@@ -877,7 +877,6 @@ func TestQueryQuarterlyFinancialDataRejectsInvalidInputsBeforeNetworkIO(t *testi
 	}
 }
 
-
 func TestParseQuarterlyFinancialPageRetainsMetricCellTypeIssue(t *testing.T) {
 	spec := quarterlyFinancialSpecs["profitability"]
 	row := make([]any, len(spec.fields))
@@ -920,7 +919,6 @@ func TestParseQuarterlyFinancialPageRetainsMetricCellTypeIssue(t *testing.T) {
 	}
 }
 
-
 func TestParseKLinePageRetainsUnsupportedCellTypeIssue(t *testing.T) {
 	fields := strings.Split(dailyKLineFields, ",")
 	row := make([]any, len(fields))
@@ -961,12 +959,11 @@ func TestParseKLinePageRetainsUnsupportedCellTypeIssue(t *testing.T) {
 	}
 }
 
-
 func TestParseQuarterlyFinancialPageReportsRequiredStructureFieldEvidence(t *testing.T) {
 	spec := quarterlyFinancialSpecs["profitability"]
 	cases := []struct {
 		name, field, code, expected string
-		mutate func([]any)
+		mutate                      func([]any)
 	}{
 		{name: "code non-scalar", field: "code", code: "invalid_field", expected: "string scalar", mutate: func(row []any) { row[0] = map[string]any{"unexpected": "object"} }},
 		{name: "statDate non-scalar", field: "statDate", code: "invalid_field", expected: "string scalar", mutate: func(row []any) { row[2] = []any{"2026-06-30"} }},
@@ -980,15 +977,21 @@ func TestParseQuarterlyFinancialPageReportsRequiredStructureFieldEvidence(t *tes
 			row := make([]any, len(spec.fields))
 			for index, field := range spec.fields {
 				switch field {
-				case "code": row[index] = "sh.600519"
-				case "pubDate": row[index] = "2026-08-29"
-				case "statDate": row[index] = "2026-06-30"
-				default: row[index] = "1.25"
+				case "code":
+					row[index] = "sh.600519"
+				case "pubDate":
+					row[index] = "2026-08-29"
+				case "statDate":
+					row[index] = "2026-06-30"
+				default:
+					row[index] = "1.25"
 				}
 			}
 			tc.mutate(row)
 			raw, err := json.Marshal(map[string]any{"record": [][]any{row}})
-			if err != nil { t.Fatal(err) }
+			if err != nil {
+				t.Fatal(err)
+			}
 			body := strings.Join([]string{
 				"0", "success", spec.method, "anonymous", "1", strconv.Itoa(quarterlyFinancialPageSize),
 				string(raw), "sh.600519", "2026", "2", strings.Join(spec.fields, ","),

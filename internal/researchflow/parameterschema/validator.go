@@ -100,22 +100,23 @@ func (v *Validator) Validate(ctx context.Context, ref string, parameters json.Ra
 		return v.validateInstance(ref, fingerprint, cached, trimmed)
 	}
 
-	compiled, err := compileSchema(ref, document)
+	schema, err := compileSchema(ref, document)
 	if err != nil {
 		return template.ParameterSchemaSnapshot{}, fmt.Errorf("%w: %s: %v", ErrInvalidSchema, ref, err)
 	}
+	candidate := compiledSchema{version: definition.Version, fingerprint: fingerprint, schema: schema}
 	v.mu.Lock()
 	if previous, ok := v.compiled[ref]; ok {
 		if previous.version != definition.Version || previous.fingerprint != fingerprint {
 			v.mu.Unlock()
 			return template.ParameterSchemaSnapshot{}, fmt.Errorf("%w: %s", ErrImmutableSchemaChanged, ref)
 		}
-		compiled = previous
+		candidate = previous
 	} else {
-		v.compiled[ref] = compiledSchema{version: definition.Version, fingerprint: fingerprint, schema: compiled}
+		v.compiled[ref] = candidate
 	}
 	v.mu.Unlock()
-	return v.validateInstance(ref, fingerprint, compiled, trimmed)
+	return v.validateInstance(ref, fingerprint, candidate, trimmed)
 }
 
 func (v *Validator) validateInstance(ref, fingerprint string, compiled compiledSchema, parameters []byte) (template.ParameterSchemaSnapshot, error) {

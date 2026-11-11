@@ -77,9 +77,9 @@ func TestMariaDBBeginRunCancellationLinearizesWorkerOperations(t *testing.T) {
 			CorrelationID: "cancel-correlation-" + suffix,
 		},
 		Stages: []domain.Stage{
-			{Ref: runningStageRef, RunRef: runRef, Code: "running", Status: domain.StageReady, Version: 1, Required: true, Dependencies: []string{}, RetryPolicyRef: "retry-v1", DiagnosticRefs: []string{}, ReasonCodes: []string{}},
-			{Ref: fencedStageRef, RunRef: runRef, Code: "fenced", Status: domain.StageReady, Version: 1, Required: true, Dependencies: []string{}, RetryPolicyRef: "retry-v1", DiagnosticRefs: []string{}, ReasonCodes: []string{}},
-			{Ref: readyStageRef, RunRef: runRef, Code: "ready", Status: domain.StageReady, Version: 1, Required: true, Dependencies: []string{}, RetryPolicyRef: "retry-v1", DiagnosticRefs: []string{}, ReasonCodes: []string{}},
+			{Ref: runningStageRef, RunRef: runRef, Code: "running", Status: domain.StagePending, Version: 1, Required: true, Dependencies: []string{}, RetryPolicyRef: "retry-v1", DiagnosticRefs: []string{}, ReasonCodes: []string{}},
+			{Ref: fencedStageRef, RunRef: runRef, Code: "fenced", Status: domain.StagePending, Version: 1, Required: true, Dependencies: []string{}, RetryPolicyRef: "retry-v1", DiagnosticRefs: []string{}, ReasonCodes: []string{}},
+			{Ref: readyStageRef, RunRef: runRef, Code: "ready", Status: domain.StagePending, Version: 1, Required: true, Dependencies: []string{}, RetryPolicyRef: "retry-v1", DiagnosticRefs: []string{}, ReasonCodes: []string{}},
 		},
 		ResolvedTemplate: template.ResolvedTemplate{
 			Ref: "cancel-template", Version: "v1", Fingerprint: templateFingerprint,
@@ -94,6 +94,14 @@ func TestMariaDBBeginRunCancellationLinearizesWorkerOperations(t *testing.T) {
 	if _, err := repository.CreateRunAtomic(ctx, record); err != nil {
 		t.Fatalf("create cancellation fixture: %v", err)
 	}
+	for _, stage := range record.Stages {
+		ready := stage
+		ready.Status = domain.StageReady
+		ready.Version++
+		if updated, err := repository.CompareAndSwapStage(ctx, stage.Version, ready); err != nil || !updated {
+			t.Fatalf("prepare Ready Stage %q updated=%v err=%v", stage.Ref, updated, err)
+		}
+	}
 	attempt, replayed, err := repository.ClaimAttempt(ctx, runRef, runningStageRef, "cancel-attempt-"+suffix, "worker-a", time.Minute, 2, 8)
 	if err != nil || replayed {
 		t.Fatalf("claim running stage replayed=%v err=%v", replayed, err)
@@ -105,6 +113,23 @@ func TestMariaDBBeginRunCancellationLinearizesWorkerOperations(t *testing.T) {
 	changed, err := repository.BeginRunCancellation(ctx, runRef, 2)
 	if err != nil || !changed {
 		t.Fatalf("begin cancellation changed=%v err=%v", changed, err)
+	}
+	// Cancelling status alone is insufficient authority: both worker stop paths
+	// must require the persisted user-cancelled reason as well.
+	if _, err := db.ExecContext(ctx, `UPDATE researchflow_runs SET termination_reason = ?
+		WHERE run_ref = ?`, "unexpected_reason", runRef); err != nil {
+		t.Fatalf("corrupt cancellation reason fixture: %v", err)
+	}
+	if confirmed, err := repository.ConfirmAttemptCancellation(ctx, runRef, runningStageRef, attempt.Ref,
+		"worker-a", attempt.FencingToken, 2); confirmed || !errors.Is(err, ErrClaimRunUnavailable) {
+		t.Fatalf("confirmation with mismatched termination reason confirmed=%v err=%v", confirmed, err)
+	}
+	if fenced, err := repository.FenceExpiredCancellationAttempt(ctx, runRef, fencedStageRef, fencedAttempt.Ref, 2); fenced || !errors.Is(err, ErrClaimRunUnavailable) {
+		t.Fatalf("fencing with mismatched termination reason fenced=%v err=%v", fenced, err)
+	}
+	if _, err := db.ExecContext(ctx, `UPDATE researchflow_runs SET termination_reason = ?
+		WHERE run_ref = ?`, "user_cancelled", runRef); err != nil {
+		t.Fatalf("restore cancellation reason fixture: %v", err)
 	}
 	changed, err = repository.BeginRunCancellation(ctx, runRef, 2)
 	if err != nil || changed {

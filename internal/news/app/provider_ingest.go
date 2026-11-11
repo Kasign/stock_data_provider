@@ -12,6 +12,7 @@ import (
 var (
 	ErrProviderOutputPolicyUnavailable = errors.New("news.provider.output_policy_unavailable")
 	ErrProviderOutputPolicyDenied      = errors.New("news.provider.output_policy_denied")
+	ErrSourceCatalogUnavailable        = errors.New("news.source.catalog_unavailable")
 )
 
 // ProviderOutputPolicyBinding 是可信策略目录解析后的不可变版本绑定。
@@ -52,15 +53,20 @@ type IngestProviderCandidate struct {
 	now      func() time.Time
 }
 
+// NewIngestProviderCandidate 是可由 Server 组合根调用的公开构造器。底层候选写入器
+// 始终在 app 包内创建，Provider 候选仍必须经过可信 Provider/Source/Endpoint 策略评估。
 func NewIngestProviderCandidate(
-	ingest *candidateIngest,
+	repository IdentityRepository,
+	newID func() string,
 	sources SourceCatalog,
 	policies ProviderOutputPolicyResolver,
 ) (*IngestProviderCandidate, error) {
-	if ingest == nil || sources == nil || policies == nil {
+	if repository == nil || newID == nil || sources == nil || policies == nil {
 		return nil, ErrProviderOutputPolicyUnavailable
 	}
-	return &IngestProviderCandidate{ingest: ingest, sources: sources, policies: policies, now: time.Now}, nil
+	return &IngestProviderCandidate{
+		ingest: newCandidateIngest(repository, newID), sources: sources, policies: policies, now: time.Now,
+	}, nil
 }
 
 func (u *IngestProviderCandidate) Execute(ctx context.Context, request IngestProviderCandidateRequest) (domain.Observation, error) {
@@ -78,7 +84,16 @@ func (u *IngestProviderCandidate) Execute(ctx context.Context, request IngestPro
 	}
 
 	registration, err := u.sources.LookupEndpoint(ctx, request.SourceID, request.EndpointID)
-	if err != nil || registration.SourceID != request.SourceID ||
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return domain.Observation{}, ctxErr
+	}
+	if err != nil {
+		if errors.Is(err, ErrSourceEndpointNotFound) {
+			return domain.Observation{}, ErrSourceEndpointNotFound
+		}
+		return domain.Observation{}, errors.Join(ErrSourceCatalogUnavailable, err)
+	}
+	if registration.SourceID != request.SourceID ||
 		registration.EndpointID != request.EndpointID || !registration.Enabled {
 		return domain.Observation{}, ErrSourceEndpointNotFound
 	}
@@ -89,6 +104,9 @@ func (u *IngestProviderCandidate) Execute(ctx context.Context, request IngestPro
 	}
 
 	providerBinding, err := u.policies.ResolveProviderOutputPolicy(ctx, request.Candidate.ProviderCode)
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return domain.Observation{}, ctxErr
+	}
 	if err != nil || strings.TrimSpace(providerBinding.ProviderCode) != request.Candidate.ProviderCode ||
 		strings.TrimSpace(providerBinding.PolicyRef) == "" || strings.TrimSpace(providerBinding.PolicyVersion) == "" {
 		return domain.Observation{}, ErrProviderOutputPolicyUnavailable

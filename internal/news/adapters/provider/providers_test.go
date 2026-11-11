@@ -136,7 +136,7 @@ func TestProviderHTTPStatusClassifiesRetryCandidate(t *testing.T) {
 	}
 	_, err = p.Search(context.Background(), domain.SearchRequest{Query: "测试", Limit: 5})
 	providerErr, ok := err.(*app.ProviderError)
-	if !ok || !providerErr.Retryable || providerErr.Code != "provider_http_429" {
+	if !ok || !providerErr.Retryable || providerErr.Code != app.ProviderErrorRateLimited {
 		t.Fatalf("error=%#v", err)
 	}
 }
@@ -189,5 +189,201 @@ func TestProviderRejectsCredentialQueryParameters(t *testing.T) {
 	})
 	if _, err := NewTavily("https://api.example.test/search?api_key=secret", "secret", client); err == nil {
 		t.Fatal("credential query parameters must be rejected")
+	}
+}
+
+func TestProviderHTTPStatusMapsStableErrorCodes(t *testing.T) {
+	tests := []struct {
+		status    int
+		code      string
+		retryable bool
+	}{
+		{status: http.StatusUnauthorized, code: app.ProviderErrorUnauthorized},
+		{status: http.StatusForbidden, code: app.ProviderErrorUnauthorized},
+		{status: http.StatusRequestTimeout, code: app.ProviderErrorTimeout, retryable: true},
+		{status: http.StatusTooManyRequests, code: app.ProviderErrorRateLimited, retryable: true},
+		{status: http.StatusBadRequest, code: app.ProviderErrorBusinessRejected},
+		{status: http.StatusServiceUnavailable, code: app.ProviderErrorUpstreamUnavailable, retryable: true},
+	}
+	for _, test := range tests {
+		t.Run(http.StatusText(test.status), func(t *testing.T) {
+			client := roundTripFunc(func(req *http.Request) (*http.Response, error) {
+				return &http.Response{StatusCode: test.status, Body: io.NopCloser(strings.NewReader("upstream body")), Header: make(http.Header)}, nil
+			})
+			p, err := NewTavily("https://api.example.test/search", "secret", client)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, err = p.Search(context.Background(), domain.SearchRequest{Query: "测试", Limit: 5})
+			providerErr, ok := err.(*app.ProviderError)
+			if !ok || providerErr.Code != test.code || providerErr.Retryable != test.retryable {
+				t.Fatalf("error=%#v, want code=%q retryable=%v", err, test.code, test.retryable)
+			}
+		})
+	}
+}
+
+func TestSearchProvidersSatisfyCommonCandidateContract(t *testing.T) {
+	tests := []struct {
+		name    string
+		new     func(app.HTTPDoer) (app.Provider, error)
+		payload string
+	}{
+		{
+			name: "bocha",
+			new: func(client app.HTTPDoer) (app.Provider, error) {
+				return NewBocha("https://api.example.test/search", "secret", client)
+			},
+			payload: `{"code":200,"data":{"webPages":{"value":[{"id":"b-1","name":"标题","url":"https://publisher.example/b","siteName":"媒体"}]}}}`,
+		},
+		{
+			name: "tavily",
+			new: func(client app.HTTPDoer) (app.Provider, error) {
+				return NewTavily("https://api.example.test/search", "secret", client)
+			},
+			payload: `{"results":[{"title":"标题","url":"https://publisher.example/t","content":"摘要"}]}`,
+		},
+		{
+			name: "brave",
+			new: func(client app.HTTPDoer) (app.Provider, error) {
+				return NewBrave("https://api.example.test/search", "secret", client)
+			},
+			payload: `{"results":[{"title":"标题","url":"https://publisher.example/br","description":"摘要"}]}`,
+		},
+		{
+			name: "searxng",
+			new: func(client app.HTTPDoer) (app.Provider, error) {
+				return NewSearXNG("https://searx.example/search", client)
+			},
+			payload: `{"results":[{"title":"标题","url":"https://publisher.example/s","content":"摘要"}]}`,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			client := roundTripFunc(func(req *http.Request) (*http.Response, error) {
+				return response(test.payload), nil
+			})
+			provider, err := test.new(client)
+			if err != nil {
+				t.Fatal(err)
+			}
+			code := provider.Code()
+			if code == "" || strings.TrimSpace(code) != code {
+				t.Fatalf("Provider Code is not canonical: %q", code)
+			}
+			items, err := provider.Search(context.Background(), domain.SearchRequest{
+				Query: "市场消息", QueryDimension: "market", Limit: 10,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(items) != 1 {
+				t.Fatalf("candidate count=%d, want 1", len(items))
+			}
+			if items[0].ProviderCode != code {
+				t.Fatalf("candidate ProviderCode=%q, want %q", items[0].ProviderCode, code)
+			}
+			if items[0].QueryDimension != "market" || items[0].ObservedAt.IsZero() {
+				t.Fatalf("candidate context was not preserved: %+v", items[0])
+			}
+		})
+	}
+}
+
+func TestBochaSearchThroughApplicationContract(t *testing.T) {
+	client := roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		return response(`{"code":200,"data":{"webPages":{"value":[{"id":"bocha-1","name":"标题","url":"https://publisher.example/a","siteName":"媒体","summary":"摘要"}]}}}`), nil
+	})
+	provider, err := NewBocha("https://api.example.test/search", "secret", client)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result := app.NewSearchCandidates(app.StaticProviderSet{Providers: []app.Provider{provider}}).
+		Execute(context.Background(), domain.SearchRequest{
+			Query: "市场消息", QueryDimension: " market ", Limit: 10,
+		})
+	if result.Status != domain.SearchSuccess {
+		t.Fatalf("search status=%s failure=%s", result.Status, result.FailureCode)
+	}
+	if len(result.Outcomes) != 1 || result.Outcomes[0].ProviderCode != BochaCode ||
+		result.Outcomes[0].Status != domain.ProviderSuccess || result.Outcomes[0].CandidateCount != 1 ||
+		result.Outcomes[0].QueryDimension != "market" {
+		t.Fatalf("provider outcome=%+v", result.Outcomes)
+	}
+	if len(result.Candidates) != 1 {
+		t.Fatalf("candidate count=%d", len(result.Candidates))
+	}
+	candidate := result.Candidates[0]
+	if candidate.ProviderCode != BochaCode || candidate.QueryDimension != "market" ||
+		candidate.Title != "标题" || candidate.ObservedAt.IsZero() {
+		t.Fatalf("normalized candidate=%+v", candidate)
+	}
+}
+
+func TestSearchProvidersThroughApplicationContract(t *testing.T) {
+	tests := []struct {
+		name    string
+		new     func(app.HTTPDoer) (app.Provider, error)
+		payload string
+	}{
+		{
+			name: "bocha",
+			new: func(client app.HTTPDoer) (app.Provider, error) {
+				return NewBocha("https://api.example.test/search", "secret", client)
+			},
+			payload: `{"code":200,"data":{"webPages":{"value":[{"id":"b-1","name":"标题","url":"https://publisher.example/b","siteName":"媒体"}]}}}`,
+		},
+		{
+			name: "tavily",
+			new: func(client app.HTTPDoer) (app.Provider, error) {
+				return NewTavily("https://api.example.test/search", "secret", client)
+			},
+			payload: `{"results":[{"title":"标题","url":"https://publisher.example/t","content":"摘要"}]}`,
+		},
+		{
+			name: "brave",
+			new: func(client app.HTTPDoer) (app.Provider, error) {
+				return NewBrave("https://api.example.test/search", "secret", client)
+			},
+			payload: `{"results":[{"title":"标题","url":"https://publisher.example/br","description":"摘要"}]}`,
+		},
+		{
+			name: "searxng",
+			new: func(client app.HTTPDoer) (app.Provider, error) {
+				return NewSearXNG("https://searx.example/search", client)
+			},
+			payload: `{"results":[{"title":"标题","url":"https://publisher.example/s","content":"摘要"}]}`,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			client := roundTripFunc(func(req *http.Request) (*http.Response, error) {
+				return response(test.payload), nil
+			})
+			provider, err := test.new(client)
+			if err != nil {
+				t.Fatal(err)
+			}
+			result := app.NewSearchCandidates(app.StaticProviderSet{Providers: []app.Provider{provider}}).
+				Execute(context.Background(), domain.SearchRequest{
+					Query: "市场消息", QueryDimension: " market ", Limit: 10,
+				})
+			if result.Status != domain.SearchSuccess {
+				t.Fatalf("search status=%s failure=%s", result.Status, result.FailureCode)
+			}
+			if len(result.Outcomes) != 1 || result.Outcomes[0].ProviderCode != provider.Code() ||
+				result.Outcomes[0].Status != domain.ProviderSuccess || result.Outcomes[0].CandidateCount != 1 ||
+				result.Outcomes[0].QueryDimension != "market" {
+				t.Fatalf("provider outcome=%+v", result.Outcomes)
+			}
+			if len(result.Candidates) != 1 {
+				t.Fatalf("candidate count=%d", len(result.Candidates))
+			}
+			candidate := result.Candidates[0]
+			if candidate.ProviderCode != provider.Code() || candidate.QueryDimension != "market" ||
+				candidate.Title != "标题" || candidate.ObservedAt.IsZero() {
+				t.Fatalf("normalized candidate=%+v", candidate)
+			}
+		})
 	}
 }

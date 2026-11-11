@@ -131,8 +131,12 @@ func (p *Baostock) FetchFundamentals(ctx context.Context, rawSymbol string, year
 			var structureErr *baostock.QuarterlyFinancialStructureError
 			if errors.As(queryErr, &structureErr) {
 				standardField := "provider." + structureErr.SourceField
-				if structureErr.SourceField == "code" { standardField = "symbol" }
-				if structureErr.SourceField == "statDate" { standardField = "report_date" }
+				if structureErr.SourceField == "code" {
+					standardField = "symbol"
+				}
+				if structureErr.SourceField == "statDate" {
+					standardField = "report_date"
+				}
 				addProviderFieldParseIssue(ctx, symbol, standardField, structureErr.SourceField,
 					structureErr.Code, structureErr.Expected, structureErr.ActualType,
 					structureErr.Preview, structureErr.RowIndex)

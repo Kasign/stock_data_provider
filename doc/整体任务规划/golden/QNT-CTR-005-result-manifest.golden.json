@@ -1,30 +1,30 @@
 {
   "manifest": {
-    "result_id": "quant_result:sha256:20d1f80b949907aba3075bde93aa8dd97a97e0e1f5034634bc0d9c8e0c82ee97",
-    "manifest_fingerprint": "20d1f80b949907aba3075bde93aa8dd97a97e0e1f5034634bc0d9c8e0c82ee97",
+    "result_id": "quant_result:sha256:9757fca91e733d4835f6ea1a3fd249897e6d7d6880eb240d9e090025d3b16709",
+    "manifest_fingerprint": "9757fca91e733d4835f6ea1a3fd249897e6d7d6880eb240d9e090025d3b16709",
     "result_type": "stock",
     "schema_version": "1.0.0",
-    "payload_schema_version": "1.0.0",
-    "algorithm_version": "stock-analysis.v1",
-    "parameter_fingerprint": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
     "system_as_of": "2026-11-06T05:02:00Z",
     "input_snapshot_refs": [
       "data_snapshot:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     ],
-    "result_fingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    "result_fingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "payload_schema_version": "1.0.0",
+    "algorithm_version": "quant-test-v1",
+    "parameter_fingerprint": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
   },
   "fingerprint_input": {
-    "algorithm_version": "stock-analysis.v1",
+    "algorithm_version": "quant-test-v1",
     "input_snapshot_refs": [
       "data_snapshot:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     ],
-    "parameter_fingerprint": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "parameter_fingerprint": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
     "payload_schema_version": "1.0.0",
     "result_fingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
     "result_type": "stock",
     "schema_version": "1.0.0",
     "system_as_of": "2026-11-06T05:02:00Z"
   },
-  "canonical_json": "{\"algorithm_version\":\"stock-analysis.v1\",\"input_snapshot_refs\":[\"data_snapshot:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"],\"parameter_fingerprint\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"payload_schema_version\":\"1.0.0\",\"result_fingerprint\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"result_type\":\"stock\",\"schema_version\":\"1.0.0\",\"system_as_of\":\"2026-11-06T05:02:00Z\"}",
-  "expected_sha256": "20d1f80b949907aba3075bde93aa8dd97a97e0e1f5034634bc0d9c8e0c82ee97"
+  "canonical_json": "{\"algorithm_version\":\"quant-test-v1\",\"input_snapshot_refs\":[\"data_snapshot:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"],\"parameter_fingerprint\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"payload_schema_version\":\"1.0.0\",\"result_fingerprint\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"result_type\":\"stock\",\"schema_version\":\"1.0.0\",\"system_as_of\":\"2026-11-06T05:02:00Z\"}",
+  "expected_sha256": "9757fca91e733d4835f6ea1a3fd249897e6d7d6880eb240d9e090025d3b16709"
 }

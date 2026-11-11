@@ -552,14 +552,16 @@ func (p *Hithink) FetchHotStocks(ctx context.Context, rankingType string, limit 
 		QualityStatus:  model.QualityDegraded,
 		QualityReasons: []string{"provider_hot_ranking_is_delayed_not_a_real_time_trading_signal", "provider_total_missing_using_returned_count"},
 	}
-	if data.Timestamp != nil && *data.Timestamp > 0 {
-		candidate := time.UnixMilli(*data.Timestamp).UTC()
+	timestampValue, timestampValid := hithinkParseFundamentalValue(data.Timestamp)
+	if timestampValid && math.Trunc(timestampValue) == timestampValue && timestampValue > 0 && timestampValue < float64(1<<63) {
+		candidate := time.UnixMilli(int64(timestampValue)).UTC()
 		if !candidate.After(now.Add(5*time.Minute)) && !candidate.Before(now.AddDate(-10, 0, 0)) {
 			snapshot.ProviderTime = &candidate
 		}
 	}
 	if snapshot.ProviderTime == nil {
 		snapshot.QualityReasons = appendUniqueHithinkReason(snapshot.QualityReasons, "provider_ranking_timestamp_missing_or_invalid")
+		addHithinkFieldIssue(ctx, nil, "provider_time", "timestamp", "missing_or_invalid_value", "valid provider ranking snapshot timestamp", "missing_or_invalid", "", "同花顺人气榜/飙升榜源端快照时间缺失或非法")
 	}
 	if len(data.Item) == 0 {
 		snapshot.QualityStatus = model.QualityUnknown
@@ -574,6 +576,7 @@ func (p *Hithink) FetchHotStocks(ctx context.Context, rankingType string, limit 
 		}
 		symbol, symbolErr := hithinkDomesticSymbol(hithinkFieldString(row, "thscode"))
 		if symbolErr != nil {
+			addHithinkFieldIssue(ctx, &index, "symbol", "thscode", "invalid_identity", "valid A-share security code", "string", hithinkFieldString(row, "thscode"), "同花顺榜单证券代码无效")
 			return nil, fmt.Errorf("同花顺榜单第 %d 行证券代码无效: %w", index, symbolErr)
 		}
 		code := hithinkFieldString(row, "ticker")
@@ -581,10 +584,12 @@ func (p *Hithink) FetchHotStocks(ctx context.Context, rankingType string, limit 
 			code = strings.Split(symbol, ".")[0]
 		}
 		if code != strings.Split(symbol, ".")[0] {
+			addHithinkFieldIssue(ctx, &index, "symbol", "ticker/thscode", "identity_mismatch", "ticker matches thscode code", "string", code+"/"+hithinkFieldString(row, "thscode"), "同花顺榜单 ticker 与 thscode 不一致")
 			return nil, fmt.Errorf("同花顺榜单第 %d 行 ticker 与 thscode 不一致", index)
 		}
 		rankValue := hithinkFieldNumber(row, "rank")
 		if rankValue == nil || *rankValue < 1 || math.Trunc(*rankValue) != *rankValue || *rankValue > 1000000 {
+			addHithinkFieldIssue(ctx, &index, "rank", "rank", "missing_or_invalid_value", "positive bounded integer rank", "missing_or_invalid", hithinkFieldString(row, "rank"), "同花顺榜单排名缺失或非法")
 			return nil, fmt.Errorf("同花顺榜单第 %d 行排名无效", index)
 		}
 		if _, duplicate := seen[symbol]; duplicate {
@@ -703,16 +708,20 @@ func (p *Hithink) FetchLimitPool(ctx context.Context, poolType, tradeDate string
 		return nil, fmt.Errorf("解析同花顺 %s 池失败: %w", map[string]string{"up": "涨停", "down": "跌停", "broken": "炸板"}[poolType], err)
 	}
 	if data.Pagination == nil || data.Pagination.Total == nil || *data.Pagination.Total < 0 {
+		addHithinkFieldIssue(ctx, nil, "pagination_total", "pagination.total", "missing_or_invalid_value", "non-negative provider total", "missing_or_invalid", "", "同花顺涨跌停池分页总数缺失或非法")
 		return nil, errors.New("同花顺涨跌停池响应缺少有效 pagination.total")
 	}
 	total := *data.Pagination.Total
 	if len(data.Item) > limit || total < len(data.Item) {
+		addHithinkFieldIssue(ctx, nil, "pagination", "pagination.total/item", "count_inconsistent", "returned rows <= requested limit and total >= returned rows", "inconsistent", fmt.Sprintf("total=%d items=%d limit=%d", total, len(data.Item), limit), "同花顺涨跌停池分页总数与当前页返回行数不一致")
 		return nil, fmt.Errorf("同花顺 %s 池分页计数不一致: total=%d items=%d limit=%d", poolType, total, len(data.Item), limit)
 	}
 	if data.Pagination.Page != nil && *data.Pagination.Page != 1 {
+		addHithinkFieldIssue(ctx, nil, "page", "pagination.page", "page_mismatch", "requested page 1", "number", strconv.Itoa(*data.Pagination.Page), "同花顺涨跌停池返回页码与请求不一致")
 		return nil, fmt.Errorf("同花顺 %s 池返回页码不匹配: requested=1 returned=%d", poolType, *data.Pagination.Page)
 	}
 	if data.Pagination.Size != nil && (*data.Pagination.Size < len(data.Item) || *data.Pagination.Size > 100) {
+		addHithinkFieldIssue(ctx, nil, "page_size", "pagination.size", "invalid_value", "returned size between item count and 100", "number", strconv.Itoa(*data.Pagination.Size), "同花顺涨跌停池返回分页 size 无效")
 		return nil, fmt.Errorf("同花顺 %s 池返回的分页 size 无效: %d", poolType, *data.Pagination.Size)
 	}
 
@@ -742,6 +751,9 @@ func (p *Hithink) FetchLimitPool(ctx context.Context, poolType, tradeDate string
 	if !providerTimestampValid {
 		snapshot.QualityReasons = appendUniqueHithinkReason(snapshot.QualityReasons, "provider_snapshot_timestamp_missing_or_invalid")
 	}
+	if !providerTimestampValid {
+		addHithinkFieldIssue(ctx, nil, "provider_time", "timestamp", "missing_or_invalid_value", "valid provider snapshot timestamp", "missing_or_invalid", "", "同花顺涨跌停池源端快照时间缺失或非法")
+	}
 	if providerTimestampValid && reportDate != rawDate {
 		snapshot.QualityReasons = appendUniqueHithinkReason(snapshot.QualityReasons, "provider_snapshot_date_differs_from_requested_trade_date")
 	}
@@ -760,6 +772,7 @@ func (p *Hithink) FetchLimitPool(ctx context.Context, poolType, tradeDate string
 		rawSymbol := hithinkFieldString(row, "thscode")
 		symbol, symbolErr := hithinkDomesticSymbol(rawSymbol)
 		if symbolErr != nil {
+			addHithinkFieldIssue(ctx, &index, "symbol", "thscode", "invalid_identity", "valid A-share security code", "string", rawSymbol, "同花顺涨跌停池证券代码无效")
 			return nil, fmt.Errorf("同花顺 %s 池第 %d 行证券代码无效: %w", poolType, index, symbolErr)
 		}
 		code := hithinkFieldString(row, "ticker")
@@ -767,6 +780,7 @@ func (p *Hithink) FetchLimitPool(ctx context.Context, poolType, tradeDate string
 			code = strings.Split(symbol, ".")[0]
 		}
 		if code != strings.Split(symbol, ".")[0] {
+			addHithinkFieldIssue(ctx, &index, "symbol", "ticker/thscode", "identity_mismatch", "ticker matches thscode code", "string", code+"/"+rawSymbol, "同花顺涨跌停池 ticker 与 thscode 不一致")
 			return nil, fmt.Errorf("同花顺 %s 池第 %d 行代码不匹配: symbol=%s ticker=%s", poolType, index, symbol, code)
 		}
 		if _, exists := seenPoolSymbols[symbol]; exists {
@@ -778,10 +792,12 @@ func (p *Hithink) FetchLimitPool(ctx context.Context, poolType, tradeDate string
 		seenPoolSymbols[symbol] = struct{}{}
 		name := hithinkFieldString(row, "name")
 		if name == "" {
+			addHithinkFieldIssue(ctx, &index, "name", "name", "missing_value", "non-empty security name", "string", "", "同花顺涨跌停池证券名称缺失")
 			return nil, fmt.Errorf("同花顺 %s 池第 %d 行缺少证券名称", poolType, index)
 		}
 		change := hithinkFieldNumber(row, "price_change_ratio_pct")
 		if change == nil {
+			addHithinkFieldIssue(ctx, &index, "change_percent", "price_change_ratio_pct", "missing_or_invalid_value", "finite provider change percent", "number", fmt.Sprint(hithinkFieldNumber(row, "price_change_ratio_pct")), "同花顺涨跌停池涨跌幅缺失或非法")
 			return nil, fmt.Errorf("同花顺 %s 池第 %d 行缺少有效涨跌幅", poolType, index)
 		}
 
@@ -790,6 +806,7 @@ func (p *Hithink) FetchLimitPool(ctx context.Context, poolType, tradeDate string
 			lastPrice = nil
 		}
 		if poolType != "up" && lastPrice == nil {
+			addHithinkFieldIssue(ctx, &index, "last_price", "last_price", "missing_or_invalid_value", "positive finite latest price", "number", fmt.Sprint(hithinkFieldNumber(row, "last_price")), "同花顺跌停/炸板池最新价缺失或非法")
 			return nil, fmt.Errorf("同花顺 %s 池第 %d 行缺少有效最新价", poolType, index)
 		}
 		var consecutive *int
@@ -846,8 +863,12 @@ func (p *Hithink) FetchLimitPool(ctx context.Context, poolType, tradeDate string
 		}
 		if poolType == "down" && (firstTouch == "" || lastTouch == "") {
 			itemReasons = append(itemReasons, "provider_limit_down_time_missing")
-			if firstTouch == "" { addHithinkFieldIssue(ctx, &index, "first_touch_time", "first_limit_time", "missing_value", "provider first limit time", "string", "", "同花顺跌停池首次触板时间缺失") }
-			if lastTouch == "" { addHithinkFieldIssue(ctx, &index, "last_touch_time", "last_limit_time", "missing_value", "provider last limit time", "string", "", "同花顺跌停池末次触板时间缺失") }
+			if firstTouch == "" {
+				addHithinkFieldIssue(ctx, &index, "first_touch_time", "first_limit_time", "missing_value", "provider first limit time", "string", "", "同花顺跌停池首次触板时间缺失")
+			}
+			if lastTouch == "" {
+				addHithinkFieldIssue(ctx, &index, "last_touch_time", "last_limit_time", "missing_value", "provider last limit time", "string", "", "同花顺跌停池末次触板时间缺失")
+			}
 		}
 		if poolType == "broken" && openTimes == nil {
 			itemReasons = append(itemReasons, "provider_open_times_missing_or_invalid")
@@ -934,10 +955,12 @@ func (p *Hithink) FetchDragonTiger(ctx context.Context, tradeDate string, page, 
 	}
 	responseDate := strings.TrimSpace(data.TradeDate)
 	if responseDate == "" {
+		addHithinkFieldIssue(ctx, nil, "trade_date", "trade_date", "missing_value", "provider report trade date", "string", "", "同花顺龙虎榜响应缺少交易日")
 		return nil, errors.New("同花顺龙虎榜响应缺少 trade_date")
 	}
 	parsedResponseDate, err := time.Parse("2006-01-02", responseDate)
 	if err != nil || parsedResponseDate.Format("2006-01-02") != responseDate {
+		addHithinkFieldIssue(ctx, nil, "trade_date", "trade_date", "invalid_value", "valid YYYY-MM-DD provider trade date", "string", responseDate, "同花顺龙虎榜返回交易日非法")
 		return nil, fmt.Errorf("同花顺龙虎榜返回了无效交易日 %q", responseDate)
 	}
 	today := time.Now().In(loc).Format("2006-01-02")
@@ -945,11 +968,13 @@ func (p *Hithink) FetchDragonTiger(ctx context.Context, tradeDate string, page, 
 		return nil, fmt.Errorf("同花顺龙虎榜源端交易日 %s 晚于中国市场当前日期 %s", responseDate, today)
 	}
 	if rawDate != "" && rawDate != responseDate {
+		addHithinkFieldIssue(ctx, nil, "trade_date", "trade_date", "date_mismatch", "returned date equals requested date", "string", responseDate, "同花顺龙虎榜返回交易日与请求日期不一致")
 		return nil, fmt.Errorf("同花顺龙虎榜交易日不匹配: requested=%s returned=%s", rawDate, responseDate)
 	}
 	total := len(data.StockItems)
 	if data.StockCount != nil {
 		if *data.StockCount < 0 || *data.StockCount != len(data.StockItems) {
+			addHithinkFieldIssue(ctx, nil, "row_count", "stock_count/stock_items", "count_inconsistent", "stock_count equals stock_items length", "inconsistent", fmt.Sprintf("declared=%d items=%d", *data.StockCount, len(data.StockItems)), "同花顺龙虎榜声明股票数与返回股票行数不一致")
 			return nil, fmt.Errorf("同花顺龙虎榜 stock_count 与 stock_items 不一致: declared=%d items=%d", *data.StockCount, len(data.StockItems))
 		}
 		total = *data.StockCount
@@ -971,17 +996,22 @@ func (p *Hithink) FetchDragonTiger(ctx context.Context, tradeDate string, page, 
 	if data.Timestamp == nil || *data.Timestamp <= 0 || time.UnixMilli(*data.Timestamp).After(now.Add(5*time.Minute)) {
 		snapshot.QualityReasons = appendUniqueHithinkReason(snapshot.QualityReasons, "provider_snapshot_timestamp_missing_or_invalid")
 	}
+	if data.Timestamp == nil || *data.Timestamp <= 0 || time.UnixMilli(*data.Timestamp).After(now.Add(5*time.Minute)) {
+		addHithinkFieldIssue(ctx, nil, "provider_time", "timestamp", "missing_or_invalid_value", "valid provider snapshot timestamp", "missing_or_invalid", "", "同花顺龙虎榜源端快照时间缺失或非法")
+	}
 	if total == 0 {
 		snapshot.QualityStatus = model.QualityUnknown
 		snapshot.QualityReasons = appendUniqueHithinkReason(snapshot.QualityReasons, "empty_dragon_tiger_report_cannot_distinguish_no_events_from_unavailable_or_not_yet_published")
 		return snapshot, nil
 	}
 	if pages == 0 || page > pages {
+		addHithinkFieldIssue(ctx, nil, "page", "page/page_size/stock_count", "page_out_of_range", "requested page within computed page count", "number", fmt.Sprintf("page=%d pages=%d", page, pages), "同花顺龙虎榜请求页超出总页数")
 		return nil, fmt.Errorf("同花顺龙虎榜请求页 %d 超出总页数 %d", page, pages)
 	}
 	startIndex := (page - 1) * pageSize
 	endIndex := min(startIndex+pageSize, total)
 	if startIndex >= len(data.StockItems) {
+		addHithinkFieldIssue(ctx, nil, "pagination", "stock_items", "page_rows_missing", "rows available for requested page", "missing", fmt.Sprintf("start=%d returned=%d", startIndex, len(data.StockItems)), "同花顺龙虎榜请求页没有对应返回行")
 		return nil, fmt.Errorf("同花顺龙虎榜请求页 %d 超出了当前返回数据", page)
 	}
 	snapshot.HasMore = page < pages
@@ -992,6 +1022,7 @@ func (p *Hithink) FetchDragonTiger(ctx context.Context, tradeDate string, page, 
 		rawSymbol := hithinkFieldString(row, "thscode")
 		symbol, symbolErr := hithinkDomesticSymbol(rawSymbol)
 		if symbolErr != nil {
+			addHithinkFieldIssue(ctx, &rowIndex, "symbol", "thscode", "invalid_identity", "valid A-share security code", "string", rawSymbol, "同花顺龙虎榜证券代码无效")
 			return nil, fmt.Errorf("同花顺龙虎榜第 %d 行证券代码无效: %w", startIndex+index, symbolErr)
 		}
 		code := hithinkFieldString(row, "ticker")
@@ -999,6 +1030,7 @@ func (p *Hithink) FetchDragonTiger(ctx context.Context, tradeDate string, page, 
 			code = strings.Split(symbol, ".")[0]
 		}
 		if code != strings.Split(symbol, ".")[0] {
+			addHithinkFieldIssue(ctx, &rowIndex, "symbol", "ticker/thscode", "identity_mismatch", "ticker matches thscode code", "string", code+"/"+rawSymbol, "同花顺龙虎榜 ticker 与 thscode 不一致")
 			return nil, fmt.Errorf("同花顺龙虎榜第 %d 行代码不匹配", startIndex+index)
 		}
 		if _, exists := seenDragonTigerSymbols[symbol]; exists {
@@ -1009,6 +1041,7 @@ func (p *Hithink) FetchDragonTiger(ctx context.Context, tradeDate string, page, 
 		seenDragonTigerSymbols[symbol] = struct{}{}
 		name := hithinkFieldString(row, "name")
 		if name == "" {
+			addHithinkFieldIssue(ctx, &rowIndex, "name", "name", "missing_value", "non-empty security name", "string", "", "同花顺龙虎榜证券名称缺失")
 			return nil, fmt.Errorf("同花顺龙虎榜第 %d 行缺少证券名称", startIndex+index)
 		}
 		change := hithinkFieldNumber(row, "change")
@@ -1024,6 +1057,7 @@ func (p *Hithink) FetchDragonTiger(ctx context.Context, tradeDate string, page, 
 		hotRank := hithinkFieldInteger(row, "hot_rank")
 		rangeDays := hithinkFieldInteger(row, "range_days")
 		if buy != nil && *buy < 0 || sell != nil && *sell < 0 {
+			addHithinkFieldIssue(ctx, &rowIndex, "buy_sell_amount", "buy_value/sell_value", "negative_amount", "non-negative buy and sell amounts", "number", fmt.Sprintf("buy=%v sell=%v", buy, sell), "同花顺龙虎榜买入或卖出金额为负")
 			return nil, fmt.Errorf("同花顺龙虎榜第 %d 行买入/卖出金额不能为负", startIndex+index)
 		}
 		var concepts []string
@@ -1056,7 +1090,6 @@ func hithinkFieldString(row map[string]json.RawMessage, key string) string {
 	}
 	return ""
 }
-
 
 // hithinkValuationMetricInputInvalid 区分源端未提供值与提供了不可解析的值。
 // 空字段、JSON null 和空字符串表示缺失；其他无法解析的内容表示源端值无效。
@@ -1256,6 +1289,9 @@ func (p *Hithink) FetchIndexConstituents(ctx context.Context, rawIndexSymbol str
 		snapshot.QualityStatus = model.QualityDegraded
 		snapshot.QualityReasons = append(snapshot.QualityReasons, "provider_constituents_timestamp_missing_or_invalid")
 	}
+	if snapshot.ProviderTime == nil {
+		addHithinkFieldIssue(ctx, nil, "provider_time", "timestamp", "missing_or_invalid_value", "valid provider snapshot timestamp", "number", "", "同花顺指数成分股快照时间缺失或非法")
+	}
 	seen := make(map[string]struct{}, len(data.Item))
 	for index, row := range data.Item {
 		symbol, symbolErr := hithinkDomesticSymbol(row.THSCode)
@@ -1418,7 +1454,7 @@ func (p *Hithink) FetchIndexDailyBars(ctx context.Context, rawIndexSymbol, start
 			bar.QualityStatus = model.QualityDegraded
 			bar.QualityReasons = append(bar.QualityReasons, "provider_turnover_missing_or_invalid")
 			addHithinkFieldIssue(ctx, &index, "amount", "turnover", "missing_or_invalid_value", "finite non-negative turnover", "number", fmt.Sprint(row.Turnover), "同花顺指数历史 K 线成交额缺失或非法")
-	}
+		}
 		if snapshot.ProviderTime == nil {
 			bar.QualityStatus = model.QualityDegraded
 			bar.QualityReasons = append(bar.QualityReasons, "provider_index_history_timestamp_missing_or_invalid")
@@ -1484,7 +1520,7 @@ func (p *Hithink) FetchValuations(ctx context.Context, rawSymbols []string) (*mo
 		return nil, err
 	}
 	var data struct {
-		Timestamp *int64                       `json:"timestamp"`
+		Timestamp json.RawMessage              `json:"timestamp"`
 		Total     *int                         `json:"total"`
 		Item      []map[string]json.RawMessage `json:"item"`
 	}
@@ -1492,6 +1528,10 @@ func (p *Hithink) FetchValuations(ctx context.Context, rawSymbols []string) (*mo
 		return nil, fmt.Errorf("解析同花顺批量估值失败: %w", err)
 	}
 	if data.Total != nil && (*data.Total < 0 || *data.Total != len(data.Item)) {
+		addHithinkFieldIssue(ctx, nil, "row_count", "total/item", "provider_count_mismatch",
+			"total equals non-negative item count", "number",
+			fmt.Sprintf("total=%d items=%d", *data.Total, len(data.Item)),
+			"同花顺估值响应 total 与 item 数量不一致")
 		return nil, fmt.Errorf("同花顺估值响应 total 与 item 数量不一致: total=%d items=%d", *data.Total, len(data.Item))
 	}
 	now := time.Now().UTC()
@@ -1501,9 +1541,10 @@ func (p *Hithink) FetchValuations(ctx context.Context, rawSymbols []string) (*mo
 		Source:           p.Name(), SourceVersion: hithinkVersion + "-valuation-snapshot-v1",
 		FetchedAt: now, QualityStatus: model.QualityValid,
 	}
-	timestampValue, timestampValid := hithinkParseFundamentalValue(data.Timestamp)
-	if timestampValid && math.Trunc(timestampValue) == timestampValue && timestampValue > 0 && timestampValue < float64(1<<63) {
-		timestamp := time.UnixMilli(int64(timestampValue)).UTC()
+	var providerTimestamp int64
+	if len(data.Timestamp) > 0 && string(data.Timestamp) != "null" &&
+		json.Unmarshal(data.Timestamp, &providerTimestamp) == nil && providerTimestamp > 0 {
+		timestamp := time.UnixMilli(providerTimestamp).UTC()
 		if !timestamp.After(now.Add(time.Minute)) && !timestamp.Before(now.AddDate(-10, 0, 0)) {
 			snapshot.ProviderTimestamp = &timestamp
 		}
@@ -1511,13 +1552,20 @@ func (p *Hithink) FetchValuations(ctx context.Context, rawSymbols []string) (*mo
 	if snapshot.ProviderTimestamp == nil {
 		snapshot.QualityStatus = model.QualityDegraded
 		snapshot.QualityReasons = append(snapshot.QualityReasons, "provider_valuation_timestamp_missing_or_invalid")
-		code := "invalid_timestamp"
-		actualType := providerJSONValueType(data.Timestamp)
-		if actualType == "missing" || actualType == "null" {
+		code, actualType, timestampPreview := "invalid_timestamp", providerJSONValueType(data.Timestamp), strings.TrimSpace(string(data.Timestamp))
+		if len(data.Timestamp) == 0 || string(data.Timestamp) == "null" {
 			code = "missing_value"
+			if len(data.Timestamp) == 0 {
+				actualType = "missing"
+			}
+		} else {
+			var timestampString string
+			if json.Unmarshal(data.Timestamp, &timestampString) == nil {
+				timestampPreview = timestampString
+			}
 		}
 		addProviderFieldParseIssue(ctx, "", "provider_timestamp", "timestamp", code,
-			"positive integer epoch-millisecond timestamp", actualType, string(data.Timestamp), -1)
+			"positive integer epoch-millisecond timestamp", actualType, timestampPreview, -1)
 	}
 	// 同花顺估值响应未提供独立报告日期字段。ProviderTimestamp 仅表示
 	// 五项估值中最新有效时间，不能据此伪造 ProviderReportDate。
@@ -1532,12 +1580,18 @@ func (p *Hithink) FetchValuations(ctx context.Context, rawSymbols []string) (*mo
 		rawSymbol := hithinkFieldString(row, "thscode")
 		symbol, symbolErr := hithinkDomesticSymbol(rawSymbol)
 		if symbolErr != nil {
+			addHithinkFieldIssue(ctx, &rowIndex, "symbol", "thscode", "invalid_symbol",
+				"valid A-share symbol with exchange", "string", rawSymbol, "同花顺估值响应证券代码无效")
 			return nil, fmt.Errorf("同花顺估值第 %d 行证券代码无效: %w", rowIndex, symbolErr)
 		}
 		if _, ok := requested[symbol]; !ok {
+			addHithinkFieldIssue(ctx, &rowIndex, "symbol", "thscode", "unrequested_identity",
+				"one of requested symbols", "string", rawSymbol, "同花顺估值响应包含未请求证券")
 			return nil, fmt.Errorf("同花顺估值响应包含未请求代码 %s", symbol)
 		}
 		if _, duplicate := bySymbol[symbol]; duplicate {
+			addHithinkFieldIssue(ctx, &rowIndex, "symbol", "thscode", "duplicate_identity",
+				"unique requested symbol", "string", rawSymbol, "同花顺估值响应包含重复证券记录")
 			return nil, fmt.Errorf("同花顺估值响应包含重复代码 %s", symbol)
 		}
 		code := hithinkFieldString(row, "ticker")
@@ -1545,6 +1599,8 @@ func (p *Hithink) FetchValuations(ctx context.Context, rawSymbols []string) (*mo
 			code = strings.Split(symbol, ".")[0]
 		}
 		if code != strings.Split(symbol, ".")[0] {
+			addHithinkFieldIssue(ctx, &rowIndex, "code", "ticker", "symbol_code_mismatch",
+				strings.Split(symbol, ".")[0], "string", code, "同花顺估值 ticker 与 thscode 不一致")
 			return nil, fmt.Errorf("同花顺估值第 %d 行 ticker 与 thscode 不一致", rowIndex)
 		}
 		name := hithinkFieldString(row, "name")
@@ -1556,7 +1612,7 @@ func (p *Hithink) FetchValuations(ctx context.Context, rawSymbols []string) (*mo
 		var pet, pem, pbm, pst, pcft *float64
 		metricIssue := false
 		metricFields := []struct {
-			key string
+			key   string
 			value **float64
 		}{
 			{key: "pe_ttm", value: &pet},
@@ -1868,16 +1924,19 @@ func (p *Hithink) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 		}
 		all = append(all, segmentBars...)
 		if len(all) > hithinkMaxRowsPerCall {
+			hithinkDailyResponseIssue(ctx, "result_limit_exceeded", "daily_bar_result", fmt.Sprintf("at most %d rows", hithinkMaxRowsPerCall), "row_count", strconv.Itoa(len(all)), "同花顺日 K 结果超过单次调用安全行数上限")
 			return nil, fmt.Errorf("同花顺日 K 结果超过安全上限 %d 行", hithinkMaxRowsPerCall)
 		}
 		segmentStart = segmentEnd.AddDate(0, 0, 1)
 	}
 	if len(all) == 0 {
+		hithinkDailyResponseIssue(ctx, "empty_result", "daily_bar_result", "at least one daily K-line row", "empty", "0 rows", "同花顺未返回请求区间的日 K")
 		return nil, errors.New("同花顺未返回请求区间的日 K")
 	}
 	sort.Slice(all, func(i, j int) bool { return all[i].TradeDate < all[j].TradeDate })
 	for i := 1; i < len(all); i++ {
 		if all[i].TradeDate == all[i-1].TradeDate {
+			hithinkDailyResponseIssue(ctx, "duplicate_trade_date", "trade_date", "unique trade date across requested segments", "date", all[i].TradeDate, "同花顺日 K 分段结果包含重复交易日")
 			return nil, fmt.Errorf("同花顺返回重复交易日 %s", all[i].TradeDate)
 		}
 	}
@@ -1944,9 +2003,13 @@ func (p *Hithink) FetchFundamentals(ctx context.Context, rawSymbol string, year,
 		return nil, fmt.Errorf("解析同花顺财务指标失败: %w", err)
 	}
 	if !strings.EqualFold(strings.TrimSpace(data.THSCode), symbol) {
+		addHithinkSymbolFieldIssue(ctx, symbol, "symbol", "thscode", "symbol_mismatch",
+			"requested symbol "+symbol, "string", data.THSCode, "同花顺财务响应证券代码与请求不匹配")
 		return nil, fmt.Errorf("同花顺财务响应证券代码不匹配: requested=%s returned=%q", symbol, data.THSCode)
 	}
 	if strings.TrimSpace(data.Report) != report {
+		addHithinkFieldIssue(ctx, nil, "report_period", "report", "report_period_mismatch",
+			report, "string", data.Report, "同花顺财务响应报告期与请求不匹配")
 		return nil, fmt.Errorf("同花顺财务响应报告期不匹配: requested=%s returned=%q", report, data.Report)
 	}
 
@@ -1964,12 +2027,16 @@ func (p *Hithink) FetchFundamentals(ctx context.Context, rawSymbol string, year,
 		standardCategorySet[category] = struct{}{}
 	}
 	seenCategories := make(map[string]struct{}, len(data.Abilities))
-	for _, ability := range data.Abilities {
+	for abilityIndex, ability := range data.Abilities {
 		category := hithinkFundamentalCategory(ability.Ability)
 		if _, allowed := standardCategorySet[category]; !allowed {
+			addHithinkFieldIssue(ctx, &abilityIndex, "category", "ability", "unknown_category",
+				"one of supported financial ability categories", "string", ability.Ability, "同花顺财务指标返回未知能力分区")
 			return nil, fmt.Errorf("同花顺财务指标返回未知能力分区 %q", ability.Ability)
 		}
 		if _, duplicate := seenCategories[category]; duplicate {
+			addHithinkFieldIssue(ctx, &abilityIndex, "category", "ability", "duplicate_category",
+				"unique financial ability category", "string", ability.Ability, "同花顺财务指标返回重复能力分区")
 			return nil, fmt.Errorf("同花顺财务指标返回重复能力分区 %q", category)
 		}
 		seenCategories[category] = struct{}{}
@@ -1995,6 +2062,8 @@ func (p *Hithink) FetchFundamentals(ctx context.Context, rawSymbol string, year,
 			indexID = strings.TrimSpace(indexID)
 			normalizedIndexID := strings.ToLower(indexID)
 			if _, duplicate := seenIndexIDs[normalizedIndexID]; duplicate {
+				addHithinkFieldIssue(ctx, &rowIndex, "metric_key", "index_id", "duplicate_metric_identity",
+					"unique index_id within ability category", "string", indexID, "同花顺财务指标分区返回重复指标 ID")
 				return nil, fmt.Errorf("同花顺财务指标返回重复指标 ID %q（分区 %s）", indexID, category)
 			}
 			seenIndexIDs[normalizedIndexID] = struct{}{}
@@ -2283,6 +2352,16 @@ type hithinkDailyRowPosition struct {
 	pageLastDate  string
 }
 
+func hithinkDailyResponseIssue(ctx context.Context, code, field, expected, actualType, actualPreview, message string) {
+	report := validation.NewReport(1)
+	report.Add(validation.FieldIssue{
+		Stage: validation.StageParse, Field: field, ProviderField: field,
+		Code: code, Expected: expected, ActualType: actualType, ActualPreview: actualPreview,
+		Severity: validation.SeverityError, Message: message,
+	})
+	validation.AddContextReport(ctx, report)
+}
+
 func (p *Hithink) fetchDailySegment(ctx context.Context, symbol string, start, end time.Time, adjust string, loc *time.Location) ([]model.DailyBar, error) {
 	startMS := time.Date(start.Year(), start.Month(), start.Day(), 0, 0, 0, 0, loc).UnixMilli()
 	endMS := time.Date(end.Year(), end.Month(), end.Day(), 23, 59, 59, int(time.Second-time.Nanosecond), loc).UnixMilli()
@@ -2302,10 +2381,12 @@ func (p *Hithink) fetchDailySegment(ctx context.Context, symbol string, start, e
 		query.Set("offset", strconv.Itoa(offset))
 		raw, err := p.get(ctx, "/api/a-share/prices/historical", query)
 		if err != nil {
+			hithinkDailyResponseIssue(ctx, "request_error", "daily_bar_page", "successful historical K-line page response", "request_error", "", "同花顺历史 K 线分页请求失败")
 			return nil, fmt.Errorf("同花顺历史 K 线区间 %s..%s 请求失败: %w", start.Format("2006-01-02"), end.Format("2006-01-02"), err)
 		}
 		dataRaw, err := hithinkResponseData(raw)
 		if err != nil {
+			hithinkDailyResponseIssue(ctx, "provider_response_error", "daily_bar_response", "successful response envelope containing data", "response_error", "", "同花顺历史 K 线响应信封无效或 Provider 拒绝请求")
 			return nil, err
 		}
 		var data struct {
@@ -2362,10 +2443,16 @@ func (p *Hithink) fetchDailySegment(ctx context.Context, symbol string, start, e
 			}
 			tradeDate := time.UnixMilli(dateMS).In(loc).Format("2006-01-02")
 			if tradeDate < start.Format("2006-01-02") || tradeDate > end.Format("2006-01-02") {
+				addProviderParseIssue(ctx, absoluteRowIndex, "trade_date", "date_ms", "date_out_of_requested_range",
+					start.Format("2006-01-02")+".."+end.Format("2006-01-02"), "timestamp", tradeDate,
+					"同花顺日 K 日期超出当前分页请求区间")
 				return nil, fmt.Errorf("同花顺日 K 日期 %s 超出请求区间", tradeDate)
 			}
 			if first, duplicate := seen[tradeDate]; duplicate {
 				// 保留重复项并拒绝整次结果；页级边界用于区分 offset 未生效与上游分页窗口重叠。
+				addProviderParseIssue(ctx, absoluteRowIndex, "trade_date", "date_ms", "duplicate_trade_date",
+					"unique trade date across all pages", "timestamp", tradeDate,
+					"同花顺分页响应包含重复交易日")
 				return nil, fmt.Errorf("同花顺分页返回重复交易日 %s (first_page=%d first_offset=%d first_row=%d first_page_item_count=%d first_page_first_date=%s first_page_last_date=%s duplicate_page=%d duplicate_offset=%d duplicate_row=%d duplicate_page_item_count=%d duplicate_page_first_date=%s duplicate_page_last_date=%s)",
 					tradeDate, first.page, first.offset, first.row, first.pageItemCount, first.pageFirstDate, first.pageLastDate,
 					page+1, offset, rowIndex, len(data.Item), pageFirstDate, pageLastDate)
@@ -2376,6 +2463,10 @@ func (p *Hithink) fetchDailySegment(ctx context.Context, symbol string, start, e
 			}
 			if !hithinkPositiveFinite(open) || !hithinkPositiveFinite(high) || !hithinkPositiveFinite(low) || !hithinkPositiveFinite(closePrice) ||
 				low > high || open < low || open > high || closePrice < low || closePrice > high {
+				addProviderParseIssue(ctx, absoluteRowIndex, "ohlc", "open_price/high_price/low_price/close_price", "invariant_violation",
+					"positive finite prices and low <= open/close <= high", "number",
+					fmt.Sprintf("open=%g high=%g low=%g close=%g", open, high, low, closePrice),
+					"同花顺日 K OHLC 价格关系不满足约束")
 				return nil, fmt.Errorf("同花顺日 K %s 的 OHLC 不满足数据约束", tradeDate)
 			}
 			var volume *int64
@@ -2426,11 +2517,13 @@ func (p *Hithink) fetchDailySegment(ctx context.Context, symbol string, start, e
 				QualityStatus: quality, QualityReasons: reasons, NormalizationVer: normalize.Version,
 			})
 			if len(out) > hithinkMaxRowsPerCall {
+				hithinkDailyResponseIssue(ctx, "result_limit_exceeded", "daily_bar_page", fmt.Sprintf("at most %d rows", hithinkMaxRowsPerCall), "row_count", strconv.Itoa(len(out)), "同花顺日 K 分页结果超过安全行数上限")
 				return nil, fmt.Errorf("同花顺分页结果超过安全上限 %d 行", hithinkMaxRowsPerCall)
 			}
 		}
 		offset += len(data.Item)
 	}
+	hithinkDailyResponseIssue(ctx, "pagination_limit_exceeded", "daily_bar_page", "pagination terminates before page safety limit", "page_count", strconv.Itoa(hithinkMaxPagesPerRange), "同花顺日 K 分页达到安全上限，拒绝返回可能不完整的结果")
 	return nil, fmt.Errorf("同花顺在 %d 页内未结束分页，拒绝返回可能不完整的 K 线", hithinkMaxPagesPerRange)
 }
 

@@ -235,6 +235,7 @@ func (s *DataService) Fundamentals(ctx context.Context, rawSymbol string, year, 
 		return nil, false, errors.New("no enabled fundamentals provider")
 	}
 	var failures []string
+	var degradedCandidate *model.FundamentalsSnapshot
 	var unknownCandidate *model.FundamentalsSnapshot
 	for _, p := range s.fundamentalsProviders {
 		if err := ctx.Err(); err != nil {
@@ -243,6 +244,10 @@ func (s *DataService) Fundamentals(ctx context.Context, rawSymbol string, year, 
 		snapshot, fetchErr := p.FetchFundamentals(ctx, symbol, year, quarter)
 		if fetchErr != nil {
 			failures = append(failures, p.Name()+": "+fetchErr.Error())
+			continue
+		}
+		if snapshot != nil && strings.TrimSpace(snapshot.Source) != "" && snapshot.Source != p.Name() {
+			failures = append(failures, p.Name()+": fundamentals source does not match Provider.Name()")
 			continue
 		}
 		if snapshot != nil {
@@ -266,6 +271,14 @@ func (s *DataService) Fundamentals(ctx context.Context, rawSymbol string, year, 
 			}
 			continue
 		}
+		if snapshot.QualityStatus == model.QualityDegraded {
+			// 降级快照仅作为兜底候选；继续尝试后续 Provider，优先取得 PIT 证据更完整的 valid 快照。
+			if betterUnknownFundamentalsSnapshot(snapshot, degradedCandidate) {
+				degradedCandidate = snapshot
+			}
+			failures = append(failures, p.Name()+": fundamentals quality is degraded")
+			continue
+		}
 		s.saveFundamentalsRevision(ctx, snapshot)
 		payload, err := json.Marshal(snapshot)
 		if err != nil {
@@ -277,6 +290,15 @@ func (s *DataService) Fundamentals(ctx context.Context, rawSymbol string, year, 
 			}
 		}
 		return snapshot, false, nil
+	}
+	if degradedCandidate != nil {
+		s.saveFundamentalsRevision(ctx, degradedCandidate)
+		if payload, err := json.Marshal(degradedCandidate); err == nil {
+			if cacheErr := s.cache.Set(ctx, key, payload, fundamentalsCacheTTL(degradedCandidate)); cacheErr != nil {
+				s.logger.Warn("fundamentals degraded cache write failed", "symbol", symbol, "year", year, "quarter", quarter, "error", cacheErr)
+			}
+		}
+		return degradedCandidate, false, nil
 	}
 	if unknownCandidate != nil {
 		unknownCandidate.QualityStatus = model.QualityUnknown

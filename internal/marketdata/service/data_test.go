@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"math"
@@ -383,6 +384,22 @@ func TestDailyBarsAcceptsForwardReferenceAfterRequestedEnd(t *testing.T) {
 	}
 }
 
+func TestQuotePrefersLaterValidProviderOverDegradedPrimary(t *testing.T) {
+	degraded := validQuote("eastmoney")
+	degraded.Amount = nil
+	primary := fakeProvider{name: "eastmoney", quote: degraded}
+	secondary := fakeProvider{name: "tencent", quote: validQuote("tencent")}
+	svc := New([]provider.Provider{primary, secondary}, cache.NewDisabled(), nil, time.Second, time.Second, 120,
+		slog.New(slog.NewTextHandler(io.Discard, nil)))
+	got, hit, err := svc.Quote(context.Background(), "600519.SH")
+	if err != nil || hit {
+		t.Fatalf("Quote returned hit=%v err=%v", hit, err)
+	}
+	if got == nil || got.Source != "tencent" || got.QualityStatus != model.QualityValid || got.FallbackFrom != "eastmoney" {
+		t.Fatalf("later valid provider must win over degraded primary: %+v", got)
+	}
+}
+
 func TestQuoteFallbackDoesNotOverrideInvalidProviderQuality(t *testing.T) {
 	invalid := validQuote("tencent")
 	invalid.Symbol = ""
@@ -448,8 +465,9 @@ func TestQuoteFallsBackWhenProviderSourceVersionIsMissing(t *testing.T) {
 	if err != nil || hit {
 		t.Fatalf("Quote returned hit=%v err=%v", hit, err)
 	}
-	if got == nil || got.Source != "tencent" || got.SourceVersion != fallback.SourceVersion || got.QualityStatus != model.QualityDegraded {
-		t.Fatalf("quote without source version must fall back to a versioned provider: %+v", got)
+	if got == nil || got.Source != "tencent" || got.SourceVersion != fallback.SourceVersion || got.QualityStatus != model.QualityValid ||
+		got.FallbackFrom != "eastmoney" || !strings.Contains(got.FallbackReason, "source_version is missing") {
+		t.Fatalf("quote without source version must use a valid versioned fallback with explicit provenance: %+v", got)
 	}
 }
 
@@ -511,10 +529,113 @@ func TestQuoteFailoverRecordsActualSource(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if q.Source != "tencent" || q.FallbackFrom != "eastmoney" || q.QualityStatus != model.QualityDegraded {
-		t.Fatalf("fallback metadata missing: %+v", q)
+	if q.Source != "tencent" || q.FallbackFrom != "eastmoney" || q.QualityStatus != model.QualityValid || containsTestWarning(q.QualityReasons, "provider_fallback_used") {
+		t.Fatalf("valid fallback data must retain valid quality and provenance separately: %+v", q)
 	}
 }
+func TestQuoteRejectsMismatchedProviderSourceAndFallsBack(t *testing.T) {
+	wrongSource := validQuote("tencent")
+	fallback := validQuote("tencent")
+	providers := []provider.Provider{
+		fakeProvider{name: "eastmoney", quote: wrongSource},
+		fakeProvider{name: "tencent", quote: fallback},
+	}
+	svc := New(providers, cache.NewDisabled(), nil, time.Second, time.Second, 120, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	got, hit, err := svc.Quote(context.Background(), "600519.SH")
+	if err != nil || hit {
+		t.Fatalf("Quote returned hit=%v err=%v", hit, err)
+	}
+	if got == nil || got.Source != "tencent" || got.FallbackFrom != "eastmoney" {
+		t.Fatalf("mismatched source must be rejected and fallback retained: %+v", got)
+	}
+}
+
+func TestQuoteMissingProviderSourceIsFilledAsDegraded(t *testing.T) {
+	quote := validQuote("eastmoney")
+	quote.Source = ""
+	svc := New([]provider.Provider{fakeProvider{name: "eastmoney", quote: quote}},
+		cache.NewDisabled(), nil, time.Second, time.Second, 120, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	got, hit, err := svc.Quote(context.Background(), "600519.SH")
+	if err != nil || hit {
+		t.Fatalf("Quote returned hit=%v err=%v", hit, err)
+	}
+	if got == nil || got.Source != "eastmoney" || got.QualityStatus != model.QualityDegraded ||
+		!containsTestWarning(got.QualityReasons, "provider_source_missing_assumed_from_provider_name") {
+		t.Fatalf("missing source must be filled only with explicit degradation evidence: %+v", got)
+	}
+}
+
+func TestDailyBarsRejectsMismatchedProviderSourceAndFallsBack(t *testing.T) {
+	primaryBar := dailyBarForVersionContractTest("eastmoney-daily-bars-v1", "2026-10-20")
+	primaryBar.Source = "tencent"
+	fallbackBar := dailyBarForVersionContractTest("tencent-daily-bars-v1", "2026-10-20")
+	providers := []provider.Provider{
+		fakeProvider{name: "eastmoney", bars: []model.DailyBar{primaryBar}},
+		fakeProvider{name: "tencent", bars: []model.DailyBar{fallbackBar}},
+	}
+	svc := New(providers, cache.NewDisabled(), nil, time.Second, time.Minute, 120, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	bars, hit, _, err := svc.DailyBars(context.Background(), "600519.SH", "2026-10-20", "2026-10-20", 1, model.AdjustmentForward)
+	if err != nil || hit {
+		t.Fatalf("DailyBars hit=%v err=%v", hit, err)
+	}
+	if len(bars) != 1 || bars[0].Source != "tencent" || bars[0].FallbackFrom != "eastmoney" {
+		t.Fatalf("mismatched source must reject the whole provider response and use fallback: %+v", bars)
+	}
+}
+
+func TestDailyBarsMissingProviderSourceIsFilledAsDegraded(t *testing.T) {
+	bar := dailyBarForVersionContractTest("eastmoney-daily-bars-v1", "2026-10-20")
+	bar.Source = ""
+	svc := New([]provider.Provider{fakeProvider{name: "eastmoney", bars: []model.DailyBar{bar}}},
+		cache.NewDisabled(), nil, time.Second, time.Minute, 120, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	bars, hit, _, err := svc.DailyBars(context.Background(), "600519.SH", "2026-10-20", "2026-10-20", 1, model.AdjustmentForward)
+	if err != nil || hit {
+		t.Fatalf("DailyBars hit=%v err=%v", hit, err)
+	}
+	if len(bars) != 1 || bars[0].Source != "eastmoney" || bars[0].QualityStatus != model.QualityDegraded ||
+		!containsTestWarning(bars[0].QualityReasons, "provider_source_missing_assumed_from_provider_name") {
+		t.Fatalf("missing source must be filled only with explicit degradation evidence: %+v", bars)
+	}
+}
+
+func TestMergeBundleQualityStatusPreservesSeverity(t *testing.T) {
+	cases := []struct{ current, next, want model.QualityStatus }{
+		{model.QualityValid, model.QualityDegraded, model.QualityDegraded},
+		{model.QualityDegraded, model.QualityUnknown, model.QualityUnknown},
+		{model.QualityUnknown, model.QualityStale, model.QualityStale},
+		{model.QualityStale, model.QualityDegraded, model.QualityStale},
+		{model.QualityStale, model.QualityInvalid, model.QualityInvalid},
+		{model.QualityValid, "", model.QualityUnknown},
+	}
+	for _, tc := range cases {
+		if got := mergeBundleQualityStatus(tc.current, tc.next); got != tc.want {
+			t.Errorf("mergeBundleQualityStatus(%q, %q) = %q, want %q", tc.current, tc.next, got, tc.want)
+		}
+	}
+}
+
+func TestBundlePreservesStaleRealtimeQuoteQuality(t *testing.T) {
+	p := fakeProvider{name: "eastmoney", quote: validQuote("eastmoney")}
+	old := time.Now().Add(-25 * time.Hour).UTC()
+	p.quote.QuoteTime = &old
+	vol, amount := int64(1000), 10500.0
+	p.bars = []model.DailyBar{{SourceVersion: "test-v1", Symbol: "600519.SH", TradeDate: time.Now().In(marketLocation()).AddDate(0, 0, -1).Format("2006-01-02"), Period: "1d", Open: 10, High: 11, Low: 9, Close: 10.5, Volume: &vol, Amount: &amount, AdjustmentBasis: model.AdjustmentNone, Source: "eastmoney", VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid}}
+	s := New([]provider.Provider{p}, cache.NewDisabled(), nil, time.Second, time.Second, 60, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	bundle, err := s.Bundle(context.Background(), "600519", 1, time.Time{}, false, model.AdjustmentNone)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bundle.Quote == nil || bundle.Quote.QualityStatus != model.QualityStale {
+		t.Fatalf("expected stale quote in bundle, got %+v", bundle.Quote)
+	}
+	if bundle.QualityStatus != model.QualityStale {
+		t.Fatalf("bundle must preserve stale child quality, got %q", bundle.QualityStatus)
+	}
+	if !containsTestWarning(bundle.Warnings, "realtime_quote_quality_stale") {
+		t.Fatalf("bundle must expose the stale child component, warnings=%v", bundle.Warnings)
+	}
+}
+
 func TestHistoricalBundleDoesNotFetchRealtimeQuote(t *testing.T) {
 	p := fakeProvider{name: "eastmoney", quoteErr: errors.New("quote should not be called")}
 	v := int64(1000)
@@ -663,11 +784,9 @@ func TestQuotePrefersFreshProviderOverStalePrimary(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cacheHit || got.Source != "tencent" || got.QualityStatus != model.QualityDegraded {
-		t.Fatalf("stale primary should be bypassed and fresh fallback annotated: hit=%v quote=%+v", cacheHit, got)
-	}
-	if !containsReason(got.QualityReasons, "provider_fallback_used") {
-		t.Fatalf("fallback source must be auditable: %+v", got.QualityReasons)
+	if cacheHit || got.Source != "tencent" || got.QualityStatus != model.QualityValid || got.FallbackFrom != "eastmoney" ||
+		!strings.Contains(got.FallbackReason, "quote not suitable as a fresh live snapshot") {
+		t.Fatalf("stale primary should be bypassed while preserving valid fallback quality and explicit provenance: hit=%v quote=%+v", cacheHit, got)
 	}
 }
 
@@ -733,11 +852,128 @@ func TestDailyBarsRejectsCacheWithWrongAdjustmentBasis(t *testing.T) {
 func dailyBarForVersionContractTest(sourceVersion, tradeDate string) model.DailyBar {
 	volume := int64(10000)
 	amount := 100000.0
+	// 测试样本的来源身份必须与其 source_version 对应，避免被生产契约校验误判为跨 Provider 数据。
+	source := strings.SplitN(strings.TrimSpace(sourceVersion), "-", 2)[0]
+	if source != "eastmoney" && source != "tencent" && source != "pytdx" {
+		// unknown/placeholder 版本样本用于验证版本拒绝路径，默认归属主 Provider，避免身份错误掩盖版本校验。
+		source = "eastmoney"
+	}
 	return model.DailyBar{
 		Symbol: "600519.SH", TradeDate: tradeDate, Period: "1d",
 		Open: 10, High: 11, Low: 9, Close: 10.5, Volume: &volume, Amount: &amount,
-		AdjustmentBasis: model.AdjustmentForward, Source: "fixture-provider", SourceVersion: sourceVersion,
+		AdjustmentBasis: model.AdjustmentForward, Source: source, SourceVersion: sourceVersion,
 		VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityDegraded,
+	}
+}
+
+func TestQuoteBypassesDegradedCacheAfterShortTTL(t *testing.T) {
+	mem := newMemoryCache()
+	cached := validQuote("eastmoney")
+	cached.QualityStatus = model.QualityDegraded
+	cached.QualityReasons = []string{"amount_missing_from_provider"}
+	cached.Amount = nil
+	cached.FetchedAt = time.Now().Add(-3 * time.Minute)
+	cached.NormalizedAt = time.Now().UTC()
+	payload, err := json.Marshal(cached)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mem.values["md:v4:quote:600519.SH"] = payload
+
+	current := fakeProvider{name: "tencent", quote: validQuote("tencent")}
+	svc := New([]provider.Provider{current}, mem, nil, 8*time.Minute, 8*time.Minute, 120, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	got, hit, err := svc.Quote(context.Background(), "600519.SH")
+	if err != nil || hit {
+		t.Fatalf("degraded quote cache older than short TTL must be bypassed: hit=%v err=%v", hit, err)
+	}
+	if got == nil || got.Source != "tencent" {
+		t.Fatalf("expected refreshed quote from provider, got %+v", got)
+	}
+}
+
+func TestDailyBarsBypassesDegradedCacheAfterShortTTL(t *testing.T) {
+	mem := newMemoryCache()
+	tradeDate := time.Now().In(marketLocation()).AddDate(0, 0, -1).Format("2006-01-02")
+	cached := dailyBarForVersionContractTest("eastmoney-daily-bars-v1", tradeDate)
+	cached.AdjustmentBasis = model.AdjustmentNone
+	cached.QualityStatus = model.QualityDegraded
+	cached.NormalizationVer = normalize.Version
+	cached.FetchedAt = time.Now().Add(-3 * time.Minute)
+	cached.NormalizedAt = time.Now().UTC()
+	payload, err := json.Marshal(map[string]any{"bars": []model.DailyBar{cached}, "warnings": []string{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	key := fmt.Sprintf("md:v5:bars:600519.SH:%s:%s:%s:%d", tradeDate, tradeDate, model.AdjustmentNone, 1)
+	mem.values[key] = payload
+
+	currentBar := dailyBarForVersionContractTest("tencent-daily-bars-v1", tradeDate)
+	currentBar.AdjustmentBasis = model.AdjustmentNone
+	currentBar.QualityStatus = model.QualityValid
+	current := fakeProvider{name: "tencent", bars: []model.DailyBar{currentBar}}
+	svc := New([]provider.Provider{current}, mem, nil, 8*time.Minute, 8*time.Minute, 1, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	bars, hit, _, err := svc.DailyBars(context.Background(), "600519.SH", tradeDate, tradeDate, 1, model.AdjustmentNone)
+	if err != nil || hit {
+		t.Fatalf("degraded daily-bars cache older than short TTL must be bypassed: hit=%v err=%v", hit, err)
+	}
+	if len(bars) != 1 || bars[0].Source != "tencent" {
+		t.Fatalf("expected refreshed daily bars from provider, got %+v", bars)
+	}
+}
+
+func TestDailyBarsRejectsNonCacheableQualityStatuses(t *testing.T) {
+	for _, quality := range []model.QualityStatus{model.QualityStale, model.QualityUnknown, model.QualityInvalid} {
+		t.Run(string(quality), func(t *testing.T) {
+			mem := newMemoryCache()
+			tradeDate := time.Now().In(marketLocation()).AddDate(0, 0, -1).Format("2006-01-02")
+			cached := dailyBarForVersionContractTest("eastmoney-daily-bars-v1", tradeDate)
+			cached.AdjustmentBasis = model.AdjustmentNone
+			cached.QualityStatus = quality
+			cached.NormalizationVer = normalize.Version
+			cached.FetchedAt = time.Now().UTC()
+			cached.NormalizedAt = time.Now().UTC()
+			payload, err := json.Marshal(map[string]any{"bars": []model.DailyBar{cached}, "warnings": []string{}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			key := fmt.Sprintf("md:v5:bars:600519.SH:%s:%s:%s:%d", tradeDate, tradeDate, model.AdjustmentNone, 1)
+			mem.values[key] = payload
+
+			currentBar := dailyBarForVersionContractTest("tencent-daily-bars-v1", tradeDate)
+			currentBar.AdjustmentBasis = model.AdjustmentNone
+			currentBar.QualityStatus = model.QualityValid
+			current := fakeProvider{name: "tencent", bars: []model.DailyBar{currentBar}}
+			svc := New([]provider.Provider{current}, mem, nil, 8*time.Minute, 8*time.Minute, 1, slog.New(slog.NewTextHandler(io.Discard, nil)))
+			bars, hit, _, err := svc.DailyBars(context.Background(), "600519.SH", tradeDate, tradeDate, 1, model.AdjustmentNone)
+			if err != nil || hit {
+				t.Fatalf("non-cacheable quality %q must be bypassed: hit=%v err=%v", quality, hit, err)
+			}
+			if len(bars) != 1 || bars[0].Source != "tencent" {
+				t.Fatalf("expected provider refresh after bypassing %q cache: %+v", quality, bars)
+			}
+		})
+	}
+}
+
+func TestDailyBarsPrefersLaterValidProviderOverDegradedPrimary(t *testing.T) {
+	tradeDate := time.Now().In(marketLocation()).AddDate(0, 0, -1).Format("2006-01-02")
+	degraded := dailyBarForVersionContractTest("eastmoney-daily-bars-v1", tradeDate)
+	degraded.AdjustmentBasis = model.AdjustmentNone
+	degraded.QualityStatus = model.QualityDegraded
+	valid := dailyBarForVersionContractTest("tencent-daily-bars-v1", tradeDate)
+	valid.AdjustmentBasis = model.AdjustmentNone
+	valid.QualityStatus = model.QualityValid
+	primary := fakeProvider{name: "eastmoney", bars: []model.DailyBar{degraded}}
+	secondary := fakeProvider{name: "tencent", bars: []model.DailyBar{valid}}
+	svc := New([]provider.Provider{primary, secondary}, cache.NewDisabled(), nil, time.Second, time.Minute, 1,
+		slog.New(slog.NewTextHandler(io.Discard, nil)))
+	bars, hit, _, err := svc.DailyBars(context.Background(), "600519.SH", "", "", 1, model.AdjustmentNone)
+	if err != nil || hit {
+		t.Fatalf("DailyBars returned hit=%v err=%v", hit, err)
+	}
+	if len(bars) != 1 || bars[0].Source != "tencent" || bars[0].QualityStatus != model.QualityValid ||
+		bars[0].FallbackFrom != "eastmoney" {
+		t.Fatalf("later valid provider must win without degrading data solely due to fallback: %+v", bars)
 	}
 }
 
@@ -2126,6 +2362,33 @@ func TestStockBasicCacheWithOldNormalizationVersionIsBypassed(t *testing.T) {
 	}
 }
 
+func TestStockBasicRejectsMismatchedSourceAndFallsBack(t *testing.T) {
+	first := &stockBasicFakeProvider{name: "eastmoney", item: stockBasicIdentityFixtureForTest("600519.SH")}
+	first.item.Source = "tencent"
+	second := &stockBasicFakeProvider{name: "tushare", item: stockBasicIdentityFixtureForTest("600519.SH")}
+	second.item.Source = "tushare"
+	svc := NewWithCapabilities([]provider.NamedProvider{first, second}, nil, nil, cache.NewDisabled(), nil,
+		time.Second, time.Minute, 120, 2000, ResilienceConfig{}, nil)
+	svc.SetStockBasicProviders([]provider.StockBasicProvider{first, second})
+	got, hit, err := svc.StockBasic(context.Background(), "600519.SH")
+	if err != nil || hit || got == nil || got.Source != "tushare" {
+		t.Fatalf("mismatched source must be rejected and fallback selected: got=%+v hit=%v err=%v", got, hit, err)
+	}
+}
+
+func TestStockBasicMissingSourceIsExplicitlyDegraded(t *testing.T) {
+	p := &stockBasicFakeProvider{name: "eastmoney", item: stockBasicIdentityFixtureForTest("600519.SH")}
+	p.item.Source = ""
+	svc := NewWithCapabilities([]provider.NamedProvider{p}, nil, nil, cache.NewDisabled(), nil,
+		time.Second, time.Minute, 120, 2000, ResilienceConfig{}, nil)
+	svc.SetStockBasicProviders([]provider.StockBasicProvider{p})
+	got, hit, err := svc.StockBasic(context.Background(), "600519.SH")
+	if err != nil || hit || got == nil || got.Source != "eastmoney" || got.QualityStatus != model.QualityDegraded ||
+		!hasStockSearchReason(got.QualityReasons, "provider_source_missing_assumed_from_provider_name") {
+		t.Fatalf("missing source must be filled with explicit degraded provenance: got=%+v hit=%v err=%v", got, hit, err)
+	}
+}
+
 func TestValidateStockBasicRejectsOutDateBeforeIPODate(t *testing.T) {
 	item := &model.StockBasic{
 		Symbol: "600519.SH", Name: "贵州茅台", IPODate: "2020-01-02", OutDate: "2019-12-31",
@@ -2280,13 +2543,19 @@ func TestStockBasicRetainsUnknownAfterFallbackExhaustion(t *testing.T) {
 }
 
 type supplementCountingFakeProvider struct {
+	name      string
 	chip      *model.ChipDistribution
 	flow      *model.CapitalFlow
 	chipCalls int
 	flowCalls int
 }
 
-func (p *supplementCountingFakeProvider) Name() string { return "miaoxiang" }
+func (p *supplementCountingFakeProvider) Name() string {
+	if strings.TrimSpace(p.name) != "" {
+		return p.name
+	}
+	return "miaoxiang"
+}
 
 func (p *supplementCountingFakeProvider) FetchChipDistribution(context.Context, string) (*model.ChipDistribution, error) {
 	p.chipCalls++
@@ -2296,6 +2565,50 @@ func (p *supplementCountingFakeProvider) FetchChipDistribution(context.Context, 
 func (p *supplementCountingFakeProvider) FetchCapitalFlow(context.Context, string) (*model.CapitalFlow, error) {
 	p.flowCalls++
 	return p.flow, nil
+}
+
+func TestSupplementRejectsMismatchedSourceAndFallsBack(t *testing.T) {
+	now := time.Now().UTC()
+	mainInflow := 120.0
+	first := &supplementCountingFakeProvider{name: "eastmoney",
+		chip: &model.ChipDistribution{Symbol: "600519.SH", AverageCost: 12.5, Source: "tencent", SourceVersion: "eastmoney-v1", FetchedAt: now, QualityStatus: model.QualityDegraded},
+		flow: &model.CapitalFlow{Symbol: "600519.SH", ProviderDate: time.Now().In(marketLocation()).Format("2006-01-02"), MainNetInflow: &mainInflow, Observations: 1, Source: "tencent", SourceVersion: "eastmoney-v1", FetchedAt: now, QualityStatus: model.QualityDegraded},
+	}
+	second := &supplementCountingFakeProvider{name: "tushare",
+		chip: &model.ChipDistribution{Symbol: "600519.SH", AverageCost: 12.6, Source: "tushare", SourceVersion: "tushare-v1", FetchedAt: now, QualityStatus: model.QualityDegraded},
+		flow: &model.CapitalFlow{Symbol: "600519.SH", ProviderDate: time.Now().In(marketLocation()).Format("2006-01-02"), MainNetInflow: &mainInflow, Observations: 1, Source: "tushare", SourceVersion: "tushare-v1", FetchedAt: now, QualityStatus: model.QualityDegraded},
+	}
+	svc := NewWithCapabilities([]provider.NamedProvider{first, second}, nil, nil, cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000, ResilienceConfig{}, nil)
+	svc.SetSupplementProviders([]provider.SupplementProvider{first, second})
+	chip, hit, err := svc.ChipDistribution(context.Background(), "600519.SH")
+	if err != nil || hit || chip == nil || chip.Source != "tushare" {
+		t.Fatalf("chip source mismatch must trigger fallback: got=%+v hit=%v err=%v", chip, hit, err)
+	}
+	flow, hit, err := svc.CapitalFlow(context.Background(), "600519.SH")
+	if err != nil || hit || flow == nil || flow.Source != "tushare" {
+		t.Fatalf("capital-flow source mismatch must trigger fallback: got=%+v hit=%v err=%v", flow, hit, err)
+	}
+}
+
+func TestSupplementMissingSourceIsExplicitlyDegraded(t *testing.T) {
+	now := time.Now().UTC()
+	mainInflow := 120.0
+	p := &supplementCountingFakeProvider{
+		chip: &model.ChipDistribution{Symbol: "600519.SH", AverageCost: 12.5, SourceVersion: "test-v1", FetchedAt: now, QualityStatus: model.QualityDegraded},
+		flow: &model.CapitalFlow{Symbol: "600519.SH", ProviderDate: time.Now().In(marketLocation()).Format("2006-01-02"), MainNetInflow: &mainInflow, Observations: 1, SourceVersion: "test-v1", FetchedAt: now, QualityStatus: model.QualityDegraded},
+	}
+	svc := NewWithCapabilities([]provider.NamedProvider{p}, nil, nil, cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000, ResilienceConfig{}, nil)
+	svc.SetSupplementProviders([]provider.SupplementProvider{p})
+	chip, hit, err := svc.ChipDistribution(context.Background(), "600519.SH")
+	if err != nil || hit || chip == nil || chip.Source != p.Name() || chip.QualityStatus != model.QualityDegraded ||
+		!hasStockSearchReason(chip.QualityReasons, "provider_source_missing_assumed_from_provider_name") {
+		t.Fatalf("chip missing source must be explicitly degraded: got=%+v hit=%v err=%v", chip, hit, err)
+	}
+	flow, hit, err := svc.CapitalFlow(context.Background(), "600519.SH")
+	if err != nil || hit || flow == nil || flow.Source != p.Name() || flow.QualityStatus != model.QualityDegraded ||
+		!hasStockSearchReason(flow.QualityReasons, "provider_source_missing_assumed_from_provider_name") {
+		t.Fatalf("capital-flow missing source must be explicitly degraded: got=%+v hit=%v err=%v", flow, hit, err)
+	}
 }
 
 func TestSupplementContractsRequireSourceVersion(t *testing.T) {
@@ -3164,5 +3477,402 @@ func TestDailyBarsCacheRetainsStoredWarningsWhenHit(t *testing.T) {
 	}
 	if !containsTestWarning(warnings, "provider_cache_original_warning") || !containsTestWarning(warnings, "invalid_ohlc_bar_dropped") {
 		t.Fatalf("cache hit must merge stored warnings and current normalization warnings: %v", warnings)
+	}
+}
+
+type snapshotSourceIdentityFakeProvider struct {
+	name            string
+	indexSnapshot   *model.IndexQuoteSnapshot
+	breadthSnapshot *model.MarketBreadthSnapshot
+	sectorSnapshot  *model.SectorRankingSnapshot
+	indexCalls      int
+	breadthCalls    int
+	sectorCalls     int
+}
+
+func (p *snapshotSourceIdentityFakeProvider) Name() string { return p.name }
+
+func (p *snapshotSourceIdentityFakeProvider) FetchIndexQuotes(context.Context) (*model.IndexQuoteSnapshot, error) {
+	p.indexCalls++
+	return p.indexSnapshot, nil
+}
+
+func (p *snapshotSourceIdentityFakeProvider) FetchMarketBreadth(context.Context) (*model.MarketBreadthSnapshot, error) {
+	p.breadthCalls++
+	return p.breadthSnapshot, nil
+}
+
+func (p *snapshotSourceIdentityFakeProvider) FetchSectorRankings(_ context.Context, _ string, _ int) (*model.SectorRankingSnapshot, error) {
+	p.sectorCalls++
+	return p.sectorSnapshot, nil
+}
+
+func (p *snapshotSourceIdentityFakeProvider) FetchSectorRankingsByMetric(_ context.Context, _, _, _ string, _ int) (*model.SectorRankingSnapshot, error) {
+	p.sectorCalls++
+	return p.sectorSnapshot, nil
+}
+
+func newSnapshotSourceIdentityService(primary, fallback *snapshotSourceIdentityFakeProvider) *DataService {
+	svc := NewWithCapabilities(
+		[]provider.NamedProvider{primary, fallback},
+		nil,
+		nil,
+		cache.NewDisabled(),
+		nil,
+		time.Second,
+		time.Second,
+		120,
+		2000,
+		ResilienceConfig{},
+		nil,
+	)
+	svc.SetIndexQuoteProviders([]provider.IndexQuoteProvider{primary, fallback})
+	svc.marketBreadthProviders = []provider.MarketBreadthProvider{primary, fallback}
+	svc.SetSectorRankingProviders([]provider.SectorRankingProvider{primary, fallback})
+	return svc
+}
+
+func indexQuoteSnapshotForSource(source string) *model.IndexQuoteSnapshot {
+	now := time.Now().UTC()
+	price, changePercent := 3200.0, 1.0
+	return &model.IndexQuoteSnapshot{
+		Source: source, SourceVersion: "test-v1", FetchedAt: now, QualityStatus: model.QualityDegraded,
+		Items: []model.MarketIndexQuote{{
+			Symbol: "000001.SH", Code: "000001", Name: "上证指数",
+			LatestPrice: &price, ChangePercent: &changePercent, AmountUnit: "unknown",
+			Source: source, SourceVersion: "test-v1", FetchedAt: now, QualityStatus: model.QualityDegraded,
+		}},
+	}
+}
+
+func marketBreadthSnapshotForSource(source string) *model.MarketBreadthSnapshot {
+	amount := 100.0
+	return &model.MarketBreadthSnapshot{
+		Market: "cn_a_share", TotalSecurities: 1, CoveredSecurities: 1,
+		AdvancingCount: 1, DecliningCount: 0, UnchangedCount: 0,
+		AmountCoverageCount: 1, TotalAmountCNY: &amount,
+		ProviderReportDate: time.Now().In(marketLocation()).Format("2006-01-02"),
+		Source:             source, SourceVersion: "test-v1", FetchedAt: time.Now().UTC(),
+		QualityStatus: model.QualityDegraded,
+	}
+}
+
+func sectorRankingSnapshotForSource(source string) *model.SectorRankingSnapshot {
+	now := time.Now().UTC()
+	changePercent := 1.0
+	return &model.SectorRankingSnapshot{
+		Category: "industry", Direction: "up", SortBy: "change_percent", Total: 1,
+		Source: source, SourceVersion: "test-v1", FetchedAt: now, QualityStatus: model.QualityDegraded,
+		Items: []model.SectorRanking{{
+			Rank: 1, Code: "BK0001", Name: "测试行业", Category: "industry",
+			ChangePercent: &changePercent, AmountUnit: "unknown",
+			Source: source, SourceVersion: "test-v1", FetchedAt: now, QualityStatus: model.QualityDegraded,
+		}},
+	}
+}
+
+func TestIndexQuotesRejectsMismatchedProviderSourceAndFallsBack(t *testing.T) {
+	primary := &snapshotSourceIdentityFakeProvider{name: "primary", indexSnapshot: indexQuoteSnapshotForSource("spoofed")}
+	fallback := &snapshotSourceIdentityFakeProvider{name: "fallback", indexSnapshot: indexQuoteSnapshotForSource("fallback")}
+	svc := newSnapshotSourceIdentityService(primary, fallback)
+
+	got, _, err := svc.IndexQuotes(context.Background())
+	if err != nil {
+		t.Fatalf("expected fallback index snapshot, got error: %v", err)
+	}
+	if got == nil || got.Source != "fallback" {
+		t.Fatalf("expected fallback source, got %+v", got)
+	}
+	if primary.indexCalls != 1 || fallback.indexCalls != 1 {
+		t.Fatalf("mismatched source must be rejected and fallback called: primary=%d fallback=%d", primary.indexCalls, fallback.indexCalls)
+	}
+}
+
+func TestMarketBreadthRejectsMismatchedProviderSourceAndFallsBack(t *testing.T) {
+	primary := &snapshotSourceIdentityFakeProvider{name: "primary", breadthSnapshot: marketBreadthSnapshotForSource("spoofed")}
+	fallback := &snapshotSourceIdentityFakeProvider{name: "fallback", breadthSnapshot: marketBreadthSnapshotForSource("fallback")}
+	svc := newSnapshotSourceIdentityService(primary, fallback)
+
+	got, _, err := svc.MarketBreadth(context.Background())
+	if err != nil {
+		t.Fatalf("expected fallback market-breadth snapshot, got error: %v", err)
+	}
+	if got == nil || got.Source != "fallback" {
+		t.Fatalf("expected fallback source, got %+v", got)
+	}
+	if primary.breadthCalls != 1 || fallback.breadthCalls != 1 {
+		t.Fatalf("mismatched source must be rejected and fallback called: primary=%d fallback=%d", primary.breadthCalls, fallback.breadthCalls)
+	}
+}
+
+func TestSectorRankingsRejectsMismatchedProviderSourceAndFallsBack(t *testing.T) {
+	primary := &snapshotSourceIdentityFakeProvider{name: "primary", sectorSnapshot: sectorRankingSnapshotForSource("spoofed")}
+	fallback := &snapshotSourceIdentityFakeProvider{name: "fallback", sectorSnapshot: sectorRankingSnapshotForSource("fallback")}
+	svc := newSnapshotSourceIdentityService(primary, fallback)
+
+	got, _, err := svc.SectorRankingsByMetric(context.Background(), "industry", "change_percent", "up", 1)
+	if err != nil {
+		t.Fatalf("expected fallback sector-ranking snapshot, got error: %v", err)
+	}
+	if got == nil || got.Source != "fallback" {
+		t.Fatalf("expected fallback source, got %+v", got)
+	}
+	if primary.sectorCalls != 1 || fallback.sectorCalls != 1 {
+		t.Fatalf("mismatched source must be rejected and fallback called: primary=%d fallback=%d", primary.sectorCalls, fallback.sectorCalls)
+	}
+}
+
+type limitAndDragonTigerSourceIdentityProvider struct {
+	name             string
+	limitPool        *model.LimitPoolSnapshot
+	dragonTiger      *model.DragonTigerSnapshot
+	limitPoolCalls   int
+	dragonTigerCalls int
+}
+
+func (p *limitAndDragonTigerSourceIdentityProvider) Name() string { return p.name }
+
+func (p *limitAndDragonTigerSourceIdentityProvider) FetchLimitPool(context.Context, string, string, int) (*model.LimitPoolSnapshot, error) {
+	p.limitPoolCalls++
+	return p.limitPool, nil
+}
+
+func (p *limitAndDragonTigerSourceIdentityProvider) FetchDragonTiger(context.Context, string, int, int) (*model.DragonTigerSnapshot, error) {
+	p.dragonTigerCalls++
+	return p.dragonTiger, nil
+}
+
+func newLimitAndDragonTigerSourceIdentityService(primary, fallback *limitAndDragonTigerSourceIdentityProvider) *DataService {
+	svc := NewWithCapabilities(
+		[]provider.NamedProvider{primary, fallback},
+		nil,
+		nil,
+		cache.NewDisabled(),
+		nil,
+		time.Second,
+		time.Second,
+		120,
+		2000,
+		ResilienceConfig{},
+		nil,
+	)
+	svc.SetLimitPoolProviders([]provider.LimitPoolProvider{primary, fallback})
+	svc.SetDragonTigerProviders([]provider.DragonTigerProvider{primary, fallback})
+	return svc
+}
+
+func unknownLimitPoolSnapshotForSource(source, tradeDate string) *model.LimitPoolSnapshot {
+	return &model.LimitPoolSnapshot{
+		PoolType: "up", TradeDate: tradeDate, Total: 0, HasData: false,
+		Source: source, SourceVersion: "test-v1", FetchedAt: time.Now().UTC(),
+		QualityStatus: model.QualityUnknown,
+	}
+}
+
+func unknownDragonTigerSnapshotForSource(source, tradeDate string) *model.DragonTigerSnapshot {
+	return &model.DragonTigerSnapshot{
+		TradeDate: tradeDate, Page: 1, PageSize: 20,
+		Total: 0, Pages: 0, Returned: 0, SourceReturned: 0, ExcludedNonAShareCount: 0,
+		HasData: false, HasMore: false,
+		Source: source, SourceVersion: "test-v1", FetchedAt: time.Now().UTC(),
+		QualityStatus: model.QualityUnknown,
+	}
+}
+
+func TestLimitPoolRejectsMismatchedProviderSourceAndFallsBack(t *testing.T) {
+	tradeDate := time.Now().In(marketLocation()).Format("2006-01-02")
+	primary := &limitAndDragonTigerSourceIdentityProvider{
+		name: "primary", limitPool: unknownLimitPoolSnapshotForSource("spoofed", tradeDate),
+	}
+	fallback := &limitAndDragonTigerSourceIdentityProvider{
+		name: "fallback", limitPool: unknownLimitPoolSnapshotForSource("fallback", tradeDate),
+	}
+	svc := newLimitAndDragonTigerSourceIdentityService(primary, fallback)
+
+	got, fromCache, err := svc.LimitPool(context.Background(), "up", tradeDate, 20)
+	if err != nil {
+		t.Fatalf("expected fallback limit-pool candidate, got error: %v", err)
+	}
+	if fromCache {
+		t.Fatal("fallback result must not be reported as cached")
+	}
+	if got == nil || got.Source != "fallback" {
+		t.Fatalf("expected fallback source, got %+v", got)
+	}
+	if primary.limitPoolCalls != 1 || fallback.limitPoolCalls != 1 {
+		t.Fatalf("mismatched source must be rejected and fallback called: primary=%d fallback=%d", primary.limitPoolCalls, fallback.limitPoolCalls)
+	}
+}
+
+func TestDragonTigerRejectsMismatchedProviderSourceAndFallsBack(t *testing.T) {
+	tradeDate := time.Now().In(marketLocation()).Format("2006-01-02")
+	primary := &limitAndDragonTigerSourceIdentityProvider{
+		name: "primary", dragonTiger: unknownDragonTigerSnapshotForSource("spoofed", tradeDate),
+	}
+	fallback := &limitAndDragonTigerSourceIdentityProvider{
+		name: "fallback", dragonTiger: unknownDragonTigerSnapshotForSource("fallback", tradeDate),
+	}
+	svc := newLimitAndDragonTigerSourceIdentityService(primary, fallback)
+
+	got, fromCache, err := svc.DragonTiger(context.Background(), tradeDate, 1, 20)
+	if err != nil {
+		t.Fatalf("expected fallback dragon-tiger candidate, got error: %v", err)
+	}
+	if fromCache {
+		t.Fatal("fallback result must not be reported as cached")
+	}
+	if got == nil || got.Source != "fallback" {
+		t.Fatalf("expected fallback source, got %+v", got)
+	}
+	if primary.dragonTigerCalls != 1 || fallback.dragonTigerCalls != 1 {
+		t.Fatalf("mismatched source must be rejected and fallback called: primary=%d fallback=%d", primary.dragonTigerCalls, fallback.dragonTigerCalls)
+	}
+}
+
+type fundamentalsSourceIdentityProvider struct {
+	name     string
+	snapshot *model.FundamentalsSnapshot
+	calls    int
+}
+
+func (p *fundamentalsSourceIdentityProvider) Name() string { return p.name }
+func (p *fundamentalsSourceIdentityProvider) FetchFundamentals(context.Context, string, int, int) (*model.FundamentalsSnapshot, error) {
+	p.calls++
+	return p.snapshot, nil
+}
+
+func TestFundamentalsRejectsMismatchedProviderSourceAndFallsBack(t *testing.T) {
+	primarySnapshot := validFundamentalsSnapshotForTest()
+	primarySnapshot.Source = "spoofed"
+	fallbackSnapshot := validFundamentalsSnapshotForTest()
+	primary := &fundamentalsSourceIdentityProvider{name: "primary", snapshot: primarySnapshot}
+	fallback := &fundamentalsSourceIdentityProvider{name: "baostock", snapshot: fallbackSnapshot}
+	svc := NewWithCapabilities([]provider.NamedProvider{primary, fallback}, nil, nil, cache.NewDisabled(), nil,
+		time.Second, time.Minute, 120, 2000,
+		ResilienceConfig{Retries: 0, CircuitFailureThreshold: 3, CircuitCooldown: time.Second}, nil)
+	svc.SetFundamentalsProviders([]provider.FundamentalsProvider{primary, fallback})
+
+	got, hit, err := svc.Fundamentals(context.Background(), "600519.SH", 2026, 2)
+	if err != nil || hit {
+		t.Fatalf("Fundamentals hit=%v err=%v", hit, err)
+	}
+	if got == nil || got.Source != "baostock" {
+		t.Fatalf("expected fallback fundamentals source baostock, got %+v", got)
+	}
+	if primary.calls != 1 || fallback.calls != 1 {
+		t.Fatalf("mismatched source must be rejected and fallback called: primary=%d fallback=%d", primary.calls, fallback.calls)
+	}
+}
+
+type valuationSourceIdentityProvider struct {
+	name     string
+	snapshot *model.ValuationSnapshot
+	calls    int
+}
+
+func (p *valuationSourceIdentityProvider) Name() string { return p.name }
+func (p *valuationSourceIdentityProvider) FetchValuations(context.Context, []string) (*model.ValuationSnapshot, error) {
+	p.calls++
+	return p.snapshot, nil
+}
+
+func TestValuationsRejectsMismatchedProviderSourceAndFallsBack(t *testing.T) {
+	primarySnapshot := validValuationSnapshotForValidationTest()
+	primarySnapshot.Source = "spoofed"
+	fallbackSnapshot := validValuationSnapshotForValidationTest()
+	primary := &valuationSourceIdentityProvider{name: "primary", snapshot: primarySnapshot}
+	fallback := &valuationSourceIdentityProvider{name: "tushare", snapshot: fallbackSnapshot}
+	svc := NewWithCapabilities([]provider.NamedProvider{primary, fallback}, nil, nil, cache.NewDisabled(), nil,
+		time.Second, time.Minute, 120, 2000,
+		ResilienceConfig{Retries: 0, CircuitFailureThreshold: 3, CircuitCooldown: time.Second}, nil)
+	svc.SetValuationProviders([]provider.ValuationProvider{primary, fallback})
+
+	got, hit, err := svc.Valuations(context.Background(), []string{"600519.SH"})
+	if err != nil || hit {
+		t.Fatalf("Valuations hit=%v err=%v", hit, err)
+	}
+	if got == nil || got.Source != "tushare" {
+		t.Fatalf("expected fallback valuation source tushare, got %+v", got)
+	}
+	if primary.calls != 1 || fallback.calls != 1 {
+		t.Fatalf("mismatched source must be rejected and fallback called: primary=%d fallback=%d", primary.calls, fallback.calls)
+	}
+}
+
+type indexCatalogSourceIdentityFake struct {
+	name     string
+	snapshot *model.IndexCatalogSnapshot
+	calls    int
+}
+
+func (f *indexCatalogSourceIdentityFake) Name() string { return f.name }
+func (f *indexCatalogSourceIdentityFake) FetchIndexCatalog(context.Context, string) (*model.IndexCatalogSnapshot, error) {
+	f.calls++
+	return f.snapshot, nil
+}
+func (f *indexCatalogSourceIdentityFake) FetchIndexConstituents(context.Context, string) (*model.IndexConstituentSnapshot, error) {
+	return nil, errors.New("not used")
+}
+func (f *indexCatalogSourceIdentityFake) FetchIndexDailyBars(context.Context, string, string, string) (*model.IndexDailyBarsSnapshot, error) {
+	return nil, errors.New("not used")
+}
+
+func TestIndexCatalogRejectsMismatchedProviderSourceAndFallsBack(t *testing.T) {
+	now := time.Now().UTC()
+	makeSnapshot := func(source string) *model.IndexCatalogSnapshot {
+		return &model.IndexCatalogSnapshot{
+			Tag:   "cn_concept",
+			Items: []model.IndexCatalogItem{{Symbol: "000300.SH", Name: "沪深300", Tag: "cn_concept"}},
+			Total: 1, ProviderReturned: 1, Source: source, SourceVersion: "test-v1",
+			FetchedAt: now, QualityStatus: model.QualityDegraded,
+		}
+	}
+	preferred := &indexCatalogSourceIdentityFake{name: "eastmoney", snapshot: makeSnapshot("spoofed")}
+	fallback := &indexCatalogSourceIdentityFake{name: "tushare", snapshot: makeSnapshot("tushare")}
+	svc := NewWithCapabilities(nil, nil, nil, cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000,
+		ResilienceConfig{Retries: 0, CircuitFailureThreshold: 3, CircuitCooldown: time.Second}, nil)
+	svc.SetIndexCatalogProviders([]provider.IndexCatalogProvider{preferred, fallback})
+
+	got, hit, err := svc.IndexCatalog(context.Background(), "cn_concept")
+	if err != nil || hit || got == nil || got.Source != "tushare" || preferred.calls != 1 || fallback.calls != 1 {
+		t.Fatalf("mismatched index-catalog source must fall back: hit=%v preferred_calls=%d fallback_calls=%d got=%+v err=%v",
+			hit, preferred.calls, fallback.calls, got, err)
+	}
+}
+
+type hotRankingSourceIdentityFake struct {
+	name     string
+	snapshot *model.HotRankingSnapshot
+	calls    int
+}
+
+func (f *hotRankingSourceIdentityFake) Name() string { return f.name }
+func (f *hotRankingSourceIdentityFake) FetchHotStocks(context.Context, string, int) (*model.HotRankingSnapshot, error) {
+	f.calls++
+	return f.snapshot, nil
+}
+
+func TestHotRankingRejectsMismatchedProviderSourceAndFallsBack(t *testing.T) {
+	now := time.Now().UTC()
+	makeSnapshot := func(source string) *model.HotRankingSnapshot {
+		return &model.HotRankingSnapshot{
+			RankingType: "popular", Total: 1, Source: source, SourceVersion: "test-v1",
+			FetchedAt: now, QualityStatus: model.QualityDegraded,
+			Items: []model.HotRankingItem{{
+				Rank: 1, Symbol: "600519.SH", Code: "600519",
+				Source: source, SourceVersion: "test-v1", FetchedAt: now, QualityStatus: model.QualityDegraded,
+			}},
+		}
+	}
+	preferred := &hotRankingSourceIdentityFake{name: "eastmoney", snapshot: makeSnapshot("spoofed")}
+	fallback := &hotRankingSourceIdentityFake{name: "tushare", snapshot: makeSnapshot("tushare")}
+	svc := NewWithCapabilities(nil, nil, nil, cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000,
+		ResilienceConfig{Retries: 0, CircuitFailureThreshold: 3, CircuitCooldown: time.Second}, nil)
+	svc.SetHotRankingProviders([]provider.HotRankingProvider{preferred, fallback})
+
+	got, hit, err := svc.HotStocks(context.Background(), "popular", 10)
+	if err != nil || hit || got == nil || got.Source != "tushare" || preferred.calls != 1 || fallback.calls != 1 {
+		t.Fatalf("mismatched hot-ranking source must fall back: hit=%v preferred_calls=%d fallback_calls=%d got=%+v err=%v",
+			hit, preferred.calls, fallback.calls, got, err)
 	}
 }

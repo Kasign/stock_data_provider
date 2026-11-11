@@ -248,7 +248,6 @@ func TestEastmoneyFetchDragonTigerRejectsExplicitFailureWithRows(t *testing.T) {
 	}
 }
 
-
 func TestEastmoneyDragonTigerReportsDegradedRowFieldsAndMissingPages(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, `{"result":{"count":1,"data":[{"SECURITY_CODE":"600519","SECUCODE":"600519.SH","SECURITY_NAME_ABBR":"贵州茅台","TRADE_DATE":"2026-10-23 00:00:00","CLOSE_PRICE":"1313.31","CHANGE_RATE":"1.25","SECURITY_TYPE_CODE":"001001"}]}}`)
@@ -268,6 +267,12 @@ func TestEastmoneyDragonTigerReportsDegradedRowFieldsAndMissingPages(t *testing.
 	for _, issue := range reporter.Snapshot().Issues {
 		key := issue.Field + ":" + issue.ProviderField + ":" + issue.Code
 		seen[key] = true
+		if issue.Field == "provider_time" {
+			if issue.RowIndex != nil {
+				t.Errorf("snapshot-level provider_time issue must not have a row index: %+v", issue)
+			}
+			continue
+		}
 		if issue.Field != "pages" && (issue.RowIndex == nil || *issue.RowIndex != 0) {
 			t.Errorf("row-level issue must point to row 0: %+v", issue)
 		}
@@ -284,7 +289,6 @@ func TestEastmoneyDragonTigerReportsDegradedRowFieldsAndMissingPages(t *testing.
 		}
 	}
 }
-
 
 func TestEastmoneyDragonTigerReportsUnavailableSnapshotTime(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -306,5 +310,31 @@ func TestEastmoneyDragonTigerReportsUnavailableSnapshotTime(t *testing.T) {
 	if len(issues) != 1 || issues[0].Field != "provider_time" || issues[0].ProviderField != "provider contract" ||
 		issues[0].Code != "not_exposed_by_provider_contract" || issues[0].RowIndex != nil {
 		t.Fatalf("unexpected snapshot-level Reporter issue: %+v", issues)
+	}
+}
+
+func TestEastmoneyDragonTigerReportsPaginationCountMismatch(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"result":{"pages":1,"count":101,"data":[{}]}}`)
+	}))
+	defer server.Close()
+	reporter := validation.NewReporter(8)
+	ctx := validation.WithReporter(context.Background(), reporter)
+	p := NewEastmoneyConfiguredWithDragonTiger(2*time.Second, "", "", "", "", "", "", "", "", server.URL, "")
+	if _, err := p.FetchDragonTiger(ctx, "2026-10-22", 1, 100); err == nil {
+		t.Fatal("expected page count mismatch")
+	}
+	issues := reporter.Snapshot().Issues
+	if len(issues) != 2 {
+		t.Fatalf("expected snapshot timestamp limitation and pagination mismatch, got %+v", issues)
+	}
+	foundPagination := false
+	for _, issue := range issues {
+		if issue.Field == "pages" && issue.Code == "count_inconsistent" && issue.RowIndex == nil {
+			foundPagination = true
+		}
+	}
+	if !foundPagination {
+		t.Fatalf("missing snapshot-level pagination mismatch issue: %+v", issues)
 	}
 }

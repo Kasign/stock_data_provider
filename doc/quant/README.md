@@ -17,7 +17,7 @@ Quant 已具备首批 Indicator/Factor 纯计算、CalculationContext、基础 R
 - Platform/Server：正式 Storage/事务接入、根 Migration 注册和统一 Diagnostics 装配。
 - 项目契约/Researchflow：Envelope 与 Payload 版本语义、强类型 Payload 映射及消费者 Contract Test。
 
-QNT-CTR-001～005 的权威状态以项目级 [跨模块契约目录与冻结状态](../contract/PLAT-002-项目级契约冻结登记簿.md) 为准；当前均不得因模块内 CI 通过而标记为 `frozen`。
+QNT-CTR-001、002、004、005 的项目级状态为 `frozen`；QNT-CTR-003 为 `deferred`。权威状态、延期条件和重新进入条件以项目级 [PLAT-002 项目级契约冻结登记簿](../contract/PLAT-002-项目级契约冻结登记簿.md) 为准。L1 冻结不代表 Quant 模块实现符合性、消费者映射或真实数据验收已完成。
 
 ## 文档索引
 

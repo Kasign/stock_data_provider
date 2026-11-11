@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"example.com/stock-analysis-flow/internal/marketdata/validation"
 )
@@ -208,7 +209,6 @@ func TestXueqiuFixtureSymbolCodesAreUnique(t *testing.T) {
 	}
 }
 
-
 func TestXueqiuHotRankingReportsSnapshotAndLimitDegradation(t *testing.T) {
 	rows := xueqiuFixtureRows(3)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -217,7 +217,7 @@ func TestXueqiuHotRankingReportsSnapshotAndLimitDegradation(t *testing.T) {
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"error_code": 0,
-			"data": map[string]any{"items": rows},
+			"data":       map[string]any{"items": rows},
 		})
 	}))
 	defer server.Close()
@@ -260,4 +260,76 @@ func TestXueqiuHotRankingReportsProviderExcessRows(t *testing.T) {
 		}
 	}
 	t.Fatalf("expected excess row diagnostic, got %+v", reporter.Snapshot().Issues)
+}
+
+func TestXueqiuErrorMessageTruncationPreservesUTF8(t *testing.T) {
+	message := strings.Repeat("a", 199) + "中" + strings.Repeat("b", 10)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"error_code": 1001, "error_description": message})
+	}))
+	defer server.Close()
+	provider := NewXueqiuConfigured(2*time.Second, server.URL, "")
+	_, err := provider.FetchHotStocks(context.Background(), "popular", 10)
+	if err == nil {
+		t.Fatal("provider error response should be rejected")
+	}
+	got := err.Error()
+	if !utf8.ValidString(got) {
+		t.Fatalf("error message is invalid UTF-8: %q", got)
+	}
+	want := "雪球榜单接口错误 code=1001: " + strings.Repeat("a", 199)
+	if got != want {
+		t.Fatalf("error summary should stop before a split multibyte rune: got %q want %q", got, want)
+	}
+}
+
+func TestXueqiuHotRankingReportsResponseRejections(t *testing.T) {
+	cases := []struct {
+		name     string
+		body     string
+		wantCode string
+		status   int
+	}{
+		{name: "HTTP status", body: "upstream unavailable", status: http.StatusBadGateway, wantCode: "http_status_error"},
+		{name: "invalid JSON", body: "{", status: http.StatusOK, wantCode: "decode_error"},
+		{name: "provider error", body: `{"error_code":1001,"error_description":"quota exceeded"}`, status: http.StatusOK, wantCode: "provider_error"},
+		{name: "invalid error code", body: `{"error_code":"bad","data":{"items":[]}}`, status: http.StatusOK, wantCode: "invalid_provider_error_code"},
+		{name: "missing data", body: `{"error_code":0}`, status: http.StatusOK, wantCode: "missing_data"},
+		{name: "invalid data shape", body: `{"error_code":0,"data":[]}`, status: http.StatusOK, wantCode: "decode_error"},
+		{name: "empty rows", body: `{"error_code":0,"data":{"items":[]}}`, status: http.StatusOK, wantCode: "empty_result"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(tc.status)
+				_, _ = w.Write([]byte(tc.body))
+			}))
+			defer server.Close()
+
+			reporter := validation.NewReporter(10)
+			ctx := validation.WithReporter(context.Background(), reporter)
+			provider := NewXueqiuConfigured(2*time.Second, server.URL, "")
+			snapshot, err := provider.FetchHotStocks(ctx, "popular", 10)
+			if tc.wantCode == "empty_result" {
+				if err != nil {
+					t.Fatalf("empty ranking preserves successful empty-snapshot semantics: %v", err)
+				}
+				if snapshot == nil || snapshot.Total != 0 {
+					t.Fatalf("expected empty snapshot, got %+v", snapshot)
+				}
+			} else if err == nil {
+				t.Fatal("expected rejected response")
+			}
+
+			for _, issue := range reporter.Snapshot().Issues {
+				if issue.Code == tc.wantCode {
+					if issue.RowIndex != nil {
+						t.Fatalf("response-level issue must not invent row index: %+v", issue)
+					}
+					return
+				}
+			}
+			t.Fatalf("missing Reporter code %q: %+v", tc.wantCode, reporter.Snapshot().Issues)
+		})
+	}
 }

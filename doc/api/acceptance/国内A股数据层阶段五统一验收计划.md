@@ -4,7 +4,7 @@
 
 - 目标分支：`feat/full-go-data-providers-api-switch`
 - 阶段定位：阶段五统一验收，不以“代码已实现”替代真实数据验收。
-- 当前状态（2026-11-03，代码基线 `b423c1ef6585924163d3d30a775e7b7713df3c59`）：统一诊断框架、Quote 字段诊断、DailyBar 字段 Reporter、Probe 历史存储、DailyBar 跨 Provider 比较及多复权口径 Probe 请求参数/结果字段已有代码实现。较早章节的待办表属于历史快照，不得作为当前任务重复执行。
+- 当前状态（2026-11-10，代码基线 `df6b4f24e0d5fc7e7d5de2cacb0c965ac0504d06`）：统一诊断框架、Provider 字段 Reporter、Probe Reporter 注入与历史持久化、DailyBar 跨 Provider 比较、多复权口径 Probe 参数/结果字段均已有实现；本基线继续补齐 Eastmoney 核心指数行情 Reporter，并完成 Probe Reporter 调用链静态 Review。阶段 B（复权绝对基准、AvailableAt 与真实交易边界证据）仍为 in_progress；阶段五不得因代码覆盖扩大而自动关闭。开发分支未运行构建/测试，CI 与真实 Provider/MariaDB 验收状态必须以该 SHA 对应 workflow 和专项证据为准。较早章节的待办表属于历史快照，不得作为当前任务重复执行。
 - 原则：每项结论必须绑定代码 SHA、样本范围、原始响应证据和质量判定；凭据不得进入文档或日志。
 
 

@@ -108,6 +108,8 @@ func (p *Baostock) FetchDailyBars(ctx context.Context, rawSymbol, startDate, end
 			return nil, fmt.Errorf("BaoStock row %d has invalid trade date %q", index, tradeDate)
 		}
 		if tradeDate < start || tradeDate > end {
+			addProviderParseIssue(ctx, index, "trade_date", "date", "date_out_of_requested_range",
+				start+".."+end, "string", tradeDate, "BaoStock daily-bar date is outside the requested range")
 			return nil, fmt.Errorf("BaoStock row %d date %s is outside requested range %s..%s", index, tradeDate, start, end)
 		}
 		// 同一交易日只允许一根日 K；重复记录通常意味着上游分页或协议数据异常。
@@ -167,6 +169,8 @@ func (p *Baostock) FetchDailyBars(ctx context.Context, rawSymbol, startDate, end
 		}
 		volume, err := normalize.RawSharesToInt64(rawVolumeValue)
 		if err != nil {
+			addProviderParseIssue(ctx, index, "volume", "volume", "normalization_error",
+				"int64 share count", "number", row.Volume, "BaoStock volume cannot be represented as normalized shares")
 			return nil, fmt.Errorf("normalize BaoStock volume on %s: %w", tradeDate, err)
 		}
 
@@ -179,6 +183,8 @@ func (p *Baostock) FetchDailyBars(ctx context.Context, rawSymbol, startDate, end
 		if strings.TrimSpace(row.Amount) == "" {
 			quality = model.QualityDegraded
 			reasons = append(reasons, "amount_missing_from_provider", "amount_unit_unknown_because_amount_missing")
+			addProviderFieldParseIssue(ctx, symbol, "amount", "amount", "missing_optional_value",
+				"finite non-negative numeric value when exposed", "missing_or_empty", "", index)
 		} else {
 			value, amountErr := parseBaoStockNumber(row.Amount, "amount", tradeDate, false)
 			if amountErr != nil {

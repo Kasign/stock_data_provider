@@ -28,7 +28,7 @@ func hasDailyBarContextReason(reasons []string, expected string) bool {
 }
 
 func TestAssessDailyBarTradingContextDistinguishesMissingSuspendedAndPreListing(t *testing.T) {
-	calendar := &model.TradingCalendarSnapshot{Items: []model.TradingCalendarDay{
+	calendar := &model.TradingCalendarSnapshot{QualityStatus: model.QualityValid, Items: []model.TradingCalendarDay{
 		{Date: "2026-10-20", IsTradingDay: true},
 		{Date: "2026-10-21", IsTradingDay: true},
 		{Date: "2026-10-22", IsTradingDay: false},
@@ -79,7 +79,7 @@ func TestAssessDailyBarTradingContextAcceptsNonTradingDayAndReturnedBar(t *testi
 }
 
 func TestAssessDailyBarTradingContextFlagsBarOnNonTradingDate(t *testing.T) {
-	calendar := &model.TradingCalendarSnapshot{Items: []model.TradingCalendarDay{
+	calendar := &model.TradingCalendarSnapshot{QualityStatus: model.QualityValid, Items: []model.TradingCalendarDay{
 		{Date: "2026-10-20", IsTradingDay: false},
 	}}
 	result := assessDailyBarTradingContext(calendar, []model.DailyBar{{TradeDate: "2026-10-20"}}, nil, nil)
@@ -90,7 +90,7 @@ func TestAssessDailyBarTradingContextFlagsBarOnNonTradingDate(t *testing.T) {
 }
 
 func TestAssessDailyBarTradingContextDoesNotExcludeMissingBarDuringIntradaySuspension(t *testing.T) {
-	calendar := &model.TradingCalendarSnapshot{Items: []model.TradingCalendarDay{
+	calendar := &model.TradingCalendarSnapshot{QualityStatus: model.QualityValid, Items: []model.TradingCalendarDay{
 		{Date: "2026-10-20", IsTradingDay: true},
 	}}
 	statuses := map[string]*model.SecurityTradingStatusSnapshot{
@@ -189,7 +189,6 @@ func TestAssessDailyBarTradingContextHistoricalCalendarInferenceStillDegrades(t 
 	}
 }
 
-
 func TestDailyBarContextCacheDeduplicatesConcurrentSecurityStatusReads(t *testing.T) {
 	ctx := withDailyBarContextCache(context.Background(), 2)
 	var calls atomic.Int32
@@ -236,9 +235,6 @@ func TestDailyBarContextCacheStopsAtRunBudget(t *testing.T) {
 		t.Fatalf("lookup beyond the per-run budget must be explicit, got %v", err)
 	}
 }
-
-
-
 
 func TestAssessDailyBarTradingContextMarksBudgetExhaustionNotComparable(t *testing.T) {
 	calendar := &model.TradingCalendarSnapshot{

@@ -188,7 +188,6 @@ func TestHithinkFundamentalsRejectsDuplicateStatementRowsForTargetReport(t *test
 	}
 }
 
-
 func TestHithinkFundamentalsReportsFieldLevelParseIssues(t *testing.T) {
 	abilities := `[
 		{"ability":"profitability","indicators":[
@@ -212,10 +211,10 @@ func TestHithinkFundamentalsReportsFieldLevelParseIssues(t *testing.T) {
 	}
 	issues := reporter.Snapshot().Issues
 	want := map[string]string{
-		"net_profit_margin": "missing_value",
+		"net_profit_margin":   "missing_value",
 		"gross_profit_margin": "invalid_number",
-		"net_profit": "invalid_number",
-		"metric_key": "missing_field",
+		"net_profit":          "invalid_number",
+		"metric_key":          "missing_field",
 	}
 	for field, code := range want {
 		found := false
@@ -232,7 +231,6 @@ func TestHithinkFundamentalsReportsFieldLevelParseIssues(t *testing.T) {
 		}
 	}
 }
-
 
 func TestHithinkFundamentalStatementReportsInvalidPeriodAndPublicationEvidence(t *testing.T) {
 	location, err := time.LoadLocation("Asia/Shanghai")
@@ -287,5 +285,49 @@ func TestHithinkFundamentalStatementReportsInvalidPeriodAndPublicationEvidence(t
 	}
 	if !foundPeriod || !foundPublication {
 		t.Fatalf("expected field-level period/publication issues, got %+v", reporter.Snapshot().Issues)
+	}
+}
+
+func TestHithinkFundamentalsRejectPathsReportIdentityIssues(t *testing.T) {
+	validData := `{"thscode":"600519.SH","report":"2026-2","abilities":[]}`
+	cases := []struct {
+		name, data, field, providerField, code string
+		rowIndex                               int
+	}{
+		{name: "symbol mismatch", data: strings.Replace(validData, "600519.SH", "600036.SH", 1), field: "symbol", providerField: "thscode", code: "symbol_mismatch", rowIndex: -1},
+		{name: "report mismatch", data: strings.Replace(validData, "2026-2", "2026-1", 1), field: "report_period", providerField: "report", code: "report_period_mismatch", rowIndex: -1},
+		{name: "unknown category", data: `{"thscode":"600519.SH","report":"2026-2","abilities":[{"ability":"unexpected","indicators":[]}]}`, field: "category", providerField: "ability", code: "unknown_category", rowIndex: 0},
+		{name: "duplicate category", data: `{"thscode":"600519.SH","report":"2026-2","abilities":[{"ability":"profitability","indicators":[]},{"ability":"profitability","indicators":[]}]}`, field: "category", providerField: "ability", code: "duplicate_category", rowIndex: 1},
+		{name: "duplicate metric", data: `{"thscode":"600519.SH","report":"2026-2","abilities":[{"ability":"profitability","indicators":[{"index_id":"ROE","value":1},{"index_id":"roe","value":2}]}]}`, field: "metric_key", providerField: "index_id", code: "duplicate_metric_identity", rowIndex: 1},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = fmt.Fprintf(w, `{"code":0,"data":%s}`, tc.data)
+			}))
+			defer server.Close()
+			reporter := validation.NewReporter(20)
+			ctx := validation.WithReporter(context.Background(), reporter)
+			_, err := NewHithinkConfigured(3*time.Second, server.URL, "unit-test-key").FetchFundamentals(ctx, "600519.SH", 2026, 2)
+			if err == nil {
+				t.Fatal("expected fail-fast validation error")
+			}
+			found := false
+			for _, issue := range reporter.Snapshot().Issues {
+				if issue.Stage != validation.StageValidate || issue.Field != tc.field || issue.ProviderField != tc.providerField || issue.Code != tc.code {
+					continue
+				}
+				if tc.rowIndex < 0 && issue.RowIndex == nil {
+					found = true
+				}
+				if tc.rowIndex >= 0 && issue.RowIndex != nil && *issue.RowIndex == tc.rowIndex {
+					found = true
+				}
+			}
+			if !found {
+				t.Fatalf("expected Reporter issue %s/%s/%s row=%d, got %+v", tc.field, tc.providerField, tc.code, tc.rowIndex, reporter.Snapshot().Issues)
+			}
+		})
 	}
 }

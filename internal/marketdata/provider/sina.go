@@ -28,11 +28,11 @@ const maxSinaKlineBars = 1023
 
 // 新浪 Provider 同时实现实时行情和历史日 K。两个端点字段契约不同，必须分别归一化。
 type Sina struct {
-	client         *http.Client
-	quoteHTTPDoer  HTTPDoer
-	klineHTTPDoer  HTTPDoer
-	quoteURL       string
-	klineURL       string
+	client        *http.Client
+	quoteHTTPDoer HTTPDoer
+	klineHTTPDoer HTTPDoer
+	quoteURL      string
+	klineURL      string
 }
 
 func NewSina(timeout time.Duration, quoteURL string) *Sina {
@@ -127,20 +127,25 @@ func (p *Sina) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endDate
 	defer resp.Body.Close()
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
+		addProviderParseIssue(ctx, -1, "provider_status", "http_status", "http_status_error", "2xx", "number", strconv.Itoa(resp.StatusCode), "Sina K-line endpoint returned a non-success HTTP status")
 		return nil, fmt.Errorf("Sina K-line HTTP status %d", resp.StatusCode)
 	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxSinaResponseBytes+1))
 	if err != nil {
+		addProviderParseIssue(ctx, -1, "response_body", "body", "read_error", "readable response body", "io_error", "", "Sina K-line response body could not be read")
 		return nil, fmt.Errorf("read Sina K-line response: %w", err)
 	}
 	if len(body) > maxSinaResponseBytes {
+		addProviderParseIssue(ctx, -1, "response_body", "body", "response_too_large", "at most 1 MiB", "bytes", strconv.Itoa(len(body)), "Sina K-line response exceeded the configured body limit")
 		return nil, errors.New("Sina K-line response exceeds 1 MiB")
 	}
 	var rows []sinaKlineRow
 	if err := decodeSingleJSON(body, &rows); err != nil {
+		addProviderParseIssue(ctx, -1, "daily_bars", "body", "decode_error", "JSON array of K-line rows", "json", providerJSONPreview(json.RawMessage(strconv.Quote(string(body)))), "Sina K-line response JSON could not be decoded")
 		return nil, fmt.Errorf("decode Sina K-line JSON: %w", err)
 	}
 	if len(rows) == 0 {
+		addProviderParseIssue(ctx, -1, "daily_bars", "rows", "empty_result", "at least one K-line row", "array", "0 rows", "Sina returned an empty K-line series")
 		return nil, errors.New("Sina returned an empty K-line series")
 	}
 
@@ -173,6 +178,7 @@ func (p *Sina) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endDate
 	// 新浪最多返回 1023 条。如果返回触顶而最老记录仍晚于请求开始日期，
 	// 明确报错而不是把不完整的历史区间伪装成成功响应。
 	if dataLength == maxSinaKlineBars && len(rows) >= dataLength && startDate != "" && oldestDate != "" && oldestDate > startISO {
+		addProviderParseIssue(ctx, -1, "trade_date", "day", "history_window_truncated", "oldest returned date <= requested start "+startISO, "date", oldestDate, "Sina K-line response reached its maximum history window before covering the requested start date")
 		return nil, fmt.Errorf("Sina K-line lookback limit reached: requested start %s but oldest returned row is %s", startISO, oldestDate)
 	}
 
