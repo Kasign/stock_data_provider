@@ -1266,3 +1266,18 @@ PLAT-002 的项目级决策收敛已完成；**PLAT-002 项目整体不宣告完
 | NEWS-CTR-003 | pending_evidence | PIT、available_at、稳定排序、15分钟 Snapshot、HMAC Cursor 已定义；system_observed_at 与领域观察时间权威归属冲突 |
 **范围说明：** 当前 News 对外跨模块边界为同进程 Application Port；doc/news/openapi.yaml 是未注册的未来 HTTP 草案，不属于当前活动契约。无新增 CTR。  
 **本批结论：** 3 项均 pending_evidence；无 pending_decision、blocked、freeze-ready。只保留公开 DTO/PIT/授权映射问题，不检查采集、Provider、Repository 或测试实现。
+
+## 44. Quant 首批公开契约定义核定（2026-11-11）
+
+| 契约 | 状态 | 结论 |
+|---|---|---|
+| QNT-CTR-001 | pending_evidence | Registry Entry Schema 已有，但首批具体 Registry 条目及 code 对应单位/精度/算法版本/质量策略未形成完整权威定义 |
+| QNT-CTR-002 | pending_evidence | Indicator 参数 Schema/算法口径已有；完整 Request/Result DTO 与输出字段映射缺失 |
+| QNT-CTR-003 | pending_evidence | Factor 参数 Schema/Golden 已有；完整 Request/Result、交易日历版本和结果映射不完整 |
+| QNT-CTR-004 | pending_decision | Envelope schema_version 同时指 Envelope 版本和 Payload 版本，需项目负责人裁决；完整 Payload Schema 与 Envelope/Ref/Manifest 字段关系也未完成 |
+| QNT-CTR-005 | pending_decision | Manifest input_snapshot_refs 要求非空，与白名单纯函数允许空输入的已接受规则冲突，需明确纯函数结果是否可持久化/引用及如何表达 |
+
+本批新增 QNT-DEC-01（Envelope/Payload 版本字段）和 QNT-DEC-02（无输入纯函数 Manifest 规则），均挂接既有 CTR，不新增编号。当前项目级待决项由此前 0 项更新为 2 项。
+
+不纳入：算法正确性、单元/Golden 测试、Repository 并发、真实 Data Adapter、授权竞态和 CI。  
+下一批：Research 公开契约定义核定；两个待决项等待项目负责人裁决，不由审查者代选。
