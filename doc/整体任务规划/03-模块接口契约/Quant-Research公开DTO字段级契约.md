@@ -113,6 +113,8 @@ completed 不代表 valid；消费方必须同时检查 result_status 和 qualit
 
 direction 与 phase 必须分开；unknown 不得用 sideways 代替。跨周期冲突必须显式表达。
 
+`direction` 与 `phase` 完全独立；unknown 不要求另一字段也为 unknown。`strength` 可空，非空必须为有限数且位于 [0,1]，不根据 direction/phase 推断。`evidence_metrics` 与 `conflict_refs` 必须显式提供数组，允许为空。TrendResult 的 period、system_as_of、algorithm_version、quality_status 必须与 QuantResult Envelope 对应字段一致；每个 evidence Metric 的 system_as_of 必须与 TrendResult.system_as_of 一致。
+
 ### 2.5 RiskDecision
 
 | JSON 字段 | 必需 | 类型/约束 | 语义 |
@@ -126,6 +128,8 @@ direction 与 phase 必须分开；unknown 不得用 sideways 代替。跨周期
 | input_refs | 是 | string[] | 输入结果/快照引用 |
 
 RiskReason 至少包含 code、severity（block/warn/info）、status（triggered/not_triggered/unknown）、safe message 和 evidence_refs。数据缺失、规则无法评估或输入质量不足时，RiskDecision 必须为 unknown 或 reject，绝不能 pass。硬门禁不提供可由评分或 LLM 调整的 override 字段。
+
+Risk RuleSet 必须非空且至少包含一条 block 规则，所有 block 规则必须 required。Reason.code 唯一且 severity 必须匹配规则定义；Reasons 按 RuleSet 声明顺序输出。任一 block triggered => reject（优先于 unknown）；无 block triggered 且至少一个 block unknown => unknown；至少一条 block 且全部 not_triggered => pass。warn/info 不改变聚合结论。RiskDecision.reasons 必须非空；input_refs 显式必需且允许空数组。RiskDecision.system_as_of 必须与 Envelope.system_as_of 一致；evaluated_at 必须为 UTC 且不早于 system_as_of；rule_set_version 与 Envelope.algorithm_version 独立。RiskDecision.status=reject 不等于 Envelope.result_status=rejected。
 
 
 ### 2.7 QuantResult Envelope 与强类型 Payload
