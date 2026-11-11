@@ -163,7 +163,26 @@
           "minLength": 1,
           "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
         },
-        "expected_value": {},
+        "expected_value": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "object",
+              "additionalProperties": true
+            }
+          ]
+        },
         "unit": {
           "type": "string",
           "minLength": 1,

@@ -132,7 +132,7 @@ GitHub 远端 ref 核验（2026-11-10）：
 | Researchflow | doc/researchflow/schema 有 4 个 1.0.0 Schema；doc/researchflow/golden 有 11 个 Golden | 需逐项映射 FLOW-CTR-001～004，不能把 Run/Stage/Attempt DTO 文件存在视为消费者测试完成 |
 | LLM | doc/llm/schema 有 6 个 1.0.0 Schema；internal/llm/testdata/json 与 sse 有 JSON/SSE 输入和 expected fixtures；未发现 doc/llm/golden 目录 | Fixture 存在，但需核对是否覆盖所有 LLM-CTR-001～003 终态/错误/断流语义，并确认 CI 实际执行 |
 | Notification | doc/notification/schema 有 4 个 1.0.0 Schema（Envelope + 3 类事件）；doc/notification/golden 有 6 个 Golden | NTF-CTR-001 有基础覆盖；NTF-CTR-002/003 的状态机、幂等、渠道和重试覆盖需逐项映射 |
-| 项目公共授权 | doc/整体任务规划/schema 有 6 个 Schema；doc/整体任务规划/golden 有 8 个 Golden | 覆盖 GOV-CTR-006、DATA-CTR-008、NEWS-CTR-002、QNT-CTR-005、RSC-CTR-001；不覆盖全部 GOV/DATA/业务契约 |
+| 项目公共授权 | doc/整体任务规划/schema 有 9 个 Schema；doc/整体任务规划/golden 有 11 个 Golden | 覆盖 GOV-CTR-006、DATA-CTR-008、NEWS-CTR-002、QNT-CTR-005、RSC-CTR-001、RSC-CTR-002；不覆盖全部 GOV/DATA/业务契约 |
 
 ## 2. 状态定义
 
@@ -503,8 +503,8 @@ PLAT-002 不因本次矩阵统计完成而结束。整体完成仍需：
 | QNT-CTR-001 | pending_evidence | Registry Entry 1.0.0 Schema 已有，字段集合覆盖 code/schema_version/value_type/unit/precision/range/algorithm_version/input_requirements/parameters_schema/quality_policy/supports_interval；但缺少可作为首批公开定义的实际 Registry 条目及每个 code 的单位、精度、舍入、输入要求和质量策略映射 |
 | QNT-CTR-002 | pending_evidence | 八种 Indicator 参数 Schema 与算法语义已有；但参数 Schema 不等同完整 Indicator Request/Result DTO，输出类型、单位、精度、状态和 Registry 元数据映射未完整定义 |
 | QNT-CTR-003 | pending_evidence | 三个首批 Factor 参数 Schema/Golden 和部分 QuantMetric Schema 已有；但完整 Factor Request/Result、交易日历版本引用、输入质量和结果 Envelope 映射不完整 |
-| QNT-CTR-004 | pending_evidence | DEC-PLAT-002-028 已裁决：Envelope schema_version 表示 Envelope 自身版本，payload_schema_version 表示 Payload 版本；按 result_type + payload_schema_version 选择 Payload。完整强类型 Payload 覆盖及 DTO/Schema/Golden 一致性仍待补 |
-| QNT-CTR-005 | pending_evidence | DEC-PLAT-002-028/029 已裁决 Manifest schema_version 表示 Manifest 自身版本、payload_schema_version 表示 Payload 版本；空输入纯函数可持久化，但仅限 Registry 与 ResolvedTemplate 双重授权。Manifest Schema、指纹字段覆盖、UTC 约束和 AuthorizationRef 映射仍待补 |
+| QNT-CTR-004 | pending_evidence | DEC-028/029 已在项目级 DTO 中对齐 Envelope/Payload 版本和空输入语义；责任模块 QuantResultRef Schema 仍为 minItems=1，Envelope Schema/Golden 缺失，且全部 result_type 的强类型 Payload Schema 尚未完整 |
+| QNT-CTR-005 | pending_evidence | Manifest Schema/Golden 已补齐 Manifest/Payload 独立版本、算法版本、参数指纹、UTC 约束及空输入数组；剩余为 Quant Record/VerifyPayload 指纹算法、Manifest/Ref 绑定和 AuthorizationRef 签发映射的权威一致性核对 |
 
 ### 17.2 已裁决的 Quant 公开契约语义
 
@@ -543,7 +543,7 @@ PLAT-002 不因本次矩阵统计完成而结束。整体完成仍需：
 | 契约 | 状态 | 核定结论 |
 |---|---|---|
 | RSC-CTR-001 | pending_evidence | Evidence 1.0.0 Schema/Golden 已有，字段、来源 Owner、derived_from_refs、content_level、AuthorizationRef、JCS 指纹语义较完整；但 Schema 的 date-time 未约束 RFC3339Nano UTC，source_version 条件必填规则缺少 source-owner/versioned-resource 适用映射，system_as_of/available_at 的 PIT 关系仍由文字约束承担 |
-| RSC-CTR-002 | pending_evidence | DEC-PLAT-002-030～032 已裁决时间规则版本、Event 派生血缘及 Claim/Hypothesis 替代语义；权威 DTO、强类型 Ref、Schema/Golden 尚未按决议对齐 |
+| RSC-CTR-002 | pending_evidence | Event、Claim/Hypothesis、Scenario 的项目级 DTO、1.0.0 Schema/Golden 已按 DEC-030～032 补齐；剩余为跨字段语义校验（EventRef 存在性/无环、source_times 对应、supersedes 当前版本）及与 Research 责任模块定义的一致性证据 |
 
 ### 18.2 RSC-CTR-002 的已裁决项与机器定义进度
 
@@ -789,4 +789,4 @@ INT-CTR-001 是 43 个正式 CTR 之一，覆盖 Quant、Research、Researchflow
 
 - QNT-CTR-004、QNT-CTR-005、RSC-CTR-002 均保持 `pending_evidence`；不把新增文件等同于完整冻结。
 - 本批不新增 CTR、不重开 DEC、不改动责任模块目录。
-- 下一步仅核对剩余的权威定义缺口：Quant ResultRef/Envelope/Payload Schema 映射、Manifest 指纹与授权映射、Research Scenario 机器定义及跨字段约束。
+- 下一步仅核对剩余的权威定义缺口：Quant ResultRef/Envelope/Payload Schema 映射、Manifest 指纹与授权映射、Research 跨字段约束及责任模块定义一致性。
