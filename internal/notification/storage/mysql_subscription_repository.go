@@ -20,6 +20,7 @@ type MySQLSubscriptionRepository struct {
 }
 
 var _ application.SubscriptionRepository = (*MySQLSubscriptionRepository)(nil)
+var _ application.SubscriptionPageReader = (*MySQLSubscriptionRepository)(nil)
 
 // NewMySQLSubscriptionRepository 接收 Server 管理的共享连接池及领域校验依赖。
 func NewMySQLSubscriptionRepository(
@@ -107,12 +108,21 @@ func (r *MySQLSubscriptionRepository) Create(ctx context.Context, subscription d
 	if err := r.validate(subscription); err != nil {
 		return err
 	}
-	_, err := r.db.ExecContext(ctx, `INSERT INTO notification_subscriptions (
-		subscription_id, version, owner_ref, status, event_type, filter_schema_version,
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("notification storage: begin subscription create: %w", err)
+	}
+	defer tx.Rollback()
+	revision, err := allocateSubscriptionRevision(ctx, tx)
+	if err != nil {
+		return err
+	}
+	_, err = tx.ExecContext(ctx, `INSERT INTO notification_subscriptions (
+		subscription_id, version, revision_id, owner_ref, status, event_type, filter_schema_version,
 		filters, recipient_scope, recipient_ref, channel_ref, template_id,
 		created_at, updated_at, effective_at
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		subscription.SubscriptionID, subscription.Version, subscription.OwnerRef,
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		subscription.SubscriptionID, subscription.Version, revision, subscription.OwnerRef,
 		string(subscription.Status), subscription.EventType, subscription.FilterSchemaVersion,
 		nullableJSON(subscription.Filters), string(subscription.RecipientScope), subscription.RecipientRef,
 		subscription.ChannelRef, subscription.TemplateID, subscription.CreatedAt.UTC(),
@@ -123,6 +133,9 @@ func (r *MySQLSubscriptionRepository) Create(ctx context.Context, subscription d
 	}
 	if err != nil {
 		return fmt.Errorf("notification storage: create subscription: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("%w: notification storage: commit subscription create: %w", application.ErrPersistenceOutcomeUnknown, err)
 	}
 	return nil
 }
@@ -183,12 +196,16 @@ func (r *MySQLSubscriptionRepository) AppendVersion(
 	if err := r.validate(next); err != nil {
 		return err
 	}
+	revision, err := allocateSubscriptionRevision(ctx, tx)
+	if err != nil {
+		return err
+	}
 	_, err = tx.ExecContext(ctx, `INSERT INTO notification_subscriptions (
-		subscription_id, version, owner_ref, status, event_type, filter_schema_version,
+		subscription_id, version, revision_id, owner_ref, status, event_type, filter_schema_version,
 		filters, recipient_scope, recipient_ref, channel_ref, template_id,
 		created_at, updated_at, effective_at
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		next.SubscriptionID, next.Version, next.OwnerRef, string(next.Status), next.EventType,
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		next.SubscriptionID, next.Version, revision, next.OwnerRef, string(next.Status), next.EventType,
 		next.FilterSchemaVersion, nullableJSON(next.Filters), string(next.RecipientScope),
 		next.RecipientRef, next.ChannelRef, next.TemplateID, next.CreatedAt.UTC(),
 		next.UpdatedAt.UTC(), next.EffectiveAt.UTC(),
@@ -203,6 +220,83 @@ func (r *MySQLSubscriptionRepository) AppendVersion(
 		return fmt.Errorf("%w: notification storage: commit subscription version: %w", application.ErrPersistenceOutcomeUnknown, err)
 	}
 	return nil
+}
+
+
+func allocateSubscriptionRevision(ctx context.Context, tx *sql.Tx) (int64, error) {
+	result, err := tx.ExecContext(ctx, `UPDATE notification_subscription_revision
+		SET current_revision = current_revision + 1 WHERE singleton_id = 1`)
+	if err != nil {
+		return 0, fmt.Errorf("notification storage: increment subscription revision: %w", err)
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("notification storage: read subscription revision update: %w", err)
+	}
+	if affected != 1 {
+		return 0, errors.New("notification storage: subscription revision row is missing")
+	}
+	var revision int64
+	if err := tx.QueryRowContext(ctx, `SELECT current_revision
+		FROM notification_subscription_revision WHERE singleton_id = 1`).Scan(&revision); err != nil {
+		return 0, fmt.Errorf("notification storage: read allocated subscription revision: %w", err)
+	}
+	return revision, nil
+}
+
+// ListActiveAtRevision 使用修订高水位和 keyset 游标返回稳定页面。
+// 必须先选每个 Subscription 在快照内的最新版本，再过滤 active/event_type。
+func (r *MySQLSubscriptionRepository) ListActiveAtRevision(
+	ctx context.Context,
+	eventType string,
+	snapshotRevision int64,
+	afterSubscriptionID string,
+	limit int,
+) ([]domain.Subscription, error) {
+	if r == nil || r.db == nil || ctx == nil || eventType == "" ||
+		snapshotRevision < 0 || limit < 1 || limit > 201 {
+		return nil, errors.New("notification storage: invalid subscription page query")
+	}
+	rows, err := r.db.QueryContext(ctx, `SELECT
+		s.subscription_id, s.owner_ref, s.version, s.status, s.event_type,
+		s.filter_schema_version, s.filters, s.recipient_scope, s.recipient_ref,
+		s.channel_ref, s.template_id,
+		DATE_FORMAT(s.created_at, '%Y-%m-%d %H:%i:%s.%f'),
+		DATE_FORMAT(s.updated_at, '%Y-%m-%d %H:%i:%s.%f'),
+		DATE_FORMAT(s.effective_at, '%Y-%m-%d %H:%i:%s.%f')
+		FROM notification_subscriptions s
+		WHERE s.subscription_id > ? AND s.revision_id <= ?
+			AND NOT EXISTS (
+				SELECT 1 FROM notification_subscriptions newer
+				WHERE newer.subscription_id = s.subscription_id
+					AND newer.revision_id <= ?
+					AND (newer.revision_id > s.revision_id
+						OR (newer.revision_id = s.revision_id AND newer.version > s.version))
+			)
+			AND s.event_type = ? AND s.status = 'active'
+		ORDER BY s.subscription_id
+		LIMIT ?`,
+		afterSubscriptionID, snapshotRevision, snapshotRevision, eventType, limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("notification storage: list active subscriptions at revision: %w", err)
+	}
+	defer rows.Close()
+	result := make([]domain.Subscription, 0, limit)
+	for rows.Next() {
+		subscription, scanErr := scanSubscription(rows)
+		if scanErr != nil {
+			return nil, scanErr
+		}
+		if err := r.validate(subscription); err != nil {
+			return nil, fmt.Errorf("notification storage: persisted subscription page contains invalid row: %w", err)
+		}
+		result = append(result, cloneStoredSubscription(subscription))
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("notification storage: iterate active subscription page: %w", err)
+	}
+	return result, nil
 }
 
 func nullableJSON(value json.RawMessage) any {

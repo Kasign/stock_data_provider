@@ -7,7 +7,7 @@ import (
 
 func TestMigrationsDeclareImmutableVersionAndRequiredUniqueness(t *testing.T) {
 	migrations := Migrations()
-	if len(migrations) != 5 || migrations[0].Version != 1 || migrations[1].Version != 2 || migrations[2].Version != 3 || migrations[3].Version != 4 || migrations[4].Version != 5 ||
+	if len(migrations) != 6 || migrations[0].Version != 1 || migrations[1].Version != 2 || migrations[2].Version != 3 || migrations[3].Version != 4 || migrations[4].Version != 5 || migrations[5].Version != 6 ||
 		migrations[0].Description == "" || len(migrations[0].Statements) != 5 ||
 		migrations[1].Description == "" || len(migrations[1].Statements) != 1 {
 		t.Fatalf("unexpected notification migration set: %+v", migrations)
@@ -80,12 +80,30 @@ func TestMigrationsDeclareImmutableVersionAndRequiredUniqueness(t *testing.T) {
 	if len(migrations[4].Statements) != 1 || !strings.Contains(migrations[4].Statements[0], "DROP INDEX idx_notification_channel_config_kind") {
 		t.Fatal("migration v5 must remove the redundant channel config index")
 	}
+	fanoutDDL := strings.Join(migrations[5].Statements, "\n")
+	for _, required := range []string{
+		"CREATE TABLE notification_subscription_revision",
+		"current_revision",
+		"ADD COLUMN revision_id",
+		"CREATE TABLE notification_fanout_work_items",
+		"uk_notification_fanout_event",
+		"idx_notification_fanout_due",
+		"idx_notification_fanout_lease",
+		"fk_notification_fanout_inbox",
+		"snapshot_revision",
+		"fencing_token",
+		"DATETIME(6)",
+	} {
+		if !strings.Contains(fanoutDDL, required) {
+			t.Errorf("Fanout migration is missing required schema element %q", required)
+		}
+	}
 }
 
 func TestMigrationsReturnIndependentStatementSlices(t *testing.T) {
 	first := Migrations()
 	second := Migrations()
-	if len(first) != 5 || len(second) != 5 {
+	if len(first) != 6 || len(second) != 6 {
 		t.Fatal("migration set must be stable")
 	}
 	for i := range first {

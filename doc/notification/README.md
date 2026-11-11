@@ -3,10 +3,10 @@
 - 目标分支：`feat/notification`
 - 代码目录：`internal/notification/**`
 - 任务前缀：NTF
-- 当前分支 HEAD 以 GitHub `feat/notification` ref 为准；文档中的历史 SHA/Workflow 仅作为历史证据，不代表当前 HEAD。当前阶段：NTF-001～005 的领域、Schema、Fake、Renderer、RetryPolicy、Preflight、unknown 对账能力已建立；NTF-006 已有八表 Migration、DeliveryPlan、Delivery、DeliveryAttempt、Subscription、Inbox、Template 与 ChannelConfig MySQL Adapter。unknown 对账使用独立 CAS Repository，并验证外部证据、Attempt 历史、不可变预算快照和 StateEvent 一致性。Inbox MySQL Adapter 与 Inbox+Fanout 同事务写入扩展点已建立；Fanout 生产 Writer/WorkItem 执行语义、活跃 Subscription 分页查询及完整 Dispatcher/Worker 仍未完成；Delivery 一致性只读诊断与安全 DTO 已建立，根 HTTP/权限接入由 Server 根据真实运维场景负责；其中依赖契约冻结的部分不得自行猜测实现。
-- 当前代码事实：`internal/notification/storage` 已包含八表 Migration、DeliveryPlan、Delivery、DeliveryAttempt、Subscription、Inbox、Template 与 ChannelConfig MySQL Adapter。Subscription Adapter 注入 Server 管理的共享 `*sql.DB`、EventTypeLookup 和 FilterSchemaValidator；Create 仅接受 version=1，GetLatest 读取最新不可变版本，AppendVersion 在事务内锁定最新版本、比较 expectedVersion 并插入新版本，不更新历史行。Delivery Adapter 实现初始 queued 记录创建、读取、事务行锁领取、fencing token 递增、版本 CAS、状态事件同事务追加，以及离开 sending 时释放租约。Attempt Adapter 实现 StartWithLease、CompleteWithLease、ListByDelivery；Start 将 Attempt 插入与 Delivery.attempt_count 投影更新放在同一事务，Start/Complete 均在事务内用 `UTC_TIMESTAMP(6)` 校验数据库权威时钟、Delivery 版本、Worker、fencing token 和租约有效期；同一 Delivery 行锁串行化 Attempt 启动，并依赖 DDL 唯一索引作最终约束。三个 Adapter 均借用调用方提供的共享 `*sql.DB`，不管理连接池生命周期。
-- Delivery MariaDB 测试覆盖 Delivery 与不可变 Plan 快照一致性、唯一性、读取、16 Worker 单赢家、状态 CAS、状态事件追加失败回滚和租约释放。Attempt MariaDB 测试覆盖同一租约 8 路并发仅一个 Attempt 成功、attempt_count 投影、运行中/完成记录读取、重复完成拒绝和同 fencing token 二次追加拒绝。上述测试均为已编写的验收代码；DeliveryPlan、Delivery、Attempt、Subscription、Inbox、Template、ChannelConfig 七组 MariaDB 集成测试统一通过 `openNotificationIntegrationDB` 调用 Platform Storage.OpenSQL 初始化连接池，Migration 统一使用 Platform ApplyMigrations。最新代码 CI Run `42609082056`：go-core 通过但不覆盖 Notification；根模块在 gofmt 阶段被其他模块文件差异阻断，Notification 文件无 gofmt 差异，根模块测试未执行。MariaDB 集成 Job skipped，真实 MariaDB DSN 执行证据仍缺，不能据此标记通过。
-- 本轮新增 Inbox MySQL Repository 与 v2 Migration；新增事务内 Fanout Writer 扩展点和可选 MariaDB 集成测试。Fanout 表结构/生产 Writer、claim/ack/retry 语义仍未实现；没有把扩展点误记为完整 Fanout。真实 MariaDB DSN 执行证据仍缺失。历史验收基线 `338d0ced374d5fdc42672812450d897d89cbe1d0` 对应 Run `42593868099`：`Test go-core` 通过（含测试、Race Detector、go vet）；根模块 `Test .` 在 gofmt 阶段被 `internal/quant/**` 阻断，Notification 文件未出现在差异列表，根模块测试未执行。真实 MariaDB DSN 执行证据仍缺。
+- 当前分支 HEAD 以 GitHub `feat/notification` ref 为准；文档中的历史 SHA/Workflow 仅作为历史证据，不代表当前 HEAD。当前阶段：FanoutWorkItem、订阅修订快照、稳定 keyset 分页、MySQL Repository 与有界 Dispatcher 已实现；当前提交 `f2dbe00` 的 CI 尚未执行，真实 MariaDB L3 尚未执行。NTF-CTR-001/002 已 L1 frozen，NTF-CTR-003 为 not_applicable；L1 不代表 L2/L3 验收通过。
+- 当前代码事实：十类业务表及 v1～v6 Migration 已定义；新增订阅事务修订号分配、FanoutWorkItem MySQL Repository（与 Inbox 同事务写入）、数据库时钟 Claim、租约/fencing、CAS 页面推进/重试、固定修订快照的 Subscription keyset 分页和有界 FanoutDispatcher。FanoutPlanFactory 是明确的模块内注入端口，尚无基于真实 Channel/Template/Recipient/Authorization 数据的生产装配；Server Worker 与根 Migration 注册仍属集成任务。
+- Delivery MariaDB 测试覆盖 Delivery 与不可变 Plan 快照一致性、唯一性、读取、16 Worker 单赢家、状态 CAS、状态事件追加失败回滚和租约释放。Attempt MariaDB 测试覆盖同一租约 8 路并发仅一个 Attempt 成功、attempt_count 投影、运行中/完成记录读取、重复完成拒绝和同 fencing token 二次追加拒绝。上述测试均为已编写的验收代码；DeliveryPlan、Delivery、Attempt、Subscription、Inbox、Template、ChannelConfig 七组 MariaDB 集成测试统一通过 `openNotificationIntegrationDB` 调用 Platform Storage.OpenSQL 初始化连接池，Migration 统一使用 Platform ApplyMigrations。此前 CI Run `43005827183` 未执行 Notification 测试；本轮 `f2dbe00` 新增的 Fanout 单测和 MariaDB 集成测试代码尚未获得 CI 执行证据。MariaDB L3 必须使用真实 `NOTIFICATION_MARIADB_TEST_DSN`，当前状态为 `not_comparable`。
+- 本轮新增 Migration v6、订阅修订号分配器、FanoutWorkItem 表/Repository、Inbox 事务内 Writer、固定快照分页查询、Fanout Dispatcher 与对应单测/MariaDB 集成测试。没有新增对外 API；没有实现虚构渠道或默认接收目标。历史验收基线 `338d0ced374d5fdc42672812450d897d89cbe1d0` 对应 Run `42593868099`：`Test go-core` 通过（含测试、Race Detector、go vet）；根模块 `Test .` 在 gofmt 阶段被 `internal/quant/**` 阻断，Notification 文件未出现在差异列表，根模块测试未执行。真实 MariaDB DSN 执行证据仍缺。
 
 Notification 是独立通知业务模块，负责事件接收、Subscription、Template、Channel、Dispatcher、Delivery、Attempt、幂等、重试和投递诊断。不计算业务告警条件，不依赖 Researchflow 内部实现。
 
@@ -27,12 +27,12 @@ Notification 是独立通知业务模块，负责事件接收、Subscription、T
 | 范围 | 状态 | 证据/限制 |
 |---|---|---|
 | 领域设计与字段契约 | 已建立 | 以 01/03 文档为准；发现契约矛盾先修正文档并评审 |
-| Schema/Golden 资产 | 模块 CI 已通过，跨模块证据待补 | 4 Schema、6 Golden；Draft 2020-12 Envelope/Payload Validator 和 Golden 测试已编写；完整 CI Run 42201893234 已通过；项目级状态以 PLAT-002 登记簿为准：NTF-CTR-001/002 为 `frozen`，NTF-CTR-003 为 `not_applicable`；L1 冻结不代表真实 Adapter、Server 装配或生产渠道验收通过 |
-| Go Notification Domain/Application | 部分实现 | EventEnvelope、JCS Fingerprint、Envelope/Payload Validator、EventReceiver、Subscription/DeliveryPlan 领域校验已实现；Inbox MySQL Repository 已实现，Fanout Writer 生产实现尚未完成 |
-| Inbox/Subscription/DeliveryPlan | 部分实现 | 双唯一 Inbox Port/Fake 与 MySQL Adapter（完整 Envelope 重放校验、事务内 Fanout Writer 扩展点）、Subscription append-only Repository Port/Fake 与 MariaDB Adapter（版本追加、CAS 并发）及 DeliveryPlan 唯一性 Port/Fake/Adapter 已实现；Inbox 表及双唯一键已持久化；Fanout 具体表/Writer 尚未冻结实现，Repository 通过事务内 Writer 扩展点确保新 Inbox 与 Fanout 原子提交；四组 MariaDB 测试统一通过 Platform Storage.OpenSQL 建立连接池，尚待 CI/真实 DSN 验证 |
+| Schema/Golden 资产 | Schema/Golden 与测试代码已建立；本轮 CI 尚待执行 | 4 Schema、6 Golden；Draft 2020-12 Envelope/Payload Validator 和 Golden 测试已编写。此前 Run `43005827183` 未执行 Notification 测试；本轮 `f2dbe00` 的 Fanout 测试需在 integration 上获得执行证据。L1 状态以 PLAT-002 为准；真实 Adapter/Server 装配/生产渠道仍未验收 |
+| Go Notification Domain/Application | 部分实现 | EventEnvelope、JCS Fingerprint、EventReceiver、Subscription/DeliveryPlan、FanoutWorkItem 与有界 FanoutDispatcher 已实现；FanoutPlanFactory 需由真实数据/Server 装配注入，CI 尚待执行 |
+| Inbox/Subscription/DeliveryPlan/Fanout | 部分实现 | Inbox 与 FanoutWorkItem 同事务；Subscription 通过事务修订号固定快照并提供 keyset 分页；DeliveryPlan 复用既有幂等 Repository。单测和 MariaDB 集成测试已编写，尚待 CI/真实 DSN 执行 |
 | Template/Renderer | 部分实现 | 固定版本 Registry、JSON Pointer 标量 allowlist、text/HTML 渲染、HTML 自动转义、CRLF Subject 拒绝和显式资源限制已实现；生产模板内容/持久化尚未实现 |
-| Channel/Dispatcher/Retry | 部分实现 | DeliveryExecutionService 已串联 Preflight、固定版本 Renderer、请求构建、Attempt 原子启动、ChannelAdapter 调用与 Completion；已补执行成功及 Attempt 启动失败不调用渠道测试。Fanout 队列、Worker 调度循环和真实渠道 Adapter 仍未实现 |
-| Repository/Migration | 进行中 | 已建立八类业务表及 Migration v1～v5（包含 Inbox、Subscription、DeliveryPlan、Delivery、DeliveryAttempt、StateEvent、Template、ChannelConfig）；相关 MySQL Adapter 和可选 MariaDB 集成测试已编写；Fanout Writer 生产实现、根 Migration 注册和真实 MariaDB 执行证据仍缺 |
+| Channel/Dispatcher/Retry | 部分实现 | DeliveryExecutionService 与有界 FanoutDispatcher 已实现；FanoutPlanFactory 真实装配、Server Worker 生命周期及真实渠道 Adapter 仍待集成/L3 |
+| Repository/Migration | 部分实现 | 十类业务表及 Migration v1～v6；Fanout/Subscription Adapter 已实现；根 Migration 注册由 Server 负责，真实 MariaDB 执行证据仍缺 |
 | 三生产方事件接入 | 未验收 | 仅按各生产方契约和真实测试证据逐项开放 |
 | 真实渠道与 L3 集成 | 未开始/不可比较 | 无真实凭据、回执、MariaDB/Worker 集成证据时不得标记通过 |
 
@@ -354,3 +354,14 @@ Notification 是独立通知业务模块，负责事件接收、Subscription、T
 - 已补充安全摘要字段的 Application 单元测试；尚未进行 JSON/HTTP 泄漏扫描及根 Server 权限接入验收。
 
 - 一致性诊断 Service 将无效查询参数（空/空白 DeliveryID、nil context）与快照读取器不可用分开返回：`ErrInvalidDeliveryConsistencyQuery` 与 `ErrDeliveryConsistencyReaderUnavailable`；数据库读取错误原样透传，记录不存在仍由 `found=false` 表达。
+
+
+### Fanout 实现边界（2026-11-11）
+
+- 实现提交：`f2dbe005b1c323a26f28b5128cfce3baa642d464`。
+- 新增 `MySQLFanoutWorkItemRepository`，并作为 `InboxFanoutWriter` 注入 `MySQLInboxRepository`；Inbox 重放不新增工作项。
+- 新增 Subscription revision 单行事务分配器；Create/AppendVersion 在同一事务递增修订号，Fanout 首次 Claim 固定高水位，页面查询先选快照内最新版本再过滤 active/event_type。
+- 新增 `FanoutDispatcher.RunOnce`，每次最多处理一个 WorkItem 的一个页面；DeliveryPlan 继续复用现有 `DeliveryPlanWriter.CreateOrGet`，计划持久化失败不推进游标。
+- 已编写 Fake/单元测试及 MariaDB 集成测试；未在本轮直接执行测试。必须先按分支规则合并到 integration 再执行 CI。
+- `FanoutPlanFactory` 目前是明确的内部注入端口，具体匹配、授权策略、ChannelConfig/Template 版本解析及 RecipientRef 解析依赖真实业务数据；未伪造实现。
+- Server 仍需装配 MySQLFanoutWorkItemRepository、Inbox Repository、Subscription PageReader、DeliveryPlanWriter、FanoutPlanFactory 和 Worker，并注册 Notification Migration。该项不在本分支范围。
