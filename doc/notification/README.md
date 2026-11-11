@@ -27,7 +27,7 @@ Notification 是独立通知业务模块，负责事件接收、Subscription、T
 | 范围 | 状态 | 证据/限制 |
 |---|---|---|
 | 领域设计与字段契约 | 已建立 | 以 01/03 文档为准；发现契约矛盾先修正文档并评审 |
-| Schema/Golden 资产 | 模块 CI 已通过，跨模块证据待补 | 4 Schema、6 Golden；Draft 2020-12 Envelope/Payload Validator 和 Golden 测试已编写；完整 CI Run 42201893234 已通过；NTF-CTR-001～003 仍因跨模块/真实 Adapter 证据不足保持 pending_evidence |
+| Schema/Golden 资产 | 模块 CI 已通过，跨模块证据待补 | 4 Schema、6 Golden；Draft 2020-12 Envelope/Payload Validator 和 Golden 测试已编写；完整 CI Run 42201893234 已通过；项目级状态以 PLAT-002 登记簿为准：NTF-CTR-001/002 为 `frozen`，NTF-CTR-003 为 `not_applicable`；L1 冻结不代表真实 Adapter、Server 装配或生产渠道验收通过 |
 | Go Notification Domain/Application | 部分实现 | EventEnvelope、JCS Fingerprint、Envelope/Payload Validator、EventReceiver、Subscription/DeliveryPlan 领域校验已实现；Inbox MySQL Repository 已实现，Fanout Writer 生产实现尚未完成 |
 | Inbox/Subscription/DeliveryPlan | 部分实现 | 双唯一 Inbox Port/Fake 与 MySQL Adapter（完整 Envelope 重放校验、事务内 Fanout Writer 扩展点）、Subscription append-only Repository Port/Fake 与 MariaDB Adapter（版本追加、CAS 并发）及 DeliveryPlan 唯一性 Port/Fake/Adapter 已实现；Inbox 表及双唯一键已持久化；Fanout 具体表/Writer 尚未冻结实现，Repository 通过事务内 Writer 扩展点确保新 Inbox 与 Fanout 原子提交；四组 MariaDB 测试统一通过 Platform Storage.OpenSQL 建立连接池，尚待 CI/真实 DSN 验证 |
 | Template/Renderer | 部分实现 | 固定版本 Registry、JSON Pointer 标量 allowlist、text/HTML 渲染、HTML 自动转义、CRLF Subject 拒绝和显式资源限制已实现；生产模板内容/持久化尚未实现 |

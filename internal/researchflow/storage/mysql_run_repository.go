@@ -16,6 +16,7 @@ import (
 
 	"example.com/stock-analysis-flow/internal/researchflow/application"
 	"example.com/stock-analysis-flow/internal/researchflow/domain"
+	"example.com/stock-analysis-flow/internal/researchflow/state"
 	"example.com/stock-analysis-flow/internal/researchflow/template"
 )
 
@@ -177,7 +178,7 @@ func (r *MySQLRunRepository) CreateRunAtomic(
 	}, nil
 }
 
-// CompareAndSwapRun updates mutable run state only when the persisted version matches.
+// CompareAndSwapRun updates Run state only; started_at is assigned from the database clock on entry to running.
 func (r *MySQLRunRepository) CompareAndSwapRun(
 	ctx context.Context,
 	expectedVersion uint64,
@@ -189,13 +190,45 @@ func (r *MySQLRunRepository) CompareAndSwapRun(
 	if expectedVersion == ^uint64(0) || next.Version != expectedVersion+1 || next.Status == "" {
 		return false, errors.New("Researchflow Run CAS version or status is invalid")
 	}
+	if next.ResultSummary != nil || next.ResultSummaryRef != nil || next.FinishedAt != nil {
+		return false, errors.New("Researchflow Run CAS cannot write terminal summary or finish time; use finalization")
+	}
+	var currentStatus string
+	var currentReason, currentSummaryRef sql.NullString
+	if err := r.db.QueryRowContext(ctx, `SELECT status, termination_reason, result_summary_ref
+		FROM researchflow_runs WHERE run_ref = ? AND version = ?`,
+		next.Ref, expectedVersion,
+	).Scan(&currentStatus, &currentReason, &currentSummaryRef); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, nil
+		}
+		return false, fmt.Errorf("load current Researchflow Run state for CAS: %w", err)
+	}
+	if currentSummaryRef.Valid {
+		return false, errors.New("Researchflow Run CAS cannot modify a Run with a ResultSummary; use finalization")
+	}
+	current := domain.Run{Status: domain.RunStatus(currentStatus)}
+	if _, err := state.TransitionRun(current, next.Status, time.Now().UTC()); err != nil {
+		return false, fmt.Errorf("reject invalid Researchflow Run CAS transition %s -> %s: %w",
+			currentStatus, next.Status, err)
+	}
+	currentReasonValue := ""
+	if currentReason.Valid {
+		currentReasonValue = currentReason.String
+	}
+	if next.TerminationReason != currentReasonValue {
+		return false, errors.New("Researchflow Run CAS cannot change termination_reason; use cancellation or deadline transition")
+	}
+	if next.StartedAt != nil {
+		return false, errors.New("Researchflow Run CAS cannot supply started_at; the database sets it when entering running")
+	}
 	result, err := r.db.ExecContext(ctx, `UPDATE researchflow_runs SET
-		status = ?, version = ?, started_at = ?, finished_at = ?,
-		result_summary_ref = ?, termination_reason = ?
-		WHERE run_ref = ? AND version = ?`,
-		string(next.Status), next.Version, nullableTime(next.StartedAt),
-		nullableTime(next.FinishedAt), nullableString(next.ResultSummaryRef),
-		nullableText(next.TerminationReason), next.Ref, expectedVersion,
+		status = ?, version = ?,
+		started_at = CASE WHEN ? = ? THEN COALESCE(started_at, DATE_FORMAT(UTC_TIMESTAMP(6), '%Y-%m-%dT%H:%i:%s.%f000Z')) ELSE started_at END
+		WHERE run_ref = ? AND version = ? AND status = ?
+		AND COALESCE(termination_reason, '') = ? AND result_summary_ref IS NULL`,
+		string(next.Status), next.Version, string(next.Status), string(domain.RunRunning),
+		next.Ref, expectedVersion, currentStatus, currentReasonValue,
 	)
 	if err != nil {
 		return false, fmt.Errorf("compare-and-swap Researchflow run %q: %w", next.Ref, err)
@@ -207,8 +240,7 @@ func (r *MySQLRunRepository) CompareAndSwapRun(
 	return affected == 1, nil
 }
 
-// CompareAndSwapStage updates mutable stage state while preserving its run,
-// code, required flag, dependency graph and retry-policy identity.
+// CompareAndSwapStage is restricted to Scheduler-owned Pending -> Ready/Blocked transitions.
 func (r *MySQLRunRepository) CompareAndSwapStage(
 	ctx context.Context,
 	expectedVersion uint64,
@@ -221,18 +253,58 @@ func (r *MySQLRunRepository) CompareAndSwapStage(
 		next.Version != expectedVersion+1 || next.Status == "" || next.AttemptNo < 0 {
 		return false, errors.New("Researchflow Stage CAS version or state is invalid")
 	}
-	result, err := r.db.ExecContext(ctx, `UPDATE researchflow_stages SET
-		status = ?, version = ?, attempt_no = ?, retry_at = ?,
-		output_ref = ?, quality_summary_ref = ?, diagnostic_refs = ?,
-		quality_status = ?, reason_codes = ?, risk_decision = ?,
-		started_at = ?, finished_at = ?
+	var currentStatus, currentReasonsJSON string
+	if err := r.db.QueryRowContext(ctx, `SELECT status, reason_codes FROM researchflow_stages
 		WHERE stage_ref = ? AND run_ref = ? AND version = ?`,
-		string(next.Status), next.Version, next.AttemptNo, nullableTime(next.RetryAt),
-		nullableString(next.OutputRef), nullableString(next.QualitySummaryRef),
-		mustMarshalStrings(next.DiagnosticRefs), nullableText(next.QualityStatus),
-		mustMarshalStrings(next.ReasonCodes), nullableText(next.RiskDecision),
-		nullableTime(next.StartedAt), nullableTime(next.FinishedAt),
 		next.Ref, next.RunRef, expectedVersion,
+	).Scan(&currentStatus, &currentReasonsJSON); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, nil
+		}
+		return false, fmt.Errorf("load current Researchflow Stage status for CAS: %w", err)
+	}
+	if domain.StageStatus(currentStatus) != domain.StagePending ||
+		(next.Status != domain.StageReady && next.Status != domain.StageBlocked) {
+		return false, errors.New("Researchflow Stage CAS is reserved for Pending -> Ready/Blocked scheduler transitions")
+	}
+	if next.AttemptNo != 0 || next.RetryAt != nil || next.OutputRef != nil ||
+		next.QualitySummaryRef != nil || len(next.DiagnosticRefs) != 0 ||
+		strings.TrimSpace(next.QualityStatus) != "" || strings.TrimSpace(next.RiskDecision) != "" || next.StartedAt != nil {
+		return false, errors.New("Researchflow Stage CAS cannot modify attempt, retry, result, quality or start fields")
+	}
+	var currentReasons []string
+	if err := json.Unmarshal([]byte(currentReasonsJSON), &currentReasons); err != nil {
+		return false, fmt.Errorf("decode current Researchflow Stage reason codes: %w", err)
+	}
+	expectedReasons := append([]string(nil), currentReasons...)
+	if next.Status == domain.StageReady {
+		if next.FinishedAt != nil || !equalResearchflowStrings(next.ReasonCodes, currentReasons) {
+			return false, errors.New("Researchflow Ready transition cannot change Stage reasons or finish time")
+		}
+	} else {
+		if next.FinishedAt == nil || next.FinishedAt.IsZero() {
+			return false, errors.New("Researchflow Blocked transition requires a non-zero finish time")
+		}
+		if !containsResearchflowString(expectedReasons, "dependency_not_satisfied") {
+			expectedReasons = append(expectedReasons, "dependency_not_satisfied")
+		}
+		if !equalResearchflowStrings(next.ReasonCodes, expectedReasons) {
+			return false, errors.New("Researchflow Blocked transition may only append dependency_not_satisfied")
+		}
+		// The database clock, not the scheduler snapshot, owns the terminal timestamp.
+	}
+	if _, err := state.TransitionStage(domain.Stage{Status: domain.StageStatus(currentStatus)},
+		next.Status, time.Now().UTC()); err != nil {
+		return false, fmt.Errorf("reject invalid Researchflow Stage CAS transition %s -> %s: %w",
+			currentStatus, next.Status, err)
+	}
+	result, err := r.db.ExecContext(ctx, `UPDATE researchflow_stages SET
+		status = ?, version = ?, reason_codes = ?,
+		finished_at = CASE WHEN ? = ? THEN DATE_FORMAT(UTC_TIMESTAMP(6), '%Y-%m-%dT%H:%i:%s.%f000Z') ELSE finished_at END
+		WHERE stage_ref = ? AND run_ref = ? AND version = ? AND status = ?`,
+		string(next.Status), next.Version, mustMarshalStrings(expectedReasons),
+		string(next.Status), string(domain.StageBlocked),
+		next.Ref, next.RunRef, expectedVersion, currentStatus,
 	)
 	if err != nil {
 		return false, fmt.Errorf("compare-and-swap Researchflow stage %q: %w", next.Ref, err)
@@ -242,6 +314,27 @@ func (r *MySQLRunRepository) CompareAndSwapStage(
 		return false, fmt.Errorf("read Researchflow Stage CAS affected rows: %w", err)
 	}
 	return affected == 1, nil
+}
+
+func equalResearchflowStrings(left, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for i := range left {
+		if left[i] != right[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func containsResearchflowString(values []string, target string) bool {
+	for _, value := range values {
+		if value == target {
+			return true
+		}
+	}
+	return false
 }
 
 func mustMarshalStrings(values []string) string {
@@ -304,7 +397,6 @@ func (r *MySQLRunRepository) GetStage(ctx context.Context, stageRef string) (dom
 	if stage.ReasonCodes == nil {
 		stage.ReasonCodes = []string{}
 	}
-	var err error
 	if stage.RetryAt, err = parseNullableResearchflowTime(retryAt); err != nil {
 		return domain.Stage{}, err
 	}
@@ -589,8 +681,13 @@ func (r *MySQLRunRepository) validateRecord(record application.CreateRunRecord) 
 	if !validSHA256Fingerprint(record.Fingerprint) ||
 		record.Run.Ref == "" || record.Run.SchemaVersion == "" || record.Run.TemplateRef == "" ||
 		record.Run.TemplateVersion == "" || !validSHA256Fingerprint(record.Run.TemplateFingerprint) ||
-		record.Run.CorrelationID == "" || record.Run.Version == 0 || record.Run.Status != domain.RunCreated {
+		record.Run.CorrelationID == "" || record.Run.Version != 1 || record.Run.Status != domain.RunCreated {
 		return errors.New("Researchflow create-run record is incomplete")
+	}
+	if record.Run.StartedAt != nil || record.Run.FinishedAt != nil ||
+		record.Run.ResultSummary != nil || record.Run.ResultSummaryRef != nil ||
+		strings.TrimSpace(record.Run.TerminationReason) != "" {
+		return errors.New("Researchflow CreateRun cannot initialize lifecycle or terminal Run fields")
 	}
 	parameters := bytes.TrimSpace(record.Parameters)
 	if len(parameters) == 0 || !json.Valid(parameters) || parameters[0] != '{' ||
@@ -601,6 +698,15 @@ func (r *MySQLRunRepository) validateRecord(record application.CreateRunRecord) 
 	}
 	if len(record.Stages) == 0 {
 		return errors.New("Researchflow create-run requires at least one stage")
+	}
+	for _, stage := range record.Stages {
+		if stage.Version != 1 || stage.AttemptNo != 0 ||
+			(stage.Status != domain.StagePending && stage.Status != domain.StageSkipped) ||
+			stage.RetryAt != nil || stage.OutputRef != nil || stage.QualitySummaryRef != nil ||
+			len(stage.DiagnosticRefs) != 0 || strings.TrimSpace(stage.QualityStatus) != "" ||
+			strings.TrimSpace(stage.RiskDecision) != "" || stage.StartedAt != nil || stage.FinishedAt != nil {
+			return fmt.Errorf("Researchflow CreateRun Stage %q contains fields owned by later lifecycle transitions", stage.Ref)
+		}
 	}
 	return nil
 }
@@ -657,16 +763,42 @@ func formatResearchflowTime(value time.Time) (string, error) {
 	return formatResearchflowTimeValue(value.UTC()), nil
 }
 
+// calculateResearchflowLeaseExpiry calculates a lease against the database clock
+// and caps it at the immutable Run deadline. Researchflow timestamps are stored
+// as fixed-width CHAR(30) values with nanosecond precision, not DATETIME(6).
+func calculateResearchflowLeaseExpiry(now time.Time, duration time.Duration, deadline time.Time) (time.Time, error) {
+	if duration <= 0 {
+		return time.Time{}, errors.New("Researchflow lease duration must be positive")
+	}
+	expiresAt := now.Add(duration)
+	if expiresAt.After(deadline) {
+		expiresAt = deadline
+	}
+	if !expiresAt.After(now) {
+		return time.Time{}, errors.New("Researchflow lease expiry must be after database time and within Run deadline")
+	}
+	// Keep the persisted representation fixed-width so lexical SQL comparisons
+	// preserve chronological ordering for every accepted timestamp.
+	if len(formatResearchflowTimeValue(expiresAt)) != len(researchflowTimestampLayout) {
+		return time.Time{}, errors.New("Researchflow lease expiry is outside the supported timestamp range")
+	}
+	return expiresAt, nil
+}
+
 func formatResearchflowTimeValue(value time.Time) string {
 	return value.UTC().Format(researchflowTimestampLayout)
 }
 
 func parseResearchflowTime(value string) (time.Time, error) {
-	parsed, err := time.Parse(researchflowTimestampLayout, value)
-	if err != nil {
-		return time.Time{}, fmt.Errorf("invalid Researchflow timestamp %q: %w", value, err)
+	// 兼容 MariaDB DATETIME 的空格分隔及微秒精度返回值；写入仍统一使用固定 UTC 格式。
+	layouts := []string{researchflowTimestampLayout, "2006-01-02 15:04:05.999999", "2006-01-02 15:04:05"}
+	for _, layout := range layouts {
+		parsed, err := time.Parse(layout, value)
+		if err == nil {
+			return parsed.UTC(), nil
+		}
 	}
-	return parsed.UTC(), nil
+	return time.Time{}, fmt.Errorf("invalid Researchflow timestamp %q", value)
 }
 
 func parseNullableResearchflowTime(value sql.NullString) (*time.Time, error) {

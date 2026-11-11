@@ -1,7 +1,9 @@
 # 五模块公开契约与 Schema 冻结基线（GOV-004）
 
-- 状态：历史设计基线与交叉审查记录；当前契约编号、权威路径、语义状态和阻断范围以 `跨模块契约目录与冻结状态.md` 为准。本文件不代表接口或数据库已经实现。
+- 状态：历史设计基线与交叉审查记录；当前契约编号、权威路径、语义状态、冻结范围和后续证据门禁以 `doc/contract/PLAT-002-项目级契约冻结登记簿.md` 为准。本文件不代表接口或数据库已经实现，也不作为当前契约状态登记表。
 - 目标落点：根 Go Module 的 `internal/{marketdata,quant,research,researchflow,llm,notification}`。
+> **当前状态校准（2026-11-11）：** 本文保留早期五模块 DTO/Schema 摘要及当时的 Review 结论。项目级 L1 契约已由 PLAT-002 登记簿正式冻结；文中旧 NO-GO、待冻结和待补齐状态均按历史记录日期理解。实现符合性、消费者测试、CI、Server 装配和真实依赖验收仍按各 CTR 的 L2/L3 关注点单独验证。
+
 - **2026-11-06 架构修订：** Data 采用方案 B，迁入根 Go Module 的 `internal/marketdata`，与 Root Server 同进程；Data 保留领域 Owner 和可选 HTTP Adapter。原“Data 独立 Go Module、必须经 HTTP/OpenAPI、不得 import 根 Platform internal”的文字是迁移前基线，已被本修订取代。Data 可依赖 Platform 公开技术 package，但跨业务模块仍只允许 Application Port/DTO，不允许 import 对方 internal。
 
 ## 1. 基础序列化约定

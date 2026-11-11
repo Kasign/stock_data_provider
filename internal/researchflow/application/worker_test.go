@@ -185,6 +185,7 @@ func TestWorkerDisablesRetryForNonAllowlistedReason(t *testing.T) {
 		Ref: "retry-v1", MaxAttempts: 3,
 		RetryableReasonCodes: []string{"provider_unavailable"},
 		Backoff:              template.BackoffPolicy{Algorithm: "exponential_full_jitter_v1", BaseDelayMS: 1000, MaxDelayMS: 5000},
+		AttemptTimeoutMS:     60000,
 	}
 	result := StageExecutionResult{
 		AttemptStatus: domain.AttemptFailed,
