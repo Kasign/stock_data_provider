@@ -25,7 +25,7 @@ func TestBuildMatchesQNTCTR005Golden(t *testing.T) {
 	}
 
 	got, err := Build(Input{
-		ResultType:              golden.Manifest.ResultType,
+		ResultType:           golden.Manifest.ResultType,
 		SchemaVersion:        golden.Manifest.SchemaVersion,
 		PayloadSchemaVersion: golden.Manifest.PayloadSchemaVersion,
 		AlgorithmVersion:     golden.Manifest.AlgorithmVersion,

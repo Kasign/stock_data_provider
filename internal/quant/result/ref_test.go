@@ -22,8 +22,8 @@ func testManifest(t *testing.T) manifest.Manifest {
 		ResultType: "factor", SchemaVersion: "1.0.0",
 		PayloadSchemaVersion: "1.0.0", AlgorithmVersion: "momentum.v1",
 		ParameterFingerprint: "sha256:parameter-fingerprint",
-		SystemAsOf:        time.Date(2026, 11, 9, 0, 0, 0, 0, time.UTC),
-		InputSnapshotRefs: []string{"snapshot-b", "snapshot-a"},
+		SystemAsOf:           time.Date(2026, 11, 9, 0, 0, 0, 0, time.UTC),
+		InputSnapshotRefs:    []string{"snapshot-b", "snapshot-a"},
 	}, payload)
 	if err != nil {
 		t.Fatal(err)
