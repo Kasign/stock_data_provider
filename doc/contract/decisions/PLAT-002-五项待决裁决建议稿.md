@@ -40,9 +40,10 @@
 **归属：** QNT-CTR-005。
 
 **现有冲突：**
-- Quant-Research 字段契约第 2.7 节和 Researchflow Template 规则允许显式白名单纯函数使用空 `input_snapshot_refs`。
+- QuantAnalysisRequest 字段契约将 `input_snapshot_refs` 定义为必填数组，但允许白名单纯函数传入空数组。
+- QuantResult Envelope 允许相同纯函数场景使用空数组。
 - QNT-CTR-005 Manifest 1.0.0 Schema 当前要求 `input_snapshot_refs.minItems = 1`。
-- 因此同一合法纯函数结果无法满足 Manifest Schema。
+- 因此 Request、Envelope 与 Manifest 对空输入的表达不完整一致，且 Manifest Schema 会拒绝已被上层允许的合法结果。
 
 **建议裁决：**
 1. 允许满足以下全部条件的纯函数生成可持久化、可引用的 QuantResult 和 Manifest：Quant Registry 明确登记该计算为无外部事实输入的纯函数；ResolvedTemplate 明确声明 `allow_empty_inputs=true`；实际执行的算法、参数和模板均来自已解析且受控的定义。调用方不得自行声明或覆盖上述授权。
