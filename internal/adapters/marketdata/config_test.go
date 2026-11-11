@@ -8,12 +8,12 @@ import (
 
 func TestLoadConfigUsesExplicitSource(t *testing.T) {
 	values := map[string]string{
-		"MARKET_DATA_BASE_URL": "https://market.internal",
-		"MARKET_DATA_API_KEY": "0123456789abcdef0123456789abcdef",
-		"MARKET_DATA_HISTORY_DAYS": "120",
+		"MARKET_DATA_BASE_URL":        "https://market.internal",
+		"MARKET_DATA_API_KEY":         "0123456789abcdef0123456789abcdef",
+		"MARKET_DATA_HISTORY_DAYS":    "120",
 		"MARKET_DATA_MAX_CONCURRENCY": "8",
-		"MARKET_DATA_INDEX_SYMBOLS": "000001.SH,399001.SZ,000001.SH",
-		"MARKET_DATA_ADJUSTMENT": "none",
+		"MARKET_DATA_INDEX_SYMBOLS":   "000001.SH,399001.SZ,000001.SH",
+		"MARKET_DATA_ADJUSTMENT":      "none",
 	}
 	env := platformconfig.NewEnvWithLookup(func(key string) (string, bool) {
 		value, ok := values[key]
