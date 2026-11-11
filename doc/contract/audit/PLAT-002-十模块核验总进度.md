@@ -1282,3 +1282,14 @@
 - 本轮不检查 Server DI/Bootstrap、Session Middleware 实现、WebUI 登录页面、Nginx/HTTPS/部署、E2E、测试或 CI；未修改 Server/WebUI 责任分支。
 - 当前项目级待决项仍为 5 项（QNT-DEC-01/02、RSC-OPEN-003/004/005）。权威明细见登记簿第22节、差异矩阵第49节。
 - 下一步：汇总所有已核定 CTR 的当前状态，确认 formal CTR 数量、not_applicable/withdrawn/deferred 范围和唯一待决项，形成 PLAT-002 阶段性冻结总表。
+
+## 50. PLAT-002 十模块契约定义核定阶段收敛（2026-11-11）
+
+- 43 个正式 CTR 已全部完成本轮“公开契约定义是否完整、是否存在未决语义、是否可冻结”的核定；不再保留全量盘点任务。
+- 当前统计：freeze-ready 1（GOV-CTR-005）；pending-evidence 37；pending-decision 3 个 CTR（对应 5 项待决）；blocked 0；not_applicable 2（DATA-CTR-003、NTF-CTR-003）；frozen 0。
+- 5 项待决为 QNT-DEC-01/02、RSC-OPEN-003/004/005。它们均影响公开 DTO/Manifest 字段语义，不属于模块实现问题。
+- 两项 not_applicable 已明确为 Data 内部 Provider Adapter SPI 和 Notification 内部 Channel Adapter SPI，不再追踪其内部 Fixture、测试或实现。
+- 旧 Analysis API/CTR-047 按 DEC-018/019 退出活动冻结范围；新 Researchflow HTTP 契约归 SRV-CTR-001 与 FLOW-CTR-001～004。WebUI 页面布局/交互/DOM 项不属于跨模块 API。
+- INT-CTR-001 三类业务事件映射已核定；剩余只为时间 UTC 和跨字段约束的机器定义。
+- 本轮未修改任何责任模块代码/文档，没有执行测试、CI、部署或集成；只更新 feat/design_doc 契约治理文档。
+- 权威统计见登记簿第24节、差异矩阵第50节。下一阶段不再“继续审查所有模块”，只逐项收敛 5 项待决和 37 项定义缺口；每项完成后直接更新 CTR 状态，达到 freeze-ready 再提交项目负责人冻结。
