@@ -172,7 +172,7 @@ GitHub 远端 ref 核验（2026-11-10）：
 | DATA-CTR-002 | 行情单位、复权、交易日和时间口径 | Data | Quant、Researchflow、Research、Server | doc/api/contracts/数据质量与状态契约.md；internal/marketdata/model/**；internal/marketdata/httpapi/openapi.yaml | 通用规则有文字定义；逐字段时间/单位映射未版本化 | `pending_evidence` | 通用规则已存在，但 Quote.quote_time、DailyBar.provider_timestamp/system_observed_at、Fundamental.available_at/publication_date、Valuation.provider_report_date/provider_timestamp、Announcement.published_at 等语义尚未形成逐 DTO 映射；IndexDailyBar.amount_unit 无闭合枚举，部分金额仍暴露 provider_defined/provider_amount_unit；百分点与 0..1 比例字段需区分 |
 | DATA-CTR-003 | Provider 原始值标准化与精度保真 | Data 内部 Provider Adapter | Data 内部 Provider Adapter | doc/api/数据侧整体规划.md（仅内部适配约定） | 不属于跨模块公开契约版本 | `not_applicable` | 仅 Data 内部 Provider 标准化规则，不存在跨模块公开消费者；从 PLAT-002 跨模块契约冻结门禁排除，不再追踪 Provider Fixture/专项测试 |
 | DATA-CTR-004 | Data Quality、覆盖率、来源和降级表达 | Data | Quant、Researchflow、WebUI、Server | internal/marketdata/model/**；internal/marketdata/httpapi/openapi.yaml；doc/api/contracts/数据质量与状态契约.md；Freshness SLA 与评估契约 | QualityStatus 枚举已存在；逐领域状态映射未版本化 | `pending_evidence` | QualityStatus、ProviderProbeItem.status、ProviderProbeCheckResult.status、freshness_status 是不同状态维度；Freshness 只在诊断 CheckResult 输出。MarketBreadth 与 Probe coverage 有不同层级/分母；其他 DTO 的 has_data/total/returned/quality_status 组合尚未形成完整适用映射 |
-| DATA-CTR-005 | 精度保真的跨模块日线 DTO（v2） | Data | Quant、Researchflow | internal/marketdata/app/port.go；internal/marketdata/httpapi/openapi.yaml；DEC-PLAT-002-009；Quant/Research 公开 DTO 字段级契约 | v1.1.0 HTTP number / InProcess float64；v2 Decimal Schema 未发现 | `pending_evidence` | 当前 HTTP 与 Application Port 均为 number/float64；仓库未发现 DailyBarsV2、Decimal DTO、v2 Schema/Golden。DEC-009 明确保留 v1、不静默改类型；v2 仍缺消费者输入边界、精度/scale/舍入/缺失语义及版本定义 |
+| DATA-CTR-005 | 精度保真的跨模块日线 DTO（v2） | Data | Quant、Researchflow | internal/marketdata/app/port.go；internal/marketdata/httpapi/openapi.yaml；DEC-PLAT-002-009/047；Quant/Research 公开 DTO 字段级契约 | v1.1.0 HTTP number / InProcess float64；v2 Decimal Schema 未发现 | `pending_evidence` | 当前 HTTP 与 Application Port 均为 number/float64；仓库未发现 DailyBarsV2、Decimal DTO、v2 Schema/Golden。DEC-009 明确保留 v1、不静默改类型；v2 还必须为 Quant Factor 暴露可验证的 bar interval 与不可变交易日历版本引用，并补消费者输入边界、精度/scale/舍入/缺失语义及版本定义 |
 | DATA-CTR-006 | Data HTTP API 调用认证 | Data HTTP Adapter；Server 负责默认 Root 入口和 Remote Adapter Secret | Server Remote Data Adapter；仅远程兼容模式下的受控 HTTP 调用方 | [DATA-CTR-006 认证契约](./rules/DATA-CTR-006-Data-HTTP-API调用认证契约.md)；internal/marketdata/httpapi/openapi.yaml；Data服务间认证映射与Secret注入设计.md；DEC-PLAT-002-017/038/041 | 1.0.0（远程 X-API-Key；同进程可信 Principal Context） | `pending_evidence` | 目标语义已收敛：默认同进程由 Root Server 注入可信 Context；远程兼容仅 X-API-Key，禁止 Bearer 别名，健康接口匿名。现有 OpenAPI 顶层 ApiKey/BearerAuth OR、Handler Bearer fallback、测试 Bearer 成功用例均违约；需 Data 责任范围同步后再核验 |
 | DATA-CTR-007 | Research Data Snapshot/Evidence 消费边界 | Data（数据事实）；Research（Evidence）；Server（Adapter 注入） | Research、Researchflow | internal/marketdata/app/port.go；DATA-CTR-008 Manifest Schema/Golden；DEC-PLAT-002-020；Quant-Research 公开 DTO 字段级契约 | DailyBarsSnapshot 当前 DTO；DATA-CTR-008 Manifest 1.0.0；内容 DTO/引用映射未定义 | `pending_evidence` | DailyBarsSnapshot 返回 bars 但不含 snapshot_ref/Manifest/AuthorizationRef；Bundle.snapshot_id 未证明等同内容寻址 SnapshotRef。DATA-CTR-008 Manifest 仅记录范围/来源版本元数据，不包含行情内容或 payload Schema。缺少不可变内容定位、DailyBarsV2/质量单位字段和 Research Evidence source_ref/version/locator 的权威映射 |
 | DATA-CTR-008 | Data AuthorizationRef 签发与快照访问审计 | Data | Quant、Research | DATA-CTR-008 Snapshot Manifest Schema/Golden；GOV-CTR-006；DEC-PLAT-002-038/041 | 1.0.0（Snapshot Manifest Schema/Golden） | `pending_evidence` | Manifest 的 UTC、sources tuple 排序/唯一性尚未由 Schema/Validator 完整约束；caller_ref 必须等于可信 Principal 的 AuthorizationRef.subject_ref，API Key 不可作为主体，但远程可信 caller 传递机制未定义；Scope/purpose 映射及读取时当前策略复核仍缺 Data 权威契约 |
@@ -181,7 +181,7 @@ GitHub 远端 ref 核验（2026-11-10）：
 | NEWS-CTR-003 | News PIT、稳定 Cursor、排序与去重 | News | Research、Researchflow | doc/news/新闻API契约.md 第11.1/11.3/11.6/11.9节；NEWS-CTR-001 Cursor Claims Schema；GOV-CTR-002；DEC-PLAT-002-042/044 | 复用 NEWS-CTR-001 1.0.0 Cursor Claims Schema；无独立 CTR-003 Schema | `pending_evidence` | 当前 active 契约已明确双时间 PIT、available_at 严格过滤、固定 system_as_of、news-evidence-v1 稳定排序、15 分钟 HMAC Cursor 和不可变快照；旧 News-Research 设计文档仍写显式 version_id 可不传 system_as_of、旧内容级别枚举和旧过滤字段，需明确废止/归档；NEWS-CTR-001 的 relation_status/UTC Schema 同步完成后再复核 |
 | QNT-CTR-001 | Metric/Indicator/Factor Registry 公共元数据 | Quant | Researchflow；Research 只消费编排结果 | doc/quant/schema/QNT-CTR-001-registry-entry-1.0.0.schema.json；doc/quant/03；DEC-PLAT-002-045 | 1.0.0（Registry Entry Schema；首批 Entry/Golden 未形成） | `pending_evidence` | 已核定 Registry Entry.code=metric_code、每个 metric_code 独立注册；Indicator 与 Metric 一对多映射、MACD/Bollinger 复合输出拆成多个 Metric；algorithm_version 由服务端活动版本映射选择，调用方不指定。首批实际 Entry 的 unit/precision/range/rounding/input_requirements/quality_policy 权威值仍未登记 |
 | QNT-CTR-002 | Indicator Request/Result | Quant | Researchflow | doc/整体任务规划/03-模块接口契约/Quant-Research公开DTO字段级契约.md 第2.1/2.3/2.7节；doc/quant/schema/QNT-CTR-002-indicator-parameters-1.0.0.schema.json；doc/quant/03；DEC-PLAT-002-045/046 | 1.0.0（Indicator Parameters Schema；8 个算法参数定义） | `pending_evidence` | 已核定请求上下文/幂等边界、8 个 indicator_code 与 typed parameters 关系、服务端算法版本选择、单/复合输出统一为 QuantMetric[]；完整 Request/IndicatorResultPayload Schema/Golden 尚缺，Registry 的 sample_count 策略及首批 Entry 元数据也未齐 |
-| QNT-CTR-003 | Factor Request/Result | Quant | Researchflow | doc/quant/schema/QNT-CTR-003-factor-parameters-1.0.0.schema.json；QNT-CTR-004 Factor QuantMetric Schema/Golden | 1.0.0（Parameters Schema；3 个首批 Factor） | `pending_evidence` | 首批三个 Factor 的参数/算法及局部 QuantMetric Schema 已有；完整 Factor Request/Result DTO、交易日历版本引用、输入质量和结果 Envelope 映射仍不完整 |
+| QNT-CTR-003 | Factor Request/Result | Quant | Researchflow | doc/quant/schema/QNT-CTR-003-factor-parameters-1.0.0.schema.json；QNT-CTR-004 Factor QuantMetric Schema/Golden；DATA-CTR-005；DEC-PLAT-002-047 | 1.0.0（Factor Parameters Schema；3 个首批 Factor） | `pending_evidence` | 已核定仅 stock 单证券日线、三个 factor_code 与 period/样本口径、factor_code=metric_code、单 Metric 强类型输出；DailyBars v2 尚缺可验证交易日历版本/interval 元数据，Factor Request/Result Payload Schema/Golden 与完整质量输入证据未形成 |
 | QNT-CTR-004 | QuantResultRef、Factor QuantMetric、Trend、Risk 输出 | Quant | Researchflow；Research 经 Researchflow 消费 | doc/quant/schema/QNT-CTR-004-*；doc/quant/03 第10.26节；项目级 Quant-Research公开DTO字段级契约第2节 | 1.0.0（Ref/Metric/Trend/Risk 局部 Schema/Golden） | `pending_evidence` | 已核验责任模块 QuantResultRef Schema 仍以 minItems=1 限制 input_snapshot_refs，与 DEC-029 冲突；项目级 QuantResultRef DTO/Golden 已允许经双重授权的空数组。Envelope Schema/Golden 尚缺；已有 Factor Metric、Trend、Risk 是局部 Payload，Indicator 尚无独立完整 Payload Schema，其他预留 result_type 无完整强类型 Payload。不得将局部 Schema 推断为完整 Envelope 支持；需补齐 Ref/Envelope/已开放 Payload 的权威映射后才能 freeze-ready |
 | QNT-CTR-005 | QuantResult AuthorizationRef 签发与访问审计 | Quant | Researchflow | doc/整体任务规划/schema/QNT-CTR-005-result-manifest-1.0.0.schema.json；doc/整体任务规划/golden/QNT-CTR-005-result-manifest.golden.json；GOV-CTR-006 | 1.0.0（Result Manifest Schema/Golden） | `pending_evidence` | 项目级 Manifest Schema/Golden 已按 DEC-028/029 区分 Manifest/Payload 版本并允许空数组；但 Quant 责任模块 Manifest Build/Verify 仍要求非空 input_snapshot_refs，且旧文档仍将 Manifest schema_version 解释为 Payload 版本，均与正式决议冲突。另需核对 Record/VerifyPayload 的 JCS 指纹权威输入、Manifest 与 Ref 的身份绑定，以及 AuthorizationRef 的可信主体/资源/用途/内容级别映射 |
 | RSC-CTR-001 | Research Evidence | Research | Researchflow | doc/整体任务规划/schema/RSC-CTR-001-evidence-1.0.0.schema.json；Golden；doc/research/01、03；GOV-CTR-006 | 1.0.0（Evidence Schema/Golden） | `pending_evidence` | Evidence 字段和 JCS 指纹语义已有；Schema 未约束 RFC3339Nano UTC，source_version 条件必填和 Evidence.system_as_of/available_at 跨字段 PIT 规则仍依赖未完成的权威适用映射。ResearchContext 不归本 CTR，按 FLOW-CTR-003 核定 |
@@ -445,7 +445,7 @@ PLAT-002 不因本次矩阵统计完成而结束。整体完成仍需：
 | DATA-CTR-002 | pending_evidence | 已有通用时间/单位规则；Quote、DailyBar、Fundamentals、Valuations、Announcements、CorporateActions、Index 等逐字段时间映射未完整；IndexDailyBar amount_unit 未闭合，Provider-defined 金额和比例/百分点差异仍需字段级约束 |
 | DATA-CTR-003 | not_applicable | 仅覆盖 Data 内部 Provider Adapter 原始值标准化，没有跨模块公开 DTO/Port 消费者；退出 PLAT-002 跨模块冻结门禁，不再要求 Provider Fixture 或专项测试作为项目级任务 |
 | DATA-CTR-004 | pending_evidence | QualityStatus、Probe Item/Check 状态、Freshness 状态必须分离；Freshness 仅属于诊断 CheckResult。MarketBreadth/Probe 覆盖维度有不同分母，其他 DTO 的 has_data/total/returned 与 quality_status 关系仍需逐域定义 |
-| DATA-CTR-005 | pending_evidence | 当前 HTTP OpenAPI 仍为 number、InProcess Port 为 float64；未发现 DailyBarsV2/Decimal DTO、Schema/Golden；DEC-009 要求保留 v1，v2 消费者边界、精度/scale/舍入/缺失语义未定义 |
+| DATA-CTR-005 | pending_evidence | 当前 HTTP OpenAPI 仍为 number、InProcess Port 为 float64；未发现 DailyBarsV2/Decimal DTO、Schema/Golden；DEC-009 要求保留 v1；v2 还需提供 Quant Factor 校验连续交易日所需的 bar interval 与不可变交易日历版本引用，并定义精度/scale/舍入/缺失语义 |
 | DATA-CTR-006 | pending_evidence | 目标语义已明确为默认同进程可信 Principal Context、远程兼容 X-API-Key only；当前 OpenAPI ApiKey/BearerAuth OR、Handler Bearer fallback、Bearer 成功测试仍违约；待 Data 权威 OpenAPI/Handler 同步 |
 | DATA-CTR-007 | pending_evidence | DailyBarsSnapshot 有 bars 但无 snapshot_ref/Manifest/AuthorizationRef；DATA-CTR-008 Manifest 只定义范围/来源版本，不含行情正文；Bundle.snapshot_id 未证明等同内容寻址 SnapshotRef，Evidence source_ref/version/locator 映射缺失 |
 | DATA-CTR-008 | pending_evidence | Manifest Schema/Golden 已有，caller_ref/purpose_code、内容寻址引用和 JCS/SHA-256 算法已有文字定义；UTC/排序约束及 Data 可信 caller/Scope/授权快照读取时复核映射仍不完整 |
@@ -502,7 +502,7 @@ PLAT-002 不因本次矩阵统计完成而结束。整体完成仍需：
 |---|---|---|
 | QNT-CTR-001 | pending_evidence | Registry Entry Schema/Go Validator 已有；DEC-045 已明确 code=metric_code、复合 Indicator 输出拆分为独立 Metric、服务端显式活动 algorithm_version；仍缺首批 8 Indicator 输出组/3 Factor 的正式 Entry/Golden，以及每个 metric_code 的单位、精度、舍入、范围、输入和质量策略值 |
 | QNT-CTR-002 | pending_evidence | DEC-046 已明确公共请求上下文、参数 Schema 版本边界、算法版本由服务端 Registry 选择、结果按 metric_code 映射为 QuantMetric[]，MACD/Bollinger 复合输出有固定顺序；仍缺完整 Request 与 IndicatorResultPayload Schema/Golden，并依赖 QNT-CTR-001 首批 Entry/样本数策略 |
-| QNT-CTR-003 | pending_evidence | 三个首批 Factor 参数 Schema/Golden 和部分 QuantMetric Schema 已有；但完整 Factor Request/Result、交易日历版本引用、输入质量和结果 Envelope 映射不完整 |
+| QNT-CTR-003 | pending_evidence | DEC-047 已明确 stock 单证券日线输入、factor_code/period 对应、20/60 日窗口与 sample_count、factor_code=metric_code 及单 Metric Payload；Data DailyBars v2 缺交易日历版本/interval 证据，完整 Request/FactorResultPayload Schema/Golden 和输入质量分类仍缺 |
 | QNT-CTR-004 | pending_evidence | QuantResultRef 责任模块 Schema 的 minItems=1 与 DEC-029 冲突；项目级 DTO/Golden 已允许双重授权空数组。Envelope Schema/Golden 缺失；已有 Factor Metric/Trend/Risk 仅为局部 Payload，Indicator 与其他预留类型尚无完整强类型 Payload，Ref/Envelope/Manifest 映射仍未闭合 |
 | QNT-CTR-005 | pending_evidence | 项目级 Manifest Schema/Golden 已区分 Manifest/Payload 版本并允许空数组；责任模块 Build/Verify 仍要求非空 Snapshot，旧文档仍将 Manifest schema_version 解释为 Payload 版本；Record/VerifyPayload JCS 指纹、Manifest/Ref 绑定和 AuthorizationRef 映射仍待权威对齐 |
 
@@ -1561,4 +1561,73 @@ Indicator 调用使用共同 QuantAnalysisRequest 上下文，必须遵守：
 - 以上均属于公开机器契约或 Registry 元数据缺口；模块内 CI、纯计算函数测试、真实 Data Adapter、Researchflow 消费接线不是本轮项目级语义定义门禁。
 
 **结论：QNT-CTR-002 的请求与输出语义已收敛；因完整 Request/IndicatorResultPayload 机器定义及 Registry 元数据仍缺，继续保持 pending_evidence。**
+
+
+
+## 56. QNT-CTR-003 Factor Request/Result 边界核定（2026-11-11）
+
+### 56.1 首批范围与请求身份
+
+- 首批 Factor 仅包括 `momentum_20d`、`momentum_60d`、`volatility_20d`，均为单证券时间序列因子；请求 `scope=stock` 且必须提供 `security_id`。
+- 不包含市场/行业横截面因子、排序、中性化、winsorize、z-score、rank 或组合因子；这些属于后续独立契约范围。
+- `factor_code` 唯一选择计算因子，并与输出 `metric_code` 一一对应；首批不允许一个 Factor 输出多个 Metric。
+- `QNT-CTR-003-factor-parameters-1.0.0.schema.json` 中 `schema_version=1.0.0` 表示 Factor Parameters 契约版本，不是 QuantAnalysisRequest DTO 或 Registry Entry 的 schema_version。
+- 首批参数固定为空对象 `{}`；拒绝任意附加参数。未来参数变化必须升级参数 Schema/版本，不得静默扩展空对象。
+
+### 56.2 请求上下文与输入快照
+
+1. Factor Request 复用 QuantAnalysisRequest 的共同上下文和幂等规则（DEC-046）：request_id、correlation_id、scope、security_id、system_as_of、trade_date、period、input_snapshot_refs、adjustment_basis、quality_policy、idempotency_key。
+2. 首批 Factor 必须且只能使用一个完整的 DailyBars Snapshot；input_snapshot_refs 非空且不得重复。快照必须覆盖目标计算窗口及其所需前序交易日，不得从多个不一致快照拼接。
+3. 输入 interval 固定为日线 `1d`；请求 `period` 表示因子计算窗口，不表示 Bar interval：
+   - momentum_20d：period=`20d`
+   - momentum_60d：period=`60d`
+   - volatility_20d：period=`20d`
+   period 必须与 factor_code 对应，调用方不得覆盖。
+4. adjustment_basis 必须明确且可比较；所有输入 Bar 的 adjustment_basis/reference_date 必须一致。unknown、混合复权口径或缺少必要复权证据时不得计算有效值。
+5. system_as_of 是系统知识截止时间；DailyBars Snapshot 与其所有组成 Bar/来源观察证据必须满足 GOV-CTR-002 PIT 边界。trade_date 若提供，必须等于快照最后一根目标 Bar 的交易日；若省略，结果 trade_date 取该快照最后一根 Bar 的交易日，不得取本机当前日期。
+6. Data 必须提供不可变、可审计的交易日历版本引用，并使该引用与 DailyBars Snapshot 的身份/指纹绑定；同时明确 Snapshot 的实际 interval。Quant 不自行创建、推断或更新交易日历版本。
+7. Quant 必须按上述交易日历版本验证 Bar 的交易日连续性、唯一性和升序。不能按自然日差判断交易日，也不能在缺失交易日时压缩数组后继续计算。
+8. 当前 DATA-CTR-005 v2 尚不存在，DATA-CTR-008 Manifest Schema 也未包含交易日历版本和 interval 元数据。因此上述第6/7项是明确的 Data 契约依赖缺口；在 Data 提供相应权威证据前，不得宣称真实 Factor 输入已满足交易日连续性/PIT。
+
+### 56.3 因子公式、样本数和单位
+
+| factor_code / metric_code | 最小输入 | 计算定义 | Metric.period | sample_count |
+|---|---:|---|---|---:|
+| momentum_20d | 21 个连续有效日线 close | close_t / close_(t-20) - 1 | 20d | 参与窗口的 close Bar 数，最多/正常为 21 |
+| momentum_60d | 61 个连续有效日线 close | close_t / close_(t-60) - 1 | 60d | 参与窗口的 close Bar 数，最多/正常为 61 |
+| volatility_20d | 21 个连续有效日线 close | 最近 20 个 simple daily returns 的样本标准差，ddof=1，不年化 | 20d | 实际参与标准差计算的 return 数，最多/正常为 20 |
+
+- 三个 Metric 的 unit 均为 `ratio`；现有 QNT-CTR-004 Factor QuantMetric Schema 已将 value JSON 类型定义为 `number`，首批契约沿用该公开类型。Registry Entry 必须与此保持一致；不得仅因 Go 使用 float64 而推导额外精度/容差。
+- sample_count 不是统一的输入 Bar 数：动量计数价格 Bar，波动率计数收益观测。不可把 volatility_20d 的 21 根输入 Bar 错报为 21 个有效收益样本。
+- 可用结果必须达到对应最小窗口；不足窗口时保留真实有效样本数，不得补零或填充。
+- 首批 Factor 是确定性描述性统计，不提供置信区间；lower_bound/upper_bound 必须同时为 null。
+- precision、rounding_mode、tolerance、range 和 quality_policy 的具体数值仍由各 metric_code 的 QNT-CTR-001 Registry Entry 提供；不得从 synthetic Golden、当前样本值或 float64 表示推导。
+
+### 56.4 Factor Result 映射
+
+- Factor 结果使用 QNT-CTR-004 共同 QuantResult Envelope，`result_type=factor`；QNT-CTR-003 不定义平行 Envelope。
+- Payload 使用强类型 `FactorResultPayload`，包含 `factor_code` 和 `metrics`；metrics 必须恰好包含一个 QuantMetric，且其 metric_code 必须等于 factor_code。
+- Metric.calculation_version 与 Envelope.algorithm_version 均取服务端 Registry 活动版本；调用方不得指定版本，历史结果复算按已持久化版本精确查找。
+- Metric.period 必须匹配 56.3 的因子窗口；system_as_of 必须与请求一致；unit/value_type/precision/range/quality_policy 取对应 Registry Entry。
+- quality_status、metric_status、result_status 分域表达；available 必须有非 null value，其他不可用状态必须显式 null，不得将缺失值转换为 0。
+
+### 56.5 样本不足、缺失数据与质量状态
+
+1. `insufficient_sample` 表示数据覆盖完整、交易日历连续，但证券在目标截止日前可用的有效历史本身不足以满足最小窗口（例如上市历史不足）。
+2. `insufficient_data` 表示按交易日历应存在的 Bar 缺失、快照覆盖不完整或输入数据不完整；不能把缺失交易日删除后仍按足够样本计算。
+3. `unknown` 表示交易日历版本、来源可获得时间、复权证据或关键质量事实无法确认；不得降级成 valid/degraded。
+4. `invalid` 表示输入违反硬约束（非正/非有限价格、重复交易日、乱序、混合复权等）；不得输出 available Metric。
+5. `degraded` 是否允许 available 由对应 Registry.quality_policy 决定；strict 不得放行 degraded，allow_degraded 也不绕过 Registry 限制。
+6. Metric 的不可用原因和整体 Result 状态必须保留区分；纯计算函数内部的 `StatusInsufficientData` 不是公开状态的充分依据，Application 必须结合 Data 覆盖/日历证据区分 insufficient_sample 与 insufficient_data。
+7. 参数 Schema 错误或请求不合法使用稳定 Fault；有效请求被业务质量门禁拒绝时 result_status=rejected；非预期执行错误为 failed。completed 不代表 quality_status=valid。
+
+### 56.6 冻结门禁与结论
+
+- 当前 Factor 参数 Schema 只定义 factor_code 和空 parameters，不是完整 QuantAnalysisRequest Schema。
+- 当前 Factor QuantMetric Schema/Golden 仅覆盖局部 Metric 子对象，不定义 FactorResultPayload 或 QuantResult Envelope。
+- DATA-CTR-005 未提供 DailyBars v2 Decimal DTO、实际 interval 和交易日历版本引用；当前纯计算函数只接收 `[]float64`，不能证明 Bar 时间、PIT、复权和交易日历连续性。
+- 首批 Registry Entry 尚未提供每个 metric_code 的精度/舍入/容差/值域/质量策略；sample_count 口径虽在本节明确，仍需由 Registry 机器契约正式承载。
+- 模块内算法 Golden/CI 通过不等于真实 Data 输入、完整 Result Payload 或 Researchflow 消费契约已完成。
+
+**结论：QNT-CTR-003 的首批 Factor 范围、输入语义、样本口径与结果映射已收敛；由于 Data DailyBars v2 元数据、完整 Request/FactorResultPayload Schema/Golden 和 Registry Entry 仍缺，继续保持 pending_evidence。**
 
