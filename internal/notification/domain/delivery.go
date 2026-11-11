@@ -161,6 +161,19 @@ func (d DeliveryRecord) Transition(change DeliveryTransition) (DeliveryRecord, D
 	if change.ManualRetryReason != "" && (len(change.ManualRetryReason) > 512 || strings.TrimSpace(change.ManualRetryReason) != change.ManualRetryReason || strings.ContainsAny(change.ManualRetryReason, "\r\n\x00")) {
 		return DeliveryRecord{}, DeliveryStateEvent{}, ErrInvalidDeliveryChange
 	}
+	manualRetry := d.Status == DeliveryFailed && change.To == DeliveryQueued
+	hasManualAudit := change.ActorRef != "" || change.RequestID != "" || change.ManualRetryReason != ""
+	if (change.AuthorizedManualRetry || hasManualAudit) && !manualRetry {
+		return DeliveryRecord{}, DeliveryStateEvent{}, ErrInvalidDeliveryChange
+	}
+	if manualRetry && (!change.AuthorizedManualRetry ||
+		d.AttemptCount >= d.MaxAttempts ||
+		!validOpaqueRef(change.ActorRef) || !validOpaqueRef(change.RequestID) ||
+		strings.TrimSpace(change.ManualRetryReason) == "" ||
+		len(change.ManualRetryReason) > 512 ||
+		strings.ContainsAny(change.ManualRetryReason, "\r\n\x00")) {
+		return DeliveryRecord{}, DeliveryStateEvent{}, ErrInvalidDeliveryChange
+	}
 	if deliveryRequiresReason(change.To) && change.ReasonCode == "" {
 		return DeliveryRecord{}, DeliveryStateEvent{}, ErrInvalidDeliveryChange
 	}
@@ -214,10 +227,12 @@ func (d DeliveryRecord) Transition(change DeliveryTransition) (DeliveryRecord, D
 	return next, event, nil
 }
 
-
 // ValidateDeliveryStateEvent validates an immutable state event using the same transition
 // rules as DeliveryRecord.Transition, without exposing the domain's internal rule helpers.
 func ValidateDeliveryStateEvent(previous DeliveryStatus, event DeliveryStateEvent) error {
+	if !validOpaqueRef(event.DeliveryID) || event.Version < 2 {
+		return ErrInvalidDeliveryChange
+	}
 	change := DeliveryTransition{
 		To:                    event.To,
 		At:                    event.ChangedAt,
@@ -246,7 +261,9 @@ func ValidateDeliveryStateEvent(previous DeliveryStatus, event DeliveryStateEven
 				event.RequestID == nil || !validOpaqueRef(*event.RequestID) ||
 				event.ActorReason == nil || strings.TrimSpace(*event.ActorReason) == "" ||
 				len(*event.ActorReason) > 512 ||
-				strings.ContainsAny(*event.ActorReason, "\r\n\x00"))) {
+				strings.ContainsAny(*event.ActorReason, "\r\n\x00"))) ||
+		((event.From != DeliveryFailed || event.To != DeliveryQueued) &&
+			(event.ActorRef != nil || event.RequestID != nil || event.ActorReason != nil)) {
 		return ErrInvalidDeliveryChange
 	}
 	return nil

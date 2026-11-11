@@ -95,7 +95,9 @@ func cloneStrings(v []string) []string {
 	if v == nil {
 		return []string{}
 	}
-	return append([]string(nil), v...)
+	out := make([]string, len(v))
+	copy(out, v)
+	return out
 }
 func stringPointer(v string) *string {
 	if v == "" {

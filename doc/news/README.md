@@ -9,11 +9,11 @@
 
 | 阶段 | 目标 | 当前状态 | 前置依赖 |
 |---|---|---|---|
-| N1-A | 新闻业务架构与平台边界评审 | 已评审确认 | 平台已接受三项契约评审意见；PLAT-002 仍待冻结 |
+| N1-A | 新闻业务架构与平台边界评审 | 已评审确认 | PLAT-002 项目级契约已进入 L1 冻结；News 消费者实现符合性和 Server 生产装配仍按各自证据验收 |
 | N2 | Domain、Application Port 与 Provider 协议 Adapter | 已完成（根模块 gofmt/test/race/vet 与分析服务镜像构建通过） | 注入式 Transport Port、固定样本和 fake |
 | N3 | 来源授权、安全抓取、解析与标准化 | 离线能力首批完成；生产触发、CollectionRunID、授权持久化编排、逐 Endpoint 装配和真实网络验收未完成 | 离线业务能力可先行；真实网络依赖 PLAT-002/008 和 SSRF 门禁 |
 | N4 | 身份、去重、版本和证券关联 | Domain/Application、MariaDB Repository、身份/版本/关系历史首批已实现；生产采集编排和完整端到端运行未完成 | fake Repository/内存替身 |
-| N5 | 公共平台基础能力接入 | Config/Secret、独立 BoundDoer、Fault/Request ID 适配已实现；Server 生产装配和部署 DNS/出口验收待完成 | PLAT-002 契约门禁；A1 适配代码已推进，A2/A3 需证据 |
+| N5 | 公共平台基础能力接入 | Config/Secret、独立 BoundDoer、Fault/Request ID 适配已实现；Server 生产装配和部署 DNS/出口验收待完成 | 项目级 PLAT-CTR 已 L1 冻结；News 消费者 A2 与生产部署 A3 仍需独立证据 |
 | N6 | 新闻持久化与 Migration | V1-V8、Repository、Retention 清理和 V7→V8 既有数据升级已通过 MariaDB 11.4 专项 CI；生产共享 DB 注入、总 Migration 注册待接入 | Server 共享 DB 注入与 Migration 总注册由集成分支负责 |
 | N7 | 新闻领域诊断及可选执行记录 | Provider/Parser/Source/Storage Check 与单条 BusinessQualityCheck 已实现；Runner 注册、采集闭环诊断和批量质量/Freshness 扫描待接入 | PLAT-007；PLAT-010 不建设通用队列，News 异步化按真实触发需求 |
 | N8 | 跨模块集成与验收 | News 模块单测/Race/Vet 与 MariaDB 专项验收已有通过证据；A2 生产接入仍未完成 | PLAT-013 领域接入；PLAT-014 故障演练 |
@@ -113,7 +113,7 @@
 
 ## 六、N5：公共平台基础能力接入
 
-触发条件：Platform 原语已在当前基线；A1 可进行 News 模块适配与测试准备。未冻结 API 不得宣称稳定生产依赖，A2/A3 仍按项目门禁验收。
+触发条件：Platform 原语已在当前基线；项目级 PLAT-CTR 语义已 L1 冻结，可按冻结定义完成 News 适配。L1 不代表消费者 A2 或生产 A3 通过；仍须按实际证据验收。
 
 - [x] Config/Secret：News 定义独立配置结构，复用 Platform Env/Secret；真实仓库根 Go 测试已通过，Provider 凭证不存入新闻表或日志。
 - [x] Error/Request ID：Provider 与 Source 适配器映射 Platform Fault，保留稳定 Code/Retryable，不透传 Cause；Request ID 由 Platform Client 从验证过的 Context 传播。Logger/Trace 结构化字段接入仍待验收。

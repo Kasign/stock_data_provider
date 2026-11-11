@@ -10,9 +10,9 @@ import (
 
 // DeliveryConsistencySnapshot is a single database-consistent read set.
 type DeliveryConsistencySnapshot struct {
-	Delivery   domain.DeliveryRecord
-	Attempts   []domain.DeliveryAttempt
-	StateEvents  []domain.DeliveryStateEvent
+	Delivery    domain.DeliveryRecord
+	Attempts    []domain.DeliveryAttempt
+	StateEvents []domain.DeliveryStateEvent
 }
 
 // DeliveryConsistencySnapshotReader must read the Delivery and both complete histories
@@ -23,7 +23,7 @@ type DeliveryConsistencySnapshotReader interface {
 
 var (
 	ErrDeliveryConsistencyReaderUnavailable = errors.New("notification: consistency snapshot reader unavailable")
-	ErrInvalidDeliveryConsistencyQuery       = errors.New("notification: invalid delivery consistency query")
+	ErrInvalidDeliveryConsistencyQuery      = errors.New("notification: invalid delivery consistency query")
 )
 
 // DeliveryConsistencyService assesses one atomically-read persistence snapshot.
@@ -50,10 +50,10 @@ func (s *DeliveryConsistencyService) Assess(ctx context.Context, deliveryID stri
 		return DeliveryConsistencyResult{}, found, err
 	}
 	result := AssessDeliveryConsistency(DeliveryConsistencyInput{
-		Delivery: snapshot.Delivery,
-		Attempts:               snapshot.Attempts,
-		AttemptsComparable:     true,
-		StateEvents:            snapshot.StateEvents,
+		Delivery:              snapshot.Delivery,
+		Attempts:              snapshot.Attempts,
+		AttemptsComparable:    true,
+		StateEvents:           snapshot.StateEvents,
 		StateEventsComparable: true,
 	})
 	return result, true, nil

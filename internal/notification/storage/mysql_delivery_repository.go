@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -129,6 +130,55 @@ func nullableText(value *string) any {
 	return *value
 }
 
+func verifyPersistedDeliveryPlan(ctx context.Context, tx *sql.Tx, delivery domain.DeliveryRecord) error {
+	var snapshot []byte
+	var columns deliveryPlanColumns
+	err := tx.QueryRowContext(ctx, `SELECT
+		delivery_id, source_module, event_id, subscription_id, subscription_version,
+		channel_ref, channel_config_version, template_id, template_version, recipient_ref,
+		payload_fingerprint, authorization_policy_versions, authorization_refs,
+		plan_fingerprint, delivery_idempotency_key, plan_json
+		FROM notification_delivery_plans WHERE delivery_id = ? FOR UPDATE`,
+		delivery.DeliveryID,
+	).Scan(
+		&columns.deliveryID, &columns.sourceModule, &columns.eventID, &columns.subscriptionID,
+		&columns.subscriptionVersion, &columns.channelRef, &columns.channelConfigVersion,
+		&columns.templateID, &columns.templateVersion, &columns.recipientRef,
+		&columns.payloadFingerprint, &columns.policyVersionsJSON, &columns.authorizationRefsJSON,
+		&columns.planFingerprint, &columns.deliveryIdempotencyKey, &snapshot,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return errors.New("notification storage: delivery snapshot has no immutable plan")
+	}
+	if err != nil {
+		return fmt.Errorf("notification storage: load immutable delivery plan: %w", err)
+	}
+	var plan domain.DeliveryPlan
+	if err := json.Unmarshal(snapshot, &plan); err != nil {
+		return fmt.Errorf("notification storage: decode immutable delivery plan: %w", err)
+	}
+	if err := plan.Validate(); err != nil {
+		return fmt.Errorf("notification storage: persisted delivery plan is invalid: %w", err)
+	}
+	if err := plan.VerifyFingerprint(); err != nil {
+		return fmt.Errorf("notification storage: persisted delivery plan fingerprint is invalid: %w", err)
+	}
+	if err := validateDeliveryPlanColumns(plan, columns); err != nil {
+		return fmt.Errorf("notification storage: persisted delivery plan columns mismatch: %w", err)
+	}
+	if plan.DeliveryID != delivery.DeliveryID ||
+		plan.SourceModule != delivery.SourceModule || plan.EventID != delivery.EventID ||
+		plan.SubscriptionID != delivery.SubscriptionID || plan.SubscriptionVersion != delivery.SubscriptionVersion ||
+		plan.ChannelRef != delivery.ChannelRef || plan.ChannelConfigVersion != delivery.ChannelConfigVersion ||
+		plan.TemplateID != delivery.TemplateID || plan.TemplateVersion != delivery.TemplateVersion ||
+		plan.RecipientRef != delivery.RecipientRef || plan.PayloadFingerprint != delivery.PayloadFingerprint ||
+		plan.PlanFingerprint != delivery.PlanFingerprint ||
+		plan.DeliveryIdempotencyKey != delivery.DeliveryIdempotencyKey {
+		return errors.New("notification storage: delivery snapshot does not match its immutable plan")
+	}
+	return nil
+}
+
 func (r *MySQLDeliveryRepository) Create(ctx context.Context, delivery domain.DeliveryRecord) error {
 	if r == nil || r.db == nil || ctx == nil {
 		return errors.New("notification storage: repository is not configured")
@@ -147,24 +197,8 @@ func (r *MySQLDeliveryRepository) Create(ctx context.Context, delivery domain.De
 	}
 	defer tx.Rollback()
 
-	var matchingPlans int
-	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM notification_delivery_plans
-		WHERE delivery_id = ? AND source_module = ? AND event_id = ?
-		AND subscription_id = ? AND subscription_version = ?
-		AND channel_ref = ? AND channel_config_version = ?
-		AND template_id = ? AND template_version = ? AND recipient_ref = ?
-		AND payload_fingerprint = ? AND plan_fingerprint = ?
-		AND delivery_idempotency_key = ?`,
-		delivery.DeliveryID, delivery.SourceModule, delivery.EventID,
-		delivery.SubscriptionID, delivery.SubscriptionVersion,
-		delivery.ChannelRef, delivery.ChannelConfigVersion,
-		delivery.TemplateID, delivery.TemplateVersion, delivery.RecipientRef,
-		delivery.PayloadFingerprint, delivery.PlanFingerprint, delivery.DeliveryIdempotencyKey,
-	).Scan(&matchingPlans); err != nil {
-		return fmt.Errorf("notification storage: verify immutable delivery plan: %w", err)
-	}
-	if matchingPlans != 1 {
-		return errors.New("notification storage: delivery snapshot does not match its immutable plan")
+	if err := verifyPersistedDeliveryPlan(ctx, tx, delivery); err != nil {
+		return err
 	}
 
 	_, err = tx.ExecContext(ctx, `INSERT INTO notification_deliveries (
@@ -190,7 +224,7 @@ func (r *MySQLDeliveryRepository) Create(ctx context.Context, delivery domain.De
 		return fmt.Errorf("notification storage: create delivery: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("notification storage: commit delivery create: %w", err)
+		return fmt.Errorf("%w: notification storage: commit delivery create: %w", application.ErrPersistenceOutcomeUnknown, err)
 	}
 	return nil
 }
@@ -283,7 +317,7 @@ func (r *MySQLDeliveryRepository) ClaimDue(
 		return application.DeliveryClaim{}, false, fmt.Errorf("notification storage: read claimed fencing token: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
-		return application.DeliveryClaim{}, false, fmt.Errorf("notification storage: commit delivery claim: %w", err)
+		return application.DeliveryClaim{}, false, fmt.Errorf("%w: notification storage: commit delivery claim: %w", application.ErrPersistenceOutcomeUnknown, err)
 	}
 	return application.DeliveryClaim{
 		Delivery: next,
@@ -311,9 +345,8 @@ func (r *MySQLDeliveryRepository) UpdateWithLease(
 	if err := next.Validate(); err != nil {
 		return err
 	}
-	if event.DeliveryID != next.DeliveryID || event.Version != next.Version ||
-		event.To != next.Status || !event.ChangedAt.Equal(next.UpdatedAt) {
-		return domain.ErrInvalidDeliveryChange
+	if err := validateDeliveryStateEventForSnapshot(next, event); err != nil {
+		return err
 	}
 	tx, err := r.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
 	if err != nil {
@@ -393,11 +426,10 @@ func (r *MySQLDeliveryRepository) UpdateWithLease(
 		return err
 	}
 	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("notification storage: commit delivery update: %w", err)
+		return fmt.Errorf("%w: notification storage: commit delivery update: %w", application.ErrPersistenceOutcomeUnknown, err)
 	}
 	return nil
 }
-
 
 func (r *MySQLDeliveryRepository) ListStateEvents(ctx context.Context, deliveryID string) ([]domain.DeliveryStateEvent, error) {
 	if r == nil || r.db == nil || ctx == nil || deliveryID == "" {
@@ -440,7 +472,29 @@ func (r *MySQLDeliveryRepository) ListStateEvents(ctx context.Context, deliveryI
 	return events, nil
 }
 
+func validateDeliveryStateEventForSnapshot(next domain.DeliveryRecord, event domain.DeliveryStateEvent) error {
+	if event.DeliveryID != next.DeliveryID || event.Version != next.Version ||
+		event.To != next.Status || !event.ChangedAt.Equal(next.UpdatedAt) ||
+		!sameOptionalDeliveryText(event.ReasonCode, next.ReasonCode) {
+		return domain.ErrInvalidDeliveryChange
+	}
+	return domain.ValidateDeliveryStateEvent(event.From, event)
+}
+
+func sameOptionalDeliveryText(left, right *string) bool {
+	if left == nil || right == nil {
+		return left == nil && right == nil
+	}
+	return *left == *right
+}
+
 func insertDeliveryStateEvent(ctx context.Context, tx *sql.Tx, event domain.DeliveryStateEvent) error {
+	if event.DeliveryID == "" || event.Version < 1 {
+		return domain.ErrInvalidDeliveryChange
+	}
+	if err := domain.ValidateDeliveryStateEvent(event.From, event); err != nil {
+		return err
+	}
 	_, err := tx.ExecContext(ctx, `INSERT INTO notification_delivery_state_events (
 		delivery_id, version, from_status, to_status, changed_at, reason_code,
 		evidence_ref, actor_ref, request_id, actor_reason

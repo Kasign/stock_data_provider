@@ -12,8 +12,8 @@ var ErrDeliveryAttemptConsistency = errors.New("notification: delivery status co
 type DeliveryAttemptConsistency string
 
 const (
-	DeliveryAttemptConsistencyConsistent    DeliveryAttemptConsistency = "consistent"
-	DeliveryAttemptConsistencyIntermediate  DeliveryAttemptConsistency = "intermediate"
+	DeliveryAttemptConsistencyConsistent   DeliveryAttemptConsistency = "consistent"
+	DeliveryAttemptConsistencyIntermediate DeliveryAttemptConsistency = "intermediate"
 )
 
 // AssessDeliveryAttemptConsistency 仅拒绝可由持久化事实明确证明的矛盾。
