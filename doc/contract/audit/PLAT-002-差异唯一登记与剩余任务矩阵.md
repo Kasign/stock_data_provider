@@ -1239,3 +1239,20 @@ PLAT-002 的项目级决策收敛已完成；**PLAT-002 项目整体不宣告完
 **明确排除：** Session Middleware/WebUI 登录/部署、Migration 实际注册、HTTP Client 真实消费者接入、Observation 领域 Adapter、任何单元/集成测试和 CI。它们不属于本轮契约定义冻结工作。
 
 **下一批：** Data 公开契约。GOV-CTR-001～004/006 只随对应 Data 字段定义核对适用映射，不重新讨论已经明确的公共规则。
+
+## 42. Data 首批公开契约定义核定（2026-11-11）
+
+| 契约 | 状态 | 结论 |
+|---|---|---|
+| DATA-CTR-001 | pending_evidence | DTO/OpenAPI 字段语义映射未收敛；DEC-027 Provider 原始金额字段仍出现在公开 DTO/OpenAPI |
+| DATA-CTR-002 | pending_evidence | 单位、复权和 PIT 原则已有，具体字段时间/单位适用映射不完整 |
+| DATA-CTR-003 | not_applicable | Provider 原始值归一化仅属 Data 内部 Adapter，不是跨模块公开契约 |
+| DATA-CTR-004 | pending_evidence | QualityStatus/Probe 规则已有，质量、Freshness、Coverage 的公开字段映射和分母语义未完整 |
+| DATA-CTR-005 | pending_evidence | DailyBarsV2 Decimal Schema/版本/精度语义未定义 |
+| DATA-CTR-006 | pending_evidence | OpenAPI 全局 ApiKey 与 BearerAuth 为 OR，与远程业务 API 仅使用 X-API-Key 的权威设计冲突；旧 API 清单仍描述浏览器持有 Key |
+| DATA-CTR-007 | pending_evidence | DailyBarsV2 内容 DTO 与 Snapshot Manifest 的关联契约缺失；Manifest 不可替代日线 Schema |
+| DATA-CTR-008 | pending_evidence | Manifest Schema/Golden 已有，但 UTC、sources 排序及 caller/Scope/授权读取适用映射仍不完整 |
+
+**本批结论：** 8 项中 7 项 pending_evidence、1 项 not_applicable，无 pending_decision、blocked 或 freeze-ready。DATA-CTR-003 从项目级跨模块冻结任务移出，不再追 Provider 内部测试。
+
+**唯一保留的公开契约问题：** Data API 的 OpenAPI Security OR 语义冲突、DragonTiger DEC-027 字段边界、DailyBarsV2 Decimal 定义、质量/时间字段映射、Snapshot 与内容 DTO 的关联。不得扩展为 Data 内部 Provider 归一化或运行质量整改。
