@@ -193,9 +193,9 @@ GitHub 远端 ref 核验（2026-11-10）：
 | LLM-CTR-001 | Provider Port、ModelRequest/Response、Usage、Tool Call | LLM | Researchflow | doc/llm/04 第2～5节；ProviderConfig/CapabilityState/ModelRequest/ModelResponse Schema 1.0.0 | 1.0.0（Request/Response/Config/Capability Schema 与 JSON Fixtures） | `pending_evidence` | 主字段与条件状态已有定义；UTC RFC3339Nano 未在相关 Schema 中约束，ContentPart.annotations Schema 允许任意值而 DTO 定义为 Annotation[]，部分未知/条件字段的结构约束仍过宽 |
 | LLM-CTR-002 | Stream/SSE 事件、终止、断流和序号 | LLM | Researchflow | doc/llm/04 第6节；doc/llm/05；ModelEvent Schema 1.0.0 | 1.0.0（ModelEvent Schema 与 SSE Fixtures） | `pending_evidence` | terminal/EOF/序号连续性/未知事件/取消语义已有；ModelEvent received_at UTC 约束未体现在 Schema，sequence_number 初始/合法范围及 terminal 后事件的公开结构约束尚未形成完整机器定义 |
 | LLM-CTR-003 | Platform Fault → ModelErrorInfo 映射 | LLM Adapter | Researchflow；依赖 Platform Fault | doc/llm/04 第7/11节；ModelErrorInfo Schema 1.0.0；PLAT-CTR-001 | 1.0.0（ModelErrorInfo Schema） | `pending_evidence` | Fault Class→ModelErrorKind、stable_code、SafeMessage、Retryable 和 Cause 隔离规则已有；但 Platform Fault 的公开分类/稳定 Code 契约尚未冻结，跨层映射无法独立冻结 |
-| NTF-CTR-001 | NotificationEvent Schema Registry 与版本 | 各业务事件生产方提供 payload；Notification 管 Registry | Notification、事件生产方、Worker | doc/notification/03、05；Schema/Golden | 1.0.0（Envelope + 3 Event Schema / 6 Golden） | `pending_evidence` | event_type/version、payload Schema、Registry digest、兼容矩阵和生产方映射测试 |
-| NTF-CTR-002 | Inbox、PublishEvent、Delivery 幂等与状态机 | Notification；事件生产方负责 Outbox 原子事实 | 事件生产方、Notification Worker、运维入口 | internal/notification/application/ports.go、storage；doc/notification/03 | 1.0.0 Envelope；状态机 Golden/Schema 覆盖待核验 | `pending_evidence` | Inbox、幂等键/fingerprint、Delivery/Attempt 状态、CAS/fencing、unknown 对账和恢复 |
-| NTF-CTR-003 | Channel Adapter、重试和投递结果语义 | Notification | 外部渠道 | internal/notification/application/channel_ports.go；doc/notification/03 | Channel/Retry 专属 Schema 未见；测试矩阵待核验 | `pending_evidence` | 不承诺 exactly-once、渠道能力、明确未接受才可重试、Retry-After 和 unknown 终态 |
+| NTF-CTR-001 | NotificationEvent Envelope、Schema Registry、Fingerprint | Notification | Quant、Research、Researchflow | doc/notification/03 第2.1/8.1节、05；Envelope 与三类 Payload Schema/Golden | 1.0.0（4 Schema / 6 Golden） | `pending_evidence` | Envelope/首批事件映射/fingerprint 算法已有；Schema 未约束 RFC3339Nano UTC，Payload reason_code/opaque ref 的稳定格式及 subject_ref 与 payload 主体一致性仍依赖文字定义，需统一机器契约约束 |
+| NTF-CTR-002 | Inbox、Subscription、Delivery、Attempt、幂等和状态机 | Notification | Server；Quant/Research/Researchflow 仅发布事件 | doc/notification/03 第2～7/9节、06；Notification Application Port 与 Domain 类型 | 1.0.0（Event Schema 已有；Subscription/Delivery/Attempt Schema 未登记） | `pending_evidence` | Event 接收/Inbox 双唯一键、Delivery 唯一键和状态机语义已有；Subscription、DeliveryPlan、DeliveryRecord、DeliveryAttempt、DeliveryStateEvent 的完整跨模块 DTO/Port 权威定义与版本/错误语义未形成可核对的机器 Schema/等价 Application Port 契约 |
+| NTF-CTR-003 | Notification 内部 Channel Adapter SPI 与 ChannelConfigSnapshot | Notification 内部扩展点 | Notification 内部 Channel Adapter/Resolver | doc/notification/03 第8.4节；internal/notification/application/channel_ports.go；internal/notification/domain/channel.go | 内部 Port，不属于跨模块公开契约版本 | `not_applicable` | ChannelConfigSnapshot、ChannelAdapter、ChannelResolver、RecipientResolver、ChannelSendRequest/Result 仅由 Notification 内部组件消费；不作为 PLAT-002 跨模块冻结门禁。Delivery 的 retry/unknown 对外语义归 NTF-CTR-002，不重复登记 |
 | SRV-CTR-001 | 唯一组合根、Bootstrap、依赖注入与生命周期 | Server | 所有服务端模块、WebUI | internal/server/bootstrap、router、migration；doc/server | 架构契约版本待裁定/登记 | `has_difference` + `pending_evidence` | 按 DEC-PLAT-002-012/016 装配 Quant Application Facade 到 Researchflow；按 DEC-PLAT-002-017 接入 Owner Session；所有模块装配、Root 单一入口、共享资源、Data InProcess/Remote、Migration/Worker/Shutdown |
 | INT-CTR-001 | Quant 风险决策、Research 事件生命周期、Researchflow Run 终态到 NotificationEvent 显式映射 | Quant/Research/Researchflow 产生业务事实；Notification 接收事件 | Notification、事件消费者 | doc/notification/05；doc/notification/03 | 1.0.0（3 Event Payload Schema；6 Golden） | `pending_evidence` | event_type、触发时点、subject_ref、幂等键、Outbox/Inbox 原子性、重放/撤回和三生产方映射 |
 
@@ -641,3 +641,31 @@ PLAT-002 不因本次矩阵统计完成而结束。整体完成仍需：
 - LLM-CTR-003 依赖 PLAT-CTR-001，不能先于 Platform Fault 公开契约冻结；本轮只登记依赖关系，不重开 Platform 任务。
 - 当前项目级待决项仍为 5 项：QNT-DEC-01/02、RSC-OPEN-003/004/005。
 - 下一批：Notification 公开契约定义核定；不重复审查 LLM 已接受的协议/重试决议。
+
+## 21. Notification 首批公开契约定义核定（2026-11-11）
+
+本批覆盖 NTF-CTR-001～003。区分跨模块公开边界与 Notification 内部 Channel Adapter 扩展点；不审查真实渠道账号、投递成功率、Worker/Repository 测试或部署。
+
+### 21.1 核定结果
+
+| 契约 | 状态 | 核定结论 |
+|---|---|---|
+| NTF-CTR-001 | pending_evidence | Envelope + 三类业务 Payload 共 4 份 Draft 2020-12 Schema、6 个 Golden 已有；fingerprint 算法、event_type/schema_version/source_module 注册键和首批业务事件映射已明确；但 occurred_at/published_at/业务时间均只使用 date-time、未约束 RFC3339Nano UTC，Payload reason_code/opaque ref 格式和 subject_ref 与 payload 主体一致性未完整机器化 |
+| NTF-CTR-002 | pending_evidence | Inbox 双唯一键、Publish 幂等键、Delivery 唯一键、Subscription/Channel/Template 快照、Delivery 状态机、unknown 对账和人工重试语义已有详细文字；但 Subscription、DeliveryPlan、DeliveryRecord、DeliveryAttempt、DeliveryStateEvent 缺完整 Schema 或唯一权威跨模块 Application Port 定义 |
+| NTF-CTR-003 | not_applicable | ChannelConfigSnapshot、ChannelAdapter、ChannelResolver、RecipientResolver、ChannelSendRequest/Result 是 Notification 内部 Adapter SPI；Server 只提供 Platform Secret/BoundDoer 等组合依赖，不作为独立跨模块业务契约。其内部能力/重试适配不属于 PLAT-002 |
+
+### 21.2 必须保留的公开边界
+
+1. NotificationEvent.event_id 由生产方生成，不得复用 RunRef、RiskDecision ID 或 ResearchEvent ID；source_event_ref 指向来源领域对象/版本；subject_ref 是业务主体引用；三者不可混用。
+2. Fingerprint 使用 RFC 8785 JCS + SHA-256，覆盖 event_type、schema_version、source_module、subject_ref、occurred_at 和 payload；不覆盖 event_id、idempotency_key、correlation_id、published_at、接收时间或传输 Header。
+3. Inbox=(source_module,event_id)，Publish=(source_module,idempotency_key)；同键同 fingerprint 幂等返回，冲突 fingerprint 拒绝；不能把这两种唯一键合并。
+4. Delivery 状态 queued/sending/retry_wait/sent/skipped/blocked/failed/unknown 必须区分；unknown 表示外部副作用不确定，先对账或依赖已验证幂等能力，不得盲目重发；sent 只表示渠道明确接受，不代表用户已阅读。
+5. Subscription、ChannelConfig、Template 的版本在 DeliveryPlan 创建时固定；历史 Delivery 不因配置更新而改写。发送前重新复核当前退订/授权，但不得把最新版本静默替代原快照。
+6. Channel SPI 不扩展为公共协议：未来新增渠道只扩展 Notification 内部 Adapter Registry；不因新增渠道抽取 Platform 通用通知协议，也不要求 Quant/Research/Researchflow 直接了解渠道能力。
+
+### 21.3 本批结论
+
+- 本批 3 项：NTF-CTR-001/002 pending_evidence，NTF-CTR-003 not_applicable；无 pending_decision、blocked、freeze-ready。
+- NTF-CTR-003 的内部 Channel Adapter SPI 从 PLAT-002 跨模块冻结门禁移出；Delivery retry/unknown 外部语义保留在 NTF-CTR-002。
+- 不纳入：真实渠道 E2E、账号/Secret 可用性、MariaDB 唯一约束测试、Worker 恢复、各渠道幂等/对账能力验收、CI。
+- 不新增 CTR；下一批核对 Server/WebUI 对 Researchflow 新 API 的公开 HTTP 契约，并收敛十模块整体冻结统计。
