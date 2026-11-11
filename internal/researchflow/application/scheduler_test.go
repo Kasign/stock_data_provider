@@ -231,7 +231,6 @@ func TestBuildSchedulePlanRejectsRetryWaitWithoutRetryAt(t *testing.T) {
 	}
 }
 
-
 type schedulerRunReaderFake struct {
 	results []CreateRunResult
 	calls   int

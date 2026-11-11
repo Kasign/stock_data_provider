@@ -244,7 +244,6 @@ func TestComposeResultAllowsEvidenceKnowledgeCutoffEarlierThanRun(t *testing.T) 
 	}
 }
 
-
 func TestComposeResultRejectsUnknownEvidenceSourceOwner(t *testing.T) {
 	input := validCompositionInput()
 	input.Evidence[0].EvidenceDraft.SourceOwner = "unknown"
