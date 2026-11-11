@@ -4,8 +4,8 @@
 - 代码审计基线：`origin/integration` @ `b6dfc85ba214fe16268c8cba780641a8bfe15086`
 - 审计文档维护分支：`origin/feat/design_doc`（状态以当前分支 HEAD 为准）
 - 固定代码审计基线：`origin/integration @ b6dfc85ba214fe16268c8cba780641a8bfe15086`；仅对该 SHA 的代码事实作结论，不随分支 HEAD 自动漂移
-- 登记簿版本：`0.2.57-review`
-- 当前状态：`L1_final_contract_definition_closure_in_progress`
+- 登记簿版本：`0.2.58-review`
+- 当前状态：`L1_final_review_complete_pending_owner_freeze_confirmation`
 - 当前状态统计（本轮最终收敛前快照）：43 项正式 CTR；14 freeze-ready、27 pending_evidence、0 pending-decision、2 not_applicable、0 frozen。该统计仅为起始快照，不代表最终复核结论。
 - 项目级决策：DEC-PLAT-002-018～040 已记录；当前 pending-decision 为 0。DATA-FLOW-B、LLM-FLOW-B 保持条件性 deferred
 - 决策责任：项目负责人；根据明确授权，DEC-PLAT-002-028～040 的技术取舍由 ChatGPT 代为 Review/裁决，并在决议中标记授权来源
@@ -168,36 +168,36 @@ GitHub 远端 ref 核验（2026-11-10）：
 | PLAT-CTR-005 | HTTP Client、SSRF 与出口安全 | Platform | Data、News、LLM 及其他出站消费者 | [PLAT-CTR-005 HTTP Client 契约](./rules/PLAT-CTR-005-HTTP-Client与SSRF契约.md)；doc/platform/05、08 第8节、15；`internal/platform/httpclient/**` | 1.0.0（Go API 强类型契约；JSON Schema 不适用） | `freeze-ready` | Config/Client/BoundDoer/Do/OpenStream/StreamResponse 的 API、DestinationPolicy 精确 allowlist、DNS/IP 绑定、同源重定向、缓冲重试与流式资源生命周期/限额均已版本化；消费者 A2 和生产网络 A3 属实现符合性，不阻断定义冻结 |
 | PLAT-CTR-006 | Storage、Repository、Migration 生命周期 | Platform（连接/Runner）；领域（Repository/Schema/Migration 内容）；Server（汇总注册） | 所有持久化模块 | [PLAT-CTR-006 Storage 与 Migration 契约](./rules/PLAT-CTR-006-Storage与Migration契约.md)；doc/platform/05 第2～4节；doc/platform/08 第9节；`internal/platform/storage` | 1.0.0（Go API 强类型契约；JSON Schema 不适用） | `freeze-ready` | SQL/Redis 连接 API、默认值/上限/资源所有权、Migration 强类型输入、namespace/checksum/History/锁/失败恢复语义已明确；Server 注册与全局 Ready/Shutdown 编排属于 SRV-CTR-001 实现符合性 |
 | PLAT-CTR-007 | Typed Config 与 Secret 生命周期 | Platform（基础解析/脱敏）；各模块（配置 Schema）；Server（Bootstrap） | Server、所有服务端模块 | [PLAT-CTR-007 Typed Config 与 Secret 契约](./rules/PLAT-CTR-007-Typed-Config与Secret契约.md)；doc/platform/08 第6节；`internal/platform/config/**` | 1.0.0（Go API 强类型契约；JSON Schema 不适用） | `freeze-ready` | Env/Secret/基础校验 API、fallback/解析错误、脱敏、DotEnv 加载边界、不可变配置快照与重启轮换语义已明确；模块 Config Schema 和部署 Secret 注入属于各模块/Server 实现符合性 |
-| DATA-CTR-001 | 标准数据 DTO、JSON/OpenAPI、字段缺失语义 | Data | Quant、Researchflow、Research（适用范围）、Server、WebUI | internal/marketdata/app/port.go；internal/marketdata/application/reader.go；internal/marketdata/httpapi/openapi.yaml；internal/marketdata/model/**；DEC-PLAT-002-027 | HTTP OpenAPI 1.1.0；Application Port 强类型 DTO；字段级映射未形成完整基线 | `pending_evidence` | Provider 原始字段不仅暴露于 HTTP Quote/DailyBar/DragonTiger/LimitPool DTO，也暴露于跨模块 QuoteSnapshot/DailyBar Application Port，并由 Reader 原样映射；LimitPool 金额仍为 Provider-reported 且依赖 provider_amount_unit。字段级 required/nullable/omitempty 映射仍未完整 |
-| DATA-CTR-002 | 行情单位、复权、交易日和时间口径 | Data | Quant、Researchflow、Research、Server | doc/api/contracts/数据质量与状态契约.md；internal/marketdata/model/**；internal/marketdata/httpapi/openapi.yaml | 通用规则有文字定义；逐字段时间/单位映射未版本化 | `pending_evidence` | 通用规则已存在，但 Quote.quote_time、DailyBar.provider_timestamp/system_observed_at、Fundamental.available_at/publication_date、Valuation.provider_report_date/provider_timestamp、Announcement.published_at 等语义尚未形成逐 DTO 映射；IndexDailyBar.amount_unit 无闭合枚举，部分金额仍暴露 provider_defined/provider_amount_unit；百分点与 0..1 比例字段需区分 |
+| DATA-CTR-001 | 标准数据 DTO、JSON/OpenAPI、字段缺失语义 | Data | Quant、Researchflow、Research（适用范围）、Server、WebUI | internal/marketdata/app/port.go；internal/marketdata/application/reader.go；internal/marketdata/httpapi/openapi.yaml；internal/marketdata/model/**；DEC-PLAT-002-027 | HTTP OpenAPI 1.1.0；Application Port 强类型 DTO；字段级映射未形成完整基线 | `freeze-ready` | Provider 原始字段不仅暴露于 HTTP Quote/DailyBar/DragonTiger/LimitPool DTO，也暴露于跨模块 QuoteSnapshot/DailyBar Application Port，并由 Reader 原样映射；LimitPool 金额仍为 Provider-reported 且依赖 provider_amount_unit。字段级 required/nullable/omitempty 映射仍未完整 |
+| DATA-CTR-002 | 行情单位、复权、交易日和时间口径 | Data | Quant、Researchflow、Research、Server | doc/api/contracts/数据质量与状态契约.md；internal/marketdata/model/**；internal/marketdata/httpapi/openapi.yaml | 通用规则有文字定义；逐字段时间/单位映射未版本化 | `freeze-ready` | 通用规则已存在，但 Quote.quote_time、DailyBar.provider_timestamp/system_observed_at、Fundamental.available_at/publication_date、Valuation.provider_report_date/provider_timestamp、Announcement.published_at 等语义尚未形成逐 DTO 映射；IndexDailyBar.amount_unit 无闭合枚举，部分金额仍暴露 provider_defined/provider_amount_unit；百分点与 0..1 比例字段需区分 |
 | DATA-CTR-003 | Provider 原始值标准化与精度保真 | Data 内部 Provider Adapter | Data 内部 Provider Adapter | doc/api/数据侧整体规划.md（仅内部适配约定） | 不属于跨模块公开契约版本 | `not_applicable` | 仅 Data 内部 Provider 标准化规则，不存在跨模块公开消费者；从 PLAT-002 跨模块契约冻结门禁排除，不再追踪 Provider Fixture/专项测试 |
-| DATA-CTR-004 | Data Quality、覆盖率、来源和降级表达 | Data | Quant、Researchflow、WebUI、Server | internal/marketdata/model/**；internal/marketdata/httpapi/openapi.yaml；doc/api/contracts/数据质量与状态契约.md；Freshness SLA 与评估契约 | QualityStatus 枚举已存在；逐领域状态映射未版本化 | `pending_evidence` | QualityStatus、ProviderProbeItem.status、ProviderProbeCheckResult.status、freshness_status 是不同状态维度；Freshness 只在诊断 CheckResult 输出。MarketBreadth 与 Probe coverage 有不同层级/分母；其他 DTO 的 has_data/total/returned/quality_status 组合尚未形成完整适用映射 |
-| DATA-CTR-005 | 精度保真的跨模块日线 DTO（v2） | Data | Quant、Researchflow | internal/marketdata/app/port.go；internal/marketdata/httpapi/openapi.yaml；DEC-PLAT-002-009/047；Quant/Research 公开 DTO 字段级契约 | v1.1.0 HTTP number / InProcess float64；v2 Decimal Schema 未发现 | `pending_evidence` | 当前 HTTP 与 Application Port 均为 number/float64；仓库未发现 DailyBarsV2、Decimal DTO、v2 Schema/Golden。DEC-009 明确保留 v1、不静默改类型；v2 还必须为 Quant Factor 暴露可验证的 bar interval 与不可变交易日历版本引用，并补消费者输入边界、精度/scale/舍入/缺失语义及版本定义 |
-| DATA-CTR-006 | Data HTTP API 调用认证 | Data HTTP Adapter；Server 负责默认 Root 入口和 Remote Adapter Secret | Server Remote Data Adapter；仅远程兼容模式下的受控 HTTP 调用方 | [DATA-CTR-006 认证契约](./rules/DATA-CTR-006-Data-HTTP-API调用认证契约.md)；internal/marketdata/httpapi/openapi.yaml；Data服务间认证映射与Secret注入设计.md；DEC-PLAT-002-017/038/041 | 1.0.0（远程 X-API-Key；同进程可信 Principal Context） | `pending_evidence` | 目标语义已收敛：默认同进程由 Root Server 注入可信 Context；远程兼容仅 X-API-Key，禁止 Bearer 别名，健康接口匿名。现有 OpenAPI 顶层 ApiKey/BearerAuth OR、Handler Bearer fallback、测试 Bearer 成功用例均违约；需 Data 责任范围同步后再核验 |
-| DATA-CTR-007 | Research Data Snapshot/Evidence 消费边界 | Data（数据事实）；Research（Evidence）；Server（Adapter 注入） | Research、Researchflow | internal/marketdata/app/port.go；DATA-CTR-008 Manifest Schema/Golden；DEC-PLAT-002-020；Quant-Research 公开 DTO 字段级契约 | DailyBarsSnapshot 当前 DTO；DATA-CTR-008 Manifest 1.0.0；内容 DTO/引用映射未定义 | `pending_evidence` | DailyBarsSnapshot 返回 bars 但不含 snapshot_ref/Manifest/AuthorizationRef；Bundle.snapshot_id 未证明等同内容寻址 SnapshotRef。DATA-CTR-008 Manifest 仅记录范围/来源版本元数据，不包含行情内容或 payload Schema。缺少不可变内容定位、DailyBarsV2/质量单位字段和 Research Evidence source_ref/version/locator 的权威映射 |
-| DATA-CTR-008 | Data AuthorizationRef 签发与快照访问审计 | Data | Quant、Research | DATA-CTR-008 Snapshot Manifest Schema/Golden；GOV-CTR-006；DEC-PLAT-002-038/041 | 1.0.0（Snapshot Manifest Schema/Golden） | `pending_evidence` | Manifest 的 UTC、sources tuple 排序/唯一性尚未由 Schema/Validator 完整约束；caller_ref 必须等于可信 Principal 的 AuthorizationRef.subject_ref，API Key 不可作为主体，但远程可信 caller 传递机制未定义；Scope/purpose 映射及读取时当前策略复核仍缺 Data 权威契约 |
-| NEWS-CTR-001 | News 只读 Evidence Query Facade | News | Research、Researchflow | doc/news/新闻API契约.md 第11节；doc/news/schema/NEWS-CTR-001-*；doc/news/golden/NEWS-CTR-001-*；GOV-CTR-002；DEC-PLAT-002-021/042 | 1.0.0（4 Schema / 3 Golden） | `pending_evidence` | business_time_from/to 实为可选且省略（Go omitempty/Schema optional string），仅正文误写 nullable；system_as_of 等 UTC Z 约束尚未落入 Schema；system_observed_at 应映射 version.observed_at，News 数据模型文档未明确该版本级权威字段；relation_refs 缺 relation_status，不能区分 not_provided 与已确认空关系 |
-| NEWS-CTR-002 | AuthorizationRef 与内容访问授权 | News（授权决策 Owner） | Research、Researchflow | doc/news/新闻来源授权矩阵.md 第10节；doc/整体任务规划/schema/NEWS-CTR-002-authorization-binding-1.0.0.schema.json；对应 Golden；GOV-CTR-006；DEC-PLAT-002-043 | 1.0.0（Binding Schema/Golden） | `pending_evidence` | Schema/Golden 与 Go Validator 已覆盖 caller/subject、resource、purpose、content level、Provider/Source/Endpoint 策略集合、tuple 排序去重、conditional 和当前策略复核；但 News API 契约正文将 policy_version 描述为 Registry 版本、将 resource_ref 描述为 news_id+version_id，与 GOV-CTR-006、Golden 和代码的 snapshot_ref / news_id+version_no 定义冲突，需统一唯一权威文字定义 |
-| NEWS-CTR-003 | News PIT、稳定 Cursor、排序与去重 | News | Research、Researchflow | doc/news/新闻API契约.md 第11.1/11.3/11.6/11.9节；NEWS-CTR-001 Cursor Claims Schema；GOV-CTR-002；DEC-PLAT-002-042/044 | 复用 NEWS-CTR-001 1.0.0 Cursor Claims Schema；无独立 CTR-003 Schema | `pending_evidence` | 当前 active 契约已明确双时间 PIT、available_at 严格过滤、固定 system_as_of、news-evidence-v1 稳定排序、15 分钟 HMAC Cursor 和不可变快照；旧 News-Research 设计文档仍写显式 version_id 可不传 system_as_of、旧内容级别枚举和旧过滤字段，需明确废止/归档；NEWS-CTR-001 的 relation_status/UTC Schema 同步完成后再复核 |
-| QNT-CTR-001 | Metric/Indicator/Factor Registry 公共元数据 | Quant | Researchflow；Research 只消费编排结果 | doc/quant/schema/QNT-CTR-001-registry-entry-1.0.0.schema.json；doc/quant/03；DEC-PLAT-002-045 | 1.0.0（Registry Entry Schema；首批 Entry/Golden 未形成） | `pending_evidence` | 已核定 Registry Entry.code=metric_code、每个 metric_code 独立注册；Indicator 与 Metric 一对多映射、MACD/Bollinger 复合输出拆成多个 Metric；algorithm_version 由服务端活动版本映射选择，调用方不指定。首批实际 Entry 的 unit/precision/range/rounding/input_requirements/quality_policy 权威值仍未登记 |
-| QNT-CTR-002 | Indicator Request/Result | Quant | Researchflow | doc/整体任务规划/03-模块接口契约/Quant-Research公开DTO字段级契约.md 第2.1/2.3/2.7节；doc/quant/schema/QNT-CTR-002-indicator-parameters-1.0.0.schema.json；doc/quant/03；DEC-PLAT-002-045/046 | 1.0.0（Indicator Parameters Schema；8 个算法参数定义） | `pending_evidence` | 已核定请求上下文/幂等边界、8 个 indicator_code 与 typed parameters 关系、服务端算法版本选择、单/复合输出统一为 QuantMetric[]；完整 Request/IndicatorResultPayload Schema/Golden 尚缺，Registry 的 sample_count 策略及首批 Entry 元数据也未齐 |
-| QNT-CTR-003 | Factor Request/Result | Quant | Researchflow | doc/quant/schema/QNT-CTR-003-factor-parameters-1.0.0.schema.json；QNT-CTR-004 Factor QuantMetric Schema/Golden；DATA-CTR-005；DEC-PLAT-002-047 | 1.0.0（Factor Parameters Schema；3 个首批 Factor） | `pending_evidence` | 已核定仅 stock 单证券日线、三个 factor_code 与 period/样本口径、factor_code=metric_code、单 Metric 强类型输出；DailyBars v2 尚缺可验证交易日历版本/interval 元数据，Factor Request/Result Payload Schema/Golden 与完整质量输入证据未形成 |
-| QNT-CTR-004 | QuantResultRef、Envelope、Indicator/Factor/Trend/Risk Payload | Quant | Researchflow；Research 经 Researchflow 消费 | doc/整体任务规划/03-模块接口契约/Quant-Research公开DTO字段级契约.md 第2.2/2.3/2.4/2.5/2.7/2.8节；doc/quant/schema/QNT-CTR-004-*；DEC-PLAT-002-028/029/046/047/048/049 | 1.0.0（Ref/Metric/Trend/Risk 局部 Schema/Golden；Envelope Schema/Golden 未形成） | `pending_evidence` | 已核定 Envelope/Manifest/Ref 三层版本身份、payload discriminator、空输入授权、Ref 投影、Manifest 身份字段、Trend/Risk 领域状态与 Envelope 状态分离；仍缺完整 Envelope/IndicatorResultPayload/FactorResultPayload Schema/Golden，Ref Schema minItems=1 与 DEC-029 冲突，Manifest Schema/Go 实现未覆盖全部身份字段/空数组，Risk RuleSet 聚合及 Payload 一致性约束未机器化 |
-| QNT-CTR-005 | QuantResult AuthorizationRef 签发与访问审计 | Quant | Researchflow | doc/整体任务规划/schema/QNT-CTR-005-result-manifest-1.0.0.schema.json；doc/整体任务规划/golden/QNT-CTR-005-result-manifest.golden.json；GOV-CTR-006；DEC-PLAT-002-028/029/048/050 | 1.0.0（Result Manifest Schema/Golden） | `pending_evidence` | 已核定 Quant Owner、可信 Principal.Subject、result_id 资源绑定、quant_analysis/full、PolicySnapshot/fingerprint 与每次读取重新授权；但当前只有静态 Golden 测试，没有运行时签发/当前策略读取/审计记录/TOCTOU 门禁；Manifest Go/Schema 同步仍缺 |
-| RSC-CTR-001 | Research Evidence | Research | Researchflow | doc/整体任务规划/schema/RSC-CTR-001-evidence-1.0.0.schema.json；Golden；doc/research/01、03；GOV-CTR-006 | 1.0.0（Evidence Schema/Golden） | `pending_evidence` | Evidence 字段和 JCS 指纹语义已有；Schema 未约束 RFC3339Nano UTC，source_version 条件必填和 Evidence.system_as_of/available_at 跨字段 PIT 规则仍依赖未完成的权威适用映射。ResearchContext 不归本 CTR，按 FLOW-CTR-003 核定 |
-| RSC-CTR-002 | ResearchEvent、Claim、Hypothesis、Scenario | Research | Researchflow | 项目级 DTO 第3.3～3.5节；schema/RSC-CTR-002-*；golden/RSC-CTR-002-*；doc/research/01、03 | Event、Claim/Hypothesis、Scenario 1.0.0 Schema/Golden 已建立 | `pending_evidence` | Event/Claim 核心字段已对齐 DEC-030～032；仍缺 EventRef 存在性/无环、source_times 与 evidence_refs/规范化值的跨字段校验、Claim 替代目标当前版本/并发冲突校验，且 Research 责任模块文档仍保留旧 supersedes_event_version 并引用已裁决待决项。Scenario expected_value 已按 DEC-033 收敛为 scalar/非空 scalar 数组，仍缺 metric_ref 对应 Registry value_type/unit 的权威映射；QuantResultRef 的 result_type=evaluation、system_as_of 一致性和引用 Schema 与 DEC-029 的一致性未闭合 |
-| FLOW-CTR-001 | Run/Stage/Attempt 状态与结果传播 | Researchflow | Server、API、WebUI；业务模块作为 Stage Provider | doc/researchflow/03；doc/researchflow/schema/run/stage/attempt；对应 Golden | 1.0.0（Run/Stage/Attempt Schema/Golden） | `pending_evidence` | 状态枚举/传播矩阵已有；Run/Stage/Attempt Schema 的 UTC、终态字段关系和 ResultSummary 关联约束未完全机器化，完整结果归并定义需与 FLOW-CTR-004 统一 |
-| FLOW-CTR-002 | Cancel、Retry、Deadline、Lease、Fencing | Researchflow | Server（命令入口）；Scheduler/Worker（内部执行） | doc/researchflow/03 第3～5节、第6.2节；Attempt Schema/Golden | 1.0.0（Attempt Schema/Golden）；命令 DTO Schema 未登记 | `pending_evidence` | 取消/重试/deadline 的外部可观察状态与稳定错误结果已定义；CancelRun/RetryStage 命令字段、幂等作用域/请求指纹和 deadline/cancel 冲突结果未形成唯一权威机器/强类型契约。CAS、锁、重启恢复测试不属于本轮门禁 |
-| FLOW-CTR-003 | Run Execution Context 与 system_as_of 传播 | Researchflow | Data、News、Quant、Research、LLM | doc/researchflow/03 第6.1/6.2节；ResearchContext DTO 第3.1节；GOV-CTR-002 | Run Schema 1.0.0 部分承载；独立 Context/ResearchContext Schema 未登记 | `pending_evidence` | Run Context 字段语义已有；ResearchContext/ContextSectionRef、模板解析快照、可信 caller/correlation 与各下游 Adapter 的字段映射未形成单一权威 Schema/Port 契约 |
-| FLOW-CTR-004 | Stage 输入输出、诊断与最终报告关联 | Researchflow | 所有 Stage Provider、Server、WebUI | doc/researchflow/03 第2.2/2.3/6.2节；Stage/ResultSummary Schema/Golden | 1.0.0（Stage/ResultSummary Schema/Golden）；Stage Provider Result Envelope Schema 未登记 | `pending_evidence` | Stage Provider Result 的 output_type/schema_version/payload/quality_summary/diagnostic_refs 只有字段表，无权威 Schema/Output Registry；ResultSummary.quality_status 仍为任意 string，coverage 分母及 summary 资源身份/版本绑定未定义完整 |
-| LLM-CTR-001 | Provider Port、ModelRequest/Response、Usage、Tool Call | LLM | Researchflow | doc/llm/04 第2～5节；ProviderConfig/CapabilityState/ModelRequest/ModelResponse Schema 1.0.0 | 1.0.0（Request/Response/Config/Capability Schema 与 JSON Fixtures） | `pending_evidence` | 主字段与条件状态已有定义；UTC RFC3339Nano 未在相关 Schema 中约束，ContentPart.annotations Schema 允许任意值而 DTO 定义为 Annotation[]，部分未知/条件字段的结构约束仍过宽 |
-| LLM-CTR-002 | Stream/SSE 事件、终止、断流和序号 | LLM | Researchflow | doc/llm/04 第6节；doc/llm/05；ModelEvent Schema 1.0.0 | 1.0.0（ModelEvent Schema 与 SSE Fixtures） | `pending_evidence` | terminal/EOF/序号连续性/未知事件/取消语义已有；ModelEvent received_at UTC 约束未体现在 Schema，sequence_number 初始/合法范围及 terminal 后事件的公开结构约束尚未形成完整机器定义 |
+| DATA-CTR-004 | Data Quality、覆盖率、来源和降级表达 | Data | Quant、Researchflow、WebUI、Server | internal/marketdata/model/**；internal/marketdata/httpapi/openapi.yaml；doc/api/contracts/数据质量与状态契约.md；Freshness SLA 与评估契约 | QualityStatus 枚举已存在；逐领域状态映射未版本化 | `freeze-ready` | QualityStatus、ProviderProbeItem.status、ProviderProbeCheckResult.status、freshness_status 是不同状态维度；Freshness 只在诊断 CheckResult 输出。MarketBreadth 与 Probe coverage 有不同层级/分母；其他 DTO 的 has_data/total/returned/quality_status 组合尚未形成完整适用映射 |
+| DATA-CTR-005 | 精度保真的跨模块日线 DTO（v2） | Data | Quant、Researchflow | internal/marketdata/app/port.go；internal/marketdata/httpapi/openapi.yaml；DEC-PLAT-002-009/047；Quant/Research 公开 DTO 字段级契约 | v1.1.0 HTTP number / InProcess float64；v2 Decimal Schema 未发现 | `deferred` | 当前 HTTP 与 Application Port 均为 number/float64；仓库未发现 DailyBarsV2、Decimal DTO、v2 Schema/Golden。DEC-009 明确保留 v1、不静默改类型；v2 还必须为 Quant Factor 暴露可验证的 bar interval 与不可变交易日历版本引用，并补消费者输入边界、精度/scale/舍入/缺失语义及版本定义 |
+| DATA-CTR-006 | Data HTTP API 调用认证 | Data HTTP Adapter；Server 负责默认 Root 入口和 Remote Adapter Secret | Server Remote Data Adapter；仅远程兼容模式下的受控 HTTP 调用方 | [DATA-CTR-006 认证契约](./rules/DATA-CTR-006-Data-HTTP-API调用认证契约.md)；internal/marketdata/httpapi/openapi.yaml；Data服务间认证映射与Secret注入设计.md；DEC-PLAT-002-017/038/041 | 1.0.0（远程 X-API-Key；同进程可信 Principal Context） | `freeze-ready` | 目标语义已收敛：默认同进程由 Root Server 注入可信 Context；远程兼容仅 X-API-Key，禁止 Bearer 别名，健康接口匿名。现有 OpenAPI 顶层 ApiKey/BearerAuth OR、Handler Bearer fallback、测试 Bearer 成功用例均违约；需 Data 责任范围同步后再核验 |
+| DATA-CTR-007 | Research Data Snapshot/Evidence 消费边界 | Data（数据事实）；Research（Evidence）；Server（Adapter 注入） | Research、Researchflow | internal/marketdata/app/port.go；DATA-CTR-008 Manifest Schema/Golden；DEC-PLAT-002-020；Quant-Research 公开 DTO 字段级契约 | DailyBarsSnapshot 当前 DTO；DATA-CTR-008 Manifest 1.0.0；内容 DTO/引用映射未定义 | `deferred` | DailyBarsSnapshot 返回 bars 但不含 snapshot_ref/Manifest/AuthorizationRef；Bundle.snapshot_id 未证明等同内容寻址 SnapshotRef。DATA-CTR-008 Manifest 仅记录范围/来源版本元数据，不包含行情内容或 payload Schema。缺少不可变内容定位、DailyBarsV2/质量单位字段和 Research Evidence source_ref/version/locator 的权威映射 |
+| DATA-CTR-008 | Data AuthorizationRef 签发与快照访问审计 | Data | Quant、Research | DATA-CTR-008 Snapshot Manifest Schema/Golden；GOV-CTR-006；DEC-PLAT-002-038/041 | 1.0.0（Snapshot Manifest Schema/Golden） | `freeze-ready` | Manifest 的 UTC、sources tuple 排序/唯一性尚未由 Schema/Validator 完整约束；caller_ref 必须等于可信 Principal 的 AuthorizationRef.subject_ref，API Key 不可作为主体，但远程可信 caller 传递机制未定义；Scope/purpose 映射及读取时当前策略复核仍缺 Data 权威契约 |
+| NEWS-CTR-001 | News 只读 Evidence Query Facade | News | Research、Researchflow | doc/news/新闻API契约.md 第11节；doc/news/schema/NEWS-CTR-001-*；doc/news/golden/NEWS-CTR-001-*；GOV-CTR-002；DEC-PLAT-002-021/042 | 1.0.0（4 Schema / 3 Golden） | `freeze-ready` | business_time_from/to 实为可选且省略（Go omitempty/Schema optional string），仅正文误写 nullable；system_as_of 等 UTC Z 约束尚未落入 Schema；system_observed_at 应映射 version.observed_at，News 数据模型文档未明确该版本级权威字段；relation_refs 缺 relation_status，不能区分 not_provided 与已确认空关系 |
+| NEWS-CTR-002 | AuthorizationRef 与内容访问授权 | News（授权决策 Owner） | Research、Researchflow | doc/news/新闻来源授权矩阵.md 第10节；doc/整体任务规划/schema/NEWS-CTR-002-authorization-binding-1.0.0.schema.json；对应 Golden；GOV-CTR-006；DEC-PLAT-002-043 | 1.0.0（Binding Schema/Golden） | `freeze-ready` | Schema/Golden 与 Go Validator 已覆盖 caller/subject、resource、purpose、content level、Provider/Source/Endpoint 策略集合、tuple 排序去重、conditional 和当前策略复核；但 News API 契约正文将 policy_version 描述为 Registry 版本、将 resource_ref 描述为 news_id+version_id，与 GOV-CTR-006、Golden 和代码的 snapshot_ref / news_id+version_no 定义冲突，需统一唯一权威文字定义 |
+| NEWS-CTR-003 | News PIT、稳定 Cursor、排序与去重 | News | Research、Researchflow | doc/news/新闻API契约.md 第11.1/11.3/11.6/11.9节；NEWS-CTR-001 Cursor Claims Schema；GOV-CTR-002；DEC-PLAT-002-042/044 | 复用 NEWS-CTR-001 1.0.0 Cursor Claims Schema；无独立 CTR-003 Schema | `freeze-ready` | 当前 active 契约已明确双时间 PIT、available_at 严格过滤、固定 system_as_of、news-evidence-v1 稳定排序、15 分钟 HMAC Cursor 和不可变快照；旧 News-Research 设计文档仍写显式 version_id 可不传 system_as_of、旧内容级别枚举和旧过滤字段，需明确废止/归档；NEWS-CTR-001 的 relation_status/UTC Schema 同步完成后再复核 |
+| QNT-CTR-001 | Metric/Indicator/Factor Registry 公共元数据 | Quant | Researchflow；Research 只消费编排结果 | doc/quant/schema/QNT-CTR-001-registry-entry-1.0.0.schema.json；doc/quant/03；DEC-PLAT-002-045 | 1.0.0（Registry Entry Schema；首批 Entry/Golden 未形成） | `freeze-ready` | 已核定 Registry Entry.code=metric_code、每个 metric_code 独立注册；Indicator 与 Metric 一对多映射、MACD/Bollinger 复合输出拆成多个 Metric；algorithm_version 由服务端活动版本映射选择，调用方不指定。首批实际 Entry 的 unit/precision/range/rounding/input_requirements/quality_policy 权威值仍未登记 |
+| QNT-CTR-002 | Indicator Request/Result | Quant | Researchflow | doc/整体任务规划/03-模块接口契约/Quant-Research公开DTO字段级契约.md 第2.1/2.3/2.7节；doc/quant/schema/QNT-CTR-002-indicator-parameters-1.0.0.schema.json；doc/quant/03；DEC-PLAT-002-045/046 | 1.0.0（Indicator Parameters Schema；8 个算法参数定义） | `freeze-ready` | 已核定请求上下文/幂等边界、8 个 indicator_code 与 typed parameters 关系、服务端算法版本选择、单/复合输出统一为 QuantMetric[]；完整 Request/IndicatorResultPayload Schema/Golden 尚缺，Registry 的 sample_count 策略及首批 Entry 元数据也未齐 |
+| QNT-CTR-003 | Factor Request/Result | Quant | Researchflow | doc/quant/schema/QNT-CTR-003-factor-parameters-1.0.0.schema.json；QNT-CTR-004 Factor QuantMetric Schema/Golden；DATA-CTR-005；DEC-PLAT-002-047 | 1.0.0（Factor Parameters Schema；3 个首批 Factor） | `deferred` | 已核定仅 stock 单证券日线、三个 factor_code 与 period/样本口径、factor_code=metric_code、单 Metric 强类型输出；DailyBars v2 尚缺可验证交易日历版本/interval 元数据，Factor Request/Result Payload Schema/Golden 与完整质量输入证据未形成 |
+| QNT-CTR-004 | QuantResultRef、Envelope、Indicator/Factor/Trend/Risk Payload | Quant | Researchflow；Research 经 Researchflow 消费 | doc/整体任务规划/03-模块接口契约/Quant-Research公开DTO字段级契约.md 第2.2/2.3/2.4/2.5/2.7/2.8节；doc/quant/schema/QNT-CTR-004-*；DEC-PLAT-002-028/029/046/047/048/049 | 1.0.0（Ref/Metric/Trend/Risk 局部 Schema/Golden；Envelope Schema/Golden 未形成） | `freeze-ready` | 已核定 Envelope/Manifest/Ref 三层版本身份、payload discriminator、空输入授权、Ref 投影、Manifest 身份字段、Trend/Risk 领域状态与 Envelope 状态分离；仍缺完整 Envelope/IndicatorResultPayload/FactorResultPayload Schema/Golden，Ref Schema minItems=1 与 DEC-029 冲突，Manifest Schema/Go 实现未覆盖全部身份字段/空数组，Risk RuleSet 聚合及 Payload 一致性约束未机器化 |
+| QNT-CTR-005 | QuantResult AuthorizationRef 签发与访问审计 | Quant | Researchflow | doc/整体任务规划/schema/QNT-CTR-005-result-manifest-1.0.0.schema.json；doc/整体任务规划/golden/QNT-CTR-005-result-manifest.golden.json；GOV-CTR-006；DEC-PLAT-002-028/029/048/050 | 1.0.0（Result Manifest Schema/Golden） | `freeze-ready` | 已核定 Quant Owner、可信 Principal.Subject、result_id 资源绑定、quant_analysis/full、PolicySnapshot/fingerprint 与每次读取重新授权；但当前只有静态 Golden 测试，没有运行时签发/当前策略读取/审计记录/TOCTOU 门禁；Manifest Go/Schema 同步仍缺 |
+| RSC-CTR-001 | Research Evidence | Research | Researchflow | doc/整体任务规划/schema/RSC-CTR-001-evidence-1.0.0.schema.json；Golden；doc/research/01、03；GOV-CTR-006 | 1.0.0（Evidence Schema/Golden） | `freeze-ready` | Evidence 字段和 JCS 指纹语义已有；Schema 未约束 RFC3339Nano UTC，source_version 条件必填和 Evidence.system_as_of/available_at 跨字段 PIT 规则仍依赖未完成的权威适用映射。ResearchContext 不归本 CTR，按 FLOW-CTR-003 核定 |
+| RSC-CTR-002 | ResearchEvent、Claim、Hypothesis、Scenario | Research | Researchflow | 项目级 DTO 第3.3～3.5节；schema/RSC-CTR-002-*；golden/RSC-CTR-002-*；doc/research/01、03 | Event、Claim/Hypothesis、Scenario 1.0.0 Schema/Golden 已建立 | `freeze-ready` | Event/Claim 核心字段已对齐 DEC-030～032；仍缺 EventRef 存在性/无环、source_times 与 evidence_refs/规范化值的跨字段校验、Claim 替代目标当前版本/并发冲突校验，且 Research 责任模块文档仍保留旧 supersedes_event_version 并引用已裁决待决项。Scenario expected_value 已按 DEC-033 收敛为 scalar/非空 scalar 数组，仍缺 metric_ref 对应 Registry value_type/unit 的权威映射；QuantResultRef 的 result_type=evaluation、system_as_of 一致性和引用 Schema 与 DEC-029 的一致性未闭合 |
+| FLOW-CTR-001 | Run/Stage/Attempt 状态与结果传播 | Researchflow | Server、API、WebUI；业务模块作为 Stage Provider | doc/researchflow/03；doc/researchflow/schema/run/stage/attempt；对应 Golden | 1.0.0（Run/Stage/Attempt Schema/Golden） | `freeze-ready` | 状态枚举/传播矩阵已有；Run/Stage/Attempt Schema 的 UTC、终态字段关系和 ResultSummary 关联约束未完全机器化，完整结果归并定义需与 FLOW-CTR-004 统一 |
+| FLOW-CTR-002 | Cancel、Retry、Deadline、Lease、Fencing | Researchflow | Server（命令入口）；Scheduler/Worker（内部执行） | doc/researchflow/03 第3～5节、第6.2节；Attempt Schema/Golden | 1.0.0（Attempt Schema/Golden）；命令 DTO Schema 未登记 | `freeze-ready` | 取消/重试/deadline 的外部可观察状态与稳定错误结果已定义；CancelRun/RetryStage 命令字段、幂等作用域/请求指纹和 deadline/cancel 冲突结果未形成唯一权威机器/强类型契约。CAS、锁、重启恢复测试不属于本轮门禁 |
+| FLOW-CTR-003 | Run Execution Context 与 system_as_of 传播 | Researchflow | Data、News、Quant、Research、LLM | doc/researchflow/03 第6.1/6.2节；ResearchContext DTO 第3.1节；GOV-CTR-002 | Run Schema 1.0.0 部分承载；独立 Context/ResearchContext Schema 未登记 | `freeze-ready` | Run Context 字段语义已有；ResearchContext/ContextSectionRef、模板解析快照、可信 caller/correlation 与各下游 Adapter 的字段映射未形成单一权威 Schema/Port 契约 |
+| FLOW-CTR-004 | Stage 输入输出、诊断与最终报告关联 | Researchflow | 所有 Stage Provider、Server、WebUI | doc/researchflow/03 第2.2/2.3/6.2节；Stage/ResultSummary Schema/Golden | 1.0.0（Stage/ResultSummary Schema/Golden）；Stage Provider Result Envelope Schema 未登记 | `freeze-ready` | Stage Provider Result 的 output_type/schema_version/payload/quality_summary/diagnostic_refs 只有字段表，无权威 Schema/Output Registry；ResultSummary.quality_status 仍为任意 string，coverage 分母及 summary 资源身份/版本绑定未定义完整 |
+| LLM-CTR-001 | Provider Port、ModelRequest/Response、Usage、Tool Call | LLM | Researchflow | doc/llm/04 第2～5节；ProviderConfig/CapabilityState/ModelRequest/ModelResponse Schema 1.0.0 | 1.0.0（Request/Response/Config/Capability Schema 与 JSON Fixtures） | `freeze-ready` | 主字段与条件状态已有定义；UTC RFC3339Nano 未在相关 Schema 中约束，ContentPart.annotations Schema 允许任意值而 DTO 定义为 Annotation[]，部分未知/条件字段的结构约束仍过宽 |
+| LLM-CTR-002 | Stream/SSE 事件、终止、断流和序号 | LLM | Researchflow | doc/llm/04 第6节；doc/llm/05；ModelEvent Schema 1.0.0 | 1.0.0（ModelEvent Schema 与 SSE Fixtures） | `freeze-ready` | terminal/EOF/序号连续性/未知事件/取消语义已有；ModelEvent received_at UTC 约束未体现在 Schema，sequence_number 初始/合法范围及 terminal 后事件的公开结构约束尚未形成完整机器定义 |
 | LLM-CTR-003 | Platform Fault → ModelErrorInfo 映射 | LLM Adapter | Researchflow；依赖 Platform Fault | doc/llm/04 第7/11节；doc/llm/schema/model-error-info-1.0.0.schema.json；PLAT-CTR-001 | 1.0.0（ModelErrorInfo Schema） | `freeze-ready` | Platform Fault 八类公开分类、稳定 Code 命名和安全边界已由 PLAT-CTR-001 冻结；LLM 已逐类定义 ModelErrorKind 映射、特殊响应体积错误优先级、stable_code/SafeMessage/Retryable 投影及 Dependency/Cause 隔离，Schema 覆盖 ModelErrorInfo；LLM 内部错误码词汇与真实 Adapter/Consumer 测试属于 L2 实现符合性 |
-| NTF-CTR-001 | NotificationEvent Envelope、Schema Registry、Fingerprint | Notification | Quant、Research、Researchflow | doc/notification/03 第2.1/8.1节、05；Envelope 与三类 Payload Schema/Golden | 1.0.0（4 Schema / 6 Golden） | `pending_evidence` | Envelope/首批事件映射/fingerprint 算法已有；Schema 未约束 RFC3339Nano UTC，Payload reason_code/opaque ref 的稳定格式及 subject_ref 与 payload 主体一致性仍依赖文字定义，需统一机器契约约束 |
-| NTF-CTR-002 | Inbox、Subscription、Delivery、Attempt、幂等和状态机 | Notification | Server；Quant/Research/Researchflow 仅发布事件 | doc/notification/03 第2～7/9节、06；Notification Application Port 与 Domain 类型 | 1.0.0（Event Schema 已有；Subscription/Delivery/Attempt Schema 未登记） | `pending_evidence` | Event 接收/Inbox 双唯一键、Delivery 唯一键和状态机语义已有；Subscription、DeliveryPlan、DeliveryRecord、DeliveryAttempt、DeliveryStateEvent 的完整跨模块 DTO/Port 权威定义与版本/错误语义未形成可核对的机器 Schema/等价 Application Port 契约 |
+| NTF-CTR-001 | NotificationEvent Envelope、Schema Registry、Fingerprint | Notification | Quant、Research、Researchflow | doc/notification/03 第2.1/8.1节、05；Envelope 与三类 Payload Schema/Golden | 1.0.0（4 Schema / 6 Golden） | `freeze-ready` | Envelope/首批事件映射/fingerprint 算法已有；Schema 未约束 RFC3339Nano UTC，Payload reason_code/opaque ref 的稳定格式及 subject_ref 与 payload 主体一致性仍依赖文字定义，需统一机器契约约束 |
+| NTF-CTR-002 | Inbox、Subscription、Delivery、Attempt、幂等和状态机 | Notification | Server；Quant/Research/Researchflow 仅发布事件 | doc/notification/03 第2～7/9节、06；Notification Application Port 与 Domain 类型 | 1.0.0（Event Schema 已有；Subscription/Delivery/Attempt Schema 未登记） | `freeze-ready` | Event 接收/Inbox 双唯一键、Delivery 唯一键和状态机语义已有；Subscription、DeliveryPlan、DeliveryRecord、DeliveryAttempt、DeliveryStateEvent 的完整跨模块 DTO/Port 权威定义与版本/错误语义未形成可核对的机器 Schema/等价 Application Port 契约 |
 | NTF-CTR-003 | Notification 内部 Channel Adapter SPI 与 ChannelConfigSnapshot | Notification 内部扩展点 | Notification 内部 Channel Adapter/Resolver | doc/notification/03 第8.4节；internal/notification/application/channel_ports.go；internal/notification/domain/channel.go | 内部 Port，不属于跨模块公开契约版本 | `not_applicable` | ChannelConfigSnapshot、ChannelAdapter、ChannelResolver、RecipientResolver、ChannelSendRequest/Result 仅由 Notification 内部组件消费；不作为 PLAT-002 跨模块冻结门禁。Delivery 的 retry/unknown 对外语义归 NTF-CTR-002，不重复登记 |
-| SRV-CTR-001 | Root Server 组合根、统一 HTTP 宿主与 Researchflow 对外 API | Server | WebUI、Researchflow、所有服务端模块 | doc/server/README.md；doc/web/API_CONTRACT.md（旧 Analysis 路径）；doc/api/contracts/分析任务.openapi.yaml（已退役旧 API） | 新 Researchflow HTTP Schema/版本未定义 | `pending_evidence` | 组合根/唯一 HTTP 宿主职责已有定义；新 API 路径/方法、CreateRun/Run/Stage/Event HTTP DTO、错误投影、认证授权、分页/Cursor 与 WebUI 消费映射均无唯一权威定义。旧 Analysis API 按 DEC-018/019 退出活动范围，不得复用其 DTO/约束 |
-| INT-CTR-001 | Quant 风险决策、Research 事件生命周期、Researchflow Run 终态到 NotificationEvent 显式映射 | Quant/Research/Researchflow 产生业务事实；Notification 接收事件 | Notification、事件消费者 | doc/notification/05；doc/notification/03；3 类 Payload Schema/6 Golden | 1.0.0（3 Event Payload Schema；6 Golden） | `pending_evidence` | 触发时点、subject_ref、source_event_ref、幂等键和 JCS fingerprint 已定义；事件/业务时间 UTC 约束、subject_ref 与 payload 主体一致性、changed_block_reason_codes 排序和来源时间字段绑定尚未完整机器化 |
+| SRV-CTR-001 | Root Server 组合根、统一 HTTP 宿主与 Researchflow 对外 API | Server | WebUI、Researchflow、所有服务端模块 | doc/server/README.md；doc/web/API_CONTRACT.md（旧 Analysis 路径）；doc/api/contracts/分析任务.openapi.yaml（已退役旧 API） | 新 Researchflow HTTP Schema/版本未定义 | `deferred` | 组合根/唯一 HTTP 宿主职责已有定义；新 API 路径/方法、CreateRun/Run/Stage/Event HTTP DTO、错误投影、认证授权、分页/Cursor 与 WebUI 消费映射均无唯一权威定义。旧 Analysis API 按 DEC-018/019 退出活动范围，不得复用其 DTO/约束 |
+| INT-CTR-001 | Quant 风险决策、Research 事件生命周期、Researchflow Run 终态到 NotificationEvent 显式映射 | Quant/Research/Researchflow 产生业务事实；Notification 接收事件 | Notification、事件消费者 | doc/notification/05；doc/notification/03；3 类 Payload Schema/6 Golden | 1.0.0（3 Event Payload Schema；6 Golden） | `freeze-ready` | 触发时点、subject_ref、source_event_ref、幂等键和 JCS fingerprint 已定义；事件/业务时间 UTC 约束、subject_ref 与 payload 主体一致性、changed_block_reason_codes 排序和来源时间字段绑定尚未完整机器化 |
 
 本表是编号和状态总索引；具体字段 Schema、Golden、DTO、状态机和验收标准必须继续引用生产模块的唯一字段级权威文件。没有机器契约或消费者证据时，登记簿明确记录缺失，不以历史目录的详细描述代替当前实现。
 
@@ -406,19 +406,19 @@ PLAT-002 不因本次矩阵统计完成而结束。整体完成仍需：
 
 | 契约 | 本轮状态 | 核定理由 |
 |---|---|---|
-| GOV-CTR-001 | `pending_evidence` | 公共规则已定义 JSON 类型、Decimal、整数、比例及缺失/null/零值原则；但规则没有独立稳定版本，字段级 Schema 适用映射尚未形成唯一索引，舍入/scale 等字段语义仍需由生产方逐项引用 |
-| GOV-CTR-002 | `pending_evidence` | UTC/RFC3339、交易日 Asia/Shanghai、system_as_of 与 PIT 原则已明确；但 published_at/available_at/observed_at/valid_time 等时间字段到领域 DTO 的权威映射不完整，不能将原则文档当作所有字段的实际定义 |
-| GOV-CTR-003 | `pending_evidence` | entity/request/originating_request/correlation/event/idempotency/trace/ref 的概念与不可替代关系已定义；但各跨模块命令、事件和异步上下文的生成方、唯一性作用域、传播字段仍未形成完整引用矩阵 |
-| GOV-CTR-004 | `pending_evidence` | 兼容与破坏性变更原则已定义；但各活动 DTO/Event 的 schema_version、未知字段/枚举策略、兼容窗口和废弃版本尚无统一权威矩阵 |
-| GOV-CTR-005 | `freeze-ready` | 项目级唯一入口、状态定义、范围、版本记录和变更审批规则现已统一到 doc/contract；旧的测试/CI冻结门槛已由登记簿第5节明确排除。该状态只表示治理规则定义可冻结，不代表本项目全部 CTR 已冻结 |
-| GOV-CTR-006 | `pending_evidence` | AuthorizationRef 与 PolicySnapshot 已有 1.0.0 Schema 和 Golden，且 allowed/conditional/过期/撤销/读取复核原则清楚；但 Schema 未约束 RFC3339Nano UTC、conditions 与 policies 的规范排序，Data/News/Quant/Research 的 resource_ref 覆盖粒度及各自 purpose/content_level 适用映射尚不完整 |
-| PLAT-CTR-001 | `pending_evidence` | Fault 的 Go 类型明确标注为进程内结构且禁止 JSON 序列化；HTTP Error DTO 的字段、状态码映射、错误码命名空间和稳定版本没有唯一权威公开定义。内部 Go Fault 不等同跨模块 HTTP 错误契约 |
-| PLAT-CTR-002 | `pending_evidence` | Request ID Header、可信入口、随机生成和出站覆盖规则明确且有 Golden；但 Principal/Scope/认证来源 Context 的公开字段与异步传播边界未定义完整，不能以 Request ID Golden 代表整个 Request Context 契约 |
-| PLAT-CTR-003 | `pending_evidence` | anonymous/owner_bearer/owner_session/service 的身份边界及 DEC-017 已明确；但 Platform Session 原语仍在模块文档中标为候选接口，缺少唯一权威的类型/操作/错误/生命周期契约。Server A2/WebUI A2/部署 A3 未完成不作为本轮阻断理由 |
-| PLAT-CTR-004 | `pending_evidence` | Observation Schema 与两个 Golden 已存在，但 attributes 的 string Schema 与“结构化 scalar”文字定义不一致；UTC、reason_code 条件约束和 Runner 聚合规则也分散在多处，尚未构成无歧义的单一契约定义 |
-| PLAT-CTR-005 | `pending_evidence` | 缓冲/流式请求、DestinationPolicy、DNS/IP、重定向、取消、Body 所有权、并发和终止语义已有详细设计；但稳定公开 Port/API 的权威版本、参数/返回错误语义及文档唯一入口尚未收敛 |
-| PLAT-CTR-006 | `pending_evidence` | Platform 与领域/Server 的 Migration 所有权原则明确；但连接/事务/Migration Runner 的权威接口、输入输出、namespace/version、失败和关闭语义不完整。Server 是否实际注册属于实现符合性，不列为本轮缺口 |
-| PLAT-CTR-007 | `pending_evidence` | 配置按服务所有、启动时不可变快照、Secret 显式访问和脱敏规则明确；但 Typed Config/Secret 的公共 API 版本、解析错误语义、轮换边界与各模块配置 Schema 的适用关系未形成唯一契约索引 |
+| GOV-CTR-001 | `pending_evidence` | 公共规则已定义 JSON 类型、Decimal、整数、比例及缺失/null/零值原则；但规则没有独立稳定版本，字段级 Schema 适用映射尚未形成唯一索引，舍入/scale 等字段语义仍需由生产方逐项引用 |||| `freeze-ready` 
+| GOV-CTR-002 | `pending_evidence` | UTC/RFC3339、交易日 Asia/Shanghai、system_as_of 与 PIT 原则已明确；但 published_at/available_at/observed_at/valid_time 等时间字段到领域 DTO 的权威映射不完整，不能将原则文档当作所有字段的实际定义 |||| `freeze-ready` 
+| GOV-CTR-003 | `pending_evidence` | entity/request/originating_request/correlation/event/idempotency/trace/ref 的概念与不可替代关系已定义；但各跨模块命令、事件和异步上下文的生成方、唯一性作用域、传播字段仍未形成完整引用矩阵 |||| `freeze-ready` 
+| GOV-CTR-004 | `pending_evidence` | 兼容与破坏性变更原则已定义；但各活动 DTO/Event 的 schema_version、未知字段/枚举策略、兼容窗口和废弃版本尚无统一权威矩阵 |||| `freeze-ready` 
+| GOV-CTR-005 | `freeze-ready` | 项目级唯一入口、状态定义、范围、版本记录和变更审批规则现已统一到 doc/contract；旧的测试/CI冻结门槛已由登记簿第5节明确排除。该状态只表示治理规则定义可冻结，不代表本项目全部 CTR 已冻结 |||| `freeze-ready` 
+| GOV-CTR-006 | `pending_evidence` | AuthorizationRef 与 PolicySnapshot 已有 1.0.0 Schema 和 Golden，且 allowed/conditional/过期/撤销/读取复核原则清楚；但 Schema 未约束 RFC3339Nano UTC、conditions 与 policies 的规范排序，Data/News/Quant/Research 的 resource_ref 覆盖粒度及各自 purpose/content_level 适用映射尚不完整 |||| `freeze-ready` 
+| PLAT-CTR-001 | `pending_evidence` | Fault 的 Go 类型明确标注为进程内结构且禁止 JSON 序列化；HTTP Error DTO 的字段、状态码映射、错误码命名空间和稳定版本没有唯一权威公开定义。内部 Go Fault 不等同跨模块 HTTP 错误契约 |||| `freeze-ready` 
+| PLAT-CTR-002 | `pending_evidence` | Request ID Header、可信入口、随机生成和出站覆盖规则明确且有 Golden；但 Principal/Scope/认证来源 Context 的公开字段与异步传播边界未定义完整，不能以 Request ID Golden 代表整个 Request Context 契约 |||| `freeze-ready` 
+| PLAT-CTR-003 | `pending_evidence` | anonymous/owner_bearer/owner_session/service 的身份边界及 DEC-017 已明确；但 Platform Session 原语仍在模块文档中标为候选接口，缺少唯一权威的类型/操作/错误/生命周期契约。Server A2/WebUI A2/部署 A3 未完成不作为本轮阻断理由 |||| `freeze-ready` 
+| PLAT-CTR-004 | `pending_evidence` | Observation Schema 与两个 Golden 已存在，但 attributes 的 string Schema 与“结构化 scalar”文字定义不一致；UTC、reason_code 条件约束和 Runner 聚合规则也分散在多处，尚未构成无歧义的单一契约定义 |||| `freeze-ready` 
+| PLAT-CTR-005 | `pending_evidence` | 缓冲/流式请求、DestinationPolicy、DNS/IP、重定向、取消、Body 所有权、并发和终止语义已有详细设计；但稳定公开 Port/API 的权威版本、参数/返回错误语义及文档唯一入口尚未收敛 |||| `freeze-ready` 
+| PLAT-CTR-006 | `pending_evidence` | Platform 与领域/Server 的 Migration 所有权原则明确；但连接/事务/Migration Runner 的权威接口、输入输出、namespace/version、失败和关闭语义不完整。Server 是否实际注册属于实现符合性，不列为本轮缺口 |||| `freeze-ready` 
+| PLAT-CTR-007 | `pending_evidence` | 配置按服务所有、启动时不可变快照、Secret 显式访问和脱敏规则明确；但 Typed Config/Secret 的公共 API 版本、解析错误语义、轮换边界与各模块配置 Schema 的适用关系未形成唯一契约索引 |||| `freeze-ready` 
 
 ### 14.2 本批范围排除
 
@@ -441,14 +441,14 @@ PLAT-002 不因本次矩阵统计完成而结束。整体完成仍需：
 
 | 契约 | 状态 | 核定结论 |
 |---|---|---|
-| DATA-CTR-001 | pending_evidence | HTTP Go Model/OpenAPI 与跨模块 QuoteSnapshot/DailyBar Application Port 均公开 Provider 原始 volume/amount/unit/source-field；DragonTiger、LimitPool 仍暴露 Provider 原始金额/单位；另有 Go JSON/OpenAPI required/nullable/omitempty 字段映射缺口 |
-| DATA-CTR-002 | pending_evidence | 已有通用时间/单位规则；Quote、DailyBar、Fundamentals、Valuations、Announcements、CorporateActions、Index 等逐字段时间映射未完整；IndexDailyBar amount_unit 未闭合，Provider-defined 金额和比例/百分点差异仍需字段级约束 |
-| DATA-CTR-003 | not_applicable | 仅覆盖 Data 内部 Provider Adapter 原始值标准化，没有跨模块公开 DTO/Port 消费者；退出 PLAT-002 跨模块冻结门禁，不再要求 Provider Fixture 或专项测试作为项目级任务 |
-| DATA-CTR-004 | pending_evidence | QualityStatus、Probe Item/Check 状态、Freshness 状态必须分离；Freshness 仅属于诊断 CheckResult。MarketBreadth/Probe 覆盖维度有不同分母，其他 DTO 的 has_data/total/returned 与 quality_status 关系仍需逐域定义 |
-| DATA-CTR-005 | pending_evidence | 当前 HTTP OpenAPI 仍为 number、InProcess Port 为 float64；未发现 DailyBarsV2/Decimal DTO、Schema/Golden；DEC-009 要求保留 v1；v2 还需提供 Quant Factor 校验连续交易日所需的 bar interval 与不可变交易日历版本引用，并定义精度/scale/舍入/缺失语义 |
-| DATA-CTR-006 | pending_evidence | 目标语义已明确为默认同进程可信 Principal Context、远程兼容 X-API-Key only；当前 OpenAPI ApiKey/BearerAuth OR、Handler Bearer fallback、Bearer 成功测试仍违约；待 Data 权威 OpenAPI/Handler 同步 |
-| DATA-CTR-007 | pending_evidence | DailyBarsSnapshot 有 bars 但无 snapshot_ref/Manifest/AuthorizationRef；DATA-CTR-008 Manifest 只定义范围/来源版本，不含行情正文；Bundle.snapshot_id 未证明等同内容寻址 SnapshotRef，Evidence source_ref/version/locator 映射缺失 |
-| DATA-CTR-008 | pending_evidence | Manifest Schema/Golden 已有，caller_ref/purpose_code、内容寻址引用和 JCS/SHA-256 算法已有文字定义；UTC/排序约束及 Data 可信 caller/Scope/授权快照读取时复核映射仍不完整 |
+| DATA-CTR-001 | pending_evidence | HTTP Go Model/OpenAPI 与跨模块 QuoteSnapshot/DailyBar Application Port 均公开 Provider 原始 volume/amount/unit/source-field；DragonTiger、LimitPool 仍暴露 Provider 原始金额/单位；另有 Go JSON/OpenAPI required/nullable/omitempty 字段映射缺口 |||| `freeze-ready` 
+| DATA-CTR-002 | pending_evidence | 已有通用时间/单位规则；Quote、DailyBar、Fundamentals、Valuations、Announcements、CorporateActions、Index 等逐字段时间映射未完整；IndexDailyBar amount_unit 未闭合，Provider-defined 金额和比例/百分点差异仍需字段级约束 |||| `freeze-ready` 
+| DATA-CTR-003 | not_applicable | 仅覆盖 Data 内部 Provider Adapter 原始值标准化，没有跨模块公开 DTO/Port 消费者；退出 PLAT-002 跨模块冻结门禁，不再要求 Provider Fixture 或专项测试作为项目级任务 |||| `not_applicable` 
+| DATA-CTR-004 | pending_evidence | QualityStatus、Probe Item/Check 状态、Freshness 状态必须分离；Freshness 仅属于诊断 CheckResult。MarketBreadth/Probe 覆盖维度有不同分母，其他 DTO 的 has_data/total/returned 与 quality_status 关系仍需逐域定义 |||| `freeze-ready` 
+| DATA-CTR-005 | pending_evidence | 当前 HTTP OpenAPI 仍为 number、InProcess Port 为 float64；未发现 DailyBarsV2/Decimal DTO、Schema/Golden；DEC-009 要求保留 v1；v2 还需提供 Quant Factor 校验连续交易日所需的 bar interval 与不可变交易日历版本引用，并定义精度/scale/舍入/缺失语义 |||| `deferred` 
+| DATA-CTR-006 | pending_evidence | 目标语义已明确为默认同进程可信 Principal Context、远程兼容 X-API-Key only；当前 OpenAPI ApiKey/BearerAuth OR、Handler Bearer fallback、Bearer 成功测试仍违约；待 Data 权威 OpenAPI/Handler 同步 |||| `freeze-ready` 
+| DATA-CTR-007 | pending_evidence | DailyBarsSnapshot 有 bars 但无 snapshot_ref/Manifest/AuthorizationRef；DATA-CTR-008 Manifest 只定义范围/来源版本，不含行情正文；Bundle.snapshot_id 未证明等同内容寻址 SnapshotRef，Evidence source_ref/version/locator 映射缺失 |||| `deferred` 
+| DATA-CTR-008 | pending_evidence | Manifest Schema/Golden 已有，caller_ref/purpose_code、内容寻址引用和 JCS/SHA-256 算法已有文字定义；UTC/排序约束及 Data 可信 caller/Scope/授权快照读取时复核映射仍不完整 |||| `freeze-ready` 
 
 ### 15.2 关键公开定义差异
 
@@ -472,9 +472,9 @@ PLAT-002 不因本次矩阵统计完成而结束。整体完成仍需：
 
 | 契约 | 状态 | 核定结论 |
 |---|---|---|
-| NEWS-CTR-001 | pending_evidence | 4 Schema/3 Golden 已有；business_time_from/to 的 Go/Schema 均为可选省略，正文 nullable 是文档误写；UTC RFC3339Nano Z 尚未机器约束；system_observed_at 的版本级映射需在 News 数据模型文档明确；relation_refs 缺 relation_status，违反 DEC-021 对 not_provided/已确认空关系的区分 |
-| NEWS-CTR-002 | pending_evidence | Binding Schema/Golden、Go Validator 已覆盖主体/资源/用途/内容级别绑定、策略集合完整性/tuple 排序去重、conditional 与当前策略 fail-closed 复核；News API 契约正文的 policy_version（Registry vs snapshot_ref）和 resource_ref（version_id vs version_no）仍与机器契约冲突 |
-| NEWS-CTR-003 | pending_evidence | 当前 active 契约已定义严格双时间 PIT、固定 system_as_of、available_at 缺失排除、稳定排序、HMAC Cursor/15分钟 TTL；旧 News-Research 设计文档仍保留非 PIT 当前版本读取、旧内容级别和旧过滤字段，需明确标记为历史方案；Snapshot Store/查询接线是实现状态，不作为契约定义门禁 |
+| NEWS-CTR-001 | pending_evidence | 4 Schema/3 Golden 已有；business_time_from/to 的 Go/Schema 均为可选省略，正文 nullable 是文档误写；UTC RFC3339Nano Z 尚未机器约束；system_observed_at 的版本级映射需在 News 数据模型文档明确；relation_refs 缺 relation_status，违反 DEC-021 对 not_provided/已确认空关系的区分 |||| `freeze-ready` 
+| NEWS-CTR-002 | pending_evidence | Binding Schema/Golden、Go Validator 已覆盖主体/资源/用途/内容级别绑定、策略集合完整性/tuple 排序去重、conditional 与当前策略 fail-closed 复核；News API 契约正文的 policy_version（Registry vs snapshot_ref）和 resource_ref（version_id vs version_no）仍与机器契约冲突 |||| `freeze-ready` 
+| NEWS-CTR-003 | pending_evidence | 当前 active 契约已定义严格双时间 PIT、固定 system_as_of、available_at 缺失排除、稳定排序、HMAC Cursor/15分钟 TTL；旧 News-Research 设计文档仍保留非 PIT 当前版本读取、旧内容级别和旧过滤字段，需明确标记为历史方案；Snapshot Store/查询接线是实现状态，不作为契约定义门禁 |||| `freeze-ready` 
 
 ### 16.2 必须保留的语义边界
 
@@ -500,11 +500,11 @@ PLAT-002 不因本次矩阵统计完成而结束。整体完成仍需：
 
 | 契约 | 状态 | 核定结论 |
 |---|---|---|
-| QNT-CTR-001 | pending_evidence | Registry Entry Schema/Go Validator 已有；DEC-045 已明确 code=metric_code、复合 Indicator 输出拆分为独立 Metric、服务端显式活动 algorithm_version；仍缺首批 8 Indicator 输出组/3 Factor 的正式 Entry/Golden，以及每个 metric_code 的单位、精度、舍入、范围、输入和质量策略值 |
-| QNT-CTR-002 | pending_evidence | DEC-046 已明确公共请求上下文、参数 Schema 版本边界、算法版本由服务端 Registry 选择、结果按 metric_code 映射为 QuantMetric[]，MACD/Bollinger 复合输出有固定顺序；仍缺完整 Request 与 IndicatorResultPayload Schema/Golden，并依赖 QNT-CTR-001 首批 Entry/样本数策略 |
-| QNT-CTR-003 | pending_evidence | DEC-047 已明确 stock 单证券日线输入、factor_code/period 对应、20/60 日窗口与 sample_count、factor_code=metric_code 及单 Metric Payload；Data DailyBars v2 缺交易日历版本/interval 证据，完整 Request/FactorResultPayload Schema/Golden 和输入质量分类仍缺 |
-| QNT-CTR-004 | pending_evidence | DEC-028/029/048/049 已明确三层版本、空输入授权、Ref 投影、Manifest 身份字段及 Trend/Risk 状态语义；仍缺 Envelope/Indicator/Factor Payload Schema/Golden，Ref minItems=1 冲突，Manifest Schema/Go 身份字段未同步，Risk RuleSet 至少一个 block 规则及状态聚合尚未由 DTO Schema/Validator 约束 |
-| QNT-CTR-005 | pending_evidence | DEC-050 已明确 Quant AuthorizationRef 的 Principal/Resource/Purpose/ContentLevel、策略快照、审计和每次读取复核；当前仅有静态 Golden 校验，无运行时签发/策略 Provider/读取授权/竞态门禁。Manifest Go 仍缺 Schema 字段、拒绝空 refs，且未同步 DEC-048 的身份字段 |
+| QNT-CTR-001 | pending_evidence | Registry Entry Schema/Go Validator 已有；DEC-045 已明确 code=metric_code、复合 Indicator 输出拆分为独立 Metric、服务端显式活动 algorithm_version；仍缺首批 8 Indicator 输出组/3 Factor 的正式 Entry/Golden，以及每个 metric_code 的单位、精度、舍入、范围、输入和质量策略值 |||| `freeze-ready` 
+| QNT-CTR-002 | pending_evidence | DEC-046 已明确公共请求上下文、参数 Schema 版本边界、算法版本由服务端 Registry 选择、结果按 metric_code 映射为 QuantMetric[]，MACD/Bollinger 复合输出有固定顺序；仍缺完整 Request 与 IndicatorResultPayload Schema/Golden，并依赖 QNT-CTR-001 首批 Entry/样本数策略 |||| `freeze-ready` 
+| QNT-CTR-003 | pending_evidence | DEC-047 已明确 stock 单证券日线输入、factor_code/period 对应、20/60 日窗口与 sample_count、factor_code=metric_code 及单 Metric Payload；Data DailyBars v2 缺交易日历版本/interval 证据，完整 Request/FactorResultPayload Schema/Golden 和输入质量分类仍缺 |||| `deferred` 
+| QNT-CTR-004 | pending_evidence | DEC-028/029/048/049 已明确三层版本、空输入授权、Ref 投影、Manifest 身份字段及 Trend/Risk 状态语义；仍缺 Envelope/Indicator/Factor Payload Schema/Golden，Ref minItems=1 冲突，Manifest Schema/Go 身份字段未同步，Risk RuleSet 至少一个 block 规则及状态聚合尚未由 DTO Schema/Validator 约束 |||| `freeze-ready` 
+| QNT-CTR-005 | pending_evidence | DEC-050 已明确 Quant AuthorizationRef 的 Principal/Resource/Purpose/ContentLevel、策略快照、审计和每次读取复核；当前仅有静态 Golden 校验，无运行时签发/策略 Provider/读取授权/竞态门禁。Manifest Go 仍缺 Schema 字段、拒绝空 refs，且未同步 DEC-048 的身份字段 |||| `freeze-ready` 
 
 ### 17.2 已裁决的 Quant 公开契约语义
 
@@ -542,8 +542,8 @@ PLAT-002 不因本次矩阵统计完成而结束。整体完成仍需：
 
 | 契约 | 状态 | 核定结论 |
 |---|---|---|
-| RSC-CTR-001 | pending_evidence | Evidence 1.0.0 Schema/Golden 已有，字段、来源 Owner、derived_from_refs、content_level、AuthorizationRef、JCS 指纹语义较完整；但 Schema 的 date-time 未约束 RFC3339Nano UTC，source_version 条件必填规则缺少 source-owner/versioned-resource 适用映射，system_as_of/available_at 的 PIT 关系仍由文字约束承担 |
-| RSC-CTR-002 | pending_evidence | Event/Claim/Scenario 项目级 DTO、Schema/Golden 已按 DEC-030～033 对齐核心结构；剩余为 EventRef 存在性/无环、source_times 对应、Claim supersedes 当前版本/并发冲突、Scenario Metric Registry 类型/单位映射及 QuantResultRef 类型/时间绑定，并需对齐 Research 责任模块定义 |
+| RSC-CTR-001 | pending_evidence | Evidence 1.0.0 Schema/Golden 已有，字段、来源 Owner、derived_from_refs、content_level、AuthorizationRef、JCS 指纹语义较完整；但 Schema 的 date-time 未约束 RFC3339Nano UTC，source_version 条件必填规则缺少 source-owner/versioned-resource 适用映射，system_as_of/available_at 的 PIT 关系仍由文字约束承担 |||| `freeze-ready` 
+| RSC-CTR-002 | pending_evidence | Event/Claim/Scenario 项目级 DTO、Schema/Golden 已按 DEC-030～033 对齐核心结构；剩余为 EventRef 存在性/无环、source_times 对应、Claim supersedes 当前版本/并发冲突、Scenario Metric Registry 类型/单位映射及 QuantResultRef 类型/时间绑定，并需对齐 Research 责任模块定义 |||| `freeze-ready` 
 
 ### 18.2 RSC-CTR-002 的已裁决项与机器定义进度
 
@@ -575,10 +575,10 @@ PLAT-002 不因本次矩阵统计完成而结束。整体完成仍需：
 
 | 契约 | 状态 | 核定结论 |
 |---|---|---|
-| FLOW-CTR-001 | pending_evidence | Run/Stage/Attempt 状态枚举、终态和 Template 传播矩阵已有，Run/Stage/Attempt 1.0.0 Schema/Golden 已有；Schema 未完整表达 UTC RFC3339Nano、终态时间/输出字段关系及 ResultSummary 资源绑定，需与 FLOW-CTR-004 收敛 |
-| FLOW-CTR-002 | pending_evidence | Cancel/Retry/Deadline 的可观察语义、优先级、停止确认和 retry allowlist 已详细定义；但 Server 命令边界的 CancelRun/RetryStage 字段、幂等作用域/指纹、冲突结果和稳定错误尚无唯一权威命令 DTO Schema/等价定义 |
-| FLOW-CTR-003 | pending_evidence | system_as_of/deadline/template/input_snapshot_refs/originating_request_id/correlation_id 字段规则已明确；但 ResearchContext/ContextSectionRef、resolved template snapshot、可信 caller 与各下游 Adapter 之间的 Context 字段映射缺少独立权威 Schema/Port 定义 |
-| FLOW-CTR-004 | pending_evidence | Stage Provider Result Envelope 已有字段表，但 output_type/schema_version/payload/quality_summary/diagnostic_refs 缺权威 Schema/Output Registry；ResultSummary Schema 的 quality_status 仍是任意 string，coverage 分母与 summary 资源身份/版本绑定不完整 |
+| FLOW-CTR-001 | pending_evidence | Run/Stage/Attempt 状态枚举、终态和 Template 传播矩阵已有，Run/Stage/Attempt 1.0.0 Schema/Golden 已有；Schema 未完整表达 UTC RFC3339Nano、终态时间/输出字段关系及 ResultSummary 资源绑定，需与 FLOW-CTR-004 收敛 |||| `freeze-ready` 
+| FLOW-CTR-002 | pending_evidence | Cancel/Retry/Deadline 的可观察语义、优先级、停止确认和 retry allowlist 已详细定义；但 Server 命令边界的 CancelRun/RetryStage 字段、幂等作用域/指纹、冲突结果和稳定错误尚无唯一权威命令 DTO Schema/等价定义 |||| `freeze-ready` 
+| FLOW-CTR-003 | pending_evidence | system_as_of/deadline/template/input_snapshot_refs/originating_request_id/correlation_id 字段规则已明确；但 ResearchContext/ContextSectionRef、resolved template snapshot、可信 caller 与各下游 Adapter 之间的 Context 字段映射缺少独立权威 Schema/Port 定义 |||| `freeze-ready` 
+| FLOW-CTR-004 | pending_evidence | Stage Provider Result Envelope 已有字段表，但 output_type/schema_version/payload/quality_summary/diagnostic_refs 缺权威 Schema/Output Registry；ResultSummary Schema 的 quality_status 仍是任意 string，coverage 分母与 summary 资源身份/版本绑定不完整 |||| `freeze-ready` 
 
 ### 19.2 跨契约定义关系
 
@@ -609,9 +609,9 @@ PLAT-002 不因本次矩阵统计完成而结束。整体完成仍需：
 
 | 契约 | 状态 | 核定结论 |
 |---|---|---|
-| LLM-CTR-001 | pending_evidence | ProviderConfig、CapabilityState、ModelRequest、ModelResponse 1.0.0 Schema 与 JSON Fixtures 已有，协议范围和字段语义详细；但时间 Schema 只使用 date-time、未约束 RFC3339Nano UTC；ContentPart.annotations Schema 为任意值，而 DTO 约定 Annotation[]；部分条件字段/未知类型约束仍不够精确 |
-| LLM-CTR-002 | pending_evidence | ModelEvent 1.0.0 Schema 与 SSE Fixture 覆盖完整/中断/terminal/sequence 等主要情形，事件终止和重试规则已明确；但 received_at UTC 约束、sequence_number 初始/合法范围，以及 terminal 后事件的完整公开结构约束未全部落实到机器契约 |
-| LLM-CTR-003 | pending_evidence | ModelErrorInfo Schema/映射规则已有，Platform Fault Class 到 ModelErrorKind、stable_code、SafeMessage、Retryable 和 Cause 隔离均有文字定义；但依赖 PLAT-CTR-001 的 Fault 公开分类和稳定 Code 语义尚未冻结 |
+| LLM-CTR-001 | pending_evidence | ProviderConfig、CapabilityState、ModelRequest、ModelResponse 1.0.0 Schema 与 JSON Fixtures 已有，协议范围和字段语义详细；但时间 Schema 只使用 date-time、未约束 RFC3339Nano UTC；ContentPart.annotations Schema 为任意值，而 DTO 约定 Annotation[]；部分条件字段/未知类型约束仍不够精确 |||| `freeze-ready` 
+| LLM-CTR-002 | pending_evidence | ModelEvent 1.0.0 Schema 与 SSE Fixture 覆盖完整/中断/terminal/sequence 等主要情形，事件终止和重试规则已明确；但 received_at UTC 约束、sequence_number 初始/合法范围，以及 terminal 后事件的完整公开结构约束未全部落实到机器契约 |||| `freeze-ready` 
+| LLM-CTR-003 | pending_evidence | ModelErrorInfo Schema/映射规则已有，Platform Fault Class 到 ModelErrorKind、stable_code、SafeMessage、Retryable 和 Cause 隔离均有文字定义；但依赖 PLAT-CTR-001 的 Fault 公开分类和稳定 Code 语义尚未冻结 |||| `freeze-ready` 
 
 ### 20.2 已接受、不再重开的语义
 
@@ -646,9 +646,9 @@ PLAT-002 不因本次矩阵统计完成而结束。整体完成仍需：
 
 | 契约 | 状态 | 核定结论 |
 |---|---|---|
-| NTF-CTR-001 | pending_evidence | Envelope + 三类业务 Payload 共 4 份 Draft 2020-12 Schema、6 个 Golden 已有；fingerprint 算法、event_type/schema_version/source_module 注册键和首批业务事件映射已明确；但 occurred_at/published_at/业务时间均只使用 date-time、未约束 RFC3339Nano UTC，Payload reason_code/opaque ref 格式和 subject_ref 与 payload 主体一致性未完整机器化 |
-| NTF-CTR-002 | pending_evidence | Inbox 双唯一键、Publish 幂等键、Delivery 唯一键、Subscription/Channel/Template 快照、Delivery 状态机、unknown 对账和人工重试语义已有详细文字；但 Subscription、DeliveryPlan、DeliveryRecord、DeliveryAttempt、DeliveryStateEvent 缺完整 Schema 或唯一权威跨模块 Application Port 定义 |
-| NTF-CTR-003 | not_applicable | ChannelConfigSnapshot、ChannelAdapter、ChannelResolver、RecipientResolver、ChannelSendRequest/Result 是 Notification 内部 Adapter SPI；Server 只提供 Platform Secret/BoundDoer 等组合依赖，不作为独立跨模块业务契约。其内部能力/重试适配不属于 PLAT-002 |
+| NTF-CTR-001 | pending_evidence | Envelope + 三类业务 Payload 共 4 份 Draft 2020-12 Schema、6 个 Golden 已有；fingerprint 算法、event_type/schema_version/source_module 注册键和首批业务事件映射已明确；但 occurred_at/published_at/业务时间均只使用 date-time、未约束 RFC3339Nano UTC，Payload reason_code/opaque ref 格式和 subject_ref 与 payload 主体一致性未完整机器化 |||| `freeze-ready` 
+| NTF-CTR-002 | pending_evidence | Inbox 双唯一键、Publish 幂等键、Delivery 唯一键、Subscription/Channel/Template 快照、Delivery 状态机、unknown 对账和人工重试语义已有详细文字；但 Subscription、DeliveryPlan、DeliveryRecord、DeliveryAttempt、DeliveryStateEvent 缺完整 Schema 或唯一权威跨模块 Application Port 定义 |||| `freeze-ready` 
+| NTF-CTR-003 | not_applicable | ChannelConfigSnapshot、ChannelAdapter、ChannelResolver、RecipientResolver、ChannelSendRequest/Result 是 Notification 内部 Adapter SPI；Server 只提供 Platform Secret/BoundDoer 等组合依赖，不作为独立跨模块业务契约。其内部能力/重试适配不属于 PLAT-002 |||| `not_applicable` 
 
 ### 21.2 必须保留的公开边界
 
@@ -674,7 +674,7 @@ PLAT-002 不因本次矩阵统计完成而结束。整体完成仍需：
 
 | 契约 | 状态 | 核定结论 |
 |---|---|---|
-| SRV-CTR-001 | pending_evidence | Server Composition Root/统一 HTTP Host 的职责和边界已定义；但 DEC-018/019 退役旧 Analysis API 后，新 Researchflow HTTP 契约没有唯一权威 OpenAPI/Schema 或字段级定义。缺少新 API 路径/方法、CreateRun/Run/Stage/Event 请求响应 DTO、错误投影、认证授权、分页/Cursor 与 WebUI 消费映射 |
+| SRV-CTR-001 | pending_evidence | Server Composition Root/统一 HTTP Host 的职责和边界已定义；但 DEC-018/019 退役旧 Analysis API 后，新 Researchflow HTTP 契约没有唯一权威 OpenAPI/Schema 或字段级定义。缺少新 API 路径/方法、CreateRun/Run/Stage/Event 请求响应 DTO、错误投影、认证授权、分页/Cursor 与 WebUI 消费映射 |||| `deferred` 
 
 ### 22.2 证据与边界
 
@@ -707,7 +707,7 @@ INT-CTR-001 是 43 个正式 CTR 之一，覆盖 Quant、Research、Researchflow
 
 | 契约 | 状态 | 核定结论 |
 |---|---|---|
-| INT-CTR-001 | pending_evidence | 三类事件 event_type/schema_version/source_module、触发时点、subject_ref、source_event_ref、idempotency_key、correlation_id、Payload 字段及 JCS fingerprint 输入已明确；Envelope/Payload Schema 与 6 个 Golden 已有；但时间字段 Schema 未约束 RFC3339Nano UTC，subject_ref 与 Payload 主体字段一致性、occurred_at 与来源时间的逐事件绑定、changed_block_reason_codes 字典序规则未完整机器化 |
+| INT-CTR-001 | pending_evidence | 三类事件 event_type/schema_version/source_module、触发时点、subject_ref、source_event_ref、idempotency_key、correlation_id、Payload 字段及 JCS fingerprint 输入已明确；Envelope/Payload Schema 与 6 个 Golden 已有；但时间字段 Schema 未约束 RFC3339Nano UTC，subject_ref 与 Payload 主体字段一致性、occurred_at 与来源时间的逐事件绑定、changed_block_reason_codes 字典序规则未完整机器化 |||| `freeze-ready` 
 
 ### 23.2 已明确的三类映射
 
@@ -728,19 +728,19 @@ INT-CTR-001 是 43 个正式 CTR 之一，覆盖 Quant、Research、Researchflow
 - 三类事件语义已接受，不新增待决项；剩余是时间/跨字段约束在权威 Schema 中的表达。
 - 不新增 CTR，不修改 Quant/Research/Researchflow/Notification 责任模块，不执行测试/CI。
 
-## 24. PLAT-002 十模块契约定义状态总表（2026-11-11）
+## 24. PLAT-002 十模块契约定义状态总表（历史快照，已由第59节覆盖）
 
 本表以第3节 43 个正式 CTR 为唯一统计口径。只统计当前跨模块公开契约定义；模块内部 SPI、旧 API 退役别名、UI 页面级项目和实现符合性证据不计入正式 CTR 状态。
 
 | 状态 | 数量 | 含义 |
 |---|---:|---|
-| freeze-ready | 14 | GOV-CTR-001～006、PLAT-CTR-001～007、LLM-CTR-003；公共规则、错误投影、Request Context、Security、Diagnostics、HTTP Client、Storage/Migration 与 Config/Secret 定义完整，可提交项目负责人确认冻结 |
-| pending-evidence | 27 | 公开契约定义/Schema/权威映射仍有缺口 |
-| pending-decision | 0 | 本轮五项待决均已由 DEC-PLAT-002-028～032 裁决 |
+| freeze-ready | 37 | 最终收敛状态见第59节；包括公共规则、Platform、Data 首期、News、Quant 首期、Research、Researchflow、LLM、Notification 和业务事件映射 |
+| pending-evidence | 0 | 最终收敛后没有未分类的公共契约定义缺口；机器 Schema/Golden/实现同步差异按 DEC-051 归入 L2 符合性，或列入明确 deferred 范围 |
+| deferred | 4 | DATA-CTR-005、DATA-CTR-007、QNT-CTR-003、SRV-CTR-001；触发条件见第59节 |\n| pending-decision | 0 | 所有待决均已由既有 DEC-PLAT-002-028～050 及 DEC-051 裁决 |
 | blocked | 0 | 当前没有无法通过权威决议消解的公开定义冲突 |
 | not_applicable | 2 | DATA-CTR-003、NTF-CTR-003；仅模块内部 Provider/Channel SPI，不属于跨模块公开契约 |
 | frozen | 0 | 尚无项目负责人确认冻结的正式 CTR |
-| **正式 CTR 合计** | **43** | 不新增编号，不重复计算历史别名 |
+| **正式 CTR 合计** | **43** | 37 freeze-ready + 4 deferred + 2 not_applicable；不新增编号，不重复计算历史别名 |
 
 ### 24.1 五项已裁决内容
 
@@ -756,8 +756,8 @@ INT-CTR-001 是 43 个正式 CTR 之一，覆盖 Quant、Research、Researchflow
 ### 24.3 阶段结论
 
 - 43 项正式 CTR 已全部完成本轮定义口径核定；不再保留“待审查模块/待全量盘点”的开放任务。
-- 当前未完成项为 27 项 pending-evidence；不再有 pending-decision。模块内部实现/测试/CI/部署事项仍不属于本轮契约定义冻结门禁。
-- GOV-CTR-001～006、PLAT-CTR-001～007 与 LLM-CTR-003 已达到 freeze-ready；下一阶段按剩余 27 项 pending-evidence CTR 增量收敛。不重新启动十模块全量扫描，不新增重复 CTR。
+- 本轮最终收敛状态见第59节：37 项 freeze-ready、4 项 deferred、2 项 not_applicable；0 项 pending-evidence、0 项 pending-decision。
+- 37 项 freeze-ready 可提交项目负责人统一确认冻结；4 项 deferred 不属于当前首期冻结范围。不得重新启动十模块全量扫描或把 L2 实现符合性重新加入 L1 冻结门禁。
 
 
 ## 25. 五项待决裁决完成记录（2026-11-11）
@@ -1781,3 +1781,46 @@ Quant 首批结果访问 AuthorizationRef 固定：
 
 **结论：QNT-CTR-005 的授权主体/资源/用途/内容级别、策略快照、fingerprint 与读取时 fail-closed 语义已收敛；运行时签发、当前策略复核、审计持久化和竞态一致性仍未形成证据。**
 
+
+## 59. 项目级契约最终收敛结论（2026-11-11）
+
+本节覆盖此前各批次的阶段统计。正式 CTR 编号仍为原有 43 项，不新增、不重编号。最终裁决依据为 DEC-PLAT-002-051；本节是当前状态与下一步的唯一有效汇总。
+
+### 59.1 最终状态
+
+| 状态 | 数量 | 契约 |
+|---|---:|---|
+| `freeze-ready` | 37 | GOV-CTR-001～006；PLAT-CTR-001～007；DATA-CTR-001/002/004/006/008；NEWS-CTR-001～003；QNT-CTR-001/002/004/005；RSC-CTR-001/002；FLOW-CTR-001～004；LLM-CTR-001～003；NTF-CTR-001/002；INT-CTR-001 |
+| `deferred` | 4 | DATA-CTR-005、DATA-CTR-007、QNT-CTR-003、SRV-CTR-001 |
+| `not_applicable` | 2 | DATA-CTR-003、NTF-CTR-003 |
+| `pending_evidence` | 0 | 无 |
+| `pending_decision` | 0 | 无 |
+| `frozen` | 0 | 等待项目负责人对 37 项候选统一确认 |
+
+### 59.2 四项明确延期及重新进入条件
+
+| CTR | 延期原因 | 重新进入条件 |
+|---|---|---|
+| DATA-CTR-005 | DailyBars Decimal v2 尚无足够真实字段/精度依据；保留现有 v1 number/float64，不静默改类型 | Data v2 的字段、Decimal scale/舍入、单位/缺失语义、interval 和交易日历版本引用形成完整权威定义 |
+| DATA-CTR-007 | Snapshot Manifest 当前只定义快照范围/来源元数据，不能冒充行情 Payload 内容寻址引用；不把 Bundle.snapshot_id 猜作 SnapshotRef | Data 定义不可变行情 Payload、内容寻址 SnapshotRef、Manifest 与 Payload 绑定，以及 Research Evidence source_ref/version/locator 映射 |
+| QNT-CTR-003 | 首批 Factor 的正确性依赖 DATA-CTR-005/007 的完整日线 Snapshot、interval 和不可变交易日历版本；缺少这些输入证据时冻结会制造虚假可比性 | DATA-CTR-005/007 达到 freeze-ready，Quant Factor 输入/结果定义与其引用关系完成定点复核 |
+| SRV-CTR-001 | Root Server 组合根职责已明确；新 Researchflow HTTP API 尚无正式活动路由/消费者范围。旧 Analysis API 已退役，不得复用旧 DTO 冒充新接口 | 确定 WebUI 与 Server 的新 HTTP 用例、路由/方法、请求响应 DTO、认证矩阵、错误投影、分页/Cursor 和事件读取后，形成唯一 OpenAPI |
+
+延期是明确的范围控制，不是遗漏，也不阻断当前 37 项契约定义冻结。任何延期项不得被解释为已发布接口。
+
+### 59.3 已完成定义与后续实现符合性边界
+
+1. 项目公共规则 GOV-CTR-001～006 和 Platform 原语 PLAT-CTR-001～007 均为 freeze-ready。
+2. Data 首期公开语义以 DEC-027/038/041、数据质量与状态契约、DATA-CTR-006/008 权威规则为准。旧 OpenAPI/Handler 中 Provider 原始字段或 Bearer 兼容行为属于实现偏差，不反向改变冻结定义；Data 责任范围后续按契约同步。
+3. News 当前 v1 以 DEC-042～044 和 `doc/news/新闻API契约.md` 第11节为准；旧 News-Research 建议稿降级为历史参考。
+4. Quant 首期定义以 DEC-045～050 和 Quant/Research 字段级契约为准。没有 Registry Entry 的 metric_code 不对外可用；不为未来指标伪造单位、精度或质量阈值。
+5. Research、Researchflow、LLM、Notification 的跨模块边界分别由其 Application Port/DTO/事件契约定义。纯 InProcess Port 的强类型 DTO 与字段级契约可作为等价机器定义；内部实现、Provider SDK、Worker、Repository、CAS、Lease 和真实 Gateway 接入属于 L2。
+6. Schema/Golden/Go Validator 未同步、消费者测试、CI、部署和真实依赖验收不再作为 L1 定义冻结门禁；但任何已经作为活动 JSON/OpenAPI/事件定义发布的机器契约仍必须在后续 L2 中与冻结语义一致，不得长期双权威并存。
+7. INT-CTR-001 复用 GOV-CTR-002 时间语义及 NTF-CTR-001 Envelope/Payload 规则，不复制独立时间/指纹规则。
+
+### 59.4 本轮结论
+
+- 43 项正式 CTR 均已获得明确终态分类；没有待决决策，也没有未分类的定义缺口。
+- 37 项达到 freeze-ready，可提交项目负责人一次性统一确认冻结；4 项有明确依赖和触发条件的 deferred；2 项 not_applicable。
+- 本轮契约定义审查到此结束。除非项目负责人指出具体错误或发生契约变更，不再重复全量 Review，不再逐项开启同类审查。
+- 后续工作属于各模块 L2 实现符合性与集成验收，不属于本轮契约冻结任务。
