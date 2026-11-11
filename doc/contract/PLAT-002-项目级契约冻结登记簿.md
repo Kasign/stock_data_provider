@@ -168,7 +168,7 @@ GitHub 远端 ref 核验（2026-11-10）：
 | PLAT-CTR-005 | HTTP Client、SSRF 与出口安全 | Platform | Data、News、LLM 及其他出站消费者 | [PLAT-CTR-005 HTTP Client 契约](./rules/PLAT-CTR-005-HTTP-Client与SSRF契约.md)；doc/platform/05、08 第8节、15；`internal/platform/httpclient/**` | 1.0.0（Go API 强类型契约；JSON Schema 不适用） | `freeze-ready` | Config/Client/BoundDoer/Do/OpenStream/StreamResponse 的 API、DestinationPolicy 精确 allowlist、DNS/IP 绑定、同源重定向、缓冲重试与流式资源生命周期/限额均已版本化；消费者 A2 和生产网络 A3 属实现符合性，不阻断定义冻结 |
 | PLAT-CTR-006 | Storage、Repository、Migration 生命周期 | Platform（连接/Runner）；领域（Repository/Schema/Migration 内容）；Server（汇总注册） | 所有持久化模块 | [PLAT-CTR-006 Storage 与 Migration 契约](./rules/PLAT-CTR-006-Storage与Migration契约.md)；doc/platform/05 第2～4节；doc/platform/08 第9节；`internal/platform/storage` | 1.0.0（Go API 强类型契约；JSON Schema 不适用） | `freeze-ready` | SQL/Redis 连接 API、默认值/上限/资源所有权、Migration 强类型输入、namespace/checksum/History/锁/失败恢复语义已明确；Server 注册与全局 Ready/Shutdown 编排属于 SRV-CTR-001 实现符合性 |
 | PLAT-CTR-007 | Typed Config 与 Secret 生命周期 | Platform（基础解析/脱敏）；各模块（配置 Schema）；Server（Bootstrap） | Server、所有服务端模块 | [PLAT-CTR-007 Typed Config 与 Secret 契约](./rules/PLAT-CTR-007-Typed-Config与Secret契约.md)；doc/platform/08 第6节；`internal/platform/config/**` | 1.0.0（Go API 强类型契约；JSON Schema 不适用） | `freeze-ready` | Env/Secret/基础校验 API、fallback/解析错误、脱敏、DotEnv 加载边界、不可变配置快照与重启轮换语义已明确；模块 Config Schema 和部署 Secret 注入属于各模块/Server 实现符合性 |
-| DATA-CTR-001 | 标准数据 DTO、JSON/OpenAPI、字段缺失语义 | Data | Quant、Researchflow、Research（适用范围）、Server、WebUI | internal/marketdata/httpapi/openapi.yaml；doc/api/contracts/数据层API清单.md（存在过期路径/认证描述） | OpenAPI 1.1.0；字段级映射未形成完整基线 | `pending_evidence` | 公开 DTO 的字段存在/缺失/null/零值/required 语义映射不完整；DragonTiger DTO 仍暴露 DEC-027 明确禁止的 Provider 原始金额/单位字段；API 清单仍引用旧 OpenAPI 路径和旧浏览器 Key 模型 |
+| DATA-CTR-001 | 标准数据 DTO、JSON/OpenAPI、字段缺失语义 | Data | Quant、Researchflow、Research（适用范围）、Server、WebUI | internal/marketdata/httpapi/openapi.yaml；internal/marketdata/model/model.go、dragon_tiger.go；doc/api/contracts/数据层API清单.md（过期历史说明） | OpenAPI 1.1.0；字段级映射未形成完整基线 | `pending_evidence` | 字段存在/缺失/null/零值/required 映射仍不完整；DEC-027 禁止的 Provider 原始金额字段不仅存在于 DragonTiger，还存在于 Quote/DailyBar 的 raw_amount/raw_amount_unit/raw_amount_field，LimitPool 另暴露 provider_amount_unit；Go JSON Tag 与 OpenAPI 同步公开。API 清单仍描述旧 /market-api、浏览器 X-API-Key 和旧 OpenAPI 路径，不能作为当前权威定义 |
 | DATA-CTR-002 | 行情单位、复权、交易日和时间口径 | Data | Quant、Researchflow、Research、Server | doc/api/contracts/数据质量与状态契约.md；internal/marketdata/httpapi/openapi.yaml | 领域规则版本未登记 | `pending_evidence` | 通用单位/质量/复权/PIT 原则已有；Quote/DailyBar/Index/Financial 等字段到 provider_time、available_at、fetched_at、normalized_at、system_observed_at 的映射及各数据域单位适用表仍不完整 |
 | DATA-CTR-003 | Provider 原始值标准化与精度保真 | Data 内部 Provider Adapter | Data 内部 Provider Adapter | doc/api/数据侧整体规划.md（仅内部适配约定） | 不属于跨模块公开契约版本 | `not_applicable` | 仅 Data 内部 Provider 标准化规则，不存在跨模块公开消费者；从 PLAT-002 跨模块契约冻结门禁排除，不再追踪 Provider Fixture/专项测试 |
 | DATA-CTR-004 | Data Quality、覆盖率、来源和降级表达 | Data | Quant、Researchflow、WebUI、Server | doc/api/contracts/数据质量与状态契约.md；internal/marketdata/httpapi/openapi.yaml | QualityStatus 已有枚举；各质量/覆盖 DTO 映射未完整登记 | `pending_evidence` | QualityStatus 与 Probe 状态已有定义；各公开响应中 quality_status、quality_reasons、freshness_status、coverage dimensions/分母和 source/version 的适用字段映射仍不完整，不能将诊断内部状态等同业务质量 |
@@ -1075,4 +1075,27 @@ INT-CTR-001 是 43 个正式 CTR 之一，覆盖 Quant、Research、Researchflow
 - 未发现需要新增项目级语义决议的未决取舍；不修改 Platform/Server/领域业务代码或其他分支。
 
 **结论：PLAT-CTR-007 由 `pending_evidence` 调整为 `freeze-ready`，契约版本 1.0.0。**
+
+
+
+## 43. DATA-CTR-001 Provider 内部金额字段公开边界复核（2026-11-11）
+
+### 43.1 核对证据
+
+固定代码基线：`origin/integration @ b6dfc85ba214fe16268c8cba780641a8bfe15086`。
+
+- `internal/marketdata/model/dragon_tiger.go` 的 `DragonTigerItem` 暴露 `provider_buy_value`、`provider_sell_value`、`provider_deal_value`、`provider_net_value`、`provider_net_rate`、`provider_org_net_value`、`provider_hot_money_net_value`、`provider_amount_unit`。
+- `internal/marketdata/model/model.go` 的 `Quote` 与 `DailyBar` 均暴露 `raw_amount`、`raw_amount_unit`、`raw_amount_field`；同文件 `LimitPoolItem` 暴露 `provider_amount_unit`。
+- `internal/marketdata/httpapi/openapi.yaml` 1.1.0 对上述字段有对应公开 Schema 声明；这不是仅存在于 Provider Adapter 或 Repository 内部的字段。
+- `doc/contract/decisions/项目级契约决策记录.md` 中 DEC-PLAT-002-027 已明确：公开 DTO 表达规范化领域数据，不公开 Provider 原始金额/单位或 Provider 专属适配细节；单位未核实的值不得冒充 CNY。
+- `doc/api/contracts/数据层API清单.md` 仍描述 `/market-api`、浏览器保存 X-API-Key、旧 `services/market-data/openapi.yaml` 权威路径，与当前根 Module 内 `internal/marketdata/httpapi/openapi.yaml` 和 Root Server 目标边界不一致；该文件只能作为历史接入说明，不能覆盖当前契约。
+
+### 43.2 核定结论
+
+1. DATA-CTR-001 的公开定义与 DEC-PLAT-002-027 存在可直接定位的冲突。冲突范围至少包括 DragonTiger、Quote、DailyBar 和 LimitPool 的 Provider 原始金额/单位字段。
+2. 该问题属于公开 DTO/OpenAPI 契约定义差异，不是 Data 内部 Provider 实现细节；不能通过 WebUI 隐藏字段或前端单位判断来规避。
+3. DEC-027 已完成语义裁决，本轮不新增决策，不在 `feat/design_doc` 修改 Data 模型、OpenAPI 或 Data 专项文档。
+4. DATA-CTR-001 继续保持 `pending_evidence`；冻结前必须由 Data 权威公开 DTO/OpenAPI 移除 Provider 内部金额字段，并明确规范化 CNY 字段的缺失/质量语义，同时完成字段级 required/nullable/omitempty 映射。
+
+**结论：补充了 DATA-CTR-001 的直接冲突证据；未改变 43 项正式 CTR 的状态统计。**
 
