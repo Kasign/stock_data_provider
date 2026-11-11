@@ -22,8 +22,9 @@ type resultManifestGolden struct {
 type authorizationGolden struct {
 	AuthorizationRef json.RawMessage `json:"authorization_ref"`
 	PolicySnapshot   struct {
-		SnapshotRef string `json:"snapshot_ref"`
-		Policies    []struct {
+		SchemaVersion string `json:"schema_version"`
+		SnapshotRef   string `json:"snapshot_ref"`
+		Policies      []struct {
 			PolicyType    string `json:"policy_type"`
 			PolicyRef     string `json:"policy_ref"`
 			PolicyVersion string `json:"policy_version"`
