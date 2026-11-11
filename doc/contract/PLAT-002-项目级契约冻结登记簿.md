@@ -186,10 +186,10 @@ GitHub 远端 ref 核验（2026-11-10）：
 | QNT-CTR-005 | QuantResult AuthorizationRef 签发与访问审计 | Quant | Researchflow | doc/整体任务规划/schema/QNT-CTR-005-result-manifest-1.0.0.schema.json；Golden；GOV-CTR-006 | 1.0.0（Result Manifest Schema/Golden） | `pending_decision` | Manifest input_snapshot_refs Schema 要求至少一项，但已接受的 DTO 规则允许模板白名单纯函数空输入；需裁决无输入纯函数是否能产生可引用/持久化结果及其 Manifest 表达。Manifest UTC Schema 约束和 Quant AuthorizationRef 绑定映射仍待补 |
 | RSC-CTR-001 | Research Evidence | Research | Researchflow | doc/整体任务规划/schema/RSC-CTR-001-evidence-1.0.0.schema.json；Golden；doc/research/01、03；GOV-CTR-006 | 1.0.0（Evidence Schema/Golden） | `pending_evidence` | Evidence 字段和 JCS 指纹语义已有；Schema 未约束 RFC3339Nano UTC，source_version 条件必填和 Evidence.system_as_of/available_at 跨字段 PIT 规则仍依赖未完成的权威适用映射。ResearchContext 不归本 CTR，按 FLOW-CTR-003 核定 |
 | RSC-CTR-002 | ResearchEvent、Claim、Hypothesis、Scenario | Research | Researchflow | doc/整体任务规划/03-模块接口契约/Quant-Research公开DTO字段级契约.md 第3.3～3.5节；doc/research/01、03 | 专属 Schema/Golden 当前未见 | `pending_decision` | RSC-OPEN-003 Event 时间规范化规则版本字段缺失；RSC-OPEN-004 Event 合并/拆分来源关系字段缺失；RSC-OPEN-005 Claim/Hypothesis supersedes_version 缺失，均会改变公开字段结构，须先裁决后形成机器定义 |
-| FLOW-CTR-001 | Run/Stage/Attempt 状态与结果传播 | Researchflow | Server、API、WebUI、Worker；业务模块作为 Stage 执行方 | doc/researchflow/03；internal/researchflow/application/domain | 1.0.0（Run/Stage Schema/Golden） | `pending_evidence` | Run/Stage/Attempt Schema、状态转移、输出传播、结果归并和终态 |
-| FLOW-CTR-002 | Cancel、Retry、Deadline、Lease、Fencing | Researchflow | Scheduler、Worker、Repository、Server | internal/researchflow/application/worker.go、storage/mysql_*；doc/researchflow/03 | 1.0.0（Attempt Schema/Golden） | `pending_evidence` | CAS/事务线性化、租约接管、迟到写入、deadline、取消确认和重启恢复 |
-| FLOW-CTR-003 | Run Execution Context 与 system_as_of 传播 | Researchflow | Data、News、Quant、Research、LLM | doc/researchflow/03；GOV-CTR-002 | 1.0.0（Run/Stage Context Schema 待映射） | `pending_evidence` | 唯一 system_as_of、输入快照、版本固定、Correlation ID 和下游 Adapter Golden |
-| FLOW-CTR-004 | Stage 输入输出、诊断与最终报告关联 | Researchflow | 所有 Stage Provider、API/WebUI | internal/researchflow/application/executor.go；doc/researchflow/03 | 1.0.0（Result Summary Schema/Golden） | `pending_evidence` | StageExecutor typed payload、schema_version/output_type、diagnostic_refs、Fault 与领域结果分层 |
+| FLOW-CTR-001 | Run/Stage/Attempt 状态与结果传播 | Researchflow | Server、API、WebUI；业务模块作为 Stage Provider | doc/researchflow/03；doc/researchflow/schema/run/stage/attempt；对应 Golden | 1.0.0（Run/Stage/Attempt Schema/Golden） | `pending_evidence` | 状态枚举/传播矩阵已有；Run/Stage/Attempt Schema 的 UTC、终态字段关系和 ResultSummary 关联约束未完全机器化，完整结果归并定义需与 FLOW-CTR-004 统一 |
+| FLOW-CTR-002 | Cancel、Retry、Deadline、Lease、Fencing | Researchflow | Server（命令入口）；Scheduler/Worker（内部执行） | doc/researchflow/03 第3～5节、第6.2节；Attempt Schema/Golden | 1.0.0（Attempt Schema/Golden）；命令 DTO Schema 未登记 | `pending_evidence` | 取消/重试/deadline 的外部可观察状态与稳定错误结果已定义；CancelRun/RetryStage 命令字段、幂等作用域/请求指纹和 deadline/cancel 冲突结果未形成唯一权威机器/强类型契约。CAS、锁、重启恢复测试不属于本轮门禁 |
+| FLOW-CTR-003 | Run Execution Context 与 system_as_of 传播 | Researchflow | Data、News、Quant、Research、LLM | doc/researchflow/03 第6.1/6.2节；ResearchContext DTO 第3.1节；GOV-CTR-002 | Run Schema 1.0.0 部分承载；独立 Context/ResearchContext Schema 未登记 | `pending_evidence` | Run Context 字段语义已有；ResearchContext/ContextSectionRef、模板解析快照、可信 caller/correlation 与各下游 Adapter 的字段映射未形成单一权威 Schema/Port 契约 |
+| FLOW-CTR-004 | Stage 输入输出、诊断与最终报告关联 | Researchflow | 所有 Stage Provider、Server、WebUI | doc/researchflow/03 第2.2/2.3/6.2节；Stage/ResultSummary Schema/Golden | 1.0.0（Stage/ResultSummary Schema/Golden）；Stage Provider Result Envelope Schema 未登记 | `pending_evidence` | Stage Provider Result 的 output_type/schema_version/payload/quality_summary/diagnostic_refs 只有字段表，无权威 Schema/Output Registry；ResultSummary.quality_status 仍为任意 string，coverage 分母及 summary 资源身份/版本绑定未定义完整 |
 | LLM-CTR-001 | Provider Port、ModelRequest/Response、Usage、Tool Call | LLM | Researchflow | internal/llm/llm.go、responses_adapter.go；doc/llm/04 | 1.0.0（Model Request/Response Schema） | `pending_evidence` | ModelRequest/Response、Usage、ToolDefinition、system_as_of、模型能力和错误语义 |
 | LLM-CTR-002 | Stream/SSE 事件、终止、断流和序号 | LLM | Researchflow | internal/llm/responses_sse.go、responses_stream.go；doc/llm/05 | 1.0.0（Model Event Schema；SSE fixtures） | `pending_evidence` | terminal event、EOF/断流、sequence_number、delta、取消、Body Close 和资源上限 |
 | LLM-CTR-003 | Platform Fault → ModelErrorInfo 映射 | LLM Adapter | Researchflow；依赖 Platform Fault | internal/llm/platform_fault.go；PLAT-CTR-001 | 1.0.0（Model Error Info Schema） | `pending_evidence` | stable_code/kind/retryable/safe_message、Cause 不出线、incomplete 与技术 Fault 分类 |
@@ -570,3 +570,37 @@ PLAT-002 不因本次矩阵统计完成而结束。整体完成仍需：
 - RSC-CTR-002 下保留 RSC-OPEN-003/004/005 三个已有待决项，不新增 CTR 或重复创建 DEC 编号。
 - ResearchContext 归 FLOW-CTR-003，不计入 RSC-CTR-001 Evidence Schema。
 - 下一批：Researchflow 公开契约定义核定；同时核对 FLOW-CTR-003 对 ResearchContext/Run Context 的完整映射。
+
+## 19. Researchflow 首批公开契约定义核定（2026-11-11）
+
+本批覆盖 FLOW-CTR-001～004。只核对 Server/业务模块消费者可见的 Run/Stage/Attempt、命令、Run Context、Stage Provider Result 与 ResultSummary 语义。Worker 锁、Repository 实现、数据库恢复、CAS 测试和部署不作为契约定义冻结门禁。
+
+### 19.1 核定结果
+
+| 契约 | 状态 | 核定结论 |
+|---|---|---|
+| FLOW-CTR-001 | pending_evidence | Run/Stage/Attempt 状态枚举、终态和 Template 传播矩阵已有，Run/Stage/Attempt 1.0.0 Schema/Golden 已有；Schema 未完整表达 UTC RFC3339Nano、终态时间/输出字段关系及 ResultSummary 资源绑定，需与 FLOW-CTR-004 收敛 |
+| FLOW-CTR-002 | pending_evidence | Cancel/Retry/Deadline 的可观察语义、优先级、停止确认和 retry allowlist 已详细定义；但 Server 命令边界的 CancelRun/RetryStage 字段、幂等作用域/指纹、冲突结果和稳定错误尚无唯一权威命令 DTO Schema/等价定义 |
+| FLOW-CTR-003 | pending_evidence | system_as_of/deadline/template/input_snapshot_refs/originating_request_id/correlation_id 字段规则已明确；但 ResearchContext/ContextSectionRef、resolved template snapshot、可信 caller 与各下游 Adapter 之间的 Context 字段映射缺少独立权威 Schema/Port 定义 |
+| FLOW-CTR-004 | pending_evidence | Stage Provider Result Envelope 已有字段表，但 output_type/schema_version/payload/quality_summary/diagnostic_refs 缺权威 Schema/Output Registry；ResultSummary Schema 的 quality_status 仍是任意 string，coverage 分母与 summary 资源身份/版本绑定不完整 |
+
+### 19.2 跨契约定义关系
+
+1. Run Schema 已包含 system_as_of、deadline_at、template_ref/version/fingerprint、input_snapshot_refs、originating_request_id、correlation_id；这不等同完整 Run Execution Context，因为 ResearchContext/ContextSectionRef 和模板解析快照仍需明确如何被 Stage 消费及固定。
+2. ResearchContext 的 DTO 字段表属于 FLOW-CTR-003 的下游 Context 输入边界；RSC-CTR-001 只覆盖 Evidence，不能用 Evidence Schema 替代 Context Schema。
+3. Stage Schema 的 output_ref 是不透明资源引用；Stage Provider Result Envelope 是另一层公开 payload 契约，二者不可合并或以 output_ref 字符串代替 Envelope Schema。
+4. ResultSummary Schema 的 quality_status 只约束为非空字符串，未固定 valid/degraded/invalid/unknown 等枚举；coverage 只有 [0,1] 范围，没有明确分子/分母和适用阶段集合。
+5. Attempt 的 lease_owner、lease_expires_at、fencing_token 属于 Worker 执行模型；消费者可见的 Attempt 状态/引用字段可以冻结，但数据库锁、CAS、lease 恢复和 fencing 竞态测试不作为本轮门禁。
+
+### 19.3 明确排除
+
+- 不将 Run/Stage/Attempt Repository、CAS、数据库事务、锁顺序、租约回收、重启恢复和 Worker 停止确认测试列入契约定义冻结。
+- 不将 Server HTTP Handler/路由装配、WebUI 状态展示和跨模块 E2E 作为本轮门禁。
+- 不把 FLOW-CTR-002 的内部 lease/fencing 机制扩展成业务模块必须直接消费的 API。
+- 不新增 CTR；Run Context 继续归 FLOW-CTR-003，Stage Provider Result/ResultSummary 继续归 FLOW-CTR-004。
+
+### 19.4 本批结论
+
+- 本批 4 项均为 pending_evidence；无新增 pending_decision、blocked、freeze-ready。
+- 当前项目级待决项总数保持 5 项：QNT-DEC-01/02、RSC-OPEN-003/004/005。
+- 下一批：LLM 公开契约定义核定；不重复审查 FLOW 已明确的状态机/取消/重试原则，不检查 Researchflow 内部 Worker/Storage 实现。
