@@ -4,7 +4,7 @@
 - 代码审计基线：`origin/integration` @ `b6dfc85ba214fe16268c8cba780641a8bfe15086`
 - 审计文档维护分支：`origin/feat/design_doc`（状态以当前分支 HEAD 为准）
 - 固定代码审计基线：`origin/integration @ b6dfc85ba214fe16268c8cba780641a8bfe15086`；仅对该 SHA 的代码事实作结论，不随分支 HEAD 自动漂移
-- 登记簿版本：`0.2.23-review`
+- 登记簿版本：`0.2.24-review`
 - 当前状态：`L1_frozen_contract_definition_review_in_progress`
 - 冻结结论：43 个正式 CTR 已完成定义口径核定：1 freeze-ready、37 pending_evidence、3 pending_decision、2 not_applicable、0 frozen；5 项具体待决见第24节
 - 项目级决策：DEC-PLAT-002-018～027 已完成原有裁决；当前另有 5 项领域公开契约待决（QNT-DEC-01/02、RSC-OPEN-003/004/005）；DATA-FLOW-B、LLM-FLOW-B 保持条件性 deferred
@@ -155,7 +155,7 @@ GitHub 远端 ref 核验（2026-11-10）：
 
 | 契约编号 | 契约主题 | 定义方 | 直接消费者 | 当前权威定义/证据入口 | 契约版本 | 当前审查状态 | 本轮验收重点 |
 |---|---|---|---|---|---|---|
-| GOV-CTR-001 | JSON 类型、Decimal、整数、比例、null/缺失 | 项目级规则；各 DTO 生产方 | 所有 DTO 消费者 | 各生产模块 Schema/DTO；旧目录保留历史规则 | 规则版本待核验；字段 Schema 分别版本化 | `pending_evidence` | 类型、精度、scale、舍入、范围、required/nullable/omitempty、unknown/zero 语义和 Golden |
+| GOV-CTR-001 | JSON 类型、Decimal、整数、比例、null/缺失 | 项目级规则；各 DTO 生产方 | 所有 DTO 消费者 | [GOV-CTR-001 公共 JSON 数值与空值规则](./rules/GOV-CTR-001-公共JSON类型数值与空值规则.md)；各领域字段映射见对应 CTR | 1.0.0 | `freeze-ready` | 公共 JSON 类型、Decimal 语法、integer 安全范围、number 精度/舍入原则、单位/比例和缺失/null/zero/empty/unknown 语义已统一版本化；字段级 scale、单位、范围、舍入、tolerance 和 nullable 仍由对应领域 CTR 负责，不作为本公共规则冻结阻断 |
 | GOV-CTR-002 | 时间、交易日、时区、PIT、system_as_of | 项目级时间语义；Data/News/Quant/Research/Researchflow | 所有历史研究及执行消费者 | 各领域时间字段定义；旧目录保留历史规则 | 规则版本待核验；字段 Schema 分别版本化 | `pending_evidence` | system_as_of、available_at、published_at、occurred_at、valid_time、fetched_at、normalized_at 映射；UTC/RFC3339Nano、Asia/Shanghai 交易日、严格 PIT |
 | GOV-CTR-003 | ID、Request/Correlation/Event/Idempotency 作用域 | Platform 提供 Request ID 原语；各模块拥有领域 ID | Server、所有模块、Worker、事件消费者 | Platform observability；各模块事件/任务 DTO | 规则版本待核验；Golden 待核验 | `pending_evidence` | ID 作用域、生成方、异步传播、幂等 fingerprint、跨进程关联和 Header/Context Golden |
 | GOV-CTR-004 | Schema 版本、兼容、废弃和迁移 | 各契约生产模块；项目级规则由治理登记 | 所有直接消费者 | 各模块 Schema Registry；doc/contract 版本规则 | 规则版本待核验；兼容矩阵待核验 | `pending_evidence` | 每个 DTO/Event 的版本、兼容级别、未知字段/枚举、废弃窗口、迁移和回滚 |
@@ -734,8 +734,8 @@ INT-CTR-001 是 43 个正式 CTR 之一，覆盖 Quant、Research、Researchflow
 
 | 状态 | 数量 | 含义 |
 |---|---:|---|
-| freeze-ready | 1 | GOV-CTR-005；治理规则定义完整，可提交项目负责人确认冻结 |
-| pending-evidence | 40 | 公开契约定义/Schema/权威映射仍有缺口 |
+| freeze-ready | 2 | GOV-CTR-001、GOV-CTR-005；公共规则定义完整，可提交项目负责人确认冻结 |
+| pending-evidence | 39 | 公开契约定义/Schema/权威映射仍有缺口 |
 | pending-decision | 0 | 本轮五项待决均已由 DEC-PLAT-002-028～032 裁决 |
 | blocked | 0 | 当前没有无法通过权威决议消解的公开定义冲突 |
 | not_applicable | 2 | DATA-CTR-003、NTF-CTR-003；仅模块内部 Provider/Channel SPI，不属于跨模块公开契约 |
@@ -756,8 +756,8 @@ INT-CTR-001 是 43 个正式 CTR 之一，覆盖 Quant、Research、Researchflow
 ### 24.3 阶段结论
 
 - 43 项正式 CTR 已全部完成本轮定义口径核定；不再保留“待审查模块/待全量盘点”的开放任务。
-- 当前未完成项为 40 项 pending-evidence；不再有 pending-decision。模块内部实现/测试/CI/部署事项仍不属于本轮契约定义冻结门禁。
-- 下一阶段只按 DEC-PLAT-002-028～033 校准 Quant/Research 权威 DTO、Schema、Golden 和映射；不重新启动十模块全量扫描，不新增重复 CTR。
+- 当前未完成项为 39 项 pending-evidence；不再有 pending-decision。模块内部实现/测试/CI/部署事项仍不属于本轮契约定义冻结门禁。
+- 下一阶段按登记簿中剩余 pending-evidence CTR 增量收敛；GOV-CTR-001 已独立 freeze-ready，Quant/Research 仍按 DEC-PLAT-002-028～033 校准权威 DTO、Schema、Golden 和映射；不重新启动十模块全量扫描，不新增重复 CTR。
 
 
 ## 25. 五项待决裁决完成记录（2026-11-11）
@@ -847,3 +847,11 @@ INT-CTR-001 是 43 个正式 CTR 之一，覆盖 Quant、Research、Researchflow
 - 项目级 Scenario DTO/Schema 已按上述结构收紧；禁止任意 object/map、嵌套对象和表达式。
 - Metric 条件仍需将 `metric_ref` 对应 Registry 的 value_type/unit/precision 映射到比较值校验；该权威映射由 Quant Registry 提供，Researchflow 负责按可信 Registry 元数据校验，不由 Research 复制。
 - RSC-CTR-002 保持 pending_evidence；本裁决不代表 Registry 映射或 QuantResultRef 绑定证据已通过。
+
+
+## 30. GOV-CTR-001 公共规则版本化与冻结评估（2026-11-11）
+
+- DEC-PLAT-002-034 已确定 GOV-CTR-001 公共规则 1.0.0，唯一权威文本为 `doc/contract/rules/GOV-CTR-001-公共JSON类型数值与空值规则.md`。
+- 公共规则覆盖 JSON 类型选择、Decimal 语法/无损转换、integer 安全范围、number 近似数值和舍入声明、ratio/percentage_point、单位声明、缺失/null/zero/empty/unknown/unavailable/missing/degraded/invalid 区分及质量/执行状态分离。
+- 项目级公共规则不规定各字段统一 scale/精度/范围/舍入/容差；这些由字段生产方 Schema/Registry 定义，分别在 DATA/QNT/Research/News/LLM 等 CTR 验收，不再作为 GOV-CTR-001 本身的冻结阻断。
+- GOV-CTR-001 状态调整为 `freeze-ready`；43 项总数不变，freeze-ready 2、pending-evidence 39、pending-decision 0、blocked 0、not_applicable 2、frozen 0。
