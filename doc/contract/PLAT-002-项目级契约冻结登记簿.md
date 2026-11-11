@@ -4,7 +4,7 @@
 - 代码审计基线：`origin/integration` @ `b6dfc85ba214fe16268c8cba780641a8bfe15086`
 - 审计文档维护分支：`origin/feat/design_doc`（状态以当前分支 HEAD 为准）
 - 固定代码审计基线：`origin/integration @ b6dfc85ba214fe16268c8cba780641a8bfe15086`；仅对该 SHA 的代码事实作结论，不随分支 HEAD 自动漂移
-- 登记簿版本：`0.2.24-review`
+- 登记簿版本：`0.2.25-review`
 - 当前状态：`L1_frozen_contract_definition_review_in_progress`
 - 冻结结论：43 个正式 CTR 已完成定义口径核定：1 freeze-ready、37 pending_evidence、3 pending_decision、2 not_applicable、0 frozen；5 项具体待决见第24节
 - 项目级决策：DEC-PLAT-002-018～027 已完成原有裁决；当前另有 5 项领域公开契约待决（QNT-DEC-01/02、RSC-OPEN-003/004/005）；DATA-FLOW-B、LLM-FLOW-B 保持条件性 deferred
