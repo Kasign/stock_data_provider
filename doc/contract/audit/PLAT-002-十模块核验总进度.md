@@ -1,6 +1,6 @@
 # PLAT-002 十模块核验总进度
 
-**当前状态：** 阶段 A 固定基线已完成；阶段 B（十模块六维核验）和阶段 C（完整 import/消费者/授权链）仍为 partial；阶段 D 项目级决策已收敛，B1～B8 已正式裁决，当前非条件性项目级 pending_decision 为 0；阶段 E（责任模块实现/补证）进入待执行状态；阶段 F 第一轮完整性 Review 为 partial；阶段 G 正确性 Review、阶段 H 冻结门禁 Review 尚未开始。L1 设计基线已冻结，L2 正式 CTR 当前 0/43 frozen。
+**当前状态（2026-11-11）：** PLAT-002 的 43 个正式 CTR 已全部完成本轮公开契约定义口径核定；当前 1 项 freeze-ready、37 项 pending_evidence、3 项 pending_decision（对应 5 个具体待决）、2 项 not_applicable、0 项 frozen。历史阶段 A～H 进度表仅保留审计追溯，不再表示当前任务尚未完成全量盘点；当前唯一有效总状态见第50节及项目级登记簿第24节。
 **代码基线：** `b6dfc85ba214fe16268c8cba780641a8bfe15086`（origin/integration）  
 **文档维护分支：** feat/design_doc
 
