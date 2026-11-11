@@ -131,7 +131,6 @@ market-data Probe 的 connectivity、contract、quality、freshness、cross_prov
 
 当前没有发现逐来源 license/terms URL、robots 策略、允许抓取内容范围、全文保留期限、删除请求和政策复核时间等字段/执行机制。RSS/Atom/NewsNow 模板只能视为候选来源配置，不可自动视为允许全文抓取或长期保存。新模块应增加来源策略元数据和审核状态；在许可未确认前只保留必要元数据、短摘要和原始链接，并为删除/到期清理留接口。
 
-
 ## 10. 来源授权矩阵
 
 逐 Provider 和原始发布来源的条款核查见《新闻来源授权矩阵》。Provider 输出使用权与原始发布来源内容权利必须独立判断；未确认许可的来源默认 pending，不得自动抓取或持久化。
@@ -141,7 +140,6 @@ market-data Probe 的 connectivity、contract、quality、freshness、cross_prov
 本规范中第 4、4.1 节原先描述的 Probe、诊断报告、被动诊断历史和诊断查询均为未来能力设计，不属于新闻模块当前开发范围。当前新闻模块不实现诊断服务、诊断存储、主动 Probe 或诊断 API。
 
 新闻模块仍必须实现业务层错误与质量表达，包括来源授权不允许、候选字段缺失、发布时间未知、正文抓取/解析失败、身份冲突、重复/转载、证券未匹配等。它们是业务结果，不应伪装成通用诊断状态。未来由公共服务把新闻业务结果纳入统一诊断体系。
-
 
 ## 12. Provider provenance 与共享适配器历史方案（已废弃，2026-11-05）
 
@@ -159,7 +157,6 @@ market-data Probe 的 connectivity、contract、quality、freshness、cross_prov
 - Provider 单项错误/部分失败信息，但不落入通用诊断历史。
 
 Provider 输出策略必须在缓存和持久化之前执行。Brave 只允许必要的短暂运行期使用，不得长期缓存或写库；博查在存储权利书面确认前不持久化；Tavily 的 Provider 层许可仍需叠加发布者授权。共享层默认不缓存混合 Provider 结果。
-
 
 
 ## 13. 最终 Provider 实施决策（2026-11-05）
@@ -187,7 +184,6 @@ Provider 输出策略必须在缓存和持久化之前执行。Brave 只允许�
 - News 业务质量状态和 Platform Diagnostics 状态分开保留。News Check Adapter 只把领域结果作为受控摘要/Reason Code 映射给公共 Runner，不把新闻正文、Provider snippet、原始响应或 Secret 放入 Check Attributes。
 - 平台 failed 表示 Check 执行器/实现自身异常；新闻内容 invalid 应作为领域质量结果呈现，不得伪装为 Check 内部失败。
 
-
 ## 15. N2 首批 Provider Adapter 实施状态（2026-11-05）
 
 根模块 `internal/news/adapters/provider` 已建立 Bocha、Tavily、Brave News、SearXNG 的首版协议 Adapter，统一通过 Application 定义的窄 HTTPDoer 注入传输能力。
@@ -202,7 +198,6 @@ Provider 输出策略必须在缓存和持久化之前执行。Brave 只允许�
 
 fake Transport 测试已在根模块 GitHub Actions 中执行通过，覆盖各 Provider 的基本字段/鉴权语义、429 Retryable 候选、响应结构错误路径等。提交 7e55cf681f86c762aaa3d2e6a914495c162d2898 对应的根模块 gofmt、go test ./...、go test -race ./...、go vet ./... 和分析服务镜像构建通过；未执行真实 Provider 网络请求。
 
-
 ## 9. N3 Provider / Source / Endpoint 授权评估实现
 
 - 新闻 Domain 已提供纯函数策略评估，不依赖数据库、Redis、平台 Diagnostics 或真实 HTTP。
@@ -215,13 +210,11 @@ fake Transport 测试已在根模块 GitHub Actions 中执行通过，覆盖各 
 
 Brave/Bocha/Tavily 等具体 Provider 的策略值必须按实际账号套餐、书面协议和本项目核验记录配置，不能仅凭 Provider 名称默认批准。
 
-
 ### 9.1 内容类型与存储模式约束
 
 - persistent_metadata 仅允许 metadata/title；persistent_excerpt 仅允许 snippet/abstract；persistent_full_text 仅允许 full_text/attachment。
 - none/transient 不代表持久化授权；跨请求缓存另由 Provider 的 AllowCrossRequestCache 和 MaxCacheRetention 独立控制。
 - 即使 Provider 和 Source 分别允许某项内容及存储方式，内容类型与存储模式不匹配仍拒绝；不得通过将全文标记为 metadata 绕过全文留存限制。
-
 
 ## 2026-11-06 平台合并后 HTTP/Diagnostics 基线复核
 
@@ -229,7 +222,6 @@ Brave/Bocha/Tavily 等具体 Provider 的策略值必须按实际账号套餐、
 - `internal/platform/diagnostics.Runner` 已有平台 L1 原语和测试证据，但 Runner 不提供历史存储或 HTTP 路由；News 领域 Check 和 Server 路由接入仍待完成。
 - 当前 `provider/http.go` 通过注入的 HTTPDoer 读取响应体；生产响应大小上限依赖平台 BoundDoer，不能把 fake/raw HTTPDoer 作为生产实现。
 - 平台 L1 CI 通过不代表 News 实际注入、真实 Provider 请求、生产 DNS/出口或来源授权验收通过。
-
 
 ## 2026-11-06 项目级契约与 News Diagnostics 接入计划
 
@@ -243,12 +235,295 @@ Brave/Bocha/Tavily 等具体 Provider 的策略值必须按实际账号套餐、
 6. 不新增 News Diagnostics HTTP 路由、Runner、Registry 或通用历史库。统一诊断路由的认证和注册由 Server Owner 负责；News Ingestion Run/Stage 若有真实采集触发需求，其事实记录仍由 News 持有。
 7. PLAT-CTR-004 仍为 `pending_evidence`；News Check Adapter 的 Schema/Golden/Runner Contract Test 和状态映射证据通过后，才申请对应调用点 A2。
 
-
 ## 2026-11-06 当前 HTTP 适配 API 修正
 
 本规范历史段落中的 `BoundDoer` / `Client.Bind()` 描述已过时。当前 Platform HTTP Client API 为 `Client.Do(ctx, request, DestinationPolicy)`。News Provider 使用 `provider.NewPlatformHTTPDoer`，Source 使用 `source.NewPlatformHTTPDoer`；每个 endpoint 独立绑定精确 Host/Port 策略。响应体大小、总 Deadline、TLS、DNS/IP 校验和拨号仍完全由 Platform Client 执行。News 不创建裸 HTTP Client，不接管共享 Client 生命周期。
 
-
 ## 2026-11-06 接入状态更新
 
 Provider 适配器已落地 `provider.NewPlatformHTTPDoer`；Source 适配器已落地 `source.NewPlatformHTTPDoer`。二者均固定单个 endpoint 的 DestinationPolicy，拒绝重定向和平台自动重试；Platform Client 负责 DNS/IP、TLS、响应大小和 Deadline。Source endpoint 保留 query 参数，Provider endpoint 配置仍拒绝 query，避免将凭证放入 URL。生产组合根按每个 Provider/Source endpoint 独立注入。
+
+## 17. 多供应商统一协议层专项复核与实施方案（2026-11-10）
+
+本节是当前多供应商协议层的实施依据，结合当前分支代码复核结果修正早期“从零建设统一 Provider 协议”的表述。目标是演进现有协议，不重复建设平行模型。
+
+### 17.1 当前代码事实
+
+| 范围 | 现有实现 | 当前缺口 |
+|---|---|---|
+| 搜索 Provider 端口 | `app.Provider`：`Code + Search` | 没有显式描述能力/版本；接口仅覆盖搜索 |
+| Provider 集合 | `ProviderSet`、`StaticProviderSet` | 没有独立 Registry；没有重复 Code 的集中校验 |
+| 搜索请求 | `domain.SearchRequest`：Query、QueryDimension、Limit | 请求上下文较少；暂不应添加没有调用场景的通用参数 |
+| 搜索结果 | `domain.SearchResult`、`ProviderOutcome` | 已保留聚合状态和 Provider 级结果；不是空白，需要核对字段缺口后增量演进 |
+| 标准候选 | `domain.Candidate`、`NormalizeCandidate` | 已保留 Provider 身份、发布者身份、原始时间、观察时间及字段缺失信息 |
+| 错误 | `app.ProviderError` | 错误码仍由 Adapter 分散产生，稳定分类与映射规则需要收敛 |
+| 供应商适配 | Bocha、Tavily、Brave、SearXNG | 当前均实现 Search；没有证据表明它们支持统一 Fetch/Discover |
+| 配置装配 | News Config + `NewPlatformProviderSet` | 配置字段和装配代码按供应商显式维护；不是动态注册中心 |
+| 网络传输 | `app.HTTPDoer` + Platform BoundDoer 适配 | 生产逐 endpoint 绑定仍由 Server 组合根完成 |
+| Feed 来源采集 | `CollectSource`、`SourceCatalog`、`SourceTransport`、RSS/Atom Parser | 属于已登记发布来源采集，不是搜索 Provider 的另一种实现 |
+
+当前四个搜索 Provider 的实现位于 `internal/news/adapters/provider/providers.go`；搜索执行和结果聚合位于 `internal/news/app/search.go`；公共端口位于 `internal/news/app/ports.go`；标准候选及搜索结果模型位于 `internal/news/domain/types.go`。
+
+### 17.2 架构修订决定
+
+1. 不新建与现有 `app.Provider` 平行的万能 Provider 接口。
+2. 当前搜索能力继续使用独立的 Search Provider 端口；未来确实出现新闻正文 Fetch、第三方推送等不同能力时，再按真实用例增加能力专属端口。
+3. RSS/Atom 继续使用 Source Collection 端口。它代表经过登记、授权和 Endpoint 约束的发布来源，不并入搜索供应商 Registry。
+4. 搜索结果优先演进现有 `SearchResult`、`ProviderOutcome`、`Candidate`；不因泛型形式更漂亮而新增通用 `ProviderResult[T]`。
+5. Provider 输出策略、Source/Endpoint 授权交集、Observation 追踪和 Evidence/PIT 规则保持现有边界，不迁入 Adapter 或 Manager。
+6. Platform 继续提供 HTTP Client、Fault、Request ID 和 Diagnostics 原语；News 只映射新闻供应商业务语义，不重建通用设施。
+
+### 17.3 协议目标结构
+
+- Search Provider Contract：稳定的 Provider 身份、搜索请求、标准候选、单 Provider 执行结果和稳定错误分类。
+- Provider Catalog/Registry：启动时注册和校验身份唯一性；按需提供能力元数据。首期不做动态插件加载。
+- Search Orchestrator：执行现有多 Provider 搜索、保留逐 Provider Outcome 和聚合状态；调度策略与协议定义分离。
+- Source Collection Contract：继续负责 Source/Endpoint 登记、访问策略、RSS/Atom 采集和解析。
+- Normalization：沿用 Candidate 标准化逻辑，明确 Provider 原始字段到 Candidate 字段的映射和时间可信度。
+- Conformance Tests：所有 Search Provider 通过统一契约测试；Source Adapter 使用独立采集契约测试。
+
+### 17.4 明确暂不建设的能力
+
+首期不增加以下无当前用例的抽象或复杂度：
+
+- 将 Search、Fetch、Discover、UpdateCheck、HistoricalSearch 合并成一个万能能力接口。
+- 任意 `map[string]any` 请求参数或供应商自定义参数透传到领域层。
+- 动态插件发现、热加载和运行期供应商注册。
+- 自动评分、智能路由、主备切换、熔断和跨供应商自动合并。
+- 跨请求缓存、混合供应商缓存或新的原始响应存储。
+- 第二套通用 ProviderResult、通用 Fault 或通用 Diagnostics 模型。
+
+以上能力只有在明确业务调用方、数据证据和验收标准后才能单独立项。
+
+### 17.5 分阶段实施和验收
+
+**P0：现状盘点与方案复核（本轮）**
+- 核对所有搜索 Provider、配置、装配、调用和错误路径。
+- 单独核对 RSS/Atom Source Collection 边界。
+- 更新本规范、N1 Review 报告和任务验收清单。
+- 验收：代码路径和缺口均有当前分支证据；不修改业务行为。
+
+**P1：协议细化与冻结**
+- 明确 Provider 身份唯一性、请求字段语义、Outcome 状态迁移和错误码映射表。
+- 明确是否需要能力元数据；若当前只有 Search，则不引入无效能力抽象。
+- 明确分页、部分结果、时间字段、Provider provenance 的现有语义及兼容要求。
+- 验收：至少以两个不同响应特征的现有 Provider（例如 Bocha 与 Brave）逐字段走查协议；Search 与 RSS/Atom 两条路径边界明确。
+
+**P2：最小协议基础实现**
+- 只实现 P1 冻结且当前代码确实缺失的能力。
+- 增加 Registry 注册校验（特别是空 ID、重复 ID、nil Provider），或证明现有装配已能保证这些约束。
+- 统一错误码映射和 ProviderOutcome 构造，避免各 Adapter/调用处重复解释错误。
+- 不改变现有供应商查询参数和业务授权行为。
+
+**P3：单供应商试点**
+- 已选择 Bocha 作为代表 Provider；通过真实 Application SearchCandidates 调用路径验证 Adapter → Candidate → ProviderOutcome → SearchResult 的完整契约。
+- 通过新契约测试覆盖请求、响应解析、缺字段、空结果、错误、来源身份和时间语义。
+- 与迁移前固定样本结果逐项比较。
+
+**P4：其余搜索 Provider 迁移**
+- 按供应商逐个接入同一 Contract Test。
+- 清理重复错误映射和旧旁路。
+- 逐个确认结果与授权门禁没有退化。
+
+**P5：运行期调度优化（后置）**
+- 仅基于实际调用量、配额、失败率和质量对比证据决定是否增加主备、熔断或路由。
+- 所有切换保留原始 Provider Outcome；不把切换成功解释为数据完整或质量通过。
+
+### 17.6 不可退化的验收门禁
+
+- Provider Code 与 Publisher/Source 身份始终分离。
+- 空结果、跳过、失败、部分成功不得互相混淆。
+- PublishedAt、FetchedAt、NormalizedAt、ObservedAt 不得混用或推断。
+- Provider 输出许可与 Source/Endpoint 内容许可继续独立评估并取交集。
+- 未通过授权策略评估的 Provider Candidate 不得进入持久化。
+- 搜索 Provider 结果不得绕过 Observation/Identity/Evidence 既有业务入口。
+- Source/Endpoint 网络访问继续使用独立 BoundDoer 和可信 SourceCatalog。
+- CI 使用固定样本/fake，不依赖真实 Provider Key 或消耗真实配额。
+- 未执行的 Go 测试、MariaDB 集成或真实网络验收不得标记为通过。
+
+### 17.7 Search Provider Contract v1（设计冻结）
+
+本版本是 News 进程内 Search Provider 契约，不是对外 HTTP API，也不承诺跨语言/插件 ABI。
+
+#### 请求语义
+
+| 字段 | 规则 |
+|---|---|
+| Query | 必填；执行前 TrimSpace 后不得为空 |
+| QueryDimension | 可选业务检索维度；仅用于结果归因，不改变 Provider 身份 |
+| Limit | 必填；范围 1～100；Provider Adapter 可按供应商上限执行，但不得静默突破请求上限 |
+| Context | 必须传播调用方 Context；取消/Deadline 不得伪装成单 Provider 普通失败 |
+| 凭证/Endpoint | 只能来自受控配置和组合根绑定，不属于 SearchRequest |
+
+首期不增加 StartAt/EndAt、AsOf、分页游标、任意 Filters 或通用 Options：现有搜索调用没有证明这些字段可被四个 Provider 一致执行。需要历史检索或时间过滤时，先明确调用方与供应商可实现的过滤语义，再扩展能力专属请求。
+
+#### Provider 身份
+
+- `Code()` 是稳定机器标识，必须非空、首尾无空白，并在一个 ProviderSet 中唯一。
+- Code 不得由显示名称、发布者名称或文章域名推导。
+- ProviderSet 中出现 nil Provider、空 Code 或重复 Code 时，整组注册无效；必须在任何上游网络请求发生前拒绝。
+- 现有生产 Provider Code：`bocha`、`tavily`、`brave_news`、`searxng`。新增 Code 需固定测试样本和稳定标识，不复用已删除 Provider 的 Code 表示不同供应商。
+
+首期不要求新增独立动态 Registry。对当前 StaticProviderSet，应用入口执行完整预检即可；只有出现运行期注册/动态启停用例时才拆分独立 Registry。
+
+#### 候选数据语义
+
+| 字段 | 契约 |
+|---|---|
+| ProviderCode | 搜索供应商身份；由 Orchestrator 依据已校验 Code 绑定，不信任响应自报值 |
+| ProviderItemID | Provider 原始条目 ID；没有则为空，不得伪造 |
+| SourceItemID | 原始发布来源条目 ID；与 ProviderItemID 分离 |
+| PublisherName / PublisherDomain | 仅保留 Provider 明确返回或受信来源目录提供的值；不从 URL 推断 |
+| PublishedAtRaw | 保留上游原始时间文本 |
+| PublishedAt | 仅在时间格式和时区足以支持精确时点时填写；日粒度/无时区文本保留 Raw，不强转 |
+| FetchedAt | 真实网络获取时间；未记录时保持 nil |
+| NormalizedAt | 标准化处理时间；未记录时保持 nil |
+| ObservedAt | 本次系统观察时间；不得替代 PublishedAt |
+| QueryDimension | 归因到本次查询维度 |
+| MissingFields | 标准化后按必需字段重新计算，不信任 Provider 自报列表 |
+
+Provider 原始响应结构只存在于 Adapter 内。Candidate 是标准化候选，不是发布者原文或已授权可持久化内容。Observation 写入仍必须经过 Provider Output ∩ Source ∩ Endpoint 策略评估。
+
+#### 单 Provider Outcome 与聚合状态
+
+单 Provider 状态：
+
+- `success`：请求成功且至少返回一个候选。
+- `empty`：请求成功但返回零候选；不是故障。
+- `skipped`：按配置/策略明确跳过；不是成功，也不是故障。
+- `failed`：本次请求执行失败。
+
+Outcome 至少保留现有字段：ProviderCode、QueryDimension、Status、CandidateCount、ErrorCode、Retryable、Duration、ObservedAt。Duration 只表示本次 Provider.Search 调用耗时；ObservedAt 表示该次调用完成/被判定的时间。CandidateCount 是 Adapter 返回并交由标准化的候选数，不代表最终持久化数量或质量合格数量。
+
+当前 `Provider.Search` 的签名是 `([]Candidate, error)`，没有单 Provider 的 partial 返回通道。契约规定：只要返回非 nil error，该 Provider 本次候选全部不接纳，Outcome 为 failed/skipped 且 CandidateCount 为 0；不能一边返回候选一边用 error 暗示部分成功。当前聚合层的 `partial` 只表示多个 Provider 之间有成功/空结果与失败/跳过并存。若未来真实供应商接口支持分页中断后保留已取得页面，必须先设计明确的单 Provider PartialResult 语义，再扩展接口，不能依赖双返回值的模糊行为。
+
+聚合状态按以下规则解释：
+
+| 条件 | SearchResult.Status |
+|---|---|
+| 所有 Provider 均 skipped，或没有可执行 Provider | skipped |
+| 没有 success/empty，且至少一个 failed | failed |
+| 至少一个 success/empty，同时存在 failed 或 skipped | partial |
+| 全部执行成功且候选总数为 0 | empty |
+| 至少一个候选且没有 failed/skipped | success |
+
+`partial` 必须保留每个 Provider Outcome；不得只返回成功候选而丢弃失败来源。
+
+#### 错误码与重试语义
+
+- `ProviderError.Code` 是稳定机器可读分类，不得包含 Secret、URL 凭证、响应正文或任意上游错误文本。
+- `Retryable` 仅表示技术层可重试候选；不授权 Adapter 或 Orchestrator 自动重试。实际重试预算归 Platform HTTP Client 与 Provider 配额策略共同约束。
+- `Skipped` 只用于明确的配置/策略跳过；不能把 401、429、超时或未知错误标记为 skipped。
+- 统一错误码最小集合：`provider_unauthorized`、`provider_rate_limited`、`provider_timeout`、`provider_transport_failed`、`provider_request_invalid`、`provider_response_invalid`、`provider_business_rejected`、`provider_upstream_unavailable`、`provider_unknown`。
+- HTTP 429 映射为 `provider_rate_limited` 且 Retryable=true；认证拒绝映射为 `provider_unauthorized` 且 Retryable=false；超时映射为 `provider_timeout` 且 Retryable=true；可重试的 5xx 映射为 `provider_upstream_unavailable` 且 Retryable=true；响应解码/结构缺失映射为 `provider_response_invalid` 且默认 Retryable=false。
+- Platform Fault 必须先 Validate，再映射到上述 News 错误分类；不得将平台 Fault 的任意 Code 直接当作稳定 News 公共错误码。底层细节只允许进入受控诊断 Reason/Evidence，不进入用户可见错误文本。
+
+#### 分页与顺序
+
+- 当前 SearchRequest 只有 Limit，没有 Page/Cursor；现有四个 Adapter 只证明单次搜索请求，不证明统一跨页能力。
+- 首期协议明确为单次请求结果；Adapter 不得声称已完整遍历上游全部结果。
+- ProviderSet 顺序决定当前执行顺序；首期保持确定性顺序，不并发改造，以免改变请求成本、限流行为和结果顺序。
+- 若未来需要分页，必须定义供应商能力差异、游标生命周期、重复页防护、停止条件和部分失败语义后单独升级协议。
+
+#### 契约测试要求
+
+所有 Search Provider 必须覆盖：
+- Code 非空、规范且在集合内唯一。
+- 请求方法、鉴权位置、查询参数和 Limit 映射。
+- 正常结果、空结果、缺失结果 Envelope。
+- ProviderCode 归因和 Publisher 身份不推断。
+- 发布时间原文保留及不可信时间不强转。
+- HTTP 401/403、429、5xx、网络超时、非法 JSON、业务拒绝的错误映射。
+- 不输出凭证或原始响应内容。
+- Context 取消传播。
+
+该测试集只验证进程内 Search Provider Contract；RSS/Atom 继续使用独立 Source Collection Contract Test。
+
+## 18. 多 Provider 协议验收与运行时边界（2026-11-10）
+
+### 18.1 已验收的协议边界
+
+- 搜索/聚合供应商统一实现 `app.Provider`：`Code()` 标识供应商，`Search(ctx, SearchRequest)` 接收标准查询并返回 `[]domain.Candidate`。
+- Application 统一通过 `ProviderSet` 获取供应商集合，由 `SearchCandidates` 负责身份预检、调用、错误归一化、候选标准化和 ProviderOutcome 汇总。
+- Candidate 保留 `ProviderCode` 与发布者身份分离；ProviderOutcome 保留 Provider 级状态、候选数量、耗时、查询维度、错误码和 Retryable。
+- 当前 Provider 集合由配置快照创建，固定顺序为 Bocha、Tavily、Brave News、SearXNG；每个生产 endpoint 单独绑定 Platform BoundDoer。没有动态插件注册、跨请求缓存、Provider 选择器或自动重试。
+- RSS/Atom 属于已登记 Source/Endpoint 采集链路，使用独立的 `SourceTransport` 和 Parser；不强行实现搜索 Provider 接口。两者共享候选领域模型，但请求语义和授权语义不同。
+
+### 18.2 调用路径审计结论
+
+本分支检查了 `cmd/analysis-api/main.go`、`internal/service/wiring.go`、`internal/platform/httpapi/server.go` 与 News Provider 组合代码：
+
+- 当前 Analysis API 的 Server/Runner 尚未装配 News ProviderSet 或 SearchCandidates；没有生产调用方通过该链路发起供应商请求。
+- 当前没有 News 独立外部 HTTP API；不在 Provider Adapter 或 News Application 中擅自增加对外路由。
+- 因此本阶段验收的是可编译、可测试的内部协议与 Adapter 边界，不是已上线的新闻搜索能力。
+- 后续由 Server 组合根在实际 Research/Researchflow 用例确定后注入 ProviderSet 和 SearchCandidates；模块之间只依赖 Application Facade，不直接依赖具体供应商 Adapter。
+
+### 18.3 当前执行语义与限制
+
+- `SearchCandidates` 按 ProviderSet 顺序串行调用。每个调用共享调用方 Context；调用方负责设置请求级 Deadline。
+- 聚合 `partial` 只表示多个 Provider 之间部分成功；单个 Provider 返回非 nil error 时，该 Provider 本次候选全部丢弃，CandidateCount 为 0。
+- 未配置供应商返回 skipped；认证、限流、超时、传输、请求、响应、业务拒绝和上游不可用使用稳定 News 错误分类。
+- Provider 错误的 Retryable 只是重试候选信息，Application 当前不自动重试。
+- 不因抽象层已统一就宣称供应商输出具有相同质量或权利；Provider 输出策略与 publisher/source 授权仍独立评估。
+
+### 18.4 验收证据
+
+- Provider 专项 Workflow：`News Provider contract tests`，Run `42755962624`，结果 success。
+- 覆盖 SearchCandidates、四家 Adapter、Race 和 Vet。
+- 真实供应商网络、实际账号配额、输出许可和生产 endpoint 的 BoundDoer 注入尚未验收。
+- 全量根模块 CI 仍受 Market Data、Notification、Quant 的 gofmt 差异阻断；全量 `go test ./internal/news/...` 另有非 Provider 业务测试问题，见 N1 Review 第 12.7 节。不得把专项通过扩大解释为全模块或全仓通过。
+
+
+## 19. News Search Facade 生产接入契约（2026-11-10）
+
+本节定义 Server 组合根如何装配现有 Search Provider，不新增对外 API，也不要求 News 依赖 Research/Researchflow。
+
+### 19.1 组合根装配顺序
+
+Server 启动时按以下顺序装配，依赖生命周期由 Server 持有：
+
+1. 使用 Platform 配置环境抽象调用 `news/config.Load(env)`，取得不可变的 News Provider 配置快照。配置加载只做本地校验，不执行 DNS、网络请求或 HTTP Client 创建。
+2. Server 创建并持有一个共享的 `*platform/httpclient.Client`；其生命周期与 Server/进程一致，不按请求创建。
+3. 调用 `provider.NewPlatformProviderSet(config, client)`。该构造器按 Bocha、Tavily、Brave、SearXNG 的确定顺序装配已配置 Provider；每个 Provider endpoint 创建独立的 `NewPlatformHTTPDoer` 和 DestinationPolicy。不得跨 endpoint 复用 BoundDoer。
+4. 将返回的 `app.ProviderSet` 交给 `app.NewSearchCandidates(providerSet)`，得到进程级 Search Facade。
+5. 将 Facade 注入真实业务调用方。Research/Researchflow 只依赖 Facade 的 `Execute(ctx, SearchRequest) SearchResult` 行为，不导入 `internal/news/adapters/provider`，不直接持有 API Key、Endpoint 或 Platform HTTP Client。
+
+配置快照、ProviderSet 和 Search Facade 在同一 Server 生命周期内复用。当前没有热更新机制；配置变更通过受控重启重新装配，不在请求中重建 ProviderSet。
+
+### 19.1.1 授权持久化用例装配
+
+RSS/Atom 采集结果和搜索 Provider 候选的持久化用例必须由 Server 组合根通过公开构造器创建：
+
+- `app.NewIngestCollectedSource(identityRepository, newID, sourceCatalog)`
+- `app.NewIngestProviderCandidate(identityRepository, newID, sourceCatalog, providerOutputPolicyResolver)`
+
+两个构造器只接收公开 Repository/策略端口和 ID 生成函数，并在 News Application 包内部创建私有候选写入器。不得导出或注入 `candidateIngest`，避免调用方绕过授权评估直接写入 Observation。
+
+### 19.2 启动失败与可选供应商
+
+- `config.Load` 返回错误：配置不完整或非法，Server 启动装配失败；不得吞掉错误后静默使用不完整配置。
+- Bocha/Tavily/Brave 仅允许 Endpoint 与 API Key 同时配置或同时缺省；SearXNG 只需要 Endpoint。
+- 某 Provider 已配置但 Endpoint 绑定或 Adapter 构造失败：`NewPlatformProviderSet` 返回错误，Server 不应把该 Provider 静默移除后继续启动。
+- 所有 Provider 均未配置：当前构造器返回空 StaticProviderSet，不属于启动错误；调用 Search Facade 时返回 `skipped/no_provider_configured`。这是可选供应商全部关闭的显式状态，不代表搜索可用。
+- 不得记录 Secret、Authorization Header、带凭证 URL 或原始响应正文。配置错误只允许指出环境变量键名和稳定错误类别。
+
+### 19.3 请求与结果边界
+
+- 业务调用方必须传递自己的请求 Context，并在业务边界设置合理 Deadline；News 不自行创建脱离请求的 Background Context。
+- SearchRequest 只传 Query、QueryDimension、Limit；凭证和 Endpoint 不得由 Web/API 请求传入。
+- Facade 只负责供应商搜索与结果归一化，不持久化、不缓存、不排序、不执行授权放行，也不把候选直接转成 Evidence。
+- 调用方必须检查 SearchResult.Status，并保留 Outcomes。特别是 `partial` 不是全量成功；`empty` 不是 Provider 故障；`skipped` 不是可用；`failed` 不能被空候选吞掉。
+- 只有 SearchResult 的候选仍须经过 News 既有 Provider Output、Source、Endpoint 授权与 Observation/Identity/Evidence 流程。搜索结果本身不构成内容持久化许可。
+- 若调用方需要用户可见的 HTTP API，Fault 映射、认证、限流和路由由 Server 负责；News 分支不增加独立外部路由。
+
+### 19.4 Server 接入验收清单
+
+- [ ] 启动配置来自 Platform Env，且不从请求参数读取 Provider Secret/Endpoint。
+- [ ] Platform HTTP Client 由 Server 创建并统一关闭/释放；News 不拥有共享 Client 生命周期。
+- [ ] 每个已配置 Provider 使用独立 BoundDoer，精确绑定 Endpoint Host/Port，禁止重定向。
+- [ ] ProviderSet 和 Search Facade 为进程级实例，不按请求创建。
+- [ ] 无 Provider 配置时，调用结果明确为 skipped/no_provider_configured。
+- [ ] 任一已配置 Provider 装配失败时，启动失败并保留可诊断错误。
+- [ ] 业务调用方只依赖 Application Facade，不导入具体 Adapter。
+- [ ] 测试覆盖 success、empty、partial、failed、skipped、Context Deadline/取消；并确认搜索结果不能绕过既有授权持久化入口。
+- [ ] 真实供应商网络、账号配额、输出许可与生产 endpoint 仍分别验收，不以 Fake/CI 代替。

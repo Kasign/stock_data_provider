@@ -1,7 +1,6 @@
 package provider
 
 import (
-	"net/http"
 	"testing"
 
 	"example.com/stock-analysis-flow/internal/news/app"

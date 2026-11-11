@@ -1,6 +1,8 @@
 # 新闻模块开发任务与验收清单
 
-> 当前阶段（2026-11-09 Review）：N1-A/N2 已完成；N3 离线首批完成、生产采集未闭环；N4 领域/Repository 首批已实现；N5 Config/BoundDoer/Fault 适配已实现、Server 装配待接入；N6 Migration V1-V7 已定义，V1/V2 有 MariaDB 集成通过记录，V3-V7 尚待集成验收；N7 Check 工厂已实现、Runner 注册待接入；NEWS-CTR-001 PIT/Snapshot/Cursor 已实现，内容查询 Facade 未闭环；NEWS-CTR-002 授权快照已实现，当前策略复核/JCS/撤销/TOCTOU 未闭环
+> 当前阶段（2026-11-10 最新核验）：N6 V1-V8 Migration、Repository、Observation retention 与 V7→V8 既有数据升级已通过 MariaDB 11.4 专项 CI（Run `42765765269`，基线 SHA `09e76e35`）；News 全量 gofmt/单测/Race/Vet 与 Provider 契约测试通过（Run `42765765274`）。根模块 `Test go-core` 通过，但根模块 `Test .` 因 Market Data、Notification、Quant 文件 gofmt 差异失败。NEWS-CTR-001 严格 available_at PIT、授权读取 TOCTOU、Server 生产装配、Runner 注册和在线采集仍未闭环。
+> 当前代码任务：N8-04 补充 ListEvidence 对已清理 Observation Tombstone 的 MariaDB 读取断言，代码提交 `0452bbbfc42b56661403bd49273c6e9d7046a6ea`；News 全量 CI Run `42768996986` success，MariaDB 11.4 Job Run `42768996723` success。
+> 历史记录说明：本文按日期累积的早期实施段落保留为过程记录；历史状态不代表当前状态。当前状态以本段、开发任务总览和最新 Review 报告为准。
 > 状态：本分支只维护 News 领域实现和专项文档；公共平台原语来自已合并基线，根组合根由 Server/集成 Owner 负责
 
 ## 一、阶段总览
@@ -12,9 +14,9 @@
 | N3 | 来源授权、安全抓取、解析与标准化 | 离线能力首批完成；生产触发、CollectionRunID、授权持久化编排、逐 Endpoint 装配和真实网络验收未完成 | 离线业务能力可先行；真实网络依赖 PLAT-002/008 和 SSRF 门禁 |
 | N4 | 身份、去重、版本和证券关联 | Domain/Application、MariaDB Repository、身份/版本/关系历史首批已实现；生产采集编排和完整端到端运行未完成 | fake Repository/内存替身 |
 | N5 | 公共平台基础能力接入 | Config/Secret、独立 BoundDoer、Fault/Request ID 适配已实现；Server 生产装配和部署 DNS/出口验收待完成 | PLAT-002 契约门禁；A1 适配代码已推进，A2/A3 需证据 |
-| N6 | 新闻持久化与 Migration | Repository 与 Migration V1-V7 已实现；V1/V2 有 MariaDB 集成通过记录；V3-V7 当前无完整 MariaDB 验收证据，Server 共享 DB/Migration 注册待接入 | Server 共享 DB 注入与 Migration 总注册由集成分支负责 |
+| N6 | 新闻持久化与 Migration | V1-V8、Repository、Retention 清理和 V7→V8 既有数据升级已通过 MariaDB 11.4 专项 CI；生产共享 DB 注入、总 Migration 注册待接入 | Server 共享 DB 注入与 Migration 总注册由集成分支负责 |
 | N7 | 新闻领域诊断及可选执行记录 | Provider/Parser/Source/Storage Check 与单条 BusinessQualityCheck 已实现；Runner 注册、采集闭环诊断和批量质量/Freshness 扫描待接入 | PLAT-007；PLAT-010 不建设通用队列，News 异步化按真实触发需求 |
-| N8 | 跨模块集成与验收 | 待 A2 接入 | PLAT-013 领域接入；PLAT-014 故障演练 |
+| N8 | 跨模块集成与验收 | News 模块单测/Race/Vet 与 MariaDB 专项验收已有通过证据；A2 生产接入仍未完成 | PLAT-013 领域接入；PLAT-014 故障演练 |
 | H1 | 历史 Python 数据价值评估 | 可选，暂不实施 | 单独确认价值，不属于主路径 |
 
 ## 二、N1-A：新闻业务架构与公共平台边界
@@ -614,7 +616,7 @@
 - [x] 请求校验覆盖可信 caller_ref 非空、system_as_of UTC 且不晚于当前时间、filters 必填、数组数量上限/去重、质量枚举、业务时间独立范围和 page_size 1..100。
 - [x] 响应 DTO 明确 available_at/published_at nullable，空 items/diagnostics 初始化为非 null 数组。
 - [x] 新增 NEWS-CTR-001 Get/List/Response JSON Schema 与 Golden；Go 测试读取 Golden 并校验请求边界。
-- [ ] Query Facade、PIT Repository 查询、AuthorizationRef 当前授权复核和固定 Snapshot Store 尚未实现；HMAC Cursor Codec 已单独完成，不标记 NEWS-CTR-001 验收完成。
+- [x] 后续已补齐 Get/List Facade、PIT Repository、固定 Snapshot Store、Cursor 与引用分页的首批实现。\n- [ ] available_at 可信证据过滤、授权快照信封一致性校验、授权与内容读取同一一致性边界仍未完成；NEWS-CTR-001 不得标记完整验收。
 
 
 ### NEWS-CTR-001 HMAC Cursor 首批实现（2026-11-06）
@@ -625,7 +627,7 @@
 - [x] 支持 active key + previous key ring；旧 key 可在 TTL 内验证，新 token 使用 active key。
 - [x] Platform `config.Secret` 持有密钥；拒绝弱密钥、未知 Key ID 和超出密钥环上限。
 - [x] 过滤数组排序规范化，nil/empty 语义统一；时间值规范化 UTC。
-- [ ] 固定 Snapshot 持久化/过期清理、PIT Repository 查询、授权复核和完整 Facade 仍待实现。
+- [x] 后续已实现固定 Snapshot 持久化、过期删除 Repository、PIT 查询和 Facade 首批编排。\n- [ ] 严格 available_at 过滤和授权一致性边界仍未闭环。
 
 
 ### N3 采集过程时间证据补充（2026-11-06）
@@ -1003,3 +1005,85 @@
 - Run `42621069210` 的根模块 `Check gofmt` 失败中，News 范围仍有 3 处格式问题，已在当前分支修复：Evidence Snapshot 存储文件多余空行、存储测试多余空行、Snapshot retention 测试嵌套缩进。
 - 同一 Run 的其余 gofmt 差异涉及 Notification、Quant 等其他模块，本分支不越权修改；需由对应模块分支修复后再取得根模块全绿结果。
 - 本次修复后仍需以新 CI 的 gofmt Job 结果确认，不提前标记通过。
+
+
+## 2026-11-10 修复进度
+
+- [x] 授权快照读取端增加 64 KiB 上限及数据库信封字段与 JSON Binding 一致性校验。
+- [x] Provider Ingest 区分 SourceCatalog not-found 与依赖不可用，并保留底层错误原因。
+- [ ] Run `42740420934` 中 News 未再触发 gofmt 错误，但根模块测试被其他模块格式差异阻断；News MariaDB 集成 Job skipped，仍需独立运行验收。
+- [ ] 当前剩余主要阻断：available_at 可信证据门禁、授权复核与内容读取 TOCTOU、Server 组合根注入及 MariaDB 真实验收。详见《代码与文档Review报告》。
+
+
+### available_at 审计结论（2026-11-10）
+
+现有 Feed/Observation 时间字段不能证明新闻首次公开可用时间；Atom updated 也不是首次公开时间。当前保持 `available_at=null`，不从 published_at/fetched_at/normalized_at/observed_at 推断。严格 PIT 门禁需等待来源证据模型先行冻结。
+
+
+### 最新授权快照一致性修复（2026-11-10）
+
+最新授权排序选择与载荷读取现已合并为单条 SQL 语句，统一校验 payload/hash/数据库信封；并增加“旧 allow + 最新 deny”集成断言。该修改尚待 CI 与 MariaDB 11.4 实际运行。它不代表 Evidence 内容读取与当前授权策略复核的 TOCTOU 已解决。
+
+
+### 2026-11-10 Evidence 读取边界测试补充
+
+- GetEvidence 新增当前授权器返回后 Context 取消的回归用例，确保取消后不返回内容 DTO。
+- 新增 RetentionUntil 与当前时间相等的边界用例，明确到期边界为 `now >= retention_until`；到期只抑制 Candidate 采集元数据。
+- 对应提交：`cc423098087b39e45716430b84a232e343914045`；CI Run `42742190179` 待完成。
+
+
+### 2026-11-10 授权复核取消传播补充
+
+- 修复授权指纹 Verifier 与当前策略 Resolver 返回后未立即检查 Context 的缺口。即使依赖忽略取消并返回成功，UseCase 也会终止，不再将结果作为有效授权复核。
+- 新增两个取消边界单测，验证 Verifier 取消后不调用策略 Resolver。
+- 对应提交：`9edb6f7321939784c3be865d56544109b954f680`。
+
+
+### 2026-11-10 采集策略依赖取消传播补充
+
+- Provider Ingest 在 SourceCatalog、ProviderOutputPolicyResolver 返回后检查 Context；Source Ingest 在 SourceCatalog 返回后检查 Context。即使依赖忽略取消并返回成功，也不会继续进入授权策略评估或持久化。
+- 新增三个取消边界测试，并检查取消后没有 Observation/Identity 持久化。
+- 对应提交：`e898104b9b548057330978c3fbc287e6c9d79a57`。
+
+
+### 2026-11-10 News 测试格式门禁修正
+
+- 根据 CI gofmt diff 单独修正 `authorization_read_test.go`、`get_evidence_test.go`、`provider_ingest_test.go`、`source_ingest_test.go`。
+- 未处理其他模块的 gofmt 差异，避免越界修改。
+- 对应提交：`0076c667d080aaf1b3889f54799d203693129eb9`。
+
+
+### 2026-11-10 Feed 采集取消传播补充
+
+- CollectSource 增加入口、SourceCatalog 返回后、SourceTransport 返回后及响应体读取后的 Context 检查。传输依赖返回响应但请求已取消时，主动关闭响应 Body 并终止采集。
+- 新增 SourceCatalog 和 SourceTransport 两个取消边界测试。
+- 对应提交：`a42c384137e2b22a68daaf126ff5cea22270128d`。
+
+
+### 2026-11-10 Feed 取消测试结构修正
+
+- CI 在解析新增取消边界测试时发现多余右花括号，已修正。
+- 对应提交：`ac8410ee00b0afb0a4cb6238dd8b03b420e75382`。
+
+
+### 2026-11-10 Provider Ingest 测试格式修正
+
+- CI 再次发现 `internal/news/app/provider_ingest_test.go` 两处复合字面量字段缩进不符合 gofmt，已修正。
+- Market Data、Notification、Quant 的格式差异没有在 News 分支处理。
+- 对应提交：`c4982d374813e70a30282e4e82027558a6d3384f`。
+
+
+### 2026-11-10 Evidence Snapshot 保存取消传播
+
+- `SaveEvidenceSnapshot.Execute` 增加 Repository 调用前和成功返回后的 Context 检查。
+- 新增已取消时不调用 Repository、Repository 返回后发生取消的测试。
+- 若 Repository 已提交后 Context 才取消，UseCase 返回取消错误但不执行补偿删除；持久化结果需通过幂等重试/读取确认，不将 Context 取消误认为事务回滚。
+- 对应提交：`4e9998e12315480a9f8e6a769a42bf58a7768af9`、`42f460f40c69ace10ba8e21f5603e8884e1ac7ca`。
+
+
+### 2026-11-10 Feed 解析与归一化取消边界
+
+- `CollectSource.Execute` 原有取消检查覆盖了 Catalog、Transport 和响应体读取，但 Feed 解析后的归一化阶段仍可能在请求取消后继续处理候选并生成结果。
+- 现已在解析返回后、每条候选处理前、归一化时间采集后、结果封印前及返回前检查 Context。
+- 新增归一化阶段取消测试，确认取消不会返回采集结果。
+- 对应提交：`a7988ad1fb7aa9ef7635365e8215cee017c15b76`。

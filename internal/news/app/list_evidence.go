@@ -57,10 +57,9 @@ func (u *ListEvidence) Execute(ctx context.Context, request ListEvidenceRequest)
 			(len(referencePage.Items) != request.PageSize || !validEvidencePageCursor(*referencePage.NextCursor))) {
 		return ResearchEvidencePage{}, ErrEvidenceSnapshotPageUnavailable
 	}
-	result := NewResearchEvidencePage(referencePage.SystemAsOf)
+	// 先验证整页引用的完整性，再读取任何正文记录。否则坏页的前半部分可能
+	// 已触发授权/存储读取，破坏“元数据无效时零内容解析”的边界。
 	seen := make(map[string]struct{}, len(referencePage.Items))
-	result.SnapshotRef = referencePage.SnapshotRef
-	result.NextCursor = referencePage.NextCursor
 	for index, item := range referencePage.Items {
 		if err := ctx.Err(); err != nil {
 			return ResearchEvidencePage{}, err
@@ -78,6 +77,14 @@ func (u *ListEvidence) Execute(ctx context.Context, request ListEvidenceRequest)
 		seen[key] = struct{}{}
 		if index > 0 && compareEvidenceSnapshotItems(referencePage.Items[index-1], item) >= 0 {
 			return ResearchEvidencePage{}, ErrEvidenceSnapshotPageUnavailable
+		}
+	}
+	result := NewResearchEvidencePage(referencePage.SystemAsOf)
+	result.SnapshotRef = referencePage.SnapshotRef
+	result.NextCursor = referencePage.NextCursor
+	for _, item := range referencePage.Items {
+		if err := ctx.Err(); err != nil {
+			return ResearchEvidencePage{}, err
 		}
 		record, err := u.records.Execute(ctx, GetEvidenceRequest{
 			CallerRef: request.CallerRef, PurposeCode: request.PurposeCode,

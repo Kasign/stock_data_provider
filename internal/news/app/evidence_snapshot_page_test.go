@@ -214,6 +214,57 @@ func TestListEvidenceSnapshotPageRejectsStoredSnapshotContextMismatch(t *testing
 	}
 }
 
+func TestListEvidenceSnapshotPageMapsValidCursorPositionMissingFromSnapshotToUnavailable(t *testing.T) {
+	now := time.Date(2026, 11, 10, 10, 0, 0, 0, time.UTC)
+	request := validEvidenceListRequest(now)
+	request.Filters = &EvidenceQueryFilters{}
+	request.PageSize = 2
+	request.SystemAsOf = now.Add(-time.Minute)
+
+	snapshot := validEvidenceSnapshot(now)
+	snapshot.CallerRef = request.CallerRef
+	snapshot.PurposeCode = request.PurposeCode
+	snapshot.RequestedContentLevel = request.RequestedContentLevel
+	snapshot.PageSize = request.PageSize
+	snapshot.SystemAsOf = request.SystemAsOf
+	snapshot.FiltersFingerprint, _ = evidenceFiltersFingerprint(request)
+	store := &evidenceSnapshotPageRepositoryStub{snapshot: snapshot}
+	query := &evidencePITRepositoryStub{}
+	factory, err := NewCreateEvidenceSnapshotForQuery(query, store, func() string { return "unused" })
+	if err != nil {
+		t.Fatal(err)
+	}
+	codec := newTestEvidenceCursorCodec(t, "active", map[string]string{"active": strings.Repeat("k", 32)})
+	service, err := NewListEvidenceSnapshotPage(factory, codec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	service.now = func() time.Time { return now }
+
+	// This cursor is correctly signed and bound to the query/snapshot, but its
+	// position does not exist in the immutable snapshot payload.
+	missingPosition := ResearchEvidenceRecord{
+		NewsID: "news-not-in-snapshot", VersionID: "version-not-in-snapshot",
+		SystemObservedAt: request.SystemAsOf.Add(-time.Second),
+		SystemAsOf:       request.SystemAsOf,
+	}
+	token, err := codec.EncodeNextCursor(request, snapshot.SnapshotRef, missingPosition, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Cursor = &token
+	page, err := service.Execute(context.Background(), request)
+	if !errors.Is(err, ErrEvidenceSnapshotPageUnavailable) {
+		t.Fatalf("Execute() error=%v, want ErrEvidenceSnapshotPageUnavailable", err)
+	}
+	if len(page.Items) != 0 || page.NextCursor != nil {
+		t.Fatalf("failed continuation returned page data: %+v", page)
+	}
+	if store.gets != 1 || query.calls != 0 {
+		t.Fatalf("unexpected dependency calls: snapshot reads=%d PIT=%d", store.gets, query.calls)
+	}
+}
+
 func TestListEvidenceSnapshotPageStopsAfterContextCancellationDuringSnapshotRead(t *testing.T) {
 	now := time.Date(2026, 11, 9, 10, 0, 0, 0, time.UTC)
 	request := validEvidenceListRequest(now)

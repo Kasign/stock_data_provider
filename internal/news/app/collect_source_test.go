@@ -15,9 +15,13 @@ import (
 type sourceCatalogStub struct {
 	registration SourceEndpointRegistration
 	err          error
+	afterLookup  func()
 }
 
 func (s sourceCatalogStub) LookupEndpoint(context.Context, string, string) (SourceEndpointRegistration, error) {
+	if s.afterLookup != nil {
+		s.afterLookup()
+	}
 	return s.registration, s.err
 }
 
@@ -27,11 +31,15 @@ type sourceTransportStub struct {
 	calls      int
 	sourceID   string
 	endpointID string
+	afterDo    func()
 }
 
 func (s *sourceTransportStub) Do(_ context.Context, sourceID, endpointID string, request *http.Request) (*http.Response, error) {
 	s.calls++
 	s.sourceID, s.endpointID = sourceID, endpointID
+	if s.afterDo != nil {
+		s.afterDo()
+	}
 	if request.Method != http.MethodGet || request.URL.Host != "publisher.example" {
 		return nil, errors.New("unexpected request")
 	}
@@ -351,5 +359,51 @@ func TestCollectSourceRecordsFetchAndNormalizationTimesSeparately(t *testing.T) 
 		candidate.NormalizedAt == nil || !candidate.NormalizedAt.Equal(normalizedAt) ||
 		!candidate.ObservedAt.Equal(normalizedAt) {
 		t.Fatalf("candidate timestamps=%+v", candidate)
+	}
+}
+
+func TestCollectSourceStopsAfterContextCancellationAtDependencyBoundaries(t *testing.T) {
+	for _, boundary := range []string{"source catalog", "source transport"} {
+		t.Run(boundary, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			catalog := sourceCatalogStub{registration: approvedSourceRegistration()}
+			transport := &sourceTransportStub{response: feedResponse("<rss/>", "application/rss+xml", http.StatusOK)}
+			if boundary == "source catalog" {
+				catalog.afterLookup = cancel
+			} else {
+				transport.afterDo = cancel
+			}
+			useCase := NewCollectSource(catalog, transport)
+			_, err := useCase.Execute(ctx, validCollectRequest())
+			if !errors.Is(err, context.Canceled) {
+				t.Fatalf("Execute() error=%v, want context.Canceled", err)
+			}
+			if boundary == "source catalog" && transport.calls != 0 {
+				t.Fatalf("transport called after catalog cancellation: %d", transport.calls)
+			}
+		})
+	}
+}
+
+func TestCollectSourceStopsAfterCancellationDuringNormalization(t *testing.T) {
+	body := `<?xml version="1.0"?><rss version="2.0"><channel><item><guid>item-1</guid><title>标题</title><link>https://publisher.example/item-1</link></item></channel></rss>`
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	transport := &sourceTransportStub{response: feedResponse(body, "application/rss+xml", http.StatusOK)}
+	useCase := NewCollectSource(sourceCatalogStub{registration: approvedSourceRegistration()}, transport)
+	clockCalls := 0
+	useCase.now = func() time.Time {
+		clockCalls++
+		if clockCalls == 3 {
+			cancel()
+		}
+		return time.Date(2026, 11, 10, 10, 0, 0, 0, time.UTC).Add(time.Duration(clockCalls) * time.Second)
+	}
+	if _, err := useCase.Execute(ctx, validCollectRequest()); !errors.Is(err, context.Canceled) {
+		t.Fatalf("Execute() error=%v, want context.Canceled", err)
+	}
+	if clockCalls != 3 {
+		t.Fatalf("clock calls=%d, want cancellation at normalization boundary", clockCalls)
 	}
 }

@@ -12,6 +12,7 @@ var ErrInvalidNewsItemRelationHistoryQuery = errors.New("news.item_relation.hist
 
 // NewsItemRelationHistoryRequest selects append-only relation assertions visible
 // at a knowledge-time boundary. It does not infer the current relation graph.
+// Results include direct assertions and their complete connected supersedes chain.
 type NewsItemRelationHistoryRequest struct {
 	NewsID     string
 	SystemAsOf time.Time
