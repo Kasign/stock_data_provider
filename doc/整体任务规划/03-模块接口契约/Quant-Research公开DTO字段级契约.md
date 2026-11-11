@@ -465,6 +465,17 @@ Event 允许多来源时间并存，不以单一 occurred_at 覆盖冲突来源�
 Event 的 source_times 必填为非 null 数组；无来源时间时为空数组。Event 可保留规范化 occurred_at 作为研究归一结果，但必须同时提供 source_times[]；规范化值必须能追溯到所采用的证据与规则版本。
 
 
+### 9.6.1 ResearchEventRef
+
+`ResearchEventRef` 是指向不可变 ResearchEvent 版本的强类型引用：
+
+| JSON 字段 | 必需 | 类型/约束 | 语义 |
+|---|---|---|---|
+| event_id | 是 | string | ResearchEvent 稳定身份 |
+| event_version | 是 | integer，>=1 | 被引用的不可变 Event 版本 |
+
+Ref 必须同时包含 event_id 和 event_version；只提供 event_id 不构成精确版本引用。引用目标必须真实存在；derived_from_refs 不得自引用或形成循环派生关系。
+
 ### 9.7 Evidence PIT、授权与内容指纹规则
 
 Evidence 必须保留来源事实、系统观察和研究纳入时间三条独立时间线：
@@ -493,7 +504,8 @@ Evidence 必须保留来源事实、系统观察和研究纳入时间三条独�
 ### 9.9 ResearchEvent / Claim / Hypothesis 版本与状态约束
 
 - ResearchEvent、Claim、Hypothesis、Scenario 均采用追加式版本；同一对象的版本号从 1 开始严格递增，版本不可覆盖或复用。
-- Claim/Hypothesis 仅在陈述/结论语义被替代时声明 supersedes_version；目标必须是同一 claim_id 下真实存在且写入前当前有效的较早版本。仅追加证据或非语义修订不设置。\n- ResearchEvent 合并/拆分只使用 derived_from_refs 表达前序 Event 血缘；不增加 source_refs。Evidence 来源通过 evidence_refs → Evidence.source_ref/source_version 追溯。
+- Claim/Hypothesis 仅在陈述/结论语义被替代时声明 supersedes_version；目标必须是同一 claim_id 下真实存在且写入前当前有效的较早版本。仅追加证据或非语义修订不设置。
+- ResearchEvent 合并/拆分只使用 derived_from_refs 表达前序 Event 血缘；不增加 source_refs。Evidence 来源通过 evidence_refs → Evidence.source_ref/source_version 追溯。
 - ResearchEvent 状态迁移由 Research 领域规则注册；MVP 允许 detected -> consolidating -> active -> materializing -> fading -> closed，任一非终态可转 invalidated；禁止从 closed/invalidated 回到 active，恢复必须创建新 Event 并引用旧对象。
 - Claim/Hypothesis 状态迁移：proposed -> testing -> supported/contradicted/invalidated/unknown；supported/contradicted/invalidated 为终态。新证据改变结论时创建新版本，不回写历史版本状态。
 - ResearchEvent 必须记录 time_normalization_rule_version；source_times 保留逐来源原始时间证据，历史 Event 不随规则升级而重算。
