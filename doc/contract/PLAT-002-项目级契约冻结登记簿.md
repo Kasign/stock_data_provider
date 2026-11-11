@@ -4,14 +4,14 @@
 - 代码审计基线：`origin/integration` @ `b6dfc85ba214fe16268c8cba780641a8bfe15086`
 - 审计文档维护分支：`origin/feat/design_doc`（状态以当前分支 HEAD 为准）
 - 固定代码审计基线：`origin/integration @ b6dfc85ba214fe16268c8cba780641a8bfe15086`；仅对该 SHA 的代码事实作结论，不随分支 HEAD 自动漂移
-- 登记簿版本：`0.2.37-review`
-- 当前状态：`L1_frozen_contract_definition_review_in_progress`
-- 当前状态统计：43 项正式 CTR；14 freeze-ready、27 pending_evidence、0 pending-decision、2 not_applicable、0 frozen。项目级语义待决已清零；各 CTR 仍按自身证据门禁收敛。
+- 登记簿版本：`0.2.57-review`
+- 当前状态：`L1_final_contract_definition_closure_in_progress`
+- 当前状态统计（本轮最终收敛前快照）：43 项正式 CTR；14 freeze-ready、27 pending_evidence、0 pending-decision、2 not_applicable、0 frozen。该统计仅为起始快照，不代表最终复核结论。
 - 项目级决策：DEC-PLAT-002-018～040 已记录；当前 pending-decision 为 0。DATA-FLOW-B、LLM-FLOW-B 保持条件性 deferred
 - 决策责任：项目负责人；根据明确授权，DEC-PLAT-002-028～040 的技术取舍由 ChatGPT 代为 Review/裁决，并在决议中标记授权来源
 - 复核原则：本轮只冻结契约定义；模块实现符合性、内部测试、CI、部署另行跟踪，不得混入本轮冻结门禁
 
-> 本登记簿是项目级契约状态与冻结结论的唯一权威入口。第1节是固定代码基线的起始快照；当前各 CTR 状态以第3节为准，冻结汇总以第24节为准，后续增量 Review 记录见第25节起。实现符合性、模块测试和 CI 不得混入本轮契约定义冻结状态。
+> 本登记簿是项目级契约状态与冻结结论的唯一权威入口。第1节是固定代码基线的起始快照；当前各 CTR 状态以第3节为准，冻结汇总以第24节为准，后续增量 Review 记录见第25节起。本轮执行一次性最终收敛：只处理跨模块公开契约定义缺口与权威定义冲突；实现符合性、模块测试和 CI 不得混入契约定义冻结状态。
 
 ## 1. 本轮核验结论（起始快照）
 
