@@ -47,7 +47,7 @@
 ## 5. Schema 与 Golden 不可变
 
 - 已发布的 `(schema_id, schema_version)` 定义不可原地改变。
-- Event Registry 使用 `(event_type, schema_version)` 唯一定位 Schema；相同版本的规范 Schema 与 Golden 必须保持不可变。
+- Event Registry 使用 `(event_type, schema_version)` 唯一定位 Schema；相同版本的规范 Schema、描述元数据与 Golden 必须保持不可变；即使只修正文档/示例，也必须发布新的 PATCH 版本。
 - 语义/结构变化必须发布新版本并保留旧版本 Schema、Golden 和变更记录。
 - 不得通过覆盖历史 Golden、静默重算历史数据或用当前 Schema 重新解释旧结果来消除兼容问题。
 - 历史 Run/Event/Delivery/Result 必须保留创建时的 schema_version、algorithm_version、template_version 和输入快照引用；确需迁移时生成显式、可审计的迁移产物。

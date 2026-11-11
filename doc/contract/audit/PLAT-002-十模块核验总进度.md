@@ -1374,3 +1374,10 @@
 - 建立 GOV-CTR-003 1.0.0 唯一权威文本，区分领域 ID、request_id、originating_request_id、correlation_id、event_id、idempotency_key 和 trace 元数据。
 - 明确通用作用域、稳定性、幂等 key/fingerprint 一致与冲突行为；具体字段映射和运行时传播留在对应 CTR。
 - GOV-CTR-003 状态调整为 freeze-ready；当前总统计为 4 freeze-ready、37 pending-evidence、0 pending-decision、2 not_applicable、0 frozen。
+
+
+## 60. GOV-CTR-004 Schema 版本与兼容规则版本化（2026-11-11）
+
+- 建立 GOV-CTR-004 1.0.0 唯一权威文本，明确 SemVer、breaking change、未知字段/枚举、消费者支持版本、Schema/Golden 不可变和废弃/直接退役规则。
+- 各 DTO/Event 的实际版本、兼容矩阵、迁移与回滚证据仍由对应 CTR 验收。
+- GOV-CTR-004 状态调整为 freeze-ready；当前总统计为 5 freeze-ready、36 pending-evidence、0 pending-decision、2 not_applicable、0 frozen。

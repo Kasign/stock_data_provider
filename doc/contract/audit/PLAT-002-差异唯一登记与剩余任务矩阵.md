@@ -1467,3 +1467,11 @@ INT-CTR-001 是正式 43 CTR 之一，不是内部 Outbox/Inbox 实现验收。�
 - 公共规则明确 request_id、originating_request_id、correlation_id、event_id、idempotency_key、trace_id/span_id 的身份职责和不可替代关系；规定稳定事件重放、命令 key+fingerprint 的一致/冲突行为以及 ambiguous outcome 不盲目重试。
 - X-Request-ID Header/Context 传播、Run/Worker 字段映射、各命令 fingerprint 字段、Notification Inbox/Publish 唯一键及执行测试仍由 PLAT-CTR-002、FLOW/NTF/QNT/RSC 对应 CTR 验收，不阻断公共规则本身冻结。
 - GOV-CTR-003 转为 freeze-ready；不代表各消费者的字段映射/运行时传播已完成。
+
+
+## 60. GOV-CTR-004 Schema 版本与兼容规则冻结评估（2026-11-11）
+
+- DEC-PLAT-002-037 已将 Schema 版本、兼容、未知字段/枚举、废弃和迁移语义收敛为 GOV-CTR-004 1.0.0 唯一权威文本。
+- 公共规则明确每个独立 DTO/Payload 的 schema_version、SemVer 变化边界、closed/open enum、消费者显式支持版本、Schema/Golden 不可变和无活跃消费者时直接退役的条件。
+- 逐 DTO/Event 版本号、未知字段策略、消费者兼容矩阵、迁移/回滚 Golden 仍由各领域 CTR 验收，不阻断公共规则本身冻结。
+- GOV-CTR-004 转为 freeze-ready；不代表 43 项业务/平台契约的兼容矩阵已完成。
