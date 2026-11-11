@@ -1190,3 +1190,17 @@
 - 本轮没有检查或修改 Platform/Server 模块实现，没有执行测试、CI 或部署验收；上述项目均未将实现符合性事项列为契约冻结门禁。
 - 权威明细见登记簿第14节及差异矩阵第41节。README 与契约版本记录已同步新门禁和 0.2.7-review。
 - 下一批：Data 公开契约定义核定；不重复审查 GOV/Platform 已确认原则，不检查 Data Provider 内部实现或专项测试。
+
+## 42. Data 公开契约定义核定完成（2026-11-11）
+
+- 完成 DATA-CTR-001～008 的公开契约定义核定，共 8 项：7 项 pending_evidence，DATA-CTR-003 为 not_applicable；无 pending_decision、blocked 或 freeze-ready。
+- DATA-CTR-003 仅是 Data 内部 Provider Adapter 原始值标准化约定，不存在跨模块公开消费者，已从 PLAT-002 跨模块冻结门禁排除；不再把 Provider Fixture/专项测试列为本项目任务。
+- DATA-CTR-001：当前 OpenAPI 仍暴露 DEC-027 明确禁止的 DragonTiger Provider 原始金额/单位字段；API 清单仍引用旧 OpenAPI 路径并保留浏览器持有 Data Key 的过期说明。
+- DATA-CTR-002：单位、复权、PIT 原则已有，尚缺具体数据域字段到 provider_time/available_at/fetched_at/normalized_at/system_observed_at 的权威映射。
+- DATA-CTR-004：QualityStatus、Probe 维度状态、Freshness 与 Coverage 规则已有，但公开响应字段映射和覆盖率分母语义不完整。
+- DATA-CTR-005/007：DailyBarsV2 Decimal Schema/版本缺失；DATA-CTR-008 Snapshot Manifest 不是 DailyBarsV2 内容 DTO，不能替代其 Schema。
+- DATA-CTR-006：当前 OpenAPI 根级 security 同时声明 ApiKey 和 BearerAuth，按 OpenAPI OR 语义表示二者可择一；与远程业务 Data API 只使用 Data 专用 X-API-Key 的契约设计冲突。该项是公开定义冲突，不检查 Handler/认证实现。
+- DATA-CTR-008：Manifest Schema/Golden 已有，但 UTC、sources 规范排序及 caller/Scope/授权读取复核适用映射仍不完整。
+- 本轮只更新 feat/design_doc 项目级契约登记和审计文档；没有修改 Data 责任分支、DTO、OpenAPI、Schema、Golden，没有执行测试或 CI。
+- 权威明细见登记簿第15节、差异矩阵第42节。本轮排除项与 GOV/Platform 结果见登记簿第14节。
+- 下一批：News 公开契约定义核定；不重新审查 Data 内部 Provider 规则或已经明确的公共授权算法。
