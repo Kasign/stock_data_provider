@@ -1167,3 +1167,14 @@
 - 本轮只更新 `feat/design_doc` 项目级契约决议解释及审计登记；未修改 Server、Researchflow、WebUI 责任分支代码，未执行测试或 CI。
 - 固定审计基线的增量证据：Researchflow 已有 CreateRun Application 和 publicdto；Server Root Router 仍只注册旧 Analysis HTTP 路由，Bootstrap 仍装配旧 Runner/TaskQueue/Platform HTTP API，没有 Researchflow HTTP Handler/路由；WebUI API Client 与 API_CONTRACT 仍使用旧 `/analysis-api/api/v1/analysis/**` 路径。故 DEC-018 新 API 接入验收尚未完成。
 - 下一批不再处理旧 CreateTask DTO；只核对新 Researchflow API 的 Server HTTP 路由/请求响应映射/认证错误与事件 Schema，以及 WebUI 对新公开契约的消费边界。模块级 CreateRunCommand 归 FLOW-CTR-001，HTTP 宿主与映射归 SRV-CTR-001，不新增 CTR。
+
+## 40. 契约定义冻结范围更正与剩余项收敛（2026-11-11）
+
+- 本轮纠正 PLAT-002 的任务口径：当前目标是冻结跨模块公开契约定义，不是验收模块实现。模块内部单元/集成测试、Provider 专项测试、CI、部署、真实 Provider/模型/通知渠道可用性及内部 Repository/Worker 生命周期，不作为契约定义冻结前置条件。
+- 项目级语义决议 DEC-PLAT-002-018～027 已完成；非条件性项目级 pending_decision 为 0。旧 Analysis HTTP 契约按 DEC-018 退出活动范围；DEC-019 不得迁移为 Researchflow 新 API 约束；DATA-FLOW-B、LLM-FLOW-B 保持条件性 deferred。
+- 原登记簿 43 个正式 CTR 的 0/43 L2 frozen、39 pending_evidence、4 has_difference + pending_evidence 是旧综合证据状态，混合了契约定义与实现/测试/CI 证据，不能直接作为本轮契约定义冻结进度。新口径见登记簿第5节；契约定义待办收敛见第13节。
+- 当前契约定义待补批次已集中为：GOV 公共规则/授权；Platform Fault、Context、Security、Diagnostics、HTTP、Storage、Config；Data DTO/单位/质量/Decimal v2/Snapshot/授权；News Query/PIT/Cursor/授权；Quant Registry/输入输出/Result Envelope/授权；Research Evidence/Event；Researchflow 状态机/Context/Stage IO；LLM Request/SSE/Error；Notification Event/Inbox/Delivery/Channel；Server/WebUI Researchflow 新 HTTP 契约。
+- 明确不作为跨模块公开契约待办：DATA-CTR-003 的 Provider 原始值归一化内部约定、Provider 专项测试、模块内部测试、纯页面 DOM 回归、旧 Analysis API 退役后的旧 Schema/Handler 补齐。
+- DEC-027 的 Dragon Tiger Provider 原始金额字段仍属于公开 DTO 边界定义缺口；CTR-043 原分页计数语义本身可 freeze-ready，Hithink 分页实现偏差不阻断该契约冻结。
+- 本轮只更新 `feat/design_doc` 的契约治理文档，没有修改责任模块代码、没有执行测试/CI，也没有将任何正式 CTR 批量标记为 frozen。
+- 下一步唯一工作：按登记簿第13.2节的批次核对权威公开定义，逐批将正式 CTR 定为 `freeze-ready`、`pending-evidence`、`blocked` 或 `deferred`；不检查模块内部实现/测试，不重复已完成的项目级决议审查。
