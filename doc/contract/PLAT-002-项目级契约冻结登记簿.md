@@ -545,7 +545,7 @@ PLAT-002 不因本次矩阵统计完成而结束。整体完成仍需：
 | RSC-CTR-001 | pending_evidence | Evidence 1.0.0 Schema/Golden 已有，字段、来源 Owner、derived_from_refs、content_level、AuthorizationRef、JCS 指纹语义较完整；但 Schema 的 date-time 未约束 RFC3339Nano UTC，source_version 条件必填规则缺少 source-owner/versioned-resource 适用映射，system_as_of/available_at 的 PIT 关系仍由文字约束承担 |
 | RSC-CTR-002 | pending_evidence | DEC-PLAT-002-030～032 已裁决时间规则版本、Event 派生血缘及 Claim/Hypothesis 替代语义；权威 DTO、强类型 Ref、Schema/Golden 尚未按决议对齐 |
 
-### 18.2 RSC-CTR-002 的待决项
+### 18.2 RSC-CTR-002 的已裁决项
 
 1. **RSC-OPEN-003（DEC-PLAT-002-030）：** ResearchEvent 增加必需 time_normalization_rule_version，标识统一 Research 时间规则集版本；source_times 保留原始证据；不增加 rule_id。
 2. **RSC-OPEN-004（DEC-PLAT-002-031）：** 增加必需强类型 derived_from_refs，引用前序 Event 不可变版本；不增加 source_refs，来源追溯经 evidence_refs → Evidence.source_ref/source_version 完成。
