@@ -1271,3 +1271,14 @@
 - 不纳入真实渠道账号/Secret、渠道 E2E、Worker、Repository、MariaDB、外部幂等/对账能力、测试和 CI；未修改 Notification 责任分支。
 - 当前项目级待决项仍为 5 项（QNT-DEC-01/02、RSC-OPEN-003/004/005）。权威明细见登记簿第21节、差异矩阵第48节。
 - 下一批：Server/WebUI Researchflow 新 API 公开 HTTP 契约核定，随后统一汇总十模块状态，不再逐个模块重复盘点。
+
+## 49. Server / WebUI Researchflow HTTP 契约核定完成（2026-11-11）
+
+- 完成 SRV-CTR-001 公开契约核定，状态 pending_evidence；无新增 pending_decision、blocked 或 freeze-ready。
+- Server Composition Root/统一 HTTP Host 职责已有定义，但 DEC-018/019 退役旧 Analysis API 后，新 Researchflow HTTP OpenAPI/Schema 尚不存在。
+- 缺口包括新 API 路径/方法、CreateRun/Run/Stage/Event HTTP 请求响应 DTO、错误投影、认证授权、Request/Correlation ID、分页/Cursor 和事件顺序/重放语义。
+- doc/web/API_CONTRACT.md 与 doc/api/contracts/分析任务.openapi.yaml 仍记录旧 Analysis API，只保留退役历史，不得继续作为活动契约，也不得把 DEC-019 旧 TaskType/symbols/幂等约束迁移到新 API。
+- WebUI 是 Server 新 HTTP 契约的消费者，不拥有 Researchflow 领域语义；WebUI CTR-011～049 中纯页面/交互/DOM 项不属于跨模块公开 API。
+- 本轮不检查 Server DI/Bootstrap、Session Middleware 实现、WebUI 登录页面、Nginx/HTTPS/部署、E2E、测试或 CI；未修改 Server/WebUI 责任分支。
+- 当前项目级待决项仍为 5 项（QNT-DEC-01/02、RSC-OPEN-003/004/005）。权威明细见登记簿第22节、差异矩阵第49节。
+- 下一步：汇总所有已核定 CTR 的当前状态，确认 formal CTR 数量、not_applicable/withdrawn/deferred 范围和唯一待决项，形成 PLAT-002 阶段性冻结总表。
