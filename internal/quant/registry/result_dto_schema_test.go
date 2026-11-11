@@ -87,7 +87,6 @@ func TestResultDTOJSONMatchesQNTCTR004Schemas(t *testing.T) {
 	}
 }
 
-
 func TestRiskDecisionSchemaRejectsEmptyReasonsAndAllowsEmptyInputRefs(t *testing.T) {
 	schema := compileQuantSchemaFile(t, "QNT-CTR-004-risk-decision-1.0.0.schema.json")
 	instance := []byte(`{
