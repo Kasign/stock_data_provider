@@ -36,6 +36,7 @@ func testManifestWithoutSnapshots(t *testing.T) manifest.Manifest {
 	payload := []byte(`{"metric_code":"pure_metric","value":1}`)
 	m, err := manifest.BuildWithPayload(manifest.Input{
 		ResultType:           "indicator",
+		Scope: "stock", SecurityID: "600000.SH", Period: "1d", QualityStatus: "valid", ResultStatus: "completed",
 		SchemaVersion:        "1.0.0",
 		PayloadSchemaVersion: "1.0.0",
 		AlgorithmVersion:     "pure.v1",
@@ -51,12 +52,9 @@ func testManifestWithoutSnapshots(t *testing.T) manifest.Manifest {
 
 func validRefInput() RefInput {
 	return RefInput{
-		SchemaVersion: "1.0.0", Scope: ScopeStock, SecurityID: "opaque-security-ref",
-		TradeDate: "2026-11-06", Period: "20d", AlgorithmVersion: "momentum.v1",
-		ParameterFingerprint: "sha256:parameter-fingerprint",
-		QualityStatus:        QualityValid, ResultStatus: StatusCompleted,
+		SchemaVersion: "1.0.0",
 		AuthorizationRef: "opaque-authorization-ref",
-		CreatedAt:        time.Date(2026, 11, 9, 8, 0, 0, 0, time.FixedZone("UTC+8", 8*60*60)),
+		CreatedAt: time.Date(2026, 11, 9, 8, 0, 0, 0, time.FixedZone("UTC+8", 8*60*60)),
 	}
 }
 
@@ -98,16 +96,22 @@ func TestBuildRefPreservesExplicitEmptySnapshotRefs(t *testing.T) {
 
 func TestBuildRefKeepsCompletedAndQualityIndependent(t *testing.T) {
 	input := validRefInput()
-	input.QualityStatus = QualityDegraded
-	got, err := BuildRef(input, testManifest(t))
+	degraded := testManifest(t)
+	degraded.QualityStatus = "degraded"
+	degraded.ManifestFingerprint, _ = degraded.calculateFingerprint()
+	degraded.ResultID = "quant_result:sha256:" + degraded.ManifestFingerprint
+	got, err := BuildRef(input, degraded)
 	if err != nil {
 		t.Fatalf("degraded completed result is representable; policy gate is separate: %v", err)
 	}
 	if got.ResultStatus != StatusCompleted || got.QualityStatus != QualityDegraded {
 		t.Fatalf("result and quality states were conflated: %+v", got)
 	}
-	input.QualityStatus = QualityUnknown
-	got, err = BuildRef(input, testManifest(t))
+	unknown := testManifest(t)
+	unknown.QualityStatus = "unknown"
+	unknown.ManifestFingerprint, _ = unknown.calculateFingerprint()
+	unknown.ResultID = "quant_result:sha256:" + unknown.ManifestFingerprint
+	got, err = BuildRef(input, unknown)
 	if err != nil || got.ResultStatus != StatusCompleted || got.QualityStatus != QualityUnknown {
 		t.Fatalf("result and quality states must remain independent, got=%+v err=%v", got, err)
 	}
@@ -119,15 +123,7 @@ func TestBuildRefRejectsInvalidMetadataAndManifest(t *testing.T) {
 		mutate func(*RefInput)
 	}{
 		{"invalid DTO schema version", func(v *RefInput) { v.SchemaVersion = "v1" }},
-		{"unknown scope", func(v *RefInput) { v.Scope = "unknown" }},
-		{"stock without security", func(v *RefInput) { v.SecurityID = "" }},
-		{"missing period", func(v *RefInput) { v.Period = "" }},
-		{"missing algorithm version", func(v *RefInput) { v.AlgorithmVersion = "" }},
-		{"missing parameter fingerprint", func(v *RefInput) { v.ParameterFingerprint = "" }},
-		{"unknown quality", func(v *RefInput) { v.QualityStatus = "unknown-value" }},
-		{"unknown result status", func(v *RefInput) { v.ResultStatus = "unknown-value" }},
 		{"missing authorization ref", func(v *RefInput) { v.AuthorizationRef = "" }},
-		{"invalid trade date", func(v *RefInput) { v.TradeDate = "2026-02-30" }},
 		{"missing created at", func(v *RefInput) { v.CreatedAt = time.Time{} }},
 	}
 	for _, tc := range tests {
@@ -149,9 +145,12 @@ func TestBuildRefRejectsInvalidMetadataAndManifest(t *testing.T) {
 
 func TestBuildRefAllowsNonStockScopeWithoutSecurityID(t *testing.T) {
 	input := validRefInput()
-	input.Scope = ScopeMarket
-	input.SecurityID = ""
-	got, err := BuildRef(input, testManifest(t))
+	market := testManifest(t)
+	market.Scope = "market"
+	market.SecurityID = ""
+	market.ManifestFingerprint, _ = market.calculateFingerprint()
+	market.ResultID = "quant_result:sha256:" + market.ManifestFingerprint
+	got, err := BuildRef(input, market)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -287,10 +286,6 @@ func TestBuildRefRejectsInvalidUTF8Metadata(t *testing.T) {
 		name   string
 		mutate func(*RefInput)
 	}{
-		{"security_id", func(v *RefInput) { v.SecurityID = string([]byte{0xff}) }},
-		{"period", func(v *RefInput) { v.Period = string([]byte{0xff}) }},
-		{"algorithm_version", func(v *RefInput) { v.AlgorithmVersion = string([]byte{0xff}) }},
-		{"parameter_fingerprint", func(v *RefInput) { v.ParameterFingerprint = string([]byte{0xff}) }},
 		{"authorization_ref", func(v *RefInput) { v.AuthorizationRef = string([]byte{0xff}) }},
 	}
 	for _, tc := range tests {
@@ -309,11 +304,6 @@ func TestBuildRefRejectsBlankOrNonCanonicalMetadata(t *testing.T) {
 		name   string
 		mutate func(*RefInput)
 	}{
-		{"security_id whitespace", func(v *RefInput) { v.SecurityID = "   " }},
-		{"period whitespace", func(v *RefInput) { v.Period = "   " }},
-		{"period leading whitespace", func(v *RefInput) { v.Period = " 20d" }},
-		{"algorithm version whitespace", func(v *RefInput) { v.AlgorithmVersion = " " }},
-		{"parameter fingerprint trailing whitespace", func(v *RefInput) { v.ParameterFingerprint = "sha256:x " }},
 		{"authorization ref whitespace", func(v *RefInput) { v.AuthorizationRef = "\t" }},
 	}
 	for _, tc := range tests {

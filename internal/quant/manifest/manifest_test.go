@@ -26,6 +26,7 @@ func TestBuildMatchesQNTCTR005Golden(t *testing.T) {
 
 	got, err := Build(Input{
 		ResultType:           golden.Manifest.ResultType,
+		Scope: "stock", SecurityID: "600000.SH", Period: "1d", QualityStatus: "valid", ResultStatus: "completed",
 		SchemaVersion:        golden.Manifest.SchemaVersion,
 		PayloadSchemaVersion: golden.Manifest.PayloadSchemaVersion,
 		AlgorithmVersion:     golden.Manifest.AlgorithmVersion,
@@ -48,6 +49,7 @@ func TestBuildMatchesQNTCTR005Golden(t *testing.T) {
 func TestBuildAllowsExplicitEmptySnapshotRefs(t *testing.T) {
 	got, err := Build(Input{
 		ResultType:           "factor",
+		Scope: "stock", SecurityID: "600000.SH", Period: "1d", QualityStatus: "valid", ResultStatus: "completed",
 		SchemaVersion:        "1.0.0",
 		PayloadSchemaVersion: "1.0.0",
 		AlgorithmVersion:     "factor.v1",
@@ -97,6 +99,7 @@ func TestFingerprintPayloadUsesCanonicalJSON(t *testing.T) {
 func TestBuildSortsSnapshotRefsAndRejectsInvalidInputs(t *testing.T) {
 	base := Input{
 		ResultType:           "factor",
+		Scope: "stock", SecurityID: "600000.SH", Period: "1d", QualityStatus: "valid", ResultStatus: "completed",
 		SchemaVersion:        "1.0.0",
 		PayloadSchemaVersion: "1.0.0",
 		AlgorithmVersion:     "quant-test-v1",
@@ -140,6 +143,7 @@ func TestBuildSortsSnapshotRefsAndRejectsInvalidInputs(t *testing.T) {
 func TestBuildRejectsInvalidUTF8SnapshotReference(t *testing.T) {
 	input := Input{
 		ResultType:           "factor",
+		Scope: "stock", SecurityID: "600000.SH", Period: "1d", QualityStatus: "valid", ResultStatus: "completed",
 		SchemaVersion:        "1.0.0",
 		PayloadSchemaVersion: "1.0.0",
 		AlgorithmVersion:     "quant-test-v1",
@@ -156,6 +160,7 @@ func TestBuildRejectsInvalidUTF8SnapshotReference(t *testing.T) {
 func TestVerifyRejectsMissingSnapshotArray(t *testing.T) {
 	got, err := Build(Input{
 		ResultType:           "factor",
+		Scope: "stock", SecurityID: "600000.SH", Period: "1d", QualityStatus: "valid", ResultStatus: "completed",
 		SchemaVersion:        "1.0.0",
 		PayloadSchemaVersion: "1.0.0",
 		AlgorithmVersion:     "factor.v1",
@@ -176,6 +181,7 @@ func TestVerifyRejectsMissingSnapshotArray(t *testing.T) {
 func TestVerifyRejectsInvalidUTF8SnapshotReference(t *testing.T) {
 	got, err := Build(Input{
 		ResultType:           "factor",
+		Scope: "stock", SecurityID: "600000.SH", Period: "1d", QualityStatus: "valid", ResultStatus: "completed",
 		SchemaVersion:        "1.0.0",
 		PayloadSchemaVersion: "1.0.0",
 		AlgorithmVersion:     "quant-test-v1",
@@ -196,6 +202,7 @@ func TestVerifyRejectsInvalidUTF8SnapshotReference(t *testing.T) {
 func TestVerifyRejectsManifestMutation(t *testing.T) {
 	got, err := Build(Input{
 		ResultType:           "stock",
+		Scope: "stock", SecurityID: "600000.SH", Period: "1d", QualityStatus: "valid", ResultStatus: "completed",
 		SchemaVersion:        "1.0.0",
 		PayloadSchemaVersion: "1.0.0",
 		AlgorithmVersion:     "quant-test-v1",
@@ -217,6 +224,7 @@ func TestBuildWithPayloadBindsManifestToCanonicalPayload(t *testing.T) {
 	payload := json.RawMessage(`{"metric_code":"momentum_20d","value":0.125}`)
 	input := Input{
 		ResultType:           "factor",
+		Scope: "stock", SecurityID: "600000.SH", Period: "1d", QualityStatus: "valid", ResultStatus: "completed",
 		SchemaVersion:        "1.0.0",
 		PayloadSchemaVersion: "1.0.0",
 		AlgorithmVersion:     "quant-test-v1",
@@ -240,6 +248,7 @@ func TestBuildWithPayloadBindsManifestToCanonicalPayload(t *testing.T) {
 func TestBuildWithPayloadRejectsCallerSuppliedFingerprintMismatch(t *testing.T) {
 	input := Input{
 		ResultType:           "factor",
+		Scope: "stock", SecurityID: "600000.SH", Period: "1d", QualityStatus: "valid", ResultStatus: "completed",
 		SchemaVersion:        "1.0.0",
 		PayloadSchemaVersion: "1.0.0",
 		AlgorithmVersion:     "quant-test-v1",
@@ -256,6 +265,7 @@ func TestBuildWithPayloadRejectsCallerSuppliedFingerprintMismatch(t *testing.T) 
 func TestVerifyPayloadRejectsInvalidManifestBeforePayload(t *testing.T) {
 	got, err := BuildWithPayload(Input{
 		ResultType:           "factor",
+		Scope: "stock", SecurityID: "600000.SH", Period: "1d", QualityStatus: "valid", ResultStatus: "completed",
 		SchemaVersion:        "1.0.0",
 		PayloadSchemaVersion: "1.0.0",
 		AlgorithmVersion:     "quant-test-v1",
@@ -275,6 +285,7 @@ func TestVerifyPayloadRejectsInvalidManifestBeforePayload(t *testing.T) {
 func TestVerifyRejectsNonCanonicalUTCSystemAsOf(t *testing.T) {
 	got, err := Build(Input{
 		ResultType:           "factor",
+		Scope: "stock", SecurityID: "600000.SH", Period: "1d", QualityStatus: "valid", ResultStatus: "completed",
 		SchemaVersion:        "1.0.0",
 		PayloadSchemaVersion: "1.0.0",
 		AlgorithmVersion:     "quant-test-v1",

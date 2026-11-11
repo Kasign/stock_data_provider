@@ -40,6 +40,12 @@ type Manifest struct {
 	ResultID             string   `json:"result_id"`
 	ManifestFingerprint  string   `json:"manifest_fingerprint"`
 	ResultType           string   `json:"result_type"`
+	Scope                string   `json:"scope"`
+	SecurityID           string   `json:"security_id,omitempty"`
+	TradeDate            string   `json:"trade_date,omitempty"`
+	Period               string   `json:"period"`
+	QualityStatus        string   `json:"quality_status"`
+	ResultStatus         string   `json:"result_status"`
 	SchemaVersion        string   `json:"schema_version"`
 	PayloadSchemaVersion string   `json:"payload_schema_version"`
 	AlgorithmVersion     string   `json:"algorithm_version"`
@@ -51,6 +57,12 @@ type Manifest struct {
 
 type Input struct {
 	ResultType           string
+	Scope                string
+	SecurityID           string
+	TradeDate            string
+	Period               string
+	QualityStatus        string
+	ResultStatus         string
 	SchemaVersion        string
 	PayloadSchemaVersion string
 	AlgorithmVersion     string
@@ -62,6 +74,12 @@ type Input struct {
 
 type fingerprintInput struct {
 	ResultType           string   `json:"result_type"`
+	Scope                string   `json:"scope"`
+	SecurityID           string   `json:"security_id,omitempty"`
+	TradeDate            string   `json:"trade_date,omitempty"`
+	Period               string   `json:"period"`
+	QualityStatus        string   `json:"quality_status"`
+	ResultStatus         string   `json:"result_status"`
 	SchemaVersion        string   `json:"schema_version"`
 	PayloadSchemaVersion string   `json:"payload_schema_version"`
 	AlgorithmVersion     string   `json:"algorithm_version"`
@@ -105,6 +123,13 @@ func Build(input Input) (Manifest, error) {
 	if _, ok := allowedResultTypes[input.ResultType]; !ok {
 		return Manifest{}, invalid("result_type")
 	}
+	if !validScope(input.Scope) { return Manifest{}, invalid("scope") }
+	if input.Scope == "stock" && !validNonBlank(input.SecurityID) { return Manifest{}, invalid("security_id") }
+	if input.SecurityID != "" && !validNonBlank(input.SecurityID) { return Manifest{}, invalid("security_id") }
+	if input.TradeDate != "" { if len(input.TradeDate) != 10 { return Manifest{}, invalid("trade_date") }; if _, err := time.Parse("2006-01-02", input.TradeDate); err != nil { return Manifest{}, invalid("trade_date") } }
+	if !validNonBlank(input.Period) { return Manifest{}, invalid("period") }
+	if !validQualityStatus(input.QualityStatus) { return Manifest{}, invalid("quality_status") }
+	if !validResultStatus(input.ResultStatus) { return Manifest{}, invalid("result_status") }
 	if !schemaVersionRE.MatchString(input.SchemaVersion) {
 		return Manifest{}, invalid("schema_version")
 	}
@@ -143,6 +168,12 @@ func Build(input Input) (Manifest, error) {
 
 	manifest := Manifest{
 		ResultType:           input.ResultType,
+		Scope:                input.Scope,
+		SecurityID:           input.SecurityID,
+		TradeDate:            input.TradeDate,
+		Period:               input.Period,
+		QualityStatus:        input.QualityStatus,
+		ResultStatus:         input.ResultStatus,
 		SchemaVersion:        input.SchemaVersion,
 		PayloadSchemaVersion: input.PayloadSchemaVersion,
 		AlgorithmVersion:     input.AlgorithmVersion,
@@ -165,6 +196,13 @@ func (m Manifest) Verify() error {
 	if _, ok := allowedResultTypes[m.ResultType]; !ok {
 		return invalid("result_type")
 	}
+	if !validScope(m.Scope) { return invalid("scope") }
+	if m.Scope == "stock" && !validNonBlank(m.SecurityID) { return invalid("security_id") }
+	if m.SecurityID != "" && !validNonBlank(m.SecurityID) { return invalid("security_id") }
+	if m.TradeDate != "" { if len(m.TradeDate) != 10 { return invalid("trade_date") }; if _, err := time.Parse("2006-01-02", m.TradeDate); err != nil { return invalid("trade_date") } }
+	if !validNonBlank(m.Period) { return invalid("period") }
+	if !validQualityStatus(m.QualityStatus) { return invalid("quality_status") }
+	if !validResultStatus(m.ResultStatus) { return invalid("result_status") }
 	if !schemaVersionRE.MatchString(m.SchemaVersion) {
 		return invalid("schema_version")
 	}
@@ -223,6 +261,12 @@ func (m Manifest) VerifyPayload(payload json.RawMessage) error {
 func (m Manifest) calculateFingerprint() (string, error) {
 	input := fingerprintInput{
 		ResultType:           m.ResultType,
+		Scope:                m.Scope,
+		SecurityID:           m.SecurityID,
+		TradeDate:            m.TradeDate,
+		Period:               m.Period,
+		QualityStatus:        m.QualityStatus,
+		ResultStatus:         m.ResultStatus,
 		SchemaVersion:        m.SchemaVersion,
 		PayloadSchemaVersion: m.PayloadSchemaVersion,
 		AlgorithmVersion:     m.AlgorithmVersion,
@@ -242,6 +286,10 @@ func (m Manifest) calculateFingerprint() (string, error) {
 	sum := sha256.Sum256(canonical)
 	return hex.EncodeToString(sum[:]), nil
 }
+
+func validScope(value string) bool { switch value { case "stock", "market", "industry", "portfolio": return true }; return false }
+func validQualityStatus(value string) bool { switch value { case "valid", "degraded", "invalid", "unknown": return true }; return false }
+func validResultStatus(value string) bool { switch value { case "completed", "insufficient_data", "insufficient_sample", "rejected", "failed": return true }; return false }
 
 func validNonBlank(value string) bool {
 	return value != "" && strings.TrimSpace(value) == value
