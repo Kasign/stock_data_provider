@@ -1204,3 +1204,14 @@
 - 本轮只更新 feat/design_doc 项目级契约登记和审计文档；没有修改 Data 责任分支、DTO、OpenAPI、Schema、Golden，没有执行测试或 CI。
 - 权威明细见登记簿第15节、差异矩阵第42节。本轮排除项与 GOV/Platform 结果见登记簿第14节。
 - 下一批：News 公开契约定义核定；不重新审查 Data 内部 Provider 规则或已经明确的公共授权算法。
+
+## 43. News 公开契约定义核定完成（2026-11-11）
+
+- 完成 NEWS-CTR-001～003 的公开定义核定，3 项均为 pending_evidence；无 pending_decision、blocked、freeze-ready。
+- 当前 News 跨模块边界是同进程只读 Application Port。doc/news/openapi.yaml 明确为未来 HTTP 草案，不注册、不属于当前活动接口；不新增 News HTTP CTR。
+- NEWS-CTR-001 已有请求/响应/Cursor Schema 与 Golden，但发现 business_time_from/to 的 nullable 文档/Schema 不一致、system_as_of UTC 约束未体现在 Schema、system_observed_at 权威来源不一致、relation_refs 缺少 DEC-021 的 not_provided/confirmed-empty 区分。
+- NEWS-CTR-002 的授权绑定结构、News 唯一决策 Owner、Provider/Source/Endpoint 策略交集、当前读取复核和 conditional 语义已有较完整定义；剩余缺口依赖 GOV-CTR-006 的公共时间/排序约束与适用映射。
+- NEWS-CTR-003 的 PIT 过滤、available_at 证据规则、固定排序、15分钟 Snapshot、HMAC Cursor、密钥轮换和稳定错误语义已有定义；但其排序使用 system_observed_at，与领域模型将观察时间归于 first_observed_at/observation.observed_at 的定义冲突。
+- 不检查 News Provider 抓取、采集 Worker、Repository、数据库并发或内部测试；本轮只核定公开契约语义。
+- 权威明细见登记簿第16节、差异矩阵第43节。无责任模块代码或文档被修改，无测试/CI 执行。
+- 下一批：Quant 公开契约定义核定；GOV-CTR-006 公共算法不重开，只核对 Quant 授权绑定映射。
