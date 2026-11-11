@@ -1459,3 +1459,11 @@ INT-CTR-001 是正式 43 CTR 之一，不是内部 Outbox/Inbox 实现验收。�
 - 公共规则明确 RFC3339Nano UTC、日期/交易日、occurred_at/published_at/available_at/system_observed_at/system_as_of/valid_time/fetched_at/normalized_at/created_at/deadline_at 的语义边界；Run 创建时固定 system_as_of 并向下游/重试传播；严格 PIT 同时校验 system_observed_at 与 available_at 不晚于 cutoff。
 - Provider 时间来源映射、领域时间字段 required/nullable、时区/精度证据和具体查询适用规则仍由各领域 CTR 验收，不阻断公共规则本身冻结。
 - GOV-CTR-002 转为 freeze-ready；不代表各领域时间字段映射和 Schema 约束已完成。
+
+
+## 59. GOV-CTR-003 公共标识符与幂等规则冻结评估（2026-11-11）
+
+- DEC-PLAT-002-036 已将 ID/Request/Correlation/Event/Idempotency 的公共语义收敛为 GOV-CTR-003 1.0.0 唯一权威文本。
+- 公共规则明确 request_id、originating_request_id、correlation_id、event_id、idempotency_key、trace_id/span_id 的身份职责和不可替代关系；规定稳定事件重放、命令 key+fingerprint 的一致/冲突行为以及 ambiguous outcome 不盲目重试。
+- X-Request-ID Header/Context 传播、Run/Worker 字段映射、各命令 fingerprint 字段、Notification Inbox/Publish 唯一键及执行测试仍由 PLAT-CTR-002、FLOW/NTF/QNT/RSC 对应 CTR 验收，不阻断公共规则本身冻结。
+- GOV-CTR-003 转为 freeze-ready；不代表各消费者的字段映射/运行时传播已完成。

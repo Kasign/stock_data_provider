@@ -1367,3 +1367,10 @@
 - 建立 GOV-CTR-002 1.0.0 唯一权威文本，明确公共时间字段语义、UTC 表示、交易日、Run cutoff 传播和严格 PIT 双边界。
 - 各领域 Provider 时间映射、字段精度/nullable、交易日历版本和具体 Schema 约束仍在对应 CTR 跟踪。
 - GOV-CTR-002 状态调整为 freeze-ready；当前总统计为 3 freeze-ready、38 pending-evidence、0 pending-decision、2 not_applicable、0 frozen。
+
+
+## 59. GOV-CTR-003 公共标识符与幂等规则版本化（2026-11-11）
+
+- 建立 GOV-CTR-003 1.0.0 唯一权威文本，区分领域 ID、request_id、originating_request_id、correlation_id、event_id、idempotency_key 和 trace 元数据。
+- 明确通用作用域、稳定性、幂等 key/fingerprint 一致与冲突行为；具体字段映射和运行时传播留在对应 CTR。
+- GOV-CTR-003 状态调整为 freeze-ready；当前总统计为 4 freeze-ready、37 pending-evidence、0 pending-decision、2 not_applicable、0 frozen。
