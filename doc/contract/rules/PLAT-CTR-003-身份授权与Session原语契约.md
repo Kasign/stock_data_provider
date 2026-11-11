@@ -15,7 +15,7 @@
 | AuthMethod | Principal.Kind | Subject | Scopes | 凭证与用途 |
 |---|---|---|---|---|
 | anonymous | anonymous | anonymous | 空 | 显式公开的少数入口 |
-| owner_bearer | owner | owner | 仅 `platform:admin` | 可信运维调用，使用独立 `PLATFORM_ADMIN_TOKEN` |
+| owner_bearer | owner | owner | 仅 `platform:admin` | 可信运维调用，由 Server 从受控部署 Secret 注入 |
 | owner_session | owner | owner | 空 | WebUI 单一 Owner 登录态，通过 HttpOnly Cookie |
 | service_bearer | service | 稳定 Service Name | 一个或多个固定 Service Scope | 服务间调用，每个调用方独立 Secret |
 
