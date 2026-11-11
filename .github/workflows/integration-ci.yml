@@ -132,7 +132,7 @@ jobs:
           report() {
             local name="$1"
             local result="$2"
-            printf '%-48s %s\\n' "$name" "$result"
+            printf '%-48s %s\n' "$name" "$result"
             if [[ "$result" != "success" ]]; then
               failed=1
             fi
