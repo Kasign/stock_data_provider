@@ -86,3 +86,32 @@ func TestResultDTOJSONMatchesQNTCTR004Schemas(t *testing.T) {
 		})
 	}
 }
+
+
+func TestRiskDecisionSchemaRejectsEmptyReasonsAndAllowsEmptyInputRefs(t *testing.T) {
+	schema := compileQuantSchemaFile(t, "QNT-CTR-004-risk-decision-1.0.0.schema.json")
+	instance := []byte(`{
+		"decision_id":"risk-decision-schema-001",
+		"status":"unknown",
+		"rule_set_version":"1.0.0",
+		"evaluated_at":"2026-11-09T01:00:00Z",
+		"system_as_of":"2026-11-09T00:59:00Z",
+		"reasons":[{"code":"INPUT_QUALITY","severity":"block","status":"unknown","safe_message":"输入质量未知","evidence_refs":[]}],
+		"input_refs":[]
+	}`)
+	if err := validateJSONSchemaInstance(schema, instance); err != nil {
+		t.Fatalf("Schema rejected empty input_refs with a non-empty reasons array: %v", err)
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal(instance, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	decoded["reasons"] = []any{}
+	emptyReasons, err := json.Marshal(decoded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := validateJSONSchemaInstance(schema, emptyReasons); err == nil {
+		t.Fatal("Schema accepted RiskDecision with empty reasons")
+	}
+}

@@ -54,7 +54,7 @@ type Decision struct {
 	InputRefs      []string       `json:"input_refs"`
 }
 
-// Validate 不推断 status 与 reasons 的业务组合，避免 DTO 层暗中实现风控规则。
+// Validate 校验 DTO 结构、Reason 唯一性、时间先后和 status 聚合结果，防止绕过 NewDecision 构造入口。
 func (d Decision) Validate() error {
 	if !nonBlank(d.DecisionID) || !nonBlank(d.RuleSetVersion) ||
 		!validDecisionStatus(d.Status) ||

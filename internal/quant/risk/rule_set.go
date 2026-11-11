@@ -61,7 +61,7 @@ func canonicalIdentity(value string) bool {
 }
 
 // BuildDecisionForRuleSet 按固定规则清单构造 RiskDecision。
-// 缺失的必需规则自动补为 block + unknown；未知规则、重复结论、严重级别不匹配均拒绝。
+// 缺失的必需规则按声明 severity 补为 unknown；必需 block 门禁因此表现为 block + unknown。未知规则、重复结论、严重级别不匹配均拒绝。
 // 返回的 Reasons 按规则集声明顺序排列，保证同一输入产生稳定输出顺序。
 func BuildDecisionForRuleSet(set RuleSet, input DecisionInput) (Decision, error) {
 	if err := set.Validate(); err != nil {
