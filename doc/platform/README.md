@@ -4,7 +4,7 @@
 - 所属分支：feat/platform-foundation
 - 当前基线：以分支最新 HEAD 为准
 - 当前目标：个人使用、单一所有者、少量服务与低并发
-- 当前阶段：已实现的 Platform 公共原语及其专项 CI 达到当前 L1 基线；PLAT-015～019 Web Owner 登录安全原语已实现并通过 Platform L1 验收。PLAT-004、PLAT-011 为条件/按需暂缓；PLAT-010 是领域队列边界治理而非通用队列交付；PLAT-012～014 的服务接入、生产运行和跨模块演练仍待完成。当前代码验收基线为 `61c0f15d3958b1d2b6190c1fa4d0fbd96403de81`，GitHub Actions [42612962271](https://github.com/Kasign/stock_data_provider/actions/runs/42612962271) success；分支最新 HEAD 可能包含后续纯文档提交，应以 GitHub 分支为准。PLAT-002 仍待项目级契约 Owner 与消费者评审冻结；Server A2 业务接入、生产 A3 验收、Argon2id 目标硬件参数基准及领域 Adapter 均不属于 Platform L1 完成范围。PLAT-008 流式能力仅代表 A1 通过，LLM A2 与生产 A3 仍待完成。
+- 当前阶段：已实现的 Platform 公共原语及其专项 CI 达到 Platform 自身 L1 基线；PLAT-015～019 Web Owner 登录安全原语已实现并通过 Platform L1 验收。项目级 PLAT-CTR-001～007 已在 `doc/contract/PLAT-002-项目级契约冻结登记簿.md` 登记为 `frozen`；这只表示项目级公开语义冻结，不代表消费者 A2 或生产 A3 验收完成。PLAT-004、PLAT-011 为条件/按需暂缓；PLAT-010 是领域队列边界治理而非通用队列交付；PLAT-012～014 的服务接入、生产运行和跨模块演练仍待完成。Platform 自身代码验收基线为 `61c0f15d3958b1d2b6190c1fa4d0fbd96403de81`，GitHub Actions [42612962271](https://github.com/Kasign/stock_data_provider/actions/runs/42612962271) success；该历史代码验收 SHA 不代表当前分支 HEAD。PLAT-008 流式能力的消费者 A2 与生产 A3 仍待完成。
 
 本目录是公共平台的唯一专项文档入口。平台的目标不是建设通用 SaaS 底座，而是为个人使用的股票研究系统提供足够可靠、性能可控、故障可定位的公共能力。
 

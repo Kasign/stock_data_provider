@@ -54,6 +54,14 @@ func TestResearchEventRejectsInvalidStructureAndTimeEvidence(t *testing.T) {
 		{"nil evidence refs", func(e *ResearchEvent) { e.EvidenceRefs = nil }, "non-null array"},
 		{"duplicate subject refs", func(e *ResearchEvent) { e.SubjectRefs = []string{"600000.SH", "600000.SH"} }, "duplicate"},
 		{"system cutoff before observation", func(e *ResearchEvent) { e.SystemAsOf = e.SystemObservedAt.Add(-time.Second) }, "must not be earlier"},
+		{"available time after system cutoff", func(e *ResearchEvent) {
+			available := eventTime(t, "2026-11-07T05:00:00Z")
+			e.AvailableAt = &available
+			e.SourceTimes = append(e.SourceTimes, EventSourceTime{
+				EvidenceRef: "evidence:news:0001", TimeType: TimeAvailableAt,
+				Value: available, AssertedBy: "news:source:exchange_notice",
+			})
+		}, "available_at must not be later than system_as_of"},
 		{"source time evidence missing", func(e *ResearchEvent) { e.SourceTimes[0].EvidenceRef = "evidence:missing" }, "must exist in evidence_refs"},
 		{"invalid time type", func(e *ResearchEvent) { e.SourceTimes[0].TimeType = "received_at" }, "time_type"},
 		{"source time non UTC", func(e *ResearchEvent) {

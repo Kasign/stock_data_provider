@@ -13,7 +13,8 @@
     "conditions": [
       "attribution_required"
     ],
-    "decision_fingerprint": "e670e585c55d89ea127f09a2745361c5c1d3dd39c350365c4db4f8c3dc2cd92b"
+    "decision_fingerprint": "95056f186fbc7f45a5cb2b10cd5ea81217d11f25a0e487a80800cd648e2a0db7",
+    "schema_version": "1.0.0"
   },
   "policy_snapshot": {
     "snapshot_ref": "policy-snapshot:news:evidence:v1",
@@ -33,7 +34,8 @@
         "policy_ref": "sec-edgar",
         "policy_version": "2.1.0"
       }
-    ]
+    ],
+    "schema_version": "1.0.0"
   },
   "fingerprint_input": {
     "policy_owner": "news",
@@ -64,8 +66,9 @@
         "policy_ref": "sec-edgar",
         "policy_version": "2.1.0"
       }
-    ]
+    ],
+    "schema_version": "1.0.0"
   },
-  "canonical_json": "{\"conditions\":[\"attribution_required\"],\"content_level\":\"snippet\",\"decided_at\":\"2026-11-06T05:01:00Z\",\"decision\":\"conditional\",\"evaluated_policy_versions\":[{\"policy_ref\":\"sec-edgar-filings\",\"policy_type\":\"endpoint\",\"policy_version\":\"1.0.0\"},{\"policy_ref\":\"tavily-output\",\"policy_type\":\"provider_output\",\"policy_version\":\"3.0.0\"},{\"policy_ref\":\"sec-edgar\",\"policy_type\":\"source\",\"policy_version\":\"2.1.0\"}],\"expires_at\":\"2026-11-06T06:00:00Z\",\"policy_owner\":\"news\",\"policy_version\":\"policy-snapshot:news:evidence:v1\",\"purpose_code\":\"research_analysis\",\"resource_ref\":\"news_evidence_version:news_001:v1\",\"subject_ref\":\"service:researchflow\"}",
-  "expected_sha256": "e670e585c55d89ea127f09a2745361c5c1d3dd39c350365c4db4f8c3dc2cd92b"
+  "canonical_json": "{\"conditions\":[\"attribution_required\"],\"content_level\":\"snippet\",\"decided_at\":\"2026-11-06T05:01:00Z\",\"decision\":\"conditional\",\"evaluated_policy_versions\":[{\"policy_ref\":\"sec-edgar-filings\",\"policy_type\":\"endpoint\",\"policy_version\":\"1.0.0\"},{\"policy_ref\":\"tavily-output\",\"policy_type\":\"provider_output\",\"policy_version\":\"3.0.0\"},{\"policy_ref\":\"sec-edgar\",\"policy_type\":\"source\",\"policy_version\":\"2.1.0\"}],\"expires_at\":\"2026-11-06T06:00:00Z\",\"policy_owner\":\"news\",\"policy_version\":\"policy-snapshot:news:evidence:v1\",\"purpose_code\":\"research_analysis\",\"resource_ref\":\"news_evidence_version:news_001:v1\",\"schema_version\":\"1.0.0\",\"subject_ref\":\"service:researchflow\"}",
+  "expected_sha256": "95056f186fbc7f45a5cb2b10cd5ea81217d11f25a0e487a80800cd648e2a0db7"
 }

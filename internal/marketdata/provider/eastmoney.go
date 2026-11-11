@@ -182,6 +182,83 @@ func (p *Eastmoney) WithHTTPDoers(doers map[string]HTTPDoer) *Eastmoney {
 	return p
 }
 
+// EastmoneyCapabilities 描述本次装配启用的 Eastmoney 业务能力，用于计算最小出站依赖集。
+type EastmoneyCapabilities struct {
+	Quote, DailyBars, StockBasic, StockSearch           bool
+	SectorRankings, IndexQuotes, MarketBreadth          bool
+	LimitPools, StockBoards, Announcements, DragonTiger bool
+	ChipDistribution, CapitalFlow, HotRankings          bool
+}
+
+// HTTPOriginsForCapabilities 只返回指定业务能力真实请求路径涉及的 endpoint origin。
+// MarketBreadth 会读取证券列表并查询涨跌停池；HotRankings 会调用指数行情补全报价；
+// SectorRankings 的五日榜会读取 K 线；ChipDistribution 通过日 K 计算。
+func (p *Eastmoney) HTTPOriginsForCapabilities(c EastmoneyCapabilities) ([]string, error) {
+	if p == nil {
+		return nil, errors.New("Eastmoney provider is nil")
+	}
+	endpoints := make([]string, 0, 8)
+	add := func(enabled bool, values ...string) {
+		if enabled {
+			endpoints = append(endpoints, values...)
+		}
+	}
+	add(c.Quote, p.quoteURL)
+	add(c.DailyBars || c.SectorRankings || c.ChipDistribution, p.klineURL)
+	add(c.StockBasic, p.stockBasicURL)
+	add(c.StockSearch || c.MarketBreadth, p.stockListURL)
+	add(c.SectorRankings, p.sectorRankingURL)
+	add(c.IndexQuotes || c.HotRankings, p.indexURL)
+	add(c.MarketBreadth, p.marketBreadthURL, p.limitPoolBaseURL)
+	add(c.LimitPools, p.limitPoolBaseURL)
+	add(c.StockBoards, p.stockBoardsURL)
+	add(c.Announcements, p.announcementURL)
+	add(c.DragonTiger, p.dragonTigerURL)
+	add(c.CapitalFlow, p.capitalFlowURL)
+	add(c.HotRankings, p.hotRankingURL, p.hotSurgeURL)
+	origins := make(map[string]struct{}, len(endpoints))
+	for _, endpoint := range endpoints {
+		origin, err := EastmoneyHTTPOrigin(endpoint)
+		if err != nil {
+			return nil, err
+		}
+		origins[origin] = struct{}{}
+	}
+	result := make([]string, 0, len(origins))
+	for origin := range origins {
+		result = append(result, origin)
+	}
+	sort.Strings(result)
+	return result, nil
+}
+
+// HTTPOrigins 返回当前 Eastmoney Provider 实际配置的全部 endpoint origin（去重并排序）。
+// 从构造完成后的 Provider 读取，确保包含 Provider 自身补齐的默认 URL。
+func (p *Eastmoney) HTTPOrigins() ([]string, error) {
+	if p == nil {
+		return nil, errors.New("Eastmoney provider is nil")
+	}
+	endpoints := []string{
+		p.quoteURL, p.klineURL, p.stockBasicURL, p.sectorRankingURL, p.stockListURL,
+		p.indexURL, p.marketBreadthURL, p.limitPoolBaseURL, p.stockBoardsURL,
+		p.capitalFlowURL, p.dragonTigerURL, p.announcementURL, p.hotRankingURL, p.hotSurgeURL,
+	}
+	origins := make(map[string]struct{}, len(endpoints))
+	for _, endpoint := range endpoints {
+		origin, err := EastmoneyHTTPOrigin(endpoint)
+		if err != nil {
+			return nil, err
+		}
+		origins[origin] = struct{}{}
+	}
+	result := make([]string, 0, len(origins))
+	for origin := range origins {
+		result = append(result, origin)
+	}
+	sort.Strings(result)
+	return result, nil
+}
+
 // EastmoneyHTTPOrigin 返回 Eastmoney endpoint 的规范 origin，供 Root 按 origin 创建 BoundDoer。
 func EastmoneyHTTPOrigin(rawURL string) (string, error) {
 	parsed, err := url.Parse(strings.TrimSpace(rawURL))
@@ -619,16 +696,13 @@ func parseEastmoneyQuoteNumber(ctx context.Context, data map[string]json.RawMess
 	value := ""
 	if exists {
 		trimmed := strings.TrimSpace(string(raw))
-		preview = trimmed
-		if len(preview) > 160 {
-			preview = preview[:160]
-		}
 		preview = strings.Map(func(r rune) rune {
 			if r < 0x20 || r == 0x7f {
 				return ' '
 			}
 			return r
-		}, preview)
+		}, trimmed)
+		preview = truncateDiagnosticPreview(preview, 160)
 		switch {
 		case len(trimmed) == 0:
 			actualType = "missing"
@@ -648,6 +722,14 @@ func parseEastmoneyQuoteNumber(ctx context.Context, data map[string]json.RawMess
 		if actualType == "string" {
 			if err := json.Unmarshal(raw, &value); err != nil {
 				actualType = "invalid"
+			} else {
+				preview = strings.Map(func(r rune) rune {
+					if r < 0x20 || r == 0x7f {
+						return ' '
+					}
+					return r
+				}, value)
+				preview = truncateDiagnosticPreview(preview, 160)
 			}
 		} else if actualType == "number" {
 			value = trimmed
@@ -1409,21 +1491,30 @@ func (p *Eastmoney) FetchDailyBars(ctx context.Context, rawSymbol, startDate, en
 		} `json:"data"`
 	}
 	if err := p.getJSON(ctx, p.klineURL, q, &payload); err != nil {
+		addEastmoneyDailyBarParseIssue(ctx, -1, symbol, "", "provider_response", "chart_response", "request_error", "successful Eastmoney daily-bars JSON response", "request_error", "", validation.SeverityError, "Eastmoney daily-bars request or response decoding failed")
 		return nil, err
 	}
 	if payload.RC != nil && *payload.RC != 0 {
+		addEastmoneyDailyBarParseIssue(ctx, -1, symbol, "", "provider_status", "rc", "provider_error", "rc=0", "number", strconv.Itoa(*payload.RC), validation.SeverityError, "Eastmoney daily-bars provider returned a non-zero result code")
 		return nil, fmt.Errorf("Eastmoney daily-bars provider error rc=%d", *payload.RC)
 	}
 	if payload.Data == nil {
+		addEastmoneyDailyBarParseIssue(ctx, -1, symbol, "", "daily_bars", "data", "empty_result", "non-null data object", "missing", "", validation.SeverityError, "Eastmoney daily-bars response has no data object")
 		return nil, errors.New("eastmoney returned empty daily bars")
 	}
 	reported := strings.TrimSpace(payload.Data.Code)
 	reportedSymbolMissing := reported == ""
-	if !reportedSymbolMissing {
+	if reportedSymbolMissing {
+		addEastmoneyDailyBarParseIssue(ctx, -1, symbol, "", "symbol", "code", "missing_requested_identity", "requested symbol echoed by provider", "missing", "", validation.SeverityWarning, "Eastmoney daily-bars response does not echo the requested security identity")
+	} else {
 		reportedSymbol, normalizeErr := normalize.NormalizeSymbol(reported)
 		if normalizeErr != nil || reportedSymbol != symbol {
+			addEastmoneyDailyBarParseIssue(ctx, -1, symbol, "", "symbol", "code", "symbol_mismatch", symbol, "string", reported, validation.SeverityError, "Eastmoney daily-bars response security identity does not match the request")
 			return nil, fmt.Errorf("Eastmoney daily-bars symbol mismatch: requested %s got %q", symbol, reported)
 		}
+	}
+	if len(payload.Data.KLines) == 0 {
+		addEastmoneyDailyBarParseIssue(ctx, -1, symbol, "", "daily_bars", "klines", "empty_result", "at least one daily-bar row", "array", "0 rows", validation.SeverityWarning, "Eastmoney daily-bars response contains no rows")
 	}
 	out := make([]model.DailyBar, 0, len(payload.Data.KLines))
 	rejectedRows := 0
@@ -2125,6 +2216,7 @@ func (p *Eastmoney) FetchSectorRankingsByMetric(ctx context.Context, rawCategory
 		QualityReasons: []string{"provider_snapshot_timestamp_not_exposed"},
 		Items:          make([]model.SectorRanking, 0, len(payload.Data.Diff)),
 	}
+	addEastmoneyDragonTigerIssue(ctx, nil, "provider_time", "sector ranking endpoint", "not_exposed_by_provider_contract", "verifiable provider snapshot timestamp", "unavailable", "", "东方财富行业/概念板块排名接口未暴露可验证的源端快照时间")
 	for _, raw := range payload.Data.Diff {
 		code := parseEastmoneyBoardString(raw, "f12")
 		name := parseEastmoneyBoardString(raw, "f14")
@@ -2342,9 +2434,10 @@ func (p *Eastmoney) FetchIndexQuotes(ctx context.Context) (*model.IndexQuoteSnap
 	if payload.Data.Total != nil && *payload.Data.Total > len(payload.Data.Diff) {
 		snapshot.QualityStatus = model.QualityDegraded
 		snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, "provider_total_exceeds_returned_rows")
+		addEastmoneyDragonTigerIssue(ctx, nil, "row_count", "data.total/diff", "provider_total_exceeds_returned_rows", "returned rows cover provider total", "incomplete", fmt.Sprintf("total=%d returned=%d", *payload.Data.Total, len(payload.Data.Diff)), "东方财富指数行情声明总数大于实际返回行数")
 	}
 	seen := make(map[string]bool, len(eastmoneyCoreIndexDefinitions))
-	for _, raw := range payload.Data.Diff {
+	for rowIndex, raw := range payload.Data.Diff {
 		market, code := parseEastmoneyBoardString(raw, "f13"), parseEastmoneyBoardString(raw, "f12")
 		definition, ok := definitions[market+"."+code]
 		if !ok {
@@ -2353,6 +2446,7 @@ func (p *Eastmoney) FetchIndexQuotes(ctx context.Context) (*model.IndexQuoteSnap
 		if seen[definition.Symbol] {
 			snapshot.QualityStatus = model.QualityDegraded
 			snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, "duplicate_index_row_dropped")
+			addEastmoneyDragonTigerIssue(ctx, &rowIndex, "symbol", "f13/f12", "duplicate_identity", "one row per allowlisted index", "duplicate", market+"."+code, "东方财富指数行情重复指数行被排除")
 			continue
 		}
 		name := parseEastmoneyBoardString(raw, "f14")
@@ -2360,12 +2454,14 @@ func (p *Eastmoney) FetchIndexQuotes(ctx context.Context) (*model.IndexQuoteSnap
 			name = definition.Name
 			snapshot.QualityStatus = model.QualityDegraded
 			snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, "provider_index_name_missing_used_allowlisted_name")
+			addEastmoneyDragonTigerIssue(ctx, &rowIndex, "name", "f14", "missing_value", "non-empty provider index name", "empty", "", "东方财富指数行情名称缺失，使用白名单名称回退")
 		}
 		price, changePercent := parseEastmoneyBoardNumber(raw, "f2"), parseEastmoneyBoardNumber(raw, "f3")
 		change := parseEastmoneyBoardNumber(raw, "f4")
 		if price == nil || *price <= 0 || changePercent == nil {
 			snapshot.QualityStatus = model.QualityDegraded
 			snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, "provider_index_required_price_field_missing_or_invalid")
+			addEastmoneyDragonTigerIssue(ctx, &rowIndex, "latest_price/change_percent", "f2/f3", "missing_or_invalid_value", "positive price and finite change percent", "invalid", fmt.Sprintf("price=%q change_percent=%q", parseEastmoneyBoardString(raw, "f2"), parseEastmoneyBoardString(raw, "f3")), "东方财富指数行情必需价格或涨跌幅字段缺失/非法")
 			continue
 		}
 		openPrice := parseEastmoneyBoardNumber(raw, "f17")
@@ -2382,6 +2478,7 @@ func (p *Eastmoney) FetchIndexQuotes(ctx context.Context) (*model.IndexQuoteSnap
 		if invalidOptionalPrice || (high != nil && low != nil && (*low > *high || *price < *low || *price > *high || (openPrice != nil && (*openPrice < *low || *openPrice > *high)))) {
 			snapshot.QualityStatus = model.QualityDegraded
 			snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, "provider_index_ohlc_invariant_failed")
+			addEastmoneyDragonTigerIssue(ctx, &rowIndex, "ohlc", "f15/f16/f17/f18/f2", "invariant_failed", "positive and internally consistent OHLC values", "inconsistent", fmt.Sprintf("open=%q high=%q low=%q prev_close=%q price=%q", parseEastmoneyBoardString(raw, "f17"), parseEastmoneyBoardString(raw, "f15"), parseEastmoneyBoardString(raw, "f16"), parseEastmoneyBoardString(raw, "f18"), parseEastmoneyBoardString(raw, "f2")), "东方财富指数行情 OHLC 区间约束校验失败")
 			continue
 		}
 		if prevClose != nil {
@@ -2390,6 +2487,7 @@ func (p *Eastmoney) FetchIndexQuotes(ctx context.Context) (*model.IndexQuoteSnap
 				math.Abs(*changePercent - priceChange / *prevClose * 100) > eastmoneyIndexChangePercentTolerancePP {
 				snapshot.QualityStatus = model.QualityDegraded
 				snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, "provider_index_change_fields_inconsistent")
+				addEastmoneyDragonTigerIssue(ctx, &rowIndex, "change/change_percent", "f4/f3/f2/f18", "inconsistent_value", "change fields agree with latest and previous close", "inconsistent", fmt.Sprintf("change=%q change_percent=%q price=%q prev_close=%q", parseEastmoneyBoardString(raw, "f4"), parseEastmoneyBoardString(raw, "f3"), parseEastmoneyBoardString(raw, "f2"), parseEastmoneyBoardString(raw, "f18")), "东方财富指数行情涨跌额/涨跌幅与价格关系不一致")
 				continue
 			}
 		}
@@ -2404,10 +2502,14 @@ func (p *Eastmoney) FetchIndexQuotes(ctx context.Context) (*model.IndexQuoteSnap
 			amountUnit = "unknown"
 			reasons = append(reasons, "provider_amount_missing")
 		}
+		if amount == nil {
+			addEastmoneyDragonTigerIssue(ctx, &rowIndex, "amount", "f6", "missing_or_invalid_value", "finite non-negative amount", "number", parseEastmoneyBoardString(raw, "f6"), "东方财富指数行情成交额缺失或非法")
+		}
 		quoteTime := validProviderSnapshotTime(parseEastmoneyTime(parseEastmoneyBoardString(raw, "f86")), time.Now().UTC())
 		quoteTimeSemantics := ""
 		if quoteTime == nil {
 			reasons = append(reasons, "provider_snapshot_timestamp_not_exposed")
+			addEastmoneyDragonTigerIssue(ctx, &rowIndex, "provider_time", "f86", "missing_or_invalid_value", "valid provider snapshot timestamp", "string", parseEastmoneyBoardString(raw, "f86"), "东方财富指数行情源端快照时间缺失或非法")
 		} else {
 			quoteTimeSemantics = "provider_snapshot_time"
 		}
@@ -2430,12 +2532,13 @@ func (p *Eastmoney) FetchIndexQuotes(ctx context.Context) (*model.IndexQuoteSnap
 		snapshot.Items = append(snapshot.Items, item)
 		seen[definition.Symbol] = true
 	}
-	if len(snapshot.Items) == 0 {
-		return nil, errors.New("Eastmoney index quote rows failed index-code and price validation")
-	}
-	if len(snapshot.Items) != len(eastmoneyCoreIndexDefinitions) {
+	if missing := len(eastmoneyCoreIndexDefinitions) - len(snapshot.Items); missing > 0 {
 		snapshot.QualityStatus = model.QualityDegraded
 		snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, "provider_core_index_rows_missing")
+		addEastmoneyDragonTigerIssue(ctx, nil, "index_coverage", "Eastmoney core index allowlist", "allowlisted_index_unavailable", "all allowlisted core indices", "incomplete", strconv.Itoa(missing), "东方财富指数行情未形成全部白名单核心指数的可用记录")
+	}
+	if len(snapshot.Items) == 0 {
+		return nil, errors.New("Eastmoney index quote rows failed index-code and price validation")
 	}
 	bySymbol := make(map[string]model.MarketIndexQuote, len(snapshot.Items))
 	for _, item := range snapshot.Items {

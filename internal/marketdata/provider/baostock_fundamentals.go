@@ -128,6 +128,19 @@ func (p *Baostock) FetchFundamentals(ctx context.Context, rawSymbol string, year
 		}
 		record, queryErr := client.QueryQuarterlyFinancialData(ctx, code, mapping.Category, year, quarter)
 		if queryErr != nil {
+			var structureErr *baostock.QuarterlyFinancialStructureError
+			if errors.As(queryErr, &structureErr) {
+				standardField := "provider." + structureErr.SourceField
+				if structureErr.SourceField == "code" {
+					standardField = "symbol"
+				}
+				if structureErr.SourceField == "statDate" {
+					standardField = "report_date"
+				}
+				addProviderFieldParseIssue(ctx, symbol, standardField, structureErr.SourceField,
+					structureErr.Code, structureErr.Expected, structureErr.ActualType,
+					structureErr.Preview, structureErr.RowIndex)
+			}
 			if ctx.Err() != nil {
 				return nil, ctx.Err()
 			}
@@ -144,28 +157,77 @@ func (p *Baostock) FetchFundamentals(ctx context.Context, rawSymbol string, year
 			continue
 		}
 		if record.ReportDate != fundamentalQuarterEnd(year, quarter) {
+			addProviderFieldParseIssue(ctx, symbol, "report_date", "statDate", "report_period_mismatch",
+				fundamentalQuarterEnd(year, quarter), record.FieldTypes["statDate"], record.FieldPreviews["statDate"], 0)
 			return nil, fmt.Errorf("BaoStock %s report date %s differs from requested quarter", mapping.Category, record.ReportDate)
 		}
 		section.ReportDate, section.PublicationDate = record.ReportDate, record.PublicationDate
 		degraded := false
 		publicationDate := strings.TrimSpace(record.PublicationDate)
-		if _, dateErr := time.Parse("2006-01-02", publicationDate); dateErr != nil {
+		publicationFieldIssue, publicationFieldInvalid := baostock.QuarterlyFinancialFieldIssue{}, false
+		for _, issue := range record.FieldIssues {
+			if issue.SourceField == "pubDate" {
+				publicationFieldIssue, publicationFieldInvalid = issue, true
+				break
+			}
+		}
+		if publicationFieldInvalid {
 			degraded = true
 			section.QualityReasons = append(section.QualityReasons, "publication_date_missing_or_invalid")
+			addProviderFieldParseIssue(ctx, symbol, "publication_date", "pubDate", publicationFieldIssue.Code,
+				"YYYY-MM-DD publication date", publicationFieldIssue.ActualType, publicationFieldIssue.Preview, publicationFieldIssue.RowIndex)
+		} else if _, dateErr := time.Parse("2006-01-02", publicationDate); dateErr != nil {
+			degraded = true
+			section.QualityReasons = append(section.QualityReasons, "publication_date_missing_or_invalid")
+			code := "invalid_date"
+			actualType := record.FieldTypes["pubDate"]
+			preview := record.FieldPreviews["pubDate"]
+			if publicationDate == "" {
+				code = "missing_value"
+			}
+			if actualType == "" {
+				actualType = "missing_or_empty"
+				preview = publicationDate
+			}
+			addProviderFieldParseIssue(ctx, symbol, "publication_date", "pubDate", code,
+				"YYYY-MM-DD publication date", actualType, preview, 0)
 		} else if publicationDate > chinaToday {
 			return nil, fmt.Errorf("BaoStock %s publication date %s is after China market date %s", mapping.Category, publicationDate, chinaToday)
 		}
+		invalidProviderFields := make(map[string]baostock.QuarterlyFinancialFieldIssue, len(record.FieldIssues))
+		for _, issue := range record.FieldIssues {
+			invalidProviderFields[issue.SourceField] = issue
+		}
 		for _, metric := range mapping.Fields {
-			raw := strings.TrimSpace(record.Fields[metric.SourceField])
-			if raw == "" {
+			if issue, invalid := invalidProviderFields[metric.SourceField]; invalid {
+				degraded = true
+				section.QualityReasons = appendFundamentalReason(section.QualityReasons, "one_or_more_metrics_invalid")
+				addProviderFieldParseIssue(ctx, symbol, metric.Key, metric.SourceField, issue.Code, "string or finite numeric cell", issue.ActualType, issue.Preview, issue.RowIndex)
+				continue
+			}
+			rawValue, present := record.Fields[metric.SourceField]
+			raw := strings.TrimSpace(rawValue)
+			if !present || raw == "" {
 				degraded = true
 				section.QualityReasons = appendFundamentalReason(section.QualityReasons, "one_or_more_metrics_missing")
+				actualType := record.FieldTypes[metric.SourceField]
+				preview := record.FieldPreviews[metric.SourceField]
+				if actualType == "" {
+					actualType, preview = "missing_or_empty", rawValue
+				}
+				addProviderFieldParseIssue(ctx, symbol, metric.Key, metric.SourceField, "missing_value", "finite numeric string", actualType, preview, 0)
 				continue
 			}
 			value, parseErr := strconv.ParseFloat(raw, 64)
 			if parseErr != nil || math.IsNaN(value) || math.IsInf(value, 0) {
 				degraded = true
 				section.QualityReasons = appendFundamentalReason(section.QualityReasons, "one_or_more_metrics_invalid")
+				actualType := record.FieldTypes[metric.SourceField]
+				preview := record.FieldPreviews[metric.SourceField]
+				if actualType == "" {
+					actualType, preview = "string", rawValue
+				}
+				addProviderFieldParseIssue(ctx, symbol, metric.Key, metric.SourceField, "invalid_number", "finite numeric string", actualType, preview, 0)
 				continue
 			}
 			section.Metrics = append(section.Metrics, model.FundamentalMetric{

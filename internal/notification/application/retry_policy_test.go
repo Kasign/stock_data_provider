@@ -190,6 +190,41 @@ func TestRetryPolicyRequiresExplicitRetryableRejectionAndCompleteHistory(t *test
 	}
 }
 
+func TestRetryPolicyRejectsAttemptOutsideDeliveryLifecycle(t *testing.T) {
+	policy := standardRetryPolicy()
+
+	delivery, attempts, now := retryPolicyFixture(t, 1, 3)
+	beforeCreated := attempts[0]
+	beforeCreated.StartedAt = delivery.CreatedAt.Add(-time.Second)
+	finished := beforeCreated.StartedAt.Add(time.Second)
+	beforeCreated.FinishedAt = &finished
+	beforeCreated.DurationMS = retryInt64Pointer(1000)
+	if err := beforeCreated.Validate(); err != nil {
+		t.Fatalf("invalid test fixture: %v", err)
+	}
+	attempts[0] = beforeCreated
+	if _, err := policy.ScheduleRetry(delivery, attempts, now, 0.5); !errors.Is(err, ErrRetryNotApplicable) {
+		t.Fatalf("attempt started before Delivery creation must be rejected: %v", err)
+	}
+
+	delivery, attempts, now = retryPolicyFixture(t, 1, 3)
+	atDeadline := attempts[0]
+	atDeadline.StartedAt = delivery.DeadlineAt
+	finished = atDeadline.StartedAt.Add(time.Second)
+	atDeadline.FinishedAt = &finished
+	atDeadline.DurationMS = retryInt64Pointer(1000)
+	leaseExpiry := atDeadline.StartedAt.Add(time.Minute)
+	atDeadline.LeaseExpiresAt = leaseExpiry
+	now = finished.Add(time.Second)
+	if err := atDeadline.Validate(); err != nil {
+		t.Fatalf("invalid test fixture: %v", err)
+	}
+	attempts[0] = atDeadline
+	if _, err := policy.ScheduleRetry(delivery, attempts, now, 0.5); !errors.Is(err, ErrRetryNotApplicable) {
+		t.Fatalf("attempt started at Delivery deadline must be rejected: %v", err)
+	}
+}
+
 func TestRetryPolicyValidatesDurationsAndRandomSample(t *testing.T) {
 	policy := standardRetryPolicy()
 	policy.BaseDelay = time.Nanosecond
@@ -217,4 +252,87 @@ func TestRetryPolicyComputesAttemptDeadline(t *testing.T) {
 	if !got.Equal(deliveryDeadline) {
 		t.Fatalf("attempt deadline must be capped by Delivery deadline: %s", got)
 	}
+}
+
+func TestRetryPolicySchedulesOnlyExternallyConfirmedUnknownAttempt(t *testing.T) {
+	delivery, attempts, now := retryPolicyFixture(t, 1, 3)
+	delivery.Status = domain.DeliveryUnknown
+	reasonCode := "delivery_unknown"
+	delivery.ReasonCode = &reasonCode
+	delivery.UpdatedAt = now.Add(-time.Second)
+	outcome := domain.DeliveryAttemptAmbiguous
+	attempts[0].Outcome = &outcome
+	attempts[0].Retryable = false
+	policy := standardRetryPolicy()
+
+	decision, err := policy.ScheduleRetryAfterUnknownLookup(
+		delivery, attempts, now, 0.5, "lookup-evidence-1", now.Add(-time.Millisecond),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !decision.Retry || decision.DeliveryID != delivery.DeliveryID ||
+		decision.DeliveryVersion != delivery.Version ||
+		decision.AttemptID != attempts[0].AttemptID ||
+		decision.FencingToken != attempts[0].FencingToken ||
+		decision.NextAttemptAt == nil {
+		t.Fatalf("unexpected evidence-bound retry decision: %+v", decision)
+	}
+	if *attempts[0].Outcome != domain.DeliveryAttemptAmbiguous || attempts[0].Retryable {
+		t.Fatal("retry evaluation must not rewrite immutable Attempt history")
+	}
+}
+
+func TestRetryPolicyRejectsUnverifiedUnknownRetryEvidence(t *testing.T) {
+	delivery, attempts, now := retryPolicyFixture(t, 1, 3)
+	delivery.Status = domain.DeliveryUnknown
+	delivery.UpdatedAt = now.Add(-time.Second)
+	outcome := domain.DeliveryAttemptAmbiguous
+	attempts[0].Outcome = &outcome
+	policy := standardRetryPolicy()
+
+	for _, tc := range []struct {
+		name        string
+		evidenceRef string
+		observedAt  time.Time
+	}{
+		{"missing evidence", "", now},
+		{"future evidence", "lookup-evidence-1", now.Add(time.Second)},
+		{"non UTC evidence", "lookup-evidence-1", now.In(time.FixedZone("offset", 3600))},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := policy.ScheduleRetryAfterUnknownLookup(
+				delivery, attempts, now, 0.5, tc.evidenceRef, tc.observedAt,
+			); !errors.Is(err, ErrRetryNotApplicable) {
+				t.Fatalf("invalid lookup evidence must fail closed: %v", err)
+			}
+		})
+	}
+	if _, err := policy.ScheduleRetry(delivery, attempts, now, 0.5); !errors.Is(err, ErrRetryNotApplicable) {
+		t.Fatalf("ordinary retry path must reject unknown ambiguous attempts: %v", err)
+	}
+}
+
+func TestRetryPolicyRejectsUnknownLookupEvidenceOlderThanAttempt(t *testing.T) {
+	delivery, attempts, now := retryPolicyFixture(t, 1, 3)
+	delivery.Status = domain.DeliveryUnknown
+	delivery.UpdatedAt = now.Add(-time.Second)
+	outcome := domain.DeliveryAttemptAmbiguous
+	attempts[0].Outcome = &outcome
+	attempts[0].Retryable = false
+	policy := standardRetryPolicy()
+	for _, observedAt := range []time.Time{
+		attempts[0].StartedAt.Add(-time.Nanosecond),
+		attempts[0].FinishedAt.Add(-time.Nanosecond),
+	} {
+		if _, err := policy.ScheduleRetryAfterUnknownLookup(
+			delivery, attempts, now, 0.5, "lookup-evidence-1", observedAt,
+		); !errors.Is(err, ErrRetryNotApplicable) {
+			t.Fatalf("stale lookup evidence must not authorize retry, observed_at=%s err=%v", observedAt, err)
+		}
+	}
+}
+
+func retryInt64Pointer(value int64) *int64 {
+	return &value
 }

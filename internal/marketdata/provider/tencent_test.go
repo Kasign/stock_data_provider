@@ -564,3 +564,63 @@ func TestTencentDailyBarsReportsInvalidTradeDate(t *testing.T) {
 		t.Fatalf("expected trade-date diagnostic with original row index, got %+v", reporter.Snapshot())
 	}
 }
+
+func TestTencentQuoteReportsDegradedOptionalFieldEvidence(t *testing.T) {
+	fields := make([]string, 60)
+	for i := range fields {
+		fields[i] = "0"
+	}
+	fields[1], fields[2] = "贵州茅台", ""
+	fields[3], fields[4], fields[5], fields[6] = "100", "99", "99", "1234"
+	fields[30], fields[31], fields[32], fields[33], fields[34] = "", "1", "1.01", "101", "98"
+	fields[35], fields[37], fields[38], fields[44] = "-", "-", "0", "0"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		fmt.Fprintf(w, "v_sh600519=%q;", strings.Join(fields, "~"))
+	}))
+	defer server.Close()
+	reporter := validation.NewReporter(20)
+	ctx := validation.WithReporter(context.Background(), reporter)
+	p := NewTencent(2 * time.Second)
+	p.quoteURL = server.URL + "/quote"
+	if _, err := p.FetchQuote(ctx, "600519.SH"); err == nil {
+		t.Fatal("unverifiable Tencent volume unit must reject the quote")
+	}
+	report := reporter.Snapshot()
+	checks := map[string]bool{"symbol": false, "amount": false, "volume": false, "quote_time": false}
+	for _, issue := range report.Issues {
+		if _, ok := checks[issue.Field]; ok && issue.Severity == validation.SeverityWarning {
+			checks[issue.Field] = true
+		}
+	}
+	for field, found := range checks {
+		if !found {
+			t.Errorf("missing degraded field evidence for %s: %+v", field, report.Issues)
+		}
+	}
+}
+
+func TestTencentDailyBarsReportsOutOfRequestedDateRange(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		fmt.Fprint(w, `{"data":{"sh600519":{"qfqday":[
+			["2026-10-22","10.0","10.2","10.3","9.9","100"],
+			["2026-10-21","10.0","10.2","10.3","9.9","100"]
+		]}}}`)
+	}))
+	defer server.Close()
+	p := NewTencent(2 * time.Second)
+	p.klineURL, p.noneKlineURL = server.URL, server.URL
+	reporter := validation.NewReporter(20)
+	ctx := validation.WithReporter(context.Background(), reporter)
+	bars, err := p.FetchDailyBars(ctx, "600519.SH", "2026-10-21", "2026-10-21", 8, model.AdjustmentForward)
+	if err != nil || len(bars) != 1 || bars[0].TradeDate != "2026-10-21" {
+		t.Fatalf("out-of-range row should be rejected while preserving requested row: bars=%+v err=%v", bars, err)
+	}
+	for _, issue := range reporter.Snapshot().Issues {
+		if issue.Stage == validation.StageParse && issue.Field == "trade_date" &&
+			issue.ProviderField == "kline_row[0]" && issue.Code == "date_out_of_requested_range" &&
+			issue.RowIndex != nil && *issue.RowIndex == 0 {
+			return
+		}
+	}
+	t.Fatalf("expected out-of-range date diagnostic at original row 0, got %+v", reporter.Snapshot().Issues)
+}

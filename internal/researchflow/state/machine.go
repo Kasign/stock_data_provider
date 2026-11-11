@@ -40,8 +40,14 @@ func transitionRun(run domain.Run, next domain.RunStatus, now time.Time) (domain
 	switch run.Status {
 	case domain.RunCreated:
 		allowed = next == domain.RunQueued || next == domain.RunCancelled
+		if run.TerminationReason == "deadline_exceeded" {
+			allowed = allowed || next == domain.RunFailed || next == domain.RunPartial
+		}
 	case domain.RunQueued:
 		allowed = next == domain.RunRunning || next == domain.RunCancelling || next == domain.RunCancelled
+		if run.TerminationReason == "deadline_exceeded" {
+			allowed = allowed || next == domain.RunFailed || next == domain.RunPartial
+		}
 	case domain.RunRunning:
 		allowed = next == domain.RunCancelling || next == domain.RunSucceeded || next == domain.RunPartial || next == domain.RunFailed
 	case domain.RunCancelling:
@@ -415,7 +421,9 @@ func AggregateRun(run domain.Run, stages []domain.Stage, attempts []domain.Attem
 			}
 		}
 	}
-	if run.Status != domain.RunRunning && run.Status != domain.RunCancelling {
+	deadlineBeforeStart := run.TerminationReason == "deadline_exceeded" &&
+		(run.Status == domain.RunCreated || run.Status == domain.RunQueued)
+	if run.Status != domain.RunRunning && run.Status != domain.RunCancelling && !deadlineBeforeStart {
 		return run, fmt.Errorf("%w: run cannot be aggregated from %s", ErrInvalidTransition, run.Status)
 	}
 	updated, err := transitionRun(run, finalStatus, now)
@@ -574,8 +582,12 @@ func uniqueSorted(values []string) []string {
 // FinalizeDeadline aggregates timed-out and completed stages after all in-flight attempts
 // have stopped or been fenced. The template propagation matrix determines partial vs failed.
 func FinalizeDeadline(run domain.Run, stages []domain.Stage, attempts []domain.Attempt, policies map[string]template.PropagationPolicy, hardRiskStageCodes map[string]bool, requiresHardRiskGate bool, now time.Time) (domain.Run, error) {
-	if run.Status != domain.RunCancelling || run.TerminationReason != "run_deadline_exceeded" {
-		return run, fmt.Errorf("%w: run is not cancelling due to deadline", ErrInvalidTransition)
+	// Storage deadline expiration keeps the Run running, fences all in-flight
+	// Attempts and marks unfinished Stages timed_out. This Application step
+	// derives failed/partial before Storage atomically commits summary and Outbox.
+	if run.TerminationReason != "deadline_exceeded" ||
+		(run.Status != domain.RunCreated && run.Status != domain.RunQueued && run.Status != domain.RunRunning) {
+		return run, fmt.Errorf("%w: run is not pending deadline finalization", ErrInvalidTransition)
 	}
 	return AggregateRun(run, stages, attempts, policies, hardRiskStageCodes, requiresHardRiskGate, now)
 }

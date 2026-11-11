@@ -419,11 +419,20 @@ func TestUpdateClaimEnforcesExpectedVersionAndDomainTransition(t *testing.T) {
 	}
 	terminal := revision
 	terminal.Status = string(researchclaim.StatusSupported)
-	if _, err := service.UpdateClaim(context.Background(), UpdateClaimCommand{ClaimID: "clm_existing", ExpectedVersion: 2, Revision: terminal}); err == nil {
+	terminalResult, err := service.UpdateClaim(context.Background(), UpdateClaimCommand{ClaimID: "clm_existing", ExpectedVersion: 2, Revision: terminal})
+	if err != nil {
+		t.Fatalf("testing Claim must be allowed to reach supported: %v", err)
+	}
+	if terminalResult.ClaimVersion != 3 || terminalResult.Status != string(researchclaim.StatusSupported) {
+		t.Fatalf("unexpected terminal Claim: %+v", terminalResult)
+	}
+	postTerminal := terminal
+	postTerminal.Status = string(researchclaim.StatusContradicted)
+	if _, err := service.UpdateClaim(context.Background(), UpdateClaimCommand{ClaimID: "clm_existing", ExpectedVersion: 3, Revision: postTerminal}); err == nil {
 		t.Fatal("terminal Claim must not transition to another status")
 	}
-	if repo.value.ClaimVersion != 2 {
-		t.Fatal("invalid terminal transition must not be persisted")
+	if repo.value.ClaimVersion != 3 || repo.value.Status != researchclaim.StatusSupported {
+		t.Fatal("invalid post-terminal transition must not be persisted")
 	}
 }
 
@@ -625,5 +634,20 @@ func TestGetEvidenceRejectsRepositoryIdentityMismatch(t *testing.T) {
 		EvidenceID: "ev_requested", CallerRef: "researchflow:worker",
 	}); err == nil {
 		t.Fatal("Evidence repository identity mismatch must be rejected")
+	}
+}
+
+func TestCloneStringsAlwaysReturnsNonNilIndependentSlice(t *testing.T) {
+	for _, input := range [][]string{nil, {}} {
+		got := cloneStrings(input)
+		if got == nil {
+			t.Fatal("cloneStrings must normalize nil and empty input to a non-nil empty slice")
+		}
+	}
+	input := []string{"evidence:1"}
+	got := cloneStrings(input)
+	got[0] = "changed"
+	if input[0] != "evidence:1" {
+		t.Fatal("cloneStrings must return an independent copy")
 	}
 }

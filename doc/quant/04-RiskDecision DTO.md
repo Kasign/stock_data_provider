@@ -11,6 +11,7 @@
 - Reason：code、severity、status、safe_message、evidence_refs。
 - severity：block、warn、info；Reason status：triggered、not_triggered、unknown。
 - 时间采用规范 UTC RFC3339Nano；Schema 与 Go DTO 同步拒绝非 UTC、冗余小数零和超过纳秒精度的时间表示；引用按不透明非空字符串处理。
+- Go 字符串可承载任意字节，但 JSON 字符串必须是有效 UTF-8；DTO 对所有非空字符串字段（身份、消息和引用）拒绝非法 UTF-8 与首尾空白，避免序列化替换字节或同一逻辑身份出现多种文本表示。
 - required 数组必须显式存在；契约未规定最少元素数，因此允许空数组。
 - Schema 禁止未声明字段，不接受未冻结的 override 扩展。
 
@@ -20,4 +21,4 @@ DTO Validate 只校验结构、枚举、必需字段和时间格式，不推导 
 
 ## 验收
 
-Go 强类型 DTO、单元测试、Draft 2020-12 Schema 编译测试和 Golden 校验已加入源码。尚未取得当前 SHA CI 证据；本阶段不代表 QNT-010 规则引擎、真实数据风险评估或运行时授权验收完成。
+Go 强类型 DTO、单元测试、Draft 2020-12 Schema 编译测试和 Golden 校验已加入源码，并由 Quant 独立 Workflow `42618742241` 在代码 SHA `cda200a1e4a3673bb4a34cd4b914d32f0a3be823` 上执行通过（覆盖 Quant 全包测试、gofmt、Manifest 30 秒随机 Fuzz、Race 和 Vet）。当前分支 HEAD `c104fb71ebcf9360b3306a8a89ca40b26131fbc6` 在该代码验收 SHA 之后只有文档提交，没有 Quant 代码变化；该证据不是对当前文档 HEAD 直接触发的 CI。本阶段不代表 QNT-010 具体领域规则、真实数据风险评估、可信授权或跨模块集成验收完成。

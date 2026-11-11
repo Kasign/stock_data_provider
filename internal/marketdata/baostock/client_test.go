@@ -6,6 +6,7 @@ import (
 	"compress/zlib"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"hash/crc32"
 	"net"
@@ -873,5 +874,138 @@ func TestQueryQuarterlyFinancialDataRejectsInvalidInputsBeforeNetworkIO(t *testi
 	}
 	if _, err := c.QueryQuarterlyFinancialData(context.Background(), "600519.SH", "profitability", 2026, 2); err == nil {
 		t.Fatal("wire-format symbol should be required")
+	}
+}
+
+func TestParseQuarterlyFinancialPageRetainsMetricCellTypeIssue(t *testing.T) {
+	spec := quarterlyFinancialSpecs["profitability"]
+	row := make([]any, len(spec.fields))
+	for index, field := range spec.fields {
+		switch field {
+		case "code":
+			row[index] = "sh.600519"
+		case "pubDate":
+			row[index] = "2026-08-29"
+		case "statDate":
+			row[index] = "2026-06-30"
+		default:
+			row[index] = "1.25"
+		}
+		if field == "roeAvg" {
+			row[index] = map[string]any{"unexpected": "object"}
+		}
+	}
+	raw, err := json.Marshal(map[string]any{"record": [][]any{row}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := strings.Join([]string{
+		"0", "success", spec.method, "anonymous", "1", strconv.Itoa(quarterlyFinancialPageSize),
+		string(raw), "sh.600519", "2026", "2", strings.Join(spec.fields, ","),
+	}, messageSplit)
+	record, err := parseQuarterlyFinancialPage(body, spec, "anonymous", "sh.600519", 2026, 2)
+	if err != nil {
+		t.Fatalf("invalid metric cell should be retained as a field issue: %v", err)
+	}
+	if record == nil || len(record.FieldIssues) != 1 {
+		t.Fatalf("expected one field issue, got %+v", record)
+	}
+	issue := record.FieldIssues[0]
+	if issue.SourceField != "roeAvg" || issue.Code != "invalid_field" || issue.ActualType != "object" || issue.RowIndex != 0 {
+		t.Fatalf("unexpected financial field issue: %+v", issue)
+	}
+	if record.Fields["roeAvg"] != "" {
+		t.Fatalf("invalid object cell must not be converted into a metric: %+v", record.Fields)
+	}
+}
+
+func TestParseKLinePageRetainsUnsupportedCellTypeIssue(t *testing.T) {
+	fields := strings.Split(dailyKLineFields, ",")
+	row := make([]any, len(fields))
+	for index, field := range fields {
+		switch field {
+		case "date":
+			row[index] = "2026-10-21"
+		case "code":
+			row[index] = "sh.600519"
+		default:
+			row[index] = "10.0"
+		}
+		if field == "close" {
+			row[index] = map[string]any{"unexpected": "object"}
+		}
+	}
+	raw, err := json.Marshal(map[string]any{"record": [][]any{row}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := strings.Join([]string{
+		"0", "success", "query_history_k_data_plus", "anonymous", "1",
+		strconv.Itoa(defaultPageSize), string(raw), "sh.600519", strings.Join(fields, ","),
+	}, messageSplit)
+	page, err := parseKLinePage(body)
+	if err != nil {
+		t.Fatalf("unsupported metric cell should be retained for adapter diagnostics: %v", err)
+	}
+	if len(page.rows) != 1 || len(page.rows[0].FieldIssues) != 1 {
+		t.Fatalf("expected one row with one field issue, got %+v", page.rows)
+	}
+	issue := page.rows[0].FieldIssues[0]
+	if issue.SourceField != "close" || issue.Code != "invalid_field" || issue.ActualType != "object" {
+		t.Fatalf("unexpected daily K-line field issue: %+v", issue)
+	}
+	if page.rows[0].Close != "" {
+		t.Fatalf("invalid object cell must not be converted into a close price: %+v", page.rows[0])
+	}
+}
+
+func TestParseQuarterlyFinancialPageReportsRequiredStructureFieldEvidence(t *testing.T) {
+	spec := quarterlyFinancialSpecs["profitability"]
+	cases := []struct {
+		name, field, code, expected string
+		mutate                      func([]any)
+	}{
+		{name: "code non-scalar", field: "code", code: "invalid_field", expected: "string scalar", mutate: func(row []any) { row[0] = map[string]any{"unexpected": "object"} }},
+		{name: "statDate non-scalar", field: "statDate", code: "invalid_field", expected: "string scalar", mutate: func(row []any) { row[2] = []any{"2026-06-30"} }},
+		{name: "code null", field: "code", code: "missing_value", expected: "non-empty string scalar", mutate: func(row []any) { row[0] = nil }},
+		{name: "statDate empty", field: "statDate", code: "missing_value", expected: "non-empty string scalar", mutate: func(row []any) { row[2] = "" }},
+		{name: "security mismatch", field: "code", code: "symbol_mismatch", expected: "sh.600519", mutate: func(row []any) { row[0] = "sz.000001" }},
+		{name: "report period mismatch", field: "statDate", code: "report_period_mismatch", expected: "2026-06-30", mutate: func(row []any) { row[2] = "2026-03-31" }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			row := make([]any, len(spec.fields))
+			for index, field := range spec.fields {
+				switch field {
+				case "code":
+					row[index] = "sh.600519"
+				case "pubDate":
+					row[index] = "2026-08-29"
+				case "statDate":
+					row[index] = "2026-06-30"
+				default:
+					row[index] = "1.25"
+				}
+			}
+			tc.mutate(row)
+			raw, err := json.Marshal(map[string]any{"record": [][]any{row}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			body := strings.Join([]string{
+				"0", "success", spec.method, "anonymous", "1", strconv.Itoa(quarterlyFinancialPageSize),
+				string(raw), "sh.600519", "2026", "2", strings.Join(spec.fields, ","),
+			}, messageSplit)
+			_, err = parseQuarterlyFinancialPage(body, spec, "anonymous", "sh.600519", 2026, 2)
+			var structureErr *QuarterlyFinancialStructureError
+			if !errors.As(err, &structureErr) {
+				t.Fatalf("expected typed structure error, got %v", err)
+			}
+			if structureErr.SourceField != tc.field || structureErr.Code != tc.code ||
+				structureErr.Expected != tc.expected || structureErr.ActualType == "" ||
+				structureErr.Preview == "" || structureErr.RowIndex != 0 {
+				t.Fatalf("unexpected structure evidence: %+v", structureErr)
+			}
+		})
 	}
 }

@@ -152,8 +152,10 @@ func (c Context) Validate() error {
 		c.QualitySummary.MissingOptionalCount != missingOptional {
 		return fmt.Errorf("quality_summary missing counts do not match omitted sections")
 	}
-	if missingRequired > 0 && c.QualitySummary.Status == QualityValid {
-		return fmt.Errorf("Context with omitted required sections cannot have valid quality status")
+	if c.QualitySummary.Status == QualityValid &&
+		(missingRequired > 0 || missingOptional > 0 ||
+			c.QualitySummary.ConflictCount > 0 || c.QualitySummary.StaleCount > 0) {
+		return fmt.Errorf("Context with non-zero quality issue counts cannot have valid quality status")
 	}
 	return nil
 }

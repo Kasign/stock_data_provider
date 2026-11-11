@@ -1,7 +1,10 @@
 package service
 
 import (
+	"context"
 	"errors"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -25,7 +28,7 @@ func hasDailyBarContextReason(reasons []string, expected string) bool {
 }
 
 func TestAssessDailyBarTradingContextDistinguishesMissingSuspendedAndPreListing(t *testing.T) {
-	calendar := &model.TradingCalendarSnapshot{Items: []model.TradingCalendarDay{
+	calendar := &model.TradingCalendarSnapshot{QualityStatus: model.QualityValid, Items: []model.TradingCalendarDay{
 		{Date: "2026-10-20", IsTradingDay: true},
 		{Date: "2026-10-21", IsTradingDay: true},
 		{Date: "2026-10-22", IsTradingDay: false},
@@ -76,7 +79,7 @@ func TestAssessDailyBarTradingContextAcceptsNonTradingDayAndReturnedBar(t *testi
 }
 
 func TestAssessDailyBarTradingContextFlagsBarOnNonTradingDate(t *testing.T) {
-	calendar := &model.TradingCalendarSnapshot{Items: []model.TradingCalendarDay{
+	calendar := &model.TradingCalendarSnapshot{QualityStatus: model.QualityValid, Items: []model.TradingCalendarDay{
 		{Date: "2026-10-20", IsTradingDay: false},
 	}}
 	result := assessDailyBarTradingContext(calendar, []model.DailyBar{{TradeDate: "2026-10-20"}}, nil, nil)
@@ -87,7 +90,7 @@ func TestAssessDailyBarTradingContextFlagsBarOnNonTradingDate(t *testing.T) {
 }
 
 func TestAssessDailyBarTradingContextDoesNotExcludeMissingBarDuringIntradaySuspension(t *testing.T) {
-	calendar := &model.TradingCalendarSnapshot{Items: []model.TradingCalendarDay{
+	calendar := &model.TradingCalendarSnapshot{QualityStatus: model.QualityValid, Items: []model.TradingCalendarDay{
 		{Date: "2026-10-20", IsTradingDay: true},
 	}}
 	statuses := map[string]*model.SecurityTradingStatusSnapshot{
@@ -122,6 +125,23 @@ func TestAssessDailyBarTradingContextDoesNotUseConflictingCalendarToConfirmMissi
 		!hasDailyBarContextReason(result.Reasons, "daily_bar_context_calendar_sources_disagree") ||
 		hasDailyBarContextReason(result.Reasons, "daily_bar_missing_on_confirmed_trading_day:2026-10-20") {
 		t.Fatalf("conflicting calendar must not confirm provider missing data: %+v", result)
+	}
+}
+
+func TestAssessDailyBarTradingContextDegradedCalendarDoesNotConfirmMissingBars(t *testing.T) {
+	calendar := &model.TradingCalendarSnapshot{
+		QualityStatus:  model.QualityDegraded,
+		QualityReasons: []string{"provider_returns_trading_days_only_non_trading_dates_inferred"},
+		Items:          []model.TradingCalendarDay{{Date: "2026-10-20", IsTradingDay: true}},
+	}
+	statuses := map[string]*model.SecurityTradingStatusSnapshot{
+		"2026-10-20": dailyBarContextStatus("2026-10-20", "2026-10-01", true, model.SuspensionStatusNoEvent),
+	}
+	result := assessDailyBarTradingContext(calendar, nil, statuses, nil)
+	if result.QualityStatus != model.QualityDegraded ||
+		!hasDailyBarContextReason(result.Reasons, "daily_bar_context_calendar_degraded") ||
+		hasDailyBarContextReason(result.Reasons, "daily_bar_missing_on_confirmed_trading_day:2026-10-20") {
+		t.Fatalf("degraded calendar must not confirm a missing bar: %+v", result)
 	}
 }
 
@@ -166,5 +186,72 @@ func TestAssessDailyBarTradingContextHistoricalCalendarInferenceStillDegrades(t 
 	if result.QualityStatus != model.QualityDegraded ||
 		!hasDailyBarContextReason(result.Reasons, "daily_bar_context_calendar_degraded") {
 		t.Fatalf("inferred historical calendar dates must remain degraded: %+v", result)
+	}
+}
+
+func TestDailyBarContextCacheDeduplicatesConcurrentSecurityStatusReads(t *testing.T) {
+	ctx := withDailyBarContextCache(context.Background(), 2)
+	var calls atomic.Int32
+	loader := func(context.Context) (*model.SecurityTradingStatusSnapshot, error) {
+		calls.Add(1)
+		time.Sleep(10 * time.Millisecond)
+		return dailyBarContextStatus("2026-10-20", "2026-10-01", true, model.SuspensionStatusNoEvent), nil
+	}
+	const workers = 8
+	var wg sync.WaitGroup
+	wg.Add(workers)
+	errs := make(chan error, workers)
+	for i := 0; i < workers; i++ {
+		go func() {
+			defer wg.Done()
+			status, err := loadDailyBarContextSecurityStatus(ctx, "600519.SH", "2026-10-20", loader)
+			if err == nil && (status == nil || status.TradeDate != "2026-10-20") {
+				err = errors.New("cached security status is invalid")
+			}
+			errs <- err
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := calls.Load(); got != 1 {
+		t.Fatalf("same symbol/date should be loaded once across concurrent jobs, got %d calls", got)
+	}
+}
+
+func TestDailyBarContextCacheStopsAtRunBudget(t *testing.T) {
+	ctx := withDailyBarContextCache(context.Background(), 1)
+	loader := func(_ context.Context) (*model.SecurityTradingStatusSnapshot, error) {
+		return dailyBarContextStatus("2026-10-20", "2026-10-01", true, model.SuspensionStatusNoEvent), nil
+	}
+	if _, err := loadDailyBarContextSecurityStatus(ctx, "600519.SH", "2026-10-20", loader); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := loadDailyBarContextSecurityStatus(ctx, "600519.SH", "2026-10-21", loader); !errors.Is(err, errDailyBarContextStatusBudgetExceeded) {
+		t.Fatalf("lookup beyond the per-run budget must be explicit, got %v", err)
+	}
+}
+
+func TestAssessDailyBarTradingContextMarksBudgetExhaustionNotComparable(t *testing.T) {
+	calendar := &model.TradingCalendarSnapshot{
+		QualityStatus: model.QualityValid,
+		Items: []model.TradingCalendarDay{
+			{Date: "2026-10-20", IsTradingDay: true},
+			{Date: "2026-10-21", IsTradingDay: true},
+		},
+	}
+	statuses := map[string]*model.SecurityTradingStatusSnapshot{
+		"2026-10-20": dailyBarContextStatus("2026-10-20", "2026-10-01", true, model.SuspensionStatusNoEvent),
+	}
+	statusErrors := map[string]error{"2026-10-21": errDailyBarContextStatusBudgetExceeded}
+	result := assessDailyBarTradingContext(calendar, nil, statuses, statusErrors)
+	if result.QualityStatus != model.QualityDegraded ||
+		!hasDailyBarContextReason(result.Reasons, "daily_bar_context_security_status_budget_exceeded:2026-10-21") ||
+		hasDailyBarContextReason(result.Reasons, "daily_bar_context_security_status_unavailable:2026-10-21") {
+		t.Fatalf("budget exhaustion must remain explicit and not-comparable: %+v", result)
 	}
 }

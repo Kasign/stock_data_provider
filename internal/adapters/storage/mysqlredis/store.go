@@ -18,9 +18,10 @@ import (
 )
 
 type Store struct {
-	DB     *sql.DB
-	Redis  *redis.Client
-	Config Config
+	DB            *sql.DB
+	Redis         *redis.Client
+	Config        Config
+	ownsResources bool
 }
 
 func Open(ctx context.Context, cfg Config) (*Store, error) {
@@ -52,21 +53,40 @@ func Open(ctx context.Context, cfg Config) (*Store, error) {
 		rdb.Close()
 		return nil, fmt.Errorf("ping Redis: %w", err)
 	}
-	s := &Store{DB: db, Redis: rdb, Config: cfg}
-	if cfg.DBAutoMigrate {
-		if err := s.Migrate(ctx); err != nil {
-			s.Close()
-			return nil, err
-		}
-	}
-	if err := s.CheckSchema(ctx); err != nil {
+	s := &Store{DB: db, Redis: rdb, Config: cfg, ownsResources: true}
+	if err := s.initializeSchema(ctx); err != nil {
 		s.Close()
 		return nil, err
 	}
 	return s, nil
 }
 
+// NewWithResources adapts Server-owned connections to the legacy Analysis Store.
+// The caller retains ownership of db and redisClient and must close them separately.
+func NewWithResources(ctx context.Context, cfg Config, db *sql.DB, redisClient *redis.Client) (*Store, error) {
+	if ctx == nil || db == nil || redisClient == nil {
+		return nil, errors.New("analysis storage resources are required")
+	}
+	s := &Store{DB: db, Redis: redisClient, Config: cfg}
+	if err := s.initializeSchema(ctx); err != nil {
+		return nil, err
+	}
+	return s, nil
+}
+
+func (s *Store) initializeSchema(ctx context.Context) error {
+	if s.Config.DBAutoMigrate {
+		if err := s.Migrate(ctx); err != nil {
+			return err
+		}
+	}
+	return s.CheckSchema(ctx)
+}
+
 func (s *Store) Close() error {
+	if s == nil || !s.ownsResources {
+		return nil
+	}
 	var errs []error
 	if s.DB != nil {
 		if e := s.DB.Close(); e != nil {

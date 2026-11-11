@@ -320,3 +320,60 @@ func TestNeteaseFetchQuoteParseFailureKeepsReporterWhenProviderReturnsError(t *t
 		t.Fatalf("expected reporter issue despite provider error, got %+v", reporter.Snapshot().Issues)
 	}
 }
+
+func TestNeteaseFetchQuoteReportsDegradedOptionalFields(t *testing.T) {
+	payload := `_ntes_quote_callback({"0600036":{"price":42.35,"percent":0.0127,"updown":0.53,"open":41.70,"high":42.38,"low":41.57,"yestclose":41.82,"volume":56829700}});`
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(payload)) }))
+	defer server.Close()
+	reporter := validation.NewReporter(20)
+	ctx := validation.WithReporter(context.Background(), reporter)
+	p := NewNeteaseConfigured(2*time.Second, server.URL, "http://127.0.0.1:1/history")
+	q, err := p.FetchQuote(ctx, "600036.SH")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if q.QualityStatus != model.QualityDegraded {
+		t.Fatalf("missing optional fields must degrade quote: %+v", q)
+	}
+	found := map[string]bool{"symbol": false, "amount": false, "quote_time": false, "name": false}
+	for _, issue := range reporter.Snapshot().Issues {
+		if _, ok := found[issue.Field]; ok && issue.Severity == validation.SeverityWarning {
+			found[issue.Field] = true
+		}
+	}
+	for field, ok := range found {
+		if !ok {
+			t.Errorf("missing Reporter evidence for %s: %+v", field, reporter.Snapshot().Issues)
+		}
+	}
+}
+
+func TestNeteaseDailyBarsReportsOutOfRequestedDateRange(t *testing.T) {
+	payload := "日期,股票代码,名称,收盘价,最高价,最低价,开盘价,成交量,成交金额\n" +
+		"2026-10-22,'600036,招商银行,42.28,42.60,42.00,42.60,74818026,3157692775.06\n" +
+		"2026-10-21,'600036,招商银行,42.28,42.60,42.00,42.60,74818026,3157692775.06\n"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+		_, _ = w.Write([]byte(payload))
+	}))
+	defer server.Close()
+
+	reporter := validation.NewReporter(20)
+	ctx := validation.WithReporter(context.Background(), reporter)
+	provider := NewNetease(2*time.Second, server.URL)
+	bars, err := provider.FetchDailyBars(ctx, "600036.SH", "2026-10-21", "2026-10-21", 8, model.AdjustmentNone)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(bars) != 1 || bars[0].TradeDate != "2026-10-21" {
+		t.Fatalf("out-of-range CSV row must be dropped while preserving the requested row: %+v", bars)
+	}
+	for _, issue := range reporter.Snapshot().Issues {
+		if issue.Field == "trade_date" && issue.ProviderField == "日期" &&
+			issue.Code == "date_out_of_requested_range" && issue.Stage == validation.StageParse &&
+			issue.RowIndex != nil && *issue.RowIndex == 0 {
+			return
+		}
+	}
+	t.Fatalf("expected out-of-range date diagnostic at CSV row 0, got %+v", reporter.Snapshot().Issues)
+}

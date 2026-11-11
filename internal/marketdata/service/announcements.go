@@ -234,6 +234,10 @@ func (s *DataService) StockAnnouncements(ctx context.Context, rawSymbol, rawStar
 			failures = append(failures, p.Name()+": "+fetchErr.Error())
 			continue
 		}
+		if snapshot != nil && strings.TrimSpace(snapshot.Source) != "" && snapshot.Source != p.Name() {
+			failures = append(failures, p.Name()+": announcement source does not match Provider.Name()")
+			continue
+		}
 		if err := validateStockAnnouncementSnapshot(symbol, startDate, endDate, page, pageSize, snapshot); err != nil {
 			failures = append(failures, p.Name()+": "+err.Error())
 			continue

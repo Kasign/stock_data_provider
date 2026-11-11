@@ -107,7 +107,7 @@ func TestProviderProbeHTTPMariaDBEndToEnd(t *testing.T) {
 	}
 
 	postHandler := newHTTPProbeMariaDBHandler(store, left, right)
-	body := `{"scope":"all","capabilities":["daily_bars"],"checks":["cross_provider"],"symbols":["600036.SH"],"daily_bar_start_date":"2026-10-29","daily_bar_end_date":"2026-10-29","daily_bar_adjustments":["backward_adjusted"],"timeout_seconds":5}`
+	body := `{"scope":"all","capabilities":["daily_bars"],"checks":["cross_provider","storage"],"symbols":["600036.SH"],"daily_bar_start_date":"2026-10-29","daily_bar_end_date":"2026-10-29","daily_bar_adjustments":["backward_adjusted"],"timeout_seconds":5}`
 	postRequest := httptest.NewRequest(http.MethodPost, "/api/v1/data-sources/probe", bytes.NewBufferString(body))
 	postRequest.Header.Set("X-API-Key", "probe-mariadb-test-key")
 	postResponse := httptest.NewRecorder()
@@ -143,6 +143,23 @@ func TestProviderProbeHTTPMariaDBEndToEnd(t *testing.T) {
 		t.Fatalf("cross-provider adjustment result is missing: %+v", run.CheckResults)
 	}
 	assertAdjustmentEvidence(created)
+	assertStorageEvidence := func(run model.ProviderProbeRun) {
+		t.Helper()
+		count := 0
+		for _, result := range run.CheckResults {
+			if result.Check != "storage" || result.Capability != "provider_probe_history" {
+				continue
+			}
+			count++
+			if result.Status != "passed" || result.ErrorCode != "" {
+				t.Fatalf("storage check must be persisted as passed in the single write: %+v", result)
+			}
+		}
+		if count != 1 {
+			t.Fatalf("expected exactly one persisted storage check, got %d: %+v", count, run.CheckResults)
+		}
+	}
+	assertStorageEvidence(created)
 
 	if err := store.Close(); err != nil {
 		t.Fatalf("close MariaDB after POST probe: %v", err)
@@ -175,6 +192,7 @@ func TestProviderProbeHTTPMariaDBEndToEnd(t *testing.T) {
 			t.Fatalf("history response lost persisted flag: %+v", persisted)
 		}
 		assertAdjustmentEvidence(persisted)
+		assertStorageEvidence(persisted)
 		return
 	}
 	t.Fatalf("GET history did not return POST run %q: %+v", created.RunID, history.Items)

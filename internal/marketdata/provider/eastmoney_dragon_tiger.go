@@ -12,6 +12,7 @@ import (
 
 	"example.com/stock-analysis-flow/internal/marketdata/model"
 	"example.com/stock-analysis-flow/internal/marketdata/normalize"
+	"example.com/stock-analysis-flow/internal/marketdata/validation"
 )
 
 const defaultEastmoneyDragonTigerURL = "https://datacenter-web.eastmoney.com/api/data/v1/get"
@@ -88,19 +89,23 @@ func (p *Eastmoney) FetchDragonTiger(ctx context.Context, tradeDate string, page
 		return nil, fmt.Errorf("Eastmoney dragon-tiger response is missing result/count (code=%d message=%q success=%v)", payload.Code, payload.Message, payload.Success)
 	}
 	if payload.Result.Count == nil {
+		addEastmoneyDragonTigerIssue(ctx, nil, "row_count", "result.count", "missing_value", "non-negative provider row count", "missing", "", "东方财富龙虎榜响应缺少分页总记录数")
 		return nil, errors.New("Eastmoney dragon-tiger result is missing count")
 	}
 	total := *payload.Result.Count
 	if total < 0 || total < len(payload.Result.Data) {
+		addEastmoneyDragonTigerIssue(ctx, nil, "row_count", "result.count/data", "count_inconsistent", "count >= returned row count and non-negative", "inconsistent", fmt.Sprintf("count=%d rows=%d", total, len(payload.Result.Data)), "东方财富龙虎榜分页总数与返回行数不一致")
 		return nil, fmt.Errorf("Eastmoney dragon-tiger count %d is inconsistent with %d rows", total, len(payload.Result.Data))
 	}
 	pages := 0
 	reasons := []string{"provider_snapshot_timestamp_not_exposed"}
+	addEastmoneyDragonTigerIssue(ctx, nil, "provider_time", "provider contract", "not_exposed_by_provider_contract", "verifiable provider snapshot timestamp", "unavailable", "", "东方财富龙虎榜接口仅提供交易日，不提供可验证的源端快照时间")
 	if payload.Result.Pages != nil && *payload.Result.Pages >= 0 {
 		pages = *payload.Result.Pages
 	}
 	if total == 0 {
 		if len(payload.Result.Data) != 0 {
+			addEastmoneyDragonTigerIssue(ctx, nil, "row_count", "result.count/data", "count_inconsistent", "zero count requires empty data", "inconsistent", fmt.Sprintf("count=0 rows=%d", len(payload.Result.Data)), "东方财富龙虎榜声明零条记录但返回了数据")
 			return nil, errors.New("Eastmoney dragon-tiger reported zero total with non-empty rows")
 		}
 		return &model.DragonTigerSnapshot{
@@ -112,16 +117,20 @@ func (p *Eastmoney) FetchDragonTiger(ctx context.Context, tradeDate string, page
 		}, nil
 	}
 	if len(payload.Result.Data) == 0 {
+		addEastmoneyDragonTigerIssue(ctx, nil, "pagination", "result.data", "page_rows_missing", "non-empty rows for requested page", "missing", fmt.Sprintf("count=%d page=%d", total, page), "东方财富龙虎榜请求页无返回行但总数非零")
 		return nil, fmt.Errorf("Eastmoney dragon-tiger count is %d but page %d returned no rows", total, page)
 	}
 	expectedPages := 1 + (total-1)/pageSize
 	if pages <= 0 {
 		pages = expectedPages
 		reasons = append(reasons, "provider_pages_field_missing_or_invalid")
+		addEastmoneyDragonTigerIssue(ctx, nil, "pages", "pages", "missing_or_invalid_value", "non-negative page count", "missing_or_invalid", "", "东方财富龙虎榜分页总数缺失或非法，已按 count/page_size 计算")
 	} else if pages != expectedPages {
+		addEastmoneyDragonTigerIssue(ctx, nil, "pages", "result.pages", "count_inconsistent", "pages equals ceil(count/page_size)", "number", strconv.Itoa(pages), "东方财富龙虎榜分页总页数与 count/page_size 推导值不一致")
 		return nil, fmt.Errorf("Eastmoney dragon-tiger provider pages=%d disagree with count=%d and page_size=%d (expected %d pages)", pages, total, pageSize, expectedPages)
 	}
 	if page > pages {
+		addEastmoneyDragonTigerIssue(ctx, nil, "page", "pageNumber/result.pages", "page_out_of_range", "requested page <= provider page count", "number", fmt.Sprintf("page=%d pages=%d", page, pages), "东方财富龙虎榜请求页超出源端总页数")
 		return nil, fmt.Errorf("requested dragon-tiger page %d exceeds provider page count %d", page, pages)
 	}
 	expectedRows := total - (page-1)*pageSize
@@ -129,6 +138,7 @@ func (p *Eastmoney) FetchDragonTiger(ctx context.Context, tradeDate string, page
 		expectedRows = pageSize
 	}
 	if expectedRows <= 0 || len(payload.Result.Data) != expectedRows {
+		addEastmoneyDragonTigerIssue(ctx, nil, "pagination", "result.data", "row_count_mismatch", "current page returns exact rows implied by count/page_size", "number", fmt.Sprintf("page=%d returned=%d expected=%d", page, len(payload.Result.Data), expectedRows), "东方财富龙虎榜当前页返回行数与分页总数不一致")
 		return nil, fmt.Errorf("Eastmoney dragon-tiger page %d returned %d raw rows, expected %d from count=%d and page_size=%d", page, len(payload.Result.Data), expectedRows, total, pageSize)
 	}
 	fetchedAt := time.Now().UTC()
@@ -144,10 +154,12 @@ func (p *Eastmoney) FetchDragonTiger(ctx context.Context, tradeDate string, page
 		securityType := strings.TrimSpace(parseEastmoneyBoardString(raw, "SECURITY_TYPE_CODE"))
 		date := normalizeDragonTigerDate(parseEastmoneyBoardString(raw, "TRADE_DATE"))
 		if date != tradeDate {
+			addEastmoneyDragonTigerIssue(ctx, &index, "trade_date", "TRADE_DATE", "date_mismatch", "row date equals requested trade date", "string", date, "东方财富龙虎榜行交易日与请求日期不一致")
 			return nil, fmt.Errorf("Eastmoney dragon-tiger row %d trade date %q does not match requested date %q", index, date, tradeDate)
 		}
 		code := strings.TrimSpace(parseEastmoneyBoardString(raw, "SECURITY_CODE"))
 		if securityType == "060" {
+			addEastmoneyDragonTigerIssue(ctx, &index, "security_type", "SECURITY_TYPE_CODE", "non_a_share_row_excluded", "A-share security type", "string", securityType, "东方财富龙虎榜可转债记录已排除")
 			// 东方财富龙虎榜返回中包含可转债（例如代码 113711），不能把它混入 A 股股票分析。
 			// 保留供应商原始总数与分页，并单独统计排除行数。
 			snapshot.ExcludedNonAShareCount++
@@ -155,6 +167,7 @@ func (p *Eastmoney) FetchDragonTiger(ctx context.Context, tradeDate string, page
 			continue
 		}
 		if securityType == "058001002" || strings.HasPrefix(code, "900") || strings.HasPrefix(code, "200") {
+			addEastmoneyDragonTigerIssue(ctx, &index, "security_type", "SECURITY_TYPE_CODE", "non_a_share_row_excluded", "A-share security type", "string", securityType, "东方财富龙虎榜 B 股记录已排除")
 			// B 股同样不属于当前 A 股数据契约；仅排除并计数，不让单条 B 股污染整页 A 股数据。
 			snapshot.ExcludedNonAShareCount++
 			snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, "provider_b_share_security_rows_excluded")
@@ -164,9 +177,15 @@ func (p *Eastmoney) FetchDragonTiger(ctx context.Context, tradeDate string, page
 		name := strings.TrimSpace(parseEastmoneyBoardString(raw, "SECURITY_NAME_ABBR"))
 		securityCode := strings.TrimSpace(parseEastmoneyBoardString(raw, "SECUCODE"))
 		if symbolErr != nil {
+			addEastmoneyDragonTigerIssue(ctx, &index, "symbol", "SECURITY_CODE/SECUCODE", "invalid_identity", "supported A-share security identity", "string", code+"/"+securityCode, "东方财富龙虎榜证券身份无效")
 			return nil, fmt.Errorf("Eastmoney dragon-tiger row %d has unsupported security identity: code=%q secucode=%q security_type=%q: %w", index, code, securityCode, securityType, symbolErr)
 		}
 		if code == "" || normalizedCode == "" || date != tradeDate || name == "" {
+			field, providerField, codeName, expected, preview := "identity", "SECURITY_CODE/SECUCODE/SECURITY_NAME_ABBR", "missing_or_invalid_value", "valid code, normalized symbol and non-empty name", code+"/"+securityCode+"/"+name
+			if name == "" {
+				field, providerField, codeName, expected, preview = "name", "SECURITY_NAME_ABBR", "missing_value", "non-empty security name", ""
+			}
+			addEastmoneyDragonTigerIssue(ctx, &index, field, providerField, codeName, expected, "string", preview, "东方财富龙虎榜行身份或名称字段不符合契约")
 			return nil, fmt.Errorf("Eastmoney dragon-tiger row %d violates identity/date contract: code=%q normalized_code=%q name=%q trade_date=%q requested_date=%q security_type=%q", index, code, normalizedCode, name, date, tradeDate, securityType)
 		}
 		itemReasons := []string{"provider_snapshot_timestamp_not_exposed"}
@@ -176,24 +195,37 @@ func (p *Eastmoney) FetchDragonTiger(ctx context.Context, tradeDate string, page
 		deal := parseEastmoneyBoardNumber(raw, "BILLBOARD_DEAL_AMT")
 		if netBuy == nil || buy == nil || sell == nil {
 			itemReasons = append(itemReasons, "provider_billboard_amount_fields_incomplete")
+			if netBuy == nil {
+				addEastmoneyDragonTigerIssue(ctx, &index, "net_buy_amount", "BILLBOARD_NET_AMT", "missing_or_invalid_value", "finite net-buy amount", "missing_or_invalid", "", "龙虎榜净买入金额缺失或非法")
+			}
+			if buy == nil {
+				addEastmoneyDragonTigerIssue(ctx, &index, "buy_amount", "BILLBOARD_BUY_AMT", "missing_or_invalid_value", "finite non-negative buy amount", "missing_or_invalid", "", "龙虎榜买入金额缺失或非法")
+			}
+			if sell == nil {
+				addEastmoneyDragonTigerIssue(ctx, &index, "sell_amount", "BILLBOARD_SELL_AMT", "missing_or_invalid_value", "finite non-negative sell amount", "missing_or_invalid", "", "龙虎榜卖出金额缺失或非法")
+			}
 		}
 		reason := strings.TrimSpace(parseEastmoneyBoardString(raw, "EXPLAIN"))
 		explanation := strings.TrimSpace(parseEastmoneyBoardString(raw, "EXPLANATION"))
 		if reason == "" && explanation == "" {
 			itemReasons = append(itemReasons, "provider_list_reason_missing")
+			addEastmoneyDragonTigerIssue(ctx, &index, "reason", "EXPLAIN/EXPLANATION", "missing_value", "list reason or explanation", "missing", "", "龙虎榜上榜原因和说明均缺失")
 		}
 		for _, amount := range []*float64{buy, sell, deal} {
 			if amount != nil && (!finiteNumber(*amount) || *amount < 0) {
+				addEastmoneyDragonTigerIssue(ctx, &index, "amount", "BILLBOARD_BUY_AMT/BILLBOARD_SELL_AMT/BILLBOARD_DEAL_AMT", "invalid_non_negative_amount", "finite non-negative amount", "number", fmt.Sprintf("%g", *amount), "东方财富龙虎榜金额为负或非有限数")
 				return nil, fmt.Errorf("Eastmoney dragon-tiger row %d has an invalid non-negative amount", index)
 			}
 		}
 		if netBuy != nil && !finiteNumber(*netBuy) {
+			addEastmoneyDragonTigerIssue(ctx, &index, "net_buy_amount", "BILLBOARD_NET_AMT", "invalid_number", "finite net-buy amount", "number", fmt.Sprintf("%g", *netBuy), "东方财富龙虎榜净买入金额非有限数")
 			return nil, fmt.Errorf("Eastmoney dragon-tiger row %d has an invalid net-buy amount", index)
 		}
 		changePercent := parseEastmoneyBoardNumber(raw, "CHANGE_RATE")
 		closePrice := parseEastmoneyBoardNumber(raw, "CLOSE_PRICE")
 		dealRatio := parseEastmoneyBoardNumber(raw, "DEAL_AMOUNT_RATIO")
 		if closePrice != nil && (!finiteNumber(*closePrice) || *closePrice <= 0) {
+			addEastmoneyDragonTigerIssue(ctx, &index, "close_price", "CLOSE_PRICE", "invalid_value", "positive finite close price", "number", fmt.Sprintf("%g", *closePrice), "东方财富龙虎榜收盘价非法")
 			return nil, fmt.Errorf("Eastmoney dragon-tiger row %d has an invalid close price", index)
 		}
 		item := model.DragonTigerItem{
@@ -268,4 +300,16 @@ func eastmoneyDragonTigerSymbol(raw map[string]json.RawMessage, rawCode string) 
 		return "", "", fmt.Errorf("Eastmoney security identity mismatch for %q", code)
 	}
 	return symbol, code, nil
+}
+
+func addEastmoneyDragonTigerIssue(ctx context.Context, rowIndex *int, field, providerField, code, expected, actualType, preview, message string) {
+	report := validation.NewReport(16)
+	issue := validation.FieldIssue{
+		Stage: validation.StageValidate, Field: field, ProviderField: providerField,
+		Code: code, Expected: expected, ActualType: actualType,
+		ActualPreview: quoteIssuePreview(preview), Severity: validation.SeverityWarning,
+		Message: message, RowIndex: rowIndex,
+	}
+	report.Add(issue)
+	validation.AddContextReport(ctx, report)
 }

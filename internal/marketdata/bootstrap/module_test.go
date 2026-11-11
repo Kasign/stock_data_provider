@@ -111,3 +111,34 @@ func TestNewRejectsUnknownProvider(t *testing.T) {
 		t.Fatal("New() must reject an unknown configured provider")
 	}
 }
+
+type typedNilCache struct{}
+
+func (*typedNilCache) Get(context.Context, string) ([]byte, bool, error)        { return nil, false, nil }
+func (*typedNilCache) Set(context.Context, string, []byte, time.Duration) error { return nil }
+func (*typedNilCache) Ping(context.Context) error                               { return nil }
+
+func TestNewRejectsTypedNilCacheWhenRedisIsConfigured(t *testing.T) {
+	cfg := testConfig()
+	cfg.RedisAddr = "redis:6379"
+	var cacheDependency *typedNilCache
+	deps := testDependencies()
+	deps.Cache = cacheDependency
+	if _, err := New(cfg, deps); err == nil {
+		t.Fatal("New() must reject a typed nil Cache when Redis is configured")
+	}
+}
+
+func TestNewReplacesTypedNilCacheWhenRedisIsNotConfigured(t *testing.T) {
+	cfg := testConfig()
+	var cacheDependency *typedNilCache
+	deps := testDependencies()
+	deps.Cache = cacheDependency
+	module, err := New(cfg, deps)
+	if err != nil {
+		t.Fatalf("New() should replace a typed nil optional Cache with disabled cache: %v", err)
+	}
+	if err := module.Close(context.Background()); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+}

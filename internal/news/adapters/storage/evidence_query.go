@@ -132,8 +132,11 @@ func evidencePlaceholders(count int) string {
 
 const evidencePITSelect = `SELECT
 	o.observation_id, o.idempotency_key, o.source_id, o.provider_code,
-	o.query_dimension, o.source_policy_version_id, o.endpoint_policy_version_id,
-	o.policy_evaluated_at, o.candidate_json, o.observed_at, o.identity_status,
+	o.query_dimension, o.endpoint_id, o.source_policy_version_id, o.endpoint_policy_version_id,
+	o.provider_output_policy_ref, o.provider_output_policy_version_id,
+	o.policy_evaluated_at,
+	CASE WHEN o.payload_purged_at IS NULL THEN o.candidate_json ELSE JSON_OBJECT() END,
+	o.observed_at, o.retention_until, o.payload_purged_at, o.identity_status,
 	o.news_id, o.reason_code,
 	v.version_id, v.news_id, v.version_no, v.fingerprint, v.title,
 	v.publisher_name, v.publisher_domain, v.author, v.published_at,
@@ -146,16 +149,17 @@ func scanEvidencePITRecord(row rowScanner) (app.EvidencePITRecord, error) {
 	var result app.EvidencePITRecord
 	var observation domain.Observation
 	var version domain.NewsItemVersion
-	var policyAt, publishedAt sql.NullTime
+	var policyAt, retentionUntil, payloadPurgedAt, publishedAt sql.NullTime
 	var newsID sql.NullString
 	var candidateJSON, contentJSON []byte
 	var identityStatus string
 
 	err := row.Scan(
 		&observation.ID, &observation.IdempotencyKey, &observation.SourceID,
-		&observation.ProviderCode, &observation.QueryDimension,
+		&observation.ProviderCode, &observation.QueryDimension, &observation.EndpointID,
 		&observation.SourcePolicyVersionID, &observation.EndpointPolicyVersionID,
-		&policyAt, &candidateJSON, &observation.ObservedAt, &identityStatus,
+		&observation.ProviderOutputPolicyRef, &observation.ProviderOutputPolicyVersionID,
+		&policyAt, &candidateJSON, &observation.ObservedAt, &retentionUntil, &payloadPurgedAt, &identityStatus,
 		&newsID, &observation.ReasonCode,
 		&version.ID, &version.NewsID, &version.VersionNo, &version.Fingerprint,
 		&version.Title, &version.PublisherName, &version.PublisherDomain, &version.Author,
@@ -182,6 +186,14 @@ func scanEvidencePITRecord(row rowScanner) (app.EvidencePITRecord, error) {
 	}
 	observation.IdentityStatus = domain.ObservationStatus(identityStatus)
 	observation.ObservedAt = observation.ObservedAt.UTC()
+	if retentionUntil.Valid {
+		observation.RetentionUntil = retentionUntil.Time.UTC()
+	}
+	if payloadPurgedAt.Valid {
+		value := payloadPurgedAt.Time.UTC()
+		observation.PayloadPurgedAt = &value
+		observation.Candidate = domain.Candidate{}
+	}
 	version.ObservedAt = version.ObservedAt.UTC()
 	result.SourceRef = observation.SourceID
 	result.ProviderRef = observation.ProviderCode

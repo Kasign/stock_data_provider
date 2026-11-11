@@ -51,12 +51,20 @@ var (
 
 // DeliveryRepository 负责 Delivery 当前快照与追加式状态事件。
 // ClaimDue 原子领取一条到期的 queued/retry_wait 记录，迁移为 sending，追加状态事件并分配新 fencing token。
+// 若 ClaimDue 返回 ErrPersistenceOutcomeUnknown，claim/claimed 不构成可执行授权：调用方必须丢弃返回值，禁止执行渠道、再次盲目 Claim 或推断事务已回滚；该接口没有可证明本次调用 fencing token 的读后对账能力，交由租约到期恢复收敛。
+// 只有 err=nil 且 claimed=true 返回的 DeliveryClaim 才能交给 DeliveryExecutionService。
 // UpdateWithLease 必须在同一原子操作中 CAS 更新快照并追加事件；过期租约、旧 token、旧版本或不匹配事件均须拒绝；next.Status 不再是 sending 时必须同时释放租约。
 type DeliveryRepository interface {
 	Create(ctx context.Context, delivery domain.DeliveryRecord) error
 	Get(ctx context.Context, deliveryID string) (delivery domain.DeliveryRecord, found bool, err error)
 	ClaimDue(ctx context.Context, workerID string, now, leaseExpiresAt time.Time) (claim DeliveryClaim, claimed bool, err error)
 	UpdateWithLease(ctx context.Context, expectedVersion, fencingToken int64, next domain.DeliveryRecord, event domain.DeliveryStateEvent, now time.Time) error
+}
+
+// DeliveryStateEventReader reads the complete immutable state history in ascending version order.
+// The returned slice must not silently truncate; an incomplete result is rejected by the history validator.
+type DeliveryStateEventReader interface {
+	ListStateEvents(ctx context.Context, deliveryID string) ([]domain.DeliveryStateEvent, error)
 }
 
 // ExpiredDeliveryLeaseScanner 以有界批次返回数据库确认已过期的 sending 租约。
@@ -79,6 +87,7 @@ type DeliveryLeaseRecoveryRepository interface {
 type DeliveryAttemptRepository interface {
 	StartWithLease(ctx context.Context, expectedDeliveryVersion, fencingToken int64, attempt domain.DeliveryAttempt) error
 	CompleteWithLease(ctx context.Context, expectedDeliveryVersion, fencingToken int64, completed domain.DeliveryAttempt) error
+	// ListByDelivery 返回完整历史，并按 AttemptNo 升序排列；缺失或重复序号由调用方 fail closed。
 	ListByDelivery(ctx context.Context, deliveryID string) (attempts []domain.DeliveryAttempt, err error)
 }
 

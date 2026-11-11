@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"unicode/utf8"
 )
 
 type ValueType string
@@ -82,13 +83,14 @@ var (
 	codePattern       = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
 	versionPattern    = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?$`)
 	jsonNumberPattern = regexp.MustCompile(`^(-?)(0|[1-9][0-9]*)(?:\.([0-9]+))?(?:[eE]([+-]?[0-9]+))?$`)
+	decimalPattern    = regexp.MustCompile(`^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$`)
 )
 
 func (e Entry) Validate() error {
-	if !codePattern.MatchString(e.Code) || !versionPattern.MatchString(e.SchemaVersion) || strings.TrimSpace(e.AlgorithmVersion) == "" {
+	if !codePattern.MatchString(e.Code) || !versionPattern.MatchString(e.SchemaVersion) || !validText(e.AlgorithmVersion) {
 		return invalid("code, schema_version or algorithm_version")
 	}
-	if strings.TrimSpace(e.Unit) == "" {
+	if !validText(e.Unit) {
 		return invalid("unit")
 	}
 	switch e.ValueType {
@@ -96,7 +98,7 @@ func (e Entry) Validate() error {
 	default:
 		return invalid("value_type")
 	}
-	if e.Precision.MaxIntegerDigits < 1 || e.Precision.MaxFractionDigits < 0 || strings.TrimSpace(e.Precision.RoundingMode) == "" {
+	if e.Precision.MaxIntegerDigits < 1 || e.Precision.MaxFractionDigits < 0 || !validText(e.Precision.RoundingMode) {
 		return invalid("precision")
 	}
 	if e.ValueType == ValueTypeInteger && e.Precision.MaxFractionDigits != 0 {
@@ -113,7 +115,7 @@ func (e Entry) Validate() error {
 		return invalid("input_requirements")
 	}
 	for i, requirement := range e.InputRequirements {
-		if len(requirement.Fields) == 0 || strings.TrimSpace(requirement.Interval) == "" || strings.TrimSpace(requirement.Adjustment) == "" || len(requirement.Quality) == 0 {
+		if len(requirement.Fields) == 0 || !validText(requirement.Interval) || !validText(requirement.Adjustment) || len(requirement.Quality) == 0 {
 			return invalid(fmt.Sprintf("input_requirements[%d]", i))
 		}
 		if hasBlankOrDuplicate(requirement.Fields) || hasBlankOrDuplicate(requirement.Quality) {
@@ -129,7 +131,7 @@ func (e Entry) Validate() error {
 	if math.IsNaN(e.QualityPolicy.MinimumCoverage) || math.IsInf(e.QualityPolicy.MinimumCoverage, 0) || e.QualityPolicy.MinimumCoverage < 0 || e.QualityPolicy.MinimumCoverage > 1 {
 		return invalid("quality_policy.minimum_coverage")
 	}
-	if strings.TrimSpace(e.QualityPolicy.MissingHandling) == "" || len(e.QualityPolicy.QualityStates) == 0 || len(e.QualityPolicy.UnavailableConditions) == 0 {
+	if !validText(e.QualityPolicy.MissingHandling) || len(e.QualityPolicy.QualityStates) == 0 || len(e.QualityPolicy.UnavailableConditions) == 0 {
 		return invalid("quality_policy")
 	}
 	if hasBlankOrDuplicate(e.QualityPolicy.QualityStates) || hasBlankOrDuplicate(e.QualityPolicy.UnavailableConditions) {
@@ -280,10 +282,14 @@ func isJSONObject(raw json.RawMessage) bool {
 	return true
 }
 
+func validText(value string) bool {
+	return utf8.ValidString(value) && strings.TrimSpace(value) != "" && strings.TrimSpace(value) == value
+}
+
 func hasBlankOrDuplicate(values []string) bool {
 	seen := make(map[string]struct{}, len(values))
 	for _, value := range values {
-		if strings.TrimSpace(value) == "" {
+		if !validText(value) {
 			return true
 		}
 		if _, exists := seen[value]; exists {

@@ -25,6 +25,9 @@ import (
 
 // Dependencies 是由调用方创建并拥有的基础设施依赖；Module 不负责关闭 Store/Cache。
 type Dependencies struct {
+	// RequireEgressDependencies 要求所有已启用 Provider 的出站执行器均由 Root 注入。
+	// 该开关只校验依赖完整性，不判断注入实现是否真正执行目的地址/DNS/IP 安全策略。
+	RequireEgressDependencies     bool
 	Store                         *repository.Store            // 调用方创建并持有；Module 不负责关闭。
 	Cache                         cache.Cache                  // 调用方创建并持有；Module 不负责关闭。
 	Logger                        *slog.Logger                 // 模块日志依赖；nil 时使用 slog.Default。
@@ -94,13 +97,18 @@ type Module struct {
 // New 根据已加载配置和调用方提供的基础设施依赖创建 Market Data Module。
 // Store/Cache 由调用方持有；Module 只拥有并关闭自身创建的 BaoStock 客户端。
 func New(cfg config.Config, deps Dependencies) (*Module, error) {
+	if deps.RequireEgressDependencies {
+		if err := validateEgressDependencies(cfg, deps); err != nil {
+			return nil, err
+		}
+	}
 	if strings.TrimSpace(cfg.MySQLDSN) != "" && deps.Store == nil {
 		return nil, errors.New("MariaDB is configured but Store was not injected")
 	}
-	if strings.TrimSpace(cfg.RedisAddr) != "" && deps.Cache == nil {
+	if strings.TrimSpace(cfg.RedisAddr) != "" && isNilEgressDependency(deps.Cache) {
 		return nil, errors.New("Redis is configured but Cache was not injected")
 	}
-	if deps.Cache == nil {
+	if isNilEgressDependency(deps.Cache) {
 		deps.Cache = cache.NewDisabled()
 	}
 	if deps.Logger == nil {
@@ -113,7 +121,7 @@ func New(cfg config.Config, deps Dependencies) (*Module, error) {
 		retentionStore: deps.Store,
 		retention:      cfg.QuoteRetention,
 	}
-	if err := module.build(cfg, deps.TushareHTTPDoer, deps.HithinkHTTPDoer, deps.TickFlowAuthenticatedHTTPDoer, deps.TickFlowPublicHTTPDoer, deps.XueqiuHTTPDoer, deps.YahooHTTPDoer, deps.NeteaseQuoteHTTPDoer, deps.NeteaseHistoryHTTPDoer, deps.TencentQuoteHTTPDoer, deps.TencentKlineHTTPDoer, deps.TencentNoneKlineHTTPDoer, deps.TencentSearchHTTPDoer, deps.SinaQuoteHTTPDoer, deps.SinaKlineHTTPDoer, deps.EastmoneyHTTPDoers, deps.MiaoXiangHTTPDoer, deps.PytdxDialContext, deps.BaoStockDialContext); err != nil {
+	if err := module.build(cfg, deps); err != nil {
 		_ = module.Close(context.Background())
 		return nil, err
 	}
@@ -173,7 +181,8 @@ func (m *Module) ProviderSummary() ProviderSummary {
 	}
 }
 
-func (m *Module) build(cfg config.Config, tushareHTTPDoer, hithinkHTTPDoer, tickflowAuthenticatedHTTPDoer, tickflowPublicHTTPDoer, xueqiuHTTPDoer, yahooHTTPDoer, neteaseQuoteHTTPDoer, neteaseHistoryHTTPDoer, tencentQuoteHTTPDoer, tencentKlineHTTPDoer, tencentNoneKlineHTTPDoer, tencentSearchHTTPDoer, sinaQuoteHTTPDoer, sinaKlineHTTPDoer provider.HTTPDoer, eastmoneyHTTPDoers map[string]provider.HTTPDoer, miaoxiangHTTPDoer provider.HTTPDoer, pytdxDialContext, baostockDialContext transport.DialContextFunc) error {
+func (m *Module) build(cfg config.Config, deps Dependencies) error {
+
 	store := m.store
 	c := m.cache
 	logger := m.logger
@@ -184,21 +193,21 @@ func (m *Module) build(cfg config.Config, tushareHTTPDoer, hithinkHTTPDoer, tick
 		Password:       cfg.BaostockPassword,
 		ConnectTimeout: cfg.BaostockConnectTimeout,
 		RequestTimeout: cfg.BaostockRequestTimeout,
-		DialContext:    baostockDialContext,
+		DialContext:    deps.BaoStockDialContext,
 	})
 	m.baostockClient = baostockClient
 	available := map[string]provider.NamedProvider{
-		"eastmoney": provider.NewEastmoneyConfiguredWithAnnouncements(cfg.ProviderTimeout, cfg.EastmoneyQuoteURL, cfg.EastmoneyKlineURL, cfg.EastmoneyStockBasicURL, cfg.EastmoneySectorRankingURL, cfg.EastmoneyIndexURL, cfg.EastmoneyMarketStocksURL, cfg.EastmoneyLimitPoolBaseURL, cfg.EastmoneyStockBoardsURL, cfg.EastmoneyDragonTigerURL, cfg.EastmoneyAnnouncementsURL, cfg.EastmoneyUT).WithHotRankingURLs(cfg.EastmoneyHotRankingsURL, cfg.EastmoneyHotSurgeURL).WithCapitalFlowURL(cfg.EastmoneyCapitalFlowURL).WithHTTPDoers(eastmoneyHTTPDoers),
-		"hithink":   provider.NewHithinkConfiguredWithHTTPDoer(cfg.ProviderTimeout, cfg.HithinkBaseURL, cfg.HithinkAPIKey, hithinkHTTPDoer),
+		"eastmoney": newEastmoneyProvider(cfg).WithHTTPDoers(deps.EastmoneyHTTPDoers),
+		"hithink":   provider.NewHithinkConfiguredWithHTTPDoer(cfg.ProviderTimeout, cfg.HithinkBaseURL, cfg.HithinkAPIKey, deps.HithinkHTTPDoer),
 		"baostock":  provider.NewBaostock(baostockClient),
-		"tencent":   provider.NewTencentConfiguredWithHTTPDoers(cfg.ProviderTimeout, cfg.TencentQuoteURL, cfg.TencentKlineURL, cfg.TencentNoneKlineURL, cfg.TencentStockSearchURL, tencentQuoteHTTPDoer, tencentKlineHTTPDoer, tencentNoneKlineHTTPDoer, tencentSearchHTTPDoer),
-		"sina":      provider.NewSinaConfiguredWithHTTPDoers(cfg.ProviderTimeout, cfg.SinaQuoteURL, cfg.SinaKlineURL, sinaQuoteHTTPDoer, sinaKlineHTTPDoer),
-		"yahoo":     provider.NewYahooFinanceWithHTTPDoer(cfg.ProviderTimeout, cfg.YahooChartURL, yahooHTTPDoer),
-		"netease":   provider.NewNeteaseConfiguredWithHTTPDoers(cfg.ProviderTimeout, cfg.NeteaseQuoteURL, cfg.NeteaseHistoryURL, neteaseQuoteHTTPDoer, neteaseHistoryHTTPDoer),
-		"tushare":   provider.NewTushareConfiguredWithHTTPDoer(cfg.ProviderTimeout, cfg.TushareAPIURL, cfg.TushareToken, tushareHTTPDoer),
-		"tickflow":  provider.NewTickFlowConfiguredWithHTTPDoers(cfg.ProviderTimeout, cfg.TickFlowAPIURL, cfg.TickFlowFreeAPIURL, cfg.TickFlowAPIKey, tickflowAuthenticatedHTTPDoer, tickflowPublicHTTPDoer),
-		"pytdx":     provider.NewPytdxWithDialContext(cfg.ProviderTimeout, pytdxDialContext, cfg.PytdxHosts...),
-		"xueqiu":    provider.NewXueqiuConfiguredWithHTTPDoer(cfg.ProviderTimeout, cfg.XueqiuBaseURL, cfg.XueqiuCookie, xueqiuHTTPDoer),
+		"tencent":   provider.NewTencentConfiguredWithHTTPDoers(cfg.ProviderTimeout, cfg.TencentQuoteURL, cfg.TencentKlineURL, cfg.TencentNoneKlineURL, cfg.TencentStockSearchURL, deps.TencentQuoteHTTPDoer, deps.TencentKlineHTTPDoer, deps.TencentNoneKlineHTTPDoer, deps.TencentSearchHTTPDoer),
+		"sina":      provider.NewSinaConfiguredWithHTTPDoers(cfg.ProviderTimeout, cfg.SinaQuoteURL, cfg.SinaKlineURL, deps.SinaQuoteHTTPDoer, deps.SinaKlineHTTPDoer),
+		"yahoo":     provider.NewYahooFinanceWithHTTPDoer(cfg.ProviderTimeout, cfg.YahooChartURL, deps.YahooHTTPDoer),
+		"netease":   provider.NewNeteaseConfiguredWithHTTPDoers(cfg.ProviderTimeout, cfg.NeteaseQuoteURL, cfg.NeteaseHistoryURL, deps.NeteaseQuoteHTTPDoer, deps.NeteaseHistoryHTTPDoer),
+		"tushare":   provider.NewTushareConfiguredWithHTTPDoer(cfg.ProviderTimeout, cfg.TushareAPIURL, cfg.TushareToken, deps.TushareHTTPDoer),
+		"tickflow":  provider.NewTickFlowConfiguredWithHTTPDoers(cfg.ProviderTimeout, cfg.TickFlowAPIURL, cfg.TickFlowFreeAPIURL, cfg.TickFlowAPIKey, deps.TickFlowAuthenticatedHTTPDoer, deps.TickFlowPublicHTTPDoer),
+		"pytdx":     provider.NewPytdxWithDialContext(cfg.ProviderTimeout, deps.PytdxDialContext, cfg.PytdxHosts...),
+		"xueqiu":    provider.NewXueqiuConfiguredWithHTTPDoer(cfg.ProviderTimeout, cfg.XueqiuBaseURL, cfg.XueqiuCookie, deps.XueqiuHTTPDoer),
 	}
 	allProviders := make([]provider.NamedProvider, 0, len(available))
 	quoteProviders := make([]provider.QuoteProvider, 0, len(available))
@@ -401,7 +410,7 @@ func (m *Module) build(cfg config.Config, tushareHTTPDoer, hithinkHTTPDoer, tick
 	ds := service.NewWithCapabilities(allProviders, quoteProviders, barProviders, c, store, cfg.QuoteCacheTTL, cfg.BarsCacheTTL, cfg.DefaultDailyBars, cfg.MaxDailyBars, service.ResilienceConfig{Retries: cfg.ProviderRetries, CircuitFailureThreshold: cfg.CircuitFailureThreshold, CircuitCooldown: cfg.CircuitCooldown}, logger)
 	supplementProviders := make([]provider.SupplementProvider, 0, 1)
 	if cfg.MXEnabled {
-		mx, mxErr := provider.NewMiaoXiangWithHTTPDoer(cfg.MXAPIKey, cfg.MXAPIURL, cfg.MXAPITimeout, miaoxiangHTTPDoer)
+		mx, mxErr := provider.NewMiaoXiangWithHTTPDoer(cfg.MXAPIKey, cfg.MXAPIURL, cfg.MXAPITimeout, deps.MiaoXiangHTTPDoer)
 		if mxErr != nil {
 			return fmt.Errorf("configure MiaoXiang supplemental provider: %w", mxErr)
 		}

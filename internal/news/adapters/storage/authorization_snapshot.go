@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"strings"
 	"time"
 
 	"example.com/stock-analysis-flow/internal/news/app"
@@ -76,6 +77,33 @@ func (r *MySQLRepository) AppendAuthorizationSnapshot(
 	return errors.Join(insertErr, queryErr)
 }
 
+// GetLatestAuthorizationSnapshotForEvidence selects the latest immutable decision
+// for one exact caller/resource/purpose/content-level tuple. A latest deny or
+// conditional decision must not fall back to an older allow decision.
+func (r *MySQLRepository) GetLatestAuthorizationSnapshotForEvidence(
+	ctx context.Context,
+	subjectRef string,
+	resourceRef string,
+	purposeCode string,
+	contentLevel domain.AuthorizationContentLevel,
+) (domain.NewsAuthorizationBinding, error) {
+	if r == nil || r.db == nil || ctx == nil ||
+		subjectRef == "" || subjectRef != strings.TrimSpace(subjectRef) ||
+		resourceRef == "" || resourceRef != strings.TrimSpace(resourceRef) ||
+		purposeCode == "" || purposeCode != strings.TrimSpace(purposeCode) ||
+		contentLevel == "" {
+		return domain.NewsAuthorizationBinding{}, app.ErrInvalidAuthorizationSnapshot
+	}
+	// Selection and payload verification share one SQL statement snapshot. A
+	// concurrent append cannot change which row is selected between lookup and read.
+	query := authorizationSnapshotSelect + ` WHERE subject_ref = ? AND resource_ref = ? AND purpose_code = ? AND content_level = ?
+		ORDER BY decided_at DESC, authorization_ref DESC
+		LIMIT 1`
+	return scanAuthorizationSnapshot(r.db.QueryRowContext(
+		ctx, query, subjectRef, resourceRef, purposeCode, string(contentLevel),
+	), "")
+}
+
 // GetAuthorizationSnapshot verifies storage integrity and the immutable binding
 // shape before returning it. Current policy revocation/expiry must be checked
 // separately by the content access path.
@@ -86,17 +114,42 @@ func (r *MySQLRepository) GetAuthorizationSnapshot(
 	if r == nil || r.db == nil || ctx == nil || authorizationRef == "" {
 		return domain.NewsAuthorizationBinding{}, app.ErrInvalidAuthorizationSnapshot
 	}
+	return scanAuthorizationSnapshot(
+		r.db.QueryRowContext(ctx, authorizationSnapshotSelect+" WHERE authorization_ref = ?", authorizationRef),
+		authorizationRef,
+	)
+}
+
+const authorizationSnapshotSelect = `SELECT authorization_ref, subject_ref, resource_ref,
+	decision, purpose_code, content_level, decided_at, expires_at,
+	decision_fingerprint, payload_json, payload_hash
+	FROM news_authorization_snapshots`
+
+type authorizationSnapshotScanner interface {
+	Scan(dest ...any) error
+}
+
+func scanAuthorizationSnapshot(
+	row authorizationSnapshotScanner,
+	expectedAuthorizationRef string,
+) (domain.NewsAuthorizationBinding, error) {
 	var payload []byte
 	var storedHash string
-	err := r.db.QueryRowContext(ctx,
-		"SELECT payload_json, payload_hash FROM news_authorization_snapshots WHERE authorization_ref = ?",
-		authorizationRef,
-	).Scan(&payload, &storedHash)
+	var storedAuthorizationRef, storedSubjectRef, storedResourceRef string
+	var storedDecision, storedPurposeCode, storedContentLevel, storedFingerprint string
+	var storedDecidedAt time.Time
+	var storedExpiresAt sql.NullTime
+	err := row.Scan(&storedAuthorizationRef, &storedSubjectRef, &storedResourceRef,
+		&storedDecision, &storedPurposeCode, &storedContentLevel, &storedDecidedAt,
+		&storedExpiresAt, &storedFingerprint, &payload, &storedHash)
 	if errors.Is(err, sql.ErrNoRows) {
 		return domain.NewsAuthorizationBinding{}, app.ErrAuthorizationSnapshotNotFound
 	}
 	if err != nil {
 		return domain.NewsAuthorizationBinding{}, err
+	}
+	if len(payload) == 0 || len(payload) > maximumAuthorizationSnapshotBytes {
+		return domain.NewsAuthorizationBinding{}, app.ErrInvalidAuthorizationSnapshot
 	}
 	sum := sha256.Sum256(payload)
 	actualHash := hex.EncodeToString(sum[:])
@@ -106,10 +159,48 @@ func (r *MySQLRepository) GetAuthorizationSnapshot(
 	var binding domain.NewsAuthorizationBinding
 	if err := json.Unmarshal(payload, &binding); err != nil ||
 		domain.ValidateNewsAuthorizationBinding(binding) != nil ||
-		binding.AuthorizationRef.AuthorizationRef != authorizationRef {
+		binding.AuthorizationRef.AuthorizationRef != storedAuthorizationRef ||
+		(expectedAuthorizationRef != "" && binding.AuthorizationRef.AuthorizationRef != expectedAuthorizationRef) ||
+		!authorizationSnapshotEnvelopeMatches(binding, storedAuthorizationRef, storedSubjectRef,
+			storedResourceRef, storedDecision, storedPurposeCode, storedContentLevel,
+			storedDecidedAt, storedExpiresAt, storedFingerprint) {
 		return domain.NewsAuthorizationBinding{}, app.ErrInvalidAuthorizationSnapshot
 	}
 	return binding, nil
+}
+
+func authorizationSnapshotEnvelopeMatches(
+	binding domain.NewsAuthorizationBinding,
+	authorizationRef, subjectRef, resourceRef, decision, purposeCode, contentLevel string,
+	decidedAt time.Time,
+	expiresAt sql.NullTime,
+	fingerprint string,
+) bool {
+	ref := binding.AuthorizationRef
+	payloadDecidedAt, err := time.Parse(time.RFC3339Nano, ref.DecidedAt)
+	if err != nil || !payloadDecidedAt.UTC().Truncate(time.Microsecond).Equal(decidedAt.UTC().Truncate(time.Microsecond)) {
+		return false
+	}
+	if !expiresAt.Valid {
+		if ref.ExpiresAt.Value != nil {
+			return false
+		}
+	} else {
+		if ref.ExpiresAt.Value == nil {
+			return false
+		}
+		payloadExpiresAt, parseErr := time.Parse(time.RFC3339Nano, *ref.ExpiresAt.Value)
+		if parseErr != nil || !payloadExpiresAt.UTC().Truncate(time.Microsecond).Equal(expiresAt.Time.UTC().Truncate(time.Microsecond)) {
+			return false
+		}
+	}
+	return authorizationRef == ref.AuthorizationRef &&
+		subjectRef == ref.SubjectRef &&
+		resourceRef == ref.ResourceRef &&
+		decision == string(ref.Decision) &&
+		purposeCode == ref.PurposeCode &&
+		contentLevel == string(ref.ContentLevel) &&
+		fingerprint == ref.DecisionFingerprint
 }
 
 func authorizationExpiry(value domain.NullableDateTime) (any, error) {

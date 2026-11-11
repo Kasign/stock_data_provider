@@ -2,6 +2,8 @@ package app
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"io"
 	"net"
@@ -73,8 +75,9 @@ type CollectedSourceEntry struct {
 	Content   domain.ContentLayers
 }
 
-// CollectSourceResult 是单个 Source Endpoint 的在线 Feed 采集结果。
+// collectionSeal 绑定完整采集结果，防止调用方修改已采集的策略版本或候选载荷。
 type CollectSourceResult struct {
+	collectionSeal          [sha256.Size]byte
 	SourceID                string
 	EndpointID              string
 	SourcePolicyVersionID   string
@@ -118,6 +121,9 @@ func (u *CollectSource) Execute(ctx context.Context, request CollectSourceReques
 	if u == nil || u.catalog == nil || u.transport == nil || ctx == nil {
 		return CollectSourceResult{}, ErrSourceCollectionRequest
 	}
+	if err := ctx.Err(); err != nil {
+		return CollectSourceResult{}, err
+	}
 	request.SourceID = strings.TrimSpace(request.SourceID)
 	request.EndpointID = strings.TrimSpace(request.EndpointID)
 	request.QueryDimension = strings.TrimSpace(request.QueryDimension)
@@ -132,6 +138,9 @@ func (u *CollectSource) Execute(ctx context.Context, request CollectSourceReques
 	}
 
 	registration, err := u.catalog.LookupEndpoint(ctx, request.SourceID, request.EndpointID)
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return CollectSourceResult{}, ctxErr
+	}
 	if err != nil {
 		if errors.Is(err, ErrSourceEndpointNotFound) {
 			return CollectSourceResult{}, &SourceCollectionError{Code: "source_endpoint_not_found", Skipped: true}
@@ -180,6 +189,12 @@ func (u *CollectSource) Execute(ctx context.Context, request CollectSourceReques
 	}
 	httpRequest.Header.Set("Accept", "application/rss+xml, application/atom+xml")
 	response, err := u.transport.Do(ctx, request.SourceID, request.EndpointID, httpRequest)
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		if response != nil && response.Body != nil {
+			_ = response.Body.Close()
+		}
+		return CollectSourceResult{}, ctxErr
+	}
 	if err != nil {
 		return CollectSourceResult{}, &SourceCollectionError{Code: "source_fetch_failed", Retryable: sourceTransportRetryable(err)}
 	}
@@ -197,6 +212,9 @@ func (u *CollectSource) Execute(ctx context.Context, request CollectSourceReques
 		return CollectSourceResult{}, &SourceCollectionError{Code: "source_response_too_large"}
 	}
 	payload, err := io.ReadAll(io.LimitReader(response.Body, limit+1))
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return CollectSourceResult{}, ctxErr
+	}
 	if err != nil {
 		return CollectSourceResult{}, &SourceCollectionError{Code: "source_response_read_failed", Retryable: sourceTransportRetryable(err)}
 	}
@@ -210,6 +228,9 @@ func (u *CollectSource) Execute(ctx context.Context, request CollectSourceReques
 
 	fetchedAt := u.now().UTC()
 	feed, err := parser.ParseFeed(payload, fetchedAt)
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return CollectSourceResult{}, ctxErr
+	}
 	if err != nil {
 		return CollectSourceResult{}, &SourceCollectionError{Code: "source_feed_parse_failed"}
 	}
@@ -229,6 +250,9 @@ func (u *CollectSource) Execute(ctx context.Context, request CollectSourceReques
 		Entries:                 make([]CollectedSourceEntry, 0, min(len(feed.Entries), request.MaxEntries)),
 	}
 	for _, entry := range feed.Entries {
+		if err := ctx.Err(); err != nil {
+			return CollectSourceResult{}, err
+		}
 		if len(result.Entries) >= request.MaxEntries {
 			break
 		}
@@ -245,6 +269,9 @@ func (u *CollectSource) Execute(ctx context.Context, request CollectSourceReques
 		})
 	}
 	normalizedAt := u.now().UTC()
+	if err := ctx.Err(); err != nil {
+		return CollectSourceResult{}, err
+	}
 	result.NormalizedAt = normalizedAt
 	result.ObservedAt = normalizedAt
 	for index := range result.Entries {
@@ -254,7 +281,41 @@ func (u *CollectSource) Execute(ctx context.Context, request CollectSourceReques
 		result.Entries[index].Candidate.NormalizedAt = &normalized
 		result.Entries[index].Candidate.ObservedAt = normalizedAt
 	}
+	if err := ctx.Err(); err != nil {
+		return CollectSourceResult{}, err
+	}
+	if err := sealCollectSourceResult(&result); err != nil {
+		return CollectSourceResult{}, &SourceCollectionError{Code: "source_result_seal_failed"}
+	}
+	if err := ctx.Err(); err != nil {
+		return CollectSourceResult{}, err
+	}
 	return result, nil
+}
+
+// sealCollectSourceResult binds all exported result fields into an unexported digest.
+// The digest is intentionally package-private so external callers cannot mint a valid result.
+func sealCollectSourceResult(result *CollectSourceResult) error {
+	if result == nil {
+		return ErrSourceCollectionRequest
+	}
+	result.collectionSeal = [sha256.Size]byte{}
+	payload, err := json.Marshal(result)
+	if err != nil {
+		return err
+	}
+	result.collectionSeal = sha256.Sum256(payload)
+	return nil
+}
+
+func (r CollectSourceResult) hasValidCollectionSeal() bool {
+	expected := r.collectionSeal
+	if expected == [sha256.Size]byte{} {
+		return false
+	}
+	r.collectionSeal = [sha256.Size]byte{}
+	payload, err := json.Marshal(r)
+	return err == nil && sha256.Sum256(payload) == expected
 }
 
 // SourceCollectionErrorCode returns the stable business code without exposing wrapped transport errors.
@@ -287,9 +348,14 @@ func sourceTransportRetryable(err error) bool {
 }
 
 func (r CollectSourceResult) ObservationPolicyTrace() ObservationPolicyTrace {
-	return ObservationPolicyTrace{
-		SourcePolicyVersionID:   r.SourcePolicyVersionID,
-		EndpointPolicyVersionID: r.EndpointPolicyVersionID,
-		PolicyEvaluatedAt:       r.PolicyEvaluatedAt,
+	trace := ObservationPolicyTrace{
+		SourcePolicyVersionID: r.SourcePolicyVersionID,
+		PolicyEvaluatedAt:     r.PolicyEvaluatedAt,
 	}
+	// EndpointRef 代表经过单独评估的 Endpoint Policy，而不是仅仅存在一个采集入口。
+	if r.EndpointPolicyVersionID != "" {
+		trace.EndpointID = r.EndpointID
+		trace.EndpointPolicyVersionID = r.EndpointPolicyVersionID
+	}
+	return trace
 }

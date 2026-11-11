@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"example.com/stock-analysis-flow/internal/marketdata/model"
+	"example.com/stock-analysis-flow/internal/marketdata/validation"
 )
 
 func TestEastmoneyFetchDragonTigerRejectsFutureTradeDateWithoutCallingProvider(t *testing.T) {
@@ -244,5 +245,96 @@ func TestEastmoneyFetchDragonTigerRejectsExplicitFailureWithRows(t *testing.T) {
 	_, err := p.FetchDragonTiger(context.Background(), "2026-10-22", 1, 100)
 	if err == nil || !strings.Contains(err.Error(), "success=false") {
 		t.Fatalf("explicit provider failure must reject even populated result data, got %v", err)
+	}
+}
+
+func TestEastmoneyDragonTigerReportsDegradedRowFieldsAndMissingPages(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"result":{"count":1,"data":[{"SECURITY_CODE":"600519","SECUCODE":"600519.SH","SECURITY_NAME_ABBR":"贵州茅台","TRADE_DATE":"2026-10-23 00:00:00","CLOSE_PRICE":"1313.31","CHANGE_RATE":"1.25","SECURITY_TYPE_CODE":"001001"}]}}`)
+	}))
+	defer server.Close()
+	reporter := validation.NewReporter(16)
+	ctx := validation.WithReporter(context.Background(), reporter)
+	p := NewEastmoneyConfiguredWithDragonTiger(2*time.Second, "", "", "", "", "", "", "", "", server.URL, "")
+	got, err := p.FetchDragonTiger(ctx, "2026-10-23", 1, 100)
+	if err != nil {
+		t.Fatalf("FetchDragonTiger: %v", err)
+	}
+	if len(got.Items) != 1 || got.QualityStatus != model.QualityDegraded {
+		t.Fatalf("expected one degraded row, got %+v", got)
+	}
+	seen := map[string]bool{}
+	for _, issue := range reporter.Snapshot().Issues {
+		key := issue.Field + ":" + issue.ProviderField + ":" + issue.Code
+		seen[key] = true
+		if issue.Field == "provider_time" {
+			if issue.RowIndex != nil {
+				t.Errorf("snapshot-level provider_time issue must not have a row index: %+v", issue)
+			}
+			continue
+		}
+		if issue.Field != "pages" && (issue.RowIndex == nil || *issue.RowIndex != 0) {
+			t.Errorf("row-level issue must point to row 0: %+v", issue)
+		}
+	}
+	for _, key := range []string{
+		"pages:pages:missing_or_invalid_value",
+		"net_buy_amount:BILLBOARD_NET_AMT:missing_or_invalid_value",
+		"buy_amount:BILLBOARD_BUY_AMT:missing_or_invalid_value",
+		"sell_amount:BILLBOARD_SELL_AMT:missing_or_invalid_value",
+		"reason:EXPLAIN/EXPLANATION:missing_value",
+	} {
+		if !seen[key] {
+			t.Errorf("missing Reporter issue %q; got %+v", key, reporter.Snapshot().Issues)
+		}
+	}
+}
+
+func TestEastmoneyDragonTigerReportsUnavailableSnapshotTime(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"result":{"pages":1,"count":1,"data":[{"SECURITY_CODE":"600519","SECUCODE":"600519.SH","SECURITY_NAME_ABBR":"贵州茅台","TRADE_DATE":"2026-10-22 00:00:00","BILLBOARD_NET_AMT":"100","BILLBOARD_BUY_AMT":"200","BILLBOARD_SELL_AMT":"100","BILLBOARD_DEAL_AMT":"300","EXPLAIN":"测试上榜原因","SECURITY_TYPE_CODE":"001001"}]}}`)
+	}))
+	defer server.Close()
+
+	reporter := validation.NewReporter(8)
+	ctx := validation.WithReporter(context.Background(), reporter)
+	p := NewEastmoneyConfiguredWithDragonTiger(2*time.Second, "", "", "", "", "", "", "", "", server.URL, "")
+	got, err := p.FetchDragonTiger(ctx, "2026-10-22", 1, 100)
+	if err != nil {
+		t.Fatalf("FetchDragonTiger: %v", err)
+	}
+	if got.QualityStatus != model.QualityDegraded || !strings.Contains(strings.Join(got.QualityReasons, ","), "provider_snapshot_timestamp_not_exposed") {
+		t.Fatalf("snapshot timestamp limitation must remain degraded: %+v", got)
+	}
+	issues := reporter.Snapshot().Issues
+	if len(issues) != 1 || issues[0].Field != "provider_time" || issues[0].ProviderField != "provider contract" ||
+		issues[0].Code != "not_exposed_by_provider_contract" || issues[0].RowIndex != nil {
+		t.Fatalf("unexpected snapshot-level Reporter issue: %+v", issues)
+	}
+}
+
+func TestEastmoneyDragonTigerReportsPaginationCountMismatch(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"result":{"pages":1,"count":101,"data":[{}]}}`)
+	}))
+	defer server.Close()
+	reporter := validation.NewReporter(8)
+	ctx := validation.WithReporter(context.Background(), reporter)
+	p := NewEastmoneyConfiguredWithDragonTiger(2*time.Second, "", "", "", "", "", "", "", "", server.URL, "")
+	if _, err := p.FetchDragonTiger(ctx, "2026-10-22", 1, 100); err == nil {
+		t.Fatal("expected page count mismatch")
+	}
+	issues := reporter.Snapshot().Issues
+	if len(issues) != 2 {
+		t.Fatalf("expected snapshot timestamp limitation and pagination mismatch, got %+v", issues)
+	}
+	foundPagination := false
+	for _, issue := range issues {
+		if issue.Field == "pages" && issue.Code == "count_inconsistent" && issue.RowIndex == nil {
+			foundPagination = true
+		}
+	}
+	if !foundPagination {
+		t.Fatalf("missing snapshot-level pagination mismatch issue: %+v", issues)
 	}
 }

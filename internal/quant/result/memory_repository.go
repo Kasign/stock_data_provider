@@ -46,6 +46,9 @@ func (repository *MemoryRepository) Save(ctx context.Context, record Record) err
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	if repository.records == nil {
+		repository.records = make(map[string]Record)
+	}
 	if existing, exists := repository.records[snapshot.Manifest.ResultID]; exists {
 		if existing.Manifest.ManifestFingerprint == snapshot.Manifest.ManifestFingerprint &&
 			existing.Manifest.ResultFingerprint == snapshot.Manifest.ResultFingerprint {

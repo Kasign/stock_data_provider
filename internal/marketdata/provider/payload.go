@@ -163,7 +163,11 @@ func validProviderSnapshotTime(value *time.Time, reference time.Time) *time.Time
 
 // addProviderParseIssue 将 Adapter 解码边界的问题追加到当前请求报告。
 // 只接受字段值摘要，不接受完整响应、URL、Header 或认证信息。
-func addProviderParseIssue(ctx context.Context, rowIndex int, field, providerField, code, expected, actualType, preview, message string) {
+func addProviderParseIssue(ctx context.Context, rowIndex int, field, providerField, code, expected, actualType, preview, message string, severity ...validation.Severity) {
+	issueSeverity := validation.SeverityWarning
+	if len(severity) > 0 {
+		issueSeverity = severity[0]
+	}
 	preview = strings.ToValidUTF8(preview, "�")
 	preview = strings.Map(func(r rune) rune {
 		if r < 0x20 || r == 0x7f {
@@ -184,7 +188,7 @@ func addProviderParseIssue(ctx context.Context, rowIndex int, field, providerFie
 	report.Add(validation.FieldIssue{
 		Stage: validation.StageParse, Field: field, ProviderField: providerField,
 		Code: code, Expected: expected, ActualType: actualType, ActualPreview: preview,
-		Severity: validation.SeverityWarning, Message: message, RowIndex: row,
+		Severity: issueSeverity, Message: message, RowIndex: row,
 	})
 	validation.AddContextReport(ctx, report)
 }

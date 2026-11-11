@@ -569,7 +569,7 @@ func TestRunAndStageTransitionTables(t *testing.T) {
 
 func TestFinalizeDeadlineRequiresAllWorkStoppedAndUsesPropagation(t *testing.T) {
 	now := time.Date(2026, 11, 6, 10, 0, 0, 0, time.UTC)
-	run := domain.Run{Status: domain.RunCancelling, TerminationReason: "run_deadline_exceeded"}
+	run := domain.Run{Status: domain.RunRunning, TerminationReason: "deadline_exceeded"}
 	policies := map[string]template.PropagationPolicy{
 		"required": {OnTimedOut: domain.PropagateFail},
 		"optional": {OnTimedOut: domain.PropagatePartial},
@@ -588,6 +588,39 @@ func TestFinalizeDeadlineRequiresAllWorkStoppedAndUsesPropagation(t *testing.T) 
 	runningAttempt := domain.Attempt{Status: domain.AttemptRunning}
 	if _, err := FinalizeDeadline(run, stages, []domain.Attempt{runningAttempt}, policies, nil, false, now); err == nil {
 		t.Fatal("deadline finalizer accepted a still-running Attempt")
+	}
+	wrongPath := run
+	wrongPath.Status = domain.RunCancelling
+	wrongPath.TerminationReason = "run_deadline_exceeded"
+	if _, err := FinalizeDeadline(wrongPath, stages, nil, policies, nil, false, now); err == nil {
+		t.Fatal("deadline finalizer accepted the obsolete cancelling/run_deadline_exceeded combination")
+	}
+	userCancelled := run
+	userCancelled.TerminationReason = "user_cancelled"
+	if _, err := FinalizeDeadline(userCancelled, stages, nil, policies, nil, false, now); err == nil {
+		t.Fatal("deadline finalizer accepted a user-cancelled Run")
+	}
+}
+
+func TestFinalizeDeadlineAcceptsRunsExpiredBeforeExecutionStarts(t *testing.T) {
+	now := time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)
+	policies := map[string]template.PropagationPolicy{
+		"required": {OnTimedOut: domain.PropagateFail},
+	}
+	stages := []domain.Stage{
+		{Code: "required", Required: true, Status: domain.StageTimedOut, ReasonCodes: []string{"run_deadline_exceeded"}},
+	}
+	for _, status := range []domain.RunStatus{domain.RunCreated, domain.RunQueued} {
+		t.Run(string(status), func(t *testing.T) {
+			run := domain.Run{Status: status, TerminationReason: "deadline_exceeded"}
+			got, err := FinalizeDeadline(run, stages, nil, policies, nil, false, now)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got.Status != domain.RunFailed || got.ResultSummary == nil {
+				t.Fatalf("unexpected pre-start deadline result: %+v", got)
+			}
+		})
 	}
 }
 
