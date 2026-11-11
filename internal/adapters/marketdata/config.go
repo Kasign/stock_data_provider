@@ -3,7 +3,7 @@ package marketdata
 import (
 	"fmt"
 	"net/url"
-		"strconv"
+	"strconv"
 	"strings"
 	"time"
 

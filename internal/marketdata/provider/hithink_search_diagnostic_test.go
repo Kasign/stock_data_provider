@@ -22,9 +22,9 @@ func TestHithinkSearchStocksReportsInvalidDuplicateAndMismatchedIdentity(t *test
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = fmt.Fprint(w, `{"code":0,"data":{"item":[
-			{"thscode":"sh.600519","ticker":"600519","name":"贵州茅台","exchange":"SH","asset_type":"a-share"},
-			{"thscode":"sh.600519","ticker":"600519","name":"贵州茅台重复","exchange":"SH","asset_type":"a-share"},
-			{"thscode":"sz.000001","ticker":"600519","name":"平安银行","exchange":"SZ","asset_type":"a-share"},
+			{"thscode":"600519.SH","ticker":"600519","name":"贵州茅台","exchange":"SH","asset_type":"a-share"},
+			{"thscode":"600519.SH","ticker":"600519","name":"贵州茅台重复","exchange":"SH","asset_type":"a-share"},
+			{"thscode":"000001.SZ","ticker":"600519","name":"平安银行","exchange":"SZ","asset_type":"a-share"},
 			{"thscode":"invalid","ticker":"000002","name":"无效证券","exchange":"SZ","asset_type":"a-share"}
 		]}}`)
 	}))

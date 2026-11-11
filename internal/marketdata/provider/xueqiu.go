@@ -15,15 +15,16 @@ import (
 
 	"example.com/stock-analysis-flow/internal/marketdata/model"
 	"example.com/stock-analysis-flow/internal/marketdata/normalize"
+	"example.com/stock-analysis-flow/internal/marketdata/validation"
 )
 
 const xueqiuVersion = "xueqiu-hot-ranking-v1"
 
 type Xueqiu struct {
-	client  *http.Client
+	client   *http.Client
 	httpDoer HTTPDoer
-	baseURL string
-	cookie  string
+	baseURL  string
+	cookie   string
 }
 
 // NewXueqiuConfigured configures an optional domestic ranking fallback.
@@ -130,6 +131,10 @@ func xueqiuSymbol(row map[string]json.RawMessage) (string, error) {
 	return symbol, nil
 }
 
+func xueqiuReportSnapshotIssue(ctx context.Context, field, providerField, code, expected, actualType, preview, message string, severity validation.Severity) {
+	addProviderQuoteFieldIssue(ctx, field, providerField, code, expected, actualType, preview, message, severity)
+}
+
 func xueqiuReportRowParseIssue(ctx context.Context, rowIndex int, field, providerField, code, expected string, raw json.RawMessage, message string) {
 	addProviderParseIssue(ctx, rowIndex, field, providerField, code, expected, providerJSONValueType(raw), providerJSONPreview(raw), message)
 }
@@ -191,7 +196,11 @@ func xueqiuRows(raw json.RawMessage) ([]map[string]json.RawMessage, error) {
 // FetchHotStocks adapts Xueqiu's public hot-stock list as a fallback.
 // "surge" uses the documented market-wide percentage-mover ordering as a proxy, not Eastmoney hot-up.
 func (p *Xueqiu) FetchHotStocks(ctx context.Context, rankingType string, limit int) (*model.HotRankingSnapshot, error) {
-	if p == nil || p.client == nil {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if p == nil || p.client == nil || p.httpDoer == nil {
+		xueqiuReportSnapshotIssue(ctx, "request", "http_client", "client_not_configured", "configured HTTP client", "missing", "", "雪球 HTTP client 未配置", validation.SeverityError)
 		return nil, errors.New("雪球 HTTP client 未配置")
 	}
 	rankingType = strings.ToLower(strings.TrimSpace(rankingType))
@@ -220,14 +229,13 @@ func (p *Xueqiu) FetchHotStocks(ctx context.Context, rankingType string, limit i
 		query.Set("page", "1")
 		query.Set("type", "sh_sz")
 	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
 	if err := ctx.Err(); err != nil {
+		xueqiuReportSnapshotIssue(ctx, "request", "context", "request_error", "active request context", "error", truncateDiagnosticPreview(err.Error(), 160), "雪球榜单请求上下文已取消或超时", validation.SeverityError)
 		return nil, err
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, p.baseURL+path+"?"+query.Encode(), nil)
 	if err != nil {
+		xueqiuReportSnapshotIssue(ctx, "request", "url", "request_error", "valid request URL", "error", truncateDiagnosticPreview(err.Error(), 160), "创建雪球榜单请求失败", validation.SeverityError)
 		return nil, fmt.Errorf("创建雪球榜单请求失败: %w", err)
 	}
 	req.Header.Set("Accept", "application/json")
@@ -239,19 +247,23 @@ func (p *Xueqiu) FetchHotStocks(ctx context.Context, rankingType string, limit i
 	}
 	resp, err := p.httpDoer.Do(req)
 	if err != nil {
+		xueqiuReportSnapshotIssue(ctx, "request", "http", "request_error", "successful HTTP request", "error", truncateDiagnosticPreview(err.Error(), 160), "雪球榜单 HTTP 请求失败", validation.SeverityError)
 		return nil, fmt.Errorf("雪球榜单请求失败: %w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		_, _ = readBoundedBody(resp.Body, 4096)
+		xueqiuReportSnapshotIssue(ctx, "http_status", "response.status_code", "http_status_error", "2xx HTTP status", "integer", strconv.Itoa(resp.StatusCode), "雪球榜单返回非成功 HTTP 状态", validation.SeverityError)
 		return nil, fmt.Errorf("雪球榜单返回 HTTP 状态码 %d（如需鉴权，请配置 MARKET_DATA_XUEQIU_COOKIE）", resp.StatusCode)
 	}
 	raw, err := readBoundedBody(resp.Body, maxProviderPayloadBytes)
 	if err != nil {
+		xueqiuReportSnapshotIssue(ctx, "response", "body", "read_error", "readable bounded response body", "error", truncateDiagnosticPreview(err.Error(), 160), "读取雪球榜单响应失败", validation.SeverityError)
 		return nil, fmt.Errorf("读取雪球榜单响应失败: %w", err)
 	}
 	var envelope map[string]json.RawMessage
 	if err := decodeSingleJSON(raw, &envelope); err != nil {
+		xueqiuReportSnapshotIssue(ctx, "response", "body", "decode_error", "single JSON object response", "invalid_json", providerJSONPreview(raw), "雪球榜单响应 JSON 解码失败", validation.SeverityError)
 		return nil, fmt.Errorf("解析雪球榜单响应失败: %w", err)
 	}
 	if rawCode := bytes.TrimSpace(envelope["error_code"]); len(rawCode) > 0 {
@@ -262,26 +274,32 @@ func (p *Xueqiu) FetchHotStocks(ctx context.Context, rankingType string, limit i
 		}
 		code, parseErr := strconv.Atoi(strings.TrimSpace(codeText))
 		if parseErr != nil {
+			xueqiuReportSnapshotIssue(ctx, "error_code", "error_code", "invalid_provider_error_code", "integer provider error code", providerJSONValueType(rawCode), providerJSONPreview(rawCode), "雪球榜单响应 error_code 无效", validation.SeverityError)
 			return nil, errors.New("雪球榜单响应 error_code 无效")
 		}
 		if code != 0 {
+			xueqiuReportSnapshotIssue(ctx, "provider_error", "error_code", "provider_error", "error_code equals zero", "integer", strconv.Itoa(code), "雪球榜单 Provider 明确拒绝请求", validation.SeverityError)
 			message := xueqiuString(envelope, "error_description")
 			if message == "" {
 				message = xueqiuString(envelope, "message")
 			}
-			if len(message) > 200 {
-				message = message[:200]
-			}
+			message = strings.ToValidUTF8(message, "�")
+			message = truncateDiagnosticPreview(message, 200)
 			return nil, fmt.Errorf("雪球榜单接口错误 code=%d: %s", code, message)
 		}
 	}
 	dataRaw := bytes.TrimSpace(envelope["data"])
 	if len(dataRaw) == 0 || bytes.Equal(dataRaw, []byte("null")) {
+		xueqiuReportSnapshotIssue(ctx, "data", "data", "missing_data", "non-null data object", providerJSONValueType(dataRaw), providerJSONPreview(dataRaw), "雪球榜单响应缺少 data", validation.SeverityError)
 		return nil, errors.New("雪球榜单响应缺少 data")
 	}
 	rows, err := xueqiuRows(dataRaw)
 	if err != nil {
+		xueqiuReportSnapshotIssue(ctx, "data", "data.items", "decode_error", "data object with items or list array", "invalid_data", providerJSONPreview(dataRaw), "雪球榜单 data 结构解码失败", validation.SeverityError)
 		return nil, err
+	}
+	if len(rows) == 0 {
+		xueqiuReportSnapshotIssue(ctx, "row_count", "data.items", "empty_result", "at least one ranking row", "empty_array", providerJSONPreview(dataRaw), "雪球榜单未返回任何记录，无法确认是零结果还是源端不可用", validation.SeverityWarning)
 	}
 	var dataObject map[string]json.RawMessage
 	_ = json.Unmarshal(dataRaw, &dataObject)

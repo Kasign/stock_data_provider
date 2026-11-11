@@ -69,6 +69,51 @@ func validStockBoardsForFallbackTest(source string) *model.StockBoardSnapshot {
 	}
 }
 
+func TestStockBoardsRejectsMismatchedSnapshotSourceAndFallsBack(t *testing.T) {
+	firstSnapshot := validStockBoardsForFallbackTest("eastmoney")
+	firstSnapshot.Source = "tencent"
+	first := &stockBoardsFallbackTestProvider{name: "eastmoney", snapshot: firstSnapshot}
+	fallback := &stockBoardsFallbackTestProvider{name: "hithink", snapshot: validStockBoardsForFallbackTest("hithink")}
+	got, hit, err := stockBoardsFallbackService(first, fallback).StockBoards(context.Background(), "600519.SH")
+	if err != nil || hit || got == nil || got.Source != "hithink" {
+		t.Fatalf("mismatched snapshot source must be rejected: got=%+v hit=%v err=%v", got, hit, err)
+	}
+}
+
+func TestStockBoardsRejectsMismatchedItemSourceAndFallsBack(t *testing.T) {
+	firstSnapshot := validStockBoardsForFallbackTest("eastmoney")
+	firstSnapshot.Items[0].Source = "tencent"
+	first := &stockBoardsFallbackTestProvider{name: "eastmoney", snapshot: firstSnapshot}
+	fallback := &stockBoardsFallbackTestProvider{name: "hithink", snapshot: validStockBoardsForFallbackTest("hithink")}
+	got, hit, err := stockBoardsFallbackService(first, fallback).StockBoards(context.Background(), "600519.SH")
+	if err != nil || hit || got == nil || got.Source != "hithink" {
+		t.Fatalf("mismatched item source must reject the whole snapshot: got=%+v hit=%v err=%v", got, hit, err)
+	}
+}
+
+func TestStockBoardsMissingSnapshotSourceIsExplicitlyDegraded(t *testing.T) {
+	snapshot := validStockBoardsForFallbackTest("eastmoney")
+	snapshot.Source = ""
+	p := &stockBoardsFallbackTestProvider{name: "eastmoney", snapshot: snapshot}
+	got, hit, err := stockBoardsFallbackService(p).StockBoards(context.Background(), "600519.SH")
+	if err != nil || hit || got == nil || got.Source != "eastmoney" || got.QualityStatus != model.QualityDegraded ||
+		!hasStockSearchReason(got.QualityReasons, "provider_source_missing_assumed_from_provider_name") {
+		t.Fatalf("missing snapshot source must be filled with explicit degraded provenance: got=%+v hit=%v err=%v", got, hit, err)
+	}
+}
+
+func TestStockBoardsMissingItemSourceIsExplicitlyDegraded(t *testing.T) {
+	snapshot := validStockBoardsForFallbackTest("eastmoney")
+	snapshot.Items[0].Source = ""
+	p := &stockBoardsFallbackTestProvider{name: "eastmoney", snapshot: snapshot}
+	got, hit, err := stockBoardsFallbackService(p).StockBoards(context.Background(), "600519.SH")
+	if err != nil || hit || got == nil || got.Items[0].Source != "eastmoney" ||
+		got.Items[0].QualityStatus != model.QualityDegraded ||
+		!hasStockSearchReason(got.Items[0].QualityReasons, "provider_source_missing_assumed_from_provider_name") {
+		t.Fatalf("missing item source must be filled with explicit degraded provenance: got=%+v hit=%v err=%v", got, hit, err)
+	}
+}
+
 func TestStockBoardsFallsBackFromUnknownQualityRows(t *testing.T) {
 	firstSnapshot := validStockBoardsForFallbackTest("eastmoney")
 	firstSnapshot.QualityStatus = model.QualityUnknown

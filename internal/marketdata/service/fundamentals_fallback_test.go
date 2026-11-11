@@ -74,6 +74,32 @@ func TestFundamentalsFallsBackFromUnknownQualityMetricsToUsableProvider(t *testi
 	}
 }
 
+func TestFundamentalsPrefersLaterValidProviderOverDegradedPrimary(t *testing.T) {
+	degraded := validFundamentalsSnapshotForTest()
+	degraded.Source = "baostock"
+	degraded.QualityStatus = model.QualityDegraded
+	degraded.QualityReasons = []string{"test_publication_evidence_incomplete"}
+	for i := range degraded.Sections {
+		degraded.Sections[i].QualityStatus = model.QualityDegraded
+		degraded.Sections[i].QualityReasons = []string{"test_publication_evidence_incomplete"}
+	}
+	valid := validFundamentalsSnapshotForTest()
+	valid.Source = "tushare"
+	first := &fundamentalsFallbackTestProvider{name: "baostock", snapshot: degraded}
+	second := &fundamentalsFallbackTestProvider{name: "tushare", snapshot: valid}
+
+	got, hit, err := fundamentalsFallbackService(first, second).Fundamentals(context.Background(), "600519.SH", 2026, 2)
+	if err != nil || hit {
+		t.Fatalf("Fundamentals returned hit=%v err=%v", hit, err)
+	}
+	if got == nil || got.Source != "tushare" || got.QualityStatus != model.QualityValid {
+		t.Fatalf("expected later valid provider over degraded primary, got %+v", got)
+	}
+	if first.calls != 1 || second.calls != 1 {
+		t.Fatalf("expected both providers to be tried, calls=%d/%d", first.calls, second.calls)
+	}
+}
+
 func TestFundamentalsKeepsUnknownCandidateWithMoreMetricCoverage(t *testing.T) {
 	more := unknownFundamentalsFallbackSnapshot("baostock")
 	less := unknownFundamentalsFallbackSnapshot("tushare")

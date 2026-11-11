@@ -150,7 +150,8 @@ jobs:
         run: go vet ./...
 
   market-data-module-test:
-    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'feat/full-go-data-providers-api-switch') }}
+    timeout-minutes: 20
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'feat/full-go-data-providers-api-switch') || (github.event_name == 'push' && github.ref == 'refs/heads/feat/full-go-data-providers-api-switch') }}
     name: Test Market Data in root module
     runs-on: ubuntu-latest
     steps:

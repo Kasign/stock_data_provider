@@ -1,4 +1,3 @@
-
 package service
 
 import (
@@ -16,10 +15,12 @@ type readinessTestCache struct {
 	err error
 }
 
-func (c readinessTestCache) Get(context.Context, string) ([]byte, bool, error) { return nil, false, nil }
+func (c readinessTestCache) Get(context.Context, string) ([]byte, bool, error) {
+	return nil, false, nil
+}
 func (c readinessTestCache) Set(context.Context, string, []byte, time.Duration) error { return nil }
-func (c readinessTestCache) Ping(context.Context) error { return c.err }
-func (c readinessTestCache) Enabled() bool { return true }
+func (c readinessTestCache) Ping(context.Context) error                               { return c.err }
+func (c readinessTestCache) Enabled() bool                                            { return true }
 
 func TestReadyUsesPlatformDiagnosticsAndKeepsDependencyFault(t *testing.T) {
 	s := &DataService{cache: readinessTestCache{err: errors.New("connection refused")}}

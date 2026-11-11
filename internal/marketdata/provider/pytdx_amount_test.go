@@ -165,11 +165,10 @@ func TestBuildPytdxQuoteReportsInvalidOptionalAmountAndDegrades(t *testing.T) {
 	}
 }
 
-
 func TestBuildPytdxQuoteReportsProviderContractLimitations(t *testing.T) {
 	reporter := validation.NewReporter(20)
 	ctx := validation.WithReporter(context.Background(), reporter)
-	quote, err := buildPytdxQuote(ctx, "600519.SH", 10, 9.8, 9.9, 10.5, 9.5, 100, 10000)
+	quote, err := buildPytdxQuote(ctx, "600519.SH", 10, 9.8, 9.9, 10.5, 9.5, 100, 100000)
 	if err != nil {
 		t.Fatal(err)
 	}

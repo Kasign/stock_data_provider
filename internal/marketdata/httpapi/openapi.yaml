@@ -108,6 +108,10 @@ components:
         adjustment_method: {type: string, description: Adjustment algorithm identifier, for example cumulative_adj_factor_v1}
         adjustment_factor_source: {type: string, description: Provider used for the adjustment factor series}
         adjustment_factor_source_version: {type: string, description: Provider schema/data version used for the adjustment factor series}
+        adjustment_factor_revision_hash: {type: string, description: Hash identifying the exact point-in-time adjustment-factor revision applied to this bar}
+        adjustment_factor_set_hash: {type: string, description: Hash identifying the complete adjustment-factor set used for this bar}
+        adjustment_factor_reference_revision_hash: {type: string, description: Hash identifying the reference-date adjustment-factor revision}
+        adjustment_algorithm_version: {type: string, description: Version of the adjustment algorithm used to derive this bar}
         adjustment_factor_system_observed_at: {type: string, format: date-time, nullable: true, description: System observation time of the factor revision applied to this bar}
         source: {type: string}
         source_version: {type: string}
@@ -597,6 +601,8 @@ components:
         quality_reasons:
           type: array
           items: {type: string}
+        fallback_from: {type: string, description: Provider that was bypassed when this snapshot used a fallback}
+        fallback_reason: {type: string, description: Stable reason explaining why the primary provider was bypassed}
 
     ProviderProbeCheckResult:
       type: object
@@ -924,6 +930,8 @@ components:
         fetched_at: {type: string, format: date-time}
         quality_status: {$ref: '#/components/schemas/QualityStatus'}
         quality_reasons: {type: array, items: {type: string}}
+        fallback_from: {type: string, description: Provider that was bypassed when this snapshot used a fallback}
+        fallback_reason: {type: string, description: Stable reason explaining why the primary provider was bypassed}
     DragonTigerItem:
       type: object
       required: [symbol, code, name, trade_date, source, source_version, fetched_at, quality_status]

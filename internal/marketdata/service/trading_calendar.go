@@ -110,6 +110,10 @@ func (s *DataService) TradingCalendar(ctx context.Context, rawStartDate, rawEndD
 			failures = append(failures, p.Name()+": "+fetchErr.Error())
 			continue
 		}
+		if snapshot != nil && strings.TrimSpace(snapshot.Source) != "" && snapshot.Source != p.Name() {
+			failures = append(failures, p.Name()+": trading-calendar source does not match Provider.Name()")
+			continue
+		}
 		if err := validateTradingCalendarSnapshot(snapshot, startDate, endDate); err != nil {
 			failures = append(failures, p.Name()+": "+err.Error())
 			continue

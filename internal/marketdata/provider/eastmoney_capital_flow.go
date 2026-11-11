@@ -29,6 +29,7 @@ func (p *Eastmoney) FetchCapitalFlow(ctx context.Context, rawSymbol string) (*mo
 		ctx = context.Background()
 	}
 	if err := ctx.Err(); err != nil {
+		addEastmoneyCapitalFlowResponseIssue(ctx, "request", "context", "request_error", "active request context", "cancelled", "东方财富资金流请求上下文已取消或超时")
 		return nil, err
 	}
 	symbol, err := normalize.NormalizeSymbol(rawSymbol)
@@ -64,23 +65,33 @@ func (p *Eastmoney) FetchCapitalFlow(ctx context.Context, rawSymbol string) (*mo
 		} `json:"data"`
 	}
 	if err := p.getJSONWithRetry(ctx, endpoint, params, &payload, 8*time.Second); err != nil {
+		addEastmoneyCapitalFlowResponseIssue(ctx, "request", "HTTP response", "request_error", "successful JSON response", "request_error", "东方财富资金流请求或响应解析失败")
 		return nil, fmt.Errorf("Eastmoney capital-flow request: %w", err)
 	}
 	if payload.RC != nil && *payload.RC != 0 {
+		addEastmoneyCapitalFlowResponseIssue(ctx, "provider_status", "rc", "provider_error", "rc equal to zero", "non_success", "东方财富资金流接口明确返回非成功 rc")
 		return nil, fmt.Errorf("Eastmoney capital-flow provider error rc=%d", *payload.RC)
 	}
-	if payload.Data == nil || len(payload.Data.KLines) == 0 {
+	if payload.Data == nil {
+		addEastmoneyCapitalFlowResponseIssue(ctx, "data", "data", "missing_data", "data object containing security identity and klines", "missing", "东方财富资金流响应缺少 data 对象")
+		return nil, errors.New("Eastmoney capital-flow response has no daily observations")
+	}
+	if len(payload.Data.KLines) == 0 {
+		addEastmoneyCapitalFlowResponseIssue(ctx, "observations", "data.klines", "empty_result", "at least one daily observation", "empty", "东方财富资金流响应 klines 为空")
 		return nil, errors.New("Eastmoney capital-flow response has no daily observations")
 	}
 	requestedCode := strings.Split(symbol, ".")[0]
 	returnedCode := strings.TrimSpace(payload.Data.Code)
 	if returnedCode == "" {
+		addEastmoneyCapitalFlowResponseIssue(ctx, "symbol", "data.code", "missing_requested_identity", "six-digit returned security code", "missing", "东方财富资金流响应未回显证券代码，无法验证证券身份")
 		return nil, errors.New("Eastmoney capital-flow response is missing security code")
 	}
 	if len(returnedCode) != 6 {
+		addEastmoneyCapitalFlowResponseIssue(ctx, "symbol", "data.code", "invalid_symbol", "six-digit security code", "invalid", "东方财富资金流响应证券代码格式无效")
 		return nil, fmt.Errorf("Eastmoney capital-flow response has invalid security code %q", returnedCode)
 	}
 	if returnedCode != requestedCode {
+		addEastmoneyCapitalFlowResponseIssue(ctx, "symbol", "data.code", "symbol_mismatch", "returned code equal to requested security code", "mismatch", "东方财富资金流响应证券代码与请求证券不一致")
 		return nil, fmt.Errorf("Eastmoney capital-flow symbol mismatch: requested %s, returned code %q", symbol, returnedCode)
 	}
 
@@ -178,6 +189,12 @@ func sumEastmoneyCapitalFlowWindow(observations []eastmoneyCapitalFlowObservatio
 	return &sum
 }
 
+func addEastmoneyCapitalFlowResponseIssue(ctx context.Context, field, providerField, code, expected, actualType, message string) {
+	report := validation.NewReport(8)
+	report.Add(validation.FieldIssue{Stage: validation.StageParse, Field: field, ProviderField: providerField, Code: code, Expected: expected, ActualType: actualType, Severity: validation.SeverityError, Message: message})
+	validation.AddContextReport(ctx, report)
+}
+
 func addEastmoneyCapitalFlowParseIssue(ctx context.Context, rowIndex int, field, providerField, code, expected, actualType, preview, message string) {
 	report := validation.NewReport(8)
 	issue := validation.FieldIssue{
@@ -191,7 +208,6 @@ func addEastmoneyCapitalFlowParseIssue(ctx context.Context, rowIndex int, field,
 	report.Add(issue)
 	validation.AddContextReport(ctx, report)
 }
-
 
 func addEastmoneyCapitalFlowWarning(ctx context.Context, rowIndex int, field, providerField, code, expected, actualType, message string) {
 	report := validation.NewReport(8)

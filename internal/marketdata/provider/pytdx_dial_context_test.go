@@ -10,7 +10,7 @@ import (
 	"example.com/stock-analysis-flow/internal/marketdata/transport"
 )
 
-func TestPytdxUsesInjectedDialContext(t *testing.T) {
+func TestPytdxDialConfiguredHostUsesInjectedDialContext(t *testing.T) {
 	wantErr := errors.New("blocked by root dial policy")
 	var gotNetwork, gotAddress string
 	dialContext := transport.DialContextFunc(func(ctx context.Context, network, address string) (net.Conn, error) {
@@ -21,7 +21,7 @@ func TestPytdxUsesInjectedDialContext(t *testing.T) {
 		return nil, wantErr
 	})
 	p := NewPytdxWithDialContext(time.Second, dialContext, "tdx.example.test")
-	_, err := p.dial(context.Background())
+	_, _, err := p.dialConfiguredHost(context.Background())
 	if err == nil || !errors.Is(err, wantErr) {
 		t.Fatalf("dial() error = %v, want injected dial error", err)
 	}

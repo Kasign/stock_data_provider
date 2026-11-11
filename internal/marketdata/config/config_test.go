@@ -990,4 +990,3 @@ func TestLoadDisabledTickFlowDoesNotRequireAPIKeyForStaleCapabilities(t *testing
 		t.Fatalf("test must preserve stale capability flags to cover the regression: %+v", cfg.ProviderSettings["tickflow"])
 	}
 }
-
