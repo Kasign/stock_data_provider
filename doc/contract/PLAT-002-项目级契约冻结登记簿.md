@@ -179,7 +179,7 @@ GitHub 远端 ref 核验（2026-11-10）：
 | NEWS-CTR-001 | News 只读 Evidence Query Facade | News | Research、Researchflow | doc/news/新闻API契约.md 第11节；doc/news/schema/NEWS-CTR-001-*；doc/news/golden/NEWS-CTR-001-*；GOV-CTR-002；DEC-PLAT-002-021/042 | 1.0.0（4 Schema / 3 Golden） | `pending_evidence` | business_time_from/to 实为可选且省略（Go omitempty/Schema optional string），仅正文误写 nullable；system_as_of 等 UTC Z 约束尚未落入 Schema；system_observed_at 应映射 version.observed_at，News 数据模型文档未明确该版本级权威字段；relation_refs 缺 relation_status，不能区分 not_provided 与已确认空关系 |
 | NEWS-CTR-002 | AuthorizationRef 与内容访问授权 | News（授权决策 Owner） | Research、Researchflow | doc/news/新闻来源授权矩阵.md 第10节；doc/整体任务规划/schema/NEWS-CTR-002-authorization-binding-1.0.0.schema.json；对应 Golden；GOV-CTR-006；DEC-PLAT-002-043 | 1.0.0（Binding Schema/Golden） | `pending_evidence` | Schema/Golden 与 Go Validator 已覆盖 caller/subject、resource、purpose、content level、Provider/Source/Endpoint 策略集合、tuple 排序去重、conditional 和当前策略复核；但 News API 契约正文将 policy_version 描述为 Registry 版本、将 resource_ref 描述为 news_id+version_id，与 GOV-CTR-006、Golden 和代码的 snapshot_ref / news_id+version_no 定义冲突，需统一唯一权威文字定义 |
 | NEWS-CTR-003 | News PIT、稳定 Cursor、排序与去重 | News | Research、Researchflow | doc/news/新闻API契约.md 第11.1/11.3/11.6/11.9节；NEWS-CTR-001 Cursor Claims Schema；GOV-CTR-002；DEC-PLAT-002-042/044 | 复用 NEWS-CTR-001 1.0.0 Cursor Claims Schema；无独立 CTR-003 Schema | `pending_evidence` | 当前 active 契约已明确双时间 PIT、available_at 严格过滤、固定 system_as_of、news-evidence-v1 稳定排序、15 分钟 HMAC Cursor 和不可变快照；旧 News-Research 设计文档仍写显式 version_id 可不传 system_as_of、旧内容级别枚举和旧过滤字段，需明确废止/归档；NEWS-CTR-001 的 relation_status/UTC Schema 同步完成后再复核 |
-| QNT-CTR-001 | Metric/Indicator/Factor Registry 公共元数据 | Quant | Researchflow；Research 只消费编排结果 | doc/quant/schema/QNT-CTR-001-registry-entry-1.0.0.schema.json；doc/quant/03 | 1.0.0（Registry Entry Schema；正式首批 Registry Entry/Golden 未形成） | `pending_evidence` | Registry Entry 结构 Schema 已有；但 code 对应的首批实际 Registry 条目及其 unit/precision/range/algorithm_version/input_requirements/quality_policy 权威值未形成完整登记，不能仅冻结空壳 Schema |
+| QNT-CTR-001 | Metric/Indicator/Factor Registry 公共元数据 | Quant | Researchflow；Research 只消费编排结果 | doc/quant/schema/QNT-CTR-001-registry-entry-1.0.0.schema.json；doc/quant/03；DEC-PLAT-002-045 | 1.0.0（Registry Entry Schema；首批 Entry/Golden 未形成） | `pending_evidence` | 已核定 Registry Entry.code=metric_code、每个 metric_code 独立注册；Indicator 与 Metric 一对多映射、MACD/Bollinger 复合输出拆成多个 Metric；algorithm_version 由服务端活动版本映射选择，调用方不指定。首批实际 Entry 的 unit/precision/range/rounding/input_requirements/quality_policy 权威值仍未登记 |
 | QNT-CTR-002 | Indicator Request/Result | Quant | Researchflow | doc/quant/schema/QNT-CTR-002-indicator-parameters-1.0.0.schema.json；doc/quant/03 | 1.0.0（Parameters Schema；8 个算法参数定义） | `pending_evidence` | 参数 Schema/算法口径已有；完整 Indicator Request/Result DTO、指标输出字段/单位/精度/状态映射及每个指标的 Registry 元数据仍未形成唯一完整契约 |
 | QNT-CTR-003 | Factor Request/Result | Quant | Researchflow | doc/quant/schema/QNT-CTR-003-factor-parameters-1.0.0.schema.json；QNT-CTR-004 Factor QuantMetric Schema/Golden | 1.0.0（Parameters Schema；3 个首批 Factor） | `pending_evidence` | 首批三个 Factor 的参数/算法及局部 QuantMetric Schema 已有；完整 Factor Request/Result DTO、交易日历版本引用、输入质量和结果 Envelope 映射仍不完整 |
 | QNT-CTR-004 | QuantResultRef、Factor QuantMetric、Trend、Risk 输出 | Quant | Researchflow；Research 经 Researchflow 消费 | doc/quant/schema/QNT-CTR-004-*；doc/quant/03 第10.26节；项目级 Quant-Research公开DTO字段级契约第2节 | 1.0.0（Ref/Metric/Trend/Risk 局部 Schema/Golden） | `pending_evidence` | 已核验责任模块 QuantResultRef Schema 仍以 minItems=1 限制 input_snapshot_refs，与 DEC-029 冲突；项目级 QuantResultRef DTO/Golden 已允许经双重授权的空数组。Envelope Schema/Golden 尚缺；已有 Factor Metric、Trend、Risk 是局部 Payload，Indicator 尚无独立完整 Payload Schema，其他预留 result_type 无完整强类型 Payload。不得将局部 Schema 推断为完整 Envelope 支持；需补齐 Ref/Envelope/已开放 Payload 的权威映射后才能 freeze-ready |
@@ -500,7 +500,7 @@ PLAT-002 不因本次矩阵统计完成而结束。整体完成仍需：
 
 | 契约 | 状态 | 核定结论 |
 |---|---|---|
-| QNT-CTR-001 | pending_evidence | Registry Entry 1.0.0 Schema 已有，字段集合覆盖 code/schema_version/value_type/unit/precision/range/algorithm_version/input_requirements/parameters_schema/quality_policy/supports_interval；但缺少可作为首批公开定义的实际 Registry 条目及每个 code 的单位、精度、舍入、输入要求和质量策略映射 |
+| QNT-CTR-001 | pending_evidence | Registry Entry Schema/Go Validator 已有；DEC-045 已明确 code=metric_code、复合 Indicator 输出拆分为独立 Metric、服务端显式活动 algorithm_version；仍缺首批 8 Indicator 输出组/3 Factor 的正式 Entry/Golden，以及每个 metric_code 的单位、精度、舍入、范围、输入和质量策略值 |
 | QNT-CTR-002 | pending_evidence | 八种 Indicator 参数 Schema 与算法语义已有；但参数 Schema 不等同完整 Indicator Request/Result DTO，输出类型、单位、精度、状态和 Registry 元数据映射未完整定义 |
 | QNT-CTR-003 | pending_evidence | 三个首批 Factor 参数 Schema/Golden 和部分 QuantMetric Schema 已有；但完整 Factor Request/Result、交易日历版本引用、输入质量和结果 Envelope 映射不完整 |
 | QNT-CTR-004 | pending_evidence | QuantResultRef 责任模块 Schema 的 minItems=1 与 DEC-029 冲突；项目级 DTO/Golden 已允许双重授权空数组。Envelope Schema/Golden 缺失；已有 Factor Metric/Trend/Risk 仅为局部 Payload，Indicator 与其他预留类型尚无完整强类型 Payload，Ref/Envelope/Manifest 映射仍未闭合 |
@@ -1460,4 +1460,42 @@ DEC-PLAT-002-044 固定 NEWS-CTR-001 v1.0 请求语义：
 上述旧字段不得作为当前跨模块 API 使用。当前实现尚未完成 Snapshot Store 到 Query Facade 的所有接线，属于实现符合性/验收问题，不改变 v1.0 公开契约语义，也不阻断本轮定义冻结。
 
 **结论：NEWS-CTR-003 的 PIT/Cursor 语义已收敛；由于 NEWS-CTR-001 的 relation_status/UTC Schema 机器定义仍未同步，NEWS-CTR-003 继续保持 pending_evidence。**
+
+
+
+## 54. QNT-CTR-001 Metric Registry 身份与复合 Indicator 输出映射核定（2026-11-11）
+
+### 54.1 当前实现与 Schema 证据
+
+- `QNT-CTR-001-registry-entry-1.0.0.schema.json` 的 Registry Entry 描述单一 code 的 value_type、unit、precision、range、algorithm_version、input_requirements、parameters_schema、quality_policy、supports_interval。
+- `internal/quant/registry.Entry.Code` 与 `internal/quant/metric.Metric.MetricCode` 在 `Registry.ValidateMetric` 中逐字比较；Entry 是对单个 Metric 标量语义的定义，不是 Indicator 函数本身的定义。
+- `internal/quant/indicator` 中 SMA/EMA/Return/Volatility/RSI/ATR 返回单值；MACD 返回 DIF/DEA/Histogram 三个值；Bollinger 返回 Middle/Upper/Lower 三个值。
+- `internal/quant/factor.Result.Code` 与 `Metric.MetricCode` 对应，首批 Factor 是 momentum_20d、momentum_60d、volatility_20d。
+- Registry 代码已支持按 (code, schema_version) 查询、显式活动 algorithm_version、历史版本查询、版本切换和 Freeze；不依赖注册顺序。
+
+### 54.2 DEC-PLAT-002-045 规范
+
+1. Registry Entry 的 `code` 唯一语义为 `metric_code`；每个 metric_code + schema_version 是一个 Registry Entry。不得把 indicator_code、factor_code、result_type 和 metric_code 混为一个标识。
+2. 单输出 Indicator 的首批 metric_code 为：sma、ema、return、volatility、rsi、atr。
+3. 复合 Indicator 的每个标量输出分别注册：
+   - MACD：`macd_dif`、`macd_dea`、`macd_histogram`。
+   - Bollinger：`bollinger_middle`、`bollinger_upper`、`bollinger_lower`。
+4. 首批 Factor 每个输出一个 Metric，metric_code 为 momentum_20d、momentum_60d、volatility_20d。
+5. Indicator Request 的 indicator_code 选择计算算法；计算结果按上述固定映射投影为一个或多个 QuantMetric。每个输出 Metric 独立命中自己的 Registry Entry，独立声明 unit/value_type/precision/range/quality_policy；不得把 MACD/Bollinger 复合对象伪装成一个标量 Metric。
+6. 同一次 Indicator 算法执行的所有输出必须记录同一算法版本；每个输出 Metric 的 calculation_version 必须与其命中的 Registry Entry.algorithm_version 一致。
+7. Registry 的版本职责：
+   - schema_version 表示 Registry Entry JSON 结构版本。
+   - algorithm_version 表示该 metric_code 的计算和值语义版本，覆盖公式、seed/window、参数解释、输入要求、单位、数值类型、精度、舍入、范围和质量策略。
+   - 仅当 Entry JSON 结构本身变化时升级 schema_version；上述任一指标语义变化必须升级 algorithm_version，不得覆盖历史版本。
+8. 公共计算请求不指定 algorithm_version。服务端按 metric_code/schema_version 的显式活动映射选择唯一 active algorithm_version；结果必须记录实际版本。历史复算/结果验证按已持久化的 algorithm_version 精确查找，不因活动版本切换而改变历史语义。
+9. 同一 metric_code/schema_version 同时最多一个活动 algorithm_version；活动切换必须显式指定 expected previous version，未知版本或并发冲突 fail closed；Registry Freeze 后禁止新增/切换。
+
+### 54.3 仍未满足的冻结门禁
+
+- 当前仓库有 Indicator/Factor 计算 Golden，但没有正式的 QNT-CTR-001 Registry Entry Golden 文件；算法输出 Golden 不等于 Registry 元数据 Golden。
+- 尚未登记 6 个单输出 Indicator、6 个复合输出 Metric 和 3 个 Factor Metric 的完整 Registry Entry 值（单位、数值类型、整数/小数精度、舍入、容差、范围、输入要求、参数 Schema、质量策略）。
+- 对价格类指标使用 decimal_string 还是 number、统计量容差、RSI/ratio 的单位表达等必须由具体指标定义和精度要求决定；不得为填满 Entry 任意套用统一 scale/tolerance。
+- 本轮只收敛 Registry 身份/映射/版本选择语义，不生成虚构的 Registry 元数据或 Golden，不修改 Quant 代码、Schema、Golden 或模块专项文档。
+
+**结论：QNT-CTR-001 的 Registry 结构语义已收敛，但缺首批真实权威 Entry/Golden，继续保持 pending_evidence。**
 
