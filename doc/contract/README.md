@@ -53,6 +53,6 @@
 
 ## 5. 本轮范围
 
-以固定的 `origin/integration` SHA `b6dfc85ba214fe16268c8cba780641a8bfe15086` 作为本轮代码核验对象；审计文档仅维护在 `feat/design_doc`。当前文档分支比 integration ahead 7 commits，compare 变更仅涉及文档文件。核验期间不修改业务代码、不修改其他分支、不合并其他分支，也不将 integration 合并回任何分支。
+以固定的 origin/integration SHA b6dfc85ba214fe16268c8cba780641a8bfe15086 作为本轮代码核验对象；审计文档仅维护在 feat/design_doc。核验期间不修改业务代码或责任模块文档，不修改其他分支，不合并 integration，也不将 integration 合并回任何分支。
 
 本目录的当前状态以登记簿第24节为准：43 个正式 CTR 已完成本轮定义口径核定，不再保留全量重复盘点任务；下一阶段只处理 5 项明确待决和 37 项公开定义缺口。任何模块内部实现、测试、CI、部署事项均不得重新加入本轮契约定义冻结门禁。
