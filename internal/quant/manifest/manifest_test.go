@@ -117,7 +117,6 @@ func TestBuildSortsSnapshotRefsAndRejectsInvalidInputs(t *testing.T) {
 		name  string
 		input Input
 	}{
-		{name: "empty refs", input: func() Input { v := base; v.InputSnapshotRefs = nil; return v }()},
 		{name: "duplicate refs", input: func() Input { v := base; v.InputSnapshotRefs = []string{"same", "same"}; return v }()},
 		{name: "blank ref", input: func() Input { v := base; v.InputSnapshotRefs = []string{" "}; return v }()},
 		{name: "unknown result type", input: func() Input { v := base; v.ResultType = "unknown"; return v }()},

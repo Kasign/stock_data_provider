@@ -223,6 +223,24 @@ func TestBuildRefOutputMatchesQNTCTR004Schema(t *testing.T) {
 		t.Fatalf("BuildRef output does not satisfy QNT-CTR-004 schema: %v", err)
 	}
 
+	emptyRef, err := BuildRef(validRefInput(), testManifestWithoutSnapshots(t))
+	if err != nil {
+		t.Fatalf("BuildRef() rejected an explicitly empty snapshot set: %v", err)
+	}
+	emptyEncoded, err := json.Marshal(emptyRef)
+	if err != nil {
+		t.Fatal(err)
+	}
+	emptyDecoder := json.NewDecoder(bytes.NewReader(emptyEncoded))
+	emptyDecoder.UseNumber()
+	var emptyInstance any
+	if err := emptyDecoder.Decode(&emptyInstance); err != nil {
+		t.Fatal(err)
+	}
+	if err := schema.Validate(emptyInstance); err != nil {
+		t.Fatalf("QNT-CTR-004 schema rejected an explicitly empty snapshot array: %v", err)
+	}
+
 	invalid := make(map[string]any)
 	for key, value := range instance.(map[string]any) {
 		invalid[key] = value
