@@ -543,7 +543,7 @@ PLAT-002 不因本次矩阵统计完成而结束。整体完成仍需：
 | 契约 | 状态 | 核定结论 |
 |---|---|---|
 | RSC-CTR-001 | pending_evidence | Evidence 1.0.0 Schema/Golden 已有，字段、来源 Owner、derived_from_refs、content_level、AuthorizationRef、JCS 指纹语义较完整；但 Schema 的 date-time 未约束 RFC3339Nano UTC，source_version 条件必填规则缺少 source-owner/versioned-resource 适用映射，system_as_of/available_at 的 PIT 关系仍由文字约束承担 |
-| RSC-CTR-002 | pending_evidence | Event、Claim/Hypothesis、Scenario 的项目级 DTO、1.0.0 Schema/Golden 已按 DEC-030～032 补齐；剩余为跨字段语义校验（EventRef 存在性/无环、source_times 对应、supersedes 当前版本）及与 Research 责任模块定义的一致性证据 |
+| RSC-CTR-002 | pending_evidence | Event/Claim/Scenario 项目级 DTO、Schema/Golden 已按 DEC-030～033 对齐核心结构；剩余为 EventRef 存在性/无环、source_times 对应、Claim supersedes 当前版本/并发冲突、Scenario Metric Registry 类型/单位映射及 QuantResultRef 类型/时间绑定，并需对齐 Research 责任模块定义 |
 
 ### 18.2 RSC-CTR-002 的已裁决项与机器定义进度
 
