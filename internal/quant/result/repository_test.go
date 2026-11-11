@@ -16,8 +16,8 @@ func validRecord(t *testing.T, payload string) Record {
 		ResultType: "factor", SchemaVersion: "1.0.0",
 		PayloadSchemaVersion: "1.0.0", AlgorithmVersion: "momentum.v1",
 		ParameterFingerprint: "sha256:parameter-fingerprint",
-		SystemAsOf:        time.Date(2026, 11, 9, 0, 0, 0, 0, time.UTC),
-		InputSnapshotRefs: []string{"snapshot:001"},
+		SystemAsOf:           time.Date(2026, 11, 9, 0, 0, 0, 0, time.UTC),
+		InputSnapshotRefs:    []string{"snapshot:001"},
 	}, raw)
 	if err != nil {
 		t.Fatalf("BuildWithPayload() error = %v", err)
