@@ -123,13 +123,32 @@ func Build(input Input) (Manifest, error) {
 	if _, ok := allowedResultTypes[input.ResultType]; !ok {
 		return Manifest{}, invalid("result_type")
 	}
-	if !validScope(input.Scope) { return Manifest{}, invalid("scope") }
-	if input.Scope == "stock" && !validNonBlank(input.SecurityID) { return Manifest{}, invalid("security_id") }
-	if input.SecurityID != "" && !validNonBlank(input.SecurityID) { return Manifest{}, invalid("security_id") }
-	if input.TradeDate != "" { if len(input.TradeDate) != 10 { return Manifest{}, invalid("trade_date") }; if _, err := time.Parse("2006-01-02", input.TradeDate); err != nil { return Manifest{}, invalid("trade_date") } }
-	if !validNonBlank(input.Period) { return Manifest{}, invalid("period") }
-	if !validQualityStatus(input.QualityStatus) { return Manifest{}, invalid("quality_status") }
-	if !validResultStatus(input.ResultStatus) { return Manifest{}, invalid("result_status") }
+	if !validScope(input.Scope) {
+		return Manifest{}, invalid("scope")
+	}
+	if input.Scope == "stock" && !validNonBlank(input.SecurityID) {
+		return Manifest{}, invalid("security_id")
+	}
+	if input.SecurityID != "" && !validNonBlank(input.SecurityID) {
+		return Manifest{}, invalid("security_id")
+	}
+	if input.TradeDate != "" {
+		if len(input.TradeDate) != 10 {
+			return Manifest{}, invalid("trade_date")
+		}
+		if _, err := time.Parse("2006-01-02", input.TradeDate); err != nil {
+			return Manifest{}, invalid("trade_date")
+		}
+	}
+	if !validNonBlank(input.Period) {
+		return Manifest{}, invalid("period")
+	}
+	if !validQualityStatus(input.QualityStatus) {
+		return Manifest{}, invalid("quality_status")
+	}
+	if !validResultStatus(input.ResultStatus) {
+		return Manifest{}, invalid("result_status")
+	}
 	if !schemaVersionRE.MatchString(input.SchemaVersion) {
 		return Manifest{}, invalid("schema_version")
 	}
@@ -196,13 +215,32 @@ func (m Manifest) Verify() error {
 	if _, ok := allowedResultTypes[m.ResultType]; !ok {
 		return invalid("result_type")
 	}
-	if !validScope(m.Scope) { return invalid("scope") }
-	if m.Scope == "stock" && !validNonBlank(m.SecurityID) { return invalid("security_id") }
-	if m.SecurityID != "" && !validNonBlank(m.SecurityID) { return invalid("security_id") }
-	if m.TradeDate != "" { if len(m.TradeDate) != 10 { return invalid("trade_date") }; if _, err := time.Parse("2006-01-02", m.TradeDate); err != nil { return invalid("trade_date") } }
-	if !validNonBlank(m.Period) { return invalid("period") }
-	if !validQualityStatus(m.QualityStatus) { return invalid("quality_status") }
-	if !validResultStatus(m.ResultStatus) { return invalid("result_status") }
+	if !validScope(m.Scope) {
+		return invalid("scope")
+	}
+	if m.Scope == "stock" && !validNonBlank(m.SecurityID) {
+		return invalid("security_id")
+	}
+	if m.SecurityID != "" && !validNonBlank(m.SecurityID) {
+		return invalid("security_id")
+	}
+	if m.TradeDate != "" {
+		if len(m.TradeDate) != 10 {
+			return invalid("trade_date")
+		}
+		if _, err := time.Parse("2006-01-02", m.TradeDate); err != nil {
+			return invalid("trade_date")
+		}
+	}
+	if !validNonBlank(m.Period) {
+		return invalid("period")
+	}
+	if !validQualityStatus(m.QualityStatus) {
+		return invalid("quality_status")
+	}
+	if !validResultStatus(m.ResultStatus) {
+		return invalid("result_status")
+	}
 	if !schemaVersionRE.MatchString(m.SchemaVersion) {
 		return invalid("schema_version")
 	}
@@ -287,9 +325,30 @@ func (m Manifest) calculateFingerprint() (string, error) {
 	return hex.EncodeToString(sum[:]), nil
 }
 
-func validScope(value string) bool { switch value { case "stock", "market", "industry", "portfolio": return true }; return false }
-func validQualityStatus(value string) bool { switch value { case "valid", "degraded", "invalid", "unknown": return true }; return false }
-func validResultStatus(value string) bool { switch value { case "completed", "insufficient_data", "insufficient_sample", "rejected", "failed": return true }; return false }
+func validScope(value string) bool {
+	switch value {
+	case "stock", "market", "industry", "portfolio":
+		return true
+	default:
+		return false
+	}
+}
+func validQualityStatus(value string) bool {
+	switch value {
+	case "valid", "degraded", "invalid", "unknown":
+		return true
+	default:
+		return false
+	}
+}
+func validResultStatus(value string) bool {
+	switch value {
+	case "completed", "insufficient_data", "insufficient_sample", "rejected", "failed":
+		return true
+	default:
+		return false
+	}
+}
 
 func validNonBlank(value string) bool {
 	return value != "" && strings.TrimSpace(value) == value
