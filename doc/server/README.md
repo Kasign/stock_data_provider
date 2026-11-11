@@ -153,7 +153,7 @@ doc/
 - `internal/server/**` 只放进程级装配、Transport、生命周期和跨模块连接代码。
 - `internal/platform/**` 继续归 Platform 所有；Server 通过公开接口使用，不复制实现。
 - `internal/{data,news,quant,research,researchflow,llm,notification}/**` 继续归各业务模块所有。
-- 旧 `cmd/analysis-api`、`internal/service`、旧 Analysis 适配器在迁移完成前保留为兼容基线；不在 SRV-001 审计阶段提前删除。
+- 旧 `cmd/analysis-api`、`internal/service` 和旧 Analysis 适配器在新链路验收及退役门禁完成前，暂作为迁移中的实现依赖保留；这不构成继续维护旧 Analysis HTTP API 公共兼容契约的承诺。依据 DEC-PLAT-002-018，旧 API 不作为长期支持接口；新 Researchflow API 验收后，按决议删除旧路由及其专属适配代码。
 - 具体目录可根据仓库现有包结构微调，但必须保持上述所有权边界，不为迎合目录树而搬动模块代码。
 
 ### 2.2 文档目录规则
@@ -1268,3 +1268,15 @@ Lifecycle.Stop 原实现通过 stopped 标记保证重复调用幂等，但并�
 - SRV-006 本轮关闭错误传播已通过独立包级测试；生产环境的关闭失败故障注入和进程退出码验收仍待完成。
 - SRV-007 本轮 Schema 只读版本/状态预检及 Readiness 注册测试已通过独立包级测试；未连接真实 MariaDB 验证故障矩阵，且未验证 checksum。Platform 需要后续提供公开只读历史/checksum 验证能力，Server 不实现其内部算法。
 - 当前 Server 分支没有合并 integration，也没有修改其他模块目录。
+
+
+### 12.52 契约冻结后 Server 接入边界复核（2026-11-11）
+
+- 本轮审计基线：分支 HEAD `2b13818a934e53ea517ff2aca4207d910d6134ff`；最新提交为合并提交，提交时间 2026-11-11 18:40（北京时间）。本轮仅读取代码、契约和文档，未修改业务代码。
+- 分支关系：Server 分支相对共同基线有 1 个独有提交，`integration` 相对共同基线有 2 个独有提交；两分支已分叉。本轮不执行合并，不以 `integration` 内容覆盖当前分支。
+- 当前 SHA 的 Combined Status 未返回状态项，提交关联的 PR Workflow Runs 查询也未返回记录；因此本轮没有可引用的当前 SHA CI 通过证据。该结果不等价于断言仓库不存在其他类型的 Actions 运行记录。
+- 契约边界：PLAT-002 登记簿中的 SRV-CTR-001 为 `deferred`。新 Researchflow HTTP API 的路径、DTO、认证授权、错误投影、分页/Cursor 和事件读取契约尚未形成活动定义；不得在 Server 侧自行补造路由、字段或公开 OpenAPI。
+- 旧 API 边界：DEC-PLAT-002-018 已明确旧 Analysis API 不作为长期支持的公共接口，并要求新 Researchflow API 验收后删除旧路由及专属适配代码。当前 `internal/server/bootstrap/bootstrap.go` 仍通过 `httpapi.NewWithTasks` 装配旧 Analysis Handler；在新 API 契约和消费者验收完成前，只能视为迁移中的临时实现，不得扩展旧 API 能力，也不得将其描述为长期兼容方案。
+- 代码现状核对：现有 Bootstrap 仍直接装配旧 Analysis Runner/Task Queue；Migration Registry 当前注册 News、Research、Notification；Diagnostics 聚合继续委托 Platform Runner；LLM Transport 复用 Platform BoundDoer。以上代码存在不等于模块装配、真实依赖或端到端验收通过。
+- 当前可执行边界：SRV-002/003/005/006/007/009 的剩余工作必须逐项对照已有代码和模块公开装配入口定点推进；SRV-004 不得创建占位 Factory，只有在模块公开构造入口、Port、Handler、Worker、Check、Migration 和配置来源可核实时才解除阻塞；SRV-008 继续等待 Outbox/Inbox 与 Dispatcher 所有权契约；SRV-010 继续等待 Data 迁移门禁。
+- 本轮未修改 `cmd/analysis-api`、`internal/server/**` 代码，未触碰其他模块目录，也未在 `integration` 上执行写操作或构建。下一阶段应先完成各模块公开装配入口的现状核对，再确定 SRV-004 是否具备真实可执行条件；不得根据目录存在或历史文档推断模块 Factory 已交付。
