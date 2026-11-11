@@ -135,18 +135,18 @@ AuthorizationRef 是不可变授权审计快照，不是访问令牌。字段如
 |---|---|---|
 | authorization_ref | string | 不透明稳定引用 |
 | policy_owner | enum | data/news/quant/research；News 内容必须为 news |
-| policy_version | string | 不可变 News Authorization Policy Registry 版本；decision_fingerprint 同时覆盖本次判定采用的 Provider Output Policy、Source Policy、Endpoint Policy 版本 |
+| policy_version | string | 必须逐字等于 `PolicySnapshot.snapshot_ref`，表示本次决策采用的完整不可变策略组合快照；各 Provider Output/Source/Endpoint 策略的具体版本只记录在 `PolicySnapshot.policies` |
 | decision | enum | allowed/denied/conditional/unknown |
 | purpose_code | enum | quant_analysis/research_analysis/risk_review/user_display；NewsEvidenceQuery 首期只允许 research_analysis/risk_review/user_display |
 | content_level | enum | metadata/summary/snippet/full |
 | subject_ref | string | 被授权调用主体的稳定引用，必须对应请求 caller_ref |
-| resource_ref | string | 本次授权决策覆盖的新闻/来源/Endpoint 资源引用 |
+| resource_ref | string | 唯一格式为 `news_evidence_version:{news_id}:v{version_no}`；绑定不可变 News Item Version。`version_id` 保持独立不透明 ID，不参与拼接 |
 | decided_at | RFC3339Nano UTC | 决策时间 |
 | expires_at | RFC3339Nano UTC/null | null 表示未配置固定过期，不表示永久授权 |
 | conditions | array<string> | 稳定 condition_code；无条件为空数组 |
 | decision_fingerprint | string | 决策输入与策略版本指纹 |
 
-News 为 News 来源内容签发 AuthorizationRef。公开或无限制内容也签发 allowed 快照，不允许 null/not_required 绕过授权审计。每次当前受限内容读取仍必须重新检查 Source/Endpoint/Provider 策略、用途、内容级别、撤销和过期状态；AuthorizationRef.subject_ref 对应 caller_ref，resource_ref 对应被读取资源。历史 allowed 不构成当前放行凭据。授权校验与内容读取必须使用同一策略版本快照；若读取期间策略版本发生变化，必须重新授权，否则丢弃内容并拒绝返回。当前决策 denied/unknown 或授权依赖不可用时，受限内容拒绝访问；conditional 仅在 News 验证全部 condition_code 均满足后允许，否则拒绝。
+News 为 News 来源内容签发 AuthorizationRef。公开或无限制内容也签发 allowed 快照，不允许 null/not_required 绕过授权审计。每次当前受限内容读取仍必须重新检查 Source/Endpoint/Provider 策略、用途、内容级别、撤销和过期状态；AuthorizationRef.subject_ref 对应 caller_ref，resource_ref 必须严格等于 `news_evidence_version:{news_id}:v{version_no}`；不得使用 version_id 或可变 news_id 单独拼接。历史 allowed 不构成当前放行凭据。授权校验与内容读取必须使用同一策略版本快照；若读取期间策略版本发生变化，必须重新授权，否则丢弃内容并拒绝返回。当前决策 denied/unknown 或授权依赖不可用时，受限内容拒绝访问；conditional 仅在 News 验证全部 condition_code 均满足后允许，否则拒绝。
 
 ### 11.3 PIT、Cursor 与稳定排序
 
