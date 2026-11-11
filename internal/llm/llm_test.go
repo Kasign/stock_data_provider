@@ -62,6 +62,52 @@ func TestModelRequestAndCapabilityValidationUseInjectedClock(t *testing.T) {
 	}
 }
 
+func TestModelRequestRequiresCanonicalUTCTimestamps(t *testing.T) {
+	now := time.Date(2026, 11, 11, 10, 0, 0, 0, time.UTC)
+	request := ModelRequest{
+		ProviderID: "p1", RequestID: "req-1", PurposeCode: "research.summary",
+		Model: "m1", InputText: "input", MaxOutputTokens: 128,
+		DeadlineAt: now.Add(time.Minute), CorrelationID: "run-1", SystemAsOf: now,
+	}
+	if err := request.ValidateAt(now); err != nil {
+		t.Fatalf("canonical UTC timestamps should be accepted: %v", err)
+	}
+
+	zeroOffsetZone := time.FixedZone("UTC+0", 0)
+	request.DeadlineAt = now.In(zeroOffsetZone).Add(time.Minute)
+	if err := request.ValidateAt(now); err == nil {
+		t.Fatal("deadline_at with a non-UTC location must be rejected even when its offset is zero")
+	}
+
+	request.DeadlineAt = now.Add(time.Minute)
+	request.SystemAsOf = now.In(zeroOffsetZone)
+	if err := request.ValidateAt(now); err == nil {
+		t.Fatal("system_as_of with a non-UTC location must be rejected even when its offset is zero")
+	}
+}
+
+func TestCapabilityEvidenceRequiresCanonicalUTCTimestamps(t *testing.T) {
+	config := testProviderConfig()
+	now := time.Date(2026, 11, 11, 10, 0, 0, 0, time.UTC)
+	zeroOffsetZone := time.FixedZone("UTC+0", 0)
+	verifiedAt := now.Add(-time.Minute).In(zeroOffsetZone)
+	validUntil := now.Add(time.Minute)
+	state := CapabilityState{
+		ProviderID: config.ProviderID, ModelID: config.DefaultModel,
+		Protocol: config.Protocol, GatewayVersion: "gateway-v1",
+		VerifiedAt: &verifiedAt, ValidUntil: &validUntil,
+		VerificationMethod: "automated_e2e", EvidenceRef: "test:evidence",
+		MaxOutputTokensLimit: 1024,
+		Values: map[Capability]CapabilityStatus{CapabilityResponsesJSON: CapabilitySupported},
+	}
+	if state.SupportsAt(CapabilityResponsesJSON, now) {
+		t.Fatal("capability evidence with a non-UTC timestamp location must not be supported")
+	}
+	if err := config.ValidateCapabilityStateAt(state, now); err == nil {
+		t.Fatal("provider validation must reject non-canonical UTC capability timestamps")
+	}
+}
+
 func TestProviderConfigValidate(t *testing.T) {
 	c := testProviderConfig()
 	if err := c.Validate(); err != nil {
