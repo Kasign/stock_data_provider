@@ -173,7 +173,7 @@ GitHub 远端 ref 核验（2026-11-10）：
 | DATA-CTR-003 | Provider 原始值标准化与精度保真 | Data 内部 Provider Adapter | Data 内部 Provider Adapter | doc/api/数据侧整体规划.md（仅内部适配约定） | 不属于跨模块公开契约版本 | `not_applicable` | 仅 Data 内部 Provider 标准化规则，不存在跨模块公开消费者；从 PLAT-002 跨模块契约冻结门禁排除，不再追踪 Provider Fixture/专项测试 |
 | DATA-CTR-004 | Data Quality、覆盖率、来源和降级表达 | Data | Quant、Researchflow、WebUI、Server | doc/api/contracts/数据质量与状态契约.md；internal/marketdata/httpapi/openapi.yaml | QualityStatus 已有枚举；各质量/覆盖 DTO 映射未完整登记 | `pending_evidence` | QualityStatus 与 Probe 状态已有定义；各公开响应中 quality_status、quality_reasons、freshness_status、coverage dimensions/分母和 source/version 的适用字段映射仍不完整，不能将诊断内部状态等同业务质量 |
 | DATA-CTR-005 | 精度保真的跨模块日线 DTO（v2） | Data | Quant、Researchflow | internal/marketdata/httpapi/openapi.yaml；Data v2 Decimal Schema 尚未登记 | v1.1.0 number；v2 版本与 Schema 未定义 | `pending_evidence` | v1 number 保持既有语义；v2 的 Decimal string 字段、精度/scale/舍入/缺失规则、版本和与 Snapshot 引用的关系尚无权威 Schema。Provider 内部精度实现不纳入本轮 |
-| DATA-CTR-006 | Data HTTP API 调用认证 | Data；Server 负责 Root 边界和 Remote Adapter Secret | Server、Quant Data Adapter；仅远程兼容模式下的 HTTP 调用方 | internal/marketdata/httpapi/openapi.yaml；Data服务间认证映射与Secret注入设计.md；DEC-PLAT-002-017 | Remote X-API-Key；InProcess 可信 Principal/Scope Context | `pending_evidence` | 模式边界已明确；但 OpenAPI 全局 security 同时声明 ApiKey 与 BearerAuth（OR 语义），与认证设计中“业务 API 仅 X-API-Key”的定义冲突；旧 API 清单仍描述浏览器持有 Key。需统一公开安全定义。实现接线不纳入本轮 |
+| DATA-CTR-006 | Data HTTP API 调用认证 | Data HTTP Adapter；Server 负责默认 Root 入口和 Remote Adapter Secret | Server Remote Data Adapter；仅远程兼容模式下的受控 HTTP 调用方 | [DATA-CTR-006 认证契约](./rules/DATA-CTR-006-Data-HTTP-API调用认证契约.md)；internal/marketdata/httpapi/openapi.yaml；Data服务间认证映射与Secret注入设计.md；DEC-PLAT-002-017/038/041 | 1.0.0（远程 X-API-Key；同进程可信 Principal Context） | `pending_evidence` | 目标语义已收敛：默认同进程由 Root Server 注入可信 Context；远程兼容仅 X-API-Key，禁止 Bearer 别名，健康接口匿名。现有 OpenAPI 顶层 ApiKey/BearerAuth OR、Handler Bearer fallback、测试 Bearer 成功用例均违约；需 Data 责任范围同步后再核验 |
 | DATA-CTR-007 | Research Data Snapshot/Evidence 消费边界 | Data（数据事实）；Research（Evidence）；Server（Adapter 注入） | Research、Researchflow | Data v2 DTO/Schema（待定义）；DATA-CTR-008 Snapshot Manifest | DailyBarsV2 Schema 未登记 | `pending_evidence` | Snapshot Manifest 只定义查询范围和来源版本，不等同 DailyBarsV2 行情内容 DTO；DailyBarsV2 字段、版本、质量/单位、Snapshot 引用与 Evidence 消费映射尚缺权威定义 |
 | DATA-CTR-008 | Data AuthorizationRef 签发与快照访问审计 | Data | Quant、Research | DATA-CTR-008 Snapshot Manifest Schema/Golden；GOV-CTR-006 AuthorizationRef/PolicySnapshot | 1.0.0（Snapshot Manifest Schema/Golden） | `pending_evidence` | Manifest 字段与 JCS/SHA-256 规则已定义；Schema 未约束 system_as_of 的 UTC 形式、sources 规范排序/去重完整语义；Data caller_ref、Scope/purpose 到可信主体及授权读取复核的公开映射仍需收敛 |
 | NEWS-CTR-001 | News 只读 Evidence Query Facade | News | Research、Researchflow | doc/news/新闻API契约.md 第11节；doc/news/schema/NEWS-CTR-001-*；doc/news/golden/NEWS-CTR-001-* | 1.0.0（4 Schema / 3 Golden） | `pending_evidence` | Application Port 查询定义已较完整；Schema 与文字存在 business_time nullable、UTC、system_observed_at 字段语义及 relation_refs 未提供/空集合状态差异，需统一公开 DTO 定义。未来 HTTP OpenAPI 草案不属于当前活动接口 |
@@ -756,8 +756,8 @@ INT-CTR-001 是 43 个正式 CTR 之一，覆盖 Quant、Research、Researchflow
 ### 24.3 阶段结论
 
 - 43 项正式 CTR 已全部完成本轮定义口径核定；不再保留“待审查模块/待全量盘点”的开放任务。
-- 当前未完成项为 30 项 pending-evidence；不再有 pending-decision。模块内部实现/测试/CI/部署事项仍不属于本轮契约定义冻结门禁。
-- GOV-CTR-001～006、PLAT-CTR-001～007 与 LLM-CTR-003 已达到 freeze-ready；下一阶段按剩余 30 项 pending-evidence CTR 增量收敛。不重新启动十模块全量扫描，不新增重复 CTR。
+- 当前未完成项为 27 项 pending-evidence；不再有 pending-decision。模块内部实现/测试/CI/部署事项仍不属于本轮契约定义冻结门禁。
+- GOV-CTR-001～006、PLAT-CTR-001～007 与 LLM-CTR-003 已达到 freeze-ready；下一阶段按剩余 27 项 pending-evidence CTR 增量收敛。不重新启动十模块全量扫描，不新增重复 CTR。
 
 
 ## 25. 五项待决裁决完成记录（2026-11-11）
@@ -1098,4 +1098,37 @@ INT-CTR-001 是 43 个正式 CTR 之一，覆盖 Quant、Research、Researchflow
 4. DATA-CTR-001 继续保持 `pending_evidence`；冻结前必须由 Data 权威公开 DTO/OpenAPI 移除 Provider 内部金额字段，并明确规范化 CNY 字段的缺失/质量语义，同时完成字段级 required/nullable/omitempty 映射。
 
 **结论：补充了 DATA-CTR-001 的直接冲突证据；未改变 43 项正式 CTR 的状态统计。**
+
+
+
+## 44. DATA-CTR-006 Data HTTP API 认证语义收敛（2026-11-11）
+
+### 44.1 核对证据
+
+固定代码基线：`origin/integration @ b6dfc85ba214fe16268c8cba780641a8bfe15086`。
+
+- `doc/整体任务规划/03-模块接口契约/Data服务间认证映射与Secret注入设计.md` 已明确 Root Server + Data 同进程为默认模式；默认模式通过可信 Principal/Scope Context 调用 Data Application Port，不使用 Data API Key。Data HTTP API Key 仅属于远程兼容模式。
+- 同一设计明确 Data API Key、Owner Token、Platform Service Secret、Provider Token 必须隔离；Remote Adapter 由 Server 侧注入 Data 专用 X-API-Key。
+- `internal/marketdata/httpapi/openapi.yaml` 当前全局 security 同时声明 ApiKey 与 BearerAuth，两个 requirement object 形成 OR；健康接口显式 `security: []`，业务接口继承全局定义。
+- `internal/marketdata/httpapi/server.go` 的 `Server.auth` 在 X-API-Key 缺失时读取 Authorization Bearer，并将两者与同一个 Data API Key 比较。
+- `internal/marketdata/httpapi/platform_contract_test.go` 将 Bearer 认证作为成功用例。
+- PLAT-CTR-003 1.0.0 与 DEC-PLAT-002-017/038 分别约束凭证隔离和可信调用主体来源。
+
+### 44.2 项目级语义决议
+
+依据 DEC-PLAT-002-041：
+1. 默认同进程模式只由 Root Server 完成外部认证/路由授权并注入可信 Principal Context；Data Application Port 不重复校验 Data API Key。
+2. 远程兼容模式的 Data HTTP 业务 API 只接受 X-API-Key；Authorization Bearer 不是别名，也不与 X-API-Key 形成 OR 认证。
+3. 健康接口保持显式匿名，返回最小信息；其余业务 HTTP Operation 继承唯一 ApiKey Security Requirement。
+4. Data API Key 只认证 Remote Adapter/服务调用方，不等同逻辑 caller，不可直接成为 AuthorizationRef.subject_ref 或 Snapshot Manifest.caller_ref。
+5. 跨 HTTP 的可信逻辑 caller 传递/绑定继续由 DATA-CTR-008 定义；不能用普通客户端自报 Header/Body/Query 替代可信 Principal Context。
+
+### 44.3 核定结论与状态
+
+- 新增 DATA-CTR-006 1.0.0 项目级唯一语义规则文件。
+- 已明确部署模式、唯一认证 Header、OpenAPI Security 表达、健康接口、凭据隔离、轮换和错误分类。
+- 当前 OpenAPI、Handler 和契约测试仍共同接受 Bearer 认证，与本次收敛语义冲突；这不是单纯的实现接线差异，而是权威机器契约本身尚未同步。
+- 本轮只更新项目级治理文档，不修改 Data 代码、OpenAPI、测试、模块专项文档或其他分支。
+
+**结论：DATA-CTR-006 语义决议已完成，但继续保持 `pending_evidence`；待 Data 权威 OpenAPI/Handler 契约定义同步后重新核验。43 项统计仍为 14/27/0/2/0。**
 

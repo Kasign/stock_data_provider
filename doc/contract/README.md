@@ -25,6 +25,7 @@
 | PLAT-CTR-005 HTTP Client、SSRF 与出口安全 | [PLAT-CTR-005 HTTP Client 契约](./rules/PLAT-CTR-005-HTTP-Client与SSRF契约.md) |
 | PLAT-CTR-006 Storage、Repository 与 Migration 生命周期 | [PLAT-CTR-006 Storage 与 Migration 契约](./rules/PLAT-CTR-006-Storage与Migration契约.md) |
 | PLAT-CTR-007 Typed Config 与 Secret 生命周期 | [PLAT-CTR-007 Typed Config 与 Secret 契约](./rules/PLAT-CTR-007-Typed-Config与Secret契约.md) |
+| DATA-CTR-006 Data HTTP API 调用认证 | [DATA-CTR-006 Data HTTP API 认证契约](./rules/DATA-CTR-006-Data-HTTP-API调用认证契约.md) |
 | 项目级契约版本、冻结/解冻和变更历史 | [契约版本与变更记录](./契约版本与变更记录.md) |
 | 项目目标、模块职责、目标架构和开发边界 | [整体任务规划总览](../整体任务规划/01-项目总览/整体任务规划总览.md) |
 | Platform 技术原语候选定义 | [Platform 公共平台契约规范](../platform/08-公共平台契约规范.md) |
@@ -68,4 +69,4 @@
 
 以固定的 origin/integration SHA b6dfc85ba214fe16268c8cba780641a8bfe15086 作为本轮代码核验对象；审计文档仅维护在 feat/design_doc。核验期间不修改业务代码或责任模块文档，不修改其他分支，不合并 integration，也不将 integration 合并回任何分支。
 
-本目录的当前状态以登记簿第24节为准：43 个正式 CTR 已完成本轮定义口径核定，不再保留全量重复盘点任务；五项待决已由 DEC-PLAT-002-028～032 裁决；ScenarioCondition 类型结构另由 DEC-PLAT-002-033 明确；下一阶段只处理 33 项公开定义证据缺口。任何模块内部实现、测试、CI、部署事项均不得重新加入本轮契约定义冻结门禁。
+本目录的当前状态以登记簿第24节为准：43 个正式 CTR 已完成本轮定义口径核定，不再保留全量重复盘点任务；五项待决已由 DEC-PLAT-002-028～032 裁决；ScenarioCondition 类型结构另由 DEC-PLAT-002-033 明确；下一阶段只处理当前 27 项公开定义证据缺口。任何模块内部实现、测试、CI、部署事项均不得重新加入本轮契约定义冻结门禁。
