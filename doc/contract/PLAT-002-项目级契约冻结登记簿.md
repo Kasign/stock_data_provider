@@ -176,7 +176,7 @@ GitHub 远端 ref 核验（2026-11-10）：
 | DATA-CTR-006 | Data HTTP API 调用认证 | Data HTTP Adapter；Server 负责默认 Root 入口和 Remote Adapter Secret | Server Remote Data Adapter；仅远程兼容模式下的受控 HTTP 调用方 | [DATA-CTR-006 认证契约](./rules/DATA-CTR-006-Data-HTTP-API调用认证契约.md)；internal/marketdata/httpapi/openapi.yaml；Data服务间认证映射与Secret注入设计.md；DEC-PLAT-002-017/038/041 | 1.0.0（远程 X-API-Key；同进程可信 Principal Context） | `pending_evidence` | 目标语义已收敛：默认同进程由 Root Server 注入可信 Context；远程兼容仅 X-API-Key，禁止 Bearer 别名，健康接口匿名。现有 OpenAPI 顶层 ApiKey/BearerAuth OR、Handler Bearer fallback、测试 Bearer 成功用例均违约；需 Data 责任范围同步后再核验 |
 | DATA-CTR-007 | Research Data Snapshot/Evidence 消费边界 | Data（数据事实）；Research（Evidence）；Server（Adapter 注入） | Research、Researchflow | internal/marketdata/app/port.go；DATA-CTR-008 Manifest Schema/Golden；DEC-PLAT-002-020；Quant-Research 公开 DTO 字段级契约 | DailyBarsSnapshot 当前 DTO；DATA-CTR-008 Manifest 1.0.0；内容 DTO/引用映射未定义 | `pending_evidence` | DailyBarsSnapshot 返回 bars 但不含 snapshot_ref/Manifest/AuthorizationRef；Bundle.snapshot_id 未证明等同内容寻址 SnapshotRef。DATA-CTR-008 Manifest 仅记录范围/来源版本元数据，不包含行情内容或 payload Schema。缺少不可变内容定位、DailyBarsV2/质量单位字段和 Research Evidence source_ref/version/locator 的权威映射 |
 | DATA-CTR-008 | Data AuthorizationRef 签发与快照访问审计 | Data | Quant、Research | DATA-CTR-008 Snapshot Manifest Schema/Golden；GOV-CTR-006；DEC-PLAT-002-038/041 | 1.0.0（Snapshot Manifest Schema/Golden） | `pending_evidence` | Manifest 的 UTC、sources tuple 排序/唯一性尚未由 Schema/Validator 完整约束；caller_ref 必须等于可信 Principal 的 AuthorizationRef.subject_ref，API Key 不可作为主体，但远程可信 caller 传递机制未定义；Scope/purpose 映射及读取时当前策略复核仍缺 Data 权威契约 |
-| NEWS-CTR-001 | News 只读 Evidence Query Facade | News | Research、Researchflow | doc/news/新闻API契约.md 第11节；doc/news/schema/NEWS-CTR-001-*；doc/news/golden/NEWS-CTR-001-* | 1.0.0（4 Schema / 3 Golden） | `pending_evidence` | Application Port 查询定义已较完整；Schema 与文字存在 business_time nullable、UTC、system_observed_at 字段语义及 relation_refs 未提供/空集合状态差异，需统一公开 DTO 定义。未来 HTTP OpenAPI 草案不属于当前活动接口 |
+| NEWS-CTR-001 | News 只读 Evidence Query Facade | News | Research、Researchflow | doc/news/新闻API契约.md 第11节；doc/news/schema/NEWS-CTR-001-*；doc/news/golden/NEWS-CTR-001-*；GOV-CTR-002；DEC-PLAT-002-021/042 | 1.0.0（4 Schema / 3 Golden） | `pending_evidence` | business_time_from/to 实为可选且省略（Go omitempty/Schema optional string），仅正文误写 nullable；system_as_of 等 UTC Z 约束尚未落入 Schema；system_observed_at 应映射 version.observed_at，News 数据模型文档未明确该版本级权威字段；relation_refs 缺 relation_status，不能区分 not_provided 与已确认空关系 |
 | NEWS-CTR-002 | AuthorizationRef 与内容访问授权 | News（授权决策 Owner） | Research、Researchflow | doc/news/新闻来源授权矩阵.md 第10节；NEWS-CTR-002 Authorization Binding Schema/Golden；GOV-CTR-006 | 1.0.0（Authorization Binding Schema/Golden） | `pending_evidence` | News-specific caller/resource/purpose/content_level 与 Provider/Source/Endpoint 策略交集已定义；仍依赖 GOV-CTR-006 的时间/规范排序及通用授权快照适用语义收敛 |
 | NEWS-CTR-003 | News PIT、稳定 Cursor、排序与去重 | News | Research、Researchflow | doc/news/新闻API契约.md 第11.3/11.6/11.9节；NEWS-CTR-001 Cursor Claims Schema；doc/news/新闻数据模型与质量契约.md | 复用 NEWS-CTR-001 1.0.0 Cursor Schema；无独立 CTR-003 Schema | `pending_evidence` | PIT 过滤、15分钟快照、HMAC Cursor、排序版本已有定义；system_observed_at 与 observation/first_observed_at 权威归属不一致，且 Evidence relation_refs 未表达 DEC-021 的 not_provided 与 confirmed-empty 区分 |
 | QNT-CTR-001 | Metric/Indicator/Factor Registry 公共元数据 | Quant | Researchflow；Research 只消费编排结果 | doc/quant/schema/QNT-CTR-001-registry-entry-1.0.0.schema.json；doc/quant/03 | 1.0.0（Registry Entry Schema；正式首批 Registry Entry/Golden 未形成） | `pending_evidence` | Registry Entry 结构 Schema 已有；但 code 对应的首批实际 Registry 条目及其 unit/precision/range/algorithm_version/input_requirements/quality_policy 权威值未形成完整登记，不能仅冻结空壳 Schema |
@@ -472,7 +472,7 @@ PLAT-002 不因本次矩阵统计完成而结束。整体完成仍需：
 
 | 契约 | 状态 | 核定结论 |
 |---|---|---|
-| NEWS-CTR-001 | pending_evidence | Query 请求/响应已有 1.0.0 Schema/Golden 和详细字段定义；但 business_time_from/to 文档允许 nullable、Schema 仅允许 string；system_as_of 要求 RFC3339Nano UTC、Schema 只声明 date-time；system_observed_at 与 News 数据模型声明的观察时间权威归属存在冲突；relation_refs 未表达 DEC-021 的 not_provided 与已确认空关系的区别 |
+| NEWS-CTR-001 | pending_evidence | 4 Schema/3 Golden 已有；business_time_from/to 的 Go/Schema 均为可选省略，正文 nullable 是文档误写；UTC RFC3339Nano Z 尚未机器约束；system_observed_at 的版本级映射需在 News 数据模型文档明确；relation_refs 缺 relation_status，违反 DEC-021 对 not_provided/已确认空关系的区分 |
 | NEWS-CTR-002 | pending_evidence | Authorization Binding Schema/Golden 已定义 caller/resource/purpose/content_level 与 GOV-CTR-006 引用；News 侧签发与读取复核、Provider/Source/Endpoint 策略继承和 conditional 规则已明确；仍依赖 GOV-CTR-006 的 UTC/排序和公共授权快照语义收敛 |
 | NEWS-CTR-003 | pending_evidence | PIT 可见性、available_at 不可推断、稳定排序、15 分钟固定 Snapshot、HMAC Cursor、key rotation 与错误分类均有明确文字和 NEWS-CTR-001 Cursor Claims Schema；但系统观察时间排序键与 News 领域时间权威定义不一致，且与 NEWS-CTR-001 的 relation_refs 状态表达存在关联缺口 |
 
@@ -1326,4 +1326,54 @@ DEC-027 不只是禁止 DragonTiger 的七个 Provider 金额字段；它确立�
 6. 本轮不修改 Data DTO、OpenAPI、Freshness Evaluator、Provider Probe 或 WebUI。
 
 **结论：DATA-CTR-004 继续保持 pending_evidence；缺口是逐响应状态/覆盖适用映射，不是缺少通用 QualityStatus 或 Freshness 枚举。**
+
+
+
+## 51. NEWS-CTR-001 Evidence 时间与 RelationRefs 状态核定（2026-11-11）
+
+### 51.1 business_time_from/to 空值语义
+
+- `ListEvidenceRequest.BusinessTimeFrom/To` 为 `*time.Time`，JSON Tag 使用 `omitempty`。
+- `NEWS-CTR-001-list-evidence-request-1.0.0.schema.json` 中两个字段均为可选属性，类型为 string/date-time，不允许 null。
+- 因此机器 Schema 与 Go JSON 序列化一致：字段缺省表示没有该边界；提供时必须是有效非空时间戳。News API 契约正文中的“可选 nullable”是文字错误，不应为了匹配该措辞把 Schema 改为允许 null。
+- DEC-PLAT-002-042 将其核定为“optional + omitted when absent”，不属于当前机器契约冲突。
+
+### 51.2 system_observed_at 权威字段映射
+
+- `GOV-CTR-002` 明确 News 单次版本观察时间映射为公共 `system_observed_at`，主体级 first/last observed 聚合时间不得替代具体版本观察时间。
+- `internal/news/domain/version_record.go` 的 `NewsItemVersion.ObservedAt` 与 `news_item_versions.observed_at` 表示具体不可变版本的观察/可见时间。
+- `internal/news/domain/observation.go` 的 `Observation.ObservedAt` 是候选观测时间；Repository PIT 查询同时要求版本和所属 Observation 均不晚于 system_as_of。
+- `internal/news/adapters/storage/evidence_query.go` 按 `v.observed_at` 选择/排序版本；`internal/news/app/get_evidence.go` 将 `pit.Version.ObservedAt.UTC()` 映射为 ResearchEvidenceRecord.system_observed_at。
+- 因此 Evidence DTO 的 system_observed_at 权威映射应为选中 NewsItemVersion 的 observed_at；Observation.observed_at 是另一项必须满足 PIT 的来源发现证据，不能替代版本观察时间。NewsItem.first_observed_at/last_observed_at 仅为主体级聚合值。
+- 当前 `新闻数据模型与质量契约.md` 第3.2节的时间权威表未明确列出版本级 `observed_at`，容易与 Observation.observed_at 混淆；需由 News 责任范围对齐文档。项目级语义以 GOV-CTR-002 与本决议为准。
+
+### 51.3 RelationRefs 的状态表达
+
+- `ResearchEvidenceRecord` 当前只有必填 `relation_refs: []string`；Schema 只定义 string array，没有关系提供状态字段。
+- `GetEvidence` 当前将 relation_refs 初始化为空数组；现有 DTO 无法区分“当前 Query 未提供关系能力”与“关系能力已执行且确认没有关系”。
+- DEC-PLAT-002-021 已明确要求区分 not_provided 与已确认无关系，不得只用空数组表达。
+- DEC-PLAT-002-042 固定最小表达：
+  - 新增必填 `relation_status`，枚举 `not_provided` / `provided`。
+  - `relation_refs` 保持必填数组。
+  - `relation_status=not_provided` 时，`relation_refs` 必须为空数组；表示本次 Evidence Query 未提供关系数据，不得解释为确认无关系。
+  - `relation_status=provided` 时，`relation_refs` 可为空或非空；空数组表示关系查询已完成且确认无适用关系，非空表示返回对应关系引用。
+  - 首期当前 Facade 未接入关系查询，应输出 `not_provided`，不能输出 `provided + []`。
+- 本字段是跨模块 DTO 语义，不能由 Researchflow 根据数组长度自行推断。
+
+### 51.4 UTC Schema 约束
+
+- `GOV-CTR-002` 规定跨模块绝对时间使用 RFC3339Nano UTC 并以 `Z` 结尾。
+- NEWS-CTR-001 的 Request/Response/Cursor Schema 多处仅声明 `format: date-time`，没有将 UTC Z 约束表达为机器规则；format 只验证 date-time 结构，不能表达本项目的 UTC 规范。
+- Go Application 已在请求校验和 PIT 映射中执行 UTC 检查/转换，但 Schema 仍比项目公共时间规则宽松。所有适用绝对时间字段（system_as_of、published_at filter、business_time filter、published_at/available_at、system_observed_at、fetched_at、normalized_at 及 Cursor 时间）应与 GOV-CTR-002 对齐，并由 Schema + 语义 Validator + Golden 共同验证。
+- 本轮不修改 News Schema/Golden/Go DTO；该同步属于 News 责任范围。
+
+### 51.5 核定结论
+
+1. business_time_from/to 的空值语义已可确定，不是冻结阻断项；应修正模块文档措辞，不改 Schema/Go 类型。
+2. system_observed_at 的公共含义已由 GOV-CTR-002 决定，具体映射为 NewsItemVersion.observed_at；News 数据模型文档需要补齐版本级时间权威表。
+3. relation_status 缺失是实际公开 DTO/Schema 缺口；必须新增机器字段并遵守 DEC-021/042 的跨字段语义。
+4. UTC RFC3339Nano Z 约束仍未完整进入 Schema/Golden。
+5. NEWS-CTR-001 继续保持 pending_evidence；未来 HTTP OpenAPI 草案不属于当前活动契约，也不作为本 CTR 冻结门禁。
+
+**结论：NEWS-CTR-001 的语义取舍已收敛；当前剩余门禁是 Schema/DTO/Golden 与 News 数据模型文档同步。**
 
