@@ -33,11 +33,19 @@ type IngestCollectedSource struct {
 	now     func() time.Time
 }
 
-func NewIngestCollectedSource(ingest *candidateIngest, sources SourceCatalog) (*IngestCollectedSource, error) {
-	if ingest == nil || sources == nil {
+// NewIngestCollectedSource 是可由 Server 组合根调用的公开构造器。底层候选写入器
+// 始终在 app 包内创建，不向调用方暴露绕过 Source 授权的写入入口。
+func NewIngestCollectedSource(
+	repository IdentityRepository,
+	newID func() string,
+	sources SourceCatalog,
+) (*IngestCollectedSource, error) {
+	if repository == nil || newID == nil || sources == nil {
 		return nil, ErrSourcePersistencePolicyUnavailable
 	}
-	return &IngestCollectedSource{ingest: ingest, sources: sources, now: time.Now}, nil
+	return &IngestCollectedSource{
+		ingest: newCandidateIngest(repository, newID), sources: sources, now: time.Now,
+	}, nil
 }
 
 func (u *IngestCollectedSource) Execute(ctx context.Context, request IngestCollectedSourceRequest) ([]domain.Observation, error) {
@@ -56,6 +64,9 @@ func (u *IngestCollectedSource) Execute(ctx context.Context, request IngestColle
 	}
 
 	registration, err := u.sources.LookupEndpoint(ctx, sourceID, endpointID)
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return nil, ctxErr
+	}
 	if err != nil {
 		return nil, errors.Join(ErrSourcePersistencePolicyUnavailable, err)
 	}

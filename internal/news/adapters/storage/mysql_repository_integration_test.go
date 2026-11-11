@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -20,6 +21,178 @@ import (
 	"example.com/stock-analysis-flow/internal/news/domain"
 	platformstorage "example.com/stock-analysis-flow/internal/platform/storage"
 )
+
+// repositoryIngestHarness 仅供 Storage 集成测试直接验证 Repository 的身份事务、
+// 幂等键和历史查询；它不替代生产 Application 的 Source/Provider 授权入口。
+type repositoryIngestHarness struct {
+	repository app.IdentityRepository
+	newID      func() string
+}
+
+func (h repositoryIngestHarness) Execute(
+	ctx context.Context,
+	sourceID, idempotencyKey string,
+	candidate domain.Candidate,
+	policy domain.SourceURLPolicy,
+) (domain.Observation, error) {
+	if h.repository == nil || h.newID == nil || ctx == nil || strings.TrimSpace(sourceID) == "" ||
+		strings.TrimSpace(idempotencyKey) == "" || strings.TrimSpace(candidate.ProviderCode) != "" {
+		if strings.TrimSpace(candidate.ProviderCode) != "" {
+			return domain.Observation{}, app.ErrProviderOutputPolicyRequired
+		}
+		return domain.Observation{}, app.ErrInvalidRequest
+	}
+	observedAt := time.Now().UTC()
+	candidate = domain.NormalizeCandidate(candidate, observedAt, candidate.QueryDimension)
+	candidate.CanonicalURL = ""
+	if candidate.RawURL != "" {
+		if decision := domain.EvaluateSourceURL(candidate.RawURL, policy); decision.Allowed {
+			candidate.CanonicalURL = decision.CanonicalURL
+		}
+	}
+	credentials, credentialErr := domain.BuildIdentityCredentials(sourceID, candidate.SourceItemID, candidate.RawURL, policy)
+	if credentialErr != nil {
+		credentials = nil
+	}
+	observation := domain.Observation{
+		ID: h.newID(), IdempotencyKey: idempotencyKey, SourceID: sourceID,
+		Candidate: candidate, ObservedAt: observedAt,
+	}
+	if observation.ID == "" {
+		return domain.Observation{}, app.ErrInvalidRequest
+	}
+	var persisted domain.Observation
+	err := h.repository.WithinIdentityTransaction(ctx, func(tx app.IdentityTransaction) error {
+		if len(credentials) == 0 {
+			observation.IdentityStatus = domain.ObservationUnidentified
+			observation.ReasonCode = "news.identity.credential_required"
+			var appendErr error
+			persisted, appendErr = tx.AppendObservation(ctx, observation)
+			return appendErr
+		}
+		existing, err := tx.FindIdentityCredentials(ctx, sourceID, credentials)
+		if err != nil {
+			return err
+		}
+		resolution := domain.ResolveIdentity(sourceID, credentials, existing)
+		switch resolution.Status {
+		case domain.IdentityConflict:
+			observation.IdentityStatus = domain.ObservationConflict
+			observation.ReasonCode = resolution.Reason
+		case domain.IdentityMatched:
+			observation.IdentityStatus = domain.ObservationMatched
+			observation.NewsID = resolution.NewsID
+		case domain.IdentityNew:
+			newsID, err := tx.CreateNewsItem(ctx, sourceID)
+			if err != nil {
+				return err
+			}
+			if strings.TrimSpace(newsID) == "" {
+				return errors.New("news.identity.created_item_id_missing")
+			}
+			observation.IdentityStatus = domain.ObservationNew
+			observation.NewsID = newsID
+			toSave := append([]domain.IdentityCredential(nil), credentials...)
+			for index := range toSave {
+				toSave[index].NewsID = newsID
+				toSave[index].ObservedAt = observedAt
+			}
+			if err := tx.SaveIdentityCredentials(ctx, toSave); err != nil {
+				return err
+			}
+		default:
+			return errors.New("news.identity.resolution_invalid")
+		}
+		var appendErr error
+		persisted, appendErr = tx.AppendObservation(ctx, observation)
+		return appendErr
+	})
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return domain.Observation{}, ctxErr
+	}
+	if err != nil {
+		return domain.Observation{}, errors.Join(app.ErrIdentityTransaction, err)
+	}
+	return persisted, nil
+}
+
+func mustMarshalAuthorizationBinding(t *testing.T, binding domain.NewsAuthorizationBinding) []byte {
+	t.Helper()
+	payload, err := json.Marshal(binding)
+	if err != nil {
+		t.Fatalf("marshal authorization binding: %v", err)
+	}
+	return payload
+}
+
+func applyNewsMigrationsAndVerifyV8Upgrade(t *testing.T, ctx context.Context, db *sql.DB) {
+	t.Helper()
+	migrations := Migrations()
+	if len(migrations) != 8 {
+		t.Fatalf("News migration count = %d, want 8", len(migrations))
+	}
+
+	var ledgerExists int
+	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM information_schema.tables
+		WHERE table_schema = DATABASE() AND table_name = 'platform_schema_migrations'`).Scan(&ledgerExists); err != nil {
+		t.Fatalf("inspect Platform migration ledger: %v", err)
+	}
+	needsV8UpgradeFixture := ledgerExists == 0
+	if ledgerExists > 0 {
+		var latestVersion sql.NullInt64
+		if err := db.QueryRowContext(ctx,
+			"SELECT MAX(version) FROM platform_schema_migrations WHERE namespace = ?", "news",
+		).Scan(&latestVersion); err != nil {
+			t.Fatalf("read News migration version: %v", err)
+		}
+		needsV8UpgradeFixture = !latestVersion.Valid || latestVersion.Int64 < 8
+	}
+
+	if !needsV8UpgradeFixture {
+		if err := platformstorage.ApplyMigrations(ctx, db, "news", migrations); err != nil {
+			t.Fatalf("verify existing News migrations: %v", err)
+		}
+		return
+	}
+
+	// Start from V1-V7 and preserve one pre-existing Observation while V8
+	// adds nullable retention columns to the live table.
+	if err := platformstorage.ApplyMigrations(ctx, db, "news", migrations[:7]); err != nil {
+		t.Fatalf("apply News migrations V1-V7: %v", err)
+	}
+	observationID := fmt.Sprintf("news-v8-upgrade-%d", time.Now().UnixNano())
+	idempotencyKey := observationID + "-key"
+	observedAt := time.Now().UTC().Truncate(time.Microsecond)
+	legacyPayload := []byte(`{"legacy":"before-v8"}`)
+	if _, err := db.ExecContext(ctx, `INSERT INTO news_observations
+		(observation_id, idempotency_key, source_id, provider_code, candidate_json, observed_at, identity_status)
+		VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		observationID, idempotencyKey, "news-v8-upgrade-source", "legacy-provider",
+		legacyPayload, observedAt, string(domain.ObservationUnidentified),
+	); err != nil {
+		t.Fatalf("insert pre-V8 Observation: %v", err)
+	}
+
+	if err := platformstorage.ApplyMigrations(ctx, db, "news", migrations); err != nil {
+		t.Fatalf("upgrade News schema from V7 to V8: %v", err)
+	}
+	var sourceID, identityStatus string
+	var candidateJSON []byte
+	var retentionUntil, payloadPurgedAt sql.NullTime
+	if err := db.QueryRowContext(ctx, `SELECT source_id, identity_status, candidate_json,
+		retention_until, payload_purged_at
+		FROM news_observations WHERE observation_id = ?`, observationID,
+	).Scan(&sourceID, &identityStatus, &candidateJSON, &retentionUntil, &payloadPurgedAt); err != nil {
+		t.Fatalf("read pre-V8 Observation after upgrade: %v", err)
+	}
+	if sourceID != "news-v8-upgrade-source" ||
+		identityStatus != string(domain.ObservationUnidentified) ||
+		string(candidateJSON) != string(legacyPayload) ||
+		retentionUntil.Valid || payloadPurgedAt.Valid {
+		t.Fatalf("V8 upgrade changed legacy Observation: source=%q status=%q payload=%s retention=%+v purged=%+v",
+			sourceID, identityStatus, candidateJSON, retentionUntil, payloadPurgedAt)
+	}
+}
 
 func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	dsn := os.Getenv("NEWS_MARIADB_TEST_DSN")
@@ -41,9 +214,7 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	}
 	defer db.Close()
 
-	if err := platformstorage.ApplyMigrations(ctx, db, "news", Migrations()); err != nil {
-		t.Fatalf("apply News migrations: %v", err)
-	}
+	applyNewsMigrationsAndVerifyV8Upgrade(t, ctx, db)
 	// Re-applying the same immutable migration set must be a no-op.
 	if err := platformstorage.ApplyMigrations(ctx, db, "news", Migrations()); err != nil {
 		t.Fatalf("re-apply News migrations: %v", err)
@@ -80,6 +251,28 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 		loadedBinding.PolicySnapshot.SnapshotRef != binding.PolicySnapshot.SnapshotRef {
 		t.Fatalf("authorization snapshot changed during persistence: %+v", loadedBinding)
 	}
+	// A later deny is authoritative: latest lookup must not fall back to this allow.
+	latestDeny := binding
+	latestDeny.AuthorizationRef.AuthorizationRef = fmt.Sprintf("%s-latest-deny-%d", latestDeny.AuthorizationRef.AuthorizationRef, time.Now().UnixNano())
+	latestDeny.AuthorizationRef.Decision = domain.AuthorizationDecisionDenied
+	latestDenyDecidedAt := time.Now().UTC()
+	latestDenyExpiry := latestDenyDecidedAt.Add(time.Hour).Format(time.RFC3339Nano)
+	latestDeny.AuthorizationRef.DecidedAt = latestDenyDecidedAt.Format(time.RFC3339Nano)
+	latestDeny.AuthorizationRef.ExpiresAt = domain.NullableDateTime{Present: true, Value: &latestDenyExpiry}
+	latestDeny.AuthorizationRef.DecisionFingerprint = strings.Repeat("b", 64)
+	if err := repository.AppendAuthorizationSnapshot(ctx, latestDeny, authorizationObservation, authorizationVersion); err != nil {
+		t.Fatalf("append latest deny authorization snapshot: %v", err)
+	}
+	latestBinding, err := repository.GetLatestAuthorizationSnapshotForEvidence(ctx,
+		binding.AuthorizationRef.SubjectRef, binding.AuthorizationRef.ResourceRef,
+		binding.AuthorizationRef.PurposeCode, binding.AuthorizationRef.ContentLevel)
+	if err != nil {
+		t.Fatalf("get latest authorization snapshot: %v", err)
+	}
+	if latestBinding.AuthorizationRef.Decision != domain.AuthorizationDecisionDenied ||
+		latestBinding.AuthorizationRef.AuthorizationRef != latestDeny.AuthorizationRef.AuthorizationRef {
+		t.Fatalf("latest authorization fell back from deny: %+v", latestBinding.AuthorizationRef)
+	}
 	conflictingBinding := binding
 	conflictingBinding.AuthorizationRef.DecisionFingerprint = strings.Repeat("f", 64)
 	if err := repository.AppendAuthorizationSnapshot(ctx, conflictingBinding, authorizationObservation, authorizationVersion); !errors.Is(err, app.ErrAuthorizationSnapshotConflict) {
@@ -115,6 +308,39 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	}
 	if !errors.Is(authorizationTamperErr, app.ErrInvalidAuthorizationSnapshot) {
 		t.Fatalf("tampered authorization snapshot error = %v, want invalid snapshot", authorizationTamperErr)
+	}
+	// Lookup columns are an immutable envelope and must match the verified payload.
+	if _, err := db.ExecContext(ctx,
+		"UPDATE news_authorization_snapshots SET decision = ? WHERE authorization_ref = ?",
+		string(domain.AuthorizationDecisionDenied), binding.AuthorizationRef.AuthorizationRef,
+	); err != nil {
+		t.Fatalf("tamper authorization envelope: %v", err)
+	}
+	_, authorizationMetadataErr := repository.GetAuthorizationSnapshot(ctx, binding.AuthorizationRef.AuthorizationRef)
+	if _, err := db.ExecContext(ctx,
+		"UPDATE news_authorization_snapshots SET decision = ? WHERE authorization_ref = ?",
+		string(binding.AuthorizationRef.Decision), binding.AuthorizationRef.AuthorizationRef,
+	); err != nil {
+		t.Fatalf("restore authorization envelope: %v", err)
+	}
+	if !errors.Is(authorizationMetadataErr, app.ErrInvalidAuthorizationSnapshot) {
+		t.Fatalf("tampered authorization envelope error = %v, want invalid snapshot", authorizationMetadataErr)
+	}
+	if _, err := db.ExecContext(ctx,
+		"UPDATE news_authorization_snapshots SET payload_json = JSON_OBJECT('oversized', REPEAT('x', ?)) WHERE authorization_ref = ?",
+		maximumAuthorizationSnapshotBytes, binding.AuthorizationRef.AuthorizationRef,
+	); err != nil {
+		t.Fatalf("write oversized authorization payload: %v", err)
+	}
+	_, authorizationOversizeErr := repository.GetAuthorizationSnapshot(ctx, binding.AuthorizationRef.AuthorizationRef)
+	if _, err := db.ExecContext(ctx,
+		"UPDATE news_authorization_snapshots SET payload_json = ? WHERE authorization_ref = ?",
+		mustMarshalAuthorizationBinding(t, binding), binding.AuthorizationRef.AuthorizationRef,
+	); err != nil {
+		t.Fatalf("restore authorization payload: %v", err)
+	}
+	if !errors.Is(authorizationOversizeErr, app.ErrInvalidAuthorizationSnapshot) {
+		t.Fatalf("oversized authorization payload error = %v, want invalid snapshot", authorizationOversizeErr)
 	}
 
 	snapshotCreatedAt := time.Now().UTC()
@@ -217,6 +443,83 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	if !errors.Is(evidenceMetadataTamperErr, app.ErrInvalidEvidenceSnapshot) {
 		t.Fatalf("tampered evidence snapshot metadata error = %v, want invalid snapshot", evidenceMetadataTamperErr)
 	}
+	// Idempotent replay must reject a matching payload hash with a corrupted
+	// denormalized envelope instead of reporting a successful create.
+	if _, err := db.ExecContext(ctx,
+		"UPDATE news_evidence_snapshots SET caller_ref = ? WHERE snapshot_ref = ?",
+		"service:tampered", snapshot.SnapshotRef,
+	); err != nil {
+		t.Fatalf("tamper evidence snapshot caller envelope: %v", err)
+	}
+	if err := repository.CreateEvidenceSnapshot(ctx, snapshot); !errors.Is(err, app.ErrInvalidEvidenceSnapshot) {
+		t.Fatalf("idempotent create with tampered envelope error = %v, want invalid snapshot", err)
+	}
+	if _, err := db.ExecContext(ctx,
+		"UPDATE news_evidence_snapshots SET caller_ref = ? WHERE snapshot_ref = ?",
+		snapshot.CallerRef, snapshot.SnapshotRef,
+	); err != nil {
+		t.Fatalf("restore evidence snapshot caller envelope: %v", err)
+	}
+	if err := repository.CreateEvidenceSnapshot(ctx, snapshot); err != nil {
+		t.Fatalf("idempotent create after envelope restoration: %v", err)
+	}
+	var originalEvidencePayload []byte
+	if err := db.QueryRowContext(ctx,
+		"SELECT payload_json FROM news_evidence_snapshots WHERE snapshot_ref = ?",
+		snapshot.SnapshotRef,
+	).Scan(&originalEvidencePayload); err != nil {
+		t.Fatalf("read original evidence payload: %v", err)
+	}
+	if _, err := db.ExecContext(ctx,
+		"UPDATE news_evidence_snapshots SET payload_json = JSON_OBJECT('tampered', 'payload') WHERE snapshot_ref = ?",
+		snapshot.SnapshotRef,
+	); err != nil {
+		t.Fatalf("tamper evidence snapshot payload: %v", err)
+	}
+	if err := repository.CreateEvidenceSnapshot(ctx, snapshot); !errors.Is(err, app.ErrInvalidEvidenceSnapshot) {
+		t.Fatalf("idempotent create with tampered payload error = %v, want invalid snapshot", err)
+	}
+	if _, err := db.ExecContext(ctx,
+		"UPDATE news_evidence_snapshots SET payload_json = ? WHERE snapshot_ref = ?",
+		originalEvidencePayload, snapshot.SnapshotRef,
+	); err != nil {
+		t.Fatalf("restore evidence snapshot payload: %v", err)
+	}
+	if err := repository.CreateEvidenceSnapshot(ctx, snapshot); err != nil {
+		t.Fatalf("idempotent create after payload restoration: %v", err)
+	}
+	// Read must independently verify the payload bytes and enforce the same
+	// size ceiling as Create/replay before hashing or JSON decoding.
+	if _, err := db.ExecContext(ctx,
+		"UPDATE news_evidence_snapshots SET payload_json = JSON_OBJECT('tampered', 'payload') WHERE snapshot_ref = ?",
+		snapshot.SnapshotRef,
+	); err != nil {
+		t.Fatalf("tamper evidence payload before read: %v", err)
+	}
+	if _, err := repository.GetEvidenceSnapshot(ctx, snapshot.SnapshotRef, snapshot.CallerRef, snapshotCreatedAt.Add(time.Minute)); !errors.Is(err, app.ErrInvalidEvidenceSnapshot) {
+		t.Fatalf("get tampered evidence payload error = %v, want invalid snapshot", err)
+	}
+	if _, err := db.ExecContext(ctx,
+		"UPDATE news_evidence_snapshots SET payload_json = ? WHERE snapshot_ref = ?",
+		originalEvidencePayload, snapshot.SnapshotRef,
+	); err != nil {
+		t.Fatalf("restore evidence payload after read tamper: %v", err)
+	}
+	if _, err := db.ExecContext(ctx,
+		"UPDATE news_evidence_snapshots SET payload_json = JSON_OBJECT('padding', REPEAT('x', ?)) WHERE snapshot_ref = ?",
+		maximumEvidenceSnapshotBytes+1, snapshot.SnapshotRef,
+	); err != nil {
+		t.Fatalf("oversize evidence payload before read: %v", err)
+	}
+	if _, err := repository.GetEvidenceSnapshot(ctx, snapshot.SnapshotRef, snapshot.CallerRef, snapshotCreatedAt.Add(time.Minute)); !errors.Is(err, app.ErrInvalidEvidenceSnapshot) {
+		t.Fatalf("get oversized evidence payload error = %v, want invalid snapshot", err)
+	}
+	if _, err := db.ExecContext(ctx,
+		"UPDATE news_evidence_snapshots SET payload_json = ? WHERE snapshot_ref = ?",
+		originalEvidencePayload, snapshot.SnapshotRef,
+	); err != nil {
+		t.Fatalf("restore evidence payload after size test: %v", err)
+	}
 	conflictingSnapshot := snapshot
 	conflictingSnapshot.PageSize++
 	if err := repository.CreateEvidenceSnapshot(ctx, conflictingSnapshot); !errors.Is(err, app.ErrEvidenceSnapshotConflict) {
@@ -232,9 +535,93 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	if err != nil || deleted < 1 {
 		t.Fatalf("delete expired evidence snapshots: deleted=%d err=%v", deleted, err)
 	}
+	var remainingSnapshotRows int
+	if err := db.QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM news_evidence_snapshots WHERE snapshot_ref = ?",
+		snapshot.SnapshotRef,
+	).Scan(&remainingSnapshotRows); err != nil {
+		t.Fatalf("count deleted evidence snapshot: %v", err)
+	}
+	if remainingSnapshotRows != 0 {
+		t.Fatalf("expired evidence snapshot rows remaining=%d, want 0", remainingSnapshotRows)
+	}
+	// 清理完成后，读取端必须将已删除的 Snapshot 视为不可用，
+	// 不得因为 payload 曾经存在而返回缓存或残留内容。
+	if _, err := repository.GetEvidenceSnapshot(ctx, snapshot.SnapshotRef, snapshot.CallerRef, snapshot.ExpiresAt); !errors.Is(err, app.ErrEvidenceSnapshotUnavailable) {
+		t.Fatalf("get deleted evidence snapshot error = %v, want unavailable", err)
+	}
+	repeatedDeleted, err := repository.DeleteExpiredEvidenceSnapshots(ctx, snapshot.ExpiresAt, 100)
+	if err != nil || repeatedDeleted != 0 {
+		t.Fatalf("repeat expired snapshot cleanup: deleted=%d err=%v, want 0 and nil", repeatedDeleted, err)
+	}
+
+	// 并发清理 Worker 使用不同请求处理同一批到期 Snapshot；总删除数必须
+	// 等于到期记录数，且每个 Worker 不得超过自己的批次上限。
+	concurrentSnapshotCreatedAt := time.Now().UTC().Add(-time.Second)
+	concurrentSnapshots := make([]app.EvidenceSnapshot, 4)
+	for index := range concurrentSnapshots {
+		concurrentSnapshot := snapshot
+		concurrentSnapshot.SnapshotRef = fmt.Sprintf("news-snapshot-cleanup-concurrent-%d-%d", time.Now().UnixNano(), index)
+		concurrentSnapshot.CreatedAt = concurrentSnapshotCreatedAt
+		concurrentSnapshot.SystemAsOf = concurrentSnapshotCreatedAt.Add(-time.Minute)
+		concurrentSnapshot.ExpiresAt = concurrentSnapshotCreatedAt.Add(app.EvidenceSnapshotTTL)
+		concurrentSnapshot.Items = append([]app.EvidenceSnapshotItem(nil), snapshot.Items...)
+		concurrentSnapshot.Items[0].SystemObservedAt = concurrentSnapshotCreatedAt.Add(-2 * time.Minute)
+		concurrentSnapshots[index] = concurrentSnapshot
+		if err := repository.CreateEvidenceSnapshot(ctx, concurrentSnapshot); err != nil {
+			t.Fatalf("create concurrent cleanup snapshot %d: %v", index, err)
+		}
+	}
+	concurrentCleanupAt := concurrentSnapshots[0].ExpiresAt
+	type snapshotCleanupOutcome struct {
+		deleted int64
+		err     error
+	}
+	const snapshotCleanupWorkers = 2
+	snapshotCleanupOutcomes := make(chan snapshotCleanupOutcome, snapshotCleanupWorkers)
+	var snapshotCleanupWait sync.WaitGroup
+	for worker := 0; worker < snapshotCleanupWorkers; worker++ {
+		snapshotCleanupWait.Add(1)
+		go func() {
+			defer snapshotCleanupWait.Done()
+			deleted, cleanupErr := repository.DeleteExpiredEvidenceSnapshots(ctx, concurrentCleanupAt, 2)
+			snapshotCleanupOutcomes <- snapshotCleanupOutcome{deleted: deleted, err: cleanupErr}
+		}()
+	}
+	snapshotCleanupWait.Wait()
+	close(snapshotCleanupOutcomes)
+	var concurrentDeleted int64
+	for outcome := range snapshotCleanupOutcomes {
+		if outcome.err != nil {
+			t.Fatalf("concurrent evidence snapshot cleanup failed: %v", outcome.err)
+		}
+		if outcome.deleted < 0 || outcome.deleted > 2 {
+			t.Fatalf("concurrent evidence snapshot cleanup deleted=%d, want 0..2", outcome.deleted)
+		}
+		concurrentDeleted += outcome.deleted
+	}
+	if concurrentDeleted != int64(len(concurrentSnapshots)) {
+		t.Fatalf("concurrent evidence snapshot cleanup total=%d, want %d", concurrentDeleted, len(concurrentSnapshots))
+	}
+	for _, concurrentSnapshot := range concurrentSnapshots {
+		var remaining int
+		if err := db.QueryRowContext(ctx,
+			"SELECT COUNT(*) FROM news_evidence_snapshots WHERE snapshot_ref = ?",
+			concurrentSnapshot.SnapshotRef,
+		).Scan(&remaining); err != nil {
+			t.Fatalf("count concurrent cleanup snapshot %s: %v", concurrentSnapshot.SnapshotRef, err)
+		}
+		if remaining != 0 {
+			t.Fatalf("concurrent cleanup snapshot %s remains: %d rows", concurrentSnapshot.SnapshotRef, remaining)
+		}
+	}
+	repeatedConcurrentCleanup, err := repository.DeleteExpiredEvidenceSnapshots(ctx, concurrentCleanupAt, 2)
+	if err != nil || repeatedConcurrentCleanup != 0 {
+		t.Fatalf("repeat concurrent snapshot cleanup deleted=%d err=%v, want 0 and nil", repeatedConcurrentCleanup, err)
+	}
 	var idSequence atomic.Uint64
 	newID := func() string { return fmt.Sprintf("news-it-%d", idSequence.Add(1)) }
-	ingest := app.NewIngestCandidate(repository, newID)
+	ingest := repositoryIngestHarness{repository: repository, newID: newID}
 	sourceID := fmt.Sprintf("news-it-source-%d", time.Now().UnixNano())
 	const workers = 6
 
@@ -252,9 +639,7 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 		wait.Add(1)
 		go func() {
 			defer wait.Done()
-			observation, err := ingest.Execute(
-				ctx, sourceID, fmt.Sprintf("news-it-key-%d", index), candidate, domain.SourceURLPolicy{},
-			)
+			observation, err := ingest.Execute(ctx, sourceID, fmt.Sprintf("news-it-key-%d", index), candidate, domain.SourceURLPolicy{})
 			if err != nil {
 				errs <- err
 				return
@@ -265,12 +650,12 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	wait.Wait()
 	close(errs)
 	for err := range errs {
-		t.Fatalf("concurrent identity ingestion failed: %v", err)
+		t.Fatalf("concurrent repository identity transaction failed: %v", err)
 	}
 
 	newsID := observations[0].NewsID
 	if newsID == "" {
-		t.Fatal("identity ingestion did not create a NewsID")
+		t.Fatal("identity repository transaction did not create a NewsID")
 	}
 	for index, observation := range observations {
 		if observation.NewsID != newsID {
@@ -284,7 +669,7 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 		t.Fatal(err)
 	}
 	if itemCount != 1 {
-		t.Fatalf("concurrent first identity created %d News items, want 1", itemCount)
+		t.Fatalf("concurrent repository transactions created %d News items, want 1", itemCount)
 	}
 
 	identityCandidates, err := domain.BuildIdentityCredentials(sourceID, "native-item-001", "", domain.SourceURLPolicy{})
@@ -312,14 +697,7 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 
 	traceSourceID := sourceID + "-provider-trace"
 	traceCandidate := domain.Candidate{SourceItemID: "provider-trace-item", ProviderCode: "tavily", Title: "trace test"}
-	trace := app.ObservationPolicyTrace{
-		SourcePolicyVersionID: "source-policy-v1",
-		EndpointID:            "endpoint-v1", EndpointPolicyVersionID: "endpoint-policy-v1",
-		ProviderOutputPolicyRef:       "provider-policy-ref",
-		ProviderOutputPolicyVersionID: "provider-policy-v1",
-		PolicyEvaluatedAt:             time.Now().UTC(),
-	}
-	if _, err := ingest.ExecuteWithPolicyTrace(ctx, traceSourceID, "provider-trace-key", traceCandidate, domain.SourceURLPolicy{}, trace); !errors.Is(err, app.ErrProviderOutputPolicyRequired) {
+	if _, err := ingest.Execute(ctx, traceSourceID, "provider-trace-key", traceCandidate, domain.SourceURLPolicy{}); !errors.Is(err, app.ErrProviderOutputPolicyRequired) {
 		t.Fatalf("self-declared provider policy error = %v, want fail-closed rejection", err)
 	}
 	if err := db.QueryRowContext(ctx,
@@ -476,13 +854,14 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 		PageSize: 20,
 	}
 	// 写入可追踪的历史策略引用，验证 PIT 查询完整回读 V6 字段。
-	policyEvaluatedAt := time.Now().UTC()
+	policyEvaluatedAt := time.Now().UTC().Truncate(time.Microsecond)
 	if _, err := db.ExecContext(ctx, `UPDATE news_observations
-		SET endpoint_id = ?, provider_output_policy_ref = ?,
+		SET source_policy_version_id = ?, endpoint_id = ?,
+		    endpoint_policy_version_id = ?, provider_output_policy_ref = ?,
 		    provider_output_policy_version_id = ?, policy_evaluated_at = ?
 		WHERE observation_id = ?`,
-		"endpoint-pit-v1", "provider-policy-pit", "provider-policy-v7",
-		policyEvaluatedAt, secondObservation.ID,
+		"source-policy-pit-v2", "endpoint-pit-v1", "endpoint-policy-pit-v3",
+		"provider-policy-pit", "provider-policy-v7", policyEvaluatedAt, secondObservation.ID,
 	); err != nil {
 		t.Fatalf("set PIT policy trace fixture: %v", err)
 	}
@@ -496,7 +875,9 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 		t.Fatalf("ListEvidence PIT returned unexpected records: %+v", listed)
 	}
 	gotObservation := listed[0].Observation
-	if gotObservation.EndpointID != "endpoint-pit-v1" ||
+	if gotObservation.SourcePolicyVersionID != "source-policy-pit-v2" ||
+		gotObservation.EndpointID != "endpoint-pit-v1" ||
+		gotObservation.EndpointPolicyVersionID != "endpoint-policy-pit-v3" ||
 		gotObservation.ProviderOutputPolicyRef != "provider-policy-pit" ||
 		gotObservation.ProviderOutputPolicyVersionID != "provider-policy-v7" ||
 		!gotObservation.PolicyEvaluatedAt.Equal(policyEvaluatedAt) {
@@ -600,7 +981,7 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	if len(history) != 0 {
 		t.Fatalf("relation history before assertion = %#v, want empty", history)
 	}
-	afterRelation := relation.ObservedAt.Add(time.Microsecond)
+	afterRelation := time.Now().UTC()
 	history, err = repository.ListNewsItemRelationsAt(ctx, app.NewsItemRelationHistoryRequest{
 		NewsID: newsID, SystemAsOf: afterRelation,
 	})
@@ -620,12 +1001,45 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 		t.Fatalf("target-side relation history = %#v, want relation %q", history, relation.ID)
 	}
 
+	// A replacement may change the target item. Both old and new target queries
+	// must retain the complete supersedes chain.
+	var changedTargetNewsID string
+	if err := repository.WithinIdentityTransaction(ctx, func(tx app.IdentityTransaction) error {
+		var err error
+		changedTargetNewsID, err = tx.CreateNewsItem(ctx, "news-it-relation-new-source")
+		return err
+	}); err != nil {
+		t.Fatalf("create changed relation target item: %v", err)
+	}
+	changedTarget, err := relationService.Execute(ctx, app.NewsItemRelationRequest{
+		Relation: domain.NewsItemRelation{
+			FromNewsID: newsID, FromSourceID: sourceID,
+			ToNewsID: changedTargetNewsID, ToSourceID: "news-it-relation-new-source",
+			Kind: domain.NewsItemRelationRepostOf, Status: domain.NewsItemRelationConfirmed,
+			SupersedesRelationID: relation.ID, EvidenceObservation: observations[0].ID,
+		},
+	})
+	if err != nil {
+		t.Fatalf("append changed-target relation replacement: %v", err)
+	}
+	for _, targetID := range []string{relation.ToNewsID, changedTarget.ToNewsID} {
+		chain, err := repository.ListNewsItemRelationsAt(ctx, app.NewsItemRelationHistoryRequest{
+			NewsID: targetID, SystemAsOf: time.Now().UTC(),
+		})
+		if err != nil {
+			t.Fatalf("read target-side relation chain for %s: %v", targetID, err)
+		}
+		if len(chain) != 2 || chain[0].ID != relation.ID || chain[1].ID != changedTarget.ID {
+			t.Fatalf("target-side relation chain for %s = %#v, want original and replacement", targetID, chain)
+		}
+	}
+
 	proposal, err := relationService.Execute(ctx, app.NewsItemRelationRequest{
 		Relation: domain.NewsItemRelation{
 			FromNewsID: newsID, FromSourceID: sourceID,
 			ToNewsID: secondObservation.NewsID, ToSourceID: secondSourceID,
 			Kind: domain.NewsItemRelationRepostOf, Status: domain.NewsItemRelationProposed,
-			SupersedesRelationID: relation.ID,
+			SupersedesRelationID: changedTarget.ID,
 			EvidenceObservation:  observations[0].ID,
 			FromVersionID:        latest.ID, ToVersionID: revisedVersion.Version.ID,
 		},
@@ -633,14 +1047,14 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("append proposed relation replacement: %v", err)
 	}
-	afterProposal := proposal.ObservedAt.Add(time.Microsecond)
+	afterProposal := time.Now().UTC()
 	history, err = repository.ListNewsItemRelationsAt(ctx, app.NewsItemRelationHistoryRequest{
 		NewsID: secondObservation.NewsID, SystemAsOf: afterProposal,
 	})
 	if err != nil {
 		t.Fatalf("read relation history after proposal: %v", err)
 	}
-	if len(history) != 2 || history[0].ID != relation.ID || history[1].ID != proposal.ID {
+	if len(history) != 3 || history[0].ID != relation.ID || history[1].ID != changedTarget.ID || history[2].ID != proposal.ID {
 		t.Fatalf("history after proposal = %#v, want original then proposal", history)
 	}
 	// 提议状态不改变当前关系图；原确认断言仍保留在历史中。
@@ -658,17 +1072,18 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("append proposal retraction: %v", err)
 	}
-	afterRetraction := retraction.ObservedAt.Add(time.Microsecond)
+	afterRetraction := time.Now().UTC()
 	history, err = repository.ListNewsItemRelationsAt(ctx, app.NewsItemRelationHistoryRequest{
 		NewsID: secondObservation.NewsID, SystemAsOf: afterRetraction,
 	})
 	if err != nil {
 		t.Fatalf("read relation history after retraction: %v", err)
 	}
-	if len(history) != 3 ||
+	if len(history) != 4 ||
 		history[0].ID != relation.ID ||
-		history[1].ID != proposal.ID ||
-		history[2].ID != retraction.ID {
+		history[1].ID != changedTarget.ID ||
+		history[2].ID != proposal.ID ||
+		history[3].ID != retraction.ID {
 		t.Fatalf("history after retraction = %#v, want complete append-only chain", history)
 	}
 }
@@ -818,6 +1233,30 @@ func TestObservationRetentionPurgeIntegration(t *testing.T) {
 	}
 	if pitRecord.Observation.PayloadPurgedAt == nil || pitRecord.Observation.Candidate.Title != "" {
 		t.Fatalf("PIT query disclosed a purged candidate payload: %+v", pitRecord.Observation)
+	}
+
+	// 列表 PIT 查询必须与单条查询保持相同的 Tombstone 载荷屏蔽语义。
+	listed, err := repository.ListEvidenceVersionsAt(ctx, app.ListEvidenceRequest{
+		CallerRef:             "service:research",
+		PurposeCode:           app.EvidencePurposeResearchAnalysis,
+		RequestedContentLevel: app.EvidenceContentSummary,
+		SystemAsOf:            time.Now().UTC(),
+		Filters: &app.EvidenceQueryFilters{
+			NewsIDs:    []string{referenceNewsID},
+			SourceRefs: []string{"news-retention-integration"},
+		},
+		PageSize: 20,
+	})
+	if err != nil {
+		t.Fatalf("ListEvidence PIT query after observation payload purge: %v", err)
+	}
+	if len(listed) != 1 || listed[0].Version.ID != referenceVersionID ||
+		listed[0].Observation.ID != observations[0].ID {
+		t.Fatalf("ListEvidence PIT returned unexpected tombstone records: %+v", listed)
+	}
+	if listed[0].Observation.PayloadPurgedAt == nil ||
+		!reflect.DeepEqual(listed[0].Observation.Candidate, domain.Candidate{}) {
+		t.Fatalf("ListEvidence PIT disclosed a purged candidate payload: %+v", listed[0].Observation)
 	}
 	var retainedVersionRows int
 	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM news_item_versions WHERE version_id = ? AND observation_id = ?", referenceVersionID, observations[0].ID).Scan(&retainedVersionRows); err != nil {

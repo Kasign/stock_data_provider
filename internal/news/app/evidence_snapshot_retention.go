@@ -39,9 +39,8 @@ func (u *EvidenceSnapshotRetentionCleaner) Execute(ctx context.Context, now time
 	if err != nil {
 		return 0, err
 	}
-	if err := ctx.Err(); err != nil {
-		return 0, err
-	}
+	// Repository 返回成功表示删除语句已完成；此后 Context 取消不能抹去
+	// 已确认的提交结果，否则调用方会把已删除记录误判为未完成。
 	if deleted < 0 || deleted > int64(limit) {
 		return 0, ErrEvidenceSnapshotRetentionResultInvalid
 	}

@@ -105,7 +105,7 @@ func TestPlatformDoerRejectsRequestOutsideBoundOrigin(t *testing.T) {
 	if !errors.As(err, &providerErr) {
 		t.Fatalf("Do() error = %T (%v), want *app.ProviderError", err, err)
 	}
-	if providerErr.Code != "platform.httpclient.destination_rejected" {
+	if providerErr.Code != app.ProviderErrorRequestInvalid {
 		t.Fatalf("ProviderError.Code = %q", providerErr.Code)
 	}
 }
@@ -122,7 +122,7 @@ func TestProviderErrorMapsPlatformFaultWithoutExposingCause(t *testing.T) {
 	if !errors.As(mapped, &providerErr) {
 		t.Fatalf("mapped error type = %T, want *app.ProviderError", mapped)
 	}
-	if providerErr.Code != "platform.httpclient.dns_failed" || !providerErr.Retryable {
+	if providerErr.Code != app.ProviderErrorUpstreamUnavailable || !providerErr.Retryable {
 		t.Fatalf("mapped provider error = %#v", providerErr)
 	}
 	if errors.Is(mapped, cause) {

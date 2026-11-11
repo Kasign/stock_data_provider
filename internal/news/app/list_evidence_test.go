@@ -50,6 +50,7 @@ func validListEvidenceRequest(now time.Time) ListEvidenceRequest {
 func TestListEvidenceAuthorizesEveryReferenceAndPreservesCursor(t *testing.T) {
 	now := time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)
 	request := validListEvidenceRequest(now)
+	request.PageSize = 2
 	next := "signed-next-cursor"
 	observedAt := request.SystemAsOf.Add(-time.Minute)
 	pageReader := evidenceSnapshotPageReaderStub{page: EvidenceSnapshotPage{

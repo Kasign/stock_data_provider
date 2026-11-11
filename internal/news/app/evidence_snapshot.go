@@ -106,7 +106,7 @@ func (s EvidenceSnapshot) MatchesRequest(request ListEvidenceRequest) bool {
 
 func (s EvidenceSnapshot) ValidateAt(now time.Time) error {
 	if s.Validate() != nil || now.IsZero() || !validEvidenceUTC(now) ||
-		s.CreatedAt.After(now) || s.SystemAsOf.After(now) {
+		s.CreatedAt.After(now) || s.SystemAsOf.After(now) || !now.Before(s.ExpiresAt) {
 		return ErrInvalidEvidenceSnapshot
 	}
 	return nil
@@ -190,5 +190,11 @@ func (s *SaveEvidenceSnapshot) Execute(ctx context.Context, snapshot EvidenceSna
 	if s == nil || s.repository == nil || ctx == nil || snapshot.ValidateAt(time.Now().UTC()) != nil {
 		return ErrInvalidEvidenceSnapshot
 	}
-	return s.repository.CreateEvidenceSnapshot(ctx, snapshot)
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := s.repository.CreateEvidenceSnapshot(ctx, snapshot); err != nil {
+		return err
+	}
+	return ctx.Err()
 }
