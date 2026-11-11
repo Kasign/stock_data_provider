@@ -138,13 +138,14 @@ GitHub 远端 ref 核验（2026-11-10）：
 
 | 状态 | 含义 | 判定规则 |
 |---|---|---|
-| `confirmed` | 当前代码/文档事实已核实 | 必须附精确路径、符号/行范围或 Blob SHA；不代表已冻结 |
-| `has_difference` | 实际代码、专项文档或项目约定存在不一致 | 必须记录两侧证据、影响和归属 |
-| `pending_decision` | 语义、架构取舍、安全边界或所有权尚待裁决 | 列出选项、建议、影响，等待项目负责人 |
-| `pending_evidence` | 语义已有候选基线，但机器契约/消费者/测试证据不足 | 不得标记 frozen |
-| `deferred` | 有明确延期理由、触发条件和不阻断范围 | 不得用来掩盖关键语义未决 |
+| `confirmed` | 当前公开定义事实已核实 | 记录权威路径、版本和关键定义；不代表可冻结 |
+| `has_difference` | 两份仍有效的公开契约定义之间存在语义冲突 | 必须指出冲突双方；纯实现偏差单独记录，不使用此状态阻断契约定义冻结 |
+| `pending_decision` | 仍有会改变公开契约的业务/安全/协议取舍未裁决 | 列出选项和影响，等待项目负责人 |
+| `pending_evidence` | 公开契约定义本身缺少必要字段语义、机器 Schema/等价定义、版本或唯一权威依据 | 不得把内部测试、CI、部署或实现接线缺失填入此状态 |
+| `freeze-ready` | 公开语义、权威定义、适用边界和项目决议完整，可以提交项目负责人冻结 | 不代表模块实现已符合 |
+| `deferred` | 有明确触发条件且不属于当前首期范围 | 不得用来掩盖关键语义未决 |
 | `not_applicable` | 对该契约/消费者关系确实不适用 | 必须写明理由 |
-| `frozen` | 该 SHA 上满足全部适用冻结门禁 | 必须记录版本、生产方、全部直接消费者、Schema/Golden、双方测试、兼容与安全证据 |
+| `frozen` | 项目负责人确认冻结的契约版本 | 记录契约版本、权威定义和适用消费者；实现符合性另行跟踪 |
 
 `implemented`、`accepted`、`closed`、单模块 CI success、Fake 测试通过和文档已写均不是冻结状态。
 
@@ -158,14 +159,14 @@ GitHub 远端 ref 核验（2026-11-10）：
 | GOV-CTR-002 | 时间、交易日、时区、PIT、system_as_of | 项目级时间语义；Data/News/Quant/Research/Researchflow | 所有历史研究及执行消费者 | 各领域时间字段定义；旧目录保留历史规则 | 规则版本待核验；字段 Schema 分别版本化 | `pending_evidence` | system_as_of、available_at、published_at、occurred_at、valid_time、fetched_at、normalized_at 映射；UTC/RFC3339Nano、Asia/Shanghai 交易日、严格 PIT |
 | GOV-CTR-003 | ID、Request/Correlation/Event/Idempotency 作用域 | Platform 提供 Request ID 原语；各模块拥有领域 ID | Server、所有模块、Worker、事件消费者 | Platform observability；各模块事件/任务 DTO | 规则版本待核验；Golden 待核验 | `pending_evidence` | ID 作用域、生成方、异步传播、幂等 fingerprint、跨进程关联和 Header/Context Golden |
 | GOV-CTR-004 | Schema 版本、兼容、废弃和迁移 | 各契约生产模块；项目级规则由治理登记 | 所有直接消费者 | 各模块 Schema Registry；doc/contract 版本规则 | 规则版本待核验；兼容矩阵待核验 | `pending_evidence` | 每个 DTO/Event 的版本、兼容级别、未知字段/枚举、废弃窗口、迁移和回滚 |
-| GOV-CTR-005 | 契约状态、冻结证据和变更审批 | 项目契约治理 | 所有模块 | doc/contract/README、登记簿、决策记录、契约版本与变更记录 | 0.2.6-review（治理规则） | `pending_evidence` | 冻结门禁、证据 SHA、生产方/消费者确认、变更审批和解冻规则；待各模块确认治理流程实际采用 |
+| GOV-CTR-005 | 契约状态、冻结证据和变更审批 | 项目契约治理 | 所有模块 | doc/contract/README、登记簿第5节、决策记录、契约版本与变更记录 | 0.2.7-review（治理规则） | `freeze-ready` | 项目级定义冻结门禁、状态、版本变更/解冻记录规则已统一；模块实现符合性不混入契约定义冻结 |
 | GOV-CTR-006 | AuthorizationRef 公共审计快照结构与引用语义 | Data、News、Quant、Research 分别签发各自资源授权快照；公共结构由项目治理 | Research、Researchflow 及受限资源消费者 | 各模块签发 Schema；旧目录 GOV-CTR-006 机器契约/Golden | 1.0.0（2 Schema / 4 Golden） | `pending_evidence` | Principal/Resource 映射、Scope、purpose、snapshot fingerprint、过期/撤销、当前授权复核和竞态 |
 | PLAT-CTR-001 | Fault 结构与分类 | Platform | Server、所有服务端模块 | doc/platform/08 第 4 节；internal/platform/fault | Go API 版本待核验；未见独立 Schema/Golden | `pending_evidence` | Fault 内部结构、HTTP Error DTO、状态码、错误码注册、Retryable 语义和各模块映射 Golden |
 | PLAT-CTR-002 | Request Context 与身份关联原语 | Platform | Server、所有服务端模块、Worker | doc/platform/08 第 5 节；observability/security Context | Request ID Golden 已有；Schema 未见 | `pending_evidence` | 可信入口、Request ID、Principal/Scope 传播、异步 Context、取消和出站 Header 覆盖 |
-| PLAT-CTR-003 | 身份、授权、ServiceKey、Secret 边界 | Platform（认证原语）；Server（入口装配）；领域（资源授权） | Server、Data、News、Research、Quant、Researchflow、WebUI | doc/platform/03、08、18；Server router/bootstrap | Bearer/Session 原语版本待核验；Schema 未见 | `has_difference` + `pending_evidence` | 按 DEC-PLAT-002-017：owner_session 独立于 owner_bearer/service；Server A2 接入 Session Middleware、路由认证矩阵、CSRF/Origin/Host、credential_version 与审计；WebUI A2 接入密码登录/Cookie/CSRF；部署 A3 验收 HTTPS/可信代理/故障 fail-closed。资源授权仍归领域 Owner |
-| PLAT-CTR-004 | Diagnostics Observation 与 Runner | Platform（Runner）；领域（reason_code/质量语义） | Server、各领域模块、WebUI | doc/platform/04、08；internal/platform/diagnostics | 1.0.0（Observation Schema / 2 Golden） | `pending_evidence` | Observation Schema、required/skipped、聚合优先级、reason_code Registry、evidence_ref 和领域 Adapter |
+| PLAT-CTR-003 | 身份、授权、ServiceKey、Secret 边界 | Platform（认证原语）；Server（入口装配）；领域（资源授权） | Server、Data、News、Research、Quant、Researchflow、WebUI | doc/platform/08 第2～3节及第18节候选定义；DEC-PLAT-002-017 | Bearer/Session 原语版本待核验；完整 Principal/Session 契约定义未登记 | `pending_evidence` | 身份类型和凭证隔离语义已有决议；Platform Session 候选接口仍未形成权威冻结定义。Server 路由接入、WebUI 登录和部署证据属于后续实现符合性，不作为本轮门禁。资源授权仍归领域 Owner |
+| PLAT-CTR-004 | Diagnostics Observation 与 Runner | Platform（Runner）；领域（reason_code/质量语义） | Server、各领域模块、WebUI | doc/platform/08 第7、14、24节；PLAT-CTR-004 Schema/Golden | 1.0.0（Observation Schema / 2 Golden） | `pending_evidence` | Schema 将 attributes 限定为 string，而规范描述为结构化 scalar；UTC、reason_code 条件约束及 Runner 聚合语义需统一为一份完整权威定义。Adapter/真实消费者测试不纳入本轮 |
 | PLAT-CTR-005 | HTTP Client、SSRF 与出口安全 | Platform | Data、News、LLM 及其他出站消费者 | doc/platform/05、15；internal/platform/httpclient | HTTP Client/Stream API 版本待核验；Schema 未见 | `pending_evidence` | DestinationPolicy、BoundDoer、DNS/IP、redirect、流式 Body 生命周期、超时/并发和真实消费者 A2 |
-| PLAT-CTR-006 | Storage、Repository、Migration 生命周期 | Platform（连接/Runner）；领域（Repository/Schema/Migration 内容）；Server（汇总注册） | 所有持久化模块 | doc/platform/05；各模块 storage/migration | Migration API 版本待核验；Schema 未见 | `has_difference` + `pending_evidence` | 连接唯一性、事务边界、namespace/version、Migration Registry、锁/失败恢复/Ready/Shutdown |
+| PLAT-CTR-006 | Storage、Repository、Migration 生命周期 | Platform（连接/Runner）；领域（Repository/Schema/Migration 内容）；Server（汇总注册） | 所有持久化模块 | doc/platform/08 第9节及 Migration 专项定义 | Migration API 版本待核验；唯一权威接口契约未登记 | `pending_evidence` | 平台连接/Runner 与领域 Repository/Schema/Migration 内容的职责已原则性明确；Migration 接口输入输出、namespace/version、失败/Ready/Shutdown 语义仍缺完整权威定义。Server 注册差异属于实现符合性 |
 | PLAT-CTR-007 | Typed Config 与 Secret 生命周期 | Platform（基础解析/脱敏）；各模块（配置 Schema）；Server（Bootstrap） | Server、所有服务端模块 | doc/platform/08 第 6 节；各模块 Config | Config API 版本待核验；Schema 未见 | `pending_evidence` | 配置所有权、读取时点、不可变快照、Secret 注入/轮换/脱敏和启动校验 |
 | DATA-CTR-001 | 标准数据 DTO、JSON/OpenAPI、字段缺失语义 | Data | Quant、Researchflow、Research（适用范围）、Server、WebUI | doc/api/数据层API清单.md；internal/marketdata/httpapi/openapi.yaml | OpenAPI 1.1.0（字段级 Schema 待逐项核验） | `pending_evidence` | Go JSON Tag/OpenAPI/Schema/required/nullable/omitempty/错误码/Golden 双向一致 |
 | DATA-CTR-002 | 行情单位、复权、交易日和时间口径 | Data | Quant、Researchflow、Research、Server | doc/api/数据质量与状态契约.md；MarketData model/normalizer | 规则版本待核验 | `pending_evidence` | CNY/股、shares、CNY、百分点/ratio、复权口径、交易日和 PIT 映射 |
@@ -395,3 +396,39 @@ PLAT-002 不因本次矩阵统计完成而结束。整体完成仍需：
 ### 13.4 后续唯一执行方式
 
 后续按 13.2 的批次逐批核对权威定义文件，只回答三个问题：公开契约是否完整、生产方与消费者的公开语义是否一致、是否可以冻结。每完成一批，直接更新正式登记状态；不再汇报单个文件读取或单个字段检查，不执行模块测试/CI，不处理责任模块实现。
+
+
+## 14. GOV / Platform 首批契约定义核定（2026-11-11）
+
+本批只核定公开定义，不检查模块实现、内部测试、CI 或部署。审查对象仍固定为代码/文档基线 `b6dfc85ba214fe16268c8cba780641a8bfe15086`；本登记簿本身以本次文档提交版本为准。
+
+### 14.1 核定结果
+
+| 契约 | 本轮状态 | 核定理由 |
+|---|---|---|
+| GOV-CTR-001 | `pending_evidence` | 公共规则已定义 JSON 类型、Decimal、整数、比例及缺失/null/零值原则；但规则没有独立稳定版本，字段级 Schema 适用映射尚未形成唯一索引，舍入/scale 等字段语义仍需由生产方逐项引用 |
+| GOV-CTR-002 | `pending_evidence` | UTC/RFC3339、交易日 Asia/Shanghai、system_as_of 与 PIT 原则已明确；但 published_at/available_at/observed_at/valid_time 等时间字段到领域 DTO 的权威映射不完整，不能将原则文档当作所有字段的实际定义 |
+| GOV-CTR-003 | `pending_evidence` | entity/request/originating_request/correlation/event/idempotency/trace/ref 的概念与不可替代关系已定义；但各跨模块命令、事件和异步上下文的生成方、唯一性作用域、传播字段仍未形成完整引用矩阵 |
+| GOV-CTR-004 | `pending_evidence` | 兼容与破坏性变更原则已定义；但各活动 DTO/Event 的 schema_version、未知字段/枚举策略、兼容窗口和废弃版本尚无统一权威矩阵 |
+| GOV-CTR-005 | `freeze-ready` | 项目级唯一入口、状态定义、范围、版本记录和变更审批规则现已统一到 doc/contract；旧的测试/CI冻结门槛已由登记簿第5节明确排除。该状态只表示治理规则定义可冻结，不代表本项目全部 CTR 已冻结 |
+| GOV-CTR-006 | `pending_evidence` | AuthorizationRef 与 PolicySnapshot 已有 1.0.0 Schema 和 Golden，且 allowed/conditional/过期/撤销/读取复核原则清楚；但 Schema 未约束 RFC3339Nano UTC、conditions 与 policies 的规范排序，Data/News/Quant/Research 的 resource_ref 覆盖粒度及各自 purpose/content_level 适用映射尚不完整 |
+| PLAT-CTR-001 | `pending_evidence` | Fault 的 Go 类型明确标注为进程内结构且禁止 JSON 序列化；HTTP Error DTO 的字段、状态码映射、错误码命名空间和稳定版本没有唯一权威公开定义。内部 Go Fault 不等同跨模块 HTTP 错误契约 |
+| PLAT-CTR-002 | `pending_evidence` | Request ID Header、可信入口、随机生成和出站覆盖规则明确且有 Golden；但 Principal/Scope/认证来源 Context 的公开字段与异步传播边界未定义完整，不能以 Request ID Golden 代表整个 Request Context 契约 |
+| PLAT-CTR-003 | `pending_evidence` | anonymous/owner_bearer/owner_session/service 的身份边界及 DEC-017 已明确；但 Platform Session 原语仍在模块文档中标为候选接口，缺少唯一权威的类型/操作/错误/生命周期契约。Server A2/WebUI A2/部署 A3 未完成不作为本轮阻断理由 |
+| PLAT-CTR-004 | `pending_evidence` | Observation Schema 与两个 Golden 已存在，但 attributes 的 string Schema 与“结构化 scalar”文字定义不一致；UTC、reason_code 条件约束和 Runner 聚合规则也分散在多处，尚未构成无歧义的单一契约定义 |
+| PLAT-CTR-005 | `pending_evidence` | 缓冲/流式请求、DestinationPolicy、DNS/IP、重定向、取消、Body 所有权、并发和终止语义已有详细设计；但稳定公开 Port/API 的权威版本、参数/返回错误语义及文档唯一入口尚未收敛 |
+| PLAT-CTR-006 | `pending_evidence` | Platform 与领域/Server 的 Migration 所有权原则明确；但连接/事务/Migration Runner 的权威接口、输入输出、namespace/version、失败和关闭语义不完整。Server 是否实际注册属于实现符合性，不列为本轮缺口 |
+| PLAT-CTR-007 | `pending_evidence` | 配置按服务所有、启动时不可变快照、Secret 显式访问和脱敏规则明确；但 Typed Config/Secret 的公共 API 版本、解析错误语义、轮换边界与各模块配置 Schema 的适用关系未形成唯一契约索引 |
+
+### 14.2 本批范围排除
+
+- PLAT-CTR-003 的 Server Session Middleware、WebUI 登录/退出页面、CSRF 请求接线、HTTPS/可信代理部署属于实现符合性，不作为本轮契约定义冻结条件。
+- PLAT-CTR-006 的 Migration 实际注册、启动顺序、数据库 Ready/Shutdown 测试属于 Server/Platform 实现验收；本轮只核定公开接口定义。
+- PLAT-CTR-005 的真实 Provider/LLM 消费者接入、网络出口测试和生产 DNS 验收不属于契约定义冻结。
+- PLAT-CTR-004 的领域 reason_code 词汇表归各领域 Owner；Platform 只定义通用 Observation 结构，不建立全领域 reason_code 大枚举。
+
+### 14.3 本批结论
+
+- 本批 13 项中：`freeze-ready` 1 项，`pending-evidence` 12 项，`pending-decision` 0 项，`blocked` 0 项。
+- 当前可以提交项目负责人冻结的是 GOV-CTR-005；其余 12 项缺口均是公开契约定义或权威映射不完整，不涉及模块内部实现整改。
+- 下一批进入 Data 公开契约核定；GOV-CTR-001～004/006 在各领域字段映射核定时只补证据，不重新讨论已明确的公共原则。
