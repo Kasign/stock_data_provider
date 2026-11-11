@@ -1396,3 +1396,11 @@
 - Data AuthorizationRef 的 subject_ref 明确来自 Server 注入的可信 Principal/Scope Context；Remote Adapter 凭证仅用于服务认证，不得写入主体引用。
 - AuthorizationRef Schema 机器约束各 policy_owner 对应的 purpose_code/content_level 合法组合；Validator 负责 expires_at > decided_at、policy_version/snapshot_ref、排序和 JCS 指纹复核。
 - GOV-CTR-006 保持 freeze-ready；运行时 Owner/Consumer/竞态测试仍是 L2 实现符合性。当前总统计 6 freeze-ready、35 pending-evidence、0 pending-decision、2 not_applicable、0 frozen。
+
+
+## 62. PLAT-CTR-001 HTTP ErrorEnvelope 契约冻结准备（2026-11-11）
+
+- 已定义 ErrorEnvelope 1.0.0 Schema/Golden 和内部 Fault → 公共错误 DTO/HTTP status 映射。
+- 明确 retryable 与错误类别约束、Request ID Header/body 关系、敏感内部字段不外泄。
+- Server 实现与 schema_version/request_id 的对齐留给后续实现阶段；PLAT-CTR-001 当前 freeze-ready。
+- 当前总统计 7 freeze-ready、34 pending-evidence、0 pending-decision、2 not_applicable、0 frozen。

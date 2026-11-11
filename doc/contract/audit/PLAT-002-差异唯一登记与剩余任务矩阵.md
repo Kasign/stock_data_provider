@@ -1491,3 +1491,11 @@ INT-CTR-001 是正式 43 CTR 之一，不是内部 Outbox/Inbox 实现验收。�
 - AuthorizationRef Schema 增加 policy_owner 与 purpose_code/content_level 的合法组合约束：Data 仅 quant_analysis/research_analysis/risk_review + full；News 仅 research_analysis/risk_review/user_display；Quant 仅 quant_analysis + full；Research 仅 research_analysis/risk_review。
 - 跨对象 Validator 补充 expires_at 非 null 时必须严格晚于 decided_at；policy_version 必须等于 PolicySnapshot.snapshot_ref；policies/conditions 的唯一性和稳定排序由 Validator 执行；指纹按完整策略快照复算。
 - GOV-CTR-006 保持 freeze-ready；Owner/Consumer/撤销竞态测试仍为 L2 实现符合性，不混入项目级定义冻结门禁。
+
+
+## 62. PLAT-CTR-001 公共 HTTP ErrorEnvelope 定义（2026-11-11）
+
+- DEC-PLAT-002-039 明确内部 Fault 仅进程内使用，Server 必须投影为独立 ErrorEnvelope 1.0.0。
+- 新增 Schema/Golden，定义 schema_version、class、code、message、retryable、可选 request_id；明确 X-Request-ID Header 权威、HTTP 状态映射和安全响应 Header。
+- 当前 Server middleware 尚未输出 schema_version，body request_id 也未映射；这是后续 Server 实现符合性，不改变公共契约定义完整性。
+- PLAT-CTR-001 转为 freeze-ready；当前 7 freeze-ready、34 pending-evidence、0 pending-decision、2 not_applicable、0 frozen。
