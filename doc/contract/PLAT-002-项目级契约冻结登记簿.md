@@ -171,7 +171,7 @@ GitHub 远端 ref 核验（2026-11-10）：
 | DATA-CTR-001 | 标准数据 DTO、JSON/OpenAPI、字段缺失语义 | Data | Quant、Researchflow、Research（适用范围）、Server、WebUI | internal/marketdata/app/port.go；internal/marketdata/application/reader.go；internal/marketdata/httpapi/openapi.yaml；internal/marketdata/model/**；DEC-PLAT-002-027 | HTTP OpenAPI 1.1.0；Application Port 强类型 DTO；字段级映射未形成完整基线 | `pending_evidence` | Provider 原始字段不仅暴露于 HTTP Quote/DailyBar/DragonTiger/LimitPool DTO，也暴露于跨模块 QuoteSnapshot/DailyBar Application Port，并由 Reader 原样映射；LimitPool 金额仍为 Provider-reported 且依赖 provider_amount_unit。字段级 required/nullable/omitempty 映射仍未完整 |
 | DATA-CTR-002 | 行情单位、复权、交易日和时间口径 | Data | Quant、Researchflow、Research、Server | doc/api/contracts/数据质量与状态契约.md；internal/marketdata/model/**；internal/marketdata/httpapi/openapi.yaml | 通用规则有文字定义；逐字段时间/单位映射未版本化 | `pending_evidence` | 通用规则已存在，但 Quote.quote_time、DailyBar.provider_timestamp/system_observed_at、Fundamental.available_at/publication_date、Valuation.provider_report_date/provider_timestamp、Announcement.published_at 等语义尚未形成逐 DTO 映射；IndexDailyBar.amount_unit 无闭合枚举，部分金额仍暴露 provider_defined/provider_amount_unit；百分点与 0..1 比例字段需区分 |
 | DATA-CTR-003 | Provider 原始值标准化与精度保真 | Data 内部 Provider Adapter | Data 内部 Provider Adapter | doc/api/数据侧整体规划.md（仅内部适配约定） | 不属于跨模块公开契约版本 | `not_applicable` | 仅 Data 内部 Provider 标准化规则，不存在跨模块公开消费者；从 PLAT-002 跨模块契约冻结门禁排除，不再追踪 Provider Fixture/专项测试 |
-| DATA-CTR-004 | Data Quality、覆盖率、来源和降级表达 | Data | Quant、Researchflow、WebUI、Server | doc/api/contracts/数据质量与状态契约.md；internal/marketdata/httpapi/openapi.yaml | QualityStatus 已有枚举；各质量/覆盖 DTO 映射未完整登记 | `pending_evidence` | QualityStatus 与 Probe 状态已有定义；各公开响应中 quality_status、quality_reasons、freshness_status、coverage dimensions/分母和 source/version 的适用字段映射仍不完整，不能将诊断内部状态等同业务质量 |
+| DATA-CTR-004 | Data Quality、覆盖率、来源和降级表达 | Data | Quant、Researchflow、WebUI、Server | internal/marketdata/model/**；internal/marketdata/httpapi/openapi.yaml；doc/api/contracts/数据质量与状态契约.md；Freshness SLA 与评估契约 | QualityStatus 枚举已存在；逐领域状态映射未版本化 | `pending_evidence` | QualityStatus、ProviderProbeItem.status、ProviderProbeCheckResult.status、freshness_status 是不同状态维度；Freshness 只在诊断 CheckResult 输出。MarketBreadth 与 Probe coverage 有不同层级/分母；其他 DTO 的 has_data/total/returned/quality_status 组合尚未形成完整适用映射 |
 | DATA-CTR-005 | 精度保真的跨模块日线 DTO（v2） | Data | Quant、Researchflow | internal/marketdata/app/port.go；internal/marketdata/httpapi/openapi.yaml；DEC-PLAT-002-009；Quant/Research 公开 DTO 字段级契约 | v1.1.0 HTTP number / InProcess float64；v2 Decimal Schema 未发现 | `pending_evidence` | 当前 HTTP 与 Application Port 均为 number/float64；仓库未发现 DailyBarsV2、Decimal DTO、v2 Schema/Golden。DEC-009 明确保留 v1、不静默改类型；v2 仍缺消费者输入边界、精度/scale/舍入/缺失语义及版本定义 |
 | DATA-CTR-006 | Data HTTP API 调用认证 | Data HTTP Adapter；Server 负责默认 Root 入口和 Remote Adapter Secret | Server Remote Data Adapter；仅远程兼容模式下的受控 HTTP 调用方 | [DATA-CTR-006 认证契约](./rules/DATA-CTR-006-Data-HTTP-API调用认证契约.md)；internal/marketdata/httpapi/openapi.yaml；Data服务间认证映射与Secret注入设计.md；DEC-PLAT-002-017/038/041 | 1.0.0（远程 X-API-Key；同进程可信 Principal Context） | `pending_evidence` | 目标语义已收敛：默认同进程由 Root Server 注入可信 Context；远程兼容仅 X-API-Key，禁止 Bearer 别名，健康接口匿名。现有 OpenAPI 顶层 ApiKey/BearerAuth OR、Handler Bearer fallback、测试 Bearer 成功用例均违约；需 Data 责任范围同步后再核验 |
 | DATA-CTR-007 | Research Data Snapshot/Evidence 消费边界 | Data（数据事实）；Research（Evidence）；Server（Adapter 注入） | Research、Researchflow | internal/marketdata/app/port.go；DATA-CTR-008 Manifest Schema/Golden；DEC-PLAT-002-020；Quant-Research 公开 DTO 字段级契约 | DailyBarsSnapshot 当前 DTO；DATA-CTR-008 Manifest 1.0.0；内容 DTO/引用映射未定义 | `pending_evidence` | DailyBarsSnapshot 返回 bars 但不含 snapshot_ref/Manifest/AuthorizationRef；Bundle.snapshot_id 未证明等同内容寻址 SnapshotRef。DATA-CTR-008 Manifest 仅记录范围/来源版本元数据，不包含行情内容或 payload Schema。缺少不可变内容定位、DailyBarsV2/质量单位字段和 Research Evidence source_ref/version/locator 的权威映射 |
@@ -444,7 +444,7 @@ PLAT-002 不因本次矩阵统计完成而结束。整体完成仍需：
 | DATA-CTR-001 | pending_evidence | HTTP Go Model/OpenAPI 与跨模块 QuoteSnapshot/DailyBar Application Port 均公开 Provider 原始 volume/amount/unit/source-field；DragonTiger、LimitPool 仍暴露 Provider 原始金额/单位；另有 Go JSON/OpenAPI required/nullable/omitempty 字段映射缺口 |
 | DATA-CTR-002 | pending_evidence | 已有通用时间/单位规则；Quote、DailyBar、Fundamentals、Valuations、Announcements、CorporateActions、Index 等逐字段时间映射未完整；IndexDailyBar amount_unit 未闭合，Provider-defined 金额和比例/百分点差异仍需字段级约束 |
 | DATA-CTR-003 | not_applicable | 仅覆盖 Data 内部 Provider Adapter 原始值标准化，没有跨模块公开 DTO/Port 消费者；退出 PLAT-002 跨模块冻结门禁，不再要求 Provider Fixture 或专项测试作为项目级任务 |
-| DATA-CTR-004 | pending_evidence | QualityStatus 已有 valid/degraded/stale/invalid/unknown；Probe 的维度状态、ProviderOutcome、freshness_status、coverage_ratio 与业务 quality_status 的关系已有文字规则，但公开响应字段适用映射及覆盖率分母语义仍需明确 |
+| DATA-CTR-004 | pending_evidence | QualityStatus、Probe Item/Check 状态、Freshness 状态必须分离；Freshness 仅属于诊断 CheckResult。MarketBreadth/Probe 覆盖维度有不同分母，其他 DTO 的 has_data/total/returned 与 quality_status 关系仍需逐域定义 |
 | DATA-CTR-005 | pending_evidence | 当前 HTTP OpenAPI 仍为 number、InProcess Port 为 float64；未发现 DailyBarsV2/Decimal DTO、Schema/Golden；DEC-009 要求保留 v1，v2 消费者边界、精度/scale/舍入/缺失语义未定义 |
 | DATA-CTR-006 | pending_evidence | 目标语义已明确为默认同进程可信 Principal Context、远程兼容 X-API-Key only；当前 OpenAPI ApiKey/BearerAuth OR、Handler Bearer fallback、Bearer 成功测试仍违约；待 Data 权威 OpenAPI/Handler 同步 |
 | DATA-CTR-007 | pending_evidence | DailyBarsSnapshot 有 bars 但无 snapshot_ref/Manifest/AuthorizationRef；DATA-CTR-008 Manifest 只定义范围/来源版本，不含行情正文；Bundle.snapshot_id 未证明等同内容寻址 SnapshotRef，Evidence source_ref/version/locator 映射缺失 |
@@ -1293,4 +1293,37 @@ DEC-027 不只是禁止 DragonTiger 的七个 Provider 金额字段；它确立�
 5. 本轮只记录公开字段定义缺口，不修改 Data 模型、OpenAPI、Provider、WebUI 或专项文档。
 
 **结论：DATA-CTR-002 继续保持 pending_evidence；后续只补逐字段时间/单位映射，不重写既有公共规则。**
+
+
+
+## 50. DATA-CTR-004 Quality、Freshness 与 Coverage 状态分层核查（2026-11-11）
+
+### 50.1 已有机器定义
+
+- OpenAPI `QualityStatus` 是闭合枚举：valid、degraded、stale、invalid、unknown。
+- `ProviderProbeItem.status` 是单个 Provider × capability 的执行/返回状态：returned、returned_degraded、returned_unknown、failed、skipped、not_configured、not_supported。
+- `ProviderProbeCheckResult.status` 是单项检查执行结果：passed、degraded、skipped、failed、not_configured、not_supported。
+- `ProviderProbeCheckResult.freshness_status` 是独立 Freshness 状态：fresh、stale、unknown、not_applicable；Freshness SLA 文档明确它不修改 QualityStatus。
+- ProviderProbeItem 同时携带 QualityStatus 和执行 status；二者不可互相映射或覆盖。缺少凭据/不支持/跳过不是业务数据质量 failed。
+- `ProviderProbeCoverageDimension` 已定义 dimension、population、source、total、returned、validated、missing、excluded、ratio；OpenAPI 明确 ratio=coverage_validated/coverage_total，分母未知时省略。
+- Freshness SLA 文档第14节明确 MarketBreadth 的 quote_response、price_classification、quote_timestamp、amount 四个字段覆盖维度使用 `total_securities` 作为分母，并定义 total/returned/validated/missing/excluded 的计数关系。
+
+### 50.2 业务响应中的覆盖与空数据语义
+
+- MarketBreadthSnapshot 有 total_securities、covered_securities、unclassified_count、amount_coverage_count、quote_timestamp_coverage_count、oldest/newest_quote_time；其 OpenAPI 明确 total_securities 来自源端分布桶、未独立与 Security Master 核验，不能无条件解释为真实全市场证券全集。
+- LimitPoolSnapshot 有 has_data、total、total_is_lower_bound、items、quality_status；OpenAPI 已声明 has_data=false 表示未知/不可用而非确认零，并给出与 total/items 的组合约束。
+- DragonTigerSnapshot 有 has_data、total、returned、source_returned、excluded_non_a_share_count、has_more；has_data 的含义是当前 Provider 页是否有支持的 A 股行，不等于指定日期完整龙虎榜是否为空。
+- FundamentalsSnapshot 有 has_data 和分区级 QualityStatus；ValuationSnapshot 用 requested_symbols、total、items、missing_symbols 表达返回覆盖；它们的缺失/空结果不能直接沿用 LimitPool 的 has_data 语义。
+- 多数业务 DTO 有 QualityStatus/quality_reasons，但 quality_status 是整体数据质量，不是请求状态，也不是覆盖率本身。total、returned、excluded 只有在明确总体分母时才构成覆盖率。
+
+### 50.3 核定结论与剩余定义
+
+1. 不能将 ProviderProbeItem.status、ProviderProbeCheckResult.status、freshness_status、QualityStatus 统一为一个 status 字段或同一状态机。
+2. Freshness 目前只作为 Provider Probe 的诊断检查维度输出；不要求所有业务 DTO 新增 freshness_status。业务 DTO 是否需要 Freshness 字段必须由具体消费者用例和数据域契约决定。
+3. skipped、not_configured、not_supported 是执行/能力边界，不是业务质量 invalid 或 failed；质量状态也不能反向证明 Provider 检查已执行。
+4. MarketBreadth/Probe coverage 的分母及维度已有局部定义；不能把它们扩展成所有 DTO 的通用覆盖率。其他领域只有在总体分母可证明时才允许输出覆盖率。
+5. 仍需建立逐响应 DTO 映射：每个响应的 QualityStatus 聚合规则、quality_reasons 条件、has_data/total/items 组合、coverage denominator、source/source_version 和 freshness 适用性；不要求在本轮重复定义已有的通用枚举。
+6. 本轮不修改 Data DTO、OpenAPI、Freshness Evaluator、Provider Probe 或 WebUI。
+
+**结论：DATA-CTR-004 继续保持 pending_evidence；缺口是逐响应状态/覆盖适用映射，不是缺少通用 QualityStatus 或 Freshness 枚举。**
 
