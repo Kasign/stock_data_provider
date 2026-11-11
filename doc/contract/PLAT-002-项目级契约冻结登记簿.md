@@ -190,9 +190,9 @@ GitHub 远端 ref 核验（2026-11-10）：
 | FLOW-CTR-002 | Cancel、Retry、Deadline、Lease、Fencing | Researchflow | Server（命令入口）；Scheduler/Worker（内部执行） | doc/researchflow/03 第3～5节、第6.2节；Attempt Schema/Golden | 1.0.0（Attempt Schema/Golden）；命令 DTO Schema 未登记 | `pending_evidence` | 取消/重试/deadline 的外部可观察状态与稳定错误结果已定义；CancelRun/RetryStage 命令字段、幂等作用域/请求指纹和 deadline/cancel 冲突结果未形成唯一权威机器/强类型契约。CAS、锁、重启恢复测试不属于本轮门禁 |
 | FLOW-CTR-003 | Run Execution Context 与 system_as_of 传播 | Researchflow | Data、News、Quant、Research、LLM | doc/researchflow/03 第6.1/6.2节；ResearchContext DTO 第3.1节；GOV-CTR-002 | Run Schema 1.0.0 部分承载；独立 Context/ResearchContext Schema 未登记 | `pending_evidence` | Run Context 字段语义已有；ResearchContext/ContextSectionRef、模板解析快照、可信 caller/correlation 与各下游 Adapter 的字段映射未形成单一权威 Schema/Port 契约 |
 | FLOW-CTR-004 | Stage 输入输出、诊断与最终报告关联 | Researchflow | 所有 Stage Provider、Server、WebUI | doc/researchflow/03 第2.2/2.3/6.2节；Stage/ResultSummary Schema/Golden | 1.0.0（Stage/ResultSummary Schema/Golden）；Stage Provider Result Envelope Schema 未登记 | `pending_evidence` | Stage Provider Result 的 output_type/schema_version/payload/quality_summary/diagnostic_refs 只有字段表，无权威 Schema/Output Registry；ResultSummary.quality_status 仍为任意 string，coverage 分母及 summary 资源身份/版本绑定未定义完整 |
-| LLM-CTR-001 | Provider Port、ModelRequest/Response、Usage、Tool Call | LLM | Researchflow | internal/llm/llm.go、responses_adapter.go；doc/llm/04 | 1.0.0（Model Request/Response Schema） | `pending_evidence` | ModelRequest/Response、Usage、ToolDefinition、system_as_of、模型能力和错误语义 |
-| LLM-CTR-002 | Stream/SSE 事件、终止、断流和序号 | LLM | Researchflow | internal/llm/responses_sse.go、responses_stream.go；doc/llm/05 | 1.0.0（Model Event Schema；SSE fixtures） | `pending_evidence` | terminal event、EOF/断流、sequence_number、delta、取消、Body Close 和资源上限 |
-| LLM-CTR-003 | Platform Fault → ModelErrorInfo 映射 | LLM Adapter | Researchflow；依赖 Platform Fault | internal/llm/platform_fault.go；PLAT-CTR-001 | 1.0.0（Model Error Info Schema） | `pending_evidence` | stable_code/kind/retryable/safe_message、Cause 不出线、incomplete 与技术 Fault 分类 |
+| LLM-CTR-001 | Provider Port、ModelRequest/Response、Usage、Tool Call | LLM | Researchflow | doc/llm/04 第2～5节；ProviderConfig/CapabilityState/ModelRequest/ModelResponse Schema 1.0.0 | 1.0.0（Request/Response/Config/Capability Schema 与 JSON Fixtures） | `pending_evidence` | 主字段与条件状态已有定义；UTC RFC3339Nano 未在相关 Schema 中约束，ContentPart.annotations Schema 允许任意值而 DTO 定义为 Annotation[]，部分未知/条件字段的结构约束仍过宽 |
+| LLM-CTR-002 | Stream/SSE 事件、终止、断流和序号 | LLM | Researchflow | doc/llm/04 第6节；doc/llm/05；ModelEvent Schema 1.0.0 | 1.0.0（ModelEvent Schema 与 SSE Fixtures） | `pending_evidence` | terminal/EOF/序号连续性/未知事件/取消语义已有；ModelEvent received_at UTC 约束未体现在 Schema，sequence_number 初始/合法范围及 terminal 后事件的公开结构约束尚未形成完整机器定义 |
+| LLM-CTR-003 | Platform Fault → ModelErrorInfo 映射 | LLM Adapter | Researchflow；依赖 Platform Fault | doc/llm/04 第7/11节；ModelErrorInfo Schema 1.0.0；PLAT-CTR-001 | 1.0.0（ModelErrorInfo Schema） | `pending_evidence` | Fault Class→ModelErrorKind、stable_code、SafeMessage、Retryable 和 Cause 隔离规则已有；但 Platform Fault 的公开分类/稳定 Code 契约尚未冻结，跨层映射无法独立冻结 |
 | NTF-CTR-001 | NotificationEvent Schema Registry 与版本 | 各业务事件生产方提供 payload；Notification 管 Registry | Notification、事件生产方、Worker | doc/notification/03、05；Schema/Golden | 1.0.0（Envelope + 3 Event Schema / 6 Golden） | `pending_evidence` | event_type/version、payload Schema、Registry digest、兼容矩阵和生产方映射测试 |
 | NTF-CTR-002 | Inbox、PublishEvent、Delivery 幂等与状态机 | Notification；事件生产方负责 Outbox 原子事实 | 事件生产方、Notification Worker、运维入口 | internal/notification/application/ports.go、storage；doc/notification/03 | 1.0.0 Envelope；状态机 Golden/Schema 覆盖待核验 | `pending_evidence` | Inbox、幂等键/fingerprint、Delivery/Attempt 状态、CAS/fencing、unknown 对账和恢复 |
 | NTF-CTR-003 | Channel Adapter、重试和投递结果语义 | Notification | 外部渠道 | internal/notification/application/channel_ports.go；doc/notification/03 | Channel/Retry 专属 Schema 未见；测试矩阵待核验 | `pending_evidence` | 不承诺 exactly-once、渠道能力、明确未接受才可重试、Retry-After 和 unknown 终态 |
@@ -604,3 +604,40 @@ PLAT-002 不因本次矩阵统计完成而结束。整体完成仍需：
 - 本批 4 项均为 pending_evidence；无新增 pending_decision、blocked、freeze-ready。
 - 当前项目级待决项总数保持 5 项：QNT-DEC-01/02、RSC-OPEN-003/004/005。
 - 下一批：LLM 公开契约定义核定；不重复审查 FLOW 已明确的状态机/取消/重试原则，不检查 Researchflow 内部 Worker/Storage 实现。
+
+## 20. LLM 首批公开契约定义核定（2026-11-11）
+
+本批覆盖 LLM-CTR-001～003。只核对 Researchflow → LLM 的 Provider Port、Request/Response/Usage/Tool、SSE Event 与 Platform Fault 投影，不核验真实模型/Gateway 能力、Provider 性能、模块测试或 CI。
+
+### 20.1 核定结果
+
+| 契约 | 状态 | 核定结论 |
+|---|---|---|
+| LLM-CTR-001 | pending_evidence | ProviderConfig、CapabilityState、ModelRequest、ModelResponse 1.0.0 Schema 与 JSON Fixtures 已有，协议范围和字段语义详细；但时间 Schema 只使用 date-time、未约束 RFC3339Nano UTC；ContentPart.annotations Schema 为任意值，而 DTO 约定 Annotation[]；部分条件字段/未知类型约束仍不够精确 |
+| LLM-CTR-002 | pending_evidence | ModelEvent 1.0.0 Schema 与 SSE Fixture 覆盖完整/中断/terminal/sequence 等主要情形，事件终止和重试规则已明确；但 received_at UTC 约束、sequence_number 初始/合法范围，以及 terminal 后事件的完整公开结构约束未全部落实到机器契约 |
+| LLM-CTR-003 | pending_evidence | ModelErrorInfo Schema/映射规则已有，Platform Fault Class 到 ModelErrorKind、stable_code、SafeMessage、Retryable 和 Cause 隔离均有文字定义；但依赖 PLAT-CTR-001 的 Fault 公开分类和稳定 Code 语义尚未冻结 |
+
+### 20.2 已接受、不再重开的语义
+
+- 首期仅单轮文本输入；多轮/多模态/background/previous_response_id 延后。
+- ToolDefinition 是受控可选字段；LLM 只解析 Tool Call，不执行、不批准。
+- reasoning_effort/temperature/top_p 等能力仅在当前 Provider+Model+Gateway 证据 supported 且未过期时使用；unknown 不放行。
+- 本地 Schema 语义固定 Draft 2020-12；上游 Responses strict 子集不支持的约束不得静默删除。
+- Usage.total_tokens 只在 input/output 均明确且无溢出时派生；上游值不一致保留原值并记录诊断。
+- SSE sequence_number 若全流提供必须严格连续；整流均缺失可继续但标记 unavailable；同流混合有无按协议异常处理。
+- Request ID、Correlation ID、Gateway Request ID、Upstream Request ID 分层保存。
+- LLM Adapter 默认不自动重试；是否重试由 Researchflow 的 Deadline/预算/幂等策略决定；流一旦发出事件禁止透明重试。
+
+### 20.3 明确排除
+
+- 不以本地 Qwen/llama.cpp 或 Gateway 当前真实能力未验证为由阻断纯协议契约冻结；能力状态属于运行时证据，unknown 是安全默认值。
+- 不检查真实 Gateway E2E、模型输出质量、Token 吞吐、并发性能或 Provider 专项测试。
+- Platform HTTP Client/受控 SSE 真实接入与部署验收不属于本轮。
+- 不修改 LLM Provider Adapter、Schema、Golden 或任何责任模块代码。
+
+### 20.4 本批结论
+
+- 本批 3 项均为 pending_evidence；无新增 pending_decision、blocked、freeze-ready。
+- LLM-CTR-003 依赖 PLAT-CTR-001，不能先于 Platform Fault 公开契约冻结；本轮只登记依赖关系，不重开 Platform 任务。
+- 当前项目级待决项仍为 5 项：QNT-DEC-01/02、RSC-OPEN-003/004/005。
+- 下一批：Notification 公开契约定义核定；不重复审查 LLM 已接受的协议/重试决议。
