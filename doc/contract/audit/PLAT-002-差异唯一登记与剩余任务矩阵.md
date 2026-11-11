@@ -1317,3 +1317,13 @@ ResearchContext 归 FLOW-CTR-003，不属于 RSC-CTR-001 Evidence。RSC-DEC-001/
 本批 3 项均 pending_evidence；无新增 pending_decision、blocked、freeze-ready。首期单轮文本、Tool 只解析不执行、Capability unknown 默认拒绝、Draft 2020-12、Usage 派生和 SSE 禁止透明重试等已接受语义不重开。
 
 真实 Gateway/模型能力、Provider 性能、E2E、HTTP Client 接线、测试/CI 不属于本轮。当前项目级待决项仍为 5 项（QNT-DEC-01/02、RSC-OPEN-003/004/005）。
+
+## 48. Notification 首批公开契约定义核定（2026-11-11）
+
+| 契约 | 状态 | 结论 |
+|---|---|---|
+| NTF-CTR-001 | pending_evidence | Envelope/3类 Payload Schema 与6个 Golden 已有；UTC 约束、reason_code/ref 格式和 subject_ref 与 payload 主体绑定未完整机器化 |
+| NTF-CTR-002 | pending_evidence | Inbox/Publish/Delivery 幂等和 Delivery 状态机语义已有；Subscription/DeliveryPlan/DeliveryRecord/Attempt/StateEvent 缺唯一权威跨模块 DTO/Port 定义 |
+| NTF-CTR-003 | not_applicable | ChannelConfig/Adapter/Resolver/SendRequest/Result 是 Notification 内部 SPI；不属于跨模块契约。Delivery retry/unknown 语义归 NTF-CTR-002 |
+
+本批 3 项：2 项 pending_evidence、1 项 not_applicable；无 pending_decision、blocked、freeze-ready。真实渠道、Secret、Worker、Repository、MariaDB、E2E、CI 均不属于本轮门禁；不新增 CTR。
