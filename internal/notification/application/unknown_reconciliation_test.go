@@ -130,7 +130,7 @@ func TestAssessUnknownDeliveryRejectsEvidenceOlderThanAttempt(t *testing.T) {
 }
 
 func TestAssessUnknownDeliveryRejectsImpossibleEarlierAttemptHistory(t *testing.T) {
-	delivery, channel, attempts, evidence, now := unknownReconciliationFixture(t)
+	delivery, channel, attempts, evidence, _ := unknownReconciliationFixture(t)
 	latest := attempts[0]
 	first := latest
 	first.AttemptID = latest.AttemptID + "-first"

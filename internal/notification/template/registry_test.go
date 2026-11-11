@@ -393,7 +393,7 @@ func TestRegistryRepositoryLoadIsIdempotentButImmutable(t *testing.T) {
 type registryTemplateRepositoryMap map[templateKey]registryTemplateRepositoryStub
 
 func (s registryTemplateRepositoryMap) Get(_ context.Context, templateID string, version int64) (Definition, string, bool, error) {
-	record, ok := s[templateKey{id: templateID, version: version}]
+	record, _ := s[templateKey{id: templateID, version: version}]
 	return record.definition, record.digest, record.found, record.err
 }
 
