@@ -27,3 +27,11 @@
 - TrendResult 与通用 QuantMetric 的自由文本字段及 JSON 标量原文必须是有效 UTF-8，避免 Go JSON 解码/序列化替换非法字节。
 - 非法时间、空引用、非法质量状态拒绝；自由文本字段必须是有效 UTF-8 且无首尾空白，避免身份/引用出现多种等价表示。
 - Golden 固定 DTO 的 JSON 结构，不代表某个真实趋势算法已完成验收。
+
+## DEC-PLAT-002-049 跨层状态约束补充（2026-11-11）
+
+- TrendResult.direction 与 phase 独立；strength 可空，非空必须有限且位于 [0,1]。
+- evidence_metrics/conflict_refs 必须显式提供数组，允许空数组。
+- 每个 evidence Metric 必须通过自身 Validate，且 `metric.system_as_of` 必须与 `TrendResult.system_as_of` 完全一致。
+- TrendResult 的 period、system_as_of、algorithm_version、quality_status 与 Envelope 对应字段一致的约束，需在完整 Envelope DTO/Validator 落地后完成；当前仓库尚无可供绑定的完整 Envelope 类型，不能提前宣称跨层一致性验收通过。
+
