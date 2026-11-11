@@ -3,7 +3,7 @@
 - 分支：`feat/researchflow`
 - 代码：`internal/researchflow/**`
 - 任务前缀：FLOW
-- 当前状态：领域状态机、MySQL 核心生命周期事务、Application Worker 单次执行协调器、MySQL WorkerStore Adapter、Scheduler 计划计算与 Stage CAS 原语均已有代码；Scheduler 运行协调器、Worker Pool/常驻消费、生产 StageExecutor Adapter、跨进程取消通知和真实 MariaDB/并发验收尚未闭环。
+- 当前状态：领域状态机、MySQL 核心生命周期事务、Application Worker 单次执行协调器、MySQL WorkerStore Adapter、Scheduler 单次 Run 运行协调器均已有代码；Worker Pool/常驻消费、周期扫描与 Server 生命周期接入、生产 StageExecutor Adapter、跨进程取消通知仍未闭环。WorkerStore 与 Scheduler 已有模块级及 MariaDB 验收证据，详见任务进度文档。
 
 Researchflow 是研究应用编排层，通过 Data、News、Quant、Research、LLM 的公开 Application Port 编排研究流程。Notification 不作为同步 DAG Stage；Run 终态 CAS 成功后按 INT-CTR-001 写本地 Outbox。它拥有 Run/Stage/Attempt 状态，不拥有其他模块内部领域规则。Platform Task Runner 只提供执行基础设施，不替代 Researchflow 业务状态机。
 
@@ -19,7 +19,7 @@ Researchflow 是研究应用编排层，通过 Data、News、Quant、Research、
 ## 当前代码能力
 
 - `domain`、`template`、`state`：Run/Stage/Attempt 模型、模板/DAG 与状态迁移。
-- `application`：CreateRun、Scheduler 计划构建与 CAS 持久化原语、Worker 单次执行协调、取消、Deadline、Retry、Outbox 与 Run Finalization 用例。
+- `application`：CreateRun、Scheduler 单次 Run 运行协调（快照读取、计划计算、Stage CAS、冲突重载重算、Worker 派发）、Worker 单次执行协调、取消、Deadline、Retry、Outbox 与 Run Finalization 用例。
 - `storage`：MySQL Run/Stage/Attempt 核心事务、租约/fencing、Deadline、Finalize 和 Outbox 持久化操作。
 - `publicdto`、`parameterschema`：公开 DTO、参数 Schema 校验。
 - `contextassembly`、`toolpolicy`、`resultvalidation`：上下文装配、工具授权、Quant Envelope 与风险校验。
@@ -27,7 +27,7 @@ Researchflow 是研究应用编排层，通过 Data、News、Quant、Research、
 
 ## 当前明确缺口
 
-- Scheduler 目前是纯计划计算 + Stage CAS 原语，没有周期扫描、调度快照读取、CAS 冲突自动重载重算和实际派发的运行服务。
+- Scheduler 已提供单次 Run 的运行协调服务；周期扫描、Server 生命周期启停与多 Run 调度入口尚未接入。当前派发直接调用 Worker.Execute，不引入第二套队列；跨进程并发仍由 ClaimAttempt 事务兜底。
 - Worker 有单次 `Execute` 协调器；MySQLRunRepository 已实现 WorkerStore，执行快照读取与结果提交映射已落地。常驻消费循环、队列派发、Worker Pool/优雅停机和生产 StageExecutor Adapter 仍未闭环。
 - `StageExecutor` 是注入端口，Data/News/Quant/Research/LLM 的生产 Adapter 尚未在本分支闭环。
 - 无独立 Worker Pool/队列消费循环；跨 Worker 的 Run 并发上限由 ClaimAttempt 数据库事务兜底。
