@@ -216,6 +216,16 @@ func (m *memoryDeliveries) StateEvents(deliveryID string) []domain.DeliveryState
 	return result
 }
 
+func (m *memoryDeliveries) ListStateEvents(ctx context.Context, deliveryID string) ([]domain.DeliveryStateEvent, error) {
+	if ctx == nil {
+		return nil, errors.New("notification: context is required")
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	return m.StateEvents(deliveryID), nil
+}
+
 func cloneDeliveryEvent(event domain.DeliveryStateEvent) domain.DeliveryStateEvent {
 	event.ReasonCode = cloneDeliveryString(event.ReasonCode)
 	event.EvidenceRef = cloneDeliveryString(event.EvidenceRef)

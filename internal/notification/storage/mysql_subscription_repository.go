@@ -200,7 +200,7 @@ func (r *MySQLSubscriptionRepository) AppendVersion(
 		return fmt.Errorf("notification storage: append subscription version: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("notification storage: commit subscription version: %w", err)
+		return fmt.Errorf("%w: notification storage: commit subscription version: %w", application.ErrPersistenceOutcomeUnknown, err)
 	}
 	return nil
 }

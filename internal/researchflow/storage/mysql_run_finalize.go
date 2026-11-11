@@ -113,24 +113,37 @@ func (r *MySQLRunRepository) FinalizeRun(ctx context.Context, input RunFinalizat
 		return false, ErrClaimRunUnavailable
 	}
 
-	// Lock every Stage and require terminal state before reading Attempts.
-	stageRows, err := tx.QueryContext(ctx, `SELECT stage_ref, status FROM researchflow_stages
-		WHERE run_ref = ? ORDER BY stage_ref FOR UPDATE`, input.RunRef)
+	// Lock every Stage and require the summary's Stage projection to match
+	// the same transactional snapshot used for finalization.
+	stageRows, err := tx.QueryContext(ctx, `SELECT stage_ref, stage_code, status, attempt_no
+		FROM researchflow_stages WHERE run_ref = ? ORDER BY stage_ref FOR UPDATE`, input.RunRef)
 	if err != nil {
 		return false, fmt.Errorf("lock Researchflow finalization Stages: %w", err)
 	}
-	stageCount := 0
+	stageStatuses := make(map[string]domain.StageStatus, len(input.Summary.StageOutcomes))
+	stageAttemptNumbers := make(map[string]int, len(input.Summary.StageOutcomes))
 	for stageRows.Next() {
-		var ref, status string
-		if err := stageRows.Scan(&ref, &status); err != nil {
+		var ref, code, status string
+		var attemptNo int
+		if err := stageRows.Scan(&ref, &code, &status, &attemptNo); err != nil {
 			_ = stageRows.Close()
 			return false, fmt.Errorf("scan Researchflow finalization Stage: %w", err)
 		}
-		stageCount++
-		if !domain.StageStatus(status).Terminal() {
+		stageStatus := domain.StageStatus(status)
+		if strings.TrimSpace(code) == "" || !stageStatus.Terminal() {
 			_ = stageRows.Close()
-			return false, fmt.Errorf("Researchflow Stage %q is not terminal", ref)
+			return false, fmt.Errorf("Researchflow Stage %q has an empty code or is not terminal", ref)
 		}
+		if _, exists := stageStatuses[code]; exists {
+			_ = stageRows.Close()
+			return false, fmt.Errorf("Researchflow Run contains duplicate Stage code %q", code)
+		}
+		if attemptNo < 0 {
+			_ = stageRows.Close()
+			return false, fmt.Errorf("Researchflow Stage %q has a negative attempt number", ref)
+		}
+		stageStatuses[code] = stageStatus
+		stageAttemptNumbers[ref] = attemptNo
 	}
 	if err := stageRows.Err(); err != nil {
 		_ = stageRows.Close()
@@ -139,28 +152,48 @@ func (r *MySQLRunRepository) FinalizeRun(ctx context.Context, input RunFinalizat
 	if err := stageRows.Close(); err != nil {
 		return false, fmt.Errorf("close Researchflow finalization Stages: %w", err)
 	}
-	if stageCount == 0 {
+	if len(stageStatuses) == 0 {
 		return false, errors.New("Researchflow Run has no persisted Stages")
 	}
+	if len(stageStatuses) != len(input.Summary.StageOutcomes) {
+		return false, errors.New("Researchflow ResultSummary Stage outcomes do not match persisted Stage set")
+	}
+	for code, persistedStatus := range stageStatuses {
+		if summarizedStatus, ok := input.Summary.StageOutcomes[code]; !ok || summarizedStatus != persistedStatus {
+			return false, fmt.Errorf("Researchflow ResultSummary Stage outcome %q does not match persisted Stage status", code)
+		}
+	}
 
-	attemptRows, err := tx.QueryContext(ctx, `SELECT attempt_ref, status FROM researchflow_attempts
-		WHERE run_ref = ? ORDER BY stage_ref, attempt_no FOR UPDATE`, input.RunRef)
+	// Lock Attempts only after every Stage. Verify complete attempt numbering
+	// against each Stage counter so missing history cannot be hidden by a terminal Stage.
+	attemptCounts := make(map[string]int, len(stageAttemptNumbers))
+	attemptMaxNumbers := make(map[string]int, len(stageAttemptNumbers))
+	attemptRows, err := tx.QueryContext(ctx, `SELECT attempt_ref, stage_ref, attempt_no, status
+		FROM researchflow_attempts WHERE run_ref = ? ORDER BY stage_ref, attempt_no FOR UPDATE`, input.RunRef)
 	if err != nil {
 		return false, fmt.Errorf("lock Researchflow finalization Attempts: %w", err)
 	}
 	for attemptRows.Next() {
-		var ref, status string
-		if err := attemptRows.Scan(&ref, &status); err != nil {
+		var ref, stageRef, status string
+		var attemptNo int
+		if err := attemptRows.Scan(&ref, &stageRef, &attemptNo, &status); err != nil {
 			_ = attemptRows.Close()
 			return false, fmt.Errorf("scan Researchflow finalization Attempt: %w", err)
 		}
-		if domain.AttemptStatus(status) == domain.AttemptRunning {
+		if _, exists := stageAttemptNumbers[stageRef]; !exists {
 			_ = attemptRows.Close()
-			return false, fmt.Errorf("Researchflow Attempt %q is still running", ref)
+			return false, fmt.Errorf("Researchflow Attempt %q references a Stage outside its Run", ref)
 		}
-		if !domain.AttemptStatus(status).Terminal() {
+		if attemptNo <= 0 || attemptNo != attemptMaxNumbers[stageRef]+1 {
 			_ = attemptRows.Close()
-			return false, fmt.Errorf("Researchflow Attempt %q has an invalid status", ref)
+			return false, fmt.Errorf("Researchflow Attempt %q history is not contiguous", ref)
+		}
+		attemptCounts[stageRef]++
+		attemptMaxNumbers[stageRef] = attemptNo
+		attemptStatus := domain.AttemptStatus(status)
+		if !attemptStatus.Terminal() {
+			_ = attemptRows.Close()
+			return false, fmt.Errorf("Researchflow Attempt %q is not terminal", ref)
 		}
 	}
 	if err := attemptRows.Err(); err != nil {
@@ -169,6 +202,11 @@ func (r *MySQLRunRepository) FinalizeRun(ctx context.Context, input RunFinalizat
 	}
 	if err := attemptRows.Close(); err != nil {
 		return false, fmt.Errorf("close Researchflow finalization Attempts: %w", err)
+	}
+	for stageRef, expectedAttemptNo := range stageAttemptNumbers {
+		if attemptCounts[stageRef] != expectedAttemptNo || attemptMaxNumbers[stageRef] != expectedAttemptNo {
+			return false, fmt.Errorf("Researchflow Stage %q attempt_no does not match persisted Attempt history", stageRef)
+		}
 	}
 
 	now, err := readDatabaseUTC(tx, ctx)

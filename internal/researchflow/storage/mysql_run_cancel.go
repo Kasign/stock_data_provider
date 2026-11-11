@@ -37,12 +37,12 @@ func (r *MySQLRunRepository) BeginRunCancellation(
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	var status string
+	var status, deadlineAt string
 	var version uint64
 	var terminationReason sql.NullString
-	if err := tx.QueryRowContext(ctx, `SELECT status, version, termination_reason
+	if err := tx.QueryRowContext(ctx, `SELECT status, version, termination_reason, deadline_at
 		FROM researchflow_runs WHERE run_ref = ? FOR UPDATE`, runRef,
-	).Scan(&status, &version, &terminationReason); err != nil {
+	).Scan(&status, &version, &terminationReason, &deadlineAt); err != nil {
 		return false, fmt.Errorf("lock Researchflow cancellation run %q: %w", runRef, err)
 	}
 	runStatus := domain.RunStatus(status)
@@ -74,6 +74,13 @@ func (r *MySQLRunRepository) BeginRunCancellation(
 	now, err := readDatabaseUTC(tx, ctx)
 	if err != nil {
 		return false, err
+	}
+	deadline, err := parseResearchflowTime(deadlineAt)
+	if err != nil {
+		return false, fmt.Errorf("parse Researchflow cancellation deadline: %w", err)
+	}
+	if !deadline.After(now) {
+		return false, errors.Join(ErrClaimRunUnavailable, application.ErrRunCancellationUnavailable)
 	}
 	rows, err := tx.QueryContext(ctx, `SELECT stage_ref, status, version, reason_codes
 		FROM researchflow_stages WHERE run_ref = ? ORDER BY stage_ref FOR UPDATE`, runRef)

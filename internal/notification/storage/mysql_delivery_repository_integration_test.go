@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -60,8 +61,23 @@ func TestNotificationMariaDBDeliveryRepositoryIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if _, err := db.ExecContext(ctx, `UPDATE notification_delivery_plans
+		SET plan_json = JSON_SET(plan_json, '$.recipient_ref', 'tampered-recipient')
+		WHERE delivery_id = ?`, plan.DeliveryID); err != nil {
+		t.Fatalf("corrupt persisted plan snapshot fixture: %v", err)
+	}
+	if err := repository.Create(ctx, delivery); err == nil {
+		t.Fatal("delivery creation must reject a corrupted immutable plan snapshot")
+	}
+	planJSON, err := json.Marshal(plan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ExecContext(ctx, `UPDATE notification_delivery_plans SET plan_json = ? WHERE delivery_id = ?`, planJSON, plan.DeliveryID); err != nil {
+		t.Fatalf("restore persisted plan snapshot fixture: %v", err)
+	}
 	if err := repository.Create(ctx, delivery); err != nil {
-		t.Fatalf("create delivery: %v", err)
+		t.Fatalf("create delivery after restoring valid plan: %v", err)
 	}
 	mismatchedPlan := delivery
 	mismatchedPlan.RecipientRef = "recipient-mismatch"
