@@ -61,10 +61,15 @@ func (s CapabilityState) Supports(key Capability) bool {
 
 func (s CapabilityState) SupportsAt(key Capability, now time.Time) bool {
 	now = now.UTC()
+	if s.VerifiedAt == nil || s.ValidUntil == nil {
+		return false
+	}
+	_, verifiedOffset := s.VerifiedAt.Zone()
+	_, validUntilOffset := s.ValidUntil.Zone()
 	return s.ProviderID != "" && s.ModelID != "" && s.Protocol == ProtocolOpenAIResponses &&
-		s.GatewayVersion != "" && strings.TrimSpace(s.VerificationMethod) != "" && len(s.VerificationMethod) <= 64 && s.EvidenceRef != "" && s.VerifiedAt != nil && !s.VerifiedAt.IsZero() &&
-		!s.VerifiedAt.After(now) && s.VerifiedAt.Location() == time.UTC && s.ValidUntil != nil &&
-		s.ValidUntil.Location() == time.UTC && s.ValidUntil.After(*s.VerifiedAt) &&
+		s.GatewayVersion != "" && strings.TrimSpace(s.VerificationMethod) != "" && len(s.VerificationMethod) <= 64 && s.EvidenceRef != "" &&
+		!s.VerifiedAt.IsZero() && verifiedOffset == 0 && !s.VerifiedAt.After(now) &&
+		validUntilOffset == 0 && s.ValidUntil.After(*s.VerifiedAt) &&
 		now.Before(*s.ValidUntil) && s.Status(key) == CapabilitySupported
 }
 
@@ -181,8 +186,10 @@ func (r ModelRequest) ValidateAt(now time.Time) error {
 	if r.SystemAsOf.After(now) {
 		return errors.New("system_as_of must not be in the future")
 	}
-	if r.DeadlineAt.Location() != time.UTC || r.SystemAsOf.Location() != time.UTC {
-		return errors.New("deadline_at and system_as_of must use canonical UTC")
+	_, deadlineOffset := r.DeadlineAt.Zone()
+	_, systemOffset := r.SystemAsOf.Zone()
+	if deadlineOffset != 0 || systemOffset != 0 {
+		return errors.New("deadline_at and system_as_of must use UTC")
 	}
 	if r.Temperature != nil && (*r.Temperature < 0 || *r.Temperature > 2) {
 		return errors.New("temperature out of range")
