@@ -168,14 +168,14 @@ GitHub 远端 ref 核验（2026-11-10）：
 | PLAT-CTR-005 | HTTP Client、SSRF 与出口安全 | Platform | Data、News、LLM 及其他出站消费者 | doc/platform/05、15；internal/platform/httpclient | HTTP Client/Stream API 版本待核验；Schema 未见 | `pending_evidence` | DestinationPolicy、BoundDoer、DNS/IP、redirect、流式 Body 生命周期、超时/并发和真实消费者 A2 |
 | PLAT-CTR-006 | Storage、Repository、Migration 生命周期 | Platform（连接/Runner）；领域（Repository/Schema/Migration 内容）；Server（汇总注册） | 所有持久化模块 | doc/platform/08 第9节及 Migration 专项定义 | Migration API 版本待核验；唯一权威接口契约未登记 | `pending_evidence` | 平台连接/Runner 与领域 Repository/Schema/Migration 内容的职责已原则性明确；Migration 接口输入输出、namespace/version、失败/Ready/Shutdown 语义仍缺完整权威定义。Server 注册差异属于实现符合性 |
 | PLAT-CTR-007 | Typed Config 与 Secret 生命周期 | Platform（基础解析/脱敏）；各模块（配置 Schema）；Server（Bootstrap） | Server、所有服务端模块 | doc/platform/08 第 6 节；各模块 Config | Config API 版本待核验；Schema 未见 | `pending_evidence` | 配置所有权、读取时点、不可变快照、Secret 注入/轮换/脱敏和启动校验 |
-| DATA-CTR-001 | 标准数据 DTO、JSON/OpenAPI、字段缺失语义 | Data | Quant、Researchflow、Research（适用范围）、Server、WebUI | doc/api/数据层API清单.md；internal/marketdata/httpapi/openapi.yaml | OpenAPI 1.1.0（字段级 Schema 待逐项核验） | `pending_evidence` | Go JSON Tag/OpenAPI/Schema/required/nullable/omitempty/错误码/Golden 双向一致 |
-| DATA-CTR-002 | 行情单位、复权、交易日和时间口径 | Data | Quant、Researchflow、Research、Server | doc/api/数据质量与状态契约.md；MarketData model/normalizer | 规则版本待核验 | `pending_evidence` | CNY/股、shares、CNY、百分点/ratio、复权口径、交易日和 PIT 映射 |
-| DATA-CTR-003 | Provider 原始值标准化与精度保真 | Data | Data 内部 Provider Adapter；间接影响 Quant/Researchflow | doc/api/数据侧整体规划.md；Provider Fixture/对账证据 | Provider 版本/Fixture 覆盖待核验 | `pending_evidence` | 原始类型、精度、单位换算、有损转换、异常值和逐 Provider Fixture |
-| DATA-CTR-004 | Data Quality、覆盖率、来源和降级表达 | Data | Quant、Researchflow、WebUI、Server | doc/api/数据质量与状态契约.md；Data model/diagnostics | Quality Schema/Golden 待核验 | `pending_evidence` | quality_status/reason_code/coverage/source_ref、unknown/degraded、缺失和分母语义 |
-| DATA-CTR-005 | 精度保真的跨模块日线 DTO（v2） | Data | Quant、Researchflow | internal/marketdata/httpapi/openapi.yaml；Data v2 Decimal Schema（待核） | v1.1.0 number；v2 Decimal Schema 当前未见 | `pending_evidence` | v1 number/float64 兼容；v2 Decimal string、Provider 原始精度链路、Golden 和真实 Quant Adapter |
-| DATA-CTR-006 | Data HTTP API 调用认证 | Data；Server 负责 Root 边界和 Remote Adapter Secret | Server、Quant Data Adapter；迁移期独立 HTTP 调用方 | internal/marketdata/httpapi/server.go；Data Module InProcessHandler | API Key 兼容契约版本待核验；InProcess 模式无 Key | `has_difference` + `pending_evidence` | InProcess 不使用 Data API Key；Remote 模式仅 Server 持有 Key；浏览器不得持有 Key；冲突 Header/轮换/脱敏 |
-| DATA-CTR-007 | Research Data Snapshot/Evidence 消费边界 | Data（数据事实）；Research（Evidence）；Server（Adapter 注入） | Research、Researchflow | Data v2 Schema；Research Evidence DTO/Adapter | DailyBarsV2 Schema 待补 | `pending_evidence` | DailyBarsV2、snapshot_ref、authorization_ref、source/version/quality/units；禁止跨模块 Repository/SQL |
-| DATA-CTR-008 | Data AuthorizationRef 签发与快照访问审计 | Data | Quant、Research | Data Snapshot Manifest Schema/Golden；GOV-CTR-006 | 1.0.0（Snapshot Manifest Schema/Golden） | `pending_evidence` | Principal/Scope、purpose_code、内容寻址 Manifest、请求范围绑定、撤销和读取复核 |
+| DATA-CTR-001 | 标准数据 DTO、JSON/OpenAPI、字段缺失语义 | Data | Quant、Researchflow、Research（适用范围）、Server、WebUI | internal/marketdata/httpapi/openapi.yaml；doc/api/contracts/数据层API清单.md（存在过期路径/认证描述） | OpenAPI 1.1.0；字段级映射未形成完整基线 | `pending_evidence` | 公开 DTO 的字段存在/缺失/null/零值/required 语义映射不完整；DragonTiger DTO 仍暴露 DEC-027 明确禁止的 Provider 原始金额/单位字段；API 清单仍引用旧 OpenAPI 路径和旧浏览器 Key 模型 |
+| DATA-CTR-002 | 行情单位、复权、交易日和时间口径 | Data | Quant、Researchflow、Research、Server | doc/api/contracts/数据质量与状态契约.md；internal/marketdata/httpapi/openapi.yaml | 领域规则版本未登记 | `pending_evidence` | 通用单位/质量/复权/PIT 原则已有；Quote/DailyBar/Index/Financial 等字段到 provider_time、available_at、fetched_at、normalized_at、system_observed_at 的映射及各数据域单位适用表仍不完整 |
+| DATA-CTR-003 | Provider 原始值标准化与精度保真 | Data 内部 Provider Adapter | Data 内部 Provider Adapter | doc/api/数据侧整体规划.md（仅内部适配约定） | 不属于跨模块公开契约版本 | `not_applicable` | 仅 Data 内部 Provider 标准化规则，不存在跨模块公开消费者；从 PLAT-002 跨模块契约冻结门禁排除，不再追踪 Provider Fixture/专项测试 |
+| DATA-CTR-004 | Data Quality、覆盖率、来源和降级表达 | Data | Quant、Researchflow、WebUI、Server | doc/api/contracts/数据质量与状态契约.md；internal/marketdata/httpapi/openapi.yaml | QualityStatus 已有枚举；各质量/覆盖 DTO 映射未完整登记 | `pending_evidence` | QualityStatus 与 Probe 状态已有定义；各公开响应中 quality_status、quality_reasons、freshness_status、coverage dimensions/分母和 source/version 的适用字段映射仍不完整，不能将诊断内部状态等同业务质量 |
+| DATA-CTR-005 | 精度保真的跨模块日线 DTO（v2） | Data | Quant、Researchflow | internal/marketdata/httpapi/openapi.yaml；Data v2 Decimal Schema 尚未登记 | v1.1.0 number；v2 版本与 Schema 未定义 | `pending_evidence` | v1 number 保持既有语义；v2 的 Decimal string 字段、精度/scale/舍入/缺失规则、版本和与 Snapshot 引用的关系尚无权威 Schema。Provider 内部精度实现不纳入本轮 |
+| DATA-CTR-006 | Data HTTP API 调用认证 | Data；Server 负责 Root 边界和 Remote Adapter Secret | Server、Quant Data Adapter；仅远程兼容模式下的 HTTP 调用方 | internal/marketdata/httpapi/openapi.yaml；Data服务间认证映射与Secret注入设计.md；DEC-PLAT-002-017 | Remote X-API-Key；InProcess 可信 Principal/Scope Context | `pending_evidence` | 模式边界已明确；但 OpenAPI 全局 security 同时声明 ApiKey 与 BearerAuth（OR 语义），与认证设计中“业务 API 仅 X-API-Key”的定义冲突；旧 API 清单仍描述浏览器持有 Key。需统一公开安全定义。实现接线不纳入本轮 |
+| DATA-CTR-007 | Research Data Snapshot/Evidence 消费边界 | Data（数据事实）；Research（Evidence）；Server（Adapter 注入） | Research、Researchflow | Data v2 DTO/Schema（待定义）；DATA-CTR-008 Snapshot Manifest | DailyBarsV2 Schema 未登记 | `pending_evidence` | Snapshot Manifest 只定义查询范围和来源版本，不等同 DailyBarsV2 行情内容 DTO；DailyBarsV2 字段、版本、质量/单位、Snapshot 引用与 Evidence 消费映射尚缺权威定义 |
+| DATA-CTR-008 | Data AuthorizationRef 签发与快照访问审计 | Data | Quant、Research | DATA-CTR-008 Snapshot Manifest Schema/Golden；GOV-CTR-006 AuthorizationRef/PolicySnapshot | 1.0.0（Snapshot Manifest Schema/Golden） | `pending_evidence` | Manifest 字段与 JCS/SHA-256 规则已定义；Schema 未约束 system_as_of 的 UTC 形式、sources 规范排序/去重完整语义；Data caller_ref、Scope/purpose 到可信主体及授权读取复核的公开映射仍需收敛 |
 | NEWS-CTR-001 | News 只读 Evidence Query Facade | News | Research、Researchflow | internal/news/app/evidence_query_facade.go；doc/news/新闻API契约.md | 1.0.0（4 Schema / 3 Golden） | `pending_evidence` | Query 输入、PIT、Cursor、分页、稳定排序、来源过滤、权限与返回 DTO |
 | NEWS-CTR-002 | AuthorizationRef 与内容访问授权 | News（授权决策 Owner） | Research、Researchflow | doc/news/新闻来源授权矩阵.md；NEWS-CTR-002 Schema；GOV-CTR-006 | 1.0.0（Authorization Binding Schema/Golden） | `pending_evidence` | Source/Article 绑定、内容级别、授权快照、过期/撤销和派生 Evidence 链 |
 | NEWS-CTR-003 | News PIT、稳定 Cursor、排序与去重 | News | Research、Researchflow | doc/news/新闻数据模型与质量契约.md；Evidence Query | 专属 Schema/Golden 当前未见 | `pending_evidence` | system_as_of、观察版本、available_at、Cursor 稳定性、排序/去重/快照生命周期 |
@@ -432,3 +432,34 @@ PLAT-002 不因本次矩阵统计完成而结束。整体完成仍需：
 - 本批 13 项中：`freeze-ready` 1 项，`pending-evidence` 12 项，`pending-decision` 0 项，`blocked` 0 项。
 - 当前可以提交项目负责人冻结的是 GOV-CTR-005；其余 12 项缺口均是公开契约定义或权威映射不完整，不涉及模块内部实现整改。
 - 下一批进入 Data 公开契约核定；GOV-CTR-001～004/006 在各领域字段映射核定时只补证据，不重新讨论已明确的公共原则。
+
+## 15. Data 首批公开契约定义核定（2026-11-11）
+
+本批覆盖 DATA-CTR-001～008，只核对公开 DTO、API 安全定义、数据质量/时间语义和不可变 Snapshot/授权引用。Provider 内部原始值归一化、Provider 专项测试和 Data 内部算法均不属于本轮。
+
+### 15.1 核定结果
+
+| 契约 | 状态 | 核定结论 |
+|---|---|---|
+| DATA-CTR-001 | pending_evidence | OpenAPI 1.1.0 是当前代码内 API 定义，但 Go JSON 与 OpenAPI 的字段存在/缺失/nullable/required 适用映射仍未形成完整权威表；DEC-027 的 DragonTiger Provider 原始金额字段仍公开暴露；API 清单引用旧路径且认证说明过期 |
+| DATA-CTR-002 | pending_evidence | 质量契约已明确价格/成交量/成交额/百分点、复权和 PIT 基本原则；具体数据域字段到 provider_time、available_at、fetched_at、normalized_at、system_observed_at 的映射仍不完整，不能用一套泛化时间规则代替逐字段语义 |
+| DATA-CTR-003 | not_applicable | 仅覆盖 Data 内部 Provider Adapter 原始值标准化，没有跨模块公开 DTO/Port 消费者；退出 PLAT-002 跨模块冻结门禁，不再要求 Provider Fixture 或专项测试作为项目级任务 |
+| DATA-CTR-004 | pending_evidence | QualityStatus 已有 valid/degraded/stale/invalid/unknown；Probe 的维度状态、ProviderOutcome、freshness_status、coverage_ratio 与业务 quality_status 的关系已有文字规则，但公开响应字段适用映射及覆盖率分母语义仍需明确 |
+| DATA-CTR-005 | pending_evidence | 当前 OpenAPI 1.1.0 DailyBar 仍是 number；未找到 DailyBarsV2 的独立 Decimal Schema/版本定义，v2 精度/scale/舍入/缺失语义尚未成为权威契约 |
+| DATA-CTR-006 | pending_evidence | 同进程 Root Server 注入可信 Principal/Scope Context、远程兼容模式使用 Data 专用 X-API-Key 的边界已明确；但 OpenAPI 全局 ApiKey/BearerAuth 的 OR 声明与“业务接口仅 X-API-Key”文字冲突，旧 API 清单仍描述浏览器持有 Key |
+| DATA-CTR-007 | pending_evidence | DATA-CTR-008 Manifest 定义了快照范围和来源版本，但它不是 DailyBarsV2 内容 Schema；跨模块行情 DTO、质量/单位、SnapshotRef 与 Research Evidence 的字段级关联尚缺定义 |
+| DATA-CTR-008 | pending_evidence | Manifest Schema/Golden 已有，caller_ref/purpose_code、内容寻址引用和 JCS/SHA-256 算法已有文字定义；UTC/排序约束及 Data 可信 caller/Scope/授权快照读取时复核映射仍不完整 |
+
+### 15.2 关键公开定义差异
+
+1. DATA-CTR-006 安全声明冲突：OpenAPI components.securitySchemes 同时定义 ApiKey 与 BearerAuth，根级 security 同时列出两项；OpenAPI 语义为二选一。认证设计文档则明确远程 Data 业务 API 使用 Data 专用 X-API-Key，不应把 Platform Service Bearer 当作替代凭据。该冲突是公开契约定义缺口，不是运行时认证实现问题。
+2. API 清单过期：doc/api/contracts/数据层API清单.md 仍指向旧 services/market-data/openapi.yaml 路径，并描述 WebUI 保存 Data API Key；当前权威 OpenAPI 已位于 internal/marketdata/httpapi/openapi.yaml，目标同进程模式明确浏览器不持有 Data Key。该文件不是唯一权威字段定义，但其冲突说明引用关系尚未收敛。
+3. DATA-CTR-001 / DEC-027：当前 DragonTigerItem Go JSON Tag 与 OpenAPI 仍公开 provider_buy_value、provider_sell_value、provider_deal_value、provider_net_value、provider_net_rate、provider_org_net_value、provider_hot_money_net_value、provider_amount_unit。它们违反已接受的 DEC-027 公开 DTO 边界，仍属契约定义待补，不得归入纯 Provider 内部问题。
+4. DATA-CTR-008 与 DATA-CTR-007：DATA-CTR-008 Manifest 仅绑定查询范围和来源版本元数据，不包含 DailyBars 内容结构。不得把 Manifest Schema 的存在解释为 DailyBarsV2 已有 Schema。
+
+### 15.3 本批结论与范围
+
+- 本批 8 项：7 项 pending_evidence，1 项 not_applicable；无 pending_decision、无 blocked、无 freeze-ready。
+- DATA-CTR-003 已从 PLAT-002 跨模块冻结门禁排除；其内部质量要求不再列入本任务。
+- 本轮没有修改 Data 责任分支、Go DTO、OpenAPI、Schema 或 Golden；没有执行测试/CI。所有已知实现与契约差异仅作为证据，不转为本轮实现整改。
+- 下一批转入 News 公开契约核定；GOV-CTR-006 的公共规则只引用本批已发现的适用映射问题，不重复审查其公共 Schema 算法。
