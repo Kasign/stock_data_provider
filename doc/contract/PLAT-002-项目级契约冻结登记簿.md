@@ -180,7 +180,7 @@ GitHub 远端 ref 核验（2026-11-10）：
 | NEWS-CTR-002 | AuthorizationRef 与内容访问授权 | News（授权决策 Owner） | Research、Researchflow | doc/news/新闻来源授权矩阵.md 第10节；doc/整体任务规划/schema/NEWS-CTR-002-authorization-binding-1.0.0.schema.json；对应 Golden；GOV-CTR-006；DEC-PLAT-002-043 | 1.0.0（Binding Schema/Golden） | `pending_evidence` | Schema/Golden 与 Go Validator 已覆盖 caller/subject、resource、purpose、content level、Provider/Source/Endpoint 策略集合、tuple 排序去重、conditional 和当前策略复核；但 News API 契约正文将 policy_version 描述为 Registry 版本、将 resource_ref 描述为 news_id+version_id，与 GOV-CTR-006、Golden 和代码的 snapshot_ref / news_id+version_no 定义冲突，需统一唯一权威文字定义 |
 | NEWS-CTR-003 | News PIT、稳定 Cursor、排序与去重 | News | Research、Researchflow | doc/news/新闻API契约.md 第11.1/11.3/11.6/11.9节；NEWS-CTR-001 Cursor Claims Schema；GOV-CTR-002；DEC-PLAT-002-042/044 | 复用 NEWS-CTR-001 1.0.0 Cursor Claims Schema；无独立 CTR-003 Schema | `pending_evidence` | 当前 active 契约已明确双时间 PIT、available_at 严格过滤、固定 system_as_of、news-evidence-v1 稳定排序、15 分钟 HMAC Cursor 和不可变快照；旧 News-Research 设计文档仍写显式 version_id 可不传 system_as_of、旧内容级别枚举和旧过滤字段，需明确废止/归档；NEWS-CTR-001 的 relation_status/UTC Schema 同步完成后再复核 |
 | QNT-CTR-001 | Metric/Indicator/Factor Registry 公共元数据 | Quant | Researchflow；Research 只消费编排结果 | doc/quant/schema/QNT-CTR-001-registry-entry-1.0.0.schema.json；doc/quant/03；DEC-PLAT-002-045 | 1.0.0（Registry Entry Schema；首批 Entry/Golden 未形成） | `pending_evidence` | 已核定 Registry Entry.code=metric_code、每个 metric_code 独立注册；Indicator 与 Metric 一对多映射、MACD/Bollinger 复合输出拆成多个 Metric；algorithm_version 由服务端活动版本映射选择，调用方不指定。首批实际 Entry 的 unit/precision/range/rounding/input_requirements/quality_policy 权威值仍未登记 |
-| QNT-CTR-002 | Indicator Request/Result | Quant | Researchflow | doc/quant/schema/QNT-CTR-002-indicator-parameters-1.0.0.schema.json；doc/quant/03 | 1.0.0（Parameters Schema；8 个算法参数定义） | `pending_evidence` | 参数 Schema/算法口径已有；完整 Indicator Request/Result DTO、指标输出字段/单位/精度/状态映射及每个指标的 Registry 元数据仍未形成唯一完整契约 |
+| QNT-CTR-002 | Indicator Request/Result | Quant | Researchflow | doc/整体任务规划/03-模块接口契约/Quant-Research公开DTO字段级契约.md 第2.1/2.3/2.7节；doc/quant/schema/QNT-CTR-002-indicator-parameters-1.0.0.schema.json；doc/quant/03；DEC-PLAT-002-045/046 | 1.0.0（Indicator Parameters Schema；8 个算法参数定义） | `pending_evidence` | 已核定请求上下文/幂等边界、8 个 indicator_code 与 typed parameters 关系、服务端算法版本选择、单/复合输出统一为 QuantMetric[]；完整 Request/IndicatorResultPayload Schema/Golden 尚缺，Registry 的 sample_count 策略及首批 Entry 元数据也未齐 |
 | QNT-CTR-003 | Factor Request/Result | Quant | Researchflow | doc/quant/schema/QNT-CTR-003-factor-parameters-1.0.0.schema.json；QNT-CTR-004 Factor QuantMetric Schema/Golden | 1.0.0（Parameters Schema；3 个首批 Factor） | `pending_evidence` | 首批三个 Factor 的参数/算法及局部 QuantMetric Schema 已有；完整 Factor Request/Result DTO、交易日历版本引用、输入质量和结果 Envelope 映射仍不完整 |
 | QNT-CTR-004 | QuantResultRef、Factor QuantMetric、Trend、Risk 输出 | Quant | Researchflow；Research 经 Researchflow 消费 | doc/quant/schema/QNT-CTR-004-*；doc/quant/03 第10.26节；项目级 Quant-Research公开DTO字段级契约第2节 | 1.0.0（Ref/Metric/Trend/Risk 局部 Schema/Golden） | `pending_evidence` | 已核验责任模块 QuantResultRef Schema 仍以 minItems=1 限制 input_snapshot_refs，与 DEC-029 冲突；项目级 QuantResultRef DTO/Golden 已允许经双重授权的空数组。Envelope Schema/Golden 尚缺；已有 Factor Metric、Trend、Risk 是局部 Payload，Indicator 尚无独立完整 Payload Schema，其他预留 result_type 无完整强类型 Payload。不得将局部 Schema 推断为完整 Envelope 支持；需补齐 Ref/Envelope/已开放 Payload 的权威映射后才能 freeze-ready |
 | QNT-CTR-005 | QuantResult AuthorizationRef 签发与访问审计 | Quant | Researchflow | doc/整体任务规划/schema/QNT-CTR-005-result-manifest-1.0.0.schema.json；doc/整体任务规划/golden/QNT-CTR-005-result-manifest.golden.json；GOV-CTR-006 | 1.0.0（Result Manifest Schema/Golden） | `pending_evidence` | 项目级 Manifest Schema/Golden 已按 DEC-028/029 区分 Manifest/Payload 版本并允许空数组；但 Quant 责任模块 Manifest Build/Verify 仍要求非空 input_snapshot_refs，且旧文档仍将 Manifest schema_version 解释为 Payload 版本，均与正式决议冲突。另需核对 Record/VerifyPayload 的 JCS 指纹权威输入、Manifest 与 Ref 的身份绑定，以及 AuthorizationRef 的可信主体/资源/用途/内容级别映射 |
@@ -501,7 +501,7 @@ PLAT-002 不因本次矩阵统计完成而结束。整体完成仍需：
 | 契约 | 状态 | 核定结论 |
 |---|---|---|
 | QNT-CTR-001 | pending_evidence | Registry Entry Schema/Go Validator 已有；DEC-045 已明确 code=metric_code、复合 Indicator 输出拆分为独立 Metric、服务端显式活动 algorithm_version；仍缺首批 8 Indicator 输出组/3 Factor 的正式 Entry/Golden，以及每个 metric_code 的单位、精度、舍入、范围、输入和质量策略值 |
-| QNT-CTR-002 | pending_evidence | 八种 Indicator 参数 Schema 与算法语义已有；但参数 Schema 不等同完整 Indicator Request/Result DTO，输出类型、单位、精度、状态和 Registry 元数据映射未完整定义 |
+| QNT-CTR-002 | pending_evidence | DEC-046 已明确公共请求上下文、参数 Schema 版本边界、算法版本由服务端 Registry 选择、结果按 metric_code 映射为 QuantMetric[]，MACD/Bollinger 复合输出有固定顺序；仍缺完整 Request 与 IndicatorResultPayload Schema/Golden，并依赖 QNT-CTR-001 首批 Entry/样本数策略 |
 | QNT-CTR-003 | pending_evidence | 三个首批 Factor 参数 Schema/Golden 和部分 QuantMetric Schema 已有；但完整 Factor Request/Result、交易日历版本引用、输入质量和结果 Envelope 映射不完整 |
 | QNT-CTR-004 | pending_evidence | QuantResultRef 责任模块 Schema 的 minItems=1 与 DEC-029 冲突；项目级 DTO/Golden 已允许双重授权空数组。Envelope Schema/Golden 缺失；已有 Factor Metric/Trend/Risk 仅为局部 Payload，Indicator 与其他预留类型尚无完整强类型 Payload，Ref/Envelope/Manifest 映射仍未闭合 |
 | QNT-CTR-005 | pending_evidence | 项目级 Manifest Schema/Golden 已区分 Manifest/Payload 版本并允许空数组；责任模块 Build/Verify 仍要求非空 Snapshot，旧文档仍将 Manifest schema_version 解释为 Payload 版本；Record/VerifyPayload JCS 指纹、Manifest/Ref 绑定和 AuthorizationRef 映射仍待权威对齐 |
@@ -1498,4 +1498,67 @@ DEC-PLAT-002-044 固定 NEWS-CTR-001 v1.0 请求语义：
 - 本轮只收敛 Registry 身份/映射/版本选择语义，不生成虚构的 Registry 元数据或 Golden，不修改 Quant 代码、Schema、Golden 或模块专项文档。
 
 **结论：QNT-CTR-001 的 Registry 结构语义已收敛，但缺首批真实权威 Entry/Golden，继续保持 pending_evidence。**
+
+
+
+## 55. QNT-CTR-002 Indicator Request/Result 边界核定（2026-11-11）
+
+### 55.1 契约职责与版本层级
+
+- QNT-CTR-002 定义首批八种 Indicator 的调用参数、计算入口与 Metric 输出映射。
+- QuantAnalysisRequest 的共同调用上下文以 `Quant-Research公开DTO字段级契约.md` 第2.1节为准；Indicator 参数选择由 `indicator_code + parameters` 表达。
+- `QNT-CTR-002-indicator-parameters-1.0.0.schema.json` 中的 `schema_version=1.0.0` 表示 Indicator Parameters 契约版本，不是 QuantAnalysisRequest DTO 的 schema_version，也不是 QNT-CTR-001 Registry Entry 的 schema_version。三者各自独立演进。
+- `indicator_code` 是算法入口标识；`metric_code` 是输出标量身份；二者不可混用。八种入口为 sma、ema、return、volatility、rsi、macd、atr、bollinger。
+
+### 55.2 请求字段和可信边界
+
+Indicator 调用使用共同 QuantAnalysisRequest 上下文，必须遵守：
+1. 必须提供请求 DTO schema_version、request_id、correlation_id、scope、system_as_of、period、input_snapshot_refs、parameters、quality_policy、idempotency_key；security_id 按 scope 条件必需，trade_date 可选。
+2. 首批八种 Indicator 均计算价格序列；必须提供可比较的 adjustment_basis。unknown/缺失复权口径拒绝计算；输入序列内不得混合 adjustment_basis 或 reference_date。
+3. input_snapshot_refs 必须非空、引用不透明、不得重复；其顺序属于请求语义，不由 Quant 擅自重排。无行情快照的纯函数调用不属于该公开 Indicator Request。
+4. system_as_of 是系统知识截止时间，必须使用 RFC3339Nano UTC；不得由 trade_date、published_at、fetched_at 或本机当前时间替代。trade_date 是目标交易日，不能代替 system_as_of。
+5. period 必须与输入 Snapshot 的实际 interval 一致，并满足所选 Registry Entry.input_requirements.interval；Registry 未声明支持的 interval 时拒绝，不得由 supports_interval=true 推断支持任意 interval。
+6. parameters 必须按 indicator_code 命中 QNT-CTR-002 的对应 discriminated schema；拒绝未知 indicator_code、未知参数字段、缺失必需参数和越界值。跨字段约束（例如 MACD fast_window < slow_window）由语义 Validator 补足，不能只依赖 JSON Schema。
+7. 调用方不得提交 algorithm_version。服务端按 DEC-PLAT-002-045 的活动版本映射选择唯一 algorithm_version；拒绝未知/未注册指标或无活动版本。结果记录实际版本。
+8. 幂等作用域固定为 (authenticated_caller_ref, use_case, idempotency_key)。use_case 由稳定的 Quant Facade 路由映射，不由客户端自由指定；同键同指纹返回原结果引用，同键异指纹返回 idempotency_conflict。request_id/correlation_id 不进入请求指纹。
+
+### 55.3 Indicator 输出映射
+
+- Indicator 结果使用 QNT-CTR-004 定义的共同 QuantResult Envelope，`result_type=indicator`；QNT-CTR-002 不另造一套平行 Envelope。
+- Indicator payload 使用强类型 `IndicatorResultPayload`，包含 `indicator_code` 和 `metrics: QuantMetric[]`；禁止将算法原始 Go Result、MACDResult、BandsResult 直接作为跨模块 DTO，也禁止任意 map。
+- 单输出入口返回恰好一个 Metric：
+  - sma → sma
+  - ema → ema
+  - return → return
+  - volatility → volatility
+  - rsi → rsi
+  - atr → atr
+- 复合输出入口返回固定数量、固定顺序的 Metric：
+  - macd → macd_dif、macd_dea、macd_histogram
+  - bollinger → bollinger_middle、bollinger_upper、bollinger_lower
+- 每个 metric_code 独立命中 QNT-CTR-001 Registry Entry；unit、value_type、precision、range、rounding、quality_policy 只从对应 Entry 读取，不从 indicator_code、Go float64 或样本值推断。
+- 同一 Indicator 调用的所有输出 Metric 使用同一 algorithm_version；每个 Metric.calculation_version 必须等于对应 Registry Entry.algorithm_version，且等于 Envelope.algorithm_version。复合输出不允许各自选择不同活动版本。
+- Metric.period 和 Metric.system_as_of 必须分别等于请求 period 和 system_as_of。available 必须有非 null value；不可用状态必须显式 null，不得用 0 代替。
+- 首批八种 Indicator 均为确定性描述性计算，不提供预测置信区间；lower_bound/upper_bound 必须同时为 null。若未来引入区间估计，须通过新的指标语义版本和明确 Registry 约束，不得把 Bollinger 上下轨当作统计置信区间。
+- MACD 三个输出及 Bollinger 三个输出共享本次输入、参数、质量判定和计算状态；不能只返回其中部分输出而将其余输出静默省略。
+
+### 55.4 质量、样本与终态映射
+
+1. `quality_status`、`metric_status`、`result_status` 分别表达输入/结果质量、单个 Metric 数值可用性、整个计算结果状态；不得互相替代。
+2. 只有所有预期输出 Metric 均完成计算且满足对应 Registry.quality_policy，Envelope.result_status 才可为 completed。degraded 输入是否允许 available，逐 metric 由 Registry.quality_policy 决定。
+3. 由于请求有效但有效样本数不足以满足算法最小窗口，Metric 使用 insufficient_sample、value=null；整体结果使用 insufficient_sample。数据源/快照缺失或覆盖不足导致无法建立所需输入时，按质量策略表达 insufficient_data/unknown，不得伪装为样本窗口不足。
+4. 参数不合法、输入违反硬约束、复权/时间口径不可比较时不得输出 available 数值；参数/请求校验失败使用稳定 Fault，业务门禁拒绝使用 rejected，非预期执行错误使用 failed。
+5. sample_count 表示该 Metric 实际参与计算的有效观测样本数量，不等于原始输入数组长度。不同算法的样本单位可以不同（价格 Bar 或收益观测），其精确定义必须由对应 Registry Entry 声明；同一复合 Indicator 的输出共享样本口径。当前 QNT-CTR-001 Entry Schema 尚无独立 sample_count 口径字段，需在首批 Entry 定义/Schema 完善时补齐，不得仅按现有 Go SampleCount 赋值推断公开语义。
+6. 计算过程不得静默填充缺失交易日、混合复权基准或把 invalid/unknown 质量提升为 valid。真实输入的交易日连续性、PIT、available_at、Bar 级质量和复权参考日由 Data Snapshot/Adapter 证据及 Quant 输入边界共同证明；纯计算函数通过不代表这些门禁通过。
+
+### 55.5 当前缺口与冻结门禁
+
+- 现有 QNT-CTR-002 Schema 只验证参数选择和参数对象，不是完整 QuantAnalysisRequest Schema。
+- 当前没有完整 IndicatorResultPayload Schema/Golden，不能把八份算法数值 Golden 当作跨模块 DTO Golden。
+- Registry 首批 8 Indicator 输出组/3 Factor 的 Entry/Golden 未形成；单位、数值类型、精度、舍入、范围、quality_policy 不能臆造。
+- Registry 尚未将 sample_count 的 required/optional、样本单位和计数口径纳入权威定义。
+- 现有 MACD 参数 Schema 无法单靠 Draft 2020-12 表达 fast_window < slow_window，必须由语义 Validator 和负例 Golden 覆盖。
+- 以上均属于公开机器契约或 Registry 元数据缺口；模块内 CI、纯计算函数测试、真实 Data Adapter、Researchflow 消费接线不是本轮项目级语义定义门禁。
+
+**结论：QNT-CTR-002 的请求与输出语义已收敛；因完整 Request/IndicatorResultPayload 机器定义及 Registry 元数据仍缺，继续保持 pending_evidence。**
 
