@@ -4,7 +4,7 @@
 - 代码审计基线：`origin/integration` @ `b6dfc85ba214fe16268c8cba780641a8bfe15086`
 - 审计文档维护分支：`origin/feat/design_doc`（状态以当前分支 HEAD 为准）
 - 固定代码审计基线：`origin/integration @ b6dfc85ba214fe16268c8cba780641a8bfe15086`；仅对该 SHA 的代码事实作结论，不随分支 HEAD 自动漂移
-- 登记簿版本：`0.2.21-review`
+- 登记簿版本：`0.2.22-review`
 - 当前状态：`L1_frozen_contract_definition_review_in_progress`
 - 冻结结论：43 个正式 CTR 已完成定义口径核定：1 freeze-ready、37 pending_evidence、3 pending_decision、2 not_applicable、0 frozen；5 项具体待决见第24节
 - 项目级决策：DEC-PLAT-002-018～027 已完成原有裁决；当前另有 5 项领域公开契约待决（QNT-DEC-01/02、RSC-OPEN-003/004/005）；DATA-FLOW-B、LLM-FLOW-B 保持条件性 deferred
@@ -185,7 +185,7 @@ GitHub 远端 ref 核验（2026-11-10）：
 | QNT-CTR-004 | QuantResultRef、Factor QuantMetric、Trend、Risk 输出 | Quant | Researchflow；Research 经 Researchflow 消费 | doc/quant/schema/QNT-CTR-004-*；doc/quant/03 第10.26节；项目级 Quant-Research公开DTO字段级契约第2节 | 1.0.0（Ref/Metric/Trend/Risk 局部 Schema/Golden） | `pending_evidence` | 已核验责任模块 QuantResultRef Schema 仍以 minItems=1 限制 input_snapshot_refs，与 DEC-029 冲突；项目级 QuantResultRef DTO/Golden 已允许经双重授权的空数组。Envelope Schema/Golden 尚缺；已有 Factor Metric、Trend、Risk 是局部 Payload，Indicator 尚无独立完整 Payload Schema，其他预留 result_type 无完整强类型 Payload。不得将局部 Schema 推断为完整 Envelope 支持；需补齐 Ref/Envelope/已开放 Payload 的权威映射后才能 freeze-ready |
 | QNT-CTR-005 | QuantResult AuthorizationRef 签发与访问审计 | Quant | Researchflow | doc/整体任务规划/schema/QNT-CTR-005-result-manifest-1.0.0.schema.json；doc/整体任务规划/golden/QNT-CTR-005-result-manifest.golden.json；GOV-CTR-006 | 1.0.0（Result Manifest Schema/Golden） | `pending_evidence` | 项目级 Manifest Schema/Golden 已按 DEC-028/029 区分 Manifest/Payload 版本并允许空数组；但 Quant 责任模块 Manifest Build/Verify 仍要求非空 input_snapshot_refs，且旧文档仍将 Manifest schema_version 解释为 Payload 版本，均与正式决议冲突。另需核对 Record/VerifyPayload 的 JCS 指纹权威输入、Manifest 与 Ref 的身份绑定，以及 AuthorizationRef 的可信主体/资源/用途/内容级别映射 |
 | RSC-CTR-001 | Research Evidence | Research | Researchflow | doc/整体任务规划/schema/RSC-CTR-001-evidence-1.0.0.schema.json；Golden；doc/research/01、03；GOV-CTR-006 | 1.0.0（Evidence Schema/Golden） | `pending_evidence` | Evidence 字段和 JCS 指纹语义已有；Schema 未约束 RFC3339Nano UTC，source_version 条件必填和 Evidence.system_as_of/available_at 跨字段 PIT 规则仍依赖未完成的权威适用映射。ResearchContext 不归本 CTR，按 FLOW-CTR-003 核定 |
-| RSC-CTR-002 | ResearchEvent、Claim、Hypothesis、Scenario | Research | Researchflow | 项目级 DTO 第3.3～3.5节；schema/RSC-CTR-002-*；golden/RSC-CTR-002-*；doc/research/01、03 | Event、Claim/Hypothesis、Scenario 1.0.0 Schema/Golden 已建立 | `pending_evidence` | Event/Claim/Scenario DTO、Schema、Golden 已按 DEC-030～032 对齐核心字段；EventRef 引用存在性/无环、时间值与 source_times 对应、supersedes 目标当前有效性及 Scenario 条件与 QuantResultRef 约束仍需 Research 权威语义校验 |
+| RSC-CTR-002 | ResearchEvent、Claim、Hypothesis、Scenario | Research | Researchflow | 项目级 DTO 第3.3～3.5节；schema/RSC-CTR-002-*；golden/RSC-CTR-002-*；doc/research/01、03 | Event、Claim/Hypothesis、Scenario 1.0.0 Schema/Golden 已建立 | `pending_evidence` | 项目级 Event 已补规则版本、EventRef 和空数组语义；Claim 已补 supersedes_version；仍缺 EventRef 存在性/无环、source_times 与 evidence_refs/规范化值的跨字段校验、Claim 替代目标当前版本/并发冲突校验。项目 Schema 曾多出 DTO 未定义的 supersedes_event_version，现已移除；Research 责任模块文档仍保留该旧字段并引用已裁决的 RSC-OPEN-003～005。Scenario expected_value 的类型化对象/集合规则未封闭，QuantResultRef 的 result_type/system_as_of 绑定及其引用 Schema 与 DEC-029 的一致性未闭合 |
 | FLOW-CTR-001 | Run/Stage/Attempt 状态与结果传播 | Researchflow | Server、API、WebUI；业务模块作为 Stage Provider | doc/researchflow/03；doc/researchflow/schema/run/stage/attempt；对应 Golden | 1.0.0（Run/Stage/Attempt Schema/Golden） | `pending_evidence` | 状态枚举/传播矩阵已有；Run/Stage/Attempt Schema 的 UTC、终态字段关系和 ResultSummary 关联约束未完全机器化，完整结果归并定义需与 FLOW-CTR-004 统一 |
 | FLOW-CTR-002 | Cancel、Retry、Deadline、Lease、Fencing | Researchflow | Server（命令入口）；Scheduler/Worker（内部执行） | doc/researchflow/03 第3～5节、第6.2节；Attempt Schema/Golden | 1.0.0（Attempt Schema/Golden）；命令 DTO Schema 未登记 | `pending_evidence` | 取消/重试/deadline 的外部可观察状态与稳定错误结果已定义；CancelRun/RetryStage 命令字段、幂等作用域/请求指纹和 deadline/cancel 冲突结果未形成唯一权威机器/强类型契约。CAS、锁、重启恢复测试不属于本轮门禁 |
 | FLOW-CTR-003 | Run Execution Context 与 system_as_of 传播 | Researchflow | Data、News、Quant、Research、LLM | doc/researchflow/03 第6.1/6.2节；ResearchContext DTO 第3.1节；GOV-CTR-002 | Run Schema 1.0.0 部分承载；独立 Context/ResearchContext Schema 未登记 | `pending_evidence` | Run Context 字段语义已有；ResearchContext/ContextSectionRef、模板解析快照、可信 caller/correlation 与各下游 Adapter 的字段映射未形成单一权威 Schema/Port 契约 |
@@ -812,3 +812,30 @@ INT-CTR-001 是 43 个正式 CTR 之一，覆盖 Quant、Research、Researchflow
 
 - QNT-CTR-004、QNT-CTR-005 继续保持 `pending_evidence`，不新增 CTR、不重开 DEC。
 - 后续如需调整 Quant 责任模块 Schema/文档，应在明确的 Quant 模块任务中按本登记簿已冻结语义执行；本项目级契约冻结任务不越权代改模块定义。
+
+
+## 28. RSC-CTR-002 跨字段语义与责任模块差异复核（2026-11-11）
+
+### 28.1 ResearchEvent
+
+- 项目级 DTO/Schema 已具备必需 `time_normalization_rule_version`、`source_times`、强类型 `derived_from_refs`，Golden 的时间来源引用可与 `evidence_refs` 对照。
+- Schema 只能验证 EventRef 结构，不能证明目标版本存在、不是自引用或整张派生图无环；这些必须由 Research Domain 在发布前按不可变版本图校验。
+- `source_times[].evidence_ref` 必须属于当前 Event 的 `evidence_refs`；非 null 的 occurred_at/published_at/available_at 必须能由同 time_type 原始证据及规则版本复核。当前 JSON Schema 未表达这些跨数组/规范化关系，责任模块文档只记录了部分来源类型存在性检查。
+- 发现项目级 Schema 曾包含 DTO 未定义的 `supersedes_event_version`。按 DEC-031，Event 版本血缘统一由 `derived_from_refs` 表达，已从项目级 DTO/Schema 移除该冗余字段；Research 责任模块文档仍保留旧字段，后续模块对齐时需清理。
+
+### 28.2 Claim / Hypothesis
+
+- 项目级 Schema 已包含可选 `supersedes_version`，并在设置时要求 `claim_version >= 2`。
+- JSON Schema 无法验证 `supersedes_version < claim_version`、目标版本存在且为写入前当前有效版本、并发替代不产生分叉；这些必须由 Research 权威写入校验完成。
+- Research 责任模块文档仍标记 `supersedes_version` 未解决/缺失，与 DEC-032 和项目级 DTO 不一致。
+
+### 28.3 Scenario
+
+- Scenario Schema 已支持递归 ConditionGroup，并在 `probability_status=available` 时要求 `quant_evaluation_ref`。
+- `expected_value` 当前允许任意非空 object，未按 condition_type/metric_ref/operator/unit 定义封闭类型；这不满足 typed scalar/object 的强类型要求。
+- `quant_evaluation_ref` 仍引用 Quant 责任模块 Ref Schema；当前 Ref Schema 的 Snapshot 最小项约束与 DEC-029 冲突。项目级跨字段还需验证 result_type=evaluation、QuantResultRef.system_as_of 与 Scenario.system_as_of 完全一致及当前授权复核责任。
+
+### 28.4 状态与边界
+
+- RSC-CTR-002 继续保持 `pending_evidence`；不新增 CTR、不重开 DEC。
+- 本轮仅更新项目级 DTO/Schema 和治理登记；未修改 `doc/research/**`、Research 实现或测试，不执行 CI/部署。

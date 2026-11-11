@@ -1337,3 +1337,12 @@
 - 差异已补入登记簿第27节和矩阵第54节。没有修改责任模块文档/Schema/代码，没有执行模块测试、CI、部署。
 - QNT-CTR-004/005 保持 pending_evidence；43 项总统计不变：1 freeze-ready、40 pending-evidence、0 pending-decision、2 not_applicable、0 frozen。
 - 下一步转向 RSC-CTR-002 的定点跨字段语义核对；Quant 模块定义修订留待明确的 Quant 模块任务，不在本项目级分支越权修改。
+
+
+## 55. RSC-CTR-002 跨字段约束定点核对（2026-11-11）
+
+- 本轮只复核项目级 DTO/Schema/Golden 与 DEC-030～032 的关系，并与 Research 责任模块文档做定点对照。
+- 移除项目级 DTO/Schema 中冗余的 `supersedes_event_version`，明确 Event 版本修订、合并、拆分统一由 `derived_from_refs` 表达；责任模块旧文档仍待后续对齐。
+- 明确 EventRef 存在性/无环、source_times 对应关系、Claim supersedes 当前版本与并发冲突、Scenario expected_value 类型映射和 QuantResultRef 类型/时间绑定均属于尚未完成的权威证据。
+- 未修改 `doc/research/**`、代码、测试或 CI；RSC-CTR-002 保持 pending_evidence。
+- 当前 43 项统计不变：1 freeze-ready、40 pending-evidence、0 pending-decision、2 not_applicable、0 frozen。

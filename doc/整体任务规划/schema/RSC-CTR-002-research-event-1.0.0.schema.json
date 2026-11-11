@@ -129,10 +129,6 @@
         "type": "string"
       }
     },
-    "supersedes_event_version": {
-      "type": "integer",
-      "minimum": 1
-    },
     "source_times": {
       "type": "array",
       "items": {
@@ -247,20 +243,5 @@
       ]
     }
   },
-  "allOf": [
-    {
-      "if": {
-        "required": [
-          "supersedes_event_version"
-        ]
-      },
-      "then": {
-        "properties": {
-          "event_version": {
-            "minimum": 2
-          }
-        }
-      }
-    }
-  ]
+  "allOf": []
 }

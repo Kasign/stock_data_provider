@@ -1428,3 +1428,11 @@ INT-CTR-001 是正式 43 CTR 之一，不是内部 Outbox/Inbox 实现验收。�
 - QNT-CTR-005：项目级 Manifest Schema/Golden 已区分 Manifest 与 Payload 版本并允许空输入；责任模块 Build/Verify 仍要求非空 Snapshot，旧文档还把 Manifest `schema_version` 当作 Payload 版本，与 DEC-028/029 冲突。
 - 两项均属于责任模块权威契约尚未对齐的证据缺口。未修改 `doc/quant/**`、代码、测试或 CI；不新增决议、不新增 CTR。
 - 处理顺序：先在 Quant 模块契约任务中按 DEC-028/029 校准 Ref/Manifest Schema 与 Build/Verify 定义；再完成 Envelope 与实际开放 Payload 类型映射；最后核对 Record/VerifyPayload 指纹和 AuthorizationRef 绑定。完成前两项 CTR 保持 pending_evidence。
+
+
+## 55. RSC-CTR-002 跨字段约束核对（2026-11-11）
+
+- Event：`time_normalization_rule_version`、`source_times`、`derived_from_refs` 的结构已定义；EventRef 目标存在性/无环、source_times.evidence_ref 属于 evidence_refs、规范化时间值可由来源证据和规则版本复核，仍需 Research 权威校验。项目级 DTO/Schema 已移除与 DEC-031 重复的 `supersedes_event_version`；模块文档残留旧字段。
+- Claim/Hypothesis：`supersedes_version` 已进入项目级 Schema；目标必须小于当前版本、为写入前当前有效版本，以及并发替代冲突拒绝，属于跨版本写入校验；模块文档仍标记该字段缺失。
+- Scenario：ConditionGroup 已结构化；`expected_value` 的类型化对象/集合映射仍未封闭；QuantResultRef 的 `result_type=evaluation`、`system_as_of` 一致性和当前授权复核仍需权威映射，且依赖的 Quant Ref Schema 仍与 DEC-029 冲突。
+- RSC-CTR-002 保持 pending_evidence；本轮不修改 `doc/research/**`、代码或测试，不新增决议/CTR。

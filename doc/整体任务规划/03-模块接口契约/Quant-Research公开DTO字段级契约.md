@@ -253,12 +253,19 @@ fact 必须有可验证来源与时间；reported_fact 只表示来源声称；i
 | impact_hypothesis_refs | 是 | string[] | 影响假设引用 |
 | invalidation_conditions | 是 | string[] | 失效条件 |
 | uncertainty | 是 | string[] | 不确定因素 |
-| supersedes_event_version | 否 | integer | 被修正版本 |
 | source_times | 是 | EventSourceTime[] | 来源级时间证据；无来源时间证据使用空数组，不压缩或覆盖冲突值 |
 | time_normalization_rule_version | 是 | string | 本 Event 规范化 occurred_at/published_at/available_at 所采用的统一 Research 时间规则集版本；即使规范化值为 null 也必须记录 |
 | derived_from_refs | 是 | ResearchEventRef[] | 直接派生自的前序 ResearchEvent 不可变版本；根 Event 使用空数组 |
 
 合并、拆分、主体修正和状态变化均追加新版本并保留证据；禁止覆盖历史版本或把 Article 直接当 Event。多来源时间冲突需保留来源级时间，不得压成一个无来源的时间值。time_normalization_rule_version 对应规则必须覆盖来源时间选择优先级、冲突处理、时区/精度和 null 处理；历史 Event 保留创建时版本，不得静默重解释。derived_from_refs 只引用直接前序 Event 的 event_id + event_version，不得自引用或形成循环；合并记录所有直接父版本，拆分后的每个子 Event 均记录其父版本。evidence_refs 表达支持/反证，不替代 Event 血缘。
+
+**ResearchEvent 跨字段约束：**
+- `source_times[].evidence_ref` 必须存在于当前 Event 的 `evidence_refs`；同一来源/时间类型的重复记录不得造成歧义。
+- `occurred_at`、`published_at`、`available_at` 任一规范化值非 null 时，必须能追溯到相同 `time_type` 的来源时间证据，并能由 `time_normalization_rule_version` 对应规则复核；冲突或无法确定时规范化值必须为 null，原始值仍保留在 `source_times`。
+- `time_normalization_rule_version` 即使三个规范化时间均为 null 也必填；该规则版本只覆盖上述三个时间字段，不改变 `system_observed_at` 的系统观察时间语义。
+- 每个 `derived_from_refs` 必须解析到真实、不可变的 Event 版本；不得引用当前版本自身或形成任何长度的循环。空数组只表示已确认的根 Event/无直接父版本；关系未知时不得用空数组代替未知。
+- 同一 `event_id` 的版本修订也通过 `derived_from_refs` 指向直接前序版本；项目级 DTO 不再单独提供 `supersedes_event_version`，避免两套父子关系双写。版本存在性、引用解析和有向无环检查由 Research Domain 校验，JSON Schema 只负责 Ref 结构。
+- `available_at` 非 null 时必须不晚于 `system_as_of`。
 
 ### 3.4 Claim / Hypothesis
 
@@ -282,6 +289,8 @@ fact 必须有可验证来源与时间；reported_fact 只表示来源声称；i
 
 Claim 与 Hypothesis 可共享存储基类，但公开 DTO 必须明确 epistemic_type；Hypothesis 的验证方法、预期观察和失效条件不可缺失。supersedes_version 仅在 statement/结论语义被替代时必需；目标版本必须存在、早于当前版本且为写入前当前有效版本。仅追加证据或不改变陈述含义的状态/评估信息可省略；历史版本不可变。
 
+**版本替代校验：** `supersedes_version` 只能指向同一 `claim_id` 下真实存在且严格小于当前 `claim_version` 的版本；若设置，目标必须是写入前当前有效版本。初始版本不得设置；语义替代必须设置；并发写入若目标已不再是当前有效版本，Research 必须拒绝，不得形成多个并行当前版本。上述跨版本/并发关系由 Research Domain/Repository 的权威写入校验完成，JSON Schema 仅约束单个 DTO 的局部结构。
+
 ### 3.5 Scenario
 
 | JSON 字段 | 必需 | 类型/约束 | 语义 |
@@ -301,6 +310,8 @@ Claim 与 Hypothesis 可共享存储基类，但公开 DTO 必须明确 epistemi
 | limitations | 是 | string[] | 样本与方法限制 |
 
 Scenario 语义由 Research 持有，概率和收益分布由 Quant 提供。没有可用 Quant 评估或样本不足时，概率必须为 unknown/insufficient_sample，不得由 LLM 生成数值概率。
+
+**Scenario 与 Quant 结果约束：** `quant_evaluation_ref` 必须引用 `result_type=evaluation` 的 QuantResultRef，且其 `system_as_of` 必须与 Scenario 的 `system_as_of` 完全一致；Researchflow 在调用 Research 前完成 Quant 结果读取和当前授权复核，Research 只验证引用身份/时间/类型，不直接调用 Quant。`probability_status=available` 时必须提供该引用；非 available 状态不得将 LLM 推测值伪装为 Quant 概率。当前 QuantResultRef 权威 Schema 与 DEC-029 的空输入规则仍未对齐，因此该跨契约 Schema 绑定尚不能视为完成。
 
 ### 3.6 QualitySummary
 
@@ -408,7 +419,7 @@ required=true 的分区被省略时，Context 整体不能标记为 valid；必�
 | evidence_refs | 是 | string[] | 支撑该条件的证据 |
 | required | 是 | boolean | 是否为场景成立的必要条件 |
 
-条件表达式不允许执行任意代码、SQL、脚本或外部 URL。跨多个条件的 AND/OR 组合应使用受限 ConditionGroup（operator=all/any、conditions[]），不允许隐式自然语言解析作为唯一执行依据。
+条件表达式不允许执行任意代码、SQL、脚本或外部 URL。跨多个条件的 AND/OR 组合应使用受限 ConditionGroup（operator=all/any、conditions[]），不允许隐式自然语言解析作为唯一执行依据。 `expected_value` 必须由 `condition_type + metric_ref + operator + unit` 唯一决定其 JSON 类型和结构；不得用任意对象/map 承载未定义字段。`in/not_in` 的集合形态、范围/复合值对象结构及各 condition_type 的类型映射仍需形成封闭 Schema/Registry 定义，在此之前不得宣称 ScenarioCondition 的机器契约完整。
 
 ### 9.3.1 ConditionGroup
 
