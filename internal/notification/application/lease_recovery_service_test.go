@@ -220,7 +220,6 @@ func TestLeaseRecoveryServiceRejectsDuplicateDeliveryCandidatesBeforeMutation(t 
 	}
 }
 
-
 func TestLeaseRecoveryServiceSeparatesPersistenceOutcomeUnknown(t *testing.T) {
 	service, _, now, repository := recoveryServiceFixture(t, nil)
 	repository.err = ErrPersistenceOutcomeUnknown
@@ -242,7 +241,6 @@ func TestLeaseRecoveryServiceSeparatesPersistenceOutcomeUnknown(t *testing.T) {
 	}
 }
 
-
 func TestLeaseRecoveryServiceContinuesAfterPersistenceOutcomeUnknown(t *testing.T) {
 	service, firstClaim, now, repository := recoveryServiceFixture(t, nil)
 	secondClaim := firstClaim
@@ -261,7 +259,6 @@ func TestLeaseRecoveryServiceContinuesAfterPersistenceOutcomeUnknown(t *testing.
 		t.Fatalf("uncertain item must not prevent processing the remaining batch: report=%+v calls=%d", report, repository.calls)
 	}
 }
-
 
 func TestLeaseRecoveryServiceCountsUnprocessedClaimsOnCancellation(t *testing.T) {
 	service, firstClaim, now, repository := recoveryServiceFixture(t, nil)

@@ -3,9 +3,9 @@ package domain
 import (
 	"bytes"
 	"encoding/json"
-	"io"
 	"errors"
 	"fmt"
+	"io"
 	"time"
 )
 

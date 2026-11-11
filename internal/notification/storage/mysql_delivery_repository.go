@@ -431,7 +431,6 @@ func (r *MySQLDeliveryRepository) UpdateWithLease(
 	return nil
 }
 
-
 func (r *MySQLDeliveryRepository) ListStateEvents(ctx context.Context, deliveryID string) ([]domain.DeliveryStateEvent, error) {
 	if r == nil || r.db == nil || ctx == nil || deliveryID == "" {
 		return nil, errors.New("notification storage: repository or delivery id is invalid")

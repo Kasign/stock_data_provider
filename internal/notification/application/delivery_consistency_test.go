@@ -27,9 +27,9 @@ func TestAssessDeliveryConsistency(t *testing.T) {
 		wantReason string
 	}{
 		{
-			name: "all histories comparable and consistent",
+			name:  "all histories comparable and consistent",
 			input: DeliveryConsistencyInput{Delivery: initial, AttemptsComparable: true, StateEventsComparable: true},
-			want: DeliveryConsistencyPass,
+			want:  DeliveryConsistencyPass,
 		},
 		{
 			name: "attempt delivery intermediate",
@@ -43,7 +43,12 @@ func TestAssessDeliveryConsistency(t *testing.T) {
 		{
 			name: "attempt snapshot contradiction",
 			input: DeliveryConsistencyInput{
-				Delivery: func() domain.DeliveryRecord { value := sendingSnapshot; value.Status = domain.DeliverySent; value.AttemptCount = 1; return value }(),
+				Delivery: func() domain.DeliveryRecord {
+					value := sendingSnapshot
+					value.Status = domain.DeliverySent
+					value.AttemptCount = 1
+					return value
+				}(),
 				Attempts: []domain.DeliveryAttempt{running}, AttemptsComparable: true,
 				StateEventsComparable: false,
 			},
@@ -58,14 +63,19 @@ func TestAssessDeliveryConsistency(t *testing.T) {
 			want: DeliveryConsistencyFail, wantReason: "state_event_history_conflict",
 		},
 		{
-			name: "history read unavailable",
+			name:  "history read unavailable",
 			input: DeliveryConsistencyInput{Delivery: initial},
-			want: DeliveryConsistencyNotComparable,
+			want:  DeliveryConsistencyNotComparable,
 		},
 		{
 			name: "known conflict dominates unavailable history",
 			input: DeliveryConsistencyInput{
-				Delivery: func() domain.DeliveryRecord { value := delivery; value.Status = domain.DeliverySent; value.AttemptCount = 1; return value }(),
+				Delivery: func() domain.DeliveryRecord {
+					value := delivery
+					value.Status = domain.DeliverySent
+					value.AttemptCount = 1
+					return value
+				}(),
 				Attempts: []domain.DeliveryAttempt{running}, AttemptsComparable: true,
 			},
 			want: DeliveryConsistencyFail, wantReason: "attempt_history_conflict",
@@ -110,19 +120,19 @@ func TestDeliveryConsistencyResultDoesNotExposeSensitiveReferences(t *testing.T)
 	request := "private-request"
 
 	attempt := domain.DeliveryAttempt{
-		DeliveryID: delivery.DeliveryID,
-		EvidenceRef: &evidence,
+		DeliveryID:         delivery.DeliveryID,
+		EvidenceRef:        &evidence,
 		ProviderMessageRef: &providerMessage,
 	}
 	event := domain.DeliveryStateEvent{
-		DeliveryID: delivery.DeliveryID,
+		DeliveryID:  delivery.DeliveryID,
 		EvidenceRef: &evidence,
-		ActorRef: &actor,
-		RequestID: &request,
+		ActorRef:    &actor,
+		RequestID:   &request,
 	}
 	result := AssessDeliveryConsistency(DeliveryConsistencyInput{
-		Delivery: delivery,
-		Attempts: []domain.DeliveryAttempt{attempt},
+		Delivery:    delivery,
+		Attempts:    []domain.DeliveryAttempt{attempt},
 		StateEvents: []domain.DeliveryStateEvent{event},
 	})
 	encoded, err := json.Marshal(result)
@@ -149,10 +159,10 @@ func TestAssessDeliveryConsistencyRetainsAllIssuesInStableOrder(t *testing.T) {
 	running := recoveryAttempt(t, delivery, lease, domain.DeliveryAttemptAccepted, false)
 
 	result := AssessDeliveryConsistency(DeliveryConsistencyInput{
-		Delivery: delivery,
-		Attempts: []domain.DeliveryAttempt{running},
-		AttemptsComparable: true,
-		StateEvents: []domain.DeliveryStateEvent{{}},
+		Delivery:              delivery,
+		Attempts:              []domain.DeliveryAttempt{running},
+		AttemptsComparable:    true,
+		StateEvents:           []domain.DeliveryStateEvent{{}},
 		StateEventsComparable: true,
 	})
 	if result.Status != DeliveryConsistencyFail {

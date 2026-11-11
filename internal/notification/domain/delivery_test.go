@@ -188,23 +188,28 @@ func TestDeliveryValidationRejectsInconsistentNullableFields(t *testing.T) {
 	}
 }
 
-
 func TestValidateDeliveryStateEventRejectsControlCharactersInManualRetryReason(t *testing.T) {
 	record := validDeliveryRecord()
 	sending, _, err := record.Transition(DeliveryTransition{
 		To: DeliverySending, At: record.UpdatedAt.Add(time.Second),
 	})
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	failed, _, err := sending.Transition(DeliveryTransition{
 		To: DeliveryFailed, At: sending.UpdatedAt.Add(time.Second), ReasonCode: "manual_review",
 	})
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	_, event, err := failed.Transition(DeliveryTransition{
 		To: DeliveryQueued, At: failed.UpdatedAt.Add(time.Second),
 		AuthorizedManualRetry: true, ActorRef: "owner-1", RequestID: "request-1",
 		ManualRetryReason: "配置修复后重试",
 	})
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, reason := range []string{"包含\n换行", "包含\r回车", "包含\x00空字符"} {
 		corrupted := event
 		value := reason
@@ -255,7 +260,6 @@ func TestValidateDeliveryStateEventRequiresIdentityAndTransitionVersion(t *testi
 	}
 }
 
-
 func TestDeliveryTransitionRejectsManualAuditOutsideManualRetry(t *testing.T) {
 	record := validDeliveryRecord()
 	change := DeliveryTransition{
@@ -273,22 +277,27 @@ func TestDeliveryManualRetryEventPassesEventValidation(t *testing.T) {
 	sending, _, err := record.Transition(DeliveryTransition{
 		To: DeliverySending, At: record.UpdatedAt.Add(time.Second),
 	})
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	failed, _, err := sending.Transition(DeliveryTransition{
 		To: DeliveryFailed, At: sending.UpdatedAt.Add(time.Second), ReasonCode: "permanent_rejection",
 	})
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	_, event, err := failed.Transition(DeliveryTransition{
 		To: DeliveryQueued, At: failed.UpdatedAt.Add(time.Second),
 		AuthorizedManualRetry: true, ActorRef: "operator-1", RequestID: "request-1",
 		ManualRetryReason: "配置修复后人工重试",
 	})
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := ValidateDeliveryStateEvent(DeliveryFailed, event); err != nil {
 		t.Fatalf("manual retry event must pass its event validator: %v", err)
 	}
 }
-
 
 func TestDeliveryManualRetryRejectsExhaustedAttemptBudget(t *testing.T) {
 	record := validDeliveryRecord()

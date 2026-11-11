@@ -469,9 +469,9 @@ func TestNotificationMariaDBConcurrentRetryWaitClaimsSingleWinnerIntegration(t *
 	claimAt := readDBNow()
 	type claimResult struct {
 		worker string
-		claim application.DeliveryClaim
-		ok bool
-		err error
+		claim  application.DeliveryClaim
+		ok     bool
+		err    error
 	}
 	start := make(chan struct{})
 	results := make(chan claimResult, 2)
@@ -483,7 +483,7 @@ func TestNotificationMariaDBConcurrentRetryWaitClaimsSingleWinnerIntegration(t *
 			defer wg.Done()
 			<-start
 			claim, ok, err := repository.ClaimDue(ctx, worker, claimAt, claimAt.Add(time.Minute))
-			results <- claimResult{worker:worker, claim:claim, ok:ok, err:err}
+			results <- claimResult{worker: worker, claim: claim, ok: ok, err: err}
 		}()
 	}
 	close(start)

@@ -61,7 +61,6 @@ type DeliveryRepository interface {
 	UpdateWithLease(ctx context.Context, expectedVersion, fencingToken int64, next domain.DeliveryRecord, event domain.DeliveryStateEvent, now time.Time) error
 }
 
-
 // DeliveryStateEventReader reads the complete immutable state history in ascending version order.
 // The returned slice must not silently truncate; an incomplete result is rejected by the history validator.
 type DeliveryStateEventReader interface {

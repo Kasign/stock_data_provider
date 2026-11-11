@@ -182,7 +182,6 @@ func TestAssessExpiredDeliveryLeaseDoesNotExposeProviderDetails(t *testing.T) {
 
 func stringPointerForRecovery(value string) *string { return &value }
 
-
 func TestAssessExpiredDeliveryLeaseWithoutCurrentAttemptRequiresRetryablePreviousOutcome(t *testing.T) {
 	cases := []struct {
 		name      string

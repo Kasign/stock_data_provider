@@ -37,17 +37,17 @@ func (r LeaseRecoveryReport) ToDiagnosticsObservation(checkedAt time.Time, durat
 	}
 
 	observation := diagnostics.Observation{
-		Status: diagnostics.StatusHealthy,
+		Status:      diagnostics.StatusHealthy,
 		SafeMessage: "lease recovery batch completed",
-		CheckedAt: checkedAt.UTC(),
-		Duration: duration,
+		CheckedAt:   checkedAt.UTC(),
+		Duration:    duration,
 		Attributes: map[string]string{
-			"scanned": strconv.Itoa(r.Scanned),
-			"recovered": strconv.Itoa(r.Recovered),
-			"conflicted": strconv.Itoa(r.Conflicted),
+			"scanned":         strconv.Itoa(r.Scanned),
+			"recovered":       strconv.Itoa(r.Recovered),
+			"conflicted":      strconv.Itoa(r.Conflicted),
 			"outcome_unknown": strconv.Itoa(r.OutcomeUnknown),
-			"failed": strconv.Itoa(r.Failed),
-			"unprocessed": strconv.Itoa(r.Unprocessed),
+			"failed":          strconv.Itoa(r.Failed),
+			"unprocessed":     strconv.Itoa(r.Unprocessed),
 		},
 	}
 	switch {

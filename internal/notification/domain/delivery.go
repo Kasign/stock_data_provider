@@ -227,7 +227,6 @@ func (d DeliveryRecord) Transition(change DeliveryTransition) (DeliveryRecord, D
 	return next, event, nil
 }
 
-
 // ValidateDeliveryStateEvent validates an immutable state event using the same transition
 // rules as DeliveryRecord.Transition, without exposing the domain's internal rule helpers.
 func ValidateDeliveryStateEvent(previous DeliveryStatus, event DeliveryStateEvent) error {

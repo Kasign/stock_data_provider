@@ -86,20 +86,31 @@ func TestDeliveryPreflightCompletionRequiresEvidenceAndRejectsExpiredLease(t *te
 	}
 }
 
-type preflightOutcomeUnknownDeliveryRepository struct { DeliveryRepository }
+type preflightOutcomeUnknownDeliveryRepository struct{ DeliveryRepository }
+
 func (r preflightOutcomeUnknownDeliveryRepository) UpdateWithLease(ctx context.Context, expectedVersion, fencingToken int64, next domain.DeliveryRecord, event domain.DeliveryStateEvent, now time.Time) error {
- if err := r.DeliveryRepository.UpdateWithLease(ctx, expectedVersion, fencingToken, next, event, now); err != nil { return err }
- return errors.Join(ErrPersistenceOutcomeUnknown, errors.New("injected preflight commit acknowledgement loss"))
+	if err := r.DeliveryRepository.UpdateWithLease(ctx, expectedVersion, fencingToken, next, event, now); err != nil {
+		return err
+	}
+	return errors.Join(ErrPersistenceOutcomeUnknown, errors.New("injected preflight commit acknowledgement loss"))
 }
 func TestDeliveryPreflightCompletionCommitOutcomeUnknownDoesNotReplay(t *testing.T) {
- repository := newMemoryDeliveries()
- claim := claimDeliveryForAttempt(t, repository)
- service, err := NewDeliveryPreflightCompletionService(preflightOutcomeUnknownDeliveryRepository{DeliveryRepository:repository})
- if err != nil { t.Fatal(err) }
- err = service.Apply(context.Background(), claim, DeliveryPreflightResult{Action:DeliveryPreflightSkip, ReasonCode:"recipient_not_authorized"}, claim.Delivery.UpdatedAt.Add(time.Second), "preflight-proof-unknown")
- if !errors.Is(err, ErrPersistenceOutcomeUnknown) { t.Fatalf("expected uncertain preflight commit, got %v", err) }
- current, found, readErr := repository.Get(context.Background(), claim.Delivery.DeliveryID)
- if readErr != nil || !found || current.Status != domain.DeliverySkipped || current.Version != claim.Delivery.Version+1 { t.Fatalf("committed preflight decision must be visible after lost acknowledgement: delivery=%+v found=%v err=%v", current, found, readErr) }
- events := repository.StateEvents(current.DeliveryID)
- if len(events) != 2 || events[len(events)-1].To != domain.DeliverySkipped || events[len(events)-1].EvidenceRef == nil || *events[len(events)-1].EvidenceRef != "preflight-proof-unknown" { t.Fatalf("preflight decision must have exactly one durable evidence event: %+v", events) }
+	repository := newMemoryDeliveries()
+	claim := claimDeliveryForAttempt(t, repository)
+	service, err := NewDeliveryPreflightCompletionService(preflightOutcomeUnknownDeliveryRepository{DeliveryRepository: repository})
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = service.Apply(context.Background(), claim, DeliveryPreflightResult{Action: DeliveryPreflightSkip, ReasonCode: "recipient_not_authorized"}, claim.Delivery.UpdatedAt.Add(time.Second), "preflight-proof-unknown")
+	if !errors.Is(err, ErrPersistenceOutcomeUnknown) {
+		t.Fatalf("expected uncertain preflight commit, got %v", err)
+	}
+	current, found, readErr := repository.Get(context.Background(), claim.Delivery.DeliveryID)
+	if readErr != nil || !found || current.Status != domain.DeliverySkipped || current.Version != claim.Delivery.Version+1 {
+		t.Fatalf("committed preflight decision must be visible after lost acknowledgement: delivery=%+v found=%v err=%v", current, found, readErr)
+	}
+	events := repository.StateEvents(current.DeliveryID)
+	if len(events) != 2 || events[len(events)-1].To != domain.DeliverySkipped || events[len(events)-1].EvidenceRef == nil || *events[len(events)-1].EvidenceRef != "preflight-proof-unknown" {
+		t.Fatalf("preflight decision must have exactly one durable evidence event: %+v", events)
+	}
 }

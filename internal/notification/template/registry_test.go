@@ -465,7 +465,7 @@ func TestRegistryBatchRepositoryLoadChecksConflictsBeforeMutation(t *testing.T) 
 	firstDigest, _ := DefinitionDigest(first)
 	conflictDigest, _ := DefinitionDigest(conflict)
 	repository := registryTemplateRepositoryMap{
-		{ id: first.TemplateID, version: first.Version }: {definition: first, digest: firstDigest, found: true},
+		{id: first.TemplateID, version: first.Version}:       {definition: first, digest: firstDigest, found: true},
 		{id: conflict.TemplateID, version: conflict.Version}: {definition: conflict, digest: conflictDigest, found: true},
 	}
 	err := registry.LoadVersionsFromRepository(context.Background(), repository, []VersionRef{

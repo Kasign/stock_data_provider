@@ -12,7 +12,7 @@ import (
 func TestLeaseRecoveryReportDiagnosticsClassification(t *testing.T) {
 	checkedAt := time.Date(2026, 11, 10, 9, 0, 0, 0, time.UTC)
 	tests := []struct {
-		name string
+		name   string
 		report LeaseRecoveryReport
 		status diagnostics.Status
 		reason string

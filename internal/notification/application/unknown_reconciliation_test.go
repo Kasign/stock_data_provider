@@ -145,7 +145,9 @@ func TestAssessUnknownDeliveryRejectsImpossibleEarlierAttemptHistory(t *testing.
 	first.Retryable = false
 	firstFinishedAt := first.StartedAt.Add(time.Second)
 	firstCompleted, err := first.Complete(firstFinishedAt, domain.DeliveryAttemptAccepted, "provider-accepted", "", false, "")
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	latest.AttemptNo = 2
 	latest.AttemptID = latest.AttemptID + "-second"
 	latest.FencingToken = first.FencingToken + 1
@@ -160,7 +162,9 @@ func TestAssessUnknownDeliveryRejectsImpossibleEarlierAttemptHistory(t *testing.
 	latest.EvidenceRef = nil
 	latest.Retryable = false
 	latest, err = latest.Complete(latest.StartedAt.Add(time.Second), domain.DeliveryAttemptAmbiguous, "", "timeout", false, "")
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	delivery.AttemptCount = 2
 	evidence.AttemptID = latest.AttemptID
 	evidence.ObservedAt = latest.FinishedAt.Add(time.Second)
