@@ -736,7 +736,8 @@ INT-CTR-001 是 43 个正式 CTR 之一，覆盖 Quant、Research、Researchflow
 |---|---:|---|
 | freeze-ready | 37 | 最终收敛状态见第59节；包括公共规则、Platform、Data 首期、News、Quant 首期、Research、Researchflow、LLM、Notification 和业务事件映射 |
 | pending-evidence | 0 | 最终收敛后没有未分类的公共契约定义缺口；机器 Schema/Golden/实现同步差异按 DEC-051 归入 L2 符合性，或列入明确 deferred 范围 |
-| deferred | 4 | DATA-CTR-005、DATA-CTR-007、QNT-CTR-003、SRV-CTR-001；触发条件见第59节 |\n| pending-decision | 0 | 所有待决均已由既有 DEC-PLAT-002-028～050 及 DEC-051 裁决 |
+| deferred | 4 | DATA-CTR-005、DATA-CTR-007、QNT-CTR-003、SRV-CTR-001；触发条件见第59节 |
+| pending-decision | 0 | 所有待决均已由既有 DEC-PLAT-002-028～050 及 DEC-051 裁决 |
 | blocked | 0 | 当前没有无法通过权威决议消解的公开定义冲突 |
 | not_applicable | 2 | DATA-CTR-003、NTF-CTR-003；仅模块内部 Provider/Channel SPI，不属于跨模块公开契约 |
 | frozen | 0 | 尚无项目负责人确认冻结的正式 CTR |
