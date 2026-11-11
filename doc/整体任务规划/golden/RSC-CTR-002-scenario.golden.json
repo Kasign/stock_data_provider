@@ -20,6 +20,30 @@
         "evidence:news-001"
       ],
       "required": true
+    },
+    {
+      "condition_id": "event_source_exists",
+      "condition_type": "event",
+      "description": "A qualifying event reference exists.",
+      "operator": "exists",
+      "evaluation_status": "not_evaluated",
+      "evidence_refs": [
+        "evidence:news-001"
+      ],
+      "required": false
+    },
+    {
+      "condition_id": "allowed_state_membership",
+      "condition_type": "other",
+      "description": "The observed state belongs to the explicitly allowed set.",
+      "operator": "in",
+      "expected_value": [
+        "state_a",
+        "state_b"
+      ],
+      "evaluation_status": "not_evaluated",
+      "evidence_refs": [],
+      "required": false
     }
   ],
   "expected_path": "If the policy increases compliance costs, affected issuers may experience margin pressure.",

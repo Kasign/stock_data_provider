@@ -503,8 +503,8 @@ PLAT-002 不因本次矩阵统计完成而结束。整体完成仍需：
 | QNT-CTR-001 | pending_evidence | Registry Entry 1.0.0 Schema 已有，字段集合覆盖 code/schema_version/value_type/unit/precision/range/algorithm_version/input_requirements/parameters_schema/quality_policy/supports_interval；但缺少可作为首批公开定义的实际 Registry 条目及每个 code 的单位、精度、舍入、输入要求和质量策略映射 |
 | QNT-CTR-002 | pending_evidence | 八种 Indicator 参数 Schema 与算法语义已有；但参数 Schema 不等同完整 Indicator Request/Result DTO，输出类型、单位、精度、状态和 Registry 元数据映射未完整定义 |
 | QNT-CTR-003 | pending_evidence | 三个首批 Factor 参数 Schema/Golden 和部分 QuantMetric Schema 已有；但完整 Factor Request/Result、交易日历版本引用、输入质量和结果 Envelope 映射不完整 |
-| QNT-CTR-004 | pending_evidence | DEC-028/029 已在项目级 DTO 中对齐 Envelope/Payload 版本和空输入语义；责任模块 QuantResultRef Schema 仍为 minItems=1，Envelope Schema/Golden 缺失，且全部 result_type 的强类型 Payload Schema 尚未完整 |
-| QNT-CTR-005 | pending_evidence | Manifest Schema/Golden 已补齐 Manifest/Payload 独立版本、算法版本、参数指纹、UTC 约束及空输入数组；剩余为 Quant Record/VerifyPayload 指纹算法、Manifest/Ref 绑定和 AuthorizationRef 签发映射的权威一致性核对 |
+| QNT-CTR-004 | pending_evidence | QuantResultRef 责任模块 Schema 的 minItems=1 与 DEC-029 冲突；项目级 DTO/Golden 已允许双重授权空数组。Envelope Schema/Golden 缺失；已有 Factor Metric/Trend/Risk 仅为局部 Payload，Indicator 与其他预留类型尚无完整强类型 Payload，Ref/Envelope/Manifest 映射仍未闭合 |
+| QNT-CTR-005 | pending_evidence | 项目级 Manifest Schema/Golden 已区分 Manifest/Payload 版本并允许空数组；责任模块 Build/Verify 仍要求非空 Snapshot，旧文档仍将 Manifest schema_version 解释为 Payload 版本；Record/VerifyPayload JCS 指纹、Manifest/Ref 绑定和 AuthorizationRef 映射仍待权威对齐 |
 
 ### 17.2 已裁决的 Quant 公开契约语义
 
@@ -757,7 +757,7 @@ INT-CTR-001 是 43 个正式 CTR 之一，覆盖 Quant、Research、Researchflow
 
 - 43 项正式 CTR 已全部完成本轮定义口径核定；不再保留“待审查模块/待全量盘点”的开放任务。
 - 当前未完成项为 40 项 pending-evidence；不再有 pending-decision。模块内部实现/测试/CI/部署事项仍不属于本轮契约定义冻结门禁。
-- 下一阶段只按 DEC-PLAT-002-028～032 校准 Quant/Research 权威 DTO、Schema、Golden 和映射；不重新启动十模块全量扫描，不新增重复 CTR。
+- 下一阶段只按 DEC-PLAT-002-028～033 校准 Quant/Research 权威 DTO、Schema、Golden 和映射；不重新启动十模块全量扫描，不新增重复 CTR。
 
 
 ## 25. 五项待决裁决完成记录（2026-11-11）
