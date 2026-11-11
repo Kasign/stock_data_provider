@@ -176,9 +176,9 @@ GitHub 远端 ref 核验（2026-11-10）：
 | DATA-CTR-006 | Data HTTP API 调用认证 | Data；Server 负责 Root 边界和 Remote Adapter Secret | Server、Quant Data Adapter；仅远程兼容模式下的 HTTP 调用方 | internal/marketdata/httpapi/openapi.yaml；Data服务间认证映射与Secret注入设计.md；DEC-PLAT-002-017 | Remote X-API-Key；InProcess 可信 Principal/Scope Context | `pending_evidence` | 模式边界已明确；但 OpenAPI 全局 security 同时声明 ApiKey 与 BearerAuth（OR 语义），与认证设计中“业务 API 仅 X-API-Key”的定义冲突；旧 API 清单仍描述浏览器持有 Key。需统一公开安全定义。实现接线不纳入本轮 |
 | DATA-CTR-007 | Research Data Snapshot/Evidence 消费边界 | Data（数据事实）；Research（Evidence）；Server（Adapter 注入） | Research、Researchflow | Data v2 DTO/Schema（待定义）；DATA-CTR-008 Snapshot Manifest | DailyBarsV2 Schema 未登记 | `pending_evidence` | Snapshot Manifest 只定义查询范围和来源版本，不等同 DailyBarsV2 行情内容 DTO；DailyBarsV2 字段、版本、质量/单位、Snapshot 引用与 Evidence 消费映射尚缺权威定义 |
 | DATA-CTR-008 | Data AuthorizationRef 签发与快照访问审计 | Data | Quant、Research | DATA-CTR-008 Snapshot Manifest Schema/Golden；GOV-CTR-006 AuthorizationRef/PolicySnapshot | 1.0.0（Snapshot Manifest Schema/Golden） | `pending_evidence` | Manifest 字段与 JCS/SHA-256 规则已定义；Schema 未约束 system_as_of 的 UTC 形式、sources 规范排序/去重完整语义；Data caller_ref、Scope/purpose 到可信主体及授权读取复核的公开映射仍需收敛 |
-| NEWS-CTR-001 | News 只读 Evidence Query Facade | News | Research、Researchflow | internal/news/app/evidence_query_facade.go；doc/news/新闻API契约.md | 1.0.0（4 Schema / 3 Golden） | `pending_evidence` | Query 输入、PIT、Cursor、分页、稳定排序、来源过滤、权限与返回 DTO |
-| NEWS-CTR-002 | AuthorizationRef 与内容访问授权 | News（授权决策 Owner） | Research、Researchflow | doc/news/新闻来源授权矩阵.md；NEWS-CTR-002 Schema；GOV-CTR-006 | 1.0.0（Authorization Binding Schema/Golden） | `pending_evidence` | Source/Article 绑定、内容级别、授权快照、过期/撤销和派生 Evidence 链 |
-| NEWS-CTR-003 | News PIT、稳定 Cursor、排序与去重 | News | Research、Researchflow | doc/news/新闻数据模型与质量契约.md；Evidence Query | 专属 Schema/Golden 当前未见 | `pending_evidence` | system_as_of、观察版本、available_at、Cursor 稳定性、排序/去重/快照生命周期 |
+| NEWS-CTR-001 | News 只读 Evidence Query Facade | News | Research、Researchflow | doc/news/新闻API契约.md 第11节；doc/news/schema/NEWS-CTR-001-*；doc/news/golden/NEWS-CTR-001-* | 1.0.0（4 Schema / 3 Golden） | `pending_evidence` | Application Port 查询定义已较完整；Schema 与文字存在 business_time nullable、UTC、system_observed_at 字段语义及 relation_refs 未提供/空集合状态差异，需统一公开 DTO 定义。未来 HTTP OpenAPI 草案不属于当前活动接口 |
+| NEWS-CTR-002 | AuthorizationRef 与内容访问授权 | News（授权决策 Owner） | Research、Researchflow | doc/news/新闻来源授权矩阵.md 第10节；NEWS-CTR-002 Authorization Binding Schema/Golden；GOV-CTR-006 | 1.0.0（Authorization Binding Schema/Golden） | `pending_evidence` | News-specific caller/resource/purpose/content_level 与 Provider/Source/Endpoint 策略交集已定义；仍依赖 GOV-CTR-006 的时间/规范排序及通用授权快照适用语义收敛 |
+| NEWS-CTR-003 | News PIT、稳定 Cursor、排序与去重 | News | Research、Researchflow | doc/news/新闻API契约.md 第11.3/11.6/11.9节；NEWS-CTR-001 Cursor Claims Schema；doc/news/新闻数据模型与质量契约.md | 复用 NEWS-CTR-001 1.0.0 Cursor Schema；无独立 CTR-003 Schema | `pending_evidence` | PIT 过滤、15分钟快照、HMAC Cursor、排序版本已有定义；system_observed_at 与 observation/first_observed_at 权威归属不一致，且 Evidence relation_refs 未表达 DEC-021 的 not_provided 与 confirmed-empty 区分 |
 | QNT-CTR-001 | Metric/Indicator/Factor Registry 公共元数据 | Quant | Researchflow；Research 只消费编排结果 | Quant schema/manifest/registry；doc/quant/03 | 1.0.0（Registry Entry Schema） | `pending_evidence` | code、schema_version、参数 Schema、输入要求、单位、精度、舍入、范围、容差、算法版本和质量规则 |
 | QNT-CTR-002 | Indicator Request/Result | Quant | Researchflow | internal/quant/indicator；Quant DTO Schema/Golden | 1.0.0（Indicator Parameters Schema） | `pending_evidence` | indicator_code、typed 参数、required/default/range、输入窗口、缺失样本、结果单位和边界样例 |
 | QNT-CTR-003 | Factor Request/Result | Quant | Researchflow | internal/quant/factor；doc/quant/03 与 Golden | 1.0.0（Factor Parameters Schema） | `pending_evidence` | momentum_20d/60d、volatility_20d 的输入、算法、精度、缺失样本和结果状态 |
@@ -463,3 +463,31 @@ PLAT-002 不因本次矩阵统计完成而结束。整体完成仍需：
 - DATA-CTR-003 已从 PLAT-002 跨模块冻结门禁排除；其内部质量要求不再列入本任务。
 - 本轮没有修改 Data 责任分支、Go DTO、OpenAPI、Schema 或 Golden；没有执行测试/CI。所有已知实现与契约差异仅作为证据，不转为本轮实现整改。
 - 下一批转入 News 公开契约核定；GOV-CTR-006 的公共规则只引用本批已发现的适用映射问题，不重复审查其公共 Schema 算法。
+
+## 16. News 首批公开契约定义核定（2026-11-11）
+
+本批覆盖 NEWS-CTR-001～003。当前 News 对跨模块消费者提供同进程只读 Application Port；doc/news/openapi.yaml 明确标注为未来 HTTP 草案，不注册、不属于当前活动公开接口。本轮不审查 Provider 抓取、采集 Worker、数据库实现或内部质量测试。
+
+### 16.1 核定结果
+
+| 契约 | 状态 | 核定结论 |
+|---|---|---|
+| NEWS-CTR-001 | pending_evidence | Query 请求/响应已有 1.0.0 Schema/Golden 和详细字段定义；但 business_time_from/to 文档允许 nullable、Schema 仅允许 string；system_as_of 要求 RFC3339Nano UTC、Schema 只声明 date-time；system_observed_at 与 News 数据模型声明的观察时间权威归属存在冲突；relation_refs 未表达 DEC-021 的 not_provided 与已确认空关系的区别 |
+| NEWS-CTR-002 | pending_evidence | Authorization Binding Schema/Golden 已定义 caller/resource/purpose/content_level 与 GOV-CTR-006 引用；News 侧签发与读取复核、Provider/Source/Endpoint 策略继承和 conditional 规则已明确；仍依赖 GOV-CTR-006 的 UTC/排序和公共授权快照语义收敛 |
+| NEWS-CTR-003 | pending_evidence | PIT 可见性、available_at 不可推断、稳定排序、15 分钟固定 Snapshot、HMAC Cursor、key rotation 与错误分类均有明确文字和 NEWS-CTR-001 Cursor Claims Schema；但系统观察时间排序键与 News 领域时间权威定义不一致，且与 NEWS-CTR-001 的 relation_refs 状态表达存在关联缺口 |
+
+### 16.2 必须保留的语义边界
+
+1. **不新增 News HTTP API 契约：** 当前唯一跨模块读取边界是同进程 NewsEvidenceQuery/Application Port；doc/news/openapi.yaml 只作为未来候选草案，不能作为当前消费者接口或冻结对象。
+2. **PIT 时间不能互相替代：** published_at 是发布者声明时间；available_at 必须有首次可用证据；fetched_at/normalized_at 是采集过程时间；observed_at 是单次 Observation 时间。不得用 fetched_at 或 published_at 推导 available_at。
+3. **观察时间唯一来源待统一：** 新闻数据模型第14.1节将系统首次观察时间归于 first_observed_at/observation.observed_at，并声明不再使用独立 system_observed_at；NEWS-CTR-001 Evidence DTO Schema 与 NEWS-CTR-003 排序却要求 system_observed_at。需明确该字段是从哪一个权威时间派生，还是应改用现有观察字段。
+4. **RelationRefs 状态不可丢失：** DEC-PLAT-002-021 要求区分关系未提供与确认无关系；当前 Evidence Page Schema 只有 relation_refs 数组，空数组无法独立表达 not_provided 与 confirmed-empty。必须明确字段级表达，不得由消费者猜测。
+5. **AuthorizationRef 不是访问令牌：** News 仍是 Provider Output/Source/Endpoint 策略交集的唯一授权决策 Owner；Research/Researchflow 只消费不透明引用，读取时按当前策略重新授权。
+
+### 16.3 本批结论与范围
+
+- 本批 3 项均为 pending_evidence；无 pending_decision、blocked、freeze-ready。
+- NEWS-CTR-001 的 Schema/Golden 已存在，不代表其字段语义完整；NEWS-CTR-003 可复用现有 Cursor Claims Schema，不因没有独立文件而机械新增 CTR。
+- 不把 NEWS-CTR-002 的当前授权复核测试、数据库并发测试、Provider 来源条款核查或采集质量测试列入本轮门禁。
+- 本轮只维护 feat/design_doc 项目级契约登记与审计文档，没有修改 News 责任分支文档/代码，没有执行测试或 CI。
+- 下一批：Quant 公开契约定义核定；GOV-CTR-006 的公共算法不重开，只核对 Quant 的 resource_ref/purpose/content_level 映射。
