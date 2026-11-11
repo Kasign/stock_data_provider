@@ -85,7 +85,7 @@ func (s *UnknownDeliveryReconciliationService) Reconcile(
 		return UnknownReconciliationAssessment{}, nil, err
 	}
 	if !found || snapshot.Delivery.DeliveryID != deliveryID {
-		return UnknownReconciliationAssessment{}, nil, ErrUnknownReconciliationSnapshotUnavailable
+		return UnknownReconciliationAssessment{}, nil, ErrUnknownDeliverySnapshotUnavailable
 	}
 	consistency := AssessDeliveryConsistency(DeliveryConsistencyInput{
 		Delivery: snapshot.Delivery, Attempts: snapshot.Attempts, AttemptsComparable: true,
