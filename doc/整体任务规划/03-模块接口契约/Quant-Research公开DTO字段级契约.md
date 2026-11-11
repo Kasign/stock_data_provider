@@ -70,6 +70,8 @@ QuantAnalysisRequest 的幂等作用域为 `(authenticated_caller_ref, use_case,
 
 completed 不代表 valid；消费方必须同时检查 result_status 和 quality_status。invalid/unknown 不可作为有效数值事实。
 
+**Ref 投影规则：** Ref 的业务结果字段必须从已验证 Manifest/不可变记录投影；Ref DTO 自身 `schema_version` 独立，`authorization_ref` 是当前访问主体的授权证明，`created_at` 来自原始持久化记录。Ref 不重复携带 `payload_schema_version`。GetResult 返回完整 Envelope，不返回裸 Payload 或 Ref。
+
 ### 2.3 QuantMetric
 
 | JSON 字段 | 必需 | 类型/约束 | 语义 |
@@ -170,6 +172,12 @@ Result Manifest 是 Quant 持久化结果的不可变身份描述，不等同于
 | result_type | 是 | 已注册 result_type | Payload 业务类型 |
 | schema_version | 是 | SemVer string | Manifest Schema 自身版本 |
 | payload_schema_version | 是 | SemVer string | Manifest 所描述的 Payload Schema 版本 |
+| scope | 是 | stock/market/industry/portfolio | 结果范围，参与结果身份 |
+| security_id | 条件必需 | string | 单证券结果主体；scope=stock 时必需，参与结果身份 |
+| trade_date | 否 | YYYY-MM-DD | 结果目标交易日；提供时参与结果身份 |
+| period | 是 | 非空 string | 结果周期，参与结果身份 |
+| quality_status | 是 | valid/degraded/invalid/unknown | 结果质量，参与结果身份 |
+| result_status | 是 | completed/insufficient_data/insufficient_sample/rejected/failed | 计算状态，参与结果身份 |
 | algorithm_version | 是 | 非空 string | 生成结果的算法语义/实现版本 |
 | parameter_fingerprint | 是 | 非空 string | 规范化计算参数指纹 |
 | system_as_of | 是 | RFC3339Nano UTC | 结果使用的知识截止时间 |
@@ -178,7 +186,7 @@ Result Manifest 是 Quant 持久化结果的不可变身份描述，不等同于
 
 Manifest 的 `schema_version` 只表示 Manifest Schema 自身版本；Payload Schema 只能由 `result_type + payload_schema_version` 唯一选择。Envelope、Manifest、Payload 三类版本独立演进。
 
-`result_fingerprint` 对规范化 Payload 内容计算 SHA-256。`manifest_fingerprint` 对 Manifest 除 `result_id` 和 `manifest_fingerprint` 外的全部必需字段按 RFC 8785 JCS 规范化后计算 SHA-256；因此算法版本、参数指纹、Payload Schema 版本、知识截止时间、输入 Snapshot 集合和结果指纹均进入 Manifest 身份。 `result_id` 固定为 `quant_result:sha256:{manifest_fingerprint}`。禁止把 `manifest_fingerprint` 自身纳入其输入，避免自引用。
+`result_fingerprint` 只对规范化强类型 Payload 内容计算 SHA-256。`manifest_fingerprint` 对 Manifest 除 `result_id` 和 `manifest_fingerprint` 外的全部字段按 RFC 8785 JCS 规范化后计算 SHA-256；因此结果类型/范围/证券主体/目标交易日/周期/质量/状态、算法版本、参数指纹、Payload Schema 版本、知识截止时间、输入 Snapshot 集合和 Payload 指纹均进入 Manifest 身份。`authorization_ref` 与 `created_at` 不属于 Manifest 字段：前者按当前访问主体每次重新授权，后者是不可变持久化记录时间。 `result_id` 固定为 `quant_result:sha256:{manifest_fingerprint}`。禁止把 `manifest_fingerprint` 自身纳入其输入，避免自引用。
 
 空输入时 Manifest 仍必须完整记录 algorithm_version、parameter_fingerprint、result_type、payload_schema_version、system_as_of 和空的 input_snapshot_refs；不得因无外部 Snapshot 而省略计算身份字段。
 

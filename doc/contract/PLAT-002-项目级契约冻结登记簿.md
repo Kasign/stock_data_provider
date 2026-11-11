@@ -182,8 +182,8 @@ GitHub 远端 ref 核验（2026-11-10）：
 | QNT-CTR-001 | Metric/Indicator/Factor Registry 公共元数据 | Quant | Researchflow；Research 只消费编排结果 | doc/quant/schema/QNT-CTR-001-registry-entry-1.0.0.schema.json；doc/quant/03；DEC-PLAT-002-045 | 1.0.0（Registry Entry Schema；首批 Entry/Golden 未形成） | `pending_evidence` | 已核定 Registry Entry.code=metric_code、每个 metric_code 独立注册；Indicator 与 Metric 一对多映射、MACD/Bollinger 复合输出拆成多个 Metric；algorithm_version 由服务端活动版本映射选择，调用方不指定。首批实际 Entry 的 unit/precision/range/rounding/input_requirements/quality_policy 权威值仍未登记 |
 | QNT-CTR-002 | Indicator Request/Result | Quant | Researchflow | doc/整体任务规划/03-模块接口契约/Quant-Research公开DTO字段级契约.md 第2.1/2.3/2.7节；doc/quant/schema/QNT-CTR-002-indicator-parameters-1.0.0.schema.json；doc/quant/03；DEC-PLAT-002-045/046 | 1.0.0（Indicator Parameters Schema；8 个算法参数定义） | `pending_evidence` | 已核定请求上下文/幂等边界、8 个 indicator_code 与 typed parameters 关系、服务端算法版本选择、单/复合输出统一为 QuantMetric[]；完整 Request/IndicatorResultPayload Schema/Golden 尚缺，Registry 的 sample_count 策略及首批 Entry 元数据也未齐 |
 | QNT-CTR-003 | Factor Request/Result | Quant | Researchflow | doc/quant/schema/QNT-CTR-003-factor-parameters-1.0.0.schema.json；QNT-CTR-004 Factor QuantMetric Schema/Golden；DATA-CTR-005；DEC-PLAT-002-047 | 1.0.0（Factor Parameters Schema；3 个首批 Factor） | `pending_evidence` | 已核定仅 stock 单证券日线、三个 factor_code 与 period/样本口径、factor_code=metric_code、单 Metric 强类型输出；DailyBars v2 尚缺可验证交易日历版本/interval 元数据，Factor Request/Result Payload Schema/Golden 与完整质量输入证据未形成 |
-| QNT-CTR-004 | QuantResultRef、Factor QuantMetric、Trend、Risk 输出 | Quant | Researchflow；Research 经 Researchflow 消费 | doc/quant/schema/QNT-CTR-004-*；doc/quant/03 第10.26节；项目级 Quant-Research公开DTO字段级契约第2节 | 1.0.0（Ref/Metric/Trend/Risk 局部 Schema/Golden） | `pending_evidence` | 已核验责任模块 QuantResultRef Schema 仍以 minItems=1 限制 input_snapshot_refs，与 DEC-029 冲突；项目级 QuantResultRef DTO/Golden 已允许经双重授权的空数组。Envelope Schema/Golden 尚缺；已有 Factor Metric、Trend、Risk 是局部 Payload，Indicator 尚无独立完整 Payload Schema，其他预留 result_type 无完整强类型 Payload。不得将局部 Schema 推断为完整 Envelope 支持；需补齐 Ref/Envelope/已开放 Payload 的权威映射后才能 freeze-ready |
-| QNT-CTR-005 | QuantResult AuthorizationRef 签发与访问审计 | Quant | Researchflow | doc/整体任务规划/schema/QNT-CTR-005-result-manifest-1.0.0.schema.json；doc/整体任务规划/golden/QNT-CTR-005-result-manifest.golden.json；GOV-CTR-006 | 1.0.0（Result Manifest Schema/Golden） | `pending_evidence` | 项目级 Manifest Schema/Golden 已按 DEC-028/029 区分 Manifest/Payload 版本并允许空数组；但 Quant 责任模块 Manifest Build/Verify 仍要求非空 input_snapshot_refs，且旧文档仍将 Manifest schema_version 解释为 Payload 版本，均与正式决议冲突。另需核对 Record/VerifyPayload 的 JCS 指纹权威输入、Manifest 与 Ref 的身份绑定，以及 AuthorizationRef 的可信主体/资源/用途/内容级别映射 |
+| QNT-CTR-004 | QuantResultRef、Envelope、Indicator/Factor/Trend/Risk Payload | Quant | Researchflow；Research 经 Researchflow 消费 | doc/整体任务规划/03-模块接口契约/Quant-Research公开DTO字段级契约.md 第2.2/2.3/2.7/2.8节；doc/quant/schema/QNT-CTR-004-*；DEC-PLAT-002-028/029/046/047/048 | 1.0.0（Ref/Metric/Trend/Risk 局部 Schema/Golden；Envelope Schema/Golden 未形成） | `pending_evidence` | 已核定 Envelope/Manifest/Ref 三层版本身份、payload discriminator、空输入授权、Ref 投影和 Manifest 身份字段；仍缺完整 Envelope/IndicatorResultPayload/FactorResultPayload Schema/Golden，Ref Schema minItems=1 与 DEC-029 冲突，Manifest Schema/Go 实现未覆盖全部身份字段/空数组，Trend/Risk 组合语义仍需机器约束 |
+| QNT-CTR-005 | QuantResult AuthorizationRef 签发与访问审计 | Quant | Researchflow | doc/整体任务规划/schema/QNT-CTR-005-result-manifest-1.0.0.schema.json；doc/整体任务规划/golden/QNT-CTR-005-result-manifest.golden.json；GOV-CTR-006；DEC-PLAT-002-028/029/048 | 1.0.0（Result Manifest Schema/Golden） | `pending_evidence` | Manifest Schema/Golden 已区分 Manifest/Payload 版本并允许空数组；但 Quant Go Manifest Build/Verify 仍缺 payload_schema_version/algorithm_version/parameter_fingerprint 且拒绝空数组。DEC-048 新增的 Envelope 不可变身份字段尚未进入 Manifest Schema/Go/Golden；AuthorizationRef 的可信主体/资源/用途/内容级别及读取时复核仍需完整闭环 |
 | RSC-CTR-001 | Research Evidence | Research | Researchflow | doc/整体任务规划/schema/RSC-CTR-001-evidence-1.0.0.schema.json；Golden；doc/research/01、03；GOV-CTR-006 | 1.0.0（Evidence Schema/Golden） | `pending_evidence` | Evidence 字段和 JCS 指纹语义已有；Schema 未约束 RFC3339Nano UTC，source_version 条件必填和 Evidence.system_as_of/available_at 跨字段 PIT 规则仍依赖未完成的权威适用映射。ResearchContext 不归本 CTR，按 FLOW-CTR-003 核定 |
 | RSC-CTR-002 | ResearchEvent、Claim、Hypothesis、Scenario | Research | Researchflow | 项目级 DTO 第3.3～3.5节；schema/RSC-CTR-002-*；golden/RSC-CTR-002-*；doc/research/01、03 | Event、Claim/Hypothesis、Scenario 1.0.0 Schema/Golden 已建立 | `pending_evidence` | Event/Claim 核心字段已对齐 DEC-030～032；仍缺 EventRef 存在性/无环、source_times 与 evidence_refs/规范化值的跨字段校验、Claim 替代目标当前版本/并发冲突校验，且 Research 责任模块文档仍保留旧 supersedes_event_version 并引用已裁决待决项。Scenario expected_value 已按 DEC-033 收敛为 scalar/非空 scalar 数组，仍缺 metric_ref 对应 Registry value_type/unit 的权威映射；QuantResultRef 的 result_type=evaluation、system_as_of 一致性和引用 Schema 与 DEC-029 的一致性未闭合 |
 | FLOW-CTR-001 | Run/Stage/Attempt 状态与结果传播 | Researchflow | Server、API、WebUI；业务模块作为 Stage Provider | doc/researchflow/03；doc/researchflow/schema/run/stage/attempt；对应 Golden | 1.0.0（Run/Stage/Attempt Schema/Golden） | `pending_evidence` | 状态枚举/传播矩阵已有；Run/Stage/Attempt Schema 的 UTC、终态字段关系和 ResultSummary 关联约束未完全机器化，完整结果归并定义需与 FLOW-CTR-004 统一 |
@@ -503,8 +503,8 @@ PLAT-002 不因本次矩阵统计完成而结束。整体完成仍需：
 | QNT-CTR-001 | pending_evidence | Registry Entry Schema/Go Validator 已有；DEC-045 已明确 code=metric_code、复合 Indicator 输出拆分为独立 Metric、服务端显式活动 algorithm_version；仍缺首批 8 Indicator 输出组/3 Factor 的正式 Entry/Golden，以及每个 metric_code 的单位、精度、舍入、范围、输入和质量策略值 |
 | QNT-CTR-002 | pending_evidence | DEC-046 已明确公共请求上下文、参数 Schema 版本边界、算法版本由服务端 Registry 选择、结果按 metric_code 映射为 QuantMetric[]，MACD/Bollinger 复合输出有固定顺序；仍缺完整 Request 与 IndicatorResultPayload Schema/Golden，并依赖 QNT-CTR-001 首批 Entry/样本数策略 |
 | QNT-CTR-003 | pending_evidence | DEC-047 已明确 stock 单证券日线输入、factor_code/period 对应、20/60 日窗口与 sample_count、factor_code=metric_code 及单 Metric Payload；Data DailyBars v2 缺交易日历版本/interval 证据，完整 Request/FactorResultPayload Schema/Golden 和输入质量分类仍缺 |
-| QNT-CTR-004 | pending_evidence | QuantResultRef 责任模块 Schema 的 minItems=1 与 DEC-029 冲突；项目级 DTO/Golden 已允许双重授权空数组。Envelope Schema/Golden 缺失；已有 Factor Metric/Trend/Risk 仅为局部 Payload，Indicator 与其他预留类型尚无完整强类型 Payload，Ref/Envelope/Manifest 映射仍未闭合 |
-| QNT-CTR-005 | pending_evidence | 项目级 Manifest Schema/Golden 已区分 Manifest/Payload 版本并允许空数组；责任模块 Build/Verify 仍要求非空 Snapshot，旧文档仍将 Manifest schema_version 解释为 Payload 版本；Record/VerifyPayload JCS 指纹、Manifest/Ref 绑定和 AuthorizationRef 映射仍待权威对齐 |
+| QNT-CTR-004 | pending_evidence | DEC-028/029/048 已明确三层版本、空输入授权、Ref 投影及 Manifest 内容身份字段；仍缺 Envelope/Indicator/Factor Payload Schema/Golden，Ref Schema minItems=1 冲突，Manifest Schema/Go 尚未覆盖 scope/security_id/trade_date/period/quality_status/result_status 等身份字段，Trend/Risk 组合约束未机器化 |
+| QNT-CTR-005 | pending_evidence | Go Manifest 与已冻结 Schema/DEC-028/029 不一致：缺 payload_schema_version、algorithm_version、parameter_fingerprint 且拒绝空 input refs；DEC-048 要求新增不可变 Envelope 身份字段进入 Manifest；还需完成 JCS 指纹、Ref 投影和 AuthorizationRef 读取复核 |
 
 ### 17.2 已裁决的 Quant 公开契约语义
 
@@ -1515,7 +1515,7 @@ DEC-PLAT-002-044 固定 NEWS-CTR-001 v1.0 请求语义：
 Indicator 调用使用共同 QuantAnalysisRequest 上下文，必须遵守：
 1. 必须提供请求 DTO schema_version、request_id、correlation_id、scope、system_as_of、period、input_snapshot_refs、parameters、quality_policy、idempotency_key；security_id 按 scope 条件必需，trade_date 可选。
 2. 首批八种 Indicator 均计算价格序列；必须提供可比较的 adjustment_basis。unknown/缺失复权口径拒绝计算；输入序列内不得混合 adjustment_basis 或 reference_date。
-3. input_snapshot_refs 必须非空、引用不透明、不得重复；其顺序属于请求语义，不由 Quant 擅自重排。无行情快照的纯函数调用不属于该公开 Indicator Request。
+3. input_snapshot_refs 必须非空、引用不透明、不得重复；它是无序集合，请求指纹前按 UTF-8 字节序升序规范化（DEC-048）。无行情快照的纯函数调用不属于该公开 Indicator Request。
 4. system_as_of 是系统知识截止时间，必须使用 RFC3339Nano UTC；不得由 trade_date、published_at、fetched_at 或本机当前时间替代。trade_date 是目标交易日，不能代替 system_as_of。
 5. period 必须与输入 Snapshot 的实际 interval 一致，并满足所选 Registry Entry.input_requirements.interval；Registry 未声明支持的 interval 时拒绝，不得由 supports_interval=true 推断支持任意 interval。
 6. parameters 必须按 indicator_code 命中 QNT-CTR-002 的对应 discriminated schema；拒绝未知 indicator_code、未知参数字段、缺失必需参数和越界值。跨字段约束（例如 MACD fast_window < slow_window）由语义 Validator 补足，不能只依赖 JSON Schema。
@@ -1630,4 +1630,71 @@ Indicator 调用使用共同 QuantAnalysisRequest 上下文，必须遵守：
 - 模块内算法 Golden/CI 通过不等于真实 Data 输入、完整 Result Payload 或 Researchflow 消费契约已完成。
 
 **结论：QNT-CTR-003 的首批 Factor 范围、输入语义、样本口径与结果映射已收敛；由于 Data DailyBars v2 元数据、完整 Request/FactorResultPayload Schema/Golden 和 Registry Entry 仍缺，继续保持 pending_evidence。**
+
+
+
+## 57. QNT-CTR-004 QuantResultRef、Envelope、Payload 与 Manifest 身份核定（2026-11-11）
+
+### 57.1 三层版本身份
+
+依据 DEC-PLAT-002-028，版本字段严格分层：
+- QuantResultRef.schema_version：Ref DTO 自身版本。
+- QuantResult Envelope.schema_version：Envelope DTO 自身版本。
+- Result Manifest.schema_version：Manifest DTO 自身版本。
+- Envelope.payload_schema_version 与 Manifest.payload_schema_version：同一个强类型 Payload Schema 版本。
+- Payload Schema 唯一选择键为 `(result_type, payload_schema_version)`。
+- Ref 不重复携带 payload_schema_version；消费者读取 Manifest/Envelope 后再选择 Payload Schema。
+- 三类 DTO 版本与 Payload 版本独立演进；未知 Envelope/Manifest Schema 或未知 Payload 组合必须明确拒绝，不允许近似版本回退。
+
+### 57.2 QuantResultRef 与 Envelope 的关系
+
+1. QuantResultRef 是结果资源的轻量索引/引用视图，不包含 Payload；它不是 Envelope 的别名，也不是独立生成的第二份结果事实。
+2. Ref 的 result_id、result_type、scope、security_id、system_as_of、trade_date、period、algorithm_version、parameter_fingerprint、input_snapshot_refs、quality_status、result_status 必须从已验证 Manifest/不可变结果记录投影，不允许由调用方重新填写或与原结果不一致。
+3. Ref.schema_version 由 Ref DTO 自身定义；authorization_ref 是当前调用主体访问该 result_id 的授权证明，created_at 是持久化记录的原始创建时间。两者不参与结果内容寻址身份。
+4. GetResult 必须返回完整 QuantResult Envelope（含强类型 Payload），不能只返回 Ref 或裸 Payload；Ref 用于列表、关联和定位，读取内容通过 Quant Facade 执行当前授权复核后返回 Envelope。
+5. Envelope 必须同时包含 schema_version 与 payload_schema_version。Envelope 的 result_type、payload_schema_version、system_as_of、input_snapshot_refs、algorithm_version、parameter_fingerprint 以及其他 Manifest 身份字段必须与 Manifest 完全一致。
+
+### 57.3 Manifest 的不可变结果身份
+
+现有 Manifest 已绑定 result_type、Manifest schema_version、payload_schema_version、algorithm_version、parameter_fingerprint、system_as_of、input_snapshot_refs 和 result_fingerprint，但无法单独证明 Envelope 的 scope/security_id/trade_date/period/quality_status/result_status 未被替换。
+
+为避免同一 result_id 被投影成不同证券、周期或质量结论，DEC-PLAT-002-048 将下列 Envelope 语义字段加入 Manifest 不可变身份：
+- 必需：scope、period、quality_status、result_status。
+- 条件/可选：security_id（scope=stock 时必需）、trade_date（无目标交易日时缺省）。
+- 已有字段继续必需：result_type、Manifest schema_version、payload_schema_version、algorithm_version、parameter_fingerprint、system_as_of、input_snapshot_refs、result_fingerprint。
+- result_fingerprint 只对规范化强类型 Payload 计算；manifest_fingerprint 对 Manifest 除 result_id/manifest_fingerprint 外的全部字段按 RFC 8785 JCS 计算；result_id 为 `quant_result:sha256:{manifest_fingerprint}`。
+- authorization_ref 不进入 Manifest/结果指纹：它是当前访问主体的授权证明，可能随调用主体和当前策略变化；必须在每次读取时重新签发/复核。
+- created_at 不进入内容寻址指纹：它是持久化记录时间，不是计算结果语义；由不可变记录元数据保存并由 Ref 投影。
+- Envelope.schema_version 不进入 Manifest 身份：Envelope 结构版本与 Payload/结果资源语义独立；升级 Envelope 表示层不得改变相同结果资源的内容身份。
+
+### 57.4 输入快照引用集合语义
+
+- `input_snapshot_refs` 是无序集合，不是有业务顺序的数组；数组顺序不得承载输入角色或优先级。
+- 请求指纹与 Manifest 指纹计算前，必须对引用按 UTF-8 字节序升序规范化；重复引用拒绝。
+- 相同引用集合的不同输入排列必须得到相同规范化指纹和相同 Manifest 身份。
+- 数组字段始终必需；空数组表示无外部事实输入，只在 DEC-PLAT-002-029 的 Quant Registry 白名单和 Researchflow ResolvedTemplate 双重授权同时成立时允许。不得用 null 或省略表示空输入。
+- 本节修正 DEC-PLAT-002-046 中“input_snapshot_refs 顺序属于请求语义”的表述；该顺序不是业务语义，必须规范化排序。
+
+### 57.5 Payload 注册与状态边界
+
+- `result_type` 枚举只定义稳定类型名称，不代表所有类型均已开放。只有存在完整注册的 `(result_type, payload_schema_version)` Payload Schema/Golden 和对应 Validator 时才允许产生/读取该类型；否则返回 unsupported_result_type/unsupported_schema。
+- 首批已定义的 Payload 形状：
+  - indicator：DEC-046 的 IndicatorResultPayload（indicator_code + QuantMetric[]）。
+  - factor：DEC-047 的 FactorResultPayload（factor_code + 恰好一个 QuantMetric）。
+  - trend：TrendResult 1.0.0 强类型对象。
+  - risk：RiskDecision 1.0.0 强类型对象。
+- market、industry、stock、strategy、backtest、evaluation 目前是预留 result_type；没有各自完整 Payload Schema/Golden 前必须拒绝，不能借用其他类型 Payload。
+- RiskDecision.status=reject 表示风险评估得出拒绝结论，不等同 Envelope.result_status=rejected。若规则完整执行并生成有效 RiskDecision，Envelope.result_status 可为 completed；Envelope.result_status=rejected 表示 Quant 请求/质量/授权门禁拒绝产生正常结果。
+- Envelope.quality_status 与 Envelope.result_status 独立；Trend/Metric/Risk 子对象的领域状态不能直接替代 Envelope 状态。各 Payload 必须定义与 Envelope 的一致性校验。
+
+### 57.6 当前机器定义缺口与结论
+
+- QuantResultRef Schema 的 input_snapshot_refs 仍有 minItems=1，违反 DEC-PLAT-002-029 的空数组表达。
+- QNT-CTR-004 尚无完整 Envelope Schema/Golden，也没有 IndicatorResultPayload/FactorResultPayload 完整机器定义。
+- QNT-CTR-005 Manifest Schema/Golden 尚未加入 DEC-048 的 scope/security_id/trade_date/period/quality_status/result_status；Go Manifest 还缺 Schema 已声明的 payload_schema_version/algorithm_version/parameter_fingerprint，并拒绝空 input_snapshot_refs。
+- 当前 Ref.BuildRef 从独立 RefInput 接收多项结果元数据，未证明这些字段与不可变 Manifest/Envelope 完全一致；需改为从已验证结果记录投影。
+- Trend/Risk 现有 Schema 只验证局部结构；与 Envelope 的字段一致性、RiskDecision 规则状态组合仍需明确 Validator 规则。
+- 当前不修改 Quant 代码、模块 Schema/Golden；机器定义同步由对应 QNT-CTR-004/005 责任范围后续执行。
+
+**结论：QNT-CTR-004 的版本身份、Ref/Envelope/Manifest 关系、内容寻址和首批 Payload 形状已收敛；由于完整 Envelope/Payload 机器定义和 QNT-CTR-005 Manifest/Go 同步未完成，继续保持 pending_evidence。**
 
