@@ -3,7 +3,7 @@
 - 仓库：`Kasign/stock_data_provider`
 - 代码审计基线：`origin/integration` @ `b6dfc85ba214fe16268c8cba780641a8bfe15086`
 - 审计文档维护分支：`origin/feat/design_doc`（状态以当前分支 HEAD 为准）
-- 当前阶段：43 个正式 CTR 已完成定义口径核定；6 项 freeze-ready、35 项 pending_evidence、0 项 pending_decision、2 项 not_applicable、0 项 frozen。整体尚未冻结
+- 当前阶段：43 个正式 CTR 已完成定义口径核定；7 项 freeze-ready、34 项 pending_evidence、0 项 pending_decision、2 项 not_applicable、0 项 frozen。整体尚未冻结
 
 ## 1. 权威性
 
@@ -18,6 +18,7 @@
 | GOV-CTR-003 公共标识符与幂等作用域规则 | [GOV-CTR-003 规则 1.0.0](./rules/GOV-CTR-003-标识符与幂等作用域规则.md) |
 | GOV-CTR-004 Schema 版本、兼容、废弃和迁移规则 | [GOV-CTR-004 规则 1.0.0](./rules/GOV-CTR-004-Schema版本兼容与废弃规则.md) |
 | GOV-CTR-006 AuthorizationRef/PolicySnapshot 机器契约、Owner 映射、指纹和 Golden | [GOV-CTR-006 权威说明](../整体任务规划/02-契约治理/GOV-CTR-006-AuthorizationRef机器契约与Golden.md) |
+| PLAT-CTR-001 Fault 与 HTTP 错误投影 | [PLAT-CTR-001 权威契约](../整体任务规划/02-契约治理/PLAT-CTR-001-Fault与HTTP错误投影契约.md)；项目级 Schema/Golden 位于整体任务规划 schema/golden |
 | PLAT-CTR-001 HTTP Error Envelope 与内部 Fault 投影 | [PLAT-CTR-001 公共错误投影契约](./rules/PLAT-CTR-001-HTTP错误投影契约.md) |
 | 项目级契约版本、冻结/解冻和变更历史 | [契约版本与变更记录](./契约版本与变更记录.md) |
 | 项目目标、模块职责、目标架构和开发边界 | [整体任务规划总览](../整体任务规划/01-项目总览/整体任务规划总览.md) |
@@ -62,4 +63,4 @@
 
 以固定的 origin/integration SHA b6dfc85ba214fe16268c8cba780641a8bfe15086 作为本轮代码核验对象；审计文档仅维护在 feat/design_doc。核验期间不修改业务代码或责任模块文档，不修改其他分支，不合并 integration，也不将 integration 合并回任何分支。
 
-本目录的当前状态以登记簿第24节为准：43 个正式 CTR 已完成本轮定义口径核定，不再保留全量重复盘点任务；五项待决已由 DEC-PLAT-002-028～032 裁决；ScenarioCondition 类型结构另由 DEC-PLAT-002-033 明确；下一阶段只处理 35 项公开定义证据缺口。任何模块内部实现、测试、CI、部署事项均不得重新加入本轮契约定义冻结门禁。
+本目录的当前状态以登记簿第24节为准：43 个正式 CTR 已完成本轮定义口径核定，不再保留全量重复盘点任务；五项待决已由 DEC-PLAT-002-028～032 裁决；ScenarioCondition 类型结构另由 DEC-PLAT-002-033 明确；下一阶段只处理 34 项公开定义证据缺口。任何模块内部实现、测试、CI、部署事项均不得重新加入本轮契约定义冻结门禁。

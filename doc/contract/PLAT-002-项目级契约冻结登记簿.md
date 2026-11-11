@@ -6,7 +6,7 @@
 - 固定代码审计基线：`origin/integration @ b6dfc85ba214fe16268c8cba780641a8bfe15086`；仅对该 SHA 的代码事实作结论，不随分支 HEAD 自动漂移
 - 登记簿版本：`0.2.33-review`
 - 当前状态：`L1_frozen_contract_definition_review_in_progress`
-- 当前状态统计：43 项正式 CTR；6 freeze-ready、35 pending_evidence、0 pending-decision、2 not_applicable、0 frozen。项目级语义待决已清零；各 CTR 仍按自身证据门禁收敛。
+- 当前状态统计：43 项正式 CTR；7 freeze-ready、34 pending_evidence、0 pending-decision、2 not_applicable、0 frozen。项目级语义待决已清零；各 CTR 仍按自身证据门禁收敛。
 - 项目级决策：DEC-PLAT-002-018～038 已记录；当前 pending-decision 为 0。DATA-FLOW-B、LLM-FLOW-B 保持条件性 deferred
 - 决策责任：项目负责人；根据明确授权，DEC-PLAT-002-028～037 的技术取舍由 ChatGPT 代为 Review/裁决，并在决议中标记授权来源
 - 复核原则：本轮只冻结契约定义；模块实现符合性、内部测试、CI、部署另行跟踪，不得混入本轮冻结门禁
@@ -161,7 +161,7 @@ GitHub 远端 ref 核验（2026-11-10）：
 | GOV-CTR-004 | Schema 版本、兼容、废弃和迁移 | 各契约生产模块；项目级规则由治理登记 | 所有直接消费者 | [GOV-CTR-004 Schema 版本与兼容规则](./rules/GOV-CTR-004-Schema版本兼容与废弃规则.md)；逐 DTO/Event 版本矩阵见对应 CTR | 1.0.0 | `freeze-ready` | SemVer、破坏性变更边界、closed/open enum、未知字段策略、消费者支持版本、Schema/G​​olden 不可变、废弃和直接退役规则已版本化；逐 DTO/Event 兼容矩阵和消费者证据仍由各 CTR 负责，不作为公共规则冻结阻断 |
 | GOV-CTR-005 | 契约状态、冻结证据和变更审批 | 项目契约治理 | 所有模块 | doc/contract/README、登记簿第5节、决策记录、契约版本与变更记录 | 0.2.19-review（治理规则） | `freeze-ready` | 项目级定义冻结门禁、状态、版本变更/解冻记录规则已统一；模块实现符合性不混入契约定义冻结 |
 | GOV-CTR-006 | AuthorizationRef 公共审计快照结构与引用语义 | Data、News、Quant、Research 分别签发各自资源授权快照；公共结构由项目治理 | Research、Researchflow 及受限资源消费者 | GOV-CTR-006 AuthorizationRef/PolicySnapshot Schema/Golden；四类 Owner 的 Principal/Resource/Purpose/ContentLevel 映射 | 1.0.0（2 Schema / 4 Golden） | `freeze-ready` | 公共 DTO 字段、各自 schema_version、RFC3339Nano UTC、decision/conditions 关系、PolicySnapshot 非空/唯一/排序、policy_version 绑定、JCS+SHA-256 指纹及 Data/News/Quant/Research 映射均有权威定义和 Golden；运行时 Owner/Consumer/撤销竞态 Contract Test 属 L2 实现符合性，不阻断项目级契约定义冻结 |
-| PLAT-CTR-001 | Fault 结构与分类 | Platform | Server、所有服务端模块 | doc/platform/08 第 4 节；internal/platform/fault | Go API 版本待核验；未见独立 Schema/Golden | `pending_evidence` | Fault 内部结构、HTTP Error DTO、状态码、错误码注册、Retryable 语义和各模块映射 Golden |
+| PLAT-CTR-001 | Fault 结构与分类及 HTTP 错误投影 | Platform 定义进程内 Fault；Server/各领域 Transport 投影公开错误 | Server、所有服务端模块及 HTTP 消费者 | [PLAT-CTR-001 Fault 与 HTTP 错误投影契约](../整体任务规划/02-契约治理/PLAT-CTR-001-Fault与HTTP错误投影契约.md)；项目级 HTTP Error Schema/Golden；Platform Fault 定义见 doc/platform/08 第 4 节 | 1.0.0（HTTP Error Schema / 8 类 Golden） | `freeze-ready` | Fault 内部字段/安全边界、8 类错误分类与 HTTP 状态映射、统一 Error Envelope、Code 命名空间、Retryable 约束及 Request ID Header 权威性已有唯一项目级定义；模块错误码词汇和真实消费者映射测试属于 L2 实现符合性 |
 | PLAT-CTR-002 | Request Context 与身份关联原语 | Platform | Server、所有服务端模块、Worker | doc/platform/08 第 5 节；observability/security Context | Request ID Golden 已有；Schema 未见 | `pending_evidence` | 可信入口、Request ID、Principal/Scope 传播、异步 Context、取消和出站 Header 覆盖 |
 | PLAT-CTR-003 | 身份、授权、ServiceKey、Secret 边界 | Platform（认证原语）；Server（入口装配）；领域（资源授权） | Server、Data、News、Research、Quant、Researchflow、WebUI | doc/platform/08 第2～3节及第18节候选定义；DEC-PLAT-002-017 | Bearer/Session 原语版本待核验；完整 Principal/Session 契约定义未登记 | `pending_evidence` | 身份类型和凭证隔离语义已有决议；Platform Session 候选接口仍未形成权威冻结定义。Server 路由接入、WebUI 登录和部署证据属于后续实现符合性，不作为本轮门禁。资源授权仍归领域 Owner |
 | PLAT-CTR-004 | Diagnostics Observation 与 Runner | Platform（Runner）；领域（reason_code/质量语义） | Server、各领域模块、WebUI | doc/platform/08 第7、14、24节；PLAT-CTR-004 Schema/Golden | 1.0.0（Observation Schema / 2 Golden） | `pending_evidence` | Schema 将 attributes 限定为 string，而规范描述为结构化 scalar；UTC、reason_code 条件约束及 Runner 聚合语义需统一为一份完整权威定义。Adapter/真实消费者测试不纳入本轮 |
@@ -734,8 +734,8 @@ INT-CTR-001 是 43 个正式 CTR 之一，覆盖 Quant、Research、Researchflow
 
 | 状态 | 数量 | 含义 |
 |---|---:|---|
-| freeze-ready | 6 | GOV-CTR-001～006；公共规则定义完整，可提交项目负责人确认冻结 |
-| pending-evidence | 35 | 公开契约定义/Schema/权威映射仍有缺口 |
+| freeze-ready | 7 | GOV-CTR-001～006、PLAT-CTR-001；公共规则与 Fault/HTTP 错误投影定义完整，可提交项目负责人确认冻结 |
+| pending-evidence | 34 | 公开契约定义/Schema/权威映射仍有缺口 |
 | pending-decision | 0 | 本轮五项待决均已由 DEC-PLAT-002-028～032 裁决 |
 | blocked | 0 | 当前没有无法通过权威决议消解的公开定义冲突 |
 | not_applicable | 2 | DATA-CTR-003、NTF-CTR-003；仅模块内部 Provider/Channel SPI，不属于跨模块公开契约 |
@@ -756,8 +756,8 @@ INT-CTR-001 是 43 个正式 CTR 之一，覆盖 Quant、Research、Researchflow
 ### 24.3 阶段结论
 
 - 43 项正式 CTR 已全部完成本轮定义口径核定；不再保留“待审查模块/待全量盘点”的开放任务。
-- 当前未完成项为 35 项 pending-evidence；不再有 pending-decision。模块内部实现/测试/CI/部署事项仍不属于本轮契约定义冻结门禁。
-- GOV-CTR-001～006 已独立达到 freeze-ready；下一阶段按剩余 35 项 pending-evidence CTR 增量收敛。Quant/Research 仍按 DEC-PLAT-002-028～033 校准责任模块定义；不重新启动十模块全量扫描，不新增重复 CTR。
+- 当前未完成项为 34 项 pending-evidence；不再有 pending-decision。模块内部实现/测试/CI/部署事项仍不属于本轮契约定义冻结门禁。
+- GOV-CTR-001～006 已独立达到 freeze-ready；下一阶段按剩余 34 项 pending-evidence CTR 增量收敛。Quant/Research 仍按 DEC-PLAT-002-028～033 校准责任模块定义；不重新启动十模块全量扫描，不新增重复 CTR。
 
 
 ## 25. 五项待决裁决完成记录（2026-11-11）
@@ -888,3 +888,15 @@ INT-CTR-001 是 43 个正式 CTR 之一，覆盖 Quant、Research、Researchflow
 - 四类 Owner 的 subject/resource/purpose/content_level 映射、conditional/allowed/denied/unknown 语义、读取时当前授权复核、撤销/过期/竞态边界及 JCS+SHA-256 指纹算法均有唯一权威定义；Data AuthorizationRef 与 DATA-CTR-008 Snapshot Manifest Golden 的 resource_ref、subject_ref、purpose_code 已逐字段核对一致。
 - GOV-CTR-006 转为 `freeze-ready`。运行时 Owner/Consumer/CI/并发安全测试属于 L2 实现符合性，不阻断本轮项目级契约定义冻结。
 - 43 项统计更新为 6 freeze-ready、35 pending-evidence、0 pending-decision、2 not_applicable、0 frozen。
+
+
+## 34. PLAT-CTR-001 Fault 与 HTTP 错误投影契约定义收敛（2026-11-11）
+
+- Platform Fault 仅是进程内错误，不得直接 JSON 序列化；Cause、Dependency 和内部错误链不进入公开响应。Fault 的内部字段及 Validate 规则继续以 Platform 第 4 节为准。
+- 新增项目级唯一 HTTP Error Envelope：`{"error":{"class","code","message","retryable","request_id?"}}`。`request_id` 为兼容性可选字段；若返回，必须与响应头 `X-Request-ID` 一致。消费者必须以响应头为权威关联值，不得依赖 Body 字段存在。
+- 固定 Class→HTTP 状态映射：validation=400、unauthenticated=401、forbidden=403、not_found=404、conflict=409、unavailable=503、timeout=504、internal=500。不得通过新增 Class 暗中扩展；新增类别须升级契约。
+- `code` 使用稳定、机器可读、带 Owner 命名空间的标识；Owner 负责其命名空间内的错误码词汇与语义，禁止复用、临时拼接请求数据或将凭证/上游原文写入 Code。
+- `message` 是可公开的脱敏摘要，不得包含 Cause、SQL/DSN、Token/Key、完整 Provider 响应或堆栈。内部 Fault 的 SafeMessage 映射为公开 message。
+- `retryable` 只是技术重试候选提示；仅 unavailable/timeout 可为 true。它不要求消费者重试；重试仍受幂等性、策略、预算和总 Deadline 约束。Retry-After 只有在服务端明确给出等待时间时才返回，不由 retryable 自动推导。
+- 已新增项目级 HTTP Error Schema 和覆盖 8 种 Class/状态码映射的 Golden。PLAT-CTR-001 转为 `freeze-ready`；模块各自错误码目录、Fault 生产/HTTP Adapter 映射测试和消费者行为属于 L2 实现符合性，不阻断本轮定义冻结。
+- 43 项统计更新为 7 freeze-ready、34 pending-evidence、0 pending-decision、2 not_applicable、0 frozen。
