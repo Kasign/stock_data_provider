@@ -175,7 +175,7 @@ GitHub 远端 ref 核验（2026-11-10）：
 | DATA-CTR-005 | 精度保真的跨模块日线 DTO（v2） | Data | Quant、Researchflow | internal/marketdata/app/port.go；internal/marketdata/httpapi/openapi.yaml；DEC-PLAT-002-009；Quant/Research 公开 DTO 字段级契约 | v1.1.0 HTTP number / InProcess float64；v2 Decimal Schema 未发现 | `pending_evidence` | 当前 HTTP 与 Application Port 均为 number/float64；仓库未发现 DailyBarsV2、Decimal DTO、v2 Schema/Golden。DEC-009 明确保留 v1、不静默改类型；v2 仍缺消费者输入边界、精度/scale/舍入/缺失语义及版本定义 |
 | DATA-CTR-006 | Data HTTP API 调用认证 | Data HTTP Adapter；Server 负责默认 Root 入口和 Remote Adapter Secret | Server Remote Data Adapter；仅远程兼容模式下的受控 HTTP 调用方 | [DATA-CTR-006 认证契约](./rules/DATA-CTR-006-Data-HTTP-API调用认证契约.md)；internal/marketdata/httpapi/openapi.yaml；Data服务间认证映射与Secret注入设计.md；DEC-PLAT-002-017/038/041 | 1.0.0（远程 X-API-Key；同进程可信 Principal Context） | `pending_evidence` | 目标语义已收敛：默认同进程由 Root Server 注入可信 Context；远程兼容仅 X-API-Key，禁止 Bearer 别名，健康接口匿名。现有 OpenAPI 顶层 ApiKey/BearerAuth OR、Handler Bearer fallback、测试 Bearer 成功用例均违约；需 Data 责任范围同步后再核验 |
 | DATA-CTR-007 | Research Data Snapshot/Evidence 消费边界 | Data（数据事实）；Research（Evidence）；Server（Adapter 注入） | Research、Researchflow | internal/marketdata/app/port.go；DATA-CTR-008 Manifest Schema/Golden；DEC-PLAT-002-020；Quant-Research 公开 DTO 字段级契约 | DailyBarsSnapshot 当前 DTO；DATA-CTR-008 Manifest 1.0.0；内容 DTO/引用映射未定义 | `pending_evidence` | DailyBarsSnapshot 返回 bars 但不含 snapshot_ref/Manifest/AuthorizationRef；Bundle.snapshot_id 未证明等同内容寻址 SnapshotRef。DATA-CTR-008 Manifest 仅记录范围/来源版本元数据，不包含行情内容或 payload Schema。缺少不可变内容定位、DailyBarsV2/质量单位字段和 Research Evidence source_ref/version/locator 的权威映射 |
-| DATA-CTR-008 | Data AuthorizationRef 签发与快照访问审计 | Data | Quant、Research | DATA-CTR-008 Snapshot Manifest Schema/Golden；GOV-CTR-006 AuthorizationRef/PolicySnapshot | 1.0.0（Snapshot Manifest Schema/Golden） | `pending_evidence` | Manifest 字段与 JCS/SHA-256 规则已定义；Schema 未约束 system_as_of 的 UTC 形式、sources 规范排序/去重完整语义；Data caller_ref、Scope/purpose 到可信主体及授权读取复核的公开映射仍需收敛 |
+| DATA-CTR-008 | Data AuthorizationRef 签发与快照访问审计 | Data | Quant、Research | DATA-CTR-008 Snapshot Manifest Schema/Golden；GOV-CTR-006；DEC-PLAT-002-038/041 | 1.0.0（Snapshot Manifest Schema/Golden） | `pending_evidence` | Manifest 的 UTC、sources tuple 排序/唯一性尚未由 Schema/Validator 完整约束；caller_ref 必须等于可信 Principal 的 AuthorizationRef.subject_ref，API Key 不可作为主体，但远程可信 caller 传递机制未定义；Scope/purpose 映射及读取时当前策略复核仍缺 Data 权威契约 |
 | NEWS-CTR-001 | News 只读 Evidence Query Facade | News | Research、Researchflow | doc/news/新闻API契约.md 第11节；doc/news/schema/NEWS-CTR-001-*；doc/news/golden/NEWS-CTR-001-* | 1.0.0（4 Schema / 3 Golden） | `pending_evidence` | Application Port 查询定义已较完整；Schema 与文字存在 business_time nullable、UTC、system_observed_at 字段语义及 relation_refs 未提供/空集合状态差异，需统一公开 DTO 定义。未来 HTTP OpenAPI 草案不属于当前活动接口 |
 | NEWS-CTR-002 | AuthorizationRef 与内容访问授权 | News（授权决策 Owner） | Research、Researchflow | doc/news/新闻来源授权矩阵.md 第10节；NEWS-CTR-002 Authorization Binding Schema/Golden；GOV-CTR-006 | 1.0.0（Authorization Binding Schema/Golden） | `pending_evidence` | News-specific caller/resource/purpose/content_level 与 Provider/Source/Endpoint 策略交集已定义；仍依赖 GOV-CTR-006 的时间/规范排序及通用授权快照适用语义收敛 |
 | NEWS-CTR-003 | News PIT、稳定 Cursor、排序与去重 | News | Research、Researchflow | doc/news/新闻API契约.md 第11.3/11.6/11.9节；NEWS-CTR-001 Cursor Claims Schema；doc/news/新闻数据模型与质量契约.md | 复用 NEWS-CTR-001 1.0.0 Cursor Schema；无独立 CTR-003 Schema | `pending_evidence` | PIT 过滤、15分钟快照、HMAC Cursor、排序版本已有定义；system_observed_at 与 observation/first_observed_at 权威归属不一致，且 Evidence relation_refs 未表达 DEC-021 的 not_provided 与 confirmed-empty 区分 |
@@ -1225,4 +1225,37 @@ DEC-027 不只是禁止 DragonTiger 的七个 Provider 金额字段；它确立�
 - Provider 内部精度算法、数据库内部快照实现、模块单测和 WebUI 展示不是本轮项目级公开契约定义门禁；只有其产生/消费的公开 DTO、引用和字段语义纳入本轮。
 
 **结论：DATA-CTR-005/007 的缺口已从笼统的“v2 未定义”细化为可执行的契约定义任务；43 项状态统计不变。**
+
+
+
+## 48. DATA-CTR-008 Snapshot Manifest 与可信授权绑定复核（2026-11-11）
+
+### 48.1 Manifest 机器定义核对
+
+固定代码基线：`origin/integration @ b6dfc85ba214fe16268c8cba780641a8bfe15086`。
+
+- `doc/整体任务规划/schema/DATA-CTR-008-snapshot-manifest-1.0.0.schema.json` 已定义 Manifest 必需字段、purpose_code 枚举、SnapshotRef 与 fingerprint 格式、sources 非空数组。
+- Schema 的 `system_as_of` 只声明 `format: date-time`，没有约束 UTC `Z`；JSON Schema format 本身不等于 UTC 约束。
+- `sources` 声明 `uniqueItems: true`，只能阻止完全相同对象重复，不能阻止相同 `source_ref` 搭配不同 `source_version` 的 tuple 重复，也不能表达按 `(source_ref, source_version)` 字典序排序。
+- 当前 Golden 只有一个 source 项，不能验证多 source 的排序、tuple 唯一和规范化稳定性。
+- Manifest fingerprint 的文字算法已定义为：排除 `snapshot_ref` 与 `manifest_fingerprint` 后，对其余字段执行 RFC 8785 JCS + SHA-256；`snapshot_ref` 为 `data_snapshot:sha256:<fingerprint>`。但 Schema/Golden 尚未覆盖全部排序与 UTC 约束边界。
+
+### 48.2 可信 caller 与 AuthorizationRef 绑定
+
+- DEC-PLAT-002-038 已明确：Manifest `caller_ref` 必须与对应 AuthorizationRef.subject_ref 完全一致；二者均来自 Server 注入的可信 Principal/Scope Context，不能由请求体、普通 Header 或 Query 自报。
+- Data API Key/Remote Service Credential 只认证 Remote Adapter/服务调用方，不得直接作为 `caller_ref` 或 `subject_ref`；DEC-PLAT-002-041 已进一步明确 X-API-Key 不是逻辑调用主体。
+- GOV-CTR-006 已要求 Data 的 AuthorizationRef.resource_ref 与 Manifest.snapshot_ref 逐字一致，purpose_code 一致；Manifest 指纹和 AuthorizationRef 指纹必须分别验证。
+- 当前 Data 服务间认证设计仍有“API Key 认证后映射 caller principal”的旧表述，与 DEC-038/041 的主体隔离原则不完全一致；需要以决议为准校准。
+- 默认同进程模式可从 Root Server 注入的可信 Principal Context 取得逻辑主体；远程兼容模式下，X-API-Key 只能证明 Remote Adapter 身份，如何在不信任普通客户端声明的前提下保留原始逻辑 caller，尚无独立的受信任传递/绑定契约。
+- `purpose_code` 的枚举已在 Manifest Schema 中定义，但请求入口如何将可信 Principal Scope 与 purpose_code 组合校验、谁负责签发 Data AuthorizationRef、每次 Snapshot 读取如何与当前策略版本保持同一可证明边界，尚未形成完整 Data 权威定义。
+
+### 48.3 核定结论
+
+1. DATA-CTR-008 已有 Manifest Schema/Golden 和指纹文字算法，不应将其描述为“完全没有机器契约”。
+2. 现有机器定义仍缺 UTC 形式约束、sources tuple 唯一/排序的语义校验，以及跨 Manifest/AuthorizationRef 的字段一致性校验。
+3. 可信 caller 的同进程来源已由 DEC-038 明确；远程模式不得把 API Key 直接转为 caller_ref，缺少可信 caller 传递协议时不得降级信任客户端自报值。
+4. Manifest 是查询范围/来源版本的授权与审计元数据，不等同行情正文；行情内容定位与 Evidence 映射仍由 DATA-CTR-007 处理。
+5. 本轮不新增项目级语义决议，不修改 Data Schema/Golden/代码或其他模块；后续若启用远程授权 Snapshot 能力，必须先补可信 caller 传递契约，否则该路径 fail closed。
+
+**结论：DATA-CTR-008 继续保持 pending_evidence；其缺口已收敛为 UTC/排序 Validator、跨对象绑定、可信 caller/Scope/purpose 和读取时授权复核。**
 
