@@ -253,6 +253,9 @@ func (m Manifest) Verify() error {
 	if !validNonBlank(m.ParameterFingerprint) {
 		return invalid("parameter_fingerprint")
 	}
+	if m.InputSnapshotRefs == nil {
+		return invalid("input_snapshot_refs must be an array")
+	}
 	if !strings.HasSuffix(m.SystemAsOf, "Z") {
 		return invalid("system_as_of must be UTC")
 	}
