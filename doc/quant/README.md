@@ -7,27 +7,34 @@
 
 ## 当前状态
 
-当前代码基线：`2c3c4720f5b1049b34f84cf1df25021525b13439`（2026-11-11）。
+当前代码基线：`532515aa327f0821006074752864ca6b71e0d109`（2026-11-11）。
 
-已具备首批 Indicator/Factor 纯计算、CalculationContext、基础 Registry、RiskDecision/RuleSet 执行框架、TrendResult DTO、Manifest/ResultRef 和 Repository Save Port/MemoryRepository。当前已按 DEC-PLAT-002-048 完成 Manifest 身份字段和 Ref 投影的代码/机器契约同步：
+已具备首批 Indicator/Factor 纯计算、CalculationContext、基础 Registry、RiskDecision/RuleSet 执行框架、TrendResult DTO、Manifest/ResultRef 和 Repository Save Port/MemoryRepository。当前完成的契约修正：
 
-- Manifest 必需绑定 `result_type`、`scope`、条件必需的 `security_id`、可选 `trade_date`、必需 `period`、`quality_status`、`result_status`，以及原有版本、算法、参数、时间、输入快照和 Payload 指纹字段。
-- 上述字段全部进入 RFC 8785 JCS + SHA-256 Manifest 指纹；`result_id` 由该指纹派生。空 `input_snapshot_refs=[]` 仍是合法结构，nil/null/省略拒绝。
-- `BuildRef` 的输入现在只接受 Ref 自身 `schema_version`、当前 `authorization_ref` 和记录 `created_at`；其他业务字段全部从已验证 Manifest 投影，避免调用方重复传入造成漂移。
-- 项目级 QNT-CTR-005 Schema/Golden、GOV-CTR-006 Quant AuthorizationRef Golden 已同步。当前 Manifest ResultID 为 `quant_result:sha256:97d6d042ef4202bf8879e4f5773803f53a9940033f791166443cdb5d2b371b5d`；GOV-CTR-006 `resource_ref` 已绑定该值，授权指纹为 `5b1e06a35a82faa85d1762ce339705f2eb1edd62dfd753d79a22151c141a3c83`。
+- DEC-PLAT-002-048：Manifest 已绑定 `scope`、条件必需的 `security_id`、可选 `trade_date`、必需 `period`、`quality_status`、`result_status`；六个字段全部进入 JCS 指纹和 ResultID。
+- Ref 投影已收敛：调用方只能提供 Ref 自身 `schema_version`、当前 `authorization_ref` 和记录 `created_at`；业务字段从已验证 Manifest 派生。
+- 项目级 QNT-CTR-005 Schema/Golden、GOV-CTR-006 AuthorizationRef Golden 已同步；Manifest ResultID 与 AuthorizationRef `resource_ref` 一致。
+- DEC-PLAT-002-049：Risk RuleSet 必须非空且至少含一个 block；所有 block 必须 required；Reason 唯一、severity 匹配、按规则集顺序输出；RiskDecision reasons 非空、status 与聚合结果一致、evaluated_at 不早于 system_as_of。
+- TrendResult 的每个 evidence Metric 必须与 TrendResult 使用相同 `system_as_of`。
 
-**CI 尚未对当前代码 SHA 完成验收。** Quant Workflow `43011022598` 与 Go test suite `43011022585` 对代码 SHA `2c3c4720f5b1049b34f84cf1df25021525b13439` 已触发，记录本文件时仍处于 queued/pending；不得提前标记通过。之前几轮 CI 暴露的格式、测试样本缺字段和 Schema 正则问题已修正，最终以当前 SHA 的完整结果为准。
+<badge color="success">Quant 专项 CI 通过</badge> Workflow `43012698608` 对代码 SHA `532515aa327f0821006074752864ca6b71e0d109` 的 gofmt、Quant 全量单测、Manifest Fuzz、Race、Vet 全部通过。
 
-项目级契约状态已校正：QNT-CTR-004 为 `pending_evidence`，因为完整 Envelope/IndicatorResultPayload/FactorResultPayload Schema/Golden 和 Risk/Payload 跨层 Validator 尚缺；QNT-CTR-005 的 Manifest 机器字段定义已对齐并恢复 `frozen`，但 DEC-PLAT-002-050 的运行时授权签发、每次读取重新授权、审计与 TOCTOU 门禁仍未完成。契约冻结不代表实现验收完成。
+**仓库级 Go Test Suite 未通过**（Workflow `43012698527`，同一代码 SHA）。失败来自其他模块：
+- LLM：`responses_json_test.go` string/rune 类型不匹配。
+- Notification：Migration 测试 uint64/int 类型不匹配，Application 多项投递生命周期测试失败。
+- Researchflow：`resultvalidation/composer.go` 引用未定义的 `validSourceOwner`、`evidenceGraphHasCycle`。
+Quant 专项工作流全部通过；未修改这些模块。
 
-当前主要外部阻塞：
+项目级状态：QNT-CTR-004 为 `pending_evidence`，因为 Envelope/IndicatorResultPayload/FactorResultPayload 机器定义和跨层 Validator 尚未完成；QNT-CTR-005 Manifest 字段定义已对齐并保持 `frozen`，但运行时授权仍未完成。
+
+当前剩余阻塞：
 - Data：DailyBars v2 Decimal 输入、真实 PIT/复权/交易日历及质量证据；没有真实数据证据，不标记真实数据验收通过。
-- Server/GOV：可信 Principal 注入、Quant Owner 当前策略授权 Adapter 与每次读取复核。
+- Quant/Envelope：当前没有完整 Envelope DTO/读取路径，不能完成 Trend/Risk/Indicator/Factor Payload 与 Envelope 的字段逐项一致性 Validator。
+- Quant 授权：Platform 已提供可信 `security.Principal` 和请求上下文读取能力；但 Quant 尚无 Application/GetResult/Envelope 读取入口、PolicySnapshot Provider 和审计/原子授权读取实现。不能将 Principal 已存在误报为 Quant 运行时授权已完成。
 - Platform/Server：正式 Storage/事务接入、根 Migration 注册和统一 Diagnostics 装配。
 - Researchflow：ResolvedTemplate 空输入授权校验及完整消费者 Contract Test。
-- Quant：Risk RuleSet 完整性/聚合与 Trend/Risk/Indicator/Factor Payload 对 Envelope 的跨层语义 Validator。
 
-空快照目前仅完成 Manifest/Ref/Schema 结构支持。真正允许空输入仍要求 Researchflow 校验 `ResolvedTemplate.allow_empty_inputs=true`，Quant 校验可信 Principal、已注册用例和 Registry 无外部事实依赖声明；当前没有完整 Application 门禁，不能宣称空输入端到端授权验收通过。
+空快照目前仅完成 Manifest/Ref/Schema 结构支持。真正允许空输入仍要求 Researchflow 校验 `ResolvedTemplate.allow_empty_inputs=true`，Quant 校验可信 Principal、已注册用例和 Registry 无外部事实依赖声明；当前没有完整 Application 门禁，不能宣称端到端授权验收通过。
 
 ## 文档索引
 
