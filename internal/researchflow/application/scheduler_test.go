@@ -87,10 +87,10 @@ func TestBuildSchedulePlanWaitsForNonTerminalDependency(t *testing.T) {
 
 func TestBuildSchedulePlanRejectsInvalidRunAndMissingDependency(t *testing.T) {
 	run, now := schedulerFixture()
-	queued := run
-	queued.Status = domain.RunQueued
-	if _, err := BuildSchedulePlan(context.Background(), queued, nil, nil, 1, now, nil); err == nil {
-		t.Fatal("queued Run must not be scheduled")
+	cancelling := run
+	cancelling.Status = domain.RunCancelling
+	if _, err := BuildSchedulePlan(context.Background(), cancelling, nil, nil, 1, now, nil); err == nil {
+		t.Fatal("cancelling Run must not be scheduled")
 	}
 	stages := []domain.Stage{{Ref: "stage-a", RunRef: run.Ref, Code: "industry", Status: domain.StagePending, Dependencies: []string{"missing"}}}
 	if _, err := BuildSchedulePlan(context.Background(), run, stages, nil, 1, now, nil); err == nil {
