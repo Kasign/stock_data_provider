@@ -1281,3 +1281,14 @@ PLAT-002 的项目级决策收敛已完成；**PLAT-002 项目整体不宣告完
 
 不纳入：算法正确性、单元/Golden 测试、Repository 并发、真实 Data Adapter、授权竞态和 CI。  
 下一批：Research 公开契约定义核定；两个待决项等待项目负责人裁决，不由审查者代选。
+
+## 45. Research 首批公开契约定义核定（2026-11-11）
+
+| 契约 | 状态 | 结论 |
+|---|---|---|
+| RSC-CTR-001 | pending_evidence | Evidence Schema/Golden 已有；UTC 精度、source_version 条件适用映射及 PIT 跨字段约束尚未与机器定义完整对齐 |
+| RSC-CTR-002 | pending_decision | RSC-OPEN-003 Event 规范化规则版本、RSC-OPEN-004 Event 合并/拆分来源关系、RSC-OPEN-005 Claim/Hypothesis supersedes_version 三项仍会改变公开 DTO 结构 |
+
+ResearchContext 归 FLOW-CTR-003，不属于 RSC-CTR-001 Evidence。RSC-DEC-001/002 已确认，不重开；RSC-OPEN-007 不阻断当前 Evidence 契约；Server Relay、Repository、MariaDB、Outbox 和授权竞态测试不属于本轮。
+
+本批 2 项：1 项 pending_evidence、1 项 pending_decision。当前项目级 pending_decision 合计 5 项（QNT-DEC-01/02 + RSC-OPEN-003/004/005）。无新增 CTR。
