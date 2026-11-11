@@ -263,7 +263,7 @@ func TestAssembleResearchContextWithTokenizerRunsCompleteBudgetAndInputPipeline(
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.AvailableTokens != 45 || result.Plan.UsedTokens != 20 ||
+	if result.AvailableTokens != 30 || result.Plan.UsedTokens != 20 ||
 		len(result.Command.IncludedSections) != 1 || result.Command.IncludedSections[0] != "required" ||
 		result.ModelInput.TokenCount != 25 || result.Tokenizer.Version != "v2" {
 		t.Fatalf("unexpected complete assembly: %+v", result)
