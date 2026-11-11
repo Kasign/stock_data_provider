@@ -1155,3 +1155,13 @@
 - WebUI 只需消费 *_cny 等标准化公开字段；不应知道 Provider 类型、内部字段名、金额单位识别和换算规则。真实 Provider 专项测试属于 Data 内部质量门禁；WebUI 渲染测试属于 WebUI 自身质量门禁，均不构成新增跨模块契约字段。
 - 状态：DEC-027 项目级语义已 accepted；Data DTO/OpenAPI/Golden 尚未落实新字段边界，保持 pending_evidence。未新增 CTR；不改变 CTR-043 原始问题定义。
 - 本轮只更新契约决议和审计文档，未修改 Data/WebUI 代码、OpenAPI、Golden 或测试，未执行 CI。详细依据见差异矩阵第39节。
+
+
+## 39. CTR-047 退役归类与 DEC-019 适用范围更正（2026-11-11）
+
+- DEC-018 已明确旧 Analysis API、Task/Run 路由和旧 StageEvent HTTP 契约退役，不保留兼容期；WebUI 直接切换 Researchflow 新 API。
+- CTR-047 原本审查旧 CreateTask/AnalysisRequest HTTP DTO。因其公开接口目标已被正式撤销，CTR-047 标记为 \`withdrawn_by_scope_decision\`，不再要求旧 API Schema、Handler、错误码和 Contract Test 补证。
+- DEC-019 的 TaskType 拒绝、symbols 上限100、旧异步 Task ID、同步 Run 显式 run_id 幂等/409 规则仅属于旧 Analysis HTTP 请求历史裁决，不得转移成 Researchflow 新 API 约束。
+- Researchflow 新 API 使用独立 CreateRunCommand/版本化 DTO；其 CreateRun 幂等键按可信调用主体与操作范围作用，使用 \`idempotency_key\` 和规范化 fingerprint；Run 引用由 Researchflow 生成。参数限制由 Template/Parameter Schema 定义。
+- 本次更正不代表旧 API 代码已删除，也不代表 Researchflow 新 API 已完成接入验收；仅撤销旧 CreateTask 公共契约的活动冻结任务。新 API 证据继续归 FLOW-CTR-001～004 等既有正式契约，不新增 CTR。
+- 本轮只更新 \`feat/design_doc\` 项目级契约决议解释及审计登记；未修改 Server、Researchflow、WebUI 责任分支代码，未执行测试或 CI。
