@@ -6,7 +6,7 @@
 - 固定代码审计基线：`origin/integration @ b6dfc85ba214fe16268c8cba780641a8bfe15086`；仅对该 SHA 的代码事实作结论，不随分支 HEAD 自动漂移
 - 登记簿版本：`0.2.58-review`
 - 当前状态：`L1_final_review_complete_pending_owner_freeze_confirmation`
-- 当前状态统计（本轮最终收敛前快照）：43 项正式 CTR；14 freeze-ready、27 pending_evidence、0 pending-decision、2 not_applicable、0 frozen。该统计仅为起始快照，不代表最终复核结论。
+- 当前状态统计（最终收敛）：43 项正式 CTR；37 freeze-ready、4 deferred、0 pending_evidence、0 pending-decision、2 not_applicable、0 frozen。
 - 项目级决策：DEC-PLAT-002-018～051 已记录；当前 pending-decision 为 0。DATA-FLOW-B、LLM-FLOW-B 保持条件性 deferred
 - 决策责任：项目负责人；根据明确授权，DEC-PLAT-002-028～051 的技术取舍由 ChatGPT 代为 Review/裁决，并在决议中标记授权来源
 - 复核原则：本轮只冻结契约定义；模块实现符合性、内部测试、CI、部署另行跟踪，不得混入本轮冻结门禁
