@@ -9,7 +9,7 @@
 
 当前代码基线：`aec6ecf2d31ee7a2ee93892b569c553544c3c7e7`（2026-11-11）。
 
-已具备首批 Indicator/Factor 纯计算、CalculationContext、基础 Registry、RiskDecision/RuleSet 执行框架、TrendResult DTO、Manifest/ResultRef 和 Repository Save Port/MemoryRepository。最近代码调整将 Manifest 必需字段对齐 QNT-CTR-005 Schema，并按 DEC-PLAT-002-029 统一空快照数组语义：
+已具备首批 Indicator/Factor 纯计算、CalculationContext、基础 Registry、RiskDecision/RuleSet 执行框架、TrendResult DTO、Manifest/ResultRef 和 Repository Save Port/MemoryRepository。最近代码调整已对齐当前旧版 QNT-CTR-005 Schema 中已有的 Manifest 字段，并按 DEC-PLAT-002-029 统一空快照数组结构语义；但继续核对 DEC-PLAT-002-048 后确认 Manifest 仍缺少六个结果身份字段（scope、security_id、trade_date、period、quality_status、result_status），Ref 仍允许调用方独立传入这些字段，尚未满足完整字段级契约：
 
 - Manifest / QuantResultRef 的 `input_snapshot_refs` 必须是数组；显式空数组 `[]` 可表示无外部事实快照，nil/null/省略仍拒绝。
 - QuantResultRef Schema 不再要求数组至少一项；Go 投影和 Record 快照保留非 nil 空切片，JSON 序列化为 `[]`。
