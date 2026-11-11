@@ -6,7 +6,7 @@
 - 固定代码审计基线：`origin/integration @ b6dfc85ba214fe16268c8cba780641a8bfe15086`；仅对该 SHA 的代码事实作结论，不随分支 HEAD 自动漂移
 - 登记簿版本：`0.2.37-review`
 - 当前状态：`L1_frozen_contract_definition_review_in_progress`
-- 当前状态统计：43 项正式 CTR；13 freeze-ready、28 pending_evidence、0 pending-decision、2 not_applicable、0 frozen。项目级语义待决已清零；各 CTR 仍按自身证据门禁收敛。
+- 当前状态统计：43 项正式 CTR；14 freeze-ready、27 pending_evidence、0 pending-decision、2 not_applicable、0 frozen。项目级语义待决已清零；各 CTR 仍按自身证据门禁收敛。
 - 项目级决策：DEC-PLAT-002-018～040 已记录；当前 pending-decision 为 0。DATA-FLOW-B、LLM-FLOW-B 保持条件性 deferred
 - 决策责任：项目负责人；根据明确授权，DEC-PLAT-002-028～040 的技术取舍由 ChatGPT 代为 Review/裁决，并在决议中标记授权来源
 - 复核原则：本轮只冻结契约定义；模块实现符合性、内部测试、CI、部署另行跟踪，不得混入本轮冻结门禁
@@ -167,7 +167,7 @@ GitHub 远端 ref 核验（2026-11-10）：
 | PLAT-CTR-004 | Diagnostics Observation 与 Runner | Platform（Runner）；领域（reason_code/质量语义） | Root Server、各领域 Check Adapter | [PLAT-CTR-004 Diagnostics 契约](./rules/PLAT-CTR-004-Diagnostics-Observation与Runner契约.md)；Observation 1.0.0 Schema/2 Golden；`internal/platform/diagnostics/**` | 1.0.0（Observation Schema / 2 Golden；Go Runner 等价强类型定义） | `freeze-ready` | Observation 字段/五态/reason_code/UTC/纳秒 duration/字符串 attributes 边界、Schema 与 Go Validator 职责、Check API 和 Runner 聚合优先级已统一；完整 HTTP Report 归 Server CTR |
 | PLAT-CTR-005 | HTTP Client、SSRF 与出口安全 | Platform | Data、News、LLM 及其他出站消费者 | [PLAT-CTR-005 HTTP Client 契约](./rules/PLAT-CTR-005-HTTP-Client与SSRF契约.md)；doc/platform/05、08 第8节、15；`internal/platform/httpclient/**` | 1.0.0（Go API 强类型契约；JSON Schema 不适用） | `freeze-ready` | Config/Client/BoundDoer/Do/OpenStream/StreamResponse 的 API、DestinationPolicy 精确 allowlist、DNS/IP 绑定、同源重定向、缓冲重试与流式资源生命周期/限额均已版本化；消费者 A2 和生产网络 A3 属实现符合性，不阻断定义冻结 |
 | PLAT-CTR-006 | Storage、Repository、Migration 生命周期 | Platform（连接/Runner）；领域（Repository/Schema/Migration 内容）；Server（汇总注册） | 所有持久化模块 | [PLAT-CTR-006 Storage 与 Migration 契约](./rules/PLAT-CTR-006-Storage与Migration契约.md)；doc/platform/05 第2～4节；doc/platform/08 第9节；`internal/platform/storage` | 1.0.0（Go API 强类型契约；JSON Schema 不适用） | `freeze-ready` | SQL/Redis 连接 API、默认值/上限/资源所有权、Migration 强类型输入、namespace/checksum/History/锁/失败恢复语义已明确；Server 注册与全局 Ready/Shutdown 编排属于 SRV-CTR-001 实现符合性 |
-| PLAT-CTR-007 | Typed Config 与 Secret 生命周期 | Platform（基础解析/脱敏）；各模块（配置 Schema）；Server（Bootstrap） | Server、所有服务端模块 | doc/platform/08 第 6 节；各模块 Config | Config API 版本待核验；Schema 未见 | `pending_evidence` | 配置所有权、读取时点、不可变快照、Secret 注入/轮换/脱敏和启动校验 |
+| PLAT-CTR-007 | Typed Config 与 Secret 生命周期 | Platform（基础解析/脱敏）；各模块（配置 Schema）；Server（Bootstrap） | Server、所有服务端模块 | [PLAT-CTR-007 Typed Config 与 Secret 契约](./rules/PLAT-CTR-007-Typed-Config与Secret契约.md)；doc/platform/08 第6节；`internal/platform/config/**` | 1.0.0（Go API 强类型契约；JSON Schema 不适用） | `freeze-ready` | Env/Secret/基础校验 API、fallback/解析错误、脱敏、DotEnv 加载边界、不可变配置快照与重启轮换语义已明确；模块 Config Schema 和部署 Secret 注入属于各模块/Server 实现符合性 |
 | DATA-CTR-001 | 标准数据 DTO、JSON/OpenAPI、字段缺失语义 | Data | Quant、Researchflow、Research（适用范围）、Server、WebUI | internal/marketdata/httpapi/openapi.yaml；doc/api/contracts/数据层API清单.md（存在过期路径/认证描述） | OpenAPI 1.1.0；字段级映射未形成完整基线 | `pending_evidence` | 公开 DTO 的字段存在/缺失/null/零值/required 语义映射不完整；DragonTiger DTO 仍暴露 DEC-027 明确禁止的 Provider 原始金额/单位字段；API 清单仍引用旧 OpenAPI 路径和旧浏览器 Key 模型 |
 | DATA-CTR-002 | 行情单位、复权、交易日和时间口径 | Data | Quant、Researchflow、Research、Server | doc/api/contracts/数据质量与状态契约.md；internal/marketdata/httpapi/openapi.yaml | 领域规则版本未登记 | `pending_evidence` | 通用单位/质量/复权/PIT 原则已有；Quote/DailyBar/Index/Financial 等字段到 provider_time、available_at、fetched_at、normalized_at、system_observed_at 的映射及各数据域单位适用表仍不完整 |
 | DATA-CTR-003 | Provider 原始值标准化与精度保真 | Data 内部 Provider Adapter | Data 内部 Provider Adapter | doc/api/数据侧整体规划.md（仅内部适配约定） | 不属于跨模块公开契约版本 | `not_applicable` | 仅 Data 内部 Provider 标准化规则，不存在跨模块公开消费者；从 PLAT-002 跨模块契约冻结门禁排除，不再追踪 Provider Fixture/专项测试 |
@@ -734,8 +734,8 @@ INT-CTR-001 是 43 个正式 CTR 之一，覆盖 Quant、Research、Researchflow
 
 | 状态 | 数量 | 含义 |
 |---|---:|---|
-| freeze-ready | 13 | GOV-CTR-001～006、PLAT-CTR-001～006、LLM-CTR-003；公共规则、错误投影、Request Context、Security、Diagnostics、HTTP Client 与 Storage/Migration 定义完整，可提交项目负责人确认冻结 |
-| pending-evidence | 28 | 公开契约定义/Schema/权威映射仍有缺口 |
+| freeze-ready | 14 | GOV-CTR-001～006、PLAT-CTR-001～007、LLM-CTR-003；公共规则、错误投影、Request Context、Security、Diagnostics、HTTP Client、Storage/Migration 与 Config/Secret 定义完整，可提交项目负责人确认冻结 |
+| pending-evidence | 27 | 公开契约定义/Schema/权威映射仍有缺口 |
 | pending-decision | 0 | 本轮五项待决均已由 DEC-PLAT-002-028～032 裁决 |
 | blocked | 0 | 当前没有无法通过权威决议消解的公开定义冲突 |
 | not_applicable | 2 | DATA-CTR-003、NTF-CTR-003；仅模块内部 Provider/Channel SPI，不属于跨模块公开契约 |
@@ -757,7 +757,7 @@ INT-CTR-001 是 43 个正式 CTR 之一，覆盖 Quant、Research、Researchflow
 
 - 43 项正式 CTR 已全部完成本轮定义口径核定；不再保留“待审查模块/待全量盘点”的开放任务。
 - 当前未完成项为 30 项 pending-evidence；不再有 pending-decision。模块内部实现/测试/CI/部署事项仍不属于本轮契约定义冻结门禁。
-- GOV-CTR-001～006、PLAT-CTR-001～006 与 LLM-CTR-003 已达到 freeze-ready；下一阶段按剩余 30 项 pending-evidence CTR 增量收敛。不重新启动十模块全量扫描，不新增重复 CTR。
+- GOV-CTR-001～006、PLAT-CTR-001～007 与 LLM-CTR-003 已达到 freeze-ready；下一阶段按剩余 30 项 pending-evidence CTR 增量收敛。不重新启动十模块全量扫描，不新增重复 CTR。
 
 
 ## 25. 五项待决裁决完成记录（2026-11-11）
@@ -1046,4 +1046,33 @@ INT-CTR-001 是 43 个正式 CTR 之一，覆盖 Quant、Research、Researchflow
 - 未发现需要新增项目级语义决议的未决取舍；不修改 Platform/Server/领域业务代码或其他分支。
 
 **结论：PLAT-CTR-006 由 `pending_evidence` 调整为 `freeze-ready`，契约版本 1.0.0。**
+
+
+
+## 42. PLAT-CTR-007 Typed Config 与 Secret 生命周期契约定义收敛（2026-11-11）
+
+### 42.1 权威定义与审计基线
+
+- 新增唯一项目级规则文件：`doc/contract/rules/PLAT-CTR-007-Typed-Config与Secret契约.md`，版本 1.0.0。
+- 核对设计来源：`doc/platform/08-公共平台契约规范.md` 第6节。
+- 对照代码基线：`origin/integration @ b6dfc85ba214fe16268c8cba780641a8bfe15086`；核对 `internal/platform/config/env.go` 与 `dotenv.go`。
+- 本契约只定义 Platform 配置读取/Secret 原语；各模块 Config Schema、业务默认值和 Server 部署装配不属于本契约。
+
+### 42.2 定义收敛
+
+已明确并版本化：
+1. Env 的构造、Key 字符集、String/RequiredString/Bool/Int/Duration 的缺失、fallback、解析和错误脱敏语义。
+2. Secret 的可选/必填读取、Configured/IsZero、唯一明文 Value 入口，以及 fmt/slog/JSON/Text 全路径脱敏。
+3. DotEnv 文件不存在、解析语法、进程环境优先、重复 Key 首次生效、先完整解析再写环境的行为。
+4. 基础值校验辅助与 errors.Join 语义；业务范围和跨字段校验由各模块负责。
+5. Bootstrap 配置快照、业务代码禁止直接读环境变量、Secret 轮换通过服务实例重建生效；明确不承诺 Go string 内存零化、热更新或 Secret Manager。
+
+### 42.3 冻结门禁判断
+
+- Platform、模块 Config Owner、Server Bootstrap 的职责边界明确。
+- 公开 API、缺失/fallback 语义、类型解析、Secret 明文访问、脱敏序列化、配置快照和轮换边界均有唯一强类型/文字权威定义。
+- 模块环境变量清单、业务 Config Schema、部署 Secret 注入与轮换演练属于模块/Server 实现符合性，不阻断本轮 Platform 公共契约定义冻结。
+- 未发现需要新增项目级语义决议的未决取舍；不修改 Platform/Server/领域业务代码或其他分支。
+
+**结论：PLAT-CTR-007 由 `pending_evidence` 调整为 `freeze-ready`，契约版本 1.0.0。**
 
