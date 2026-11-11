@@ -6,8 +6,8 @@
 - 固定代码审计基线：`origin/integration @ b6dfc85ba214fe16268c8cba780641a8bfe15086`；仅对该 SHA 的代码事实作结论，不随分支 HEAD 自动漂移
 - 登记簿版本：`0.2.29-review`
 - 当前状态：`L1_frozen_contract_definition_review_in_progress`
-- 冻结结论：43 个正式 CTR 已完成定义口径核定：1 freeze-ready、37 pending_evidence、3 pending_decision、2 not_applicable、0 frozen；5 项具体待决见第24节
-- 项目级决策：DEC-PLAT-002-018～027 已完成原有裁决；当前另有 5 项领域公开契约待决（QNT-DEC-01/02、RSC-OPEN-003/004/005）；DATA-FLOW-B、LLM-FLOW-B 保持条件性 deferred
+- 当前状态统计：43 项正式 CTR；5 freeze-ready、36 pending_evidence、0 pending-decision、2 not_applicable、0 frozen。项目级语义待决已清零；各 CTR 仍按自身证据门禁收敛。
+- 项目级决策：DEC-PLAT-002-018～037 已记录；当前 pending-decision 为 0。DATA-FLOW-B、LLM-FLOW-B 保持条件性 deferred
 - 决策责任：项目负责人
 - 复核原则：本轮只冻结契约定义；模块实现符合性、内部测试、CI、部署另行跟踪，不得混入本轮冻结门禁
 
@@ -160,7 +160,7 @@ GitHub 远端 ref 核验（2026-11-10）：
 | GOV-CTR-003 | ID、Request/Correlation/Event/Idempotency 作用域 | Platform 提供 Request ID 原语；各模块拥有领域 ID | Server、所有模块、Worker、事件消费者 | [GOV-CTR-003 公共标识符与幂等作用域规则](./rules/GOV-CTR-003-标识符与幂等作用域规则.md)；运行时传播见 PLAT-CTR-002；字段映射见各领域 CTR | 1.0.0 | `freeze-ready` | request/originating/correlation/event/idempotency/trace 身份职责、唯一性边界、重放冲突语义和 fingerprint 原则已版本化；Header/Context/Worker/事件 Envelope 的实际字段映射与执行证据仍由 PLAT/FLOW/NTF/各生产方 CTR 负责，不作为公共规则冻结阻断 |
 | GOV-CTR-004 | Schema 版本、兼容、废弃和迁移 | 各契约生产模块；项目级规则由治理登记 | 所有直接消费者 | [GOV-CTR-004 Schema 版本与兼容规则](./rules/GOV-CTR-004-Schema版本兼容与废弃规则.md)；逐 DTO/Event 版本矩阵见对应 CTR | 1.0.0 | `freeze-ready` | SemVer、破坏性变更边界、closed/open enum、未知字段策略、消费者支持版本、Schema/G​​olden 不可变、废弃和直接退役规则已版本化；逐 DTO/Event 兼容矩阵和消费者证据仍由各 CTR 负责，不作为公共规则冻结阻断 |
 | GOV-CTR-005 | 契约状态、冻结证据和变更审批 | 项目契约治理 | 所有模块 | doc/contract/README、登记簿第5节、决策记录、契约版本与变更记录 | 0.2.19-review（治理规则） | `freeze-ready` | 项目级定义冻结门禁、状态、版本变更/解冻记录规则已统一；模块实现符合性不混入契约定义冻结 |
-| GOV-CTR-006 | AuthorizationRef 公共审计快照结构与引用语义 | Data、News、Quant、Research 分别签发各自资源授权快照；公共结构由项目治理 | Research、Researchflow 及受限资源消费者 | 各模块签发 Schema；旧目录 GOV-CTR-006 机器契约/Golden | 1.0.0（2 Schema / 4 Golden） | `pending_evidence` | Principal/Resource 映射、Scope、purpose、snapshot fingerprint、过期/撤销、当前授权复核和竞态 |
+| GOV-CTR-006 | AuthorizationRef 公共审计快照结构与引用语义 | Data、News、Quant、Research 分别签发各自资源授权快照；公共结构由项目治理 | Research、Researchflow 及受限资源消费者 | GOV-CTR-006 AuthorizationRef/PolicySnapshot Schema/Golden；各 Owner 的 Scope/Resource 映射 | 1.0.0（2 Schema / 4 Golden） | `pending_evidence` | Schema 已约束 UTC RFC3339Nano 时间格式、conditions 去重、policies 非空/唯一；跨数组字典序、policy_version 与 snapshot_ref 绑定、JCS 指纹重算及 Data/News/Quant/Research 的 purpose/content_level/resource_ref 适用映射仍待 Owner 证据 |
 | PLAT-CTR-001 | Fault 结构与分类 | Platform | Server、所有服务端模块 | doc/platform/08 第 4 节；internal/platform/fault | Go API 版本待核验；未见独立 Schema/Golden | `pending_evidence` | Fault 内部结构、HTTP Error DTO、状态码、错误码注册、Retryable 语义和各模块映射 Golden |
 | PLAT-CTR-002 | Request Context 与身份关联原语 | Platform | Server、所有服务端模块、Worker | doc/platform/08 第 5 节；observability/security Context | Request ID Golden 已有；Schema 未见 | `pending_evidence` | 可信入口、Request ID、Principal/Scope 传播、异步 Context、取消和出站 Header 覆盖 |
 | PLAT-CTR-003 | 身份、授权、ServiceKey、Secret 边界 | Platform（认证原语）；Server（入口装配）；领域（资源授权） | Server、Data、News、Research、Quant、Researchflow、WebUI | doc/platform/08 第2～3节及第18节候选定义；DEC-PLAT-002-017 | Bearer/Session 原语版本待核验；完整 Principal/Session 契约定义未登记 | `pending_evidence` | 身份类型和凭证隔离语义已有决议；Platform Session 候选接口仍未形成权威冻结定义。Server 路由接入、WebUI 登录和部署证据属于后续实现符合性，不作为本轮门禁。资源授权仍归领域 Owner |

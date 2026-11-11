@@ -39,7 +39,8 @@
             "minLength": 1
           }
         }
-      }
+      },
+      "description": "策略快照必须至少包含一个实际生效策略；完整对象唯一由 Schema 校验，按三元组排序由语义 Validator 校验。"
     }
   }
 }
