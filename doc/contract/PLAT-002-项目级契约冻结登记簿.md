@@ -219,25 +219,33 @@ Platform 文档中的 P002-D01～D15 是 Platform 侧差异/待决事项索引�
 
 每项均须重新读取当前代码和直接消费者证据；本段只建立追踪关系，不自动继承 Platform 文档的关闭状态。
 
-## 5. 项目级冻结门禁
+## 5. PLAT-002 契约定义冻结门禁（范围更正）
 
-每一项契约必须完成以下适用门禁；不适用必须写理由：
+**本项目当前任务是冻结跨模块公开契约，不是验收模块实现。** 因此本节只规定“契约定义能否冻结”，不把模块内部实现质量、单元测试、模块内部 Provider 测试、CI、部署或真实依赖可用性作为契约定义冻结的前置条件。
 
-1. 生产方、直接消费者、Owner Role、调用方向和公开边界明确。
-2. 唯一权威字段定义路径、版本和兼容策略明确。
-3. 字段类型、必填/可空/缺失/零值、单位、精度、时间/PIT、ID 作用域明确。
-4. 错误分类、超时、取消、重试、降级和幂等语义明确。
-5. 身份、Scope、资源授权、Secret 和数据内容级别边界明确（适用时）。
-6. 存在可机器校验的 Schema 或等价契约定义。
-7. 正常、边界、异常、兼容 Golden 齐备（适用时）。
-8. 生产方序列化/行为 Contract Test 通过。
-9. 每个直接消费者的反序列化、字段映射和行为 Contract Test 通过；不能由同一份复制实现自测替代。
-10. 状态机、并发、幂等、重试、取消、恢复和竞态测试通过（适用时）。
-11. 记录测试命令、结果、精确代码 SHA、CI Run/测试报告链接。
-12. 迁移、废弃、回滚和版本兼容窗口明确。
-13. 生产环境依赖验收与契约冻结分层记录；不把 A1 包级通过冒充 A2/A3。
+每项公开契约只核对以下适用条件：
 
-缺少关键语义时为 `pending_decision`；语义明确但证据不足为 `pending_evidence`。只有全部适用门禁满足才允许 `frozen`。
+1. 生产方、直接消费者、Owner、调用方向和公开边界明确。
+2. 唯一权威定义位置、契约版本和适用范围明确。
+3. 公开字段/命令/事件的类型、必填、可空、缺失、零值、单位、精度、时间/PIT、ID/幂等作用域有明确语义。
+4. 状态、错误、超时、取消、重试、降级和幂等规则有明确语义（适用时）。
+5. 身份、Scope、资源授权、Secret 和内容级别边界明确（适用时）。
+6. 有可核对的机器 Schema，或对纯 InProcess Port 有等价的、唯一权威的强类型契约定义。
+7. 版本、兼容、废弃和迁移边界明确。
+8. 项目级语义决议已登记；不存在仍会改变公开契约的未决取舍。
+
+**不属于本轮冻结门禁：** 模块内部单元/集成测试、Provider 专项测试、实现正确性、CI、部署验收、真实 Provider/模型/通知渠道可用性、模块内部 Repository/Worker/Storage 生命周期测试。发现实现与已定义契约不一致时，分别记录实现偏差；不得因此反复修改正确的契约，也不得把内部测试缺失转成项目级契约待办。
+
+契约状态按以下口径判定：
+
+- `freeze-ready`：公开语义、权威定义和适用边界完整，可冻结；不代表实现已符合。
+- `pending-decision`：仍有会改变公开契约的业务/安全/协议取舍未裁决。
+- `pending-evidence`：公开契约定义本身缺少必要字段语义、机器 Schema/等价定义、版本或权威依据。
+- `blocked`：公开定义之间存在无法同时成立的冲突，尚不能确定应冻结哪一方。
+- `deferred`：有明确触发条件且不属于当前首期范围。
+- `frozen`：项目负责人确认冻结的契约版本；实现符合性另行跟踪，不与契约定义状态混算。
+
+生产方/消费者测试和 CI 可作为后续实现符合性证据，但不属于本轮“契约定义冻结”的必要条件。
 
 ## 6. 模块核验责任矩阵
 
@@ -346,3 +354,44 @@ PLAT-002 不因本次矩阵统计完成而结束。整体完成仍需：
 - B2～B8 按正式决议执行，详细语义和验收要求以项目级决策记录为准。
 - 本次批准只确认项目级契约语义和实现方向，不代表责任模块实现完成，也不改变第3节正式 CTR 状态。CTR 仍须分别满足 Schema、Golden、生产方/消费者 Contract Test、CI 和适用安全/兼容门禁后才能冻结。
 - 后续责任模块：Server/WebUI/Researchflow（B1/B2）；Data/Quant/Research（B3）；News/Research（B4）；News/Researchflow/Server（B5）；Quant/Researchflow/Server（B6）；Research/Researchflow（B7）；LLM/Researchflow/Server（B8）。
+
+## 13. 契约定义未完成项收敛（2026-11-11）
+
+本节按第5节更正后的“契约定义冻结”口径归类。它取代“43 个 CTR 全部 pending_evidence 就等于 43 份契约都未定义”的错误读法；第3节原状态是旧的综合证据状态快照，不能直接作为本轮契约定义冻结结论。此处不因缺模块内部测试、CI 或实现接线而保留契约待办。
+
+### 13.1 已完成的项目级语义裁决
+
+- DEC-PLAT-002-018～027 已完成项目级语义裁决；当前非条件性项目级 pending_decision 为 0。
+- DEC-018 旧 Analysis API 退役边界已明确；旧 Analysis HTTP 契约不再是活动冻结对象。
+- DEC-019 只保留为旧 API 历史裁决，不得迁移为 Researchflow 新 API 的请求约束。
+- DEC-020～025 已明确 Data Snapshot、News Evidence、News 输入物化、Quant ResultRef、Research Stage 读写和 LLM 请求/重试的关键职责语义。
+- DEC-027 已明确 Dragon Tiger 对外只暴露标准化 CNY 字段，不暴露 Provider 原始金额及单位字段。
+- DATA-FLOW-B、LLM-FLOW-B 是条件性 deferred，不计入首期未完成契约。
+
+### 13.2 仍需补齐的公开契约定义
+
+| 批次 | 契约编号 | 未完成的定义内容 | 不纳入本轮的事项 |
+|---|---|---|---|
+| 项目公共规则 | GOV-CTR-001～005 | 将 JSON/Decimal、时间/PIT、ID/幂等、Schema 版本兼容、契约变更规则落实为可引用的权威规则及字段适用映射；其中已 accepted 的原则不重开，只补尚缺的适用范围定义 | 各模块内部序列化测试、CI |
+| 公共授权 | GOV-CTR-006 | 公共 AuthorizationRef 已有 Schema/Golden；仍需明确各领域签发快照与消费者读取时的资源绑定、purpose、撤销/过期和当前授权复核语义 | 真实权限服务部署和竞态测试 |
+| Platform | PLAT-CTR-001～007 | Fault→公开错误投影、Request Context 可信传播、Session/Bearer/Service 身份边界、Diagnostics 必需字段与状态含义、出站 DestinationPolicy/流接口、Storage/Migration 所有权与生命周期、Config/Secret 注入边界；PLAT-CTR-004 已有 Schema，其他项需补权威机器定义或等价接口契约 | Server 实际接线、内部包测试、全模块部署 |
+| Data | DATA-CTR-001、002、004～008 | 规范 DTO 的字段级缺失/质量语义；行情单位/复权/交易日/PIT 映射；v2 Decimal 日线 Schema；InProcess 与 Remote 认证边界；DailyBarsV2 Snapshot/Evidence 引用；Data AuthorizationRef 的资源绑定与访问语义。DEC-027 的 Dragon Tiger 公开字段边界也须纳入对应公开 DTO 定义 | DATA-CTR-003 的 Provider 原始值归一化属于 Data 内部 Provider 适配约定，不作为跨模块公开契约冻结项；Provider 专项测试不纳入 |
+| News | NEWS-CTR-001～003 | Evidence Query 的公开输入/输出与过滤范围；内容授权绑定；system_as_of/available_at/版本观察、Cursor 稳定性、排序、去重及 Snapshot 生命周期。NEWS-CTR-003 尚缺独立机器定义 | Provider 抓取内部实现和内部测试 |
+| Quant | QNT-CTR-001～005 | Registry 参数约束、Indicator/Factor 输入输出边界、Result Envelope/Manifest/Schema、RiskDecision 与质量状态关系、AuthorizationRef 绑定及读取语义；已有 Schema 需明确覆盖到对应 CTR 的完整字段与版本 | 指标算法内部实现测试、真实计算性能 |
+| Research | RSC-CTR-001～002 | Evidence 的来源版本/PIT/授权/派生引用适用语义；ResearchEvent、Claim、Hypothesis、Scenario 的公开状态、引用与版本规则。RSC-CTR-002 尚缺专属机器定义 | Research 内部 Repository/领域单测 |
+| Researchflow | FLOW-CTR-001～004 | Run/Stage/Attempt 状态与终态、Cancel/Retry/Deadline/Lease/Fencing、Run Context/system_as_of、Stage 输入输出/诊断引用的完整字段映射；重点补 FLOW-CTR-003 Context Schema 映射 | Worker 实际部署、内部调度/存储测试 |
+| LLM | LLM-CTR-001～003 | Model Request/Response/Usage/Tool 定义；SSE 事件序号、终止和断流语义；Platform Fault 到 ModelErrorInfo 的稳定映射；现有 Schema/Fixture 需确认唯一权威版本和覆盖边界 | 真实模型服务可用性、Provider 内部性能测试 |
+| Notification | NTF-CTR-001～003 | 事件 Envelope/Registry 版本兼容；Inbox/Delivery/Attempt 状态和幂等语义；Channel 能力、重试与 unknown 终态。现有 4 个 Schema 未覆盖完整状态机/渠道契约 | 渠道账号、真实投递和 Worker 部署 |
+| Server / WebUI | SRV-CTR-001；沿用 FLOW-CTR-001～004 | Server 组合根与 HTTP 宿主边界；Researchflow 新 API 的路径、方法、HTTP 请求/响应 DTO、认证、错误投影、Run/Stage/Event Schema；WebUI 只消费该公开契约。旧 Analysis API 不再补契约 | 十模块 DI 实际装配、Session E2E、Nginx 部署验收 |
+
+### 13.3 可冻结与不应继续扩张的边界
+
+1. CTR-043 的龙虎榜分页计数公共语义可 `freeze-ready`；Hithink Provider 分页实现不符合属于 Data 内部实现问题。
+2. DEC-018～019 覆盖的旧 Analysis HTTP 契约按退役决议退出活动冻结范围，不再修旧 Schema。
+3. WebUI CTR-011～049 中，只有公开 Schema/字段语义本身不完整或错误的部分才保留契约定义待办；纯页面测试、DOM 回归、Provider 内部测试和产品未选用的预留页面不阻断服务端契约冻结。
+4. DEC-027 的 Dragon Tiger Provider 原始字段泄漏是公开契约定义边界问题，仍未完成；不能误归为 Provider 内部测试事项。
+5. 不新增 CTR。已有编号若仅覆盖模块内部实现细节，应在对应正式 CTR 的范围说明中标为“非 PLAT-002 跨模块冻结门禁”，不另开审计任务。
+
+### 13.4 后续唯一执行方式
+
+后续按 13.2 的批次逐批核对权威定义文件，只回答三个问题：公开契约是否完整、生产方与消费者的公开语义是否一致、是否可以冻结。每完成一批，直接更新正式登记状态；不再汇报单个文件读取或单个字段检查，不执行模块测试/CI，不处理责任模块实现。
