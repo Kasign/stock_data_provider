@@ -19,7 +19,7 @@
 | 编号/主题 | 当前处理 | 计数规则 |
 |---|---|---|
 | CTR-003 | Run 路径/响应契约问题由 CTR-046 承接 | 历史别名，不单独计数 |
-| CTR-005 | CreateTask 请求 DTO、TaskType/required 约束由 CTR-047 承接 | 历史别名；其剩余关闭条件并入 CTR-047 |
+| CTR-005 | 旧 Analysis CreateTask 请求约束历史上由 CTR-047 承接 | 随 DEC-018 旧 API 退役，不再有活动关闭条件；历史别名不计活动项 |
 | CTR-010 | Go omitempty 与 OpenAPI nullable 的跨 DTO 字段差异 | 一个聚合 CTR，字段清单为其影响范围，不按 DTO 或字段新增编号 |
 | CTR-038 / CTR-048 | 分别属于 Market Sentiment History 与 Provider Probe History | 不合并；相同 total 主题可共享规范，不共享缺陷编号 |
 | CTR-041 | 固定基线 DTO、OpenAPI、Golden 三方一致，原登记撤销 | withdrawn，不计活动项 |
@@ -51,7 +51,7 @@ API Client 全量盘点也已完成：44 个导出函数，41 个远端入口，
 | CTR-042 | Limit Pool 金额单位 | P2；provider_defined 不可比较/换算边界待裁决 |
 | CTR-043～044 | Dragon Tiger | CTR-043 公共分页计数语义已明确、契约可冻结；Hithink Adapter 实现偏差转 Data 内部整改；CTR-044 Provider 日期能力边界待裁决 |
 | CTR-045 | Stock Search 质量状态消费 | P2；WebUI 空结果和质量状态提示待对齐 |
-| CTR-046～047 | Analysis Run/Task | P2；Run 读取/事件 OpenAPI 缺失、CreateTask HTTP DTO 语义待裁决 |
+| CTR-046～047 | 旧 Analysis Run/Task HTTP 契约 | DEC-018 已决定整组旧 HTTP API 退役；CTR-047 按本矩阵第40节撤销活动状态，CTR-046/006/007 等相邻旧路由契约按同一退役边界归类，不再补齐旧 OpenAPI |
 | CTR-048～049 | Provider Probe History | P2；total 语义与存储错误 HTTP 映射待裁决/补证 |
 
 这些结论只记录冻结影响，不表示责任模块已修复。不得再次对上述范围执行相同的初审或冻结影响分析；后续只检查裁决结果、责任模块新提交和关闭证据。
@@ -426,7 +426,7 @@ W2-D 的“权威规则核对与裁决问题准备”完成；CTR-010 本身仍�
 |---|---|---|---|
 | SRV2-D2-001：Root /diagnostics复合Report、/readyz成功/失败响应没有Server专属Schema/Golden；Platform Observation Schema不能约束Server新增Readiness/Report包装 | SRV-CTR-001（Root HTTP契约）；嵌入Observation继续归PLAT-CTR-004 | P2证据缺口，不是已证实运行时字段错误；不新增CTR | 明确运维端点是否作为稳定契约；若保留，补Server Schema与healthz/readyz/diagnostics成功失败Golden/Handler Contract Test；若不做，登记不适用理由及替代测试 |
 | Analysis Run OpenAPI覆盖不足 | CTR-046（GET Run/Events）+ SRV-CTR-001（Root API清单） | 既有差异；POST Run也尚未进入当前Analysis OpenAPI，随Root路由清单统一登记，不重复编号 | OpenAPI覆盖真实注册的Run路由、响应结构和错误状态；Go Handler与Schema/Gateway Contract Test一致 |
-| CreateTask的AnalysisRequest Schema与RunRequest字段/约束不完整 | CTR-047 | 既有差异，不新增CTR | 对齐完整请求字段、required/default/枚举和未知字段拒绝语义 |
+| CreateTask的AnalysisRequest Schema与RunRequest字段/约束不完整 | CTR-047（历史审计项） | 已被 DEC-018 旧 API 退役决议覆盖；不再是活动公共契约差异 | 不补齐旧 CreateTask Schema；新 API 只按 Researchflow CreateRunCommand 独立契约定义 |
 | StageEvent Schema仅为泛化object | CTR-007 | 既有差异，不新增CTR | 展开StageEvent字段、状态枚举、时间格式和可选字段语义 |
 | Task started_at/finished_at的omitempty与nullable差异 | CTR-006 | 既有差异，不新增CTR | 明确省略或null并对齐Go/OpenAPI/Golden |
 | Root错误Envelope存在publicError(class/code/message/retryable)与legacy error(code/message)两种形状 | PLAT-CTR-001（Server负责映射） | 安全消息已有收敛测试，但统一Envelope策略和全路由映射证据未完成；不新增CTR | 明确统一或按端点保留多种Envelope；同步状态码、OpenAPI、WebUI消费和Golden |
@@ -448,7 +448,7 @@ Server维度2当前仅完成首轮一个切片，状态为 `in_progress / partia
 - Root Router没有新增模块Handler，仍为13条method-pattern；本轮不扩大路由范围。
 - Root错误生产路径已交叉核验：Bootstrap Middleware/Fault为class/code/message/retryable；Security Guard、Health Handler、旧Analysis Handler主要为code/message；Analysis Run执行失败另带partial_result；声明超限与Handler解码超限的错误码不同。
 - WebUI只消费message/code/status/requestId，不消费class/retryable；Request ID实际Body优先、Header其次，既有测试已验证Body优先。此前审计文档中“Header优先”的说法已在Server审计记录中纠正。
-- Analysis OpenAPI没有统一Error Schema/错误响应JSON Schema。CTR-046（Run路由OpenAPI缺失）、CTR-047（CreateTask请求Schema）均为既有项，本批不重复登记。
+- Analysis OpenAPI没有统一Error Schema/错误响应JSON Schema。CTR-046/047 是旧 Analysis HTTP 契约历史审计项；DEC-018 已决定退役，不再据此补齐旧 API Schema。
 - 错误Envelope统一建议：Root稳定错误响应逐步统一为嵌套Error DTO，保留code/message并明确class/retryable；实现前须由Server/项目责任方裁决覆盖端点、枚举、HTTP状态、retryable规则、超限错误码、Request ID权威通道及OpenAPI范围。审计分支不擅自改实现。
 - 唯一归属：Envelope归PLAT-CTR-001；Root路由/运维契约归SRV-CTR-001；Request ID归PLAT-CTR-002；CTR-046/047保持原编号。无新增CTR。
 - 本批状态：第二切片complete_with_open_items；Server维度2整体仍为in_progress / partial，不等于契约冻结。
@@ -472,7 +472,7 @@ Server维度2当前仅完成首轮一个切片，状态为 `in_progress / partia
 | 编号 | 本轮确认的字段级事实 | 当前状态与关闭条件 |
 |---|---|---|
 | CTR-046 | POST Run、GET Run、GET Run Events缺少OpenAPI路径；RunResult没有响应Schema。同步Run与Task共用RunRequest，但两者run_id行为不同；RunResult是多层嵌套DTO | 保持开放。补齐真实Root路径/状态/请求响应Schema，明确同步/异步run_id差异；为RunResult及Events提供完整Schema、Golden和Handler/Schema一致性测试 |
-| CTR-047 | RunRequest JSON字段为run_id、task_type、as_of、as_of_mode、universe_id、symbols、portfolio_id、strategy_ids、market_id、strategy_config_version、risk_config_version、trading_rules_version、data_policy_version、parameters。现有AnalysisRequest缺run_id/as_of_mode/parameters；没有required、TaskType enum。Handler补默认值并覆盖as_of_mode；历史回放要求显式as_of | 保持开放。权威请求契约须区分服务端派生字段、默认值和条件必填；明确同步Run与异步Task对run_id的差异；Schema与运行时校验/Contract Test对齐 |
+| CTR-047 | 旧 Analysis RunRequest 与 CreateTask HTTP DTO 字段差异 | 历史事实保留；旧 API 已由 DEC-018 决定退役 | 不再为旧请求定义新的 required/default/枚举或同步/异步 ID 规则；新 API 按 Researchflow 独立命令契约验收 |
 | CTR-006 | Task.started_at/finished_at为*time.Time + omitempty，nil时字段省略；OpenAPI nullable=true允许显式null | 保持开放。裁决省略或null；DTO、OpenAPI和queued/running/terminal Golden一致 |
 | CTR-007 | StageEvent固定字段run_id/stage/status/at；可选duration_ms/message/attributes；status为started/succeeded/failed/skipped；attributes为map[string]string；OpenAPI event仍为无约束object | 保持开放。展开StageEvent Schema、required/enum/date-time/类型；补Golden与Schema/Handler Contract Test |
 | CTR-008 | 本轮只确认固定基线未定位旧Analysis taskqueue表的独立DDL；不对数据库现状作不存在判断 | 不改变既有状态和关闭条件；由原责任方补迁移/DDL、唯一单调ID和真实DB分页证据 |
@@ -488,7 +488,7 @@ Server维度2当前仅完成首轮一个切片，状态为 `in_progress / partia
 | CTR | 唯一责任边界 | 决策/事实状态 | 下一交付 |
 |---|---|---|---|
 | CTR-046 | Server负责Root HTTP路由、版本和适配；Researchflow负责自身Run/Stage/Attempt领域DTO、Schema/Golden | 项目架构已明确Server为唯一Composition Root、Researchflow为唯一跨模块流程编排者；但旧Analysis同步Run/Task/Events是否保留、是否迁移到Researchflow API尚未裁决 | 项目负责人确认API兼容/迁移边界；随后Server补最终路由/OpenAPI，Researchflow只补自身DTO契约，双方做真实组合测试 |
-| CTR-047 | 旧Analysis请求由旧Analysis/Server负责；Researchflow CreateRunCommand不与其混用 | Researchflow命令字段和可信Context语义已有accepted决议；旧Analysis RunRequest仍存在run_id、TaskType校验、symbols上限和同步/异步差异待明确项 | 裁决同步Run客户端run_id、Task入口生成/覆盖规则、未知TaskType是否拒绝、symbols上限是否强制；再对齐Handler、Schema、Contract Test |
+| CTR-047 | 旧 Analysis CreateTask HTTP 请求契约（已退役范围） | DEC-018 已决定旧 API 退役；DEC-019 的旧接口规则不迁移至 Researchflow | 撤销旧 CreateTask 的活动契约待办；新 API 只按 FLOW-CTR-001 等 Researchflow 契约定义并验收 |
 | CTR-006 | 旧Analysis Task DTO与对应OpenAPI | 当前Go行为已明确：started_at/finished_at nil时省略；nullable=true与真实输出不符 | 默认保持现有行为，Schema移除nullable并允许字段缺失；补queued/running/terminal Golden和Schema校验 |
 | CTR-007 | 旧Analysis Task Events生产方/HTTP适配方 | StageEvent是旧Analysis进度事件，不是Researchflow Stage DTO；字段事实见Server维度2第9节 | 先确定旧Events端点保留范围，再为保留端点定义独立StageEvent Schema/Golden；若替换，定义迁移和兼容策略 |
 
@@ -502,7 +502,7 @@ Server维度2当前仅完成首轮一个切片，状态为 `in_progress / partia
 ### 关闭依赖顺序
 
 1. CTR-046：项目负责人确认旧Analysis API保留/迁移边界。
-2. CTR-047：据此确定同步/异步请求行为和运行时校验规则。
+2. CTR-047：旧 CreateTask HTTP 契约已由 DEC-018 退役，不再执行同步/异步旧请求行为的冻结工作；Researchflow 新 API 独立按 FLOW-CTR-001 验收。
 3. CTR-006：按当前nil省略行为修正Schema并补三态Golden，可与第2项并行。
 4. CTR-007：确认Events端点保留后定义旧StageEvent契约；不得套用Researchflow Stage。
 5. CTR-046：最后补最终Run响应Schema、Golden、Root路由和真实Handler/Adapter Contract Test。
@@ -519,7 +519,7 @@ Server维度2当前仅完成首轮一个切片，状态为 `in_progress / partia
 | 决策ID | CTR | 推荐默认方案 | 确认前状态 | 确认后的交付 |
 |---|---|---|---|---|
 | D-SRV-API-01 | CTR-046 | 旧 Analysis API 不保留兼容期；WebUI 直接切换 Researchflow 新 API。当前缺口是新 API 的实际路由、公开 DTO/OpenAPI、认证/错误映射和旧专属路由退役尚未完成。 | `pending_evidence` | 新 Researchflow API 路由与 OpenAPI 和 Handler/WebUI 一致；跨端 Contract Test 通过；验收后删除旧 Analysis 路由、Handler、专属 DTO/事件适配及专属测试。 |
-| D-SRV-REQ-01 | CTR-047 | B2 已明确请求与 ID 语义；当前需落实未知 TaskType 拒绝、symbols 上限100、异步 Task ID 服务端生成，以及同步 Run 显式 ID 同指纹幂等/异指纹409。 | `pending_evidence` | Handler、OpenAPI、错误码、请求指纹规范化和同/异指纹重放 Contract Test 一致。 |
+| D-SRV-REQ-01 | CTR-047 | 历史上针对旧 Analysis CreateTask/Run 的请求规则；旧 API 已按 DEC-018 退役 | `superseded_by_DEC-018` | 不再落实旧 Handler/OpenAPI；Researchflow 新 API 只按其独立 CreateRunCommand、caller-scoped idempotency_key 和 fingerprint 契约验收。 |
 | D-SRV-EVT-01 | CTR-007 | 旧 Analysis Event 不设兼容期；新 Researchflow Task/Run/Event 使用独立版本化 DTO。当前缺口是新事件 Schema/游标/查询路由实现与旧专属事件适配清理。 | `pending_evidence` | 新 Event Schema/Golden、Handler/WebUI 映射和游标测试通过；新 API 验收后删除旧专属事件路由/DTO/适配。 |
 | D-SRV-TIME-01 | CTR-006 | 保持Task时间字段nil时省略；OpenAPI移除nullable；补queued/running/terminal Golden | ready_for_implementation | Schema/Golden/Handler Contract Test通过后关闭CTR-006 |
 
@@ -568,7 +568,7 @@ Server维度2当前仅完成首轮一个切片，状态为 `in_progress / partia
 **第一批只做Server维度2差异关闭，不再增加审查切片：**
 
 1. CTR-006：责任模块在实际契约/实现分支修正Task时间字段Schema，补queued/running/terminal Golden及Handler Contract Test。当前审计基线已证明Go nil省略，保持现有运行时行为，不改DTO。
-2. CTR-047：只补同步Runner对run_id的真实使用/持久化/查询证据；该证据到位后，将同步/异步run_id、未知TaskType和symbols上限与CTR-046/007的API决议集中裁决，不重复字段盘点。
+2. CTR-047：历史同步 Runner run_id 证据已记录；因旧 HTTP API 已按 DEC-018 退役，不再为该旧请求入口补 HTTP 409、Schema 或 Contract Test 证据。
 3. CTR-046/007：项目负责人一次确认旧Analysis API与Events兼容保留边界；决议后Server按保留端点批量补OpenAPI/Schema/Golden/Root Contract Test。Researchflow DTO不替代旧Analysis DTO。
 4. CTR-008：只由Researchflow/Server责任方补真实DDL、唯一单调ID及数据库分页证据；不重新审查Handler cursor算法。
 5. Server维度2统一执行定向测试和CI；通过项逐项关闭，未通过项只保留原编号和明确阻断原因。
@@ -594,7 +594,7 @@ Server维度2当前仅完成首轮一个切片，状态为 `in_progress / partia
 - `internal/adapters/storage/mysqlredis/store.go`已证明：Begin使用INSERT，`analysis_runs.run_id`为主键；Finish/GetResult均按同一run_id写入/读取；重复ID不会覆盖已有Run，数据库会拒绝第二次INSERT。
 - 当前Runner/Handler测试未覆盖显式ID贯穿、重复ID冲突及冲突HTTP状态；未执行真实MariaDB集成测试。Handler尚未发现将主键冲突稳定映射为409的专用分支。
 - CTR-047同步Run推荐契约已收敛为：客户端合法run_id允许保留；省略时服务端生成；重复ID拒绝且应稳定映射409/run_id_conflict。异步Task Queue另按其服务端生成ID规则，不与同步入口混同。
-- 状态调整：同步Run ID的实现事实已补齐，决策输入可用（ready_for_decision）；重复冲突HTTP映射、Runner/Store/Handler测试及真实DB证据仍为pending_evidence。CTR-047整体仍开放。
+- 历史状态（已被后续 DEC-018 覆盖）：当时同步Run ID事实为 ready_for_decision，重复冲突HTTP映射和测试证据仍缺。该证据缺口不再构成旧 HTTP API 的活动契约门禁；底层存储/运行组件若被新模块继续使用，其内部正确性另由对应模块工程验收负责。
 - 本轮没有新增CTR、修改业务代码或执行测试/CI。详细证据见`Server-维度2-DTO-Schema-Golden.md`第12节。
 
 
@@ -1125,7 +1125,7 @@ PLAT-002 的项目级决策收敛已完成；**PLAT-002 项目整体不宣告完
 | 批次 | 决策主题 | 对应现有工作项/契约 | 建议裁决方向 | 不包含的工作 |
 |---|---|---|---|---|
 | DEC-B1 | 旧 Analysis API 直接退役 | D-SRV-API-01、D-SRV-EVT-01、WEB-SRV-C；CTR-046/007 | 当前无正在服役的旧 Analysis 服务；WebUI 直接切换 Researchflow 新 API，不保留旧 API 兼容期。新 API 独立使用版本化 DTO/事件语义；OpenAPI 覆盖实际路由、认证、错误和 Run/Task/Event Schema。新 API 接入验收后删除旧路由、Handler 和专属适配代码 | 不自动删除仍被新模块使用的通用能力、历史数据或 Migration |
-| DEC-B2 | 请求校验与 Run/Task ID | D-SRV-REQ-01；CTR-047 | 未知 TaskType 拒绝；symbols 首期上限 100，由 Server Handler 集中强制并进入 OpenAPI/测试，后续调整须有负载/性能依据并同步更新契约。异步 Task ID 服务端生成；同步 Run 缺失 ID 时生成，显式 ID 相同指纹返回既有 Run，不同指纹返回 409/run_id_conflict | 不改变 Researchflow CreateRunCommand 的独立 ID 语义 |
+| DEC-B2 | 请求校验与 Run/Task ID（历史提案） | D-SRV-REQ-01；CTR-047 | 原提案曾针对旧 Analysis API 定义 TaskType、symbols 和旧 Run/Task ID 规则；已由 DEC-018 退役决议限定为历史语义，不再要求落实 | Researchflow CreateRunCommand 使用独立的 caller-scoped idempotency_key/fingerprint，不继承旧 run_id/TaskType 规则 |
 | DEC-B3 | Data Snapshot 事实映射 | Data→Quant 两项、Data→Research Manifest 映射；DATA-CTR-005/007/008、QNT-CTR-001/002、RSC-CTR-001 | Data 提供行情/交易日历/完整性证据，证据缺失显式 unknown；Quant 按具体指标策略校验连续性；stale 不得升级 valid，容忍时显式 degraded；Research 引用不可变 Snapshot 并保留来源/授权链 | 不改变既有 Decimal v2 决策；available_at 继续单独补证 |
 | DEC-B4 | News Evidence 来源/质量/关系语义 | NEWS-RSC-B/D/F；NEWS-CTR-001/002/003、RSC-CTR-001 | 区分 News Item/Version、Observation、Source、Provider、分页 Snapshot；质量和 stale 策略显式；RelationRefs 区分 not_provided 与 confirmed_none，不以空数组表达无关系结论 | 不重开 GOV-CTR-006 授权语义 |
 | DEC-B5 | News 输入进入 Researchflow Run | NEWS-FLOW-A/B/C/D；NEWS-CTR-001/002、FLOW-CTR-003/004、GOV-CTR-002/006 | Run 创建前两阶段准备输入：固定身份/查询条件查询 News，仅物化该 Run 实际需要的持久化不可变 Snapshot，再创建 Run 固定 refs；Cursor 仅由 News Adapter 持有，重试复用原 Snapshot | 不建设无必要的通用快照平台；无 News 输入不创建空 Snapshot |
@@ -1159,7 +1159,7 @@ PLAT-002 的项目级决策收敛已完成；**PLAT-002 项目整体不宣告完
 | 提案映射 | 正式决议 | 最终裁决要点 | 后续责任边界 |
 |---|---|---|---|
 | B1 | DEC-PLAT-002-018 | 当前无服役旧 Analysis 服务；WebUI 直接切换新 Researchflow API；不保留兼容期；新 API 验收后删除旧路由和专属适配代码 | Server、WebUI、Researchflow |
-| B2 | DEC-PLAT-002-019 | 未知 TaskType 拒绝；symbols 首期上限100由 Handler 强制；异步 Task ID 服务端生成；同步 Run 同指纹幂等、异指纹409 | Server、WebUI |
+| B2 | DEC-PLAT-002-019（旧 API 规则，已由 DEC-018 限定退役适用范围） | 不作为新 Researchflow API 的请求约束；新 API 按 FLOW-CTR-001 独立契约 | Server、Researchflow |
 | B3 | DEC-PLAT-002-020 | Data 提供行情/日历/完整性事实；Quant 决定指标连续性策略；stale 不得升级 valid；Research 引用不可变 Snapshot | Data、Quant、Research |
 | B4 | DEC-PLAT-002-021 | News 来源/版本/Observation 分离；质量显式；关系未提供不等于无关系 | News、Research |
 | B5 | DEC-PLAT-002-022 | Run 创建前两阶段准备输入；只物化 Run 实际需要内容；Cursor 不进入 Run refs；重试复用快照 | News、Researchflow、Server |
@@ -1198,3 +1198,14 @@ PLAT-002 的项目级决策收敛已完成；**PLAT-002 项目整体不宣告完
 - WebUI 只消费公开 CNY 字段，不识别同花顺、不处理 provider_defined、不负责换算。Data 内部可继续保留任意 Provider 原始字段、模型或诊断信息，但不得通过跨模块公开 JSON DTO 泄漏。
 - 状态：项目级语义决议已 accepted；Data 公开 DTO/OpenAPI 落实证据尚缺，故该字段边界在 L2 仍为 pending_evidence。这是既有 DEC-027 的落实项，不新建 CTR，不与原始 CTR-043 的分页计数问题混为一项。
 - 本分支只登记契约边界与证据缺口，不修改 Data 代码、OpenAPI、Golden 或测试；后续由 Data 责任分支落实后，以新 SHA 增量核验。
+
+
+## 40. CTR-047 退役归类：旧 Analysis CreateTask 请求不再作为活动冻结契约（2026-11-11）
+
+- **唯一依据：** DEC-PLAT-002-018 已由项目负责人接受，明确旧 Analysis API、旧 Task/Run HTTP 路由及旧 StageEvent HTTP 契约不保留兼容期；WebUI 直接切换 Researchflow 新 API，新 API 验收后删除旧路由及专属适配代码。
+- **CTR-047 原始对象：** 旧 Analysis 的 CreateTask/AnalysisRequest HTTP 请求 Schema 与领域 RunRequest 的字段、默认值、TaskType、as_of/as_of_mode、parameters、同步/异步 run_id 行为差异。它不是 Researchflow CreateRunCommand 的公共契约。
+- **状态修正：** CTR-047 标记为 \`withdrawn_by_scope_decision\`（因公开 API 退役而撤销活动冻结任务），不再保留 P2 活动差异，不要求补齐旧 CreateTask OpenAPI、Handler 校验或旧请求 Contract Test。历史字段核验与同步 Runner run_id 证据仅用于解释旧实现，不作为新 API 的约束。
+- **DEC-PLAT-002-019 适用范围：** 该决议原本约束旧 Analysis CreateTask/同步 Run HTTP 请求。其历史裁决不再形成旧 API 活动门禁；TaskType 四值、symbols 上限100、异步 Task ID 服务端生成、同步显式 run_id 幂等/409 规则均不得直接套用到 Researchflow 新 API。
+- **新 API 的独立契约：** Researchflow 使用独立的 CreateRunCommand 和版本化 DTO；调用主体从可信认证 Context 获取，CreateRun 幂等键作用域为 \`(authenticated_caller_ref, CreateRun)\`，使用 \`idempotency_key\` 与规范化请求 fingerprint；相同键和指纹返回既有 Run，不同指纹冲突。Run 引用由 Researchflow 生成。参数约束由具体版本化 Template/Parameter Schema 定义，不沿用旧 Analysis 的 \`symbols\` 通用上限。
+- **责任边界：** 旧 CreateTask API 不再由 Server/WebUI/Researchflow 继续维护或冻结。Server/WebUI/Researchflow 只需按 DEC-018 完成新 API 接入验收、OpenAPI/DTO/认证/错误/事件对齐；Researchflow 新 API 的证据仍归 FLOW-CTR-001～004 等既有正式契约，不新增 CTR。
+- **不代表：** 本状态不表示旧 API 代码已删除，也不表示新 API 已接入验收。旧代码退役属于 DEC-018 的迁移执行工作；新 API 的契约证据按其正式契约单独验收。
