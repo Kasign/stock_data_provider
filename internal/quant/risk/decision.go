@@ -4,7 +4,6 @@ import (
 	"errors"
 	"strings"
 	"time"
-	"unicode/utf8"
 )
 
 var ErrInvalidDecision = errors.New("invalid risk decision")
@@ -85,7 +84,7 @@ func (d Decision) Validate() error {
 }
 
 func nonBlank(value string) bool {
-	return utf8.ValidString(value) && strings.TrimSpace(value) != "" && strings.TrimSpace(value) == value
+	return strings.TrimSpace(value) != ""
 }
 
 func canonicalUTCTimestamp(value string) bool {

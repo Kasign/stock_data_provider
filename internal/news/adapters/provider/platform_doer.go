@@ -15,7 +15,8 @@ import (
 // platformHTTPDoer binds one Provider endpoint to one immutable destination policy.
 // It deliberately does not own the shared Platform Client lifecycle.
 type platformHTTPDoer struct {
-	bound *httpclient.BoundDoer
+	client *httpclient.Client
+	policy httpclient.DestinationPolicy
 }
 
 // NewPlatformHTTPDoer creates a Provider-specific HTTPDoer.
@@ -31,11 +32,7 @@ func NewPlatformHTTPDoer(client *httpclient.Client, endpoint, dependency string)
 	if err != nil {
 		return nil, err
 	}
-	bound, err := client.Bind(policy)
-	if err != nil {
-		return nil, app.ErrProviderConfig
-	}
-	return &platformHTTPDoer{bound: bound}, nil
+	return &platformHTTPDoer{client: client, policy: policy}, nil
 }
 
 func providerDestinationPolicy(endpoint, dependency string) (httpclient.DestinationPolicy, error) {
@@ -99,10 +96,10 @@ func validProviderDependency(value string) bool {
 }
 
 func (d *platformHTTPDoer) Do(request *http.Request) (*http.Response, error) {
-	if d == nil || d.bound == nil || request == nil || request.URL == nil {
+	if d == nil || d.client == nil || request == nil || request.URL == nil {
 		return nil, app.ErrProviderConfig
 	}
-	response, err := d.bound.Do(request)
+	response, err := d.client.Do(request.Context(), request, d.policy)
 	if err != nil {
 		return nil, providerErrorFromPlatform(err)
 	}
@@ -111,7 +108,7 @@ func (d *platformHTTPDoer) Do(request *http.Request) (*http.Response, error) {
 
 func providerErrorFromPlatform(err error) error {
 	var platformFault *fault.Fault
-	if errors.As(err, &platformFault) && platformFault != nil && platformFault.Validate() == nil {
+	if errors.As(err, &platformFault) && platformFault != nil {
 		code := strings.TrimSpace(platformFault.Code)
 		if code == "" {
 			code = "provider_transport_failed"

@@ -54,9 +54,6 @@ func AssessExpiredDeliveryLease(
 		!isRecoveryUTC(now) || now.Before(lease.ExpiresAt) {
 		return LeaseRecoveryAssessment{}, ErrLeaseRecoveryNotApplicable
 	}
-	if err := ValidateDeliveryAttemptHistoryForDelivery(delivery, attempts); err != nil {
-		return LeaseRecoveryAssessment{}, ErrLeaseRecoveryHistory
-	}
 	if len(attempts) != delivery.AttemptCount {
 		return LeaseRecoveryAssessment{}, ErrLeaseRecoveryHistory
 	}
@@ -67,8 +64,7 @@ func AssessExpiredDeliveryLease(
 	seenTokens := make(map[int64]struct{}, len(attempts))
 	for i := range attempts {
 		attempt := attempts[i]
-		if err := attempt.Validate(); err != nil || attempt.DeliveryID != delivery.DeliveryID ||
-			attempt.AttemptNo != i+1 {
+		if err := attempt.Validate(); err != nil || attempt.DeliveryID != delivery.DeliveryID {
 			return LeaseRecoveryAssessment{}, ErrLeaseRecoveryHistory
 		}
 		if _, exists := seenIDs[attempt.AttemptID]; exists {
@@ -85,23 +81,6 @@ func AssessExpiredDeliveryLease(
 		seenTokens[attempt.FencingToken] = struct{}{}
 		if attempt.FencingToken > lease.FencingToken {
 			return LeaseRecoveryAssessment{}, ErrLeaseRecoveryHistory
-		}
-		if i > 0 {
-			previous := attempts[i-1]
-			if attempt.FencingToken <= previous.FencingToken ||
-				previous.FinishedAt == nil || previous.Outcome == nil ||
-				attempt.StartedAt.Before(*previous.FinishedAt) {
-				return LeaseRecoveryAssessment{}, ErrLeaseRecoveryHistory
-			}
-			switch *previous.Outcome {
-			case domain.DeliveryAttemptRejected:
-				if !previous.Retryable {
-					return LeaseRecoveryAssessment{}, ErrLeaseRecoveryHistory
-				}
-			case domain.DeliveryAttemptNotSent:
-			default:
-				return LeaseRecoveryAssessment{}, ErrLeaseRecoveryHistory
-			}
 		}
 		if attempt.FencingToken == lease.FencingToken {
 			if current != nil || attempt.WorkerID != lease.WorkerID ||
@@ -120,7 +99,7 @@ func AssessExpiredDeliveryLease(
 	if current == nil {
 		return recoveryBudgetAssessment(delivery, now, "lease_expired_before_attempt", "", ""), nil
 	}
-	result := LeaseRecoveryAssessment{AttemptID: current.AttemptID, EvidenceRef: current.AttemptID}
+	result := LeaseRecoveryAssessment{AttemptID: current.AttemptID}
 	if current.FinishedAt == nil || current.Outcome == nil {
 		result.Action = LeaseRecoveryMarkUnknown
 		result.ReasonCode = "lease_expired_during_attempt"

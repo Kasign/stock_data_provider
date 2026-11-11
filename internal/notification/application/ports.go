@@ -59,26 +59,6 @@ type DeliveryRepository interface {
 	UpdateWithLease(ctx context.Context, expectedVersion, fencingToken int64, next domain.DeliveryRecord, event domain.DeliveryStateEvent, now time.Time) error
 }
 
-
-// DeliveryStateEventReader reads the complete immutable state history in ascending version order.
-// The returned slice must not silently truncate; an incomplete result is rejected by the history validator.
-type DeliveryStateEventReader interface {
-	ListStateEvents(ctx context.Context, deliveryID string) ([]domain.DeliveryStateEvent, error)
-}
-
-// ExpiredDeliveryLeaseScanner 以有界批次返回数据库确认已过期的 sending 租约。
-// 返回项只是候选快照，恢复写入仍必须重新执行版本/token/数据库时钟 CAS。
-type ExpiredDeliveryLeaseScanner interface {
-	ListExpiredLeases(ctx context.Context, limit int) ([]DeliveryClaim, error)
-}
-
-// DeliveryLeaseRecoveryRepository 将已过期租约的恢复结果与状态事件原子持久化。
-// 评估逻辑必须先通过完整 Attempt 历史调用 AssessExpiredDeliveryLease；
-// 本接口只负责在数据库权威时钟确认租约过期后，以版本和 fencing token CAS 收敛状态。
-type DeliveryLeaseRecoveryRepository interface {
-	RecoverExpiredLease(ctx context.Context, expectedVersion, fencingToken int64, next domain.DeliveryRecord, event domain.DeliveryStateEvent, now time.Time) error
-}
-
 // DeliveryAttemptRepository 管理单次渠道调用的追加式历史。
 // StartWithLease 必须在原子写入时使用 Repository 权威时钟校验租约仍有效、StartedAt 不在未来；同一 fencing token 最多追加一个 Attempt。
 // attempt_count 是 Attempt 历史的计数投影，随 StartWithLease 原子更新，不改变 Delivery 状态版本。
@@ -86,7 +66,6 @@ type DeliveryLeaseRecoveryRepository interface {
 type DeliveryAttemptRepository interface {
 	StartWithLease(ctx context.Context, expectedDeliveryVersion, fencingToken int64, attempt domain.DeliveryAttempt) error
 	CompleteWithLease(ctx context.Context, expectedDeliveryVersion, fencingToken int64, completed domain.DeliveryAttempt) error
-	// ListByDelivery 返回完整历史，并按 AttemptNo 升序排列；缺失或重复序号由调用方 fail closed。
 	ListByDelivery(ctx context.Context, deliveryID string) (attempts []domain.DeliveryAttempt, err error)
 }
 

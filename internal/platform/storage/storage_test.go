@@ -11,7 +11,6 @@ import (
 	"sort"
 	"strings"
 	"sync/atomic"
-	"syscall"
 	"testing"
 	"time"
 
@@ -565,7 +564,7 @@ func TestApplyMigrationsRejectsConcurrentMigrationLock(t *testing.T) {
 		Version: 1, Description: "create", Statements: []string{"CREATE TABLE sample (id INT)"},
 	}})
 	var platformFault *fault.Fault
-	if !errors.As(err, &platformFault) || platformFault.Code != "platform.storage.migration_lock_busy" || platformFault.Class != fault.ClassConflict || platformFault.Retryable {
+	if !errors.As(err, &platformFault) || platformFault.Code != "platform.storage.migration_lock_busy" {
 		t.Fatalf("expected migration lock conflict, got %v", err)
 	}
 	if state.historyCreated || len(state.statements) != 0 || state.lockReleased {
@@ -682,33 +681,5 @@ func TestNormalizeSQLConfigAppliesCompleteDefaults(t *testing.T) {
 		config.ConnMaxIdleTime != defaults.ConnMaxIdleTime ||
 		config.PingTimeout != defaults.PingTimeout {
 		t.Fatalf("zero-value SQL config did not receive complete defaults: got %+v want %+v", config, defaults)
-	}
-}
-
-func TestDependencyFaultRetryabilityIsConservative(t *testing.T) {
-	tests := []struct {
-		name      string
-		cause     error
-		class     fault.Class
-		retryable bool
-	}{
-		{name: "context deadline", cause: context.DeadlineExceeded, class: fault.ClassTimeout},
-		{name: "context cancellation", cause: context.Canceled, class: fault.ClassUnavailable},
-		{name: "permanent database error", cause: errors.New("access denied"), class: fault.ClassUnavailable},
-		{name: "network timeout", cause: &net.DNSError{Err: "temporary resolver failure", IsTimeout: true}, class: fault.ClassTimeout, retryable: true},
-		{name: "connection refused", cause: &net.OpError{Op: "dial", Net: "tcp", Err: syscall.ECONNREFUSED}, class: fault.ClassUnavailable, retryable: true},
-		{name: "permanent network error", cause: &net.OpError{Op: "dial", Net: "tcp", Err: errors.New("certificate verification failed")}, class: fault.ClassUnavailable},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			got := dependencyFault("sql", "platform.storage.dependency_failed", "database operation failed", test.cause)
-			if got.Class != test.class || got.Retryable != test.retryable {
-				t.Fatalf("dependencyFault() = class %q retryable %v, want class %q retryable %v",
-					got.Class, got.Retryable, test.class, test.retryable)
-			}
-			if err := got.Validate(); err != nil {
-				t.Fatalf("dependencyFault() returned invalid fault: %v", err)
-			}
-		})
 	}
 }

@@ -238,23 +238,11 @@ func (t *mysqlNewsTransaction) SaveIdentityCredentials(ctx context.Context, cred
 		return app.ErrInvalidRequest
 	}
 	for _, credential := range credentials {
-		_, observedOffset := credential.ObservedAt.Zone()
-		if credential.ObservedAt.IsZero() || observedOffset != 0 {
-			return app.ErrIdentityHistoryInvalid
-		}
 		if _, err := t.tx.ExecContext(ctx, `INSERT INTO news_identifiers
-			(source_id, identifier_type, identifier_hash, identifier_value, identifier_status, news_id, created_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?)`,
+			(source_id, identifier_type, identifier_hash, identifier_value, identifier_status, news_id)
+			VALUES (?, ?, ?, ?, ?, ?)`,
 			credential.SourceID, string(credential.Type), credential.Hash,
-			credential.Value, string(credential.Status), credential.NewsID, credential.ObservedAt.UTC(),
-		); err != nil {
-			return err
-		}
-		if _, err := t.tx.ExecContext(ctx, `INSERT INTO news_identifier_status_history
-			(source_id, identifier_type, identifier_hash, identifier_status, observed_at)
-			VALUES (?, ?, ?, ?, ?)`,
-			credential.SourceID, string(credential.Type), credential.Hash,
-			string(credential.Status), credential.ObservedAt.UTC(),
+			credential.Value, string(credential.Status), credential.NewsID,
 		); err != nil {
 			return err
 		}
@@ -279,16 +267,13 @@ func (t *mysqlNewsTransaction) AppendObservation(ctx context.Context, observatio
 		newsID = observation.NewsID
 	}
 	_, insertErr := t.tx.ExecContext(ctx, `INSERT INTO news_observations
-		(observation_id, idempotency_key, source_id, provider_code, query_dimension, endpoint_id,
-		 source_policy_version_id, endpoint_policy_version_id, provider_output_policy_ref, provider_output_policy_version_id,
-		 policy_evaluated_at, candidate_json, observed_at, retention_until, payload_purged_at,
-		 identity_status, news_id, reason_code)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		(observation_id, idempotency_key, source_id, provider_code, query_dimension,
+		 source_policy_version_id, endpoint_policy_version_id, policy_evaluated_at,
+		 candidate_json, observed_at, identity_status, news_id, reason_code)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		observation.ID, observation.IdempotencyKey, observation.SourceID, observation.ProviderCode,
-		observation.QueryDimension, observation.EndpointID, observation.SourcePolicyVersionID,
-		observation.EndpointPolicyVersionID, observation.ProviderOutputPolicyRef, observation.ProviderOutputPolicyVersionID,
+		observation.QueryDimension, observation.SourcePolicyVersionID, observation.EndpointPolicyVersionID,
 		policyEvaluatedAt, candidateJSON, observation.ObservedAt.UTC(),
-		nullableTime(observation.RetentionUntil), nullableTimePointer(observation.PayloadPurgedAt),
 		string(observation.IdentityStatus), newsID, observation.ReasonCode,
 	)
 	if insertErr == nil {
@@ -299,9 +284,6 @@ func (t *mysqlNewsTransaction) AppendObservation(ctx context.Context, observatio
 	if lookupErr != nil {
 		return domain.Observation{}, errors.Join(insertErr, lookupErr)
 	}
-	if existing.PayloadPurgedAt != nil {
-		return domain.Observation{}, app.ErrObservationPayloadPurged
-	}
 	if !app.SameObservationPayload(existing, observation) {
 		return domain.Observation{}, app.ErrObservationIdempotencyConflict
 	}
@@ -309,9 +291,8 @@ func (t *mysqlNewsTransaction) AppendObservation(ctx context.Context, observatio
 }
 
 const observationSelect = `SELECT observation_id, idempotency_key, source_id, provider_code,
-	query_dimension, endpoint_id, source_policy_version_id, endpoint_policy_version_id,
-	provider_output_policy_ref, provider_output_policy_version_id, policy_evaluated_at, candidate_json, observed_at, retention_until, payload_purged_at,
-	identity_status, news_id, reason_code
+	query_dimension, source_policy_version_id, endpoint_policy_version_id,
+	policy_evaluated_at, candidate_json, observed_at, identity_status, news_id, reason_code
 	FROM news_observations`
 
 type rowScanner interface {
@@ -320,15 +301,14 @@ type rowScanner interface {
 
 func scanObservation(row rowScanner) (domain.Observation, error) {
 	var result domain.Observation
-	var policyAt, retentionUntil, payloadPurgedAt sql.NullTime
+	var policyAt sql.NullTime
 	var newsID sql.NullString
 	var candidateJSON []byte
 	var status string
 	err := row.Scan(
 		&result.ID, &result.IdempotencyKey, &result.SourceID, &result.ProviderCode,
-		&result.QueryDimension, &result.EndpointID, &result.SourcePolicyVersionID,
-		&result.EndpointPolicyVersionID, &result.ProviderOutputPolicyRef, &result.ProviderOutputPolicyVersionID, &policyAt, &candidateJSON, &result.ObservedAt, &retentionUntil, &payloadPurgedAt,
-		&status, &newsID, &result.ReasonCode,
+		&result.QueryDimension, &result.SourcePolicyVersionID, &result.EndpointPolicyVersionID,
+		&policyAt, &candidateJSON, &result.ObservedAt, &status, &newsID, &result.ReasonCode,
 	)
 	if err != nil {
 		return domain.Observation{}, err
@@ -344,14 +324,6 @@ func scanObservation(row rowScanner) (domain.Observation, error) {
 	}
 	result.IdentityStatus = domain.ObservationStatus(status)
 	result.ObservedAt = result.ObservedAt.UTC()
-	if retentionUntil.Valid {
-		result.RetentionUntil = retentionUntil.Time.UTC()
-	}
-	if payloadPurgedAt.Valid {
-		value := payloadPurgedAt.Time.UTC()
-		result.PayloadPurgedAt = &value
-		result.Candidate = domain.Candidate{}
-	}
 	return result, nil
 }
 
@@ -618,100 +590,6 @@ func (t *mysqlNewsTransaction) AppendNewsItemRelation(ctx context.Context, relat
 	return err
 }
 
-// ObservationRetentionBacklog 返回当前已到期但尚未清除的 Observation 数量及最早到期时间。
-func (r *MySQLRepository) ObservationRetentionBacklog(ctx context.Context, now time.Time) (int, *time.Time, error) {
-	if r == nil || r.db == nil || ctx == nil || now.IsZero() {
-		return 0, nil, app.ErrInvalidRequest
-	}
-	var count int
-	var oldest sql.NullTime
-	if err := r.db.QueryRowContext(ctx, `SELECT COUNT(*), MIN(retention_until)
-		FROM news_observations
-		WHERE retention_until IS NOT NULL AND retention_until <= ? AND payload_purged_at IS NULL`, now.UTC()).Scan(&count, &oldest); err != nil {
-		return 0, nil, err
-	}
-	if !oldest.Valid {
-		return count, nil, nil
-	}
-	value := oldest.Time.UTC()
-	return count, &value, nil
-}
-
-// PurgeExpiredObservationPayloads 清除到期候选载荷并保留 Observation tombstone。
-// Scanned 仅统计本事务成功锁定的记录；SKIP LOCKED 跳过的行不计入。
-// 被锁定记录必须全部更新成功，否则回滚整批，避免报告部分清理。
-func (r *MySQLRepository) PurgeExpiredObservationPayloads(ctx context.Context, now time.Time, limit int) (app.ObservationPayloadPurgeResult, error) {
-	if r == nil || r.db == nil || ctx == nil || now.IsZero() || limit < 1 || limit > 1000 {
-		return app.ObservationPayloadPurgeResult{}, app.ErrInvalidRequest
-	}
-	result := app.ObservationPayloadPurgeResult{}
-	err := r.withTransaction(ctx, "news_observation_retention", func(tx *sql.Tx, _ func(string) error) error {
-		rows, err := tx.QueryContext(ctx, `SELECT observation_id FROM news_observations
-			WHERE retention_until IS NOT NULL AND retention_until <= ? AND payload_purged_at IS NULL
-			ORDER BY retention_until, observation_id LIMIT ? FOR UPDATE SKIP LOCKED`, now.UTC(), limit)
-		if err != nil {
-			return err
-		}
-		ids := make([]string, 0, limit)
-		for rows.Next() {
-			var id string
-			if err := rows.Scan(&id); err != nil {
-				_ = rows.Close()
-				return err
-			}
-			ids = append(ids, id)
-		}
-		rowsErr := rows.Err()
-		closeErr := rows.Close()
-		if err := errors.Join(rowsErr, closeErr); err != nil {
-			return err
-		}
-		result.Scanned = len(ids)
-		if len(ids) == 0 {
-			return nil
-		}
-		placeholders := strings.TrimRight(strings.Repeat("?,", len(ids)), ",")
-		args := make([]any, 0, len(ids)+1)
-		args = append(args, now.UTC())
-		for _, id := range ids {
-			args = append(args, id)
-		}
-		updated, err := tx.ExecContext(ctx, fmt.Sprintf(`UPDATE news_observations
-			SET candidate_json = JSON_OBJECT(), payload_purged_at = ?
-			WHERE payload_purged_at IS NULL AND observation_id IN (%s)`, placeholders), args...)
-		if err != nil {
-			return err
-		}
-		affected, err := updated.RowsAffected()
-		if err != nil {
-			return err
-		}
-		if affected != int64(len(ids)) {
-			return app.ErrObservationRetentionResultInvalid
-		}
-		result.Purged = int(affected)
-		return nil
-	})
-	if err != nil {
-		return app.ObservationPayloadPurgeResult{}, err
-	}
-	return result, nil
-}
-
-func nullableTime(value time.Time) any {
-	if value.IsZero() {
-		return nil
-	}
-	return value.UTC()
-}
-
-func nullableTimePointer(value *time.Time) any {
-	if value == nil || value.IsZero() {
-		return nil
-	}
-	return value.UTC()
-}
-
 func nullableString(value string) any {
 	if value == "" {
 		return nil
@@ -722,7 +600,6 @@ func nullableString(value string) any {
 var requiredNewsSchemaTables = []string{
 	"news_items",
 	"news_identifiers",
-	"news_identifier_status_history",
 	"news_observations",
 	"news_item_versions",
 	"news_relation_assertions",

@@ -145,8 +145,8 @@ func NewAuthenticator(ownerToken config.Secret, services []ServiceCredential) (*
 	seenNames := map[string]struct{}{}
 	for _, service := range services {
 		name := strings.TrimSpace(service.Name)
-		if !validServiceName(name) || !service.Secret.Configured() {
-			return nil, errors.New("service credential name must be a 1-64 byte lowercase identifier and secret is required")
+		if name == "" || !service.Secret.Configured() {
+			return nil, errors.New("service credential name and secret are required")
 		}
 		if !validToken(service.Secret.Value()) {
 			return nil, errors.New("service credential must be a 32-256 byte URL-safe token")
@@ -179,24 +179,6 @@ func NewAuthenticator(ownerToken config.Secret, services []ServiceCredential) (*
 		})
 	}
 	return auth, nil
-}
-
-// validServiceName accepts a stable, bounded identifier for Principal.Subject.
-// Names are normalized with TrimSpace by NewAuthenticator before validation.
-func validServiceName(name string) bool {
-	if len(name) == 0 || len(name) > 64 {
-		return false
-	}
-	for index, char := range []byte(name) {
-		if (char >= 'a' && char <= 'z') || (char >= '0' && char <= '9') {
-			continue
-		}
-		if index > 0 && (char == '.' || char == '_' || char == '-') {
-			continue
-		}
-		return false
-	}
-	return true
 }
 
 // validToken accepts unpadded URL-safe tokens and bounds the work performed
@@ -312,22 +294,12 @@ func (p RoutePolicy) valid() bool {
 
 type principalContextKey struct{}
 
-// clonePrincipal prevents callers from mutating the scope snapshot held in a
-// request context through a shared slice backing array.
-func clonePrincipal(principal Principal) Principal {
-	principal.Scopes = append([]string(nil), principal.Scopes...)
-	return principal
-}
-
 func PrincipalFromContext(request *http.Request) (Principal, bool) {
 	if request == nil {
 		return Principal{}, false
 	}
 	principal, ok := request.Context().Value(principalContextKey{}).(Principal)
-	if !ok {
-		return Principal{}, false
-	}
-	return clonePrincipal(principal), true
+	return principal, ok
 }
 
 func Guard(authenticator *Authenticator, policy RoutePolicy, next http.Handler) http.Handler {
@@ -386,7 +358,7 @@ func contains(values []string, target string) bool {
 }
 
 func withPrincipal(ctx context.Context, principal Principal) context.Context {
-	return context.WithValue(ctx, principalContextKey{}, clonePrincipal(principal))
+	return context.WithValue(ctx, principalContextKey{}, principal)
 }
 
 func writeAuthError(w http.ResponseWriter, status int, code, message string) {

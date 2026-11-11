@@ -2,15 +2,14 @@
 
 - 决议日期：2026-11-06
 - 适用范围：Data、News、Quant、Research 的授权快照签发与跨模块引用
-- 当前状态：公共契约定义 `freeze-ready`；两份 Schema、四份 Golden、DTO 自身版本、字段语义、指纹算法和四类 Owner 映射已形成唯一权威定义。模块 CI Validator、Owner/Consumer 运行时授权与竞态测试属于 L2 实现符合性，不阻断项目级定义冻结。
-- 权威关系：本文是 GOV-CTR-006 AuthorizationRef/PolicySnapshot 字段语义、Owner 映射、指纹算法和 Golden 的唯一项目级权威说明；两份 Schema 与四份 Golden 是本文引用的规范机器文件。项目级 DTO 只引用本契约，不另行定义第二套授权语义。
+- 当前状态：语义决议 accepted；Schema 定义通过 Draft 2020-12 结构校验，四个 Golden 的 JCS/SHA-256 复算一致；模块 CI Validator、Scope/资源映射和授权竞态 Contract Test 仍 pending_evidence
+- 权威关系：公共字段与语义以项目级契约目录第 7.2 节为准；本文给出机器 Schema、Principal/Resource 映射、fingerprint 规范和 Golden 测试向量。
 
 ## 1. AuthorizationRef Schema
 
 机器文件：`schema/GOV-CTR-006-authorization-ref-1.0.0.schema.json`。
 
 字段固定为：
-- `schema_version`：必填，固定为本文件对应的 DTO Schema 版本 `1.0.0`；只标识 AuthorizationRef 自身结构。
 - `authorization_ref`：不透明、稳定、不可猜测的审计引用；不是 bearer token。
 - `policy_owner`：data/news/quant/research。
 - `policy_version`：AuthorizationPolicySnapshot.snapshot_ref，不是单个策略版本号。
@@ -27,7 +26,6 @@
 机器文件：`schema/GOV-CTR-006-policy-snapshot-1.0.0.schema.json`。
 
 `policy_version` 必须指向签发 Owner 保存的不可变 AuthorizationPolicySnapshot。结构为：
-- `schema_version`：必填，固定为 PolicySnapshot 自身 Schema 版本 `1.0.0`。
 - `snapshot_ref`：与 AuthorizationRef.policy_version 完全相同。
 - `policies[]`：至少一项，每项包含 `policy_type`、`policy_ref`、`policy_version`。
 
@@ -37,7 +35,7 @@
 
 | policy_owner | subject_ref 来源 | resource_ref | purpose_code | content_level |
 |---|---|---|---|---|
-| data | Server 注入的可信 Principal/Scope Context 中的逻辑 caller principal；同进程调用直接继承可信 Context。Remote Adapter 的 Service Credential 只认证 Adapter，subject_ref 仍取可信调用主体，绝不保存原始 API Key；禁止客户端自报 | Data 不可变查询 snapshot_ref | quant_analysis / research_analysis / risk_review | full |
+| data | Data API Key 认证后映射的可信 caller principal；禁止客户端自报 | Data 不可变查询 snapshot_ref | quant_analysis / research_analysis / risk_review | full |
 | news | 可信 caller_ref（Research/Researchflow/授权用户主体） | 实际 News Evidence/版本资源引用；Provider/Source/Endpoint 策略版本进入组合快照 | research_analysis / risk_review / user_display | metadata / summary / snippet / full |
 | quant | 可信调用主体；MVP 为 Researchflow service principal | Quant result_id | quant_analysis | full |
 | research | 可信调用主体；MVP 为 Researchflow service principal | Research evidence_id | research_analysis / risk_review | 按实际返回内容选择 |
@@ -46,16 +44,16 @@
 
 ## 4. Decision 与条件语义
 
-- allowed：签发时允许；conditions 必须为空数组；数组项必须唯一并按字典序排列。每次实际读取仍重新检查当前策略。
+- allowed：签发时允许；conditions 必须为空数组。每次实际读取仍重新检查当前策略。
 - denied：明确拒绝；不得访问受限内容。
 - unknown：无法可靠判断；默认拒绝受限内容。
 - conditional：不是授权许可；conditions 必须非空。签发 Owner 验证所有条件后，必须重新签发新的 allowed AuthorizationRef，不得把原 conditional 引用当作允许凭证。
 - expires_at=null 只表示没有固定过期时间，不代表永久授权；当前策略撤销、Scope 变化或授权服务不可用仍必须拒绝。
-- expires_at 非 null 时必须严格晚于 decided_at；now >= expires_at 即过期。读取时策略版本在检查和内容读取之间发生变化，必须重新授权；无法确认一致性时丢弃内容并拒绝返回。
+- expires_at 非 null 时，now >= expires_at 即过期。读取时策略版本在检查和内容读取之间发生变化，必须重新授权；无法确认一致性时丢弃内容并拒绝返回。
 
 ## 5. Fingerprint 唯一算法
 
-1. 从 AuthorizationRef 取除 `authorization_ref` 和 `decision_fingerprint` 之外的全部字段；其中包括必需的 `schema_version`，使 DTO 结构版本参与决策指纹。
+1. 从 AuthorizationRef 取除 `authorization_ref` 和 `decision_fingerprint` 之外的全部字段。
 2. 解析 `policy_version` 指向的 AuthorizationPolicySnapshot，取完整 `policies` 数组作为 `evaluated_policy_versions`；数组按 (policy_type, policy_ref, policy_version) 字典序排序。
 3. 将 `evaluated_policy_versions` 加入步骤 1 的对象，形成唯一 fingerprint input。
 4. 对 fingerprint input 执行 RFC 8785 JCS，得到 UTF-8 字节。
@@ -81,10 +79,9 @@
 
 | Test ID | Owner / 层 | 场景与输入 | 必须断言 | 失败结果 |
 |---|---|---|---|---|
-| GOV006-SCH-01 | 公共 Schema | 四份 Owner Golden + 两份 Schema | AuthorizationRef 与 PolicySnapshot 均通过 Draft 2020-12；启用 format assertion 校验 date-time，并由 Schema pattern 强制 RFC3339Nano UTC（Z 结尾，最多 9 位小数） | CI 失败 |
+| GOV006-SCH-01 | 公共 Schema | 四份 Owner Golden + 两份 Schema | AuthorizationRef 与 PolicySnapshot 均通过 Draft 2020-12；启用 format assertion 校验 RFC3339 date-time | CI 失败 |
 | GOV006-SCH-02 | 公共 Schema | 缺少必填字段、未知字段、非法 enum、空 ref、非法 fingerprint、allowed 携带 conditions、conditional 不带 conditions | 每个负例均被拒绝；不得静默丢弃未知字段 | CI 失败 |
-| GOV006-SCH-03 | 语义 Validator | policy_version 与 snapshot_ref 不一致；conditions 重复项；policies 为空/重复 tuple/顺序非字典序；expires_at 不晚于 decided_at | 一致性、非空、tuple 唯一、稳定排序和有效期顺序全部由跨对象 Validator 检查 | CI 失败 |
-| GOV006-SCH-04 | 公共 Schema | policy_owner 与 purpose_code/content_level 不匹配 | Data/News/Quant/Research 只允许各自映射表定义的 purpose/content_level 组合 | Schema 拒绝 |
+| GOV006-SCH-03 | 语义 Validator | policy_version 与 snapshot_ref 不一致；policies 为空；重复 tuple；顺序非字典序 | 一致性、非空、tuple 唯一和稳定排序全部由跨对象 Validator 检查 | CI 失败 |
 | GOV006-FP-01 | 公共 Fingerprint | 四个 Golden | 从 AuthorizationRef + PolicySnapshot 重新构造 fingerprint_input；JCS 后 SHA-256 必须等于 expected_sha256 和 decision_fingerprint | CI 失败 |
 | GOV006-FP-02 | 公共 Fingerprint | 修改 policies 中任意一项 policy_type/ref/version，或漏掉一项 | 摘要必须变化；旧 fingerprint 不再匹配 | CI 失败 |
 | GOV006-FP-03 | 公共 Fingerprint | 仅修改 authorization_ref 或 decision_fingerprint | fingerprint_input 不变；避免把引用自身或摘要自身递归纳入摘要 | CI 失败 |
@@ -110,29 +107,29 @@
 JSON Schema 负责单对象结构约束；跨对象和运行时语义不得假装由 Schema 完成：
 
 1. **Schema Validator**：Draft 2020-12；必须启用 format assertion，而不是只把 date-time 当注释。
-2. **Snapshot/Time Validator**：校验 authorization_ref.policy_version == policy_snapshot.snapshot_ref；policies 非空；Schema 校验完整对象唯一，Validator 进一步按 (policy_type, policy_ref, policy_version) tuple 去重并严格字典序排序；expires_at 非 null 时必须严格晚于 decided_at。
+2. **Snapshot Validator**：校验 authorization_ref.policy_version == policy_snapshot.snapshot_ref；policies 非空；按 (policy_type, policy_ref, policy_version) tuple 唯一且严格字典序排序。
 3. **Fingerprint Verifier**：根据 PolicySnapshot 重建 evaluated_policy_versions，再执行 RFC 8785 JCS + SHA-256；不信任调用方传入的 fingerprint_input/canonical_json。
-4. **Owner Authorization Test**：每个 Owner 自己验证 subject_ref、resource_ref、purpose_code、content_level 与可信认证上下文和真实资源的绑定关系；Data subject_ref 必须来自 Server 注入的可信 Principal/Scope Context，原始 API Key 只能作为认证凭证，不得成为主体引用。
+4. **Owner Authorization Test**：每个 Owner 自己验证 subject_ref、resource_ref、purpose_code、content_level 与可信认证上下文和真实资源的绑定关系。
 5. **Read-time Gate**：消费者必须调用资源 Owner 的当前授权检查；不得仅在任务创建时检查一次后长期缓存 allowed。
 6. **Race Test**：授权检查与正文读取必须处于可证明一致的策略版本边界；无法证明时 fail closed。
 
 ### 7.3 测试分层与完成定义
 
 - **L1 Schema/Golden**：GOV006-SCH-*、GOV006-FP-* 全通过。
-- **L2 Owner Contract（实现符合性）**：DATA/NEWS/QUANT/RESEARCH 各自的签发、Scope、资源映射、当前授权复核测试。
-- **L2 Consumer Contract（实现符合性）**：Researchflow/Report/Notification 等直接消费者不得把 AuthorizationRef 当 bearer token；必须保留上游来源链并调用 Owner 当前复核。
-- **L2 Concurrency/Security（实现符合性）**：READ/RACE 场景验证。
-- L1 负责项目级契约定义是否达到 freeze-ready；L2 运行记录用于后续实现符合性/集成验收，不作为本轮项目级定义冻结门禁。
+- **L2 Owner Contract**：DATA/NEWS/QUANT/RESEARCH 各自的签发、Scope、资源映射、当前授权复核全通过。
+- **L2 Consumer Contract**：Researchflow/Report/Notification 等直接消费者不得把 AuthorizationRef 当 bearer token；必须保留上游来源链并调用 Owner 当前复核。
+- **L2 Concurrency/Security**：READ/RACE 场景全通过。
+- 只有 L1 + 所有适用 L2 都有 CI 运行记录、测试命令、测试结果和提交 SHA，GOV-CTR-006 才能从 pending_evidence 升级为 frozen。文档存在、Schema 可解析或 Golden 静态校验通过都不等价于 Contract Test 通过。
 
-## 7. 后续 L2 实现符合性证据（不阻断 freeze-ready）
+## 7. 尚待证据
 
-以下测试仍需在对应模块开发/集成阶段执行；它们不改变 GOV-CTR-006 当前 freeze-ready 的项目级定义状态：
-- 将仓库中的两份 Schema 文件接入模块 CI，由实际 Validator 执行正向/反向校验，并校验 format/date-time；本轮已对 Schema 定义执行 Draft 2020-12 结构校验；RFC3339Nano UTC、conditions 唯一性和 policies 非空/完整对象唯一已落实到 Schema，跨数组排序仍由 Validator 负责。
+以下测试通过前，GOV-CTR-006 保持 pending_evidence：
+- 将仓库中的两份 Schema 文件接入模块 CI，由实际 Validator 执行正向/反向校验，并校验 format/date-time；本轮已对 Schema 定义执行 Draft 2020-12 结构校验。
 - 将四个 Golden 接入运行时测试，复算 JCS canonicalization 与 SHA-256；本轮四个 Golden 预期摘要独立复算一致，尚未形成模块 CI 证据。
-- policy_version 与 snapshot_ref 一致性、policies 非空/唯一/排序、遗漏任一策略版本导致 fingerprint 不匹配；AuthorizationRef 与 PolicySnapshot 必须各自携带匹配自身 Schema 的 schema_version。
+- policy_version 与 snapshot_ref 一致性、policies 非空/唯一/排序、遗漏任一策略版本导致 fingerprint 不匹配。
 - 四个 policy_owner 的 Principal/Scope/Resource 映射 Contract Test。
 - allowed → revoked、expires_at 边界、conditional 未满足/全部满足、unknown、授权服务不可用的拒绝测试。
 - 策略在授权检查与内容读取之间变化时，必须重新授权或丢弃内容的竞态测试。
 - 历史 allowed 不得覆盖当前 denied/expired/unknown；来源授权链不得被 Research 派生授权覆盖。
 
-以上测试失败时，阻断相应受限资源访问调用点的实现验收；不回退公共契约定义状态，也不阻断无授权依赖的 Domain 开发。
+以上证据只阻断依赖授权引用或受限资源访问的调用点；不阻断无授权依赖的 Domain 开发。

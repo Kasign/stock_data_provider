@@ -163,7 +163,7 @@ func execute(parent context.Context, check Check) (result Result) {
 func normalizeFault(err error, contextErr error) *fault.Fault {
 	var f *fault.Fault
 	if errors.As(err, &f) && f != nil {
-		if !f.Class.Valid() {
+		if !validFaultClass(f.Class) {
 			return &fault.Fault{
 				Class: fault.ClassInternal, Code: "platform.diagnostics.invalid_fault",
 				SafeMessage: "check returned an invalid fault", Cause: err,
@@ -176,7 +176,9 @@ func normalizeFault(err error, contextErr error) *fault.Fault {
 		if copy.SafeMessage == "" {
 			copy.SafeMessage = "check failed"
 		}
-		if validationErr := copy.Validate(); validationErr != nil {
+		if len(copy.Code) > 160 || !validStableCode(copy.Code) ||
+			len(copy.SafeMessage) > 512 || hasControlCharacters(copy.SafeMessage) ||
+			len(copy.Dependency) > 128 || hasControlCharacters(copy.Dependency) {
 			return &fault.Fault{
 				Class: fault.ClassInternal, Code: "platform.diagnostics.invalid_fault",
 				SafeMessage: "check returned an invalid fault", Cause: err,
@@ -200,6 +202,10 @@ func normalizeFault(err error, contextErr error) *fault.Fault {
 		Class: fault.ClassInternal, Code: "platform.diagnostics.check_failed",
 		SafeMessage: "check failed", Cause: err,
 	}
+}
+
+func validFaultClass(class fault.Class) bool {
+	return class.Valid()
 }
 
 func notStartedObservation(cause error) Observation {

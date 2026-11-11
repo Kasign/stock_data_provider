@@ -142,15 +142,15 @@ Gateway 远程 OpenAI-compatible Provider 对成功 JSON 采用原始响应体�
 | 场景 | Gateway 可观察行为 | LLM Adapter 处理建议 |
 |---|---|---|
 | 调用方 Key 缺失/无效/过期 | 401 | 认证配置错误，不重试 |
-| 调用方 RPM 超限 | 429 | 归一化为 rate_limited 并解析 Retry-After；LLM Adapter 不退避、不重试，由上层按调用预算决定 |
-| Redis 限流不可用 | 503 | 视为 Gateway 基础依赖故障，归一化为 upstream_unavailable；LLM Adapter 不自动重试 |
+| 调用方 RPM 超限 | 429 | 读取 Retry-After，按调用预算退避 |
+| Redis 限流不可用 | 503 | 视为 Gateway 基础依赖故障，不盲目重试 |
 | 请求体超限 | 常规推理入口 413，最大 64 MiB | 本地限制应远低于 Gateway 上限 |
-| Provider 并发/队列满 | 503，可能为 provider_concurrency_limit / provider_queue_full | 归一化为 overloaded/upstream_unavailable 并保留可重试提示；LLM Adapter 不执行退避或重试 |
-| Provider 队列等待超时 | 503 provider_queue_timeout | 记录稳定错误与排队超时语义；LLM Adapter 不重试，上层结合整体 deadline 决定后续策略 |
+| Provider 并发/队列满 | 503，可能为 provider_concurrency_limit / provider_queue_full | 有界退避；不在多个层重复重试 |
+| Provider 队列等待超时 | 503 provider_queue_timeout | 记录排队耗时；按整体 deadline 判断是否重试 |
 | 上游 HTTP 非 2xx | 保留/映射上游状态；错误正文按协议脱敏 | 按状态与稳定错误码分类，不解析任意敏感正文 |
 | Gateway 整体 deadline | 未提交响应时 504 gateway_timeout；已提交流式响应后 HTTP 状态不能更改 | 将请求标记 timeout；不能把部分文本当完整成功 |
 | 客户端断连/管理端取消 | Context 取消；未提交时可记录 499，已提交后保持原 HTTP 状态但审计标记 cancelled | 取消不可重试；及时释放资源 |
-| 上游建连/读取失败 | 502/504 等稳定错误；远程 Provider 有 provider_upstream/provider_timeout 等映射 | 归一化稳定错误并保留 retryable 提示；LLM Adapter 不重试，上层仅在能证明未派发且满足幂等/预算约束时决定是否重新发起 |
+| 上游建连/读取失败 | 502/504 等稳定错误；远程 Provider 有 provider_upstream/provider_timeout 等映射 | 只对明确安全且幂等的请求有限重试 |
 | Responses SSE 提交后失败 | 远程 Provider 追加 event:error；本地 Provider 当前主要结束流 | 必须识别异常终止，不能把 EOF/断流当 response.completed |
 
 超时层：
@@ -182,7 +182,7 @@ Gateway 远程 OpenAI-compatible Provider 对成功 JSON 采用原始响应体�
 7. Stream 使用 Responses SSE event parser；至少区分 response.created、response.output_text.delta、response.completed、response.incomplete、response.failed、error 和未知事件。结束事件缺失或流中断必须返回 incomplete/error。
 8. 工具调用只解析为待审批 ToolCall，不在 LLM Adapter 内执行；Researchflow 负责完整授权和执行闭环。
 9. Usage 缺失保持 nil/unknown；模型版本、Gateway request ID、总耗时、首字节和可用 TTFT 分开记录。
-10. 超时/取消由调用方 deadline 驱动；LLM Adapter 每次只发起一次请求，不做自动重试。上层只有在确认未派发且满足幂等、deadline 与预算约束时才可决定重新发起；流开始输出后禁止透明重试。
+10. 超时/取消由调用方 deadline 驱动；仅对发送前失败或明确可安全重放的请求有限重试，流开始输出后禁止透明重试。
 
 ## 10. LLM-001 验收状态
 

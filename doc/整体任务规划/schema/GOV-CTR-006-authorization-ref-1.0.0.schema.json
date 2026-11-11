@@ -5,7 +5,6 @@
   "type": "object",
   "additionalProperties": false,
   "required": [
-    "schema_version",
     "authorization_ref",
     "policy_owner",
     "policy_version",
@@ -74,16 +73,14 @@
     },
     "decided_at": {
       "type": "string",
-      "format": "date-time",
-      "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](\\.[0-9]{1,9})?Z$"
+      "format": "date-time"
     },
     "expires_at": {
       "type": [
         "string",
         "null"
       ],
-      "format": "date-time",
-      "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](\\.[0-9]{1,9})?Z$"
+      "format": "date-time"
     },
     "conditions": {
       "type": "array",
@@ -91,17 +88,11 @@
       "items": {
         "type": "string",
         "minLength": 1
-      },
-      "description": "Condition code 数组必须唯一；按字典序排列由语义 Validator 校验。"
+      }
     },
     "decision_fingerprint": {
       "type": "string",
       "pattern": "^[0-9a-f]{64}$"
-    },
-    "schema_version": {
-      "type": "string",
-      "const": "1.0.0",
-      "description": "当前 AuthorizationRef DTO 自身的 Schema 版本。"
     }
   },
   "allOf": [
@@ -139,99 +130,6 @@
         "properties": {
           "conditions": {
             "maxItems": 0
-          }
-        }
-      }
-    },
-    {
-      "if": {
-        "properties": {
-          "policy_owner": {
-            "const": "data"
-          }
-        },
-        "required": [
-          "policy_owner"
-        ]
-      },
-      "then": {
-        "properties": {
-          "purpose_code": {
-            "enum": [
-              "quant_analysis",
-              "research_analysis",
-              "risk_review"
-            ]
-          },
-          "content_level": {
-            "const": "full"
-          }
-        }
-      }
-    },
-    {
-      "if": {
-        "properties": {
-          "policy_owner": {
-            "const": "news"
-          }
-        },
-        "required": [
-          "policy_owner"
-        ]
-      },
-      "then": {
-        "properties": {
-          "purpose_code": {
-            "enum": [
-              "research_analysis",
-              "risk_review",
-              "user_display"
-            ]
-          }
-        }
-      }
-    },
-    {
-      "if": {
-        "properties": {
-          "policy_owner": {
-            "const": "quant"
-          }
-        },
-        "required": [
-          "policy_owner"
-        ]
-      },
-      "then": {
-        "properties": {
-          "purpose_code": {
-            "const": "quant_analysis"
-          },
-          "content_level": {
-            "const": "full"
-          }
-        }
-      }
-    },
-    {
-      "if": {
-        "properties": {
-          "policy_owner": {
-            "const": "research"
-          }
-        },
-        "required": [
-          "policy_owner"
-        ]
-      },
-      "then": {
-        "properties": {
-          "purpose_code": {
-            "enum": [
-              "research_analysis",
-              "risk_review"
-            ]
           }
         }
       }

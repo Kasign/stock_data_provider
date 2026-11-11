@@ -83,8 +83,7 @@ type ListEvidenceRequest struct {
 }
 
 // GetEvidenceRequest identifies one News Item and an optional immutable
-// version. CallerRef must be injected from trusted in-process context. SystemAsOf
-// is mandatory even when VersionID is supplied.
+// version. SystemAsOf is mandatory even when VersionID is supplied.
 type GetEvidenceRequest struct {
 	CallerRef             string               `json:"caller_ref"`
 	PurposeCode           EvidencePurposeCode  `json:"purpose_code"`
@@ -154,7 +153,6 @@ type EvidencePITRecord struct {
 // Both the selected version and its owning Observation must be visible at T.
 type EvidencePITRepository interface {
 	GetEvidenceVersionAt(context.Context, GetEvidenceRequest) (EvidencePITRecord, error)
-	ListEvidenceVersionsAt(context.Context, ListEvidenceRequest) ([]EvidencePITRecord, error)
 }
 
 // ResearchEvidenceQuery is the only cross-module read port. It never searches

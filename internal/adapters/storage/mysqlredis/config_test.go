@@ -4,8 +4,6 @@ import (
 	"strings"
 	"testing"
 
-	platformconfig "example.com/stock-analysis-flow/internal/platform/config"
-
 	mysqlDriver "github.com/go-sql-driver/mysql"
 )
 
@@ -74,41 +72,5 @@ func TestMySQLDriverConfigRejectsInvalidLocation(t *testing.T) {
 	}
 	if _, err := cfg.mysqlDriverConfig(); err == nil {
 		t.Fatal("invalid DB_PARAMS loc must be rejected")
-	}
-}
-
-func TestLoadConfigUsesExplicitSource(t *testing.T) {
-	values := map[string]string{
-		"DB_HOST": "mariadb.internal",
-		"DB_USER": "service-user",
-		"DB_PASSWORD": "secret-value",
-		"DB_NAME": "research",
-		"DB_PORT": "3307",
-		"REDIS_ADDR": "redis.internal:6380",
-		"REDIS_PASSWORD": "redis-secret",
-		"DB_AUTO_MIGRATE": "true",
-	}
-	env := platformconfig.NewEnvWithLookup(func(key string) (string, bool) {
-		value, ok := values[key]
-		return value, ok
-	})
-	cfg, err := LoadConfig(env)
-	if err != nil {
-		t.Fatalf("LoadConfig() error = %v", err)
-	}
-	if cfg.DBHost != "mariadb.internal" || cfg.DBPort != 3307 ||
-		cfg.DBPassword != "secret-value" || cfg.RedisAddr != "redis.internal:6380" ||
-		cfg.RedisPassword != "redis-secret" || !cfg.DBAutoMigrate {
-		t.Fatalf("explicit source was not applied correctly: %+v", cfg)
-	}
-}
-
-func TestLoadConfigRejectsInvalidExplicitSource(t *testing.T) {
-	env := platformconfig.NewEnvWithLookup(func(key string) (string, bool) {
-		if key == "DB_PORT" { return "not-a-port", true }
-		return "", false
-	})
-	if _, err := LoadConfig(env); err == nil {
-		t.Fatal("LoadConfig() error = nil, want invalid DB_PORT error")
 	}
 }

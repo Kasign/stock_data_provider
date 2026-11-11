@@ -10,10 +10,10 @@ import (
 
 func TestMapAuthorizationErrorPreservesFailureSemantics(t *testing.T) {
 	tests := []struct {
-		name  string
-		kind  AuthorizationFailureKind
+		name string
+		kind AuthorizationFailureKind
 		class fault.Class
-		code  string
+		code string
 	}{
 		{name: "明确拒绝", kind: AuthorizationDenied, class: fault.ClassForbidden, code: "evidence_authorization_rejected"},
 		{name: "依赖不可用", kind: AuthorizationUnavailable, class: fault.ClassUnavailable, code: "evidence_authorization_unavailable"},
@@ -38,7 +38,7 @@ func TestMapAuthorizationErrorTreatsUntypedFailureAsInternal(t *testing.T) {
 func TestMapAuthorizationErrorRecognizesContextTermination(t *testing.T) {
 	tests := []struct {
 		name string
-		err  error
+		err error
 		code string
 	}{
 		{name: "调用取消", err: context.Canceled, code: "evidence_authorization_canceled"},

@@ -43,6 +43,7 @@ func TestNewRepositoryBaseRequiresDatabase(t *testing.T) {
 	}
 }
 
+
 func TestVerifyStoredPayloadRejectsDigestMismatch(t *testing.T) {
 	payload := []byte(`{"context_id":"ctx-1","context_version":1}`)
 	validDigest := payloadDigest(payload)

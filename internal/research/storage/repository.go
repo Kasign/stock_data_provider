@@ -8,7 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	researcherrors "example.com/stock-analysis-flow/internal/research"
+ researcherrors "example.com/stock-analysis-flow/internal/research"
 	"fmt"
 	"math"
 	"time"
@@ -16,10 +16,10 @@ import (
 )
 
 var (
-	ErrNotFound          = researcherrors.ErrNotFound
-	ErrConflict          = researcherrors.ErrConflict
+	ErrNotFound = researcherrors.ErrNotFound
+	ErrConflict = researcherrors.ErrConflict
 	ErrInvalidRepository = researcherrors.ErrInvalidRepository
-	ErrCorruptRecord     = researcherrors.ErrCorruptRecord
+	ErrCorruptRecord = researcherrors.ErrCorruptRecord
 )
 
 const pitTimeLayout = "2006-01-02T15:04:05.000000000Z"
@@ -27,17 +27,13 @@ const pitTimeLayout = "2006-01-02T15:04:05.000000000Z"
 type Clock func() time.Time
 
 type repositoryBase struct {
-	db  *sql.DB
+	db *sql.DB
 	now Clock
 }
 
 func newRepositoryBase(db *sql.DB, clock Clock) (repositoryBase, error) {
-	if db == nil {
-		return repositoryBase{}, ErrInvalidRepository
-	}
-	if clock == nil {
-		clock = func() time.Time { return time.Now().UTC() }
-	}
+	if db == nil { return repositoryBase{}, ErrInvalidRepository }
+	if clock == nil { clock = func() time.Time { return time.Now().UTC() } }
 	return repositoryBase{db: db, now: clock}, nil
 }
 
@@ -67,36 +63,21 @@ func (r repositoryBase) appendVersionWithHook(ctx context.Context, aggregateType
 	version int64, table, idColumn, versionColumn string, payload []byte, createdAt time.Time,
 	insertSQL string, insertArgs []any, validateNext func(previous []byte) error,
 	afterAppend func(tx *sql.Tx, previous []byte) error) error {
-	if r.db == nil {
-		return ErrInvalidRepository
-	}
-	if ctx == nil {
-		return errors.New("context is nil")
-	}
+	if r.db == nil { return ErrInvalidRepository }
+	if ctx == nil { return errors.New("context is nil") }
 	if aggregateID == "" || utf8.RuneCountInString(aggregateID) > 255 || version < 1 || len(payload) == 0 {
 		return fmt.Errorf("aggregate identity (1..255 characters), positive version and payload are required")
 	}
 	now := createdAt.UTC()
-	if now.IsZero() {
-		return errors.New("repository clock returned zero time")
-	}
+	if now.IsZero() { return errors.New("repository clock returned zero time") }
 	tx, err := r.db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin research append transaction: %w", err)
-	}
+	if err != nil { return fmt.Errorf("begin research append transaction: %w", err) }
 	defer tx.Rollback()
 
-	// Use an upsert that takes the aggregate-head write lock immediately.
-	// INSERT IGNORE can acquire a shared duplicate-key lock that is later
-	// upgraded by SELECT FOR UPDATE; concurrent appenders may deadlock while
-	// upgrading those locks.
-	_, err = tx.ExecContext(ctx, "INSERT INTO research_aggregate_heads "+
-		"(aggregate_type, aggregate_id, latest_version, created_at, updated_at) VALUES (?, ?, 0, ?, ?) "+
-		"ON DUPLICATE KEY UPDATE aggregate_id=VALUES(aggregate_id)",
+	_, err = tx.ExecContext(ctx, "INSERT IGNORE INTO research_aggregate_heads "+
+		"(aggregate_type, aggregate_id, latest_version, created_at, updated_at) VALUES (?, ?, 0, ?, ?)",
 		aggregateType, aggregateID, now, now)
-	if err != nil {
-		return fmt.Errorf("initialize research aggregate head: %w", err)
-	}
+	if err != nil { return fmt.Errorf("initialize research aggregate head: %w", err) }
 
 	var latest int64
 	if err := tx.QueryRowContext(ctx, "SELECT latest_version FROM research_aggregate_heads "+
@@ -118,9 +99,7 @@ func (r repositoryBase) appendVersionWithHook(ctx context.Context, aggregateType
 				return tx.Commit()
 			}
 		}
-		if err != nil && !errors.Is(err, sql.ErrNoRows) {
-			return fmt.Errorf("read existing research version: %w", err)
-		}
+		if err != nil && !errors.Is(err, sql.ErrNoRows) { return fmt.Errorf("read existing research version: %w", err) }
 		return fmt.Errorf("%w: %s %s version %d already has different content", ErrConflict, aggregateType, aggregateID, version)
 	}
 	if latest == math.MaxInt64 {
@@ -135,20 +114,13 @@ func (r repositoryBase) appendVersionWithHook(ctx context.Context, aggregateType
 		var previous []byte
 		query := fmt.Sprintf("SELECT payload_sha256, payload FROM %s WHERE %s=? AND %s=?", table, idColumn, versionColumn)
 		if err := tx.QueryRowContext(ctx, query, aggregateID, latest).Scan(&previousDigest, &previous); err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				return corruptStoredRecord(aggregateType, "aggregate head references a missing latest version", nil)
-			}
 			return fmt.Errorf("read previous research version: %w", err)
 		}
 		if err := verifyStoredPayload(previous, previousDigest); err != nil {
 			return err
 		}
-		if validateNext == nil {
-			return errors.New("next-version validator is required")
-		}
-		if err := validateNext(previous); err != nil {
-			return fmt.Errorf("validate next research version: %w", err)
-		}
+		if validateNext == nil { return errors.New("next-version validator is required") }
+		if err := validateNext(previous); err != nil { return fmt.Errorf("validate next research version: %w", err) }
 		previousPayload = append([]byte(nil), previous...)
 	}
 	if _, err := tx.ExecContext(ctx, insertSQL, insertArgs...); err != nil {
@@ -156,44 +128,26 @@ func (r repositoryBase) appendVersionWithHook(ctx context.Context, aggregateType
 	}
 	result, err := tx.ExecContext(ctx, "UPDATE research_aggregate_heads SET latest_version=?, updated_at=? "+
 		"WHERE aggregate_type=? AND aggregate_id=? AND latest_version=?", version, now, aggregateType, aggregateID, latest)
-	if err != nil {
-		return fmt.Errorf("advance research aggregate head: %w", err)
-	}
+	if err != nil { return fmt.Errorf("advance research aggregate head: %w", err) }
 	affected, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("verify research aggregate head update: %w", err)
-	}
-	if affected != 1 {
-		return fmt.Errorf("%w: aggregate head changed during append", ErrConflict)
-	}
+	if err != nil { return fmt.Errorf("verify research aggregate head update: %w", err) }
+	if affected != 1 { return fmt.Errorf("%w: aggregate head changed during append", ErrConflict) }
 	if afterAppend != nil {
-		if err := afterAppend(tx, previousPayload); err != nil {
-			return fmt.Errorf("append transaction side effect: %w", err)
-		}
+		if err := afterAppend(tx, previousPayload); err != nil { return fmt.Errorf("append transaction side effect: %w", err) }
 	}
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit research append transaction: %w", err)
-	}
+	if err := tx.Commit(); err != nil { return fmt.Errorf("commit research append transaction: %w", err) }
 	return nil
 }
 
 func (r repositoryBase) getVersion(ctx context.Context, table, idColumn, versionColumn, aggregateID string, version int64) ([]byte, error) {
-	if r.db == nil {
-		return nil, ErrInvalidRepository
-	}
-	if ctx == nil {
-		return nil, errors.New("context is nil")
-	}
-	if aggregateID == "" || version < 1 {
-		return nil, fmt.Errorf("aggregate identity and positive version are required")
-	}
+	if r.db == nil { return nil, ErrInvalidRepository }
+	if ctx == nil { return nil, errors.New("context is nil") }
+	if aggregateID == "" || version < 1 { return nil, fmt.Errorf("aggregate identity and positive version are required") }
 	query := fmt.Sprintf("SELECT payload_sha256, payload FROM %s WHERE %s=? AND %s=?", table, idColumn, versionColumn)
 	var storedDigest string
 	var payload []byte
 	if err := r.db.QueryRowContext(ctx, query, aggregateID, version).Scan(&storedDigest, &payload); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, ErrNotFound
-		}
+		if errors.Is(err, sql.ErrNoRows) { return nil, ErrNotFound }
 		return nil, fmt.Errorf("read research version: %w", err)
 	}
 	if err := verifyStoredPayload(payload, storedDigest); err != nil {
@@ -211,9 +165,7 @@ func verifyStoredPayload(payload []byte, storedDigest string) error {
 
 func encodePayload(value any) ([]byte, string, error) {
 	payload, err := json.Marshal(value)
-	if err != nil {
-		return nil, "", fmt.Errorf("encode research payload: %w", err)
-	}
+	if err != nil { return nil, "", fmt.Errorf("encode research payload: %w", err) }
 	return payload, payloadDigest(payload), nil
 }
 

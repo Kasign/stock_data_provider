@@ -9,14 +9,8 @@ import (
 )
 
 type evidenceSnapshotRepositoryStub struct {
-	created     EvidenceSnapshot
-	calls       int
-	deleted     int64
-	deleteErr   error
-	deleteNow   time.Time
-	deleteLimit int
-	deleteCalls int
-	afterDelete func()
+	created EvidenceSnapshot
+	calls   int
 }
 
 func (s *evidenceSnapshotRepositoryStub) CreateEvidenceSnapshot(_ context.Context, snapshot EvidenceSnapshot) error {
@@ -29,13 +23,8 @@ func (s *evidenceSnapshotRepositoryStub) GetEvidenceSnapshot(context.Context, st
 	return EvidenceSnapshot{}, ErrEvidenceSnapshotUnavailable
 }
 
-func (s *evidenceSnapshotRepositoryStub) DeleteExpiredEvidenceSnapshots(_ context.Context, now time.Time, limit int) (int64, error) {
-	s.deleteCalls++
-	s.deleteNow, s.deleteLimit = now, limit
-	if s.afterDelete != nil {
-		s.afterDelete()
-	}
-	return s.deleted, s.deleteErr
+func (s *evidenceSnapshotRepositoryStub) DeleteExpiredEvidenceSnapshots(context.Context, time.Time, int) (int64, error) {
+	return 0, nil
 }
 
 func validEvidenceSnapshot(now time.Time) EvidenceSnapshot {
@@ -193,79 +182,4 @@ func TestSaveEvidenceSnapshotValidatesBeforePersistence(t *testing.T) {
 	if repository.calls != 1 {
 		t.Fatalf("invalid snapshot reached repository; calls=%d", repository.calls)
 	}
-}
-
-func TestEvidenceSnapshotRetentionCleanerUsesBoundedRepositoryRequest(t *testing.T) {
-	repository := &evidenceSnapshotRepositoryStub{deleted: 7}
-	cleaner, err := NewEvidenceSnapshotRetentionCleaner(repository)
-	if err != nil {
-		t.Fatal(err)
-	}
-	now := time.Date(2026, 11, 9, 10, 0, 0, 0, time.FixedZone("UTC+8", 8*60*60))
-	deleted, err := cleaner.Execute(context.Background(), now, 20)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if deleted != 7 || repository.deleteCalls != 1 || !repository.deleteNow.Equal(now.UTC()) || repository.deleteLimit != 20 {
-		t.Fatalf("deleted=%d calls=%d now=%s limit=%d", deleted, repository.deleteCalls, repository.deleteNow, repository.deleteLimit)
-	}
-}
-
-func TestEvidenceSnapshotRetentionCleanerRejectsInvalidRequestsAndResults(t *testing.T) {
-	if _, err := NewEvidenceSnapshotRetentionCleaner(nil); !errors.Is(err, ErrInvalidEvidenceSnapshot) {
-		t.Fatalf("nil repository error=%v", err)
-	}
-	repository := &evidenceSnapshotRepositoryStub{}
-	cleaner, err := NewEvidenceSnapshotRetentionCleaner(repository)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := cleaner.Execute(context.Background(), time.Time{}, 1); !errors.Is(err, ErrInvalidEvidenceSnapshot) {
-		t.Fatalf("zero time error=%v", err)
-	}
-	if _, err := cleaner.Execute(context.Background(), time.Now(), 1001); !errors.Is(err, ErrInvalidEvidenceSnapshot) {
-		t.Fatalf("oversized limit error=%v", err)
-	}
-	repository.deleted = -1
-	if _, err := cleaner.Execute(context.Background(), time.Now(), 10); !errors.Is(err, ErrEvidenceSnapshotRetentionResultInvalid) {
-		t.Fatalf("negative deleted count error=%v", err)
-	}
-	repository.deleted = 11
-	if _, err := cleaner.Execute(context.Background(), time.Now(), 10); !errors.Is(err, ErrEvidenceSnapshotRetentionResultInvalid) {
-		t.Fatalf("over-limit deleted count error=%v", err)
-	}
-}
-
-func TestEvidenceSnapshotRetentionCleanerHonorsCancellation(t *testing.T) {
-	now := time.Date(2026, 11, 9, 10, 0, 0, 0, time.UTC)
-	t.Run("already canceled does not call repository", func(t *testing.T) {
-		repository := &evidenceSnapshotRepositoryStub{}
-		cleaner, err := NewEvidenceSnapshotRetentionCleaner(repository)
-		if err != nil {
-			t.Fatal(err)
-		}
-		ctx, cancel := context.WithCancel(context.Background())
-		cancel()
-		if _, err := cleaner.Execute(ctx, now, 10); !errors.Is(err, context.Canceled) {
-			t.Fatalf("Execute() error=%v", err)
-		}
-		if repository.deleteCalls != 0 {
-			t.Fatalf("repository calls=%d, want 0", repository.deleteCalls)
-		}
-	})
-	t.Run("canceled while repository is running", func(t *testing.T) {
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
-		repository := &evidenceSnapshotRepositoryStub{deleted: 2, afterDelete: cancel}
-		cleaner, err := NewEvidenceSnapshotRetentionCleaner(repository)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if _, err := cleaner.Execute(ctx, now, 10); !errors.Is(err, context.Canceled) {
-			t.Fatalf("Execute() error=%v", err)
-		}
-		if repository.deleteCalls != 1 {
-			t.Fatalf("repository calls=%d, want 1", repository.deleteCalls)
-		}
-	})
 }

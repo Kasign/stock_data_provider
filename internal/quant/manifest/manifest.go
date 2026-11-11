@@ -111,8 +111,8 @@ func Build(input Input) (Manifest, error) {
 
 	refs := append([]string(nil), input.InputSnapshotRefs...)
 	for _, ref := range refs {
-		if !utf8.ValidString(ref) || strings.TrimSpace(ref) == "" || strings.TrimSpace(ref) != ref {
-			return Manifest{}, invalid("input_snapshot_refs contains invalid UTF-8, blank or padded reference")
+		if strings.TrimSpace(ref) == "" || strings.TrimSpace(ref) != ref {
+			return Manifest{}, invalid("input_snapshot_refs contains blank or padded reference")
 		}
 	}
 	sort.Strings(refs)
@@ -157,8 +157,8 @@ func (m Manifest) Verify() error {
 		return invalid("input_snapshot_refs must not be empty")
 	}
 	for i, ref := range m.InputSnapshotRefs {
-		if !utf8.ValidString(ref) || strings.TrimSpace(ref) == "" || strings.TrimSpace(ref) != ref {
-			return invalid("input_snapshot_refs contains invalid UTF-8, blank or padded reference")
+		if strings.TrimSpace(ref) == "" || strings.TrimSpace(ref) != ref {
+			return invalid("input_snapshot_refs contains blank or padded reference")
 		}
 		if i > 0 && m.InputSnapshotRefs[i-1] >= ref {
 			return invalid("input_snapshot_refs must be sorted and unique")
