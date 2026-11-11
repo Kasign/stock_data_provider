@@ -48,7 +48,7 @@ PLAT-CTR-002 定义一次同步 HTTP 请求在服务端调用树中的可信关�
 - `observability.FromContext(ctx)`：读取当前 Context 中已验证的 Request ID；不存在时返回空字符串。
 - `observability.WithRequestID(ctx, requestID)`：仅在输入值符合格式时建立带 Request ID 的子 Context；无效值不改变 Context。
 - `observability.PropagateRequestID(ctx, request)`：只从可信 Context 覆盖出站 Header；Context 无 Request ID 时删除请求对象中已有的 `X-Request-ID`。
-- `security.Principal{Kind, Subject, Scopes}`：进程内调用主体快照。
+- `security.Principal{Kind, AuthMethod, Subject, Scopes}`：进程内调用主体快照。
 - `security.PrincipalFromContext(request)`：读取由 Platform Guard 写入的 Principal，并返回 Scope 切片副本。
 
 Principal 只能由服务端认证/授权链写入 Context。客户端自报的 Principal、Subject、Scope 或身份 Header 不构成可信身份。Principal 的具体身份种类、凭证和 Scope allowlist 由 PLAT-CTR-003 管理。
