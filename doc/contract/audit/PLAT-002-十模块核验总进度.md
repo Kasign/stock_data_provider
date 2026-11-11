@@ -1346,3 +1346,10 @@
 - 明确 EventRef 存在性/无环、source_times 对应关系、Claim supersedes 当前版本与并发冲突、Scenario expected_value 类型映射和 QuantResultRef 类型/时间绑定均属于尚未完成的权威证据。
 - 未修改 `doc/research/**`、代码、测试或 CI；RSC-CTR-002 保持 pending_evidence。
 - 当前 43 项统计不变：1 freeze-ready、40 pending-evidence、0 pending-decision、2 not_applicable、0 frozen。
+
+
+## 56. ScenarioCondition 期望值契约收敛（2026-11-11）
+
+- DEC-PLAT-002-033 已确定 expected_value 的 scalar/非空 scalar 数组结构和 operator 约束；项目级 DTO/Schema 已同步。
+- 禁止任意 object/map 和嵌套表达式；Metric 值类型/unit 必须以 Quant Registry 为准，待权威映射证据。
+- 未修改 Research 责任模块文件；RSC-CTR-002 保持 pending_evidence，43 项统计不变。

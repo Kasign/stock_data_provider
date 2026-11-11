@@ -412,14 +412,14 @@ required=true 的分区被省略时，Context 整体不能标记为 valid；必�
 | description | 是 | string | 人类可读条件 |
 | operator | 是 | gt/gte/lt/lte/eq/neq/in/not_in/crosses/exists/not_exists | 比较运算 |
 | metric_ref | 条件必需 | string | Quant Metric 或外部事实引用 |
-| expected_value | 条件必需 | typed scalar/object | 目标值；必须与 unit 一致 |
+| expected_value | 条件必需 | string/number/boolean scalar 或非空 scalar 数组 | `in/not_in` 使用数组；`exists/not_exists` 省略；其他比较使用单值；Metric 条件必须匹配 Registry 的 value_type/unit |
 | unit | 条件必需 | string | 比较单位 |
 | window | 否 | string | 条件观察窗口 |
 | evaluation_status | 是 | satisfied/not_satisfied/unknown/not_evaluated | 当前验证状态 |
 | evidence_refs | 是 | string[] | 支撑该条件的证据 |
 | required | 是 | boolean | 是否为场景成立的必要条件 |
 
-条件表达式不允许执行任意代码、SQL、脚本或外部 URL。跨多个条件的 AND/OR 组合应使用受限 ConditionGroup（operator=all/any、conditions[]），不允许隐式自然语言解析作为唯一执行依据。 `expected_value` 必须由 `condition_type + metric_ref + operator + unit` 唯一决定其 JSON 类型和结构；不得用任意对象/map 承载未定义字段。`in/not_in` 的集合形态、范围/复合值对象结构及各 condition_type 的类型映射仍需形成封闭 Schema/Registry 定义，在此之前不得宣称 ScenarioCondition 的机器契约完整。
+条件表达式不允许执行任意代码、SQL、脚本或外部 URL。跨多个条件的 AND/OR 组合应使用受限 ConditionGroup（operator=all/any、conditions[]），不允许隐式自然语言解析作为唯一执行依据。`expected_value` 只允许 string/number/boolean scalar 或非空 scalar 数组；`in/not_in` 必须使用数组，`exists/not_exists` 必须省略该字段，其他比较运算必须使用单值。禁止任意 object/map、嵌套结构和表达式。Metric 条件的值类型、数组元素类型与 unit 必须匹配 `metric_ref` 对应 Registry 的权威定义；该 Registry/Adapter 映射证据尚待补齐。
 
 ### 9.3.1 ConditionGroup
 

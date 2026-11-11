@@ -1436,3 +1436,10 @@ INT-CTR-001 是正式 43 CTR 之一，不是内部 Outbox/Inbox 实现验收。�
 - Claim/Hypothesis：`supersedes_version` 已进入项目级 Schema；目标必须小于当前版本、为写入前当前有效版本，以及并发替代冲突拒绝，属于跨版本写入校验；模块文档仍标记该字段缺失。
 - Scenario：ConditionGroup 已结构化；`expected_value` 的类型化对象/集合映射仍未封闭；QuantResultRef 的 `result_type=evaluation`、`system_as_of` 一致性和当前授权复核仍需权威映射，且依赖的 Quant Ref Schema 仍与 DEC-029 冲突。
 - RSC-CTR-002 保持 pending_evidence；本轮不修改 `doc/research/**`、代码或测试，不新增决议/CTR。
+
+
+## 56. ScenarioCondition 期望值类型收敛（2026-11-11）
+
+- DEC-PLAT-002-033 已裁决 ScenarioCondition.expected_value 不允许任意 object/map；仅允许 string/number/boolean scalar 或非空 scalar 数组。
+- `in/not_in` 必须数组，`exists/not_exists` 必须省略，其他比较运算必须是单值；Metric 条件的值类型与 unit 以 `metric_ref` 对应 Registry 为准。
+- 项目级 Scenario Schema 已同步收紧；Metric Registry 映射和 QuantResultRef 类型/时间绑定仍需权威证据，RSC-CTR-002 继续 pending_evidence。

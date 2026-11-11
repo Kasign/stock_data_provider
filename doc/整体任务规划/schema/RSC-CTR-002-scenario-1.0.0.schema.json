@@ -175,11 +175,24 @@
               "type": "boolean"
             },
             {
-              "type": "object",
-              "minProperties": 1
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "oneOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "boolean"
+                  }
+                ]
+              }
             }
           ],
-          "description": "标量或由 condition_type 对应 Registry 约束的非空类型化对象；禁止任意表达式。"
+          "description": "单值或非空 scalar 数组；in/not_in 使用数组，exists/not_exists 省略；禁止任意对象和嵌套表达式。"
         },
         "unit": {
           "type": "string",
@@ -215,6 +228,107 @@
         {
           "if": {
             "properties": {
+              "operator": {
+                "enum": [
+                  "in",
+                  "not_in"
+                ]
+              }
+            },
+            "required": [
+              "operator"
+            ]
+          },
+          "then": {
+            "required": [
+              "expected_value"
+            ],
+            "properties": {
+              "expected_value": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "oneOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "boolean"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "operator": {
+                "enum": [
+                  "exists",
+                  "not_exists"
+                ]
+              }
+            },
+            "required": [
+              "operator"
+            ]
+          },
+          "then": {
+            "not": {
+              "required": [
+                "expected_value"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "operator": {
+                "enum": [
+                  "gt",
+                  "gte",
+                  "lt",
+                  "lte",
+                  "eq",
+                  "neq",
+                  "crosses"
+                ]
+              }
+            },
+            "required": [
+              "operator"
+            ]
+          },
+          "then": {
+            "required": [
+              "expected_value"
+            ],
+            "properties": {
+              "expected_value": {
+                "oneOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "boolean"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
               "condition_type": {
                 "enum": [
                   "price",
@@ -232,9 +346,30 @@
           },
           "then": {
             "required": [
-              "metric_ref",
-              "expected_value",
-              "unit"
+              "metric_ref"
+            ],
+            "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "operator": {
+                      "enum": [
+                        "exists",
+                        "not_exists"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "operator"
+                  ]
+                },
+                "then": {},
+                "else": {
+                  "required": [
+                    "unit"
+                  ]
+                }
+              }
             ]
           }
         }
