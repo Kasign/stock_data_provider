@@ -1,0 +1,39 @@
+{
+  "scenario_id": "research_scenario:scenario-001",
+  "scenario_version": 1,
+  "subject_refs": [
+    "industry:example"
+  ],
+  "system_as_of": "2026-11-10T08:06:00Z",
+  "horizon": "next_two_quarters",
+  "conditions": [
+    {
+      "condition_id": "cost_ratio_increase",
+      "condition_type": "fundamental",
+      "description": "Operating cost ratio increases after the policy effective date.",
+      "operator": "gt",
+      "metric_ref": "quant_metric:operating_cost_ratio",
+      "expected_value": "0.02",
+      "unit": "ratio",
+      "evaluation_status": "not_evaluated",
+      "evidence_refs": [
+        "evidence:news-001"
+      ],
+      "required": true
+    }
+  ],
+  "expected_path": "If the policy increases compliance costs, affected issuers may experience margin pressure.",
+  "evidence_refs": [
+    "evidence:news-001"
+  ],
+  "probability_status": "unknown",
+  "risks": [
+    "The policy scope may be narrower than currently reported."
+  ],
+  "invalidation_conditions": [
+    "Official clarification excludes the target industry."
+  ],
+  "limitations": [
+    "No Quant probability evaluation is available."
+  ]
+}

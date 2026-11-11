@@ -289,7 +289,7 @@ Claim 与 Hypothesis 可共享存储基类，但公开 DTO 必须明确 epistemi
 | subject_refs | 是 | string[] | 适用证券/行业 |
 | system_as_of | 是 | RFC3339Nano UTC | 基准知识时点 |
 | horizon | 是 | string | 预测周期 |
-| conditions | 是 | ScenarioCondition[] | 触发/前提条件 |
+| conditions | 是 | (ScenarioCondition \| ConditionGroup)[] | 触发/前提条件；支持原子条件及显式 all/any 条件组 |
 | expected_path | 是 | string | 条件化路径描述 |
 | evidence_refs | 是 | string[] | 支持与反证 |
 | quant_evaluation_ref | 否 | QuantResultRef | Quant 数值评估引用 |
@@ -407,6 +407,15 @@ required=true 的分区被省略时，Context 整体不能标记为 valid；必�
 | required | 是 | boolean | 是否为场景成立的必要条件 |
 
 条件表达式不允许执行任意代码、SQL、脚本或外部 URL。跨多个条件的 AND/OR 组合应使用受限 ConditionGroup（operator=all/any、conditions[]），不允许隐式自然语言解析作为唯一执行依据。
+
+### 9.3.1 ConditionGroup
+
+| JSON 字段 | 必需 | 类型/约束 | 语义 |
+|---|---|---|---|
+| operator | 是 | all/any | 组内条件逻辑关系 |
+| conditions | 是 | (ScenarioCondition \| ConditionGroup)[] | 嵌套的原子条件或条件组；必须非空 |
+
+条件组只能使用 all/any 组合，禁止任意表达式、脚本或隐式自然语言逻辑。
 
 ### 9.4 RiskReason
 

@@ -128,7 +128,7 @@ GitHub 远端 ref 核验（2026-11-10）：
 | Data | internal/marketdata/httpapi/openapi.yaml 当前为 1.1.0；项目 schema/golden 有 DATA-CTR-008 Manifest 1.0.0 各 1 个 | DATA-CTR-005 v2 Decimal Schema 当前未发现；DATA-CTR-001～004/006/007 仍需逐字段/行为契约盘点 |
 | News | doc/news/schema 有 NEWS-CTR-001 的 4 个 1.0.0 Schema；doc/news/golden 有 3 个 Golden；项目 schema/golden 另有 NEWS-CTR-002 Authorization Binding 各 1 个 | NEWS-CTR-003 PIT/Cursor/排序/去重未发现独立 Schema/Golden |
 | Quant | doc/quant/schema 有 7 个 1.0.0 Schema；doc/quant/golden 有 Indicator 9、Factor 3、Result 9 个 Golden；项目 schema/golden 另有 QNT-CTR-005 Manifest 各 1 个 | 文件覆盖了部分 QNT-CTR-001～005；仍需核对 Schema 与实际导出 DTO/Registry/消费者一致 |
-| Research | 项目级 schema/golden 已新增 RSC-CTR-002 Event、Claim/Hypothesis 各 1.0.0 Schema/Golden；doc/research 责任模块文档未改动 | RSC-CTR-002 Scenario Schema/Golden 仍缺，且需确认模块权威定义与项目 Schema 完全一致 |
+| Research | 项目级 schema/golden 已新增 RSC-CTR-002 Event、Claim/Hypothesis、Scenario 各 1.0.0 Schema/Golden；doc/research 责任模块文档未改动 | 机器定义已覆盖 DTO 的四类核心对象；跨字段引用存在性、无环、版本目标当前性和时间证据关联仍需 Research 权威语义校验 |
 | Researchflow | doc/researchflow/schema 有 4 个 1.0.0 Schema；doc/researchflow/golden 有 11 个 Golden | 需逐项映射 FLOW-CTR-001～004，不能把 Run/Stage/Attempt DTO 文件存在视为消费者测试完成 |
 | LLM | doc/llm/schema 有 6 个 1.0.0 Schema；internal/llm/testdata/json 与 sse 有 JSON/SSE 输入和 expected fixtures；未发现 doc/llm/golden 目录 | Fixture 存在，但需核对是否覆盖所有 LLM-CTR-001～003 终态/错误/断流语义，并确认 CI 实际执行 |
 | Notification | doc/notification/schema 有 4 个 1.0.0 Schema（Envelope + 3 类事件）；doc/notification/golden 有 6 个 Golden | NTF-CTR-001 有基础覆盖；NTF-CTR-002/003 的状态机、幂等、渠道和重试覆盖需逐项映射 |
@@ -185,7 +185,7 @@ GitHub 远端 ref 核验（2026-11-10）：
 | QNT-CTR-004 | QuantResultRef、Factor QuantMetric、Trend、Risk 输出 | Quant | Researchflow；Research 经 Researchflow 消费 | doc/quant/schema/QNT-CTR-004-*；doc/quant/03 第10.26节；项目级 Quant-Research公开DTO字段级契约第2节 | 1.0.0（Ref/Metric/Trend/Risk 局部 Schema/Golden） | `pending_evidence` | 项目级 DTO 已按 DEC-028 增加 payload_schema_version，并按 result_type + payload_schema_version 选择 Payload；但 doc/quant 的 QuantResultRef Schema 仍以 minItems=1 限制 input_snapshot_refs，与 DEC-029 冲突；完整 Envelope Schema/Golden、全部 result_type 的强类型 Payload Schema 与 Ref Schema/Golden 对齐仍缺 |
 | QNT-CTR-005 | QuantResult AuthorizationRef 签发与访问审计 | Quant | Researchflow | doc/整体任务规划/schema/QNT-CTR-005-result-manifest-1.0.0.schema.json；doc/整体任务规划/golden/QNT-CTR-005-result-manifest.golden.json；GOV-CTR-006 | 1.0.0（Result Manifest Schema/Golden） | `pending_evidence` | Manifest Schema/Golden 已按 DEC-028/029 补齐 Manifest/Payload 独立版本、算法版本、参数指纹及允许空数组；仍需对齐 Quant 责任模块 Record/VerifyPayload 的权威指纹计算、Manifest 与 Ref 的绑定，以及 AuthorizationRef 的签发主体/资源/用途/内容级别映射 |
 | RSC-CTR-001 | Research Evidence | Research | Researchflow | doc/整体任务规划/schema/RSC-CTR-001-evidence-1.0.0.schema.json；Golden；doc/research/01、03；GOV-CTR-006 | 1.0.0（Evidence Schema/Golden） | `pending_evidence` | Evidence 字段和 JCS 指纹语义已有；Schema 未约束 RFC3339Nano UTC，source_version 条件必填和 Evidence.system_as_of/available_at 跨字段 PIT 规则仍依赖未完成的权威适用映射。ResearchContext 不归本 CTR，按 FLOW-CTR-003 核定 |
-| RSC-CTR-002 | ResearchEvent、Claim、Hypothesis、Scenario | Research | Researchflow | 项目级 DTO 第3.3～3.5节；schema/RSC-CTR-002-*；golden/RSC-CTR-002-*；doc/research/01、03 | Event、Claim/Hypothesis 1.0.0 Schema/Golden 已建立；Scenario 尚缺 | `pending_evidence` | Event/Claim DTO、Schema、Golden 已按 DEC-030～032 对齐核心字段；Scenario 仍无独立 Schema/Golden；EventRef 引用存在性/无环、时间值与 source_times 对应、supersedes 目标当前有效性及跨字段规则需 Research 权威语义校验，不能由 JSON Schema 单独证明 |
+| RSC-CTR-002 | ResearchEvent、Claim、Hypothesis、Scenario | Research | Researchflow | 项目级 DTO 第3.3～3.5节；schema/RSC-CTR-002-*；golden/RSC-CTR-002-*；doc/research/01、03 | Event、Claim/Hypothesis、Scenario 1.0.0 Schema/Golden 已建立 | `pending_evidence` | Event/Claim DTO、Schema、Golden 已按 DEC-030～032 对齐核心字段；Scenario 仍无独立 Schema/Golden；EventRef 引用存在性/无环、时间值与 source_times 对应、supersedes 目标当前有效性及跨字段规则需 Research 权威语义校验，不能由 JSON Schema 单独证明 |
 | FLOW-CTR-001 | Run/Stage/Attempt 状态与结果传播 | Researchflow | Server、API、WebUI；业务模块作为 Stage Provider | doc/researchflow/03；doc/researchflow/schema/run/stage/attempt；对应 Golden | 1.0.0（Run/Stage/Attempt Schema/Golden） | `pending_evidence` | 状态枚举/传播矩阵已有；Run/Stage/Attempt Schema 的 UTC、终态字段关系和 ResultSummary 关联约束未完全机器化，完整结果归并定义需与 FLOW-CTR-004 统一 |
 | FLOW-CTR-002 | Cancel、Retry、Deadline、Lease、Fencing | Researchflow | Server（命令入口）；Scheduler/Worker（内部执行） | doc/researchflow/03 第3～5节、第6.2节；Attempt Schema/Golden | 1.0.0（Attempt Schema/Golden）；命令 DTO Schema 未登记 | `pending_evidence` | 取消/重试/deadline 的外部可观察状态与稳定错误结果已定义；CancelRun/RetryStage 命令字段、幂等作用域/请求指纹和 deadline/cancel 冲突结果未形成唯一权威机器/强类型契约。CAS、锁、重启恢复测试不属于本轮门禁 |
 | FLOW-CTR-003 | Run Execution Context 与 system_as_of 传播 | Researchflow | Data、News、Quant、Research、LLM | doc/researchflow/03 第6.1/6.2节；ResearchContext DTO 第3.1节；GOV-CTR-002 | Run Schema 1.0.0 部分承载；独立 Context/ResearchContext Schema 未登记 | `pending_evidence` | Run Context 字段语义已有；ResearchContext/ContextSectionRef、模板解析快照、可信 caller/correlation 与各下游 Adapter 的字段映射未形成单一权威 Schema/Port 契约 |
@@ -777,13 +777,13 @@ INT-CTR-001 是 43 个正式 CTR 之一，覆盖 Quant、Research、Researchflow
 1. QuantAnalysisRequest、QuantResultRef、QuantResult Envelope 的项目级 DTO 统一空输入数组语义；QuantResult Envelope 新增必需 `payload_schema_version`，Payload 选择键固定为 `(result_type, payload_schema_version)`。
 2. QuantResult Manifest Schema/Golden 已补齐 `payload_schema_version`、`algorithm_version`、`parameter_fingerprint`，并允许 `input_snapshot_refs=[]`。Manifest `schema_version` 表示 Manifest 自身版本；manifest_fingerprint 按 JCS 对除 result_id/manifest_fingerprint 外全部字段计算。
 3. ResearchEvent DTO 增加必需 `time_normalization_rule_version`、`derived_from_refs`；Claim/Hypothesis DTO 增加可选 `supersedes_version`，并将合并/拆分语义从旧 `source_refs` 统一收敛到 Event 血缘字段。
-4. 新增项目级 ResearchEvent、Claim/Hypothesis 1.0.0 JSON Schema 与 Golden，明确强类型 EventRef、EventSourceTime 和 Hypothesis 条件字段。
+4. 新增项目级 ResearchEvent、Claim/Hypothesis、Scenario 1.0.0 JSON Schema 与 Golden，明确强类型 EventRef、EventSourceTime、Hypothesis 条件字段、ScenarioCondition 与递归 ConditionGroup。
 
 ### 26.2 尚未通过的项目级契约证据
 
 - QNT-CTR-004：Quant 责任模块 QuantResultRef Schema 仍限制 input_snapshot_refs 至少一项；Envelope 缺完整 Schema/Golden；result_type 的强类型 Payload 覆盖未完整。
 - QNT-CTR-005：Manifest Schema/Golden 已更新，但需与 Quant Record/VerifyPayload 权威指纹算法及 AuthorizationRef 映射定义核对；项目级文档不替代 Quant 模块实现契约。
-- RSC-CTR-002：Scenario 仍缺 Schema/Golden；Event/Claim 的引用存在性、派生无环、版本目标当前性和时间证据关联需要 Research 权威语义规则明确。
+- RSC-CTR-002：Scenario Schema/Golden 已补齐；Event/Claim/Scenario 的引用存在性、派生无环、版本目标当前性和时间证据关联需要 Research 权威语义规则明确。
 
 ### 26.3 本批状态
 
