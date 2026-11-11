@@ -25,21 +25,25 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  go-checks:
-    name: Go format and static checks
+  checks:
+    name: Full integration checks
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 40
     steps:
       - name: Checkout
+        id: checkout
         uses: actions/checkout@v4
 
       - name: Set up Go
+        id: setup-go
         uses: actions/setup-go@v5
         with:
           go-version: '1.23.x'
           cache: true
 
-      - name: Check Go formatting
+      - name: Check Go formatting (all tracked files)
+        id: gofmt
+        continue-on-error: true
         shell: bash
         run: |
           files="$(git ls-files -z '*.go' | xargs -0 -r gofmt -l)"
@@ -48,40 +52,109 @@ jobs:
             echo "$files"
             exit 1
           fi
+          echo "所有已跟踪 Go 文件均通过 gofmt。"
 
       - name: Run go vet (root module)
+        id: vet-root
+        continue-on-error: true
         run: go vet ./...
 
+      - name: Run Go tests and compile packages (root module)
+        id: test-root
+        continue-on-error: true
+        run: go test ./...
+
       - name: Run go vet (go-core module)
+        id: vet-core
+        continue-on-error: true
         working-directory: go-core
         run: go vet ./...
 
-  webui-checks:
-    name: WebUI checks
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - name: Run Go tests and compile packages (go-core module)
+        id: test-core
+        continue-on-error: true
+        working-directory: go-core
+        run: go test ./...
 
       - name: Prepare example environment
+        id: prepare-env
+        continue-on-error: true
         run: cp .env.example .env
 
       - name: Validate Compose configuration
+        id: compose
+        continue-on-error: true
         run: docker compose --env-file .env -f docker-compose.yml config --quiet
 
       - name: Set up Node.js
+        id: setup-node
+        continue-on-error: true
         uses: actions/setup-node@v4
         with:
           node-version: '22'
 
       - name: Check JavaScript syntax
+        id: js-check
+        continue-on-error: true
         working-directory: web
         run: npm run check
 
       - name: Run WebUI unit tests
+        id: web-test
+        continue-on-error: true
         working-directory: web
         run: npm test
 
       - name: Build WebUI image
+        id: web-build
+        continue-on-error: true
         run: docker build --tag stock-analysis-web:ci --file web/Dockerfile web
+
+      - name: Summarize all checks
+        if: always()
+        shell: bash
+        env:
+          CHECKOUT: ${{ steps.checkout.outcome }}
+          SETUP_GO: ${{ steps.setup-go.outcome }}
+          GOFMT: ${{ steps.gofmt.outcome }}
+          VET_ROOT: ${{ steps.vet-root.outcome }}
+          TEST_ROOT: ${{ steps.test-root.outcome }}
+          VET_CORE: ${{ steps.vet-core.outcome }}
+          TEST_CORE: ${{ steps.test-core.outcome }}
+          PREPARE_ENV: ${{ steps.prepare-env.outcome }}
+          COMPOSE: ${{ steps.compose.outcome }}
+          SETUP_NODE: ${{ steps.setup-node.outcome }}
+          JS_CHECK: ${{ steps.js-check.outcome }}
+          WEB_TEST: ${{ steps.web-test.outcome }}
+          WEB_BUILD: ${{ steps.web-build.outcome }}
+        run: |
+          failed=0
+          report() {
+            local name="$1"
+            local result="$2"
+            printf '%-48s %s\\n' "$name" "$result"
+            if [[ "$result" != "success" ]]; then
+              failed=1
+            fi
+          }
+
+          echo "========== Integration CI 检查汇总 =========="
+          report "Checkout" "$CHECKOUT"
+          report "Go 环境准备" "$SETUP_GO"
+          report "Go 格式检查（全部已跟踪文件）" "$GOFMT"
+          report "go vet（根模块）" "$VET_ROOT"
+          report "go test（根模块）" "$TEST_ROOT"
+          report "go vet（go-core）" "$VET_CORE"
+          report "go test（go-core）" "$TEST_CORE"
+          report "Web 环境准备" "$PREPARE_ENV"
+          report "Docker Compose 配置检查" "$COMPOSE"
+          report "Node.js 环境准备" "$SETUP_NODE"
+          report "WebUI JavaScript 语法检查" "$JS_CHECK"
+          report "WebUI 单元测试" "$WEB_TEST"
+          report "WebUI Docker 构建" "$WEB_BUILD"
+
+          if [[ "$failed" -ne 0 ]]; then
+            echo "::error::存在失败或未执行的检查，请查看对应步骤日志。"
+            exit 1
+          fi
+          echo "所有检查均通过。"
