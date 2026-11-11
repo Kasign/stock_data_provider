@@ -16,15 +16,19 @@ import (
 )
 
 func testManifest(t *testing.T) manifest.Manifest {
+	return testManifestWith(t, "stock", "opaque-security-ref", "valid")
+}
+
+func testManifestWith(t *testing.T, scope, securityID, qualityStatus string) manifest.Manifest {
 	t.Helper()
 	payload := []byte(`{"metric_code":"momentum_20d","value":0.2}`)
 	m, err := manifest.BuildWithPayload(manifest.Input{
 		ResultType:           "factor",
-		Scope:                "stock",
-		SecurityID:           "opaque-security-ref",
+		Scope:                scope,
+		SecurityID:           securityID,
 		TradeDate:            "2026-11-06",
 		Period:               "20d",
-		QualityStatus:        "valid",
+		QualityStatus:        qualityStatus,
 		ResultStatus:         "completed",
 		SchemaVersion:        "1.0.0",
 		PayloadSchemaVersion: "1.0.0",
@@ -109,10 +113,7 @@ func TestBuildRefPreservesExplicitEmptySnapshotRefs(t *testing.T) {
 
 func TestBuildRefKeepsCompletedAndQualityIndependent(t *testing.T) {
 	input := validRefInput()
-	degraded := testManifest(t)
-	degraded.QualityStatus = "degraded"
-	degraded.ManifestFingerprint, _ = degraded.calculateFingerprint()
-	degraded.ResultID = "quant_result:sha256:" + degraded.ManifestFingerprint
+	degraded := testManifestWith(t, "stock", "opaque-security-ref", "degraded")
 	got, err := BuildRef(input, degraded)
 	if err != nil {
 		t.Fatalf("degraded completed result is representable; policy gate is separate: %v", err)
@@ -120,10 +121,7 @@ func TestBuildRefKeepsCompletedAndQualityIndependent(t *testing.T) {
 	if got.ResultStatus != StatusCompleted || got.QualityStatus != QualityDegraded {
 		t.Fatalf("result and quality states were conflated: %+v", got)
 	}
-	unknown := testManifest(t)
-	unknown.QualityStatus = "unknown"
-	unknown.ManifestFingerprint, _ = unknown.calculateFingerprint()
-	unknown.ResultID = "quant_result:sha256:" + unknown.ManifestFingerprint
+	unknown := testManifestWith(t, "stock", "opaque-security-ref", "unknown")
 	got, err = BuildRef(input, unknown)
 	if err != nil || got.ResultStatus != StatusCompleted || got.QualityStatus != QualityUnknown {
 		t.Fatalf("result and quality states must remain independent, got=%+v err=%v", got, err)
@@ -158,11 +156,7 @@ func TestBuildRefRejectsInvalidMetadataAndManifest(t *testing.T) {
 
 func TestBuildRefAllowsNonStockScopeWithoutSecurityID(t *testing.T) {
 	input := validRefInput()
-	market := testManifest(t)
-	market.Scope = "market"
-	market.SecurityID = ""
-	market.ManifestFingerprint, _ = market.calculateFingerprint()
-	market.ResultID = "quant_result:sha256:" + market.ManifestFingerprint
+	market := testManifestWith(t, "market", "", "valid")
 	got, err := BuildRef(input, market)
 	if err != nil {
 		t.Fatal(err)
