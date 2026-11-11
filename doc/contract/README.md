@@ -3,7 +3,7 @@
 - 仓库：`Kasign/stock_data_provider`
 - 代码审计基线：`origin/integration` @ `b6dfc85ba214fe16268c8cba780641a8bfe15086`
 - 审计文档维护分支：`origin/feat/design_doc`（状态以当前分支 HEAD 为准）
-- 当前阶段：43 个正式 CTR 已完成定义口径核定；14 项 freeze-ready、27 项 pending_evidence、0 项 pending_decision、2 项 not_applicable、0 项 frozen。整体尚未冻结
+- 当前阶段：正在对 43 个正式 CTR 执行一次性最终收敛。此前 14 项 freeze-ready、27 项 pending_evidence、0 项 pending_decision、2 项 not_applicable、0 项 frozen 仅作为收敛前快照；最终状态以本轮统一复核后的登记簿为准。
 
 ## 1. 权威性
 
@@ -69,4 +69,4 @@
 
 以固定的 origin/integration SHA b6dfc85ba214fe16268c8cba780641a8bfe15086 作为本轮代码核验对象；审计文档仅维护在 feat/design_doc。核验期间不修改业务代码或责任模块文档，不修改其他分支，不合并 integration，也不将 integration 合并回任何分支。
 
-本目录的当前状态以登记簿第24节为准：43 个正式 CTR 已完成本轮定义口径核定，不再保留全量重复盘点任务；五项待决已由 DEC-PLAT-002-028～032 裁决；ScenarioCondition 类型结构另由 DEC-PLAT-002-033 明确；下一阶段只处理当前 27 项公开定义证据缺口。任何模块内部实现、测试、CI、部署事项均不得重新加入本轮契约定义冻结门禁。
+本目录的当前状态以登记簿第24节为准：43 个正式 CTR 已完成本轮定义口径核定，不再保留全量重复盘点任务；五项待决已由 DEC-PLAT-002-028～032 裁决；ScenarioCondition 类型结构另由 DEC-PLAT-002-033 明确；本轮不再逐项开启重复审计：对 43 项 CTR 统一区分真实公共定义缺口、定义已完整但缺实现符合性证据、已完整可冻结三类；集中修正前两类中的公共定义问题与权威冲突，随后一次性输出冻结候选清单。模块内部实现、测试、CI、部署事项不得加入契约定义冻结门禁。
