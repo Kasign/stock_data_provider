@@ -1353,3 +1353,11 @@ ResearchContext 归 FLOW-CTR-003，不属于 RSC-CTR-001 Evidence。RSC-DEC-001/
 | 合计 | 43 | 正式 CTR 总数 |
 
 5 项待决：QNT-DEC-01/02、RSC-OPEN-003/004/005。旧 Analysis API/CTR-047 已按 DEC-018/019 退出活动范围；WebUI 页面级 CTR 不属于跨模块公开 API。43 项均已完成本轮定义口径核定，不再安排全量重复扫描。
+
+## 51. INT-CTR-001 业务事件映射契约核定（2026-11-11）
+
+| 契约 | 状态 | 结论 |
+|---|---|---|
+| INT-CTR-001 | pending_evidence | Quant RiskDecision、Research Event Lifecycle、Researchflow Run Terminal 三类 Payload Schema/Golden、触发时点、subject_ref/source_event_ref、幂等键和 JCS fingerprint 已定义；时间 UTC、subject_ref 与 payload 主体绑定、来源时间逐事件映射和 changed_block_reason_codes 排序未完整机器化 |
+
+本项为正式 43 CTR 之一，不是内部 Outbox/Inbox 实现验收。三类事件语义已接受，无新增待决；不检查真实发布接线、重放、数据库事务、测试或 CI。
