@@ -678,7 +678,7 @@
 ### WebUI — 维度 2：Analysis Run CTR-046 / CTR-047 冻结影响 Review
 
 - 详细记录：`WebUI-维度2-完整性Review-第一轮.md` 第 26 节。固定代码基线仍为 `b6dfc85ba214fe16268c8cba780641a8bfe15086`。
-- **CTR-046 保留 P2**：Server 实际提供 Run GET 与 Run Events；Run GET 返回 RunResult，状态含 200/404/409/500；Run Events 返回 `{run_id, events}`，状态含 200/404/500。权威分析任务 OpenAPI 缺少两条路径及 RunResult/事件响应 Schema。已有 Run GET 404、500 脱敏测试；缺成功、409 和 Run Events Handler 专项测试。Task Events 测试不能替代 Run Events。该项阻断 Analysis Run 对外契约冻结。
+- **CTR-046/047 当前状态：旧 Analysis HTTP 契约已由 DEC-018 退役，不再作为活动冻结目标。** 原有 Run GET/Run Events/CreateTask 路由和 Schema 差异保留为历史审计证据；不补齐旧 OpenAPI。新 Researchflow API 的路由、DTO、认证、错误、Run/Task/Event Schema 和消费者映射，按 FLOW-CTR-001～004 与 SRV-CTR-001 等正式契约独立验收。
 - **CTR-047 保留 P2**：CreateTask Handler 将 JSON 解码为领域 RunRequest，OpenAPI却只列部分字段并声称两者一致。Handler 会补 task_type、as_of、universe_id、portfolio_id、market_id、strategy_ids、配置版本默认值；historical_replay 必须显式 as_of；as_of_mode 根据是否显式提供 as_of 被服务端覆盖；Queue 生成并覆盖 run_id；parameters 是 map[string]string，Runner 可从 parameters.symbols 回退取标的。不能机械复制领域字段为 HTTP required。
 - CTR-047 关闭前须裁决独立 CreateTaskRequest、TaskType 四值枚举/非法值处理时机、默认字段、historical_replay 条件约束、as_of_mode/run_id 服务端所有权、parameters 类型与校验时机，并同步 OpenAPI、Handler 和测试。CTR-005 的遗留枚举/required要求由 CTR-047 承接；CTR-003 的路径缺失由 CTR-046 承接，不重复计数。
 - 本批未修改业务代码、OpenAPI、DTO 或测试，未执行 CI；不把 RunResult 嵌套 Golden、DB migration、Worker 并发审计扩展到本轮。
@@ -1160,8 +1160,8 @@
 ## 39. CTR-047 退役归类与 DEC-019 适用范围更正（2026-11-11）
 
 - DEC-018 已明确旧 Analysis API、Task/Run 路由和旧 StageEvent HTTP 契约退役，不保留兼容期；WebUI 直接切换 Researchflow 新 API。
-- CTR-047 原本审查旧 CreateTask/AnalysisRequest HTTP DTO。因其公开接口目标已被正式撤销，CTR-047 标记为 \`withdrawn_by_scope_decision\`，不再要求旧 API Schema、Handler、错误码和 Contract Test 补证。
+- CTR-047 原本审查旧 CreateTask/AnalysisRequest HTTP DTO。因其公开接口目标已被正式撤销，CTR-047 标记为 `withdrawn_by_scope_decision`，不再要求旧 API Schema、Handler、错误码和 Contract Test 补证。
 - DEC-019 的 TaskType 拒绝、symbols 上限100、旧异步 Task ID、同步 Run 显式 run_id 幂等/409 规则仅属于旧 Analysis HTTP 请求历史裁决，不得转移成 Researchflow 新 API 约束。
-- Researchflow 新 API 使用独立 CreateRunCommand/版本化 DTO；其 CreateRun 幂等键按可信调用主体与操作范围作用，使用 \`idempotency_key\` 和规范化 fingerprint；Run 引用由 Researchflow 生成。参数限制由 Template/Parameter Schema 定义。
+- Researchflow 新 API 使用独立 CreateRunCommand/版本化 DTO；其 CreateRun 幂等键按可信调用主体与操作范围作用，使用 `idempotency_key` 和规范化 fingerprint；Run 引用由 Researchflow 生成。参数限制由 Template/Parameter Schema 定义。
 - 本次更正不代表旧 API 代码已删除，也不代表 Researchflow 新 API 已完成接入验收；仅撤销旧 CreateTask 公共契约的活动冻结任务。新 API 证据继续归 FLOW-CTR-001～004 等既有正式契约，不新增 CTR。
-- 本轮只更新 \`feat/design_doc\` 项目级契约决议解释及审计登记；未修改 Server、Researchflow、WebUI 责任分支代码，未执行测试或 CI。
+- 本轮只更新 `feat/design_doc` 项目级契约决议解释及审计登记；未修改 Server、Researchflow、WebUI 责任分支代码，未执行测试或 CI。
