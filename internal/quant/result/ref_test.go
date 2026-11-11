@@ -65,7 +65,7 @@ func testManifestWithoutSnapshots(t *testing.T) manifest.Manifest {
 
 func validRefInput() RefInput {
 	return RefInput{
-		SchemaVersion: "1.0.0",
+		SchemaVersion:    "1.0.0",
 		AuthorizationRef: "opaque-authorization-ref",
 		CreatedAt:        time.Date(2026, 11, 9, 8, 0, 0, 0, time.FixedZone("UTC+8", 8*60*60)),
 	}
