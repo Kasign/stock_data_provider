@@ -1227,3 +1227,14 @@
 - 新增 QNT-DEC-01（Envelope/Payload 版本字段语义）和 QNT-DEC-02（无输入纯函数 Manifest 规则），分别挂接 QNT-CTR-004/005，不新增 CTR。当前项目级待决项由此前 0 项更新为 2 项。
 - 本轮不检查算法实现、单元/Golden 测试、Repository 并发、真实 Data Adapter、授权竞态或 CI；未修改 Quant 责任分支。
 - 权威明细见登记簿第17节、差异矩阵第44节。下一批转入 Research 公开契约核定；QNT-DEC-01/02 等待项目负责人裁决，不由审查者自行决定。
+
+## 45. Research 公开契约定义核定完成（2026-11-11）
+
+- 完成 RSC-CTR-001～002 核定：RSC-CTR-001 pending_evidence；RSC-CTR-002 pending_decision。
+- RSC-CTR-001 Evidence 1.0.0 Schema/Golden 和字段语义已有；剩余为 Schema 未约束 RFC3339Nano UTC、source_version 条件必填缺少资源适用映射，以及 system_as_of/available_at 的 PIT 跨字段约束未完整映射。
+- RSC-CTR-002 仍有三项公开字段待决：RSC-OPEN-003 Event 规范化时间规则版本；RSC-OPEN-004 Event 合并/拆分来源关系；RSC-OPEN-005 Claim/Hypothesis 显式版本替代字段。三项都会改变跨模块 DTO 结构，不属于实现整改。
+- ResearchContext 不属于 RSC-CTR-001 Evidence；其 Run Context 结构与传播归 FLOW-CTR-003 核定，不新增 CTR。
+- RSC-DEC-001 Research 不直接调用 Quant、RSC-DEC-002 changed_at 事务时间语义已确认，不重开。RSC-OPEN-007 授权续期历史属于额外能力，不阻断当前 Evidence DTO。
+- 当前项目级 pending_decision 总数由 Quant 核定后的 2 项增加为 5 项：QNT-DEC-01/02 与 RSC-OPEN-003/004/005。此前 2 项统计为历史快照，以本节为准。
+- 不纳入 Research Repository/MariaDB/Outbox、Server Relay、关系图并发、授权竞态、模块测试和 CI；本轮未修改 Research 责任分支。
+- 权威明细见登记簿第18节、差异矩阵第45节。下一批核定 Researchflow 的 Run/Stage/Attempt、Context 和事件公开契约。
