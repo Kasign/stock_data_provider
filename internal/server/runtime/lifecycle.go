@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"time"
 )
 
 // Component 是由 Server 组合根管理的运行组件。
@@ -24,10 +25,24 @@ type Lifecycle struct {
 	stopped    bool
 	startDone  chan struct{}
 	stopDone   chan struct{}
-	stopErr    error
+	stopErr         error
+	rollbackTimeout time.Duration
 }
 
-func NewLifecycle() *Lifecycle { return &Lifecycle{} }
+const defaultRollbackTimeout = 10 * time.Second
+
+func NewLifecycle() *Lifecycle {
+	return &Lifecycle{rollbackTimeout: defaultRollbackTimeout}
+}
+
+// NewLifecycleWithRollbackTimeout creates a Lifecycle whose startup rollback
+// uses the same bounded shutdown budget as the owning Server process.
+func NewLifecycleWithRollbackTimeout(timeout time.Duration) (*Lifecycle, error) {
+	if timeout <= 0 {
+		return nil, errors.New("lifecycle rollback timeout must be positive")
+	}
+	return &Lifecycle{rollbackTimeout: timeout}, nil
+}
 
 // Register 只允许在启动前注册组件，名称必须唯一。
 func (l *Lifecycle) Register(component Component) error {
@@ -71,7 +86,9 @@ func (l *Lifecycle) Start(ctx context.Context) error {
 	l.mu.Unlock()
 
 	if startErr != nil {
-		rollbackErr := l.Stop(context.WithoutCancel(ctx))
+		rollbackCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), l.rollbackTimeout)
+		defer cancel()
+		rollbackErr := l.Stop(rollbackCtx)
 		return errors.Join(startErr, rollbackErr)
 	}
 	return nil

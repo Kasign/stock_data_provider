@@ -136,7 +136,10 @@ func Run(ctx context.Context) (runErr error) {
 		return fmt.Errorf("创建旧 Analysis 异步任务队列失败: %w", err)
 	}
 
-	lifecycle = runtime.NewLifecycle()
+	lifecycle, err = runtime.NewLifecycleWithRollbackTimeout(shutdownTimeout)
+	if err != nil {
+		return fmt.Errorf("创建 Server Lifecycle 失败: %w", err)
+	}
 	if err := lifecycle.Register(legacyAnalysisWorker{name: "legacy-analysis-worker", queue: tasks, enabled: serverRole == serverconfig.RoleWorker || serverRole == serverconfig.RoleAll}); err != nil {
 		return fmt.Errorf("注册旧 Analysis Worker 生命周期失败: %w", err)
 	}

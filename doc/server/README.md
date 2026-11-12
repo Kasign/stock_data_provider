@@ -1323,3 +1323,12 @@ Lifecycle.Stop 原实现通过 stopped 标记保证重复调用幂等，但并�
 - 增加回归测试：Handler 阻塞且 Shutdown 超时时，Listener 关闭后 Stop 仍不得返回；只有 Handler 退出后 Stop 才返回，并保留超时错误。
 - 该安全约束意味着 Handler 必须遵守 Request Context 取消约定；若 Handler 在连接关闭后仍永久阻塞，Server 会继续等待而不会提前关闭共享资源。当前没有 WebSocket/自定义 Hijacker 业务入口；未来若引入 Hijacked 长连接，必须单独纳入生命周期跟踪。
 - Server 独立 Workflow Run `43139331264`（SHA `ca1d96383af368105746c8072b62e0db65a328ac`）成功：Server gofmt、包级单测、Race、Vet 全部通过。该结果不替代真实长连接/故障注入环境验收。
+
+
+### 12.57 SRV-006 启动失败回滚增加关闭超时预算（2026-11-12）
+
+- Bootstrap 原先使用 `runtime.NewLifecycle()`；Lifecycle 在启动失败时以 `context.WithoutCancel(ctx)` 回滚。该 API 会同时移除父 Context 的 Deadline，因此组件 Stop 若不响应或等待中的资源无法释放，启动失败路径可能无限阻塞，外层 Bootstrap defer 的关闭超时无法介入。
+- 新增 `NewLifecycleWithRollbackTimeout`，要求正数超时；Lifecycle 启动失败时以 `WithoutCancel` 保留“即使进程 Context 已取消仍需回滚”的语义，再施加配置的 rollback deadline。原 `NewLifecycle()` 保留并使用 10 秒默认回滚预算，避免改变现有调用者。
+- Bootstrap 将当前进程 `shutdownTimeout` 注入 Lifecycle，使 API/all 角色使用 HTTP Shutdown 配置，worker 角色使用现有 10 秒预算。正常运行期间显式 `Lifecycle.Stop(ctx)` 仍由调用方提供关闭预算。
+- 新增测试覆盖回滚 Context deadline、Stop 遵守 Context 时的超时退出，以及非法超时配置。启动错误与回滚超时通过 `errors.Join` 同时保留。组件若忽略传入 Context，Go 无法安全强制终止其 Stop goroutine；组件实现仍须遵守 Stop Context 契约。
+- 本次仅修改 Server Runtime、Bootstrap、对应测试和本文件；不改变模块接口和其他分支。CI 验收待新提交执行。

@@ -312,3 +312,87 @@ func TestLifecycleCancellationReleasesBlockingStartBeforeRollback(t *testing.T) 
 		t.Fatal("started component was not stopped after cancellation")
 	}
 }
+
+
+type rollbackDeadlineComponent struct {
+	name string
+	startErr error
+	deadline chan time.Time
+}
+
+func (c rollbackDeadlineComponent) Name() string { return c.name }
+func (c rollbackDeadlineComponent) Start(context.Context) error { return c.startErr }
+func (c rollbackDeadlineComponent) Stop(ctx context.Context) error {
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		return errors.New("rollback context has no deadline")
+	}
+	c.deadline <- deadline
+	return nil
+}
+
+type rollbackBlockingComponent struct {
+	name string
+	startErr error
+}
+
+func (c rollbackBlockingComponent) Name() string { return c.name }
+func (c rollbackBlockingComponent) Start(context.Context) error { return c.startErr }
+func (c rollbackBlockingComponent) Stop(ctx context.Context) error {
+	<-ctx.Done()
+	return ctx.Err()
+}
+
+func TestLifecycleStartupRollbackUsesConfiguredDeadline(t *testing.T) {
+	startErr := errors.New("startup failed")
+	deadlines := make(chan time.Time, 1)
+	lifecycle, err := NewLifecycleWithRollbackTimeout(250 * time.Millisecond)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := lifecycle.Register(rollbackDeadlineComponent{
+		name: "deadline-check", startErr: startErr, deadline: deadlines,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	err = lifecycle.Start(context.Background())
+	if !errors.Is(err, startErr) {
+		t.Fatalf("Start() error = %v, want original startup error", err)
+	}
+	select {
+	case deadline := <-deadlines:
+		remaining := time.Until(deadline)
+		if remaining <= 0 || remaining > 250*time.Millisecond {
+			t.Fatalf("rollback deadline remaining = %v, want within configured budget", remaining)
+		}
+	default:
+		t.Fatal("rollback Stop did not receive a deadline")
+	}
+}
+
+func TestLifecycleStartupRollbackStopsAtConfiguredTimeout(t *testing.T) {
+	startErr := errors.New("startup failed")
+	lifecycle, err := NewLifecycleWithRollbackTimeout(20 * time.Millisecond)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := lifecycle.Register(rollbackBlockingComponent{name: "blocking-stop", startErr: startErr}); err != nil {
+		t.Fatal(err)
+	}
+	started := time.Now()
+	err = lifecycle.Start(context.Background())
+	if !errors.Is(err, startErr) || !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("Start() error = %v, want startup and rollback deadline errors", err)
+	}
+	if elapsed := time.Since(started); elapsed > time.Second {
+		t.Fatalf("startup rollback took %v, want bounded completion", elapsed)
+	}
+}
+
+func TestNewLifecycleWithRollbackTimeoutRejectsNonPositiveValues(t *testing.T) {
+	for _, timeout := range []time.Duration{0, -time.Second} {
+		if _, err := NewLifecycleWithRollbackTimeout(timeout); err == nil {
+			t.Fatalf("NewLifecycleWithRollbackTimeout(%v) error = nil", timeout)
+		}
+	}
+}
