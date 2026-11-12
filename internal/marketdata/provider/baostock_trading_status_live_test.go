@@ -151,11 +151,11 @@ func TestLiveBaoStockTradeStatusOnOfficialSuspensionWindow(t *testing.T) {
 			"is_st_counts":                 isSTCounts,
 		},
 		"intraday_suspension": map[string]any{
-			"official_url": "https://www.sse.com.cn/disclosure/announcement/general/mainsuspension/c/c_20250103_10767682.shtml",
-			"symbol":       intradaySymbol,
-			"event_date":   intradayDate,
+			"official_url":            "https://www.sse.com.cn/disclosure/announcement/general/mainsuspension/c/c_20250103_10767682.shtml",
+			"symbol":                  intradaySymbol,
+			"event_date":              intradayDate,
 			"daily_tradestatus_scope": "daily status does not encode the intraday halt interval",
-			"daily_rows":   intradayEvidence,
+			"daily_rows":              intradayEvidence,
 		},
 	}
 	encoded, err := json.Marshal(report)
