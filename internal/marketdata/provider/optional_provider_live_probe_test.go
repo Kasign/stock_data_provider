@@ -69,6 +69,71 @@ func TestIsTusharePermissionRequired(t *testing.T) {
 }
 
 // 最小权限探测通过提交标记 [include_tushare] [tushare_daily_only] 显式触发。
+type hithinkLiveStatementGolden struct {
+	category    string
+	sourceField string
+	unit        string
+	value       float64
+}
+
+func hithinkLiveAnnualStatementEvidence(snapshot *model.FundamentalsSnapshot) ([]map[string]any, bool) {
+	// 固定样本取自贵州茅台 2025 年年度报告（2026-04-17）合并报表。
+	expected := []hithinkLiveStatementGolden{
+		{category: "income_statement", sourceField: "operating_income", unit: "CNY", value: 168838102514.79},
+		{category: "income_statement", sourceField: "net_profit", unit: "CNY", value: 85310324833.67},
+		{category: "income_statement", sourceField: "basic_eps", unit: "CNY/share", value: 65.66},
+		{category: "balance_sheet", sourceField: "assets_total", unit: "CNY", value: 303834844021.44},
+		{category: "balance_sheet", sourceField: "total_debt", unit: "CNY", value: 49875590112.37},
+		{category: "cash_flow_statement", sourceField: "act_cash_flow_net", unit: "CNY", value: 61522204989.35},
+		{category: "cash_flow_statement", sourceField: "invest_cash_flow_net", unit: "CNY", value: -31641898948.89},
+		{category: "cash_flow_statement", sourceField: "financing_cash_flow_net", unit: "CNY", value: -73427081208.87},
+	}
+	evidence := make([]map[string]any, 0, len(expected))
+	mismatch := false
+	for _, want := range expected {
+		metric, ok := hithinkLiveFindStatementMetric(snapshot, want.category, want.sourceField)
+		matched := false
+		var observed any
+		var observedUnit string
+		if ok {
+			observed = metric.Value
+			observedUnit = metric.Unit
+			delta := metric.Value - want.value
+			if delta < 0 {
+				delta = -delta
+			}
+			matched = metric.Unit == want.unit && delta <= 0.01
+		}
+		if !matched {
+			mismatch = true
+		}
+		evidence = append(evidence, map[string]any{
+			"category": want.category, "source_field": want.sourceField,
+			"expected_value": want.value, "expected_unit": want.unit,
+			"observed_value": observed, "observed_unit": observedUnit,
+			"status": map[bool]string{true: "matched", false: "mismatch"}[matched],
+		})
+	}
+	return evidence, mismatch
+}
+
+func hithinkLiveFindStatementMetric(snapshot *model.FundamentalsSnapshot, category, sourceField string) (model.FundamentalMetric, bool) {
+	if snapshot == nil {
+		return model.FundamentalMetric{}, false
+	}
+	for _, section := range snapshot.Sections {
+		if section.Category != category {
+			continue
+		}
+		for _, metric := range section.Metrics {
+			if metric.SourceField == sourceField {
+				return metric, true
+			}
+		}
+	}
+	return model.FundamentalMetric{}, false
+}
+
 func TestLiveTushareCapabilities(t *testing.T) {
 	if os.Getenv("MARKET_DATA_LIVE_TUSHARE_TESTS") != "1" {
 		t.Skip("set MARKET_DATA_LIVE_TUSHARE_TESTS=1 to call Tushare Pro endpoints")
@@ -683,6 +748,10 @@ func TestLiveHithinkCapabilities(t *testing.T) {
 		if publicationDateMismatch {
 			notes = append(notes, "official_2025_annual_report_publication_date_mismatch")
 		}
+		metricEvidence, metricMismatch := hithinkLiveAnnualStatementEvidence(item)
+		if metricMismatch {
+			notes = append(notes, "official_2025_annual_report_statement_metric_mismatch")
+		}
 		detailsByCapability["fundamentals"] = map[string]any{
 			"symbol": item.Symbol, "year": item.Year, "quarter": item.Quarter,
 			"source": item.Source, "source_version": item.SourceVersion, "fetched_at": item.FetchedAt,
@@ -693,6 +762,11 @@ func TestLiveHithinkCapabilities(t *testing.T) {
 				"observed": statementPublicationDates,
 				"status":   map[bool]string{true: "mismatch", false: "matched"}[publicationDateMismatch],
 				"basis":    "贵州茅台 2025 年年度报告官方披露日期",
+			},
+			"official_metric_evidence": map[string]any{
+				"basis": "贵州茅台 2025 年年度报告合并报表；仅适用于 600519.SH / 2025Q4 固定样本",
+				"status": map[bool]string{true: "mismatch", false: "matched"}[metricMismatch],
+				"items": metricEvidence,
 			},
 			"sections": sections,
 		}
