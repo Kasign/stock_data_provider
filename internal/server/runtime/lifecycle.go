@@ -82,6 +82,9 @@ func (l *Lifecycle) Start(ctx context.Context) error {
 	startErr := l.startComponents(ctx, components)
 
 	l.mu.Lock()
+	if startErr == nil && l.stopped {
+		startErr = errors.New("lifecycle startup interrupted by stop")
+	}
 	close(l.startDone)
 	l.mu.Unlock()
 

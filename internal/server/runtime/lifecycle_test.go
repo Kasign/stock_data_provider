@@ -395,3 +395,53 @@ func TestNewLifecycleWithRollbackTimeoutRejectsNonPositiveValues(t *testing.T) {
 		}
 	}
 }
+
+
+func TestLifecycleConcurrentStopDuringSingleComponentStartupDoesNotReportSuccess(t *testing.T) {
+	var events []string
+	component := blockingStartComponent{
+		name: "single-blocking-start", entered: make(chan struct{}),
+		release: make(chan struct{}), events: &events,
+	}
+	lifecycle := NewLifecycle()
+	if err := lifecycle.Register(component); err != nil {
+		t.Fatal(err)
+	}
+
+	startDone := make(chan error, 1)
+	go func() { startDone <- lifecycle.Start(context.Background()) }()
+	select {
+	case <-component.entered:
+	case <-time.After(time.Second):
+		t.Fatal("component Start did not begin")
+	}
+
+	stopDone := make(chan error, 1)
+	go func() { stopDone <- lifecycle.Stop(context.Background()) }()
+	deadline := time.Now().Add(time.Second)
+	for {
+		lifecycle.mu.Lock()
+		stopping := lifecycle.stopped
+		lifecycle.mu.Unlock()
+		if stopping {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("Stop did not enter stopping state")
+		}
+		time.Sleep(time.Millisecond)
+	}
+
+	close(component.release)
+	if err := <-startDone; err == nil {
+		t.Fatal("Start() must report interruption when Stop begins during the only component startup")
+	}
+	if err := <-stopDone; err != nil {
+		t.Fatalf("Stop() error = %v", err)
+	}
+
+	want := []string{"start:entered", "start:finished", "stop"}
+	if !reflect.DeepEqual(events, want) {
+		t.Fatalf("events = %v, want %v", events, want)
+	}
+}
