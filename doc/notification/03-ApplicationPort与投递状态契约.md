@@ -340,7 +340,7 @@ TemplateDefinition 的固定字段为：
 - 可选 `subject_template`、必填 `body_template`；
 - `variable_bindings`：模板变量名到 payload JSON Pointer 的映射。
 
-版本注册键为 `(template_id, version)`。相同键、相同 JCS digest 可幂等注册；相同键、不同 digest 必须拒绝；内容变化必须增加版本。当前模块 Registry 是内存实现，不代表已有持久化 Template Repository。
+版本注册键为 `(template_id, version)`。相同键、相同 JCS digest 可幂等注册；相同键、不同 digest 必须拒绝；内容变化必须增加版本。运行时 Registry 为进程内不可变索引；MySQL Template Repository 已实现持久化 Create/Get，Registry 可按明确版本从 Repository 装载。生产模板内容仍需业务提供，不得用占位模板冒充已验收内容。
 
 模板仅支持直接标量插值 `{{.variable}}`，不支持 if/range/模板嵌套/函数或任意表达式。变量必须显式列入 allowlist，并由 JSON Pointer 从 payload 取值；只允许 string/bool/number，不允许把整个 payload map 传入模板。缺失路径、非标量、未声明变量和未使用绑定均 fail closed。
 
