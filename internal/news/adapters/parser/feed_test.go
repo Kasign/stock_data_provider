@@ -101,6 +101,44 @@ func TestParseAtomFeedDoesNotTreatUpdatedAsPublished(t *testing.T) {
 	}
 }
 
+
+func TestParseFeedAcceptsExplicitGMTAndUTCZones(t *testing.T) {
+	cases := []struct {
+		name string
+		raw  string
+		want time.Time
+	}{
+		{
+			name: "RFC1123 GMT",
+			raw:  "Wed, 04 Nov 2026 10:30:00 GMT",
+			want: time.Date(2026, 11, 4, 10, 30, 0, 0, time.UTC),
+		},
+		{
+			name: "RFC1123 lowercase utc with surrounding spaces",
+			raw:  " Wed, 04 Nov 2026 10:30:00 utc ",
+			want: time.Date(2026, 11, 4, 10, 30, 0, 0, time.UTC),
+		},
+		{
+			name: "RFC822 GMT",
+			raw:  "Wed, 04 Nov 26 10:30:00 GMT",
+			want: time.Date(2026, 11, 4, 10, 30, 0, 0, time.UTC),
+		},
+		{
+			name: "RFC3339 numeric offset",
+			raw:  "2026-11-04T18:30:00+08:00",
+			want: time.Date(2026, 11, 4, 10, 30, 0, 0, time.UTC),
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, ok := parseFeedTime(tc.raw)
+			if !ok || !got.Equal(tc.want) {
+				t.Fatalf("parseFeedTime(%q)=(%v, %v), want (%v, true)", tc.raw, got, ok, tc.want)
+			}
+		})
+	}
+}
+
 func TestParseFeedDoesNotInferTimezoneForRFCDate(t *testing.T) {
 	for _, raw := range []string{"2026-11-04", "Wed, 04 Nov 2026 10:30:00", "Wed, 04 Nov 2026 10:30:00 CST"} {
 		if _, ok := parseFeedTime(raw); ok {
