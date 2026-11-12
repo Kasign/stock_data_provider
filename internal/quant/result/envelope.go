@@ -250,6 +250,10 @@ func (envelope *Envelope) UnmarshalJSON(data []byte) error {
 	if envelope == nil {
 		return ErrInvalidEnvelope
 	}
+	// Envelope 元数据同样参与跨模块解释；在结构解码前拒绝重复键、非法 UTF-8 和歧义 JSON。
+	if _, err := manifest.FingerprintPayload(data); err != nil {
+		return fmt.Errorf("%w: envelope JSON is invalid: %v", ErrInvalidEnvelope, err)
+	}
 	var wire struct {
 		SchemaVersion        string          `json:"schema_version"`
 		ResultID             string          `json:"result_id"`

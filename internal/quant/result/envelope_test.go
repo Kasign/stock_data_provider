@@ -238,6 +238,46 @@ func TestEnvelopeUnmarshalRejectsMissingSnapshotArray(t *testing.T) {
 	}
 }
 
+func TestEnvelopeUnmarshalRejectsDuplicateAndAmbiguousMetadataKeys(t *testing.T) {
+	payload := validTrendPayload(t)
+	payloadJSON, err := payload.marshalPayload()
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifestValue, err := manifest.BuildWithPayload(manifest.Input{
+		ResultType: "trend", Scope: "stock", SecurityID: "600000.SH", Period: "20d",
+		QualityStatus: "valid", ResultStatus: "completed", SchemaVersion: "1.0.0",
+		PayloadSchemaVersion: "1.0.0", AlgorithmVersion: "trend-algorithm.v1",
+		ParameterFingerprint: "sha256:envelope-test-parameters",
+		SystemAsOf: envelopeTestTime(t), InputSnapshotRefs: []string{"snapshot:envelope-test"},
+	}, payloadJSON)
+	if err != nil {
+		t.Fatal(err)
+	}
+	envelope, err := BuildEnvelope(manifestValue, "authorization-ref:current", payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := json.Marshal(envelope)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	duplicateTopLevel := strings.Replace(string(encoded), "{", `{"schema_version":"1.0.0",`, 1)
+	escapedDuplicate := strings.Replace(string(encoded), `"schema_version":`, `"schema_\\u0076ersion":`, 1)
+	for name, raw := range map[string]string{
+		"duplicate top-level key": duplicateTopLevel,
+		"escaped duplicate top-level key": escapedDuplicate,
+	} {
+		t.Run(name, func(t *testing.T) {
+			var decoded Envelope
+			if err := json.Unmarshal([]byte(raw), &decoded); !errors.Is(err, ErrInvalidEnvelope) {
+				t.Fatalf("UnmarshalJSON() = %v, want ErrInvalidEnvelope", err)
+			}
+		})
+	}
+}
+
 func TestPayloadConstructorsCopyCallerOwnedMemory(t *testing.T) {
 	value := trend.Result{
 		TrendCode: "price_trend", Direction: trend.DirectionUnknown, Phase: trend.PhaseUnknown,
