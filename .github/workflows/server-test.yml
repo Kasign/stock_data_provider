@@ -31,6 +31,7 @@ jobs:
           cache: true
       - name: Check Server gofmt
         run: |
+          gofmt -d ./internal/server/security/session_service_test.go
           files="$(gofmt -l ./cmd/analysis-api ./internal/server)"
           if [[ -n "$files" ]]; then
             printf '%s\n' "$files"
