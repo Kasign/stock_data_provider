@@ -10,6 +10,7 @@ on:
       - 'internal/**'
       - 'doc/news/**'
       - 'doc/notification/**'
+      - 'doc/research/**'
       - 'doc/researchflow/**'
       - 'go-core/**'
       - 'services/market-data/**'
@@ -20,7 +21,7 @@ on:
       - 'docker-compose.yml'
       - 'scripts/**'
   push:
-    branches: [main, feat/full-go-data-providers-api-switch, feat/research-news-ingestion, feat/notification, feat/quant, feat/researchflow]
+    branches: [main, feat/full-go-data-providers-api-switch, feat/research-news-ingestion, feat/notification, feat/quant, feat/research, feat/researchflow]
     paths:
       - 'go.mod'
       - 'go.sum'
@@ -28,6 +29,7 @@ on:
       - 'internal/**'
       - 'doc/news/**'
       - 'doc/notification/**'
+      - 'doc/research/**'
       - 'go-core/**'
       - 'services/market-data/**'
       - '.github/workflows/go-test.yml'
@@ -278,6 +280,70 @@ jobs:
           NEWS_MARIADB_TEST_DSN: "root:news-ci@tcp(127.0.0.1:3306)/news_test?parseTime=true&loc=UTC"
         run: |
           go test ./internal/news/adapters/storage -run 'TestNewsMariaDBRepositoryIntegration|TestObservationRetentionPurgeIntegration' -count=1 -v
+
+  research-module-validation:
+    name: Research module format, tests, race and vet
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: true
+          cache-dependency-path: go.sum
+      - name: Check Research gofmt
+        run: |
+          files="$(gofmt -l ./internal/research)"
+          if [[ -n "$files" ]]; then
+            echo "::error::Research Go files need gofmt:"
+            printf '%s\\n' "$files"
+            while IFS= read -r file; do
+              [[ -z "$file" ]] || gofmt -d "$file"
+            done <<< "$files"
+            exit 1
+          fi
+      - name: Download dependencies
+        run: go mod download
+      - name: Run Research tests
+        run: go test ./internal/research/...
+      - name: Run Research race detector
+        run: go test -race ./internal/research/...
+      - name: Run Research go vet
+        run: go vet ./internal/research/...
+
+  research-mariadb-integration:
+    name: Research MariaDB migration and repository integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      mariadb:
+        image: mariadb:11.4
+        env:
+          MARIADB_ROOT_PASSWORD: research-ci
+          MARIADB_DATABASE: research_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: true
+          cache-dependency-path: go.sum
+      - name: Run Research MariaDB integration
+        env:
+          RESEARCH_TEST_MYSQL_DSN: "root:research-ci@tcp(127.0.0.1:3306)/research_test?parseTime=true&loc=UTC"
+        run: go test ./internal/research/storage -run '^TestResearch' -count=1 -v
 
   researchflow-module-validation:
     name: Researchflow module format, tests, race and vet
