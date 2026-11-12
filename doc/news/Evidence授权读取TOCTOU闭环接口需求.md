@@ -1,9 +1,9 @@
 # Evidence 授权读取 TOCTOU 闭环接口需求
 
-- 日期：2026-11-10
+- 日期：2026-11-12
 - 适用范围：News `GetEvidence` / `ListEvidence` 内容披露路径
-- 当前状态：News 模式 A 策略版本存储与 Evidence 原子读取已实现；RACE-04 新增 MariaDB 竞态测试，RACE-07 已有整页失败单测；GOV-CTR-006 公共 Runtime Verifier 与 Server 生产装配仍未完成，受限内容披露保持关闭
-- 代码基线：`b4767ab60dfcba187e4cb9a211ac910d8763f6a7`
+- 当前状态：News 模式 A 策略版本发布、当前策略 Resolver、Evidence 原子读取和来源采集持久化授权事务锁已实现；Evidence RACE-01～07 与采集策略撤销/首次 Endpoint 发布竞态均有对应测试。GOV-CTR-006 公共 Runtime Verifier 与 Server 生产装配仍未完成，受限内容披露保持关闭
+- 代码基线：`eac3269ebaa625bd583f5ef3a73a139ff02c3881`
 
 ## 1. 当前实现事实
 
@@ -227,3 +227,17 @@ JCS 仍只调用项目公共 GOV-CTR-006 Runtime Verifier；本模式不复制 J
 | ListEvidence 页内任一记录授权失败（RACE-07） | `internal/news/app/list_evidence_test.go`：`TestListEvidenceDoesNotReturnPartialPageWhenAnItemIsDenied` | 第一条记录已成功解析、第二条记录授权拒绝时，整个 Execute 返回错误且 `result.Items == nil`；不返回部分正文页 |
 
 原子读取现已在策略行锁后重新读取并锁定 Observation/Version 元数据，重新验证 Binding、策略轨迹、版本 fingerprint、Observation 归属和 PIT 时间边界。Application 使用事务返回的最新 Observation，并在组装 DTO 前再次应用载荷留存/清理状态。
+
+
+## 13. 来源采集持久化授权事务补充（2026-11-12）
+
+来源采集写入与 Evidence 内容读取是两个不同的授权边界。本节记录 Observation 持久化前的当前策略竞态保护，不替代第 11 节的 Evidence 原子读取，也不扩展 Evidence RACE-01～07 的定义。
+
+- `IngestCollectedSource` 不再只依赖 Catalog 返回的策略快照在事务外完成持久化授权判断；每条 Observation 写入前，在同一个 Identity Transaction 内锁定并重新读取当前 Source/Endpoint 策略，再评估元数据持久化权限。
+- Provider Candidate Ingest 在同一事务内锁定完整 Provider Output、Source、Endpoint 当前策略组合，并使用数据库持久化的当前策略作为授权权威；不使用 Catalog 中的旧策略对象替代当前版本。
+- 策略 tuple 按 `(policy_type, policy_ref)` 固定字典序锁定。策略撤销/替换更新同一当前指针行，因此必须等待正在进行的 Observation 写事务提交。
+- Identity Transaction 显式使用 InnoDB `REPEATABLE READ`。当 Endpoint 当前策略指针尚不存在时，`SELECT ... FOR UPDATE` 的间隙锁用于阻止并发首次发布绕过该次写入授权检查；策略发布事务与 Evidence 原子读取事务也显式使用 `REPEATABLE READ`。
+- MariaDB 11.4 集成测试覆盖完整三类策略读取、Source 策略替换等待、Provider Output 策略撤销等待、旧策略版本在替换提交后被拒绝，以及缺失 Endpoint 指针期间首次发布必须等待。
+- 内存替身测试覆盖数据库当前 Source 策略版本与 Catalog 快照不一致时拒绝持久化；数据库并发语义以 MariaDB 集成测试为准。
+
+该补充只保护 News 自身的采集持久化事务，不意味着真实网络采集已启用。Provider/Feed 在线验收仍需部署环境凭证、固定 Endpoint BoundDoer、来源授权和出口安全证据。GOV-CTR-006 JCS Runtime Verifier 未接入时，Evidence 受限内容继续 fail closed。
