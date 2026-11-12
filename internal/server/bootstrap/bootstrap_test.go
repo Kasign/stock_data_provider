@@ -68,7 +68,6 @@ func TestStopConsumersThenCloseResourcesHandlesMissingLifecycle(t *testing.T) {
 	}
 }
 
-
 func TestNewDiagnosticsServiceRegistersNewsParserChecks(t *testing.T) {
 	service, err := newDiagnosticsService(nil, servermigration.NewRegistry())
 	if err != nil {
