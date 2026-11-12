@@ -126,8 +126,12 @@ func TestGetResultFailsClosedForInvalidAuthorization(t *testing.T) {
 		{"denied", func(v *AuthorizedRecord) { v.AuthorizationRef.Decision = "denied" }},
 		{"policy snapshot mismatch", func(v *AuthorizedRecord) { v.PolicySnapshot.SnapshotRef = "policy-snapshot:other" }},
 		{"empty policy snapshot", func(v *AuthorizedRecord) { v.PolicySnapshot.Policies = []PolicyVersion{} }},
-		{"duplicate policy tuple", func(v *AuthorizedRecord) { v.PolicySnapshot.Policies = append(v.PolicySnapshot.Policies, v.PolicySnapshot.Policies[0]) }},
-		{"unsorted policy tuples", func(v *AuthorizedRecord) { v.PolicySnapshot.Policies = []PolicyVersion{{PolicyType: "z", PolicyRef: "z", PolicyVersion: "1"}, {PolicyType: "a", PolicyRef: "a", PolicyVersion: "1"}} }},
+		{"duplicate policy tuple", func(v *AuthorizedRecord) {
+			v.PolicySnapshot.Policies = append(v.PolicySnapshot.Policies, v.PolicySnapshot.Policies[0])
+		}},
+		{"unsorted policy tuples", func(v *AuthorizedRecord) {
+			v.PolicySnapshot.Policies = []PolicyVersion{{PolicyType: "z", PolicyRef: "z", PolicyVersion: "1"}, {PolicyType: "a", PolicyRef: "a", PolicyVersion: "1"}}
+		}},
 		{"expired", func(v *AuthorizedRecord) {
 			expired := now.Format(time.RFC3339Nano)
 			v.AuthorizationRef.ExpiresAt = &expired
@@ -198,7 +202,6 @@ func TestGetResultRejectsReaderFailureAndNonUTCClock(t *testing.T) {
 		t.Fatalf("non-UTC trusted clock accepted: %+v %v", got, err)
 	}
 }
-
 
 func TestValidateAuthorizationMatchesFrozenQuantGolden(t *testing.T) {
 	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "doc", "整体任务规划", "golden", "GOV-CTR-006-quant-allowed.golden.json"))
