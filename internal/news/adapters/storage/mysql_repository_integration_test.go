@@ -882,13 +882,6 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	if !reflect.DeepEqual(pitRecord.Version.Content, domain.ContentLayers{}) {
 		t.Fatalf("PIT metadata lookup loaded content before authorization: %+v", pitRecord.Version.Content)
 	}
-	content, err := repository.GetEvidenceContentAt(ctx, secondObservation.NewsID, secondVersion.Version.ID, atVersion.SystemAsOf)
-	if err != nil {
-		t.Fatalf("load exact evidence content after authorization: %v", err)
-	}
-	if content.SourceSummary != secondVersion.Version.Content.SourceSummary {
-		t.Fatalf("exact version content mismatch: got %+v want %+v", content, secondVersion.Version.Content)
-	}
 
 	atomicPolicyVersion := "atomic-source-v1"
 	if _, err := db.ExecContext(ctx, "UPDATE news_observations SET source_policy_version_id = ? WHERE observation_id = ?",
@@ -957,9 +950,6 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	}
 	if atomicContent.SourceSummary != secondVersion.Version.Content.SourceSummary {
 		t.Fatalf("atomic evidence content mismatch: got %+v want %+v", atomicContent, secondVersion.Version.Content)
-	}
-	if _, err := repository.GetEvidenceContentAt(ctx, secondObservation.NewsID, secondVersion.Version.ID, secondVersion.Version.ObservedAt.Add(-time.Second)); !errors.Is(err, app.ErrEvidencePITNotFound) {
-		t.Fatalf("content before system_as_of error = %v, want PIT not found", err)
 	}
 	atVersion.SystemAsOf = secondVersion.Version.ObservedAt.Add(-time.Second)
 	if _, err := repository.GetEvidenceVersionAt(ctx, atVersion); !errors.Is(err, app.ErrEvidencePITNotFound) {

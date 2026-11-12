@@ -31,13 +31,6 @@ func (s getEvidencePITRepositoryStub) ListEvidenceVersionsAt(context.Context, Li
 	return nil, ErrInvalidEvidenceQuery
 }
 
-func (s getEvidencePITRepositoryStub) GetEvidenceContentAt(context.Context, string, string, time.Time) (domain.ContentLayers, error) {
-	if s.afterContentRead != nil {
-		s.afterContentRead()
-	}
-	return s.record.Version.Content, nil
-}
-
 func (s getEvidencePITRepositoryStub) GetEvidenceContentWithCurrentAuthorization(
 	ctx context.Context,
 	binding domain.NewsAuthorizationBinding,

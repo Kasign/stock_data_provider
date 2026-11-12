@@ -203,39 +203,3 @@ func isEvidenceUTC(value time.Time) bool {
 	_, offset := value.Zone()
 	return offset == 0
 }
-
-// GetEvidenceContentAt reads the body of one exact immutable version. Callers must
-// first locate and authorize that version through the News Application facade.
-func (r *MySQLRepository) GetEvidenceContentAt(
-	ctx context.Context,
-	newsID string,
-	versionID string,
-	systemAsOf time.Time,
-) (domain.ContentLayers, error) {
-	if r == nil || r.db == nil || ctx == nil ||
-		strings.TrimSpace(newsID) == "" || newsID != strings.TrimSpace(newsID) ||
-		strings.TrimSpace(versionID) == "" || versionID != strings.TrimSpace(versionID) ||
-		systemAsOf.IsZero() || !isEvidenceUTC(systemAsOf) {
-		return domain.ContentLayers{}, app.ErrInvalidEvidenceQuery
-	}
-	var payload []byte
-	err := r.db.QueryRowContext(ctx, `SELECT v.content_json
-		FROM news_item_versions v
-		INNER JOIN news_observations o
-			ON o.observation_id = v.observation_id AND o.news_id = v.news_id
-		WHERE v.news_id = ? AND v.version_id = ?
-			AND v.observed_at <= ? AND o.observed_at <= ?`,
-		newsID, versionID, systemAsOf.UTC(), systemAsOf.UTC(),
-	).Scan(&payload)
-	if errors.Is(err, sql.ErrNoRows) {
-		return domain.ContentLayers{}, app.ErrEvidencePITNotFound
-	}
-	if err != nil {
-		return domain.ContentLayers{}, err
-	}
-	var content domain.ContentLayers
-	if err := json.Unmarshal(payload, &content); err != nil {
-		return domain.ContentLayers{}, err
-	}
-	return content, nil
-}

@@ -165,11 +165,6 @@ type EvidencePITRepository interface {
 	ListEvidenceVersionsAt(context.Context, ListEvidenceRequest) ([]EvidencePITRecord, error)
 }
 
-// EvidenceContentRepository loads one exact immutable version body after authorization succeeds.
-type EvidenceContentRepository interface {
-	GetEvidenceContentAt(context.Context, string, string, time.Time) (domain.ContentLayers, error)
-}
-
 // ResearchEvidenceQuery is the only cross-module read port. It never searches
 // Providers or triggers source collection.
 type ResearchEvidenceQuery interface {
