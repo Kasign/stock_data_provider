@@ -38,12 +38,12 @@ func TestQuantResultEnvelopeSchemaMatchesRegisteredPayloads(t *testing.T) {
 		t.Fatal(err)
 	}
 	cases := []struct {
-		name string
-		resultType string
-		algorithmVersion string
+		name                 string
+		resultType           string
+		algorithmVersion     string
 		parameterFingerprint string
-		snapshots []string
-		payload result.Payload
+		snapshots            []string
+		payload              result.Payload
 	}{
 		{"trend", "trend", "trend-algorithm.v1", "sha256:envelope-test-parameters", []string{"snapshot:envelope-test"}, trendPayload},
 		{"risk", "risk", "risk-evaluator.v1", "sha256:risk-parameters", []string{}, riskPayload},
