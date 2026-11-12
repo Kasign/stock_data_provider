@@ -1313,4 +1313,4 @@ Lifecycle.Stop 原实现通过 stopped 标记保证重复调用幂等，但并�
 - 将预检改为一次只读读取 `platform_schema_migrations` 全部 `namespace/version/status`，并要求数据库 namespace 集合与当前 Registry 完全一致；每个 namespace 内仍要求版本集合完全一致且全部为 `applied`。
 - 不执行 DDL、不修改迁移历史、不删除旧记录，也不改变 Platform Migration Runner 的职责。发现未知 namespace 时明确拒绝启动，交由运维确认数据库与当前代码版本是否匹配。
 - 新增纯逻辑测试覆盖完整集合、未知 namespace、缺失 namespace、已注册 namespace 内未知版本；数据库读写行为仍需由后续 MariaDB 集成验收覆盖。
-- 本批次代码与测试已提交；当前 SHA 的 Server 独立 CI 结果待 Workflow 执行，不提前标记通过。
+- 首次独立 CI 在 gofmt 门禁发现新增测试文件格式不符合规范，包级单测、Race、Vet 因门禁失败而未执行；已将 namespace 集合测试拆分为独立测试文件进行格式修正，后续以新 SHA 重新执行完整 Server Workflow。
