@@ -36,7 +36,7 @@ func (r *EventRepository) Append(ctx context.Context, value researchevent.Resear
 	}
 	now := r.base.now().UTC()
 	insert := "INSERT INTO research_event_versions (event_id, event_version, status, system_as_of, payload_sha256, payload, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
-	return r.base.appendVersion(ctx, "event", value.EventID, int64(value.EventVersion),
+	return r.base.appendVersionWithHooks(ctx, "event", value.EventID, int64(value.EventVersion),
 		eventTable, "event_id", "event_version", payload, now, insert,
 		[]any{value.EventID, value.EventVersion, string(value.Status), formatPIT(value.SystemAsOf), digest, string(payload), now},
 		func(previous []byte) error {
@@ -45,7 +45,9 @@ func (r *EventRepository) Append(ctx context.Context, value researchevent.Resear
 				return fmt.Errorf("decode previous Event: %w", err)
 			}
 			return value.ValidateNextVersion(prior)
-		})
+		},
+		func(tx *sql.Tx, _ []byte) error { return validateEventDerivedRefs(ctx, tx, value) },
+		nil)
 }
 
 // AppendWithLifecycle atomically appends an Event version and its
@@ -74,7 +76,7 @@ func (r *EventRepository) AppendWithLifecycle(ctx context.Context, value researc
 	}
 	insert := "INSERT INTO research_event_versions (event_id, event_version, status, system_as_of, payload_sha256, payload, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
 	var previous researchevent.ResearchEvent
-	return r.base.appendVersionWithHook(ctx, "event", value.EventID, int64(value.EventVersion),
+	return r.base.appendVersionWithHooks(ctx, "event", value.EventID, int64(value.EventVersion),
 		eventTable, "event_id", "event_version", payload, now, insert,
 		[]any{value.EventID, value.EventVersion, string(value.Status), formatPIT(value.SystemAsOf), digest, string(payload), now},
 		func(raw []byte) error {
@@ -101,7 +103,9 @@ func (r *EventRepository) AppendWithLifecycle(ctx context.Context, value researc
 				return fmt.Errorf("lifecycle Outbox requires a status change")
 			}
 			return insertResearchLifecycleOutbox(ctx, tx, previous, value, *transition, reasonCode, correlationID, now)
-		})
+		},
+		func(tx *sql.Tx, _ []byte) error { return validateEventDerivedRefs(ctx, tx, value) },
+		nil)
 }
 
 func (r *EventRepository) GetVersion(ctx context.Context, id string, version int) (researchevent.ResearchEvent, error) {
@@ -123,4 +127,46 @@ func (r *EventRepository) GetVersion(ctx context.Context, id string, version int
 		return value, corruptStoredIdentity("Event")
 	}
 	return value, nil
+}
+
+
+// validateEventDerivedRefs resolves every exact Event version in the same
+// transaction as the append. This prevents a concurrent or missing reference
+// from being accepted between validation and persistence.
+func validateEventDerivedRefs(ctx context.Context, tx *sql.Tx, value researchevent.ResearchEvent) error {
+	visited := make(map[researchevent.ResearchEventRef]struct{})
+	visiting := make(map[researchevent.ResearchEventRef]struct{})
+	var visit func(researchevent.ResearchEventRef) error
+	visit = func(ref researchevent.ResearchEventRef) error {
+		if _, ok := visiting[ref]; ok {
+			return fmt.Errorf("derived_from_refs contains a cycle at %s@%d", ref.EventID, ref.EventVersion)
+		}
+		if _, ok := visited[ref]; ok { return nil }
+		visiting[ref] = struct{}{}
+		var digest string
+		var payload []byte
+		err := tx.QueryRowContext(ctx, "SELECT payload_sha256, payload FROM research_event_versions WHERE event_id=? AND event_version=?", ref.EventID, ref.EventVersion).Scan(&digest, &payload)
+		if err != nil {
+			if err == sql.ErrNoRows { return fmt.Errorf("derived Event reference %s@%d does not exist", ref.EventID, ref.EventVersion) }
+			return fmt.Errorf("read derived Event reference %s@%d: %w", ref.EventID, ref.EventVersion, err)
+		}
+		if err := verifyStoredPayload(payload, digest); err != nil { return err }
+		var referenced researchevent.ResearchEvent
+		if err := json.Unmarshal(payload, &referenced); err != nil { return corruptStoredRecord("Event", "derived reference decode failed", err) }
+		if referenced.EventID != ref.EventID || referenced.EventVersion != ref.EventVersion { return corruptStoredIdentity("Event derived reference") }
+		if err := referenced.Validate(); err != nil { return corruptStoredRecord("Event", "derived reference validation failed", err) }
+		for _, parent := range referenced.DerivedFromRefs {
+			if err := visit(parent); err != nil { return err }
+		}
+		delete(visiting, ref)
+		visited[ref] = struct{}{}
+		return nil
+	}
+	for _, ref := range value.DerivedFromRefs {
+		if ref.EventID == value.EventID && ref.EventVersion == value.EventVersion {
+			return fmt.Errorf("Event cannot derive from itself")
+		}
+		if err := visit(ref); err != nil { return err }
+	}
+	return nil
 }
