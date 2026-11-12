@@ -75,7 +75,7 @@ func NewAuthorizer(query newsapp.ResearchEvidenceQuery) (*Authorizer, error) {
 
 func (a *Authorizer) AuthorizeEvidence(ctx context.Context, callerRef string, purpose researchevidence.PurposeCode, value researchevidence.Evidence) error {
 	if a == nil || a.query == nil || ctx == nil || strings.TrimSpace(callerRef) == "" ||
-		value.SourceOwner != researchevidence.SourceNews || value.SourceVersion == nil ||
+		value.SourceOwner != researchevidence.SourceNews || value.SourceVersion == nil || value.SourceLocator == nil ||
 		!validPurpose(string(purpose)) || !validContentLevel(string(value.ContentLevel)) {
 		return researchapp.NewAuthorizationError(researchapp.AuthorizationInternal, ErrInvalidRequest)
 	}
@@ -85,7 +85,7 @@ func (a *Authorizer) AuthorizeEvidence(ctx context.Context, callerRef string, pu
 	record, err := a.query.GetEvidence(ctx, newsapp.GetEvidenceRequest{
 		CallerRef: callerRef, PurposeCode: newsapp.EvidencePurposeCode(purpose),
 		RequestedContentLevel: newsapp.EvidenceContentLevel(value.ContentLevel),
-		SystemAsOf: value.SystemAsOf, NewsID: value.SourceRef, VersionID: *value.SourceVersion,
+		SystemAsOf: value.SystemAsOf, NewsID: *value.SourceLocator, VersionID: *value.SourceVersion,
 	})
 	if err != nil {
 		switch {
@@ -99,7 +99,7 @@ func (a *Authorizer) AuthorizeEvidence(ctx context.Context, callerRef string, pu
 			return researchapp.NewAuthorizationError(researchapp.AuthorizationInternal, err)
 		}
 	}
-	if record.NewsID != value.SourceRef || record.VersionID != *value.SourceVersion ||
+	if record.NewsID != *value.SourceLocator || record.SourceRef != value.SourceRef || record.VersionID != *value.SourceVersion ||
 		record.AuthorizationStatus != "allowed" || record.AuthorizationRef == "" ||
 		record.SystemAsOf.IsZero() || !record.SystemAsOf.Equal(value.SystemAsOf) ||
 		record.SystemObservedAt.IsZero() || !record.SystemObservedAt.Equal(value.SystemObservedAt) ||
@@ -142,11 +142,7 @@ func mapNewsEvidence(record newsapp.ResearchEvidenceRecord, request ImportReques
 	}
 
 	version := record.VersionID
-	var locator *string
-	if record.ContentRef != nil && strings.TrimSpace(*record.ContentRef) != "" {
-		value := *record.ContentRef
-		locator = &value
-	}
+	locator := record.NewsID
 	limitations := []string{"news_subject_refs_not_provided"}
 	quality := mapNewsQuality(record.QualityStatus, record.BusinessQualityStatus)
 	if quality == researchevidence.QualityDegraded {
@@ -155,7 +151,7 @@ func mapNewsEvidence(record newsapp.ResearchEvidenceRecord, request ImportReques
 	return researchapp.EvidenceDraft{
 		EvidenceType: string(researchevidence.TypeReportedFact),
 		SourceOwner: string(researchevidence.SourceNews),
-		SourceRef: record.NewsID, SourceVersion: &version, SourceLocator: locator,
+		SourceRef: record.SourceRef, SourceVersion: &version, SourceLocator: &locator,
 		DerivedFromRefs: []string{}, ClaimRef: nil, SubjectRefs: []string{},
 		PublishedAt: cloneTime(record.PublishedAt), AvailableAt: cloneTime(record.AvailableAt),
 		SystemObservedAt: record.SystemObservedAt.UTC(), SystemAsOf: request.SystemAsOf.UTC(),
