@@ -7,7 +7,7 @@
 
 ## 当前状态
 
-当前验收 HEAD：`4ce2fd155c21e7f8fe850c6f7f8c8d105b3dd47e`（2026-11-12）。
+当前代码验收 SHA：`e9d4bbc34245f697d49a00845a3242be743c6a00`（2026-11-12）；对应 Quant 专项 CI 正在执行，完成状态以该 SHA 的 Workflow 为准。
 
 已具备首批 Indicator/Factor 纯计算、CalculationContext、基础 Registry、RiskDecision/RuleSet 执行框架、TrendResult DTO、Manifest/ResultRef、Repository Save Port/MemoryRepository，以及 QuantResult Envelope 初版。
 
@@ -20,6 +20,8 @@
 - Envelope JSON Schema、Trend/Risk Golden、Schema 回归、序列化/反序列化和非法输入测试已补齐。
 - Envelope Marshal/Unmarshal 均执行结构校验；input_snapshot_refs 必须显式存在、唯一且按 Manifest 规范顺序排列，允许空数组。
 - QNT-CTR-001 Registry Entry 2.0.0 已接入 Go `SampleCountPolicy`；`ValidateMetric` 按 `required_in_metric` 检查字段存在性，保留缺失、null、0 的差异；Schema 1.0.0 保留历史投影。
+- 八份 Indicator Golden 已显式固化 `expected.sample_count`，测试直接读取 Golden 期望值。
+- 新增 `internal/quant/application.GetResult`：从可信 PrincipalResolver 获取主体，调用授权读取 Port，在释放 Payload 前验证 GOV-CTR-006 授权指纹/策略快照、Manifest 与 Payload 指纹，并只解码已注册的 Trend/Risk 强类型 Envelope。
 
 <badge color="success">Quant 专项 CI 通过</badge> Workflow `43142021410` 对验收 SHA `4ce2fd155c21e7f8fe850c6f7f8c8d105b3dd47e` 的 gofmt、Quant 全量单测、Manifest 30 秒随机 Fuzz、Race、Vet 全部通过。
 
@@ -32,12 +34,19 @@
 
 当前剩余阻塞：
 - Indicator/Factor：补齐各自强类型 Payload 容器 Schema/Golden、字段/顺序校验及 Registry 驱动的 Metric 语义校验；完成前保持未注册。
-- Quant 授权：尚无完整 Application/GetResult 读取链、当前 PolicySnapshot Provider、审计和授权检查至 Payload 释放的 TOCTOU 保护。
+- Quant 授权：GetResult Application 用例和授权读取 Port 已建立；生产 AuthorizedResultReader/当前策略源、与存储同一致性边界的原子读取、审计落库仍需 Server/Platform Storage Adapter 接入并做撤销竞态验收。当前不能把接口契约和内存测试视为生产授权已通过。
 - Data：DailyBars v2 Decimal 输入、真实 PIT/复权/交易日历及质量证据；没有真实数据证据，不标记真实数据验收通过。
 - Platform/Server：正式 Storage/事务接入、根 Migration 注册和统一 Diagnostics 装配。
 - Researchflow：Envelope discriminator/Schema/版本消费校验、当前授权引用传递及双方 Contract Test。
 
 全仓 Go Test Suite 最近一次执行（Workflow `43142021397`，验收 SHA `4ce2fd155c21e7f8fe850c6f7f8c8d105b3dd47e`）未通过：根模块 `Test .` 的失败集中在 Notification application 测试，独立 Researchflow 模块测试 Job 也失败；Researchflow MariaDB lifecycle integration 通过。Quant 包在同一 SHA 的专项 CI 全部通过。上述失败不属于 Quant，本分支未修改其他模块。
+
+## 集合联调边界
+
+- 可联调能力：Trend/Risk `1.0.0` Envelope 解码、Manifest/ResultRef、Repository Save Port，以及 `application.GetResult` 的授权读取 Application 接口。
+- Server 需要注入可信 PrincipalResolver、UTC Clock、AuthorizedResultReader；AuthorizedResultReader 必须在一个可证明的一致性边界内复核当前 Quant 策略并读取不可变结果，授权状态变化或无法证明一致时 fail closed。
+- 暂不可联调为完整结果的类型：Indicator/Factor 尚未注册 Payload，必须拒绝；Market/Industry/Stock/Strategy/Backtest/Evaluation 仍未实现。
+- 尚未完成生产闭环：真实授权策略源、审计持久化、MariaDB/Platform Storage Adapter、根 Migration、真实 Data v2 输入，以及 Researchflow 消费端 Contract Test。
 
 ## 文档索引
 
