@@ -130,8 +130,8 @@
       "pattern": "^[a-z][a-z0-9_]*$"
     },
     "schema_version": {
-      "type": "string",
-      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$"
+      "const": "2.0.0",
+      "description": "Registry Entry 结构版本；必须与本 Schema 版本一致。"
     },
     "value_type": {
       "type": "string",
