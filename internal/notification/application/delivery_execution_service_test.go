@@ -567,7 +567,6 @@ func TestDeliveryExecutionDoesNotStartAttemptWhenLeaseAlreadyExpired(t *testing.
 	}
 }
 
-
 type outcomeUnknownAttemptCompletionRepository struct {
 	*memoryDeliveries
 	persistCompletion bool
