@@ -49,9 +49,8 @@ type pytdxOfficialSuspensionDailyItem struct {
 	Error          string   `json:"error,omitempty"`
 }
 
-// TestLivePytdxOfficialIntradaySuspensionDailyBars verifies that public daily
-// K-line endpoints return a full-day candle for exchange-announced intraday
-// suspensions. It deliberately does not call Tushare or consume API credits.
+// TestLivePytdxOfficialIntradaySuspensionDailyBars 使用交易所官方公告样本核验
+// Pytdx 日 K 对盘中临停与全天停牌窗口的返回行为；不调用 Tushare，不消耗 Tushare API 配额。
 func TestLivePytdxOfficialIntradaySuspensionDailyBars(t *testing.T) {
 	if os.Getenv("MARKET_DATA_LIVE_PYTDX_OFFICIAL_SUSPENSION_TESTS") != "1" {
 		t.Skip("set MARKET_DATA_LIVE_PYTDX_OFFICIAL_SUSPENSION_TESTS=1 to query Pytdx daily bars for official intraday-suspension samples")
