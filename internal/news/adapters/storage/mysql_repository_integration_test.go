@@ -837,6 +837,19 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 		pitRecord.ProviderRef != "" {
 		t.Fatalf("PIT record mismatch: %+v", pitRecord)
 	}
+	if !reflect.DeepEqual(pitRecord.Version.Content, domain.ContentLayers{}) {
+		t.Fatalf("PIT metadata lookup loaded content before authorization: %+v", pitRecord.Version.Content)
+	}
+	content, err := repository.GetEvidenceContentAt(ctx, secondObservation.NewsID, secondVersion.Version.ID, atVersion.SystemAsOf)
+	if err != nil {
+		t.Fatalf("load exact evidence content after authorization: %v", err)
+	}
+	if content.SourceSummary != secondVersion.Version.Content.SourceSummary {
+		t.Fatalf("exact version content mismatch: got %+v want %+v", content, secondVersion.Version.Content)
+	}
+	if _, err := repository.GetEvidenceContentAt(ctx, secondObservation.NewsID, secondVersion.Version.ID, secondVersion.Version.ObservedAt.Add(-time.Second)); !errors.Is(err, app.ErrEvidencePITNotFound) {
+		t.Fatalf("content before system_as_of error = %v, want PIT not found", err)
+	}
 	atVersion.SystemAsOf = secondVersion.Version.ObservedAt.Add(-time.Second)
 	if _, err := repository.GetEvidenceVersionAt(ctx, atVersion); !errors.Is(err, app.ErrEvidencePITNotFound) {
 		t.Fatalf("explicit future version error = %v, want PIT not found", err)
@@ -873,6 +886,9 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	if len(listed) != 1 || listed[0].Version.ID != secondVersion.Version.ID ||
 		listed[0].Observation.ID != secondObservation.ID || listed[0].SourceRef != secondSourceID {
 		t.Fatalf("ListEvidence PIT returned unexpected records: %+v", listed)
+	}
+	if !reflect.DeepEqual(listed[0].Version.Content, domain.ContentLayers{}) {
+		t.Fatalf("ListEvidence PIT metadata lookup loaded content before per-item authorization: %+v", listed[0].Version.Content)
 	}
 	gotObservation := listed[0].Observation
 	if gotObservation.SourcePolicyVersionID != "source-policy-pit-v2" ||
