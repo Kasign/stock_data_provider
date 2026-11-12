@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "urn:kasign:stock-data-provider:server:diagnostics-report:1.0.0",
+  "$id": "https://kasign.github.io/stock_data_provider/server/diagnostics-report-1.0.0.schema.json",
   "title": "Server Diagnostics HTTP Report",
   "description": "Owner-only Root Server diagnostics response returned when the diagnostics Runner completes.",
   "type": "object",
@@ -56,7 +56,7 @@
       "properties": {
         "ready": { "type": "boolean" },
         "reason_code": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z0-9][a-z0-9._-]*$" },
-        "safe_message": { "type": "string", "minLength": 1, "maxLength": 512 }
+        "safe_message": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^[^\\u0000-\\u001F\\u007F]*$" }
       }
     }
   },
@@ -72,17 +72,25 @@
       "properties": {
         "status": { "$ref": "#/definitions/status" },
         "reason_code": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z0-9][a-z0-9._-]*$" },
-        "safe_message": { "type": "string", "minLength": 1, "maxLength": 512 },
-        "checked_at": { "type": "string", "format": "date-time" },
+        "safe_message": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^[^\\u0000-\\u001F\\u007F]*$" },
+        "checked_at": { "type": "string", "format": "date-time", "pattern": "Z$" },
         "duration": { "type": "integer", "minimum": 0 },
-        "evidence_ref": { "type": "string", "maxLength": 512 },
+        "evidence_ref": { "type": "string", "maxLength": 512, "pattern": "^[^\\u0000-\\u001F\\u007F]*$" },
         "attributes": {
           "type": "object",
           "maxProperties": 16,
-          "propertyNames": { "minLength": 1, "maxLength": 64 },
-          "additionalProperties": { "type": "string", "maxLength": 256 }
+          "propertyNames": { "minLength": 1, "maxLength": 64, "pattern": "^[^\\u0000-\\u001F\\u007F]+$" },
+          "additionalProperties": { "type": "string", "maxLength": 256, "pattern": "^[^\\u0000-\\u001F\\u007F]*$" }
         }
-      }
+      },
+      "allOf": [{
+        "if": {
+          "properties": { "status": { "const": "healthy" } },
+          "required": ["status"]
+        },
+        "then": {},
+        "else": { "required": ["reason_code"] }
+      }]
     }
   }
 }
