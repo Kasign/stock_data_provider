@@ -1,10 +1,10 @@
 # 国内 A 股数据层阶段五统一验收计划
 
-> 本文为阶段五的专项实施与验收历史记录，不再作为整体任务入口。本文当前记录到 2026-11-05 P0 批次 48；2026-11-12 的 P0-86～P0-89 及后续执行状态统一维护在 [数据侧整体规划](数据侧整体规划.md) 和 [Runtime Acceptance Log](../provider-migration/DATA_SOURCE_RUNTIME_ACCEPTANCE_LOG.md)。本文保留历史工作包和证据，不得从较早章节的旧待办重复派发任务。
+> 本文为阶段五的专项实施与验收历史记录，不再作为整体任务入口。本文当前记录到 2026-11-05 P0 批次 48；2026-11-12 的 P0-86～P0-89、Fundamentals Probe 边界修复及 `source_version` 校验收敛统一维护在 [数据侧整体规划](数据侧整体规划.md) 和 [Runtime Acceptance Log](../provider-migration/DATA_SOURCE_RUNTIME_ACCEPTANCE_LOG.md)。本文保留历史工作包和证据，不得从较早章节的旧待办重复派发任务。
 
 - 目标分支：`feat/full-go-data-providers-api-switch`
 - 阶段定位：阶段五统一验收，不以“代码已实现”替代真实数据验收。
-- 当前状态（2026-11-12，Data 文档 HEAD `f41053fefbe2e6f6d12b00102e1c4dd06d9aa368`，最近代码 SHA `8b61eb39ae5061ec0bf6448bfcf124dcea9836bd`）：统一诊断框架、Provider 字段 Reporter、Probe Reporter 注入与历史持久化、DailyBar 跨 Provider 比较、多复权口径 Probe 参数/结果字段均已有实现。Go Test Suite Run `43219224292` 在前一代码 SHA `1d24e84c53b948d8c29389c997c2687ba2a4856e` 通过；其后代码变更仅为探针格式收敛，但不能把该 Run 写成 `8b61eb39` 的直接 CI 证据。BaoStock 首轮 Live Provider Run `43218703614` 的专项步骤成功，但旧测试只检查响应非空并记录字段；加强后的停牌/复牌/盘中临停断言尚未真实运行。Live Provider Run `43219175966` 的 BaoStock 专项步骤 skipped。阶段 B 仍 in_progress；较早章节的待办表属于历史快照，不得作为当前任务重复执行。
+- 当前状态（2026-11-12，Data 文档 HEAD `bcc36efbdbee0c74bf2a1f8439943926a2f47a46`，最近功能代码 SHA `a63a126e7ab0bc1acea576e30ca083063708483c`）：本轮 Fundamentals Probe 报告期边界和 `source_version=unknown` Reporter 判定已修复；当前 SHA 的 Go Test Suite Run `43226759988` success，包含 Data gofmt/tests/race/vet、Root Go tests/race/vet、MariaDB/PIT persistence。BaoStock 首轮 Live Provider Run `43218703614` 只证明非空响应；加强后的字段语义断言尚未真实运行。最新 Live Provider Run `43226714523` 总体 success，但 BaoStock 专项步骤 skipped。阶段 B 仍 in_progress；较早章节的待办表属于历史快照，不得作为当前任务重复执行。
 - 原则：每项结论必须绑定代码 SHA、样本范围、原始响应证据和质量判定；凭据不得进入文档或日志。
 - Data 代码验收补充（2026-11-12）：代码 SHA `f919b4f8568181706053639032cb38fc75a131fb` 的 Go Test Suite Run `43143964508` 中 Data gofmt、单测、Race、Vet 及 MariaDB/PIT、DailyBar 回退、PIT 修订回退、Probe HTTP + MariaDB 端到端均通过。该结果只关闭本轮 Data 代码门禁，不关闭阶段 B 的真实 Provider 复权基准、AvailableAt 和交易边界证据验收。
 
@@ -401,3 +401,9 @@
 - Pytdx 协议解码将 float32 成交额乘以 1000 后转为 `Price`（厘），Go 整数转换会截断不足 0.001 CNY 的部分。因此 Pytdx 绝对误差上界应为半个 float32 ULP + 0.001 CNY；BaoStock 4 位小数且舍入方式未明确，保守取 0.0001 CNY。
 - 内部字段改为 `AmountErrorBound`，比较容差改为两侧绝对误差上界之和。新增 100,000 CNY 小额边界测试，Pytdx error bound=0.00490625 CNY；真实样本两证券仍各 54/54 字段 matched。
 - 代码 SHA `95383503` 的 Push Go suite `42027994789`、PR Go suite `42028409432`、Parity `42028409433`、WebUI checks `42028409422` 均 success。PR Live Provider Probe `42028409554` 外层 success，但历史专项均 skipped；WebUI 契约无变化。
+
+
+## 2026-11-12 后续代码验收补充
+
+- 当前 Data 分支 HEAD `bcc36efbdbee0c74bf2a1f8439943926a2f47a46` 的 Go Test Suite Run `43226759988` success：Data gofmt/tests/race/vet、Root Go tests/race/vet、MariaDB migration/PIT persistence 均通过。
+- 本次仅修复 Fundamentals Probe 报告期校验年份和 Fundamentals/Valuations `source_version=unknown` 的 Reporter/Service 判定一致性；不代表阶段 B 真实 Provider 复权基准与 BaoStock 字段语义验收关闭。
