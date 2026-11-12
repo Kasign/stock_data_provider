@@ -254,11 +254,11 @@ type MarketIndexQuote struct {
 	AmountUnit         string        `json:"amount_unit"`
 	QuoteTime          *time.Time    `json:"quote_time,omitempty"`
 	QuoteTimeSemantics string        `json:"quote_time_semantics,omitempty"`
-	Source             string     `json:"source"`
-	SourceVersion      string     `json:"source_version,omitempty"`
-	FetchedAt          time.Time  `json:"fetched_at"`
-	QualityStatus    QualityStatus `json:"quality_status"`
-	QualityReasons   []string      `json:"quality_reasons,omitempty"`
+	Source             string        `json:"source"`
+	SourceVersion      string        `json:"source_version,omitempty"`
+	FetchedAt          time.Time     `json:"fetched_at"`
+	QualityStatus      QualityStatus `json:"quality_status"`
+	QualityReasons     []string      `json:"quality_reasons,omitempty"`
 }
 
 type IndexQuoteSnapshot struct {

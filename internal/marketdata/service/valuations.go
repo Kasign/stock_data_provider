@@ -251,7 +251,7 @@ func (s *DataService) ValuationsAsOf(ctx context.Context, rawSymbols []string, a
 		}
 		if candidate.SystemObservedAt == nil || candidate.SystemObservedAt.After(asOf) ||
 			candidate.FetchedAt.IsZero() || candidate.FetchedAt.After(asOf) ||
-			candidate.SystemObservedAt.Before(candidate.FetchedAt) || itemFetchedAfterCutoff ||
+			itemFetchedAfterCutoff ||
 			(candidate.ProviderTimestamp != nil && candidate.ProviderTimestamp.After(asOf)) ||
 			(candidate.ProviderReportDate != "" && candidate.ProviderReportDate > asOf.In(marketLocation()).Format("2006-01-02")) ||
 			validateValuationSnapshot(symbols, candidate) != nil {
