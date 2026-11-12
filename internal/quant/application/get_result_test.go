@@ -243,7 +243,6 @@ func TestGetResultAuditFailurePreventsEnvelopeRelease(t *testing.T) {
 	}
 }
 
-
 func TestGetResultReaderDenialIsAuditedAsDenied(t *testing.T) {
 	now := time.Date(2026, 11, 9, 2, 0, 0, 0, time.UTC)
 	reader := &fixedReader{err: ErrAccessDenied}

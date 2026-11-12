@@ -132,7 +132,6 @@ func (snapshot *PolicySnapshot) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-
 // AuthorizedRecord 必须由结果 Owner 的授权读取端口在同一一致性边界内返回。
 type AuthorizedRecord struct {
 	Record           result.Record
