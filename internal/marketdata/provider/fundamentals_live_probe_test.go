@@ -63,6 +63,9 @@ func TestLiveProviderProbeQuarterlyFundamentals(t *testing.T) {
 				t.Fatalf("category %s invalid publication date %q", section.Category, section.PublicationDate)
 			}
 		}
+		if section.AvailableAt != nil {
+			t.Fatalf("category %s date-only pubDate must not be promoted to an exact available_at timestamp: %v", section.Category, section.AvailableAt)
+		}
 	}
 	if snapshot.QualityStatus != model.QualityValid && snapshot.QualityStatus != model.QualityDegraded {
 		t.Fatalf("unexpected live fundamentals quality %q", snapshot.QualityStatus)
