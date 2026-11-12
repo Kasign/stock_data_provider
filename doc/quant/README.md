@@ -7,7 +7,7 @@
 
 ## 当前状态
 
-当前代码基线：`7c7cbbde5c0428021ae44ce04a1648257cd576fd`（2026-11-12）。
+当前验收 HEAD：`4ce2fd155c21e7f8fe850c6f7f8c8d105b3dd47e`（2026-11-12）。
 
 已具备首批 Indicator/Factor 纯计算、CalculationContext、基础 Registry、RiskDecision/RuleSet 执行框架、TrendResult DTO、Manifest/ResultRef、Repository Save Port/MemoryRepository，以及 QuantResult Envelope 初版。
 
@@ -19,8 +19,9 @@
 - 当前仅注册 `trend/1.0.0`、`risk/1.0.0` 两种强类型 Payload；Trend/Risk 与 Envelope 的重复字段逐项校验，Envelope 与 Manifest 逐字段校验并验证 Payload 指纹。
 - Envelope JSON Schema、Trend/Risk Golden、Schema 回归、序列化/反序列化和非法输入测试已补齐。
 - Envelope Marshal/Unmarshal 均执行结构校验；input_snapshot_refs 必须显式存在、唯一且按 Manifest 规范顺序排列，允许空数组。
+- QNT-CTR-001 Registry Entry 2.0.0 已接入 Go `SampleCountPolicy`；`ValidateMetric` 按 `required_in_metric` 检查字段存在性，保留缺失、null、0 的差异；Schema 1.0.0 保留历史投影。
 
-<badge color="success">Quant 专项 CI 通过</badge> Workflow `43137704383` 对代码 SHA `7c7cbbde5c0428021ae44ce04a1648257cd576fd` 的 gofmt、Quant 全量单测、Manifest Fuzz、Race、Vet 全部通过。
+<badge color="success">Quant 专项 CI 通过</badge> Workflow `43142021410` 对验收 SHA `4ce2fd155c21e7f8fe850c6f7f8c8d105b3dd47e` 的 gofmt、Quant 全量单测、Manifest 30 秒随机 Fuzz、Race、Vet 全部通过。
 
 **Payload 支持边界：**
 - 已注册：`trend/1.0.0`、`risk/1.0.0`。
@@ -36,7 +37,7 @@
 - Platform/Server：正式 Storage/事务接入、根 Migration 注册和统一 Diagnostics 装配。
 - Researchflow：Envelope discriminator/Schema/版本消费校验、当前授权引用传递及双方 Contract Test。
 
-全仓 Go Test Suite 最近一次执行（Workflow `43137433301`，代码 SHA `87cadf5be09592945dbb4ad90810cf7eed74854c`）未通过，失败位于 LLM、Notification、Researchflow。该 SHA 不是当前代码基线；Quant 专项 CI 对当前 SHA 已独立通过。未修改其他模块。
+全仓 Go Test Suite 最近一次执行（Workflow `43142021397`，验收 SHA `4ce2fd155c21e7f8fe850c6f7f8c8d105b3dd47e`）未通过：根模块 `Test .` 的失败集中在 Notification application 测试，独立 Researchflow 模块测试 Job 也失败；Researchflow MariaDB lifecycle integration 通过。Quant 包在同一 SHA 的专项 CI 全部通过。上述失败不属于 Quant，本分支未修改其他模块。
 
 ## 文档索引
 
