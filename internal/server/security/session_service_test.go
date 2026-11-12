@@ -114,7 +114,7 @@ func (a *lifecycleTestAudit) Write(_ context.Context, event platformsecurity.Sec
 
 func newLifecycleTestService(t *testing.T, auditErr error) (*SessionLifecycleService, *lifecycleTestCredentials, *lifecycleTestSessions, *lifecycleTestRateLimiter, *lifecycleTestAudit) {
 	t.Helper()
-	credentials := &lifecycleTestCredentials{credential:	platformsecurity.OwnerCredential{
+	credentials := &lifecycleTestCredentials{credential: platformsecurity.OwnerCredential{
 		Subject: "owner", PasswordHash: "encoded:correct", CredentialVersion: 7,
 	}}
 	sessions := &lifecycleTestSessions{}
@@ -125,18 +125,18 @@ func newLifecycleTestService(t *testing.T, auditErr error) (*SessionLifecycleSer
 		Credentials: credentials,
 		Sessions:    sessions,
 		RateLimiter: limiter,
-		Hasher: lifecycleTestHasher{expected: "correct"},
-		Audit: audit,
+		Hasher:      lifecycleTestHasher{expected: "correct"},
+		Audit:       audit,
 	}, SessionLifecycleConfig{
 		RateLimitHMACKey: []byte("0123456789abcdef0123456789abcdef"),
-		Cookie:           platformsecurity.SessionCookieConfig{
+		Cookie: platformsecurity.SessionCookieConfig{
 			Name:     "__Secure-owner_session",
 			Path:     "/api",
 			Secure:   true,
 			SameSite: http.SameSiteLaxMode,
 		},
-		IdleTTL:         12 * time.Hour,
-		AbsoluteTTL:     7 * 24 * time.Hour,
+		IdleTTL:     12 * time.Hour,
+		AbsoluteTTL: 7 * 24 * time.Hour,
 		RateLimitPolicy: platformsecurity.LoginRateLimitPolicy{
 			AccountMaxFailures: 5,
 			IPMaxFailures:      10,
