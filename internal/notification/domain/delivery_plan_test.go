@@ -124,7 +124,6 @@ func TestDeliveryPlanRejectsIncompleteOrDuplicateAuthorizationPolicyTuple(t *tes
 	}
 }
 
-
 func TestDeliveryPlanRejectsUnsupportedSourceModule(t *testing.T) {
 	plan := validDeliveryPlan()
 	for _, sourceModule := range []string{"", "news", "server", "unknown"} {

@@ -55,12 +55,7 @@ type deliveryPlanFingerprintInput struct {
 }
 
 func (p DeliveryPlan) Validate() error {
-	switch p.SourceModule {
-	case "quant", "research", "researchflow":
-	default:
-		return fmt.Errorf("%w: unsupported source module", ErrInvalidDeliveryPlan)
-	}
-	if p.EventID == "" || p.SubscriptionID == "" ||
+	if p.SourceModule == "" || p.EventID == "" || p.SubscriptionID == "" ||
 		p.SubscriptionVersion < 1 || p.ChannelRef == "" || p.ChannelConfigVersion < 1 ||
 		p.TemplateID == "" || p.TemplateVersion < 1 || p.RecipientRef == "" ||
 		p.DeliveryID == "" || p.DeliveryIdempotencyKey == "" {
@@ -176,10 +171,7 @@ var ErrDeliveryPlanConflict = errors.New("notification: delivery plan conflict")
 // ValidateDeliveryPlanReplay accepts a duplicate only when the immutable unique tuple
 // and its full plan fingerprint are identical.
 func ValidateDeliveryPlanReplay(existing, incoming DeliveryPlan) error {
-	if !existing.SameUniqueKey(incoming) ||
-		existing.PlanFingerprint != incoming.PlanFingerprint ||
-		existing.DeliveryID != incoming.DeliveryID ||
-		existing.DeliveryIdempotencyKey != incoming.DeliveryIdempotencyKey {
+	if !existing.SameUniqueKey(incoming) || existing.PlanFingerprint != incoming.PlanFingerprint {
 		return ErrDeliveryPlanConflict
 	}
 	return nil
