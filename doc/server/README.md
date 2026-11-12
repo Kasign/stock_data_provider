@@ -1656,4 +1656,4 @@ Server Bootstrap
 - 验证 `ValidateApplied` 拒绝该未完成 Schema；再次执行 Registry 时由 Platform 返回 `platform.storage.migration_requires_recovery`，Server 保留该 Fault 并继续标记需要人工恢复，不自动重试或清理部分 DDL。
 - 测试数据库和 namespace 均按纳秒时间戳隔离，结束时仅删除本测试数据库，不触碰其他测试历史。
 - 本项只增加 Server 对 Platform Migration Runner 的真实故障场景组合验收，不复制 Migration 算法、不修改 Platform、不尝试自动修复 MariaDB 部分 DDL。checksum 只读预检 API 仍属于 Platform 公共能力缺口。
-- 首次 Workflow Run `43214521137` 在 gofmt 门禁发现测试文件函数间多余空行，包测试及后续门禁未执行；已在提交 `103fcec3ef54dbf13a212b9f35a77cd6d2fbd29b` 修正格式，等待该 SHA 的完整 Workflow 结果。
+- 首次 Workflow Run `43214521137` 在 gofmt 门禁发现测试文件函数间多余空行，包测试及后续门禁未执行；已在提交 `103fcec3ef54dbf13a212b9f35a77cd6d2fbd29b` 修正格式。最终 Server Workflow Run `43214719289`（Run #107，HEAD `0cf4e795951d79533f45a941de1ae73054596860`）成功：gofmt、Server 包测试、Race、真实 MariaDB/Redis 集成、Vet、Docker 镜像构建、真实容器 Bootstrap 与 SIGTERM smoke 全部通过。
