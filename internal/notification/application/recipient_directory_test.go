@@ -98,7 +98,7 @@ func TestDirectoryRecipientResolverFailsClosedOnDirectoryMismatch(t *testing.T) 
 	_, err := resolver.Resolve(context.Background(), domain.Subscription{
 		SubscriptionID: "sub-1", OwnerRef: "identity:owner-1",
 		RecipientScope: domain.RecipientScopePreconfiguredTarget,
-		RecipientRef: "recipient:configured-1", ChannelRef: channel.ChannelRef,
+		RecipientRef:   "recipient:configured-1", ChannelRef: channel.ChannelRef,
 	}, channel)
 	if !errors.Is(err, ErrRecipientNotAuthorized) {
 		t.Fatalf("expected authorization denial, got %v", err)
