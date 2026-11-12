@@ -441,6 +441,7 @@ func (p *Hithink) FetchTradingCalendar(ctx context.Context, startDate, endDate s
 		return nil, fmt.Errorf("解析同花顺交易日历失败: %w", err)
 	}
 	if len(data.Item) == 0 {
+		addHithinkFieldIssue(ctx, nil, "trading_days", "item", "empty_result", "at least one provider trading day", "empty", "0 rows", "同花顺交易日历未返回交易日记录")
 		return nil, errors.New("同花顺交易日历返回空的交易日列表")
 	}
 	tradingDates := make(map[string]struct{}, len(data.Item))
@@ -455,16 +456,20 @@ func (p *Hithink) FetchTradingCalendar(ctx context.Context, startDate, endDate s
 		} else if item.DateMS != nil && *item.DateMS > 0 {
 			parsed = time.UnixMilli(*item.DateMS).In(loc)
 		} else {
+			addHithinkFieldIssue(ctx, &index, "trade_date", "date/date_ms", "missing_value", "valid provider trading date", "missing", "", "同花顺交易日历记录缺少日期")
 			return nil, fmt.Errorf("同花顺交易日历第 %d 项缺少有效日期", index)
 		}
 		if err != nil {
+			addHithinkFieldIssue(ctx, &index, "trade_date", "date/date_ms", "invalid_value", "valid YYYYMMDD or epoch-millisecond date", "string", dateText, "同花顺交易日历记录日期格式非法")
 			return nil, fmt.Errorf("同花顺交易日历第 %d 项日期无效", index)
 		}
 		date := parsed.In(loc).Format("2006-01-02")
 		if date < firstSupportedDate || date > todayDate {
+			addHithinkFieldIssue(ctx, &index, "trade_date", "date/date_ms", "out_of_supported_range", "date within provider rolling one-year range", "date", date, "同花顺交易日历返回日期超出供应商支持范围")
 			return nil, fmt.Errorf("同花顺交易日历返回了超出滚动一年范围的日期 %s", date)
 		}
 		if _, duplicate := tradingDates[date]; duplicate {
+			addHithinkFieldIssue(ctx, &index, "trade_date", "date/date_ms", "duplicate_identity", "unique provider trading date", "date", date, "同花顺交易日历返回重复日期")
 			return nil, fmt.Errorf("同花顺交易日历返回重复日期 %s", date)
 		}
 		tradingDates[date] = struct{}{}
@@ -491,6 +496,11 @@ func (p *Hithink) FetchTradingCalendar(ctx context.Context, startDate, endDate s
 	}
 	if data.Timestamp == nil || *data.Timestamp <= 0 {
 		snapshot.QualityReasons = append(snapshot.QualityReasons, "provider_snapshot_timestamp_missing")
+		preview := "missing"
+		if data.Timestamp != nil {
+			preview = strconv.FormatInt(*data.Timestamp, 10)
+		}
+		addHithinkFieldIssue(ctx, nil, "provider_time", "timestamp", "missing_or_invalid_value", "positive provider snapshot timestamp in milliseconds", "missing_or_invalid", preview, "同花顺交易日历源端快照时间缺失或非法")
 	}
 	return snapshot, nil
 }
@@ -764,6 +774,7 @@ func (p *Hithink) FetchLimitPool(ctx context.Context, poolType, tradeDate string
 		return snapshot, nil
 	}
 	if total > 0 && len(data.Item) == 0 {
+		addHithinkFieldIssue(ctx, nil, "pagination", "pagination.total/item", "page_rows_missing", "non-empty first page when provider total is positive", "inconsistent", fmt.Sprintf("total=%d items=0", total), "同花顺涨跌停池声明存在记录，但当前页为空")
 		return nil, fmt.Errorf("同花顺 %s 池 total=%d 但当前页没有返回数据", poolType, total)
 	}
 
@@ -1192,9 +1203,11 @@ func (p *Hithink) FetchIndexCatalog(ctx context.Context, rawTag string) (*model.
 		return nil, fmt.Errorf("解析同花顺指数/板块目录失败: %w", err)
 	}
 	if len(data.Item) == 0 {
+		addHithinkFieldIssue(ctx, nil, "catalog_items", "item", "empty_result", "at least one index catalog item", "empty", "0 rows", "同花顺指数/板块目录返回空列表")
 		return nil, fmt.Errorf("同花顺指数/板块目录 %s 返回空列表", tag)
 	}
 	if len(data.Item) > 30000 {
+		addHithinkFieldIssue(ctx, nil, "catalog_items", "item", "result_limit_exceeded", "at most 30000 catalog items", "row_count", strconv.Itoa(len(data.Item)), "同花顺指数/板块目录超过本地安全行数上限")
 		return nil, fmt.Errorf("同花顺指数/板块目录 %s 超过 30000 项安全上限", tag)
 	}
 	now := time.Now().UTC()
@@ -1209,17 +1222,29 @@ func (p *Hithink) FetchIndexCatalog(ctx context.Context, rawTag string) (*model.
 		snapshot.TotalIsLowerBound = true
 		snapshot.QualityStatus = model.QualityDegraded
 		snapshot.QualityReasons = appendUniqueHithinkReason(snapshot.QualityReasons, "provider_catalog_response_hits_30000_item_safety_boundary")
+		addHithinkFieldIssue(ctx, nil, "catalog_items", "item", "safety_limit_reached", "complete catalog response below 30000 rows", "row_count", "30000", "同花顺指数/板块目录触及本地安全行数边界，结果总数只能视为下界")
 	}
 	snapshot.ProviderTime = hithinkProviderTime(data.Timestamp, now)
 	if snapshot.ProviderTime == nil {
 		snapshot.QualityStatus = model.QualityDegraded
 		snapshot.QualityReasons = append(snapshot.QualityReasons, "provider_catalog_timestamp_missing_or_invalid")
+		preview := "missing"
+		if data.Timestamp != nil {
+			preview = strconv.FormatInt(*data.Timestamp, 10)
+		}
+		addHithinkFieldIssue(ctx, nil, "provider_time", "timestamp", "missing_or_invalid_value", "valid provider snapshot timestamp in milliseconds", "missing_or_invalid", preview, "同花顺指数/板块目录源端快照时间缺失或非法")
 	}
 	seen := make(map[string]struct{}, len(data.Item))
 	for index, row := range data.Item {
 		symbol, symbolErr := hithinkIndexSymbol(row.THSCode)
 		name := strings.TrimSpace(row.Name)
 		if symbolErr != nil || name == "" {
+			if symbolErr != nil {
+				addHithinkFieldIssue(ctx, &index, "symbol", "thscode", "invalid_symbol", "valid THS index symbol with exchange suffix", "string", row.THSCode, "同花顺指数/板块目录代码无效")
+			}
+			if name == "" {
+				addHithinkFieldIssue(ctx, &index, "name", "name", "missing_value", "non-empty index name", "string", "", "同花顺指数/板块目录名称缺失")
+			}
 			return nil, fmt.Errorf("同花顺指数/板块目录第 %d 项缺少有效代码或名称", index)
 		}
 		if _, exists := seen[symbol]; exists {
@@ -1234,6 +1259,7 @@ func (p *Hithink) FetchIndexCatalog(ctx context.Context, rawTag string) (*model.
 	}
 	snapshot.Total = len(snapshot.Items)
 	if snapshot.Total == 0 {
+		addHithinkFieldIssue(ctx, nil, "catalog_items", "item", "no_usable_rows", "at least one valid index catalog item", "empty", "0 usable rows", "同花顺指数/板块目录没有可用记录")
 		return nil, fmt.Errorf("同花顺指数/板块目录 %s 没有可用记录", tag)
 	}
 	return snapshot, nil
