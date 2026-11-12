@@ -100,7 +100,7 @@ Research Event 与 Claim 作为 Run 诊断快照时，其 system_as_of 必须不
 
 ## 6.3 Claim / Hypothesis 领域实现边界
 
-当前 `internal/research/claim/` 以 Claim DTO 表达 reported_fact、inference 和 hypothesis 三类认识论状态；Hypothesis 必须提供 validation_method、expected_observation 和非空 invalidation_conditions，支持与反证引用不能重叠。Claim Validator 已实现本地结构、UTC 知识截止时间、版本连续性和状态迁移门禁；`internal/research/storage/` 已实现 Claim SQL Repository 的事务内版本追加与精确版本读取。当前仍不查询 Evidence/Scope 资源、不自动推断支持度或概率；`supersedes_version` 契约缺口仍未解决。
+当前 `internal/research/claim/` 以 Claim DTO 表达 reported_fact、inference 和 hypothesis 三类认识论状态；Hypothesis 必须提供 validation_method、expected_observation 和非空 invalidation_conditions，支持与反证引用不能重叠。Claim Validator 已实现本地结构、UTC 知识截止时间、版本连续性和状态迁移门禁；`internal/research/storage/` 已实现 Claim SQL Repository 的事务内版本追加与精确版本读取。当前仍不查询 Evidence/Scope 资源、不自动推断支持度或概率；`supersedes_version` 已按冻结 DTO 增加，并在追加新版本时校验其指向当前前一版本。
 
 ## 7. 验收门禁
 
@@ -122,7 +122,7 @@ Fixture/Fake Adapter 只能证明 Research 自身模型和消费边界；真实 
 - Evidence 当前契约没有 Research-owned version 字段，Repository 以 evidence_id 作为不可变键；相同 ID、相同完整 payload 才允许幂等重放，任何完整 payload 变化（包括 authorization_ref 变化）均冲突拒绝，不自动生成替代 ID。语义变化如何形成新 Evidence ID/版本仍待项目契约明确；content_fingerprint 不替代上游 source_version。
 - Research 拥有领域表、SQL、Repository Port 和 Migration 定义；连接池、Ping/Close、Migration 执行与历史校验复用 `internal/platform/storage`。
 - Research Migration namespace 为 `research`，由组合根显式注册和执行；Research 分支不修改服务启动入口或根 Migration 注册表。
-- system_as_of、system_observed_at、available_at 使用固定 30 字符 UTC RFC3339Nano（9 位小数）字符串并以 ascii_bin 排序，保证 PIT 纳秒精度；Migration v2 将 v1 DATETIME(6) 数据扩展为 6 位微秒 + 3 位零纳秒。created_at/updated_at 仍使用 DATETIME(6)，只作审计时间。payload_sha256 只用于完整 DTO 序列化内容的幂等校验。
+- system_as_of、system_observed_at、available_at 使用固定 30 字符 UTC RFC3339Nano（9 位小数）字符串并以 ascii_bin 排序，保证 PIT 纳秒精度；初版 Migration v1 直接使用 CHAR(30) RFC3339Nano，不做历史精度回填。created_at/updated_at 仍使用 DATETIME(6)，只作审计时间。payload_sha256 只用于完整 DTO 序列化内容的幂等校验。
 - Event lifecycle_changed 的 changed_at 已按项目级 INT-CTR-001 映射决议，在 Event 新版本和 Outbox 同一事务中固化；Outbox 重试复用原值。Server → Notification PublishEvent Relay 接线仍待组合根集成。
 - Evidence SQL Adapter 的 Append/Get 已实现；RSC-OPEN-007 仅保留授权快照续期历史的独立留档语义待决，不再阻断 Evidence 基础不可变存储。
 
@@ -152,7 +152,7 @@ Quant-Research DTO 第 3.3 节的 ResearchEvent 字段表没有 `source_refs` �
 
 ### RSC-OPEN-005：Claim/Hypothesis 版本替代字段缺失
 
-Quant-Research DTO 第 3.4 节定义 claim_version，但没有 `supersedes_version`；第 9.9 节又要求修正声明 supersedes_version。当前实现只能验证 claim_version 从 1 起、相邻版本号连续和 system_as_of 不回退，不能验证显式替代关系。项目级契约补齐前不新增私有字段，也不把版本追加验收标记为完整。
+Quant-Research DTO 第 3.4 节定义 claim_version，但没有 `supersedes_version`；第 9.9 节又要求修正声明 supersedes_version。当前实现使用冻结 DTO 的 supersedes_version 字段表达显式修正关系；若提供该字段，必须指向同一 Claim 的前一版本。
 
 ### RSC-DEC-002：Lifecycle changed_at 的事务时间语义
 
@@ -160,7 +160,7 @@ Quant-Research DTO 第 3.4 节定义 claim_version，但没有 `supersedes_versi
 
 ### RSC-OPEN-002：Server → Notification Relay 接线待完成
 
-INT-CTR-001 已接受 `lifecycle_changed` Payload 映射：`source_event_ref`、`research_event_ref`、`event_version`、`previous_state`、`current_state`、`reason_code`、`system_as_of`、`changed_at`。`changed_at` 是状态迁移提交时间，不得用 `occurred_at` 或 `system_observed_at` 代替。Research Migration v4/v5 提供事务 Outbox 和领取/租约/重试/确认/拒绝；CreateEvent 首次创建与 UpdateEvent 状态迁移均在同一事务写入 Outbox；Schema/Golden 自动 Contract Test 与专用 MariaDB 验收已通过。当前未完成的是 Server 组合根消费 Research Outbox 并调用 Notification `PublishEvent` 的 Relay 接线；这不是 DTO 映射或 Research Outbox 本身的缺口。
+INT-CTR-001 已接受 `lifecycle_changed` Payload 映射：`source_event_ref`、`research_event_ref`、`event_version`、`previous_state`、`current_state`、`reason_code`、`system_as_of`、`changed_at`。`changed_at` 是状态迁移提交时间，不得用 `occurred_at` 或 `system_observed_at` 代替。Research 初版 Migration v1 直接创建事务 Outbox 和领取/租约/重试/确认/拒绝；CreateEvent 首次创建与 UpdateEvent 状态迁移均在同一事务写入 Outbox；Schema/Golden 自动 Contract Test 与专用 MariaDB 验收已通过。当前未完成的是 Server 组合根消费 Research Outbox 并调用 Notification `PublishEvent` 的 Relay 接线；这不是 DTO 映射或 Research Outbox 本身的缺口。
 
 
 
