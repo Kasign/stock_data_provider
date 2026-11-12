@@ -21,7 +21,7 @@ var (
 )
 
 // ClaimAttempt atomically claims a ready stage and creates its next attempt.
-// Lock order is fixed as Run -> Stage -> latest Attempt. attemptRef is used only
+// Lock order is fixed as CapacityGuard -> Run -> Stage -> latest Attempt. attemptRef is used only
 // when a new attempt is created; a repeated claim by the current lease owner
 // returns the existing attempt without consuming another attempt number.
 func (r *MySQLRunRepository) ClaimAttempt(
@@ -45,6 +45,11 @@ func (r *MySQLRunRepository) ClaimAttempt(
 		return domain.Attempt{}, false, fmt.Errorf("begin Researchflow attempt claim: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+
+	// 所有新 Attempt 都先获取同一容量守卫锁，避免跨 Run 的 Worker 槽位超卖。
+	if err := lockCapacityGuard(ctx, tx); err != nil {
+		return domain.Attempt{}, false, err
+	}
 
 	var runStatus string
 	var runVersion uint64
@@ -322,6 +327,17 @@ func (r *MySQLRunRepository) ClaimAttempt(
 	}
 	if activeLeases >= maxParallel {
 		return domain.Attempt{}, false, ErrRunConcurrencyLimit
+	}
+
+	var globalActiveWorkers int
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM researchflow_attempts
+		WHERE status = ? AND lease_expires_at > ?`,
+		string(domain.AttemptRunning), formatResearchflowTimeValue(now),
+	).Scan(&globalActiveWorkers); err != nil {
+		return domain.Attempt{}, false, fmt.Errorf("count global active Researchflow Worker leases: %w", err)
+	}
+	if globalActiveWorkers >= r.capacity.MaxWorkers {
+		return domain.Attempt{}, false, ErrGlobalWorkerCapacityExceeded
 	}
 
 	var maxToken uint64

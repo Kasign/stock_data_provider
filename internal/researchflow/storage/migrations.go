@@ -160,5 +160,16 @@ func Migrations() []platformstorage.Migration {
 				) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin`,
 			},
 		},
+		{
+			Version:     4,
+			Description: "add transactional Researchflow global capacity guard",
+			Statements: []string{
+				`CREATE TABLE researchflow_capacity_guard (
+					guard_id TINYINT UNSIGNED NOT NULL,
+					PRIMARY KEY (guard_id)
+				) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin`,
+				`INSERT INTO researchflow_capacity_guard (guard_id) VALUES (1)`,
+			},
+		},
 	}
 }

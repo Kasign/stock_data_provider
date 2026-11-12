@@ -27,14 +27,18 @@ var _ application.RunRepository = (*MySQLRunRepository)(nil)
 // MySQLRunRepository stores Researchflow runs in the module-owned MariaDB tables.
 // The caller owns db lifecycle and migration execution.
 type MySQLRunRepository struct {
-	db *sql.DB
+	db       *sql.DB
+	capacity CapacityLimits
 }
 
-func NewMySQLRunRepository(db *sql.DB) (*MySQLRunRepository, error) {
+func NewMySQLRunRepository(db *sql.DB, capacity CapacityLimits) (*MySQLRunRepository, error) {
 	if db == nil {
 		return nil, errors.New("researchflow SQL database is required")
 	}
-	return &MySQLRunRepository{db: db}, nil
+	if err := capacity.Validate(); err != nil {
+		return nil, err
+	}
+	return &MySQLRunRepository{db: db, capacity: capacity}, nil
 }
 
 func (r *MySQLRunRepository) FindIdempotentRun(
@@ -75,6 +79,43 @@ func (r *MySQLRunRepository) CreateRunAtomic(
 		return application.CreateRunResult{}, fmt.Errorf("begin Researchflow create-run transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+
+	// CreateRun 与 ClaimAttempt 共用容量守卫锁，确保排队名额检查与写入原子化。
+	if err := lockCapacityGuard(ctx, tx); err != nil {
+		return application.CreateRunResult{}, err
+	}
+	var existingRunRef, existingFingerprint string
+	err = tx.QueryRowContext(ctx, `SELECT run_ref, request_fingerprint
+		FROM researchflow_run_idempotency
+		WHERE caller_ref = ? AND operation = ? AND idempotency_key = ?`,
+		record.Scope.CallerRef, record.Scope.Operation, record.Scope.Key,
+	).Scan(&existingRunRef, &existingFingerprint)
+	if err == nil {
+		_ = tx.Rollback()
+		existing, fingerprint, found, lookupErr := r.FindIdempotentRun(ctx, record.Scope)
+		if lookupErr != nil {
+			return application.CreateRunResult{}, fmt.Errorf("resolve serialized Researchflow idempotency replay: %w", lookupErr)
+		}
+		if !found {
+			return application.CreateRunResult{}, errors.New("Researchflow idempotency row disappeared after capacity lock")
+		}
+		if replayErr := domain.ValidateIdempotentReplay(fingerprint, record.Fingerprint); replayErr != nil {
+			return application.CreateRunResult{}, replayErr
+		}
+		existing.Replayed = true
+		return existing, nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return application.CreateRunResult{}, fmt.Errorf("check Researchflow idempotency under capacity lock: %w", err)
+	}
+	var queuedRuns int
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM researchflow_runs
+		WHERE status IN (?, ?)`, string(domain.RunCreated), string(domain.RunQueued)).Scan(&queuedRuns); err != nil {
+		return application.CreateRunResult{}, fmt.Errorf("count queued Researchflow Runs: %w", err)
+	}
+	if queuedRuns >= r.capacity.MaxQueuedRuns {
+		return application.CreateRunResult{}, ErrQueueCapacityExceeded
+	}
 
 	dbNow, err := readDatabaseUTC(tx, ctx)
 	if err != nil {
