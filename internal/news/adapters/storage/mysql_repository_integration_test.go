@@ -888,7 +888,14 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 		atomicPolicyVersion, secondObservation.ID); err != nil {
 		t.Fatalf("set atomic read policy trace: %v", err)
 	}
-	secondObservation.SourcePolicyVersionID = atomicPolicyVersion
+	atomicPIT, err := repository.GetEvidenceVersionAt(ctx, app.GetEvidenceRequest{
+		NewsID: secondObservation.NewsID, VersionID: secondVersion.Version.ID, SystemAsOf: time.Now().UTC(),
+	})
+	if err != nil {
+		t.Fatalf("reload Evidence PIT metadata for atomic read: %v", err)
+	}
+	secondObservation = atomicPIT.Observation
+	secondVersion.Version = atomicPIT.Version
 	atomicResourceRef, err := domain.NewsEvidenceResourceRef(secondVersion.Version.NewsID, secondVersion.Version.VersionNo)
 	if err != nil {
 		t.Fatal(err)
