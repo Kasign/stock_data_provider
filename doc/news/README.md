@@ -1129,10 +1129,10 @@
 - `research_analysis`、`risk_review`、`user_display` 分别对应 `internal_personal_research`、`internal_business`、`public_display`。反向映射仍拒绝 `PurposeInternalBusiness`，因为它没有唯一的 purpose_code。
 - SourcePolicy、EndpointPolicy、ProviderOutputPolicy 继续按请求显式 purpose_code 检查策略许可；映射不等于授权通过。
 - 新增测试覆盖用途映射、SourcePolicy 用途匹配、EndpointPolicy 用途匹配，以及不允许跨用途推断。
-- 本轮未执行 Go 测试、Race、Vet 或 MariaDB 集成；此前 CI SHA 不覆盖本轮提交，必须取得覆盖当前代码 SHA 的新验证结果后才能标记通过。
+- 当前 HEAD 的 CI 已覆盖上述代码和测试：News 专项 gofmt、全量单测、Race、Vet、Provider 契约测试均通过；MariaDB Repository/Migration 集成也通过。详见本节后续“当前 HEAD CI 验收结果”。
 
 
-### 十七、补充：risk_review 修复的当前 HEAD CI 验收结果（2026-11-12）
+### 十七（续）、risk_review 修复的当前 HEAD CI 验收结果（2026-11-12）
 
 - 验收分支：`feat/research-news-ingestion`；验收 HEAD：`a8a3763e5dc662d856a438c52a0b1a28975def43`。
 - News Provider contract workflow Run [43219930444](https://github.com/Kasign/stock_data_provider/actions/runs/43219930444)：`Test News Provider contracts`、`Test full News module` 均 success。覆盖 News gofmt、`go test ./internal/news/...`、News Race Detector、News Vet，以及 Provider contract tests、Race、Vet。
