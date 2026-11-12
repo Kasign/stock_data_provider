@@ -1583,3 +1583,12 @@ Server Bootstrap
 - 本包已有覆盖 HTTPS Host/Port 精确匹配、禁止重定向/重试、SSE Body 所有权、Header 隔离、Provider/Policy 不匹配拒绝及 Adapter 构造的测试；它是 Server-owned 生产代码，不应仅因依赖 `internal/llm` 而排除在 Server CI 外。
 - 将该包加入独立 CI 的普通测试、Race 和 Vet。该项验证的是 Server Transport Adapter 的编译与包级行为，不代表 LLM Provider 凭证、Capability Evidence 已完成生产配置，也不代表真实 Gateway 联通。
 - 本次不在 Bootstrap 构造 LLM Adapter：当前 Server Process Config 尚未提供完整 Provider/Capability/Secret 装载入口；未具备可信配置和能力证据前，不创建空配置或虚假 Gateway 实例。
+
+
+### 12.75 SRV-009 News Parser 自检接入 Server Diagnostics（2026-11-12）
+
+- Server Bootstrap 原先只注册共享存储与 Migration Schema 检查；News 模块已有的 `ParserChecks()`（RSS、Atom 确定性本地 Fixture）未进入统一 Diagnostics 报告。
+- Bootstrap 现在通过 `newDiagnosticsService` 将 News Parser 自检与 Server 存储、Schema 检查组合，Parser 实现及 Fixture 仍由 News 模块拥有；Server 不复制解析逻辑。
+- 新增 Bootstrap 集成测试，执行统一 Diagnostics Service 并断言 `news.parser.rss`、`news.parser.atom` 均出现在结果中且状态为 healthy。
+- 本接入不发起 Provider 网络请求，不代表 News Provider 凭证、来源授权或采集链路已通过生产验收；也不将尚未装配的 Research/Researchflow 运行态诊断伪装成静态健康检查。
+- Server 独立 CI 的 gofmt、package tests、Race、Vet 已在提交 `1ea0b4badb12fda40f6fb380491a5ecf28d52fdd` 全部通过。
