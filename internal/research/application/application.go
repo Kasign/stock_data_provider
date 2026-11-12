@@ -361,6 +361,9 @@ func (s *Service) AddEvidence(ctx context.Context, command AddEvidenceCommand) (
 	if err := value.Validate(); err != nil {
 		return EvidenceRecord{}, validationFault("invalid_evidence", "Research Evidence is invalid", err)
 	}
+	if err := s.validateEvidenceReferences(ctx, value.DerivedFromRefs, value.SystemAsOf); err != nil {
+		return EvidenceRecord{}, err
+	}
 	if err := s.authorizer.AuthorizeEvidence(ctx, command.CallerRef, purpose, cloneDomainEvidence(value)); err != nil {
 		return EvidenceRecord{}, mapAuthorizationError(err)
 	}
@@ -537,6 +540,9 @@ func (s *Service) CreateEvent(ctx context.Context, command CreateEventCommand) (
 	if err := value.Validate(); err != nil {
 		return ResearchEvent{}, validationFault("invalid_research_event", "Research Event is invalid", err)
 	}
+	if err := s.validateEvidenceReferences(ctx, value.EvidenceRefs, value.SystemAsOf); err != nil {
+		return ResearchEvent{}, err
+	}
 	correlationID, err := correlationIDForPublication(ctx, s.ids)
 	if err != nil {
 		return ResearchEvent{}, applicationFault(fault.ClassInternal, "research_correlation_id_generation_failed", "Research correlation identifier generation failed", err)
@@ -590,6 +596,9 @@ func (s *Service) UpdateEvent(ctx context.Context, command UpdateEventCommand) (
 	}
 	if err := next.ValidateNextVersion(previous); err != nil {
 		return ResearchEvent{}, validationFault("invalid_research_event_transition", "Research Event revision is invalid", err)
+	}
+	if err := s.validateEvidenceReferences(ctx, next.EvidenceRefs, next.SystemAsOf); err != nil {
+		return ResearchEvent{}, err
 	}
 	if command.ReasonCode != nil && !validCorrelationID(*command.ReasonCode) {
 		return ResearchEvent{}, validationFault("invalid_event_reason_code", "Research Event reason code must be null or a non-empty trimmed value", nil)
@@ -737,6 +746,10 @@ func (s *Service) CreateClaim(ctx context.Context, command CreateClaimCommand) (
 	if err := value.Validate(); err != nil {
 		return Claim{}, validationFault("invalid_research_claim", "Research Claim is invalid", err)
 	}
+	evidenceRefs := append(cloneStrings(value.SupportingEvidenceRefs), value.ContradictingEvidenceRefs...)
+	if err := s.validateEvidenceReferences(ctx, evidenceRefs, value.SystemAsOf); err != nil {
+		return Claim{}, err
+	}
 	if err := s.claims.Append(ctx, value); err != nil {
 		return Claim{}, mapRepositoryError(err)
 	}
@@ -784,6 +797,10 @@ func (s *Service) UpdateClaim(ctx context.Context, command UpdateClaimCommand) (
 	if err := next.ValidateNextVersion(previous); err != nil {
 		return Claim{}, validationFault("invalid_research_claim_revision", "Research Claim revision is invalid", err)
 	}
+	evidenceRefs := append(cloneStrings(next.SupportingEvidenceRefs), next.ContradictingEvidenceRefs...)
+	if err := s.validateEvidenceReferences(ctx, evidenceRefs, next.SystemAsOf); err != nil {
+		return Claim{}, err
+	}
 	if err := s.claims.Append(ctx, next); err != nil {
 		return Claim{}, mapRepositoryError(err)
 	}
@@ -820,6 +837,31 @@ func fromDomainClaim(value researchclaim.Claim) Claim {
 		ValidationMethod:          cloneString(value.ValidationMethod), ExpectedObservation: cloneString(value.ExpectedObservation),
 		InvalidationConditions: cloneStrings(value.InvalidationConditions), Status: string(value.Status), Limitations: cloneStrings(value.Limitations),
 	}
+}
+
+func (s *Service) validateEvidenceReferences(ctx context.Context, refs []string, systemAsOf time.Time) error {
+	if len(refs) == 0 {
+		return nil
+	}
+	if s == nil || s.evidence == nil {
+		return applicationFault(fault.ClassInternal, "research_evidence_repository_not_configured", "Research Evidence Repository is not configured", researcherrors.ErrInvalidRepository)
+	}
+	for _, ref := range refs {
+		value, err := s.evidence.Get(ctx, ref)
+		if err != nil {
+			if errors.Is(err, researcherrors.ErrNotFound) {
+				return validationFault("research_evidence_reference_not_found", "Research Evidence reference does not exist", err)
+			}
+			return mapRepositoryError(err)
+		}
+		if value.EvidenceID != ref {
+			return applicationFault(fault.ClassInternal, "stored_evidence_identity_mismatch", "Stored Research Evidence identity does not match the requested reference", researcherrors.ErrCorruptRecord)
+		}
+		if err := value.ValidateForStrictPIT(systemAsOf); err != nil {
+			return validationFault("invalid_research_evidence_reference", "Research Evidence reference is not valid at the requested PIT cutoff", err)
+		}
+	}
+	return nil
 }
 
 func mapRepositoryError(err error) error {

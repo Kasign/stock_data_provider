@@ -38,20 +38,48 @@ func (f *contextRepoFake) GetVersion(_ context.Context, id string, version int64
 
 type evidenceRepoFake struct {
 	value     researchevidence.Evidence
+	values    map[string]researchevidence.Evidence
 	appended  bool
 	appendErr error
 }
 
 func (f *evidenceRepoFake) Append(_ context.Context, value researchevidence.Evidence) error {
 	f.value = value
+	if f.values == nil {
+		f.values = make(map[string]researchevidence.Evidence)
+	}
+	f.values[value.EvidenceID] = value
 	f.appended = true
 	return f.appendErr
 }
 func (f *evidenceRepoFake) Get(_ context.Context, id string) (researchevidence.Evidence, error) {
-	if f.value.EvidenceID != id {
-		return researchevidence.Evidence{}, errors.New("missing")
+	if value, ok := f.values[id]; ok {
+		return value, nil
 	}
-	return f.value, nil
+	if f.value.EvidenceID == id {
+		return f.value, nil
+	}
+	return researchevidence.Evidence{}, researcherrors.ErrNotFound
+}
+
+func evidenceFixture(t *testing.T, id string, systemAsOf time.Time) researchevidence.Evidence {
+	t.Helper()
+	availableAt := systemAsOf.Add(-time.Hour)
+	value := researchevidence.Evidence{
+		EvidenceID: id, EvidenceType: researchevidence.TypeFact,
+		SourceOwner: researchevidence.SourceData, SourceRef: "data:" + id,
+		DerivedFromRefs: []string{}, SubjectRefs: []string{"security:600000"},
+		AvailableAt: &availableAt, SystemObservedAt: systemAsOf.Add(-30 * time.Minute),
+		SystemAsOf: systemAsOf, Stance: researchevidence.StanceNeutral,
+		QualityStatus: researchevidence.QualityValid, ContentLevel: researchevidence.ContentMetadata,
+		AuthorizationRef: "auth:" + id, Limitations: []string{},
+	}
+	fingerprint, err := value.ComputeContentFingerprint()
+	if err != nil {
+		t.Fatalf("ComputeContentFingerprint() error = %v", err)
+	}
+	value.ContentFingerprint = fingerprint
+	return value
 }
 
 type authorizerFake struct {
@@ -243,7 +271,10 @@ func (f *eventRepoFake) GetVersion(_ context.Context, id string, version int) (r
 func TestCreateAndGetEventUseApplicationDTOAndServerIdentity(t *testing.T) {
 	now := time.Date(2026, 11, 9, 1, 0, 0, 0, time.UTC)
 	repo := &eventRepoFake{}
-	service, err := NewServiceWithEvents(&contextRepoFake{}, &evidenceRepoFake{}, repo, &authorizerFake{}, func() time.Time { return now }, &fixedIDs{})
+	evidence := &evidenceRepoFake{values: map[string]researchevidence.Evidence{
+		"ev_source_1": evidenceFixture(t, "ev_source_1", now),
+	}}
+	service, err := NewServiceWithEvents(&contextRepoFake{}, evidence, repo, &authorizerFake{}, func() time.Time { return now }, &fixedIDs{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -290,7 +321,10 @@ func TestUpdateEventUsesExpectedVersionAndDomainLifecycleRules(t *testing.T) {
 		}},
 	}
 	repo := &eventRepoFake{value: previous}
-	service, err := NewServiceWithEvents(&contextRepoFake{}, &evidenceRepoFake{}, repo, &authorizerFake{}, nil, nil)
+	evidence := &evidenceRepoFake{values: map[string]researchevidence.Evidence{
+		"ev_source_1": evidenceFixture(t, "ev_source_1", now),
+	}}
+	service, err := NewServiceWithEvents(&contextRepoFake{}, evidence, repo, &authorizerFake{}, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -401,7 +435,10 @@ func (f *claimRepoFake) GetVersion(_ context.Context, id string, version int) (r
 func TestCreateAndGetHypothesisUseApplicationDTO(t *testing.T) {
 	now := time.Date(2026, 11, 9, 1, 0, 0, 0, time.UTC)
 	repo := &claimRepoFake{}
-	service, err := NewServiceWithClaims(&contextRepoFake{}, &evidenceRepoFake{}, repo, &authorizerFake{}, nil, &fixedIDs{})
+	evidence := &evidenceRepoFake{values: map[string]researchevidence.Evidence{
+		"ev_support_1": evidenceFixture(t, "ev_support_1", now),
+	}}
+	service, err := NewServiceWithClaims(&contextRepoFake{}, evidence, repo, &authorizerFake{}, nil, &fixedIDs{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -429,6 +466,63 @@ func TestCreateAndGetHypothesisUseApplicationDTO(t *testing.T) {
 	}
 	if read.Statement != command.Statement || read.EpistemicType != command.EpistemicType {
 		t.Fatalf("unexpected Claim DTO: %+v", read)
+	}
+}
+
+func TestClaimAndEventRejectMissingOrNonPITEvidenceReferences(t *testing.T) {
+	now := time.Date(2026, 11, 12, 1, 0, 0, 0, time.UTC)
+	method, observation := "compare revisions", "forecast increases"
+	claimCommand := CreateClaimCommand{
+		Statement: "盈利改善假设", EpistemicType: string(researchclaim.EpistemicHypothesis),
+		ScopeRefs: []string{"security:600000"}, SystemAsOf: now,
+		SupportingEvidenceRefs: []string{"ev_missing"}, ContradictingEvidenceRefs: []string{},
+		RequiredDataRefs: []string{}, ValidationMethod: &method, ExpectedObservation: &observation,
+		InvalidationConditions: []string{"预测持续下调"}, Status: string(researchclaim.StatusProposed), Limitations: []string{},
+	}
+	claimRepo := &claimRepoFake{}
+	claimService, err := NewServiceWithClaims(&contextRepoFake{}, &evidenceRepoFake{}, claimRepo, &authorizerFake{}, nil, &fixedIDs{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := claimService.CreateClaim(context.Background(), claimCommand); err == nil {
+		t.Fatal("Claim with missing Research Evidence must be rejected")
+	}
+	if claimRepo.appended {
+		t.Fatal("Claim with missing Research Evidence must not be persisted")
+	}
+
+	future := evidenceFixture(t, "ev_future", now.Add(time.Minute))
+	evidenceRepo := &evidenceRepoFake{values: map[string]researchevidence.Evidence{"ev_future": future}}
+	claimService, err = NewServiceWithClaims(&contextRepoFake{}, evidenceRepo, claimRepo, &authorizerFake{}, nil, &fixedIDs{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	claimCommand.SupportingEvidenceRefs = []string{"ev_future"}
+	if _, err := claimService.CreateClaim(context.Background(), claimCommand); err == nil {
+		t.Fatal("Claim must reject Evidence learned after its system_as_of")
+	}
+	if claimRepo.appended {
+		t.Fatal("PIT-invalid Claim must not be persisted")
+	}
+
+	eventRepo := &eventRepoFake{}
+	eventService, err := NewServiceWithEvents(&contextRepoFake{}, &evidenceRepoFake{}, eventRepo, &authorizerFake{}, nil, &fixedIDs{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = eventService.CreateEvent(context.Background(), CreateEventCommand{
+		EventType: "earnings_guidance", Title: "公告事件", Status: string(researchevent.StatusDetected),
+		SubjectRefs: []string{"security:600000"}, EvidenceRefs: []string{"ev_missing"},
+		SystemObservedAt: now, SystemAsOf: now, ImpactHypothesisRefs: []string{},
+		InvalidationConditions: []string{}, Uncertainty: []string{},
+		TimeNormalizationRuleVersion: "1.0.0", DerivedFromRefs: []EventRef{},
+		SourceTimes: []EventSourceTime{{EvidenceRef: "ev_missing", TimeType: string(researchevent.TimeSystemObservedAt), Value: now, AssertedBy: "news"}},
+	})
+	if err == nil {
+		t.Fatal("Event with missing Research Evidence must be rejected")
+	}
+	if eventRepo.appended {
+		t.Fatal("Event with missing Research Evidence must not be persisted")
 	}
 }
 
@@ -463,7 +557,10 @@ func TestUpdateClaimEnforcesExpectedVersionAndDomainTransition(t *testing.T) {
 		ValidationMethod: stringPointer("比较预测修订"), ExpectedObservation: stringPointer("预测上调"),
 		InvalidationConditions: []string{"预测持续下调"}, Status: researchclaim.StatusProposed, Limitations: []string{},
 	}}
-	service, err := NewServiceWithClaims(&contextRepoFake{}, &evidenceRepoFake{}, repo, &authorizerFake{}, nil, &fixedIDs{})
+	evidence := &evidenceRepoFake{values: map[string]researchevidence.Evidence{
+		"ev_support_1": evidenceFixture(t, "ev_support_1", now),
+	}}
+	service, err := NewServiceWithClaims(&contextRepoFake{}, evidence, repo, &authorizerFake{}, nil, &fixedIDs{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -634,7 +731,9 @@ func TestEvidenceApplicationDeepCopiesDTOAndAdapterBoundaries(t *testing.T) {
 		QualityStatus: string(researchevidence.QualityValid), ContentLevel: string(researchevidence.ContentMetadata),
 		AuthorizationRef: "auth:deep-copy", Limitations: []string{"limited"},
 	}
-	repo := &evidenceRepoFake{}
+	repo := &evidenceRepoFake{values: map[string]researchevidence.Evidence{
+		"ev_parent": evidenceFixture(t, "ev_parent", now),
+	}}
 	service, err := NewService(&contextRepoFake{}, repo, mutatingEvidenceAuthorizer{}, nil, &fixedIDs{})
 	if err != nil {
 		t.Fatal(err)
