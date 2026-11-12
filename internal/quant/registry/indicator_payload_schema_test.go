@@ -193,16 +193,15 @@ func TestIndicatorResultPayloadGoValidatorRejectsContextDrift(t *testing.T) {
 	})
 }
 
-
 func TestIndicatorPayloadGoValidatorRejectsWrongMetricMappingForAllIndicators(t *testing.T) {
 	mappings := map[string][]string{
-		"sma":       {"sma"},
-		"ema":       {"ema"},
-		"return":    {"return"},
+		"sma":        {"sma"},
+		"ema":        {"ema"},
+		"return":     {"return"},
 		"volatility": {"volatility"},
-		"rsi":       {"rsi"},
-		"atr":       {"atr"},
-		"macd":      {"macd_dif", "macd_dea", "macd_histogram"},
+		"rsi":        {"rsi"},
+		"atr":        {"atr"},
+		"macd":       {"macd_dif", "macd_dea", "macd_histogram"},
 		"bollinger": {"bollinger_middle", "bollinger_upper", "bollinger_lower"},
 	}
 	for indicatorCode, metricCodes := range mappings {
