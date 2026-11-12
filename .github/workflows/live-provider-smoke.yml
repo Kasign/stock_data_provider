@@ -136,6 +136,11 @@ jobs:
           MARKET_DATA_HITHINK_API_KEY: ${{ secrets.HITHINK_FINANCE_API_KEY }}
           MARKET_DATA_HITHINK_BASE_URL: https://fuyao.aicubes.cn
         run: go test -run TestLiveHithinkDailyBarsBackwardRaw -count=1 -v ./internal/marketdata/provider
+      - name: Probe Eastmoney and Tencent adjusted K-line reference-date evidence
+        if: always() && github.event_name == 'push' && contains(github.event.head_commit.message, '[eastmoney_tencent_adjustment_live]')
+        env:
+          MARKET_DATA_LIVE_EASTMONEY_TENCENT_ADJUSTMENT_TESTS: "1"
+        run: go test -run TestLiveEastmoneyTencentAdjustmentReferenceEvidence -count=1 -v ./internal/marketdata/provider
       - name: Probe historical Provider service and MariaDB persistence
         if: always() && github.event_name == 'push' && contains(github.event.head_commit.message, '[historical_service_probe]')
         env:

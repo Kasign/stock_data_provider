@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"math"
+	"net/http"
 	"net/url"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"testing"
@@ -734,6 +736,131 @@ func TestLiveHithinkDailyBarsBackwardRaw(t *testing.T) {
 	t.Logf("LIVE_HITHINK_DAILY_BAR_BACKWARD_RAW %s", encoded)
 	if len(data.Item) == 0 {
 		t.Errorf("Hithink returned an empty raw backward-adjusted response for the requested window")
+	}
+}
+
+func liveAdjustmentReferenceKeyPaths(raw string) []string {
+	var value any
+	if err := json.Unmarshal([]byte(raw), &value); err != nil {
+		return nil
+	}
+	paths := make([]string, 0)
+	var visit func(any, string)
+	visit = func(node any, prefix string) {
+		switch current := node.(type) {
+		case map[string]any:
+			for key, child := range current {
+				path := key
+				if prefix != "" {
+					path = prefix + "." + key
+				}
+				lower := strings.ToLower(key)
+				if strings.Contains(lower, "reference") || strings.Contains(lower, "ref_date") || strings.Contains(lower, "refdate") {
+					paths = append(paths, path)
+				}
+				visit(child, path)
+			}
+		case []any:
+			for index, child := range current {
+				visit(child, fmt.Sprintf("%s[%d]", prefix, index))
+			}
+		}
+	}
+	visit(value, "")
+	sort.Strings(paths)
+	return paths
+}
+
+// TestLiveEastmoneyTencentAdjustmentReferenceEvidence captures a small real adjusted
+// window and records whether the provider response exposes an independent reference date.
+func TestLiveEastmoneyTencentAdjustmentReferenceEvidence(t *testing.T) {
+	if os.Getenv("MARKET_DATA_LIVE_EASTMONEY_TENCENT_ADJUSTMENT_TESTS") != "1" {
+		t.Skip("set MARKET_DATA_LIVE_EASTMONEY_TENCENT_ADJUSTMENT_TESTS=1 to query Eastmoney and Tencent adjusted K-lines")
+	}
+	const symbol = "600519.SH"
+	const startDate = "2026-10-13"
+	const endDate = "2026-11-12"
+	type probeCase struct {
+		provider   string
+		adjustment model.AdjustmentBasis
+	}
+	cases := []probeCase{
+		{provider: "eastmoney", adjustment: model.AdjustmentForward},
+		{provider: "eastmoney", adjustment: model.AdjustmentBackward},
+		{provider: "tencent", adjustment: model.AdjustmentForward},
+		{provider: "tencent", adjustment: model.AdjustmentBackward},
+	}
+	for _, tc := range cases {
+		capture := &liveProbeCapture{}
+		var bars []model.DailyBar
+		var err error
+		switch tc.provider {
+		case "eastmoney":
+			klineURL := "https://push2his.eastmoney.com/api/qt/stock/kline/get"
+			origin, originErr := EastmoneyHTTPOrigin(klineURL)
+			if originErr != nil {
+				t.Fatalf("resolve Eastmoney K-line origin: %v", originErr)
+			}
+			doer := &http.Client{
+				Timeout: 25 * time.Second,
+				Transport: capture.transport(),
+				CheckRedirect: eastmoneyRedirectPolicy,
+			}
+			provider := NewEastmoneyConfigured(25*time.Second, "", klineURL, "").WithHTTPDoers(map[string]HTTPDoer{origin: doer})
+			bars, err = provider.FetchDailyBars(context.Background(), symbol, startDate, endDate, 100, tc.adjustment)
+		case "tencent":
+			doer := &http.Client{
+				Timeout: 25 * time.Second,
+				Transport: capture.transport(),
+				CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse },
+			}
+			provider := NewTencentConfiguredWithHTTPDoers(25*time.Second, "", "", "", "", nil, doer, doer, nil)
+			bars, err = provider.FetchDailyBars(context.Background(), symbol, startDate, endDate, 100, tc.adjustment)
+		default:
+			t.Fatalf("unsupported provider %q", tc.provider)
+		}
+		if err != nil {
+			t.Fatalf("%s %s adjusted DailyBar request: %v", tc.provider, tc.adjustment, err)
+		}
+		if len(bars) == 0 {
+			t.Fatalf("%s %s returned no adjusted DailyBar rows", tc.provider, tc.adjustment)
+		}
+		if contractErr := liveProbeDailyContractError(bars, tc.provider, tc.provider, symbol, tc.adjustment, startDate, endDate, 100); contractErr != "" {
+			t.Fatalf("%s %s DailyBar contract: %s", tc.provider, tc.adjustment, contractErr)
+		}
+		methods := make([]string, 0, len(bars))
+		referenceDates := make([]string, 0, len(bars))
+		for _, bar := range bars {
+			if bar.AdjustmentMethod != "" && (len(methods) == 0 || methods[len(methods)-1] != bar.AdjustmentMethod) {
+				methods = append(methods, bar.AdjustmentMethod)
+			}
+			if bar.AdjustmentRefDate != "" && (len(referenceDates) == 0 || referenceDates[len(referenceDates)-1] != bar.AdjustmentRefDate) {
+				referenceDates = append(referenceDates, bar.AdjustmentRefDate)
+			}
+		}
+		responses := capture.snapshot()
+		if len(responses) == 0 {
+			t.Fatalf("%s %s returned bars without captured HTTP response evidence", tc.provider, tc.adjustment)
+		}
+		lastResponse := responses[len(responses)-1]
+		evidence := map[string]any{
+			"provider": tc.provider,
+			"symbol": symbol,
+			"adjustment": tc.adjustment,
+			"rows": len(bars),
+			"first_trade_date": bars[0].TradeDate,
+			"last_trade_date": bars[len(bars)-1].TradeDate,
+			"adjustment_methods": methods,
+			"adjustment_reference_dates": referenceDates,
+			"raw_response_reference_key_paths": liveAdjustmentReferenceKeyPaths(lastResponse.BodySample),
+			"raw_response_truncated": lastResponse.BodyTruncated,
+			"http_responses": responses,
+		}
+		encoded, marshalErr := json.Marshal(evidence)
+		if marshalErr != nil {
+			t.Fatalf("marshal %s %s adjustment evidence: %v", tc.provider, tc.adjustment, marshalErr)
+		}
+		t.Logf("LIVE_ADJUSTMENT_REFERENCE_EVIDENCE %s", encoded)
 	}
 }
 
