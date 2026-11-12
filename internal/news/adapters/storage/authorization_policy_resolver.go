@@ -1,0 +1,232 @@
+package storage
+
+import (
+	"context"
+	"crypto/sha256"
+	"crypto/subtle"
+	"encoding/hex"
+	"errors"
+	"time"
+
+	"example.com/stock-analysis-flow/internal/news/app"
+	"example.com/stock-analysis-flow/internal/news/domain"
+)
+
+var _ app.CurrentNewsAuthorizationPolicyResolver = (*MySQLRepository)(nil)
+
+// ResolveCurrentNewsAuthorizationPolicies 从 News 自有 MariaDB 读取 Binding 所需的
+// 完整当前策略集合。该方法用于授权预检；最终正文读取仍必须使用带当前指针行锁的原子读取事务。
+func (r *MySQLRepository) ResolveCurrentNewsAuthorizationPolicies(
+	ctx context.Context,
+	binding domain.NewsAuthorizationBinding,
+) (domain.CurrentAuthorizationPolicySet, error) {
+	if r == nil || r.db == nil || ctx == nil ||
+		domain.ValidateNewsAuthorizationBinding(binding) != nil {
+		return domain.CurrentAuthorizationPolicySet{}, app.ErrNewsCurrentPolicyUnavailable
+	}
+	if err := ctx.Err(); err != nil {
+		return domain.CurrentAuthorizationPolicySet{}, err
+	}
+
+	tx, err := r.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return domain.CurrentAuthorizationPolicySet{}, errors.Join(app.ErrNewsCurrentPolicyUnavailable, err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	now := time.Now().UTC()
+	result := domain.CurrentAuthorizationPolicySet{
+		EvaluatedAt: now,
+		Policies:    make([]domain.CurrentAuthorizationPolicy, 0, len(binding.PolicySnapshot.Policies)),
+	}
+	loaded := make(map[string]domain.NewsPolicyVersion, len(binding.PolicySnapshot.Policies))
+	for _, expected := range binding.PolicySnapshot.Policies {
+		var value domain.NewsPolicyVersion
+		var payload []byte
+		var createdAt time.Time
+		err := tx.QueryRowContext(ctx, `SELECT current.policy_type, current.policy_ref,
+			current.policy_version, version.payload_json, version.payload_hash, version.created_at
+			FROM news_current_policy_versions current
+			INNER JOIN news_policy_versions version
+				ON version.policy_type = current.policy_type
+				AND version.policy_ref = current.policy_ref
+				AND version.policy_version = current.policy_version
+			WHERE current.policy_type = ? AND current.policy_ref = ?`,
+			expected.PolicyType, expected.PolicyRef,
+		).Scan(&value.PolicyType, &value.PolicyRef, &value.PolicyVersion, &payload, &value.PayloadHash, &createdAt)
+		if err != nil {
+			return domain.CurrentAuthorizationPolicySet{}, errors.Join(app.ErrNewsCurrentPolicyUnavailable, err)
+		}
+		value.Payload = append([]byte(nil), payload...)
+		value.CreatedAt = createdAt.UTC()
+		if value.PolicyType != expected.PolicyType || value.PolicyRef != expected.PolicyRef ||
+			value.PolicyVersion != expected.PolicyVersion || domain.ValidateNewsPolicyVersion(value) != nil {
+			return domain.CurrentAuthorizationPolicySet{}, app.ErrNewsCurrentPolicyUnavailable
+		}
+		sum := sha256.Sum256(value.Payload)
+		actualHash := hex.EncodeToString(sum[:])
+		if subtle.ConstantTimeCompare([]byte(actualHash), []byte(value.PayloadHash)) != 1 {
+			return domain.CurrentAuthorizationPolicySet{}, app.ErrNewsCurrentPolicyUnavailable
+		}
+		loaded[value.PolicyType+"\x00"+value.PolicyRef] = value
+	}
+	if len(loaded) != len(binding.PolicySnapshot.Policies) {
+		return domain.CurrentAuthorizationPolicySet{}, app.ErrNewsCurrentPolicyUnavailable
+	}
+
+	var source domain.SourcePolicy
+	var endpoint *domain.EndpointPolicy
+	if value, ok := loaded[domain.NewsPolicyTypeSource+"\x00"+binding.SourceRef]; ok {
+		if err := decodeCurrentPolicy(value.Payload, &source); err != nil {
+			return domain.CurrentAuthorizationPolicySet{}, app.ErrNewsCurrentPolicyUnavailable
+		}
+	}
+	if binding.EndpointRef.Value != nil {
+		value, ok := loaded[domain.NewsPolicyTypeEndpoint+"\x00"+*binding.EndpointRef.Value]
+		if !ok {
+			return domain.CurrentAuthorizationPolicySet{}, app.ErrNewsCurrentPolicyUnavailable
+		}
+		endpoint = new(domain.EndpointPolicy)
+		if err := decodeCurrentPolicy(value.Payload, endpoint); err != nil {
+			return domain.CurrentAuthorizationPolicySet{}, app.ErrNewsCurrentPolicyUnavailable
+		}
+	}
+
+	for _, expected := range binding.PolicySnapshot.Policies {
+		value := loaded[expected.PolicyType+"\x00"+expected.PolicyRef]
+		current := domain.CurrentAuthorizationPolicy{
+			PolicyType: value.PolicyType, PolicyRef: value.PolicyRef, PolicyVersion: value.PolicyVersion,
+		}
+		switch value.PolicyType {
+		case domain.NewsPolicyTypeSource:
+			current.Status = source.Status
+			current.EffectiveAt = source.EffectiveAt
+			current.ExpiresAt = clonePolicyTime(source.ExpiresAt)
+			current.Allows = policyAllowsPurposeAndContent(source.AllowedPurposes, source.AllowedContentKinds, binding)
+		case domain.NewsPolicyTypeEndpoint:
+			current.Status = endpoint.Status
+			if current.Status == "" {
+				current.Status = source.Status
+			}
+			current.EffectiveAt = endpoint.EffectiveAt
+			current.ExpiresAt = clonePolicyTime(endpoint.ExpiresAt)
+			current.Allows = endpointAllowsPurposeAndContent(*endpoint, binding)
+		case domain.NewsPolicyTypeProviderOutput:
+			var policy domain.ProviderOutputPolicy
+			if err := decodeCurrentPolicy(value.Payload, &policy); err != nil {
+				return domain.CurrentAuthorizationPolicySet{}, app.ErrNewsCurrentPolicyUnavailable
+			}
+			current.Status = policy.Status
+			current.EffectiveAt = policy.EffectiveAt
+			current.ExpiresAt = clonePolicyTime(policy.ExpiresAt)
+			current.Allows = policy.AllowRequestProcessing &&
+				policyAllowsPurposeAndContent(policy.AllowedPurposes, policy.AllowedContentKinds, binding)
+		default:
+			return domain.CurrentAuthorizationPolicySet{}, app.ErrNewsCurrentPolicyUnavailable
+		}
+		result.Policies = append(result.Policies, current)
+	}
+	if err := tx.Commit(); err != nil {
+		return domain.CurrentAuthorizationPolicySet{}, errors.Join(app.ErrNewsCurrentPolicyUnavailable, err)
+	}
+	return result, nil
+}
+
+func decodeCurrentPolicy(payload []byte, target any) error {
+	return decodeNewsPolicyPayload(payload, target)
+}
+
+func clonePolicyTime(value *time.Time) *time.Time {
+	if value == nil {
+		return nil
+	}
+	cloned := value.UTC()
+	return &cloned
+}
+
+func policyAllowsPurposeAndContent(
+	purposes []domain.Purpose,
+	contentKinds []domain.ContentKind,
+	binding domain.NewsAuthorizationBinding,
+) bool {
+	purpose, ok := authorizationPurposeForCode(binding.PurposeCode)
+	if !ok || !containsNewsPurpose(purposes, purpose) {
+		return false
+	}
+	requiredKinds := authorizationContentKinds(binding.RequestedContentLevel)
+	for _, required := range requiredKinds {
+		if containsNewsContentKind(contentKinds, required) {
+			return true
+		}
+	}
+	return false
+}
+
+func endpointAllowsPurposeAndContent(policy domain.EndpointPolicy, binding domain.NewsAuthorizationBinding) bool {
+	if policy.AllowedPurposes != nil || policy.AllowedContentKinds != nil {
+		purpose, ok := authorizationPurposeForCode(binding.PurposeCode)
+		if !ok {
+			return false
+		}
+		if policy.AllowedPurposes != nil && !containsNewsPurpose(policy.AllowedPurposes, purpose) {
+			return false
+		}
+		if policy.AllowedContentKinds != nil {
+			matched := false
+			for _, required := range authorizationContentKinds(binding.RequestedContentLevel) {
+				if containsNewsContentKind(policy.AllowedContentKinds, required) {
+					matched = true
+					break
+				}
+			}
+			if !matched {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func authorizationPurposeForCode(value string) (domain.Purpose, bool) {
+	switch value {
+	case "research_analysis":
+		return domain.PurposeInternalPersonalResearch, true
+	case "user_display":
+		return domain.PurposePublicDisplay, true
+	default:
+		return "", false
+	}
+}
+
+func authorizationContentKinds(level domain.AuthorizationContentLevel) []domain.ContentKind {
+	switch level {
+	case domain.AuthorizationContentMetadata:
+		return []domain.ContentKind{domain.ContentMetadata, domain.ContentTitle}
+	case domain.AuthorizationContentSummary:
+		return []domain.ContentKind{domain.ContentAbstract}
+	case domain.AuthorizationContentSnippet:
+		return []domain.ContentKind{domain.ContentSnippet}
+	case domain.AuthorizationContentFull:
+		return []domain.ContentKind{domain.ContentFullText}
+	default:
+		return nil
+	}
+}
+
+func containsNewsPurpose(values []domain.Purpose, target domain.Purpose) bool {
+	for _, value := range values {
+		if value == target {
+			return true
+		}
+	}
+	return false
+}
+
+func containsNewsContentKind(values []domain.ContentKind, target domain.ContentKind) bool {
+	for _, value := range values {
+		if value == target {
+			return true
+		}
+	}
+	return false
+}
