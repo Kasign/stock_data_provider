@@ -7,7 +7,7 @@
 
 ## 当前状态
 
-当前代码验收 SHA：`e9d4bbc34245f697d49a00845a3242be743c6a00`（2026-11-12）；对应 Quant 专项 CI 正在执行，完成状态以该 SHA 的 Workflow 为准。
+当前代码验收 SHA：`a743c7406bcb9d182b7c61ca4317048e277468a9`（2026-11-12）；Quant 专项 CI Workflow `43145772880` 已通过 gofmt、Quant 全量单测、Manifest Fuzz、Race、Vet。
 
 已具备首批 Indicator/Factor 纯计算、CalculationContext、基础 Registry、RiskDecision/RuleSet 执行框架、TrendResult DTO、Manifest/ResultRef、Repository Save Port/MemoryRepository，以及 QuantResult Envelope 初版。
 
@@ -22,6 +22,7 @@
 - QNT-CTR-001 Registry Entry 2.0.0 已接入 Go `SampleCountPolicy`；`ValidateMetric` 按 `required_in_metric` 检查字段存在性，保留缺失、null、0 的差异；Schema 1.0.0 保留历史投影。
 - 八份 Indicator Golden 已显式固化 `expected.sample_count`，测试直接读取 Golden 期望值。
 - 新增 `internal/quant/application.GetResult`：从可信 PrincipalResolver 获取主体，调用授权读取 Port，在释放 Payload 前验证 GOV-CTR-006 授权指纹/策略快照、Manifest 与 Payload 指纹，并只解码已注册的 Trend/Risk 强类型 Envelope。
+- GetResult 强制注入 `AccessAuditor`：显式拒绝、授权服务不可用、结果完整性失败和成功释放均写入元数据审计事件；审计写入失败时不释放 Envelope。AuthorizationRef/PolicySnapshot 严格解码，区分 `expires_at` 缺失与显式 null。
 
 <badge color="success">Quant 专项 CI 通过</badge> Workflow `43142021410` 对验收 SHA `4ce2fd155c21e7f8fe850c6f7f8c8d105b3dd47e` 的 gofmt、Quant 全量单测、Manifest 30 秒随机 Fuzz、Race、Vet 全部通过。
 
@@ -34,7 +35,7 @@
 
 当前剩余阻塞：
 - Indicator/Factor：补齐各自强类型 Payload 容器 Schema/Golden、字段/顺序校验及 Registry 驱动的 Metric 语义校验；完成前保持未注册。
-- Quant 授权：GetResult Application 用例和授权读取 Port 已建立；生产 AuthorizedResultReader/当前策略源、与存储同一致性边界的原子读取、审计落库仍需 Server/Platform Storage Adapter 接入并做撤销竞态验收。当前不能把接口契约和内存测试视为生产授权已通过。
+- Quant 授权：GetResult、AuthorizedResultReader 和 AccessAuditor Port 已建立；生产当前策略源、与存储同一致性边界的原子读取、审计落库仍需 Server/Platform Storage Adapter 接入并做撤销竞态验收。当前不能把接口契约和内存测试视为生产授权已通过。
 - Data：DailyBars v2 Decimal 输入、真实 PIT/复权/交易日历及质量证据；没有真实数据证据，不标记真实数据验收通过。
 - Platform/Server：正式 Storage/事务接入、根 Migration 注册和统一 Diagnostics 装配。
 - Researchflow：Envelope discriminator/Schema/版本消费校验、当前授权引用传递及双方 Contract Test。
@@ -44,7 +45,7 @@
 ## 集合联调边界
 
 - 可联调能力：Trend/Risk `1.0.0` Envelope 解码、Manifest/ResultRef、Repository Save Port，以及 `application.GetResult` 的授权读取 Application 接口。
-- Server 需要注入可信 PrincipalResolver、UTC Clock、AuthorizedResultReader；AuthorizedResultReader 必须在一个可证明的一致性边界内复核当前 Quant 策略并读取不可变结果，授权状态变化或无法证明一致时 fail closed。
+- Server 需要注入可信 PrincipalResolver、UTC Clock、AuthorizedResultReader、AccessAuditor；AuthorizedResultReader 必须在一个可证明的一致性边界内复核当前 Quant 策略并读取不可变结果，授权状态变化或无法证明一致时 fail closed。AccessAuditor 必须先于 Envelope 释放成功写入审计事件，审计失败即拒绝释放。
 - 暂不可联调为完整结果的类型：Indicator/Factor 尚未注册 Payload，必须拒绝；Market/Industry/Stock/Strategy/Backtest/Evaluation 仍未实现。
 - 尚未完成生产闭环：真实授权策略源、审计持久化、MariaDB/Platform Storage Adapter、根 Migration、真实 Data v2 输入，以及 Researchflow 消费端 Contract Test。
 

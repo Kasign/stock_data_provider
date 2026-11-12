@@ -52,3 +52,18 @@ Record 测试覆盖合法 Manifest/payload 绑定、payload 篡改和 Manifest �
 - 当前分支提供的是可编译、可测试的 Port 与 Application 用例；没有生产 AuthorizedResultReader、当前策略存储、审计持久化或 MariaDB/Platform Storage Adapter。
 - Server 必须注入可信 PrincipalResolver、UTC Clock 和生产 Reader；生产 Reader 需定义授权检查/读取的原子一致性边界。不能用历史 allowed、`expires_at=null` 或缓存结果代替当前策略检查。
 - 本地单测只验证应用层授权证明、内容指纹和 fail-closed 行为；不证明真实存储并发撤销、审计落库或 TOCTOU 已验收。
+
+
+### 读取审计 Port
+
+- `application.GetResult` 强制依赖 `AccessAuditor`，审计事件只包含主体、结果引用、用途、决策、原因码、授权引用和发生时间，不包含 Payload 或受限内容。
+- 已识别主体的读取尝试在结果释放前写入审计：显式拒绝记为 denied；授权/策略服务不可用和结果完整性错误记为 unknown；验证完成并准备释放记为 allowed。
+- 审计写入失败时返回 `ErrAuditUnavailable`，不向调用方释放 Envelope。无法解析可信主体、无效 result_id 或调用已取消时不伪造主体审计记录。
+- 当前仅完成 Port 和内存测试；生产审计持久化、保留策略和审计存储故障注入属于 Server/Platform Storage 集成验收。
+
+### 授权证明严格解码
+
+- AuthorizationRef 与 PolicySnapshot 拒绝未知 JSON 字段。
+- AuthorizationRef 必须显式包含 `expires_at`；显式 `null` 表示没有固定过期时间，但仍须执行当前策略复核；字段缺失不等于 `null`，必须拒绝。
+- PolicySnapshot 必须包含非空策略版本列表，按 `(policy_type, policy_ref, policy_version)` 严格字典序排列且无重复。
+- 应用层读取验证已通过项目冻结的 GOV-CTR-006 Quant Golden，验证 JCS + SHA-256 指纹结果一致。
