@@ -8,11 +8,11 @@ import (
 )
 
 type expiredAttemptReaderFake struct {
-	items []ExpiredAttemptCandidate
-	err error
-	afterRun string
+	items      []ExpiredAttemptCandidate
+	err        error
+	afterRun   string
 	afterStage string
-	limit int
+	limit      int
 }
 
 func (f *expiredAttemptReaderFake) ListExpiredAttemptCandidates(_ context.Context, runRef, stageRef string, limit int) ([]ExpiredAttemptCandidate, error) {

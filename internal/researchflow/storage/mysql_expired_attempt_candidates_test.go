@@ -57,7 +57,7 @@ func TestMariaDBExpiredAttemptCandidatesAndReclaim(t *testing.T) {
 			Scope: application.IdempotencyScope{
 				CallerRef: "researchflow-expired-attempt-" + suffix,
 				Operation: "CreateRun",
-				Key: fmt.Sprintf("expired-attempt-%d-%s", index, suffix),
+				Key:       fmt.Sprintf("expired-attempt-%d-%s", index, suffix),
 			},
 			Fingerprint: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 			Run: domain.Run{
@@ -100,7 +100,8 @@ func TestMariaDBExpiredAttemptCandidatesAndReclaim(t *testing.T) {
 		}
 	}
 
-	first, err := repository.ListExpiredAttemptCandidates(ctx, "", "", 1)
+	cursorRunRef := "zzzz-expired-attempt-" + suffix
+	first, err := repository.ListExpiredAttemptCandidates(ctx, cursorRunRef, "", 1)
 	if err != nil {
 		t.Fatal(err)
 	}

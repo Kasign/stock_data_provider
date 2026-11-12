@@ -23,14 +23,14 @@ type ExpiredAttemptCandidateReader interface {
 }
 
 type ExpiredAttemptCandidatePage struct {
-	Candidates []ExpiredAttemptCandidate
-	NextRunRef string
+	Candidates   []ExpiredAttemptCandidate
+	NextRunRef   string
 	NextStageRef string
-	HasMore bool
+	HasMore      bool
 }
 
 type ExpiredAttemptScanner struct {
-	reader ExpiredAttemptCandidateReader
+	reader    ExpiredAttemptCandidateReader
 	batchSize int
 }
 
@@ -61,7 +61,7 @@ func (s *ExpiredAttemptScanner) ListNextPage(ctx context.Context, afterRunRef, a
 	}
 	page := ExpiredAttemptCandidatePage{
 		Candidates: append([]ExpiredAttemptCandidate{}, items...),
-		HasMore: len(items) == s.batchSize,
+		HasMore:    len(items) == s.batchSize,
 	}
 	previousRun, previousStage := afterRunRef, afterStageRef
 	for _, item := range items {
