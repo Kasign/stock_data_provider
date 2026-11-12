@@ -1,9 +1,9 @@
 # Research 模块
 
 - 分支：`feat/research`
-- 当前分支代码验收基线（2026-11-12）：`21f2c57e76874d45f5f3c874eea482fe0ce7fe4f`。
-- 最新 Integration CI Run [43187007758](https://github.com/Kasign/stock_data_provider/actions/runs/43187007758) 在该 SHA 全项通过：全仓 gofmt、根模块 go vet/go test、go-core go vet/go test、Compose、WebUI 语法/单测和镜像构建。
-- 本次 CI 未执行 Research 专项 race 与 MariaDB DSN 故障注入；当前单一 Migration v1 最终结构初始化、锁等待取消、Outbox 租约/并发仍需专用数据库验收。旧 v1-v5 MariaDB 结果不能替代当前结构验收。
+- 当前分支最新提交（2026-11-12）：`e01a642a54088694c7063f95f10ed0491c9d31de`。
+- 该 SHA 尚无对应 CI Run；旧 Integration CI Run [43187007758](https://github.com/Kasign/stock_data_provider/actions/runs/43187007758) 对应 SHA `21f2c57e76874d45f5f3c874eea482fe0ce7fe4f`，不能作为本轮新增代码的测试证据。
+- 当前 `.github/workflows/go-test.yml` 的 push 分支未包含 `feat/research`，且没有 Research 专项 gofmt/test/race/vet 或 MariaDB Job；workflow_dispatch 也未定义 Research Job。旧 Research MariaDB Run 覆盖已删除的 v1-v5 迁移链，不能替代当前单一 Migration v1 验收。
 - 详细任务进度与依赖边界见 [02-任务拆分与验收](./02-任务拆分与验收.md)。
 - 代码范围：`internal/research/**`
 - 文档范围：`doc/research/**`
@@ -33,7 +33,7 @@ Research 不采集新闻、不拥有行情事实、不重算 Quant 指标，不�
 | RSC-004 实体关联 | 尚未实现 | 等待 Data 提供稳定 Security/Industry 引用、版本/时间语义及公开 Application Port |
 | RSC-005 Claim/Hypothesis | Domain、认识论校验、状态迁移、版本追加、supersedes_version 字段及当前版本头校验、Application、SQL Repository；创建和更新时解析 supporting/contradicting EvidenceRefs，并校验严格 PIT cutoff 与 Evidence.stance 分组一致性 | Scope 的外部实体/来源版本解析和真实研究样本仍受 Data/News 公开契约限制；本地 Evidence 引用已不再依赖生产 Owner 实现 |
 | RSC-006 Scenario | 新增 Scenario/Condition/ConditionGroup 领域模型，expected_value 限定为标量或一层标量数组，递归 ConditionGroup 校验按 DEC-033 执行 | Quant Metric Registry/QuantEvaluationRef 由 Quant Owner 校验；Researchflow 获取并复核 Quant Evaluation 后传入授权 DTO/引用，Research 不直接调用 Quant；当前冻结契约未要求独立 Scenario Application/Storage API |
-| RSC-007 Storage/Outbox | Context/Event/Claim/Evidence Repository、Migration v1（初版最终结构；无 v2-v5 兼容迁移）、事务 Outbox、领取/租约/重试/确认/拒绝；最终结构初始化测试待本轮 CI 验证 | 根 Server Migration 注册、Server→Notification Relay 接线、授权续期历史留档语义 |
+| RSC-007 Storage/Outbox | Context/Event/Claim/Evidence Repository、Migration v1、事务 Outbox、领取/租约/重试/确认/拒绝；发布确认仅允许同一 Worker+Lease Token 幂等重放，错误身份拒绝 | 最新提交尚无 CI/MariaDB 执行证据；根 Server Migration 注册、Server→Notification Relay 接线、授权续期历史留档语义 |
 | RSC-008 Diagnostics | Context/Event/Claim/Evidence 快照 Check、Run PIT、脱敏和快照隔离；Evidence Check 通过 Application GetEvidence 执行 Owner Authorizer 调用；invalid Evidence 质量失败优先于 available_at 不可比较；Research-owned News Authorizer 已实现 | News Owner 完整 TOCTOU/available_at 证据仍不完整；Researchflow FLOW-009 Facade 和 Runner 集成待接入 |
 
 ## 诊断边界
@@ -47,7 +47,7 @@ Research 不采集新闻、不拥有行情事实、不重算 Quant 指标，不�
 ## 当前验收结论
 
 - 历史 Research 专项 Workflow Run [42616788237](https://github.com/Kasign/stock_data_provider/actions/runs/42616788237) 对旧代码 SHA `0129675185ab29905b0ef14a21e1d564961e3dde` 的 Research gofmt、go test、race、vet 与当时的 MariaDB Job 通过；该 MariaDB 结果覆盖旧迁移结构，不覆盖 2026-11-12 收敛后的单一 Migration v1。
-- 最新代码集成验收为 Integration CI Run [43187007758](https://github.com/Kasign/stock_data_provider/actions/runs/43187007758)，SHA `21f2c57e76874d45f5f3c874eea482fe0ce7fe4f`。全仓 gofmt、根模块 go vet/go test、go-core go vet/go test、Compose 配置、WebUI 语法/单测和 WebUI 镜像构建均通过；该 Run 未执行 race，也未配置 Research 专用 MariaDB DSN，不能替代 Research 数据库故障注入验收。
+- 最近一次 Integration CI Run [43187007758](https://github.com/Kasign/stock_data_provider/actions/runs/43187007758) 对应 SHA `21f2c57e76874d45f5f3c874eea482fe0ce7fe4f`。全仓 gofmt、根模块 go vet/go test、go-core go vet/go test、Compose 配置、WebUI 语法/单测和 WebUI 镜像构建通过；该 Run 未执行 Research race 或 Research 专项 MariaDB。它不是当前 HEAD 的验收结果。
 - 本轮 Research 新增 News Evidence Importer/Authorizer、Data/News/Quant Context 固定样本，以及 Evidence/Claim/Event 的本地引用解析与严格 PIT 校验；最新 CI 覆盖根模块编译与测试。测试替身只在测试中使用，不写入生产业务流程。
 - 本轮代码复核发现并修复 Event.available_at PIT 边界；本次进一步按 RSC-CTR-002 补齐 Event 时间规则版本/派生引用及严格 JSON 字段校验、Claim supersedes_version 及严格 JSON 字段校验、Scenario 闭合条件模型和数值标量类型校验。新改动的 CI 验收状态以对应提交后的 Workflow 为准。
 - Research 已实现 News 公开 Evidence Query Port 的消费 Adapter，但 News 当前所有可用来源均缺少可验证 available_at，故生产导入会 fail-closed；测试替身只用于契约映射和门禁测试，不产生生产证据。Data 证券/行业主数据引用仍缺公开 Port，DATA-CTR-007 仍为 deferred。根 Server Migration 注册和 Notification Relay 由 Server 组合根负责。
