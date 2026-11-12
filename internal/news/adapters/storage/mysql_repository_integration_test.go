@@ -236,6 +236,8 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	}
 
 	binding := loadIntegrationAuthorizationBinding(t)
+	currentExpiry := time.Now().UTC().Add(time.Hour).Format(time.RFC3339Nano)
+	binding.AuthorizationRef.ExpiresAt.Value = &currentExpiry
 	publisher, err := app.NewPublishNewsPolicyVersion(repository)
 	if err != nil {
 		t.Fatal(err)
