@@ -475,52 +475,52 @@
                   "valid",
                   "degraded"
                 ]
-              },
-              "oneOf": [
-                {
-                  "properties": {
-                    "value": {
-                      "type": [
-                        "string",
-                        "number"
-                      ]
-                    },
-                    "lower_bound": {
-                      "type": "null"
-                    },
-                    "upper_bound": {
-                      "type": "null"
-                    }
-                  }
-                },
-                {
-                  "properties": {
-                    "value": {
-                      "type": "number"
-                    },
-                    "lower_bound": {
-                      "type": "number"
-                    },
-                    "upper_bound": {
-                      "type": "number"
-                    }
-                  }
-                },
-                {
-                  "properties": {
-                    "value": {
-                      "type": "string"
-                    },
-                    "lower_bound": {
-                      "type": "string"
-                    },
-                    "upper_bound": {
-                      "type": "string"
-                    }
+              }
+            },
+            "oneOf": [
+              {
+                "properties": {
+                  "value": {
+                    "type": [
+                      "string",
+                      "number"
+                    ]
+                  },
+                  "lower_bound": {
+                    "type": "null"
+                  },
+                  "upper_bound": {
+                    "type": "null"
                   }
                 }
-              ]
-            }
+              },
+              {
+                "properties": {
+                  "value": {
+                    "type": "number"
+                  },
+                  "lower_bound": {
+                    "type": "number"
+                  },
+                  "upper_bound": {
+                    "type": "number"
+                  }
+                }
+              },
+              {
+                "properties": {
+                  "value": {
+                    "type": "string"
+                  },
+                  "lower_bound": {
+                    "type": "string"
+                  },
+                  "upper_bound": {
+                    "type": "string"
+                  }
+                }
+              }
+            ]
           },
           "else": {
             "properties": {

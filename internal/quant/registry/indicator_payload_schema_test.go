@@ -49,17 +49,104 @@ func TestIndicatorResultPayloadSchemaAndGolden(t *testing.T) {
 
 func TestIndicatorResultPayloadSchemaRejectsWrongMappingAndUnknownFields(t *testing.T) {
 	schema := compileQuantSchemaFile(t, "QNT-CTR-004-indicator-result-payload-1.0.0.schema.json")
-	cases := []string{
-		"{\"indicator_code\":\"sma\",\"metrics\":[{\"metric_code\":\"ema\"}]}",
-		"{\"indicator_code\":\"macd\",\"metrics\":[{\"metric_code\":\"macd_dea\"},{\"metric_code\":\"macd_dif\"},{\"metric_code\":\"macd_histogram\"}]}",
-		"{\"indicator_code\":\"bollinger\",\"metrics\":[{\"metric_code\":\"bollinger_middle\"},{\"metric_code\":\"bollinger_upper\"}]}",
-		"{\"indicator_code\":\"unknown\",\"metrics\":[]}",
-		"{\"indicator_code\":\"sma\",\"metrics\":[{\"metric_code\":\"sma\"}],\"extra\":true}",
+	goldenPath := filepath.Join("..", "..", "..", "doc", "quant", "golden", "result", "indicator-payload-1.0.0.golden.json")
+	document, err := os.ReadFile(goldenPath)
+	if err != nil {
+		t.Fatal(err)
 	}
-	for _, instance := range cases {
-		if err := validateJSONSchemaInstance(schema, []byte(instance)); err == nil {
-			t.Errorf("Indicator Payload Schema unexpectedly accepted: %s", instance)
+	var golden struct {
+		Cases []struct {
+			Name    string          `json:"name"`
+			Payload json.RawMessage `json:"payload"`
+		} `json:"cases"`
+	}
+	if err := json.Unmarshal(document, &golden); err != nil {
+		t.Fatal(err)
+	}
+	var validMACD json.RawMessage
+	for _, item := range golden.Cases {
+		if item.Name == "macd" {
+			validMACD = item.Payload
+			break
 		}
+	}
+	if len(validMACD) == 0 {
+		t.Fatal("MACD Golden fixture is missing")
+	}
+
+	mutations := []struct {
+		name   string
+		mutate func(map[string]json.RawMessage) error
+	}{
+		{
+			name: "wrong metric mapping",
+			mutate: func(payload map[string]json.RawMessage) error {
+				var metrics []map[string]json.RawMessage
+				if err := json.Unmarshal(payload["metrics"], &metrics); err != nil {
+					return err
+				}
+				metrics[0]["metric_code"] = json.RawMessage("\"macd_dea\"")
+				encoded, err := json.Marshal(metrics)
+				payload["metrics"] = encoded
+				return err
+			},
+		},
+		{
+			name: "wrong metric order",
+			mutate: func(payload map[string]json.RawMessage) error {
+				var metrics []json.RawMessage
+				if err := json.Unmarshal(payload["metrics"], &metrics); err != nil {
+					return err
+				}
+				metrics[0], metrics[1] = metrics[1], metrics[0]
+				encoded, err := json.Marshal(metrics)
+				payload["metrics"] = encoded
+				return err
+			},
+		},
+		{
+			name: "too few metrics",
+			mutate: func(payload map[string]json.RawMessage) error {
+				var metrics []json.RawMessage
+				if err := json.Unmarshal(payload["metrics"], &metrics); err != nil {
+					return err
+				}
+				payload["metrics"], _ = json.Marshal(metrics[:2])
+				return nil
+			},
+		},
+		{
+			name: "unknown indicator",
+			mutate: func(payload map[string]json.RawMessage) error {
+				payload["indicator_code"] = json.RawMessage("\"unknown\"")
+				return nil
+			},
+		},
+		{
+			name: "unknown payload field",
+			mutate: func(payload map[string]json.RawMessage) error {
+				payload["extra"] = json.RawMessage("true")
+				return nil
+			},
+		},
+	}
+	for _, tc := range mutations {
+		t.Run(tc.name, func(t *testing.T) {
+			var payload map[string]json.RawMessage
+			if err := json.Unmarshal(validMACD, &payload); err != nil {
+				t.Fatal(err)
+			}
+			if err := tc.mutate(payload); err != nil {
+				t.Fatal(err)
+			}
+			instance, err := json.Marshal(payload)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := validateJSONSchemaInstance(schema, instance); err == nil {
+				t.Fatalf("Indicator Payload Schema unexpectedly accepted: %s", instance)
+			}
+		})
 	}
 }
 
