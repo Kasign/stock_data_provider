@@ -71,7 +71,7 @@
 
 | — | /api/v1/analysis/tasks | 服务端任务历史分页需求（当前无此路由，非现有 API） | 暂无；需服务端补充分页、状态/类型/股票/日期过滤与总数语义 |
 
-分析任务请求/响应的完整字段契约以 doc/api/分析任务.openapi.yaml 和分析服务当前实现为准。当前没有服务端研究报告列表/详情/归档 API；WebUI 直接使用已校验的 Run 结果在浏览器本地归档，不新增服务端接口。当前 OpenAPI 仅定义创建、单任务状态、事件与 Run 结果查询，没有服务端任务列表分页接口；WebUI 的“最近分析”只保留本地最多 10 条任务引用，不应称为服务端历史。
+分析任务请求/响应的完整字段契约以 doc/api/contracts/分析任务.openapi.yaml 和分析服务当前实现为准。当前没有服务端研究报告列表/详情/归档 API；WebUI 直接使用已校验的 Run 结果在浏览器本地归档，不新增服务端接口。当前 OpenAPI 仅定义创建、单任务状态、事件与 Run 结果查询，没有服务端任务列表分页接口；WebUI 的“最近分析”只保留本地最多 10 条任务引用，不应称为服务端历史。
 
 ## 4. 页面与接口对应关系
 
@@ -128,7 +128,7 @@
 ### 板块排行字段补充说明（2026-11-03）
 
 - WebUI 使用 `amount` + `amount_unit` 展示成交额；仅 `amount_unit=CNY` 时显示人民币单位，unknown 不推断。
-- 五日排序由服务端 `sort_by=change_5d` 执行，返回值字段为 `change_percent_5d`。`SectorRanking.change_percent_5d` 已在 `services/market-data/openapi.yaml` 中声明为可空数值，说明其为六个日收盘价计算的五交易日涨幅，单位为百分点；对应 Schema 契约测试已验证字段归属。
+- 五日排序由服务端 `sort_by=change_5d` 执行，返回值字段为 `change_percent_5d`。`SectorRanking.change_percent_5d` 已在 `internal/marketdata/httpapi/openapi.yaml` 中声明为可空数值，说明其为六个日收盘价计算的五交易日涨幅，单位为百分点；对应 Schema 契约测试已验证字段归属。
 - `direction=up` 表示按所选指标从高到低，`direction=down` 表示从低到高。
 - 板块资金净流入没有独立服务端接口，WebUI 继续显示未接入，不以成交额替代。
 
