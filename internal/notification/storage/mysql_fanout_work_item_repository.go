@@ -199,6 +199,7 @@ func (r *MySQLFanoutWorkItemRepository) ClaimDue(
 	}
 	work.Status = domain.FanoutProcessing
 	work.LeaseWorkerID = workerID
+	work.NextAttemptAt = time.Time{}
 	if err := work.Validate(); err != nil {
 		return result, false, err
 	}

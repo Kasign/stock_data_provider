@@ -92,6 +92,22 @@ func TestNotificationMariaDBExpiredDeliveryLeaseRecoveryIntegration(t *testing.T
 	if err := attemptRepository.StartWithLease(ctx, claim.Delivery.Version, claim.Lease.FencingToken, attempt); err != nil {
 		t.Fatalf("start attempt before lease expiry: %v", err)
 	}
+	recoverySnapshot, found, err := repository.Get(ctx, delivery.DeliveryID)
+	if err != nil || !found || recoverySnapshot.AttemptCount != 1 {
+		t.Fatalf("load Delivery after Attempt start: found=%v delivery=%+v err=%v", found, recoverySnapshot, err)
+	}
+	recoveryAt := now
+	next, event, err := recoverySnapshot.Transition(domain.DeliveryTransition{
+		To: domain.DeliveryUnknown, At: recoveryAt,
+		ReasonCode: "lease_expired_during_attempt", EvidenceRef: attempt.AttemptID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := repository.RecoverExpiredLease(ctx, claim.Delivery.Version, claim.Lease.FencingToken, next, event, leaseExpiry.Add(-time.Microsecond)); !errors.Is(err, application.ErrDeliveryLeaseConflict) {
+		t.Fatalf("active lease must not be recovered, got %v", err)
+	}
+
 	// 测试夹具同时推进 Delivery 与 Attempt 的租约截止时间，模拟 Worker 在发送期间失联。
 	expiredAt := now.Add(-time.Second)
 	if _, err := db.ExecContext(ctx, "UPDATE notification_deliveries SET lease_expires_at = ? WHERE delivery_id = ?", expiredAt, delivery.DeliveryID); err != nil {
@@ -116,18 +132,6 @@ func TestNotificationMariaDBExpiredDeliveryLeaseRecoveryIntegration(t *testing.T
 	}
 	if !foundExpired {
 		t.Fatalf("bounded scan must return the expired lease for %s", delivery.DeliveryID)
-	}
-	recoveryAt := now
-	next, event, err := claim.Delivery.Transition(domain.DeliveryTransition{
-		To: domain.DeliveryUnknown, At: recoveryAt,
-		ReasonCode: "lease_expired_during_attempt", EvidenceRef: attempt.AttemptID,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if err := repository.RecoverExpiredLease(ctx, claim.Delivery.Version, claim.Lease.FencingToken, next, event, leaseExpiry.Add(-time.Microsecond)); !errors.Is(err, application.ErrDeliveryLeaseConflict) {
-		t.Fatalf("active lease must not be recovered, got %v", err)
 	}
 
 	// 恢复只能改变状态与租约，不得改写 Delivery 的创建时间、截止时间或重试预算。
