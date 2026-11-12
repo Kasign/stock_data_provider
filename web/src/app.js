@@ -5053,7 +5053,14 @@ window.addEventListener("resize", () => {
   if (window.innerWidth > 600) setMobileNavigationOpen(false);
 });
 window.addEventListener("hashchange", () => {
-  setView(window.location.hash.slice(1), { updateHash: false });
+  const requestedView = window.location.hash.slice(1);
+  const nextView = requestedView === "market-data"
+    ? "market"
+    : (Object.hasOwn(VIEW_META, requestedView) ? requestedView : "market");
+  if (window.location.hash !== "#" + nextView) {
+    window.history.replaceState(null, "", window.location.pathname + window.location.search + "#" + nextView);
+  }
+  setView(nextView, { updateHash: false });
 });
 
 $("#topbar-notifications").addEventListener("click", () => setView("notifications"));
