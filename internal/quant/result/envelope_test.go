@@ -3,6 +3,9 @@ package result
 import (
 	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -86,6 +89,7 @@ func TestBuildEnvelopeProjectsManifestAndRoundTripsTrendPayload(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	assertEnvelopeGolden(t, "quant-result-envelope-trend-1.0.0.golden.json", envelope)
 	if envelope.ResultID != manifestValue.ResultID ||
 		envelope.ResultType != "trend" ||
 		envelope.PayloadSchemaVersion != manifestValue.PayloadSchemaVersion ||
@@ -132,6 +136,7 @@ func TestBuildEnvelopeKeepsRiskRejectIndependentFromCompletedResult(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
+	assertEnvelopeGolden(t, "quant-result-envelope-risk-1.0.0.golden.json", envelope)
 	if envelope.ResultStatus != "completed" || envelope.Payload.(RiskPayload).Decision().Status != risk.DecisionReject {
 		t.Fatalf("risk domain decision was conflated with result lifecycle: %+v", envelope)
 	}
@@ -289,5 +294,28 @@ func TestEnvelopeRejectsUnsortedSnapshotRefs(t *testing.T) {
 	envelope.InputSnapshotRefs = []string{"snapshot:b", "snapshot:a"}
 	if !errors.Is(envelope.Validate(), ErrInvalidEnvelope) {
 		t.Fatal("Envelope accepted non-canonical input_snapshot_refs order")
+	}
+}
+
+func assertEnvelopeGolden(t *testing.T, name string, envelope Envelope) {
+	t.Helper()
+	encoded, err := json.Marshal(envelope)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join("../../../doc/quant/golden/result", name)
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got, want any
+	if err := json.Unmarshal(encoded, &got); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(raw, &want); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("Envelope JSON differs from %s\n got: %s\nwant: %s", name, encoded, raw)
 	}
 }
