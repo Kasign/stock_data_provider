@@ -1290,3 +1290,18 @@ Lifecycle.Stop 原实现通过 stopped 标记保证重复调用幂等，但并�
 - 更新 Registry 单测，要求 namespace 集合包含 `researchflow`，并保持排序确定性。
 - 本次仅修改 `internal/server/bootstrap/bootstrap.go`、对应测试和本文档；不触碰其他模块代码，不执行 integration 合并或写操作。
 - Server 独立 Workflow Run `43137020216`（SHA `3ffb0d8a109ef2e8f8e4d3aaa6db394c1c0f3e23`）已完成并成功：Server 范围 gofmt、包级单测、Race、Vet 全部通过。该 Workflow 不覆盖根模块全量 `go test ./...`、真实 MariaDB Migration 执行或 Researchflow Worker 生产启动；因此本项仅具备 Server 包级 CI 证据，不代表真实数据库/完整系统验收通过。
+
+
+### 12.54 SRV-004 六模块公开装配入口核验（2026-11-12）
+
+- 审计基线：当前分支 HEAD `4250aa713416ef5f7c46ca7e4f7bcda2ffb9d6a7`。本轮只核对当前分支的模块代码与各模块 README，不把目录存在、单元测试或模块 CI 等同于 Root DI 已可装配。
+- News：已有 `SearchCandidates`、`CollectSource`、`IngestProviderCandidate`、`IngestCollectedSource` 等组件级构造器，以及自有 Repository/Migration 和 Provider 配置；尚未形成一个覆盖 Provider/Source Catalog、可信策略解析、采集触发和真实 BoundDoer 注入的生产组合入口。News 文档也明确 Server 生产装配、策略评估和在线采集尚未闭环。
+- Research：已有稳定 `application.Port`、`NewService` / `NewServiceWithEvents` / `NewServiceWithClaims`，并有 Research 自有 Storage Repository、Migration 和 Diagnostics Check。它具备可继续装配的基础，但 Server 仍需明确 Repository 构造、可信 Evidence Authorizer、Clock/ID Generator 的真实来源；不可用空实现或测试 Fake 代替。
+- Researchflow：已有 `NewCreateRunService`、`NewWorker`、`NewDeadlineScanner` 等组件级构造器和自有 Migration；Worker 依赖 RequestIdentity、数据库时钟、ID Generator、WorkerStore、StageExecutor 等真实 Port。当前没有核实到一个统一生产 Factory/完整 Executor 组合入口，不能仅实例化 Worker 就宣称模块可运行。
+- Quant：当前可核实到的是指标/风险注册表及领域计算包；没有可供 Server 注入的模块级 Application Port/Factory、持久化 Migration 或统一 Worker/Diagnostics 入口。不得由 Server 临时创建 Quant API 或把 Registry 直接包装成业务服务。
+- LLM：已有 Provider 接口和 Responses Adapter 构造器；Server 已有共享 Platform BoundDoer 到 LLM HTTP/SSE 的传输桥接及 Responses Adapter 构造器。尚缺生产 ProviderConfig、Secret、CapabilityState 的可信配置/证据来源和真实 Gateway 联调，因此只完成传输桥接，不等于 LLM 生产实例可安全启用。
+- Notification：已有 Delivery Preflight、Execution、Completion、Lease Recovery 等组件级 Application Service 与自有 Migration；README 明确 Fanout Writer/WorkItem 执行语义、活跃 Subscription 分页和完整 Dispatcher/Worker 尚未完成。Server 不得用旧 Platform Task Queue 或临时轮询器代替模块 Worker。
+- Migration 复核：当前 Server Registry 已注册 News、Research、Researchflow、Notification 四个已公开 Migration namespace；Quant/LLM 当前没有可注册的模块 Migration 贡献项，不增加空 namespace。
+- Diagnostics 复核：Server 当前统一聚合共享 Storage Checks；Research 已有可构造的 Domain Snapshot Check，Researchflow 有 Stage Assessment Adapter；News 的真实检查依赖生产采集与策略入口，Quant/LLM/Notification 尚未形成可由 Server 直接注册的完整生产 Check 组。Server 不构造假健康检查。
+- 结论：SRV-004 仍不能整体解除阻塞。可继续做的只有对已交付模块公开入口进行逐个真实装配；当前缺少的可信配置、授权、执行器、Worker/Dispatcher 和跨模块 Port 必须由对应模块或项目契约提供，Server 不代替模块补业务能力。本轮不新增 DI Factory、HTTP API、Worker、字段或诊断项。
+- 本轮没有修改任何业务模块文件；Researchflow Migration 接入已由 12.53 节记录并通过 Server 独立 CI。下一步优先核对 Research 模块的真实 MySQL Repository 与 Evidence Authorizer 构造来源，确认其是否具备不依赖 Fake 的生产装配条件；其他模块保持各自明确的阻塞状态。
