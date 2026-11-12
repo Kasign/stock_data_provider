@@ -311,3 +311,15 @@
 - 官方文档示例值仅为结构示例，不是实时样本。既有 `600519.SH` Live 样本仍为真实返回但 degraded，不因文档补证而升级质量状态。
 - 本轮未修改代码、DTO、PIT 算法或质量门槛。契约层 PCF 语义判定 pass；PCF 具体数值、PE/PB/PS 复算仍 not_comparable；逐字段 Freshness 与 ProviderReportDate 仍 unknown。
 - 下一步仅需补齐同一证券/同一快照时点的价格与财务分母原始证据；不重复调用权限不足的 Tushare，也不为取得样本而重复发起相同 Hithink 请求。
+
+
+### 2026-11-12：估值独立复算输入链路审查
+
+- 官方估值文档确认 TTM 通常由最近四个季度数据计算、MRQ 为最近已披露报告期；响应 timestamp 是上游指标元数据最大有效时间，不是每个估值项的独立时间。
+- 官方财报文档明确 `report_date_ms` 是披露日、`period_end_ms` 是报告期末；现有 Hithink Adapter 已正确区分并映射，不重复实现。
+- 官方现金流字段定义明确 `act_cash_flow_net` 为经营活动现金流净额（原币元），`cash_equivalents_net_addition` 为另一独立字段；PCF 分母语义继续采用经营现金流。
+- 但官方文档没有说明 quarterly 现金流值是单季值还是年初至今累计值。现有 helper 每次仅选取一个报告期，不能直接提供四季度原始序列；禁止未经确认直接累加/差分。
+- Hithink 公开估值、行情、财报和财务指标接口中未发现可用于独立复算的总股本/总市值字段。历史日 K 可提供同日 OHLC，但不能替代股本，也不能证明与估值聚合 timestamp 完全同步。
+- Tushare daily_basic 当前真实账号仍为 40203 permission_required；代码当前没有请求 total_share/total_mv。权限未变化前不重复请求，不将静态字段可用性等同于真实数据。
+- 判定：披露日/报告期末映射 pass；经营现金流字段定义 pass；季度现金流构造、股本/市值、PCF 数值复算 not_comparable；逐字段 Freshness unknown。PE/PB/PS 独立复算也保持 not_comparable。
+- 本轮无代码、DTO、API、PIT 或质量门槛变更；无 Provider 请求、无构建测试。下一步先取得 Hithink 对 quarterly 累计语义、估值有效日和股本口径的明确答复，或等待授权的 Tushare 市值/股本数据，再进行同一基准日离线复算。
