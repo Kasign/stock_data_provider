@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -16,6 +17,7 @@ import (
 )
 
 type outboxFake struct {
+	mu          sync.Mutex
 	events      []researchapp.NotificationEventEnvelope
 	claimed     int
 	confirmed   []string
@@ -35,14 +37,20 @@ func (f *outboxFake) Claim(_ context.Context, worker string, limit int, lease ti
 	return append([]researchapp.NotificationEventEnvelope(nil), f.events...), nil
 }
 func (f *outboxFake) Confirm(_ context.Context, eventID, _, _ string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.confirmed = append(f.confirmed, eventID)
 	return f.confirmErr
 }
 func (f *outboxFake) Retry(_ context.Context, eventID, _, _ string, _ time.Duration, _ string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.retried = append(f.retried, eventID)
 	return f.retryErr
 }
 func (f *outboxFake) Reject(_ context.Context, eventID, _, _, _ string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.rejected = append(f.rejected, eventID)
 	return f.rejectErr
 }
