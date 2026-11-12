@@ -44,14 +44,14 @@ func (r *MySQLRepository) ResolveCurrentNewsAuthorizationPolicies(
 		var value domain.NewsPolicyVersion
 		var payload []byte
 		var createdAt time.Time
-		err := tx.QueryRowContext(ctx, `SELECT current.policy_type, current.policy_ref,
-			current.policy_version, version.payload_json, version.payload_hash, version.created_at
-			FROM news_current_policy_versions current
+		err := tx.QueryRowContext(ctx, `SELECT cp.policy_type, cp.policy_ref,
+			cp.policy_version, version.payload_json, version.payload_hash, version.created_at
+			FROM news_current_policy_versions cp
 			INNER JOIN news_policy_versions version
-				ON version.policy_type = current.policy_type
-				AND version.policy_ref = current.policy_ref
-				AND version.policy_version = current.policy_version
-			WHERE current.policy_type = ? AND current.policy_ref = ?`,
+				ON version.policy_type = cp.policy_type
+				AND version.policy_ref = cp.policy_ref
+				AND version.policy_version = cp.policy_version
+			WHERE cp.policy_type = ? AND cp.policy_ref = ?`,
 			expected.PolicyType, expected.PolicyRef,
 		).Scan(&value.PolicyType, &value.PolicyRef, &value.PolicyVersion, &payload, &value.PayloadHash, &createdAt)
 		if err != nil {
@@ -77,7 +77,7 @@ func (r *MySQLRepository) ResolveCurrentNewsAuthorizationPolicies(
 	var source domain.SourcePolicy
 	var endpoint *domain.EndpointPolicy
 	if value, ok := loaded[domain.NewsPolicyTypeSource+"\x00"+binding.SourceRef]; ok {
-		if err := decodeCurrentPolicy(value.Payload, &source); err != nil {
+		if err := decodeNewsPolicyPayload(value.Payload, &source); err != nil {
 			return domain.CurrentAuthorizationPolicySet{}, app.ErrNewsCurrentPolicyUnavailable
 		}
 	}
@@ -87,7 +87,7 @@ func (r *MySQLRepository) ResolveCurrentNewsAuthorizationPolicies(
 			return domain.CurrentAuthorizationPolicySet{}, app.ErrNewsCurrentPolicyUnavailable
 		}
 		endpoint = new(domain.EndpointPolicy)
-		if err := decodeCurrentPolicy(value.Payload, endpoint); err != nil {
+		if err := decodeNewsPolicyPayload(value.Payload, endpoint); err != nil {
 			return domain.CurrentAuthorizationPolicySet{}, app.ErrNewsCurrentPolicyUnavailable
 		}
 	}
@@ -113,7 +113,7 @@ func (r *MySQLRepository) ResolveCurrentNewsAuthorizationPolicies(
 			current.Allows = endpointAllowsPurposeAndContent(*endpoint, binding)
 		case domain.NewsPolicyTypeProviderOutput:
 			var policy domain.ProviderOutputPolicy
-			if err := decodeCurrentPolicy(value.Payload, &policy); err != nil {
+			if err := decodeNewsPolicyPayload(value.Payload, &policy); err != nil {
 				return domain.CurrentAuthorizationPolicySet{}, app.ErrNewsCurrentPolicyUnavailable
 			}
 			current.Status = policy.Status
@@ -130,10 +130,6 @@ func (r *MySQLRepository) ResolveCurrentNewsAuthorizationPolicies(
 		return domain.CurrentAuthorizationPolicySet{}, errors.Join(app.ErrNewsCurrentPolicyUnavailable, err)
 	}
 	return result, nil
-}
-
-func decodeCurrentPolicy(payload []byte, target any) error {
-	return decodeNewsPolicyPayload(payload, target)
 }
 
 func clonePolicyTime(value *time.Time) *time.Time {
