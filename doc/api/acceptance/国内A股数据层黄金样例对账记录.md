@@ -3,7 +3,7 @@
 - 采集时间：2026-10-30（UTC）
 - Git 提交基线：`986ed9cabf7711884a288efb20044632b624d685`
 - GitHub Actions：Live provider probe，Run ID `41018766329`
-- 固化夹具：`services/market-data/internal/provider/testdata/live_market_golden_20261030.json`
+- 固化夹具：`internal/marketdata/provider/testdata/live_market_golden_20261030.json`
 - 回归测试：`TestLiveGoldenCrossProviderQuoteAndDailyBarsParity`
 - 证据类型：真实公网 Provider 请求后的 Go 归一化结果，不是手工构造的模拟行情。
 - 范围限制：本记录是 Go 多 Provider 交叉样例，不是 Python/Go 双侧字段等价证明。
@@ -145,7 +145,7 @@ Go/Python 字段级等价、同花顺真实账号权限和全市场样本覆盖�
 - 采集源：Sina、Tencent；行情快照和日 K 均记录来源版本、源端时间/交易日期、单位、质量状态和降级原因。
 - Sina quote 为 valid，Tencent quote 为 degraded（成交量单位推断、volume_ratio 不支持）；两边日 K 均 degraded，成交额缺失且 amount_unit=unknown。Sina 日 K 还存在响应未回显证券代码的契约告警。
 - 日 K 两侧单位均为 shares，复权口径 none；真实样本不能作为 matched 基准。
-- 固定夹具路径：`services/market-data/internal/provider/testdata/live_market_cross_market_golden_20261030.json`。
+- 固定夹具路径：`internal/marketdata/provider/testdata/live_market_cross_market_golden_20261030.json`。
 - 来源提交：`720f2fc685376e29452ce3742ba398ff79089a03`；Live provider probe Run：`41042950111`。
 - 自动化测试将两市场日 K 输入统一比较器，要求 `not_comparable / quality_status_must_be_valid`。这是质量门禁证据，不是跨 Provider 对账通过证据。
 

@@ -39,6 +39,13 @@ await new Promise((resolve, reject) => {
 const address = server.address();
 assert.ok(address && typeof address === "object");
 const baseUrl = "http://127.0.0.1:" + address.port;
+const openStocksView = async targetPage => {
+  const stocksLink = targetPage.locator('.nav-link[data-view="stocks"]');
+  if (!(await stocksLink.isVisible())) {
+    await targetPage.locator('.nav-link[data-view="market"]').click();
+  }
+  await stocksLink.click();
+};
 function waitWithTimeout(promise, timeoutMs, message) {
   let timer;
   return Promise.race([
@@ -258,7 +265,7 @@ try {
   await page.waitForFunction(() => document.querySelector("#symbol-input")?.value === "300750.SZ");
 
   // 全市场分页结果应能直接进入研究工作区，并同步当前证券代码。
-  await page.locator('.nav-link[data-view="stocks"]').click();
+  await openStocksView(page);
   await page.locator("#load-market-stocks").click();
   await page.locator('#market-stocks-body button[data-market-stock-action="research"]').waitFor({ state: "visible" });
   const marketRowText = await page.locator("#market-stocks-body tr").first().textContent();
@@ -302,7 +309,7 @@ try {
   assert.match(await page.locator("#research-list-scope").textContent(), /当前浏览器列表/);
   await settingsSyncPage.close();
 
-  await page.locator('.nav-link[data-view="stocks"]').click();
+  await openStocksView(page);
   await page.locator("#symbol-input").fill("600519.SH");
   await page.locator('.nav-link[data-view="research"]').click();
   await page.locator("#research-view").waitFor({ state: "visible" });
@@ -318,7 +325,7 @@ try {
   await membershipSyncPage.close();
 
   // 个股研究资料在途时，另一标签页切换行情连接；必须取消旧请求并恢复整组加载按钮。
-  await page.locator('.nav-link[data-view="stocks"]').click();
+  await openStocksView(page);
   await page.locator("#symbol-input").fill("000001.SZ");
   await page.locator('.nav-link[data-view="research"]').click();
   // 请求进入路由后再切换连接；用延迟响应验证旧结果不会覆盖当前研究状态。
@@ -347,14 +354,14 @@ try {
   await researchSettingsSyncPage.close();
 
   // 跨标签页场景使用 000001.SZ；恢复到旧标的后再执行原有的迟到财务响应测试。
-  await page.locator('.nav-link[data-view="stocks"]').click();
+  await openStocksView(page);
   await page.locator("#symbol-input").fill("600519.SH");
   await page.locator('.nav-link[data-view="research"]').click();
   await page.locator("#load-fundamentals").click();
   await waitWithTimeout(oldRequestStarted, 10000, "等待旧标的财务请求启动超时");
 
   // 切换标的后必须中止旧请求，并恢复所有请求按钮，包括财务指标按钮。
-  await page.locator('.nav-link[data-view="stocks"]').click();
+  await openStocksView(page);
   await page.locator("#symbol-input").fill("000001.SZ");
   await page.locator('.nav-link[data-view="research"]').click();
   await page.waitForFunction(() => {
@@ -435,7 +442,7 @@ try {
     body: JSON.stringify({ error: { message: "not configured" } })
   }));
   await noKeyPage.goto(baseUrl, { waitUntil: "load", timeout: 30000 });
-  await noKeyPage.locator('.nav-link[data-view="stocks"]').click();
+  await openStocksView(noKeyPage);
   await noKeyPage.locator("#symbol-input").fill("600519.SH");
   await noKeyPage.locator('.nav-link[data-view="research"]').click();
   await noKeyPage.locator("#load-valuations").click();

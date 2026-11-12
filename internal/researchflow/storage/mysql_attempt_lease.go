@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"example.com/stock-analysis-flow/internal/researchflow/application"
 	"example.com/stock-analysis-flow/internal/researchflow/domain"
 )
 
@@ -39,6 +40,9 @@ func (r *MySQLRunRepository) RenewAttemptLease(
 		FROM researchflow_runs WHERE run_ref = ? FOR UPDATE`, runRef,
 	).Scan(&runStatus, &deadlineValue); err != nil {
 		return time.Time{}, fmt.Errorf("lock Researchflow lease run %q: %w", runRef, err)
+	}
+	if domain.RunStatus(runStatus) == domain.RunCancelling {
+		return time.Time{}, application.ErrRunCancellationUnavailable
 	}
 	if domain.RunStatus(runStatus) != domain.RunRunning {
 		return time.Time{}, ErrClaimRunUnavailable

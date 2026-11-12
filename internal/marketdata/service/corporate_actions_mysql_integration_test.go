@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"example.com/stock-analysis-flow/internal/marketdata/model"
+	"example.com/stock-analysis-flow/internal/marketdata/normalize"
 	"example.com/stock-analysis-flow/internal/marketdata/provider"
 	"example.com/stock-analysis-flow/internal/marketdata/repository"
 )
@@ -61,6 +62,61 @@ func TestAdjustmentFactorsAsOfFallsBackToLatestProviderVisibleRevision(t *testin
 	}
 	if len(got) != 1 || got[0].Factor != 1.1 || got[0].SourceVersion != "v1" {
 		t.Fatalf("service must return latest provider-visible revision v1, got %+v", got)
+	}
+}
+
+func TestDailyBarsAsOfIncludesCarryInAdjustmentFactorBeforeRequestedStart(t *testing.T) {
+	dsn := os.Getenv("MARKET_DATA_TEST_MYSQL_DSN")
+	if dsn == "" {
+		t.Skip("MARKET_DATA_TEST_MYSQL_DSN is not configured")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	store, err := repository.OpenMySQL(ctx, dsn)
+	if err != nil {
+		t.Fatalf("open MariaDB: %v", err)
+	}
+	defer store.Close()
+	if err := store.Migrate(ctx); err != nil {
+		t.Fatalf("migrate MariaDB: %v", err)
+	}
+
+	const symbol = "600519.SH"
+	const source = "daily-bars-asof-carry-in-test"
+	const sourceVersion = "carry-in-v1"
+	const startDate = "2026-10-29"
+	const endDate = "2026-10-29"
+	fetchedAt := time.Now().UTC().Add(-time.Minute)
+	availableAt := fetchedAt.Add(-time.Minute)
+	bar := model.DailyBar{
+		Symbol: symbol, TradeDate: startDate, Period: "1d",
+		Open: 10, High: 11, Low: 9, Close: 10,
+		Source: source, SourceVersion: sourceVersion,
+		AdjustmentBasis: model.AdjustmentNone, NormalizationVer: normalize.Version,
+		FetchedAt: fetchedAt, NormalizedAt: fetchedAt,
+		QualityStatus: model.QualityValid,
+	}
+	if err := store.UpsertBars(ctx, []model.DailyBar{bar}); err != nil {
+		t.Fatalf("save raw daily bar: %v", err)
+	}
+	factor := model.AdjustmentFactor{
+		Symbol: symbol, TradeDate: "2026-10-28", Factor: 2,
+		Basis: model.AdjustmentFactorBackward, Source: source, SourceVersion: sourceVersion,
+		FetchedAt: fetchedAt, AvailableAt: &availableAt, QualityStatus: model.QualityValid,
+	}
+	if err := store.SaveAdjustmentFactors(ctx, []model.AdjustmentFactor{factor}); err != nil {
+		t.Fatalf("save carry-in adjustment factor: %v", err)
+	}
+
+	service := &DataService{store: store, defaultBars: 200, maxBars: 2000}
+	bars, _, err := service.DailyBarsAsOf(ctx, symbol, startDate, endDate, 10, model.AdjustmentBackward, time.Now().UTC())
+	if err != nil {
+		t.Fatalf("DailyBarsAsOf should use the latest visible factor before the requested range: %v", err)
+	}
+	if len(bars) != 1 || bars[0].Close != 20 {
+		t.Fatalf("expected pre-range factor 2 to adjust raw close 10 to 20, got %+v", bars)
 	}
 }
 
@@ -268,5 +324,34 @@ func TestRefreshAdjustmentFactorsStopsOnPersistenceFailure(t *testing.T) {
 	}
 	if len(persisted) != 0 {
 		t.Fatalf("rejected refresh must not persist a partial revision: %+v", persisted)
+	}
+}
+
+func TestSaveCorporateActionsRejectsMissingSourceVersion(t *testing.T) {
+	dsn := os.Getenv("MARKET_DATA_TEST_MYSQL_DSN")
+	if dsn == "" {
+		t.Skip("MARKET_DATA_TEST_MYSQL_DSN is not configured")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	store, err := repository.OpenMySQL(ctx, dsn)
+	if err != nil {
+		t.Fatalf("open MariaDB: %v", err)
+	}
+	defer store.Close()
+	if err := store.Migrate(ctx); err != nil {
+		t.Fatalf("migrate MariaDB: %v", err)
+	}
+
+	action := model.CorporateAction{
+		Symbol: "600519.SH", ProviderEventID: "missing-source-version",
+		EventType: "cash_dividend", ExDate: "2026-10-30",
+		Source: "corporate-action-persistence-test", FetchedAt: time.Now().UTC(),
+		QualityStatus: model.QualityValid,
+	}
+	if err := store.SaveCorporateActions(ctx, []model.CorporateAction{action}); err == nil {
+		t.Fatal("corporate-action persistence must reject missing source_version")
 	}
 }

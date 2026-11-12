@@ -153,6 +153,7 @@ func researchEvidenceRecordFromPIT(
 		AuthorizationRef:      binding.AuthorizationRef.AuthorizationRef,
 		AuthorizationStatus:   string(binding.AuthorizationRef.Decision),
 		SystemAsOf:            request.SystemAsOf.UTC(),
+		RelationStatus:        EvidenceRelationNotProvided,
 		RelationRefs:          []string{},
 	}
 	if pit.ProviderRef != "" {

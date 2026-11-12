@@ -142,27 +142,39 @@ func TestOpenAPIErrorSchemaDocumentsPlatformFaultProjection(t *testing.T) {
 	}
 }
 
-func TestDataHTTPAuthAcceptsBothDocumentedCredentialForms(t *testing.T) {
+func TestDataHTTPAuthAcceptsOnlySingleXAPIKey(t *testing.T) {
 	next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 	})
 	handler := (&Server{apiKey: "contract-test-secret"}).auth(next)
 	tests := []struct {
 		name       string
-		header     string
-		value      string
+		setHeaders func(*http.Request)
 		wantStatus int
 	}{
-		{name: "X-API-Key", header: "X-API-Key", value: "contract-test-secret", wantStatus: http.StatusNoContent},
-		{name: "Bearer", header: "Authorization", value: "Bearer contract-test-secret", wantStatus: http.StatusNoContent},
-		{name: "missing", wantStatus: http.StatusUnauthorized},
-		{name: "wrong key", header: "X-API-Key", value: "wrong", wantStatus: http.StatusUnauthorized},
+		{name: "valid X-API-Key", setHeaders: func(r *http.Request) {
+			r.Header.Set("X-API-Key", "contract-test-secret")
+		}, wantStatus: http.StatusNoContent},
+		{name: "Bearer is not an alias", setHeaders: func(r *http.Request) {
+			r.Header.Set("Authorization", "Bearer contract-test-secret")
+		}, wantStatus: http.StatusUnauthorized},
+		{name: "missing key", wantStatus: http.StatusUnauthorized},
+		{name: "wrong key", setHeaders: func(r *http.Request) {
+			r.Header.Set("X-API-Key", "wrong")
+		}, wantStatus: http.StatusUnauthorized},
+		{name: "repeated key headers", setHeaders: func(r *http.Request) {
+			r.Header.Add("X-API-Key", "contract-test-secret")
+			r.Header.Add("X-API-Key", "contract-test-secret")
+		}, wantStatus: http.StatusUnauthorized},
+		{name: "empty key", setHeaders: func(r *http.Request) {
+			r.Header.Set("X-API-Key", "   ")
+		}, wantStatus: http.StatusUnauthorized},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			req := httptest.NewRequest(http.MethodGet, "/api/v1/market/quotes", nil)
-			if tt.header != "" {
-				req.Header.Set(tt.header, tt.value)
+			if tt.setHeaders != nil {
+				tt.setHeaders(req)
 			}
 			rec := httptest.NewRecorder()
 			handler.ServeHTTP(rec, req)

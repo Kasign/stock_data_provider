@@ -1,12 +1,19 @@
-# RiskDecision 聚合器非法枚举 fail-closed
+# RiskDecision 聚合器与硬门禁完整性
 
-## 修正内容
+## 聚合规则
 
-RiskDecision DTO 的 Validate 会拒绝未知 severity/status，但聚合器也可能被上游直接调用，不能假定输入一定经过 DTO Validate。
+- RuleSet 必须非空，且至少包含一条 `block` 规则。
+- 所有 `block` 规则必须 `required=true`；warn/info 规则可以 required 或 optional。
+- 任一 block triggered => reject，优先于其他 unknown。
+- 没有 block triggered，但至少一个 block unknown => unknown。
+- 至少一条 block 规则且全部 block not_triggered => pass；warn/info 不改变聚合结论。
+- 没有 block 规则、未知 severity 或非法 status 不得 pass。
 
-- 未知 severity：聚合结果至少为 unknown，不得被忽略后误判 pass。
-- 未知 reason status：无论属于 block 还是 warn/info，都不能产生 pass。
-- 已明确触发的 block 仍优先 reject；非法的其他规则不能抹掉已经成立的拒绝证据。
-- 原有空规则集、warn/info-only、block unknown 和全部 block not_triggered 语义保持不变。
+## 执行完整性
 
-该修正只加固聚合边界，不代替 DTO Validate，也不代表必需规则完整性已由 Application 保证。
+- 缺失 required 规则按其声明 severity 生成 unknown Reason；缺失 block 门禁必须明确生成 block + unknown。
+- RuleSet 外的 Reason、重复 code、severity 不匹配均拒绝。
+- Reasons 按 RuleSet 声明顺序输出。
+- DTO Validate 再次校验 Reason.code 唯一、Reasons 非空、status 与聚合结果一致，以及时间边界。
+
+该机制只定义执行完整性与聚合，不定义具体风险阈值或投资规则，也不允许评分/LLM 覆盖硬门禁。

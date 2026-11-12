@@ -64,6 +64,7 @@ func (a DeliveryAttempt) Validate() error {
 		return nil
 	}
 	if !isUTCTime(*a.FinishedAt) || a.FinishedAt.Before(a.StartedAt) ||
+		!a.FinishedAt.Before(a.LeaseExpiresAt) ||
 		*a.DurationMS < 0 || *a.DurationMS != a.FinishedAt.Sub(a.StartedAt).Milliseconds() ||
 		(a.RetryAfterAt != nil && (!isUTCTime(*a.RetryAfterAt) || a.Outcome == nil || *a.Outcome != DeliveryAttemptRejected)) {
 		return fmt.Errorf("%w: invalid completion time or duration", ErrInvalidDeliveryAttempt)

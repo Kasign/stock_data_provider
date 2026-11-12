@@ -23,6 +23,7 @@ import (
 	platformstorage "example.com/stock-analysis-flow/internal/platform/storage"
 	"example.com/stock-analysis-flow/internal/platform/taskqueue"
 	researchstorage "example.com/stock-analysis-flow/internal/research/storage"
+	researchflowstorage "example.com/stock-analysis-flow/internal/researchflow/storage"
 	serverconfig "example.com/stock-analysis-flow/internal/server/config"
 	serverdiagnostics "example.com/stock-analysis-flow/internal/server/diagnostics"
 	serverhealth "example.com/stock-analysis-flow/internal/server/health"
@@ -135,7 +136,10 @@ func Run(ctx context.Context) (runErr error) {
 		return fmt.Errorf("创建旧 Analysis 异步任务队列失败: %w", err)
 	}
 
-	lifecycle = runtime.NewLifecycle()
+	lifecycle, err = runtime.NewLifecycleWithRollbackTimeout(shutdownTimeout)
+	if err != nil {
+		return fmt.Errorf("创建 Server Lifecycle 失败: %w", err)
+	}
 	if err := lifecycle.Register(legacyAnalysisWorker{name: "legacy-analysis-worker", queue: tasks, enabled: serverRole == serverconfig.RoleWorker || serverRole == serverconfig.RoleAll}); err != nil {
 		return fmt.Errorf("注册旧 Analysis Worker 生命周期失败: %w", err)
 	}
@@ -270,6 +274,7 @@ func newMigrationRegistry() (*servermigration.Registry, error) {
 	}{
 		{namespace: "news", migrations: newsstorage.Migrations()},
 		{namespace: researchstorage.MigrationNamespace, migrations: researchstorage.Migrations()},
+		{namespace: researchflowstorage.MigrationNamespace, migrations: researchflowstorage.Migrations()},
 		{namespace: "notification", migrations: notificationstorage.Migrations()},
 	}
 	for _, registration := range registrations {

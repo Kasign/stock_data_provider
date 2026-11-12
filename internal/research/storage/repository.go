@@ -67,6 +67,15 @@ func (r repositoryBase) appendVersionWithHook(ctx context.Context, aggregateType
 	version int64, table, idColumn, versionColumn string, payload []byte, createdAt time.Time,
 	insertSQL string, insertArgs []any, validateNext func(previous []byte) error,
 	afterAppend func(tx *sql.Tx, previous []byte) error) error {
+	return r.appendVersionWithHooks(ctx, aggregateType, aggregateID, version, table, idColumn, versionColumn,
+		payload, createdAt, insertSQL, insertArgs, validateNext, nil, afterAppend)
+}
+
+func (r repositoryBase) appendVersionWithHooks(ctx context.Context, aggregateType, aggregateID string,
+	version int64, table, idColumn, versionColumn string, payload []byte, createdAt time.Time,
+	insertSQL string, insertArgs []any, validateNext func(previous []byte) error,
+	beforeAppend func(tx *sql.Tx, previous []byte) error,
+	afterAppend func(tx *sql.Tx, previous []byte) error) error {
 	if r.db == nil {
 		return ErrInvalidRepository
 	}
@@ -150,6 +159,11 @@ func (r repositoryBase) appendVersionWithHook(ctx context.Context, aggregateType
 			return fmt.Errorf("validate next research version: %w", err)
 		}
 		previousPayload = append([]byte(nil), previous...)
+	}
+	if beforeAppend != nil {
+		if err := beforeAppend(tx, previousPayload); err != nil {
+			return fmt.Errorf("validate research append references: %w", err)
+		}
 	}
 	if _, err := tx.ExecContext(ctx, insertSQL, insertArgs...); err != nil {
 		return fmt.Errorf("insert immutable research version: %w", err)

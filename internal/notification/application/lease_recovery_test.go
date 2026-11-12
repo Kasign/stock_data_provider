@@ -114,10 +114,10 @@ func TestAssessExpiredDeliveryLeaseClassifiesAttemptOutcomes(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			delivery, lease, now := recoveryFixture(t)
+			delivery.AttemptCount = 1
 			attempt := recoveryAttempt(t, delivery, lease, tc.outcome, tc.finished)
-			if tc.retryable {
-				attempt.Retryable = true
-			}
+			// 辅助函数为 rejected 提供可重试默认值；表驱动用例必须显式覆盖，避免永久拒绝被污染。
+			attempt.Retryable = tc.retryable
 			got, err := AssessExpiredDeliveryLease(delivery, lease, []domain.DeliveryAttempt{attempt}, now)
 			if err != nil || got.Action != tc.want {
 				t.Fatalf("want %s, got %+v err=%v", tc.want, got, err)
@@ -134,6 +134,7 @@ func TestAssessExpiredDeliveryLeaseClassifiesAttemptOutcomes(t *testing.T) {
 
 func TestAssessExpiredDeliveryLeaseRetainsRetryAfter(t *testing.T) {
 	delivery, lease, now := recoveryFixture(t)
+	delivery.AttemptCount = 1
 	running := recoveryAttempt(t, delivery, lease, domain.DeliveryAttemptRejected, false)
 	finishedAt := running.StartedAt.Add(time.Second)
 	retryAfter := finishedAt.Add(45 * time.Second)
@@ -173,6 +174,7 @@ func TestAssessExpiredDeliveryLeaseRequiresExpiredUTCLease(t *testing.T) {
 
 func TestAssessExpiredDeliveryLeaseDoesNotExposeProviderDetails(t *testing.T) {
 	delivery, lease, now := recoveryFixture(t)
+	delivery.AttemptCount = 1
 	attempt := recoveryAttempt(t, delivery, lease, domain.DeliveryAttemptRejected, true)
 	attempt.ErrorCode = stringPointerForRecovery("provider returned private response: " + strings.Repeat("x", 4))
 	if _, err := AssessExpiredDeliveryLease(delivery, lease, []domain.DeliveryAttempt{attempt}, now); !errors.Is(err, ErrLeaseRecoveryHistory) {
@@ -203,9 +205,8 @@ func TestAssessExpiredDeliveryLeaseWithoutCurrentAttemptRequiresRetryablePreviou
 				ExpiresAt: delivery.UpdatedAt.Add(30 * time.Second),
 			}
 			previous := recoveryAttempt(t, delivery, previousLease, tc.outcome, true)
-			if tc.retryable {
-				previous.Retryable = true
-			}
+			// 明确使用用例声明的 retryable，确保永久拒绝路径真实保持 fail-closed。
+			previous.Retryable = tc.retryable
 			delivery.AttemptCount = 1
 			lease.FencingToken++
 			got, err := AssessExpiredDeliveryLease(delivery, lease, []domain.DeliveryAttempt{previous}, now)
