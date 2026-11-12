@@ -12,9 +12,9 @@ import (
 )
 
 type getEvidencePITRepositoryStub struct {
-	record          EvidencePITRecord
-	err             error
-	afterRead       func()
+	record           EvidencePITRecord
+	err              error
+	afterRead        func()
 	afterContentRead func()
 }
 
