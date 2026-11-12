@@ -23,6 +23,7 @@ import (
 	platformstorage "example.com/stock-analysis-flow/internal/platform/storage"
 	"example.com/stock-analysis-flow/internal/platform/taskqueue"
 	researchstorage "example.com/stock-analysis-flow/internal/research/storage"
+	researchflowstorage "example.com/stock-analysis-flow/internal/researchflow/storage"
 	serverconfig "example.com/stock-analysis-flow/internal/server/config"
 	serverdiagnostics "example.com/stock-analysis-flow/internal/server/diagnostics"
 	serverhealth "example.com/stock-analysis-flow/internal/server/health"
@@ -270,6 +271,7 @@ func newMigrationRegistry() (*servermigration.Registry, error) {
 	}{
 		{namespace: "news", migrations: newsstorage.Migrations()},
 		{namespace: researchstorage.MigrationNamespace, migrations: researchstorage.Migrations()},
+		{namespace: researchflowstorage.MigrationNamespace, migrations: researchflowstorage.Migrations()},
 		{namespace: "notification", migrations: notificationstorage.Migrations()},
 	}
 	for _, registration := range registrations {

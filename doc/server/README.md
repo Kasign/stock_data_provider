@@ -1280,3 +1280,13 @@ Lifecycle.Stop 原实现通过 stopped 标记保证重复调用幂等，但并�
 - 代码现状核对：现有 Bootstrap 仍直接装配旧 Analysis Runner/Task Queue；Migration Registry 当前注册 News、Research、Notification；Diagnostics 聚合继续委托 Platform Runner；LLM Transport 复用 Platform BoundDoer。以上代码存在不等于模块装配、真实依赖或端到端验收通过。
 - 当前可执行边界：SRV-002/003/005/006/007/009 的剩余工作必须逐项对照已有代码和模块公开装配入口定点推进；SRV-004 不得创建占位 Factory，只有在模块公开构造入口、Port、Handler、Worker、Check、Migration 和配置来源可核实时才解除阻塞；SRV-008 继续等待 Outbox/Inbox 与 Dispatcher 所有权契约；SRV-010 继续等待 Data 迁移门禁。
 - 本轮未修改 `cmd/analysis-api`、`internal/server/**` 代码，未触碰其他模块目录，也未在 `integration` 上执行写操作或构建。下一阶段应先完成各模块公开装配入口的现状核对，再确定 SRV-004 是否具备真实可执行条件；不得根据目录存在或历史文档推断模块 Factory 已交付。
+
+
+### 12.53 SRV-007 Researchflow Migration 注册补齐（2026-11-12）
+
+- 以当前分支 HEAD `85d041f891c7fba86619f0b59becbd3079018bff` 为修改基线。代码核对确认 `internal/researchflow/storage` 已公开 `MigrationNamespace = "researchflow"` 和 `Migrations()`，Migration 内容由 Researchflow 所有，Server 只负责注册。
+- 原 Server Registry 只注册 News、Research、Notification，遗漏已经存在的 Researchflow Migration，导致 Researchflow 持久化表不会由 Root Server 的统一 Migration 流程创建或校验。
+- 在 Bootstrap 注册表中直接复用 Researchflow 的公开 Migration 列表和 namespace 常量；没有复制 SQL、没有修改模块 Migration、没有增加版本或字段。
+- 更新 Registry 单测，要求 namespace 集合包含 `researchflow`，并保持排序确定性。
+- 本次仅修改 `internal/server/bootstrap/bootstrap.go`、对应测试和本文档；不触碰其他模块代码，不执行 integration 合并或写操作。
+- 当前尚未执行 gofmt、Server 独立 Workflow、根模块全量测试或真实 MariaDB Migration 验收；本项只能标记为代码接线完成，不能标记为构建/数据库验收通过。
