@@ -1,6 +1,6 @@
 # 新闻模块开发任务与验收清单
 
-> 当前验收状态（2026-11-12，代码基线 `eac3269ebaa625bd583f5ef3a73a139ff02c3881`）：News Provider contract tests 与 News 全模块 gofmt/测试/Race/go vet 通过（Run [43210204658](https://github.com/Kasign/stock_data_provider/actions/runs/43210204658)）；根模块 Go test suite 的所有适用 Job 通过（Run [43210204807](https://github.com/Kasign/stock_data_provider/actions/runs/43210204807)），其中 News MariaDB 11.4 Repository/Migration 集成成功。Market Data 与 Compose/Docker Job 为 skipped，不计为通过。News 已完成策略版本存储、当前策略 Resolver、Evidence 事务型授权读取、Observation 写入前策略锁定及撤销竞态验收；News Diagnostics 的 Context 取消边界修复也已纳入上述 News 专项验证。GOV-CTR-006 公共 JCS Runtime Verifier 和 Server 生产装配仍缺失，未接入时必须 fail closed；available_at 继续保持 null，真实 Provider/Feed 网络验收仍需部署环境的凭证与来源授权证据。
+> 当前验收状态（2026-11-12，最新 News 代码提交 `30e15829b02a00251df29691acfb1700ecdba7b1`；当前分支文档 HEAD `f942b471112f54b25c6efaeb836d1e19d1c206b3`）：最近成功的 News 专项 Run [43210204658](https://github.com/Kasign/stock_data_provider/actions/runs/43210204658) 与根模块 Run [43210204807](https://github.com/Kasign/stock_data_provider/actions/runs/43210204807) 的实际 `head_sha` 均为 `eac3269ebaa625bd583f5ef3a73a139ff02c3881`，早于后续 Diagnostics Context 取消边界修复（最新代码提交 `30e15829`），因此不能作为最新代码通过证据。PR [#88](https://github.com/Kasign/stock_data_provider/pull/88) 已按验收约定合入 `integration`，Merge Commit 为 `85c78f19e4d8d231b29d78f5815bc72868dc326d`；截至本次复核尚未出现该 SHA 的 Integration CI Run。当前 Diagnostics 修复标记为代码已提交、CI 待验证。
 
 > 当前模块状态：News 自有领域代码质量门禁、Provider 固定响应契约和 MariaDB 11.4 持久化专项验收已有通过证据；生产受限内容披露仍受公共 JCS Runtime Verifier 注入和 Server 生产装配阻断；News 内部的策略指针锁定、授权复核与精确 Version 正文读取事务机制已实现。NEWS-CTR-001 的 available_at 严格 PIT 继续等待合格来源证据，不得从 published_at/fetched_at/observed_at 推导。
 > 历史记录说明：本文按日期累积的早期实施段落保留为过程记录；其中旧的未完成项、等待 CI 项和旧阻断状态不代表当前任务状态。当前状态以本段及文末“2026-11-12 当前任务边界与后续计划”为准。
@@ -1119,4 +1119,4 @@
 5. 等待具备来源证据的真实数据后，再单独实现 available_at 证据模型与 Get/List 严格 PIT；不以模拟样本或推断时间验收。
 6. 有真实 Provider 凭证和授权材料后，执行受控 Live Probe；否则不把固定响应契约测试描述为在线验收。
 
-本分支当前没有可在不依赖外部 Owner、真实授权或真实来源证据的情况下继续完成的高价值生产闭环代码任务。后续若没有新的 News 专属缺陷或合格外部证据，保持代码冻结，只处理明确的 News 范围缺陷和必要文档同步。
+本分支当前没有可在不依赖外部 Owner、真实授权或真实来源证据的情况下继续完成的高价值生产闭环代码任务；当前优先事项是取得 integration Merge Commit `85c78f1` 的 CI 验收结果。后续若没有新的 News 专属缺陷或合格外部证据，保持代码冻结，只处理明确的 News 范围缺陷和必要文档同步。
