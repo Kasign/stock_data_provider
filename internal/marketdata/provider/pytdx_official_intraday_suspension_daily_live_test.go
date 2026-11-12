@@ -12,27 +12,27 @@ import (
 )
 
 type pytdxOfficialSuspensionDailyReport struct {
-	GeneratedAt       string                                `json:"generated_at"`
-	Items              []pytdxOfficialSuspensionDailyItem    `json:"items"`
-	FullDaySuspensions []pytdxFullDaySuspensionWindowItem    `json:"full_day_suspensions,omitempty"`
+	GeneratedAt        string                             `json:"generated_at"`
+	Items              []pytdxOfficialSuspensionDailyItem `json:"items"`
+	FullDaySuspensions []pytdxFullDaySuspensionWindowItem `json:"full_day_suspensions,omitempty"`
 }
 
 type pytdxFullDaySuspensionWindowItem struct {
-	Symbol                 string   `json:"symbol"`
-	SuspensionStartDate    string   `json:"suspension_start_date"`
-	ResumeDate             string   `json:"resume_date"`
-	WindowStartDate        string   `json:"window_start_date"`
-	WindowEndDate          string   `json:"window_end_date"`
-	OfficialSuspensionURL  string   `json:"official_suspension_url"`
-	OfficialResumptionURL  string   `json:"official_resumption_url"`
-	ObservedDates          []string `json:"observed_dates,omitempty"`
-	PreSuspensionRows      int      `json:"pre_suspension_rows"`
-	SuspensionWindowRows   int      `json:"suspension_window_rows"`
-	ResumeRows             int      `json:"resume_rows"`
-	ResumeQualityStatus    string   `json:"resume_quality_status,omitempty"`
-	ResumeQualityReasons   []string `json:"resume_quality_reasons,omitempty"`
-	Status                 string   `json:"status"`
-	Error                  string   `json:"error,omitempty"`
+	Symbol                string   `json:"symbol"`
+	SuspensionStartDate   string   `json:"suspension_start_date"`
+	ResumeDate            string   `json:"resume_date"`
+	WindowStartDate       string   `json:"window_start_date"`
+	WindowEndDate         string   `json:"window_end_date"`
+	OfficialSuspensionURL string   `json:"official_suspension_url"`
+	OfficialResumptionURL string   `json:"official_resumption_url"`
+	ObservedDates         []string `json:"observed_dates,omitempty"`
+	PreSuspensionRows     int      `json:"pre_suspension_rows"`
+	SuspensionWindowRows  int      `json:"suspension_window_rows"`
+	ResumeRows            int      `json:"resume_rows"`
+	ResumeQualityStatus   string   `json:"resume_quality_status,omitempty"`
+	ResumeQualityReasons  []string `json:"resume_quality_reasons,omitempty"`
+	Status                string   `json:"status"`
+	Error                 string   `json:"error,omitempty"`
 }
 
 type pytdxOfficialSuspensionDailyItem struct {
@@ -63,7 +63,7 @@ func TestLivePytdxOfficialIntradaySuspensionDailyBars(t *testing.T) {
 		{Symbol: "603400.SH", TradeDate: "2025-06-25", OfficialURL: "https://www.sse.com.cn/disclosure/announcement/general/mainsuspension/c/c_20250625_10783012.shtml"},
 	}
 	report := pytdxOfficialSuspensionDailyReport{
-		GeneratedAt:       time.Now().UTC().Format(time.RFC3339),
+		GeneratedAt:        time.Now().UTC().Format(time.RFC3339),
 		Items:              make([]pytdxOfficialSuspensionDailyItem, 0, len(samples)),
 		FullDaySuspensions: make([]pytdxFullDaySuspensionWindowItem, 0, 1),
 	}
