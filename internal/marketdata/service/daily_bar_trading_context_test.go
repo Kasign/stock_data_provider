@@ -104,6 +104,28 @@ func TestAssessDailyBarTradingContextDoesNotExcludeMissingBarDuringIntradaySuspe
 	}
 }
 
+func TestAssessDailyBarTradingContextDoesNotPromoteNonValidSecurityStatusQuality(t *testing.T) {
+	calendar := &model.TradingCalendarSnapshot{
+		QualityStatus: model.QualityValid,
+		Items:         []model.TradingCalendarDay{{Date: "2026-10-20", IsTradingDay: true}},
+	}
+	for _, quality := range []model.QualityStatus{model.QualityDegraded, model.QualityUnknown} {
+		t.Run(string(quality), func(t *testing.T) {
+			status := dailyBarContextStatus("2026-10-20", "2026-10-01", true, model.SuspensionStatusNoEvent)
+			status.QualityStatus = quality
+			result := assessDailyBarTradingContext(calendar, nil,
+				map[string]*model.SecurityTradingStatusSnapshot{"2026-10-20": status}, nil)
+			if result.QualityStatus != model.QualityDegraded ||
+				!hasDailyBarContextReason(result.Reasons, "daily_bar_context_security_status_quality_not_valid:2026-10-20") {
+				t.Fatalf("non-valid security-status evidence must not produce valid context: %+v", result)
+			}
+			if !hasDailyBarContextReason(result.Reasons, "daily_bar_missing_on_confirmed_trading_day:2026-10-20") {
+				t.Fatalf("field-level evidence should remain visible without promoting overall quality: %+v", result)
+			}
+		})
+	}
+}
+
 func TestAssessDailyBarTradingContextMissingCalendarIsUnknown(t *testing.T) {
 	result := assessDailyBarTradingContext(nil, nil, nil, nil)
 	if result.QualityStatus != model.QualityDegraded ||

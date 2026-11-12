@@ -201,6 +201,11 @@ func assessDailyBarTradingContext(calendar *model.TradingCalendarSnapshot, bars 
 			}
 			continue
 		}
+		if status.QualityStatus != model.QualityValid {
+			// 字段级已知标志不能覆盖快照整体降级/未知状态，避免将非有效证据提升为有效上下文。
+			result.QualityStatus = model.QualityDegraded
+			result.Reasons = appendDailyBarContextReason(result.Reasons, "daily_bar_context_security_status_quality_not_valid:"+day.Date)
+		}
 		if status.TradeDate != day.Date || !status.TradingDayKnown || !status.IsTradingDay {
 			result.QualityStatus = model.QualityDegraded
 			result.Reasons = appendDailyBarContextReason(result.Reasons, "daily_bar_context_trading_day_unknown_or_conflicting:"+day.Date)
