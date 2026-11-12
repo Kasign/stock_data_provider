@@ -25,6 +25,7 @@ import (
 	researchstorage "example.com/stock-analysis-flow/internal/research/storage"
 	researchflowstorage "example.com/stock-analysis-flow/internal/researchflow/storage"
 	serverconfig "example.com/stock-analysis-flow/internal/server/config"
+	newsdiagnostics "example.com/stock-analysis-flow/internal/news/diagnostics"
 	serverdiagnostics "example.com/stock-analysis-flow/internal/server/diagnostics"
 	serverhealth "example.com/stock-analysis-flow/internal/server/health"
 	servermigration "example.com/stock-analysis-flow/internal/server/migration"
@@ -150,7 +151,7 @@ func Run(ctx context.Context) (runErr error) {
 		if err != nil {
 			return fmt.Errorf("创建旧 Analysis HTTP API 失败: %w", err)
 		}
-		diagnosticsService, err := serverdiagnostics.NewServiceWithMigration(storageResources, migrationRegistry)
+		diagnosticsService, err := newDiagnosticsService(storageResources, migrationRegistry)
 		if err != nil {
 			return fmt.Errorf("创建 Server 诊断服务失败: %w", err)
 		}
@@ -201,6 +202,12 @@ func Run(ctx context.Context) (runErr error) {
 	case <-httpComponent.Done():
 		return httpComponent.Result()
 	}
+}
+
+// newDiagnosticsService composes Server resource/schema checks with the
+// deterministic News parser self-checks. Domain checks remain owned by News.
+func newDiagnosticsService(shared *serverresources.Resources, registry *servermigration.Registry) (*serverdiagnostics.Service, error) {
+	return serverdiagnostics.NewServiceWithMigration(shared, registry, newsdiagnostics.ParserChecks())
 }
 
 func joinShutdownError(runErr, shutdownErr error) error {

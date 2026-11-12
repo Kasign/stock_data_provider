@@ -5,6 +5,9 @@ import (
 	"errors"
 	"reflect"
 	"testing"
+
+	platformdiagnostics "example.com/stock-analysis-flow/internal/platform/diagnostics"
+	servermigration "example.com/stock-analysis-flow/internal/server/migration"
 )
 
 func TestNewMigrationRegistryRegistersAvailableModules(t *testing.T) {
@@ -62,5 +65,28 @@ func TestStopConsumersThenCloseResourcesHandlesMissingLifecycle(t *testing.T) {
 	})
 	if err != nil || !closed {
 		t.Fatalf("shutdown without lifecycle = (%v, closed=%v), want nil and closed", err, closed)
+	}
+}
+
+
+func TestNewDiagnosticsServiceRegistersNewsParserChecks(t *testing.T) {
+	service, err := newDiagnosticsService(nil, servermigration.NewRegistry())
+	if err != nil {
+		t.Fatalf("newDiagnosticsService() error = %v", err)
+	}
+	report, err := service.Run(context.Background())
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	got := make(map[string]platformdiagnostics.Status, len(report.Diagnostics.Results))
+	for _, result := range report.Diagnostics.Results {
+		got[result.ID] = result.Observation.Status
+	}
+	for _, id := range []string{"news.parser.rss", "news.parser.atom"} {
+		if status, exists := got[id]; !exists {
+			t.Fatalf("diagnostics result %q is missing", id)
+		} else if status != platformdiagnostics.StatusHealthy {
+			t.Fatalf("diagnostics result %q status = %s, want healthy", id, status)
+		}
 	}
 }
