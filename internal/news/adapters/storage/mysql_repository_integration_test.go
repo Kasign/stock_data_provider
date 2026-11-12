@@ -1034,13 +1034,17 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	if err := <-publishDone; err != nil {
 		t.Fatalf("publish revocation after read commit: %v", err)
 	}
-	if _, _, err := repository.GetEvidenceContentWithCurrentAuthorization(
+	staleBindingCallbackCalled := false
+	_, _, staleBindingErr := repository.GetEvidenceContentWithCurrentAuthorization(
 		ctx, atomicBinding, secondObservation, secondVersion.Version, time.Now().UTC(),
 		func(_ context.Context, _ domain.CurrentAuthorizationPolicySet, _ domain.Observation) error {
+			staleBindingCallbackCalled = true
 			return nil
 		},
-	); !errors.Is(err, app.ErrNewsCurrentPolicyUnavailable) {
-		t.Fatalf("stale Binding after policy replacement error = %v, want current policy unavailable", err)
+	)
+	if !errors.Is(staleBindingErr, app.ErrNewsCurrentPolicyUnavailable) || staleBindingCallbackCalled {
+		t.Fatalf("stale Binding after policy replacement error=%v authorization_callback_called=%t, want fail closed before authorization",
+			staleBindingErr, staleBindingCallbackCalled)
 	}
 
 	// 撤销已经提交后，匹配新策略版本的读取也必须由领域授权规则拒绝。
