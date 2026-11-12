@@ -1,8 +1,8 @@
-> 当前状态核对（2026-11-12，Data 代码验收基线 `e39c3d5409b5b4f2c7b79da3dee5a6159e8efb34`）：最新 BaoStock 加强字段探针 Live Provider Run `43228986723` / Job `131219214147` 已明确 PASS；Go Test Suite Run `43229045731`、Go-Python parity Run `43228986785` 均 success。本文是追加式真实 Provider 运行证据账本，早期日期记录只描述当时结果。P0-89 只关闭指定证券/日期的 `tradestatus/isST` 字段语义样本，不代表完整 SecurityTradingStatus Provider。当前任务顺序以 [数据侧整体规划](../数据侧整体规划.md) 为准；CI 通过不能替代逐 Provider 单项结论。
+> 当前状态核对（2026-11-12，Data 代码验收基线 `9fe53c43c6c32408bbf59eb8c3c627b18a9bfe24`）：最新 Go Test Suite Run `43231652148` success；其 MariaDB Job `131228387935` 已通过业务表 Repository revision/PIT/reopen 测试（含 Fundamentals、Valuations），以及 DailyBar fallback、AdjustmentFactors/CorporateActions PIT 和 Probe HTTP + MariaDB 集成。BaoStock 加强字段探针 Live Provider Run `43228986723` / Job `131219214147` 明确 PASS。本文是追加式真实 Provider 运行证据账本；MariaDB 代码集成结果不等同于 Provider 真实数据验收，P0-89 也不代表完整 SecurityTradingStatus Provider。当前任务顺序以 [数据侧整体规划](../数据侧整体规划.md) 为准。
 
 - 适用分支：`feat/full-go-data-providers-api-switch`
 - 文档更新日期：2026-11-12
-- 最近代码验收基线：`e39c3d5409b5b4f2c7b79da3dee5a6159e8efb34`（Go Test Suite Run `43229045731` success）
+- 最近代码验收基线：`9fe53c43c6c32408bbf59eb8c3c627b18a9bfe24`（Go Test Suite Run `43231652148` success）
 - 当前结论：各 Provider/能力状态必须按后续逐条记录判定；没有对应真实请求记录的能力仍为未执行，不能从其他 Provider 的结果外推。
 
 ## 1. 验收状态口径
