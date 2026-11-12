@@ -108,17 +108,27 @@ func newLifecycleTestService(t *testing.T, auditErr error) (*SessionLifecycleSer
 	audit := &lifecycleTestAudit{err: auditErr}
 	now := time.Date(2026, 11, 12, 9, 0, 0, 0, time.UTC)
 	service, err := NewSessionLifecycleService(SessionLifecycleDependencies{
-		Credentials: credentials, Sessions: sessions, RateLimiter: limiter,
-		Hasher: lifecycleTestHasher{expected: "correct"}, Audit: audit,
+		Credentials: credentials,
+		Sessions:    sessions,
+		RateLimiter: limiter,
+		Hasher:      lifecycleTestHasher{expected: "correct"},
+		Audit:       audit,
 	}, SessionLifecycleConfig{
 		RateLimitHMACKey: []byte("0123456789abcdef0123456789abcdef"),
 		Cookie: platformsecurity.SessionCookieConfig{
-			Name: "__Secure-owner_session", Path: "/api", Secure: true, SameSite: http.SameSiteLaxMode,
+			Name:     "__Secure-owner_session",
+			Path:     "/api",
+			Secure:   true,
+			SameSite: http.SameSiteLaxMode,
 		},
-		IdleTTL: 12 * time.Hour, AbsoluteTTL: 7 * 24 * time.Hour,
+		IdleTTL:     12 * time.Hour,
+		AbsoluteTTL: 7 * 24 * time.Hour,
 		RateLimitPolicy: platformsecurity.LoginRateLimitPolicy{
-			AccountMaxFailures: 5, IPMaxFailures: 10, Window: 15 * time.Minute,
-			BaseBackoff: time.Second, MaxBackoff: 15 * time.Minute,
+			AccountMaxFailures: 5,
+			IPMaxFailures:      10,
+			Window:             15 * time.Minute,
+			BaseBackoff:        time.Second,
+			MaxBackoff:         15 * time.Minute,
 		},
 		Now: func() time.Time { return now },
 	})

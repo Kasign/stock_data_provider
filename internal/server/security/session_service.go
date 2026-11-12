@@ -79,9 +79,11 @@ func NewSessionLifecycleService(deps SessionLifecycleDependencies, cfg SessionLi
 	if cfg.AbsoluteTTL < cfg.IdleTTL || cfg.AbsoluteTTL > platformsecurity.DefaultSessionAbsoluteTTL {
 		return nil, errors.New("Session absolute TTL is outside Platform bounds")
 	}
-	if cfg.RateLimitPolicy.AccountMaxFailures < 1 || cfg.RateLimitPolicy.IPMaxFailures < 1 ||
-		cfg.RateLimitPolicy.Window < time.Millisecond || cfg.RateLimitPolicy.BaseBackoff < time.Millisecond ||
-		cfg.RateLimitPolicy.MaxBackoff < cfg.RateLimitPolicy.BaseBackoff {
+	if cfg.RateLimitPolicy.AccountMaxFailures < 1 || cfg.RateLimitPolicy.AccountMaxFailures > 100000 ||
+		cfg.RateLimitPolicy.IPMaxFailures < 1 || cfg.RateLimitPolicy.IPMaxFailures > 100000 ||
+		cfg.RateLimitPolicy.Window < time.Millisecond || cfg.RateLimitPolicy.Window > 24*time.Hour ||
+		cfg.RateLimitPolicy.BaseBackoff < time.Millisecond || cfg.RateLimitPolicy.BaseBackoff > 24*time.Hour ||
+		cfg.RateLimitPolicy.MaxBackoff < cfg.RateLimitPolicy.BaseBackoff || cfg.RateLimitPolicy.MaxBackoff > 24*time.Hour {
 		return nil, errors.New("login rate limit policy is incomplete")
 	}
 	now := cfg.Now
@@ -89,10 +91,17 @@ func NewSessionLifecycleService(deps SessionLifecycleDependencies, cfg SessionLi
 		now = time.Now
 	}
 	return &SessionLifecycleService{
-		credentials: deps.Credentials, sessions: deps.Sessions, rateLimiter: deps.RateLimiter,
-		hasher: deps.Hasher, audit: deps.Audit, cookie: cfg.Cookie,
-		idleTTL: cfg.IdleTTL, absoluteTTL: cfg.AbsoluteTTL, policy: cfg.RateLimitPolicy,
-		rateKey: append([]byte(nil), cfg.RateLimitHMACKey...), now: now,
+		credentials: deps.Credentials,
+		sessions:    deps.Sessions,
+		rateLimiter: deps.RateLimiter,
+		hasher:      deps.Hasher,
+		audit:       deps.Audit,
+		cookie:      cfg.Cookie,
+		idleTTL:     cfg.IdleTTL,
+		absoluteTTL: cfg.AbsoluteTTL,
+		policy:      cfg.RateLimitPolicy,
+		rateKey:     append([]byte(nil), cfg.RateLimitHMACKey...),
+		now:         now,
 	}, nil
 }
 
@@ -318,10 +327,13 @@ func (s *SessionLifecycleService) createSession(ctx context.Context, credentialV
 		return SessionIssue{}, "", err
 	}
 	record := platformsecurity.SessionRecord{
-		Subject: "owner", CreatedAt: now, LastSeenAt: now,
-		IdleExpiresAt: minTime(now.Add(s.idleTTL), now.Add(s.absoluteTTL)),
-		AbsoluteExpiresAt: now.Add(s.absoluteTTL), CredentialVersion: credentialVersion,
-		CSRFTokenDigest: csrfDigest,
+		Subject:           "owner",
+		CreatedAt:         now,
+		LastSeenAt:        now,
+		IdleExpiresAt:     minTime(now.Add(s.idleTTL), now.Add(s.absoluteTTL)),
+		AbsoluteExpiresAt: now.Add(s.absoluteTTL),
+		CredentialVersion: credentialVersion,
+		CSRFTokenDigest:   csrfDigest,
 	}
 	if err := s.sessions.Create(ctx, digest, record); err != nil {
 		return SessionIssue{}, "", err
