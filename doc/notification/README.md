@@ -32,12 +32,12 @@ Notification 是独立通知业务模块，负责事件接收、Subscription、T
 | 范围 | 状态 | 证据/限制 |
 |---|---|---|
 | 领域设计与字段契约 | 已建立 | 以 01/03 文档为准；发现契约矛盾先修正文档并评审 |
-| Schema/Golden 资产 | Schema/Golden 与测试代码已建立；本轮 CI 尚待执行 | 4 Schema、6 Golden；Draft 2020-12 Envelope/Payload Validator 和 Golden 测试已编写。此前 Run `43005827183` 未执行 Notification 测试；本轮 `f2dbe00` 的 Fanout 测试需在 integration 上获得执行证据。L1 状态以 PLAT-002 为准；真实 Adapter/Server 装配/生产渠道仍未验收 |
-| Go Notification Domain/Application | 部分实现 | EventEnvelope、JCS Fingerprint、EventReceiver、Subscription/DeliveryPlan、FanoutWorkItem 与有界 FanoutDispatcher 已实现；FanoutPlanFactory 需由真实数据/Server 装配注入，CI 尚待执行 |
-| Inbox/Subscription/DeliveryPlan/Fanout | 部分实现 | Inbox 与 FanoutWorkItem 同事务；Subscription 通过事务修订号固定快照并提供 keyset 分页；DeliveryPlan 复用既有幂等 Repository。单测和 MariaDB 集成测试已编写，尚待 CI/真实 DSN 执行 |
+| Schema/Golden 资产 | 资产与测试代码已建立；当前 CI 未提供 Notification 测试执行证据 | 4 Schema、6 Golden；Validator/Golden 测试已编写。Run `43142936331` 无 Notification 专项 Job，根模块测试在 gofmt 门禁前终止；不能据此标记测试通过。生产方 Contract Test 仍需独立验收 |
+| Go Notification Domain/Application | 核心实现已建立；当前 HEAD 测试未验证 | EventEnvelope、JCS Fingerprint、EventReceiver、Subscription/DeliveryPlan、FanoutWorkItem、有界 FanoutDispatcher、DeliveryExecution 与 Attempt/Recovery 已实现；Run `43142936331` 未执行根模块测试，无 Notification 专项 Job |
+| Inbox/Subscription/DeliveryPlan/Fanout | 模块代码已建立；真实依赖待验收 | Inbox 与 FanoutWorkItem 同事务；Subscription 通过事务修订号固定快照并提供 keyset 分页；测试代码已编写。当前 CI 未提供 Notification 测试执行证据，MariaDB L3=`not_comparable` |
 | Template/Renderer | 部分实现 | 固定版本 Registry、JSON Pointer 标量 allowlist、text/HTML 渲染、HTML 自动转义、CRLF Subject 拒绝和显式资源限制已实现；生产模板内容/持久化尚未实现 |
-| Channel/Dispatcher/Retry | 部分实现 | DeliveryExecutionService 与有界 FanoutDispatcher 已实现；FanoutPlanFactory 真实装配、Server Worker 生命周期及真实渠道 Adapter 仍待集成/L3 |
-| Repository/Migration | 部分实现 | 十类业务表及 Migration v1～v6；Fanout/Subscription Adapter 已实现；根 Migration 注册由 Server 负责，真实 MariaDB 执行证据仍缺 |
+| Channel/Dispatcher/Retry | 模块内执行链已建立；集成待完成 | DeliveryExecutionService、Attempt、Retry/Recovery 与 Unknown 对账入口已实现；真实 FanoutPlanFactory、Server Worker、身份目录和渠道 Adapter 仍待集成/L3 |
+| Repository/Migration | 模块内 Adapter 已建立；L3 未验收 | Migration v1～v6、MySQL Repository 已实现；根 Migration 注册由 Server 负责；缺少真实 `NOTIFICATION_MARIADB_TEST_DSN` 执行证据 |
 | 三生产方事件接入 | 未验收 | 仅按各生产方契约和真实测试证据逐项开放 |
 | 真实渠道与 L3 集成 | 未开始/不可比较 | 无真实凭据、回执、MariaDB/Worker 集成证据时不得标记通过 |
 
