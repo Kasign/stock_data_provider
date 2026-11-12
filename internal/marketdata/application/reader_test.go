@@ -11,17 +11,27 @@ import (
 )
 
 type fakeDataService struct {
-	quote           *model.Quote
-	quoteErr        error
-	currentBars     []model.DailyBar
-	currentWarnings []string
-	currentErr      error
-	pitBars         []model.DailyBar
-	pitWarnings     []string
-	pitErr          error
-	currentCalls    int
-	pitCalls        int
-	lastAsOf        time.Time
+	quote                    *model.Quote
+	quoteErr                 error
+	currentBars              []model.DailyBar
+	currentWarnings          []string
+	currentErr               error
+	pitBars                  []model.DailyBar
+	pitWarnings              []string
+	pitErr                   error
+	fundamentals             *model.FundamentalsSnapshot
+	fundamentalsErr          error
+	valuations               *model.ValuationSnapshot
+	valuationsErr            error
+	currentCalls             int
+	pitCalls                 int
+	currentFundamentalsCalls int
+	pitFundamentalsCalls     int
+	currentValuationsCalls   int
+	pitValuationsCalls       int
+	lastAsOf                 time.Time
+	lastFundamentalsAsOf     time.Time
+	lastValuationsAsOf       time.Time
 }
 
 func (f *fakeDataService) Quote(context.Context, string) (*model.Quote, bool, error) {
@@ -37,6 +47,28 @@ func (f *fakeDataService) DailyBarsAsOf(_ context.Context, _, _, _ string, _ int
 	f.pitCalls++
 	f.lastAsOf = asOf
 	return f.pitBars, f.pitWarnings, f.pitErr
+}
+
+func (f *fakeDataService) Fundamentals(context.Context, string, int, int) (*model.FundamentalsSnapshot, bool, error) {
+	f.currentFundamentalsCalls++
+	return f.fundamentals, false, f.fundamentalsErr
+}
+
+func (f *fakeDataService) FundamentalsAsOf(_ context.Context, _ string, _, _ int, asOf time.Time) (*model.FundamentalsSnapshot, error) {
+	f.pitFundamentalsCalls++
+	f.lastFundamentalsAsOf = asOf
+	return f.fundamentals, f.fundamentalsErr
+}
+
+func (f *fakeDataService) Valuations(context.Context, []string) (*model.ValuationSnapshot, bool, error) {
+	f.currentValuationsCalls++
+	return f.valuations, false, f.valuationsErr
+}
+
+func (f *fakeDataService) ValuationsAsOf(_ context.Context, _ []string, asOf time.Time) (*model.ValuationSnapshot, error) {
+	f.pitValuationsCalls++
+	f.lastValuationsAsOf = asOf
+	return f.valuations, f.valuationsErr
 }
 
 func TestReaderGetQuotePreservesNullablePrecisionAndMetadata(t *testing.T) {
@@ -229,5 +261,130 @@ func TestReaderGetDailyBarsEmptyResultRemainsUnknown(t *testing.T) {
 	}
 	if got.QualityStatus != app.QualityUnknown || len(got.Bars) != 0 {
 		t.Fatalf("empty data must remain unknown, got %+v", got)
+	}
+}
+
+func TestReaderGetFundamentalsSelectsCurrentAndPITUseCases(t *testing.T) {
+	availableAt := time.Date(2026, 11, 6, 8, 0, 0, 0, time.UTC)
+	observedAt := availableAt.Add(time.Minute)
+	snapshot := &model.FundamentalsSnapshot{
+		Symbol: "600519.SH", Year: 2025, Quarter: 4, HasData: true,
+		Sections: []model.FundamentalSection{{
+			Category: "profitability", ReportDate: "2025-12-31", PublicationDate: "2026-03-20",
+			AvailableAt: &availableAt, HasData: true, QualityStatus: model.QualityDegraded,
+			Metrics: []model.FundamentalMetric{{Key: "roe", Name: "净资产收益率", Value: 0.12, Unit: "ratio", SourceField: "roe"}},
+			QualityReasons: []string{"source_time_precision_date_only"},
+		}},
+		Source: "tushare", SourceVersion: "fund-v2", FetchedAt: availableAt.Add(2 * time.Minute),
+		SystemObservedAt: &observedAt, QualityStatus: model.QualityDegraded,
+		QualityReasons: []string{"some_sections_unavailable"},
+	}
+	backend := &fakeDataService{fundamentals: snapshot}
+	reader := &Reader{backend: backend}
+	query := app.FundamentalsQuery{Symbol: "600519.SH", Year: 2025, Quarter: 4}
+	current, err := reader.GetFundamentals(context.Background(), query)
+	if err != nil {
+		t.Fatalf("GetFundamentals(current) error = %v", err)
+	}
+	if backend.currentFundamentalsCalls != 1 || backend.pitFundamentalsCalls != 0 ||
+		current.Symbol != snapshot.Symbol || current.Year != snapshot.Year || current.Quarter != snapshot.Quarter ||
+		current.Source != snapshot.Source || current.SourceVersion != snapshot.SourceVersion ||
+		current.QualityStatus != app.QualityDegraded || len(current.Sections) != 1 ||
+		current.Sections[0].AvailableAt == nil || !current.Sections[0].AvailableAt.Equal(availableAt) ||
+		current.Sections[0].Metrics[0].SourceField != "roe" || current.Sections[0].Metrics[0].Unit != "ratio" {
+		t.Fatalf("fundamentals current mapping mismatch: calls=%d/%d result=%+v", backend.currentFundamentalsCalls, backend.pitFundamentalsCalls, current)
+	}
+	*current.Sections[0].AvailableAt = availableAt.Add(time.Hour)
+	current.Sections[0].Metrics[0].Key = "mutated"
+	current.Sections[0].QualityReasons[0] = "mutated"
+	if !snapshot.Sections[0].AvailableAt.Equal(availableAt) ||
+		snapshot.Sections[0].Metrics[0].Key != "roe" ||
+		snapshot.Sections[0].QualityReasons[0] != "source_time_precision_date_only" {
+		t.Fatal("fundamentals Application DTO aliases backend data")
+	}
+	cutoff := availableAt.Add(30 * time.Minute)
+	query.SystemObservedAtCutoff = &cutoff
+	historical, err := reader.GetFundamentals(context.Background(), query)
+	if err != nil {
+		t.Fatalf("GetFundamentals(PIT) error = %v", err)
+	}
+	if backend.currentFundamentalsCalls != 1 || backend.pitFundamentalsCalls != 1 ||
+		!backend.lastFundamentalsAsOf.Equal(cutoff) ||
+		historical.SystemObservedAt == nil || !historical.SystemObservedAt.Equal(observedAt) {
+		t.Fatalf("fundamentals PIT mapping mismatch: %+v", historical)
+	}
+}
+
+func TestReaderGetValuationsSelectsCurrentAndPITUseCases(t *testing.T) {
+	providerTime := time.Date(2026, 11, 6, 8, 0, 0, 0, time.UTC)
+	observedAt := providerTime.Add(time.Minute)
+	pe, pb := 25.5, 3.2
+	snapshot := &model.ValuationSnapshot{
+		RequestedSymbols: []string{"600519.SH"}, Total: 1,
+		Items: []model.ValuationItem{{
+			Symbol: "600519.SH", Code: "600519", Name: "贵州茅台", PETTM: &pe, PBMRQ: &pb,
+			Source: "eastmoney", SourceVersion: "valuation-v3", FetchedAt: providerTime,
+			QualityStatus: model.QualityDegraded, QualityReasons: []string{"some_metric_missing"},
+		}},
+		ProviderReportDate: "2026-11-05", ProviderTimestamp: &providerTime,
+		Source: "eastmoney", SourceVersion: "valuation-v3", FetchedAt: providerTime,
+		SystemObservedAt: &observedAt, QualityStatus: model.QualityDegraded,
+		QualityReasons: []string{"provider_timestamp_is_aggregate"},
+	}
+	backend := &fakeDataService{valuations: snapshot}
+	reader := &Reader{backend: backend}
+	query := app.ValuationsQuery{Symbols: []string{"600519.SH"}}
+	current, err := reader.GetValuations(context.Background(), query)
+	if err != nil {
+		t.Fatalf("GetValuations(current) error = %v", err)
+	}
+	if backend.currentValuationsCalls != 1 || backend.pitValuationsCalls != 0 ||
+		current.Total != 1 || len(current.Items) != 1 || current.Items[0].PETTM == nil ||
+		*current.Items[0].PETTM != pe || current.Items[0].PBMRQ == nil || *current.Items[0].PBMRQ != pb ||
+		current.ProviderReportDate != "2026-11-05" || current.ProviderTimestamp == nil ||
+		current.SourceVersion != "valuation-v3" || current.QualityStatus != app.QualityDegraded {
+		t.Fatalf("valuation current mapping mismatch: calls=%d/%d result=%+v", backend.currentValuationsCalls, backend.pitValuationsCalls, current)
+	}
+	*current.Items[0].PETTM = 1
+	current.Items[0].QualityReasons[0] = "mutated"
+	current.RequestedSymbols[0] = "mutated"
+	if *snapshot.Items[0].PETTM != pe || snapshot.Items[0].QualityReasons[0] != "some_metric_missing" ||
+		snapshot.RequestedSymbols[0] != "600519.SH" {
+		t.Fatal("valuations Application DTO aliases backend data")
+	}
+	cutoff := observedAt.Add(time.Minute)
+	query.SystemObservedAtCutoff = &cutoff
+	historical, err := reader.GetValuations(context.Background(), query)
+	if err != nil {
+		t.Fatalf("GetValuations(PIT) error = %v", err)
+	}
+	if backend.currentValuationsCalls != 1 || backend.pitValuationsCalls != 1 ||
+		!backend.lastValuationsAsOf.Equal(cutoff) ||
+		historical.SystemObservedAt == nil || !historical.SystemObservedAt.Equal(observedAt) {
+		t.Fatalf("valuation PIT mapping mismatch: %+v", historical)
+	}
+}
+
+func TestReaderFundamentalsAndValuationsPreserveBackendErrors(t *testing.T) {
+	fundamentalsErr := errors.New("fundamentals storage unavailable")
+	valuationsErr := errors.New("valuations revision not found")
+	reader := &Reader{backend: &fakeDataService{
+		fundamentalsErr: fundamentalsErr, valuationsErr: valuationsErr,
+	}}
+	if _, err := reader.GetFundamentals(context.Background(), app.FundamentalsQuery{
+		Symbol: "600519.SH", Year: 2025, Quarter: 4,
+	}); !errors.Is(err, fundamentalsErr) {
+		t.Fatalf("GetFundamentals() error = %v, want %v", err, fundamentalsErr)
+	}
+	if _, err := reader.GetValuations(context.Background(), app.ValuationsQuery{
+		Symbols: []string{"600519.SH"},
+	}); !errors.Is(err, valuationsErr) {
+		t.Fatalf("GetValuations() error = %v, want %v", err, valuationsErr)
+	}
+	if _, err := reader.GetFundamentals(nil, app.FundamentalsQuery{}); err == nil {
+		t.Fatal("GetFundamentals must reject nil context")
+	}
+	if _, err := reader.GetValuations(nil, app.ValuationsQuery{}); err == nil {
+		t.Fatal("GetValuations must reject nil context")
 	}
 }
