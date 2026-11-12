@@ -182,3 +182,16 @@ JCS 仍只调用项目公共 GOV-CTR-006 Runtime Verifier；本模式不复制 J
 - 历史版本行不更新 Payload 或 Hash；撤销仍必须作为新版本发布。
 
 本阶段仅完成策略版本写入和当前指针切换。当前策略读取、授权 Scope 评估、原子 Evidence 正文读取以及 RACE-01～07 仍未完成；生产受限内容披露继续关闭。
+
+## 10. 当前策略 Resolver 实现（2026-11-12）
+
+已由 News MariaDB Repository 实现既有 Application Port
+`CurrentNewsAuthorizationPolicyResolver`，未新增第二套策略解析接口：
+
+- 按 Binding 中的完整策略快照逐项读取当前指针及其不可变版本，要求当前版本与快照版本完全一致。
+- 在同一只读事务中读取策略组合，避免预检阶段混合读取不同提交时点的策略版本。
+- 校验策略类型、策略引用、版本、Payload 领域结构、创建时间及 SHA-256；缺失指针、版本不匹配、载荷损坏或策略集合不完整均 fail closed。
+- 复用既有 `EvaluateNewsAuthorizationAgainstCurrentPolicies` 完成最终版本、状态和有效期判定。
+- Source、Endpoint、Provider Output 的用途与内容级别许可按现有策略字段计算；Endpoint 未设置的覆盖字段按既有领域语义继承 Source。无法映射的用途不自动推断为其他用途，保持拒绝。
+
+该 Resolver 仍是读取前预检，不构成 NEWS-CTR-002 的原子读取保证。最终正文读取仍必须在同一 MariaDB 事务中锁定全部当前策略指针、复核授权并读取正文，提交成功后才可返回内容。RACE-01～07 尚未完成。
