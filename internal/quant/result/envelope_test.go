@@ -24,7 +24,7 @@ func validTrendPayload(t *testing.T) TrendPayload {
 		EvidenceMetrics:  []metric.Metric{},
 		ConflictRefs:     []string{},
 		QualityStatus:    trend.QualityValid,
-		SystemAsOf:       envelopeTestTime(t),
+		SystemAsOf:       "2026-11-09T00:59:00Z",
 		AlgorithmVersion: "trend-algorithm.v1",
 	}
 	payload, err := NewTrendPayload(value)
@@ -148,7 +148,8 @@ func TestEnvelopeRejectsManifestFieldDrift(t *testing.T) {
 		QualityStatus: "valid", ResultStatus: "completed", SchemaVersion: "1.0.0",
 		PayloadSchemaVersion: "1.0.0", AlgorithmVersion: "trend-algorithm.v1",
 		ParameterFingerprint: "sha256:envelope-test-parameters",
-		SystemAsOf: envelopeTestTime(t), InputSnapshotRefs: []string{"snapshot:envelope-test"},
+		SystemAsOf: envelopeTestTime(t),
+		InputSnapshotRefs: []string{"snapshot:envelope-test"},
 	}, payloadJSON)
 	if err != nil {
 		t.Fatal(err)
@@ -235,7 +236,7 @@ func TestPayloadConstructorsCopyCallerOwnedMemory(t *testing.T) {
 	value := trend.Result{
 		TrendCode: "price_trend", Direction: trend.DirectionUnknown, Phase: trend.PhaseUnknown,
 		Period: "20d", EvidenceMetrics: []metric.Metric{}, ConflictRefs: []string{"conflict:one"},
-		QualityStatus: trend.QualityValid, SystemAsOf: envelopeTestTime(t),
+		QualityStatus: trend.QualityValid, SystemAsOf: "2026-11-09T00:59:00Z",
 		AlgorithmVersion: "trend-algorithm.v1",
 	}
 	payload, err := NewTrendPayload(value)
