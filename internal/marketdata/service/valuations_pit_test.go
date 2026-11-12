@@ -74,6 +74,9 @@ func TestValuationsAsOfReadsHistoricalRevisionFromMariaDBWithoutProviderFallback
 	if err != nil || hit {
 		t.Fatalf("revised Valuations hit=%v err=%v", hit, err)
 	}
+	if latest.Items[0].PETTM == nil || *latest.Items[0].PETTM != changed {
+		t.Fatalf("live revised snapshot must expose the updated metric %v, got %+v", changed, latest.Items[0].PETTM)
+	}
 	latestAsOf := time.Now().UTC().Add(time.Millisecond)
 
 	beforeFirst, err := svc.ValuationsAsOf(ctx, []string{"600519.SH"}, firstAsOf.Add(-time.Minute))
