@@ -186,7 +186,6 @@ func (f *ProductionFanoutPlanFactory) Build(
 	return FanoutPlanDecision{Matched: true, Plan: plan}, nil
 }
 
-
 // validateFanoutSubscription enforces the frozen Subscription field contract
 // before resolving any downstream dependency. Event-specific filter schema lookup
 // and matching are still performed by SubscriptionFilterMatcher.
