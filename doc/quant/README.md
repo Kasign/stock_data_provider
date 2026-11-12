@@ -7,7 +7,7 @@
 
 ## 当前状态
 
-当前代码验收 SHA：`d39e76e2bf4353ea3caeb58c4d536644a6cc5fdc`（2026-11-12）；Quant 专项 CI Workflow `43147915093` 已通过 gofmt、Quant 全量单测、Manifest 30 秒 Fuzz、Race、Vet。
+当前代码验收 SHA：`2ee9a479e027078296bee814781f65a2bb944e17`（2026-11-12）；Quant 专项 CI Workflow `43150754831` 已通过 gofmt、Quant 全量单测、Manifest 30 秒 Fuzz、Race、Vet。
 
 已具备首批 Indicator/Factor 纯计算、CalculationContext、基础 Registry、RiskDecision/RuleSet 执行框架、TrendResult DTO、Manifest/ResultRef、Repository Save Port/MemoryRepository，以及 QuantResult Envelope 初版。
 
@@ -37,7 +37,7 @@
 项目级状态：QNT-CTR-004/005 均为 `frozen`（DEC-PLAT-002-051）。未完成的 Payload 子类型、运行时授权和消费者验收属于 L2 实现符合性待办，不改变契约冻结状态。
 
 当前剩余阻塞：
-- Indicator/Factor：补齐各自强类型 Payload 容器 Schema/Golden、字段/顺序校验及 Registry 驱动的 Metric 语义校验；完成前保持未注册。
+- Indicator：容器 Schema/Golden/结构 Validator 已完成；仍待逐指标 Registry Entry 元数据，未注册到 Envelope。Factor：容器 Schema/Golden/Validator 仍待完成，且 DATA-CTR-005 deferred 门禁未解除。
 - Quant 授权：GetResult、AuthorizedResultReader 和 AccessAuditor Port 已建立；生产当前策略源、与存储同一致性边界的原子读取、审计落库仍需 Server/Platform Storage Adapter 接入并做撤销竞态验收。当前不能把接口契约和内存测试视为生产授权已通过。
 - Data：DailyBars v2 Decimal 输入、真实 PIT/复权/交易日历及质量证据；没有真实数据证据，不标记真实数据验收通过。
 - Platform/Server：正式 Storage/事务接入、根 Migration 注册和统一 Diagnostics 装配。
