@@ -887,6 +887,75 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	if content.SourceSummary != secondVersion.Version.Content.SourceSummary {
 		t.Fatalf("exact version content mismatch: got %+v want %+v", content, secondVersion.Version.Content)
 	}
+
+	atomicPolicyVersion := "atomic-source-v1"
+	if _, err := db.ExecContext(ctx, "UPDATE news_observations SET source_policy_version_id = ? WHERE observation_id = ?",
+		atomicPolicyVersion, secondObservation.ID); err != nil {
+		t.Fatalf("set atomic read policy trace: %v", err)
+	}
+	secondObservation.SourcePolicyVersionID = atomicPolicyVersion
+	atomicResourceRef, err := domain.NewsEvidenceResourceRef(secondVersion.Version.NewsID, secondVersion.Version.VersionNo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	atomicBinding := domain.NewsAuthorizationBinding{
+		CallerRef: "service:research", ResourceRef: atomicResourceRef,
+		PurposeCode: "research_analysis", RequestedContentLevel: domain.AuthorizationContentSummary,
+		ProviderRef: domain.NullableOpaqueRef{Present: true},
+		EndpointRef: domain.NullableOpaqueRef{Present: true},
+		SourceRef: secondObservation.SourceID,
+		AuthorizationRef: domain.NewsAuthorizationRef{
+			AuthorizationRef: fmt.Sprintf("news-it-atomic-auth-%d", time.Now().UnixNano()),
+			PolicyOwner: "news", PolicyVersion: "news-it-atomic-snapshot",
+			Decision: domain.AuthorizationDecisionAllowed, PurposeCode: "research_analysis",
+			ContentLevel: domain.AuthorizationContentSummary, SubjectRef: "service:research",
+			ResourceRef: atomicResourceRef, DecidedAt: time.Now().UTC().Add(-time.Minute).Format(time.RFC3339Nano),
+			ExpiresAt: domain.NullableDateTime{Present: true}, Conditions: []string{},
+			DecisionFingerprint: strings.Repeat("a", 64),
+		},
+		PolicySnapshot: domain.AuthorizationPolicySnapshot{
+			SnapshotRef: "news-it-atomic-snapshot",
+			Policies: []domain.AuthorizationPolicyVersion{{
+				PolicyType: domain.NewsPolicyTypeSource, PolicyRef: secondObservation.SourceID,
+				PolicyVersion: atomicPolicyVersion,
+			}},
+		},
+	}
+	atomicPayload, err := json.Marshal(domain.SourcePolicy{
+		Status: domain.AuthorizationApproved,
+		AllowedPurposes: []domain.Purpose{domain.PurposeInternalPersonalResearch},
+		AllowedContentKinds: []domain.ContentKind{domain.ContentAbstract},
+		EvidenceRef: "news-it-atomic-source-evidence",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	atomicPublisher, err := app.NewPublishNewsPolicyVersion(repository)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := atomicPublisher.Execute(ctx, domain.NewsPolicyTypeSource, secondObservation.SourceID, atomicPolicyVersion, atomicPayload); err != nil {
+		t.Fatalf("publish atomic read source policy: %v", err)
+	}
+	atomicContent, err := repository.GetEvidenceContentWithCurrentAuthorization(
+		ctx, atomicBinding, secondObservation, secondVersion.Version, time.Now().UTC().Add(time.Second),
+		func(readCtx context.Context, current domain.CurrentAuthorizationPolicySet) error {
+			if err := readCtx.Err(); err != nil {
+				return err
+			}
+			decision := domain.EvaluateNewsAuthorizationAgainstCurrentPolicies(atomicBinding, current, time.Now().UTC())
+			if !decision.Allowed {
+				return fmt.Errorf("atomic read authorization denied: %s", decision.ReasonCode)
+			}
+			return nil
+		},
+	)
+	if err != nil {
+		t.Fatalf("atomic authorized evidence read: %v", err)
+	}
+	if atomicContent.SourceSummary != secondVersion.Version.Content.SourceSummary {
+		t.Fatalf("atomic evidence content mismatch: got %+v want %+v", atomicContent, secondVersion.Version.Content)
+	}
 	if _, err := repository.GetEvidenceContentAt(ctx, secondObservation.NewsID, secondVersion.Version.ID, secondVersion.Version.ObservedAt.Add(-time.Second)); !errors.Is(err, app.ErrEvidencePITNotFound) {
 		t.Fatalf("content before system_as_of error = %v, want PIT not found", err)
 	}
