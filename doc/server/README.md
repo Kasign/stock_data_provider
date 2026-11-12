@@ -1575,3 +1575,11 @@ Server Bootstrap
 - 将 `internal/server/security` 加入独立 CI 的普通测试、Race 和 Vet 目标。该包包含 Owner Session Authenticator、Lifecycle Service、Security Audit Writer 的 Server 组合逻辑及对应状态机测试，是 SRV-005 的直接归属包，必须独立执行。
 - 本次不纳入 `internal/server/llmtransport`：它依赖 `internal/llm` 的构建状态，尚未在本分支 CI 证据中确认可稳定编译；不通过跳过或屏蔽依赖错误伪造验收。
 - 本次只修正 Server 独立 CI 的实际覆盖范围，不改变业务代码和契约；后续结果以新 Workflow 对当前 SHA 的测试、Race、Vet 结果为准。
+
+
+### 12.74 SRV-004 LLM Platform Transport 纳入独立 CI（2026-11-12）
+
+- `internal/server/llmtransport` 是 Server 对 LLM HTTP/SSE Port 的生产适配器：将 LLM Provider 固定目的地址策略绑定到 Server 持有的 Platform HTTP Client，并同时实现普通请求与流式请求接口。
+- 本包已有覆盖 HTTPS Host/Port 精确匹配、禁止重定向/重试、SSE Body 所有权、Header 隔离、Provider/Policy 不匹配拒绝及 Adapter 构造的测试；它是 Server-owned 生产代码，不应仅因依赖 `internal/llm` 而排除在 Server CI 外。
+- 将该包加入独立 CI 的普通测试、Race 和 Vet。该项验证的是 Server Transport Adapter 的编译与包级行为，不代表 LLM Provider 凭证、Capability Evidence 已完成生产配置，也不代表真实 Gateway 联通。
+- 本次不在 Bootstrap 构造 LLM Adapter：当前 Server Process Config 尚未提供完整 Provider/Capability/Secret 装载入口；未具备可信配置和能力证据前，不创建空配置或虚假 Gateway 实例。
