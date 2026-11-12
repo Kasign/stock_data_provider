@@ -45,10 +45,12 @@ func (w *SQLSecurityAuditWriter) Write(ctx context.Context, event platformsecuri
 	)
 	if err != nil {
 		return &platformfault.Fault{
-			Class: platformfault.ClassUnavailable, Code: "server.security_audit.write_failed",
+			Class:       platformfault.ClassUnavailable,
+			Code:        "server.security_audit.write_failed",
 			SafeMessage: "security audit event could not be persisted",
-			Dependency: "mariadb", Retryable: false,
-			Cause: fmt.Errorf("insert security audit event: %w", err),
+			Dependency:  "mariadb",
+			Retryable:   false,
+			Cause:       fmt.Errorf("insert security audit event: %w", err),
 		}
 	}
 	return nil

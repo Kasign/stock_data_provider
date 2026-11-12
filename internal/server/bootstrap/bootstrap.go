@@ -29,8 +29,8 @@ import (
 	serverhealth "example.com/stock-analysis-flow/internal/server/health"
 	servermigration "example.com/stock-analysis-flow/internal/server/migration"
 	serverresources "example.com/stock-analysis-flow/internal/server/resources"
-	serversecurity "example.com/stock-analysis-flow/internal/server/security"
 	runtime "example.com/stock-analysis-flow/internal/server/runtime"
+	serversecurity "example.com/stock-analysis-flow/internal/server/security"
 	"example.com/stock-analysis-flow/internal/service"
 )
 

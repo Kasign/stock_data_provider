@@ -64,12 +64,12 @@ func newAuditWriterTestDB(connection *auditWriterTestConnection) *sql.DB {
 
 func validAuditEvent() platformsecurity.SecurityAuditEvent {
 	return platformsecurity.SecurityAuditEvent{
-		EventType: platformsecurity.AuditLoginSucceeded,
-		Subject: "owner",
-		Result: platformsecurity.AuditResultSuccess,
+		EventType:  platformsecurity.AuditLoginSucceeded,
+		Subject:    "owner",
+		Result:     platformsecurity.AuditResultSuccess,
 		OccurredAt: time.Date(2026, 11, 12, 9, 0, 0, 0, time.FixedZone("test", 8*60*60)),
-		RequestID: "request-123",
-		Source: platformsecurity.AuditSourceOwnerSession,
+		RequestID:  "request-123",
+		Source:     platformsecurity.AuditSourceOwnerSession,
 		ReasonCode: "credentials_verified",
 	}
 }
