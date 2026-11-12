@@ -95,7 +95,8 @@ func (e ResearchEvent) Validate() error {
 	for _, ref := range e.EvidenceRefs {
 		evidenceRefs[ref] = struct{}{}
 	}
-	timeTypes := make(map[EventTimeType]struct{}, len(e.SourceTimes))
+	timeTypes := make(map[EventTimeType][]time.Time, len(e.SourceTimes))
+	sourceTimeKeys := make(map[string]struct{}, len(e.SourceTimes))
 	for index, sourceTime := range e.SourceTimes {
 		if err := sourceTime.Validate(); err != nil {
 			return fmt.Errorf("source_times[%d]: %w", index, err)
@@ -103,7 +104,12 @@ func (e ResearchEvent) Validate() error {
 		if _, exists := evidenceRefs[sourceTime.EvidenceRef]; !exists {
 			return fmt.Errorf("source_times[%d].evidence_ref must exist in evidence_refs", index)
 		}
-		timeTypes[sourceTime.TimeType] = struct{}{}
+		key := sourceTime.EvidenceRef + "\x00" + string(sourceTime.TimeType)
+		if _, exists := sourceTimeKeys[key]; exists {
+			return fmt.Errorf("source_times contains duplicate evidence/time_type pair %s/%s", sourceTime.EvidenceRef, sourceTime.TimeType)
+		}
+		sourceTimeKeys[key] = struct{}{}
+		timeTypes[sourceTime.TimeType] = append(timeTypes[sourceTime.TimeType], sourceTime.Value)
 	}
 	for _, item := range []struct {
 		name     string
@@ -114,9 +120,16 @@ func (e ResearchEvent) Validate() error {
 		{"published_at", e.PublishedAt, TimePublishedAt},
 		{"available_at", e.AvailableAt, TimeAvailableAt},
 	} {
-		if item.value != nil {
-			if _, exists := timeTypes[item.timeType]; !exists {
-				return fmt.Errorf("%s requires a matching source_times entry", item.name)
+		if item.value == nil {
+			continue
+		}
+		values := timeTypes[item.timeType]
+		if len(values) == 0 {
+			return fmt.Errorf("%s requires a matching source_times entry", item.name)
+		}
+		for _, sourceValue := range values {
+			if !sourceValue.Equal(*item.value) {
+				return fmt.Errorf("%s conflicts with source_times; normalized value must be null", item.name)
 			}
 		}
 	}
