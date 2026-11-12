@@ -217,6 +217,22 @@ func (s *DataService) saveValuationRevision(ctx context.Context, snapshot *model
 }
 
 // ValuationsAsOf 只读取 MariaDB 中截至系统观察时点已记录的估值快照，不回源实时 Provider。
+func valuationSnapshotEligibleAsOf(symbols []string, candidate *model.ValuationSnapshot, asOf time.Time) bool {
+	if candidate == nil || asOf.IsZero() || candidate.SystemObservedAt == nil ||
+		candidate.SystemObservedAt.After(asOf) || candidate.FetchedAt.IsZero() || candidate.FetchedAt.After(asOf) ||
+		(candidate.ProviderTimestamp != nil && candidate.ProviderTimestamp.After(asOf)) ||
+		(candidate.ProviderReportDate != "" && candidate.ProviderReportDate > asOf.In(marketLocation()).Format("2006-01-02")) ||
+		validateValuationSnapshot(symbols, candidate) != nil {
+		return false
+	}
+	for _, item := range candidate.Items {
+		if item.FetchedAt.IsZero() || item.FetchedAt.After(asOf) {
+			return false
+		}
+	}
+	return true
+}
+
 func (s *DataService) ValuationsAsOf(ctx context.Context, rawSymbols []string, asOf time.Time) (*model.ValuationSnapshot, error) {
 	symbols, err := normalizeValuationSymbols(rawSymbols)
 	if err != nil {
@@ -242,19 +258,7 @@ func (s *DataService) ValuationsAsOf(ctx context.Context, rawSymbols []string, a
 	bestRank := 0
 	for index := range revisions {
 		candidate := &revisions[index]
-		itemFetchedAfterCutoff := false
-		for _, item := range candidate.Items {
-			if item.FetchedAt.IsZero() || item.FetchedAt.After(asOf) {
-				itemFetchedAfterCutoff = true
-				break
-			}
-		}
-		if candidate.SystemObservedAt == nil || candidate.SystemObservedAt.After(asOf) ||
-			candidate.FetchedAt.IsZero() || candidate.FetchedAt.After(asOf) ||
-			itemFetchedAfterCutoff ||
-			(candidate.ProviderTimestamp != nil && candidate.ProviderTimestamp.After(asOf)) ||
-			(candidate.ProviderReportDate != "" && candidate.ProviderReportDate > asOf.In(marketLocation()).Format("2006-01-02")) ||
-			validateValuationSnapshot(symbols, candidate) != nil {
+		if !valuationSnapshotEligibleAsOf(symbols, candidate, asOf) {
 			continue
 		}
 		rank := 0

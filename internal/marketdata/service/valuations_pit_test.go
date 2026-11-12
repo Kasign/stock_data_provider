@@ -29,6 +29,58 @@ func TestValuationsAsOfRejectsInvalidCutoffBeforeStorageAccess(t *testing.T) {
 	}
 }
 
+func TestValuationSnapshotEligibleAsOfRequiresAllRecordedTimesAtCutoff(t *testing.T) {
+	asOf := time.Date(2026, 11, 6, 10, 0, 0, 0, marketLocation())
+	providerTime := asOf.Add(-time.Minute)
+	observedAt := asOf.Add(-30 * time.Second)
+	snapshot := validValuationsForFallbackTest("eastmoney")
+	snapshot.FetchedAt = asOf.Add(-20 * time.Second)
+	snapshot.Items[0].FetchedAt = asOf.Add(-10 * time.Second)
+	snapshot.ProviderTimestamp = &providerTime
+	snapshot.ProviderReportDate = asOf.Format("2006-01-02")
+	snapshot.SystemObservedAt = &observedAt
+
+	if !valuationSnapshotEligibleAsOf([]string{"600519.SH"}, snapshot, asOf) {
+		t.Fatal("snapshot with all evidence at or before as_of should be eligible")
+	}
+
+	tests := []struct {
+		name   string
+		mutate func(*model.ValuationSnapshot)
+	}{
+		{name: "snapshot fetched after cutoff", mutate: func(value *model.ValuationSnapshot) {
+			value.FetchedAt = asOf.Add(time.Nanosecond)
+		}},
+		{name: "item fetched after cutoff", mutate: func(value *model.ValuationSnapshot) {
+			value.Items[0].FetchedAt = asOf.Add(time.Nanosecond)
+		}},
+		{name: "item fetch time missing", mutate: func(value *model.ValuationSnapshot) {
+			value.Items[0].FetchedAt = time.Time{}
+		}},
+		{name: "system observation after cutoff", mutate: func(value *model.ValuationSnapshot) {
+			after := asOf.Add(time.Nanosecond)
+			value.SystemObservedAt = &after
+		}},
+		{name: "provider timestamp after cutoff", mutate: func(value *model.ValuationSnapshot) {
+			after := asOf.Add(time.Nanosecond)
+			value.ProviderTimestamp = &after
+		}},
+		{name: "provider report date after cutoff date", mutate: func(value *model.ValuationSnapshot) {
+			value.ProviderReportDate = asOf.AddDate(0, 0, 1).Format("2006-01-02")
+		}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			candidate := *snapshot
+			candidate.Items = append([]model.ValuationItem(nil), snapshot.Items...)
+			test.mutate(&candidate)
+			if valuationSnapshotEligibleAsOf([]string{"600519.SH"}, &candidate, asOf) {
+				t.Fatal("snapshot with evidence after or missing at as_of must be excluded")
+			}
+		})
+	}
+}
+
 func TestValuationsAsOfReadsHistoricalRevisionFromMariaDBWithoutProviderFallback(t *testing.T) {
 	dsn := os.Getenv("MARKET_DATA_TEST_MYSQL_DSN")
 	if dsn == "" {
