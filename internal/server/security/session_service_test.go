@@ -242,8 +242,10 @@ func TestSessionLifecycleLogoutRevokesSessionAndClearsCookie(t *testing.T) {
 	if len(sessions.revoked) != 1 || sessions.revoked[0] != oldDigest {
 		t.Fatalf("Logout() did not revoke the active Session: %+v", sessions.revoked)
 	}
-	if got := audit.events[len(audit.events)-1].EventType; got != platformsecurity.AuditLogout {
-		t.Fatalf("last audit event = %q, want logout", got)
+	if len(audit.events) != 4 ||
+		audit.events[2].EventType != platformsecurity.AuditLogout ||
+		audit.events[3].EventType != platformsecurity.AuditSessionRevoked {
+		t.Fatalf("logout audit events must record action and revocation outcome: %+v", audit.events)
 	}
 }
 
@@ -262,6 +264,11 @@ func TestSessionLifecycleLogoutReturnsClearingCookieWhenAuditFails(t *testing.T)
 	}
 	if len(sessions.revoked) != 1 {
 		t.Fatalf("Session was not revoked before audit: %+v", sessions.revoked)
+	}
+	if len(audit.events) != 4 ||
+		audit.events[2].EventType != platformsecurity.AuditLogout ||
+		audit.events[3].EventType != platformsecurity.AuditSessionRevoked {
+		t.Fatalf("both logout audit events must be attempted even when persistence fails: %+v", audit.events)
 	}
 }
 

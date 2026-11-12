@@ -1522,3 +1522,14 @@ Server Bootstrap
 - 不擅自定义保留期限、自动清理或归档任务；在运维保留策略冻结前，审计数据只追加，不进行破坏性清理。
 - 单测使用标准库 database/sql 测试 Connector 验证参数化写入、UTC 时间、非法事件在访问 DB 前拒绝、数据库错误 Fault、Migration 定义；真实 MariaDB Migration 与写入 E2E 尚未执行。
 - 本轮仅新增 Server 审计存储能力及 Migration 注册，不在 Bootstrap 创建或启用 Session 登录服务，不新增 HTTP 路由/DTO。
+
+
+### 12.68 SRV-005 Logout 双事件审计与安全边界复审（2026-11-12）
+
+- Review 确认 PLAT-CTR-003 定义了独立的 `logout` 与 `session.revoked` Audit EventType。Logout 成功撤销 Session 后，Server 现在分别记录用户退出动作和 Session 撤销结果，避免只保留动作而缺少状态结果。
+- 两条审计写入均会尝试执行；任一写入失败都会返回聚合错误，但已经完成的 Session 撤销不会回滚，清除 Cookie 仍必须由调用方发出。测试验证正常路径的事件顺序，以及审计失败时仍尝试写入两类事件并返回清除 Cookie。
+- 复审记录两项跨层限制，不在 Server 私自改变公共原语：
+  1. `SessionStore` 目前只有 `LookupAndTouch`，没有只读 Lookup；`SessionAuthenticator` 在读取 Session 后才能验证 CSRF，因此错误 CSRF 请求仍可能刷新 idle TTL。需要 Platform 提供只读读取或原子校验/Touch 原语后再修正；Server 不直连 Redis 私有实现。
+  2. Session 生命周期服务的账号/IP 限流摘要当前采用带域分离的 HMAC-SHA256；PLAT-CTR-003 第 7 节文字定义为 SHA-256 小写十六进制摘要。HMAC 可降低 IP 摘要被离线枚举的风险，但属于实现与契约文字差异；在契约 Owner 明确前不静默改为无密钥摘要，也不宣称完全符合该条。
+- Logout、RotateSession、ChangePassword 仍是内部用例；调用方必须先完成可信身份、Origin/Host 和 CSRF 验证。SRV-CTR-001 仍 deferred，因此本轮不增加 HTTP 路由/DTO，不在 Bootstrap 启用浏览器 Session。
+- 本轮未进行真实 MariaDB/Redis E2E；包级 CI 仅验证 Server 代码和 Fake/SQL Connector 测试，不代表部署验收。

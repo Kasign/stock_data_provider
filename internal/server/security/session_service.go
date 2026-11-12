@@ -226,9 +226,11 @@ func (s *SessionLifecycleService) Logout(ctx context.Context, rawToken, requestI
 	if err != nil {
 		return nil, err
 	}
-	auditErr := s.writeAudit(ctx, requestID, platformsecurity.AuditLogout,
+	logoutErr := s.writeAudit(ctx, requestID, platformsecurity.AuditLogout,
+		"owner", platformsecurity.AuditResultSuccess, platformsecurity.AuditSourceOwnerSession, "owner_logout")
+	revokeErr := s.writeAudit(ctx, requestID, platformsecurity.AuditSessionRevoked,
 		"owner", platformsecurity.AuditResultSuccess, platformsecurity.AuditSourceOwnerSession, "session_revoked")
-	return cookie, auditErr
+	return cookie, errors.Join(logoutErr, revokeErr)
 }
 
 func (s *SessionLifecycleService) RotateSession(ctx context.Context, rawToken, requestID string) (SessionIssue, error) {
