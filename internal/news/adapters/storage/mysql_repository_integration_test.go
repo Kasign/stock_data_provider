@@ -888,6 +888,7 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 		atomicPolicyVersion, secondObservation.ID); err != nil {
 		t.Fatalf("set atomic read policy trace: %v", err)
 	}
+	expectedAtomicContent := secondVersion.Version.Content
 	atomicPIT, err := repository.GetEvidenceVersionAt(ctx, app.GetEvidenceRequest{
 		NewsID: secondObservation.NewsID, VersionID: secondVersion.Version.ID, SystemAsOf: time.Now().UTC(),
 	})
@@ -955,8 +956,8 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("atomic authorized evidence read: %v", err)
 	}
-	if atomicContent.SourceSummary != secondVersion.Version.Content.SourceSummary {
-		t.Fatalf("atomic evidence content mismatch: got %+v want %+v", atomicContent, secondVersion.Version.Content)
+	if atomicContent.SourceSummary != expectedAtomicContent.SourceSummary {
+		t.Fatalf("atomic evidence content mismatch: got %+v want %+v", atomicContent, expectedAtomicContent)
 	}
 
 	if _, err := repository.GetEvidenceContentWithCurrentAuthorization(
