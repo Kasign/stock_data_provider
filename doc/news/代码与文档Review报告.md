@@ -441,3 +441,31 @@
 ### 本轮结论
 
 News 自身代码质量和 MariaDB 专项验证已取得当前 CI 通过证据。当前剩余事项均受公共能力、Server 组合根、策略 Owner 或真实来源证据约束；没有发现可通过在 News 内重复开发公共能力来安全关闭的缺口。后续按“有明确新证据再推进”的方式执行，不新增空壳接口、字段、表或 WebUI 专用 API。
+
+
+## 十五、2026-11-12 TOCTOU 代码现状纠正与用途映射复核
+
+### Evidence 授权读取一致性
+
+此前第 1、5、6 节记录的“授权复核与内容读取不在同一一致性边界”已被后续实现取代，不再是当前代码缺口。当前实现如下：
+
+- Application：`internal/news/app/get_evidence.go` 要求 Repository 实现 `EvidenceAtomicContentRepository`；不满足时构造失败，避免回退到无锁正文读取路径。
+- Storage：`internal/news/adapters/storage/evidence_authorization_read.go` 在单个 InnoDB Repeatable Read 事务中，按 Binding 顺序锁定当前策略指针行，读取并校验不可变策略版本，重新读取精确 Observation/Version，执行授权回调，再读取正文；只有事务提交成功才返回正文。
+- 并发测试：News MariaDB Repository Integration 已覆盖读取事务先持有策略指针锁、撤销发布等待读取提交、撤销提交后旧 Binding 失效，以及过期 PIT/版本和 Observation 绑定校验等场景。
+- Run `43210204807` 的 News MariaDB Repository and Migration integration Job 为 success；上述事务实现不再列为待开发 TOCTOU 代码任务。
+
+仍未关闭的是公共 GOV-CTR-006 JCS Runtime Verifier 的实际依赖注入和 Server 生产装配。事务一致性机制已存在，不代表没有 JCS 验证器时可以开放受限内容；缺少 Verifier/可信策略依赖仍必须 fail-closed。
+
+### risk_review 用途映射
+
+- NEWS-CTR-002 将 `risk_review` 列为合法的显式 `purpose_code`。
+- 当前 News Domain 通用 `Purpose` 枚举包含 `internal_business`，但 `authorizationPurposeForCode` 只映射 `research_analysis` 与 `user_display`；未知映射返回拒绝。
+- 现有《新闻模块与公共平台接入矩阵》明确 `internal_business` 没有默认映射，不能自动推断为 `research_analysis` 或 `risk_review`。因此当前拒绝 `risk_review` 是 fail-closed 行为，不能仅为“支持枚举”而擅自补映射。
+- 是否允许在受控调用显式声明 `risk_review` 时，将其映射到领域策略的 `PurposeInternalBusiness`，仍需确认其授权含义；确认前保持拒绝，不修改 Domain 枚举、策略规则或契约。
+
+### 当前 Review 状态修订
+
+1. 将“TOCTOU 机制未实现”从当前阻断项中移除；保留“公共 JCS Verifier/Server 生产装配未完成”作为披露门禁。
+2. available_at 仍无符合冻结准入规则的真实来源字段，继续 NULL，不实施推断。
+3. `risk_review` 的显式用途到领域策略映射尚需语义确认，当前拒绝行为不视为可绕过的缺陷。
+4. 真实 Provider/Feed 网络、账号授权和生产 DNS/出口验收仍等待真实环境证据。
