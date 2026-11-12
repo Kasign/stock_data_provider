@@ -25,7 +25,7 @@ func (r *MySQLRepository) GetEvidenceContentWithCurrentAuthorization(
 ) (domain.ContentLayers, error) {
 	if r == nil || r.db == nil || ctx == nil || authorize == nil ||
 		domain.ValidateNewsAuthorizationBindingForEvidence(binding, observation, version) != nil ||
-		systemAsOf.IsZero() || !isEvidenceUTC(systemAsOf) {
+		systemAsOf.IsZero() || !isEvidenceUTC(systemAsOf) || systemAsOf.After(time.Now().UTC()) {
 		return domain.ContentLayers{}, app.ErrInvalidEvidenceQuery
 	}
 	if err := ctx.Err(); err != nil {

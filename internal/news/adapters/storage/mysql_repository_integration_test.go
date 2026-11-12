@@ -726,7 +726,7 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	if len(credentialsBefore) != 0 {
 		t.Fatalf("identity credential visible before creation: %+v", credentialsBefore)
 	}
-	identityAsOf := time.Now().UTC().Add(time.Second)
+	identityAsOf := time.Now().UTC()
 	credentialsAt, err := repository.ListIdentityCredentialsAt(ctx, sourceID, identityCandidates, identityAsOf)
 	if err != nil {
 		t.Fatalf("query identity at system_as_of: %v", err)
@@ -933,7 +933,7 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 		t.Fatalf("publish atomic read source policy: %v", err)
 	}
 	atomicContent, err := repository.GetEvidenceContentWithCurrentAuthorization(
-		ctx, atomicBinding, secondObservation, secondVersion.Version, time.Now().UTC().Add(time.Second),
+		ctx, atomicBinding, secondObservation, secondVersion.Version, time.Now().UTC(),
 		func(readCtx context.Context, current domain.CurrentAuthorizationPolicySet) error {
 			if err := readCtx.Err(); err != nil {
 				return err
@@ -952,6 +952,13 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 		t.Fatalf("atomic evidence content mismatch: got %+v want %+v", atomicContent, secondVersion.Version.Content)
 	}
 
+	if _, err := repository.GetEvidenceContentWithCurrentAuthorization(
+		ctx, atomicBinding, secondObservation, secondVersion.Version, secondVersion.Version.ObservedAt.Add(-time.Second),
+		func(context.Context, domain.CurrentAuthorizationPolicySet) error { return nil },
+	); !errors.Is(err, app.ErrEvidencePITNotFound) {
+		t.Fatalf("atomic content before system_as_of error = %v, want PIT not found", err)
+	}
+
 	// 读取事务先锁定当前指针时，撤销发布必须等待读取提交；随后旧 Binding 立即失效。
 	revokedPolicyVersion := "atomic-source-v2"
 	revokedPayload, err := json.Marshal(domain.SourcePolicy{
@@ -968,7 +975,7 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	readDone := make(chan error, 1)
 	go func() {
 		_, readErr := repository.GetEvidenceContentWithCurrentAuthorization(
-			ctx, atomicBinding, secondObservation, secondVersion.Version, time.Now().UTC().Add(time.Second),
+			ctx, atomicBinding, secondObservation, secondVersion.Version, time.Now().UTC(),
 			func(readCtx context.Context, current domain.CurrentAuthorizationPolicySet) error {
 				decision := domain.EvaluateNewsAuthorizationAgainstCurrentPolicies(atomicBinding, current, time.Now().UTC())
 				if !decision.Allowed {
@@ -1014,7 +1021,7 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 		t.Fatalf("publish revocation after read commit: %v", err)
 	}
 	if _, err := repository.GetEvidenceContentWithCurrentAuthorization(
-		ctx, atomicBinding, secondObservation, secondVersion.Version, time.Now().UTC().Add(time.Second),
+		ctx, atomicBinding, secondObservation, secondVersion.Version, time.Now().UTC(),
 		func(context.Context, domain.CurrentAuthorizationPolicySet) error { return nil },
 	); !errors.Is(err, app.ErrNewsCurrentPolicyUnavailable) {
 		t.Fatalf("stale Binding after policy replacement error = %v, want current policy unavailable", err)
@@ -1031,7 +1038,7 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 		t.Fatalf("set revoked policy trace: %v", err)
 	}
 	_, revokedReadErr := repository.GetEvidenceContentWithCurrentAuthorization(
-		ctx, revokedBinding, revokedObservation, secondVersion.Version, time.Now().UTC().Add(time.Second),
+		ctx, revokedBinding, revokedObservation, secondVersion.Version, time.Now().UTC(),
 		func(readCtx context.Context, current domain.CurrentAuthorizationPolicySet) error {
 			decision := domain.EvaluateNewsAuthorizationAgainstCurrentPolicies(revokedBinding, current, time.Now().UTC())
 			if !decision.Allowed {
