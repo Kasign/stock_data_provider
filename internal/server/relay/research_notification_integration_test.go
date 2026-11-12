@@ -108,19 +108,19 @@ func TestResearchOutboxRelayMariaDB(t *testing.T) {
 		t.Fatalf("create Research Event Service: %v", err)
 	}
 	created, err := researchService.CreateEvent(ctx, researchapp.CreateEventCommand{
-		EventType: "integration.test_event",
-		Title:     "Research Notification relay integration event",
-		Status:    "detected",
-		SubjectRefs: []string{"stock:600000"},
-		EvidenceRefs: []string{},
-		SystemObservedAt: now,
-		SystemAsOf: now,
-		ImpactHypothesisRefs: []string{},
-		InvalidationConditions: []string{},
-		Uncertainty: []string{},
+		EventType:                    "integration.test_event",
+		Title:                        "Research Notification relay integration event",
+		Status:                       "detected",
+		SubjectRefs:                  []string{"stock:600000"},
+		EvidenceRefs:                 []string{},
+		SystemObservedAt:             now,
+		SystemAsOf:                   now,
+		ImpactHypothesisRefs:         []string{},
+		InvalidationConditions:       []string{},
+		Uncertainty:                  []string{},
 		TimeNormalizationRuleVersion: "1.0.0",
-		SourceTimes: []researchapp.EventSourceTime{},
-		DerivedFromRefs: []researchapp.EventRef{},
+		SourceTimes:                  []researchapp.EventSourceTime{},
+		DerivedFromRefs:              []researchapp.EventRef{},
 	})
 	if err != nil {
 		t.Fatalf("create Research Event and transactional Outbox: %v", err)
