@@ -33,7 +33,7 @@ Research 不采集新闻、不拥有行情事实、不重算 Quant 指标，不�
 | RSC-005 Claim/Hypothesis | Domain、认识论校验、状态迁移、版本追加、supersedes_version 字段及当前版本头校验、Application、SQL Repository | Evidence/Scope 真实引用解析、真实研究样本 |
 | RSC-006 Scenario | 新增 Scenario/Condition/ConditionGroup 领域模型，expected_value 限定为标量或一层标量数组，递归 ConditionGroup 校验按 DEC-033 执行 | Quant Metric Registry/结果引用由 Quant Owner 校验；Scenario Application/Storage 接入待完成 |
 | RSC-007 Storage/Outbox | Context/Event/Claim/Evidence Repository、Migration v1（初版最终结构；无 v2-v5 兼容迁移）、事务 Outbox、领取/租约/重试/确认/拒绝；最终结构初始化测试待本轮 CI 验证 | 根 Server Migration 注册、Server→Notification Relay 接线、授权续期历史留档语义 |
-| RSC-008 Diagnostics | Context/Event/Claim/Evidence 快照 Check、Run PIT、脱敏和快照隔离；Research 全模块测试通过；Evidence Check 通过 Application GetEvidence 执行 Owner Authorizer 调用 | 真实 Owner Adapter、Researchflow FLOW-009 Facade 和 Runner 集成 |
+| RSC-008 Diagnostics | Context/Event/Claim/Evidence 快照 Check、Run PIT、脱敏和快照隔离；历史 Research CI 曾通过；Evidence Check 通过 Application GetEvidence 执行 Owner Authorizer 调用 | 真实 Owner Adapter、Researchflow FLOW-009 Facade 和 Runner 集成 |
 
 ## 诊断边界
 

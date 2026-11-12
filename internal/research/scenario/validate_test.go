@@ -2,6 +2,7 @@ package scenario
 
 import (
 	"encoding/json"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -127,5 +128,19 @@ func TestExistsOperatorRejectsExplicitNullExpectedValue(t *testing.T) {
 	s.Conditions[0].Condition.ExpectedValuePresent = true
 	if err := s.Validate(); err == nil || !strings.Contains(err.Error(), "must be omitted") {
 		t.Fatalf("explicit null expected_value should fail: %v", err)
+	}
+}
+
+func TestScenarioMatchesFrozenGolden(t *testing.T) {
+	data, err := os.ReadFile("../../../doc/整体任务规划/golden/RSC-CTR-002-scenario.golden.json")
+	if err != nil {
+		t.Fatalf("read frozen Scenario Golden: %v", err)
+	}
+	var value Scenario
+	if err := json.Unmarshal(data, &value); err != nil {
+		t.Fatalf("decode frozen Scenario Golden: %v", err)
+	}
+	if err := value.Validate(); err != nil {
+		t.Fatalf("frozen Scenario Golden does not validate: %v", err)
 	}
 }

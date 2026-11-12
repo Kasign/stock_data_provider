@@ -279,11 +279,19 @@ func (c ScenarioCondition) Validate() error {
 		c.ConditionType == ConditionIndicator || c.ConditionType == ConditionFundamental ||
 		c.ConditionType == ConditionMarket || c.ConditionType == ConditionIndustry
 	if needsMetric {
-		if c.MetricRef == nil || strings.TrimSpace(*c.MetricRef) == "" {
+		if c.MetricRef == nil {
 			return fmt.Errorf("metric_ref is required for this condition_type")
 		}
-		if c.Operator != OperatorExists && c.Operator != OperatorNotExists && (c.Unit == nil || strings.TrimSpace(*c.Unit) == "") {
-			return fmt.Errorf("unit is required for metric comparisons")
+		if err := required("metric_ref", *c.MetricRef); err != nil {
+			return err
+		}
+		if c.Operator != OperatorExists && c.Operator != OperatorNotExists {
+			if c.Unit == nil {
+				return fmt.Errorf("unit is required for metric comparisons")
+			}
+			if err := required("unit", *c.Unit); err != nil {
+				return err
+			}
 		}
 	}
 	switch c.Operator {
