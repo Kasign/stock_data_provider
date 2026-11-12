@@ -1,4 +1,4 @@
-> 当前状态核对（2026-11-12，Data 分支 HEAD `bcc36efbdbee0c74bf2a1f8439943926a2f47a46`）：本文是追加式真实 Provider 运行证据账本，早期日期记录只描述当时运行结果。最新 BaoStock 首轮真实请求为 Live Provider Run `43218703614`，仅证明请求/响应非空；加强后的 `tradestatus/isST` 语义断言尚未真实运行，最新 Live Provider Run `43226714523` 中该专项步骤 skipped。Go Test Suite Run `43226759988` success 属于代码 CI，不是 Provider 数据验收。当前开发顺序与待办以 [数据侧整体规划](../数据侧整体规划.md) 为准；CI 总体 success 或 `continue-on-error` 均不能替代逐 Provider 单项结论。
+> 当前状态核对（2026-11-12，Data 代码验收基线 `bcc36efbdbee0c74bf2a1f8439943926a2f47a46`）：本文是追加式真实 Provider 运行证据账本，早期日期记录只描述当时运行结果。最新 BaoStock 首轮真实请求为 Live Provider Run `43218703614`，仅证明请求/响应非空；加强后的 `tradestatus/isST` 语义断言尚未真实运行，最新 Live Provider Run `43226714523` 中该专项步骤 skipped。Go Test Suite Run `43226759988` success 属于代码 CI，不是 Provider 数据验收。当前开发顺序与待办以 [数据侧整体规划](../数据侧整体规划.md) 为准；CI 总体 success 或 `continue-on-error` 均不能替代逐 Provider 单项结论。
 
 - 适用分支：`feat/full-go-data-providers-api-switch`
 - 文档更新日期：2026-11-12
