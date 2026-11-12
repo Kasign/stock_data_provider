@@ -245,7 +245,7 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 		t.Fatal(err)
 	}
 	purpose := []domain.Purpose{domain.PurposeInternalPersonalResearch}
-	contentKinds := []domain.ContentKind{domain.ContentAbstract}
+	contentKinds := []domain.ContentKind{domain.ContentSnippet}
 	currentPolicyPayloads := map[string]any{
 		domain.NewsPolicyTypeSource: domain.SourcePolicy{
 			Status: domain.AuthorizationApproved, AllowedPurposes: purpose,
