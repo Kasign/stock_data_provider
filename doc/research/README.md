@@ -34,7 +34,7 @@ Research 不采集新闻、不拥有行情事实、不重算 Quant 指标，不�
 | RSC-005 Claim/Hypothesis | Domain、认识论校验、状态迁移、版本追加、supersedes_version 字段及当前版本头校验、Application、SQL Repository；创建和更新时解析 supporting/contradicting EvidenceRefs，并校验严格 PIT cutoff 与 Evidence.stance 分组一致性 | Scope 的外部实体/来源版本解析和真实研究样本仍受 Data/News 公开契约限制；本地 Evidence 引用已不再依赖生产 Owner 实现 |
 | RSC-006 Scenario | 新增 Scenario/Condition/ConditionGroup 领域模型，expected_value 限定为标量或一层标量数组，递归 ConditionGroup 校验按 DEC-033 执行 | Quant Metric Registry/QuantEvaluationRef 由 Quant Owner 校验；Researchflow 获取并复核 Quant Evaluation 后传入授权 DTO/引用，Research 不直接调用 Quant；当前冻结契约未要求独立 Scenario Application/Storage API |
 | RSC-007 Storage/Outbox | Context/Event/Claim/Evidence Repository、Migration v1（初版最终结构；无 v2-v5 兼容迁移）、事务 Outbox、领取/租约/重试/确认/拒绝；最终结构初始化测试待本轮 CI 验证 | 根 Server Migration 注册、Server→Notification Relay 接线、授权续期历史留档语义 |
-| RSC-008 Diagnostics | Context/Event/Claim/Evidence 快照 Check、Run PIT、脱敏和快照隔离；Evidence Check 通过 Application GetEvidence 执行 Owner Authorizer 调用；Research-owned News Authorizer 已实现 | News Owner 完整 TOCTOU/available_at 证据仍不完整；Researchflow FLOW-009 Facade 和 Runner 集成待接入 |
+| RSC-008 Diagnostics | Context/Event/Claim/Evidence 快照 Check、Run PIT、脱敏和快照隔离；Evidence Check 通过 Application GetEvidence 执行 Owner Authorizer 调用；invalid Evidence 质量失败优先于 available_at 不可比较；Research-owned News Authorizer 已实现 | News Owner 完整 TOCTOU/available_at 证据仍不完整；Researchflow FLOW-009 Facade 和 Runner 集成待接入 |
 
 ## 诊断边界
 
