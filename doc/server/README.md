@@ -1331,4 +1331,4 @@ Lifecycle.Stop 原实现通过 stopped 标记保证重复调用幂等，但并�
 - 新增 `NewLifecycleWithRollbackTimeout`，要求正数超时；Lifecycle 启动失败时以 `WithoutCancel` 保留“即使进程 Context 已取消仍需回滚”的语义，再施加配置的 rollback deadline。原 `NewLifecycle()` 保留并使用 10 秒默认回滚预算，避免改变现有调用者。
 - Bootstrap 将当前进程 `shutdownTimeout` 注入 Lifecycle，使 API/all 角色使用 HTTP Shutdown 配置，worker 角色使用现有 10 秒预算。正常运行期间显式 `Lifecycle.Stop(ctx)` 仍由调用方提供关闭预算。
 - 新增测试覆盖回滚 Context deadline、Stop 遵守 Context 时的超时退出，以及非法超时配置。启动错误与回滚超时通过 `errors.Join` 同时保留。组件若忽略传入 Context，Go 无法安全强制终止其 Stop goroutine；组件实现仍须遵守 Stop Context 契约。
-- 首次 CI Run `43140116477` 在 gofmt 门禁发现 `lifecycle.go` 与 `lifecycle_test.go` 格式不符合规范，后续测试步骤因此跳过；已修正格式，当前提交重新触发完整 Server Workflow。
+- 首次 CI Run `43140116477` 在 gofmt 门禁发现 `lifecycle.go` 与 `lifecycle_test.go` 格式不符合规范，后续测试步骤因此跳过；修正后 Run `43140433555`（SHA `a26ab79788bbff317cb2d5a9561e2e8330935f1d`）成功，Server gofmt、包级单测、Race、Vet 全部通过。
