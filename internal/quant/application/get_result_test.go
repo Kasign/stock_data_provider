@@ -260,7 +260,6 @@ func TestGetResultReaderDenialIsAuditedAsDenied(t *testing.T) {
 	}
 }
 
-
 func TestAuthorizationRefJSONRequiresExpiresAtAndRejectsAmbiguousObjects(t *testing.T) {
 	tests := []struct {
 		name string
