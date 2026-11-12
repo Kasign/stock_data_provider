@@ -163,7 +163,6 @@ func TestConfigRejectsInvalidValues(t *testing.T) {
 	}
 }
 
-
 func TestProcessOnceHandlesEveryClaimedEvent(t *testing.T) {
 	events := []researchapp.NotificationEventEnvelope{relayEvent(), relayEvent()}
 	events[1].EventID = "nte_2"
