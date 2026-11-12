@@ -1283,9 +1283,20 @@ Go suite 覆盖根模块、go-core、market-data 的格式/测试/race/vet、Mar
 - 判定：Pytdx 对盘中临停日保留成交日 K，对全天停牌期间不返回日 K，并在复牌日恢复；本项真实验收通过，范围仅限上述 4 个盘中样本和 1 个全天停牌窗口。
 - 限制：未调用 Tushare；真实 `SecurityTradingStatus` 数据源仍受 `40203 permission_required` 权限限制，因此本结果不代表 Tushare 状态 Provider 或 DataService 状态分类已完成端到端真实验收。
 
-## 71. 2026-11-12：BaoStock tradestatus/isST 探针运行取消
+## 71. 2026-11-12 BaoStock tradestatus/isST 真实请求与加强断言状态
 
-- 探针提交：`9fb34c717d130ad326be988110b341125be8e510`；后续格式整理提交：`1d24e84c53b948d8c29389c997c2687ba2a4856e`。
-- GitHub Actions Go Test Suite Run `43218703390` 已取消；没有取得该测试的真实 Provider 输出，未证明 BaoStock `tradestatus` 或 `isST` 在样本日期上的实际值。
-- 取消前的探针实现只记录原始字段和计数，没有对官方停牌交易日、复牌日及盘中临停日的字段值作断言；不能把该次运行当作字段语义验收。
-- 后续已在 P0-89 补齐源码断言，待 integration 运行。此记录状态为 `cancelled / not_executed`，不是 pass、degraded 或 provider failure；没有原始数据可用于质量判定。
+### 71.1 首轮真实请求（弱探针）
+
+- 探针提交：`9fb34c717d130ad326be988110b341125be8e510`。
+- GitHub Actions Live Provider Run：`43218703614`；Job：`131184437457`；测试步骤：`Probe BaoStock trade-status fields on official suspension window`，结论 success。
+- 该版本测试确认 BaoStock 交易日历、`002968.SZ` 全天停牌窗口日 K 和 `603072.SH / 2025-01-03` 盘中临停日 K 均有非空响应，并输出 `tradestatus/isST` 字段原始值与计数。
+- 旧测试没有断言官方停牌交易日必须 `tradestatus=0`、复牌日必须 `1`，也没有约束盘中临停日线状态和 `isST` 取值。因此该 Run 只证明请求/响应链路可用，不是字段语义验收通过。
+- Run `43218703390` 实际是 Go Test Suite，结论 cancelled；不能将其归属为 BaoStock Live Provider 探针取消。
+
+### 71.2 加强断言与后续运行
+
+- 加强断言提交：`9cfc9ba42e07bdb3c76f40f26e14b97c3ad4fb19`；格式整理后的代码 SHA：`8b61eb39ae5061ec0bf6448bfcf124dcea9836bd`。
+- 新断言覆盖全天停牌交易日 `tradestatus=0`、官方复牌日 `tradestatus=1`、盘中临停日线 `tradestatus=1`，以及所有样本 `tradestatus/isST` 均为 `0/1`。
+- Go Test Suite Run `43219224292` 在格式整理前 SHA `1d24e84c53b948d8c29389c997c2687ba2a4856e` success；该结果证明常规 Go 测试链路通过，不等于真实 Provider 断言运行。
+- Live Provider Run `43219175966` 的 BaoStock 专项步骤 skipped；因此加强断言真实运行状态仍为 `not_executed`。
+- 后续只执行加强后的定向探针一次，取得字段值后再判定 pass/degraded/fail；不重复首轮弱探针，不将 skipped/cancelled 混为 Provider failure。

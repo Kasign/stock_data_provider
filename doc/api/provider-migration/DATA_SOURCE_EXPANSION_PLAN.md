@@ -1,5 +1,7 @@
 # 国内 A 股数据源扩展计划
 
+> **历史候选清单（2026-11-12 校准）**：本文建立于 2026-10-30，阶段三顺序和 P1 能力列表是当时的候选规划，不代表当前缺失能力。部分能力后来已有代码实现、权限验证或独立验收；不得按本文勾选状态直接开发。当前任务以 [数据侧整体规划](../数据侧整体规划.md) 为准，Provider 代码/默认开关以 [迁移矩阵](./PYTHON_PROVIDER_GO_MIGRATION_MATRIX.md) 为准，真实运行证据以 [Runtime Acceptance Log](./DATA_SOURCE_RUNTIME_ACCEPTANCE_LOG.md) 为准。本文只保留需求定义和单项开发准入规则。
+
 - 适用分支：`feat/full-go-data-providers-api-switch`
 - 更新日期：2026-11-03
 - 依据：当前分支 Provider 接口、实现、启动注册、默认配置及 Python/Go 迁移矩阵。

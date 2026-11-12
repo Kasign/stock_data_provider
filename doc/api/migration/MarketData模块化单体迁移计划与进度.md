@@ -1119,7 +1119,7 @@ internal/
 
 ### 核验基线
 
-- Data 开发分支：`feat/full-go-data-providers-api-switch`，文档更新前 HEAD `edd870b06e9aea0bb66040339660cd9d56f94fd2`；该 HEAD 的 Data 代码基线为 `6d722802073ac2b0c587986d50ec56cf325f505a`，后续提交仅更新 Data 文档。
+- Data 开发分支：`feat/full-go-data-providers-api-switch`，当前文档 HEAD `f41053fefbe2e6f6d12b00102e1c4dd06d9aa368`；最近代码提交 `8b61eb39ae5061ec0bf6448bfcf124dcea9836bd` 仅收敛 BaoStock 探针格式与对应验收记录，不改变 M1/M2 迁移边界。
 - 只读核验聚合分支 `integration` HEAD：`8542b5d73da6c3b047fb275b05f58d8c0ade552e`。
 - 本轮未修改 integration、Server 或 Platform 代码，也未执行构建/测试。
 
