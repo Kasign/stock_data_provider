@@ -377,7 +377,7 @@ WHERE symbol=? AND trade_date=? AND source=?`, basisSymbol, "2026-10-30", "baost
 		persistedValuations[0].SourceVersion != valuationV2.SourceVersion ||
 		len(persistedValuations[0].Items) != 1 ||
 		persistedValuations[0].Items[0].PETTM == nil ||
-		* persistedValuations[0].Items[0].PETTM != peV2 {
+		*persistedValuations[0].Items[0].PETTM != peV2 {
 		t.Fatalf("valuation revisions must persist across connection restart: rows=%+v err=%v", persistedValuations, err)
 	}
 	probeRun := &model.ProviderProbeRun{
