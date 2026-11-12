@@ -1863,7 +1863,7 @@ syncRefreshButtonContext();
     const group = button.closest(".nav-group");
     group?.classList.toggle("is-active", active);
     const submenu = group?.querySelector(".nav-subnav");
-    if (active) button.setAttribute("aria-current", submenu ? "location" : "page");
+    if (active) button.setAttribute("aria-current", button.dataset.view === nextView ? "page" : "location");
     else button.removeAttribute("aria-current");
     if (submenu) {
       button.setAttribute("aria-expanded", String(active));
