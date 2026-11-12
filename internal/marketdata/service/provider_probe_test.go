@@ -1822,7 +1822,7 @@ func TestApplyProviderProbeCheckStatusIncludesCheckResults(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			run := &model.ProviderProbeRun{
-				Status: tc.baseStatus,
+				Status:       tc.baseStatus,
 				CheckResults: []model.ProviderProbeCheckResult{{Check: "quality", Status: tc.check}},
 			}
 			applyProviderProbeCheckStatus(run)
