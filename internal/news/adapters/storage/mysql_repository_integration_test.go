@@ -1091,6 +1091,107 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	}); !errors.Is(err, app.ErrNewsCurrentPolicyUnavailable) {
 		t.Fatalf("stale source policy after committed replacement error = %v, want current policy unavailable", err)
 	}
+
+	// Provider Output 策略替换也必须与完整 Observation 写事务共享当前指针锁。
+	providerLockSourceRef := "news-it-provider-ingest-lock-source"
+	providerLockSourceVersion := "news-it-provider-ingest-source-v1"
+	providerLockSourcePayload, err := json.Marshal(domain.SourcePolicy{
+		Status:               domain.AuthorizationApproved,
+		AllowedAccessMethods: []domain.AccessMethod{domain.AccessRSS},
+		AllowedPurposes:      []domain.Purpose{domain.PurposeInternalPersonalResearch},
+		AllowedContentKinds:  []domain.ContentKind{domain.ContentMetadata},
+		AllowedStorageModes:  []domain.StorageMode{domain.StoragePersistentMetadata},
+		MaxRetention:         time.Hour,
+		EvidenceRef:          "news-it-provider-ingest-source-evidence",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := atomicPublisher.Execute(ctx, domain.NewsPolicyTypeSource, providerLockSourceRef, providerLockSourceVersion, providerLockSourcePayload); err != nil {
+		t.Fatalf("publish Provider Ingest source policy: %v", err)
+	}
+	providerLockRevokedVersion := "news-it-source-ingest-provider-output-v2"
+	providerLockRevokedPayload, err := json.Marshal(domain.ProviderOutputPolicy{
+		Status:                  domain.AuthorizationRevoked,
+		AllowedPurposes:         []domain.Purpose{domain.PurposeInternalPersonalResearch},
+		AllowedContentKinds:     []domain.ContentKind{domain.ContentMetadata},
+		AllowRequestProcessing:  false,
+		MaxRequestRetention:     time.Hour,
+		AllowedStorageModes:     []domain.StorageMode{domain.StoragePersistentMetadata},
+		MaxPersistenceRetention: time.Hour,
+		EvidenceRef:             "news-it-provider-output-ingest-revoked-evidence",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	providerWriteLocked := make(chan struct{})
+	releaseProviderWrite := make(chan struct{})
+	providerWriteDone := make(chan error, 1)
+	go func() {
+		providerWriteDone <- repository.WithinIdentityTransaction(ctx, func(tx app.IdentityTransaction) error {
+			policyTx, ok := tx.(app.CurrentIngestPolicyIdentityTransaction)
+			if !ok {
+				return errors.New("identity transaction lacks current ingest policy lock")
+			}
+			if _, _, _, err := policyTx.LockCurrentIngestPolicies(
+				ctx,
+				providerLockSourceRef, providerLockSourceVersion,
+				lockEndpointRef, lockEndpointVersion,
+				lockProviderRef, lockProviderVersion,
+			); err != nil {
+				return err
+			}
+			close(providerWriteLocked)
+			select {
+			case <-releaseProviderWrite:
+				return nil
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		})
+	}()
+	select {
+	case <-providerWriteLocked:
+	case <-time.After(5 * time.Second):
+		close(releaseProviderWrite)
+		t.Fatal("Provider Ingest transaction did not lock current policy set")
+	}
+	providerRevokeDone := make(chan error, 1)
+	go func() {
+		providerRevokeDone <- atomicPublisher.Execute(
+			ctx, domain.NewsPolicyTypeProviderOutput, lockProviderRef,
+			providerLockRevokedVersion, providerLockRevokedPayload,
+		)
+	}()
+	select {
+	case revokeErr := <-providerRevokeDone:
+		close(releaseProviderWrite)
+		t.Fatalf("Provider Output replacement completed while Observation transaction held its lock: %v", revokeErr)
+	case <-time.After(100 * time.Millisecond):
+	}
+	close(releaseProviderWrite)
+	if err := <-providerWriteDone; err != nil {
+		t.Fatalf("Provider Ingest transaction: %v", err)
+	}
+	if err := <-providerRevokeDone; err != nil {
+		t.Fatalf("publish Provider Output revocation after Observation transaction: %v", err)
+	}
+	if err := repository.WithinIdentityTransaction(ctx, func(tx app.IdentityTransaction) error {
+		policyTx, ok := tx.(app.CurrentIngestPolicyIdentityTransaction)
+		if !ok {
+			return errors.New("identity transaction lacks current ingest policy lock")
+		}
+		_, _, _, err := policyTx.LockCurrentIngestPolicies(
+			ctx,
+			providerLockSourceRef, providerLockSourceVersion,
+			lockEndpointRef, lockEndpointVersion,
+			lockProviderRef, lockProviderVersion,
+		)
+		return err
+	}); !errors.Is(err, app.ErrNewsCurrentPolicyUnavailable) {
+		t.Fatalf("stale Provider Output policy after committed replacement error = %v, want current policy unavailable", err)
+	}
+
 	atomicContent, atomicReadObservation, err := repository.GetEvidenceContentWithCurrentAuthorization(
 		ctx, atomicBinding, secondObservation, secondVersion.Version, time.Now().UTC(),
 		func(readCtx context.Context, current domain.CurrentAuthorizationPolicySet, currentObservation domain.Observation) error {
