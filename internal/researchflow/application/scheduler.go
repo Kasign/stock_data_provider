@@ -231,8 +231,9 @@ func PersistSchedulePlan(ctx context.Context, store SchedulePlanStore, plan Sche
 }
 
 // StageExecutionDispatcher delegates a planned Stage to the existing Worker.
-// Worker.Execute performs the authoritative ClaimAttempt transaction; this
-// interface does not introduce a second queue or a second concurrency gate.
+// Scheduler may call Execute concurrently for independent Stages; implementations
+// must be concurrency-safe. Worker.Execute/ClaimAttempt remains the authority
+// for durable queue state, global capacity, Lease and Fencing.
 type StageExecutionDispatcher interface {
 	Execute(context.Context, string, string, string) (WorkerExecution, error)
 }
