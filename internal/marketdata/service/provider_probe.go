@@ -1214,9 +1214,21 @@ func (s *DataService) applyFreshnessProbeResults(ctx context.Context, run *model
 	if s == nil || run == nil {
 		return
 	}
+	itemStatuses := make(map[string]string, len(run.Items))
+	for _, item := range run.Items {
+		itemStatuses[item.Provider+"\x00"+item.Capability] = item.Status
+	}
+	returned := func(check model.ProviderProbeCheckResult) bool {
+		switch itemStatuses[check.Provider+"\x00"+check.Capability] {
+		case "returned", "returned_degraded", "returned_unknown":
+			return true
+		default:
+			return false
+		}
+	}
 	hasPolicy, needsQuote := false, false
 	for _, result := range run.CheckResults {
-		if result.Check != "freshness" {
+		if result.Check != "freshness" || !returned(result) {
 			continue
 		}
 		if _, ok := freshnessDomainForCapability(result.Capability); ok {
@@ -1275,7 +1287,7 @@ func (s *DataService) applyFreshnessProbeResults(ctx context.Context, run *model
 	}
 	for i := range run.CheckResults {
 		check := &run.CheckResults[i]
-		if check.Check != "freshness" {
+		if check.Check != "freshness" || !returned(*check) {
 			continue
 		}
 		domain, ok := freshnessDomainForCapability(check.Capability)
@@ -1398,6 +1410,10 @@ func buildProviderProbeCheckResults(items []model.ProviderProbeItem, requestedCh
 			case "freshness":
 				if item.Status == "not_configured" || item.Status == "not_supported" || item.Status == "skipped" {
 					result.Status, result.ErrorCode = item.Status, item.ErrorCode
+					break
+				}
+				if item.Status == "failed" {
+					result.Status, result.ErrorCode = "skipped", item.ErrorCode
 					break
 				}
 				if item.ProviderTime == nil || item.ProviderTime.IsZero() {
