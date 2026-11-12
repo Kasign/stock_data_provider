@@ -312,6 +312,7 @@ func TestBuildRefRejectsBlankOrNonCanonicalMetadata(t *testing.T) {
 		mutate func(*RefInput)
 	}{
 		{"authorization ref whitespace", func(v *RefInput) { v.AuthorizationRef = "\t" }},
+		{"authorization ref Unicode whitespace", func(v *RefInput) { v.AuthorizationRef = "\u00a0authorization-1" }},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -383,6 +384,12 @@ func TestQuantResultRefSchemaMatchesGoCanonicalTextAndIdentityRules(t *testing.T
 		{"snapshot ref leading whitespace", func(v map[string]any) { v["input_snapshot_refs"] = []any{" snapshot-1"} }},
 		{"snapshot ref trailing whitespace", func(v map[string]any) { v["input_snapshot_refs"] = []any{"snapshot-1 "} }},
 		{"snapshot ref whitespace only", func(v map[string]any) { v["input_snapshot_refs"] = []any{"   "} }},
+		{"security_id Unicode leading whitespace", func(v map[string]any) { v["security_id"] = "\u00a0security-1" }},
+		{"period Unicode trailing whitespace", func(v map[string]any) { v["period"] = "20d\u3000" }},
+		{"algorithm_version Unicode leading whitespace", func(v map[string]any) { v["algorithm_version"] = "\u2003momentum.v1" }},
+		{"parameter_fingerprint Unicode trailing whitespace", func(v map[string]any) { v["parameter_fingerprint"] = "sha256:x\u00a0" }},
+		{"authorization_ref Unicode leading whitespace", func(v map[string]any) { v["authorization_ref"] = "\u3000authorization-1" }},
+		{"snapshot ref Unicode whitespace", func(v map[string]any) { v["input_snapshot_refs"] = []any{"\u2003snapshot-1"} }},
 	}
 	for _, tc := range invalid {
 		t.Run(tc.name, func(t *testing.T) {

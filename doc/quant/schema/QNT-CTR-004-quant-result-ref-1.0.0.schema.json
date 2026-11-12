@@ -41,7 +41,7 @@
     "security_id": {
       "type": "string",
       "minLength": 1,
-      "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+      "pattern": "^[^\\s                 　](?:[\\s\\S]*[^\\s                 　])?$"
     },
     "system_as_of": {
       "type": "string",
@@ -56,17 +56,17 @@
     "period": {
       "type": "string",
       "minLength": 1,
-      "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+      "pattern": "^[^\\s                 　](?:[\\s\\S]*[^\\s                 　])?$"
     },
     "algorithm_version": {
       "type": "string",
       "minLength": 1,
-      "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+      "pattern": "^[^\\s                 　](?:[\\s\\S]*[^\\s                 　])?$"
     },
     "parameter_fingerprint": {
       "type": "string",
       "minLength": 1,
-      "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+      "pattern": "^[^\\s                 　](?:[\\s\\S]*[^\\s                 　])?$"
     },
     "input_snapshot_refs": {
       "type": "array",
@@ -74,7 +74,7 @@
       "items": {
         "type": "string",
         "minLength": 1,
-        "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+        "pattern": "^[^\\s                 　](?:[\\s\\S]*[^\\s                 　])?$"
       }
     },
     "quality_status": {
@@ -99,7 +99,7 @@
     "authorization_ref": {
       "type": "string",
       "minLength": 1,
-      "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+      "pattern": "^[^\\s                 　](?:[\\s\\S]*[^\\s                 　])?$"
     },
     "created_at": {
       "type": "string",

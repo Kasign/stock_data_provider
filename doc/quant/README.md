@@ -7,7 +7,7 @@
 
 ## 当前状态
 
-最近一次代码验收 SHA：`7f6dcfd0582d3b505d8b45688bc1b74055a1866f`（2026-11-12）；Quant 专项 CI Workflow `43152597197` 对该 SHA 已通过 gofmt、Quant 全量单测、Manifest 30 秒 Fuzz、Race、Vet。其后提交仅更新文档。
+最近一次代码验收 SHA：`5073f72c5f7703d88e1fe5d1b33afd6bc65df211`（2026-11-12）；Quant 专项 CI Workflow `43167409632` 已通过 gofmt、Quant 全量单测、Manifest 30 秒 Fuzz、Race、Vet。其后提交仅更新文档。
 
 已具备首批 Indicator/Factor 纯计算、CalculationContext、基础 Registry、RiskDecision/RuleSet 执行框架、TrendResult DTO、Manifest/ResultRef、Repository Save Port/MemoryRepository，以及 QuantResult Envelope 初版。
 
@@ -106,3 +106,12 @@ internal/quant/
 首期只按实际任务创建必要包，不为目录齐全创建空包。旧代码迁移结论见 [01](01-量化引擎总体设计.md) 第 6 节；输入输出契约和 Golden 设计见 [03](03-首批输入输出契约与验收补充.md)。
 
 - QNT-CTR-001 Registry Entry Schema 2.0.0 与 Go Entry.SampleCountPolicy 已对齐，ValidateMetric 按 required_in_metric 拒绝缺失字段并保留显式 null/0 的差异；旧版 1.0.0 保留。首批真实 Registry Entry/Golden、各 metric_code 的权威 counting_rule 仍属 L2 待办。
+
+
+## 2026-11-12 · QNT-CTR-004/005 文本规范化复核
+
+- QuantResultRef 1.0.0 Schema 的自由文本约束补齐 Unicode White_Space 边界；与 Go `strings.TrimSpace` 的首尾空白拒绝语义保持一致。
+- Manifest 测试补充 NBSP、全角空格、EM SPACE 等 Unicode 首尾空白负例，并补齐 `payload_schema_version` 非 SemVer 与首部空格负例。
+- QuantResultRef 测试补充 Schema 与构造入口的 Unicode 空白负例；Ref 仍不携带 `payload_schema_version`，该版本由 Manifest/Envelope 分别承载。
+- Manifest/Payload 绑定继续由 `BuildWithPayload`、`VerifyPayload` 和 `Record.Validate` 校验；Payload 内容指纹采用 RFC 8785 JCS + SHA-256，业务 Schema 校验仍由已注册的强类型 Payload Validator 负责。
+- Quant Workflow `43167409632` 对 SHA `5073f72c5f7703d88e1fe5d1b33afd6bc65df211` 的 gofmt、Quant 全量单测、Manifest 30 秒 Fuzz、Race、Vet 全部通过。
