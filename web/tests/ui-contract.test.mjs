@@ -1601,7 +1601,7 @@ test("primary navigation groups preserve market views and the seven-entry inform
 });
 test("collapsed sidebar navigation remains accessible and unavailable modules disclose their status", () => {
   assert.match(html, /class="nav-link(?: [^"]*)?"[^>]*data-view="screening"[^>]*aria-label="量化研究"/);
-  assert.match(html, /class="nav-link(?: [^"]*)?"[^>]*data-view="alerts"[^>]*aria-label="告警"/);
+  assert.match(html, /class="nav-link(?: [^"]*)?"[^>]*data-view="alerts"[^>]*aria-label="告警（待接入）"/);
   assert.match(html, /class="nav-link-state" title="[^"]*待接入[^"]*">待接入/);
   assert.match(stylesheet, /nav-link-state/);
 });
