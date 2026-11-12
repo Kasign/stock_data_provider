@@ -1502,3 +1502,12 @@ Server Bootstrap
 - ChangePassword 验证当前密码错误不修改 Credential；成功时通过 CredentialStore CAS 将 credential_version 递增；审计失败不回滚已经提交的密码更新，调用方必须重新读取权威 Credential 状态，不能把返回错误解释为更新未发生。
 - 测试使用内存 Fake 验证 Server Application Service 的调用顺序和状态结果，不替代 Platform Redis/MariaDB 原子性测试，也不构成真实依赖 E2E。
 - 本轮不接入 Bootstrap、HTTP 路由或 DTO；不改变 SRV-CTR-001 deferred 状态。Argon2id 生产参数、Secret/Audit Writer 可信配置、可信代理策略和真实 MariaDB/Redis E2E 仍是后续门禁。
+
+
+### 12.66 SRV-005 生命周期状态校验加固（2026-11-12）
+
+- Review 发现 RotateSession 只比较 MariaDB credential_version，没有独立验证 Redis SessionRecord 的 Subject、CSRF Digest 和时间边界。虽然 Platform Store 限制了记录写入，但 Server 生命周期服务仍应在消费跨存储记录时验证完整 Owner Session 不变量。
+- RotateSession 现在要求 Subject 固定为 owner、credential_version 非零、CSRF Digest 格式有效、created_at 非零且不晚于当前时间、idle/absolute expiry 均晚于当前时间；随后再核对 MariaDB 权威 credential_version。无效或过期记录统一拒绝，不生成新 Token。
+- ChangePassword 现在在调用密码验证器前验证 Credential Subject、CredentialVersion 和 PasswordHash 非空，避免损坏或错误身份状态进入密码更新流程。
+- 新增测试覆盖非 Owner Session、CredentialVersion 过期和无效 Owner Credential，确认拒绝后不发生轮换或凭证修改。
+- 本轮不改变 Platform Store 契约，不直连 Redis，不接入 HTTP 路由或 Bootstrap；真实依赖 E2E 仍待执行。

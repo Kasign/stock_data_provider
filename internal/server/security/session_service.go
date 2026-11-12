@@ -247,11 +247,18 @@ func (s *SessionLifecycleService) RotateSession(ctx context.Context, rawToken, r
 	if err != nil {
 		return SessionIssue{}, err
 	}
+	if record.Subject != "owner" || record.CredentialVersion == 0 ||
+		!validDigest(record.CSRFTokenDigest) || record.CreatedAt.IsZero() ||
+		record.CreatedAt.After(now) || !record.IdleExpiresAt.After(now) ||
+		!record.AbsoluteExpiresAt.After(now) {
+		return SessionIssue{}, unauthenticatedLoginFault()
+	}
 	credential, err := s.credentials.GetOwnerCredential(ctx)
 	if err != nil {
 		return SessionIssue{}, err
 	}
-	if credential.Subject != "owner" || credential.CredentialVersion != record.CredentialVersion {
+	if credential.Subject != "owner" || credential.CredentialVersion == 0 ||
+		credential.CredentialVersion != record.CredentialVersion {
 		return SessionIssue{}, unauthenticatedLoginFault()
 	}
 	newRaw, newDigest, err := platformsecurity.NewSessionToken()
@@ -293,6 +300,9 @@ func (s *SessionLifecycleService) ChangePassword(ctx context.Context, currentPas
 	credential, err := s.credentials.GetOwnerCredential(ctx)
 	if err != nil {
 		return err
+	}
+	if credential.Subject != "owner" || credential.CredentialVersion == 0 || credential.PasswordHash == "" {
+		return platformfault.New(platformfault.ClassInternal, "server.invalid_owner_credential", "Owner credential is invalid", nil)
 	}
 	valid, err := s.hasher.Verify(credential.PasswordHash, currentPassword)
 	if err != nil {

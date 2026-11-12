@@ -353,6 +353,53 @@ func TestSessionLifecycleChangePasswordAuditFailureDoesNotUndoCredentialUpdate(t
 	}
 }
 
+func TestSessionLifecycleRotateRejectsInvalidSessionRecord(t *testing.T) {
+	service, _, sessions, _, _ := newLifecycleTestService(t, nil)
+	issue, err := service.Login(context.Background(), LoginInput{
+		Password: []byte("correct"), SourceIP: net.ParseIP("192.0.2.10"), RequestID: "req-login",
+	})
+	if err != nil {
+		t.Fatalf("Login() error = %v", err)
+	}
+	oldDigest := sessions.createdDigest
+	sessions.record.Subject = "service"
+	if _, err := service.RotateSession(context.Background(), issue.Cookie.Value, "req-rotate"); err == nil {
+		t.Fatal("RotateSession() accepted a non-owner Session record")
+	}
+	if sessions.createdDigest != oldDigest || len(sessions.revoked) != 0 {
+		t.Fatalf("invalid Session record was rotated: digest=%q revoked=%+v", sessions.createdDigest, sessions.revoked)
+	}
+}
+
+func TestSessionLifecycleRotateRejectsStaleCredentialVersion(t *testing.T) {
+	service, credentials, sessions, _, _ := newLifecycleTestService(t, nil)
+	issue, err := service.Login(context.Background(), LoginInput{
+		Password: []byte("correct"), SourceIP: net.ParseIP("192.0.2.10"), RequestID: "req-login",
+	})
+	if err != nil {
+		t.Fatalf("Login() error = %v", err)
+	}
+	oldDigest := sessions.createdDigest
+	credentials.credential.CredentialVersion++
+	if _, err := service.RotateSession(context.Background(), issue.Cookie.Value, "req-rotate"); err == nil {
+		t.Fatal("RotateSession() accepted a stale credential version")
+	}
+	if sessions.createdDigest != oldDigest || len(sessions.revoked) != 0 {
+		t.Fatalf("stale Session was rotated: digest=%q revoked=%+v", sessions.createdDigest, sessions.revoked)
+	}
+}
+
+func TestSessionLifecycleChangePasswordRejectsInvalidCredential(t *testing.T) {
+	service, credentials, _, _, _ := newLifecycleTestService(t, nil)
+	credentials.credential.Subject = "service"
+	if err := service.ChangePassword(context.Background(), []byte("correct"), []byte("new-owner-password"), "req-password"); err == nil {
+		t.Fatal("ChangePassword() accepted an invalid Owner credential")
+	}
+	if credentials.credential.CredentialVersion != 7 || credentials.credential.PasswordHash != "encoded:correct" {
+		t.Fatalf("invalid credential was modified: %+v", credentials.credential)
+	}
+}
+
 func TestSessionLifecycleChangePasswordRejectsWrongCurrentPassword(t *testing.T) {
 	service, credentials, _, _, audit := newLifecycleTestService(t, nil)
 	if err := service.ChangePassword(context.Background(), []byte("wrong"), []byte("new-owner-password"), "req-password"); err == nil {
