@@ -1,9 +1,9 @@
 # Research 模块
 
 - 分支：`feat/research`
-- 本轮 RSC-002 契约复核基线（2026-11-12）：Research `04c68c754131f65b0e9f730c095fc08c8b7a60cd`；只读核对 News `feat/research-news-ingestion` `af76d22d5932555266448b5416bceb4e5e5cda03`。
-- 该 SHA 尚无对应 CI Run；旧 Integration CI Run [43187007758](https://github.com/Kasign/stock_data_provider/actions/runs/43187007758) 对应 SHA `21f2c57e76874d45f5f3c874eea482fe0ce7fe4f`，不能作为本轮新增代码的测试证据。
-- 当前 `.github/workflows/go-test.yml` 的 push 分支未包含 `feat/research`，且没有 Research 专项 gofmt/test/race/vet 或 MariaDB Job；workflow_dispatch 也未定义 Research Job。旧 Research MariaDB Run 覆盖已删除的 v1-v5 迁移链，不能替代当前单一 Migration v1 验收。
+- 当前代码与 CI 验收基线（2026-11-12）：Research `6cbe2d7763522f8c094a17c37d70e67c993adcf0`；Workflow Run [43197749469](https://github.com/Kasign/stock_data_provider/actions/runs/43197749469) 对应同一 SHA，整体结论 success。
+- 本次 Research 专项 gofmt、go test、race、vet 和 MariaDB Migration/Repository 集成 Job 全部通过；根模块 Test、go-core Test 也通过。Researchflow 相关 Job 同样通过，但不作为 Research 自身实现范围。
+- 当前 Workflow 已包含 `feat/research` push 触发、Research 专项验证 Job 和专用 MariaDB Job；不得继续引用此前“缺少 Research CI 门禁”的历史状态。
 - 详细任务进度与依赖边界见 [02-任务拆分与验收](./02-任务拆分与验收.md)。
 - 代码范围：`internal/research/**`
 - 文档范围：`doc/research/**`
@@ -46,8 +46,9 @@ Research 不采集新闻、不拥有行情事实、不重算 Quant 指标，不�
 
 ## 当前验收结论
 
-- 历史 Research 专项 Workflow Run [42616788237](https://github.com/Kasign/stock_data_provider/actions/runs/42616788237) 对旧代码 SHA `0129675185ab29905b0ef14a21e1d564961e3dde` 的 Research gofmt、go test、race、vet 与当时的 MariaDB Job 通过；该 MariaDB 结果覆盖旧迁移结构，不覆盖 2026-11-12 收敛后的单一 Migration v1。
-- 最近一次 Integration CI Run [43187007758](https://github.com/Kasign/stock_data_provider/actions/runs/43187007758) 对应 SHA `21f2c57e76874d45f5f3c874eea482fe0ce7fe4f`。全仓 gofmt、根模块 go vet/go test、go-core go vet/go test、Compose 配置、WebUI 语法/单测和 WebUI 镜像构建通过；该 Run 未执行 Research race 或 Research 专项 MariaDB。它不是当前 HEAD 的验收结果。
+- 当前验收：Workflow Run [43197749469](https://github.com/Kasign/stock_data_provider/actions/runs/43197749469)，SHA `6cbe2d7763522f8c094a17c37d70e67c993adcf0`。Research 专项 gofmt、go test、race、vet 与单一 Migration v1 的 MariaDB Repository 集成全部通过；根模块 Test 与 go-core Test 通过。
+- 该 Run 还覆盖 Researchflow 专项测试、race、vet、WorkerStore 与 MariaDB 生命周期集成；这些结果仅作为同一 Workflow 的其他 Job 记录，不改变模块归属。News/Market Data Job 在本次 Run 中 skipped，不代表它们验收通过。
+- 历史 Run `42616788237`、`43187007758` 保留为历史证据，不再作为当前 HEAD 的验收依据。
 - 本轮 Research 新增 News Evidence Importer/Authorizer、Data/News/Quant Context 固定样本，以及 Evidence/Claim/Event 的本地引用解析与严格 PIT 校验；最新 CI 覆盖根模块编译与测试。测试替身只在测试中使用，不写入生产业务流程。
 - 本轮代码复核发现并修复 Event.available_at PIT 边界；本次进一步按 RSC-CTR-002 补齐 Event 时间规则版本/派生引用及严格 JSON 字段校验、Claim supersedes_version 及严格 JSON 字段校验、Scenario 闭合条件模型和数值标量类型校验。新改动的 CI 验收状态以对应提交后的 Workflow 为准。
 - Research 已实现 News 公开 Evidence Query Port 的消费 Adapter，但 News 当前所有可用来源均缺少可验证 available_at，故生产导入会 fail-closed；测试替身只用于契约映射和门禁测试，不产生生产证据。Data 证券/行业主数据引用仍缺公开 Port，DATA-CTR-007 仍为 deferred。根 Server Migration 注册和 Notification Relay 由 Server 组合根负责。
