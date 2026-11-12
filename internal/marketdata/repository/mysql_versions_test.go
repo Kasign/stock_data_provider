@@ -103,3 +103,63 @@ func TestFundamentalsRevisionHashIgnoresFetchTimestamps(t *testing.T) {
 		t.Fatal("a changed financial metric must create a new fundamentals revision")
 	}
 }
+
+
+func TestValuationRevisionHashIgnoresObservationTimestamps(t *testing.T) {
+	fetched := time.Date(2026, 11, 10, 2, 0, 0, 0, time.UTC)
+	observed := fetched.Add(time.Second)
+	value := 25.0
+	snapshot := model.ValuationSnapshot{
+		RequestedSymbols: []string{"600519.SH"}, Total: 1,
+		Items: []model.ValuationItem{{
+			Symbol: "600519.SH", Code: "600519", PETTM: &value,
+			Source: "eastmoney", SourceVersion: "fixture-v1",
+			FetchedAt: fetched, QualityStatus: model.QualityDegraded,
+		}},
+		Source: "eastmoney", SourceVersion: "fixture-v1",
+		FetchedAt: fetched, SystemObservedAt: &observed,
+		QualityStatus: model.QualityDegraded,
+	}
+	first, err := valuationRevisionHash(snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot.FetchedAt = fetched.Add(time.Hour)
+	observed = fetched.Add(2 * time.Hour)
+	second, err := valuationRevisionHash(snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first != second {
+		t.Fatal("fetch/observation timestamps alone must not create a valuation content revision")
+	}
+	changed := 26.0
+	snapshot.Items[0].PETTM = &changed
+	third, err := valuationRevisionHash(snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first == third {
+		t.Fatal("a changed valuation metric must create a new revision")
+	}
+}
+
+func TestValuationRequestFingerprintValidatesAndPreservesRequestOrder(t *testing.T) {
+	first, err := valuationRequestFingerprint([]string{"600519.SH", "000858.SZ"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	reordered, err := valuationRequestFingerprint([]string{"000858.SZ", "600519.SH"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first == reordered {
+		t.Fatal("request fingerprint must preserve requested symbol order")
+	}
+	if _, err := valuationRequestFingerprint([]string{"600519.SH", "600519.SH"}); err == nil {
+		t.Fatal("duplicate symbols must be rejected by the repository fingerprint")
+	}
+	if _, err := valuationRequestFingerprint(nil); err == nil {
+		t.Fatal("empty valuation request must be rejected")
+	}
+}
