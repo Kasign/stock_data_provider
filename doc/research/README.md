@@ -1,9 +1,9 @@
 # Research 模块
 
 - 分支：`feat/research`
-- 当前分支基线（2026-11-12）：`18334198edb05990f8952adecd8e74b8b8bf741d`。
-- 最新代码集成验收：Integration CI Run `43178908392`（验收 SHA `fdc19b8591223dabccb533389d472713bfecc415`）全项通过；其后 `integration` 的 `9f12f7e` 仅新增系统接入审查文档，当前分支再合入该文档提交，未改变已验收的业务代码。
-- 本轮 Research 最近三个提交仅修正测试，不修改生产逻辑；根模块 gofmt、go vet、go test 已由上述 Integration CI 覆盖。Research 专项 MariaDB 当前最终结构初始化、锁等待取消、Outbox 租约/并发用例仍需专用数据库证据，不能沿用旧 v1-v5 迁移链的历史验收结论。
+- 当前分支代码验收基线（2026-11-12）：`d764b389a62045b0dfa46ed67e9e0160f8d3286b`。
+- 最新 Integration CI Run [43186418678](https://github.com/Kasign/stock_data_provider/actions/runs/43186418678) 在该 SHA 全项通过：全仓 gofmt、根模块 go vet/go test、go-core go vet/go test、Compose、WebUI 语法/单测和镜像构建。
+- 本次 CI 未执行 Research 专项 race 与 MariaDB DSN 故障注入；当前单一 Migration v1 最终结构初始化、锁等待取消、Outbox 租约/并发仍需专用数据库验收。旧 v1-v5 MariaDB 结果不能替代当前结构验收。
 - 详细任务进度与依赖边界见 [02-任务拆分与验收](./02-任务拆分与验收.md)。
 - 代码范围：`internal/research/**`
 - 文档范围：`doc/research/**`
@@ -27,14 +27,14 @@ Research 不采集新闻、不拥有行情事实、不重算 Quant 指标，不�
 
 | 任务 | 当前实现与验收 | 未完成边界 |
 |---|---|---|
-| RSC-001 Context | Domain、结构/版本链校验、v1 Golden/Schema Validator、Application Create/Get、SQL Repository；Research 全模块 gofmt、go test、race、vet 已通过 | 消费方 Contract Test、远端引用与授权版本验证 |
+| RSC-001 Context | Domain、结构/版本链校验、v1 Golden/Schema Validator、Application Create/Get、SQL Repository；新增 Data/News/Quant 固定分区 Fixture，验证证据引用保留、可选分区省略及统一 Run cutoff；最新 Integration CI 根模块 gofmt/vet/test 通过 | 消费方 Contract Test、远端引用与授权版本验证；Context Assembly 本身归 Researchflow |
 | RSC-002 Evidence | Domain、JCS/SHA-256 指纹、严格 PIT、AuthorizationRef 绑定、Application Add/Get、SQL Repository；新增 Research-owned News Evidence Importer/Authorizer，消费 News `ResearchEvidenceQuery`，固定 Fixture 覆盖来源/版本/授权/PIT 映射与拒绝写入 | News 当前 available_at 仍为 null，真实新闻无法通过严格 PIT 导入；News NEWS-CTR-001 当前授权/TOCTOU 与来源 available_at 证据未完成；授权续期历史留档仍待治理语义 |
 | RSC-003 Event | Domain、SourceTime、版本追加、生命周期、事务 Outbox、Application Create/Update；补齐 time_normalization_rule_version、derived_from_refs 字段及结构校验，并在同一事务内校验精确版本存在性与引用图 | 多来源归并/拆分、News Owner Adapter |
 | RSC-004 实体关联 | 尚未实现 | 等待 Data 提供稳定 Security/Industry 引用、版本/时间语义及公开 Application Port |
 | RSC-005 Claim/Hypothesis | Domain、认识论校验、状态迁移、版本追加、supersedes_version 字段及当前版本头校验、Application、SQL Repository | Evidence/Scope 真实引用解析、真实研究样本 |
 | RSC-006 Scenario | 新增 Scenario/Condition/ConditionGroup 领域模型，expected_value 限定为标量或一层标量数组，递归 ConditionGroup 校验按 DEC-033 执行 | Quant Metric Registry/QuantEvaluationRef 由 Quant Owner 校验；Researchflow 获取并复核 Quant Evaluation 后传入授权 DTO/引用，Research 不直接调用 Quant；当前冻结契约未要求独立 Scenario Application/Storage API |
 | RSC-007 Storage/Outbox | Context/Event/Claim/Evidence Repository、Migration v1（初版最终结构；无 v2-v5 兼容迁移）、事务 Outbox、领取/租约/重试/确认/拒绝；最终结构初始化测试待本轮 CI 验证 | 根 Server Migration 注册、Server→Notification Relay 接线、授权续期历史留档语义 |
-| RSC-008 Diagnostics | Context/Event/Claim/Evidence 快照 Check、Run PIT、脱敏和快照隔离；历史 Research CI 曾通过；Evidence Check 通过 Application GetEvidence 执行 Owner Authorizer 调用 | 真实 Owner Adapter、Researchflow FLOW-009 Facade 和 Runner 集成 |
+| RSC-008 Diagnostics | Context/Event/Claim/Evidence 快照 Check、Run PIT、脱敏和快照隔离；Evidence Check 通过 Application GetEvidence 执行 Owner Authorizer 调用；Research-owned News Authorizer 已实现 | News Owner 完整 TOCTOU/available_at 证据仍不完整；Researchflow FLOW-009 Facade 和 Runner 集成待接入 |
 
 ## 诊断边界
 
@@ -47,8 +47,8 @@ Research 不采集新闻、不拥有行情事实、不重算 Quant 指标，不�
 ## 当前验收结论
 
 - 历史 Research 专项 Workflow Run [42616788237](https://github.com/Kasign/stock_data_provider/actions/runs/42616788237) 对旧代码 SHA `0129675185ab29905b0ef14a21e1d564961e3dde` 的 Research gofmt、go test、race、vet 与当时的 MariaDB Job 通过；该 MariaDB 结果覆盖旧迁移结构，不覆盖 2026-11-12 收敛后的单一 Migration v1。
-- 最新代码集成验收为 Integration CI Run [43178908392](https://github.com/Kasign/stock_data_provider/actions/runs/43178908392)，SHA `fdc19b8591223dabccb533389d472713bfecc415`。全仓 gofmt、根模块 go vet/go test、go-core go vet/go test、Compose 配置、WebUI 语法/单测和 WebUI 镜像构建均通过；该 Run 未执行 race，也未配置 Research 专用 MariaDB DSN，不能替代 Research 数据库故障注入验收。
-- 当前 `feat/research` HEAD `18334198edb05990f8952adecd8e74b8b8bf741d` 合入的 `9f12f7e` 仅新增项目级系统接入审查文档；该文档提交未修改业务代码。当前 Research 最近三个提交均为测试修正，已包含在上述成功的集成代码基线中。
+- 最新代码集成验收为 Integration CI Run [43186418678](https://github.com/Kasign/stock_data_provider/actions/runs/43186418678)，SHA `d764b389a62045b0dfa46ed67e9e0160f8d3286b`。全仓 gofmt、根模块 go vet/go test、go-core go vet/go test、Compose 配置、WebUI 语法/单测和 WebUI 镜像构建均通过；该 Run 未执行 race，也未配置 Research 专用 MariaDB DSN，不能替代 Research 数据库故障注入验收。
+- 本轮 Research 新增 News Evidence Importer/Authorizer 和 Data/News/Quant Context 固定样本；最新 CI 覆盖根模块编译与测试。测试替身只在测试中使用，不写入生产业务流程。
 - 本轮代码复核发现并修复 Event.available_at PIT 边界；本次进一步按 RSC-CTR-002 补齐 Event 时间规则版本/派生引用及严格 JSON 字段校验、Claim supersedes_version 及严格 JSON 字段校验、Scenario 闭合条件模型和数值标量类型校验。新改动的 CI 验收状态以对应提交后的 Workflow 为准。
 - Research 已实现 News 公开 Evidence Query Port 的消费 Adapter，但 News 当前所有可用来源均缺少可验证 available_at，故生产导入会 fail-closed；测试替身只用于契约映射和门禁测试，不产生生产证据。Data 证券/行业主数据引用仍缺公开 Port，DATA-CTR-007 仍为 deferred。根 Server Migration 注册和 Notification Relay 由 Server 组合根负责。
 
