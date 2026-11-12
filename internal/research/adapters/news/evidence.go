@@ -20,7 +20,6 @@ var (
 	ErrEvidenceMapping       = errors.New("news evidence cannot be mapped to Research")
 )
 
-// ImportRequest carries trusted in-process identity and one immutable News version.
 type ImportRequest struct {
 	CallerRef             string
 	PurposeCode           string
@@ -30,7 +29,6 @@ type ImportRequest struct {
 	VersionID             string
 }
 
-// Importer imports one already-persisted News version; it never triggers collection.
 type Importer struct {
 	query    newsapp.ResearchEvidenceQuery
 	research researchapp.Port
@@ -171,23 +169,23 @@ func mapNewsEvidence(record newsapp.ResearchEvidenceRecord, request ImportReques
 		limitations = append(limitations, "news_source_quality_degraded_or_stale")
 	}
 	return researchapp.EvidenceDraft{
-		EvidenceType:      string(researchevidence.TypeReportedFact),
-		SourceOwner:       string(researchevidence.SourceNews),
-		SourceRef:         record.SourceRef,
-		SourceVersion:     &version,
-		SourceLocator:     &locator,
-		DerivedFromRefs:   []string{},
-		ClaimRef:          nil,
-		SubjectRefs:       []string{},
-		PublishedAt:       cloneTime(record.PublishedAt),
-		AvailableAt:       cloneTime(record.AvailableAt),
-		SystemObservedAt:  record.SystemObservedAt.UTC(),
-		SystemAsOf:        request.SystemAsOf.UTC(),
-		Stance:            string(researchevidence.StanceNeutral),
-		QualityStatus:     string(quality),
-		ContentLevel:      string(record.ContentLevel),
-		AuthorizationRef:  record.AuthorizationRef,
-		Limitations:       limitations,
+		EvidenceType:     string(researchevidence.TypeReportedFact),
+		SourceOwner:      string(researchevidence.SourceNews),
+		SourceRef:        record.SourceRef,
+		SourceVersion:   &version,
+		SourceLocator:   &locator,
+		DerivedFromRefs: []string{},
+		ClaimRef:        nil,
+		SubjectRefs:     []string{},
+		PublishedAt:     cloneTime(record.PublishedAt),
+		AvailableAt:     cloneTime(record.AvailableAt),
+		SystemObservedAt: record.SystemObservedAt.UTC(),
+		SystemAsOf:      request.SystemAsOf.UTC(),
+		Stance:          string(researchevidence.StanceNeutral),
+		QualityStatus:   string(quality),
+		ContentLevel:    string(record.ContentLevel),
+		AuthorizationRef: record.AuthorizationRef,
+		Limitations:     limitations,
 	}, nil
 }
 

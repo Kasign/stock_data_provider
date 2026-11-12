@@ -104,37 +104,37 @@ func TestCreateContextPreservesFixedDataNewsEvidenceAndOmissionFixture(t *testin
 	}
 	command := CreateContextCommand{
 		ResearchQuestion: "浦发银行盈利质量是否改善",
-		Scope: string(researchcontext.ScopeStock),
-		SubjectRefs: []string{"security:600000"},
-		SystemAsOf: now,
+		Scope:            string(researchcontext.ScopeStock),
+		SubjectRefs:      []string{"security:600000"},
+		SystemAsOf:       now,
 		SectionRefs: []ContextSectionRef{
 			{
 				SectionID: "daily_bars", SectionVersion: "snapshot-v2",
-				SourceOwner: string(researchcontext.SourceOwnerData),
-				SourceRefs: []string{"data:snapshot:daily:600000:2026-11-11"},
-				EvidenceRefs: []string{"ev_data_daily_001"},
+				SourceOwner:   string(researchcontext.SourceOwnerData),
+				SourceRefs:    []string{"data:snapshot:daily:600000:2026-11-11"},
+				EvidenceRefs:  []string{"ev_data_daily_001"},
 				QualityStatus: string(researchcontext.QualityDegraded),
-				Required: true, Included: true, AssembledAt: now, SystemAsOf: now,
+				Required:      true, Included: true, AssembledAt: now, SystemAsOf: now,
 			},
 			{
 				SectionID: "news_evidence", SectionVersion: "news-page-v1",
-				SourceOwner: string(researchcontext.SourceOwnerNews),
-				SourceRefs: []string{"news:snapshot:news_001:v3"},
-				EvidenceRefs: []string{"ev_news_001"},
+				SourceOwner:   string(researchcontext.SourceOwnerNews),
+				SourceRefs:    []string{"news:snapshot:news_001:v3"},
+				EvidenceRefs:  []string{"ev_news_001"},
 				QualityStatus: string(researchcontext.QualityValid),
-				Required: true, Included: true, AssembledAt: now, SystemAsOf: now,
+				Required:      true, Included: true, AssembledAt: now, SystemAsOf: now,
 			},
 			{
 				SectionID: "quant_evaluation", SectionVersion: "evaluation-request-v1",
-				SourceOwner: string(researchcontext.SourceOwnerQuant),
-				SourceRefs: []string{"quant:request:evaluation:600000"},
-				EvidenceRefs: []string{},
+				SourceOwner:   string(researchcontext.SourceOwnerQuant),
+				SourceRefs:    []string{"quant:request:evaluation:600000"},
+				EvidenceRefs:  []string{},
 				QualityStatus: string(researchcontext.QualityUnknown),
-				Required: false, Included: false, AssembledAt: now, SystemAsOf: now,
+				Required:      false, Included: false, AssembledAt: now, SystemAsOf: now,
 			},
 		},
 		QualitySummary: ContextQualitySummary{
-			Status: string(researchcontext.QualityDegraded),
+			Status:               string(researchcontext.QualityDegraded),
 			MissingRequiredCount: 0, MissingOptionalCount: 1,
 			ConflictCount: 0, StaleCount: 0,
 			ReasonCodes: []string{"data_quality_degraded", "optional_quant_unavailable"},
@@ -143,9 +143,9 @@ func TestCreateContextPreservesFixedDataNewsEvidenceAndOmissionFixture(t *testin
 		OmittedSections: []ContextOmittedSection{{
 			SectionID: "quant_evaluation", SourceOwner: string(researchcontext.SourceOwnerQuant),
 			ReasonCode: "unavailable", Required: false,
-			SourceRefs: []string{"quant:request:evaluation:600000"},
+			SourceRefs:  []string{"quant:request:evaluation:600000"},
 			SafeMessage: "Quant evaluation is unavailable at the Run cutoff",
-			Retryable: true,
+			Retryable:   true,
 		}},
 		BuilderVersion: "researchflow-context-fixture/1.0.0",
 	}
@@ -164,7 +164,6 @@ func TestCreateContextPreservesFixedDataNewsEvidenceAndOmissionFixture(t *testin
 		t.Fatal("Context and all source sections must preserve the exact Run system_as_of")
 	}
 }
-
 func TestAddEvidenceGeneratesIdentityFingerprintAndRequiresCurrentAuthorization(t *testing.T) {
 	now := time.Date(2026, 11, 9, 1, 0, 0, 0, time.UTC)
 	repo := &evidenceRepoFake{}

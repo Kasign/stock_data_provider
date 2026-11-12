@@ -55,9 +55,9 @@ func validNewsRecord(asOf time.Time) newsapp.ResearchEvidenceRecord {
 	return newsapp.ResearchEvidenceRecord{
 		NewsID: "news_001", ObservationID: "obs_001", VersionID: "version_001", VersionNo: 1,
 		ContentFingerprint: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-		SourceRef: "source_001", QualityStatus: newsapp.EvidenceQualityValid,
+		SourceRef:          "source_001", QualityStatus: newsapp.EvidenceQualityValid,
 		BusinessQualityStatus: newsapp.EvidenceBusinessQualityValid,
-		AvailableAt: &available, SystemObservedAt: observed,
+		AvailableAt:           &available, SystemObservedAt: observed,
 		ContentLevel: newsapp.EvidenceContentSummary, AuthorizationRef: "auth_001",
 		AuthorizationStatus: "allowed", SystemAsOf: asOf,
 		RelationStatus: newsapp.EvidenceRelationNotProvided, RelationRefs: []string{},
