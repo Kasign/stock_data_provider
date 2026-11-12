@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -124,6 +126,8 @@ func TestGetResultFailsClosedForInvalidAuthorization(t *testing.T) {
 		{"denied", func(v *AuthorizedRecord) { v.AuthorizationRef.Decision = "denied" }},
 		{"policy snapshot mismatch", func(v *AuthorizedRecord) { v.PolicySnapshot.SnapshotRef = "policy-snapshot:other" }},
 		{"empty policy snapshot", func(v *AuthorizedRecord) { v.PolicySnapshot.Policies = []PolicyVersion{} }},
+		{"duplicate policy tuple", func(v *AuthorizedRecord) { v.PolicySnapshot.Policies = append(v.PolicySnapshot.Policies, v.PolicySnapshot.Policies[0]) }},
+		{"unsorted policy tuples", func(v *AuthorizedRecord) { v.PolicySnapshot.Policies = []PolicyVersion{{PolicyType: "z", PolicyRef: "z", PolicyVersion: "1"}, {PolicyType: "a", PolicyRef: "a", PolicyVersion: "1"}} }},
 		{"expired", func(v *AuthorizedRecord) {
 			expired := now.Format(time.RFC3339Nano)
 			v.AuthorizationRef.ExpiresAt = &expired
@@ -192,5 +196,45 @@ func TestGetResultRejectsReaderFailureAndNonUTCClock(t *testing.T) {
 	got, err = usecase.Execute(context.Background(), reader.value.Record.Manifest.ResultID)
 	if !errors.Is(err, ErrResultUnavailable) || got.ResultID != "" {
 		t.Fatalf("non-UTC trusted clock accepted: %+v %v", got, err)
+	}
+}
+
+
+func TestValidateAuthorizationMatchesFrozenQuantGolden(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "doc", "整体任务规划", "golden", "GOV-CTR-006-quant-allowed.golden.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var golden struct {
+		AuthorizationRef AuthorizationRef `json:"authorization_ref"`
+		PolicySnapshot   PolicySnapshot   `json:"policy_snapshot"`
+	}
+	if err := json.Unmarshal(raw, &golden); err != nil {
+		t.Fatal(err)
+	}
+	request := ReadRequest{
+		SubjectRef: golden.AuthorizationRef.SubjectRef, ResourceRef: golden.AuthorizationRef.ResourceRef,
+		PurposeCode: quantPurposeCode, ContentLevel: quantContentLevel,
+		At: time.Date(2026, 11, 12, 0, 0, 0, 0, time.UTC),
+	}
+	if err := validateAuthorization(golden.AuthorizationRef, golden.PolicySnapshot, request); err != nil {
+		t.Fatalf("frozen GOV-CTR-006 Quant Golden rejected: %v", err)
+	}
+}
+
+func TestGetResultAuditFailurePreventsEnvelopeRelease(t *testing.T) {
+	now := time.Date(2026, 11, 9, 2, 0, 0, 0, time.UTC)
+	reader := &fixedReader{value: getResultFixture(t, now)}
+	auditor := &fixedAuditor{err: errors.New("audit storage unavailable")}
+	usecase, err := NewGetResult(reader, fixedPrincipal{principal: Principal{SubjectRef: "service:researchflow"}}, auditor, func() time.Time { return now })
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := usecase.Execute(context.Background(), reader.value.Record.Manifest.ResultID)
+	if !errors.Is(err, ErrAuditUnavailable) || got.ResultID != "" || got.Payload != nil {
+		t.Fatalf("audit failure must fail closed: envelope=%+v err=%v", got, err)
+	}
+	if len(auditor.events) != 1 || auditor.events[0].Decision != "allowed" {
+		t.Fatalf("expected one pre-release allow audit event: %+v", auditor.events)
 	}
 }
