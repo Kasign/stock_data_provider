@@ -169,15 +169,15 @@ func mapFundamentals(source model.FundamentalsSnapshot) app.FundamentalsSnapshot
 	result := app.FundamentalsSnapshot{
 		Symbol: source.Symbol, Year: source.Year, Quarter: source.Quarter, HasData: source.HasData,
 		Sections: make([]app.FundamentalSection, 0, len(source.Sections)),
-		Source: source.Source, SourceVersion: source.SourceVersion, FetchedAt: source.FetchedAt,
+		Source:   source.Source, SourceVersion: source.SourceVersion, FetchedAt: source.FetchedAt,
 		SystemObservedAt: clonePointer(source.SystemObservedAt),
-		QualityStatus: app.QualityStatus(source.QualityStatus), QualityReasons: cloneStrings(source.QualityReasons),
+		QualityStatus:    app.QualityStatus(source.QualityStatus), QualityReasons: cloneStrings(source.QualityReasons),
 	}
 	for _, section := range source.Sections {
 		mapped := app.FundamentalSection{
 			Category: section.Category, ReportDate: section.ReportDate, PublicationDate: section.PublicationDate,
 			AvailableAt: clonePointer(section.AvailableAt), HasData: section.HasData,
-			Metrics: make([]app.FundamentalMetric, 0, len(section.Metrics)),
+			Metrics:       make([]app.FundamentalMetric, 0, len(section.Metrics)),
 			QualityStatus: app.QualityStatus(section.QualityStatus), QualityReasons: cloneStrings(section.QualityReasons),
 		}
 		for _, metric := range section.Metrics {
@@ -197,18 +197,18 @@ func mapValuations(source model.ValuationSnapshot) app.ValuationsSnapshot {
 		ProviderReportDate: source.ProviderReportDate, ProviderTimestamp: clonePointer(source.ProviderTimestamp),
 		Source: source.Source, SourceVersion: source.SourceVersion, FetchedAt: source.FetchedAt,
 		SystemObservedAt: clonePointer(source.SystemObservedAt),
-		QualityStatus: app.QualityStatus(source.QualityStatus), QualityReasons: cloneStrings(source.QualityReasons),
+		QualityStatus:    app.QualityStatus(source.QualityStatus), QualityReasons: cloneStrings(source.QualityReasons),
 	}
 	for _, item := range source.Items {
 		result.Items = append(result.Items, app.ValuationItem{
 			Symbol: item.Symbol, Code: item.Code, Name: item.Name,
 			PETTM: clonePointer(item.PETTM), PEMRQ: clonePointer(item.PEMRQ), PEStatic: clonePointer(item.PEStatic),
 			PBMRQ: clonePointer(item.PBMRQ), PSTTM: clonePointer(item.PSTTM), PCFTTM: clonePointer(item.PCFTTM),
-			TurnoverRatePercent: clonePointer(item.TurnoverRatePercent),
+			TurnoverRatePercent:      clonePointer(item.TurnoverRatePercent),
 			FloatTurnoverRatePercent: clonePointer(item.FloatTurnoverRatePercent),
-			VolumeRatio: clonePointer(item.VolumeRatio), DividendYieldPercent: clonePointer(item.DividendYieldPercent),
+			VolumeRatio:              clonePointer(item.VolumeRatio), DividendYieldPercent: clonePointer(item.DividendYieldPercent),
 			DividendYieldTTMPercent: clonePointer(item.DividendYieldTTMPercent),
-			Source: item.Source, SourceVersion: item.SourceVersion, FetchedAt: item.FetchedAt,
+			Source:                  item.Source, SourceVersion: item.SourceVersion, FetchedAt: item.FetchedAt,
 			QualityStatus: app.QualityStatus(item.QualityStatus), QualityReasons: cloneStrings(item.QualityReasons),
 		})
 	}
