@@ -22,20 +22,6 @@ func TestNewMigrationRegistryRegistersAvailableModules(t *testing.T) {
 	if got := registry.Namespaces(); !reflect.DeepEqual(got, want) {
 		t.Fatalf("registered namespaces = %v, want %v", got, want)
 	}
-	for id, want := range map[string]platformdiagnostics.Status{
-		"news.provider.tavily.configuration": platformdiagnostics.StatusSkipped,
-		"news.provider.brave.configuration":  platformdiagnostics.StatusSkipped,
-		"news.provider.searxng.configuration": platformdiagnostics.StatusSkipped,
-	} {
-		if got := got[id]; got != want {
-			t.Fatalf("diagnostics result %q status = %s, want %s", id, got, want)
-		}
-	}
-	for _, result := range report.Diagnostics.Results {
-		if result.CheckID == "news.provider.bocha.configuration" && strings.Contains(result.Observation.SafeMessage, "test-secret-not-for-diagnostics") {
-			t.Fatal("provider credential leaked into diagnostics")
-		}
-	}
 }
 
 func TestStopConsumersThenCloseResourcesPreservesOrder(t *testing.T) {
@@ -116,6 +102,23 @@ func TestNewDiagnosticsServiceRegistersNewsParserAndProviderConfigChecks(t *test
 			t.Fatalf("diagnostics result %q is missing", id)
 		} else if status != platformdiagnostics.StatusHealthy {
 			t.Fatalf("diagnostics result %q status = %s, want healthy", id, status)
+		}
+	}
+
+	for id, want := range map[string]platformdiagnostics.Status{
+		"news.provider.tavily.configuration": platformdiagnostics.StatusSkipped,
+		"news.provider.brave.configuration":  platformdiagnostics.StatusSkipped,
+		"news.provider.searxng.configuration": platformdiagnostics.StatusSkipped,
+	} {
+		if status, exists := got[id]; !exists {
+			t.Fatalf("diagnostics result %q is missing", id)
+		} else if status != want {
+			t.Fatalf("diagnostics result %q status = %s, want %s", id, status, want)
+		}
+	}
+	for _, result := range report.Diagnostics.Results {
+		if result.CheckID == "news.provider.bocha.configuration" && strings.Contains(result.Observation.SafeMessage, "test-secret-not-for-diagnostics") {
+			t.Fatal("provider credential leaked into diagnostics")
 		}
 	}
 }
