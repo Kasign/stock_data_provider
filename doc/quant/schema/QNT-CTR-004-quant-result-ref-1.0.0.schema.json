@@ -41,7 +41,7 @@
     "security_id": {
       "type": "string",
       "minLength": 1,
-      "pattern": "^[^\\s\\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000](?:[\\s\\S]*[^\\s\\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000])?$"
+      "pattern": "^[^\\s                 　](?:[\\s\\S]*[^\\s                 　])?$"
     },
     "system_as_of": {
       "type": "string",
@@ -56,17 +56,17 @@
     "period": {
       "type": "string",
       "minLength": 1,
-      "pattern": "^[^\\s\\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000](?:[\\s\\S]*[^\\s\\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000])?$"
+      "pattern": "^[^\\s                 　](?:[\\s\\S]*[^\\s                 　])?$"
     },
     "algorithm_version": {
       "type": "string",
       "minLength": 1,
-      "pattern": "^[^\\s\\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000](?:[\\s\\S]*[^\\s\\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000])?$"
+      "pattern": "^[^\\s                 　](?:[\\s\\S]*[^\\s                 　])?$"
     },
     "parameter_fingerprint": {
       "type": "string",
       "minLength": 1,
-      "pattern": "^[^\\s\\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000](?:[\\s\\S]*[^\\s\\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000])?$"
+      "pattern": "^[^\\s                 　](?:[\\s\\S]*[^\\s                 　])?$"
     },
     "input_snapshot_refs": {
       "type": "array",
@@ -74,7 +74,7 @@
       "items": {
         "type": "string",
         "minLength": 1,
-        "pattern": "^[^\\s\\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000](?:[\\s\\S]*[^\\s\\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000])?$"
+        "pattern": "^[^\\s                 　](?:[\\s\\S]*[^\\s                 　])?$"
       }
     },
     "quality_status": {
@@ -99,7 +99,7 @@
     "authorization_ref": {
       "type": "string",
       "minLength": 1,
-      "pattern": "^[^\\s\\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000](?:[\\s\\S]*[^\\s\\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000])?$"
+      "pattern": "^[^\\s                 　](?:[\\s\\S]*[^\\s                 　])?$"
     },
     "created_at": {
       "type": "string",
