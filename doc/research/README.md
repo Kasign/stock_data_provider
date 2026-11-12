@@ -1,7 +1,7 @@
 # Research 模块
 
 - 分支：`feat/research`
-- 当前分支最新提交（2026-11-12）：`745045fb6a857abe751b5bcd55df57a75c9b80fe`（包含 Outbox 修复和验收文档更新）。
+- 本轮 RSC-002 契约复核基线（2026-11-12）：Research `04c68c754131f65b0e9f730c095fc08c8b7a60cd`；只读核对 News `feat/research-news-ingestion` `af76d22d5932555266448b5416bceb4e5e5cda03`。
 - 该 SHA 尚无对应 CI Run；旧 Integration CI Run [43187007758](https://github.com/Kasign/stock_data_provider/actions/runs/43187007758) 对应 SHA `21f2c57e76874d45f5f3c874eea482fe0ce7fe4f`，不能作为本轮新增代码的测试证据。
 - 当前 `.github/workflows/go-test.yml` 的 push 分支未包含 `feat/research`，且没有 Research 专项 gofmt/test/race/vet 或 MariaDB Job；workflow_dispatch 也未定义 Research Job。旧 Research MariaDB Run 覆盖已删除的 v1-v5 迁移链，不能替代当前单一 Migration v1 验收。
 - 详细任务进度与依赖边界见 [02-任务拆分与验收](./02-任务拆分与验收.md)。
@@ -28,7 +28,7 @@ Research 不采集新闻、不拥有行情事实、不重算 Quant 指标，不�
 | 任务 | 当前实现与验收 | 未完成边界 |
 |---|---|---|
 | RSC-001 Context | Domain、结构/版本链校验、v1 Golden/Schema Validator、Application Create/Get、SQL Repository；新增 Data/News/Quant 固定分区 Fixture，验证证据引用保留、可选分区省略及统一 Run cutoff；最新 Integration CI 根模块 gofmt/vet/test 通过 | 消费方 Contract Test、远端引用与授权版本验证；Context Assembly 本身归 Researchflow |
-| RSC-002 Evidence | Domain、JCS/SHA-256 指纹、严格 PIT、AuthorizationRef 绑定、Application Add/Get、SQL Repository；新增 Research-owned News Evidence Importer/Authorizer，消费 News `ResearchEvidenceQuery`，固定 Fixture 覆盖来源/版本/授权/PIT 映射与拒绝写入 | News 当前 available_at 仍为 null，真实新闻无法通过严格 PIT 导入；News NEWS-CTR-001 当前授权/TOCTOU 与来源 available_at 证据未完成；授权续期历史留档仍待治理语义 |
+| RSC-002 Evidence | Domain、JCS/SHA-256 指纹、严格 PIT、AuthorizationRef 绑定、Application Add/Get、SQL Repository；新增 Research-owned News Evidence Importer/Authorizer，消费 News `ResearchEvidenceQuery`，固定 Fixture 覆盖来源/版本/授权/PIT 映射与拒绝写入 | NEWS-CTR-001/002 已在项目级冻结登记簿登记为 frozen（定义冻结不等于生产实现验收）；News 当前 available_at 仍为 null，且 Get/List 尚未按 available_at 严格排除记录；授权复核与内容读取未处于同一一致性边界，真实新闻不能作为已验收的生产 Evidence 导入；授权续期历史留档仍待治理语义 |
 | RSC-003 Event | Domain、SourceTime、版本追加、生命周期、事务 Outbox、Application Create/Update；EvidenceRefs 精确记录与严格 PIT 校验；Event 派生引用由 SQL Repository 在追加事务内解析精确版本并做递归无环检查；时间规则 1.0.0 已实现 UTC 精确值共识归一、冲突置 null、无来源置 null、未注册版本拒绝 | 多来源归并/拆分仍需真实来源证据；真实来源时间精度和 asserted_by 语义仍需 News Owner 证据；Event 不读取 News 私有存储 |
 | RSC-004 实体关联 | 尚未实现 | 等待 Data 提供稳定 Security/Industry 引用、版本/时间语义及公开 Application Port |
 | RSC-005 Claim/Hypothesis | Domain、认识论校验、状态迁移、版本追加、supersedes_version 字段及当前版本头校验、Application、SQL Repository；创建和更新时解析 supporting/contradicting EvidenceRefs，并校验严格 PIT cutoff 与 Evidence.stance 分组一致性 | Scope 的外部实体/来源版本解析和真实研究样本仍受 Data/News 公开契约限制；本地 Evidence 引用已不再依赖生产 Owner 实现 |
