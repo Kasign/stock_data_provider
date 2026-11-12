@@ -248,6 +248,37 @@ func TestWorkerCancellationStopsProviderAndConfirmsAttempt(t *testing.T) {
 	}
 }
 
+
+func TestWorkerHeartbeatObservesDurableCrossProcessCancellation(t *testing.T) {
+	store, _ := newWorkerFixture()
+	store.renewErr = ErrRunCancellationUnavailable
+	store.cancelOK = true
+	executor := &blockingWorkerExecutor{started: make(chan struct{})}
+	worker, err := NewWorker(store, executor, workerClockFake{}, WorkerConfig{
+		WorkerID: "worker-1", LeaseDuration: time.Second, HeartbeatInterval: time.Millisecond, MaxParallel: 2,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() {
+		_, executeErr := worker.Execute(context.Background(), "run-1", "stage-1", "attempt-new")
+		done <- executeErr
+	}()
+	<-executor.started
+	select {
+	case executeErr := <-done:
+		if executeErr != nil {
+			t.Fatalf("durable cancellation should be confirmed, got %v", executeErr)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Worker did not observe durable Run cancellation through lease heartbeat")
+	}
+	if store.cancelled != 1 || store.commits != 0 {
+		t.Fatalf("expected cancellation confirmation without result commit: cancelled=%d commits=%d", store.cancelled, store.commits)
+	}
+}
+
 func TestWorkerCancellationConfirmationFailureDoesNotCommit(t *testing.T) {
 	store, _ := newWorkerFixture()
 	store.cancelErr = errors.New("fencing conflict")

@@ -175,7 +175,7 @@ func (w *Worker) Execute(ctx context.Context, runRef, stageRef, attemptRef strin
 	stopHeartbeat := make(chan struct{})
 	heartbeatDone := make(chan struct{})
 	heartbeatErr := make(chan error, 1)
-	go w.heartbeat(runCtx, cancelRun, snapshot, attempt, stopHeartbeat, heartbeatDone, heartbeatErr)
+	go w.heartbeat(runCtx, cancelExecutionCause, snapshot, attempt, stopHeartbeat, heartbeatDone, heartbeatErr)
 
 	request := StageExecutionRequest{
 		Run: snapshot.Run, Stage: snapshot.Stage, Attempt: attempt,
@@ -193,7 +193,11 @@ func (w *Worker) Execute(ctx context.Context, runRef, stageRef, attemptRef strin
 		if errors.Is(heartbeatFailure, ErrWorkerDeadline) {
 			return WorkerExecution{Attempt: attempt}, ErrWorkerDeadline
 		}
-		return WorkerExecution{Attempt: attempt}, fmt.Errorf("%w: %v", ErrWorkerLeaseLost, heartbeatFailure)
+		if errors.Is(heartbeatFailure, ErrRunCancellationUnavailable) {
+			cancelExecutionCause(ErrWorkerCancelled)
+		} else {
+			return WorkerExecution{Attempt: attempt}, fmt.Errorf("%w: %v", ErrWorkerLeaseLost, heartbeatFailure)
+		}
 	default:
 	}
 	if errors.Is(runCtx.Err(), context.DeadlineExceeded) || !w.now().Before(snapshot.Run.DeadlineAt) {
@@ -288,7 +292,7 @@ func (w *Worker) Execute(ctx context.Context, runRef, stageRef, attemptRef strin
 	return WorkerExecution{Attempt: attempt, Committed: true}, nil
 }
 
-func (w *Worker) heartbeat(ctx context.Context, cancel context.CancelFunc, snapshot StageExecutionSnapshot, attempt domain.Attempt,
+func (w *Worker) heartbeat(ctx context.Context, cancel context.CancelCauseFunc, snapshot StageExecutionSnapshot, attempt domain.Attempt,
 	stop <-chan struct{}, done chan<- struct{}, failures chan<- error) {
 	defer close(done)
 	ticker := time.NewTicker(w.config.HeartbeatInterval)
@@ -312,7 +316,11 @@ func (w *Worker) heartbeat(ctx context.Context, cancel context.CancelFunc, snaps
 				case failures <- err:
 				default:
 				}
-				cancel()
+				if errors.Is(err, ErrRunCancellationUnavailable) {
+					cancel(ErrWorkerCancelled)
+				} else {
+					cancel(ErrWorkerLeaseLost)
+				}
 				return
 			}
 		}
