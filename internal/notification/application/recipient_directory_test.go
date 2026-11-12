@@ -23,10 +23,10 @@ func recipientDirectoryChannel() domain.ChannelConfigSnapshot {
 	return domain.ChannelConfigSnapshot{
 		ChannelRef: "channel-email", ConfigVersion: 3, ChannelKind: "email", Enabled: true,
 		Capabilities: domain.ChannelCapabilities{
-			SupportsIdempotency: domain.CapabilityUnknown,
+			SupportsIdempotency:    domain.CapabilityUnknown,
 			SupportsDeliveryLookup: domain.CapabilityUnknown,
-			SupportsRetryAfter: domain.CapabilityUnknown,
-			MaxPayloadBytes: 4096,
+			SupportsRetryAfter:     domain.CapabilityUnknown,
+			MaxPayloadBytes:        4096,
 		},
 	}
 }
@@ -68,7 +68,7 @@ func TestDirectoryRecipientResolverBindsPreconfiguredTarget(t *testing.T) {
 	channel := recipientDirectoryChannel()
 	directory := &recipientDirectoryStub{result: RecipientDirectoryResult{
 		Target: domain.RecipientTarget{
-			RecipientRef: "recipient:configured-1", ChannelRef: channel.ChannelRef,
+			RecipientRef:   "recipient:configured-1", ChannelRef: channel.ChannelRef,
 			ConfigVersion: channel.ConfigVersion, AdapterTargetRef: "email-target:opaque",
 		},
 	}}

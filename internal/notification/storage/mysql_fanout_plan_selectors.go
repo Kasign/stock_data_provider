@@ -14,7 +14,7 @@ import (
 // MySQLFanoutChannelConfigSelector selects the greatest persisted config version.
 // A disabled newest version is returned as disabled; callers must not fall back.
 type MySQLFanoutChannelConfigSelector struct {
-	db *sql.DB
+	db         *sql.DB
 	repository application.ChannelConfigRepository
 }
 
@@ -46,7 +46,7 @@ func (s *MySQLFanoutChannelConfigSelector) ResolveForFanout(ctx context.Context,
 // MySQLFanoutTemplateVersionSelector selects the greatest template version compatible
 // with the exact event_type and schema_version.
 type MySQLFanoutTemplateVersionSelector struct {
-	db *sql.DB
+	db         *sql.DB
 	repository template.Repository
 }
 

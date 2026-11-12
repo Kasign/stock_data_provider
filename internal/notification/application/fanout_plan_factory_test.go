@@ -11,7 +11,7 @@ import (
 
 type fanoutChannelSelectorStub struct {
 	snapshot domain.ChannelConfigSnapshot
-	err error
+	err      error
 }
 
 func (s fanoutChannelSelectorStub) ResolveForFanout(context.Context, domain.Subscription) (domain.ChannelConfigSnapshot, error) {
@@ -28,8 +28,8 @@ func (s fanoutTemplateSelectorStub) ResolveForFanout(context.Context, string, st
 }
 
 type fanoutRecipientDirectoryStub struct {
-	result RecipientDirectoryResult
-	err error
+	result  RecipientDirectoryResult
+	err     error
 	request RecipientDirectoryRequest
 }
 
@@ -40,8 +40,8 @@ func (s *fanoutRecipientDirectoryStub) ResolveAuthorized(_ context.Context, requ
 
 type fanoutFilterMatcherStub struct {
 	matched bool
-	err error
-	calls int
+	err     error
+	calls   int
 }
 
 func (s *fanoutFilterMatcherStub) Matches(context.Context, domain.EventEnvelope, domain.Subscription) (bool, error) {
@@ -54,10 +54,10 @@ func productionFanoutInputs() (domain.EventEnvelope, domain.Subscription, domain
 	channel := domain.ChannelConfigSnapshot{
 		ChannelRef: "channel-1", ConfigVersion: 2, ChannelKind: "email", Enabled: true,
 		Capabilities: domain.ChannelCapabilities{
-			SupportsIdempotency: domain.CapabilityUnknown,
+			SupportsIdempotency:    domain.CapabilityUnknown,
 			SupportsDeliveryLookup: domain.CapabilityUnknown,
-			SupportsRetryAfter: domain.CapabilityUnknown,
-			MaxPayloadBytes: 4096,
+			SupportsRetryAfter:     domain.CapabilityUnknown,
+			MaxPayloadBytes:        4096,
 		},
 	}
 	subscription := domain.Subscription{

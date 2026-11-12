@@ -13,11 +13,11 @@ var ErrRecipientDirectoryUnavailable = errors.New("notification: recipient direc
 // RecipientDirectoryRequest is the complete, non-secret lookup identity.
 // Implementations must perform current authorization checks and return only opaque target references.
 type RecipientDirectoryRequest struct {
-	Scope        domain.RecipientScope
-	OwnerRef     string
-	RecipientRef string
-	ChannelRef   string
-	ChannelKind  string
+	Scope         domain.RecipientScope
+	OwnerRef      string
+	RecipientRef  string
+	ChannelRef    string
+	ChannelKind   string
 	ConfigVersion int64
 }
 
@@ -67,8 +67,8 @@ func (r *DirectoryRecipientResolver) Resolve(
 	}
 
 	request := RecipientDirectoryRequest{
-		Scope:    subscription.RecipientScope,
-		OwnerRef: subscription.OwnerRef,
+		Scope:      subscription.RecipientScope,
+		OwnerRef:   subscription.OwnerRef,
 		ChannelRef: channel.ChannelRef, ChannelKind: channel.ChannelKind,
 		ConfigVersion: channel.ConfigVersion,
 	}

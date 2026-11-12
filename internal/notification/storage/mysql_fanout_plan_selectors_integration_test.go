@@ -49,10 +49,10 @@ func TestNotificationMariaDBFanoutPlanSelectorsIntegration(t *testing.T) {
 	channelV1 := domain.ChannelConfigSnapshot{
 		ChannelRef: "fanout-selector-channel", ConfigVersion: 1, ChannelKind: "email", Enabled: true,
 		Capabilities: domain.ChannelCapabilities{
-			SupportsIdempotency: domain.CapabilityUnknown,
+			SupportsIdempotency:    domain.CapabilityUnknown,
 			SupportsDeliveryLookup: domain.CapabilityUnknown,
-			SupportsRetryAfter: domain.CapabilityUnknown,
-			MaxPayloadBytes: 4096,
+			SupportsRetryAfter:     domain.CapabilityUnknown,
+			MaxPayloadBytes:        4096,
 		},
 	}
 	channelV2 := channelV1

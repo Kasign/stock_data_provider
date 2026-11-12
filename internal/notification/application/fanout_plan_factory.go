@@ -14,8 +14,8 @@ import (
 )
 
 var (
-	ErrFanoutFilterMatcherUnavailable = errors.New("notification: fanout filter matcher is unavailable")
-	ErrFanoutChannelSelectorUnavailable = errors.New("notification: fanout channel selector is unavailable")
+	ErrFanoutFilterMatcherUnavailable    = errors.New("notification: fanout filter matcher is unavailable")
+	ErrFanoutChannelSelectorUnavailable  = errors.New("notification: fanout channel selector is unavailable")
 	ErrFanoutTemplateSelectorUnavailable = errors.New("notification: fanout template selector is unavailable")
 )
 
@@ -122,7 +122,8 @@ func (f *ProductionFanoutPlanFactory) Build(
 
 	request := RecipientDirectoryRequest{
 		Scope: subscription.RecipientScope, OwnerRef: subscription.OwnerRef,
-		Channel: cloneChannelSnapshot(channel),
+		ChannelRef: channel.ChannelRef, ChannelKind: channel.ChannelKind,
+		ConfigVersion: channel.ConfigVersion,
 	}
 	switch subscription.RecipientScope {
 	case domain.RecipientScopeOwner:
@@ -158,10 +159,10 @@ func (f *ProductionFanoutPlanFactory) Build(
 		SubscriptionID: subscription.SubscriptionID, SubscriptionVersion: subscription.Version,
 		ChannelRef: channel.ChannelRef, ChannelConfigVersion: channel.ConfigVersion,
 		TemplateID: subscription.TemplateID, TemplateVersion: templateVersion,
-		RecipientRef: authorization.Target.RecipientRef,
-		PayloadFingerprint: event.PayloadFingerprint,
+		RecipientRef:                authorization.Target.RecipientRef,
+		PayloadFingerprint:          event.PayloadFingerprint,
 		AuthorizationPolicyVersions: append([]domain.AuthorizationPolicyVersion(nil), authorization.AuthorizationPolicyVersions...),
-		AuthorizationRefs: append([]string(nil), authorization.AuthorizationRefs...),
+		AuthorizationRefs:           append([]string(nil), authorization.AuthorizationRefs...),
 	}
 	if err := assignDeterministicDeliveryIdentity(&plan); err != nil {
 		return FanoutPlanDecision{}, err
@@ -241,4 +242,3 @@ func ValidateFanoutPlanInput(event domain.EventEnvelope, subscription domain.Sub
 	}
 	return validateRecipientDirectoryResult(recipient, channel)
 }
-
