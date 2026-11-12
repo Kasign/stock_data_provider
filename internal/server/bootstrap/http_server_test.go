@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"context"
+	"errors"
 	"net"
 	"net/http"
 	"sync/atomic"
@@ -88,7 +89,7 @@ func TestHTTPServerComponentListenFailureIsStartupFailure(t *testing.T) {
 	}
 }
 
-func TestHTTPServerComponentShutdownTimeoutForcesClose(t *testing.T) {
+func TestHTTPServerComponentShutdownTimeoutBoundsActiveHandlerDrain(t *testing.T) {
 	entered, release := make(chan struct{}), make(chan struct{})
 	mux := http.NewServeMux()
 	mux.HandleFunc("/blocked", func(http.ResponseWriter, *http.Request) {
@@ -111,16 +112,32 @@ func TestHTTPServerComponentShutdownTimeoutForcesClose(t *testing.T) {
 		}
 	}()
 	<-entered
+
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
 	defer cancel()
+	started := time.Now()
 	err = component.Stop(ctx)
 	if err == nil {
-		t.Fatal("Stop() must report shutdown timeout")
+		t.Fatal("Stop() must report the active-handler drain timeout")
 	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("Stop() error = %v, want context deadline", err)
+	}
+	if elapsed := time.Since(started); elapsed > time.Second {
+		t.Fatalf("Stop() took %v after its shutdown deadline", elapsed)
+	}
+	select {
+	case <-component.done:
+	case <-time.After(time.Second):
+		t.Fatal("HTTP listener did not stop after shutdown timeout")
+	}
+
+	// A handler that ignores request cancellation may outlive the forced
+	// socket close. Release it explicitly so the test does not leak a goroutine.
 	close(release)
 	select {
 	case <-requestDone:
 	case <-time.After(time.Second):
-		t.Fatal("request goroutine did not exit after forced close")
+		t.Fatal("request goroutine did not exit after handler release")
 	}
 }

@@ -70,6 +70,7 @@ try {
     await page.locator("#alert-rule-form").waitFor({ state: "attached" });
   }
 
+  await first.locator('.primary-nav-link[data-nav-primary="tracking"]').click();
   await first.locator('.nav-link[data-view="alerts"]').click();
   await second.evaluate(({ key, item }) => localStorage.setItem(key, JSON.stringify([item])), { key: alertKey, item: alertDraft() });
   const firstCard = first.locator(".local-alert-draft-card").filter({ hasText: "初始规则" });

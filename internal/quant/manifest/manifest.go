@@ -37,38 +37,56 @@ var (
 )
 
 type Manifest struct {
-	ResultID            string   `json:"result_id"`
-	ManifestFingerprint string   `json:"manifest_fingerprint"`
-	ResultType          string   `json:"result_type"`
+	ResultID             string   `json:"result_id"`
+	ManifestFingerprint  string   `json:"manifest_fingerprint"`
+	ResultType           string   `json:"result_type"`
+	Scope                string   `json:"scope"`
+	SecurityID           string   `json:"security_id,omitempty"`
+	TradeDate            string   `json:"trade_date,omitempty"`
+	Period               string   `json:"period"`
+	QualityStatus        string   `json:"quality_status"`
+	ResultStatus         string   `json:"result_status"`
 	SchemaVersion        string   `json:"schema_version"`
 	PayloadSchemaVersion string   `json:"payload_schema_version"`
 	AlgorithmVersion     string   `json:"algorithm_version"`
 	ParameterFingerprint string   `json:"parameter_fingerprint"`
 	SystemAsOf           string   `json:"system_as_of"`
-	InputSnapshotRefs   []string `json:"input_snapshot_refs"`
-	ResultFingerprint   string   `json:"result_fingerprint"`
+	InputSnapshotRefs    []string `json:"input_snapshot_refs"`
+	ResultFingerprint    string   `json:"result_fingerprint"`
 }
 
 type Input struct {
-	ResultType        string
+	ResultType           string
+	Scope                string
+	SecurityID           string
+	TradeDate            string
+	Period               string
+	QualityStatus        string
+	ResultStatus         string
 	SchemaVersion        string
 	PayloadSchemaVersion string
 	AlgorithmVersion     string
 	ParameterFingerprint string
 	SystemAsOf           time.Time
-	InputSnapshotRefs []string
-	ResultFingerprint string
+	InputSnapshotRefs    []string
+	ResultFingerprint    string
 }
 
 type fingerprintInput struct {
-	ResultType        string   `json:"result_type"`
+	ResultType           string   `json:"result_type"`
+	Scope                string   `json:"scope"`
+	SecurityID           string   `json:"security_id,omitempty"`
+	TradeDate            string   `json:"trade_date,omitempty"`
+	Period               string   `json:"period"`
+	QualityStatus        string   `json:"quality_status"`
+	ResultStatus         string   `json:"result_status"`
 	SchemaVersion        string   `json:"schema_version"`
 	PayloadSchemaVersion string   `json:"payload_schema_version"`
 	AlgorithmVersion     string   `json:"algorithm_version"`
 	ParameterFingerprint string   `json:"parameter_fingerprint"`
 	SystemAsOf           string   `json:"system_as_of"`
-	InputSnapshotRefs []string `json:"input_snapshot_refs"`
-	ResultFingerprint string   `json:"result_fingerprint"`
+	InputSnapshotRefs    []string `json:"input_snapshot_refs"`
+	ResultFingerprint    string   `json:"result_fingerprint"`
 }
 
 // FingerprintPayload 对强类型结果 payload 做 RFC 8785 JCS + SHA-256。
@@ -105,6 +123,32 @@ func Build(input Input) (Manifest, error) {
 	if _, ok := allowedResultTypes[input.ResultType]; !ok {
 		return Manifest{}, invalid("result_type")
 	}
+	if !validScope(input.Scope) {
+		return Manifest{}, invalid("scope")
+	}
+	if input.Scope == "stock" && !validNonBlank(input.SecurityID) {
+		return Manifest{}, invalid("security_id")
+	}
+	if input.SecurityID != "" && !validNonBlank(input.SecurityID) {
+		return Manifest{}, invalid("security_id")
+	}
+	if input.TradeDate != "" {
+		if len(input.TradeDate) != 10 {
+			return Manifest{}, invalid("trade_date")
+		}
+		if _, err := time.Parse("2006-01-02", input.TradeDate); err != nil {
+			return Manifest{}, invalid("trade_date")
+		}
+	}
+	if !validNonBlank(input.Period) {
+		return Manifest{}, invalid("period")
+	}
+	if !validQualityStatus(input.QualityStatus) {
+		return Manifest{}, invalid("quality_status")
+	}
+	if !validResultStatus(input.ResultStatus) {
+		return Manifest{}, invalid("result_status")
+	}
 	if !schemaVersionRE.MatchString(input.SchemaVersion) {
 		return Manifest{}, invalid("schema_version")
 	}
@@ -123,11 +167,12 @@ func Build(input Input) (Manifest, error) {
 	if !fingerprintRE.MatchString(input.ResultFingerprint) {
 		return Manifest{}, invalid("result_fingerprint")
 	}
-	if len(input.InputSnapshotRefs) == 0 {
-		return Manifest{}, invalid("input_snapshot_refs must not be empty")
+	// nil 表示调用方未提供必需数组；非 nil 空数组表示本次计算没有外部事实快照。
+	if input.InputSnapshotRefs == nil {
+		return Manifest{}, invalid("input_snapshot_refs must be an array")
 	}
-
-	refs := append([]string(nil), input.InputSnapshotRefs...)
+	// 空数组是否允许由 Registry 与调用上下文双重门禁决定。
+	refs := append([]string{}, input.InputSnapshotRefs...)
 	for _, ref := range refs {
 		if !utf8.ValidString(ref) || strings.TrimSpace(ref) == "" || strings.TrimSpace(ref) != ref {
 			return Manifest{}, invalid("input_snapshot_refs contains invalid UTF-8, blank or padded reference")
@@ -142,13 +187,19 @@ func Build(input Input) (Manifest, error) {
 
 	manifest := Manifest{
 		ResultType:           input.ResultType,
+		Scope:                input.Scope,
+		SecurityID:           input.SecurityID,
+		TradeDate:            input.TradeDate,
+		Period:               input.Period,
+		QualityStatus:        input.QualityStatus,
+		ResultStatus:         input.ResultStatus,
 		SchemaVersion:        input.SchemaVersion,
 		PayloadSchemaVersion: input.PayloadSchemaVersion,
 		AlgorithmVersion:     input.AlgorithmVersion,
 		ParameterFingerprint: input.ParameterFingerprint,
 		SystemAsOf:           input.SystemAsOf.UTC().Format(time.RFC3339Nano),
-		InputSnapshotRefs: refs,
-		ResultFingerprint: input.ResultFingerprint,
+		InputSnapshotRefs:    refs,
+		ResultFingerprint:    input.ResultFingerprint,
 	}
 	fingerprint, err := manifest.calculateFingerprint()
 	if err != nil {
@@ -164,6 +215,32 @@ func (m Manifest) Verify() error {
 	if _, ok := allowedResultTypes[m.ResultType]; !ok {
 		return invalid("result_type")
 	}
+	if !validScope(m.Scope) {
+		return invalid("scope")
+	}
+	if m.Scope == "stock" && !validNonBlank(m.SecurityID) {
+		return invalid("security_id")
+	}
+	if m.SecurityID != "" && !validNonBlank(m.SecurityID) {
+		return invalid("security_id")
+	}
+	if m.TradeDate != "" {
+		if len(m.TradeDate) != 10 {
+			return invalid("trade_date")
+		}
+		if _, err := time.Parse("2006-01-02", m.TradeDate); err != nil {
+			return invalid("trade_date")
+		}
+	}
+	if !validNonBlank(m.Period) {
+		return invalid("period")
+	}
+	if !validQualityStatus(m.QualityStatus) {
+		return invalid("quality_status")
+	}
+	if !validResultStatus(m.ResultStatus) {
+		return invalid("result_status")
+	}
 	if !schemaVersionRE.MatchString(m.SchemaVersion) {
 		return invalid("schema_version")
 	}
@@ -176,15 +253,15 @@ func (m Manifest) Verify() error {
 	if !validNonBlank(m.ParameterFingerprint) {
 		return invalid("parameter_fingerprint")
 	}
+	if m.InputSnapshotRefs == nil {
+		return invalid("input_snapshot_refs must be an array")
+	}
 	if !strings.HasSuffix(m.SystemAsOf, "Z") {
 		return invalid("system_as_of must be UTC")
 	}
 	parsedAsOf, err := time.Parse(time.RFC3339Nano, m.SystemAsOf)
 	if err != nil || parsedAsOf.UTC().Format(time.RFC3339Nano) != m.SystemAsOf {
 		return invalid("system_as_of must use canonical UTC RFC3339Nano")
-	}
-	if len(m.InputSnapshotRefs) == 0 {
-		return invalid("input_snapshot_refs must not be empty")
 	}
 	for i, ref := range m.InputSnapshotRefs {
 		if !utf8.ValidString(ref) || strings.TrimSpace(ref) == "" || strings.TrimSpace(ref) != ref {
@@ -225,13 +302,19 @@ func (m Manifest) VerifyPayload(payload json.RawMessage) error {
 func (m Manifest) calculateFingerprint() (string, error) {
 	input := fingerprintInput{
 		ResultType:           m.ResultType,
+		Scope:                m.Scope,
+		SecurityID:           m.SecurityID,
+		TradeDate:            m.TradeDate,
+		Period:               m.Period,
+		QualityStatus:        m.QualityStatus,
+		ResultStatus:         m.ResultStatus,
 		SchemaVersion:        m.SchemaVersion,
 		PayloadSchemaVersion: m.PayloadSchemaVersion,
 		AlgorithmVersion:     m.AlgorithmVersion,
 		ParameterFingerprint: m.ParameterFingerprint,
 		SystemAsOf:           m.SystemAsOf,
-		InputSnapshotRefs: m.InputSnapshotRefs,
-		ResultFingerprint: m.ResultFingerprint,
+		InputSnapshotRefs:    m.InputSnapshotRefs,
+		ResultFingerprint:    m.ResultFingerprint,
 	}
 	encoded, err := json.Marshal(input)
 	if err != nil {
@@ -245,8 +328,33 @@ func (m Manifest) calculateFingerprint() (string, error) {
 	return hex.EncodeToString(sum[:]), nil
 }
 
+func validScope(value string) bool {
+	switch value {
+	case "stock", "market", "industry", "portfolio":
+		return true
+	default:
+		return false
+	}
+}
+func validQualityStatus(value string) bool {
+	switch value {
+	case "valid", "degraded", "invalid", "unknown":
+		return true
+	default:
+		return false
+	}
+}
+func validResultStatus(value string) bool {
+	switch value {
+	case "completed", "insufficient_data", "insufficient_sample", "rejected", "failed":
+		return true
+	default:
+		return false
+	}
+}
+
 func validNonBlank(value string) bool {
-	return value != "" && strings.TrimSpace(value) == value
+	return utf8.ValidString(value) && value != "" && strings.TrimSpace(value) == value
 }
 
 func invalid(field string) error {

@@ -5,7 +5,7 @@
 - 文档范围：`doc/llm/**`
 - 任务前缀：LLM
 - 当前代码状态：Provider Port、DTO、Responses JSON Mapper/Parser、非流式 Adapter、SSE Reader/Stream Adapter、Draft 2020-12 Schema 编译与 Responses strict 子集门禁均已实现；当前没有已确认的 LLM 核心业务代码缺口。
-- 当前模块验证状态：LLM 自身 gofmt 已从最近一次 CI 失败文件清单中排除；但 Run `42567071019` 在根模块全仓 gofmt 门禁失败，LLM 包级 go test、race、vet 未执行，不能标记通过。
+- 当前模块验证状态：本次代码核对基线（本次文档更新前）为 `f36721efcea2385b83eb1833f62122fde473e307`，该代码基线尚无对应 CI 运行；后续文档提交未修改 `internal/llm/**`。最近一次相关 Run `42989240185` 对应旧 SHA `18e4505f1ce2cecffa84218e95eca5f8a09e6d67`；根模块 gofmt 因 Notification 的 13 个文件失败，失败清单不含 `internal/llm/**`，根模块测试被跳过；`go-core` 测试/race/vet 通过，但不覆盖 LLM；Docker analysis-api 构建失败。LLM 包级 go test、race、vet 仍无成功执行证据。
 - PR #45 已于 2026-11-09 合并到 `integration`，合并提交：`2eeea1c44a3268fc98bbd4c99dc1bf5e464f8814`。该合并提交不等于当前 `feat/llm` HEAD 已有独立 CI 通过证据。
 - 当前 `integration` 已包含 Platform `BoundDoer.OpenStream` / `StreamResponse` 代码；LLM 已实现窄接口和 Stream Adapter。剩余接线责任是 Server 组合根将 Platform 流式响应包装为 LLM 的 `HTTPStreamResponse`，不得在 LLM 复制 HTTP Client 或目的地址策略。
 - LLM 不创建 HTTP Client、不实现 SSRF/目标地址策略、不自行重试；网络传输和目的地址安全由 Platform 提供，组合根包装由 Server 负责。

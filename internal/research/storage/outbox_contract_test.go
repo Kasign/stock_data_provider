@@ -114,7 +114,8 @@ func TestResearchLifecycleProducerOutputSatisfiesNotificationContract(t *testing
 		SubjectRefs: []string{"security:600000"}, EvidenceRefs: []string{},
 		SystemObservedAt: now, SystemAsOf: now,
 		ImpactHypothesisRefs: []string{}, InvalidationConditions: []string{},
-		Uncertainty: []string{}, SourceTimes: []researchevent.EventSourceTime{},
+		Uncertainty: []string{}, TimeNormalizationRuleVersion: "1.0.0",
+		SourceTimes: []researchevent.EventSourceTime{}, DerivedFromRefs: []researchevent.ResearchEventRef{},
 	}
 	envelope, _, err := buildResearchLifecycleCreatedEnvelope(created, nil, "corr_parent_123", now)
 	if err != nil {

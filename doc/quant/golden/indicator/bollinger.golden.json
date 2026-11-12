@@ -18,7 +18,8 @@
   "expected": {
     "middle": 2,
     "upper": 3.632993161855452,
-    "lower": 0.36700683814454793
+    "lower": 0.36700683814454793,
+    "sample_count": 3
   },
   "tolerance": 1e-12
 }

@@ -26,7 +26,7 @@ func NewMySQLDeliveryRepository(db *sql.DB) (*MySQLDeliveryRepository, error) {
 	return &MySQLDeliveryRepository{db: db}, nil
 }
 
-const deliverySelect = `SELECT
+const deliverySelectColumns = `SELECT
 	delivery_id, source_module, event_id, subscription_id,
 	subscription_version, channel_ref, channel_config_version, template_id,
 	template_version, recipient_ref, payload_fingerprint, plan_fingerprint,
@@ -35,8 +35,9 @@ const deliverySelect = `SELECT
 	DATE_FORMAT(deadline_at, '%Y-%m-%d %H:%i:%s.%f'),
 	reason_code, last_error_code, provider_message_ref,
 	DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s.%f'),
-	DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i:%s.%f')
-	FROM notification_deliveries`
+	DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i:%s.%f')`
+
+const deliverySelect = deliverySelectColumns + ` FROM notification_deliveries`
 
 // normalizeDeliveryDatabaseTime 将领域时间统一到 MariaDB DATETIME(6) 精度。
 func normalizeDeliveryDatabaseTime(value time.Time) time.Time {
@@ -295,11 +296,13 @@ func (r *MySQLDeliveryRepository) ClaimDue(
 		return application.DeliveryClaim{}, false, err
 	}
 	result, err := tx.ExecContext(ctx, `UPDATE notification_deliveries
-		SET status = ?, version = ?, updated_at = ?, lease_worker_id = ?,
-		lease_expires_at = ?, fencing_token = fencing_token + 1
+		SET status = ?, version = ?, updated_at = ?, next_attempt_at = NULL,
+		reason_code = ?, last_error_code = ?, provider_message_ref = ?,
+		lease_worker_id = ?, lease_expires_at = ?, fencing_token = fencing_token + 1
 		WHERE delivery_id = ? AND version = ? AND fencing_token = ?`,
-		string(next.Status), next.Version, next.UpdatedAt.UTC(), workerID, effectiveExpiry,
-		next.DeliveryID, record.Version, currentToken)
+		string(next.Status), next.Version, next.UpdatedAt.UTC(),
+		nullableText(next.ReasonCode), nullableText(next.LastErrorCode), nullableText(next.ProviderMessageRef),
+		workerID, effectiveExpiry, next.DeliveryID, record.Version, currentToken)
 	if err != nil {
 		return application.DeliveryClaim{}, false, fmt.Errorf("notification storage: claim delivery: %w", err)
 	}

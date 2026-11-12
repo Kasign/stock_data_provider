@@ -66,17 +66,22 @@ func TestNewDecisionRejectsInvalidDTO(t *testing.T) {
 	}
 }
 
-func TestNewDecisionPreservesPresentEmptyCollections(t *testing.T) {
+func TestNewDecisionPreservesPresentEmptyInputRefs(t *testing.T) {
 	input := DecisionInput{
 		DecisionID: "risk-decision-005", RuleSetVersion: "1.0.0",
 		EvaluatedAt: "2026-11-09T01:00:00Z", SystemAsOf: "2026-11-09T00:59:00Z",
-		Reasons: []Reason{}, InputRefs: []string{},
+		Reasons: []Reason{{
+			Code: "INPUT_QUALITY", Severity: SeverityBlock, Status: ReasonUnknown,
+			SafeMessage: "输入质量未知", EvidenceRefs: []string{},
+		}},
+		InputRefs: []string{},
 	}
 	decision, err := NewDecision(input)
 	if err != nil {
 		t.Fatalf("NewDecision() error = %v", err)
 	}
-	if decision.Reasons == nil || decision.InputRefs == nil || decision.Status != DecisionUnknown {
-		t.Fatalf("unexpected empty decision: %+v", decision)
+	if decision.Reasons == nil || len(decision.Reasons) != 1 ||
+		decision.InputRefs == nil || len(decision.InputRefs) != 0 || decision.Status != DecisionUnknown {
+		t.Fatalf("unexpected decision with explicit empty input_refs: %+v", decision)
 	}
 }

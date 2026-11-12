@@ -166,42 +166,65 @@ func (r *Registry) ValidateApplied(ctx context.Context, db *sql.DB) error {
 		return errors.New("migration validation context is required")
 	}
 	if db == nil {
-		return errors.New("migration database is required")
+		return errors.New("migration validation database is required")
 	}
 	entries := r.snapshot()
 	if len(entries) == 0 {
 		return errors.New("no module migrations are registered")
 	}
-	namespaces := make([]string, 0, len(entries))
-	for namespace := range entries {
-		namespaces = append(namespaces, namespace)
+
+	rows, err := db.QueryContext(ctx, "SELECT namespace, version, status FROM platform_schema_migrations")
+	if err != nil {
+		return fmt.Errorf("read migration history: %w", err)
 	}
-	sort.Strings(namespaces)
-	for _, namespace := range namespaces {
-		rows, err := db.QueryContext(ctx, "SELECT version, status FROM platform_schema_migrations WHERE namespace = ?", namespace)
-		if err != nil {
-			return fmt.Errorf("read migration history for %s: %w", namespace, err)
+	applied := make(map[string]map[uint64]string, len(entries))
+	for rows.Next() {
+		var namespace, status string
+		var version uint64
+		if err := rows.Scan(&namespace, &version, &status); err != nil {
+			_ = rows.Close()
+			return fmt.Errorf("read migration history: %w", err)
 		}
-		applied := make(map[uint64]string, len(entries[namespace]))
-		for rows.Next() {
-			var version uint64
-			var status string
-			if err := rows.Scan(&version, &status); err != nil {
-				_ = rows.Close()
-				return fmt.Errorf("read migration history for %s: %w", namespace, err)
-			}
-			applied[version] = status
+		if applied[namespace] == nil {
+			applied[namespace] = make(map[uint64]string)
 		}
-		rowsErr := rows.Err()
-		closeErr := rows.Close()
-		if rowsErr != nil {
-			return fmt.Errorf("read migration history for %s: %w", namespace, rowsErr)
+		applied[namespace][version] = status
+	}
+	rowsErr := rows.Err()
+	closeErr := rows.Close()
+	if rowsErr != nil {
+		return fmt.Errorf("read migration history: %w", rowsErr)
+	}
+	if closeErr != nil {
+		return fmt.Errorf("close migration history: %w", closeErr)
+	}
+	if err := validateAppliedNamespaces(entries, applied); err != nil {
+		return fmt.Errorf("migration schema is not ready: %w", err)
+	}
+	return nil
+}
+
+// validateAppliedNamespaces requires the database history to contain exactly
+// the namespaces and versions registered by the current Server composition.
+func validateAppliedNamespaces(
+	expected map[string][]platformstorage.Migration,
+	applied map[string]map[uint64]string,
+) error {
+	if len(expected) == 0 {
+		return errors.New("no migration definitions are registered")
+	}
+	for namespace, migrations := range expected {
+		namespaceApplied, exists := applied[namespace]
+		if !exists {
+			return fmt.Errorf("migration namespace %q is missing", namespace)
 		}
-		if closeErr != nil {
-			return fmt.Errorf("close migration history for %s: %w", namespace, closeErr)
+		if err := validateAppliedVersions(migrations, namespaceApplied); err != nil {
+			return fmt.Errorf("migration namespace %q: %w", namespace, err)
 		}
-		if err := validateAppliedVersions(entries[namespace], applied); err != nil {
-			return fmt.Errorf("migration namespace %s is not ready: %w", namespace, err)
+	}
+	for namespace := range applied {
+		if _, exists := expected[namespace]; !exists {
+			return fmt.Errorf("database contains unregistered migration namespace %q", namespace)
 		}
 	}
 	return nil
