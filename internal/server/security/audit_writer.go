@@ -61,7 +61,7 @@ func SecurityAuditMigrations() []platformstorage.Migration {
 	return []platformstorage.Migration{{
 		Version:     1,
 		Description: "create security audit event persistence",
-		Statements: []string{\`CREATE TABLE server_security_audit_events (
+		Statements: []string{`CREATE TABLE server_security_audit_events (
 			audit_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
 			event_type VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
 			subject VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
@@ -74,6 +74,6 @@ func SecurityAuditMigrations() []platformstorage.Migration {
 			KEY idx_server_security_audit_occurred (occurred_at, audit_id),
 			KEY idx_server_security_audit_subject_occurred (subject, occurred_at, audit_id),
 			KEY idx_server_security_audit_request_id (request_id)
-		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci\`},
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`},
 	}}
 }
