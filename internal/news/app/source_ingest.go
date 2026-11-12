@@ -13,8 +13,13 @@ import (
 
 // SourcePolicyIdentityTransaction 在 Identity 写事务内锁定并读取当前 Source/Endpoint 策略版本。
 // 生产实现必须使用与 Observation 写入相同的数据库事务。
-type SourcePolicyIdentityTransaction interface {
-	LockCurrentSourcePolicies(context.Context, string, string, string, string) (domain.SourcePolicy, *domain.EndpointPolicy, error)
+type CurrentIngestPolicyIdentityTransaction interface {
+	LockCurrentIngestPolicies(
+		context.Context,
+		string, string,
+		string, string,
+		string, string,
+	) (domain.SourcePolicy, *domain.EndpointPolicy, *domain.ProviderOutputPolicy, error)
 }
 
 var (
@@ -130,12 +135,12 @@ func (u *IngestCollectedSource) Execute(ctx context.Context, request IngestColle
 		observation, ingestErr := u.ingest.executeWithPolicyTraceAndCheck(
 			ctx, sourceID, idempotencyKey, candidate, registration.URLPolicy, trace,
 			func(tx IdentityTransaction) error {
-				policyTx, ok := tx.(SourcePolicyIdentityTransaction)
+				policyTx, ok := tx.(CurrentIngestPolicyIdentityTransaction)
 				if !ok {
 					return ErrSourcePersistencePolicyUnavailable
 				}
-				sourcePolicy, endpointPolicy, policyErr := policyTx.LockCurrentSourcePolicies(
-					ctx, sourceID, result.SourcePolicyVersionID, endpointID, result.EndpointPolicyVersionID,
+				sourcePolicy, endpointPolicy, _, policyErr := policyTx.LockCurrentIngestPolicies(
+					ctx, sourceID, result.SourcePolicyVersionID, endpointID, result.EndpointPolicyVersionID, "", "",
 				)
 				if policyErr != nil {
 					return errors.Join(ErrSourcePersistencePolicyUnavailable, policyErr)

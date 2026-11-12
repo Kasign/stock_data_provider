@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"reflect"
 	"strings"
 	"time"
 
@@ -121,13 +122,6 @@ func (u *IngestProviderCandidate) Execute(ctx context.Context, request IngestPro
 		Retention:         request.Retention,
 		CrossRequestCache: request.CrossRequestCache,
 	}
-	decision := domain.EvaluateCandidateCollectionPolicy(
-		&providerBinding.Policy, registration.SourcePolicy, registration.EndpointPolicy, policyRequest, evaluatedAt,
-	)
-	if !decision.Allowed {
-		return domain.Observation{}, errors.Join(ErrProviderOutputPolicyDenied, errors.New(decision.ReasonCode))
-	}
-
 	trace := ObservationPolicyTrace{
 		SourcePolicyVersionID:         registration.SourcePolicyVersionID,
 		ProviderOutputPolicyRef:       strings.TrimSpace(providerBinding.PolicyRef),
@@ -139,6 +133,32 @@ func (u *IngestProviderCandidate) Execute(ctx context.Context, request IngestPro
 		trace.EndpointID = registration.EndpointID
 		trace.EndpointPolicyVersionID = registration.EndpointPolicyVersionID
 	}
-	return u.ingest.executeCore(ctx, request.SourceID, request.IdempotencyKey,
-		request.Candidate, registration.URLPolicy, trace, nil)
+	return u.ingest.executeWithPolicyTraceAndCheck(
+		ctx, request.SourceID, request.IdempotencyKey, request.Candidate, registration.URLPolicy, trace,
+		func(tx IdentityTransaction) error {
+			policyTx, ok := tx.(CurrentIngestPolicyIdentityTransaction)
+			if !ok {
+				return ErrProviderOutputPolicyUnavailable
+			}
+			sourcePolicy, endpointPolicy, currentProviderPolicy, policyErr := policyTx.LockCurrentIngestPolicies(
+				ctx,
+				request.SourceID, registration.SourcePolicyVersionID,
+				registration.EndpointID, registration.EndpointPolicyVersionID,
+				providerBinding.PolicyRef, providerBinding.PolicyVersion,
+			)
+			if policyErr != nil || currentProviderPolicy == nil ||
+				!reflect.DeepEqual(sourcePolicy, registration.SourcePolicy) ||
+				!reflect.DeepEqual(endpointPolicy, registration.EndpointPolicy) ||
+				!reflect.DeepEqual(*currentProviderPolicy, providerBinding.Policy) {
+				return errors.Join(ErrProviderOutputPolicyUnavailable, policyErr)
+			}
+			decision := domain.EvaluateCandidateCollectionPolicy(
+				currentProviderPolicy, sourcePolicy, endpointPolicy, policyRequest, u.now().UTC(),
+			)
+			if !decision.Allowed {
+				return errors.Join(ErrProviderOutputPolicyDenied, errors.New(decision.ReasonCode))
+			}
+			return nil
+		},
+	)
 }

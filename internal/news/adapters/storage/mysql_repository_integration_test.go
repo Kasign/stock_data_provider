@@ -977,12 +977,12 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	sourceWriteDone := make(chan error, 1)
 	go func() {
 		sourceWriteDone <- repository.WithinIdentityTransaction(ctx, func(tx app.IdentityTransaction) error {
-			policyTx, ok := tx.(app.SourcePolicyIdentityTransaction)
+			policyTx, ok := tx.(app.CurrentIngestPolicyIdentityTransaction)
 			if !ok {
 				return errors.New("identity transaction lacks source policy lock")
 			}
-			if _, _, err := policyTx.LockCurrentSourcePolicies(
-				ctx, lockSourceRef, lockSourceV1, "news-it-source-ingest-endpoint", "",
+			if _, _, err := policyTx.LockCurrentIngestPolicies(
+				ctx, lockSourceRef, lockSourceV1, "news-it-source-ingest-endpoint", "", "", "",
 			); err != nil {
 				return err
 			}
@@ -1019,12 +1019,12 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 		t.Fatalf("publish source policy revocation after Observation transaction: %v", err)
 	}
 	if err := repository.WithinIdentityTransaction(ctx, func(tx app.IdentityTransaction) error {
-		policyTx, ok := tx.(app.SourcePolicyIdentityTransaction)
+		policyTx, ok := tx.(app.CurrentIngestPolicyIdentityTransaction)
 		if !ok {
 			return errors.New("identity transaction lacks source policy lock")
 		}
-		_, _, err := policyTx.LockCurrentSourcePolicies(
-			ctx, lockSourceRef, lockSourceV1, "news-it-source-ingest-endpoint", "",
+		_, _, err := policyTx.LockCurrentIngestPolicies(
+			ctx, lockSourceRef, lockSourceV1, "news-it-source-ingest-endpoint", "", "", "",
 		)
 		return err
 	}); !errors.Is(err, app.ErrNewsCurrentPolicyUnavailable) {

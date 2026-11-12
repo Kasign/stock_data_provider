@@ -16,8 +16,11 @@ type memoryIdentityRepository struct {
 	failAppend              bool
 	sourcePolicy            domain.SourcePolicy
 	sourcePolicyVersionID   string
-	endpointPolicy          *domain.EndpointPolicy
-	endpointPolicyVersionID string
+	endpointPolicy                 *domain.EndpointPolicy
+	endpointPolicyVersionID        string
+	providerOutputPolicy           domain.ProviderOutputPolicy
+	providerOutputPolicyRef        string
+	providerOutputPolicyVersionID  string
 }
 
 type memoryIdentityTransaction struct {
@@ -39,17 +42,23 @@ func (r *memoryIdentityRepository) WithinIdentityTransaction(ctx context.Context
 	return nil
 }
 
-func (tx memoryIdentityTransaction) LockCurrentSourcePolicies(
+func (tx memoryIdentityTransaction) LockCurrentIngestPolicies(
 	_ context.Context,
-	sourceID, sourceVersionID, endpointID, endpointVersionID string,
-) (domain.SourcePolicy, *domain.EndpointPolicy, error) {
+	sourceID, sourceVersionID, endpointID, endpointVersionID, providerRef, providerVersion string,
+) (domain.SourcePolicy, *domain.EndpointPolicy, *domain.ProviderOutputPolicy, error) {
 	repository := tx.repository
 	if repository == nil || sourceID == "" || endpointID == "" ||
 		repository.sourcePolicyVersionID != sourceVersionID ||
-		repository.endpointPolicyVersionID != endpointVersionID {
-		return domain.SourcePolicy{}, nil, ErrSourcePersistencePolicyUnavailable
+		repository.endpointPolicyVersionID != endpointVersionID ||
+		repository.providerOutputPolicyRef != providerRef ||
+		repository.providerOutputPolicyVersionID != providerVersion {
+		return domain.SourcePolicy{}, nil, nil, ErrSourcePersistencePolicyUnavailable
 	}
-	return repository.sourcePolicy, repository.endpointPolicy, nil
+	if providerRef == "" {
+		return repository.sourcePolicy, repository.endpointPolicy, nil, nil
+	}
+	providerPolicy := repository.providerOutputPolicy
+	return repository.sourcePolicy, repository.endpointPolicy, &providerPolicy, nil
 }
 
 func (tx memoryIdentityTransaction) FindIdentityCredentials(_ context.Context, sourceID string, candidates []domain.IdentityCredential) ([]domain.IdentityCredential, error) {

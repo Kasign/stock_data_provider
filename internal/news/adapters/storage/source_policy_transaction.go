@@ -4,24 +4,26 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"sort"
 
 	"example.com/stock-analysis-flow/internal/news/app"
 	"example.com/stock-analysis-flow/internal/news/domain"
 )
 
-var _ app.SourcePolicyIdentityTransaction = (*mysqlNewsTransaction)(nil)
+var _ app.CurrentIngestPolicyIdentityTransaction = (*mysqlNewsTransaction)(nil)
 
-// LockCurrentSourcePolicies 在 Observation 身份事务中锁定并读取当前 Source/Endpoint 策略。
+// LockCurrentIngestPolicies 在 Observation 身份事务中按固定顺序锁定并读取当前策略组合。
 // 策略撤销/替换必须更新相同指针行，因此不能越过本次授权与 Observation 写入。
-func (t *mysqlNewsTransaction) LockCurrentSourcePolicies(
+func (t *mysqlNewsTransaction) LockCurrentIngestPolicies(
 	ctx context.Context,
-	sourceRef, sourceVersion, endpointRef, endpointVersion string,
-) (domain.SourcePolicy, *domain.EndpointPolicy, error) {
-	if t == nil || t.tx == nil || ctx == nil || sourceRef == "" || sourceVersion == "" || endpointRef == "" {
-		return domain.SourcePolicy{}, nil, app.ErrNewsCurrentPolicyUnavailable
+	sourceRef, sourceVersion, endpointRef, endpointVersion, providerRef, providerVersion string,
+) (domain.SourcePolicy, *domain.EndpointPolicy, *domain.ProviderOutputPolicy, error) {
+	if t == nil || t.tx == nil || ctx == nil || sourceRef == "" || sourceVersion == "" || endpointRef == "" ||
+		(providerRef == "") != (providerVersion == "") {
+		return domain.SourcePolicy{}, nil, nil, app.ErrNewsCurrentPolicyUnavailable
 	}
 
-	expected := make([]domain.AuthorizationPolicyVersion, 0, 2)
+	expected := make([]domain.AuthorizationPolicyVersion, 0, 3)
 	if endpointVersion != "" {
 		expected = append(expected, domain.AuthorizationPolicyVersion{
 			PolicyType: domain.NewsPolicyTypeEndpoint, PolicyRef: endpointRef, PolicyVersion: endpointVersion,
@@ -33,41 +35,64 @@ func (t *mysqlNewsTransaction) LockCurrentSourcePolicies(
 			domain.NewsPolicyTypeEndpoint, endpointRef,
 		).Scan(&currentVersion)
 		if err == nil {
-			return domain.SourcePolicy{}, nil, app.ErrNewsCurrentPolicyUnavailable
+			return domain.SourcePolicy{}, nil, nil, app.ErrNewsCurrentPolicyUnavailable
 		}
 		if !errors.Is(err, sql.ErrNoRows) {
-			return domain.SourcePolicy{}, nil, errors.Join(app.ErrNewsCurrentPolicyUnavailable, err)
+			return domain.SourcePolicy{}, nil, nil, errors.Join(app.ErrNewsCurrentPolicyUnavailable, err)
 		}
+	}
+	if providerRef != "" {
+		expected = append(expected, domain.AuthorizationPolicyVersion{
+			PolicyType: domain.NewsPolicyTypeProviderOutput, PolicyRef: providerRef, PolicyVersion: providerVersion,
+		})
 	}
 	expected = append(expected, domain.AuthorizationPolicyVersion{
 		PolicyType: domain.NewsPolicyTypeSource, PolicyRef: sourceRef, PolicyVersion: sourceVersion,
+	})
+	sort.Slice(expected, func(i, j int) bool {
+		if expected[i].PolicyType != expected[j].PolicyType {
+			return expected[i].PolicyType < expected[j].PolicyType
+		}
+		return expected[i].PolicyRef < expected[j].PolicyRef
 	})
 
 	loaded, err := loadCurrentNewsPolicyVersions(ctx, t.tx, domain.NewsAuthorizationBinding{
 		PolicySnapshot: domain.AuthorizationPolicySnapshot{Policies: expected},
 	}, true)
 	if err != nil {
-		return domain.SourcePolicy{}, nil, err
+		return domain.SourcePolicy{}, nil, nil, err
 	}
-	sourceVersionValue, ok := loaded[domain.NewsPolicyTypeSource+"\x00"+sourceRef]
+	sourceVersionValue, ok := loaded[domain.NewsPolicyTypeSource+"\\x00"+sourceRef]
 	if !ok {
-		return domain.SourcePolicy{}, nil, app.ErrNewsCurrentPolicyUnavailable
+		return domain.SourcePolicy{}, nil, nil, app.ErrNewsCurrentPolicyUnavailable
 	}
 	var sourcePolicy domain.SourcePolicy
 	if decodeCurrentPolicy(sourceVersionValue.Payload, &sourcePolicy) != nil {
-		return domain.SourcePolicy{}, nil, app.ErrNewsCurrentPolicyUnavailable
+		return domain.SourcePolicy{}, nil, nil, app.ErrNewsCurrentPolicyUnavailable
 	}
 
-	if endpointVersion == "" {
-		return sourcePolicy, nil, nil
+	var endpointPolicy *domain.EndpointPolicy
+	if endpointVersion != "" {
+		endpointVersionValue, ok := loaded[domain.NewsPolicyTypeEndpoint+"\\x00"+endpointRef]
+		if !ok {
+			return domain.SourcePolicy{}, nil, nil, app.ErrNewsCurrentPolicyUnavailable
+		}
+		endpointPolicy = new(domain.EndpointPolicy)
+		if decodeCurrentPolicy(endpointVersionValue.Payload, endpointPolicy) != nil {
+			return domain.SourcePolicy{}, nil, nil, app.ErrNewsCurrentPolicyUnavailable
+		}
 	}
-	endpointVersionValue, ok := loaded[domain.NewsPolicyTypeEndpoint+"\x00"+endpointRef]
-	if !ok {
-		return domain.SourcePolicy{}, nil, app.ErrNewsCurrentPolicyUnavailable
+
+	var providerPolicy *domain.ProviderOutputPolicy
+	if providerRef != "" {
+		providerVersionValue, ok := loaded[domain.NewsPolicyTypeProviderOutput+"\\x00"+providerRef]
+		if !ok {
+			return domain.SourcePolicy{}, nil, nil, app.ErrNewsCurrentPolicyUnavailable
+		}
+		providerPolicy = new(domain.ProviderOutputPolicy)
+		if decodeCurrentPolicy(providerVersionValue.Payload, providerPolicy) != nil {
+			return domain.SourcePolicy{}, nil, nil, app.ErrNewsCurrentPolicyUnavailable
+		}
 	}
-	endpointPolicy := new(domain.EndpointPolicy)
-	if decodeCurrentPolicy(endpointVersionValue.Payload, endpointPolicy) != nil {
-		return domain.SourcePolicy{}, nil, app.ErrNewsCurrentPolicyUnavailable
-	}
-	return sourcePolicy, endpointPolicy, nil
+	return sourcePolicy, endpointPolicy, providerPolicy, nil
 }
