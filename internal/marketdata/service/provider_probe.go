@@ -1074,7 +1074,10 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 			}
 			if err != nil {
 				setProbeFailure(&item, err)
-				if job.capability == "daily_bars" && isUnsupportedDailyBarAdjustmentError(err) {
+				if item.ErrorCode == "provider_not_configured" {
+					item.Status = "not_configured"
+					item.ErrorStage = "configuration"
+				} else if job.capability == "daily_bars" && isUnsupportedDailyBarAdjustmentError(err) {
 					item.Status = "not_supported"
 					item.ErrorCode = "daily_bar_adjustment_not_supported"
 					item.ErrorStage = "configuration"
@@ -1393,6 +1396,10 @@ func buildProviderProbeCheckResults(items []model.ProviderProbeItem, requestedCh
 					result.ErrorCode = item.ErrorCode
 				}
 			case "freshness":
+				if item.Status == "not_configured" || item.Status == "not_supported" || item.Status == "skipped" {
+					result.Status, result.ErrorCode = item.Status, item.ErrorCode
+					break
+				}
 				if item.ProviderTime == nil || item.ProviderTime.IsZero() {
 					result.ErrorCode = "provider_time_unavailable"
 					break
@@ -1679,6 +1686,9 @@ func classifyProbeError(err error) string {
 		return "cancelled"
 	}
 	message := strings.ToLower(err.Error())
+	if isProbeProviderNotConfiguredError(message) {
+		return "provider_not_configured"
+	}
 	switch {
 	case strings.Contains(message, "429"), strings.Contains(message, "too many requests"), strings.Contains(message, "rate limit"):
 		return "rate_limited"
@@ -1699,6 +1709,16 @@ func classifyProbeError(err error) string {
 		return "network_error"
 	}
 	return "provider_error"
+}
+
+// isProbeProviderNotConfiguredError 只识别明确的本地配置缺失，不把远端认证/权限拒绝降级为 skipped。
+func isProbeProviderNotConfiguredError(message string) bool {
+	message = strings.ToLower(strings.TrimSpace(message))
+	return strings.Contains(message, "token is not configured") ||
+		strings.Contains(message, "api key is not configured") ||
+		strings.Contains(message, "http client is not configured") ||
+		strings.Contains(message, "http client 未配置") ||
+		(strings.Contains(message, "需要配置") && (strings.Contains(message, "api_key") || strings.Contains(message, "token")))
 }
 
 func probeHTTPStatus(err error) int {
@@ -1740,6 +1760,8 @@ func probeErrorStage(code string) string {
 		return "provider_permission"
 	case code == "contract_invalid":
 		return "contract"
+	case code == "provider_not_configured":
+		return "configuration"
 	case code == "network_error":
 		return "connect"
 	case strings.HasPrefix(code, "http_"):

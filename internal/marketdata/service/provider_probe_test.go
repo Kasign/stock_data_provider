@@ -321,6 +321,34 @@ func TestProviderProbeRejectsQuoteWithoutIdentity(t *testing.T) {
 	}
 }
 
+
+func TestProviderProbeClassifiesMissingCredentialsAsNotConfigured(t *testing.T) {
+	cases := []string{
+		"Tushare token is not configured",
+		"同花顺行情接口需要配置 MARKET_DATA_HITHINK_API_KEY",
+		"Provider HTTP client is not configured",
+	}
+	for _, message := range cases {
+		t.Run(message, func(t *testing.T) {
+			p := providerProbeFailQuoteFake{message: message}
+			ds := NewWithCapabilities([]provider.NamedProvider{p}, []provider.QuoteProvider{p}, nil, cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000, ResilienceConfig{}, nil)
+			run, err := ds.ProbeProviderCapabilitiesWithOptions(context.Background(), ProviderProbeOptions{
+				Scope: "all", Capabilities: []string{"quote"}, Checks: []string{"connectivity", "contract", "quality", "freshness"}, TimeoutSeconds: 5,
+			})
+			if err != nil { t.Fatalf("ProbeProviderCapabilitiesWithOptions() error = %v", err) }
+			item, found := findProbeItem(run.Items, p.Name(), "quote")
+			if !found || item.Status != "not_configured" || item.ErrorCode != "provider_not_configured" || item.ErrorStage != "configuration" {
+				t.Fatalf("missing local credentials must be not_configured: %+v", item)
+			}
+			for _, check := range run.CheckResults {
+				if check.Provider == p.Name() && check.Capability == "quote" && check.Status != "not_configured" {
+					t.Fatalf("check %q must preserve not_configured, got %+v", check.Check, check)
+				}
+			}
+		})
+	}
+}
+
 func TestProviderProbeFailureClassification(t *testing.T) {
 	cases := []struct {
 		message string
@@ -332,6 +360,8 @@ func TestProviderProbeFailureClassification(t *testing.T) {
 		{"HTTP 403 Forbidden", "permission_denied", "provider_permission"},
 		{"dial tcp: lookup example.test: no such host", "network_error", "connect"},
 		{"quote contract missing source version", "contract_invalid", "contract"},
+		{"Tushare token is not configured", "provider_not_configured", "configuration"},
+		{"Provider HTTP client is not configured", "provider_not_configured", "configuration"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.code, func(t *testing.T) {
