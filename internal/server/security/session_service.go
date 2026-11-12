@@ -22,45 +22,45 @@ type PasswordHasher interface {
 }
 
 type SessionLifecycleConfig struct {
-	RateLimitHMACKey []byte
-	Cookie          platformsecurity.SessionCookieConfig
-	IdleTTL         time.Duration
-	AbsoluteTTL     time.Duration
-	RateLimitPolicy platformsecurity.LoginRateLimitPolicy
-	Now             func() time.Time
+	RateLimitHMACKey	[]byte
+	Cookie	platformsecurity.SessionCookieConfig
+	IdleTTL	time.Duration
+	AbsoluteTTL	time.Duration
+	RateLimitPolicy	platformsecurity.LoginRateLimitPolicy
+	Now	func() time.Time
 }
 
 type SessionLifecycleDependencies struct {
-	Credentials platformsecurity.CredentialStore
-	Sessions    platformsecurity.SessionStore
-	RateLimiter platformsecurity.LoginRateLimiter
-	Hasher      PasswordHasher
-	Audit       platformsecurity.SecurityAuditWriter
+	Credentials	platformsecurity.CredentialStore
+	Sessions	platformsecurity.SessionStore
+	RateLimiter	platformsecurity.LoginRateLimiter
+	Hasher	PasswordHasher
+	Audit	platformsecurity.SecurityAuditWriter
 }
 
 type SessionLifecycleService struct {
-	credentials platformsecurity.CredentialStore
-	sessions    platformsecurity.SessionStore
-	rateLimiter platformsecurity.LoginRateLimiter
-	hasher      PasswordHasher
-	audit       platformsecurity.SecurityAuditWriter
-	cookie      platformsecurity.SessionCookieConfig
-	idleTTL     time.Duration
-	absoluteTTL time.Duration
-	policy      platformsecurity.LoginRateLimitPolicy
-	rateKey     []byte
+	credentials	platformsecurity.CredentialStore
+	sessions	platformsecurity.SessionStore
+	rateLimiter	platformsecurity.LoginRateLimiter
+	hasher	PasswordHasher
+	audit	platformsecurity.SecurityAuditWriter
+	cookie	platformsecurity.SessionCookieConfig
+	idleTTL	time.Duration
+	absoluteTTL	time.Duration
+	policy	platformsecurity.LoginRateLimitPolicy
+	rateKey	[]byte
 	now         func() time.Time
 }
 
 type LoginInput struct {
-	Password  []byte
-	SourceIP  net.IP
-	RequestID string
+	Password	[]byte
+	SourceIP	net.IP
+	RequestID	string
 }
 
 type SessionIssue struct {
-	Cookie    *http.Cookie
-	CSRFToken string
+	Cookie	*http.Cookie
+	CSRFToken	string
 }
 
 func NewSessionLifecycleService(deps SessionLifecycleDependencies, cfg SessionLifecycleConfig) (*SessionLifecycleService, error) {
@@ -278,7 +278,7 @@ func (s *SessionLifecycleService) RotateSession(ctx context.Context, rawToken, r
 		_ = s.sessions.Revoke(ctx, newDigest)
 		return SessionIssue{}, err
 	}
-	return SessionIssue{Cookie:	cookie, CSRFToken: csrf}, nil
+	return SessionIssue{Cookie: cookie, CSRFToken: csrf}, nil
 }
 
 func (s *SessionLifecycleService) ChangePassword(ctx context.Context, currentPassword, newPassword []byte, requestID string) error {
@@ -343,11 +343,11 @@ func (s *SessionLifecycleService) createSession(ctx context.Context, credentialV
 		_ = s.sessions.Revoke(ctx, digest)
 		return SessionIssue{}, "", err
 	}
-	return SessionIssue{Cookie:	cookie, CSRFToken: csrf}, digest, nil
+	return SessionIssue{Cookie: cookie, CSRFToken: csrf}, digest, nil
 }
 
 func (s *SessionLifecycleService) writeAudit(ctx context.Context, requestID string, eventType platformsecurity.SecurityAuditEventType,
-	subject string, result platformsecurity.SecurityAuditResult, source platformsecurity.SecurityAuditSource, reason string) error {
+	subject	string, result platformsecurity.SecurityAuditResult, source platformsecurity.SecurityAuditSource, reason string) error {
 	return platformsecurity.WriteSecurityAudit(ctx, s.audit, platformsecurity.SecurityAuditEvent{
 		EventType:	eventType, Subject:	subject, Result:	result, OccurredAt:	s.now().UTC(),
 		RequestID:	requestID, Source:	source, ReasonCode:	reason,

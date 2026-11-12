@@ -20,9 +20,9 @@ func (h lifecycleTestHasher) Verify(_ string, password []byte) (bool, error) {
 func (h lifecycleTestHasher) NeedsRehash(string) (bool, error) { return false, nil }
 
 type lifecycleTestCredentials struct {
-	credential platformsecurity.OwnerCredential
-	initErr    error
-	updateErr  error
+	credential	platformsecurity.OwnerCredential
+	initErr	error
+	updateErr	error
 }
 
 func (s *lifecycleTestCredentials) GetOwnerCredential(context.Context) (platformsecurity.OwnerCredential, error) {
@@ -30,7 +30,7 @@ func (s *lifecycleTestCredentials) GetOwnerCredential(context.Context) (platform
 }
 func (s *lifecycleTestCredentials) InitializeOwnerCredential(_ context.Context, hash string) (platformsecurity.OwnerCredential, error) {
 	if s.initErr != nil { return platformsecurity.OwnerCredential{}, s.initErr }
-	s.credential = platformsecurity.OwnerCredential{Subject:	"owner", PasswordHash: hash, CredentialVersion:	1}
+	s.credential = platformsecurity.OwnerCredential{Subject: "owner", PasswordHash: hash, CredentialVersion: 1}
 	return s.credential, nil
 }
 func (s *lifecycleTestCredentials) UpdateOwnerPassword(_ context.Context, version uint64, hash string) (platformsecurity.OwnerCredential, error) {
@@ -42,10 +42,10 @@ func (s *lifecycleTestCredentials) UpdateOwnerPassword(_ context.Context, versio
 }
 
 type lifecycleTestSessions struct {
-	createdDigest string
-	record        platformsecurity.SessionRecord
-	revoked       []string
-	rotateErr     error
+	createdDigest	string
+	record	platformsecurity.SessionRecord
+	revoked	[]string
+	rotateErr	error
 }
 
 func (s *lifecycleTestSessions) Create(_ context.Context, digest string, record platformsecurity.SessionRecord) error {
@@ -69,10 +69,10 @@ func (s *lifecycleTestSessions) Revoke(_ context.Context, digest string) error {
 }
 
 type lifecycleTestRateLimiter struct {
-	checkResult platformsecurity.LoginRateLimitResult
-	failures    int
-	reset       int
-	err         error
+	checkResult	platformsecurity.LoginRateLimitResult
+	failures	int
+	reset	int
+	err	error
 }
 
 func (r *lifecycleTestRateLimiter) Check(context.Context, string, string) (platformsecurity.LoginRateLimitResult, error) {
@@ -89,8 +89,8 @@ func (r *lifecycleTestRateLimiter) ResetAccount(context.Context, string) error {
 }
 
 type lifecycleTestAudit struct {
-	events []platformsecurity.SecurityAuditEvent
-	err    error
+	events	[]platformsecurity.SecurityAuditEvent
+	err	error
 }
 
 func (a *lifecycleTestAudit) Write(_ context.Context, event platformsecurity.SecurityAuditEvent) error {
@@ -104,14 +104,14 @@ func newLifecycleTestService(t *testing.T, auditErr error) (*SessionLifecycleSer
 		Subject:	"owner", PasswordHash: "encoded:correct", CredentialVersion:	7,
 	}}
 	sessions := &lifecycleTestSessions{}
-	limiter := &lifecycleTestRateLimiter{checkResult:	platformsecurity.LoginRateLimitResult{Allowed: true}}
+	limiter := &lifecycleTestRateLimiter{checkResult: platformsecurity.LoginRateLimitResult{Allowed: true}}
 	audit := &lifecycleTestAudit{err: auditErr}
 	now := time.Date(2026, 11, 12, 9, 0, 0, 0, time.UTC)
 	service, err := NewSessionLifecycleService(SessionLifecycleDependencies{
 		Credentials:	credentials,
 		Sessions:	sessions,
 		RateLimiter:	limiter,
-		Hasher:	lifecycleTestHasher{expected:	"correct"},
+		Hasher: lifecycleTestHasher{expected: "correct"},
 		Audit:	audit,
 	}, SessionLifecycleConfig{
 		RateLimitHMACKey:	[]byte("0123456789abcdef0123456789abcdef"),
@@ -130,7 +130,7 @@ func newLifecycleTestService(t *testing.T, auditErr error) (*SessionLifecycleSer
 			BaseBackoff:	time.Second,
 			MaxBackoff:	15 * time.Minute,
 		},
-		Now:	func() time.Time { return now },
+		Now: func() time.Time { return now },
 	})
 	if err != nil { t.Fatal(err) }
 	return service, credentials, sessions, limiter, audit
