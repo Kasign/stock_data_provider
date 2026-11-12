@@ -19,12 +19,10 @@ type publicError struct {
 	Code      string `json:"code"`
 	Message   string `json:"message"`
 	Retryable bool   `json:"retryable"`
-	RequestID string `json:"request_id,omitempty"`
 }
 
 type publicErrorEnvelope struct {
-	SchemaVersion string      `json:"schema_version"`
-	Error         publicError `json:"error"`
+	Error publicError `json:"error"`
 }
 
 func newHTTPMiddleware(next http.Handler, cfg httpMiddlewareConfig) (http.Handler, error) {
@@ -42,7 +40,7 @@ func newHTTPMiddleware(next http.Handler, cfg httpMiddlewareConfig) (http.Handle
 func limitRequestBody(next http.Handler, maximum int64) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.ContentLength > maximum {
-			writePublicError(w, r, http.StatusRequestEntityTooLarge, publicError{
+			writePublicError(w, http.StatusRequestEntityTooLarge, publicError{
 				Class: "validation", Code: "server.request_too_large",
 				Message: "request body exceeds the configured limit",
 			})
@@ -70,7 +68,7 @@ func limitConcurrentRequests(next http.Handler, maximum int) http.Handler {
 			next.ServeHTTP(w, r)
 		default:
 			w.Header().Set("Retry-After", "1")
-			writePublicError(w, r, http.StatusServiceUnavailable, publicError{
+			writePublicError(w, http.StatusServiceUnavailable, publicError{
 				Class: "unavailable", Code: "server.overloaded",
 				Message: "server is temporarily overloaded", Retryable: true,
 			})
@@ -78,20 +76,20 @@ func limitConcurrentRequests(next http.Handler, maximum int) http.Handler {
 	})
 }
 
-func writePlatformFault(w http.ResponseWriter, r *http.Request, err error) bool {
+func writePlatformFault(w http.ResponseWriter, err error) bool {
 	var platformFault *fault.Fault
 	if !errors.As(err, &platformFault) || platformFault == nil {
 		return false
 	}
 	if validationErr := platformFault.Validate(); validationErr != nil {
-		writePublicError(w, r, http.StatusInternalServerError, publicError{
+		writePublicError(w, http.StatusInternalServerError, publicError{
 			Class: string(fault.ClassInternal), Code: "server.invalid_fault",
 			Message: "internal server error",
 		})
 		return true
 	}
 	status := faultHTTPStatus(platformFault.Class)
-	writePublicError(w, r, status, publicError{
+	writePublicError(w, status, publicError{
 		Class: string(platformFault.Class), Code: platformFault.Code,
 		Message: platformFault.SafeMessage, Retryable: platformFault.Retryable,
 	})
@@ -119,18 +117,13 @@ func faultHTTPStatus(class fault.Class) int {
 	}
 }
 
-func writePublicError(w http.ResponseWriter, r *http.Request, status int, value publicError) {
+func writePublicError(w http.ResponseWriter, status int, value publicError) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	if value.Code == "server.overloaded" {
 		w.Header().Set("Retry-After", "1")
 	}
-	if r != nil {
-		if requestID := observability.FromContext(r.Context()); requestID != "" {
-			value.RequestID = requestID
-		}
-	}
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(publicErrorEnvelope{SchemaVersion: "1.0.0", Error: value})
+	_ = json.NewEncoder(w).Encode(publicErrorEnvelope{Error: value})
 }

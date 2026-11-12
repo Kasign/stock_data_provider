@@ -199,7 +199,7 @@ func TestWritePlatformFaultMatchesPLATCTR001EnvelopeAndRequestID(t *testing.T) {
 	}
 	var body struct {
 		SchemaVersion string `json:"schema_version"`
-		Error struct {
+		Error         struct {
 			RequestID string `json:"request_id"`
 		} `json:"error"`
 	}
