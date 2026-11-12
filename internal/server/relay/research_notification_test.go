@@ -18,7 +18,6 @@ import (
 
 type outboxFake struct {
 	mu          sync.Mutex
-	mu          sync.Mutex
 	events      []researchapp.NotificationEventEnvelope
 	claimed     int
 	confirmed   []string
