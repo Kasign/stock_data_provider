@@ -77,4 +77,3 @@ func (r *MySQLRepository) PublishNewsPolicyVersion(ctx context.Context, value do
 	committed = true
 	return nil
 }
-
