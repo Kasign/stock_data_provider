@@ -41,6 +41,11 @@ func validEntry(code, algorithmVersion string) Entry {
 			QualityStates:         []string{"valid"},
 			UnavailableConditions: []string{"missing_input"},
 		},
+		SampleCount: SampleCountPolicy{
+			RequiredInMetric: false,
+			Unit:             "bar",
+			CountingRule:     "Count valid bar observations actually included by the calculation; test fixture only.",
+		},
 		SupportsInterval: false,
 	}
 }
@@ -48,6 +53,43 @@ func validEntry(code, algorithmVersion string) Entry {
 func TestEntryValidateAcceptsTypedMetadata(t *testing.T) {
 	if err := validEntry("momentum_20d", "1.0.0").Validate(); err != nil {
 		t.Fatalf("Validate() error = %v", err)
+	}
+}
+
+func TestEntryValidateRequiresExplicitSampleCountSemantics(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(*Entry)
+	}{
+		{"empty unit", func(e *Entry) { e.SampleCount.Unit = "" }},
+		{"whitespace unit", func(e *Entry) { e.SampleCount.Unit = " " }},
+		{"leading whitespace in unit", func(e *Entry) { e.SampleCount.Unit = " bar" }},
+		{"empty counting rule", func(e *Entry) { e.SampleCount.CountingRule = "" }},
+		{"whitespace counting rule", func(e *Entry) { e.SampleCount.CountingRule = " " }},
+		{"trailing whitespace in counting rule", func(e *Entry) { e.SampleCount.CountingRule += " " }},
+		{"invalid UTF-8 unit", func(e *Entry) { e.SampleCount.Unit = string([]byte{0xff}) }},
+		{"invalid UTF-8 counting rule", func(e *Entry) { e.SampleCount.CountingRule = string([]byte{0xff}) }},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			entry := validEntry("sample_metric", "1.0.0")
+			tc.mutate(&entry)
+			if err := entry.Validate(); !errors.Is(err, ErrInvalidEntry) {
+				t.Fatalf("Validate() error = %v, want ErrInvalidEntry", err)
+			}
+		})
+	}
+}
+
+func TestEntryValidateAcceptsBothSampleCountRequirednessModes(t *testing.T) {
+	entry := validEntry("sample_metric", "1.0.0")
+	entry.SampleCount.RequiredInMetric = true
+	if err := entry.Validate(); err != nil {
+		t.Fatalf("required sample_count metadata rejected: %v", err)
+	}
+	entry.SampleCount.RequiredInMetric = false
+	if err := entry.Validate(); err != nil {
+		t.Fatalf("optional sample_count metadata rejected: %v", err)
 	}
 }
 

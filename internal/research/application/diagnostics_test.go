@@ -35,8 +35,7 @@ func TestDiagnosticsApplicationBuildsChecksFromExactVersions(t *testing.T) {
 		Title: "业绩指引变化", Status: researchevent.StatusDetected,
 		SubjectRefs: []string{"security:600000"}, EvidenceRefs: []string{"ev_source_1"},
 		SystemObservedAt: now, SystemAsOf: now, ImpactHypothesisRefs: []string{},
-		InvalidationConditions: []string{"后续公告撤回"}, Uncertainty: []string{},
-		SourceTimes: []researchevent.EventSourceTime{{
+		InvalidationConditions: []string{"后续公告撤回"}, Uncertainty: []string{}, TimeNormalizationRuleVersion: "1.0.0", DerivedFromRefs: []researchevent.ResearchEventRef{}, SourceTimes: []researchevent.EventSourceTime{{
 			EvidenceRef: "ev_source_1", TimeType: researchevent.TimeSystemObservedAt,
 			Value: now, AssertedBy: "news:observation",
 		}},

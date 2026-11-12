@@ -19,6 +19,52 @@ func readQuantSchema(t *testing.T, name string) []byte {
 	return document
 }
 
+func TestRegistryEntrySchemaV2RequiresSampleCountMetadata(t *testing.T) {
+	schema := compileQuantSchemaFile(t, "QNT-CTR-001-registry-entry-2.0.0.schema.json")
+	entry := validEntry("momentum_20d", "1.0.0")
+	entry.SampleCount.RequiredInMetric = true
+	encoded, err := json.Marshal(entry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := validateJSONSchemaInstance(schema, encoded); err != nil {
+		t.Fatalf("valid Registry Entry 2.0.0 rejected: %v", err)
+	}
+
+	var object map[string]json.RawMessage
+	if err := json.Unmarshal(encoded, &object); err != nil {
+		t.Fatal(err)
+	}
+	delete(object, "sample_count")
+	missingMetadata, err := json.Marshal(object)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := validateJSONSchemaInstance(schema, missingMetadata); err == nil {
+		t.Fatal("Registry Entry without sample_count metadata unexpectedly passed")
+	}
+
+	for _, tc := range []struct {
+		name   string
+		mutate func(*SampleCountPolicy)
+	}{
+		{"missing unit", func(p *SampleCountPolicy) { p.Unit = "" }},
+		{"missing counting rule", func(p *SampleCountPolicy) { p.CountingRule = "" }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			candidate := validEntry("momentum_20d", "1.0.0")
+			tc.mutate(&candidate.SampleCount)
+			raw, err := json.Marshal(candidate)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := validateJSONSchemaInstance(schema, raw); err == nil {
+				t.Fatalf("invalid sample_count metadata unexpectedly passed: %s", raw)
+			}
+		})
+	}
+}
+
 func TestDraft202012SchemasCompileAndValidateInstances(t *testing.T) {
 	cases := []struct {
 		name     string
@@ -27,7 +73,7 @@ func TestDraft202012SchemasCompileAndValidateInstances(t *testing.T) {
 	}{
 		{
 			name:     "QNT-CTR-001-registry-entry-1.0.0.schema.json",
-			instance: mustJSON(t, validEntry("momentum_20d", "1.0.0")),
+			instance: mustLegacyEntryV1JSON(t, validEntry("momentum_20d", "1.0.0")),
 			invalid:  `{"code":"momentum_20d","schema_version":"1.0.0","unexpected":true}`,
 		},
 		{
@@ -130,6 +176,24 @@ func mustJSON(t *testing.T, value any) string {
 	return string(encoded)
 }
 
+func mustLegacyEntryV1JSON(t *testing.T, entry Entry) string {
+	t.Helper()
+	encoded, err := json.Marshal(entry)
+	if err != nil {
+		t.Fatalf("marshal current Registry entry: %v", err)
+	}
+	var object map[string]json.RawMessage
+	if err := json.Unmarshal(encoded, &object); err != nil {
+		t.Fatalf("decode current Registry entry: %v", err)
+	}
+	delete(object, "sample_count")
+	legacy, err := json.Marshal(object)
+	if err != nil {
+		t.Fatalf("marshal Registry Entry 1.0.0 fixture: %v", err)
+	}
+	return string(legacy)
+}
+
 func TestAllIndicatorAndFactorGoldenParametersMatchContractSchemas(t *testing.T) {
 	contracts := []struct {
 		name       string
@@ -208,7 +272,7 @@ func compileQuantSchemaFile(t *testing.T, name string) *jsonschema.Schema {
 }
 
 func TestRegistryEntrySchemaEnforcesValueTypeConditionals(t *testing.T) {
-	schema := compileQuantSchemaFile(t, "QNT-CTR-001-registry-entry-1.0.0.schema.json")
+	schema := compileQuantSchemaFile(t, "QNT-CTR-001-registry-entry-2.0.0.schema.json")
 
 	decimalEntry := validEntry("decimal_metric", "1.0.0")
 	decimalEntry.ValueType = ValueTypeDecimalString
@@ -291,7 +355,7 @@ func TestValidateJSONSchemaInstanceRejectsInvalidUTF8(t *testing.T) {
 }
 
 func TestRegistryEntrySchemaEnforcesRangeAndUniqueInputConstraints(t *testing.T) {
-	schema := compileQuantSchemaFile(t, "QNT-CTR-001-registry-entry-1.0.0.schema.json")
+	schema := compileQuantSchemaFile(t, "QNT-CTR-001-registry-entry-2.0.0.schema.json")
 	cases := []struct {
 		name   string
 		mutate func(*Entry)
@@ -436,6 +500,49 @@ func TestFirstFactorQuantMetricSchemaValidatesGoldenAndRejectsInvalidStates(t *t
 	}
 }
 
+func TestFirstFactorQuantMetricSchemaEnforcesPeriodAndInsufficientSampleBounds(t *testing.T) {
+	schema := compileQuantSchemaFile(t, "QNT-CTR-004-factor-quant-metric-1.0.0.schema.json")
+	base := func(code, period, status string, count int) map[string]any {
+		return map[string]any{
+			"metric_code": code, "value": nil, "unit": "ratio", "period": period,
+			"system_as_of": "2026-11-09T00:00:00Z", "quality_status": "valid",
+			"metric_status": status, "calculation_version": "1.0.0",
+			"sample_count": count, "lower_bound": nil, "upper_bound": nil,
+		}
+	}
+	valid := []map[string]any{
+		base("momentum_20d", "20d", "insufficient_data", 20),
+		base("momentum_60d", "60d", "insufficient_data", 60),
+		base("volatility_20d", "20d", "insufficient_data", 19),
+	}
+	for _, instance := range valid {
+		encoded, err := json.Marshal(instance)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := validateJSONSchemaInstance(schema, encoded); err != nil {
+			t.Errorf("valid insufficient-data boundary rejected: %s: %v", encoded, err)
+		}
+	}
+	invalid := []map[string]any{
+		base("momentum_20d", "60d", "insufficient_data", 20),
+		base("momentum_60d", "20d", "insufficient_data", 60),
+		base("volatility_20d", "60d", "insufficient_data", 19),
+		base("momentum_20d", "20d", "insufficient_data", 21),
+		base("momentum_60d", "60d", "insufficient_data", 61),
+		base("volatility_20d", "20d", "insufficient_data", 20),
+	}
+	for _, instance := range invalid {
+		encoded, err := json.Marshal(instance)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := validateJSONSchemaInstance(schema, encoded); err == nil {
+			t.Errorf("invalid Factor QuantMetric unexpectedly passed: %s", encoded)
+		}
+	}
+}
+
 func TestFirstFactorQuantMetricSchemaAllowsDegradedAvailabilityForRegistryPolicyGate(t *testing.T) {
 	schema := compileQuantSchemaFile(t, "QNT-CTR-004-factor-quant-metric-1.0.0.schema.json")
 	instance := []byte(`{"metric_code":"momentum_20d","value":0.2,"unit":"ratio","period":"20d","system_as_of":"2026-11-09T00:00:00Z","quality_status":"degraded","metric_status":"available","calculation_version":"1.0.0","sample_count":21,"lower_bound":null,"upper_bound":null}`)
@@ -487,7 +594,7 @@ func TestRiskDecisionSchemaValidatesGoldenAndFailClosedStructure(t *testing.T) {
 }
 
 func TestRegistryEntrySchemaMatchesGoCanonicalTextValidation(t *testing.T) {
-	schema := compileQuantSchemaFile(t, "QNT-CTR-001-registry-entry-1.0.0.schema.json")
+	schema := compileQuantSchemaFile(t, "QNT-CTR-001-registry-entry-2.0.0.schema.json")
 	cases := []struct {
 		name   string
 		mutate func(*Entry)
@@ -523,7 +630,7 @@ func TestRegistryEntrySchemaMatchesGoCanonicalTextValidation(t *testing.T) {
 }
 
 func TestRegistryEntrySchemaAcceptsCanonicalTextAndRejectsWhitespace(t *testing.T) {
-	schema := compileQuantSchemaFile(t, "QNT-CTR-001-registry-entry-1.0.0.schema.json")
+	schema := compileQuantSchemaFile(t, "QNT-CTR-001-registry-entry-2.0.0.schema.json")
 	entry := validEntry("sample_metric", "1.0.0")
 	encoded, err := json.Marshal(entry)
 	if err != nil {
@@ -543,7 +650,7 @@ func TestRegistryEntrySchemaAcceptsCanonicalTextAndRejectsWhitespace(t *testing.
 }
 
 func TestRegistryEntrySchemaValidatesUnavailableConditionItems(t *testing.T) {
-	schema := compileQuantSchemaFile(t, "QNT-CTR-001-registry-entry-1.0.0.schema.json")
+	schema := compileQuantSchemaFile(t, "QNT-CTR-001-registry-entry-2.0.0.schema.json")
 	entry := validEntry("sample_metric", "1.0.0")
 	entry.QualityPolicy.UnavailableConditions = []string{" "}
 	encoded, err := json.Marshal(entry)
@@ -564,7 +671,7 @@ func TestRegistryEntrySchemaValidatesUnavailableConditionItems(t *testing.T) {
 }
 
 func TestRegistryEntrySchemaAndGoNumericValidationResponsibilities(t *testing.T) {
-	schema := compileQuantSchemaFile(t, "QNT-CTR-001-registry-entry-1.0.0.schema.json")
+	schema := compileQuantSchemaFile(t, "QNT-CTR-001-registry-entry-2.0.0.schema.json")
 	cases := []struct {
 		name   string
 		mutate func(*Entry)
@@ -603,7 +710,7 @@ func TestRegistryEntrySchemaAndGoNumericValidationResponsibilities(t *testing.T)
 }
 
 func TestRegistryEntrySchemaRejectsNegativeNumericTolerance(t *testing.T) {
-	schema := compileQuantSchemaFile(t, "QNT-CTR-001-registry-entry-1.0.0.schema.json")
+	schema := compileQuantSchemaFile(t, "QNT-CTR-001-registry-entry-2.0.0.schema.json")
 	entry := validEntry("sample_metric", "1.0.0")
 	entry.Precision.Tolerance = json.RawMessage("-0.000001")
 	encoded, err := json.Marshal(entry)

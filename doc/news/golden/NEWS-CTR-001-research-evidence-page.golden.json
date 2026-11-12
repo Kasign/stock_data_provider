@@ -22,7 +22,8 @@
       "authorization_ref": "authorization-example-001",
       "authorization_status": "allowed",
       "system_as_of": "2026-11-06T09:00:00Z",
-      "relation_refs": []
+      "relation_refs": [],
+      "relation_status": "not_provided"
     }
   ],
   "next_cursor": null,

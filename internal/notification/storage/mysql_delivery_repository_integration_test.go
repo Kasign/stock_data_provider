@@ -155,8 +155,13 @@ func TestNotificationMariaDBDeliveryRepositoryIntegration(t *testing.T) {
 		t.Fatalf("expire lease fixture: %v", err)
 	}
 	if expired, err := scanner.ListExpiredLeases(ctx, 10); err != nil || len(expired) != 1 ||
-		expired[0].Lease.FencingToken != winner.Lease.FencingToken {
-		t.Fatalf("expired lease must be returned with current fencing token: claims=%+v err=%v", expired, err)
+		expired[0].Delivery.DeliveryID != delivery.DeliveryID ||
+		expired[0].Delivery.Version != winner.Delivery.Version ||
+		expired[0].Delivery.Status != domain.DeliverySending ||
+		expired[0].Lease.WorkerID != winner.Lease.WorkerID ||
+		expired[0].Lease.FencingToken != winner.Lease.FencingToken ||
+		!expired[0].Lease.ExpiresAt.Equal(now.Add(-time.Second)) {
+		t.Fatalf("expired lease scan must return one coherent Delivery/Lease snapshot: claims=%+v err=%v", expired, err)
 	}
 	if _, err := db.ExecContext(ctx, "UPDATE notification_deliveries SET lease_expires_at = ? WHERE delivery_id = ?", now.Add(2*time.Minute), delivery.DeliveryID); err != nil {
 		t.Fatalf("renew lease fixture: %v", err)
@@ -205,5 +210,86 @@ func TestNotificationMariaDBDeliveryRepositoryIntegration(t *testing.T) {
 	}
 	if err := repository.UpdateWithLease(ctx, winner.Delivery.Version, winner.Lease.FencingToken, next, event, finishedAt.Add(time.Second)); !errors.Is(err, application.ErrDeliveryLeaseConflict) {
 		t.Fatalf("released lease must reject repeated update, got %v", err)
+	}
+}
+
+func TestNotificationMariaDBDeliveryRetryClaimClearsScheduleIntegration(t *testing.T) {
+	dsn := os.Getenv("NOTIFICATION_MARIADB_TEST_DSN")
+	if dsn == "" {
+		t.Skip("set NOTIFICATION_MARIADB_TEST_DSN to run Notification MariaDB integration")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	db, err := openNotificationIntegrationDB(ctx, dsn)
+	if err != nil {
+		t.Fatalf("open MariaDB through Platform Storage: %v", err)
+	}
+	defer db.Close()
+	if err := platformstorage.ApplyMigrations(ctx, db, "notification", Migrations()); err != nil {
+		t.Fatalf("apply Notification migrations: %v", err)
+	}
+	plan := integrationDeliveryPlan()
+	plan.PlanFingerprint, err = plan.CalculateFingerprint()
+	if err != nil {
+		t.Fatal(err)
+	}
+	plans, err := NewMySQLDeliveryPlanRepository(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, duplicate, err := plans.CreateOrGet(ctx, plan); err != nil || duplicate {
+		t.Fatalf("create delivery plan: duplicate=%v err=%v", duplicate, err)
+	}
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	delivery := domain.DeliveryRecord{
+		DeliveryID: plan.DeliveryID, SourceModule: plan.SourceModule, EventID: plan.EventID,
+		SubscriptionID: plan.SubscriptionID, SubscriptionVersion: plan.SubscriptionVersion,
+		ChannelRef: plan.ChannelRef, ChannelConfigVersion: plan.ChannelConfigVersion,
+		TemplateID: plan.TemplateID, TemplateVersion: plan.TemplateVersion,
+		RecipientRef: plan.RecipientRef, PayloadFingerprint: plan.PayloadFingerprint,
+		PlanFingerprint: plan.PlanFingerprint, DeliveryIdempotencyKey: plan.DeliveryIdempotencyKey,
+		Status: domain.DeliveryQueued, Version: 1, AttemptCount: 0, MaxAttempts: 3,
+		DeadlineAt: now.Add(30 * time.Minute), CreatedAt: now, UpdatedAt: now,
+	}
+	repository, err := NewMySQLDeliveryRepository(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := repository.Create(ctx, delivery); err != nil {
+		t.Fatalf("create delivery: %v", err)
+	}
+	claimAt := now.Add(time.Second)
+	first, claimed, err := repository.ClaimDue(ctx, "retry-worker-1", claimAt, claimAt.Add(time.Minute))
+	if err != nil || !claimed {
+		t.Fatalf("claim initial delivery: claimed=%v err=%v", claimed, err)
+	}
+	retryAt := claimAt.Add(3 * time.Second)
+	updatedAt := claimAt.Add(time.Second)
+	retry, event, err := first.Delivery.Transition(domain.DeliveryTransition{
+		To: domain.DeliveryRetryWait, At: updatedAt, ReasonCode: "provider.retryable",
+		ErrorCode: "provider_unavailable", NextAttemptAt: &retryAt,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := repository.UpdateWithLease(ctx, first.Delivery.Version, first.Lease.FencingToken,
+		retry, event, updatedAt); err != nil {
+		t.Fatalf("schedule delivery retry: %v", err)
+	}
+	secondAt := retryAt.Add(time.Microsecond)
+	second, claimed, err := repository.ClaimDue(ctx, "retry-worker-2", secondAt, secondAt.Add(time.Minute))
+	if err != nil || !claimed {
+		t.Fatalf("claim retry-wait delivery: claimed=%v err=%v", claimed, err)
+	}
+	if second.Delivery.Status != domain.DeliverySending || second.Delivery.NextAttemptAt != nil ||
+		second.Delivery.Version != retry.Version+1 || second.Lease.FencingToken != first.Lease.FencingToken+1 {
+		t.Fatalf("retry claim must clear schedule and advance lease: first=%+v second=%+v",
+			first, second)
+	}
+	persisted, found, err := repository.Get(ctx, delivery.DeliveryID)
+	if err != nil || !found || persisted.Status != domain.DeliverySending || persisted.NextAttemptAt != nil ||
+		persisted.ReasonCode != nil || persisted.LastErrorCode != nil || persisted.ProviderMessageRef != nil {
+		t.Fatalf("persisted sending delivery must match the cleared claim snapshot: found=%v delivery=%+v err=%v",
+			found, persisted, err)
 	}
 }

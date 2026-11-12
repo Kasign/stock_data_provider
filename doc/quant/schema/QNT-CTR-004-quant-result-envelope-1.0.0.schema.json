@@ -1,0 +1,575 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://stock-data-provider.local/schema/QNT-CTR-004-quant-result-envelope-1.0.0.schema.json",
+  "title": "QuantResult Envelope 1.0.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "result_id",
+    "result_type",
+    "scope",
+    "system_as_of",
+    "period",
+    "algorithm_version",
+    "parameter_fingerprint",
+    "input_snapshot_refs",
+    "quality_status",
+    "result_status",
+    "authorization_ref",
+    "payload_schema_version",
+    "payload"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0.0"
+    },
+    "result_id": {
+      "type": "string",
+      "pattern": "^quant_result:sha256:[0-9a-f]{64}$"
+    },
+    "result_type": {
+      "type": "string",
+      "enum": [
+        "trend",
+        "risk"
+      ]
+    },
+    "scope": {
+      "type": "string",
+      "enum": [
+        "stock",
+        "market",
+        "industry",
+        "portfolio"
+      ]
+    },
+    "security_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+    },
+    "system_as_of": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{0,8}[1-9])?Z$"
+    },
+    "trade_date": {
+      "type": "string",
+      "format": "date",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+    },
+    "period": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+    },
+    "algorithm_version": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+    },
+    "parameter_fingerprint": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+    },
+    "input_snapshot_refs": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+      },
+      "uniqueItems": true
+    },
+    "quality_status": {
+      "type": "string",
+      "enum": [
+        "valid",
+        "degraded",
+        "invalid",
+        "unknown"
+      ]
+    },
+    "result_status": {
+      "type": "string",
+      "enum": [
+        "completed",
+        "insufficient_data",
+        "insufficient_sample",
+        "rejected",
+        "failed"
+      ]
+    },
+    "authorization_ref": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+    },
+    "payload_schema_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$"
+    },
+    "payload": {
+      "type": "object"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "scope": {
+            "const": "stock"
+          }
+        },
+        "required": [
+          "scope"
+        ]
+      },
+      "then": {
+        "required": [
+          "security_id"
+        ]
+      }
+    },
+    {
+      "oneOf": [
+        {
+          "properties": {
+            "result_type": {
+              "const": "trend"
+            },
+            "payload_schema_version": {
+              "const": "1.0.0"
+            },
+            "payload": {
+              "$ref": "#/$defs/trend_payload"
+            }
+          },
+          "required": [
+            "result_type",
+            "payload_schema_version",
+            "payload"
+          ]
+        },
+        {
+          "properties": {
+            "result_type": {
+              "const": "risk"
+            },
+            "payload_schema_version": {
+              "const": "1.0.0"
+            },
+            "payload": {
+              "$ref": "#/$defs/risk_payload"
+            }
+          },
+          "required": [
+            "result_type",
+            "payload_schema_version",
+            "payload"
+          ]
+        }
+      ]
+    }
+  ],
+  "$defs": {
+    "trend_payload": {
+      "title": "Quant TrendResult 1.0.0",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "trend_code",
+        "direction",
+        "phase",
+        "strength",
+        "period",
+        "evidence_metrics",
+        "conflict_refs",
+        "quality_status",
+        "system_as_of",
+        "algorithm_version"
+      ],
+      "properties": {
+        "trend_code": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+        },
+        "direction": {
+          "type": "string",
+          "enum": [
+            "bullish",
+            "bearish",
+            "sideways",
+            "unknown"
+          ]
+        },
+        "phase": {
+          "type": "string",
+          "enum": [
+            "emerging",
+            "accelerating",
+            "mature",
+            "weakening",
+            "reversing",
+            "unknown"
+          ]
+        },
+        "strength": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "period": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+        },
+        "evidence_metrics": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/trend_payload/$defs/quant_metric"
+          }
+        },
+        "conflict_refs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+          }
+        },
+        "quality_status": {
+          "type": "string",
+          "enum": [
+            "valid",
+            "degraded",
+            "invalid",
+            "unknown"
+          ]
+        },
+        "system_as_of": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{0,8}[1-9])?Z$"
+        },
+        "algorithm_version": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+        }
+      },
+      "$defs": {
+        "quant_metric": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "metric_code",
+            "value",
+            "unit",
+            "period",
+            "system_as_of",
+            "quality_status",
+            "metric_status",
+            "calculation_version",
+            "lower_bound",
+            "upper_bound"
+          ],
+          "properties": {
+            "metric_code": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+            },
+            "value": {
+              "type": [
+                "string",
+                "number",
+                "null"
+              ]
+            },
+            "unit": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+            },
+            "period": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+            },
+            "system_as_of": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{0,8}[1-9])?Z$"
+            },
+            "quality_status": {
+              "type": "string",
+              "enum": [
+                "valid",
+                "degraded",
+                "invalid",
+                "unknown"
+              ]
+            },
+            "metric_status": {
+              "type": "string",
+              "enum": [
+                "available",
+                "insufficient_data",
+                "insufficient_sample",
+                "not_applicable",
+                "unknown"
+              ]
+            },
+            "calculation_version": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+            },
+            "sample_count": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0
+            },
+            "lower_bound": {
+              "type": [
+                "string",
+                "number",
+                "null"
+              ]
+            },
+            "upper_bound": {
+              "type": [
+                "string",
+                "number",
+                "null"
+              ]
+            }
+          },
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "metric_status": {
+                    "const": "available"
+                  }
+                },
+                "required": [
+                  "metric_status"
+                ]
+              },
+              "then": {
+                "properties": {
+                  "value": {
+                    "type": [
+                      "number",
+                      "string"
+                    ]
+                  },
+                  "quality_status": {
+                    "enum": [
+                      "valid",
+                      "degraded"
+                    ]
+                  }
+                },
+                "oneOf": [
+                  {
+                    "properties": {
+                      "value": {
+                        "type": [
+                          "number",
+                          "string"
+                        ]
+                      },
+                      "lower_bound": {
+                        "type": "null"
+                      },
+                      "upper_bound": {
+                        "type": "null"
+                      }
+                    }
+                  },
+                  {
+                    "properties": {
+                      "value": {
+                        "type": "number"
+                      },
+                      "lower_bound": {
+                        "type": "number"
+                      },
+                      "upper_bound": {
+                        "type": "number"
+                      }
+                    }
+                  },
+                  {
+                    "properties": {
+                      "value": {
+                        "type": "string"
+                      },
+                      "lower_bound": {
+                        "type": "string"
+                      },
+                      "upper_bound": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                ]
+              },
+              "else": {
+                "properties": {
+                  "value": {
+                    "type": "null"
+                  },
+                  "lower_bound": {
+                    "type": "null"
+                  },
+                  "upper_bound": {
+                    "type": "null"
+                  }
+                }
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "quality_status": {
+                    "enum": [
+                      "invalid",
+                      "unknown"
+                    ]
+                  }
+                },
+                "required": [
+                  "quality_status"
+                ]
+              },
+              "then": {
+                "properties": {
+                  "metric_status": {
+                    "not": {
+                      "const": "available"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "risk_payload": {
+      "title": "QNT-CTR-004 RiskDecision 1.0.0",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "decision_id": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "pass",
+            "reject",
+            "unknown"
+          ]
+        },
+        "rule_set_version": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+        },
+        "evaluated_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{0,8}[1-9])?Z$"
+        },
+        "system_as_of": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{0,8}[1-9])?Z$"
+        },
+        "reasons": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+              },
+              "severity": {
+                "type": "string",
+                "enum": [
+                  "block",
+                  "warn",
+                  "info"
+                ]
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "triggered",
+                  "not_triggered",
+                  "unknown"
+                ]
+              },
+              "safe_message": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+              },
+              "evidence_refs": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+                }
+              }
+            },
+            "required": [
+              "code",
+              "severity",
+              "status",
+              "safe_message",
+              "evidence_refs"
+            ]
+          },
+          "minItems": 1
+        },
+        "input_refs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+          }
+        }
+      },
+      "required": [
+        "decision_id",
+        "status",
+        "rule_set_version",
+        "evaluated_at",
+        "system_as_of",
+        "reasons",
+        "input_refs"
+      ]
+    }
+  }
+}

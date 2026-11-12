@@ -311,11 +311,11 @@ func TestMapResponsesRequestFullOptionsGoldenFixture(t *testing.T) {
 		MaxOutputTokens: 256, Temperature: &temperature, TopP: &topP, ReasoningEffort: "high",
 		ResponseSchema: &JSONSchemaSpec{
 			Name: "summary", Strict: true,
-			SchemaJSON: json.RawMessage(`{"type":"object","required":["summary"],"properties":{"summary":{"type":"string"}}}`),
+			SchemaJSON: json.RawMessage(`{"type":"object","required":["summary"],"properties":{"summary":{"type":"string"}},"additionalProperties":false}`),
 		},
 		Tools: []ToolDefinition{{
 			Name: "lookup_quote", Description: "Look up a quote", Strict: true,
-			ParametersJSON: json.RawMessage(`{"type":"object","properties":{"symbol":{"type":"string"}}}`),
+			ParametersJSON: json.RawMessage(`{"type":"object","properties":{"symbol":{"type":"string"}},"required":["symbol"],"additionalProperties":false}`),
 		}},
 		ToolChoice: "auto", DeadlineAt: now.Add(time.Minute),
 		CorrelationID: "run-full", SystemAsOf: now,

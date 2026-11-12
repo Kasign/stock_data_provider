@@ -1,0 +1,307 @@
+package application
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"os"
+	"path/filepath"
+	"testing"
+	"time"
+
+	"github.com/gowebpki/jcs"
+
+	"example.com/stock-analysis-flow/internal/quant/manifest"
+	"example.com/stock-analysis-flow/internal/quant/result"
+)
+
+type fixedPrincipal struct {
+	principal Principal
+	err       error
+}
+
+func (p fixedPrincipal) Resolve(context.Context) (Principal, error) { return p.principal, p.err }
+
+type fixedAuditor struct {
+	events []AccessAuditEvent
+	err    error
+}
+
+func (a *fixedAuditor) RecordResultAccess(_ context.Context, event AccessAuditEvent) error {
+	a.events = append(a.events, event)
+	return a.err
+}
+
+type fixedReader struct {
+	value   AuthorizedRecord
+	err     error
+	request ReadRequest
+	calls   int
+}
+
+func (r *fixedReader) ReadAuthorized(_ context.Context, request ReadRequest) (AuthorizedRecord, error) {
+	r.calls++
+	r.request = request
+	return r.value, r.err
+}
+
+func getResultFixture(t *testing.T, now time.Time) AuthorizedRecord {
+	t.Helper()
+	payload := json.RawMessage(`{"decision_id":"risk-decision-001","status":"unknown","rule_set_version":"1.0.0","evaluated_at":"2026-11-09T01:00:00Z","system_as_of":"2026-11-09T00:59:00Z","reasons":[{"code":"INPUT_QUALITY_UNKNOWN","severity":"block","status":"unknown","safe_message":"输入质量无法确认","evidence_refs":["evidence:quality:001"]}],"input_refs":["quant_result:001"]}`)
+	stored, err := manifest.BuildWithPayload(manifest.Input{
+		ResultType: "risk", Scope: "stock", SecurityID: "600000.SH", Period: "1d",
+		QualityStatus: "unknown", ResultStatus: "insufficient_data", SchemaVersion: "1.0.0",
+		PayloadSchemaVersion: "1.0.0", AlgorithmVersion: "1.0.0",
+		ParameterFingerprint: "sha256:parameters", SystemAsOf: now.Add(-time.Hour - time.Minute),
+		InputSnapshotRefs: []string{"snapshot:001"},
+	}, payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	record := result.Record{Manifest: stored, Payload: payload}
+	policy := PolicySnapshot{SchemaVersion: "1.0.0", SnapshotRef: "policy-snapshot:quant:1", Policies: []PolicyVersion{
+		{PolicyType: "quant_result_access", PolicyRef: "quant-result-access", PolicyVersion: "1.0.0"},
+	}}
+	ref := AuthorizationRef{
+		SchemaVersion: "1.0.0", AuthorizationRef: "authz:quant:001", PolicyOwner: "quant",
+		PolicyVersion: policy.SnapshotRef, Decision: "allowed", PurposeCode: quantPurposeCode,
+		ContentLevel: quantContentLevel, SubjectRef: "service:researchflow", ResourceRef: stored.ResultID,
+		DecidedAt: now.Add(-time.Minute).Format(time.RFC3339Nano), ExpiresAtPresent: true, Conditions: []string{},
+	}
+	input := authorizationFingerprintInput{
+		SchemaVersion: ref.SchemaVersion, PolicyOwner: ref.PolicyOwner, PolicyVersion: ref.PolicyVersion,
+		Decision: ref.Decision, PurposeCode: ref.PurposeCode, ContentLevel: ref.ContentLevel,
+		SubjectRef: ref.SubjectRef, ResourceRef: ref.ResourceRef, DecidedAt: ref.DecidedAt,
+		ExpiresAt: ref.ExpiresAt, Conditions: ref.Conditions, EvaluatedPolicyVersions: policy.Policies,
+	}
+	encoded, err := json.Marshal(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	canonical, err := jcs.Transform(encoded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ref.DecisionFingerprint, err = manifest.FingerprintPayload(canonical)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return AuthorizedRecord{Record: record, AuthorizationRef: ref, PolicySnapshot: policy}
+}
+
+func TestGetResultReturnsValidatedAuthorizedEnvelope(t *testing.T) {
+	now := time.Date(2026, 11, 9, 2, 0, 0, 0, time.UTC)
+	reader := &fixedReader{value: getResultFixture(t, now)}
+	auditor := &fixedAuditor{}
+	usecase, err := NewGetResult(reader, fixedPrincipal{principal: Principal{SubjectRef: "service:researchflow"}}, auditor, func() time.Time { return now })
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := usecase.Execute(context.Background(), reader.value.Record.Manifest.ResultID)
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if got.ResultID != reader.value.Record.Manifest.ResultID || got.AuthorizationRef != reader.value.AuthorizationRef.AuthorizationRef || got.ResultType != "risk" {
+		t.Fatalf("unexpected envelope: %+v", got)
+	}
+	if len(auditor.events) != 1 || auditor.events[0].Decision != "allowed" || auditor.events[0].ReasonCode != "result_released" {
+		t.Fatalf("successful result access was not audited: %+v", auditor.events)
+	}
+	if reader.calls != 1 || reader.request.SubjectRef != "service:researchflow" ||
+		reader.request.ResourceRef != got.ResultID || reader.request.PurposeCode != quantPurposeCode ||
+		reader.request.ContentLevel != quantContentLevel || !reader.request.At.Equal(now) {
+		t.Fatalf("authorization read request mismatch: %+v", reader.request)
+	}
+}
+
+func TestGetResultFailsClosedForInvalidAuthorization(t *testing.T) {
+	now := time.Date(2026, 11, 9, 2, 0, 0, 0, time.UTC)
+	tests := []struct {
+		name   string
+		mutate func(*AuthorizedRecord)
+	}{
+		{"subject mismatch", func(v *AuthorizedRecord) { v.AuthorizationRef.SubjectRef = "service:other" }},
+		{"resource mismatch", func(v *AuthorizedRecord) { v.AuthorizationRef.ResourceRef = "result:other" }},
+		{"wrong owner", func(v *AuthorizedRecord) { v.AuthorizationRef.PolicyOwner = "research" }},
+		{"denied", func(v *AuthorizedRecord) { v.AuthorizationRef.Decision = "denied" }},
+		{"policy snapshot mismatch", func(v *AuthorizedRecord) { v.PolicySnapshot.SnapshotRef = "policy-snapshot:other" }},
+		{"empty policy snapshot", func(v *AuthorizedRecord) { v.PolicySnapshot.Policies = []PolicyVersion{} }},
+		{"duplicate policy tuple", func(v *AuthorizedRecord) {
+			v.PolicySnapshot.Policies = append(v.PolicySnapshot.Policies, v.PolicySnapshot.Policies[0])
+		}},
+		{"unsorted policy tuples", func(v *AuthorizedRecord) {
+			v.PolicySnapshot.Policies = []PolicyVersion{{PolicyType: "z", PolicyRef: "z", PolicyVersion: "1"}, {PolicyType: "a", PolicyRef: "a", PolicyVersion: "1"}}
+		}},
+		{"expired", func(v *AuthorizedRecord) {
+			expired := now.Format(time.RFC3339Nano)
+			v.AuthorizationRef.ExpiresAt = &expired
+		}},
+		{"missing expires_at field", func(v *AuthorizedRecord) { v.AuthorizationRef.ExpiresAtPresent = false }},
+		{"bad fingerprint", func(v *AuthorizedRecord) { v.AuthorizationRef.DecisionFingerprint = "invalid" }},
+		{"conditional", func(v *AuthorizedRecord) {
+			v.AuthorizationRef.Decision = "conditional"
+			v.AuthorizationRef.Conditions = []string{"needs_review"}
+		}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			value := getResultFixture(t, now)
+			tc.mutate(&value)
+			reader := &fixedReader{value: value}
+			auditor := &fixedAuditor{}
+			usecase, _ := NewGetResult(reader, fixedPrincipal{principal: Principal{SubjectRef: "service:researchflow"}}, auditor, func() time.Time { return now })
+			got, err := usecase.Execute(context.Background(), value.Record.Manifest.ResultID)
+			if !errors.Is(err, ErrInvalidAuthorization) || got.ResultID != "" || got.Payload != nil || len(auditor.events) != 1 || auditor.events[0].Decision != "denied" {
+				t.Fatalf("expected fail-closed authorization error, got=%+v err=%v", got, err)
+			}
+		})
+	}
+}
+
+func TestGetResultRejectsTamperedRecord(t *testing.T) {
+	now := time.Date(2026, 11, 9, 2, 0, 0, 0, time.UTC)
+	value := getResultFixture(t, now)
+	value.Record.Payload = []byte(`{"unexpected":true}`)
+	reader := &fixedReader{value: value}
+	auditor := &fixedAuditor{}
+	usecase, _ := NewGetResult(reader, fixedPrincipal{principal: Principal{SubjectRef: "service:researchflow"}}, auditor, func() time.Time { return now })
+	got, err := usecase.Execute(context.Background(), value.Record.Manifest.ResultID)
+	if !errors.Is(err, ErrInvalidStoredRecord) || got.ResultID != "" || len(auditor.events) != 1 || auditor.events[0].Decision != "unknown" {
+		t.Fatalf("tampered record should not escape: %+v %v", got, err)
+	}
+}
+
+func TestGetResultRejectsInvalidRequestAndDoesNotCallReader(t *testing.T) {
+	now := time.Date(2026, 11, 9, 2, 0, 0, 0, time.UTC)
+	reader := &fixedReader{value: getResultFixture(t, now)}
+	usecase, _ := NewGetResult(reader, fixedPrincipal{principal: Principal{SubjectRef: "service:researchflow"}}, &fixedAuditor{}, func() time.Time { return now })
+	for _, id := range []string{"", "result-1", "quant_result:sha256:ABC"} {
+		if got, err := usecase.Execute(context.Background(), id); !errors.Is(err, ErrInvalidGetResultRequest) || got.ResultID != "" {
+			t.Fatalf("invalid result id accepted: %q", id)
+		}
+	}
+	if reader.calls != 0 {
+		t.Fatalf("reader called for invalid id: %d", reader.calls)
+	}
+}
+
+func TestGetResultRejectsReaderFailureAndNonUTCClock(t *testing.T) {
+	now := time.Date(2026, 11, 9, 2, 0, 0, 0, time.UTC)
+	reader := &fixedReader{value: getResultFixture(t, now), err: errors.New("policy service unavailable")}
+	auditor := &fixedAuditor{}
+	usecase, _ := NewGetResult(reader, fixedPrincipal{principal: Principal{SubjectRef: "service:researchflow"}}, auditor, func() time.Time { return now })
+	got, err := usecase.Execute(context.Background(), reader.value.Record.Manifest.ResultID)
+	if !errors.Is(err, ErrResultUnavailable) || got.ResultID != "" || len(auditor.events) != 1 || auditor.events[0].Decision != "unknown" {
+		t.Fatalf("reader failure leaked result: %+v %v", got, err)
+	}
+	reader.err = nil
+	usecase, _ = NewGetResult(reader, fixedPrincipal{principal: Principal{SubjectRef: "service:researchflow"}}, auditor, func() time.Time {
+		return now.In(time.FixedZone("UTC+8", 8*60*60))
+	})
+	got, err = usecase.Execute(context.Background(), reader.value.Record.Manifest.ResultID)
+	if !errors.Is(err, ErrResultUnavailable) || got.ResultID != "" {
+		t.Fatalf("non-UTC trusted clock accepted: %+v %v", got, err)
+	}
+}
+
+func TestValidateAuthorizationMatchesFrozenQuantGolden(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "doc", "整体任务规划", "golden", "GOV-CTR-006-quant-allowed.golden.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var golden struct {
+		AuthorizationRef AuthorizationRef `json:"authorization_ref"`
+		PolicySnapshot   PolicySnapshot   `json:"policy_snapshot"`
+	}
+	if err := json.Unmarshal(raw, &golden); err != nil {
+		t.Fatal(err)
+	}
+	request := ReadRequest{
+		SubjectRef: golden.AuthorizationRef.SubjectRef, ResourceRef: golden.AuthorizationRef.ResourceRef,
+		PurposeCode: quantPurposeCode, ContentLevel: quantContentLevel,
+		At: time.Date(2026, 11, 12, 0, 0, 0, 0, time.UTC),
+	}
+	if err := validateAuthorization(golden.AuthorizationRef, golden.PolicySnapshot, request); err != nil {
+		t.Fatalf("frozen GOV-CTR-006 Quant Golden rejected: %v", err)
+	}
+}
+
+func TestGetResultAuditFailurePreventsEnvelopeRelease(t *testing.T) {
+	now := time.Date(2026, 11, 9, 2, 0, 0, 0, time.UTC)
+	reader := &fixedReader{value: getResultFixture(t, now)}
+	auditor := &fixedAuditor{err: errors.New("audit storage unavailable")}
+	usecase, err := NewGetResult(reader, fixedPrincipal{principal: Principal{SubjectRef: "service:researchflow"}}, auditor, func() time.Time { return now })
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := usecase.Execute(context.Background(), reader.value.Record.Manifest.ResultID)
+	if !errors.Is(err, ErrAuditUnavailable) || got.ResultID != "" || got.Payload != nil {
+		t.Fatalf("audit failure must fail closed: envelope=%+v err=%v", got, err)
+	}
+	if len(auditor.events) != 1 || auditor.events[0].Decision != "allowed" {
+		t.Fatalf("expected one pre-release allow audit event: %+v", auditor.events)
+	}
+}
+
+func TestGetResultReaderDenialIsAuditedAsDenied(t *testing.T) {
+	now := time.Date(2026, 11, 9, 2, 0, 0, 0, time.UTC)
+	reader := &fixedReader{err: ErrAccessDenied}
+	auditor := &fixedAuditor{}
+	usecase, err := NewGetResult(reader, fixedPrincipal{principal: Principal{SubjectRef: "service:researchflow"}}, auditor, func() time.Time { return now })
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := usecase.Execute(context.Background(), "quant_result:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+	if !errors.Is(err, ErrResultUnavailable) || got.ResultID != "" {
+		t.Fatalf("denied read returned result: %+v %v", got, err)
+	}
+	if len(auditor.events) != 1 || auditor.events[0].Decision != "denied" || auditor.events[0].ReasonCode != "authorization_denied" {
+		t.Fatalf("explicit denial was not audited as denied: %+v", auditor.events)
+	}
+}
+
+func TestAuthorizationRefJSONRequiresExpiresAtAndRejectsAmbiguousObjects(t *testing.T) {
+	tests := []struct {
+		name string
+		raw  string
+		ok   bool
+	}{
+		{name: "explicit null is present", raw: `{"schema_version":"1.0.0","expires_at":null}`, ok: true},
+		{name: "missing expires_at", raw: `{"schema_version":"1.0.0"}`},
+		{name: "unknown field", raw: `{"schema_version":"1.0.0","expires_at":null,"unexpected":true}`},
+		{name: "duplicate key", raw: `{"schema_version":"1.0.0","expires_at":null,"expires_at":null}`},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var ref AuthorizationRef
+			err := json.Unmarshal([]byte(tc.raw), &ref)
+			if tc.ok {
+				if err != nil || !ref.ExpiresAtPresent || ref.ExpiresAt != nil {
+					t.Fatalf("explicit null was not preserved: ref=%+v err=%v", ref, err)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatalf("ambiguous or incomplete AuthorizationRef accepted: %s", tc.raw)
+			}
+		})
+	}
+}
+
+func TestPolicySnapshotJSONRejectsUnknownAndDuplicateFields(t *testing.T) {
+	tests := []struct {
+		name string
+		raw  string
+	}{
+		{name: "unknown field", raw: `{"schema_version":"1.0.0","snapshot_ref":"snapshot:1","policies":[],"unexpected":true}`},
+		{name: "duplicate key", raw: `{"schema_version":"1.0.0","snapshot_ref":"snapshot:1","snapshot_ref":"snapshot:2","policies":[]}`},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var snapshot PolicySnapshot
+			if err := json.Unmarshal([]byte(tc.raw), &snapshot); err == nil {
+				t.Fatalf("ambiguous PolicySnapshot accepted: %s", tc.raw)
+			}
+		})
+	}
+}

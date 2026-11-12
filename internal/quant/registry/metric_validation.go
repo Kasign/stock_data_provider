@@ -14,7 +14,7 @@ import (
 var ErrInvalidMetricResult = errors.New("invalid quant metric result")
 
 // ValidateMetric 按明确的 Registry 版本校验实际指标结果。
-// sample_count 是否必需取决于指标专属 Schema；当前 Entry 没有该字段时不在此处推断。
+// sample_count 的字段存在性由 Registry Entry 声明；显式 null 与字段缺失保持区分。
 func (r *Registry) ValidateMetric(code, schemaVersion, algorithmVersion string, raw json.RawMessage) error {
 	entry, err := r.LookupVersion(code, schemaVersion, algorithmVersion)
 	if err != nil {
@@ -25,6 +25,15 @@ func (r *Registry) ValidateMetric(code, schemaVersion, algorithmVersion string, 
 	}
 	if err := validateUniqueJSONKeys(raw); err != nil {
 		return fmt.Errorf("%w: duplicate JSON keys: %v", ErrInvalidMetricResult, err)
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &fields); err != nil || fields == nil {
+		return fmt.Errorf("%w: result must be a JSON object", ErrInvalidMetricResult)
+	}
+	if entry.SampleCount.RequiredInMetric {
+		if _, exists := fields["sample_count"]; !exists {
+			return fmt.Errorf("%w: sample_count is required by registry entry", ErrInvalidMetricResult)
+		}
 	}
 
 	var result metric.Metric

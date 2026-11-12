@@ -1,6 +1,8 @@
 package claim
 
 import (
+	"encoding/json"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -195,5 +197,54 @@ func TestClaimValidateRejectsZeroOffsetNonUTCLocation(t *testing.T) {
 	value.SystemAsOf = time.Date(2026, 11, 6, 5, 0, 0, 0, time.FixedZone("non-UTC", 0))
 	if err := value.Validate(); err == nil || !strings.Contains(err.Error(), "must be UTC") {
 		t.Fatalf("Validate() error = %v, want strict UTC Location rejection", err)
+	}
+}
+
+func TestClaimSupersedesVersionMustMatchCurrentHead(t *testing.T) {
+	previous := validHypothesis(t)
+	previous.ClaimVersion = 2
+	next := previous
+	next.ClaimVersion = 3
+	next.SystemAsOf = previous.SystemAsOf.Add(time.Minute)
+	wrong := 1
+	next.SupersedesVersion = &wrong
+	if err := next.ValidateNextVersion(previous); err == nil || !strings.Contains(err.Error(), "immediately previous") {
+		t.Fatalf("stale supersession target should fail, got %v", err)
+	}
+	correct := previous.ClaimVersion
+	next.SupersedesVersion = &correct
+	if err := next.ValidateNextVersion(previous); err != nil {
+		t.Fatalf("current-head supersession should pass: %v", err)
+	}
+}
+
+func TestClaimFrozenGolden(t *testing.T) {
+	data, err := os.ReadFile("../../../doc/整体任务规划/golden/RSC-CTR-002-claim-hypothesis.golden.json")
+	if err != nil {
+		t.Fatalf("read frozen Claim Golden: %v", err)
+	}
+	var value Claim
+	if err := json.Unmarshal(data, &value); err != nil {
+		t.Fatalf("decode frozen Claim Golden: %v", err)
+	}
+	if err := value.Validate(); err != nil {
+		t.Fatalf("frozen Claim Golden does not validate: %v", err)
+	}
+}
+
+func TestClaimJSONRejectsUnknownFields(t *testing.T) {
+	valid, err := json.Marshal(validHypothesis(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var object map[string]json.RawMessage
+	if err := json.Unmarshal(valid, &object); err != nil {
+		t.Fatal(err)
+	}
+	object["unexpected"] = json.RawMessage(`true`)
+	encoded, _ := json.Marshal(object)
+	var decoded Claim
+	if err := json.Unmarshal(encoded, &decoded); err == nil || !strings.Contains(err.Error(), "unknown field") {
+		t.Fatalf("unknown Claim field should fail: %v", err)
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"example.com/stock-analysis-flow/internal/researchflow/domain"
@@ -43,7 +44,12 @@ func BuildSchedulePlan(
 	if maxParallel < 1 {
 		return SchedulePlan{}, errors.New("Researchflow scheduler max_parallel must be positive")
 	}
-	if run.Status != domain.RunRunning || run.TerminationReason != "" {
+	switch run.Status {
+	case domain.RunCreated, domain.RunQueued, domain.RunRunning:
+		if run.TerminationReason != "" {
+			return SchedulePlan{}, fmt.Errorf("Researchflow Run is not schedulable: status=%s", run.Status)
+		}
+	default:
 		return SchedulePlan{}, fmt.Errorf("Researchflow Run is not schedulable: status=%s", run.Status)
 	}
 	now = now.UTC()
@@ -222,4 +228,155 @@ func PersistSchedulePlan(ctx context.Context, store SchedulePlanStore, plan Sche
 		}
 	}
 	return result, nil
+}
+
+// StageExecutionDispatcher delegates a planned Stage to the existing Worker.
+// Scheduler may call Execute concurrently for independent Stages; implementations
+// must be concurrency-safe. Worker.Execute/ClaimAttempt remains the authority
+// for durable queue state, global capacity, Lease and Fencing.
+type StageExecutionDispatcher interface {
+	Execute(context.Context, string, string, string) (WorkerExecution, error)
+}
+
+var ErrScheduleReplanExhausted = errors.New("Researchflow scheduler exhausted snapshot replan attempts")
+
+type SchedulerConfig struct {
+	MaxParallel int
+	MaxReplans  int
+}
+
+type ScheduledStageExecution struct {
+	StageRef   string
+	AttemptRef string
+	Execution  WorkerExecution
+}
+
+type ScheduleRunResult struct {
+	Plan        SchedulePlan
+	Persisted   SchedulePlanPersistResult
+	Executions  []ScheduledStageExecution
+	ReplanCount int
+}
+
+// Scheduler coordinates one scheduling pass for a persisted Run. It is
+// intentionally invoked by the Server lifecycle; periodic scanning and Worker
+// Pool ownership remain outside this Application service.
+type Scheduler struct {
+	reader     RunReader
+	store      SchedulePlanStore
+	clock      DatabaseClock
+	ids        IDGenerator
+	validator  DependencyOutputValidator
+	dispatcher StageExecutionDispatcher
+	config     SchedulerConfig
+}
+
+func NewScheduler(
+	reader RunReader,
+	store SchedulePlanStore,
+	clock DatabaseClock,
+	ids IDGenerator,
+	validator DependencyOutputValidator,
+	dispatcher StageExecutionDispatcher,
+	config SchedulerConfig,
+) (*Scheduler, error) {
+	if reader == nil || store == nil || clock == nil || ids == nil || dispatcher == nil ||
+		config.MaxParallel <= 0 || config.MaxReplans <= 0 {
+		return nil, errors.New("Researchflow scheduler dependencies or configuration are invalid")
+	}
+	return &Scheduler{
+		reader: reader, store: store, clock: clock, ids: ids,
+		validator: validator, dispatcher: dispatcher, config: config,
+	}, nil
+}
+
+// ScheduleRun reloads and recomputes the complete plan after any Stage CAS
+// conflict. Only a successfully persisted plan may be dispatched. ClaimAttempt
+// remains the final cross-process concurrency, deadline, lease and fencing gate.
+func (s *Scheduler) ScheduleRun(ctx context.Context, runRef string) (ScheduleRunResult, error) {
+	if s == nil || s.reader == nil || s.store == nil || s.clock == nil ||
+		s.ids == nil || s.dispatcher == nil {
+		return ScheduleRunResult{}, errors.New("Researchflow scheduler is not configured")
+	}
+	if strings.TrimSpace(runRef) == "" || runRef != strings.TrimSpace(runRef) || len(runRef) > 255 {
+		return ScheduleRunResult{}, errors.New("Researchflow scheduler Run reference is invalid")
+	}
+
+	result := ScheduleRunResult{Executions: []ScheduledStageExecution{}}
+	for attempt := 0; attempt < s.config.MaxReplans; attempt++ {
+		if err := ctx.Err(); err != nil {
+			return result, err
+		}
+		snapshot, err := s.reader.GetRun(ctx, runRef)
+		if err != nil {
+			return result, fmt.Errorf("load Researchflow scheduler snapshot: %w", err)
+		}
+		if snapshot.Run.Ref != runRef {
+			return result, errors.New("Researchflow scheduler reader returned another Run")
+		}
+		now, err := s.clock.NowUTC(ctx)
+		if err != nil {
+			return result, fmt.Errorf("read Researchflow scheduler database clock: %w", err)
+		}
+		if now.IsZero() {
+			return result, errors.New("Researchflow scheduler database clock returned a zero timestamp")
+		}
+		if _, offset := now.Zone(); offset != 0 {
+			return result, errors.New("Researchflow scheduler database clock must return UTC")
+		}
+
+		plan, err := BuildSchedulePlan(ctx, snapshot.Run, snapshot.Stages, nil,
+			s.config.MaxParallel, now, s.validator)
+		if err != nil {
+			return result, fmt.Errorf("build Researchflow schedule plan: %w", err)
+		}
+		persisted, err := PersistSchedulePlan(ctx, s.store, plan)
+		if errors.Is(err, ErrSchedulePlanConflict) {
+			result.ReplanCount++
+			continue
+		}
+		if err != nil {
+			return result, err
+		}
+
+		result.Plan = plan
+		result.Persisted = persisted
+		attemptRefs := make([]string, len(plan.Dispatch))
+		for index, stage := range plan.Dispatch {
+			attemptRef, idErr := s.ids.NewRef(ctx, "attempt")
+			if idErr != nil {
+				return result, fmt.Errorf("generate Researchflow Attempt reference for Stage %q: %w", stage.Ref, idErr)
+			}
+			if strings.TrimSpace(attemptRef) == "" || attemptRef != strings.TrimSpace(attemptRef) {
+				return result, fmt.Errorf("Researchflow ID generator returned an invalid Attempt reference for Stage %q", stage.Ref)
+			}
+			attemptRefs[index] = attemptRef
+		}
+
+		// 单次 Run 的 Dispatch 集合已受 MaxParallel 限制；并发提交给固定 Worker Pool，
+		// 让同一 Run 的独立 Stage 可以并行执行，而不增加第二套持久化队列。
+		result.Executions = make([]ScheduledStageExecution, len(plan.Dispatch))
+		dispatchErrors := make([]error, len(plan.Dispatch))
+		var dispatchWait sync.WaitGroup
+		for index, stage := range plan.Dispatch {
+			index, stage, attemptRef := index, stage, attemptRefs[index]
+			dispatchWait.Add(1)
+			go func() {
+				defer dispatchWait.Done()
+				execution, dispatchErr := s.dispatcher.Execute(ctx, runRef, stage.Ref, attemptRef)
+				result.Executions[index] = ScheduledStageExecution{
+					StageRef: stage.Ref, AttemptRef: attemptRef, Execution: execution,
+				}
+				dispatchErrors[index] = dispatchErr
+			}()
+		}
+		dispatchWait.Wait()
+		for index, dispatchErr := range dispatchErrors {
+			if dispatchErr != nil {
+				return result, fmt.Errorf("dispatch Researchflow Stage %q: %w", plan.Dispatch[index].Ref, dispatchErr)
+			}
+		}
+		return result, nil
+	}
+	return result, fmt.Errorf("%w: run=%s max_replans=%d", ErrScheduleReplanExhausted, runRef, s.config.MaxReplans)
 }

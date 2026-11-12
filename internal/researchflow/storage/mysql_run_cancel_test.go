@@ -56,7 +56,7 @@ func TestMariaDBBeginRunCancellationLinearizesWorkerOperations(t *testing.T) {
 	if err := platformstorage.ApplyMigrations(ctx, db, MigrationNamespace, Migrations()); err != nil {
 		t.Fatalf("apply Researchflow migrations: %v", err)
 	}
-	repository, err := NewMySQLRunRepository(db)
+	repository, err := NewMySQLRunRepository(db, CapacityLimits{MaxQueuedRuns: 1000, MaxWorkers: 64})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -113,6 +113,10 @@ func TestMariaDBBeginRunCancellationLinearizesWorkerOperations(t *testing.T) {
 	changed, err := repository.BeginRunCancellation(ctx, runRef, 2)
 	if err != nil || !changed {
 		t.Fatalf("begin cancellation changed=%v err=%v", changed, err)
+	}
+	if _, err := repository.RenewAttemptLease(ctx, runRef, runningStageRef, attempt.Ref,
+		"worker-a", attempt.FencingToken, time.Minute); !errors.Is(err, application.ErrRunCancellationUnavailable) {
+		t.Fatalf("lease heartbeat after durable cancellation error=%v, want ErrRunCancellationUnavailable", err)
 	}
 	// Cancelling status alone is insufficient authority: both worker stop paths
 	// must require the persisted user-cancelled reason as well.

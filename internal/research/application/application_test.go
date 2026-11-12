@@ -182,8 +182,7 @@ func TestCreateAndGetEventUseApplicationDTOAndServerIdentity(t *testing.T) {
 		EventType: "earnings_guidance", Title: "公司调整年度业绩指引", Status: string(researchevent.StatusDetected),
 		SubjectRefs: []string{"security:600000"}, EvidenceRefs: []string{"ev_source_1"},
 		SystemObservedAt: now, SystemAsOf: now, ImpactHypothesisRefs: []string{},
-		InvalidationConditions: []string{"后续公告撤回该指引"}, Uncertainty: []string{},
-		SourceTimes: []EventSourceTime{{EvidenceRef: "ev_source_1", TimeType: string(researchevent.TimeSystemObservedAt), Value: now, AssertedBy: "news:observation"}},
+		InvalidationConditions: []string{"后续公告撤回该指引"}, Uncertainty: []string{}, TimeNormalizationRuleVersion: "1.0.0", DerivedFromRefs: []EventRef{}, SourceTimes: []EventSourceTime{{EvidenceRef: "ev_source_1", TimeType: string(researchevent.TimeSystemObservedAt), Value: now, AssertedBy: "news:observation"}},
 	}
 	createCtx, err := WithCorrelationID(context.Background(), "corr_create_parent")
 	if err != nil {
@@ -216,7 +215,7 @@ func TestUpdateEventUsesExpectedVersionAndDomainLifecycleRules(t *testing.T) {
 		SubjectRefs: []string{"security:600000"}, EvidenceRefs: []string{"ev_source_1"},
 		SystemObservedAt: now, SystemAsOf: now,
 		ImpactHypothesisRefs: []string{}, InvalidationConditions: []string{"公告撤回"},
-		Uncertainty: []string{}, SourceTimes: []researchevent.EventSourceTime{{
+		Uncertainty: []string{}, TimeNormalizationRuleVersion: "1.0.0", DerivedFromRefs: []researchevent.ResearchEventRef{}, SourceTimes: []researchevent.EventSourceTime{{
 			EvidenceRef: "ev_source_1", TimeType: researchevent.TimeSystemObservedAt,
 			Value: now, AssertedBy: "news:observation",
 		}},
@@ -232,7 +231,7 @@ func TestUpdateEventUsesExpectedVersionAndDomainLifecycleRules(t *testing.T) {
 		SubjectRefs: []string{"security:600000"}, EvidenceRefs: []string{"ev_source_1"},
 		SystemObservedAt: now, SystemAsOf: now.Add(time.Minute),
 		ImpactHypothesisRefs: []string{}, InvalidationConditions: []string{"公告撤回"},
-		Uncertainty: []string{}, SourceTimes: []EventSourceTime{{
+		Uncertainty: []string{}, TimeNormalizationRuleVersion: "1.0.0", DerivedFromRefs: []EventRef{}, SourceTimes: []EventSourceTime{{
 			EvidenceRef: "ev_source_1", TimeType: string(researchevent.TimeSystemObservedAt),
 			Value: now, AssertedBy: "news:observation",
 		}},
@@ -300,7 +299,7 @@ func TestCreateEventRejectsInvalidEventBeforePersistence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = service.CreateEvent(context.Background(), CreateEventCommand{EventType: "", Title: "", Status: "unknown", SystemObservedAt: now, SystemAsOf: now, SubjectRefs: []string{}, EvidenceRefs: []string{}, ImpactHypothesisRefs: []string{}, InvalidationConditions: []string{}, Uncertainty: []string{}, SourceTimes: []EventSourceTime{}})
+	_, err = service.CreateEvent(context.Background(), CreateEventCommand{EventType: "", Title: "", Status: "unknown", SystemObservedAt: now, SystemAsOf: now, SubjectRefs: []string{}, EvidenceRefs: []string{}, ImpactHypothesisRefs: []string{}, InvalidationConditions: []string{}, Uncertainty: []string{}, TimeNormalizationRuleVersion: "1.0.0", DerivedFromRefs: []EventRef{}, SourceTimes: []EventSourceTime{}})
 	if err == nil {
 		t.Fatal("invalid Event must be rejected")
 	}
@@ -479,8 +478,7 @@ func TestApplicationRejectsRepositoryIdentityMismatch(t *testing.T) {
 		EventID: "evt_other", EventVersion: 1, EventType: "earnings_guidance", Title: "快照",
 		Status: researchevent.StatusDetected, SubjectRefs: []string{"security:600000"},
 		EvidenceRefs: []string{"ev_source_1"}, SystemObservedAt: now, SystemAsOf: now,
-		ImpactHypothesisRefs: []string{}, InvalidationConditions: []string{}, Uncertainty: []string{},
-		SourceTimes: []researchevent.EventSourceTime{{EvidenceRef: "ev_source_1", TimeType: researchevent.TimeSystemObservedAt, Value: now, AssertedBy: "news"}},
+		ImpactHypothesisRefs: []string{}, InvalidationConditions: []string{}, Uncertainty: []string{}, TimeNormalizationRuleVersion: "1.0.0", DerivedFromRefs: []researchevent.ResearchEventRef{}, SourceTimes: []researchevent.EventSourceTime{{EvidenceRef: "ev_source_1", TimeType: researchevent.TimeSystemObservedAt, Value: now, AssertedBy: "news"}},
 	}}}
 	service, err = NewServiceWithEvents(&contextRepoFake{}, &evidenceRepoFake{}, eventRepo, &authorizerFake{}, nil, nil)
 	if err != nil {
