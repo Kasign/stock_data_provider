@@ -566,3 +566,13 @@ Outbox 使用发布前 Claim、提交租约、外部 Publish、成功后 Ack 的
 - WorkerPool Shutdown 停止接收新任务并等待在途任务；超过截止时间取消池上下文。Server 仍需负责创建/启动/关闭 WorkerPool，并按统一配置保证本地 Worker 数不超过全局 MaxWorkers。
 - Actions Run `43137118534`，SHA `6c4e1aad62b5e1d469a9b087a6bf944dc8851a4d`：Researchflow gofmt、模块单测、Race、Vet、WorkerStore 单测/Race/Vet、MariaDB 生命周期普通/Race 集成全部通过。全仓 gofmt 因 Quant `internal/quant/manifest/manifest.go` 与 `manifest_test.go` 格式失败；不属于 Researchflow 模块。
 - Server 周期扫描所有可调度 Run 并重新调用 Scheduler、跨进程取消传播、真实 StageExecutor Adapter 和多模块端到端验收尚未完成。
+
+
+## 29. FLOW-004 调度恢复扫描与跨进程取消（2026-11-12）
+
+- Application 新增 `SchedulableRunCandidateReader` Port 和 `SchedulerCandidateScanner.ListNextPage`，以 RunRef 作为 keyset 游标。Server 可从空游标开始分页，直到 `HasMore=false`；每轮新扫描从头开始，以发现新建或状态变化的 Run。
+- MySQL Adapter 只返回 status 为 created/queued/running、termination_reason 为空、deadline 尚未到期，且至少有 pending/ready/retry_wait Stage 的 Run。每个候选仍须由 Scheduler.GetRun 重新读取完整快照，最终 ClaimAttempt 在事务中重新校验；候选列表不是执行授权或锁。
+- Worker Pool 不保存持久化任务队列。进程重启后，Server 周期扫描通过候选 Port 重新发现未终态 Run；Scheduler 从数据库 Stage 状态重新计算计划。已被 Claim 的 Attempt 仍由 Lease/Fencing 恢复路径处理。
+- 跨进程取消使用数据库 Lease 心跳轮询：Run 进入 cancelling 后，RenewAttemptLease 返回 `ErrRunCancellationUnavailable`；Worker 取消执行 Context，并通过 ConfirmAttemptCancellation 确认停止。Server 同进程可额外调用 Worker.CancelRun 降低延迟，但不能替代持久化取消状态和心跳确认。
+- MariaDB 集成覆盖取消后 Lease 心跳拒绝续租；Worker 单测覆盖心跳观察 durable cancellation 并完成确认。Actions Run `43138436243` 的 Researchflow 模块 gofmt/test/race/vet、WorkerStore 单测/Race/Vet、MariaDB 普通/Race 集成均通过。
+- Server 仍负责周期触发、分页循环、WorkerPool 启停、DeadlineScanner/Finalizer 生命周期和真实模块 Adapter 注入；本分支不修改 Server 代码。
