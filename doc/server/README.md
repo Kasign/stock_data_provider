@@ -1289,4 +1289,4 @@ Lifecycle.Stop 原实现通过 stopped 标记保证重复调用幂等，但并�
 - 在 Bootstrap 注册表中直接复用 Researchflow 的公开 Migration 列表和 namespace 常量；没有复制 SQL、没有修改模块 Migration、没有增加版本或字段。
 - 更新 Registry 单测，要求 namespace 集合包含 `researchflow`，并保持排序确定性。
 - 本次仅修改 `internal/server/bootstrap/bootstrap.go`、对应测试和本文档；不触碰其他模块代码，不执行 integration 合并或写操作。
-- 当前尚未执行 gofmt、Server 独立 Workflow、根模块全量测试或真实 MariaDB Migration 验收；本项只能标记为代码接线完成，不能标记为构建/数据库验收通过。
+- Server 独立 Workflow Run `43137020216`（SHA `3ffb0d8a109ef2e8f8e4d3aaa6db394c1c0f3e23`）已完成并成功：Server 范围 gofmt、包级单测、Race、Vet 全部通过。该 Workflow 不覆盖根模块全量 `go test ./...`、真实 MariaDB Migration 执行或 Researchflow Worker 生产启动；因此本项仅具备 Server 包级 CI 证据，不代表真实数据库/完整系统验收通过。
