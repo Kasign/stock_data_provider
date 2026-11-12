@@ -128,8 +128,8 @@ func mustMarshalAuthorizationBinding(t *testing.T, binding domain.NewsAuthorizat
 func applyNewsMigrationsAndVerifyV8Upgrade(t *testing.T, ctx context.Context, db *sql.DB) {
 	t.Helper()
 	migrations := Migrations()
-	if len(migrations) != 8 {
-		t.Fatalf("News migration count = %d, want 8", len(migrations))
+	if len(migrations) != 9 {
+		t.Fatalf("News migration count = %d, want 9", len(migrations))
 	}
 
 	var ledgerExists int
@@ -155,8 +155,8 @@ func applyNewsMigrationsAndVerifyV8Upgrade(t *testing.T, ctx context.Context, db
 		return
 	}
 
-	// Start from V1-V7 and preserve one pre-existing Observation while V8
-	// adds nullable retention columns to the live table.
+	// Start from V1-V7 and preserve one pre-existing Observation while V8 adds
+	// nullable retention columns and V9 adds the policy version tables.
 	if err := platformstorage.ApplyMigrations(ctx, db, "news", migrations[:7]); err != nil {
 		t.Fatalf("apply News migrations V1-V7: %v", err)
 	}
@@ -174,7 +174,7 @@ func applyNewsMigrationsAndVerifyV8Upgrade(t *testing.T, ctx context.Context, db
 	}
 
 	if err := platformstorage.ApplyMigrations(ctx, db, "news", migrations); err != nil {
-		t.Fatalf("upgrade News schema from V7 to V8: %v", err)
+		t.Fatalf("upgrade News schema from V7 to V9: %v", err)
 	}
 	var sourceID, identityStatus string
 	var candidateJSON []byte
