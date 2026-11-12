@@ -65,9 +65,9 @@ func productionFanoutInputs() (domain.EventEnvelope, domain.Subscription, domain
 		SubscriptionID: "sub-1", OwnerRef: "owner-1", Version: 3,
 		Status: domain.SubscriptionActive, EventType: event.EventType,
 		RecipientScope: domain.RecipientScopeOwner, ChannelRef: channel.ChannelRef,
-		TemplateID: "template-1",
-		CreatedAt: time.Date(2026, 11, 12, 0, 0, 0, 0, time.UTC),
-		UpdatedAt: time.Date(2026, 11, 12, 0, 0, 0, 0, time.UTC),
+		TemplateID:  "template-1",
+		CreatedAt:   time.Date(2026, 11, 12, 0, 0, 0, 0, time.UTC),
+		UpdatedAt:   time.Date(2026, 11, 12, 0, 0, 0, 0, time.UTC),
 		EffectiveAt: time.Date(2026, 11, 12, 0, 0, 0, 0, time.UTC),
 	}
 	recipient := RecipientDirectoryResult{
@@ -197,12 +197,15 @@ func TestProductionFanoutPlanFactoryDoesNotDowngradeDependencyFailures(t *testin
 
 func TestProductionFanoutPlanFactoryRejectsInvalidFrozenSubscriptionFields(t *testing.T) {
 	cases := []struct {
-		name string
+		name   string
 		mutate func(*domain.Subscription)
 	}{
 		{name: "schema version without filters", mutate: func(s *domain.Subscription) { s.FilterSchemaVersion = "1.0.0" }},
 		{name: "filters without schema version", mutate: func(s *domain.Subscription) { s.Filters = []byte(`{"status":"reject"}`) }},
-		{name: "duplicate filter key", mutate: func(s *domain.Subscription) { s.Filters = []byte(`{"status":"reject","status":"pass"}`); s.FilterSchemaVersion = "1.0.0" }},
+		{name: "duplicate filter key", mutate: func(s *domain.Subscription) {
+			s.Filters = []byte(`{"status":"reject","status":"pass"}`)
+			s.FilterSchemaVersion = "1.0.0"
+		}},
 		{name: "non UTC timestamp", mutate: func(s *domain.Subscription) { s.UpdatedAt = s.UpdatedAt.In(time.FixedZone("UTC+8", 8*60*60)) }},
 		{name: "effective before creation", mutate: func(s *domain.Subscription) { s.EffectiveAt = s.CreatedAt.Add(-time.Second) }},
 	}
@@ -215,7 +218,9 @@ func TestProductionFanoutPlanFactoryRejectsInvalidFrozenSubscriptionFields(t *te
 				fanoutTemplateSelectorStub{version: 1},
 				&fanoutRecipientDirectoryStub{result: recipient},
 			)
-			if err != nil { t.Fatal(err) }
+			if err != nil {
+				t.Fatal(err)
+			}
 			if _, err := factory.Build(context.Background(), event, subscription); !errors.Is(err, domain.ErrInvalidSubscription) {
 				t.Fatalf("expected invalid subscription, got %v", err)
 			}
