@@ -204,7 +204,6 @@ func isEvidenceUTC(value time.Time) bool {
 	return offset == 0
 }
 
-
 // GetEvidenceContentAt reads the body of one exact immutable version. Callers must
 // first locate and authorize that version through the News Application facade.
 func (r *MySQLRepository) GetEvidenceContentAt(
