@@ -614,6 +614,8 @@ try {
       await page.goto(baseUrl + "#unknown-view", { waitUntil: "load", timeout: 30000 });
       await page.locator("#market-view").waitFor({ state: "visible" });
       assert.equal(new URL(page.url()).hash, "#market", "unknown view hashes must safely fall back to market");
+      await page.reload({ waitUntil: "load", timeout: 30000 });
+      await page.locator("#market-view").waitFor({ state: "visible" });
     }
 
     // Keyboard users must be able to reveal and activate the skip link before traversing the dashboard.
