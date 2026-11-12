@@ -1305,3 +1305,12 @@ Lifecycle.Stop 原实现通过 stopped 标记保证重复调用幂等，但并�
 - Diagnostics 复核：Server 当前统一聚合共享 Storage Checks；Research 已有可构造的 Domain Snapshot Check，Researchflow 有 Stage Assessment Adapter；News 的真实检查依赖生产采集与策略入口，Quant/LLM/Notification 尚未形成可由 Server 直接注册的完整生产 Check 组。Server 不构造假健康检查。
 - 结论：SRV-004 仍不能整体解除阻塞。Research 的 SQL Repository 构造入口已经确认，不再作为未知项；可信 Evidence Authorizer 是明确阻塞。可继续做的只有对已交付模块公开入口进行逐个真实装配；当前缺少的可信配置、授权、执行器、Worker/Dispatcher 和跨模块 Port 必须由对应模块或项目契约提供，Server 不代替模块补业务能力。本轮不新增 DI Factory、HTTP API、Worker、字段或诊断项。
 - 本轮没有修改任何业务模块文件；Researchflow Migration 接入已由 12.53 节记录并通过 Server 独立 CI。进一步核对确认 Research 四类 MySQL Repository 均已有构造入口，但可信 Evidence Authorizer 没有可直接注入的生产实现。下一步应等待授权契约/Owner Adapter 明确后再接入 Research；不得在 Server 临时实现授权规则。其他模块保持各自明确的阻塞状态。
+
+
+### 12.55 SRV-007 Schema 预检补齐未知 namespace 检查（2026-11-12）
+
+- 复核 `ValidateApplied` 时发现，原实现只逐个查询当前已注册的 namespace。它能拒绝已注册 namespace 内缺失、未完成或未知的版本，但不会读取其他 namespace；数据库若残留已退役模块或不属于当前 Server 组合的迁移记录，仍可能通过 `MIGRATION_ENABLED=false` 的启动预检。
+- 将预检改为一次只读读取 `platform_schema_migrations` 全部 `namespace/version/status`，并要求数据库 namespace 集合与当前 Registry 完全一致；每个 namespace 内仍要求版本集合完全一致且全部为 `applied`。
+- 不执行 DDL、不修改迁移历史、不删除旧记录，也不改变 Platform Migration Runner 的职责。发现未知 namespace 时明确拒绝启动，交由运维确认数据库与当前代码版本是否匹配。
+- 新增纯逻辑测试覆盖完整集合、未知 namespace、缺失 namespace、已注册 namespace 内未知版本；数据库读写行为仍需由后续 MariaDB 集成验收覆盖。
+- 本批次代码与测试已提交；当前 SHA 的 Server 独立 CI 结果待 Workflow 执行，不提前标记通过。
