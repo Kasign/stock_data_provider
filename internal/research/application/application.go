@@ -746,8 +746,7 @@ func (s *Service) CreateClaim(ctx context.Context, command CreateClaimCommand) (
 	if err := value.Validate(); err != nil {
 		return Claim{}, validationFault("invalid_research_claim", "Research Claim is invalid", err)
 	}
-	evidenceRefs := append(cloneStrings(value.SupportingEvidenceRefs), value.ContradictingEvidenceRefs...)
-	if err := s.validateEvidenceReferences(ctx, evidenceRefs, value.SystemAsOf); err != nil {
+	if err := s.validateClaimEvidenceReferences(ctx, value.SupportingEvidenceRefs, value.ContradictingEvidenceRefs, value.SystemAsOf); err != nil {
 		return Claim{}, err
 	}
 	if err := s.claims.Append(ctx, value); err != nil {
@@ -797,8 +796,7 @@ func (s *Service) UpdateClaim(ctx context.Context, command UpdateClaimCommand) (
 	if err := next.ValidateNextVersion(previous); err != nil {
 		return Claim{}, validationFault("invalid_research_claim_revision", "Research Claim revision is invalid", err)
 	}
-	evidenceRefs := append(cloneStrings(next.SupportingEvidenceRefs), next.ContradictingEvidenceRefs...)
-	if err := s.validateEvidenceReferences(ctx, evidenceRefs, next.SystemAsOf); err != nil {
+	if err := s.validateClaimEvidenceReferences(ctx, next.SupportingEvidenceRefs, next.ContradictingEvidenceRefs, next.SystemAsOf); err != nil {
 		return Claim{}, err
 	}
 	if err := s.claims.Append(ctx, next); err != nil {
@@ -837,6 +835,40 @@ func fromDomainClaim(value researchclaim.Claim) Claim {
 		ValidationMethod:          cloneString(value.ValidationMethod), ExpectedObservation: cloneString(value.ExpectedObservation),
 		InvalidationConditions: cloneStrings(value.InvalidationConditions), Status: string(value.Status), Limitations: cloneStrings(value.Limitations),
 	}
+}
+
+func (s *Service) validateClaimEvidenceReferences(ctx context.Context, supporting, contradicting []string, systemAsOf time.Time) error {
+	for _, group := range []struct {
+		name   string
+		refs   []string
+		stance researchevidence.Stance
+	}{
+		{name: "supporting_evidence_refs", refs: supporting, stance: researchevidence.StanceSupports},
+		{name: "contradicting_evidence_refs", refs: contradicting, stance: researchevidence.StanceContradicts},
+	} {
+		for _, ref := range group.refs {
+			if s == nil || s.evidence == nil {
+				return applicationFault(fault.ClassInternal, "research_evidence_repository_not_configured", "Research Evidence Repository is not configured", researcherrors.ErrInvalidRepository)
+			}
+			value, err := s.evidence.Get(ctx, ref)
+			if err != nil {
+				if errors.Is(err, researcherrors.ErrNotFound) {
+					return validationFault("research_evidence_reference_not_found", "Research Evidence reference does not exist", err)
+				}
+				return mapRepositoryError(err)
+			}
+			if value.EvidenceID != ref {
+				return applicationFault(fault.ClassInternal, "stored_evidence_identity_mismatch", "Stored Research Evidence identity does not match the requested reference", researcherrors.ErrCorruptRecord)
+			}
+			if err := value.ValidateForStrictPIT(systemAsOf); err != nil {
+				return validationFault("invalid_research_evidence_reference", "Research Evidence reference is not valid at the requested PIT cutoff", err)
+			}
+			if value.Stance != group.stance {
+				return validationFault("research_claim_evidence_stance_mismatch", "Research Claim Evidence stance does not match its support/contradiction reference list", fmt.Errorf("%s requires stance %q, got %q", group.name, group.stance, value.Stance))
+			}
+		}
+	}
+	return nil
 }
 
 func (s *Service) validateEvidenceReferences(ctx context.Context, refs []string, systemAsOf time.Time) error {

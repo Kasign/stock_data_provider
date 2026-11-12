@@ -62,6 +62,18 @@ func (f *evidenceRepoFake) Get(_ context.Context, id string) (researchevidence.E
 	return researchevidence.Evidence{}, researcherrors.ErrNotFound
 }
 
+func evidenceFixtureWithStance(t *testing.T, id string, systemAsOf time.Time, stance researchevidence.Stance) researchevidence.Evidence {
+	t.Helper()
+	value := evidenceFixture(t, id, systemAsOf)
+	value.Stance = stance
+	fingerprint, err := value.ComputeContentFingerprint()
+	if err != nil {
+		t.Fatalf("ComputeContentFingerprint() error = %v", err)
+	}
+	value.ContentFingerprint = fingerprint
+	return value
+}
+
 func evidenceFixture(t *testing.T, id string, systemAsOf time.Time) researchevidence.Evidence {
 	t.Helper()
 	availableAt := systemAsOf.Add(-time.Hour)
@@ -436,7 +448,7 @@ func TestCreateAndGetHypothesisUseApplicationDTO(t *testing.T) {
 	now := time.Date(2026, 11, 9, 1, 0, 0, 0, time.UTC)
 	repo := &claimRepoFake{}
 	evidence := &evidenceRepoFake{values: map[string]researchevidence.Evidence{
-		"ev_support_1": evidenceFixture(t, "ev_support_1", now),
+		"ev_support_1": evidenceFixtureWithStance(t, "ev_support_1", now, researchevidence.StanceSupports),
 	}}
 	service, err := NewServiceWithClaims(&contextRepoFake{}, evidence, repo, &authorizerFake{}, nil, &fixedIDs{})
 	if err != nil {
@@ -815,5 +827,44 @@ func TestCloneStringsAlwaysReturnsNonNilIndependentSlice(t *testing.T) {
 	got[0] = "changed"
 	if input[0] != "evidence:1" {
 		t.Fatal("cloneStrings must return an independent copy")
+	}
+}
+
+func TestClaimRejectsEvidenceWithMismatchedStance(t *testing.T) {
+	now := time.Date(2026, 11, 12, 2, 0, 0, 0, time.UTC)
+	method, observation := "compare revisions", "forecast increases"
+	base := CreateClaimCommand{
+		Statement: "盈利改善假设", EpistemicType: string(researchclaim.EpistemicHypothesis),
+		ScopeRefs: []string{"security:600000"}, SystemAsOf: now,
+		SupportingEvidenceRefs: []string{"ev_support"}, ContradictingEvidenceRefs: []string{"ev_contradict"},
+		RequiredDataRefs: []string{}, ValidationMethod: &method, ExpectedObservation: &observation,
+		InvalidationConditions: []string{"预测持续下调"}, Status: string(researchclaim.StatusProposed), Limitations: []string{},
+	}
+	for _, tc := range []struct {
+		name string
+		supporting researchevidence.Stance
+		contradicting researchevidence.Stance
+	}{
+		{name: "support reference cannot point to contradiction evidence", supporting: researchevidence.StanceContradicts, contradicting: researchevidence.StanceContradicts},
+		{name: "contradiction reference cannot point to support evidence", supporting: researchevidence.StanceSupports, contradicting: researchevidence.StanceSupports},
+		{name: "neutral evidence cannot be classified as support or contradiction", supporting: researchevidence.StanceNeutral, contradicting: researchevidence.StanceContradicts},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := &claimRepoFake{}
+			evidence := &evidenceRepoFake{values: map[string]researchevidence.Evidence{
+				"ev_support": evidenceFixtureWithStance(t, "ev_support", now, tc.supporting),
+				"ev_contradict": evidenceFixtureWithStance(t, "ev_contradict", now, tc.contradicting),
+			}}
+			service, err := NewServiceWithClaims(&contextRepoFake{}, evidence, repo, &authorizerFake{}, nil, &fixedIDs{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := service.CreateClaim(context.Background(), base); err == nil {
+				t.Fatal("Claim must reject Evidence whose stance conflicts with its reference list")
+			}
+			if repo.appended {
+				t.Fatal("Claim with mismatched Evidence stance must not be persisted")
+			}
+		})
 	}
 }
