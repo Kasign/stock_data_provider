@@ -132,6 +132,11 @@ RiskReason 至少包含 code、severity（block/warn/info）、status（triggere
 Risk RuleSet 必须非空且至少包含一条 block 规则，所有 block 规则必须 required。Reason.code 唯一且 severity 必须匹配规则定义；Reasons 按 RuleSet 声明顺序输出。任一 block triggered => reject（优先于 unknown）；无 block triggered 且至少一个 block unknown => unknown；至少一条 block 且全部 not_triggered => pass。warn/info 不改变聚合结论。RiskDecision.reasons 必须非空；input_refs 显式必需且允许空数组。RiskDecision.system_as_of 必须与 Envelope.system_as_of 一致；evaluated_at 必须为 UTC 且不早于 system_as_of；rule_set_version 与 Envelope.algorithm_version 独立。RiskDecision.status=reject 不等于 Envelope.result_status=rejected。
 
 
+### 2.6 Quant Facade 边界
+
+首期可按用例暴露 AnalyzeStock、AnalyzeMarket、EvaluateRisk、GetResult 等 Application 用例。具体签名由 QNT-001 细化；不得暴露 Repository、SQL Model、Data HTTP DTO 或内部计算结构。结果读取必须验证调用方权限和引用归属。
+
+
 ### 2.7 QuantResult Envelope 与强类型 Payload
 
 Quant Application 返回的 QuantResult 使用共同 Envelope，不允许 `map[string]any` 或无约束 JSON payload。
@@ -227,11 +232,6 @@ Factor 首批仅包含单证券日线时间序列因子，不包含横截面排�
 - 任何未知 indicator_code、factor_code、metric_code、重复/缺失/多余 Metric、顺序错误、跨字段版本或时间不一致，均必须 fail closed；不得降级为任意 object 或忽略未知字段。
 - Indicator/Factor 结果均不引入独立的 payload-level status；计算可用性由 QuantMetric.metric_status 表达，Envelope.result_status 与 Envelope.quality_status 继续独立表达。
 
-
-
-### 2.6 Quant Facade 边界
-
-首期可按用例暴露 AnalyzeStock、AnalyzeMarket、EvaluateRisk、GetResult 等 Application 用例。具体签名由 QNT-001 细化；不得暴露 Repository、SQL Model、Data HTTP DTO 或内部计算结构。结果读取必须验证调用方权限和引用归属。
 
 
 ### 2.8 QuantResult Manifest（QNT-CTR-005）
