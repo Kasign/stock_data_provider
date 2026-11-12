@@ -40,7 +40,7 @@ func getResultFixture(t *testing.T, now time.Time) AuthorizedRecord {
 		ResultType: "risk", Scope: "stock", SecurityID: "600000.SH", Period: "1d",
 		QualityStatus: "unknown", ResultStatus: "insufficient_data", SchemaVersion: "1.0.0",
 		PayloadSchemaVersion: "1.0.0", AlgorithmVersion: "1.0.0",
-		ParameterFingerprint: "sha256:parameters", SystemAsOf: now.Add(-time.Minute),
+		ParameterFingerprint: "sha256:parameters", SystemAsOf: now.Add(-time.Hour - time.Minute),
 		InputSnapshotRefs: []string{"snapshot:001"},
 	}, payload)
 	if err != nil {
