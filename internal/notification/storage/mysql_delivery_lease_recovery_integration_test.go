@@ -96,32 +96,34 @@ func TestNotificationMariaDBExpiredDeliveryLeaseRecoveryIntegration(t *testing.T
 	if err != nil || !found || recoverySnapshot.AttemptCount != 1 {
 		t.Fatalf("load Delivery after Attempt start: found=%v delivery=%+v err=%v", found, recoverySnapshot, err)
 	}
-	recoveryAt := now
-	next, event, err := recoverySnapshot.Transition(domain.DeliveryTransition{
-		To: domain.DeliveryUnknown, At: recoveryAt,
+	activeNext, activeEvent, err := recoverySnapshot.Transition(domain.DeliveryTransition{
+		To: domain.DeliveryUnknown, At: now,
 		ReasonCode: "lease_expired_during_attempt", EvidenceRef: attempt.AttemptID,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := repository.RecoverExpiredLease(ctx, recoverySnapshot.Version, claim.Lease.FencingToken, next, event, recoveryAt); !errors.Is(err, application.ErrDeliveryLeaseConflict) {
+	if err := repository.RecoverExpiredLease(ctx, recoverySnapshot.Version, claim.Lease.FencingToken, activeNext, activeEvent, now); !errors.Is(err, application.ErrDeliveryLeaseConflict) {
 		t.Fatalf("active lease must not be recovered, got %v", err)
 	}
 
-	// 等待真实租约到期；不改写 Delivery/Attempt 的租约时间戳，保持 Attempt 追加记录不可变。
-	leaseWait := time.Until(leaseExpiry.Add(20 * time.Millisecond))
-	if leaseWait > 0 {
-		time.Sleep(leaseWait)
+	// Attempt 的租约必须晚于 StartedAt；将其推进到 StartedAt 之后再等待自然过期。
+	expiredAt := startedAt.Add(100 * time.Millisecond)
+	if _, err := db.ExecContext(ctx, "UPDATE notification_deliveries SET lease_expires_at = ? WHERE delivery_id = ?", expiredAt, delivery.DeliveryID); err != nil {
+		t.Fatalf("expire delivery lease fixture: %v", err)
 	}
-	recoverySnapshot, found, err = repository.Get(ctx, delivery.DeliveryID)
-	if err != nil || !found || recoverySnapshot.AttemptCount != 1 {
-		t.Fatalf("reload Delivery after lease expiry: found=%v delivery=%+v err=%v", found, recoverySnapshot, err)
+	if _, err := db.ExecContext(ctx, "UPDATE notification_delivery_attempts SET lease_expires_at = ? WHERE delivery_id = ?", expiredAt, delivery.DeliveryID); err != nil {
+		t.Fatalf("expire attempt lease fixture: %v", err)
 	}
-	recoveryAt = time.Now().UTC().Truncate(time.Microsecond)
-	next, event, err = recoverySnapshot.Transition(domain.DeliveryTransition{
-		To: domain.DeliveryUnknown, At: recoveryAt,
-		ReasonCode: "lease_expired_during_attempt", EvidenceRef: attempt.AttemptID,
-	})
+	wait := time.Until(expiredAt.Add(20 * time.Millisecond))
+	if wait > 0 {
+		time.Sleep(wait)
+	}
+	var recoveryClock []byte
+	if err := db.QueryRowContext(ctx, "SELECT DATE_FORMAT(UTC_TIMESTAMP(6), '%Y-%m-%d %H:%i:%s.%f')").Scan(&recoveryClock); err != nil {
+		t.Fatal(err)
+	}
+	recoveryAt, err := parseDatabaseTime(recoveryClock)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -143,6 +145,13 @@ func TestNotificationMariaDBExpiredDeliveryLeaseRecoveryIntegration(t *testing.T
 	}
 	if !foundExpired {
 		t.Fatalf("bounded scan must return the expired lease for %s", delivery.DeliveryID)
+	}
+	next, event, err := recoveryBase.Transition(domain.DeliveryTransition{
+		To: domain.DeliveryUnknown, At: recoveryAt,
+		ReasonCode: "lease_expired_during_attempt", EvidenceRef: attempt.AttemptID,
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
 
 	// 恢复只能改变状态与租约，不得改写 Delivery 的创建时间、截止时间或重试预算。
