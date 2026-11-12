@@ -326,3 +326,32 @@ func TestRefreshAdjustmentFactorsStopsOnPersistenceFailure(t *testing.T) {
 		t.Fatalf("rejected refresh must not persist a partial revision: %+v", persisted)
 	}
 }
+
+func TestSaveCorporateActionsRejectsMissingSourceVersion(t *testing.T) {
+	dsn := os.Getenv("MARKET_DATA_TEST_MYSQL_DSN")
+	if dsn == "" {
+		t.Skip("MARKET_DATA_TEST_MYSQL_DSN is not configured")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	store, err := repository.OpenMySQL(ctx, dsn)
+	if err != nil {
+		t.Fatalf("open MariaDB: %v", err)
+	}
+	defer store.Close()
+	if err := store.Migrate(ctx); err != nil {
+		t.Fatalf("migrate MariaDB: %v", err)
+	}
+
+	action := model.CorporateAction{
+		Symbol: "600519.SH", ProviderEventID: "missing-source-version",
+		EventType: "cash_dividend", ExDate: "2026-10-30",
+		Source: "corporate-action-persistence-test", FetchedAt: time.Now().UTC(),
+		QualityStatus: model.QualityValid,
+	}
+	if err := store.SaveCorporateActions(ctx, []model.CorporateAction{action}); err == nil {
+		t.Fatal("corporate-action persistence must reject missing source_version")
+	}
+}
