@@ -86,3 +86,13 @@ jobs:
             ./internal/server/resources \
             ./internal/server/runtime \
             ./internal/server/relay
+
+      - name: Build Server image and verify Notification schemas
+        run: |
+          docker build -t server-relay-packaging-test -f Dockerfile .
+          docker run --rm --entrypoint sh server-relay-packaging-test -c '
+            test -s /app/doc/notification/schema/notification-event-envelope-1.0.0.schema.json &&
+            test -s /app/doc/notification/schema/quant-risk-decision-changed-1.0.0.schema.json &&
+            test -s /app/doc/notification/schema/research-event-lifecycle-changed-1.0.0.schema.json &&
+            test -s /app/doc/notification/schema/researchflow-run-terminal-1.0.0.schema.json
+          '

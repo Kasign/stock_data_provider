@@ -1615,3 +1615,11 @@ Server Bootstrap
 - 该检查只证明本地 Endpoint/凭证配置完整，不发起网络请求，不证明 Provider 可达、授权有效、配额可用或输出策略允许持久化。诊断消息和属性不包含 Endpoint 或 Secret。
 - News 配置只在 API/All 角色加载；Worker 角色不因未使用的 News Provider 配置而阻塞启动。
 - Server Bootstrap 集成测试覆盖一个 Provider 已配置、其他 Provider 未配置、Parser 检查通过及 Secret 不泄露。独立 CI Run `43203751587` 的 gofmt、package tests、Race、Vet 全部通过。
+
+### 12.78 SRV-009 Relay Schema 运行时资源打包修正（2026-11-12）
+
+- 复审发现 Relay 在 Bootstrap 中使用 `os.DirFS("doc/notification/schema")` 加载事件 Schema，但根 Dockerfile 的最终运行镜像此前只复制 `analysis-api` 二进制，没有复制该目录。
+- 本地从仓库根目录运行时路径存在，CI 的 Go 包测试也能通过；但基于原 Dockerfile 部署时，`worker/all` 角色创建 Relay 会因 Schema Registry 目录缺失而启动失败。
+- 修正根 Dockerfile，将四份冻结的 Notification Event Schema 复制到镜像固定路径 `/app/doc/notification/schema`，与镜像 `WORKDIR /app` 及 Bootstrap 相对路径保持一致；不复制整个文档目录。
+- Server 独立 CI 增加镜像构建和四份 Schema 文件存在性检查，防止后续镜像裁剪再次移除运行时资源。
+- 本修正只处理镜像资源完整性，不代表 Notification Fanout Worker、真实渠道 Adapter 或生产投递链路已完成装配。

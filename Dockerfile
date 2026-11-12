@@ -16,3 +16,6 @@ COPY --from=builder /out/analysis-api /app/analysis-api
 USER app
 EXPOSE 8092
 ENTRYPOINT ["/app/analysis-api"]
+
+# Relay 在运行时从固定路径加载 Notification Schema，必须随二进制一起打包。
+COPY --from=builder /src/doc/notification/schema /app/doc/notification/schema
