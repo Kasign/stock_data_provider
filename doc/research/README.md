@@ -32,7 +32,7 @@ Research 不采集新闻、不拥有行情事实、不重算 Quant 指标，不�
 | RSC-004 实体关联 | 尚未实现 | 等待 Data 提供稳定 Security/Industry 引用、版本/时间语义及公开 Application Port |
 | RSC-005 Claim/Hypothesis | Domain、认识论校验、状态迁移、版本追加、supersedes_version 字段及当前版本头校验、Application、SQL Repository | Evidence/Scope 真实引用解析、真实研究样本 |
 | RSC-006 Scenario | 新增 Scenario/Condition/ConditionGroup 领域模型，expected_value 限定为标量或一层标量数组，递归 ConditionGroup 校验按 DEC-033 执行 | Quant Metric Registry/结果引用由 Quant Owner 校验；Scenario Application/Storage 接入待完成 |
-| RSC-007 Storage/Outbox | Context/Event/Claim/Evidence Repository、Migration v1-v5、事务 Outbox、领取/租约/重试/确认/拒绝；专用 MariaDB 当前版本与历史升级 Job 已通过 | 根 Server Migration 注册、Server→Notification Relay 接线、授权续期历史留档语义 |
+| RSC-007 Storage/Outbox | Context/Event/Claim/Evidence Repository、Migration v1（初版最终结构）、事务 Outbox、领取/租约/重试/确认/拒绝；专用 MariaDB 当前版本与旧的过渡迁移 Job 已通过 | 根 Server Migration 注册、Server→Notification Relay 接线、授权续期历史留档语义 |
 | RSC-008 Diagnostics | Context/Event/Claim/Evidence 快照 Check、Run PIT、脱敏和快照隔离；Research 全模块测试通过；Evidence Check 通过 Application GetEvidence 执行 Owner Authorizer 调用 | 真实 Owner Adapter、Researchflow FLOW-009 Facade 和 Runner 集成 |
 
 ## 诊断边界
@@ -47,7 +47,7 @@ Research 不采集新闻、不拥有行情事实、不重算 Quant 指标，不�
 
 - Research 全模块独立 Job 和 Research Storage/Migration MariaDB Job 均在本轮 Workflow Run [42616788237](https://github.com/Kasign/stock_data_provider/actions/runs/42616788237) 通过，测试代码 SHA 为 `0129675185ab29905b0ef14a21e1d564961e3dde`。Research gofmt、全包 go test、race、vet 及 MariaDB Storage/Migration 集成均通过。
 - 同一 Workflow 的整体 conclusion 是 failure：根模块 `Test .` 被 Marketdata、News、Notification、Quant 的 gofmt 差异阻断。该失败不属于 Research 文件；因此不能表述为全仓 Go Workflow 通过，也不能把根模块全量编译/测试视为已验收。
-- 本地 MariaDB Job 覆盖 Migration v1→v5 历史升级、PIT 纳秒/NULL 回填、Context/Event/Claim/Evidence Repository、并发追加、损坏记录 fail-closed、Outbox 原子写入/并发领取/租约过期。
+- 本地 MariaDB Job 覆盖 初版 Migration v1 最终结构初始化、PIT 纳秒/NULL 回填、Context/Event/Claim/Evidence Repository、并发追加、损坏记录 fail-closed、Outbox 原子写入/并发领取/租约过期。
 - 本轮代码复核发现并修复 Event.available_at PIT 边界；本次进一步按 RSC-CTR-002 补齐 Event 时间规则版本/派生引用、Claim supersedes_version 和 Scenario 闭合条件模型。新改动的 CI 验收状态以对应提交后的 Workflow 为准。
 - 尚无真实 Data/News Owner Adapter 与完整来源证据；跨模块接入及真实数据验收仍未完成。根 Server Migration 注册和 Notification Relay 由 Server 组合根负责。
 
@@ -58,3 +58,11 @@ Research 不采集新闻、不拥有行情事实、不重算 Quant 指标，不�
 3. 不新增无真实调用场景的查询/API，不为 WebUI 提前扩展 DTO。
 4. 阶段状态、诊断标准和测试证据更新在本目录现有文档；不重复创建进度文档。
 5. 契约字段定义以项目级契约目录和生产方 DTO 为准；本模块文档只记录 Research 的消费规则与实现进度。
+
+
+### 初版存储结构收敛（2026-11-12）
+
+- Research 当前为初版且无历史业务数据，Migration 已收敛为单个 version 1，直接创建最终结构。
+- 移除 v2-v5 中为既有表回填 PIT 精度、扩大版本列、升级 Outbox 状态所做的过渡迁移；最终字段类型直接写入初始 DDL。
+- 删除 v1→v5 历史数据升级集成测试，保留最终结构初始化、Repository、并发、PIT 与 Outbox 行为测试。
+- 不创建 legacy/v2 表，不做数据复制或兼容迁移。该变更要求 Research 数据库按初版空库重新初始化；不得对已有非空数据库直接执行。
