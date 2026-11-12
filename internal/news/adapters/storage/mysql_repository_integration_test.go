@@ -1115,7 +1115,8 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 			return errors.New("identity transaction lacks source policy lock")
 		}
 		_, _, _, err := policyTx.LockCurrentIngestPolicies(
-			ctx, lockSourceRef, lockSourceV1, "news-it-source-ingest-endpoint", "", "", "",
+			ctx, lockSourceRef, lockSourceV1,
+			"news-it-source-ingest-endpoint", "news-it-source-ingest-endpoint-first", "", "",
 		)
 		return err
 	}); !errors.Is(err, app.ErrNewsCurrentPolicyUnavailable) {
