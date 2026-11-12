@@ -64,24 +64,24 @@ type EventSourceTime struct {
 // ResearchEvent is one immutable version of a cross-source real-world event.
 // Notification mapping and persistence are intentionally outside this package.
 type ResearchEvent struct {
-	EventID                       string             `json:"event_id"`
-	EventVersion                  int                `json:"event_version"`
-	EventType                     string             `json:"event_type"`
-	Title                         string             `json:"title"`
-	Status                        EventStatus        `json:"status"`
-	SubjectRefs                   []string           `json:"subject_refs"`
-	EvidenceRefs                  []string           `json:"evidence_refs"`
-	OccurredAt                    *time.Time         `json:"occurred_at"`
-	PublishedAt                   *time.Time         `json:"published_at"`
-	AvailableAt                   *time.Time         `json:"available_at"`
-	SystemObservedAt              time.Time          `json:"system_observed_at"`
-	SystemAsOf                    time.Time          `json:"system_as_of"`
-	ImpactHypothesisRefs          []string           `json:"impact_hypothesis_refs"`
-	InvalidationConditions        []string           `json:"invalidation_conditions"`
-	Uncertainty                   []string           `json:"uncertainty"`
-	SourceTimes                   []EventSourceTime  `json:"source_times"`
+	EventID                      string             `json:"event_id"`
+	EventVersion                 int                `json:"event_version"`
+	EventType                    string             `json:"event_type"`
+	Title                        string             `json:"title"`
+	Status                       EventStatus        `json:"status"`
+	SubjectRefs                  []string           `json:"subject_refs"`
+	EvidenceRefs                 []string           `json:"evidence_refs"`
+	OccurredAt                   *time.Time         `json:"occurred_at"`
+	PublishedAt                  *time.Time         `json:"published_at"`
+	AvailableAt                  *time.Time         `json:"available_at"`
+	SystemObservedAt             time.Time          `json:"system_observed_at"`
+	SystemAsOf                   time.Time          `json:"system_as_of"`
+	ImpactHypothesisRefs         []string           `json:"impact_hypothesis_refs"`
+	InvalidationConditions       []string           `json:"invalidation_conditions"`
+	Uncertainty                  []string           `json:"uncertainty"`
+	SourceTimes                  []EventSourceTime  `json:"source_times"`
 	TimeNormalizationRuleVersion string             `json:"time_normalization_rule_version"`
-	DerivedFromRefs               []ResearchEventRef `json:"derived_from_refs"`
+	DerivedFromRefs              []ResearchEventRef `json:"derived_from_refs"`
 }
 
 // LifecycleTransition is an immutable lifecycle_changed payload.
@@ -94,7 +94,6 @@ type LifecycleTransition struct {
 	ToStatus     EventStatus `json:"to_status"`
 	ChangedAt    time.Time   `json:"changed_at"`
 }
-
 
 // UnmarshalJSON rejects fields outside the frozen RSC-CTR-002 Event contract
 // and requires nullable timestamp properties to be explicitly present.

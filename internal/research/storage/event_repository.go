@@ -130,7 +130,6 @@ func (r *EventRepository) GetVersion(ctx context.Context, id string, version int
 	return value, nil
 }
 
-
 // validateEventDerivedRefs resolves every exact Event version in the same
 // transaction as the append. This prevents a concurrent or missing reference
 // from being accepted between validation and persistence.

@@ -108,7 +108,7 @@ func TestCapabilityEvidenceRequiresUTCOffsetTimestamps(t *testing.T) {
 		VerifiedAt: &verifiedAt, ValidUntil: &validUntil,
 		VerificationMethod: "automated_e2e", EvidenceRef: "test:evidence",
 		MaxOutputTokensLimit: 1024,
-		Values: map[Capability]CapabilityStatus{CapabilityResponsesJSON: CapabilitySupported},
+		Values:               map[Capability]CapabilityStatus{CapabilityResponsesJSON: CapabilitySupported},
 	}
 	if !state.SupportsAt(CapabilityResponsesJSON, now) {
 		t.Fatal("zero-offset capability timestamps that serialize with Z should be supported")

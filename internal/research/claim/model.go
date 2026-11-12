@@ -45,7 +45,6 @@ type Claim struct {
 	Limitations               []string      `json:"limitations"`
 }
 
-
 // UnmarshalJSON enforces the frozen Claim/Hypothesis DTO field set.
 func (c *Claim) UnmarshalJSON(data []byte) error {
 	if c == nil {
