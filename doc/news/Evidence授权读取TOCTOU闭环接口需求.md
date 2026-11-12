@@ -168,3 +168,17 @@ JCS 仍只调用项目公共 GOV-CTR-006 Runtime Verifier；本模式不复制 J
 - 不新增 News HTTP 管理 API；策略发布/撤销先作为 News 内部 Application Port，由 Server 组合根或受控运维入口注入。
 - 本决策不放宽任何来源授权，不自动启用当前 disabled/skipped 的来源，不授权真实网络采集。
 - 在 V9、策略发布/撤销事务、原子正文读取、公共 Verifier 注入及 RACE 测试全部通过前，受限内容披露保持关闭。
+
+
+## 9. 策略版本发布能力（2026-11-12）
+
+已在 News 内增加策略版本发布 Application Port / UseCase 与 MariaDB Repository：
+
+- 仅接受 `source`、`endpoint`、`provider_output` 三种策略类型。
+- Payload 按对应领域策略结构严格解码，拒绝未知字段、未知状态、无证据引用和无效时间区间。
+- Application 对原始 Payload 字节计算 SHA-256，并复制输入字节，避免调用方后续修改影响待写入数据。
+- Repository 在同一事务中插入不可变版本，再更新当前版本指针。
+- 相同策略身份和版本的重复发布仅在 Payload Hash 一致时幂等成功；Hash 不一致返回版本冲突。
+- 历史版本行不更新 Payload 或 Hash；撤销仍必须作为新版本发布。
+
+本阶段仅完成策略版本写入和当前指针切换。当前策略读取、授权 Scope 评估、原子 Evidence 正文读取以及 RACE-01～07 仍未完成；生产受限内容披露继续关闭。

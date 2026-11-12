@@ -6,7 +6,6 @@ import (
 	"crypto/subtle"
 	"encoding/hex"
 	"errors"
-	"strings"
 	"time"
 
 	"example.com/stock-analysis-flow/internal/news/app"
@@ -79,5 +78,3 @@ func (r *MySQLRepository) PublishNewsPolicyVersion(ctx context.Context, value do
 	return nil
 }
 
-// 保留该断言，避免未来将策略 ref 规范化成大小写不敏感标识。
-var _ = strings.Compare
