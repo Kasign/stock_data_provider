@@ -49,7 +49,7 @@ func (t *mysqlNewsTransaction) LockCurrentSourcePolicies(
 	if err != nil {
 		return domain.SourcePolicy{}, nil, err
 	}
-	sourceVersionValue, ok := loaded[domain.NewsPolicyTypeSource+"\\x00"+sourceRef]
+	sourceVersionValue, ok := loaded[domain.NewsPolicyTypeSource+"\x00"+sourceRef]
 	if !ok {
 		return domain.SourcePolicy{}, nil, app.ErrNewsCurrentPolicyUnavailable
 	}
@@ -61,7 +61,7 @@ func (t *mysqlNewsTransaction) LockCurrentSourcePolicies(
 	if endpointVersion == "" {
 		return sourcePolicy, nil, nil
 	}
-	endpointVersionValue, ok := loaded[domain.NewsPolicyTypeEndpoint+"\\x00"+endpointRef]
+	endpointVersionValue, ok := loaded[domain.NewsPolicyTypeEndpoint+"\x00"+endpointRef]
 	if !ok {
 		return domain.SourcePolicy{}, nil, app.ErrNewsCurrentPolicyUnavailable
 	}
