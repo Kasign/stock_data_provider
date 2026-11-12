@@ -839,10 +839,10 @@ func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 	if _, err := claimRepo.GetVersion(ctx, claimID, 2); !errors.Is(err, ErrCorruptRecord) {
 		t.Fatalf("tampered Claim read error = %v, want ErrCorruptRecord", err)
 	}
-	claimV3 := claimV2
-	claimV3.ClaimVersion = 3
-	claimV3.SystemAsOf = claimV2.SystemAsOf.Add(time.Minute)
-	if err := claimRepo.Append(ctx, claimV3); !errors.Is(err, ErrCorruptRecord) {
+	claimV3AfterCorruption := claimV2
+	claimV3AfterCorruption.ClaimVersion = 3
+	claimV3AfterCorruption.SystemAsOf = claimV2.SystemAsOf.Add(time.Minute)
+	if err := claimRepo.Append(ctx, claimV3AfterCorruption); !errors.Is(err, ErrCorruptRecord) {
 		t.Fatalf("append after tampered previous Claim error = %v, want ErrCorruptRecord", err)
 	}
 }

@@ -71,7 +71,7 @@ func TestResearchEventRejectsInvalidStructureAndTimeEvidence(t *testing.T) {
 			e.SourceTimes[0].Value = time.Date(2026, 11, 5, 9, 0, 0, 0, time.FixedZone("CST", 8*60*60))
 		}, "must be UTC"},
 		{"confidence without method", func(e *ResearchEvent) { confidence := 0.8; e.SourceTimes[0].Confidence = &confidence }, "confidence_method is required"},
-		{"method without confidence", func(e *ResearchEvent) { method := "source_rank"; e.SourceTimes[0].ConfidenceMethod = &method }, "require a non-null confidence"}, "must not supersede"},
+		{"method without confidence", func(e *ResearchEvent) { method := "source_rank"; e.SourceTimes[0].ConfidenceMethod = &method }, "require a non-null confidence"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
