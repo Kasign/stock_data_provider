@@ -19,6 +19,7 @@ type Process struct {
 	Migration         Migration
 	Security          Security
 	HTTP              HTTP
+	ResearchNotificationRelay ResearchNotificationRelay
 }
 
 // LoadProcess 在启动阶段一次性解析 Server 进程级配置。
@@ -65,6 +66,11 @@ func LoadProcess(env platformconfig.Env) (Process, error) {
 			return Process{}, err
 		}
 		if cfg.HTTP, err = LoadHTTP(env, cfg.AnalysisTimeout); err != nil {
+			return Process{}, err
+		}
+	}
+	if cfg.Role != RoleAPI {
+		if cfg.ResearchNotificationRelay, err = LoadResearchNotificationRelay(env); err != nil {
 			return Process{}, err
 		}
 	}

@@ -46,6 +46,7 @@ jobs:
             ./internal/server/migration \
             ./internal/server/resources \
             ./internal/server/runtime \
+            ./internal/server/relay \
             ./internal/server/security \
             ./internal/server/llmtransport
       - name: Run Server race tests

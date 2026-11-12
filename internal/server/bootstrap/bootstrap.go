@@ -15,9 +15,12 @@ import (
 
 	"example.com/stock-analysis-flow/internal/adapters/marketdata"
 	"example.com/stock-analysis-flow/internal/adapters/storage/mysqlredis"
+	notificationapplication "example.com/stock-analysis-flow/internal/notification/application"
+	notificationschema "example.com/stock-analysis-flow/internal/notification/schema"
 	newsstorage "example.com/stock-analysis-flow/internal/news/adapters/storage"
 	newsdiagnostics "example.com/stock-analysis-flow/internal/news/diagnostics"
 	notificationstorage "example.com/stock-analysis-flow/internal/notification/storage"
+	researchapplication "example.com/stock-analysis-flow/internal/research/application"
 	"example.com/stock-analysis-flow/internal/platform/config"
 	"example.com/stock-analysis-flow/internal/platform/httpapi"
 	platformsecurity "example.com/stock-analysis-flow/internal/platform/security"
@@ -31,6 +34,7 @@ import (
 	servermigration "example.com/stock-analysis-flow/internal/server/migration"
 	serverresources "example.com/stock-analysis-flow/internal/server/resources"
 	runtime "example.com/stock-analysis-flow/internal/server/runtime"
+	serverrelay "example.com/stock-analysis-flow/internal/server/relay"
 	serversecurity "example.com/stock-analysis-flow/internal/server/security"
 	"example.com/stock-analysis-flow/internal/service"
 )
@@ -145,6 +149,16 @@ func Run(ctx context.Context) (runErr error) {
 	if err := lifecycle.Register(legacyAnalysisWorker{name: "legacy-analysis-worker", queue: tasks, enabled: serverRole == serverconfig.RoleWorker || serverRole == serverconfig.RoleAll}); err != nil {
 		return fmt.Errorf("注册旧 Analysis Worker 生命周期失败: %w", err)
 	}
+
+	if serverRole != serverconfig.RoleAPI {
+		relay, relayErr := newResearchNotificationRelay(storageResources, processConfig.ResearchNotificationRelay)
+		if relayErr != nil {
+			return fmt.Errorf("创建 Research→Notification Outbox Relay 失败: %w", relayErr)
+		}
+		if err := lifecycle.Register(relay); err != nil {
+			return fmt.Errorf("注册 Research→Notification Outbox Relay 生命周期失败: %w", err)
+		}
+	}
 	var httpComponent *httpServerComponent
 	if serverRole != serverconfig.RoleWorker {
 		api, err := httpapi.NewWithTasks(runner, store, analysisTimeout, tasks)
@@ -202,6 +216,60 @@ func Run(ctx context.Context) (runErr error) {
 	case <-httpComponent.Done():
 		return httpComponent.Result()
 	}
+}
+
+type notificationClock struct{}
+
+func (notificationClock) Now() time.Time { return time.Now().UTC() }
+
+type notificationReceiverAdapter struct {
+	receiver *notificationapplication.EventReceiver
+}
+
+func (a notificationReceiverAdapter) Receive(ctx context.Context, raw []byte) error {
+	if a.receiver == nil {
+		return errors.New("Notification EventReceiver is not configured")
+	}
+	_, err := a.receiver.Receive(ctx, raw)
+	return err
+}
+
+// newResearchNotificationRelay connects the Research-owned Outbox Port to
+// Notification's validated Inbox acceptance path. Both modules keep their own
+// persistence and transaction boundaries.
+func newResearchNotificationRelay(shared *serverresources.Resources, cfg serverconfig.ResearchNotificationRelay) (*serverrelay.ResearchOutboxRelay, error) {
+	if shared == nil || shared.DB == nil {
+		return nil, errors.New("shared MariaDB resource is required for Research Notification relay")
+	}
+	outboxRepository, err := researchstorage.NewOutboxRepository(shared.DB, func() time.Time { return time.Now().UTC() })
+	if err != nil {
+		return nil, fmt.Errorf("创建 Research Outbox Repository 失败: %w", err)
+	}
+	outbox, err := researchapplication.NewOutboxService(outboxRepository, func() time.Time { return time.Now().UTC() })
+	if err != nil {
+		return nil, fmt.Errorf("创建 Research Outbox Service 失败: %w", err)
+	}
+	fanoutWriter, err := notificationstorage.NewMySQLFanoutWorkItemRepository(shared.DB)
+	if err != nil {
+		return nil, fmt.Errorf("创建 Notification Fanout Writer 失败: %w", err)
+	}
+	inbox, err := notificationstorage.NewMySQLInboxRepository(shared.DB, fanoutWriter)
+	if err != nil {
+		return nil, fmt.Errorf("创建 Notification Inbox Repository 失败: %w", err)
+	}
+	registry, err := notificationschema.NewRegistry(os.DirFS("doc/notification/schema"), cfg.EventLimits)
+	if err != nil {
+		return nil, fmt.Errorf("加载 Notification Event Schema Registry 失败: %w", err)
+	}
+	receiver, err := notificationapplication.NewEventReceiver(registry, inbox, notificationClock{})
+	if err != nil {
+		return nil, fmt.Errorf("创建 Notification EventReceiver 失败: %w", err)
+	}
+	return serverrelay.NewResearchOutboxRelay(outbox, notificationReceiverAdapter{receiver: receiver}, serverrelay.Config{
+		WorkerID: cfg.WorkerID, BatchSize: cfg.BatchSize,
+		PollInterval: cfg.PollInterval, LeaseDuration: cfg.LeaseDuration,
+		RetryDelay: cfg.RetryDelay,
+	}, slog.Default())
 }
 
 // newDiagnosticsService composes Server resource/schema checks with the
