@@ -404,3 +404,12 @@
 - 对照取消传播 Review 记录与实际代码时，发现 Storage Ping/Schema 虽已在依赖返回后检查 Context，但调用前门禁尚未落入最终代码。
 - 已补充调用前检查，确保 Context 已取消时不再触发数据库探测。
 - 新增回归测试验证已取消 Context 下 Ping 和 MissingSchemaTables 均不会被调用，诊断状态为 unavailable。
+
+
+## 十三、News Diagnostics Storage Context 取消边界补充（2026-11-12）
+
+- 复核 StorageChecks 时发现 Schema Check 缺少数据库探测调用前的 Context 门禁；已补充 `ctx.Err()` 检查，已取消时不调用 `MissingSchemaTables`。
+- 同时发现 Storage Ping 先处理依赖错误、后检查 Context；依赖在取消时返回 `context.Canceled` 会被错误归类为普通连接故障。现改为依赖返回后优先检查 Context，再处理 Ping 错误。
+- 回归测试直接调用 Check.Run，断言已取消 Context 返回 `context.Canceled` 且 Schema 探测调用次数为零；Ping 依赖取消并返回取消错误时也验证取消错误优先级。
+- 代码提交：`1ba83c9`、`dc8d102`、`34c9cdf`、`30e1582`。最新 SHA 的 News 专项和组合 CI 尚在执行，结果待记录。
+- 本修复只收敛 News Diagnostics 的取消语义，不改变诊断业务状态、数据库 Schema、Migration 或平台 Runner 行为。
