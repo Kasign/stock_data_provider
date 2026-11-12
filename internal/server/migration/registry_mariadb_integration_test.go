@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	_ "github.com/go-sql-driver/mysql"
+	mysqlDriver "github.com/go-sql-driver/mysql"
 
 	platformstorage "example.com/stock-analysis-flow/internal/platform/storage"
 )
@@ -24,25 +24,42 @@ func TestRegistryMariaDBIntegration(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	db, err := sql.Open("mysql", dsn)
+	adminDB, err := sql.Open("mysql", dsn)
 	if err != nil {
-		t.Fatalf("open MariaDB: %v", err)
+		t.Fatalf("open MariaDB admin connection: %v", err)
 	}
-	defer db.Close()
-	if err := db.PingContext(ctx); err != nil {
+	defer adminDB.Close()
+	if err := adminDB.PingContext(ctx); err != nil {
 		t.Fatalf("ping MariaDB: %v", err)
 	}
 
 	suffix := strconv.FormatInt(time.Now().UnixNano(), 36)
+	testDatabase := "server_it_" + suffix
 	namespace := "server_it_" + suffix
 	table := "server_it_records_" + suffix
+	if _, err := adminDB.ExecContext(ctx, fmt.Sprintf("CREATE DATABASE `%s`", testDatabase)); err != nil {
+		t.Fatalf("create isolated MariaDB database: %v", err)
+	}
 	t.Cleanup(func() {
 		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cleanupCancel()
-		_, _ = db.ExecContext(cleanupCtx, fmt.Sprintf("DROP TABLE IF EXISTS %s", table))
-		_, _ = db.ExecContext(cleanupCtx,
-			"DELETE FROM platform_schema_migrations WHERE namespace = ?", namespace)
+		_, _ = adminDB.ExecContext(cleanupCtx, fmt.Sprintf("DROP DATABASE IF EXISTS `%s`", testDatabase))
 	})
+
+	config, err := mysqlDriver.ParseDSN(dsn)
+	if err != nil {
+		t.Fatalf("parse MariaDB DSN: %v", err)
+	}
+	config.DBName = testDatabase
+	connector, err := mysqlDriver.NewConnector(config)
+	if err != nil {
+		t.Fatalf("create isolated MariaDB connector: %v", err)
+	}
+	db := sql.OpenDB(connector)
+	defer db.Close()
+	if err := db.PingContext(ctx); err != nil {
+		t.Fatalf("ping isolated MariaDB database: %v", err)
+	}
 
 	registry := NewRegistry()
 	if err := registry.Register(namespace, []platformstorage.Migration{{
