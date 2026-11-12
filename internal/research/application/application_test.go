@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
 	"time"
 
@@ -99,6 +100,20 @@ type authorizerFake struct {
 	calls int
 }
 
+type contextAuthorizerFake struct {
+	err error
+	calls int
+	caller string
+	purpose researchevidence.PurposeCode
+	value researchcontext.Context
+}
+
+func (f *contextAuthorizerFake) AuthorizeContext(_ context.Context, caller string, purpose researchevidence.PurposeCode, value researchcontext.Context) error {
+	f.calls++
+	f.caller, f.purpose, f.value = caller, purpose, value
+	return f.err
+}
+
 func (f *authorizerFake) AuthorizeEvidence(_ context.Context, caller string, purpose researchevidence.PurposeCode, value researchevidence.Evidence) error {
 	f.calls++
 	if caller == "" || purpose == "" || value.EvidenceID == "" {
@@ -132,6 +147,43 @@ func TestCreateContextAssignsIdentityAndPersistsValidatedSnapshot(t *testing.T) 
 	}
 	if repo.value.ContextID != got.ContextID {
 		t.Fatal("Context was not persisted")
+	}
+}
+
+func TestGetContextRequiresTrustedCurrentVisibilityAuthorization(t *testing.T) {
+	now := time.Date(2026, 11, 12, 1, 0, 0, 0, time.UTC)
+	value := researchcontext.Context{
+		SchemaVersion: researchcontext.SchemaVersion, ContextID: "ctx-protected", ContextVersion: 1,
+		ResearchQuestion: "受控 Context", Scope: researchcontext.ScopeStock, SubjectRefs: []string{"security:600000"},
+		SystemAsOf: now, SectionRefs: []researchcontext.SectionRef{{
+			SectionID: "overview", SectionVersion: "1", SourceOwner: researchcontext.SourceOwnerResearch,
+			SourceRefs: []string{}, EvidenceRefs: []string{}, QualityStatus: researchcontext.QualityValid,
+			Required: true, Included: true, AssembledAt: now, SystemAsOf: now,
+		}},
+		QualitySummary: researchcontext.QualitySummary{Status: researchcontext.QualityValid, ReasonCodes: []string{}},
+		IncludedSections: []string{"overview"}, OmittedSections: []researchcontext.OmittedSection{},
+		BuilderVersion: "1.0.0", CreatedAt: now,
+	}
+	repo := &contextRepoFake{value: value}
+	request := ContextReadRequest{Ref: ContextRef{ContextID: value.ContextID, ContextVersion: value.ContextVersion}, CallerRef: "researchflow:worker", PurposeCode: string(researchevidence.PurposeResearchAnalysis)}
+	service, err := NewService(repo, &evidenceRepoFake{}, &authorizerFake{}, nil, nil)
+	if err != nil { t.Fatal(err) }
+	if _, err := service.GetContext(context.Background(), request); err == nil {
+		t.Fatal("Context read without a current visibility authorizer must fail closed")
+	}
+	access := &contextAuthorizerFake{}
+	service, err = NewService(repo, &evidenceRepoFake{}, &authorizerFake{}, nil, nil, access)
+	if err != nil { t.Fatal(err) }
+	got, err := service.GetContext(context.Background(), request)
+	if err != nil { t.Fatalf("authorized Context read failed: %v", err) }
+	if got.ContextID != value.ContextID || access.calls != 1 || access.caller != request.CallerRef ||
+		access.purpose != researchevidence.PurposeResearchAnalysis || access.value.Scope != value.Scope ||
+		!slices.Equal(access.value.SubjectRefs, value.SubjectRefs) {
+		t.Fatalf("authorization did not receive exact caller/purpose/visibility: got=%+v authorizer=%+v", got, access)
+	}
+	access.err = NewAuthorizationError(AuthorizationDenied, errors.New("not visible"))
+	if _, err := service.GetContext(context.Background(), request); err == nil {
+		t.Fatal("explicit visibility denial must reject Context read")
 	}
 }
 
@@ -648,7 +700,7 @@ func TestApplicationRejectsRepositoryIdentityMismatch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.GetContext(context.Background(), ContextRef{ContextID: "ctx_requested", ContextVersion: 1}); err == nil {
+	if _, err := service.GetContext(context.Background(), ContextReadRequest{Ref: ContextRef{ContextID: "ctx_requested", ContextVersion: 1}, CallerRef: "researchflow:worker", PurposeCode: string(researchevidence.PurposeResearchAnalysis)}); err == nil {
 		t.Fatal("Context repository identity mismatch must be rejected")
 	}
 

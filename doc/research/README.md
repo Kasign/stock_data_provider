@@ -27,7 +27,7 @@ Research 不采集新闻、不拥有行情事实、不重算 Quant 指标，不�
 
 | 任务 | 当前实现与验收 | 未完成边界 |
 |---|---|---|
-| RSC-001 Context | Domain、结构/版本链校验、v1 Golden/Schema Validator、Application Create/Get、SQL Repository；新增 Data/News/Quant 固定分区 Fixture，验证证据引用保留、可选分区省略及统一 Run cutoff；最新 Integration CI 根模块 gofmt/vet/test 通过 | 消费方 Contract Test、远端引用与授权版本验证；Context Assembly 本身归 Researchflow |
+| RSC-001 Context | Domain、结构/版本链校验、v1 Golden/Schema Validator、Application Create/Get、SQL Repository；新增 Data/News/Quant 固定分区 Fixture；GetContext 新增独立 caller/purpose 请求与 ContextAuthorizer 当前可见范围复核，未装配时 fail-closed | 消费方 Contract Test、远端引用与授权版本验证；Context Assembly 本身归 Researchflow |
 | RSC-002 Evidence | Domain、JCS/SHA-256 指纹、严格 PIT、AuthorizationRef 绑定、Application Add/Get、SQL Repository；新增 Research-owned News Evidence Importer/Authorizer，消费 News `ResearchEvidenceQuery`，固定 Fixture 覆盖来源/版本/授权/PIT 映射与拒绝写入；Evidence Validator 已对 `source_owner=news` 强制要求 `source_version` | NEWS-CTR-001/002 已在项目级冻结登记簿登记为 frozen（定义冻结不等于生产实现验收）；News 当前 available_at 仍为 null，且 Get/List 尚未按 available_at 严格排除记录；授权复核与内容读取未处于同一一致性边界，真实新闻不能作为已验收的生产 Evidence 导入；授权续期历史留档仍待治理语义 |
 | RSC-003 Event | Domain、SourceTime、版本追加、生命周期、事务 Outbox、Application Create/Update；EvidenceRefs 精确记录与严格 PIT 校验；Event 派生引用由 SQL Repository 在追加事务内解析精确版本并做递归无环检查；时间规则 1.0.0 已实现 UTC 精确值共识归一、冲突置 null、无来源置 null、未注册版本拒绝 | 多来源归并/拆分仍需真实来源证据；真实来源时间精度和 asserted_by 语义仍需 News Owner 证据；Event 不读取 News 私有存储 |
 | RSC-004 实体关联 | 尚未实现 | 等待 Data 提供稳定 Security/Industry 引用、版本/时间语义及公开 Application Port |
