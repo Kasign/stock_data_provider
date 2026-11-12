@@ -188,7 +188,6 @@ func TestWritePlatformFaultMapsStableClassesAndHidesInternals(t *testing.T) {
 	}
 }
 
-
 func TestWritePlatformFaultMatchesPLATCTR001EnvelopeAndRequestID(t *testing.T) {
 	request := httptest.NewRequest(http.MethodGet, "/api", nil)
 	request = request.WithContext(observability.WithRequestID(request.Context(), "req-contract-001"))
