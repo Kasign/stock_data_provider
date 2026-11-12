@@ -192,3 +192,44 @@ func TestIndicatorResultPayloadGoValidatorRejectsContextDrift(t *testing.T) {
 		}
 	})
 }
+
+
+func TestIndicatorPayloadGoValidatorRejectsWrongMetricMappingForAllIndicators(t *testing.T) {
+	mappings := map[string][]string{
+		"sma":       {"sma"},
+		"ema":       {"ema"},
+		"return":    {"return"},
+		"volatility": {"volatility"},
+		"rsi":       {"rsi"},
+		"atr":       {"atr"},
+		"macd":      {"macd_dif", "macd_dea", "macd_histogram"},
+		"bollinger": {"bollinger_middle", "bollinger_upper", "bollinger_lower"},
+	}
+	for indicatorCode, metricCodes := range mappings {
+		t.Run(indicatorCode, func(t *testing.T) {
+			metrics := make([]map[string]json.RawMessage, 0, len(metricCodes))
+			for _, code := range metricCodes {
+				metrics = append(metrics, map[string]json.RawMessage{
+					"metric_code":         json.RawMessage("\"" + code + "\""),
+					"value":               json.RawMessage("null"),
+					"unit":                json.RawMessage("\"fixture_unit\""),
+					"period":              json.RawMessage("\"20d\""),
+					"system_as_of":        json.RawMessage("\"2026-11-12T00:00:00Z\""),
+					"quality_status":      json.RawMessage("\"unknown\""),
+					"metric_status":       json.RawMessage("\"insufficient_sample\""),
+					"calculation_version": json.RawMessage("\"fixture-v1\""),
+					"lower_bound":         json.RawMessage("null"),
+					"upper_bound":         json.RawMessage("null"),
+				})
+			}
+			metrics[len(metrics)-1]["metric_code"] = json.RawMessage("\"wrong_metric\"")
+			raw, err := json.Marshal(map[string]any{"indicator_code": indicatorCode, "metrics": metrics})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := result.DecodeIndicatorPayload(raw); err == nil {
+				t.Fatalf("Go Validator accepted wrong metric mapping for %s", indicatorCode)
+			}
+		})
+	}
+}
