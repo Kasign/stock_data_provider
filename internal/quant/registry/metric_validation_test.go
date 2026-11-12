@@ -79,7 +79,7 @@ func TestRegistryValidateMetricEnforcesSampleCountRequiredness(t *testing.T) {
 		t.Fatalf("explicit zero sample_count rejected: %v", err)
 	}
 
-	explicitNull := json.RawMessage(`{"metric_code":"required_sample_metric","value":null,"unit":"ratio","period":"20d","system_as_of":"2026-11-09T01:00:00Z","quality_status":"unknown","metric_status":"unknown","calculation_version":"1.0.0","sample_count":null,"lower_bound":null,"upper_bound":null}`)
+	explicitNull := json.RawMessage(`{"metric_code":"required_sample_metric","value":null,"unit":"ratio","period":"20d","system_as_of":"2026-11-09T01:00:00Z","quality_status":"valid","metric_status":"insufficient_sample","calculation_version":"1.0.0","sample_count":null,"lower_bound":null,"upper_bound":null}`)
 	if err := registry.ValidateMetric("required_sample_metric", "1.0.0", "1.0.0", explicitNull); err != nil {
 		t.Fatalf("explicit null sample_count should remain distinct from missing: %v", err)
 	}

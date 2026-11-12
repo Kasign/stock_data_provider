@@ -53,7 +53,7 @@ type QualityPolicy struct {
 	UnavailableConditions []string `json:"unavailable_conditions"`
 }
 
- // SampleCountPolicy 定义 QuantMetric.sample_count 的必需性和计数语义。
+// SampleCountPolicy 定义 QuantMetric.sample_count 的必需性和计数语义。
  type SampleCountPolicy struct {
 	RequiredInMetric bool   `json:"required_in_metric"`
 	Unit             string `json:"unit"`
@@ -73,7 +73,7 @@ type Entry struct {
 	InputRequirements []InputRequirement `json:"input_requirements"`
 	ParametersSchema  json.RawMessage    `json:"parameters_schema"`
 	QualityPolicy     QualityPolicy      `json:"quality_policy"`
-	SampleCount       SampleCountPolicy   `json:"sample_count"`
+	SampleCount       SampleCountPolicy  `json:"sample_count"`
 	SupportsInterval  bool               `json:"supports_interval"`
 }
 
