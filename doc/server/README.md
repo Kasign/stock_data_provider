@@ -1339,4 +1339,4 @@ Lifecycle.Stop 原实现通过 stopped 标记保证重复调用幂等，但并�
 - 补充审查发现，已有并发 Stop 测试使用两个组件：Stop 在第一个组件启动期间进入后，后续第二个组件会在启动循环中检测到 stopped。但当只有一个组件，且 Stop 在该组件 Start 阻塞期间发生时，原实现可能在组件 Start 返回后直接报告 Start 成功，因为没有下一轮循环检查 stopped。
 - 在 Start 关闭 `startDone` 前持有 Lifecycle 锁检查最终 stopped 状态；若并发 Stop 已先进入停止状态，则 Start 返回明确的启动中断错误。Stop 仍等待 `startDone` 后按逆序停止，不改变资源释放顺序。
 - 新增单组件阻塞启动的并发回归测试，验证 Start 不会报告成功、Stop 仍会停止该组件且完成。
-- 该修正仅涉及 Server Runtime、对应测试和本文件。CI 验收待新提交执行。
+- Server 独立 Workflow Run `43140792357`（SHA `b46b67b6b0d50352ad16fb4b72a2500b505a7c7f`）成功：Server gofmt、包级单测、Race、Vet 全部通过。
