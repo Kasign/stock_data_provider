@@ -1647,3 +1647,13 @@ Server Bootstrap
 - 通过 `docker stop` 向容器 PID 1 发送真实 SIGTERM，要求容器在 20 秒 Docker stop 宽限期内以退出码 0 结束；Bootstrap 自身关闭预算设置为 15 秒。失败时输出容器日志以便定位启动、迁移或关闭问题。
 - 测试数据库按 GitHub Run ID 隔离，不与其他集成测试共享 Migration History；凭证由 CI 运行时随机生成，不写入仓库或日志。
 - 此项验证最终镜像中的实际 Bootstrap、MariaDB/Redis 连接、Readiness 和 SIGTERM 进程退出；不等于完整生产部署验收，也不覆盖多副本滚动升级、真实上游 Provider、长时间在途业务请求和外部渠道投递。
+
+
+### 12.82 SRV-007 MariaDB 部分 DDL 失败与恢复门禁验收（2026-11-12）
+
+- 在既有真实 MariaDB Registry 组合测试之外，新增独立隔离数据库场景：同一 Migration 的第一条 DDL 成功创建表，第二条 SQL 故意失败。
+- 验证 Server `RunWithReport` 将 Platform `platform.storage.migration_apply_failed` 映射为失败 namespace、稳定 `reason_code` 和 `recovery_required=true`；同时直接检查 MariaDB，确认第一条 DDL 已实际生效、历史记录为 `failed` 且 `failure_statement=2`。
+- 验证 `ValidateApplied` 拒绝该未完成 Schema；再次执行 Registry 时由 Platform 返回 `platform.storage.migration_requires_recovery`，Server 保留该 Fault 并继续标记需要人工恢复，不自动重试或清理部分 DDL。
+- 测试数据库和 namespace 均按纳秒时间戳隔离，结束时仅删除本测试数据库，不触碰其他测试历史。
+- 本项只增加 Server 对 Platform Migration Runner 的真实故障场景组合验收，不复制 Migration 算法、不修改 Platform、不尝试自动修复 MariaDB 部分 DDL。checksum 只读预检 API 仍属于 Platform 公共能力缺口。
+- 代码提交：`e9b23dba586ee05c5b4620bd8866522b0cb8bc73`；CI 结果待本提交对应 Workflow 完成后记录。
