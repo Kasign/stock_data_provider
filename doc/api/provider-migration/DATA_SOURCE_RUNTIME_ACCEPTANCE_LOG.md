@@ -1264,3 +1264,21 @@ Go suite 覆盖根模块、go-core、market-data 的格式/测试/race/vet、Mar
 - 判定：真实数据获取通过；复权参考日期不可用；后复权首日价格差异明显，跨 Provider 结果保持 `not-comparable`。不推断参考日、不填充 `AdjustmentRefDate`，不重复本轮四个请求；下一步只核对官方字段契约或获取完整响应证据。
 
 - CI 状态快照：该测试所在 Live Provider Run `43216445700` success；测试只证明单证券、单窗口真实请求和结构验收通过，不代表复权基准已对齐。当前代码基线 `61c9d009ce37380f364f4a0afe0804ab0c1eaf7a` 的 Go Test Suite Run `43216783357`、Go-Python parity Run `43216744832` 当时仍在执行。
+
+
+## 71. 2026-11-12 Pytdx 官方盘中临停与全天停牌日 K 核验
+
+- 仓库分支：`feat/full-go-data-providers-api-switch`
+- Live Probe Run：`43217601588`；Job：`131180700823`；测试：`TestLivePytdxOfficialIntradaySuspensionDailyBars`。
+- 盘中临停官方事件（均返回 1 条对应日期日 K）：
+  - `603072.SH / 2025-01-03`，SSE 公告 `https://www.sse.com.cn/disclosure/announcement/general/mainsuspension/c/c_20250103_10767682.shtml`；close 48.00，volume 50,782,000，amount 2,549,722,624，quality degraded。
+  - `301595.SZ / 2025-05-19`，SZSE 公告 `https://www.szse.cn/disclosure/notice/temp/t20250519_613632.html`；close 54.30，volume 19,489,400，amount 914,551,360，quality degraded。
+  - `001390.SZ / 2025-05-29`，SZSE 公告 `https://www.szse.cn/disclosure/notice/temp/t20250529_613857.html`；close 32.00，volume 39,103,100，amount 1,278,978,688，quality degraded。
+  - `603400.SH / 2025-06-25`，SSE 公告 `https://www.sse.com.cn/disclosure/announcement/general/mainsuspension/c/c_20250625_10783012.shtml`；close 78.81，volume 17,077,900，amount 990,280,256，quality valid。
+- 前三条 degraded 原因均为 `provider_change_percent_unavailable_for_first_bar`，即请求窗口首条缺少前一交易日涨跌幅；日 K 本身存在，不应分类为停牌缺失。
+- 全天停牌样本：
+  - 证券 `002968.SZ`，官方停牌 `2025-09-15..2025-09-28`，官方复牌 `2025-09-29`。
+  - 官方停牌公告：`https://www.szse.cn/disclosure/notice/temp/t20250915_616077.html`；复牌公告：`https://disc.static.szse.cn/download/disc/disk03/finalpage/2025-09-29/8a38844e-6ccc-475f-a8f6-b808a5be55e1.PDF`。
+  - 查询窗口 `2025-09-12..2025-09-30`；观察到 `2025-09-12`、`2025-09-29`、`2025-09-30`；停牌窗口 rows=0，停牌前 rows=1，复牌日 rows=1 且 quality valid；status `suspension_gap_and_resume_verified`。
+- 判定：Pytdx 对盘中临停日保留成交日 K，对全天停牌期间不返回日 K，并在复牌日恢复；本项真实验收通过，范围仅限上述 4 个盘中样本和 1 个全天停牌窗口。
+- 限制：未调用 Tushare；真实 `SecurityTradingStatus` 数据源仍受 `40203 permission_required` 权限限制，因此本结果不代表 Tushare 状态 Provider 或 DataService 状态分类已完成端到端真实验收。
