@@ -190,7 +190,13 @@ func TestMariaDBCreateRunAtomicConcurrentIdempotency(t *testing.T) {
 	}
 
 	// 排队容量必须在同一事务中原子检查；超限不能留下 Run、Stage 或幂等记录。
-	limitedQueueRepository, err := NewMySQLRunRepository(db, CapacityLimits{MaxQueuedRuns: 1, MaxWorkers: 1})
+	var queuedBaseline int
+	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM researchflow_runs WHERE status IN (?, ?)`,
+		string(domain.RunCreated), string(domain.RunQueued),
+	).Scan(&queuedBaseline); err != nil {
+		t.Fatal(err)
+	}
+	limitedQueueRepository, err := NewMySQLRunRepository(db, CapacityLimits{MaxQueuedRuns: queuedBaseline + 1, MaxWorkers: 1})
 	if err != nil {
 		t.Fatal(err)
 	}

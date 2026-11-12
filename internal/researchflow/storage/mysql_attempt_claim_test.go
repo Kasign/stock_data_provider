@@ -530,7 +530,14 @@ func TestMariaDBGlobalWorkerCapacitySerializesClaimsAcrossRuns(t *testing.T) {
 	if err := platformstorage.ApplyMigrations(ctx, db, MigrationNamespace, Migrations()); err != nil {
 		t.Fatalf("apply Researchflow migrations: %v", err)
 	}
-	repository, err := NewMySQLRunRepository(db, CapacityLimits{MaxQueuedRuns: 10, MaxWorkers: 1})
+	var activeBaseline int
+	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM researchflow_attempts
+		WHERE status = ? AND lease_expires_at > DATE_FORMAT(UTC_TIMESTAMP(6), '%Y-%m-%dT%H:%i:%s.%f000Z')`,
+		string(domain.AttemptRunning),
+	).Scan(&activeBaseline); err != nil {
+		t.Fatal(err)
+	}
+	repository, err := NewMySQLRunRepository(db, CapacityLimits{MaxQueuedRuns: 10, MaxWorkers: activeBaseline + 1})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -629,8 +636,8 @@ func TestMariaDBGlobalWorkerCapacitySerializesClaimsAcrossRuns(t *testing.T) {
 	).Scan(&active); err != nil {
 		t.Fatal(err)
 	}
-	if active != 1 {
-		t.Fatalf("active global Worker leases=%d, want 1", active)
+	if active != activeBaseline+1 {
+		t.Fatalf("active global Worker leases=%d, want baseline %d plus one", active, activeBaseline)
 	}
 
 	// Expired leases release the global slot; the previously rejected Run can then claim.
