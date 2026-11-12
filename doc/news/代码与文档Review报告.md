@@ -413,3 +413,31 @@
 - 回归测试直接调用 Check.Run，断言已取消 Context 返回 `context.Canceled` 且 Schema 探测调用次数为零；Ping 依赖取消并返回取消错误时也验证取消错误优先级。
 - 代码提交：`1ba83c9`、`dc8d102`、`34c9cdf`、`30e1582`。最新 SHA 的 News 专项和组合 CI 尚在执行，结果待记录。
 - 本修复只收敛 News Diagnostics 的取消语义，不改变诊断业务状态、数据库 Schema、Migration 或平台 Runner 行为。
+
+
+## 十四、2026-11-12 最新代码与 CI 状态复核
+
+- 当前文档记录的代码基线：`eac3269ebaa625bd583f5ef3a73a139ff02c3881`；最新提交修正 Observation Retention 事务调用参数，未改变领域行为或公共服务边界。
+- News 专项 Workflow Run [43210204658](https://github.com/Kasign/stock_data_provider/actions/runs/43210204658)：
+  - `Test full News module`：success，包含 News gofmt、`go test ./internal/news/...`、Race、Vet。
+  - `Test News Provider contracts`：success，包含 SearchCandidates/Provider Adapter 契约测试、Race 和 Vet。
+- 根模块 Workflow Run [43210204807](https://github.com/Kasign/stock_data_provider/actions/runs/43210204807)：
+  - News MariaDB Repository and Migration integration：success，实际执行 News Migration/Repository 集成。
+  - 根模块 `Test go-core` 与 `Test .`：success。
+  - Market Data MariaDB、Compose/Docker、Market Data 迁移及测试 Job 为 skipped；不能将其记为通过。
+- 2026-11-12 Diagnostics Context 取消边界修复已纳入 News 专项 CI：Observation retention、Source Endpoint Catalog、Storage Ping、Schema Check 覆盖依赖调用前/后的取消传播；已取消时不触发探测，依赖返回取消错误时优先传播 Context 取消。当前没有证据表明需要再重复实现同类取消检查。
+- 当前 CI 证明 News 包级格式、单测、Race、Vet、Provider 固定响应契约和 MariaDB 专项集成通过；不证明真实 Provider 网络/来源授权、生产 DNS/出口、Server 组合根装配或受限内容生产披露通过。
+
+### 当前缺口重新分级
+
+| 缺口 | 是否属于 News 可独立继续的代码任务 | 判定 |
+|---|---|---|
+| available_at 证据与严格 PIT | 否，当前无合格来源证据 | 继续 NULL；不得推导、伪造或新增无真实证据支撑的字段/表。获得符合冻结准入规则的来源后再实施 |
+| 授权复核与内容读取 TOCTOU | 否，需跨模块一致性方案 | 等待公共 JCS Verifier、可信策略 Owner 与 Server/Repository 共同确定一致性边界；News 仅实现明确方案的适配 |
+| Provider/Source BoundDoer、Migration、Diagnostics Runner、Cleaner 调度生产装配 | 否，归 Server 组合根 | News 已提供对应构造/领域入口，不修改 Server 文件 |
+| 真实 Provider/Feed 网络与授权验收 | 当前不具备条件 | 等待真实凭证、账号适用条款、来源授权和部署网络证据；固定响应测试不替代 Live Probe |
+| News 自有单测、Race、Vet、Provider 契约、MariaDB 集成 | 已有当前 CI 证据 | 不为形式重复回归；只有后续代码改动或新缺陷才重跑相应门禁 |
+
+### 本轮结论
+
+News 自身代码质量和 MariaDB 专项验证已取得当前 CI 通过证据。当前剩余事项均受公共能力、Server 组合根、策略 Owner 或真实来源证据约束；没有发现可通过在 News 内重复开发公共能力来安全关闭的缺口。后续按“有明确新证据再推进”的方式执行，不新增空壳接口、字段、表或 WebUI 专用 API。
