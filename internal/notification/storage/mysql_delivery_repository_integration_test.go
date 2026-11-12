@@ -155,8 +155,13 @@ func TestNotificationMariaDBDeliveryRepositoryIntegration(t *testing.T) {
 		t.Fatalf("expire lease fixture: %v", err)
 	}
 	if expired, err := scanner.ListExpiredLeases(ctx, 10); err != nil || len(expired) != 1 ||
-		expired[0].Lease.FencingToken != winner.Lease.FencingToken {
-		t.Fatalf("expired lease must be returned with current fencing token: claims=%+v err=%v", expired, err)
+		expired[0].Delivery.DeliveryID != delivery.DeliveryID ||
+		expired[0].Delivery.Version != winner.Delivery.Version ||
+		expired[0].Delivery.Status != domain.DeliverySending ||
+		expired[0].Lease.WorkerID != winner.Lease.WorkerID ||
+		expired[0].Lease.FencingToken != winner.Lease.FencingToken ||
+		!expired[0].Lease.ExpiresAt.Equal(now.Add(-time.Second)) {
+		t.Fatalf("expired lease scan must return one coherent Delivery/Lease snapshot: claims=%+v err=%v", expired, err)
 	}
 	if _, err := db.ExecContext(ctx, "UPDATE notification_deliveries SET lease_expires_at = ? WHERE delivery_id = ?", now.Add(2*time.Minute), delivery.DeliveryID); err != nil {
 		t.Fatalf("renew lease fixture: %v", err)

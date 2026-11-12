@@ -505,6 +505,8 @@ Preflight 在 Delivery 已领取为 sending、但尚未创建 Attempt/调用渠�
 
 Server Worker 是定时/并发调度所有者；Notification 只提供有界的 `LeaseRecoveryService.RecoverExpiredOnce`。Worker 每次调用必须提供有效 UTC 时钟、正数批次上限（最大 1000）和可取消 Context，不得在 Notification 内创建定时器或后台 Goroutine。
 
+`ListExpiredLeases` 必须通过单条 SQL 同时读取完整 Delivery 快照与 Lease（worker、expiry、fencing token），保持候选内部一致；按租约到期时间及 Delivery ID 稳定排序，并限制单批最多 1000 条，禁止逐条回查形成 N+1 查询。
+
 批次报告计数必须满足：
 
 ```go
