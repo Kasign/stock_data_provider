@@ -288,14 +288,14 @@ type Port interface {
 }
 
 type Service struct {
-	contexts   ContextRepository
-	evidence   EvidenceRepository
-	authorizer EvidenceAuthorizer
+	contexts          ContextRepository
+	evidence          EvidenceRepository
+	authorizer        EvidenceAuthorizer
 	contextAuthorizer ContextAuthorizer
-	events     EventRepository
-	claims     ClaimRepository
-	clock      Clock
-	ids        IDGenerator
+	events            EventRepository
+	claims            ClaimRepository
+	clock             Clock
+	ids               IDGenerator
 }
 
 var _ Port = (*Service)(nil)

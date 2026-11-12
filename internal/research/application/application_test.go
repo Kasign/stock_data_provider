@@ -101,11 +101,11 @@ type authorizerFake struct {
 }
 
 type contextAuthorizerFake struct {
-	err error
-	calls int
-	caller string
+	err     error
+	calls   int
+	caller  string
 	purpose researchevidence.PurposeCode
-	value researchcontext.Context
+	value   researchcontext.Context
 }
 
 func (f *contextAuthorizerFake) AuthorizeContext(_ context.Context, caller string, purpose researchevidence.PurposeCode, value researchcontext.Context) error {
