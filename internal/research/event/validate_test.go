@@ -1,7 +1,9 @@
 package event
 
 import (
+	"encoding/json"
 	"math"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -303,5 +305,20 @@ func TestLifecycleTransitionRejectsZeroOffsetNonUTCLocation(t *testing.T) {
 	nonUTC := time.Date(2026, 11, 6, 5, 10, 0, 0, time.FixedZone("non-UTC", 0))
 	if _, err := NewLifecycleTransition(previous, next, nonUTC); err == nil || !strings.Contains(err.Error(), "must be UTC") {
 		t.Fatalf("NewLifecycleTransition() error = %v, want strict UTC Location rejection", err)
+	}
+}
+
+
+func TestResearchEventFrozenGolden(t *testing.T) {
+	data, err := os.ReadFile("../../../doc/整体任务规划/golden/RSC-CTR-002-research-event.golden.json")
+	if err != nil {
+		t.Fatalf("read frozen Event Golden: %v", err)
+	}
+	var value ResearchEvent
+	if err := json.Unmarshal(data, &value); err != nil {
+		t.Fatalf("decode frozen Event Golden: %v", err)
+	}
+	if err := value.Validate(); err != nil {
+		t.Fatalf("frozen Event Golden does not validate: %v", err)
 	}
 }
