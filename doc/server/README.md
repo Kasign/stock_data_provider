@@ -1606,3 +1606,12 @@ Server Bootstrap
   - `NOTIFICATION_EVENT_MAX_PAYLOAD_BYTES=4096`
   - `NOTIFICATION_EVENT_MAX_JSON_DEPTH=16`
 - 当前 Relay 只负责可靠接收并创建 Notification Fanout WorkItem；不代表 Fanout Worker 已启动、订阅已配置或渠道已发送。真实 MariaDB 跨模块端到端验收仍需在部署环境执行。
+
+
+### 12.77 SRV-009 News Provider 配置诊断接入（2026-11-12）
+
+- Bootstrap 在 API/All 角色通过 News 自有 `newsconfig.Load` 解析 Provider 配置快照，并将 `ProviderConfigChecks` 与 Parser 自检一起注册到 Server Diagnostics；Server 不复制 Provider 配置字段或凭证规则。
+- Bocha、Tavily、Brave、SearXNG 分别输出独立的可选检查。未配置时为 `skipped`，不把可选 Provider 缺失误报为故障；配置完整时为 `healthy`。
+- 该检查只证明本地 Endpoint/凭证配置完整，不发起网络请求，不证明 Provider 可达、授权有效、配额可用或输出策略允许持久化。诊断消息和属性不包含 Endpoint 或 Secret。
+- News 配置只在 API/All 角色加载；Worker 角色不因未使用的 News Provider 配置而阻塞启动。
+- Server Bootstrap 集成测试覆盖一个 Provider 已配置、其他 Provider 未配置、Parser 检查通过及 Secret 不泄露。独立 CI Run `43203751587` 的 gofmt、package tests、Race、Vet 全部通过。
