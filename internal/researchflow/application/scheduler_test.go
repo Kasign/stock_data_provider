@@ -379,7 +379,6 @@ func TestSchedulerStopsAfterBoundedCASConflicts(t *testing.T) {
 	}
 }
 
-
 type schedulerConcurrentPoolDispatcher struct {
 	started chan string
 	release chan struct{}

@@ -26,11 +26,11 @@ const (
 )
 
 type workerPoolTask struct {
-	ctx       context.Context
-	runRef    string
-	stageRef  string
+	ctx        context.Context
+	runRef     string
+	stageRef   string
 	attemptRef string
-	result    chan workerPoolResult
+	result     chan workerPoolResult
 }
 
 type workerPoolResult struct {
@@ -44,14 +44,14 @@ type WorkerPool struct {
 	dispatcher StageExecutionDispatcher
 	config     WorkerPoolConfig
 
-	mu             sync.Mutex
-	state          workerPoolState
-	ctx            context.Context
-	cancel         context.CancelFunc
-	tasks          chan workerPoolTask
-	stopAccepting  chan struct{}
-	done           chan struct{}
-	workers        sync.WaitGroup
+	mu            sync.Mutex
+	state         workerPoolState
+	ctx           context.Context
+	cancel        context.CancelFunc
+	tasks         chan workerPoolTask
+	stopAccepting chan struct{}
+	done          chan struct{}
+	workers       sync.WaitGroup
 }
 
 func NewWorkerPool(dispatcher StageExecutionDispatcher, config WorkerPoolConfig) (*WorkerPool, error) {
@@ -187,4 +187,3 @@ func (p *WorkerPool) Shutdown(ctx context.Context) error {
 
 // Ensure WorkerPool remains a valid synchronous Stage dispatcher for Scheduler.
 var _ StageExecutionDispatcher = (*WorkerPool)(nil)
-
