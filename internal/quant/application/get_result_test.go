@@ -259,3 +259,50 @@ func TestGetResultReaderDenialIsAuditedAsDenied(t *testing.T) {
 		t.Fatalf("explicit denial was not audited as denied: %+v", auditor.events)
 	}
 }
+
+
+func TestAuthorizationRefJSONRequiresExpiresAtAndRejectsAmbiguousObjects(t *testing.T) {
+	tests := []struct {
+		name string
+		raw  string
+		ok   bool
+	}{
+		{name: "explicit null is present", raw: `{"schema_version":"1.0.0","expires_at":null}`, ok: true},
+		{name: "missing expires_at", raw: `{"schema_version":"1.0.0"}`},
+		{name: "unknown field", raw: `{"schema_version":"1.0.0","expires_at":null,"unexpected":true}`},
+		{name: "duplicate key", raw: `{"schema_version":"1.0.0","expires_at":null,"expires_at":null}`},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var ref AuthorizationRef
+			err := json.Unmarshal([]byte(tc.raw), &ref)
+			if tc.ok {
+				if err != nil || !ref.ExpiresAtPresent || ref.ExpiresAt != nil {
+					t.Fatalf("explicit null was not preserved: ref=%+v err=%v", ref, err)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatalf("ambiguous or incomplete AuthorizationRef accepted: %s", tc.raw)
+			}
+		})
+	}
+}
+
+func TestPolicySnapshotJSONRejectsUnknownAndDuplicateFields(t *testing.T) {
+	tests := []struct {
+		name string
+		raw  string
+	}{
+		{name: "unknown field", raw: `{"schema_version":"1.0.0","snapshot_ref":"snapshot:1","policies":[],"unexpected":true}`},
+		{name: "duplicate key", raw: `{"schema_version":"1.0.0","snapshot_ref":"snapshot:1","snapshot_ref":"snapshot:2","policies":[]}`},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var snapshot PolicySnapshot
+			if err := json.Unmarshal([]byte(tc.raw), &snapshot); err == nil {
+				t.Fatalf("ambiguous PolicySnapshot accepted: %s", tc.raw)
+			}
+		})
+	}
+}

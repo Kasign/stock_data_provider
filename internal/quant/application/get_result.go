@@ -80,6 +80,9 @@ type AuthorizationRef struct {
 // PolicyVersion 是策略快照中一条实际生效的策略版本。
 // UnmarshalJSON 保留 expires_at 必填但可为 null 的存在性语义，避免把字段缺失误读为永久授权。
 func (ref *AuthorizationRef) UnmarshalJSON(data []byte) error {
+	if _, err := manifest.FingerprintPayload(data); err != nil {
+		return ErrInvalidAuthorization
+	}
 	type authorizationRefAlias AuthorizationRef
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
@@ -118,6 +121,9 @@ type PolicySnapshot struct {
 
 // UnmarshalJSON 拒绝策略快照中的未知字段，避免忽略额外策略元数据。
 func (snapshot *PolicySnapshot) UnmarshalJSON(data []byte) error {
+	if _, err := manifest.FingerprintPayload(data); err != nil {
+		return ErrInvalidAuthorization
+	}
 	type policySnapshotAlias PolicySnapshot
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
