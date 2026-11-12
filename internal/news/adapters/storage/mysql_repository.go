@@ -646,7 +646,7 @@ func (r *MySQLRepository) PurgeExpiredObservationPayloads(ctx context.Context, n
 		return app.ObservationPayloadPurgeResult{}, app.ErrInvalidRequest
 	}
 	result := app.ObservationPayloadPurgeResult{}
-	err := r.withTransaction(ctx, "news_observation_retention", func(tx *sql.Tx, _ func(string) error) error {
+	err := r.withTransaction(ctx, "news_observation_retention", nil, func(tx *sql.Tx, _ func(string) error) error {
 		rows, err := tx.QueryContext(ctx, `SELECT observation_id FROM news_observations
 			WHERE retention_until IS NOT NULL AND retention_until <= ? AND payload_purged_at IS NULL
 			ORDER BY retention_until, observation_id LIMIT ? FOR UPDATE SKIP LOCKED`, now.UTC(), limit)
