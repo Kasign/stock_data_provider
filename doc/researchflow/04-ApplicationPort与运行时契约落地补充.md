@@ -555,3 +555,14 @@ Outbox 使用发布前 Claim、提交租约、外部 Publish、成功后 Ack 的
 - ClaimAttempt 在容量锁内检查全局 running Attempt 的有效 Lease 数；有效 Lease 达到 MaxWorkers 时返回 `ErrGlobalWorkerCapacityExceeded`。失效的 running Attempt Lease 数据按 fail-closed 处理；过期 Lease 不占用有效 Worker 槽位，原有 Fencing 回收路径不变。
 - 新增容量配置校验单测与 Migration v4 结构断言；真实 MariaDB 下的队列超限回滚、并发创建不超卖、全局 Worker 槽位竞争、过期 Lease 释放仍待补充/执行。当前不宣称该能力已通过集成验收。
 - 本实现只提供数据库全局容量权威，不包含有界 Worker Pool、常驻消费循环、进程恢复或 Server 配置接线；这些仍是后续任务。
+
+
+## 28. FLOW-004 全局容量与 Worker Pool 验收（2026-11-12）
+
+- 全局容量控制使用 Migration v4 单例守卫行，CreateRunAtomic 与 ClaimAttempt 统一按 `CapacityGuard -> Run -> Stage -> Attempt` 顺序加锁；容量配置 `MaxQueuedRuns`、`MaxWorkers` 必须显式为正数，各 Server 实例必须使用一致配置。
+- CreateRun 排队容量按数据库中 created/queued Run 统计；容量满时返回 `ErrQueueCapacityExceeded`，不留下 Run/Stage/幂等记录；相同幂等请求在容量满时仍回放原 Run。
+- 全局 Worker 容量按数据库当前有效 running Attempt Lease 统计；容量满时返回 `ErrGlobalWorkerCapacityExceeded`。缺失 owner/expiry 的 running Attempt 按 fail-closed 处理；过期 Lease 不占用有效槽位。
+- WorkerPool 使用固定 Workers 数量、无缓冲任务通道，不构建第二套持久化队列；Scheduler 并发提交本次计划中的独立 Stage，Dispatch 结果仍按计划顺序返回。数据库 Ready/RetryWait 与 ClaimAttempt 是任务事实和资源占用权威。
+- WorkerPool Shutdown 停止接收新任务并等待在途任务；超过截止时间取消池上下文。Server 仍需负责创建/启动/关闭 WorkerPool，并按统一配置保证本地 Worker 数不超过全局 MaxWorkers。
+- Actions Run `43137118534`，SHA `6c4e1aad62b5e1d469a9b087a6bf944dc8851a4d`：Researchflow gofmt、模块单测、Race、Vet、WorkerStore 单测/Race/Vet、MariaDB 生命周期普通/Race 集成全部通过。全仓 gofmt 因 Quant `internal/quant/manifest/manifest.go` 与 `manifest_test.go` 格式失败；不属于 Researchflow 模块。
+- Server 周期扫描所有可调度 Run 并重新调用 Scheduler、跨进程取消传播、真实 StageExecutor Adapter 和多模块端到端验收尚未完成。
