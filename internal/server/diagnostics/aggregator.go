@@ -8,7 +8,10 @@ import (
 	platformdiagnostics "example.com/stock-analysis-flow/internal/platform/diagnostics"
 )
 
-var ErrNoRequiredChecks = errors.New("at least one required readiness check is required")
+var (
+	ErrNoRequiredChecks = errors.New("at least one required readiness check is required")
+	ErrRunnerRequired   = errors.New("diagnostics runner is required")
+)
 
 // Readiness is deliberately stricter than the aggregate diagnostics summary:
 // every required check must be healthy before the instance accepts traffic.
@@ -39,6 +42,9 @@ func (a Aggregator) Run(ctx context.Context, checks []platformdiagnostics.Check)
 	}
 	if required == 0 {
 		return Report{}, ErrNoRequiredChecks
+	}
+	if a.Runner == nil {
+		return Report{}, ErrRunnerRequired
 	}
 
 	diagnostics, err := a.Runner.Run(ctx, checks)

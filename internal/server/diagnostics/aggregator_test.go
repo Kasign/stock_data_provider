@@ -32,6 +32,15 @@ func TestAggregatorRequiresAtLeastOneRequiredCheck(t *testing.T) {
 	}
 }
 
+func TestAggregatorRejectsMissingRunner(t *testing.T) {
+	_, err := (Aggregator{}).Run(context.Background(), []platformdiagnostics.Check{
+		check("required", true, platformdiagnostics.StatusHealthy),
+	})
+	if !errors.Is(err, ErrRunnerRequired) {
+		t.Fatalf("expected ErrRunnerRequired, got %v", err)
+	}
+}
+
 func TestAggregatorReadinessRequiresEveryRequiredCheckHealthy(t *testing.T) {
 	tests := []struct {
 		name   string

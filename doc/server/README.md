@@ -1533,3 +1533,11 @@ Server Bootstrap
   2. Session 生命周期服务的账号/IP 限流摘要当前采用带域分离的 HMAC-SHA256；PLAT-CTR-003 第 7 节文字定义为 SHA-256 小写十六进制摘要。HMAC 可降低 IP 摘要被离线枚举的风险，但属于实现与契约文字差异；在契约 Owner 明确前不静默改为无密钥摘要，也不宣称完全符合该条。
 - Logout、RotateSession、ChangePassword 仍是内部用例；调用方必须先完成可信身份、Origin/Host 和 CSRF 验证。SRV-CTR-001 仍 deferred，因此本轮不增加 HTTP 路由/DTO，不在 Bootstrap 启用浏览器 Session。
 - 本轮未进行真实 MariaDB/Redis E2E；包级 CI 仅验证 Server 代码和 Fake/SQL Connector 测试，不代表部署验收。
+
+
+### 12.69 SRV-009 Diagnostics Aggregator 缺失 Runner 防御（2026-11-12）
+
+- Review 发现 `Aggregator` 暴露可注入的 `Runner` 字段，但 `Run` 在存在必需检查时未验证 Runner 非 nil，异常构造会触发 nil pointer panic。
+- 新增稳定错误 `ErrRunnerRequired`，在执行检查前显式拒绝缺失 Runner；正常 `Service` 构造仍注入 Platform Runner，正常 Bootstrap 行为不变。
+- 新增回归测试覆盖必需检查存在但 Runner 缺失的路径，确保返回可识别错误而不是 panic。
+- 本修复仅属于 Server Diagnostics 防御性边界，不改变 Platform Runner、检查状态语义或 Readiness 判定规则。
