@@ -140,5 +140,5 @@ func (u *IngestProviderCandidate) Execute(ctx context.Context, request IngestPro
 		trace.EndpointPolicyVersionID = registration.EndpointPolicyVersionID
 	}
 	return u.ingest.executeCore(ctx, request.SourceID, request.IdempotencyKey,
-		request.Candidate, registration.URLPolicy, trace)
+		request.Candidate, registration.URLPolicy, trace, nil)
 }
