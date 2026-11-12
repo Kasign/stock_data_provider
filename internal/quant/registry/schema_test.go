@@ -500,7 +500,6 @@ func TestFirstFactorQuantMetricSchemaValidatesGoldenAndRejectsInvalidStates(t *t
 	}
 }
 
-
 func TestFirstFactorQuantMetricSchemaEnforcesPeriodAndInsufficientSampleBounds(t *testing.T) {
 	schema := compileQuantSchemaFile(t, "QNT-CTR-004-factor-quant-metric-1.0.0.schema.json")
 	base := func(code, period, status string, count int) map[string]any {
@@ -518,7 +517,9 @@ func TestFirstFactorQuantMetricSchemaEnforcesPeriodAndInsufficientSampleBounds(t
 	}
 	for _, instance := range valid {
 		encoded, err := json.Marshal(instance)
-		if err != nil { t.Fatal(err) }
+		if err != nil {
+			t.Fatal(err)
+		}
 		if err := validateJSONSchemaInstance(schema, encoded); err != nil {
 			t.Errorf("valid insufficient-data boundary rejected: %s: %v", encoded, err)
 		}
@@ -533,7 +534,9 @@ func TestFirstFactorQuantMetricSchemaEnforcesPeriodAndInsufficientSampleBounds(t
 	}
 	for _, instance := range invalid {
 		encoded, err := json.Marshal(instance)
-		if err != nil { t.Fatal(err) }
+		if err != nil {
+			t.Fatal(err)
+		}
 		if err := validateJSONSchemaInstance(schema, encoded); err == nil {
 			t.Errorf("invalid Factor QuantMetric unexpectedly passed: %s", encoded)
 		}
