@@ -110,7 +110,8 @@ func (r *MySQLRunRepository) CreateRunAtomic(
 	}
 	var queuedRuns int
 	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM researchflow_runs
-		WHERE status IN (?, ?)`, string(domain.RunCreated), string(domain.RunQueued)).Scan(&queuedRuns); err != nil {
+		WHERE status IN (?, ?)
+			AND deadline_at > DATE_FORMAT(UTC_TIMESTAMP(6), '%Y-%m-%dT%H:%i:%s.%f000Z')`, string(domain.RunCreated), string(domain.RunQueued)).Scan(&queuedRuns); err != nil {
 		return application.CreateRunResult{}, fmt.Errorf("count queued Researchflow Runs: %w", err)
 	}
 	if queuedRuns >= r.capacity.MaxQueuedRuns {
