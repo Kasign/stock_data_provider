@@ -1024,6 +1024,9 @@ func TestTushareFundamentalsPreservesPermissionRequiredWhenAllEndpointsDenied(t 
 	if !isTusharePermissionError(err) {
 		t.Fatalf("permission error was collapsed into a generic no-data error: %v", err)
 	}
+	if !strings.Contains(err.Error(), "fina_indicator") || !strings.Contains(err.Error(), "code=40203") {
+		t.Fatalf("permission error must retain the original Tushare endpoint and code: %v", err)
+	}
 	for _, endpoint := range []string{"fina_indicator", "income", "balancesheet", "cashflow"} {
 		if !seen[endpoint] {
 			t.Errorf("expected Tushare endpoint %q to be attempted", endpoint)
