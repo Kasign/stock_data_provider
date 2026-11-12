@@ -17,6 +17,7 @@
 - DEC-PLAT-002-049：Risk RuleSet、Reason、RiskDecision 聚合及 TrendResult evidence Metric 时间一致性校验。
 - Envelope 1.0.0：从 Manifest 投影元数据；payload 按 `(result_type, payload_schema_version)` 显式解码；未知组合 fail closed。
 - 当前仅注册 `trend/1.0.0`、`risk/1.0.0` 两种强类型 Payload；Trend/Risk 与 Envelope 的重复字段逐项校验，Envelope 与 Manifest 逐字段校验并验证 Payload 指纹。
+- IndicatorResultPayload 1.0.0 已补齐独立结构 Schema、合成 Golden 和 Go 容器/顺序/跨 Metric 一致性 Validator；因逐指标 Registry Entry 元数据未完成，仍不加入 Envelope 解码/构造注册表。
 - Envelope JSON Schema、Trend/Risk Golden、Schema 回归、序列化/反序列化和非法输入测试已补齐。
 - Envelope Marshal/Unmarshal 均执行结构校验；input_snapshot_refs 必须显式存在、唯一且按 Manifest 规范顺序排列，允许空数组。
 - Envelope Unmarshal 在强类型结构解码前拒绝重复 JSON 键、转义后重名键和非法 UTF-8；与授权证明采用同一 Manifest JSON 安全校验入口。
@@ -30,7 +31,7 @@
 
 **Payload 支持边界：**
 - 已注册：`trend/1.0.0`、`risk/1.0.0`。
-- 尚未注册：`indicator`、`factor`。虽然已有部分 Metric DTO/Schema/Golden，但完整 IndicatorResultPayload、FactorResultPayload 容器 Schema/Golden、跨字段 Validator 和 Registry 元数据尚未齐备；不得据此生成或消费完整 Envelope。
+- 尚未注册：`indicator`、`factor`。IndicatorResultPayload 的容器 Schema/Golden/Go 结构 Validator 已完成，但逐指标 Registry Entry 的单位、精度、值域、质量策略和 sample_count 计数语义尚未齐备，不能加入 Envelope Registry。FactorResultPayload 仍待完整 Schema/Golden/Validator，且继续受 DATA-CTR-005 deferred 门禁约束；两者均不得生成或消费完整 Envelope。
 - `market/industry/stock/strategy/backtest/evaluation` 仍为预留类型，当前必须拒绝，不能用宽泛 object/map 兜底。
 
 项目级状态：QNT-CTR-004/005 均为 `frozen`（DEC-PLAT-002-051）。未完成的 Payload 子类型、运行时授权和消费者验收属于 L2 实现符合性待办，不改变契约冻结状态。
