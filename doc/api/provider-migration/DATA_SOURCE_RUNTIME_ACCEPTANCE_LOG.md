@@ -1155,3 +1155,15 @@ Go suite 覆盖根模块、go-core、market-data 的格式/测试/race/vet、Mar
 - Go Test Suite Run：`43204829838` success。Market Data gofmt/unit/race/vet、MariaDB Migration/PIT、DailyBar fallback、PIT revision fallback、Probe HTTP + MariaDB E2E 均 success；Compose/Docker build 和 Market Data module migration Job skipped。
 - 结论：P0-79 权限错误语义修复获得真实请求路径复验。Tushare 相关数据仍不可用，不构成 Fundamentals / Valuations 真实字段验收；未取得新增估值样本。
 - 下一步：继续 D-3 的 Hithink 估值口径与 PIT 证据核验；Tushare 权限未变化前不重复请求，Freshness 与跨源可比性门禁保持不变。
+
+
+## 66. 2026-11-12 Hithink 估值接口专属契约补证
+
+- 来源：同花顺官方估值 API 文档 `https://fuyao.aicubes.cn/docs/api-reference/valuations/`，通过官方聚合文档 `https://fuyao.aicubes.cn/llms-full.txt` 核对。
+- 固定字段为 `pe_ttm`、`pe_mrq`、`pb_mrq`、`ps_ttm`、`pcf_ttm`；TTM 为最近连续 12 个月，MRQ 为最近一个已披露报告期。
+- 官方将 PCF_TTM 描述为股票价格相对于公司经营现金流的市现率，接口语义层分母明确为经营现金流，不是现金及现金等价物净增加额。具体样本数值仍缺同一时点价格和经营现金流原始值，不能独立复算。
+- 官方明确 `data.timestamp` 是本次响应使用的上游指标元数据最大有效时间，不代表所有指标同步更新；未提供逐字段更新时间或报告日期。
+- 对照 Adapter：五项字段直接映射；ProviderTimestamp 仅保留为快照级时间；ProviderReportDate 缺失时维持 degraded。没有代码缺陷证据，不改实现。
+- 判定：接口字段映射/PCF 分母语义为契约层 pass；PCF 数值复算、PE/PB/PS 数值复算为 not_comparable；逐字段 Freshness 与 ProviderReportDate 为 unknown。
+- 文档示例数值不是实时数据，本次不作为验收样本。既有 Live 样本不升级质量状态。
+- 本轮无代码变更，无构建/测试；不重复请求 Tushare（权限未变化）或 Hithink（没有新增授权样本/独立分母输入）。

@@ -300,3 +300,14 @@
 - PIT 查询已要求系统观察时间、快照采集时间、每个证券项采集时间不晚于 cutoff；存在 ProviderTimestamp / ProviderReportDate 时也检查截止边界。只读取历史版本并保留 degraded，不将其升级为 valid。
 - 同花顺公开估值表文档提供 PE_MRQ、PE_TTM、PB、PS_TTM 的表级公式，但未证明 HTTP `/api/a-share/valuations/snapshot` 的字段映射与该表完全一致。PCF TTM 还存在经营现金流与现金净流量两种不同分母，当前 `pcf_ttm` 没有 endpoint 专属映射证据。
 - 结论：不修改 Provider 映射、PIT 算法或 DTO；估值 Freshness 保持 unknown，PCF_TTM 及未被 endpoint 字典证明的口径保持 not_comparable。后续需取得该 endpoint 的正式字段字典或同一时点可复核原始样本，不能用通用行业公式代替供应商字段证据。
+
+
+### 2026-11-12：Hithink 估值 endpoint 专属契约补证
+
+- 已查阅官方聚合 API 文档的估值数据章节：`https://fuyao.aicubes.cn/docs/api-reference/valuations/`。
+- 官方字段表确认固定五项 `pe_ttm/pe_mrq/pb_mrq/ps_ttm/pcf_ttm`；TTM 为最近连续 12 个月，MRQ 为最近已披露报告期。
+- 官方将 `pcf_ttm` 明确定义为相对于公司经营现金流的市现率，故接口语义层不再保留“经营现金流/现金净流量”二选一疑问；但具体数值仍缺同一时点的价格与经营现金流原始值，不能复算验收。
+- 官方将 `data.timestamp` 定义为本次响应所用上游指标元数据的最大有效时间，并明确不同指标更新时间可能不同。当前 ProviderTimestamp 作为快照级聚合时间的处理合理；不能下沉成五项字段时间。接口不提供逐字段更新时间或 ProviderReportDate。
+- 官方文档示例值仅为结构示例，不是实时样本。既有 `600519.SH` Live 样本仍为真实返回但 degraded，不因文档补证而升级质量状态。
+- 本轮未修改代码、DTO、PIT 算法或质量门槛。契约层 PCF 语义判定 pass；PCF 具体数值、PE/PB/PS 复算仍 not_comparable；逐字段 Freshness 与 ProviderReportDate 仍 unknown。
+- 下一步仅需补齐同一证券/同一快照时点的价格与财务分母原始证据；不重复调用权限不足的 Tushare，也不为取得样本而重复发起相同 Hithink 请求。
