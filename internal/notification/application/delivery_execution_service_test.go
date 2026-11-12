@@ -432,7 +432,6 @@ func TestDeliveryExecutionCapsAttemptDeadlineByMaxElapsed(t *testing.T) {
 	}
 	service.preflight.channels = registry
 
-	startedAt := claim.Delivery.UpdatedAt.Add(time.Second)
 	result, err := service.Execute(
 		context.Background(), claim, event, "attempt-execution-max-elapsed",
 		0.5, "evidence-execution-max-elapsed",
