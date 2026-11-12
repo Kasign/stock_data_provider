@@ -1,6 +1,6 @@
 # 新闻模块开发任务与验收清单
 
-> 当前验收状态（2026-11-12，最新 News 代码提交 `30e15829b02a00251df29691acfb1700ecdba7b1`；其后只有文档同步提交）：最近成功的 News 专项 Run [43210204658](https://github.com/Kasign/stock_data_provider/actions/runs/43210204658) 与根模块 Run [43210204807](https://github.com/Kasign/stock_data_provider/actions/runs/43210204807) 的实际 `head_sha` 均为 `eac3269ebaa625bd583f5ef3a73a139ff02c3881`，早于后续 Diagnostics Context 取消边界修复（最新代码提交 `30e15829`），因此不能作为最新代码通过证据。PR [#88](https://github.com/Kasign/stock_data_provider/pull/88) 已按验收约定合入 `integration`，Merge Commit 为 `85c78f19e4d8d231b29d78f5815bc72868dc326d`；截至本次复核尚未出现该 SHA 的 Integration CI Run。当前 Diagnostics 修复标记为代码已提交、CI 待验证。
+> 当前验收状态（2026-11-12，最新代码提交：用途映射修复 `e76eb3a88ecffd7fe97e2ddf8cb55c28e04eee08`，对应测试 `6188c22efd24993bf2717b8b382661cb3854b3eb`）：本轮修正 NEWS-CTR-002 合法显式 `risk_review` 在当前策略校验中被拒绝的问题，并补充用途映射、SourcePolicy 与 EndpointPolicy 测试。尚未运行 Go 测试、Race、Vet 或 MariaDB 集成；此前 Run `43210204658` / `43210204807` 的 SHA 早于本轮代码，不构成本轮验收证据。PR [#88](https://github.com/Kasign/stock_data_provider/pull/88) 已合入 `integration`，Merge Commit 为 `85c78f19e4d8d231b29d78f5815bc72868dc326d`；本轮未再次合并分支。
 
 > 当前模块状态：News 自有领域代码质量门禁、Provider 固定响应契约和 MariaDB 11.4 持久化专项验收已有通过证据；生产受限内容披露仍受公共 JCS Runtime Verifier 注入和 Server 生产装配阻断；News 内部的策略指针锁定、授权复核与精确 Version 正文读取事务机制已实现。NEWS-CTR-001 的 available_at 严格 PIT 继续等待合格来源证据，不得从 published_at/fetched_at/observed_at 推导。
 > 历史记录说明：本文按日期累积的早期实施段落保留为过程记录；其中旧的未完成项、等待 CI 项和旧阻断状态不代表当前任务状态。当前状态以本段及文末“2026-11-12 当前任务边界与后续计划”为准。
@@ -1107,7 +1107,7 @@
 | 授权复核与精确 Version 内容读取 TOCTOU | News 内部事务机制已实现 | `evidence_authorization_read.go` 在同一 InnoDB 事务锁定策略指针、复读 Observation/Version、执行授权回调并读取正文；MariaDB 集成覆盖读取与撤销并发。剩余是公共 JCS Verifier 的真实注入和 Server 生产装配，不再重复建设事务机制 |
 | available_at 严格 PIT | 阻断但暂无可实施真实数据 | 当前已核实来源没有符合准入规则的首次公开可获取时间字段；继续保持 NULL，不新增空壳字段/表，不修改 Get/List SQL。只有取得合格来源证据后才实现证据持久化和 PIT 过滤 |
 | Provider/Source 生产装配、Migration 总注册、Diagnostics Runner、Cleaner 周期调度 | 非本分支任务 | 由 Server 组合根装配；News 提供的构造入口、Migration、Check 和 Cleaner 已存在 |
-| `risk_review` 当前策略映射 | 保持 fail-closed，待用途语义确认 | NEWS-CTR-002 允许显式 `risk_review`，但当前 SourcePolicy 的 `Purpose` 映射未实现该值；不得擅自把它等同于 `internal_business`。需先确认是否允许在显式 `risk_review` 请求下映射为 `PurposeInternalBusiness`，否则保持拒绝 |
+| `risk_review` 当前策略映射 | 代码已修复，验证待执行 | 显式 `risk_review` 映射到 `PurposeInternalBusiness`；反向通用映射仍拒绝，避免从 `internal_business` 自动推断 purpose_code。Source/Endpoint/Provider 策略仍独立决定是否许可 |
 | 真实 Provider/Feed 网络、配额及来源授权验收 | 等待真实环境条件 | 需要可用账号凭证、实际套餐条款、逐来源授权及部署 DNS/出口证据；未满足时保持 skipped/restricted |
 | News 自有代码质量与 MariaDB 专项验证 | 已通过当前 CI | 不重复进行无差异回归；后续代码变更再按变更范围触发验证 |
 
@@ -1115,8 +1115,18 @@
 
 1. 不新增 News 领域功能，不为 WebUI 增加 API，也不复制 Platform/Server 能力。
 2. 跟进公共 GOV-CTR-006 Runtime Verifier 的可依赖实现；确认真实 package/API 和 Golden 后，由 Server 组合根注入并完成 News 消费者接入；News 已有事务型授权读取机制，不再重复实现。
-4. 明确 `risk_review` 与 News Domain `Purpose` 的授权映射；在确认前继续 fail-closed。
+4. `risk_review` 映射缺口已按冻结契约修复；等待本轮代码对应 CI 验证，不重复讨论用途语义。
 5. 等待具备来源证据的真实数据后，再单独实现 available_at 证据模型与 Get/List 严格 PIT；不以模拟样本或推断时间验收。
 6. 有真实 Provider 凭证和授权材料后，执行受控 Live Probe；否则不把固定响应契约测试描述为在线验收。
 
 本分支当前没有可在不依赖外部 Owner、真实授权或真实来源证据的情况下继续完成的高价值生产闭环代码任务；当前优先事项是取得 integration Merge Commit `85c78f1` 的 CI 验收结果。后续若没有新的 News 专属缺陷或合格外部证据，保持代码冻结，只处理明确的 News 范围缺陷和必要文档同步。
+
+
+## 十七、2026-11-12 NEWS-CTR-002 risk_review 显式用途映射修复
+
+- 代码提交：`e76eb3a88ecffd7fe97e2ddf8cb55c28e04eee08`；测试提交：`6188c22efd24993bf2717b8b382661cb3854b3eb`。
+- 按冻结契约将显式 `risk_review` 映射为领域策略用途 `internal_business`；未改变契约、Domain Purpose 枚举或策略数据结构。
+- `research_analysis`、`risk_review`、`user_display` 分别对应 `internal_personal_research`、`internal_business`、`public_display`。反向映射仍拒绝 `PurposeInternalBusiness`，因为它没有唯一的 purpose_code。
+- SourcePolicy、EndpointPolicy、ProviderOutputPolicy 继续按请求显式 purpose_code 检查策略许可；映射不等于授权通过。
+- 新增测试覆盖用途映射、SourcePolicy 用途匹配、EndpointPolicy 用途匹配，以及不允许跨用途推断。
+- 本轮未执行 Go 测试、Race、Vet 或 MariaDB 集成；此前 CI SHA 不覆盖本轮提交，必须取得覆盖当前代码 SHA 的新验证结果后才能标记通过。
