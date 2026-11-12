@@ -45,7 +45,8 @@ jobs:
             ./internal/server/health \
             ./internal/server/migration \
             ./internal/server/resources \
-            ./internal/server/runtime
+            ./internal/server/runtime \
+            ./internal/server/security
       - name: Run Server race tests
         run: |
           go test -race ./cmd/analysis-api \

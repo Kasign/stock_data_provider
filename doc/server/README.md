@@ -1567,3 +1567,11 @@ Server Bootstrap
 - 新增测试直接断言账号和 IPv4 地址的摘要等于契约要求的 SHA-256 小写十六进制值；覆盖摘要长度和大小写。
 - 注意：SHA-256 对低熵 IP 地址可被离线枚举。该实现是对冻结契约的符合性修正，不代表其隐私强度等同于 HMAC；若要改变摘要算法，必须走契约版本/项目决策变更，不得在 Server 私自保留 HMAC 变体。
 - 历史 12.68/12.70 中关于 HMAC 差异的记录保留为当时事实；本节记录其修正完成。SessionStore 缺少只读 Lookup 的跨层阻塞仍未解决，本次未触碰 Platform。
+
+
+### 12.73 SRV-005 Server Security 包纳入独立 CI（2026-11-12）
+
+- 复核当前 Server 独立 Workflow 后发现：gofmt 覆盖 `internal/server/security`，但 package tests、race 和 vet 的显式目标列表遗漏该包。Bootstrap 虽然间接编译了 Security 生产代码，但不会执行 `internal/server/security` 自身的测试。
+- 将 `internal/server/security` 加入独立 CI 的普通测试、Race 和 Vet 目标。该包包含 Owner Session Authenticator、Lifecycle Service、Security Audit Writer 的 Server 组合逻辑及对应状态机测试，是 SRV-005 的直接归属包，必须独立执行。
+- 本次不纳入 `internal/server/llmtransport`：它依赖 `internal/llm` 的构建状态，尚未在本分支 CI 证据中确认可稳定编译；不通过跳过或屏蔽依赖错误伪造验收。
+- 本次只修正 Server 独立 CI 的实际覆盖范围，不改变业务代码和契约；后续结果以新 Workflow 对当前 SHA 的测试、Race、Vet 结果为准。
