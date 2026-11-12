@@ -90,3 +90,5 @@ internal/quant/
 ```
 
 首期只按实际任务创建必要包，不为目录齐全创建空包。旧代码迁移结论见 [01](01-量化引擎总体设计.md) 第 6 节；输入输出契约和 Golden 设计见 [03](03-首批输入输出契约与验收补充.md)。
+
+- QNT-CTR-001 Registry Entry Schema 2.0.0 与 Go Entry.SampleCountPolicy 已对齐，ValidateMetric 按 required_in_metric 拒绝缺失字段并保留显式 null/0 的差异；旧版 1.0.0 保留。首批真实 Registry Entry/Golden、各 metric_code 的权威 counting_rule 仍属 L2 待办。

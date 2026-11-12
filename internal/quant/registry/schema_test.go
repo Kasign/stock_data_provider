@@ -19,6 +19,52 @@ func readQuantSchema(t *testing.T, name string) []byte {
 	return document
 }
 
+func TestRegistryEntrySchemaV2RequiresSampleCountMetadata(t *testing.T) {
+	schema := compileQuantSchemaFile(t, "QNT-CTR-001-registry-entry-2.0.0.schema.json")
+	entry := validEntry("momentum_20d", "1.0.0")
+	entry.SampleCount.RequiredInMetric = true
+	encoded, err := json.Marshal(entry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := validateJSONSchemaInstance(schema, encoded); err != nil {
+		t.Fatalf("valid Registry Entry 2.0.0 rejected: %v", err)
+	}
+
+	var object map[string]json.RawMessage
+	if err := json.Unmarshal(encoded, &object); err != nil {
+		t.Fatal(err)
+	}
+	delete(object, "sample_count")
+	missingMetadata, err := json.Marshal(object)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := validateJSONSchemaInstance(schema, missingMetadata); err == nil {
+		t.Fatal("Registry Entry without sample_count metadata unexpectedly passed")
+	}
+
+	for _, tc := range []struct {
+		name   string
+		mutate func(*SampleCountPolicy)
+	}{
+		{"missing unit", func(p *SampleCountPolicy) { p.Unit = "" }},
+		{"missing counting rule", func(p *SampleCountPolicy) { p.CountingRule = "" }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			candidate := validEntry("momentum_20d", "1.0.0")
+			tc.mutate(&candidate.SampleCount)
+			raw, err := json.Marshal(candidate)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := validateJSONSchemaInstance(schema, raw); err == nil {
+				t.Fatalf("invalid sample_count metadata unexpectedly passed: %s", raw)
+			}
+		})
+	}
+}
+
 func TestDraft202012SchemasCompileAndValidateInstances(t *testing.T) {
 	cases := []struct {
 		name     string

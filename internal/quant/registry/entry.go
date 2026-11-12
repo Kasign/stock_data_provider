@@ -53,6 +53,13 @@ type QualityPolicy struct {
 	UnavailableConditions []string `json:"unavailable_conditions"`
 }
 
+ // SampleCountPolicy 定义 QuantMetric.sample_count 的必需性和计数语义。
+ type SampleCountPolicy struct {
+	RequiredInMetric bool   `json:"required_in_metric"`
+	Unit             string `json:"unit"`
+	CountingRule     string `json:"counting_rule"`
+}
+
 // Entry 是 Quant 指标、Indicator 或 Factor 的不可变语义元数据。
 // ParametersSchema 保留 JSON Schema 原文，避免把参数定义降级为无约束 map。
 type Entry struct {
@@ -66,6 +73,7 @@ type Entry struct {
 	InputRequirements []InputRequirement `json:"input_requirements"`
 	ParametersSchema  json.RawMessage    `json:"parameters_schema"`
 	QualityPolicy     QualityPolicy      `json:"quality_policy"`
+	SampleCount       SampleCountPolicy   `json:"sample_count"`
 	SupportsInterval  bool               `json:"supports_interval"`
 }
 
@@ -136,6 +144,9 @@ func (e Entry) Validate() error {
 	}
 	if hasBlankOrDuplicate(e.QualityPolicy.QualityStates) || hasBlankOrDuplicate(e.QualityPolicy.UnavailableConditions) {
 		return invalid("quality_policy contains blank or duplicate values")
+	}
+	if !validText(e.SampleCount.Unit) || !validText(e.SampleCount.CountingRule) {
+		return invalid("sample_count.unit or sample_count.counting_rule")
 	}
 	return nil
 }
