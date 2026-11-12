@@ -11,7 +11,7 @@ import (
 	"example.com/stock-analysis-flow/internal/news/domain"
 )
 
-// SourcePolicyIdentityTransaction 在 Identity 写事务内锁定并读取当前 Source/Endpoint 策略版本。
+// CurrentIngestPolicyIdentityTransaction 在 Identity 写事务内锁定并读取当前策略组合。
 // 生产实现必须使用与 Observation 写入相同的数据库事务。
 type CurrentIngestPolicyIdentityTransaction interface {
 	LockCurrentIngestPolicies(
@@ -162,7 +162,7 @@ func (u *IngestCollectedSource) Execute(ctx context.Context, request IngestColle
 		idempotencyKey := prefix + "/" + hex.EncodeToString(fingerprint[:])
 		observation, ingestErr := u.ingest.executeWithPolicyTraceAndCheck(
 			ctx, sourceID, idempotencyKey, candidate, registration.URLPolicy, trace,
-checkPersistencePolicy,
+			checkPersistencePolicy,
 		)
 		if ingestErr != nil {
 			return nil, ingestErr
