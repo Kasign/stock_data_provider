@@ -1623,3 +1623,11 @@ Server Bootstrap
 - 修正根 Dockerfile，将四份冻结的 Notification Event Schema 复制到镜像固定路径 `/app/doc/notification/schema`，与镜像 `WORKDIR /app` 及 Bootstrap 相对路径保持一致；不复制整个文档目录。
 - Server 独立 CI 增加镜像构建和四份 Schema 文件存在性检查，防止后续镜像裁剪再次移除运行时资源。
 - 本修正只处理镜像资源完整性，不代表 Notification Fanout Worker、真实渠道 Adapter 或生产投递链路已完成装配。
+
+### 12.79 SRV-006 / SRV-007 真实依赖 CI 验收（2026-11-12）
+
+- Server 独立 CI 在原有 MariaDB Relay 集成环境上增加 Redis 7.4 服务，并为 Platform Storage 集成测试显式启用真实依赖配置。
+- 新增执行 `go test -count=1 ./internal/platform/storage -run 'TestMariaDBStorageIntegration|TestRedisStorageIntegration'`，验证真实 MariaDB 连接池与读写、并发 Migration advisory lock、Migration 失败后的恢复门禁，以及 Redis 连接池和读写。
+- 该步骤复用 Platform 已有集成测试，不复制 Migration 算法、不修改 Platform 实现，也不改变生产配置。
+- SIGTERM 生命周期仍由 Server Bootstrap 子进程测试验证；本步骤不宣称已完成真实容器编排下的完整 Bootstrap SIGTERM 验收。
+- Migration checksum 只读预检仍受 Platform 缺少公开只读校验 API 限制；本次不在 Server 重复实现。

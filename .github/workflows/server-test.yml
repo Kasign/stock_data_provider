@@ -23,6 +23,12 @@ jobs:
     timeout-minutes: 20
     env:
       SERVER_RELAY_TEST_MYSQL_DSN: root:root@tcp(127.0.0.1:3306)/server_relay_test?parseTime=true&loc=UTC
+      PLATFORM_STORAGE_INTEGRATION: "1"
+      PLATFORM_MARIADB_USER: root
+      PLATFORM_MARIADB_PASSWORD: root
+      PLATFORM_MARIADB_ADDR: 127.0.0.1:3306
+      PLATFORM_MARIADB_DATABASE: server_relay_test
+      PLATFORM_REDIS_ADDR: 127.0.0.1:6379
     services:
       mariadb:
         image: mariadb:11.4
@@ -33,6 +39,15 @@ jobs:
           - 3306:3306
         options: >-
           --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+      redis:
+        image: redis:7.4
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
           --health-interval=5s
           --health-timeout=5s
           --health-retries=20
@@ -75,6 +90,8 @@ jobs:
             ./internal/server/resources \
             ./internal/server/runtime \
             ./internal/server/relay
+      - name: Run real MariaDB and Redis storage integration tests
+        run: go test -count=1 ./internal/platform/storage -run 'TestMariaDBStorageIntegration|TestRedisStorageIntegration'
       - name: Run Server vet
         run: |
           go vet ./cmd/analysis-api \
