@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"bytes"
+	"errors"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -9,6 +10,7 @@ import (
 	"strings"
 
 	"example.com/stock-analysis-flow/internal/marketdata/model"
+	"example.com/stock-analysis-flow/internal/marketdata/service"
 )
 
 type providerProbeRequest struct {
@@ -113,6 +115,10 @@ func (s *Server) dataSourceProbe(w http.ResponseWriter, r *http.Request) {
 		Scope: request.Scope, Capabilities: request.Capabilities, Checks: request.Checks, Markets: request.Markets, Symbols: request.Symbols, DailyBarAdjustments: request.DailyBarAdjustments, DailyBarStartDate: request.DailyBarStartDate, DailyBarEndDate: request.DailyBarEndDate, TimeoutSeconds: timeoutSeconds,
 	})
 	if err != nil {
+		if errors.Is(err, service.ErrProviderProbePersistence) {
+			writeErr(w, http.StatusServiceUnavailable, "STORAGE_UNAVAILABLE", "provider-probe history could not be persisted", requestID(r))
+			return
+		}
 		writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", err.Error(), requestID(r))
 		return
 	}

@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"strings"
@@ -13,6 +14,7 @@ import (
 	"example.com/stock-analysis-flow/internal/marketdata/model"
 	"example.com/stock-analysis-flow/internal/marketdata/normalize"
 	"example.com/stock-analysis-flow/internal/marketdata/provider"
+	"example.com/stock-analysis-flow/internal/marketdata/repository"
 	"example.com/stock-analysis-flow/internal/marketdata/validation"
 )
 
@@ -1833,5 +1835,30 @@ func TestApplyProviderProbeCheckStatusIncludesCheckResults(t *testing.T) {
 				t.Fatalf("overall status = %q, want %q", run.Status, tc.want)
 			}
 		})
+	}
+}
+
+func TestProviderProbeStorageFailureFailsBatchWithoutStorageCheck(t *testing.T) {
+	db, err := sql.Open("mysql", "probe:probe@tcp(127.0.0.1:3306)/probe")
+	if err != nil {
+		t.Fatalf("open test database handle: %v", err)
+	}
+	store, err := repository.NewWithBorrowedDB(db)
+	if err != nil {
+		_ = db.Close()
+		t.Fatalf("create borrowed repository: %v", err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatalf("close test database handle: %v", err)
+	}
+	ds := NewWithCapabilities(nil, nil, nil, cache.NewDisabled(), store, time.Second, time.Second, 120, 2000, ResilienceConfig{}, nil)
+	run, err := ds.ProbeProviderCapabilitiesWithOptions(context.Background(), ProviderProbeOptions{
+		Scope: "all", Capabilities: []string{"quote"}, Checks: []string{"quality"}, TimeoutSeconds: 5,
+	})
+	if !errors.Is(err, ErrProviderProbePersistence) {
+		t.Fatalf("persistence failure must be typed: run=%+v err=%v", run, err)
+	}
+	if run == nil || run.Persisted || run.Status != "failed" {
+		t.Fatalf("failed persistence must clear persisted and fail the batch even when storage check was not requested: %+v", run)
 	}
 }

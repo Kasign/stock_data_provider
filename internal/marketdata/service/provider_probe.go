@@ -19,6 +19,9 @@ import (
 	"example.com/stock-analysis-flow/internal/marketdata/validation"
 )
 
+// ErrProviderProbePersistence 表示探测结果历史写入失败。
+var ErrProviderProbePersistence = errors.New("provider-probe persistence failed")
+
 var (
 	probeHTTPStatusPattern = regexp.MustCompile(`(?i)\bHTTP(?:\s+status)?\s*[:=]?\s*(\d{3})\b`)
 	probeURLQueryPattern   = regexp.MustCompile(`(?i)(https?://[^\s"'?]+)\?[^\s"' ]*`)
@@ -1203,8 +1206,9 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 					break
 				}
 			}
+			run.Status = "failed"
 			applyProviderProbeCheckStatus(run)
-			return run, fmt.Errorf("persist provider-probe run: %w", err)
+			return run, fmt.Errorf("%w: %w", ErrProviderProbePersistence, err)
 		}
 	}
 	return run, nil

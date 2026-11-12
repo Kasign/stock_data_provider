@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"bytes"
+	"database/sql"
 	"io"
 	"log/slog"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 
 	"example.com/stock-analysis-flow/internal/marketdata/cache"
 	"example.com/stock-analysis-flow/internal/marketdata/service"
+	"example.com/stock-analysis-flow/internal/marketdata/repository"
 )
 
 func newProviderProbeHTTPTestHandler() http.Handler {
@@ -206,5 +208,38 @@ func TestProviderProbeEndpointRejectsUnknownAndDuplicateChecks(t *testing.T) {
 		if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), `"code":"VALIDATION_ERROR"`) {
 			t.Fatalf("invalid checks request status=%d body=%s", response.Code, response.Body.String())
 		}
+	}
+}
+
+func TestProviderProbeEndpointReportsStorageFailureAsUnavailable(t *testing.T) {
+	db, err := sql.Open("mysql", "probe:probe@tcp(127.0.0.1:3306)/probe")
+	if err != nil {
+		t.Fatalf("open test database handle: %v", err)
+	}
+	store, err := repository.NewWithBorrowedDB(db)
+	if err != nil {
+		_ = db.Close()
+		t.Fatalf("create borrowed repository: %v", err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatalf("close test database handle: %v", err)
+	}
+	svc := service.NewWithCapabilities(
+		nil, nil, nil, cache.NewDisabled(), store,
+		time.Second, time.Second, 120, 2000,
+		service.ResilienceConfig{}, slog.New(slog.NewTextHandler(io.Discard, nil)),
+	)
+	server := NewWithCapabilityInterfaces(
+		"probe-test-key", "forward_adjusted", svc,
+		nil, nil, nil, 2000, 110*time.Second,
+		slog.New(slog.NewTextHandler(io.Discard, nil)),
+	)
+	response := performProviderProbeRequest(server.Handler(), "{\"capabilities\":[\"quote\"],\"checks\":[\"quality\"]}", true)
+	if response.Code != http.StatusServiceUnavailable ||
+		!strings.Contains(response.Body.String(), "\"code\":\"STORAGE_UNAVAILABLE\"") {
+		t.Fatalf("storage persistence failure must return 503 STORAGE_UNAVAILABLE: status=%d body=%s", response.Code, response.Body.String())
+	}
+	if strings.Contains(response.Body.String(), "database is closed") {
+		t.Fatalf("storage internals must not be exposed in the HTTP response: %s", response.Body.String())
 	}
 }
