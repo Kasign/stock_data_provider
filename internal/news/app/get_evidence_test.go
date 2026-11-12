@@ -22,7 +22,9 @@ func (s getEvidencePITRepositoryStub) GetEvidenceVersionAt(context.Context, GetE
 	if s.afterRead != nil {
 		s.afterRead()
 	}
-	return s.record, s.err
+	record := s.record
+	record.Version.Content = domain.ContentLayers{}
+	return record, s.err
 }
 
 func (s getEvidencePITRepositoryStub) ListEvidenceVersionsAt(context.Context, ListEvidenceRequest) ([]EvidencePITRecord, error) {
@@ -139,9 +141,11 @@ func validGetEvidenceFixture(now time.Time) (GetEvidenceRequest, EvidencePITReco
 func TestGetEvidenceAppliesAuthorizationAndContentLevelBeforeReturningDTO(t *testing.T) {
 	now := time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)
 	request, pit, binding := validGetEvidenceFixture(now)
-	authorizer := &getEvidenceAuthorizerStub{}
+	contentRead := false
+	authorizationBeforeContent := false
+	authorizer := &getEvidenceAuthorizerStub{afterExecute: func() { authorizationBeforeContent = !contentRead }}
 	usecase, err := NewGetEvidence(
-		getEvidencePITRepositoryStub{record: pit},
+		getEvidencePITRepositoryStub{record: pit, afterContentRead: func() { contentRead = true }},
 		getEvidenceAuthorizationSnapshotStub{binding: binding},
 		authorizer,
 	)
@@ -153,7 +157,8 @@ func TestGetEvidenceAppliesAuthorizationAndContentLevelBeforeReturningDTO(t *tes
 	if err != nil {
 		t.Fatal(err)
 	}
-	if authorizer.calls != 1 || result.Title == nil || *result.Title != "headline" ||
+	if authorizer.calls != 1 || !authorizationBeforeContent || !contentRead ||
+		result.Title == nil || *result.Title != "headline" ||
 		result.ContentExcerpt == nil || *result.ContentExcerpt != "source summary" {
 		t.Fatalf("unexpected authorized evidence result: %+v calls=%d", result, authorizer.calls)
 	}
@@ -259,8 +264,9 @@ func TestGetEvidenceReturnsNoDTOWhenCurrentAuthorizationDenies(t *testing.T) {
 	request, pit, binding := validGetEvidenceFixture(now)
 	denied := errors.New("current authorization revoked")
 	authorizer := &getEvidenceAuthorizerStub{err: denied}
+	contentRead := false
 	usecase, err := NewGetEvidence(
-		getEvidencePITRepositoryStub{record: pit},
+		getEvidencePITRepositoryStub{record: pit, afterContentRead: func() { contentRead = true }},
 		getEvidenceAuthorizationSnapshotStub{binding: binding},
 		authorizer,
 	)
@@ -269,7 +275,7 @@ func TestGetEvidenceReturnsNoDTOWhenCurrentAuthorizationDenies(t *testing.T) {
 	}
 	usecase.now = func() time.Time { return now }
 	result, err := usecase.Execute(context.Background(), request)
-	if !errors.Is(err, denied) || result.Title != nil || result.ContentExcerpt != nil {
+	if !errors.Is(err, denied) || result.Title != nil || result.ContentExcerpt != nil || contentRead {
 		t.Fatalf("denied request disclosed evidence: result=%+v err=%v", result, err)
 	}
 }
