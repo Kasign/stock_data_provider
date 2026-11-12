@@ -398,22 +398,21 @@ type ValuationItem struct {
 }
 
 // ValuationSnapshot 是一次批量估值查询。ProviderTimestamp 是供应商返回的五项估值中最新有效时间，
-// 不代表每个指标都在该时刻更新。MissingSymbols 记录未从供应商响应中返回的请求代码。
+// 不代表每个指标都在该时刻更新。ProviderReportDate 是日期精度的源端数据日期；SystemObservedAt 是 Data
+// 将快照记录到本地历史版本的时刻，不代表 Provider 的公开时间。MissingSymbols 记录未返回的请求代码。
 type ValuationSnapshot struct {
-	RequestedSymbols []string        `json:"requested_symbols"`
-	Total            int             `json:"total"`
-	Items            []ValuationItem `json:"items"`
-	MissingSymbols   []string        `json:"missing_symbols,omitempty"`
-	// ProviderReportDate 是供应商给出的估值数据日期；日期不等于精确快照时间。
-	ProviderReportDate string     `json:"provider_report_date,omitempty"`
-	ProviderTimestamp  *time.Time `json:"provider_timestamp,omitempty"`
-	Source             string     `json:"source"`
-	SourceVersion      string     `json:"source_version,omitempty"`
-	FetchedAt          time.Time  `json:"fetched_at"`
-	// SystemObservedAt 是 Data 将该估值快照记录到本地历史版本的时刻；它不代表 Provider 的公开时间。
-	SystemObservedAt *time.Time    `json:"system_observed_at,omitempty"`
-	QualityStatus    QualityStatus `json:"quality_status"`
-	QualityReasons   []string      `json:"quality_reasons,omitempty"`
+	RequestedSymbols   []string        `json:"requested_symbols"`
+	Total              int             `json:"total"`
+	Items              []ValuationItem `json:"items"`
+	MissingSymbols     []string        `json:"missing_symbols,omitempty"`
+	ProviderReportDate string          `json:"provider_report_date,omitempty"`
+	ProviderTimestamp  *time.Time      `json:"provider_timestamp,omitempty"`
+	Source             string          `json:"source"`
+	SourceVersion      string          `json:"source_version,omitempty"`
+	FetchedAt          time.Time       `json:"fetched_at"`
+	SystemObservedAt   *time.Time      `json:"system_observed_at,omitempty"`
+	QualityStatus      QualityStatus   `json:"quality_status"`
+	QualityReasons     []string        `json:"quality_reasons,omitempty"`
 }
 
 // IndexCatalogItem 是一个同花顺指数或板块的目录项。
