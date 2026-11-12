@@ -239,6 +239,9 @@ func (envelope Envelope) ValidateAgainstManifest(source manifest.Manifest) error
 }
 
 func (envelope Envelope) MarshalJSON() ([]byte, error) {
+	if err := envelope.Validate(); err != nil {
+		return nil, err
+	}
 	type envelopeAlias Envelope
 	return json.Marshal(envelopeAlias(envelope))
 }
@@ -376,15 +379,13 @@ func validEnvelopeSnapshots(refs []string) bool {
 	if refs == nil {
 		return false
 	}
-	seen := make(map[string]struct{}, len(refs))
-	for _, ref := range refs {
+	for index, ref := range refs {
 		if !validEnvelopeText(ref) {
 			return false
 		}
-		if _, exists := seen[ref]; exists {
+		if index > 0 && refs[index-1] >= ref {
 			return false
 		}
-		seen[ref] = struct{}{}
 	}
 	return true
 }

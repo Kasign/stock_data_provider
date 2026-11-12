@@ -258,3 +258,35 @@ func envelopeTestTime(t *testing.T) time.Time {
 	}
 	return value
 }
+
+func TestEnvelopeMarshalRejectsInvalidEnvelope(t *testing.T) {
+	if _, err := json.Marshal(Envelope{}); !errors.Is(err, ErrInvalidEnvelope) {
+		t.Fatalf("MarshalJSON() = %v, want ErrInvalidEnvelope", err)
+	}
+}
+
+func TestEnvelopeRejectsUnsortedSnapshotRefs(t *testing.T) {
+	payload := validTrendPayload(t)
+	payloadJSON, err := payload.marshalPayload()
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifestValue, err := manifest.BuildWithPayload(manifest.Input{
+		ResultType: "trend", Scope: "stock", SecurityID: "600000.SH", Period: "20d",
+		QualityStatus: "valid", ResultStatus: "completed", SchemaVersion: "1.0.0",
+		PayloadSchemaVersion: "1.0.0", AlgorithmVersion: "trend-algorithm.v1",
+		ParameterFingerprint: "sha256:envelope-test-parameters",
+		SystemAsOf: envelopeTestTime(t), InputSnapshotRefs: []string{"snapshot:a", "snapshot:b"},
+	}, payloadJSON)
+	if err != nil {
+		t.Fatal(err)
+	}
+	envelope, err := BuildEnvelope(manifestValue, "authorization-ref:current", payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	envelope.InputSnapshotRefs = []string{"snapshot:b", "snapshot:a"}
+	if !errors.Is(envelope.Validate(), ErrInvalidEnvelope) {
+		t.Fatal("Envelope accepted non-canonical input_snapshot_refs order")
+	}
+}
