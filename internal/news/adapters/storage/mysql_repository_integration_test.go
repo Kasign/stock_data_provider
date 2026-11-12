@@ -942,7 +942,7 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	}
 	atomicContent, atomicReadObservation, err := repository.GetEvidenceContentWithCurrentAuthorization(
 		ctx, atomicBinding, secondObservation, secondVersion.Version, time.Now().UTC(),
-		func(readCtx context.Context, current domain.CurrentAuthorizationPolicySet, _ domain.Observation) error {
+		func(readCtx context.Context, current domain.CurrentAuthorizationPolicySet, currentObservation domain.Observation) error {
 			if err := readCtx.Err(); err != nil {
 				return err
 			}
@@ -962,7 +962,7 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 
 	if _, _, err := repository.GetEvidenceContentWithCurrentAuthorization(
 		ctx, atomicBinding, secondObservation, secondVersion.Version, secondVersion.Version.ObservedAt.Add(-time.Second),
-		func(context.Context, domain.CurrentAuthorizationPolicySet, _ domain.Observation) error { return nil },
+		func(_ context.Context, _ domain.CurrentAuthorizationPolicySet, _ domain.Observation) error { return nil },
 	); !errors.Is(err, app.ErrEvidencePITNotFound) {
 		t.Fatalf("atomic content before system_as_of error = %v, want PIT not found", err)
 	}
@@ -984,7 +984,7 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	go func() {
 		_, _, readErr := repository.GetEvidenceContentWithCurrentAuthorization(
 			ctx, atomicBinding, secondObservation, secondVersion.Version, time.Now().UTC(),
-			func(readCtx context.Context, current domain.CurrentAuthorizationPolicySet, _ domain.Observation) error {
+			func(readCtx context.Context, current domain.CurrentAuthorizationPolicySet, currentObservation domain.Observation) error {
 				decision := domain.EvaluateNewsAuthorizationAgainstCurrentPolicies(atomicBinding, current, time.Now().UTC())
 				if !decision.Allowed {
 					return fmt.Errorf("read-first authorization denied: %s", decision.ReasonCode)
@@ -1030,7 +1030,7 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	}
 	if _, _, err := repository.GetEvidenceContentWithCurrentAuthorization(
 		ctx, atomicBinding, secondObservation, secondVersion.Version, time.Now().UTC(),
-		func(context.Context, domain.CurrentAuthorizationPolicySet, _ domain.Observation) error { return nil },
+		func(_ context.Context, _ domain.CurrentAuthorizationPolicySet, _ domain.Observation) error { return nil },
 	); !errors.Is(err, app.ErrNewsCurrentPolicyUnavailable) {
 		t.Fatalf("stale Binding after policy replacement error = %v, want current policy unavailable", err)
 	}
@@ -1047,7 +1047,7 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	}
 	_, _, revokedReadErr := repository.GetEvidenceContentWithCurrentAuthorization(
 		ctx, revokedBinding, revokedObservation, secondVersion.Version, time.Now().UTC(),
-		func(readCtx context.Context, current domain.CurrentAuthorizationPolicySet, _ domain.Observation) error {
+		func(readCtx context.Context, current domain.CurrentAuthorizationPolicySet, currentObservation domain.Observation) error {
 			decision := domain.EvaluateNewsAuthorizationAgainstCurrentPolicies(revokedBinding, current, time.Now().UTC())
 			if !decision.Allowed {
 				return app.ErrNewsCurrentPolicyDenied
@@ -1079,7 +1079,7 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	}
 	_, _, tamperedPolicyErr := repository.GetEvidenceContentWithCurrentAuthorization(
 		ctx, revokedBinding, revokedObservation, secondVersion.Version, time.Now().UTC(),
-		func(context.Context, domain.CurrentAuthorizationPolicySet, _ domain.Observation) error { return nil },
+		func(_ context.Context, _ domain.CurrentAuthorizationPolicySet, _ domain.Observation) error { return nil },
 	)
 	if _, err := db.ExecContext(ctx, `UPDATE news_policy_versions SET payload_hash = ?
 		WHERE policy_type = ? AND policy_ref = ? AND policy_version = ?`,
@@ -1098,7 +1098,7 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	}
 	_, _, missingPointerErr := repository.GetEvidenceContentWithCurrentAuthorization(
 		ctx, revokedBinding, revokedObservation, secondVersion.Version, time.Now().UTC(),
-		func(context.Context, domain.CurrentAuthorizationPolicySet, _ domain.Observation) error { return nil },
+		func(_ context.Context, _ domain.CurrentAuthorizationPolicySet, _ domain.Observation) error { return nil },
 	)
 	if _, err := db.ExecContext(ctx, `INSERT INTO news_current_policy_versions
 		(policy_type, policy_ref, policy_version, updated_at) VALUES (?, ?, ?, ?)`,
@@ -1115,7 +1115,7 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	invalidResourceBinding.ResourceRef = "news-evidence-wrong-resource"
 	if _, _, err := repository.GetEvidenceContentWithCurrentAuthorization(
 		ctx, invalidResourceBinding, revokedObservation, secondVersion.Version, time.Now().UTC(),
-		func(context.Context, domain.CurrentAuthorizationPolicySet, _ domain.Observation) error { return nil },
+		func(_ context.Context, _ domain.CurrentAuthorizationPolicySet, _ domain.Observation) error { return nil },
 	); !errors.Is(err, app.ErrInvalidEvidenceQuery) {
 		t.Fatalf("mismatched resource binding error = %v, want invalid evidence query", err)
 	}
@@ -1124,7 +1124,7 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	cancelCtx, cancelRead := context.WithCancel(ctx)
 	_, _, canceledReadErr := repository.GetEvidenceContentWithCurrentAuthorization(
 		cancelCtx, revokedBinding, revokedObservation, secondVersion.Version, time.Now().UTC(),
-		func(context.Context, domain.CurrentAuthorizationPolicySet, _ domain.Observation) error {
+		func(_ context.Context, _ domain.CurrentAuthorizationPolicySet, _ domain.Observation) error {
 			cancelRead()
 			return nil
 		},
