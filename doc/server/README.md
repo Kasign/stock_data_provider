@@ -1313,7 +1313,7 @@ Lifecycle.Stop 原实现通过 stopped 标记保证重复调用幂等，但并�
 - 将预检改为一次只读读取 `platform_schema_migrations` 全部 `namespace/version/status`，并要求数据库 namespace 集合与当前 Registry 完全一致；每个 namespace 内仍要求版本集合完全一致且全部为 `applied`。
 - 不执行 DDL、不修改迁移历史、不删除旧记录，也不改变 Platform Migration Runner 的职责。发现未知 namespace 时明确拒绝启动，交由运维确认数据库与当前代码版本是否匹配。
 - 新增纯逻辑测试覆盖完整集合、未知 namespace、缺失 namespace、已注册 namespace 内未知版本；数据库读写行为仍需由后续 MariaDB 集成验收覆盖。
-- 首次独立 CI 在 gofmt 门禁发现新增测试文件格式不符合规范，包级单测、Race、Vet 因门禁失败而未执行；已将 namespace 集合测试拆分为独立测试文件进行格式修正，后续以新 SHA 重新执行完整 Server Workflow。
+- 首次独立 CI Run `43138224549` 在 gofmt 门禁发现新增测试文件格式不符合规范，包级单测、Race、Vet 因门禁失败而未执行；已将 namespace 集合测试拆分为独立测试文件并修正格式。修正后 Run `43138604293`（SHA `d95aeb90a8f6a2d51a7c245524bc39a2577f3fbe`）成功，Server gofmt、包级单测、Race、Vet 全部通过。
 
 
 ### 12.56 SRV-006 HTTP 强制关闭后的活动连接排空（2026-11-12）
@@ -1322,4 +1322,4 @@ Lifecycle.Stop 原实现通过 stopped 标记保证重复调用幂等，但并�
 - 在 Server HTTP 生命周期组件内增加活动连接跟踪，串联原有 ConnState 回调；Shutdown 超时后强制关闭连接，仍等待活动连接进入 Idle/Closed，再允许 Lifecycle 继续释放共享资源。未改变正常优雅关闭路径和 Readiness draining 顺序。
 - 增加回归测试：Handler 阻塞且 Shutdown 超时时，Listener 关闭后 Stop 仍不得返回；只有 Handler 退出后 Stop 才返回，并保留超时错误。
 - 该安全约束意味着 Handler 必须遵守 Request Context 取消约定；若 Handler 在连接关闭后仍永久阻塞，Server 会继续等待而不会提前关闭共享资源。当前没有 WebSocket/自定义 Hijacker 业务入口；未来若引入 Hijacked 长连接，必须单独纳入生命周期跟踪。
-- 本批次代码与测试已提交；当前 SHA 的 Server 独立 CI 结果待 Workflow 执行。
+- Server 独立 Workflow Run `43139331264`（SHA `ca1d96383af368105746c8072b62e0db65a328ac`）成功：Server gofmt、包级单测、Race、Vet 全部通过。该结果不替代真实长连接/故障注入环境验收。
