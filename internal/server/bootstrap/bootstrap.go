@@ -273,6 +273,7 @@ func newMigrationRegistry() (*servermigration.Registry, error) {
 		migrations []platformstorage.Migration
 	}{
 		{namespace: "news", migrations: newsstorage.Migrations()},
+		{namespace: platformsecurity.OwnerCredentialMigrationNamespace, migrations: platformsecurity.OwnerCredentialMigrations()},
 		{namespace: researchstorage.MigrationNamespace, migrations: researchstorage.Migrations()},
 		{namespace: researchflowstorage.MigrationNamespace, migrations: researchflowstorage.Migrations()},
 		{namespace: "notification", migrations: notificationstorage.Migrations()},

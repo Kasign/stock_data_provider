@@ -1389,10 +1389,12 @@ Lifecycle.Stop 原实现通过 stopped 标记保证重复调用幂等，但并�
 - Bootstrap 通过 `OpenLegacyAnalysisResources` 创建 Platform DB/Redis/HTTP Client，并同时创建兼容旧 Analysis 的 `mysqlredis.Store`；共享资源由 Server 关闭。
 - 实际业务实例仍为旧 `service.NewRunnerWithMarketDataStores`、旧 `taskqueue.Queue`、旧 `httpapi.NewWithTasks`；当前 HTTP 路由仍全部指向旧 Analysis Handler。
 - Lifecycle 当前注册旧 Analysis Worker 和 HTTP Server；尚未注册 News、Research、Researchflow、Quant、LLM、Notification 的业务 Worker/Service。
-- Migration Registry 已注册 News、Research、Researchflow、Notification 四个 namespace；Quant/LLM 没有模块 Migration 贡献项，不创建空 namespace。
+- Migration Registry 已注册 Platform Owner Credential（`platform.security`）、News、Research、Researchflow、Notification 五个 namespace；Quant/LLM 没有模块 Migration 贡献项，不创建空 namespace。
 - Diagnostics Service 当前只传入共享资源和 Migration Registry，没有传入模块 Check 分组；Readiness 主要反映 DB/Redis 和 Migration Schema 状态，不代表新业务模块已就绪。
 
 #### 12.61.2 模块公开能力与生产装配缺口
+
+补充：Platform 自有 Owner Credential Migration 由 Server 显式注册，不能遗漏；具体修正记录见 12.62 节。
 
 | 模块 | 当前代码中已存在的能力 | Server 生产装配仍缺少的条件 | 当前判断 |
 |---|---|---|---|
@@ -1449,3 +1451,15 @@ Server Bootstrap
 4. SRV-008 先等待 Outbox/Inbox Relay 所有权契约冻结；SRV-007、SRV-006 的真实 MariaDB/容器验收等待可用运行环境。
 5. 不在 Server 分支修改模块私有实现。模块缺口回对应模块分支或契约 Owner；Server 只负责公开 Port 的消费、依赖注入、路由、共享资源和生命周期。
 6. 本轮没有新增业务代码或假接口；INT-A 审查完成后，SRV-004 仍保持阻塞。当前没有证据支持直接启动新业务模块生产装配。
+
+
+### 12.62 SRV-005 Platform Owner Credential Migration 注册补齐（2026-11-12）
+
+- 本轮以 Server 分支 HEAD `bd6a08e91657773f6e42bf2795eee451d72ed808` 为基线；Integration HEAD 保持 `9f12f7ebfdb2a04106a126934d46d1fc216823ff`，不在 Integration 写入。
+- 对照已冻结的 PLAT-CTR-003 和项目决策记录，确认 Platform 已提供 `security.OwnerCredentialMigrationNamespace` 与 `security.OwnerCredentialMigrations()`，但 Root Server 的 Migration Registry 只注册 News、Research、Researchflow、Notification，遗漏了 Platform 自有的 `platform.security` namespace。
+- 该遗漏会导致 Server 即使完成登录/Session 业务接入，也无法通过统一 Migration 流程创建 `platform_owner_credentials` 表；CredentialStore 的构造不会自动建表，登录初始化/认证读取将失败。
+- 在 Server Registry 中直接注册 Platform 公共 Migration，继续由 Platform 所有 SQL 定义；Server 不复制 SQL、不修改 Platform，也不创建空 namespace。
+- 更新 Bootstrap Registry 单测，要求命名空间集合精确包含 `platform.security`，并保持确定性排序。
+- 本批次只修改 Server Bootstrap、对应测试和本文档；没有接入登录 Handler、Session Middleware 或伪造认证实现。
+- 后续 SRV-005 A2 仍需完成一次性初始密码 Secret、Argon2id 参数基准与显式配置、Session/CSRF/Origin/Host Middleware、登录限流和审计 Writer 装配；按 PLAT-CTR-003 与项目决策记录实施。
+- 本次代码变更的 CI 结果以本提交对应的 Server Workflow 为准；未完成真实 MariaDB Migration/登录 E2E 前，不标记 Server A2 或部署 A3 通过。
