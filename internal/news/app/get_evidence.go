@@ -34,11 +34,11 @@ type EvidenceAtomicContentRepository interface {
 // GetEvidence 组合单版本 PIT、最新授权快照、当前授权复核和内容级别裁剪。
 // 在授权通过前，不构造任何可向跨模块返回的内容 DTO。
 type GetEvidence struct {
-	repository EvidencePITRepository
+	repository    EvidencePITRepository
 	atomicContent EvidenceAtomicContentRepository
 	snapshots     AuthorizationSnapshotRepository
-	authorizer EvidenceReadAuthorizer
-	now        func() time.Time
+	authorizer    EvidenceReadAuthorizer
+	now           func() time.Time
 }
 
 // NewGetEvidence 创建单条 Evidence 查询 Facade。
