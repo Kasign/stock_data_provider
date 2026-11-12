@@ -965,12 +965,13 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	lockEndpointVersion := "news-it-source-ingest-endpoint-v1"
 	endpointRetention := time.Hour
 	endpointPayload, err := json.Marshal(domain.EndpointPolicy{
-		Status: domain.AuthorizationApproved,
+		Status:               domain.AuthorizationApproved,
 		AllowedAccessMethods: []domain.AccessMethod{domain.AccessRSS},
-		AllowedPurposes: []domain.Purpose{domain.PurposeInternalPersonalResearch},
-		AllowedContentKinds: []domain.ContentKind{domain.ContentMetadata},
-		AllowedStorageModes: []domain.StorageMode{domain.StoragePersistentMetadata},
-		MaxRetention: &endpointRetention, EvidenceRef: "news-it-endpoint-ingest-evidence",
+		AllowedPurposes:      []domain.Purpose{domain.PurposeInternalPersonalResearch},
+		AllowedContentKinds:  []domain.ContentKind{domain.ContentMetadata},
+		AllowedStorageModes:  []domain.StorageMode{domain.StoragePersistentMetadata},
+		MaxRetention:         &endpointRetention,
+		EvidenceRef:          "news-it-endpoint-ingest-evidence",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -981,14 +982,14 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	lockProviderRef := "news-it-source-ingest-provider-output"
 	lockProviderVersion := "news-it-source-ingest-provider-v1"
 	providerPayload, err := json.Marshal(domain.ProviderOutputPolicy{
-		Status: domain.AuthorizationApproved,
-		AllowedPurposes: []domain.Purpose{domain.PurposeInternalPersonalResearch},
-		AllowedContentKinds: []domain.ContentKind{domain.ContentMetadata},
-		AllowRequestProcessing: true,
-		MaxRequestRetention: time.Hour,
-		AllowedStorageModes: []domain.StorageMode{domain.StoragePersistentMetadata},
+		Status:                  domain.AuthorizationApproved,
+		AllowedPurposes:         []domain.Purpose{domain.PurposeInternalPersonalResearch},
+		AllowedContentKinds:     []domain.ContentKind{domain.ContentMetadata},
+		AllowRequestProcessing:  true,
+		MaxRequestRetention:     time.Hour,
+		AllowedStorageModes:     []domain.StorageMode{domain.StoragePersistentMetadata},
 		MaxPersistenceRetention: time.Hour,
-		EvidenceRef: "news-it-provider-output-ingest-evidence",
+		EvidenceRef:             "news-it-provider-output-ingest-evidence",
 	})
 	if err != nil {
 		t.Fatal(err)
