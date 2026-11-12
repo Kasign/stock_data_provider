@@ -95,13 +95,13 @@ type AuthorizedRecord struct {
 
 // AccessAuditEvent 只记录授权读取元数据，不包含结果 Payload 或受限内容。
 type AccessAuditEvent struct {
-	SubjectRef      string
-	ResourceRef     string
-	PurposeCode     string
-	Decision        string
-	ReasonCode      string
+	SubjectRef       string
+	ResourceRef      string
+	PurposeCode      string
+	Decision         string
+	ReasonCode       string
 	AuthorizationRef string
-	OccurredAt      time.Time
+	OccurredAt       time.Time
 }
 
 // AccessAuditor 持久化每次已识别主体的结果读取决策；写入失败时 Application 必须拒绝释放结果。
