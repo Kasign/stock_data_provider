@@ -26,8 +26,8 @@ func NewFanoutDispatcher(
 	config FanoutDispatcherConfig,
 ) (*FanoutDispatcher, error) {
 	if workItems == nil || subs == nil || factory == nil || plans == nil || clock == nil ||
-		config.PageSize < 1 || config.PageSize > 200 || config.LeaseDuration <= 0 ||
-		config.Retry.MaxAttempts < 1 || config.Retry.BaseDelay <= 0 ||
+		config.PageSize < 1 || config.PageSize > 200 || config.LeaseDuration < time.Microsecond ||
+		config.Retry.MaxAttempts < 1 || config.Retry.BaseDelay < time.Microsecond ||
 		config.Retry.MaxDelay < config.Retry.BaseDelay {
 		return nil, ErrFanoutConfigurationInvalid
 	}
@@ -100,7 +100,9 @@ func (d *FanoutDispatcher) RunOnce(ctx context.Context, workerID string) (Fanout
 		if err := ctx.Err(); err != nil {
 			return d.retryOrFail(ctx, claim, report, err)
 		}
-		if subscription.SubscriptionID <= nextCursor {
+		if subscription.SubscriptionID <= nextCursor ||
+			subscription.EventType != claim.Event.EventType ||
+			subscription.Status != domain.SubscriptionActive {
 			return d.retryOrFail(ctx, claim, report, domain.ErrInvalidFanoutWorkItem)
 		}
 		decision, buildErr := d.factory.Build(ctx, claim.Event, subscription)
@@ -108,6 +110,9 @@ func (d *FanoutDispatcher) RunOnce(ctx context.Context, workerID string) (Fanout
 			return d.retryOrFail(ctx, claim, report, buildErr)
 		}
 		if decision.Matched {
+			if !fanoutPlanMatchesEventAndSubscription(decision.Plan, claim.Event, subscription) {
+				return d.retryOrFail(ctx, claim, report, domain.ErrInvalidDeliveryPlan)
+			}
 			_, duplicate, writeErr := d.plans.CreateOrGet(ctx, decision.Plan)
 			if writeErr != nil {
 				return d.retryOrFail(ctx, claim, report, writeErr)
@@ -128,12 +133,32 @@ func (d *FanoutDispatcher) RunOnce(ctx context.Context, workerID string) (Fanout
 	return report, nil
 }
 
+func fanoutPlanMatchesEventAndSubscription(
+	plan domain.DeliveryPlan,
+	event domain.EventEnvelope,
+	subscription domain.Subscription,
+) bool {
+	return plan.SourceModule == event.SourceModule &&
+		plan.EventID == event.EventID &&
+		plan.PayloadFingerprint == event.PayloadFingerprint &&
+		plan.SubscriptionID == subscription.SubscriptionID &&
+		plan.SubscriptionVersion == subscription.Version
+}
+
 func (d *FanoutDispatcher) retryOrFail(
 	ctx context.Context,
 	claim FanoutClaim,
 	report FanoutRunReport,
 	cause error,
 ) (FanoutRunReport, error) {
+	// 提交结果不确定时不得再用当前 Claim 写入 Retry/Fail；丢弃租约，
+	// 等租约过期后重新读取持久状态。DeliveryPlan 的唯一键保证安全重放。
+	if errors.Is(cause, ErrPersistenceOutcomeUnknown) {
+		return report, cause
+	}
+	if ctx != nil && ctx.Err() != nil {
+		return report, ctx.Err()
+	}
 	now := d.clock.Now()
 	if now.IsZero() || now.Location() != time.UTC {
 		return report, ErrFanoutConfigurationInvalid
@@ -142,7 +167,8 @@ func (d *FanoutDispatcher) retryOrFail(
 	retryable := true
 	if errors.Is(cause, domain.ErrInvalidDeliveryPlan) ||
 		errors.Is(cause, domain.ErrDeliveryPlanConflict) ||
-		errors.Is(cause, domain.ErrInvalidFanoutWorkItem) {
+		errors.Is(cause, domain.ErrInvalidFanoutWorkItem) ||
+		errors.Is(cause, domain.ErrInvalidSubscription) {
 		retryable = false
 		reasonCode = "notification.fanout.contract_violation"
 	}
