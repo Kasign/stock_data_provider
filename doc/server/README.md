@@ -1631,3 +1631,10 @@ Server Bootstrap
 - 该步骤复用 Platform 已有集成测试，不复制 Migration 算法、不修改 Platform 实现，也不改变生产配置。
 - SIGTERM 生命周期仍由 Server Bootstrap 子进程测试验证；本步骤不宣称已完成真实容器编排下的完整 Bootstrap SIGTERM 验收。
 - Migration checksum 只读预检仍受 Platform 缺少公开只读校验 API 限制；本次不在 Server 重复实现。
+
+### 12.80 SRV-007 Server Migration Registry 真实 MariaDB 组合验收（2026-11-12）
+
+- 在 Server migration 包新增受 `SERVER_RELAY_TEST_MYSQL_DSN` 控制的 MariaDB 集成测试，复用 Server 独立 CI 已启动的 MariaDB 服务。
+- 测试通过真实 `database/sql` 连接执行 Server `Registry.RunWithReport`，检查 namespace 结果报告、Platform Migration Runner 写入历史，以及 `ValidateApplied` 对已应用版本的只读校验；最后对迁移创建的表执行真实读写。
+- 测试使用唯一 namespace/table，并清理测试表及对应历史记录，不与 Relay 或 Platform Storage 的测试数据冲突。
+- 该测试验证 Server Registry 到 Platform Runner 的组合调用，不验证 checksum 只读预检；后者仍需要 Platform 提供公开只读校验能力。
