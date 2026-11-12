@@ -158,9 +158,7 @@ func (s *DeliveryExecutionService) Execute(
 			previous.AttemptNo != i+1 || previous.FinishedAt == nil || previous.Outcome == nil {
 			return output, ErrLeaseRecoveryHistory
 		}
-		if i == 0 {
-			firstAttemptAt = previous.StartedAt
-		} else {
+		if i > 0 {
 			prior := history[i-1]
 			if previous.FencingToken <= prior.FencingToken ||
 				previous.StartedAt.Before(*prior.FinishedAt) {
