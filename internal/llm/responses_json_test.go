@@ -348,17 +348,15 @@ func TestParseResponsesUsageDetailsAreRangeChecked(t *testing.T) {
 			if err != nil || got.Usage == nil {
 				t.Fatalf("usage details should be preserved with diagnostics: %+v err=%v", got, err)
 			}
-			for _, want := range tt.want {
-				found := false
-				for _, diagnostic := range got.Usage.Diagnostics {
-					if diagnostic == want {
-						found = true
-						break
-					}
+			found := false
+			for _, diagnostic := range got.Usage.Diagnostics {
+				if diagnostic == tt.want {
+					found = true
+					break
 				}
-				if !found {
-					t.Fatalf("expected diagnostic %q, got %v", want, got.Usage.Diagnostics)
-				}
+			}
+			if !found {
+				t.Fatalf("expected diagnostic %q, got %v", tt.want, got.Usage.Diagnostics)
 			}
 		})
 	}

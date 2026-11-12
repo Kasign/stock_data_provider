@@ -90,7 +90,7 @@ func TestParseResponsesSSESequencePolicies(t *testing.T) {
 		}
 		lines = append(lines,
 			"event: response.completed",
-			"data: {\"type\":\"response.completed\""+terminalSequence+",\"response\":{\"id\":\"resp-seq\",\"object\":\"response\",\"status\":\"completed\",\"output\":[]}}",
+			"data: {\"type\":\"response.completed\""+terminalSequence+",\"response\":{\"id\":\"resp-seq\",\"object\":\"response\",\"status\":\"completed\",\"output\":[{\"id\":\"msg-seq\",\"type\":\"message\",\"content\":[{\"type\":\"output_text\",\"text\":\"xx\"}]}]}}",
 			"",
 		)
 		return []byte(strings.Join(lines, "\n"))

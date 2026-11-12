@@ -90,7 +90,7 @@ func TestBuildDecisionForRuleSetRejectsVersionMismatch(t *testing.T) {
 	}
 }
 
-func TestRuleSetRejectsDuplicateAndNonBlockRequiredRules(t *testing.T) {
+func TestRuleSetRejectsDuplicateAndRuleSetsWithoutRequiredBlock(t *testing.T) {
 	tests := []RuleSet{
 		{Version: "1.0.0", Rules: []RuleDefinition{{Code: "A", Severity: SeverityBlock}, {Code: "A", Severity: SeverityBlock}}},
 		{Version: "1.0.0", Rules: []RuleDefinition{{Code: "A", Severity: SeverityWarn, Required: true}}},
@@ -103,6 +103,29 @@ func TestRuleSetRejectsDuplicateAndNonBlockRequiredRules(t *testing.T) {
 		if err := set.Validate(); !errors.Is(err, ErrInvalidRuleSet) {
 			t.Errorf("case %d: error = %v, want ErrInvalidRuleSet", i, err)
 		}
+	}
+}
+
+func TestRuleSetAllowsRequiredNonBlockRulesWhenBlockGateExists(t *testing.T) {
+	set := RuleSet{
+		Version: "risk-1",
+		Rules: []RuleDefinition{
+			{Code: "HARD_GATE", Severity: SeverityBlock, Required: true},
+			{Code: "REQUIRED_WARNING", Severity: SeverityWarn, Required: true},
+		},
+	}
+	if err := set.Validate(); err != nil {
+		t.Fatalf("Validate() rejected a required warning alongside a hard gate: %v", err)
+	}
+	decision, err := BuildDecisionForRuleSet(set, decisionInput(set.Version, []Reason{
+		{Code: "HARD_GATE", Severity: SeverityBlock, Status: ReasonNotTriggered, SafeMessage: "硬门禁未触发", EvidenceRefs: []string{}},
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if decision.Status != DecisionPass || len(decision.Reasons) != 2 ||
+		decision.Reasons[1].Severity != SeverityWarn || decision.Reasons[1].Status != ReasonUnknown {
+		t.Fatalf("missing required warning must remain a warning diagnostic: %+v", decision)
 	}
 }
 

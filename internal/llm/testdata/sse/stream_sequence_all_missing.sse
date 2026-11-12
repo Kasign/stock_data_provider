@@ -5,5 +5,5 @@ event: response.output_text.delta
 data: {"type":"response.output_text.delta","delta":"b"}
 
 event: response.completed
-data: {"type":"response.completed","response":{"id":"resp-no-seq","object":"response","status":"completed","output":[]}}
+data: {"type":"response.completed","response":{"id":"resp-no-seq","object":"response","status":"completed","output":[{"id":"msg-no-seq","type":"message","content":[{"type":"output_text","text":"ab"}]}]}}
 

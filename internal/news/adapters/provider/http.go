@@ -17,6 +17,9 @@ import (
 	"example.com/stock-analysis-flow/internal/news/domain"
 )
 
+// maxProviderResponseBytes bounds successful Provider payloads before JSON decoding.
+const maxProviderResponseBytes int64 = 8 << 20
+
 type config struct {
 	endpoint string
 	apiKey   string
@@ -75,13 +78,7 @@ func (c config) do(ctx context.Context, method, target string, headers map[strin
 	}
 	defer resp.Body.Close()
 
-	raw, err := io.ReadAll(resp.Body)
-	if err != nil {
-		if isProviderTimeout(err) {
-			return nil, &app.ProviderError{Code: app.ProviderErrorTimeout, Retryable: true}
-		}
-		return nil, &app.ProviderError{Code: app.ProviderErrorTransportFailed, Retryable: isRetryableProviderTransport(err)}
-	}
+	// 非成功响应只依据状态码分类，不读取上游错误正文，避免错误响应造成无界内存消耗。
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		switch resp.StatusCode {
 		case http.StatusUnauthorized, http.StatusForbidden:
@@ -96,6 +93,21 @@ func (c config) do(ctx context.Context, method, target string, headers map[strin
 			}
 			return nil, &app.ProviderError{Code: app.ProviderErrorBusinessRejected}
 		}
+	}
+
+	if resp.ContentLength > maxProviderResponseBytes {
+		return nil, &app.ProviderError{Code: app.ProviderErrorResponseInvalid}
+	}
+	// Content-Length 可能缺失或不可信；多读一个字节以识别实际超限。
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxProviderResponseBytes+1))
+	if err != nil {
+		if isProviderTimeout(err) {
+			return nil, &app.ProviderError{Code: app.ProviderErrorTimeout, Retryable: true}
+		}
+		return nil, &app.ProviderError{Code: app.ProviderErrorTransportFailed, Retryable: isRetryableProviderTransport(err)}
+	}
+	if int64(len(raw)) > maxProviderResponseBytes {
+		return nil, &app.ProviderError{Code: app.ProviderErrorResponseInvalid}
 	}
 	return raw, nil
 }

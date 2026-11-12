@@ -62,6 +62,76 @@ func TestModelRequestAndCapabilityValidationUseInjectedClock(t *testing.T) {
 	}
 }
 
+func TestModelRequestRequiresUTCOffsetTimestamps(t *testing.T) {
+	now := time.Date(2026, 11, 11, 10, 0, 0, 0, time.UTC)
+	request := ModelRequest{
+		ProviderID: "p1", RequestID: "req-1", PurposeCode: "research.summary",
+		Model: "m1", InputText: "input", MaxOutputTokens: 128,
+		DeadlineAt: now.Add(time.Minute), CorrelationID: "run-1", SystemAsOf: now,
+	}
+	if err := request.ValidateAt(now); err != nil {
+		t.Fatalf("canonical UTC timestamps should be accepted: %v", err)
+	}
+
+	zeroOffsetZone := time.FixedZone("UTC+0", 0)
+	request.DeadlineAt = now.In(zeroOffsetZone).Add(time.Minute)
+	request.SystemAsOf = now.In(zeroOffsetZone)
+	if err := request.ValidateAt(now); err != nil {
+		t.Fatalf("zero-offset timestamps that serialize with Z should be accepted: %v", err)
+	}
+	if got := request.SystemAsOf.Format(time.RFC3339Nano); !strings.HasSuffix(got, "Z") {
+		t.Fatalf("zero-offset RFC3339Nano timestamp must end in Z, got %q", got)
+	}
+
+	nonUTCZone := time.FixedZone("UTC+8", 8*60*60)
+	request.DeadlineAt = now.In(nonUTCZone).Add(time.Minute)
+	if err := request.ValidateAt(now); err == nil {
+		t.Fatal("deadline_at with a non-zero UTC offset must be rejected")
+	}
+
+	request.DeadlineAt = now.Add(time.Minute)
+	request.SystemAsOf = now.In(nonUTCZone)
+	if err := request.ValidateAt(now); err == nil {
+		t.Fatal("system_as_of with a non-zero UTC offset must be rejected")
+	}
+}
+
+func TestCapabilityEvidenceRequiresUTCOffsetTimestamps(t *testing.T) {
+	config := testProviderConfig()
+	now := time.Date(2026, 11, 11, 10, 0, 0, 0, time.UTC)
+	zeroOffsetZone := time.FixedZone("UTC+0", 0)
+	verifiedAt := now.Add(-time.Minute).In(zeroOffsetZone)
+	validUntil := now.Add(time.Minute).In(zeroOffsetZone)
+	state := CapabilityState{
+		ProviderID: config.ProviderID, ModelID: config.DefaultModel,
+		Protocol: config.Protocol, GatewayVersion: "gateway-v1",
+		VerifiedAt: &verifiedAt, ValidUntil: &validUntil,
+		VerificationMethod: "automated_e2e", EvidenceRef: "test:evidence",
+		MaxOutputTokensLimit: 1024,
+		Values:               map[Capability]CapabilityStatus{CapabilityResponsesJSON: CapabilitySupported},
+	}
+	if !state.SupportsAt(CapabilityResponsesJSON, now) {
+		t.Fatal("zero-offset capability timestamps that serialize with Z should be supported")
+	}
+	if err := config.ValidateCapabilityStateAt(state, now); err != nil {
+		t.Fatalf("zero-offset capability timestamps should pass provider validation: %v", err)
+	}
+
+	nonUTCZone := time.FixedZone("UTC+8", 8*60*60)
+	verifiedAtNonUTC := verifiedAt.In(nonUTCZone)
+	state.VerifiedAt = &verifiedAtNonUTC
+	if state.SupportsAt(CapabilityResponsesJSON, now) {
+		t.Fatal("verified_at with a non-zero UTC offset must not enable capability")
+	}
+
+	state.VerifiedAt = &verifiedAt
+	validUntilNonUTC := validUntil.In(nonUTCZone)
+	state.ValidUntil = &validUntilNonUTC
+	if state.SupportsAt(CapabilityResponsesJSON, now) {
+		t.Fatal("valid_until with a non-zero UTC offset must not enable capability")
+	}
+}
+
 func TestProviderConfigValidate(t *testing.T) {
 	c := testProviderConfig()
 	if err := c.Validate(); err != nil {

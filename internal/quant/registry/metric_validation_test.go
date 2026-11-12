@@ -61,6 +61,35 @@ func TestRegistryValidateMetricSupportsDecimalStringAndInteger(t *testing.T) {
 	}
 }
 
+func TestRegistryValidateMetricEnforcesSampleCountRequiredness(t *testing.T) {
+	registry := New()
+	entry := validEntry("required_sample_metric", "1.0.0")
+	entry.SampleCount.RequiredInMetric = true
+	if err := registry.Register(entry, true); err != nil {
+		t.Fatal(err)
+	}
+
+	missing := json.RawMessage(`{"metric_code":"required_sample_metric","value":0.25,"unit":"ratio","period":"20d","system_as_of":"2026-11-09T01:00:00Z","quality_status":"valid","metric_status":"available","calculation_version":"1.0.0","lower_bound":null,"upper_bound":null}`)
+	if err := registry.ValidateMetric("required_sample_metric", "1.0.0", "1.0.0", missing); !errors.Is(err, ErrInvalidMetricResult) {
+		t.Fatalf("missing required sample_count accepted: %v", err)
+	}
+
+	present := json.RawMessage(`{"metric_code":"required_sample_metric","value":0.25,"unit":"ratio","period":"20d","system_as_of":"2026-11-09T01:00:00Z","quality_status":"valid","metric_status":"available","calculation_version":"1.0.0","sample_count":0,"lower_bound":null,"upper_bound":null}`)
+	if err := registry.ValidateMetric("required_sample_metric", "1.0.0", "1.0.0", present); err != nil {
+		t.Fatalf("explicit zero sample_count rejected: %v", err)
+	}
+
+	explicitNull := json.RawMessage(`{"metric_code":"required_sample_metric","value":null,"unit":"ratio","period":"20d","system_as_of":"2026-11-09T01:00:00Z","quality_status":"valid","metric_status":"insufficient_sample","calculation_version":"1.0.0","sample_count":null,"lower_bound":null,"upper_bound":null}`)
+	if err := registry.ValidateMetric("required_sample_metric", "1.0.0", "1.0.0", explicitNull); err != nil {
+		t.Fatalf("explicit null sample_count should remain distinct from missing: %v", err)
+	}
+
+	negative := json.RawMessage(`{"metric_code":"required_sample_metric","value":0.25,"unit":"ratio","period":"20d","system_as_of":"2026-11-09T01:00:00Z","quality_status":"valid","metric_status":"available","calculation_version":"1.0.0","sample_count":-1,"lower_bound":null,"upper_bound":null}`)
+	if err := registry.ValidateMetric("required_sample_metric", "1.0.0", "1.0.0", negative); !errors.Is(err, ErrInvalidMetricResult) {
+		t.Fatalf("negative sample_count accepted: %v", err)
+	}
+}
+
 func TestRegistryValidateMetricAcceptsUnavailableNullValue(t *testing.T) {
 	registry := New()
 	entry := validEntry("sample_metric", "1.0.0")

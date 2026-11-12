@@ -210,7 +210,13 @@ func (s *DeliveryExecutionService) Execute(
 		return output, err
 	}
 
-	sendCtx, cancelSend := context.WithDeadline(ctx, attemptDeadline)
+	// attemptDeadline 使用注入时钟的绝对时间；Context 使用真实时钟，因此只传递
+	// 从 Attempt 开始时刻计算出的剩余预算，避免虚拟日期被误判为已过期。
+	sendTimeout := attemptDeadline.Sub(startedAt)
+	if sendTimeout <= 0 {
+		return output, ErrRetryNotApplicable
+	}
+	sendCtx, cancelSend := context.WithTimeout(ctx, sendTimeout)
 	result, sendErr := preflight.Channel.Send(sendCtx, request)
 	cancelSend()
 	output.AttemptID = attemptID

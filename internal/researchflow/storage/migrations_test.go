@@ -10,8 +10,8 @@ func TestMigrationsAreExplicitAndVersioned(t *testing.T) {
 		t.Fatalf("MigrationNamespace = %q, want researchflow", MigrationNamespace)
 	}
 	migrations := Migrations()
-	if len(migrations) != 3 || migrations[0].Version != 1 || migrations[1].Version != 2 || migrations[2].Version != 3 {
-		t.Fatalf("expected ordered migrations v1, v2 and v3, got %+v", migrations)
+	if len(migrations) != 4 || migrations[0].Version != 1 || migrations[1].Version != 2 || migrations[2].Version != 3 || migrations[3].Version != 4 {
+		t.Fatalf("expected ordered migrations v1, v2, v3 and v4, got %+v", migrations)
 	}
 	migration := migrations[0]
 	if migration.Description == "" || len(migration.Statements) != 6 {
@@ -43,6 +43,13 @@ func TestMigrationsAreExplicitAndVersioned(t *testing.T) {
 		if !strings.Contains(templateDDL, fragment) {
 			t.Errorf("Template Registry migration is missing %q", fragment)
 		}
+	}
+
+	capacityMigration := migrations[3]
+	if capacityMigration.Description == "" || len(capacityMigration.Statements) != 2 ||
+		!strings.Contains(capacityMigration.Statements[0], "CREATE TABLE researchflow_capacity_guard") ||
+		!strings.Contains(capacityMigration.Statements[1], "VALUES (1)") {
+		t.Fatalf("global capacity guard migration is incomplete: %+v", capacityMigration)
 	}
 
 	joined := strings.Join(migration.Statements, "\n")

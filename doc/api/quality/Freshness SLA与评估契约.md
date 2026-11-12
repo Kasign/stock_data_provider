@@ -1,8 +1,8 @@
 # Freshness SLA 与评估契约
 
-> 状态说明：第 6、8 节及第 9 节中的“尚未接入/尚未执行”属于早期实施阶段的历史记录。Freshness Evaluator、策略注册表、Probe freshness 检查映射和 Quote 证券级停复牌上下文已在后续章节记录实现；当前策略覆盖范围以第 16 节为准。本文不再将已完成的 Evaluator/Probe 接入列为待开发。
+> 状态说明：第 6、8、9 节中的“尚未接入/尚未执行”属于早期历史记录。Freshness Evaluator、策略注册表、Probe freshness 检查映射和 Quote 证券级停复牌上下文已实现；第 16 节是 2026-11-03 的策略覆盖快照，第 2026-11-09 P0-65 条目补充了非实时数据域边界，第 17 节记录 2026-11-12 的状态保留修复。不要把早期快照当作当前待开发清单。
 
-更新日期：2026-11-03
+更新日期：2026-11-12
 
 ## 1. 目标与边界
 
@@ -16,7 +16,7 @@ Freshness 描述数据相对于其更新预期是否及时，是独立于 `Quali
 
 ## 2. 核心实现
 
-核心纯函数位于 `services/market-data/internal/freshness`：
+核心纯函数位于 `internal/marketdata/freshness`：
 
 - `Policy`：数据域 SLA、允许的市场阶段、是否要求交易日历、停牌时是否不适用。
 - `Evidence`：源端数据时间及其语义；采集时间仅用于诊断展示。
@@ -209,9 +209,9 @@ Service 层新增 fake Provider 集成测试，验证 `applyFreshnessProbeResult
 本轮 Service 层停复牌回归测试首次 CI 仅因测试表格字段对齐未通过 gofmt，未进入 market-data 编译和单测；已按 gofmt diff 修正，后续以新 SHA 的完整工作流验收。
 
 
-## 16. 当前代码核对状态（2026-11-03）
+## 16. 历史代码核对快照（2026-11-03）
 
-以当前 HEAD `de028801` 为准：Freshness Evaluator、策略注册表、Probe `freshness` 检查映射及 Quote 证券级停复牌上下文解析均已有代码和回归测试。当前注册策略覆盖 Quote、Index、Market Breadth、Sector、Fund Flow；DailyBar、Fundamentals、Valuations 尚未发现独立 SLA 策略注册。
+以 2026-11-03 的历史 HEAD `de028801` 为准：Freshness Evaluator、策略注册表、Probe `freshness` 检查映射及 Quote 证券级停复牌上下文解析均已有代码和回归测试。当前注册策略覆盖 Quote、Index、Market Breadth、Sector、Fund Flow；DailyBar、Fundamentals、Valuations 尚未发现独立 SLA 策略注册。
 
 因此本阶段不再建设 Evaluator 或 Probe 接口，只补充缺失数据域的策略和证据测试。DailyBar 应依据最近已完成交易日、交易日历和 Provider 发布时点判断；Fundamentals 应依据公告时间、available_at 与报告期语义；Valuations 应区分快照时间和报告日期。缺少可信源端时间或必要市场上下文时保持 `unknown`/`skipped`，不得使用 `fetched_at` 代替 `provider_time`，也不得复用 Quote 的秒级 SLA。
 
@@ -223,3 +223,11 @@ Service 层新增 fake Provider 集成测试，验证 `applyFreshnessProbeResult
 - Fundamentals 的 `PublicationDate` 只有日期精度，`AvailableAt` 仅在源端确实提供精确可用时刻时使用；报告期末、抓取时间和系统观察时间不能替代披露时刻。
 - Valuations 的 `ProviderTimestamp` 是响应内五项指标的最新有效时间，不能证明每个指标的更新时间；同花顺当前没有独立 `ProviderReportDate`。在字段级时间证据和业务 SLA 未确定前保持 unknown/not-comparable。
 - 新增回归测试，防止 DailyBar/Fundamentals/Valuations 被误映射到通用持续时间策略。策略实现仍需真实数据域 SLA 和源端时间证据，不以任意阈值“补齐”。
+
+
+## 17. 2026-11-12 Provider Probe 不可执行状态保留
+
+- Freshness 后处理仅评估已返回数据的 Provider/capability；对应探测项为 `not_configured`、`not_supported`、`skipped` 或失败时，不进入 Freshness 二次评估，不覆盖原始诊断状态与错误原因。
+- 独立检查结果没有对应 Provider 探测项时，保留既有兼容行为，允许按其自身时间证据执行 Freshness 评估。
+- DailyBar、Fundamentals、Valuations 未配置 Freshness 策略时仍返回 `skipped/freshness_policy_not_configured`；这表示策略未配置，不代表 Provider 未配置或请求失败。
+- Data 专项验收证据：代码 SHA `f919b4f8568181706053639032cb38fc75a131fb`，Go Test Suite Run `43143964508` 中 Market Data gofmt、单测、Race、Vet，以及 MariaDB Migration/PIT、DailyBar 回退、PIT 修订回退、Probe HTTP + MariaDB 端到端均通过。

@@ -42,7 +42,7 @@ func deadlineRaceDB(t *testing.T) (context.Context, context.CancelFunc, *sql.DB,
 		cancel()
 		t.Fatal(err)
 	}
-	repo, err := NewMySQLRunRepository(db)
+	repo, err := NewMySQLRunRepository(db, CapacityLimits{MaxQueuedRuns: 1000, MaxWorkers: 64})
 	if err != nil {
 		db.Close()
 		cancel()

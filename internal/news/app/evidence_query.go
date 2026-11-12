@@ -38,6 +38,13 @@ const (
 
 type EvidenceQualityStatus string
 
+type EvidenceRelationStatus string
+
+const (
+	EvidenceRelationNotProvided EvidenceRelationStatus = "not_provided"
+	EvidenceRelationProvided    EvidenceRelationStatus = "provided"
+)
+
 const (
 	EvidenceQualityValid    EvidenceQualityStatus = "valid"
 	EvidenceQualityDegraded EvidenceQualityStatus = "degraded"
@@ -122,6 +129,7 @@ type ResearchEvidenceRecord struct {
 	AuthorizationRef      string                        `json:"authorization_ref"`
 	AuthorizationStatus   string                        `json:"authorization_status"`
 	SystemAsOf            time.Time                     `json:"system_as_of"`
+	RelationStatus        EvidenceRelationStatus        `json:"relation_status"`
 	RelationRefs          []string                      `json:"relation_refs"`
 }
 
