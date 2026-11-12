@@ -115,3 +115,56 @@
 - News 当前实现属于授权预检，不是原子授权读取。
 - 本文只冻结 News 对跨模块机制的需求，不自行冻结模式 A/B；选择权归策略 Owner 与 Platform/Server 集成决策。
 - 该项保持 P1 阻断：未完成一致性实现及 RACE-01～07 适用测试前，不得启用生产受限内容披露。
+
+
+## 8. 一致性模式决策（2026-11-12）
+
+### 8.1 选择模式 A：News MariaDB 共享事务与策略版本行锁
+
+本模块选择模式 A，不采用跨服务许可租约。依据：
+
+1. GOV-CTR-006 与 NEWS-CTR-002 将 Provider Output、Source、Endpoint 策略组合决策责任归 News；Research/Researchflow 只消费授权结果，不拥有这些来源策略。
+2. News Evidence 内容、Observation、Version 已由 News Repository 写入 MariaDB；Server 组合根向 News Repository 注入共享 `*sql.DB`。策略权威数据应归入同一 News 数据库事务资源，不引入第二套策略服务。
+3. 当前 Static Catalog 只是启动期输入快照，不能继续作为读取时权威状态。News 必须将不可变策略版本和当前版本指针持久化，并让策略发布/撤销与 Evidence 读取竞争同一数据库行锁。
+
+该决策不代表模式 A 已实现或当前内容读取已安全开放。
+
+### 8.2 目标数据结构
+
+新增两类 News 自有表：
+
+- `news_policy_versions`：不可变策略版本，复合主键为 `(policy_type, policy_ref, policy_version)`；保存规范化策略 JSON、payload hash、创建时间。允许的 policy_type 仅为 `source`、`endpoint`、`provider_output`。
+- `news_current_policy_versions`：每个 `(policy_type, policy_ref)` 唯一一行，指向当前不可变版本；复合外键保证目标版本存在。策略撤销也必须发布新的 revoked 版本并切换指针，不允许原地修改历史版本。
+
+策略发布事务必须先写入不可变版本，再更新当前指针；两个动作在同一事务提交。旧版本不得 UPDATE/DELETE。
+
+### 8.3 读取事务与线性化点
+
+最终正文读取必须在一个 MariaDB 事务中完成：
+
+1. 根据 Binding 的完整 PolicySnapshot 构造所有适用策略 tuple，并按 `(policy_type, policy_ref)` 字典序排序。
+2. 对每个 `news_current_policy_versions` 当前指针行执行 `SELECT ... FOR UPDATE`；任何行缺失、版本不匹配、payload hash 错误或策略集合不完整均拒绝。
+3. 在该事务中读取对应不可变策略版本，校验状态、有效期、用途和内容级别；Source、Endpoint、Provider Output 的实际适用集合必须与 Binding 完全一致。
+4. 在同一事务中按 `news_id + version_id` 读取正文，并复核版本 fingerprint、所属 Observation 和 `system_as_of`。
+5. 成功提交事务后才允许将正文交给 Application 组装 DTO；事务失败或提交失败必须丢弃正文。
+
+读取线性化点为持有完整策略行锁的读取事务提交。撤销/收窄事务更新同一当前指针行：读取先取得锁时，撤销只能在读取提交后生效；撤销先提交时，后续读取只能看到新版本。两者由 InnoDB 行锁排序，不依赖进程内锁或 advisory lock。
+
+### 8.4 代码实施顺序
+
+1. V9 Migration：不可变策略版本表、当前版本指针表及复合外键/索引。
+2. Domain：按策略类型校验 payload 与 ref/version 绑定，定义完整策略组合的只读快照。
+3. Storage：策略发布事务和读取事务的共享锁协议；所有锁按固定 tuple 顺序取得。
+4. Application：将 GOV-CTR-006 Fingerprint Verifier 与授权前元数据定位接入；最终内容读取只能调用原子授权读取 Port，不再在普通 Resolver 预检通过后直接读取正文。
+5. MariaDB 并发集成：撤销先提交、读取先锁定、策略版本替换、缺失策略行、payload 篡改、资源版本不匹配和提交失败。
+6. RACE-01～07 对照 NEWS-CTR-002 逐项记录实际读取副作用和返回内容。
+
+JCS 仍只调用项目公共 GOV-CTR-006 Runtime Verifier；本模式不复制 JCS 算法。公共 Verifier 未可用时，授权读取仍 fail closed。
+
+### 8.5 实施边界
+
+- 本决策只在 News 自有 MariaDB 与 News 内容库共享同一个 `*sql.DB` 时成立；Server 不得为 News 策略另建连接池。
+- Static Catalog 只可作为启动导入/配置校验输入，不再作为生产读取时当前策略权威来源。
+- 不新增 News HTTP 管理 API；策略发布/撤销先作为 News 内部 Application Port，由 Server 组合根或受控运维入口注入。
+- 本决策不放宽任何来源授权，不自动启用当前 disabled/skipped 的来源，不授权真实网络采集。
+- 在 V9、策略发布/撤销事务、原子正文读取、公共 Verifier 注入及 RACE 测试全部通过前，受限内容披露保持关闭。
