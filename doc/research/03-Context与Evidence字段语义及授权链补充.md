@@ -19,6 +19,8 @@ Context 的 system_as_of 必须与所属 Researchflow Run 完全一致；不得�
 
 Research 定义分区结构、质量和语义校验；Researchflow 决定本次 Run 选取哪些分区、顺序、Token Budget 和裁剪策略。裁剪必须保留来源引用、时间、反证、unknown 和风险限制。required 分区缺失时 Context 不得标 valid；每个 omitted section 必须有稳定 reason_code。
 
+**Context 受控读取：** 按 DEC-PLAT-002-024，Context 元数据本身属于受控 Research 资源。Application 的 ContextRef 只定位不可变版本，不构成读取许可。GetContext 必须单独接收 Server/可信入口注入的 caller_ref 与受控 purpose，并由 Research Owner ContextAuthorizer 对精确版本的 scope、subject_refs 和当前可见范围进行复核；未装配授权器、拒绝、unknown 或依赖不可用均不得返回 Context。此门禁与 section_refs 中各 Data/News/Quant 来源内容的授权是两层独立检查：Context 可见不代表其来源正文可读，来源 Owner 仍须在读取内容时重新授权。当前冻结决议尚未定义 Context 专用 resource_ref 拼接语法和策略注册表结构，不在 Research 中擅自增加。
+
 ## 3. Evidence 字段和认识论约束
 
 Evidence DTO 的规范字段如下。RSC-CTR-001 的 Schema `$id` 标识 1.0.0 版本，JSON payload 不包含 schema_version。旧文档中的 source_type、observed_at、as_of、content_hash 仅为早期概念草稿，不作为跨模块 JSON 字段：
