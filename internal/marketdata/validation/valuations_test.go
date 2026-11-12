@@ -61,7 +61,6 @@ func TestValidateValuationSnapshotNil(t *testing.T) {
 	}
 }
 
-
 func TestValidateValuationSnapshotRejectsUnknownSourceVersion(t *testing.T) {
 	snapshot := validValuationSnapshot()
 	snapshot.SourceVersion = "unknown"

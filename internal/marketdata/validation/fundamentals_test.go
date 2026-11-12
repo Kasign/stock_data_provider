@@ -79,7 +79,6 @@ func TestValidateFundamentalsSnapshotReportsNilSnapshot(t *testing.T) {
 	}
 }
 
-
 func TestValidateFundamentalsSnapshotRejectsUnknownSourceVersion(t *testing.T) {
 	snapshot := validFundamentalsFixture()
 	snapshot.SourceVersion = "unknown"
