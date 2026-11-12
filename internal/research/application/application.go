@@ -240,6 +240,7 @@ type CreateContextCommand struct {
 	OmittedSections  []ContextOmittedSection
 	BuilderVersion   string
 }
+
 // ContextRef only identifies an immutable Context version; it is not an access grant.
 type ContextRef struct {
 	ContextID      string
