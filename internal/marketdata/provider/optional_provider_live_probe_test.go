@@ -698,19 +698,19 @@ func TestLiveHithinkDailyBarsBackwardRaw(t *testing.T) {
 		t.Fatalf("decode Hithink backward-adjusted response envelope: %v", err)
 	}
 	var data struct {
-		Timestamp *int64                     `json:"timestamp"`
+		Timestamp *int64                       `json:"timestamp"`
 		Item      []map[string]json.RawMessage `json:"item"`
 	}
 	if err := json.Unmarshal(dataRaw, &data); err != nil {
 		t.Fatalf("decode Hithink backward-adjusted rows: %v", err)
 	}
 	evidence := map[string]any{
-		"provider": "hithink",
-		"endpoint": "/api/a-share/prices/historical",
-		"symbol": symbol,
-		"adjust": "backward",
-		"start": "2026-10-13",
-		"end": "2026-11-12",
+		"provider":  "hithink",
+		"endpoint":  "/api/a-share/prices/historical",
+		"symbol":    symbol,
+		"adjust":    "backward",
+		"start":     "2026-10-13",
+		"end":       "2026-11-12",
 		"row_count": len(data.Item),
 		"timestamp": data.Timestamp,
 	}
