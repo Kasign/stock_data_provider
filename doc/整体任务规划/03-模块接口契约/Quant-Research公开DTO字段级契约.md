@@ -84,7 +84,7 @@ completed 不代表 valid；消费方必须同时检查 result_status 和 qualit
 | quality_status | 是 | valid/degraded/invalid/unknown | 质量 |
 | metric_status | 是 | available/insufficient_data/insufficient_sample/not_applicable/unknown | 数值可用性 |
 | calculation_version | 是 | string | 公式/实现版本 |
-| sample_count | 条件必需 | integer/null | 统计/概率类指标必需 |
+| sample_count | 条件必需 | integer/null | 字段是否必需由 Registry Entry.sample_count.required_in_metric 决定；非负整数表示实际参与计算的有效样本数，null 仅表示无法可靠确定计数，不代表 0 |
 | lower_bound | 是 | string/number/null（与该 metric_code 的 value 类型一致） | 无区间时显式 null；有区间时与 upper_bound 同时非 null |
 | upper_bound | 是 | string/number/null（与该 metric_code 的 value 类型一致） | 无区间时显式 null；有区间时与 lower_bound 同时非 null |
 
@@ -94,7 +94,24 @@ completed 不代表 valid；消费方必须同时检查 result_status 和 qualit
 - `metric_status=available` 时 value 必须非 null；`insufficient_data/insufficient_sample/not_applicable/unknown` 时 value 必须为 null。
 - `quality_status=invalid/unknown` 时 metric_status 不得为 available；degraded 是否允许 available 必须由该 metric 的 quality_policy 明确声明。
 - lower_bound/upper_bound 必须同时为 null 或同时非 null；非 null 时类型与 value 一致且 lower_bound <= value <= upper_bound。value 为 null 时区间必须均为 null。
-- sample_count 为非负整数；Registry 声明 sample_count 是否必需及其统计口径，不得用输入行数冒充有效样本数。
+- sample_count 为非负整数或按字段规则允许的 null；Registry Entry.sample_count.required_in_metric 决定字段是否必需，unit 与 counting_rule 定义计数单位和精确口径。计数必须是实际参与计算的有效样本，不得用输入数组长度/Provider 返回行数冒充；0 表示真实计数为零，null 不得代替零。
+
+### 2.3.1 Metric Registry Entry 的 sample_count 元数据
+
+QNT-CTR-001 Registry Entry Schema 2.0.0 为每个 Entry 增加必需的 `sample_count` 元数据对象：
+
+| 元数据字段 | 必需 | 类型 | 语义 |
+|---|---|---|---|
+| required_in_metric | 是 | boolean | 是否要求输出 QuantMetric 必须包含 sample_count 字段 |
+| unit | 是 | 非空 string | 样本计数单位，例如 bar、return；不得只写“输入行” |
+| counting_rule | 是 | 非空 string | 明确被计数对象、纳入/排除条件，以及输入观测转换为派生样本时的精确计数规则 |
+
+规则：
+- 每个 Registry Entry 都必须提供该对象；required_in_metric=false 只表示 QuantMetric 可省略 sample_count，不代表 unit/counting_rule 可以缺失。
+- sample_count 统计实际参与计算的有效观测。具体过滤和计数转换以对应 Entry.counting_rule 为准，消费者不得自行推断。
+- sample_count 的非负整数、null、缺失语义遵循 QNT-CTR-004 与 GOV-CTR-001；字段缺失、null 和 0 是不同状态。
+- 首批 Factor 的计数映射按 DEC-PLAT-002-047：momentum_20d 为 21 个有效 close Bar；momentum_60d 为 61 个有效 close Bar；volatility_20d 为 20 个 simple Return（由 21 个有效 close 产生）。这只是已裁决的计数口径，不代表对应生产 Registry Entry 或真实 Data 输入已验收。
+- Registry Entry Schema 1.0.0 保留为历史不可变版本；新 Entry 使用 2.0.0。Go Registry 类型/Validator 与 Metric 输出 Schema/Golden 同步属于 L2 实现符合性。
 
 ### 2.4 TrendResult
 
