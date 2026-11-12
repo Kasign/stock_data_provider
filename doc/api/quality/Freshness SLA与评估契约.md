@@ -2,7 +2,7 @@
 
 > 状态说明：第 6、8 节及第 9 节中的“尚未接入/尚未执行”属于早期实施阶段的历史记录。Freshness Evaluator、策略注册表、Probe freshness 检查映射和 Quote 证券级停复牌上下文已在后续章节记录实现；当前策略覆盖范围以第 16 节为准。本文不再将已完成的 Evaluator/Probe 接入列为待开发。
 
-更新日期：2026-11-03
+更新日期：2026-11-12
 
 ## 1. 目标与边界
 
@@ -223,3 +223,11 @@ Service 层新增 fake Provider 集成测试，验证 `applyFreshnessProbeResult
 - Fundamentals 的 `PublicationDate` 只有日期精度，`AvailableAt` 仅在源端确实提供精确可用时刻时使用；报告期末、抓取时间和系统观察时间不能替代披露时刻。
 - Valuations 的 `ProviderTimestamp` 是响应内五项指标的最新有效时间，不能证明每个指标的更新时间；同花顺当前没有独立 `ProviderReportDate`。在字段级时间证据和业务 SLA 未确定前保持 unknown/not-comparable。
 - 新增回归测试，防止 DailyBar/Fundamentals/Valuations 被误映射到通用持续时间策略。策略实现仍需真实数据域 SLA 和源端时间证据，不以任意阈值“补齐”。
+
+
+## 17. 2026-11-12 Provider Probe 不可执行状态保留
+
+- Freshness 后处理仅评估已返回数据的 Provider/capability；对应探测项为 `not_configured`、`not_supported`、`skipped` 或失败时，不进入 Freshness 二次评估，不覆盖原始诊断状态与错误原因。
+- 独立检查结果没有对应 Provider 探测项时，保留既有兼容行为，允许按其自身时间证据执行 Freshness 评估。
+- DailyBar、Fundamentals、Valuations 未配置 Freshness 策略时仍返回 `skipped/freshness_policy_not_configured`；这表示策略未配置，不代表 Provider 未配置或请求失败。
+- Data 专项验收证据：代码 SHA `f919b4f8568181706053639032cb38fc75a131fb`，Go Test Suite Run `43143964508` 中 Market Data gofmt、单测、Race、Vet，以及 MariaDB Migration/PIT、DailyBar 回退、PIT 修订回退、Probe HTTP + MariaDB 端到端均通过。

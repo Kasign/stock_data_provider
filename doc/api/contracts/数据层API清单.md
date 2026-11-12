@@ -1,10 +1,10 @@
 # 数据层 API 接口清单与 WebUI 接入映射
 
-更新日期：2026-11-11
+更新日期：2026-11-12
 适用分支：feat/full-go-data-providers-api-switch
 核对依据：当前分支 internal/marketdata/httpapi/openapi.yaml、internal/marketdata/httpapi/server.go。本文接口清单描述 Data HTTP Adapter 的远程兼容接口；字段类型、完整响应 Schema 和状态码以该 OpenAPI 为准。
 
-说明：接口已注册/已封装不代表 Provider 已启用或真实数据已验收。Provider 代码能力、默认开关和运行验收状态见 [Python Provider → Go 迁移矩阵](./接口规范/PYTHON_PROVIDER_GO_MIGRATION_MATRIX.md) 与 [数据源真实环境验收记录](./接口规范/DATA_SOURCE_RUNTIME_ACCEPTANCE_LOG.md)。
+说明：接口已注册/已封装不代表 Provider 已启用或真实数据已验收。Provider 代码能力、默认开关和运行验收状态见 [Python Provider → Go 迁移矩阵](./provider-migration/PYTHON_PROVIDER_GO_MIGRATION_MATRIX.md) 与 [数据源真实环境验收记录](./provider-migration/DATA_SOURCE_RUNTIME_ACCEPTANCE_LOG.md)。
 
 ## 1. 接口边界
 
@@ -28,7 +28,7 @@
 | GET | /api/v1/bars/{symbol}/daily | 单只股票日 K（支持日期范围、复权及 as_of 历史观察时点） | 路径参数 symbol；start、end、limit（1–2000）、adjustment、as_of | getDailyBars | 是 |
 | GET | /api/v1/bundles/{symbol} | 单只股票行情与日 K 统一快照 | 路径参数 symbol；lookback_days（20–2000）、adjustment、as_of | getMarketBundle | 是 |
 | GET | /api/v1/data-sources/diagnostics | Provider 业务请求熔断诊断（进程内真实请求观测） | 无额外参数；详见 OpenAPI | getDataSourceDiagnostics | 是 |
-| POST | /api/v1/data-sources/probe | 主动探测已启用 Provider 的各项能力 | scope（all/core）、checks（connectivity/contract/quality/freshness/cross_provider/storage）、capabilities、daily_bar_adjustments（仅 daily_bars；none/forward_adjusted/backward_adjusted，最多 3 个且不重复；省略默认 none）、daily_bar_start_date/daily_bar_end_date（仅 daily_bars；必须成对；首尾包含；Asia/Shanghai；最多 31 个自然日；结束日期不得晚于今日；省略保持近期 5 条）、markets（最多 1 个）、symbols（最多 1 个标准代码）、timeout_seconds（1–30，默认 12）；响应回显 requested_daily_bar_start_date/end_date；请求体可选 | runDataSourceProbe | 是 |
+| POST | /api/v1/data-sources/probe | 主动探测已启用 Provider 的各项能力 | scope（all/core）、checks（connectivity/contract/quality/freshness/cross_provider/storage）、capabilities、daily_bar_adjustments（仅 daily_bars；none/forward_adjusted/backward_adjusted，最多 3 个且不重复；省略默认 none）、daily_bar_start_date/daily_bar_end_date（仅 daily_bars；必须成对；首尾包含；Asia/Shanghai；最多 31 个自然日；结束日期不得晚于今日；省略保持近期 5 条）、markets（最多 1 个）、symbols（最多 1 个标准代码）、timeout_seconds（1–30，默认 12）；响应回显 requested_daily_bar_start_date/end_date；请求体可选；历史批次持久化失败返回 503 STORAGE_UNAVAILABLE | runDataSourceProbe | 是 |
 | GET | /api/v1/data-sources/probe/history | 最近已持久化的主动探测批次 | limit（1–100，默认 20）；依赖 MariaDB，存储不可用返回 503 | getDataSourceProbeHistory | 是 |
 | GET | /api/v1/data-sources | Provider 注册信息与静态能力声明 | 无额外参数；详见 OpenAPI | getDataSources | 是 |
 | GET | /api/v1/stocks/search | A 股证券名称/代码搜索 | q 必填（1–64 字符）；limit（1–50，默认 10） | searchStocks | 是 |
@@ -118,11 +118,11 @@
 
 ## 8. 权威接口定义
 
-- 行情服务 OpenAPI：services/market-data/openapi.yaml（代码内权威协议，不迁移到文档目录）。
-- 分析任务 OpenAPI：doc/api/分析任务.openapi.yaml。
-- Python 桥接 OpenAPI：doc/api/Python桥接.openapi.yaml。
+- 行情服务 OpenAPI：internal/marketdata/httpapi/openapi.yaml（代码内权威协议，不迁移到文档目录）。
+- 分析任务 OpenAPI：doc/api/contracts/分析任务.openapi.yaml。
+- Python 桥接 OpenAPI：doc/api/contracts/Python桥接.openapi.yaml。
 - WebUI 实际请求实现：web/src/api.js。
-- 行情服务路由注册：services/market-data/internal/httpapi/server.go。
+- 行情服务路由注册：internal/marketdata/httpapi/server.go。
 
 
 ### 板块排行字段补充说明（2026-11-03）

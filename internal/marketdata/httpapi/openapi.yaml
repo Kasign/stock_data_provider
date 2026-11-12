@@ -1412,8 +1412,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '500':
-          description: "诊断结果持久化失败"
+        '503':
+          description: "诊断批次历史无法持久化，当前探测结果未成功保存"
           content:
             application/json:
               schema:
