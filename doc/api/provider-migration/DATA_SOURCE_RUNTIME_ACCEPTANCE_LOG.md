@@ -1285,7 +1285,7 @@ Go suite 覆盖根模块、go-core、market-data 的格式/测试/race/vet、Mar
 
 ## 71. 2026-11-12：BaoStock tradestatus/isST 探针运行取消
 
-- 探针提交：\`9fb34c717d130ad326be988110b341125be8e510\`；后续格式整理提交：\`1d24e84c53b948d8c29389c997c2687ba2a4856e\`。
-- GitHub Actions Go Test Suite Run \`43218703390\` 已取消；没有取得该测试的真实 Provider 输出，未证明 BaoStock \`tradestatus\` 或 \`isST\` 在样本日期上的实际值。
+- 探针提交：`9fb34c717d130ad326be988110b341125be8e510`；后续格式整理提交：`1d24e84c53b948d8c29389c997c2687ba2a4856e`。
+- GitHub Actions Go Test Suite Run `43218703390` 已取消；没有取得该测试的真实 Provider 输出，未证明 BaoStock `tradestatus` 或 `isST` 在样本日期上的实际值。
 - 取消前的探针实现只记录原始字段和计数，没有对官方停牌交易日、复牌日及盘中临停日的字段值作断言；不能把该次运行当作字段语义验收。
-- 后续已在 P0-89 补齐源码断言，待 integration 运行。此记录状态为 \`cancelled / not_executed\`，不是 pass、degraded 或 provider failure；没有原始数据可用于质量判定。
+- 后续已在 P0-89 补齐源码断言，待 integration 运行。此记录状态为 `cancelled / not_executed`，不是 pass、degraded 或 provider failure；没有原始数据可用于质量判定。
