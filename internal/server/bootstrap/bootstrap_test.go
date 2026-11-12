@@ -106,8 +106,8 @@ func TestNewDiagnosticsServiceRegistersNewsParserAndProviderConfigChecks(t *test
 	}
 
 	for id, want := range map[string]platformdiagnostics.Status{
-		"news.provider.tavily.configuration": platformdiagnostics.StatusSkipped,
-		"news.provider.brave.configuration":  platformdiagnostics.StatusSkipped,
+		"news.provider.tavily.configuration":  platformdiagnostics.StatusSkipped,
+		"news.provider.brave.configuration":   platformdiagnostics.StatusSkipped,
 		"news.provider.searxng.configuration": platformdiagnostics.StatusSkipped,
 	} {
 		if status, exists := got[id]; !exists {
