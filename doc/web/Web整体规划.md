@@ -58,14 +58,14 @@ Web 负责交互、请求编排、状态展示和有限的浏览器本地工作�
 
 ## 5. 当前 Web 基线
 
-按当前 HEAD 的 Git Tree 与文件内容核对：
+按本轮代码验收基线的 Git Tree 与文件内容核对：
 - web/src 下有 51 个 JavaScript 文件。
 - web/src/app.js 为 5,574 行，直接静态 import 47 个模块。
 - CSS 当前为 web/styles.css 和 web/screening-local-batch.css 两个文件。
 - 已有市场总览、个股行情、全市场分页、自选股、个股研究、选股、分析任务/Run Flow、本地研究笔记/报告归档、数据中心、告警草稿、通知偏好和设置中心。
 - 当前选股是已加载分页上的本地筛选，不是全市场策略扫描。
 - 最近任务是有限数量的浏览器任务引用，不是服务端完整历史。
-- 当前 HEAD `82460cad6668c34ff6fde103efc28815ee21a02d` 的 WebUI Checks（43160974526）与 Chromium Browser Smoke（43160974640，attempt 2）均通过。
+- 本轮代码验收 SHA `82460cad6668c34ff6fde103efc28815ee21a02d` 的 WebUI Checks（43160974526）与 Chromium Browser Smoke（43160974640，attempt 2）均通过。
 
 ## 6. W0-W5 执行路线
 
@@ -98,7 +98,7 @@ Web 负责交互、请求编排、状态展示和有限的浏览器本地工作�
 - [x] W1-D：当前 SHA `82460cad6668c34ff6fde103efc28815ee21a02d` 的浏览器前进/后退、活动导航状态及 Reduced Motion 断言通过；Browser Smoke（43160974640，attempt 2）。
 - [x] W1-C：研究中心明确结构化 Evidence 等 Research 服务端能力待接入；区分行情资料、本地笔记和 Run 结果副本；核对任务引用、跟踪本地数据及数据中心/设置职责边界。
 - [x] W1-D：W1-C 提交 SHA `7f1b8510d349b9d166b6efceddee874ddb7703c0` 的 WebUI Checks（43160148859）和 Chromium Browser Smoke（43160149003）通过，覆盖 320/375/600/768/900/1280/1600px。
-- [ ] W1-D：补齐浏览器前进/后退专项；Reduced Motion 测试上下文已启用 `reduce`，仍需核验具体动效行为。
+- [x] W1-D：真实 API 与 Mock 的验收边界已记录在 API_CONTRACT 和提测清单；本轮 Mock 浏览器测试不作为真实服务端联调证据。
 
 ### 后续执行门禁
 

@@ -34,7 +34,7 @@ W1-C 提交 `7f1b8510d349b9d166b6efceddee874ddb7703c0` 的 WebUI Checks（431601
 | Notification | 订阅、渠道、发送尝试、重试和最终投递状态 | 仅 UI 显示“已发送”但无服务端投递证据 |
 | 本地数据 | localStorage 范围、跨标签冲突、写入回读、失败恢复 | 将本地记录显示为服务端历史或跨设备同步 |
 
-## 0.2 当前 HEAD 待验收项
+## 0.2 本轮代码验收证据
 
 - [x] W1-D 提交 SHA `82460cad6668c34ff6fde103efc28815ee21a02d` 对应 WebUI Checks（43160974526）通过。
 - [x] W1-D 提交 SHA `82460cad6668c34ff6fde103efc28815ee21a02d` 对应 Chromium Browser Smoke（43160974640，attempt 2）通过。
