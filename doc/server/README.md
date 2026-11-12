@@ -1492,3 +1492,13 @@ Server Bootstrap
 - 本阶段不把服务接入 Bootstrap，不定义登录/退出/密码修改 HTTP 路由或 DTO，不启用浏览器认证。Argon2id Hasher 由外部显式注入；没有目标部署硬件基准，不提供生产成本参数或默认值。
 - 单测覆盖成功登录签发、错误密码计数、审计失败时撤销新 Session、初始化 Secret 清零。Logout/Rotate/ChangePassword 的完整状态机测试、可信代理配置接线、持久化 Audit Writer、Bootstrap 装配和真实 MariaDB/Redis E2E 仍待后续阶段。
 - 安全边界注意：Platform SessionStore 当前只公开 `LookupAndTouch`，因此 RotateSession 在 CSRF/HTTP Middleware 完整接入前不应作为独立外部入口暴露；当前它只是一项内部生命周期能力。SessionAuthenticator 仍会在 CSRF 校验前执行 LookupAndTouch，错误 CSRF 请求可能刷新 idle TTL；不绕过 Platform Store 私有实现，后续需向 Platform 提交只读 Lookup 原语提案或在契约允许的情况下调整认证流程。
+
+
+### 12.65 SRV-005 Session 生命周期状态机测试补齐（2026-11-12）
+
+- 在既有 SessionLifecycleService 单测基础上，补齐 Logout、RotateSession、ChangePassword 的成功与失败状态转换测试。
+- Logout 验证先撤销 Session，再生成与原 Cookie 同 Name/Path 的清除 Cookie；审计失败时仍返回清除 Cookie 和错误，调用方必须发送清除 Cookie。
+- RotateSession 验证新 Token/CSRF 重新签发、旧 Token 摘要失效、created_at 与 absolute_expires_at 保持不变；审计失败时撤销新 Token，旧 Token 已轮换失效，操作按 fail-closed 处理。
+- ChangePassword 验证当前密码错误不修改 Credential；成功时通过 CredentialStore CAS 将 credential_version 递增；审计失败不回滚已经提交的密码更新，调用方必须重新读取权威 Credential 状态，不能把返回错误解释为更新未发生。
+- 测试使用内存 Fake 验证 Server Application Service 的调用顺序和状态结果，不替代 Platform Redis/MariaDB 原子性测试，也不构成真实依赖 E2E。
+- 本轮不接入 Bootstrap、HTTP 路由或 DTO；不改变 SRV-CTR-001 deferred 状态。Argon2id 生产参数、Secret/Audit Writer 可信配置、可信代理策略和真实 MariaDB/Redis E2E 仍是后续门禁。

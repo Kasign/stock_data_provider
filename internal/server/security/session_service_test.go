@@ -68,10 +68,11 @@ func (s *lifecycleTestSessions) LookupAndTouch(_ context.Context, _ string, now 
 	record.IdleExpiresAt = minTime(now.Add(idle), record.AbsoluteExpiresAt)
 	return record, nil
 }
-func (s *lifecycleTestSessions) Rotate(_ context.Context, _, newDigest string, record platformsecurity.SessionRecord, _ time.Time) error {
+func (s *lifecycleTestSessions) Rotate(_ context.Context, oldDigest, newDigest string, record platformsecurity.SessionRecord, _ time.Time) error {
 	if s.rotateErr != nil {
 		return s.rotateErr
 	}
+	s.revoked = append(s.revoked, oldDigest)
 	s.createdDigest, s.record = newDigest, record
 	return nil
 }
@@ -218,5 +219,150 @@ func TestSessionLifecycleInitializeOwnerClearsBootstrapSecret(t *testing.T) {
 		if value != 0 {
 			t.Fatal("InitializeOwner did not clear the bootstrap secret buffer")
 		}
+	}
+}
+
+
+func TestSessionLifecycleLogoutRevokesSessionAndClearsCookie(t *testing.T) {
+	service, _, sessions, _, audit := newLifecycleTestService(t, nil)
+	issue, err := service.Login(context.Background(), LoginInput{
+		Password: []byte("correct"), SourceIP: net.ParseIP("192.0.2.10"), RequestID: "req-login",
+	})
+	if err != nil {
+		t.Fatalf("Login() error = %v", err)
+	}
+	oldDigest := sessions.createdDigest
+	cookie, err := service.Logout(context.Background(), issue.Cookie.Value, "req-logout")
+	if err != nil {
+		t.Fatalf("Logout() error = %v", err)
+	}
+	if cookie == nil || cookie.Name != issue.Cookie.Name || cookie.Path != issue.Cookie.Path ||
+		cookie.Value != "" || cookie.MaxAge >= 0 {
+		t.Fatalf("Logout() returned an invalid clearing cookie: %+v", cookie)
+	}
+	if len(sessions.revoked) != 1 || sessions.revoked[0] != oldDigest {
+		t.Fatalf("Logout() did not revoke the active Session: %+v", sessions.revoked)
+	}
+	if got := audit.events[len(audit.events)-1].EventType; got != platformsecurity.AuditLogout {
+		t.Fatalf("last audit event = %q, want logout", got)
+	}
+}
+
+func TestSessionLifecycleLogoutReturnsClearingCookieWhenAuditFails(t *testing.T) {
+	service, _, sessions, _, audit := newLifecycleTestService(t, nil)
+	issue, err := service.Login(context.Background(), LoginInput{
+		Password: []byte("correct"), SourceIP: net.ParseIP("192.0.2.10"), RequestID: "req-login",
+	})
+	if err != nil {
+		t.Fatalf("Login() error = %v", err)
+	}
+	audit.err = errors.New("audit unavailable")
+	cookie, err := service.Logout(context.Background(), issue.Cookie.Value, "req-logout")
+	if err == nil || cookie == nil || cookie.Value != "" {
+		t.Fatalf("Logout() must return clearing cookie and audit error, cookie=%+v err=%v", cookie, err)
+	}
+	if len(sessions.revoked) != 1 {
+		t.Fatalf("Session was not revoked before audit: %+v", sessions.revoked)
+	}
+}
+
+func TestSessionLifecycleRotateReplacesTokenAndCSRF(t *testing.T) {
+	service, _, sessions, _, audit := newLifecycleTestService(t, nil)
+	issue, err := service.Login(context.Background(), LoginInput{
+		Password: []byte("correct"), SourceIP: net.ParseIP("192.0.2.10"), RequestID: "req-login",
+	})
+	if err != nil {
+		t.Fatalf("Login() error = %v", err)
+	}
+	oldDigest := sessions.createdDigest
+	createdAt := sessions.record.CreatedAt
+	absoluteExpiry := sessions.record.AbsoluteExpiresAt
+	oldCSRF := sessions.record.CSRFTokenDigest
+	rotated, err := service.RotateSession(context.Background(), issue.Cookie.Value, "req-rotate")
+	if err != nil {
+		t.Fatalf("RotateSession() error = %v", err)
+	}
+	if rotated.Cookie == nil || rotated.Cookie.Value == "" || rotated.Cookie.Value == issue.Cookie.Value ||
+		rotated.CSRFToken == "" || rotated.CSRFToken == issue.CSRFToken {
+		t.Fatalf("rotation did not issue fresh credentials: %+v", rotated)
+	}
+	if sessions.createdDigest == oldDigest || sessions.record.CSRFTokenDigest == oldCSRF ||
+		!sessions.record.CreatedAt.Equal(createdAt) || !sessions.record.AbsoluteExpiresAt.Equal(absoluteExpiry) {
+		t.Fatalf("rotation did not preserve Session invariants: digest=%q record=%+v", sessions.createdDigest, sessions.record)
+	}
+	if len(sessions.revoked) != 1 || sessions.revoked[0] != oldDigest {
+		t.Fatalf("old Session was not invalidated: %+v", sessions.revoked)
+	}
+	if got := audit.events[len(audit.events)-1].EventType; got != platformsecurity.AuditSessionRotated {
+		t.Fatalf("last audit event = %q, want session_rotated", got)
+	}
+}
+
+func TestSessionLifecycleRotateRevokesNewTokenWhenAuditFails(t *testing.T) {
+	service, _, sessions, _, audit := newLifecycleTestService(t, nil)
+	issue, err := service.Login(context.Background(), LoginInput{
+		Password: []byte("correct"), SourceIP: net.ParseIP("192.0.2.10"), RequestID: "req-login",
+	})
+	if err != nil {
+		t.Fatalf("Login() error = %v", err)
+	}
+	oldDigest := sessions.createdDigest
+	audit.err = errors.New("audit unavailable")
+	_, err = service.RotateSession(context.Background(), issue.Cookie.Value, "req-rotate")
+	if err == nil {
+		t.Fatal("RotateSession() succeeded without required audit persistence")
+	}
+	if sessions.createdDigest == oldDigest || len(sessions.revoked) != 2 ||
+		sessions.revoked[0] != oldDigest || sessions.revoked[1] != sessions.createdDigest {
+		t.Fatalf("rotation audit failure did not fail closed: digest=%q revoked=%+v", sessions.createdDigest, sessions.revoked)
+	}
+}
+
+func TestSessionLifecycleChangePasswordAdvancesCredentialVersion(t *testing.T) {
+	service, credentials, _, _, audit := newLifecycleTestService(t, nil)
+	currentPassword := []byte("correct")
+	newPassword := []byte("new-owner-password")
+	if err := service.ChangePassword(context.Background(), currentPassword, newPassword, "req-password"); err != nil {
+		t.Fatalf("ChangePassword() error = %v", err)
+	}
+	if credentials.credential.PasswordHash != "encoded:new-owner-password" ||
+		credentials.credential.CredentialVersion != 8 {
+		t.Fatalf("credential was not atomically advanced: %+v", credentials.credential)
+	}
+	if got := audit.events[len(audit.events)-1].EventType; got != platformsecurity.AuditPasswordChanged {
+		t.Fatalf("last audit event = %q, want password_changed", got)
+	}
+	for _, buffer := range [][]byte{currentPassword, newPassword} {
+		for _, value := range buffer {
+			if value != 0 {
+				t.Fatal("ChangePassword did not clear supplied password buffers")
+			}
+		}
+	}
+}
+
+func TestSessionLifecycleChangePasswordAuditFailureDoesNotUndoCredentialUpdate(t *testing.T) {
+	service, credentials, _, _, audit := newLifecycleTestService(t, nil)
+	audit.err = errors.New("audit unavailable")
+	err := service.ChangePassword(context.Background(), []byte("correct"), []byte("new-owner-password"), "req-password")
+	if err == nil {
+		t.Fatal("ChangePassword() must report required audit failure")
+	}
+	if credentials.credential.PasswordHash != "encoded:new-owner-password" ||
+		credentials.credential.CredentialVersion != 8 {
+		t.Fatalf("audit failure unexpectedly changed committed credential state: %+v", credentials.credential)
+	}
+}
+
+func TestSessionLifecycleChangePasswordRejectsWrongCurrentPassword(t *testing.T) {
+	service, credentials, _, _, audit := newLifecycleTestService(t, nil)
+	if err := service.ChangePassword(context.Background(), []byte("wrong"), []byte("new-owner-password"), "req-password"); err == nil {
+		t.Fatal("ChangePassword() accepted an incorrect current password")
+	}
+	if credentials.credential.PasswordHash != "encoded:correct" || credentials.credential.CredentialVersion != 7 {
+		t.Fatalf("wrong current password changed credential: %+v", credentials.credential)
+	}
+	if len(audit.events) != 1 || audit.events[0].Result != platformsecurity.AuditResultFailure {
+		t.Fatalf("wrong current password was not audited: %+v", audit.events)
 	}
 }
