@@ -579,7 +579,7 @@ func TestResponsesAdapterStreamUsesPlatformStreamAndParsesIncrementally(t *testi
 			StatusCode: http.StatusOK,
 			Header: http.Header{
 				"Content-Type": []string{"text/event-stream; charset=utf-8"},
-				"X-Request-ID": []string{"gateway-stream-1"},
+				"X-Request-Id": []string{"gateway-stream-1"},
 				"Request-Id":   []string{"upstream-stream-1"},
 			},
 			Body: io.NopCloser(strings.NewReader(sse)),

@@ -4084,7 +4084,9 @@ func (s *DataService) DailyBarsAsOf(ctx context.Context, rawSymbol, start, end s
 	}
 	bars, warnings := normalize.ValidateAndSortBars(symbol, coherent, start, end, limit)
 	if basis != model.AdjustmentNone {
-		factors, factorErr := s.AdjustmentFactorsAsOf(ctx, symbol, start, end, asOf)
+		// 因子是稀疏的公司行动事件记录；重建区间首根 K 线时也需要读取 start 之前最近一次已知因子。
+		// 空 start 只扩大事件历史读取范围，as_of 可见性仍由 Repository 与 Service 双重限制。
+		factors, factorErr := s.AdjustmentFactorsAsOf(ctx, symbol, "", end, asOf)
 		if factorErr != nil {
 			return nil, nil, fmt.Errorf("%w: cannot rebuild adjusted daily bars without point-in-time adjustment factors: %v", ErrDailyBarsAsOfNotFound, factorErr)
 		}

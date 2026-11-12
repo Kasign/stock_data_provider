@@ -59,6 +59,8 @@ test("creates a Go analysis task with the current payload and optional idempoten
     assert.equal(request.headers["Idempotency-Key"], "webui-test-1");
     assert.deepEqual(JSON.parse(request.body), payload);
     assert.equal(request.credentials, "same-origin");
+    assert.equal(Object.hasOwn(request.headers, "Authorization"), false,
+      "browser analysis requests must never carry the Owner Bearer credential");
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -83,6 +85,10 @@ test("reads task events incrementally and only sends the market API key to marke
     assert.equal(requests[2].url, "/analysis-api/api/v1/analysis/runs/run-1");
     assert.equal(Object.hasOwn(requests[0].headers, "X-API-Key"), false);
     assert.equal(Object.hasOwn(requests[2].headers, "X-API-Key"), false);
+    assert.equal(Object.hasOwn(requests[0].headers, "Authorization"), false,
+      "task event reads must not carry the Owner Bearer credential");
+    assert.equal(Object.hasOwn(requests[2].headers, "Authorization"), false,
+      "Run reads must not carry the Owner Bearer credential");
   } finally {
     globalThis.fetch = originalFetch;
   }

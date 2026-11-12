@@ -6,6 +6,7 @@
 - 阶段定位：阶段五统一验收，不以“代码已实现”替代真实数据验收。
 - 当前状态（2026-11-10，代码基线 `df6b4f24e0d5fc7e7d5de2cacb0c965ac0504d06`）：统一诊断框架、Provider 字段 Reporter、Probe Reporter 注入与历史持久化、DailyBar 跨 Provider 比较、多复权口径 Probe 参数/结果字段均已有实现；本基线继续补齐 Eastmoney 核心指数行情 Reporter，并完成 Probe Reporter 调用链静态 Review。阶段 B（复权绝对基准、AvailableAt 与真实交易边界证据）仍为 in_progress；阶段五不得因代码覆盖扩大而自动关闭。开发分支未运行构建/测试，CI 与真实 Provider/MariaDB 验收状态必须以该 SHA 对应 workflow 和专项证据为准。较早章节的待办表属于历史快照，不得作为当前任务重复执行。
 - 原则：每项结论必须绑定代码 SHA、样本范围、原始响应证据和质量判定；凭据不得进入文档或日志。
+- Data 代码验收补充（2026-11-12）：代码 SHA `f919b4f8568181706053639032cb38fc75a131fb` 的 Go Test Suite Run `43143964508` 中 Data gofmt、单测、Race、Vet 及 MariaDB/PIT、DailyBar 回退、PIT 修订回退、Probe HTTP + MariaDB 端到端均通过。该结果只关闭本轮 Data 代码门禁，不关闭阶段 B 的真实 Provider 复权基准、AvailableAt 和交易边界证据验收。
 
 
 ## 2026-11-04 当前 HEAD 回归修复记录

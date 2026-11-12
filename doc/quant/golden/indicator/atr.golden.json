@@ -26,7 +26,8 @@
     "previous_close": 10
   },
   "expected": {
-    "value": 2
+    "value": 2,
+    "sample_count": 3
   },
   "tolerance": 1e-12
 }

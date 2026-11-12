@@ -16,6 +16,7 @@
       "schema": {
         "type": "object",
         "required": ["summary"],
+        "additionalProperties": false,
         "properties": {
           "summary": {
             "type": "string"
@@ -35,7 +36,9 @@
           "symbol": {
             "type": "string"
           }
-        }
+        },
+        "required": ["symbol"],
+        "additionalProperties": false
       },
       "strict": true
     }
