@@ -541,10 +541,11 @@ len(OutcomeUnknownDeliveryIDs) = OutcomeUnknown
 1. 通过 `DeliveryConsistencySnapshotReader` 在同一数据库一致性快照中读取 Delivery、完整 Attempt 历史和 StateEvent 历史。
 2. 使用 `AssessDeliveryConsistency` 校验两类历史；结果必须为 `pass`，Delivery 必须仍为 `unknown`。fail、degrade、not_comparable 均停止，不查询渠道。
 
-一致性评估必须使用 `ValidateDeliveryAttemptHistoryForDelivery`，校验 Attempt 的 StartedAt 位于 Delivery 创建与发送截止区间内；`sent` 状态还必须与最后一条 accepted Attempt 的 `provider_message_ref` 一致，且不残留 reason/error。状态事件链末条事件的 `reason_code` 必须与 Delivery 当前快照一致。
 3. 从 Registry 按 Delivery 固定的 `channel_ref + config_version` 读取不可变 Channel 快照，并执行 Lookup。
 4. Registry 查询错误或 Context 取消立即返回，不调用状态持久化。
 5. 查询结果包装为 application 包内不可构造的 `verifiedUnknownDeliveryEvidence`，绑定 Delivery version、最后一次 Ambiguous Attempt ID 和完整 Channel 快照；只有包内收敛函数能消费该类型。
+
+一致性评估必须使用 `ValidateDeliveryAttemptHistoryForDelivery`，校验 Attempt 的 StartedAt 位于 Delivery 创建与发送截止区间内；`sent` 状态还必须与最后一条 accepted Attempt 的 `provider_message_ref` 一致，且不残留 reason/error。状态事件链末条事件的 `reason_code` 必须与 Delivery 当前快照一致。
 6. 使用读取快照中的 Delivery version 执行现有 CAS。查询期间 Delivery 被其他 Worker 更新时，CAS 冲突退出；不得把旧查询证据应用到重新读取的新版本。
 
 `AssessUnknownDelivery` 仍是接收普通 Evidence 的纯规则评估函数，可用于单元测试和规则验证，但不具备持久化能力。原先直接接收调用方 Evidence 的导出状态收敛函数已收紧为包内函数。外部调用方必须使用一致性快照服务。
