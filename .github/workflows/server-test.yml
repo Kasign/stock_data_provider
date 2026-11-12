@@ -131,7 +131,7 @@ jobs:
           # 使用独立数据库，避免与 Relay / Migration 包级集成测试共享 Schema History。
           docker run --rm --network host mariadb:11.4 \
             mariadb --protocol=tcp -h127.0.0.1 -uroot -proot \
-            -e "CREATE DATABASE \\\`$SERVER_SMOKE_DB_NAME\\\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
+            -e "CREATE DATABASE $SERVER_SMOKE_DB_NAME CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
 
           docker run -d --name "$container" \
             --add-host=host.docker.internal:host-gateway \
