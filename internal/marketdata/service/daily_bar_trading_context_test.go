@@ -50,6 +50,22 @@ func TestAssessDailyBarTradingContextDistinguishesMissingSuspendedAndPreListing(
 	}
 }
 
+func TestAssessDailyBarTradingContextDoesNotTrustListingDateWhenStatusUnknown(t *testing.T) {
+	calendar := &model.TradingCalendarSnapshot{
+		QualityStatus: model.QualityValid,
+		Items:         []model.TradingCalendarDay{{Date: "2026-10-20", IsTradingDay: true}},
+	}
+	status := dailyBarContextStatus("2026-10-20", "2026-10-21", false, model.SuspensionStatusSuspended)
+	result := assessDailyBarTradingContext(calendar, nil,
+		map[string]*model.SecurityTradingStatusSnapshot{"2026-10-20": status}, nil)
+	if result.QualityStatus != model.QualityDegraded ||
+		!hasDailyBarContextReason(result.Reasons, "daily_bar_context_listing_status_unknown:2026-10-20") ||
+		hasDailyBarContextReason(result.Reasons, "daily_bar_excluded_before_listing:2026-10-20") ||
+		hasDailyBarContextReason(result.Reasons, "daily_bar_excluded_suspended:2026-10-20") {
+		t.Fatalf("unverified listing date must not support exclusion or suspension classification: %+v", result)
+	}
+}
+
 func TestAssessDailyBarTradingContextKeepsUnknownStateNotComparable(t *testing.T) {
 	calendar := &model.TradingCalendarSnapshot{Items: []model.TradingCalendarDay{
 		{Date: "2026-10-20", IsTradingDay: true},

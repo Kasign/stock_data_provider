@@ -211,25 +211,24 @@ func assessDailyBarTradingContext(calendar *model.TradingCalendarSnapshot, bars 
 			result.Reasons = appendDailyBarContextReason(result.Reasons, "daily_bar_context_trading_day_unknown_or_conflicting:"+day.Date)
 			continue
 		}
-		if status.ListingDate != "" {
-			listingDate, parseErr := time.Parse("2006-01-02", status.ListingDate)
-			if parseErr != nil || listingDate.Format("2006-01-02") != status.ListingDate {
-				result.QualityStatus = model.QualityDegraded
-				result.Reasons = appendDailyBarContextReason(result.Reasons, "daily_bar_context_listing_date_invalid:"+day.Date)
-				continue
-			}
-			if day.Date < status.ListingDate {
-				result.Reasons = appendDailyBarContextReason(result.Reasons, "daily_bar_excluded_before_listing:"+day.Date)
-				continue
-			}
-		} else if !status.ListingStatusKnown {
+		if !status.ListingStatusKnown {
 			result.QualityStatus = model.QualityDegraded
 			result.Reasons = appendDailyBarContextReason(result.Reasons, "daily_bar_context_listing_status_unknown:"+day.Date)
 			continue
 		}
-		if !status.ListingStatusKnown {
+		if status.ListingDate == "" {
 			result.QualityStatus = model.QualityDegraded
-			result.Reasons = appendDailyBarContextReason(result.Reasons, "daily_bar_context_listing_status_unknown:"+day.Date)
+			result.Reasons = appendDailyBarContextReason(result.Reasons, "daily_bar_context_listing_date_invalid:"+day.Date)
+			continue
+		}
+		listingDate, parseErr := time.Parse("2006-01-02", status.ListingDate)
+		if parseErr != nil || listingDate.Format("2006-01-02") != status.ListingDate {
+			result.QualityStatus = model.QualityDegraded
+			result.Reasons = appendDailyBarContextReason(result.Reasons, "daily_bar_context_listing_date_invalid:"+day.Date)
+			continue
+		}
+		if day.Date < status.ListingDate {
+			result.Reasons = appendDailyBarContextReason(result.Reasons, "daily_bar_excluded_before_listing:"+day.Date)
 			continue
 		}
 		switch status.SuspensionStatus {
