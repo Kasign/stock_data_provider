@@ -1,0 +1,46 @@
+name: News live Provider and Feed probe
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_live_probe:
+        description: "确认使用已配置的真实 Provider 凭证和已授权 Feed URL 发起在线请求"
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  live-probe:
+    if: inputs.confirm_live_probe
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      NEWS_LIVE_PROBE: "1"
+      NEWS_LIVE_QUERY: ${{ vars.NEWS_LIVE_QUERY }}
+      NEWS_PROVIDER_BOCHA_ENDPOINT: ${{ vars.NEWS_PROVIDER_BOCHA_ENDPOINT }}
+      NEWS_PROVIDER_BOCHA_API_KEY: ${{ secrets.NEWS_PROVIDER_BOCHA_API_KEY }}
+      NEWS_PROVIDER_TAVILY_ENDPOINT: ${{ vars.NEWS_PROVIDER_TAVILY_ENDPOINT }}
+      NEWS_PROVIDER_TAVILY_API_KEY: ${{ secrets.NEWS_PROVIDER_TAVILY_API_KEY }}
+      NEWS_PROVIDER_BRAVE_ENDPOINT: ${{ vars.NEWS_PROVIDER_BRAVE_ENDPOINT }}
+      NEWS_PROVIDER_BRAVE_API_KEY: ${{ secrets.NEWS_PROVIDER_BRAVE_API_KEY }}
+      NEWS_PROVIDER_SEARXNG_ENDPOINT: ${{ vars.NEWS_PROVIDER_SEARXNG_ENDPOINT }}
+      NEWS_LIVE_FEED_URL: ${{ vars.NEWS_LIVE_FEED_URL }}
+      NEWS_LIVE_FEED_AUTHORIZATION_EVIDENCE: ${{ vars.NEWS_LIVE_FEED_AUTHORIZATION_EVIDENCE }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.23.x"
+          cache: true
+          cache-dependency-path: go.sum
+      - name: Download dependencies
+        run: go mod download
+      - name: Probe configured real Providers
+        run: go test ./internal/news/adapters/provider -run '^TestLiveProviderProbe$' -count=1 -v
+      - name: Probe explicitly authorized RSS/Atom Feed
+        run: go test ./internal/news/adapters/source -run '^TestLiveFeedProbe$' -count=1 -v

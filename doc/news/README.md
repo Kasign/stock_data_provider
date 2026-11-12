@@ -1,12 +1,10 @@
 # 新闻模块开发任务与验收清单
 
-> 当前验收状态（2026-11-12，基线 `ab9693a2119ec3e41d64954bb232d38d3210de9b`）：News MariaDB 11.4 集成测试此前在 Push 事件中被 `.github/workflows/go-test.yml` 的 `github.event_name != 'push'` 条件跳过。本轮已将条件限定调整为普通事件保持原行为，同时允许 `feat/research-news-ingestion` 分支 Push 执行 News MariaDB 集成任务。CI Run [43143256775](https://github.com/Kasign/stock_data_provider/actions/runs/43143256775) 中，`News MariaDB Repository and Migration integration` Job 实际启动 MariaDB 11.4，并执行 `TestNewsMariaDBRepositoryIntegration`，结果 PASS（约 0.38 秒）。这确认当前 SHA 的 News Migration/Repository 真实 MariaDB 集成测试通过；不代表 Server 生产装配或真实 Provider 网络采集已验收。该 Go test suite 的其他失败来自 Quant 格式检查和 Researchflow 未定义符号，不属于 News。
+> 当前验收状态（2026-11-12，代码基线 `eac3269ebaa625bd583f5ef3a73a139ff02c3881`）：News Provider contract tests 与 News 全模块 gofmt/测试/Race/go vet 通过（Run [43210204658](https://github.com/Kasign/stock_data_provider/actions/runs/43210204658)）；根模块 Go test suite 的所有适用 Job 通过（Run [43210204807](https://github.com/Kasign/stock_data_provider/actions/runs/43210204807)），其中 News MariaDB 11.4 Repository/Migration 集成成功。Market Data 与 Compose/Docker Job 为 skipped，不计为通过。News 已完成策略版本存储、当前策略 Resolver、Evidence 事务型授权读取、Observation 写入前策略锁定及撤销竞态验收；News Diagnostics 的 Context 取消边界修复也已纳入上述 News 专项验证。GOV-CTR-006 公共 JCS Runtime Verifier 和 Server 生产装配仍缺失，未接入时必须 fail closed；available_at 继续保持 null，真实 Provider/Feed 网络验收仍需部署环境的凭证与来源授权证据。
 
-> 当前状态（2026-11-11）：项目级契约处于 `L1_contracts_frozen`，以 `doc/contract/PLAT-002-项目级契约冻结登记簿.md` 为准。News 已有 N6 MariaDB 11.4 与 N8-04 Tombstone 集成验收证据；本轮按 DEC-PLAT-002-042 补齐 Evidence `relation_status`、UTC Z Schema 和版本观察时间映射。NEWS-CTR-001 仍未完整验收：available_at 严格 PIT、授权读取 TOCTOU、公共 JCS/可信策略注入和 Server 生产装配仍阻断。
-> 历史 CI 快照（2026-11-10）：N6 V1-V8 Migration、Repository、Observation retention 与 V7→V8 既有数据升级已通过 MariaDB 11.4 专项 CI（Run `42765765269`，基线 SHA `09e76e35`）；News 全量 gofmt/单测/Race/Vet 与 Provider 契约测试通过（Run `42765765274`）。根模块 `Test go-core` 通过，但根模块 `Test .` 因 Market Data、Notification、Quant 文件 gofmt 差异失败。NEWS-CTR-001 严格 available_at PIT、授权读取 TOCTOU、Server 生产装配、Runner 注册和在线采集仍未闭环。
-> 当前代码任务：N8-04 补充 ListEvidence 对已清理 Observation Tombstone 的 MariaDB 读取断言，代码提交 `0452bbbfc42b56661403bd49273c6e9d7046a6ea`；News 全量 CI Run `42768996986` success，MariaDB 11.4 Job Run `42768996723` success。
-> 历史记录说明：本文按日期累积的早期实施段落保留为过程记录；历史状态不代表当前状态。当前状态以本段、开发任务总览和最新 Review 报告为准。
-> 状态：本分支只维护 News 领域实现和专项文档；公共平台原语来自已合并基线，根组合根由 Server/集成 Owner 负责
+> 当前模块状态：News 自有领域代码质量门禁、Provider 固定响应契约和 MariaDB 11.4 持久化专项验收已有通过证据；生产受限内容披露仍受公共 JCS Runtime Verifier 注入和 Server 生产装配阻断；News 内部的策略指针锁定、授权复核与精确 Version 正文读取事务机制已实现。NEWS-CTR-001 的 available_at 严格 PIT 继续等待合格来源证据，不得从 published_at/fetched_at/observed_at 推导。
+> 历史记录说明：本文按日期累积的早期实施段落保留为过程记录；其中旧的未完成项、等待 CI 项和旧阻断状态不代表当前任务状态。当前状态以本段及文末“2026-11-12 当前任务边界与后续计划”为准。
+> 状态：本分支只维护 News 领域实现和专项文档；公共平台原语来自共同基线，根组合根由 Server 实施分支负责。
 
 ## 一、阶段总览
 
@@ -1090,3 +1088,35 @@
 - 现已在解析返回后、每条候选处理前、归一化时间采集后、结果封印前及返回前检查 Context。
 - 新增归一化阶段取消测试，确认取消不会返回采集结果。
 - 对应提交：`a7988ad1fb7aa9ef7635365e8215cee017c15b76`。
+
+
+## 2026-11-12 当前任务边界与后续计划
+
+### 本轮已确认的验收证据
+
+- News 专项 Run `43210204658`：`Test full News module` 与 `Test News Provider contracts` 均 success，步骤包含 News gofmt、全量单测、Race、Vet 及 Provider 契约测试。
+- 根模块 CI Run `43210204807`：News MariaDB Repository and Migration integration success；根模块 `Test go-core` 与 `Test .` 均 success。Market Data MariaDB、Compose/Docker 和 Market Data 迁移/测试 Job 为 skipped，不计为通过。
+- News Diagnostics 已补齐 Observation retention、Source Endpoint Catalog、Storage Ping/Schema Check 的依赖调用前后 Context 取消边界；Storage Ping 在依赖返回取消错误时优先传播 Context 取消，Schema Check 在已取消时不触发探测。上述代码已包含在当前 News 专项验证范围内。
+- 最近的 `eac3269` 是 Observation Retention 事务选项参数修正；本轮没有发现需要继续重复实现的同类事务参数工作。
+
+### 当前仍未关闭的事项及归属
+
+| 事项 | 当前判定 | 责任边界 / 下一步 |
+|---|---|---|
+| GOV-CTR-006 JCS Runtime Verifier | 阻断 | 由公共能力 Owner 提供唯一实现；News 只接入并验证 Golden，不复制 JCS 算法 |
+| 授权复核与精确 Version 内容读取 TOCTOU | News 内部事务机制已实现 | `evidence_authorization_read.go` 在同一 InnoDB 事务锁定策略指针、复读 Observation/Version、执行授权回调并读取正文；MariaDB 集成覆盖读取与撤销并发。剩余是公共 JCS Verifier 的真实注入和 Server 生产装配，不再重复建设事务机制 |
+| available_at 严格 PIT | 阻断但暂无可实施真实数据 | 当前已核实来源没有符合准入规则的首次公开可获取时间字段；继续保持 NULL，不新增空壳字段/表，不修改 Get/List SQL。只有取得合格来源证据后才实现证据持久化和 PIT 过滤 |
+| Provider/Source 生产装配、Migration 总注册、Diagnostics Runner、Cleaner 周期调度 | 非本分支任务 | 由 Server 组合根装配；News 提供的构造入口、Migration、Check 和 Cleaner 已存在 |
+| `risk_review` 当前策略映射 | 保持 fail-closed，待用途语义确认 | NEWS-CTR-002 允许显式 `risk_review`，但当前 SourcePolicy 的 `Purpose` 映射未实现该值；不得擅自把它等同于 `internal_business`。需先确认是否允许在显式 `risk_review` 请求下映射为 `PurposeInternalBusiness`，否则保持拒绝 |
+| 真实 Provider/Feed 网络、配额及来源授权验收 | 等待真实环境条件 | 需要可用账号凭证、实际套餐条款、逐来源授权及部署 DNS/出口证据；未满足时保持 skipped/restricted |
+| News 自有代码质量与 MariaDB 专项验证 | 已通过当前 CI | 不重复进行无差异回归；后续代码变更再按变更范围触发验证 |
+
+### 下一步执行顺序
+
+1. 不新增 News 领域功能，不为 WebUI 增加 API，也不复制 Platform/Server 能力。
+2. 跟进公共 GOV-CTR-006 Runtime Verifier 的可依赖实现；确认真实 package/API 和 Golden 后，由 Server 组合根注入并完成 News 消费者接入；News 已有事务型授权读取机制，不再重复实现。
+4. 明确 `risk_review` 与 News Domain `Purpose` 的授权映射；在确认前继续 fail-closed。
+5. 等待具备来源证据的真实数据后，再单独实现 available_at 证据模型与 Get/List 严格 PIT；不以模拟样本或推断时间验收。
+6. 有真实 Provider 凭证和授权材料后，执行受控 Live Probe；否则不把固定响应契约测试描述为在线验收。
+
+本分支当前没有可在不依赖外部 Owner、真实授权或真实来源证据的情况下继续完成的高价值生产闭环代码任务。后续若没有新的 News 专属缺陷或合格外部证据，保持代码冻结，只处理明确的 News 范围缺陷和必要文档同步。

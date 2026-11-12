@@ -388,3 +388,84 @@
 - **留待真实环境验收：** Provider 网络、配额和输出许可。
 
 本次验收只证明当前 News 自身代码和上述 CI 场景通过，不代表全仓 CI 通过，也不代表 News 已可生产上线。
+
+
+## 十二、News Diagnostics 依赖调用后的取消边界（2026-11-12）
+
+- Review 发现 Observation retention、Source endpoint Catalog、Storage Ping/Schema Check 在外部依赖返回后未再次检查 Context。若依赖忽略取消并返回成功，诊断可能在请求已取消后继续报告 healthy/degraded。
+- 已在上述依赖返回边界补充 Context 检查。
+- 新增依赖执行期间主动取消 Context 的回归测试，覆盖 retention、source catalog、storage ping 和 schema 四条路径。
+- 该修复只约束诊断执行生命周期，不改变业务质量状态、授权决策或平台 Runner 语义。
+- 对应代码提交待 CI 验收；不把新增测试视为已运行通过。
+
+
+### 十二、补充：Storage 探测的调用前取消门禁
+
+- 对照取消传播 Review 记录与实际代码时，发现 Storage Ping/Schema 虽已在依赖返回后检查 Context，但调用前门禁尚未落入最终代码。
+- 已补充调用前检查，确保 Context 已取消时不再触发数据库探测。
+- 新增回归测试验证已取消 Context 下 Ping 和 MissingSchemaTables 均不会被调用，诊断状态为 unavailable。
+
+
+## 十三、News Diagnostics Storage Context 取消边界补充（2026-11-12）
+
+- 复核 StorageChecks 时发现 Schema Check 缺少数据库探测调用前的 Context 门禁；已补充 `ctx.Err()` 检查，已取消时不调用 `MissingSchemaTables`。
+- 同时发现 Storage Ping 先处理依赖错误、后检查 Context；依赖在取消时返回 `context.Canceled` 会被错误归类为普通连接故障。现改为依赖返回后优先检查 Context，再处理 Ping 错误。
+- 回归测试直接调用 Check.Run，断言已取消 Context 返回 `context.Canceled` 且 Schema 探测调用次数为零；Ping 依赖取消并返回取消错误时也验证取消错误优先级。
+- 代码提交：`1ba83c9`、`dc8d102`、`34c9cdf`、`30e1582`。最新 SHA 的 News 专项和组合 CI 尚在执行，结果待记录。
+- 本修复只收敛 News Diagnostics 的取消语义，不改变诊断业务状态、数据库 Schema、Migration 或平台 Runner 行为。
+
+
+## 十四、2026-11-12 最新代码与 CI 状态复核
+
+- 当前文档记录的代码基线：`eac3269ebaa625bd583f5ef3a73a139ff02c3881`；最新提交修正 Observation Retention 事务调用参数，未改变领域行为或公共服务边界。
+- News 专项 Workflow Run [43210204658](https://github.com/Kasign/stock_data_provider/actions/runs/43210204658)：
+  - `Test full News module`：success，包含 News gofmt、`go test ./internal/news/...`、Race、Vet。
+  - `Test News Provider contracts`：success，包含 SearchCandidates/Provider Adapter 契约测试、Race 和 Vet。
+- 根模块 Workflow Run [43210204807](https://github.com/Kasign/stock_data_provider/actions/runs/43210204807)：
+  - News MariaDB Repository and Migration integration：success，实际执行 News Migration/Repository 集成。
+  - 根模块 `Test go-core` 与 `Test .`：success。
+  - Market Data MariaDB、Compose/Docker、Market Data 迁移及测试 Job 为 skipped；不能将其记为通过。
+- 2026-11-12 Diagnostics Context 取消边界修复已纳入 News 专项 CI：Observation retention、Source Endpoint Catalog、Storage Ping、Schema Check 覆盖依赖调用前/后的取消传播；已取消时不触发探测，依赖返回取消错误时优先传播 Context 取消。当前没有证据表明需要再重复实现同类取消检查。
+- 当前 CI 证明 News 包级格式、单测、Race、Vet、Provider 固定响应契约和 MariaDB 专项集成通过；不证明真实 Provider 网络/来源授权、生产 DNS/出口、Server 组合根装配或受限内容生产披露通过。
+
+### 当前缺口重新分级
+
+| 缺口 | 是否属于 News 可独立继续的代码任务 | 判定 |
+|---|---|---|
+| available_at 证据与严格 PIT | 否，当前无合格来源证据 | 继续 NULL；不得推导、伪造或新增无真实证据支撑的字段/表。获得符合冻结准入规则的来源后再实施 |
+| 授权复核与内容读取 TOCTOU | 否，需跨模块一致性方案 | 等待公共 JCS Verifier、可信策略 Owner 与 Server/Repository 共同确定一致性边界；News 仅实现明确方案的适配 |
+| Provider/Source BoundDoer、Migration、Diagnostics Runner、Cleaner 调度生产装配 | 否，归 Server 组合根 | News 已提供对应构造/领域入口，不修改 Server 文件 |
+| 真实 Provider/Feed 网络与授权验收 | 当前不具备条件 | 等待真实凭证、账号适用条款、来源授权和部署网络证据；固定响应测试不替代 Live Probe |
+| News 自有单测、Race、Vet、Provider 契约、MariaDB 集成 | 已有当前 CI 证据 | 不为形式重复回归；只有后续代码改动或新缺陷才重跑相应门禁 |
+
+### 本轮结论
+
+News 自身代码质量和 MariaDB 专项验证已取得当前 CI 通过证据。当前剩余事项均受公共能力、Server 组合根、策略 Owner 或真实来源证据约束；没有发现可通过在 News 内重复开发公共能力来安全关闭的缺口。后续按“有明确新证据再推进”的方式执行，不新增空壳接口、字段、表或 WebUI 专用 API。
+
+
+## 十五、2026-11-12 TOCTOU 代码现状纠正与用途映射复核
+
+### Evidence 授权读取一致性
+
+此前第 1、5、6 节记录的“授权复核与内容读取不在同一一致性边界”已被后续实现取代，不再是当前代码缺口。当前实现如下：
+
+- Application：`internal/news/app/get_evidence.go` 要求 Repository 实现 `EvidenceAtomicContentRepository`；不满足时构造失败，避免回退到无锁正文读取路径。
+- Storage：`internal/news/adapters/storage/evidence_authorization_read.go` 在单个 InnoDB Repeatable Read 事务中，按 Binding 顺序锁定当前策略指针行，读取并校验不可变策略版本，重新读取精确 Observation/Version，执行授权回调，再读取正文；只有事务提交成功才返回正文。
+- 并发测试：News MariaDB Repository Integration 已覆盖读取事务先持有策略指针锁、撤销发布等待读取提交、撤销提交后旧 Binding 失效，以及过期 PIT/版本和 Observation 绑定校验等场景。
+- Run `43210204807` 的 News MariaDB Repository and Migration integration Job 为 success；上述事务实现不再列为待开发 TOCTOU 代码任务。
+
+仍未关闭的是公共 GOV-CTR-006 JCS Runtime Verifier 的实际依赖注入和 Server 生产装配。事务一致性机制已存在，不代表没有 JCS 验证器时可以开放受限内容；缺少 Verifier/可信策略依赖仍必须 fail-closed。
+
+### risk_review 用途映射
+
+- NEWS-CTR-002 将 `risk_review` 列为合法的显式 `purpose_code`。
+- 当前 News Domain 通用 `Purpose` 枚举包含 `internal_business`，但 `authorizationPurposeForCode` 只映射 `research_analysis` 与 `user_display`；未知映射返回拒绝。
+- 现有《新闻模块与公共平台接入矩阵》明确 `internal_business` 没有默认映射，不能自动推断为 `research_analysis` 或 `risk_review`。因此当前拒绝 `risk_review` 是 fail-closed 行为，不能仅为“支持枚举”而擅自补映射。
+- 是否允许在受控调用显式声明 `risk_review` 时，将其映射到领域策略的 `PurposeInternalBusiness`，仍需确认其授权含义；确认前保持拒绝，不修改 Domain 枚举、策略规则或契约。
+
+### 当前 Review 状态修订
+
+1. 将“TOCTOU 机制未实现”从当前阻断项中移除；保留“公共 JCS Verifier/Server 生产装配未完成”作为披露门禁。
+2. available_at 仍无符合冻结准入规则的真实来源字段，继续 NULL，不实施推断。
+3. `risk_review` 的显式用途到领域策略映射尚需语义确认，当前拒绝行为不视为可绕过的缺陷。
+4. 真实 Provider/Feed 网络、账号授权和生产 DNS/出口验收仍等待真实环境证据。
