@@ -329,6 +329,17 @@ func (r *MySQLRunRepository) ClaimAttempt(
 		return domain.Attempt{}, false, ErrRunConcurrencyLimit
 	}
 
+	var invalidGlobalWorkers int
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM researchflow_attempts
+		WHERE status = ? AND (lease_owner IS NULL OR lease_owner = '' OR lease_expires_at IS NULL)`,
+		string(domain.AttemptRunning),
+	).Scan(&invalidGlobalWorkers); err != nil {
+		return domain.Attempt{}, false, fmt.Errorf("validate global running Researchflow Worker leases: %w", err)
+	}
+	if invalidGlobalWorkers != 0 {
+		return domain.Attempt{}, false, errors.New("Researchflow contains a running Attempt without a valid Worker lease")
+	}
+
 	var globalActiveWorkers int
 	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM researchflow_attempts
 		WHERE status = ? AND lease_expires_at > ?`,

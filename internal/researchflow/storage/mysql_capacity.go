@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 )
 
 var (
@@ -33,7 +34,7 @@ func lockCapacityGuard(ctx context.Context, tx *sql.Tx) error {
 	var guardID uint8
 	if err := tx.QueryRowContext(ctx, `SELECT guard_id FROM researchflow_capacity_guard
 		WHERE guard_id = 1 FOR UPDATE`).Scan(&guardID); err != nil {
-		return errors.New("Researchflow capacity guard is unavailable; apply migration v4 before serving requests")
+		return fmt.Errorf("Researchflow capacity guard is unavailable; apply migration v4 before serving requests: %w", err)
 	}
 	if guardID != 1 {
 		return errors.New("Researchflow capacity guard singleton row is invalid")
