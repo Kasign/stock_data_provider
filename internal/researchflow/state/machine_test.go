@@ -697,3 +697,37 @@ func TestSkippedIsNotA_RuntimeStageTransition(t *testing.T) {
 		}
 	}
 }
+
+
+func TestCreatedRunCanStartImmediatelyWhenCapacityIsAvailable(t *testing.T) {
+	now := time.Date(2026, 11, 12, 9, 0, 0, 0, time.UTC)
+	created := domain.Run{Ref: "run-immediate", Status: domain.RunCreated, Version: 1}
+	started, err := TransitionRun(created, domain.RunRunning, now)
+	if err != nil {
+		t.Fatalf("created -> running should be valid when capacity is available: %v", err)
+	}
+	if started.Status != domain.RunRunning || started.Version != created.Version+1 ||
+		started.StartedAt == nil || !started.StartedAt.Equal(now) {
+		t.Fatalf("immediate start did not update state/version/start time: %#v", started)
+	}
+	if created.Status != domain.RunCreated || created.StartedAt != nil {
+		t.Fatalf("transition mutated input Run: %#v", created)
+	}
+}
+
+func TestCreatedRunCanStillEnterQueuedBeforeStarting(t *testing.T) {
+	now := time.Date(2026, 11, 12, 9, 0, 0, 0, time.UTC)
+	created := domain.Run{Ref: "run-queued", Status: domain.RunCreated, Version: 1}
+	queued, err := TransitionRun(created, domain.RunQueued, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	started, err := TransitionRun(queued, domain.RunRunning, now.Add(time.Second))
+	if err != nil {
+		t.Fatalf("queued -> running should remain valid: %v", err)
+	}
+	if started.Version != created.Version+2 || started.StartedAt == nil ||
+		!started.StartedAt.Equal(now.Add(time.Second)) {
+		t.Fatalf("queued start has incorrect version or start time: %#v", started)
+	}
+}
