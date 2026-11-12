@@ -97,7 +97,6 @@ func TestLiveProviderProbeQuarterlyFundamentals(t *testing.T) {
 	t.Logf("LIVE_PROVIDER_RESULT %s", encoded)
 }
 
-
 func assertBaoStockLiveFundamentalMetric(
 	t *testing.T,
 	snapshot *model.FundamentalsSnapshot,
