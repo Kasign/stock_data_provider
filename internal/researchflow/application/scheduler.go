@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"example.com/stock-analysis-flow/internal/researchflow/domain"
@@ -230,8 +231,9 @@ func PersistSchedulePlan(ctx context.Context, store SchedulePlanStore, plan Sche
 }
 
 // StageExecutionDispatcher delegates a planned Stage to the existing Worker.
-// Worker.Execute performs the authoritative ClaimAttempt transaction; this
-// interface does not introduce a second queue or a second concurrency gate.
+// Scheduler may call Execute concurrently for independent Stages; implementations
+// must be concurrency-safe. Worker.Execute/ClaimAttempt remains the authority
+// for durable queue state, global capacity, Lease and Fencing.
 type StageExecutionDispatcher interface {
 	Execute(context.Context, string, string, string) (WorkerExecution, error)
 }
@@ -339,7 +341,8 @@ func (s *Scheduler) ScheduleRun(ctx context.Context, runRef string) (ScheduleRun
 
 		result.Plan = plan
 		result.Persisted = persisted
-		for _, stage := range plan.Dispatch {
+		attemptRefs := make([]string, len(plan.Dispatch))
+		for index, stage := range plan.Dispatch {
 			attemptRef, idErr := s.ids.NewRef(ctx, "attempt")
 			if idErr != nil {
 				return result, fmt.Errorf("generate Researchflow Attempt reference for Stage %q: %w", stage.Ref, idErr)
@@ -347,12 +350,30 @@ func (s *Scheduler) ScheduleRun(ctx context.Context, runRef string) (ScheduleRun
 			if strings.TrimSpace(attemptRef) == "" || attemptRef != strings.TrimSpace(attemptRef) {
 				return result, fmt.Errorf("Researchflow ID generator returned an invalid Attempt reference for Stage %q", stage.Ref)
 			}
-			execution, dispatchErr := s.dispatcher.Execute(ctx, runRef, stage.Ref, attemptRef)
-			result.Executions = append(result.Executions, ScheduledStageExecution{
-				StageRef: stage.Ref, AttemptRef: attemptRef, Execution: execution,
-			})
+			attemptRefs[index] = attemptRef
+		}
+
+		// 单次 Run 的 Dispatch 集合已受 MaxParallel 限制；并发提交给固定 Worker Pool，
+		// 让同一 Run 的独立 Stage 可以并行执行，而不增加第二套持久化队列。
+		result.Executions = make([]ScheduledStageExecution, len(plan.Dispatch))
+		dispatchErrors := make([]error, len(plan.Dispatch))
+		var dispatchWait sync.WaitGroup
+		for index, stage := range plan.Dispatch {
+			index, stage, attemptRef := index, stage, attemptRefs[index]
+			dispatchWait.Add(1)
+			go func() {
+				defer dispatchWait.Done()
+				execution, dispatchErr := s.dispatcher.Execute(ctx, runRef, stage.Ref, attemptRef)
+				result.Executions[index] = ScheduledStageExecution{
+					StageRef: stage.Ref, AttemptRef: attemptRef, Execution: execution,
+				}
+				dispatchErrors[index] = dispatchErr
+			}()
+		}
+		dispatchWait.Wait()
+		for index, dispatchErr := range dispatchErrors {
 			if dispatchErr != nil {
-				return result, fmt.Errorf("dispatch Researchflow Stage %q: %w", stage.Ref, dispatchErr)
+				return result, fmt.Errorf("dispatch Researchflow Stage %q: %w", plan.Dispatch[index].Ref, dispatchErr)
 			}
 		}
 		return result, nil
