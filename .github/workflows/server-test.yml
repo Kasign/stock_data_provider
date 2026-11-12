@@ -21,6 +21,21 @@ jobs:
     name: Test Server-owned packages
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      SERVER_RELAY_TEST_MYSQL_DSN: root:root@tcp(127.0.0.1:3306)/server_relay_test?parseTime=true&loc=UTC
+    services:
+      mariadb:
+        image: mariadb:11.4
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: server_relay_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
