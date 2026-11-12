@@ -40,7 +40,7 @@
 - Platform/Server：正式 Storage/事务接入、根 Migration 注册和统一 Diagnostics 装配。
 - Researchflow：Envelope discriminator/Schema/版本消费校验、当前授权引用传递及双方 Contract Test。
 
-全仓 Go Test Suite 最近一次执行（Workflow `43142021397`，验收 SHA `4ce2fd155c21e7f8fe850c6f7f8c8d105b3dd47e`）未通过：根模块 `Test .` 的失败集中在 Notification application 测试，独立 Researchflow 模块测试 Job 也失败；Researchflow MariaDB lifecycle integration 通过。Quant 包在同一 SHA 的专项 CI 全部通过。上述失败不属于 Quant，本分支未修改其他模块。
+全仓 Go Test Suite Workflow `43146432716` 对代码 SHA `d2dc66eba08635bc9e09bb0c96638b7df7574e73` 未通过：根模块 `Test .` 与独立 Researchflow 模块测试 Job 失败；Researchflow WorkerStore 和 MariaDB lifecycle integration 通过，go-core 通过。Quant 专项 CI `43146432752` 在同一代码 SHA 全部通过。失败项属于根模块/Researchflow，本分支未修改其他模块。
 
 ## 集合联调边界
 
