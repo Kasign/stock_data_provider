@@ -103,7 +103,6 @@ func TestRegistryMariaDBIntegration(t *testing.T) {
 	}
 }
 
-
 // TestRegistryMariaDBPartialDDLFailureRequiresRecovery verifies the real
 // MariaDB behavior when an earlier DDL statement succeeds but a later
 // statement in the same migration fails. Server must report the Platform
