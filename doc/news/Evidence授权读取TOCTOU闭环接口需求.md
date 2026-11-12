@@ -195,3 +195,19 @@ JCS 仍只调用项目公共 GOV-CTR-006 Runtime Verifier；本模式不复制 J
 - Source、Endpoint、Provider Output 的用途与内容级别许可按现有策略字段计算；Endpoint 未设置的覆盖字段按既有领域语义继承 Source。无法映射的用途不自动推断为其他用途，保持拒绝。
 
 该 Resolver 仍是读取前预检，不构成 NEWS-CTR-002 的原子读取保证。最终正文读取仍必须在同一 MariaDB 事务中锁定全部当前策略指针、复核授权并读取正文，提交成功后才可返回内容。RACE-01～07 尚未完成。
+
+## 11. Evidence 原子授权读取实现（2026-11-12）
+
+已将 `GetEvidence` 的最终正文读取改为事务型 Repository Port：
+
+- Application 不再先调用普通 Resolver 复核，再调用独立正文查询。
+- Storage 在一个 MariaDB 事务中按 Binding 的策略 tuple 顺序锁定全部 `news_current_policy_versions` 当前指针行。
+- 在持锁事务内读取并校验对应不可变策略版本、Payload Hash 和策略结构。
+- 将事务内取得的当前策略集合交给 Application 授权回调；回调复用既有 GOV-CTR-006 Fingerprint Verifier 和 `EvaluateNewsAuthorizationAgainstCurrentPolicies`。
+- 授权通过后，在同一事务内读取精确 `news_id + version_id` 正文，并复核 fingerprint、Observation 归属及 PIT 时间边界。
+- 事务提交成功后才返回正文；授权失败、查询失败、上下文取消或提交失败均不返回正文。
+- 已移除独立的 `GetEvidenceContentAt` 无锁正文读取 Port，避免生产路径绕过原子授权边界。
+
+普通 `CurrentNewsAuthorizationPolicyResolver` 仍保留为预检能力，不再承担最终正文披露的安全边界。
+
+当前已增加 MariaDB 正向原子读取集成覆盖；撤销竞争、提交失败、缺失策略、载荷篡改等 RACE-01～07 的专项并发验收仍需完成。GOV-CTR-006 公共 Runtime Verifier 的实际生产装配仍由 Platform/Server 负责，未装配时必须 fail closed。
