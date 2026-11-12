@@ -267,7 +267,6 @@ func TestFanoutDispatcherRejectsPlanBoundToDifferentSubscription(t *testing.T) {
 	}
 }
 
-
 func TestFanoutDispatcherRejectsSubMicrosecondDurations(t *testing.T) {
 	plans, _ := NewDeliveryPlanWriter(&memoryDeliveryPlans{})
 	config := FanoutDispatcherConfig{
@@ -285,7 +284,6 @@ func TestFanoutDispatcherRejectsSubMicrosecondDurations(t *testing.T) {
 		t.Fatalf("sub-microsecond retry delay must be rejected, got %v", err)
 	}
 }
-
 
 func TestFanoutDispatcherRejectsMissingPlanFactoryAndInvalidConfiguration(t *testing.T) {
 	plans, _ := NewDeliveryPlanWriter(&memoryDeliveryPlans{})
