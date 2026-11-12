@@ -67,7 +67,7 @@ func TestNotificationMariaDBExpiredDeliveryLeaseRecoveryIntegration(t *testing.T
 	}
 
 	claimAt := now.Add(-2 * time.Second)
-	leaseExpiry := now.Add(time.Minute)
+	leaseExpiry := now.Add(500 * time.Millisecond)
 	claim, claimed, err := repository.ClaimDue(ctx, "recovery-worker", claimAt, leaseExpiry)
 	if err != nil || !claimed {
 		t.Fatalf("claim delivery: claimed=%v err=%v", claimed, err)
@@ -108,13 +108,22 @@ func TestNotificationMariaDBExpiredDeliveryLeaseRecoveryIntegration(t *testing.T
 		t.Fatalf("active lease must not be recovered, got %v", err)
 	}
 
-	// 测试夹具同时推进 Delivery 与 Attempt 的租约截止时间，模拟 Worker 在发送期间失联。
-	expiredAt := now.Add(-time.Second)
-	if _, err := db.ExecContext(ctx, "UPDATE notification_deliveries SET lease_expires_at = ? WHERE delivery_id = ?", expiredAt, delivery.DeliveryID); err != nil {
-		t.Fatalf("expire delivery lease fixture: %v", err)
+	// 等待真实租约到期；不改写 Delivery/Attempt 的租约时间戳，保持 Attempt 追加记录不可变。
+	leaseWait := time.Until(leaseExpiry.Add(20 * time.Millisecond))
+	if leaseWait > 0 {
+		time.Sleep(leaseWait)
 	}
-	if _, err := db.ExecContext(ctx, "UPDATE notification_delivery_attempts SET lease_expires_at = ? WHERE delivery_id = ?", expiredAt, delivery.DeliveryID); err != nil {
-		t.Fatalf("expire attempt lease fixture: %v", err)
+	recoverySnapshot, found, err = repository.Get(ctx, delivery.DeliveryID)
+	if err != nil || !found || recoverySnapshot.AttemptCount != 1 {
+		t.Fatalf("reload Delivery after lease expiry: found=%v delivery=%+v err=%v", found, recoverySnapshot, err)
+	}
+	recoveryAt = time.Now().UTC().Truncate(time.Microsecond)
+	next, event, err = recoverySnapshot.Transition(domain.DeliveryTransition{
+		To: domain.DeliveryUnknown, At: recoveryAt,
+		ReasonCode: "lease_expired_during_attempt", EvidenceRef: attempt.AttemptID,
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
 
 	expiredClaims, err := repository.ListExpiredLeases(ctx, 10)
@@ -170,7 +179,7 @@ func TestNotificationMariaDBExpiredDeliveryLeaseRecoveryIntegration(t *testing.T
 	if _, err := db.ExecContext(ctx, "DELETE FROM notification_delivery_state_events WHERE delivery_id = ? AND version = ?", delivery.DeliveryID, next.Version); err != nil {
 		t.Fatalf("remove conflicting event fixture: %v", err)
 	}
-	finishedAt := recoveryAt.Add(time.Second)
+	finishedAt := leaseExpiry.Add(-time.Microsecond)
 	completed, err := attempt.Complete(finishedAt, domain.DeliveryAttemptAccepted, "late-provider-acceptance", "", false, "")
 	if err != nil {
 		t.Fatal(err)
