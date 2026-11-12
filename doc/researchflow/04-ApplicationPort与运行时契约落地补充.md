@@ -586,3 +586,10 @@ Outbox 使用发布前 Claim、提交租约、外部 Publish、成功后 Ack 的
 - Server 对每个候选调用 Worker.Execute，并生成新的 AttemptRef。ClaimAttempt 在 CapacityGuard -> Run -> Stage -> latest Attempt 事务锁下重新核验 Lease 是否仍过期、Attempt 次数、Run Deadline、全局 Worker 容量，并对旧 Attempt fencing 后创建新 Attempt。若另一个进程已恢复，候选会因状态已变化而被拒绝，不会重复执行。
 - 新增 Scanner 复合游标/乱序/超量/错误单测，以及 MariaDB 分页和过期 Lease reclaim/fencing 集成测试。
 - 当前 HEAD `ab9a756ea6a22462441e4fbef8340c96c8e79ec6` 的新增代码尚未获得 GitHub Actions 和真实 MariaDB 执行结果；不得标记为已验收。Server 的恢复扫描周期、WorkerPool 调度和容量配置接线仍由 Server 分支完成。
+
+
+## 31. 过期 Attempt 恢复扫描 CI 验收（2026-11-12）
+
+- Actions Run `43140101199`，代码 SHA `6692cf1dfdb67509dca3dd564600d3085e935509`：Researchflow gofmt、模块 `go test`、Race、Vet 全部通过；WorkerStore 单测/Race/Vet 通过；MariaDB 生命周期普通/Race 集成通过。
+- MariaDB 测试验证复合游标分页按 RunRef/StageRef 稳定排序，过期 Lease 能被扫描发现；调用 ClaimAttempt 后旧 Attempt 被标记 timed_out、清空 Lease 并递增 fencing token，新 Attempt 以更高 fencing token 启动。
+- 同一 Run 的全仓根模块 Job 因 Quant `internal/quant/manifest/manifest.go` 与 `manifest_test.go` gofmt 失败；Researchflow 模块门禁不受影响。未执行的根模块测试/Vet 不标记为通过。

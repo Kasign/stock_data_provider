@@ -28,7 +28,7 @@ Researchflow 是研究应用编排层，通过 Data、News、Quant、Research、
 ## 当前明确缺口
 
 - Scheduler 已提供单次 Run 的运行协调服务；周期扫描、Server 生命周期启停与多 Run 调度入口尚未接入。当前派发直接调用 Worker.Execute，不引入第二套队列；跨进程并发仍由 ClaimAttempt 事务兜底。
-- Worker 有单次 `Execute` 协调器；MySQLRunRepository 已实现 WorkerStore，执行快照读取与结果提交映射已落地。全局容量事务守卫和固定数量 Worker Pool 已通过模块 gofmt/test/race/vet 与 MariaDB 普通/Race 集成；queued Run 周期恢复由 Server 调用 SchedulerCandidateScanner 分页接入；进程崩溃后 running Stage 的过期 Attempt 由 ExpiredAttemptScanner 发现，Server 应调用 Worker.Execute 触发 ClaimAttempt 原子回收；Worker Lease 心跳已能检测跨进程 Run 取消并确认。当前新增恢复扫描尚待 CI/MariaDB 验收。Server 生命周期接线、生产 StageExecutor Adapter 仍未闭环。Worker Pool 已提供模块内优雅 Shutdown。
+- Worker 有单次 `Execute` 协调器；MySQLRunRepository 已实现 WorkerStore，执行快照读取与结果提交映射已落地。全局容量事务守卫和固定数量 Worker Pool 已通过模块 gofmt/test/race/vet 与 MariaDB 普通/Race 集成；queued Run 周期恢复由 Server 调用 SchedulerCandidateScanner 分页接入；进程崩溃后 running Stage 的过期 Attempt 由 ExpiredAttemptScanner 发现，Server 应调用 Worker.Execute 触发 ClaimAttempt 原子回收；Worker Lease 心跳已能检测跨进程 Run 取消并确认。ExpiredAttemptScanner 已通过当前 HEAD 的模块 gofmt/test/race/vet 与 MariaDB 普通/Race 集成验收。Server 生命周期接线、生产 StageExecutor Adapter 仍未闭环。Worker Pool 已提供模块内优雅 Shutdown。
 - `StageExecutor` 是注入端口，Data/News/Quant/Research/LLM 的生产 Adapter 尚未在本分支闭环。
 - Worker Pool 是模块内有界执行协程池，不是持久化队列；周期扫描与池生命周期由 Server 驱动。跨 Worker 的 Run 并发和全局 Worker 上限由 ClaimAttempt 数据库事务兜底。
 - Go 测试、Race、Vet、真实 MariaDB、进程崩溃恢复和跨模块端到端验收必须按实际 SHA 记录，不以测试文件存在代替通过证据。
