@@ -411,7 +411,7 @@ type ValuationSnapshot struct {
 	SourceVersion      string        `json:"source_version,omitempty"`
 	FetchedAt          time.Time     `json:"fetched_at"`
 	// SystemObservedAt 是 Data 将该估值快照记录到本地历史版本的时刻；它不代表 Provider 的公开时间。
-	SystemObservedAt   *time.Time    `json:"system_observed_at,omitempty"`
+	SystemObservedAt *time.Time    `json:"system_observed_at,omitempty"`
 	QualityStatus      QualityStatus `json:"quality_status"`
 	QualityReasons     []string      `json:"quality_reasons,omitempty"`
 }
