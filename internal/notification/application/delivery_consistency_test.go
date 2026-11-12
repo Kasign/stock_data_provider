@@ -60,8 +60,9 @@ func TestAssessDeliveryConsistency(t *testing.T) {
 			input: func() DeliveryConsistencyInput {
 				value := delivery
 				value.AttemptCount = 1
-				outside := completed
+				outside := running
 				outside.StartedAt = value.DeadlineAt
+				outside.LeaseExpiresAt = value.DeadlineAt.Add(time.Minute)
 				return DeliveryConsistencyInput{Delivery: value, Attempts: []domain.DeliveryAttempt{outside}, AttemptsComparable: true}
 			}(),
 			want: DeliveryConsistencyFail, wantReason: "attempt_history_conflict",
