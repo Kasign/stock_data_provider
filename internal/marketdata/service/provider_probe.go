@@ -1182,6 +1182,7 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 			})
 		}
 	}
+	applyProviderProbeCheckStatus(run)
 	if s.store != nil {
 		run.Persisted = true
 		if err := s.store.SaveProviderProbeRun(ctx, run); err != nil {
@@ -1199,6 +1200,7 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 					break
 				}
 			}
+			applyProviderProbeCheckStatus(run)
 			return run, fmt.Errorf("persist provider-probe run: %w", err)
 		}
 	}
@@ -1411,6 +1413,27 @@ func buildProviderProbeCheckResults(items []model.ProviderProbeItem, requestedCh
 		}
 	}
 	return results
+}
+
+// applyProviderProbeCheckStatus 将检查维度的失败/不完整结果纳入批次总体状态。
+// skipped、not_configured 和 not_supported 表示本次检查未形成完整通过证据，不能把批次标为 success。
+func applyProviderProbeCheckStatus(run *model.ProviderProbeRun) {
+	if run == nil {
+		return
+	}
+	degraded := false
+	for _, result := range run.CheckResults {
+		switch result.Status {
+		case "failed":
+			run.Status = "failed"
+			return
+		case "degraded", "skipped", "not_configured", "not_supported":
+			degraded = true
+		}
+	}
+	if degraded && run.Status == "success" {
+		run.Status = "degraded"
+	}
 }
 
 func crossProviderProbeFailureCode(item model.ProviderProbeItem) string {

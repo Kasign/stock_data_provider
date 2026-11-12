@@ -1771,3 +1771,34 @@ func TestFreshnessDomainForCapabilityDoesNotInventNonRealtimePolicies(t *testing
 		}
 	}
 }
+
+
+func TestApplyProviderProbeCheckStatusIncludesCheckResults(t *testing.T) {
+	tests := []struct {
+		name       string
+		baseStatus string
+		check      string
+		want       string
+	}{
+		{name: "passed checks preserve success", baseStatus: "success", check: "passed", want: "success"},
+		{name: "failed check fails batch", baseStatus: "success", check: "failed", want: "failed"},
+		{name: "degraded check degrades batch", baseStatus: "success", check: "degraded", want: "degraded"},
+		{name: "skipped check cannot claim success", baseStatus: "success", check: "skipped", want: "degraded"},
+		{name: "unconfigured check cannot claim success", baseStatus: "success", check: "not_configured", want: "degraded"},
+		{name: "unsupported check cannot claim success", baseStatus: "success", check: "not_supported", want: "degraded"},
+		{name: "failed check overrides not configured batch", baseStatus: "not_configured", check: "failed", want: "failed"},
+		{name: "passed check preserves not configured batch", baseStatus: "not_configured", check: "passed", want: "not_configured"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			run := &model.ProviderProbeRun{
+				Status: tc.baseStatus,
+				CheckResults: []model.ProviderProbeCheckResult{{Check: "quality", Status: tc.check}},
+			}
+			applyProviderProbeCheckStatus(run)
+			if run.Status != tc.want {
+				t.Fatalf("overall status = %q, want %q", run.Status, tc.want)
+			}
+		})
+	}
+}
