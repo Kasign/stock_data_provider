@@ -7,7 +7,7 @@
 
 ## 当前状态
 
-当前代码验收 SHA：`a743c7406bcb9d182b7c61ca4317048e277468a9`（2026-11-12）；Quant 专项 CI Workflow `43145772880` 已通过 gofmt、Quant 全量单测、Manifest Fuzz、Race、Vet。
+当前代码验收 SHA：`d2dc66eba08635bc9e09bb0c96638b7df7574e73`（2026-11-12）；Quant 专项 CI Workflow `43146432752` 已通过 gofmt、Quant 全量单测、Manifest Fuzz、Race、Vet。
 
 已具备首批 Indicator/Factor 纯计算、CalculationContext、基础 Registry、RiskDecision/RuleSet 执行框架、TrendResult DTO、Manifest/ResultRef、Repository Save Port/MemoryRepository，以及 QuantResult Envelope 初版。
 
@@ -22,7 +22,7 @@
 - QNT-CTR-001 Registry Entry 2.0.0 已接入 Go `SampleCountPolicy`；`ValidateMetric` 按 `required_in_metric` 检查字段存在性，保留缺失、null、0 的差异；Schema 1.0.0 保留历史投影。
 - 八份 Indicator Golden 已显式固化 `expected.sample_count`，测试直接读取 Golden 期望值。
 - 新增 `internal/quant/application.GetResult`：从可信 PrincipalResolver 获取主体，调用授权读取 Port，在释放 Payload 前验证 GOV-CTR-006 授权指纹/策略快照、Manifest 与 Payload 指纹，并只解码已注册的 Trend/Risk 强类型 Envelope。
-- GetResult 强制注入 `AccessAuditor`：显式拒绝、授权服务不可用、结果完整性失败和成功释放均写入元数据审计事件；审计写入失败时不释放 Envelope。AuthorizationRef/PolicySnapshot 严格解码，区分 `expires_at` 缺失与显式 null。
+- GetResult 强制注入 `AccessAuditor`：显式拒绝、授权服务不可用、结果完整性失败和成功释放均写入元数据审计事件；审计写入失败时不释放 Envelope。AuthorizationRef/PolicySnapshot 严格解码，区分 `expires_at` 缺失与显式 null，并拒绝未知字段、重复 JSON 键及歧义输入。
 
 <badge color="success">Quant 专项 CI 通过</badge> Workflow `43142021410` 对验收 SHA `4ce2fd155c21e7f8fe850c6f7f8c8d105b3dd47e` 的 gofmt、Quant 全量单测、Manifest 30 秒随机 Fuzz、Race、Vet 全部通过。
 
