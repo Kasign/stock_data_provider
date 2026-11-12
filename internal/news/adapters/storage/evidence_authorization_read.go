@@ -56,7 +56,7 @@ func (r *MySQLRepository) GetEvidenceContentWithCurrentAuthorization(
 	// 元数据定位发生在事务外；这里重新读取 Observation 与 Version，防止并发策略轨迹
 	// 修改、载荷清理或版本变更在预检之后、正文读取之前形成 TOCTOU。
 	record, err := scanEvidencePITRecord(tx.QueryRowContext(ctx, evidencePITSelect+` WHERE
-		v.news_id = ? AND v.version_id = ? AND v.observed_at <= ? AND o.observed_at <= ?`,
+		v.news_id = ? AND v.version_id = ? AND v.observed_at <= ? AND o.observed_at <= ? FOR UPDATE`,
 		version.NewsID, version.ID, systemAsOf.UTC(), systemAsOf.UTC(),
 	))
 	if errors.Is(err, sql.ErrNoRows) || errors.Is(err, app.ErrEvidencePITNotFound) {
