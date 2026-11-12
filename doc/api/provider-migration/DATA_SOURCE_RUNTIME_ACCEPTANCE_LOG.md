@@ -1298,3 +1298,4 @@ Go suite 覆盖根模块、go-core、market-data 的格式/测试/race/vet、Mar
 - Go Test Suite Run `43219224292` 在格式整理前 SHA `1d24e84c53b948d8c29389c997c2687ba2a4856e` success；该结果证明常规 Go 测试链路通过，不等于真实 Provider 断言运行。
 - Live Provider Run `43219175966` 的 BaoStock 专项步骤 skipped；因此加强断言真实运行状态仍为 `not_executed`。
 - 后续只执行加强后的定向探针一次，取得字段值后再判定 pass/degraded/fail；不重复首轮弱探针，不将 skipped/cancelled 混为 Provider failure。
+- 本次继续执行时，仅通过现有 Live Provider workflow 的 `[baostock_trade_status_live]` 提交标记触发加强后的 `TestLiveBaoStockTradeStatusOnOfficialSuspensionWindow` 一次；不重复首轮弱探针，也不增加证券/日期样本。
