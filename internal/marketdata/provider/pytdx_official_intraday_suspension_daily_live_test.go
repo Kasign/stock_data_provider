@@ -49,8 +49,8 @@ type pytdxOfficialSuspensionDailyItem struct {
 	Error          string   `json:"error,omitempty"`
 }
 
-// TestLivePytdxOfficialIntradaySuspensionDailyBars 使用交易所官方公告样本核验
-// Pytdx 日 K 对盘中临停与全天停牌窗口的返回行为；不调用 Tushare，不消耗 Tushare API 配额。
+// TestLivePytdxOfficialIntradaySuspensionDailyBars 基于交易所公告的固定事件样本
+// 核验 Pytdx 日 K 对盘中临停和全天停牌窗口的表现；不调用 Tushare，不消耗其 API 配额。
 func TestLivePytdxOfficialIntradaySuspensionDailyBars(t *testing.T) {
 	if os.Getenv("MARKET_DATA_LIVE_PYTDX_OFFICIAL_SUSPENSION_TESTS") != "1" {
 		t.Skip("set MARKET_DATA_LIVE_PYTDX_OFFICIAL_SUSPENSION_TESTS=1 to query Pytdx daily bars for official intraday-suspension samples")
