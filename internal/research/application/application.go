@@ -113,51 +113,54 @@ type EventSourceTime struct {
 	TimeType                string    `json:"time_type"`
 	Value                   time.Time `json:"value"`
 	AssertedBy              string    `json:"asserted_by"`
-	Confidence              *float64  `json:"confidence"`
-	ConfidenceMethod        *string   `json:"confidence_method"`
-	ConfidenceMethodVersion *string   `json:"confidence_method_version"`
-	Notes                   *string   `json:"notes"`
+	Confidence              *float64  `json:"confidence,omitempty"`
+	ConfidenceMethod        *string   `json:"confidence_method,omitempty"`
+	ConfidenceMethodVersion *string   `json:"confidence_method_version,omitempty"`
+	Notes                   *string   `json:"notes,omitempty"`
 }
 type ResearchEvent struct {
-	EventID                string            `json:"event_id"`
-	EventVersion           int               `json:"event_version"`
-	EventType              string            `json:"event_type"`
-	Title                  string            `json:"title"`
-	Status                 string            `json:"status"`
-	SubjectRefs            []string          `json:"subject_refs"`
-	EvidenceRefs           []string          `json:"evidence_refs"`
-	OccurredAt             *time.Time        `json:"occurred_at"`
-	PublishedAt            *time.Time        `json:"published_at"`
-	AvailableAt            *time.Time        `json:"available_at"`
-	SystemObservedAt       time.Time         `json:"system_observed_at"`
-	SystemAsOf             time.Time         `json:"system_as_of"`
-	ImpactHypothesisRefs   []string          `json:"impact_hypothesis_refs"`
-	InvalidationConditions []string          `json:"invalidation_conditions"`
-	Uncertainty            []string          `json:"uncertainty"`
-	SupersedesEventVersion *int              `json:"supersedes_event_version"`
-	SourceTimes            []EventSourceTime `json:"source_times"`
+	EventID                       string            `json:"event_id"`
+	EventVersion                  int               `json:"event_version"`
+	EventType                     string            `json:"event_type"`
+	Title                         string            `json:"title"`
+	Status                        string            `json:"status"`
+	SubjectRefs                   []string          `json:"subject_refs"`
+	EvidenceRefs                  []string          `json:"evidence_refs"`
+	OccurredAt                    *time.Time        `json:"occurred_at"`
+	PublishedAt                   *time.Time        `json:"published_at"`
+	AvailableAt                   *time.Time        `json:"available_at"`
+	SystemObservedAt              time.Time         `json:"system_observed_at"`
+	SystemAsOf                    time.Time         `json:"system_as_of"`
+	ImpactHypothesisRefs          []string          `json:"impact_hypothesis_refs"`
+	InvalidationConditions        []string          `json:"invalidation_conditions"`
+	Uncertainty                   []string          `json:"uncertainty"`
+	SourceTimes                   []EventSourceTime `json:"source_times"`
+	TimeNormalizationRuleVersion string            `json:"time_normalization_rule_version"`
+	DerivedFromRefs               []EventRef        `json:"derived_from_refs"`
 }
 type CreateEventCommand struct {
-	EventType              string
-	Title                  string
-	Status                 string
-	SubjectRefs            []string
-	EvidenceRefs           []string
-	OccurredAt             *time.Time
-	PublishedAt            *time.Time
-	AvailableAt            *time.Time
-	SystemObservedAt       time.Time
-	SystemAsOf             time.Time
-	ImpactHypothesisRefs   []string
-	InvalidationConditions []string
-	Uncertainty            []string
-	SupersedesEventVersion *int
-	SourceTimes            []EventSourceTime
+	EventType                     string
+	Title                         string
+	Status                        string
+	SubjectRefs                   []string
+	EvidenceRefs                  []string
+	OccurredAt                    *time.Time
+	PublishedAt                   *time.Time
+	AvailableAt                   *time.Time
+	SystemObservedAt              time.Time
+	SystemAsOf                    time.Time
+	ImpactHypothesisRefs          []string
+	InvalidationConditions        []string
+	Uncertainty                   []string
+	TimeNormalizationRuleVersion string
+	DerivedFromRefs               []EventRef
+	SourceTimes                   []EventSourceTime
 }
 type EventRef struct {
-	EventID      string
-	EventVersion int
+	EventID      string `json:"event_id"`
+	EventVersion int    `json:"event_version"`
 }
+
 type EventRepository interface {
 	Append(context.Context, researchevent.ResearchEvent) error
 	AppendWithLifecycle(context.Context, researchevent.ResearchEvent, *string, string) error
@@ -178,6 +181,7 @@ type EventPort interface {
 type Claim struct {
 	ClaimID                   string    `json:"claim_id"`
 	ClaimVersion              int       `json:"claim_version"`
+	SupersedesVersion         *int      `json:"supersedes_version,omitempty"`
 	Statement                 string    `json:"statement"`
 	EpistemicType             string    `json:"epistemic_type"`
 	ScopeRefs                 []string  `json:"scope_refs"`
@@ -193,6 +197,7 @@ type Claim struct {
 }
 type CreateClaimCommand struct {
 	Statement                 string
+	SupersedesVersion         *int
 	EpistemicType             string
 	ScopeRefs                 []string
 	SystemAsOf                time.Time
@@ -525,8 +530,9 @@ func (s *Service) CreateEvent(ctx context.Context, command CreateEventCommand) (
 		SystemObservedAt: command.SystemObservedAt, SystemAsOf: command.SystemAsOf,
 		ImpactHypothesisRefs:   cloneStrings(command.ImpactHypothesisRefs),
 		InvalidationConditions: cloneStrings(command.InvalidationConditions),
-		Uncertainty:            cloneStrings(command.Uncertainty), SupersedesEventVersion: cloneInt(command.SupersedesEventVersion),
-		SourceTimes: toDomainEventTimes(command.SourceTimes),
+		Uncertainty: cloneStrings(command.Uncertainty), SourceTimes: toDomainEventTimes(command.SourceTimes),
+		TimeNormalizationRuleVersion: command.TimeNormalizationRuleVersion,
+		DerivedFromRefs:               toDomainEventRefs(command.DerivedFromRefs),
 	}
 	if err := value.Validate(); err != nil {
 		return ResearchEvent{}, validationFault("invalid_research_event", "Research Event is invalid", err)
@@ -577,9 +583,10 @@ func (s *Service) UpdateEvent(ctx context.Context, command UpdateEventCommand) (
 		SystemAsOf:             command.Revision.SystemAsOf,
 		ImpactHypothesisRefs:   cloneStrings(command.Revision.ImpactHypothesisRefs),
 		InvalidationConditions: cloneStrings(command.Revision.InvalidationConditions),
-		Uncertainty:            cloneStrings(command.Revision.Uncertainty),
-		SupersedesEventVersion: cloneInt(command.Revision.SupersedesEventVersion),
-		SourceTimes:            toDomainEventTimes(command.Revision.SourceTimes),
+		Uncertainty: cloneStrings(command.Revision.Uncertainty),
+		SourceTimes: toDomainEventTimes(command.Revision.SourceTimes),
+		TimeNormalizationRuleVersion: command.Revision.TimeNormalizationRuleVersion,
+		DerivedFromRefs:               toDomainEventRefs(command.Revision.DerivedFromRefs),
 	}
 	if err := next.ValidateNextVersion(previous); err != nil {
 		return ResearchEvent{}, validationFault("invalid_research_event_transition", "Research Event revision is invalid", err)
@@ -628,6 +635,25 @@ func toDomainEventTimes(values []EventSourceTime) []researchevent.EventSourceTim
 	}
 	return out
 }
+func toDomainEventRefs(values []EventRef) []researchevent.ResearchEventRef {
+	if values == nil {
+		return nil
+	}
+	out := make([]researchevent.ResearchEventRef, len(values))
+	for i, value := range values {
+		out[i] = researchevent.ResearchEventRef{EventID: value.EventID, EventVersion: value.EventVersion}
+	}
+	return out
+}
+
+func fromDomainEventRefs(values []researchevent.ResearchEventRef) []EventRef {
+	out := make([]EventRef, len(values))
+	for i, value := range values {
+		out[i] = EventRef{EventID: value.EventID, EventVersion: value.EventVersion}
+	}
+	return out
+}
+
 func fromDomainEvent(value researchevent.ResearchEvent) ResearchEvent {
 	out := ResearchEvent{
 		EventID: value.EventID, EventVersion: value.EventVersion, EventType: value.EventType, Title: value.Title, Status: string(value.Status),
@@ -636,7 +662,9 @@ func fromDomainEvent(value researchevent.ResearchEvent) ResearchEvent {
 		SystemObservedAt: value.SystemObservedAt, SystemAsOf: value.SystemAsOf,
 		ImpactHypothesisRefs:   cloneStrings(value.ImpactHypothesisRefs),
 		InvalidationConditions: cloneStrings(value.InvalidationConditions), Uncertainty: cloneStrings(value.Uncertainty),
-		SupersedesEventVersion: cloneInt(value.SupersedesEventVersion), SourceTimes: make([]EventSourceTime, len(value.SourceTimes)),
+		SourceTimes: make([]EventSourceTime, len(value.SourceTimes)),
+		TimeNormalizationRuleVersion: value.TimeNormalizationRuleVersion,
+		DerivedFromRefs:               fromDomainEventRefs(value.DerivedFromRefs),
 	}
 	for i, v := range value.SourceTimes {
 		out.SourceTimes[i] = EventSourceTime{EvidenceRef: v.EvidenceRef, TimeType: string(v.TimeType), Value: v.Value, AssertedBy: v.AssertedBy, Confidence: cloneFloat(v.Confidence), ConfidenceMethod: cloneString(v.ConfidenceMethod), ConfidenceMethodVersion: cloneString(v.ConfidenceMethodVersion), Notes: cloneString(v.Notes)}
@@ -696,7 +724,7 @@ func (s *Service) CreateClaim(ctx context.Context, command CreateClaimCommand) (
 		return Claim{}, applicationFault(fault.ClassInternal, "research_id_generation_failed", "Research identifier generation failed", err)
 	}
 	value := researchclaim.Claim{
-		ClaimID: id, ClaimVersion: 1, Statement: command.Statement,
+		ClaimID: id, ClaimVersion: 1, SupersedesVersion: cloneInt(command.SupersedesVersion), Statement: command.Statement,
 		EpistemicType: researchclaim.EpistemicType(command.EpistemicType),
 		ScopeRefs:     cloneStrings(command.ScopeRefs), SystemAsOf: command.SystemAsOf,
 		SupportingEvidenceRefs:    cloneStrings(command.SupportingEvidenceRefs),
@@ -739,6 +767,7 @@ func (s *Service) UpdateClaim(ctx context.Context, command UpdateClaimCommand) (
 	next := researchclaim.Claim{
 		ClaimID:                   previous.ClaimID,
 		ClaimVersion:              previous.ClaimVersion + 1,
+		SupersedesVersion:         cloneInt(revision.SupersedesVersion),
 		Statement:                 revision.Statement,
 		EpistemicType:             researchclaim.EpistemicType(revision.EpistemicType),
 		ScopeRefs:                 cloneStrings(revision.ScopeRefs),
@@ -783,7 +812,7 @@ func (s *Service) GetClaim(ctx context.Context, ref ClaimRef) (Claim, error) {
 
 func fromDomainClaim(value researchclaim.Claim) Claim {
 	return Claim{
-		ClaimID: value.ClaimID, ClaimVersion: value.ClaimVersion, Statement: value.Statement,
+		ClaimID: value.ClaimID, ClaimVersion: value.ClaimVersion, SupersedesVersion: cloneInt(value.SupersedesVersion), Statement: value.Statement,
 		EpistemicType: string(value.EpistemicType), ScopeRefs: cloneStrings(value.ScopeRefs), SystemAsOf: value.SystemAsOf,
 		SupportingEvidenceRefs:    cloneStrings(value.SupportingEvidenceRefs),
 		ContradictingEvidenceRefs: cloneStrings(value.ContradictingEvidenceRefs),

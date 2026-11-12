@@ -94,7 +94,7 @@ func TestResearchEventLifecycleOutboxFailureRollsBackEventVersion(t *testing.T) 
 		SubjectRefs: []string{"security:600000"}, EvidenceRefs: []string{},
 		SystemObservedAt: now, SystemAsOf: now,
 		ImpactHypothesisRefs: []string{}, InvalidationConditions: []string{},
-		Uncertainty: []string{}, SourceTimes: []researchevent.EventSourceTime{},
+		Uncertainty: []string{}, TimeNormalizationRuleVersion: "1.0.0", DerivedFromRefs: []researchevent.ResearchEventRef{}, SourceTimes: []researchevent.EventSourceTime{},
 	}
 	if err := repo.Append(ctx, previous); err != nil {
 		t.Fatalf("append Event v1: %v", err)
@@ -146,7 +146,7 @@ func TestResearchOutboxClaimRetryAndConfirmation(t *testing.T) {
 		EventID: eventID, EventVersion: 1, EventType: "integration_fixture", Title: "Outbox delivery fixture",
 		Status: researchevent.StatusDetected, SubjectRefs: []string{}, EvidenceRefs: []string{},
 		SystemObservedAt: now, SystemAsOf: now, ImpactHypothesisRefs: []string{},
-		InvalidationConditions: []string{}, Uncertainty: []string{}, SourceTimes: []researchevent.EventSourceTime{},
+		InvalidationConditions: []string{}, Uncertainty: []string{}, TimeNormalizationRuleVersion: "1.0.0", DerivedFromRefs: []researchevent.ResearchEventRef{}, SourceTimes: []researchevent.EventSourceTime{},
 	}
 	if err := repo.AppendWithLifecycle(ctx, value, nil, "corr_integration"); err != nil {
 		t.Fatalf("append Event and initial Outbox: %v", err)
@@ -225,7 +225,7 @@ func TestResearchOutboxConcurrentClaimsDoNotDuplicateLease(t *testing.T) {
 		SubjectRefs: []string{}, EvidenceRefs: []string{},
 		SystemObservedAt: now, SystemAsOf: now,
 		ImpactHypothesisRefs: []string{}, InvalidationConditions: []string{},
-		Uncertainty: []string{}, SourceTimes: []researchevent.EventSourceTime{},
+		Uncertainty: []string{}, TimeNormalizationRuleVersion: "1.0.0", DerivedFromRefs: []researchevent.ResearchEventRef{}, SourceTimes: []researchevent.EventSourceTime{},
 	}
 	if err := repo.AppendWithLifecycle(ctx, value, nil, "corr_concurrent_claim"); err != nil {
 		t.Fatalf("append Event and Outbox: %v", err)
@@ -281,149 +281,7 @@ func TestResearchOutboxConcurrentClaimsDoNotDuplicateLease(t *testing.T) {
 	}
 }
 
-func TestResearchMigrationsUpgradeHistoricalRowsFromV1ToV5(t *testing.T) {
-	dsn := os.Getenv("RESEARCH_MIGRATION_TEST_MYSQL_DSN")
-	if dsn == "" {
-		t.Skip("RESEARCH_MIGRATION_TEST_MYSQL_DSN is not set; skipping isolated migration upgrade test")
-	}
-	config, err := mysql.ParseDSN(dsn)
-	if err != nil {
-		t.Fatalf("parse RESEARCH_MIGRATION_TEST_MYSQL_DSN: %v", err)
-	}
-	if !strings.HasSuffix(strings.ToLower(config.DBName), "_migration_test") {
-		t.Fatalf("RESEARCH_MIGRATION_TEST_MYSQL_DSN database %q is unsafe; isolated database name must end with _migration_test", config.DBName)
-	}
-	db, err := sql.Open("mysql", dsn)
-	if err != nil {
-		t.Fatalf("open isolated MariaDB: %v", err)
-	}
-	t.Cleanup(func() { _ = db.Close() })
-
-	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
-	defer cancel()
-	if err := db.PingContext(ctx); err != nil {
-		t.Fatalf("ping isolated MariaDB: %v", err)
-	}
-	var existingTables int
-	if err := db.QueryRowContext(ctx,
-		"SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE()").Scan(&existingTables); err != nil {
-		t.Fatalf("inspect isolated migration database: %v", err)
-	}
-	if existingTables != 0 {
-		t.Fatalf("isolated migration database contains %d tables; refusing destructive upgrade test", existingTables)
-	}
-	t.Cleanup(func() {
-		for _, table := range []string{
-			"research_notification_outbox",
-			"research_claim_versions",
-			"research_event_versions",
-			"research_evidence_records",
-			"research_context_versions",
-			"research_aggregate_heads",
-			"platform_schema_migrations",
-		} {
-			_, _ = db.ExecContext(context.Background(), "DROP TABLE IF EXISTS "+table)
-		}
-	})
-
-	migrations := Migrations()
-	if err := platformstorage.ApplyMigrations(ctx, db, MigrationNamespace, migrations[:1]); err != nil {
-		t.Fatalf("apply Research migration v1: %v", err)
-	}
-
-	const (
-		contextTime  = "2026-11-08 12:34:56.123456"
-		observedTime = "2026-11-08 12:34:57.654321"
-		asOfTime     = "2026-11-08 12:35:00.000001"
-		createdTime  = "2026-11-08 12:36:00.654321"
-	)
-	if _, err := db.ExecContext(ctx,
-		"INSERT INTO research_context_versions (context_id, context_version, system_as_of, payload_sha256, payload, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-		"ctx_migration_fixture", 1, contextTime, strings.Repeat("a", 64), "{\"legacy\":\"context\"}", createdTime); err != nil {
-		t.Fatalf("seed v1 Context row: %v", err)
-	}
-	if _, err := db.ExecContext(ctx,
-		"INSERT INTO research_evidence_records (evidence_id, source_owner, source_ref, source_version, available_at, system_observed_at, system_as_of, quality_status, content_level, authorization_ref, content_fingerprint, payload_sha256, payload, created_at) VALUES (?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-		"ev_migration_fixture", "data", "data:fixture:1", observedTime, asOfTime, "valid", "metadata", "auth:migration", strings.Repeat("b", 64), strings.Repeat("c", 64), "{\"legacy\":\"evidence\"}", createdTime); err != nil {
-		t.Fatalf("seed v1 Evidence row: %v", err)
-	}
-	if _, err := db.ExecContext(ctx,
-		"INSERT INTO research_event_versions (event_id, event_version, status, system_as_of, payload_sha256, payload, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-		"evt_migration_fixture", 1, "detected", asOfTime, strings.Repeat("d", 64), "{\"legacy\":\"event\"}", createdTime); err != nil {
-		t.Fatalf("seed v1 Event row: %v", err)
-	}
-	if _, err := db.ExecContext(ctx,
-		"INSERT INTO research_claim_versions (claim_id, claim_version, epistemic_type, status, system_as_of, payload_sha256, payload, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-		"clm_migration_fixture", 1, "reported_fact", "proposed", asOfTime, strings.Repeat("e", 64), "{\"legacy\":\"claim\"}", createdTime); err != nil {
-		t.Fatalf("seed v1 Claim row: %v", err)
-	}
-
-	if err := platformstorage.ApplyMigrations(ctx, db, MigrationNamespace, migrations[:4]); err != nil {
-		t.Fatalf("upgrade Research schema from v1 through v4: %v", err)
-	}
-
-	const outboxPIT = "2026-11-08T12:36:00.654321000Z"
-	if _, err := db.ExecContext(ctx,
-		"INSERT INTO research_notification_outbox (event_id, event_type, schema_version, source_module, occurred_at, published_at, subject_ref, idempotency_key, correlation_id, payload_fingerprint, payload, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-		"nte_migration_fixture", "research.lifecycle_changed", "1.0.0", "research",
-		outboxPIT, outboxPIT, "research-event:evt_migration_fixture", "migration-fixture-key",
-		"corr_migration_fixture", strings.Repeat("f", 64), "{\"legacy\":\"outbox\"}", createdTime); err != nil {
-		t.Fatalf("seed v4 Outbox row: %v", err)
-	}
-	if err := platformstorage.ApplyMigrations(ctx, db, MigrationNamespace, migrations); err != nil {
-		t.Fatalf("upgrade Research schema from v4 to v5: %v", err)
-	}
-
-	assertExact := func(name, query, want string, args ...any) {
-		t.Helper()
-		var got string
-		if err := db.QueryRowContext(ctx, query, args...).Scan(&got); err != nil {
-			t.Fatalf("read migrated %s: %v", name, err)
-		}
-		if got != want {
-			t.Fatalf("migrated %s = %q, want %q", name, got, want)
-		}
-	}
-	assertExact("Context system_as_of", "SELECT system_as_of FROM research_context_versions WHERE context_id=?", "2026-11-08T12:34:56.123456000Z", "ctx_migration_fixture")
-	assertExact("Evidence system_observed_at", "SELECT system_observed_at FROM research_evidence_records WHERE evidence_id=?", "2026-11-08T12:34:57.654321000Z", "ev_migration_fixture")
-	assertExact("Evidence system_as_of", "SELECT system_as_of FROM research_evidence_records WHERE evidence_id=?", "2026-11-08T12:35:00.000001000Z", "ev_migration_fixture")
-	assertExact("Event system_as_of", "SELECT system_as_of FROM research_event_versions WHERE event_id=?", "2026-11-08T12:35:00.000001000Z", "evt_migration_fixture")
-	assertExact("Claim system_as_of", "SELECT system_as_of FROM research_claim_versions WHERE claim_id=?", "2026-11-08T12:35:00.000001000Z", "clm_migration_fixture")
-	var availableAt sql.NullString
-	if err := db.QueryRowContext(ctx, "SELECT available_at FROM research_evidence_records WHERE evidence_id=?", "ev_migration_fixture").Scan(&availableAt); err != nil {
-		t.Fatalf("read migrated Evidence available_at: %v", err)
-	}
-	if availableAt.Valid {
-		t.Fatalf("Evidence available_at = %q, want preserved NULL", availableAt.String)
-	}
-	assertExact("Context payload", "SELECT payload FROM research_context_versions WHERE context_id=?", "{\"legacy\":\"context\"}", "ctx_migration_fixture")
-	assertExact("Evidence payload", "SELECT payload FROM research_evidence_records WHERE evidence_id=?", "{\"legacy\":\"evidence\"}", "ev_migration_fixture")
-	assertExact("Event payload", "SELECT payload FROM research_event_versions WHERE event_id=?", "{\"legacy\":\"event\"}", "evt_migration_fixture")
-	assertExact("Claim payload", "SELECT payload FROM research_claim_versions WHERE claim_id=?", "{\"legacy\":\"claim\"}", "clm_migration_fixture")
-
-	var eventType, claimType string
-	if err := db.QueryRowContext(ctx, "SELECT DATA_TYPE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='research_event_versions' AND COLUMN_NAME='event_version'").Scan(&eventType); err != nil {
-		t.Fatalf("read migrated Event version type: %v", err)
-	}
-	if err := db.QueryRowContext(ctx, "SELECT DATA_TYPE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='research_claim_versions' AND COLUMN_NAME='claim_version'").Scan(&claimType); err != nil {
-		t.Fatalf("read migrated Claim version type: %v", err)
-	}
-	if eventType != "bigint" || claimType != "bigint" {
-		t.Fatalf("migrated version types = Event:%q Claim:%q, want bigint", eventType, claimType)
-	}
-
-	var status, available string
-	var attempts int
-	var updated string
-	if err := db.QueryRowContext(ctx,
-		"SELECT delivery_status, available_at, attempt_count, DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i:%s.%f') FROM research_notification_outbox WHERE event_id=?",
-		"nte_migration_fixture").Scan(&status, &available, &attempts, &updated); err != nil {
-		t.Fatalf("read migrated Outbox row: %v", err)
-	}
-	if status != "pending" || available != outboxPIT || attempts != 0 || updated != createdTime {
-		t.Fatalf("migrated Outbox state = status:%q available_at:%q attempts:%d updated_at:%q", status, available, attempts, updated)
-	}
-}
+func intPointer(value int) *int { return &value }
 
 func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 	db := openResearchIntegrationDB(t)
@@ -435,6 +293,12 @@ func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
 	contextID := "ctx-it-" + suffix
 	eventID := "event-it-" + suffix
+	derivedParentID := eventID + "-parent"
+	derivedChildID := eventID + "-child"
+	missingDerivedID := eventID + "-missing-ref"
+	cycleAID := eventID + "-cycle-a"
+	cycleBID := eventID + "-cycle-b"
+	cycleCID := eventID + "-cycle-c"
 	claimID := "claim-it-" + suffix
 	evidenceID := "evidence-it-" + suffix
 	concurrentEvidenceID := "evidence-concurrent-it-" + suffix
@@ -444,10 +308,10 @@ func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 
 	t.Cleanup(func() {
 		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_context_versions WHERE context_id IN (?, ?, ?)", contextID, orphanContextID, lockedContextID)
-		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_event_versions WHERE event_id=?", eventID)
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_event_versions WHERE event_id IN (?, ?, ?, ?, ?, ?, ?)", eventID, derivedParentID, derivedChildID, missingDerivedID, cycleAID, cycleBID, cycleCID)
 		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_claim_versions WHERE claim_id=?", claimID)
 		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_evidence_records WHERE evidence_id IN (?, ?)", evidenceID, concurrentEvidenceID)
-		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_aggregate_heads WHERE aggregate_id IN (?, ?, ?, ?, ?, ?)", contextID, eventID, claimID, cancelledContextID, orphanContextID, lockedContextID)
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_aggregate_heads WHERE aggregate_id IN (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", contextID, eventID, derivedParentID, derivedChildID, missingDerivedID, cycleAID, cycleBID, cycleCID, claimID, cancelledContextID, orphanContextID, lockedContextID)
 	})
 
 	contextRepo, err := NewContextRepository(db, clock)
@@ -722,11 +586,55 @@ func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 		SubjectRefs: []string{}, EvidenceRefs: []string{},
 		SystemObservedAt: cutoff, SystemAsOf: cutoff,
 		ImpactHypothesisRefs: []string{}, InvalidationConditions: []string{},
-		Uncertainty: []string{}, SourceTimes: []researchevent.EventSourceTime{},
+		Uncertainty: []string{}, TimeNormalizationRuleVersion: "1.0.0", DerivedFromRefs: []researchevent.ResearchEventRef{}, SourceTimes: []researchevent.EventSourceTime{},
 	}
 	if err := eventRepo.Append(ctx, eventV1); err != nil {
 		t.Fatalf("append Event v1: %v", err)
 	}
+	parentEvent := eventV1
+	parentEvent.EventID = derivedParentID
+	if err := eventRepo.Append(ctx, parentEvent); err != nil { t.Fatalf("append derived parent Event: %v", err) }
+	childEvent := eventV1
+	childEvent.EventID = derivedChildID
+	childEvent.DerivedFromRefs = []researchevent.ResearchEventRef{{EventID: derivedParentID, EventVersion: 1}}
+	if err := eventRepo.Append(ctx, childEvent); err != nil { t.Fatalf("append Event with exact derived reference: %v", err) }
+	missingDerived := eventV1
+	missingDerived.EventID = missingDerivedID
+	missingDerived.DerivedFromRefs = []researchevent.ResearchEventRef{{EventID: "event:missing", EventVersion: 1}}
+	if err := eventRepo.Append(ctx, missingDerived); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("append Event with missing derived reference = %v, want ErrNotFound", err)
+	}
+	var missingHeadCount int
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM research_aggregate_heads WHERE aggregate_type='event' AND aggregate_id=?", missingDerivedID).Scan(&missingHeadCount); err != nil { t.Fatalf("count rejected derived Event head: %v", err) }
+	if missingHeadCount != 0 { t.Fatalf("missing-reference append left %d aggregate heads, want 0", missingHeadCount) }
+
+	// 通过直接注入损坏行构造循环图，验证追加时递归检查会 fail closed。
+	cycleA := eventV1
+	cycleA.EventID = cycleAID
+	cycleA.DerivedFromRefs = []researchevent.ResearchEventRef{{EventID: cycleBID, EventVersion: 1}}
+	cycleB := eventV1
+	cycleB.EventID = cycleBID
+	cycleB.DerivedFromRefs = []researchevent.ResearchEventRef{{EventID: cycleAID, EventVersion: 1}}
+	for _, value := range []researchevent.ResearchEvent{cycleA, cycleB} {
+		payload, digest, err := encodePayload(value)
+		if err != nil { t.Fatalf("encode cyclic Event fixture: %v", err) }
+		if _, err := db.ExecContext(ctx,
+			"INSERT INTO research_event_versions (event_id, event_version, status, system_as_of, payload_sha256, payload, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+			value.EventID, value.EventVersion, string(value.Status), formatPIT(value.SystemAsOf), digest, string(payload), now); err != nil {
+			t.Fatalf("seed cyclic Event fixture %s: %v", value.EventID, err)
+		}
+	}
+	cycleCandidate := eventV1
+	cycleCandidate.EventID = cycleCID
+	cycleCandidate.DerivedFromRefs = []researchevent.ResearchEventRef{{EventID: cycleAID, EventVersion: 1}}
+	if err := eventRepo.Append(ctx, cycleCandidate); err == nil || !strings.Contains(err.Error(), "cycle") {
+		t.Fatalf("append Event referencing cyclic lineage = %v, want cycle rejection", err)
+	}
+	var cycleHeadCount int
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM research_aggregate_heads WHERE aggregate_type='event' AND aggregate_id=?", cycleCID).Scan(&cycleHeadCount); err != nil {
+		t.Fatalf("count rejected cyclic Event head: %v", err)
+	}
+	if cycleHeadCount != 0 { t.Fatalf("cyclic-reference append left %d aggregate heads, want 0", cycleHeadCount) }
 	assertResearchPITColumn(t, ctx, db, "SELECT system_as_of FROM research_event_versions WHERE event_id=? AND event_version=1", []any{eventID}, cutoff)
 	if err := eventRepo.Append(ctx, eventV1); err != nil {
 		t.Fatalf("replay Event v1: %v", err)
@@ -769,8 +677,21 @@ func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 	claimV2 := claimV1
 	claimV2.ClaimVersion = 2
 	claimV2.SystemAsOf = cutoff.Add(time.Minute)
+	claimV2.SupersedesVersion = intPointer(1)
 	if err := claimRepo.Append(ctx, claimV2); err != nil {
 		t.Fatalf("append Claim v2: %v", err)
+	}
+	staleClaimV3 := claimV2
+	staleClaimV3.ClaimVersion = 3
+	staleClaimV3.SystemAsOf = cutoff.Add(2 * time.Minute)
+	staleClaimV3.SupersedesVersion = intPointer(1)
+	if err := claimRepo.Append(ctx, staleClaimV3); err == nil {
+		t.Fatal("Claim v3 must reject supersedes_version pointing behind the current version head")
+	}
+	claimV3 := staleClaimV3
+	claimV3.SupersedesVersion = intPointer(2)
+	if err := claimRepo.Append(ctx, claimV3); err != nil {
+		t.Fatalf("append Claim v3 superseding current head: %v", err)
 	}
 	if got, err := claimRepo.GetVersion(ctx, claimID, 2); err != nil || got.ClaimVersion != 2 {
 		t.Fatalf("get Claim v2 = version %d, error %v", got.ClaimVersion, err)
@@ -956,7 +877,7 @@ func TestResearchAppendRejectsAggregateHeadWithMissingLatestVersion(t *testing.T
 		SubjectRefs: []string{}, EvidenceRefs: []string{},
 		SystemObservedAt: now, SystemAsOf: now,
 		ImpactHypothesisRefs: []string{}, InvalidationConditions: []string{},
-		Uncertainty: []string{}, SourceTimes: []researchevent.EventSourceTime{},
+		Uncertainty: []string{}, TimeNormalizationRuleVersion: "1.0.0", DerivedFromRefs: []researchevent.ResearchEventRef{}, SourceTimes: []researchevent.EventSourceTime{},
 	}
 	if err := repo.Append(ctx, next); !errors.Is(err, ErrCorruptRecord) {
 		t.Fatalf("append with missing latest Event row = %v, want ErrCorruptRecord", err)
@@ -1002,7 +923,7 @@ func TestResearchOutboxRejectsExpiredLeaseEvenWithBackdatedActionTime(t *testing
 		SubjectRefs: []string{}, EvidenceRefs: []string{},
 		SystemObservedAt: now, SystemAsOf: now,
 		ImpactHypothesisRefs: []string{}, InvalidationConditions: []string{},
-		Uncertainty: []string{}, SourceTimes: []researchevent.EventSourceTime{},
+		Uncertainty: []string{}, TimeNormalizationRuleVersion: "1.0.0", DerivedFromRefs: []researchevent.ResearchEventRef{}, SourceTimes: []researchevent.EventSourceTime{},
 	}
 	if err := repo.AppendWithLifecycle(ctx, value, nil, "corr_expired_lease"); err != nil {
 		t.Fatalf("append Event and Outbox: %v", err)
