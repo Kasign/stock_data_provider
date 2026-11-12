@@ -1657,3 +1657,11 @@ Server Bootstrap
 - 测试数据库和 namespace 均按纳秒时间戳隔离，结束时仅删除本测试数据库，不触碰其他测试历史。
 - 本项只增加 Server 对 Platform Migration Runner 的真实故障场景组合验收，不复制 Migration 算法、不修改 Platform、不尝试自动修复 MariaDB 部分 DDL。checksum 只读预检 API 仍属于 Platform 公共能力缺口。
 - 首次 Workflow Run `43214521137` 在 gofmt 门禁发现测试文件函数间多余空行，包测试及后续门禁未执行；已在提交 `103fcec3ef54dbf13a212b9f35a77cd6d2fbd29b` 修正格式。最终 Server Workflow Run `43214719289`（Run #107，HEAD `0cf4e795951d79533f45a941de1ae73054596860`）成功：gofmt、Server 包测试、Race、真实 MariaDB/Redis 集成、Vet、Docker 镜像构建、真实容器 Bootstrap 与 SIGTERM smoke 全部通过。
+
+
+### 12.83 SRV-009 Diagnostics HTTP Report Schema 与 Golden（2026-11-12）
+
+- 按 PLAT-CTR-004 的职责划分，Platform 继续拥有 Observation/Runner；Server 为实际对外的 `/diagnostics` 组合响应定义独立 Schema 与 Golden，不复用 Platform Observation Schema。
+- Server Report 增加 `schema_version=1.0.0`，遵循 GOV-CTR-004 的独立 DTO 版本身份规则。Schema 仅描述 Runner 成功完成时的 200 响应：`diagnostics.summary`、`diagnostics.results[]` 和 `readiness`；不包含内部 `Result.Fault`。
+- HTTP 行为保持现有实现：Owner-only、GET/HEAD、`Cache-Control: no-store`；检查执行完成即返回 200，即使某项检查不健康；Runner 执行错误返回脱敏 503。该 Schema 不定义 503 错误投影，也不替代 PLAT-CTR-001。
+- 增加 Go 契约测试，使用项目既有 JSON Schema 校验库验证 Golden 与实际 Server Report 序列化结果，并断言内部 Fault 不进入 JSON。
