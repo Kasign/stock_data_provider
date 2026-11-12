@@ -160,7 +160,6 @@ func newLifecycleTestService(t *testing.T, auditErr error) (*SessionLifecycleSer
 	return service, credentials, sessions, limiter, audit
 }
 
-
 func TestSessionLifecycleLoginUsesContractSHA256RateLimitDigests(t *testing.T) {
 	service, _, _, limiter, _ := newLifecycleTestService(t, nil)
 	_, err := service.Login(context.Background(), LoginInput{
