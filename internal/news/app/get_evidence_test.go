@@ -38,6 +38,31 @@ func (s getEvidencePITRepositoryStub) GetEvidenceContentAt(context.Context, stri
 	return s.record.Version.Content, nil
 }
 
+func (s getEvidencePITRepositoryStub) GetEvidenceContentWithCurrentAuthorization(
+	ctx context.Context,
+	binding domain.NewsAuthorizationBinding,
+	_ domain.Observation,
+	_ domain.NewsItemVersion,
+	_ time.Time,
+	authorize func(context.Context, domain.CurrentAuthorizationPolicySet) error,
+) (domain.ContentLayers, error) {
+	policies := make([]domain.CurrentAuthorizationPolicy, 0, len(binding.PolicySnapshot.Policies))
+	for _, item := range binding.PolicySnapshot.Policies {
+		policies = append(policies, domain.CurrentAuthorizationPolicy{
+			PolicyType: item.PolicyType, PolicyRef: item.PolicyRef, PolicyVersion: item.PolicyVersion,
+			Status: domain.AuthorizationApproved, Allows: true,
+		})
+	}
+	current := domain.CurrentAuthorizationPolicySet{EvaluatedAt: time.Now().UTC(), Policies: policies}
+	if err := authorize(ctx, current); err != nil {
+		return domain.ContentLayers{}, err
+	}
+	if s.afterContentRead != nil {
+		s.afterContentRead()
+	}
+	return s.record.Version.Content, s.err
+}
+
 type getEvidenceAuthorizationSnapshotStub struct {
 	binding   domain.NewsAuthorizationBinding
 	err       error
@@ -73,7 +98,7 @@ type getEvidenceAuthorizerStub struct {
 	afterExecute func()
 }
 
-func (s *getEvidenceAuthorizerStub) Execute(_ context.Context, _ domain.NewsAuthorizationBinding, observation domain.Observation, _ domain.NewsItemVersion, _ string, _ string, _ domain.AuthorizationContentLevel) error {
+func (s *getEvidenceAuthorizerStub) ExecuteWithCurrentPolicies(_ context.Context, _ domain.NewsAuthorizationBinding, observation domain.Observation, _ domain.NewsItemVersion, _ string, _ string, _ domain.AuthorizationContentLevel, _ domain.CurrentAuthorizationPolicySet) error {
 	s.calls++
 	s.observation = observation
 	if s.afterExecute != nil {
