@@ -72,7 +72,7 @@ Web 负责交互、请求编排、状态展示和有限的浏览器本地工作�
 | 阶段 | 目标 | 主要任务 | 依赖/完成条件 | 状态 |
 |---|---|---|---|---|
 | W0 | 产品规划和文档基线 | 统一目标 IA；梳理页面与服务能力；清理过期排期/路径/状态；更新 API、架构、诊断和验收边界 | 文档内部链接、事实、基线和 Git diff 复核 | 已完成 |
-| W1 | 现有工作台收口 | 目标导航映射；明确研究对象/过程/结果/跟踪边界；页面状态和响应式体验收口；认证迁移准备 | 不新增业务 API；不假设 Session 已上线 | W1-A 完成；W1-B 导航壳层已实现，待验收 |
+| W1 | 现有工作台收口 | 目标导航映射；明确研究对象/过程/结果/跟踪边界；页面状态和响应式体验收口；认证迁移准备 | 不新增业务 API；不假设 Session 已上线 | W1-A/W1-B 完成；W1-D 部分验收通过，W1-C 待执行 |
 | W2 | 研究任务工作区升级 | 真实模板、Run/Stage/Attempt、执行进度、取消、服务端历史分页、结果综合和历史回看 | Researchflow Application Facade、Server 路由、权限及分页/取消契约可用 | 等待依赖 |
 | W3 | 研究中心与量化研究 | Research Evidence/Context/Event/Claim/Hypothesis/Scenario；Quant 指标/因子/趋势/策略/回测/风险 | Research、News Evidence Query、Quant DTO/API、PIT/质量/风险契约及 Server 注册可用 | 等待依赖 |
 | W4 | 跟踪与通知 | 服务端订阅、通知渠道、投递状态、告警规则/触发历史 | Notification API 和告警领域归属评审完成 | 等待依赖 |
@@ -93,7 +93,9 @@ Web 负责交互、请求编排、状态展示和有限的浏览器本地工作�
 - [x] W1-A：建立当前 11 个入口到目标七导航的映射。
 - [x] W1-A：形成页面职责、导航兼容和分批实施方案，见《WebUI 页面结构调整计划》。
 - [x] 用户确认七导航分组；旧 hash 沿用原 view id，market-data 归一到 market。
-- [x] W1-B：七个一级导航分组、子视图入口、活动态和深链刷新恢复已实现；待 CI/Browser Smoke 验收。
+- [x] W1-B：七个一级导航分组、子视图入口、活动态和深链刷新恢复已实现。
+- [x] W1-D：WebUI Checks 与 Chromium Browser Smoke 在 SHA 3845bdc50a52121d6d875b6071f85217ef3d86e1 通过；覆盖七入口、hash 直达/刷新、响应式断点和既有主要交互验收。
+- [ ] W1-D：浏览器前进/后退与 reduced-motion 专项仍待补验。
 - [ ] W1-C：收口页面内容和状态边界。
 - [ ] W1-D：按实际提交 SHA 执行 CI、浏览器和响应式验收。
 
@@ -126,4 +128,4 @@ Web 负责交互、请求编排、状态展示和有限的浏览器本地工作�
 
 ## 9. 本轮执行记录
 
-2026-11-12：以代码基线 e43dba62079c872d95919e5412e9c7cad21f477c 完成 W0，文档提交 1a13e3ae84e7b3fa4824070e6dd942eb9171f64c、2de5cd6c2241bb6a691155d5e28d2668a4b8b0bc。W1-A 于 8cc8a06d8c65aa637cea5c29d094ec9a52b86fd4 完成规划并经用户确认；W1-B 本轮实现七导航壳层、子视图入口、状态同步和 hash 深链恢复，待本次 SHA 的 CI/Browser Smoke 验收。
+2026-11-12：以代码基线 e43dba62079c872d95919e5412e9c7cad21f477c 完成 W0，文档提交 1a13e3ae84e7b3fa4824070e6dd942eb9171f64c、2de5cd6c2241bb6a691155d5e28d2668a4b8b0bc。W1-A 于 8cc8a06d8c65aa637cea5c29d094ec9a52b86fd4 完成规划并经用户确认；W1-B 已实现七导航壳层、子视图入口、状态同步和 hash 深链恢复。验收 SHA 3845bdc50a52121d6d875b6071f85217ef3d86e1 的 WebUI Checks（43154904745）与 Chromium Browser Smoke（43154904775）均通过；W1-C 未开始，W1-D 的前进/后退和 reduced-motion 专项仍待补验。
