@@ -222,7 +222,6 @@ func TestSessionLifecycleInitializeOwnerClearsBootstrapSecret(t *testing.T) {
 	}
 }
 
-
 func TestSessionLifecycleLogoutRevokesSessionAndClearsCookie(t *testing.T) {
 	service, _, sessions, _, audit := newLifecycleTestService(t, nil)
 	issue, err := service.Login(context.Background(), LoginInput{
