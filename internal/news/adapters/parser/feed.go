@@ -375,6 +375,7 @@ func parseFeedTime(raw string) (time.Time, bool) {
 		time.RFC3339Nano,
 		time.RFC1123Z,
 		time.RFC822Z,
+		"Mon, 02 Jan 06 15:04:05 -0700",
 	}
 	for _, layout := range layouts {
 		parsed, err := time.Parse(layout, zoned)
