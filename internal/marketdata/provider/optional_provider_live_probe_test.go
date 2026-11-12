@@ -802,8 +802,8 @@ func TestLiveEastmoneyTencentAdjustmentReferenceEvidence(t *testing.T) {
 				t.Fatalf("resolve Eastmoney K-line origin: %v", originErr)
 			}
 			doer := &http.Client{
-				Timeout: 25 * time.Second,
-				Transport: capture.transport(),
+				Timeout:       25 * time.Second,
+				Transport:     capture.transport(),
 				CheckRedirect: eastmoneyRedirectPolicy,
 			}
 			provider := NewEastmoneyConfigured(25*time.Second, "", klineURL, "").WithHTTPDoers(map[string]HTTPDoer{origin: doer})
