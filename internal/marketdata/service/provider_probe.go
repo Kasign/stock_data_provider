@@ -1224,8 +1224,8 @@ func (s *DataService) applyFreshnessProbeResults(ctx context.Context, run *model
 	}
 	returned := func(check model.ProviderProbeCheckResult) bool {
 		status, exists := itemStatuses[check.Provider+"\x00"+check.Capability]
-		if !exists {
-			// 允许只提供 CheckResults 的单元测试和内部调用继续执行 Freshness 评估。
+		if !exists || status == "" {
+			// 允许旧版/独立检查结果继续执行 Freshness 评估。
 			return true
 		}
 		switch status {
