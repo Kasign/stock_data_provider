@@ -1475,3 +1475,20 @@ Server Bootstrap
 - 本阶段只提供可测试的认证组合器，不注册 HTTP 路由、不定义登录/退出/密码修改 HTTP DTO，也未在 Bootstrap 启用；SRV-CTR-001 仍 deferred，不能据此宣称 Web 登录 API 已接入。
 - 测试覆盖 owner_session Principal、Cookie 安全属性/续期、Cookie 缺失与重复、CSRF 缺失/重复/跨 Origin、Host 不匹配、CredentialVersion 失效和 SessionStore 故障 fail-closed。
 - 本轮未执行真实 MariaDB/Redis 或 Web/Nginx E2E；Server CI 通过后仅视为包级/竞态/静态检查证据。后续需补充可信登录/退出用例、Origin/Host 配置接入、审计 Writer 持久化和路由矩阵；不得将此认证器直接挂到旧 Analysis 路由。
+
+
+### 12.64 SRV-005 Owner Session 生命周期内部服务（2026-11-12）
+
+- 新增 `internal/server/security.SessionLifecycleService`，仅组合 Platform 已有 CredentialStore、SessionStore、LoginRateLimiter、Argon2id Hasher、Cookie、CSRF 和 SecurityAuditWriter；不复制 Redis/MariaDB 实现，不修改 Platform。
+- 覆盖内部用例：
+  - `InitializeOwner`：消费一次性初始 Secret、生成 PHC Argon2id Hash、调用单 Owner CredentialStore 初始化；清零调用方传入的密码字节切片。
+  - `Login`：固定 Owner 身份、账号/IP 双维度限流、统一认证失败响应、失败计数、成功后清理账号维度失败状态、创建新的 256-bit Session Token 与独立 CSRF Token；持久化仅保存 Token/CSRF Digest。
+  - `Logout`：撤销当前 Session 并返回同作用域过期 Cookie。
+  - `RotateSession`：检查现有 Session 和 MariaDB CredentialVersion，通过 Platform 原子 Rotate 使旧 Token 失效，同时重新生成 CSRF Token。
+  - `ChangePassword`：校验当前密码，使用 CredentialStore CAS 更新 Hash 与 CredentialVersion；版本递增使旧 Session 在认证时失效。
+- 登录限流标识采用带域分离的 HMAC-SHA256，不把原始 IP 写入 Redis Key 或审计事件。HMAC Key 必须由调用方注入且至少 32 字节；必须在同一部署的实例间保持一致并妥善保管。密钥轮换会导致既有登录失败计数无法继续关联，应作为有意识的运维变更。
+- `LoginInput.SourceIP` 必须由可信入口解析。服务本身不读取 `X-Forwarded-For`；当前没有可信代理 CIDR 配置接线时，调用方只能传入 `RemoteAddr` 解析出的直接对端 IP，不能信任任意转发头。
+- 审计策略采用 fail-closed：登录失败/限流事件写入失败时不返回普通认证结果；成功登录的 Session 已创建但任一成功审计事件写入失败时，尝试撤销新 Session 并拒绝签发 Cookie。Logout 先完成撤销，再返回清除 Cookie；即使审计写入失败仍返回清除 Cookie 和审计错误，调用方必须发出清除 Cookie。密码初始化/更新一旦由 CredentialStore 成功提交，后续审计失败不会回滚数据库写入，方法返回审计错误；调用方不得把该错误解释为凭证未变更，需通过 CredentialStore 重新读取确认状态。
+- 本阶段不把服务接入 Bootstrap，不定义登录/退出/密码修改 HTTP 路由或 DTO，不启用浏览器认证。Argon2id Hasher 由外部显式注入；没有目标部署硬件基准，不提供生产成本参数或默认值。
+- 单测覆盖成功登录签发、错误密码计数、审计失败时撤销新 Session、初始化 Secret 清零。Logout/Rotate/ChangePassword 的完整状态机测试、可信代理配置接线、持久化 Audit Writer、Bootstrap 装配和真实 MariaDB/Redis E2E 仍待后续阶段。
+- 安全边界注意：Platform SessionStore 当前只公开 `LookupAndTouch`，因此 RotateSession 在 CSRF/HTTP Middleware 完整接入前不应作为独立外部入口暴露；当前它只是一项内部生命周期能力。SessionAuthenticator 仍会在 CSRF 校验前执行 LookupAndTouch，错误 CSRF 请求可能刷新 idle TTL；不绕过 Platform Store 私有实现，后续需向 Platform 提交只读 Lookup 原语提案或在契约允许的情况下调整认证流程。
