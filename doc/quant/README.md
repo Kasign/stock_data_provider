@@ -7,17 +7,50 @@
 
 ## 当前状态
 
-Quant 已具备首批 Indicator/Factor 纯计算、CalculationContext、基础 Registry、RiskDecision/RuleSet 执行框架、TrendResult DTO、Manifest/ResultRef 和 Repository Save Port 等模块内能力。最近代码验收 SHA `cda200a1e4a3673bb4a34cd4b914d32f0a3be823` 的 Quant 独立 CI Workflow `42618742241` 已全部通过，覆盖 gofmt、`go test ./internal/quant/...`、Manifest 30 秒随机 Fuzz、Race 和 Vet。
+最近一次代码验收 SHA：`7f6dcfd0582d3b505d8b45688bc1b74055a1866f`（2026-11-12）；Quant 专项 CI Workflow `43152597197` 对该 SHA 已通过 gofmt、Quant 全量单测、Manifest 30 秒 Fuzz、Race、Vet。其后提交仅更新文档。
 
-同一代码 SHA 的全仓 Go Workflow `42618742230` 已结束但失败：根模块 gofmt、`services/market-data` 测试及 Market Data Docker 镜像构建失败；`go-core`、News MariaDB 集成和 Market Data MariaDB migration/PIT 集成 Job 成功。当前分支 HEAD 在该代码验收 SHA 之后只有文档提交、没有 Quant 代码变化。上述全仓失败不属于 Quant 独立工作流失败；仍需对应模块修复。Quant 独立 CI 只证明模块内代码验证，不代表真实行情、生产 Registry 元数据、运行时授权、完整结果 Envelope、Platform Storage 或 Server 集成验收完成。
+已具备首批 Indicator/Factor 纯计算、CalculationContext、基础 Registry、RiskDecision/RuleSet 执行框架、TrendResult DTO、Manifest/ResultRef、Repository Save Port/MemoryRepository，以及 QuantResult Envelope 初版。
 
-当前主要外部阻塞：
-- Data：DailyBars v2 Decimal 输入、真实 PIT/复权/交易日历及质量证据。
-- Server/GOV：可信 Principal 注入、Quant Owner 授权签发与每次读取的当前授权复核。
+本轮完成：
+- DEC-PLAT-002-048：Manifest 绑定结果资源语义字段，全部进入 JCS 指纹和 ResultID。
+- Ref 投影收敛：业务字段从已验证 Manifest 派生；当前 authorization_ref 与记录 created_at 独立提供。
+- DEC-PLAT-002-049：Risk RuleSet、Reason、RiskDecision 聚合及 TrendResult evidence Metric 时间一致性校验。
+- Envelope 1.0.0：从 Manifest 投影元数据；payload 按 `(result_type, payload_schema_version)` 显式解码；未知组合 fail closed。
+- 当前仅注册 `trend/1.0.0`、`risk/1.0.0` 两种强类型 Payload；Trend/Risk 与 Envelope 的重复字段逐项校验，Envelope 与 Manifest 逐字段校验并验证 Payload 指纹。
+- IndicatorResultPayload 1.0.0 已补齐独立结构 Schema、合成 Golden 和 Go 容器/顺序/跨 Metric 一致性 Validator；因逐指标 Registry Entry 元数据未完成，仍不加入 Envelope 解码/构造注册表。
+- Envelope JSON Schema、Trend/Risk Golden、Schema 回归、序列化/反序列化和非法输入测试已补齐。
+- Envelope Marshal/Unmarshal 均执行结构校验；input_snapshot_refs 必须显式存在、唯一且按 Manifest 规范顺序排列，允许空数组。
+- Envelope Unmarshal 在强类型结构解码前拒绝重复 JSON 键、转义后重名键和非法 UTF-8；与授权证明采用同一 Manifest JSON 安全校验入口。
+- Envelope 严格 JSON 负例覆盖顶层重复键和转义后重名键；回归测试确认两种输入均被拒绝。
+- QNT-CTR-001 Registry Entry 2.0.0 已接入 Go `SampleCountPolicy`；`ValidateMetric` 按 `required_in_metric` 检查字段存在性，保留缺失、null、0 的差异；Schema 1.0.0 保留历史投影。
+- 八份 Indicator Golden 已显式固化 `expected.sample_count`，测试直接读取 Golden 期望值。
+- 新增 `internal/quant/application.GetResult`：从可信 PrincipalResolver 获取主体，调用授权读取 Port，在释放 Payload 前验证 GOV-CTR-006 授权指纹/策略快照、Manifest 与 Payload 指纹，并只解码已注册的 Trend/Risk 强类型 Envelope。
+- GetResult 强制注入 `AccessAuditor`：显式拒绝、授权服务不可用、结果完整性失败和成功释放均写入元数据审计事件；审计写入失败时不释放 Envelope。AuthorizationRef/PolicySnapshot 严格解码，区分 `expires_at` 缺失与显式 null，并拒绝未知字段、重复 JSON 键及歧义输入。
+
+<badge color="success">Quant 专项 CI 通过</badge> Workflow `43142021410` 对验收 SHA `4ce2fd155c21e7f8fe850c6f7f8c8d105b3dd47e` 的 gofmt、Quant 全量单测、Manifest 30 秒随机 Fuzz、Race、Vet 全部通过。
+
+**Payload 支持边界：**
+- 已注册：`trend/1.0.0`、`risk/1.0.0`。
+- 尚未注册：`indicator`、`factor`。IndicatorResultPayload 的容器 Schema/Golden/Go 结构 Validator 已完成，但逐指标 Registry Entry 的单位、精度、值域、质量策略和 sample_count 计数语义尚未齐备，不能加入 Envelope Registry。FactorResultPayload 仍待完整 Schema/Golden/Validator，且继续受 DATA-CTR-005 deferred 门禁约束；两者均不得生成或消费完整 Envelope。
+- `market/industry/stock/strategy/backtest/evaluation` 仍为预留类型，当前必须拒绝，不能用宽泛 object/map 兜底。
+
+项目级状态：QNT-CTR-004/005 均为 `frozen`（DEC-PLAT-002-051）。未完成的 Payload 子类型、运行时授权和消费者验收属于 L2 实现符合性待办，不改变契约冻结状态。
+
+当前剩余阻塞：
+- Indicator：容器 Schema/Golden/结构 Validator 已完成；仍待逐指标 Registry Entry 元数据，未注册到 Envelope。Factor：容器 Schema/Golden/Validator 仍待完成，且 DATA-CTR-005 deferred 门禁未解除。
+- Quant 授权：GetResult、AuthorizedResultReader 和 AccessAuditor Port 已建立；生产当前策略源、与存储同一致性边界的原子读取、审计落库仍需 Server/Platform Storage Adapter 接入并做撤销竞态验收。当前不能把接口契约和内存测试视为生产授权已通过。
+- Data：DailyBars v2 Decimal 输入、真实 PIT/复权/交易日历及质量证据；没有真实数据证据，不标记真实数据验收通过。
 - Platform/Server：正式 Storage/事务接入、根 Migration 注册和统一 Diagnostics 装配。
-- 项目契约/Researchflow：Envelope 与 Payload 版本语义、强类型 Payload 映射及消费者 Contract Test。
+- Researchflow：Envelope discriminator/Schema/版本消费校验、当前授权引用传递及双方 Contract Test。
 
-QNT-CTR-001、002、004、005 的项目级状态为 `frozen`；QNT-CTR-003 为 `deferred`。权威状态、延期条件和重新进入条件以项目级 [PLAT-002 项目级契约冻结登记簿](../contract/PLAT-002-项目级契约冻结登记簿.md) 为准。L1 冻结不代表 Quant 模块实现符合性、消费者映射或真实数据验收已完成。
+全仓 Go Test Suite Workflow `43146432716` 对代码 SHA `d2dc66eba08635bc9e09bb0c96638b7df7574e73` 未通过：根模块 `Test .` 与独立 Researchflow 模块测试 Job 失败；Researchflow WorkerStore 和 MariaDB lifecycle integration 通过，go-core 通过。Quant 专项 CI `43146432752` 在同一代码 SHA 全部通过。失败项属于根模块/Researchflow，本分支未修改其他模块。
+
+## 集合联调边界
+
+- 可联调能力：Trend/Risk `1.0.0` Envelope 解码、Manifest/ResultRef、Repository Save Port，以及 `application.GetResult` 的授权读取 Application 接口。
+- Server 需要注入可信 PrincipalResolver、UTC Clock、AuthorizedResultReader、AccessAuditor；AuthorizedResultReader 必须在一个可证明的一致性边界内复核当前 Quant 策略并读取不可变结果，授权状态变化或无法证明一致时 fail closed。AccessAuditor 必须先于 Envelope 释放成功写入审计事件，审计失败即拒绝释放。
+- 暂不可联调为完整结果的类型：Indicator/Factor 尚未注册 Payload，必须拒绝；Market/Industry/Stock/Strategy/Backtest/Evaluation 仍未实现。
+- 尚未完成生产闭环：真实授权策略源、审计持久化、MariaDB/Platform Storage Adapter、根 Migration、真实 Data v2 输入，以及 Researchflow 消费端 Contract Test。
 
 ## 文档索引
 
@@ -71,3 +104,5 @@ internal/quant/
 ```
 
 首期只按实际任务创建必要包，不为目录齐全创建空包。旧代码迁移结论见 [01](01-量化引擎总体设计.md) 第 6 节；输入输出契约和 Golden 设计见 [03](03-首批输入输出契约与验收补充.md)。
+
+- QNT-CTR-001 Registry Entry Schema 2.0.0 与 Go Entry.SampleCountPolicy 已对齐，ValidateMetric 按 required_in_metric 拒绝缺失字段并保留显式 null/0 的差异；旧版 1.0.0 保留。首批真实 Registry Entry/Golden、各 metric_code 的权威 counting_rule 仍属 L2 待办。

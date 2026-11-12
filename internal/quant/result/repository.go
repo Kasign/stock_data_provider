@@ -38,7 +38,7 @@ func (record Record) ValidatedSnapshot() (Record, error) {
 		Manifest: record.Manifest,
 		Payload:  append(json.RawMessage(nil), record.Payload...),
 	}
-	snapshot.Manifest.InputSnapshotRefs = append([]string(nil), record.Manifest.InputSnapshotRefs...)
+	snapshot.Manifest.InputSnapshotRefs = append([]string{}, record.Manifest.InputSnapshotRefs...)
 	return snapshot, nil
 }
 

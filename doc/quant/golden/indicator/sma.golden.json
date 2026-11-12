@@ -15,7 +15,8 @@
     ]
   },
   "expected": {
-    "value": 3
+    "value": 3,
+    "sample_count": 3
   },
   "tolerance": 1e-12
 }
