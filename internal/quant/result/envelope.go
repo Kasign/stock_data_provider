@@ -71,7 +71,6 @@ func (p RiskPayload) validate() error                 { return p.value.Validate(
 func (p RiskPayload) marshalPayload() ([]byte, error) { return json.Marshal(p.value) }
 func (p RiskPayload) MarshalJSON() ([]byte, error)    { return p.marshalPayload() }
 
-
 // indicatorPayloadValue 是 IndicatorResultPayload 1.0.0 的 JSON 结构。
 // 此结构校验只负责容器、映射和跨字段一致性；metric_code 的单位、精度、值域、
 // sample_count 计数语义仍必须由正式 Registry Entry 校验。
