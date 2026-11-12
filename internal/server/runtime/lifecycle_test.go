@@ -396,7 +396,6 @@ func TestNewLifecycleWithRollbackTimeoutRejectsNonPositiveValues(t *testing.T) {
 	}
 }
 
-
 func TestLifecycleConcurrentStopDuringSingleComponentStartupDoesNotReportSuccess(t *testing.T) {
 	var events []string
 	component := blockingStartComponent{
