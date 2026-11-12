@@ -7,34 +7,36 @@
 
 ## 当前状态
 
-当前代码基线：`532515aa327f0821006074752864ca6b71e0d109`（2026-11-11）。
+当前代码基线：`7c7cbbde5c0428021ae44ce04a1648257cd576fd`（2026-11-12）。
 
-已具备首批 Indicator/Factor 纯计算、CalculationContext、基础 Registry、RiskDecision/RuleSet 执行框架、TrendResult DTO、Manifest/ResultRef 和 Repository Save Port/MemoryRepository。当前完成的契约修正：
+已具备首批 Indicator/Factor 纯计算、CalculationContext、基础 Registry、RiskDecision/RuleSet 执行框架、TrendResult DTO、Manifest/ResultRef、Repository Save Port/MemoryRepository，以及 QuantResult Envelope 初版。
 
-- DEC-PLAT-002-048：Manifest 已绑定 `scope`、条件必需的 `security_id`、可选 `trade_date`、必需 `period`、`quality_status`、`result_status`；六个字段全部进入 JCS 指纹和 ResultID。
-- Ref 投影已收敛：调用方只能提供 Ref 自身 `schema_version`、当前 `authorization_ref` 和记录 `created_at`；业务字段从已验证 Manifest 派生。
-- 项目级 QNT-CTR-005 Schema/Golden、GOV-CTR-006 AuthorizationRef Golden 已同步；Manifest ResultID 与 AuthorizationRef `resource_ref` 一致。
-- DEC-PLAT-002-049：Risk RuleSet 必须非空且至少含一个 block；所有 block 必须 required；Reason 唯一、severity 匹配、按规则集顺序输出；RiskDecision reasons 非空、status 与聚合结果一致、evaluated_at 不早于 system_as_of。
-- TrendResult 的每个 evidence Metric 必须与 TrendResult 使用相同 `system_as_of`。
+本轮完成：
+- DEC-PLAT-002-048：Manifest 绑定结果资源语义字段，全部进入 JCS 指纹和 ResultID。
+- Ref 投影收敛：业务字段从已验证 Manifest 派生；当前 authorization_ref 与记录 created_at 独立提供。
+- DEC-PLAT-002-049：Risk RuleSet、Reason、RiskDecision 聚合及 TrendResult evidence Metric 时间一致性校验。
+- Envelope 1.0.0：从 Manifest 投影元数据；payload 按 `(result_type, payload_schema_version)` 显式解码；未知组合 fail closed。
+- 当前仅注册 `trend/1.0.0`、`risk/1.0.0` 两种强类型 Payload；Trend/Risk 与 Envelope 的重复字段逐项校验，Envelope 与 Manifest 逐字段校验并验证 Payload 指纹。
+- Envelope JSON Schema、Trend/Risk Golden、Schema 回归、序列化/反序列化和非法输入测试已补齐。
+- Envelope Marshal/Unmarshal 均执行结构校验；input_snapshot_refs 必须显式存在、唯一且按 Manifest 规范顺序排列，允许空数组。
 
-<badge color="success">Quant 专项 CI 通过</badge> Workflow `43012698608` 对代码 SHA `532515aa327f0821006074752864ca6b71e0d109` 的 gofmt、Quant 全量单测、Manifest Fuzz、Race、Vet 全部通过。
+<badge color="success">Quant 专项 CI 通过</badge> Workflow `43137704383` 对代码 SHA `7c7cbbde5c0428021ae44ce04a1648257cd576fd` 的 gofmt、Quant 全量单测、Manifest Fuzz、Race、Vet 全部通过。
 
-**仓库级 Go Test Suite 未通过**（Workflow `43012698527`，同一代码 SHA）。失败来自其他模块：
-- LLM：`responses_json_test.go` string/rune 类型不匹配。
-- Notification：Migration 测试 uint64/int 类型不匹配，Application 多项投递生命周期测试失败。
-- Researchflow：`resultvalidation/composer.go` 引用未定义的 `validSourceOwner`、`evidenceGraphHasCycle`。
-Quant 专项工作流全部通过；未修改这些模块。
+**Payload 支持边界：**
+- 已注册：`trend/1.0.0`、`risk/1.0.0`。
+- 尚未注册：`indicator`、`factor`。虽然已有部分 Metric DTO/Schema/Golden，但完整 IndicatorResultPayload、FactorResultPayload 容器 Schema/Golden、跨字段 Validator 和 Registry 元数据尚未齐备；不得据此生成或消费完整 Envelope。
+- `market/industry/stock/strategy/backtest/evaluation` 仍为预留类型，当前必须拒绝，不能用宽泛 object/map 兜底。
 
-项目级状态：QNT-CTR-004/005 均为 `frozen`（DEC-PLAT-002-051）。QNT-CTR-004 的完整 Envelope Go DTO、强类型 Payload 注册和跨层 Validator，以及 QNT-CTR-005 运行时授权，均属于 L2 实现符合性待办，不是契约定义 pending_evidence。
+项目级状态：QNT-CTR-004/005 均为 `frozen`（DEC-PLAT-002-051）。未完成的 Payload 子类型、运行时授权和消费者验收属于 L2 实现符合性待办，不改变契约冻结状态。
 
 当前剩余阻塞：
+- Indicator/Factor：补齐各自强类型 Payload 容器 Schema/Golden、字段/顺序校验及 Registry 驱动的 Metric 语义校验；完成前保持未注册。
+- Quant 授权：尚无完整 Application/GetResult 读取链、当前 PolicySnapshot Provider、审计和授权检查至 Payload 释放的 TOCTOU 保护。
 - Data：DailyBars v2 Decimal 输入、真实 PIT/复权/交易日历及质量证据；没有真实数据证据，不标记真实数据验收通过。
-- Quant/Envelope：当前没有完整 Envelope DTO/读取路径，不能完成 Trend/Risk/Indicator/Factor Payload 与 Envelope 的字段逐项一致性 Validator。
-- Quant 授权：Platform 已提供可信 `security.Principal` 和请求上下文读取能力；但 Quant 尚无 Application/GetResult/Envelope 读取入口、PolicySnapshot Provider 和审计/原子授权读取实现。不能将 Principal 已存在误报为 Quant 运行时授权已完成。
 - Platform/Server：正式 Storage/事务接入、根 Migration 注册和统一 Diagnostics 装配。
-- Researchflow：ResolvedTemplate 空输入授权校验及完整消费者 Contract Test。
+- Researchflow：Envelope discriminator/Schema/版本消费校验、当前授权引用传递及双方 Contract Test。
 
-空快照目前仅完成 Manifest/Ref/Schema 结构支持。真正允许空输入仍要求 Researchflow 校验 `ResolvedTemplate.allow_empty_inputs=true`，Quant 校验可信 Principal、已注册用例和 Registry 无外部事实依赖声明；当前没有完整 Application 门禁，不能宣称端到端授权验收通过。
+全仓 Go Test Suite 最近一次执行（Workflow `43137433301`，代码 SHA `87cadf5be09592945dbb4ad90810cf7eed74854c`）未通过，失败位于 LLM、Notification、Researchflow。该 SHA 不是当前代码基线；Quant 专项 CI 对当前 SHA 已独立通过。未修改其他模块。
 
 ## 文档索引
 
