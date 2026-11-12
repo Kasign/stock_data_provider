@@ -66,7 +66,7 @@ func getResultFixture(t *testing.T, now time.Time) AuthorizedRecord {
 		SchemaVersion: "1.0.0", AuthorizationRef: "authz:quant:001", PolicyOwner: "quant",
 		PolicyVersion: policy.SnapshotRef, Decision: "allowed", PurposeCode: quantPurposeCode,
 		ContentLevel: quantContentLevel, SubjectRef: "service:researchflow", ResourceRef: stored.ResultID,
-		DecidedAt: now.Add(-time.Minute).Format(time.RFC3339Nano), Conditions: []string{},
+		DecidedAt: now.Add(-time.Minute).Format(time.RFC3339Nano), ExpiresAtPresent: true, Conditions: []string{},
 	}
 	input := authorizationFingerprintInput{
 		SchemaVersion: ref.SchemaVersion, PolicyOwner: ref.PolicyOwner, PolicyVersion: ref.PolicyVersion,
@@ -136,6 +136,7 @@ func TestGetResultFailsClosedForInvalidAuthorization(t *testing.T) {
 			expired := now.Format(time.RFC3339Nano)
 			v.AuthorizationRef.ExpiresAt = &expired
 		}},
+		{"missing expires_at field", func(v *AuthorizedRecord) { v.AuthorizationRef.ExpiresAtPresent = false }},
 		{"bad fingerprint", func(v *AuthorizedRecord) { v.AuthorizationRef.DecisionFingerprint = "invalid" }},
 		{"conditional", func(v *AuthorizedRecord) {
 			v.AuthorizationRef.Decision = "conditional"

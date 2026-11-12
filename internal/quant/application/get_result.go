@@ -2,9 +2,11 @@
 package application
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"sort"
 	"strings"
 	"time"
@@ -68,11 +70,37 @@ type AuthorizationRef struct {
 	ResourceRef         string   `json:"resource_ref"`
 	DecidedAt           string   `json:"decided_at"`
 	ExpiresAt           *string  `json:"expires_at"`
+	ExpiresAtPresent    bool     `json:"-"`
 	Conditions          []string `json:"conditions"`
 	DecisionFingerprint string   `json:"decision_fingerprint"`
 }
 
 // PolicyVersion 是策略快照中一条实际生效的策略版本。
+// UnmarshalJSON 保留 expires_at 必填但可为 null 的存在性语义，避免把字段缺失误读为永久授权。
+func (ref *AuthorizationRef) UnmarshalJSON(data []byte) error {
+	type authorizationRefAlias AuthorizationRef
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	var decoded authorizationRefAlias
+	if err := decoder.Decode(&decoded); err != nil {
+		return err
+	}
+	var trailing any
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		return ErrInvalidAuthorization
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	if _, exists := fields["expires_at"]; !exists {
+		return ErrInvalidAuthorization
+	}
+	*ref = AuthorizationRef(decoded)
+	ref.ExpiresAtPresent = true
+	return nil
+}
+
 type PolicyVersion struct {
 	PolicyType    string `json:"policy_type"`
 	PolicyRef     string `json:"policy_ref"`
@@ -243,7 +271,7 @@ func validateAuthorization(ref AuthorizationRef, snapshot PolicySnapshot, reques
 		ref.PolicyOwner != "quant" || ref.Decision != "allowed" ||
 		ref.PurposeCode != request.PurposeCode || ref.ContentLevel != request.ContentLevel ||
 		ref.SubjectRef != request.SubjectRef || ref.ResourceRef != request.ResourceRef ||
-		ref.PolicyVersion != snapshot.SnapshotRef || ref.Conditions == nil || len(ref.Conditions) != 0 {
+		ref.PolicyVersion != snapshot.SnapshotRef || !ref.ExpiresAtPresent || ref.Conditions == nil || len(ref.Conditions) != 0 {
 		return ErrInvalidAuthorization
 	}
 	decidedAt, ok := parseCanonicalUTC(ref.DecidedAt)
