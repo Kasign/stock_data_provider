@@ -478,3 +478,31 @@ News 自身代码质量和 MariaDB 专项验证已取得当前 CI 通过证据�
 - 按本仓库约定，已将当前 News 分支通过 PR [#88](https://github.com/Kasign/stock_data_provider/pull/88) 合入 `integration`；Integration Merge Commit：`85c78f19e4d8d231b29d78f5815bc72868dc326d`。没有在 integration 直接编辑代码。
 - 合并后读取 Integration Actions 列表、Merge Commit combined status 与 workflow runs，尚未发现针对 `85c78f1` 的新 CI Run/status。当前 GitHub 操作接口只提供 workflow run 读取/重跑能力，没有可用的 workflow_dispatch 调用；因此不能声称 integration 构建已执行。
 - 下一步：在 GitHub Actions 手动触发 `Integration CI`，目标必须是 integration 当前 HEAD `85c78f1`；或者由具有普通 push 权限的仓库维护者触发一次 integration push。只读取该 SHA 对应 Run 的 Job 结果，不在 integration 修复任何代码。失败项回到 News 源分支处理。
+
+
+## 十七、2026-11-12 NEWS-CTR-002 risk_review 用途映射修复 Review
+
+### 契约与实现
+
+- 冻结契约允许 `research_analysis`、`risk_review`、`user_display` 三种显式用途代码。
+- 冻结接入矩阵规定：`internal_personal_research` 对应 `research_analysis`；`public_display` 对应 `user_display`；`internal_business` 没有默认映射，具体调用必须显式选择 `research_analysis` 或 `risk_review`。
+- 结合领域策略枚举和调用边界，显式 `risk_review` 映射为领域策略用途 `PurposeInternalBusiness`；该映射只解释受控请求的用途，不替代 Source/Endpoint/Provider 策略许可判断。
+- 已修改 `internal/news/adapters/storage/authorization_policy_resolver.go` 的 `authorizationPurposeForCode`，增加 `risk_review` → `PurposeInternalBusiness`。
+- `AuthorizationPurposeCodeForPurpose(PurposeInternalBusiness)` 保持不可映射，防止通用领域用途反向自动推断成某个授权代码。没有新增用途、字段、接口或策略表。
+
+### 测试覆盖
+
+- 新增 `authorization_policy_resolver_test.go`：
+  - 三种合法 purpose_code 的精确映射；
+  - 将领域用途字符串、redistribution、model_training 和未知值拒绝为 purpose_code；
+  - 显式 risk_review 只匹配 internal_business 策略；
+  - research_analysis 不得从 internal_business 策略获得许可；
+  - risk_review 不得从 internal_personal_research 策略获得许可；
+  - EndpointPolicy 使用相同的显式用途映射规则。
+- 本轮只完成代码与测试编写，未运行 Go 测试、Race、Vet 或 MariaDB 集成；不得将测试代码视为测试通过。
+
+### Review 结论
+
+- 变更范围仅限 `internal/news/adapters/storage/authorization_policy_resolver.go`、对应存储层单测和 `doc/news/**`。
+- 未修改冻结契约、公共平台、Server、其他模块或其他分支。
+- 当前代码结论：映射缺口已修复，授权策略仍保持独立 fail-closed；验收状态为“代码已提交，CI/构建待验证”。
