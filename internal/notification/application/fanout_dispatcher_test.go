@@ -268,6 +268,25 @@ func TestFanoutDispatcherRejectsPlanBoundToDifferentSubscription(t *testing.T) {
 }
 
 
+func TestFanoutDispatcherRejectsSubMicrosecondDurations(t *testing.T) {
+	plans, _ := NewDeliveryPlanWriter(&memoryDeliveryPlans{})
+	config := FanoutDispatcherConfig{
+		PageSize: 1, LeaseDuration: time.Microsecond,
+		Retry: FanoutRetryPolicy{MaxAttempts: 1, BaseDelay: time.Microsecond, MaxDelay: time.Microsecond},
+	}
+	clock := fanoutTestClock{time.Now().UTC()}
+	config.LeaseDuration = time.Nanosecond
+	if _, err := NewFanoutDispatcher(&fanoutTestWorkItems{}, fanoutTestSubscriptions{}, fanoutTestFactory{}, plans, clock, config); !errors.Is(err, ErrFanoutConfigurationInvalid) {
+		t.Fatalf("sub-microsecond lease must be rejected, got %v", err)
+	}
+	config.LeaseDuration = time.Microsecond
+	config.Retry.BaseDelay = time.Nanosecond
+	if _, err := NewFanoutDispatcher(&fanoutTestWorkItems{}, fanoutTestSubscriptions{}, fanoutTestFactory{}, plans, clock, config); !errors.Is(err, ErrFanoutConfigurationInvalid) {
+		t.Fatalf("sub-microsecond retry delay must be rejected, got %v", err)
+	}
+}
+
+
 func TestFanoutDispatcherRejectsMissingPlanFactoryAndInvalidConfiguration(t *testing.T) {
 	plans, _ := NewDeliveryPlanWriter(&memoryDeliveryPlans{})
 	_, err := NewFanoutDispatcher(

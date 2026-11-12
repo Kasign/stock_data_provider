@@ -26,8 +26,8 @@ func NewFanoutDispatcher(
 	config FanoutDispatcherConfig,
 ) (*FanoutDispatcher, error) {
 	if workItems == nil || subs == nil || factory == nil || plans == nil || clock == nil ||
-		config.PageSize < 1 || config.PageSize > 200 || config.LeaseDuration <= 0 ||
-		config.Retry.MaxAttempts < 1 || config.Retry.BaseDelay <= 0 ||
+		config.PageSize < 1 || config.PageSize > 200 || config.LeaseDuration < time.Microsecond ||
+		config.Retry.MaxAttempts < 1 || config.Retry.BaseDelay < time.Microsecond ||
 		config.Retry.MaxDelay < config.Retry.BaseDelay {
 		return nil, ErrFanoutConfigurationInvalid
 	}

@@ -604,9 +604,9 @@ len(OutcomeUnknownDeliveryIDs) = OutcomeUnknown
 | processing | 可重试错误且未达最大 Claim 次数 | retry_wait | 不推进 cursor；记录稳定错误码与 next_attempt_at；释放租约 |
 | processing | 达到最大 Claim 次数或不可恢复错误 | failed | 不推进未完成页面；记录稳定错误码并释放租约 |
 
-- Claim/Advance/Retry/Fail 必须以 work_item_id + status + lease_worker_id + fencing_token 条件更新，并由 MariaDB UTC_TIMESTAMP(6) 判断租约有效性；不能信任 Worker 本地时间证明租约仍有效。
+- Claim/Advance/Retry/Fail 必须以 work_item_id + status + lease_worker_id + fencing_token 条件更新，并由 MariaDB UTC_TIMESTAMP(6) 判断租约有效性；不能信任 Worker 本地时间证明租约仍有效。自提交 SQL 成功后若 RowsAffected 读取失败，结果视为 ErrPersistenceOutcomeUnknown，不得当作租约冲突或普通失败继续写状态。
 - Claim 使用事务行锁选择最早到期项，单次最多返回一个 WorkItem；不依赖 Redis、旧 Platform Task Queue 或 SKIP LOCKED 版本特性。
-- Worker ID 必须非空且长度不超过 128 字节；租约时长必须由 Server 显式配置为正数。
+- Worker ID 必须非空且长度不超过 128 字节；租约时长必须由 Server 显式配置且不少于 1 微秒（MariaDB DATETIME(6) 精度）。Fanout retry base_delay 同样不得小于 1 微秒，避免截断后 next_attempt_at 落回当前时间。
 - attempt_count 达到配置的 max_attempts 后不得继续自动 Claim；错误恢复策略必须显式提供 max_attempts、base_delay、max_delay，不设隐式全局默认值。
 - Retry 延迟采用有上限的指数退避；next_attempt_at 由 Application Clock 计算并规范为 UTC 微秒，Repository 仍使用数据库时钟校验当前租约。
 - ErrPersistenceOutcomeUnknown 时，Worker 不得依据返回对象推断 Claim/Checkpoint/Retry/DeliveryPlan 写入已提交；Dispatcher 不得继续用当前 Claim 执行 Retry/Fail/Advance，必须丢弃本次 claim 并等待租约到期后重新领取和读取持久状态。DeliveryPlan 是否已提交由唯一 tuple + fingerprint 在重放时对账。

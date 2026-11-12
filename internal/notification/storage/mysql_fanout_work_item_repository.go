@@ -249,7 +249,7 @@ func (r *MySQLFanoutWorkItemRepository) RetryWithLease(
 func requireFanoutLeaseUpdate(result sql.Result) error {
 	affected, err := result.RowsAffected()
 	if err != nil {
-		return fmt.Errorf("notification storage: read fanout affected rows: %w", err)
+		return fmt.Errorf("%w: notification storage: read fanout affected rows: %w", application.ErrPersistenceOutcomeUnknown, err)
 	}
 	if affected != 1 {
 		return application.ErrFanoutWorkItemLeaseConflict
