@@ -1672,3 +1672,11 @@ Server Bootstrap
 - 已将属性名约束同步为 `^[^\\x00-\\x1F\\x7F]+$`，保留非空约束；文档 Schema 是测试和契约的唯一读取源，不存在独立的运行时 Schema 副本。
 - 最终 CI Run `43218433690`，HEAD `bdb5eceb0462c496f20b126023883b5326ecf874` 成功：gofmt、Server 包测试、Race、真实 MariaDB/Redis 集成、Vet、Docker 镜像与 Notification Schema 检查、真实容器 Bootstrap/Readiness/SIGTERM smoke 全部通过。
 - 前两次失败 Run 分别为 `43217460937` 和 `43218169542`；失败均定位到同一 Schema 属性名正则未修正。本节以最终成功 Run 为验收依据。
+
+### 12.85 SRV-009 Research / Researchflow 诊断入口语义复核（2026-11-12）
+
+- 复核当前 Server 分支已包含的模块诊断代码：Research 的 `BuildContextCheck/BuildEventCheck/BuildClaimCheck/BuildEvidenceCheck` 均要求具体领域对象引用及 Run 的 UTC `system_as_of`，构造的是某次研究快照的 PIT/结构质量检查，不是进程级健康检查。
+- Researchflow 的 `NewStageCheck` 输入是具体 Run Stage 的 `StageAssessment`（stage_ref、stage_code、kind、状态、时间、EvidenceRef 等），用于把某次 Run 的执行/质量/依赖结果映射到 Platform Observation，也不是可在 Server 启动时静态注册的系统检查组。
+- 因此不将这两类 Run-scoped Check 塞入全局 `/diagnostics`，也不创建无上下文的空 Check 或伪造健康状态。它们应由 Research/Researchflow 在对应 Run 的执行/报告链路中调用；Server 只在模块提供真实进程级依赖 Check 或 Run 报告组合入口时接线。
+- 该复核撤销“必须把 Research/Researchflow 诊断器注册为全局 Server Check”的隐含前提；目前全局 Diagnostics 的 Server 责任已由 Storage/Schema、News Parser 和 News Provider 配置检查覆盖。后续不重复建设同类全局检查。
+- LLM 生产装配仍是 Server 的实质缺口：现有 `llmtransport.NewResponsesAdapter` 已能消费 ProviderConfig、Secret、CapabilityState、Clock 和 DestinationPolicy，但 Process Config 尚无这些可信输入的约定来源；CapabilityState 也不能由 Server 凭空生成。待明确 ProviderConfig/CapabilityState 的受控配置来源和真实能力证据后，再完成 Bootstrap 注入及 Gateway E2E。
