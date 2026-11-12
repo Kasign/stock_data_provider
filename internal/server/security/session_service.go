@@ -278,7 +278,7 @@ func (s *SessionLifecycleService) RotateSession(ctx context.Context, rawToken, r
 		_ = s.sessions.Revoke(ctx, newDigest)
 		return SessionIssue{}, err
 	}
-	return SessionIssue{Cookie:\tcookie, CSRFToken: csrf}, nil
+	return SessionIssue{Cookie:	cookie, CSRFToken: csrf}, nil
 }
 
 func (s *SessionLifecycleService) ChangePassword(ctx context.Context, currentPassword, newPassword []byte, requestID string) error {
@@ -327,13 +327,13 @@ func (s *SessionLifecycleService) createSession(ctx context.Context, credentialV
 		return SessionIssue{}, "", err
 	}
 	record := platformsecurity.SessionRecord{
-		Subject:\t"owner",
-		CreatedAt:\tnow,
-		LastSeenAt:\tnow,
-		IdleExpiresAt:\tminTime(now.Add(s.idleTTL), now.Add(s.absoluteTTL)),
-		AbsoluteExpiresAt:\tnow.Add(s.absoluteTTL),
-		CredentialVersion:\tcredentialVersion,
-		CSRFTokenDigest:\tcsrfDigest,
+		Subject:	"owner",
+		CreatedAt:	now,
+		LastSeenAt:	now,
+		IdleExpiresAt:	minTime(now.Add(s.idleTTL), now.Add(s.absoluteTTL)),
+		AbsoluteExpiresAt:	now.Add(s.absoluteTTL),
+		CredentialVersion:	credentialVersion,
+		CSRFTokenDigest:	csrfDigest,
 	}
 	if err := s.sessions.Create(ctx, digest, record); err != nil {
 		return SessionIssue{}, "", err
@@ -343,14 +343,14 @@ func (s *SessionLifecycleService) createSession(ctx context.Context, credentialV
 		_ = s.sessions.Revoke(ctx, digest)
 		return SessionIssue{}, "", err
 	}
-	return SessionIssue{Cookie:\tcookie, CSRFToken: csrf}, digest, nil
+	return SessionIssue{Cookie:	cookie, CSRFToken: csrf}, digest, nil
 }
 
 func (s *SessionLifecycleService) writeAudit(ctx context.Context, requestID string, eventType platformsecurity.SecurityAuditEventType,
 	subject string, result platformsecurity.SecurityAuditResult, source platformsecurity.SecurityAuditSource, reason string) error {
 	return platformsecurity.WriteSecurityAudit(ctx, s.audit, platformsecurity.SecurityAuditEvent{
-		EventType:\teventType, Subject:\tsubject, Result:\tresult, OccurredAt:\ts.now().UTC(),
-		RequestID:\trequestID, Source:\tsource, ReasonCode:\treason,
+		EventType:	eventType, Subject:	subject, Result:	result, OccurredAt:	s.now().UTC(),
+		RequestID:	requestID, Source:	source, ReasonCode:	reason,
 	})
 }
 
