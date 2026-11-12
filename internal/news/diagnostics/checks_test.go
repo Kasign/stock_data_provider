@@ -503,8 +503,12 @@ func TestStorageChecksDoNotCallProbeWhenContextIsAlreadyCanceled(t *testing.T) {
 		cancel()
 		probe := &countingStorageProbe{}
 		report, err := (platformdiag.Runner{}).Run(ctx, StorageChecks(probe)[:1])
-		if err != nil { t.Fatal(err) }
-		if probe.pingCalls != 0 { t.Fatalf("Ping calls=%d, want 0", probe.pingCalls) }
+		if err != nil {
+			t.Fatal(err)
+		}
+		if probe.pingCalls != 0 {
+			t.Fatalf("Ping calls=%d, want 0", probe.pingCalls)
+		}
 		if got := report.Results[0].Observation.Status; got != platformdiag.StatusUnavailable {
 			t.Fatalf("status=%s, want unavailable", got)
 		}
@@ -514,8 +518,12 @@ func TestStorageChecksDoNotCallProbeWhenContextIsAlreadyCanceled(t *testing.T) {
 		cancel()
 		probe := &countingStorageProbe{}
 		report, err := (platformdiag.Runner{}).Run(ctx, StorageChecks(probe)[1:])
-		if err != nil { t.Fatal(err) }
-		if probe.schemaCalls != 0 { t.Fatalf("MissingSchemaTables calls=%d, want 0", probe.schemaCalls) }
+		if err != nil {
+			t.Fatal(err)
+		}
+		if probe.schemaCalls != 0 {
+			t.Fatalf("MissingSchemaTables calls=%d, want 0", probe.schemaCalls)
+		}
 		if got := report.Results[0].Observation.Status; got != platformdiag.StatusUnavailable {
 			t.Fatalf("status=%s, want unavailable", got)
 		}
