@@ -10,6 +10,7 @@ import (
 
 	"example.com/stock-analysis-flow/internal/marketdata/baostock"
 	"example.com/stock-analysis-flow/internal/marketdata/model"
+	"example.com/stock-analysis-flow/internal/marketdata/validation"
 )
 
 func TestLiveProviderProbeQuarterlyFundamentals(t *testing.T) {
@@ -25,6 +26,8 @@ func TestLiveProviderProbeQuarterlyFundamentals(t *testing.T) {
 	p := NewBaostock(client)
 	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Second)
 	defer cancel()
+	reporter := validation.NewReporter(validation.DefaultMaxIssues)
+	ctx = validation.WithReporter(ctx, reporter)
 	started := time.Now()
 	snapshot, err := p.FetchFundamentals(ctx, "600519.SH", 2026, 2)
 	result := map[string]any{
@@ -34,7 +37,10 @@ func TestLiveProviderProbeQuarterlyFundamentals(t *testing.T) {
 	}
 	if snapshot != nil {
 		result["fundamentals"] = snapshot
+		result["quality_status"] = snapshot.QualityStatus
+		result["quality_reasons"] = snapshot.QualityReasons
 	}
+	result["validation"] = reporter.Snapshot()
 	if err != nil {
 		kind, message := liveProbeErrorSummary(err)
 		result["error_kind"], result["error"] = kind, message
@@ -93,6 +99,11 @@ func TestLiveProviderProbeQuarterlyFundamentals(t *testing.T) {
 		t.Fatalf("unexpected live fundamentals quality %q", snapshot.QualityStatus)
 	}
 	result["status"] = "returned"
+	if snapshot.QualityStatus == model.QualityDegraded {
+		result["status"] = "returned_degraded"
+	} else if snapshot.QualityStatus == model.QualityUnknown {
+		result["status"] = "returned_unknown"
+	}
 	encoded, _ := json.Marshal(result)
 	t.Logf("LIVE_PROVIDER_RESULT %s", encoded)
 }
