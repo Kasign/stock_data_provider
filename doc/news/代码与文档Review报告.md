@@ -499,13 +499,13 @@ News 自身代码质量和 MariaDB 专项验证已取得当前 CI 通过证据�
   - research_analysis 不得从 internal_business 策略获得许可；
   - risk_review 不得从 internal_personal_research 策略获得许可；
   - EndpointPolicy 使用相同的显式用途映射规则。
-- 本轮只完成代码与测试编写，未运行 Go 测试、Race、Vet 或 MariaDB 集成；不得将测试代码视为测试通过。
+- 编写阶段尚未执行本地测试；随后当前 HEAD `a8a3763e5dc662d856a438c52a0b1a28975def43` 的 CI 已覆盖该代码，News 全量测试、Race、Vet、Provider 契约测试及 MariaDB Repository/Migration 集成均通过，详见本报告末尾的当前 HEAD CI 验收补充。
 
 ### Review 结论
 
 - 变更范围仅限 `internal/news/adapters/storage/authorization_policy_resolver.go`、对应存储层单测和 `doc/news/**`。
 - 未修改冻结契约、公共平台、Server、其他模块或其他分支。
-- 当前代码结论：映射缺口已修复，授权策略仍保持独立 fail-closed；验收状态为“代码已提交，CI/构建待验证”。
+- 当前代码结论：映射缺口已修复，授权策略仍保持独立 fail-closed；当前 HEAD CI 已通过。真实 Provider/Feed 网络、生产装配和 available_at 严格 PIT 仍未验收。
 
 
 ### 当前 HEAD CI 验收补充（2026-11-12）
