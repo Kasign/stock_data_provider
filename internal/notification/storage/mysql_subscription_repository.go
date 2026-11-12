@@ -101,13 +101,14 @@ func (r *MySQLSubscriptionRepository) Create(ctx context.Context, subscription d
 	if r == nil || r.db == nil || ctx == nil {
 		return errors.New("notification storage: repository is not configured")
 	}
-	subscription = normalizeSubscriptionDatabaseTimes(subscription)
 	if subscription.Version != 1 {
 		return domain.ErrSubscriptionVersionConflict
 	}
+	// Validate the caller's original offsets before database precision/UTC normalization.
 	if err := r.validate(subscription); err != nil {
 		return err
 	}
+	subscription = normalizeSubscriptionDatabaseTimes(subscription)
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("notification storage: begin subscription create: %w", err)
@@ -169,6 +170,10 @@ func (r *MySQLSubscriptionRepository) AppendVersion(
 	if expectedVersion < 1 {
 		return domain.ErrSubscriptionVersionConflict
 	}
+	// Reject non-UTC caller input before normalization can erase its original offset.
+	if err := r.validate(next); err != nil {
+		return err
+	}
 	next = normalizeSubscriptionDatabaseTimes(next)
 	tx, err := r.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
 	if err != nil {
@@ -191,9 +196,6 @@ func (r *MySQLSubscriptionRepository) AppendVersion(
 		return fmt.Errorf("notification storage: previous subscription version is invalid: %w", err)
 	}
 	if err := domain.ValidateSubscriptionVersion(previous, next); err != nil {
-		return err
-	}
-	if err := r.validate(next); err != nil {
 		return err
 	}
 	revision, err := allocateSubscriptionRevision(ctx, tx)
