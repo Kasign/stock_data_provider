@@ -113,21 +113,40 @@ func (r *MySQLFanoutWorkItemRepository) ClaimDue(
 	}
 	work.LeaseWorkerID = leaseWorkerID.String
 	work.LastErrorCode = lastErrorCode.String
-	if snapshotRevision.Valid {
-		work.SnapshotRevision = snapshotRevision.Int64
-		work.HasSnapshot = true
-	} else {
-		if err := tx.QueryRowContext(ctx, `SELECT current_revision
-			FROM notification_subscription_revision WHERE singleton_id = 1`).Scan(&work.SnapshotRevision); err != nil {
-			return result, false, fmt.Errorf("notification storage: read subscription snapshot revision: %w", err)
+	if len(leaseExpiresAt) > 0 {
+		if work.LeaseExpiresAt, err = parseDatabaseTime(leaseExpiresAt); err != nil {
+			return result, false, err
 		}
-		work.HasSnapshot = true
+	}
+	if len(nextAttemptAt) > 0 {
+		if work.NextAttemptAt, err = parseDatabaseTime(nextAttemptAt); err != nil {
+			return result, false, err
+		}
 	}
 	if work.CreatedAt, err = parseDatabaseTime(createdAt); err != nil {
 		return result, false, err
 	}
 	if work.UpdatedAt, err = parseDatabaseTime(updatedAt); err != nil {
 		return result, false, err
+	}
+	if err := work.Validate(); err != nil {
+		return result, false, err
+	}
+	if snapshotRevision.Valid {
+		work.SnapshotRevision = snapshotRevision.Int64
+		work.HasSnapshot = true
+	} else {
+		// 只有从未领取的初始 pending 项允许首次分配快照。
+		// retry_wait/过期 processing 丢失快照时必须 fail closed，不能重建为新高水位。
+		if work.Status != domain.FanoutPending || work.AttemptCount != 0 ||
+			work.FencingToken != 0 || work.CursorSubscriptionID != "" {
+			return result, false, domain.ErrInvalidFanoutWorkItem
+		}
+		if err := tx.QueryRowContext(ctx, `SELECT current_revision
+			FROM notification_subscription_revision WHERE singleton_id = 1`).Scan(&work.SnapshotRevision); err != nil {
+			return result, false, fmt.Errorf("notification storage: read subscription snapshot revision: %w", err)
+		}
+		work.HasSnapshot = true
 	}
 	event.Payload = append([]byte(nil), payload...)
 	if err := event.VerifyPayloadFingerprint(); err != nil {

@@ -26,6 +26,8 @@ func TestFanoutWorkItemValidatesLeaseAndRetryState(t *testing.T) {
 	}
 	processing := base
 	processing.Status = FanoutProcessing
+	processing.HasSnapshot = true
+	processing.AttemptCount = 1
 	processing.LeaseWorkerID = "worker-1"
 	processing.LeaseExpiresAt = now.Add(time.Minute)
 	processing.FencingToken = 1
@@ -39,8 +41,27 @@ func TestFanoutWorkItemValidatesLeaseAndRetryState(t *testing.T) {
 	}
 	retry := base
 	retry.Status = FanoutRetryWait
+	retry.HasSnapshot = true
+	retry.AttemptCount = 1
+	retry.FencingToken = 1
 	retry.NextAttemptAt = now.Add(time.Second)
 	if err := retry.Validate(); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestFanoutWorkItemRequiresSnapshotAfterInitialPendingState(t *testing.T) {
+	now := time.Date(2026, 11, 11, 9, 0, 0, 0, time.UTC)
+	item := FanoutWorkItem{
+		WorkItemID: FanoutWorkItemID("quant", "event-2"), SourceModule: "quant", EventID: "event-2",
+		EventType: "quant.risk_decision.changed", PayloadFingerprint: strings.Repeat("b", 64),
+		Status: FanoutPending, CreatedAt: now, UpdatedAt: now,
+	}
+	if err := item.Validate(); err != nil {
+		t.Fatalf("new pending item may defer its first snapshot: %v", err)
+	}
+	item.AttemptCount = 1
+	if err := item.Validate(); err == nil {
+		t.Fatal("a previously claimed item must not lose its fixed snapshot")
 	}
 }

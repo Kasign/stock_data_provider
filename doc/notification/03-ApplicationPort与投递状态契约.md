@@ -583,6 +583,8 @@ len(OutcomeUnknownDeliveryIDs) = OutcomeUnknown
 | source_module / event_id | string | 对应已提交 Inbox 的双唯一身份 | 必填；唯一键 (source_module,event_id) |
 | event_type / payload_fingerprint | string | 从 Inbox 不可变事件复制，供路由和一致性校验 | 必填；不得由 Worker 改写 |
 | snapshot_revision | uint64 nullable | 首次 Claim 时读取的订阅修订高水位；未 Claim 前为空 | 首次设置后不可变 |
+
+只有 `pending + attempt_count=0 + fencing_token=0 + cursor 为空` 的初始 WorkItem 可以没有快照；一旦领取过，快照缺失必须 fail closed，恢复时不得重新读取当前 revision。
 | cursor_subscription_id | string | 最后一个已完整处理的 Subscription ID；空串表示页面尚未开始 | 每次页面成功后单调前进 |
 | status | enum | pending、processing、retry_wait、completed、failed | 仅允许本节定义的迁移 |
 | attempt_count | uint32 | 成功取得 Fanout 租约的次数，包括过期租约重新领取 | Claim 成功时递增 |
