@@ -194,7 +194,7 @@ func TestComposeResultRejectsRiskPassUsingUnusableQuantResult(t *testing.T) {
 		t.Fatal(err)
 	}
 	risk := validRiskDecision()
-	risk.InputRefs = []string{"qres_1"}
+	risk.InputRefs = []string{"qres-1"}
 	input.RiskDecision = &risk
 	if _, err := ComposeResult(input, registry); !errors.Is(err, ErrInvalidResultComposition) {
 		t.Fatalf("RiskDecision pass must not consume unusable Quant result, got %v", err)
@@ -214,7 +214,7 @@ func TestComposeResultAcceptsRiskReferencesResolvedByContextAndQuant(t *testing.
 		t.Fatal(err)
 	}
 	risk := validRiskDecision()
-	risk.InputRefs = []string{"qres_1", "snapshot-1"}
+	risk.InputRefs = []string{"qres-1", "snapshot-1"}
 	input.RiskDecision = &risk
 	result, err := ComposeResult(input, registry)
 	if err != nil {
@@ -222,6 +222,13 @@ func TestComposeResultAcceptsRiskReferencesResolvedByContextAndQuant(t *testing.
 	}
 	if result.RiskDecision == nil {
 		t.Fatal("validated RiskDecision was dropped")
+	}
+
+	// 引用必须精确匹配已纳入的 Quant Result ID；相似但不存在的别名仍应拒绝。
+	risk.InputRefs = []string{"qres_1"}
+	input.RiskDecision = &risk
+	if _, err := ComposeResult(input, registry); !errors.Is(err, ErrInvalidResultComposition) {
+		t.Fatalf("unknown near-match Quant result reference must fail closed, got %v", err)
 	}
 }
 

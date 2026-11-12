@@ -122,18 +122,22 @@ func ComposeResult(input ResultCompositionInput, quantRegistry *Registry) (Compo
 		if err := ValidateRiskDecision(*input.RiskDecision, input.SystemAsOf); err != nil {
 			return ComposedResearchResult{}, fmt.Errorf("%w: RiskDecision: %v", ErrInvalidResultComposition, err)
 		}
-		quantRefs := make(map[string]struct{}, len(quantResults))
+		// Quant Result ID 与其输入快照是两类不同的引用：分别建表，
+		// 但都必须来自本次实际纳入组合的 Quant 结果，不能放宽未知引用检查。
+		quantResultRefs := make(map[string]struct{}, len(quantResults))
+		quantSnapshotRefs := make(map[string]struct{})
 		unusableQuantRefs := make(map[string]struct{})
 		for _, quantResult := range quantResults {
-			quantRefs[quantResult.Result.ResultID] = struct{}{}
+			resultID := quantResult.Result.ResultID
+			quantResultRefs[resultID] = struct{}{}
 			for _, snapshotRef := range quantResult.Result.InputSnapshotRefs {
-				quantRefs[snapshotRef] = struct{}{}
+				quantSnapshotRefs[snapshotRef] = struct{}{}
 			}
 			if !quantResult.Usable {
-				unusableQuantRefs[quantResult.Result.ResultID] = struct{}{}
+				unusableQuantRefs[resultID] = struct{}{}
 			}
 		}
-		if err := validateRiskReferences(*input.RiskDecision, quantRefs, unusableQuantRefs, contextSourceRefs, evidenceIDs); err != nil {
+		if err := validateRiskReferences(*input.RiskDecision, quantResultRefs, quantSnapshotRefs, unusableQuantRefs, contextSourceRefs, evidenceIDs); err != nil {
 			return ComposedResearchResult{}, err
 		}
 		copyValue, err := cloneJSON(*input.RiskDecision)
@@ -241,12 +245,15 @@ func validateContextReferences(value researchapp.ResearchContext, evidenceIDs ma
 	return sourceRefs, nil
 }
 
-func validateRiskReferences(value RiskDecision, quantRefs, unusableQuantRefs, sourceRefs, evidenceIDs map[string]struct{}) error {
+func validateRiskReferences(value RiskDecision, quantResultRefs, quantSnapshotRefs, unusableQuantRefs, sourceRefs, evidenceIDs map[string]struct{}) error {
 	for _, ref := range value.InputRefs {
 		if _, unusable := unusableQuantRefs[ref]; unusable && value.Status == "pass" {
 			return fmt.Errorf("%w: RiskDecision pass references unusable Quant result %q", ErrInvalidResultComposition, ref)
 		}
-		if _, quantExists := quantRefs[ref]; quantExists {
+		if _, quantResultExists := quantResultRefs[ref]; quantResultExists {
+			continue
+		}
+		if _, quantSnapshotExists := quantSnapshotRefs[ref]; quantSnapshotExists {
 			continue
 		}
 		if _, sourceExists := sourceRefs[ref]; sourceExists {
