@@ -811,8 +811,8 @@ func TestLiveEastmoneyTencentAdjustmentReferenceEvidence(t *testing.T) {
 			bars, err = provider.FetchDailyBars(context.Background(), symbol, startDate, endDate, 100, tc.adjustment)
 		case "tencent":
 			doer := &http.Client{
-				Timeout: 25 * time.Second,
-				Transport: capture.transport(),
+				Timeout:       25 * time.Second,
+				Transport:     capture.transport(),
 				CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse },
 			}
 			provider := NewTencentConfiguredWithHTTPDoers(25*time.Second, "", "", "", "", nil, doer, doer, nil)
@@ -845,17 +845,17 @@ func TestLiveEastmoneyTencentAdjustmentReferenceEvidence(t *testing.T) {
 		}
 		lastResponse := responses[len(responses)-1]
 		evidence := map[string]any{
-			"provider": tc.provider,
-			"symbol": symbol,
-			"adjustment": tc.adjustment,
-			"rows": len(bars),
-			"first_trade_date": bars[0].TradeDate,
-			"last_trade_date": bars[len(bars)-1].TradeDate,
-			"adjustment_methods": methods,
-			"adjustment_reference_dates": referenceDates,
+			"provider":                         tc.provider,
+			"symbol":                           symbol,
+			"adjustment":                       tc.adjustment,
+			"rows":                             len(bars),
+			"first_trade_date":                 bars[0].TradeDate,
+			"last_trade_date":                  bars[len(bars)-1].TradeDate,
+			"adjustment_methods":               methods,
+			"adjustment_reference_dates":       referenceDates,
 			"raw_response_reference_key_paths": liveAdjustmentReferenceKeyPaths(lastResponse.BodySample),
-			"raw_response_truncated": lastResponse.BodyTruncated,
-			"http_responses": responses,
+			"raw_response_truncated":           lastResponse.BodyTruncated,
+			"http_responses":                   responses,
 		}
 		encoded, marshalErr := json.Marshal(evidence)
 		if marshalErr != nil {
