@@ -1636,5 +1636,5 @@ Server Bootstrap
 
 - 在 Server migration 包新增受 `SERVER_RELAY_TEST_MYSQL_DSN` 控制的 MariaDB 集成测试，复用 Server 独立 CI 已启动的 MariaDB 服务。
 - 测试通过真实 `database/sql` 连接执行 Server `Registry.RunWithReport`，检查 namespace 结果报告、Platform Migration Runner 写入历史，以及 `ValidateApplied` 对已应用版本的只读校验；最后对迁移创建的表执行真实读写。
-- 测试使用唯一 namespace/table，并清理测试表及对应历史记录，不与 Relay 或 Platform Storage 的测试数据冲突。
+- 测试先通过 CI MariaDB 管理连接创建唯一临时数据库，再将 Server Registry 的测试连接指向该隔离数据库；结束后删除整个临时数据库。这样 ValidateApplied 校验的完整 Migration namespace 集合不会被共享测试库中其他模块（如 notification）的历史记录污染，也不会清理或改动其他测试的 Migration 数据。
 - 该测试验证 Server Registry 到 Platform Runner 的组合调用，不验证 checksum 只读预检；后者仍需要 Platform 提供公开只读校验能力。
