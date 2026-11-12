@@ -1638,3 +1638,12 @@ Server Bootstrap
 - 测试通过真实 `database/sql` 连接执行 Server `Registry.RunWithReport`，检查 namespace 结果报告、Platform Migration Runner 写入历史，以及 `ValidateApplied` 对已应用版本的只读校验；最后对迁移创建的表执行真实读写。
 - 测试先通过 CI MariaDB 管理连接创建唯一临时数据库，再将 Server Registry 的测试连接指向该隔离数据库；结束后删除整个临时数据库。这样 ValidateApplied 校验的完整 Migration namespace 集合不会被共享测试库中其他模块（如 notification）的历史记录污染，也不会清理或改动其他测试的 Migration 数据。
 - 该测试验证 Server Registry 到 Platform Runner 的组合调用，不验证 checksum 只读预检；后者仍需要 Platform 提供公开只读校验能力。
+
+
+### 12.81 SRV-006 真实容器 Bootstrap 与 SIGTERM 验收（2026-11-12）
+
+- 在 Server 独立 CI 的镜像构建步骤后增加真实容器 smoke：使用刚构建的最终 Server 镜像启动 `SERVER_ROLE=all`，连接 CI 提供的真实 MariaDB 和 Redis，使用独立临时数据库执行旧 Analysis Schema 初始化及 Server 模块 Migration。
+- smoke 必须同时通过 `/healthz` 与 `/readyz`，确认完整 Bootstrap 已启动 HTTP、共享资源及当前角色启用的 Worker/Relay 生命周期；不以容器进程存活代替 Readiness。
+- 通过 `docker stop` 向容器 PID 1 发送真实 SIGTERM，要求容器在 20 秒 Docker stop 宽限期内以退出码 0 结束；Bootstrap 自身关闭预算设置为 15 秒。失败时输出容器日志以便定位启动、迁移或关闭问题。
+- 测试数据库按 GitHub Run ID 隔离，不与其他集成测试共享 Migration History；凭证由 CI 运行时随机生成，不写入仓库或日志。
+- 此项验证最终镜像中的实际 Bootstrap、MariaDB/Redis 连接、Readiness 和 SIGTERM 进程退出；不等于完整生产部署验收，也不覆盖多副本滚动升级、真实上游 Provider、长时间在途业务请求和外部渠道投递。
