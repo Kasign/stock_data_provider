@@ -259,6 +259,101 @@ WHERE symbol=? AND trade_date=? AND source=?`, basisSymbol, "2026-10-30", "baost
 		t.Fatalf("PIT daily-bar query must exclude revisions recorded after as_of: bars=%+v err=%v", barsBeforeObservation, err)
 	}
 
+	// Fundamentals：验证来源修订、available_at 精确时间和 as_of 历史版本读取。
+	fundamentalAvailableAtV1 := time.Date(2026, 10, 30, 8, 0, 0, 0, time.UTC)
+	fundamentalValueV1 := 100.0
+	fundamentalV1 := model.FundamentalsSnapshot{
+		Symbol: symbol, Year: 2026, Quarter: 3, HasData: true,
+		Source: "integration-fundamentals", SourceVersion: "integration-fundamentals-v1",
+		FetchedAt: time.Now().UTC(), QualityStatus: model.QualityValid,
+		Sections: []model.FundamentalSection{{
+			Category: "profitability", ReportDate: "2026-09-30", PublicationDate: "2026-10-30",
+			AvailableAt: &fundamentalAvailableAtV1, HasData: true, QualityStatus: model.QualityValid,
+			Metrics: []model.FundamentalMetric{{
+				Key: "net_profit", Name: "净利润", Value: fundamentalValueV1, Unit: "CNY", SourceField: "net_profit",
+			}},
+		}},
+	}
+	if err := store.SaveFundamentals(ctx, &fundamentalV1); err != nil {
+		t.Fatalf("save first fundamentals revision: %v", err)
+	}
+	fundamentalsFirstAsOf := time.Now().UTC()
+	time.Sleep(5 * time.Millisecond)
+	fundamentalAvailableAtV2 := time.Date(2026, 11, 10, 8, 0, 0, 0, time.UTC)
+	fundamentalValueV2 := 120.0
+	fundamentalV2 := fundamentalV1
+	fundamentalV2.SourceVersion = "integration-fundamentals-v2"
+	fundamentalV2.FetchedAt = time.Now().UTC()
+	fundamentalV2.Sections = append([]model.FundamentalSection(nil), fundamentalV1.Sections...)
+	fundamentalV2.Sections[0].AvailableAt = &fundamentalAvailableAtV2
+	fundamentalV2.Sections[0].Metrics = append([]model.FundamentalMetric(nil), fundamentalV1.Sections[0].Metrics...)
+	fundamentalV2.Sections[0].Metrics[0].Value = fundamentalValueV2
+	if err := store.SaveFundamentals(ctx, &fundamentalV2); err != nil {
+		t.Fatalf("save second fundamentals revision: %v", err)
+	}
+	fundamentalsSecondAsOf := time.Now().UTC()
+	fundamentalsBeforeRevision, err := store.ListFundamentalsAsOf(ctx, symbol, 2026, 3, fundamentalsFirstAsOf)
+	if err != nil || len(fundamentalsBeforeRevision) != 1 ||
+		fundamentalsBeforeRevision[0].SourceVersion != fundamentalV1.SourceVersion ||
+		fundamentalsBeforeRevision[0].Sections[0].Metrics[0].Value != fundamentalValueV1 ||
+		fundamentalsBeforeRevision[0].Sections[0].AvailableAt == nil ||
+		!fundamentalsBeforeRevision[0].Sections[0].AvailableAt.Equal(fundamentalAvailableAtV1) {
+		t.Fatalf("fundamentals as_of must preserve the first source revision and exact available_at: rows=%+v err=%v", fundamentalsBeforeRevision, err)
+	}
+	fundamentalsAfterRevision, err := store.ListFundamentalsAsOf(ctx, symbol, 2026, 3, fundamentalsSecondAsOf)
+	if err != nil || len(fundamentalsAfterRevision) != 1 ||
+		fundamentalsAfterRevision[0].SourceVersion != fundamentalV2.SourceVersion ||
+		fundamentalsAfterRevision[0].Sections[0].Metrics[0].Value != fundamentalValueV2 {
+		t.Fatalf("fundamentals as_of must select the latest recorded revision: rows=%+v err=%v", fundamentalsAfterRevision, err)
+	}
+
+	// Valuations：验证批量请求指纹、来源修订和 as_of 版本选择。
+	peV1 := 12.5
+	valuationFetchedAtV1 := time.Now().UTC()
+	valuationV1 := model.ValuationSnapshot{
+		RequestedSymbols: []string{symbol}, Total: 1, Source: "integration-valuations",
+		SourceVersion: "integration-valuations-v1", FetchedAt: valuationFetchedAtV1,
+		QualityStatus: model.QualityValid,
+		Items: []model.ValuationItem{{
+			Symbol: symbol, Code: symbol, PETTM: &peV1, Source: "integration-valuations",
+			SourceVersion: "integration-valuations-v1", FetchedAt: valuationFetchedAtV1,
+			QualityStatus: model.QualityValid,
+		}},
+	}
+	if err := store.SaveValuations(ctx, &valuationV1); err != nil {
+		t.Fatalf("save first valuation revision: %v", err)
+	}
+	valuationsFirstAsOf := time.Now().UTC()
+	time.Sleep(5 * time.Millisecond)
+	peV2 := 13.75
+	valuationV2 := valuationV1
+	valuationV2.SourceVersion = "integration-valuations-v2"
+	valuationV2.FetchedAt = time.Now().UTC()
+	valuationV2.Items = append([]model.ValuationItem(nil), valuationV1.Items...)
+	valuationV2.Items[0].PETTM = &peV2
+	valuationV2.Items[0].SourceVersion = valuationV2.SourceVersion
+	valuationV2.Items[0].FetchedAt = valuationV2.FetchedAt
+	if err := store.SaveValuations(ctx, &valuationV2); err != nil {
+		t.Fatalf("save second valuation revision: %v", err)
+	}
+	valuationsSecondAsOf := time.Now().UTC()
+	valuationsBeforeRevision, err := store.ListValuationsAsOf(ctx, []string{symbol}, valuationsFirstAsOf)
+	if err != nil || len(valuationsBeforeRevision) != 1 ||
+		valuationsBeforeRevision[0].SourceVersion != valuationV1.SourceVersion ||
+		len(valuationsBeforeRevision[0].Items) != 1 ||
+		valuationsBeforeRevision[0].Items[0].PETTM == nil ||
+		*valuationsBeforeRevision[0].Items[0].PETTM != peV1 {
+		t.Fatalf("valuations as_of must preserve the first source revision: rows=%+v err=%v", valuationsBeforeRevision, err)
+	}
+	valuationsAfterRevision, err := store.ListValuationsAsOf(ctx, []string{symbol}, valuationsSecondAsOf)
+	if err != nil || len(valuationsAfterRevision) != 1 ||
+		valuationsAfterRevision[0].SourceVersion != valuationV2.SourceVersion ||
+		len(valuationsAfterRevision[0].Items) != 1 ||
+		valuationsAfterRevision[0].Items[0].PETTM == nil ||
+		*valuationsAfterRevision[0].Items[0].PETTM != peV2 {
+		t.Fatalf("valuations as_of must select the latest recorded revision: rows=%+v err=%v", valuationsAfterRevision, err)
+	}
+
 	if err := store.Close(); err != nil {
 		t.Fatalf("close MariaDB connection: %v", err)
 	}
@@ -270,6 +365,20 @@ WHERE symbol=? AND trade_date=? AND source=?`, basisSymbol, "2026-10-30", "baost
 	persisted, err := reopened.ListAdjustmentFactorsAsOf(ctx, symbol, "", "", secondAsOf)
 	if err != nil || len(persisted) != 2 {
 		t.Fatalf("independent source-version revisions must persist across connection restart: rows=%+v err=%v", persisted, err)
+	}
+	persistedFundamentals, err := reopened.ListFundamentalsAsOf(ctx, symbol, 2026, 3, fundamentalsSecondAsOf)
+	if err != nil || len(persistedFundamentals) != 1 ||
+		persistedFundamentals[0].SourceVersion != fundamentalV2.SourceVersion ||
+		persistedFundamentals[0].Sections[0].Metrics[0].Value != fundamentalValueV2 {
+		t.Fatalf("fundamentals revisions must persist across connection restart: rows=%+v err=%v", persistedFundamentals, err)
+	}
+	persistedValuations, err := reopened.ListValuationsAsOf(ctx, []string{symbol}, valuationsSecondAsOf)
+	if err != nil || len(persistedValuations) != 1 ||
+		persistedValuations[0].SourceVersion != valuationV2.SourceVersion ||
+		len(persistedValuations[0].Items) != 1 ||
+		persistedValuations[0].Items[0].PETTM == nil ||
+		* persistedValuations[0].Items[0].PETTM != peV2 {
+		t.Fatalf("valuation revisions must persist across connection restart: rows=%+v err=%v", persistedValuations, err)
 	}
 	probeRun := &model.ProviderProbeRun{
 		RunID: fmt.Sprintf("probe-%d", time.Now().UnixNano()),
