@@ -319,8 +319,8 @@ type rollbackDeadlineComponent struct {
 	deadline chan time.Time
 }
 
-func (c rollbackDeadlineComponent) Name() string                 { return c.name }
-func (c rollbackDeadlineComponent) Start(context.Context) error  { return c.startErr }
+func (c rollbackDeadlineComponent) Name() string { return c.name }
+func (c rollbackDeadlineComponent) Start(context.Context) error { return c.startErr }
 func (c rollbackDeadlineComponent) Stop(ctx context.Context) error {
 	deadline, ok := ctx.Deadline()
 	if !ok {
@@ -335,7 +335,7 @@ type rollbackBlockingComponent struct {
 	startErr error
 }
 
-func (c rollbackBlockingComponent) Name() string                { return c.name }
+func (c rollbackBlockingComponent) Name() string { return c.name }
 func (c rollbackBlockingComponent) Start(context.Context) error { return c.startErr }
 func (c rollbackBlockingComponent) Stop(ctx context.Context) error {
 	<-ctx.Done()

@@ -18,13 +18,13 @@ type Component interface {
 
 // Lifecycle 按注册顺序启动组件，并按逆序停止；启动失败时自动回滚。
 type Lifecycle struct {
-	mu         sync.Mutex
-	components []Component
-	started    []Component
-	startedOK  bool
-	stopped    bool
-	startDone  chan struct{}
-	stopDone   chan struct{}
+	mu              sync.Mutex
+	components      []Component
+	started         []Component
+	startedOK       bool
+	stopped         bool
+	startDone       chan struct{}
+	stopDone        chan struct{}
 	stopErr         error
 	rollbackTimeout time.Duration
 }
