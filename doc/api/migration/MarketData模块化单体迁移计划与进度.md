@@ -1113,3 +1113,39 @@ internal/
 - Data 不能自行复制一套 Migration Runner，也不能修改已发布的 migration version 1。当前代码保留既有兼容逻辑，暂不做有风险的 SQL 重排。
 - 这是 Platform Migration Runner 的能力缺口：需要评估提供受统一锁保护的迁移前置/兼容检查步骤，或支持可版本化的条件迁移操作；执行、历史记录和失败恢复仍由同一 Runner 负责。Root Server 必须保证迁移阶段只执行一次/由单一受控生命周期触发，直到该能力补齐。
 - 状态：`blocked_by_platform_migration_runner`。Data 侧待公共能力落地后，将两项兼容修复迁入受控版本化流程，再删除 Runner 外 DDL；不可把当前“单实例幂等”描述为“多实例迁移安全”。
+
+
+## 2026-11-12：Integration Root Server 装配状态复核
+
+### 核验基线
+
+- Data 开发分支：`feat/full-go-data-providers-api-switch`，文档更新前 HEAD `edd870b06e9aea0bb66040339660cd9d56f94fd2`；该 HEAD 的 Data 代码基线为 `6d722802073ac2b0c587986d50ec56cf325f505a`，后续提交仅更新 Data 文档。
+- 只读核验聚合分支 `integration` HEAD：`8542b5d73da6c3b047fb275b05f58d8c0ade552e`。
+- 本轮未修改 integration、Server 或 Platform 代码，也未执行构建/测试。
+
+### Root 当前事实
+
+- `internal/server/bootstrap/bootstrap.go` 仍加载旧 `internal/adapters/marketdata.LoadConfig`，并调用 `service.NewRunnerWithMarketDataStores`；没有构造 `internal/marketdata/bootstrap.Module`。
+- Root 没有将 Data Application Port 注入业务模块，没有挂载 Data `InProcessHandler`，也没有把 Data `MigrationRunner` 注册进 `newMigrationRegistry()`。
+- 当前 Migration Registry 注册 News、Research、Researchflow、Notification，未注册 Data。
+- Root Diagnostics/Readiness 与 Lifecycle 未注册 Data Module 的 Diagnostics、Start/Stop/Close。
+- `internal/server/bootstrap/router.go` 仍只注册 Health/Diagnostics 与旧 Analysis API，没有 `/market-api` 路由。
+
+### 阶段判定
+
+| 阶段 | 当前状态 | 责任边界 |
+|---|---|---|
+| M1 Go Module 归并 | Data 分支已完成 | 不重复搬迁 |
+| M2 Application Port / Bootstrap | Data 侧已完成 | 不再增加第二套 Data Bootstrap |
+| M3 Root Server 装配 | `data_side_ready_root_pending` | 由 Server Owner 完成 Module 构造、依赖注入、路由、Migration、Diagnostics/Readiness 和 Lifecycle |
+| M4 共享资源与受控出站 | `data_side_ready_root_pending_with_platform_blocker` | Root 资源创建/注入由 Server 负责；TCP BoundDialer 与统一迁移锁依赖 Platform；Data 不复制公共能力 |
+| M5 部署切换 | `pending` | 等 M3/M4 具备可验收条件后执行 |
+| M6 迁移验收 | `pending` | 需要 Root 装配、部署、回滚及真实生产证据 |
+
+Data 分支在代码 SHA `6d722802073ac2b0c587986d50ec56cf325f505a` 的 Go Test Suite Run `43204829838` 中，Data gofmt、单测、race、vet 和 MariaDB/PIT/Probe E2E 均通过；Compose/Docker build 与 Data module migration Job skipped。该证据只覆盖 Data 代码与对应集成测试，不代表 Root M3/M4 或部署验收通过。
+
+### 执行边界
+
+- Data 分支不修改 `internal/server/**`，不代替 Server 实现 M3。
+- 不在 Data 内复制 Platform BoundDialer、统一 Migration Runner 或共享资源生命周期。
+- 当前 Data 侧没有需要为 M3 再增加的重复接口。下一主线继续 Data 领域真实数据质量与 PIT 证据；Root 装配缺口作为 Server 的明确依赖，不阻断 Data Provider 独立推进。
