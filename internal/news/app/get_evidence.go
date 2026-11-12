@@ -27,8 +27,8 @@ type EvidenceAtomicContentRepository interface {
 		domain.Observation,
 		domain.NewsItemVersion,
 		time.Time,
-		func(context.Context, domain.CurrentAuthorizationPolicySet) error,
-	) (domain.ContentLayers, error)
+		func(context.Context, domain.CurrentAuthorizationPolicySet, domain.Observation) error,
+	) (domain.ContentLayers, domain.Observation, error)
 }
 
 // GetEvidence 组合单版本 PIT、最新授权快照、当前授权复核和内容级别裁剪。
@@ -79,11 +79,6 @@ func (u *GetEvidence) Execute(ctx context.Context, request GetEvidenceRequest) (
 	if !validEvidencePITRecord(pit, request) {
 		return ResearchEvidenceRecord{}, ErrInvalidEvidenceQuery
 	}
-	// 到期或历史期限未知的候选载荷不得通过读取路径继续披露，即使清理任务尚未执行。
-	if pit.Observation.PayloadPurgedAt != nil || pit.Observation.RetentionUntil.IsZero() ||
-		!pit.Observation.RetentionUntil.After(now) {
-		pit.Observation.Candidate = domain.Candidate{}
-	}
 	resourceRef, err := domain.NewsEvidenceResourceRef(pit.Version.NewsID, pit.Version.VersionNo)
 	if err != nil {
 		return ResearchEvidenceRecord{}, ErrInvalidAuthorizationSnapshot
@@ -110,11 +105,11 @@ func (u *GetEvidence) Execute(ctx context.Context, request GetEvidenceRequest) (
 		return ResearchEvidenceRecord{}, err
 	}
 	// 当前策略锁定、授权复核和正文读取必须共享一个 MariaDB 事务。
-	content, err := u.atomicContent.GetEvidenceContentWithCurrentAuthorization(
+	content, currentObservation, err := u.atomicContent.GetEvidenceContentWithCurrentAuthorization(
 		ctx, binding, pit.Observation, pit.Version, request.SystemAsOf,
-		func(readCtx context.Context, current domain.CurrentAuthorizationPolicySet) error {
+		func(readCtx context.Context, current domain.CurrentAuthorizationPolicySet, observation domain.Observation) error {
 			return u.authorizer.ExecuteWithCurrentPolicies(
-				readCtx, binding, pit.Observation, pit.Version, request.CallerRef,
+				readCtx, binding, observation, pit.Version, request.CallerRef,
 				string(request.PurposeCode), contentLevel, current,
 			)
 		},
@@ -124,6 +119,13 @@ func (u *GetEvidence) Execute(ctx context.Context, request GetEvidenceRequest) (
 	}
 	if err := ctx.Err(); err != nil {
 		return ResearchEvidenceRecord{}, err
+	}
+	pit.Observation = currentObservation
+	// 以原子事务中重新读取的 Observation 为准，避免与并发清理任务竞争时披露已过期载荷。
+	afterRead := u.now().UTC()
+	if currentObservation.PayloadPurgedAt != nil || currentObservation.RetentionUntil.IsZero() ||
+		!currentObservation.RetentionUntil.After(afterRead) {
+		pit.Observation.Candidate = domain.Candidate{}
 	}
 	pit.Version.Content = content
 	return researchEvidenceRecordFromPIT(pit, binding, request), nil

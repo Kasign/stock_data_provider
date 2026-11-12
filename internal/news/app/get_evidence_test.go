@@ -37,8 +37,8 @@ func (s getEvidencePITRepositoryStub) GetEvidenceContentWithCurrentAuthorization
 	_ domain.Observation,
 	_ domain.NewsItemVersion,
 	_ time.Time,
-	authorize func(context.Context, domain.CurrentAuthorizationPolicySet) error,
-) (domain.ContentLayers, error) {
+	authorize func(context.Context, domain.CurrentAuthorizationPolicySet, domain.Observation) error,
+) (domain.ContentLayers, domain.Observation, error) {
 	policies := make([]domain.CurrentAuthorizationPolicy, 0, len(binding.PolicySnapshot.Policies))
 	for _, item := range binding.PolicySnapshot.Policies {
 		policies = append(policies, domain.CurrentAuthorizationPolicy{
@@ -48,12 +48,12 @@ func (s getEvidencePITRepositoryStub) GetEvidenceContentWithCurrentAuthorization
 	}
 	current := domain.CurrentAuthorizationPolicySet{EvaluatedAt: time.Now().UTC(), Policies: policies}
 	if err := authorize(ctx, current); err != nil {
-		return domain.ContentLayers{}, err
+		return domain.ContentLayers{}, domain.Observation{}, err
 	}
 	if s.afterContentRead != nil {
 		s.afterContentRead()
 	}
-	return s.record.Version.Content, s.err
+	return s.record.Version.Content, s.record.Observation, s.err
 }
 
 type getEvidenceAuthorizationSnapshotStub struct {
