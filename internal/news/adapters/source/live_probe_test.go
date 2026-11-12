@@ -45,28 +45,28 @@ func TestLiveFeedProbe(t *testing.T) {
 
 	now := time.Now().UTC()
 	registration := app.SourceEndpointRegistration{
-		SourceID: "live-probe-source",
-		EndpointID: "live-probe-feed",
-		Enabled: true,
-		URL: feedURL,
-		PublisherName: "Live probe source",
-		PublisherDomain: host,
-		AccessMethod: domain.AccessRSS,
+		SourceID:              "live-probe-source",
+		EndpointID:            "live-probe-feed",
+		Enabled:               true,
+		URL:                   feedURL,
+		PublisherName:         "Live probe source",
+		PublisherDomain:       host,
+		AccessMethod:          domain.AccessRSS,
 		SourcePolicyVersionID: "live-probe-source-policy-v1",
 		SourcePolicy: domain.SourcePolicy{
-			Status: domain.AuthorizationApproved,
+			Status:               domain.AuthorizationApproved,
 			AllowedAccessMethods: []domain.AccessMethod{domain.AccessRSS},
-			AllowedPurposes: []domain.Purpose{domain.PurposeInternalPersonalResearch},
-			AllowedContentKinds: []domain.ContentKind{domain.ContentMetadata},
-			AllowedStorageModes: []domain.StorageMode{domain.StorageTransient},
-			MaxRetention: time.Minute,
-			EffectiveAt: now.Add(-time.Minute),
-			EvidenceRef: evidenceRef,
+			AllowedPurposes:      []domain.Purpose{domain.PurposeInternalPersonalResearch},
+			AllowedContentKinds:  []domain.ContentKind{domain.ContentMetadata},
+			AllowedStorageModes:  []domain.StorageMode{domain.StorageTransient},
+			MaxRetention:         time.Minute,
+			EffectiveAt:          now.Add(-time.Minute),
+			EvidenceRef:          evidenceRef,
 		},
 		URLPolicy: domain.SourceURLPolicy{
 			AllowedSchemes: []string{"https"},
-			AllowedHosts: []string{host},
-			AllowedPorts: allowedPorts,
+			AllowedHosts:   []string{host},
+			AllowedPorts:   allowedPorts,
 		},
 		MaxResponseBytes: 2 << 20,
 	}
@@ -91,13 +91,13 @@ func TestLiveFeedProbe(t *testing.T) {
 
 	started := time.Now()
 	result, err := collector.Execute(ctx, app.CollectSourceRequest{
-		SourceID: registration.SourceID,
-		EndpointID: registration.EndpointID,
-		Purpose: domain.PurposeInternalPersonalResearch,
-		ContentKind: domain.ContentMetadata,
-		StorageMode: domain.StorageTransient,
-		Retention: time.Minute,
-		MaxEntries: 5,
+		SourceID:       registration.SourceID,
+		EndpointID:     registration.EndpointID,
+		Purpose:        domain.PurposeInternalPersonalResearch,
+		ContentKind:    domain.ContentMetadata,
+		StorageMode:    domain.StorageTransient,
+		Retention:      time.Minute,
+		MaxEntries:     5,
 		QueryDimension: "live_probe",
 	})
 	duration := time.Since(started)

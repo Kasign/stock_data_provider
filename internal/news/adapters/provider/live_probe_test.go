@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"example.com/stock-analysis-flow/internal/news/app"
-	"example.com/stock-analysis-flow/internal/news/domain"
 	newsconfig "example.com/stock-analysis-flow/internal/news/config"
+	"example.com/stock-analysis-flow/internal/news/domain"
 	platformconfig "example.com/stock-analysis-flow/internal/platform/config"
 	"example.com/stock-analysis-flow/internal/platform/httpclient"
 )
