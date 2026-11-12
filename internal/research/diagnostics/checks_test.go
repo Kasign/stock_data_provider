@@ -138,7 +138,7 @@ func TestEventAndClaimChecksValidateSnapshots(t *testing.T) {
 		SystemObservedAt: cutoff, SystemAsOf: cutoff,
 		ImpactHypothesisRefs: []string{}, InvalidationConditions: []string{},
 		Uncertainty: []string{}, TimeNormalizationRuleVersion: "1.0.0",
-		SourceTimes: []researchevent.EventSourceTime{},
+		SourceTimes: []researchevent.EventSourceTime{}, DerivedFromRefs: []researchevent.ResearchEventRef{},
 	}
 	eventCheck, err := NewEventCheck("research.event.snapshot", "Event 快照", true, event, cutoff)
 	if err != nil {

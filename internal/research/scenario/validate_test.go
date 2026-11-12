@@ -13,8 +13,8 @@ func validScenario() Scenario {
 	return Scenario{
 		ScenarioID: "scenario:600000.SH:breakout", ScenarioVersion: 1,
 		SubjectRefs: []string{"600000.SH"},
-		SystemAsOf: time.Date(2026, 11, 10, 8, 0, 0, 0, time.UTC),
-		Horizon: "next_20_sessions",
+		SystemAsOf:  time.Date(2026, 11, 10, 8, 0, 0, 0, time.UTC),
+		Horizon:     "next_20_sessions",
 		Conditions: []ConditionNode{{
 			Condition: &ScenarioCondition{
 				ConditionID: "close_above", ConditionType: ConditionPrice,
@@ -25,7 +25,7 @@ func validScenario() Scenario {
 		}},
 		ExpectedPath: "价格延续突破", EvidenceRefs: []string{},
 		ProbabilityStatus: ProbabilityNotEvaluated,
-		Risks: []string{}, InvalidationConditions: []string{"收盘价跌破突破位"}, Limitations: []string{},
+		Risks:             []string{}, InvalidationConditions: []string{"收盘价跌破突破位"}, Limitations: []string{},
 	}
 }
 

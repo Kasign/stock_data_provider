@@ -200,7 +200,6 @@ func TestClaimValidateRejectsZeroOffsetNonUTCLocation(t *testing.T) {
 	}
 }
 
-
 func TestClaimSupersedesVersionMustMatchCurrentHead(t *testing.T) {
 	previous := validHypothesis(t)
 	previous.ClaimVersion = 2
@@ -233,12 +232,15 @@ func TestClaimFrozenGolden(t *testing.T) {
 	}
 }
 
-
 func TestClaimJSONRejectsUnknownFields(t *testing.T) {
 	valid, err := json.Marshal(validHypothesis(t))
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	var object map[string]json.RawMessage
-	if err := json.Unmarshal(valid, &object); err != nil { t.Fatal(err) }
+	if err := json.Unmarshal(valid, &object); err != nil {
+		t.Fatal(err)
+	}
 	object["unexpected"] = json.RawMessage(`true`)
 	encoded, _ := json.Marshal(object)
 	var decoded Claim

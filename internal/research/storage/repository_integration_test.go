@@ -593,11 +593,15 @@ func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 	}
 	parentEvent := eventV1
 	parentEvent.EventID = derivedParentID
-	if err := eventRepo.Append(ctx, parentEvent); err != nil { t.Fatalf("append derived parent Event: %v", err) }
+	if err := eventRepo.Append(ctx, parentEvent); err != nil {
+		t.Fatalf("append derived parent Event: %v", err)
+	}
 	childEvent := eventV1
 	childEvent.EventID = derivedChildID
 	childEvent.DerivedFromRefs = []researchevent.ResearchEventRef{{EventID: derivedParentID, EventVersion: 1}}
-	if err := eventRepo.Append(ctx, childEvent); err != nil { t.Fatalf("append Event with exact derived reference: %v", err) }
+	if err := eventRepo.Append(ctx, childEvent); err != nil {
+		t.Fatalf("append Event with exact derived reference: %v", err)
+	}
 	missingDerived := eventV1
 	missingDerived.EventID = missingDerivedID
 	missingDerived.DerivedFromRefs = []researchevent.ResearchEventRef{{EventID: "event:missing", EventVersion: 1}}
@@ -605,8 +609,12 @@ func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 		t.Fatalf("append Event with missing derived reference = %v, want ErrNotFound", err)
 	}
 	var missingHeadCount int
-	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM research_aggregate_heads WHERE aggregate_type='event' AND aggregate_id=?", missingDerivedID).Scan(&missingHeadCount); err != nil { t.Fatalf("count rejected derived Event head: %v", err) }
-	if missingHeadCount != 0 { t.Fatalf("missing-reference append left %d aggregate heads, want 0", missingHeadCount) }
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM research_aggregate_heads WHERE aggregate_type='event' AND aggregate_id=?", missingDerivedID).Scan(&missingHeadCount); err != nil {
+		t.Fatalf("count rejected derived Event head: %v", err)
+	}
+	if missingHeadCount != 0 {
+		t.Fatalf("missing-reference append left %d aggregate heads, want 0", missingHeadCount)
+	}
 
 	// 通过直接注入损坏行构造循环图，验证追加时递归检查会 fail closed。
 	cycleA := eventV1
@@ -617,7 +625,9 @@ func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 	cycleB.DerivedFromRefs = []researchevent.ResearchEventRef{{EventID: cycleAID, EventVersion: 1}}
 	for _, value := range []researchevent.ResearchEvent{cycleA, cycleB} {
 		payload, digest, err := encodePayload(value)
-		if err != nil { t.Fatalf("encode cyclic Event fixture: %v", err) }
+		if err != nil {
+			t.Fatalf("encode cyclic Event fixture: %v", err)
+		}
 		if _, err := db.ExecContext(ctx,
 			"INSERT INTO research_event_versions (event_id, event_version, status, system_as_of, payload_sha256, payload, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
 			value.EventID, value.EventVersion, string(value.Status), formatPIT(value.SystemAsOf), digest, string(payload), now); err != nil {
@@ -634,7 +644,9 @@ func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM research_aggregate_heads WHERE aggregate_type='event' AND aggregate_id=?", cycleCID).Scan(&cycleHeadCount); err != nil {
 		t.Fatalf("count rejected cyclic Event head: %v", err)
 	}
-	if cycleHeadCount != 0 { t.Fatalf("cyclic-reference append left %d aggregate heads, want 0", cycleHeadCount) }
+	if cycleHeadCount != 0 {
+		t.Fatalf("cyclic-reference append left %d aggregate heads, want 0", cycleHeadCount)
+	}
 	assertResearchPITColumn(t, ctx, db, "SELECT system_as_of FROM research_event_versions WHERE event_id=? AND event_version=1", []any{eventID}, cutoff)
 	if err := eventRepo.Append(ctx, eventV1); err != nil {
 		t.Fatalf("replay Event v1: %v", err)

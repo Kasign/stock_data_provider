@@ -12,12 +12,12 @@
 - severity：block、warn、info；Reason status：triggered、not_triggered、unknown。
 - 时间采用规范 UTC RFC3339Nano；Schema 与 Go DTO 同步拒绝非 UTC、冗余小数零和超过纳秒精度的时间表示；引用按不透明非空字符串处理。
 - Go 字符串可承载任意字节，但 JSON 字符串必须是有效 UTF-8；DTO 对所有非空字符串字段（身份、消息和引用）拒绝非法 UTF-8 与首尾空白，避免序列化替换字节或同一逻辑身份出现多种文本表示。
-- required 数组必须显式存在；契约未规定最少元素数，因此允许空数组。
+- `reasons` 必须显式存在且至少包含一条 Reason；`input_refs` 必须显式存在，但允许空数组；每条 Reason 的 `evidence_refs` 必须显式存在，允许空数组。
 - Schema 禁止未声明字段，不接受未冻结的 override 扩展。
 
 ## 领域边界
 
-DTO Validate 只校验结构、枚举、必需字段和时间格式，不推导 status 与 reasons 的业务组合。风险规则的 fail-closed 决策由 QNT-010 Application 执行：数据缺失、规则无法评估或输入质量不足时必须 unknown 或 reject，不能 pass；硬门禁不允许评分或 LLM override。
+DTO Validate 校验结构、枚举、Reason.code 唯一性、`evaluated_at >= system_as_of` 和 status 聚合结果；不替代 RuleSet 对 Reason severity/顺序/覆盖率的校验。风险规则的 fail-closed 执行由 QNT-010 Application 与 RuleSet 执行入口共同保证：数据缺失、规则无法评估或输入质量不足时必须 unknown 或 reject，不能 pass；硬门禁不允许评分或 LLM override。
 
 ## 验收
 

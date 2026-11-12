@@ -78,7 +78,7 @@
 
 当前分支已提供 `POST /api/v1/data-sources/probe`、`GET /api/v1/data-sources/probe/history`，支持 Provider/capability 探测、超时与并发限制、错误脱敏、状态分类、checks 过滤、结构化字段诊断和 MariaDB 历史持久化。`GET /api/v1/data-sources/diagnostics` 继续承担业务请求熔断观测，两者职责不同。
 
-剩余工作不再是建设诊断入口，而是补充 DailyBar 复权口径、交易边界、财务/估值字段规则、数据域 Freshness/PIT 和真实 Provider 证据。唯一任务顺序见 `doc/国内A股数据层阶段五统一验收计划.md`。
+剩余工作不再是建设诊断入口，而是补充 DailyBar 复权口径、交易边界、财务/估值字段规则、数据域 Freshness/PIT 和真实 Provider 证据。唯一任务顺序见 `doc/api/acceptance/国内A股数据层阶段五统一验收计划.md`。
 
 ## 4. 第三批：历史可用性和 PIT
 

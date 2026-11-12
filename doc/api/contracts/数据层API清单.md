@@ -1,24 +1,24 @@
 # 数据层 API 接口清单与 WebUI 接入映射
 
-更新日期：2026-11-04
-适用分支：feat/full-go-data-providers-api-switch（已包含 feat/webui-market-data-console 的 WebUI 合并内容）
-核对依据：当前目标分支 services/market-data/openapi.yaml、services/market-data/internal/httpapi/server.go、web/src/api.js 及页面模块。服务端路由与 OpenAPI 已逐项核对。字段类型、完整响应 Schema 和状态码以 OpenAPI 为准。
+更新日期：2026-11-12
+适用分支：feat/full-go-data-providers-api-switch
+核对依据：当前分支 internal/marketdata/httpapi/openapi.yaml、internal/marketdata/httpapi/server.go。本文接口清单描述 Data HTTP Adapter 的远程兼容接口；字段类型、完整响应 Schema 和状态码以该 OpenAPI 为准。
 
-说明：接口已注册/已封装不代表 Provider 已启用或真实数据已验收。Provider 代码能力、默认开关和运行验收状态见 [Python Provider → Go 迁移矩阵](./接口规范/PYTHON_PROVIDER_GO_MIGRATION_MATRIX.md) 与 [数据源真实环境验收记录](./接口规范/DATA_SOURCE_RUNTIME_ACCEPTANCE_LOG.md)。
+说明：接口已注册/已封装不代表 Provider 已启用或真实数据已验收。Provider 代码能力、默认开关和运行验收状态见 [Python Provider → Go 迁移矩阵](./provider-migration/PYTHON_PROVIDER_GO_MIGRATION_MATRIX.md) 与 [数据源真实环境验收记录](./provider-migration/DATA_SOURCE_RUNTIME_ACCEPTANCE_LOG.md)。
 
 ## 1. 接口边界
 
-- 行情数据服务：浏览器默认代理前缀 /market-api。
-- 分析任务服务：浏览器默认代理前缀 /analysis-api，与行情服务分离。
-- 行情接口除健康检查外均使用 X-API-Key；该 Key 是行情服务内部访问凭据，保存在当前浏览器连接设置中。
-- 分析任务请求不复用行情 API Key。管理员登录态、服务密钥和行情服务 API Key 不应混用。
+- 本清单描述 Data HTTP Adapter 的远程兼容接口，不代表浏览器应直接持有 Data 凭据。
+- 默认目标部署为 Root Server 与 Data 同进程：浏览器访问 Root Server，由 Root Server 完成外部认证；内部通过可信 Context/Application Port 调用 Data，不发送 Data API Key。
+- 仅远程兼容/独立部署模式启用 Data HTTP API Key，业务接口唯一接受 X-API-Key，由 Root Server Remote Data Adapter 从受控 Secret 装载并注入；Bearer 不得作为别名。
+- 浏览器、WebUI、用户请求和 LLM Tool 不得持有、保存、传递或获取 Data API Key；Provider Token 也只由服务端配置。
 - “前端封装”表示 web/src/api.js 存在对应请求函数，不代表当前部署的 Provider 数据一定可用。
 
 ## 2. 行情数据服务接口
 
-以下路径均相对于 /market-api。接口方法以表格为准；健康检查为公开 GET，行情数据接口需要 API Key，主动探测使用 POST。
+以下路径均相对于远程兼容入口。健康检查为匿名 GET；业务接口在远程兼容模式下要求单一 X-API-Key，默认同进程模式不经过此 HTTP 认证边界。
 
-| 方法 | 路径 | 功能 | 参数摘要 | WebUI 封装 | API Key |
+| 方法 | 路径 | 功能 | 参数摘要 | WebUI 封装 | 远程模式 X-API-Key |
 |---|---|---|---|---|---|
 | GET | /health/live | 行情服务存活检查 | 无额外参数；详见 OpenAPI | marketLiveness | 否 |
 | GET | /health/ready | 行情服务就绪检查 | 无额外参数；详见 OpenAPI | marketHealth | 否 |
@@ -28,7 +28,7 @@
 | GET | /api/v1/bars/{symbol}/daily | 单只股票日 K（支持日期范围、复权及 as_of 历史观察时点） | 路径参数 symbol；start、end、limit（1–2000）、adjustment、as_of | getDailyBars | 是 |
 | GET | /api/v1/bundles/{symbol} | 单只股票行情与日 K 统一快照 | 路径参数 symbol；lookback_days（20–2000）、adjustment、as_of | getMarketBundle | 是 |
 | GET | /api/v1/data-sources/diagnostics | Provider 业务请求熔断诊断（进程内真实请求观测） | 无额外参数；详见 OpenAPI | getDataSourceDiagnostics | 是 |
-| POST | /api/v1/data-sources/probe | 主动探测已启用 Provider 的各项能力 | scope（all/core）、checks（connectivity/contract/quality/freshness/cross_provider/storage）、capabilities、daily_bar_adjustments（仅 daily_bars；none/forward_adjusted/backward_adjusted，最多 3 个且不重复；省略默认 none）、daily_bar_start_date/daily_bar_end_date（仅 daily_bars；必须成对；首尾包含；Asia/Shanghai；最多 31 个自然日；结束日期不得晚于今日；省略保持近期 5 条）、markets（最多 1 个）、symbols（最多 1 个标准代码）、timeout_seconds（1–30，默认 12）；响应回显 requested_daily_bar_start_date/end_date；请求体可选 | runDataSourceProbe | 是 |
+| POST | /api/v1/data-sources/probe | 主动探测已启用 Provider 的各项能力 | scope（all/core）、checks（connectivity/contract/quality/freshness/cross_provider/storage）、capabilities、daily_bar_adjustments（仅 daily_bars；none/forward_adjusted/backward_adjusted，最多 3 个且不重复；省略默认 none）、daily_bar_start_date/daily_bar_end_date（仅 daily_bars；必须成对；首尾包含；Asia/Shanghai；最多 31 个自然日；结束日期不得晚于今日；省略保持近期 5 条）、markets（最多 1 个）、symbols（最多 1 个标准代码）、timeout_seconds（1–30，默认 12）；响应回显 requested_daily_bar_start_date/end_date；请求体可选；历史批次持久化失败返回 503 STORAGE_UNAVAILABLE | runDataSourceProbe | 是 |
 | GET | /api/v1/data-sources/probe/history | 最近已持久化的主动探测批次 | limit（1–100，默认 20）；依赖 MariaDB，存储不可用返回 503 | getDataSourceProbeHistory | 是 |
 | GET | /api/v1/data-sources | Provider 注册信息与静态能力声明 | 无额外参数；详见 OpenAPI | getDataSources | 是 |
 | GET | /api/v1/stocks/search | A 股证券名称/代码搜索 | q 必填（1–64 字符）；limit（1–50，默认 10） | searchStocks | 是 |
@@ -71,7 +71,7 @@
 
 | — | /api/v1/analysis/tasks | 服务端任务历史分页需求（当前无此路由，非现有 API） | 暂无；需服务端补充分页、状态/类型/股票/日期过滤与总数语义 |
 
-分析任务请求/响应的完整字段契约以 doc/api/分析任务.openapi.yaml 和分析服务当前实现为准。当前没有服务端研究报告列表/详情/归档 API；WebUI 直接使用已校验的 Run 结果在浏览器本地归档，不新增服务端接口。当前 OpenAPI 仅定义创建、单任务状态、事件与 Run 结果查询，没有服务端任务列表分页接口；WebUI 的“最近分析”只保留本地最多 10 条任务引用，不应称为服务端历史。
+分析任务请求/响应的完整字段契约以 doc/api/contracts/分析任务.openapi.yaml 和分析服务当前实现为准。当前没有服务端研究报告列表/详情/归档 API；WebUI 直接使用已校验的 Run 结果在浏览器本地归档，不新增服务端接口。当前 OpenAPI 仅定义创建、单任务状态、事件与 Run 结果查询，没有服务端任务列表分页接口；WebUI 的“最近分析”只保留本地最多 10 条任务引用，不应称为服务端历史。
 
 ## 4. 页面与接口对应关系
 
@@ -118,17 +118,17 @@
 
 ## 8. 权威接口定义
 
-- 行情服务 OpenAPI：services/market-data/openapi.yaml（代码内权威协议，不迁移到文档目录）。
-- 分析任务 OpenAPI：doc/api/分析任务.openapi.yaml。
-- Python 桥接 OpenAPI：doc/api/Python桥接.openapi.yaml。
+- 行情服务 OpenAPI：internal/marketdata/httpapi/openapi.yaml（代码内权威协议，不迁移到文档目录）。
+- 分析任务 OpenAPI：doc/api/contracts/分析任务.openapi.yaml。
+- Python 桥接 OpenAPI：doc/api/contracts/Python桥接.openapi.yaml。
 - WebUI 实际请求实现：web/src/api.js。
-- 行情服务路由注册：services/market-data/internal/httpapi/server.go。
+- 行情服务路由注册：internal/marketdata/httpapi/server.go。
 
 
 ### 板块排行字段补充说明（2026-11-03）
 
 - WebUI 使用 `amount` + `amount_unit` 展示成交额；仅 `amount_unit=CNY` 时显示人民币单位，unknown 不推断。
-- 五日排序由服务端 `sort_by=change_5d` 执行，返回值字段为 `change_percent_5d`。`SectorRanking.change_percent_5d` 已在 `services/market-data/openapi.yaml` 中声明为可空数值，说明其为六个日收盘价计算的五交易日涨幅，单位为百分点；对应 Schema 契约测试已验证字段归属。
+- 五日排序由服务端 `sort_by=change_5d` 执行，返回值字段为 `change_percent_5d`。`SectorRanking.change_percent_5d` 已在 `internal/marketdata/httpapi/openapi.yaml` 中声明为可空数值，说明其为六个日收盘价计算的五交易日涨幅，单位为百分点；对应 Schema 契约测试已验证字段归属。
 - `direction=up` 表示按所选指标从高到低，`direction=down` 表示从低到高。
 - 板块资金净流入没有独立服务端接口，WebUI 继续显示未接入，不以成交额替代。
 

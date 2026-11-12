@@ -81,7 +81,8 @@
           "safe_message",
           "evidence_refs"
         ]
-      }
+      },
+      "minItems": 1
     },
     "input_refs": {
       "type": "array",

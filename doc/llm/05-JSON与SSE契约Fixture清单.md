@@ -3,7 +3,7 @@
 - 归属任务：LLM-002-F
 - 对应协议：OpenAI Responses
 - 日期：2026-11-05
-- 状态：Fixture 设计基线、首批 JSON/SSE Golden 文件及 Mapper/Parser/HTTP Adapter/纯 SSE Parser 单测代码已存在；Golden/单测执行证据仍缺失，对应 LLM-CTR-001～003 当前为 pending_evidence；不代表真实模型能力证明。
+- 状态：JSON/SSE Golden 文件及 Mapper/Parser/HTTP Adapter/纯 SSE Parser 单测代码已存在；LLM-CTR-001～003 的项目级定义状态为 frozen（L1），但本分支包级测试尚无成功执行证据，真实 Gateway/模型能力也未验收。Fixture 通过不代表真实模型能力证明。
 
 ## 1. Fixture 原则
 
@@ -381,3 +381,15 @@ sequence_number 严格连续策略、Draft 2020-12 本地 Schema dialect、Reque
 - 该能力绑定 Provider、Model、Protocol、Gateway 版本和有效期；unknown/unsupported 一律不派发。
 - strict 与 non-strict 都执行高级约束能力门禁；`local_validation_only` 只对 Response Schema 跳过上游能力要求。
 - 对应测试：`TestValidateCapabilitiesRequiresAdvancedSchemaConstraintEvidence`。
+
+## 26. Integration CI P0 修复记录（2026-11-12）
+
+针对 Integration CI Run #17 暴露的 LLM 测试失败项，修复范围限定在本模块：
+
+- SSE EOF/读取中断收尾：分发 Scanner 已交付的最后一条完整事件；不覆盖 dispatch 产生的协议错误；读取中断始终返回 incomplete，即使已解析到 terminal 事件也不宣告成功。
+- JSON completed 缺少 response_id：返回 invalid_response 时同步将响应状态置为 failed。
+- Strict Schema Golden：补齐 Response Schema 与 Function Tool 参数对象的 additionalProperties=false，并保证所有对象属性均列入 required。
+- Sequence Fixture：终态 output 与增量文本一致；全缺失 sequence_number 仍记录为 unavailable。
+- Request ID 测试：使用 Go http.Header 的规范化键名，避免测试构造绕过 Header.Get 的规范查找。
+
+本记录说明修复目标与测试数据调整，不代表本地测试或 Integration CI 已通过。验收证据以修复提交后的实际 Go 测试和对应分支 CI 为准。

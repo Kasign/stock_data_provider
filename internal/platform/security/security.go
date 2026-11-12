@@ -15,11 +15,17 @@ import (
 )
 
 type IdentityKind string
+type AuthMethod string
 
 const (
 	IdentityAnonymous IdentityKind = "anonymous"
 	IdentityOwner     IdentityKind = "owner"
 	IdentityService   IdentityKind = "service"
+
+	AuthMethodAnonymous     AuthMethod = "anonymous"
+	AuthMethodOwnerBearer   AuthMethod = "owner_bearer"
+	AuthMethodOwnerSession  AuthMethod = "owner_session"
+	AuthMethodServiceBearer AuthMethod = "service_bearer"
 
 	ScopePlatformAdmin = "platform:admin"
 	ScopeDataRead      = "data:read"
@@ -32,10 +38,13 @@ const minimumTokenBytes = 32
 const maximumTokenBytes = 256
 const maximumServiceCredentials = 128
 
+// Principal is a trusted in-process identity snapshot. AuthMethod preserves
+// the credential path so owner sessions never inherit owner-bearer authority.
 type Principal struct {
-	Kind    IdentityKind
-	Subject string
-	Scopes  []string
+	Kind       IdentityKind
+	AuthMethod AuthMethod
+	Subject    string
+	Scopes     []string
 }
 
 type ServiceCredential struct {
@@ -244,7 +253,7 @@ func (a *Authenticator) Authenticate(request *http.Request) (Principal, error) {
 	}
 	values := request.Header.Values("Authorization")
 	if len(values) == 0 {
-		return Principal{Kind: IdentityAnonymous, Subject: "anonymous"}, nil
+		return Principal{Kind: IdentityAnonymous, AuthMethod: AuthMethodAnonymous, Subject: "anonymous"}, nil
 	}
 	if len(values) != 1 {
 		return Principal{}, errors.New("invalid authorization header")
@@ -267,8 +276,12 @@ func (a *Authenticator) Authenticate(request *http.Request) (Principal, error) {
 		return Principal{}, errors.New("invalid credentials")
 	}
 	credential := a.credentials[matched]
+	authMethod := AuthMethodServiceBearer
+	if credential.kind == IdentityOwner {
+		authMethod = AuthMethodOwnerBearer
+	}
 	return Principal{
-		Kind: credential.kind, Subject: credential.subject,
+		Kind: credential.kind, AuthMethod: authMethod, Subject: credential.subject,
 		Scopes: append([]string(nil), credential.scopes...),
 	}, nil
 }
@@ -319,6 +332,53 @@ func clonePrincipal(principal Principal) Principal {
 	return principal
 }
 
+// WithPrincipal adds an already authenticated identity to a context. Only a
+// trusted authentication boundary may call this function; it is not a way for
+// request data or domain code to assert an identity.
+func WithPrincipal(ctx context.Context, principal Principal) (context.Context, error) {
+	if ctx == nil {
+		return nil, errors.New("principal context is required")
+	}
+	if err := validatePrincipal(principal); err != nil {
+		return nil, err
+	}
+	return context.WithValue(ctx, principalContextKey{}, clonePrincipal(principal)), nil
+}
+
+func validatePrincipal(principal Principal) error {
+	switch principal.AuthMethod {
+	case AuthMethodAnonymous:
+		if principal.Kind != IdentityAnonymous || principal.Subject != "anonymous" || len(principal.Scopes) != 0 {
+			return errors.New("anonymous principal combination is invalid")
+		}
+	case AuthMethodOwnerBearer:
+		if principal.Kind != IdentityOwner || principal.Subject != "owner" ||
+			len(principal.Scopes) != 1 || principal.Scopes[0] != ScopePlatformAdmin {
+			return errors.New("owner bearer principal combination is invalid")
+		}
+	case AuthMethodOwnerSession:
+		if principal.Kind != IdentityOwner || principal.Subject != "owner" || len(principal.Scopes) != 0 {
+			return errors.New("owner session principal combination is invalid")
+		}
+	case AuthMethodServiceBearer:
+		if principal.Kind != IdentityService || !validServiceName(principal.Subject) || len(principal.Scopes) == 0 {
+			return errors.New("service bearer principal combination is invalid")
+		}
+		scopes, err := normalizeScopes(principal.Scopes)
+		if err != nil {
+			return err
+		}
+		for index, scope := range scopes {
+			if scope == ScopePlatformAdmin || scope != principal.Scopes[index] {
+				return errors.New("service bearer principal scopes are invalid")
+			}
+		}
+	default:
+		return errors.New("principal authentication method is invalid")
+	}
+	return nil
+}
+
 func PrincipalFromContext(request *http.Request) (Principal, bool) {
 	if request == nil {
 		return Principal{}, false
@@ -349,8 +409,11 @@ func Guard(authenticator *Authenticator, policy RoutePolicy, next http.Handler) 
 			writeAuthError(w, http.StatusForbidden, "forbidden", "the caller is not allowed to access this route")
 			return
 		}
-		ctx := request.Context()
-		ctx = withPrincipal(ctx, principal)
+		ctx, err := WithPrincipal(request.Context(), principal)
+		if err != nil {
+			writeAuthError(w, http.StatusInternalServerError, "principal_context_invalid", "authenticated identity is invalid")
+			return
+		}
 		next.ServeHTTP(w, request.WithContext(ctx))
 	})
 }
@@ -383,10 +446,6 @@ func contains(values []string, target string) bool {
 		}
 	}
 	return false
-}
-
-func withPrincipal(ctx context.Context, principal Principal) context.Context {
-	return context.WithValue(ctx, principalContextKey{}, clonePrincipal(principal))
 }
 
 func writeAuthError(w http.ResponseWriter, status int, code, message string) {

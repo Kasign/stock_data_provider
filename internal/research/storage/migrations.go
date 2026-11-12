@@ -8,7 +8,7 @@ const MigrationNamespace = "research"
 // 最终表结构，不保留逐步升级、历史回填或旧结构兼容迁移。
 func Migrations() []platformstorage.Migration {
 	return []platformstorage.Migration{{
-		Version: 1,
+		Version:     1,
 		Description: "create final Research storage schema",
 		Statements: []string{
 			"CREATE TABLE research_aggregate_heads (aggregate_type VARCHAR(32) NOT NULL, aggregate_id VARCHAR(255) NOT NULL, latest_version BIGINT UNSIGNED NOT NULL, created_at DATETIME(6) NOT NULL, updated_at DATETIME(6) NOT NULL, PRIMARY KEY (aggregate_type, aggregate_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin",

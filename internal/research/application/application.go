@@ -119,42 +119,42 @@ type EventSourceTime struct {
 	Notes                   *string   `json:"notes,omitempty"`
 }
 type ResearchEvent struct {
-	EventID                       string            `json:"event_id"`
-	EventVersion                  int               `json:"event_version"`
-	EventType                     string            `json:"event_type"`
-	Title                         string            `json:"title"`
-	Status                        string            `json:"status"`
-	SubjectRefs                   []string          `json:"subject_refs"`
-	EvidenceRefs                  []string          `json:"evidence_refs"`
-	OccurredAt                    *time.Time        `json:"occurred_at"`
-	PublishedAt                   *time.Time        `json:"published_at"`
-	AvailableAt                   *time.Time        `json:"available_at"`
-	SystemObservedAt              time.Time         `json:"system_observed_at"`
-	SystemAsOf                    time.Time         `json:"system_as_of"`
-	ImpactHypothesisRefs          []string          `json:"impact_hypothesis_refs"`
-	InvalidationConditions        []string          `json:"invalidation_conditions"`
-	Uncertainty                   []string          `json:"uncertainty"`
-	SourceTimes                   []EventSourceTime `json:"source_times"`
+	EventID                      string            `json:"event_id"`
+	EventVersion                 int               `json:"event_version"`
+	EventType                    string            `json:"event_type"`
+	Title                        string            `json:"title"`
+	Status                       string            `json:"status"`
+	SubjectRefs                  []string          `json:"subject_refs"`
+	EvidenceRefs                 []string          `json:"evidence_refs"`
+	OccurredAt                   *time.Time        `json:"occurred_at"`
+	PublishedAt                  *time.Time        `json:"published_at"`
+	AvailableAt                  *time.Time        `json:"available_at"`
+	SystemObservedAt             time.Time         `json:"system_observed_at"`
+	SystemAsOf                   time.Time         `json:"system_as_of"`
+	ImpactHypothesisRefs         []string          `json:"impact_hypothesis_refs"`
+	InvalidationConditions       []string          `json:"invalidation_conditions"`
+	Uncertainty                  []string          `json:"uncertainty"`
+	SourceTimes                  []EventSourceTime `json:"source_times"`
 	TimeNormalizationRuleVersion string            `json:"time_normalization_rule_version"`
-	DerivedFromRefs               []EventRef        `json:"derived_from_refs"`
+	DerivedFromRefs              []EventRef        `json:"derived_from_refs"`
 }
 type CreateEventCommand struct {
-	EventType                     string
-	Title                         string
-	Status                        string
-	SubjectRefs                   []string
-	EvidenceRefs                  []string
-	OccurredAt                    *time.Time
-	PublishedAt                   *time.Time
-	AvailableAt                   *time.Time
-	SystemObservedAt              time.Time
-	SystemAsOf                    time.Time
-	ImpactHypothesisRefs          []string
-	InvalidationConditions        []string
-	Uncertainty                   []string
+	EventType                    string
+	Title                        string
+	Status                       string
+	SubjectRefs                  []string
+	EvidenceRefs                 []string
+	OccurredAt                   *time.Time
+	PublishedAt                  *time.Time
+	AvailableAt                  *time.Time
+	SystemObservedAt             time.Time
+	SystemAsOf                   time.Time
+	ImpactHypothesisRefs         []string
+	InvalidationConditions       []string
+	Uncertainty                  []string
 	TimeNormalizationRuleVersion string
-	DerivedFromRefs               []EventRef
-	SourceTimes                   []EventSourceTime
+	DerivedFromRefs              []EventRef
+	SourceTimes                  []EventSourceTime
 }
 type EventRef struct {
 	EventID      string `json:"event_id"`
@@ -530,9 +530,9 @@ func (s *Service) CreateEvent(ctx context.Context, command CreateEventCommand) (
 		SystemObservedAt: command.SystemObservedAt, SystemAsOf: command.SystemAsOf,
 		ImpactHypothesisRefs:   cloneStrings(command.ImpactHypothesisRefs),
 		InvalidationConditions: cloneStrings(command.InvalidationConditions),
-		Uncertainty: cloneStrings(command.Uncertainty), SourceTimes: toDomainEventTimes(command.SourceTimes),
+		Uncertainty:            cloneStrings(command.Uncertainty), SourceTimes: toDomainEventTimes(command.SourceTimes),
 		TimeNormalizationRuleVersion: command.TimeNormalizationRuleVersion,
-		DerivedFromRefs:               toDomainEventRefs(command.DerivedFromRefs),
+		DerivedFromRefs:              toDomainEventRefs(command.DerivedFromRefs),
 	}
 	if err := value.Validate(); err != nil {
 		return ResearchEvent{}, validationFault("invalid_research_event", "Research Event is invalid", err)
@@ -573,20 +573,20 @@ func (s *Service) UpdateEvent(ctx context.Context, command UpdateEventCommand) (
 	next := researchevent.ResearchEvent{
 		EventID: previous.EventID, EventVersion: previous.EventVersion + 1,
 		EventType: command.Revision.EventType, Title: command.Revision.Title,
-		Status:                 researchevent.EventStatus(command.Revision.Status),
-		SubjectRefs:            cloneStrings(command.Revision.SubjectRefs),
-		EvidenceRefs:           cloneStrings(command.Revision.EvidenceRefs),
-		OccurredAt:             cloneTime(command.Revision.OccurredAt),
-		PublishedAt:            cloneTime(command.Revision.PublishedAt),
-		AvailableAt:            cloneTime(command.Revision.AvailableAt),
-		SystemObservedAt:       command.Revision.SystemObservedAt,
-		SystemAsOf:             command.Revision.SystemAsOf,
-		ImpactHypothesisRefs:   cloneStrings(command.Revision.ImpactHypothesisRefs),
-		InvalidationConditions: cloneStrings(command.Revision.InvalidationConditions),
-		Uncertainty: cloneStrings(command.Revision.Uncertainty),
-		SourceTimes: toDomainEventTimes(command.Revision.SourceTimes),
+		Status:                       researchevent.EventStatus(command.Revision.Status),
+		SubjectRefs:                  cloneStrings(command.Revision.SubjectRefs),
+		EvidenceRefs:                 cloneStrings(command.Revision.EvidenceRefs),
+		OccurredAt:                   cloneTime(command.Revision.OccurredAt),
+		PublishedAt:                  cloneTime(command.Revision.PublishedAt),
+		AvailableAt:                  cloneTime(command.Revision.AvailableAt),
+		SystemObservedAt:             command.Revision.SystemObservedAt,
+		SystemAsOf:                   command.Revision.SystemAsOf,
+		ImpactHypothesisRefs:         cloneStrings(command.Revision.ImpactHypothesisRefs),
+		InvalidationConditions:       cloneStrings(command.Revision.InvalidationConditions),
+		Uncertainty:                  cloneStrings(command.Revision.Uncertainty),
+		SourceTimes:                  toDomainEventTimes(command.Revision.SourceTimes),
 		TimeNormalizationRuleVersion: command.Revision.TimeNormalizationRuleVersion,
-		DerivedFromRefs:               toDomainEventRefs(command.Revision.DerivedFromRefs),
+		DerivedFromRefs:              toDomainEventRefs(command.Revision.DerivedFromRefs),
 	}
 	if err := next.ValidateNextVersion(previous); err != nil {
 		return ResearchEvent{}, validationFault("invalid_research_event_transition", "Research Event revision is invalid", err)
@@ -662,9 +662,9 @@ func fromDomainEvent(value researchevent.ResearchEvent) ResearchEvent {
 		SystemObservedAt: value.SystemObservedAt, SystemAsOf: value.SystemAsOf,
 		ImpactHypothesisRefs:   cloneStrings(value.ImpactHypothesisRefs),
 		InvalidationConditions: cloneStrings(value.InvalidationConditions), Uncertainty: cloneStrings(value.Uncertainty),
-		SourceTimes: make([]EventSourceTime, len(value.SourceTimes)),
+		SourceTimes:                  make([]EventSourceTime, len(value.SourceTimes)),
 		TimeNormalizationRuleVersion: value.TimeNormalizationRuleVersion,
-		DerivedFromRefs:               fromDomainEventRefs(value.DerivedFromRefs),
+		DerivedFromRefs:              fromDomainEventRefs(value.DerivedFromRefs),
 	}
 	for i, v := range value.SourceTimes {
 		out.SourceTimes[i] = EventSourceTime{EvidenceRef: v.EvidenceRef, TimeType: string(v.TimeType), Value: v.Value, AssertedBy: v.AssertedBy, Confidence: cloneFloat(v.Confidence), ConfidenceMethod: cloneString(v.ConfidenceMethod), ConfidenceMethodVersion: cloneString(v.ConfidenceMethodVersion), Notes: cloneString(v.Notes)}

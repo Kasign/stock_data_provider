@@ -13,7 +13,7 @@ import (
 )
 
 // InboxFanoutWriter 在 Inbox 事务中写入对应 Fanout 工作项。
-// 实现必须复用传入事务，不得自行提交或开启独立事务；具体工作项结构由冻结后的 Fanout 契约决定。
+// 实现必须复用传入事务，不得自行提交或开启独立事务；字段、状态和游标语义以本模块 03 文档第 13 节为准。
 type InboxFanoutWriter interface {
 	InsertForAcceptedEvent(ctx context.Context, tx *sql.Tx, record domain.InboxRecord) error
 }

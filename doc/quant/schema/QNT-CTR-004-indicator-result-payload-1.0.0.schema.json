@@ -1,0 +1,566 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://stock-data-provider.local/schema/QNT-CTR-004-indicator-result-payload-1.0.0.schema.json",
+  "title": "Quant IndicatorResultPayload 1.0.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "indicator_code",
+    "metrics"
+  ],
+  "properties": {
+    "indicator_code": {
+      "type": "string",
+      "enum": [
+        "sma",
+        "ema",
+        "return",
+        "volatility",
+        "rsi",
+        "atr",
+        "macd",
+        "bollinger"
+      ]
+    },
+    "metrics": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/quant_metric"
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "indicator_code": {
+            "const": "sma"
+          }
+        },
+        "required": [
+          "indicator_code"
+        ]
+      },
+      "then": {
+        "properties": {
+          "metrics": {
+            "minItems": 1,
+            "maxItems": 1,
+            "prefixItems": [
+              {
+                "type": "object",
+                "properties": {
+                  "metric_code": {
+                    "const": "sma"
+                  }
+                },
+                "required": [
+                  "metric_code"
+                ]
+              }
+            ],
+            "items": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "indicator_code": {
+            "const": "ema"
+          }
+        },
+        "required": [
+          "indicator_code"
+        ]
+      },
+      "then": {
+        "properties": {
+          "metrics": {
+            "minItems": 1,
+            "maxItems": 1,
+            "prefixItems": [
+              {
+                "type": "object",
+                "properties": {
+                  "metric_code": {
+                    "const": "ema"
+                  }
+                },
+                "required": [
+                  "metric_code"
+                ]
+              }
+            ],
+            "items": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "indicator_code": {
+            "const": "return"
+          }
+        },
+        "required": [
+          "indicator_code"
+        ]
+      },
+      "then": {
+        "properties": {
+          "metrics": {
+            "minItems": 1,
+            "maxItems": 1,
+            "prefixItems": [
+              {
+                "type": "object",
+                "properties": {
+                  "metric_code": {
+                    "const": "return"
+                  }
+                },
+                "required": [
+                  "metric_code"
+                ]
+              }
+            ],
+            "items": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "indicator_code": {
+            "const": "volatility"
+          }
+        },
+        "required": [
+          "indicator_code"
+        ]
+      },
+      "then": {
+        "properties": {
+          "metrics": {
+            "minItems": 1,
+            "maxItems": 1,
+            "prefixItems": [
+              {
+                "type": "object",
+                "properties": {
+                  "metric_code": {
+                    "const": "volatility"
+                  }
+                },
+                "required": [
+                  "metric_code"
+                ]
+              }
+            ],
+            "items": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "indicator_code": {
+            "const": "rsi"
+          }
+        },
+        "required": [
+          "indicator_code"
+        ]
+      },
+      "then": {
+        "properties": {
+          "metrics": {
+            "minItems": 1,
+            "maxItems": 1,
+            "prefixItems": [
+              {
+                "type": "object",
+                "properties": {
+                  "metric_code": {
+                    "const": "rsi"
+                  }
+                },
+                "required": [
+                  "metric_code"
+                ]
+              }
+            ],
+            "items": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "indicator_code": {
+            "const": "atr"
+          }
+        },
+        "required": [
+          "indicator_code"
+        ]
+      },
+      "then": {
+        "properties": {
+          "metrics": {
+            "minItems": 1,
+            "maxItems": 1,
+            "prefixItems": [
+              {
+                "type": "object",
+                "properties": {
+                  "metric_code": {
+                    "const": "atr"
+                  }
+                },
+                "required": [
+                  "metric_code"
+                ]
+              }
+            ],
+            "items": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "indicator_code": {
+            "const": "macd"
+          }
+        },
+        "required": [
+          "indicator_code"
+        ]
+      },
+      "then": {
+        "properties": {
+          "metrics": {
+            "minItems": 3,
+            "maxItems": 3,
+            "prefixItems": [
+              {
+                "type": "object",
+                "properties": {
+                  "metric_code": {
+                    "const": "macd_dif"
+                  }
+                },
+                "required": [
+                  "metric_code"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "metric_code": {
+                    "const": "macd_dea"
+                  }
+                },
+                "required": [
+                  "metric_code"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "metric_code": {
+                    "const": "macd_histogram"
+                  }
+                },
+                "required": [
+                  "metric_code"
+                ]
+              }
+            ],
+            "items": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "indicator_code": {
+            "const": "bollinger"
+          }
+        },
+        "required": [
+          "indicator_code"
+        ]
+      },
+      "then": {
+        "properties": {
+          "metrics": {
+            "minItems": 3,
+            "maxItems": 3,
+            "prefixItems": [
+              {
+                "type": "object",
+                "properties": {
+                  "metric_code": {
+                    "const": "bollinger_middle"
+                  }
+                },
+                "required": [
+                  "metric_code"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "metric_code": {
+                    "const": "bollinger_upper"
+                  }
+                },
+                "required": [
+                  "metric_code"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "metric_code": {
+                    "const": "bollinger_lower"
+                  }
+                },
+                "required": [
+                  "metric_code"
+                ]
+              }
+            ],
+            "items": false
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "quant_metric": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "metric_code",
+        "value",
+        "unit",
+        "period",
+        "system_as_of",
+        "quality_status",
+        "metric_status",
+        "calculation_version",
+        "lower_bound",
+        "upper_bound"
+      ],
+      "properties": {
+        "metric_code": {
+          "type": "string",
+          "enum": [
+            "sma",
+            "ema",
+            "return",
+            "volatility",
+            "rsi",
+            "atr",
+            "macd_dif",
+            "macd_dea",
+            "macd_histogram",
+            "bollinger_middle",
+            "bollinger_upper",
+            "bollinger_lower"
+          ]
+        },
+        "value": {
+          "type": [
+            "string",
+            "number",
+            "null"
+          ]
+        },
+        "unit": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+        },
+        "period": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+        },
+        "system_as_of": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{0,8}[1-9])?Z$"
+        },
+        "quality_status": {
+          "type": "string",
+          "enum": [
+            "valid",
+            "degraded",
+            "invalid",
+            "unknown"
+          ]
+        },
+        "metric_status": {
+          "type": "string",
+          "enum": [
+            "available",
+            "insufficient_data",
+            "insufficient_sample",
+            "not_applicable",
+            "unknown"
+          ]
+        },
+        "calculation_version": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+        },
+        "sample_count": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "lower_bound": {
+          "type": [
+            "string",
+            "number",
+            "null"
+          ]
+        },
+        "upper_bound": {
+          "type": [
+            "string",
+            "number",
+            "null"
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "metric_status": {
+                "const": "available"
+              }
+            },
+            "required": [
+              "metric_status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "value": {
+                "type": [
+                  "string",
+                  "number"
+                ]
+              },
+              "quality_status": {
+                "enum": [
+                  "valid",
+                  "degraded"
+                ]
+              }
+            },
+            "oneOf": [
+              {
+                "properties": {
+                  "value": {
+                    "type": [
+                      "string",
+                      "number"
+                    ]
+                  },
+                  "lower_bound": {
+                    "type": "null"
+                  },
+                  "upper_bound": {
+                    "type": "null"
+                  }
+                }
+              },
+              {
+                "properties": {
+                  "value": {
+                    "type": "number"
+                  },
+                  "lower_bound": {
+                    "type": "number"
+                  },
+                  "upper_bound": {
+                    "type": "number"
+                  }
+                }
+              },
+              {
+                "properties": {
+                  "value": {
+                    "type": "string"
+                  },
+                  "lower_bound": {
+                    "type": "string"
+                  },
+                  "upper_bound": {
+                    "type": "string"
+                  }
+                }
+              }
+            ]
+          },
+          "else": {
+            "properties": {
+              "value": {
+                "type": "null"
+              },
+              "lower_bound": {
+                "type": "null"
+              },
+              "upper_bound": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "quality_status": {
+                "enum": [
+                  "invalid",
+                  "unknown"
+                ]
+              }
+            },
+            "required": [
+              "quality_status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "metric_status": {
+                "not": {
+                  "const": "available"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

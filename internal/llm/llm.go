@@ -61,9 +61,15 @@ func (s CapabilityState) Supports(key Capability) bool {
 
 func (s CapabilityState) SupportsAt(key Capability, now time.Time) bool {
 	now = now.UTC()
+	if s.VerifiedAt == nil || s.ValidUntil == nil {
+		return false
+	}
+	_, verifiedOffset := s.VerifiedAt.Zone()
+	_, validUntilOffset := s.ValidUntil.Zone()
 	return s.ProviderID != "" && s.ModelID != "" && s.Protocol == ProtocolOpenAIResponses &&
-		s.GatewayVersion != "" && strings.TrimSpace(s.VerificationMethod) != "" && len(s.VerificationMethod) <= 64 && s.EvidenceRef != "" && s.VerifiedAt != nil && !s.VerifiedAt.IsZero() &&
-		!s.VerifiedAt.After(now) && s.ValidUntil != nil && s.ValidUntil.After(*s.VerifiedAt) &&
+		s.GatewayVersion != "" && strings.TrimSpace(s.VerificationMethod) != "" && len(s.VerificationMethod) <= 64 && s.EvidenceRef != "" &&
+		!s.VerifiedAt.IsZero() && verifiedOffset == 0 && !s.VerifiedAt.After(now) &&
+		validUntilOffset == 0 && s.ValidUntil.After(*s.VerifiedAt) &&
 		now.Before(*s.ValidUntil) && s.Status(key) == CapabilitySupported
 }
 

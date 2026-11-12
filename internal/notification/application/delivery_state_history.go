@@ -55,7 +55,8 @@ func ValidateDeliveryStateHistory(delivery domain.DeliveryRecord, events []domai
 	}
 	last := events[len(events)-1]
 	if last.To != delivery.Status || last.Version != delivery.Version ||
-		!last.ChangedAt.Equal(delivery.UpdatedAt) {
+		!last.ChangedAt.Equal(delivery.UpdatedAt) ||
+		!sameStateHistoryText(last.ReasonCode, delivery.ReasonCode) {
 		return "", ErrDeliveryStateHistory
 	}
 	return DeliveryStateHistoryConsistent, nil
@@ -70,4 +71,11 @@ func validStateEventStatus(status domain.DeliveryStatus) bool {
 	default:
 		return false
 	}
+}
+
+func sameStateHistoryText(left, right *string) bool {
+	if left == nil || right == nil {
+		return left == nil && right == nil
+	}
+	return *left == *right
 }

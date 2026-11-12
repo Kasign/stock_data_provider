@@ -1,0 +1,33 @@
+{
+  "schema_version": "1.0.0",
+  "result_id": "quant_result:sha256:aa8ffa0383b02e621313e3f1a1f02b817113f3e4967843364dd4ec9b0a1ecb1b",
+  "result_type": "risk",
+  "scope": "stock",
+  "security_id": "600000.SH",
+  "system_as_of": "2026-11-09T00:59:00Z",
+  "period": "20d",
+  "algorithm_version": "risk-evaluator.v1",
+  "parameter_fingerprint": "sha256:risk-parameters",
+  "input_snapshot_refs": [],
+  "quality_status": "valid",
+  "result_status": "completed",
+  "authorization_ref": "authorization-ref:current",
+  "payload_schema_version": "1.0.0",
+  "payload": {
+    "decision_id": "risk-decision-001",
+    "status": "reject",
+    "rule_set_version": "risk-rules.v7",
+    "evaluated_at": "2026-11-09T01:00:00Z",
+    "system_as_of": "2026-11-09T00:59:00Z",
+    "reasons": [
+      {
+        "code": "HARD_GATE",
+        "severity": "block",
+        "status": "triggered",
+        "safe_message": "硬门禁已触发",
+        "evidence_refs": []
+      }
+    ],
+    "input_refs": []
+  }
+}

@@ -30,7 +30,7 @@ func validEvent(t *testing.T) ResearchEvent {
 		OccurredAt: &occurred, PublishedAt: nil, AvailableAt: nil,
 		SystemObservedAt: observed, SystemAsOf: asOf,
 		ImpactHypothesisRefs: []string{}, InvalidationConditions: []string{"company retracts guidance"},
-		Uncertainty: []string{"guidance may be revised"},
+		Uncertainty:                  []string{"guidance may be revised"},
 		TimeNormalizationRuleVersion: "1.0.0", DerivedFromRefs: []ResearchEventRef{},
 		SourceTimes: []EventSourceTime{{
 			EvidenceRef: "evidence:news:0001", TimeType: TimeOccurredAt,
@@ -308,7 +308,6 @@ func TestLifecycleTransitionRejectsZeroOffsetNonUTCLocation(t *testing.T) {
 	}
 }
 
-
 func TestResearchEventFrozenGolden(t *testing.T) {
 	data, err := os.ReadFile("../../../doc/整体任务规划/golden/RSC-CTR-002-research-event.golden.json")
 	if err != nil {
@@ -323,12 +322,15 @@ func TestResearchEventFrozenGolden(t *testing.T) {
 	}
 }
 
-
 func TestResearchEventJSONRejectsUnknownAndMissingRequiredFields(t *testing.T) {
 	valid, err := json.Marshal(validEvent(t))
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	var object map[string]json.RawMessage
-	if err := json.Unmarshal(valid, &object); err != nil { t.Fatal(err) }
+	if err := json.Unmarshal(valid, &object); err != nil {
+		t.Fatal(err)
+	}
 	object["unexpected"] = json.RawMessage(`true`)
 	encoded, _ := json.Marshal(object)
 	var decoded ResearchEvent
