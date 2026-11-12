@@ -222,6 +222,6 @@ JCS 仍只调用项目公共 GOV-CTR-006 Runtime Verifier；本模式不复制 J
 | 策略 Payload Hash 被篡改 | MariaDB 集成测试 | Hash 校验失败，拒绝读取 |
 | Binding 资源引用不匹配 | MariaDB 集成测试 | 进入事务前拒绝 |
 | 授权回调期间上下文取消 | MariaDB 集成测试 | 回滚事务，不返回正文 |
-| 数据库 Commit 明确失败 | 尚未完成故障注入 | 代码路径在 Commit 返回错误时丢弃正文；尚无真实 MariaDB Commit 故障测试 |
+| ListEvidence 页内任一记录授权失败（RACE-07） | `internal/news/app/list_evidence_test.go`：`TestListEvidenceDoesNotReturnPartialPageWhenAnItemIsDenied` | 第一条记录已成功解析、第二条记录授权拒绝时，整个 Execute 返回错误且 `result.Items == nil`；不返回部分正文页 |
 
 原子读取现已在策略行锁后重新读取并锁定 Observation/Version 元数据，重新验证 Binding、策略轨迹、版本 fingerprint、Observation 归属和 PIT 时间边界。Application 使用事务返回的最新 Observation，并在组装 DTO 前再次应用载荷留存/清理状态。
