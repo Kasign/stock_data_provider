@@ -65,7 +65,6 @@ func (r *MySQLRunRepository) ListExpiredAttemptCandidates(ctx context.Context, a
 	return items, nil
 }
 
-
 // isAfterExpiredAttemptCursor compares the composite (RunRef, StageRef) key.
 // Multiple Stages belonging to the same Run must remain valid across pages.
 func isAfterExpiredAttemptCursor(runRef, stageRef, afterRunRef, afterStageRef string) bool {

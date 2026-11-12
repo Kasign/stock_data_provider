@@ -129,7 +129,6 @@ func TestMariaDBExpiredAttemptCandidatesAndReclaim(t *testing.T) {
 	}
 }
 
-
 func TestExpiredAttemptCandidateCompositeCursorAllowsMultipleStagesPerRun(t *testing.T) {
 	if !isAfterExpiredAttemptCursor("run-a", "stage-b", "run-a", "stage-a") {
 		t.Fatal("a later Stage in the same Run must be after the composite cursor")
