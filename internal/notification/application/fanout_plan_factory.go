@@ -21,8 +21,10 @@ var (
 	ErrFanoutTemplateSelectorUnavailable = errors.New("notification: fanout template selector is unavailable")
 )
 
-// SubscriptionFilterMatcher evaluates only the registered, versioned filter schema.
-// It must not interpret arbitrary JSON as a query language.
+// SubscriptionFilterMatcher must resolve the exact (event_type, filter_schema_version)
+// pair, validate the filter document against that registered schema, and evaluate only
+// its declared semantics. It must not fall back to another version or interpret arbitrary
+// JSON as a query language.
 type SubscriptionFilterMatcher interface {
 	Matches(ctx context.Context, event domain.EventEnvelope, subscription domain.Subscription) (bool, error)
 }
