@@ -1058,6 +1058,81 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	if !errors.Is(revokedReadErr, app.ErrNewsCurrentPolicyDenied) {
 		t.Fatalf("read after committed revocation error = %v, want authorization denied", revokedReadErr)
 	}
+
+	// 策略 Payload Hash 被篡改时，原子读取必须在正文查询前拒绝。
+	var originalPolicyHash string
+	if err := db.QueryRowContext(ctx, `SELECT payload_hash FROM news_policy_versions
+		WHERE policy_type = ? AND policy_ref = ? AND policy_version = ?`,
+		domain.NewsPolicyTypeSource, secondObservation.SourceID, revokedPolicyVersion,
+	).Scan(&originalPolicyHash); err != nil {
+		t.Fatalf("read source policy hash: %v", err)
+	}
+	tamperedPolicyHash := strings.Repeat("0", 64)
+	if tamperedPolicyHash == originalPolicyHash {
+		tamperedPolicyHash = strings.Repeat("1", 64)
+	}
+	if _, err := db.ExecContext(ctx, `UPDATE news_policy_versions SET payload_hash = ?
+		WHERE policy_type = ? AND policy_ref = ? AND policy_version = ?`,
+		tamperedPolicyHash, domain.NewsPolicyTypeSource, secondObservation.SourceID, revokedPolicyVersion,
+	); err != nil {
+		t.Fatalf("tamper source policy hash: %v", err)
+	}
+	_, tamperedPolicyErr := repository.GetEvidenceContentWithCurrentAuthorization(
+		ctx, revokedBinding, revokedObservation, secondVersion.Version, time.Now().UTC(),
+		func(context.Context, domain.CurrentAuthorizationPolicySet) error { return nil },
+	)
+	if _, err := db.ExecContext(ctx, `UPDATE news_policy_versions SET payload_hash = ?
+		WHERE policy_type = ? AND policy_ref = ? AND policy_version = ?`,
+		originalPolicyHash, domain.NewsPolicyTypeSource, secondObservation.SourceID, revokedPolicyVersion,
+	); err != nil {
+		t.Fatalf("restore source policy hash: %v", err)
+	}
+	if !errors.Is(tamperedPolicyErr, app.ErrNewsCurrentPolicyUnavailable) {
+		t.Fatalf("tampered source policy read error = %v, want current policy unavailable", tamperedPolicyErr)
+	}
+
+	// 当前策略指针缺失时 fail closed，不允许回退到历史策略版本。
+	if _, err := db.ExecContext(ctx, `DELETE FROM news_current_policy_versions
+		WHERE policy_type = ? AND policy_ref = ?`, domain.NewsPolicyTypeSource, secondObservation.SourceID); err != nil {
+		t.Fatalf("delete current source policy pointer: %v", err)
+	}
+	_, missingPointerErr := repository.GetEvidenceContentWithCurrentAuthorization(
+		ctx, revokedBinding, revokedObservation, secondVersion.Version, time.Now().UTC(),
+		func(context.Context, domain.CurrentAuthorizationPolicySet) error { return nil },
+	)
+	if _, err := db.ExecContext(ctx, `INSERT INTO news_current_policy_versions
+		(policy_type, policy_ref, policy_version, updated_at) VALUES (?, ?, ?, ?)`,
+		domain.NewsPolicyTypeSource, secondObservation.SourceID, revokedPolicyVersion, time.Now().UTC(),
+	); err != nil {
+		t.Fatalf("restore current source policy pointer: %v", err)
+	}
+	if !errors.Is(missingPointerErr, app.ErrNewsCurrentPolicyUnavailable) {
+		t.Fatalf("missing current policy pointer error = %v, want current policy unavailable", missingPointerErr)
+	}
+
+	// Binding 的资源引用不匹配时，不得进入策略读取或正文读取事务。
+	invalidResourceBinding := revokedBinding
+	invalidResourceBinding.ResourceRef = "news-evidence-wrong-resource"
+	if _, err := repository.GetEvidenceContentWithCurrentAuthorization(
+		ctx, invalidResourceBinding, revokedObservation, secondVersion.Version, time.Now().UTC(),
+		func(context.Context, domain.CurrentAuthorizationPolicySet) error { return nil },
+	); !errors.Is(err, app.ErrInvalidEvidenceQuery) {
+		t.Fatalf("mismatched resource binding error = %v, want invalid evidence query", err)
+	}
+
+	// 授权回调期间取消上下文时，事务必须回滚且不能返回正文。
+	cancelCtx, cancelRead := context.WithCancel(ctx)
+	_, canceledReadErr := repository.GetEvidenceContentWithCurrentAuthorization(
+		cancelCtx, revokedBinding, revokedObservation, secondVersion.Version, time.Now().UTC(),
+		func(context.Context, domain.CurrentAuthorizationPolicySet) error {
+			cancelRead()
+			return nil
+		},
+	)
+	cancelRead()
+	if !errors.Is(canceledReadErr, context.Canceled) {
+		t.Fatalf("canceled atomic read error = %v, want context canceled", canceledReadErr)
+	}
 	atVersion.SystemAsOf = secondVersion.Version.ObservedAt.Add(-time.Second)
 	if _, err := repository.GetEvidenceVersionAt(ctx, atVersion); !errors.Is(err, app.ErrEvidencePITNotFound) {
 		t.Fatalf("explicit future version error = %v, want PIT not found", err)
