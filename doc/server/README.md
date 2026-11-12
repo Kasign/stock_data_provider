@@ -1535,9 +1535,8 @@ Server Bootstrap
 - 本轮未进行真实 MariaDB/Redis E2E；包级 CI 仅验证 Server 代码和 Fake/SQL Connector 测试，不代表部署验收。
 
 
-### 12.69 SRV-009 Diagnostics Aggregator 缺失 Runner 防御（2026-11-12）
+### 12.69 SRV-009 Diagnostics Aggregator 复审结论（2026-11-12）
 
-- Review 发现 `Aggregator` 暴露可注入的 `Runner` 字段，但 `Run` 在存在必需检查时未验证 Runner 非 nil，异常构造会触发 nil pointer panic。
-- 新增稳定错误 `ErrRunnerRequired`，在执行检查前显式拒绝缺失 Runner；正常 `Service` 构造仍注入 Platform Runner，正常 Bootstrap 行为不变。
-- 新增回归测试覆盖必需检查存在但 Runner 缺失的路径，确保返回可识别错误而不是 panic。
-- 本修复仅属于 Server Diagnostics 防御性边界，不改变 Platform Runner、检查状态语义或 Readiness 判定规则。
+- 对 `internal/platform/diagnostics.Runner` 的实际定义核查后确认其为值类型结构体，不是接口或指针；零值 Runner 本身可用，会采用 Platform 默认并发数和总超时。
+- 因此 `Aggregator.Runner == nil` 检查不成立，不能以此作为 Server 缺陷；已撤销该防御性改动和对应测试，没有保留无效接口约束。
+- 该次 CI 失败是本轮错误修改造成的编译错误，不是原分支缺陷。后续继续审查 Diagnostics 时，以 Platform Runner 的真实值类型和零值语义为准。
