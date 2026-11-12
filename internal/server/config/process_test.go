@@ -89,10 +89,10 @@ func TestLoadProcessRejectsInvalidProcessSettings(t *testing.T) {
 
 func TestLoadProcessReturnsStableSnapshot(t *testing.T) {
 	values := map[string]string{
-		"LOG_LEVEL":           "debug",
-		"ANALYSIS_WORKERS":    "4",
-		"ANALYSIS_MAX_QUEUED": "200",
-		"SERVER_ROLE":         "worker",
+		"LOG_LEVEL":                             "debug",
+		"ANALYSIS_WORKERS":                      "4",
+		"ANALYSIS_MAX_QUEUED":                   "200",
+		"SERVER_ROLE":                           "worker",
 		"NOTIFICATION_EVENT_MAX_ENVELOPE_BYTES": "8192",
 		"NOTIFICATION_EVENT_MAX_PAYLOAD_BYTES":  "4096",
 		"NOTIFICATION_EVENT_MAX_JSON_DEPTH":     "16",

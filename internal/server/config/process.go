@@ -9,16 +9,16 @@ import (
 )
 
 // Process 是 Bootstrap 使用的不可变进程配置快照。
-// 领域模块配置仍由模块自己的配置入口解析，避免 Server 接管领域参数所有权。
+// 领域模块配置仍由各自模块的配置入口解析，避免 Server 接管领域参数 Schema。
 type Process struct {
-	LogLevel          string
-	AnalysisTimeout   time.Duration
-	AnalysisWorkers   int
-	AnalysisMaxQueued int
-	Role              Role
-	Migration         Migration
-	Security          Security
-	HTTP              HTTP
+	LogLevel                  string
+	AnalysisTimeout           time.Duration
+	AnalysisWorkers           int
+	AnalysisMaxQueued         int
+	Role                      Role
+	Migration                 Migration
+	Security                  Security
+	HTTP                      HTTP
 	ResearchNotificationRelay ResearchNotificationRelay
 }
 
