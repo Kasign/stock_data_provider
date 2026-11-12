@@ -304,8 +304,8 @@ func TestNotificationMariaDBRecoveryRetryReclaimsWithNewFencingTokenIntegration(
 		t.Fatal(err)
 	}
 	wait := time.Until(expiredAt.Add(20 * time.Millisecond))
-	if retryDelay > 0 {
-		time.Sleep(retryDelay)
+	if wait > 0 {
+		time.Sleep(wait)
 	}
 	recoveryNow := time.Now().UTC().Truncate(time.Microsecond)
 	recoverySnapshot, found, err := deliveries.Get(ctx, delivery.DeliveryID)
