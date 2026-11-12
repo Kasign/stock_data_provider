@@ -63,7 +63,7 @@ func newTestSessionAuthenticator(t *testing.T, now time.Time) (*SessionAuthentic
 	}}
 	auth, err := NewSessionAuthenticator(sessions, credentials, SessionAuthenticatorConfig{
 		Cookie: platformsecurity.SessionCookieConfig{
-			Name: "__Host-owner_session", Path: "/api", Secure: true, SameSite: http.SameSiteLaxMode,
+			Name: "__Secure-owner_session", Path: "/api", Secure: true, SameSite: http.SameSiteLaxMode,
 		},
 		PublicOrigin: "https://stocks.example.com", CSRFHeader: DefaultCSRFAuthHeader,
 		IdleTTL: 12 * time.Hour, Now: func() time.Time { return now },
@@ -76,7 +76,7 @@ func sessionRequest(method, rawToken string) *http.Request {
 	request := httptest.NewRequest(method, "https://stocks.example.com/api/private", nil)
 	request.Host = "stocks.example.com"
 	if rawToken != "" {
-		request.AddCookie(&http.Cookie{Name: "__Host-owner_session", Value: rawToken})
+		request.AddCookie(&http.Cookie{Name: "__Secure-owner_session", Value: rawToken})
 	}
 	return request
 }
@@ -109,7 +109,7 @@ func TestSessionAuthenticatorRequiresCookieAndRejectsDuplicateCookies(t *testing
 		t.Fatal("missing Session Cookie was accepted")
 	}
 	request := sessionRequest(http.MethodGet, rawToken)
-	request.AddCookie(&http.Cookie{Name: "__Host-owner_session", Value: rawToken})
+	request.AddCookie(&http.Cookie{Name: "__Secure-owner_session", Value: rawToken})
 	if _, _, err := auth.Authenticate(request); err == nil {
 		t.Fatal("duplicate Session Cookies were accepted")
 	}
@@ -123,6 +123,12 @@ func TestSessionAuthenticatorRequiresCSRFAndSameOriginForWrites(t *testing.T) {
 	if _, _, err := auth.Authenticate(request); err == nil {
 		t.Fatal("unsafe request without CSRF token was accepted")
 	}
+	request.Header.Set(DefaultCSRFAuthHeader, csrfToken)
+	request.Header.Add(DefaultCSRFAuthHeader, csrfToken)
+	if _, _, err := auth.Authenticate(request); err == nil {
+		t.Fatal("duplicate CSRF headers were accepted")
+	}
+	request.Header.Del(DefaultCSRFAuthHeader)
 	request.Header.Set(DefaultCSRFAuthHeader, csrfToken)
 	request.Header.Set("Origin", "https://attacker.example")
 	if _, _, err := auth.Authenticate(request); err == nil {

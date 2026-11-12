@@ -1463,3 +1463,15 @@ Server Bootstrap
 - 本批次只修改 Server Bootstrap、对应测试和本文档；没有接入登录 Handler、Session Middleware 或伪造认证实现。
 - 后续 SRV-005 A2 仍需完成一次性初始密码 Secret、Argon2id 参数基准与显式配置、Session/CSRF/Origin/Host Middleware、登录限流和审计 Writer 装配；按 PLAT-CTR-003 与项目决策记录实施。
 - 本次代码变更的 CI 结果以本提交对应的 Server Workflow 为准；未完成真实 MariaDB Migration/登录 E2E 前，不标记 Server A2 或部署 A3 通过。
+
+
+### 12.63 SRV-005 Owner Session 独立认证器（2026-11-12）
+
+- 基线：Server 分支 `fbca2b46137b3aa5b7867eff68631823673f6e6d`；本阶段只在 `feat/research-analysis-flow-native-go` 开发。
+- 本轮实现 `internal/server/security.SessionAuthenticator`，只组合 Platform 已有 `SessionStore`、`CredentialStore`、Cookie、CSRF 与可信 Principal Context，不修改 Platform。
+- 认证顺序：校验请求 Host/Origin → 唯一 Session Cookie → Token Digest → Redis Session LookupAndTouch → Session Subject/CredentialVersion/CSRF Digest 结构校验 → MariaDB 当前 Owner CredentialVersion 权威核对 → unsafe method CSRF 校验 → 生成滑动过期 Cookie → 写入 `AuthMethod=owner_session` Principal。
+- Session 每次请求均查询 MariaDB CredentialVersion；Redis/MariaDB 依赖故障原样返回，不降级为 Bearer、内存 Session 或匿名身份。Session Principal 不携带 `platform:admin` 或 Service Scope。
+- Cookie 只在认证成功后返回给调用方；过期时间取 IdleExpiresAt 与 AbsoluteExpiresAt 较早者。拒绝重复 Session Cookie、重复 Origin/CSRF Header、Host 不匹配、跨 Origin 写请求和缺少/错误 CSRF Token。
+- 本阶段只提供可测试的认证组合器，不注册 HTTP 路由、不定义登录/退出/密码修改 HTTP DTO，也未在 Bootstrap 启用；SRV-CTR-001 仍 deferred，不能据此宣称 Web 登录 API 已接入。
+- 测试覆盖 owner_session Principal、Cookie 安全属性/续期、Cookie 缺失与重复、CSRF 缺失/重复/跨 Origin、Host 不匹配、CredentialVersion 失效和 SessionStore 故障 fail-closed。
+- 本轮未执行真实 MariaDB/Redis 或 Web/Nginx E2E；Server CI 通过后仅视为包级/竞态/静态检查证据。后续需补充可信登录/退出用例、Origin/Host 配置接入、审计 Writer 持久化和路由矩阵；不得将此认证器直接挂到旧 Analysis 路由。

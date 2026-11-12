@@ -64,7 +64,7 @@ func NewSessionAuthenticator(
 	if header == "" || strings.ContainsAny(header, " \t\r\n:") {
 		return nil, errors.New("CSRF Header 名称无效")
 	}
-	if cfg.IdleTTL <= 0 || cfg.IdleTTL > platformsecurity.DefaultSessionIdleTTL {
+	if cfg.IdleTTL < time.Second || cfg.IdleTTL > platformsecurity.DefaultSessionIdleTTL {
 		return nil, fmt.Errorf("Session 空闲期限必须在 0 到 %s 之间", platformsecurity.DefaultSessionIdleTTL)
 	}
 	now := cfg.Now
@@ -107,8 +107,11 @@ func (a *SessionAuthenticator) Authenticate(request *http.Request) (*http.Reques
 	if record.Subject != "owner" || record.CredentialVersion == 0 || !validDigest(record.CSRFTokenDigest) {
 		return nil, nil, invalidSessionFault()
 	}
-	if !isSafeMethod(request.Method) && !platformsecurity.VerifyCSRFToken(request.Header.Get(a.csrfHeader), record.CSRFTokenDigest) {
-		return nil, nil, platformfault.New(platformfault.ClassForbidden, "server.csrf_rejected", "request origin or CSRF token is invalid", nil)
+	if !isSafeMethod(request.Method) {
+		csrfValues := request.Header.Values(a.csrfHeader)
+		if len(csrfValues) != 1 || !platformsecurity.VerifyCSRFToken(csrfValues[0], record.CSRFTokenDigest) {
+			return nil, nil, platformfault.New(platformfault.ClassForbidden, "server.csrf_rejected", "request origin or CSRF token is invalid", nil)
+		}
 	}
 	credential, err := a.credentials.GetOwnerCredential(request.Context())
 	if err != nil {
