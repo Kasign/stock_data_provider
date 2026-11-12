@@ -1643,7 +1643,7 @@ Server Bootstrap
 ### 12.81 SRV-006 真实容器 Bootstrap 与 SIGTERM 验收（2026-11-12）
 
 - 在 Server 独立 CI 的镜像构建步骤后增加真实容器 smoke：使用刚构建的最终 Server 镜像启动 `SERVER_ROLE=all`，连接 CI 提供的真实 MariaDB 和 Redis，使用独立临时数据库执行旧 Analysis Schema 初始化及 Server 模块 Migration。
-- smoke 必须同时通过 `/healthz` 与 `/readyz`，确认完整 Bootstrap 已启动 HTTP、共享资源及当前角色启用的 Worker/Relay 生命周期；不以容器进程存活代替 Readiness。
+- smoke 必须同时通过 `/healthz` 与 `/readyz`，确认完整 Bootstrap 已启动 HTTP、共享资源及当前角色启用的 Worker/Relay 生命周期；不以容器进程存活代替 Readiness。`/readyz` 在 Root Server 路由中属于 OwnerAccess，smoke 使用本次运行随机生成的 `PLATFORM_ADMIN_TOKEN` 对应 Bearer 凭证探测，不能匿名请求；此前一次失败正是探测遗漏认证头导致持续收到未授权响应，并非 Readiness 依赖异常。
 - 通过 `docker stop` 向容器 PID 1 发送真实 SIGTERM，要求容器在 20 秒 Docker stop 宽限期内以退出码 0 结束；Bootstrap 自身关闭预算设置为 15 秒。失败时输出容器日志以便定位启动、迁移或关闭问题。
 - 测试数据库按 GitHub Run ID 隔离，不与其他集成测试共享 Migration History；凭证由 CI 运行时随机生成，不写入仓库或日志。
 - 此项验证最终镜像中的实际 Bootstrap、MariaDB/Redis 连接、Readiness 和 SIGTERM 进程退出；不等于完整生产部署验收，也不覆盖多副本滚动升级、真实上游 Provider、长时间在途业务请求和外部渠道投递。
