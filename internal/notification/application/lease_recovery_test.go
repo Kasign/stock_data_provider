@@ -114,6 +114,7 @@ func TestAssessExpiredDeliveryLeaseClassifiesAttemptOutcomes(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			delivery, lease, now := recoveryFixture(t)
+			delivery.AttemptCount = 1
 			attempt := recoveryAttempt(t, delivery, lease, tc.outcome, tc.finished)
 			if tc.retryable {
 				attempt.Retryable = true
@@ -134,6 +135,7 @@ func TestAssessExpiredDeliveryLeaseClassifiesAttemptOutcomes(t *testing.T) {
 
 func TestAssessExpiredDeliveryLeaseRetainsRetryAfter(t *testing.T) {
 	delivery, lease, now := recoveryFixture(t)
+	delivery.AttemptCount = 1
 	running := recoveryAttempt(t, delivery, lease, domain.DeliveryAttemptRejected, false)
 	finishedAt := running.StartedAt.Add(time.Second)
 	retryAfter := finishedAt.Add(45 * time.Second)
@@ -173,6 +175,7 @@ func TestAssessExpiredDeliveryLeaseRequiresExpiredUTCLease(t *testing.T) {
 
 func TestAssessExpiredDeliveryLeaseDoesNotExposeProviderDetails(t *testing.T) {
 	delivery, lease, now := recoveryFixture(t)
+	delivery.AttemptCount = 1
 	attempt := recoveryAttempt(t, delivery, lease, domain.DeliveryAttemptRejected, true)
 	attempt.ErrorCode = stringPointerForRecovery("provider returned private response: " + strings.Repeat("x", 4))
 	if _, err := AssessExpiredDeliveryLease(delivery, lease, []domain.DeliveryAttempt{attempt}, now); !errors.Is(err, ErrLeaseRecoveryHistory) {

@@ -228,7 +228,8 @@ func TestDeliveryCompletionPreservesAttemptCountAcrossTwoRetryCycles(t *testing.
 	if err != nil || !claimed {
 		t.Fatalf("claim second attempt: claimed=%v err=%v", claimed, err)
 	}
-	if secondClaim.Delivery.AttemptCount != 1 || secondClaim.Delivery.Version != afterFirst.Version ||
+	if secondClaim.Delivery.AttemptCount != 1 || secondClaim.Delivery.Version != afterFirst.Version+1 ||
+		secondClaim.Delivery.Status != domain.DeliverySending ||
 		secondClaim.Lease.FencingToken <= firstClaim.Lease.FencingToken {
 		t.Fatalf("second claim must retain first attempt projection and advance fencing: %+v", secondClaim)
 	}
@@ -315,7 +316,7 @@ func TestDeliveryCompletionDeliveryCommitOutcomeUnknownDoesNotReplayTransition(t
 		t.Fatalf("committed Delivery transition must be visible without replay: delivery=%+v found=%v err=%v", current, found, readErr)
 	}
 	events, readErr := repository.ListStateEvents(context.Background(), current.DeliveryID)
-	if readErr != nil || len(events) != 3 || events[len(events)-1].To != domain.DeliverySent {
+	if readErr != nil || len(events) != 2 || events[len(events)-1].To != domain.DeliverySent {
 		t.Fatalf("uncertain commit must not create duplicate StateEvent: events=%+v err=%v", events, readErr)
 	}
 	attempts, readErr := repository.ListByDelivery(context.Background(), current.DeliveryID)

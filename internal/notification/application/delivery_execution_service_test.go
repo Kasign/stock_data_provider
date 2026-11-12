@@ -91,10 +91,15 @@ func executionFixture(t *testing.T) (*DeliveryExecutionService, *memoryDeliverie
 	t.Helper()
 	repository := newMemoryDeliveries()
 	delivery := validDeliveryForRepository()
+	// context.WithDeadline 使用真实系统时钟；执行测试必须使用当前时间，避免固定历史时间导致发送上下文一创建就超时。
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	delivery.CreatedAt = now
+	delivery.UpdatedAt = now
+	delivery.DeadlineAt = now.Add(time.Hour)
 	event := domain.EventEnvelope{
 		EventID: delivery.EventID, EventType: "researchflow.run.terminal",
 		SchemaVersion: "1.0.0", SourceModule: delivery.SourceModule,
-		OccurredAt: "2026-11-09T02:00:00Z", PublishedAt: "2026-11-09T02:00:01Z",
+		OccurredAt: now.Format(time.RFC3339Nano), PublishedAt: now.Add(time.Second).Format(time.RFC3339Nano),
 		SubjectRef: "run:execution-1", IdempotencyKey: "event-key-1", CorrelationID: "correlation-1",
 		Payload: json.RawMessage([]byte("{\"status\":\"succeeded\"}")),
 	}
