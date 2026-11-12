@@ -149,6 +149,8 @@ func TestBuildSortsSnapshotRefsAndRejectsInvalidInputs(t *testing.T) {
 		{name: "unknown result type", input: func() Input { v := base; v.ResultType = "unknown"; return v }()},
 		{name: "invalid schema version", input: func() Input { v := base; v.SchemaVersion = "v1"; return v }()},
 		{name: "missing payload schema version", input: func() Input { v := base; v.PayloadSchemaVersion = ""; return v }()},
+		{name: "invalid payload schema version", input: func() Input { v := base; v.PayloadSchemaVersion = "v1"; return v }()},
+		{name: "padded payload schema version", input: func() Input { v := base; v.PayloadSchemaVersion = " 1.0.0"; return v }()},
 		{name: "missing algorithm version", input: func() Input { v := base; v.AlgorithmVersion = ""; return v }()},
 		{name: "missing parameter fingerprint", input: func() Input { v := base; v.ParameterFingerprint = ""; return v }()},
 		{name: "missing timestamp", input: func() Input { v := base; v.SystemAsOf = time.Time{}; return v }()},
