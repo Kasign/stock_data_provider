@@ -141,10 +141,6 @@ func (s *DeliveryExecutionService) Execute(
 		return output, err
 	}
 
-	startedAt, err := s.executionTime()
-	if err != nil {
-		return output, err
-	}
 	history, err := s.attempts.ListByDelivery(ctx, claim.Delivery.DeliveryID)
 	if err != nil {
 		return output, err
@@ -155,7 +151,6 @@ func (s *DeliveryExecutionService) Execute(
 	if len(history) != claim.Delivery.AttemptCount {
 		return output, ErrLeaseRecoveryHistory
 	}
-	firstAttemptAt := startedAt
 	for i := range history {
 		previous := history[i]
 		if err := previous.Validate(); err != nil ||
@@ -181,6 +176,15 @@ func (s *DeliveryExecutionService) Execute(
 				return output, ErrLeaseRecoveryHistory
 			}
 		}
+	}
+	// Attempt 开始时间在历史校验完成后采样，避免历史读取耗时占用尚未开始的单次预算。
+	startedAt, err := s.executionTime()
+	if err != nil {
+		return output, err
+	}
+	firstAttemptAt := startedAt
+	if len(history) > 0 {
+		firstAttemptAt = history[0].StartedAt
 	}
 	attemptDeadline, err := s.completion.retry.AttemptDeadline(
 		startedAt, firstAttemptAt, claim.Delivery.DeadlineAt,
@@ -210,11 +214,35 @@ func (s *DeliveryExecutionService) Execute(
 		return output, err
 	}
 
-	// attemptDeadline 使用注入时钟的绝对时间；Context 使用真实时钟，因此只传递
-	// 从 Attempt 开始时刻计算出的剩余预算，避免虚拟日期被误判为已过期。
-	sendTimeout := attemptDeadline.Sub(startedAt)
+	// StartWithLease 可能消耗时间；必须在持久化成功后重新采样注入时钟，
+	// 只把此刻到绝对截止时间的剩余预算交给使用真实时钟的 Go Context。
+	sendStartedAt, err := s.executionTime()
+	if err != nil {
+		return output, err
+	}
+	sendTimeout := attemptDeadline.Sub(sendStartedAt)
 	if sendTimeout <= 0 {
-		return output, ErrRetryNotApplicable
+		// Attempt 已持久化，但渠道调用尚未开始；用明确 not_sent 事实收敛，
+		// 避免把已知未发送误留成运行中 Attempt 并在恢复时升级为 unknown。
+		notSent := domain.ChannelSendResult{
+			Outcome:   domain.ChannelOutcomeNotSent,
+			ErrorCode: "attempt_deadline_elapsed_before_send",
+		}
+		finishedAt, timeErr := s.executionTime()
+		if timeErr != nil {
+			return output, timeErr
+		}
+		if completeErr := s.completion.Complete(
+			ctx, claim, attempt, preflight.ChannelSnapshot, notSent,
+			finishedAt, randomUnit, evidenceRef,
+		); completeErr != nil {
+			return output, errors.Join(ErrRetryNotApplicable, completeErr)
+		}
+		output.Action = DeliveryPreflightReady
+		output.ReasonCode = "attempt_deadline_elapsed_before_send"
+		output.AttemptID = attemptID
+		output.ChannelResult = &notSent
+		return output, nil
 	}
 	sendCtx, cancelSend := context.WithTimeout(ctx, sendTimeout)
 	result, sendErr := preflight.Channel.Send(sendCtx, request)
