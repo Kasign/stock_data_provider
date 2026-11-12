@@ -72,100 +72,133 @@ func (p RiskPayload) marshalPayload() ([]byte, error) { return json.Marshal(p.va
 func (p RiskPayload) MarshalJSON() ([]byte, error)    { return p.marshalPayload() }
 
 
- // indicatorPayloadValue 是 IndicatorResultPayload 1.0.0 的 JSON 结构。
- // 此结构校验只负责容器、映射和跨字段一致性；metric_code 的单位、精度、值域、
- // sample_count 计数语义仍必须由正式 Registry Entry 校验。
- type indicatorPayloadValue struct {
-  IndicatorCode string `json:"indicator_code"`
-  Metrics []metric.Metric `json:"metrics"`
- }
+// indicatorPayloadValue 是 IndicatorResultPayload 1.0.0 的 JSON 结构。
+// 此结构校验只负责容器、映射和跨字段一致性；metric_code 的单位、精度、值域、
+// sample_count 计数语义仍必须由正式 Registry Entry 校验。
+type indicatorPayloadValue struct {
+	IndicatorCode string          `json:"indicator_code"`
+	Metrics       []metric.Metric `json:"metrics"`
+}
 
- // IndicatorPayload 是尚未注册到 Envelope 联合类型的强类型 Indicator 结果容器。
- type IndicatorPayload struct { value indicatorPayloadValue }
+// IndicatorPayload 是尚未注册到 Envelope 联合类型的强类型 Indicator 结果容器。
+type IndicatorPayload struct {
+	value indicatorPayloadValue
+}
 
- // NewIndicatorPayload 构造并校验 IndicatorResultPayload 1.0.0。
- func NewIndicatorPayload(indicatorCode string, metrics []metric.Metric) (IndicatorPayload, error) {
-  value := indicatorPayloadValue{IndicatorCode: indicatorCode, Metrics: cloneIndicatorMetrics(metrics)}
-  if err := validateIndicatorPayload(value); err != nil { return IndicatorPayload{}, err }
-  return IndicatorPayload{value:value}, nil
- }
+// NewIndicatorPayload 构造并校验 IndicatorResultPayload 1.0.0。
+func NewIndicatorPayload(indicatorCode string, metrics []metric.Metric) (IndicatorPayload, error) {
+	value := indicatorPayloadValue{
+		IndicatorCode: indicatorCode,
+		Metrics:       cloneIndicatorMetrics(metrics),
+	}
+	if err := validateIndicatorPayload(value); err != nil {
+		return IndicatorPayload{}, err
+	}
+	return IndicatorPayload{value: value}, nil
+}
 
- func (p IndicatorPayload) IndicatorCode() string { return p.value.IndicatorCode }
- func (p IndicatorPayload) Metrics() []metric.Metric { return cloneIndicatorMetrics(p.value.Metrics) }
- func (IndicatorPayload) resultType() string { return "indicator" }
- func (IndicatorPayload) payloadSchemaVersion() string { return "1.0.0" }
- func (p IndicatorPayload) validate() error { return validateIndicatorPayload(p.value) }
- func (p IndicatorPayload) marshalPayload() ([]byte,error) {
-  if err:=p.validate(); err!=nil { return nil,err }
-  return json.Marshal(p.value)
- }
- func (p IndicatorPayload) MarshalJSON() ([]byte,error) { return p.marshalPayload() }
+func (p IndicatorPayload) IndicatorCode() string {
+	return p.value.IndicatorCode
+}
 
- // DecodeIndicatorPayload 解码并校验独立 Indicator Payload；不代表其已加入 Envelope Registry。
- func DecodeIndicatorPayload(raw json.RawMessage) (IndicatorPayload,error) {
-  if _,err:=manifest.FingerprintPayload(raw); err!=nil {
-   return IndicatorPayload{},fmt.Errorf("%w: indicator payload JSON is invalid: %v",ErrInvalidEnvelope,err)
-  }
-  var value indicatorPayloadValue
-  if err:=decodeStrictPayload(raw,&value); err!=nil {
-   return IndicatorPayload{},fmt.Errorf("%w: indicator payload: %v",ErrInvalidEnvelope,err)
-  }
-  return NewIndicatorPayload(value.IndicatorCode,value.Metrics)
- }
+func (p IndicatorPayload) Metrics() []metric.Metric {
+	return cloneIndicatorMetrics(p.value.Metrics)
+}
 
- func validateIndicatorPayload(value indicatorPayloadValue) error {
-  var expected []string
-  switch value.IndicatorCode {
-  case "sma","ema","return","volatility","rsi","atr":
-   expected=[]string{value.IndicatorCode}
-  case "macd":
-   expected=[]string{"macd_dif","macd_dea","macd_histogram"}
-  case "bollinger":
-   expected=[]string{"bollinger_middle","bollinger_upper","bollinger_lower"}
-  default:
-   return fmt.Errorf("%w: unknown indicator_code %q",ErrInvalidEnvelope,value.IndicatorCode)
-  }
-  if len(value.Metrics)!=len(expected) {
-   return fmt.Errorf("%w: indicator %s requires %d metrics",ErrInvalidEnvelope,value.IndicatorCode,len(expected))
-  }
-  for index,item:=range value.Metrics {
-   if item.MetricCode!=expected[index] || item.Validate()!=nil {
-    return fmt.Errorf("%w: indicator %s metric[%d]",ErrInvalidEnvelope,value.IndicatorCode,index)
-   }
-   if index==0 { continue }
-   first:=value.Metrics[0]
-   if item.Period!=first.Period || item.SystemAsOf!=first.SystemAsOf ||
-    item.QualityStatus!=first.QualityStatus || item.MetricStatus!=first.MetricStatus ||
-    item.CalculationVersion!=first.CalculationVersion ||
-    !sameMetricSampleCount(item.SampleCount,first.SampleCount) {
-    return fmt.Errorf("%w: indicator metrics have inconsistent calculation context",ErrInvalidEnvelope)
-   }
-  }
-  return nil
- }
+func (IndicatorPayload) resultType() string {
+	return "indicator"
+}
 
- func cloneIndicatorMetrics(values []metric.Metric) []metric.Metric {
-  if values==nil { return nil }
-  cloned:=append([]metric.Metric{},values...)
-  for index:=range cloned {
-   cloned[index].Value=append(json.RawMessage{},values[index].Value...)
-   cloned[index].LowerBound=append(json.RawMessage{},values[index].LowerBound...)
-   cloned[index].UpperBound=append(json.RawMessage{},values[index].UpperBound...)
-   if values[index].SampleCount!=nil {
-    count:=*values[index].SampleCount
-    cloned[index].SampleCount=&count
-   }
-  }
-  return cloned
- }
+func (IndicatorPayload) payloadSchemaVersion() string {
+	return "1.0.0"
+}
 
- func sameMetricSampleCount(left,right *int) bool {
-  if left==nil || right==nil { return left==nil && right==nil }
-  return *left==*right
- }
+func (p IndicatorPayload) validate() error {
+	return validateIndicatorPayload(p.value)
+}
 
-// DecodePayload 按 result_type + payload_schema_version 解码已注册的强类型载荷。
-// 未注册组合 fail closed；禁止退回 map[string]any 或宽泛 JSON 对象。
+func (p IndicatorPayload) marshalPayload() ([]byte, error) {
+	if err := p.validate(); err != nil {
+		return nil, err
+	}
+	return json.Marshal(p.value)
+}
+
+func (p IndicatorPayload) MarshalJSON() ([]byte, error) {
+	return p.marshalPayload()
+}
+
+// DecodeIndicatorPayload 解码并校验独立 Indicator Payload；不代表其已加入 Envelope Registry。
+func DecodeIndicatorPayload(raw json.RawMessage) (IndicatorPayload, error) {
+	if _, err := manifest.FingerprintPayload(raw); err != nil {
+		return IndicatorPayload{}, fmt.Errorf("%w: indicator payload JSON is invalid: %v", ErrInvalidEnvelope, err)
+	}
+	var value indicatorPayloadValue
+	if err := decodeStrictPayload(raw, &value); err != nil {
+		return IndicatorPayload{}, fmt.Errorf("%w: indicator payload: %v", ErrInvalidEnvelope, err)
+	}
+	return NewIndicatorPayload(value.IndicatorCode, value.Metrics)
+}
+
+func validateIndicatorPayload(value indicatorPayloadValue) error {
+	var expected []string
+	switch value.IndicatorCode {
+	case "sma", "ema", "return", "volatility", "rsi", "atr":
+		expected = []string{value.IndicatorCode}
+	case "macd":
+		expected = []string{"macd_dif", "macd_dea", "macd_histogram"}
+	case "bollinger":
+		expected = []string{"bollinger_middle", "bollinger_upper", "bollinger_lower"}
+	default:
+		return fmt.Errorf("%w: unknown indicator_code %q", ErrInvalidEnvelope, value.IndicatorCode)
+	}
+	if len(value.Metrics) != len(expected) {
+		return fmt.Errorf("%w: indicator %s requires %d metrics", ErrInvalidEnvelope, value.IndicatorCode, len(expected))
+	}
+	for index, item := range value.Metrics {
+		if item.MetricCode != expected[index] || item.Validate() != nil {
+			return fmt.Errorf("%w: indicator %s metric[%d]", ErrInvalidEnvelope, value.IndicatorCode, index)
+		}
+		if index == 0 {
+			continue
+		}
+		first := value.Metrics[0]
+		if item.Period != first.Period ||
+			item.SystemAsOf != first.SystemAsOf ||
+			item.QualityStatus != first.QualityStatus ||
+			item.MetricStatus != first.MetricStatus ||
+			item.CalculationVersion != first.CalculationVersion ||
+			!sameMetricSampleCount(item.SampleCount, first.SampleCount) {
+			return fmt.Errorf("%w: indicator metrics have inconsistent calculation context", ErrInvalidEnvelope)
+		}
+	}
+	return nil
+}
+
+func cloneIndicatorMetrics(values []metric.Metric) []metric.Metric {
+	if values == nil {
+		return nil
+	}
+	cloned := append([]metric.Metric{}, values...)
+	for index := range cloned {
+		cloned[index].Value = append(json.RawMessage{}, values[index].Value...)
+		cloned[index].LowerBound = append(json.RawMessage{}, values[index].LowerBound...)
+		cloned[index].UpperBound = append(json.RawMessage{}, values[index].UpperBound...)
+		if values[index].SampleCount != nil {
+			count := *values[index].SampleCount
+			cloned[index].SampleCount = &count
+		}
+	}
+	return cloned
+}
+
+func sameMetricSampleCount(left, right *int) bool {
+	if left == nil || right == nil {
+		return left == nil && right == nil
+	}
+	return *left == *right
+}
+
 func DecodePayload(resultType, schemaVersion string, raw json.RawMessage) (Payload, error) {
 	if _, err := manifest.FingerprintPayload(raw); err != nil {
 		return nil, fmt.Errorf("%w: payload JSON is invalid: %v", ErrInvalidEnvelope, err)
