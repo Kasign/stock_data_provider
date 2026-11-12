@@ -144,7 +144,9 @@ func newLifecycleTestService(t *testing.T, auditErr error) (*SessionLifecycleSer
 			BaseBackoff:	time.Second,
 			MaxBackoff:	15 * time.Minute,
 		},
-		Now: func() time.Time { return now },
+		Now: func() time.Time {
+			return now
+		},
 	})
 	if err != nil {
 		t.Fatal(err)
