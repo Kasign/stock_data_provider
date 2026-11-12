@@ -545,3 +545,51 @@ Storage 事务的统一锁顺序为 Run -> Stage（按 stage_ref）-> Attempt（
 Outbox 使用发布前 Claim、提交租约、外部 Publish、成功后 Ack 的顺序，语义为至少一次。Publish 成功而 Ack 前进程崩溃会导致租约到期后重复投递；消费端必须按稳定 idempotency_key 去重。不得将本地租约/fencing 描述为端到端 exactly-once。
 
 以上为静态代码 Review 结论。真实 MariaDB 的死锁/锁等待压力、context cancel、事务中途失败和 Publish/Ack 崩溃窗口仍需集成验收。
+
+
+## 27. FLOW-004 全局容量事务守卫（2026-11-12，待 CI 与 MariaDB 验收）
+
+- 新增必填 `CapacityLimits`：`MaxQueuedRuns` 与 `MaxWorkers` 均必须显式配置为正数；不提供生产默认值。
+- Migration v4 新增 InnoDB 单例表 `researchflow_capacity_guard`，创建固定 guard_id=1 的守卫行。CreateRunAtomic 与 ClaimAttempt 都先锁该行，再按 `CapacityGuard -> Run -> Stage -> Attempt` 顺序处理，避免并发请求分别通过容量检查造成超卖。
+- CreateRunAtomic 在容量锁内先处理幂等回放，再统计 created/queued Run；容量已满返回 `ErrQueueCapacityExceeded`，Run/Stage/幂等记录均不写入。幂等回放不因当前队列已满而被拒绝。
+- ClaimAttempt 在容量锁内检查全局 running Attempt 的有效 Lease 数；有效 Lease 达到 MaxWorkers 时返回 `ErrGlobalWorkerCapacityExceeded`。失效的 running Attempt Lease 数据按 fail-closed 处理；过期 Lease 不占用有效 Worker 槽位，原有 Fencing 回收路径不变。
+- 新增容量配置校验单测与 Migration v4 结构断言；真实 MariaDB 下的队列超限回滚、并发创建不超卖、全局 Worker 槽位竞争、过期 Lease 释放仍待补充/执行。当前不宣称该能力已通过集成验收。
+- 本实现只提供数据库全局容量权威，不包含有界 Worker Pool、常驻消费循环、进程恢复或 Server 配置接线；这些仍是后续任务。
+
+
+## 28. FLOW-004 全局容量与 Worker Pool 验收（2026-11-12）
+
+- 全局容量控制使用 Migration v4 单例守卫行，CreateRunAtomic 与 ClaimAttempt 统一按 `CapacityGuard -> Run -> Stage -> Attempt` 顺序加锁；容量配置 `MaxQueuedRuns`、`MaxWorkers` 必须显式为正数，各 Server 实例必须使用一致配置。
+- CreateRun 排队容量按数据库中 created/queued Run 统计；容量满时返回 `ErrQueueCapacityExceeded`，不留下 Run/Stage/幂等记录；相同幂等请求在容量满时仍回放原 Run。
+- 全局 Worker 容量按数据库当前有效 running Attempt Lease 统计；容量满时返回 `ErrGlobalWorkerCapacityExceeded`。缺失 owner/expiry 的 running Attempt 按 fail-closed 处理；过期 Lease 不占用有效槽位。
+- WorkerPool 使用固定 Workers 数量、无缓冲任务通道，不构建第二套持久化队列；Scheduler 并发提交本次计划中的独立 Stage，Dispatch 结果仍按计划顺序返回。数据库 Ready/RetryWait 与 ClaimAttempt 是任务事实和资源占用权威。
+- WorkerPool Shutdown 停止接收新任务并等待在途任务；超过截止时间取消池上下文。Server 仍需负责创建/启动/关闭 WorkerPool，并按统一配置保证本地 Worker 数不超过全局 MaxWorkers。
+- Actions Run `43137118534`，SHA `6c4e1aad62b5e1d469a9b087a6bf944dc8851a4d`：Researchflow gofmt、模块单测、Race、Vet、WorkerStore 单测/Race/Vet、MariaDB 生命周期普通/Race 集成全部通过。全仓 gofmt 因 Quant `internal/quant/manifest/manifest.go` 与 `manifest_test.go` 格式失败；不属于 Researchflow 模块。
+- Server 周期扫描所有可调度 Run 并重新调用 Scheduler、跨进程取消传播、真实 StageExecutor Adapter 和多模块端到端验收尚未完成。
+
+
+## 29. FLOW-004 调度恢复扫描与跨进程取消（2026-11-12）
+
+- Application 新增 `SchedulableRunCandidateReader` Port 和 `SchedulerCandidateScanner.ListNextPage`，以 RunRef 作为 keyset 游标。Server 可从空游标开始分页，直到 `HasMore=false`；每轮新扫描从头开始，以发现新建或状态变化的 Run。
+- MySQL Adapter 只返回 status 为 created/queued/running、termination_reason 为空、deadline 尚未到期，且至少有 pending/ready/retry_wait Stage 的 Run。每个候选仍须由 Scheduler.GetRun 重新读取完整快照，最终 ClaimAttempt 在事务中重新校验；候选列表不是执行授权或锁。
+- Worker Pool 不保存持久化任务队列。进程重启后，Server 周期扫描通过候选 Port 重新发现未终态 Run；Scheduler 从数据库 Stage 状态重新计算计划。已被 Claim 的 Attempt 仍由 Lease/Fencing 恢复路径处理。
+- 跨进程取消使用数据库 Lease 心跳轮询：Run 进入 cancelling 后，RenewAttemptLease 返回 `ErrRunCancellationUnavailable`；Worker 取消执行 Context，并通过 ConfirmAttemptCancellation 确认停止。Server 同进程可额外调用 Worker.CancelRun 降低延迟，但不能替代持久化取消状态和心跳确认。
+- MariaDB 集成覆盖取消后 Lease 心跳拒绝续租；Worker 单测覆盖心跳观察 durable cancellation 并完成确认。Actions Run `43138436243` 的 Researchflow 模块 gofmt/test/race/vet、WorkerStore 单测/Race/Vet、MariaDB 普通/Race 集成均通过。
+- Server 仍负责周期触发、分页循环、WorkerPool 启停、DeadlineScanner/Finalizer 生命周期和真实模块 Adapter 注入；本分支不修改 Server 代码。
+
+
+## 30. 过期 Attempt 的进程崩溃恢复扫描（2026-11-12）
+
+- Review 发现普通 SchedulerCandidateScanner 只查找含 pending/ready/retry_wait Stage 的 Run；Scheduler 对 running Stage 只计入 ActiveCount，不会再次派发。虽然 ClaimAttempt 已支持在 Lease 过期后关闭旧 Attempt、递增 fencing token 并创建新 Attempt，但原有周期扫描不会触发该路径。
+- 新增 Application Port `ExpiredAttemptCandidateReader` 与 `ExpiredAttemptScanner`，使用 (RunRef, StageRef) 复合 keyset 游标分页发现 Run=running、Stage=running、最新 Attempt=running 且 Lease 已过期的候选。
+- MySQL 查询只读、不变更状态；过滤终止/Deadline 已到期 Run，要求 AttemptRef/Stage.AttemptNo 对齐。候选只是恢复提示，不授予执行权。
+- Server 对每个候选调用 Worker.Execute，并生成新的 AttemptRef。ClaimAttempt 在 CapacityGuard -> Run -> Stage -> latest Attempt 事务锁下重新核验 Lease 是否仍过期、Attempt 次数、Run Deadline、全局 Worker 容量，并对旧 Attempt fencing 后创建新 Attempt。若另一个进程已恢复，候选会因状态已变化而被拒绝，不会重复执行。
+- 新增 Scanner 复合游标/乱序/超量/错误单测，以及 MariaDB 分页和过期 Lease reclaim/fencing 集成测试。
+- 当前 HEAD `ab9a756ea6a22462441e4fbef8340c96c8e79ec6` 的新增代码尚未获得 GitHub Actions 和真实 MariaDB 执行结果；不得标记为已验收。Server 的恢复扫描周期、WorkerPool 调度和容量配置接线仍由 Server 分支完成。
+
+
+## 31. 过期 Attempt 恢复扫描 CI 验收（2026-11-12）
+
+- Actions Run `43140101199`，代码 SHA `6692cf1dfdb67509dca3dd564600d3085e935509`：Researchflow gofmt、模块 `go test`、Race、Vet 全部通过；WorkerStore 单测/Race/Vet 通过；MariaDB 生命周期普通/Race 集成通过。
+- MariaDB 测试验证复合游标分页按 RunRef/StageRef 稳定排序，过期 Lease 能被扫描发现；调用 ClaimAttempt 后旧 Attempt 被标记 timed_out、清空 Lease 并递增 fencing token，新 Attempt 以更高 fencing token 启动。
+- 同一 Run 的全仓根模块 Job 因 Quant `internal/quant/manifest/manifest.go` 与 `manifest_test.go` gofmt 失败；Researchflow 模块门禁不受影响。未执行的根模块测试/Vet 不标记为通过。

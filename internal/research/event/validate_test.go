@@ -1,7 +1,9 @@
 package event
 
 import (
+	"encoding/json"
 	"math"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -28,7 +30,8 @@ func validEvent(t *testing.T) ResearchEvent {
 		OccurredAt: &occurred, PublishedAt: nil, AvailableAt: nil,
 		SystemObservedAt: observed, SystemAsOf: asOf,
 		ImpactHypothesisRefs: []string{}, InvalidationConditions: []string{"company retracts guidance"},
-		Uncertainty: []string{"guidance may be revised"},
+		Uncertainty:                  []string{"guidance may be revised"},
+		TimeNormalizationRuleVersion: "1.0.0", DerivedFromRefs: []ResearchEventRef{},
 		SourceTimes: []EventSourceTime{{
 			EvidenceRef: "evidence:news:0001", TimeType: TimeOccurredAt,
 			Value: occurred, AssertedBy: "news:source:exchange_notice",
@@ -69,7 +72,6 @@ func TestResearchEventRejectsInvalidStructureAndTimeEvidence(t *testing.T) {
 		}, "must be UTC"},
 		{"confidence without method", func(e *ResearchEvent) { confidence := 0.8; e.SourceTimes[0].Confidence = &confidence }, "confidence_method is required"},
 		{"method without confidence", func(e *ResearchEvent) { method := "source_rank"; e.SourceTimes[0].ConfidenceMethod = &method }, "require a non-null confidence"},
-		{"version one supersedes", func(e *ResearchEvent) { version := 0; e.SupersedesEventVersion = &version }, "must not supersede"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -94,8 +96,6 @@ func TestResearchEventVersionMustAppendAndPreserveLifecycle(t *testing.T) {
 	previous := validEvent(t)
 	next := previous
 	next.EventVersion = 2
-	supersedes := 1
-	next.SupersedesEventVersion = &supersedes
 	next.SystemAsOf = previous.SystemAsOf.Add(time.Minute)
 	if err := next.ValidateNextVersion(previous); err != nil {
 		t.Fatalf("same-status append should pass: %v", err)
@@ -110,8 +110,6 @@ func TestResearchEventVersionMustAppendAndPreserveLifecycle(t *testing.T) {
 	}
 	next = previous
 	next.EventVersion = 3
-	supersedes = 2
-	next.SupersedesEventVersion = &supersedes
 	if err := next.ValidateNextVersion(previous); err == nil || !strings.Contains(err.Error(), "increment by exactly one") {
 		t.Fatalf("version gap should fail, got %v", err)
 	}
@@ -139,17 +137,6 @@ func TestResearchEventLifecycleTerminalAndInvalidationRules(t *testing.T) {
 		if CanTransition(pair.from, pair.to) {
 			t.Errorf("CanTransition(%s, %s) = true, want false", pair.from, pair.to)
 		}
-	}
-}
-
-func TestResearchEventVersionCanOmitOptionalSupersedesReference(t *testing.T) {
-	previous := validEvent(t)
-	next := previous
-	next.EventVersion = 2
-	next.SystemAsOf = previous.SystemAsOf.Add(time.Minute)
-	next.SupersedesEventVersion = nil
-	if err := next.ValidateNextVersion(previous); err != nil {
-		t.Fatalf("optional supersedes_event_version should not be required: %v", err)
 	}
 }
 
@@ -318,5 +305,48 @@ func TestLifecycleTransitionRejectsZeroOffsetNonUTCLocation(t *testing.T) {
 	nonUTC := time.Date(2026, 11, 6, 5, 10, 0, 0, time.FixedZone("non-UTC", 0))
 	if _, err := NewLifecycleTransition(previous, next, nonUTC); err == nil || !strings.Contains(err.Error(), "must be UTC") {
 		t.Fatalf("NewLifecycleTransition() error = %v, want strict UTC Location rejection", err)
+	}
+}
+
+func TestResearchEventFrozenGolden(t *testing.T) {
+	data, err := os.ReadFile("../../../doc/整体任务规划/golden/RSC-CTR-002-research-event.golden.json")
+	if err != nil {
+		t.Fatalf("read frozen Event Golden: %v", err)
+	}
+	var value ResearchEvent
+	if err := json.Unmarshal(data, &value); err != nil {
+		t.Fatalf("decode frozen Event Golden: %v", err)
+	}
+	if err := value.Validate(); err != nil {
+		t.Fatalf("frozen Event Golden does not validate: %v", err)
+	}
+}
+
+func TestResearchEventJSONRejectsUnknownAndMissingRequiredFields(t *testing.T) {
+	valid, err := json.Marshal(validEvent(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var object map[string]json.RawMessage
+	if err := json.Unmarshal(valid, &object); err != nil {
+		t.Fatal(err)
+	}
+	object["unexpected"] = json.RawMessage(`true`)
+	encoded, _ := json.Marshal(object)
+	var decoded ResearchEvent
+	if err := json.Unmarshal(encoded, &decoded); err == nil || !strings.Contains(err.Error(), "unknown field") {
+		t.Fatalf("unknown Event field should fail: %v", err)
+	}
+	delete(object, "unexpected")
+	object["derived_from_refs"] = json.RawMessage(`[{"event_id":"evt_parent","event_version":1,"unexpected":true}]`)
+	encoded, _ = json.Marshal(object)
+	if err := json.Unmarshal(encoded, &decoded); err == nil || !strings.Contains(err.Error(), "unknown field") {
+		t.Fatalf("unknown Event reference field should fail: %v", err)
+	}
+	object["derived_from_refs"] = json.RawMessage(`[]`)
+	delete(object, "occurred_at")
+	encoded, _ = json.Marshal(object)
+	if err := json.Unmarshal(encoded, &decoded); err == nil || !strings.Contains(err.Error(), "occurred_at") {
+		t.Fatalf("omitted nullable timestamp should fail: %v", err)
 	}
 }

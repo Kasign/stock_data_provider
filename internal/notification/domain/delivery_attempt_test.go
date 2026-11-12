@@ -101,6 +101,14 @@ func TestDeliveryAttemptRejectsInvalidLeaseAndTime(t *testing.T) {
 	if _, err := attempt.Complete(attempt.StartedAt.Add(-time.Second), DeliveryAttemptAccepted, "", "", false, ""); !errors.Is(err, ErrInvalidDeliveryAttempt) {
 		t.Fatalf("completion cannot precede start: %v", err)
 	}
+	for _, finishedAt := range []time.Time{
+		attempt.LeaseExpiresAt,
+		attempt.LeaseExpiresAt.Add(time.Nanosecond),
+	} {
+		if _, err := attempt.Complete(finishedAt, DeliveryAttemptAccepted, "", "", false, ""); !errors.Is(err, ErrInvalidDeliveryAttempt) {
+			t.Fatalf("completion at or after lease expiry must be rejected: finished_at=%s err=%v", finishedAt, err)
+		}
+	}
 }
 
 func TestDeliveryAttemptCloneDoesNotShareMutableFields(t *testing.T) {

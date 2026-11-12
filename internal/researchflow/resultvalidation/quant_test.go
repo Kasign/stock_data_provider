@@ -10,7 +10,7 @@ import (
 func validQuantResult() QuantResultEnvelope {
 	now := time.Date(2026, 11, 9, 8, 0, 0, 0, time.UTC)
 	return QuantResultEnvelope{
-		SchemaVersion: "1.0.0", ResultID: "qres_1", ResultType: "indicator",
+		SchemaVersion: "1.0.0", ResultID: "qres-1", ResultType: "indicator",
 		Scope: "stock", SecurityID: "600000.SH", SystemAsOf: now,
 		TradeDate: "2026-11-09", Period: "daily", AlgorithmVersion: "ma-v1",
 		ParameterFingerprint: "sha256:parameter-fingerprint",

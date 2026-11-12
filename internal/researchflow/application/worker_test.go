@@ -99,9 +99,20 @@ func newWorkerFixture() (*workerStoreFake, StageExecutionResult) {
 	return store, StageExecutionResult{AttemptStatus: domain.AttemptSucceeded, StageStatus: domain.StageSucceeded, OutputRef: &output}
 }
 
-type workerClockFake struct{}
+type workerClockFake struct {
+	now time.Time
+	err error
+}
 
-func (workerClockFake) NowUTC(context.Context) (time.Time, error) { return time.Now().UTC(), nil }
+func (f workerClockFake) NowUTC(context.Context) (time.Time, error) {
+	if f.err != nil {
+		return time.Time{}, f.err
+	}
+	if !f.now.IsZero() {
+		return f.now.UTC(), nil
+	}
+	return time.Now().UTC(), nil
+}
 
 func newWorker(t *testing.T, store *workerStoreFake, result StageExecutionResult) *Worker {
 	t.Helper()
@@ -111,6 +122,42 @@ func newWorker(t *testing.T, store *workerStoreFake, result StageExecutionResult
 	}
 	return w
 }
+func TestWorkerUsesDatabaseClockForRunDeadline(t *testing.T) {
+	store, _ := newWorkerFixture()
+	// 本机时间不参与判断；数据库时间已越过 Run Deadline 时必须拒绝执行。
+	store.snapshot.Run.DeadlineAt = time.Now().UTC().Add(time.Minute)
+	clock := workerClockFake{now: store.snapshot.Run.DeadlineAt.Add(time.Second)}
+	worker, err := NewWorker(store, workerExecutorFake{result: StageExecutionResult{
+		AttemptStatus: domain.AttemptSucceeded, StageStatus: domain.StageSucceeded,
+	}}, clock, WorkerConfig{WorkerID: "worker-1", LeaseDuration: time.Minute, HeartbeatInterval: time.Second, MaxParallel: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := worker.Execute(context.Background(), "run-1", "stage-1", "attempt-new"); !errors.Is(err, ErrWorkerDeadline) {
+		t.Fatalf("expected database-clock deadline rejection, got %v", err)
+	}
+	if store.commits != 0 {
+		t.Fatal("expired Run must not commit a Stage result")
+	}
+}
+
+func TestWorkerFailsClosedWhenDatabaseClockUnavailable(t *testing.T) {
+	store, _ := newWorkerFixture()
+	clockErr := errors.New("database clock unavailable")
+	worker, err := NewWorker(store, workerExecutorFake{}, workerClockFake{err: clockErr}, WorkerConfig{
+		WorkerID: "worker-1", LeaseDuration: time.Minute, HeartbeatInterval: time.Second, MaxParallel: 2,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := worker.Execute(context.Background(), "run-1", "stage-1", "attempt-new"); !errors.Is(err, clockErr) {
+		t.Fatalf("expected database clock error, got %v", err)
+	}
+	if store.commits != 0 {
+		t.Fatal("must not execute or commit without authoritative database time")
+	}
+}
+
 func TestWorkerExecuteClaimsExecutesAndCommits(t *testing.T) {
 	store, result := newWorkerFixture()
 	got, err := newWorker(t, store, result).Execute(context.Background(), "run-1", "stage-1", "attempt-new")
@@ -245,6 +292,36 @@ func TestWorkerCancellationStopsProviderAndConfirmsAttempt(t *testing.T) {
 	}
 	if store.cancelled != 1 || store.commits != 0 {
 		t.Fatalf("expected cancellation confirmation only: cancelled=%d commits=%d", store.cancelled, store.commits)
+	}
+}
+
+func TestWorkerHeartbeatObservesDurableCrossProcessCancellation(t *testing.T) {
+	store, _ := newWorkerFixture()
+	store.renewErr = ErrRunCancellationUnavailable
+	store.cancelOK = true
+	executor := &blockingWorkerExecutor{started: make(chan struct{})}
+	worker, err := NewWorker(store, executor, workerClockFake{}, WorkerConfig{
+		WorkerID: "worker-1", LeaseDuration: time.Second, HeartbeatInterval: time.Millisecond, MaxParallel: 2,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() {
+		_, executeErr := worker.Execute(context.Background(), "run-1", "stage-1", "attempt-new")
+		done <- executeErr
+	}()
+	<-executor.started
+	select {
+	case executeErr := <-done:
+		if executeErr != nil {
+			t.Fatalf("durable cancellation should be confirmed, got %v", executeErr)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Worker did not observe durable Run cancellation through lease heartbeat")
+	}
+	if store.cancelled != 1 || store.commits != 0 {
+		t.Fatalf("expected cancellation confirmation without result commit: cancelled=%d commits=%d", store.cancelled, store.commits)
 	}
 }
 

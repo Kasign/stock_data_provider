@@ -17,7 +17,8 @@ func TestBuildResearchLifecycleEnvelopeKeepsStablePublicationIdentity(t *testing
 		SubjectRefs: []string{"security:600000"}, EvidenceRefs: []string{"ev_1"},
 		SystemObservedAt: now, SystemAsOf: now,
 		ImpactHypothesisRefs: []string{}, InvalidationConditions: []string{},
-		Uncertainty: []string{}, SourceTimes: []researchevent.EventSourceTime{},
+		Uncertainty: []string{}, TimeNormalizationRuleVersion: "1.0.0",
+		SourceTimes: []researchevent.EventSourceTime{}, DerivedFromRefs: []researchevent.ResearchEventRef{},
 	}
 	next := previous
 	next.EventVersion = 2
@@ -86,7 +87,8 @@ func TestBuildResearchLifecycleCreatedEnvelopeMatchesFirstVersionContract(t *tes
 		SubjectRefs: []string{"security:600000"}, EvidenceRefs: []string{},
 		SystemObservedAt: now, SystemAsOf: now,
 		ImpactHypothesisRefs: []string{}, InvalidationConditions: []string{},
-		Uncertainty: []string{}, SourceTimes: []researchevent.EventSourceTime{},
+		Uncertainty: []string{}, TimeNormalizationRuleVersion: "1.0.0",
+		SourceTimes: []researchevent.EventSourceTime{}, DerivedFromRefs: []researchevent.ResearchEventRef{},
 	}
 	envelope, payload, err := buildResearchLifecycleCreatedEnvelope(value, nil, "corr_parent_123", now)
 	if err != nil {
@@ -118,7 +120,8 @@ func TestBuildResearchLifecycleEnvelopeRejectsInvalidCorrelationID(t *testing.T)
 		SubjectRefs: []string{}, EvidenceRefs: []string{},
 		SystemObservedAt: now, SystemAsOf: now,
 		ImpactHypothesisRefs: []string{}, InvalidationConditions: []string{},
-		Uncertainty: []string{}, SourceTimes: []researchevent.EventSourceTime{},
+		Uncertainty: []string{}, TimeNormalizationRuleVersion: "1.0.0",
+		SourceTimes: []researchevent.EventSourceTime{}, DerivedFromRefs: []researchevent.ResearchEventRef{},
 	}
 	if _, _, err := buildResearchLifecycleCreatedEnvelope(value, nil, "client supplied id", now); err == nil {
 		t.Fatal("unsafe correlation ID must be rejected")

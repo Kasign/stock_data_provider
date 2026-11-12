@@ -2,9 +2,10 @@
 
 - 适用分支：`feat/full-go-data-providers-api-switch`
 - 静态检查基线：`4c603172448102058f95e6bc625494436a8402c9`
-- 更新日期：2026-11-03
+- 更新日期：2026-11-12（静态盘点内容基线仍为 2026-11-03；本次只校准适用边界）
 - 检查范围：当前仓库中的 Go Provider 接口、Provider 实现、启动注册、`providers.json`、Python bridge 适配代码。
 - 证据限制：当前仓库没有完整包含原始 Python `DataFetcherManager`、Efinance、AkShare 的全部实现；本矩阵不能证明旧系统每个函数的来源和字段契约。
+- 状态边界：本矩阵主体是 2026-11-03 的静态迁移盘点，不是 2026-11-12 当前代码的逐 Provider 复审，也不代表真实 Provider 运行通过。当前 Data 代码 CI 结果以 [数据侧整体规划](../数据侧整体规划.md) 为准；真实请求证据以 [数据源真实环境验收记录](./DATA_SOURCE_RUNTIME_ACCEPTANCE_LOG.md) 为准。
 
 ## 1. 状态定义
 

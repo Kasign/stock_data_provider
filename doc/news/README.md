@@ -1,6 +1,9 @@
 # 新闻模块开发任务与验收清单
 
-> 当前阶段（2026-11-10 最新核验）：N6 V1-V8 Migration、Repository、Observation retention 与 V7→V8 既有数据升级已通过 MariaDB 11.4 专项 CI（Run `42765765269`，基线 SHA `09e76e35`）；News 全量 gofmt/单测/Race/Vet 与 Provider 契约测试通过（Run `42765765274`）。根模块 `Test go-core` 通过，但根模块 `Test .` 因 Market Data、Notification、Quant 文件 gofmt 差异失败。NEWS-CTR-001 严格 available_at PIT、授权读取 TOCTOU、Server 生产装配、Runner 注册和在线采集仍未闭环。
+> 当前验收状态（2026-11-12，基线 `ab9693a2119ec3e41d64954bb232d38d3210de9b`）：News MariaDB 11.4 集成测试此前在 Push 事件中被 `.github/workflows/go-test.yml` 的 `github.event_name != 'push'` 条件跳过。本轮已将条件限定调整为普通事件保持原行为，同时允许 `feat/research-news-ingestion` 分支 Push 执行 News MariaDB 集成任务。CI Run [43143256775](https://github.com/Kasign/stock_data_provider/actions/runs/43143256775) 中，`News MariaDB Repository and Migration integration` Job 实际启动 MariaDB 11.4，并执行 `TestNewsMariaDBRepositoryIntegration`，结果 PASS（约 0.38 秒）。这确认当前 SHA 的 News Migration/Repository 真实 MariaDB 集成测试通过；不代表 Server 生产装配或真实 Provider 网络采集已验收。该 Go test suite 的其他失败来自 Quant 格式检查和 Researchflow 未定义符号，不属于 News。
+
+> 当前状态（2026-11-11）：项目级契约处于 `L1_contracts_frozen`，以 `doc/contract/PLAT-002-项目级契约冻结登记簿.md` 为准。News 已有 N6 MariaDB 11.4 与 N8-04 Tombstone 集成验收证据；本轮按 DEC-PLAT-002-042 补齐 Evidence `relation_status`、UTC Z Schema 和版本观察时间映射。NEWS-CTR-001 仍未完整验收：available_at 严格 PIT、授权读取 TOCTOU、公共 JCS/可信策略注入和 Server 生产装配仍阻断。
+> 历史 CI 快照（2026-11-10）：N6 V1-V8 Migration、Repository、Observation retention 与 V7→V8 既有数据升级已通过 MariaDB 11.4 专项 CI（Run `42765765269`，基线 SHA `09e76e35`）；News 全量 gofmt/单测/Race/Vet 与 Provider 契约测试通过（Run `42765765274`）。根模块 `Test go-core` 通过，但根模块 `Test .` 因 Market Data、Notification、Quant 文件 gofmt 差异失败。NEWS-CTR-001 严格 available_at PIT、授权读取 TOCTOU、Server 生产装配、Runner 注册和在线采集仍未闭环。
 > 当前代码任务：N8-04 补充 ListEvidence 对已清理 Observation Tombstone 的 MariaDB 读取断言，代码提交 `0452bbbfc42b56661403bd49273c6e9d7046a6ea`；News 全量 CI Run `42768996986` success，MariaDB 11.4 Job Run `42768996723` success。
 > 历史记录说明：本文按日期累积的早期实施段落保留为过程记录；历史状态不代表当前状态。当前状态以本段、开发任务总览和最新 Review 报告为准。
 > 状态：本分支只维护 News 领域实现和专项文档；公共平台原语来自已合并基线，根组合根由 Server/集成 Owner 负责

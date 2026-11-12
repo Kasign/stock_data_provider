@@ -33,7 +33,16 @@ const viewNavigation = [
 const clickNav = async (targetPage, selector) => {
   const menu = targetPage.locator("#mobile-menu-toggle");
   if (await menu.isVisible() && (await menu.getAttribute("aria-expanded")) !== "true") await menu.click();
-  await targetPage.locator(selector).click();
+  const target = targetPage.locator(selector);
+  if (!(await target.isVisible())) {
+    const group = target.locator("xpath=ancestor::div[contains(@class, 'nav-group')]");
+    const primary = group.locator(".primary-nav-link");
+    if (await primary.count()) {
+      await primary.click();
+      if (await menu.isVisible() && (await menu.getAttribute("aria-expanded")) !== "true") await menu.click();
+    }
+  }
+  await target.click();
 };
 
 const contentTypes = {
@@ -593,6 +602,24 @@ try {
       { timeout: 10000 }
     );
     assert.equal(await page.locator("#market-view").isVisible(), true, "market overview must be the initial view");
+
+    // Verify legacy view hashes survive direct navigation and refresh; the old market-data alias is normalized.
+    if (viewport.width === 320) {
+      await page.goto(baseUrl + "#stocks", { waitUntil: "load", timeout: 30000 });
+      await page.locator("#stocks-view").waitFor({ state: "visible" });
+      assert.equal(new URL(page.url()).hash, "#stocks");
+      await page.reload({ waitUntil: "load", timeout: 30000 });
+      await page.locator("#stocks-view").waitFor({ state: "visible" });
+      assert.equal(new URL(page.url()).hash, "#stocks", "refresh must restore the legacy stocks view hash");
+      await page.goto(baseUrl + "#market-data", { waitUntil: "load", timeout: 30000 });
+      await page.locator("#market-view").waitFor({ state: "visible" });
+      assert.equal(new URL(page.url()).hash, "#market", "the historical market-data alias must normalize to market");
+      await page.goto(baseUrl + "#unknown-view", { waitUntil: "load", timeout: 30000 });
+      await page.locator("#market-view").waitFor({ state: "visible" });
+      assert.equal(new URL(page.url()).hash, "#market", "unknown view hashes must safely fall back to market");
+      await page.reload({ waitUntil: "load", timeout: 30000 });
+      await page.locator("#market-view").waitFor({ state: "visible" });
+    }
 
     // Keyboard users must be able to reveal and activate the skip link before traversing the dashboard.
     await page.keyboard.press("Tab");
@@ -1713,13 +1740,8 @@ try {
     }
     for (const entry of viewNavigation) {
       const viewName = entry.name;
-      if (entry.selector.startsWith(".nav-link") &&
-          await menu.isVisible() &&
-          (await menu.getAttribute("aria-expanded")) !== "true") {
-        await menu.click();
-      }
+      await clickNav(page, entry.selector);
       const navigationButton = page.locator(entry.selector);
-      await navigationButton.click();
       assert.deepEqual(pageErrors, [], "browser page errors after navigating to " + viewName + " at " + viewport.width + "px: " + pageErrors.join(" | "));
       await page.locator("#" + viewName + "-view").waitFor({ state: "visible" });
       assert.equal(
@@ -2224,6 +2246,38 @@ try {
           await page.waitForFunction(key => JSON.parse(localStorage.getItem(key) || "{}").apiKey === "browser-test-key", keys.settings);
         }
       }
+    }
+
+    if (viewport.width === 320) {
+      const reducedMotion = await page.evaluate(() => ({
+        requested: window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+        primaryNavigation: getComputedStyle(document.querySelector(".nav-link")).transitionProperty,
+        researchNavigation: getComputedStyle(document.querySelector(".research-detail-nav-link")).transitionProperty
+      }));
+      assert.equal(reducedMotion.requested, true, "browser context must enable prefers-reduced-motion: reduce");
+      assert.equal(reducedMotion.primaryNavigation, "none",
+        "primary navigation transitions must be disabled for reduced-motion users: " + JSON.stringify(reducedMotion));
+      assert.equal(reducedMotion.researchNavigation, "none",
+        "research navigation transitions must be disabled for reduced-motion users: " + JSON.stringify(reducedMotion));
+
+      const navigateByHash = async view => {
+        await page.evaluate(value => { window.location.hash = "#" + value; }, view);
+        await page.waitForFunction(value =>
+          window.location.hash === "#" + value && document.querySelector("#" + value + "-view")?.hidden === false, view);
+      };
+      for (const view of ["stocks", "research", "tasks"]) await navigateByHash(view);
+      await page.evaluate(() => window.history.back());
+      await page.waitForFunction(() => window.location.hash === "#research" && document.querySelector("#research-view")?.hidden === false);
+      await page.evaluate(() => window.history.back());
+      await page.waitForFunction(() => window.location.hash === "#stocks" && document.querySelector("#stocks-view")?.hidden === false);
+      await page.evaluate(() => window.history.forward());
+      await page.waitForFunction(() => window.location.hash === "#research" && document.querySelector("#research-view")?.hidden === false);
+      await page.evaluate(() => window.history.forward());
+      await page.waitForFunction(() => window.location.hash === "#tasks" && document.querySelector("#tasks-view")?.hidden === false);
+      assert.equal(await page.locator(".view:not([hidden])").count(), 1,
+        "history back/forward must keep exactly one workspace visible");
+      assert.equal(await page.locator('.nav-link[data-view="tasks"]').getAttribute("aria-current"), "page",
+        "history forward must restore the active navigation state");
     }
 
     if (await menu.isVisible() && (await menu.getAttribute("aria-expanded")) !== "true") {
