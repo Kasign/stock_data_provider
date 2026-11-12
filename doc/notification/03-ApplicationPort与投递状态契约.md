@@ -223,7 +223,7 @@ DeliveryRecord 领域模型与纯函数迁移测试、DeliveryRepository Port/Fa
 | UpdateWithLease(expected_version, fencing_token, next, event, now) | Delivery.Transition 输出 + 当前 Worker Lease | 同一原子操作内校验版本/token/租约、更新快照并追加事件；终止本次 sending 后释放租约 |
 | ErrDeliveryVersionConflict / ErrDeliveryLeaseConflict | Repository CAS 判定 | 分别表示快照版本竞争和租约/token 失效；调用方不得将冲突当作可覆盖更新 |
 
-- Claim retry_wait 时必须同时清空 `next_attempt_at`，保持该字段仅属于 retry_wait 状态。
+- ClaimDue 必须持久化 `Delivery.Transition` 返回的完整可变状态字段；从 retry_wait 领取时清空 `next_attempt_at`、`reason_code`、`last_error_code` 和 `provider_message_ref`，确保数据库快照与返回快照一致。
 
 当前 Fake 只证明模块内并发/CAS 语义，不代表 MariaDB 锁、事务、跨进程 fencing 或崩溃恢复已验收。ClaimDue 将租约截止限制为 min(调用方请求截止, Delivery.deadline_at)，不回收过期 sending；后续 Dispatcher Recovery 必须先判断请求是否发出，能证明未发出才可安全重排，结果不明必须进入 unknown。
 

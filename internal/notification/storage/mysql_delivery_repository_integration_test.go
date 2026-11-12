@@ -282,8 +282,9 @@ func TestNotificationMariaDBDeliveryRetryClaimClearsScheduleIntegration(t *testi
 			first, second)
 	}
 	persisted, found, err := repository.Get(ctx, delivery.DeliveryID)
-	if err != nil || !found || persisted.Status != domain.DeliverySending || persisted.NextAttemptAt != nil {
-		t.Fatalf("persisted sending delivery must not retain next_attempt_at: found=%v delivery=%+v err=%v",
+	if err != nil || !found || persisted.Status != domain.DeliverySending || persisted.NextAttemptAt != nil ||
+		persisted.ReasonCode != nil || persisted.LastErrorCode != nil || persisted.ProviderMessageRef != nil {
+		t.Fatalf("persisted sending delivery must match the cleared claim snapshot: found=%v delivery=%+v err=%v",
 			found, persisted, err)
 	}
 }
