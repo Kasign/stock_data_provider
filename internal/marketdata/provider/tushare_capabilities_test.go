@@ -454,6 +454,15 @@ func TestTushareValuationKeepsStaticPESeparateFromMRQ(t *testing.T) {
 	if got.Total != 1 || len(got.Items) != 1 {
 		t.Fatalf("unexpected valuation snapshot: %+v", got)
 	}
+	if got.ProviderReportDate != reference.Format("2006-01-02") {
+		t.Fatalf("provider report date = %q, want daily_basic trade_date %q", got.ProviderReportDate, reference.Format("2006-01-02"))
+	}
+	if got.ProviderTimestamp != nil {
+		t.Fatalf("daily_basic does not expose an exact snapshot timestamp, got %v", got.ProviderTimestamp)
+	}
+	if got.QualityStatus != model.QualityDegraded {
+		t.Fatalf("daily_basic snapshot must remain degraded without an exact provider timestamp, got %q", got.QualityStatus)
+	}
 	item := got.Items[0]
 	if got.SourceVersion != "tushare-daily-basic-v2" || item.SourceVersion != "tushare-daily-basic-v2" {
 		t.Fatalf("unexpected Tushare valuation field version: snapshot=%q item=%q", got.SourceVersion, item.SourceVersion)
@@ -463,6 +472,9 @@ func TestTushareValuationKeepsStaticPESeparateFromMRQ(t *testing.T) {
 	}
 	if item.PEMRQ != nil {
 		t.Fatalf("Tushare daily_basic pe must not be labelled pe_mrq, got %+v", item.PEMRQ)
+	}
+	if item.PCFTTM != nil {
+		t.Fatalf("Tushare daily_basic does not provide PCF TTM, got %+v", item.PCFTTM)
 	}
 	if item.PETTM == nil || *item.PETTM != 18.4 {
 		t.Fatalf("expected TTM PE to remain mapped, got %+v", item.PETTM)
@@ -476,8 +488,14 @@ func TestTushareValuationKeepsStaticPESeparateFromMRQ(t *testing.T) {
 		item.DividendYieldTTMPercent == nil || *item.DividendYieldTTMPercent != 2.6 {
 		t.Fatalf("dividend-yield fields were not mapped: %+v", item)
 	}
-	if !containsTushareReason(item.QualityReasons, "provider_pe_mrq_not_supported_by_tushare_daily_basic") {
-		t.Fatalf("expected missing-MRQ quality reason, got %+v", item.QualityReasons)
+	for _, reason := range []string{
+		"provider_exact_snapshot_time_not_exposed",
+		"provider_pcf_ttm_not_supported_by_tushare_daily_basic",
+		"provider_pe_mrq_not_supported_by_tushare_daily_basic",
+	} {
+		if !containsTushareReason(item.QualityReasons, reason) {
+			t.Fatalf("expected quality reason %q, got %+v", reason, item.QualityReasons)
+		}
 	}
 }
 
