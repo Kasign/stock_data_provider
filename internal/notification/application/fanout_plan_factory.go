@@ -7,7 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
+	"fmt"\n\t"strings"\n\t"time"
 
 	"example.com/stock-analysis-flow/internal/notification/domain"
 	"github.com/gowebpki/jcs"
@@ -71,13 +71,11 @@ func (f *ProductionFanoutPlanFactory) Build(
 	event domain.EventEnvelope,
 	subscription domain.Subscription,
 ) (FanoutPlanDecision, error) {
-	if f == nil || f.channels == nil || f.templates == nil || f.recipients == nil ||
-		ctx == nil || subscription.Status != domain.SubscriptionActive ||
-		subscription.SubscriptionID == "" || subscription.Version < 1 ||
-		subscription.OwnerRef == "" || subscription.EventType == "" ||
-		subscription.EventType != event.EventType || subscription.ChannelRef == "" ||
-		subscription.TemplateID == "" {
+	if f == nil || f.channels == nil || f.templates == nil || f.recipients == nil || ctx == nil {
 		return FanoutPlanDecision{}, ErrFanoutConfigurationInvalid
+	}
+	if err := validateFanoutSubscription(event, subscription); err != nil {
+		return FanoutPlanDecision{}, err
 	}
 	if err := ctx.Err(); err != nil {
 		return FanoutPlanDecision{}, err
@@ -182,6 +180,38 @@ func (f *ProductionFanoutPlanFactory) Build(
 		return FanoutPlanDecision{}, err
 	}
 	return FanoutPlanDecision{Matched: true, Plan: plan}, nil
+}
+
+
+// validateFanoutSubscription enforces the frozen Subscription field contract
+// before resolving any downstream dependency. Event-specific filter schema lookup
+// and matching are still performed by SubscriptionFilterMatcher.
+func validateFanoutSubscription(event domain.EventEnvelope, subscription domain.Subscription) error {
+	if subscription.Status != domain.SubscriptionActive ||
+		subscription.SubscriptionID == "" || subscription.Version < 1 ||
+		subscription.OwnerRef == "" || subscription.EventType == "" ||
+		subscription.EventType != event.EventType || subscription.ChannelRef == "" ||
+		subscription.TemplateID == "" ||
+		subscription.CreatedAt.IsZero() || subscription.UpdatedAt.IsZero() || subscription.EffectiveAt.IsZero() ||
+		subscription.CreatedAt.Location() != time.UTC || subscription.UpdatedAt.Location() != time.UTC ||
+		subscription.EffectiveAt.Location() != time.UTC ||
+		subscription.UpdatedAt.Before(subscription.CreatedAt) || subscription.EffectiveAt.Before(subscription.CreatedAt) {
+		return domain.ErrInvalidSubscription
+	}
+	filters := bytes.TrimSpace(subscription.Filters)
+	if len(filters) == 0 || bytes.Equal(filters, []byte("null")) {
+		if subscription.FilterSchemaVersion != "" {
+			return domain.ErrInvalidSubscription
+		}
+		return nil
+	}
+	if subscription.FilterSchemaVersion == "" || subscription.FilterSchemaVersion != strings.TrimSpace(subscription.FilterSchemaVersion) {
+		return domain.ErrInvalidSubscription
+	}
+	if err := domain.ValidateSubscriptionFilterDocument(subscription.Filters); err != nil {
+		return fmt.Errorf("%w: invalid filter document: %v", domain.ErrInvalidSubscription, err)
+	}
+	return nil
 }
 
 func hasSubscriptionFilters(filters json.RawMessage) bool {
