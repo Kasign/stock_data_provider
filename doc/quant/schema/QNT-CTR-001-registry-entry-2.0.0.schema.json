@@ -346,13 +346,13 @@
         "unit": {
           "type": "string",
           "minLength": 1,
-          "pattern": "^\\\\S(?:[\\\\s\\\\S]*\\\\S)?$",
+          "pattern": "^\\S(?:[\\s\\S]*\\S)?$",
           "description": "计数单位，例如 bar 或 return；不得用输入数组行数替代实际参与计算的样本单位。"
         },
         "counting_rule": {
           "type": "string",
           "minLength": 1,
-          "pattern": "^\\\\S(?:[\\\\s\\\\S]*\\\\S)?$",
+          "pattern": "^\\S(?:[\\s\\S]*\\S)?$",
           "description": "精确计数规则，必须说明被计数对象、纳入条件、排除条件及输入观测到派生样本的转换口径。"
         }
       }
