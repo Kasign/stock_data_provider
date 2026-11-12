@@ -119,6 +119,34 @@ func (u *IngestCollectedSource) Execute(ctx context.Context, request IngestColle
 		}
 	}
 
+	checkPersistencePolicy := func(tx IdentityTransaction) error {
+		policyTx, ok := tx.(CurrentIngestPolicyIdentityTransaction)
+		if !ok {
+			return ErrSourcePersistencePolicyUnavailable
+		}
+		sourcePolicy, endpointPolicy, _, policyErr := policyTx.LockCurrentIngestPolicies(
+			ctx, sourceID, result.SourcePolicyVersionID, endpointID, result.EndpointPolicyVersionID, "", "",
+		)
+		if policyErr != nil {
+			return errors.Join(ErrSourcePersistencePolicyUnavailable, policyErr)
+		}
+		decision := domain.EvaluateSourceCollectionPolicy(sourcePolicy, endpointPolicy, policyRequest, u.now().UTC())
+		if !decision.Allowed {
+			return errors.Join(ErrSourcePersistencePolicyDenied, errors.New(decision.ReasonCode))
+		}
+		return nil
+	}
+	if len(result.Entries) == 0 {
+		err := u.ingest.repository.WithinIdentityTransaction(ctx, checkPersistencePolicy)
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return nil, ctxErr
+		}
+		if err != nil {
+			return nil, errors.Join(ErrIdentityTransaction, err)
+		}
+		return []domain.Observation{}, nil
+	}
+
 	observations := make([]domain.Observation, 0, len(result.Entries))
 	for _, entry := range result.Entries {
 		if err := ctx.Err(); err != nil {
@@ -134,23 +162,7 @@ func (u *IngestCollectedSource) Execute(ctx context.Context, request IngestColle
 		idempotencyKey := prefix + "/" + hex.EncodeToString(fingerprint[:])
 		observation, ingestErr := u.ingest.executeWithPolicyTraceAndCheck(
 			ctx, sourceID, idempotencyKey, candidate, registration.URLPolicy, trace,
-			func(tx IdentityTransaction) error {
-				policyTx, ok := tx.(CurrentIngestPolicyIdentityTransaction)
-				if !ok {
-					return ErrSourcePersistencePolicyUnavailable
-				}
-				sourcePolicy, endpointPolicy, _, policyErr := policyTx.LockCurrentIngestPolicies(
-					ctx, sourceID, result.SourcePolicyVersionID, endpointID, result.EndpointPolicyVersionID, "", "",
-				)
-				if policyErr != nil {
-					return errors.Join(ErrSourcePersistencePolicyUnavailable, policyErr)
-				}
-				decision := domain.EvaluateSourceCollectionPolicy(sourcePolicy, endpointPolicy, policyRequest, u.now().UTC())
-				if !decision.Allowed {
-					return errors.Join(ErrSourcePersistencePolicyDenied, errors.New(decision.ReasonCode))
-				}
-				return nil
-			},
+checkPersistencePolicy,
 		)
 		if ingestErr != nil {
 			return nil, ingestErr

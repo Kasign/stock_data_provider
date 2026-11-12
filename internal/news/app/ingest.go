@@ -92,8 +92,8 @@ func (u *candidateIngest) executeWithPolicyTraceAndCheck(
 	if trace.SourcePolicyVersionID == "" || trace.PolicyEvaluatedAt.IsZero() || trace.Retention <= 0 {
 		return domain.Observation{}, ErrInvalidRequest
 	}
-	if strings.TrimSpace(candidate.ProviderCode) != "" ||
-		trace.ProviderOutputPolicyRef != "" || trace.ProviderOutputPolicyVersionID != "" {
+	if (strings.TrimSpace(candidate.ProviderCode) != "" ||
+		trace.ProviderOutputPolicyRef != "" || trace.ProviderOutputPolicyVersionID != "") && beforePersist == nil {
 		return domain.Observation{}, ErrProviderOutputPolicyRequired
 	}
 	trace.PolicyEvaluatedAt = trace.PolicyEvaluatedAt.UTC()

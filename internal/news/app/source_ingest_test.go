@@ -139,8 +139,13 @@ func TestIngestCollectedSourceFailsClosedWhenDatabasePolicyVersionChanged(t *tes
 	if err != nil {
 		t.Fatal(err)
 	}
+	result := sealedCollectedSourceResult()
+	result.Entries = []CollectedSourceEntry{{Candidate: domain.Candidate{SourceItemID: "item-db-policy-change"}}}
+	if err := sealCollectSourceResult(&result); err != nil {
+		t.Fatal(err)
+	}
 	_, err = usecase.Execute(context.Background(), IngestCollectedSourceRequest{
-		Collection: sealedCollectedSourceResult(), IdempotencyPrefix: "collection-db-policy-change",
+		Collection: result, IdempotencyPrefix: "collection-db-policy-change",
 		Purpose: domain.PurposeInternalPersonalResearch, Retention: time.Hour,
 	})
 	if !errors.Is(err, ErrSourcePersistencePolicyUnavailable) ||
