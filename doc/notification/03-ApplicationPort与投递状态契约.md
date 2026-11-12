@@ -217,13 +217,13 @@ DeliveryRecord 领域模型与纯函数迁移测试、DeliveryRepository Port/Fa
 | Create(delivery) | 已校验 DeliveryPlan + 显式 max_attempts/deadline_at + Clock | 只接受 queued、version=1、attempt_count=0 的初始快照；DeliveryID 唯一 |
 | Get(delivery_id) | Delivery 稳定 ID | 返回深拷贝快照；不存在时 found=false，不伪造空记录 |
 | ClaimDue(worker_id, now, lease_expires_at) | Dispatcher Worker 身份 + 注入 Clock + 显式租约时长 | 原子选择 queued 或到期 retry_wait；同时迁移 sending、追加状态事件、分配单调 fencing_token；不增加 attempt_count，因为尚未证明已发起渠道调用 |
-
-- Claim retry_wait 时必须同时清空 `next_attempt_at`，保持该字段仅属于 retry_wait 状态。
 | DeliveryLease.worker_id | Worker 注册/启动时分配的稳定引用 | 不透明 Worker 标识，不包含主机敏感信息 |
 | DeliveryLease.fencing_token | Repository 对每个 Delivery 单调递增计数 | 旧 token 永久失效；不可由调用方指定或回退 |
 | DeliveryLease.expires_at | Claim 时的 UTC now + 显式 lease duration | 仅用于当前租约有效性判定；不得晚于 Delivery.deadline_at；过期后不允许旧 Worker 写入 |
 | UpdateWithLease(expected_version, fencing_token, next, event, now) | Delivery.Transition 输出 + 当前 Worker Lease | 同一原子操作内校验版本/token/租约、更新快照并追加事件；终止本次 sending 后释放租约 |
 | ErrDeliveryVersionConflict / ErrDeliveryLeaseConflict | Repository CAS 判定 | 分别表示快照版本竞争和租约/token 失效；调用方不得将冲突当作可覆盖更新 |
+
+- Claim retry_wait 时必须同时清空 `next_attempt_at`，保持该字段仅属于 retry_wait 状态。
 
 当前 Fake 只证明模块内并发/CAS 语义，不代表 MariaDB 锁、事务、跨进程 fencing 或崩溃恢复已验收。ClaimDue 将租约截止限制为 min(调用方请求截止, Delivery.deadline_at)，不回收过期 sending；后续 Dispatcher Recovery 必须先判断请求是否发出，能证明未发出才可安全重排，结果不明必须进入 unknown。
 
@@ -585,8 +585,6 @@ len(OutcomeUnknownDeliveryIDs) = OutcomeUnknown
 | source_module / event_id | string | 对应已提交 Inbox 的双唯一身份 | 必填；唯一键 (source_module,event_id) |
 | event_type / payload_fingerprint | string | 从 Inbox 不可变事件复制，供路由和一致性校验 | 必填；不得由 Worker 改写 |
 | snapshot_revision | uint64 nullable | 首次 Claim 时读取的订阅修订高水位；未 Claim 前为空 | 首次设置后不可变 |
-
-只有 `pending + attempt_count=0 + fencing_token=0 + cursor 为空` 的初始 WorkItem 可以没有快照；一旦领取过，快照缺失必须 fail closed，恢复时不得重新读取当前 revision。
 | cursor_subscription_id | string | 最后一个已完整处理的 Subscription ID；空串表示页面尚未开始 | 每次页面成功后单调前进 |
 | status | enum | pending、processing、retry_wait、completed、failed | 仅允许本节定义的迁移 |
 | attempt_count | uint32 | 成功取得 Fanout 租约的次数，包括过期租约重新领取 | Claim 成功时递增 |
@@ -596,19 +594,21 @@ len(OutcomeUnknownDeliveryIDs) = OutcomeUnknown
 | last_error_code | string nullable | 最后一次失败的稳定内部错误分类，不存原始错误文本 | 安全码；不含用户内容/Secret |
 | created_at / updated_at | UTC timestamp | 数据库持久化时间 | DATETIME(6) 精度 |
 
+只有 `pending + attempt_count=0 + fencing_token=0 + cursor 为空` 的初始 WorkItem 可以没有快照；一旦领取过，快照缺失必须 fail closed，恢复时不得重新读取当前 revision。
+
 ### 13.4 状态迁移、租约与 fencing
 
 | 当前状态 | 触发条件 | 下一状态 | 原子要求 |
 |---|---|---|---|
 | pending | Worker 成功 Claim | processing | attempt_count、fencing_token 递增；设置 worker/lease；首次 Claim 固定 snapshot_revision |
 | retry_wait | next_attempt_at 到期且 Claim 成功 | processing | 同上 |
-
-retry_wait 成功 Claim 后，Repository 必须在同一 UPDATE 中清空 `next_attempt_at`；该字段只允许 retry_wait 状态保留，不能将已到期的调度时间带入新租约。
 | processing | 当前租约过期，其他 Worker Claim 成功 | processing | fencing_token 递增，替换 worker/lease；保留 cursor/snapshot |
 | processing | 页面完成且还有后续页 | pending | CAS 校验 worker/token/有效租约；推进 cursor 并释放租约 |
 | processing | 页面完成且无后续页 | completed | 同上；清空租约和 next_attempt_at |
 | processing | 可重试错误且未达最大 Claim 次数 | retry_wait | 不推进 cursor；记录稳定错误码与 next_attempt_at；释放租约 |
 | processing | 达到最大 Claim 次数或不可恢复错误 | failed | 不推进未完成页面；记录稳定错误码并释放租约 |
+
+retry_wait 成功 Claim 后，Repository 必须在同一 UPDATE 中清空 `next_attempt_at`；该字段只允许 retry_wait 状态保留，不能将已到期的调度时间带入新租约。
 
 - Claim/Advance/Retry/Fail 必须以 work_item_id + status + lease_worker_id + fencing_token 条件更新，并由 MariaDB UTC_TIMESTAMP(6) 判断租约有效性；不能信任 Worker 本地时间证明租约仍有效。自提交 SQL 成功后若 RowsAffected 读取失败，结果视为 ErrPersistenceOutcomeUnknown，不得当作租约冲突或普通失败继续写状态。
 - Claim 使用事务行锁选择最早到期项，单次最多返回一个 WorkItem；不依赖 Redis、旧 Platform Task Queue 或 SKIP LOCKED 版本特性。
