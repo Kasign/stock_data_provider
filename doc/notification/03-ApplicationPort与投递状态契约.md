@@ -598,6 +598,8 @@ len(OutcomeUnknownDeliveryIDs) = OutcomeUnknown
 |---|---|---|---|
 | pending | Worker 成功 Claim | processing | attempt_count、fencing_token 递增；设置 worker/lease；首次 Claim 固定 snapshot_revision |
 | retry_wait | next_attempt_at 到期且 Claim 成功 | processing | 同上 |
+
+retry_wait 成功 Claim 后，Repository 必须在同一 UPDATE 中清空 `next_attempt_at`；该字段只允许 retry_wait 状态保留，不能将已到期的调度时间带入新租约。
 | processing | 当前租约过期，其他 Worker Claim 成功 | processing | fencing_token 递增，替换 worker/lease；保留 cursor/snapshot |
 | processing | 页面完成且还有后续页 | pending | CAS 校验 worker/token/有效租约；推进 cursor 并释放租约 |
 | processing | 页面完成且无后续页 | completed | 同上；清空租约和 next_attempt_at |

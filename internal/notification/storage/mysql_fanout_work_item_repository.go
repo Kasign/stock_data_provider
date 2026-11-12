@@ -140,6 +140,7 @@ func (r *MySQLFanoutWorkItemRepository) ClaimDue(
 
 	update, err := tx.ExecContext(ctx, `UPDATE notification_fanout_work_items
 		SET status = 'processing', attempt_count = attempt_count + 1,
+			next_attempt_at = NULL,
 			lease_worker_id = ?, lease_expires_at = TIMESTAMPADD(MICROSECOND, ?, UTC_TIMESTAMP(6)),
 			fencing_token = fencing_token + 1, snapshot_revision = ?, updated_at = UTC_TIMESTAMP(6)
 		WHERE work_item_id = ?`,
