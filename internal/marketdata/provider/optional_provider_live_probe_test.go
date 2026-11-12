@@ -658,6 +658,84 @@ func TestLiveHithinkDailyBarsSingleWindow(t *testing.T) {
 	}
 }
 
+// TestLiveHithinkDailyBarsBackwardRaw isolates the raw backward-adjusted response
+// to distinguish provider-side empty data from normalization rejection.
+func TestLiveHithinkDailyBarsBackwardRaw(t *testing.T) {
+	if os.Getenv("MARKET_DATA_LIVE_HITHINK_DAILY_BARS_BACKWARD_RAW") != "1" {
+		t.Skip("set MARKET_DATA_LIVE_HITHINK_DAILY_BARS_BACKWARD_RAW=1 to query the raw Hithink backward-adjusted endpoint")
+	}
+	apiKey := os.Getenv("MARKET_DATA_HITHINK_API_KEY")
+	if apiKey == "" {
+		apiKey = os.Getenv("HITHINK_FINANCE_API_KEY")
+	}
+	if apiKey == "" {
+		t.Skip("Hithink backward DailyBar probe skipped: API key is not configured")
+	}
+
+	client := NewHithinkConfigured(25*time.Second, os.Getenv("MARKET_DATA_HITHINK_BASE_URL"), apiKey)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	location := time.FixedZone("Asia/Shanghai", 8*60*60)
+	symbol, err := hithinkDomesticSymbol("600519.SH")
+	if err != nil {
+		t.Fatalf("normalize target symbol: %v", err)
+	}
+	startMS := time.Date(2026, time.October, 13, 0, 0, 0, 0, location).UnixMilli()
+	endMS := time.Date(2026, time.November, 12, 23, 59, 59, int(time.Second-time.Nanosecond), location).UnixMilli()
+	query := url.Values{}
+	query.Set("thscode", symbol)
+	query.Set("interval", "1d")
+	query.Set("start", strconv.FormatInt(startMS, 10))
+	query.Set("end", strconv.FormatInt(endMS, 10))
+	query.Set("adjust", "backward")
+	raw, err := client.get(ctx, "/api/a-share/prices/historical", query)
+	if err != nil {
+		t.Fatalf("request Hithink backward-adjusted historical endpoint: %v", err)
+	}
+	dataRaw, err := hithinkResponseData(raw)
+	if err != nil {
+		t.Fatalf("decode Hithink backward-adjusted response envelope: %v", err)
+	}
+	var data struct {
+		Timestamp *int64                     `json:"timestamp"`
+		Item      []map[string]json.RawMessage `json:"item"`
+	}
+	if err := json.Unmarshal(dataRaw, &data); err != nil {
+		t.Fatalf("decode Hithink backward-adjusted rows: %v", err)
+	}
+	evidence := map[string]any{
+		"provider": "hithink",
+		"endpoint": "/api/a-share/prices/historical",
+		"symbol": symbol,
+		"adjust": "backward",
+		"start": "2026-10-13",
+		"end": "2026-11-12",
+		"row_count": len(data.Item),
+		"timestamp": data.Timestamp,
+	}
+	if len(data.Item) > 0 {
+		first, last := data.Item[0], data.Item[len(data.Item)-1]
+		for key, row := range map[string]map[string]json.RawMessage{"first": first, "last": last} {
+			dateValue, dateOK := hithinkParseFundamentalValue(row["date_ms"])
+			dateText, dateValid := hithinkDateFromMillis(dateValue, location)
+			evidence[key+"_date"] = dateText
+			evidence[key+"_date_valid"] = dateOK && dateValid
+			evidence[key+"_open_price_raw"] = string(row["open_price"])
+			evidence[key+"_close_price_raw"] = string(row["close_price"])
+			evidence[key+"_volume_raw"] = string(row["volume"])
+			evidence[key+"_turnover_raw"] = string(row["turnover"])
+		}
+	}
+	encoded, err := json.Marshal(evidence)
+	if err != nil {
+		t.Fatalf("marshal backward-adjusted raw evidence: %v", err)
+	}
+	t.Logf("LIVE_HITHINK_DAILY_BAR_BACKWARD_RAW %s", encoded)
+	if len(data.Item) == 0 {
+		t.Errorf("Hithink returned an empty raw backward-adjusted response for the requested window")
+	}
+}
+
 func TestLiveHithinkCapabilities(t *testing.T) {
 	if os.Getenv("MARKET_DATA_LIVE_HITHINK_TESTS") != "1" {
 		t.Skip("set MARKET_DATA_LIVE_HITHINK_TESTS=1 to call Hithink Finance endpoints")

@@ -129,6 +129,13 @@ jobs:
           MARKET_DATA_HITHINK_API_KEY: ${{ secrets.HITHINK_FINANCE_API_KEY }}
           MARKET_DATA_HITHINK_BASE_URL: https://fuyao.aicubes.cn
         run: go test -run TestLiveHithinkDailyBarsSingleWindow -count=1 -v ./internal/marketdata/provider
+      - name: Probe Hithink backward-adjusted DailyBar raw response
+        if: always() && github.event_name == 'push' && contains(github.event.head_commit.message, '[hithink_daily_bars_backward_raw]')
+        env:
+          MARKET_DATA_LIVE_HITHINK_DAILY_BARS_BACKWARD_RAW: "1"
+          MARKET_DATA_HITHINK_API_KEY: ${{ secrets.HITHINK_FINANCE_API_KEY }}
+          MARKET_DATA_HITHINK_BASE_URL: https://fuyao.aicubes.cn
+        run: go test -run TestLiveHithinkDailyBarsBackwardRaw -count=1 -v ./internal/marketdata/provider
       - name: Probe historical Provider service and MariaDB persistence
         if: always() && github.event_name == 'push' && contains(github.event.head_commit.message, '[historical_service_probe]')
         env:
