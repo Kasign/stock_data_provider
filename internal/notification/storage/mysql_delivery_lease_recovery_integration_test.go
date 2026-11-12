@@ -304,8 +304,8 @@ func TestNotificationMariaDBRecoveryRetryReclaimsWithNewFencingTokenIntegration(
 		t.Fatal(err)
 	}
 	wait := time.Until(expiredAt.Add(20 * time.Millisecond))
-	if wait > 0 {
-		time.Sleep(wait)
+	if retryDelay > 0 {
+		time.Sleep(retryDelay)
 	}
 	recoveryNow := time.Now().UTC().Truncate(time.Microsecond)
 	recoverySnapshot, found, err := deliveries.Get(ctx, delivery.DeliveryID)
@@ -324,9 +324,9 @@ func TestNotificationMariaDBRecoveryRetryReclaimsWithNewFencingTokenIntegration(
 	if err := deliveries.RecoverExpiredLease(ctx, oldClaim.Delivery.Version, oldClaim.Lease.FencingToken, next, event, recoveryNow); err != nil {
 		t.Fatalf("recover retryable lease: %v", err)
 	}
-	wait := time.Until(retryAt.Add(10 * time.Millisecond))
-	if wait > 0 {
-		time.Sleep(wait)
+	retryDelay := time.Until(retryAt.Add(10 * time.Millisecond))
+	if retryDelay > 0 {
+		time.Sleep(retryDelay)
 	}
 	if err := db.QueryRowContext(ctx, "SELECT CAST(UTC_TIMESTAMP(6) AS CHAR)").Scan(&clock); err != nil {
 		t.Fatal(err)
@@ -464,9 +464,9 @@ func TestNotificationMariaDBConcurrentRetryWaitClaimsSingleWinnerIntegration(t *
 	if err := repository.RecoverExpiredLease(ctx, recoverySnapshot.Version, oldClaim.Lease.FencingToken, retryWait, event, recoveryNow); err != nil {
 		t.Fatalf("recover expired lease into retry_wait: %v", err)
 	}
-	wait := time.Until(retryAt.Add(10 * time.Millisecond))
-	if wait > 0 {
-		time.Sleep(wait)
+	retryDelay := time.Until(retryAt.Add(10 * time.Millisecond))
+	if retryDelay > 0 {
+		time.Sleep(retryDelay)
 	}
 	claimAt := readDBNow()
 	type claimResult struct {
