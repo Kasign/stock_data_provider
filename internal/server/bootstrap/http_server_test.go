@@ -88,7 +88,7 @@ func TestHTTPServerComponentListenFailureIsStartupFailure(t *testing.T) {
 	}
 }
 
-func TestHTTPServerComponentShutdownTimeoutForcesClose(t *testing.T) {
+func TestHTTPServerComponentShutdownTimeoutWaitsForHandlerAfterForcedClose(t *testing.T) {
 	entered, release := make(chan struct{}), make(chan struct{})
 	mux := http.NewServeMux()
 	mux.HandleFunc("/blocked", func(http.ResponseWriter, *http.Request) {
@@ -111,13 +111,32 @@ func TestHTTPServerComponentShutdownTimeoutForcesClose(t *testing.T) {
 		}
 	}()
 	<-entered
+
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
 	defer cancel()
-	err = component.Stop(ctx)
-	if err == nil {
-		t.Fatal("Stop() must report shutdown timeout")
+	stopDone := make(chan error, 1)
+	go func() { stopDone <- component.Stop(ctx) }()
+	<-ctx.Done()
+	select {
+	case <-component.done:
+	case <-time.After(time.Second):
+		t.Fatal("HTTP listener did not stop after shutdown timeout")
 	}
+	select {
+	case err := <-stopDone:
+		t.Fatalf("Stop returned while an HTTP handler was still active: %v", err)
+	default:
+	}
+
 	close(release)
+	select {
+	case err := <-stopDone:
+		if err == nil {
+			t.Fatal("Stop() must report shutdown timeout")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Stop did not finish after the active handler exited")
+	}
 	select {
 	case <-requestDone:
 	case <-time.After(time.Second):
