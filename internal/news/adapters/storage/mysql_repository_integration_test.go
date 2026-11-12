@@ -946,12 +946,13 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	lockSourceV1 := "news-it-source-ingest-v1"
 	lockSourceV2 := "news-it-source-ingest-v2"
 	lockPayloadV1, err := json.Marshal(domain.SourcePolicy{
-		Status: domain.AuthorizationApproved,
+		Status:               domain.AuthorizationApproved,
 		AllowedAccessMethods: []domain.AccessMethod{domain.AccessRSS},
-		AllowedPurposes: []domain.Purpose{domain.PurposeInternalPersonalResearch},
-		AllowedContentKinds: []domain.ContentKind{domain.ContentMetadata},
-		AllowedStorageModes: []domain.StorageMode{domain.StoragePersistentMetadata},
-		MaxRetention: time.Hour, EvidenceRef: "news-it-source-ingest-lock-evidence",
+		AllowedPurposes:      []domain.Purpose{domain.PurposeInternalPersonalResearch},
+		AllowedContentKinds:  []domain.ContentKind{domain.ContentMetadata},
+		AllowedStorageModes:  []domain.StorageMode{domain.StoragePersistentMetadata},
+		MaxRetention:         time.Hour,
+		EvidenceRef:          "news-it-source-ingest-lock-evidence",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -960,12 +961,13 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 		t.Fatalf("publish source ingest lock policy: %v", err)
 	}
 	lockPayloadV2, err := json.Marshal(domain.SourcePolicy{
-		Status: domain.AuthorizationRevoked,
+		Status:               domain.AuthorizationRevoked,
 		AllowedAccessMethods: []domain.AccessMethod{domain.AccessRSS},
-		AllowedPurposes: []domain.Purpose{domain.PurposeInternalPersonalResearch},
-		AllowedContentKinds: []domain.ContentKind{domain.ContentMetadata},
-		AllowedStorageModes: []domain.StorageMode{domain.StoragePersistentMetadata},
-		MaxRetention: time.Hour, EvidenceRef: "news-it-source-ingest-revoked-evidence",
+		AllowedPurposes:      []domain.Purpose{domain.PurposeInternalPersonalResearch},
+		AllowedContentKinds:  []domain.ContentKind{domain.ContentMetadata},
+		AllowedStorageModes:  []domain.StorageMode{domain.StoragePersistentMetadata},
+		MaxRetention:         time.Hour,
+		EvidenceRef:          "news-it-source-ingest-revoked-evidence",
 	})
 	if err != nil {
 		t.Fatal(err)
