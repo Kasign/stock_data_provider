@@ -134,7 +134,14 @@ func (r *MySQLFanoutWorkItemRepository) ClaimDue(
 		return result, false, err
 	}
 	if err := work.Validate(); err != nil {
-		return result, false, err
+		return result, false, fmt.Errorf(
+			"notification storage: invalid fanout work item id=%q status=%q snapshot=%t revision=%d cursor=%q attempts=%d worker=%q lease_expires=%s fencing=%d next_attempt=%s created=%s updated=%s: %w",
+			work.WorkItemID, work.Status, work.HasSnapshot, work.SnapshotRevision,
+			work.CursorSubscriptionID, work.AttemptCount, work.LeaseWorkerID,
+			work.LeaseExpiresAt.Format(time.RFC3339Nano), work.FencingToken,
+			work.NextAttemptAt.Format(time.RFC3339Nano), work.CreatedAt.Format(time.RFC3339Nano),
+			work.UpdatedAt.Format(time.RFC3339Nano), err,
+		)
 	}
 	if !snapshotRevision.Valid {
 		// 只有从未领取的初始 pending 项允许首次分配快照。
