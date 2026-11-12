@@ -578,12 +578,12 @@ func TestLiveHithinkAnnualBalanceSheetPublicationDateRaw(t *testing.T) {
 		})
 	}
 	encoded, err := json.Marshal(map[string]any{
-		"provider": "hithink",
-		"endpoint": "/api/a-share/financials/balance-sheets",
-		"symbol": symbol,
-		"period": "annual",
+		"provider":           "hithink",
+		"endpoint":           "/api/a-share/financials/balance-sheets",
+		"symbol":             symbol,
+		"period":             "annual",
 		"target_report_date": "2025-12-31",
-		"rows": evidence,
+		"rows":               evidence,
 	})
 	if err != nil {
 		t.Fatalf("marshal raw balance-sheet evidence: %v", err)
