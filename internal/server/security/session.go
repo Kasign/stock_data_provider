@@ -18,11 +18,11 @@ import (
 const DefaultCSRFAuthHeader = "X-CSRF-Token"
 
 type SessionAuthenticatorConfig struct {
-	Cookie      platformsecurity.SessionCookieConfig
+	Cookie       platformsecurity.SessionCookieConfig
 	PublicOrigin string
-	CSRFHeader  string
-	IdleTTL     time.Duration
-	Now         func() time.Time
+	CSRFHeader   string
+	IdleTTL      time.Duration
+	Now          func() time.Time
 }
 
 // SessionAuthenticator verifies browser Owner Sessions independently from

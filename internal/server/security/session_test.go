@@ -13,35 +13,51 @@ import (
 )
 
 type testSessionStore struct {
-	record platformsecurity.SessionRecord
-	err    error
-	digest string
+	record  platformsecurity.SessionRecord
+	err     error
+	digest  string
 	idleTTL time.Duration
 }
 
-func (s *testSessionStore) Create(context.Context, string, platformsecurity.SessionRecord) error { return nil }
+func (s *testSessionStore) Create(context.Context, string, platformsecurity.SessionRecord) error {
+	return nil
+}
+
 func (s *testSessionStore) LookupAndTouch(_ context.Context, digest string, now time.Time, idleTTL time.Duration) (platformsecurity.SessionRecord, error) {
 	s.digest, s.idleTTL = digest, idleTTL
-	if s.err != nil { return platformsecurity.SessionRecord{}, s.err }
+	if s.err != nil {
+		return platformsecurity.SessionRecord{}, s.err
+	}
 	record := s.record
 	record.LastSeenAt = now
 	record.IdleExpiresAt = now.Add(idleTTL)
-	if record.AbsoluteExpiresAt.Before(record.IdleExpiresAt) { record.IdleExpiresAt = record.AbsoluteExpiresAt }
+	if record.AbsoluteExpiresAt.Before(record.IdleExpiresAt) {
+		record.IdleExpiresAt = record.AbsoluteExpiresAt
+	}
 	return record, nil
 }
-func (s *testSessionStore) Rotate(context.Context, string, string, platformsecurity.SessionRecord, time.Time) error { return nil }
-func (s *testSessionStore) Revoke(context.Context, string) error { return nil }
+
+func (s *testSessionStore) Rotate(context.Context, string, string, platformsecurity.SessionRecord, time.Time) error {
+	return nil
+}
+
+func (s *testSessionStore) Revoke(context.Context, string) error {
+	return nil
+}
 
 type testCredentialStore struct {
 	credential platformsecurity.OwnerCredential
-	err error
+	err        error
 }
+
 func (s *testCredentialStore) GetOwnerCredential(context.Context) (platformsecurity.OwnerCredential, error) {
 	return s.credential, s.err
 }
+
 func (s *testCredentialStore) InitializeOwnerCredential(context.Context, string) (platformsecurity.OwnerCredential, error) {
 	return platformsecurity.OwnerCredential{}, errors.New("not implemented")
 }
+
 func (s *testCredentialStore) UpdateOwnerPassword(context.Context, uint64, string) (platformsecurity.OwnerCredential, error) {
 	return platformsecurity.OwnerCredential{}, errors.New("not implemented")
 }
@@ -49,12 +65,16 @@ func (s *testCredentialStore) UpdateOwnerPassword(context.Context, uint64, strin
 func newTestSessionAuthenticator(t *testing.T, now time.Time) (*SessionAuthenticator, *testSessionStore, string, string) {
 	t.Helper()
 	rawToken, _, err := platformsecurity.NewSessionToken()
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	csrfToken, csrfDigest, err := platformsecurity.NewCSRFToken()
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	sessions := &testSessionStore{record: platformsecurity.SessionRecord{
 		Subject: "owner", CreatedAt: now.Add(-time.Hour), LastSeenAt: now.Add(-time.Minute),
-		IdleExpiresAt: now.Add(platformsecurity.DefaultSessionIdleTTL),
+		IdleExpiresAt:     now.Add(platformsecurity.DefaultSessionIdleTTL),
 		AbsoluteExpiresAt: now.Add(platformsecurity.DefaultSessionAbsoluteTTL),
 		CredentialVersion: 3, CSRFTokenDigest: csrfDigest,
 	}}
@@ -68,7 +88,9 @@ func newTestSessionAuthenticator(t *testing.T, now time.Time) (*SessionAuthentic
 		PublicOrigin: "https://stocks.example.com", CSRFHeader: DefaultCSRFAuthHeader,
 		IdleTTL: 12 * time.Hour, Now: func() time.Time { return now },
 	})
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	return auth, sessions, rawToken, csrfToken
 }
 
@@ -86,7 +108,9 @@ func TestSessionAuthenticatorAddsOwnerSessionPrincipalAndRefreshCookie(t *testin
 	auth, sessions, rawToken, _ := newTestSessionAuthenticator(t, now)
 	request := sessionRequest(http.MethodGet, rawToken)
 	authenticated, cookie, err := auth.Authenticate(request)
-	if err != nil { t.Fatalf("Authenticate() error = %v", err) }
+	if err != nil {
+		t.Fatalf("Authenticate() error = %v", err)
+	}
 	principal, ok := platformsecurity.PrincipalFromContext(authenticated)
 	if !ok || principal.Kind != platformsecurity.IdentityOwner ||
 		principal.AuthMethod != platformsecurity.AuthMethodOwnerSession ||
