@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"errors"
+	"reflect"
 	"testing"
 
 	"example.com/stock-analysis-flow/internal/notification/domain"
@@ -96,7 +97,7 @@ func TestProductionFanoutPlanFactoryBuildsDeterministicImmutablePlan(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !first.Matched || !second.Matched || first.Plan != second.Plan {
+	if !first.Matched || !second.Matched || !reflect.DeepEqual(first.Plan, second.Plan) {
 		t.Fatalf("same immutable inputs must produce the same plan: first=%+v second=%+v", first, second)
 	}
 	if err := first.Plan.Validate(); err != nil {
