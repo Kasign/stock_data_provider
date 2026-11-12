@@ -33,7 +33,13 @@ const viewNavigation = [
 const clickNav = async (targetPage, selector) => {
   const menu = targetPage.locator("#mobile-menu-toggle");
   if (await menu.isVisible() && (await menu.getAttribute("aria-expanded")) !== "true") await menu.click();
-  await targetPage.locator(selector).click();
+  const target = targetPage.locator(selector);
+  if (!(await target.isVisible())) {
+    const group = target.locator("xpath=ancestor::div[contains(@class, 'nav-group')]");
+    const primary = group.locator(".primary-nav-link");
+    if (await primary.count()) await primary.click();
+  }
+  await target.click();
 };
 
 const contentTypes = {

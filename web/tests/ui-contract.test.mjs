@@ -2051,7 +2051,7 @@ test("mobile navigation drawer moves focus inside and traps Tab navigation", () 
 test("移动侧栏打开连接设置时关闭抽屉并进入设置中心", () => {
   assert.match(html, /class="nav-link(?: [^"]*)?"[^>]*data-view="settings"/);
   assert.match(app, /if \(nextView === "settings" && previousView !== nextView\) openSettings\(\)/);
-  assert.match(app, /button\.addEventListener\("click", \(\) => \{\s*setView\(button\.dataset\.view \|\| button\.dataset\.navDefaultView\);\s*setMobileNavigationOpen\(false, \{ restoreFocus: true \}\);/);
+  assert.match(app, /button\.addEventListener\("click", \(\) => \{\s*setView\(button\.dataset\.view \|\| button\.dataset\.navDefaultView\);[\s\S]*?if \(!expandablePrimary\) setMobileNavigationOpen\(false, \{ restoreFocus: true \}\);/);
   assert.doesNotMatch(app, /settings-dialog/);
 });
 test("numeric UI presentation rejects boolean or structured market fields", () => {
