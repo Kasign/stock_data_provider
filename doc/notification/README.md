@@ -35,7 +35,7 @@ Notification 是独立通知业务模块，负责事件接收、Subscription、T
 | Schema/Golden 资产 | 资产与测试代码已建立；当前 CI 未提供 Notification 测试执行证据 | 4 Schema、6 Golden；Validator/Golden 测试已编写。Run `43142936331` 无 Notification 专项 Job，根模块测试在 gofmt 门禁前终止；不能据此标记测试通过。生产方 Contract Test 仍需独立验收 |
 | Go Notification Domain/Application | 核心实现已建立；当前 HEAD 测试未验证 | EventEnvelope、JCS Fingerprint、EventReceiver、Subscription/DeliveryPlan、FanoutWorkItem、有界 FanoutDispatcher、DeliveryExecution 与 Attempt/Recovery 已实现；Run `43142936331` 未执行根模块测试，无 Notification 专项 Job |
 | Inbox/Subscription/DeliveryPlan/Fanout | 模块代码已建立；真实依赖待验收 | Inbox 与 FanoutWorkItem 同事务；Subscription 通过事务修订号固定快照并提供 keyset 分页；测试代码已编写。当前 CI 未提供 Notification 测试执行证据，MariaDB L3=`not_comparable` |
-| Template/Renderer | 部分实现 | 固定版本 Registry、JSON Pointer 标量 allowlist、text/HTML 渲染、HTML 自动转义、CRLF Subject 拒绝和显式资源限制已实现；生产模板内容/持久化尚未实现 |
+| Template/Renderer | 部分实现 | 固定版本 Registry、JSON Pointer 标量 allowlist、text/HTML 渲染、HTML 自动转义、CRLF Subject 拒绝和显式资源限制已实现；生产模板内容尚未提供；Template MySQL Repository 已实现，生产模板数据仍需业务确认 |
 | Channel/Dispatcher/Retry | 模块内执行链已建立；集成待完成 | DeliveryExecutionService、Attempt、Retry/Recovery 与 Unknown 对账入口已实现；真实 FanoutPlanFactory、Server Worker、身份目录和渠道 Adapter 仍待集成/L3 |
 | Repository/Migration | 模块内 Adapter 已建立；L3 未验收 | Migration v1～v6、MySQL Repository 已实现；根 Migration 注册由 Server 负责；缺少真实 `NOTIFICATION_MARIADB_TEST_DSN` 执行证据 |
 | 三生产方事件接入 | 未验收 | 仅按各生产方契约和真实测试证据逐项开放 |
