@@ -960,6 +960,66 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	if err := atomicPublisher.Execute(ctx, domain.NewsPolicyTypeSource, lockSourceRef, lockSourceV1, lockPayloadV1); err != nil {
 		t.Fatalf("publish source ingest lock policy: %v", err)
 	}
+
+	lockEndpointRef := "news-it-source-ingest-endpoint-with-policy"
+	lockEndpointVersion := "news-it-source-ingest-endpoint-v1"
+	endpointRetention := time.Hour
+	endpointPayload, err := json.Marshal(domain.EndpointPolicy{
+		Status: domain.AuthorizationApproved,
+		AllowedAccessMethods: []domain.AccessMethod{domain.AccessRSS},
+		AllowedPurposes: []domain.Purpose{domain.PurposeInternalPersonalResearch},
+		AllowedContentKinds: []domain.ContentKind{domain.ContentMetadata},
+		AllowedStorageModes: []domain.StorageMode{domain.StoragePersistentMetadata},
+		MaxRetention: &endpointRetention, EvidenceRef: "news-it-endpoint-ingest-evidence",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := atomicPublisher.Execute(ctx, domain.NewsPolicyTypeEndpoint, lockEndpointRef, lockEndpointVersion, endpointPayload); err != nil {
+		t.Fatalf("publish endpoint ingest policy: %v", err)
+	}
+	lockProviderRef := "news-it-source-ingest-provider-output"
+	lockProviderVersion := "news-it-source-ingest-provider-v1"
+	providerPayload, err := json.Marshal(domain.ProviderOutputPolicy{
+		Status: domain.AuthorizationApproved,
+		AllowedPurposes: []domain.Purpose{domain.PurposeInternalPersonalResearch},
+		AllowedContentKinds: []domain.ContentKind{domain.ContentMetadata},
+		AllowRequestProcessing: true,
+		MaxRequestRetention: time.Hour,
+		AllowedStorageModes: []domain.StorageMode{domain.StoragePersistentMetadata},
+		MaxPersistenceRetention: time.Hour,
+		EvidenceRef: "news-it-provider-output-ingest-evidence",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := atomicPublisher.Execute(ctx, domain.NewsPolicyTypeProviderOutput, lockProviderRef, lockProviderVersion, providerPayload); err != nil {
+		t.Fatalf("publish provider output ingest policy: %v", err)
+	}
+	var loadedSource domain.SourcePolicy
+	var loadedEndpoint *domain.EndpointPolicy
+	var loadedProvider *domain.ProviderOutputPolicy
+	if err := repository.WithinIdentityTransaction(ctx, func(tx app.IdentityTransaction) error {
+		policyTx, ok := tx.(app.CurrentIngestPolicyIdentityTransaction)
+		if !ok {
+			return errors.New("identity transaction lacks current ingest policy lock")
+		}
+		var loadErr error
+		loadedSource, loadedEndpoint, loadedProvider, loadErr = policyTx.LockCurrentIngestPolicies(
+			ctx, lockSourceRef, lockSourceV1,
+			lockEndpointRef, lockEndpointVersion,
+			lockProviderRef, lockProviderVersion,
+		)
+		return loadErr
+	}); err != nil {
+		t.Fatalf("load complete current ingest policy set: %v", err)
+	}
+	if loadedSource.EvidenceRef != "news-it-source-ingest-lock-evidence" ||
+		loadedEndpoint == nil || loadedEndpoint.EvidenceRef != "news-it-endpoint-ingest-evidence" ||
+		loadedProvider == nil || loadedProvider.EvidenceRef != "news-it-provider-output-ingest-evidence" {
+		t.Fatalf("incomplete current ingest policy set: source=%+v endpoint=%+v provider=%+v",
+			loadedSource, loadedEndpoint, loadedProvider)
+	}
 	lockPayloadV2, err := json.Marshal(domain.SourcePolicy{
 		Status:               domain.AuthorizationRevoked,
 		AllowedAccessMethods: []domain.AccessMethod{domain.AccessRSS},
