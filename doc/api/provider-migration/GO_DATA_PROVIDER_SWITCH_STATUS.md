@@ -282,3 +282,13 @@
 - 本轮没有把第三方历史行情展示页的数值冒充 Provider 原始响应；也没有将静态字段映射审查结果标为真实数据验收通过。此前外部展示页基准仍维持：OHLC 可作参考；成交量精确值及成交额精确值为 `not_comparable`。
 - 本轮未修改 Provider 代码，未运行构建、测试或 CI。当前环境没有成功取得真实 Provider 响应，故没有可供 Raw → Normalized 差分的新增数据证据。
 - 下一步仍在同一固定样本下推进真实响应采集：优先在可访问这些 Provider 的运行环境中，通过实际 Adapter 请求链路留存脱敏请求参数、HTTP 状态/响应头和原始响应体；若本地运行环境具备网络但受限于 DNS/代理，应先解决出站网络可达性，再执行同样本采集。取得响应后再逐项核对成交量、成交额字段与单位，不提前改换算逻辑。
+
+
+### 2026-11-12：Tushare 财务权限错误语义真实复验
+
+- 基线 SHA：`6d722802073ac2b0c587986d50ec56cf325f505a`。
+- Live Provider Probe Run：`43204747697`，外层 workflow success；读取 Job 日志确认 Tushare 9 项能力均为 `permission_required`，其中 Fundamentals 明确保留 `fina_indicator`、`code=40203`，Valuations 因 `trade_cal` 权限不足标记为 `permission_required`。
+- 本次确认 P0-79 修复已通过真实 Tushare 请求路径复验，原先 Fundamentals 被错误折叠为普通无数据并标记 failed 的问题已纠正。
+- 不将权限不足解释为无数据、Provider 不可用或业务能力通过；没有拿到财务/估值真实字段样本。
+- Go Test Suite Run：`43204829838` success。Market Data gofmt/unit/race/vet 和 MariaDB PIT / DailyBar fallback / PIT revision fallback / Probe HTTP + MariaDB E2E 均 success；Compose/Docker build、Market Data module migration Job skipped。
+- 后续 D-3 继续核验 Hithink 估值分母与报告期口径、估值 PIT 时间证据；Tushare 仅在账号权限变化后重试。

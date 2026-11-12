@@ -1145,3 +1145,13 @@ Go suite 覆盖根模块、go-core、market-data 的格式/测试/race/vet、Mar
 - Pytdx ref date 现在有明确算法锚点和真实数据证据，元数据完整性改善。
 - 这不会改变 Pytdx 与 BaoStock 的原生复权算法差异；比较器仍要求 method/ref date 同时一致，不会因此把两边 adjusted OHLC 判为 matched。
 - BaoStock、Eastmoney、Tencent 和 Tushare hfq 的 ref date 仍按 section 63 所列状态处理，不补猜测值。
+
+
+## 65. 2026-11-12 Tushare 财务权限错误语义真实复验
+
+- 对应分支 HEAD：`6d722802073ac2b0c587986d50ec56cf325f505a`。
+- Live Provider Probe Run：`43204747697`，Job `131136953754` success。日志中的 Tushare 9 项能力全部为 `permission_required`，无权限错误没有再被归类为普通 failed。
+- Fundamentals 明确保留 `fina_indicator` 与 `code=40203`；Valuations 因 `trade_cal` 权限不足而无法选取估值交易日，分类为 `permission_required`。
+- Go Test Suite Run：`43204829838` success。Market Data gofmt/unit/race/vet、MariaDB Migration/PIT、DailyBar fallback、PIT revision fallback、Probe HTTP + MariaDB E2E 均 success；Compose/Docker build 和 Market Data module migration Job skipped。
+- 结论：P0-79 权限错误语义修复获得真实请求路径复验。Tushare 相关数据仍不可用，不构成 Fundamentals / Valuations 真实字段验收；未取得新增估值样本。
+- 下一步：继续 D-3 的 Hithink 估值口径与 PIT 证据核验；Tushare 权限未变化前不重复请求，Freshness 与跨源可比性门禁保持不变。
