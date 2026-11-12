@@ -24,12 +24,12 @@ const (
 )
 
 var (
-	ErrInvalidGetResultRequest = errors.New("invalid quant get-result request")
-	ErrResultUnavailable       = errors.New("quant result unavailable")
-	ErrInvalidAuthorization    = errors.New("quant authorization proof is invalid")
-	ErrInvalidStoredRecord     = errors.New("quant stored result is invalid")
-	ErrAuditUnavailable        = errors.New("quant result access audit unavailable")
-	ErrAccessDenied            = errors.New("quant result access denied")
+	ErrInvalidGetResultRequest  = errors.New("invalid quant get-result request")
+	ErrResultUnavailable        = errors.New("quant result unavailable")
+	ErrInvalidAuthorization     = errors.New("quant authorization proof is invalid")
+	ErrInvalidStoredRecord      = errors.New("quant stored result is invalid")
+	ErrAuditUnavailable         = errors.New("quant result access audit unavailable")
+	ErrAccessDenied             = errors.New("quant result access denied")
 	ErrAuthorizationUnavailable = errors.New("quant authorization unavailable")
 )
 
@@ -115,6 +115,7 @@ type PolicySnapshot struct {
 	SnapshotRef   string          `json:"snapshot_ref"`
 	Policies      []PolicyVersion `json:"policies"`
 }
+
 // UnmarshalJSON 拒绝策略快照中的未知字段，避免忽略额外策略元数据。
 func (snapshot *PolicySnapshot) UnmarshalJSON(data []byte) error {
 	type policySnapshotAlias PolicySnapshot
