@@ -149,6 +149,12 @@ jobs:
           MARKET_DATA_TEST_MYSQL_DSN: "root:market-data-ci@tcp(127.0.0.1:3306)/market_data_probe?parseTime=true&loc=UTC"
           MARKET_DATA_TUSHARE_TOKEN: ${{ secrets.TUSHARE_TOKEN }}
         run: go test -run TestLiveHistoricalProviderProbe -count=1 -v ./internal/marketdata/service
+      - name: Probe BaoStock trade-status fields on official suspension window
+        if: always() && github.event_name == 'push' && contains(github.event.head_commit.message, '[baostock_trade_status_live]')
+        env:
+          MARKET_DATA_LIVE_BAOSTOCK_TRADE_STATUS_TESTS: "1"
+        continue-on-error: true
+        run: go test -run '^TestLiveBaoStockTradeStatusOnOfficialSuspensionWindow$' -count=1 -v ./internal/marketdata/provider
       - name: Probe BaoStock historical adjustment-factor consistency
         if: always() && github.event_name == 'push' && contains(github.event.head_commit.message, '[historical_baostock_factors]')
         env:
