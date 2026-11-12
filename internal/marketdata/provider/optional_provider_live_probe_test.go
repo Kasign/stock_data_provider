@@ -527,14 +527,14 @@ func TestLiveHithinkCapabilities(t *testing.T) {
 				"symbol": value.Symbol, "code": value.Code, "name": value.Name,
 				"pe_ttm": value.PETTM, "pe_mrq": value.PEMRQ, "pe_static": value.PEStatic,
 				"pb_mrq": value.PBMRQ, "ps_ttm": value.PSTTM, "pcf_ttm": value.PCFTTM,
-				"turnover_rate_percent": value.TurnoverRatePercent,
+				"turnover_rate_percent":       value.TurnoverRatePercent,
 				"float_turnover_rate_percent": value.FloatTurnoverRatePercent,
-				"volume_ratio": value.VolumeRatio,
-				"dividend_yield_percent": value.DividendYieldPercent,
-				"dividend_yield_ttm_percent": value.DividendYieldTTMPercent,
-				"source": value.Source, "source_version": value.SourceVersion,
-				"fetched_at": value.FetchedAt, "quality_status": value.QualityStatus,
-				"quality_reasons": value.QualityReasons,
+				"volume_ratio":                value.VolumeRatio,
+				"dividend_yield_percent":      value.DividendYieldPercent,
+				"dividend_yield_ttm_percent":  value.DividendYieldTTMPercent,
+				"source":                      value.Source, "source_version": value.SourceVersion,
+				"fetched_at":                  value.FetchedAt, "quality_status": value.QualityStatus,
+				"quality_reasons":             value.QualityReasons,
 			})
 		}
 		detailsByCapability["valuations"] = map[string]any{
@@ -668,14 +668,35 @@ func TestLiveHithinkCapabilities(t *testing.T) {
 				"quality_status": section.QualityStatus, "quality_reasons": section.QualityReasons,
 			})
 		}
+		statementPublicationDates := make(map[string]string, 3)
+		publicationDateMismatch := false
+		for _, section := range item.Sections {
+			switch section.Category {
+			case "income_statement", "balance_sheet", "cash_flow_statement":
+				statementPublicationDates[section.Category] = section.PublicationDate
+				if section.PublicationDate != "2026-04-17" {
+					publicationDateMismatch = true
+				}
+			}
+		}
+		notes := append([]string(nil), item.QualityReasons...)
+		if publicationDateMismatch {
+			notes = append(notes, "official_2025_annual_report_publication_date_mismatch")
+		}
 		detailsByCapability["fundamentals"] = map[string]any{
 			"symbol": item.Symbol, "year": item.Year, "quarter": item.Quarter,
 			"source": item.Source, "source_version": item.SourceVersion, "fetched_at": item.FetchedAt,
 			"system_observed_at": item.SystemObservedAt, "has_data": item.HasData,
 			"quality_status": item.QualityStatus, "quality_reasons": item.QualityReasons,
+			"publication_date_evidence": map[string]any{
+				"expected": "2026-04-17",
+				"observed": statementPublicationDates,
+				"status": map[bool]string{true: "mismatch", false: "matched"}[publicationDateMismatch],
+				"basis": "贵州茅台 2025 年年度报告官方披露日期",
+			},
 			"sections": sections,
 		}
-		return len(item.Sections), item.QualityStatus, item.QualityReasons, nil
+		return len(item.Sections), item.QualityStatus, notes, nil
 	})
 	logOptionalProviderProbe(t, results, failures)
 }
