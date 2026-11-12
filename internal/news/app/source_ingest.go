@@ -57,7 +57,8 @@ func (u *IngestCollectedSource) Execute(ctx context.Context, request IngestColle
 	endpointID := strings.TrimSpace(result.EndpointID)
 	prefix := strings.TrimSpace(request.IdempotencyPrefix)
 	if sourceID == "" || endpointID == "" || prefix == "" ||
-		request.Purpose == "" || request.Retention <= 0 ||
+		request.Purpose == "" || result.CollectionPurpose == "" ||
+		request.Purpose != result.CollectionPurpose || request.Retention <= 0 ||
 		result.PolicyEvaluatedAt.IsZero() || strings.TrimSpace(result.SourcePolicyVersionID) == "" ||
 		!result.hasValidCollectionSeal() {
 		return nil, ErrInvalidRequest

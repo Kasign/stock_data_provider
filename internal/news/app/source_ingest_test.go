@@ -28,6 +28,7 @@ func sourcePersistenceRegistration() SourceEndpointRegistration {
 
 func sealedCollectedSourceResult() CollectSourceResult {
 	result := CollectSourceResult{
+		CollectionPurpose:     domain.PurposeInternalPersonalResearch,
 		SourceID:              "source-feed",
 		EndpointID:            "endpoint-feed",
 		SourcePolicyVersionID: "source-policy-v3",
@@ -73,6 +74,32 @@ func TestIngestCollectedSourceRechecksVersionAndMetadataPersistencePolicy(t *tes
 	}
 	if repository.observations[0].SourcePolicyVersionID != "source-policy-v3" {
 		t.Fatalf("policy trace mismatch: %+v", repository.observations[0])
+	}
+}
+
+func TestIngestCollectedSourceRejectsPurposeRelabeling(t *testing.T) {
+	registration := sourcePersistenceRegistration()
+	registration.SourcePolicy.AllowedPurposes = []domain.Purpose{
+		domain.PurposeInternalPersonalResearch,
+		domain.PurposePublicDisplay,
+	}
+	repository := &memoryIdentityRepository{}
+	ingest := newCandidateIngest(repository, func() string { return "must-not-persist" })
+	usecase, err := NewIngestCollectedSource(ingest.repository, ingest.newID, providerIngestCatalogStub{registration: registration})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	result := sealedCollectedSourceResult()
+	_, err = usecase.Execute(context.Background(), IngestCollectedSourceRequest{
+		Collection: result, IdempotencyPrefix: "collection-purpose-relabel",
+		Purpose: domain.PurposePublicDisplay, Retention: time.Hour,
+	})
+	if !errors.Is(err, ErrInvalidRequest) {
+		t.Fatalf("purpose relabeling error=%v, want ErrInvalidRequest", err)
+	}
+	if len(repository.observations) != 0 || len(repository.items) != 0 {
+		t.Fatalf("purpose relabeling persisted data: %+v", repository)
 	}
 }
 
