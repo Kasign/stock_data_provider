@@ -1,12 +1,64 @@
 # WebUI 功能提测与集中验收清单
 
-更新日期：2026-11-11
-历史验收分支：`feat/webui-market-data-console`（HEAD `917b30dddae41e40d0656a38560940b5b40a3e16` 已并入 integration 历史）。当前聚合基线：`integration` HEAD `92f91663426b266647a0a56e3a6dd63bc4c0fbfa`。
-验收策略：先完成页面和接口闭环开发，再集中进行一次完整浏览器验收；开发期间不反复进行零碎浏览器检查。
+更新时间：2026-11-12  
+当前代码核对基线：feat/webui-market-data-console @ 7f1b8510d349b9d166b6efceddee874ddb7703c0  
+W1-C 提交 `7f1b8510d349b9d166b6efceddee874ddb7703c0` 的 WebUI Checks（43160148859）和 Chromium Browser Smoke（43160149003）通过；后续 W1-D 提交 `82460cad6668c34ff6fde103efc28815ee21a02d` 的 WebUI Checks（43160974526）和 Chromium Browser Smoke（43160974640，attempt 2）通过。浏览器结果仅证明对应 SHA 的前端行为与指定视口，不代表真实 API/生产部署验收。
 
-> 本文只记录验收项与测试证据；总体任务顺序和当前进度统一以 [WebUI 整体规划](./Web整体规划.md) 为准。文中历史“后续开发顺序”仅作当时决策记录，不再作为当前排期。
+> 本文保留历史功能验收证据。历史 CI/Browser Smoke 只对其记录的 SHA 有效，不自动代表当前 HEAD 或 integration 最新提交通过。总体任务顺序、当前状态和下一步统一以《WebUI 整体规划》为准。
+>
+> 2026-11-12 起的跨模块验收新增强制维度：真实 Root Server 路由、Session/CSRF/资源授权、Evidence 来源与授权、PIT 时间语义、Quant RiskDecision 硬门禁、Researchflow Run/Stage/Attempt 状态所有权、LLM 流式输出与 Run 终态分离、Notification 实际投递状态。没有真实服务端/部署证据时，Mock 仅作为前端行为测试。
 
-> 本清单中所有 Browser Smoke、WebUI Checks 和人工验收结果均绑定其记录的历史 SHA。由于当前 integration HEAD 尚未在本清单中完成对应复验，不得将历史通过结果直接作为当前聚合基线的验收结论。
+## 0. 当前验收基线与证据等级
+
+| 等级 | 验收内容 | 可证明 | 不能证明 |
+|---|---|---|---|
+| L0 静态 | JS 语法、格式、静态契约、CSS AST | 源码结构和静态约束 | 运行时/API 可用 |
+| L1 单元 | 领域纯函数、状态映射、输入校验 | 模块逻辑 | 浏览器完整交互 |
+| L2 浏览器 | Chromium Browser Smoke、响应式、跨标签页 | 前端交互和请求编排（通常使用 Mock） | 真实 Provider/服务端数据 |
+| L3 契约 | Web 请求与真实 Handler/DTO 对照 | API 形状和路由契约 | 生产环境可达/上游可用 |
+| L4 部署/真实数据 | Root Server、认证、真实 Provider、DB 持久化 | 指定环境中的端到端能力 | 未覆盖环境或其他 SHA 的结果 |
+
+本轮只更新文档，不执行代码构建、Browser Smoke 或真实 API 验收。
+
+## 0.1 跨模块研究闭环验收矩阵
+
+| 验收域 | 必须核对 | 阻断条件 |
+|---|---|---|
+| Server/API | Root 路由注册、方法/路径、DTO、错误映射、分页/取消/幂等 | 仅有 OpenAPI 或 ApplicationPort、无真实 Handler |
+| 认证授权 | Session/Cookie、CSRF、登录限流、资源授权、可信代理 | 要求浏览器保存 Owner Token/服务端密钥，或匿名访问受保护资源 |
+| News/Research Evidence | 来源、授权、引用定位、事件时间、可用时间、采集时间 | 证据来源/授权/时间不可追溯 |
+| PIT | as-of 时间、数据可用时间、数据版本/快照身份 | 将当前可见数据冒充历史时点可用数据 |
+| Quant | DTO、数据口径、风险结果、回测/评估版本 | RiskDecision=block 被评分或 LLM 解释覆盖 |
+| Researchflow | Run/Stage/Attempt 状态、重试/取消、终态、事件顺序 | Web/LLM 自行推断或覆盖任务终态 |
+| LLM | 模型调用、结构化输出校验、错误与流式生命周期 | 将流式结束当作 Run 成功 |
+| Notification | 订阅、渠道、发送尝试、重试和最终投递状态 | 仅 UI 显示“已发送”但无服务端投递证据 |
+| 本地数据 | localStorage 范围、跨标签冲突、写入回读、失败恢复 | 将本地记录显示为服务端历史或跨设备同步 |
+
+## 0.2 本轮代码验收证据
+
+- [x] W1-D 提交 SHA `82460cad6668c34ff6fde103efc28815ee21a02d` 对应 WebUI Checks（43160974526）通过。
+- [x] W1-D 提交 SHA `82460cad6668c34ff6fde103efc28815ee21a02d` 对应 Chromium Browser Smoke（43160974640，attempt 2）通过。
+- [ ] 当前部署环境 Root Server 路由、Session/CSRF 与真实行情 API 可达性。
+- [ ] Data 主动诊断的真实 Provider 样例、质量/覆盖率证据及历史持久化。
+- [ ] Research/News/Quant/Researchflow/LLM/Notification 按各自真实 API 完成后逐模块加入验收矩阵。
+
+> 下文未勾选的历史条目是其所属日期/批次的验收记录或当时遗留项，不自动构成当前待办；当前待办以《WebUI 整体规划》为准。
+
+## 0.3 W1-C 页面职责与状态边界核对
+
+- [x] 研究中心将行情/公司资料、技术派生指标、本地研究笔记、Run 报告归档分开表达；结构化 Research Context/Evidence/Event/Claim/Hypothesis/Scenario 显示服务端待接入，不生成模拟证据。
+- [x] Run 报告归档明确为服务端 Run 结果的浏览器本地副本；任务状态、阶段事件和在线结果以任务页读取的服务端响应为准。
+- [x] 最近任务明确为最多 10 条本地引用；清理本地引用不删除服务端任务或报告。
+- [x] 跟踪中心区分本地自选、告警草稿、通知偏好与服务端告警/通知待接入能力。
+- [x] 数据中心承载服务健康、Provider 能力与诊断；设置中心承载连接及个人偏好，Provider 能力入口跳转数据中心。
+- [x] 状态映射分别保留 loading、empty、unknown、degraded、failed、unavailable 等语义；未接入不等于空集合或健康。
+- [x] 代码层检查研究表格横向滚动、窄屏研究分区导航、面板标题折行和移动端布局规则。
+- [x] 在本轮实际 SHA 的 Chromium 验收中复核研究中心、任务中心、跟踪中心在 320/375/600/768/900/1280/1600 视口下的页面切换、页面横向溢出和主要交互；Browser Smoke 运行 43160149003 通过。
+- [x] 浏览器前进/后退：验证 stocks → research → tasks 后退两次、前进两次，视图、hash 和活动导航状态一致。
+- [x] Reduced Motion：在 `prefers-reduced-motion: reduce` 上下文下断言主导航和研究分区导航的 `transition-property: none`。
+- [x] 当前 SHA 七视口浏览器验收覆盖研究中心、任务中心、跟踪中心页面切换和页面横向溢出。
+- [ ] 真实 API/生产部署验收仍待对应服务端路由、认证和部署环境具备后另行执行；当前 Mock 不代表 L3/L4 验收。
+
 
 ## 1. 本批次范围
 

@@ -86,6 +86,7 @@ try {
     await route.continue();
   });
   await page.goto(baseUrl, { waitUntil: "load", timeout: 30000 });
+  await page.locator('.nav-link[data-view="market"]').click();
   await page.locator('.nav-link[data-view="stocks"]').click();
   await page.locator("#load-market-stocks").click();
   await page.waitForFunction(() => document.querySelectorAll("#market-stocks-body tr").length === 3);
