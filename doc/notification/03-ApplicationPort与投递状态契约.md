@@ -370,7 +370,7 @@ type TemplateRenderer interface {
 
 TemplateRenderer 只接受已通过 Event Schema/Envelope 校验的事件；具体实现仍须重新验证 payload fingerprint、event/schema 精确匹配和渲染资源限制。
 
-### 8.4 NTF-003 Channel Config 与 Adapter Port
+### 8.4 Channel Config 与 Adapter Port（模块内部 SPI；NTF-CTR-003 为 not_applicable）
 
 Channel 配置是不可变版本快照，注册键为 `(channel_ref, config_version)`。同一键不得原地修改；Resolver 必须精确解析指定版本，不允许回退到 latest。
 
