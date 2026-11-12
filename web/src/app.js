@@ -5136,11 +5136,13 @@ document.querySelectorAll("[data-theme-value]").forEach((button) => {
 });
 document.querySelectorAll(".nav-link, .workspace-tab").forEach((button) => {
   button.addEventListener("click", () => {
-    setView(button.dataset.view || button.dataset.navDefaultView);
+    const group = button.closest(".nav-group");
+    const wasActivePrimary = group?.classList.contains("is-active");
     const expandablePrimary = button.classList.contains("primary-nav-link") &&
-      button.closest(".nav-group")?.querySelector(".nav-subnav");
-    // 移动端先展开一级分组，用户选择具体子页面后再关闭抽屉。
-    if (!expandablePrimary) setMobileNavigationOpen(false, { restoreFocus: true });
+      group?.querySelector(".nav-subnav");
+    setView(button.dataset.view || button.dataset.navDefaultView);
+    // 移动端首次进入分组时保留抽屉以显示子页面；再次点击当前分组或选择子页面时关闭抽屉。
+    if (!expandablePrimary || wasActivePrimary) setMobileNavigationOpen(false, { restoreFocus: true });
   });
 });
 document.querySelectorAll("[data-open-view]").forEach((button) => {
