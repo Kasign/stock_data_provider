@@ -163,6 +163,8 @@ type EvidencePITRecord struct {
 type EvidencePITRepository interface {
 	GetEvidenceVersionAt(context.Context, GetEvidenceRequest) (EvidencePITRecord, error)
 	ListEvidenceVersionsAt(context.Context, ListEvidenceRequest) ([]EvidencePITRecord, error)
+	// GetEvidenceContentAt loads the exact immutable version body only after authorization succeeds.
+	GetEvidenceContentAt(context.Context, string, string, time.Time) (domain.ContentLayers, error)
 }
 
 // ResearchEvidenceQuery is the only cross-module read port. It never searches

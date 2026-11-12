@@ -140,7 +140,7 @@ const evidencePITSelect = `SELECT
 	o.news_id, o.reason_code,
 	v.version_id, v.news_id, v.version_no, v.fingerprint, v.title,
 	v.publisher_name, v.publisher_domain, v.author, v.published_at,
-	v.content_json, v.observed_at, v.observation_id
+	v.observed_at, v.observation_id
 	FROM news_item_versions v
 	INNER JOIN news_observations o
 		ON o.observation_id = v.observation_id AND o.news_id = v.news_id`
@@ -151,7 +151,7 @@ func scanEvidencePITRecord(row rowScanner) (app.EvidencePITRecord, error) {
 	var version domain.NewsItemVersion
 	var policyAt, retentionUntil, payloadPurgedAt, publishedAt sql.NullTime
 	var newsID sql.NullString
-	var candidateJSON, contentJSON []byte
+	var candidateJSON []byte
 	var identityStatus string
 
 	err := row.Scan(
@@ -163,15 +163,12 @@ func scanEvidencePITRecord(row rowScanner) (app.EvidencePITRecord, error) {
 		&newsID, &observation.ReasonCode,
 		&version.ID, &version.NewsID, &version.VersionNo, &version.Fingerprint,
 		&version.Title, &version.PublisherName, &version.PublisherDomain, &version.Author,
-		&publishedAt, &contentJSON, &version.ObservedAt, &version.ObservationID,
+		&publishedAt, &version.ObservedAt, &version.ObservationID,
 	)
 	if err != nil {
 		return app.EvidencePITRecord{}, err
 	}
 	if err := json.Unmarshal(candidateJSON, &observation.Candidate); err != nil {
-		return app.EvidencePITRecord{}, err
-	}
-	if err := json.Unmarshal(contentJSON, &version.Content); err != nil {
 		return app.EvidencePITRecord{}, err
 	}
 	if policyAt.Valid {
@@ -205,4 +202,41 @@ func scanEvidencePITRecord(row rowScanner) (app.EvidencePITRecord, error) {
 func isEvidenceUTC(value time.Time) bool {
 	_, offset := value.Zone()
 	return offset == 0
+}
+
+
+// GetEvidenceContentAt reads the body of one exact immutable version. Callers must
+// first locate and authorize that version through the News Application facade.
+func (r *MySQLRepository) GetEvidenceContentAt(
+	ctx context.Context,
+	newsID string,
+	versionID string,
+	systemAsOf time.Time,
+) (domain.ContentLayers, error) {
+	if r == nil || r.db == nil || ctx == nil ||
+		strings.TrimSpace(newsID) == "" || newsID != strings.TrimSpace(newsID) ||
+		strings.TrimSpace(versionID) == "" || versionID != strings.TrimSpace(versionID) ||
+		systemAsOf.IsZero() || !isEvidenceUTC(systemAsOf) {
+		return domain.ContentLayers{}, app.ErrInvalidEvidenceQuery
+	}
+	var payload []byte
+	err := r.db.QueryRowContext(ctx, `SELECT v.content_json
+		FROM news_item_versions v
+		INNER JOIN news_observations o
+			ON o.observation_id = v.observation_id AND o.news_id = v.news_id
+		WHERE v.news_id = ? AND v.version_id = ?
+			AND v.observed_at <= ? AND o.observed_at <= ?`,
+		newsID, versionID, systemAsOf.UTC(), systemAsOf.UTC(),
+	).Scan(&payload)
+	if errors.Is(err, sql.ErrNoRows) {
+		return domain.ContentLayers{}, app.ErrEvidencePITNotFound
+	}
+	if err != nil {
+		return domain.ContentLayers{}, err
+	}
+	var content domain.ContentLayers
+	if err := json.Unmarshal(payload, &content); err != nil {
+		return domain.ContentLayers{}, err
+	}
+	return content, nil
 }

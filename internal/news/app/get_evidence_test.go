@@ -12,9 +12,10 @@ import (
 )
 
 type getEvidencePITRepositoryStub struct {
-	record    EvidencePITRecord
-	err       error
-	afterRead func()
+	record          EvidencePITRecord
+	err             error
+	afterRead       func()
+	afterContentRead func()
 }
 
 func (s getEvidencePITRepositoryStub) GetEvidenceVersionAt(context.Context, GetEvidenceRequest) (EvidencePITRecord, error) {
@@ -26,6 +27,13 @@ func (s getEvidencePITRepositoryStub) GetEvidenceVersionAt(context.Context, GetE
 
 func (s getEvidencePITRepositoryStub) ListEvidenceVersionsAt(context.Context, ListEvidenceRequest) ([]EvidencePITRecord, error) {
 	return nil, ErrInvalidEvidenceQuery
+}
+
+func (s getEvidencePITRepositoryStub) GetEvidenceContentAt(context.Context, string, string, time.Time) (domain.ContentLayers, error) {
+	if s.afterContentRead != nil {
+		s.afterContentRead()
+	}
+	return s.record.Version.Content, nil
 }
 
 type getEvidenceAuthorizationSnapshotStub struct {

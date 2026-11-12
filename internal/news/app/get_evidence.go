@@ -100,6 +100,15 @@ func (u *GetEvidence) Execute(ctx context.Context, request GetEvidenceRequest) (
 	if err := ctx.Err(); err != nil {
 		return ResearchEvidenceRecord{}, err
 	}
+	// 正文在授权复核通过后才从存储读取；元数据定位阶段不加载 content_json。
+	content, err := u.repository.GetEvidenceContentAt(ctx, pit.Version.NewsID, pit.Version.ID, request.SystemAsOf)
+	if err != nil {
+		return ResearchEvidenceRecord{}, err
+	}
+	if err := ctx.Err(); err != nil {
+		return ResearchEvidenceRecord{}, err
+	}
+	pit.Version.Content = content
 	return researchEvidenceRecordFromPIT(pit, binding, request), nil
 }
 
