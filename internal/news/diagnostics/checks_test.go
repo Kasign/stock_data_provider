@@ -516,12 +516,16 @@ func TestStorageChecksDoNotCallProbeWhenContextIsAlreadyCanceled(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
 		probe := &countingStorageProbe{}
-		report, err := (platformdiag.Runner{}).Run(ctx, StorageChecks(probe)[1:])
-		if err != nil {
-			t.Fatal(err)
+		check := StorageChecks(probe)[1]
+		if _, err := check.Run(ctx); !errors.Is(err, context.Canceled) {
+			t.Fatalf("Run error=%v, want context.Canceled", err)
 		}
 		if probe.schemaCalls != 0 {
 			t.Fatalf("MissingSchemaTables calls=%d, want 0", probe.schemaCalls)
+		}
+		report, err := (platformdiag.Runner{}).Run(ctx, []platformdiag.Check{check})
+		if err != nil {
+			t.Fatal(err)
 		}
 		if got := report.Results[0].Observation.Status; got != platformdiag.StatusUnavailable {
 			t.Fatalf("status=%s, want unavailable", got)
