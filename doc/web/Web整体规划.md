@@ -1,7 +1,7 @@
 # WebUI 整体规划
 
 更新时间：2026-11-12  
-规划基线：feat/webui-market-data-console @ d99d99de2a86425e9592e883af4fb920c00c60d1  
+规划基线：feat/webui-market-data-console @ 7f1b8510d349b9d166b6efceddee874ddb7703c0  
 范围：web/** 与 doc/web/**。
 
 > 本文是 WebUI 产品路线、任务状态、跨模块依赖和下一步安排的唯一入口。本轮先完成 W0 文档规划，不代表已经实现目标信息架构或接入新模块。
@@ -72,7 +72,7 @@ Web 负责交互、请求编排、状态展示和有限的浏览器本地工作�
 | 阶段 | 目标 | 主要任务 | 依赖/完成条件 | 状态 |
 |---|---|---|---|---|
 | W0 | 产品规划和文档基线 | 统一目标 IA；梳理页面与服务能力；清理过期排期/路径/状态；更新 API、架构、诊断和验收边界 | 文档内部链接、事实、基线和 Git diff 复核 | 已完成 |
-| W1 | 现有工作台收口 | 目标导航映射；明确研究对象/过程/结果/跟踪边界；页面状态和响应式体验收口；认证迁移准备 | 不新增业务 API；不假设 Session 已上线 | W1-A/W1-B/W1-C 已完成代码与文档；W1-D 待当前 SHA 复验及专项补验 |
+| W1 | 现有工作台收口 | 目标导航映射；明确研究对象/过程/结果/跟踪边界；页面状态和响应式体验收口；认证迁移准备 | 不新增业务 API；不假设 Session 已上线 | W1-A/W1-B/W1-C 已完成；W1-C 当前 SHA 的 CI/浏览器视口验收通过，W1-D 仍有浏览器前进/后退专项待补验 |
 | W2 | 研究任务工作区升级 | 真实模板、Run/Stage/Attempt、执行进度、取消、服务端历史分页、结果综合和历史回看 | Researchflow Application Facade、Server 路由、权限及分页/取消契约可用 | 等待依赖 |
 | W3 | 研究中心与量化研究 | Research Evidence/Context/Event/Claim/Hypothesis/Scenario；Quant 指标/因子/趋势/策略/回测/风险 | Research、News Evidence Query、Quant DTO/API、PIT/质量/风险契约及 Server 注册可用 | 等待依赖 |
 | W4 | 跟踪与通知 | 服务端订阅、通知渠道、投递状态、告警规则/触发历史 | Notification API 和告警领域归属评审完成 | 等待依赖 |
@@ -97,7 +97,8 @@ Web 负责交互、请求编排、状态展示和有限的浏览器本地工作�
 - [x] W1-D：WebUI Checks 与 Chromium Browser Smoke 在 SHA 3845bdc50a52121d6d875b6071f85217ef3d86e1 通过；覆盖七入口、hash 直达/刷新、响应式断点和既有主要交互验收。
 - [ ] W1-D：浏览器前进/后退与 reduced-motion 专项仍待补验。
 - [x] W1-C：研究中心明确结构化 Evidence 等 Research 服务端能力待接入；区分行情资料、本地笔记和 Run 结果副本；核对任务引用、跟踪本地数据及数据中心/设置职责边界。
-- [ ] W1-D：对本次 W1-C 提交的实际 SHA 执行 CI、浏览器和响应式验收；补齐浏览器前进/后退与 reduced-motion 专项。
+- [x] W1-D：W1-C 提交 SHA `7f1b8510d349b9d166b6efceddee874ddb7703c0` 的 WebUI Checks（43160148859）和 Chromium Browser Smoke（43160149003）通过，覆盖 320/375/600/768/900/1280/1600px。
+- [ ] W1-D：补齐浏览器前进/后退专项；Reduced Motion 测试上下文已启用 `reduce`，仍需核验具体动效行为。
 
 ### 后续执行门禁
 
@@ -128,4 +129,4 @@ Web 负责交互、请求编排、状态展示和有限的浏览器本地工作�
 
 ## 9. 本轮执行记录
 
-2026-11-12：W0/W1-A/W1-B 已完成；历史验收 SHA 3845bdc50a52121d6d875b6071f85217ef3d86e1 的 WebUI Checks（43154904745）与 Chromium Browser Smoke（43154904775）通过。以 d99d99de2a86425e9592e883af4fb920c00c60d1 为 W1-C 核对基线，完成研究中心结构化证据待接入边界、Run 报告本地副本说明及相关职责/状态文档收口。本次代码变更后的验收须绑定新 SHA；W1-D 的前进/后退和 reduced-motion 专项仍待补验。
+2026-11-12：W0/W1-A/W1-B/W1-C 已完成。W1-C 提交 `7f1b8510d349b9d166b6efceddee874ddb7703c0` 的 WebUI Checks（43160148859）和 Chromium Browser Smoke（43160149003）通过，覆盖七个视口和现有主要页面交互；W1-D 仅剩浏览器前进/后退及 Reduced Motion 具体动效专项。

@@ -1,8 +1,8 @@
 # WebUI 功能提测与集中验收清单
 
 更新时间：2026-11-12  
-当前代码核对基线：feat/webui-market-data-console @ d99d99de2a86425e9592e883af4fb920c00c60d1  
-本轮 W1-C 修改后的提交 SHA 尚待 WebUI Checks / Chromium Browser Smoke 验收；历史 SHA 的通过记录不替代本轮结果。
+当前代码核对基线：feat/webui-market-data-console @ 7f1b8510d349b9d166b6efceddee874ddb7703c0  
+W1-C 提交 `7f1b8510d349b9d166b6efceddee874ddb7703c0` 的 WebUI Checks（43160148859）和 Chromium Browser Smoke（43160149003）均通过；浏览器结果仅证明该 SHA 的前端行为与指定视口，不代表真实 API/生产部署验收。
 
 > 本文保留历史功能验收证据。历史 CI/Browser Smoke 只对其记录的 SHA 有效，不自动代表当前 HEAD 或 integration 最新提交通过。总体任务顺序、当前状态和下一步统一以《WebUI 整体规划》为准。
 >
@@ -36,8 +36,8 @@
 
 ## 0.2 当前 HEAD 待验收项
 
-- [ ] W1-C 修改后的实际提交 SHA 对应 WebUI Checks。
-- [ ] W1-C 修改后的实际提交 SHA 对应 Chromium Browser Smoke。
+- [x] W1-C 提交 SHA `7f1b8510d349b9d166b6efceddee874ddb7703c0` 对应 WebUI Checks（43160148859）通过。
+- [x] W1-C 提交 SHA `7f1b8510d349b9d166b6efceddee874ddb7703c0` 对应 Chromium Browser Smoke（43160149003）通过。
 - [ ] 当前部署环境 Root Server 路由、Session/CSRF 与真实行情 API 可达性。
 - [ ] Data 主动诊断的真实 Provider 样例、质量/覆盖率证据及历史持久化。
 - [ ] Research/News/Quant/Researchflow/LLM/Notification 按各自真实 API 完成后逐模块加入验收矩阵。
@@ -53,7 +53,8 @@
 - [x] 数据中心承载服务健康、Provider 能力与诊断；设置中心承载连接及个人偏好，Provider 能力入口跳转数据中心。
 - [x] 状态映射分别保留 loading、empty、unknown、degraded、failed、unavailable 等语义；未接入不等于空集合或健康。
 - [x] 代码层检查研究表格横向滚动、窄屏研究分区导航、面板标题折行和移动端布局规则。
-- [ ] 在本轮实际 SHA 的 Chromium 验收中复核研究中心、任务中心、跟踪中心在 320/375/600/768/900/1280/1600 视口下的内容密度、滚动和溢出。
+- [x] 在本轮实际 SHA 的 Chromium 验收中复核研究中心、任务中心、跟踪中心在 320/375/600/768/900/1280/1600 视口下的页面切换、页面横向溢出和主要交互；Browser Smoke 运行 43160149003 通过。
+- [ ] 单独补验浏览器前进/后退与 Reduced Motion 具体动效行为；当前 Browser Smoke 以 `reducedMotion: "reduce"` 创建浏览器上下文，但没有覆盖完整动效断言。
 
 
 ## 1. 本批次范围

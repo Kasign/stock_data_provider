@@ -1,7 +1,7 @@
 # WebUI 功能与页面说明
 
 更新日期：2026-11-12  
-核对基线：feat/webui-market-data-console @ d99d99de2a86425e9592e883af4fb920c00c60d1  
+核对基线：feat/webui-market-data-console @ 7f1b8510d349b9d166b6efceddee874ddb7703c0  
 技术栈：原生 HTML、CSS、JavaScript ES Modules；不使用 React。
 
 > 本文记录页面功能事实和目标信息架构。总体路线、优先级和进度只维护在《WebUI 整体规划》。

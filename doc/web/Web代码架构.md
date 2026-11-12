@@ -1,7 +1,7 @@
 # Web 代码架构
 
 更新时间：2026-11-12  
-核对基线：feat/webui-market-data-console @ d99d99de2a86425e9592e883af4fb920c00c60d1
+核对基线：feat/webui-market-data-console @ 7f1b8510d349b9d166b6efceddee874ddb7703c0
 
 > 本文描述当前前端架构事实和目标职责边界，不维护任务排期。
 

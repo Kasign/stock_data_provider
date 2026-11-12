@@ -1,7 +1,7 @@
 # WebUI 真实 API 与配置边界
 
 更新时间：2026-11-12  
-核对基线：feat/webui-market-data-console @ d99d99de2a86425e9592e883af4fb920c00c60d1
+核对基线：feat/webui-market-data-console @ 7f1b8510d349b9d166b6efceddee874ddb7703c0
 
 > 本文只记录当前请求封装、仓库可核对的路由事实和接入门禁。必须区分 OpenAPI 声明、Handler 注册、Root Server 挂载、部署可达和真实数据验收。
 
