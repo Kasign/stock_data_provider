@@ -292,3 +292,11 @@
 - 不将权限不足解释为无数据、Provider 不可用或业务能力通过；没有拿到财务/估值真实字段样本。
 - Go Test Suite Run：`43204829838` success。Market Data gofmt/unit/race/vet 和 MariaDB PIT / DailyBar fallback / PIT revision fallback / Probe HTTP + MariaDB E2E 均 success；Compose/Docker build、Market Data module migration Job skipped。
 - 后续 D-3 继续核验 Hithink 估值分母与报告期口径、估值 PIT 时间证据；Tushare 仅在账号权限变化后重试。
+
+
+### 2026-11-12：Hithink 估值字段口径与 PIT 边界复核
+
+- `FetchValuations` 已映射五项指标，已对快照级 timestamp、缺失报告日期、缺失/非法指标和请求覆盖执行结构化诊断；不重复实现。
+- PIT 查询已要求系统观察时间、快照采集时间、每个证券项采集时间不晚于 cutoff；存在 ProviderTimestamp / ProviderReportDate 时也检查截止边界。只读取历史版本并保留 degraded，不将其升级为 valid。
+- 同花顺公开估值表文档提供 PE_MRQ、PE_TTM、PB、PS_TTM 的表级公式，但未证明 HTTP `/api/a-share/valuations/snapshot` 的字段映射与该表完全一致。PCF TTM 还存在经营现金流与现金净流量两种不同分母，当前 `pcf_ttm` 没有 endpoint 专属映射证据。
+- 结论：不修改 Provider 映射、PIT 算法或 DTO；估值 Freshness 保持 unknown，PCF_TTM 及未被 endpoint 字典证明的口径保持 not_comparable。后续需取得该 endpoint 的正式字段字典或同一时点可复核原始样本，不能用通用行业公式代替供应商字段证据。
