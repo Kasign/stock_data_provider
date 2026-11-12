@@ -11,6 +11,12 @@ import (
 	"example.com/stock-analysis-flow/internal/news/domain"
 )
 
+// SourcePolicyIdentityTransaction 在 Identity 写事务内锁定并读取当前 Source/Endpoint 策略版本。
+// 生产实现必须使用与 Observation 写入相同的数据库事务。
+type SourcePolicyIdentityTransaction interface {
+	LockCurrentSourcePolicies(context.Context, string, string, string, string) (domain.SourcePolicy, *domain.EndpointPolicy, error)
+}
+
 var (
 	ErrSourcePersistencePolicyUnavailable = errors.New("news: source persistence policy unavailable")
 	ErrSourcePersistencePolicyDenied      = errors.New("news: source persistence policy denied")
@@ -90,12 +96,6 @@ func (u *IngestCollectedSource) Execute(ctx context.Context, request IngestColle
 		StorageMode:  domain.StoragePersistentMetadata,
 		Retention:    request.Retention,
 	}
-	decision := domain.EvaluateSourceCollectionPolicy(
-		registration.SourcePolicy, registration.EndpointPolicy, policyRequest, now,
-	)
-	if !decision.Allowed {
-		return nil, errors.Join(ErrSourcePersistencePolicyDenied, errors.New(decision.ReasonCode))
-	}
 
 	trace := ObservationPolicyTrace{
 		SourcePolicyVersionID: result.SourcePolicyVersionID,
@@ -127,8 +127,25 @@ func (u *IngestCollectedSource) Execute(ctx context.Context, request IngestColle
 				candidate.Title + "\x00" + candidate.PublishedAtRaw,
 		))
 		idempotencyKey := prefix + "/" + hex.EncodeToString(fingerprint[:])
-		observation, ingestErr := u.ingest.executeWithPolicyTrace(
+		observation, ingestErr := u.ingest.executeWithPolicyTraceAndCheck(
 			ctx, sourceID, idempotencyKey, candidate, registration.URLPolicy, trace,
+			func(tx IdentityTransaction) error {
+				policyTx, ok := tx.(SourcePolicyIdentityTransaction)
+				if !ok {
+					return ErrSourcePersistencePolicyUnavailable
+				}
+				sourcePolicy, endpointPolicy, policyErr := policyTx.LockCurrentSourcePolicies(
+					ctx, sourceID, result.SourcePolicyVersionID, endpointID, result.EndpointPolicyVersionID,
+				)
+				if policyErr != nil {
+					return errors.Join(ErrSourcePersistencePolicyUnavailable, policyErr)
+				}
+				decision := domain.EvaluateSourceCollectionPolicy(sourcePolicy, endpointPolicy, policyRequest, u.now().UTC())
+				if !decision.Allowed {
+					return errors.Join(ErrSourcePersistencePolicyDenied, errors.New(decision.ReasonCode))
+				}
+				return nil
+			},
 		)
 		if ingestErr != nil {
 			return nil, ingestErr

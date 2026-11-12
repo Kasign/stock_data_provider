@@ -10,10 +10,14 @@ import (
 )
 
 type memoryIdentityRepository struct {
-	credentials  []domain.IdentityCredential
-	observations []domain.Observation
-	items        []string
-	failAppend   bool
+	credentials             []domain.IdentityCredential
+	observations            []domain.Observation
+	items                   []string
+	failAppend              bool
+	sourcePolicy            domain.SourcePolicy
+	sourcePolicyVersionID   string
+	endpointPolicy          *domain.EndpointPolicy
+	endpointPolicyVersionID string
 }
 
 type memoryIdentityTransaction struct {
@@ -33,6 +37,19 @@ func (r *memoryIdentityRepository) WithinIdentityTransaction(ctx context.Context
 	}
 	*r = working
 	return nil
+}
+
+func (tx memoryIdentityTransaction) LockCurrentSourcePolicies(
+	_ context.Context,
+	sourceID, sourceVersionID, endpointID, endpointVersionID string,
+) (domain.SourcePolicy, *domain.EndpointPolicy, error) {
+	repository := tx.repository
+	if repository == nil || sourceID == "" || endpointID == "" ||
+		repository.sourcePolicyVersionID != sourceVersionID ||
+		repository.endpointPolicyVersionID != endpointVersionID {
+		return domain.SourcePolicy{}, nil, ErrSourcePersistencePolicyUnavailable
+	}
+	return repository.sourcePolicy, repository.endpointPolicy, nil
 }
 
 func (tx memoryIdentityTransaction) FindIdentityCredentials(_ context.Context, sourceID string, candidates []domain.IdentityCredential) ([]domain.IdentityCredential, error) {
