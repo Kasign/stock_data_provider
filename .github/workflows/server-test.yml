@@ -152,6 +152,9 @@ jobs:
             -e REDIS_PASSWORD= \
             -e MIGRATION_ENABLED=true \
             -e MIGRATION_TIMEOUT=2m \
+            -e NOTIFICATION_EVENT_MAX_ENVELOPE_BYTES=1048576 \
+            -e NOTIFICATION_EVENT_MAX_PAYLOAD_BYTES=524288 \
+            -e NOTIFICATION_EVENT_MAX_JSON_DEPTH=64 \
             "$image"
 
           ready=false
