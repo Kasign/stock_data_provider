@@ -39,9 +39,10 @@ func (a *cancelAfterSendAdapter) Send(context.Context, domain.ChannelSendRequest
 }
 
 type deadlineAwareExecutionAdapter struct {
-	snapshot    domain.ChannelConfigSnapshot
-	hasDeadline bool
-	calls       int
+	snapshot      domain.ChannelConfigSnapshot
+	hasDeadline   bool
+	contextActive bool
+	calls         int
 }
 
 func (a *deadlineAwareExecutionAdapter) ConfigSnapshot() domain.ChannelConfigSnapshot {
@@ -51,6 +52,7 @@ func (a *deadlineAwareExecutionAdapter) ConfigSnapshot() domain.ChannelConfigSna
 func (a *deadlineAwareExecutionAdapter) Send(ctx context.Context, _ domain.ChannelSendRequest) (domain.ChannelSendResult, error) {
 	a.calls++
 	_, a.hasDeadline = ctx.Deadline()
+	a.contextActive = ctx.Err() == nil
 	return domain.ChannelSendResult{
 		Outcome:   domain.ChannelOutcomeAmbiguous,
 		ErrorCode: "provider_timeout",
@@ -58,9 +60,10 @@ func (a *deadlineAwareExecutionAdapter) Send(ctx context.Context, _ domain.Chann
 }
 
 type deadlineRecordingExecutionAdapter struct {
-	snapshot domain.ChannelConfigSnapshot
-	deadline time.Time
-	calls    int
+	snapshot  domain.ChannelConfigSnapshot
+	deadline  time.Time
+	remaining time.Duration
+	calls     int
 }
 
 func (a *deadlineRecordingExecutionAdapter) ConfigSnapshot() domain.ChannelConfigSnapshot {
@@ -70,6 +73,9 @@ func (a *deadlineRecordingExecutionAdapter) ConfigSnapshot() domain.ChannelConfi
 func (a *deadlineRecordingExecutionAdapter) Send(ctx context.Context, _ domain.ChannelSendRequest) (domain.ChannelSendResult, error) {
 	a.calls++
 	a.deadline, _ = ctx.Deadline()
+	if !a.deadline.IsZero() {
+		a.remaining = time.Until(a.deadline)
+	}
 	return domain.ChannelSendResult{Outcome: domain.ChannelOutcomeAmbiguous, ErrorCode: "deadline_probe"}, nil
 }
 
@@ -91,15 +97,10 @@ func executionFixture(t *testing.T) (*DeliveryExecutionService, *memoryDeliverie
 	t.Helper()
 	repository := newMemoryDeliveries()
 	delivery := validDeliveryForRepository()
-	// context.WithDeadline 使用真实系统时钟；执行测试必须使用当前时间，避免固定历史时间导致发送上下文一创建就超时。
-	now := time.Now().UTC().Truncate(time.Microsecond)
-	delivery.CreatedAt = now
-	delivery.UpdatedAt = now
-	delivery.DeadlineAt = now.Add(time.Hour)
 	event := domain.EventEnvelope{
 		EventID: delivery.EventID, EventType: "researchflow.run.terminal",
 		SchemaVersion: "1.0.0", SourceModule: delivery.SourceModule,
-		OccurredAt: now.Format(time.RFC3339Nano), PublishedAt: now.Add(time.Second).Format(time.RFC3339Nano),
+		OccurredAt: "2026-11-09T02:00:00Z", PublishedAt: "2026-11-09T02:00:01Z",
 		SubjectRef: "run:execution-1", IdempotencyKey: "event-key-1", CorrelationID: "correlation-1",
 		Payload: json.RawMessage([]byte("{\"status\":\"succeeded\"}")),
 	}
@@ -405,8 +406,8 @@ func TestDeliveryExecutionBoundsChannelCallAndPersistsTimeoutWithParentContext(t
 	if err != nil {
 		t.Fatalf("ambiguous timeout should be persisted using parent context: %v", err)
 	}
-	if !adapter.hasDeadline || adapter.calls != 1 {
-		t.Fatalf("channel call must have a bounded deadline and run once: deadline=%v calls=%d", adapter.hasDeadline, adapter.calls)
+	if !adapter.hasDeadline || adapter.calls != 1 || !adapter.contextActive {
+		t.Fatalf("channel call must have an active bounded context and run once: deadline=%v active=%v calls=%d", adapter.hasDeadline, adapter.contextActive, adapter.calls)
 	}
 	if result.ChannelResult == nil || result.ChannelResult.Outcome != domain.ChannelOutcomeAmbiguous {
 		t.Fatalf("timeout must remain ambiguous: %+v", result)
@@ -439,9 +440,11 @@ func TestDeliveryExecutionCapsAttemptDeadlineByMaxElapsed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("execute within max elapsed budget: %v", err)
 	}
-	expected := startedAt.Add(time.Second)
-	if adapter.calls != 1 || !adapter.deadline.Equal(expected) {
-		t.Fatalf("attempt deadline must be capped by first-attempt MaxElapsed: calls=%d deadline=%s expected=%s", adapter.calls, adapter.deadline, expected)
+	expectedTimeout := time.Second
+	if adapter.calls != 1 || adapter.remaining <= 0 ||
+		adapter.remaining > expectedTimeout ||
+		expectedTimeout-adapter.remaining > 100*time.Millisecond {
+		t.Fatalf("attempt timeout must be capped by first-attempt MaxElapsed: calls=%d remaining=%s expected=%s", adapter.calls, adapter.remaining, expectedTimeout)
 	}
 	if result.ChannelResult == nil || result.ChannelResult.Outcome != domain.ChannelOutcomeAmbiguous {
 		t.Fatalf("unexpected bounded execution result: %+v", result)
@@ -520,9 +523,13 @@ func TestDeliveryExecutionCapsAttemptDeadlineByLeaseExpiry(t *testing.T) {
 
 	repository.mu.Lock()
 	repository.leases[claim.Delivery.DeliveryID] = claim.Lease
-	repository.now = startedAt
+	finishedAt := startedAt.Add(100 * time.Millisecond)
+	if !finishedAt.Before(leaseExpiry) {
+		t.Fatalf("test completion must remain strictly before lease expiry: finished=%s lease_expiry=%s", finishedAt, leaseExpiry)
+	}
+	repository.now = finishedAt
 	repository.mu.Unlock()
-	service.clock.(*sequenceExecutionClock).times[1] = startedAt.Add(100 * time.Millisecond)
+	service.clock.(*sequenceExecutionClock).times[1] = finishedAt
 
 	snapshot := channelRegistryTestSnapshot()
 	snapshot.ConfigVersion = claim.Delivery.ChannelConfigVersion
@@ -540,9 +547,12 @@ func TestDeliveryExecutionCapsAttemptDeadlineByLeaseExpiry(t *testing.T) {
 	if err != nil {
 		t.Fatalf("execute within lease deadline: %v", err)
 	}
-	if adapter.calls != 1 || !adapter.deadline.Equal(leaseExpiry) {
-		t.Fatalf("attempt deadline must be capped by lease expiry: calls=%d deadline=%s expected=%s",
-			adapter.calls, adapter.deadline, leaseExpiry)
+	expectedTimeout := leaseExpiry.Sub(startedAt)
+	if adapter.calls != 1 || adapter.remaining <= 0 ||
+		adapter.remaining > expectedTimeout ||
+		expectedTimeout-adapter.remaining > 100*time.Millisecond {
+		t.Fatalf("attempt timeout must be capped by lease expiry: calls=%d remaining=%s expected=%s",
+			adapter.calls, adapter.remaining, expectedTimeout)
 	}
 }
 

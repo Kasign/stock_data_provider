@@ -318,6 +318,8 @@ func TestRetryPolicyRejectsUnverifiedUnknownRetryEvidence(t *testing.T) {
 func TestRetryPolicyRejectsUnknownLookupEvidenceOlderThanAttempt(t *testing.T) {
 	delivery, attempts, now := retryPolicyFixture(t, 1, 3)
 	delivery.Status = domain.DeliveryUnknown
+	reasonCode := "channel_outcome_ambiguous"
+	delivery.ReasonCode = &reasonCode
 	delivery.UpdatedAt = now.Add(-time.Second)
 	outcome := domain.DeliveryAttemptAmbiguous
 	attempts[0].Outcome = &outcome
