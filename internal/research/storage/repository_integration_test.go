@@ -85,7 +85,7 @@ func TestResearchEventLifecycleOutboxFailureRollsBackEventVersion(t *testing.T) 
 	}
 	t.Cleanup(func() {
 		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_notification_outbox WHERE subject_ref=?", "research-event:"+eventID)
-		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_event_versions WHERE event_id IN (?, ?, ?, ?)", eventID, derivedParentID, derivedChildID, missingDerivedID)
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_event_versions WHERE event_id IN (?, ?, ?, ?, ?, ?, ?)", eventID, derivedParentID, derivedChildID, missingDerivedID, cycleAID, cycleBID, cycleCID)
 		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_aggregate_heads WHERE aggregate_type='event' AND aggregate_id=?", eventID)
 	})
 	previous := researchevent.ResearchEvent{
@@ -296,6 +296,9 @@ func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 	derivedParentID := eventID + "-parent"
 	derivedChildID := eventID + "-child"
 	missingDerivedID := eventID + "-missing-ref"
+	cycleAID := eventID + "-cycle-a"
+	cycleBID := eventID + "-cycle-b"
+	cycleCID := eventID + "-cycle-c"
 	claimID := "claim-it-" + suffix
 	evidenceID := "evidence-it-" + suffix
 	concurrentEvidenceID := "evidence-concurrent-it-" + suffix
@@ -308,7 +311,7 @@ func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_event_versions WHERE event_id=?", eventID)
 		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_claim_versions WHERE claim_id=?", claimID)
 		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_evidence_records WHERE evidence_id IN (?, ?)", evidenceID, concurrentEvidenceID)
-		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_aggregate_heads WHERE aggregate_id IN (?, ?, ?, ?, ?, ?, ?, ?, ?)", contextID, eventID, derivedParentID, derivedChildID, missingDerivedID, claimID, cancelledContextID, orphanContextID, lockedContextID)
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_aggregate_heads WHERE aggregate_id IN (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", contextID, eventID, derivedParentID, derivedChildID, missingDerivedID, cycleAID, cycleBID, cycleCID, claimID, cancelledContextID, orphanContextID, lockedContextID)
 	})
 
 	contextRepo, err := NewContextRepository(db, clock)
@@ -604,6 +607,34 @@ func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 	var missingHeadCount int
 	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM research_aggregate_heads WHERE aggregate_type='event' AND aggregate_id=?", missingDerivedID).Scan(&missingHeadCount); err != nil { t.Fatalf("count rejected derived Event head: %v", err) }
 	if missingHeadCount != 0 { t.Fatalf("missing-reference append left %d aggregate heads, want 0", missingHeadCount) }
+
+	// 通过直接注入损坏行构造循环图，验证追加时递归检查会 fail closed。
+	cycleA := eventV1
+	cycleA.EventID = cycleAID
+	cycleA.DerivedFromRefs = []researchevent.ResearchEventRef{{EventID: cycleBID, EventVersion: 1}}
+	cycleB := eventV1
+	cycleB.EventID = cycleBID
+	cycleB.DerivedFromRefs = []researchevent.ResearchEventRef{{EventID: cycleAID, EventVersion: 1}}
+	for _, value := range []researchevent.ResearchEvent{cycleA, cycleB} {
+		payload, digest, err := encodePayload(value)
+		if err != nil { t.Fatalf("encode cyclic Event fixture: %v", err) }
+		if _, err := db.ExecContext(ctx,
+			"INSERT INTO research_event_versions (event_id, event_version, status, system_as_of, payload_sha256, payload, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+			value.EventID, value.EventVersion, string(value.Status), formatPIT(value.SystemAsOf), digest, string(payload), now); err != nil {
+			t.Fatalf("seed cyclic Event fixture %s: %v", value.EventID, err)
+		}
+	}
+	cycleCandidate := eventV1
+	cycleCandidate.EventID = cycleCID
+	cycleCandidate.DerivedFromRefs = []researchevent.ResearchEventRef{{EventID: cycleAID, EventVersion: 1}}
+	if err := eventRepo.Append(ctx, cycleCandidate); err == nil || !strings.Contains(err.Error(), "cycle") {
+		t.Fatalf("append Event referencing cyclic lineage = %v, want cycle rejection", err)
+	}
+	var cycleHeadCount int
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM research_aggregate_heads WHERE aggregate_type='event' AND aggregate_id=?", cycleCID).Scan(&cycleHeadCount); err != nil {
+		t.Fatalf("count rejected cyclic Event head: %v", err)
+	}
+	if cycleHeadCount != 0 { t.Fatalf("cyclic-reference append left %d aggregate heads, want 0", cycleHeadCount) }
 	assertResearchPITColumn(t, ctx, db, "SELECT system_as_of FROM research_event_versions WHERE event_id=? AND event_version=1", []any{eventID}, cutoff)
 	if err := eventRepo.Append(ctx, eventV1); err != nil {
 		t.Fatalf("replay Event v1: %v", err)
