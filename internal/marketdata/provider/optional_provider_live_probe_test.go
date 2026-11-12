@@ -41,11 +41,7 @@ func logOptionalProviderProbe(t *testing.T, results []optionalProviderProbeResul
 }
 
 func isTusharePermissionRequired(err error) bool {
-	if err == nil {
-		return false
-	}
-	message := strings.ToLower(err.Error())
-	return strings.Contains(message, "code=40203") || strings.Contains(message, "权限不足") || strings.Contains(message, "无接口访问权限")
+	return isTusharePermissionError(err)
 }
 
 func TestIsTusharePermissionRequired(t *testing.T) {

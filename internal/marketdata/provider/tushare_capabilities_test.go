@@ -995,6 +995,42 @@ func TestTushareFundamentalsUsesStatementsWhenIndicatorEndpointFails(t *testing.
 	}
 }
 
+func TestTushareFundamentalsPreservesPermissionRequiredWhenAllEndpointsDenied(t *testing.T) {
+	seen := make(map[string]bool, 4)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request tushareIndexWeightRequest
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Errorf("decode Tushare financial request: %v", err)
+			http.Error(w, "invalid request", http.StatusBadRequest)
+			return
+		}
+		switch request.APIName {
+		case "fina_indicator", "income", "balancesheet", "cashflow":
+			seen[request.APIName] = true
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"code":40203,"msg":"permission denied","data":null}`))
+		default:
+			t.Errorf("unexpected Tushare financial endpoint %q", request.APIName)
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	client := NewTushareConfigured(2*time.Second, server.URL, "test-token")
+	_, err := client.FetchFundamentals(context.Background(), "600519.SH", 2025, 4)
+	if err == nil {
+		t.Fatal("expected permission error when all Tushare financial endpoints are denied")
+	}
+	if !isTusharePermissionError(err) {
+		t.Fatalf("permission error was collapsed into a generic no-data error: %v", err)
+	}
+	for _, endpoint := range []string{"fina_indicator", "income", "balancesheet", "cashflow"} {
+		if !seen[endpoint] {
+			t.Errorf("expected Tushare endpoint %q to be attempted", endpoint)
+		}
+	}
+}
+
 func TestTushareStatementReportTypeForQuarterBoundaries(t *testing.T) {
 	tests := []struct {
 		name       string
