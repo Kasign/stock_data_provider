@@ -244,7 +244,7 @@ func (s *Store) SaveCorporateActions(ctx context.Context, values []model.Corpora
 	for _, value := range values {
 		if strings.TrimSpace(value.Symbol) == "" || strings.TrimSpace(value.ProviderEventID) == "" ||
 			strings.TrimSpace(value.EventType) == "" || strings.TrimSpace(value.Source) == "" ||
-			!hasIdentifiableSourceVersion(value.SourceVersion) ||
+			(strings.TrimSpace(value.SourceVersion) == "" || strings.EqualFold(strings.TrimSpace(value.SourceVersion), "unknown")) ||
 			!validISODate(value.ExDate, true) || !validISODate(value.AnnouncementDate, true) ||
 			(value.ExDate == "" && value.AnnouncementDate == "") || !validISODate(value.ImplementationAnnouncementDate, true) ||
 			!validISODate(value.RecordDate, true) || !validISODate(value.PayDate, true) ||

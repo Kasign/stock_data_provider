@@ -321,7 +321,6 @@ func TestProviderProbeRejectsQuoteWithoutIdentity(t *testing.T) {
 	}
 }
 
-
 func TestProviderProbeClassifiesMissingCredentialsAsNotConfigured(t *testing.T) {
 	cases := []string{
 		"Tushare token is not configured",
@@ -335,7 +334,9 @@ func TestProviderProbeClassifiesMissingCredentialsAsNotConfigured(t *testing.T) 
 			run, err := ds.ProbeProviderCapabilitiesWithOptions(context.Background(), ProviderProbeOptions{
 				Scope: "all", Capabilities: []string{"quote"}, Checks: []string{"connectivity", "contract", "quality", "freshness"}, TimeoutSeconds: 5,
 			})
-			if err != nil { t.Fatalf("ProbeProviderCapabilitiesWithOptions() error = %v", err) }
+			if err != nil {
+				t.Fatalf("ProbeProviderCapabilitiesWithOptions() error = %v", err)
+			}
 			item, found := findProbeItem(run.Items, p.Name(), "quote")
 			if !found || item.Status != "not_configured" || item.ErrorCode != "provider_not_configured" || item.ErrorStage != "configuration" {
 				t.Fatalf("missing local credentials must be not_configured: %+v", item)
@@ -1801,7 +1802,6 @@ func TestFreshnessDomainForCapabilityDoesNotInventNonRealtimePolicies(t *testing
 		}
 	}
 }
-
 
 func TestApplyProviderProbeCheckStatusIncludesCheckResults(t *testing.T) {
 	tests := []struct {
