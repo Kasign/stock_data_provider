@@ -202,7 +202,7 @@ func TestIndicatorPayloadGoValidatorRejectsWrongMetricMappingForAllIndicators(t 
 		"rsi":        {"rsi"},
 		"atr":        {"atr"},
 		"macd":       {"macd_dif", "macd_dea", "macd_histogram"},
-		"bollinger": {"bollinger_middle", "bollinger_upper", "bollinger_lower"},
+		"bollinger":  {"bollinger_middle", "bollinger_upper", "bollinger_lower"},
 	}
 	for indicatorCode, metricCodes := range mappings {
 		t.Run(indicatorCode, func(t *testing.T) {
