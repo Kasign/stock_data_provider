@@ -26,6 +26,7 @@ var (
 	ErrResultUnavailable       = errors.New("quant result unavailable")
 	ErrInvalidAuthorization    = errors.New("quant authorization proof is invalid")
 	ErrInvalidStoredRecord     = errors.New("quant stored result is invalid")
+	ErrAuditUnavailable        = errors.New("quant result access audit unavailable")
 )
 
 // Principal 由 Server 的认证上下文解析器产生；不得从 GetResult 请求体或普通 Header 构造。
@@ -92,6 +93,22 @@ type AuthorizedRecord struct {
 	PolicySnapshot   PolicySnapshot
 }
 
+// AccessAuditEvent 只记录授权读取元数据，不包含结果 Payload 或受限内容。
+type AccessAuditEvent struct {
+	SubjectRef      string
+	ResourceRef     string
+	PurposeCode     string
+	Decision        string
+	ReasonCode      string
+	AuthorizationRef string
+	OccurredAt      time.Time
+}
+
+// AccessAuditor 持久化每次已识别主体的结果读取决策；写入失败时 Application 必须拒绝释放结果。
+type AccessAuditor interface {
+	RecordResultAccess(ctx context.Context, event AccessAuditEvent) error
+}
+
 // AuthorizedResultReader 负责当前授权复核和结果读取。
 // 实现必须在一个可证明的线性化/一致性边界内完成：读取当前策略快照、判断主体/资源/用途/级别、读取不可变记录。
 // 若授权策略在检查与读取间变化，或无法证明二者使用同一策略版本，必须拒绝且不得返回记录。
@@ -104,15 +121,16 @@ type AuthorizedResultReader interface {
 type GetResult struct {
 	reader     AuthorizedResultReader
 	principals PrincipalResolver
+	auditor    AccessAuditor
 	now        func() time.Time
 }
 
 // NewGetResult 创建授权读取用例；now 必须由 Server 注入可信 UTC Clock。
-func NewGetResult(reader AuthorizedResultReader, principals PrincipalResolver, now func() time.Time) (*GetResult, error) {
-	if reader == nil || principals == nil || now == nil {
+func NewGetResult(reader AuthorizedResultReader, principals PrincipalResolver, auditor AccessAuditor, now func() time.Time) (*GetResult, error) {
+	if reader == nil || principals == nil || auditor == nil || now == nil {
 		return nil, ErrInvalidGetResultRequest
 	}
-	return &GetResult{reader: reader, principals: principals, now: now}, nil
+	return &GetResult{reader: reader, principals: principals, auditor: auditor, now: now}, nil
 }
 
 // Execute 只有在记录指纹、当前授权证明和强类型 Payload 全部验证后才返回完整 Envelope。
@@ -140,6 +158,9 @@ func (usecase *GetResult) Execute(ctx context.Context, resultID string) (result.
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return result.Envelope{}, ctxErr
 		}
+		if auditErr := usecase.recordAudit(ctx, request, "unknown", "authorization_unavailable", ""); auditErr != nil {
+			return result.Envelope{}, auditErr
+		}
 		return result.Envelope{}, ErrResultUnavailable
 	}
 	if err := ctx.Err(); err != nil {
@@ -147,26 +168,59 @@ func (usecase *GetResult) Execute(ctx context.Context, resultID string) (result.
 	}
 	record, err := authorized.Record.ValidatedSnapshot()
 	if err != nil || record.Manifest.ResultID != resultID {
+		if auditErr := usecase.recordAudit(ctx, request, "unknown", "stored_record_invalid", ""); auditErr != nil {
+			return result.Envelope{}, auditErr
+		}
 		return result.Envelope{}, ErrInvalidStoredRecord
 	}
 	if err := validateAuthorization(authorized.AuthorizationRef, authorized.PolicySnapshot, request); err != nil {
+		if auditErr := usecase.recordAudit(ctx, request, "denied", "authorization_proof_invalid", authorized.AuthorizationRef.AuthorizationRef); auditErr != nil {
+			return result.Envelope{}, auditErr
+		}
 		return result.Envelope{}, err
 	}
 	payload, err := result.DecodePayload(record.Manifest.ResultType, record.Manifest.PayloadSchemaVersion, record.Payload)
 	if err != nil {
+		if auditErr := usecase.recordAudit(ctx, request, "unknown", "payload_type_unsupported", authorized.AuthorizationRef.AuthorizationRef); auditErr != nil {
+			return result.Envelope{}, auditErr
+		}
 		return result.Envelope{}, result.ErrUnsupportedPayload
 	}
 	envelope, err := result.BuildEnvelope(record.Manifest, authorized.AuthorizationRef.AuthorizationRef, payload)
 	if err != nil {
+		if auditErr := usecase.recordAudit(ctx, request, "unknown", "envelope_invalid", authorized.AuthorizationRef.AuthorizationRef); auditErr != nil {
+			return result.Envelope{}, auditErr
+		}
 		return result.Envelope{}, ErrInvalidStoredRecord
 	}
 	if err := envelope.ValidateAgainstManifest(record.Manifest); err != nil {
+		if auditErr := usecase.recordAudit(ctx, request, "unknown", "manifest_mismatch", authorized.AuthorizationRef.AuthorizationRef); auditErr != nil {
+			return result.Envelope{}, auditErr
+		}
 		return result.Envelope{}, ErrInvalidStoredRecord
 	}
 	if err := ctx.Err(); err != nil {
 		return result.Envelope{}, err
 	}
+	if err := usecase.recordAudit(ctx, request, "allowed", "result_released", authorized.AuthorizationRef.AuthorizationRef); err != nil {
+		return result.Envelope{}, err
+	}
 	return envelope, nil
+}
+
+func (usecase *GetResult) recordAudit(ctx context.Context, request ReadRequest, decision, reasonCode, authorizationRef string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	event := AccessAuditEvent{
+		SubjectRef: request.SubjectRef, ResourceRef: request.ResourceRef,
+		PurposeCode: request.PurposeCode, Decision: decision, ReasonCode: reasonCode,
+		AuthorizationRef: authorizationRef, OccurredAt: request.At,
+	}
+	if err := usecase.auditor.RecordResultAccess(ctx, event); err != nil {
+		return ErrAuditUnavailable
+	}
+	return nil
 }
 
 type authorizationFingerprintInput struct {
