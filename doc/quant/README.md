@@ -7,7 +7,7 @@
 
 ## 当前状态
 
-当前代码验收 SHA：`d2dc66eba08635bc9e09bb0c96638b7df7574e73`（2026-11-12）；Quant 专项 CI Workflow `43146432752` 已通过 gofmt、Quant 全量单测、Manifest Fuzz、Race、Vet。
+当前代码验收 SHA：`d39e76e2bf4353ea3caeb58c4d536644a6cc5fdc`（2026-11-12）；Quant 专项 CI Workflow `43147915093` 已通过 gofmt、Quant 全量单测、Manifest 30 秒 Fuzz、Race、Vet。
 
 已具备首批 Indicator/Factor 纯计算、CalculationContext、基础 Registry、RiskDecision/RuleSet 执行框架、TrendResult DTO、Manifest/ResultRef、Repository Save Port/MemoryRepository，以及 QuantResult Envelope 初版。
 
@@ -20,6 +20,7 @@
 - Envelope JSON Schema、Trend/Risk Golden、Schema 回归、序列化/反序列化和非法输入测试已补齐。
 - Envelope Marshal/Unmarshal 均执行结构校验；input_snapshot_refs 必须显式存在、唯一且按 Manifest 规范顺序排列，允许空数组。
 - Envelope Unmarshal 在强类型结构解码前拒绝重复 JSON 键、转义后重名键和非法 UTF-8；与授权证明采用同一 Manifest JSON 安全校验入口。
+- Envelope 严格 JSON 负例覆盖顶层重复键和转义后重名键；回归测试确认两种输入均被拒绝。
 - QNT-CTR-001 Registry Entry 2.0.0 已接入 Go `SampleCountPolicy`；`ValidateMetric` 按 `required_in_metric` 检查字段存在性，保留缺失、null、0 的差异；Schema 1.0.0 保留历史投影。
 - 八份 Indicator Golden 已显式固化 `expected.sample_count`，测试直接读取 Golden 期望值。
 - 新增 `internal/quant/application.GetResult`：从可信 PrincipalResolver 获取主体，调用授权读取 Port，在释放 Payload 前验证 GOV-CTR-006 授权指纹/策略快照、Manifest 与 Payload 指纹，并只解码已注册的 Trend/Risk 强类型 Envelope。
