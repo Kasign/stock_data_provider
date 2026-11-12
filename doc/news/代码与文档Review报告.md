@@ -417,7 +417,7 @@
 
 ## 十四、2026-11-12 最新代码与 CI 状态复核
 
-- 当前文档记录的代码基线：`eac3269ebaa625bd583f5ef3a73a139ff02c3881`；最新提交修正 Observation Retention 事务调用参数，未改变领域行为或公共服务边界。
+- 当前最新 News 代码提交：`30e15829b02a00251df29691acfb1700ecdba7b1`（Diagnostics Context 取消边界修复）；最近成功 CI 的 `head_sha` 仍为 `eac3269ebaa625bd583f5ef3a73a139ff02c3881`，早于该修复。
 - News 专项 Workflow Run [43210204658](https://github.com/Kasign/stock_data_provider/actions/runs/43210204658)：
   - `Test full News module`：success，包含 News gofmt、`go test ./internal/news/...`、Race、Vet。
   - `Test News Provider contracts`：success，包含 SearchCandidates/Provider Adapter 契约测试、Race 和 Vet。
@@ -425,8 +425,8 @@
   - News MariaDB Repository and Migration integration：success，实际执行 News Migration/Repository 集成。
   - 根模块 `Test go-core` 与 `Test .`：success。
   - Market Data MariaDB、Compose/Docker、Market Data 迁移及测试 Job 为 skipped；不能将其记为通过。
-- 2026-11-12 Diagnostics Context 取消边界修复已纳入 News 专项 CI：Observation retention、Source Endpoint Catalog、Storage Ping、Schema Check 覆盖依赖调用前/后的取消传播；已取消时不触发探测，依赖返回取消错误时优先传播 Context 取消。当前没有证据表明需要再重复实现同类取消检查。
-- 当前 CI 证明 News 包级格式、单测、Race、Vet、Provider 固定响应契约和 MariaDB 专项集成通过；不证明真实 Provider 网络/来源授权、生产 DNS/出口、Server 组合根装配或受限内容生产披露通过。
+- 2026-11-12 Diagnostics Context 取消边界修复已提交至 `30e15829`：Observation retention、Source Endpoint Catalog、Storage Ping、Schema Check 覆盖依赖调用前/后的取消传播；已取消时不触发探测，依赖返回取消错误时优先传播 Context 取消。但 Run `43210204658` 的 `head_sha` 为 `eac3269`，不包含这些后续变更；当前修复尚无 CI 通过证据。
+- Run `43210204658` / `43210204807` 只证明 `eac3269` 基线的 News 包级格式、单测、Race、Vet、Provider 固定响应契约和 MariaDB 专项集成通过；不能外推到 `30e15829`。两次 Run 均不证明真实 Provider 网络/来源授权、生产 DNS/出口、Server 组合根装配或受限内容生产披露通过。
 
 ### 当前缺口重新分级
 
@@ -436,7 +436,7 @@
 | 授权复核与内容读取 TOCTOU | 否，需跨模块一致性方案 | 等待公共 JCS Verifier、可信策略 Owner 与 Server/Repository 共同确定一致性边界；News 仅实现明确方案的适配 |
 | Provider/Source BoundDoer、Migration、Diagnostics Runner、Cleaner 调度生产装配 | 否，归 Server 组合根 | News 已提供对应构造/领域入口，不修改 Server 文件 |
 | 真实 Provider/Feed 网络与授权验收 | 当前不具备条件 | 等待真实凭证、账号适用条款、来源授权和部署网络证据；固定响应测试不替代 Live Probe |
-| News 自有单测、Race、Vet、Provider 契约、MariaDB 集成 | 已有当前 CI 证据 | 不为形式重复回归；只有后续代码改动或新缺陷才重跑相应门禁 |
+| News 自有单测、Race、Vet、Provider 契约、MariaDB 集成 | `eac3269` 基线已通过；`30e15829` 待验证 | 需在 integration 合并提交上取得新的 CI 证据，不复用旧基线结果 |
 
 ### 本轮结论
 
@@ -469,3 +469,12 @@ News 自身代码质量和 MariaDB 专项验证已取得当前 CI 通过证据�
 2. available_at 仍无符合冻结准入规则的真实来源字段，继续 NULL，不实施推断。
 3. `risk_review` 的显式用途到领域策略映射尚需语义确认，当前拒绝行为不视为可绕过的缺陷。
 4. 真实 Provider/Feed 网络、账号授权和生产 DNS/出口验收仍等待真实环境证据。
+
+
+## 十六、2026-11-12 最新代码集成与 CI 触发状态
+
+- 最新 News 代码提交为 `30e15829b02a00251df29691acfb1700ecdba7b1`；其后当前分支仅有文档同步提交，未再修改 `internal/news/**`。
+- 最近两次成功 Run 的实际 `head_sha` 均为 `eac3269ebaa625bd583f5ef3a73a139ff02c3881`，因此 Diagnostics Context 取消边界代码未被这两次 CI 覆盖。
+- 按本仓库约定，已将当前 News 分支通过 PR [#88](https://github.com/Kasign/stock_data_provider/pull/88) 合入 `integration`；Integration Merge Commit：`85c78f19e4d8d231b29d78f5815bc72868dc326d`。没有在 integration 直接编辑代码。
+- 合并后读取 Integration Actions 列表、Merge Commit combined status 与 workflow runs，尚未发现针对 `85c78f1` 的新 CI Run/status。当前 GitHub 操作接口只提供 workflow run 读取/重跑能力，没有可用的 workflow_dispatch 调用；因此不能声称 integration 构建已执行。
+- 下一步：在 GitHub Actions 手动触发 `Integration CI`，目标必须是 integration 当前 HEAD `85c78f1`；或者由具有普通 push 权限的仓库维护者触发一次 integration push。只读取该 SHA 对应 Run 的 Job 结果，不在 integration 修复任何代码。失败项回到 News 源分支处理。
