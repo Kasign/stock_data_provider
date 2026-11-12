@@ -94,7 +94,7 @@ func TestResearchEventLifecycleOutboxFailureRollsBackEventVersion(t *testing.T) 
 		SubjectRefs: []string{"security:600000"}, EvidenceRefs: []string{},
 		SystemObservedAt: now, SystemAsOf: now,
 		ImpactHypothesisRefs: []string{}, InvalidationConditions: []string{},
-		Uncertainty: []string{}, SourceTimes: []researchevent.EventSourceTime{},
+		Uncertainty: []string{}, TimeNormalizationRuleVersion: "1.0.0", DerivedFromRefs: []researchevent.ResearchEventRef{}, SourceTimes: []researchevent.EventSourceTime{},
 	}
 	if err := repo.Append(ctx, previous); err != nil {
 		t.Fatalf("append Event v1: %v", err)
@@ -146,7 +146,7 @@ func TestResearchOutboxClaimRetryAndConfirmation(t *testing.T) {
 		EventID: eventID, EventVersion: 1, EventType: "integration_fixture", Title: "Outbox delivery fixture",
 		Status: researchevent.StatusDetected, SubjectRefs: []string{}, EvidenceRefs: []string{},
 		SystemObservedAt: now, SystemAsOf: now, ImpactHypothesisRefs: []string{},
-		InvalidationConditions: []string{}, Uncertainty: []string{}, SourceTimes: []researchevent.EventSourceTime{},
+		InvalidationConditions: []string{}, Uncertainty: []string{}, TimeNormalizationRuleVersion: "1.0.0", DerivedFromRefs: []researchevent.ResearchEventRef{}, SourceTimes: []researchevent.EventSourceTime{},
 	}
 	if err := repo.AppendWithLifecycle(ctx, value, nil, "corr_integration"); err != nil {
 		t.Fatalf("append Event and initial Outbox: %v", err)
@@ -225,7 +225,7 @@ func TestResearchOutboxConcurrentClaimsDoNotDuplicateLease(t *testing.T) {
 		SubjectRefs: []string{}, EvidenceRefs: []string{},
 		SystemObservedAt: now, SystemAsOf: now,
 		ImpactHypothesisRefs: []string{}, InvalidationConditions: []string{},
-		Uncertainty: []string{}, SourceTimes: []researchevent.EventSourceTime{},
+		Uncertainty: []string{}, TimeNormalizationRuleVersion: "1.0.0", DerivedFromRefs: []researchevent.ResearchEventRef{}, SourceTimes: []researchevent.EventSourceTime{},
 	}
 	if err := repo.AppendWithLifecycle(ctx, value, nil, "corr_concurrent_claim"); err != nil {
 		t.Fatalf("append Event and Outbox: %v", err)
@@ -578,7 +578,7 @@ func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 		SubjectRefs: []string{}, EvidenceRefs: []string{},
 		SystemObservedAt: cutoff, SystemAsOf: cutoff,
 		ImpactHypothesisRefs: []string{}, InvalidationConditions: []string{},
-		Uncertainty: []string{}, SourceTimes: []researchevent.EventSourceTime{},
+		Uncertainty: []string{}, TimeNormalizationRuleVersion: "1.0.0", DerivedFromRefs: []researchevent.ResearchEventRef{}, SourceTimes: []researchevent.EventSourceTime{},
 	}
 	if err := eventRepo.Append(ctx, eventV1); err != nil {
 		t.Fatalf("append Event v1: %v", err)
@@ -812,7 +812,7 @@ func TestResearchAppendRejectsAggregateHeadWithMissingLatestVersion(t *testing.T
 		SubjectRefs: []string{}, EvidenceRefs: []string{},
 		SystemObservedAt: now, SystemAsOf: now,
 		ImpactHypothesisRefs: []string{}, InvalidationConditions: []string{},
-		Uncertainty: []string{}, SourceTimes: []researchevent.EventSourceTime{},
+		Uncertainty: []string{}, TimeNormalizationRuleVersion: "1.0.0", DerivedFromRefs: []researchevent.ResearchEventRef{}, SourceTimes: []researchevent.EventSourceTime{},
 	}
 	if err := repo.Append(ctx, next); !errors.Is(err, ErrCorruptRecord) {
 		t.Fatalf("append with missing latest Event row = %v, want ErrCorruptRecord", err)
@@ -858,7 +858,7 @@ func TestResearchOutboxRejectsExpiredLeaseEvenWithBackdatedActionTime(t *testing
 		SubjectRefs: []string{}, EvidenceRefs: []string{},
 		SystemObservedAt: now, SystemAsOf: now,
 		ImpactHypothesisRefs: []string{}, InvalidationConditions: []string{},
-		Uncertainty: []string{}, SourceTimes: []researchevent.EventSourceTime{},
+		Uncertainty: []string{}, TimeNormalizationRuleVersion: "1.0.0", DerivedFromRefs: []researchevent.ResearchEventRef{}, SourceTimes: []researchevent.EventSourceTime{},
 	}
 	if err := repo.AppendWithLifecycle(ctx, value, nil, "corr_expired_lease"); err != nil {
 		t.Fatalf("append Event and Outbox: %v", err)
