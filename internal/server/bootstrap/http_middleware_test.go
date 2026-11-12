@@ -1,6 +1,7 @@
 package bootstrap
 
 import (
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -167,7 +168,9 @@ func TestWritePlatformFaultMapsStableClassesAndHidesInternals(t *testing.T) {
 			f.Dependency = "private.database"
 			f.Cause = errors.New("password=must-not-leak")
 			response := httptest.NewRecorder()
-			if !writePlatformFault(response, f) {
+			request := httptest.NewRequest(http.MethodGet, "/api", nil)
+			request = request.WithContext(observability.WithRequestID(request.Context(), "req-contract-001"))
+			if !writePlatformFault(response, request, f) {
 				t.Fatal("writePlatformFault() = false")
 			}
 			if response.Code != test.code {
@@ -185,10 +188,36 @@ func TestWritePlatformFaultMapsStableClassesAndHidesInternals(t *testing.T) {
 	}
 }
 
+
+func TestWritePlatformFaultMatchesPLATCTR001EnvelopeAndRequestID(t *testing.T) {
+	request := httptest.NewRequest(http.MethodGet, "/api", nil)
+	request = request.WithContext(observability.WithRequestID(request.Context(), "req-contract-001"))
+	response := httptest.NewRecorder()
+	faultValue := &fault.Fault{Class: fault.ClassUnavailable, Code: "server.dependency_unavailable", SafeMessage: "dependency unavailable", Retryable: true}
+	if !writePlatformFault(response, request, faultValue) {
+		t.Fatal("writePlatformFault() = false")
+	}
+	var body struct {
+		SchemaVersion string `json:"schema_version"`
+		Error struct {
+			RequestID string `json:"request_id"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode ErrorEnvelope: %v", err)
+	}
+	if body.SchemaVersion != "1.0.0" || body.Error.RequestID != "req-contract-001" {
+		t.Fatalf("ErrorEnvelope contract fields = %+v", body)
+	}
+	if response.Header().Get(observability.RequestIDHeader) != "" {
+		t.Fatal("writePlatformFault must not manufacture a request ID response header")
+	}
+}
+
 func TestWritePlatformFaultRejectsInvalidMetadata(t *testing.T) {
 	response := httptest.NewRecorder()
 	f := &fault.Fault{Class: fault.ClassValidation, Code: "Invalid Error", SafeMessage: "unsafe"}
-	if !writePlatformFault(response, f) {
+	if !writePlatformFault(response, nil, f) {
 		t.Fatal("writePlatformFault() = false")
 	}
 	if response.Code != http.StatusInternalServerError {
