@@ -189,6 +189,44 @@ func TestMariaDBCreateRunAtomicConcurrentIdempotency(t *testing.T) {
 		}
 	}
 
+	// 排队容量必须在同一事务中原子检查；超限不能留下 Run、Stage 或幂等记录。
+	limitedQueueRepository, err := NewMySQLRunRepository(db, CapacityLimits{MaxQueuedRuns: 1, MaxWorkers: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	capacityRecord := makeRecord("capacity-run-"+suffix, "capacity-stage-"+suffix)
+	capacityRecord.Scope.Key = "capacity-queue-" + suffix
+	if _, err := limitedQueueRepository.CreateRunAtomic(ctx, capacityRecord); err != nil {
+		t.Fatalf("create Run within queue capacity: %v", err)
+	}
+	replayRecord := makeRecord("capacity-replay-run-"+suffix, "capacity-replay-stage-"+suffix)
+	replayRecord.Scope = capacityRecord.Scope
+	replay, err := limitedQueueRepository.CreateRunAtomic(ctx, replayRecord)
+	if err != nil || !replay.Replayed || replay.Run.Ref != capacityRecord.Run.Ref {
+		t.Fatalf("idempotent replay at full queue capacity result=%#v err=%v", replay, err)
+	}
+	overflowRecord := makeRecord("capacity-overflow-run-"+suffix, "capacity-overflow-stage-"+suffix)
+	overflowRecord.Scope.Key = "capacity-overflow-" + suffix
+	if _, err := limitedQueueRepository.CreateRunAtomic(ctx, overflowRecord); !errors.Is(err, ErrQueueCapacityExceeded) {
+		t.Fatalf("CreateRunAtomic at full queue capacity error=%v, want ErrQueueCapacityExceeded", err)
+	}
+	var overflowRuns, overflowStages, overflowKeys int
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM researchflow_runs WHERE run_ref = ?", overflowRecord.Run.Ref).Scan(&overflowRuns); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM researchflow_stages WHERE stage_ref = ?", overflowRecord.Stages[0].Ref).Scan(&overflowStages); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM researchflow_run_idempotency
+		WHERE caller_ref = ? AND operation = ? AND idempotency_key = ?`,
+		overflowRecord.Scope.CallerRef, overflowRecord.Scope.Operation, overflowRecord.Scope.Key,
+	).Scan(&overflowKeys); err != nil {
+		t.Fatal(err)
+	}
+	if overflowRuns != 0 || overflowStages != 0 || overflowKeys != 0 {
+		t.Fatalf("capacity rejection left partial records: runs=%d stages=%d idempotency=%d", overflowRuns, overflowStages, overflowKeys)
+	}
+
 	records := []application.CreateRunRecord{
 		makeRecord("run-"+suffix+"-a", "stage-"+suffix+"-a"),
 		makeRecord("run-"+suffix+"-b", "stage-"+suffix+"-b"),
