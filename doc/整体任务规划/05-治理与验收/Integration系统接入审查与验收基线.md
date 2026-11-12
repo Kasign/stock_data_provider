@@ -82,12 +82,12 @@ Registry 已具备 namespace 校验、确定性排序、执行报告和 Schema �
 | Data | 独立行情服务及迁移中的 Go Data 能力 | 仍由旧 Market Data Adapter 配置和 Runner 使用；未看到新 Data Application Port 装配 | 迁移门禁未通过，不作为新模块接入完成 |
 | News | Application、Provider/Source Adapter、Storage、Evidence 查询能力和 Migration | 当前仅注册 Migration；未实例化 News Application/Provider Adapter，也未注入生产 BoundDoer | 部分具备，未接入业务运行时 |
 | Research | Application Service、Port、Storage、Outbox 和 Migration | 当前仅注册 Migration；未构造 Research Service、未向 Researchflow 注入公开 Port | 部分具备，未接入业务运行时 |
-| Researchflow | Run/Stage/Attempt 状态、调度/Worker、Context Assembly、Result Validation 等包 | 当前仅注册 Migration；Bootstrap 未构造 Researchflow Facade/Executor/Worker，也未提供业务路由 | 未接入 |
+| Researchflow | Run/Stage/Attempt 状态、CreateRun、Scheduler 单次 Run 协调、MySQL WorkerStore、Worker 单次执行、固定数量 Worker Pool、Context Assembly、Result Validation | Bootstrap 未装配 Scheduler 周期驱动、Worker Pool 生命周期和生产 StageExecutor Adapter；未提供 Researchflow 业务路由 | 模块核心执行设施已有实现，Server/生产 Adapter 接入未完成 |
 | Quant | Indicator/Factor/Registry/Risk/Result 等能力及查询用例 | Bootstrap 未构造 Quant Application Facade 或结果存储服务 | 未接入 |
 | LLM | Provider Port、Responses JSON/SSE 协议适配与校验 | Bootstrap 未创建具体 Provider；未注入 ProviderConfig、CapabilityState 和受控 BoundDoer | 未接入 |
-| Notification | Inbox、Subscription、Delivery、Attempt、Fanout/投递用例和 Migration | 当前仅注册 Migration；Bootstrap 未创建 EventReceiver、Fanout/Dispatcher/Delivery Worker | 未接入 |
+| Notification | EventReceiver、Inbox、Subscription、Delivery/Attempt、FanoutWorkItem、FanoutDispatcher、Migration | Bootstrap 未创建 EventReceiver/FanoutPlanFactory/Dispatcher/Delivery Worker；生产渠道与身份目录也未装配 | 模块内核心执行设施部分具备，生产 Factory/Server Worker 接入未完成 |
 
-说明：模块代码存在、模块单测通过、模块 Migration 已注册，均不能单独作为 Server 生产接入证据。接入必须以真实构造、依赖注入、调用链、生命周期和运行证据为准。
+说明：模块代码存在、模块单测通过、模块 Migration 已注册，均不能单独作为 Server 生产接入证据。Researchflow 的 WorkerStore/Scheduler/Worker Pool，以及 Notification 的 Inbox/FanoutDispatcher/Delivery 执行设施，属于模块内部已经实现的能力；缺口主要在生产 Adapter、组合根装配和生命周期驱动。接入必须以真实构造、依赖注入、调用链、生命周期和运行证据为准。
 
 ## 3. 已发现的文档同步问题
 
@@ -100,10 +100,10 @@ Registry 已具备 namespace 校验、确定性排序、执行报告和 Schema �
 | 编号 | 阻断项 | 影响 | 责任归属建议 |
 |---|---|---|---|
 | INT-001 | 新模块公开构造入口和生产 Facade 未齐备 | Server 无法真实实例化并注入模块 | 对应模块分支 |
-| INT-002 | Researchflow 生产 Repository、Facade、Worker 接入缺口 | 无法执行新的研究流程主链路 | Researchflow + Server |
+| INT-002 | Researchflow Scheduler 周期驱动、Worker Pool 生命周期、生产 StageExecutor Adapter 和业务入口未装配 | 模块已有 WorkerStore/Scheduler/Worker 执行设施，但无法由 Server 驱动完整生产流程 | Researchflow + Server |
 | INT-003 | Quant 缺少完整可注入 Application/结果持久化边界 | Researchflow 无法消费生产 Quant 结果 | Quant |
 | INT-004 | LLM 缺少 Provider 生产配置和 BoundDoer 注入 | 无法进行真实模型调用 | LLM + Server |
-| INT-005 | Notification Inbox/Fanout/Dispatcher/Worker 未形成完整接入 | 无法验证事件到通知的端到端交付 | Notification + Server |
+| INT-005 | Notification 生产 FanoutPlanFactory、渠道/身份目录和 Server Worker 装配未完成 | 模块内 Inbox/FanoutDispatcher/Delivery 执行设施已存在，但无法形成真实事件到渠道的投递链路 | Notification + Server |
 | INT-006 | Research/News/Quant 等模块间公开 Port 尚未全部形成生产注入图 | 无法确认真实调用链及依赖方向 | 对应模块 + Server |
 | INT-007 | Outbox → Inbox 连接未装配 | Research/Researchflow 事件无法驱动 Notification | Server；前置为生产方与消费者 Port 就绪 |
 | INT-008 | Data 模块化单体迁移未满足门禁 | 新 Data Application Port 无法注入 Root Server | Data |
