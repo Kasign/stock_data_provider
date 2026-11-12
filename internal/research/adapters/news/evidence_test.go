@@ -42,7 +42,7 @@ func (f *researchPortFake) AddEvidence(_ context.Context, command researchapp.Ad
 	return researchapp.EvidenceRecord{}, f.err
 }
 
-func (f *researchPortFake) GetContext(context.Context, researchapp.ContextRef) (researchapp.ResearchContext, error) {
+func (f *researchPortFake) GetContext(context.Context, researchapp.ContextReadRequest) (researchapp.ResearchContext, error) {
 	return researchapp.ResearchContext{}, errors.New("not used")
 }
 
