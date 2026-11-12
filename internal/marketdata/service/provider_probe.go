@@ -1686,12 +1686,12 @@ func classifyProbeError(err error) string {
 		return "cancelled"
 	}
 	status := probeHTTPStatus(err)
-	switch status {
-	case 429:
+	switch {
+	case status == 429:
 		return "rate_limited"
-	case 401:
+	case status == 401:
 		return "authentication_failed"
-	case 403:
+	case status == 403:
 		return "permission_denied"
 	case status >= 400:
 		return "http_" + strconv.Itoa(status)
