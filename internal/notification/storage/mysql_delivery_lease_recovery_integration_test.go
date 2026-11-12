@@ -22,7 +22,7 @@ func TestNotificationMariaDBExpiredDeliveryLeaseRecoveryIntegration(t *testing.T
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	db, err := openNotificationIntegrationDB(ctx, dsn)
+	db, err := openNotificationIntegrationDB(t, ctx, dsn)
 	if err != nil {
 		t.Fatalf("open MariaDB through Platform Storage: %v", err)
 	}
@@ -216,7 +216,7 @@ func TestNotificationMariaDBRecoveryRetryReclaimsWithNewFencingTokenIntegration(
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	db, err := openNotificationIntegrationDB(ctx, dsn)
+	db, err := openNotificationIntegrationDB(t, ctx, dsn)
 	if err != nil {
 		t.Fatalf("open MariaDB: %v", err)
 	}
@@ -312,7 +312,7 @@ func TestNotificationMariaDBRecoveryRetryReclaimsWithNewFencingTokenIntegration(
 	if err != nil || !found || recoverySnapshot.AttemptCount != 1 {
 		t.Fatalf("load current Delivery projection before recovery: found=%v delivery=%+v err=%v", found, recoverySnapshot, err)
 	}
-	retryAt := recoveryNow.Add(time.Microsecond)
+	retryAt := recoveryNow.Add(100 * time.Millisecond)
 	next, event, err := recoverySnapshot.Transition(domain.DeliveryTransition{
 		To: domain.DeliveryRetryWait, At: recoveryNow, NextAttemptAt: &retryAt,
 		ReasonCode: "retryable_rejection_recovered", ErrorCode: "temporary_provider_error",
@@ -324,8 +324,9 @@ func TestNotificationMariaDBRecoveryRetryReclaimsWithNewFencingTokenIntegration(
 	if err := deliveries.RecoverExpiredLease(ctx, oldClaim.Delivery.Version, oldClaim.Lease.FencingToken, next, event, recoveryNow); err != nil {
 		t.Fatalf("recover retryable lease: %v", err)
 	}
-	if _, err := db.ExecContext(ctx, "UPDATE notification_deliveries SET next_attempt_at = ? WHERE delivery_id = ?", recoveryNow.Add(-time.Second), delivery.DeliveryID); err != nil {
-		t.Fatal(err)
+	wait := time.Until(retryAt.Add(10 * time.Millisecond))
+	if wait > 0 {
+		time.Sleep(wait)
 	}
 	if err := db.QueryRowContext(ctx, "SELECT CAST(UTC_TIMESTAMP(6) AS CHAR)").Scan(&clock); err != nil {
 		t.Fatal(err)
@@ -386,7 +387,7 @@ func TestNotificationMariaDBConcurrentRetryWaitClaimsSingleWinnerIntegration(t *
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	db, err := openNotificationIntegrationDB(ctx, dsn)
+	db, err := openNotificationIntegrationDB(t, ctx, dsn)
 	if err != nil {
 		t.Fatalf("open MariaDB: %v", err)
 	}
@@ -452,7 +453,7 @@ func TestNotificationMariaDBConcurrentRetryWaitClaimsSingleWinnerIntegration(t *
 	if err != nil || !found {
 		t.Fatalf("load recovery snapshot: found=%v err=%v", found, err)
 	}
-	retryAt := recoveryNow.Add(time.Second)
+	retryAt := recoveryNow.Add(100 * time.Millisecond)
 	retryWait, event, err := recoverySnapshot.Transition(domain.DeliveryTransition{
 		To: domain.DeliveryRetryWait, At: recoveryNow, NextAttemptAt: &retryAt,
 		ReasonCode: "lease_expired_before_attempt",
@@ -463,8 +464,9 @@ func TestNotificationMariaDBConcurrentRetryWaitClaimsSingleWinnerIntegration(t *
 	if err := repository.RecoverExpiredLease(ctx, recoverySnapshot.Version, oldClaim.Lease.FencingToken, retryWait, event, recoveryNow); err != nil {
 		t.Fatalf("recover expired lease into retry_wait: %v", err)
 	}
-	if _, err := db.ExecContext(ctx, "UPDATE notification_deliveries SET next_attempt_at = ? WHERE delivery_id = ?", recoveryNow.Add(-time.Second), delivery.DeliveryID); err != nil {
-		t.Fatal(err)
+	wait := time.Until(retryAt.Add(10 * time.Millisecond))
+	if wait > 0 {
+		time.Sleep(wait)
 	}
 	claimAt := readDBNow()
 	type claimResult struct {
