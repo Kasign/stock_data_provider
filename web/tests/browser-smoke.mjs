@@ -2248,6 +2248,39 @@ try {
       }
     }
 
+    if (viewport.width === 320) {
+      const reducedMotion = await page.evaluate(() => ({
+        requested: window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+        primaryNavigation: getComputedStyle(document.querySelector(".nav-link")).transitionDuration,
+        researchNavigation: getComputedStyle(document.querySelector(".research-detail-nav-link")).transitionDuration
+      }));
+      assert.equal(reducedMotion.requested, true, "browser context must enable prefers-reduced-motion: reduce");
+      const durations = [reducedMotion.primaryNavigation, reducedMotion.researchNavigation]
+        .flatMap(value => value.split(","))
+        .map(value => Number.parseFloat(value.trim()));
+      assert.ok(durations.length > 0 && durations.every(value => value === 0),
+        "navigation transitions must be disabled for reduced-motion users: " + JSON.stringify(reducedMotion));
+
+      const navigateByHash = async view => {
+        await page.evaluate(value => { window.location.hash = "#" + value; }, view);
+        await page.waitForFunction(value =>
+          window.location.hash === "#" + value && document.querySelector("#" + value + "-view")?.hidden === false, view);
+      };
+      for (const view of ["stocks", "research", "tasks"]) await navigateByHash(view);
+      await page.evaluate(() => window.history.back());
+      await page.waitForFunction(() => window.location.hash === "#research" && document.querySelector("#research-view")?.hidden === false);
+      await page.evaluate(() => window.history.back());
+      await page.waitForFunction(() => window.location.hash === "#stocks" && document.querySelector("#stocks-view")?.hidden === false);
+      await page.evaluate(() => window.history.forward());
+      await page.waitForFunction(() => window.location.hash === "#research" && document.querySelector("#research-view")?.hidden === false);
+      await page.evaluate(() => window.history.forward());
+      await page.waitForFunction(() => window.location.hash === "#tasks" && document.querySelector("#tasks-view")?.hidden === false);
+      assert.equal(await page.locator(".view:not([hidden])").count(), 1,
+        "history back/forward must keep exactly one workspace visible");
+      assert.equal(await page.locator('.nav-link[data-view="tasks"]').getAttribute("aria-current"), "page",
+        "history forward must restore the active navigation state");
+    }
+
     if (await menu.isVisible() && (await menu.getAttribute("aria-expanded")) !== "true") {
       await menu.click();
     }
