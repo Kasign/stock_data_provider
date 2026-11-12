@@ -18,6 +18,7 @@ import (
 	"example.com/stock-analysis-flow/internal/marketdata/normalize"
 	"example.com/stock-analysis-flow/internal/marketdata/provider"
 	"example.com/stock-analysis-flow/internal/marketdata/repository"
+	"example.com/stock-analysis-flow/internal/marketdata/validation"
 	platformdiagnostics "example.com/stock-analysis-flow/internal/platform/diagnostics"
 	"example.com/stock-analysis-flow/internal/platform/fault"
 )
@@ -2212,10 +2213,9 @@ func (s *DataService) SetCapitalFlowProviders(providers []provider.CapitalFlowPr
 	s.capitalFlowProviders = append([]provider.CapitalFlowProvider(nil), providers...)
 }
 
-// hasIdentifiableSourceVersion 拒绝空版本和占位值，避免把未知字段映射伪装成可追溯契约。
+// hasIdentifiableSourceVersion 保持 Service 校验入口兼容，规则统一委托给 Validation。
 func hasIdentifiableSourceVersion(value string) bool {
-	value = strings.TrimSpace(value)
-	return value != "" && !strings.EqualFold(value, "unknown")
+	return validation.IsIdentifiableSourceVersion(value)
 }
 
 // CapitalFlowProviders 合并独立资金流 Provider 与旧版 SupplementProvider，按名称去重。

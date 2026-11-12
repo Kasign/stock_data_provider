@@ -60,3 +60,21 @@ func TestValidateValuationSnapshotNil(t *testing.T) {
 		t.Fatalf("unexpected nil snapshot report: %+v", report)
 	}
 }
+
+
+func TestValidateValuationSnapshotRejectsUnknownSourceVersion(t *testing.T) {
+	snapshot := validValuationSnapshot()
+	snapshot.SourceVersion = "unknown"
+	snapshot.Items[0].SourceVersion = "unknown"
+	report := ValidateValuationSnapshot(snapshot, []string{"600000.SH"})
+	found := false
+	for _, issue := range report.Issues {
+		if issue.Field == "source_version" && issue.Code == "unidentifiable" && issue.Severity == SeverityError {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected unknown source_version to be rejected, got %+v", report.Issues)
+	}
+}
