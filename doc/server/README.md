@@ -361,7 +361,7 @@ Server 不重写模块业务 Handler 的校验和领域错误，不在路由层�
 
 ### SRV-006：API/Worker 运行角色和生命周期
 
-- 状态：进行中（已实现 SERVER_ROLE=api|worker|all；旧 Analysis Worker 与 HTTP Server 均已纳入 runtime.Lifecycle，具备启动失败回滚、Readiness 先降级、HTTP 在途请求排空和超时强制关闭；Lifecycle 已补充启动期间 Context 取消检测与逆序回滚。真实子进程 SIGTERM 验收、模块 Worker 装配仍待完成）
+- 状态：进行中（已实现 SERVER_ROLE=api|worker|all；旧 Analysis Worker 与 HTTP Server 均已纳入 runtime.Lifecycle，具备启动失败回滚预算、Readiness 先降级、HTTP 在途请求排空和超时强制关闭；Lifecycle 已覆盖启动期间 Context 取消、并发 Stop 竞争和逆序回滚。HTTP 活动 Handler 排空受关闭 Context 限制，超时会返回错误；组件仍须遵守 Context 取消契约。
 - 前置：SRV-003、SRV-004
 - 工作内容：实现角色解析、组件选择、启动依赖排序、失败回滚、优雅关闭和超时。
 - 交付物：Runtime Role 与 Lifecycle Manager。
@@ -370,7 +370,7 @@ Server 不重写模块业务 Handler 的校验和领域错误，不在路由层�
 
 ### SRV-007：Migration 注册与执行
 
-- 状态：进行中（Server Registry 已接入 News、Research、Notification 三个模块 Migration；按 namespace 和版本号稳定排序，执行由 `MIGRATION_ENABLED` 显式开启）
+- 状态：进行中（Server Registry 已接入 News、Research、Researchflow、Notification 四个模块 Migration；按 namespace 和版本号稳定排序，执行由 `MIGRATION_ENABLED` 显式开启；只读 Schema 预检要求数据库 namespace/version 集合与当前 Registry 完全一致且状态均为 `applied`。真实 MariaDB 故障/恢复集成及 Platform checksum 只读验证能力仍待完成）
 - 前置：SRV-003；其余模块提供可用 Migration 后再注册；核对 Platform `storage.ApplyMigrations` 实际签名和各模块 Migration 注册形态
 - 工作内容：在模块装配阶段收集各模块拥有的 Migration 描述，校验 namespace/version 唯一性及顺序，再按部署策略调用 Platform Runner，输出可追踪结果。MariaDB DDL 部分执行失败后的恢复按 Platform Runner 契约执行，不在 Server 自行重试失败 Migration。
 - 交付物：`internal/server/migration.Registry`、显式执行配置和模块注册测试；真实 MariaDB 集成验收待执行。
@@ -773,7 +773,7 @@ Server 层完成不是“服务能够启动”这么简单。至少同时满足�
 | SRV-003 | 进行中 | DB、Redis、HTTP Client 已由 Resources 统一创建和关闭；BoundDoer 与 LLM JSON/SSE 传输桥接及 Responses Adapter 构造入口已实现；当前 Server 独立 CI 已通过，未再存在文档所述 `internal/llm` 未使用导入导致的编译阻断；Provider/Secret/CapabilityState 可信配置装配、News Provider/Source 真实注入及生产流式 E2E 仍待完成；详见 12.24、12.28、12.40～12.42 节 |
 | SRV-004 | 阻塞 | 2026-11-12 复核已确认 Research Repository 构造入口和 Researchflow Migration 接入；但 Research 可信 Evidence Authorizer、News 生产查询/采集入口、Researchflow Repository/Worker、Quant Application Facade、LLM 可信 Provider 配置、Notification Dispatcher/Worker 仍未具备完整生产装配条件；详见 12.6、12.54 节 |
 | SRV-005 | 进行中 | 已接入 Platform Bearer Owner 认证、入口 Request ID、Fault HTTP 映射工具、请求体与并发限制；补齐 GET/HEAD 探针的状态、响应头、身份策略及过载豁免测试；现有旧 Analysis Handler 保留原业务错误 DTO；Web Session/密码登录、CSRF、登录限流、模块 Service Scope 和可信代理边界仍待契约/模块入口，现有 WebUI 尚未携带 Analysis Owner 凭证，不能视为浏览器认证链路已完成；详见 12.31 节 |
-| SRV-006 | 进行中 | 旧 Analysis Worker 与 HTTP Server 已纳入统一 Lifecycle；已覆盖启动取消回滚预算、单组件 Start/Stop 并发竞态、HTTP 优雅关闭及强制关闭后的活动连接排空；最新 HEAD `dcdcbae` 对应 Server CI 的 gofmt、包级测试、Race、Vet 全部通过；模块 Worker 接入、真实 SIGTERM/生产容器退出验收仍待完成；详见 12.17～12.19、12.26、12.34、12.38、12.50～12.51、12.56～12.58 节 |
+| SRV-006 | 进行中 | 旧 Analysis Worker 与 HTTP Server 已纳入统一 Lifecycle；已覆盖启动取消回滚预算、单组件 Start/Stop 并发竞态、HTTP 优雅关闭及强制关闭后的活动连接排空；最新文档 HEAD `db0087e5` 对应的 Server CI（Run `43147147914`）成功；代码修复 SHA `17585149` 对应 Run `43147039665`，gofmt、包级测试、Race、Vet 全部通过；模块 Worker 接入、真实 SIGTERM/生产容器退出验收仍待完成；详见 12.17～12.19、12.26、12.34、12.38、12.50～12.51、12.56～12.58 节 |
 | SRV-007 | 进行中 | Server Migration Registry 已注册 News、Research、Researchflow、Notification 四个模块 namespace；namespace/版本确定性排序、执行报告、稳定原因码、Registry 并发保护和执行快照冻结已实现；只读 Schema 预检已校验 namespace 与版本集合完全匹配且状态均为 applied，并纳入 Bootstrap 启动门禁和 API Readiness；最新 Server 独立 CI 的 Migration/Diagnostics 单测、Race、Vet 通过；Platform checksum 只读验证 API/Fault Code、MariaDB 故障/恢复集成验收仍待完成；详见 12.7、12.23、12.25、12.30、12.37、12.45、12.50～12.51、12.53、12.55 节 |
 | SRV-008 | 待契约 | Dispatcher 所有权未冻结 |
 | SRV-009 | 进行中 | 已实现 Platform Runner 聚合、严格 Readiness 判定、MariaDB/Redis 资源检查、Migration Schema 检查及 Owner 保护的结构化 `/diagnostics` 入口；`/readyz` 动态读取实际 Check Results；Service 装配期拒绝重复 Check ID 并冻结 Check 快照；真实模块 Check 注册、依赖故障注入和 Platform Observation 元数据契约验收仍待完成，详见 12.8、12.20、12.29、12.33、12.55 节 |
@@ -1319,9 +1319,9 @@ Lifecycle.Stop 原实现通过 stopped 标记保证重复调用幂等，但并�
 ### 12.56 SRV-006 HTTP 强制关闭后的活动连接排空（2026-11-12）
 
 - 深入检查 `httpServerComponent.Stop` 发现：优雅关闭超过预算后调用 `http.Server.Close()`，原实现只等待 Serve Listener goroutine 退出。Go HTTP Server 的 Close 不保证等待正在执行的 Handler 结束，因此 Stop 可能提前返回，Bootstrap 随后关闭共享 DB/Redis，而 Handler 仍可能使用这些资源。
-- 在 Server HTTP 生命周期组件内增加活动连接跟踪，串联原有 ConnState 回调；Shutdown 超时后强制关闭连接，仍等待活动连接进入 Idle/Closed，再允许 Lifecycle 继续释放共享资源。未改变正常优雅关闭路径和 Readiness draining 顺序。
-- 增加回归测试：Handler 阻塞且 Shutdown 超时时，Listener 关闭后 Stop 仍不得返回；只有 Handler 退出后 Stop 才返回，并保留超时错误。
-- 该安全约束意味着 Handler 必须遵守 Request Context 取消约定；若 Handler 在连接关闭后仍永久阻塞，Server 会继续等待而不会提前关闭共享资源。当前没有 WebSocket/自定义 Hijacker 业务入口；未来若引入 Hijacked 长连接，必须单独纳入生命周期跟踪。
+- 在 Server HTTP 生命周期组件内增加活动连接跟踪，串联原有 ConnState 回调；当时的实现会在 Shutdown 超时后强制关闭连接，并继续等待活动连接进入 Idle/Closed，再允许 Lifecycle 释放共享资源。
+- 当时的回归测试验证：Handler 阻塞且 Shutdown 超时时，Listener 关闭后 Stop 仍不得返回；只有 Handler 退出后 Stop 才返回，并保留超时错误。
+- **后续行为已由 12.60 节修正并取代**：活动连接排空现在受关闭 Context 限制；超时后 Stop 返回可识别的超时错误，不再无限等待忽略取消的 Handler。Lifecycle 会继续执行后续组件清理，因此不能据此保证超时后所有 Handler 均已退出再释放共享资源。Handler 必须遵守 Request Context 取消约定。
 - Server 独立 Workflow Run `43139331264`（SHA `ca1d96383af368105746c8072b62e0db65a328ac`）成功：Server gofmt、包级单测、Race、Vet 全部通过。该结果不替代真实长连接/故障注入环境验收。
 
 
@@ -1334,17 +1334,13 @@ Lifecycle.Stop 原实现通过 stopped 标记保证重复调用幂等，但并�
 - 首次 CI Run `43140116477` 在 gofmt 门禁发现 `lifecycle.go` 与 `lifecycle_test.go` 格式不符合规范，后续测试步骤因此跳过；修正后 Run `43140433555`（SHA `a26ab79788bbff317cb2d5a9561e2e8330935f1d`）成功，Server gofmt、包级单测、Race、Vet 全部通过。
 
 
-### 12.60 Server 模块代码 Review 与 HTTP 关闭超时修正（2026-11-12）
+### 12.58 SRV-006 单组件启动期间并发 Stop 状态竞争修正（2026-11-12）
 
-- Review 基线：分支 HEAD `efdb04ef071481e1ed2d34adaa990ea6a62e5b1a`；本轮检查 `cmd/analysis-api` 与 `internal/server/**` 全部 34 个文件，覆盖 Bootstrap、Config、Diagnostics、Health、LLM Transport、Migration、Resources、Lifecycle 及对应测试。
-- Review 结论：未发现当前 Server 所有权包存在编译错误；既有 HEAD 的 Server CI 已通过 gofmt、包测试、Race、Vet。
-- 发现并修正：`httpServerComponent.Stop` 在 `Shutdown(ctx)` 超时并强制关闭 Socket 后，仍无条件等待活动 Handler 全部退出，活动 Handler 若不响应取消会使 Stop 超过配置的关闭预算并阻塞 Bootstrap 释放资源。
-- 修正方式：活动连接排空改为接受关闭 Context；超过关闭期限后返回可识别的 `context.DeadlineExceeded`，并保留 Listener 强制关闭及错误汇总行为。不会把未完成 Handler 误报为正常优雅退出。
-- 回归测试：将原先“超时后无限等待 Handler”的测试改为验证关闭预算生效、Listener 已退出、超时错误被返回；测试主动释放忽略取消的 Handler，避免测试遗留 goroutine。
-- 验证提交：`f1bc6ef51345e37970365e4fd1930e5fa610c2b3`（实现）、`1758514939c0d0acdb2d4a3eed4c06da4c479be2`（回归测试）。
-- 最新 Server Workflow Run `43147039665` 对应 HEAD `1758514939c0d0acdb2d4a3eed4c06da4c479be2`，gofmt、Server 包级测试、Race、Vet 全部通过。
-- 边界说明：超时后强制关闭连接不能保证一个完全忽略 Request Context 的业务 Handler 立即终止；Server 会返回关闭超时错误并继续进程级清理。业务 Handler 仍必须遵守请求 Context 取消契约。
-- 未覆盖项：本轮没有在 integration 上执行全仓构建，也没有执行真实 MariaDB/Redis 环境、生产容器或真实外部 LLM Gateway 验收；不得据此标记 L3 真实依赖验收通过。
+- 补充审查发现，已有并发 Stop 测试使用两个组件：Stop 在第一个组件启动期间进入后，后续第二个组件会在启动循环中检测到 stopped。但当只有一个组件，且 Stop 在该组件 Start 阻塞期间发生时，原实现可能在组件 Start 返回后直接报告 Start 成功，因为没有下一轮循环检查 stopped。
+- 在 Start 关闭 `startDone` 前持有 Lifecycle 锁检查最终 stopped 状态；若并发 Stop 已先进入停止状态，则 Start 返回明确的启动中断错误。Stop 仍等待 `startDone` 后按逆序停止，不改变资源释放顺序。
+- 新增单组件阻塞启动的并发回归测试，验证 Start 不会报告成功、Stop 仍会停止该组件且完成。
+- Server 独立 Workflow Run `43140792357`（SHA `b46b67b6b0d50352ad16fb4b72a2500b505a7c7f`）成功：Server gofmt、包级单测、Race、Vet 全部通过。
+
 
 ### 12.59 当前 Server 任务边界与下一阶段计划（2026-11-12）
 
@@ -1361,9 +1357,15 @@ Lifecycle.Stop 原实现通过 stopped 标记保证重复调用幂等，但并�
   4. SRV-005：等待 Web Session、CSRF、可信代理等项目级/Platform 契约和可复用实现后，完成浏览器身份链路；不自行定义公共认证语义。
 - 当前没有可由 Server 单独补齐且不越过模块/契约边界的业务装配任务。后续以真实依赖和公开 Port 到位为触发条件，不为了保持提交频率制造新接口或重复测试。
 
-### 12.58 SRV-006 单组件启动期间并发 Stop 状态竞争修正（2026-11-12）
 
-- 补充审查发现，已有并发 Stop 测试使用两个组件：Stop 在第一个组件启动期间进入后，后续第二个组件会在启动循环中检测到 stopped。但当只有一个组件，且 Stop 在该组件 Start 阻塞期间发生时，原实现可能在组件 Start 返回后直接报告 Start 成功，因为没有下一轮循环检查 stopped。
-- 在 Start 关闭 `startDone` 前持有 Lifecycle 锁检查最终 stopped 状态；若并发 Stop 已先进入停止状态，则 Start 返回明确的启动中断错误。Stop 仍等待 `startDone` 后按逆序停止，不改变资源释放顺序。
-- 新增单组件阻塞启动的并发回归测试，验证 Start 不会报告成功、Stop 仍会停止该组件且完成。
-- Server 独立 Workflow Run `43140792357`（SHA `b46b67b6b0d50352ad16fb4b72a2500b505a7c7f`）成功：Server gofmt、包级单测、Race、Vet 全部通过。
+### 12.60 Server 模块代码 Review 与 HTTP 关闭超时修正（2026-11-12）
+
+- Review 基线：分支 HEAD `efdb04ef071481e1ed2d34adaa990ea6a62e5b1a`；本轮检查 `cmd/analysis-api` 与 `internal/server/**` 全部 34 个文件，覆盖 Bootstrap、Config、Diagnostics、Health、LLM Transport、Migration、Resources、Lifecycle 及对应测试。
+- Review 结论：未发现当前 Server 所有权包存在编译错误；既有 HEAD 的 Server CI 已通过 gofmt、包测试、Race、Vet。
+- 发现并修正：`httpServerComponent.Stop` 在 `Shutdown(ctx)` 超时并强制关闭 Socket 后，仍无条件等待活动 Handler 全部退出，活动 Handler 若不响应取消会使 Stop 超过配置的关闭预算并阻塞 Bootstrap 释放资源。
+- 修正方式：活动连接排空改为接受关闭 Context；超过关闭期限后返回可识别的 `context.DeadlineExceeded`，并保留 Listener 强制关闭及错误汇总行为。不会把未完成 Handler 误报为正常优雅退出。
+- 回归测试：将原先“超时后无限等待 Handler”的测试改为验证关闭预算生效、Listener 已退出、超时错误被返回；测试主动释放忽略取消的 Handler，避免测试遗留 goroutine。
+- 验证提交：`f1bc6ef51345e37970365e4fd1930e5fa610c2b3`（实现）、`1758514939c0d0acdb2d4a3eed4c06da4c479be2`（回归测试）。
+- 最新 Server Workflow Run `43147039665` 对应 HEAD `1758514939c0d0acdb2d4a3eed4c06da4c479be2`，gofmt、Server 包级测试、Race、Vet 全部通过。
+- 边界说明：超时后强制关闭连接不能保证一个完全忽略 Request Context 的业务 Handler 立即终止；Server 会返回关闭超时错误并继续进程级清理。业务 Handler 仍必须遵守请求 Context 取消契约。
+- 未覆盖项：本轮没有在 integration 上执行全仓构建，也没有执行真实 MariaDB/Redis 环境、生产容器或真实外部 LLM Gateway 验收；不得据此标记 L3 真实依赖验收通过。
