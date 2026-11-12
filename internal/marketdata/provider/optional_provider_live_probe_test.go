@@ -14,12 +14,12 @@ import (
 )
 
 type optionalProviderProbeResult struct {
-	Provider    string   `json:"provider"`
-	Capability  string   `json:"capability"`
-	Status      string   `json:"status"`
-	ElapsedMS   int64    `json:"elapsed_ms"`
-	Rows        int      `json:"rows,omitempty"`
-	Quality     string   `json:"quality,omitempty"`
+	Provider    string         `json:"provider"`
+	Capability  string         `json:"capability"`
+	Status      string         `json:"status"`
+	ElapsedMS   int64          `json:"elapsed_ms"`
+	Rows        int            `json:"rows,omitempty"`
+	Quality     string         `json:"quality,omitempty"`
 	QualityNote []string       `json:"quality_notes,omitempty"`
 	Details     map[string]any `json:"details,omitempty"`
 	Error       string         `json:"error,omitempty"`
@@ -533,8 +533,8 @@ func TestLiveHithinkCapabilities(t *testing.T) {
 				"dividend_yield_percent":      value.DividendYieldPercent,
 				"dividend_yield_ttm_percent":  value.DividendYieldTTMPercent,
 				"source":                      value.Source, "source_version": value.SourceVersion,
-				"fetched_at":                  value.FetchedAt, "quality_status": value.QualityStatus,
-				"quality_reasons":             value.QualityReasons,
+				"fetched_at": value.FetchedAt, "quality_status": value.QualityStatus,
+				"quality_reasons": value.QualityReasons,
 			})
 		}
 		detailsByCapability["valuations"] = map[string]any{
@@ -691,8 +691,8 @@ func TestLiveHithinkCapabilities(t *testing.T) {
 			"publication_date_evidence": map[string]any{
 				"expected": "2026-04-17",
 				"observed": statementPublicationDates,
-				"status": map[bool]string{true: "mismatch", false: "matched"}[publicationDateMismatch],
-				"basis": "贵州茅台 2025 年年度报告官方披露日期",
+				"status":   map[bool]string{true: "mismatch", false: "matched"}[publicationDateMismatch],
+				"basis":    "贵州茅台 2025 年年度报告官方披露日期",
 			},
 			"sections": sections,
 		}
