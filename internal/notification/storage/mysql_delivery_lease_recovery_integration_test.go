@@ -104,7 +104,7 @@ func TestNotificationMariaDBExpiredDeliveryLeaseRecoveryIntegration(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := repository.RecoverExpiredLease(ctx, claim.Delivery.Version, claim.Lease.FencingToken, next, event, leaseExpiry.Add(-time.Microsecond)); !errors.Is(err, application.ErrDeliveryLeaseConflict) {
+	if err := repository.RecoverExpiredLease(ctx, recoverySnapshot.Version, claim.Lease.FencingToken, next, event, recoveryAt); !errors.Is(err, application.ErrDeliveryLeaseConflict) {
 		t.Fatalf("active lease must not be recovered, got %v", err)
 	}
 
