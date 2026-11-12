@@ -132,6 +132,11 @@ RiskReason 至少包含 code、severity（block/warn/info）、status（triggere
 Risk RuleSet 必须非空且至少包含一条 block 规则，所有 block 规则必须 required。Reason.code 唯一且 severity 必须匹配规则定义；Reasons 按 RuleSet 声明顺序输出。任一 block triggered => reject（优先于 unknown）；无 block triggered 且至少一个 block unknown => unknown；至少一条 block 且全部 not_triggered => pass。warn/info 不改变聚合结论。RiskDecision.reasons 必须非空；input_refs 显式必需且允许空数组。RiskDecision.system_as_of 必须与 Envelope.system_as_of 一致；evaluated_at 必须为 UTC 且不早于 system_as_of；rule_set_version 与 Envelope.algorithm_version 独立。RiskDecision.status=reject 不等于 Envelope.result_status=rejected。
 
 
+### 2.6 Quant Facade 边界
+
+首期可按用例暴露 AnalyzeStock、AnalyzeMarket、EvaluateRisk、GetResult 等 Application 用例。具体签名由 QNT-001 细化；不得暴露 Repository、SQL Model、Data HTTP DTO 或内部计算结构。结果读取必须验证调用方权限和引用归属。
+
+
 ### 2.7 QuantResult Envelope 与强类型 Payload
 
 Quant Application 返回的 QuantResult 使用共同 Envelope，不允许 `map[string]any` 或无约束 JSON payload。
@@ -159,10 +164,74 @@ Quant Application 返回的 QuantResult 使用共同 Envelope，不允许 `map[s
 
 `result_type` 枚举只规定稳定类型名称，不代表该类型已经具备可消费的 Payload。只有 Quant Registry 明确注册 `(result_type, payload_schema_version)`，且该组合具有完整强类型 Payload Schema/Golden 时，Quant 才能产生该结果；尚无完整 Payload 定义的预留类型必须拒绝，不得使用宽泛 object、任意 map 或其他类型的 Schema 兜底。Envelope schema_version 只表示 Envelope DTO 自身版本；payload_schema_version 只表示 Payload Schema 版本。Researchflow 只校验 discriminator、Schema 和版本并保存结果引用；Research 不解析未知 payload，也不自行计算或重解释指标。未知 result_type、Envelope schema_version 或 payload_schema_version 必须返回对应 unsupported 错误，不回退旧版本。
 
+#### 2.7.1 IndicatorResultPayload（目标 Schema 1.0.0）
 
-### 2.6 Quant Facade 边界
+Indicator 的公开结果是单个指标代码对应的一组标量 Metric，不返回内部算法结构，也不返回整段历史序列。
 
-首期可按用例暴露 AnalyzeStock、AnalyzeMarket、EvaluateRisk、GetResult 等 Application 用例。具体签名由 QNT-001 细化；不得暴露 Repository、SQL Model、Data HTTP DTO 或内部计算结构。结果读取必须验证调用方权限和引用归属。
+| JSON 字段 | 必需 | 类型/约束 | 语义 |
+|---|---|---|---|
+| indicator_code | 是 | enum：sma/ema/return/volatility/rsi/macd/atr/bollinger | 本次计算的 Indicator 稳定代码，必须与请求中的单个 indicator_code 一致 |
+| metrics | 是 | QuantMetric[] | 本 Indicator 的全部标量输出；数组顺序固定，不允许重复 metric_code 或额外 Metric |
+
+**Indicator 与 Metric 的固定映射及顺序：**
+
+| indicator_code | metrics.metric_code（按输出顺序） | 数量 |
+|---|---|---:|
+| sma | sma | 1 |
+| ema | ema | 1 |
+| return | return | 1 |
+| volatility | volatility | 1 |
+| rsi | rsi | 1 |
+| atr | atr | 1 |
+| macd | macd_dif、macd_dea、macd_histogram | 3 |
+| bollinger | bollinger_middle、bollinger_upper、bollinger_lower | 3 |
+
+跨字段约束：
+
+1. 六个单值 Indicator 必须恰好包含一个 Metric；MACD、Bollinger 必须恰好包含三个 Metric，不能将复合结果压成一个数值，也不能拆成多个 Envelope。
+2. 每个 Metric 必须符合 QuantMetric 字段契约及其独立 metric_code Schema；metric_code 必须严格匹配上表，数组顺序必须严格匹配上表。
+3. 同一 Payload 内所有 Metric 的 period、system_as_of、quality_status、calculation_version 必须分别与 Envelope 的 period、system_as_of、quality_status、algorithm_version 完全一致。
+4. 同一次 Indicator 计算的所有 Metric 必须具有相同 metric_status 和 sample_count；不得只发布复合结果中的部分分量。不可用状态的 value 必须显式为 null。
+5. sample_count 的单位与 counting_rule 由每个 metric_code 的 Registry Entry 声明。已有算法计数审计只作为候选证据，不替代正式 Registry 元数据。
+6. metrics 仅表示本次计算的最终标量值；不包含历史序列、时间点数组、图表采样或任意扩展字段。
+
+**当前可冻结的结构边界与未冻结元数据：** 本节固定 Indicator 代码、一对一/一对多映射、字段结构、数组基数和顺序；不据此推导每个指标的 value_type、unit、precision、scale、rounding_mode、range、tolerance 或 quality_policy。上述发布元数据必须逐 metric_code 由 QNT-CTR-001 Registry Entry 提供权威来源。特别是 RSI 的量纲、ATR/Bollinger 的价格单位，以及 MACD/Bollinger 各分量的 Registry 元数据，在对应 Entry 完成前不得注册或对外输出 Indicator Envelope。
+
+#### 2.7.2 FactorResultPayload（目标 Schema 1.0.0；当前保持 deferred）
+
+Factor 首批仅包含单证券日线时间序列因子，不包含横截面排序、行业中性化、winsorize、zscore、rank 或动态表达式。
+
+| JSON 字段 | 必需 | 类型/约束 | 语义 |
+|---|---|---|---|
+| factor_code | 是 | enum：momentum_20d/momentum_60d/volatility_20d | 本次计算的因子稳定代码 |
+| metric | 是 | QuantMetric | 唯一标量输出；factor_code 必须等于 metric.metric_code |
+
+**首批 Factor 固定映射：**
+
+| factor_code / metric.metric_code | period | unit | available 所需样本数 | 计算口径 |
+|---|---|---|---:|---|
+| momentum_20d | 20d | ratio | 21 个连续有效 close | close_t / close_(t-20) - 1 |
+| momentum_60d | 60d | ratio | 61 个连续有效 close | close_t / close_(t-60) - 1 |
+| volatility_20d | 20d | ratio | 20 个有效 simple return（由 21 个连续有效 close 生成） | 最近 20 个 simple daily return 的样本标准差，ddof=1，不年化 |
+
+跨字段约束：
+
+1. FactorResultPayload 必须恰好包含一个 Metric；不使用 metrics 数组，也不允许额外输出字段。
+2. metric 必须符合首批 Factor QuantMetric Schema；factor_code 与 metric.metric_code 相等，period、unit 和样本下限必须符合上表。
+3. Envelope.scope 固定为 stock，security_id 必需；Envelope.period 必须与 metric.period 一致。
+4. metric.system_as_of、quality_status、calculation_version 必须分别与 Envelope.system_as_of、quality_status、algorithm_version 一致。
+5. Factor 的 input_snapshot_refs 必须非空且可追溯到真实 Data Snapshot；不能使用纯函数空输入授权例外替代行情事实依赖。
+6. 不可用结果必须由 metric_status 表达并将 value 显式置 null；不得以 0 代替缺失。Registry quality_policy 不允许时，degraded 不得作为 available 放行。
+
+**启用门禁：** 本节只补齐 Factor Payload 的字段级目标结构和首批计算映射，不改变 QNT-CTR-003 当前 deferred 状态。DATA-CTR-005 的 DailyBars v2 精度、bar interval、交易日历版本、PIT/复权和质量输入证据未闭合前，FactorResultPayload 不得注册到 Envelope Registry，不得对外输出为已支持的 factor/1.0.0。
+
+#### 2.7.3 版本、注册与拒绝规则
+
+- IndicatorResultPayload 与 FactorResultPayload 的目标 Payload Schema 版本均为 1.0.0；该版本号仅在对应完整 Schema、Golden、Go Validator 和 Envelope Registry Entry 落地后成为可运行注册项。
+- Envelope 当前实际注册范围以 Quant 模块中已验证的 Registry/Schema 为准。字段级设计完成不等于 discriminator 已注册。
+- 任何未知 indicator_code、factor_code、metric_code、重复/缺失/多余 Metric、顺序错误、跨字段版本或时间不一致，均必须 fail closed；不得降级为任意 object 或忽略未知字段。
+- Indicator/Factor 结果均不引入独立的 payload-level status；计算可用性由 QuantMetric.metric_status 表达，Envelope.result_status 与 Envelope.quality_status 继续独立表达。
+
 
 
 ### 2.8 QuantResult Manifest（QNT-CTR-005）
