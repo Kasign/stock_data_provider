@@ -248,7 +248,6 @@ func TestWorkerCancellationStopsProviderAndConfirmsAttempt(t *testing.T) {
 	}
 }
 
-
 func TestWorkerHeartbeatObservesDurableCrossProcessCancellation(t *testing.T) {
 	store, _ := newWorkerFixture()
 	store.renewErr = ErrRunCancellationUnavailable
