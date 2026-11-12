@@ -175,7 +175,9 @@ func TestGetContextRequiresTrustedCurrentVisibilityAuthorization(t *testing.T) {
 	}
 	access := &contextAuthorizerFake{}
 	service, err = NewService(repo, &evidenceRepoFake{}, &authorizerFake{}, nil, nil, access)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	got, err := service.GetContext(context.Background(), request)
 	if err != nil {
 		t.Fatalf("authorized Context read failed: %v", err)
