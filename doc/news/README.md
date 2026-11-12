@@ -1114,8 +1114,7 @@
 ### 下一步执行顺序
 
 1. 不新增 News 领域功能，不为 WebUI 增加 API，也不复制 Platform/Server 能力。
-2. 跟进公共 GOV-CTR-006 Runtime Verifier 的可依赖实现；确认真实 package/API 和 Golden 后，再做 News 消费者接入。
-3. 接入公共 GOV-CTR-006 JCS Runtime Verifier，并由 Server 组合根注入；News 已有事务型授权读取机制，不再重复实现。
+2. 跟进公共 GOV-CTR-006 Runtime Verifier 的可依赖实现；确认真实 package/API 和 Golden 后，由 Server 组合根注入并完成 News 消费者接入；News 已有事务型授权读取机制，不再重复实现。
 4. 明确 `risk_review` 与 News Domain `Purpose` 的授权映射；在确认前继续 fail-closed。
 5. 等待具备来源证据的真实数据后，再单独实现 available_at 证据模型与 Get/List 严格 PIT；不以模拟样本或推断时间验收。
 6. 有真实 Provider 凭证和授权材料后，执行受控 Live Probe；否则不把固定响应契约测试描述为在线验收。
