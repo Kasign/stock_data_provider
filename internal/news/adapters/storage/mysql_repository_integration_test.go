@@ -955,10 +955,10 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	// 读取事务先锁定当前指针时，撤销发布必须等待读取提交；随后旧 Binding 立即失效。
 	revokedPolicyVersion := "atomic-source-v2"
 	revokedPayload, err := json.Marshal(domain.SourcePolicy{
-		Status: domain.AuthorizationRevoked,
-		AllowedPurposes: []domain.Purpose{domain.PurposeInternalPersonalResearch},
+		Status:              domain.AuthorizationRevoked,
+		AllowedPurposes:     []domain.Purpose{domain.PurposeInternalPersonalResearch},
 		AllowedContentKinds: []domain.ContentKind{domain.ContentAbstract},
-		EvidenceRef: "news-it-atomic-revocation-evidence",
+		EvidenceRef:         "news-it-atomic-revocation-evidence",
 	})
 	if err != nil {
 		t.Fatal(err)
