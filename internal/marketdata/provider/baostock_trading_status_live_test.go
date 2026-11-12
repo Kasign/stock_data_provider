@@ -138,6 +138,11 @@ func TestLiveBaoStockTradeStatusOnOfficialSuspensionWindow(t *testing.T) {
 
 	report := map[string]any{
 		"provider": "baostock",
+		"field_semantics_under_test": map[string]string{
+			"tradestatus": "0=full-day suspension; 1=trading occurred on the date",
+			"isST":        "0=not ST; 1=ST",
+			"granularity": "daily; cannot encode an intraday suspension interval",
+		},
 		"full_day_suspension": map[string]any{
 			"official_url":                 "https://www.szse.cn/disclosure/notice/temp/t20250915_616077.html",
 			"symbol":                       fullDaySymbol,
