@@ -726,20 +726,22 @@ func (p *providerProbeHistoricalDailyBarsFake) FetchDailyBars(_ context.Context,
 
 func TestFundamentalsProbePeriodUsesCompletedHalfYear(t *testing.T) {
 	cases := []struct {
-		name string
-		now time.Time
-		wantYear int
+		name        string
+		now         time.Time
+		wantYear    int
 		wantQuarter int
 	}{
 		{
-			name: "before current half-year disclosure deadline",
-			now: time.Date(2026, time.August, 31, 23, 59, 0, 0, marketLocation()),
-			wantYear: 2025, wantQuarter: 2,
+			name:        "before current half-year disclosure deadline",
+			now:         time.Date(2026, time.August, 31, 23, 59, 0, 0, marketLocation()),
+			wantYear:    2025,
+			wantQuarter: 2,
 		},
 		{
-			name: "after current half-year disclosure deadline",
-			now: time.Date(2026, time.September, 1, 0, 1, 0, 0, marketLocation()),
-			wantYear: 2026, wantQuarter: 2,
+			name:        "after current half-year disclosure deadline",
+			now:         time.Date(2026, time.September, 1, 0, 1, 0, 0, marketLocation()),
+			wantYear:    2026,
+			wantQuarter: 2,
 		},
 	}
 	for _, tc := range cases {

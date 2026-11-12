@@ -203,8 +203,6 @@ func (s *DataService) ProbeProviderCapabilities(ctx context.Context) (*model.Pro
 	return s.ProbeProviderCapabilitiesWithOptions(ctx, ProviderProbeOptions{Scope: "all", TimeoutSeconds: 12})
 }
 
-// ProbeProviderCapabilitiesWithOptions 主动探测已启用 Provider 的能力。
-// 每个探测直接调用对应 Provider，不经过业务请求的熔断统计；单项超时和并发均受限。
 // fundamentalsProbePeriod 选择已过半年度报告披露截止期的 Q2 样本，避免年初探测未来报告期。
 func fundamentalsProbePeriod(now time.Time) (int, int) {
 	local := now.In(marketLocation())
@@ -215,6 +213,8 @@ func fundamentalsProbePeriod(now time.Time) (int, int) {
 	return year, 2
 }
 
+// ProbeProviderCapabilitiesWithOptions 主动探测已启用 Provider 的能力。
+// 每个探测直接调用对应 Provider，不经过业务请求的熔断统计；单项超时和并发均受限。
 func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, options ProviderProbeOptions) (*model.ProviderProbeRun, error) {
 	if ctx == nil {
 		ctx = context.Background()
