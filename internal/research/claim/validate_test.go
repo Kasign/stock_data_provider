@@ -1,215 +1,145 @@
-package claim
+package scenario
 
 import (
+	"bytes"
+	"encoding/json"
+	"fmt"
 	"strings"
-	"testing"
 	"time"
 )
 
-func claimTime(t *testing.T, value string) time.Time {
-	t.Helper()
-	parsed, err := time.Parse(time.RFC3339Nano, value)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return parsed
+type ProbabilityStatus string
+const (
+	ProbabilityAvailable ProbabilityStatus = "available"
+	ProbabilityInsufficientSample ProbabilityStatus = "insufficient_sample"
+	ProbabilityUnknown ProbabilityStatus = "unknown"
+	ProbabilityNotEvaluated ProbabilityStatus = "not_evaluated"
+)
+type ConditionType string
+const (
+	ConditionPrice ConditionType = "price"
+	ConditionVolume ConditionType = "volume"
+	ConditionIndicator ConditionType = "indicator"
+	ConditionEvent ConditionType = "event"
+	ConditionFundamental ConditionType = "fundamental"
+	ConditionMarket ConditionType = "market"
+	ConditionIndustry ConditionType = "industry"
+	ConditionOther ConditionType = "other"
+)
+type ConditionOperator string
+const (
+	OperatorGT ConditionOperator = "gt"
+	OperatorGTE ConditionOperator = "gte"
+	OperatorLT ConditionOperator = "lt"
+	OperatorLTE ConditionOperator = "lte"
+	OperatorEQ ConditionOperator = "eq"
+	OperatorNEQ ConditionOperator = "neq"
+	OperatorIn ConditionOperator = "in"
+	OperatorNotIn ConditionOperator = "not_in"
+	OperatorCrosses ConditionOperator = "crosses"
+	OperatorExists ConditionOperator = "exists"
+	OperatorNotExists ConditionOperator = "not_exists"
+)
+type EvaluationStatus string
+const (
+	EvaluationSatisfied EvaluationStatus = "satisfied"
+	EvaluationNotSatisfied EvaluationStatus = "not_satisfied"
+	EvaluationUnknown EvaluationStatus = "unknown"
+	EvaluationNotEvaluated EvaluationStatus = "not_evaluated"
+)
+type Scenario struct {
+	ScenarioID string `json:"scenario_id"`
+	ScenarioVersion int `json:"scenario_version"`
+	SubjectRefs []string `json:"subject_refs"`
+	SystemAsOf time.Time `json:"system_as_of"`
+	Horizon string `json:"horizon"`
+	Conditions []ConditionNode `json:"conditions"`
+	ExpectedPath string `json:"expected_path"`
+	EvidenceRefs []string `json:"evidence_refs"`
+	QuantEvaluationRef json.RawMessage `json:"quant_evaluation_ref,omitempty"`
+	ProbabilityStatus ProbabilityStatus `json:"probability_status"`
+	Risks []string `json:"risks"`
+	InvalidationConditions []string `json:"invalidation_conditions"`
+	Limitations []string `json:"limitations"`
 }
-
-func validHypothesis(t *testing.T) Claim {
-	t.Helper()
-	method := "breakout_follow_through"
-	expected := "close remains above the prior resistance for three sessions"
-	return Claim{
-		ClaimID:                   "claim:research:0001",
-		ClaimVersion:              1,
-		Statement:                 "The stock may sustain its breakout",
-		EpistemicType:             EpistemicHypothesis,
-		ScopeRefs:                 []string{"600000.SH"},
-		SystemAsOf:                claimTime(t, "2026-11-06T05:00:00Z"),
-		SupportingEvidenceRefs:    []string{"evidence:research:0001"},
-		ContradictingEvidenceRefs: []string{"evidence:research:0002"},
-		RequiredDataRefs:          []string{"daily_bars:600000.SH"},
-		ValidationMethod:          &method,
-		ExpectedObservation:       &expected,
-		InvalidationConditions:    []string{"close falls below breakout level"},
-		Status:                    StatusTesting,
-		Limitations:               []string{"single-security hypothesis"},
-	}
+type ConditionNode struct { Condition *ScenarioCondition; Group *ConditionGroup }
+type ConditionGroup struct { Operator string `json:"operator"`; Conditions []ConditionNode `json:"conditions"` }
+type ScenarioCondition struct {
+	ConditionID string `json:"condition_id"`
+	ConditionType ConditionType `json:"condition_type"`
+	Description string `json:"description"`
+	Operator ConditionOperator `json:"operator"`
+	MetricRef *string `json:"metric_ref,omitempty"`
+	ExpectedValue any `json:"expected_value,omitempty"`
+	Unit *string `json:"unit,omitempty"`
+	Window *string `json:"window,omitempty"`
+	EvaluationStatus EvaluationStatus `json:"evaluation_status"`
+	EvidenceRefs []string `json:"evidence_refs"`
+	Required bool `json:"required"`
 }
-
-func TestHypothesisValidate(t *testing.T) {
-	value := validHypothesis(t)
-	if err := value.Validate(); err != nil {
-		t.Fatalf("Validate() error = %v", err)
-	}
+func (n ConditionNode) MarshalJSON() ([]byte,error) {
+	if (n.Condition==nil)==(n.Group==nil) { return nil,fmt.Errorf("condition node must contain exactly one condition or group") }
+	if n.Condition!=nil { return json.Marshal(n.Condition) }; return json.Marshal(n.Group)
 }
-
-func TestReportedFactDoesNotRequireHypothesisFields(t *testing.T) {
-	value := validHypothesis(t)
-	value.EpistemicType = EpistemicReportedFact
-	value.ValidationMethod = nil
-	value.ExpectedObservation = nil
-	value.InvalidationConditions = nil
-	value.Status = StatusProposed
-	if err := value.Validate(); err != nil {
-		t.Fatalf("reported fact rejected: %v", err)
-	}
+func (n *ConditionNode) UnmarshalJSON(data []byte) error {
+	if n==nil { return fmt.Errorf("condition node is nil") }
+	var shape map[string]json.RawMessage
+	if err:=json.Unmarshal(data,&shape); err!=nil{return err}
+	if _,ok:=shape["condition_id"];ok { var v ScenarioCondition; if err:=json.Unmarshal(data,&v);err!=nil{return err}; n.Condition,n.Group=&v,nil; return nil }
+	var g ConditionGroup; if err:=json.Unmarshal(data,&g);err!=nil{return err}; n.Condition,n.Group=nil,&g; return nil
 }
-
-func TestClaimRejectsInvalidContractValues(t *testing.T) {
-	tests := []struct {
-		name   string
-		mutate func(*Claim)
-		want   string
-	}{
-		{"zero version", func(c *Claim) { c.ClaimVersion = 0 }, "claim_version"},
-		{"supersedes version on first version", func(c *Claim) { v := 1; c.SupersedesVersion = &v }, "earlier positive"},
-		{"blank statement", func(c *Claim) { c.Statement = " " }, "statement"},
-		{"unknown epistemic type", func(c *Claim) { c.EpistemicType = "fact" }, "epistemic_type"},
-		{"unknown status", func(c *Claim) { c.Status = "accepted" }, "status"},
-		{"nil scope refs", func(c *Claim) { c.ScopeRefs = nil }, "scope_refs"},
-		{"duplicate supporting evidence", func(c *Claim) { c.SupportingEvidenceRefs = []string{"e1", "e1"} }, "duplicate"},
-		{"same evidence both stances", func(c *Claim) { c.ContradictingEvidenceRefs = []string{"evidence:research:0001"} }, "both supporting and contradicting"},
-		{"missing validation method", func(c *Claim) { c.ValidationMethod = nil }, "validation_method"},
-		{"missing expected observation", func(c *Claim) { c.ExpectedObservation = nil }, "expected_observation"},
-		{"padded validation method", func(c *Claim) { value := " breakout_follow_through "; c.ValidationMethod = &value }, "surrounding whitespace"},
-		{"padded expected observation", func(c *Claim) { value := " close remains above resistance "; c.ExpectedObservation = &value }, "surrounding whitespace"},
-		{"empty invalidation conditions", func(c *Claim) { c.InvalidationConditions = []string{} }, "non-empty array"},
-		{"non UTC cutoff", func(c *Claim) { c.SystemAsOf = time.Date(2026, 11, 6, 13, 0, 0, 0, time.FixedZone("CST", 8*60*60)) }, "must be UTC"},
+func (s Scenario) Validate() error {
+	if err:=required("scenario_id",s.ScenarioID);err!=nil{return err}
+	if s.ScenarioVersion<1{return fmt.Errorf("scenario_version must be >= 1")}
+	if err:=validateStrings("subject_refs",s.SubjectRefs);err!=nil{return err}
+	if err:=utc(s.SystemAsOf);err!=nil{return err}
+	if err:=required("horizon",s.Horizon);err!=nil{return err}
+	if len(s.Conditions)==0{return fmt.Errorf("conditions must be a non-empty array")}
+	for i,n:=range s.Conditions {if err:=n.Validate();err!=nil{return fmt.Errorf("conditions[%d]: %w",i,err)}}
+	if err:=required("expected_path",s.ExpectedPath);err!=nil{return err}
+	if err:=validateStrings("evidence_refs",s.EvidenceRefs);err!=nil{return err}
+	if err:=validateProbabilityStatus(s.ProbabilityStatus);err!=nil{return err}
+	if s.ProbabilityStatus==ProbabilityAvailable&&len(s.QuantEvaluationRef)==0{return fmt.Errorf("quant_evaluation_ref is required when probability_status is available")}
+	if len(s.QuantEvaluationRef)>0&&(!json.Valid(s.QuantEvaluationRef)||bytes.TrimSpace(s.QuantEvaluationRef)[0]!='{'){return fmt.Errorf("quant_evaluation_ref must be a JSON object")}
+	for name,values:=range map[string][]string{"risks":s.Risks,"invalidation_conditions":s.InvalidationConditions,"limitations":s.Limitations}{
+		if values==nil{return fmt.Errorf("%s must be a non-null array",name)}
+		for i,v:=range values{if strings.TrimSpace(v)==""{return fmt.Errorf("%s[%d] must not be blank",name,i)}}
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			value := validHypothesis(t)
-			tt.mutate(&value)
-			if err := value.Validate(); err == nil || !strings.Contains(err.Error(), tt.want) {
-				t.Fatalf("Validate() error = %v, want containing %q", err, tt.want)
-			}
-		})
-	}
+	return nil
 }
-
-func TestClaimVersionMustBeAppendOnly(t *testing.T) {
-	previous := validHypothesis(t)
-	next := previous
-	next.ClaimVersion = 2
-	next.SystemAsOf = previous.SystemAsOf.Add(time.Minute)
-	if err := next.ValidateNextVersion(previous); err != nil { t.Fatalf("contiguous version rejected: %v", err) }
-	previousVersion := previous.ClaimVersion
-	next.SupersedesVersion = &previousVersion
-	if err := next.ValidateNextVersion(previous); err != nil { t.Fatalf("current-head supersession rejected: %v", err) }
-	next.SupersedesVersion = nil
-
-	next.ClaimVersion = 3
-	if err := next.ValidateNextVersion(previous); err == nil || !strings.Contains(err.Error(), "increment by exactly one") {
-		t.Fatalf("version gap should fail, got %v", err)
-	}
-	next = previous
-	next.ClaimVersion = 2
-	next.ClaimID = "claim:research:other"
-	if err := next.ValidateNextVersion(previous); err == nil || !strings.Contains(err.Error(), "claim_id cannot change") {
-		t.Fatalf("changed ID should fail, got %v", err)
-	}
+func (n ConditionNode) Validate() error {
+	if (n.Condition==nil)==(n.Group==nil){return fmt.Errorf("exactly one condition or group is required")}
+	if n.Condition!=nil{return n.Condition.Validate()};return n.Group.Validate()
 }
-
-func TestClaimSupersedesVersionMustMatchCurrentHead(t *testing.T) {
-	previous := validHypothesis(t)
-	next := previous
-	next.ClaimVersion = 2
-	next.SystemAsOf = previous.SystemAsOf.Add(time.Minute)
-	wrong := 0
-	next.SupersedesVersion = &wrong
-	if err := next.ValidateNextVersion(previous); err == nil || !strings.Contains(err.Error(), "immediately previous") { t.Fatalf("stale supersession target should fail, got %v", err) }
-	correct := previous.ClaimVersion
-	next.SupersedesVersion = &correct
-	if err := next.ValidateNextVersion(previous); err != nil { t.Fatalf("current-head supersession should pass: %v", err) }
+func (g ConditionGroup) Validate() error {
+	if g.Operator!="all"&&g.Operator!="any"{return fmt.Errorf("group operator must be all or any")}
+	if len(g.Conditions)==0{return fmt.Errorf("group conditions must be a non-empty array")}
+	for i,n:=range g.Conditions{if err:=n.Validate();err!=nil{return fmt.Errorf("conditions[%d]: %w",i,err)}}
+	return nil
 }
-
-func TestClaimValidateNextVersionRejectsIntegerOverflow(t *testing.T) {
-	previous := validHypothesis(t)
-	previous.ClaimVersion = int(^uint(0) >> 1)
-	next := previous
-	next.ClaimVersion = 1
-	if err := next.ValidateNextVersion(previous); err == nil || !strings.Contains(err.Error(), "integer limit") {
-		t.Fatalf("ValidateNextVersion() error = %v, want integer limit rejection", err)
+func (c ScenarioCondition) Validate() error {
+	if err:=required("condition_id",c.ConditionID);err!=nil{return err}
+	switch c.ConditionType{case ConditionPrice,ConditionVolume,ConditionIndicator,ConditionEvent,ConditionFundamental,ConditionMarket,ConditionIndustry,ConditionOther:default:return fmt.Errorf("condition_type is invalid")}
+	if err:=required("description",c.Description);err!=nil{return err}
+	switch c.Operator{case OperatorGT,OperatorGTE,OperatorLT,OperatorLTE,OperatorEQ,OperatorNEQ,OperatorIn,OperatorNotIn,OperatorCrosses,OperatorExists,OperatorNotExists:default:return fmt.Errorf("operator is invalid")}
+	needsMetric:=c.ConditionType==ConditionPrice||c.ConditionType==ConditionVolume||c.ConditionType==ConditionIndicator||c.ConditionType==ConditionFundamental||c.ConditionType==ConditionMarket||c.ConditionType==ConditionIndustry
+	if needsMetric{
+		if c.MetricRef==nil||strings.TrimSpace(*c.MetricRef)==""{return fmt.Errorf("metric_ref is required for this condition_type")}
+		if c.Operator!=OperatorExists&&c.Operator!=OperatorNotExists&&(c.Unit==nil||strings.TrimSpace(*c.Unit)==""){return fmt.Errorf("unit is required for metric comparisons")}
 	}
+	switch c.Operator{
+	case OperatorExists,OperatorNotExists: if c.ExpectedValue!=nil{return fmt.Errorf("expected_value must be omitted for exists operators")}
+	case OperatorIn,OperatorNotIn: if !validScalarCollection(c.ExpectedValue){return fmt.Errorf("in/not_in expected_value must be a non-empty scalar array")}
+	default: if !validScalar(c.ExpectedValue){return fmt.Errorf("expected_value must be a string, number or boolean scalar")}
+	}
+	if err:=validateEvaluationStatus(c.EvaluationStatus);err!=nil{return err}
+	return validateStrings("evidence_refs",c.EvidenceRefs)
 }
-
-func TestClaimStatusTransitionRules(t *testing.T) {
-	allowed := []struct {
-		from ClaimStatus
-		to   ClaimStatus
-	}{
-		{StatusProposed, StatusTesting},
-		{StatusTesting, StatusSupported},
-		{StatusTesting, StatusContradicted},
-		{StatusTesting, StatusInvalidated},
-		{StatusTesting, StatusUnknown},
-	}
-	for _, pair := range allowed {
-		if !CanTransition(pair.from, pair.to) {
-			t.Errorf("CanTransition(%s, %s) = false, want true", pair.from, pair.to)
-		}
-	}
-
-	blocked := []struct {
-		from ClaimStatus
-		to   ClaimStatus
-	}{
-		{StatusProposed, StatusSupported},
-		{StatusTesting, StatusProposed},
-		{StatusSupported, StatusTesting},
-		{StatusContradicted, StatusTesting},
-		{StatusInvalidated, StatusTesting},
-		{StatusUnknown, StatusTesting},
-	}
-	for _, pair := range blocked {
-		if CanTransition(pair.from, pair.to) {
-			t.Errorf("CanTransition(%s, %s) = true, want false", pair.from, pair.to)
-		}
-	}
-}
-
-func TestClaimValidateNextVersionEnforcesStatusTransitions(t *testing.T) {
-	tests := []struct {
-		name      string
-		from      ClaimStatus
-		to        ClaimStatus
-		wantError bool
-	}{
-		{"same status revision", StatusTesting, StatusTesting, false},
-		{"proposed to testing", StatusProposed, StatusTesting, false},
-		{"testing to supported", StatusTesting, StatusSupported, false},
-		{"testing to unknown", StatusTesting, StatusUnknown, false},
-		{"proposed skips testing", StatusProposed, StatusSupported, true},
-		{"testing returns to proposed", StatusTesting, StatusProposed, true},
-		{"supported is terminal", StatusSupported, StatusTesting, true},
-		{"contradicted is terminal", StatusContradicted, StatusTesting, true},
-		{"invalidated is terminal", StatusInvalidated, StatusTesting, true},
-		{"unknown has no declared recovery", StatusUnknown, StatusTesting, true},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			previous := validHypothesis(t)
-			previous.Status = tt.from
-			next := previous
-			next.ClaimVersion++
-			next.SystemAsOf = previous.SystemAsOf.Add(time.Minute)
-			next.Status = tt.to
-			err := next.ValidateNextVersion(previous)
-			if tt.wantError && (err == nil || !strings.Contains(err.Error(), "status transition")) {
-				t.Fatalf("ValidateNextVersion() error = %v, want status transition rejection", err)
-			}
-			if !tt.wantError && err != nil {
-				t.Fatalf("ValidateNextVersion() error = %v, want success", err)
-			}
-		})
-	}
-}
-
-func TestClaimValidateRejectsZeroOffsetNonUTCLocation(t *testing.T) {
-	value := validHypothesis(t)
-	value.SystemAsOf = time.Date(2026, 11, 6, 5, 0, 0, 0, time.FixedZone("non-UTC", 0))
-	if err := value.Validate(); err == nil || !strings.Contains(err.Error(), "must be UTC") {
-		t.Fatalf("Validate() error = %v, want strict UTC Location rejection", err)
-	}
-}
+func validScalar(v any) bool {switch x:=v.(type){case string,bool:return true;case float64:return !isNaNOrInf(x);case json.Number:return true;default:return false}}
+func validScalarCollection(v any) bool {a,ok:=v.([]any);if !ok||len(a)==0{return false};for _,x:=range a{if !validScalar(x){return false}};return true}
+func isNaNOrInf(v float64)bool{return v!=v||v>1.7976931348623157e308||v< -1.7976931348623157e308}
+func validateStrings(name string,a []string)error{if a==nil{return fmt.Errorf("%s must be a non-null array",name)};seen:=map[string]struct{}{};for _,v:=range a{if err:=required(name+" item",v);err!=nil{return err};if _,ok:=seen[v];ok{return fmt.Errorf("%s contains duplicate value %q",name,v)};seen[v]=struct{}{}};return nil}
+func required(name,v string)error{if strings.TrimSpace(v)==""||v!=strings.TrimSpace(v){return fmt.Errorf("%s is required without surrounding whitespace",name)};return nil}
+func utc(v time.Time)error{if v.IsZero(){return fmt.Errorf("system_as_of is required")};_,off:=v.Zone();if off!=0||v.Location()!=time.UTC{return fmt.Errorf("system_as_of must be UTC")};return nil}
+func validateProbabilityStatus(v ProbabilityStatus)error{switch v{case ProbabilityAvailable,ProbabilityInsufficientSample,ProbabilityUnknown,ProbabilityNotEvaluated:return nil;default:return fmt.Errorf("probability_status is invalid")}}
+func validateEvaluationStatus(v EvaluationStatus)error{switch v{case EvaluationSatisfied,EvaluationNotSatisfied,EvaluationUnknown,EvaluationNotEvaluated:return nil;default:return fmt.Errorf("evaluation_status is invalid")}}

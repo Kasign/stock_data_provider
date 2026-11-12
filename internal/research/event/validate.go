@@ -8,17 +8,7 @@ import (
 	"time"
 )
 
-var timeNormalizationRuleVersionPattern = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?package event
-
-import (
-	"fmt"
-	"math"
-	"regexp"
-	"strings"
-	"time"
-)
-
-)
+var timeNormalizationRuleVersionPattern = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?$`)
 
 func (e ResearchEvent) Validate() error {
 	if err := required("event_id", e.EventID); err != nil {
@@ -87,9 +77,15 @@ func (e ResearchEvent) Validate() error {
 	}
 	derivedRefs := make(map[ResearchEventRef]struct{}, len(e.DerivedFromRefs))
 	for index, ref := range e.DerivedFromRefs {
-		if err := required(fmt.Sprintf("derived_from_refs[%d].event_id", index), ref.EventID); err != nil { return err }
-		if ref.EventVersion < 1 { return fmt.Errorf("derived_from_refs[%d].event_version must be >= 1", index) }
-		if _, exists := derivedRefs[ref]; exists { return fmt.Errorf("derived_from_refs contains duplicate reference %s@%d", ref.EventID, ref.EventVersion) }
+		if err := required(fmt.Sprintf("derived_from_refs[%d].event_id", index), ref.EventID); err != nil {
+			return err
+		}
+		if ref.EventVersion < 1 {
+			return fmt.Errorf("derived_from_refs[%d].event_version must be >= 1", index)
+		}
+		if _, exists := derivedRefs[ref]; exists {
+			return fmt.Errorf("derived_from_refs contains duplicate reference %s@%d", ref.EventID, ref.EventVersion)
+		}
 		derivedRefs[ref] = struct{}{}
 	}
 	if e.SourceTimes == nil {
