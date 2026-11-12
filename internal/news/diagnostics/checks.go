@@ -272,14 +272,15 @@ func StorageChecks(probe StorageProbe) []platformdiag.Check {
 						"News storage probe is unavailable", nil,
 					)
 				}
-				if err := probe.Ping(ctx); err != nil {
+				pingErr := probe.Ping(ctx)
+				if ctxErr := ctx.Err(); ctxErr != nil {
+					return platformdiag.Observation{}, ctxErr
+				}
+				if pingErr != nil {
 					return platformdiag.Observation{}, fault.New(
 						fault.ClassUnavailable, "news.storage.connection_failed",
-						"News storage is unavailable", err,
+						"News storage is unavailable", pingErr,
 					)
-				}
-				if err := ctx.Err(); err != nil {
-					return platformdiag.Observation{}, err
 				}
 				return platformdiag.Observation{
 					Status: platformdiag.StatusHealthy, SafeMessage: "News storage connection is healthy",
