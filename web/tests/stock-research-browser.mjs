@@ -258,6 +258,7 @@ try {
   await page.waitForFunction(() => document.querySelector("#symbol-input")?.value === "300750.SZ");
 
   // 全市场分页结果应能直接进入研究工作区，并同步当前证券代码。
+  await page.locator('.nav-link[data-view="market"]').click();
   await page.locator('.nav-link[data-view="stocks"]').click();
   await page.locator("#load-market-stocks").click();
   await page.locator('#market-stocks-body button[data-market-stock-action="research"]').waitFor({ state: "visible" });
