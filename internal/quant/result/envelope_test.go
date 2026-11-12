@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"example.com/stock-analysis-flow/internal/quant/manifest"
 	"example.com/stock-analysis-flow/internal/quant/metric"
@@ -23,7 +24,7 @@ func validTrendPayload(t *testing.T) TrendPayload {
 		EvidenceMetrics:  []metric.Metric{},
 		ConflictRefs:     []string{},
 		QualityStatus:    trend.QualityValid,
-		SystemAsOf: "2026-11-09T00:59:00Z",
+		SystemAsOf: envelopeTestTime(t),
 		AlgorithmVersion: "trend-algorithm.v1",
 	}
 	payload, err := NewTrendPayload(value)
@@ -75,7 +76,7 @@ func TestBuildEnvelopeProjectsManifestAndRoundTripsTrendPayload(t *testing.T) {
 		PayloadSchemaVersion: "1.0.0",
 		AlgorithmVersion:     "trend-algorithm.v1",
 		ParameterFingerprint: "sha256:envelope-test-parameters",
-		SystemAsOf:           "2026-11-09T00:59:00Z",
+		SystemAsOf:           envelopeTestTime(t),
 		InputSnapshotRefs:    []string{"snapshot:envelope-test"},
 	}, payloadJSON)
 	if err != nil {
@@ -121,7 +122,7 @@ func TestBuildEnvelopeKeepsRiskRejectIndependentFromCompletedResult(t *testing.T
 		PayloadSchemaVersion: "1.0.0",
 		AlgorithmVersion:     "risk-evaluator.v1",
 		ParameterFingerprint: "sha256:risk-parameters",
-		SystemAsOf:           "2026-11-09T00:59:00Z",
+		SystemAsOf:           envelopeTestTime(t),
 		InputSnapshotRefs:    []string{},
 	}, payloadJSON)
 	if err != nil {
@@ -147,7 +148,7 @@ func TestEnvelopeRejectsManifestFieldDrift(t *testing.T) {
 		QualityStatus: "valid", ResultStatus: "completed", SchemaVersion: "1.0.0",
 		PayloadSchemaVersion: "1.0.0", AlgorithmVersion: "trend-algorithm.v1",
 		ParameterFingerprint: "sha256:envelope-test-parameters",
-		SystemAsOf: "2026-11-09T00:59:00Z", InputSnapshotRefs: []string{"snapshot:envelope-test"},
+		SystemAsOf: envelopeTestTime(t), InputSnapshotRefs: []string{"snapshot:envelope-test"},
 	}, payloadJSON)
 	if err != nil {
 		t.Fatal(err)
@@ -202,7 +203,7 @@ func TestEnvelopeUnmarshalRejectsMissingSnapshotArray(t *testing.T) {
 		QualityStatus: "valid", ResultStatus: "completed", SchemaVersion: "1.0.0",
 		PayloadSchemaVersion: "1.0.0", AlgorithmVersion: "trend-algorithm.v1",
 		ParameterFingerprint: "sha256:envelope-test-parameters",
-		SystemAsOf: "2026-11-09T00:59:00Z", InputSnapshotRefs: []string{"snapshot:envelope-test"},
+		SystemAsOf: envelopeTestTime(t), InputSnapshotRefs: []string{"snapshot:envelope-test"},
 	}, payloadJSON)
 	if err != nil {
 		t.Fatal(err)
@@ -234,7 +235,7 @@ func TestPayloadConstructorsCopyCallerOwnedMemory(t *testing.T) {
 	value := trend.Result{
 		TrendCode: "price_trend", Direction: trend.DirectionUnknown, Phase: trend.PhaseUnknown,
 		Period: "20d", EvidenceMetrics: []metric.Metric{}, ConflictRefs: []string{"conflict:one"},
-		QualityStatus: trend.QualityValid, SystemAsOf: "2026-11-09T00:59:00Z",
+		QualityStatus: trend.QualityValid, SystemAsOf: envelopeTestTime(t),
 		AlgorithmVersion: "trend-algorithm.v1",
 	}
 	payload, err := NewTrendPayload(value)
@@ -245,4 +246,13 @@ func TestPayloadConstructorsCopyCallerOwnedMemory(t *testing.T) {
 	if payload.Result().ConflictRefs[0] != "conflict:one" {
 		t.Fatal("TrendPayload retained caller-owned slice memory")
 	}
+}
+
+func envelopeTestTime(t *testing.T) time.Time {
+	t.Helper()
+	value, err := time.Parse(time.RFC3339Nano, "2026-11-09T00:59:00Z")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return value
 }
