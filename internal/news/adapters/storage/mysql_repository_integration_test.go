@@ -1147,6 +1147,38 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	if !errors.Is(canceledReadErr, context.Canceled) {
 		t.Fatalf("canceled atomic read error = %v, want context canceled", canceledReadErr)
 	}
+
+	// RACE-04：元数据定位后，若同一 Version 的 fingerprint 被替换，
+	// 原子读取必须拒绝旧引用，且不得调用授权回调或读取正文。
+	originalVersionFingerprint := secondVersion.Version.Fingerprint
+	changedVersionFingerprint := strings.Repeat("c", 64)
+	if changedVersionFingerprint == originalVersionFingerprint {
+		changedVersionFingerprint = strings.Repeat("d", 64)
+	}
+	if _, err := db.ExecContext(ctx, `UPDATE news_item_versions SET fingerprint = ?
+		WHERE news_id = ? AND version_id = ?`,
+		changedVersionFingerprint, secondVersion.Version.NewsID, secondVersion.Version.ID,
+	); err != nil {
+		t.Fatalf("change evidence version fingerprint: %v", err)
+	}
+	authorizationCallbackCalled := false
+	_, _, changedVersionErr := repository.GetEvidenceContentWithCurrentAuthorization(
+		ctx, revokedBinding, revokedObservation, secondVersion.Version, time.Now().UTC(),
+		func(_ context.Context, _ domain.CurrentAuthorizationPolicySet, _ domain.Observation) error {
+			authorizationCallbackCalled = true
+			return nil
+		},
+	)
+	if _, err := db.ExecContext(ctx, `UPDATE news_item_versions SET fingerprint = ?
+		WHERE news_id = ? AND version_id = ?`,
+		originalVersionFingerprint, secondVersion.Version.NewsID, secondVersion.Version.ID,
+	); err != nil {
+		t.Fatalf("restore evidence version fingerprint: %v", err)
+	}
+	if !errors.Is(changedVersionErr, app.ErrInvalidEvidenceQuery) || authorizationCallbackCalled {
+		t.Fatalf("changed evidence version error=%v authorization_callback_called=%t, want invalid query before authorization",
+			changedVersionErr, authorizationCallbackCalled)
+	}
 	atVersion.SystemAsOf = secondVersion.Version.ObservedAt.Add(-time.Second)
 	if _, err := repository.GetEvidenceVersionAt(ctx, atVersion); !errors.Is(err, app.ErrEvidencePITNotFound) {
 		t.Fatalf("explicit future version error = %v, want PIT not found", err)
