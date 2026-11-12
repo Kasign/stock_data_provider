@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/santhosh-tekuri/jsonschema/v5"
 	platformdiagnostics "example.com/stock-analysis-flow/internal/platform/diagnostics"
 	"example.com/stock-analysis-flow/internal/platform/fault"
+	"github.com/santhosh-tekuri/jsonschema/v5"
 )
 
 func TestDiagnosticsHTTPReportSchemaAndGolden(t *testing.T) {
@@ -51,11 +51,11 @@ func TestDiagnosticsHTTPReportSchemaAndGolden(t *testing.T) {
 			Results: []platformdiagnostics.Result{{
 				CheckID: "server.storage.mariadb", Name: "MariaDB", Required: true,
 				Observation: platformdiagnostics.Observation{
-					Status: platformdiagnostics.StatusHealthy,
+					Status:      platformdiagnostics.StatusHealthy,
 					SafeMessage: "MariaDB connection is healthy",
-					CheckedAt: time.Date(2026, 11, 12, 0, 0, 0, 0, time.UTC),
-					Duration: 1200000,
-					Attributes: map[string]string{"dependency": "mariadb"},
+					CheckedAt:   time.Date(2026, 11, 12, 0, 0, 0, 0, time.UTC),
+					Duration:    1200000,
+					Attributes:  map[string]string{"dependency": "mariadb"},
 				},
 				Fault: &fault.Fault{},
 			}},
