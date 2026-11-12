@@ -131,12 +131,12 @@ type ResearchEvent struct {
 	AvailableAt            *time.Time        `json:"available_at"`
 	SystemObservedAt       time.Time         `json:"system_observed_at"`
 	SystemAsOf             time.Time         `json:"system_as_of"`
-	ImpactHypothesisRefs   []string          `json:"impact_hypothesis_refs"`
-	InvalidationConditions []string          `json:"invalidation_conditions"`
-	Uncertainty            []string          `json:"uncertainty"`
-	SourceTimes []EventSourceTime `json:"source_times"`
-	TimeNormalizationRuleVersion string `json:"time_normalization_rule_version"`
-	DerivedFromRefs []EventRef `json:"derived_from_refs"`
+	ImpactHypothesisRefs          []string          `json:"impact_hypothesis_refs"`
+	InvalidationConditions        []string          `json:"invalidation_conditions"`
+	Uncertainty                   []string          `json:"uncertainty"`
+	SourceTimes                   []EventSourceTime `json:"source_times"`
+	TimeNormalizationRuleVersion string            `json:"time_normalization_rule_version"`
+	DerivedFromRefs               []EventRef        `json:"derived_from_refs"`
 }
 type CreateEventCommand struct {
 	EventType              string
@@ -151,14 +151,14 @@ type CreateEventCommand struct {
 	SystemAsOf             time.Time
 	ImpactHypothesisRefs   []string
 	InvalidationConditions []string
-	Uncertainty            []string
+	Uncertainty                   []string
 	TimeNormalizationRuleVersion string
-	DerivedFromRefs []EventRef
-	SourceTimes []EventSourceTime
+	DerivedFromRefs               []EventRef
+	SourceTimes                   []EventSourceTime
 }
 type EventRef struct {
-	EventID string `json:"event_id"`
-	EventVersion int `json:"event_version"`
+	EventID      string `json:"event_id"`
+	EventVersion int    `json:"event_version"`
 }
 type EventRepository interface {
 	Append(context.Context, researchevent.ResearchEvent) error
@@ -530,7 +530,8 @@ func (s *Service) CreateEvent(ctx context.Context, command CreateEventCommand) (
 		ImpactHypothesisRefs:   cloneStrings(command.ImpactHypothesisRefs),
 		InvalidationConditions: cloneStrings(command.InvalidationConditions),
 		Uncertainty: cloneStrings(command.Uncertainty), SourceTimes: toDomainEventTimes(command.SourceTimes),
-		TimeNormalizationRuleVersion: command.TimeNormalizationRuleVersion, DerivedFromRefs: toDomainEventRefs(command.DerivedFromRefs),
+		TimeNormalizationRuleVersion: command.TimeNormalizationRuleVersion,
+		DerivedFromRefs:               toDomainEventRefs(command.DerivedFromRefs),
 	}
 	if err := value.Validate(); err != nil {
 		return ResearchEvent{}, validationFault("invalid_research_event", "Research Event is invalid", err)
@@ -584,7 +585,7 @@ func (s *Service) UpdateEvent(ctx context.Context, command UpdateEventCommand) (
 		Uncertainty: cloneStrings(command.Revision.Uncertainty),
 		SourceTimes: toDomainEventTimes(command.Revision.SourceTimes),
 		TimeNormalizationRuleVersion: command.Revision.TimeNormalizationRuleVersion,
-		DerivedFromRefs: toDomainEventRefs(command.Revision.DerivedFromRefs),
+		DerivedFromRefs:               toDomainEventRefs(command.Revision.DerivedFromRefs),
 	}
 	if err := next.ValidateNextVersion(previous); err != nil {
 		return ResearchEvent{}, validationFault("invalid_research_event_transition", "Research Event revision is invalid", err)
@@ -634,14 +635,21 @@ func toDomainEventTimes(values []EventSourceTime) []researchevent.EventSourceTim
 	return out
 }
 func toDomainEventRefs(values []EventRef) []researchevent.ResearchEventRef {
-	if values == nil { return nil }
+	if values == nil {
+		return nil
+	}
 	out := make([]researchevent.ResearchEventRef, len(values))
-	for i, value := range values { out[i] = researchevent.ResearchEventRef{EventID:value.EventID, EventVersion:value.EventVersion} }
+	for i, value := range values {
+		out[i] = researchevent.ResearchEventRef{EventID: value.EventID, EventVersion: value.EventVersion}
+	}
 	return out
 }
+
 func fromDomainEventRefs(values []researchevent.ResearchEventRef) []EventRef {
 	out := make([]EventRef, len(values))
-	for i, value := range values { out[i] = EventRef{EventID:value.EventID, EventVersion:value.EventVersion} }
+	for i, value := range values {
+		out[i] = EventRef{EventID: value.EventID, EventVersion: value.EventVersion}
+	}
 	return out
 }
 
@@ -654,7 +662,8 @@ func fromDomainEvent(value researchevent.ResearchEvent) ResearchEvent {
 		ImpactHypothesisRefs:   cloneStrings(value.ImpactHypothesisRefs),
 		InvalidationConditions: cloneStrings(value.InvalidationConditions), Uncertainty: cloneStrings(value.Uncertainty),
 		SourceTimes: make([]EventSourceTime, len(value.SourceTimes)),
-		TimeNormalizationRuleVersion: value.TimeNormalizationRuleVersion, DerivedFromRefs: fromDomainEventRefs(value.DerivedFromRefs),
+		TimeNormalizationRuleVersion: value.TimeNormalizationRuleVersion,
+		DerivedFromRefs:               fromDomainEventRefs(value.DerivedFromRefs),
 	}
 	for i, v := range value.SourceTimes {
 		out.SourceTimes[i] = EventSourceTime{EvidenceRef: v.EvidenceRef, TimeType: string(v.TimeType), Value: v.Value, AssertedBy: v.AssertedBy, Confidence: cloneFloat(v.Confidence), ConfidenceMethod: cloneString(v.ConfidenceMethod), ConfidenceMethodVersion: cloneString(v.ConfidenceMethodVersion), Notes: cloneString(v.Notes)}

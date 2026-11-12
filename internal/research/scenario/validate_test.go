@@ -109,6 +109,17 @@ func TestConditionNodeJSONRoundTrip(t *testing.T) {
 	}
 }
 
+func TestScenarioRejectsUnknownFields(t *testing.T) {
+	var value Scenario
+	if err := json.Unmarshal([]byte(`{"scenario_id":"x","unknown":true}`), &value); err == nil {
+		t.Fatal("unknown Scenario field should fail")
+	}
+	var node ConditionNode
+	if err := json.Unmarshal([]byte(`{"condition_id":"x","unknown":true}`), &node); err == nil {
+		t.Fatal("unknown ScenarioCondition field should fail")
+	}
+}
+
 func TestExistsOperatorRejectsExplicitNullExpectedValue(t *testing.T) {
 	s := validScenario()
 	s.Conditions[0].Condition.Operator = OperatorExists

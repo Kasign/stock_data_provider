@@ -11,8 +11,12 @@ func (c Claim) Validate() error {
 	if err := required("claim_id", c.ClaimID); err != nil {
 		return err
 	}
-	if c.ClaimVersion < 1 { return fmt.Errorf("claim_version must be >= 1") }
-	if c.SupersedesVersion != nil && (*c.SupersedesVersion < 1 || *c.SupersedesVersion >= c.ClaimVersion) { return fmt.Errorf("supersedes_version must reference an earlier positive claim_version") }
+	if c.ClaimVersion < 1 {
+		return fmt.Errorf("claim_version must be >= 1")
+	}
+	if c.SupersedesVersion != nil && (*c.SupersedesVersion < 1 || *c.SupersedesVersion >= c.ClaimVersion) {
+		return fmt.Errorf("supersedes_version must reference an earlier positive claim_version")
+	}
 	if err := required("statement", c.Statement); err != nil {
 		return err
 	}

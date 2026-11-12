@@ -171,6 +171,9 @@ func (c *ScenarioCondition) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &fields); err != nil {
 		return err
 	}
+	if _, ok := fields["required"]; !ok {
+		return fmt.Errorf("required is required")
+	}
 	if raw, ok := fields["expected_value"]; ok {
 		value.ExpectedValuePresent = true
 		if bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {

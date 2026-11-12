@@ -28,7 +28,7 @@ Research 不采集新闻、不拥有行情事实、不重算 Quant 指标，不�
 |---|---|---|
 | RSC-001 Context | Domain、结构/版本链校验、v1 Golden/Schema Validator、Application Create/Get、SQL Repository；Research 全模块 gofmt、go test、race、vet 已通过 | 消费方 Contract Test、远端引用与授权版本验证 |
 | RSC-002 Evidence | Domain、JCS/SHA-256 指纹、严格 PIT、AuthorizationRef 绑定、Application Add/Get、SQL Repository；本地授权调用边界已测试 | News 生产 Adapter、Owner 当前授权复核与内容读取 TOCTOU、available_at 来源证据及授权续期历史语义 |
-| RSC-003 Event | Domain、SourceTime、版本追加、生命周期、事务 Outbox、Application Create/Update；本轮补齐 time_normalization_rule_version 与 derived_from_refs 字段及结构校验 | 多来源归并/拆分、News Owner Adapter |
+| RSC-003 Event | Domain、SourceTime、版本追加、生命周期、事务 Outbox、Application Create/Update；补齐 time_normalization_rule_version、derived_from_refs 字段及结构校验，并在同一事务内校验精确版本存在性与引用图 | 多来源归并/拆分、News Owner Adapter |
 | RSC-004 实体关联 | 尚未实现 | 等待 Data 提供稳定 Security/Industry 引用、版本/时间语义及公开 Application Port |
 | RSC-005 Claim/Hypothesis | Domain、认识论校验、状态迁移、版本追加、supersedes_version 字段及当前版本头校验、Application、SQL Repository | Evidence/Scope 真实引用解析、真实研究样本 |
 | RSC-006 Scenario | 新增 Scenario/Condition/ConditionGroup 领域模型，expected_value 限定为标量或一层标量数组，递归 ConditionGroup 校验按 DEC-033 执行 | Quant Metric Registry/结果引用由 Quant Owner 校验；Scenario Application/Storage 接入待完成 |
