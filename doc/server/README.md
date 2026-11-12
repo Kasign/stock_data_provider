@@ -1665,3 +1665,10 @@ Server Bootstrap
 - Server Report 增加 `schema_version=1.0.0`，遵循 GOV-CTR-004 的独立 DTO 版本身份规则。Schema 仅描述 Runner 成功完成时的 200 响应：`diagnostics.summary`、`diagnostics.results[]` 和 `readiness`；不包含内部 `Result.Fault`。
 - HTTP 行为保持现有实现：Owner-only、GET/HEAD、`Cache-Control: no-store`；检查执行完成即返回 200，即使某项检查不健康；Runner 执行错误返回脱敏 503。该 Schema 不定义 503 错误投影，也不替代 PLAT-CTR-001。
 - 增加 Go 契约测试，使用项目既有 JSON Schema 校验库验证 Golden 与实际 Server Report 序列化结果，并断言内部 Fault 不进入 JSON。
+
+### 12.84 SRV-009 Diagnostics HTTP Report Schema 正则修正与 CI 验收（2026-11-12）
+
+- 首轮 Schema 修正遗漏了 `attributes.propertyNames.pattern`：Observation 字段值已切换到 Go regexp 可识别的控制字符范围写法，但属性名仍保留旧的 Unicode 转义正则，导致 JSON Schema 编译继续失败。
+- 已将属性名约束同步为 `^[^\\x00-\\x1F\\x7F]+$`，保留非空约束；文档 Schema 是测试和契约的唯一读取源，不存在独立的运行时 Schema 副本。
+- 最终 CI Run `43218433690`，HEAD `bdb5eceb0462c496f20b126023883b5326ecf874` 成功：gofmt、Server 包测试、Race、真实 MariaDB/Redis 集成、Vet、Docker 镜像与 Notification Schema 检查、真实容器 Bootstrap/Readiness/SIGTERM smoke 全部通过。
+- 前两次失败 Run 分别为 `43217460937` 和 `43218169542`；失败均定位到同一 Schema 属性名正则未修正。本节以最终成功 Run 为验收依据。
