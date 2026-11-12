@@ -405,7 +405,6 @@ func TestProviderOutputPolicyResolverCheckDistinguishesReadinessStates(t *testin
 	}, platformdiag.StatusDegraded, "news.provider.output_policy_binding_invalid", "available")
 }
 
-
 type cancellationStorageProbe struct{ cancel context.CancelFunc }
 
 func (p cancellationStorageProbe) Ping(context.Context) error {
@@ -442,7 +441,9 @@ func TestDiagnosticChecksStopWhenContextIsCanceledByDependency(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		check := ObservationRetentionCheck(cancellationRetentionProbe{cancel: cancel})
 		report, err := (platformdiag.Runner{}).Run(ctx, []platformdiag.Check{check})
-		if err != nil { t.Fatal(err) }
+		if err != nil {
+			t.Fatal(err)
+		}
 		if got := report.Results[0].Observation.Status; got != platformdiag.StatusUnavailable {
 			t.Fatalf("status=%s, want unavailable", got)
 		}
@@ -451,7 +452,9 @@ func TestDiagnosticChecksStopWhenContextIsCanceledByDependency(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		check := SourceEndpointCheck(cancellationSourceCatalog{cancel: cancel}, "source-1", "endpoint-1", true)
 		report, err := (platformdiag.Runner{}).Run(ctx, []platformdiag.Check{check})
-		if err != nil { t.Fatal(err) }
+		if err != nil {
+			t.Fatal(err)
+		}
 		if got := report.Results[0].Observation.Status; got != platformdiag.StatusUnavailable {
 			t.Fatalf("status=%s, want unavailable", got)
 		}
@@ -459,7 +462,9 @@ func TestDiagnosticChecksStopWhenContextIsCanceledByDependency(t *testing.T) {
 	t.Run("storage ping", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		report, err := (platformdiag.Runner{}).Run(ctx, StorageChecks(cancellationStorageProbe{cancel: cancel})[:1])
-		if err != nil { t.Fatal(err) }
+		if err != nil {
+			t.Fatal(err)
+		}
 		if got := report.Results[0].Observation.Status; got != platformdiag.StatusUnavailable {
 			t.Fatalf("status=%s, want unavailable", got)
 		}
@@ -467,7 +472,9 @@ func TestDiagnosticChecksStopWhenContextIsCanceledByDependency(t *testing.T) {
 	t.Run("storage schema", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		report, err := (platformdiag.Runner{}).Run(ctx, StorageChecks(cancellationStorageProbe{cancel: cancel})[1:])
-		if err != nil { t.Fatal(err) }
+		if err != nil {
+			t.Fatal(err)
+		}
 		if got := report.Results[0].Observation.Status; got != platformdiag.StatusUnavailable {
 			t.Fatalf("status=%s, want unavailable", got)
 		}
