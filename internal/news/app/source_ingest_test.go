@@ -129,6 +129,26 @@ func TestIngestCollectedSourceFailsClosedOnPolicyVersionChange(t *testing.T) {
 	}
 }
 
+func TestIngestCollectedSourceFailsClosedWhenDatabasePolicyVersionChanged(t *testing.T) {
+	registration := sourcePersistenceRegistration()
+	repository := newSourcePersistenceMemoryRepository(registration)
+	// SourceCatalog 仍返回采集时版本，但权威持久化策略版本已更新。
+	repository.sourcePolicyVersionID = "source-policy-v4"
+	ingest := newCandidateIngest(repository, func() string { return "must-not-persist-stale-policy" })
+	usecase, err := NewIngestCollectedSource(ingest.repository, ingest.newID, providerIngestCatalogStub{registration: registration})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = usecase.Execute(context.Background(), IngestCollectedSourceRequest{
+		Collection: sealedCollectedSourceResult(), IdempotencyPrefix: "collection-db-policy-change",
+		Purpose: domain.PurposeInternalPersonalResearch, Retention: time.Hour,
+	})
+	if !errors.Is(err, ErrSourcePersistencePolicyUnavailable) ||
+		len(repository.observations) != 0 || len(repository.items) != 0 {
+		t.Fatalf("err=%v repository=%+v, want stale database policy rejected before writes", err, repository)
+	}
+}
+
 func TestIngestCollectedSourceRequiresSeparateMetadataPersistenceGrant(t *testing.T) {
 	registration := sourcePersistenceRegistration()
 	registration.SourcePolicy.AllowedStorageModes = []domain.StorageMode{domain.StorageTransient}

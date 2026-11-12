@@ -31,8 +31,8 @@ type IngestCollectedSourceRequest struct {
 	Retention         time.Duration
 }
 
-// IngestCollectedSource 在持久化前重新读取 SourceCatalog，并独立评估元数据持久化权限。
-// 采集时与当前策略版本不一致时拒绝，避免旧采集结果借用新版本授权。
+// IngestCollectedSource 在每条 Observation 写事务内锁定并复核当前 Source/Endpoint 策略，
+// 再评估元数据持久化权限，避免授权预检与持久化之间发生撤销竞态。
 type IngestCollectedSource struct {
 	ingest  *candidateIngest
 	sources SourceCatalog

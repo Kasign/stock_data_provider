@@ -940,6 +940,94 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	if err := atomicPublisher.Execute(ctx, domain.NewsPolicyTypeSource, secondObservation.SourceID, atomicPolicyVersion, atomicPayload); err != nil {
 		t.Fatalf("publish atomic read source policy: %v", err)
 	}
+
+	// Source Observation 写入事务也必须锁定同一当前策略指针，避免授权后、持久化前被撤销。
+	lockSourceRef := "news-it-source-ingest-lock"
+	lockSourceV1 := "news-it-source-ingest-v1"
+	lockSourceV2 := "news-it-source-ingest-v2"
+	lockPayloadV1, err := json.Marshal(domain.SourcePolicy{
+		Status: domain.AuthorizationApproved,
+		AllowedAccessMethods: []domain.AccessMethod{domain.AccessRSS},
+		AllowedPurposes: []domain.Purpose{domain.PurposeInternalPersonalResearch},
+		AllowedContentKinds: []domain.ContentKind{domain.ContentMetadata},
+		AllowedStorageModes: []domain.StorageMode{domain.StoragePersistentMetadata},
+		MaxRetention: time.Hour, EvidenceRef: "news-it-source-ingest-lock-evidence",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := atomicPublisher.Execute(ctx, domain.NewsPolicyTypeSource, lockSourceRef, lockSourceV1, lockPayloadV1); err != nil {
+		t.Fatalf("publish source ingest lock policy: %v", err)
+	}
+	lockPayloadV2, err := json.Marshal(domain.SourcePolicy{
+		Status: domain.AuthorizationRevoked,
+		AllowedAccessMethods: []domain.AccessMethod{domain.AccessRSS},
+		AllowedPurposes: []domain.Purpose{domain.PurposeInternalPersonalResearch},
+		AllowedContentKinds: []domain.ContentKind{domain.ContentMetadata},
+		AllowedStorageModes: []domain.StorageMode{domain.StoragePersistentMetadata},
+		MaxRetention: time.Hour, EvidenceRef: "news-it-source-ingest-revoked-evidence",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sourcePolicyLocked := make(chan struct{})
+	releaseSourceWrite := make(chan struct{})
+	sourceWriteDone := make(chan error, 1)
+	go func() {
+		sourceWriteDone <- repository.WithinIdentityTransaction(ctx, func(tx app.IdentityTransaction) error {
+			policyTx, ok := tx.(app.SourcePolicyIdentityTransaction)
+			if !ok {
+				return errors.New("identity transaction lacks source policy lock")
+			}
+			if _, _, err := policyTx.LockCurrentSourcePolicies(
+				ctx, lockSourceRef, lockSourceV1, "news-it-source-ingest-endpoint", "",
+			); err != nil {
+				return err
+			}
+			close(sourcePolicyLocked)
+			select {
+			case <-releaseSourceWrite:
+				return nil
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		})
+	}()
+	select {
+	case <-sourcePolicyLocked:
+	case <-time.After(5 * time.Second):
+		close(releaseSourceWrite)
+		t.Fatal("source ingest transaction did not lock current policy")
+	}
+	sourceRevokeDone := make(chan error, 1)
+	go func() {
+		sourceRevokeDone <- atomicPublisher.Execute(ctx, domain.NewsPolicyTypeSource, lockSourceRef, lockSourceV2, lockPayloadV2)
+	}()
+	select {
+	case revokeErr := <-sourceRevokeDone:
+		close(releaseSourceWrite)
+		t.Fatalf("source policy replacement completed while Observation transaction held its lock: %v", revokeErr)
+	case <-time.After(100 * time.Millisecond):
+	}
+	close(releaseSourceWrite)
+	if err := <-sourceWriteDone; err != nil {
+		t.Fatalf("source Observation transaction: %v", err)
+	}
+	if err := <-sourceRevokeDone; err != nil {
+		t.Fatalf("publish source policy revocation after Observation transaction: %v", err)
+	}
+	if err := repository.WithinIdentityTransaction(ctx, func(tx app.IdentityTransaction) error {
+		policyTx, ok := tx.(app.SourcePolicyIdentityTransaction)
+		if !ok {
+			return errors.New("identity transaction lacks source policy lock")
+		}
+		_, _, err := policyTx.LockCurrentSourcePolicies(
+			ctx, lockSourceRef, lockSourceV1, "news-it-source-ingest-endpoint", "",
+		)
+		return err
+	}); !errors.Is(err, app.ErrNewsCurrentPolicyUnavailable) {
+		t.Fatalf("stale source policy after committed replacement error = %v, want current policy unavailable", err)
+	}
 	atomicContent, atomicReadObservation, err := repository.GetEvidenceContentWithCurrentAuthorization(
 		ctx, atomicBinding, secondObservation, secondVersion.Version, time.Now().UTC(),
 		func(readCtx context.Context, current domain.CurrentAuthorizationPolicySet, currentObservation domain.Observation) error {
