@@ -1601,5 +1601,8 @@ Server Bootstrap
 - Research 的 LeaseToken 仅用于 Research Outbox Confirm/Retry/Reject，不序列化给 Notification。Inbox 接收成功但 Outbox 确认失败时，租约到期后重放相同 Envelope，由 Notification 双唯一键和内容校验安全去重。
 - 明确区分错误：未知/不匹配 Schema、无效 JSON、资源超限、Fingerprint/幂等冲突进入 rejected；Inbox/存储等其他接收错误按 Server 固定退避策略进入 retry_wait。Research Outbox 不持久化原始错误。
 - Relay 作为 Server Lifecycle 组件，仅在 `SERVER_ROLE=worker|all` 时启动；停止时先取消 Relay 并等待退出，再关闭共享 MariaDB。API-only 角色不启动 Relay。
-- Notification Schema Registry 的 Envelope/Payload/JSON depth 上限必须通过 `NOTIFICATION_EVENT_MAX_ENVELOPE_BYTES`、`NOTIFICATION_EVENT_MAX_PAYLOAD_BYTES`、`NOTIFICATION_EVENT_MAX_JSON_DEPTH` 显式配置；项目建议值未冻结，Server 不采用隐式默认值。Relay 批次/轮询/租约/临时错误退避采用 Server 明确默认策略，可由对应 `RESEARCH_NOTIFICATION_RELAY_*` 环境变量覆盖。
+- Notification Schema Registry 的 Envelope/Payload/JSON depth 上限必须通过 `NOTIFICATION_EVENT_MAX_ENVELOPE_BYTES`、`NOTIFICATION_EVENT_MAX_PAYLOAD_BYTES`、`NOTIFICATION_EVENT_MAX_JSON_DEPTH` 显式配置；项目建议值未冻结，Server 不采用隐式默认值。Relay 批次/轮询/租约/临时错误退避采用 Server 明确默认策略，可由对应 `RESEARCH_NOTIFICATION_RELAY_*` 环境变量覆盖。示例配置（仅用于演示字段关系，不代表项目已批准生产阈值）：
+  - `NOTIFICATION_EVENT_MAX_ENVELOPE_BYTES=8192`
+  - `NOTIFICATION_EVENT_MAX_PAYLOAD_BYTES=4096`
+  - `NOTIFICATION_EVENT_MAX_JSON_DEPTH=16`
 - 当前 Relay 只负责可靠接收并创建 Notification Fanout WorkItem；不代表 Fanout Worker 已启动、订阅已配置或渠道已发送。真实 MariaDB 跨模块端到端验收仍需在部署环境执行。

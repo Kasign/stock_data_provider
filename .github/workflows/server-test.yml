@@ -59,6 +59,7 @@ jobs:
             ./internal/server/migration \
             ./internal/server/resources \
             ./internal/server/runtime
+            ./internal/server/relay \
       - name: Run Server vet
         run: |
           go vet ./cmd/analysis-api \
@@ -69,3 +70,4 @@ jobs:
             ./internal/server/migration \
             ./internal/server/resources \
             ./internal/server/runtime
+            ./internal/server/relay \

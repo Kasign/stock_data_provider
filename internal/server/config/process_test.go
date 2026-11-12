@@ -1,17 +1,17 @@
 package config
 
-var relayRequiredTestValues = map[string]string{
-	"NOTIFICATION_EVENT_MAX_ENVELOPE_BYTES": "8192",
-	"NOTIFICATION_EVENT_MAX_PAYLOAD_BYTES":  "4096",
-	"NOTIFICATION_EVENT_MAX_JSON_DEPTH":     "16",
-}
-
 import (
 	"testing"
 	"time"
 
 	platformconfig "example.com/stock-analysis-flow/internal/platform/config"
 )
+
+var relayRequiredTestValues = map[string]string{
+	"NOTIFICATION_EVENT_MAX_ENVELOPE_BYTES": "8192",
+	"NOTIFICATION_EVENT_MAX_PAYLOAD_BYTES":  "4096",
+	"NOTIFICATION_EVENT_MAX_JSON_DEPTH":     "16",
+}
 
 func TestLoadProcessDefaults(t *testing.T) {
 	env := platformconfig.NewEnvWithLookup(func(key string) (string, bool) {
@@ -29,7 +29,8 @@ func TestLoadProcessDefaults(t *testing.T) {
 	}
 	if cfg.LogLevel != "info" || cfg.AnalysisTimeout != 5*time.Minute ||
 		cfg.AnalysisWorkers != 2 || cfg.AnalysisMaxQueued != 100 ||
-		cfg.Role != RoleAll || cfg.HTTP.Address != ":8092" {
+		cfg.Role != RoleAll || cfg.HTTP.Address != ":8092" ||
+		cfg.ResearchNotificationRelay.BatchSize != 20 || cfg.ResearchNotificationRelay.EventLimits.MaxJSONDepth != 16 {
 		t.Fatalf("unexpected process defaults: %+v", cfg)
 	}
 }
