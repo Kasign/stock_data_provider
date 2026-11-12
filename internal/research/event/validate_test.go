@@ -336,6 +336,12 @@ func TestResearchEventJSONRejectsUnknownAndMissingRequiredFields(t *testing.T) {
 		t.Fatalf("unknown Event field should fail: %v", err)
 	}
 	delete(object, "unexpected")
+	object["derived_from_refs"] = json.RawMessage(`[{"event_id":"evt_parent","event_version":1,"unexpected":true}]`)
+	encoded, _ = json.Marshal(object)
+	if err := json.Unmarshal(encoded, &decoded); err == nil || !strings.Contains(err.Error(), "unknown field") {
+		t.Fatalf("unknown Event reference field should fail: %v", err)
+	}
+	object["derived_from_refs"] = json.RawMessage(`[]`)
 	delete(object, "occurred_at")
 	encoded, _ = json.Marshal(object)
 	if err := json.Unmarshal(encoded, &decoded); err == nil || !strings.Contains(err.Error(), "occurred_at") {

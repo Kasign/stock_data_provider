@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -318,26 +319,37 @@ func (c ScenarioCondition) Validate() error {
 }
 
 func validScalar(value any) bool {
-	switch v := value.(type) {
-	case string, bool:
-		return true
-	case float64:
-		return !math.IsNaN(v) && !math.IsInf(v, 0)
-	case json.Number:
-		parsed, err := strconv.ParseFloat(string(v), 64)
+	if number, ok := value.(json.Number); ok {
+		parsed, err := strconv.ParseFloat(string(number), 64)
 		return err == nil && !math.IsNaN(parsed) && !math.IsInf(parsed, 0)
+	}
+	reflected := reflect.ValueOf(value)
+	if !reflected.IsValid() {
+		return false
+	}
+	switch reflected.Kind() {
+	case reflect.String, reflect.Bool,
+		reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return true
+	case reflect.Float32, reflect.Float64:
+		number := reflected.Float()
+		return !math.IsNaN(number) && !math.IsInf(number, 0)
 	default:
 		return false
 	}
 }
 
 func validScalarCollection(value any) bool {
-	values, ok := value.([]any)
-	if !ok || len(values) == 0 {
+	reflected := reflect.ValueOf(value)
+	if !reflected.IsValid() || (reflected.Kind() != reflect.Slice && reflected.Kind() != reflect.Array) || reflected.Len() == 0 {
 		return false
 	}
-	for _, item := range values {
-		if !validScalar(item) {
+	if reflected.Type().Elem().Kind() == reflect.Uint8 {
+		return false
+	}
+	for i := 0; i < reflected.Len(); i++ {
+		if !validScalar(reflected.Index(i).Interface()) {
 			return false
 		}
 	}

@@ -2,7 +2,7 @@
 
 - 分支：`feat/research`
 - 本轮执行基线（开始时 HEAD）：`6d0ef54002f58516a3279547f256225f946f85f4`。
-- 当前执行提交：`ea7ca1b7e1a0d9a70a30253944ba782f6a006698`（本轮 CI 尚未执行）。
+- 当前执行提交：以 `feat/research` 分支最新 HEAD 为准；本轮 CI 尚未执行。
 - 本轮按 RSC-CTR-002 完成 Event/Claim/Scenario 模型对齐、Research 初版 Migration 收敛、事务引用校验及测试/文档更新；详细进度见 [02-任务拆分与验收](./02-任务拆分与验收.md)。
 - 代码范围：`internal/research/**`
 - 文档范围：`doc/research/**`
@@ -48,7 +48,7 @@ Research 不采集新闻、不拥有行情事实、不重算 Quant 指标，不�
 - 历史 Workflow Run [42616788237](https://github.com/Kasign/stock_data_provider/actions/runs/42616788237) 对旧代码 SHA `0129675185ab29905b0ef14a21e1d564961e3dde` 的 Research gofmt、go test、race、vet 与旧版 MariaDB 迁移测试通过；不代表本轮新提交已验收。当前 `.github/workflows/go-test.yml` 的 push 分支列表不包含 `feat/research`，本轮提交没有自动触发该 Workflow。
 - 同一 Workflow 的整体 conclusion 是 failure：根模块 `Test .` 被 Marketdata、News、Notification、Quant 的 gofmt 差异阻断。该失败不属于 Research 文件；因此不能表述为全仓 Go Workflow 通过，也不能把根模块全量编译/测试视为已验收。
 - 此前 Workflow 的 MariaDB 结果仅证明旧 v1-v5 迁移链；本轮删除该链后，最终结构初始化与当前 Repository 集成尚待重新验收。
-- 本轮代码复核发现并修复 Event.available_at PIT 边界；本次进一步按 RSC-CTR-002 补齐 Event 时间规则版本/派生引用、Claim supersedes_version 和 Scenario 闭合条件模型。新改动的 CI 验收状态以对应提交后的 Workflow 为准。
+- 本轮代码复核发现并修复 Event.available_at PIT 边界；本次进一步按 RSC-CTR-002 补齐 Event 时间规则版本/派生引用及严格 JSON 字段校验、Claim supersedes_version 及严格 JSON 字段校验、Scenario 闭合条件模型和数值标量类型校验。新改动的 CI 验收状态以对应提交后的 Workflow 为准。
 - 尚无真实 Data/News Owner Adapter 与完整来源证据；跨模块接入及真实数据验收仍未完成。根 Server Migration 注册和 Notification Relay 由 Server 组合根负责。
 
 ## 维护规则

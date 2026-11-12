@@ -43,12 +43,17 @@ func TestScenarioClosedConditionValueTypes(t *testing.T) {
 	}
 
 	s = validScenario()
+	s.Conditions[0].Condition.ExpectedValue = 12
+	if err := s.Validate(); err != nil {
+		t.Fatalf("integer scalar should pass: %v", err)
+	}
+	s = validScenario()
 	s.Conditions[0].Condition.Operator = OperatorIn
-	s.Conditions[0].Condition.ExpectedValue = []any{"a", true, float64(3)}
+	s.Conditions[0].Condition.ExpectedValue = []int{1, 2, 3}
 	if err := s.Validate(); err != nil {
 		t.Fatalf("scalar array should pass: %v", err)
 	}
-	s.Conditions[0].Condition.ExpectedValue = []any{[]any{"nested"}}
+	s.Conditions[0].Condition.ExpectedValue = [][]string{{"nested"}}
 	if err := s.Validate(); err == nil {
 		t.Fatal("nested collection should fail")
 	}
