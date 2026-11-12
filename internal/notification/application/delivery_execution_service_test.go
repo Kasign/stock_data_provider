@@ -567,12 +567,12 @@ func TestDeliveryExecutionDoesNotStartAttemptWhenLeaseAlreadyExpired(t *testing.
 	}
 }
 
-type outcomeUnknownAttemptCompletionRepository struct {
+type executionOutcomeUnknownAttemptCompletionRepository struct {
 	*memoryDeliveries
 	persistCompletion bool
 }
 
-func (r outcomeUnknownAttemptCompletionRepository) CompleteWithLease(
+func (r executionOutcomeUnknownAttemptCompletionRepository) CompleteWithLease(
 	ctx context.Context,
 	expectedDeliveryVersion, fencingToken int64,
 	completed domain.DeliveryAttempt,
@@ -595,7 +595,7 @@ func TestDeliveryExecutionCompletionOutcomeUnknownNeverRepeatsChannelSend(t *tes
 		}
 		t.Run(name, func(t *testing.T) {
 			service, repository, adapter, claim, event := executionFixture(t)
-			attempts := outcomeUnknownAttemptCompletionRepository{
+			attempts := executionOutcomeUnknownAttemptCompletionRepository{
 				memoryDeliveries: repository, persistCompletion: persistCompletion,
 			}
 			service.attempts = attempts
