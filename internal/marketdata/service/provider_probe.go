@@ -1685,20 +1685,29 @@ func classifyProbeError(err error) string {
 	if errors.Is(err, context.Canceled) {
 		return "cancelled"
 	}
+	status := probeHTTPStatus(err)
+	switch status {
+	case 429:
+		return "rate_limited"
+	case 401:
+		return "authentication_failed"
+	case 403:
+		return "permission_denied"
+	case status >= 400:
+		return "http_" + strconv.Itoa(status)
+	}
+
 	message := strings.ToLower(err.Error())
 	if isProbeProviderNotConfiguredError(message) {
 		return "provider_not_configured"
 	}
 	switch {
-	case strings.Contains(message, "429"), strings.Contains(message, "too many requests"), strings.Contains(message, "rate limit"):
+	case strings.Contains(message, "too many requests"), strings.Contains(message, "rate limit"):
 		return "rate_limited"
-	case strings.Contains(message, "401"), strings.Contains(message, "unauthorized"), strings.Contains(message, "invalid token"):
+	case strings.Contains(message, "unauthorized"), strings.Contains(message, "invalid token"):
 		return "authentication_failed"
-	case strings.Contains(message, "403"), strings.Contains(message, "forbidden"), strings.Contains(message, "permission denied"):
+	case strings.Contains(message, "forbidden"), strings.Contains(message, "permission denied"):
 		return "permission_denied"
-	}
-	if match := probeHTTPStatusPattern.FindStringSubmatch(err.Error()); len(match) == 2 {
-		return "http_" + match[1]
 	}
 	if strings.Contains(message, "contract") || strings.Contains(message, "invalid") || strings.Contains(message, "missing") || strings.Contains(message, "unexpected") {
 		return "contract_invalid"

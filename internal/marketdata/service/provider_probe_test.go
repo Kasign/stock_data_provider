@@ -357,12 +357,15 @@ func TestProviderProbeFailureClassification(t *testing.T) {
 		stage   string
 	}{
 		{"HTTP 502 Bad Gateway", "http_502", "http"},
+		{"HTTP 502 Bad Gateway: invalid token", "http_502", "http"},
 		{"HTTP 429 Too Many Requests", "rate_limited", "rate_limit"},
 		{"HTTP 403 Forbidden", "permission_denied", "provider_permission"},
 		{"dial tcp: lookup example.test: no such host", "network_error", "connect"},
 		{"quote contract missing source version", "contract_invalid", "contract"},
 		{"Tushare token is not configured", "provider_not_configured", "configuration"},
 		{"Provider HTTP client is not configured", "provider_not_configured", "configuration"},
+		{"HTTP 401 Unauthorized: token is not configured", "authentication_failed", "provider_auth"},
+		{"HTTP 403 Forbidden: API key is not configured", "permission_denied", "provider_permission"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.code, func(t *testing.T) {
