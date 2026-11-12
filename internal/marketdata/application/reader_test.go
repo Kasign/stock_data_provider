@@ -272,7 +272,7 @@ func TestReaderGetFundamentalsSelectsCurrentAndPITUseCases(t *testing.T) {
 		Sections: []model.FundamentalSection{{
 			Category: "profitability", ReportDate: "2025-12-31", PublicationDate: "2026-03-20",
 			AvailableAt: &availableAt, HasData: true, QualityStatus: model.QualityDegraded,
-			Metrics: []model.FundamentalMetric{{Key: "roe", Name: "净资产收益率", Value: 0.12, Unit: "ratio", SourceField: "roe"}},
+			Metrics:        []model.FundamentalMetric{{Key: "roe", Name: "净资产收益率", Value: 0.12, Unit: "ratio", SourceField: "roe"}},
 			QualityReasons: []string{"source_time_precision_date_only"},
 		}},
 		Source: "tushare", SourceVersion: "fund-v2", FetchedAt: availableAt.Add(2 * time.Minute),
