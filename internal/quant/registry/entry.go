@@ -54,7 +54,7 @@ type QualityPolicy struct {
 }
 
 // SampleCountPolicy 定义 QuantMetric.sample_count 的必需性和计数语义。
- type SampleCountPolicy struct {
+type SampleCountPolicy struct {
 	RequiredInMetric bool   `json:"required_in_metric"`
 	Unit             string `json:"unit"`
 	CountingRule     string `json:"counting_rule"`
