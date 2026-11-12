@@ -981,7 +981,7 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 			if !ok {
 				return errors.New("identity transaction lacks source policy lock")
 			}
-			if _, _, _, _, err := policyTx.LockCurrentIngestPolicies(
+			if _, _, _, err := policyTx.LockCurrentIngestPolicies(
 				ctx, lockSourceRef, lockSourceV1, "news-it-source-ingest-endpoint", "", "", "",
 			); err != nil {
 				return err
