@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"math"
+	"net/url"
 	"os"
 	"strings"
 	"testing"
@@ -504,6 +505,99 @@ func TestLiveTushareHistoricalAdjustmentEvidence(t *testing.T) {
 	}
 	if len(failures) > 0 {
 		t.Errorf("Tushare historical adjustment evidence failed: %s", strings.Join(failures, " | "))
+	}
+}
+
+// TestLiveHithinkAnnualBalanceSheetPublicationDateRaw isolates the annual balance-sheet
+// endpoint so a publication-date mismatch can be traced to the provider's raw fields.
+func TestLiveHithinkAnnualBalanceSheetPublicationDateRaw(t *testing.T) {
+	if os.Getenv("MARKET_DATA_LIVE_HITHINK_BALANCE_SHEET_RAW") != "1" {
+		t.Skip("set MARKET_DATA_LIVE_HITHINK_BALANCE_SHEET_RAW=1 to query the Hithink balance-sheet endpoint")
+	}
+	apiKey := os.Getenv("MARKET_DATA_HITHINK_API_KEY")
+	if apiKey == "" {
+		apiKey = os.Getenv("HITHINK_FINANCE_API_KEY")
+	}
+	if apiKey == "" {
+		t.Skip("Hithink balance-sheet probe skipped: API key is not configured")
+	}
+
+	client := NewHithinkConfigured(25*time.Second, os.Getenv("MARKET_DATA_HITHINK_BASE_URL"), apiKey)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	symbol, err := hithinkDomesticSymbol("600519.SH")
+	if err != nil {
+		t.Fatalf("normalize target symbol: %v", err)
+	}
+	query := url.Values{}
+	query.Set("thscode", symbol)
+	query.Set("period", "annual")
+	query.Set("limit", "20")
+	raw, err := client.get(ctx, "/api/a-share/financials/balance-sheets", query)
+	if err != nil {
+		t.Fatalf("request Hithink annual balance-sheet endpoint: %v", err)
+	}
+	dataRaw, err := hithinkResponseData(raw)
+	if err != nil {
+		t.Fatalf("decode Hithink response envelope: %v", err)
+	}
+	var data struct {
+		Item []map[string]json.RawMessage `json:"item"`
+	}
+	if err := json.Unmarshal(dataRaw, &data); err != nil {
+		t.Fatalf("decode Hithink balance-sheet rows: %v", err)
+	}
+
+	location := time.FixedZone("Asia/Shanghai", 8*60*60)
+	evidence := make([]map[string]any, 0, 1)
+	for rowIndex, row := range data.Item {
+		var rowSymbol string
+		if err := json.Unmarshal(row["thscode"], &rowSymbol); err != nil ||
+			!strings.EqualFold(strings.TrimSpace(rowSymbol), symbol) {
+			continue
+		}
+		periodEndValue, periodEndOK := hithinkParseFundamentalValue(row["period_end_ms"])
+		periodEndDate, periodEndDateOK := hithinkDateFromMillis(periodEndValue, location)
+		if !periodEndOK || !periodEndDateOK || periodEndDate != "2025-12-31" {
+			continue
+		}
+		publicationRaw := row["report_date_ms"]
+		publicationValue, publicationOK := hithinkParseFundamentalValue(publicationRaw)
+		publicationDate, publicationDateOK := hithinkDateFromMillis(publicationValue, location)
+		evidence = append(evidence, map[string]any{
+			"row_index": rowIndex,
+			"thscode": rowSymbol,
+			"period_end_ms_raw": string(row["period_end_ms"]),
+			"period_end_date": periodEndDate,
+			"report_date_ms_raw": string(publicationRaw),
+			"publication_date": publicationDate,
+			"publication_date_valid": publicationOK && publicationDateOK,
+			"assets_total_raw": string(row["assets_total"]),
+			"total_debt_raw": string(row["total_debt"]),
+		})
+	}
+	encoded, err := json.Marshal(map[string]any{
+		"provider": "hithink",
+		"endpoint": "/api/a-share/financials/balance-sheets",
+		"symbol": symbol,
+		"period": "annual",
+		"target_report_date": "2025-12-31",
+		"rows": evidence,
+	})
+	if err != nil {
+		t.Fatalf("marshal raw balance-sheet evidence: %v", err)
+	}
+	t.Logf("LIVE_HITHINK_BALANCE_SHEET_RAW_EVIDENCE %s", encoded)
+	if len(evidence) != 1 {
+		t.Fatalf("expected exactly one 600519.SH / 2025-12-31 balance-sheet row, got %d", len(evidence))
+	}
+	if evidence[0]["publication_date_valid"] != true {
+		t.Fatalf("Hithink report_date_ms is missing or invalid for 2025-12-31 balance sheet")
+	}
+	if evidence[0]["publication_date"] != "2026-04-17" {
+		t.Errorf("Hithink balance-sheet publication date mismatch: observed=%v expected=2026-04-17",
+			evidence[0]["publication_date"])
 	}
 }
 
