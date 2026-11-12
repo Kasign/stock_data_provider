@@ -18,17 +18,17 @@ func staticCatalogRegistration() app.SourceEndpointRegistration {
 		PublisherDomain: "publisher.example", AccessMethod: domain.AccessRSS,
 		SourcePolicyVersionID: "source-policy-v1",
 		SourcePolicy: domain.SourcePolicy{
-			Status: domain.AuthorizationApproved,
+			Status:               domain.AuthorizationApproved,
 			AllowedAccessMethods: []domain.AccessMethod{domain.AccessRSS},
-			AllowedPurposes: []domain.Purpose{domain.PurposeInternalPersonalResearch},
-			AllowedContentKinds: []domain.ContentKind{domain.ContentMetadata},
-			AllowedStorageModes: []domain.StorageMode{domain.StorageTransient},
-			MaxRetention: time.Hour, EffectiveAt: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
+			AllowedPurposes:      []domain.Purpose{domain.PurposeInternalPersonalResearch},
+			AllowedContentKinds:  []domain.ContentKind{domain.ContentMetadata},
+			AllowedStorageModes:  []domain.StorageMode{domain.StorageTransient},
+			MaxRetention:         time.Hour, EffectiveAt: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
 			ExpiresAt: &expiresAt, EvidenceRef: "authorization-evidence",
 		},
 		URLPolicy: domain.SourceURLPolicy{
 			AllowedSchemes: []string{"https"},
-			AllowedHosts: []string{"publisher.example"},
+			AllowedHosts:   []string{"publisher.example"},
 		},
 	}
 }
