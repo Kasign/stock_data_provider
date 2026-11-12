@@ -1860,11 +1860,11 @@ syncRefreshButtonContext();
   document.querySelectorAll(".primary-nav-link").forEach((button) => {
     const active = button.dataset.navPrimary === activeGroup;
     button.classList.toggle("active", active);
-    if (active) button.setAttribute("aria-current", "location");
-    else button.removeAttribute("aria-current");
     const group = button.closest(".nav-group");
     group?.classList.toggle("is-active", active);
     const submenu = group?.querySelector(".nav-subnav");
+    if (active) button.setAttribute("aria-current", submenu ? "location" : "page");
+    else button.removeAttribute("aria-current");
     if (submenu) {
       button.setAttribute("aria-expanded", String(active));
       submenu.hidden = !active;

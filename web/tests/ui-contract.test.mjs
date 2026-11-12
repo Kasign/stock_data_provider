@@ -1580,10 +1580,19 @@ test("market overview and activity use readable secondary text and touch-sized c
 });
 
 
-test("primary navigation keeps market modules on the homepage without quick-locate UI", () => {
+test("primary navigation groups preserve market views and the seven-entry information architecture", () => {
   for (const view of ["market", "stocks", "watchlist"]) {
-    assert.match(html, new RegExp('class="nav-link"[^>]*data-view="' + view + '"'));
+    assert.match(html, new RegExp('class="nav-link(?: [^"]*)?"[^>]*data-view="' + view + '"'));
   }
+  assert.equal((html.match(/data-nav-primary=/g) || []).length, 7);
+  assert.equal((html.match(/class="nav-group"/g) || []).length, 7);
+  assert.match(html, /data-nav-primary="market"/);
+  assert.match(html, /data-nav-primary="research"/);
+  assert.match(html, /data-nav-primary="quant"/);
+  assert.match(html, /data-nav-primary="tasks"/);
+  assert.match(html, /data-nav-primary="tracking"/);
+  assert.match(html, /data-nav-primary="data"/);
+  assert.match(html, /data-nav-primary="settings"/);
   assert.match(html, /id="market-view"/);
   assert.match(html, /id="stocks-view"/);
   assert.match(html, /id="watchlist-view"/);
@@ -1591,10 +1600,16 @@ test("primary navigation keeps market modules on the homepage without quick-loca
   assert.match(html, /market-sector-body/);
 });
 test("collapsed sidebar navigation remains accessible and unavailable modules disclose their status", () => {
-  assert.match(html, /class="nav-link"[^>]*data-view="screening"[^>]*aria-label="选股与筛选"/);
-  assert.match(html, /class="nav-link"[^>]*data-view="alerts"[^>]*aria-label="告警"/);
-  assert.match(html, /class="nav-link-state" title="后端接口待接入">待接入/);
+  assert.match(html, /class="nav-link(?: [^"]*)?"[^>]*data-view="screening"[^>]*aria-label="选股与筛选"/);
+  assert.match(html, /class="nav-link(?: [^"]*)?"[^>]*data-view="alerts"[^>]*aria-label="告警"/);
+  assert.match(html, /class="nav-link-state" title="[^"]*待接入[^"]*">待接入/);
   assert.match(stylesheet, /nav-link-state/);
+});
+test("旧 view hash 在应用启动时恢复原页面，未知 hash 回退首页", () => {
+  assert.match(app, /const requestedInitialView = window\.location\.hash\.slice\(1\)/);
+  assert.match(app, /Object\.hasOwn\(VIEW_META, requestedInitialView\)/);
+  assert.match(app, /window\.history\.replaceState\(null, "", window\.location\.pathname \+ window\.location\.search \+ "#" \+ initialView\)/);
+  assert.match(app, /setView\(initialView, \{ updateHash: false, refreshData: true \}\)/);
 });
 test("深浅主题的辅助文字在常用背景上达到 WCAG AA 对比度", () => {
   const parseHex = (value) => {
@@ -2034,9 +2049,9 @@ test("mobile navigation drawer moves focus inside and traps Tab navigation", () 
   assert.match(app, /event\.shiftKey[\s\S]*?lastFocusable\.focus\(\)[\s\S]*?firstFocusable\.focus\(\)/);
 });
 test("移动侧栏打开连接设置时关闭抽屉并进入设置中心", () => {
-  assert.match(html, /class="nav-link"[^>]*data-view="settings"/);
+  assert.match(html, /class="nav-link(?: [^"]*)?"[^>]*data-view="settings"/);
   assert.match(app, /if \(nextView === "settings" && previousView !== nextView\) openSettings\(\)/);
-  assert.match(app, /button\.addEventListener\("click", \(\) => \{\s*setView\(button\.dataset\.view\);\s*setMobileNavigationOpen\(false, \{ restoreFocus: true \}\);/);
+  assert.match(app, /button\.addEventListener\("click", \(\) => \{\s*setView\(button\.dataset\.view \|\| button\.dataset\.navDefaultView\);\s*setMobileNavigationOpen\(false, \{ restoreFocus: true \}\);/);
   assert.doesNotMatch(app, /settings-dialog/);
 });
 test("numeric UI presentation rejects boolean or structured market fields", () => {
