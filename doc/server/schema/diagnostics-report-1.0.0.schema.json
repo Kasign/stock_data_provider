@@ -79,7 +79,7 @@
         "attributes": {
           "type": "object",
           "maxProperties": 16,
-          "propertyNames": { "minLength": 1, "maxLength": 64, "pattern": "^[^\\u0000-\\u001F\\u007F]+$" },
+          "propertyNames": { "minLength": 1, "maxLength": 64, "pattern": "^[^\\x00-\\x1F\\x7F]+$" },
           "additionalProperties": { "type": "string", "maxLength": 256, "pattern": "^[^\\x00-\\x1F\\x7F]*$" }
         }
       },
