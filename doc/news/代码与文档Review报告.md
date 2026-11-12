@@ -388,3 +388,12 @@
 - **留待真实环境验收：** Provider 网络、配额和输出许可。
 
 本次验收只证明当前 News 自身代码和上述 CI 场景通过，不代表全仓 CI 通过，也不代表 News 已可生产上线。
+
+
+## 十二、News Diagnostics 依赖调用后的取消边界（2026-11-12）
+
+- Review 发现 Observation retention、Source endpoint Catalog、Storage Ping/Schema Check 在外部依赖返回后未再次检查 Context。若依赖忽略取消并返回成功，诊断可能在请求已取消后继续报告 healthy/degraded。
+- 已在上述依赖返回边界补充 Context 检查。
+- 新增依赖执行期间主动取消 Context 的回归测试，覆盖 retention、source catalog、storage ping 和 schema 四条路径。
+- 该修复只约束诊断执行生命周期，不改变业务质量状态、授权决策或平台 Runner 语义。
+- 对应代码提交待 CI 验收；不把新增测试视为已运行通过。

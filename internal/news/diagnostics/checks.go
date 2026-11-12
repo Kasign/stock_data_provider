@@ -46,6 +46,9 @@ func ObservationRetentionCheck(probe ObservationRetentionProbe) platformdiag.Che
 			}
 			checkedAt := time.Now().UTC()
 			count, oldest, err := probe.ObservationRetentionBacklog(ctx, checkedAt)
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				return platformdiag.Observation{}, ctxErr
+			}
 			if err != nil {
 				return platformdiag.Observation{}, fault.New(
 					fault.ClassUnavailable, "news.observation.retention_backlog_query_failed",
@@ -193,6 +196,9 @@ func SourceEndpointCheck(catalog app.SourceCatalog, sourceID, endpointID string,
 				)
 			}
 			registration, err := catalog.LookupEndpoint(ctx, sourceID, endpointID)
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				return platformdiag.Observation{}, ctxErr
+			}
 			if err != nil {
 				if errors.Is(err, app.ErrSourceEndpointNotFound) {
 					return platformdiag.Observation{
@@ -269,6 +275,9 @@ func StorageChecks(probe StorageProbe) []platformdiag.Check {
 						"News storage is unavailable", err,
 					)
 				}
+				if err := ctx.Err(); err != nil {
+					return platformdiag.Observation{}, err
+				}
 				return platformdiag.Observation{
 					Status: platformdiag.StatusHealthy, SafeMessage: "News storage connection is healthy",
 					CheckedAt: time.Now().UTC(), Attributes: map[string]string{"database": "mariadb"},
@@ -285,6 +294,9 @@ func StorageChecks(probe StorageProbe) []platformdiag.Check {
 					)
 				}
 				missing, err := probe.MissingSchemaTables(ctx)
+				if ctxErr := ctx.Err(); ctxErr != nil {
+					return platformdiag.Observation{}, ctxErr
+				}
 				if err != nil {
 					return platformdiag.Observation{}, fault.New(
 						fault.ClassUnavailable, "news.storage.schema_check_failed",
