@@ -1558,3 +1558,12 @@ Server Bootstrap
 - 原 Server `publicErrorEnvelope` 缺少必需字段 `schema_version`，错误对象也没有可选 `request_id`；与 PLAT-CTR-001 1.0.0 Schema/Golden 不一致。
 - 已在 `internal/server/bootstrap/http_middleware.go` 统一输出 `schema_version=1.0.0`，并从可信 Request Context 注入可选 `error.request_id`。413 请求体超限、并发过载和 Platform Fault 投影均复用该 Envelope；请求 ID Header 仍由 PLAT-CTR-002 Middleware 负责生成和回显。
 - 新增测试覆盖 Envelope 版本、body/header Request ID 一致性和错误内部字段不泄露。该实现只完成 Server Transport 边界符合性，不代表旧 Analysis Handler 已全部切换公共 ErrorEnvelope，也不代表模块 Handler 已完成统一接入。
+
+
+### 12.72 SRV-005 PLAT-CTR-003 Login RateLimit 摘要符合性修正（2026-11-12）
+
+- 按 Integration 冻结登记簿中的 PLAT-CTR-003 第 7 节实现：账号维度使用规范化固定 Owner 标识 `owner`，来源 IP 使用 `net.IP` 规范化后的文本；分别计算 SHA-256，并以 64 位小写十六进制传给 Platform LoginRateLimiter。
+- 移除 Server 限流摘要的 HMAC Key 配置与依赖。限流接口不接收原始账号/IP，Server 仍只向 Platform 传摘要。
+- 新增测试直接断言账号和 IPv4 地址的摘要等于契约要求的 SHA-256 小写十六进制值；覆盖摘要长度和大小写。
+- 注意：SHA-256 对低熵 IP 地址可被离线枚举。该实现是对冻结契约的符合性修正，不代表其隐私强度等同于 HMAC；若要改变摘要算法，必须走契约版本/项目决策变更，不得在 Server 私自保留 HMAC 变体。
+- 历史 12.68/12.70 中关于 HMAC 差异的记录保留为当时事实；本节记录其修正完成。SessionStore 缺少只读 Lookup 的跨层阻塞仍未解决，本次未触碰 Platform。

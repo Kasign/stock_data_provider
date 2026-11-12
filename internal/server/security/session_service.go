@@ -2,7 +2,6 @@ package security
 
 import (
 	"context"
-	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -22,7 +21,6 @@ type PasswordHasher interface {
 }
 
 type SessionLifecycleConfig struct {
-	RateLimitHMACKey []byte
 	Cookie           platformsecurity.SessionCookieConfig
 	IdleTTL          time.Duration
 	AbsoluteTTL      time.Duration
@@ -48,7 +46,6 @@ type SessionLifecycleService struct {
 	idleTTL     time.Duration
 	absoluteTTL time.Duration
 	policy      platformsecurity.LoginRateLimitPolicy
-	rateKey     []byte
 	now         func() time.Time
 }
 
@@ -69,9 +66,6 @@ func NewSessionLifecycleService(deps SessionLifecycleDependencies, cfg SessionLi
 	}
 	if err := cfg.Cookie.Validate(); err != nil {
 		return nil, fmt.Errorf("Session Cookie 配置无效: %w", err)
-	}
-	if len(cfg.RateLimitHMACKey) < 32 {
-		return nil, errors.New("login rate limit HMAC key must contain at least 32 bytes")
 	}
 	if cfg.IdleTTL < time.Second || cfg.IdleTTL > platformsecurity.DefaultSessionIdleTTL {
 		return nil, errors.New("Session idle TTL is outside Platform bounds")
@@ -100,7 +94,6 @@ func NewSessionLifecycleService(deps SessionLifecycleDependencies, cfg SessionLi
 		idleTTL:     cfg.IdleTTL,
 		absoluteTTL: cfg.AbsoluteTTL,
 		policy:      cfg.RateLimitPolicy,
-		rateKey:     append([]byte(nil), cfg.RateLimitHMACKey...),
 		now:         now,
 	}, nil
 }
@@ -142,8 +135,8 @@ func (s *SessionLifecycleService) Login(ctx context.Context, input LoginInput) (
 		(input.SourceIP.To4() == nil && input.SourceIP.To16() == nil) {
 		return SessionIssue{}, platformfault.New(platformfault.ClassValidation, "server.invalid_login_input", "login input is invalid", nil)
 	}
-	accountDigest := securityDigest(s.rateKey, "account:owner")
-	ipDigest := securityDigest(s.rateKey, "source-ip:"+canonicalIP(input.SourceIP))
+	accountDigest := securityDigest("owner")
+	ipDigest := securityDigest(canonicalIP(input.SourceIP))
 	limit, err := s.rateLimiter.Check(ctx, accountDigest, ipDigest)
 	if err != nil {
 		return SessionIssue{}, err
@@ -389,10 +382,9 @@ func canonicalIP(ip net.IP) string {
 	return ip.To16().String()
 }
 
-func securityDigest(key []byte, value string) string {
-	mac := hmac.New(sha256.New, key)
-	_, _ = mac.Write([]byte(value))
-	return hex.EncodeToString(mac.Sum(nil))
+func securityDigest(value string) string {
+	digest := sha256.Sum256([]byte(value))
+	return hex.EncodeToString(digest[:])
 }
 
 func minTime(a, b time.Time) time.Time {

@@ -2,9 +2,12 @@ package security
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"net"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -85,10 +88,13 @@ type lifecycleTestRateLimiter struct {
 	checkResult platformsecurity.LoginRateLimitResult
 	failures    int
 	reset       int
+	accountDigest string
+	ipDigest      string
 	err         error
 }
 
-func (r *lifecycleTestRateLimiter) Check(context.Context, string, string) (platformsecurity.LoginRateLimitResult, error) {
+func (r *lifecycleTestRateLimiter) Check(_ context.Context, accountDigest, ipDigest string) (platformsecurity.LoginRateLimitResult, error) {
+	r.accountDigest, r.ipDigest = accountDigest, ipDigest
 	if r.err != nil {
 		return platformsecurity.LoginRateLimitResult{}, r.err
 	}
@@ -129,7 +135,6 @@ func newLifecycleTestService(t *testing.T, auditErr error) (*SessionLifecycleSer
 		Hasher:      lifecycleTestHasher{expected: "correct"},
 		Audit:       audit,
 	}, SessionLifecycleConfig{
-		RateLimitHMACKey: []byte("0123456789abcdef0123456789abcdef"),
 		Cookie: platformsecurity.SessionCookieConfig{
 			Name:     "__Secure-owner_session",
 			Path:     "/api",
@@ -153,6 +158,30 @@ func newLifecycleTestService(t *testing.T, auditErr error) (*SessionLifecycleSer
 		t.Fatal(err)
 	}
 	return service, credentials, sessions, limiter, audit
+}
+
+
+func TestSessionLifecycleLoginUsesContractSHA256RateLimitDigests(t *testing.T) {
+	service, _, _, limiter, _ := newLifecycleTestService(t, nil)
+	_, err := service.Login(context.Background(), LoginInput{
+		Password: []byte("correct"), SourceIP: net.ParseIP("192.0.2.10"), RequestID: "req-digest",
+	})
+	if err != nil {
+		t.Fatalf("Login() error = %v", err)
+	}
+	wantDigest := func(value string) string {
+		digest := sha256.Sum256([]byte(value))
+		return hex.EncodeToString(digest[:])
+	}
+	if limiter.accountDigest != wantDigest("owner") || limiter.ipDigest != wantDigest("192.0.2.10") {
+		t.Fatalf("rate-limit digests = (%q, %q), want SHA-256 of normalized account and IP", limiter.accountDigest, limiter.ipDigest)
+	}
+	if len(limiter.accountDigest) != 64 || len(limiter.ipDigest) != 64 {
+		t.Fatalf("rate-limit digest lengths = (%d, %d), want 64 lowercase hex characters", len(limiter.accountDigest), len(limiter.ipDigest))
+	}
+	if limiter.accountDigest != strings.ToLower(limiter.accountDigest) || limiter.ipDigest != strings.ToLower(limiter.ipDigest) {
+		t.Fatal("rate-limit digests must use lowercase hexadecimal")
+	}
 }
 
 func TestSessionLifecycleLoginCreatesFreshOwnerSession(t *testing.T) {
