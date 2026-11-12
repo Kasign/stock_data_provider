@@ -159,14 +159,29 @@ func (r *ResearchOutboxRelay) ProcessOnce(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("claim Research Outbox: %w", err)
 	}
-	var result error
+	var wait sync.WaitGroup
+	errorsCh := make(chan error, len(events))
 	for _, event := range events {
 		if err := ctx.Err(); err != nil {
-			return errors.Join(result, err)
+			break
 		}
-		if err := r.deliver(ctx, event); err != nil {
-			result = errors.Join(result, fmt.Errorf("deliver Research Outbox event: %w", err))
-		}
+		event := event
+		wait.Add(1)
+		go func() {
+			defer wait.Done()
+			if err := r.deliver(ctx, event); err != nil {
+				errorsCh <- fmt.Errorf("deliver Research Outbox event %q: %w", event.EventID, err)
+			}
+		}()
+	}
+	wait.Wait()
+	close(errorsCh)
+	var result error
+	for err := range errorsCh {
+		result = errors.Join(result, err)
+	}
+	if err := ctx.Err(); err != nil {
+		result = errors.Join(result, err)
 	}
 	return result
 }

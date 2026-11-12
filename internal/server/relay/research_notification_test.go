@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -152,4 +153,32 @@ func TestConfigRejectsInvalidValues(t *testing.T) {
 	if err := config.Validate(); err == nil {
 		t.Fatal("zero lease duration must be rejected")
 	}
+}
+
+
+func TestProcessOnceHandlesEveryClaimedEvent(t *testing.T) {
+	events := []researchapp.NotificationEventEnvelope{relayEvent(), relayEvent()}
+	events[1].EventID = "nte_2"
+	outbox := &outboxFake{events: events}
+	var received atomic.Int64
+	receiver := receiverFunc(func(context.Context, []byte) error {
+		received.Add(1)
+		return nil
+	})
+	relay, err := NewResearchOutboxRelay(outbox, receiver, relayConfig(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := relay.ProcessOnce(context.Background()); err != nil {
+		t.Fatalf("ProcessOnce() error = %v", err)
+	}
+	if received.Load() != 2 || len(outbox.confirmed) != 2 {
+		t.Fatalf("batch was not fully handled: received=%d confirmed=%v", received.Load(), outbox.confirmed)
+	}
+}
+
+type receiverFunc func(context.Context, []byte) error
+
+func (f receiverFunc) Receive(ctx context.Context, raw []byte) error {
+	return f(ctx, raw)
 }
