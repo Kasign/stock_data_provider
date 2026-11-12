@@ -104,7 +104,6 @@ func TestFundamentalsRevisionHashIgnoresFetchTimestamps(t *testing.T) {
 	}
 }
 
-
 func TestValuationRevisionHashIgnoresObservationTimestamps(t *testing.T) {
 	fetched := time.Date(2026, 11, 10, 2, 0, 0, 0, time.UTC)
 	observed := fetched.Add(time.Second)
@@ -125,6 +124,7 @@ func TestValuationRevisionHashIgnoresObservationTimestamps(t *testing.T) {
 		t.Fatal(err)
 	}
 	snapshot.FetchedAt = fetched.Add(time.Hour)
+	snapshot.Items[0].FetchedAt = fetched.Add(time.Hour)
 	observed = fetched.Add(2 * time.Hour)
 	second, err := valuationRevisionHash(snapshot)
 	if err != nil {

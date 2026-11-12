@@ -242,9 +242,18 @@ func (s *DataService) ValuationsAsOf(ctx context.Context, rawSymbols []string, a
 	bestRank := 0
 	for index := range revisions {
 		candidate := &revisions[index]
+		itemFetchedAfterCutoff := false
+		for _, item := range candidate.Items {
+			if item.FetchedAt.IsZero() || item.FetchedAt.After(asOf) {
+				itemFetchedAfterCutoff = true
+				break
+			}
+		}
 		if candidate.SystemObservedAt == nil || candidate.SystemObservedAt.After(asOf) ||
 			candidate.FetchedAt.IsZero() || candidate.FetchedAt.After(asOf) ||
+			candidate.SystemObservedAt.Before(candidate.FetchedAt) || itemFetchedAfterCutoff ||
 			(candidate.ProviderTimestamp != nil && candidate.ProviderTimestamp.After(asOf)) ||
+			(candidate.ProviderReportDate != "" && candidate.ProviderReportDate > asOf.In(marketLocation()).Format("2006-01-02")) ||
 			validateValuationSnapshot(symbols, candidate) != nil {
 			continue
 		}

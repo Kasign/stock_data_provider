@@ -254,11 +254,11 @@ type MarketIndexQuote struct {
 	AmountUnit         string        `json:"amount_unit"`
 	QuoteTime          *time.Time    `json:"quote_time,omitempty"`
 	QuoteTimeSemantics string        `json:"quote_time_semantics,omitempty"`
-	Source             string        `json:"source"`
-	SourceVersion      string        `json:"source_version,omitempty"`
-	FetchedAt          time.Time     `json:"fetched_at"`
-	QualityStatus      QualityStatus `json:"quality_status"`
-	QualityReasons     []string      `json:"quality_reasons,omitempty"`
+	Source             string     `json:"source"`
+	SourceVersion      string     `json:"source_version,omitempty"`
+	FetchedAt          time.Time  `json:"fetched_at"`
+	QualityStatus    QualityStatus `json:"quality_status"`
+	QualityReasons   []string      `json:"quality_reasons,omitempty"`
 }
 
 type IndexQuoteSnapshot struct {
@@ -405,8 +405,8 @@ type ValuationSnapshot struct {
 	Items            []ValuationItem `json:"items"`
 	MissingSymbols   []string        `json:"missing_symbols,omitempty"`
 	// ProviderReportDate 是供应商给出的估值数据日期；日期不等于精确快照时间。
-	ProviderReportDate string        `json:"provider_report_date,omitempty"`
-	ProviderTimestamp  *time.Time    `json:"provider_timestamp,omitempty"`
+	ProviderReportDate string     `json:"provider_report_date,omitempty"`
+	ProviderTimestamp  *time.Time `json:"provider_timestamp,omitempty"`
 	Source             string        `json:"source"`
 	SourceVersion      string        `json:"source_version,omitempty"`
 	FetchedAt          time.Time     `json:"fetched_at"`

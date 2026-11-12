@@ -556,6 +556,10 @@ func valuationRevisionHash(snapshot model.ValuationSnapshot) (string, error) {
 	fingerprint := snapshot
 	fingerprint.FetchedAt = time.Time{}
 	fingerprint.SystemObservedAt = nil
+	fingerprint.Items = append([]model.ValuationItem(nil), snapshot.Items...)
+	for index := range fingerprint.Items {
+		fingerprint.Items[index].FetchedAt = time.Time{}
+	}
 	payload, err := json.Marshal(fingerprint)
 	if err != nil {
 		return "", err
