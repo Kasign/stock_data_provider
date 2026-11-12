@@ -29,7 +29,7 @@ Evidence DTO 的规范字段如下。RSC-CTR-001 的 Schema `$id` 标识 1.0.0 �
 | evidence_type | 必填 | fact/reported_fact/inference/hypothesis/unknown |
 | source_owner | 必填 | data/news/quant/research |
 | source_ref | 必填 | 上游资源或来源对象引用 |
-| source_version | 条件必填 | 上游资源可版本化时必须提供 |
+| source_version | 条件必填 | 上游资源可版本化时必须提供；News Evidence 固定引用不可变 VersionID，因此 `source_owner=news` 时必填 |
 | source_locator | 可选 | 内容定位符；不得放未授权正文 |
 | derived_from_refs | 必填数组 | 直接上游 Evidence 引用；fact/reported_fact 可为空，inference/hypothesis 必须非空 |
 | claim_ref | nullable | 关联 Claim |
@@ -167,3 +167,8 @@ INT-CTR-001 已接受 `lifecycle_changed` Payload 映射：`source_event_ref`、
 ### RSC-OPEN-007：Evidence 授权快照续期与存储幂等边界
 
 Evidence.content_fingerprint 排除 authorization_ref，而存储层 payload_sha256 覆盖完整 DTO。相同 evidence_id、相同内容但不同 AuthorizationRef 会导致内容指纹相同、完整 payload 摘要不同。当前已采用完整 DTO 不可变、冲突拒绝策略；不允许原地覆盖历史 AuthorizationRef，也不自动生成替代 evidence_id。若要持久化授权续期历史，须由项目契约定义独立授权记录或关联结构。该待决项不阻断当前 Evidence Append/Get；它仅阻断“同一 Evidence ID 下授权续期可追溯”的额外能力。
+
+
+### News Evidence 版本引用门禁
+
+NEWS-CTR-001 的 `ResearchEvidenceRecord` 必须返回不可变 `VersionID`。因此 Research 消费 News 时，`source_owner=news` 的 Evidence 必须提供 `source_version`；缺失时在 Evidence Domain Validator 拒绝，不允许以 `source_ref` 或 `source_locator` 替代版本身份。该规则是 RSC-CTR-001“上游资源可版本化时 source_version 必填”的具体化，不新增字段或跨模块契约。
