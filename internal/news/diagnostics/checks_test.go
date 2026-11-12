@@ -409,12 +409,12 @@ type cancellationStorageProbe struct{ cancel context.CancelFunc }
 
 func (p cancellationStorageProbe) Ping(context.Context) error {
 	p.cancel()
-	return nil
+	return context.Canceled
 }
 
 func (p cancellationStorageProbe) MissingSchemaTables(context.Context) ([]string, error) {
 	p.cancel()
-	return nil, nil
+	return nil, context.Canceled
 }
 
 type cancellationRetentionProbe struct{ cancel context.CancelFunc }
@@ -461,7 +461,11 @@ func TestDiagnosticChecksStopWhenContextIsCanceledByDependency(t *testing.T) {
 	})
 	t.Run("storage ping", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
-		report, err := (platformdiag.Runner{}).Run(ctx, StorageChecks(cancellationStorageProbe{cancel: cancel})[:1])
+		check := StorageChecks(cancellationStorageProbe{cancel: cancel})[0]
+		if _, err := check.Run(ctx); !errors.Is(err, context.Canceled) {
+			t.Fatalf("Run error=%v, want context.Canceled", err)
+		}
+		report, err := (platformdiag.Runner{}).Run(ctx, []platformdiag.Check{check})
 		if err != nil {
 			t.Fatal(err)
 		}
