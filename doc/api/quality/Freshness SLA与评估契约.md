@@ -16,7 +16,7 @@ Freshness 描述数据相对于其更新预期是否及时，是独立于 `Quali
 
 ## 2. 核心实现
 
-核心纯函数位于 `services/market-data/internal/freshness`：
+核心纯函数位于 `internal/marketdata/freshness`：
 
 - `Policy`：数据域 SLA、允许的市场阶段、是否要求交易日历、停牌时是否不适用。
 - `Evidence`：源端数据时间及其语义；采集时间仅用于诊断展示。
@@ -209,9 +209,9 @@ Service 层新增 fake Provider 集成测试，验证 `applyFreshnessProbeResult
 本轮 Service 层停复牌回归测试首次 CI 仅因测试表格字段对齐未通过 gofmt，未进入 market-data 编译和单测；已按 gofmt diff 修正，后续以新 SHA 的完整工作流验收。
 
 
-## 16. 当前代码核对状态（2026-11-03）
+## 16. 历史代码核对快照（2026-11-03）
 
-以当前 HEAD `de028801` 为准：Freshness Evaluator、策略注册表、Probe `freshness` 检查映射及 Quote 证券级停复牌上下文解析均已有代码和回归测试。当前注册策略覆盖 Quote、Index、Market Breadth、Sector、Fund Flow；DailyBar、Fundamentals、Valuations 尚未发现独立 SLA 策略注册。
+以 2026-11-03 的历史 HEAD `de028801` 为准：Freshness Evaluator、策略注册表、Probe `freshness` 检查映射及 Quote 证券级停复牌上下文解析均已有代码和回归测试。当前注册策略覆盖 Quote、Index、Market Breadth、Sector、Fund Flow；DailyBar、Fundamentals、Valuations 尚未发现独立 SLA 策略注册。
 
 因此本阶段不再建设 Evaluator 或 Probe 接口，只补充缺失数据域的策略和证据测试。DailyBar 应依据最近已完成交易日、交易日历和 Provider 发布时点判断；Fundamentals 应依据公告时间、available_at 与报告期语义；Valuations 应区分快照时间和报告日期。缺少可信源端时间或必要市场上下文时保持 `unknown`/`skipped`，不得使用 `fetched_at` 代替 `provider_time`，也不得复用 Quote 的秒级 SLA。
 
