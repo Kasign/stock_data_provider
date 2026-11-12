@@ -60,6 +60,9 @@ func (r *MySQLDeliveryRepository) ListExpiredLeases(ctx context.Context, limit i
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("notification storage: iterate expired delivery lease snapshots: %w", err)
 	}
+	if err := rows.Close(); err != nil {
+		return nil, fmt.Errorf("notification storage: close expired delivery lease scan: %w", err)
+	}
 
 	return claims, nil
 }
