@@ -545,3 +545,13 @@ Storage 事务的统一锁顺序为 Run -> Stage（按 stage_ref）-> Attempt（
 Outbox 使用发布前 Claim、提交租约、外部 Publish、成功后 Ack 的顺序，语义为至少一次。Publish 成功而 Ack 前进程崩溃会导致租约到期后重复投递；消费端必须按稳定 idempotency_key 去重。不得将本地租约/fencing 描述为端到端 exactly-once。
 
 以上为静态代码 Review 结论。真实 MariaDB 的死锁/锁等待压力、context cancel、事务中途失败和 Publish/Ack 崩溃窗口仍需集成验收。
+
+
+## 27. FLOW-004 全局容量事务守卫（2026-11-12，待 CI 与 MariaDB 验收）
+
+- 新增必填 `CapacityLimits`：`MaxQueuedRuns` 与 `MaxWorkers` 均必须显式配置为正数；不提供生产默认值。
+- Migration v4 新增 InnoDB 单例表 `researchflow_capacity_guard`，创建固定 guard_id=1 的守卫行。CreateRunAtomic 与 ClaimAttempt 都先锁该行，再按 `CapacityGuard -> Run -> Stage -> Attempt` 顺序处理，避免并发请求分别通过容量检查造成超卖。
+- CreateRunAtomic 在容量锁内先处理幂等回放，再统计 created/queued Run；容量已满返回 `ErrQueueCapacityExceeded`，Run/Stage/幂等记录均不写入。幂等回放不因当前队列已满而被拒绝。
+- ClaimAttempt 在容量锁内检查全局 running Attempt 的有效 Lease 数；有效 Lease 达到 MaxWorkers 时返回 `ErrGlobalWorkerCapacityExceeded`。失效的 running Attempt Lease 数据按 fail-closed 处理；过期 Lease 不占用有效 Worker 槽位，原有 Fencing 回收路径不变。
+- 新增容量配置校验单测与 Migration v4 结构断言；真实 MariaDB 下的队列超限回滚、并发创建不超卖、全局 Worker 槽位竞争、过期 Lease 释放仍待补充/执行。当前不宣称该能力已通过集成验收。
+- 本实现只提供数据库全局容量权威，不包含有界 Worker Pool、常驻消费循环、进程恢复或 Server 配置接线；这些仍是后续任务。
