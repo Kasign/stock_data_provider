@@ -85,12 +85,12 @@ func (s *lifecycleTestSessions) Revoke(_ context.Context, digest string) error {
 }
 
 type lifecycleTestRateLimiter struct {
-	checkResult platformsecurity.LoginRateLimitResult
-	failures    int
-	reset       int
+	checkResult   platformsecurity.LoginRateLimitResult
+	failures      int
+	reset         int
 	accountDigest string
 	ipDigest      string
-	err         error
+	err           error
 }
 
 func (r *lifecycleTestRateLimiter) Check(_ context.Context, accountDigest, ipDigest string) (platformsecurity.LoginRateLimitResult, error) {

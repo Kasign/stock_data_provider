@@ -21,11 +21,11 @@ type PasswordHasher interface {
 }
 
 type SessionLifecycleConfig struct {
-	Cookie           platformsecurity.SessionCookieConfig
-	IdleTTL          time.Duration
-	AbsoluteTTL      time.Duration
-	RateLimitPolicy  platformsecurity.LoginRateLimitPolicy
-	Now              func() time.Time
+	Cookie          platformsecurity.SessionCookieConfig
+	IdleTTL         time.Duration
+	AbsoluteTTL     time.Duration
+	RateLimitPolicy platformsecurity.LoginRateLimitPolicy
+	Now             func() time.Time
 }
 
 type SessionLifecycleDependencies struct {
