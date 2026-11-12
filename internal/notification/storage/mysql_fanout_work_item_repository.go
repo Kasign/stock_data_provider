@@ -113,6 +113,10 @@ func (r *MySQLFanoutWorkItemRepository) ClaimDue(
 	}
 	work.LeaseWorkerID = leaseWorkerID.String
 	work.LastErrorCode = lastErrorCode.String
+	if snapshotRevision.Valid {
+		work.SnapshotRevision = snapshotRevision.Int64
+		work.HasSnapshot = true
+	}
 	if len(leaseExpiresAt) > 0 {
 		if work.LeaseExpiresAt, err = parseDatabaseTime(leaseExpiresAt); err != nil {
 			return result, false, err
@@ -132,10 +136,7 @@ func (r *MySQLFanoutWorkItemRepository) ClaimDue(
 	if err := work.Validate(); err != nil {
 		return result, false, err
 	}
-	if snapshotRevision.Valid {
-		work.SnapshotRevision = snapshotRevision.Int64
-		work.HasSnapshot = true
-	} else {
+	if !snapshotRevision.Valid {
 		// 只有从未领取的初始 pending 项允许首次分配快照。
 		// retry_wait/过期 processing 丢失快照时必须 fail closed，不能重建为新高水位。
 		if work.Status != domain.FanoutPending || work.AttemptCount != 0 ||
