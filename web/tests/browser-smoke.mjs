@@ -1740,13 +1740,8 @@ try {
     }
     for (const entry of viewNavigation) {
       const viewName = entry.name;
-      if (entry.selector.startsWith(".nav-link") &&
-          await menu.isVisible() &&
-          (await menu.getAttribute("aria-expanded")) !== "true") {
-        await menu.click();
-      }
+      await clickNav(page, entry.selector);
       const navigationButton = page.locator(entry.selector);
-      await navigationButton.click();
       assert.deepEqual(pageErrors, [], "browser page errors after navigating to " + viewName + " at " + viewport.width + "px: " + pageErrors.join(" | "));
       await page.locator("#" + viewName + "-view").waitFor({ state: "visible" });
       assert.equal(
