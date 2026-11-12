@@ -37,7 +37,10 @@ const clickNav = async (targetPage, selector) => {
   if (!(await target.isVisible())) {
     const group = target.locator("xpath=ancestor::div[contains(@class, 'nav-group')]");
     const primary = group.locator(".primary-nav-link");
-    if (await primary.count()) await primary.click();
+    if (await primary.count()) {
+      await primary.click();
+      if (await menu.isVisible() && (await menu.getAttribute("aria-expanded")) !== "true") await menu.click();
+    }
   }
   await target.click();
 };
