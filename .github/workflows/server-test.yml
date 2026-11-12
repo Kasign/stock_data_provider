@@ -160,7 +160,10 @@ jobs:
           ready=false
           for attempt in $(seq 1 60); do
             if curl --silent --show-error --fail http://127.0.0.1:18092/healthz >/dev/null 2>&1; then
-              if curl --silent --show-error --fail http://127.0.0.1:18092/readyz >/dev/null 2>&1; then
+              # /readyz 按 Root Server 路由策略要求 Owner Bearer，不能匿名探测。
+              if curl --silent --show-error --fail \
+                -H "Authorization: Bearer $owner_token" \
+                http://127.0.0.1:18092/readyz >/tmp/server-readyz.json 2>/tmp/server-readyz-error.log; then
                 ready=true
                 break
               fi
@@ -173,6 +176,8 @@ jobs:
           done
           if [ "$ready" != "true" ]; then
             echo "Server container did not become ready within 120 seconds"
+            cat /tmp/server-readyz.json 2>/dev/null || true
+            cat /tmp/server-readyz-error.log 2>/dev/null || true
             exit 1
           fi
 
