@@ -79,7 +79,7 @@ func TestNewDiagnosticsServiceRegistersNewsParserChecks(t *testing.T) {
 	}
 	got := make(map[string]platformdiagnostics.Status, len(report.Diagnostics.Results))
 	for _, result := range report.Diagnostics.Results {
-		got[result.ID] = result.Observation.Status
+		got[result.CheckID] = result.Observation.Status
 	}
 	for _, id := range []string{"news.parser.rss", "news.parser.atom"} {
 		if status, exists := got[id]; !exists {
