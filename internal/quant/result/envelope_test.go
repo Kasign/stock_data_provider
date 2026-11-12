@@ -276,7 +276,8 @@ func TestEnvelopeRejectsUnsortedSnapshotRefs(t *testing.T) {
 		QualityStatus: "valid", ResultStatus: "completed", SchemaVersion: "1.0.0",
 		PayloadSchemaVersion: "1.0.0", AlgorithmVersion: "trend-algorithm.v1",
 		ParameterFingerprint: "sha256:envelope-test-parameters",
-		SystemAsOf: envelopeTestTime(t), InputSnapshotRefs: []string{"snapshot:a", "snapshot:b"},
+		SystemAsOf:           envelopeTestTime(t),
+		InputSnapshotRefs:    []string{"snapshot:a", "snapshot:b"},
 	}, payloadJSON)
 	if err != nil {
 		t.Fatal(err)
