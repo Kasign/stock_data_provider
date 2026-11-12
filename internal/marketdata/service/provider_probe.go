@@ -205,6 +205,16 @@ func (s *DataService) ProbeProviderCapabilities(ctx context.Context) (*model.Pro
 
 // ProbeProviderCapabilitiesWithOptions 主动探测已启用 Provider 的能力。
 // 每个探测直接调用对应 Provider，不经过业务请求的熔断统计；单项超时和并发均受限。
+// fundamentalsProbePeriod 选择已过半年度报告披露截止期的 Q2 样本，避免年初探测未来报告期。
+func fundamentalsProbePeriod(now time.Time) (int, int) {
+	local := now.In(marketLocation())
+	year := local.Year()
+	if local.Month() < time.September {
+		year--
+	}
+	return year, 2
+}
+
 func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, options ProviderProbeOptions) (*model.ProviderProbeRun, error) {
 	if ctx == nil {
 		ctx = context.Background()
@@ -857,11 +867,12 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 	for _, p := range s.fundamentalsProviders {
 		p := p
 		add(p.Name(), "fundamentals", func(probeCtx context.Context) (model.QualityStatus, string, []string, error) {
-			v, err := p.FetchFundamentals(probeCtx, barsSymbol, nowLocal.Year(), 2)
+			fundamentalProbeYear, fundamentalProbeQuarter := fundamentalsProbePeriod(nowLocal)
+			v, err := p.FetchFundamentals(probeCtx, barsSymbol, fundamentalProbeYear, fundamentalProbeQuarter)
 			if err != nil {
 				return model.QualityUnknown, "", nil, err
 			}
-			report := validation.ValidateFundamentalsSnapshot(v, barsSymbol, nowLocal.Year(), 2)
+			report := validation.ValidateFundamentalsSnapshot(v, barsSymbol, fundamentalProbeYear, fundamentalProbeQuarter)
 			validation.AddContextReport(probeCtx, report)
 			sourceVersion := ""
 			if v != nil {

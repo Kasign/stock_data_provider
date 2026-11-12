@@ -724,6 +724,34 @@ func (p *providerProbeHistoricalDailyBarsFake) FetchDailyBars(_ context.Context,
 	return bars, nil
 }
 
+func TestFundamentalsProbePeriodUsesCompletedHalfYear(t *testing.T) {
+	cases := []struct {
+		name string
+		now time.Time
+		wantYear int
+		wantQuarter int
+	}{
+		{
+			name: "before current half-year disclosure deadline",
+			now: time.Date(2026, time.August, 31, 23, 59, 0, 0, marketLocation()),
+			wantYear: 2025, wantQuarter: 2,
+		},
+		{
+			name: "after current half-year disclosure deadline",
+			now: time.Date(2026, time.September, 1, 0, 1, 0, 0, marketLocation()),
+			wantYear: 2026, wantQuarter: 2,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			year, quarter := fundamentalsProbePeriod(tc.now)
+			if year != tc.wantYear || quarter != tc.wantQuarter {
+				t.Fatalf("fundamentalsProbePeriod() = %d-Q%d, want %d-Q%d", year, quarter, tc.wantYear, tc.wantQuarter)
+			}
+		})
+	}
+}
+
 func TestProviderProbeDefaultDailyBarsExcludeCurrentIncompleteDay(t *testing.T) {
 	p := &providerProbeHistoricalDailyBarsFake{name: "default-range-bars"}
 	ds := NewWithCapabilities([]provider.NamedProvider{p}, nil, []provider.DailyBarProvider{p}, cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000, ResilienceConfig{}, nil)
