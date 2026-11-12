@@ -101,7 +101,6 @@ func TestParseAtomFeedDoesNotTreatUpdatedAsPublished(t *testing.T) {
 	}
 }
 
-
 func TestParseFeedAcceptsExplicitGMTAndUTCZones(t *testing.T) {
 	cases := []struct {
 		name string
