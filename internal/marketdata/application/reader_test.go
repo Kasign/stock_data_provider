@@ -92,20 +92,25 @@ func TestReaderGetDailyBarsSelectsCurrentAndPITUseCases(t *testing.T) {
 	factorObservedAt := providerTime.Add(2 * time.Minute)
 	volume := int64(1234567890123)
 	amount := 987654.32
-	ma5 := 10.5
+	changePercent := 1.25
+	ma5, ma20, ma120, ma250 := 10.5, 10.2, 9.8, 8.7
+	rawVolume, rawAmount := 1234567.89, 987654.32
 	current := model.DailyBar{
-		Symbol: "600000.SH", TradeDate: "2026-11-06", Period: "1d",
-		Open: 10, High: 11, Low: 9, Close: 10.5, MA5: &ma5,
-		Volume: &volume, Amount: &amount, AdjustmentBasis: model.AdjustmentForward,
+		Symbol: "600000.SH", TradeDate: "2026-11-06", IsPartial: true, Period: "1d",
+		Open: 10, High: 11, Low: 9, Close: 10.5, MA5: &ma5, MA20: &ma20, MA120: &ma120, MA250: &ma250,
+		Volume: &volume, Amount: &amount, ChangePercent: &changePercent, AdjustmentBasis: model.AdjustmentForward,
 		AdjustmentMethod: "provider_forward", AdjustmentRefDate: "2026-11-06",
 		AdjustmentFactorSource: "eastmoney", AdjustmentFactorSourceVersion: "factor-v2",
 		AdjustmentFactorRevisionHash: "factor-revision-v2", AdjustmentFactorSetHash: "factor-set-v2",
 		AdjustmentFactorReferenceRevisionHash: "reference-revision-v2", AdjustmentAlgorithmVersion: "cumulative_adj_factor_v1",
 		AdjustmentFactorSystemObservedAt: &factorObservedAt,
-		Source:                           "eastmoney", SourceVersion: "bars-v3", ProviderTime: &providerTime,
+		Source: "eastmoney", SourceVersion: "bars-v3", ProviderTime: &providerTime,
 		FetchedAt: providerTime.Add(3 * time.Minute), NormalizedAt: providerTime.Add(4 * time.Minute),
-		SystemObservedAt: &systemObservedAt, VolumeUnit: "shares", AmountUnit: "CNY",
-		QualityStatus: model.QualityValid, RequestID: "req-bars", NormalizationVer: "norm-v1",
+		SystemObservedAt: &systemObservedAt, RawVolume: &rawVolume, RawVolumeUnit: "手",
+		RawAmount: &rawAmount, RawAmountUnit: "CNY", RawAmountField: "amount",
+		VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid,
+		QualityReasons: []string{"source_contract_verified"}, FallbackFrom: "tushare",
+		FallbackReason: "primary_timeout", RequestID: "req-bars", NormalizationVer: "norm-v1",
 	}
 	backend := &fakeDataService{
 		currentBars:     []model.DailyBar{current},
@@ -128,21 +133,36 @@ func TestReaderGetDailyBarsSelectsCurrentAndPITUseCases(t *testing.T) {
 		t.Fatalf("current snapshot metadata mismatch: %+v", live)
 	}
 	if len(live.Bars) != 1 || live.Bars[0].AdjustmentReferenceDate != "2026-11-06" ||
+		live.Bars[0].AdjustmentBasis != app.AdjustmentForward ||
+		live.Bars[0].AdjustmentMethod != "provider_forward" ||
+		live.Bars[0].AdjustmentFactorSource != "eastmoney" ||
 		live.Bars[0].AdjustmentFactorSourceVersion != "factor-v2" ||
 		live.Bars[0].AdjustmentFactorRevisionHash != "factor-revision-v2" ||
 		live.Bars[0].AdjustmentFactorSetHash != "factor-set-v2" ||
 		live.Bars[0].AdjustmentFactorReferenceRevisionHash != "reference-revision-v2" ||
 		live.Bars[0].AdjustmentAlgorithmVersion != "cumulative_adj_factor_v1" ||
-		live.Bars[0].NormalizationVersion != "norm-v1" {
-		t.Fatalf("daily-bar provenance metadata was not preserved: %+v", live.Bars)
+		live.Bars[0].NormalizationVersion != "norm-v1" ||
+		!live.Bars[0].IsPartial || live.Bars[0].ChangePercent == nil || *live.Bars[0].ChangePercent != changePercent ||
+		live.Bars[0].MA20 == nil || *live.Bars[0].MA20 != ma20 ||
+		live.Bars[0].MA120 == nil || *live.Bars[0].MA120 != ma120 ||
+		live.Bars[0].MA250 == nil || *live.Bars[0].MA250 != ma250 ||
+		live.Bars[0].RawVolume == nil || *live.Bars[0].RawVolume != rawVolume ||
+		live.Bars[0].RawVolumeUnit != "手" ||
+		live.Bars[0].RawAmount == nil || *live.Bars[0].RawAmount != rawAmount ||
+		live.Bars[0].RawAmountUnit != "CNY" || live.Bars[0].RawAmountField != "amount" ||
+		live.Bars[0].FallbackFrom != "tushare" || live.Bars[0].FallbackReason != "primary_timeout" ||
+		live.Bars[0].RequestID != "req-bars" || len(live.Bars[0].QualityReasons) != 1 {
+		t.Fatalf("daily-bar provenance/nullable metadata was not preserved: %+v", live.Bars)
 	}
 	if live.Bars[0].ProviderTime == nil || !live.Bars[0].ProviderTime.Equal(providerTime) ||
 		live.Bars[0].SystemObservedAt == nil || !live.Bars[0].SystemObservedAt.Equal(systemObservedAt) {
 		t.Fatalf("provider/system timestamps were not preserved: %+v", live.Bars[0])
 	}
 	*live.Bars[0].Volume = 1
-	if *current.Volume != volume {
-		t.Fatal("Application DTO must not alias DataService daily-bar pointers")
+	live.Bars[0].QualityReasons[0] = "mutated"
+	live.Warnings[0] = "mutated"
+	if *current.Volume != volume || current.QualityReasons[0] != "source_contract_verified" || backend.currentWarnings[0] != "bars_truncated_to_limit" {
+		t.Fatal("Application DTO must not alias DataService daily-bar pointers or slices")
 	}
 
 	cutoff := time.Date(2026, 11, 7, 12, 0, 0, 0, time.UTC)
@@ -175,5 +195,39 @@ func TestReaderRejectsMissingContextAndPreservesBackendErrors(t *testing.T) {
 	reader := &Reader{backend: &fakeDataService{quoteErr: wantErr}}
 	if _, err := reader.GetQuote(context.Background(), "600000.SH"); !errors.Is(err, wantErr) {
 		t.Fatalf("GetQuote() error = %v, want wrapped/preserved %v", err, wantErr)
+	}
+}
+
+func TestReaderGetDailyBarsRejectsInvalidContextAndPreservesBackendErrors(t *testing.T) {
+	query := app.DailyBarsQuery{Symbol: "600000.SH", Limit: 10, AdjustmentBasis: app.AdjustmentNone}
+	if _, err := (*Reader)(nil).GetDailyBars(context.Background(), query); err == nil {
+		t.Fatal("nil Reader must be rejected")
+	}
+	reader := &Reader{backend: &fakeDataService{}}
+	if _, err := reader.GetDailyBars(nil, query); err == nil {
+		t.Fatal("nil context must be rejected")
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := reader.GetDailyBars(ctx, query); !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancelled context error = %v, want context.Canceled", err)
+	}
+	wantErr := errors.New("daily bars unavailable")
+	reader = &Reader{backend: &fakeDataService{currentErr: wantErr}}
+	if _, err := reader.GetDailyBars(context.Background(), query); !errors.Is(err, wantErr) {
+		t.Fatalf("GetDailyBars() error = %v, want preserved %v", err, wantErr)
+	}
+}
+
+func TestReaderGetDailyBarsEmptyResultRemainsUnknown(t *testing.T) {
+	reader := &Reader{backend: &fakeDataService{}}
+	got, err := reader.GetDailyBars(context.Background(), app.DailyBarsQuery{
+		Symbol: "600000.SH", Limit: 10, AdjustmentBasis: app.AdjustmentNone,
+	})
+	if err != nil {
+		t.Fatalf("GetDailyBars() error = %v", err)
+	}
+	if got.QualityStatus != app.QualityUnknown || len(got.Bars) != 0 {
+		t.Fatalf("empty data must remain unknown, got %+v", got)
 	}
 }
