@@ -205,7 +205,7 @@ DeliveryStateEvent 的 version/from/to/changed_at 来自每次状态迁移；evi
 
 Repository 持久化前必须再次校验 StateEvent 与目标 Delivery 快照：delivery_id/version/to/changed_at/reason_code 必须一致，事件迁移必须满足领域状态机；自动迁移不得携带 actor_ref/request_id/actor_reason，只有 failed -> queued 的授权人工重试允许这些审计字段。该校验必须在事务开始前完成，且追加事件时再次执行领域事件校验。
 
-当前 DeliveryRecord 已具备领域模型与纯函数迁移测试；DeliveryRepository Port/Fake 已覆盖 Claim/CAS 的模块内并发语义。DeliveryAttempt 领域快照与 Complete 纯函数已实现，字段语义和校验规则见第 4.3 节。Attempt Repository、租约超时恢复和 Dispatcher/Worker 尚未实现，不能据此宣称 Worker 或真实投递已实现。
+DeliveryRecord 领域模型与纯函数迁移测试、DeliveryRepository Port/Fake、DeliveryAttempt 领域快照、Attempt Repository、租约超时恢复、单条 DeliveryExecutionService 和 FanoutDispatcher 均已有实现。Fanout Dispatcher 只负责把 Inbox Event 展开为 DeliveryPlan；真实 FanoutPlanFactory 装配、Delivery Worker 生命周期和 Server 根 Migration 注册仍属集成任务。代码与测试存在不代表当前 HEAD CI 或真实 MariaDB L3 已通过。
 
 
 ### 4.2 DeliveryRepository Port 与 Fake 的第一阶段实现
@@ -412,7 +412,7 @@ Notification 持久化层提供按 `(channel_ref, config_version)` 精确读取�
 | NTF-005 | retryable/permanent/ambiguous 分类、退避预算、Retry-After、unknown 不盲重试 | 真实渠道超时/回执丢失/幂等行为验证 |
 | NTF-006 | Repository Port、唯一约束、Outbox/Inbox Schema 设计 | MariaDB 事务、唯一冲突、锁竞争、Migration/恢复演练 |
 
-当前 `internal/notification/storage.Migrations()` 已包含 v1～v5 Migration，覆盖 Subscription、DeliveryPlan、Delivery、Attempt、DeliveryStateEvent、Inbox、Template 与 ChannelConfig 八类表；MySQL Adapter 已覆盖相应持久化边界。Inbox 通过必需注入的 `InboxFanoutWriter` 扩展点要求与 Inbox 同事务写入，但仓库中尚无生产 Fanout WorkItem 表/Writer；活跃 Subscription 有界分页查询也尚未定义。二者属于 NTF-CTR-002 范围内的模块内部 Application Port/持久化契约细化，不是等待项目级 CTR 冻结。实现前须先在本文件明确 WorkItem 状态、claim/ack/retry、并发租约/恢复和分页游标语义，不得臆造队列字段。根 Migration 总注册与 Worker 生命周期仍由 Server 负责；MariaDB 真实 DSN 执行证据缺失时，不得标记 L3 通过。
+当前 `internal/notification/storage.Migrations()` 已包含 v1～v6 Migration，覆盖 Subscription、DeliveryPlan、Delivery、Attempt、DeliveryStateEvent、Inbox、Template、ChannelConfig、Subscription Revision 与 FanoutWorkItem 持久化结构。`MySQLFanoutWorkItemRepository` 实现 Inbox 同事务写入、数据库时钟 Claim、租约/fencing、CAS 页面推进和 Retry；`MySQLSubscriptionRepository` 实现事务修订号分配与固定快照 keyset 分页；`FanoutDispatcher` 提供单 WorkItem 单页面有界执行。FanoutPlanFactory 的真实业务数据装配、Server 根 Migration 注册与 Worker 生命周期仍由集成层负责。MariaDB 真实 DSN 执行证据缺失时，不得标记 L3 通过。
 | NTF-007 | Delivery 查询、脱敏诊断、reason_code 和审计 | 根 HTTP/权限/监控接入 |
 
 
@@ -609,7 +609,7 @@ len(OutcomeUnknownDeliveryIDs) = OutcomeUnknown
 - Worker ID 必须非空且长度不超过 128 字节；租约时长必须由 Server 显式配置为正数。
 - attempt_count 达到配置的 max_attempts 后不得继续自动 Claim；错误恢复策略必须显式提供 max_attempts、base_delay、max_delay，不设隐式全局默认值。
 - Retry 延迟采用有上限的指数退避；next_attempt_at 由 Application Clock 计算并规范为 UTC 微秒，Repository 仍使用数据库时钟校验当前租约。
-- ErrPersistenceOutcomeUnknown 时，Worker 不得依据返回对象推断 Claim/Checkpoint/Retry 已提交；必须丢弃本次 claim 并等待租约到期后重新领取和读取持久状态。
+- ErrPersistenceOutcomeUnknown 时，Worker 不得依据返回对象推断 Claim/Checkpoint/Retry/DeliveryPlan 写入已提交；Dispatcher 不得继续用当前 Claim 执行 Retry/Fail/Advance，必须丢弃本次 claim 并等待租约到期后重新领取和读取持久状态。DeliveryPlan 是否已提交由唯一 tuple + fingerprint 在重放时对账。
 - failed 是需要人工/显式运维命令处理的终态；不得在普通 Worker 循环中自动重置为 pending。
 
 ### 13.5 页面处理与幂等提交
@@ -621,7 +621,7 @@ len(OutcomeUnknownDeliveryIDs) = OutcomeUnknown
 5. 页面全部处理成功后，使用当前 Worker/FencingToken 执行一次 AdvanceWithLease：cursor 前进到本页最后一个 Subscription ID；若无更多页则转 completed，否则回到 pending。
 6. 页面为空时直接转 completed。快照中不存在 active Subscription 是正常完成，不是失败或降级。
 
-FanoutPlanFactory 是模块内部应用端口，不是新增对外 Facade。它的唯一调用场景是 Dispatcher 将一个已校验 Inbox Event 与一个固定版本 Subscription 转为 DeliveryPlan decision。其实现不得调用渠道 Send；真实 Recipient/Channel/Template/Authorization 数据缺失时必须返回明确错误，不得制造默认接收目标或伪造版本。
+FanoutPlanFactory 是模块内部应用端口，不是新增对外 Facade。它的唯一调用场景是 Dispatcher 将一个已校验 Inbox Event 与一个固定版本 Subscription 转为 DeliveryPlan decision。Dispatcher 必须校验 Subscription 为 active 且 event_type 与 Event 一致，并校验 DeliveryPlan 的 source_module/event_id/payload_fingerprint 与 Event 一致、subscription_id/version 与当前 Subscription 一致。Factory 实现不得调用渠道 Send；真实 Recipient/Channel/Template/Authorization 数据缺失时必须返回明确错误，不得制造默认接收目标或伪造版本。
 
 ### 13.6 持久化与验收边界
 

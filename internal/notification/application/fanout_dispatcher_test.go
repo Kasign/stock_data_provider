@@ -3,7 +3,6 @@ package application
 import (
 	"context"
 	"errors"
-	"strings"
 	"testing"
 	"time"
 
@@ -77,7 +76,7 @@ func (p *fanoutTestPlans) CreateOrGet(_ context.Context, plan domain.DeliveryPla
 	return plan, p.duplicate, nil
 }
 
-func validFanoutClaim(now time.Time) FanoutClaim {
+func validFanoutEvent() domain.EventEnvelope {
 	event := domain.EventEnvelope{
 		SourceModule:  "quant",
 		EventID:       "event-1",
@@ -88,6 +87,11 @@ func validFanoutClaim(now time.Time) FanoutClaim {
 		Payload:       []byte(`{"decision":"watch"}`),
 	}
 	event.PayloadFingerprint, _ = event.CalculatePayloadFingerprint()
+	return event
+}
+
+func validFanoutClaim(now time.Time) FanoutClaim {
+	event := validFanoutEvent()
 	return FanoutClaim{
 		WorkItem: domain.FanoutWorkItem{
 			WorkItemID:         domain.FanoutWorkItemID("quant", "event-1"),
@@ -110,6 +114,7 @@ func validFanoutClaim(now time.Time) FanoutClaim {
 }
 
 func validFanoutPlan() domain.DeliveryPlan {
+	event := validFanoutEvent()
 	plan := domain.DeliveryPlan{
 		SourceModule:           "quant",
 		EventID:                "event-1",
@@ -120,7 +125,7 @@ func validFanoutPlan() domain.DeliveryPlan {
 		TemplateID:             "template-1",
 		TemplateVersion:        1,
 		RecipientRef:           "recipient-1",
-		PayloadFingerprint:     strings.Repeat("a", 64),
+		PayloadFingerprint:     event.PayloadFingerprint,
 		DeliveryID:             "delivery-1",
 		DeliveryIdempotencyKey: "delivery-key-1",
 	}
@@ -134,8 +139,8 @@ func TestFanoutDispatcherAdvancesOnlyAfterPagePlansPersist(t *testing.T) {
 	work := &fanoutTestWorkItems{claim: claim, claimed: true}
 	subscriptions := fanoutTestSubscriptions{
 		values: []domain.Subscription{
-			{SubscriptionID: "sub-1"},
-			{SubscriptionID: "sub-2"},
+			{SubscriptionID: "sub-1", Version: 1, EventType: "quant.risk_decision.changed", Status: domain.SubscriptionActive},
+			{SubscriptionID: "sub-2", Version: 1, EventType: "quant.risk_decision.changed", Status: domain.SubscriptionActive},
 		},
 	}
 	plans, _ := NewDeliveryPlanWriter(newMemoryDeliveryPlans())
@@ -171,7 +176,7 @@ func TestFanoutDispatcherDoesNotAdvanceCursorWhenPlanWriteFails(t *testing.T) {
 	now := time.Date(2026, 11, 11, 9, 0, 0, 0, time.UTC)
 	work := &fanoutTestWorkItems{claim: validFanoutClaim(now), claimed: true}
 	subscriptions := fanoutTestSubscriptions{
-		values: []domain.Subscription{{SubscriptionID: "sub-1"}},
+		values: []domain.Subscription{{SubscriptionID: "sub-1", Version: 1, EventType: "quant.risk_decision.changed", Status: domain.SubscriptionActive}},
 	}
 	plans, _ := NewDeliveryPlanWriter(&fanoutTestPlans{
 		err: errors.New("transient plan persistence failure"),
@@ -202,6 +207,66 @@ func TestFanoutDispatcherDoesNotAdvanceCursorWhenPlanWriteFails(t *testing.T) {
 		t.Fatalf("failed page must retry without advancing cursor: report=%+v work=%+v", report, work)
 	}
 }
+
+func TestFanoutDispatcherDoesNotRetryWhenPlanPersistenceOutcomeIsUnknown(t *testing.T) {
+	now := time.Date(2026, 11, 11, 9, 0, 0, 0, time.UTC)
+	work := &fanoutTestWorkItems{claim: validFanoutClaim(now), claimed: true}
+	subscriptions := fanoutTestSubscriptions{
+		values: []domain.Subscription{{SubscriptionID: "sub-1", Version: 1, EventType: "quant.risk_decision.changed", Status: domain.SubscriptionActive}},
+	}
+	plans, _ := NewDeliveryPlanWriter(&fanoutTestPlans{err: ErrPersistenceOutcomeUnknown})
+	factory := fanoutTestFactory{
+		decisions: map[string]FanoutPlanDecision{
+			"sub-1": {Matched: true, Plan: validFanoutPlan()},
+		},
+	}
+	dispatcher, err := NewFanoutDispatcher(work, subscriptions, factory, plans, fanoutTestClock{now}, FanoutDispatcherConfig{
+		PageSize: 1, LeaseDuration: time.Minute,
+		Retry: FanoutRetryPolicy{MaxAttempts: 3, BaseDelay: time.Second, MaxDelay: time.Minute},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	report, err := dispatcher.RunOnce(context.Background(), "worker-1")
+	if !errors.Is(err, ErrPersistenceOutcomeUnknown) {
+		t.Fatalf("expected persistence outcome unknown, got report=%+v err=%v", report, err)
+	}
+	if work.retried || work.advanced {
+		t.Fatalf("unknown persistence outcome must leave the claim untouched: report=%+v work=%+v", report, work)
+	}
+}
+
+func TestFanoutDispatcherRejectsPlanBoundToDifferentSubscription(t *testing.T) {
+	now := time.Date(2026, 11, 11, 9, 0, 0, 0, time.UTC)
+	work := &fanoutTestWorkItems{claim: validFanoutClaim(now), claimed: true}
+	subscriptions := fanoutTestSubscriptions{
+		values: []domain.Subscription{{SubscriptionID: "sub-1", Version: 1, EventType: "quant.risk_decision.changed", Status: domain.SubscriptionActive}},
+	}
+	plan := validFanoutPlan()
+	plan.SubscriptionID = "sub-other"
+	plan.PlanFingerprint, _ = plan.CalculateFingerprint()
+	plans, _ := NewDeliveryPlanWriter(newMemoryDeliveryPlans())
+	factory := fanoutTestFactory{
+		decisions: map[string]FanoutPlanDecision{
+			"sub-1": {Matched: true, Plan: plan},
+		},
+	}
+	dispatcher, err := NewFanoutDispatcher(work, subscriptions, factory, plans, fanoutTestClock{now}, FanoutDispatcherConfig{
+		PageSize: 1, LeaseDuration: time.Minute,
+		Retry: FanoutRetryPolicy{MaxAttempts: 3, BaseDelay: time.Second, MaxDelay: time.Minute},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	report, err := dispatcher.RunOnce(context.Background(), "worker-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !report.Failed || !work.retried || !work.terminal || work.advanced {
+		t.Fatalf("a plan bound to another subscription must fail closed: report=%+v work=%+v", report, work)
+	}
+}
+
 
 func TestFanoutDispatcherRejectsMissingPlanFactoryAndInvalidConfiguration(t *testing.T) {
 	plans, _ := NewDeliveryPlanWriter(&memoryDeliveryPlans{})
