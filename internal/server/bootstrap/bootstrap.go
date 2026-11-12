@@ -17,6 +17,7 @@ import (
 	"example.com/stock-analysis-flow/internal/adapters/storage/mysqlredis"
 	newsstorage "example.com/stock-analysis-flow/internal/news/adapters/storage"
 	newsdiagnostics "example.com/stock-analysis-flow/internal/news/diagnostics"
+newsconfig "example.com/stock-analysis-flow/internal/news/config"
 	notificationapplication "example.com/stock-analysis-flow/internal/notification/application"
 	notificationschema "example.com/stock-analysis-flow/internal/notification/schema"
 	notificationstorage "example.com/stock-analysis-flow/internal/notification/storage"
@@ -165,7 +166,11 @@ func Run(ctx context.Context) (runErr error) {
 		if err != nil {
 			return fmt.Errorf("创建旧 Analysis HTTP API 失败: %w", err)
 		}
-		diagnosticsService, err := newDiagnosticsService(storageResources, migrationRegistry)
+		newsConfig, configErr := newsconfig.Load(env)
+		if configErr != nil {
+			return fmt.Errorf("News Provider 配置无效: %w", configErr)
+		}
+		diagnosticsService, err := newDiagnosticsService(storageResources, migrationRegistry, newsConfig)
 		if err != nil {
 			return fmt.Errorf("创建 Server 诊断服务失败: %w", err)
 		}
@@ -274,8 +279,12 @@ func newResearchNotificationRelay(shared *serverresources.Resources, cfg serverc
 
 // newDiagnosticsService composes Server resource/schema checks with the
 // deterministic News parser self-checks. Domain checks remain owned by News.
-func newDiagnosticsService(shared *serverresources.Resources, registry *servermigration.Registry) (*serverdiagnostics.Service, error) {
-	return serverdiagnostics.NewServiceWithMigration(shared, registry, newsdiagnostics.ParserChecks())
+func newDiagnosticsService(shared *serverresources.Resources, registry *servermigration.Registry, newsConfig newsconfig.Config) (*serverdiagnostics.Service, error) {
+	return serverdiagnostics.NewServiceWithMigration(
+		shared, registry,
+		newsdiagnostics.ParserChecks(),
+		newsdiagnostics.ProviderConfigChecks(newsConfig),
+	)
 }
 
 func joinShutdownError(runErr, shutdownErr error) error {
