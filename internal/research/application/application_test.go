@@ -570,7 +570,7 @@ func TestUpdateClaimEnforcesExpectedVersionAndDomainTransition(t *testing.T) {
 		InvalidationConditions: []string{"预测持续下调"}, Status: researchclaim.StatusProposed, Limitations: []string{},
 	}}
 	evidence := &evidenceRepoFake{values: map[string]researchevidence.Evidence{
-		"ev_support_1": evidenceFixture(t, "ev_support_1", now),
+		"ev_support_1": evidenceFixtureWithStance(t, "ev_support_1", now, researchevidence.StanceSupports),
 	}}
 	service, err := NewServiceWithClaims(&contextRepoFake{}, evidence, repo, &authorizerFake{}, nil, &fixedIDs{})
 	if err != nil {
