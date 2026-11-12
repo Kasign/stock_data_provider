@@ -29,6 +29,7 @@ import (
 	serverhealth "example.com/stock-analysis-flow/internal/server/health"
 	servermigration "example.com/stock-analysis-flow/internal/server/migration"
 	serverresources "example.com/stock-analysis-flow/internal/server/resources"
+	serversecurity "example.com/stock-analysis-flow/internal/server/security"
 	runtime "example.com/stock-analysis-flow/internal/server/runtime"
 	"example.com/stock-analysis-flow/internal/service"
 )
@@ -277,6 +278,7 @@ func newMigrationRegistry() (*servermigration.Registry, error) {
 		{namespace: researchstorage.MigrationNamespace, migrations: researchstorage.Migrations()},
 		{namespace: researchflowstorage.MigrationNamespace, migrations: researchflowstorage.Migrations()},
 		{namespace: "notification", migrations: notificationstorage.Migrations()},
+		{namespace: serversecurity.SecurityAuditMigrationNamespace, migrations: serversecurity.SecurityAuditMigrations()},
 	}
 	for _, registration := range registrations {
 		if err := registry.Register(registration.namespace, registration.migrations); err != nil {

@@ -1511,3 +1511,14 @@ Server Bootstrap
 - ChangePassword 现在在调用密码验证器前验证 Credential Subject、CredentialVersion 和 PasswordHash 非空，避免损坏或错误身份状态进入密码更新流程。
 - 新增测试覆盖非 Owner Session、CredentialVersion 过期和无效 Owner Credential，确认拒绝后不发生轮换或凭证修改。
 - 本轮不改变 Platform Store 契约，不直连 Redis，不接入 HTTP 路由或 Bootstrap；真实依赖 E2E 仍待执行。
+
+
+### 12.67 SRV-005 Security Audit MariaDB Writer（2026-11-12）
+
+- 新增 Server 自有 `security.SQLSecurityAuditWriter`，复用 Bootstrap 已创建的共享 `*sql.DB`，不创建第二连接池、不持有连接关闭责任。
+- Writer 在执行 SQL 前调用 Platform `SecurityAuditEvent.Validate`，仅持久化 event_type、subject、result、occurred_at、request_id、source、reason_code 七个契约字段；不接收任意 metadata，不写入密码、Hash、Token、Cookie、IP 或请求体。
+- 新增 Server 自有 Migration namespace `server.security_audit`，创建 `server_security_audit_events` 表及 occurred_at、subject/time、request_id 索引；Bootstrap Migration Registry 显式注册该 namespace。
+- Writer 将 MariaDB 写入错误转换为依赖 `mariadb` 的不可重试 Fault；上层 Platform `WriteSecurityAudit` 仍负责事件校验和统一 Writer Fault 包装，SessionLifecycleService 继续执行既定 fail-closed 业务策略。
+- 不擅自定义保留期限、自动清理或归档任务；在运维保留策略冻结前，审计数据只追加，不进行破坏性清理。
+- 单测使用标准库 database/sql 测试 Connector 验证参数化写入、UTC 时间、非法事件在访问 DB 前拒绝、数据库错误 Fault、Migration 定义；真实 MariaDB Migration 与写入 E2E 尚未执行。
+- 本轮仅新增 Server 审计存储能力及 Migration 注册，不在 Bootstrap 创建或启用 Session 登录服务，不新增 HTTP 路由/DTO。
