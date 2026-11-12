@@ -113,10 +113,10 @@ type EventSourceTime struct {
 	TimeType                string    `json:"time_type"`
 	Value                   time.Time `json:"value"`
 	AssertedBy              string    `json:"asserted_by"`
-	Confidence              *float64  `json:"confidence"`
-	ConfidenceMethod        *string   `json:"confidence_method"`
-	ConfidenceMethodVersion *string   `json:"confidence_method_version"`
-	Notes                   *string   `json:"notes"`
+	Confidence              *float64  `json:"confidence,omitempty"`
+	ConfidenceMethod        *string   `json:"confidence_method,omitempty"`
+	ConfidenceMethodVersion *string   `json:"confidence_method_version,omitempty"`
+	Notes                   *string   `json:"notes,omitempty"`
 }
 type ResearchEvent struct {
 	EventID                       string            `json:"event_id"`

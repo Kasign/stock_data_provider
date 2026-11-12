@@ -232,3 +232,17 @@ func TestClaimFrozenGolden(t *testing.T) {
 		t.Fatalf("frozen Claim Golden does not validate: %v", err)
 	}
 }
+
+
+func TestClaimJSONRejectsUnknownFields(t *testing.T) {
+	valid, err := json.Marshal(validHypothesis(t))
+	if err != nil { t.Fatal(err) }
+	var object map[string]json.RawMessage
+	if err := json.Unmarshal(valid, &object); err != nil { t.Fatal(err) }
+	object["unexpected"] = json.RawMessage(`true`)
+	encoded, _ := json.Marshal(object)
+	var decoded Claim
+	if err := json.Unmarshal(encoded, &decoded); err == nil || !strings.Contains(err.Error(), "unknown field") {
+		t.Fatalf("unknown Claim field should fail: %v", err)
+	}
+}

@@ -1,6 +1,10 @@
 package event
 
-import "time"
+import (
+	"encoding/json"
+	"fmt"
+	"time"
+)
 
 type EventStatus string
 
@@ -71,4 +75,65 @@ type LifecycleTransition struct {
 	FromStatus   EventStatus `json:"from_status"`
 	ToStatus     EventStatus `json:"to_status"`
 	ChangedAt    time.Time   `json:"changed_at"`
+}
+
+
+// UnmarshalJSON rejects fields outside the frozen RSC-CTR-002 Event contract
+// and requires nullable timestamp properties to be explicitly present.
+func (e *ResearchEvent) UnmarshalJSON(data []byte) error {
+	if e == nil {
+		return fmt.Errorf("ResearchEvent target is nil")
+	}
+	if err := validateJSONShape(data,
+		[]string{"event_id", "event_version", "event_type", "title", "status", "subject_refs", "evidence_refs", "occurred_at", "published_at", "available_at", "system_observed_at", "system_as_of", "impact_hypothesis_refs", "invalidation_conditions", "uncertainty", "source_times", "time_normalization_rule_version", "derived_from_refs"},
+		[]string{"event_id", "event_version", "event_type", "title", "status", "subject_refs", "evidence_refs", "occurred_at", "published_at", "available_at", "system_observed_at", "system_as_of", "impact_hypothesis_refs", "invalidation_conditions", "uncertainty", "source_times", "time_normalization_rule_version", "derived_from_refs"}); err != nil {
+		return err
+	}
+	type eventAlias ResearchEvent
+	var value eventAlias
+	if err := json.Unmarshal(data, &value); err != nil {
+		return err
+	}
+	*e = ResearchEvent(value)
+	return nil
+}
+
+func (t *EventSourceTime) UnmarshalJSON(data []byte) error {
+	if t == nil {
+		return fmt.Errorf("EventSourceTime target is nil")
+	}
+	if err := validateJSONShape(data,
+		[]string{"evidence_ref", "time_type", "value", "asserted_by"},
+		[]string{"evidence_ref", "time_type", "value", "asserted_by", "confidence", "confidence_method", "confidence_method_version", "notes"}); err != nil {
+		return err
+	}
+	type sourceTimeAlias EventSourceTime
+	var value sourceTimeAlias
+	if err := json.Unmarshal(data, &value); err != nil {
+		return err
+	}
+	*t = EventSourceTime(value)
+	return nil
+}
+
+func validateJSONShape(data []byte, required, allowed []string) error {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	allowedSet := make(map[string]struct{}, len(allowed))
+	for _, field := range allowed {
+		allowedSet[field] = struct{}{}
+	}
+	for field := range fields {
+		if _, ok := allowedSet[field]; !ok {
+			return fmt.Errorf("unknown field %q", field)
+		}
+	}
+	for _, field := range required {
+		if _, ok := fields[field]; !ok {
+			return fmt.Errorf("required field %q is missing", field)
+		}
+	}
+	return nil
 }

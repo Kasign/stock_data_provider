@@ -146,7 +146,7 @@ Quant-Research DTO 要求非 null 的 occurred_at/published_at/available_at 规�
 
 ### RSC-OPEN-004：Event 合并/拆分的来源关系字段缺失
 
-Quant-Research DTO 第 3.3 节的 ResearchEvent 字段表没有 `source_refs` 和 `derived_from_refs`，但第 9.9 节要求 Event 合并/拆分时记录这两类引用。现有 `supersedes_event_version` 只能表达同一 Event 内的版本替代，不能表达多个 Event 合并为一个或一个 Event 拆分为多个。
+早期契约草案曾缺少跨 Event 来源字段。该问题已由冻结 RSC-CTR-002 的 `derived_from_refs` 解决：每项引用必须指向精确 Event 版本；Research Repository 在同一追加事务内解析引用并递归拒绝缺失节点、损坏节点和循环图。当前不再使用 `supersedes_event_version`。
 
 在项目级契约明确字段、方向、基数和历史查询语义前，Research 只实现单 Event 版本追加与状态转换，不新增本地私有字段，不实现跨 Event 合并/拆分写入。
 

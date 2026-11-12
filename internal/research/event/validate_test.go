@@ -322,3 +322,23 @@ func TestResearchEventFrozenGolden(t *testing.T) {
 		t.Fatalf("frozen Event Golden does not validate: %v", err)
 	}
 }
+
+
+func TestResearchEventJSONRejectsUnknownAndMissingRequiredFields(t *testing.T) {
+	valid, err := json.Marshal(validEvent(t))
+	if err != nil { t.Fatal(err) }
+	var object map[string]json.RawMessage
+	if err := json.Unmarshal(valid, &object); err != nil { t.Fatal(err) }
+	object["unexpected"] = json.RawMessage(`true`)
+	encoded, _ := json.Marshal(object)
+	var decoded ResearchEvent
+	if err := json.Unmarshal(encoded, &decoded); err == nil || !strings.Contains(err.Error(), "unknown field") {
+		t.Fatalf("unknown Event field should fail: %v", err)
+	}
+	delete(object, "unexpected")
+	delete(object, "occurred_at")
+	encoded, _ = json.Marshal(object)
+	if err := json.Unmarshal(encoded, &decoded); err == nil || !strings.Contains(err.Error(), "occurred_at") {
+		t.Fatalf("omitted nullable timestamp should fail: %v", err)
+	}
+}
