@@ -47,7 +47,7 @@ func (s getEvidencePITRepositoryStub) GetEvidenceContentWithCurrentAuthorization
 		})
 	}
 	current := domain.CurrentAuthorizationPolicySet{EvaluatedAt: time.Now().UTC(), Policies: policies}
-	if err := authorize(ctx, current); err != nil {
+	if err := authorize(ctx, current, s.record.Observation); err != nil {
 		return domain.ContentLayers{}, domain.Observation{}, err
 	}
 	if s.afterContentRead != nil {
