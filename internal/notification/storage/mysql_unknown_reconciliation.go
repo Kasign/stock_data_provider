@@ -19,6 +19,9 @@ func (r *MySQLDeliveryRepository) ReconcileUnknown(
 	next domain.DeliveryRecord,
 	event domain.DeliveryStateEvent,
 ) error {
+	if !isUTCTime(event.ChangedAt) {
+		return domain.ErrInvalidDeliveryChange
+	}
 	if r == nil || r.db == nil || ctx == nil || expectedVersion < 1 {
 		return errors.New("notification storage: invalid unknown reconciliation request")
 	}

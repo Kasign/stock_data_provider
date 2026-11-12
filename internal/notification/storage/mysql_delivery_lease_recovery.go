@@ -25,6 +25,9 @@ func (r *MySQLDeliveryRepository) RecoverExpiredLease(
 	event domain.DeliveryStateEvent,
 	now time.Time,
 ) error {
+	if !isUTCTime(event.ChangedAt) {
+		return domain.ErrInvalidDeliveryChange
+	}
 	if r == nil || r.db == nil || ctx == nil || !isUTCTime(now) ||
 		expectedVersion < 1 || fencingToken < 1 {
 		return application.ErrDeliveryLeaseConflict

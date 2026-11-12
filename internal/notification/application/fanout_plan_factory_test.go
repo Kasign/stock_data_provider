@@ -149,6 +149,7 @@ func TestProductionFanoutPlanFactoryFailsClosedWhenFilterMatcherMissing(t *testi
 
 func TestProductionFanoutPlanFactoryReturnsUnmatchedForFilterAndAuthorizationDenial(t *testing.T) {
 	event, subscription, channel, recipient := productionFanoutInputs()
+	subscription.Filters = []byte(`{"status":"reject"}`)
 	matcher := &fanoutFilterMatcherStub{matched: false}
 	factory, err := NewProductionFanoutPlanFactory(
 		matcher, fanoutChannelSelectorStub{snapshot: channel},

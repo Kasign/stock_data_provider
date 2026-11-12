@@ -122,11 +122,13 @@ func TestNotificationMariaDBExpiredDeliveryLeaseRecoveryIntegration(t *testing.T
 		t.Fatalf("scan expired leases: %v", err)
 	}
 	foundExpired := false
+	var recoveryBase domain.DeliveryRecord
 	for _, expired := range expiredClaims {
 		if expired.Delivery.DeliveryID == delivery.DeliveryID &&
 			expired.Lease.FencingToken == claim.Lease.FencingToken &&
 			expired.Lease.WorkerID == claim.Lease.WorkerID {
 			foundExpired = true
+			recoveryBase = expired.Delivery
 			break
 		}
 	}
@@ -143,7 +145,7 @@ func TestNotificationMariaDBExpiredDeliveryLeaseRecoveryIntegration(t *testing.T
 	} {
 		tampered := next
 		mutate(&tampered)
-		if err := repository.RecoverExpiredLease(ctx, claim.Delivery.Version, claim.Lease.FencingToken, tampered, event, recoveryAt); !errors.Is(err, application.ErrDeliveryVersionConflict) {
+		if err := repository.RecoverExpiredLease(ctx, recoveryBase.Version, claim.Lease.FencingToken, tampered, event, recoveryAt); !errors.Is(err, application.ErrDeliveryVersionConflict) {
 			t.Fatalf("recovery must reject tampered %s, got %v", name, err)
 		}
 	}
@@ -154,7 +156,7 @@ func TestNotificationMariaDBExpiredDeliveryLeaseRecoveryIntegration(t *testing.T
 		string(event.To), event.ChangedAt); err != nil {
 		t.Fatalf("insert conflicting state event fixture: %v", err)
 	}
-	if err := repository.RecoverExpiredLease(ctx, claim.Delivery.Version, claim.Lease.FencingToken, next, event, recoveryAt); err == nil {
+	if err := repository.RecoverExpiredLease(ctx, recoveryBase.Version, claim.Lease.FencingToken, next, event, recoveryAt); err == nil {
 		t.Fatal("duplicate state event must fail recovery transaction")
 	}
 	stillSending, found, err := repository.Get(ctx, delivery.DeliveryID)
@@ -180,7 +182,7 @@ func TestNotificationMariaDBExpiredDeliveryLeaseRecoveryIntegration(t *testing.T
 	go func() {
 		defer wg.Done()
 		<-start
-		recoveryErr = repository.RecoverExpiredLease(ctx, claim.Delivery.Version, claim.Lease.FencingToken, next, event, recoveryAt)
+		recoveryErr = repository.RecoverExpiredLease(ctx, recoveryBase.Version, claim.Lease.FencingToken, next, event, recoveryAt)
 	}()
 	go func() {
 		defer wg.Done()
@@ -208,7 +210,7 @@ func TestNotificationMariaDBExpiredDeliveryLeaseRecoveryIntegration(t *testing.T
 	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM notification_deliveries WHERE delivery_id = ? AND lease_worker_id IS NULL AND lease_expires_at IS NULL", delivery.DeliveryID).Scan(&leaseCount); err != nil || leaseCount != 1 {
 		t.Fatalf("recovered lease must be released: count=%d err=%v", leaseCount, err)
 	}
-	if err := repository.RecoverExpiredLease(ctx, claim.Delivery.Version, claim.Lease.FencingToken, next, event, recoveryAt); !errors.Is(err, application.ErrDeliveryVersionConflict) && !errors.Is(err, application.ErrDeliveryLeaseConflict) {
+	if err := repository.RecoverExpiredLease(ctx, recoveryBase.Version, claim.Lease.FencingToken, next, event, recoveryAt); !errors.Is(err, application.ErrDeliveryVersionConflict) && !errors.Is(err, application.ErrDeliveryLeaseConflict) {
 		t.Fatalf("stale recovery must be rejected, got %v", err)
 	}
 }
