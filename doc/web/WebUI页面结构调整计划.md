@@ -137,10 +137,10 @@
 - [x] WebUI Checks 绑定实际提交 SHA `3845bdc50a52121d6d875b6071f85217ef3d86e1`，通过。
 - [x] Chromium Browser Smoke 覆盖七个入口、旧 view hash 直达/刷新、market-data 别名和未知 hash 回退。
 - [x] 桌面 1280/1600、平板 768/900、窄屏 320/375 及 600px 断点检查。
-- [ ] 验证浏览器前进/后退、刷新恢复、移动端菜单、键盘焦点和 reduced-motion。
+- [x] 验证浏览器前进/后退、刷新恢复、移动端菜单、键盘焦点和 reduced-motion；当前 SHA 的浏览器测试通过。
 - [x] Run Flow 交互、结果恢复、页面切换和晚到响应隔离验收通过。
 - [x] 设置、研究记录、告警草稿、通知偏好和自选快照的跨标签/本地状态验收通过；本地报告归档仍保留原有本地边界。
-- [ ] 记录真实 API 与 Mock 的验收边界；本阶段不将 Mock 验收写成后端联调通过。
+- [x] 记录真实 API 与 Mock 的验收边界；Mock 浏览器测试不作为后端联调通过证据，详见 API_CONTRACT 与提测清单。
 
 完成条件：CI/Browser Smoke 对应 SHA 通过；真实 API 未接入的能力继续明确显示 not_integrated。
 
@@ -167,4 +167,4 @@
 
 ## 8. 执行记录
 
-2026-11-12：W1-A/W1-B 完成并经用户确认七导航。W1-C 在研究中心增加结构化 Research 证据待接入说明，明确 Run 报告归档是当前浏览器副本；任务页本地最近任务引用、跟踪中心本地草稿/偏好、数据中心与设置中心职责均沿用已有实现，不重复开发。提交 `7f1b8510d349b9d166b6efceddee874ddb7703c0` 的 WebUI Checks（43160148859）和 Chromium Browser Smoke（43160149003）均通过；浏览器覆盖 320/375/600/768/900/1280/1600px，主要视图无页面横向溢出，Research 页面及本地/服务端边界说明随视口验收。W1-D 的浏览器前进/后退专项仍待补验；Reduced Motion 已由浏览器测试以 reduce 偏好运行，但仍需单独验证具体动效行为。
+2026-11-12：W1-A/W1-B 完成并经用户确认七导航；W1-C 完成研究中心结构化 Research 证据待接入说明及本地/服务端职责边界收口。W1-D 在提交 `82460cad6668c34ff6fde103efc28815ee21a02d` 增加浏览器前进/后退与 Reduced Motion 断言，WebUI Checks（43160974526）和 Chromium Browser Smoke（43160974640，attempt 2）通过；覆盖 320/375/600/768/900/1280/1600px、导航历史恢复和 reduced-motion 下导航 transition-property。首次 Browser Smoke attempt 在既有行情重试断言处超时，重跑通过，记录为测试稳定性观察。

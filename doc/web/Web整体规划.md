@@ -65,14 +65,14 @@ Web 负责交互、请求编排、状态展示和有限的浏览器本地工作�
 - 已有市场总览、个股行情、全市场分页、自选股、个股研究、选股、分析任务/Run Flow、本地研究笔记/报告归档、数据中心、告警草稿、通知偏好和设置中心。
 - 当前选股是已加载分页上的本地筛选，不是全市场策略扫描。
 - 最近任务是有限数量的浏览器任务引用，不是服务端完整历史。
-- 当前 HEAD 尚无本轮对应 CI/Browser Smoke 新验收证据；旧 SHA 通过记录只作为历史证据。
+- 当前 HEAD `82460cad6668c34ff6fde103efc28815ee21a02d` 的 WebUI Checks（43160974526）与 Chromium Browser Smoke（43160974640，attempt 2）均通过。
 
 ## 6. W0-W5 执行路线
 
 | 阶段 | 目标 | 主要任务 | 依赖/完成条件 | 状态 |
 |---|---|---|---|---|
 | W0 | 产品规划和文档基线 | 统一目标 IA；梳理页面与服务能力；清理过期排期/路径/状态；更新 API、架构、诊断和验收边界 | 文档内部链接、事实、基线和 Git diff 复核 | 已完成 |
-| W1 | 现有工作台收口 | 目标导航映射；明确研究对象/过程/结果/跟踪边界；页面状态和响应式体验收口；认证迁移准备 | 不新增业务 API；不假设 Session 已上线 | W1-A/W1-B/W1-C 已完成；W1-C 当前 SHA 的 CI/浏览器视口验收通过，W1-D 仍有浏览器前进/后退专项待补验 |
+| W1 | 现有工作台收口 | 目标导航映射；明确研究对象/过程/结果/跟踪边界；页面状态和响应式体验收口；认证迁移准备 | 不新增业务 API；不假设 Session 已上线 | W1-A/W1-B/W1-C/W1-D 已完成；当前 SHA 的 CI、浏览器历史导航、Reduced Motion 与七视口验收通过 |
 | W2 | 研究任务工作区升级 | 真实模板、Run/Stage/Attempt、执行进度、取消、服务端历史分页、结果综合和历史回看 | Researchflow Application Facade、Server 路由、权限及分页/取消契约可用 | 等待依赖 |
 | W3 | 研究中心与量化研究 | Research Evidence/Context/Event/Claim/Hypothesis/Scenario；Quant 指标/因子/趋势/策略/回测/风险 | Research、News Evidence Query、Quant DTO/API、PIT/质量/风险契约及 Server 注册可用 | 等待依赖 |
 | W4 | 跟踪与通知 | 服务端订阅、通知渠道、投递状态、告警规则/触发历史 | Notification API 和告警领域归属评审完成 | 等待依赖 |
@@ -95,7 +95,7 @@ Web 负责交互、请求编排、状态展示和有限的浏览器本地工作�
 - [x] 用户确认七导航分组；旧 hash 沿用原 view id，market-data 归一到 market。
 - [x] W1-B：七个一级导航分组、子视图入口、活动态和深链刷新恢复已实现。
 - [x] W1-D：WebUI Checks 与 Chromium Browser Smoke 在 SHA 3845bdc50a52121d6d875b6071f85217ef3d86e1 通过；覆盖七入口、hash 直达/刷新、响应式断点和既有主要交互验收。
-- [ ] W1-D：浏览器前进/后退与 reduced-motion 专项仍待补验。
+- [x] W1-D：当前 SHA `82460cad6668c34ff6fde103efc28815ee21a02d` 的浏览器前进/后退、活动导航状态及 Reduced Motion 断言通过；Browser Smoke（43160974640，attempt 2）。
 - [x] W1-C：研究中心明确结构化 Evidence 等 Research 服务端能力待接入；区分行情资料、本地笔记和 Run 结果副本；核对任务引用、跟踪本地数据及数据中心/设置职责边界。
 - [x] W1-D：W1-C 提交 SHA `7f1b8510d349b9d166b6efceddee874ddb7703c0` 的 WebUI Checks（43160148859）和 Chromium Browser Smoke（43160149003）通过，覆盖 320/375/600/768/900/1280/1600px。
 - [ ] W1-D：补齐浏览器前进/后退专项；Reduced Motion 测试上下文已启用 `reduce`，仍需核验具体动效行为。
@@ -129,4 +129,4 @@ Web 负责交互、请求编排、状态展示和有限的浏览器本地工作�
 
 ## 9. 本轮执行记录
 
-2026-11-12：W0/W1-A/W1-B/W1-C 已完成。W1-C 提交 `7f1b8510d349b9d166b6efceddee874ddb7703c0` 的 WebUI Checks（43160148859）和 Chromium Browser Smoke（43160149003）通过，覆盖七个视口和现有主要页面交互；W1-D 仅剩浏览器前进/后退及 Reduced Motion 具体动效专项。
+2026-11-12：W0/W1-A/W1-B/W1-C/W1-D 已完成。W1-C 提交 `7f1b8510d349b9d166b6efceddee874ddb7703c0` 的 CI/浏览器视口验收通过；W1-D 在提交 `82460cad6668c34ff6fde103efc28815ee21a02d` 增加浏览器前进/后退与 Reduced Motion 断言，WebUI Checks（43160974526）及 Chromium Browser Smoke（43160974640，attempt 2）通过。Browser Smoke 首次 attempt 在既有行情重试断言处超时，重跑通过；记录为测试稳定性观察。

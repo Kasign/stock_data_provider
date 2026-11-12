@@ -2,7 +2,7 @@
 
 更新时间：2026-11-12  
 当前代码核对基线：feat/webui-market-data-console @ 7f1b8510d349b9d166b6efceddee874ddb7703c0  
-W1-C 提交 `7f1b8510d349b9d166b6efceddee874ddb7703c0` 的 WebUI Checks（43160148859）和 Chromium Browser Smoke（43160149003）均通过；浏览器结果仅证明该 SHA 的前端行为与指定视口，不代表真实 API/生产部署验收。
+W1-C 提交 `7f1b8510d349b9d166b6efceddee874ddb7703c0` 的 WebUI Checks（43160148859）和 Chromium Browser Smoke（43160149003）通过；后续 W1-D 提交 `82460cad6668c34ff6fde103efc28815ee21a02d` 的 WebUI Checks（43160974526）和 Chromium Browser Smoke（43160974640，attempt 2）通过。浏览器结果仅证明对应 SHA 的前端行为与指定视口，不代表真实 API/生产部署验收。
 
 > 本文保留历史功能验收证据。历史 CI/Browser Smoke 只对其记录的 SHA 有效，不自动代表当前 HEAD 或 integration 最新提交通过。总体任务顺序、当前状态和下一步统一以《WebUI 整体规划》为准。
 >
@@ -36,8 +36,8 @@ W1-C 提交 `7f1b8510d349b9d166b6efceddee874ddb7703c0` 的 WebUI Checks（431601
 
 ## 0.2 当前 HEAD 待验收项
 
-- [x] W1-C 提交 SHA `7f1b8510d349b9d166b6efceddee874ddb7703c0` 对应 WebUI Checks（43160148859）通过。
-- [x] W1-C 提交 SHA `7f1b8510d349b9d166b6efceddee874ddb7703c0` 对应 Chromium Browser Smoke（43160149003）通过。
+- [x] W1-D 提交 SHA `82460cad6668c34ff6fde103efc28815ee21a02d` 对应 WebUI Checks（43160974526）通过。
+- [x] W1-D 提交 SHA `82460cad6668c34ff6fde103efc28815ee21a02d` 对应 Chromium Browser Smoke（43160974640，attempt 2）通过。
 - [ ] 当前部署环境 Root Server 路由、Session/CSRF 与真实行情 API 可达性。
 - [ ] Data 主动诊断的真实 Provider 样例、质量/覆盖率证据及历史持久化。
 - [ ] Research/News/Quant/Researchflow/LLM/Notification 按各自真实 API 完成后逐模块加入验收矩阵。
@@ -54,7 +54,10 @@ W1-C 提交 `7f1b8510d349b9d166b6efceddee874ddb7703c0` 的 WebUI Checks（431601
 - [x] 状态映射分别保留 loading、empty、unknown、degraded、failed、unavailable 等语义；未接入不等于空集合或健康。
 - [x] 代码层检查研究表格横向滚动、窄屏研究分区导航、面板标题折行和移动端布局规则。
 - [x] 在本轮实际 SHA 的 Chromium 验收中复核研究中心、任务中心、跟踪中心在 320/375/600/768/900/1280/1600 视口下的页面切换、页面横向溢出和主要交互；Browser Smoke 运行 43160149003 通过。
-- [ ] 单独补验浏览器前进/后退与 Reduced Motion 具体动效行为；当前 Browser Smoke 以 `reducedMotion: "reduce"` 创建浏览器上下文，但没有覆盖完整动效断言。
+- [x] 浏览器前进/后退：验证 stocks → research → tasks 后退两次、前进两次，视图、hash 和活动导航状态一致。
+- [x] Reduced Motion：在 `prefers-reduced-motion: reduce` 上下文下断言主导航和研究分区导航的 `transition-property: none`。
+- [x] 当前 SHA 七视口浏览器验收覆盖研究中心、任务中心、跟踪中心页面切换和页面横向溢出。
+- [ ] 真实 API/生产部署验收仍待对应服务端路由、认证和部署环境具备后另行执行；当前 Mock 不代表 L3/L4 验收。
 
 
 ## 1. 本批次范围
