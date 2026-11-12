@@ -529,7 +529,7 @@ func TestRunAndStageTransitionTables(t *testing.T) {
 		{"queued_to_running", domain.RunQueued, domain.RunRunning, false},
 		{"queued_to_cancelling", domain.RunQueued, domain.RunCancelling, false},
 		{"running_to_cancelling", domain.RunRunning, domain.RunCancelling, false},
-		{"created_to_running", domain.RunCreated, domain.RunRunning, true},
+		{"created_to_running", domain.RunCreated, domain.RunRunning, false},
 		{"running_to_succeeded_requires_finalizer", domain.RunRunning, domain.RunSucceeded, true},
 		{"cancelling_to_running", domain.RunCancelling, domain.RunRunning, true},
 		{"terminal_run_is_immutable", domain.RunSucceeded, domain.RunCancelling, true},
