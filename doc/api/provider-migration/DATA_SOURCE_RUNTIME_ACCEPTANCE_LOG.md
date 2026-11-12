@@ -1212,3 +1212,32 @@ Go suite 覆盖根模块、go-core、market-data 的格式/测试/race/vet、Mar
 - 行情源时间为 15:34:59（北京时间），估值响应聚合 timestamp 为 18:34:16；聚合时间不能升级为逐字段 Freshness。
 - Hithink ProviderReportDate 仍缺失，估值快照整体 degraded；PE_MRQ 算法解释尚待供应商确认。
 - 本轮复用历史 Actions 日志与官方报告，没有再次请求 Hithink/Tushare，也没有改代码。
+
+
+
+## 68. 2026-11-12 Hithink 2025 年报资产负债表披露日原始字段核验
+
+- 仓库分支：`feat/full-go-data-providers-api-switch`
+- Live Probe Run：`43213471638`；Job：`131166682925`；测试：`TestLiveHithinkAnnualBalanceSheetPublicationDateRaw`。
+- 请求范围：`GET /api/a-share/financials/balance-sheets`，`thscode=600519.SH`、`period=annual`，只检查报告期末 `2025-12-31` 的目标行；没有重跑其他 Hithink 能力。
+- 原始响应：
+  - `period_end_ms=1767110400000` → `2025-12-31`
+  - `report_date_ms=1793376000000` → `2026-10-31`
+  - `assets_total=303834844021.44 CNY`
+  - `total_debt=49875590112.37 CNY`
+- 该测试以官方年报披露日 `2026-04-17` 为预期，实际返回 `2026-10-31`，因此定向验收断言失败；原始字段已完整记录。Hithink 官方字段契约将 `report_date_ms` 定义为披露日，`period_end_ms` 定义为报告期末。Adapter 直接映射原值，没有发现日期转换错误。
+- PIT 结果：该样本因日期偏晚而被保守延迟可见；未发现本样本提前可见。不得硬编码覆盖供应商日期，不修改 PIT 算法，等待 Provider 解释/修正该报表字段。
+
+## 69. 2026-11-12 Hithink 历史日 K 分页与后复权成交量核验
+
+- 代码修复：提交 `0b5adb085daae4659ea4969838ba5e1b906235ba` 移除历史日 K 不支持的 `offset` 翻页；每个日期窗口只请求一次，单个响应内仍拒绝重复交易日。
+- 单测：`TestHithinkDailyBarsFetchesSingleResponseWithoutOffset` 验证单窗口只发一次请求并返回全部记录；`TestHithinkDailyResponseRejectsDuplicateDatesWithinSingleResponse` 验证同一响应内部重复日期仍被拒绝。
+- 三口径真实验收 Run `43214243770` / Job `131169300123`，`600519.SH`，`2026-10-13..2026-11-12`：
+  - none：23 条，首日 `2026-10-13`，末日 `2026-11-12`。
+  - forward：23 条，首日 `2026-10-13`，末日 `2026-11-12`。
+  - backward：归一化后无有效日 K，真实验收失败。
+- backward 原始字段定向 Run `43214735212` / Job `131170962436`，测试 `TestLiveHithinkDailyBarsBackwardRaw`：
+  - 原始响应有 23 条，首末日期分别为 `2026-10-13`、`2026-11-12`。
+  - 首行 `volume=472172.42721306626`，末行 `volume=575236.0558640865`；接口文档定义 volume 单位为股，当前 Data 契约要求非负整数股数。
+  - Adapter 拒绝小数股数，不做四舍五入；当前后复权模式不通过。该结果归类为 Provider 数据/字段语义异常，而不是将 volume 校验放宽。
+- CI 状态快照：Go-Python data quality parity Run `43214910262` success；Go Test Suite Run `43214976579` 当时仍在执行 Market Data Race 与 root Go test/race；Market-data MariaDB Migration/PIT persistence Job `131171939942` success；Compose/Docker 与 root-module migration Job skipped。
