@@ -4,7 +4,7 @@
 
 - 目标分支：`feat/full-go-data-providers-api-switch`
 - 阶段定位：阶段五统一验收，不以“代码已实现”替代真实数据验收。
-- 当前状态（2026-11-12，Data 代码验收基线 `bcc36efbdbee0c74bf2a1f8439943926a2f47a46`，最近功能代码 SHA `a63a126e7ab0bc1acea576e30ca083063708483c`）：本轮 Fundamentals Probe 报告期边界和 `source_version=unknown` Reporter 判定已修复；当前 SHA 的 Go Test Suite Run `43226759988` success，包含 Data gofmt/tests/race/vet、Root Go tests/race/vet、MariaDB/PIT persistence。BaoStock 首轮 Live Provider Run `43218703614` 只证明非空响应；加强后的字段语义断言尚未真实运行。最新 Live Provider Run `43226714523` 总体 success，但 BaoStock 专项步骤 skipped。阶段 B 仍 in_progress；较早章节的待办表属于历史快照，不得作为当前任务重复执行。
+- 当前状态（2026-11-12，Data 代码验收基线 `e39c3d5409b5b4f2c7b79da3dee5a6159e8efb34`）：Fundamentals Probe 报告期边界、`source_version=unknown` Reporter 判定和 BaoStock `tradestatus/isST` 加强断言均已有对应代码与证据；Go Test Suite Run `43229045731`、Go-Python parity Run `43228986785`、Live Provider Run `43228986723` 均 success。BaoStock 专项明确 PASS，详见数据侧整体规划 P0-89 和 Runtime Log 第 72 节。阶段 B 仍因 DailyBar 复权绝对参考基准缺证而 in_progress；较早章节的待办表属于历史快照，不得作为当前任务重复执行。
 - 原则：每项结论必须绑定代码 SHA、样本范围、原始响应证据和质量判定；凭据不得进入文档或日志。
 - Data 代码验收补充（2026-11-12）：代码 SHA `f919b4f8568181706053639032cb38fc75a131fb` 的 Go Test Suite Run `43143964508` 中 Data gofmt、单测、Race、Vet 及 MariaDB/PIT、DailyBar 回退、PIT 修订回退、Probe HTTP + MariaDB 端到端均通过。该结果只关闭本轮 Data 代码门禁，不关闭阶段 B 的真实 Provider 复权基准、AvailableAt 和交易边界证据验收。
 
