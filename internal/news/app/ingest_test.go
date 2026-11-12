@@ -10,16 +10,16 @@ import (
 )
 
 type memoryIdentityRepository struct {
-	credentials                  []domain.IdentityCredential
-	observations                 []domain.Observation
-	items                        []string
-	failAppend                   bool
-	sourcePolicy                 domain.SourcePolicy
-	sourcePolicyVersionID        string
-	endpointPolicy               *domain.EndpointPolicy
-	endpointPolicyVersionID      string
-	providerOutputPolicy         domain.ProviderOutputPolicy
-	providerOutputPolicyRef      string
+	credentials                   []domain.IdentityCredential
+	observations                  []domain.Observation
+	items                         []string
+	failAppend                    bool
+	sourcePolicy                  domain.SourcePolicy
+	sourcePolicyVersionID         string
+	endpointPolicy                *domain.EndpointPolicy
+	endpointPolicyVersionID       string
+	providerOutputPolicy          domain.ProviderOutputPolicy
+	providerOutputPolicyRef       string
 	providerOutputPolicyVersionID string
 }
 
