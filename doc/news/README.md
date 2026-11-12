@@ -1,6 +1,6 @@
 # 新闻模块开发任务与验收清单
 
-> 当前验收状态（2026-11-12，最新代码提交：用途映射修复 `e76eb3a88ecffd7fe97e2ddf8cb55c28e04eee08`，对应测试 `6188c22efd24993bf2717b8b382661cb3854b3eb`）：本轮修正 NEWS-CTR-002 合法显式 `risk_review` 在当前策略校验中被拒绝的问题，并补充用途映射、SourcePolicy 与 EndpointPolicy 测试。尚未运行 Go 测试、Race、Vet 或 MariaDB 集成；此前 Run `43210204658` / `43210204807` 的 SHA 早于本轮代码，不构成本轮验收证据。PR [#88](https://github.com/Kasign/stock_data_provider/pull/88) 已合入 `integration`，Merge Commit 为 `85c78f19e4d8d231b29d78f5815bc72868dc326d`；本轮未再次合并分支。
+> 当前验收状态（2026-11-12，News 分支 HEAD：`a8a3763e5dc662d856a438c52a0b1a28975def43`）：NEWS-CTR-002 显式 `risk_review` 用途映射修复及对应测试已通过当前 HEAD 的 CI。News Provider contract workflow Run `43219930444`：Provider contract tests、完整 News 模块测试均 success，包含 gofmt、单测、Race、Vet；Go test suite Run `43219930418`：News MariaDB Repository and Migration integration、根模块 `Test .`、Researchflow 相关测试及 `Test go-core` 均 success。Compose/Docker 与 Market Data 专项 jobs 按条件 skipped，不计为通过。两条 Run 的 `head_sha` 均与当前 HEAD 完全一致。PR [#88](https://github.com/Kasign/stock_data_provider/pull/88) 的历史合并记录不代表本轮再次合并；本轮未执行分支合并。
 
 > 当前模块状态：News 自有领域代码质量门禁、Provider 固定响应契约和 MariaDB 11.4 持久化专项验收已有通过证据；生产受限内容披露仍受公共 JCS Runtime Verifier 注入和 Server 生产装配阻断；News 内部的策略指针锁定、授权复核与精确 Version 正文读取事务机制已实现。NEWS-CTR-001 的 available_at 严格 PIT 继续等待合格来源证据，不得从 published_at/fetched_at/observed_at 推导。
 > 历史记录说明：本文按日期累积的早期实施段落保留为过程记录；其中旧的未完成项、等待 CI 项和旧阻断状态不代表当前任务状态。当前状态以本段及文末“2026-11-12 当前任务边界与后续计划”为准。
@@ -1107,7 +1107,7 @@
 | 授权复核与精确 Version 内容读取 TOCTOU | News 内部事务机制已实现 | `evidence_authorization_read.go` 在同一 InnoDB 事务锁定策略指针、复读 Observation/Version、执行授权回调并读取正文；MariaDB 集成覆盖读取与撤销并发。剩余是公共 JCS Verifier 的真实注入和 Server 生产装配，不再重复建设事务机制 |
 | available_at 严格 PIT | 阻断但暂无可实施真实数据 | 当前已核实来源没有符合准入规则的首次公开可获取时间字段；继续保持 NULL，不新增空壳字段/表，不修改 Get/List SQL。只有取得合格来源证据后才实现证据持久化和 PIT 过滤 |
 | Provider/Source 生产装配、Migration 总注册、Diagnostics Runner、Cleaner 周期调度 | 非本分支任务 | 由 Server 组合根装配；News 提供的构造入口、Migration、Check 和 Cleaner 已存在 |
-| `risk_review` 当前策略映射 | 代码已修复，验证待执行 | 显式 `risk_review` 映射到 `PurposeInternalBusiness`；反向通用映射仍拒绝，避免从 `internal_business` 自动推断 purpose_code。Source/Endpoint/Provider 策略仍独立决定是否许可 |
+| `risk_review` 当前策略映射 | 当前 HEAD CI 已通过 | 显式 `risk_review` 映射到 `PurposeInternalBusiness`；反向通用映射仍拒绝，避免从 `internal_business` 自动推断 purpose_code。Source/Endpoint/Provider 策略仍独立决定是否许可 |
 | 真实 Provider/Feed 网络、配额及来源授权验收 | 等待真实环境条件 | 需要可用账号凭证、实际套餐条款、逐来源授权及部署 DNS/出口证据；未满足时保持 skipped/restricted |
 | News 自有代码质量与 MariaDB 专项验证 | 已通过当前 CI | 不重复进行无差异回归；后续代码变更再按变更范围触发验证 |
 
@@ -1115,7 +1115,7 @@
 
 1. 不新增 News 领域功能，不为 WebUI 增加 API，也不复制 Platform/Server 能力。
 2. 跟进公共 GOV-CTR-006 Runtime Verifier 的可依赖实现；确认真实 package/API 和 Golden 后，由 Server 组合根注入并完成 News 消费者接入；News 已有事务型授权读取机制，不再重复实现。
-4. `risk_review` 映射缺口已按冻结契约修复；等待本轮代码对应 CI 验证，不重复讨论用途语义。
+4. `risk_review` 映射缺口已按冻结契约修复；当前 HEAD 的 News 专项测试、Race、Vet 和根模块相关 CI 已通过，不重复讨论用途语义。
 5. 等待具备来源证据的真实数据后，再单独实现 available_at 证据模型与 Get/List 严格 PIT；不以模拟样本或推断时间验收。
 6. 有真实 Provider 凭证和授权材料后，执行受控 Live Probe；否则不把固定响应契约测试描述为在线验收。
 
@@ -1130,3 +1130,12 @@
 - SourcePolicy、EndpointPolicy、ProviderOutputPolicy 继续按请求显式 purpose_code 检查策略许可；映射不等于授权通过。
 - 新增测试覆盖用途映射、SourcePolicy 用途匹配、EndpointPolicy 用途匹配，以及不允许跨用途推断。
 - 本轮未执行 Go 测试、Race、Vet 或 MariaDB 集成；此前 CI SHA 不覆盖本轮提交，必须取得覆盖当前代码 SHA 的新验证结果后才能标记通过。
+
+
+### 十七、补充：risk_review 修复的当前 HEAD CI 验收结果（2026-11-12）
+
+- 验收分支：`feat/research-news-ingestion`；验收 HEAD：`a8a3763e5dc662d856a438c52a0b1a28975def43`。
+- News Provider contract workflow Run [43219930444](https://github.com/Kasign/stock_data_provider/actions/runs/43219930444)：`Test News Provider contracts`、`Test full News module` 均 success。覆盖 News gofmt、`go test ./internal/news/...`、News Race Detector、News Vet，以及 Provider contract tests、Race、Vet。
+- Go test suite Run [43219930418](https://github.com/Kasign/stock_data_provider/actions/runs/43219930418)：News MariaDB Repository and Migration integration、根模块 `Test .`、Researchflow MariaDB lifecycle integration、Researchflow format/tests/race/vet、WorkerStore tests/race/vet、`Test go-core` 均 success。Compose/Docker 和 Market Data 专项 jobs 为 skipped，不计入通过范围。
+- 两条 Run 的 `head_sha` 均精确匹配验收 HEAD；因此 `risk_review` 映射及新增存储层测试已被当前 HEAD 的 News 全量测试、Race、Vet 覆盖。
+- 该结果不代表真实 Provider/Feed 网络、来源授权、部署 DNS/出口、Server 生产装配或 available_at 严格 PIT 已验收。
