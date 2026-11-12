@@ -764,9 +764,9 @@ func TestLiveHithinkCapabilities(t *testing.T) {
 				"basis":    "贵州茅台 2025 年年度报告官方披露日期",
 			},
 			"official_metric_evidence": map[string]any{
-				"basis": "贵州茅台 2025 年年度报告合并报表；仅适用于 600519.SH / 2025Q4 固定样本",
+				"basis":  "贵州茅台 2025 年年度报告合并报表；仅适用于 600519.SH / 2025Q4 固定样本",
 				"status": map[bool]string{true: "mismatch", false: "matched"}[metricMismatch],
-				"items": metricEvidence,
+				"items":  metricEvidence,
 			},
 			"sections": sections,
 		}
