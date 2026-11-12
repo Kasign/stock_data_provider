@@ -123,3 +123,46 @@ func TestDeliveryPlanRejectsIncompleteOrDuplicateAuthorizationPolicyTuple(t *tes
 		t.Fatalf("duplicate policy tuple must be rejected, got %v", err)
 	}
 }
+
+
+func TestDeliveryPlanRejectsUnsupportedSourceModule(t *testing.T) {
+	plan := validDeliveryPlan()
+	for _, sourceModule := range []string{"", "news", "server", "unknown"} {
+		plan.SourceModule = sourceModule
+		if err := plan.Validate(); !errors.Is(err, ErrInvalidDeliveryPlan) {
+			t.Errorf("source_module %q must be rejected, got %v", sourceModule, err)
+		}
+	}
+}
+
+func TestValidateDeliveryPlanReplayRejectsChangedDeliveryIdentity(t *testing.T) {
+	existing := validDeliveryPlan()
+	existing.PlanFingerprint, _ = existing.CalculateFingerprint()
+
+	tests := []struct {
+		name   string
+		mutate func(*DeliveryPlan)
+	}{
+		{
+			name: "delivery_id",
+			mutate: func(plan *DeliveryPlan) {
+				plan.DeliveryID = "different-delivery"
+			},
+		},
+		{
+			name: "delivery_idempotency_key",
+			mutate: func(plan *DeliveryPlan) {
+				plan.DeliveryIdempotencyKey = "different-idempotency-key"
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			incoming := existing
+			tt.mutate(&incoming)
+			if err := ValidateDeliveryPlanReplay(existing, incoming); !errors.Is(err, ErrDeliveryPlanConflict) {
+				t.Fatalf("changed immutable delivery identity must conflict, got %v", err)
+			}
+		})
+	}
+}
