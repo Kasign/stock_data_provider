@@ -16,7 +16,9 @@ type RecipientDirectoryRequest struct {
 	Scope        domain.RecipientScope
 	OwnerRef     string
 	RecipientRef string
-	Channel      domain.ChannelConfigSnapshot
+	ChannelRef   string
+	ChannelKind  string
+	ConfigVersion int64
 }
 
 // RecipientDirectoryResult carries the authorized opaque target and the policy evidence
@@ -67,7 +69,8 @@ func (r *DirectoryRecipientResolver) Resolve(
 	request := RecipientDirectoryRequest{
 		Scope:    subscription.RecipientScope,
 		OwnerRef: subscription.OwnerRef,
-		Channel:  cloneChannelSnapshot(channel),
+		ChannelRef: channel.ChannelRef, ChannelKind: channel.ChannelKind,
+		ConfigVersion: channel.ConfigVersion,
 	}
 	switch subscription.RecipientScope {
 	case domain.RecipientScopeOwner:
