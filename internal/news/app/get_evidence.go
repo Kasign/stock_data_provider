@@ -22,6 +22,7 @@ type EvidenceReadAuthorizer interface {
 // 在授权通过前，不构造任何可向跨模块返回的内容 DTO。
 type GetEvidence struct {
 	repository EvidencePITRepository
+	content    EvidenceContentRepository
 	snapshots  AuthorizationSnapshotRepository
 	authorizer EvidenceReadAuthorizer
 	now        func() time.Time
@@ -36,12 +37,16 @@ func NewGetEvidence(
 	if repository == nil || snapshots == nil || authorizer == nil {
 		return nil, ErrEvidenceAuthorizationUnavailable
 	}
-	return &GetEvidence{repository: repository, snapshots: snapshots, authorizer: authorizer, now: time.Now}, nil
+	content, ok := repository.(EvidenceContentRepository)
+	if !ok {
+		return nil, ErrEvidenceAuthorizationUnavailable
+	}
+	return &GetEvidence{repository: repository, content: content, snapshots: snapshots, authorizer: authorizer, now: time.Now}, nil
 }
 
 // Execute 只返回 PIT 可见且当前授权仍有效的证据；授权失败时返回空 DTO。
 func (u *GetEvidence) Execute(ctx context.Context, request GetEvidenceRequest) (ResearchEvidenceRecord, error) {
-	if u == nil || u.repository == nil || u.snapshots == nil || u.authorizer == nil || u.now == nil || ctx == nil {
+	if u == nil || u.repository == nil || u.content == nil || u.snapshots == nil || u.authorizer == nil || u.now == nil || ctx == nil {
 		return ResearchEvidenceRecord{}, ErrInvalidEvidenceQuery
 	}
 	if err := ctx.Err(); err != nil {
@@ -101,7 +106,7 @@ func (u *GetEvidence) Execute(ctx context.Context, request GetEvidenceRequest) (
 		return ResearchEvidenceRecord{}, err
 	}
 	// 正文在授权复核通过后才从存储读取；元数据定位阶段不加载 content_json。
-	content, err := u.repository.GetEvidenceContentAt(ctx, pit.Version.NewsID, pit.Version.ID, request.SystemAsOf)
+	content, err := u.content.GetEvidenceContentAt(ctx, pit.Version.NewsID, pit.Version.ID, request.SystemAsOf)
 	if err != nil {
 		return ResearchEvidenceRecord{}, err
 	}
