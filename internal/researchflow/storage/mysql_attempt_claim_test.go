@@ -502,7 +502,6 @@ func TestMariaDBClaimAttemptLeaseAndFencing(t *testing.T) {
 
 func stringRef(value string) *string { return &value }
 
-
 // TestMariaDBGlobalWorkerCapacitySerializesClaimsAcrossRuns verifies that
 // concurrent claims on different Runs cannot exceed the configured global Worker slots.
 func TestMariaDBGlobalWorkerCapacitySerializesClaimsAcrossRuns(t *testing.T) {
