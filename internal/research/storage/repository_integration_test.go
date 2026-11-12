@@ -183,7 +183,13 @@ func TestResearchOutboxClaimRetryAndConfirmation(t *testing.T) {
 		t.Fatalf("confirm Outbox delivery: %v", err)
 	}
 	if err := repo.base.MarkOutboxPublished(ctx, reclaimed[0].EventID, "worker_test", reclaimed[0].LeaseToken, now); err != nil {
-		t.Fatalf("repeated confirmation must be idempotent: %v", err)
+		t.Fatalf("repeated confirmation must be idempotent for the same lease: %v", err)
+	}
+	if err := repo.base.MarkOutboxPublished(ctx, reclaimed[0].EventID, "worker_other", reclaimed[0].LeaseToken, now); !errors.Is(err, ErrConflict) {
+		t.Fatalf("published confirmation by another worker = %v, want ErrConflict", err)
+	}
+	if err := repo.base.MarkOutboxPublished(ctx, reclaimed[0].EventID, "worker_test", claimed[0].LeaseToken, now); !errors.Is(err, ErrConflict) {
+		t.Fatalf("published confirmation with stale lease token = %v, want ErrConflict", err)
 	}
 	after, err := repo.base.ClaimOutbox(ctx, "worker_test", 10, now.Add(time.Minute))
 	if err != nil {
