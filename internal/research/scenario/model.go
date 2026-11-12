@@ -132,7 +132,36 @@ func (n *ConditionNode) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (s *Scenario) UnmarshalJSON(data []byte) error {
+	type scenarioAlias Scenario
+	if err := rejectUnknownFields(data, "scenario_id", "scenario_version", "subject_refs", "system_as_of", "horizon", "conditions", "expected_path", "evidence_refs", "quant_evaluation_ref", "probability_status", "risks", "invalidation_conditions", "limitations"); err != nil {
+		return err
+	}
+	var value scenarioAlias
+	if err := json.Unmarshal(data, &value); err != nil {
+		return err
+	}
+	*s = Scenario(value)
+	return nil
+}
+
+func (g *ConditionGroup) UnmarshalJSON(data []byte) error {
+	type groupAlias ConditionGroup
+	if err := rejectUnknownFields(data, "operator", "conditions"); err != nil {
+		return err
+	}
+	var value groupAlias
+	if err := json.Unmarshal(data, &value); err != nil {
+		return err
+	}
+	*g = ConditionGroup(value)
+	return nil
+}
+
 func (c *ScenarioCondition) UnmarshalJSON(data []byte) error {
+	if err := rejectUnknownFields(data, "condition_id", "condition_type", "description", "operator", "metric_ref", "expected_value", "unit", "window", "evaluation_status", "evidence_refs", "required"); err != nil {
+		return err
+	}
 	type conditionAlias ScenarioCondition
 	var value conditionAlias
 	if err := json.Unmarshal(data, &value); err != nil {
@@ -197,11 +226,6 @@ func (s Scenario) Validate() error {
 		if values == nil {
 			return fmt.Errorf("%s must be a non-null array", name)
 		}
-		for i, value := range values {
-			if strings.TrimSpace(value) == "" {
-				return fmt.Errorf("%s[%d] must not be blank", name, i)
-			}
-		}
 	}
 	return nil
 }
@@ -240,8 +264,8 @@ func (c ScenarioCondition) Validate() error {
 	default:
 		return fmt.Errorf("condition_type is invalid")
 	}
-	if err := required("description", c.Description); err != nil {
-		return err
+	if c.Description == "" {
+		return fmt.Errorf("description is required")
 	}
 	switch c.Operator {
 	case OperatorGT, OperatorGTE, OperatorLT, OperatorLTE, OperatorEQ, OperatorNEQ, OperatorIn, OperatorNotIn, OperatorCrosses, OperatorExists, OperatorNotExists:
@@ -360,4 +384,21 @@ func validateEvaluationStatus(value EvaluationStatus) error {
 	default:
 		return fmt.Errorf("evaluation_status is invalid")
 	}
+}
+
+func rejectUnknownFields(data []byte, allowed ...string) error {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	allowedFields := make(map[string]struct{}, len(allowed))
+	for _, field := range allowed {
+		allowedFields[field] = struct{}{}
+	}
+	for field := range fields {
+		if _, ok := allowedFields[field]; !ok {
+			return fmt.Errorf("unknown field %q", field)
+		}
+	}
+	return nil
 }

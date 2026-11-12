@@ -308,7 +308,7 @@ func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_event_versions WHERE event_id=?", eventID)
 		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_claim_versions WHERE claim_id=?", claimID)
 		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_evidence_records WHERE evidence_id IN (?, ?)", evidenceID, concurrentEvidenceID)
-		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_aggregate_heads WHERE aggregate_id IN (?, ?, ?, ?, ?, ?, ?, ?)", contextID, eventID, derivedParentID, derivedChildID, missingDerivedID, claimID, cancelledContextID, orphanContextID, lockedContextID)
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_aggregate_heads WHERE aggregate_id IN (?, ?, ?, ?, ?, ?, ?, ?, ?)", contextID, eventID, derivedParentID, derivedChildID, missingDerivedID, claimID, cancelledContextID, orphanContextID, lockedContextID)
 	})
 
 	contextRepo, err := NewContextRepository(db, clock)
