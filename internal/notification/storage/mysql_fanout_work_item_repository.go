@@ -116,18 +116,38 @@ func (r *MySQLFanoutWorkItemRepository) ClaimDue(
 	if snapshotRevision.Valid {
 		work.SnapshotRevision = snapshotRevision.Int64
 		work.HasSnapshot = true
-	} else {
-		if err := tx.QueryRowContext(ctx, `SELECT current_revision
-			FROM notification_subscription_revision WHERE singleton_id = 1`).Scan(&work.SnapshotRevision); err != nil {
-			return result, false, fmt.Errorf("notification storage: read subscription snapshot revision: %w", err)
+	}
+	if len(leaseExpiresAt) > 0 {
+		if work.LeaseExpiresAt, err = parseDatabaseTime(leaseExpiresAt); err != nil {
+			return result, false, err
 		}
-		work.HasSnapshot = true
+	}
+	if len(nextAttemptAt) > 0 {
+		if work.NextAttemptAt, err = parseDatabaseTime(nextAttemptAt); err != nil {
+			return result, false, err
+		}
 	}
 	if work.CreatedAt, err = parseDatabaseTime(createdAt); err != nil {
 		return result, false, err
 	}
 	if work.UpdatedAt, err = parseDatabaseTime(updatedAt); err != nil {
 		return result, false, err
+	}
+	if err := work.Validate(); err != nil {
+		return result, false, err
+	}
+	if !snapshotRevision.Valid {
+		// 只有从未领取的初始 pending 项允许首次分配快照。
+		// retry_wait/过期 processing 丢失快照时必须 fail closed，不能重建为新高水位。
+		if work.Status != domain.FanoutPending || work.AttemptCount != 0 ||
+			work.FencingToken != 0 || work.CursorSubscriptionID != "" {
+			return result, false, domain.ErrInvalidFanoutWorkItem
+		}
+		if err := tx.QueryRowContext(ctx, `SELECT current_revision
+			FROM notification_subscription_revision WHERE singleton_id = 1`).Scan(&work.SnapshotRevision); err != nil {
+			return result, false, fmt.Errorf("notification storage: read subscription snapshot revision: %w", err)
+		}
+		work.HasSnapshot = true
 	}
 	event.Payload = append([]byte(nil), payload...)
 	if err := event.VerifyPayloadFingerprint(); err != nil {
@@ -140,6 +160,7 @@ func (r *MySQLFanoutWorkItemRepository) ClaimDue(
 
 	update, err := tx.ExecContext(ctx, `UPDATE notification_fanout_work_items
 		SET status = 'processing', attempt_count = attempt_count + 1,
+			next_attempt_at = NULL,
 			lease_worker_id = ?, lease_expires_at = TIMESTAMPADD(MICROSECOND, ?, UTC_TIMESTAMP(6)),
 			fencing_token = fencing_token + 1, snapshot_revision = ?, updated_at = UTC_TIMESTAMP(6)
 		WHERE work_item_id = ?`,

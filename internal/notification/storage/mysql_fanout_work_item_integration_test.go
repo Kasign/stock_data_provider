@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"os"
@@ -74,15 +75,41 @@ func TestNotificationMariaDBFanoutWorkItemIntegration(t *testing.T) {
 		second.WorkItem.SnapshotRevision != first.WorkItem.SnapshotRevision {
 		t.Fatalf("reclaim must preserve snapshot/cursor and increase fencing: first=%+v second=%+v", first.WorkItem, second.WorkItem)
 	}
-	if err := fanout.AdvanceWithLease(ctx, first, "sub-002", false); !errors.Is(err, application.ErrFanoutWorkItemLeaseConflict) {
-		t.Fatalf("stale fencing token must be rejected, got %v", err)
+	if err := fanout.RetryWithLease(ctx, second, time.Now().UTC().Add(-time.Second).Truncate(time.Microsecond),
+		"notification.fanout.integration_retry", false); err != nil {
+		t.Fatalf("schedule fanout retry: %v", err)
 	}
-	if err := fanout.AdvanceWithLease(ctx, second, "sub-002", true); err != nil {
+	third, claimed, err := fanout.ClaimDue(ctx, "fanout-worker-3", time.Minute)
+	if err != nil || !claimed {
+		t.Fatalf("claim retry-wait item: claimed=%v err=%v", claimed, err)
+	}
+	if third.WorkItem.Status != domain.FanoutProcessing ||
+		third.WorkItem.FencingToken != second.WorkItem.FencingToken+1 ||
+		third.WorkItem.CursorSubscriptionID != second.WorkItem.CursorSubscriptionID ||
+		third.WorkItem.SnapshotRevision != second.WorkItem.SnapshotRevision {
+		t.Fatalf("retry claim must preserve snapshot/cursor and increase fencing: second=%+v third=%+v",
+			second.WorkItem, third.WorkItem)
+	}
+	var nextAttemptAt sql.NullTime
+	if err := db.QueryRowContext(ctx, "SELECT next_attempt_at FROM notification_fanout_work_items WHERE work_item_id = ?",
+		third.WorkItem.WorkItemID).Scan(&nextAttemptAt); err != nil {
+		t.Fatal(err)
+	}
+	if nextAttemptAt.Valid {
+		t.Fatalf("processing item must clear next_attempt_at after retry claim, got %v", nextAttemptAt.Time)
+	}
+	if err := fanout.AdvanceWithLease(ctx, first, "sub-002", false); !errors.Is(err, application.ErrFanoutWorkItemLeaseConflict) {
+		t.Fatalf("stale first fencing token must be rejected, got %v", err)
+	}
+	if err := fanout.AdvanceWithLease(ctx, second, "sub-002", false); !errors.Is(err, application.ErrFanoutWorkItemLeaseConflict) {
+		t.Fatalf("stale retry fencing token must be rejected, got %v", err)
+	}
+	if err := fanout.AdvanceWithLease(ctx, third, "sub-002", true); err != nil {
 		t.Fatalf("complete fanout: %v", err)
 	}
 	var status string
 	if err := db.QueryRowContext(ctx, "SELECT status FROM notification_fanout_work_items WHERE work_item_id = ?",
-		second.WorkItem.WorkItemID).Scan(&status); err != nil {
+		third.WorkItem.WorkItemID).Scan(&status); err != nil {
 		t.Fatal(err)
 	}
 	if status != string(domain.FanoutCompleted) {

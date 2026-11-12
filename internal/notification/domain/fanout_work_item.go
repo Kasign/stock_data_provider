@@ -68,6 +68,10 @@ func (w FanoutWorkItem) Validate() error {
 	if w.HasSnapshot && w.SnapshotRevision < 0 {
 		return ErrInvalidFanoutWorkItem
 	}
+	if !w.HasSnapshot && (w.Status != FanoutPending || w.AttemptCount != 0 ||
+		w.FencingToken != 0 || w.CursorSubscriptionID != "") {
+		return ErrInvalidFanoutWorkItem
+	}
 	if w.Status == FanoutProcessing {
 		if w.LeaseWorkerID == "" || w.LeaseExpiresAt.IsZero() || w.FencingToken < 1 {
 			return ErrInvalidFanoutWorkItem

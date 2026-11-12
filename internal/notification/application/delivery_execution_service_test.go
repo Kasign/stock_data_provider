@@ -566,3 +566,75 @@ func TestDeliveryExecutionDoesNotStartAttemptWhenLeaseAlreadyExpired(t *testing.
 		t.Fatalf("expired lease must not append Attempt: attempts=%+v err=%v", attempts, listErr)
 	}
 }
+
+type outcomeUnknownAttemptCompletionRepository struct {
+	*memoryDeliveries
+	persistCompletion bool
+}
+
+func (r outcomeUnknownAttemptCompletionRepository) CompleteWithLease(
+	ctx context.Context,
+	expectedDeliveryVersion, fencingToken int64,
+	completed domain.DeliveryAttempt,
+) error {
+	if r.persistCompletion {
+		if err := r.memoryDeliveries.CompleteWithLease(ctx, expectedDeliveryVersion, fencingToken, completed); err != nil {
+			return err
+		}
+	}
+	return errors.Join(ErrPersistenceOutcomeUnknown, errors.New("injected completion commit acknowledgement loss"))
+}
+
+func TestDeliveryExecutionCompletionOutcomeUnknownNeverRepeatsChannelSend(t *testing.T) {
+	for _, persistCompletion := range []bool{true, false} {
+		name := "completion_not_committed"
+		wantRecovery := LeaseRecoveryMarkUnknown
+		if persistCompletion {
+			name = "completion_committed"
+			wantRecovery = LeaseRecoveryFinalizeSent
+		}
+		t.Run(name, func(t *testing.T) {
+			service, repository, adapter, claim, event := executionFixture(t)
+			attempts := outcomeUnknownAttemptCompletionRepository{
+				memoryDeliveries: repository, persistCompletion: persistCompletion,
+			}
+			service.attempts = attempts
+			service.completion.attempts = attempts
+
+			_, err := service.Execute(
+				context.Background(), claim, event, "attempt-completion-outcome-unknown",
+				0.5, "evidence-completion-outcome-unknown",
+			)
+			if !errors.Is(err, ErrPersistenceOutcomeUnknown) {
+				t.Fatalf("expected uncertain completion commit, got %v", err)
+			}
+			if adapter.calls != 1 {
+				t.Fatalf("channel must be called exactly once, calls=%d", adapter.calls)
+			}
+
+			delivery, found, getErr := repository.Get(context.Background(), claim.Delivery.DeliveryID)
+			if getErr != nil || !found || delivery.Status != domain.DeliverySending || delivery.AttemptCount != 1 {
+				t.Fatalf("uncertain completion must leave the Delivery for lease recovery: delivery=%+v found=%v err=%v", delivery, found, getErr)
+			}
+			history, listErr := repository.ListByDelivery(context.Background(), claim.Delivery.DeliveryID)
+			if listErr != nil || len(history) != 1 {
+				t.Fatalf("expected one persisted Attempt, history=%+v err=%v", history, listErr)
+			}
+			if persistCompletion && (history[0].FinishedAt == nil || history[0].Outcome == nil ||
+				*history[0].Outcome != domain.DeliveryAttemptAccepted) {
+				t.Fatalf("committed completion must be visible to recovery: %+v", history[0])
+			}
+			if !persistCompletion && history[0].FinishedAt != nil {
+				t.Fatalf("uncommitted completion must leave a running Attempt: %+v", history[0])
+			}
+
+			assessment, assessErr := AssessExpiredDeliveryLease(
+				delivery, claim.Lease, history, claim.Lease.ExpiresAt.Add(time.Second),
+			)
+			if assessErr != nil || assessment.Action != wantRecovery {
+				t.Fatalf("recovery must conservatively converge from persisted facts: assessment=%+v want=%q err=%v",
+					assessment, wantRecovery, assessErr)
+			}
+		})
+	}
+}

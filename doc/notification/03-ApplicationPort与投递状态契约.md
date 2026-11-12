@@ -223,6 +223,8 @@ DeliveryRecord 领域模型与纯函数迁移测试、DeliveryRepository Port/Fa
 | UpdateWithLease(expected_version, fencing_token, next, event, now) | Delivery.Transition 输出 + 当前 Worker Lease | 同一原子操作内校验版本/token/租约、更新快照并追加事件；终止本次 sending 后释放租约 |
 | ErrDeliveryVersionConflict / ErrDeliveryLeaseConflict | Repository CAS 判定 | 分别表示快照版本竞争和租约/token 失效；调用方不得将冲突当作可覆盖更新 |
 
+- ClaimDue 必须持久化 `Delivery.Transition` 返回的完整可变状态字段；从 retry_wait 领取时清空 `next_attempt_at`、`reason_code`、`last_error_code` 和 `provider_message_ref`，确保数据库快照与返回快照一致。
+
 当前 Fake 只证明模块内并发/CAS 语义，不代表 MariaDB 锁、事务、跨进程 fencing 或崩溃恢复已验收。ClaimDue 将租约截止限制为 min(调用方请求截止, Delivery.deadline_at)，不回收过期 sending；后续 Dispatcher Recovery 必须先判断请求是否发出，能证明未发出才可安全重排，结果不明必须进入 unknown。
 
 
@@ -250,6 +252,17 @@ DeliveryRecord 领域模型与纯函数迁移测试、DeliveryRepository Port/Fa
 Attempt Repository 的模块级原子边界：
 - StartWithLease：使用 Repository 内部权威时钟（MariaDB Adapter 在事务 SQL 中使用 UTC_TIMESTAMP(6)，Fake 使用可控时钟），校验租约在 now 时刻仍有效、StartedAt 不晚于 now 且不早于本次 sending 领取时间；同时校验当前 Delivery 为 sending、expected version 与 fencing token 匹配、Worker 与租约一致、attempt_no 等于当前 Attempt 数量 + 1，并确保同一 fencing token 最多只能创建一个 Attempt（无论前一 Attempt 是否已完成）；在同一 Repository 原子操作中追加运行中 Attempt 并更新 attempt_count 投影。重试必须先完成 sending -> retry_wait 等状态迁移并释放旧租约，再重新 ClaimDue 获得新 fencing token，不能在同一 claim 下启动第二次渠道调用。不能仅凭调用方传入的 StartedAt 早于 ExpiresAt 推断租约当前仍有效。
 - CompleteWithLease：只允许当前有效租约、当前 Delivery 版本和同一 Attempt 身份将运行中记录完成一次；完成时间不得越过租约截止；旧 Worker 的迟到完成必须拒绝。
+- 写入结果不确定：StartWithLease 返回 `ErrPersistenceOutcomeUnknown` 时，调用方必须立即停止，绝不能调用渠道 Send；CompleteWithLease 返回该错误时，渠道调用已经发生，调用方不得重发。两者均须通过 Delivery + Attempt + StateEvent 一致性快照读后对账；若完成事务未提交而 Attempt 仍运行，租约恢复必须按 ambiguous/unknown 保守收敛，不能把“Attempt 未完成”解释为“渠道未发送”。
+
+该边界对应两种必须区分的持久化结果不确定场景：
+
+| 场景 | 渠道 Send 是否已发生 | 读后可见的 Attempt | 后续处理 |
+|---|---|---|---|
+| `StartWithLease` 提交结果不确定 | **尚未调用** | 可能已创建，也可能未创建 | 当前执行立即停止；不得调用 Send。读取 Delivery/Attempt/StateEvent 一致性快照后再决定恢复路径 |
+| `CompleteWithLease` 已提交但提交确认丢失 | **已经调用一次** | 已完成，可能为 accepted | 不得再次 Send；一致性恢复根据已提交 Attempt 与状态事件收敛，accepted 结果可完成 Delivery 为 sent |
+| `CompleteWithLease` 未提交但调用方收到结果不确定 | **已经调用一次** | Attempt 仍为 running | 不得再次 Send；租约恢复必须按外部副作用不确定处理并收敛为 unknown，不能把 running Attempt 当作未发送证明 |
+
+回归测试 `TestDeliveryExecutionCompletionOutcomeUnknownNeverRepeatsChannelSend` 覆盖 CompleteWithLease 提交成功但确认丢失、以及事务未提交两种情况，并断言每种情况下 Channel Send 调用次数均为 1。测试代码存在不等于 CI 已执行通过；当前 CI 证据见模块 README 与任务验收文档。
 - ListByDelivery：按 attempt_no 顺序返回深拷贝历史；未知 Delivery 返回 not found。
 - attempt_count 是已追加 Attempt 数量的计数投影；StartWithLease 与 Attempt 追加同事务更新，不改变 Delivery 状态版本，也不产生伪造的状态迁移事件。真实 Repository 必须保证 Attempt 行、计数投影和租约检查的事务原子性；建议数据库增加 `UNIQUE(delivery_id, fencing_token)`，并在事务中锁定 Delivery 行，防止同一 claim 并发创建第二个 Attempt。
 
@@ -327,7 +340,7 @@ TemplateDefinition 的固定字段为：
 - 可选 `subject_template`、必填 `body_template`；
 - `variable_bindings`：模板变量名到 payload JSON Pointer 的映射。
 
-版本注册键为 `(template_id, version)`。相同键、相同 JCS digest 可幂等注册；相同键、不同 digest 必须拒绝；内容变化必须增加版本。当前模块 Registry 是内存实现，不代表已有持久化 Template Repository。
+版本注册键为 `(template_id, version)`。相同键、相同 JCS digest 可幂等注册；相同键、不同 digest 必须拒绝；内容变化必须增加版本。运行时 Registry 为进程内不可变索引；MySQL Template Repository 已实现持久化 Create/Get，Registry 可按明确版本从 Repository 装载。生产模板内容仍需业务提供，不得用占位模板冒充已验收内容。
 
 模板仅支持直接标量插值 `{{.variable}}`，不支持 if/range/模板嵌套/函数或任意表达式。变量必须显式列入 allowlist，并由 JSON Pointer 从 payload 取值；只允许 string/bool/number，不允许把整个 payload map 传入模板。缺失路径、非标量、未声明变量和未使用绑定均 fail closed。
 
@@ -357,7 +370,7 @@ type TemplateRenderer interface {
 
 TemplateRenderer 只接受已通过 Event Schema/Envelope 校验的事件；具体实现仍须重新验证 payload fingerprint、event/schema 精确匹配和渲染资源限制。
 
-### 8.4 NTF-003 Channel Config 与 Adapter Port
+### 8.4 Channel Config 与 Adapter Port（模块内部 SPI；NTF-CTR-003 为 not_applicable）
 
 Channel 配置是不可变版本快照，注册键为 `(channel_ref, config_version)`。同一键不得原地修改；Resolver 必须精确解析指定版本，不允许回退到 latest。
 
@@ -503,6 +516,8 @@ Preflight 在 Delivery 已领取为 sending、但尚未创建 Attempt/调用渠�
 
 Server Worker 是定时/并发调度所有者；Notification 只提供有界的 `LeaseRecoveryService.RecoverExpiredOnce`。Worker 每次调用必须提供有效 UTC 时钟、正数批次上限（最大 1000）和可取消 Context，不得在 Notification 内创建定时器或后台 Goroutine。
 
+`ListExpiredLeases` 必须通过单条 SQL 同时读取完整 Delivery 快照与 Lease（worker、expiry、fencing token），保持候选内部一致；按租约到期时间及 Delivery ID 稳定排序，并限制单批最多 1000 条，禁止逐条回查形成 N+1 查询。
+
 批次报告计数必须满足：
 
 ```go
@@ -536,9 +551,12 @@ len(OutcomeUnknownDeliveryIDs) = OutcomeUnknown
 
 1. 通过 `DeliveryConsistencySnapshotReader` 在同一数据库一致性快照中读取 Delivery、完整 Attempt 历史和 StateEvent 历史。
 2. 使用 `AssessDeliveryConsistency` 校验两类历史；结果必须为 `pass`，Delivery 必须仍为 `unknown`。fail、degrade、not_comparable 均停止，不查询渠道。
+
 3. 从 Registry 按 Delivery 固定的 `channel_ref + config_version` 读取不可变 Channel 快照，并执行 Lookup。
 4. Registry 查询错误或 Context 取消立即返回，不调用状态持久化。
 5. 查询结果包装为 application 包内不可构造的 `verifiedUnknownDeliveryEvidence`，绑定 Delivery version、最后一次 Ambiguous Attempt ID 和完整 Channel 快照；只有包内收敛函数能消费该类型。
+
+一致性评估必须使用 `ValidateDeliveryAttemptHistoryForDelivery`，校验 Attempt 的 StartedAt 位于 Delivery 创建与发送截止区间内；`sent` 状态还必须与最后一条 accepted Attempt 的 `provider_message_ref` 一致，且不残留 reason/error。状态事件链末条事件的 `reason_code` 必须与 Delivery 当前快照一致。
 6. 使用读取快照中的 Delivery version 执行现有 CAS。查询期间 Delivery 被其他 Worker 更新时，CAS 冲突退出；不得把旧查询证据应用到重新读取的新版本。
 
 `AssessUnknownDelivery` 仍是接收普通 Evidence 的纯规则评估函数，可用于单元测试和规则验证，但不具备持久化能力。原先直接接收调用方 Evidence 的导出状态收敛函数已收紧为包内函数。外部调用方必须使用一致性快照服务。
@@ -592,6 +610,8 @@ len(OutcomeUnknownDeliveryIDs) = OutcomeUnknown
 | last_error_code | string nullable | 最后一次失败的稳定内部错误分类，不存原始错误文本 | 安全码；不含用户内容/Secret |
 | created_at / updated_at | UTC timestamp | 数据库持久化时间 | DATETIME(6) 精度 |
 
+只有 `pending + attempt_count=0 + fencing_token=0 + cursor 为空` 的初始 WorkItem 可以没有快照；一旦领取过，快照缺失必须 fail closed，恢复时不得重新读取当前 revision。
+
 ### 13.4 状态迁移、租约与 fencing
 
 | 当前状态 | 触发条件 | 下一状态 | 原子要求 |
@@ -603,6 +623,8 @@ len(OutcomeUnknownDeliveryIDs) = OutcomeUnknown
 | processing | 页面完成且无后续页 | completed | 同上；清空租约和 next_attempt_at |
 | processing | 可重试错误且未达最大 Claim 次数 | retry_wait | 不推进 cursor；记录稳定错误码与 next_attempt_at；释放租约 |
 | processing | 达到最大 Claim 次数或不可恢复错误 | failed | 不推进未完成页面；记录稳定错误码并释放租约 |
+
+retry_wait 成功 Claim 后，Repository 必须在同一 UPDATE 中清空 `next_attempt_at`；该字段只允许 retry_wait 状态保留，不能将已到期的调度时间带入新租约。
 
 - Claim/Advance/Retry/Fail 必须以 work_item_id + status + lease_worker_id + fencing_token 条件更新，并由 MariaDB UTC_TIMESTAMP(6) 判断租约有效性；不能信任 Worker 本地时间证明租约仍有效。自提交 SQL 成功后若 RowsAffected 读取失败，结果视为 ErrPersistenceOutcomeUnknown，不得当作租约冲突或普通失败继续写状态。
 - Claim 使用事务行锁选择最早到期项，单次最多返回一个 WorkItem；不依赖 Redis、旧 Platform Task Queue 或 SKIP LOCKED 版本特性。
