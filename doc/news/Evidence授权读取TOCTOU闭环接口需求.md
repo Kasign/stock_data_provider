@@ -210,4 +210,18 @@ JCS 仍只调用项目公共 GOV-CTR-006 Runtime Verifier；本模式不复制 J
 
 普通 `CurrentNewsAuthorizationPolicyResolver` 仍保留为预检能力，不再承担最终正文披露的安全边界。
 
-当前已增加 MariaDB 正向原子读取集成覆盖；撤销竞争、提交失败、缺失策略、载荷篡改等 RACE-01～07 的专项并发验收仍需完成。GOV-CTR-006 公共 Runtime Verifier 的实际生产装配仍由 Platform/Server 负责，未装配时必须 fail closed。
+当前已增加 MariaDB 正向原子读取集成覆盖；已覆盖读取先锁后撤销、撤销提交后旧 Binding 失效、缺失当前指针、Payload Hash 篡改、资源引用不匹配和授权回调期间取消上下文；提交失败的故障注入仍未完成。GOV-CTR-006 公共 Runtime Verifier 的实际生产装配仍由 Platform/Server 负责，未装配时必须 fail closed。
+
+## 12. RACE 验收进度（2026-11-12）
+
+| 场景 | 当前覆盖 | 结果边界 |
+|---|---|---|
+| 读取先取得策略行锁，撤销随后发布 | MariaDB 并发集成测试 | 撤销等待读取事务提交；读取返回旧版本内容后，撤销才生效 |
+| 撤销先提交，旧 Binding 再读取 | MariaDB 集成测试 | 当前指针版本不匹配，读取 fail closed |
+| 当前策略指针缺失 | MariaDB 集成测试 | 不回退历史版本，拒绝读取 |
+| 策略 Payload Hash 被篡改 | MariaDB 集成测试 | Hash 校验失败，拒绝读取 |
+| Binding 资源引用不匹配 | MariaDB 集成测试 | 进入事务前拒绝 |
+| 授权回调期间上下文取消 | MariaDB 集成测试 | 回滚事务，不返回正文 |
+| 数据库 Commit 明确失败 | 尚未完成故障注入 | 代码路径在 Commit 返回错误时丢弃正文；尚无真实 MariaDB Commit 故障测试 |
+
+原子读取现已在策略行锁后重新读取并锁定 Observation/Version 元数据，重新验证 Binding、策略轨迹、版本 fingerprint、Observation 归属和 PIT 时间边界。Application 使用事务返回的最新 Observation，并在组装 DTO 前再次应用载荷留存/清理状态。
