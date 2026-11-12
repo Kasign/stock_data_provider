@@ -698,7 +698,6 @@ func TestSkippedIsNotA_RuntimeStageTransition(t *testing.T) {
 	}
 }
 
-
 func TestCreatedRunCanStartImmediatelyWhenCapacityIsAvailable(t *testing.T) {
 	now := time.Date(2026, 11, 12, 9, 0, 0, 0, time.UTC)
 	created := domain.Run{Ref: "run-immediate", Status: domain.RunCreated, Version: 1}
