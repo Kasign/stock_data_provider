@@ -3,6 +3,18 @@
 - 目标分支：`feat/notification`
 - 代码目录：`internal/notification/**`
 - 任务前缀：NTF
+- 最近代码验收基线：`c9f8265cbf91bcf1785333889064b8c31038e7ee`；文档提交后以 GitHub 分支实时 HEAD 为准。
+- 当前实现：事件接收、Inbox 幂等、Subscription 修订快照、FanoutWorkItem/Dispatcher、ProductionFanoutPlanFactory、MySQL 渠道/模板版本选择、RecipientDirectory Port/Resolver、Delivery/Attempt 执行与租约恢复、Unknown 对账。
+- **最新通过 CI：** Run `43191203554`，SHA `c9f8265cbf91bcf1785333889064b8c31038e7ee`，结论 `success`。根模块 gofmt、`go test ./...`、`go test -race ./...`、`go vet ./...` 全部通过。
+- **Notification MariaDB L3：** 同一 Run 的 Notification MariaDB lifecycle integration Job 使用 MariaDB 11.4 与 `NOTIFICATION_MARIADB_TEST_DSN`，全部集成测试和 Race 集成测试通过，覆盖 Migration 幂等、Delivery/Attempt 生命周期、租约/并发、Fanout 重试、Subscription 修订、Channel/Template 版本选择、Unknown 对账和历史查询。
+- 每个 MariaDB 集成测试使用独立 Schema；测试用户需具备 CREATE/DROP DATABASE 权限。CI MariaDB 是真实 MariaDB 引擎，但不代表用户部署数据库实例已验收。
+- **仍待生产装配：** 真实渠道 Provider Adapter（需先确定 Provider）、非空 Subscription Filter 的匹配实现、Server 对真实身份目录 Port 的实现、Server Worker 生命周期与根 Migration 注册。
+- **职责边界：** Notification 实现业务 Port、Factory、Channel Adapter 和状态机；Server 提供真实身份/凭据/平台依赖并负责装配、Worker 生命周期和根 Migration 注册。
+- 项目级契约：NTF-CTR-001/002 已 L1 frozen；NTF-CTR-003 为 not_applicable；INT-CTR-001 已 L1 frozen。历史 SHA 与阶段记录保留为证据，当前状态以本节和对应 CI 证据为准。
+
+- 目标分支：`feat/notification`
+- 代码目录：`internal/notification/**`
+- 任务前缀：NTF
 - 当前 HEAD：`3a72b433d0ee84f25f9ec544d8fa5e7bf88e9ac1`（2026-11-12；以 GitHub 分支 ref 实时值为准）。该分支已包含 Integration 最新提交 `9f12f7ebfdb2a04106a126934d46d1fc216823ff`。
 - 当前实现：事件接收、Inbox 幂等、Subscription 版本与快照分页、DeliveryPlan、Template/Channel 配置持久化、单条 Delivery 执行、Attempt/租约恢复、Unknown 对账入口、FanoutWorkItem 与有界 FanoutDispatcher 已有代码实现。真实 FanoutPlanFactory 装配、Server Worker/根 Migration 注册、真实渠道与生产身份目录仍属于集成/L3 范围。
 - **最新通过的分支 CI：** Run `43184343735`，代码 SHA `3a72b433d0ee84f25f9ec544d8fa5e7bf88e9ac1`，结论 `success`。根模块 `gofmt`、`go test ./...`、`go test -race ./...`、`go vet ./...` 全部通过；日志明确显示 Notification 的 application/domain/schema/storage/template 五个包在普通测试和 Race Detector 下均通过。该 Run 同时通过 go-core、Researchflow 单测/Race/Vet 与 Researchflow MariaDB lifecycle integration。该 MariaDB Job 属于 Researchflow，不是 Notification 的 MariaDB L3 证据。
