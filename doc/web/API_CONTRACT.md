@@ -1,7 +1,7 @@
 # WebUI 真实 API 与配置边界
 
 更新时间：2026-11-12  
-核对基线：feat/webui-market-data-console @ e43dba62079c872d95919e5412e9c7cad21f477c
+核对基线：feat/webui-market-data-console @ d99d99de2a86425e9592e883af4fb920c00c60d1
 
 > 本文只记录当前请求封装、仓库可核对的路由事实和接入门禁。必须区分 OpenAPI 声明、Handler 注册、Root Server 挂载、部署可达和真实数据验收。
 
@@ -59,7 +59,7 @@
 | 领域 | Web 目标场景 | 前置条件 | 当前处理 |
 |---|---|---|---|
 | News | 新闻、来源、事件线索 | 公开查询边界、来源授权字段 | 未接入为正式页面数据 |
-| Research | Context、Evidence、Event、Claim、Hypothesis、Scenario | Research Application API；News-Research 只读 Evidence Query；来源授权/引用定位 | 保留个股研究和本地笔记，结构化研究待接入 |
+| Research | Context、Evidence、Event、Claim、Hypothesis、Scenario | Research Application API；News-Research 只读 Evidence Query；来源授权/引用定位 | 个股行情/资料可用；结构化研究明确 not_integrated，本地笔记不是 Evidence |
 | Quant | 指标、因子、趋势、策略、回测、风险/评估 | Quant-Research DTO、Application API、PIT/质量/风险语义 | 当前仅本地派生指标和当前页筛选 |
 | Researchflow | Run/Stage/Attempt、模板、取消、历史、综合结果 | ApplicationPort/状态机契约、Server 路由、认证和分页 | 继续消费现有 Task/Run，不另建状态机 |
 | LLM | 模型选择、结构化解释、受控生成 | LLM Gateway、Server 代理、凭据托管、权限和输出 Schema | 不在浏览器保存模型密钥 |

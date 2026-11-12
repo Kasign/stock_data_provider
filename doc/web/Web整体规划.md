@@ -1,7 +1,7 @@
 # WebUI 整体规划
 
 更新时间：2026-11-12  
-规划基线：feat/webui-market-data-console @ e43dba62079c872d95919e5412e9c7cad21f477c  
+规划基线：feat/webui-market-data-console @ d99d99de2a86425e9592e883af4fb920c00c60d1  
 范围：web/** 与 doc/web/**。
 
 > 本文是 WebUI 产品路线、任务状态、跨模块依赖和下一步安排的唯一入口。本轮先完成 W0 文档规划，不代表已经实现目标信息架构或接入新模块。
@@ -60,7 +60,7 @@ Web 负责交互、请求编排、状态展示和有限的浏览器本地工作�
 
 按当前 HEAD 的 Git Tree 与文件内容核对：
 - web/src 下有 51 个 JavaScript 文件。
-- web/src/app.js 为 5,547 行，直接静态 import 47 个模块。
+- web/src/app.js 为 5,574 行，直接静态 import 47 个模块。
 - CSS 当前为 web/styles.css 和 web/screening-local-batch.css 两个文件。
 - 已有市场总览、个股行情、全市场分页、自选股、个股研究、选股、分析任务/Run Flow、本地研究笔记/报告归档、数据中心、告警草稿、通知偏好和设置中心。
 - 当前选股是已加载分页上的本地筛选，不是全市场策略扫描。
@@ -72,7 +72,7 @@ Web 负责交互、请求编排、状态展示和有限的浏览器本地工作�
 | 阶段 | 目标 | 主要任务 | 依赖/完成条件 | 状态 |
 |---|---|---|---|---|
 | W0 | 产品规划和文档基线 | 统一目标 IA；梳理页面与服务能力；清理过期排期/路径/状态；更新 API、架构、诊断和验收边界 | 文档内部链接、事实、基线和 Git diff 复核 | 已完成 |
-| W1 | 现有工作台收口 | 目标导航映射；明确研究对象/过程/结果/跟踪边界；页面状态和响应式体验收口；认证迁移准备 | 不新增业务 API；不假设 Session 已上线 | W1-A/W1-B 完成；W1-D 部分验收通过，W1-C 待执行 |
+| W1 | 现有工作台收口 | 目标导航映射；明确研究对象/过程/结果/跟踪边界；页面状态和响应式体验收口；认证迁移准备 | 不新增业务 API；不假设 Session 已上线 | W1-A/W1-B/W1-C 已完成代码与文档；W1-D 待当前 SHA 复验及专项补验 |
 | W2 | 研究任务工作区升级 | 真实模板、Run/Stage/Attempt、执行进度、取消、服务端历史分页、结果综合和历史回看 | Researchflow Application Facade、Server 路由、权限及分页/取消契约可用 | 等待依赖 |
 | W3 | 研究中心与量化研究 | Research Evidence/Context/Event/Claim/Hypothesis/Scenario；Quant 指标/因子/趋势/策略/回测/风险 | Research、News Evidence Query、Quant DTO/API、PIT/质量/风险契约及 Server 注册可用 | 等待依赖 |
 | W4 | 跟踪与通知 | 服务端订阅、通知渠道、投递状态、告警规则/触发历史 | Notification API 和告警领域归属评审完成 | 等待依赖 |
@@ -96,8 +96,8 @@ Web 负责交互、请求编排、状态展示和有限的浏览器本地工作�
 - [x] W1-B：七个一级导航分组、子视图入口、活动态和深链刷新恢复已实现。
 - [x] W1-D：WebUI Checks 与 Chromium Browser Smoke 在 SHA 3845bdc50a52121d6d875b6071f85217ef3d86e1 通过；覆盖七入口、hash 直达/刷新、响应式断点和既有主要交互验收。
 - [ ] W1-D：浏览器前进/后退与 reduced-motion 专项仍待补验。
-- [ ] W1-C：收口页面内容和状态边界。
-- [ ] W1-D：按实际提交 SHA 执行 CI、浏览器和响应式验收。
+- [x] W1-C：研究中心明确结构化 Evidence 等 Research 服务端能力待接入；区分行情资料、本地笔记和 Run 结果副本；核对任务引用、跟踪本地数据及数据中心/设置职责边界。
+- [ ] W1-D：对本次 W1-C 提交的实际 SHA 执行 CI、浏览器和响应式验收；补齐浏览器前进/后退与 reduced-motion 专项。
 
 ### 后续执行门禁
 
@@ -128,4 +128,4 @@ Web 负责交互、请求编排、状态展示和有限的浏览器本地工作�
 
 ## 9. 本轮执行记录
 
-2026-11-12：以代码基线 e43dba62079c872d95919e5412e9c7cad21f477c 完成 W0，文档提交 1a13e3ae84e7b3fa4824070e6dd942eb9171f64c、2de5cd6c2241bb6a691155d5e28d2668a4b8b0bc。W1-A 于 8cc8a06d8c65aa637cea5c29d094ec9a52b86fd4 完成规划并经用户确认；W1-B 已实现七导航壳层、子视图入口、状态同步和 hash 深链恢复。验收 SHA 3845bdc50a52121d6d875b6071f85217ef3d86e1 的 WebUI Checks（43154904745）与 Chromium Browser Smoke（43154904775）均通过；W1-C 未开始，W1-D 的前进/后退和 reduced-motion 专项仍待补验。
+2026-11-12：W0/W1-A/W1-B 已完成；历史验收 SHA 3845bdc50a52121d6d875b6071f85217ef3d86e1 的 WebUI Checks（43154904745）与 Chromium Browser Smoke（43154904775）通过。以 d99d99de2a86425e9592e883af4fb920c00c60d1 为 W1-C 核对基线，完成研究中心结构化证据待接入边界、Run 报告本地副本说明及相关职责/状态文档收口。本次代码变更后的验收须绑定新 SHA；W1-D 的前进/后退和 reduced-motion 专项仍待补验。

@@ -334,6 +334,13 @@
               <button class="button button-primary" id="research-start-analysis" type="button">发起分析任务</button>
             </div>
           </section>
+          <section class="panel research-evidence-boundary" aria-labelledby="research-evidence-boundary-title">
+            <div class="panel-heading">
+              <div><h2 id="research-evidence-boundary-title">结构化研究证据</h2><p>Research 服务端的 Context、Evidence、Event、Claim、Hypothesis 和 Scenario 尚未通过 Root Server API 接入。当前页面不会生成模拟证据；行情、公告和财务资料仍按各自真实数据源展示。</p></div>
+              <span class="availability-pill is-unavailable">服务端待接入</span>
+            </div>
+            <p class="market-widget-meta">当前浏览器研究笔记是个人记录，不是结构化 Evidence；下方 Run 报告是服务端结果的本地归档副本。两者均不代表 Research 服务端对象。</p>
+          </section>
           <nav class="research-detail-nav research-workspace-nav" aria-label="个股研究分区">
             <span class="research-detail-nav-label">研究视图</span>
             <button class="research-detail-nav-link is-active" type="button" data-research-detail-target="research-overview-panel" aria-current="location">行情摘要</button>
@@ -460,7 +467,7 @@
             <div id="research-note-list" class="research-note-list" aria-live="polite"><p class="table-empty">尚无研究记录。</p></div>
           </section>
           <section class="panel research-reports-panel" aria-labelledby="research-reports-title">
-            <div class="panel-heading"><div><h2 id="research-reports-title">研究报告归档</h2><p>归档分析服务实际返回的 Run 结果，保留任务、Run、标的和质量门禁关联。</p></div><span class="availability-pill is-local">当前浏览器本地保存</span></div>
+            <div class="panel-heading"><div><h2 id="research-reports-title">研究报告归档</h2><p>归档分析服务实际返回的 Run 结果，保留任务、Run、标的和质量门禁关联；此处是当前浏览器的副本，任务状态、阶段事件和在线 Run 结果仍以研究任务页读取的服务端响应为准。</p></div><span class="availability-pill is-local">当前浏览器本地保存</span></div>
             <div class="research-report-toolbar">
               <label class="field"><span>检索报告</span><input id="research-report-search" type="search" placeholder="股票代码、Task ID、Run ID 或状态"></label>
               <label class="field"><span>归档日期起</span><input id="research-report-from" type="date"></label>

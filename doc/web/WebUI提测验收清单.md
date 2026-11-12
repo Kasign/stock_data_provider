@@ -1,8 +1,8 @@
 # WebUI 功能提测与集中验收清单
 
 更新时间：2026-11-12  
-当前规划基线：feat/webui-market-data-console @ e43dba62079c872d95919e5412e9c7cad21f477c  
-当前 HEAD 尚无本轮对应的 WebUI Checks / Chromium Browser Smoke 复验结论。
+当前代码核对基线：feat/webui-market-data-console @ d99d99de2a86425e9592e883af4fb920c00c60d1  
+本轮 W1-C 修改后的提交 SHA 尚待 WebUI Checks / Chromium Browser Smoke 验收；历史 SHA 的通过记录不替代本轮结果。
 
 > 本文保留历史功能验收证据。历史 CI/Browser Smoke 只对其记录的 SHA 有效，不自动代表当前 HEAD 或 integration 最新提交通过。总体任务顺序、当前状态和下一步统一以《WebUI 整体规划》为准。
 >
@@ -36,13 +36,25 @@
 
 ## 0.2 当前 HEAD 待验收项
 
-- [ ] 当前 HEAD e43dba62079c872d95919e5412e9c7cad21f477c 对应 WebUI Checks。
-- [ ] 当前 HEAD e43dba62079c872d95919e5412e9c7cad21f477c 对应 Chromium Browser Smoke。
+- [ ] W1-C 修改后的实际提交 SHA 对应 WebUI Checks。
+- [ ] W1-C 修改后的实际提交 SHA 对应 Chromium Browser Smoke。
 - [ ] 当前部署环境 Root Server 路由、Session/CSRF 与真实行情 API 可达性。
 - [ ] Data 主动诊断的真实 Provider 样例、质量/覆盖率证据及历史持久化。
 - [ ] Research/News/Quant/Researchflow/LLM/Notification 按各自真实 API 完成后逐模块加入验收矩阵。
 
 > 下文未勾选的历史条目是其所属日期/批次的验收记录或当时遗留项，不自动构成当前待办；当前待办以《WebUI 整体规划》为准。
+
+## 0.3 W1-C 页面职责与状态边界核对
+
+- [x] 研究中心将行情/公司资料、技术派生指标、本地研究笔记、Run 报告归档分开表达；结构化 Research Context/Evidence/Event/Claim/Hypothesis/Scenario 显示服务端待接入，不生成模拟证据。
+- [x] Run 报告归档明确为服务端 Run 结果的浏览器本地副本；任务状态、阶段事件和在线结果以任务页读取的服务端响应为准。
+- [x] 最近任务明确为最多 10 条本地引用；清理本地引用不删除服务端任务或报告。
+- [x] 跟踪中心区分本地自选、告警草稿、通知偏好与服务端告警/通知待接入能力。
+- [x] 数据中心承载服务健康、Provider 能力与诊断；设置中心承载连接及个人偏好，Provider 能力入口跳转数据中心。
+- [x] 状态映射分别保留 loading、empty、unknown、degraded、failed、unavailable 等语义；未接入不等于空集合或健康。
+- [x] 代码层检查研究表格横向滚动、窄屏研究分区导航、面板标题折行和移动端布局规则。
+- [ ] 在本轮实际 SHA 的 Chromium 验收中复核研究中心、任务中心、跟踪中心在 320/375/600/768/900/1280/1600 视口下的内容密度、滚动和溢出。
+
 
 ## 1. 本批次范围
 

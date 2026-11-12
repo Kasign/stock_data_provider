@@ -1,7 +1,7 @@
 # Web 代码架构
 
 更新时间：2026-11-12  
-核对基线：feat/webui-market-data-console @ e43dba62079c872d95919e5412e9c7cad21f477c
+核对基线：feat/webui-market-data-console @ d99d99de2a86425e9592e883af4fb920c00c60d1
 
 > 本文描述当前前端架构事实和目标职责边界，不维护任务排期。
 
@@ -10,7 +10,7 @@
 | 项目 | 当前基线 |
 |---|---:|
 | web/src/*.js | 51 个文件 |
-| web/src/app.js | 5,547 行 |
+| web/src/app.js | 5,574 行 |
 | app.js 直接静态 import | 47 个语句 |
 | CSS 文件 | web/styles.css、web/screening-local-batch.css |
 
@@ -43,7 +43,7 @@ app.js 行数和 import 数量本身不是拆分理由。只有出现独立状�
 |---|---|---|
 | App Shell | 导航、布局、当前页面、全局反馈、跨页协调 | app.js |
 | Market View | 市场行情、市场活动、行情分页 | 市场领域模块；数据来自 Server |
-| Research View | 研究对象、证据、事件、主张/假设/情景 | Research 服务端；本地笔记独立 |
+| Research View | 研究对象、结构化证据/事件/主张/假设/情景、行情资料、本地记录与 Run 报告副本 | 结构化研究待 Server API 接入；行情资料来自对应 API；笔记/报告副本由浏览器本地模块管理 |
 | Quant View | 指标、因子、策略、回测、风险和评估 | Quant 服务端 |
 | Researchflow View | Run/Stage/Attempt、进度、事件、终态、历史 | Researchflow 服务端 |
 | Tracking View | 自选、订阅、告警和通知 | 各领域服务；本地功能需标识 |

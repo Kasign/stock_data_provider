@@ -1,7 +1,7 @@
 # WebUI 功能与页面说明
 
 更新日期：2026-11-12  
-核对基线：feat/webui-market-data-console @ e43dba62079c872d95919e5412e9c7cad21f477c  
+核对基线：feat/webui-market-data-console @ d99d99de2a86425e9592e883af4fb920c00c60d1  
 技术栈：原生 HTML、CSS、JavaScript ES Modules；不使用 React。
 
 > 本文记录页面功能事实和目标信息架构。总体路线、优先级和进度只维护在《WebUI 整体规划》。
@@ -26,9 +26,7 @@ WebUI 目标是形成以研究任务为中心的个人 A 股研究工作台。�
 
 ## 3. 当前主导航实际结构与目标映射
 
-当前代码仍有 11 个一级入口：市场总览、个股行情、自选与观察、个股深度研究、分析任务、选股与筛选、告警、问股、通知中心、数据中心、设置中心。它们由 `data-view`、`VIEW_META` 和 `setView` 驱动，页面容器分别为 market/stocks/watchlist/research/tasks/screening/alerts/chat/notifications/data/settings。
-
-目标七导航的具体迁移关系、旧 hash 兼容要求和分批实施任务见《WebUI 页面结构调整计划》。在代码真正调整前，当前 11 个入口仍是实际运行结构；不要将目标导航误写成已上线。
+当前代码已将 11 个既有 view 归入七个一级导航分组：市场观察（market/stocks）、研究中心（research/chat）、量化研究（screening）、研究任务（tasks）、跟踪中心（watchlist/alerts/notifications）、数据中心（data）、系统设置（settings）。页面仍由 `data-view`、`VIEW_META` 和 `setView` 驱动，保留原 view id/hash 作为兼容入口；没有新增第二套路由。
 
 ## 4. 当前页面能力事实
 
@@ -55,7 +53,9 @@ WebUI 目标是形成以研究任务为中心的个人 A 股研究工作台。�
 - 个股研究按需读取行情、日 K、档案、板块、财务、估值、公告、个股资金流和筹码分布。
 - 补充资料按模块主动加载；打开页面不自动请求所有数据。
 - 研究笔记和 Run 报告归档保存在当前浏览器，支持搜索、编辑、详情、Markdown 下载及关联任务跳转。
+- Run 报告归档是服务端结果的本地副本；任务状态、阶段事件和在线 Run 结果仍以研究任务页读取的服务端响应为准。
 - 本地笔记/报告不等于 Research 服务端 Evidence/Claim/Hypothesis，也不等于服务端 Report。
+- 结构化 Research 的 Context、Evidence、Event、Claim、Hypothesis、Scenario 尚未通过 Root Server API 接入；页面明确显示待接入，不将行情/公告资料或本地笔记冒充结构化 Evidence。
 - 结构化研究接入后，区分原始证据、研究解释和模型生成内容，保留证据来源及授权边界。
 
 ### 3.5 分析任务与 Run Flow
