@@ -3,8 +3,21 @@ package event
 import (
 	"fmt"
 	"math"
+	"regexp"
 	"strings"
 	"time"
+)
+
+var timeNormalizationRuleVersionPattern = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?package event
+
+import (
+	"fmt"
+	"math"
+	"regexp"
+	"strings"
+	"time"
+)
+
 )
 
 func (e ResearchEvent) Validate() error {
@@ -66,8 +79,18 @@ func (e ResearchEvent) Validate() error {
 	if e.AvailableAt != nil && e.AvailableAt.After(e.SystemAsOf) {
 		return fmt.Errorf("available_at must not be later than system_as_of")
 	}
-	if e.SupersedesEventVersion != nil && (*e.SupersedesEventVersion < 1 || *e.SupersedesEventVersion >= e.EventVersion) {
-		return fmt.Errorf("supersedes_event_version must not supersede the current or a future event_version")
+	if !timeNormalizationRuleVersionPattern.MatchString(e.TimeNormalizationRuleVersion) {
+		return fmt.Errorf("time_normalization_rule_version must be a semantic version")
+	}
+	if e.DerivedFromRefs == nil {
+		return fmt.Errorf("derived_from_refs must be a non-null array")
+	}
+	derivedRefs := make(map[ResearchEventRef]struct{}, len(e.DerivedFromRefs))
+	for index, ref := range e.DerivedFromRefs {
+		if err := required(fmt.Sprintf("derived_from_refs[%d].event_id", index), ref.EventID); err != nil { return err }
+		if ref.EventVersion < 1 { return fmt.Errorf("derived_from_refs[%d].event_version must be >= 1", index) }
+		if _, exists := derivedRefs[ref]; exists { return fmt.Errorf("derived_from_refs contains duplicate reference %s@%d", ref.EventID, ref.EventVersion) }
+		derivedRefs[ref] = struct{}{}
 	}
 	if e.SourceTimes == nil {
 		return fmt.Errorf("source_times must be a non-null array")

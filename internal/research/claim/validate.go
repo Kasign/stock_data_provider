@@ -11,9 +11,8 @@ func (c Claim) Validate() error {
 	if err := required("claim_id", c.ClaimID); err != nil {
 		return err
 	}
-	if c.ClaimVersion < 1 {
-		return fmt.Errorf("claim_version must be >= 1")
-	}
+	if c.ClaimVersion < 1 { return fmt.Errorf("claim_version must be >= 1") }
+	if c.SupersedesVersion != nil && (*c.SupersedesVersion < 1 || *c.SupersedesVersion >= c.ClaimVersion) { return fmt.Errorf("supersedes_version must reference an earlier positive claim_version") }
 	if err := required("statement", c.Statement); err != nil {
 		return err
 	}
@@ -75,9 +74,7 @@ func (c Claim) Validate() error {
 	return nil
 }
 
-// ValidateNextVersion checks immutable ID, contiguous version and monotonic
-// knowledge cutoff. The current DTO has no supersedes_version field, so explicit
-// cross-version supersession linkage remains a contract gap.
+// ValidateNextVersion checks immutable ID, contiguous version, monotonic knowledge cutoff and supersession linkage.
 func (next Claim) ValidateNextVersion(previous Claim) error {
 	if err := previous.Validate(); err != nil {
 		return fmt.Errorf("previous claim: %w", err)
@@ -93,6 +90,9 @@ func (next Claim) ValidateNextVersion(previous Claim) error {
 	}
 	if next.ClaimVersion != previous.ClaimVersion+1 {
 		return fmt.Errorf("claim_version must increment by exactly one")
+	}
+	if next.SupersedesVersion != nil && *next.SupersedesVersion != previous.ClaimVersion {
+		return fmt.Errorf("supersedes_version must equal the immediately previous claim_version %d", previous.ClaimVersion)
 	}
 	if next.SystemAsOf.Before(previous.SystemAsOf) {
 		return fmt.Errorf("system_as_of cannot move backwards across claim versions")

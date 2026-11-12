@@ -63,6 +63,7 @@ func TestClaimRejectsInvalidContractValues(t *testing.T) {
 		want   string
 	}{
 		{"zero version", func(c *Claim) { c.ClaimVersion = 0 }, "claim_version"},
+		{"supersedes version on first version", func(c *Claim) { v := 1; c.SupersedesVersion = &v }, "earlier positive"},
 		{"blank statement", func(c *Claim) { c.Statement = " " }, "statement"},
 		{"unknown epistemic type", func(c *Claim) { c.EpistemicType = "fact" }, "epistemic_type"},
 		{"unknown status", func(c *Claim) { c.Status = "accepted" }, "status"},
@@ -92,9 +93,11 @@ func TestClaimVersionMustBeAppendOnly(t *testing.T) {
 	next := previous
 	next.ClaimVersion = 2
 	next.SystemAsOf = previous.SystemAsOf.Add(time.Minute)
-	if err := next.ValidateNextVersion(previous); err != nil {
-		t.Fatalf("contiguous version rejected: %v", err)
-	}
+	if err := next.ValidateNextVersion(previous); err != nil { t.Fatalf("contiguous version rejected: %v", err) }
+	previousVersion := previous.ClaimVersion
+	next.SupersedesVersion = &previousVersion
+	if err := next.ValidateNextVersion(previous); err != nil { t.Fatalf("current-head supersession rejected: %v", err) }
+	next.SupersedesVersion = nil
 
 	next.ClaimVersion = 3
 	if err := next.ValidateNextVersion(previous); err == nil || !strings.Contains(err.Error(), "increment by exactly one") {
@@ -106,6 +109,19 @@ func TestClaimVersionMustBeAppendOnly(t *testing.T) {
 	if err := next.ValidateNextVersion(previous); err == nil || !strings.Contains(err.Error(), "claim_id cannot change") {
 		t.Fatalf("changed ID should fail, got %v", err)
 	}
+}
+
+func TestClaimSupersedesVersionMustMatchCurrentHead(t *testing.T) {
+	previous := validHypothesis(t)
+	next := previous
+	next.ClaimVersion = 2
+	next.SystemAsOf = previous.SystemAsOf.Add(time.Minute)
+	wrong := 0
+	next.SupersedesVersion = &wrong
+	if err := next.ValidateNextVersion(previous); err == nil || !strings.Contains(err.Error(), "immediately previous") { t.Fatalf("stale supersession target should fail, got %v", err) }
+	correct := previous.ClaimVersion
+	next.SupersedesVersion = &correct
+	if err := next.ValidateNextVersion(previous); err != nil { t.Fatalf("current-head supersession should pass: %v", err) }
 }
 
 func TestClaimValidateNextVersionRejectsIntegerOverflow(t *testing.T) {

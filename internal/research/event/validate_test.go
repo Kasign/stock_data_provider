@@ -29,6 +29,7 @@ func validEvent(t *testing.T) ResearchEvent {
 		SystemObservedAt: observed, SystemAsOf: asOf,
 		ImpactHypothesisRefs: []string{}, InvalidationConditions: []string{"company retracts guidance"},
 		Uncertainty: []string{"guidance may be revised"},
+		TimeNormalizationRuleVersion: "1.0.0", DerivedFromRefs: []ResearchEventRef{},
 		SourceTimes: []EventSourceTime{{
 			EvidenceRef: "evidence:news:0001", TimeType: TimeOccurredAt,
 			Value: occurred, AssertedBy: "news:source:exchange_notice",
@@ -68,8 +69,7 @@ func TestResearchEventRejectsInvalidStructureAndTimeEvidence(t *testing.T) {
 			e.SourceTimes[0].Value = time.Date(2026, 11, 5, 9, 0, 0, 0, time.FixedZone("CST", 8*60*60))
 		}, "must be UTC"},
 		{"confidence without method", func(e *ResearchEvent) { confidence := 0.8; e.SourceTimes[0].Confidence = &confidence }, "confidence_method is required"},
-		{"method without confidence", func(e *ResearchEvent) { method := "source_rank"; e.SourceTimes[0].ConfidenceMethod = &method }, "require a non-null confidence"},
-		{"version one supersedes", func(e *ResearchEvent) { version := 0; e.SupersedesEventVersion = &version }, "must not supersede"},
+		{"method without confidence", func(e *ResearchEvent) { method := "source_rank"; e.SourceTimes[0].ConfidenceMethod = &method }, "require a non-null confidence"}, "must not supersede"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -94,8 +94,6 @@ func TestResearchEventVersionMustAppendAndPreserveLifecycle(t *testing.T) {
 	previous := validEvent(t)
 	next := previous
 	next.EventVersion = 2
-	supersedes := 1
-	next.SupersedesEventVersion = &supersedes
 	next.SystemAsOf = previous.SystemAsOf.Add(time.Minute)
 	if err := next.ValidateNextVersion(previous); err != nil {
 		t.Fatalf("same-status append should pass: %v", err)
@@ -110,8 +108,6 @@ func TestResearchEventVersionMustAppendAndPreserveLifecycle(t *testing.T) {
 	}
 	next = previous
 	next.EventVersion = 3
-	supersedes = 2
-	next.SupersedesEventVersion = &supersedes
 	if err := next.ValidateNextVersion(previous); err == nil || !strings.Contains(err.Error(), "increment by exactly one") {
 		t.Fatalf("version gap should fail, got %v", err)
 	}
@@ -139,17 +135,6 @@ func TestResearchEventLifecycleTerminalAndInvalidationRules(t *testing.T) {
 		if CanTransition(pair.from, pair.to) {
 			t.Errorf("CanTransition(%s, %s) = true, want false", pair.from, pair.to)
 		}
-	}
-}
-
-func TestResearchEventVersionCanOmitOptionalSupersedesReference(t *testing.T) {
-	previous := validEvent(t)
-	next := previous
-	next.EventVersion = 2
-	next.SystemAsOf = previous.SystemAsOf.Add(time.Minute)
-	next.SupersedesEventVersion = nil
-	if err := next.ValidateNextVersion(previous); err != nil {
-		t.Fatalf("optional supersedes_event_version should not be required: %v", err)
 	}
 }
 

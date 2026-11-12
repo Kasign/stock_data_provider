@@ -28,10 +28,10 @@ Research 不采集新闻、不拥有行情事实、不重算 Quant 指标，不�
 |---|---|---|
 | RSC-001 Context | Domain、结构/版本链校验、v1 Golden/Schema Validator、Application Create/Get、SQL Repository；Research 全模块 gofmt、go test、race、vet 已通过 | 消费方 Contract Test、远端引用与授权版本验证 |
 | RSC-002 Evidence | Domain、JCS/SHA-256 指纹、严格 PIT、AuthorizationRef 绑定、Application Add/Get、SQL Repository；本地授权调用边界已测试 | News 生产 Adapter、Owner 当前授权复核与内容读取 TOCTOU、available_at 来源证据及授权续期历史语义 |
-| RSC-003 Event | Domain、SourceTime、版本追加、生命周期、事务 Outbox、Application Create/Update；本地 MariaDB 追加/Outbox 验收通过 | 多来源归并/拆分、规范化时间规则版本、News Owner Adapter |
+| RSC-003 Event | Domain、SourceTime、版本追加、生命周期、事务 Outbox、Application Create/Update；本轮补齐 time_normalization_rule_version 与 derived_from_refs 字段及结构校验 | derived_from_refs 精确版本存在性/引用图校验；多来源归并/拆分、News Owner Adapter |
 | RSC-004 实体关联 | 尚未实现 | 等待 Data 提供稳定 Security/Industry 引用、版本/时间语义及公开 Application Port |
-| RSC-005 Claim/Hypothesis | Domain、认识论校验、状态迁移、版本追加、Application、SQL Repository；本地状态机测试通过 | Evidence/Scope 真实引用解析、supersedes_version 契约缺口、真实研究样本 |
-| RSC-006 Scenario | 仅有部分引用模型 | 等待 typed expected_value 类型映射与 ConditionGroup 机器契约 |
+| RSC-005 Claim/Hypothesis | Domain、认识论校验、状态迁移、版本追加、supersedes_version 字段及当前版本头校验、Application、SQL Repository | Evidence/Scope 真实引用解析、真实研究样本 |
+| RSC-006 Scenario | 新增 Scenario/Condition/ConditionGroup 领域模型，expected_value 限定为标量或一层标量数组，递归 ConditionGroup 校验按 DEC-033 执行 | Quant Metric Registry/结果引用由 Quant Owner 校验；Scenario Application/Storage 接入待完成 |
 | RSC-007 Storage/Outbox | Context/Event/Claim/Evidence Repository、Migration v1-v5、事务 Outbox、领取/租约/重试/确认/拒绝；专用 MariaDB 当前版本与历史升级 Job 已通过 | 根 Server Migration 注册、Server→Notification Relay 接线、授权续期历史留档语义 |
 | RSC-008 Diagnostics | Context/Event/Claim/Evidence 快照 Check、Run PIT、脱敏和快照隔离；Research 全模块测试通过；Evidence Check 通过 Application GetEvidence 执行 Owner Authorizer 调用 | 真实 Owner Adapter、Researchflow FLOW-009 Facade 和 Runner 集成 |
 
@@ -48,7 +48,7 @@ Research 不采集新闻、不拥有行情事实、不重算 Quant 指标，不�
 - Research 全模块独立 Job 和 Research Storage/Migration MariaDB Job 均在本轮 Workflow Run [42616788237](https://github.com/Kasign/stock_data_provider/actions/runs/42616788237) 通过，测试代码 SHA 为 `0129675185ab29905b0ef14a21e1d564961e3dde`。Research gofmt、全包 go test、race、vet 及 MariaDB Storage/Migration 集成均通过。
 - 同一 Workflow 的整体 conclusion 是 failure：根模块 `Test .` 被 Marketdata、News、Notification、Quant 的 gofmt 差异阻断。该失败不属于 Research 文件；因此不能表述为全仓 Go Workflow 通过，也不能把根模块全量编译/测试视为已验收。
 - 本地 MariaDB Job 覆盖 Migration v1→v5 历史升级、PIT 纳秒/NULL 回填、Context/Event/Claim/Evidence Repository、并发追加、损坏记录 fail-closed、Outbox 原子写入/并发领取/租约过期。
-- 本轮代码复核发现并修复 Event.available_at PIT 边界；修复后的代码已由上述新 SHA 的 Research 独立 Job 和 MariaDB Job 验收通过。
+- 本轮代码复核发现并修复 Event.available_at PIT 边界；本次进一步按 RSC-CTR-002 补齐 Event 时间规则版本/派生引用、Claim supersedes_version 和 Scenario 闭合条件模型。新改动的 CI 验收状态以对应提交后的 Workflow 为准。
 - 尚无真实 Data/News Owner Adapter 与完整来源证据；跨模块接入及真实数据验收仍未完成。根 Server Migration 注册和 Notification Relay 由 Server 组合根负责。
 
 ## 维护规则

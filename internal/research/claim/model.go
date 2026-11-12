@@ -26,6 +26,7 @@ const (
 type Claim struct {
 	ClaimID                   string        `json:"claim_id"`
 	ClaimVersion              int           `json:"claim_version"`
+	SupersedesVersion         *int          `json:"supersedes_version,omitempty"`
 	Statement                 string        `json:"statement"`
 	EpistemicType             EpistemicType `json:"epistemic_type"`
 	ScopeRefs                 []string      `json:"scope_refs"`

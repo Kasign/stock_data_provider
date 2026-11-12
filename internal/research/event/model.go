@@ -23,6 +23,11 @@ const (
 	TimeSystemObservedAt EventTimeType = "system_observed_at"
 )
 
+type ResearchEventRef struct {
+	EventID string `json:"event_id"`
+	EventVersion int `json:"event_version"`
+}
+
 type EventSourceTime struct {
 	EvidenceRef             string        `json:"evidence_ref"`
 	TimeType                EventTimeType `json:"time_type"`
@@ -52,8 +57,9 @@ type ResearchEvent struct {
 	ImpactHypothesisRefs   []string          `json:"impact_hypothesis_refs"`
 	InvalidationConditions []string          `json:"invalidation_conditions"`
 	Uncertainty            []string          `json:"uncertainty"`
-	SupersedesEventVersion *int              `json:"supersedes_event_version,omitempty"`
-	SourceTimes            []EventSourceTime `json:"source_times"`
+	SourceTimes []EventSourceTime `json:"source_times"`
+	TimeNormalizationRuleVersion string `json:"time_normalization_rule_version"`
+	DerivedFromRefs []ResearchEventRef `json:"derived_from_refs"`
 }
 
 // LifecycleTransition is an immutable lifecycle_changed payload.
