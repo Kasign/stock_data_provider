@@ -46,7 +46,6 @@ func TestMigrationsDefineNewsOwnedPersistenceSchema(t *testing.T) {
 	}
 }
 
-
 func TestMigrationsAddImmutablePolicyVersionsAndCurrentPointers(t *testing.T) {
 	migrations := Migrations()
 	if len(migrations) != 9 {
