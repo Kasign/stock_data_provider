@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"sort"
 	"strings"
 	"time"
@@ -18,7 +17,7 @@ import (
 )
 
 const (
-	quantPurposeCode = "quant_analysis"
+	quantPurposeCode  = "quant_analysis"
 	quantContentLevel = "full"
 )
 
@@ -88,9 +87,9 @@ type PolicySnapshot struct {
 
 // AuthorizedRecord 必须由结果 Owner 的授权读取端口在同一一致性边界内返回。
 type AuthorizedRecord struct {
-	Record            result.Record
-	AuthorizationRef  AuthorizationRef
-	PolicySnapshot    PolicySnapshot
+	Record           result.Record
+	AuthorizationRef AuthorizationRef
+	PolicySnapshot   PolicySnapshot
 }
 
 // AuthorizedResultReader 负责当前授权复核和结果读取。
@@ -103,9 +102,9 @@ type AuthorizedResultReader interface {
 
 // GetResult 是 Quant 的授权读取用例。它不接受客户端自报主体，也不暴露 Repository。
 type GetResult struct {
-	reader    AuthorizedResultReader
+	reader     AuthorizedResultReader
 	principals PrincipalResolver
-	now       func() time.Time
+	now        func() time.Time
 }
 
 // NewGetResult 创建授权读取用例；now 必须由 Server 注入可信 UTC Clock。
@@ -222,7 +221,7 @@ func validateAuthorization(ref AuthorizationRef, snapshot PolicySnapshot, reques
 		PurposeCode: ref.PurposeCode, ContentLevel: ref.ContentLevel,
 		SubjectRef: ref.SubjectRef, ResourceRef: ref.ResourceRef,
 		DecidedAt: ref.DecidedAt, ExpiresAt: ref.ExpiresAt,
-		Conditions: append([]string{}, ref.Conditions...),
+		Conditions:              append([]string{}, ref.Conditions...),
 		EvaluatedPolicyVersions: policies,
 	}
 	encoded, err := json.Marshal(input)
@@ -241,8 +240,12 @@ func validateAuthorization(ref AuthorizationRef, snapshot PolicySnapshot, reques
 }
 
 func comparePolicyVersion(left, right PolicyVersion) int {
-	if value := strings.Compare(left.PolicyType, right.PolicyType); value != 0 { return value }
-	if value := strings.Compare(left.PolicyRef, right.PolicyRef); value != 0 { return value }
+	if value := strings.Compare(left.PolicyType, right.PolicyType); value != 0 {
+		return value
+	}
+	if value := strings.Compare(left.PolicyRef, right.PolicyRef); value != 0 {
+		return value
+	}
 	return strings.Compare(left.PolicyVersion, right.PolicyVersion)
 }
 
@@ -258,8 +261,14 @@ func parseCanonicalUTC(value string) (time.Time, bool) {
 func validResultID(value string) bool {
 	const prefix = "quant_result:sha256:"
 	digest := strings.TrimPrefix(value, prefix)
-	if digest == value || len(digest) != 64 { return false }
-	for _, r := range digest { if !((r >= '0' && r <= '9') || (r >= 'a' && r <= 'f')) { return false } }
+	if digest == value || len(digest) != 64 {
+		return false
+	}
+	for _, r := range digest {
+		if !((r >= '0' && r <= '9') || (r >= 'a' && r <= 'f')) {
+			return false
+		}
+	}
 	return true
 }
 
@@ -273,5 +282,3 @@ func SortPolicyVersions(values []PolicyVersion) []PolicyVersion {
 	sort.Slice(result, func(i, j int) bool { return comparePolicyVersion(result[i], result[j]) < 0 })
 	return result
 }
-
-var _ = fmt.Sprintf
