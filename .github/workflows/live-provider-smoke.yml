@@ -31,6 +31,31 @@ on:
         required: false
         default: "600036.SH"
         type: string
+      include_mx:
+        description: "Run quota-sensitive MX API probes"
+        required: false
+        default: false
+        type: boolean
+      include_netease:
+        description: "Run optional NetEase probes"
+        required: false
+        default: false
+        type: boolean
+      include_hithink:
+        description: "Run Hithink probes when its API key is configured"
+        required: false
+        default: false
+        type: boolean
+      include_tushare:
+        description: "Run Tushare probes when its token is configured"
+        required: false
+        default: false
+        type: boolean
+      include_tickflow:
+        description: "Run TickFlow probes when its API key is configured"
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
