@@ -51,8 +51,8 @@ func (r *MySQLRunRepository) ListExpiredAttemptCandidates(ctx context.Context, a
 		if err := rows.Scan(&item.RunRef, &item.StageRef, &item.AttemptRef); err != nil {
 			return nil, fmt.Errorf("scan expired Researchflow Attempt candidate: %w", err)
 		}
-		if strings.TrimSpace(item.RunRef) == "" || item.RunRef <= previousRun ||
-			(item.RunRef == previousRun && item.StageRef <= previousStage) ||
+		if strings.TrimSpace(item.RunRef) == "" ||
+			!isAfterExpiredAttemptCursor(item.RunRef, item.StageRef, previousRun, previousStage) ||
 			strings.TrimSpace(item.StageRef) == "" || strings.TrimSpace(item.AttemptRef) == "" {
 			return nil, errors.New("expired Researchflow Attempt query returned an invalid or unordered candidate")
 		}
@@ -63,4 +63,11 @@ func (r *MySQLRunRepository) ListExpiredAttemptCandidates(ctx context.Context, a
 		return nil, fmt.Errorf("iterate expired Researchflow Attempt candidates: %w", err)
 	}
 	return items, nil
+}
+
+
+// isAfterExpiredAttemptCursor compares the composite (RunRef, StageRef) key.
+// Multiple Stages belonging to the same Run must remain valid across pages.
+func isAfterExpiredAttemptCursor(runRef, stageRef, afterRunRef, afterStageRef string) bool {
+	return runRef > afterRunRef || (runRef == afterRunRef && stageRef > afterStageRef)
 }

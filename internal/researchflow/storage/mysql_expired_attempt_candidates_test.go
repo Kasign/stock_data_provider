@@ -128,3 +128,22 @@ func TestMariaDBExpiredAttemptCandidatesAndReclaim(t *testing.T) {
 		t.Fatalf("previous Attempt was not fenced and closed: attempt=%#v err=%v", previous, err)
 	}
 }
+
+
+func TestExpiredAttemptCandidateCompositeCursorAllowsMultipleStagesPerRun(t *testing.T) {
+	if !isAfterExpiredAttemptCursor("run-a", "stage-b", "run-a", "stage-a") {
+		t.Fatal("a later Stage in the same Run must be after the composite cursor")
+	}
+	if !isAfterExpiredAttemptCursor("run-b", "stage-a", "run-a", "stage-z") {
+		t.Fatal("a later Run must be after the composite cursor")
+	}
+	if isAfterExpiredAttemptCursor("run-a", "stage-a", "run-a", "stage-a") {
+		t.Fatal("the cursor itself must not be returned again")
+	}
+	if isAfterExpiredAttemptCursor("run-a", "stage-a", "run-a", "stage-b") {
+		t.Fatal("an earlier Stage in the same Run must be rejected")
+	}
+	if isAfterExpiredAttemptCursor("run-a", "stage-z", "run-b", "stage-a") {
+		t.Fatal("an earlier Run must be rejected")
+	}
+}
