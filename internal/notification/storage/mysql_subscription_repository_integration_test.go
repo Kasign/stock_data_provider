@@ -62,7 +62,7 @@ func TestNotificationMariaDBSubscriptionRepositoryIntegration(t *testing.T) {
 		CreatedAt: now, UpdatedAt: now, EffectiveAt: now,
 	}
 	for _, tc := range []struct {
-		name string
+		name   string
 		mutate func(*domain.Subscription)
 	}{
 		{name: "created_at", mutate: func(s *domain.Subscription) { s.CreatedAt = s.CreatedAt.In(time.FixedZone("UTC+8", 8*60*60)) }},
@@ -86,7 +86,7 @@ func TestNotificationMariaDBSubscriptionRepositoryIntegration(t *testing.T) {
 	}
 
 	for _, tc := range []struct {
-		name string
+		name   string
 		mutate func(*domain.Subscription)
 	}{
 		{name: "updated_at", mutate: func(s *domain.Subscription) { s.UpdatedAt = s.UpdatedAt.In(time.FixedZone("UTC+8", 8*60*60)) }},
