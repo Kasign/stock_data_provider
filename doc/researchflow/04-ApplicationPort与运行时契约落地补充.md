@@ -576,3 +576,13 @@ Outbox 使用发布前 Claim、提交租约、外部 Publish、成功后 Ack 的
 - 跨进程取消使用数据库 Lease 心跳轮询：Run 进入 cancelling 后，RenewAttemptLease 返回 `ErrRunCancellationUnavailable`；Worker 取消执行 Context，并通过 ConfirmAttemptCancellation 确认停止。Server 同进程可额外调用 Worker.CancelRun 降低延迟，但不能替代持久化取消状态和心跳确认。
 - MariaDB 集成覆盖取消后 Lease 心跳拒绝续租；Worker 单测覆盖心跳观察 durable cancellation 并完成确认。Actions Run `43138436243` 的 Researchflow 模块 gofmt/test/race/vet、WorkerStore 单测/Race/Vet、MariaDB 普通/Race 集成均通过。
 - Server 仍负责周期触发、分页循环、WorkerPool 启停、DeadlineScanner/Finalizer 生命周期和真实模块 Adapter 注入；本分支不修改 Server 代码。
+
+
+## 30. 过期 Attempt 的进程崩溃恢复扫描（2026-11-12）
+
+- Review 发现普通 SchedulerCandidateScanner 只查找含 pending/ready/retry_wait Stage 的 Run；Scheduler 对 running Stage 只计入 ActiveCount，不会再次派发。虽然 ClaimAttempt 已支持在 Lease 过期后关闭旧 Attempt、递增 fencing token 并创建新 Attempt，但原有周期扫描不会触发该路径。
+- 新增 Application Port `ExpiredAttemptCandidateReader` 与 `ExpiredAttemptScanner`，使用 (RunRef, StageRef) 复合 keyset 游标分页发现 Run=running、Stage=running、最新 Attempt=running 且 Lease 已过期的候选。
+- MySQL 查询只读、不变更状态；过滤终止/Deadline 已到期 Run，要求 AttemptRef/Stage.AttemptNo 对齐。候选只是恢复提示，不授予执行权。
+- Server 对每个候选调用 Worker.Execute，并生成新的 AttemptRef。ClaimAttempt 在 CapacityGuard -> Run -> Stage -> latest Attempt 事务锁下重新核验 Lease 是否仍过期、Attempt 次数、Run Deadline、全局 Worker 容量，并对旧 Attempt fencing 后创建新 Attempt。若另一个进程已恢复，候选会因状态已变化而被拒绝，不会重复执行。
+- 新增 Scanner 复合游标/乱序/超量/错误单测，以及 MariaDB 分页和过期 Lease reclaim/fencing 集成测试。
+- 当前 HEAD `ab9a756ea6a22462441e4fbef8340c96c8e79ec6` 的新增代码尚未获得 GitHub Actions 和真实 MariaDB 执行结果；不得标记为已验收。Server 的恢复扫描周期、WorkerPool 调度和容量配置接线仍由 Server 分支完成。
