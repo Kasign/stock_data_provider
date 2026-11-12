@@ -566,15 +566,15 @@ func TestLiveHithinkAnnualBalanceSheetPublicationDateRaw(t *testing.T) {
 		publicationValue, publicationOK := hithinkParseFundamentalValue(publicationRaw)
 		publicationDate, publicationDateOK := hithinkDateFromMillis(publicationValue, location)
 		evidence = append(evidence, map[string]any{
-			"row_index": rowIndex,
-			"thscode": rowSymbol,
-			"period_end_ms_raw": string(row["period_end_ms"]),
-			"period_end_date": periodEndDate,
-			"report_date_ms_raw": string(publicationRaw),
-			"publication_date": publicationDate,
+			"row_index":              rowIndex,
+			"thscode":                rowSymbol,
+			"period_end_ms_raw":      string(row["period_end_ms"]),
+			"period_end_date":        periodEndDate,
+			"report_date_ms_raw":     string(publicationRaw),
+			"publication_date":       publicationDate,
 			"publication_date_valid": publicationOK && publicationDateOK,
-			"assets_total_raw": string(row["assets_total"]),
-			"total_debt_raw": string(row["total_debt"]),
+			"assets_total_raw":       string(row["assets_total"]),
+			"total_debt_raw":         string(row["total_debt"]),
 		})
 	}
 	encoded, err := json.Marshal(map[string]any{
