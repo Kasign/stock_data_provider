@@ -3,7 +3,7 @@
 - 分支：`feat/researchflow`
 - 代码：`internal/researchflow/**`
 - 任务前缀：FLOW
-- 当前状态：领域状态机、MySQL 核心生命周期事务、Application Worker 单次执行协调器、MySQL WorkerStore Adapter、Scheduler 单次 Run 运行协调器均已有代码；全局容量事务守卫（CreateRun 排队容量、ClaimAttempt 全局 Worker Lease）与固定数量 Worker Pool 已实现，并通过当前 SHA 的 Researchflow 模块门禁和 MariaDB 普通/Race 集成；Server 生命周期与周期调度接入、生产 StageExecutor Adapter 仍未闭环。WorkerStore 与 Scheduler 已有模块级及 MariaDB 验收证据，详见任务进度文档。
+- 当前状态：领域状态机、MySQL 核心生命周期事务、Application Worker 单次执行协调器、MySQL WorkerStore Adapter、Scheduler 单次 Run 运行协调器均已有代码；全局容量事务守卫（CreateRun 排队容量、ClaimAttempt 全局 Worker Lease）与固定数量 Worker Pool 已实现，并通过代码 SHA `6692cf1dfdb67509dca3dd564600d3085e935509` 的 Researchflow 模块门禁和 MariaDB 普通/Race 集成；Server 生命周期与周期调度接入、生产 StageExecutor Adapter 仍未闭环。WorkerStore 与 Scheduler 已有模块级及 MariaDB 验收证据，详见任务进度文档。
 
 Researchflow 是研究应用编排层，通过 Data、News、Quant、Research、LLM 的公开 Application Port 编排研究流程。Notification 不作为同步 DAG Stage；Run 终态 CAS 成功后按 INT-CTR-001 写本地 Outbox。它拥有 Run/Stage/Attempt 状态，不拥有其他模块内部领域规则。Platform Task Runner 只提供执行基础设施，不替代 Researchflow 业务状态机。
 
