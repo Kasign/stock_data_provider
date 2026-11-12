@@ -32,7 +32,7 @@ Research 不采集新闻、不拥有行情事实、不重算 Quant 指标，不�
 | RSC-004 实体关联 | 尚未实现 | 等待 Data 提供稳定 Security/Industry 引用、版本/时间语义及公开 Application Port |
 | RSC-005 Claim/Hypothesis | Domain、认识论校验、状态迁移、版本追加、supersedes_version 字段及当前版本头校验、Application、SQL Repository | Evidence/Scope 真实引用解析、真实研究样本 |
 | RSC-006 Scenario | 新增 Scenario/Condition/ConditionGroup 领域模型，expected_value 限定为标量或一层标量数组，递归 ConditionGroup 校验按 DEC-033 执行 | Quant Metric Registry/结果引用由 Quant Owner 校验；Scenario Application/Storage 接入待完成 |
-| RSC-007 Storage/Outbox | Context/Event/Claim/Evidence Repository、Migration v1（初版最终结构）、事务 Outbox、领取/租约/重试/确认/拒绝；专用 MariaDB 当前版本与旧的过渡迁移 Job 已通过 | 根 Server Migration 注册、Server→Notification Relay 接线、授权续期历史留档语义 |
+| RSC-007 Storage/Outbox | Context/Event/Claim/Evidence Repository、Migration v1（初版最终结构；无 v2-v5 兼容迁移）、事务 Outbox、领取/租约/重试/确认/拒绝；最终结构初始化测试待本轮 CI 验证 | 根 Server Migration 注册、Server→Notification Relay 接线、授权续期历史留档语义 |
 | RSC-008 Diagnostics | Context/Event/Claim/Evidence 快照 Check、Run PIT、脱敏和快照隔离；Research 全模块测试通过；Evidence Check 通过 Application GetEvidence 执行 Owner Authorizer 调用 | 真实 Owner Adapter、Researchflow FLOW-009 Facade 和 Runner 集成 |
 
 ## 诊断边界
@@ -47,7 +47,7 @@ Research 不采集新闻、不拥有行情事实、不重算 Quant 指标，不�
 
 - Research 全模块独立 Job 和 Research Storage/Migration MariaDB Job 均在本轮 Workflow Run [42616788237](https://github.com/Kasign/stock_data_provider/actions/runs/42616788237) 通过，测试代码 SHA 为 `0129675185ab29905b0ef14a21e1d564961e3dde`。Research gofmt、全包 go test、race、vet 及 MariaDB Storage/Migration 集成均通过。
 - 同一 Workflow 的整体 conclusion 是 failure：根模块 `Test .` 被 Marketdata、News、Notification、Quant 的 gofmt 差异阻断。该失败不属于 Research 文件；因此不能表述为全仓 Go Workflow 通过，也不能把根模块全量编译/测试视为已验收。
-- 本地 MariaDB Job 覆盖 初版 Migration v1 最终结构初始化、PIT 纳秒/NULL 回填、Context/Event/Claim/Evidence Repository、并发追加、损坏记录 fail-closed、Outbox 原子写入/并发领取/租约过期。
+- 本地 MariaDB 历史验收曾覆盖 v1-v5 过渡迁移；本轮已删除该兼容迁移链，新的最终结构初始化需重新验收、Context/Event/Claim/Evidence Repository、并发追加、损坏记录 fail-closed、Outbox 原子写入/并发领取/租约过期。
 - 本轮代码复核发现并修复 Event.available_at PIT 边界；本次进一步按 RSC-CTR-002 补齐 Event 时间规则版本/派生引用、Claim supersedes_version 和 Scenario 闭合条件模型。新改动的 CI 验收状态以对应提交后的 Workflow 为准。
 - 尚无真实 Data/News Owner Adapter 与完整来源证据；跨模块接入及真实数据验收仍未完成。根 Server Migration 注册和 Notification Relay 由 Server 组合根负责。
 

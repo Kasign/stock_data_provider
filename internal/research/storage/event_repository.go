@@ -147,7 +147,7 @@ func validateEventDerivedRefs(ctx context.Context, tx *sql.Tx, value researcheve
 		var payload []byte
 		err := tx.QueryRowContext(ctx, "SELECT payload_sha256, payload FROM research_event_versions WHERE event_id=? AND event_version=?", ref.EventID, ref.EventVersion).Scan(&digest, &payload)
 		if err != nil {
-			if err == sql.ErrNoRows { return fmt.Errorf("derived Event reference %s@%d does not exist", ref.EventID, ref.EventVersion) }
+			if err == sql.ErrNoRows { return fmt.Errorf("%w: derived Event reference %s@%d does not exist", ErrNotFound, ref.EventID, ref.EventVersion) }
 			return fmt.Errorf("read derived Event reference %s@%d: %w", ref.EventID, ref.EventVersion, err)
 		}
 		if err := verifyStoredPayload(payload, digest); err != nil { return err }

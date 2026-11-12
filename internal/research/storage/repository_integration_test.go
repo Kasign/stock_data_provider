@@ -85,7 +85,7 @@ func TestResearchEventLifecycleOutboxFailureRollsBackEventVersion(t *testing.T) 
 	}
 	t.Cleanup(func() {
 		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_notification_outbox WHERE subject_ref=?", "research-event:"+eventID)
-		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_event_versions WHERE event_id=?", eventID)
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_event_versions WHERE event_id IN (?, ?, ?, ?)", eventID, derivedParentID, derivedChildID, missingDerivedID)
 		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_aggregate_heads WHERE aggregate_type='event' AND aggregate_id=?", eventID)
 	})
 	previous := researchevent.ResearchEvent{
@@ -281,6 +281,8 @@ func TestResearchOutboxConcurrentClaimsDoNotDuplicateLease(t *testing.T) {
 	}
 }
 
+func intPointer(value int) *int { return &value }
+
 func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 	db := openResearchIntegrationDB(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -291,6 +293,9 @@ func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
 	contextID := "ctx-it-" + suffix
 	eventID := "event-it-" + suffix
+	derivedParentID := eventID + "-parent"
+	derivedChildID := eventID + "-child"
+	missingDerivedID := eventID + "-missing-ref"
 	claimID := "claim-it-" + suffix
 	evidenceID := "evidence-it-" + suffix
 	concurrentEvidenceID := "evidence-concurrent-it-" + suffix
@@ -303,7 +308,7 @@ func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_event_versions WHERE event_id=?", eventID)
 		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_claim_versions WHERE claim_id=?", claimID)
 		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_evidence_records WHERE evidence_id IN (?, ?)", evidenceID, concurrentEvidenceID)
-		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_aggregate_heads WHERE aggregate_id IN (?, ?, ?, ?, ?, ?)", contextID, eventID, claimID, cancelledContextID, orphanContextID, lockedContextID)
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_aggregate_heads WHERE aggregate_id IN (?, ?, ?, ?, ?, ?, ?, ?)", contextID, eventID, derivedParentID, derivedChildID, missingDerivedID, claimID, cancelledContextID, orphanContextID, lockedContextID)
 	})
 
 	contextRepo, err := NewContextRepository(db, clock)
@@ -583,6 +588,22 @@ func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 	if err := eventRepo.Append(ctx, eventV1); err != nil {
 		t.Fatalf("append Event v1: %v", err)
 	}
+	parentEvent := eventV1
+	parentEvent.EventID = derivedParentID
+	if err := eventRepo.Append(ctx, parentEvent); err != nil { t.Fatalf("append derived parent Event: %v", err) }
+	childEvent := eventV1
+	childEvent.EventID = derivedChildID
+	childEvent.DerivedFromRefs = []researchevent.ResearchEventRef{{EventID: derivedParentID, EventVersion: 1}}
+	if err := eventRepo.Append(ctx, childEvent); err != nil { t.Fatalf("append Event with exact derived reference: %v", err) }
+	missingDerived := eventV1
+	missingDerived.EventID = missingDerivedID
+	missingDerived.DerivedFromRefs = []researchevent.ResearchEventRef{{EventID: "event:missing", EventVersion: 1}}
+	if err := eventRepo.Append(ctx, missingDerived); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("append Event with missing derived reference = %v, want ErrNotFound", err)
+	}
+	var missingHeadCount int
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM research_aggregate_heads WHERE aggregate_type='event' AND aggregate_id=?", missingDerivedID).Scan(&missingHeadCount); err != nil { t.Fatalf("count rejected derived Event head: %v", err) }
+	if missingHeadCount != 0 { t.Fatalf("missing-reference append left %d aggregate heads, want 0", missingHeadCount) }
 	assertResearchPITColumn(t, ctx, db, "SELECT system_as_of FROM research_event_versions WHERE event_id=? AND event_version=1", []any{eventID}, cutoff)
 	if err := eventRepo.Append(ctx, eventV1); err != nil {
 		t.Fatalf("replay Event v1: %v", err)
@@ -625,8 +646,21 @@ func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 	claimV2 := claimV1
 	claimV2.ClaimVersion = 2
 	claimV2.SystemAsOf = cutoff.Add(time.Minute)
+	claimV2.SupersedesVersion = intPointer(1)
 	if err := claimRepo.Append(ctx, claimV2); err != nil {
 		t.Fatalf("append Claim v2: %v", err)
+	}
+	staleClaimV3 := claimV2
+	staleClaimV3.ClaimVersion = 3
+	staleClaimV3.SystemAsOf = cutoff.Add(2 * time.Minute)
+	staleClaimV3.SupersedesVersion = intPointer(1)
+	if err := claimRepo.Append(ctx, staleClaimV3); err == nil {
+		t.Fatal("Claim v3 must reject supersedes_version pointing behind the current version head")
+	}
+	claimV3 := staleClaimV3
+	claimV3.SupersedesVersion = intPointer(2)
+	if err := claimRepo.Append(ctx, claimV3); err != nil {
+		t.Fatalf("append Claim v3 superseding current head: %v", err)
 	}
 	if got, err := claimRepo.GetVersion(ctx, claimID, 2); err != nil || got.ClaimVersion != 2 {
 		t.Fatalf("get Claim v2 = version %d, error %v", got.ClaimVersion, err)

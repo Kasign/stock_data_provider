@@ -157,8 +157,8 @@ type CreateEventCommand struct {
 	SourceTimes []EventSourceTime
 }
 type EventRef struct {
-	EventID      string
-	EventVersion int
+	EventID string `json:"event_id"`
+	EventVersion int `json:"event_version"`
 }
 type EventRepository interface {
 	Append(context.Context, researchevent.ResearchEvent) error
@@ -634,6 +634,7 @@ func toDomainEventTimes(values []EventSourceTime) []researchevent.EventSourceTim
 	return out
 }
 func toDomainEventRefs(values []EventRef) []researchevent.ResearchEventRef {
+	if values == nil { return nil }
 	out := make([]researchevent.ResearchEventRef, len(values))
 	for i, value := range values { out[i] = researchevent.ResearchEventRef{EventID:value.EventID, EventVersion:value.EventVersion} }
 	return out
