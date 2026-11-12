@@ -1549,7 +1549,7 @@ Server Bootstrap
 - PLAT-CTR-003 第 5 节公开的 `SessionStore` 只有 `LookupAndTouch`，没有只读 Lookup。Server Session Authenticator 在 CSRF 校验前触发 Touch 的问题无法通过 Server 侧调整顺序解决；作为 Platform 消费者缺口记录，需在 Platform 分支提出兼容的只读读取/原子校验能力，不在本分支复制 Redis 实现。
 - `integration` 本轮核查基线为 `8542b5d73da6c3b047fb275b05f58d8c0ade552e`；Server 分支保持独立，本轮没有合并或修改 Integration/Platform。
 - SRV-007 当前 Bootstrap Migration Registry 实际包含六个 namespace：`news`、`research`、`researchflow`、`notification`、`platform.security`、`server.security_audit`。同步修正 SRV-007 状态摘要，避免将安全基础设施 Migration 漏记为仅四项注册。
-- 后续门禁：先由契约 Owner 确认 PLAT-CTR-003 冻结状态及限流摘要算法；Platform Owner 提供 Session 只读/原子校验能力后，再修正 Server 认证顺序。未满足前不启用 Owner Session HTTP 入口。
+- 后续门禁：限流摘要按已冻结 PLAT-CTR-003 对齐；Session 只读/原子校验能力仍是 Platform 消费者缺口。SRV-CTR-001 登录 API/路由矩阵未完成前，不启用 Owner Session HTTP 入口。
 
 
 ### 12.71 SRV-005 PLAT-CTR-001 ErrorEnvelope 对齐（2026-11-12）
