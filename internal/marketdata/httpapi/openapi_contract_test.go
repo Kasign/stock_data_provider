@@ -27,8 +27,8 @@ func TestOpenAPISecurityMatchesDataHTTPAdapterRoutes(t *testing.T) {
 	if _, ok := schemes["ApiKey"]; !ok {
 		t.Fatal("OpenAPI must define ApiKey for X-API-Key")
 	}
-	if _, ok := schemes["BearerAuth"]; !ok {
-		t.Fatal("OpenAPI must define BearerAuth for Authorization: Bearer")
+	if _, ok := schemes["BearerAuth"]; ok {
+		t.Fatal("OpenAPI must not define BearerAuth for the Data HTTP Adapter")
 	}
 
 	rootSecurity, ok := document["security"].([]any)
@@ -55,7 +55,7 @@ func TestOpenAPISecurityMatchesDataHTTPAdapterRoutes(t *testing.T) {
 				continue
 			}
 			for name, scopes := range requirement {
-				if name != "ApiKey" && name != "BearerAuth" {
+				if name != "ApiKey" {
 					t.Errorf("%s declares unsupported security scheme %q", where, name)
 				}
 				if scopeList, ok := scopes.([]any); !ok || len(scopeList) != 0 {
@@ -64,8 +64,8 @@ func TestOpenAPISecurityMatchesDataHTTPAdapterRoutes(t *testing.T) {
 				got[name] = true
 			}
 		}
-		if len(got) != 2 || !got["ApiKey"] || !got["BearerAuth"] {
-			t.Errorf("%s must accept ApiKey OR BearerAuth, got %#v", where, got)
+		if len(got) != 1 || !got["ApiKey"] {
+			t.Errorf("%s must require only X-API-Key, got %#v", where, got)
 		}
 	}
 	assertSecurity("root", rootSecurity, false)

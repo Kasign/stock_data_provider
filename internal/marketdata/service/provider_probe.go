@@ -19,6 +19,9 @@ import (
 	"example.com/stock-analysis-flow/internal/marketdata/validation"
 )
 
+// ErrProviderProbePersistence 表示探测结果历史写入失败。
+var ErrProviderProbePersistence = errors.New("provider-probe persistence failed")
+
 var (
 	probeHTTPStatusPattern = regexp.MustCompile(`(?i)\bHTTP(?:\s+status)?\s*[:=]?\s*(\d{3})\b`)
 	probeURLQueryPattern   = regexp.MustCompile(`(?i)(https?://[^\s"'?]+)\?[^\s"' ]*`)
@@ -201,6 +204,16 @@ func normalizeDailyBarProbeRange(startText, endText string) (string, string, err
 // ProbeProviderCapabilities 保留旧调用方式，默认执行全部诊断能力。
 func (s *DataService) ProbeProviderCapabilities(ctx context.Context) (*model.ProviderProbeRun, error) {
 	return s.ProbeProviderCapabilitiesWithOptions(ctx, ProviderProbeOptions{Scope: "all", TimeoutSeconds: 12})
+}
+
+// fundamentalsProbePeriod 选择已过半年度报告披露截止期的 Q2 样本，避免年初探测未来报告期。
+func fundamentalsProbePeriod(now time.Time) (int, int) {
+	local := now.In(marketLocation())
+	year := local.Year()
+	if local.Month() < time.September {
+		year--
+	}
+	return year, 2
 }
 
 // ProbeProviderCapabilitiesWithOptions 主动探测已启用 Provider 的能力。
@@ -857,11 +870,12 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 	for _, p := range s.fundamentalsProviders {
 		p := p
 		add(p.Name(), "fundamentals", func(probeCtx context.Context) (model.QualityStatus, string, []string, error) {
-			v, err := p.FetchFundamentals(probeCtx, barsSymbol, nowLocal.Year(), 2)
+			fundamentalProbeYear, fundamentalProbeQuarter := fundamentalsProbePeriod(nowLocal)
+			v, err := p.FetchFundamentals(probeCtx, barsSymbol, fundamentalProbeYear, fundamentalProbeQuarter)
 			if err != nil {
 				return model.QualityUnknown, "", nil, err
 			}
-			report := validation.ValidateFundamentalsSnapshot(v, barsSymbol, nowLocal.Year(), 2)
+			report := validation.ValidateFundamentalsSnapshot(v, barsSymbol, fundamentalProbeYear, fundamentalProbeQuarter)
 			validation.AddContextReport(probeCtx, report)
 			sourceVersion := ""
 			if v != nil {
@@ -1063,7 +1077,10 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 			}
 			if err != nil {
 				setProbeFailure(&item, err)
-				if job.capability == "daily_bars" && isUnsupportedDailyBarAdjustmentError(err) {
+				if item.ErrorCode == "provider_not_configured" {
+					item.Status = "not_configured"
+					item.ErrorStage = "configuration"
+				} else if job.capability == "daily_bars" && isUnsupportedDailyBarAdjustmentError(err) {
 					item.Status = "not_supported"
 					item.ErrorCode = "daily_bar_adjustment_not_supported"
 					item.ErrorStage = "configuration"
@@ -1171,6 +1188,7 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 			})
 		}
 	}
+	applyProviderProbeCheckStatus(run)
 	if s.store != nil {
 		run.Persisted = true
 		if err := s.store.SaveProviderProbeRun(ctx, run); err != nil {
@@ -1188,7 +1206,9 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 					break
 				}
 			}
-			return run, fmt.Errorf("persist provider-probe run: %w", err)
+			run.Status = "failed"
+			applyProviderProbeCheckStatus(run)
+			return run, fmt.Errorf("%w: %w", ErrProviderProbePersistence, err)
 		}
 	}
 	return run, nil
@@ -1198,9 +1218,26 @@ func (s *DataService) applyFreshnessProbeResults(ctx context.Context, run *model
 	if s == nil || run == nil {
 		return
 	}
+	itemStatuses := make(map[string]string, len(run.Items))
+	for _, item := range run.Items {
+		itemStatuses[item.Provider+"\x00"+item.Capability] = item.Status
+	}
+	returned := func(check model.ProviderProbeCheckResult) bool {
+		status, exists := itemStatuses[check.Provider+"\x00"+check.Capability]
+		if !exists || status == "" {
+			// 允许旧版/独立检查结果继续执行 Freshness 评估。
+			return true
+		}
+		switch status {
+		case "returned", "returned_degraded", "returned_unknown":
+			return true
+		default:
+			return false
+		}
+	}
 	hasPolicy, needsQuote := false, false
 	for _, result := range run.CheckResults {
-		if result.Check != "freshness" {
+		if result.Check != "freshness" || !returned(result) {
 			continue
 		}
 		if _, ok := freshnessDomainForCapability(result.Capability); ok {
@@ -1259,7 +1296,7 @@ func (s *DataService) applyFreshnessProbeResults(ctx context.Context, run *model
 	}
 	for i := range run.CheckResults {
 		check := &run.CheckResults[i]
-		if check.Check != "freshness" {
+		if check.Check != "freshness" || !returned(*check) {
 			continue
 		}
 		domain, ok := freshnessDomainForCapability(check.Capability)
@@ -1380,6 +1417,14 @@ func buildProviderProbeCheckResults(items []model.ProviderProbeItem, requestedCh
 					result.ErrorCode = item.ErrorCode
 				}
 			case "freshness":
+				if item.Status == "not_configured" || item.Status == "not_supported" || item.Status == "skipped" {
+					result.Status, result.ErrorCode = item.Status, item.ErrorCode
+					break
+				}
+				if item.Status == "failed" {
+					result.Status, result.ErrorCode = "skipped", item.ErrorCode
+					break
+				}
 				if item.ProviderTime == nil || item.ProviderTime.IsZero() {
 					result.ErrorCode = "provider_time_unavailable"
 					break
@@ -1400,6 +1445,27 @@ func buildProviderProbeCheckResults(items []model.ProviderProbeItem, requestedCh
 		}
 	}
 	return results
+}
+
+// applyProviderProbeCheckStatus 将检查维度的失败/不完整结果纳入批次总体状态。
+// skipped、not_configured 和 not_supported 表示本次检查未形成完整通过证据，不能把批次标为 success。
+func applyProviderProbeCheckStatus(run *model.ProviderProbeRun) {
+	if run == nil {
+		return
+	}
+	degraded := false
+	for _, result := range run.CheckResults {
+		switch result.Status {
+		case "failed":
+			run.Status = "failed"
+			return
+		case "degraded", "skipped", "not_configured", "not_supported":
+			degraded = true
+		}
+	}
+	if degraded && run.Status == "success" {
+		run.Status = "degraded"
+	}
 }
 
 func crossProviderProbeFailureCode(item model.ProviderProbeItem) string {
@@ -1644,17 +1710,29 @@ func classifyProbeError(err error) string {
 	if errors.Is(err, context.Canceled) {
 		return "cancelled"
 	}
-	message := strings.ToLower(err.Error())
+	status := probeHTTPStatus(err)
 	switch {
-	case strings.Contains(message, "429"), strings.Contains(message, "too many requests"), strings.Contains(message, "rate limit"):
+	case status == 429:
 		return "rate_limited"
-	case strings.Contains(message, "401"), strings.Contains(message, "unauthorized"), strings.Contains(message, "invalid token"):
+	case status == 401:
 		return "authentication_failed"
-	case strings.Contains(message, "403"), strings.Contains(message, "forbidden"), strings.Contains(message, "permission denied"):
+	case status == 403:
 		return "permission_denied"
+	case status >= 400:
+		return "http_" + strconv.Itoa(status)
 	}
-	if match := probeHTTPStatusPattern.FindStringSubmatch(err.Error()); len(match) == 2 {
-		return "http_" + match[1]
+
+	message := strings.ToLower(err.Error())
+	if isProbeProviderNotConfiguredError(message) {
+		return "provider_not_configured"
+	}
+	switch {
+	case strings.Contains(message, "too many requests"), strings.Contains(message, "rate limit"):
+		return "rate_limited"
+	case strings.Contains(message, "unauthorized"), strings.Contains(message, "invalid token"):
+		return "authentication_failed"
+	case strings.Contains(message, "forbidden"), strings.Contains(message, "permission denied"):
+		return "permission_denied"
 	}
 	if strings.Contains(message, "contract") || strings.Contains(message, "invalid") || strings.Contains(message, "missing") || strings.Contains(message, "unexpected") {
 		return "contract_invalid"
@@ -1665,6 +1743,16 @@ func classifyProbeError(err error) string {
 		return "network_error"
 	}
 	return "provider_error"
+}
+
+// isProbeProviderNotConfiguredError 只识别明确的本地配置缺失，不把远端认证/权限拒绝降级为 skipped。
+func isProbeProviderNotConfiguredError(message string) bool {
+	message = strings.ToLower(strings.TrimSpace(message))
+	return strings.Contains(message, "token is not configured") ||
+		strings.Contains(message, "api key is not configured") ||
+		strings.Contains(message, "http client is not configured") ||
+		strings.Contains(message, "http client 未配置") ||
+		(strings.Contains(message, "需要配置") && (strings.Contains(message, "api_key") || strings.Contains(message, "token")))
 }
 
 func probeHTTPStatus(err error) int {
@@ -1706,6 +1794,8 @@ func probeErrorStage(code string) string {
 		return "provider_permission"
 	case code == "contract_invalid":
 		return "contract"
+	case code == "provider_not_configured":
+		return "configuration"
 	case code == "network_error":
 		return "connect"
 	case strings.HasPrefix(code, "http_"):

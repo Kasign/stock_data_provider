@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"strings"
@@ -13,6 +14,7 @@ import (
 	"example.com/stock-analysis-flow/internal/marketdata/model"
 	"example.com/stock-analysis-flow/internal/marketdata/normalize"
 	"example.com/stock-analysis-flow/internal/marketdata/provider"
+	"example.com/stock-analysis-flow/internal/marketdata/repository"
 	"example.com/stock-analysis-flow/internal/marketdata/validation"
 )
 
@@ -321,6 +323,35 @@ func TestProviderProbeRejectsQuoteWithoutIdentity(t *testing.T) {
 	}
 }
 
+func TestProviderProbeClassifiesMissingCredentialsAsNotConfigured(t *testing.T) {
+	cases := []string{
+		"Tushare token is not configured",
+		"同花顺行情接口需要配置 MARKET_DATA_HITHINK_API_KEY",
+		"Provider HTTP client is not configured",
+	}
+	for _, message := range cases {
+		t.Run(message, func(t *testing.T) {
+			p := providerProbeFailQuoteFake{message: message}
+			ds := NewWithCapabilities([]provider.NamedProvider{p}, []provider.QuoteProvider{p}, nil, cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000, ResilienceConfig{}, nil)
+			run, err := ds.ProbeProviderCapabilitiesWithOptions(context.Background(), ProviderProbeOptions{
+				Scope: "all", Capabilities: []string{"quote"}, Checks: []string{"connectivity", "contract", "quality", "freshness"}, TimeoutSeconds: 5,
+			})
+			if err != nil {
+				t.Fatalf("ProbeProviderCapabilitiesWithOptions() error = %v", err)
+			}
+			item, found := findProbeItem(run.Items, p.Name(), "quote")
+			if !found || item.Status != "not_configured" || item.ErrorCode != "provider_not_configured" || item.ErrorStage != "configuration" {
+				t.Fatalf("missing local credentials must be not_configured: %+v", item)
+			}
+			for _, check := range run.CheckResults {
+				if check.Provider == p.Name() && check.Capability == "quote" && check.Status != "not_configured" {
+					t.Fatalf("check %q must preserve not_configured, got %+v", check.Check, check)
+				}
+			}
+		})
+	}
+}
+
 func TestProviderProbeFailureClassification(t *testing.T) {
 	cases := []struct {
 		message string
@@ -328,10 +359,15 @@ func TestProviderProbeFailureClassification(t *testing.T) {
 		stage   string
 	}{
 		{"HTTP 502 Bad Gateway", "http_502", "http"},
+		{"HTTP 502 Bad Gateway: invalid token", "http_502", "http"},
 		{"HTTP 429 Too Many Requests", "rate_limited", "rate_limit"},
 		{"HTTP 403 Forbidden", "permission_denied", "provider_permission"},
 		{"dial tcp: lookup example.test: no such host", "network_error", "connect"},
 		{"quote contract missing source version", "contract_invalid", "contract"},
+		{"Tushare token is not configured", "provider_not_configured", "configuration"},
+		{"Provider HTTP client is not configured", "provider_not_configured", "configuration"},
+		{"HTTP 401 Unauthorized: token is not configured", "authentication_failed", "provider_auth"},
+		{"HTTP 403 Forbidden: API key is not configured", "permission_denied", "provider_permission"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.code, func(t *testing.T) {
@@ -722,6 +758,36 @@ func (p *providerProbeHistoricalDailyBarsFake) FetchDailyBars(_ context.Context,
 		})
 	}
 	return bars, nil
+}
+
+func TestFundamentalsProbePeriodUsesCompletedHalfYear(t *testing.T) {
+	cases := []struct {
+		name        string
+		now         time.Time
+		wantYear    int
+		wantQuarter int
+	}{
+		{
+			name:        "before current half-year disclosure deadline",
+			now:         time.Date(2026, time.August, 31, 23, 59, 0, 0, marketLocation()),
+			wantYear:    2025,
+			wantQuarter: 2,
+		},
+		{
+			name:        "after current half-year disclosure deadline",
+			now:         time.Date(2026, time.September, 1, 0, 1, 0, 0, marketLocation()),
+			wantYear:    2026,
+			wantQuarter: 2,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			year, quarter := fundamentalsProbePeriod(tc.now)
+			if year != tc.wantYear || quarter != tc.wantQuarter {
+				t.Fatalf("fundamentalsProbePeriod() = %d-Q%d, want %d-Q%d", year, quarter, tc.wantYear, tc.wantQuarter)
+			}
+		})
+	}
 }
 
 func TestProviderProbeDefaultDailyBarsExcludeCurrentIncompleteDay(t *testing.T) {
@@ -1739,5 +1805,60 @@ func TestFreshnessDomainForCapabilityDoesNotInventNonRealtimePolicies(t *testing
 		if domain, ok := freshnessDomainForCapability(capability); ok {
 			t.Fatalf("capability %q must remain without a generic duration SLA until domain evidence is defined, got %q", capability, domain)
 		}
+	}
+}
+
+func TestApplyProviderProbeCheckStatusIncludesCheckResults(t *testing.T) {
+	tests := []struct {
+		name       string
+		baseStatus string
+		check      string
+		want       string
+	}{
+		{name: "passed checks preserve success", baseStatus: "success", check: "passed", want: "success"},
+		{name: "failed check fails batch", baseStatus: "success", check: "failed", want: "failed"},
+		{name: "degraded check degrades batch", baseStatus: "success", check: "degraded", want: "degraded"},
+		{name: "skipped check cannot claim success", baseStatus: "success", check: "skipped", want: "degraded"},
+		{name: "unconfigured check cannot claim success", baseStatus: "success", check: "not_configured", want: "degraded"},
+		{name: "unsupported check cannot claim success", baseStatus: "success", check: "not_supported", want: "degraded"},
+		{name: "failed check overrides not configured batch", baseStatus: "not_configured", check: "failed", want: "failed"},
+		{name: "passed check preserves not configured batch", baseStatus: "not_configured", check: "passed", want: "not_configured"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			run := &model.ProviderProbeRun{
+				Status:       tc.baseStatus,
+				CheckResults: []model.ProviderProbeCheckResult{{Check: "quality", Status: tc.check}},
+			}
+			applyProviderProbeCheckStatus(run)
+			if run.Status != tc.want {
+				t.Fatalf("overall status = %q, want %q", run.Status, tc.want)
+			}
+		})
+	}
+}
+
+func TestProviderProbeStorageFailureFailsBatchWithoutStorageCheck(t *testing.T) {
+	db, err := sql.Open("mysql", "probe:probe@tcp(127.0.0.1:3306)/probe")
+	if err != nil {
+		t.Fatalf("open test database handle: %v", err)
+	}
+	store, err := repository.NewWithBorrowedDB(db)
+	if err != nil {
+		_ = db.Close()
+		t.Fatalf("create borrowed repository: %v", err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatalf("close test database handle: %v", err)
+	}
+	ds := NewWithCapabilities(nil, nil, nil, cache.NewDisabled(), store, time.Second, time.Second, 120, 2000, ResilienceConfig{}, nil)
+	run, err := ds.ProbeProviderCapabilitiesWithOptions(context.Background(), ProviderProbeOptions{
+		Scope: "all", Capabilities: []string{"quote"}, Checks: []string{"quality"}, TimeoutSeconds: 5,
+	})
+	if !errors.Is(err, ErrProviderProbePersistence) {
+		t.Fatalf("persistence failure must be typed: run=%+v err=%v", run, err)
+	}
+	if run == nil || run.Persisted || run.Status != "failed" {
+		t.Fatalf("failed persistence must clear persisted and fail the batch even when storage check was not requested: %+v", run)
 	}
 }
