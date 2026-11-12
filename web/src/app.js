@@ -1748,17 +1748,20 @@ function getQuerySymbol() {
 }
 
 const VIEW_META = Object.freeze({
-  market: { title: "首页" },
-  stocks: { title: "个股行情" },
-  watchlist: { title: "自选股" },
-  research: { title: "个股研究" },
-  data: { title: "数据中心" },
-  tasks: { title: "分析任务" },
-  notifications: { title: "通知中心" },
-  chat: { title: "问股工作台" },
-  screening: { title: "条件选股" },
-  alerts: { title: "告警中心" },
-  settings: { title: "设置中心" }
+  market: { title: "市场总览" }, stocks: { title: "个股行情" },
+  watchlist: { title: "自选与观察" }, research: { title: "个股深度研究" },
+  data: { title: "数据中心" }, tasks: { title: "分析任务" },
+  notifications: { title: "通知中心" }, chat: { title: "问股" },
+  screening: { title: "条件选股" }, alerts: { title: "告警" }, settings: { title: "设置中心" }
+});
+const VIEW_NAV_GROUP = Object.freeze({
+  market: "market", stocks: "market", research: "research", chat: "research",
+  screening: "quant", tasks: "tasks", watchlist: "tracking", alerts: "tracking",
+  notifications: "tracking", data: "data", settings: "settings"
+});
+const PRIMARY_NAV_META = Object.freeze({
+  market: "市场观察", research: "研究中心", quant: "量化研究",
+  tasks: "研究任务", tracking: "跟踪中心", data: "数据中心", settings: "系统设置"
 });
 
 const REFRESH_BUTTON_CONTEXT = Object.freeze({
@@ -1847,14 +1850,27 @@ syncRefreshButtonContext();
   document.querySelectorAll(".view").forEach((section) => {
     section.hidden = section.id !== nextView + "-view";
   });
-  document.querySelectorAll(".nav-link, .workspace-tab").forEach((button) => {
+  const activeGroup = VIEW_NAV_GROUP[nextView] || "market";
+  document.querySelectorAll(".nav-link:not(.primary-nav-link), .workspace-tab").forEach((button) => {
     const active = button.dataset.view === nextView;
     button.classList.toggle("active", active);
     if (active) button.setAttribute("aria-current", "page");
     else button.removeAttribute("aria-current");
   });
+  document.querySelectorAll(".primary-nav-link").forEach((button) => {
+    const active = button.dataset.navPrimary === activeGroup;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-expanded", String(active));
+    if (active) button.setAttribute("aria-current", "location");
+    else button.removeAttribute("aria-current");
+    const group = button.closest(".nav-group");
+    group?.classList.toggle("is-active", active);
+    const submenu = group?.querySelector(".nav-subnav");
+    if (submenu) submenu.hidden = !active;
+  });
   const title = VIEW_META[nextView].title;
-  setText("#breadcrumb-current", title);
+  const primaryTitle = PRIMARY_NAV_META[activeGroup] || PRIMARY_NAV_META.market;
+  setText("#breadcrumb-current", primaryTitle === title ? title : primaryTitle + " / " + title);
   setText("#view-title", title);
   document.title = title + " · Stock Data Console";
   if (previousView !== nextView) {
@@ -5538,9 +5554,15 @@ renderAlertCollection({ supported: false }, "attempts", "[data-alert-delivery-st
 renderRecentTasks();
 renderWatchlist();
 configureDateInputs();
-// 每次重新进入应用都从首页开始；任务引用仍保留，但不强制跳转到运行流。
-window.history.replaceState(null, "", window.location.pathname + window.location.search);
-setView("market", { updateHash: false, refreshData: false });
+// 保留旧 view hash 深链；未知值回退首页，market-data 作为历史别名归一到 market。
+const requestedInitialView = window.location.hash.slice(1);
+const initialView = requestedInitialView === "market-data"
+  ? "market"
+  : (Object.hasOwn(VIEW_META, requestedInitialView) ? requestedInitialView : "market");
+if (window.location.hash !== "#" + initialView) {
+  window.history.replaceState(null, "", window.location.pathname + window.location.search + "#" + initialView);
+}
+setView(initialView, { updateHash: false, refreshData: true });
 syncSettingsThemeButtons(readTheme());
 void refreshServices();
-void refreshMarketWorkspace();
+if (initialView === "market") void refreshMarketWorkspace();
