@@ -1,8 +1,6 @@
 name: Live provider probe
 
 on:
-  # 功能分支未进入默认分支，workflow_dispatch 在 GitHub 页面不可用。
-  # 通过仅监听本分支该工作流文件的 push，并用提交信息中的 include 标记选择专项探测。
   push:
     branches:
       - feat/full-go-data-providers-api-switch
@@ -13,43 +11,6 @@ on:
       - ".env.example"
       - "go.mod"
       - "go.sum"
-  workflow_dispatch:
-    inputs:
-      quote_symbol:
-        description: "A-share symbol for real-time quote probes, e.g. 600519.SH"
-        required: false
-        default: "600519.SH"
-        type: string
-      daily_symbol:
-        description: "A-share symbol for daily-bar probes, e.g. 600036.SH"
-        required: false
-        default: "600036.SH"
-        type: string
-      include_mx:
-        description: "Make two quota-sensitive MX_API live queries (chip distribution and capital flow)"
-        required: false
-        default: false
-        type: boolean
-      include_netease:
-        description: "Retry optional NetEase quote and historical CSV endpoints"
-        required: false
-        default: false
-        type: boolean
-      include_hithink:
-        description: "Probe Tonghuashun capabilities using the HITHINK_FINANCE_API_KEY repository secret"
-        required: false
-        default: false
-        type: boolean
-      include_tushare:
-        description: "Probe Tushare capabilities using the TUSHARE_TOKEN repository secret"
-        required: false
-        default: false
-        type: boolean
-      include_tickflow:
-        description: "Probe TickFlow capabilities using the TICKFLOW_API_KEY repository secret"
-        required: false
-        default: false
-        type: boolean
   pull_request:
     paths:
       - ".github/workflows/live-provider-smoke.yml"
@@ -58,8 +19,18 @@ on:
       - ".env.example"
       - "go.mod"
       - "go.sum"
-      - "go-core/**"
-      - ".env.example"
+  workflow_dispatch:
+    inputs:
+      quote_symbol:
+        description: "A-share symbol for real-time quote probes"
+        required: false
+        default: "600519.SH"
+        type: string
+      daily_symbol:
+        description: "A-share symbol for daily-bar probes"
+        required: false
+        default: "600036.SH"
+        type: string
 
 permissions:
   contents: read
@@ -68,8 +39,8 @@ jobs:
   live-provider-probe:
     name: Probe real public provider responses
     runs-on: ubuntu-latest
-    timeout-minutes: 10
-    # Provider networks can rate-limit or block hosted runners; this diagnostic must not gate normal CI.
+    timeout-minutes: 15
+    # Provider networks may rate-limit or block hosted runners; live diagnostics do not gate regular CI.
     continue-on-error: true
     services:
       mariadb:
@@ -91,7 +62,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: "1.23.x"
-      - name: Query market-data providers and capture sanitized responses
+      - name: Probe public market-data providers
         env:
           MARKET_DATA_LIVE_PROVIDER_TESTS: ${{ (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && contains(github.event.head_commit.message, '[include_public]'))) && '1' || '0' }}
           MARKET_DATA_LIVE_PUBLIC_DAILY_ONLY: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[public_daily_only]') && '1' || '0' }}
@@ -118,48 +89,22 @@ jobs:
           MARKET_DATA_HITHINK_BASE_URL: https://fuyao.aicubes.cn
           MARKET_DATA_MX_API_KEY: ${{ secrets.MX_APIKEY }}
           MARKET_DATA_MX_API_URL: https://mkapi2.dfcfs.com/finskillshub/api/claw/query
-        working-directory: .
-        run: go test -run '^TestLiveProviderProbe$|^TestLiveProviderProbeQuarterlyFundamentals$|^TestLiveHithinkCapabilities$|^TestLiveTushareCapabilities$|^TestLiveTickFlowCapabilities
-      - name: Print market-data probe report
-        if: always()
-        run: |
-          if [[ -f live-provider-report.json ]]; then
-            cat live-provider-report.json
-          else
-            echo "No market-data report file was produced; inspect the probe step logs."
-          fi
-      - name: Upload market-data report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: live-provider-report
-          path: live-provider-report.json
-          if-no-files-found: warn
-      - name: Run production historical Probe through the service diagnostic chain
+        run: go test -run '^TestLiveProviderProbe$|^TestLiveProviderProbeQuarterlyFundamentals$|^TestLiveHithinkCapabilities$|^TestLiveTushareCapabilities$|^TestLiveTickFlowCapabilities$' -count=1 -v ./internal/marketdata/provider
+      - name: Probe historical Provider service and MariaDB persistence
         if: always() && github.event_name == 'push' && contains(github.event.head_commit.message, '[historical_service_probe]')
         env:
           MARKET_DATA_LIVE_HISTORICAL_PROBE: "1"
           LIVE_HISTORICAL_PROBE_REPORT_PATH: ${{ github.workspace }}/live-historical-probe-report.json
           MARKET_DATA_TEST_MYSQL_DSN: "root:market-data-ci@tcp(127.0.0.1:3306)/market_data_probe?parseTime=true&loc=UTC"
           MARKET_DATA_TUSHARE_TOKEN: ${{ secrets.TUSHARE_TOKEN }}
-        working-directory: .
         run: go test -run TestLiveHistoricalProviderProbe -count=1 -v ./internal/marketdata/service
-      - name: Print production historical Probe report
-        if: always()
-        run: |
-          if [[ -f live-historical-probe-report.json ]]; then
-            cat live-historical-probe-report.json
-          else
-            echo "No production historical Probe report was produced."
-          fi
-      - name: Upload production historical Probe report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: live-historical-probe-report
-          path: live-historical-probe-report.json
-          if-no-files-found: warn
-      - name: Run Tushare historical adjustment-factor and corporate-action evidence probe
+      - name: Probe BaoStock historical adjustment-factor consistency
+        if: always() && github.event_name == 'push' && contains(github.event.head_commit.message, '[historical_baostock_factors]')
+        env:
+          MARKET_DATA_LIVE_BAOSTOCK_ADJUSTMENT_TESTS: "1"
+          LIVE_BAOSTOCK_ADJUSTMENT_REPORT_PATH: ${{ github.workspace }}/live-baostock-adjustment-report.json
+        run: go test -run TestLiveBaoStockAdjustmentFactorConsistency -count=1 -v ./internal/marketdata/baostock
+      - name: Probe Tushare historical adjustment factors and corporate actions
         if: always() && github.event_name == 'push' && contains(github.event.head_commit.message, '[historical_tushare_adjustment]')
         env:
           MARKET_DATA_LIVE_TUSHARE_ADJUSTMENT_TESTS: "1"
@@ -168,46 +113,8 @@ jobs:
           LIVE_PROBE_DAILY_END_DATE: "2025-07-17"
           LIVE_PROBE_DAILY_SYMBOLS: "600036.SH,002982.SZ"
           LIVE_TUSHARE_ADJUSTMENT_REPORT_PATH: ${{ github.workspace }}/live-tushare-adjustment-report.json
-        working-directory: .
         run: go test -run TestLiveTushareHistoricalAdjustmentEvidence -count=1 -v ./internal/marketdata/provider
-      - name: Print Tushare historical adjustment report
-        if: always()
-        run: |
-          if [[ -f live-tushare-adjustment-report.json ]]; then
-            cat live-tushare-adjustment-report.json
-          else
-            echo "No Tushare historical adjustment report was produced."
-          fi
-      - name: Upload Tushare historical adjustment report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: live-tushare-adjustment-report
-          path: live-tushare-adjustment-report.json
-          if-no-files-found: warn
-      - name: Run BaoStock historical adjustment-factor consistency probe
-        if: always() && github.event_name == 'push' && contains(github.event.head_commit.message, '[historical_baostock_factors]')
-        env:
-          MARKET_DATA_LIVE_BAOSTOCK_ADJUSTMENT_TESTS: "1"
-          LIVE_BAOSTOCK_ADJUSTMENT_REPORT_PATH: ${{ github.workspace }}/live-baostock-adjustment-report.json
-        working-directory: .
-        run: go test -run TestLiveBaoStockAdjustmentFactorConsistency -count=1 -v ./internal/marketdata/baostock
-      - name: Print BaoStock historical adjustment report
-        if: always()
-        run: |
-          if [[ -f live-baostock-adjustment-report.json ]]; then
-            cat live-baostock-adjustment-report.json
-          else
-            echo "No BaoStock historical adjustment report was produced."
-          fi
-      - name: Upload BaoStock historical adjustment report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: live-baostock-adjustment-report
-          path: live-baostock-adjustment-report.json
-          if-no-files-found: warn
-      - name: Run Pytdx historical daily-bar and GBBQ probe
+      - name: Probe Pytdx historical daily bars and corporate actions
         if: always() && github.event_name == 'push' && contains(github.event.head_commit.message, '[historical_pytdx_gbbq]')
         env:
           MARKET_DATA_LIVE_PYTDX_HISTORICAL_TESTS: "1"
@@ -216,306 +123,32 @@ jobs:
           LIVE_PROBE_DAILY_SYMBOLS: "600036.SH,002982.SZ"
           LIVE_PYTDX_HISTORICAL_REPORT_PATH: ${{ github.workspace }}/live-pytdx-historical-report.json
           LIVE_PYTDX_BAOSTOCK_EVENT_REPORT_PATH: ${{ github.workspace }}/live-pytdx-baostock-event-report.json
-        working-directory: .
         run: go test -run 'TestLivePytdxHistoricalDailyBars|TestLivePytdxBaoStockCorporateActionConsistency' -count=1 -v ./internal/marketdata/provider
-      - name: Print Pytdx historical report
-        if: always()
-        run: |
-          if [[ -f live-pytdx-historical-report.json ]]; then
-            cat live-pytdx-historical-report.json
-          else
-            echo "No Pytdx historical report was produced."
-          fi
-      - name: Upload Pytdx historical report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: live-pytdx-historical-report
-          path: live-pytdx-historical-report.json
-          if-no-files-found: warn
-      - name: Run Tushare intraday suspension and same-day daily-bar evidence probe
+      - name: Probe Tushare intraday suspension samples
         if: always() && github.event_name == 'push' && contains(github.event.head_commit.message, '[historical_tushare_suspension]')
         env:
           MARKET_DATA_LIVE_TUSHARE_SUSPENSION_TESTS: "1"
           MARKET_DATA_TUSHARE_TOKEN: ${{ secrets.TUSHARE_TOKEN }}
           LIVE_TUSHARE_SUSPENSION_REPORT_PATH: ${{ github.workspace }}/live-tushare-suspension-report.json
-        working-directory: .
         run: go test -run '^TestLiveTushareIntradaySuspensionSamples$' -count=1 -v ./internal/marketdata/provider
-      - name: Run Pytdx daily bars for official intraday-suspension dates
+      - name: Probe Pytdx daily bars on official intraday-suspension dates
         if: always() && github.event_name == 'push' && contains(github.event.head_commit.message, '[historical_intraday_daily_bars]')
         env:
           MARKET_DATA_LIVE_PYTDX_OFFICIAL_SUSPENSION_TESTS: "1"
           LIVE_PYTDX_OFFICIAL_SUSPENSION_REPORT_PATH: ${{ github.workspace }}/live-pytdx-official-suspension-report.json
-        working-directory: .
         run: go test -run '^TestLivePytdxOfficialIntradaySuspensionDailyBars$' -count=1 -v ./internal/marketdata/provider
-      - name: Print Pytdx official intraday-suspension daily-bar report
-        if: always()
-        run: |
-          if [[ -f live-pytdx-official-suspension-report.json ]]; then
-            cat live-pytdx-official-suspension-report.json
-          else
-            echo "No Pytdx official suspension daily-bar report was produced."
-          fi
-      - name: Upload Pytdx official intraday-suspension daily-bar report
+      - name: Upload sanitized live Provider reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: pytdx-official-suspension-daily-report
-          path: live-pytdx-official-suspension-report.json
-          if-no-files-found: warn
-      - name: Print Tushare intraday suspension report
-        if: always()
-        run: |
-          if [[ -f live-tushare-suspension-report.json ]]; then
-            cat live-tushare-suspension-report.json
-          else
-            echo "No Tushare intraday suspension report was produced."
-          fi
-      - name: Upload Tushare intraday suspension report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: live-tushare-suspension-report
-          path: live-tushare-suspension-report.json
-          if-no-files-found: warn
-      - name: Print Pytdx/BaoStock corporate-action event report
-        if: always()
-        run: |
-          if [[ -f live-pytdx-baostock-event-report.json ]]; then
-            cat live-pytdx-baostock-event-report.json
-          else
-            echo "No Pytdx/BaoStock event report was produced."
-          fi
-      - name: Upload Pytdx/BaoStock corporate-action event report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: live-pytdx-baostock-event-report
-          path: live-pytdx-baostock-event-report.json
-          if-no-files-found: warn
-      - name: Probe native news search when credentials are available
-        env:
-          GO_NATIVE_NEWS_LIVE_TESTS: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[include_news]') && '1' || '0' }}
-          GO_NEWS_LIVE_REPORT_PATH: ${{ github.workspace }}/live-news-report.json
-          BOCHA_API_KEYS: ${{ secrets.BOCHA_API_KEYS }}
-          SEARXNG_BASE_URLS: ${{ secrets.SEARXNG_BASE_URLS }}
-          NEWS_MAX_AGE_DAYS: "3"
-          NEWS_STRATEGY_PROFILE: short
-          NEWS_SEARCH_TIMEOUT_SECONDS: "10"
-        working-directory: go-core
-        run: go test -run '^TestLiveNativeNewsSearch$' -count=1 -v ./internal/adapters/newssearch
-      - name: Print native news report
-        if: always()
-        run: |
-          if [[ -f live-news-report.json ]]; then
-            cat live-news-report.json
-          else
-            echo "No native-news report file was produced; inspect the probe step logs."
-          fi
-      - name: Upload native-news report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: live-news-report
-          path: live-news-report.json
-          if-no-files-found: warn
- -count=1 -v ./internal/marketdata/provider
-      - name: Print market-data probe report
-        if: always()
-        run: |
-          if [[ -f live-provider-report.json ]]; then
-            cat live-provider-report.json
-          else
-            echo "No market-data report file was produced; inspect the probe step logs."
-          fi
-      - name: Upload market-data report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: live-provider-report
-          path: live-provider-report.json
-          if-no-files-found: warn
-      - name: Run production historical Probe through the service diagnostic chain
-        if: always() && github.event_name == 'push' && contains(github.event.head_commit.message, '[historical_service_probe]')
-        env:
-          MARKET_DATA_LIVE_HISTORICAL_PROBE: "1"
-          LIVE_HISTORICAL_PROBE_REPORT_PATH: ${{ github.workspace }}/live-historical-probe-report.json
-          MARKET_DATA_TEST_MYSQL_DSN: "root:market-data-ci@tcp(127.0.0.1:3306)/market_data_probe?parseTime=true&loc=UTC"
-          MARKET_DATA_TUSHARE_TOKEN: ${{ secrets.TUSHARE_TOKEN }}
-        working-directory: .
-        run: go test -run TestLiveHistoricalProviderProbe -count=1 -v ./internal/marketdata/service
-      - name: Print production historical Probe report
-        if: always()
-        run: |
-          if [[ -f live-historical-probe-report.json ]]; then
-            cat live-historical-probe-report.json
-          else
-            echo "No production historical Probe report was produced."
-          fi
-      - name: Upload production historical Probe report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: live-historical-probe-report
-          path: live-historical-probe-report.json
-          if-no-files-found: warn
-      - name: Run Tushare historical adjustment-factor and corporate-action evidence probe
-        if: always() && github.event_name == 'push' && contains(github.event.head_commit.message, '[historical_tushare_adjustment]')
-        env:
-          MARKET_DATA_LIVE_TUSHARE_ADJUSTMENT_TESTS: "1"
-          MARKET_DATA_TUSHARE_TOKEN: ${{ secrets.TUSHARE_TOKEN }}
-          LIVE_PROBE_DAILY_START_DATE: "2025-07-07"
-          LIVE_PROBE_DAILY_END_DATE: "2025-07-17"
-          LIVE_PROBE_DAILY_SYMBOLS: "600036.SH,002982.SZ"
-          LIVE_TUSHARE_ADJUSTMENT_REPORT_PATH: ${{ github.workspace }}/live-tushare-adjustment-report.json
-        working-directory: .
-        run: go test -run TestLiveTushareHistoricalAdjustmentEvidence -count=1 -v ./internal/marketdata/provider
-      - name: Print Tushare historical adjustment report
-        if: always()
-        run: |
-          if [[ -f live-tushare-adjustment-report.json ]]; then
-            cat live-tushare-adjustment-report.json
-          else
-            echo "No Tushare historical adjustment report was produced."
-          fi
-      - name: Upload Tushare historical adjustment report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: live-tushare-adjustment-report
-          path: live-tushare-adjustment-report.json
-          if-no-files-found: warn
-      - name: Run BaoStock historical adjustment-factor consistency probe
-        if: always() && github.event_name == 'push' && contains(github.event.head_commit.message, '[historical_baostock_factors]')
-        env:
-          MARKET_DATA_LIVE_BAOSTOCK_ADJUSTMENT_TESTS: "1"
-          LIVE_BAOSTOCK_ADJUSTMENT_REPORT_PATH: ${{ github.workspace }}/live-baostock-adjustment-report.json
-        working-directory: .
-        run: go test -run TestLiveBaoStockAdjustmentFactorConsistency -count=1 -v ./internal/marketdata/baostock
-      - name: Print BaoStock historical adjustment report
-        if: always()
-        run: |
-          if [[ -f live-baostock-adjustment-report.json ]]; then
-            cat live-baostock-adjustment-report.json
-          else
-            echo "No BaoStock historical adjustment report was produced."
-          fi
-      - name: Upload BaoStock historical adjustment report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: live-baostock-adjustment-report
-          path: live-baostock-adjustment-report.json
-          if-no-files-found: warn
-      - name: Run Pytdx historical daily-bar and GBBQ probe
-        if: always() && github.event_name == 'push' && contains(github.event.head_commit.message, '[historical_pytdx_gbbq]')
-        env:
-          MARKET_DATA_LIVE_PYTDX_HISTORICAL_TESTS: "1"
-          LIVE_PROBE_DAILY_START_DATE: "2025-07-07"
-          LIVE_PROBE_DAILY_END_DATE: "2025-07-17"
-          LIVE_PROBE_DAILY_SYMBOLS: "600036.SH,002982.SZ"
-          LIVE_PYTDX_HISTORICAL_REPORT_PATH: ${{ github.workspace }}/live-pytdx-historical-report.json
-          LIVE_PYTDX_BAOSTOCK_EVENT_REPORT_PATH: ${{ github.workspace }}/live-pytdx-baostock-event-report.json
-        working-directory: .
-        run: go test -run 'TestLivePytdxHistoricalDailyBars|TestLivePytdxBaoStockCorporateActionConsistency' -count=1 -v ./internal/marketdata/provider
-      - name: Print Pytdx historical report
-        if: always()
-        run: |
-          if [[ -f live-pytdx-historical-report.json ]]; then
-            cat live-pytdx-historical-report.json
-          else
-            echo "No Pytdx historical report was produced."
-          fi
-      - name: Upload Pytdx historical report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: live-pytdx-historical-report
-          path: live-pytdx-historical-report.json
-          if-no-files-found: warn
-      - name: Run Tushare intraday suspension and same-day daily-bar evidence probe
-        if: always() && github.event_name == 'push' && contains(github.event.head_commit.message, '[historical_tushare_suspension]')
-        env:
-          MARKET_DATA_LIVE_TUSHARE_SUSPENSION_TESTS: "1"
-          MARKET_DATA_TUSHARE_TOKEN: ${{ secrets.TUSHARE_TOKEN }}
-          LIVE_TUSHARE_SUSPENSION_REPORT_PATH: ${{ github.workspace }}/live-tushare-suspension-report.json
-        working-directory: .
-        run: go test -run '^TestLiveTushareIntradaySuspensionSamples$' -count=1 -v ./internal/marketdata/provider
-      - name: Run Pytdx daily bars for official intraday-suspension dates
-        if: always() && github.event_name == 'push' && contains(github.event.head_commit.message, '[historical_intraday_daily_bars]')
-        env:
-          MARKET_DATA_LIVE_PYTDX_OFFICIAL_SUSPENSION_TESTS: "1"
-          LIVE_PYTDX_OFFICIAL_SUSPENSION_REPORT_PATH: ${{ github.workspace }}/live-pytdx-official-suspension-report.json
-        working-directory: .
-        run: go test -run '^TestLivePytdxOfficialIntradaySuspensionDailyBars$' -count=1 -v ./internal/marketdata/provider
-      - name: Print Pytdx official intraday-suspension daily-bar report
-        if: always()
-        run: |
-          if [[ -f live-pytdx-official-suspension-report.json ]]; then
-            cat live-pytdx-official-suspension-report.json
-          else
-            echo "No Pytdx official suspension daily-bar report was produced."
-          fi
-      - name: Upload Pytdx official intraday-suspension daily-bar report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: pytdx-official-suspension-daily-report
-          path: live-pytdx-official-suspension-report.json
-          if-no-files-found: warn
-      - name: Print Tushare intraday suspension report
-        if: always()
-        run: |
-          if [[ -f live-tushare-suspension-report.json ]]; then
-            cat live-tushare-suspension-report.json
-          else
-            echo "No Tushare intraday suspension report was produced."
-          fi
-      - name: Upload Tushare intraday suspension report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: live-tushare-suspension-report
-          path: live-tushare-suspension-report.json
-          if-no-files-found: warn
-      - name: Print Pytdx/BaoStock corporate-action event report
-        if: always()
-        run: |
-          if [[ -f live-pytdx-baostock-event-report.json ]]; then
-            cat live-pytdx-baostock-event-report.json
-          else
-            echo "No Pytdx/BaoStock event report was produced."
-          fi
-      - name: Upload Pytdx/BaoStock corporate-action event report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: live-pytdx-baostock-event-report
-          path: live-pytdx-baostock-event-report.json
-          if-no-files-found: warn
-      - name: Probe native news search when credentials are available
-        env:
-          GO_NATIVE_NEWS_LIVE_TESTS: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[include_news]') && '1' || '0' }}
-          GO_NEWS_LIVE_REPORT_PATH: ${{ github.workspace }}/live-news-report.json
-          BOCHA_API_KEYS: ${{ secrets.BOCHA_API_KEYS }}
-          SEARXNG_BASE_URLS: ${{ secrets.SEARXNG_BASE_URLS }}
-          NEWS_MAX_AGE_DAYS: "3"
-          NEWS_STRATEGY_PROFILE: short
-          NEWS_SEARCH_TIMEOUT_SECONDS: "10"
-        working-directory: go-core
-        run: go test -run '^TestLiveNativeNewsSearch$' -count=1 -v ./internal/adapters/newssearch
-      - name: Print native news report
-        if: always()
-        run: |
-          if [[ -f live-news-report.json ]]; then
-            cat live-news-report.json
-          else
-            echo "No native-news report file was produced; inspect the probe step logs."
-          fi
-      - name: Upload native-news report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: live-news-report
-          path: live-news-report.json
-          if-no-files-found: warn
+          name: live-provider-reports
+          path: |
+            live-provider-report.json
+            live-historical-probe-report.json
+            live-baostock-adjustment-report.json
+            live-tushare-adjustment-report.json
+            live-pytdx-historical-report.json
+            live-pytdx-baostock-event-report.json
+            live-tushare-suspension-report.json
+            live-pytdx-official-suspension-report.json
+          if-no-files-found: ignore
