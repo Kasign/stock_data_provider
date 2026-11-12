@@ -841,8 +841,8 @@ func TestClaimRejectsEvidenceWithMismatchedStance(t *testing.T) {
 		InvalidationConditions: []string{"预测持续下调"}, Status: string(researchclaim.StatusProposed), Limitations: []string{},
 	}
 	for _, tc := range []struct {
-		name string
-		supporting researchevidence.Stance
+		name          string
+		supporting    researchevidence.Stance
 		contradicting researchevidence.Stance
 	}{
 		{name: "support reference cannot point to contradiction evidence", supporting: researchevidence.StanceContradicts, contradicting: researchevidence.StanceContradicts},
@@ -866,5 +866,41 @@ func TestClaimRejectsEvidenceWithMismatchedStance(t *testing.T) {
 				t.Fatal("Claim with mismatched Evidence stance must not be persisted")
 			}
 		})
+	}
+}
+
+func TestUpdateClaimRejectsEvidenceWithMismatchedStance(t *testing.T) {
+	now := time.Date(2026, 11, 12, 3, 0, 0, 0, time.UTC)
+	previous := researchclaim.Claim{
+		ClaimID: "clm_existing", ClaimVersion: 1, Statement: "待验证的盈利改善判断",
+		EpistemicType: researchclaim.EpistemicHypothesis, ScopeRefs: []string{"security:600000"},
+		SystemAsOf: now.Add(-time.Minute), SupportingEvidenceRefs: []string{},
+		ContradictingEvidenceRefs: []string{}, RequiredDataRefs: []string{},
+		ValidationMethod: stringPointer("比较预测修订"), ExpectedObservation: stringPointer("预测上调"),
+		InvalidationConditions: []string{"预测持续下调"}, Status: researchclaim.StatusProposed, Limitations: []string{},
+	}
+	repo := &claimRepoFake{value: previous}
+	evidence := &evidenceRepoFake{values: map[string]researchevidence.Evidence{
+		"ev_contradict": evidenceFixtureWithStance(t, "ev_contradict", now, researchevidence.StanceContradicts),
+	}}
+	service, err := NewServiceWithClaims(&contextRepoFake{}, evidence, repo, &authorizerFake{}, nil, &fixedIDs{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	revision := CreateClaimCommand{
+		Statement: "盈利改善判断进入验证阶段", EpistemicType: string(researchclaim.EpistemicHypothesis),
+		ScopeRefs: []string{"security:600000"}, SystemAsOf: now,
+		SupportingEvidenceRefs: []string{"ev_contradict"}, ContradictingEvidenceRefs: []string{},
+		RequiredDataRefs: []string{}, ValidationMethod: stringPointer("比较预测修订"),
+		ExpectedObservation: stringPointer("预测上调"), InvalidationConditions: []string{"预测持续下调"},
+		Status: string(researchclaim.StatusTesting), Limitations: []string{},
+	}
+	if _, err := service.UpdateClaim(context.Background(), UpdateClaimCommand{
+		ClaimID: previous.ClaimID, ExpectedVersion: previous.ClaimVersion, Revision: revision,
+	}); err == nil {
+		t.Fatal("UpdateClaim must reject Evidence whose stance conflicts with its reference list")
+	}
+	if repo.appended || repo.value.ClaimVersion != previous.ClaimVersion {
+		t.Fatal("Claim with mismatched Evidence stance must not be appended")
 	}
 }
