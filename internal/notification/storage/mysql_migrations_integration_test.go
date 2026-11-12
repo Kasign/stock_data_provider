@@ -32,7 +32,7 @@ func TestNotificationMariaDBMigrationOrderAndIdempotencyIntegration(t *testing.T
 			t.Fatalf("migration order is not contiguous: index=%d version=%d expected=%d", index, migration.Version, expected)
 		}
 	}
-	if _, err := platformstorage.ApplyMigrations(ctx, db, "notification", migrations); err != nil {
+	if err := platformstorage.ApplyMigrations(ctx, db, "notification", migrations); err != nil {
 		t.Fatalf("first migration application failed: %v", err)
 	}
 	if _, err := platformstorage.ApplyMigrations(ctx, db, "notification", migrations); err != nil {
