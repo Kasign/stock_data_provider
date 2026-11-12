@@ -82,11 +82,19 @@ func (t *activeConnectionTracker) observe(conn net.Conn, state http.ConnState) {
 	}
 }
 
-func (t *activeConnectionTracker) wait() {
+func (t *activeConnectionTracker) wait(ctx context.Context) error {
+	if ctx == nil {
+		return errors.New("connection drain context is required")
+	}
 	t.mu.Lock()
 	idle := t.idle
 	t.mu.Unlock()
-	<-idle
+	select {
+	case <-idle:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 func (c *httpServerComponent) Name() string { return "http-server" }
@@ -150,7 +158,9 @@ func (c *httpServerComponent) Stop(ctx context.Context) error {
 	// Serve 退出只代表 Listener 已关闭；Close 不等待已进入的 Handler。
 	// 必须等活动连接进入 Idle/Closed 后才能让 Bootstrap 释放共享 DB/Redis。
 	<-c.done
-	c.connections.wait()
+	if err := c.connections.wait(ctx); err != nil {
+		shutdownErr = errors.Join(shutdownErr, fmt.Errorf("wait for active HTTP handlers: %w", err))
+	}
 	if serveErr := c.Result(); serveErr != nil {
 		shutdownErr = errors.Join(shutdownErr, serveErr)
 	}
