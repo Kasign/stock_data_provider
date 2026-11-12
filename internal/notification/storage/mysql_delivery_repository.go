@@ -295,8 +295,8 @@ func (r *MySQLDeliveryRepository) ClaimDue(
 		return application.DeliveryClaim{}, false, err
 	}
 	result, err := tx.ExecContext(ctx, `UPDATE notification_deliveries
-		SET status = ?, version = ?, updated_at = ?, lease_worker_id = ?,
-		lease_expires_at = ?, fencing_token = fencing_token + 1
+		SET status = ?, version = ?, updated_at = ?, next_attempt_at = NULL,
+		lease_worker_id = ?, lease_expires_at = ?, fencing_token = fencing_token + 1
 		WHERE delivery_id = ? AND version = ? AND fencing_token = ?`,
 		string(next.Status), next.Version, next.UpdatedAt.UTC(), workerID, effectiveExpiry,
 		next.DeliveryID, record.Version, currentToken)

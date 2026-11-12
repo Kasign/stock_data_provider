@@ -216,7 +216,7 @@ DeliveryRecord 领域模型与纯函数迁移测试、DeliveryRepository Port/Fa
 |---|---|---|
 | Create(delivery) | 已校验 DeliveryPlan + 显式 max_attempts/deadline_at + Clock | 只接受 queued、version=1、attempt_count=0 的初始快照；DeliveryID 唯一 |
 | Get(delivery_id) | Delivery 稳定 ID | 返回深拷贝快照；不存在时 found=false，不伪造空记录 |
-| ClaimDue(worker_id, now, lease_expires_at) | Dispatcher Worker 身份 + 注入 Clock + 显式租约时长 | 原子选择 queued 或到期 retry_wait；同时迁移 sending、追加状态事件、分配单调 fencing_token；不增加 attempt_count，因为尚未证明已发起渠道调用 |
+| ClaimDue(worker_id, now, lease_expires_at) | Dispatcher Worker 身份 + 注入 Clock + 显式租约时长 | 原子选择 queued 或到期 retry_wait；同时迁移 sending、追加状态事件、分配单调 fencing_token；不增加 attempt_count，因为尚未证明已发起渠道调用 | Claim retry_wait 时必须同时清空 next_attempt_at，保持该字段仅属于 retry_wait 状态。
 | DeliveryLease.worker_id | Worker 注册/启动时分配的稳定引用 | 不透明 Worker 标识，不包含主机敏感信息 |
 | DeliveryLease.fencing_token | Repository 对每个 Delivery 单调递增计数 | 旧 token 永久失效；不可由调用方指定或回退 |
 | DeliveryLease.expires_at | Claim 时的 UTC now + 显式 lease duration | 仅用于当前租约有效性判定；不得晚于 Delivery.deadline_at；过期后不允许旧 Worker 写入 |
