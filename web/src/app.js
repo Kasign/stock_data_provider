@@ -1860,13 +1860,17 @@ syncRefreshButtonContext();
   document.querySelectorAll(".primary-nav-link").forEach((button) => {
     const active = button.dataset.navPrimary === activeGroup;
     button.classList.toggle("active", active);
-    button.setAttribute("aria-expanded", String(active));
     if (active) button.setAttribute("aria-current", "location");
     else button.removeAttribute("aria-current");
     const group = button.closest(".nav-group");
     group?.classList.toggle("is-active", active);
     const submenu = group?.querySelector(".nav-subnav");
-    if (submenu) submenu.hidden = !active;
+    if (submenu) {
+      button.setAttribute("aria-expanded", String(active));
+      submenu.hidden = !active;
+    } else {
+      button.removeAttribute("aria-expanded");
+    }
   });
   const title = VIEW_META[nextView].title;
   const primaryTitle = PRIMARY_NAV_META[activeGroup] || PRIMARY_NAV_META.market;
@@ -5132,7 +5136,7 @@ document.querySelectorAll("[data-theme-value]").forEach((button) => {
 });
 document.querySelectorAll(".nav-link, .workspace-tab").forEach((button) => {
   button.addEventListener("click", () => {
-    setView(button.dataset.view);
+    setView(button.dataset.view || button.dataset.navDefaultView);
     setMobileNavigationOpen(false, { restoreFocus: true });
   });
 });
