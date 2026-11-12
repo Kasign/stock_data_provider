@@ -71,7 +71,7 @@ func TestImporterMapsAuthorizedPITNewsRecordToResearchEvidence(t *testing.T) {
 	if len(query.requests) != 1 || research.calls != 1 { t.Fatalf("unexpected calls: query=%d research=%d", len(query.requests), research.calls) }
 	got := research.command.Draft
 	if got.EvidenceType != "reported_fact" || got.SourceOwner != "news" ||
-		got.SourceRef != "news_001" || got.SourceVersion == nil || *got.SourceVersion != "version_001" ||
+		got.SourceRef != "source_001" || got.SourceLocator == nil || *got.SourceLocator != "news_001" || got.SourceVersion == nil || *got.SourceVersion != "version_001" ||
 		got.AvailableAt == nil || got.SystemAsOf != asOf || got.AuthorizationRef != "auth_001" ||
 		got.SubjectRefs == nil || len(got.SubjectRefs) != 0 || got.DerivedFromRefs == nil || len(got.DerivedFromRefs) != 0 {
 		t.Fatalf("unexpected Research Evidence mapping: %+v", got)
@@ -110,7 +110,7 @@ func TestAuthorizerRechecksCurrentNewsAuthorizationAndExactVersion(t *testing.T)
 	version := "version_001"
 	available := asOf.Add(-time.Hour)
 	value := researchevidence.Evidence{
-		EvidenceID: "ev_001", SourceOwner: researchevidence.SourceNews, SourceRef: "news_001", SourceVersion: &version,
+		EvidenceID: "ev_001", SourceOwner: researchevidence.SourceNews, SourceRef: "source_001", SourceVersion: &version, SourceLocator: stringPointer("news_001"),
 		AvailableAt: &available, SystemObservedAt: asOf.Add(-30*time.Minute), SystemAsOf: asOf,
 		ContentLevel: researchevidence.ContentSummary, AuthorizationRef: "auth_historical",
 	}

@@ -28,7 +28,7 @@ Research 不采集新闻、不拥有行情事实、不重算 Quant 指标，不�
 | 任务 | 当前实现与验收 | 未完成边界 |
 |---|---|---|
 | RSC-001 Context | Domain、结构/版本链校验、v1 Golden/Schema Validator、Application Create/Get、SQL Repository；Research 全模块 gofmt、go test、race、vet 已通过 | 消费方 Contract Test、远端引用与授权版本验证 |
-| RSC-002 Evidence | Domain、JCS/SHA-256 指纹、严格 PIT、AuthorizationRef 绑定、Application Add/Get、SQL Repository；本地授权调用边界已测试 | News 生产 Adapter、Owner 当前授权复核与内容读取 TOCTOU、available_at 来源证据及授权续期历史语义 |
+| RSC-002 Evidence | Domain、JCS/SHA-256 指纹、严格 PIT、AuthorizationRef 绑定、Application Add/Get、SQL Repository；新增 Research-owned News Evidence Importer/Authorizer，消费 News `ResearchEvidenceQuery`，固定 Fixture 覆盖来源/版本/授权/PIT 映射与拒绝写入 | News 当前 available_at 仍为 null，真实新闻无法通过严格 PIT 导入；News NEWS-CTR-001 当前授权/TOCTOU 与来源 available_at 证据未完成；授权续期历史留档仍待治理语义 |
 | RSC-003 Event | Domain、SourceTime、版本追加、生命周期、事务 Outbox、Application Create/Update；补齐 time_normalization_rule_version、derived_from_refs 字段及结构校验，并在同一事务内校验精确版本存在性与引用图 | 多来源归并/拆分、News Owner Adapter |
 | RSC-004 实体关联 | 尚未实现 | 等待 Data 提供稳定 Security/Industry 引用、版本/时间语义及公开 Application Port |
 | RSC-005 Claim/Hypothesis | Domain、认识论校验、状态迁移、版本追加、supersedes_version 字段及当前版本头校验、Application、SQL Repository | Evidence/Scope 真实引用解析、真实研究样本 |
@@ -50,7 +50,7 @@ Research 不采集新闻、不拥有行情事实、不重算 Quant 指标，不�
 - 最新代码集成验收为 Integration CI Run [43178908392](https://github.com/Kasign/stock_data_provider/actions/runs/43178908392)，SHA `fdc19b8591223dabccb533389d472713bfecc415`。全仓 gofmt、根模块 go vet/go test、go-core go vet/go test、Compose 配置、WebUI 语法/单测和 WebUI 镜像构建均通过；该 Run 未执行 race，也未配置 Research 专用 MariaDB DSN，不能替代 Research 数据库故障注入验收。
 - 当前 `feat/research` HEAD `18334198edb05990f8952adecd8e74b8b8bf741d` 合入的 `9f12f7e` 仅新增项目级系统接入审查文档；该文档提交未修改业务代码。当前 Research 最近三个提交均为测试修正，已包含在上述成功的集成代码基线中。
 - 本轮代码复核发现并修复 Event.available_at PIT 边界；本次进一步按 RSC-CTR-002 补齐 Event 时间规则版本/派生引用及严格 JSON 字段校验、Claim supersedes_version 及严格 JSON 字段校验、Scenario 闭合条件模型和数值标量类型校验。新改动的 CI 验收状态以对应提交后的 Workflow 为准。
-- 尚无真实 Data/News Owner Adapter 与完整来源证据；跨模块接入及真实数据验收仍未完成。根 Server Migration 注册和 Notification Relay 由 Server 组合根负责。
+- Research 已实现 News 公开 Evidence Query Port 的消费 Adapter，但 News 当前所有可用来源均缺少可验证 available_at，故生产导入会 fail-closed；测试替身只用于契约映射和门禁测试，不产生生产证据。Data 证券/行业主数据引用仍缺公开 Port，DATA-CTR-007 仍为 deferred。根 Server Migration 注册和 Notification Relay 由 Server 组合根负责。
 
 ## 维护规则
 
