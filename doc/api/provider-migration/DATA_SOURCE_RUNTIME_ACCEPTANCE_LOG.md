@@ -1241,3 +1241,26 @@ Go suite 覆盖根模块、go-core、market-data 的格式/测试/race/vet、Mar
   - 首行 `volume=472172.42721306626`，末行 `volume=575236.0558640865`；接口文档定义 volume 单位为股，当前 Data 契约要求非负整数股数。
   - Adapter 拒绝小数股数，不做四舍五入；当前后复权模式不通过。该结果归类为 Provider 数据/字段语义异常，而不是将 volume 校验放宽。
 - CI 状态快照：Go-Python data quality parity Run `43214910262` success；Go Test Suite Run `43214976579` 当时仍在执行 Market Data Race 与 root Go test/race；Market-data MariaDB Migration/PIT persistence Job `131171939942` success；Compose/Docker 与 root-module migration Job skipped。
+
+
+## 70. 2026-11-12 Eastmoney / Tencent 复权基准真实样本核验
+
+- 仓库分支：`feat/full-go-data-providers-api-switch`
+- Live Probe Run：`43216445700`；Job：`131176790740`；测试：`TestLiveEastmoneyTencentAdjustmentReferenceEvidence`。
+- 请求范围：`600519.SH`，`2026-10-13..2026-11-12`；Eastmoney `fqt_1/fqt_2`，Tencent `qfqday/hfqday`。
+- 四组响应均返回 23 条，首末日期均覆盖请求窗口；测试的日 K 结构/范围/重复日期检查通过。
+- 标准化结果：
+  - Eastmoney forward/backward 的 `AdjustmentMethod` 分别为 `eastmoney_fqt_1`、`eastmoney_fqt_2`。
+  - Tencent forward/backward 的 `AdjustmentMethod` 分别为 `tencent_qfqday`、`tencent_hfqday`。
+  - 四组 `AdjustmentRefDate` 均为空。
+- 首日收盘价：
+  - Eastmoney forward：`1274.89`；Tencent forward：`1274.890`。
+  - Eastmoney backward：`8011.70`；Tencent backward：`8978.100`。
+  - Hithink backward 原始样本首日收盘价为 `8978.100`，与 Tencent 一致，但 Hithink 成交量字段另有小数股数问题（见第 69 节）。
+- 原始响应采样：
+  - Eastmoney forward/backward 响应体约 2172/2190 bytes。
+  - Tencent forward/backward 响应体约 3307/3313 bytes。
+  - `liveProbeBodySampleLimit=2048`，四个响应的 `BodyTruncated=true`；采样前缀未显示独立参考日期字段，但无法证明完整响应尾部绝无该字段。
+- 判定：真实数据获取通过；复权参考日期不可用；后复权首日价格差异明显，跨 Provider 结果保持 `not-comparable`。不推断参考日、不填充 `AdjustmentRefDate`，不重复本轮四个请求；下一步只核对官方字段契约或获取完整响应证据。
+
+- CI 状态快照：该测试所在 Live Provider Run `43216445700` success；测试只证明单证券、单窗口真实请求和结构验收通过，不代表复权基准已对齐。当前代码基线 `61c9d009ce37380f364f4a0afe0804ab0c1eaf7a` 的 Go Test Suite Run `43216783357`、Go-Python parity Run `43216744832` 当时仍在执行。
