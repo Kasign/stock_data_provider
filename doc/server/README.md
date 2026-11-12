@@ -370,7 +370,7 @@ Server 不重写模块业务 Handler 的校验和领域错误，不在路由层�
 
 ### SRV-007：Migration 注册与执行
 
-- 状态：进行中（Server Registry 已接入 News、Research、Researchflow、Notification 四个模块 Migration；按 namespace 和版本号稳定排序，执行由 `MIGRATION_ENABLED` 显式开启；只读 Schema 预检要求数据库 namespace/version 集合与当前 Registry 完全一致且状态均为 `applied`。真实 MariaDB 故障/恢复集成及 Platform checksum 只读验证能力仍待完成）
+- 状态：进行中（Server Registry 已接入 News、Research、Researchflow、Notification 四个业务模块 Migration，以及 Platform Owner Credential、Server Security Audit 两个安全基础设施 namespace；按 namespace 和版本号稳定排序，执行由 `MIGRATION_ENABLED` 显式开启；只读 Schema 预检要求数据库 namespace/version 集合与当前 Registry 完全一致且状态均为 `applied`。真实 MariaDB 故障/恢复集成及 Platform checksum 只读验证能力仍待完成）
 - 前置：SRV-003；其余模块提供可用 Migration 后再注册；核对 Platform `storage.ApplyMigrations` 实际签名和各模块 Migration 注册形态
 - 工作内容：在模块装配阶段收集各模块拥有的 Migration 描述，校验 namespace/version 唯一性及顺序，再按部署策略调用 Platform Runner，输出可追踪结果。MariaDB DDL 部分执行失败后的恢复按 Platform Runner 契约执行，不在 Server 自行重试失败 Migration。
 - 交付物：`internal/server/migration.Registry`、显式执行配置和模块注册测试；真实 MariaDB 集成验收待执行。
@@ -1540,3 +1540,13 @@ Server Bootstrap
 - 对 `internal/platform/diagnostics.Runner` 的实际定义核查后确认其为值类型结构体，不是接口或指针；零值 Runner 本身可用，会采用 Platform 默认并发数和总超时。
 - 因此 `Aggregator.Runner == nil` 检查不成立，不能以此作为 Server 缺陷；已撤销该防御性改动和对应测试，没有保留无效接口约束。
 - 该次 CI 失败是本轮错误修改造成的编译错误，不是原分支缺陷。后续继续审查 Diagnostics 时，以 Platform Runner 的真实值类型和零值语义为准。
+
+
+### 12.70 SRV-005 跨分支契约状态复核（2026-11-12）
+
+- 复核 Server 分支与当前 `integration` 的 `PLAT-CTR-003` 文件，双方文件均标记为 `freeze-ready（待项目负责人确认冻结）`，不是 `frozen`。此前工作记录中将其描述为“已冻结”不准确；Server 后续实现只能将其视为待确认的契约基线，不得声称项目级冻结已完成。
+- 当前契约第 7 节要求账号和来源 IP 摘要为 SHA-256 小写十六进制；Server `SessionLifecycleService` 当前采用带域分离的 HMAC-SHA256。两者存在明确实现差异。HMAC 的隐私收益不能替代契约批准；在契约状态确认及 Owner 决策前，不静默改变算法，也不宣称符合性验收通过。
+- 当前契约第 5 节公开的 `SessionStore` 仅有 `LookupAndTouch`，没有只读 Lookup。Server Session Authenticator 在 CSRF 校验前触发 Touch 的问题不能仅靠 Server 调整顺序解决；需 Platform 提供只读读取或等价原子校验原语，并完成契约更新。
+- `integration` 本轮核查基线为 `8542b5d73da6c3b047fb275b05f58d8c0ade552e`；Server 分支保持独立，本轮没有合并或修改 Integration/Platform。
+- SRV-007 当前 Bootstrap Migration Registry 实际包含六个 namespace：`news`、`research`、`researchflow`、`notification`、`platform.security`、`server.security_audit`。同步修正 SRV-007 状态摘要，避免将安全基础设施 Migration 漏记为仅四项注册。
+- 后续门禁：先由契约 Owner 确认 PLAT-CTR-003 冻结状态及限流摘要算法；Platform Owner 提供 Session 只读/原子校验能力后，再修正 Server 认证顺序。未满足前不启用 Owner Session HTTP 入口。
