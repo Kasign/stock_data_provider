@@ -28,6 +28,18 @@ func TestValidateDeliveryStateHistory(t *testing.T) {
 	}{
 		{name: "initial version has no event", record: delivery},
 		{name: "complete chain", record: snapshot, events: []domain.DeliveryStateEvent{sending}},
+		{name: "event reason mismatch", record: func() domain.DeliveryRecord {
+			value := snapshot
+			reason := "snapshot_reason"
+				value.ReasonCode = &reason
+			return value
+		}(), events: []domain.DeliveryStateEvent{func() domain.DeliveryStateEvent {
+			event := sending
+			reason := "event_reason"
+			event.ReasonCode = &reason
+			return event
+		}()}, wantErr: true},
+
 		{name: "missing event", record: snapshot, wantErr: true},
 		{name: "version gap", record: snapshot, events: []domain.DeliveryStateEvent{{DeliveryID: delivery.DeliveryID, Version: 3, From: domain.DeliveryQueued, To: domain.DeliverySending, ChangedAt: at}}, wantErr: true},
 		{name: "broken status chain", record: snapshot, events: []domain.DeliveryStateEvent{{DeliveryID: delivery.DeliveryID, Version: 2, From: domain.DeliveryBlocked, To: domain.DeliverySending, ChangedAt: at}}, wantErr: true},

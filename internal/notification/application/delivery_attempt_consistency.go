@@ -23,7 +23,7 @@ func AssessDeliveryAttemptConsistency(delivery domain.DeliveryRecord, attempts [
 	if err := delivery.Validate(); err != nil {
 		return "", err
 	}
-	if err := ValidateDeliveryAttemptHistory(delivery.DeliveryID, delivery.AttemptCount, attempts); err != nil {
+	if err := ValidateDeliveryAttemptHistoryForDelivery(delivery, attempts); err != nil {
 		return "", ErrDeliveryAttemptConsistency
 	}
 	if len(attempts) == 0 {
@@ -51,7 +51,9 @@ func AssessDeliveryAttemptConsistency(delivery domain.DeliveryRecord, attempts [
 			return DeliveryAttemptConsistencyConsistent, nil
 		}
 	case domain.DeliverySent:
-		if !running && *last.Outcome == domain.DeliveryAttemptAccepted {
+		if !running && *last.Outcome == domain.DeliveryAttemptAccepted &&
+			sameAttemptProjectionText(delivery.ProviderMessageRef, last.ProviderMessageRef) &&
+			delivery.ReasonCode == nil && delivery.LastErrorCode == nil {
 			return DeliveryAttemptConsistencyConsistent, nil
 		}
 	case domain.DeliveryUnknown:
@@ -71,4 +73,11 @@ func AssessDeliveryAttemptConsistency(delivery domain.DeliveryRecord, attempts [
 		}
 	}
 	return "", ErrDeliveryAttemptConsistency
+}
+
+func sameAttemptProjectionText(left, right *string) bool {
+	if left == nil || right == nil {
+		return left == nil && right == nil
+	}
+	return *left == *right
 }

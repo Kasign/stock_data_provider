@@ -56,6 +56,31 @@ func TestAssessDeliveryConsistency(t *testing.T) {
 			want: DeliveryConsistencyFail, wantReason: "attempt_history_conflict",
 		},
 		{
+			name: "attempt outside delivery lifecycle",
+			input: func() DeliveryConsistencyInput {
+				value := delivery
+				value.AttemptCount = 1
+				outside := completed
+				outside.StartedAt = value.DeadlineAt
+				return DeliveryConsistencyInput{Delivery: value, Attempts: []domain.DeliveryAttempt{outside}, AttemptsComparable: true}
+			}(),
+			want: DeliveryConsistencyFail, wantReason: "attempt_history_conflict",
+		},
+		{
+			name: "sent provider reference projection mismatch",
+			input: func() DeliveryConsistencyInput {
+				value := delivery
+				value.Status = domain.DeliverySent
+				value.AttemptCount = 1
+				providerRef := "persisted-provider-reference"
+				value.ProviderMessageRef = &providerRef
+				accepted := completed
+				accepted.ProviderMessageRef = nil
+				return DeliveryConsistencyInput{Delivery: value, Attempts: []domain.DeliveryAttempt{accepted}, AttemptsComparable: true}
+			}(),
+			want: DeliveryConsistencyFail, wantReason: "attempt_history_conflict",
+		},
+		{
 			name: "state history invalid",
 			input: DeliveryConsistencyInput{
 				Delivery: initial, AttemptsComparable: false, StateEvents: []domain.DeliveryStateEvent{{}},
