@@ -481,7 +481,6 @@ func TestDiagnosticChecksStopWhenContextIsCanceledByDependency(t *testing.T) {
 	})
 }
 
-
 type countingStorageProbe struct {
 	pingCalls   int
 	schemaCalls int
