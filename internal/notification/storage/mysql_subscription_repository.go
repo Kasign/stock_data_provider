@@ -170,7 +170,7 @@ func (r *MySQLSubscriptionRepository) AppendVersion(
 		return domain.ErrSubscriptionVersionConflict
 	}
 	next = normalizeSubscriptionDatabaseTimes(next)
-	tx, err := r.db.BeginTx(ctx, nil)
+	tx, err := r.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
 	if err != nil {
 		return fmt.Errorf("notification storage: begin subscription version: %w", err)
 	}
