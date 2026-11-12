@@ -253,6 +253,16 @@ Attempt Repository 的模块级原子边界：
 - StartWithLease：使用 Repository 内部权威时钟（MariaDB Adapter 在事务 SQL 中使用 UTC_TIMESTAMP(6)，Fake 使用可控时钟），校验租约在 now 时刻仍有效、StartedAt 不晚于 now 且不早于本次 sending 领取时间；同时校验当前 Delivery 为 sending、expected version 与 fencing token 匹配、Worker 与租约一致、attempt_no 等于当前 Attempt 数量 + 1，并确保同一 fencing token 最多只能创建一个 Attempt（无论前一 Attempt 是否已完成）；在同一 Repository 原子操作中追加运行中 Attempt 并更新 attempt_count 投影。重试必须先完成 sending -> retry_wait 等状态迁移并释放旧租约，再重新 ClaimDue 获得新 fencing token，不能在同一 claim 下启动第二次渠道调用。不能仅凭调用方传入的 StartedAt 早于 ExpiresAt 推断租约当前仍有效。
 - CompleteWithLease：只允许当前有效租约、当前 Delivery 版本和同一 Attempt 身份将运行中记录完成一次；完成时间不得越过租约截止；旧 Worker 的迟到完成必须拒绝。
 - 写入结果不确定：StartWithLease 返回 `ErrPersistenceOutcomeUnknown` 时，调用方必须立即停止，绝不能调用渠道 Send；CompleteWithLease 返回该错误时，渠道调用已经发生，调用方不得重发。两者均须通过 Delivery + Attempt + StateEvent 一致性快照读后对账；若完成事务未提交而 Attempt 仍运行，租约恢复必须按 ambiguous/unknown 保守收敛，不能把“Attempt 未完成”解释为“渠道未发送”。
+
+该边界对应两种必须区分的持久化结果不确定场景：
+
+| 场景 | 渠道 Send 是否已发生 | 读后可见的 Attempt | 后续处理 |
+|---|---|---|---|
+| `StartWithLease` 提交结果不确定 | **尚未调用** | 可能已创建，也可能未创建 | 当前执行立即停止；不得调用 Send。读取 Delivery/Attempt/StateEvent 一致性快照后再决定恢复路径 |
+| `CompleteWithLease` 已提交但提交确认丢失 | **已经调用一次** | 已完成，可能为 accepted | 不得再次 Send；一致性恢复根据已提交 Attempt 与状态事件收敛，accepted 结果可完成 Delivery 为 sent |
+| `CompleteWithLease` 未提交但调用方收到结果不确定 | **已经调用一次** | Attempt 仍为 running | 不得再次 Send；租约恢复必须按外部副作用不确定处理并收敛为 unknown，不能把 running Attempt 当作未发送证明 |
+
+回归测试 `TestDeliveryExecutionCompletionOutcomeUnknownNeverRepeatsChannelSend` 覆盖 CompleteWithLease 提交成功但确认丢失、以及事务未提交两种情况，并断言每种情况下 Channel Send 调用次数均为 1。测试代码存在不等于 CI 已执行通过；当前 CI 证据见模块 README 与任务验收文档。
 - ListByDelivery：按 attempt_no 顺序返回深拷贝历史；未知 Delivery 返回 not found。
 - attempt_count 是已追加 Attempt 数量的计数投影；StartWithLease 与 Attempt 追加同事务更新，不改变 Delivery 状态版本，也不产生伪造的状态迁移事件。真实 Repository 必须保证 Attempt 行、计数投影和租约检查的事务原子性；建议数据库增加 `UNIQUE(delivery_id, fencing_token)`，并在事务中锁定 Delivery 行，防止同一 claim 并发创建第二个 Attempt。
 
