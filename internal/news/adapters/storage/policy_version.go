@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"database/sql"
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
