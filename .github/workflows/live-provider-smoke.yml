@@ -122,6 +122,13 @@ jobs:
           MARKET_DATA_HITHINK_API_KEY: ${{ secrets.HITHINK_FINANCE_API_KEY }}
           MARKET_DATA_HITHINK_BASE_URL: https://fuyao.aicubes.cn
         run: go test -run TestLiveHithinkAnnualBalanceSheetPublicationDateRaw -count=1 -v ./internal/marketdata/provider
+      - name: Probe Hithink DailyBar single-window adjustment modes
+        if: always() && github.event_name == 'push' && contains(github.event.head_commit.message, '[hithink_daily_bars_single_window]')
+        env:
+          MARKET_DATA_LIVE_HITHINK_DAILY_BARS_SINGLE_WINDOW: "1"
+          MARKET_DATA_HITHINK_API_KEY: ${{ secrets.HITHINK_FINANCE_API_KEY }}
+          MARKET_DATA_HITHINK_BASE_URL: https://fuyao.aicubes.cn
+        run: go test -run TestLiveHithinkDailyBarsSingleWindow -count=1 -v ./internal/marketdata/provider
       - name: Probe historical Provider service and MariaDB persistence
         if: always() && github.event_name == 'push' && contains(github.event.head_commit.message, '[historical_service_probe]')
         env:

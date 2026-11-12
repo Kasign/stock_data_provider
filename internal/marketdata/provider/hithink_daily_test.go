@@ -42,7 +42,7 @@ func TestHithinkDailyBarParseIssuesIncludeRowAndProviderField(t *testing.T) {
 	}
 }
 
-func TestHithinkDailyPaginationDuplicateReportsPageOffsetAndRow(t *testing.T) {
+func TestHithinkDailyBarsFetchesSingleResponseWithoutOffset(t *testing.T) {
 	loc := time.FixedZone("CST", 8*60*60)
 	dateMS := func(day int) int64 {
 		return time.Date(2026, time.October, day, 0, 0, 0, 0, loc).UnixMilli()
@@ -50,23 +50,51 @@ func TestHithinkDailyPaginationDuplicateReportsPageOffsetAndRow(t *testing.T) {
 	row := func(day int) string {
 		return fmt.Sprintf("{\"date_ms\":%d,\"open_price\":10,\"high_price\":11,\"low_price\":9,\"close_price\":10,\"volume\":1000,\"turnover\":10000}", dateMS(day))
 	}
-	payload := func(rows ...string) string {
-		return "{\"code\":0,\"data\":{\"item\":[" + strings.Join(rows, ",") + "]}}"
-	}
-	var offsets []string
+	payload := "{\"code\":0,\"data\":{\"item\":[" + strings.Join([]string{row(7), row(8), row(9)}, ",") + "]}}"
+	requests := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		offset := r.URL.Query().Get("offset")
-		offsets = append(offsets, offset)
-		w.Header().Set("Content-Type", "application/json")
-		switch offset {
-		case "0":
-			_, _ = w.Write([]byte(payload(row(7), row(8))))
-		case "2":
-			// 模拟服务端第二页与第一页边界重叠；客户端必须报错，不能静默去重。
-			_, _ = w.Write([]byte(payload(row(8), row(9))))
-		default:
-			_, _ = w.Write([]byte(payload()))
+		requests++
+		if r.URL.Path != "/api/a-share/prices/historical" {
+			t.Errorf("unexpected request path %q", r.URL.Path)
 		}
+		if _, exists := r.URL.Query()["offset"]; exists {
+			t.Errorf("historical K-line endpoint does not support offset pagination")
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(payload))
+	}))
+	defer server.Close()
+
+	provider := NewHithinkConfigured(time.Second, server.URL, "test-key")
+	got, err := provider.FetchDailyBars(context.Background(), "600036.SH", "2026-10-07", "2026-10-09", 10, model.AdjustmentNone)
+	if err != nil {
+		t.Fatalf("FetchDailyBars: %v", err)
+	}
+	if requests != 1 {
+		t.Fatalf("expected exactly one historical request, got %d", requests)
+	}
+	if len(got) != 3 || got[0].TradeDate != "2026-10-07" || got[2].TradeDate != "2026-10-09" {
+		t.Fatalf("expected all three rows from one response, got %+v", got)
+	}
+}
+
+func TestHithinkDailyResponseRejectsDuplicateDatesWithinSingleResponse(t *testing.T) {
+	loc := time.FixedZone("CST", 8*60*60)
+	dateMS := func(day int) int64 {
+		return time.Date(2026, time.October, day, 0, 0, 0, 0, loc).UnixMilli()
+	}
+	row := func(day int) string {
+		return fmt.Sprintf("{\"date_ms\":%d,\"open_price\":10,\"high_price\":11,\"low_price\":9,\"close_price\":10,\"volume\":1000,\"turnover\":10000}", dateMS(day))
+	}
+	payload := "{\"code\":0,\"data\":{\"item\":[" + strings.Join([]string{row(7), row(8), row(8)}, ",") + "]}}"
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		if _, exists := r.URL.Query()["offset"]; exists {
+			t.Errorf("historical K-line endpoint does not support offset pagination")
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(payload))
 	}))
 	defer server.Close()
 
@@ -74,11 +102,12 @@ func TestHithinkDailyPaginationDuplicateReportsPageOffsetAndRow(t *testing.T) {
 	reporter := validation.NewReporter(20)
 	ctx := validation.WithReporter(context.Background(), reporter)
 	_, err := provider.FetchDailyBars(ctx, "600036.SH", "2026-10-07", "2026-10-09", 10, model.AdjustmentNone)
-	if err == nil || !strings.Contains(err.Error(), "first_page=1 first_offset=0 first_row=1 first_page_item_count=2 first_page_first_date=2026-10-07 first_page_last_date=2026-10-08 duplicate_page=2 duplicate_offset=2 duplicate_row=0 duplicate_page_item_count=2 duplicate_page_first_date=2026-10-08 duplicate_page_last_date=2026-10-09") || !strings.Contains(err.Error(), "2026-10-08") {
-		t.Fatalf("expected page/offset/row duplicate diagnostic, got %v", err)
+	if err == nil || !strings.Contains(err.Error(), "duplicate trade date 2026-10-08") ||
+		!strings.Contains(err.Error(), "first_row=1 duplicate_row=2 returned_rows=3") {
+		t.Fatalf("expected single-response duplicate diagnostic, got %v", err)
 	}
-	if len(offsets) != 2 || offsets[0] != "0" || offsets[1] != "2" {
-		t.Fatalf("unexpected pagination offsets: %v", offsets)
+	if requests != 1 {
+		t.Fatalf("expected exactly one historical request, got %d", requests)
 	}
 	found := false
 	for _, issue := range reporter.Snapshot().Issues {
@@ -89,7 +118,7 @@ func TestHithinkDailyPaginationDuplicateReportsPageOffsetAndRow(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Fatalf("expected structured duplicate trade-date issue at absolute row 2, got %+v", reporter.Snapshot().Issues)
+		t.Fatalf("expected structured duplicate trade-date issue at row 2, got %+v", reporter.Snapshot().Issues)
 	}
 }
 

@@ -601,6 +601,63 @@ func TestLiveHithinkAnnualBalanceSheetPublicationDateRaw(t *testing.T) {
 	}
 }
 
+// TestLiveHithinkDailyBarsSingleWindow verifies one bounded real window without unsupported offset pagination.
+func TestLiveHithinkDailyBarsSingleWindow(t *testing.T) {
+	if os.Getenv("MARKET_DATA_LIVE_HITHINK_DAILY_BARS_SINGLE_WINDOW") != "1" {
+		t.Skip("set MARKET_DATA_LIVE_HITHINK_DAILY_BARS_SINGLE_WINDOW=1 to query Hithink DailyBar adjustment modes")
+	}
+	apiKey := os.Getenv("MARKET_DATA_HITHINK_API_KEY")
+	if apiKey == "" {
+		apiKey = os.Getenv("HITHINK_FINANCE_API_KEY")
+	}
+	if apiKey == "" {
+		t.Skip("Hithink DailyBar probe skipped: API key is not configured")
+	}
+
+	client := NewHithinkConfigured(25*time.Second, os.Getenv("MARKET_DATA_HITHINK_BASE_URL"), apiKey)
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+
+	cases := []struct {
+		name       string
+		adjustment model.AdjustmentBasis
+	}{
+		{name: "none", adjustment: model.AdjustmentNone},
+		{name: "forward", adjustment: model.AdjustmentForward},
+		{name: "backward", adjustment: model.AdjustmentBackward},
+	}
+	for _, tc := range cases {
+		bars, err := client.FetchDailyBars(ctx, "600519.SH", "2026-10-13", "2026-11-12", 100, tc.adjustment)
+		if err != nil {
+			t.Fatalf("Hithink DailyBar %s: %v", tc.name, err)
+		}
+		if len(bars) == 0 {
+			t.Fatalf("Hithink DailyBar %s returned no rows", tc.name)
+		}
+		seen := make(map[string]struct{}, len(bars))
+		firstDate, lastDate := bars[0].TradeDate, bars[0].TradeDate
+		for _, bar := range bars {
+			if bar.TradeDate < "2026-10-13" || bar.TradeDate > "2026-11-12" {
+				t.Fatalf("Hithink DailyBar %s returned out-of-range date %s", tc.name, bar.TradeDate)
+			}
+			if _, exists := seen[bar.TradeDate]; exists {
+				t.Fatalf("Hithink DailyBar %s returned duplicate date %s", tc.name, bar.TradeDate)
+			}
+			seen[bar.TradeDate] = struct{}{}
+			if bar.TradeDate < firstDate {
+				firstDate = bar.TradeDate
+			}
+			if bar.TradeDate > lastDate {
+				lastDate = bar.TradeDate
+			}
+			if bar.AdjustmentBasis != tc.adjustment {
+				t.Fatalf("Hithink DailyBar %s returned adjustment basis %q", tc.name, bar.AdjustmentBasis)
+			}
+		}
+		t.Logf("LIVE_HITHINK_DAILY_BAR_SINGLE_WINDOW adjustment=%s rows=%d first=%s last=%s", tc.name, len(bars), firstDate, lastDate)
+	}
+}
+
 func TestLiveHithinkCapabilities(t *testing.T) {
 	if os.Getenv("MARKET_DATA_LIVE_HITHINK_TESTS") != "1" {
 		t.Skip("set MARKET_DATA_LIVE_HITHINK_TESTS=1 to call Hithink Finance endpoints")
