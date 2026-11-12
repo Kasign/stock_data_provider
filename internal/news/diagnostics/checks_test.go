@@ -432,7 +432,7 @@ func (p cancellationSourceCatalog) LookupEndpoint(context.Context, string, strin
 		SourceID: "source-1", EndpointID: "endpoint-1", Enabled: true,
 		URL: "https://feeds.example.com/rss", AccessMethod: domain.AccessRSS,
 		SourcePolicyVersionID: "source-policy-v1",
-		URLPolicy: domain.SourceURLPolicy{AllowedSchemes: []string{"https"}, AllowedHosts: []string{"feeds.example.com"}},
+		URLPolicy:             domain.SourceURLPolicy{AllowedSchemes: []string{"https"}, AllowedHosts: []string{"feeds.example.com"}},
 	}, nil
 }
 
