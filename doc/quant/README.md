@@ -7,7 +7,7 @@
 
 ## 当前状态
 
-最近一次代码验收 SHA：`7f6dcfd0582d3b505d8b45688bc1b74055a1866f`（2026-11-12）；Quant 专项 CI Workflow `43152597197` 对该 SHA 已通过 gofmt、Quant 全量单测、Manifest 30 秒 Fuzz、Race、Vet。其后提交仅更新文档。
+最近一次代码验收 SHA：`5073f72c5f7703d88e1fe5d1b33afd6bc65df211`（2026-11-12）；Quant 专项 CI Workflow `43167409632` 已通过 gofmt、Quant 全量单测、Manifest 30 秒 Fuzz、Race、Vet。其后提交仅更新文档。
 
 已具备首批 Indicator/Factor 纯计算、CalculationContext、基础 Registry、RiskDecision/RuleSet 执行框架、TrendResult DTO、Manifest/ResultRef、Repository Save Port/MemoryRepository，以及 QuantResult Envelope 初版。
 
