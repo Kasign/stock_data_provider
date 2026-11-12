@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strings"
 
 	"example.com/stock-analysis-flow/internal/notification/domain"
 	"github.com/gowebpki/jcs"
@@ -243,6 +242,3 @@ func ValidateFanoutPlanInput(event domain.EventEnvelope, subscription domain.Sub
 	return validateRecipientDirectoryResult(recipient, channel)
 }
 
-// Keep strings imported here so future implementations cannot accidentally accept
-// whitespace-only opaque identifiers through a shallow non-empty check.
-var _ = strings.TrimSpace
