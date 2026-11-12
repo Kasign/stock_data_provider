@@ -951,6 +951,98 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	if atomicContent.SourceSummary != secondVersion.Version.Content.SourceSummary {
 		t.Fatalf("atomic evidence content mismatch: got %+v want %+v", atomicContent, secondVersion.Version.Content)
 	}
+
+	// 读取事务先锁定当前指针时，撤销发布必须等待读取提交；随后旧 Binding 立即失效。
+	revokedPolicyVersion := "atomic-source-v2"
+	revokedPayload, err := json.Marshal(domain.SourcePolicy{
+		Status: domain.AuthorizationRevoked,
+		AllowedPurposes: []domain.Purpose{domain.PurposeInternalPersonalResearch},
+		AllowedContentKinds: []domain.ContentKind{domain.ContentAbstract},
+		EvidenceRef: "news-it-atomic-revocation-evidence",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	locked := make(chan struct{})
+	releaseRead := make(chan struct{})
+	readDone := make(chan error, 1)
+	go func() {
+		_, readErr := repository.GetEvidenceContentWithCurrentAuthorization(
+			ctx, atomicBinding, secondObservation, secondVersion.Version, time.Now().UTC().Add(time.Second),
+			func(readCtx context.Context, current domain.CurrentAuthorizationPolicySet) error {
+				decision := domain.EvaluateNewsAuthorizationAgainstCurrentPolicies(atomicBinding, current, time.Now().UTC())
+				if !decision.Allowed {
+					return fmt.Errorf("read-first authorization denied: %s", decision.ReasonCode)
+				}
+				close(locked)
+				select {
+				case <-releaseRead:
+					return readCtx.Err()
+				case <-readCtx.Done():
+					return readCtx.Err()
+				}
+			},
+		)
+		readDone <- readErr
+	}()
+	select {
+	case <-locked:
+	case <-time.After(5 * time.Second):
+		close(releaseRead)
+		t.Fatal("atomic read did not acquire current policy locks")
+	}
+	publishStarted := make(chan struct{})
+	publishDone := make(chan error, 1)
+	go func() {
+		close(publishStarted)
+		publishDone <- atomicPublisher.Execute(
+			ctx, domain.NewsPolicyTypeSource, secondObservation.SourceID, revokedPolicyVersion, revokedPayload,
+		)
+	}()
+	<-publishStarted
+	select {
+	case publishErr := <-publishDone:
+		close(releaseRead)
+		t.Fatalf("revocation publication completed while read held the policy lock: %v", publishErr)
+	case <-time.After(100 * time.Millisecond):
+	}
+	close(releaseRead)
+	if err := <-readDone; err != nil {
+		t.Fatalf("read that acquired policy locks before revocation failed: %v", err)
+	}
+	if err := <-publishDone; err != nil {
+		t.Fatalf("publish revocation after read commit: %v", err)
+	}
+	if _, err := repository.GetEvidenceContentWithCurrentAuthorization(
+		ctx, atomicBinding, secondObservation, secondVersion.Version, time.Now().UTC().Add(time.Second),
+		func(context.Context, domain.CurrentAuthorizationPolicySet) error { return nil },
+	); !errors.Is(err, app.ErrNewsCurrentPolicyUnavailable) {
+		t.Fatalf("stale Binding after policy replacement error = %v, want current policy unavailable", err)
+	}
+
+	// 撤销已经提交后，匹配新策略版本的读取也必须由领域授权规则拒绝。
+	revokedBinding := atomicBinding
+	revokedBinding.PolicySnapshot.Policies = append([]domain.AuthorizationPolicyVersion(nil), atomicBinding.PolicySnapshot.Policies...)
+	revokedBinding.PolicySnapshot.Policies[0].PolicyVersion = revokedPolicyVersion
+	revokedObservation := secondObservation
+	revokedObservation.SourcePolicyVersionID = revokedPolicyVersion
+	if _, err := db.ExecContext(ctx, "UPDATE news_observations SET source_policy_version_id = ? WHERE observation_id = ?",
+		revokedPolicyVersion, revokedObservation.ID); err != nil {
+		t.Fatalf("set revoked policy trace: %v", err)
+	}
+	_, revokedReadErr := repository.GetEvidenceContentWithCurrentAuthorization(
+		ctx, revokedBinding, revokedObservation, secondVersion.Version, time.Now().UTC().Add(time.Second),
+		func(readCtx context.Context, current domain.CurrentAuthorizationPolicySet) error {
+			decision := domain.EvaluateNewsAuthorizationAgainstCurrentPolicies(revokedBinding, current, time.Now().UTC())
+			if !decision.Allowed {
+				return app.ErrNewsCurrentPolicyDenied
+			}
+			return nil
+		},
+	)
+	if !errors.Is(revokedReadErr, app.ErrNewsCurrentPolicyDenied) {
+		t.Fatalf("read after committed revocation error = %v, want authorization denied", revokedReadErr)
+	}
 	atVersion.SystemAsOf = secondVersion.Version.ObservedAt.Add(-time.Second)
 	if _, err := repository.GetEvidenceVersionAt(ctx, atVersion); !errors.Is(err, app.ErrEvidencePITNotFound) {
 		t.Fatalf("explicit future version error = %v, want PIT not found", err)
