@@ -506,3 +506,12 @@ News 自身代码质量和 MariaDB 专项验证已取得当前 CI 通过证据�
 - 变更范围仅限 `internal/news/adapters/storage/authorization_policy_resolver.go`、对应存储层单测和 `doc/news/**`。
 - 未修改冻结契约、公共平台、Server、其他模块或其他分支。
 - 当前代码结论：映射缺口已修复，授权策略仍保持独立 fail-closed；验收状态为“代码已提交，CI/构建待验证”。
+
+
+### 当前 HEAD CI 验收补充（2026-11-12）
+
+- 当前分支 `feat/research-news-ingestion` HEAD：`a8a3763e5dc662d856a438c52a0b1a28975def43`。
+- News Provider contract workflow Run [43219930444](https://github.com/Kasign/stock_data_provider/actions/runs/43219930444)：两个 Job（Provider contracts、full News module）均 success，覆盖 gofmt、News 单测、Race、Vet 及 Provider 契约测试、Race、Vet。
+- Go test suite Run [43219930418](https://github.com/Kasign/stock_data_provider/actions/runs/43219930418)：News MariaDB Repository/Migration integration、根模块 `Test .`、Researchflow MariaDB 生命周期集成、Researchflow 测试/Race/Vet、WorkerStore 测试/Race/Vet、`Test go-core` 均 success；Compose/Docker 和 Market Data jobs 为 skipped，不纳入通过结论。
+- 两个 Workflow 的 `head_sha` 均为 `a8a3763e5dc662d856a438c52a0b1a28975def43`，本轮 `risk_review` 映射与新增测试获得当前 HEAD 的 CI 证据。此前文档中“本轮未运行测试/CI 待验证”的状态已被本记录取代。
+- 仅关闭代码质量验证项；真实 Provider/Feed 网络、来源授权、生产 DNS/出口、公共 GOV-CTR-006 Runtime Verifier 的生产注入、Server 组合根装配和 available_at 严格 PIT 仍未验收。
