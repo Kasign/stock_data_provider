@@ -2251,15 +2251,14 @@ try {
     if (viewport.width === 320) {
       const reducedMotion = await page.evaluate(() => ({
         requested: window.matchMedia("(prefers-reduced-motion: reduce)").matches,
-        primaryNavigation: getComputedStyle(document.querySelector(".nav-link")).transitionDuration,
-        researchNavigation: getComputedStyle(document.querySelector(".research-detail-nav-link")).transitionDuration
+        primaryNavigation: getComputedStyle(document.querySelector(".nav-link")).transitionProperty,
+        researchNavigation: getComputedStyle(document.querySelector(".research-detail-nav-link")).transitionProperty
       }));
       assert.equal(reducedMotion.requested, true, "browser context must enable prefers-reduced-motion: reduce");
-      const durations = [reducedMotion.primaryNavigation, reducedMotion.researchNavigation]
-        .flatMap(value => value.split(","))
-        .map(value => Number.parseFloat(value.trim()));
-      assert.ok(durations.length > 0 && durations.every(value => value === 0),
-        "navigation transitions must be disabled for reduced-motion users: " + JSON.stringify(reducedMotion));
+      assert.equal(reducedMotion.primaryNavigation, "none",
+        "primary navigation transitions must be disabled for reduced-motion users: " + JSON.stringify(reducedMotion));
+      assert.equal(reducedMotion.researchNavigation, "none",
+        "research navigation transitions must be disabled for reduced-motion users: " + JSON.stringify(reducedMotion));
 
       const navigateByHash = async view => {
         await page.evaluate(value => { window.location.hash = "#" + value; }, view);
