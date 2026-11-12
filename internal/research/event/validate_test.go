@@ -141,6 +141,22 @@ func TestResearchEventNormalizedTimeMustMatchAllSourceEvidence(t *testing.T) {
 			t.Fatalf("agreeing source values should pass: %v", err)
 		}
 	})
+
+	t.Run("require normalized value when source values agree", func(t *testing.T) {
+		value := validEvent(t)
+		value.OccurredAt = nil
+		if err := value.Validate(); err == nil || !strings.Contains(err.Error(), "must equal the consensus source_times value") {
+			t.Fatalf("consensus source time without normalized value should fail, got %v", err)
+		}
+	})
+
+	t.Run("reject unregistered normalization rule version", func(t *testing.T) {
+		value := validEvent(t)
+		value.TimeNormalizationRuleVersion = "2.0.0"
+		if err := value.Validate(); err == nil || !strings.Contains(err.Error(), "unsupported time_normalization_rule_version") {
+			t.Fatalf("unregistered rule version should fail, got %v", err)
+		}
+	})
 }
 
 func TestResearchEventVersionMustAppendAndPreserveLifecycle(t *testing.T) {
