@@ -119,18 +119,18 @@ type EventSourceTime struct {
 	Notes                   *string   `json:"notes"`
 }
 type ResearchEvent struct {
-	EventID                string            `json:"event_id"`
-	EventVersion           int               `json:"event_version"`
-	EventType              string            `json:"event_type"`
-	Title                  string            `json:"title"`
-	Status                 string            `json:"status"`
-	SubjectRefs            []string          `json:"subject_refs"`
-	EvidenceRefs           []string          `json:"evidence_refs"`
-	OccurredAt             *time.Time        `json:"occurred_at"`
-	PublishedAt            *time.Time        `json:"published_at"`
-	AvailableAt            *time.Time        `json:"available_at"`
-	SystemObservedAt       time.Time         `json:"system_observed_at"`
-	SystemAsOf             time.Time         `json:"system_as_of"`
+	EventID                       string            `json:"event_id"`
+	EventVersion                  int               `json:"event_version"`
+	EventType                     string            `json:"event_type"`
+	Title                         string            `json:"title"`
+	Status                        string            `json:"status"`
+	SubjectRefs                   []string          `json:"subject_refs"`
+	EvidenceRefs                  []string          `json:"evidence_refs"`
+	OccurredAt                    *time.Time        `json:"occurred_at"`
+	PublishedAt                   *time.Time        `json:"published_at"`
+	AvailableAt                   *time.Time        `json:"available_at"`
+	SystemObservedAt              time.Time         `json:"system_observed_at"`
+	SystemAsOf                    time.Time         `json:"system_as_of"`
 	ImpactHypothesisRefs          []string          `json:"impact_hypothesis_refs"`
 	InvalidationConditions        []string          `json:"invalidation_conditions"`
 	Uncertainty                   []string          `json:"uncertainty"`
@@ -139,18 +139,18 @@ type ResearchEvent struct {
 	DerivedFromRefs               []EventRef        `json:"derived_from_refs"`
 }
 type CreateEventCommand struct {
-	EventType              string
-	Title                  string
-	Status                 string
-	SubjectRefs            []string
-	EvidenceRefs           []string
-	OccurredAt             *time.Time
-	PublishedAt            *time.Time
-	AvailableAt            *time.Time
-	SystemObservedAt       time.Time
-	SystemAsOf             time.Time
-	ImpactHypothesisRefs   []string
-	InvalidationConditions []string
+	EventType                     string
+	Title                         string
+	Status                        string
+	SubjectRefs                   []string
+	EvidenceRefs                  []string
+	OccurredAt                    *time.Time
+	PublishedAt                   *time.Time
+	AvailableAt                   *time.Time
+	SystemObservedAt              time.Time
+	SystemAsOf                    time.Time
+	ImpactHypothesisRefs          []string
+	InvalidationConditions        []string
 	Uncertainty                   []string
 	TimeNormalizationRuleVersion string
 	DerivedFromRefs               []EventRef
@@ -160,6 +160,7 @@ type EventRef struct {
 	EventID      string `json:"event_id"`
 	EventVersion int    `json:"event_version"`
 }
+
 type EventRepository interface {
 	Append(context.Context, researchevent.ResearchEvent) error
 	AppendWithLifecycle(context.Context, researchevent.ResearchEvent, *string, string) error
