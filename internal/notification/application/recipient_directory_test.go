@@ -57,7 +57,9 @@ func TestDirectoryRecipientResolverResolvesSubscriptionOwnerWithPolicyEvidence(t
 	if target.RecipientRef != "identity:user-opaque" ||
 		directory.request.OwnerRef != "identity:owner-1" ||
 		directory.request.RecipientRef != "" ||
-		directory.request.Channel.ConfigVersion != channel.ConfigVersion {
+		directory.request.ChannelRef != channel.ChannelRef ||
+		directory.request.ChannelKind != channel.ChannelKind ||
+		directory.request.ConfigVersion != channel.ConfigVersion {
 		t.Fatalf("unexpected identity lookup: target=%+v request=%+v", target, directory.request)
 	}
 }
