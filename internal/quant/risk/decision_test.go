@@ -33,44 +33,52 @@ func TestDecisionValidateAcceptsUnknownFailClosedRepresentation(t *testing.T) {
 	}
 }
 
-func TestDecisionValidateDoesNotInferRuleOutcome(t *testing.T) {
-	for _, status := range []DecisionStatus{DecisionPass, DecisionReject, DecisionUnknown} {
+func TestDecisionValidateRequiresAggregatedStatus(t *testing.T) {
+	decision := sampleDecision()
+	if err := decision.Validate(); err != nil {
+		t.Fatalf("aggregated unknown status rejected: %v", err)
+	}
+	for _, status := range []DecisionStatus{DecisionPass, DecisionReject} {
 		decision := sampleDecision()
 		decision.Status = status
-		if err := decision.Validate(); err != nil {
-			t.Errorf("status %q rejected: %v", status, err)
+		if err := decision.Validate(); !errors.Is(err, ErrInvalidDecision) {
+			t.Errorf("status %q: got %v, want ErrInvalidDecision", status, err)
 		}
 	}
 }
 
 func TestDecisionValidateRejectsInvalidFields(t *testing.T) {
 	cases := map[string]func(*Decision){
-		"missing decision id":        func(d *Decision) { d.DecisionID = "" },
-		"decision id padded":         func(d *Decision) { d.DecisionID = " risk-decision-001 " },
-		"rule version padded":        func(d *Decision) { d.RuleSetVersion = " 1.0.0 " },
-		"input ref padded":           func(d *Decision) { d.InputRefs = []string{" quant_result:001 "} },
-		"reason code padded":         func(d *Decision) { d.Reasons[0].Code = " INPUT_QUALITY_UNKNOWN " },
-		"safe message padded":        func(d *Decision) { d.Reasons[0].SafeMessage = " 输入质量无法确认 " },
-		"evidence ref padded":        func(d *Decision) { d.Reasons[0].EvidenceRefs = []string{" evidence:quality:001 "} },
-		"missing rule version":       func(d *Decision) { d.RuleSetVersion = "" },
-		"nil reasons":                func(d *Decision) { d.Reasons = nil },
-		"nil input refs":             func(d *Decision) { d.InputRefs = nil },
-		"empty input ref":            func(d *Decision) { d.InputRefs = []string{""} },
-		"nil evidence refs":          func(d *Decision) { d.Reasons[0].EvidenceRefs = nil },
-		"empty evidence ref":         func(d *Decision) { d.Reasons[0].EvidenceRefs = []string{" "} },
-		"empty safe message":         func(d *Decision) { d.Reasons[0].SafeMessage = " " },
-		"unknown decision status":    func(d *Decision) { d.Status = "sideways" },
-		"unknown severity":           func(d *Decision) { d.Reasons[0].Severity = "critical" },
-		"unknown reason status":      func(d *Decision) { d.Reasons[0].Status = "passed" },
-		"non UTC time":               func(d *Decision) { d.EvaluatedAt = "2026-11-09T09:00:00+08:00" },
-		"non canonical time":         func(d *Decision) { d.SystemAsOf = "2026-11-09T00:59:00.000Z" },
-		"invalid calendar date":      func(d *Decision) { d.EvaluatedAt = "2026-02-30T01:00:00Z" },
-		"invalid UTF-8 decision id":  func(d *Decision) { d.DecisionID = string([]byte{0xff}) },
-		"invalid UTF-8 rule version": func(d *Decision) { d.RuleSetVersion = string([]byte{0xff}) },
-		"invalid UTF-8 input ref":    func(d *Decision) { d.InputRefs = []string{string([]byte{0xff})} },
-		"invalid UTF-8 reason code":  func(d *Decision) { d.Reasons[0].Code = string([]byte{0xff}) },
-		"invalid UTF-8 safe message": func(d *Decision) { d.Reasons[0].SafeMessage = string([]byte{0xff}) },
-		"invalid UTF-8 evidence ref": func(d *Decision) { d.Reasons[0].EvidenceRefs = []string{string([]byte{0xff})} },
+		"missing decision id":           func(d *Decision) { d.DecisionID = "" },
+		"decision id padded":            func(d *Decision) { d.DecisionID = " risk-decision-001 " },
+		"rule version padded":           func(d *Decision) { d.RuleSetVersion = " 1.0.0 " },
+		"input ref padded":              func(d *Decision) { d.InputRefs = []string{" quant_result:001 "} },
+		"reason code padded":            func(d *Decision) { d.Reasons[0].Code = " INPUT_QUALITY_UNKNOWN " },
+		"safe message padded":           func(d *Decision) { d.Reasons[0].SafeMessage = " 输入质量无法确认 " },
+		"evidence ref padded":           func(d *Decision) { d.Reasons[0].EvidenceRefs = []string{" evidence:quality:001 "} },
+		"missing rule version":          func(d *Decision) { d.RuleSetVersion = "" },
+		"nil reasons":                   func(d *Decision) { d.Reasons = nil },
+		"empty reasons":                 func(d *Decision) { d.Reasons = []Reason{} },
+		"duplicate reason code":         func(d *Decision) { d.Reasons = append(d.Reasons, d.Reasons[0]) },
+		"evaluated before system as of": func(d *Decision) { d.EvaluatedAt = "2026-11-09T00:58:00Z" },
+		"status disagrees with reasons": func(d *Decision) { d.Status = DecisionPass },
+		"nil input refs":                func(d *Decision) { d.InputRefs = nil },
+		"empty input ref":               func(d *Decision) { d.InputRefs = []string{""} },
+		"nil evidence refs":             func(d *Decision) { d.Reasons[0].EvidenceRefs = nil },
+		"empty evidence ref":            func(d *Decision) { d.Reasons[0].EvidenceRefs = []string{" "} },
+		"empty safe message":            func(d *Decision) { d.Reasons[0].SafeMessage = " " },
+		"unknown decision status":       func(d *Decision) { d.Status = "sideways" },
+		"unknown severity":              func(d *Decision) { d.Reasons[0].Severity = "critical" },
+		"unknown reason status":         func(d *Decision) { d.Reasons[0].Status = "passed" },
+		"non UTC time":                  func(d *Decision) { d.EvaluatedAt = "2026-11-09T09:00:00+08:00" },
+		"non canonical time":            func(d *Decision) { d.SystemAsOf = "2026-11-09T00:59:00.000Z" },
+		"invalid calendar date":         func(d *Decision) { d.EvaluatedAt = "2026-02-30T01:00:00Z" },
+		"invalid UTF-8 decision id":     func(d *Decision) { d.DecisionID = string([]byte{0xff}) },
+		"invalid UTF-8 rule version":    func(d *Decision) { d.RuleSetVersion = string([]byte{0xff}) },
+		"invalid UTF-8 input ref":       func(d *Decision) { d.InputRefs = []string{string([]byte{0xff})} },
+		"invalid UTF-8 reason code":     func(d *Decision) { d.Reasons[0].Code = string([]byte{0xff}) },
+		"invalid UTF-8 safe message":    func(d *Decision) { d.Reasons[0].SafeMessage = string([]byte{0xff}) },
+		"invalid UTF-8 evidence ref":    func(d *Decision) { d.Reasons[0].EvidenceRefs = []string{string([]byte{0xff})} },
 	}
 	for name, mutate := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -83,12 +91,11 @@ func TestDecisionValidateRejectsInvalidFields(t *testing.T) {
 	}
 }
 
-func TestDecisionValidateAllowsPresentEmptyArrays(t *testing.T) {
+func TestDecisionValidateAllowsPresentEmptyInputRefs(t *testing.T) {
 	decision := sampleDecision()
-	decision.Reasons = []Reason{}
 	decision.InputRefs = []string{}
 	if err := decision.Validate(); err != nil {
-		t.Fatalf("empty but present arrays rejected: %v", err)
+		t.Fatalf("empty but present input_refs rejected: %v", err)
 	}
 }
 

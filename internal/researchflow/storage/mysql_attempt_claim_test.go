@@ -54,7 +54,7 @@ func TestMariaDBClaimAttemptLeaseAndFencing(t *testing.T) {
 	if err := platformstorage.ApplyMigrations(ctx, db, MigrationNamespace, Migrations()); err != nil {
 		t.Fatalf("apply Researchflow migrations: %v", err)
 	}
-	repository, err := NewMySQLRunRepository(db)
+	repository, err := NewMySQLRunRepository(db, CapacityLimits{MaxQueuedRuns: 1000, MaxWorkers: 64})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -501,3 +501,155 @@ func TestMariaDBClaimAttemptLeaseAndFencing(t *testing.T) {
 }
 
 func stringRef(value string) *string { return &value }
+
+// TestMariaDBGlobalWorkerCapacitySerializesClaimsAcrossRuns verifies that
+// concurrent claims on different Runs cannot exceed the configured global Worker slots.
+func TestMariaDBGlobalWorkerCapacitySerializesClaimsAcrossRuns(t *testing.T) {
+	if os.Getenv("PLATFORM_STORAGE_INTEGRATION") != "1" {
+		t.Skip("set PLATFORM_STORAGE_INTEGRATION=1 to run Researchflow MariaDB integration tests")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+	defer cancel()
+	dsn := fmt.Sprintf("%s:%s@tcp(%s)/%s?parseTime=true",
+		os.Getenv("PLATFORM_MARIADB_USER"), os.Getenv("PLATFORM_MARIADB_PASSWORD"),
+		os.Getenv("PLATFORM_MARIADB_ADDR"), os.Getenv("PLATFORM_MARIADB_DATABASE"))
+	config, err := mysql.ParseDSN(dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	connector, err := mysql.NewConnector(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := platformstorage.OpenSQL(ctx, connector, platformstorage.DefaultSQLConfig())
+	if err != nil {
+		t.Fatalf("open MariaDB: %v", err)
+	}
+	defer db.Close()
+	if err := platformstorage.ApplyMigrations(ctx, db, MigrationNamespace, Migrations()); err != nil {
+		t.Fatalf("apply Researchflow migrations: %v", err)
+	}
+	var activeBaseline int
+	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM researchflow_attempts
+		WHERE status = ? AND lease_expires_at > DATE_FORMAT(UTC_TIMESTAMP(6), '%Y-%m-%dT%H:%i:%s.%f000Z')`,
+		string(domain.AttemptRunning),
+	).Scan(&activeBaseline); err != nil {
+		t.Fatal(err)
+	}
+	repository, err := NewMySQLRunRepository(db, CapacityLimits{MaxQueuedRuns: 10, MaxWorkers: activeBaseline + 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
+	now := time.Now().UTC()
+	templateFingerprint := "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+	type claimTarget struct {
+		runRef     string
+		stageRef   string
+		attemptRef string
+	}
+	targets := []claimTarget{
+		{runRef: "global-capacity-run-a-" + suffix, stageRef: "global-capacity-stage-a-" + suffix, attemptRef: "global-capacity-attempt-a-" + suffix},
+		{runRef: "global-capacity-run-b-" + suffix, stageRef: "global-capacity-stage-b-" + suffix, attemptRef: "global-capacity-attempt-b-" + suffix},
+	}
+	for i, target := range targets {
+		record := application.CreateRunRecord{
+			Scope: application.IdempotencyScope{
+				CallerRef: "researchflow-global-capacity-" + suffix,
+				Operation: "CreateRun",
+				Key:       fmt.Sprintf("global-capacity-%d-%s", i, suffix),
+			},
+			Fingerprint: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			Run: domain.Run{
+				Ref: target.runRef, SchemaVersion: "v1", Status: domain.RunCreated, Version: 1,
+				SystemAsOf: now.Add(-time.Minute), DeadlineAt: now.Add(10 * time.Minute),
+				TemplateRef: "global-capacity-template", TemplateVersion: "v1",
+				TemplateFingerprint: templateFingerprint, InputSnapshotRefs: []string{},
+				CorrelationID: "global-capacity-correlation-" + suffix,
+			},
+			Stages: []domain.Stage{{
+				Ref: target.stageRef, RunRef: target.runRef, Code: "context",
+				Status: domain.StagePending, Version: 1, Required: true,
+				Dependencies: []string{}, RetryPolicyRef: "retry-v1",
+				DiagnosticRefs: []string{}, ReasonCodes: []string{},
+			}},
+			ResolvedTemplate: template.ResolvedTemplate{
+				Ref: "global-capacity-template", Version: "v1", Fingerprint: templateFingerprint,
+				Stages: []template.ResolvedStage{{Definition: template.StageDefinition{Code: "context"}}},
+			},
+			Parameters: json.RawMessage("{}"),
+		}
+		if _, err := repository.CreateRunAtomic(ctx, record); err != nil {
+			t.Fatalf("create capacity fixture %d: %v", i, err)
+		}
+		ready := record.Stages[0]
+		ready.Status = domain.StageReady
+		ready.Version++
+		if updated, err := repository.CompareAndSwapStage(ctx, 1, ready); err != nil || !updated {
+			t.Fatalf("prepare capacity Stage %d updated=%v err=%v", i, updated, err)
+		}
+	}
+
+	type outcome struct {
+		target  claimTarget
+		attempt domain.Attempt
+		err     error
+	}
+	outcomes := make(chan outcome, len(targets))
+	var wait sync.WaitGroup
+	for _, target := range targets {
+		target := target
+		wait.Add(1)
+		go func() {
+			defer wait.Done()
+			attempt, _, err := repository.ClaimAttempt(ctx, target.runRef, target.stageRef,
+				target.attemptRef, "global-worker-"+target.runRef, time.Minute, 2, 2)
+			outcomes <- outcome{target: target, attempt: attempt, err: err}
+		}()
+	}
+	wait.Wait()
+	close(outcomes)
+
+	var winner *outcome
+	var rejected *outcome
+	for item := range outcomes {
+		item := item
+		if item.err == nil {
+			if winner != nil {
+				t.Fatal("global Worker capacity allowed two concurrent claims")
+			}
+			winner = &item
+		} else if errors.Is(item.err, ErrGlobalWorkerCapacityExceeded) {
+			rejected = &item
+		} else {
+			t.Fatalf("unexpected global capacity claim error: %v", item.err)
+		}
+	}
+	if winner == nil || rejected == nil {
+		t.Fatalf("expected one successful claim and one capacity rejection; winner=%v rejected=%v", winner != nil, rejected != nil)
+	}
+	var active int
+	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM researchflow_attempts
+		WHERE status = ? AND lease_expires_at > ?`,
+		string(domain.AttemptRunning), formatResearchflowTimeValue(time.Now().UTC()),
+	).Scan(&active); err != nil {
+		t.Fatal(err)
+	}
+	if active != activeBaseline+1 {
+		t.Fatalf("active global Worker leases=%d, want baseline %d plus one", active, activeBaseline)
+	}
+
+	// Expired leases release the global slot; the previously rejected Run can then claim.
+	if _, err := db.ExecContext(ctx, "UPDATE researchflow_attempts SET lease_expires_at = ? WHERE attempt_ref = ?",
+		formatResearchflowTimeValue(time.Now().UTC().Add(-time.Minute)), winner.attempt.Ref); err != nil {
+		t.Fatalf("expire winning Worker lease: %v", err)
+	}
+	reclaimed, _, err := repository.ClaimAttempt(ctx, rejected.target.runRef, rejected.target.stageRef,
+		"global-capacity-retry-"+suffix, "global-worker-retry", time.Minute, 2, 2)
+	if err != nil {
+		t.Fatalf("claim after global Worker lease expiry: %v", err)
+	}
+	if reclaimed.Ref == "" {
+		t.Fatal("claim after lease expiry returned an empty Attempt")
+	}
+}

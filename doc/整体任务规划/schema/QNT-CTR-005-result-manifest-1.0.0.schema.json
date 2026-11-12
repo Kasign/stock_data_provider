@@ -8,6 +8,10 @@
     "result_id",
     "manifest_fingerprint",
     "result_type",
+    "scope",
+    "period",
+    "quality_status",
+    "result_status",
     "schema_version",
     "payload_schema_version",
     "algorithm_version",
@@ -75,6 +79,68 @@
     "result_fingerprint": {
       "type": "string",
       "pattern": "^[0-9a-f]{64}$"
+    },
+    "scope": {
+      "type": "string",
+      "enum": [
+        "stock",
+        "market",
+        "industry",
+        "portfolio"
+      ]
+    },
+    "security_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+    },
+    "trade_date": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+      "format": "date"
+    },
+    "period": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+    },
+    "quality_status": {
+      "type": "string",
+      "enum": [
+        "valid",
+        "degraded",
+        "invalid",
+        "unknown"
+      ]
+    },
+    "result_status": {
+      "type": "string",
+      "enum": [
+        "completed",
+        "insufficient_data",
+        "insufficient_sample",
+        "rejected",
+        "failed"
+      ]
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "scope": {
+            "const": "stock"
+          }
+        },
+        "required": [
+          "scope"
+        ]
+      },
+      "then": {
+        "required": [
+          "security_id"
+        ]
+      }
+    }
+  ]
 }

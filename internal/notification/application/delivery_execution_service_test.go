@@ -403,8 +403,8 @@ func TestDeliveryExecutionBoundsChannelCallAndPersistsTimeoutWithParentContext(t
 		context.Background(), claim, event, "attempt-execution-timeout",
 		0.5, "evidence-execution-timeout",
 	)
-	if err != nil {
-		t.Fatalf("ambiguous timeout should be persisted using parent context: %v", err)
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("channel timeout must remain visible after ambiguous result persistence, got %v", err)
 	}
 	if !adapter.hasDeadline || adapter.calls != 1 || !adapter.contextActive {
 		t.Fatalf("channel call must have an active bounded context and run once: deadline=%v active=%v calls=%d", adapter.hasDeadline, adapter.contextActive, adapter.calls)
@@ -432,7 +432,6 @@ func TestDeliveryExecutionCapsAttemptDeadlineByMaxElapsed(t *testing.T) {
 	}
 	service.preflight.channels = registry
 
-	startedAt := claim.Delivery.UpdatedAt.Add(time.Second)
 	result, err := service.Execute(
 		context.Background(), claim, event, "attempt-execution-max-elapsed",
 		0.5, "evidence-execution-max-elapsed",

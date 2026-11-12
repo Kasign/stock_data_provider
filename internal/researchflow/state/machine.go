@@ -39,7 +39,8 @@ func transitionRun(run domain.Run, next domain.RunStatus, now time.Time) (domain
 	allowed := false
 	switch run.Status {
 	case domain.RunCreated:
-		allowed = next == domain.RunQueued || next == domain.RunCancelled
+		// A Run may start immediately when capacity is available; queued is the persisted backlog state.
+		allowed = next == domain.RunQueued || next == domain.RunRunning || next == domain.RunCancelled
 		if run.TerminationReason == "deadline_exceeded" {
 			allowed = allowed || next == domain.RunFailed || next == domain.RunPartial
 		}

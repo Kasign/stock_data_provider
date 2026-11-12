@@ -194,7 +194,7 @@ func TestComposeResultRejectsRiskPassUsingUnusableQuantResult(t *testing.T) {
 		t.Fatal(err)
 	}
 	risk := validRiskDecision()
-	risk.InputRefs = []string{"qres_1"}
+	risk.InputRefs = []string{"qres-1"}
 	input.RiskDecision = &risk
 	if _, err := ComposeResult(input, registry); !errors.Is(err, ErrInvalidResultComposition) {
 		t.Fatalf("RiskDecision pass must not consume unusable Quant result, got %v", err)
@@ -214,7 +214,7 @@ func TestComposeResultAcceptsRiskReferencesResolvedByContextAndQuant(t *testing.
 		t.Fatal(err)
 	}
 	risk := validRiskDecision()
-	risk.InputRefs = []string{"qres_1", "snapshot-1"}
+	risk.InputRefs = []string{"qres-1", "snapshot-1"}
 	input.RiskDecision = &risk
 	result, err := ComposeResult(input, registry)
 	if err != nil {
@@ -222,6 +222,13 @@ func TestComposeResultAcceptsRiskReferencesResolvedByContextAndQuant(t *testing.
 	}
 	if result.RiskDecision == nil {
 		t.Fatal("validated RiskDecision was dropped")
+	}
+
+	// 引用必须精确匹配已纳入的 Quant Result ID；相似但不存在的别名仍应拒绝。
+	risk.InputRefs = []string{"qres_1"}
+	input.RiskDecision = &risk
+	if _, err := ComposeResult(input, registry); !errors.Is(err, ErrInvalidResultComposition) {
+		t.Fatalf("unknown near-match Quant result reference must fail closed, got %v", err)
 	}
 }
 
@@ -241,5 +248,34 @@ func TestComposeResultAllowsEvidenceKnowledgeCutoffEarlierThanRun(t *testing.T) 
 	input.Evidence[0].EvidenceDraft.SystemObservedAt = input.SystemAsOf.Add(-2 * time.Hour)
 	if _, err := ComposeResult(input, nil); err != nil {
 		t.Fatalf("older Evidence system_as_of should remain valid: %v", err)
+	}
+}
+
+func TestComposeResultRejectsUnknownEvidenceSourceOwner(t *testing.T) {
+	input := validCompositionInput()
+	input.Evidence[0].EvidenceDraft.SourceOwner = "unknown"
+	if _, err := ComposeResult(input, nil); !errors.Is(err, ErrInvalidResultComposition) {
+		t.Fatalf("unknown Evidence source owner should fail, got %v", err)
+	}
+
+	input = validCompositionInput()
+	input.Context.SectionRefs[0].SourceOwner = "unknown"
+	if _, err := ComposeResult(input, nil); !errors.Is(err, ErrInvalidResultComposition) {
+		t.Fatalf("unknown Context section source owner should fail, got %v", err)
+	}
+}
+
+func TestComposeResultRejectsCyclicEvidenceDerivation(t *testing.T) {
+	input := validCompositionInput()
+	second := input.Evidence[0]
+	second.EvidenceID = "ev-2"
+	second.ContentFingerprint = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+	second.EvidenceDraft.SourceRef = "snapshot-2"
+	second.EvidenceDraft.DerivedFromRefs = []string{"ev-1"}
+	input.Evidence[0].EvidenceDraft.DerivedFromRefs = []string{"ev-2"}
+	input.Evidence = append(input.Evidence, second)
+
+	if _, err := ComposeResult(input, nil); !errors.Is(err, ErrInvalidResultComposition) {
+		t.Fatalf("cyclic Evidence derivation should fail, got %v", err)
 	}
 }

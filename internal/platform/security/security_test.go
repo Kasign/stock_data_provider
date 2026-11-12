@@ -51,11 +51,11 @@ func requestWithToken(token string) *http.Request {
 func TestAuthenticateOwnerAndService(t *testing.T) {
 	auth := newTestAuthenticator(t)
 	owner, err := auth.Authenticate(requestWithToken(ownerToken))
-	if err != nil || owner.Kind != IdentityOwner || owner.Subject != "owner" {
+	if err != nil || owner.Kind != IdentityOwner || owner.AuthMethod != AuthMethodOwnerBearer || owner.Subject != "owner" {
 		t.Fatalf("owner = %+v, err=%v", owner, err)
 	}
 	service, err := auth.Authenticate(requestWithToken(dataToken))
-	if err != nil || service.Kind != IdentityService || service.Subject != "data-service" {
+	if err != nil || service.Kind != IdentityService || service.AuthMethod != AuthMethodServiceBearer || service.Subject != "data-service" {
 		t.Fatalf("service = %+v, err=%v", service, err)
 	}
 	if !contains(service.Scopes, ScopeDataRead) {
@@ -66,7 +66,7 @@ func TestAuthenticateOwnerAndService(t *testing.T) {
 func TestAuthenticateRejectsMissingInvalidAndMalformedCredentials(t *testing.T) {
 	auth := newTestAuthenticator(t)
 	anonymous, err := auth.Authenticate(requestWithToken(""))
-	if err != nil || anonymous.Kind != IdentityAnonymous {
+	if err != nil || anonymous.Kind != IdentityAnonymous || anonymous.AuthMethod != AuthMethodAnonymous {
 		t.Fatalf("missing credentials should resolve to anonymous: %+v, %v", anonymous, err)
 	}
 	if _, err := auth.Authenticate(requestWithToken("incorrect-token-0123456789-0123456789")); err == nil {
@@ -90,7 +90,7 @@ func TestGuardEnforcesIdentityAndScope(t *testing.T) {
 	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		called = true
 		principal, ok := PrincipalFromContext(r)
-		if !ok || principal.Kind != IdentityService {
+		if !ok || principal.Kind != IdentityService || principal.AuthMethod != AuthMethodServiceBearer {
 			t.Errorf("principal missing from request context: %+v", principal)
 		}
 		w.WriteHeader(http.StatusNoContent)
@@ -398,26 +398,64 @@ func TestAuthenticatorCredentialSnapshotIsImmutableToCallers(t *testing.T) {
 	}
 }
 
+func TestWithPrincipalValidatesIdentityCombinations(t *testing.T) {
+	valid := []Principal{
+		{Kind: IdentityAnonymous, AuthMethod: AuthMethodAnonymous, Subject: "anonymous"},
+		{Kind: IdentityOwner, AuthMethod: AuthMethodOwnerBearer, Subject: "owner", Scopes: []string{ScopePlatformAdmin}},
+		{Kind: IdentityOwner, AuthMethod: AuthMethodOwnerSession, Subject: "owner"},
+		{Kind: IdentityService, AuthMethod: AuthMethodServiceBearer, Subject: "data-service", Scopes: []string{ScopeDataRead}},
+	}
+	for _, principal := range valid {
+		if _, err := WithPrincipal(context.Background(), principal); err != nil {
+			t.Errorf("valid principal rejected: %+v: %v", principal, err)
+		}
+	}
+
+	invalid := []Principal{
+		{Kind: IdentityOwner, AuthMethod: AuthMethodAnonymous, Subject: "owner"},
+		{Kind: IdentityAnonymous, AuthMethod: AuthMethodAnonymous, Subject: "anonymous", Scopes: []string{ScopeDataRead}},
+		{Kind: IdentityOwner, AuthMethod: AuthMethodOwnerBearer, Subject: "owner"},
+		{Kind: IdentityOwner, AuthMethod: AuthMethodOwnerBearer, Subject: "owner", Scopes: []string{ScopePlatformAdmin, ScopeDataRead}},
+		{Kind: IdentityOwner, AuthMethod: AuthMethodOwnerSession, Subject: "owner", Scopes: []string{ScopePlatformAdmin}},
+		{Kind: IdentityService, AuthMethod: AuthMethodServiceBearer, Subject: "bad/name", Scopes: []string{ScopeDataRead}},
+		{Kind: IdentityService, AuthMethod: AuthMethodServiceBearer, Subject: "data-service"},
+		{Kind: IdentityService, AuthMethod: AuthMethodServiceBearer, Subject: "data-service", Scopes: []string{ScopePlatformAdmin}},
+		{Kind: IdentityService, AuthMethod: AuthMethodServiceBearer, Subject: "data-service", Scopes: []string{"unknown:scope"}},
+		{Kind: IdentityOwner, AuthMethod: "unknown", Subject: "owner"},
+	}
+	for _, principal := range invalid {
+		if _, err := WithPrincipal(context.Background(), principal); err == nil {
+			t.Errorf("invalid principal accepted: %+v", principal)
+		}
+	}
+	if _, err := WithPrincipal(nil, valid[0]); err == nil {
+		t.Fatal("nil context must be rejected")
+	}
+}
+
 func TestPrincipalContextReturnsIsolatedScopeSnapshots(t *testing.T) {
 	original := Principal{
-		Kind: IdentityService, Subject: "context-service",
-		Scopes: []string{ScopeDataRead},
+		Kind: IdentityService, AuthMethod: AuthMethodServiceBearer,
+		Subject: "context-service", Scopes: []string{ScopeDataRead},
 	}
-	ctx := withPrincipal(context.Background(), original)
+	ctx, err := WithPrincipal(context.Background(), original)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// The context must not retain the caller's mutable scope slice.
 	original.Scopes[0] = ScopeResearchRun
 
 	request := httptest.NewRequest(http.MethodGet, "/protected", nil).WithContext(ctx)
 	first, ok := PrincipalFromContext(request)
-	if !ok || !contains(first.Scopes, ScopeDataRead) || contains(first.Scopes, ScopeResearchRun) {
+	if !ok || first.AuthMethod != AuthMethodServiceBearer || !contains(first.Scopes, ScopeDataRead) || contains(first.Scopes, ScopeResearchRun) {
 		t.Fatalf("context principal changed through caller-owned slice: %+v, ok=%v", first, ok)
 	}
 
 	// Mutating a returned principal must not alter the context snapshot.
 	first.Scopes[0] = ScopeResearchRun
 	second, ok := PrincipalFromContext(request)
-	if !ok || !contains(second.Scopes, ScopeDataRead) || contains(second.Scopes, ScopeResearchRun) {
+	if !ok || second.AuthMethod != AuthMethodServiceBearer || !contains(second.Scopes, ScopeDataRead) || contains(second.Scopes, ScopeResearchRun) {
 		t.Fatalf("context principal changed through returned slice: %+v, ok=%v", second, ok)
 	}
 }

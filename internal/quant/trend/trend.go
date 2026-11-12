@@ -68,7 +68,7 @@ func (r Result) Validate() error {
 		return ErrInvalidTrend
 	}
 	for _, item := range r.EvidenceMetrics {
-		if item.Validate() != nil {
+		if item.Validate() != nil || item.SystemAsOf != r.SystemAsOf {
 			return ErrInvalidTrend
 		}
 	}

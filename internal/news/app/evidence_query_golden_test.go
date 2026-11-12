@@ -50,4 +50,7 @@ func TestNewsEvidenceQueryContractGoldens(t *testing.T) {
 	if page.Items[0].AvailableAt != nil || page.NextCursor != nil {
 		t.Fatalf("nullable fields were not preserved: %+v", page.Items[0])
 	}
+	if page.Items[0].RelationStatus != EvidenceRelationNotProvided || len(page.Items[0].RelationRefs) != 0 {
+		t.Fatalf("relation status must distinguish an unqueried relation set: %+v", page.Items[0])
+	}
 }
