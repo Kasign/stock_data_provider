@@ -44,12 +44,12 @@ func NewTrendPayload(value trend.Result) (TrendPayload, error) {
 	return TrendPayload{value: copyValue}, nil
 }
 
-func (p TrendPayload) Result() trend.Result { return cloneTrendResult(p.value) }
-func (TrendPayload) resultType() string { return "trend" }
-func (TrendPayload) payloadSchemaVersion() string { return "1.0.0" }
-func (p TrendPayload) validate() error { return p.value.Validate() }
+func (p TrendPayload) Result() trend.Result            { return cloneTrendResult(p.value) }
+func (TrendPayload) resultType() string                { return "trend" }
+func (TrendPayload) payloadSchemaVersion() string      { return "1.0.0" }
+func (p TrendPayload) validate() error                 { return p.value.Validate() }
 func (p TrendPayload) marshalPayload() ([]byte, error) { return json.Marshal(p.value) }
-func (p TrendPayload) MarshalJSON() ([]byte, error) { return p.marshalPayload() }
+func (p TrendPayload) MarshalJSON() ([]byte, error)    { return p.marshalPayload() }
 
 // RiskPayload 是 risk/1.0.0 的强类型载荷。
 type RiskPayload struct {
@@ -64,12 +64,12 @@ func NewRiskPayload(value risk.Decision) (RiskPayload, error) {
 	return RiskPayload{value: copyValue}, nil
 }
 
-func (p RiskPayload) Decision() risk.Decision { return cloneRiskDecision(p.value) }
-func (RiskPayload) resultType() string { return "risk" }
-func (RiskPayload) payloadSchemaVersion() string { return "1.0.0" }
-func (p RiskPayload) validate() error { return p.value.Validate() }
+func (p RiskPayload) Decision() risk.Decision         { return cloneRiskDecision(p.value) }
+func (RiskPayload) resultType() string                { return "risk" }
+func (RiskPayload) payloadSchemaVersion() string      { return "1.0.0" }
+func (p RiskPayload) validate() error                 { return p.value.Validate() }
 func (p RiskPayload) marshalPayload() ([]byte, error) { return json.Marshal(p.value) }
-func (p RiskPayload) MarshalJSON() ([]byte, error) { return p.marshalPayload() }
+func (p RiskPayload) MarshalJSON() ([]byte, error)    { return p.marshalPayload() }
 
 // DecodePayload 按 result_type + payload_schema_version 解码已注册的强类型载荷。
 // 未注册组合 fail closed；禁止退回 map[string]any 或宽泛 JSON 对象。

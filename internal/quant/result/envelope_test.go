@@ -24,7 +24,7 @@ func validTrendPayload(t *testing.T) TrendPayload {
 		EvidenceMetrics:  []metric.Metric{},
 		ConflictRefs:     []string{},
 		QualityStatus:    trend.QualityValid,
-		SystemAsOf: envelopeTestTime(t),
+		SystemAsOf:       envelopeTestTime(t),
 		AlgorithmVersion: "trend-algorithm.v1",
 	}
 	payload, err := NewTrendPayload(value)
