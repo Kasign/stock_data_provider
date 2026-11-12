@@ -1028,7 +1028,7 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	if err := <-publishDone; err != nil {
 		t.Fatalf("publish revocation after read commit: %v", err)
 	}
-	if _, err := repository.GetEvidenceContentWithCurrentAuthorization(
+	if _, _, err := repository.GetEvidenceContentWithCurrentAuthorization(
 		ctx, atomicBinding, secondObservation, secondVersion.Version, time.Now().UTC(),
 		func(context.Context, domain.CurrentAuthorizationPolicySet, _ domain.Observation) error { return nil },
 	); !errors.Is(err, app.ErrNewsCurrentPolicyUnavailable) {
@@ -1113,7 +1113,7 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	// Binding 的资源引用不匹配时，不得进入策略读取或正文读取事务。
 	invalidResourceBinding := revokedBinding
 	invalidResourceBinding.ResourceRef = "news-evidence-wrong-resource"
-	if _, err := repository.GetEvidenceContentWithCurrentAuthorization(
+	if _, _, err := repository.GetEvidenceContentWithCurrentAuthorization(
 		ctx, invalidResourceBinding, revokedObservation, secondVersion.Version, time.Now().UTC(),
 		func(context.Context, domain.CurrentAuthorizationPolicySet, _ domain.Observation) error { return nil },
 	); !errors.Is(err, app.ErrInvalidEvidenceQuery) {
