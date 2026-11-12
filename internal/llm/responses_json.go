@@ -216,6 +216,7 @@ func ParseResponsesResponse(body []byte, request ModelRequest) (ModelResponse, e
 		result.Usage = normalizeResponsesUsage(envelope.Usage)
 	}
 	if result.Status == ResponseCompleted && result.ResponseID == "" {
+		result.Status = ResponseFailed
 		result.Error = invalidResponsesError("llm.responses.missing_response_id")
 		return result, ErrInvalidResponsesResponse
 	}
