@@ -45,6 +45,7 @@ func TestValidateDeliveryAttemptHistoryRejectsImpossibleHistory(t *testing.T) {
 
 func TestValidateDeliveryAttemptHistoryForDeliveryRejectsOutsideLifecycle(t *testing.T) {
 	delivery, lease, _ := recoveryFixture(t)
+	delivery.AttemptCount = 1
 	attempt := recoveryAttempt(t, delivery, lease, domain.DeliveryAttemptAccepted, true)
 	if err := ValidateDeliveryAttemptHistoryForDelivery(delivery, []domain.DeliveryAttempt{attempt}); err != nil {
 		t.Fatalf("valid attempt history rejected: %v", err)

@@ -459,7 +459,7 @@ func TestDeliveryRepositoryRetryWaitIsNotClaimedBeforeDueTime(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := repository.UpdateWithLease(ctx, first.Delivery.Version, first.Lease.FencingToken, staleNext, staleEvent, retryAt.Add(time.Second)); !errors.Is(err, ErrDeliveryVersionConflict) {
+	if err := repository.UpdateWithLease(ctx, first.Delivery.Version, first.Lease.FencingToken, staleNext, staleEvent, retryAt.Add(time.Second)); !errors.Is(err, ErrDeliveryLeaseConflict) {
 		t.Fatalf("old worker must not overwrite the newer claim, got %v", err)
 	}
 }
