@@ -1544,9 +1544,17 @@ Server Bootstrap
 
 ### 12.70 SRV-005 跨分支契约状态复核（2026-11-12）
 
-- 复核 Server 分支与当前 `integration` 的 `PLAT-CTR-003` 文件，双方文件均标记为 `freeze-ready（待项目负责人确认冻结）`，不是 `frozen`。此前工作记录中将其描述为“已冻结”不准确；Server 后续实现只能将其视为待确认的契约基线，不得声称项目级冻结已完成。
-- 当前契约第 7 节要求账号和来源 IP 摘要为 SHA-256 小写十六进制；Server `SessionLifecycleService` 当前采用带域分离的 HMAC-SHA256。两者存在明确实现差异。HMAC 的隐私收益不能替代契约批准；在契约状态确认及 Owner 决策前，不静默改变算法，也不宣称符合性验收通过。
-- 当前契约第 5 节公开的 `SessionStore` 仅有 `LookupAndTouch`，没有只读 Lookup。Server Session Authenticator 在 CSRF 校验前触发 Touch 的问题不能仅靠 Server 调整顺序解决；需 Platform 提供只读读取或等价原子校验原语，并完成契约更新。
+- Integration 的 `doc/contract/PLAT-002-项目级契约冻结登记簿.md @ 8542b5d73da6c3b047fb275b05f58d8c0ade552e` 将 `PLAT-CTR-003` 明确登记为 `frozen`；契约正文头部仍写 `freeze-ready`，属于正文状态标记滞后。登记簿是唯一权威状态来源，Server 必须按已冻结定义推进 L2 实现符合性，不再等待再次冻结。
+- PLAT-CTR-003 第 7 节要求账号和来源 IP 摘要为 SHA-256 小写十六进制；Server `SessionLifecycleService` 当前采用带域分离的 HMAC-SHA256，属于明确 L2 实现差异。此前以契约未冻结为由暂缓处理的判断已撤销；后续按冻结定义对齐，并单独评估摘要可枚举性风险，不能擅自改写契约语义。
+- PLAT-CTR-003 第 5 节公开的 `SessionStore` 只有 `LookupAndTouch`，没有只读 Lookup。Server Session Authenticator 在 CSRF 校验前触发 Touch 的问题无法通过 Server 侧调整顺序解决；作为 Platform 消费者缺口记录，需在 Platform 分支提出兼容的只读读取/原子校验能力，不在本分支复制 Redis 实现。
 - `integration` 本轮核查基线为 `8542b5d73da6c3b047fb275b05f58d8c0ade552e`；Server 分支保持独立，本轮没有合并或修改 Integration/Platform。
 - SRV-007 当前 Bootstrap Migration Registry 实际包含六个 namespace：`news`、`research`、`researchflow`、`notification`、`platform.security`、`server.security_audit`。同步修正 SRV-007 状态摘要，避免将安全基础设施 Migration 漏记为仅四项注册。
 - 后续门禁：先由契约 Owner 确认 PLAT-CTR-003 冻结状态及限流摘要算法；Platform Owner 提供 Session 只读/原子校验能力后，再修正 Server 认证顺序。未满足前不启用 Owner Session HTTP 入口。
+
+
+### 12.71 SRV-005 PLAT-CTR-001 ErrorEnvelope 对齐（2026-11-12）
+
+- 冻结基线：Integration `doc/contract/PLAT-002-项目级契约冻结登记簿.md @ 8542b5d73da6c3b047fb275b05f58d8c0ade552e` 将 PLAT-CTR-001 登记为 `frozen`。契约正文头部的 `freeze-ready` 标记同样滞后，不能覆盖登记簿状态。
+- 原 Server `publicErrorEnvelope` 缺少必需字段 `schema_version`，错误对象也没有可选 `request_id`；与 PLAT-CTR-001 1.0.0 Schema/Golden 不一致。
+- 已在 `internal/server/bootstrap/http_middleware.go` 统一输出 `schema_version=1.0.0`，并从可信 Request Context 注入可选 `error.request_id`。413 请求体超限、并发过载和 Platform Fault 投影均复用该 Envelope；请求 ID Header 仍由 PLAT-CTR-002 Middleware 负责生成和回显。
+- 新增测试覆盖 Envelope 版本、body/header Request ID 一致性和错误内部字段不泄露。该实现只完成 Server Transport 边界符合性，不代表旧 Analysis Handler 已全部切换公共 ErrorEnvelope，也不代表模块 Handler 已完成统一接入。

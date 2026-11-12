@@ -53,6 +53,14 @@ func TestHTTPMiddlewareRejectsDeclaredOversizedBody(t *testing.T) {
 	if !strings.Contains(response.Body.String(), "server.request_too_large") {
 		t.Fatalf("unexpected response: %s", response.Body.String())
 	}
+	var body publicErrorEnvelope
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode ErrorEnvelope: %v", err)
+	}
+	requestID := response.Header().Get(observability.RequestIDHeader)
+	if body.SchemaVersion != "1.0.0" || requestID == "" || body.Error.RequestID != requestID {
+		t.Fatalf("ErrorEnvelope schema/request ID mismatch: body=%+v header=%q", body, requestID)
+	}
 }
 
 func TestHTTPMiddlewareWrapsChunkedBodyWithMaxBytesReader(t *testing.T) {
