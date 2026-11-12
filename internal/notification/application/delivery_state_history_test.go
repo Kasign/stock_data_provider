@@ -31,7 +31,7 @@ func TestValidateDeliveryStateHistory(t *testing.T) {
 		{name: "event reason mismatch", record: func() domain.DeliveryRecord {
 			value := snapshot
 			reason := "snapshot_reason"
-				value.ReasonCode = &reason
+			value.ReasonCode = &reason
 			return value
 		}(), events: []domain.DeliveryStateEvent{func() domain.DeliveryStateEvent {
 			event := sending
