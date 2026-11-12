@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"reflect"
-	"testing"
+	"testing"\n\t"time"
 
 	"example.com/stock-analysis-flow/internal/notification/domain"
 )
@@ -65,6 +65,9 @@ func productionFanoutInputs() (domain.EventEnvelope, domain.Subscription, domain
 		Status: domain.SubscriptionActive, EventType: event.EventType,
 		RecipientScope: domain.RecipientScopeOwner, ChannelRef: channel.ChannelRef,
 		TemplateID: "template-1",
+		CreatedAt: time.Date(2026, 11, 12, 0, 0, 0, 0, time.UTC),
+		UpdatedAt: time.Date(2026, 11, 12, 0, 0, 0, 0, time.UTC),
+		EffectiveAt: time.Date(2026, 11, 12, 0, 0, 0, 0, time.UTC),
 	}
 	recipient := RecipientDirectoryResult{
 		Target: domain.RecipientTarget{
@@ -134,6 +137,7 @@ func TestProductionFanoutPlanFactoryDoesNotRequireFilterMatcherForNullFilters(t 
 func TestProductionFanoutPlanFactoryFailsClosedWhenFilterMatcherMissing(t *testing.T) {
 	event, subscription, channel, recipient := productionFanoutInputs()
 	subscription.Filters = []byte(`{"status":"reject"}`)
+	subscription.FilterSchemaVersion = "1.0.0"
 	factory, err := NewProductionFanoutPlanFactory(
 		nil, fanoutChannelSelectorStub{snapshot: channel},
 		fanoutTemplateSelectorStub{version: 1}, &fanoutRecipientDirectoryStub{result: recipient},
@@ -164,6 +168,7 @@ func TestProductionFanoutPlanFactoryReturnsUnmatchedForFilterAndAuthorizationDen
 	}
 
 	subscription.Filters = nil
+	subscription.FilterSchemaVersion = ""
 	directory := &fanoutRecipientDirectoryStub{err: ErrRecipientNotAuthorized}
 	factory, _ = NewProductionFanoutPlanFactory(
 		nil, fanoutChannelSelectorStub{snapshot: channel},
@@ -185,5 +190,33 @@ func TestProductionFanoutPlanFactoryDoesNotDowngradeDependencyFailures(t *testin
 	_, err := factory.Build(context.Background(), event, subscription)
 	if !errors.Is(err, dependencyErr) {
 		t.Fatalf("dependency failure must remain an error: %v", err)
+	}
+}
+
+func TestProductionFanoutPlanFactoryRejectsInvalidFrozenSubscriptionFields(t *testing.T) {
+	cases := []struct {
+		name string
+		mutate func(*domain.Subscription)
+	}{
+		{name: "schema version without filters", mutate: func(s *domain.Subscription) { s.FilterSchemaVersion = "1.0.0" }},
+		{name: "filters without schema version", mutate: func(s *domain.Subscription) { s.Filters = []byte(`{"status":"reject"}`) }},
+		{name: "duplicate filter key", mutate: func(s *domain.Subscription) { s.Filters = []byte(`{"status":"reject","status":"pass"}`); s.FilterSchemaVersion = "1.0.0" }},
+		{name: "non UTC timestamp", mutate: func(s *domain.Subscription) { s.UpdatedAt = s.UpdatedAt.In(time.FixedZone("UTC+8", 8*60*60)) }},
+		{name: "effective before creation", mutate: func(s *domain.Subscription) { s.EffectiveAt = s.CreatedAt.Add(-time.Second) }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			event, subscription, channel, recipient := productionFanoutInputs()
+			tc.mutate(&subscription)
+			factory, err := NewProductionFanoutPlanFactory(nil,
+				fanoutChannelSelectorStub{snapshot: channel},
+				fanoutTemplateSelectorStub{version: 1},
+				&fanoutRecipientDirectoryStub{result: recipient},
+			)
+			if err != nil { t.Fatal(err) }
+			if _, err := factory.Build(context.Background(), event, subscription); !errors.Is(err, domain.ErrInvalidSubscription) {
+				t.Fatalf("expected invalid subscription, got %v", err)
+			}
+		})
 	}
 }
