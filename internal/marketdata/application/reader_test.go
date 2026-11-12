@@ -104,7 +104,7 @@ func TestReaderGetDailyBarsSelectsCurrentAndPITUseCases(t *testing.T) {
 		AdjustmentFactorRevisionHash: "factor-revision-v2", AdjustmentFactorSetHash: "factor-set-v2",
 		AdjustmentFactorReferenceRevisionHash: "reference-revision-v2", AdjustmentAlgorithmVersion: "cumulative_adj_factor_v1",
 		AdjustmentFactorSystemObservedAt: &factorObservedAt,
-		Source: "eastmoney", SourceVersion: "bars-v3", ProviderTime: &providerTime,
+		Source:                           "eastmoney", SourceVersion: "bars-v3", ProviderTime: &providerTime,
 		FetchedAt: providerTime.Add(3 * time.Minute), NormalizedAt: providerTime.Add(4 * time.Minute),
 		SystemObservedAt: &systemObservedAt, RawVolume: &rawVolume, RawVolumeUnit: "手",
 		RawAmount: &rawAmount, RawAmountUnit: "CNY", RawAmountField: "amount",
