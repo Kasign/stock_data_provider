@@ -22,45 +22,45 @@ type PasswordHasher interface {
 }
 
 type SessionLifecycleConfig struct {
-	RateLimitHMACKey	[]byte
-	Cookie	platformsecurity.SessionCookieConfig
-	IdleTTL	time.Duration
-	AbsoluteTTL	time.Duration
-	RateLimitPolicy	platformsecurity.LoginRateLimitPolicy
-	Now	func() time.Time
+	RateLimitHMACKey []byte
+	Cookie           platformsecurity.SessionCookieConfig
+	IdleTTL          time.Duration
+	AbsoluteTTL      time.Duration
+	RateLimitPolicy  platformsecurity.LoginRateLimitPolicy
+	Now              func() time.Time
 }
 
 type SessionLifecycleDependencies struct {
-	Credentials	platformsecurity.CredentialStore
-	Sessions	platformsecurity.SessionStore
-	RateLimiter	platformsecurity.LoginRateLimiter
-	Hasher	PasswordHasher
-	Audit	platformsecurity.SecurityAuditWriter
+	Credentials platformsecurity.CredentialStore
+	Sessions    platformsecurity.SessionStore
+	RateLimiter platformsecurity.LoginRateLimiter
+	Hasher      PasswordHasher
+	Audit       platformsecurity.SecurityAuditWriter
 }
 
 type SessionLifecycleService struct {
-	credentials	platformsecurity.CredentialStore
-	sessions	platformsecurity.SessionStore
-	rateLimiter	platformsecurity.LoginRateLimiter
-	hasher	PasswordHasher
-	audit	platformsecurity.SecurityAuditWriter
-	cookie	platformsecurity.SessionCookieConfig
-	idleTTL	time.Duration
-	absoluteTTL	time.Duration
-	policy	platformsecurity.LoginRateLimitPolicy
-	rateKey	[]byte
-	now	func() time.Time
+	credentials platformsecurity.CredentialStore
+	sessions    platformsecurity.SessionStore
+	rateLimiter platformsecurity.LoginRateLimiter
+	hasher      PasswordHasher
+	audit       platformsecurity.SecurityAuditWriter
+	cookie      platformsecurity.SessionCookieConfig
+	idleTTL     time.Duration
+	absoluteTTL time.Duration
+	policy      platformsecurity.LoginRateLimitPolicy
+	rateKey     []byte
+	now         func() time.Time
 }
 
 type LoginInput struct {
-	Password	[]byte
-	SourceIP	net.IP
-	RequestID	string
+	Password  []byte
+	SourceIP  net.IP
+	RequestID string
 }
 
 type SessionIssue struct {
-	Cookie	*http.Cookie
-	CSRFToken	string
+	Cookie    *http.Cookie
+	CSRFToken string
 }
 
 func NewSessionLifecycleService(deps SessionLifecycleDependencies, cfg SessionLifecycleConfig) (*SessionLifecycleService, error) {
@@ -91,17 +91,17 @@ func NewSessionLifecycleService(deps SessionLifecycleDependencies, cfg SessionLi
 		now = time.Now
 	}
 	return &SessionLifecycleService{
-		credentials:	deps.Credentials,
-		sessions:	deps.Sessions,
-		rateLimiter:	deps.RateLimiter,
-		hasher:	deps.Hasher,
-		audit:	deps.Audit,
-		cookie:	cfg.Cookie,
-		idleTTL:	cfg.IdleTTL,
-		absoluteTTL:	cfg.AbsoluteTTL,
-		policy:	cfg.RateLimitPolicy,
-		rateKey:	append([]byte(nil), cfg.RateLimitHMACKey...),
-		now:	now,
+		credentials: deps.Credentials,
+		sessions:    deps.Sessions,
+		rateLimiter: deps.RateLimiter,
+		hasher:      deps.Hasher,
+		audit:       deps.Audit,
+		cookie:      cfg.Cookie,
+		idleTTL:     cfg.IdleTTL,
+		absoluteTTL: cfg.AbsoluteTTL,
+		policy:      cfg.RateLimitPolicy,
+		rateKey:     append([]byte(nil), cfg.RateLimitHMACKey...),
+		now:         now,
 	}, nil
 }
 
@@ -143,7 +143,7 @@ func (s *SessionLifecycleService) Login(ctx context.Context, input LoginInput) (
 		return SessionIssue{}, platformfault.New(platformfault.ClassValidation, "server.invalid_login_input", "login input is invalid", nil)
 	}
 	accountDigest := securityDigest(s.rateKey, "account:owner")
-	ipDigest := securityDigest(s.rateKey, "source-ip:" + canonicalIP(input.SourceIP))
+	ipDigest := securityDigest(s.rateKey, "source-ip:"+canonicalIP(input.SourceIP))
 	limit, err := s.rateLimiter.Check(ctx, accountDigest, ipDigest)
 	if err != nil {
 		return SessionIssue{}, err
@@ -327,13 +327,13 @@ func (s *SessionLifecycleService) createSession(ctx context.Context, credentialV
 		return SessionIssue{}, "", err
 	}
 	record := platformsecurity.SessionRecord{
-		Subject:	"owner",
-		CreatedAt:	now,
-		LastSeenAt:	now,
-		IdleExpiresAt:	minTime(now.Add(s.idleTTL), now.Add(s.absoluteTTL)),
-		AbsoluteExpiresAt:	now.Add(s.absoluteTTL),
-		CredentialVersion:	credentialVersion,
-		CSRFTokenDigest:	csrfDigest,
+		Subject:           "owner",
+		CreatedAt:         now,
+		LastSeenAt:        now,
+		IdleExpiresAt:     minTime(now.Add(s.idleTTL), now.Add(s.absoluteTTL)),
+		AbsoluteExpiresAt: now.Add(s.absoluteTTL),
+		CredentialVersion: credentialVersion,
+		CSRFTokenDigest:   csrfDigest,
 	}
 	if err := s.sessions.Create(ctx, digest, record); err != nil {
 		return SessionIssue{}, "", err
@@ -347,10 +347,10 @@ func (s *SessionLifecycleService) createSession(ctx context.Context, credentialV
 }
 
 func (s *SessionLifecycleService) writeAudit(ctx context.Context, requestID string, eventType platformsecurity.SecurityAuditEventType,
-	subject	string, result platformsecurity.SecurityAuditResult, source platformsecurity.SecurityAuditSource, reason string) error {
+	subject string, result platformsecurity.SecurityAuditResult, source platformsecurity.SecurityAuditSource, reason string) error {
 	return platformsecurity.WriteSecurityAudit(ctx, s.audit, platformsecurity.SecurityAuditEvent{
-		EventType:	eventType, Subject:	subject, Result:	result, OccurredAt:	s.now().UTC(),
-		RequestID:	requestID, Source:	source, ReasonCode:	reason,
+		EventType: eventType, Subject: subject, Result: result, OccurredAt: s.now().UTC(),
+		RequestID: requestID, Source: source, ReasonCode: reason,
 	})
 }
 

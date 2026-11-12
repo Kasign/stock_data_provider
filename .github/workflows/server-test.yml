@@ -31,7 +31,6 @@ jobs:
           cache: true
       - name: Check Server gofmt
         run: |
-          gofmt -d ./cmd/analysis-api ./internal/server
           files="$(gofmt -l ./cmd/analysis-api ./internal/server)"
           if [[ -n "$files" ]]; then
             printf '%s\n' "$files"

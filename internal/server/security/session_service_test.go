@@ -24,9 +24,9 @@ func (h lifecycleTestHasher) NeedsRehash(string) (bool, error) {
 }
 
 type lifecycleTestCredentials struct {
-	credential	platformsecurity.OwnerCredential
-	initErr	error
-	updateErr	error
+	credential platformsecurity.OwnerCredential
+	initErr    error
+	updateErr  error
 }
 
 func (s *lifecycleTestCredentials) GetOwnerCredential(context.Context) (platformsecurity.OwnerCredential, error) {
@@ -52,10 +52,10 @@ func (s *lifecycleTestCredentials) UpdateOwnerPassword(_ context.Context, versio
 }
 
 type lifecycleTestSessions struct {
-	createdDigest	string
-	record	platformsecurity.SessionRecord
-	revoked	[]string
-	rotateErr	error
+	createdDigest string
+	record        platformsecurity.SessionRecord
+	revoked       []string
+	rotateErr     error
 }
 
 func (s *lifecycleTestSessions) Create(_ context.Context, digest string, record platformsecurity.SessionRecord) error {
@@ -81,10 +81,10 @@ func (s *lifecycleTestSessions) Revoke(_ context.Context, digest string) error {
 }
 
 type lifecycleTestRateLimiter struct {
-	checkResult	platformsecurity.LoginRateLimitResult
-	failures	int
-	reset	int
-	err	error
+	checkResult platformsecurity.LoginRateLimitResult
+	failures    int
+	reset       int
+	err         error
 }
 
 func (r *lifecycleTestRateLimiter) Check(context.Context, string, string) (platformsecurity.LoginRateLimitResult, error) {
@@ -103,8 +103,8 @@ func (r *lifecycleTestRateLimiter) ResetAccount(context.Context, string) error {
 }
 
 type lifecycleTestAudit struct {
-	events	[]platformsecurity.SecurityAuditEvent
-	err	error
+	events []platformsecurity.SecurityAuditEvent
+	err    error
 }
 
 func (a *lifecycleTestAudit) Write(_ context.Context, event platformsecurity.SecurityAuditEvent) error {
@@ -115,34 +115,34 @@ func (a *lifecycleTestAudit) Write(_ context.Context, event platformsecurity.Sec
 func newLifecycleTestService(t *testing.T, auditErr error) (*SessionLifecycleService, *lifecycleTestCredentials, *lifecycleTestSessions, *lifecycleTestRateLimiter, *lifecycleTestAudit) {
 	t.Helper()
 	credentials := &lifecycleTestCredentials{credential:	platformsecurity.OwnerCredential{
-		Subject:	"owner", PasswordHash: "encoded:correct", CredentialVersion:	7,
+		Subject: "owner", PasswordHash: "encoded:correct", CredentialVersion: 7,
 	}}
 	sessions := &lifecycleTestSessions{}
 	limiter := &lifecycleTestRateLimiter{checkResult: platformsecurity.LoginRateLimitResult{Allowed: true}}
 	audit := &lifecycleTestAudit{err: auditErr}
 	now := time.Date(2026, 11, 12, 9, 0, 0, 0, time.UTC)
 	service, err := NewSessionLifecycleService(SessionLifecycleDependencies{
-		Credentials:	credentials,
-		Sessions:	sessions,
-		RateLimiter:	limiter,
+		Credentials: credentials,
+		Sessions:    sessions,
+		RateLimiter: limiter,
 		Hasher: lifecycleTestHasher{expected: "correct"},
-		Audit:	audit,
+		Audit: audit,
 	}, SessionLifecycleConfig{
-		RateLimitHMACKey:	[]byte("0123456789abcdef0123456789abcdef"),
-		Cookie:	platformsecurity.SessionCookieConfig{
-			Name:	"__Secure-owner_session",
-			Path:	"/api",
-			Secure:	true,
-			SameSite:	http.SameSiteLaxMode,
+		RateLimitHMACKey: []byte("0123456789abcdef0123456789abcdef"),
+		Cookie:           platformsecurity.SessionCookieConfig{
+			Name:     "__Secure-owner_session",
+			Path:     "/api",
+			Secure:   true,
+			SameSite: http.SameSiteLaxMode,
 		},
-		IdleTTL:	12 * time.Hour,
-		AbsoluteTTL:	7 * 24 * time.Hour,
-		RateLimitPolicy:	platformsecurity.LoginRateLimitPolicy{
-			AccountMaxFailures:	5,
-			IPMaxFailures:	10,
-			Window:	15 * time.Minute,
-			BaseBackoff:	time.Second,
-			MaxBackoff:	15 * time.Minute,
+		IdleTTL:         12 * time.Hour,
+		AbsoluteTTL:     7 * 24 * time.Hour,
+		RateLimitPolicy: platformsecurity.LoginRateLimitPolicy{
+			AccountMaxFailures: 5,
+			IPMaxFailures:      10,
+			Window:             15 * time.Minute,
+			BaseBackoff:        time.Second,
+			MaxBackoff:         15 * time.Minute,
 		},
 		Now: func() time.Time {
 			return now
@@ -158,7 +158,7 @@ func TestSessionLifecycleLoginCreatesFreshOwnerSession(t *testing.T) {
 	service, _, sessions, limiter, audit := newLifecycleTestService(t, nil)
 	password := []byte("correct")
 	issue, err := service.Login(context.Background(), LoginInput{
-		Password:	password, SourceIP:	net.ParseIP("192.0.2.10"), RequestID:	"req-123",
+		Password: password, SourceIP: net.ParseIP("192.0.2.10"), RequestID: "req-123",
 	})
 	if err != nil {
 		t.Fatalf("Login() error = %v", err)
@@ -180,7 +180,7 @@ func TestSessionLifecycleLoginCreatesFreshOwnerSession(t *testing.T) {
 func TestSessionLifecycleLoginRevokesSessionWhenAuditFails(t *testing.T) {
 	service, _, sessions, _, _ := newLifecycleTestService(t, errors.New("audit unavailable"))
 	_, err := service.Login(context.Background(), LoginInput{
-		Password:	[]byte("correct"), SourceIP:	net.ParseIP("192.0.2.10"), RequestID:	"req-123",
+		Password: []byte("correct"), SourceIP: net.ParseIP("192.0.2.10"), RequestID: "req-123",
 	})
 	if err == nil {
 		t.Fatal("Login succeeded without required audit persistence")
@@ -193,7 +193,7 @@ func TestSessionLifecycleLoginRevokesSessionWhenAuditFails(t *testing.T) {
 func TestSessionLifecycleLoginRecordsWrongPassword(t *testing.T) {
 	service, _, sessions, limiter, audit := newLifecycleTestService(t, nil)
 	_, err := service.Login(context.Background(), LoginInput{
-		Password:	[]byte("wrong"), SourceIP:	net.ParseIP("192.0.2.10"), RequestID:	"req-123",
+		Password: []byte("wrong"), SourceIP: net.ParseIP("192.0.2.10"), RequestID: "req-123",
 	})
 	if err == nil {
 		t.Fatal("wrong password was accepted")
