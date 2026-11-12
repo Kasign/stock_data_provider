@@ -1282,3 +1282,10 @@ Go suite 覆盖根模块、go-core、market-data 的格式/测试/race/vet、Mar
   - 查询窗口 `2025-09-12..2025-09-30`；观察到 `2025-09-12`、`2025-09-29`、`2025-09-30`；停牌窗口 rows=0，停牌前 rows=1，复牌日 rows=1 且 quality valid；status `suspension_gap_and_resume_verified`。
 - 判定：Pytdx 对盘中临停日保留成交日 K，对全天停牌期间不返回日 K，并在复牌日恢复；本项真实验收通过，范围仅限上述 4 个盘中样本和 1 个全天停牌窗口。
 - 限制：未调用 Tushare；真实 `SecurityTradingStatus` 数据源仍受 `40203 permission_required` 权限限制，因此本结果不代表 Tushare 状态 Provider 或 DataService 状态分类已完成端到端真实验收。
+
+## 71. 2026-11-12：BaoStock tradestatus/isST 探针运行取消
+
+- 探针提交：\`9fb34c717d130ad326be988110b341125be8e510\`；后续格式整理提交：\`1d24e84c53b948d8c29389c997c2687ba2a4856e\`。
+- GitHub Actions Go Test Suite Run \`43218703390\` 已取消；没有取得该测试的真实 Provider 输出，未证明 BaoStock \`tradestatus\` 或 \`isST\` 在样本日期上的实际值。
+- 取消前的探针实现只记录原始字段和计数，没有对官方停牌交易日、复牌日及盘中临停日的字段值作断言；不能把该次运行当作字段语义验收。
+- 后续已在 P0-89 补齐源码断言，待 integration 运行。此记录状态为 \`cancelled / not_executed\`，不是 pass、degraded 或 provider failure；没有原始数据可用于质量判定。
