@@ -102,7 +102,7 @@ func TestHithinkDailyResponseRejectsDuplicateDatesWithinSingleResponse(t *testin
 	reporter := validation.NewReporter(20)
 	ctx := validation.WithReporter(context.Background(), reporter)
 	_, err := provider.FetchDailyBars(ctx, "600036.SH", "2026-10-07", "2026-10-09", 10, model.AdjustmentNone)
-	if err == nil || !strings.Contains(err.Error(), "duplicate trade date 2026-10-08") ||
+	if err == nil || !strings.Contains(err.Error(), "重复交易日 2026-10-08") ||
 		!strings.Contains(err.Error(), "first_row=1 duplicate_row=2 returned_rows=3") {
 		t.Fatalf("expected single-response duplicate diagnostic, got %v", err)
 	}
