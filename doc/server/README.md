@@ -1334,6 +1334,18 @@ Lifecycle.Stop 原实现通过 stopped 标记保证重复调用幂等，但并�
 - 首次 CI Run `43140116477` 在 gofmt 门禁发现 `lifecycle.go` 与 `lifecycle_test.go` 格式不符合规范，后续测试步骤因此跳过；修正后 Run `43140433555`（SHA `a26ab79788bbff317cb2d5a9561e2e8330935f1d`）成功，Server gofmt、包级单测、Race、Vet 全部通过。
 
 
+### 12.60 Server 模块代码 Review 与 HTTP 关闭超时修正（2026-11-12）
+
+- Review 基线：分支 HEAD `efdb04ef071481e1ed2d34adaa990ea6a62e5b1a`；本轮检查 `cmd/analysis-api` 与 `internal/server/**` 全部 34 个文件，覆盖 Bootstrap、Config、Diagnostics、Health、LLM Transport、Migration、Resources、Lifecycle 及对应测试。
+- Review 结论：未发现当前 Server 所有权包存在编译错误；既有 HEAD 的 Server CI 已通过 gofmt、包测试、Race、Vet。
+- 发现并修正：`httpServerComponent.Stop` 在 `Shutdown(ctx)` 超时并强制关闭 Socket 后，仍无条件等待活动 Handler 全部退出，活动 Handler 若不响应取消会使 Stop 超过配置的关闭预算并阻塞 Bootstrap 释放资源。
+- 修正方式：活动连接排空改为接受关闭 Context；超过关闭期限后返回可识别的 `context.DeadlineExceeded`，并保留 Listener 强制关闭及错误汇总行为。不会把未完成 Handler 误报为正常优雅退出。
+- 回归测试：将原先“超时后无限等待 Handler”的测试改为验证关闭预算生效、Listener 已退出、超时错误被返回；测试主动释放忽略取消的 Handler，避免测试遗留 goroutine。
+- 验证提交：`f1bc6ef51345e37970365e4fd1930e5fa610c2b3`（实现）、`1758514939c0d0acdb2d4a3eed4c06da4c479be2`（回归测试）。
+- 最新 Server Workflow Run `43147039665` 对应 HEAD `1758514939c0d0acdb2d4a3eed4c06da4c479be2`，gofmt、Server 包级测试、Race、Vet 全部通过。
+- 边界说明：超时后强制关闭连接不能保证一个完全忽略 Request Context 的业务 Handler 立即终止；Server 会返回关闭超时错误并继续进程级清理。业务 Handler 仍必须遵守请求 Context 取消契约。
+- 未覆盖项：本轮没有在 integration 上执行全仓构建，也没有执行真实 MariaDB/Redis 环境、生产容器或真实外部 LLM Gateway 验收；不得据此标记 L3 真实依赖验收通过。
+
 ### 12.59 当前 Server 任务边界与下一阶段计划（2026-11-12）
 
 - 核对基线：分支 HEAD `dcdcbaed13b4b28e6a21d66f60b40041f27b4d82`；最新 Server Workflow Run `43140870143` 成功，gofmt、Server 包级测试、Race、Vet 全部通过。
