@@ -12,8 +12,8 @@ import (
 	"time"
 
 	"example.com/stock-analysis-flow/internal/marketdata/cache"
-	"example.com/stock-analysis-flow/internal/marketdata/service"
 	"example.com/stock-analysis-flow/internal/marketdata/repository"
+	"example.com/stock-analysis-flow/internal/marketdata/service"
 )
 
 func newProviderProbeHTTPTestHandler() http.Handler {

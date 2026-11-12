@@ -2,8 +2,8 @@ package httpapi
 
 import (
 	"bytes"
-	"errors"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"strconv"
