@@ -1862,15 +1862,8 @@ syncRefreshButtonContext();
     button.classList.toggle("active", active);
     const group = button.closest(".nav-group");
     group?.classList.toggle("is-active", active);
-    const submenu = group?.querySelector(".nav-subnav");
     if (active) button.setAttribute("aria-current", button.dataset.view === nextView ? "page" : "location");
     else button.removeAttribute("aria-current");
-    if (submenu) {
-      button.setAttribute("aria-expanded", String(active));
-      submenu.hidden = !active;
-    } else {
-      button.removeAttribute("aria-expanded");
-    }
   });
   const title = VIEW_META[nextView].title;
   const primaryTitle = PRIMARY_NAV_META[activeGroup] || PRIMARY_NAV_META.market;
