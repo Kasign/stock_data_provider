@@ -31,9 +31,9 @@ func TestLiveBaoStockTradeStatusOnOfficialSuspensionWindow(t *testing.T) {
 	}()
 
 	const (
-		fullDaySymbol = "sz.002968"
-		fullDayStart  = "2025-09-12"
-		fullDayEnd    = "2025-09-30"
+		fullDaySymbol  = "sz.002968"
+		fullDayStart   = "2025-09-12"
+		fullDayEnd     = "2025-09-30"
 		intradaySymbol = "sh.603072"
 		intradayDate   = "2025-01-03"
 	)
@@ -68,35 +68,35 @@ func TestLiveBaoStockTradeStatusOnOfficialSuspensionWindow(t *testing.T) {
 	intradayEvidence := make([]map[string]string, 0, len(intradayRows))
 	for _, row := range intradayRows {
 		intradayEvidence = append(intradayEvidence, map[string]string{
-			"date": row.Date,
+			"date":         row.Date,
 			"trade_status": row.TradeStatus,
-			"is_st": row.IsST,
-			"open": row.Open,
-			"high": row.High,
-			"low": row.Low,
-			"close": row.Close,
-			"volume": row.Volume,
-			"amount": row.Amount,
+			"is_st":        row.IsST,
+			"open":         row.Open,
+			"high":         row.High,
+			"low":          row.Low,
+			"close":        row.Close,
+			"volume":       row.Volume,
+			"amount":       row.Amount,
 		})
 	}
 
 	report := map[string]any{
 		"provider": "baostock",
 		"full_day_suspension": map[string]any{
-			"official_url": "https://www.szse.cn/disclosure/notice/temp/t20250915_616077.html",
-			"symbol": fullDaySymbol,
+			"official_url":               "https://www.szse.cn/disclosure/notice/temp/t20250915_616077.html",
+			"symbol":                     fullDaySymbol,
 			"official_suspension_window": "2025-09-15..2025-09-28",
-			"official_resume_date": "2025-09-29",
-			"calendar": calendar,
-			"daily_rows": fullDayRows,
-			"trade_status_counts": tradeStatusCounts,
-			"is_st_counts": isSTCounts,
+			"official_resume_date":       "2025-09-29",
+			"calendar":                   calendar,
+			"daily_rows":                 fullDayRows,
+			"trade_status_counts":        tradeStatusCounts,
+			"is_st_counts":               isSTCounts,
 		},
 		"intraday_suspension": map[string]any{
 			"official_url": "https://www.sse.com.cn/disclosure/announcement/general/mainsuspension/c/c_20250103_10767682.shtml",
-			"symbol": intradaySymbol,
-			"event_date": intradayDate,
-			"daily_rows": intradayEvidence,
+			"symbol":       intradaySymbol,
+			"event_date":   intradayDate,
+			"daily_rows":   intradayEvidence,
 		},
 	}
 	encoded, err := json.Marshal(report)
