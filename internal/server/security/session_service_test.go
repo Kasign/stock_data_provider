@@ -13,11 +13,15 @@ import (
 
 type lifecycleTestHasher struct{ expected string }
 
-func (h lifecycleTestHasher) Hash(password []byte) (string, error) { return "encoded:" + string(password), nil }
+func (h lifecycleTestHasher) Hash(password []byte) (string, error) {
+	return "encoded:" + string(password), nil
+}
 func (h lifecycleTestHasher) Verify(_ string, password []byte) (bool, error) {
 	return string(password) == h.expected, nil
 }
-func (h lifecycleTestHasher) NeedsRehash(string) (bool, error) { return false, nil }
+func (h lifecycleTestHasher) NeedsRehash(string) (bool, error) {
+	return false, nil
+}
 
 type lifecycleTestCredentials struct {
 	credential	platformsecurity.OwnerCredential
@@ -29,13 +33,19 @@ func (s *lifecycleTestCredentials) GetOwnerCredential(context.Context) (platform
 	return s.credential, nil
 }
 func (s *lifecycleTestCredentials) InitializeOwnerCredential(_ context.Context, hash string) (platformsecurity.OwnerCredential, error) {
-	if s.initErr != nil { return platformsecurity.OwnerCredential{}, s.initErr }
+	if s.initErr != nil {
+		return platformsecurity.OwnerCredential{}, s.initErr
+	}
 	s.credential = platformsecurity.OwnerCredential{Subject: "owner", PasswordHash: hash, CredentialVersion: 1}
 	return s.credential, nil
 }
 func (s *lifecycleTestCredentials) UpdateOwnerPassword(_ context.Context, version uint64, hash string) (platformsecurity.OwnerCredential, error) {
-	if s.updateErr != nil { return platformsecurity.OwnerCredential{}, s.updateErr }
-	if version != s.credential.CredentialVersion { return platformsecurity.OwnerCredential{}, errors.New("version conflict") }
+	if s.updateErr != nil {
+		return platformsecurity.OwnerCredential{}, s.updateErr
+	}
+	if version != s.credential.CredentialVersion {
+		return platformsecurity.OwnerCredential{}, errors.New("version conflict")
+	}
 	s.credential.PasswordHash = hash
 	s.credential.CredentialVersion++
 	return s.credential, nil
@@ -59,7 +69,9 @@ func (s *lifecycleTestSessions) LookupAndTouch(_ context.Context, _ string, now 
 	return record, nil
 }
 func (s *lifecycleTestSessions) Rotate(_ context.Context, _, newDigest string, record platformsecurity.SessionRecord, _ time.Time) error {
-	if s.rotateErr != nil { return s.rotateErr }
+	if s.rotateErr != nil {
+		return s.rotateErr
+	}
 	s.createdDigest, s.record = newDigest, record
 	return nil
 }
@@ -76,7 +88,9 @@ type lifecycleTestRateLimiter struct {
 }
 
 func (r *lifecycleTestRateLimiter) Check(context.Context, string, string) (platformsecurity.LoginRateLimitResult, error) {
-	if r.err != nil { return platformsecurity.LoginRateLimitResult{}, r.err }
+	if r.err != nil {
+		return platformsecurity.LoginRateLimitResult{}, r.err
+	}
 	return r.checkResult, nil
 }
 func (r *lifecycleTestRateLimiter) RecordFailure(context.Context, string, string, platformsecurity.LoginRateLimitPolicy) (platformsecurity.LoginRateLimitResult, error) {
@@ -132,7 +146,9 @@ func newLifecycleTestService(t *testing.T, auditErr error) (*SessionLifecycleSer
 		},
 		Now: func() time.Time { return now },
 	})
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	return service, credentials, sessions, limiter, audit
 }
 
@@ -142,7 +158,9 @@ func TestSessionLifecycleLoginCreatesFreshOwnerSession(t *testing.T) {
 	issue, err := service.Login(context.Background(), LoginInput{
 		Password:	password, SourceIP:	net.ParseIP("192.0.2.10"), RequestID:	"req-123",
 	})
-	if err != nil { t.Fatalf("Login() error = %v", err) }
+	if err != nil {
+		t.Fatalf("Login() error = %v", err)
+	}
 	if issue.Cookie == nil || !issue.Cookie.HttpOnly || !issue.Cookie.Secure || issue.CSRFToken == "" {
 		t.Fatalf("invalid Session issue: %+v", issue)
 	}
@@ -151,7 +169,9 @@ func TestSessionLifecycleLoginCreatesFreshOwnerSession(t *testing.T) {
 		t.Fatalf("Session lifecycle side effects are incomplete: record=%+v limiter=%+v audit=%+v", sessions.record, limiter, audit.events)
 	}
 	for _, value := range password {
-		if value != 0 { t.Fatal("Login did not clear the supplied password buffer") }
+		if value != 0 {
+			t.Fatal("Login did not clear the supplied password buffer")
+		}
 	}
 }
 
@@ -160,7 +180,9 @@ func TestSessionLifecycleLoginRevokesSessionWhenAuditFails(t *testing.T) {
 	_, err := service.Login(context.Background(), LoginInput{
 		Password:	[]byte("correct"), SourceIP:	net.ParseIP("192.0.2.10"), RequestID:	"req-123",
 	})
-	if err == nil { t.Fatal("Login succeeded without required audit persistence") }
+	if err == nil {
+		t.Fatal("Login succeeded without required audit persistence")
+	}
 	if sessions.createdDigest == "" || len(sessions.revoked) != 1 || sessions.revoked[0] != sessions.createdDigest {
 		t.Fatalf("new Session was not revoked after audit failure: %+v", sessions)
 	}
@@ -171,7 +193,9 @@ func TestSessionLifecycleLoginRecordsWrongPassword(t *testing.T) {
 	_, err := service.Login(context.Background(), LoginInput{
 		Password:	[]byte("wrong"), SourceIP:	net.ParseIP("192.0.2.10"), RequestID:	"req-123",
 	})
-	if err == nil { t.Fatal("wrong password was accepted") }
+	if err == nil {
+		t.Fatal("wrong password was accepted")
+	}
 	if limiter.failures != 1 || sessions.createdDigest != "" || len(audit.events) != 1 ||
 		audit.events[0].EventType != platformsecurity.AuditLoginFailed {
 		t.Fatalf("wrong-password handling is incorrect: limiter=%+v sessions=%+v audit=%+v", limiter, sessions, audit.events)
@@ -189,6 +213,8 @@ func TestSessionLifecycleInitializeOwnerClearsBootstrapSecret(t *testing.T) {
 		t.Fatalf("Owner credential was not initialized: %+v", credentials.credential)
 	}
 	for _, value := range secret {
-		if value != 0 { t.Fatal("InitializeOwner did not clear the bootstrap secret buffer") }
+		if value != 0 {
+			t.Fatal("InitializeOwner did not clear the bootstrap secret buffer")
+		}
 	}
 }

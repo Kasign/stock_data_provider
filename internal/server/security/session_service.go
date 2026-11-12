@@ -49,7 +49,7 @@ type SessionLifecycleService struct {
 	absoluteTTL	time.Duration
 	policy	platformsecurity.LoginRateLimitPolicy
 	rateKey	[]byte
-	now         func() time.Time
+	now	func() time.Time
 }
 
 type LoginInput struct {
