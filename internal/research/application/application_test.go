@@ -160,14 +160,16 @@ func TestGetContextRequiresTrustedCurrentVisibilityAuthorization(t *testing.T) {
 			SourceRefs: []string{}, EvidenceRefs: []string{}, QualityStatus: researchcontext.QualityValid,
 			Required: true, Included: true, AssembledAt: now, SystemAsOf: now,
 		}},
-		QualitySummary: researchcontext.QualitySummary{Status: researchcontext.QualityValid, ReasonCodes: []string{}},
+		QualitySummary:   researchcontext.QualitySummary{Status: researchcontext.QualityValid, ReasonCodes: []string{}},
 		IncludedSections: []string{"overview"}, OmittedSections: []researchcontext.OmittedSection{},
 		BuilderVersion: "1.0.0", CreatedAt: now,
 	}
 	repo := &contextRepoFake{value: value}
 	request := ContextReadRequest{Ref: ContextRef{ContextID: value.ContextID, ContextVersion: value.ContextVersion}, CallerRef: "researchflow:worker", PurposeCode: string(researchevidence.PurposeResearchAnalysis)}
 	service, err := NewService(repo, &evidenceRepoFake{}, &authorizerFake{}, nil, nil)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	if _, err := service.GetContext(context.Background(), request); err == nil {
 		t.Fatal("Context read without a current visibility authorizer must fail closed")
 	}
@@ -175,7 +177,9 @@ func TestGetContextRequiresTrustedCurrentVisibilityAuthorization(t *testing.T) {
 	service, err = NewService(repo, &evidenceRepoFake{}, &authorizerFake{}, nil, nil, access)
 	if err != nil { t.Fatal(err) }
 	got, err := service.GetContext(context.Background(), request)
-	if err != nil { t.Fatalf("authorized Context read failed: %v", err) }
+	if err != nil {
+		t.Fatalf("authorized Context read failed: %v", err)
+	}
 	if got.ContextID != value.ContextID || access.calls != 1 || access.caller != request.CallerRef ||
 		access.purpose != researchevidence.PurposeResearchAnalysis || access.value.Scope != value.Scope ||
 		!slices.Equal(access.value.SubjectRefs, value.SubjectRefs) {
@@ -904,7 +908,7 @@ func TestClaimRejectsEvidenceWithMismatchedStance(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			repo := &claimRepoFake{}
 			evidence := &evidenceRepoFake{values: map[string]researchevidence.Evidence{
-				"ev_support": evidenceFixtureWithStance(t, "ev_support", now, tc.supporting),
+				"ev_support":    evidenceFixtureWithStance(t, "ev_support", now, tc.supporting),
 				"ev_contradict": evidenceFixtureWithStance(t, "ev_contradict", now, tc.contradicting),
 			}}
 			service, err := NewServiceWithClaims(&contextRepoFake{}, evidence, repo, &authorizerFake{}, nil, &fixedIDs{})
