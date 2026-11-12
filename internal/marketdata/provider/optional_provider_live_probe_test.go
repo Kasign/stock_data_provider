@@ -20,8 +20,9 @@ type optionalProviderProbeResult struct {
 	ElapsedMS   int64    `json:"elapsed_ms"`
 	Rows        int      `json:"rows,omitempty"`
 	Quality     string   `json:"quality,omitempty"`
-	QualityNote []string `json:"quality_notes,omitempty"`
-	Error       string   `json:"error,omitempty"`
+	QualityNote []string       `json:"quality_notes,omitempty"`
+	Details     map[string]any `json:"details,omitempty"`
+	Error       string         `json:"error,omitempty"`
 }
 
 func optionalProbeDateRange(now time.Time) (string, string) {
@@ -416,11 +417,15 @@ func TestLiveHithinkCapabilities(t *testing.T) {
 	const symbol = "600519.SH"
 	results := make([]optionalProviderProbeResult, 0, 14)
 	failures := make([]string, 0, 14)
+	detailsByCapability := make(map[string]map[string]any)
 
 	run := func(capability string, call func() (int, model.QualityStatus, []string, error)) {
 		started := time.Now()
 		rows, quality, notes, err := call()
 		item := optionalProviderProbeResult{Provider: "hithink", Capability: capability, Status: "passed", ElapsedMS: time.Since(started).Milliseconds(), Rows: rows, Quality: string(quality), QualityNote: notes}
+		if details, ok := detailsByCapability[capability]; ok {
+			item.Details = details
+		}
 		if err != nil {
 			_, safeMessage := liveProbeErrorSummary(err)
 			item.Status, item.Error = "failed", safeMessage
@@ -515,6 +520,29 @@ func TestLiveHithinkCapabilities(t *testing.T) {
 		}
 		if item == nil || item.Source != "hithink" || item.FetchedAt.IsZero() || len(item.RequestedSymbols) != 1 || item.RequestedSymbols[0] != symbol {
 			return 0, "", nil, errLiveProbeContract("valuations request/source/fetched_at mismatch")
+		}
+		valuationItems := make([]map[string]any, 0, len(item.Items))
+		for _, value := range item.Items {
+			valuationItems = append(valuationItems, map[string]any{
+				"symbol": value.Symbol, "code": value.Code, "name": value.Name,
+				"pe_ttm": value.PETTM, "pe_mrq": value.PEMRQ, "pe_static": value.PEStatic,
+				"pb_mrq": value.PBMRQ, "ps_ttm": value.PSTTM, "pcf_ttm": value.PCFTTM,
+				"turnover_rate_percent": value.TurnoverRatePercent,
+				"float_turnover_rate_percent": value.FloatTurnoverRatePercent,
+				"volume_ratio": value.VolumeRatio,
+				"dividend_yield_percent": value.DividendYieldPercent,
+				"dividend_yield_ttm_percent": value.DividendYieldTTMPercent,
+				"source": value.Source, "source_version": value.SourceVersion,
+				"fetched_at": value.FetchedAt, "quality_status": value.QualityStatus,
+				"quality_reasons": value.QualityReasons,
+			})
+		}
+		detailsByCapability["valuations"] = map[string]any{
+			"requested_symbols": item.RequestedSymbols, "missing_symbols": item.MissingSymbols,
+			"provider_report_date": item.ProviderReportDate, "provider_timestamp": item.ProviderTimestamp,
+			"source": item.Source, "source_version": item.SourceVersion, "fetched_at": item.FetchedAt,
+			"quality_status": item.QualityStatus, "quality_reasons": item.QualityReasons,
+			"items": valuationItems,
 		}
 		return len(item.Items), item.QualityStatus, item.QualityReasons, nil
 	})
@@ -623,6 +651,29 @@ func TestLiveHithinkCapabilities(t *testing.T) {
 		if item == nil || item.Symbol != symbol || item.Year != 2025 || item.Quarter != 4 ||
 			item.Source != "hithink" || item.FetchedAt.IsZero() {
 			return 0, "", nil, errLiveProbeContract("fundamentals identity/period/source/fetched_at mismatch")
+		}
+		sections := make([]map[string]any, 0, len(item.Sections))
+		for _, section := range item.Sections {
+			metrics := make([]map[string]any, 0, len(section.Metrics))
+			for _, metric := range section.Metrics {
+				metrics = append(metrics, map[string]any{
+					"key": metric.Key, "name": metric.Name, "value": metric.Value,
+					"unit": metric.Unit, "source_field": metric.SourceField,
+				})
+			}
+			sections = append(sections, map[string]any{
+				"category": section.Category, "report_date": section.ReportDate,
+				"publication_date": section.PublicationDate, "available_at": section.AvailableAt,
+				"has_data": section.HasData, "metrics": metrics,
+				"quality_status": section.QualityStatus, "quality_reasons": section.QualityReasons,
+			})
+		}
+		detailsByCapability["fundamentals"] = map[string]any{
+			"symbol": item.Symbol, "year": item.Year, "quarter": item.Quarter,
+			"source": item.Source, "source_version": item.SourceVersion, "fetched_at": item.FetchedAt,
+			"system_observed_at": item.SystemObservedAt, "has_data": item.HasData,
+			"quality_status": item.QualityStatus, "quality_reasons": item.QualityReasons,
+			"sections": sections,
 		}
 		return len(item.Sections), item.QualityStatus, item.QualityReasons, nil
 	})
