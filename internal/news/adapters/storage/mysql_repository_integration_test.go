@@ -905,10 +905,10 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 		PurposeCode: "research_analysis", RequestedContentLevel: domain.AuthorizationContentSummary,
 		ProviderRef: domain.NullableOpaqueRef{Present: true},
 		EndpointRef: domain.NullableOpaqueRef{Present: true},
-		SourceRef: secondObservation.SourceID,
+		SourceRef:   secondObservation.SourceID,
 		AuthorizationRef: domain.NewsAuthorizationRef{
 			AuthorizationRef: fmt.Sprintf("news-it-atomic-auth-%d", time.Now().UnixNano()),
-			PolicyOwner: "news", PolicyVersion: "news-it-atomic-snapshot",
+			PolicyOwner:      "news", PolicyVersion: "news-it-atomic-snapshot",
 			Decision: domain.AuthorizationDecisionAllowed, PurposeCode: "research_analysis",
 			ContentLevel: domain.AuthorizationContentSummary, SubjectRef: "service:research",
 			ResourceRef: atomicResourceRef, DecidedAt: time.Now().UTC().Add(-time.Minute).Format(time.RFC3339Nano),
@@ -924,10 +924,10 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 		},
 	}
 	atomicPayload, err := json.Marshal(domain.SourcePolicy{
-		Status: domain.AuthorizationApproved,
-		AllowedPurposes: []domain.Purpose{domain.PurposeInternalPersonalResearch},
+		Status:              domain.AuthorizationApproved,
+		AllowedPurposes:     []domain.Purpose{domain.PurposeInternalPersonalResearch},
 		AllowedContentKinds: []domain.ContentKind{domain.ContentAbstract},
-		EvidenceRef: "news-it-atomic-source-evidence",
+		EvidenceRef:         "news-it-atomic-source-evidence",
 	})
 	if err != nil {
 		t.Fatal(err)
