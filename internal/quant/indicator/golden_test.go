@@ -62,7 +62,7 @@ func TestIndicatorGoldenFixtures(t *testing.T) {
 				fixture.AlgorithmVersion != "1.0.0" || fixture.IndicatorCode != code {
 				t.Fatalf("unexpected fixture metadata: %+v", fixture)
 			}
-			if fixture.Tolerance <= 0 || math.IsNaN(fixture.Tolerance) || math.IsInf(fixture.Tolerance, 0) {
+			if fixture.Tolerance <= 0 || math.IsNaN(fixture.Tolerance) || math.IsInf(fixture.Tolerance, 0) || fixture.Expected.SampleCount <= 0 {
 				t.Fatalf("invalid tolerance: %v", fixture.Tolerance)
 			}
 
@@ -88,14 +88,14 @@ func TestIndicatorGoldenFixtures(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				assertAvailable(got.Status, got.SampleCount, fixture.Parameters.Window)
+				assertAvailable(got.Status, got.SampleCount, fixture.Expected.SampleCount)
 				closeExpected("value", got.Value, fixture.Expected.Value)
 			case "ema":
 				got, err := EMA(fixture.Input.Close, EMAParams{Window: fixture.Parameters.Window, SeedMethod: fixture.Parameters.SeedMethod})
 				if err != nil {
 					t.Fatal(err)
 				}
-				assertAvailable(got.Status, got.SampleCount, len(fixture.Input.Close))
+				assertAvailable(got.Status, got.SampleCount, fixture.Expected.SampleCount)
 				closeExpected("value", got.Value, fixture.Expected.Value)
 			case "return":
 				got, err := Return(fixture.Input.Close, ReturnParams{Window: fixture.Parameters.Window, ReturnBasis: fixture.Parameters.ReturnBasis})
@@ -116,7 +116,7 @@ func TestIndicatorGoldenFixtures(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				assertAvailable(got.Status, got.SampleCount, len(fixture.Input.Close)-1)
+				assertAvailable(got.Status, got.SampleCount, fixture.Expected.SampleCount)
 				closeExpected("value", got.Value, fixture.Expected.Value)
 			case "macd":
 				got, err := MACD(fixture.Input.Close, MACDParams{FastWindow: fixture.Parameters.FastWindow, SlowWindow: fixture.Parameters.SlowWindow, SignalWindow: fixture.Parameters.SignalWindow})
