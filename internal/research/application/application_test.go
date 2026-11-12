@@ -696,7 +696,7 @@ func TestApplicationRejectsRepositoryIdentityMismatch(t *testing.T) {
 		}, IncludedSections: []string{}, OmittedSections: []researchcontext.OmittedSection{},
 		BuilderVersion: "test", CreatedAt: now,
 	}}}
-	service, err := NewService(contextRepo, &evidenceRepoFake{}, &authorizerFake{}, nil, nil)
+	service, err := NewService(contextRepo, &evidenceRepoFake{}, &authorizerFake{}, nil, nil, &contextAuthorizerFake{})
 	if err != nil {
 		t.Fatal(err)
 	}

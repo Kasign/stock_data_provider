@@ -248,8 +248,8 @@ type ContextRef struct {
 
 // ContextReadRequest carries trusted access metadata separately from the resource locator.
 type ContextReadRequest struct {
-	Ref ContextRef
-	CallerRef string
+	Ref         ContextRef
+	CallerRef   string // Must be injected from the trusted Principal Context.
 	PurposeCode string
 }
 
