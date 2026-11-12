@@ -290,6 +290,9 @@ func StorageChecks(probe StorageProbe) []platformdiag.Check {
 		{
 			ID: "news.storage.schema", Name: "News storage schema", Required: true, Timeout: 5 * time.Second,
 			Run: func(ctx context.Context) (platformdiag.Observation, error) {
+				if err := ctx.Err(); err != nil {
+					return platformdiag.Observation{}, err
+				}
 				if probe == nil {
 					return platformdiag.Observation{}, fault.New(
 						fault.ClassUnavailable, "news.storage.probe_unavailable",
