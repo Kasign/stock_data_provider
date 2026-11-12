@@ -1033,6 +1033,20 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// 没有 Endpoint 当前策略行时，Repeatable Read 的 InnoDB gap lock 也必须阻止并发首次发布。
+	missingEndpointRef := "news-it-source-ingest-endpoint"
+	endpointCreatePayload, err := json.Marshal(domain.EndpointPolicy{
+		Status:               domain.AuthorizationApproved,
+		AllowedAccessMethods: []domain.AccessMethod{domain.AccessRSS},
+		AllowedPurposes:      []domain.Purpose{domain.PurposeInternalPersonalResearch},
+		AllowedContentKinds:  []domain.ContentKind{domain.ContentMetadata},
+		AllowedStorageModes:  []domain.StorageMode{domain.StoragePersistentMetadata},
+		MaxRetention:         &endpointRetention,
+		EvidenceRef:          "news-it-source-ingest-endpoint-first-publish",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	sourcePolicyLocked := make(chan struct{})
 	releaseSourceWrite := make(chan struct{})
 	sourceWriteDone := make(chan error, 1)
@@ -1062,6 +1076,19 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 		close(releaseSourceWrite)
 		t.Fatal("source ingest transaction did not lock current policy")
 	}
+	sourceEndpointPublishDone := make(chan error, 1)
+	go func() {
+		sourceEndpointPublishDone <- atomicPublisher.Execute(
+			ctx, domain.NewsPolicyTypeEndpoint, missingEndpointRef,
+			"news-it-source-ingest-endpoint-first", endpointCreatePayload,
+		)
+	}()
+	select {
+	case publishErr := <-sourceEndpointPublishDone:
+		close(releaseSourceWrite)
+		t.Fatalf("first Endpoint policy publication bypassed missing-row lock: %v", publishErr)
+	case <-time.After(100 * time.Millisecond):
+	}
 	sourceRevokeDone := make(chan error, 1)
 	go func() {
 		sourceRevokeDone <- atomicPublisher.Execute(ctx, domain.NewsPolicyTypeSource, lockSourceRef, lockSourceV2, lockPayloadV2)
@@ -1075,6 +1102,9 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	close(releaseSourceWrite)
 	if err := <-sourceWriteDone; err != nil {
 		t.Fatalf("source Observation transaction: %v", err)
+	}
+	if err := <-sourceEndpointPublishDone; err != nil {
+		t.Fatalf("publish first Endpoint policy after Observation transaction: %v", err)
 	}
 	if err := <-sourceRevokeDone; err != nil {
 		t.Fatalf("publish source policy revocation after Observation transaction: %v", err)

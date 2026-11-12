@@ -133,7 +133,7 @@ func (r *MySQLRepository) withTransaction(
 		}
 	}
 
-	tx, err := conn.BeginTx(ctx, nil)
+	tx, err := conn.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead})
 	if err != nil {
 		if releaseErr := releaseLocks(); releaseErr != nil {
 			return errors.Join(err, releaseErr)

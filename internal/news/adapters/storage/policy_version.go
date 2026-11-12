@@ -26,7 +26,7 @@ func (r *MySQLRepository) PublishNewsPolicyVersion(ctx context.Context, value do
 		return app.ErrNewsPolicyVersionStore
 	}
 
-	tx, err := r.db.BeginTx(ctx, nil)
+	tx, err := r.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead})
 	if err != nil {
 		return errors.Join(app.ErrNewsPolicyVersionStore, err)
 	}

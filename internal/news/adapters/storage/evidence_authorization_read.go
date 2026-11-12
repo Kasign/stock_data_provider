@@ -31,7 +31,7 @@ func (r *MySQLRepository) GetEvidenceContentWithCurrentAuthorization(
 	if err := ctx.Err(); err != nil {
 		return domain.ContentLayers{}, domain.Observation{}, err
 	}
-	tx, err := r.db.BeginTx(ctx, nil)
+	tx, err := r.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead})
 	if err != nil {
 		return domain.ContentLayers{}, domain.Observation{}, err
 	}
