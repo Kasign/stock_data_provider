@@ -250,7 +250,7 @@ func TestDeliveryAttemptRepositoryRejectsStaleLeaseAndVersion(t *testing.T) {
 	if err := repository.StartWithLease(context.Background(), claim.Delivery.Version, claim.Lease.FencingToken, attempt); err != nil {
 		t.Fatal(err)
 	}
-	completed, err := attempt.Complete(claim.Lease.ExpiresAt, domain.DeliveryAttemptAccepted, "", "", false, "")
+	completed, err := attempt.Complete(claim.Lease.ExpiresAt.Add(-time.Microsecond), domain.DeliveryAttemptAccepted, "", "", false, "")
 	if err != nil {
 		t.Fatal(err)
 	}
