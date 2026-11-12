@@ -397,3 +397,10 @@
 - 新增依赖执行期间主动取消 Context 的回归测试，覆盖 retention、source catalog、storage ping 和 schema 四条路径。
 - 该修复只约束诊断执行生命周期，不改变业务质量状态、授权决策或平台 Runner 语义。
 - 对应代码提交待 CI 验收；不把新增测试视为已运行通过。
+
+
+### 十二、补充：Storage 探测的调用前取消门禁
+
+- 对照取消传播 Review 记录与实际代码时，发现 Storage Ping/Schema 虽已在依赖返回后检查 Context，但调用前门禁尚未落入最终代码。
+- 已补充调用前检查，确保 Context 已取消时不再触发数据库探测。
+- 新增回归测试验证已取消 Context 下 Ping 和 MissingSchemaTables 均不会被调用，诊断状态为 unavailable。
