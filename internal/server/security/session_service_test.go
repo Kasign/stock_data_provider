@@ -130,7 +130,7 @@ func newLifecycleTestService(t *testing.T, auditErr error) (*SessionLifecycleSer
 			BaseBackoff:\ttime.Second,
 			MaxBackoff:\t15 * time.Minute,
 		},
-		Now: func() time.Time { return now },
+		Now:	func() time.Time { return now },
 	})
 	if err != nil { t.Fatal(err) }
 	return service, credentials, sessions, limiter, audit

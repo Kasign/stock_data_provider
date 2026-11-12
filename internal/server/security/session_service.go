@@ -91,17 +91,17 @@ func NewSessionLifecycleService(deps SessionLifecycleDependencies, cfg SessionLi
 		now = time.Now
 	}
 	return &SessionLifecycleService{
-		credentials: deps.Credentials,
-		sessions:    deps.Sessions,
-		rateLimiter: deps.RateLimiter,
-		hasher:      deps.Hasher,
-		audit:       deps.Audit,
-		cookie:      cfg.Cookie,
-		idleTTL:     cfg.IdleTTL,
-		absoluteTTL: cfg.AbsoluteTTL,
-		policy:      cfg.RateLimitPolicy,
-		rateKey:     append([]byte(nil), cfg.RateLimitHMACKey...),
-		now:         now,
+		credentials:	deps.Credentials,
+		sessions:	deps.Sessions,
+		rateLimiter:	deps.RateLimiter,
+		hasher:	deps.Hasher,
+		audit:	deps.Audit,
+		cookie:	cfg.Cookie,
+		idleTTL:	cfg.IdleTTL,
+		absoluteTTL:	cfg.AbsoluteTTL,
+		policy:	cfg.RateLimitPolicy,
+		rateKey:	append([]byte(nil), cfg.RateLimitHMACKey...),
+		now:	now,
 	}, nil
 }
 
