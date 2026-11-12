@@ -3,7 +3,6 @@ package app
 import (
 	"context"
 	"errors"
-	"reflect"
 	"strings"
 	"time"
 
@@ -146,10 +145,7 @@ func (u *IngestProviderCandidate) Execute(ctx context.Context, request IngestPro
 				registration.EndpointID, registration.EndpointPolicyVersionID,
 				providerBinding.PolicyRef, providerBinding.PolicyVersion,
 			)
-			if policyErr != nil || currentProviderPolicy == nil ||
-				!reflect.DeepEqual(sourcePolicy, registration.SourcePolicy) ||
-				!reflect.DeepEqual(endpointPolicy, registration.EndpointPolicy) ||
-				!reflect.DeepEqual(*currentProviderPolicy, providerBinding.Policy) {
+			if policyErr != nil || currentProviderPolicy == nil {
 				return errors.Join(ErrProviderOutputPolicyUnavailable, policyErr)
 			}
 			decision := domain.EvaluateCandidateCollectionPolicy(
