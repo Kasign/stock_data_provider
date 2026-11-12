@@ -362,3 +362,29 @@
 - 本轮未实现 available_at 推断：现有来源无满足准入条件的首次公开可用时间证据，严格 PIT 仍不能验收。
 - 授权读取与内容查询尚未位于可证明的同一策略/存储一致性边界；公共 JCS Runtime Verifier 和可信当前策略 Resolver 仍需由公共平台/Server 组合根提供。News 不复制 JCS，也不声称 TOCTOU 已解决。
 - 本轮未执行构建或测试。若需要构建，按分支规则先将本分支合并到 `origin/integration`，仅在 integration 执行，且不得直接修改 integration。
+
+
+## 2026-11-12 News 模块自身代码验收复核
+
+- 验收基线：`83358f8cbe1f69a635218438dc97015e33300581`；范围仅为 `internal/news/**`、`doc/news/**` 及 News 自身 CI 门禁。未审查或修改其他模块实现。
+- News 全模块专项 Run `43143438840`（基线代码 `1ab32cd1f6e27c8f5e3727997ca5d6c7f3e3dcc2`）通过：News gofmt、`go test ./internal/news/...`、`go test -race ./internal/news/...`、`go vet ./internal/news/...`；Provider 契约专项的测试、Race、Vet 也通过。其后提交只修改工作流和文档，没有改变 `internal/news/**` 代码。
+- MariaDB 11.4 Run `43144140642`（当前代码树）成功执行两个独立集成测试：`TestNewsMariaDBRepositoryIntegration` 与 `TestObservationRetentionPurgeIntegration` 均 PASS。此前 CI 命令只运行第一个测试，现已修正为同时执行两个测试。
+- 根模块 Go CI 仍失败，但失败位置在 Quant gofmt 和 Researchflow 未定义符号（`validSourceOwner`、`evidenceGraphHasCycle`）；不属于 News，未越界处理。
+
+### 当前验收结论
+
+**News 自身基础代码质量门禁通过，但 NEWS-CTR-001/002 的业务能力完整性尚未通过，不应把整个 News 模块标记为全部完成或可生产披露。**
+
+1. **P1 — 严格 PIT 的 available_at 门禁未完成。** 当前没有任何已接入来源提供满足冻结准入规则的“首次公开可获取时间”证据。代码正确地不以 published_at、fetched_at、observed_at 等字段代替；Get/List 仍不能宣称满足严格 available_at PIT。待出现合格真实来源后，再实现证据持久化和查询过滤。
+2. **P1 — 授权复核与内容读取 TOCTOU 未解决。** 当前 `GetEvidenceVersionAt` 先读取完整 Version 内容，随后才读取授权快照并调用当前策略 Authorizer；两者没有共同的策略/存储一致性边界。Application 的 fail-closed 构造和授权检查不能证明消除竞态。安全闭环需要在跨模块验收时明确公共 Verifier、可信策略 Resolver 与内容读取事务/版本边界，完成前不得开放受限内容生产披露。
+3. **P2 — 真实 Provider 网络与授权证据未验收。** 四家 Provider 的固定响应契约、错误分类、Race 和 Vet 已通过；但真实账号配额、输出许可、供应商网络稳定性和真实响应语义未验证。不得用固定响应测试替代 Live Probe。
+4. **非本分支范围 — 生产装配。** Server 的 Provider/Source BoundDoer 注入、Migration 总注册、Diagnostics Runner 和周期清理注册，留待跨模块联调；本轮不修改 Server 或其他模块。
+
+### 结论分层
+
+- **已通过：** News 包级格式、单测、Race、Vet、Provider 固定响应契约，以及 MariaDB 11.4 Migration/Repository/Observation Retention 集成测试。
+- **仍阻断业务完整验收：** available_at 严格 PIT、授权复核与内容读取 TOCTOU。
+- **留待跨模块联调：** Server 生产装配及公共授权能力接线。
+- **留待真实环境验收：** Provider 网络、配额和输出许可。
+
+本次验收只证明当前 News 自身代码和上述 CI 场景通过，不代表全仓 CI 通过，也不代表 News 已可生产上线。
