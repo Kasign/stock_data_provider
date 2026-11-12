@@ -600,6 +600,22 @@ try {
     );
     assert.equal(await page.locator("#market-view").isVisible(), true, "market overview must be the initial view");
 
+    // Verify legacy view hashes survive direct navigation and refresh; the old market-data alias is normalized.
+    if (viewport.width === 320) {
+      await page.goto(baseUrl + "#stocks", { waitUntil: "load", timeout: 30000 });
+      await page.locator("#stocks-view").waitFor({ state: "visible" });
+      assert.equal(new URL(page.url()).hash, "#stocks");
+      await page.reload({ waitUntil: "load", timeout: 30000 });
+      await page.locator("#stocks-view").waitFor({ state: "visible" });
+      assert.equal(new URL(page.url()).hash, "#stocks", "refresh must restore the legacy stocks view hash");
+      await page.goto(baseUrl + "#market-data", { waitUntil: "load", timeout: 30000 });
+      await page.locator("#market-view").waitFor({ state: "visible" });
+      assert.equal(new URL(page.url()).hash, "#market", "the historical market-data alias must normalize to market");
+      await page.goto(baseUrl + "#unknown-view", { waitUntil: "load", timeout: 30000 });
+      await page.locator("#market-view").waitFor({ state: "visible" });
+      assert.equal(new URL(page.url()).hash, "#market", "unknown view hashes must safely fall back to market");
+    }
+
     // Keyboard users must be able to reveal and activate the skip link before traversing the dashboard.
     await page.keyboard.press("Tab");
     const skipLinkState = await page.locator(".skip-link").evaluate((element) => {
