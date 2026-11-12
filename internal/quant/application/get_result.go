@@ -29,6 +29,8 @@ var (
 	ErrInvalidAuthorization    = errors.New("quant authorization proof is invalid")
 	ErrInvalidStoredRecord     = errors.New("quant stored result is invalid")
 	ErrAuditUnavailable        = errors.New("quant result access audit unavailable")
+	ErrAccessDenied            = errors.New("quant result access denied")
+	ErrAuthorizationUnavailable = errors.New("quant authorization unavailable")
 )
 
 // Principal 由 Server 的认证上下文解析器产生；不得从 GetResult 请求体或普通 Header 构造。
@@ -113,6 +115,23 @@ type PolicySnapshot struct {
 	SnapshotRef   string          `json:"snapshot_ref"`
 	Policies      []PolicyVersion `json:"policies"`
 }
+// UnmarshalJSON 拒绝策略快照中的未知字段，避免忽略额外策略元数据。
+func (snapshot *PolicySnapshot) UnmarshalJSON(data []byte) error {
+	type policySnapshotAlias PolicySnapshot
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	var decoded policySnapshotAlias
+	if err := decoder.Decode(&decoded); err != nil {
+		return err
+	}
+	var trailing any
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		return ErrInvalidAuthorization
+	}
+	*snapshot = PolicySnapshot(decoded)
+	return nil
+}
+
 
 // AuthorizedRecord 必须由结果 Owner 的授权读取端口在同一一致性边界内返回。
 type AuthorizedRecord struct {
@@ -186,7 +205,11 @@ func (usecase *GetResult) Execute(ctx context.Context, resultID string) (result.
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return result.Envelope{}, ctxErr
 		}
-		if auditErr := usecase.recordAudit(ctx, request, "unknown", "authorization_unavailable", ""); auditErr != nil {
+		decision, reasonCode := "unknown", "authorization_unavailable"
+		if errors.Is(err, ErrAccessDenied) {
+			decision, reasonCode = "denied", "authorization_denied"
+		}
+		if auditErr := usecase.recordAudit(ctx, request, decision, reasonCode, ""); auditErr != nil {
 			return result.Envelope{}, auditErr
 		}
 		return result.Envelope{}, ErrResultUnavailable

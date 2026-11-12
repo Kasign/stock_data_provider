@@ -242,3 +242,21 @@ func TestGetResultAuditFailurePreventsEnvelopeRelease(t *testing.T) {
 		t.Fatalf("expected one pre-release allow audit event: %+v", auditor.events)
 	}
 }
+
+
+func TestGetResultReaderDenialIsAuditedAsDenied(t *testing.T) {
+	now := time.Date(2026, 11, 9, 2, 0, 0, 0, time.UTC)
+	reader := &fixedReader{err: ErrAccessDenied}
+	auditor := &fixedAuditor{}
+	usecase, err := NewGetResult(reader, fixedPrincipal{principal: Principal{SubjectRef: "service:researchflow"}}, auditor, func() time.Time { return now })
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := usecase.Execute(context.Background(), "quant_result:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+	if !errors.Is(err, ErrResultUnavailable) || got.ResultID != "" {
+		t.Fatalf("denied read returned result: %+v %v", got, err)
+	}
+	if len(auditor.events) != 1 || auditor.events[0].Decision != "denied" || auditor.events[0].ReasonCode != "authorization_denied" {
+		t.Fatalf("explicit denial was not audited as denied: %+v", auditor.events)
+	}
+}
