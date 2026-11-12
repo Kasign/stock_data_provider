@@ -1378,7 +1378,7 @@ Lifecycle.Stop 原实现通过 stopped 标记保证重复调用幂等，但并�
 
 ### 12.61 Integration 最新代码基线下的模块装配审查（2026-11-12）
 
-- 审查基线：Integration HEAD `9f12f7ebfdb2a04106a126934d46d1fc216823ff`；其代码树与全仓 CI 实际测试 SHA `fdc19b8591223dabccb533389d472713bfecc415` 相同，HEAD 后续仅有接入审查文档提交。
+- 审查基线：Integration HEAD `9f12f7ebfdb2a04106a126934d46d1fc216823ff`；全仓 CI 实际测试代码 SHA 为 `fdc19b8591223dabccb533389d472713bfecc415`，其后 Integration HEAD 仅增加接入审查文档提交，未改变被测代码文件。
 - CI 证据：Integration Run `43178908392`（Workflow `Integration CI`，Run #23）成功。覆盖全仓 gofmt、根 Go Module 测试/编译、go-core 测试/编译、两处 go vet、Compose 配置、WebUI JavaScript 语法/单测及 WebUI 镜像构建。
 - 分支边界：审查开始时 `feat/research-analysis-flow-native-go` 与 `integration` 完全相同（ahead/behind 均为 0）。本节及后续 Server 修改只允许提交到 Server 分支，不直接修改 `integration`。
 - 验收边界：CI 通过只证明 CI 工作流覆盖的编译、测试和构建门禁通过；本轮没有连接真实 MariaDB/Redis、外部 Provider、LLM Gateway 或生产部署环境，不能标记端到端或 L3 验收通过。
