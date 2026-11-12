@@ -6,7 +6,6 @@ import (
 	"strings"
 	"sync"
 
-	"example.com/stock-analysis-flow/internal/researchflow/domain"
 )
 
 var (
@@ -190,6 +189,3 @@ func (p *WorkerPool) Shutdown(ctx context.Context) error {
 // Ensure WorkerPool remains a valid synchronous Stage dispatcher for Scheduler.
 var _ StageExecutionDispatcher = (*WorkerPool)(nil)
 
-// Keep the domain import explicit at this layer: task identity is always a Stage reference,
-// never an alternate in-memory task object or a copied domain state.
-var _ = domain.Stage{}

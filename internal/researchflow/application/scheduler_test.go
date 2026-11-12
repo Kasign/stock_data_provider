@@ -378,3 +378,82 @@ func TestSchedulerStopsAfterBoundedCASConflicts(t *testing.T) {
 		t.Fatalf("scheduler exceeded or bypassed replan boundary: reader=%d store=%d dispatch=%d", reader.calls, store.calls, len(dispatcher.calls))
 	}
 }
+
+
+type schedulerConcurrentPoolDispatcher struct {
+	started chan string
+	release chan struct{}
+}
+
+func (d *schedulerConcurrentPoolDispatcher) Execute(ctx context.Context, runRef, stageRef, attemptRef string) (WorkerExecution, error) {
+	d.started <- stageRef
+	select {
+	case <-d.release:
+		return WorkerExecution{Attempt: domain.Attempt{Ref: attemptRef, StageRef: stageRef}}, nil
+	case <-ctx.Done():
+		return WorkerExecution{}, ctx.Err()
+	}
+}
+
+func TestSchedulerDispatchesIndependentStagesConcurrentlyThroughWorkerPool(t *testing.T) {
+	run, now := schedulerFixture()
+	run.Status = domain.RunCreated
+	stages := []domain.Stage{
+		{Ref: "stage-b", RunRef: run.Ref, Code: "quant", Status: domain.StagePending, Version: 1},
+		{Ref: "stage-a", RunRef: run.Ref, Code: "context", Status: domain.StagePending, Version: 1},
+	}
+	reader := &schedulerRunReaderFake{results: []CreateRunResult{{Run: run, Stages: stages}}}
+	store := &schedulerReplanStoreFake{}
+	ids := &schedulerIDGeneratorFake{refs: []string{"attempt-a", "attempt-b"}}
+	executor := &schedulerConcurrentPoolDispatcher{
+		started: make(chan string, 2),
+		release: make(chan struct{}, 2),
+	}
+	pool, err := NewWorkerPool(executor, WorkerPoolConfig{Workers: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := pool.Start(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := pool.Shutdown(context.Background()); err != nil {
+			t.Errorf("shutdown Worker Pool: %v", err)
+		}
+	}()
+	scheduler, err := NewScheduler(reader, store, schedulerClockFake{now: now}, ids, nil, pool,
+		SchedulerConfig{MaxParallel: 2, MaxReplans: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	type scheduleOutcome struct {
+		result ScheduleRunResult
+		err    error
+	}
+	done := make(chan scheduleOutcome, 1)
+	go func() {
+		result, scheduleErr := scheduler.ScheduleRun(context.Background(), run.Ref)
+		done <- scheduleOutcome{result: result, err: scheduleErr}
+	}()
+	started := make([]string, 0, 2)
+	for index := 0; index < 2; index++ {
+		select {
+		case stageRef := <-executor.started:
+			started = append(started, stageRef)
+		case <-time.After(time.Second):
+			t.Fatalf("Scheduler did not dispatch both independent Stages concurrently; started=%v", started)
+		}
+	}
+	executor.release <- struct{}{}
+	executor.release <- struct{}{}
+	outcome := <-done
+	if outcome.err != nil {
+		t.Fatal(outcome.err)
+	}
+	if len(outcome.result.Executions) != 2 ||
+		outcome.result.Executions[0].StageRef != "stage-a" ||
+		outcome.result.Executions[1].StageRef != "stage-b" {
+		t.Fatalf("Scheduler did not preserve deterministic result order: %#v", outcome.result.Executions)
+	}
+}
