@@ -264,7 +264,7 @@ func TestEnvelopeUnmarshalRejectsDuplicateAndAmbiguousMetadataKeys(t *testing.T)
 	}
 
 	duplicateTopLevel := strings.Replace(string(encoded), "{", `{"schema_version":"1.0.0",`, 1)
-	escapedDuplicate := strings.Replace(string(encoded), `"schema_version":`, `"schema_\\u0076ersion":`, 1)
+	escapedDuplicate := strings.Replace(string(encoded), `"schema_version":`, `"schema_\u0076ersion":`, 1)
 	for name, raw := range map[string]string{
 		"duplicate top-level key": duplicateTopLevel,
 		"escaped duplicate top-level key": escapedDuplicate,

@@ -19,6 +19,7 @@
 - 当前仅注册 `trend/1.0.0`、`risk/1.0.0` 两种强类型 Payload；Trend/Risk 与 Envelope 的重复字段逐项校验，Envelope 与 Manifest 逐字段校验并验证 Payload 指纹。
 - Envelope JSON Schema、Trend/Risk Golden、Schema 回归、序列化/反序列化和非法输入测试已补齐。
 - Envelope Marshal/Unmarshal 均执行结构校验；input_snapshot_refs 必须显式存在、唯一且按 Manifest 规范顺序排列，允许空数组。
+- Envelope Unmarshal 在强类型结构解码前拒绝重复 JSON 键、转义后重名键和非法 UTF-8；与授权证明采用同一 Manifest JSON 安全校验入口。
 - QNT-CTR-001 Registry Entry 2.0.0 已接入 Go `SampleCountPolicy`；`ValidateMetric` 按 `required_in_metric` 检查字段存在性，保留缺失、null、0 的差异；Schema 1.0.0 保留历史投影。
 - 八份 Indicator Golden 已显式固化 `expected.sample_count`，测试直接读取 Golden 期望值。
 - 新增 `internal/quant/application.GetResult`：从可信 PrincipalResolver 获取主体，调用授权读取 Port，在释放 Payload 前验证 GOV-CTR-006 授权指纹/策略快照、Manifest 与 Payload 指纹，并只解码已注册的 Trend/Risk 强类型 Envelope。
