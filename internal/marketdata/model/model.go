@@ -407,13 +407,13 @@ type ValuationSnapshot struct {
 	// ProviderReportDate 是供应商给出的估值数据日期；日期不等于精确快照时间。
 	ProviderReportDate string     `json:"provider_report_date,omitempty"`
 	ProviderTimestamp  *time.Time `json:"provider_timestamp,omitempty"`
-	Source             string        `json:"source"`
-	SourceVersion      string        `json:"source_version,omitempty"`
-	FetchedAt          time.Time     `json:"fetched_at"`
+	Source             string     `json:"source"`
+	SourceVersion      string     `json:"source_version,omitempty"`
+	FetchedAt          time.Time  `json:"fetched_at"`
 	// SystemObservedAt 是 Data 将该估值快照记录到本地历史版本的时刻；它不代表 Provider 的公开时间。
 	SystemObservedAt *time.Time    `json:"system_observed_at,omitempty"`
-	QualityStatus      QualityStatus `json:"quality_status"`
-	QualityReasons     []string      `json:"quality_reasons,omitempty"`
+	QualityStatus    QualityStatus `json:"quality_status"`
+	QualityReasons   []string      `json:"quality_reasons,omitempty"`
 }
 
 // IndexCatalogItem 是一个同花顺指数或板块的目录项。
