@@ -410,9 +410,13 @@ func parseResponsesSSEReaderLimit(reader io.Reader, request ModelRequest, clock 
 	if parseErr == nil && limitedReader.N == 0 {
 		parseErr = newSSEAdapterError(adapterError(ErrorResourceLimit, "llm.sse.total_too_large", false, nil))
 	}
-	if parseErr == nil && readErr == nil {
+	if parseErr == nil {
+		// EOF 或传输中断前，Scanner 可能已经交付最后一条完整 data 行；
+		// 分发该事件以保留可安全解析的部分输出。
 		dispatch()
-		parseErr = terminalErr
+		if parseErr == nil && readErr == nil {
+			parseErr = terminalErr
+		}
 	}
 	switch sequenceMode {
 	case 1:
@@ -421,6 +425,21 @@ func parseResponsesSSEReaderLimit(reader io.Reader, request ModelRequest, clock 
 		result.SequenceNumberStatus = SequenceNumberUnavailable
 	}
 	if readErr != nil {
+		if callbackError && parseErr != nil {
+			finish()
+			return result, parseErr
+		}
+		if parseErr != nil {
+			var adapterErr *AdapterError
+			if errors.As(parseErr, &adapterErr) {
+				result.Status = ResponseFailed
+				result.Error = adapterErr.Info
+				finish()
+				return result, parseErr
+			}
+			return fail(invalidResponsesError("llm.sse.invalid_stream"), parseErr)
+		}
+		// 即使已解析到 terminal，底层读取失败也不能被升级为成功。
 		result.Status = ResponseIncomplete
 		result.Error = nil
 		finish()

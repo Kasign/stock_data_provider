@@ -96,6 +96,63 @@
         "properties": {
           "metric_code": {
             "const": "momentum_20d"
+          }
+        },
+        "required": [
+          "metric_code"
+        ]
+      },
+      "then": {
+        "properties": {
+          "period": {
+            "const": "20d"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "metric_code": {
+            "const": "momentum_60d"
+          }
+        },
+        "required": [
+          "metric_code"
+        ]
+      },
+      "then": {
+        "properties": {
+          "period": {
+            "const": "60d"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "metric_code": {
+            "const": "volatility_20d"
+          }
+        },
+        "required": [
+          "metric_code"
+        ]
+      },
+      "then": {
+        "properties": {
+          "period": {
+            "const": "20d"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "metric_code": {
+            "const": "momentum_20d"
           },
           "metric_status": {
             "const": "available"
@@ -108,9 +165,6 @@
       },
       "then": {
         "properties": {
-          "period": {
-            "const": "20d"
-          },
           "sample_count": {
             "minimum": 21
           },
@@ -140,9 +194,6 @@
       },
       "then": {
         "properties": {
-          "period": {
-            "const": "60d"
-          },
           "sample_count": {
             "minimum": 61
           }
@@ -166,11 +217,77 @@
       },
       "then": {
         "properties": {
-          "period": {
-            "const": "20d"
-          },
           "sample_count": {
             "minimum": 20
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "metric_code": {
+            "const": "momentum_20d"
+          },
+          "metric_status": {
+            "const": "insufficient_data"
+          }
+        },
+        "required": [
+          "metric_code",
+          "metric_status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "sample_count": {
+            "maximum": 20
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "metric_code": {
+            "const": "momentum_60d"
+          },
+          "metric_status": {
+            "const": "insufficient_data"
+          }
+        },
+        "required": [
+          "metric_code",
+          "metric_status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "sample_count": {
+            "maximum": 60
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "metric_code": {
+            "const": "volatility_20d"
+          },
+          "metric_status": {
+            "const": "insufficient_data"
+          }
+        },
+        "required": [
+          "metric_code",
+          "metric_status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "sample_count": {
+            "maximum": 19
           }
         }
       }

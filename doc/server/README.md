@@ -153,7 +153,7 @@ doc/
 - `internal/server/**` 只放进程级装配、Transport、生命周期和跨模块连接代码。
 - `internal/platform/**` 继续归 Platform 所有；Server 通过公开接口使用，不复制实现。
 - `internal/{data,news,quant,research,researchflow,llm,notification}/**` 继续归各业务模块所有。
-- 旧 `cmd/analysis-api`、`internal/service`、旧 Analysis 适配器在迁移完成前保留为兼容基线；不在 SRV-001 审计阶段提前删除。
+- 旧 `cmd/analysis-api`、`internal/service` 和旧 Analysis 适配器在新链路验收及退役门禁完成前，暂作为迁移中的实现依赖保留；这不构成继续维护旧 Analysis HTTP API 公共兼容契约的承诺。依据 DEC-PLAT-002-018，旧 API 不作为长期支持接口；新 Researchflow API 验收后，按决议删除旧路由及其专属适配代码。
 - 具体目录可根据仓库现有包结构微调，但必须保持上述所有权边界，不为迎合目录树而搬动模块代码。
 
 ### 2.2 文档目录规则
@@ -361,7 +361,7 @@ Server 不重写模块业务 Handler 的校验和领域错误，不在路由层�
 
 ### SRV-006：API/Worker 运行角色和生命周期
 
-- 状态：进行中（已实现 SERVER_ROLE=api|worker|all；旧 Analysis Worker 与 HTTP Server 均已纳入 runtime.Lifecycle，具备启动失败回滚、Readiness 先降级、HTTP 在途请求排空和超时强制关闭；Lifecycle 已补充启动期间 Context 取消检测与逆序回滚。真实子进程 SIGTERM 验收、模块 Worker 装配仍待完成）
+- 状态：进行中（已实现 SERVER_ROLE=api|worker|all；旧 Analysis Worker 与 HTTP Server 均已纳入 runtime.Lifecycle，具备启动失败回滚预算、Readiness 先降级、HTTP 在途请求排空和超时强制关闭；Lifecycle 已覆盖启动期间 Context 取消、并发 Stop 竞争和逆序回滚。HTTP 活动 Handler 排空受关闭 Context 限制，超时会返回错误；组件仍须遵守 Context 取消契约。
 - 前置：SRV-003、SRV-004
 - 工作内容：实现角色解析、组件选择、启动依赖排序、失败回滚、优雅关闭和超时。
 - 交付物：Runtime Role 与 Lifecycle Manager。
@@ -370,7 +370,7 @@ Server 不重写模块业务 Handler 的校验和领域错误，不在路由层�
 
 ### SRV-007：Migration 注册与执行
 
-- 状态：进行中（Server Registry 已接入 News、Research、Notification 三个模块 Migration；按 namespace 和版本号稳定排序，执行由 `MIGRATION_ENABLED` 显式开启）
+- 状态：进行中（Server Registry 已接入 News、Research、Researchflow、Notification 四个模块 Migration；按 namespace 和版本号稳定排序，执行由 `MIGRATION_ENABLED` 显式开启；只读 Schema 预检要求数据库 namespace/version 集合与当前 Registry 完全一致且状态均为 `applied`。真实 MariaDB 故障/恢复集成及 Platform checksum 只读验证能力仍待完成）
 - 前置：SRV-003；其余模块提供可用 Migration 后再注册；核对 Platform `storage.ApplyMigrations` 实际签名和各模块 Migration 注册形态
 - 工作内容：在模块装配阶段收集各模块拥有的 Migration 描述，校验 namespace/version 唯一性及顺序，再按部署策略调用 Platform Runner，输出可追踪结果。MariaDB DDL 部分执行失败后的恢复按 Platform Runner 契约执行，不在 Server 自行重试失败 Migration。
 - 交付物：`internal/server/migration.Registry`、显式执行配置和模块注册测试；真实 MariaDB 集成验收待执行。
@@ -769,14 +769,14 @@ Server 层完成不是“服务能够启动”这么简单。至少同时满足�
 | 任务 | 状态 | 说明 |
 |---|---|---|
 | SRV-001 | 完成 | 已记录旧入口、路由与认证现状、旧 Analysis Migration 四表、Worker/Storage 生命周期、部署边界及各模块接入就绪度；详细见 12.3 节 |
-| SRV-002 | 进行中 | Server 进程级配置已集中为 Process 快照；Storage/MarketData Adapter 已支持显式 Env 注入；Bootstrap 统一传递配置；部分初始化失败会汇总原始错误和逆序清理错误；SHA `46763c7` 的 `internal/server/bootstrap` 包测试通过；完整模块 Registry 与统一装配仍待模块入口；详见 12.22、12.27、12.32、12.35、12.36 节 |
-| SRV-003 | 进行中 | DB、Redis、HTTP Client 已由 Resources 统一创建和关闭；新增固定 DestinationPolicy 的 BoundDoer 绑定入口；LLM JSON/SSE 共用 Transport 与 Responses Adapter 构造入口已实现；但当前 `internal/llm` 因未使用的 `time` 导入无法编译，连带阻断 `internal/server/llmtransport` 测试；Provider/Secret/CapabilityState 可信配置装配、News Provider/Source 真实注入及生产流式 E2E 仍待完成；详见 12.24、12.28、12.40～12.42 节 |
-| SRV-004 | 阻塞 | 已复核模块接入面；Researchflow/Quant/LLM/Notification 缺少完整生产装配入口，News/Research 也有关键查询/授权接入缺口；详见 12.6 节 |
+| SRV-002 | 进行中 | Process 配置快照、显式 Env 注入、Bootstrap 配置传递和部分初始化失败逆序清理已实现；当前仍以旧 Analysis Runner/Task Queue/HTTP API 作为运行对象，完整模块 Registry 与生产装配尚未完成；详见 12.22、12.27、12.32、12.35、12.36 节 |
+| SRV-003 | 进行中 | DB、Redis、HTTP Client 已由 Resources 统一创建和关闭；BoundDoer 与 LLM JSON/SSE 传输桥接及 Responses Adapter 构造入口已实现；当前 Server 独立 CI 已通过，未再存在文档所述 `internal/llm` 未使用导入导致的编译阻断；Provider/Secret/CapabilityState 可信配置装配、News Provider/Source 真实注入及生产流式 E2E 仍待完成；详见 12.24、12.28、12.40～12.42 节 |
+| SRV-004 | 阻塞 | 2026-11-12 复核已确认 Research Repository 构造入口和 Researchflow Migration 接入；但 Research 可信 Evidence Authorizer、News 生产查询/采集入口、Researchflow Repository/Worker、Quant Application Facade、LLM 可信 Provider 配置、Notification Dispatcher/Worker 仍未具备完整生产装配条件；详见 12.6、12.54 节 |
 | SRV-005 | 进行中 | 已接入 Platform Bearer Owner 认证、入口 Request ID、Fault HTTP 映射工具、请求体与并发限制；补齐 GET/HEAD 探针的状态、响应头、身份策略及过载豁免测试；现有旧 Analysis Handler 保留原业务错误 DTO；Web Session/密码登录、CSRF、登录限流、模块 Service Scope 和可信代理边界仍待契约/模块入口，现有 WebUI 尚未携带 Analysis Owner 凭证，不能视为浏览器认证链路已完成；详见 12.31 节 |
-| SRV-006 | 进行中 | 旧 Analysis Worker 与 HTTP Server 均已纳入统一 Lifecycle；启动取消回滚、并发 Stop、Start/Stop 竞态屏障、HTTP 排空和消费者先于共享资源关闭已实现；Bootstrap 关闭错误现在会与运行错误汇总返回；最新 Server 独立 CI 的 Bootstrap/Runtime 单测、Race、Vet 通过；模块 Worker 接入、真实 SIGTERM/生产容器退出验收仍待完成；详见 12.17～12.19、12.26、12.34、12.38、12.50～12.51 节 |
-| SRV-007 | 进行中 | 已建立 Server Migration Registry，并注册 News/Research/Notification；namespace 与版本号稳定排序；增加执行报告、稳定原因码、人工恢复标记、Registry 并发保护及首次执行快照冻结；新增只读 Schema 版本/状态预检，并纳入 Bootstrap 启动门禁和 API Readiness；最新 Server 独立 CI 的 Migration/Diagnostics 单测、Race、Vet 通过；Platform checksum 只读验证 API/Fault Code、其他模块 Migration 与 MariaDB 故障/恢复集成验收待完成；详见 12.7、12.23、12.25、12.30、12.37、12.45、12.50～12.51 节 |
+| SRV-006 | 进行中 | 旧 Analysis Worker 与 HTTP Server 已纳入统一 Lifecycle；已覆盖启动取消回滚预算、单组件 Start/Stop 并发竞态、HTTP 优雅关闭及强制关闭后的活动连接排空；最新文档 HEAD `db0087e5` 对应的 Server CI（Run `43147147914`）成功；代码修复 SHA `17585149` 对应 Run `43147039665`，gofmt、包级测试、Race、Vet 全部通过；模块 Worker 接入、真实 SIGTERM/生产容器退出验收仍待完成；详见 12.17～12.19、12.26、12.34、12.38、12.50～12.51、12.56～12.58 节 |
+| SRV-007 | 进行中 | Server Migration Registry 已注册 News、Research、Researchflow、Notification 四个模块 namespace；namespace/版本确定性排序、执行报告、稳定原因码、Registry 并发保护和执行快照冻结已实现；只读 Schema 预检已校验 namespace 与版本集合完全匹配且状态均为 applied，并纳入 Bootstrap 启动门禁和 API Readiness；最新 Server 独立 CI 的 Migration/Diagnostics 单测、Race、Vet 通过；Platform checksum 只读验证 API/Fault Code、MariaDB 故障/恢复集成验收仍待完成；详见 12.7、12.23、12.25、12.30、12.37、12.45、12.50～12.51、12.53、12.55 节 |
 | SRV-008 | 待契约 | Dispatcher 所有权未冻结 |
-| SRV-009 | 进行中 | 已实现 Platform Runner 聚合、严格 Readiness 判定、MariaDB/Redis 资源检查、Owner 保护的结构化 `/diagnostics` 入口；`/readyz` 动态读取实际 Check Results；Service 装配期拒绝重复 Check ID 并保存 Check 快照；SHA `46763c7` 的 `internal/server/diagnostics` 包测试通过；真实模块 Check 注册、依赖故障注入和 Platform Observation 元数据契约验收仍待完成，详见 12.8、12.20、12.29、12.33 节 |
+| SRV-009 | 进行中 | 已实现 Platform Runner 聚合、严格 Readiness 判定、MariaDB/Redis 资源检查、Migration Schema 检查及 Owner 保护的结构化 `/diagnostics` 入口；`/readyz` 动态读取实际 Check Results；Service 装配期拒绝重复 Check ID 并冻结 Check 快照；真实模块 Check 注册、依赖故障注入和 Platform Observation 元数据契约验收仍待完成，详见 12.8、12.20、12.29、12.33、12.55 节 |
 | SRV-010 | 阻塞 | 等待 Data 迁移门禁和公开接口 |
 | SRV-011 | 未开始 | 等待核心运行能力 |
 | SRV-012 | 未开始 | 等待新链路验收 |
@@ -1268,3 +1268,104 @@ Lifecycle.Stop 原实现通过 stopped 标记保证重复调用幂等，但并�
 - SRV-006 本轮关闭错误传播已通过独立包级测试；生产环境的关闭失败故障注入和进程退出码验收仍待完成。
 - SRV-007 本轮 Schema 只读版本/状态预检及 Readiness 注册测试已通过独立包级测试；未连接真实 MariaDB 验证故障矩阵，且未验证 checksum。Platform 需要后续提供公开只读历史/checksum 验证能力，Server 不实现其内部算法。
 - 当前 Server 分支没有合并 integration，也没有修改其他模块目录。
+
+
+### 12.52 契约冻结后 Server 接入边界复核（2026-11-11）
+
+- 本轮审计基线：分支 HEAD `2b13818a934e53ea517ff2aca4207d910d6134ff`；最新提交为合并提交，提交时间 2026-11-11 18:40（北京时间）。本轮仅读取代码、契约和文档，未修改业务代码。
+- 分支关系：Server 分支相对共同基线有 1 个独有提交，`integration` 相对共同基线有 2 个独有提交；两分支已分叉。本轮不执行合并，不以 `integration` 内容覆盖当前分支。
+- 当前 SHA 的 Combined Status 未返回状态项，提交关联的 PR Workflow Runs 查询也未返回记录；因此本轮没有可引用的当前 SHA CI 通过证据。该结果不等价于断言仓库不存在其他类型的 Actions 运行记录。
+- 契约边界：PLAT-002 登记簿中的 SRV-CTR-001 为 `deferred`。新 Researchflow HTTP API 的路径、DTO、认证授权、错误投影、分页/Cursor 和事件读取契约尚未形成活动定义；不得在 Server 侧自行补造路由、字段或公开 OpenAPI。
+- 旧 API 边界：DEC-PLAT-002-018 已明确旧 Analysis API 不作为长期支持的公共接口，并要求新 Researchflow API 验收后删除旧路由及专属适配代码。当前 `internal/server/bootstrap/bootstrap.go` 仍通过 `httpapi.NewWithTasks` 装配旧 Analysis Handler；在新 API 契约和消费者验收完成前，只能视为迁移中的临时实现，不得扩展旧 API 能力，也不得将其描述为长期兼容方案。
+- 代码现状核对：现有 Bootstrap 仍直接装配旧 Analysis Runner/Task Queue；Migration Registry 当前注册 News、Research、Notification；Diagnostics 聚合继续委托 Platform Runner；LLM Transport 复用 Platform BoundDoer。以上代码存在不等于模块装配、真实依赖或端到端验收通过。
+- 当前可执行边界：SRV-002/003/005/006/007/009 的剩余工作必须逐项对照已有代码和模块公开装配入口定点推进；SRV-004 不得创建占位 Factory，只有在模块公开构造入口、Port、Handler、Worker、Check、Migration 和配置来源可核实时才解除阻塞；SRV-008 继续等待 Outbox/Inbox 与 Dispatcher 所有权契约；SRV-010 继续等待 Data 迁移门禁。
+- 本轮未修改 `cmd/analysis-api`、`internal/server/**` 代码，未触碰其他模块目录，也未在 `integration` 上执行写操作或构建。下一阶段应先完成各模块公开装配入口的现状核对，再确定 SRV-004 是否具备真实可执行条件；不得根据目录存在或历史文档推断模块 Factory 已交付。
+
+
+### 12.53 SRV-007 Researchflow Migration 注册补齐（2026-11-12）
+
+- 以当前分支 HEAD `85d041f891c7fba86619f0b59becbd3079018bff` 为修改基线。代码核对确认 `internal/researchflow/storage` 已公开 `MigrationNamespace = "researchflow"` 和 `Migrations()`，Migration 内容由 Researchflow 所有，Server 只负责注册。
+- 原 Server Registry 只注册 News、Research、Notification，遗漏已经存在的 Researchflow Migration，导致 Researchflow 持久化表不会由 Root Server 的统一 Migration 流程创建或校验。
+- 在 Bootstrap 注册表中直接复用 Researchflow 的公开 Migration 列表和 namespace 常量；没有复制 SQL、没有修改模块 Migration、没有增加版本或字段。
+- 更新 Registry 单测，要求 namespace 集合包含 `researchflow`，并保持排序确定性。
+- 本次仅修改 `internal/server/bootstrap/bootstrap.go`、对应测试和本文档；不触碰其他模块代码，不执行 integration 合并或写操作。
+- Server 独立 Workflow Run `43137020216`（SHA `3ffb0d8a109ef2e8f8e4d3aaa6db394c1c0f3e23`）已完成并成功：Server 范围 gofmt、包级单测、Race、Vet 全部通过。该 Workflow 不覆盖根模块全量 `go test ./...`、真实 MariaDB Migration 执行或 Researchflow Worker 生产启动；因此本项仅具备 Server 包级 CI 证据，不代表真实数据库/完整系统验收通过。
+
+
+### 12.54 SRV-004 六模块公开装配入口核验（2026-11-12）
+
+- 审计基线：当前分支 HEAD `4250aa713416ef5f7c46ca7e4f7bcda2ffb9d6a7`。本轮只核对当前分支的模块代码与各模块 README，不把目录存在、单元测试或模块 CI 等同于 Root DI 已可装配。
+- News：已有 `SearchCandidates`、`CollectSource`、`IngestProviderCandidate`、`IngestCollectedSource` 等组件级构造器，以及自有 Repository/Migration 和 Provider 配置；尚未形成一个覆盖 Provider/Source Catalog、可信策略解析、采集触发和真实 BoundDoer 注入的生产组合入口。News 文档也明确 Server 生产装配、策略评估和在线采集尚未闭环。
+- Research：已有稳定 `application.Port`、`NewService` / `NewServiceWithEvents` / `NewServiceWithClaims`；`storage.NewContextRepository`、`NewEvidenceRepository`、`NewEventRepository`、`NewClaimRepository` 均可注入共享 `*sql.DB` 和模块 Clock，Migration 与 Diagnostics Check 也已交付。当前真正阻塞生产装配的是 `application.EvidenceAuthorizer` 的可信实现/来源尚未在本模块或 Server 找到；必须由 Data/News 授权语义与契约提供，不能用恒允许 Authorizer 绕过。Clock/ID Generator 可由 Server 提供进程级基础实现，但不得替代领域授权。
+- Researchflow：已有 `NewCreateRunService`、`NewWorker`、`NewDeadlineScanner` 等组件级构造器和自有 Migration；Worker 依赖 RequestIdentity、数据库时钟、ID Generator、WorkerStore、StageExecutor 等真实 Port。当前没有核实到一个统一生产 Factory/完整 Executor 组合入口，不能仅实例化 Worker 就宣称模块可运行。
+- Quant：当前可核实到的是指标/风险注册表及领域计算包；没有可供 Server 注入的模块级 Application Port/Factory、持久化 Migration 或统一 Worker/Diagnostics 入口。不得由 Server 临时创建 Quant API 或把 Registry 直接包装成业务服务。
+- LLM：已有 Provider 接口和 Responses Adapter 构造器；Server 已有共享 Platform BoundDoer 到 LLM HTTP/SSE 的传输桥接及 Responses Adapter 构造器。尚缺生产 ProviderConfig、Secret、CapabilityState 的可信配置/证据来源和真实 Gateway 联调，因此只完成传输桥接，不等于 LLM 生产实例可安全启用。
+- Notification：已有 Delivery Preflight、Execution、Completion、Lease Recovery 等组件级 Application Service 与自有 Migration；README 明确 Fanout Writer/WorkItem 执行语义、活跃 Subscription 分页和完整 Dispatcher/Worker 尚未完成。Server 不得用旧 Platform Task Queue 或临时轮询器代替模块 Worker。
+- Migration 复核：当前 Server Registry 已注册 News、Research、Researchflow、Notification 四个已公开 Migration namespace；Quant/LLM 当前没有可注册的模块 Migration 贡献项，不增加空 namespace。
+- Diagnostics 复核：Server 当前统一聚合共享 Storage Checks；Research 已有可构造的 Domain Snapshot Check，Researchflow 有 Stage Assessment Adapter；News 的真实检查依赖生产采集与策略入口，Quant/LLM/Notification 尚未形成可由 Server 直接注册的完整生产 Check 组。Server 不构造假健康检查。
+- 结论：SRV-004 仍不能整体解除阻塞。Research 的 SQL Repository 构造入口已经确认，不再作为未知项；可信 Evidence Authorizer 是明确阻塞。可继续做的只有对已交付模块公开入口进行逐个真实装配；当前缺少的可信配置、授权、执行器、Worker/Dispatcher 和跨模块 Port 必须由对应模块或项目契约提供，Server 不代替模块补业务能力。本轮不新增 DI Factory、HTTP API、Worker、字段或诊断项。
+- 本轮没有修改任何业务模块文件；Researchflow Migration 接入已由 12.53 节记录并通过 Server 独立 CI。进一步核对确认 Research 四类 MySQL Repository 均已有构造入口，但可信 Evidence Authorizer 没有可直接注入的生产实现。下一步应等待授权契约/Owner Adapter 明确后再接入 Research；不得在 Server 临时实现授权规则。其他模块保持各自明确的阻塞状态。
+
+
+### 12.55 SRV-007 Schema 预检补齐未知 namespace 检查（2026-11-12）
+
+- 复核 `ValidateApplied` 时发现，原实现只逐个查询当前已注册的 namespace。它能拒绝已注册 namespace 内缺失、未完成或未知的版本，但不会读取其他 namespace；数据库若残留已退役模块或不属于当前 Server 组合的迁移记录，仍可能通过 `MIGRATION_ENABLED=false` 的启动预检。
+- 将预检改为一次只读读取 `platform_schema_migrations` 全部 `namespace/version/status`，并要求数据库 namespace 集合与当前 Registry 完全一致；每个 namespace 内仍要求版本集合完全一致且全部为 `applied`。
+- 不执行 DDL、不修改迁移历史、不删除旧记录，也不改变 Platform Migration Runner 的职责。发现未知 namespace 时明确拒绝启动，交由运维确认数据库与当前代码版本是否匹配。
+- 新增纯逻辑测试覆盖完整集合、未知 namespace、缺失 namespace、已注册 namespace 内未知版本；数据库读写行为仍需由后续 MariaDB 集成验收覆盖。
+- 首次独立 CI Run `43138224549` 在 gofmt 门禁发现新增测试文件格式不符合规范，包级单测、Race、Vet 因门禁失败而未执行；已将 namespace 集合测试拆分为独立测试文件并修正格式。修正后 Run `43138604293`（SHA `d95aeb90a8f6a2d51a7c245524bc39a2577f3fbe`）成功，Server gofmt、包级单测、Race、Vet 全部通过。
+
+
+### 12.56 SRV-006 HTTP 强制关闭后的活动连接排空（2026-11-12）
+
+- 深入检查 `httpServerComponent.Stop` 发现：优雅关闭超过预算后调用 `http.Server.Close()`，原实现只等待 Serve Listener goroutine 退出。Go HTTP Server 的 Close 不保证等待正在执行的 Handler 结束，因此 Stop 可能提前返回，Bootstrap 随后关闭共享 DB/Redis，而 Handler 仍可能使用这些资源。
+- 在 Server HTTP 生命周期组件内增加活动连接跟踪，串联原有 ConnState 回调；当时的实现会在 Shutdown 超时后强制关闭连接，并继续等待活动连接进入 Idle/Closed，再允许 Lifecycle 释放共享资源。
+- 当时的回归测试验证：Handler 阻塞且 Shutdown 超时时，Listener 关闭后 Stop 仍不得返回；只有 Handler 退出后 Stop 才返回，并保留超时错误。
+- **后续行为已由 12.60 节修正并取代**：活动连接排空现在受关闭 Context 限制；超时后 Stop 返回可识别的超时错误，不再无限等待忽略取消的 Handler。Lifecycle 会继续执行后续组件清理，因此不能据此保证超时后所有 Handler 均已退出再释放共享资源。Handler 必须遵守 Request Context 取消约定。
+- Server 独立 Workflow Run `43139331264`（SHA `ca1d96383af368105746c8072b62e0db65a328ac`）成功：Server gofmt、包级单测、Race、Vet 全部通过。该结果不替代真实长连接/故障注入环境验收。
+
+
+### 12.57 SRV-006 启动失败回滚增加关闭超时预算（2026-11-12）
+
+- Bootstrap 原先使用 `runtime.NewLifecycle()`；Lifecycle 在启动失败时以 `context.WithoutCancel(ctx)` 回滚。该 API 会同时移除父 Context 的 Deadline，因此组件 Stop 若不响应或等待中的资源无法释放，启动失败路径可能无限阻塞，外层 Bootstrap defer 的关闭超时无法介入。
+- 新增 `NewLifecycleWithRollbackTimeout`，要求正数超时；Lifecycle 启动失败时以 `WithoutCancel` 保留“即使进程 Context 已取消仍需回滚”的语义，再施加配置的 rollback deadline。原 `NewLifecycle()` 保留并使用 10 秒默认回滚预算，避免改变现有调用者。
+- Bootstrap 将当前进程 `shutdownTimeout` 注入 Lifecycle，使 API/all 角色使用 HTTP Shutdown 配置，worker 角色使用现有 10 秒预算。正常运行期间显式 `Lifecycle.Stop(ctx)` 仍由调用方提供关闭预算。
+- 新增测试覆盖回滚 Context deadline、Stop 遵守 Context 时的超时退出，以及非法超时配置。启动错误与回滚超时通过 `errors.Join` 同时保留。组件若忽略传入 Context，Go 无法安全强制终止其 Stop goroutine；组件实现仍须遵守 Stop Context 契约。
+- 首次 CI Run `43140116477` 在 gofmt 门禁发现 `lifecycle.go` 与 `lifecycle_test.go` 格式不符合规范，后续测试步骤因此跳过；修正后 Run `43140433555`（SHA `a26ab79788bbff317cb2d5a9561e2e8330935f1d`）成功，Server gofmt、包级单测、Race、Vet 全部通过。
+
+
+### 12.58 SRV-006 单组件启动期间并发 Stop 状态竞争修正（2026-11-12）
+
+- 补充审查发现，已有并发 Stop 测试使用两个组件：Stop 在第一个组件启动期间进入后，后续第二个组件会在启动循环中检测到 stopped。但当只有一个组件，且 Stop 在该组件 Start 阻塞期间发生时，原实现可能在组件 Start 返回后直接报告 Start 成功，因为没有下一轮循环检查 stopped。
+- 在 Start 关闭 `startDone` 前持有 Lifecycle 锁检查最终 stopped 状态；若并发 Stop 已先进入停止状态，则 Start 返回明确的启动中断错误。Stop 仍等待 `startDone` 后按逆序停止，不改变资源释放顺序。
+- 新增单组件阻塞启动的并发回归测试，验证 Start 不会报告成功、Stop 仍会停止该组件且完成。
+- Server 独立 Workflow Run `43140792357`（SHA `b46b67b6b0d50352ad16fb4b72a2500b505a7c7f`）成功：Server gofmt、包级单测、Race、Vet 全部通过。
+
+
+### 12.59 当前 Server 任务边界与下一阶段计划（2026-11-12）
+
+- 核对基线：分支 HEAD `dcdcbaed13b4b28e6a21d66f60b40041f27b4d82`；最新 Server Workflow Run `43140870143` 成功，gofmt、Server 包级测试、Race、Vet 全部通过。
+- 入口核对：当前唯一启动入口仍为 `cmd/analysis-api/main.go`；仓库不存在 `cmd/server/`，继续沿用现有入口，不新增第二个进程入口。
+- Migration 核对：Bootstrap 当前显式注册 News、Research、Researchflow、Notification 四个模块 Migration；Quant/LLM 当前无可注册 Migration，不创建空 namespace。
+- Schema 预检核对：`ValidateApplied` 只读读取 Platform Migration History，要求当前 Server Registry 与数据库 namespace/version 集合完全一致且状态均为 `applied`；checksum 校验仍由 Platform Runner 所有，Server 不解析 Platform 私有错误文本。
+- Lifecycle 核对：最新代码已覆盖单组件启动期间并发 Stop、启动失败回滚超时、HTTP 强制关闭后的活动连接排空；组件 Start/Stop 仍必须遵守 Context 取消约定。最新 CI 通过不等于真实生产容器 SIGTERM 验收通过。
+- 模块接入核对：SRV-004 继续阻塞，不创建空 Factory/Registry、临时 Worker 或假 Diagnostics。Research 可信 Evidence Authorizer、News 生产采集装配、Researchflow Repository/Worker、Quant Application Facade、LLM 可信 Provider 配置、Notification Dispatcher/Worker 仍由对应模块或契约提供。
+- 下一阶段优先顺序：
+  1. SRV-007：等待在 integration 聚合后具备 MariaDB 环境时，执行 Schema 预检、Migration 成功/失败/部分 DDL 恢复场景的真实集成验收；不得在 Server 自行实现 Migration Runner 或 checksum。
+  2. SRV-006：在部署/运行环境可用后补充真实 SIGTERM 与容器退出验收；不重复增加已经覆盖的 Lifecycle 单元测试。
+  3. SRV-004/SRV-009：仅在模块公开装配入口及可信 Check 到位后接入；每个入口/Check 必须有实际调用场景和明确判定标准。
+  4. SRV-005：等待 Web Session、CSRF、可信代理等项目级/Platform 契约和可复用实现后，完成浏览器身份链路；不自行定义公共认证语义。
+- 当前没有可由 Server 单独补齐且不越过模块/契约边界的业务装配任务。后续以真实依赖和公开 Port 到位为触发条件，不为了保持提交频率制造新接口或重复测试。
+
+
+### 12.60 Server 模块代码 Review 与 HTTP 关闭超时修正（2026-11-12）
+
+- Review 基线：分支 HEAD `efdb04ef071481e1ed2d34adaa990ea6a62e5b1a`；本轮检查 `cmd/analysis-api` 与 `internal/server/**` 全部 34 个文件，覆盖 Bootstrap、Config、Diagnostics、Health、LLM Transport、Migration、Resources、Lifecycle 及对应测试。
+- Review 结论：未发现当前 Server 所有权包存在编译错误；既有 HEAD 的 Server CI 已通过 gofmt、包测试、Race、Vet。
+- 发现并修正：`httpServerComponent.Stop` 在 `Shutdown(ctx)` 超时并强制关闭 Socket 后，仍无条件等待活动 Handler 全部退出，活动 Handler 若不响应取消会使 Stop 超过配置的关闭预算并阻塞 Bootstrap 释放资源。
+- 修正方式：活动连接排空改为接受关闭 Context；超过关闭期限后返回可识别的 `context.DeadlineExceeded`，并保留 Listener 强制关闭及错误汇总行为。不会把未完成 Handler 误报为正常优雅退出。
+- 回归测试：将原先“超时后无限等待 Handler”的测试改为验证关闭预算生效、Listener 已退出、超时错误被返回；测试主动释放忽略取消的 Handler，避免测试遗留 goroutine。
+- 验证提交：`f1bc6ef51345e37970365e4fd1930e5fa610c2b3`（实现）、`1758514939c0d0acdb2d4a3eed4c06da4c479be2`（回归测试）。
+- 最新 Server Workflow Run `43147039665` 对应 HEAD `1758514939c0d0acdb2d4a3eed4c06da4c479be2`，gofmt、Server 包级测试、Race、Vet 全部通过。
+- 边界说明：超时后强制关闭连接不能保证一个完全忽略 Request Context 的业务 Handler 立即终止；Server 会返回关闭超时错误并继续进程级清理。业务 Handler 仍必须遵守请求 Context 取消契约。
+- 未覆盖项：本轮没有在 integration 上执行全仓构建，也没有执行真实 MariaDB/Redis 环境、生产容器或真实外部 LLM Gateway 验收；不得据此标记 L3 真实依赖验收通过。

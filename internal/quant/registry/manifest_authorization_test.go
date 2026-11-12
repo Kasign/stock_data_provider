@@ -156,11 +156,28 @@ func TestQuantResultManifestAndAuthorizationGolden(t *testing.T) {
 	}
 }
 
-func TestQuantResultManifestSchemaRejectsEmptySnapshotAndInvalidIdentity(t *testing.T) {
+func TestQuantResultManifestSchemaAllowsEmptySnapshotAndRejectsInvalidIdentity(t *testing.T) {
 	schema, err := compileJSONSchema(readPlanningFixture(t, filepath.Join("schema", "QNT-CTR-005-result-manifest-1.0.0.schema.json")))
 	if err != nil {
 		t.Fatalf("compile QNT-CTR-005 schema: %v", err)
 	}
+	var golden resultManifestGolden
+	if err := json.Unmarshal(readPlanningFixture(t, filepath.Join("golden", "QNT-CTR-005-result-manifest.golden.json")), &golden); err != nil {
+		t.Fatalf("decode manifest golden: %v", err)
+	}
+	var emptySnapshotInstance map[string]any
+	if err := json.Unmarshal(golden.Manifest, &emptySnapshotInstance); err != nil {
+		t.Fatalf("decode manifest instance: %v", err)
+	}
+	emptySnapshotInstance["input_snapshot_refs"] = []any{}
+	encodedEmptySnapshot, err := json.Marshal(emptySnapshotInstance)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := validateJSONSchemaInstance(schema, encodedEmptySnapshot); err != nil {
+		t.Fatalf("QNT-CTR-005 schema rejected an explicitly empty snapshot array: %v", err)
+	}
+
 	invalid := []string{
 		`{"result_id":"quant_result:sha256:invalid","manifest_fingerprint":"invalid","result_type":"stock","schema_version":"1.0.0","system_as_of":"2026-11-06T05:02:00Z","input_snapshot_refs":[],"result_fingerprint":"invalid"}`,
 		`{"result_id":"quant_result:sha256:29e81fdc80342387b910ab2c50a2732e5010defc7ce3e8030de316b37f4b8299","manifest_fingerprint":"29e81fdc80342387b910ab2c50a2732e5010defc7ce3e8030de316b37f4b8299","result_type":"stock","schema_version":"1.0.0","system_as_of":"not-a-time","input_snapshot_refs":["snapshot-a"],"result_fingerprint":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}`,

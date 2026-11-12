@@ -1,77 +1,87 @@
 # WebUI 统一诊断接入计划
 
-- 目标分支：`feat/webui-market-data-console`
-- 更新日期：2026-11-09
-- 当前总体任务状态以 [WebUI 整体规划](./Web整体规划.md) 为准；本文不维护独立分支 HEAD 基线。
+更新时间：2026-11-12  
+核对基线：feat/webui-market-data-console @ e43dba62079c872d95919e5412e9c7cad21f477c
 
-> 本文只保留诊断专项字段、展示和联调约束；当前是否推进以 [WebUI 整体规划](./Web整体规划.md) 为准。
-- 范围：仅修改当前 WebUI 分支的 `web/**` 与 `doc/web/**`；不创建新分支，不修改其他分支，不修改 Go Provider、服务端路由、数据库、OpenAPI 或部署配置。
+> 本文只记录诊断消费、字段展示和验收约束；总体任务状态以《WebUI 整体规划》为准。
 
-## 1. 目标与边界
+## 1. 目标与职责边界
 
-数据侧负责诊断判断和证据生成；WebUI 负责诊断参数交互、真实响应校验、状态表达、证据展示和历史查看。WebUI 不复制字段质量规则，不根据行情值自行判定 Provider 质量，也不使用模拟数据作为真实运行状态。
+WebUI 是统一诊断工作台的消费端：
+- Platform 提供 Request ID、Fault、Observation 等公共诊断原语。
+- 各领域模块负责本领域诊断事实、业务状态、质量规则和证据。
+- Server 负责将模块诊断能力装配到 Root HTTP API。
+- WebUI 负责按领域分组展示请求状态、诊断证据和可诊断错误。
 
-## 2. 实施任务
+WebUI 不实现探测器，不复制 Provider/业务质量规则，不推算覆盖率分母，不把领域状态压成单一平台状态，也不访问模块内部存储。
 
-| 阶段 | 任务 | 状态 |
-|---|---|---|
-| 1 | 核对统一主动探测接口、响应模型、页面调用链和历史接口 | 已完成 |
-| 2 | 展示字段校验计数、字段级问题、截断信息 | 已完成，自动化通过 |
-| 3 | 展示市场宽度四类覆盖率维度，严格使用服务端 ratio | 已完成，自动化通过 |
-| 4 | 区分源端时间、采集时间、检查时间；Quality 与 Freshness 分离；跳过状态不误报 | 已完成，自动化通过 |
-| 5 | 同步功能说明、API 映射、提测清单和本计划 | 已完成 |
-| 6 | WebUI 单测、语法检查、浏览器专项及集中回归 | 已完成：356/356 单测、语法、镜像构建及 Chromium 专项通过 |
-| 7 | 部署后对照真实探测 JSON 验证字段、覆盖率和历史持久化 | 暂缓，等待数据侧接口开发与验证完成 |
+## 2. 当前接入基线
 
-## 3. 数据契约说明
+当前 Web 已有 Web 静态检查、行情/分析服务健康端点、Provider 注册清单、只读运行诊断、用户显式触发的主动探测和探测历史。
 
-当前数据侧 Go `ProviderProbeItem` 与 Market Data OpenAPI 已声明以下字段：
+历史自动化结果见《WebUI 提测验收清单》。Mock API 自动化只证明前端展示行为；Provider 真实可用性、真实质量和 MariaDB 历史持久化仍需部署环境证据。
 
-- `validation_total_count` / `validation_error_count` / `validation_warning_count` / `validation_info_count`
-- `validation_truncated` / `validation_issues`
-- `coverage_dimensions`
+## 3. 目标诊断聚合映射
 
-字段问题包括解析、标准化、校验阶段以及标准字段、Provider 原始字段、规则编码、期望、实际类型、脱敏实际值、严重级别和消息。市场宽度覆盖维度为 quote_response、price_classification、quote_timestamp、amount。
+| 诊断分组 | 责任方 | Web 展示 | Web 不得推断 |
+|---|---|---|---|
+| Platform/Server | Platform + Server | HTTP/依赖故障、Request ID、Fault、服务就绪 | 业务质量是否合格 |
+| Data | Data | Provider 能力、请求观测、字段校验、覆盖率、Freshness | Provider 质量规则、分母、字段对账结论 |
+| News | News | 抓取/解析状态、来源、授权、采集时间、失败原因 | 新闻真实性、来源授权、事件归并 |
+| Research | Research | Evidence 查询状态、来源授权、引用完整性、对象关联 | Claim/Hypothesis 正确性或证据充分性 |
+| Quant | Quant | 计算状态、数据版本、PIT 时点、风险决策、评估摘要 | 因子质量、回测结果、风险门禁 |
+| Researchflow | Researchflow | Run/Stage/Attempt、阶段耗时、重试/取消/失败原因 | Run 终态和阶段状态机 |
+| LLM | LLM | 模型调用状态、耗时、结构化输出校验和错误 | 模型结论真实性 |
+| Notification | Notification | 订阅、渠道、发送尝试、重试和最终投递状态 | UI 展示成功等于消息送达 |
 
-当前契约文件为 `internal/marketdata/httpapi/openapi.yaml`，其中 `ProviderProbeItem` 已声明上述字段。本分支只消费契约，不修改服务端文件。OpenAPI 声明不代表 Root Server 已挂载该 Handler，也不代表真实 Provider 已产生完整诊断数据。
+这是目标展示责任映射，不表示上述诊断 API 已全部存在或注册。
 
-## 4. 展示约束
+## 4. 统一展示约束
 
-1. 字段校验计数使用服务端计数；明细最多展示 30 条，服务端截断必须提示。
-2. 实际值只展示服务端提供的脱敏摘要，并使用 textContent 输出。
-3. 覆盖率只展示服务端 ratio；不根据返回数、有效数或总数在浏览器端补算。
-4. 不同覆盖维度独立展示，不把总体有效证券覆盖率当作价格/时间/成交额覆盖率。
-5. provider_time、fetched_at、checked_at 分别表示源端时间、采集时间、检查时间，缺失时不互相代替。
-6. Quality 与 Freshness 独立；skipped、not_configured、not_supported 不得映射为健康。
-7. 历史记录复用同一渲染逻辑；历史读取失败不得清空或覆盖本次探测结果。
+1. Platform Observation 是公共载体，不替代领域诊断字段；领域状态、质量、Freshness、授权和风险门禁保留原语义。
+2. 每条诊断尽可能显示模块/依赖、状态、reason_code、Request ID、发生时间、证据引用和可重试性；未提供字段显示未知。
+3. pass、degraded、fail、not_comparable、skipped、not_configured、not_supported 按契约区分。
+4. skipped/not_configured/not_supported 不得映射为 pass。
+5. Quality 与 Freshness 分开展示；provider/source time、fetched/observed time、checked time 不互相替代。
+6. 覆盖率仅显示服务端 ratio、分子/分母和维度；缺失分母时显示不可比较/未知。
+7. 诊断明细和实际值遵循服务端脱敏约束，使用安全文本节点。
+8. 当前请求与历史请求分别管理生命周期；历史读取失败不得清空当前结果。
+9. 取消、超时和旧连接响应按领域 generation/AbortController 规则处理。
+10. LLM 输出不得覆盖 Researchflow 终态或 Quant 风险阻断状态。
 
-## 5. 验收标准
+## 5. Data 主动探测字段约束
 
-- 有字段问题、无字段问题、明细截断、仅有计数无明细均能正确显示。
-- 四种覆盖维度分别显示正确 ratio 和分母证据；ratio 缺失/非法时显示未知。
-- 源端时间、采集时间和检查时间可独立缺失，不发生时间字段替代。
-- Quality=degraded 与 Freshness=stale 可以同时显示，不互相覆盖。
-- skipped / not_configured / not_supported 显示非成功状态。
-- 当前探测和历史探测使用相同字段展示规则。
-- 单元测试、语法检查、Chromium 专项通过；真实部署验收另行记录，不以模拟 API 测试代替。
+当前 Data 探测展示已使用：
+- validation_total_count、validation_error_count、validation_warning_count、validation_info_count。
+- validation_truncated、validation_issues。
+- quote_response、price_classification、quote_timestamp、amount 等覆盖维度。
+- provider_time、fetched_at、checked_at。
+- quality_status/quality_reasons 与独立 Freshness 字段。
 
+规则：
+- 字段问题计数使用服务端计数；页面明细最多展开 30 条，服务端截断需提示。
+- 实际值只显示服务端脱敏摘要。
+- 覆盖率使用服务端 ratio，不从前端返回记录数推导。
+- 时间字段分别展示，缺失不替代。
+- Quality 与 Freshness 不合并。
+- 主动探测必须由用户显式触发；普通页面打开或健康检查不得隐式访问 Provider。
+- 第三方 Provider 凭据由服务端管理，Web 不读取、保存或回显。
 
-## 6. 本批自动化结果（2026-11-03）
+## 6. 接入顺序与验收门禁
 
-- WebUI Checks：356/356 单元测试通过，JS 语法检查、Nginx 镜像构建通过。运行记录：[41592118649](https://github.com/Kasign/stock_data_provider/actions/runs/41592118649)。
-- Chromium Browser Smoke：响应式布局、Run Flow、Run Flow 结果恢复、个股研究交互/数据质量、Provider 主动探测专项全部通过。运行记录：[41592118635](https://github.com/Kasign/stock_data_provider/actions/runs/41592118635)。
-- 上述自动化运行对应功能代码提交 `d5fc8665ab2e8d5d3a17a68bb7bb67bc9cf88d61`；后续仅文档索引/映射和验收状态更新，不改变本批 WebUI 代码。
-- 真实部署验收仍待执行，不能由模拟 API 的 Chromium 测试替代。
+| 阶段 | 工作 | 准入条件 | 验收证据 |
+|---|---|---|---|
+| D0 | 保持当前 Data 诊断展示 | 当前响应契约稳定 | 现有单测/Browser Smoke 历史记录 |
+| D1 | Platform/Server 诊断基础接入 | Platform 原语稳定，Server 有统一诊断出口 | 真实 Root Server 请求、Request ID/Fault/Observation 样例 |
+| D2 | News/Research/Quant 诊断 | 领域诊断 DTO、脱敏和证据引用契约实现 | 各模块真实响应、降级/失败/不可比较样例 |
+| D3 | Researchflow/LLM/Notification 诊断 | Run 状态、模型调用和投递状态 API 可用 | 真实 Run、LLM 错误和 Notification 投递记录 |
+| D4 | 聚合页端到端验收 | 目标模块由 Server 注册且权限可用 | 真实部署全链路与错误注入记录 |
 
+不得为填满页面而虚构模块健康状态或新增无来源字段。契约缺口回到领域/Server 契约流程解决。
 
-## 7. 当前开发决策（2026-11-03）
+## 7. 当前结论
 
-统一诊断任务当前不继续扩展 WebUI 功能。原因是数据侧接口尚未完成全面验证，现阶段仅凭模拟 API 或部分真实回包无法确认所有字段、枚举、覆盖率分母和历史持久化行为稳定。
-
-恢复条件：
-1. 数据侧完成 ProviderProbeItem 响应模型与 OpenAPI 契约同步。
-2. 数据侧使用真实 Provider 验证接口连通性、字段校验、覆盖率及跳过/未配置状态。
-3. 数据侧验证诊断历史持久化、查询及降级行为。
-4. WebUI 对照最终真实响应样例进行联调；只修正实际发现的兼容问题，不复制数据侧质量规则。
-
-等待期间保留已完成的前端展示，不修改 Go、Provider、数据库、服务端路由或 OpenAPI；诊断相关 UI 深化标记为暂缓，不阻塞其他独立 WebUI 任务。
+- 保留现有 Data 诊断展示，不重做字段校验、覆盖率和时间语义。
+- Data 主动探测的真实 Provider、跨源黄金样例和历史持久化仍以数据侧真实验收为准。
+- Platform 有 Observation 原语或模块文档存在，不代表 Web 已接入该模块诊断。
+- Web 后续只做真实接口接入、状态表达和展示问题修正，不扩展第二套诊断规则。

@@ -67,17 +67,9 @@ type Ref struct {
 
 type RefInput struct {
 	// SchemaVersion 是 QuantResultRef DTO 自身版本，不是 Manifest 的 payload schema_version。
-	SchemaVersion        string
-	Scope                Scope
-	SecurityID           string
-	TradeDate            string
-	Period               string
-	AlgorithmVersion     string
-	ParameterFingerprint string
-	QualityStatus        QualityStatus
-	ResultStatus         ResultStatus
-	AuthorizationRef     string
-	CreatedAt            time.Time
+	SchemaVersion    string
+	AuthorizationRef string
+	CreatedAt        time.Time
 }
 
 // BuildRef 仅从已验证 Manifest 构造引用；不签发或验证 AuthorizationRef 的授权事实。
@@ -86,41 +78,26 @@ func BuildRef(input RefInput, source manifest.Manifest) (Ref, error) {
 		return Ref{}, fmt.Errorf("%w: manifest: %v", ErrInvalidResultRef, err)
 	}
 	if !refSchemaVersionRE.MatchString(input.SchemaVersion) ||
-		(input.SecurityID != "" && !validText(input.SecurityID)) ||
-		!validText(input.Period) ||
-		!validText(input.AlgorithmVersion) ||
-		!validText(input.ParameterFingerprint) ||
 		!validText(input.AuthorizationRef) ||
 		!validSnapshotRefsUTF8(source.InputSnapshotRefs) ||
-		!validScope(input.Scope) ||
-		(input.Scope == ScopeStock && !validText(input.SecurityID)) ||
-		!validQuality(input.QualityStatus) || !validResultStatus(input.ResultStatus) ||
 		input.CreatedAt.IsZero() {
 		return Ref{}, ErrInvalidResultRef
-	}
-	if input.TradeDate != "" {
-		if !tradeDateRE.MatchString(input.TradeDate) {
-			return Ref{}, fmt.Errorf("%w: trade_date format", ErrInvalidResultRef)
-		}
-		if _, err := time.Parse("2006-01-02", input.TradeDate); err != nil {
-			return Ref{}, fmt.Errorf("%w: trade_date value", ErrInvalidResultRef)
-		}
 	}
 
 	return Ref{
 		SchemaVersion:        input.SchemaVersion,
 		ResultID:             source.ResultID,
 		ResultType:           source.ResultType,
-		Scope:                input.Scope,
-		SecurityID:           input.SecurityID,
+		Scope:                Scope(source.Scope),
+		SecurityID:           source.SecurityID,
 		SystemAsOf:           source.SystemAsOf,
-		TradeDate:            input.TradeDate,
-		Period:               input.Period,
-		AlgorithmVersion:     input.AlgorithmVersion,
-		ParameterFingerprint: input.ParameterFingerprint,
-		InputSnapshotRefs:    append([]string(nil), source.InputSnapshotRefs...),
-		QualityStatus:        input.QualityStatus,
-		ResultStatus:         input.ResultStatus,
+		TradeDate:            source.TradeDate,
+		Period:               source.Period,
+		AlgorithmVersion:     source.AlgorithmVersion,
+		ParameterFingerprint: source.ParameterFingerprint,
+		InputSnapshotRefs:    append([]string{}, source.InputSnapshotRefs...),
+		QualityStatus:        QualityStatus(source.QualityStatus),
+		ResultStatus:         ResultStatus(source.ResultStatus),
 		AuthorizationRef:     input.AuthorizationRef,
 		CreatedAt:            input.CreatedAt.UTC().Format(time.RFC3339Nano),
 	}, nil

@@ -680,15 +680,14 @@ func boundedLogPath(path string) string {
 }
 func (s *Server) auth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		token := strings.TrimSpace(r.Header.Get("X-API-Key"))
-		if token == "" {
-			a := strings.TrimSpace(r.Header.Get("Authorization"))
-			if strings.HasPrefix(a, "Bearer ") {
-				token = strings.TrimSpace(strings.TrimPrefix(a, "Bearer "))
-			}
+		// DATA-CTR-006：远程兼容模式只接受单个 X-API-Key，不接受 Bearer 别名。
+		values := r.Header.Values("X-API-Key")
+		token := ""
+		if len(values) == 1 {
+			token = strings.TrimSpace(values[0])
 		}
 		if token == "" || subtle.ConstantTimeCompare([]byte(token), []byte(s.apiKey)) != 1 {
-			writeErr(w, 401, "AUTH_REQUIRED", "valid API key required", requestID(r))
+			writeErr(w, http.StatusUnauthorized, "AUTH_REQUIRED", "valid API key required", requestID(r))
 			return
 		}
 		next.ServeHTTP(w, r)
