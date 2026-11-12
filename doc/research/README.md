@@ -1,7 +1,7 @@
 # Research 模块
 
 - 分支：`feat/research`
-- 当前分支最新提交（2026-11-12）：`e01a642a54088694c7063f95f10ed0491c9d31de`。
+- 当前分支最新提交（2026-11-12）：`745045fb6a857abe751b5bcd55df57a75c9b80fe`（包含 Outbox 修复和验收文档更新）。
 - 该 SHA 尚无对应 CI Run；旧 Integration CI Run [43187007758](https://github.com/Kasign/stock_data_provider/actions/runs/43187007758) 对应 SHA `21f2c57e76874d45f5f3c874eea482fe0ce7fe4f`，不能作为本轮新增代码的测试证据。
 - 当前 `.github/workflows/go-test.yml` 的 push 分支未包含 `feat/research`，且没有 Research 专项 gofmt/test/race/vet 或 MariaDB Job；workflow_dispatch 也未定义 Research Job。旧 Research MariaDB Run 覆盖已删除的 v1-v5 迁移链，不能替代当前单一 Migration v1 验收。
 - 详细任务进度与依赖边界见 [02-任务拆分与验收](./02-任务拆分与验收.md)。
