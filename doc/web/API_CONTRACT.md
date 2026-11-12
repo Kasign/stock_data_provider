@@ -1,116 +1,92 @@
 # WebUI 真实 API 与配置边界
 
-更新时间：2026-11-09  
-适用分支：`feat/webui-market-data-console`
+更新时间：2026-11-12  
+核对基线：feat/webui-market-data-console @ e43dba62079c872d95919e5412e9c7cad21f477c
 
-本文只描述当前 WebUI 实际调用与当前仓库可核对的接口注册状态。OpenAPI 声明不等于 Handler 已注册，更不等于 Provider 已配置或上游可用。
+> 本文只记录当前请求封装、仓库可核对的路由事实和接入门禁。必须区分 OpenAPI 声明、Handler 注册、Root Server 挂载、部署可达和真实数据验收。
 
-## 1. 服务边界
+## 1. Web API 原则
 
-| 配置项 | 目标服务 | 用途 | 浏览器保存范围 |
+1. 浏览器只访问 Root Server 对外 HTTP API，不访问模块内部 Repository、ApplicationPort 或 Provider。
+2. 不根据模块名称自行设计 URL、字段、枚举、游标和错误语义。
+3. 前端封装不代表服务端注册；Handler 注册不代表 Root Server 挂载；路由可达不代表 Provider 有权限或返回真实数据。
+4. Mock/Fixture 只证明前端行为，不证明真实服务端联调。
+5. 新 API 必须明确用户场景、调用时机、字段来源、权限、分页/超时/取消语义和验收证据。
+
+## 2. 当前服务配置与认证边界
+
+| 配置 | 当前行为 | 迁移目标 | 限制 |
 |---|---|---|---|
-| 行情 API 基础路径 | 迁移期行情兼容路由；目标为 Root Server 内 Market Data Adapter | 行情、证券资料、数据源清单与运行诊断 | 当前迁移期配置仍保存在浏览器 |
-| 行情服务 API Key | 迁移期 Market Data Adapter | 当前通过 `X-API-Key` 访问受保护行情接口 | 当前浏览器暂存；目标架构禁止浏览器持有 |
-| 分析 API 基础路径 | `/analysis-api` 兼容前缀；目标为 Root Server 注册的模块路由 | 创建分析任务、查询任务/Run/阶段事件 | 当前浏览器配置代理路径 |
-| 分析服务认证 | 当前 Server Owner Bearer | WebUI 不携带 Owner Bearer；当前 Analysis 请求预期 401 | 不得把 Owner Token 写入浏览器；等待 Web Session/Cookie + CSRF + 资源授权 |
+| 行情 API 基础路径 | 浏览器配置代理路径 | Root Server Market Data Adapter | 以 Server 路由和部署验证为准 |
+| 行情 API Key | 迁移期由浏览器配置并用于行情请求 | Server 注入 Data 服务凭据 | 当前兼容实现不是目标安全模型 |
+| 分析 API 基础路径 | 使用分析兼容代理路径 | Root Server 注册 Researchflow 路由 | 需统一 Server 入口 |
+| 分析认证 | 当前分析路由使用 Owner Bearer；Web 不持有该凭据 | Web Session/Cookie + CSRF + 资源授权 | 不把 Owner Token 放入 localStorage，不匿名开放受保护接口 |
 
-行情服务健康检查使用 `GET /health/live`、`GET /health/ready`。分析服务健康检查使用 `GET /healthz`、`GET /readyz`，属于独立服务路径，不应拿行情服务 Handler 代替分析服务契约。
+行情健康检查使用 /health/live、/health/ready；分析服务使用 /healthz、/readyz。两组路径属于不同服务契约。
 
-## 2. 行情服务接口映射
+## 3. 当前 Web 已封装的行情 API
 
-当前 `web/src/api.js` 的行情接口封装应与 `internal/marketdata/httpapi/server.go` 的 Adapter 路由注册逐项对照。注意以下事实分层：OpenAPI 声明仅代表协议描述；`Server.routes()` 注册仅代表 Adapter 自身存在 Handler；`InProcessHandler()` 仅提供不带认证中间件的进程内路由。Root Server 是否已装配该 Adapter、对外路由是否可达、由何种认证保护，必须以 Root Server 装配代码和部署实测分别确认。当前 WebUI 分支未取得 Root Server 实际挂载及生产路由可达的验收证据，因此本表的“已注册”不得解读为浏览器生产环境可用。
+以下路径来自当前 API 封装及行情 Adapter 路由核对；仍需 Root Server 装配、部署可达和真实 Provider 验收，才能视为目标环境可用。
 
-核心已注册并由 WebUI 封装使用的接口包括：
-
-| 能力 | 方法与路径 | WebUI 封装 | 说明 |
-|---|---|---|---|
-| Provider 静态清单 | `GET /api/v1/data-sources` | `getDataSources` | 配置/能力声明，不代表健康 |
-| Provider 运行诊断 | `GET /api/v1/data-sources/diagnostics` | `getDataSourceDiagnostics` | 只读进程内真实业务请求统计，不主动探测 |
-| 批量行情 | `GET /api/v1/market/quotes` | `getMarketQuotes` | 仅查询明确传入的证券列表 |
-| 指数行情/目录/成分/日线 | `GET /api/v1/market/indices`、`index-catalog`、`indices/{symbol}/constituents`、`indices/{symbol}/daily` | 对应 `getMarketIndices`、`getIndexCatalog`、`getIndexConstituents`、`getIndexDailyBars` | 目录与行情快照不是同一资源 |
-| 市场广度/板块 | `GET /api/v1/market/breadth`、`/market/sectors` | `getMarketBreadth`、`getMarketSectors` | 按实际服务端质量字段展示 |
-| 全市场分页股票 | `GET /api/v1/market/stocks` | `getMarketStocks`、`bindMarketStocks` | 个股行情页按需加载；分页展示报价、成交额、换手率、量比、MA5/MA20、页内覆盖率和质量原因；MA/报价缺失保留未提供状态 |
-| 市场情绪快照/历史 | `GET /api/v1/market/sentiment`、`/market/sentiment/history` | `getMarketSentiment`、`getMarketSentimentHistory` | 历史只读数据库已保存快照，不补造缺失交易日 |
-| 人气榜/涨跌停/龙虎榜/交易日历/时段 | `GET /api/v1/market/hot-stocks`、`limit-pools`、`dragon-tiger`、`trading-calendar`、`session` | 对应同名 `getMarket*` / `getTradingCalendar` 封装 | 不将缺失数据补成零 |
-| 个股行情/日 K/Bundle | `GET /api/v1/quotes/{symbol}`、`bars/{symbol}/daily`、`bundles/{symbol}` | `getQuote`、`getDailyBars`、`getMarketBundle` | 保留复权、来源与质量语义 |
-| 个股资料/财务/公告/板块 | `GET /api/v1/stocks/{symbol}/profile`、`fundamentals`、`announcements`、`boards` | 对应 `getStock*` 封装 | 分别处理空结果、分页和报告期 |
-| 市场级资金流 | `GET /api/v1/market/capital-flow` | `getMarketCapitalFlow` | start/end 闭区间，最多 2000 个自然日；Tushare `moneyflow_mkt_dc`，CNY/百分点，依赖有权限 Provider |
-| 个股筹码/资金流 | `GET /api/v1/stocks/{symbol}/chip-distribution`、`capital-flow` | `getChipDistribution`、`getCapitalFlow` | 个股资金流不是市场级资金流 |
-
-### 已发现的契约差异
-
-- `GET /api/v1/market/capital-flow` 已在当前 `server.go` 注册，并由 `market_capital_flow.go` 实现；WebUI 通过 `getMarketCapitalFlow` 按 start/end 日期范围读取。接口返回 Tushare `moneyflow_mkt_dc` 原始市场级序列，金额为 CNY、比例为百分点；需要启用且具备权限的 Tushare Token，Provider 不可用时返回 503，不能据此认定当前部署已有可用数据。
-- 个股资金流 `GET /api/v1/stocks/{symbol}/capital-flow` 已注册 Handler，并有 `getCapitalFlow` 封装。不得用个股资金流冒充市场级资金流。
-- `GET /api/v1/market/stocks`、`GET /api/v1/market/sentiment`、`GET /api/v1/market/sentiment/history` 已注册 Handler，且现已提供 WebUI API 封装；市场股票分页已接入“个股行情”页，由用户显式点击加载，支持每页 20/50/100 条、复权方式切换和分页，具体实现位于 `web/src/market-stocks.js`；情绪历史提供手动日期范围查询入口。市场股票接口的 Provider 可用性仍需真实部署验证。
-- `POST /api/v1/data-sources/probe` 是主动探测接口。数据中心的同花顺状态展示不得调用该接口；本页面仅读取 `GET /api/v1/data-sources` 与只读运行诊断快照。不得要求用户提供同花顺 API Key 来完成 UI 验收。
-
-## 3. 分析任务服务边界
-
-WebUI 使用独立的 `analysisBase` 调用：
-
-- `POST /api/v1/analysis/tasks`：创建任务，可附带 `Idempotency-Key`。
-- `GET /api/v1/analysis/tasks/{task_id}`：读取任务状态。
-- `GET /api/v1/analysis/tasks/{task_id}/events`：按序列游标读取阶段事件。
-- `GET /api/v1/analysis/runs/{run_id}`：读取分析结果。
-- 健康检查：`GET /healthz`、`GET /readyz`。
-
-这些路径属于 Analysis/Researchflow 业务边界，不属于 Market Data Adapter。目标由 Root Server 注册并统一承载；当前 Server 的 Analysis 路由使用 Owner Bearer，而 WebUI 不发送该凭证，因此浏览器请求预期 401。Web Session/Cookie、CSRF、登录限流与资源授权契约完成前，Analysis API 继续受 Owner Bearer 保护并限制网络入口，不得匿名开放或把 Owner Token 写入浏览器。分析任务字段契约以 `doc/api/分析任务.openapi.yaml` 为准。
-
-当前 WebUI 的“最近任务”仅保存浏览器本地任务引用（有限数量），用于恢复用户最近访问上下文；它不是服务端任务历史列表，也不代表服务端仅存在这些任务。服务端任务历史分页与筛选由 Researchflow Application Facade 提供用例能力，再由 Root Server 注册 HTTP 路由；没有真实 Handler、认证和分页契约前，WebUI 不新增请求或将本地引用标记为服务端历史。
-
-## 4. 设置中心能力状态
-
-| 设置分组 | 当前能力 | 真实边界 |
+| 能力 | 方法与路径 | 用途 |
 |---|---|---|
-| 显示偏好 | 已实现 | 主题、行情颜色、精度、单位、自选股排序/显示和日 K 默认参数保存在浏览器 |
-| 连接与服务 | 已实现 | 保存行情/分析代理路径及行情服务 Key；连接检查只检查服务健康端点 |
-| 浏览器本地数据 | 已实现 | 导入/导出工作区 JSON；不包含 API Key、数据库或服务器配置 |
-| 基础设置 | 部分实现 | 仅日 K 默认条数与复权方式本地保存；其他未接入项禁用 |
-| 数据源管理 | 只读 | 展示注册信息和能力声明；不支持前端启停、凭据修改或主动测试 |
-| AI 模型与问股 | 待接入 | 无服务端模型配置、密钥托管和模型测试 API |
-| 通知渠道 | 待接入 | 无渠道 CRUD、订阅管理、发送测试与投递记录 API；仅保留浏览器本地偏好草稿 |
-| 任务调度 | 待接入 | 无周期调度 CRUD、状态和执行历史 API |
-| 选股默认项 | 待接入 | 无策略 Schema、条件选股配置和扫描任务 API |
-| 安全与备份 | 待接入 | 无管理员认证、服务密钥轮换、审计和服务器备份恢复 API |
+| Provider 清单/运行诊断 | GET /api/v1/data-sources、GET /api/v1/data-sources/diagnostics | 能力声明与只读进程内请求统计 |
+| 主动探测/历史 | POST /api/v1/data-sources/probe、GET /api/v1/data-sources/probe/history | 用户显式触发探测、查询历史 |
+| 批量报价 | GET /api/v1/market/quotes | 查询明确传入的证券 |
+| 指数 | GET /api/v1/market/indices、index-catalog、indices/{symbol}/constituents、indices/{symbol}/daily | 指数快照、目录、成分和日线 |
+| 市场行情/活动 | GET /api/v1/market/breadth、sectors、stocks、sentiment、sentiment/history、hot-stocks、limit-pools、dragon-tiger、trading-calendar、session | 市场总览、全市场分页和市场活动 |
+| 个股行情/日线 | GET /api/v1/quotes/{symbol}、bars/{symbol}/daily、bundles/{symbol} | 单股报价、日线和组合行情 |
+| 个股资料 | GET /api/v1/stocks/{symbol}/profile、fundamentals、announcements、boards | 个股研究补充资料 |
+| 市场资金流 | GET /api/v1/market/capital-flow | Tushare 市场级资金流历史，依赖 Provider 权限 |
+| 个股资金流/筹码 | GET /api/v1/stocks/{symbol}/capital-flow、chip-distribution | 个股级资金流和筹码，不可替代市场级资金流 |
 
-## 5. 当前认证与迁移边界
+完整参数、响应字段和函数名以当前 web/src/api.js、internal/marketdata/httpapi/server.go 与行情 OpenAPI 为准；本文不复制完整 Schema。
 
-1. Data API Key 当前仍由浏览器配置并用于行情请求，这是迁移期兼容状态，不是目标安全模型。MDM-006 与 Root Server 登录认证切换完成后，移除 Key 的浏览器读写和请求头注入，清理 localStorage 旧字段，并轮换已暴露凭据。
-2. OpenAPI 声明、Market Data Adapter Handler 注册、Root Server 实际挂载、Nginx/部署路由可达、认证通过是五个独立事实；必须分别提供证据，不得用其中任一项替代其他项。
-3. Analysis API 当前要求 Owner Bearer，WebUI 不携带该 Token，故当前浏览器请求预期 401。此状态不得通过把 Owner Token 放入 localStorage、静态 Nginx 配置或匿名降级解决。
-4. Root Server Web Session/Cookie、CSRF、登录限流、资源授权和可信代理边界完成前，Analysis API 继续保持受限网络入口。
+## 4. 当前分析任务 API
 
-## 6. 验收规则
+当前 Web 使用独立分析服务连接配置：
+- POST /api/v1/analysis/tasks：创建任务。
+- GET /api/v1/analysis/tasks/{task_id}：读取任务状态。
+- GET /api/v1/analysis/tasks/{task_id}/events：读取阶段事件。
+- GET /api/v1/analysis/runs/{run_id}：读取 Run 结果。
 
-1. “已注册”只表示 Handler 存在；“OpenAPI 已声明”只表示协议文档存在；“WebUI 已封装”只表示有前端请求函数。这三者必须分别核对。
-2. 未配置 Provider Key、未观测到真实业务请求、服务端接口不可读，必须显示为不同状态；不得互相推断。
-3. 同花顺诊断不发起真实上游请求，不消耗第三方额度，不以 API Key 测试作为交付条件。
-4. 没有服务端 API 的设置项必须禁用并标记待接入；浏览器本地保存成功不能反馈为服务端配置成功。
-5. 任何未在当前 Handler 注册的 OpenAPI 路径不得被页面描述为生产可用能力。
+字段契约以 doc/api/contracts/分析任务.openapi.yaml 为准。最近任务区只保存有限数量的浏览器任务引用，不是服务端完整历史。
 
+当前分析路由 Owner Bearer 与浏览器 Session 尚未形成可验收的认证闭环。服务端历史分页、模板、取消和综合结果接口未完成 Application API、Server 注册、认证和部署验证前，Web 不新增推测请求。
 
-### 全市场分页行情页面
+## 5. 跨模块目标能力与接入状态
 
-- 入口位于“个股行情”页，用户点击“加载全市场”后才请求 `GET /api/v1/market/stocks`；不会在页面打开时自动遍历全市场。
-- 支持每页 20/50/100 条、前复权/后复权/不复权、上一页/下一页和当前页刷新。
-- 页面展示证券名称/代码、最新价、涨跌幅、成交额、换手率、量比、MA5/MA20、单条质量状态。
-- 汇总展示证券目录数量及是否下限、当前页行情成功/失败数与覆盖率、目录来源/版本/获取时间、行情获取时间和 MA 复权口径。
-- `coverage_ratio` 是当前页覆盖率，不解释为全市场覆盖率；`total_is_lower_bound=true` 时总数显示为“至少”。
-- MA 或行情字段为 null 时显示“—”，不补零；接口失败时清空当前表格并明确展示失败原因，不保留旧数据冒充新连接结果。
-- 点击单条记录进入该股票行情详情；全市场分页只读取用户当前请求页，不自动连续翻页。
+| 领域 | Web 目标场景 | 前置条件 | 当前处理 |
+|---|---|---|---|
+| News | 新闻、来源、事件线索 | 公开查询边界、来源授权字段 | 未接入为正式页面数据 |
+| Research | Context、Evidence、Event、Claim、Hypothesis、Scenario | Research Application API；News-Research 只读 Evidence Query；来源授权/引用定位 | 保留个股研究和本地笔记，结构化研究待接入 |
+| Quant | 指标、因子、趋势、策略、回测、风险/评估 | Quant-Research DTO、Application API、PIT/质量/风险语义 | 当前仅本地派生指标和当前页筛选 |
+| Researchflow | Run/Stage/Attempt、模板、取消、历史、综合结果 | ApplicationPort/状态机契约、Server 路由、认证和分页 | 继续消费现有 Task/Run，不另建状态机 |
+| LLM | 模型选择、结构化解释、受控生成 | LLM Gateway、Server 代理、凭据托管、权限和输出 Schema | 不在浏览器保存模型密钥 |
+| Notification | 订阅、渠道、投递历史 | Notification API、权限和投递状态契约 | 仅保留本地通知偏好 |
+| Portfolio/Alert/Report | 组合、规则、服务端报告 | 领域归属和持久化边界评审 | 不从本地功能推断服务端模块存在 |
 
+跨模块契约见 doc/整体任务规划/03-模块接口契约/。契约冻结不代表实现、Server 注册、部署或真实数据验收完成。
 
-- 个股深度研究的“研究标的与快捷入口”列表复用自选股页已读取的批量行情缓存，不额外逐只请求；当前正在研究的股票优先使用本次单股行情快照。批量刷新期间或刷新失败时，保留的旧批量快照会明确标记；没有批量记录的股票仍显示“未加载”。
+## 6. 数据、诊断与安全约束
 
+- 质量、覆盖率、Freshness、来源时间和采集时间由服务端给出；前端不补算业务口径。
+- skipped、not_configured、not_supported 不得显示为健康/成功。
+- Evidence 展示来源、授权范围、事件时间、可用时间、采集时间及引用定位；缺字段显示未知。
+- Quant RiskDecision=block 是硬门禁，不能被 LLM 分数或 UI 覆盖。
+- Run 最终状态由 Researchflow 决定，LLM 流式输出只是过程。
+- 浏览器不存 Owner Token、模型密钥或第三方 Provider Key。
+- OpenAPI、Handler、Root Server 路由、部署和真实数据是独立验收项。
 
-## 6. 个股研究工作区与列表口径
+## 7. 新增 API 准入模板
 
-- 个股深度研究页统一承载当前行情摘要、日 K 图表、技术指标、历史日 K、上市档案、行业/概念、财务、估值、个股资金流、筹码分布和公告。行情摘要与日 K 仍由个股行情查询流程加载；补充资料按模块主动加载，不因打开研究页自动发起所有补充请求。
-- 技术指标（MA、RSI、MACD）由浏览器根据当前标的已加载的日 K 收盘价计算；样本不足显示“样本不足”，不是后端指标 API，也不代表数据缺失或数值为零。
-- 全市场分页列表与研究标的列表共用行情字段语义：最新价、涨跌幅、成交额、换手率、量比、MA5/MA20、质量状态。缺失数值显示“—”，失败/未加载分开标记；质量原因、行情时间与批量采集时间可通过质量状态提示查看。
-- 全市场分页列表按服务端证券目录分页顺序展示，不在浏览器对单页数据二次排序；排序需由服务端提供全局排序参数，避免把页内排序误认为全市场排序。
-- 自选股管理页按用户本地偏好排序（更新时间、代码、名称），展示行情快照、涨跌幅、报价时间和质量状态；研究标的快捷列表沿用本地自选股顺序并将当前查询标的置顶，额外展示成交额、换手率、量比和 MA5/MA20。自选股批量行情 API 不提供 MA，因此非当前研究标的的 MA 明确显示“未加载”，不逐只补请求；这两个列表不承担全市场排名。
-- 自选股批量行情来自市场批量报价接口，不会逐只补请求。刷新期间或失败时，保留的成功快照标记为旧快照；质量状态、质量原因、行情时间和采集时间不合并成一个时间字段。
-- 模块状态口径：请求中显示读取中；HTTP/API 错误显示具体错误；服务端明确无数据或成功但无可展示字段显示空数据说明；服务端质量状态为 stale 时显示过期质量。当前没有统一的客户端 TTL 契约，因此不能仅凭时间跨度自行判定数据过期。失败时清空当前模块的本次展示，不把上次标的的数据冒充当前结果。
-- 个股资金流使用个股资金流接口，不得与市场级资金流混用。市场级每日资金流历史已接入市场总览，依赖 Tushare `moneyflow_mkt_dc` 权限；板块级资金流排行仍待后端提供真实接口。
-- 筹码分布使用个股筹码分布接口；若 Provider 未启用或未配置，按 503 展示具体能力不可用状态，不用静态筹码数据填充。
+新增 Web API 前必须明确：
+1. 用户场景和页面入口。
+2. 领域 Owner 与 Server 路由 Owner。
+3. 方法、路径、请求/响应 Schema、字段来源和单位。
+4. 身份认证、资源授权和数据来源授权。
+5. 分页、排序、超时、取消、幂等和错误语义。
+6. 空数据、跳过、降级、部分成功和不可比较的表达。
+7. 单元/契约/浏览器测试及真实部署/真实数据验收证据。
+
+不满足条件时标记“待契约/待服务端接入”，不写成已实现 API。
