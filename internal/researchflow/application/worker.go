@@ -149,11 +149,18 @@ func (w *Worker) Execute(ctx context.Context, runRef, stageRef, attemptRef strin
 		!reflect.DeepEqual(snapshot.RetryPolicy, policySnapshot.RetryPolicy) {
 		return WorkerExecution{Attempt: attempt}, errors.New("Researchflow execution snapshot is inconsistent with claimed Attempt")
 	}
-	if !w.now().Before(snapshot.Run.DeadlineAt) {
+	// DeadlineAt 与 Attempt.StartedAt 均由数据库写入，必须使用同一数据库时钟
+	// 计算剩余时长，不能用 Worker 主机时钟直接比较绝对时间。
+	databaseNow, clockErr := w.clock.NowUTC(ctx)
+	if clockErr != nil {
+		return WorkerExecution{Attempt: attempt}, fmt.Errorf("read database UTC time before Stage execution: %w", clockErr)
+	}
+	runRemaining := snapshot.Run.DeadlineAt.Sub(databaseNow.UTC())
+	if runRemaining <= 0 {
 		return WorkerExecution{Attempt: attempt}, ErrWorkerDeadline
 	}
 
-	runCtx, cancelRun := context.WithDeadline(ctx, snapshot.Run.DeadlineAt)
+	runCtx, cancelRun := context.WithTimeout(ctx, runRemaining)
 	defer cancelRun()
 	if attempt.StartedAt.IsZero() {
 		return WorkerExecution{Attempt: attempt}, errors.New("Researchflow Attempt start time is missing")
@@ -166,9 +173,13 @@ func (w *Worker) Execute(ctx context.Context, runRef, stageRef, attemptRef strin
 	if attemptDeadline.After(snapshot.Run.DeadlineAt) {
 		attemptDeadline = snapshot.Run.DeadlineAt
 	}
+	attemptRemaining := attemptDeadline.Sub(databaseNow.UTC())
+	if attemptRemaining <= 0 {
+		return WorkerExecution{Attempt: attempt}, ErrWorkerDeadline
+	}
 	baseExecCtx, cancelExecutionCause := context.WithCancelCause(runCtx)
 	defer cancelExecutionCause(nil)
-	execCtx, cancelAttemptDeadline := context.WithDeadline(baseExecCtx, attemptDeadline)
+	execCtx, cancelAttemptDeadline := context.WithTimeout(baseExecCtx, attemptRemaining)
 	defer cancelAttemptDeadline()
 	unregisterCancellation := w.cancellations.register(runRef, attempt.Ref, cancelExecutionCause)
 	defer unregisterCancellation()
@@ -200,7 +211,15 @@ func (w *Worker) Execute(ctx context.Context, runRef, stageRef, attemptRef strin
 		}
 	default:
 	}
-	if errors.Is(runCtx.Err(), context.DeadlineExceeded) || !w.now().Before(snapshot.Run.DeadlineAt) {
+	if errors.Is(runCtx.Err(), context.DeadlineExceeded) {
+		return WorkerExecution{Attempt: attempt}, ErrWorkerDeadline
+	}
+	// 即使本地执行上下文尚未超时，提交前仍用数据库时钟复核 Deadline。
+	completedAt, clockErr := w.clock.NowUTC(ctx)
+	if clockErr != nil {
+		return WorkerExecution{Attempt: attempt}, fmt.Errorf("read database UTC time after Stage execution: %w", clockErr)
+	}
+	if !completedAt.UTC().Before(snapshot.Run.DeadlineAt.UTC()) {
 		return WorkerExecution{Attempt: attempt}, ErrWorkerDeadline
 	}
 	if errors.Is(context.Cause(execCtx), ErrWorkerCancelled) {
