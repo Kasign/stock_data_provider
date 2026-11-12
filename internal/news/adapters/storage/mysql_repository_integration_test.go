@@ -236,6 +236,44 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	}
 
 	binding := loadIntegrationAuthorizationBinding(t)
+	publisher, err := app.NewPublishNewsPolicyVersion(repository)
+	if err != nil {
+		t.Fatal(err)
+	}
+	purpose := []domain.Purpose{domain.PurposeInternalPersonalResearch}
+	contentKinds := []domain.ContentKind{domain.ContentAbstract}
+	currentPolicyPayloads := map[string]any{
+		domain.NewsPolicyTypeSource: domain.SourcePolicy{
+			Status: domain.AuthorizationApproved, AllowedPurposes: purpose,
+			AllowedContentKinds: contentKinds, EvidenceRef: "integration-source-evidence",
+		},
+		domain.NewsPolicyTypeEndpoint: domain.EndpointPolicy{},
+		domain.NewsPolicyTypeProviderOutput: domain.ProviderOutputPolicy{
+			Status: domain.AuthorizationApproved, AllowedPurposes: purpose,
+			AllowedContentKinds: contentKinds, AllowRequestProcessing: true,
+			EvidenceRef: "integration-provider-evidence",
+		},
+	}
+	for _, expected := range binding.PolicySnapshot.Policies {
+		payload, err := json.Marshal(currentPolicyPayloads[expected.PolicyType])
+		if err != nil {
+			t.Fatalf("marshal %s policy: %v", expected.PolicyType, err)
+		}
+		if err := publisher.Execute(ctx, expected.PolicyType, expected.PolicyRef, expected.PolicyVersion, payload); err != nil {
+			t.Fatalf("publish %s policy %s: %v", expected.PolicyType, expected.PolicyRef, err)
+		}
+	}
+	currentPolicies, err := repository.ResolveCurrentNewsAuthorizationPolicies(ctx, binding)
+	if err != nil {
+		t.Fatalf("resolve current authorization policies: %v", err)
+	}
+	if len(currentPolicies.Policies) != len(binding.PolicySnapshot.Policies) {
+		t.Fatalf("resolved policy count = %d, want %d", len(currentPolicies.Policies), len(binding.PolicySnapshot.Policies))
+	}
+	currentDecision := domain.EvaluateNewsAuthorizationAgainstCurrentPolicies(binding, currentPolicies, time.Now().UTC())
+	if !currentDecision.Allowed {
+		t.Fatalf("matching current policies rejected: %+v", currentDecision)
+	}
 	authorizationObservation, authorizationVersion := integrationAuthorizationEvidence()
 	if err := repository.AppendAuthorizationSnapshot(ctx, binding, authorizationObservation, authorizationVersion); err != nil {
 		t.Fatalf("append authorization snapshot: %v", err)
@@ -1141,69 +1179,6 @@ func integrationAuthorizationEvidence() (domain.Observation, domain.NewsItemVers
 // idempotent purge, and the no-resurrection rule for an expired payload.
 // TestNewsCurrentPolicyResolverMariaDBIntegration verifies that the existing
 // authorization resolver port reads the exact current immutable policy versions.
-func TestNewsCurrentPolicyResolverMariaDBIntegration(t *testing.T) {
-	dsn := os.Getenv("NEWS_MARIADB_TEST_DSN")
-	if dsn == "" {
-		t.Skip("set NEWS_MARIADB_TEST_DSN to run News MariaDB integration")
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	db, err := sql.Open("mysql", dsn)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-	if err := db.PingContext(ctx); err != nil {
-		t.Fatalf("MariaDB ping failed: %v", err)
-	}
-	if err := platformstorage.ApplyMigrations(ctx, db, "news", Migrations()); err != nil {
-		t.Fatalf("apply News migrations: %v", err)
-	}
-	repository, err := NewMySQLRepository(db)
-	if err != nil {
-		t.Fatal(err)
-	}
-	binding := loadIntegrationAuthorizationBinding(t)
-	publisher, err := app.NewPublishNewsPolicyVersion(repository)
-	if err != nil {
-		t.Fatal(err)
-	}
-	purpose := []domain.Purpose{domain.PurposeInternalPersonalResearch}
-	contentKinds := []domain.ContentKind{domain.ContentAbstract}
-	policies := map[string]any{
-		domain.NewsPolicyTypeSource: domain.SourcePolicy{
-			Status: domain.AuthorizationApproved, AllowedPurposes: purpose,
-			AllowedContentKinds: contentKinds, EvidenceRef: "integration-source-evidence",
-		},
-		domain.NewsPolicyTypeEndpoint: domain.EndpointPolicy{},
-		domain.NewsPolicyTypeProviderOutput: domain.ProviderOutputPolicy{
-			Status: domain.AuthorizationApproved, AllowedPurposes: purpose,
-			AllowedContentKinds: contentKinds, AllowRequestProcessing: true,
-			EvidenceRef: "integration-provider-evidence",
-		},
-	}
-	for _, expected := range binding.PolicySnapshot.Policies {
-		payload, err := json.Marshal(policies[expected.PolicyType])
-		if err != nil {
-			t.Fatalf("marshal %s policy: %v", expected.PolicyType, err)
-		}
-		if err := publisher.Execute(ctx, expected.PolicyType, expected.PolicyRef, expected.PolicyVersion, payload); err != nil {
-			t.Fatalf("publish %s policy %s: %v", expected.PolicyType, expected.PolicyRef, err)
-		}
-	}
-	current, err := repository.ResolveCurrentNewsAuthorizationPolicies(ctx, binding)
-	if err != nil {
-		t.Fatalf("resolve current authorization policies: %v", err)
-	}
-	if len(current.Policies) != len(binding.PolicySnapshot.Policies) {
-		t.Fatalf("resolved policy count = %d, want %d", len(current.Policies), len(binding.PolicySnapshot.Policies))
-	}
-	decision := domain.EvaluateNewsAuthorizationAgainstCurrentPolicies(binding, current, time.Now().UTC())
-	if !decision.Allowed {
-		t.Fatalf("matching current policies rejected: %+v", decision)
-	}
-}
-
 func TestObservationRetentionPurgeIntegration(t *testing.T) {
 	dsn := os.Getenv("NEWS_MARIADB_TEST_DSN")
 	if dsn == "" {
