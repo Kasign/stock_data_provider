@@ -68,7 +68,7 @@ func TestDirectoryRecipientResolverBindsPreconfiguredTarget(t *testing.T) {
 	channel := recipientDirectoryChannel()
 	directory := &recipientDirectoryStub{result: RecipientDirectoryResult{
 		Target: domain.RecipientTarget{
-			RecipientRef:   "recipient:configured-1", ChannelRef: channel.ChannelRef,
+			RecipientRef: "recipient:configured-1", ChannelRef: channel.ChannelRef,
 			ConfigVersion: channel.ConfigVersion, AdapterTargetRef: "email-target:opaque",
 		},
 	}}
@@ -76,7 +76,7 @@ func TestDirectoryRecipientResolverBindsPreconfiguredTarget(t *testing.T) {
 	_, err := resolver.Resolve(context.Background(), domain.Subscription{
 		SubscriptionID: "sub-1", OwnerRef: "identity:owner-1",
 		RecipientScope: domain.RecipientScopePreconfiguredTarget,
-		RecipientRef: "recipient:configured-1", ChannelRef: channel.ChannelRef,
+		RecipientRef:   "recipient:configured-1", ChannelRef: channel.ChannelRef,
 	}, channel)
 	if err != nil {
 		t.Fatal(err)

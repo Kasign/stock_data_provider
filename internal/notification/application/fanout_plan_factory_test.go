@@ -20,7 +20,7 @@ func (s fanoutChannelSelectorStub) ResolveForFanout(context.Context, domain.Subs
 
 type fanoutTemplateSelectorStub struct {
 	version int64
-	err error
+	err     error
 }
 
 func (s fanoutTemplateSelectorStub) ResolveForFanout(context.Context, string, string, string) (int64, error) {

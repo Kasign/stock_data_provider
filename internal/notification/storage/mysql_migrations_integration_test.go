@@ -35,7 +35,7 @@ func TestNotificationMariaDBMigrationOrderAndIdempotencyIntegration(t *testing.T
 	if err := platformstorage.ApplyMigrations(ctx, db, "notification", migrations); err != nil {
 		t.Fatalf("first migration application failed: %v", err)
 	}
-	if _, err := platformstorage.ApplyMigrations(ctx, db, "notification", migrations); err != nil {
+	if err := platformstorage.ApplyMigrations(ctx, db, "notification", migrations); err != nil {
 		t.Fatalf("second migration application must be idempotent: %v", err)
 	}
 
