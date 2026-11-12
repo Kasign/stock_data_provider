@@ -139,22 +139,22 @@ func BuildEnvelope(source manifest.Manifest, authorizationRef string, payload Pa
 		snapshotRefs = append([]string{}, source.InputSnapshotRefs...)
 	}
 	envelope := Envelope{
-		SchemaVersion: EnvelopeSchemaVersion,
-		ResultID: source.ResultID,
-		ResultType: source.ResultType,
-		Scope: source.Scope,
-		SecurityID: source.SecurityID,
-		SystemAsOf: source.SystemAsOf,
-		TradeDate: source.TradeDate,
-		Period: source.Period,
-		AlgorithmVersion: source.AlgorithmVersion,
-		ParameterFingerprint: source.ParameterFingerprint,
-		InputSnapshotRefs: snapshotRefs,
-		QualityStatus: source.QualityStatus,
-		ResultStatus: source.ResultStatus,
-		AuthorizationRef: authorizationRef,
-		PayloadSchemaVersion: source.PayloadSchemaVersion,
-		Payload: payload,
+		SchemaVersion:        EnvelopeSchemaVersion,
+		ResultID:             source.ResultID,
+		ResultType:           source.ResultType,
+		Scope:                source.Scope,
+		SecurityID:           source.SecurityID,
+		SystemAsOf:           source.SystemAsOf,
+		TradeDate:             source.TradeDate,
+		Period:                source.Period,
+		AlgorithmVersion:      source.AlgorithmVersion,
+		ParameterFingerprint:  source.ParameterFingerprint,
+		InputSnapshotRefs:     snapshotRefs,
+		QualityStatus:         source.QualityStatus,
+		ResultStatus:          source.ResultStatus,
+		AuthorizationRef:      authorizationRef,
+		PayloadSchemaVersion:  source.PayloadSchemaVersion,
+		Payload:               payload,
 	}
 	if err := envelope.ValidateAgainstManifest(source); err != nil {
 		return Envelope{}, err
@@ -248,22 +248,22 @@ func (envelope *Envelope) UnmarshalJSON(data []byte) error {
 		return ErrInvalidEnvelope
 	}
 	var wire struct {
-		SchemaVersion string `json:"schema_version"`
-		ResultID string `json:"result_id"`
-		ResultType string `json:"result_type"`
-		Scope string `json:"scope"`
-		SecurityID string `json:"security_id"`
-		SystemAsOf string `json:"system_as_of"`
-		TradeDate string `json:"trade_date"`
-		Period string `json:"period"`
-		AlgorithmVersion string `json:"algorithm_version"`
-		ParameterFingerprint string `json:"parameter_fingerprint"`
-		InputSnapshotRefs []string `json:"input_snapshot_refs"`
-		QualityStatus string `json:"quality_status"`
-		ResultStatus string `json:"result_status"`
-		AuthorizationRef string `json:"authorization_ref"`
-		PayloadSchemaVersion string `json:"payload_schema_version"`
-		Payload json.RawMessage `json:"payload"`
+		SchemaVersion        string          `json:"schema_version"`
+		ResultID             string          `json:"result_id"`
+		ResultType           string          `json:"result_type"`
+		Scope                string          `json:"scope"`
+		SecurityID           string          `json:"security_id"`
+		SystemAsOf           string          `json:"system_as_of"`
+		TradeDate            string          `json:"trade_date"`
+		Period               string          `json:"period"`
+		AlgorithmVersion     string          `json:"algorithm_version"`
+		ParameterFingerprint string          `json:"parameter_fingerprint"`
+		InputSnapshotRefs    []string        `json:"input_snapshot_refs"`
+		QualityStatus        string          `json:"quality_status"`
+		ResultStatus         string          `json:"result_status"`
+		AuthorizationRef     string          `json:"authorization_ref"`
+		PayloadSchemaVersion string          `json:"payload_schema_version"`
+		Payload              json.RawMessage `json:"payload"`
 	}
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
@@ -283,22 +283,22 @@ func (envelope *Envelope) UnmarshalJSON(data []byte) error {
 		snapshotRefs = append([]string{}, wire.InputSnapshotRefs...)
 	}
 	decoded := Envelope{
-		SchemaVersion: wire.SchemaVersion,
-		ResultID: wire.ResultID,
-		ResultType: wire.ResultType,
-		Scope: wire.Scope,
-		SecurityID: wire.SecurityID,
-		SystemAsOf: wire.SystemAsOf,
-		TradeDate: wire.TradeDate,
-		Period: wire.Period,
-		AlgorithmVersion: wire.AlgorithmVersion,
-		ParameterFingerprint: wire.ParameterFingerprint,
-		InputSnapshotRefs: snapshotRefs,
-		QualityStatus: wire.QualityStatus,
-		ResultStatus: wire.ResultStatus,
-		AuthorizationRef: wire.AuthorizationRef,
-		PayloadSchemaVersion: wire.PayloadSchemaVersion,
-		Payload: payload,
+		SchemaVersion:        wire.SchemaVersion,
+		ResultID:             wire.ResultID,
+		ResultType:           wire.ResultType,
+		Scope:                wire.Scope,
+		SecurityID:           wire.SecurityID,
+		SystemAsOf:           wire.SystemAsOf,
+		TradeDate:             wire.TradeDate,
+		Period:                wire.Period,
+		AlgorithmVersion:      wire.AlgorithmVersion,
+		ParameterFingerprint:  wire.ParameterFingerprint,
+		InputSnapshotRefs:     snapshotRefs,
+		QualityStatus:         wire.QualityStatus,
+		ResultStatus:          wire.ResultStatus,
+		AuthorizationRef:      wire.AuthorizationRef,
+		PayloadSchemaVersion:  wire.PayloadSchemaVersion,
+		Payload:               payload,
 	}
 	if err := decoded.Validate(); err != nil {
 		return err
