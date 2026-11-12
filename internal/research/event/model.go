@@ -32,6 +32,24 @@ type ResearchEventRef struct {
 	EventVersion int    `json:"event_version"`
 }
 
+func (r *ResearchEventRef) UnmarshalJSON(data []byte) error {
+	if r == nil {
+		return fmt.Errorf("ResearchEventRef target is nil")
+	}
+	if err := validateJSONShape(data,
+		[]string{"event_id", "event_version"},
+		[]string{"event_id", "event_version"}); err != nil {
+		return err
+	}
+	type eventRefAlias ResearchEventRef
+	var value eventRefAlias
+	if err := json.Unmarshal(data, &value); err != nil {
+		return err
+	}
+	*r = ResearchEventRef(value)
+	return nil
+}
+
 type EventSourceTime struct {
 	EvidenceRef             string        `json:"evidence_ref"`
 	TimeType                EventTimeType `json:"time_type"`
