@@ -62,7 +62,7 @@ func (t *mysqlNewsTransaction) LockCurrentIngestPolicies(
 	if err != nil {
 		return domain.SourcePolicy{}, nil, nil, err
 	}
-	sourceVersionValue, ok := loaded[domain.NewsPolicyTypeSource+"\\x00"+sourceRef]
+	sourceVersionValue, ok := loaded[domain.NewsPolicyTypeSource+"\x00"+sourceRef]
 	if !ok {
 		return domain.SourcePolicy{}, nil, nil, app.ErrNewsCurrentPolicyUnavailable
 	}
@@ -73,7 +73,7 @@ func (t *mysqlNewsTransaction) LockCurrentIngestPolicies(
 
 	var endpointPolicy *domain.EndpointPolicy
 	if endpointVersion != "" {
-		endpointVersionValue, ok := loaded[domain.NewsPolicyTypeEndpoint+"\\x00"+endpointRef]
+		endpointVersionValue, ok := loaded[domain.NewsPolicyTypeEndpoint+"\x00"+endpointRef]
 		if !ok {
 			return domain.SourcePolicy{}, nil, nil, app.ErrNewsCurrentPolicyUnavailable
 		}
@@ -85,7 +85,7 @@ func (t *mysqlNewsTransaction) LockCurrentIngestPolicies(
 
 	var providerPolicy *domain.ProviderOutputPolicy
 	if providerRef != "" {
-		providerVersionValue, ok := loaded[domain.NewsPolicyTypeProviderOutput+"\\x00"+providerRef]
+		providerVersionValue, ok := loaded[domain.NewsPolicyTypeProviderOutput+"\x00"+providerRef]
 		if !ok {
 			return domain.SourcePolicy{}, nil, nil, app.ErrNewsCurrentPolicyUnavailable
 		}
