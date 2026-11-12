@@ -2368,7 +2368,6 @@ func actualTypeForHithinkRaw(raw json.RawMessage) string {
 	return providerJSONValueType(raw)
 }
 
-
 func hithinkDailyResponseIssue(ctx context.Context, code, field, expected, actualType, actualPreview, message string) {
 	report := validation.NewReport(1)
 	report.Add(validation.FieldIssue{
