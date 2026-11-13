@@ -1,7 +1,7 @@
 # Integration 系统接入审查与整体验收基线
 
 - 验收分支：`integration`
-- 当前审查基线 SHA：`63f49065a5ef3379d95948a6c2c6e504a555a63f`
+- 本轮代码审查基线 SHA：`63f49065a5ef3379d95948a6c2c6e504a555a63f`
 - 当前 CI：Integration Run #54（`43359166036`），对应 SHA `63f49065a5ef3379d95948a6c2c6e504a555a63f`，结论 `success`；gofmt、root/go-core vet/test、MariaDB/Redis 集成、WebUI 语法/单测和 Docker 构建全部通过
 - 历史参考：Run #23（`43178908392`）仅对应旧 SHA `fdc19b8591223dabccb533389d472713bfecc415`，结论 `success`
 - 本文性质：Integration 当前代码树的源码接入审查、真实依赖 CI 证据与后续验收基线
