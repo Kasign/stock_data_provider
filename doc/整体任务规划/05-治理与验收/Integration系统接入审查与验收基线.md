@@ -1,29 +1,31 @@
 # Integration 系统接入审查与整体验收基线
 
 - 验收分支：`integration`
-- 审查基线 SHA：`fdc19b8591223dabccb533389d472713bfecc415`
-- 对应 CI：Run #23（`43178908392`），结论 `success`
+- 当前审查基线 SHA：`5099ddd648128def63e8a8b413c8ed5976ae84b8`
+- 当前 CI：Integration Run #32（`43353715052`），状态 `in_progress`；不得沿用旧 Run #23 作为当前 SHA 的 CI 结论
+- 历史参考：Run #23（`43178908392`）仅对应旧 SHA `fdc19b8591223dabccb533389d472713bfecc415`，结论 `success`
 - 本文性质：Integration 当前代码树的静态接入审查记录与后续验收基线
 - 范围：只记录根组合入口、模块装配、路由、Migration、Worker、事件连接和诊断接入；不替代各模块内部功能验收
-- 限制：本轮通过 GitHub 源码 API 进行静态检查，未连接实际 MariaDB/Redis、外部 Provider、LLM Gateway 或部署环境；因此不构成运行时/生产验收
+- 限制：本轮基于 GitHub 当前 `integration` 代码树进行静态检查；当前 Integration CI 尚在运行。即使 CI 成功，也不能替代真实外部 Provider、LLM Gateway、目标部署网络和生产凭据验收。
 
 ## 1. 当前结论
 
-**Integration CI 已通过，但系统尚未达到端到端联调条件。**
+**当前 Integration SHA 的 CI 尚未完成；从代码接入面看，系统仍未达到端到端联调条件。**
 
 当前 `cmd/analysis-api/main.go` 已委托 `internal/server/bootstrap.Run`，Server 已拥有共享资源、进程配置、HTTP/Worker 生命周期、Health/Readiness 和 Migration Registry 等基础设施；但 Bootstrap 实际创建的业务执行链仍是旧 Analysis Runner、旧 Analysis Task Queue 和旧 Analysis HTTP API。
 
-News、Research、Researchflow、Notification 的 Migration 已进入根 Registry，不代表相应 Application Service、业务 Adapter、Worker、HTTP Handler 或事件链路已经接入。Quant 和 LLM 也尚未在 Bootstrap 中实例化。
+News、Research、Researchflow、Notification 的 Migration 已进入根 Registry，不代表相应 Application Service、业务 Adapter、Worker 或 HTTP Handler 已接入。当前已有 Research Outbox → Notification Inbox Relay、News Parser/Provider 配置诊断和 LLM Platform Transport 适配代码；但 Researchflow Scheduler/Worker、生产 StageExecutor、Quant 生产 Facade、LLM 可信 Provider 装载、Notification Fanout/Delivery Worker 仍未形成完整运行链。
 
 因此当前阶段应判定为：
 
-- CI 基线：通过
+- 当前 SHA CI：`in_progress`（Run #32）
 - Root Bootstrap 基础设施：部分完成
-- 新业务模块运行时装配：未完成
-- 新业务 API / Worker：未完成或未接入
-- Outbox → Inbox 事件交付：未接入
-- 真实数据库/Redis/Provider/LLM 运行验收：未执行
-- 端到端业务验收：未具备条件
+- 新业务模块运行时装配：部分完成；仍以旧 Analysis Runner/Queue/API 为主
+- 新业务 API / Worker：Researchflow 业务 API 与 Worker 未接入
+- Research → Notification Outbox/Inbox：Server Relay 已接入；Researchflow → Notification 尚未接入
+- MariaDB/Redis：已有 CI 真实依赖测试；当前 SHA Run #32 尚未完成
+- 外部 Provider、LLM Gateway、目标部署网络：未取得当前 SHA 的真实运行验收
+- 端到端业务验收：尚未具备条件
 
 ## 2. 源码核查事实
 
@@ -80,12 +82,12 @@ Registry 已具备 namespace 校验、确定性排序、执行报告和 Schema �
 |---|---|---|---|
 | Platform | Config、Fault、Security、HTTP Client、Storage、Diagnostics、Task Queue 等基础包 | DB/Redis 资源、Security Authenticator、Diagnostics 基础服务和共享 HTTP Client 资源已使用；未见各模块生产 BoundDoer/完整 Check 集合注入 | 基础设施部分接入 |
 | Data | 独立行情服务及迁移中的 Go Data 能力 | 仍由旧 Market Data Adapter 配置和 Runner 使用；未看到新 Data Application Port 装配 | 迁移门禁未通过，不作为新模块接入完成 |
-| News | Application、Provider/Source Adapter、Storage、Evidence 查询能力和 Migration | 当前仅注册 Migration；未实例化 News Application/Provider Adapter，也未注入生产 BoundDoer | 部分具备，未接入业务运行时 |
+| News | Application、Provider/Source Adapter、Storage、Evidence 查询能力和 Migration | 已接入 Parser 自检及 Provider 配置诊断；尚未实例化完整 News Application/Provider 采集运行时，也未完成生产 BoundDoer 注入 | 诊断接入部分完成，业务运行时未接入 |
 | Research | Application Service、Port、Storage、Outbox 和 Migration | 当前仅注册 Migration；未构造 Research Service、未向 Researchflow 注入公开 Port | 部分具备，未接入业务运行时 |
 | Researchflow | Run/Stage/Attempt 状态、CreateRun、Scheduler 单次 Run 协调、MySQL WorkerStore、Worker 单次执行、固定数量 Worker Pool、Context Assembly、Result Validation | Bootstrap 未装配 Scheduler 周期驱动、Worker Pool 生命周期和生产 StageExecutor Adapter；未提供 Researchflow 业务路由 | 模块核心执行设施已有实现，Server/生产 Adapter 接入未完成 |
 | Quant | Indicator/Factor/Registry/Risk/Result 等能力及查询用例 | Bootstrap 未构造 Quant Application Facade 或结果存储服务 | 未接入 |
 | LLM | Provider Port、Responses JSON/SSE 协议适配与校验 | Bootstrap 未创建具体 Provider；未注入 ProviderConfig、CapabilityState 和受控 BoundDoer | 未接入 |
-| Notification | EventReceiver、Inbox、Subscription、Delivery/Attempt、FanoutWorkItem、FanoutDispatcher、Migration | Bootstrap 未创建 EventReceiver/FanoutPlanFactory/Dispatcher/Delivery Worker；生产渠道与身份目录也未装配 | 模块内核心执行设施部分具备，生产 Factory/Server Worker 接入未完成 |
+| Notification | EventReceiver、Inbox、Subscription、Delivery/Attempt、FanoutWorkItem、FanoutDispatcher、Migration | Bootstrap 已创建 EventReceiver，并通过 Research Outbox Relay 投递至 Notification Inbox/FanoutWorkItem；FanoutPlanFactory、生产渠道/身份目录、Fanout/Delivery Worker 仍未装配 | Research → Inbox 已接入；Inbox → 渠道投递未接入 |
 
 说明：模块代码存在、模块单测通过、模块 Migration 已注册，均不能单独作为 Server 生产接入证据。Researchflow 的 WorkerStore/Scheduler/Worker Pool，以及 Notification 的 Inbox/FanoutDispatcher/Delivery 执行设施，属于模块内部已经实现的能力；缺口主要在生产 Adapter、组合根装配和生命周期驱动。接入必须以真实构造、依赖注入、调用链、生命周期和运行证据为准。
 
@@ -105,9 +107,9 @@ Registry 已具备 namespace 校验、确定性排序、执行报告和 Schema �
 | INT-004 | LLM 缺少 Provider 生产配置和 BoundDoer 注入 | 无法进行真实模型调用 | LLM + Server |
 | INT-005 | Notification 生产 FanoutPlanFactory、渠道/身份目录和 Server Worker 装配未完成 | 模块内 Inbox/FanoutDispatcher/Delivery 执行设施已存在，但无法形成真实事件到渠道的投递链路 | Notification + Server |
 | INT-006 | Research/News/Quant 等模块间公开 Port 尚未全部形成生产注入图 | 无法确认真实调用链及依赖方向 | 对应模块 + Server |
-| INT-007 | Outbox → Inbox 连接未装配 | Research/Researchflow 事件无法驱动 Notification | Server；前置为生产方与消费者 Port 就绪 |
+| INT-007 | Outbox → Inbox 仅完成 Research 生产方接入；Researchflow 事件仍未进入 Notification | Research 事件可进入 Inbox；Researchflow 终态事件无法触发 Notification | Server + Researchflow；先按冻结事件契约修正生产 Envelope，再接 Relay |
 | INT-008 | Data 模块化单体迁移未满足门禁 | 新 Data Application Port 无法注入 Root Server | Data |
-| INT-009 | 模块 Diagnostics Check 未注册 | Readiness 只能覆盖基础资源，不能代表业务模块健康 | 对应模块 + Server |
+| INT-009 | 尚无更多可注册的进程级领域 Diagnostics Check；Research/Researchflow 的现有检查属于 Run-scoped 诊断 | 不得把需要 Run/Stage 上下文的检查伪装成进程级 Readiness；全局检查维持真实资源/Schema/News Provider 语义 | 对应模块 + Server；仅在出现真实进程级依赖检查时扩展 |
 | INT-010 | 真实 MariaDB/Redis、Provider、LLM Gateway 和部署网络验收未执行 | 无法证明运行时和生产环境可用 | Server + Platform + 各模块 + 部署 |
 
 ## 5. 后续验收阶段与准入条件
@@ -187,9 +189,9 @@ Registry 已具备 namespace 校验、确定性排序、执行报告和 Schema �
 
 ## 6. 本轮审查结论与下一步
 
-本轮只完成静态接入审查，没有修改业务代码，也没有执行部署或真实依赖测试。
+本轮已在 `integration` 纳入 Data 日 K MariaDB fallback 读取失败日志修复（`5099ddd`）；并对当前代码树重新核对了 Bootstrap、Researchflow Outbox、Notification Schema 和模块接入文档。Research → Notification Relay 已有 MariaDB 组合测试，但当前 SHA Run #32 仍在执行，不能提前标记通过。
 
-**下一步先执行 INT-A：逐模块核对公开构造入口、Application Port、Repository、Migration、Diagnostics 和 Worker，形成可执行依赖 DAG。** 对缺少模块能力的事项只登记归属和阻断，不在 Integration 越界代替模块实现；只有模块公开契约真实可用后，才进入 INT-B 的 Server 装配验收。
+**下一步不再重复 INT-A 静态盘点，转为按真实契约闭合已有跨模块链路：先处理 Researchflow → Notification 事件生产契约不一致，再在事件 Envelope 对齐后复用现有 Notification EventReceiver/Inbox Relay。** 同时保留 Research/News Evidence Adapter、Data/Quant 和 Researchflow StageExecutor 的明确准入条件；不通过 Server 伪造缺失的模块 Facade、Output Registry 或 Stage 实现。
 
 验收状态必须区分：
 
