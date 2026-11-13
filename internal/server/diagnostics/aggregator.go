@@ -8,6 +8,8 @@ import (
 	platformdiagnostics "example.com/stock-analysis-flow/internal/platform/diagnostics"
 )
 
+const ReportSchemaVersion = "1.0.0"
+
 var ErrNoRequiredChecks = errors.New("at least one required readiness check is required")
 
 // Readiness is deliberately stricter than the aggregate diagnostics summary:
@@ -18,10 +20,11 @@ type Readiness struct {
 	SafeMessage string `json:"safe_message"`
 }
 
-// Report keeps the detailed Platform report and the traffic-readiness decision.
+// Report is the versioned Server HTTP diagnostics representation.
 type Report struct {
-	Diagnostics platformdiagnostics.Report `json:"diagnostics"`
-	Readiness   Readiness                  `json:"readiness"`
+	SchemaVersion string                     `json:"schema_version"`
+	Diagnostics   platformdiagnostics.Report `json:"diagnostics"`
+	Readiness     Readiness                  `json:"readiness"`
 }
 
 // Aggregator delegates execution, limits, panic recovery and status aggregation
@@ -40,13 +43,12 @@ func (a Aggregator) Run(ctx context.Context, checks []platformdiagnostics.Check)
 	if required == 0 {
 		return Report{}, ErrNoRequiredChecks
 	}
-
 	diagnostics, err := a.Runner.Run(ctx, checks)
 	if err != nil {
 		return Report{}, err
 	}
 	readiness := evaluateReadiness(diagnostics.Results)
-	return Report{Diagnostics: diagnostics, Readiness: readiness}, nil
+	return Report{SchemaVersion: ReportSchemaVersion, Diagnostics: diagnostics, Readiness: readiness}, nil
 }
 
 func evaluateReadiness(results []platformdiagnostics.Result) Readiness {

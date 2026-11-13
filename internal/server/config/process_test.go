@@ -7,10 +7,19 @@ import (
 	platformconfig "example.com/stock-analysis-flow/internal/platform/config"
 )
 
+var relayRequiredTestValues = map[string]string{
+	"NOTIFICATION_EVENT_MAX_ENVELOPE_BYTES": "8192",
+	"NOTIFICATION_EVENT_MAX_PAYLOAD_BYTES":  "4096",
+	"NOTIFICATION_EVENT_MAX_JSON_DEPTH":     "16",
+}
+
 func TestLoadProcessDefaults(t *testing.T) {
 	env := platformconfig.NewEnvWithLookup(func(key string) (string, bool) {
 		if key == "PLATFORM_ADMIN_TOKEN" {
 			return "0123456789abcdef0123456789abcdef", true
+		}
+		if value, ok := relayRequiredTestValues[key]; ok {
+			return value, true
 		}
 		return "", false
 	})
@@ -20,7 +29,8 @@ func TestLoadProcessDefaults(t *testing.T) {
 	}
 	if cfg.LogLevel != "info" || cfg.AnalysisTimeout != 5*time.Minute ||
 		cfg.AnalysisWorkers != 2 || cfg.AnalysisMaxQueued != 100 ||
-		cfg.Role != RoleAll || cfg.HTTP.Address != ":8092" {
+		cfg.Role != RoleAll || cfg.HTTP.Address != ":8092" ||
+		cfg.ResearchNotificationRelay.BatchSize != 20 || cfg.ResearchNotificationRelay.EventLimits.MaxJSONDepth != 16 || cfg.ResearchflowCapacity.Configured {
 		t.Fatalf("unexpected process defaults: %+v", cfg)
 	}
 }
@@ -29,6 +39,9 @@ func TestLoadProcessWorkerSkipsHTTPAndSecurity(t *testing.T) {
 	env := platformconfig.NewEnvWithLookup(func(key string) (string, bool) {
 		if key == "SERVER_ROLE" {
 			return "worker", true
+		}
+		if value, ok := relayRequiredTestValues[key]; ok {
+			return value, true
 		}
 		return "", false
 	})
@@ -62,6 +75,9 @@ func TestLoadProcessRejectsInvalidProcessSettings(t *testing.T) {
 				if key == "SERVER_ROLE" {
 					return "worker", true
 				}
+				if value, ok := relayRequiredTestValues[key]; ok {
+					return value, true
+				}
 				return "", false
 			})
 			if _, err := LoadProcess(env); err == nil {
@@ -73,10 +89,13 @@ func TestLoadProcessRejectsInvalidProcessSettings(t *testing.T) {
 
 func TestLoadProcessReturnsStableSnapshot(t *testing.T) {
 	values := map[string]string{
-		"LOG_LEVEL":           "debug",
-		"ANALYSIS_WORKERS":    "4",
-		"ANALYSIS_MAX_QUEUED": "200",
-		"SERVER_ROLE":         "worker",
+		"LOG_LEVEL":                             "debug",
+		"ANALYSIS_WORKERS":                      "4",
+		"ANALYSIS_MAX_QUEUED":                   "200",
+		"SERVER_ROLE":                           "worker",
+		"NOTIFICATION_EVENT_MAX_ENVELOPE_BYTES": "8192",
+		"NOTIFICATION_EVENT_MAX_PAYLOAD_BYTES":  "4096",
+		"NOTIFICATION_EVENT_MAX_JSON_DEPTH":     "16",
 	}
 	env := platformconfig.NewEnvWithLookup(func(key string) (string, bool) {
 		value, ok := values[key]
