@@ -12,16 +12,16 @@ import (
 )
 
 const (
-	BochaEndpointEnv   = "NEWS_PROVIDER_BOCHA_ENDPOINT"
-	BochaAPIKeyEnv     = "NEWS_PROVIDER_BOCHA_API_KEY"
-	TavilyEndpointEnv  = "NEWS_PROVIDER_TAVILY_ENDPOINT"
-	TavilyAPIKeyEnv    = "NEWS_PROVIDER_TAVILY_API_KEY"
-	BraveEndpointEnv   = "NEWS_PROVIDER_BRAVE_ENDPOINT"
-	BraveAPIKeyEnv     = "NEWS_PROVIDER_BRAVE_API_KEY"
-	SearXNGEndpointEnv = "NEWS_PROVIDER_SEARXNG_ENDPOINT"
+	BochaEndpointEnv             = "NEWS_PROVIDER_BOCHA_ENDPOINT"
+	BochaAPIKeyEnv               = "NEWS_PROVIDER_BOCHA_API_KEY"
+	TavilyEndpointEnv            = "NEWS_PROVIDER_TAVILY_ENDPOINT"
+	TavilyAPIKeyEnv              = "NEWS_PROVIDER_TAVILY_API_KEY"
+	BraveEndpointEnv             = "NEWS_PROVIDER_BRAVE_ENDPOINT"
+	BraveAPIKeyEnv               = "NEWS_PROVIDER_BRAVE_API_KEY"
+	SearXNGEndpointEnv           = "NEWS_PROVIDER_SEARXNG_ENDPOINT"
 	EvidenceCursorActiveKeyIDEnv = "NEWS_EVIDENCE_CURSOR_ACTIVE_KEY_ID"
-	EvidenceCursorKeyRingEnv = "NEWS_EVIDENCE_CURSOR_KEYRING_JSON"
-	maximumEvidenceCursorKeys = 8
+	EvidenceCursorKeyRingEnv     = "NEWS_EVIDENCE_CURSOR_KEYRING_JSON"
+	maximumEvidenceCursorKeys    = 8
 )
 
 // ProviderConfig is a value snapshot. Treat it as immutable after Load returns.
@@ -49,10 +49,10 @@ func (c ProviderConfig) Configured() bool {
 // Config is a startup snapshot of News provider settings.
 // Fields are private to prevent accidental mutation after loading.
 type Config struct {
-	bocha                    ProviderConfig
-	tavily                   ProviderConfig
-	brave                    ProviderConfig
-	searxng                  ProviderConfig
+	bocha                     ProviderConfig
+	tavily                    ProviderConfig
+	brave                     ProviderConfig
+	searxng                   ProviderConfig
 	evidenceCursorActiveKeyID string
 	evidenceCursorKeys        map[string]platformconfig.Secret
 }
@@ -119,7 +119,7 @@ func Load(env platformconfig.Env) (Config, error) {
 	return Config{
 		bocha: bocha, tavily: tavily, brave: brave, searxng: searxng,
 		evidenceCursorActiveKeyID: activeCursorKeyID,
-		evidenceCursorKeys: cursorKeys,
+		evidenceCursorKeys:        cursorKeys,
 	}, nil
 }
 

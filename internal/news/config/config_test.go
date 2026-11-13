@@ -162,7 +162,6 @@ func TestProviderSecretFormattingAndJSONAreRedacted(t *testing.T) {
 	}
 }
 
-
 func TestLoadEvidenceCursorKeyRingIsOptionalAndDefensivelyCopied(t *testing.T) {
 	if _, _, configured := mustLoad(t, nil).EvidenceCursorKeyRing(); configured {
 		t.Fatal("cursor key ring should remain optional when not configured")
