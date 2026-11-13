@@ -1892,3 +1892,19 @@ Server Bootstrap
 - Notification 的真实 Recipient Directory、Channel Provider、Fanout/Delivery Worker 仍未装配；Relay 成功只表示事件被 Inbox 接收。
 - Quant 目前没有生产 RiskDecision Outbox 生产方，因此 Notification 中的 Quant 事件映射尚无来源。
 - 升级前应确认没有待处理的旧事件类型：`SELECT COUNT(*) FROM researchflow_outbox WHERE event_type='researchflow.run.finalized' AND published_at IS NULL`。若结果非零，先按冻结契约做显式对账/修复，不允许新 Relay 静默丢弃旧事件。
+
+
+### 12.93 SRV-006 GOV-CTR-006 Runtime Verifier 与 News → Research 装配复核（2026-11-13）
+
+本轮只核对并更新 integration 组合根接入事实，未修改 Server 业务代码。
+
+- integration 的 internal/platform/authorization 已提供 RFC 8785 JCS + SHA-256 Runtime Verifier；News 通过 internal/news/adapters/platform 消费，不复制 JCS。
+- NEWS-CTR-002 的 AuthorizationRef 与 PolicySnapshot 均已带 schema_version=1.0.0，NEWS Golden 与 GOV-CTR-006 News Golden 对齐。
+- Integration CI Run [43362987745](https://github.com/Kasign/stock_data_provider/actions/runs/43362987745)，head_sha 23d07e7716aa6d7cd7f0fda4d3dbfa178c148a4e，gofmt、root/go-core vet/test、Compose、WebUI 检查和 Docker 构建全部 success。
+- Server Bootstrap 尚未构造 News Evidence Query Facade 或 Research Application Service；不将 Runtime Verifier 存在等同于生产接入。
+- News MySQLRepository 可复用 PIT Repository、Atomic Content Repository、AuthorizationSnapshotRepository、CurrentPolicyResolver 和 EvidenceSnapshotRepository；News Application 已有 Get/List Evidence Facade 构造入口。
+- 完整 ListEvidence Facade 需要 EvidenceCursorCodec 的 HMAC Key Ring。News Config 当前没有 Active Key ID/轮换 Key 的可信配置；游标 TTL 为 15 分钟，旧 Key 必须在轮换窗口内保留。下一步先按 Platform Secret 约定补齐可轮换配置，再构造 News/Research 真实依赖。
+- Research 的 internal/research/adapters/news/evidence.go 已有 Importer/Authorizer；Research Context/Evidence Repository 和 Service 构造入口已存在，不得重复实现 Adapter。
+- Researchflow 生产 StageExecutor 尚未装配；Quant 生产 Application Port/Payload Registry 门禁仍未满足。不得因 News/Research 组合构造完成而直接宣称完整 Researchflow 业务链路通过。
+
+下一轮任务顺序、具体文件入口和验收标准见 [Integration 当前任务交接与继续执行](../整体任务规划/05-治理与验收/Integration当前任务交接与继续执行.md)。

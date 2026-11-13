@@ -1,5 +1,7 @@
 # 新闻模块开发任务与验收清单
 
+> **Integration 接入状态（2026-11-13）**：integration HEAD 23d07e7716aa6d7cd7f0fda4d3dbfa178c148a4e 的全量 CI Run [43362987745](https://github.com/Kasign/stock_data_provider/actions/runs/43362987745) success。公共 GOV-CTR-006 JCS Runtime Verifier 与 News Platform Adapter 已进入 integration，NEWS-CTR-002 AuthorizationRef/PolicySnapshot 的 schema_version 已对齐 Golden。News 的 MySQL Repository 已具备 PIT 查询、当前策略复核、授权快照和同事务正文读取能力；Server 尚未注入完整 Evidence Query Facade 或 Research Service。完整 ListEvidence 生产装配还缺 HMAC Cursor Key Ring 的可信配置（Active Key、轮换 Key 与 15 分钟重叠窗口），不得用默认密钥或跳过签名验证绕过。下一步以 [Integration 当前任务交接](../整体任务规划/05-治理与验收/Integration当前任务交接与继续执行.md) 为准。
+
 > 当前验收状态（2026-11-12，News 分支 HEAD：`a8a3763e5dc662d856a438c52a0b1a28975def43`）：NEWS-CTR-002 显式 `risk_review` 用途映射修复及对应测试已通过当前 HEAD 的 CI。News Provider contract workflow Run `43219930444`：Provider contract tests、完整 News 模块测试均 success，包含 gofmt、单测、Race、Vet；Go test suite Run `43219930418`：News MariaDB Repository and Migration integration、根模块 `Test .`、Researchflow 相关测试及 `Test go-core` 均 success。Compose/Docker 与 Market Data 专项 jobs 按条件 skipped，不计为通过。两条 Run 的 `head_sha` 均与当前 HEAD 完全一致。PR [#88](https://github.com/Kasign/stock_data_provider/pull/88) 的历史合并记录不代表本轮再次合并；本轮未执行分支合并。
 
 > 当前模块状态：News 自有领域代码质量门禁、Provider 固定响应契约和 MariaDB 11.4 持久化专项验收已有通过证据；公共 JCS Runtime Verifier 与 News 适配器已在 integration 实现，并以 GOV-CTR-006 四份 Golden 为验收向量；Server 生产装配尚未注入该 Verifier，受限内容披露仍保持关闭；News 内部的策略指针锁定、授权复核与精确 Version 正文读取事务机制已实现。NEWS-CTR-001 的 available_at 严格 PIT 继续等待合格来源证据，不得从 published_at/fetched_at/observed_at 推导。
