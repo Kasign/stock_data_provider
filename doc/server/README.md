@@ -1680,3 +1680,33 @@ Server Bootstrap
 - 因此不将这两类 Run-scoped Check 塞入全局 `/diagnostics`，也不创建无上下文的空 Check 或伪造健康状态。它们应由 Research/Researchflow 在对应 Run 的执行/报告链路中调用；Server 只在模块提供真实进程级依赖 Check 或 Run 报告组合入口时接线。
 - 该复核撤销“必须把 Research/Researchflow 诊断器注册为全局 Server Check”的隐含前提；目前全局 Diagnostics 的 Server 责任已由 Storage/Schema、News Parser 和 News Provider 配置检查覆盖。后续不重复建设同类全局检查。
 - LLM 生产装配仍是 Server 的实质缺口：现有 `llmtransport.NewResponsesAdapter` 已能消费 ProviderConfig、Secret、CapabilityState、Clock 和 DestinationPolicy，但 Process Config 尚无这些可信输入的约定来源；CapabilityState 也不能由 Server 凭空生成。待明确 ProviderConfig/CapabilityState 的受控配置来源和真实能力证据后，再完成 Bootstrap 注入及 Gateway E2E。
+
+### 12.86 SRV-004 Researchflow / LLM 生产装配前置核查（2026-11-13）
+
+本轮仅核查当前 Server 分支及各业务模块最新分支，没有修改其他分支，也没有将尚未具备真实依赖的组件接入 Bootstrap。
+
+#### Researchflow
+
+- 当前 Server HEAD：`d9086550f783c50818a4c1a5e4b4341be3ebd985`。
+- Researchflow 当前分支：`feat/researchflow @ f11a83c14de5a854685e106275619e56a01630e2`。
+- `StageExecutor` 在 `internal/researchflow/application/executor.go` 中目前是 Application Port；接口注释明确由 Server 组合根注入 Data/News/Quant/Research/LLM 的具体 Adapter。
+- 对当前已核查的 Research、Quant、Data、News、LLM 模块代码树，未发现可直接注入的统一 `StageExecutor` 实现。现有 Research Application、Quant GetResult、Data Provider、News Ingest 和 LLM Responses Adapter 是各自领域能力，不能直接等同于完整 Stage Adapter。
+- Researchflow 已提供 Worker、WorkerPool、Scheduler、SchedulerCandidateScanner、ExpiredAttemptScanner、DeadlineScanner、Finalizer/Coordinator 和 MySQL Storage；Server 当前 Bootstrap 只注册 Researchflow Migration，尚未创建这些运行组件。
+- `CapacityLimits.MaxQueuedRuns/MaxWorkers` 在 Researchflow Storage 中明确要求显式正数，且无生产默认值。Server 尚未装载该配置，也尚未将容量限制注入 CreateRun/Worker claim 路径。
+- FLOW-CTR 的 28–31 节已明确 Server 负责 WorkerPool 生命周期、周期调度/恢复扫描和 Deadline/Finalizer 生命周期。不得重复实现模块已有组件。
+
+#### LLM
+
+- LLM 当前分支：`feat/llm @ 307793080ecd5991946b7daee176b20cd07a771f`。
+- ProviderConfig、CapabilityState Go 类型、ProviderConfig/CapabilityState JSON Schema、Responses JSON/SSE Adapter 均已存在；Server `internal/server/llmtransport` 已提供 Platform 受控 HTTP/SSE Transport 和 Adapter 构造入口。
+- Server Process Config 当前没有 ProviderConfig、Secret、CapabilityState 的装载入口；Bootstrap 当前也未调用 `NewResponsesAdapter`。
+- PLAT-CTR-007 明确模块定义 Config Schema 和校验，Server 在 Bootstrap 装载模块 Config/Secret 并注入。ProviderConfig 的字段语义以 LLM Schema/模块定义为准，Server 不另造第二套配置模型。
+- CapabilityState 必须绑定 Provider、Model、Protocol、Gateway 版本、验证时间、有效期和 evidence_ref。当前没有核实到可由 Server 可信读取的生产证据来源；在证据来源建立前，不构造 supported 状态，不启用需要该能力的请求。
+
+#### 本轮结论与下一步
+
+1. Researchflow 生命周期接线是真实 Server 缺口，但完整启动 Worker 前必须先确定真实 Stage Adapter 的构造方案和依赖的模块 Application Port；禁止用空实现绕过。
+2. 当前未发现可直接注入的 StageExecutor，不代表各业务模块没有任何可用领域能力；下一步需按冻结的 Stage/Output Registry 和各模块公开 Port，逐项确定 Stage Adapter 的输入、输出、错误与证据映射。Adapter 的组合代码归 Server，领域操作仍归模块。
+3. Researchflow 容量配置是明确缺口，应按模块 `CapacityLimits` 类型和冻结契约装载，不提供猜测默认值。
+4. LLM ProviderConfig/Secret 装载和 Capability Evidence 可信来源仍是 Bootstrap 的前置缺口。真实 Gateway 能力证据未建立前，不创建可运行的 Responses Adapter。
+5. 本轮没有提交代码变更；下一阶段先完成 Stage/Output Registry 到各模块公开 Port 的映射审查，再按可真实构造的组件分批装配和验收。
