@@ -171,7 +171,7 @@ func TestResearchflowOutboxToNotificationInboxMariaDB(t *testing.T) {
 	).Scan(&publishedAt, &nextAttemptAt, &lastErrorCode); err != nil {
 		t.Fatalf("read Researchflow Outbox retry state: %v", err)
 	}
-	if publishedAt.Valid || !nextAttemptAt.Valid || lastErrorCode.String != "publish_failed" {
+	if publishedAt.Valid || !nextAttemptAt.Valid || lastErrorCode.String != "notification_receive_unavailable" {
 		t.Fatalf("failed Notification acceptance was not persisted as retryable: published=%v next_attempt=%v error_code=%q", publishedAt, nextAttemptAt, lastErrorCode.String)
 	}
 	time.Sleep(1200 * time.Millisecond)
