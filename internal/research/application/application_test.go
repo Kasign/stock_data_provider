@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
 	"time"
 
@@ -62,6 +63,18 @@ func (f *evidenceRepoFake) Get(_ context.Context, id string) (researchevidence.E
 	return researchevidence.Evidence{}, researcherrors.ErrNotFound
 }
 
+func evidenceFixtureWithStance(t *testing.T, id string, systemAsOf time.Time, stance researchevidence.Stance) researchevidence.Evidence {
+	t.Helper()
+	value := evidenceFixture(t, id, systemAsOf)
+	value.Stance = stance
+	fingerprint, err := value.ComputeContentFingerprint()
+	if err != nil {
+		t.Fatalf("ComputeContentFingerprint() error = %v", err)
+	}
+	value.ContentFingerprint = fingerprint
+	return value
+}
+
 func evidenceFixture(t *testing.T, id string, systemAsOf time.Time) researchevidence.Evidence {
 	t.Helper()
 	availableAt := systemAsOf.Add(-time.Hour)
@@ -85,6 +98,20 @@ func evidenceFixture(t *testing.T, id string, systemAsOf time.Time) researchevid
 type authorizerFake struct {
 	err   error
 	calls int
+}
+
+type contextAuthorizerFake struct {
+	err     error
+	calls   int
+	caller  string
+	purpose researchevidence.PurposeCode
+	value   researchcontext.Context
+}
+
+func (f *contextAuthorizerFake) AuthorizeContext(_ context.Context, caller string, purpose researchevidence.PurposeCode, value researchcontext.Context) error {
+	f.calls++
+	f.caller, f.purpose, f.value = caller, purpose, value
+	return f.err
 }
 
 func (f *authorizerFake) AuthorizeEvidence(_ context.Context, caller string, purpose researchevidence.PurposeCode, value researchevidence.Evidence) error {
@@ -120,6 +147,49 @@ func TestCreateContextAssignsIdentityAndPersistsValidatedSnapshot(t *testing.T) 
 	}
 	if repo.value.ContextID != got.ContextID {
 		t.Fatal("Context was not persisted")
+	}
+}
+
+func TestGetContextRequiresTrustedCurrentVisibilityAuthorization(t *testing.T) {
+	now := time.Date(2026, 11, 12, 1, 0, 0, 0, time.UTC)
+	value := researchcontext.Context{
+		SchemaVersion: researchcontext.SchemaVersion, ContextID: "ctx-protected", ContextVersion: 1,
+		ResearchQuestion: "受控 Context", Scope: researchcontext.ScopeStock, SubjectRefs: []string{"security:600000"},
+		SystemAsOf: now, SectionRefs: []researchcontext.SectionRef{{
+			SectionID: "overview", SectionVersion: "1", SourceOwner: researchcontext.SourceOwnerResearch,
+			SourceRefs: []string{}, EvidenceRefs: []string{}, QualityStatus: researchcontext.QualityValid,
+			Required: true, Included: true, AssembledAt: now, SystemAsOf: now,
+		}},
+		QualitySummary:   researchcontext.QualitySummary{Status: researchcontext.QualityValid, ReasonCodes: []string{}},
+		IncludedSections: []string{"overview"}, OmittedSections: []researchcontext.OmittedSection{},
+		BuilderVersion: "1.0.0", CreatedAt: now,
+	}
+	repo := &contextRepoFake{value: value}
+	request := ContextReadRequest{Ref: ContextRef{ContextID: value.ContextID, ContextVersion: value.ContextVersion}, CallerRef: "researchflow:worker", PurposeCode: string(researchevidence.PurposeResearchAnalysis)}
+	service, err := NewService(repo, &evidenceRepoFake{}, &authorizerFake{}, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.GetContext(context.Background(), request); err == nil {
+		t.Fatal("Context read without a current visibility authorizer must fail closed")
+	}
+	access := &contextAuthorizerFake{}
+	service, err = NewService(repo, &evidenceRepoFake{}, &authorizerFake{}, nil, nil, access)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := service.GetContext(context.Background(), request)
+	if err != nil {
+		t.Fatalf("authorized Context read failed: %v", err)
+	}
+	if got.ContextID != value.ContextID || access.calls != 1 || access.caller != request.CallerRef ||
+		access.purpose != researchevidence.PurposeResearchAnalysis || access.value.Scope != value.Scope ||
+		!slices.Equal(access.value.SubjectRefs, value.SubjectRefs) {
+		t.Fatalf("authorization did not receive exact caller/purpose/visibility: got=%+v authorizer=%+v", got, access)
+	}
+	access.err = NewAuthorizationError(AuthorizationDenied, errors.New("not visible"))
+	if _, err := service.GetContext(context.Background(), request); err == nil {
+		t.Fatal("explicit visibility denial must reject Context read")
 	}
 }
 
@@ -436,7 +506,7 @@ func TestCreateAndGetHypothesisUseApplicationDTO(t *testing.T) {
 	now := time.Date(2026, 11, 9, 1, 0, 0, 0, time.UTC)
 	repo := &claimRepoFake{}
 	evidence := &evidenceRepoFake{values: map[string]researchevidence.Evidence{
-		"ev_support_1": evidenceFixture(t, "ev_support_1", now),
+		"ev_support_1": evidenceFixtureWithStance(t, "ev_support_1", now, researchevidence.StanceSupports),
 	}}
 	service, err := NewServiceWithClaims(&contextRepoFake{}, evidence, repo, &authorizerFake{}, nil, &fixedIDs{})
 	if err != nil {
@@ -558,7 +628,7 @@ func TestUpdateClaimEnforcesExpectedVersionAndDomainTransition(t *testing.T) {
 		InvalidationConditions: []string{"预测持续下调"}, Status: researchclaim.StatusProposed, Limitations: []string{},
 	}}
 	evidence := &evidenceRepoFake{values: map[string]researchevidence.Evidence{
-		"ev_support_1": evidenceFixture(t, "ev_support_1", now),
+		"ev_support_1": evidenceFixtureWithStance(t, "ev_support_1", now, researchevidence.StanceSupports),
 	}}
 	service, err := NewServiceWithClaims(&contextRepoFake{}, evidence, repo, &authorizerFake{}, nil, &fixedIDs{})
 	if err != nil {
@@ -632,11 +702,11 @@ func TestApplicationRejectsRepositoryIdentityMismatch(t *testing.T) {
 		}, IncludedSections: []string{}, OmittedSections: []researchcontext.OmittedSection{},
 		BuilderVersion: "test", CreatedAt: now,
 	}}}
-	service, err := NewService(contextRepo, &evidenceRepoFake{}, &authorizerFake{}, nil, nil)
+	service, err := NewService(contextRepo, &evidenceRepoFake{}, &authorizerFake{}, nil, nil, &contextAuthorizerFake{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.GetContext(context.Background(), ContextRef{ContextID: "ctx_requested", ContextVersion: 1}); err == nil {
+	if _, err := service.GetContext(context.Background(), ContextReadRequest{Ref: ContextRef{ContextID: "ctx_requested", ContextVersion: 1}, CallerRef: "researchflow:worker", PurposeCode: string(researchevidence.PurposeResearchAnalysis)}); err == nil {
 		t.Fatal("Context repository identity mismatch must be rejected")
 	}
 
@@ -815,5 +885,80 @@ func TestCloneStringsAlwaysReturnsNonNilIndependentSlice(t *testing.T) {
 	got[0] = "changed"
 	if input[0] != "evidence:1" {
 		t.Fatal("cloneStrings must return an independent copy")
+	}
+}
+
+func TestClaimRejectsEvidenceWithMismatchedStance(t *testing.T) {
+	now := time.Date(2026, 11, 12, 2, 0, 0, 0, time.UTC)
+	method, observation := "compare revisions", "forecast increases"
+	base := CreateClaimCommand{
+		Statement: "盈利改善假设", EpistemicType: string(researchclaim.EpistemicHypothesis),
+		ScopeRefs: []string{"security:600000"}, SystemAsOf: now,
+		SupportingEvidenceRefs: []string{"ev_support"}, ContradictingEvidenceRefs: []string{"ev_contradict"},
+		RequiredDataRefs: []string{}, ValidationMethod: &method, ExpectedObservation: &observation,
+		InvalidationConditions: []string{"预测持续下调"}, Status: string(researchclaim.StatusProposed), Limitations: []string{},
+	}
+	for _, tc := range []struct {
+		name          string
+		supporting    researchevidence.Stance
+		contradicting researchevidence.Stance
+	}{
+		{name: "support reference cannot point to contradiction evidence", supporting: researchevidence.StanceContradicts, contradicting: researchevidence.StanceContradicts},
+		{name: "contradiction reference cannot point to support evidence", supporting: researchevidence.StanceSupports, contradicting: researchevidence.StanceSupports},
+		{name: "neutral evidence cannot be classified as support or contradiction", supporting: researchevidence.StanceNeutral, contradicting: researchevidence.StanceContradicts},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := &claimRepoFake{}
+			evidence := &evidenceRepoFake{values: map[string]researchevidence.Evidence{
+				"ev_support":    evidenceFixtureWithStance(t, "ev_support", now, tc.supporting),
+				"ev_contradict": evidenceFixtureWithStance(t, "ev_contradict", now, tc.contradicting),
+			}}
+			service, err := NewServiceWithClaims(&contextRepoFake{}, evidence, repo, &authorizerFake{}, nil, &fixedIDs{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := service.CreateClaim(context.Background(), base); err == nil {
+				t.Fatal("Claim must reject Evidence whose stance conflicts with its reference list")
+			}
+			if repo.appended {
+				t.Fatal("Claim with mismatched Evidence stance must not be persisted")
+			}
+		})
+	}
+}
+
+func TestUpdateClaimRejectsEvidenceWithMismatchedStance(t *testing.T) {
+	now := time.Date(2026, 11, 12, 3, 0, 0, 0, time.UTC)
+	previous := researchclaim.Claim{
+		ClaimID: "clm_existing", ClaimVersion: 1, Statement: "待验证的盈利改善判断",
+		EpistemicType: researchclaim.EpistemicHypothesis, ScopeRefs: []string{"security:600000"},
+		SystemAsOf: now.Add(-time.Minute), SupportingEvidenceRefs: []string{},
+		ContradictingEvidenceRefs: []string{}, RequiredDataRefs: []string{},
+		ValidationMethod: stringPointer("比较预测修订"), ExpectedObservation: stringPointer("预测上调"),
+		InvalidationConditions: []string{"预测持续下调"}, Status: researchclaim.StatusProposed, Limitations: []string{},
+	}
+	repo := &claimRepoFake{value: previous}
+	evidence := &evidenceRepoFake{values: map[string]researchevidence.Evidence{
+		"ev_contradict": evidenceFixtureWithStance(t, "ev_contradict", now, researchevidence.StanceContradicts),
+	}}
+	service, err := NewServiceWithClaims(&contextRepoFake{}, evidence, repo, &authorizerFake{}, nil, &fixedIDs{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	revision := CreateClaimCommand{
+		Statement: "盈利改善判断进入验证阶段", EpistemicType: string(researchclaim.EpistemicHypothesis),
+		ScopeRefs: []string{"security:600000"}, SystemAsOf: now,
+		SupportingEvidenceRefs: []string{"ev_contradict"}, ContradictingEvidenceRefs: []string{},
+		RequiredDataRefs: []string{}, ValidationMethod: stringPointer("比较预测修订"),
+		ExpectedObservation: stringPointer("预测上调"), InvalidationConditions: []string{"预测持续下调"},
+		Status: string(researchclaim.StatusTesting), Limitations: []string{},
+	}
+	if _, err := service.UpdateClaim(context.Background(), UpdateClaimCommand{
+		ClaimID: previous.ClaimID, ExpectedVersion: previous.ClaimVersion, Revision: revision,
+	}); err == nil {
+		t.Fatal("UpdateClaim must reject Evidence whose stance conflicts with its reference list")
+	}
+	if repo.appended || repo.value.ClaimVersion != previous.ClaimVersion {
+		t.Fatal("Claim with mismatched Evidence stance must not be appended")
 	}
 }
