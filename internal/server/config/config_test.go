@@ -141,7 +141,7 @@ func TestLoadResearchflowCapacityRequiresBothExplicitPositiveLimits(t *testing.T
 		{name: "not configured", values: map[string]string{}, want: false},
 		{name: "both configured", values: map[string]string{
 			"RESEARCHFLOW_MAX_QUEUED_RUNS": "120",
-			"RESEARCHFLOW_MAX_WORKERS": "6",
+			"RESEARCHFLOW_MAX_WORKERS":     "6",
 		}, want: true},
 	}
 	for _, test := range tests {
