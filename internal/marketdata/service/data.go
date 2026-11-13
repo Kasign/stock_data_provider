@@ -3308,6 +3308,8 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 					}
 				}
 			}
+		} else if e != nil && s.logger != nil {
+			s.logger.Warn("MariaDB daily-bar fallback read failed", "symbol", symbol, "adjustment", basis, "error", e)
 		}
 	}
 	if err := ctx.Err(); err != nil {
