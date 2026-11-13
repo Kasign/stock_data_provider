@@ -1845,3 +1845,26 @@ Server Bootstrap
 - 未创建 Researchflow Worker、Scheduler 或 Stage Adapter；未改业务模块与冻结契约。
 - 代码测试及 CI 尚待本轮最新提交验证，不将静态配置单测定义为生产装配验收。
 
+### 12.91 SRV-004 最新模块进展与 Server 接入门禁复核（2026-11-13）
+
+本轮基于各模块当前分支 HEAD 复核前述 12.87–12.90 的接入结论，避免继续沿用过期提交状态；只读其他模块分支，没有跨分支写操作。
+
+#### 最新分支进展
+
+- Research：`feat/research @ 68e716ad54af87f19c3bb99b418e8db8eb100345`。新增 `internal/research/adapters/news`，提供 News Evidence Importer 与 Authorizer：通过 News `ResearchEvidenceQuery` 获取指定 News 版本，校验授权状态、内容级别、`SystemAsOf`、`SystemObservedAt` 和 `AvailableAt`，再调用 Research `AddEvidence`；读取/写入时重新向 News Owner 查询授权，不把存储的 `AuthorizationRef` 当作访问凭证。该能力补齐 News → Research 的 Evidence 领域适配，但不是 Researchflow `StageExecutor` 实现，也没有自动接入 Server Bootstrap。该分支 HEAD 对应 Go test suite Run `43198863446` 成功。
+- Data：`feat/full-go-data-providers-api-switch @ c3d89eaa6097538cc42a23dfd8ee217f0a808b8c`。相对前次核查只新增 Bundle `as_of` 历史观察时点参数校验、空值/重复参数测试和 MariaDB CI 触发；没有涉及 DailyBarsV2 Decimal DTO、Provider 原始精度保真或 Golden，因此 DATA-CTR-005 的既有阻断结论不变。该分支 HEAD 对应 Go test suite Run `43347838452` 成功。
+- Quant：`feat/quant @ dd686838527978626d1c6af2a905b0c4df01c3b5`；Researchflow：`feat/researchflow @ f11a83c14de5a854685e106275619e56a01630e2`；LLM：`feat/llm @ 307793080ecd5991946b7daee176b20cd07a771f`。相对上一轮核查，这三个分支 HEAD 未变化；对应的 Quant 生产计算 Facade / Result Payload 注册、Researchflow Output Registry / Stage 绑定、LLM 可信 ProviderConfig / Capability Evidence 来源缺口仍未解除。
+
+#### 对 Server 生产装配的影响
+
+1. Research News Adapter 由 Research 模块拥有，Server 不应在 `internal/server` 重写授权查询、PIT 校验或 Evidence 映射。只有在某个已冻结的 Stage 定义明确要求导入 News Evidence，且该 Stage 的输入、输出 Schema、Registry 版本和授权主体来源均确定后，Server 才负责将该 Adapter 组合进对应 Stage Executor。
+2. 当前 Researchflow `StageExecutor` 仍只是执行 Port。未发现已注册的精确 `stage_code + template_version + output_registry_version` 与可装载 Output Registry；Research 新增 Evidence Adapter 不能替代这些流程注册信息。
+3. Data 最新提交只收紧 Bundle 查询参数，不改变 DailyBars 数值类型；Quant 当前仍缺生产计算用例与可生产 Payload 注册。因此 Data → Quant 生产计算 Stage 仍不可接线。
+4. 本轮不创建无实际调用方的 Research Service/News Importer 装配，不启动 Researchflow Worker，也不把模块测试通过等同于跨模块生产联调通过。
+
+#### 本轮结论
+
+- Research → News Evidence 适配能力已有模块实现和模块 CI 证据；Server 不重复实现。
+- Server 仍没有可安全启用的具体 Researchflow Stage。当前可独立完成的容量配置读取已在 12.90 实现并通过 Server CI；其生产注入必须与真实 Worker 装配同批完成。
+- 下一步等待模块按冻结契约补齐 Stage 所需的生产 Application Port、Output Registry 和可信配置来源；条件满足后再由 Server 实现精确 Adapter 组合。若没有新的模块契约/公开 Port 变化，Server 不再重复静态盘点这些已确认的阻断项。
+
