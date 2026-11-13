@@ -140,7 +140,7 @@ const evidencePITSelect = `SELECT
 	o.news_id, o.reason_code,
 	v.version_id, v.news_id, v.version_no, v.fingerprint, v.title,
 	v.publisher_name, v.publisher_domain, v.author, v.published_at,
-	v.content_json, v.observed_at, v.observation_id
+	v.observed_at, v.observation_id
 	FROM news_item_versions v
 	INNER JOIN news_observations o
 		ON o.observation_id = v.observation_id AND o.news_id = v.news_id`
@@ -151,7 +151,7 @@ func scanEvidencePITRecord(row rowScanner) (app.EvidencePITRecord, error) {
 	var version domain.NewsItemVersion
 	var policyAt, retentionUntil, payloadPurgedAt, publishedAt sql.NullTime
 	var newsID sql.NullString
-	var candidateJSON, contentJSON []byte
+	var candidateJSON []byte
 	var identityStatus string
 
 	err := row.Scan(
@@ -163,15 +163,12 @@ func scanEvidencePITRecord(row rowScanner) (app.EvidencePITRecord, error) {
 		&newsID, &observation.ReasonCode,
 		&version.ID, &version.NewsID, &version.VersionNo, &version.Fingerprint,
 		&version.Title, &version.PublisherName, &version.PublisherDomain, &version.Author,
-		&publishedAt, &contentJSON, &version.ObservedAt, &version.ObservationID,
+		&publishedAt, &version.ObservedAt, &version.ObservationID,
 	)
 	if err != nil {
 		return app.EvidencePITRecord{}, err
 	}
 	if err := json.Unmarshal(candidateJSON, &observation.Candidate); err != nil {
-		return app.EvidencePITRecord{}, err
-	}
-	if err := json.Unmarshal(contentJSON, &version.Content); err != nil {
 		return app.EvidencePITRecord{}, err
 	}
 	if policyAt.Valid {

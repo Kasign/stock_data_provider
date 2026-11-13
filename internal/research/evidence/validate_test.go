@@ -86,6 +86,7 @@ func TestEvidenceValidateRejectsInvalidContractValues(t *testing.T) {
 	}{
 		{"invalid evidence type", func(e *Evidence) { e.EvidenceType = "assertion" }, "evidence_type"},
 		{"invalid source owner", func(e *Evidence) { e.SourceOwner = "platform" }, "source_owner"},
+		{"news evidence without source version", func(e *Evidence) { e.SourceVersion = nil }, "source_version is required"},
 		{"missing source ref", func(e *Evidence) { e.SourceRef = " " }, "source_ref"},
 		{"padded source ref", func(e *Evidence) { e.SourceRef = " news_ref" }, "surrounding whitespace"},
 		{"nil derived refs", func(e *Evidence) { e.DerivedFromRefs = nil }, "non-null arrays"},

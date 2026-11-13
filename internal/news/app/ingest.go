@@ -65,12 +65,25 @@ func (u *candidateIngest) executeUnscoped(ctx context.Context, sourceID, idempot
 	if strings.TrimSpace(candidate.ProviderCode) != "" {
 		return domain.Observation{}, ErrProviderOutputPolicyRequired
 	}
-	return u.executeCore(ctx, sourceID, idempotencyKey, candidate, policy, ObservationPolicyTrace{})
+	return u.executeCore(ctx, sourceID, idempotencyKey, candidate, policy, ObservationPolicyTrace{}, nil)
 }
 
 // executeWithPolicyTrace 接收 Source/Endpoint 可信授权结果，并要求实际保留期限为正数。
 // Provider 候选必须经 IngestProviderCandidate 的独立策略 Resolver 评估。
 func (u *candidateIngest) executeWithPolicyTrace(ctx context.Context, sourceID, idempotencyKey string, candidate domain.Candidate, policy domain.SourceURLPolicy, trace ObservationPolicyTrace) (domain.Observation, error) {
+	return u.executeWithPolicyTraceAndCheck(ctx, sourceID, idempotencyKey, candidate, policy, trace, nil)
+}
+
+// executeWithPolicyTraceAndCheck 在身份写入事务内执行额外的授权校验。
+// 校验回调与 Observation/Identity 写入共享同一个数据库事务。
+func (u *candidateIngest) executeWithPolicyTraceAndCheck(
+	ctx context.Context,
+	sourceID, idempotencyKey string,
+	candidate domain.Candidate,
+	policy domain.SourceURLPolicy,
+	trace ObservationPolicyTrace,
+	beforePersist func(IdentityTransaction) error,
+) (domain.Observation, error) {
 	trace.SourcePolicyVersionID = strings.TrimSpace(trace.SourcePolicyVersionID)
 	trace.EndpointID = strings.TrimSpace(trace.EndpointID)
 	trace.EndpointPolicyVersionID = strings.TrimSpace(trace.EndpointPolicyVersionID)
@@ -79,15 +92,15 @@ func (u *candidateIngest) executeWithPolicyTrace(ctx context.Context, sourceID, 
 	if trace.SourcePolicyVersionID == "" || trace.PolicyEvaluatedAt.IsZero() || trace.Retention <= 0 {
 		return domain.Observation{}, ErrInvalidRequest
 	}
-	if strings.TrimSpace(candidate.ProviderCode) != "" ||
-		trace.ProviderOutputPolicyRef != "" || trace.ProviderOutputPolicyVersionID != "" {
+	if (strings.TrimSpace(candidate.ProviderCode) != "" ||
+		trace.ProviderOutputPolicyRef != "" || trace.ProviderOutputPolicyVersionID != "") && beforePersist == nil {
 		return domain.Observation{}, ErrProviderOutputPolicyRequired
 	}
 	trace.PolicyEvaluatedAt = trace.PolicyEvaluatedAt.UTC()
-	return u.executeCore(ctx, sourceID, idempotencyKey, candidate, policy, trace)
+	return u.executeCore(ctx, sourceID, idempotencyKey, candidate, policy, trace, beforePersist)
 }
 
-func (u *candidateIngest) executeCore(ctx context.Context, sourceID, idempotencyKey string, candidate domain.Candidate, policy domain.SourceURLPolicy, trace ObservationPolicyTrace) (domain.Observation, error) {
+func (u *candidateIngest) executeCore(ctx context.Context, sourceID, idempotencyKey string, candidate domain.Candidate, policy domain.SourceURLPolicy, trace ObservationPolicyTrace, beforePersist func(IdentityTransaction) error) (domain.Observation, error) {
 	if u == nil || u.repository == nil || u.newID == nil || ctx == nil {
 		return domain.Observation{}, ErrInvalidRequest
 	}
@@ -151,6 +164,14 @@ func (u *candidateIngest) executeCore(ctx context.Context, sourceID, idempotency
 
 	var persisted domain.Observation
 	err := u.repository.WithinIdentityTransaction(ctx, func(tx IdentityTransaction) error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if beforePersist != nil {
+			if err := beforePersist(tx); err != nil {
+				return err
+			}
+		}
 		if len(credentials) == 0 {
 			var appendErr error
 			persisted, appendErr = tx.AppendObservation(ctx, observation)

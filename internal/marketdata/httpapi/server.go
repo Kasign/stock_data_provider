@@ -333,16 +333,20 @@ func (s *Server) bundle(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	asOfRaw := strings.TrimSpace(r.URL.Query().Get("as_of"))
+	asOfValues, hasAsOf := r.URL.Query()["as_of"]
 	var asOf time.Time
-	provided := asOfRaw != ""
-	var err error
-	if provided {
-		asOf, err = time.Parse(time.RFC3339, asOfRaw)
-		if err != nil {
-			writeErr(w, 400, "VALIDATION_ERROR", "as_of must be RFC3339 with timezone", requestID(r))
+	provided := hasAsOf
+	if hasAsOf {
+		if len(asOfValues) != 1 || strings.TrimSpace(asOfValues[0]) == "" {
+			writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", "as_of must be a single RFC3339 timestamp", requestID(r))
 			return
 		}
+		parsed, parseErr := time.Parse(time.RFC3339Nano, strings.TrimSpace(asOfValues[0]))
+		if parseErr != nil || parsed.After(time.Now().UTC()) {
+			writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", "as_of must be a valid non-future RFC3339 timestamp", requestID(r))
+			return
+		}
+		asOf = parsed
 	}
 	adjustment := r.URL.Query().Get("adjustment")
 	if adjustment == "" {
@@ -801,7 +805,12 @@ func writeDomainErr(w http.ResponseWriter, err error, id string) {
 	code := "PROVIDER_BAD_RESPONSE"
 	safeMessage := "upstream data provider returned an invalid response"
 	retryable := false
-	if strings.Contains(msg, "invalid A-share symbol") || strings.Contains(msg, "B-share code") || strings.Contains(msg, "exchange suffix") || strings.Contains(msg, "invalid start date") || strings.Contains(msg, "invalid end date") || strings.Contains(msg, "must not be after") || strings.Contains(msg, "must not be in the future") || strings.Contains(msg, "unsupported adjustment") || strings.Contains(msg, "cannot infer exchange") {
+	if errors.Is(err, service.ErrPITStorageFailure) {
+		status = http.StatusServiceUnavailable
+		code = "PIT_STORAGE_UNAVAILABLE"
+		safeMessage = "point-in-time revision storage is unavailable"
+		retryable = true
+	} else if strings.Contains(msg, "invalid A-share symbol") || strings.Contains(msg, "B-share code") || strings.Contains(msg, "exchange suffix") || strings.Contains(msg, "invalid start date") || strings.Contains(msg, "invalid end date") || strings.Contains(msg, "must not be after") || strings.Contains(msg, "must not be in the future") || strings.Contains(msg, "unsupported adjustment") || strings.Contains(msg, "cannot infer exchange") {
 		status = http.StatusBadRequest
 		code = "VALIDATION_ERROR"
 		safeMessage = msg

@@ -3,12 +3,12 @@ package event
 import (
 	"fmt"
 	"math"
-	"regexp"
 	"strings"
 	"time"
 )
 
-var timeNormalizationRuleVersionPattern = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?$`)
+// TimeNormalizationRuleVersionV1 is the first immutable Research Event time rule set.
+const TimeNormalizationRuleVersionV1 = "1.0.0"
 
 func (e ResearchEvent) Validate() error {
 	if err := required("event_id", e.EventID); err != nil {
@@ -69,8 +69,8 @@ func (e ResearchEvent) Validate() error {
 	if e.AvailableAt != nil && e.AvailableAt.After(e.SystemAsOf) {
 		return fmt.Errorf("available_at must not be later than system_as_of")
 	}
-	if !timeNormalizationRuleVersionPattern.MatchString(e.TimeNormalizationRuleVersion) {
-		return fmt.Errorf("time_normalization_rule_version must be a semantic version")
+	if e.TimeNormalizationRuleVersion != TimeNormalizationRuleVersionV1 {
+		return fmt.Errorf("unsupported time_normalization_rule_version %q", e.TimeNormalizationRuleVersion)
 	}
 	if e.DerivedFromRefs == nil {
 		return fmt.Errorf("derived_from_refs must be a non-null array")
@@ -95,7 +95,8 @@ func (e ResearchEvent) Validate() error {
 	for _, ref := range e.EvidenceRefs {
 		evidenceRefs[ref] = struct{}{}
 	}
-	timeTypes := make(map[EventTimeType]struct{}, len(e.SourceTimes))
+	timeTypes := make(map[EventTimeType][]time.Time, len(e.SourceTimes))
+	sourceTimeKeys := make(map[string]struct{}, len(e.SourceTimes))
 	for index, sourceTime := range e.SourceTimes {
 		if err := sourceTime.Validate(); err != nil {
 			return fmt.Errorf("source_times[%d]: %w", index, err)
@@ -103,7 +104,12 @@ func (e ResearchEvent) Validate() error {
 		if _, exists := evidenceRefs[sourceTime.EvidenceRef]; !exists {
 			return fmt.Errorf("source_times[%d].evidence_ref must exist in evidence_refs", index)
 		}
-		timeTypes[sourceTime.TimeType] = struct{}{}
+		key := sourceTime.EvidenceRef + "\x00" + string(sourceTime.TimeType)
+		if _, exists := sourceTimeKeys[key]; exists {
+			return fmt.Errorf("source_times contains duplicate evidence/time_type pair %s/%s", sourceTime.EvidenceRef, sourceTime.TimeType)
+		}
+		sourceTimeKeys[key] = struct{}{}
+		timeTypes[sourceTime.TimeType] = append(timeTypes[sourceTime.TimeType], sourceTime.Value)
 	}
 	for _, item := range []struct {
 		name     string
@@ -114,10 +120,32 @@ func (e ResearchEvent) Validate() error {
 		{"published_at", e.PublishedAt, TimePublishedAt},
 		{"available_at", e.AvailableAt, TimeAvailableAt},
 	} {
-		if item.value != nil {
-			if _, exists := timeTypes[item.timeType]; !exists {
+		values := timeTypes[item.timeType]
+		if len(values) == 0 {
+			if item.value != nil {
 				return fmt.Errorf("%s requires a matching source_times entry", item.name)
 			}
+			continue
+		}
+		consensus := values[0]
+		conflict := false
+		for _, sourceValue := range values[1:] {
+			if !sourceValue.Equal(consensus) {
+				conflict = true
+				break
+			}
+		}
+		if conflict {
+			if item.value != nil {
+				return fmt.Errorf("%s conflicts with source_times; normalized value must be null", item.name)
+			}
+			continue
+		}
+		if item.value == nil {
+			return fmt.Errorf("%s must equal the consensus source_times value under rule %s", item.name, e.TimeNormalizationRuleVersion)
+		}
+		if !consensus.Equal(*item.value) {
+			return fmt.Errorf("%s conflicts with source_times; normalized value must equal the consensus value", item.name)
 		}
 	}
 	return nil

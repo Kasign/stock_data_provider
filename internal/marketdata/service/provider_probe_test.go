@@ -790,6 +790,39 @@ func TestFundamentalsProbePeriodUsesCompletedHalfYear(t *testing.T) {
 	}
 }
 
+func TestFundamentalsProbeSnapshotValidationUsesSelectedCompletedPeriod(t *testing.T) {
+	now := time.Date(2026, time.August, 31, 23, 59, 0, 0, marketLocation())
+	year, quarter := fundamentalsProbePeriod(now)
+	if year != 2025 || quarter != 2 {
+		t.Fatalf("fundamentalsProbePeriod() = %d-Q%d, want 2025-Q2", year, quarter)
+	}
+
+	snapshot := &model.FundamentalsSnapshot{
+		Symbol: "600519.SH", Year: year, Quarter: quarter,
+		Source: "probe-test", SourceVersion: "probe-test-v1",
+		FetchedAt: now.UTC(), HasData: true, QualityStatus: model.QualityValid,
+	}
+	for _, category := range []string{"profitability", "operating", "growth", "solvency", "cash_flow", "dupont"} {
+		snapshot.Sections = append(snapshot.Sections, model.FundamentalSection{
+			Category: category, ReportDate: "2025-06-30", PublicationDate: "2025-08-15",
+			HasData: true, QualityStatus: model.QualityValid,
+			Metrics: []model.FundamentalMetric{{
+				Key: category + "_metric", Name: category + " metric", Unit: "CNY",
+				SourceField: category + "_source", Value: 1,
+			}},
+		})
+	}
+
+	if err := validateFundamentalsProbeSnapshot(
+		context.Background(), "600519.SH", year, quarter, snapshot,
+	); err != nil {
+		t.Fatalf("selected prior-year Q2 snapshot should pass both Probe validators: %v", err)
+	}
+	if err := validateFundamentalsSnapshot("600519.SH", now.Year(), 2, snapshot); err == nil {
+		t.Fatal("snapshot must be rejected when incorrectly validated against the current calendar year")
+	}
+}
+
 func TestProviderProbeDefaultDailyBarsExcludeCurrentIncompleteDay(t *testing.T) {
 	p := &providerProbeHistoricalDailyBarsFake{name: "default-range-bars"}
 	ds := NewWithCapabilities([]provider.NamedProvider{p}, nil, []provider.DailyBarProvider{p}, cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000, ResilienceConfig{}, nil)

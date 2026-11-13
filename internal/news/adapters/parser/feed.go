@@ -354,16 +354,31 @@ func selectAtomLink(links []atomLink) string {
 }
 
 func parseFeedTime(raw string) (time.Time, bool) {
+	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return time.Time{}, false
 	}
+
+	// Go 的 time.Parse 会把未知时区缩写解析成零偏移的伪时区。
+	// 这里只将语义明确且全球唯一的 GMT/UTC 显式转换为数字零偏移；
+	// CST、IST 等多义缩写继续拒绝，不能猜测发布地时区。
+	zoned := raw
+	fields := strings.Fields(raw)
+	if len(fields) >= 2 {
+		zone := fields[len(fields)-1]
+		if strings.EqualFold(zone, "GMT") || strings.EqualFold(zone, "UTC") {
+			zoned = strings.TrimSpace(strings.TrimSuffix(raw, zone)) + " +0000"
+		}
+	}
+
 	layouts := []string{
 		time.RFC3339Nano,
 		time.RFC1123Z,
 		time.RFC822Z,
+		"Mon, 02 Jan 06 15:04:05 -0700",
 	}
 	for _, layout := range layouts {
-		parsed, err := time.Parse(layout, raw)
+		parsed, err := time.Parse(layout, zoned)
 		if err == nil && !parsed.IsZero() {
 			return parsed, true
 		}

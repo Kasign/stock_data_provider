@@ -357,7 +357,7 @@ func (s *DataService) FundamentalsAsOf(ctx context.Context, rawSymbol string, ye
 	}
 	snapshots, err := s.store.ListFundamentalsAsOf(ctx, symbol, year, quarter, asOf)
 	if err != nil {
-		return nil, err
+		return nil, wrapPITStorageFailure(err)
 	}
 	var best *model.FundamentalsSnapshot
 	bestScore := -1
