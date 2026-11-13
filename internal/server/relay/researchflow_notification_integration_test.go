@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	_ "github.com/go-sql-driver/mysql"
+	"github.com/go-sql-driver/mysql"
 
 	notificationapplication "example.com/stock-analysis-flow/internal/notification/application"
 	notificationschema "example.com/stock-analysis-flow/internal/notification/schema"
@@ -29,15 +29,33 @@ func TestResearchflowOutboxToNotificationInboxMariaDB(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
 
-	db, err := sql.Open("mysql", dsn)
+	adminDB, err := sql.Open("mysql", dsn)
 	if err != nil {
-		t.Fatalf("open MariaDB: %v", err)
+		t.Fatalf("open MariaDB admin connection: %v", err)
 	}
-	defer db.Close()
-	db.SetMaxOpenConns(8)
-	if err := db.PingContext(ctx); err != nil {
+	defer adminDB.Close()
+	if err := adminDB.PingContext(ctx); err != nil {
 		t.Fatalf("ping MariaDB: %v", err)
 	}
+	databaseName := fmt.Sprintf("researchflow_relay_%d", time.Now().UnixNano())
+	if _, err := adminDB.ExecContext(ctx, "CREATE DATABASE `"+databaseName+"`"); err != nil {
+		t.Fatalf("create isolated Researchflow relay database: %v", err)
+	}
+	defer func() {
+		_, _ = adminDB.ExecContext(context.Background(), "DROP DATABASE IF EXISTS `"+databaseName+"`")
+	}()
+	mysqlConfig, err := mysql.ParseDSN(dsn)
+	if err != nil {
+		t.Fatalf("parse MariaDB DSN: %v", err)
+	}
+	mysqlConfig.DBName = databaseName
+	connector, err := mysql.NewConnector(mysqlConfig)
+	if err != nil {
+		t.Fatalf("create isolated MariaDB connector: %v", err)
+	}
+	db := sql.OpenDB(connector)
+	defer db.Close()
+	db.SetMaxOpenConns(8)
 
 	migrations := servermigration.NewRegistry()
 	if err := migrations.Register(researchflowstorage.MigrationNamespace, researchflowstorage.Migrations()); err != nil {
