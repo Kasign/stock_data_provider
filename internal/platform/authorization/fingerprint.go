@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"sort"
 
 	"github.com/gowebpki/jcs"
 )
@@ -66,6 +65,15 @@ func Fingerprint(authorizationRef, snapshot []byte) (string, error) {
 }
 
 func fingerprintFromObjects(authorizationRef, snapshot []byte) ([]byte, error) {
+	// Run JCS over each original object first. Besides validating I-JSON input,
+	// this rejects duplicate object members before encoding/json could collapse them.
+	if _, err := jcs.Transform(authorizationRef); err != nil {
+		return nil, ErrInvalidAuthorizationFingerprint
+	}
+	if _, err := jcs.Transform(snapshot); err != nil {
+		return nil, ErrInvalidAuthorizationFingerprint
+	}
+
 	var ref map[string]json.RawMessage
 	if err := json.Unmarshal(authorizationRef, &ref); err != nil || len(ref) == 0 {
 		return nil, ErrInvalidAuthorizationFingerprint
@@ -93,9 +101,6 @@ func fingerprintFromObjects(authorizationRef, snapshot []byte) ([]byte, error) {
 			return nil, ErrInvalidAuthorizationFingerprint
 		}
 	}
-	// Sorting a copy makes the intended tuple ordering explicit while the
-	// strict input-order check above rejects non-canonical owner snapshots.
-	sort.Slice(policies, func(i, j int) bool { return comparePolicy(policies[i], policies[j]) < 0 })
 
 	delete(ref, "authorization_ref")
 	delete(ref, "decision_fingerprint")

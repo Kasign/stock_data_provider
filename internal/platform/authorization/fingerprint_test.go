@@ -60,3 +60,11 @@ func TestVerifyFingerprintRejectsUnorderedPolicySnapshot(t *testing.T) {
 		t.Fatal("VerifyFingerprint() accepted an unordered policy snapshot")
 	}
 }
+
+func TestVerifyFingerprintRejectsDuplicateJSONMembers(t *testing.T) {
+	ref := []byte(`{"schema_version":"1.0.0","policy_version":"snapshot-1","policy_version":"snapshot-1","decision_fingerprint":"0000000000000000000000000000000000000000000000000000000000000000"}`)
+	snapshot := []byte(`{"snapshot_ref":"snapshot-1","policies":[{"policy_type":"source","policy_ref":"source-1","policy_version":"1"}]}`)
+	if err := VerifyFingerprint(ref, snapshot); err == nil {
+		t.Fatal("VerifyFingerprint() accepted duplicate JSON members")
+	}
+}
