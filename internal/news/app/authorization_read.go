@@ -52,6 +52,44 @@ func NewEvaluateNewsEvidenceReadAuthorization(
 	}, nil
 }
 
+// ExecuteWithCurrentPolicies 验证授权快照指纹，并使用调用方原子事务中锁定的当前策略集合判定。
+func (u *EvaluateNewsEvidenceReadAuthorization) ExecuteWithCurrentPolicies(
+	ctx context.Context,
+	binding domain.NewsAuthorizationBinding,
+	observation domain.Observation,
+	version domain.NewsItemVersion,
+	callerRef string,
+	purposeCode string,
+	contentLevel domain.AuthorizationContentLevel,
+	current domain.CurrentAuthorizationPolicySet,
+) error {
+	if u == nil || u.verifier == nil || u.now == nil || ctx == nil ||
+		domain.ValidateNewsAuthorizationBindingForEvidence(binding, observation, version) != nil ||
+		binding.CallerRef != callerRef || binding.PurposeCode != purposeCode ||
+		binding.RequestedContentLevel != contentLevel {
+		return ErrInvalidAuthorizationSnapshot
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	now := u.now().UTC()
+	snapshotDecision := domain.EvaluateNewsAuthorizationUse(binding, now)
+	if !snapshotDecision.Allowed {
+		return errors.Join(ErrNewsCurrentPolicyDenied, errors.New(snapshotDecision.ReasonCode))
+	}
+	if err := u.verifier.VerifyNewsAuthorizationFingerprint(ctx, binding); err != nil {
+		return ErrNewsAuthorizationFingerprintInvalid
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	decision := domain.EvaluateNewsAuthorizationAgainstCurrentPolicies(binding, current, now)
+	if !decision.Allowed {
+		return errors.Join(ErrNewsCurrentPolicyDenied, errors.New(decision.ReasonCode))
+	}
+	return nil
+}
+
 func (u *EvaluateNewsEvidenceReadAuthorization) Execute(
 	ctx context.Context,
 	binding domain.NewsAuthorizationBinding,

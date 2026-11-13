@@ -138,6 +138,96 @@ type DailyBarsSnapshot struct {
 	Bars                   []DailyBar
 }
 
+// FundamentalsQuery 定义单证券、单报告期的财务数据读取请求。
+// SystemObservedAtCutoff 非 nil 时只读取该系统观察时点已持久化的历史修订。
+type FundamentalsQuery struct {
+	Symbol                 string
+	Year                   int
+	Quarter                int
+	SystemObservedAtCutoff *time.Time
+}
+
+// FundamentalMetric 保留财务指标标准键、展示名称、值、单位和源字段映射。
+type FundamentalMetric struct {
+	Key         string
+	Name        string
+	Value       float64
+	Unit        string
+	SourceField string
+}
+
+// FundamentalSection 是具有独立披露时间和质量状态的财务数据分区。
+type FundamentalSection struct {
+	Category        string
+	ReportDate      string
+	PublicationDate string
+	AvailableAt     *time.Time
+	HasData         bool
+	Metrics         []FundamentalMetric
+	QualityStatus   QualityStatus
+	QualityReasons  []string
+}
+
+// FundamentalsSnapshot 是 Data 对外提供的财务快照；SystemObservedAt 不等于源端披露时间。
+type FundamentalsSnapshot struct {
+	Symbol           string
+	Year             int
+	Quarter          int
+	HasData          bool
+	Sections         []FundamentalSection
+	Source           string
+	SourceVersion    string
+	FetchedAt        time.Time
+	SystemObservedAt *time.Time
+	QualityStatus    QualityStatus
+	QualityReasons   []string
+}
+
+// ValuationsQuery 定义批量估值读取请求。Symbols 的数量、格式和去重由 DataService 校验。
+type ValuationsQuery struct {
+	Symbols                []string
+	SystemObservedAtCutoff *time.Time
+}
+
+// ValuationItem 是单证券估值数据；源端缺失指标保持 nil，不补零。
+type ValuationItem struct {
+	Symbol                   string
+	Code                     string
+	Name                     string
+	PETTM                    *float64
+	PEMRQ                    *float64
+	PEStatic                 *float64
+	PBMRQ                    *float64
+	PSTTM                    *float64
+	PCFTTM                   *float64
+	TurnoverRatePercent      *float64
+	FloatTurnoverRatePercent *float64
+	VolumeRatio              *float64
+	DividendYieldPercent     *float64
+	DividendYieldTTMPercent  *float64
+	Source                   string
+	SourceVersion            string
+	FetchedAt                time.Time
+	QualityStatus            QualityStatus
+	QualityReasons           []string
+}
+
+// ValuationsSnapshot 是一次批量估值快照。ProviderTimestamp 是聚合时间，不代表每项指标更新时间。
+type ValuationsSnapshot struct {
+	RequestedSymbols   []string
+	Total              int
+	Items              []ValuationItem
+	MissingSymbols     []string
+	ProviderReportDate string
+	ProviderTimestamp  *time.Time
+	Source             string
+	SourceVersion      string
+	FetchedAt          time.Time
+	SystemObservedAt   *time.Time
+	QualityStatus      QualityStatus
+	QualityReasons     []string
+}
+
 // QuoteReader 是窄化的行情读取用例，不暴露 Provider 选择与调度。
 type QuoteReader interface {
 	GetQuote(ctx context.Context, symbol string) (QuoteSnapshot, error)
@@ -149,9 +239,21 @@ type DailyBarsReader interface {
 	GetDailyBars(ctx context.Context, query DailyBarsQuery) (DailyBarsSnapshot, error)
 }
 
-// MarketDataReader 是当前供 Analysis 使用的消费者 Port。
-// 后续消费者应只依赖自己实际需要的最窄接口。
+// FundamentalsReader 是窄化的财务数据读取用例。
+type FundamentalsReader interface {
+	GetFundamentals(ctx context.Context, query FundamentalsQuery) (FundamentalsSnapshot, error)
+}
+
+// ValuationsReader 是窄化的批量估值读取用例。
+type ValuationsReader interface {
+	GetValuations(ctx context.Context, query ValuationsQuery) (ValuationsSnapshot, error)
+}
+
+// MarketDataReader 是 Data 对外提供的完整首批只读 Application Port。
+// 消费者仍应优先依赖自己实际需要的最窄接口。
 type MarketDataReader interface {
 	QuoteReader
 	DailyBarsReader
+	FundamentalsReader
+	ValuationsReader
 }

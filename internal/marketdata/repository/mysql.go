@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"example.com/stock-analysis-flow/internal/marketdata/model"
@@ -237,6 +238,12 @@ SET source_version=COALESCE(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(metadata,'$.source_
 WHERE source_version=''`,
 				`CREATE INDEX idx_market_adjustment_factor_version_asof
 ON market_data_adjustment_factor_versions (symbol, trade_date, source, source_version, factor_basis, recorded_at, id)`,
+			},
+		},
+		{
+			Version: 3, Description: "valuation snapshot revision history",
+			Statements: []string{
+				"CREATE TABLE IF NOT EXISTS market_data_valuation_versions (id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT, request_fingerprint CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL, source VARCHAR(64) NOT NULL, revision_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL, recorded_at DATETIME(6) NOT NULL, fetched_at DATETIME(6) NOT NULL, quality_status VARCHAR(16) NOT NULL, metadata JSON NOT NULL, PRIMARY KEY (id), KEY idx_market_valuation_asof (request_fingerprint, recorded_at), KEY idx_market_valuation_identity_asof (request_fingerprint, source, recorded_at, id), KEY idx_market_valuation_observed (recorded_at)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
 			},
 		},
 	}); err != nil {
@@ -545,6 +552,137 @@ VALUES (?,?,?,?,?,?,?,?,?)`,
 }
 
 // ListFundamentalsAsOf 读取截至系统观察时点、每个来源当时最新的报告版本。
+func valuationRevisionHash(snapshot model.ValuationSnapshot) (string, error) {
+	fingerprint := snapshot
+	fingerprint.FetchedAt = time.Time{}
+	fingerprint.SystemObservedAt = nil
+	fingerprint.Items = append([]model.ValuationItem(nil), snapshot.Items...)
+	for index := range fingerprint.Items {
+		fingerprint.Items[index].FetchedAt = time.Time{}
+	}
+	payload, err := json.Marshal(fingerprint)
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(payload)
+	return hex.EncodeToString(sum[:]), nil
+}
+
+func valuationRequestFingerprint(symbols []string) (string, error) {
+	if len(symbols) == 0 || len(symbols) > 100 {
+		return "", errors.New("valuation request fingerprint requires 1..100 symbols")
+	}
+	seen := make(map[string]struct{}, len(symbols))
+	for _, symbol := range symbols {
+		if symbol == "" {
+			return "", errors.New("valuation request fingerprint contains an empty symbol")
+		}
+		if _, exists := seen[symbol]; exists {
+			return "", errors.New("valuation request fingerprint contains duplicate symbols")
+		}
+		seen[symbol] = struct{}{}
+	}
+	payload, err := json.Marshal(symbols)
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(payload)
+	return hex.EncodeToString(sum[:]), nil
+}
+
+// SaveValuations 追加保存批量估值快照的内容修订；重复抓取相同内容不制造新版本。
+func (s *Store) SaveValuations(ctx context.Context, snapshot *model.ValuationSnapshot) error {
+	if s == nil || s.db == nil {
+		return nil
+	}
+	if snapshot == nil {
+		return errors.New("valuation snapshot is nil")
+	}
+	if strings.TrimSpace(snapshot.Source) == "" || strings.TrimSpace(snapshot.SourceVersion) == "" ||
+		snapshot.FetchedAt.IsZero() || snapshot.Total != len(snapshot.Items) {
+		return errors.New("valuation snapshot source, source_version, fetched_at or total is invalid")
+	}
+	fingerprint, err := valuationRequestFingerprint(snapshot.RequestedSymbols)
+	if err != nil {
+		return err
+	}
+	stored := *snapshot
+	stored.SystemObservedAt = nil
+	metadata, err := json.Marshal(&stored)
+	if err != nil {
+		return err
+	}
+	revisionHash, err := valuationRevisionHash(stored)
+	if err != nil {
+		return err
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin valuation revision transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	var latestHash string
+	lookupErr := tx.QueryRowContext(ctx, "SELECT revision_hash FROM market_data_valuation_versions WHERE request_fingerprint=? AND source=? ORDER BY recorded_at DESC, id DESC LIMIT 1 FOR UPDATE",
+		fingerprint, stored.Source).Scan(&latestHash)
+	if lookupErr != nil && !errors.Is(lookupErr, sql.ErrNoRows) {
+		return fmt.Errorf("read latest valuation revision for %s: %w", stored.Source, lookupErr)
+	}
+	if shouldRecordRevision(latestHash, lookupErr == nil, revisionHash) {
+		recordedAt := time.Now().UTC().Format("2006-01-02 15:04:05.999999")
+		_, err = tx.ExecContext(ctx, "INSERT INTO market_data_valuation_versions (request_fingerprint,source,revision_hash,recorded_at,fetched_at,quality_status,metadata) VALUES (?,?,?,?,?,?,?)",
+			fingerprint, stored.Source, revisionHash, recordedAt,
+			stored.FetchedAt.UTC().Format("2006-01-02 15:04:05.999999"), string(stored.QualityStatus), metadata)
+		if err != nil {
+			return fmt.Errorf("record valuation revision for %s: %w", stored.Source, err)
+		}
+	}
+	return tx.Commit()
+}
+
+// ListValuationsAsOf 返回系统观察截止时点前、每个 Provider 当时最新的同一请求快照。
+func (s *Store) ListValuationsAsOf(ctx context.Context, symbols []string, asOf time.Time) ([]model.ValuationSnapshot, error) {
+	if s == nil || s.db == nil {
+		return nil, errors.New("MariaDB valuation revision storage disabled")
+	}
+	if asOf.IsZero() {
+		return nil, errors.New("valuation as_of timestamp must not be zero")
+	}
+	fingerprint, err := valuationRequestFingerprint(symbols)
+	if err != nil {
+		return nil, err
+	}
+	asOfText := asOf.UTC().Format("2006-01-02 15:04:05.999999")
+	rows, err := s.db.QueryContext(ctx, "SELECT v.metadata, DATE_FORMAT(v.recorded_at, '%Y-%m-%d %H:%i:%s.%f') FROM market_data_valuation_versions AS v WHERE v.request_fingerprint=? AND v.recorded_at<=? AND NOT EXISTS (SELECT 1 FROM market_data_valuation_versions AS newer WHERE newer.request_fingerprint=v.request_fingerprint AND newer.source=v.source AND newer.recorded_at<=? AND (newer.recorded_at>v.recorded_at OR (newer.recorded_at=v.recorded_at AND newer.id>v.id))) ORDER BY v.recorded_at DESC, v.source ASC",
+		fingerprint, asOfText, asOfText)
+	if err != nil {
+		return nil, fmt.Errorf("query valuation revisions as of %s: %w", asOfText, err)
+	}
+	defer rows.Close()
+	out := []model.ValuationSnapshot{}
+	for rows.Next() {
+		var metadata []byte
+		var recordedAtText string
+		if err := rows.Scan(&metadata, &recordedAtText); err != nil {
+			return nil, err
+		}
+		var snapshot model.ValuationSnapshot
+		if err := json.Unmarshal(metadata, &snapshot); err != nil {
+			return nil, fmt.Errorf("decode valuation revision metadata: %w", err)
+		}
+		recordedAt, err := time.ParseInLocation("2006-01-02 15:04:05.000000", recordedAtText, time.UTC)
+		if err != nil {
+			return nil, fmt.Errorf("parse valuation record timestamp: %w", err)
+		}
+		snapshot.SystemObservedAt = &recordedAt
+		out = append(out, snapshot)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (s *Store) ListFundamentalsAsOf(ctx context.Context, symbol string, year, quarter int, asOf time.Time) ([]model.FundamentalsSnapshot, error) {
 	if s == nil || s.db == nil {
 		return nil, errors.New("MariaDB fundamentals revision storage disabled")

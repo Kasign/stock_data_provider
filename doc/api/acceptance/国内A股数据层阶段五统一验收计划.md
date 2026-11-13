@@ -1,10 +1,10 @@
 # 国内 A 股数据层阶段五统一验收计划
 
-> 本文为阶段五的专项实施与验收资料，不再作为整体任务入口。整体开发顺序、优先级和当前执行队列统一以 [数据侧整体规划](数据侧整体规划.md) 为准。本文保留阶段五诊断细节、专项验收工作包和历史证据；与整体排期冲突时以整体规划为准。
+> 本文为阶段五的专项实施与验收历史记录，不再作为整体任务入口。本文当前记录到 2026-11-05 P0 批次 48；2026-11-12 的 P0-86～P0-89、Fundamentals Probe 边界修复及 `source_version` 校验收敛统一维护在 [数据侧整体规划](数据侧整体规划.md) 和 [Runtime Acceptance Log](../provider-migration/DATA_SOURCE_RUNTIME_ACCEPTANCE_LOG.md)。本文保留历史工作包和证据，不得从较早章节的旧待办重复派发任务。
 
 - 目标分支：`feat/full-go-data-providers-api-switch`
 - 阶段定位：阶段五统一验收，不以“代码已实现”替代真实数据验收。
-- 当前状态（2026-11-10，代码基线 `df6b4f24e0d5fc7e7d5de2cacb0c965ac0504d06`）：统一诊断框架、Provider 字段 Reporter、Probe Reporter 注入与历史持久化、DailyBar 跨 Provider 比较、多复权口径 Probe 参数/结果字段均已有实现；本基线继续补齐 Eastmoney 核心指数行情 Reporter，并完成 Probe Reporter 调用链静态 Review。阶段 B（复权绝对基准、AvailableAt 与真实交易边界证据）仍为 in_progress；阶段五不得因代码覆盖扩大而自动关闭。开发分支未运行构建/测试，CI 与真实 Provider/MariaDB 验收状态必须以该 SHA 对应 workflow 和专项证据为准。较早章节的待办表属于历史快照，不得作为当前任务重复执行。
+- 当前状态（2026-11-12，Data 代码验收基线 `9fe53c43c6c32408bbf59eb8c3c627b18a9bfe24`）：Go Test Suite Run `43231652148` success，MariaDB Job 已覆盖 Fundamentals/Valuations Repository 历史修订、as_of 和重启读回；Go-Python parity Run `43228986785`、BaoStock Live Provider Run `43228986723` 均 success。BaoStock 专项明确 PASS，详见数据侧整体规划 P0-89 和 Runtime Log 第 72 节。阶段 B 仍因 DailyBar 复权绝对参考基准缺证而 in_progress；较早章节的待办表属于历史快照，不得作为当前任务重复执行。
 - 原则：每项结论必须绑定代码 SHA、样本范围、原始响应证据和质量判定；凭据不得进入文档或日志。
 - Data 代码验收补充（2026-11-12）：代码 SHA `f919b4f8568181706053639032cb38fc75a131fb` 的 Go Test Suite Run `43143964508` 中 Data gofmt、单测、Race、Vet 及 MariaDB/PIT、DailyBar 回退、PIT 修订回退、Probe HTTP + MariaDB 端到端均通过。该结果只关闭本轮 Data 代码门禁，不关闭阶段 B 的真实 Provider 复权基准、AvailableAt 和交易边界证据验收。
 
@@ -401,3 +401,17 @@
 - Pytdx 协议解码将 float32 成交额乘以 1000 后转为 `Price`（厘），Go 整数转换会截断不足 0.001 CNY 的部分。因此 Pytdx 绝对误差上界应为半个 float32 ULP + 0.001 CNY；BaoStock 4 位小数且舍入方式未明确，保守取 0.0001 CNY。
 - 内部字段改为 `AmountErrorBound`，比较容差改为两侧绝对误差上界之和。新增 100,000 CNY 小额边界测试，Pytdx error bound=0.00490625 CNY；真实样本两证券仍各 54/54 字段 matched。
 - 代码 SHA `95383503` 的 Push Go suite `42027994789`、PR Go suite `42028409432`、Parity `42028409433`、WebUI checks `42028409422` 均 success。PR Live Provider Probe `42028409554` 外层 success，但历史专项均 skipped；WebUI 契约无变化。
+
+
+## 2026-11-12 后续代码验收补充
+
+- 当前 Data 分支 HEAD `bcc36efbdbee0c74bf2a1f8439943926a2f47a46` 的 Go Test Suite Run `43226759988` success：Data gofmt/tests/race/vet、Root Go tests/race/vet、MariaDB migration/PIT persistence 均通过。
+- 本次仅修复 Fundamentals Probe 报告期校验年份和 Fundamentals/Valuations `source_version=unknown` 的 Reporter/Service 判定一致性；不代表阶段 B 真实 Provider 复权基准与 BaoStock 字段语义验收关闭。
+## 2026-11-13 P1：PIT 存储故障与历史版本缺失分类
+
+- PIT Repository 查询故障统一包装为 `ErrPITStorageFailure`；DailyBar、AdjustmentFactor、CorporateAction、Fundamentals、Valuations、SecurityTradingStatus 的 PIT 读取不再把数据库查询错误当作“无历史版本”。
+- DailyBarsAsOf 的复权因子读取现在区分存储故障与可见因子缺失：前者保留存储故障语义，后者才归入 `PIT_REVISION_NOT_FOUND`。
+- HTTP `writeDomainErr` 将 `ErrPITStorageFailure` 映射为 `503 PIT_STORAGE_UNAVAILABLE`、`retryable=true`；用户主动取消请求仍保留取消语义。
+- 新增关闭 SQL 连接池的 HTTP 回归测试，覆盖 DailyBar、Fundamentals、SecurityTradingStatus 三个 PIT 接口，确认数据库查询失败返回 503，而不是 502 Provider 错误。
+- 验收代码 SHA：`277895d01695422cc50875e8778268653eda96f7`。Go Test Suite Run `43348782880` 全部 Job success；Data 根模块 gofmt、tests、race、vet 全部 success；MariaDB Job `131634603762` success，包含 Repository PIT、DailyBar fallback、AdjustmentFactor/CorporateAction Service PIT 回退、Fundamentals HTTP→MariaDB PIT 和 Probe HTTP→MariaDB 联调。
+- 本批只修复 PIT 读取故障分类，不改变“无可见历史版本”时的 404 语义，不改变 Provider 选择、数据质量门槛或 Freshness SLA。阶段 E 的跨域时间关联、独立 Freshness SLA 和其他 DB/Cache 降级验收仍未关闭。

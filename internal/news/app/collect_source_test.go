@@ -94,7 +94,8 @@ func TestCollectSourceFeedSuccessUsesRegisteredEndpointAndPolicy(t *testing.T) {
 	if transport.calls != 1 || transport.sourceID != "source-1" || transport.endpointID != "rss-main" {
 		t.Fatalf("transport selection=%+v", transport)
 	}
-	if result.SourcePolicyVersionID != "source-policy-v3" || result.EndpointPolicyVersionID != "" ||
+	if result.CollectionPurpose != validCollectRequest().Purpose ||
+		result.SourcePolicyVersionID != "source-policy-v3" || result.EndpointPolicyVersionID != "" ||
 		!result.PolicyEvaluatedAt.Equal(time.Date(2026, 11, 5, 10, 0, 0, 0, time.UTC)) {
 		t.Fatalf("policy trace=%+v", result)
 	}

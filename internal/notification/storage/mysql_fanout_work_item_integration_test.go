@@ -21,7 +21,7 @@ func TestNotificationMariaDBFanoutWorkItemIntegration(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	db, err := openNotificationIntegrationDB(ctx, dsn)
+	db, err := openNotificationIntegrationDB(t, ctx, dsn)
 	if err != nil {
 		t.Fatalf("open MariaDB through Platform Storage: %v", err)
 	}
@@ -75,9 +75,14 @@ func TestNotificationMariaDBFanoutWorkItemIntegration(t *testing.T) {
 		second.WorkItem.SnapshotRevision != first.WorkItem.SnapshotRevision {
 		t.Fatalf("reclaim must preserve snapshot/cursor and increase fencing: first=%+v second=%+v", first.WorkItem, second.WorkItem)
 	}
-	if err := fanout.RetryWithLease(ctx, second, time.Now().UTC().Add(-time.Second).Truncate(time.Microsecond),
+	retryAt := time.Now().UTC().Add(100 * time.Millisecond).Truncate(time.Microsecond)
+	if err := fanout.RetryWithLease(ctx, second, retryAt,
 		"notification.fanout.integration_retry", false); err != nil {
 		t.Fatalf("schedule fanout retry: %v", err)
+	}
+	wait := time.Until(retryAt.Add(10 * time.Millisecond))
+	if wait > 0 {
+		time.Sleep(wait)
 	}
 	third, claimed, err := fanout.ClaimDue(ctx, "fanout-worker-3", time.Minute)
 	if err != nil || !claimed {
@@ -124,7 +129,7 @@ func TestNotificationMariaDBSubscriptionRevisionSnapshotIntegration(t *testing.T
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	db, err := openNotificationIntegrationDB(ctx, dsn)
+	db, err := openNotificationIntegrationDB(t, ctx, dsn)
 	if err != nil {
 		t.Fatalf("open MariaDB through Platform Storage: %v", err)
 	}
