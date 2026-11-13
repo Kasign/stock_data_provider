@@ -2,7 +2,7 @@
 
 > 当前验收状态（2026-11-12，News 分支 HEAD：`a8a3763e5dc662d856a438c52a0b1a28975def43`）：NEWS-CTR-002 显式 `risk_review` 用途映射修复及对应测试已通过当前 HEAD 的 CI。News Provider contract workflow Run `43219930444`：Provider contract tests、完整 News 模块测试均 success，包含 gofmt、单测、Race、Vet；Go test suite Run `43219930418`：News MariaDB Repository and Migration integration、根模块 `Test .`、Researchflow 相关测试及 `Test go-core` 均 success。Compose/Docker 与 Market Data 专项 jobs 按条件 skipped，不计为通过。两条 Run 的 `head_sha` 均与当前 HEAD 完全一致。PR [#88](https://github.com/Kasign/stock_data_provider/pull/88) 的历史合并记录不代表本轮再次合并；本轮未执行分支合并。
 
-> 当前模块状态：News 自有领域代码质量门禁、Provider 固定响应契约和 MariaDB 11.4 持久化专项验收已有通过证据；生产受限内容披露仍受公共 JCS Runtime Verifier 注入和 Server 生产装配阻断；News 内部的策略指针锁定、授权复核与精确 Version 正文读取事务机制已实现。NEWS-CTR-001 的 available_at 严格 PIT 继续等待合格来源证据，不得从 published_at/fetched_at/observed_at 推导。
+> 当前模块状态：News 自有领域代码质量门禁、Provider 固定响应契约和 MariaDB 11.4 持久化专项验收已有通过证据；公共 JCS Runtime Verifier 与 News 适配器已在 integration 实现，并以 GOV-CTR-006 四份 Golden 为验收向量；Server 生产装配尚未注入该 Verifier，受限内容披露仍保持关闭；News 内部的策略指针锁定、授权复核与精确 Version 正文读取事务机制已实现。NEWS-CTR-001 的 available_at 严格 PIT 继续等待合格来源证据，不得从 published_at/fetched_at/observed_at 推导。
 > 历史记录说明：本文按日期累积的早期实施段落保留为过程记录；其中旧的未完成项、等待 CI 项和旧阻断状态不代表当前任务状态。当前状态以本段及文末“2026-11-12 当前任务边界与后续计划”为准。
 > 状态：本分支只维护 News 领域实现和专项文档；公共平台原语来自共同基线，根组合根由 Server 实施分支负责。
 
@@ -118,6 +118,7 @@
 
 - [x] Config/Secret：News 定义独立配置结构，复用 Platform Env/Secret；真实仓库根 Go 测试已通过，Provider 凭证不存入新闻表或日志。
 - [x] Error/Request ID：Provider 与 Source 适配器映射 Platform Fault，保留稳定 Code/Retryable，不透传 Cause；Request ID 由 Platform Client 从验证过的 Context 传播。Logger/Trace 结构化字段接入仍待验收。
+- [x] GOV-CTR-006 Runtime Verifier：integration 的 `internal/platform/authorization` 使用 RFC 8785 JCS + SHA-256 重建并验证完整策略快照指纹；News 通过 `internal/news/adapters/platform` 实现窄 Port 适配，AuthorizationRef 与 PolicySnapshot 均保留 `schema_version=1.0.0`。四份项目 Golden 和 News 绑定 Golden 已纳入运行时测试；Server 注入与最新 SHA CI 通过后才可解除受限内容披露门禁。
 - [x] HTTP Client 模块适配：Provider/Source 均已新增 Platform Client + DestinationPolicy 适配器；生产组合根注入和公网 DNS/出口验收仍待完成。
 - [ ] Security：当前同进程 Application 不引入 Service Key；未来既有 HTTP API 暴露新闻操作时，由该 API 统一认证和 Scope 授权。
 - [ ] 不导入平台未冻结的内部实现路径；公共契约变更通过版本和接入评审处理。
