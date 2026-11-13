@@ -10,10 +10,17 @@ import (
 )
 
 type memoryIdentityRepository struct {
-	credentials  []domain.IdentityCredential
-	observations []domain.Observation
-	items        []string
-	failAppend   bool
+	credentials                   []domain.IdentityCredential
+	observations                  []domain.Observation
+	items                         []string
+	failAppend                    bool
+	sourcePolicy                  domain.SourcePolicy
+	sourcePolicyVersionID         string
+	endpointPolicy                *domain.EndpointPolicy
+	endpointPolicyVersionID       string
+	providerOutputPolicy          domain.ProviderOutputPolicy
+	providerOutputPolicyRef       string
+	providerOutputPolicyVersionID string
 }
 
 type memoryIdentityTransaction struct {
@@ -33,6 +40,25 @@ func (r *memoryIdentityRepository) WithinIdentityTransaction(ctx context.Context
 	}
 	*r = working
 	return nil
+}
+
+func (tx memoryIdentityTransaction) LockCurrentIngestPolicies(
+	_ context.Context,
+	sourceID, sourceVersionID, endpointID, endpointVersionID, providerRef, providerVersion string,
+) (domain.SourcePolicy, *domain.EndpointPolicy, *domain.ProviderOutputPolicy, error) {
+	repository := tx.repository
+	if repository == nil || sourceID == "" || endpointID == "" ||
+		repository.sourcePolicyVersionID != sourceVersionID ||
+		repository.endpointPolicyVersionID != endpointVersionID ||
+		repository.providerOutputPolicyRef != providerRef ||
+		repository.providerOutputPolicyVersionID != providerVersion {
+		return domain.SourcePolicy{}, nil, nil, ErrSourcePersistencePolicyUnavailable
+	}
+	if providerRef == "" {
+		return repository.sourcePolicy, repository.endpointPolicy, nil, nil
+	}
+	providerPolicy := repository.providerOutputPolicy
+	return repository.sourcePolicy, repository.endpointPolicy, &providerPolicy, nil
 }
 
 func (tx memoryIdentityTransaction) FindIdentityCredentials(_ context.Context, sourceID string, candidates []domain.IdentityCredential) ([]domain.IdentityCredential, error) {

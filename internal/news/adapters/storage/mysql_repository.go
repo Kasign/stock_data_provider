@@ -49,7 +49,7 @@ func (r *MySQLRepository) WithinIdentityTransaction(ctx context.Context, fn func
 	if r == nil || r.db == nil || ctx == nil || fn == nil {
 		return app.ErrInvalidRequest
 	}
-	return r.withTransaction(ctx, "", func(tx *sql.Tx, acquire func(string) error) error {
+	return r.withTransaction(ctx, "", &sql.TxOptions{Isolation: sql.LevelRepeatableRead}, func(tx *sql.Tx, acquire func(string) error) error {
 		return fn(&mysqlNewsTransaction{tx: tx, acquire: acquire})
 	})
 }
@@ -58,7 +58,7 @@ func (r *MySQLRepository) WithinResearchUpdateTransaction(ctx context.Context, f
 	if r == nil || r.db == nil || ctx == nil || fn == nil {
 		return app.ErrInvalidRequest
 	}
-	return r.withTransaction(ctx, "", func(tx *sql.Tx, acquire func(string) error) error {
+	return r.withTransaction(ctx, "", nil, func(tx *sql.Tx, acquire func(string) error) error {
 		return fn(&mysqlNewsTransaction{tx: tx, acquire: acquire})
 	})
 }
@@ -70,7 +70,7 @@ func (r *MySQLRepository) WithinNewsItemRelationTransaction(ctx context.Context,
 	// The relation graph is cross-news and the current Application port reads
 	// the complete graph. A single advisory lock prevents concurrent writers
 	// from validating against stale graph snapshots.
-	return r.withTransaction(ctx, "news_item_relation_graph", func(tx *sql.Tx, acquire func(string) error) error {
+	return r.withTransaction(ctx, "news_item_relation_graph", nil, func(tx *sql.Tx, acquire func(string) error) error {
 		return fn(&mysqlNewsTransaction{tx: tx, acquire: acquire})
 	})
 }
@@ -83,6 +83,7 @@ type mysqlNewsTransaction struct {
 func (r *MySQLRepository) withTransaction(
 	ctx context.Context,
 	initialLock string,
+	options *sql.TxOptions,
 	fn func(*sql.Tx, func(string) error) error,
 ) (resultErr error) {
 	conn, err := r.db.Conn(ctx)
@@ -133,7 +134,7 @@ func (r *MySQLRepository) withTransaction(
 		}
 	}
 
-	tx, err := conn.BeginTx(ctx, nil)
+	tx, err := conn.BeginTx(ctx, options)
 	if err != nil {
 		if releaseErr := releaseLocks(); releaseErr != nil {
 			return errors.Join(err, releaseErr)
@@ -645,7 +646,7 @@ func (r *MySQLRepository) PurgeExpiredObservationPayloads(ctx context.Context, n
 		return app.ObservationPayloadPurgeResult{}, app.ErrInvalidRequest
 	}
 	result := app.ObservationPayloadPurgeResult{}
-	err := r.withTransaction(ctx, "news_observation_retention", func(tx *sql.Tx, _ func(string) error) error {
+	err := r.withTransaction(ctx, "news_observation_retention", nil, func(tx *sql.Tx, _ func(string) error) error {
 		rows, err := tx.QueryContext(ctx, `SELECT observation_id FROM news_observations
 			WHERE retention_until IS NOT NULL AND retention_until <= ? AND payload_purged_at IS NULL
 			ORDER BY retention_until, observation_id LIMIT ? FOR UPDATE SKIP LOCKED`, now.UTC(), limit)
@@ -730,6 +731,8 @@ var requiredNewsSchemaTables = []string{
 	"news_item_relations",
 	"news_authorization_snapshots",
 	"news_evidence_snapshots",
+	"news_policy_versions",
+	"news_current_policy_versions",
 }
 
 // Ping verifies the borrowed SQL pool without taking ownership of it.

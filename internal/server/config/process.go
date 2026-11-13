@@ -9,16 +9,18 @@ import (
 )
 
 // Process 是 Bootstrap 使用的不可变进程配置快照。
-// 领域模块配置仍由模块自己的配置入口解析，避免 Server 接管领域参数所有权。
+// 领域模块配置仍由各自模块的配置入口解析，避免 Server 接管领域参数 Schema。
 type Process struct {
-	LogLevel          string
-	AnalysisTimeout   time.Duration
-	AnalysisWorkers   int
-	AnalysisMaxQueued int
-	Role              Role
-	Migration         Migration
-	Security          Security
-	HTTP              HTTP
+	LogLevel                  string
+	AnalysisTimeout           time.Duration
+	AnalysisWorkers           int
+	AnalysisMaxQueued         int
+	Role                      Role
+	Migration                 Migration
+	Security                  Security
+	HTTP                      HTTP
+	ResearchNotificationRelay ResearchNotificationRelay
+	ResearchflowCapacity      ResearchflowCapacity
 }
 
 // LoadProcess 在启动阶段一次性解析 Server 进程级配置。
@@ -67,6 +69,14 @@ func LoadProcess(env platformconfig.Env) (Process, error) {
 		if cfg.HTTP, err = LoadHTTP(env, cfg.AnalysisTimeout); err != nil {
 			return Process{}, err
 		}
+	}
+	if cfg.Role != RoleAPI {
+		if cfg.ResearchNotificationRelay, err = LoadResearchNotificationRelay(env); err != nil {
+			return Process{}, err
+		}
+	}
+	if cfg.ResearchflowCapacity, err = LoadResearchflowCapacity(env); err != nil {
+		return Process{}, err
 	}
 	return cfg, nil
 }

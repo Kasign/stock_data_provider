@@ -19,6 +19,8 @@ Context 的 system_as_of 必须与所属 Researchflow Run 完全一致；不得�
 
 Research 定义分区结构、质量和语义校验；Researchflow 决定本次 Run 选取哪些分区、顺序、Token Budget 和裁剪策略。裁剪必须保留来源引用、时间、反证、unknown 和风险限制。required 分区缺失时 Context 不得标 valid；每个 omitted section 必须有稳定 reason_code。
 
+**Context 受控读取：** 按 DEC-PLAT-002-024，Context 元数据本身属于受控 Research 资源。Application 的 ContextRef 只定位不可变版本，不构成读取许可。GetContext 必须单独接收 Server/可信入口注入的 caller_ref 与受控 purpose，并由 Research Owner ContextAuthorizer 对精确版本的 scope、subject_refs 和当前可见范围进行复核；未装配授权器、拒绝、unknown 或依赖不可用均不得返回 Context。此门禁与 section_refs 中各 Data/News/Quant 来源内容的授权是两层独立检查：Context 可见不代表其来源正文可读，来源 Owner 仍须在读取内容时重新授权。当前冻结决议尚未定义 Context 专用 resource_ref 拼接语法和策略注册表结构，不在 Research 中擅自增加。
+
 ## 3. Evidence 字段和认识论约束
 
 Evidence DTO 的规范字段如下。RSC-CTR-001 的 Schema `$id` 标识 1.0.0 版本，JSON payload 不包含 schema_version。旧文档中的 source_type、observed_at、as_of、content_hash 仅为早期概念草稿，不作为跨模块 JSON 字段：
@@ -29,7 +31,7 @@ Evidence DTO 的规范字段如下。RSC-CTR-001 的 Schema `$id` 标识 1.0.0 �
 | evidence_type | 必填 | fact/reported_fact/inference/hypothesis/unknown |
 | source_owner | 必填 | data/news/quant/research |
 | source_ref | 必填 | 上游资源或来源对象引用 |
-| source_version | 条件必填 | 上游资源可版本化时必须提供 |
+| source_version | 条件必填 | 上游资源可版本化时必须提供；News Evidence 固定引用不可变 VersionID，因此 `source_owner=news` 时必填 |
 | source_locator | 可选 | 内容定位符；不得放未授权正文 |
 | derived_from_refs | 必填数组 | 直接上游 Evidence 引用；fact/reported_fact 可为空，inference/hypothesis 必须非空 |
 | claim_ref | nullable | 关联 Claim |
@@ -167,3 +169,8 @@ INT-CTR-001 已接受 `lifecycle_changed` Payload 映射：`source_event_ref`、
 ### RSC-OPEN-007：Evidence 授权快照续期与存储幂等边界
 
 Evidence.content_fingerprint 排除 authorization_ref，而存储层 payload_sha256 覆盖完整 DTO。相同 evidence_id、相同内容但不同 AuthorizationRef 会导致内容指纹相同、完整 payload 摘要不同。当前已采用完整 DTO 不可变、冲突拒绝策略；不允许原地覆盖历史 AuthorizationRef，也不自动生成替代 evidence_id。若要持久化授权续期历史，须由项目契约定义独立授权记录或关联结构。该待决项不阻断当前 Evidence Append/Get；它仅阻断“同一 Evidence ID 下授权续期可追溯”的额外能力。
+
+
+### News Evidence 版本引用门禁
+
+NEWS-CTR-001 的 `ResearchEvidenceRecord` 必须返回不可变 `VersionID`。因此 Research 消费 News 时，`source_owner=news` 的 Evidence 必须提供 `source_version`；缺失时在 Evidence Domain Validator 拒绝，不允许以 `source_ref` 或 `source_locator` 替代版本身份。该规则是 RSC-CTR-001“上游资源可版本化时 source_version 必填”的具体化，不新增字段或跨模块契约。

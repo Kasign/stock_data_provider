@@ -92,6 +92,73 @@ func TestResearchEventNormalizedTimesNeedSourceTimeTrace(t *testing.T) {
 	}
 }
 
+func TestResearchEventNormalizedTimeMustMatchAllSourceEvidence(t *testing.T) {
+	t.Run("reject duplicate source and time type", func(t *testing.T) {
+		value := validEvent(t)
+		value.SourceTimes = append(value.SourceTimes, value.SourceTimes[0])
+		if err := value.Validate(); err == nil || !strings.Contains(err.Error(), "duplicate evidence/time_type pair") {
+			t.Fatalf("duplicate source/time pair should fail, got %v", err)
+		}
+	})
+	t.Run("reject normalized value that differs from source", func(t *testing.T) {
+		value := validEvent(t)
+		wrong := value.OccurredAt.Add(time.Second)
+		value.OccurredAt = &wrong
+		if err := value.Validate(); err == nil || !strings.Contains(err.Error(), "conflicts with source_times") {
+			t.Fatalf("normalized value that differs from source should fail, got %v", err)
+		}
+	})
+	t.Run("reject conflicting source values when normalized value is present", func(t *testing.T) {
+		value := validEvent(t)
+		other := value.SourceTimes[0]
+		other.EvidenceRef = "evidence:news:0002"
+		other.Value = other.Value.Add(time.Minute)
+		value.EvidenceRefs = append(value.EvidenceRefs, other.EvidenceRef)
+		value.SourceTimes = append(value.SourceTimes, other)
+		if err := value.Validate(); err == nil || !strings.Contains(err.Error(), "normalized value must be null") {
+			t.Fatalf("conflicting sources must reject a normalized value, got %v", err)
+		}
+	})
+	t.Run("allow conflicting source values only when normalized value is null", func(t *testing.T) {
+		value := validEvent(t)
+		value.OccurredAt = nil
+		other := value.SourceTimes[0]
+		other.EvidenceRef = "evidence:news:0002"
+		other.Value = other.Value.Add(time.Minute)
+		value.EvidenceRefs = append(value.EvidenceRefs, other.EvidenceRef)
+		value.SourceTimes = append(value.SourceTimes, other)
+		if err := value.Validate(); err != nil {
+			t.Fatalf("conflicting source values with null normalized value should pass: %v", err)
+		}
+	})
+	t.Run("allow agreeing values from multiple sources", func(t *testing.T) {
+		value := validEvent(t)
+		other := value.SourceTimes[0]
+		other.EvidenceRef = "evidence:news:0002"
+		value.EvidenceRefs = append(value.EvidenceRefs, other.EvidenceRef)
+		value.SourceTimes = append(value.SourceTimes, other)
+		if err := value.Validate(); err != nil {
+			t.Fatalf("agreeing source values should pass: %v", err)
+		}
+	})
+
+	t.Run("require normalized value when source values agree", func(t *testing.T) {
+		value := validEvent(t)
+		value.OccurredAt = nil
+		if err := value.Validate(); err == nil || !strings.Contains(err.Error(), "must equal the consensus source_times value") {
+			t.Fatalf("consensus source time without normalized value should fail, got %v", err)
+		}
+	})
+
+	t.Run("reject unregistered normalization rule version", func(t *testing.T) {
+		value := validEvent(t)
+		value.TimeNormalizationRuleVersion = "2.0.0"
+		if err := value.Validate(); err == nil || !strings.Contains(err.Error(), "unsupported time_normalization_rule_version") {
+			t.Fatalf("unregistered rule version should fail, got %v", err)
+		}
+	})
+}
+
 func TestResearchEventVersionMustAppendAndPreserveLifecycle(t *testing.T) {
 	previous := validEvent(t)
 	next := previous
