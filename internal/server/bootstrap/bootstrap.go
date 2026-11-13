@@ -316,7 +316,7 @@ func newResearchflowNotificationRelay(
 	}
 	outbox, err := researchflowstorage.NewMySQLRunRepository(shared.DB, researchflowstorage.CapacityLimits{
 		MaxQueuedRuns: capacity.MaxQueuedRuns,
-		MaxWorkers: capacity.MaxWorkers,
+		MaxWorkers:    capacity.MaxWorkers,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("创建 Researchflow Outbox Store 失败: %w", err)
