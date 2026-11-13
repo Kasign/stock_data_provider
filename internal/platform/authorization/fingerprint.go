@@ -24,8 +24,9 @@ type policyVersion struct {
 }
 
 type policySnapshot struct {
-	SnapshotRef string          `json:"snapshot_ref"`
-	Policies    []policyVersion `json:"policies"`
+	SnapshotRef   string          `json:"snapshot_ref"`
+	Policies      []policyVersion `json:"policies"`
+	SchemaVersion string          `json:"schema_version"`
 }
 
 // VerifyFingerprint verifies the GOV-CTR-006 decision fingerprint.
@@ -80,7 +81,7 @@ func fingerprintFromObjects(authorizationRef, snapshot []byte) ([]byte, error) {
 	}
 	var policy policySnapshot
 	if err := json.Unmarshal(snapshot, &policy); err != nil ||
-		policy.SnapshotRef == "" || len(policy.Policies) == 0 {
+		policy.SnapshotRef == "" || policy.SchemaVersion != "1.0.0" || len(policy.Policies) == 0 {
 		return nil, ErrInvalidAuthorizationFingerprint
 	}
 	var policyVersion string
@@ -88,7 +89,8 @@ func fingerprintFromObjects(authorizationRef, snapshot []byte) ([]byte, error) {
 		policyVersion == "" || policyVersion != policy.SnapshotRef {
 		return nil, ErrInvalidAuthorizationFingerprint
 	}
-	if _, ok := ref["schema_version"]; !ok {
+	var schemaVersion string
+	if err := json.Unmarshal(ref["schema_version"], &schemaVersion); err != nil || schemaVersion != "1.0.0" {
 		return nil, ErrInvalidAuthorizationFingerprint
 	}
 

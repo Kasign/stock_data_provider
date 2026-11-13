@@ -47,7 +47,7 @@ func TestVerifyFingerprintGOV006Goldens(t *testing.T) {
 
 func TestVerifyFingerprintRejectsChangedPolicyVersion(t *testing.T) {
 	ref := []byte(`{"schema_version":"1.0.0","policy_version":"snapshot-1","decision_fingerprint":"0000000000000000000000000000000000000000000000000000000000000000"}`)
-	snapshot := []byte(`{"snapshot_ref":"snapshot-1","policies":[{"policy_type":"source","policy_ref":"source-1","policy_version":"1.0.1"}]}`)
+	snapshot := []byte(`{"schema_version":"1.0.0","snapshot_ref":"snapshot-1","policies":[{"policy_type":"source","policy_ref":"source-1","policy_version":"1.0.1"}]}`)
 	if err := VerifyFingerprint(ref, snapshot); err == nil {
 		t.Fatal("VerifyFingerprint() accepted a mismatched decision fingerprint")
 	}
@@ -55,7 +55,7 @@ func TestVerifyFingerprintRejectsChangedPolicyVersion(t *testing.T) {
 
 func TestVerifyFingerprintRejectsUnorderedPolicySnapshot(t *testing.T) {
 	ref := []byte(`{"schema_version":"1.0.0","policy_version":"snapshot-1","decision_fingerprint":"0000000000000000000000000000000000000000000000000000000000000000"}`)
-	snapshot := []byte(`{"snapshot_ref":"snapshot-1","policies":[{"policy_type":"source","policy_ref":"z","policy_version":"1"},{"policy_type":"source","policy_ref":"a","policy_version":"1"}]}`)
+	snapshot := []byte(`{"schema_version":"1.0.0","snapshot_ref":"snapshot-1","policies":[{"policy_type":"source","policy_ref":"z","policy_version":"1"},{"policy_type":"source","policy_ref":"a","policy_version":"1"}]}`)
 	if err := VerifyFingerprint(ref, snapshot); err == nil {
 		t.Fatal("VerifyFingerprint() accepted an unordered policy snapshot")
 	}
@@ -63,7 +63,7 @@ func TestVerifyFingerprintRejectsUnorderedPolicySnapshot(t *testing.T) {
 
 func TestVerifyFingerprintRejectsDuplicateJSONMembers(t *testing.T) {
 	ref := []byte(`{"schema_version":"1.0.0","policy_version":"snapshot-1","policy_version":"snapshot-1","decision_fingerprint":"0000000000000000000000000000000000000000000000000000000000000000"}`)
-	snapshot := []byte(`{"snapshot_ref":"snapshot-1","policies":[{"policy_type":"source","policy_ref":"source-1","policy_version":"1"}]}`)
+	snapshot := []byte(`{"schema_version":"1.0.0","snapshot_ref":"snapshot-1","policies":[{"policy_type":"source","policy_ref":"source-1","policy_version":"1"}]}`)
 	if err := VerifyFingerprint(ref, snapshot); err == nil {
 		t.Fatal("VerifyFingerprint() accepted duplicate JSON members")
 	}

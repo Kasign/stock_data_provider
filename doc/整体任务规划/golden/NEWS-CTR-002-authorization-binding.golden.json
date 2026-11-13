@@ -21,7 +21,8 @@
       "conditions": [
         "attribution_required"
       ],
-      "decision_fingerprint": "e670e585c55d89ea127f09a2745361c5c1d3dd39c350365c4db4f8c3dc2cd92b"
+      "decision_fingerprint": "95056f186fbc7f45a5cb2b10cd5ea81217d11f25a0e487a80800cd648e2a0db7",
+      "schema_version": "1.0.0"
     },
     "policy_snapshot": {
       "snapshot_ref": "policy-snapshot:news:evidence:v1",
