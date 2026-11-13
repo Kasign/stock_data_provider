@@ -84,9 +84,9 @@ func fingerprintFromObjects(authorizationRef, snapshot []byte) ([]byte, error) {
 		policy.SnapshotRef == "" || policy.SchemaVersion != "1.0.0" || len(policy.Policies) == 0 {
 		return nil, ErrInvalidAuthorizationFingerprint
 	}
-	var policyVersion string
-	if err := json.Unmarshal(ref["policy_version"], &policyVersion); err != nil ||
-		policyVersion == "" || policyVersion != policy.SnapshotRef {
+	var snapshotRef string
+	if err := json.Unmarshal(ref["policy_version"], &snapshotRef); err != nil ||
+		snapshotRef == "" || snapshotRef != policy.SnapshotRef {
 		return nil, ErrInvalidAuthorizationFingerprint
 	}
 	var schemaVersion string
