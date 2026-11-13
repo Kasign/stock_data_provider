@@ -4,9 +4,10 @@
 - 当前工作分支：integration
 - 本文更新日期：2026-11-13
 - 本文用途：下一轮新聊天的首要接续入口。新聊天先读本文，再核对 GitHub 当前 HEAD/CI；不得直接假设本文 SHA 仍是最新。
-- 本轮验收 HEAD：23d07e7716aa6d7cd7f0fda4d3dbfa178c148a4e
-- 对应 Integration CI Run：43362987745，结论 success，head_sha 与验收 SHA 完全一致。
-- CI 链接：https://github.com/Kasign/stock_data_provider/actions/runs/43362987745
+- 本轮代码验收 HEAD：19394e856c6909b50a3eb664c2d565262fe2e8a2
+- 对应 Integration CI Run：43364123334，结论 success，head_sha 与代码验收 SHA 完全一致。
+- CI 链接：https://github.com/Kasign/stock_data_provider/actions/runs/43364123334
+- 本文及其他交接文档在代码验收后另有 docs-only 更新；新聊天仍须重新核对当前 integration HEAD。
 
 ## 1. 当前已完成的工作
 
@@ -31,7 +32,7 @@ NEWS-CTR-002 DTO 和 Golden 已补齐 AuthorizationRef.schema_version 与 Policy
 
 ### 1.3 本轮 CI 验收
 
-Run 43362987745 对 SHA 23d07e7 全部通过：
+Run 43362987745 对 SHA 23d07e7 的 GOV-CTR-006/News 代码全量通过；其后 Run 43364123334 对 SHA 19394e8 的游标密钥配置代码全量通过：
 
 - 全仓 Go 格式检查；
 - Root Module go vet ./...、go test ./...；
@@ -117,7 +118,7 @@ Researchflow 已有 Scheduler、Worker、WorkerPool、Claim/Lease/Fencing、候�
 
 按顺序推进，一次只处理一条真实依赖链：
 
-1. News 游标密钥配置已完成代码入口：NEWS_EVIDENCE_CURSOR_ACTIVE_KEY_ID + NEWS_EVIDENCE_CURSOR_KEYRING_JSON；已实现缺失/非法/轮换 Key 基本校验、Secret 防泄漏和防御性副本。下一步由 CI 验收，并在 Server Bootstrap 装配 EvidenceCursorCodec 时消费该配置；轮换需保留旧 Key 至少 15 分钟。
+1. News 游标密钥配置代码与测试已完成并通过 Run 43364123334：NEWS_EVIDENCE_CURSOR_ACTIVE_KEY_ID + NEWS_EVIDENCE_CURSOR_KEYRING_JSON；覆盖缺失/非法配置、Active Key 校验、Secret 防泄漏和防御性副本。下一步由 Server Bootstrap 装配 EvidenceCursorCodec 时消费该配置；轮换需保留旧 Key 至少 15 分钟。
 2. News/Research 组合构造：在 Server Composition 层构造共享 DB 上的 News Repository、公共 Verifier、当前策略复核器、Get/List Evidence Facade、Research Repository 和 Research Service，再构造已有 Research News Importer/Authorizer。所有必需依赖均为真实实现。
 3. 装配验收：为构造入口补 Bootstrap/Composition 测试；使用真实 MariaDB 集成验证从 News 授权快照读取、当前策略复核到 Research Evidence 持久化的调用链。测试应覆盖指纹篡改、策略撤销、PIT 不可见、事务失败和 Context 取消。
 4. Researchflow Stage 接入：先读取当前冻结 Stage/Template/Output Registry 契约及真实模块代码。只有具体 Stage 输入/输出、Registry 版本、可信 CallerRef 和生产 Provider 均明确后才接入；不创建空壳 StageExecutor。

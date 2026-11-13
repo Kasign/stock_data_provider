@@ -1,6 +1,6 @@
 # 新闻模块开发任务与验收清单
 
-> **Integration 接入状态（2026-11-13）**：integration HEAD 23d07e7716aa6d7cd7f0fda4d3dbfa178c148a4e 的全量 CI Run [43362987745](https://github.com/Kasign/stock_data_provider/actions/runs/43362987745) success。公共 GOV-CTR-006 JCS Runtime Verifier 与 News Platform Adapter 已进入 integration，NEWS-CTR-002 AuthorizationRef/PolicySnapshot 的 schema_version 已对齐 Golden。News 的 MySQL Repository 已具备 PIT 查询、当前策略复核、授权快照和同事务正文读取能力；Server 尚未注入完整 Evidence Query Facade 或 Research Service。完整 ListEvidence 生产装配还缺 HMAC Cursor Key Ring 在 Server 的实际注入；News Config 已新增 Active Key ID + JSON Key Ring 的可轮换 Secret 配置解析和边界测试，但尚未由 Bootstrap 装配到 EvidenceCursorCodec。不得用默认密钥或跳过签名验证绕过。下一步以 [Integration 当前任务交接](../整体任务规划/05-治理与验收/Integration当前任务交接与继续执行.md) 为准。
+> **Integration 接入状态（2026-11-13）**：integration 代码 HEAD 19394e856c6909b50a3eb664c2d565262fe2e8a2 的全量 CI Run [43364123334](https://github.com/Kasign/stock_data_provider/actions/runs/43364123334) success。公共 GOV-CTR-006 JCS Runtime Verifier 与 News Platform Adapter 已进入 integration，NEWS-CTR-002 AuthorizationRef/PolicySnapshot 的 schema_version 已对齐 Golden。News 的 MySQL Repository 已具备 PIT 查询、当前策略复核、授权快照和同事务正文读取能力；Server 尚未注入完整 Evidence Query Facade 或 Research Service。完整 ListEvidence 生产装配还缺 HMAC Cursor Key Ring 在 Server 的实际注入；News Config 已新增 Active Key ID + JSON Key Ring 的可轮换 Secret 配置解析和边界测试，但尚未由 Bootstrap 装配到 EvidenceCursorCodec。不得用默认密钥或跳过签名验证绕过。下一步以 [Integration 当前任务交接](../整体任务规划/05-治理与验收/Integration当前任务交接与继续执行.md) 为准。
 
 > 当前验收状态（2026-11-12，News 分支 HEAD：`a8a3763e5dc662d856a438c52a0b1a28975def43`）：NEWS-CTR-002 显式 `risk_review` 用途映射修复及对应测试已通过当前 HEAD 的 CI。News Provider contract workflow Run `43219930444`：Provider contract tests、完整 News 模块测试均 success，包含 gofmt、单测、Race、Vet；Go test suite Run `43219930418`：News MariaDB Repository and Migration integration、根模块 `Test .`、Researchflow 相关测试及 `Test go-core` 均 success。Compose/Docker 与 Market Data 专项 jobs 按条件 skipped，不计为通过。两条 Run 的 `head_sha` 均与当前 HEAD 完全一致。PR [#88](https://github.com/Kasign/stock_data_provider/pull/88) 的历史合并记录不代表本轮再次合并；本轮未执行分支合并。
 
@@ -1148,8 +1148,8 @@
 
 - 新增可选配置：NEWS_EVIDENCE_CURSOR_ACTIVE_KEY_ID 与 NEWS_EVIDENCE_CURSOR_KEYRING_JSON。Key Ring JSON 对象的 Key ID 对应 Secret 值，最多 8 把 Key；Active Key ID 必须存在于 Key Ring。
 - 每个 Key Secret 长度限制为 32～256 字节；Key ID 限制为 1～64 个字母、数字、下划线、点或短横线。配置错误只报告环境变量名，不回显 Key Ring JSON 或 Secret。
-- Config.EvidenceCursorKeyRing 返回 Platform Secret 包装值的防御性副本；未配置时返回 configured=false，不生成默认密钥。该配置目前仅提供装载能力，Server Bootstrap 尚未将其传给 EvidenceCursorCodec。
+- Config.EvidenceCursorKeyRing 返回 Platform Secret 包装值的防御性副本；未配置时返回 configured=false，不生成默认密钥。Integration Run 43364123334 已覆盖该配置代码的根模块测试、格式和 Vet；Server Bootstrap 尚未将其传给 EvidenceCursorCodec。
 - 游标 TTL 为 15 分钟。轮换时先加入新 Key，再切换 Active Key ID；旧 Key 至少保留 15 分钟，建议额外覆盖部署时钟偏差窗口。删除旧 Key 前必须确认其签发的游标均已过期。
 - .env.example 只提供注释示例，不包含可用密钥。
 - 新增测试覆盖未配置、成功双 Key 加载、防御性副本、配置不完整、JSON 非法、Active Key 缺失、短密钥、非法 Key ID、Key 数量超限及错误信息不泄露密钥。
-- 尚待 Integration CI 验收；此配置不代表 EvidenceCursorCodec 或 News/Research 查询 Facade 已在 Bootstrap 启用。
+- Integration Run 43364123334 对代码 SHA 19394e8 的 gofmt、root/go-core vet/test、Compose、WebUI 检查和 Docker 构建全部通过；此配置不代表 EvidenceCursorCodec 或 News/Research 查询 Facade 已在 Bootstrap 启用。

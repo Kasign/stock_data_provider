@@ -1900,10 +1900,10 @@ Server Bootstrap
 
 - integration 的 internal/platform/authorization 已提供 RFC 8785 JCS + SHA-256 Runtime Verifier；News 通过 internal/news/adapters/platform 消费，不复制 JCS。
 - NEWS-CTR-002 的 AuthorizationRef 与 PolicySnapshot 均已带 schema_version=1.0.0，NEWS Golden 与 GOV-CTR-006 News Golden 对齐。
-- Integration CI Run [43362987745](https://github.com/Kasign/stock_data_provider/actions/runs/43362987745)，head_sha 23d07e7716aa6d7cd7f0fda4d3dbfa178c148a4e，gofmt、root/go-core vet/test、Compose、WebUI 检查和 Docker 构建全部 success。
+- Integration CI Run [43364123334](https://github.com/Kasign/stock_data_provider/actions/runs/43364123334)，head_sha 19394e856c6909b50a3eb664c2d565262fe2e8a2，gofmt、root/go-core vet/test、Compose、WebUI 检查和 Docker 构建全部 success。
 - Server Bootstrap 尚未构造 News Evidence Query Facade 或 Research Application Service；不将 Runtime Verifier 存在等同于生产接入。
 - News MySQLRepository 可复用 PIT Repository、Atomic Content Repository、AuthorizationSnapshotRepository、CurrentPolicyResolver 和 EvidenceSnapshotRepository；News Application 已有 Get/List Evidence Facade 构造入口。
-- 完整 ListEvidence Facade 需要 EvidenceCursorCodec 的 HMAC Key Ring。News Config 当前没有 Active Key ID/轮换 Key 的可信配置；游标 TTL 为 15 分钟，旧 Key 必须在轮换窗口内保留。下一步先按 Platform Secret 约定补齐可轮换配置，再构造 News/Research 真实依赖。
+- 完整 ListEvidence Facade 需要 EvidenceCursorCodec 的 HMAC Key Ring。News Config 已新增 Active Key ID + JSON Secret Key Ring 的可轮换配置解析，覆盖最多 8 把 Key、32～256 字节 Secret、Active Key 必须存在和错误不泄密；CI 已通过。游标 TTL 为 15 分钟，旧 Key 必须在轮换窗口内保留。下一步由 Bootstrap 消费该配置并构造 News/Research 真实依赖。
 - Research 的 internal/research/adapters/news/evidence.go 已有 Importer/Authorizer；Research Context/Evidence Repository 和 Service 构造入口已存在，不得重复实现 Adapter。
 - Researchflow 生产 StageExecutor 尚未装配；Quant 生产 Application Port/Payload Registry 门禁仍未满足。不得因 News/Research 组合构造完成而直接宣称完整 Researchflow 业务链路通过。
 

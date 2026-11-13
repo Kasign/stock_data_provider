@@ -1,8 +1,8 @@
 # Integration 系统接入审查与整体验收基线
 
 - 验收分支：`integration`
-- 本文最近一次核对的 integration SHA：`23d07e7716aa6d7cd7f0fda4d3dbfa178c148a4e`
-- 当前 CI：Integration Run `43362987745`，对应 SHA `23d07e7716aa6d7cd7f0fda4d3dbfa178c148a4e`，结论 `success`；gofmt、root/go-core vet/test、Compose、WebUI 语法/单测和 Docker 构建全部通过
+- 本文最近一次核对的 integration SHA：`19394e856c6909b50a3eb664c2d565262fe2e8a2`
+- 当前 CI：Integration Run `43364123334`，对应 SHA `19394e856c6909b50a3eb664c2d565262fe2e8a2`，结论 `success`；gofmt、root/go-core vet/test、Compose、WebUI 语法/单测和 Docker 构建全部通过
 - 历史审查基线 SHA：`63f49065a5ef3379d95948a6c2c6e504a555a63f`（Run #54），仅作为历史参考
 - 历史参考：Run #23（`43178908392`）仅对应旧 SHA `fdc19b8591223dabccb533389d472713bfecc415`，结论 `success`
 - 本文性质：Integration 当前代码树的源码接入审查、真实依赖 CI 证据与后续验收基线
@@ -211,10 +211,10 @@ Registry 已具备 namespace 校验、确定性排序、执行报告和 Schema �
 
 - 最新精确 SHA：23d07e7716aa6d7cd7f0fda4d3dbfa178c148a4e；Integration CI Run [43362987745](https://github.com/Kasign/stock_data_provider/actions/runs/43362987745) success。
 - GOV-CTR-006 公共 JCS Runtime Verifier 已在 internal/platform/authorization 实现；News Adapter 已在 internal/news/adapters/platform 实现。四份 GOV Golden 和 News Binding Golden 已纳入测试。
-- Server Bootstrap 尚未构造 News Evidence Query Facade 和 Research Service；News ListEvidence 的 Cursor HMAC Key Ring 尚缺可信配置，因此暂不能完成生产组合注入。
+- Server Bootstrap 尚未构造 News Evidence Query Facade 和 Research Service；News Config 已新增 Cursor HMAC Key Ring 的 Active Key ID + JSON Secret 配置解析并通过 CI；Server 尚未将其注入 EvidenceCursorCodec，因此暂不能完成生产组合注入。
 - Research News Evidence Importer/Authorizer 已存在；News MySQL Repository、Research Storage 和 Research Application 的构造入口均可复用，不得重写。
 - Researchflow Scheduler/WorkerPool 的生产生命周期与 StageExecutor Adapter 尚未完成；Quant 的生产计算 Port/Payload Registry 门禁未解除。
 - 不重复 Outbox → Notification Inbox/FanoutWorkItem 的既有 MariaDB 验收；真实渠道投递仍未接入。
 - 不把本轮 GOV Verifier Golden 测试通过描述为 News → Research 或 Researchflow 端到端通过。
 
-本轮 CI 通过后未新增业务链路接入；下一轮应从 Cursor Key Ring 可信配置开始，再完成 News/Research 组合根构造和 MariaDB 调用链验收。
+本轮 CI 通过后未新增业务链路接入；下一轮应从 Server 消费 Cursor Key Ring 配置开始，再完成 News/Research 组合根构造和 MariaDB 调用链验收。
