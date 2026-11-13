@@ -1710,3 +1710,35 @@ Server Bootstrap
 3. Researchflow 容量配置是明确缺口，应按模块 `CapacityLimits` 类型和冻结契约装载，不提供猜测默认值。
 4. LLM ProviderConfig/Secret 装载和 Capability Evidence 可信来源仍是 Bootstrap 的前置缺口。真实 Gateway 能力证据未建立前，不创建可运行的 Responses Adapter。
 5. 本轮没有提交代码变更；下一阶段先完成 Stage/Output Registry 到各模块公开 Port 的映射审查，再按可真实构造的组件分批装配和验收。
+
+### 12.87 SRV-004 Researchflow Stage Adapter 依赖映射核查（2026-11-13）
+
+本节只记录当前 Server 分支已存在的公开 Application Port 与 Researchflow 纯逻辑组件之间的真实对应关系。它不是新增领域契约，也不把模块 Port 直接等同于完整 Stage Adapter。
+
+#### 公开 Port 与当前可复用能力
+
+| 模块 | 当前公开入口/实现 | 可支持的流程能力 | 不能据此宣称已完成的能力 |
+|---|---|---|---|
+| Data | `internal/marketdata/app.MarketDataReader`；`application.Reader` 实现 QuoteReader / DailyBarsReader | 读取 Quote、DailyBars；支持 AdjustmentBasis、SystemObservedAtCutoff、质量状态和来源元数据 | 不等同于所有 Data Snapshot、Fundamentals、Valuations 的统一 Stage 输出；必须按具体 Stage 输入要求确定查询和快照引用 |
+| News | `internal/news/app.ResearchEvidenceQuery`；`EvidenceQueryFacade` 组合 GetEvidence/ListEvidence | 按 Caller、Purpose、ContentLevel、SystemAsOf 读取经 News Owner 授权复核的 Evidence | 不执行 Provider 搜索/采集；不能将 News 采集接口当成研究 Evidence 读取接口；正文授权与 Context 分区元数据仍需明确组合 |
+| Research | `internal/research/application.Port`、`EventPort`、`ClaimPort`；`application.Service` 实现 | 创建/读取 Context、Evidence；创建/读取/更新 Event、Claim | Port 本身不负责从 Data/News 组装来源；Researchflow 的 Context Assembly 只投影 DTO，不读取或授权来源正文 |
+| Quant | `internal/quant/application.GetResult`；`quant/registry` 的强类型指标/参数元数据注册 | 按可信 Principal、当前 Owner 授权、访问审计读取已持久化 Quant Result Envelope | 当前已核实的 Application 入口是结果读取用例；不能把 GetResult 当作指标计算、Factor 计算或 EvaluateRisk 执行入口。具体 Risk/计算 Facade 是否存在，须按 Quant 契约与完整代码继续确认 |
+| LLM | `internal/llm` Responses JSON/SSE 协议实现；`internal/server/llmtransport` Platform 受控 Transport | 已具备模型请求/响应协议适配及流式传输边界 | 生产 ProviderConfig/Secret、真实 CapabilityState 证据、Tokenizer 和 Gateway 运行接线尚未闭环 |
+
+#### Researchflow 已有纯逻辑组件
+
+- FLOW-005：`AssembleResearchContextWithTokenizer`、Research DTO 投影、Tool Policy、LLM Tool Call Intent 校验已存在；生产 Tokenizer、Research Owner 授权后的 Section 正文 Adapter、Context 持久化调用和真实 LLM 调用未闭环。
+- FLOW-006：Quant Envelope 通用校验、强类型 Payload Validator Registry、RiskDecision 校验和 Result Composer 已存在；但 Registry 必须由真实的 `result_type + schema_version` Validator 注册，不能只凭通用 Envelope 或 Quant 指标注册表推定 Payload Schema 已齐备。
+- FLOW-004：`StageExecutor` 是一个统一执行 Port，`Worker` 负责执行/租约/提交；Stage 到模块用例的映射、每个 Adapter 的参数投影、授权上下文、输出引用和错误分类仍需显式实现。
+- Researchflow Template 保存 `OutputRegistryVersion`，但该字段只是版本引用。当前核查没有找到可供 Server 装配的完整 Researchflow Output Registry 实例/注册清单；Quant Metric Registry 不能替代它。
+
+#### 责任边界与未决项
+
+1. Server 负责把公开模块用例装配成具体 `StageExecutor`，并负责依赖注入、进程生命周期和配置；不在 Server 重算指标、不复制 Evidence/Claim/Context 领域规则、不绕过 Owner 授权。
+2. 每个 Stage Adapter 必须绑定明确的 `stage_code + template_version + output_registry_version`，并明确输入 DTO、输出 DTO/Schema、EvidenceRef/OutputRef 生成方、`system_as_of` 传播、deadline/cancellation 和 Fault/ReasonCode 映射。
+3. 不得仅凭“模块存在某个 Port”就创建通用万能 Adapter；例如 Quant GetResult 只读既有结果，不能代替 Quant 计算/风险评估 Stage。
+4. 不得把 News Provider Search/Collect 当成 Researchflow 读取既有授权 Evidence 的同一用例；两者的来源授权、可用时点和持久化语义不同。
+5. 在 Output Registry 的权威版本、具体 Stage 清单和各 Stage 输出 Schema 尚未逐项对齐前，不注册推测性的 Stage，不启动可接收生产 Run 的 Worker。
+6. 下一步按冻结契约逐项核对 Data/News/Quant/Research/LLM 的 Stage 清单和 Output Registry 定义；若契约已冻结但代码缺少模块用例，任务归对应模块；若模块 Port 已存在而组合映射缺失，才由 Server 实现 Adapter。
+
+本轮没有修改业务模块代码，没有新增配置或默认值。以上结论为当前代码静态核查；各 Adapter 的集成/运行状态仍为 pending_evidence。
