@@ -153,7 +153,7 @@ func (p researchflowNotificationPublisher) Publish(ctx context.Context, message 
 	fingerprintInput := researchflowFingerprintInput{
 		EventType: "researchflow.run.terminal", SchemaVersion: "1.0.0",
 		SourceModule: "researchflow", SubjectRef: message.RunRef,
-		OccurredAt: payload.FinishedAt, Payload: json.RawMessage(sourcePayload),
+		OccurredAt:  payload.FinishedAt, Payload:            json.RawMessage(sourcePayload),
 	}
 	fingerprintJSON, err := json.Marshal(fingerprintInput)
 	if err != nil {
@@ -169,8 +169,8 @@ func (p researchflowNotificationPublisher) Publish(ctx context.Context, message 
 		SchemaVersion: "1.0.0", SourceModule: "researchflow",
 		OccurredAt: payload.FinishedAt,
 		PublishedAt: publishedAt.Format(time.RFC3339Nano),
-		SubjectRef: message.RunRef, IdempotencyKey: message.IdempotencyKey,
-		CorrelationID: message.CorrelationID,
+		SubjectRef:  message.RunRef, IdempotencyKey: message.IdempotencyKey,
+		CorrelationID:      message.CorrelationID,
 		PayloadFingerprint: hex.EncodeToString(fingerprint[:]),
 		Payload: json.RawMessage(sourcePayload),
 	}
@@ -238,7 +238,9 @@ func NewResearchflowNotificationRelay(
 	return &ResearchflowNotificationRelay{dispatcher: dispatcher, config: config, logger: logger}, nil
 }
 
-func (r *ResearchflowNotificationRelay) Name() string { return "researchflow-notification-outbox-relay" }
+func (r *ResearchflowNotificationRelay) Name() string {
+	return "researchflow-notification-outbox-relay"
+}
 
 func (r *ResearchflowNotificationRelay) Start(ctx context.Context) error {
 	if r == nil || ctx == nil {

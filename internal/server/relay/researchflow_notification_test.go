@@ -35,15 +35,15 @@ func terminalOutboxMessage(t *testing.T, status, reason string, includeSummary b
 		summaryRef = &value
 	}
 	payload := researchflowTerminalPayload{
-		SourceEventRef: "run_001",
-		RunRef: "run_001",
-		Status: status,
+		SourceEventRef:    "run_001",
+		RunRef:            "run_001",
+		Status:            status,
 		TerminationReason: terminationReason,
-		SystemAsOf: "2026-11-05T16:00:00.000000000Z",
-		FinishedAt: "2026-11-06T04:10:00.000000000Z",
-		ResultSummaryRef: summaryRef,
-		TemplateRef: "daily_stock_analysis",
-		TemplateVersion: "1.0.0",
+		SystemAsOf:        "2026-11-05T16:00:00.000000000Z",
+		FinishedAt:        "2026-11-06T04:10:00.000000000Z",
+		ResultSummaryRef:  summaryRef,
+		TemplateRef:       "daily_stock_analysis",
+		TemplateVersion:   "1.0.0",
 	}
 	raw, err := json.Marshal(payload)
 	if err != nil {
@@ -59,7 +59,7 @@ func terminalOutboxMessage(t *testing.T, status, reason string, includeSummary b
 		EventType: "researchflow.run.terminal", SchemaVersion: "1.0.0",
 		IdempotencyKey: "run-terminal:run_001", CorrelationID: "corr_001",
 		PayloadFingerprint: hex.EncodeToString(digest[:]),
-		Payload: string(raw), CreatedAt: createdAt,
+		Payload:            string(raw), CreatedAt: createdAt,
 	}
 }
 

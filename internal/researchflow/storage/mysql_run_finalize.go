@@ -241,8 +241,8 @@ func (r *MySQLRunRepository) FinalizeRun(ctx context.Context, input RunFinalizat
 	}{
 		SourceEventRef: input.RunRef, RunRef: input.RunRef, Status: input.TerminalStatus,
 		TerminationReason: terminationReasonValue,
-		SystemAsOf: systemAsOfTime.UTC().Format("2006-01-02T15:04:05.000000000Z"),
-		FinishedAt: finishedAt, ResultSummaryRef: resultSummaryRefValue,
+		SystemAsOf:        systemAsOfTime.UTC().Format("2006-01-02T15:04:05.000000000Z"),
+		FinishedAt:        finishedAt, ResultSummaryRef: resultSummaryRefValue,
 		TemplateRef: templateRef, TemplateVersion: templateVersion,
 	})
 	if err != nil {
