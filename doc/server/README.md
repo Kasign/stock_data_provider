@@ -1811,3 +1811,37 @@ Server Bootstrap
 
 本节结论为跨分支静态代码与契约核查，集成运行状态仍为 pending_evidence。
 
+### 12.90 SRV-004 Researchflow 容量配置边界与 LLM 生产装载复核（2026-11-13）
+
+#### Researchflow 容量配置
+
+本轮在 Server 配置层增加了显式容量配置读取：
+
+- `RESEARCHFLOW_MAX_QUEUED_RUNS` → `ResearchflowCapacity.MaxQueuedRuns`
+- `RESEARCHFLOW_MAX_WORKERS` → `ResearchflowCapacity.MaxWorkers`
+- 两项必须同时配置，且均为正整数；不设置默认值。
+- 两项均未配置时，返回 `Configured=false`，保持现有 Server/旧 Analysis 启动行为不变。
+- 仅配置其中一项、空值、非整数、零或负数均拒绝。
+- `.env.example` 只提供注释示例，不注入任何默认容量值。
+
+当前 Server 尚未创建 Researchflow `MySQLRunRepository`、Scheduler、WorkerPool，也没有可生产执行的 StageExecutor。故本次只完成配置读取和边界校验，没有将这两个值错误映射到旧 `ANALYSIS_WORKERS/ANALYSIS_MAX_QUEUED`，也没有启动 Researchflow Worker。后续在真实 Worker 装配时，必须要求 `Configured=true`，并将两值原样映射到 `researchflow/storage.CapacityLimits`；所有实例使用相同配置。
+
+#### LLM 生产装载边界
+
+复核 Server 当前分支的 LLM 接入点：
+
+- `llm.ProviderConfig` 要求 Provider、HTTPS Gateway `/v1`、默认模型、Secret 引用、请求/响应大小、超时、Capability TTL 和模型 allowlist。
+- `llm.CapabilityState` 要求 Provider/Model/GatewayVersion、VerificationMethod、EvidenceRef、VerifiedAt、ValidUntil 和各项能力状态；能力证据必须与 Provider 配置匹配且处于有效期内。
+- `server/llmtransport.NewResponsesAdapter` 已提供受控 Platform HTTP Transport 与 JSON/SSE Adapter 构造入口。
+- 当前 Server Process Config 没有 ProviderConfig 的可信来源装载、SecretRef 解析、CapabilityState 证据读取/校验和 DestinationPolicy 构造；未发现可直接复用的 LLM Provider 配置仓储或 Evidence Loader。
+
+因此，LLM 尚不能在 Bootstrap 中创建生产 Adapter。不得把 Provider 能力硬编码为 supported，不得用静态伪造 EvidenceRef/VerifiedAt 通过构造校验，也不得把 SecretRef 当作凭证明文。下一步需先确定真实 ProviderConfig 与 Capability Evidence 的权威来源及 SecretRef 解析接口，再由 Server 做装载、校验和 Adapter 装配。
+
+#### 本轮变更与验证范围
+
+- 新增 `internal/server/config/researchflow.go`，并接入 Process 配置快照。
+- 增加未配置、成对配置、部分配置和非法数值测试。
+- 更新 `.env.example` 的注释说明。
+- 未创建 Researchflow Worker、Scheduler 或 Stage Adapter；未改业务模块与冻结契约。
+- 代码测试及 CI 尚待本轮最新提交验证，不将静态配置单测定义为生产装配验收。
+
