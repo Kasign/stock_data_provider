@@ -914,10 +914,10 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 			ContentLevel: domain.AuthorizationContentSummary, SubjectRef: "service:research",
 			ResourceRef: atomicResourceRef, DecidedAt: time.Now().UTC().Add(-time.Minute).Format(time.RFC3339Nano),
 			ExpiresAt: domain.NullableDateTime{Present: true}, Conditions: []string{},
-			DecisionFingerprint: strings.Repeat("a", 64),
+			DecisionFingerprint: strings.Repeat("a", 64), SchemaVersion: "1.0.0",
 		},
 		PolicySnapshot: domain.AuthorizationPolicySnapshot{
-			SnapshotRef: "news-it-atomic-snapshot",
+			SnapshotRef: "news-it-atomic-snapshot", SchemaVersion: "1.0.0",
 			Policies: []domain.AuthorizationPolicyVersion{{
 				PolicyType: domain.NewsPolicyTypeSource, PolicyRef: secondObservation.SourceID,
 				PolicyVersion: atomicPolicyVersion,
