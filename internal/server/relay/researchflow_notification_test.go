@@ -63,6 +63,64 @@ func terminalOutboxMessage(t *testing.T, status, reason string, includeSummary b
 	}
 }
 
+type emptyResearchflowOutboxStore struct {
+	claimed chan struct{}
+}
+
+func (s *emptyResearchflowOutboxStore) ClaimOutbox(context.Context, string, string, int, time.Duration) ([]researchflowapp.OutboxMessage, error) {
+	select {
+	case s.claimed <- struct{}{}:
+	default:
+	}
+	return nil, nil
+}
+
+func (*emptyResearchflowOutboxStore) AcknowledgeOutbox(context.Context, string, string, uint64) (bool, error) {
+	return false, nil
+}
+
+func (*emptyResearchflowOutboxStore) RetryOutbox(context.Context, string, string, uint64, time.Time, string) (bool, error) {
+	return false, nil
+}
+
+func TestResearchflowNotificationRelayStartStop(t *testing.T) {
+	store := &emptyResearchflowOutboxStore{claimed: make(chan struct{}, 1)}
+	relay, err := NewResearchflowNotificationRelay(store, &researchflowNotificationReceiverStub{}, ResearchflowNotificationConfig{
+		WorkerID: "test-researchflow-notification-relay",
+		BatchSize: 1, PollInterval: 10 * time.Millisecond,
+		LeaseDuration: time.Second, PublishTimeout: 500 * time.Millisecond,
+	}, nil)
+	if err != nil {
+		t.Fatalf("create Researchflow Notification Relay: %v", err)
+	}
+	if relay.Name() != "researchflow-notification-outbox-relay" {
+		t.Fatalf("relay Name() = %q", relay.Name())
+	}
+	if err := relay.Stop(context.Background()); err != nil {
+		t.Fatalf("Stop() before Start() error = %v", err)
+	}
+	startCtx := context.Background()
+	if err := relay.Start(startCtx); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	select {
+	case <-store.claimed:
+	case <-time.After(time.Second):
+		t.Fatal("Relay did not begin polling the Outbox after Start()")
+	}
+	if err := relay.Start(startCtx); err == nil {
+		t.Fatal("Start() called twice without Stop() should fail")
+	}
+	stopCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if err := relay.Stop(stopCtx); err != nil {
+		t.Fatalf("Stop() error = %v", err)
+	}
+	if err := relay.Stop(stopCtx); err != nil {
+		t.Fatalf("repeated Stop() error = %v", err)
+	}
+}
+
 func TestResearchflowNotificationPublisherBuildsFrozenEnvelope(t *testing.T) {
 	receiver := &researchflowNotificationReceiverStub{}
 	message := terminalOutboxMessage(t, "succeeded", "", true)
