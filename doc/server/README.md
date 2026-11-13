@@ -1868,3 +1868,27 @@ Server Bootstrap
 - Server 仍没有可安全启用的具体 Researchflow Stage。当前可独立完成的容量配置读取已在 12.90 实现并通过 Server CI；其生产注入必须与真实 Worker 装配同批完成。
 - 下一步等待模块按冻结契约补齐 Stage 所需的生产 Application Port、Output Registry 和可信配置来源；条件满足后再由 Server 实现精确 Adapter 组合。若没有新的模块契约/公开 Port 变化，Server 不再重复静态盘点这些已确认的阻断项。
 
+
+
+### 12.92 SRV-005 Researchflow → Notification 终态 Outbox 接入（2026-11-13）
+
+本轮在 integration 完成 Researchflow 终态事件生产与 Server Relay 的契约闭合：
+
+- `internal/researchflow/storage/mysql_run_finalize.go` 将终态事件类型统一为 `researchflow.run.terminal` / Schema `1.0.0`，Payload 对齐 `doc/notification/schema/researchflow-run-terminal-1.0.0.schema.json`；`source_event_ref` 与 `run_ref` 使用 Run 引用，携带 `system_as_of`、`finished_at`、`template_ref`、`template_version` 和终态摘要引用。
+- `internal/server/relay/researchflow_notification.go` 新增 Outbox Publisher/Relay：校验 Outbox 原始 SHA-256、事件身份、终态状态和 UTC 时间；生成 Notification Event Envelope，并按 JCS 计算 Envelope Payload Fingerprint。
+- `internal/server/bootstrap/bootstrap.go` 在 Worker/All 角色装配 Relay；只有 `ResearchflowCapacity.Configured` 时才创建 Run Repository/Relay。Research 与 Researchflow 共用 Notification EventReceiver 构造入口，仍由各自 Outbox Store 管理租约与确认。
+- Outbox 只有在 Notification EventReceiver 接收成功后才 Ack；Inbox/FanoutWorkItem 的幂等唯一约束承担重复投递去重。此处完成的是 Outbox → Inbox/FanoutWorkItem，不代表真实渠道发送完成。
+
+#### 验收证据
+
+- `internal/researchflow/storage/mysql_run_finalize_test.go`：MariaDB 测试验证成功与取消终态事件类型、Payload 字段及取消 Golden 语义。
+- `internal/server/relay/researchflow_notification_integration_test.go`：独立 MariaDB 数据库验证 Researchflow Outbox 经 Relay 进入 Notification Inbox/FanoutWorkItem，重复执行不重复创建；接收失败时保留 Outbox、持久化诊断码与 next_attempt_at，到期后重试成功。
+- `internal/server/relay/researchflow_notification_test.go`：Relay Start/Stop 组件生命周期测试。
+- Integration Run #54（`43359166036`），代码基线 SHA `63f49065a5ef3379d95948a6c2c6e504a555a63f`：gofmt、root/go-core vet/test、MariaDB/Redis 集成、WebUI 检查和 Docker 构建全部通过。
+
+#### 当前边界与上线前置检查
+
+- Researchflow Scheduler/Worker 生命周期和生产 StageExecutor Adapter 仍未装配；本次 Relay 不会创建或执行 Run。
+- Notification 的真实 Recipient Directory、Channel Provider、Fanout/Delivery Worker 仍未装配；Relay 成功只表示事件被 Inbox 接收。
+- Quant 目前没有生产 RiskDecision Outbox 生产方，因此 Notification 中的 Quant 事件映射尚无来源。
+- 升级前应确认没有待处理的旧事件类型：`SELECT COUNT(*) FROM researchflow_outbox WHERE event_type='researchflow.run.finalized' AND published_at IS NULL`。若结果非零，先按冻结契约做显式对账/修复，不允许新 Relay 静默丢弃旧事件。
