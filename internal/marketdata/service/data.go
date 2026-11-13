@@ -4003,12 +4003,15 @@ func absDuration(d time.Duration) time.Duration {
 var (
 	ErrDailyBarsAsOfUnavailable = errors.New("daily-bar point-in-time storage is not enabled")
 	ErrDailyBarsAsOfNotFound    = errors.New("no coherent daily-bar revisions were recorded by the requested as_of time")
-	ErrPITStorageFailure       = errors.New("point-in-time revision storage query failed")
+	ErrPITStorageFailure        = errors.New("point-in-time revision storage query failed")
 )
 
 func wrapPITStorageFailure(err error) error {
 	if err == nil {
 		return nil
+	}
+	if errors.Is(err, context.Canceled) {
+		return err
 	}
 	return errors.Join(ErrPITStorageFailure, err)
 }
