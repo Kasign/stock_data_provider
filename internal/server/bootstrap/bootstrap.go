@@ -67,6 +67,10 @@ func Run(ctx context.Context) (runErr error) {
 	if err != nil {
 		return fmt.Errorf("Go 行情服务配置无效: %w", err)
 	}
+	newsConfig, err := newsconfig.Load(env)
+	if err != nil {
+		return fmt.Errorf("News 配置无效: %w", err)
+	}
 	migrationCfg := processConfig.Migration
 	serverRole := processConfig.Role
 	shutdownTimeout := 10 * time.Second
@@ -132,6 +136,16 @@ func Run(ctx context.Context) (runErr error) {
 	}
 	migrationCancel()
 
+	// Key Ring 配置为可选项；未配置时不创建分页 Facade，也不生成任何默认密钥。
+	// 已配置时在 API/Worker 两种角色下使用同一共享 DB 构造真实 News/Research 依赖。
+	var researchNews *researchNewsComposition
+	if _, _, configured := newsConfig.EvidenceCursorKeyRing(); configured {
+		researchNews, err = newResearchNewsComposition(storageResources.DB, newsConfig)
+		if err != nil {
+			return fmt.Errorf("装配 News→Research 依赖失败: %w", err)
+		}
+	}
+
 	runner, err := service.NewRunnerWithMarketDataStores(marketDataCfg, store, store)
 	if err != nil {
 		return fmt.Errorf("创建分析 Runner 失败: %w", err)
@@ -177,10 +191,6 @@ func Run(ctx context.Context) (runErr error) {
 		if err != nil {
 			return fmt.Errorf("创建旧 Analysis HTTP API 失败: %w", err)
 		}
-		newsConfig, configErr := newsconfig.Load(env)
-		if configErr != nil {
-			return fmt.Errorf("News Provider 配置无效: %w", configErr)
-		}
 		diagnosticsService, err := newDiagnosticsService(storageResources, migrationRegistry, newsConfig)
 		if err != nil {
 			return fmt.Errorf("创建 Server 诊断服务失败: %w", err)
@@ -219,6 +229,10 @@ func Run(ctx context.Context) (runErr error) {
 
 	if err := lifecycle.Start(ctx); err != nil {
 		return fmt.Errorf("启动 Server 运行组件失败: %w", err)
+	}
+	if researchNews != nil {
+		// 目前没有 Researchflow Stage/HTTP 用例消费该组合；这里只确认生产依赖装配成功。
+		slog.Info("News→Research 生产依赖已装配，等待业务消费端接入")
 	}
 	if serverRole == serverconfig.RoleWorker {
 		slog.Info("股票分析 Worker 已启动", "service", "stock-analysis-worker", "role", serverRole)
