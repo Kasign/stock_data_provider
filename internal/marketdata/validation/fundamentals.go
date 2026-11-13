@@ -38,6 +38,8 @@ func ValidateFundamentalsSnapshot(snapshot *model.FundamentalsSnapshot, requeste
 	}
 	if strings.TrimSpace(snapshot.SourceVersion) == "" {
 		add("source_version", "source_version", "required", "identifiable provider schema/version", "fundamentals source version is missing", SeverityError, -1)
+	} else if !IsIdentifiableSourceVersion(snapshot.SourceVersion) {
+		add("source_version", "source_version", "unidentifiable", "identifiable provider schema/version", "fundamentals source version is an unknown placeholder", SeverityError, -1)
 	}
 	if snapshot.FetchedAt.IsZero() || snapshot.FetchedAt.After(time.Now().UTC().Add(5*time.Minute)) {
 		add("fetched_at", "fetched_at", "invalid_timestamp", "non-zero timestamp not more than five minutes in the future", "fundamentals fetched_at is missing or in the future", SeverityError, -1)

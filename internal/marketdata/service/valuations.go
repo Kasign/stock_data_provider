@@ -170,24 +170,24 @@ func betterUnknownValuationSnapshot(candidate, current *model.ValuationSnapshot)
 	return metricCount(candidate) > metricCount(current)
 }
 
-func (s *DataService) Valuations(ctx context.Context, rawSymbols []string) (*model.ValuationSnapshot, bool, error) {
+func normalizeValuationSymbols(rawSymbols []string) ([]string, error) {
 	if len(rawSymbols) == 0 || len(rawSymbols) > 100 {
-		return nil, false, errors.New("valuation request must contain 1..100 raw symbol tokens")
+		return nil, errors.New("valuation request must contain 1..100 raw symbol tokens")
 	}
 	symbols := make([]string, 0, len(rawSymbols))
 	seen := make(map[string]struct{}, len(rawSymbols))
 	for _, rawSymbol := range rawSymbols {
 		symbol, err := normalize.NormalizeSymbol(strings.TrimSpace(rawSymbol))
 		if err != nil {
-			return nil, false, err
+			return nil, err
 		}
 		parts := strings.Split(symbol, ".")
 		if len(parts) != 2 || (parts[1] != "SH" && parts[1] != "SZ" && parts[1] != "BJ") || len(parts[0]) != 6 {
-			return nil, false, fmt.Errorf("valuation only supports six-digit A-share symbols with SH/SZ/BJ suffix: %q", rawSymbol)
+			return nil, fmt.Errorf("valuation only supports six-digit A-share symbols with SH/SZ/BJ suffix: %q", rawSymbol)
 		}
 		for _, digit := range parts[0] {
 			if digit < '0' || digit > '9' {
-				return nil, false, fmt.Errorf("valuation symbol must use six numeric digits: %q", rawSymbol)
+				return nil, fmt.Errorf("valuation symbol must use six numeric digits: %q", rawSymbol)
 			}
 		}
 		if _, duplicate := seen[symbol]; duplicate {
@@ -197,7 +197,95 @@ func (s *DataService) Valuations(ctx context.Context, rawSymbols []string) (*mod
 		symbols = append(symbols, symbol)
 	}
 	if len(symbols) == 0 {
-		return nil, false, errors.New("valuation request has no valid symbols")
+		return nil, errors.New("valuation request has no valid symbols")
+	}
+	return symbols, nil
+}
+
+var (
+	ErrValuationsAsOfUnavailable = errors.New("valuation point-in-time storage is not enabled")
+	ErrValuationsAsOfNotFound    = errors.New("no valuation snapshot was recorded by the requested as_of time")
+)
+
+func (s *DataService) saveValuationRevision(ctx context.Context, snapshot *model.ValuationSnapshot) {
+	if s == nil || s.store == nil || snapshot == nil {
+		return
+	}
+	if err := s.store.SaveValuations(ctx, snapshot); err != nil {
+		s.logger.Warn("persist valuation revision failed", "source", snapshot.Source, "error", err)
+	}
+}
+
+// ValuationsAsOf 只读取 MariaDB 中截至系统观察时点已记录的估值快照，不回源实时 Provider。
+func valuationSnapshotEligibleAsOf(symbols []string, candidate *model.ValuationSnapshot, asOf time.Time) bool {
+	if candidate == nil || asOf.IsZero() || candidate.SystemObservedAt == nil ||
+		candidate.SystemObservedAt.After(asOf) || candidate.FetchedAt.IsZero() || candidate.FetchedAt.After(asOf) ||
+		(candidate.ProviderTimestamp != nil && candidate.ProviderTimestamp.After(asOf)) ||
+		(candidate.ProviderReportDate != "" && candidate.ProviderReportDate > asOf.In(marketLocation()).Format("2006-01-02")) ||
+		validateValuationSnapshot(symbols, candidate) != nil {
+		return false
+	}
+	for _, item := range candidate.Items {
+		if item.FetchedAt.IsZero() || item.FetchedAt.After(asOf) {
+			return false
+		}
+	}
+	return true
+}
+
+func (s *DataService) ValuationsAsOf(ctx context.Context, rawSymbols []string, asOf time.Time) (*model.ValuationSnapshot, error) {
+	symbols, err := normalizeValuationSymbols(rawSymbols)
+	if err != nil {
+		return nil, err
+	}
+	if asOf.IsZero() || asOf.After(time.Now().UTC()) {
+		return nil, errors.New("valuation as_of must be a valid non-future timestamp")
+	}
+	if s == nil || s.store == nil {
+		return nil, ErrValuationsAsOfUnavailable
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	revisions, err := s.store.ListValuationsAsOf(ctx, symbols, asOf)
+	if err != nil {
+		return nil, wrapPITStorageFailure(err)
+	}
+	var best *model.ValuationSnapshot
+	bestRank := 0
+	for index := range revisions {
+		candidate := &revisions[index]
+		if !valuationSnapshotEligibleAsOf(symbols, candidate, asOf) {
+			continue
+		}
+		rank := 0
+		switch candidate.QualityStatus {
+		case model.QualityValid:
+			rank = 2
+		case model.QualityDegraded:
+			rank = 1
+		default:
+			continue
+		}
+		if rank > bestRank || (rank == bestRank && (best == nil || candidate.SystemObservedAt.After(*best.SystemObservedAt))) {
+			copySnapshot := *candidate
+			best = &copySnapshot
+			bestRank = rank
+		}
+	}
+	if best == nil {
+		return nil, ErrValuationsAsOfNotFound
+	}
+	return best, nil
+}
+
+func (s *DataService) Valuations(ctx context.Context, rawSymbols []string) (*model.ValuationSnapshot, bool, error) {
+	symbols, err := normalizeValuationSymbols(rawSymbols)
+	if err != nil {
+		return nil, false, err
 	}
 	if ctx == nil {
 		ctx = context.Background()
@@ -229,6 +317,7 @@ func (s *DataService) Valuations(ctx context.Context, rawSymbols []string) (*mod
 				cacheEligible = fallbackExhausted || len(s.valuationProviders) <= 1
 			}
 			if cacheEligible && time.Since(cached.FetchedAt) < ttl {
+				s.saveValuationRevision(ctx, &cached)
 				return &cached, true, nil
 			}
 		}
@@ -287,6 +376,7 @@ func (s *DataService) Valuations(ctx context.Context, rawSymbols []string) (*mod
 				s.logger.Warn("valuation cache write failed", "symbols", strings.Join(symbols, ","), "error", cacheErr)
 			}
 		}
+		s.saveValuationRevision(ctx, snapshot)
 		return snapshot, false, nil
 	}
 	if degradedSnapshot != nil {
@@ -295,6 +385,7 @@ func (s *DataService) Valuations(ctx context.Context, rawSymbols []string) (*mod
 				s.logger.Warn("valuation degraded cache write failed", "symbols", strings.Join(symbols, ","), "error", cacheErr)
 			}
 		}
+		s.saveValuationRevision(ctx, degradedSnapshot)
 		return degradedSnapshot, false, nil
 	}
 	if unknownSnapshot != nil {
@@ -308,6 +399,7 @@ func (s *DataService) Valuations(ctx context.Context, rawSymbols []string) (*mod
 				s.logger.Warn("valuation unknown cache write failed", "symbols", strings.Join(symbols, ","), "error", cacheErr)
 			}
 		}
+		s.saveValuationRevision(ctx, unknownSnapshot)
 		return unknownSnapshot, false, nil
 	}
 	return nil, false, fmt.Errorf("all valuation providers failed: %s", strings.Join(failures, "; "))
