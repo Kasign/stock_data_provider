@@ -129,6 +129,17 @@ func isUTCInstant(value time.Time) bool {
 	return offset == 0
 }
 
+// ValidateSubscriptionFilterDocument checks the frozen structural contract for a
+// non-null filter document. Event-specific schema lookup and matching remain the
+// responsibility of the registered application matcher.
+func ValidateSubscriptionFilterDocument(filters json.RawMessage) error {
+	trimmed := bytes.TrimSpace(filters)
+	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
+		return nil
+	}
+	return validateSubscriptionFilterJSON(trimmed)
+}
+
 func validateSubscriptionFilterJSON(raw []byte) error {
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.UseNumber()

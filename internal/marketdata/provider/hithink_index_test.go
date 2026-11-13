@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"example.com/stock-analysis-flow/internal/marketdata/model"
+	"example.com/stock-analysis-flow/internal/marketdata/validation"
 )
 
 func TestHithinkFetchIndexQuotesCrossChecksReportedChanges(t *testing.T) {
@@ -333,5 +335,99 @@ func TestHithinkFetchIndexCatalogTracksRawAndExcludedRows(t *testing.T) {
 	}
 	if got.QualityStatus != model.QualityDegraded {
 		t.Fatalf("duplicate source rows must degrade the catalog, got %s", got.QualityStatus)
+	}
+}
+
+func TestHithinkFetchIndexCatalogReportsMissingProviderTimestamp(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"code": 0,
+			"data": map[string]any{"item": []map[string]any{{"thscode": "000001.SH", "name": "上证指数"}}},
+		})
+	}))
+	defer server.Close()
+
+	reporter := validation.NewReporter(10)
+	ctx := validation.WithReporter(context.Background(), reporter)
+	p := NewHithinkConfigured(2*time.Second, server.URL, "unit-test-key")
+	got, err := p.FetchIndexCatalog(ctx, "tszs")
+	if err != nil {
+		t.Fatalf("FetchIndexCatalog: %v", err)
+	}
+	if got.ProviderTime != nil || got.QualityStatus != model.QualityDegraded {
+		t.Fatalf("missing provider timestamp must remain unknown and degrade the snapshot: %+v", got)
+	}
+	issues := reporter.Snapshot().Issues
+	if len(issues) != 1 || issues[0].Field != "provider_time" || issues[0].ProviderField != "timestamp" ||
+		issues[0].Code != "missing_or_invalid_value" || issues[0].RowIndex != nil {
+		t.Fatalf("unexpected provider timestamp issue: %+v", issues)
+	}
+}
+
+func TestHithinkFetchIndexCatalogReportsInvalidIdentityAndName(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"code": 0,
+			"data": map[string]any{"timestamp": time.Now().UTC().UnixMilli(), "item": []map[string]any{{"thscode": "bad-symbol", "name": ""}}},
+		})
+	}))
+	defer server.Close()
+
+	reporter := validation.NewReporter(10)
+	ctx := validation.WithReporter(context.Background(), reporter)
+	p := NewHithinkConfigured(2*time.Second, server.URL, "unit-test-key")
+	if _, err := p.FetchIndexCatalog(ctx, "tszs"); err == nil {
+		t.Fatal("expected invalid catalog row to be rejected")
+	}
+	issues := reporter.Snapshot().Issues
+	if len(issues) != 2 {
+		t.Fatalf("expected symbol and name issues, got %+v", issues)
+	}
+	fields := map[string]bool{}
+	for _, issue := range issues {
+		if issue.RowIndex == nil || *issue.RowIndex != 0 {
+			t.Errorf("invalid row issue must point to row 0: %+v", issue)
+		}
+		fields[issue.Field+":"+issue.Code] = true
+	}
+	if !fields["symbol:invalid_symbol"] || !fields["name:missing_value"] {
+		t.Fatalf("missing catalog field issues: %+v", issues)
+	}
+}
+
+func TestHithinkFetchIndexCatalogReportsSafetyBoundary(t *testing.T) {
+	items := make([]map[string]any, 30000)
+	suffixes := [...]string{"SH", "SZ", "TI"}
+	for i := range items {
+		symbol := fmt.Sprintf("%06d.%s", i/len(suffixes)+1, suffixes[i%len(suffixes)])
+		items[i] = map[string]any{"thscode": symbol, "name": "指数"}
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"code": 0,
+			"data": map[string]any{"timestamp": time.Now().UTC().UnixMilli(), "item": items},
+		})
+	}))
+	defer server.Close()
+
+	reporter := validation.NewReporter(10)
+	ctx := validation.WithReporter(context.Background(), reporter)
+	p := NewHithinkConfigured(5*time.Second, server.URL, "unit-test-key")
+	got, err := p.FetchIndexCatalog(ctx, "tszs")
+	if err != nil {
+		t.Fatalf("FetchIndexCatalog: %v", err)
+	}
+	if !got.TotalIsLowerBound || got.QualityStatus != model.QualityDegraded {
+		t.Fatalf("catalog at safety boundary must be degraded with lower-bound total: %+v", got)
+	}
+	found := false
+	for _, issue := range reporter.Snapshot().Issues {
+		if issue.Field == "catalog_items" && issue.ProviderField == "item" && issue.Code == "safety_limit_reached" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("missing safety-boundary Reporter issue: %+v", reporter.Snapshot().Issues)
 	}
 }

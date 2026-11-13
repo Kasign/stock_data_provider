@@ -10,11 +10,13 @@
 | [architecture/](architecture/) | 服务职责、架构边界和运行说明 | 解释当前服务能力，不替代代码事实 |
 | [contracts/](contracts/) | API 清单、OpenAPI、数据质量与状态契约 | 接口字段以权威 OpenAPI 和实现为准 |
 | [quality/](quality/) | 字段校验、诊断、Freshness、样例管理 | 规则与诊断专项，不重复建立通用框架 |
-| [acceptance/](acceptance/) | 阶段验收计划、黄金样例、对账记录 | 只记录有证据的验收状态 |
+| [acceptance/](acceptance/) | 阶段验收计划、黄金样例、对账记录 | 阶段五计划与 Runtime Log 是当前 Data 证据入口；[阶段二三统一验收清单](acceptance/阶段二三统一验收清单.md) 是已归档历史登记，不可作为当前待办 |
 | [migration/](migration/) | Market Data 并入 Root Server 的迁移计划与唯一进度 | M1/M2 的历史 Data 侧验收已完成；M3/M4 是否关闭须以 integration 当前 SHA、Server 装配和生产证据重新核验；本目录不维护旧分支进度 |
 | [provider-migration/](provider-migration/) | Provider 扩展、Go 迁移和 Python/Go 差分 | 历史专项状态不替代整体主计划 |
 
 ## 维护规则
+
+6. 历史阶段清单、旧迁移矩阵和历史执行队列必须标明归档/过期状态；不得与唯一主计划并列成为任务入口。
 
 1. 新文档先归入对应职责目录，不再默认放在本目录根部。
 2. 只有数据侧唯一主计划保留在根目录；新增领域主计划须先明确是否应并入现有主计划。

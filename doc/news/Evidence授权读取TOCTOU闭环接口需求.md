@@ -1,9 +1,9 @@
 # Evidence 授权读取 TOCTOU 闭环接口需求
 
-- 日期：2026-11-10
+- 日期：2026-11-12
 - 适用范围：News `GetEvidence` / `ListEvidence` 内容披露路径
-- 当前状态：需求澄清完成；跨模块一致性机制尚未实现，NEWS-CTR-002 / GOV-CTR-006 相关读取竞态仍为 pending_evidence
-- 代码基线：`b4767ab60dfcba187e4cb9a211ac910d8763f6a7`
+- 当前状态：News 模式 A 策略版本发布、当前策略 Resolver、Evidence 原子读取和来源采集持久化授权事务锁已实现；Evidence RACE-01～07 与采集策略撤销/首次 Endpoint 发布竞态均有对应测试。GOV-CTR-006 公共 Runtime Verifier 与 Server 生产装配仍未完成，受限内容披露保持关闭
+- 代码基线：`eac3269ebaa625bd583f5ef3a73a139ff02c3881`
 
 ## 1. 当前实现事实
 
@@ -112,6 +112,132 @@
 
 ## 7. 当前结论
 
-- News 当前实现属于授权预检，不是原子授权读取。
-- 本文只冻结 News 对跨模块机制的需求，不自行冻结模式 A/B；选择权归策略 Owner 与 Platform/Server 集成决策。
-- 该项保持 P1 阻断：未完成一致性实现及 RACE-01～07 适用测试前，不得启用生产受限内容披露。
+- News 已实现模式 A：当前策略指针行锁、事务内策略校验、Observation/Version 复核、精确正文读取与提交后返回。
+- 普通 Resolver 仍只是预检；最终正文披露只能经过原子读取 Port。
+- RACE-04 本轮补充 MariaDB 版本变更竞态测试；RACE-07 已由 ListEvidence 单测覆盖整页失败语义。RACE-01～06 的覆盖情况按第 12 节逐项核对。
+- GOV-CTR-006 公共 Runtime Verifier 尚无 Platform 实现，Server 生产装配也未完成；因此生产受限内容披露继续关闭。
+
+
+## 8. 一致性模式决策（2026-11-12）
+
+### 8.1 选择模式 A：News MariaDB 共享事务与策略版本行锁
+
+本模块选择模式 A，不采用跨服务许可租约。依据：
+
+1. GOV-CTR-006 与 NEWS-CTR-002 将 Provider Output、Source、Endpoint 策略组合决策责任归 News；Research/Researchflow 只消费授权结果，不拥有这些来源策略。
+2. News Evidence 内容、Observation、Version 已由 News Repository 写入 MariaDB；Server 组合根向 News Repository 注入共享 `*sql.DB`。策略权威数据应归入同一 News 数据库事务资源，不引入第二套策略服务。
+3. 当前 Static Catalog 只是启动期输入快照，不能继续作为读取时权威状态。News 必须将不可变策略版本和当前版本指针持久化，并让策略发布/撤销与 Evidence 读取竞争同一数据库行锁。
+
+模式 A 的 News 侧存储和原子读取已在第 9～11 节落地；但这不代表生产受限内容读取已可开放，公共 Verifier 和 Server 装配仍是阻断项。
+
+### 8.2 目标数据结构
+
+新增两类 News 自有表：
+
+- `news_policy_versions`：不可变策略版本，复合主键为 `(policy_type, policy_ref, policy_version)`；保存规范化策略 JSON、payload hash、创建时间。允许的 policy_type 仅为 `source`、`endpoint`、`provider_output`。
+- `news_current_policy_versions`：每个 `(policy_type, policy_ref)` 唯一一行，指向当前不可变版本；复合外键保证目标版本存在。策略撤销也必须发布新的 revoked 版本并切换指针，不允许原地修改历史版本。
+
+策略发布事务必须先写入不可变版本，再更新当前指针；两个动作在同一事务提交。旧版本不得 UPDATE/DELETE。
+
+### 8.3 读取事务与线性化点
+
+最终正文读取必须在一个 MariaDB 事务中完成：
+
+1. 根据 Binding 的完整 PolicySnapshot 构造所有适用策略 tuple，并按 `(policy_type, policy_ref)` 字典序排序。
+2. 对每个 `news_current_policy_versions` 当前指针行执行 `SELECT ... FOR UPDATE`；任何行缺失、版本不匹配、payload hash 错误或策略集合不完整均拒绝。
+3. 在该事务中读取对应不可变策略版本，校验状态、有效期、用途和内容级别；Source、Endpoint、Provider Output 的实际适用集合必须与 Binding 完全一致。
+4. 在同一事务中按 `news_id + version_id` 读取正文，并复核版本 fingerprint、所属 Observation 和 `system_as_of`。
+5. 成功提交事务后才允许将正文交给 Application 组装 DTO；事务失败或提交失败必须丢弃正文。
+
+读取线性化点为持有完整策略行锁的读取事务提交。撤销/收窄事务更新同一当前指针行：读取先取得锁时，撤销只能在读取提交后生效；撤销先提交时，后续读取只能看到新版本。两者由 InnoDB 行锁排序，不依赖进程内锁或 advisory lock。
+
+### 8.4 代码实施顺序
+
+1. V9 Migration：不可变策略版本表、当前版本指针表及复合外键/索引。
+2. Domain：按策略类型校验 payload 与 ref/version 绑定，定义完整策略组合的只读快照。
+3. Storage：策略发布事务和读取事务的共享锁协议；所有锁按固定 tuple 顺序取得。
+4. Application：将 GOV-CTR-006 Fingerprint Verifier 与授权前元数据定位接入；最终内容读取只能调用原子授权读取 Port，不再在普通 Resolver 预检通过后直接读取正文。
+5. MariaDB 并发集成：撤销先提交、读取先锁定、策略版本替换、缺失策略行、payload 篡改、资源版本不匹配和提交失败。
+6. RACE-01～07 对照 NEWS-CTR-002 逐项记录实际读取副作用和返回内容。
+
+JCS 仍只调用项目公共 GOV-CTR-006 Runtime Verifier；本模式不复制 JCS 算法。公共 Verifier 未可用时，授权读取仍 fail closed。
+
+### 8.5 实施边界
+
+- 本决策只在 News 自有 MariaDB 与 News 内容库共享同一个 `*sql.DB` 时成立；Server 不得为 News 策略另建连接池。
+- Static Catalog 只可作为启动导入/配置校验输入，不再作为生产读取时当前策略权威来源。
+- 不新增 News HTTP 管理 API；策略发布/撤销先作为 News 内部 Application Port，由 Server 组合根或受控运维入口注入。
+- 本决策不放宽任何来源授权，不自动启用当前 disabled/skipped 的来源，不授权真实网络采集。
+- 在 V9、策略发布/撤销事务、原子正文读取、公共 Verifier 注入及 RACE 测试全部通过前，受限内容披露保持关闭。
+
+
+## 9. 策略版本发布能力（2026-11-12）
+
+已在 News 内增加策略版本发布 Application Port / UseCase 与 MariaDB Repository：
+
+- 仅接受 `source`、`endpoint`、`provider_output` 三种策略类型。
+- Payload 按对应领域策略结构严格解码，拒绝未知字段、未知状态、无证据引用和无效时间区间。
+- Application 对原始 Payload 字节计算 SHA-256，并复制输入字节，避免调用方后续修改影响待写入数据。
+- Repository 在同一事务中插入不可变版本，再更新当前版本指针。
+- 相同策略身份和版本的重复发布仅在 Payload Hash 一致时幂等成功；Hash 不一致返回版本冲突。
+- 历史版本行不更新 Payload 或 Hash；撤销仍必须作为新版本发布。
+
+本节记录策略版本写入和当前指针切换的首个实现阶段。当前策略 Resolver 与原子 Evidence 正文读取随后分别在第 10、11 节完成；并发验收状态以第 12 节为准。生产受限内容披露仍因公共 Verifier/Server 生产装配缺失而关闭。
+
+## 10. 当前策略 Resolver 实现（2026-11-12）
+
+已由 News MariaDB Repository 实现既有 Application Port
+`CurrentNewsAuthorizationPolicyResolver`，未新增第二套策略解析接口：
+
+- 按 Binding 中的完整策略快照逐项读取当前指针及其不可变版本，要求当前版本与快照版本完全一致。
+- 在同一只读事务中读取策略组合，避免预检阶段混合读取不同提交时点的策略版本。
+- 校验策略类型、策略引用、版本、Payload 领域结构、创建时间及 SHA-256；缺失指针、版本不匹配、载荷损坏或策略集合不完整均 fail closed。
+- 复用既有 `EvaluateNewsAuthorizationAgainstCurrentPolicies` 完成最终版本、状态和有效期判定。
+- Source、Endpoint、Provider Output 的用途与内容级别许可按现有策略字段计算；Endpoint 未设置的覆盖字段按既有领域语义继承 Source。无法映射的用途不自动推断为其他用途，保持拒绝。
+
+该 Resolver 仍是读取前预检，不构成 NEWS-CTR-002 的原子读取保证。最终正文读取已由第 11 节的事务型 Repository Port 实现；RACE-01～07 的当前覆盖情况以第 12 节为准。
+
+## 11. Evidence 原子授权读取实现（2026-11-12）
+
+已将 `GetEvidence` 的最终正文读取改为事务型 Repository Port：
+
+- Application 不再先调用普通 Resolver 复核，再调用独立正文查询。
+- Storage 在一个 MariaDB 事务中按 Binding 的策略 tuple 顺序锁定全部 `news_current_policy_versions` 当前指针行。
+- 在持锁事务内读取并校验对应不可变策略版本、Payload Hash 和策略结构。
+- 将事务内取得的当前策略集合交给 Application 授权回调；回调复用既有 GOV-CTR-006 Fingerprint Verifier 和 `EvaluateNewsAuthorizationAgainstCurrentPolicies`。
+- 授权通过后，在同一事务内读取精确 `news_id + version_id` 正文，并复核 fingerprint、Observation 归属及 PIT 时间边界。
+- 事务提交成功后才返回正文；授权失败、查询失败、上下文取消或提交失败均不返回正文。
+- 已移除独立的 `GetEvidenceContentAt` 无锁正文读取 Port，避免生产路径绕过原子授权边界。
+
+普通 `CurrentNewsAuthorizationPolicyResolver` 仍保留为预检能力，不再承担最终正文披露的安全边界。
+
+当前已增加 MariaDB 原子读取集成覆盖，包括读取先锁后撤销、撤销提交后旧 Binding 失效、缺失当前指针、Payload Hash 篡改、资源引用不匹配、授权回调期间取消上下文，以及本轮新增的 Evidence Version fingerprint 变更拒绝。事务 Commit 返回错误时实现会丢弃正文，但尚无专门的 Commit 故障注入测试；该项不是 RACE-07。GOV-CTR-006 公共 Runtime Verifier 的实际生产装配仍由 Platform/Server 负责，未装配时必须 fail closed。
+
+## 12. RACE 验收进度（2026-11-12）
+
+| 场景 | 当前覆盖 | 结果边界 |
+|---|---|---|
+| 读取先取得策略行锁，撤销随后发布 | MariaDB 并发集成测试 | 撤销等待读取事务提交；读取返回旧版本内容后，撤销才生效 |
+| 撤销先提交，旧 Binding 再读取 | MariaDB 集成测试 | 当前指针版本不匹配，读取 fail closed |
+| 当前策略指针缺失 | MariaDB 集成测试 | 不回退历史版本，拒绝读取 |
+| 策略 Payload Hash 被篡改 | MariaDB 集成测试 | Hash 校验失败，拒绝读取 |
+| Binding 资源引用不匹配 | MariaDB 集成测试 | 进入事务前拒绝 |
+| 授权回调期间上下文取消 | MariaDB 集成测试 | 回滚事务，不返回正文 |
+| Evidence Version 在元数据定位后发生变化（RACE-04） | `internal/news/adapters/storage/mysql_repository_integration_test.go`：原子读取前替换持久化 fingerprint | 返回 `ErrInvalidEvidenceQuery`，且授权回调未执行，拒绝继续读取正文 |
+| ListEvidence 页内任一记录授权失败（RACE-07） | `internal/news/app/list_evidence_test.go`：`TestListEvidenceDoesNotReturnPartialPageWhenAnItemIsDenied` | 第一条记录已成功解析、第二条记录授权拒绝时，整个 Execute 返回错误且 `result.Items == nil`；不返回部分正文页 |
+
+原子读取现已在策略行锁后重新读取并锁定 Observation/Version 元数据，重新验证 Binding、策略轨迹、版本 fingerprint、Observation 归属和 PIT 时间边界。Application 使用事务返回的最新 Observation，并在组装 DTO 前再次应用载荷留存/清理状态。
+
+
+## 13. 来源采集持久化授权事务补充（2026-11-12）
+
+来源采集写入与 Evidence 内容读取是两个不同的授权边界。本节记录 Observation 持久化前的当前策略竞态保护，不替代第 11 节的 Evidence 原子读取，也不扩展 Evidence RACE-01～07 的定义。
+
+- `IngestCollectedSource` 不再只依赖 Catalog 返回的策略快照在事务外完成持久化授权判断；每条 Observation 写入前，在同一个 Identity Transaction 内锁定并重新读取当前 Source/Endpoint 策略，再评估元数据持久化权限。
+- Provider Candidate Ingest 在同一事务内锁定完整 Provider Output、Source、Endpoint 当前策略组合，并使用数据库持久化的当前策略作为授权权威；不使用 Catalog 中的旧策略对象替代当前版本。
+- 策略 tuple 按 `(policy_type, policy_ref)` 固定字典序锁定。策略撤销/替换更新同一当前指针行，因此必须等待正在进行的 Observation 写事务提交。
+- Identity Transaction 显式使用 InnoDB `REPEATABLE READ`。当 Endpoint 当前策略指针尚不存在时，`SELECT ... FOR UPDATE` 的间隙锁用于阻止并发首次发布绕过该次写入授权检查；策略发布事务与 Evidence 原子读取事务也显式使用 `REPEATABLE READ`。
+- MariaDB 11.4 集成测试覆盖完整三类策略读取、Source 策略替换等待、Provider Output 策略撤销等待、旧策略版本在替换提交后被拒绝，以及缺失 Endpoint 指针期间首次发布必须等待。
+- 内存替身测试覆盖数据库当前 Source 策略版本与 Catalog 快照不一致时拒绝持久化；数据库并发语义以 MariaDB 集成测试为准。
+
+该补充只保护 News 自身的采集持久化事务，不意味着真实网络采集已启用。Provider/Feed 在线验收仍需部署环境凭证、固定 Endpoint BoundDoer、来源授权和出口安全证据。GOV-CTR-006 JCS Runtime Verifier 未接入时，Evidence 受限内容继续 fail closed。

@@ -454,6 +454,15 @@ func TestTushareValuationKeepsStaticPESeparateFromMRQ(t *testing.T) {
 	if got.Total != 1 || len(got.Items) != 1 {
 		t.Fatalf("unexpected valuation snapshot: %+v", got)
 	}
+	if got.ProviderReportDate != reference.Format("2006-01-02") {
+		t.Fatalf("provider report date = %q, want daily_basic trade_date %q", got.ProviderReportDate, reference.Format("2006-01-02"))
+	}
+	if got.ProviderTimestamp != nil {
+		t.Fatalf("daily_basic does not expose an exact snapshot timestamp, got %v", got.ProviderTimestamp)
+	}
+	if got.QualityStatus != model.QualityDegraded {
+		t.Fatalf("daily_basic snapshot must remain degraded without an exact provider timestamp, got %q", got.QualityStatus)
+	}
 	item := got.Items[0]
 	if got.SourceVersion != "tushare-daily-basic-v2" || item.SourceVersion != "tushare-daily-basic-v2" {
 		t.Fatalf("unexpected Tushare valuation field version: snapshot=%q item=%q", got.SourceVersion, item.SourceVersion)
@@ -463,6 +472,9 @@ func TestTushareValuationKeepsStaticPESeparateFromMRQ(t *testing.T) {
 	}
 	if item.PEMRQ != nil {
 		t.Fatalf("Tushare daily_basic pe must not be labelled pe_mrq, got %+v", item.PEMRQ)
+	}
+	if item.PCFTTM != nil {
+		t.Fatalf("Tushare daily_basic does not provide PCF TTM, got %+v", item.PCFTTM)
 	}
 	if item.PETTM == nil || *item.PETTM != 18.4 {
 		t.Fatalf("expected TTM PE to remain mapped, got %+v", item.PETTM)
@@ -476,8 +488,14 @@ func TestTushareValuationKeepsStaticPESeparateFromMRQ(t *testing.T) {
 		item.DividendYieldTTMPercent == nil || *item.DividendYieldTTMPercent != 2.6 {
 		t.Fatalf("dividend-yield fields were not mapped: %+v", item)
 	}
-	if !containsTushareReason(item.QualityReasons, "provider_pe_mrq_not_supported_by_tushare_daily_basic") {
-		t.Fatalf("expected missing-MRQ quality reason, got %+v", item.QualityReasons)
+	for _, reason := range []string{
+		"provider_exact_snapshot_time_not_exposed",
+		"provider_pcf_ttm_not_supported_by_tushare_daily_basic",
+		"provider_pe_mrq_not_supported_by_tushare_daily_basic",
+	} {
+		if !containsTushareReason(item.QualityReasons, reason) {
+			t.Fatalf("expected quality reason %q, got %+v", reason, item.QualityReasons)
+		}
 	}
 }
 
@@ -973,6 +991,45 @@ func TestTushareFundamentalsUsesStatementsWhenIndicatorEndpointFails(t *testing.
 		}
 		if !found {
 			t.Fatalf("statement section %s should remain usable despite indicator endpoint failure", category)
+		}
+	}
+}
+
+func TestTushareFundamentalsPreservesPermissionRequiredWhenAllEndpointsDenied(t *testing.T) {
+	seen := make(map[string]bool, 4)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request tushareIndexWeightRequest
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Errorf("decode Tushare financial request: %v", err)
+			http.Error(w, "invalid request", http.StatusBadRequest)
+			return
+		}
+		switch request.APIName {
+		case "fina_indicator", "income", "balancesheet", "cashflow":
+			seen[request.APIName] = true
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"code":40203,"msg":"permission denied","data":null}`))
+		default:
+			t.Errorf("unexpected Tushare financial endpoint %q", request.APIName)
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	client := NewTushareConfigured(2*time.Second, server.URL, "test-token")
+	_, err := client.FetchFundamentals(context.Background(), "600519.SH", 2025, 4)
+	if err == nil {
+		t.Fatal("expected permission error when all Tushare financial endpoints are denied")
+	}
+	if !isTusharePermissionError(err) {
+		t.Fatalf("permission error was collapsed into a generic no-data error: %v", err)
+	}
+	if !strings.Contains(err.Error(), "fina_indicator") || !strings.Contains(err.Error(), "code=40203") {
+		t.Fatalf("permission error must retain the original Tushare endpoint and code: %v", err)
+	}
+	for _, endpoint := range []string{"fina_indicator", "income", "balancesheet", "cashflow"} {
+		if !seen[endpoint] {
+			t.Errorf("expected Tushare endpoint %q to be attempted", endpoint)
 		}
 	}
 }
