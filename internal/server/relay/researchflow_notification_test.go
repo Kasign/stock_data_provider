@@ -86,7 +86,7 @@ func (*emptyResearchflowOutboxStore) RetryOutbox(context.Context, string, string
 func TestResearchflowNotificationRelayStartStop(t *testing.T) {
 	store := &emptyResearchflowOutboxStore{claimed: make(chan struct{}, 1)}
 	relay, err := NewResearchflowNotificationRelay(store, &researchflowNotificationReceiverStub{}, ResearchflowNotificationConfig{
-		WorkerID: "test-researchflow-notification-relay",
+		WorkerID:  "test-researchflow-notification-relay",
 		BatchSize: 1, PollInterval: 10 * time.Millisecond,
 		LeaseDuration: time.Second, PublishTimeout: 500 * time.Millisecond,
 	}, nil)
@@ -206,56 +206,5 @@ func TestResearchflowNotificationPublisherRejectsMismatchedRunReference(t *testi
 	}
 	if len(receiver.raw) != 0 {
 		t.Fatal("inconsistent Researchflow payload reached Notification EventReceiver")
-	}
-}
-
-type relayLifecycleOutboxStore struct {
-	claimed chan struct{}
-}
-
-func (s *relayLifecycleOutboxStore) ClaimOutbox(context.Context, string, string, int, time.Duration) ([]researchflowapp.OutboxMessage, error) {
-	select {
-	case s.claimed <- struct{}{}:
-	default:
-	}
-	return nil, nil
-}
-
-func (*relayLifecycleOutboxStore) AcknowledgeOutbox(context.Context, string, string, uint64) (bool, error) {
-	return false, nil
-}
-
-func (*relayLifecycleOutboxStore) RetryOutbox(context.Context, string, string, uint64, time.Time, string) (bool, error) {
-	return false, nil
-}
-
-func TestResearchflowNotificationRelayStartStopLifecycle(t *testing.T) {
-	store := &relayLifecycleOutboxStore{claimed: make(chan struct{}, 1)}
-	relay, err := NewResearchflowNotificationRelay(store, &researchflowNotificationReceiverStub{}, ResearchflowNotificationConfig{
-		WorkerID: "relay-lifecycle-test", BatchSize: 1,
-		PollInterval: 10 * time.Millisecond, LeaseDuration: time.Second,
-		PublishTimeout: 100 * time.Millisecond,
-	}, nil)
-	if err != nil {
-		t.Fatalf("create Researchflow Notification Relay: %v", err)
-	}
-	if err := relay.Start(context.Background()); err != nil {
-		t.Fatalf("start Researchflow Notification Relay: %v", err)
-	}
-	select {
-	case <-store.claimed:
-	case <-time.After(time.Second):
-		t.Fatal("Researchflow Notification Relay did not start polling its Outbox")
-	}
-	stopCtx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-	if err := relay.Stop(stopCtx); err != nil {
-		t.Fatalf("stop Researchflow Notification Relay: %v", err)
-	}
-	if err := relay.Start(context.Background()); err == nil {
-		t.Fatal("Researchflow Notification Relay accepted a second start")
-	}
-	if err := relay.Stop(stopCtx); err != nil {
-		t.Fatalf("repeat stop should be safe: %v", err)
 	}
 }
