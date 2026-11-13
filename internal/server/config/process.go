@@ -20,6 +20,7 @@ type Process struct {
 	Security                  Security
 	HTTP                      HTTP
 	ResearchNotificationRelay ResearchNotificationRelay
+	ResearchflowCapacity       ResearchflowCapacity
 }
 
 // LoadProcess 在启动阶段一次性解析 Server 进程级配置。
@@ -73,6 +74,9 @@ func LoadProcess(env platformconfig.Env) (Process, error) {
 		if cfg.ResearchNotificationRelay, err = LoadResearchNotificationRelay(env); err != nil {
 			return Process{}, err
 		}
+	}
+	if cfg.ResearchflowCapacity, err = LoadResearchflowCapacity(env); err != nil {
+		return Process{}, err
 	}
 	return cfg, nil
 }
