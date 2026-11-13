@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
@@ -29,9 +30,8 @@ func (p *fundamentalsCountingHTTPProvider) FetchFundamentals(ctx context.Context
 	return p.fundamentalsHTTPProvider.FetchFundamentals(ctx, symbol, year, quarter)
 }
 
-// TestFundamentalsHTTPToMariaDBPointInTime verifies the public HTTP route writes
-// the Provider result through DataService and can read that exact revision back
-// through the as_of route without calling the Provider again.
+// TestFundamentalsHTTPToMariaDBPointInTime verifies the HTTP route persists the
+// Provider result through DataService and reads that revision back through as_of.
 func TestFundamentalsHTTPToMariaDBPointInTime(t *testing.T) {
 	dsn := os.Getenv("MARKET_DATA_TEST_MYSQL_DSN")
 	if dsn == "" {
@@ -51,9 +51,9 @@ func TestFundamentalsHTTPToMariaDBPointInTime(t *testing.T) {
 	}
 
 	symbol := fmt.Sprintf("%06d.SH", 900000+time.Now().UnixNano()%99999)
-	provider := &fundamentalsCountingHTTPProvider{}
+	source := &fundamentalsCountingHTTPProvider{}
 	svc := service.New(
-		[]provider.Provider{provider},
+		[]provider.Provider{source},
 		cache.NewDisabled(),
 		store,
 		time.Second,
@@ -61,8 +61,8 @@ func TestFundamentalsHTTPToMariaDBPointInTime(t *testing.T) {
 		120,
 		slog.New(slog.NewTextHandler(io.Discard, nil)),
 	)
-	svc.SetFundamentalsProviders([]provider.FundamentalsProvider{provider})
-	handler := New("integration-secret", "forward_adjusted", svc, []provider.Provider{provider}, nil).Handler()
+	svc.SetFundamentalsProviders([]provider.FundamentalsProvider{source})
+	handler := New("integration-secret", "forward_adjusted", svc, []provider.Provider{source}, nil).Handler()
 
 	liveRequest := httptest.NewRequest(http.MethodGet,
 		"/api/v1/stocks/"+symbol+"/fundamentals?year=2026&quarter=2", nil)
@@ -79,8 +79,8 @@ func TestFundamentalsHTTPToMariaDBPointInTime(t *testing.T) {
 	if liveSnapshot.Symbol != symbol || liveSnapshot.Year != 2026 || liveSnapshot.Quarter != 2 {
 		t.Fatalf("live response identity mismatch: %+v", liveSnapshot)
 	}
-	if provider.calls != 1 {
-		t.Fatalf("live request should call Provider once, got %d", provider.calls)
+	if source.calls != 1 {
+		t.Fatalf("live request should call Provider once, got %d", source.calls)
 	}
 
 	asOf := time.Now().UTC()
@@ -106,7 +106,7 @@ func TestFundamentalsHTTPToMariaDBPointInTime(t *testing.T) {
 	if len(historical.Sections) == 0 || historical.Sections[0].ReportDate != "2026-06-30" {
 		t.Fatalf("PIT response did not restore persisted report data: %+v", historical.Sections)
 	}
-	if provider.calls != 1 {
-		t.Fatalf("PIT request must not call live Provider; calls=%d", provider.calls)
+	if source.calls != 1 {
+		t.Fatalf("PIT request must not call live Provider; calls=%d", source.calls)
 	}
 }
