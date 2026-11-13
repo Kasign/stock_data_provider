@@ -20,7 +20,7 @@ type Process struct {
 	Security                  Security
 	HTTP                      HTTP
 	ResearchNotificationRelay ResearchNotificationRelay
-	ResearchflowCapacity       ResearchflowCapacity
+	ResearchflowCapacity      ResearchflowCapacity
 }
 
 // LoadProcess 在启动阶段一次性解析 Server 进程级配置。
