@@ -1,7 +1,7 @@
 # Integration 系统接入审查与整体验收基线
 
 - 验收分支：`integration`
-- 本文最近一次核对的 integration 代码 SHA：`d664b9f6ec08d358b914242735fde52f49e9c7c1`；当前分支 HEAD 为 `dde7d4f8fb071912ffa34bb9c50d46507d1a388b`。
+- 本文最近一次核对的 integration 代码验收 SHA：`dde7d4f8fb071912ffa34bb9c50d46507d1a388b`；其后仅有文档同步提交（包括 `d1fa84d`），不改变本次代码验收结论。
 - 当前 CI：Integration Run `43370552552`，对应精确 HEAD `dde7d4f8fb071912ffa34bb9c50d46507d1a388b`，结论 `success`；gofmt、root/go-core vet/test、News/Research MariaDB 集成测试、Compose、WebUI 语法/单测和 Docker 构建全部通过。上一轮 Run `43369529083` 对代码 SHA `d664b9f` 同样 success。
 - 历史审查基线 SHA：`63f49065a5ef3379d95948a6c2c6e504a555a63f`（Run #54），仅作为历史参考
 - 历史参考：Run #23（`43178908392`）仅对应旧 SHA `fdc19b8591223dabccb533389d472713bfecc415`，结论 `success`

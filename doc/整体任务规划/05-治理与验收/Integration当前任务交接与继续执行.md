@@ -4,8 +4,8 @@
 - 当前工作分支：integration
 - 本文更新日期：2026-11-13
 - 本文用途：下一轮新聊天的首要接续入口。新聊天先读本文，再核对 GitHub 当前 HEAD/CI；不得直接假设本文 SHA 仍是最新。
-- 当前 integration HEAD：dde7d4f8fb071912ffa34bb9c50d46507d1a388b
-- 当前代码验收 SHA：dde7d4f8fb071912ffa34bb9c50d46507d1a388b；Integration CI Run [43370552552](https://github.com/Kasign/stock_data_provider/actions/runs/43370552552) success，head_sha 精确匹配。
+- 本轮代码验收 HEAD：dde7d4f8fb071912ffa34bb9c50d46507d1a388b；其后仅有 docs-only 更新（包括 `d1fa84d`），不改变本轮代码验收结论。
+- 代码验收 SHA：dde7d4f8fb071912ffa34bb9c50d46507d1a388b；Integration CI Run [43370552552](https://github.com/Kasign/stock_data_provider/actions/runs/43370552552) success，head_sha 精确匹配。
 - News→Research 组合代码 SHA：d664b9f6ec08d358b914242735fde52f49e9c7c1；Run 43369529083 success。`dde7d4f` 仅移除一次误加的重复 LLM 传输适配器，当前代码树不包含重复实现。
 - News→Research 组合构造提交：06722fdcd2e178c69ee4ae7bb3bf06caf907545d，Run 43368950457 success。
 - 启用 News/Research MariaDB 集成测试后，Run 43369220849 对 SHA 570b001 暴露既有 News 集成夹具缺少 NEWS-CTR-002 schema_version；已在 SHA d664b9f 修正，Run 43369529083 success。
