@@ -6,6 +6,8 @@
 > 代码范围：Server 运行入口、应用装配、HTTP Transport、Worker 生命周期、Migration 汇总、事件连接和运行诊断。
 > 本文是 Server 分支的唯一任务主计划。模块内部实现仍以各模块自己的 `doc/<module>/` 为准；项目级架构和跨模块契约以 `feat/design_doc` 上的项目总览及契约目录为准；当前项目总览权威路径为 `doc/整体任务规划/01-项目总览/整体任务规划总览.md`，契约登记簿为 `doc/contract/PLAT-002-项目级契约冻结登记簿.md`。
 
+> **Integration 联调更新（2026-11-13，代码 SHA `d664b9f6ec08d358b914242735fde52f49e9c7c1`）**：Server Bootstrap 已在 API/Worker 角色共同加载 News Config；当 Evidence Cursor Key Ring 已配置时，构造共享 MariaDB 上的 News PIT/授权查询、HMAC Cursor 分页、Research Context/Evidence Repository、Research Service、News Importer/Authorizer。未配置 Key Ring 时不生成默认密钥、不构造分页 Facade。当前只是生产依赖组合已构造，尚无 Researchflow Stage 或 HTTP 业务入口消费 Importer；不等同端到端业务链路已启用。精确 SHA 的 Integration CI Run [43369529083](https://github.com/Kasign/stock_data_provider/actions/runs/43369529083) 已 success；News→Research 跨模块真实写入验收仍待完成。
+
 ## 1. 目标与边界
 
 Server 是应用组合根（Composition Root）和进程运行入口。它负责把 Platform 与业务模块组装成可运行服务，并管理进程级资源和生命周期；不实现业务领域规则，不拥有业务数据和业务状态机。

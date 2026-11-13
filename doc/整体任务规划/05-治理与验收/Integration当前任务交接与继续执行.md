@@ -4,10 +4,11 @@
 - 当前工作分支：integration
 - 本文更新日期：2026-11-13
 - 本文用途：下一轮新聊天的首要接续入口。新聊天先读本文，再核对 GitHub 当前 HEAD/CI；不得直接假设本文 SHA 仍是最新。
-- 本轮代码验收 HEAD：19394e856c6909b50a3eb664c2d565262fe2e8a2
-- 对应 Integration CI Run：43364123334，结论 success，head_sha 与代码验收 SHA 完全一致。
-- CI 链接：https://github.com/Kasign/stock_data_provider/actions/runs/43364123334
-- 本文及其他交接文档在代码验收后另有 docs-only 更新；新聊天仍须重新核对当前 integration HEAD。
+- 当前代码提交：d664b9f6ec08d358b914242735fde52f49e9c7c1
+- 对应 Integration CI Run：[43369529083](https://github.com/Kasign/stock_data_provider/actions/runs/43369529083)，结论 success，head_sha 与当前代码 SHA 完全一致。
+- News→Research 组合构造提交：06722fdcd2e178c69ee4ae7bb3bf06caf907545d，Run 43368950457 success。
+- 启用 News/Research MariaDB 集成测试后，Run 43369220849 对 SHA 570b001 暴露既有 News 集成夹具缺少 NEWS-CTR-002 schema_version；已在 SHA d664b9f 修正，Run 43369529083 success。
+- CI 现设置 NEWS_MARIADB_TEST_DSN 与 RESEARCH_TEST_MYSQL_DSN，News 与 Research 模块级 MariaDB 集成测试已进入根模块测试并通过；不代表跨模块 Importer 写入链路已验收。
 
 ## 1. 当前已完成的工作
 
@@ -48,11 +49,7 @@ Run 43362987745 对 SHA 23d07e7 的 GOV-CTR-006/News 代码全量通过；其后
 
 internal/server/bootstrap/bootstrap.go 当前仍以旧 Analysis Runner、旧 Analysis Task Queue 和旧 Analysis HTTP API 为主要业务运行链。Bootstrap 有共享 DB/Redis、Migration Registry、Lifecycle、Health/Readiness，以及 Research/Researchflow → Notification Outbox Relay。
 
-当前 Bootstrap 尚未：
-- 构造 News 的生产 Evidence Query Facade；
-- 构造 Research Context/Evidence Repository 与 Research Application Service；
-- 注入 News → Research 的 Importer/Authorizer；
-- 装配 Researchflow Scheduler、WorkerPool 和生产 StageExecutor。
+当前 Bootstrap 已新增 News→Research 组合构造入口，并在 API/Worker 角色共同加载 News Config；当 Key Ring 已配置时，构造 News Evidence Query Facade、Research Repository/Service、Importer/Authorizer。当前仍未将 Importer 接入具体业务消费者，也未装配 Researchflow Scheduler、WorkerPool 和生产 StageExecutor。
 
 不要将 Migration 已注册、模块代码已存在或模块单测通过描述为生产调用链已接通。
 
@@ -108,7 +105,21 @@ Research Application 入口：
 
 NewService 的必需依赖是 Context Repository、Evidence Repository、EvidenceAuthorizer；Clock 和 ID Generator 有默认值，ContextAuthorizer 可选但若提供必须非 nil。
 
-### 2.5 Researchflow 当前边界
+### 2.5 News → Research 本轮组合构造
+
+新增 `internal/server/bootstrap/research_news.go`：
+
+- 使用共享 DB 构造 News MySQL Repository；同一 Repository 提供 PIT 查询、授权快照、当前策略解析、事务内当前授权复核/正文读取及 Evidence Snapshot 存储。
+- 使用 News Platform Adapter 委托 GOV-CTR-006 公共 Runtime Verifier。
+- 构造 GetEvidence、Evidence Snapshot Factory、EvidenceCursorCodec、ListEvidenceSnapshotPage、ListEvidence 和 EvidenceQueryFacade。
+- 构造 Research Context/Evidence MariaDB Repository、Research Service、News Authorizer、News Importer。
+- Snapshot ID 使用 crypto/rand；随机源失败时返回空 ID，由领域校验拒绝，不降级为可预测 ID。
+- Key Ring 未配置时 Bootstrap 不构造分页 Facade，不生成默认密钥；已配置但非法时 News Config 加载/构造失败关闭。
+- Bootstrap 在 API/Worker 两种角色均加载 News Config，并在 Key Ring 配置后执行真实依赖构造。
+
+重要边界：该组合目前尚无 Researchflow Stage/HTTP 业务消费者；构造成功只证明构造函数和依赖图可创建，不代表 News Evidence 已被调用或持久化。尚需真实 MariaDB 联调验证授权读取、分页、Key 轮换和 Research Evidence 写入。
+
+### 2.6 Researchflow 当前边界
 
 Researchflow 已有 Scheduler、Worker、WorkerPool、Claim/Lease/Fencing、候选扫描与 Finalizer 等模块内设施；但尚未形成 Server 生产 StageExecutor 组合。Quant 也不能直接作为生产 Stage Provider：Indicator/Factor/Trend 的公开 Application Port、Payload Registry 和冻结契约门禁仍有缺口。
 
@@ -118,11 +129,12 @@ Researchflow 已有 Scheduler、Worker、WorkerPool、Claim/Lease/Fencing、候�
 
 按顺序推进，一次只处理一条真实依赖链：
 
-1. News 游标密钥配置代码与测试已完成并通过 Run 43364123334：NEWS_EVIDENCE_CURSOR_ACTIVE_KEY_ID + NEWS_EVIDENCE_CURSOR_KEYRING_JSON；覆盖缺失/非法配置、Active Key 校验、Secret 防泄漏和防御性副本。下一步由 Server Bootstrap 装配 EvidenceCursorCodec 时消费该配置；轮换需保留旧 Key 至少 15 分钟。
-2. News/Research 组合构造：在 Server Composition 层构造共享 DB 上的 News Repository、公共 Verifier、当前策略复核器、Get/List Evidence Facade、Research Repository 和 Research Service，再构造已有 Research News Importer/Authorizer。所有必需依赖均为真实实现。
-3. 装配验收：为构造入口补 Bootstrap/Composition 测试；使用真实 MariaDB 集成验证从 News 授权快照读取、当前策略复核到 Research Evidence 持久化的调用链。测试应覆盖指纹篡改、策略撤销、PIT 不可见、事务失败和 Context 取消。
-4. Researchflow Stage 接入：先读取当前冻结 Stage/Template/Output Registry 契约及真实模块代码。只有具体 Stage 输入/输出、Registry 版本、可信 CallerRef 和生产 Provider 均明确后才接入；不创建空壳 StageExecutor。
-5. Quant：继续保持生产 Stage 禁止接入，直到其 Application Port、Result Payload/Registry 和对应 Data 精度门禁满足契约。
+1. News Cursor Key Ring 配置已完成，Run 43364123334 对 SHA 19394e8 success；Bootstrap 已消费配置并构造 EvidenceCursorCodec，部署轮换时旧 Key 至少保留游标 TTL 15 分钟。
+2. News→Research 组合构造代码及 Bootstrap 构造测试已提交；Run 43368950457 对构造代码 SHA 06722fd success。启用 MariaDB 集成测试暴露了既有 News 集成夹具缺少 schema_version，已在 SHA d664b9f 修正，Run 43369529083 success。
+3. 真实 News→Research 跨模块 MariaDB 端到端验收仍未完成：验证授权快照读取、当前策略复核、PIT 不可见、指纹篡改、策略撤销、事务失败、Context 取消，以及 Research Evidence 持久化。现有 News/Research 模块级 MariaDB 集成测试已由 Run 43369529083 执行并通过；不得将其等同跨模块链路验收。另需验证分页游标旧 Key 在轮换期间仍可验签。
+4. Researchflow Stage 接入：读取冻结 Stage/Template/Output Registry 契约及真实模块代码。只有 Stage 输入/输出、Registry 版本、可信 CallerRef 和生产 Provider 均明确后才接入；不创建空壳 StageExecutor。
+5. Quant：保持生产 Stage 禁止接入，直到 Application Port、Result Payload/Registry 和 DATA-CTR-005/007 门禁满足契约。
+6. 复核 LLM Provider 与 Notification Delivery 的生产装配条件；已有 Outbox→Inbox/FanoutWorkItem MariaDB 验收不重复执行。只推进存在真实契约与可运行依赖的缺口。
 
 ## 4. 执行规则
 
