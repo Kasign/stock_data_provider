@@ -136,7 +136,7 @@ func validGetEvidenceFixture(now time.Time) (GetEvidenceRequest, EvidencePITReco
 		EndpointRef:           domain.NullableOpaqueRef{Present: true},
 		SourceRef:             observation.SourceID,
 		AuthorizationRef: domain.NewsAuthorizationRef{
-			AuthorizationRef: "authorization-evidence-1", PolicyOwner: "news",
+			AuthorizationRef: "authorization-evidence-1", PolicyOwner: "news", SchemaVersion: "1.0.0",
 			PolicyVersion: "snapshot-evidence-v1", Decision: domain.AuthorizationDecisionAllowed,
 			PurposeCode: string(request.PurposeCode), ContentLevel: domain.AuthorizationContentSummary,
 			SubjectRef: request.CallerRef, ResourceRef: resourceRef,
@@ -145,7 +145,7 @@ func validGetEvidenceFixture(now time.Time) (GetEvidenceRequest, EvidencePITReco
 			Conditions: []string{}, DecisionFingerprint: strings.Repeat("a", 64),
 		},
 		PolicySnapshot: domain.AuthorizationPolicySnapshot{
-			SnapshotRef: "snapshot-evidence-v1",
+			SnapshotRef: "snapshot-evidence-v1", SchemaVersion: "1.0.0",
 			Policies: []domain.AuthorizationPolicyVersion{{
 				PolicyType: "source", PolicyRef: observation.SourceID, PolicyVersion: observation.SourcePolicyVersionID,
 			}},

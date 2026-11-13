@@ -9,8 +9,8 @@ import (
 
 type goldenVector struct {
 	AuthorizationRef json.RawMessage `json:"authorization_ref"`
-	PolicySnapshot    json.RawMessage `json:"policy_snapshot"`
-	ExpectedSHA256    string          `json:"expected_sha256"`
+	PolicySnapshot   json.RawMessage `json:"policy_snapshot"`
+	ExpectedSHA256   string          `json:"expected_sha256"`
 }
 
 func TestVerifyFingerprintGOV006Goldens(t *testing.T) {

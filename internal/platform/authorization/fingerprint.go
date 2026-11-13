@@ -13,7 +13,7 @@ import (
 )
 
 var (
-	ErrInvalidAuthorizationFingerprint = errors.New("authorization: invalid fingerprint input")
+	ErrInvalidAuthorizationFingerprint  = errors.New("authorization: invalid fingerprint input")
 	ErrAuthorizationFingerprintMismatch = errors.New("authorization: fingerprint mismatch")
 )
 
