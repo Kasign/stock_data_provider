@@ -131,7 +131,6 @@ func TestLoadRoleRejectsUnknownRole(t *testing.T) {
 	}
 }
 
-
 func TestLoadResearchflowCapacityRequiresBothExplicitPositiveLimits(t *testing.T) {
 	tests := []struct {
 		name   string
