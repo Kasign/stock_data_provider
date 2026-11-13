@@ -78,3 +78,19 @@ func TestValidateFundamentalsSnapshotReportsNilSnapshot(t *testing.T) {
 		t.Fatalf("expected one nil snapshot issue, got %+v", report)
 	}
 }
+
+func TestValidateFundamentalsSnapshotRejectsUnknownSourceVersion(t *testing.T) {
+	snapshot := validFundamentalsFixture()
+	snapshot.SourceVersion = "unknown"
+	report := ValidateFundamentalsSnapshot(snapshot, "600036.SH", 2026, 2)
+	found := false
+	for _, issue := range report.Issues {
+		if issue.Field == "source_version" && issue.Code == "unidentifiable" && issue.Severity == SeverityError {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected unknown source_version to be rejected, got %+v", report.Issues)
+	}
+}

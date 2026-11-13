@@ -361,7 +361,7 @@ Server 不重写模块业务 Handler 的校验和领域错误，不在路由层�
 
 ### SRV-006：API/Worker 运行角色和生命周期
 
-- 状态：进行中（已实现 SERVER_ROLE=api|worker|all；旧 Analysis Worker 与 HTTP Server 均已纳入 runtime.Lifecycle，具备启动失败回滚预算、Readiness 先降级、HTTP 在途请求排空和超时强制关闭；Lifecycle 已覆盖启动期间 Context 取消、并发 Stop 竞争和逆序回滚。HTTP 活动 Handler 排空受关闭 Context 限制，超时会返回错误；组件仍须遵守 Context 取消契约。
+- 状态：进行中（已实现 SERVER_ROLE=api|worker|all；旧 Analysis Worker 与 HTTP Server 均已纳入 runtime.Lifecycle，具备启动失败回滚预算、Readiness 先降级、HTTP 在途请求排空和超时强制关闭；Lifecycle 已覆盖启动期间 Context 取消、并发 Stop 竞争和逆序回滚。HTTP 活动 Handler 排空受关闭 Context 限制，超时会返回错误；组件仍须遵守 Context 取消契约。独立子进程真实 OS SIGTERM 顺序测试已存在；完整 Bootstrap/真实数据库/生产容器验收仍待完成。
 - 前置：SRV-003、SRV-004
 - 工作内容：实现角色解析、组件选择、启动依赖排序、失败回滚、优雅关闭和超时。
 - 交付物：Runtime Role 与 Lifecycle Manager。
@@ -370,7 +370,7 @@ Server 不重写模块业务 Handler 的校验和领域错误，不在路由层�
 
 ### SRV-007：Migration 注册与执行
 
-- 状态：进行中（Server Registry 已接入 News、Research、Researchflow、Notification 四个模块 Migration；按 namespace 和版本号稳定排序，执行由 `MIGRATION_ENABLED` 显式开启；只读 Schema 预检要求数据库 namespace/version 集合与当前 Registry 完全一致且状态均为 `applied`。真实 MariaDB 故障/恢复集成及 Platform checksum 只读验证能力仍待完成）
+- 状态：进行中（Server Registry 已接入 News、Research、Researchflow、Notification 四个业务模块 Migration，以及 Platform Owner Credential、Server Security Audit 两个安全基础设施 namespace；按 namespace 和版本号稳定排序，执行由 `MIGRATION_ENABLED` 显式开启；只读 Schema 预检要求数据库 namespace/version 集合与当前 Registry 完全一致且状态均为 `applied`。真实 MariaDB 故障/恢复集成及 Platform checksum 只读验证能力仍待完成）
 - 前置：SRV-003；其余模块提供可用 Migration 后再注册；核对 Platform `storage.ApplyMigrations` 实际签名和各模块 Migration 注册形态
 - 工作内容：在模块装配阶段收集各模块拥有的 Migration 描述，校验 namespace/version 唯一性及顺序，再按部署策略调用 Platform Runner，输出可追踪结果。MariaDB DDL 部分执行失败后的恢复按 Platform Runner 契约执行，不在 Server 自行重试失败 Migration。
 - 交付物：`internal/server/migration.Registry`、显式执行配置和模块注册测试；真实 MariaDB 集成验收待执行。
@@ -514,6 +514,8 @@ flowchart TD
 - 当前 HTTP Client 使用 Platform 默认 Config。模块后续通过自己的公开配置/目的地址策略绑定使用，不在 Server 预设 Provider Host allowlist。
 - 本次增加资源容器重复关闭测试。GitHub 文件写入已完成，但本轮尚未执行 Go 编译和测试；不能据此认定测试通过。
 ### 12.6 模块装配就绪度复核（2026-11-09）
+
+ > 历史快照：其中 Researchflow/Notification/LLM 的缺口描述已被后续实现部分取代；当前状态以 12.61 节为准。
 
 本节用于确定 SRV-004 的真实前置条件，不代表替代各模块自己的任务验收。
 
@@ -771,12 +773,12 @@ Server 层完成不是“服务能够启动”这么简单。至少同时满足�
 | SRV-001 | 完成 | 已记录旧入口、路由与认证现状、旧 Analysis Migration 四表、Worker/Storage 生命周期、部署边界及各模块接入就绪度；详细见 12.3 节 |
 | SRV-002 | 进行中 | Process 配置快照、显式 Env 注入、Bootstrap 配置传递和部分初始化失败逆序清理已实现；当前仍以旧 Analysis Runner/Task Queue/HTTP API 作为运行对象，完整模块 Registry 与生产装配尚未完成；详见 12.22、12.27、12.32、12.35、12.36 节 |
 | SRV-003 | 进行中 | DB、Redis、HTTP Client 已由 Resources 统一创建和关闭；BoundDoer 与 LLM JSON/SSE 传输桥接及 Responses Adapter 构造入口已实现；当前 Server 独立 CI 已通过，未再存在文档所述 `internal/llm` 未使用导入导致的编译阻断；Provider/Secret/CapabilityState 可信配置装配、News Provider/Source 真实注入及生产流式 E2E 仍待完成；详见 12.24、12.28、12.40～12.42 节 |
-| SRV-004 | 阻塞 | 2026-11-12 复核已确认 Research Repository 构造入口和 Researchflow Migration 接入；但 Research 可信 Evidence Authorizer、News 生产查询/采集入口、Researchflow Repository/Worker、Quant Application Facade、LLM 可信 Provider 配置、Notification Dispatcher/Worker 仍未具备完整生产装配条件；详见 12.6、12.54 节 |
+| SRV-004 | 阻塞 | Integration 最新代码复核已确认：Research MySQL Repository/Service、Researchflow MySQL WorkerStore/Scheduler/WorkerPool、Notification EventReceiver/FanoutDispatcher/Delivery 执行服务均已存在，不再将这些基础设施误列为缺失；当前阻断为 News 生产 SourceCatalog/Endpoint 授权与 BoundDoer/ProviderOutputPolicy 装配、Research 可信 EvidenceAuthorizer、Researchflow 生产 StageExecutor 与周期调度/Worker 生命周期、Quant 完整计算 Application Facade/持久化 Repository、LLM 可信 ProviderConfig/Secret/CapabilityState 注入、Notification 生产 FanoutPlanFactory/渠道 Adapter/身份目录/Worker 接入；详见 12.61 节 |
 | SRV-005 | 进行中 | 已接入 Platform Bearer Owner 认证、入口 Request ID、Fault HTTP 映射工具、请求体与并发限制；补齐 GET/HEAD 探针的状态、响应头、身份策略及过载豁免测试；现有旧 Analysis Handler 保留原业务错误 DTO；Web Session/密码登录、CSRF、登录限流、模块 Service Scope 和可信代理边界仍待契约/模块入口，现有 WebUI 尚未携带 Analysis Owner 凭证，不能视为浏览器认证链路已完成；详见 12.31 节 |
-| SRV-006 | 进行中 | 旧 Analysis Worker 与 HTTP Server 已纳入统一 Lifecycle；已覆盖启动取消回滚预算、单组件 Start/Stop 并发竞态、HTTP 优雅关闭及强制关闭后的活动连接排空；最新文档 HEAD `db0087e5` 对应的 Server CI（Run `43147147914`）成功；代码修复 SHA `17585149` 对应 Run `43147039665`，gofmt、包级测试、Race、Vet 全部通过；模块 Worker 接入、真实 SIGTERM/生产容器退出验收仍待完成；详见 12.17～12.19、12.26、12.34、12.38、12.50～12.51、12.56～12.58 节 |
-| SRV-007 | 进行中 | Server Migration Registry 已注册 News、Research、Researchflow、Notification 四个模块 namespace；namespace/版本确定性排序、执行报告、稳定原因码、Registry 并发保护和执行快照冻结已实现；只读 Schema 预检已校验 namespace 与版本集合完全匹配且状态均为 applied，并纳入 Bootstrap 启动门禁和 API Readiness；最新 Server 独立 CI 的 Migration/Diagnostics 单测、Race、Vet 通过；Platform checksum 只读验证 API/Fault Code、MariaDB 故障/恢复集成验收仍待完成；详见 12.7、12.23、12.25、12.30、12.37、12.45、12.50～12.51、12.53、12.55 节 |
+| SRV-006 | 进行中 | 已实现 SERVER_ROLE=api|worker|all；旧 Analysis Worker 与 HTTP Server 纳入统一 Lifecycle，覆盖启动回滚预算、Readiness draining、HTTP 活动连接排空和超时强制关闭；已有独立子进程真实 OS SIGTERM 测试，验证 HTTP 先进入 draining、再停止 Worker；仍缺真实 Bootstrap + MariaDB/Redis 的 SIGTERM 及生产容器退出验收、新模块 Worker 接入；详见 12.17～12.19、12.26、12.34、12.38、12.50～12.51、12.56～12.58、12.61 节 |
+| SRV-007 | 进行中 | Server Migration Registry 已注册 News、Research、Researchflow、Notification 四个模块 namespace；确定性排序、执行报告、稳定原因码、快照冻结及 namespace/version 完整集合只读预检已实现；Integration CI Run `43178908392`（代码 SHA `fdc19b8591223dabccb533389d472713bfecc415`）全仓测试通过；真实 MariaDB Migration 成功/部分失败恢复/多实例并发验收及 Platform checksum 只读验证 API/Fault Code 仍待完成 |
 | SRV-008 | 待契约 | Dispatcher 所有权未冻结 |
-| SRV-009 | 进行中 | 已实现 Platform Runner 聚合、严格 Readiness 判定、MariaDB/Redis 资源检查、Migration Schema 检查及 Owner 保护的结构化 `/diagnostics` 入口；`/readyz` 动态读取实际 Check Results；Service 装配期拒绝重复 Check ID 并冻结 Check 快照；真实模块 Check 注册、依赖故障注入和 Platform Observation 元数据契约验收仍待完成，详见 12.8、12.20、12.29、12.33、12.55 节 |
+| SRV-009 | 进行中 | Server 当前仅注册 MariaDB/Redis 基础资源与 Migration Schema 检查；News Provider/Parser/Source/Storage Check、Research Snapshot Check、Researchflow StageAssessment Adapter 已有模块侧实现，但没有实际模块实例注入 Server；Notification 当前诊断转换为 Recovery Report 投影，不是完整实时 Check；Quant/LLM 也无可直接装配的完整 Check 组；故障注入与真实模块 Check 注册仍待完成，详见 12.8、12.20、12.29、12.33、12.55、12.61 节 |
 | SRV-010 | 阻塞 | 等待 Data 迁移门禁和公开接口 |
 | SRV-011 | 未开始 | 等待核心运行能力 |
 | SRV-012 | 未开始 | 等待新链路验收 |
@@ -1294,6 +1296,8 @@ Lifecycle.Stop 原实现通过 stopped 标记保证重复调用幂等，但并�
 
 ### 12.54 SRV-004 六模块公开装配入口核验（2026-11-12）
 
+> 本节是早期静态核验快照；Researchflow Repository/Worker 与 Notification FanoutDispatcher 等模块能力已在后续代码中补齐。当前阻断项以 12.61 节对 Integration 最新代码树的复核为准。
+
 - 审计基线：当前分支 HEAD `4250aa713416ef5f7c46ca7e4f7bcda2ffb9d6a7`。本轮只核对当前分支的模块代码与各模块 README，不把目录存在、单元测试或模块 CI 等同于 Root DI 已可装配。
 - News：已有 `SearchCandidates`、`CollectSource`、`IngestProviderCandidate`、`IngestCollectedSource` 等组件级构造器，以及自有 Repository/Migration 和 Provider 配置；尚未形成一个覆盖 Provider/Source Catalog、可信策略解析、采集触发和真实 BoundDoer 注入的生产组合入口。News 文档也明确 Server 生产装配、策略评估和在线采集尚未闭环。
 - Research：已有稳定 `application.Port`、`NewService` / `NewServiceWithEvents` / `NewServiceWithClaims`；`storage.NewContextRepository`、`NewEvidenceRepository`、`NewEventRepository`、`NewClaimRepository` 均可注入共享 `*sql.DB` 和模块 Clock，Migration 与 Diagnostics Check 也已交付。当前真正阻塞生产装配的是 `application.EvidenceAuthorizer` 的可信实现/来源尚未在本模块或 Server 找到；必须由 Data/News 授权语义与契约提供，不能用恒允许 Authorizer 绕过。Clock/ID Generator 可由 Server 提供进程级基础实现，但不得替代领域授权。
@@ -1369,3 +1373,498 @@ Lifecycle.Stop 原实现通过 stopped 标记保证重复调用幂等，但并�
 - 最新 Server Workflow Run `43147039665` 对应 HEAD `1758514939c0d0acdb2d4a3eed4c06da4c479be2`，gofmt、Server 包级测试、Race、Vet 全部通过。
 - 边界说明：超时后强制关闭连接不能保证一个完全忽略 Request Context 的业务 Handler 立即终止；Server 会返回关闭超时错误并继续进程级清理。业务 Handler 仍必须遵守请求 Context 取消契约。
 - 未覆盖项：本轮没有在 integration 上执行全仓构建，也没有执行真实 MariaDB/Redis 环境、生产容器或真实外部 LLM Gateway 验收；不得据此标记 L3 真实依赖验收通过。
+
+
+
+### 12.61 Integration 最新代码基线下的模块装配审查（2026-11-12）
+
+- 审查基线：Integration HEAD `9f12f7ebfdb2a04106a126934d46d1fc216823ff`；全仓 CI 实际测试代码 SHA 为 `fdc19b8591223dabccb533389d472713bfecc415`，其后 Integration HEAD 仅增加接入审查文档提交，未改变被测代码文件。
+- CI 证据：Integration Run `43178908392`（Workflow `Integration CI`，Run #23）成功。覆盖全仓 gofmt、根 Go Module 测试/编译、go-core 测试/编译、两处 go vet、Compose 配置、WebUI JavaScript 语法/单测及 WebUI 镜像构建。
+- 分支边界：审查开始时 `feat/research-analysis-flow-native-go` 与 `integration` 完全相同（ahead/behind 均为 0）。本节及后续 Server 修改只允许提交到 Server 分支，不直接修改 `integration`。
+- 验收边界：CI 通过只证明 CI 工作流覆盖的编译、测试和构建门禁通过；本轮没有连接真实 MariaDB/Redis、外部 Provider、LLM Gateway 或生产部署环境，不能标记端到端或 L3 验收通过。
+
+#### 12.61.1 Root Bootstrap 当前事实
+
+- 唯一入口仍为 `cmd/analysis-api/main.go`，调用 `internal/server/bootstrap.Run`；不新增第二个入口。
+- Bootstrap 通过 `OpenLegacyAnalysisResources` 创建 Platform DB/Redis/HTTP Client，并同时创建兼容旧 Analysis 的 `mysqlredis.Store`；共享资源由 Server 关闭。
+- 实际业务实例仍为旧 `service.NewRunnerWithMarketDataStores`、旧 `taskqueue.Queue`、旧 `httpapi.NewWithTasks`；当前 HTTP 路由仍全部指向旧 Analysis Handler。
+- Lifecycle 当前注册旧 Analysis Worker 和 HTTP Server；尚未注册 News、Research、Researchflow、Quant、LLM、Notification 的业务 Worker/Service。
+- Migration Registry 已注册 Platform Owner Credential（`platform.security`）、News、Research、Researchflow、Notification 五个 namespace；Quant/LLM 没有模块 Migration 贡献项，不创建空 namespace。
+- Diagnostics Service 当前只传入共享资源和 Migration Registry，没有传入模块 Check 分组；Readiness 主要反映 DB/Redis 和 Migration Schema 状态，不代表新业务模块已就绪。
+
+#### 12.61.2 模块公开能力与生产装配缺口
+
+补充：Platform 自有 Owner Credential Migration 由 Server 显式注册，不能遗漏；具体修正记录见 12.62 节。
+
+| 模块 | 当前代码中已存在的能力 | Server 生产装配仍缺少的条件 | 当前判断 |
+|---|---|---|---|
+| News | `config.Load`；Bocha/Tavily/Brave/SearXNG Provider 构造器；`SearchCandidates`、`CollectSource`、Provider/Source Ingest 用例；MySQL Repository、Evidence Query Facade、Migration；Provider/Parser/Source/Storage Diagnostics Checks；Platform BoundDoer 适配器 | 可信 SourceCatalog/Endpoint 授权来源、ProviderOutputPolicyResolver、按 endpoint 固定策略的 BoundDoer、生产采集触发/编排及可信配置注入 | 模块组件已具备，生产组合入口未闭环 |
+| Research | `NewService`、`NewServiceWithEvents`、`NewServiceWithClaims`；Context/Evidence/Event/Claim 四类 MySQL Repository；Outbox Service/Repository；Migration；Snapshot Diagnostics Check | `application.EvidenceAuthorizer` 的可信生产实现及其策略来源。不能用恒允许 Authorizer 绕过来源授权；Clock/ID 可由 Server 提供，但不替代授权 | 基础 Service/Storage 可构造，可信授权是阻断项 |
+| Researchflow | `NewCreateRunService`、`NewScheduler`、`NewWorker`、`NewWorkerPool`、SchedulerCandidateScanner、MySQL WorkerStore；Context Assembly/Research Adapter、Quant Result Validator、LLM Tool Policy Adapter；Migration | 生产 `StageExecutor` 组合实现；Scheduler 周期驱动、Candidate/Expired Attempt 扫描接线、WorkerPool Lifecycle；可信 RequestIdentity、数据库时钟和 Fault Normalizer 等依赖装配 | 核心执行设施已有，生产 Adapter/运行驱动未完成 |
+| Quant | Indicator/Factor/Trend/Risk 领域计算、Registry/Schema/Manifest、Result Envelope/Validator；`GetResult` 读取用例 | 完整计算 Application Facade/用例入口、生产持久化 Repository（当前可见结果 Repository 仅有接口与 Memory 实现）、授权策略源和审计持久化；尚无可注册 Migration | 领域计算与读取能力存在，生产 Application/Storage 边界未闭环 |
+| LLM | Provider Port、Responses JSON/SSE Adapter；`NewResponsesAdapterWithStream` 可接收 HTTP Doer、Stream Doer、ProviderConfig、Secret、CapabilityState、Clock；Server 已有 BoundDoer JSON/SSE 传输桥接 | ProviderConfig、Secret、CapabilityState 的可信配置/证据来源，以及生产 BoundDoer 注入和真实 Gateway 验收 | 协议与传输桥接已具备，生产 Provider 实例未启用 |
+| Notification | EventReceiver、Inbox/Subscription/Delivery/Attempt 存储；FanoutWorkItem、FanoutDispatcher、DeliveryExecutionService、ChannelRegistry、Template/ChannelConfig Repository；Migration | 生产 FanoutPlanFactory、身份/收件人目录、具体 ChannelAdapter、Delivery Worker/循环及 Server 生命周期接入；真实渠道配置和投递验收 | 模块执行设施部分具备，真实事件到渠道链路未闭环 |
+| Data | 既有独立 Data 服务及 Go 迁移工作 | Data 模块化单体迁移门禁、公开 Application Port、配置/凭证、Migration 和生命周期契约 | SRV-010 继续阻塞 |
+
+说明：表中“已有能力”仅表示当前代码存在公开构造器、Port 或 Adapter，不等于所有依赖都可在生产环境安全构造。模块 CI 通过也不替代生产配置、凭证、授权和外部依赖验收。
+
+#### 12.61.3 当前可确认的依赖关系
+
+```text
+Server Bootstrap
+  └─ Platform Resources (MariaDB / Redis / HTTP Client / Secret / Security)
+       ├─ News
+       │    └─ Evidence Query / Source Collection
+       ├─ Research (Repositories + trusted EvidenceAuthorizer)
+       │    └─ Researchflow Context Assembly Adapter
+       ├─ Quant Calculation / Result Repository
+       │    └─ Researchflow Quant Result Validation
+       ├─ LLM Provider (Responses JSON/SSE)
+       │    └─ Researchflow Tool Policy Adapter
+       ├─ Researchflow CreateRun → Scheduler → WorkerPool → Worker
+       │    └─ production StageExecutor (must call the above public Ports)
+       └─ Notification EventReceiver / Inbox
+            ← Outbox Relay (ownership contract still pending)
+            → FanoutDispatcher → DeliveryExecutionService → ChannelAdapter
+```
+
+- Researchflow 是业务流程编排者；Server 只创建、注入和管理生命周期，不在 Server 写 Stage 业务执行逻辑。
+- News 的 Evidence Query Facade 是受控跨模块读取边界；Research 的 EvidenceAuthorizer 仍需可信策略来源。两者不能被 Server 用直连 Repository/SQL 绕过。
+- Researchflow 的 Context Assembly、Quant Result Validation、LLM Tool Policy 已存在模块 Adapter；生产 StageExecutor 应在模块边界内组合这些 Port，Server 不实现领域编排。
+- Research 与 Researchflow Outbox 到 Notification Inbox 的 Relay/Dispatcher 所有权仍受 SRV-008 契约门禁约束；不得把旧 Platform Task Queue 当作 Outbox Relay。
+
+#### 12.61.4 Diagnostics 与 Lifecycle 接入判断
+
+- News 已有 Provider Config、Parser、Source Endpoint、Storage 等检查构造器；部分检查只反映配置/Adapter 快照，不应直接当作在线采集健康状态。
+- Research 有 Service 级 Context/Event/Claim/Evidence Check 构造入口和 Domain Snapshot Check；必须在真实 Service/授权装配后注册。
+- Researchflow 有 Stage Assessment 到 Platform Diagnostics Check 的适配器；必须由真实运行阶段提供 Assessment。
+- Notification 的 LeaseRecoveryReport 可投影为 Observation，但这不是完整的实时模块 Check，也不能代替渠道/Worker 健康检查。
+- Quant/LLM 当前没有可直接由 Server 注入的完整生产 Check 组。
+- 因 Bootstrap 尚未创建上述模块实例，当前不注册这些模块 Check；不创建静态“healthy”或空 Check 冒充模块就绪。
+- 当前 `signal_integration_test.go` 已使用独立子进程发送真实 OS SIGTERM，验证 HTTP 进入 draining 后再停止 Worker。它不是完整 Bootstrap + 真实 MariaDB/Redis + 生产容器的 SIGTERM 验收。
+
+#### 12.61.5 下一步执行顺序与边界
+
+1. INT-A 静态公开装配审查已完成；本节作为当前模块依赖图和 Server 接入门禁记录。
+2. 按模块公开能力到位情况逐个解锁，不要求所有模块同时完成：Research 先提供可信 EvidenceAuthorizer；News 补齐可信 SourceCatalog/Endpoint 授权和生产 BoundDoer 注入；LLM 明确生产 Provider 配置/Secret/CapabilityState 来源；Notification 补齐生产 Factory/ChannelAdapter/身份目录；Quant 补齐可注入计算 Facade 和持久化边界；Researchflow 在上述 Port 可用后完成 StageExecutor 与 Scheduler/WorkerPool 生命周期接入。
+3. 每个模块达到真实装配条件后，Server 才新增对应 Bootstrap 构造、Lifecycle 注册、路由（如有）和 Diagnostics Check；每次只接入已满足条件的模块，不建立空 Registry 或假实现。
+4. SRV-008 先等待 Outbox/Inbox Relay 所有权契约冻结；SRV-007、SRV-006 的真实 MariaDB/容器验收等待可用运行环境。
+5. 不在 Server 分支修改模块私有实现。模块缺口回对应模块分支或契约 Owner；Server 只负责公开 Port 的消费、依赖注入、路由、共享资源和生命周期。
+6. 本轮没有新增业务代码或假接口；INT-A 审查完成后，SRV-004 仍保持阻塞。当前没有证据支持直接启动新业务模块生产装配。
+
+
+### 12.62 SRV-005 Platform Owner Credential Migration 注册补齐（2026-11-12）
+
+- 本轮以 Server 分支 HEAD `bd6a08e91657773f6e42bf2795eee451d72ed808` 为基线；Integration HEAD 保持 `9f12f7ebfdb2a04106a126934d46d1fc216823ff`，不在 Integration 写入。
+- 对照已冻结的 PLAT-CTR-003 和项目决策记录，确认 Platform 已提供 `security.OwnerCredentialMigrationNamespace` 与 `security.OwnerCredentialMigrations()`，但 Root Server 的 Migration Registry 只注册 News、Research、Researchflow、Notification，遗漏了 Platform 自有的 `platform.security` namespace。
+- 该遗漏会导致 Server 即使完成登录/Session 业务接入，也无法通过统一 Migration 流程创建 `platform_owner_credentials` 表；CredentialStore 的构造不会自动建表，登录初始化/认证读取将失败。
+- 在 Server Registry 中直接注册 Platform 公共 Migration，继续由 Platform 所有 SQL 定义；Server 不复制 SQL、不修改 Platform，也不创建空 namespace。
+- 更新 Bootstrap Registry 单测，要求命名空间集合精确包含 `platform.security`，并保持确定性排序。
+- 本批次只修改 Server Bootstrap、对应测试和本文档；没有接入登录 Handler、Session Middleware 或伪造认证实现。
+- 后续 SRV-005 A2 仍需完成一次性初始密码 Secret、Argon2id 参数基准与显式配置、Session/CSRF/Origin/Host Middleware、登录限流和审计 Writer 装配；按 PLAT-CTR-003 与项目决策记录实施。
+- 本次代码变更的 CI 结果以本提交对应的 Server Workflow 为准；未完成真实 MariaDB Migration/登录 E2E 前，不标记 Server A2 或部署 A3 通过。
+
+
+### 12.63 SRV-005 Owner Session 独立认证器（2026-11-12）
+
+- 基线：Server 分支 `fbca2b46137b3aa5b7867eff68631823673f6e6d`；本阶段只在 `feat/research-analysis-flow-native-go` 开发。
+- 本轮实现 `internal/server/security.SessionAuthenticator`，只组合 Platform 已有 `SessionStore`、`CredentialStore`、Cookie、CSRF 与可信 Principal Context，不修改 Platform。
+- 认证顺序：校验请求 Host/Origin → 唯一 Session Cookie → Token Digest → Redis Session LookupAndTouch → Session Subject/CredentialVersion/CSRF Digest 结构校验 → MariaDB 当前 Owner CredentialVersion 权威核对 → unsafe method CSRF 校验 → 生成滑动过期 Cookie → 写入 `AuthMethod=owner_session` Principal。
+- Session 每次请求均查询 MariaDB CredentialVersion；Redis/MariaDB 依赖故障原样返回，不降级为 Bearer、内存 Session 或匿名身份。Session Principal 不携带 `platform:admin` 或 Service Scope。
+- Cookie 只在认证成功后返回给调用方；过期时间取 IdleExpiresAt 与 AbsoluteExpiresAt 较早者。拒绝重复 Session Cookie、重复 Origin/CSRF Header、Host 不匹配、跨 Origin 写请求和缺少/错误 CSRF Token。
+- 本阶段只提供可测试的认证组合器，不注册 HTTP 路由、不定义登录/退出/密码修改 HTTP DTO，也未在 Bootstrap 启用；SRV-CTR-001 仍 deferred，不能据此宣称 Web 登录 API 已接入。
+- 测试覆盖 owner_session Principal、Cookie 安全属性/续期、Cookie 缺失与重复、CSRF 缺失/重复/跨 Origin、Host 不匹配、CredentialVersion 失效和 SessionStore 故障 fail-closed。
+- 本轮未执行真实 MariaDB/Redis 或 Web/Nginx E2E；Server CI 通过后仅视为包级/竞态/静态检查证据。后续需补充可信登录/退出用例、Origin/Host 配置接入、审计 Writer 持久化和路由矩阵；不得将此认证器直接挂到旧 Analysis 路由。
+
+
+### 12.64 SRV-005 Owner Session 生命周期内部服务（2026-11-12）
+
+- 新增 `internal/server/security.SessionLifecycleService`，仅组合 Platform 已有 CredentialStore、SessionStore、LoginRateLimiter、Argon2id Hasher、Cookie、CSRF 和 SecurityAuditWriter；不复制 Redis/MariaDB 实现，不修改 Platform。
+- 覆盖内部用例：
+  - `InitializeOwner`：消费一次性初始 Secret、生成 PHC Argon2id Hash、调用单 Owner CredentialStore 初始化；清零调用方传入的密码字节切片。
+  - `Login`：固定 Owner 身份、账号/IP 双维度限流、统一认证失败响应、失败计数、成功后清理账号维度失败状态、创建新的 256-bit Session Token 与独立 CSRF Token；持久化仅保存 Token/CSRF Digest。
+  - `Logout`：撤销当前 Session 并返回同作用域过期 Cookie。
+  - `RotateSession`：检查现有 Session 和 MariaDB CredentialVersion，通过 Platform 原子 Rotate 使旧 Token 失效，同时重新生成 CSRF Token。
+  - `ChangePassword`：校验当前密码，使用 CredentialStore CAS 更新 Hash 与 CredentialVersion；版本递增使旧 Session 在认证时失效。
+- 登录限流标识采用带域分离的 HMAC-SHA256，不把原始 IP 写入 Redis Key 或审计事件。HMAC Key 必须由调用方注入且至少 32 字节；必须在同一部署的实例间保持一致并妥善保管。密钥轮换会导致既有登录失败计数无法继续关联，应作为有意识的运维变更。
+- `LoginInput.SourceIP` 必须由可信入口解析。服务本身不读取 `X-Forwarded-For`；当前没有可信代理 CIDR 配置接线时，调用方只能传入 `RemoteAddr` 解析出的直接对端 IP，不能信任任意转发头。
+- 审计策略采用 fail-closed：登录失败/限流事件写入失败时不返回普通认证结果；成功登录的 Session 已创建但任一成功审计事件写入失败时，尝试撤销新 Session 并拒绝签发 Cookie。Logout 先完成撤销，再返回清除 Cookie；即使审计写入失败仍返回清除 Cookie 和审计错误，调用方必须发出清除 Cookie。密码初始化/更新一旦由 CredentialStore 成功提交，后续审计失败不会回滚数据库写入，方法返回审计错误；调用方不得把该错误解释为凭证未变更，需通过 CredentialStore 重新读取确认状态。
+- 本阶段不把服务接入 Bootstrap，不定义登录/退出/密码修改 HTTP 路由或 DTO，不启用浏览器认证。Argon2id Hasher 由外部显式注入；没有目标部署硬件基准，不提供生产成本参数或默认值。
+- 单测覆盖成功登录签发、错误密码计数、审计失败时撤销新 Session、初始化 Secret 清零。Logout/Rotate/ChangePassword 的完整状态机测试、可信代理配置接线、持久化 Audit Writer、Bootstrap 装配和真实 MariaDB/Redis E2E 仍待后续阶段。
+- 安全边界注意：Platform SessionStore 当前只公开 `LookupAndTouch`，因此 RotateSession 在 CSRF/HTTP Middleware 完整接入前不应作为独立外部入口暴露；当前它只是一项内部生命周期能力。SessionAuthenticator 仍会在 CSRF 校验前执行 LookupAndTouch，错误 CSRF 请求可能刷新 idle TTL；不绕过 Platform Store 私有实现，后续需向 Platform 提交只读 Lookup 原语提案或在契约允许的情况下调整认证流程。
+
+
+### 12.65 SRV-005 Session 生命周期状态机测试补齐（2026-11-12）
+
+- 在既有 SessionLifecycleService 单测基础上，补齐 Logout、RotateSession、ChangePassword 的成功与失败状态转换测试。
+- Logout 验证先撤销 Session，再生成与原 Cookie 同 Name/Path 的清除 Cookie；审计失败时仍返回清除 Cookie 和错误，调用方必须发送清除 Cookie。
+- RotateSession 验证新 Token/CSRF 重新签发、旧 Token 摘要失效、created_at 与 absolute_expires_at 保持不变；审计失败时撤销新 Token，旧 Token 已轮换失效，操作按 fail-closed 处理。
+- ChangePassword 验证当前密码错误不修改 Credential；成功时通过 CredentialStore CAS 将 credential_version 递增；审计失败不回滚已经提交的密码更新，调用方必须重新读取权威 Credential 状态，不能把返回错误解释为更新未发生。
+- 测试使用内存 Fake 验证 Server Application Service 的调用顺序和状态结果，不替代 Platform Redis/MariaDB 原子性测试，也不构成真实依赖 E2E。
+- 本轮不接入 Bootstrap、HTTP 路由或 DTO；不改变 SRV-CTR-001 deferred 状态。Argon2id 生产参数、Secret/Audit Writer 可信配置、可信代理策略和真实 MariaDB/Redis E2E 仍是后续门禁。
+
+
+### 12.66 SRV-005 生命周期状态校验加固（2026-11-12）
+
+- Review 发现 RotateSession 只比较 MariaDB credential_version，没有独立验证 Redis SessionRecord 的 Subject、CSRF Digest 和时间边界。虽然 Platform Store 限制了记录写入，但 Server 生命周期服务仍应在消费跨存储记录时验证完整 Owner Session 不变量。
+- RotateSession 现在要求 Subject 固定为 owner、credential_version 非零、CSRF Digest 格式有效、created_at 非零且不晚于当前时间、idle/absolute expiry 均晚于当前时间；随后再核对 MariaDB 权威 credential_version。无效或过期记录统一拒绝，不生成新 Token。
+- ChangePassword 现在在调用密码验证器前验证 Credential Subject、CredentialVersion 和 PasswordHash 非空，避免损坏或错误身份状态进入密码更新流程。
+- 新增测试覆盖非 Owner Session、CredentialVersion 过期和无效 Owner Credential，确认拒绝后不发生轮换或凭证修改。
+- 本轮不改变 Platform Store 契约，不直连 Redis，不接入 HTTP 路由或 Bootstrap；真实依赖 E2E 仍待执行。
+
+
+### 12.67 SRV-005 Security Audit MariaDB Writer（2026-11-12）
+
+- 新增 Server 自有 `security.SQLSecurityAuditWriter`，复用 Bootstrap 已创建的共享 `*sql.DB`，不创建第二连接池、不持有连接关闭责任。
+- Writer 在执行 SQL 前调用 Platform `SecurityAuditEvent.Validate`，仅持久化 event_type、subject、result、occurred_at、request_id、source、reason_code 七个契约字段；不接收任意 metadata，不写入密码、Hash、Token、Cookie、IP 或请求体。
+- 新增 Server 自有 Migration namespace `server.security_audit`，创建 `server_security_audit_events` 表及 occurred_at、subject/time、request_id 索引；Bootstrap Migration Registry 显式注册该 namespace。
+- Writer 将 MariaDB 写入错误转换为依赖 `mariadb` 的不可重试 Fault；上层 Platform `WriteSecurityAudit` 仍负责事件校验和统一 Writer Fault 包装，SessionLifecycleService 继续执行既定 fail-closed 业务策略。
+- 不擅自定义保留期限、自动清理或归档任务；在运维保留策略冻结前，审计数据只追加，不进行破坏性清理。
+- 单测使用标准库 database/sql 测试 Connector 验证参数化写入、UTC 时间、非法事件在访问 DB 前拒绝、数据库错误 Fault、Migration 定义；真实 MariaDB Migration 与写入 E2E 尚未执行。
+- 本轮仅新增 Server 审计存储能力及 Migration 注册，不在 Bootstrap 创建或启用 Session 登录服务，不新增 HTTP 路由/DTO。
+
+
+### 12.68 SRV-005 Logout 双事件审计与安全边界复审（2026-11-12）
+
+- Review 确认 PLAT-CTR-003 定义了独立的 `logout` 与 `session.revoked` Audit EventType。Logout 成功撤销 Session 后，Server 现在分别记录用户退出动作和 Session 撤销结果，避免只保留动作而缺少状态结果。
+- 两条审计写入均会尝试执行；任一写入失败都会返回聚合错误，但已经完成的 Session 撤销不会回滚，清除 Cookie 仍必须由调用方发出。测试验证正常路径的事件顺序，以及审计失败时仍尝试写入两类事件并返回清除 Cookie。
+- 复审记录两项跨层限制，不在 Server 私自改变公共原语：
+  1. `SessionStore` 目前只有 `LookupAndTouch`，没有只读 Lookup；`SessionAuthenticator` 在读取 Session 后才能验证 CSRF，因此错误 CSRF 请求仍可能刷新 idle TTL。需要 Platform 提供只读读取或原子校验/Touch 原语后再修正；Server 不直连 Redis 私有实现。
+  2. Session 生命周期服务的账号/IP 限流摘要当前采用带域分离的 HMAC-SHA256；PLAT-CTR-003 第 7 节文字定义为 SHA-256 小写十六进制摘要。HMAC 可降低 IP 摘要被离线枚举的风险，但属于实现与契约文字差异；在契约 Owner 明确前不静默改为无密钥摘要，也不宣称完全符合该条。
+- Logout、RotateSession、ChangePassword 仍是内部用例；调用方必须先完成可信身份、Origin/Host 和 CSRF 验证。SRV-CTR-001 仍 deferred，因此本轮不增加 HTTP 路由/DTO，不在 Bootstrap 启用浏览器 Session。
+- 本轮未进行真实 MariaDB/Redis E2E；包级 CI 仅验证 Server 代码和 Fake/SQL Connector 测试，不代表部署验收。
+
+
+### 12.69 SRV-009 Diagnostics Aggregator 复审结论（2026-11-12）
+
+- 对 `internal/platform/diagnostics.Runner` 的实际定义核查后确认其为值类型结构体，不是接口或指针；零值 Runner 本身可用，会采用 Platform 默认并发数和总超时。
+- 因此 `Aggregator.Runner == nil` 检查不成立，不能以此作为 Server 缺陷；已撤销该防御性改动和对应测试，没有保留无效接口约束。
+- 该次 CI 失败是本轮错误修改造成的编译错误，不是原分支缺陷。后续继续审查 Diagnostics 时，以 Platform Runner 的真实值类型和零值语义为准。
+
+
+### 12.70 SRV-005 跨分支契约状态复核（2026-11-12）
+
+- Integration 的 `doc/contract/PLAT-002-项目级契约冻结登记簿.md @ 8542b5d73da6c3b047fb275b05f58d8c0ade552e` 将 `PLAT-CTR-003` 明确登记为 `frozen`；契约正文头部仍写 `freeze-ready`，属于正文状态标记滞后。登记簿是唯一权威状态来源，Server 必须按已冻结定义推进 L2 实现符合性，不再等待再次冻结。
+- PLAT-CTR-003 第 7 节要求账号和来源 IP 摘要为 SHA-256 小写十六进制；Server `SessionLifecycleService` 当前采用带域分离的 HMAC-SHA256，属于明确 L2 实现差异。此前以契约未冻结为由暂缓处理的判断已撤销；后续按冻结定义对齐，并单独评估摘要可枚举性风险，不能擅自改写契约语义。
+- PLAT-CTR-003 第 5 节公开的 `SessionStore` 只有 `LookupAndTouch`，没有只读 Lookup。Server Session Authenticator 在 CSRF 校验前触发 Touch 的问题无法通过 Server 侧调整顺序解决；作为 Platform 消费者缺口记录，需在 Platform 分支提出兼容的只读读取/原子校验能力，不在本分支复制 Redis 实现。
+- `integration` 本轮核查基线为 `8542b5d73da6c3b047fb275b05f58d8c0ade552e`；Server 分支保持独立，本轮没有合并或修改 Integration/Platform。
+- SRV-007 当前 Bootstrap Migration Registry 实际包含六个 namespace：`news`、`research`、`researchflow`、`notification`、`platform.security`、`server.security_audit`。同步修正 SRV-007 状态摘要，避免将安全基础设施 Migration 漏记为仅四项注册。
+- 后续门禁：限流摘要按已冻结 PLAT-CTR-003 对齐；Session 只读/原子校验能力仍是 Platform 消费者缺口。SRV-CTR-001 登录 API/路由矩阵未完成前，不启用 Owner Session HTTP 入口。
+
+
+### 12.71 SRV-005 PLAT-CTR-001 ErrorEnvelope 对齐（2026-11-12）
+
+- 冻结基线：Integration `doc/contract/PLAT-002-项目级契约冻结登记簿.md @ 8542b5d73da6c3b047fb275b05f58d8c0ade552e` 将 PLAT-CTR-001 登记为 `frozen`。契约正文头部的 `freeze-ready` 标记同样滞后，不能覆盖登记簿状态。
+- 原 Server `publicErrorEnvelope` 缺少必需字段 `schema_version`，错误对象也没有可选 `request_id`；与 PLAT-CTR-001 1.0.0 Schema/Golden 不一致。
+- 已在 `internal/server/bootstrap/http_middleware.go` 统一输出 `schema_version=1.0.0`，并从可信 Request Context 注入可选 `error.request_id`。413 请求体超限、并发过载和 Platform Fault 投影均复用该 Envelope；请求 ID Header 仍由 PLAT-CTR-002 Middleware 负责生成和回显。
+- 新增测试覆盖 Envelope 版本、body/header Request ID 一致性和错误内部字段不泄露。该实现只完成 Server Transport 边界符合性，不代表旧 Analysis Handler 已全部切换公共 ErrorEnvelope，也不代表模块 Handler 已完成统一接入。
+
+
+### 12.72 SRV-005 PLAT-CTR-003 Login RateLimit 摘要符合性修正（2026-11-12）
+
+- 按 Integration 冻结登记簿中的 PLAT-CTR-003 第 7 节实现：账号维度使用规范化固定 Owner 标识 `owner`，来源 IP 使用 `net.IP` 规范化后的文本；分别计算 SHA-256，并以 64 位小写十六进制传给 Platform LoginRateLimiter。
+- 移除 Server 限流摘要的 HMAC Key 配置与依赖。限流接口不接收原始账号/IP，Server 仍只向 Platform 传摘要。
+- 新增测试直接断言账号和 IPv4 地址的摘要等于契约要求的 SHA-256 小写十六进制值；覆盖摘要长度和大小写。
+- 注意：SHA-256 对低熵 IP 地址可被离线枚举。该实现是对冻结契约的符合性修正，不代表其隐私强度等同于 HMAC；若要改变摘要算法，必须走契约版本/项目决策变更，不得在 Server 私自保留 HMAC 变体。
+- 历史 12.68/12.70 中关于 HMAC 差异的记录保留为当时事实；本节记录其修正完成。SessionStore 缺少只读 Lookup 的跨层阻塞仍未解决，本次未触碰 Platform。
+
+
+### 12.73 SRV-005 Server Security 包纳入独立 CI（2026-11-12）
+
+- 复核当前 Server 独立 Workflow 后发现：gofmt 覆盖 `internal/server/security`，但 package tests、race 和 vet 的显式目标列表遗漏该包。Bootstrap 虽然间接编译了 Security 生产代码，但不会执行 `internal/server/security` 自身的测试。
+- 将 `internal/server/security` 加入独立 CI 的普通测试、Race 和 Vet 目标。该包包含 Owner Session Authenticator、Lifecycle Service、Security Audit Writer 的 Server 组合逻辑及对应状态机测试，是 SRV-005 的直接归属包，必须独立执行。
+- 本次不纳入 `internal/server/llmtransport`：它依赖 `internal/llm` 的构建状态，尚未在本分支 CI 证据中确认可稳定编译；不通过跳过或屏蔽依赖错误伪造验收。
+- 本次只修正 Server 独立 CI 的实际覆盖范围，不改变业务代码和契约；后续结果以新 Workflow 对当前 SHA 的测试、Race、Vet 结果为准。
+
+
+### 12.74 SRV-004 LLM Platform Transport 纳入独立 CI（2026-11-12）
+
+- `internal/server/llmtransport` 是 Server 对 LLM HTTP/SSE Port 的生产适配器：将 LLM Provider 固定目的地址策略绑定到 Server 持有的 Platform HTTP Client，并同时实现普通请求与流式请求接口。
+- 本包已有覆盖 HTTPS Host/Port 精确匹配、禁止重定向/重试、SSE Body 所有权、Header 隔离、Provider/Policy 不匹配拒绝及 Adapter 构造的测试；它是 Server-owned 生产代码，不应仅因依赖 `internal/llm` 而排除在 Server CI 外。
+- 将该包加入独立 CI 的普通测试、Race 和 Vet。该项验证的是 Server Transport Adapter 的编译与包级行为，不代表 LLM Provider 凭证、Capability Evidence 已完成生产配置，也不代表真实 Gateway 联通。
+- 本次不在 Bootstrap 构造 LLM Adapter：当前 Server Process Config 尚未提供完整 Provider/Capability/Secret 装载入口；未具备可信配置和能力证据前，不创建空配置或虚假 Gateway 实例。
+
+
+### 12.75 SRV-009 News Parser 自检接入 Server Diagnostics（2026-11-12）
+
+- Server Bootstrap 原先只注册共享存储与 Migration Schema 检查；News 模块已有的 `ParserChecks()`（RSS、Atom 确定性本地 Fixture）未进入统一 Diagnostics 报告。
+- Bootstrap 现在通过 `newDiagnosticsService` 将 News Parser 自检与 Server 存储、Schema 检查组合，Parser 实现及 Fixture 仍由 News 模块拥有；Server 不复制解析逻辑。
+- 新增 Bootstrap 集成测试，执行统一 Diagnostics Service 并断言 `news.parser.rss`、`news.parser.atom` 均出现在结果中且状态为 healthy。
+- 本接入不发起 Provider 网络请求，不代表 News Provider 凭证、来源授权或采集链路已通过生产验收；也不将尚未装配的 Research/Researchflow 运行态诊断伪装成静态健康检查。
+- Server 独立 CI 的 gofmt、package tests、Race、Vet 已在提交 `1ea0b4badb12fda40f6fb380491a5ecf28d52fdd` 全部通过。
+
+
+### 12.76 SRV-009 Research Outbox → Notification Inbox Relay（2026-11-12）
+
+- 按 RSC-OPEN-002 和 INT-CTR-001，Server 组合根消费 Research Application `OutboxDeliveryPort`，将原始不可变 Envelope 交给 Notification `EventReceiver.Receive`；不直接跨模块写 Inbox，也不共享两个模块的事务。
+- Notification 先完成 Envelope/Payload Schema、资源上限和 JCS Fingerprint 校验，再通过 MySQL Inbox Repository 原子写入 Inbox 与 Fanout WorkItem。Relay 只有在 Receive 成功（含幂等重放）后才确认 Research Outbox。
+- Research 的 LeaseToken 仅用于 Research Outbox Confirm/Retry/Reject，不序列化给 Notification。Inbox 接收成功但 Outbox 确认失败时，租约到期后重放相同 Envelope，由 Notification 双唯一键和内容校验安全去重。
+- 明确区分错误：未知/不匹配 Schema、无效 JSON、资源超限、Fingerprint/幂等冲突进入 rejected；Inbox/存储等其他接收错误按 Server 固定退避策略进入 retry_wait。Research Outbox 不持久化原始错误。
+- Relay 作为 Server Lifecycle 组件，仅在 `SERVER_ROLE=worker|all` 时启动；停止时先取消 Relay 并等待退出，再关闭共享 MariaDB。API-only 角色不启动 Relay。
+- Notification Schema Registry 的 Envelope/Payload/JSON depth 上限必须通过 `NOTIFICATION_EVENT_MAX_ENVELOPE_BYTES`、`NOTIFICATION_EVENT_MAX_PAYLOAD_BYTES`、`NOTIFICATION_EVENT_MAX_JSON_DEPTH` 显式配置；项目建议值未冻结，Server 不采用隐式默认值。Relay 批次/轮询/租约/临时错误退避采用 Server 明确默认策略，可由对应 `RESEARCH_NOTIFICATION_RELAY_*` 环境变量覆盖。示例配置（仅用于演示字段关系，不代表项目已批准生产阈值）：
+  - `NOTIFICATION_EVENT_MAX_ENVELOPE_BYTES=8192`
+  - `NOTIFICATION_EVENT_MAX_PAYLOAD_BYTES=4096`
+  - `NOTIFICATION_EVENT_MAX_JSON_DEPTH=16`
+- 当前 Relay 只负责可靠接收并创建 Notification Fanout WorkItem；不代表 Fanout Worker 已启动、订阅已配置或渠道已发送。真实 MariaDB 跨模块端到端验收仍需在部署环境执行。
+
+
+### 12.77 SRV-009 News Provider 配置诊断接入（2026-11-12）
+
+- Bootstrap 在 API/All 角色通过 News 自有 `newsconfig.Load` 解析 Provider 配置快照，并将 `ProviderConfigChecks` 与 Parser 自检一起注册到 Server Diagnostics；Server 不复制 Provider 配置字段或凭证规则。
+- Bocha、Tavily、Brave、SearXNG 分别输出独立的可选检查。未配置时为 `skipped`，不把可选 Provider 缺失误报为故障；配置完整时为 `healthy`。
+- 该检查只证明本地 Endpoint/凭证配置完整，不发起网络请求，不证明 Provider 可达、授权有效、配额可用或输出策略允许持久化。诊断消息和属性不包含 Endpoint 或 Secret。
+- News 配置只在 API/All 角色加载；Worker 角色不因未使用的 News Provider 配置而阻塞启动。
+- Server Bootstrap 集成测试覆盖一个 Provider 已配置、其他 Provider 未配置、Parser 检查通过及 Secret 不泄露。独立 CI Run `43203751587` 的 gofmt、package tests、Race、Vet 全部通过。
+
+### 12.78 SRV-009 Relay Schema 运行时资源打包修正（2026-11-12）
+
+- 复审发现 Relay 在 Bootstrap 中使用 `os.DirFS("doc/notification/schema")` 加载事件 Schema，但根 Dockerfile 的最终运行镜像此前只复制 `analysis-api` 二进制，没有复制该目录。
+- 本地从仓库根目录运行时路径存在，CI 的 Go 包测试也能通过；但基于原 Dockerfile 部署时，`worker/all` 角色创建 Relay 会因 Schema Registry 目录缺失而启动失败。
+- 修正根 Dockerfile，将四份冻结的 Notification Event Schema 复制到镜像固定路径 `/app/doc/notification/schema`，与镜像 `WORKDIR /app` 及 Bootstrap 相对路径保持一致；不复制整个文档目录。
+- Server 独立 CI 增加镜像构建和四份 Schema 文件存在性检查，防止后续镜像裁剪再次移除运行时资源。
+- 本修正只处理镜像资源完整性，不代表 Notification Fanout Worker、真实渠道 Adapter 或生产投递链路已完成装配。
+
+### 12.79 SRV-006 / SRV-007 真实依赖 CI 验收（2026-11-12）
+
+- Server 独立 CI 在原有 MariaDB Relay 集成环境上增加 Redis 7.4 服务，并为 Platform Storage 集成测试显式启用真实依赖配置。
+- 新增执行 `go test -count=1 ./internal/platform/storage -run 'TestMariaDBStorageIntegration|TestRedisStorageIntegration'`，验证真实 MariaDB 连接池与读写、并发 Migration advisory lock、Migration 失败后的恢复门禁，以及 Redis 连接池和读写。
+- 该步骤复用 Platform 已有集成测试，不复制 Migration 算法、不修改 Platform 实现，也不改变生产配置。
+- SIGTERM 生命周期仍由 Server Bootstrap 子进程测试验证；本步骤不宣称已完成真实容器编排下的完整 Bootstrap SIGTERM 验收。
+- Migration checksum 只读预检仍受 Platform 缺少公开只读校验 API 限制；本次不在 Server 重复实现。
+
+### 12.80 SRV-007 Server Migration Registry 真实 MariaDB 组合验收（2026-11-12）
+
+- 在 Server migration 包新增受 `SERVER_RELAY_TEST_MYSQL_DSN` 控制的 MariaDB 集成测试，复用 Server 独立 CI 已启动的 MariaDB 服务。
+- 测试通过真实 `database/sql` 连接执行 Server `Registry.RunWithReport`，检查 namespace 结果报告、Platform Migration Runner 写入历史，以及 `ValidateApplied` 对已应用版本的只读校验；最后对迁移创建的表执行真实读写。
+- 测试先通过 CI MariaDB 管理连接创建唯一临时数据库，再将 Server Registry 的测试连接指向该隔离数据库；结束后删除整个临时数据库。这样 ValidateApplied 校验的完整 Migration namespace 集合不会被共享测试库中其他模块（如 notification）的历史记录污染，也不会清理或改动其他测试的 Migration 数据。
+- 该测试验证 Server Registry 到 Platform Runner 的组合调用，不验证 checksum 只读预检；后者仍需要 Platform 提供公开只读校验能力。
+
+
+### 12.81 SRV-006 真实容器 Bootstrap 与 SIGTERM 验收（2026-11-12）
+
+- 在 Server 独立 CI 的镜像构建步骤后增加真实容器 smoke：使用刚构建的最终 Server 镜像启动 `SERVER_ROLE=all`，连接 CI 提供的真实 MariaDB 和 Redis，使用独立临时数据库执行旧 Analysis Schema 初始化及 Server 模块 Migration。
+- smoke 必须同时通过 `/healthz` 与 `/readyz`，确认完整 Bootstrap 已启动 HTTP、共享资源及当前角色启用的 Worker/Relay 生命周期；不以容器进程存活代替 Readiness。`/readyz` 在 Root Server 路由中属于 OwnerAccess，smoke 使用本次运行随机生成的 `PLATFORM_ADMIN_TOKEN` 对应 Bearer 凭证探测，不能匿名请求；此前一次失败正是探测遗漏认证头导致持续收到未授权响应，并非 Readiness 依赖异常。
+- 通过 `docker stop` 向容器 PID 1 发送真实 SIGTERM，要求容器在 20 秒 Docker stop 宽限期内以退出码 0 结束；Bootstrap 自身关闭预算设置为 15 秒。失败时输出容器日志以便定位启动、迁移或关闭问题。
+- 测试数据库按 GitHub Run ID 隔离，不与其他集成测试共享 Migration History；凭证由 CI 运行时随机生成，不写入仓库或日志。
+- 此项验证最终镜像中的实际 Bootstrap、MariaDB/Redis 连接、Readiness 和 SIGTERM 进程退出；不等于完整生产部署验收，也不覆盖多副本滚动升级、真实上游 Provider、长时间在途业务请求和外部渠道投递。
+
+
+### 12.82 SRV-007 MariaDB 部分 DDL 失败与恢复门禁验收（2026-11-12）
+
+- 在既有真实 MariaDB Registry 组合测试之外，新增独立隔离数据库场景：同一 Migration 的第一条 DDL 成功创建表，第二条 SQL 故意失败。
+- 验证 Server `RunWithReport` 将 Platform `platform.storage.migration_apply_failed` 映射为失败 namespace、稳定 `reason_code` 和 `recovery_required=true`；同时直接检查 MariaDB，确认第一条 DDL 已实际生效、历史记录为 `failed` 且 `failure_statement=2`。
+- 验证 `ValidateApplied` 拒绝该未完成 Schema；再次执行 Registry 时由 Platform 返回 `platform.storage.migration_requires_recovery`，Server 保留该 Fault 并继续标记需要人工恢复，不自动重试或清理部分 DDL。
+- 测试数据库和 namespace 均按纳秒时间戳隔离，结束时仅删除本测试数据库，不触碰其他测试历史。
+- 本项只增加 Server 对 Platform Migration Runner 的真实故障场景组合验收，不复制 Migration 算法、不修改 Platform、不尝试自动修复 MariaDB 部分 DDL。checksum 只读预检 API 仍属于 Platform 公共能力缺口。
+- 首次 Workflow Run `43214521137` 在 gofmt 门禁发现测试文件函数间多余空行，包测试及后续门禁未执行；已在提交 `103fcec3ef54dbf13a212b9f35a77cd6d2fbd29b` 修正格式。最终 Server Workflow Run `43214719289`（Run #107，HEAD `0cf4e795951d79533f45a941de1ae73054596860`）成功：gofmt、Server 包测试、Race、真实 MariaDB/Redis 集成、Vet、Docker 镜像构建、真实容器 Bootstrap 与 SIGTERM smoke 全部通过。
+
+
+### 12.83 SRV-009 Diagnostics HTTP Report Schema 与 Golden（2026-11-12）
+
+- 按 PLAT-CTR-004 的职责划分，Platform 继续拥有 Observation/Runner；Server 为实际对外的 `/diagnostics` 组合响应定义独立 Schema 与 Golden，不复用 Platform Observation Schema。
+- Server Report 增加 `schema_version=1.0.0`，遵循 GOV-CTR-004 的独立 DTO 版本身份规则。Schema 仅描述 Runner 成功完成时的 200 响应：`diagnostics.summary`、`diagnostics.results[]` 和 `readiness`；不包含内部 `Result.Fault`。
+- HTTP 行为保持现有实现：Owner-only、GET/HEAD、`Cache-Control: no-store`；检查执行完成即返回 200，即使某项检查不健康；Runner 执行错误返回脱敏 503。该 Schema 不定义 503 错误投影，也不替代 PLAT-CTR-001。
+- 增加 Go 契约测试，使用项目既有 JSON Schema 校验库验证 Golden 与实际 Server Report 序列化结果，并断言内部 Fault 不进入 JSON。
+
+### 12.84 SRV-009 Diagnostics HTTP Report Schema 正则修正与 CI 验收（2026-11-12）
+
+- 首轮 Schema 修正遗漏了 `attributes.propertyNames.pattern`：Observation 字段值已切换到 Go regexp 可识别的控制字符范围写法，但属性名仍保留旧的 Unicode 转义正则，导致 JSON Schema 编译继续失败。
+- 已将属性名约束同步为 `^[^\\x00-\\x1F\\x7F]+$`，保留非空约束；文档 Schema 是测试和契约的唯一读取源，不存在独立的运行时 Schema 副本。
+- 最终 CI Run `43218433690`，HEAD `bdb5eceb0462c496f20b126023883b5326ecf874` 成功：gofmt、Server 包测试、Race、真实 MariaDB/Redis 集成、Vet、Docker 镜像与 Notification Schema 检查、真实容器 Bootstrap/Readiness/SIGTERM smoke 全部通过。
+- 前两次失败 Run 分别为 `43217460937` 和 `43218169542`；失败均定位到同一 Schema 属性名正则未修正。本节以最终成功 Run 为验收依据。
+
+### 12.85 SRV-009 Research / Researchflow 诊断入口语义复核（2026-11-12）
+
+- 复核当前 Server 分支已包含的模块诊断代码：Research 的 `BuildContextCheck/BuildEventCheck/BuildClaimCheck/BuildEvidenceCheck` 均要求具体领域对象引用及 Run 的 UTC `system_as_of`，构造的是某次研究快照的 PIT/结构质量检查，不是进程级健康检查。
+- Researchflow 的 `NewStageCheck` 输入是具体 Run Stage 的 `StageAssessment`（stage_ref、stage_code、kind、状态、时间、EvidenceRef 等），用于把某次 Run 的执行/质量/依赖结果映射到 Platform Observation，也不是可在 Server 启动时静态注册的系统检查组。
+- 因此不将这两类 Run-scoped Check 塞入全局 `/diagnostics`，也不创建无上下文的空 Check 或伪造健康状态。它们应由 Research/Researchflow 在对应 Run 的执行/报告链路中调用；Server 只在模块提供真实进程级依赖 Check 或 Run 报告组合入口时接线。
+- 该复核撤销“必须把 Research/Researchflow 诊断器注册为全局 Server Check”的隐含前提；目前全局 Diagnostics 的 Server 责任已由 Storage/Schema、News Parser 和 News Provider 配置检查覆盖。后续不重复建设同类全局检查。
+- LLM 生产装配仍是 Server 的实质缺口：现有 `llmtransport.NewResponsesAdapter` 已能消费 ProviderConfig、Secret、CapabilityState、Clock 和 DestinationPolicy，但 Process Config 尚无这些可信输入的约定来源；CapabilityState 也不能由 Server 凭空生成。待明确 ProviderConfig/CapabilityState 的受控配置来源和真实能力证据后，再完成 Bootstrap 注入及 Gateway E2E。
+
+### 12.86 SRV-004 Researchflow / LLM 生产装配前置核查（2026-11-13）
+
+本轮仅核查当前 Server 分支及各业务模块最新分支，没有修改其他分支，也没有将尚未具备真实依赖的组件接入 Bootstrap。
+
+#### Researchflow
+
+- 当前 Server HEAD：`d9086550f783c50818a4c1a5e4b4341be3ebd985`。
+- Researchflow 当前分支：`feat/researchflow @ f11a83c14de5a854685e106275619e56a01630e2`。
+- `StageExecutor` 在 `internal/researchflow/application/executor.go` 中目前是 Application Port；接口注释明确由 Server 组合根注入 Data/News/Quant/Research/LLM 的具体 Adapter。
+- 对当前已核查的 Research、Quant、Data、News、LLM 模块代码树，未发现可直接注入的统一 `StageExecutor` 实现。现有 Research Application、Quant GetResult、Data Provider、News Ingest 和 LLM Responses Adapter 是各自领域能力，不能直接等同于完整 Stage Adapter。
+- Researchflow 已提供 Worker、WorkerPool、Scheduler、SchedulerCandidateScanner、ExpiredAttemptScanner、DeadlineScanner、Finalizer/Coordinator 和 MySQL Storage；Server 当前 Bootstrap 只注册 Researchflow Migration，尚未创建这些运行组件。
+- `CapacityLimits.MaxQueuedRuns/MaxWorkers` 在 Researchflow Storage 中明确要求显式正数，且无生产默认值。Server 尚未装载该配置，也尚未将容量限制注入 CreateRun/Worker claim 路径。
+- FLOW-CTR 的 28–31 节已明确 Server 负责 WorkerPool 生命周期、周期调度/恢复扫描和 Deadline/Finalizer 生命周期。不得重复实现模块已有组件。
+
+#### LLM
+
+- LLM 当前分支：`feat/llm @ 307793080ecd5991946b7daee176b20cd07a771f`。
+- ProviderConfig、CapabilityState Go 类型、ProviderConfig/CapabilityState JSON Schema、Responses JSON/SSE Adapter 均已存在；Server `internal/server/llmtransport` 已提供 Platform 受控 HTTP/SSE Transport 和 Adapter 构造入口。
+- Server Process Config 当前没有 ProviderConfig、Secret、CapabilityState 的装载入口；Bootstrap 当前也未调用 `NewResponsesAdapter`。
+- PLAT-CTR-007 明确模块定义 Config Schema 和校验，Server 在 Bootstrap 装载模块 Config/Secret 并注入。ProviderConfig 的字段语义以 LLM Schema/模块定义为准，Server 不另造第二套配置模型。
+- CapabilityState 必须绑定 Provider、Model、Protocol、Gateway 版本、验证时间、有效期和 evidence_ref。当前没有核实到可由 Server 可信读取的生产证据来源；在证据来源建立前，不构造 supported 状态，不启用需要该能力的请求。
+
+#### 本轮结论与下一步
+
+1. Researchflow 生命周期接线是真实 Server 缺口，但完整启动 Worker 前必须先确定真实 Stage Adapter 的构造方案和依赖的模块 Application Port；禁止用空实现绕过。
+2. 当前未发现可直接注入的 StageExecutor，不代表各业务模块没有任何可用领域能力；下一步需按冻结的 Stage/Output Registry 和各模块公开 Port，逐项确定 Stage Adapter 的输入、输出、错误与证据映射。Adapter 的组合代码归 Server，领域操作仍归模块。
+3. Researchflow 容量配置是明确缺口，应按模块 `CapacityLimits` 类型和冻结契约装载，不提供猜测默认值。
+4. LLM ProviderConfig/Secret 装载和 Capability Evidence 可信来源仍是 Bootstrap 的前置缺口。真实 Gateway 能力证据未建立前，不创建可运行的 Responses Adapter。
+5. 本轮没有提交代码变更；下一阶段先完成 Stage/Output Registry 到各模块公开 Port 的映射审查，再按可真实构造的组件分批装配和验收。
+
+### 12.87 SRV-004 Researchflow Stage Adapter 依赖映射核查（2026-11-13）
+
+本节只记录当前 Server 分支已存在的公开 Application Port 与 Researchflow 纯逻辑组件之间的真实对应关系。它不是新增领域契约，也不把模块 Port 直接等同于完整 Stage Adapter。
+
+#### 公开 Port 与当前可复用能力
+
+| 模块 | 当前公开入口/实现 | 可支持的流程能力 | 不能据此宣称已完成的能力 |
+|---|---|---|---|
+| Data | `internal/marketdata/app.MarketDataReader`；`application.Reader` 实现 QuoteReader / DailyBarsReader | 读取 Quote、DailyBars；支持 AdjustmentBasis、SystemObservedAtCutoff、质量状态和来源元数据 | 不等同于所有 Data Snapshot、Fundamentals、Valuations 的统一 Stage 输出；必须按具体 Stage 输入要求确定查询和快照引用 |
+| News | `internal/news/app.ResearchEvidenceQuery`；`EvidenceQueryFacade` 组合 GetEvidence/ListEvidence | 按 Caller、Purpose、ContentLevel、SystemAsOf 读取经 News Owner 授权复核的 Evidence | 不执行 Provider 搜索/采集；不能将 News 采集接口当成研究 Evidence 读取接口；正文授权与 Context 分区元数据仍需明确组合 |
+| Research | `internal/research/application.Port`、`EventPort`、`ClaimPort`；`application.Service` 实现 | 创建/读取 Context、Evidence；创建/读取/更新 Event、Claim | Port 本身不负责从 Data/News 组装来源；Researchflow 的 Context Assembly 只投影 DTO，不读取或授权来源正文 |
+| Quant | `internal/quant/application.GetResult`；`quant/registry` 的强类型指标/参数元数据注册 | 按可信 Principal、当前 Owner 授权、访问审计读取已持久化 Quant Result Envelope | 当前已核实的 Application 入口是结果读取用例；不能把 GetResult 当作指标计算、Factor 计算或 EvaluateRisk 执行入口。具体 Risk/计算 Facade 是否存在，须按 Quant 契约与完整代码继续确认 |
+| LLM | `internal/llm` Responses JSON/SSE 协议实现；`internal/server/llmtransport` Platform 受控 Transport | 已具备模型请求/响应协议适配及流式传输边界 | 生产 ProviderConfig/Secret、真实 CapabilityState 证据、Tokenizer 和 Gateway 运行接线尚未闭环 |
+
+#### Researchflow 已有纯逻辑组件
+
+- FLOW-005：`AssembleResearchContextWithTokenizer`、Research DTO 投影、Tool Policy、LLM Tool Call Intent 校验已存在；生产 Tokenizer、Research Owner 授权后的 Section 正文 Adapter、Context 持久化调用和真实 LLM 调用未闭环。
+- FLOW-006：Quant Envelope 通用校验、强类型 Payload Validator Registry、RiskDecision 校验和 Result Composer 已存在；但 Registry 必须由真实的 `result_type + schema_version` Validator 注册，不能只凭通用 Envelope 或 Quant 指标注册表推定 Payload Schema 已齐备。
+- FLOW-004：`StageExecutor` 是一个统一执行 Port，`Worker` 负责执行/租约/提交；Stage 到模块用例的映射、每个 Adapter 的参数投影、授权上下文、输出引用和错误分类仍需显式实现。
+- Researchflow Template 保存 `OutputRegistryVersion`，但该字段只是版本引用。当前核查没有找到可供 Server 装配的完整 Researchflow Output Registry 实例/注册清单；Quant Metric Registry 不能替代它。
+
+#### 责任边界与未决项
+
+1. Server 负责把公开模块用例装配成具体 `StageExecutor`，并负责依赖注入、进程生命周期和配置；不在 Server 重算指标、不复制 Evidence/Claim/Context 领域规则、不绕过 Owner 授权。
+2. 每个 Stage Adapter 必须绑定明确的 `stage_code + template_version + output_registry_version`，并明确输入 DTO、输出 DTO/Schema、EvidenceRef/OutputRef 生成方、`system_as_of` 传播、deadline/cancellation 和 Fault/ReasonCode 映射。
+3. 不得仅凭“模块存在某个 Port”就创建通用万能 Adapter；例如 Quant GetResult 只读既有结果，不能代替 Quant 计算/风险评估 Stage。
+4. 不得把 News Provider Search/Collect 当成 Researchflow 读取既有授权 Evidence 的同一用例；两者的来源授权、可用时点和持久化语义不同。
+5. 在 Output Registry 的权威版本、具体 Stage 清单和各 Stage 输出 Schema 尚未逐项对齐前，不注册推测性的 Stage，不启动可接收生产 Run 的 Worker。
+6. 下一步按冻结契约逐项核对 Data/News/Quant/Research/LLM 的 Stage 清单和 Output Registry 定义；若契约已冻结但代码缺少模块用例，任务归对应模块；若模块 Port 已存在而组合映射缺失，才由 Server 实现 Adapter。
+
+本轮没有修改业务模块代码，没有新增配置或默认值。以上结论为当前代码静态核查；各 Adapter 的集成/运行状态仍为 pending_evidence。
+
+### 12.88 SRV-004 Stage 清单与 Output Schema 启用门禁复核（2026-11-13）
+
+继续对照当前分支保留的流程架构文档及 Quant/Research 跨模块契约，补充区分“流程阶段概念”与“可执行 Stage Registry”。
+
+#### 已有阶段定义（概念层）
+
+`doc/research-analysis-flow-native-go/01-总体架构与分析流程.md` 定义 Stage 0–10 的业务阶段：
+受理/范围、输入快照与质量、市场环境、行业/主题、个股量化、事件与证据、Context 与假设、策略/情景验证、风险门禁、综合与校验、归档与跟踪。
+
+该文档描述业务流程，不等于 Researchflow 当前已注册的 `stage_code`、版本化 DAG、Adapter 或 Output Schema。Researchflow Template 结构要求显式携带 `output_registry_version`，但不能由阶段标题推导 Registry 项。
+
+#### 关键契约启用门禁
+
+- Quant-Research 字段级契约明确：ResultType 名称不代表 Payload 已支持；只有精确的 `result_type + payload_schema_version` 具备完整 Schema、Golden、Go Validator 和 Registry 注册后，才允许产生该结果。
+- Indicator/Factor 的 Registry Entry 与 Quant Result Payload Registry 是不同层次；不得把 Metric Registry 当作 Researchflow Output Registry。
+- Factor 首批仍受 QNT-CTR-003 deferred 和 DATA-CTR-005 DailyBars 输入证据门禁约束；不得在 Data 输入契约未闭合时注册可生产消费的 Factor Payload。
+- RiskDecision 规则要求数据缺失、规则不可评估或输入质量不足时 unknown/reject，不得 pass；Researchflow 的 HardRiskGate Stage 还必须通过受控 stage_code Registry 与 Template gate_type 双重登记，并 fail closed。
+- Researchflow FLOW-006 当前 Registry 是 Validator 容器，不会自动发现或注册 Quant Schema。当前没有依据把所有预留 result_type 批量注册。
+
+#### 当前可执行决策
+
+1. 暂不编写一个“覆盖 Stage 0–10 的通用万能 Executor”。它会掩盖不同模块的输入、授权、时点和输出语义。
+2. 先从已具备公开 Port 且有精确输出契约的单个用例切入，核对其输入快照、system_as_of、授权主体、输出 Schema/Golden 和错误分类是否完整。
+3. 对于只有概念定义、缺少冻结 stage_code/Output Schema 或生产 Application 用例的阶段，保留阻断状态并归属到对应契约/模块，不在 Server 猜字段补齐。
+4. Server Adapter 只做 DTO 映射和模块公开用例调用；OutputRef 必须引用模块真实持久化结果，不能由 Server 生成一个看似有效的引用。
+5. Stage/Output Registry 的版本绑定和具体条目必须在真实 Adapter 开始前确定；Template 的 `output_registry_version` 不得使用未经登记的临时版本。
+
+本轮没有改动业务模块、模板数据或契约定义；仅将当前已证实的启用门禁写入 Server 唯一主计划。
+
+### 12.89 SRV-004 Data → Quant 生产计算链路阻断复核（2026-11-13）
+
+本节只读核对以下模块分支当前 HEAD，不对这些分支执行写操作：
+
+- Quant：`feat/quant @ dd686838527978626d1c6af2a905b0c4df01c3b5`
+- Data：`feat/full-go-data-providers-api-switch @ 0d2416f6d5ecd5821bef46afe0cc265b58c7ec8a`
+- Researchflow：`feat/researchflow @ f11a83c14de5a854685e106275619e56a01630e2`
+
+#### Data 输入边界
+
+- Data 的 `app.MarketDataReader` 已组合 Quote、DailyBars、Fundamentals、Valuations 读取 Port；`application.Reader` 已适配 DataService，并支持 DailyBars/Fundamentals/Valuations 的 SystemObservedAt 截止读取。
+- 但当前公开 `app.DailyBar` 的 Open/High/Low/Close、Amount 等精确数值仍为 float64；未发现 DailyBarsV2 Decimal DTO/Provider 精度保真实现。
+- 项目契约目录明确 DATA-CTR-005 为 `pending_evidence`，缺少 v2 OpenAPI、Go Decimal Model、Provider 原始数值精度链路和 Golden；该契约明确阻断真实 Quant Data Adapter，但不阻断 Quant 纯算法/Fixture 开发。
+- 因此现有 Data Reader 可以用于已明确允许的 v1 读取场景，但不能把 float64 DailyBars 接入需要精确日线事实的生产 Factor/Quant Stage，也不能由 Server 在边界处自行转换后声称满足 v2。
+
+#### Quant 计算与结果边界
+
+- `internal/quant/application` 当前只有 `GetResult` 授权读取用例；未发现生产计算 Application Facade。
+- `factor`、`indicator` 包已有纯计算函数；`risk.EvaluateRuleSet` 已有规则执行纯逻辑，但这些函数不等于带可信输入快照、参数校验、质量判定、结果持久化和访问审计的完整生产用例。
+- `quant/result.Repository` 当前是 Save 写入端口；`GetResult` 是授权读取用例。当前 `DecodePayload` 只接受 `trend/1.0.0` 和 `risk/1.0.0`；Indicator 虽有独立 Payload 类型，但代码明确未加入 Envelope 联合类型；未发现 Factor Payload 的可生产注册项。
+- Quant Metric Registry 负责指标/参数元数据与 Metric 校验，不是 Result Payload Registry。项目契约目录中 QNT-CTR-003 仍为 `pending_evidence`；Factor 字段级目标结构也明确保持 deferred，不能因纯算法函数、Schema 文件或 Golden 文件存在就开放 Factor 结果。
+- 结论：当前 Server 不具备可调用的 Quant 生产计算入口；不得在 Server 自行串接纯函数、拼装 Manifest/Envelope 或绕过 Data v2 门禁来制造一个伪 Application Facade。计算 Facade、Payload 注册和持久化生产链路归 Quant；DailyBarsV2 精度输入证据归 Data。
+
+#### Researchflow 执行注册边界
+
+- Researchflow 已有 `StageExecutor`、版本化 Template（含 `stage_code` 与 `output_registry_version`）和 MySQL Template Registry。
+- Template Registry 负责精确版本模板的存储、指纹与模板校验；没有证据表明它同时提供 Output Registry。当前分支树未发现独立 Output Registry 实现/注册清单，Quant Metric Registry 不能代替。
+- 因此即使 Server 能调用某个模块 Port，也仍缺少可核验的 Stage → Output Schema/Validator 绑定。不能由 Server 根据 Stage 名称临时发明输出类型或 Registry 版本。
+
+#### 本轮决策与归属
+
+1. 不实现 Data → Quant 生产 Stage Adapter：DATA-CTR-005 和 Quant 生产计算入口/结果 Payload 注册均未满足启用条件。
+2. Data 继续完成 DATA-CTR-005 的 DailyBarsV2 Decimal 精度链路与 Golden；Quant 完成生产计算 Application Facade、真实输入快照绑定、Result Payload Schema/Golden/Validator/Registry、结果持久化；Researchflow 完成可装载的 Output Registry 及其 Stage 绑定。各模块按自身冻结契约推进。
+3. Server 不复刻上述领域逻辑。待模块公开用例与精确 Registry 条目齐备后，Server 才实现对应 Adapter 和组合注入。
+4. Researchflow `CapacityLimits` 仍是 Server 独立装配缺口，但两个限制值必须显式为正数且无默认值。当前 Server Process Config 尚无 Researchflow 容量配置字段；现有 `ANALYSIS_WORKERS/ANALYSIS_MAX_QUEUED` 属于旧 Analysis 队列，不得未经契约确认映射为 Researchflow 容量。需先依据 Server 配置约定确定显式配置键，再装载并注入 MySQL Run/Worker Claim 路径。
+5. 本轮只更新本分支 Server 主计划；未修改 Data、Quant、Researchflow 分支或业务代码，也未启动 Researchflow Worker/接收生产 Run。
+
+本节结论为跨分支静态代码与契约核查，集成运行状态仍为 pending_evidence。
+
+### 12.90 SRV-004 Researchflow 容量配置边界与 LLM 生产装载复核（2026-11-13）
+
+#### Researchflow 容量配置
+
+本轮在 Server 配置层增加了显式容量配置读取：
+
+- `RESEARCHFLOW_MAX_QUEUED_RUNS` → `ResearchflowCapacity.MaxQueuedRuns`
+- `RESEARCHFLOW_MAX_WORKERS` → `ResearchflowCapacity.MaxWorkers`
+- 两项必须同时配置，且均为正整数；不设置默认值。
+- 两项均未配置时，返回 `Configured=false`，保持现有 Server/旧 Analysis 启动行为不变。
+- 仅配置其中一项、空值、非整数、零或负数均拒绝。
+- `.env.example` 只提供注释示例，不注入任何默认容量值。
+
+当前 Server 尚未创建 Researchflow `MySQLRunRepository`、Scheduler、WorkerPool，也没有可生产执行的 StageExecutor。故本次只完成配置读取和边界校验，没有将这两个值错误映射到旧 `ANALYSIS_WORKERS/ANALYSIS_MAX_QUEUED`，也没有启动 Researchflow Worker。后续在真实 Worker 装配时，必须要求 `Configured=true`，并将两值原样映射到 `researchflow/storage.CapacityLimits`；所有实例使用相同配置。
+
+#### LLM 生产装载边界
+
+复核 Server 当前分支的 LLM 接入点：
+
+- `llm.ProviderConfig` 要求 Provider、HTTPS Gateway `/v1`、默认模型、Secret 引用、请求/响应大小、超时、Capability TTL 和模型 allowlist。
+- `llm.CapabilityState` 要求 Provider/Model/GatewayVersion、VerificationMethod、EvidenceRef、VerifiedAt、ValidUntil 和各项能力状态；能力证据必须与 Provider 配置匹配且处于有效期内。
+- `server/llmtransport.NewResponsesAdapter` 已提供受控 Platform HTTP Transport 与 JSON/SSE Adapter 构造入口。
+- 当前 Server Process Config 没有 ProviderConfig 的可信来源装载、SecretRef 解析、CapabilityState 证据读取/校验和 DestinationPolicy 构造；未发现可直接复用的 LLM Provider 配置仓储或 Evidence Loader。
+
+因此，LLM 尚不能在 Bootstrap 中创建生产 Adapter。不得把 Provider 能力硬编码为 supported，不得用静态伪造 EvidenceRef/VerifiedAt 通过构造校验，也不得把 SecretRef 当作凭证明文。下一步需先确定真实 ProviderConfig 与 Capability Evidence 的权威来源及 SecretRef 解析接口，再由 Server 做装载、校验和 Adapter 装配。
+
+#### 本轮变更与验证范围
+
+- 新增 `internal/server/config/researchflow.go`，并接入 Process 配置快照。
+- 增加未配置、成对配置、部分配置和非法数值测试。
+- 更新 `.env.example` 的注释说明。
+- 未创建 Researchflow Worker、Scheduler 或 Stage Adapter；未改业务模块与冻结契约。
+- 代码测试及 CI 尚待本轮最新提交验证，不将静态配置单测定义为生产装配验收。
+
+### 12.91 SRV-004 最新模块进展与 Server 接入门禁复核（2026-11-13）
+
+本轮基于各模块当前分支 HEAD 复核前述 12.87–12.90 的接入结论，避免继续沿用过期提交状态；只读其他模块分支，没有跨分支写操作。
+
+#### 最新分支进展
+
+- Research：`feat/research @ 68e716ad54af87f19c3bb99b418e8db8eb100345`。新增 `internal/research/adapters/news`，提供 News Evidence Importer 与 Authorizer：通过 News `ResearchEvidenceQuery` 获取指定 News 版本，校验授权状态、内容级别、`SystemAsOf`、`SystemObservedAt` 和 `AvailableAt`，再调用 Research `AddEvidence`；读取/写入时重新向 News Owner 查询授权，不把存储的 `AuthorizationRef` 当作访问凭证。该能力补齐 News → Research 的 Evidence 领域适配，但不是 Researchflow `StageExecutor` 实现，也没有自动接入 Server Bootstrap。该分支 HEAD 对应 Go test suite Run `43198863446` 成功。
+- Data：`feat/full-go-data-providers-api-switch @ c3d89eaa6097538cc42a23dfd8ee217f0a808b8c`。相对前次核查只新增 Bundle `as_of` 历史观察时点参数校验、空值/重复参数测试和 MariaDB CI 触发；没有涉及 DailyBarsV2 Decimal DTO、Provider 原始精度保真或 Golden，因此 DATA-CTR-005 的既有阻断结论不变。该分支 HEAD 对应 Go test suite Run `43347838452` 成功。
+- Quant：`feat/quant @ dd686838527978626d1c6af2a905b0c4df01c3b5`；Researchflow：`feat/researchflow @ f11a83c14de5a854685e106275619e56a01630e2`；LLM：`feat/llm @ 307793080ecd5991946b7daee176b20cd07a771f`。相对上一轮核查，这三个分支 HEAD 未变化；对应的 Quant 生产计算 Facade / Result Payload 注册、Researchflow Output Registry / Stage 绑定、LLM 可信 ProviderConfig / Capability Evidence 来源缺口仍未解除。
+
+#### 对 Server 生产装配的影响
+
+1. Research News Adapter 由 Research 模块拥有，Server 不应在 `internal/server` 重写授权查询、PIT 校验或 Evidence 映射。只有在某个已冻结的 Stage 定义明确要求导入 News Evidence，且该 Stage 的输入、输出 Schema、Registry 版本和授权主体来源均确定后，Server 才负责将该 Adapter 组合进对应 Stage Executor。
+2. 当前 Researchflow `StageExecutor` 仍只是执行 Port。未发现已注册的精确 `stage_code + template_version + output_registry_version` 与可装载 Output Registry；Research 新增 Evidence Adapter 不能替代这些流程注册信息。
+3. Data 最新提交只收紧 Bundle 查询参数，不改变 DailyBars 数值类型；Quant 当前仍缺生产计算用例与可生产 Payload 注册。因此 Data → Quant 生产计算 Stage 仍不可接线。
+4. 本轮不创建无实际调用方的 Research Service/News Importer 装配，不启动 Researchflow Worker，也不把模块测试通过等同于跨模块生产联调通过。
+
+#### 本轮结论
+
+- Research → News Evidence 适配能力已有模块实现和模块 CI 证据；Server 不重复实现。
+- Server 仍没有可安全启用的具体 Researchflow Stage。当前可独立完成的容量配置读取已在 12.90 实现并通过 Server CI；其生产注入必须与真实 Worker 装配同批完成。
+- 下一步等待模块按冻结契约补齐 Stage 所需的生产 Application Port、Output Registry 和可信配置来源；条件满足后再由 Server 实现精确 Adapter 组合。若没有新的模块契约/公开 Port 变化，Server 不再重复静态盘点这些已确认的阻断项。
+

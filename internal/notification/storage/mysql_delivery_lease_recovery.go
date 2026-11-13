@@ -25,14 +25,11 @@ func (r *MySQLDeliveryRepository) RecoverExpiredLease(
 	event domain.DeliveryStateEvent,
 	now time.Time,
 ) error {
+	if !isUTCTime(event.ChangedAt) {
+		return domain.ErrInvalidDeliveryChange
+	}
 	if r == nil || r.db == nil || ctx == nil || !isUTCTime(now) ||
 		expectedVersion < 1 || fencingToken < 1 {
-		return application.ErrDeliveryLeaseConflict
-	}
-	now = normalizeDeliveryDatabaseTime(now)
-	next = normalizeDeliveryRecordTimes(next)
-	event.ChangedAt = normalizeDeliveryDatabaseTime(event.ChangedAt)
-	if next.UpdatedAt.After(now) {
 		return application.ErrDeliveryLeaseConflict
 	}
 	if err := next.Validate(); err != nil {
@@ -40,6 +37,12 @@ func (r *MySQLDeliveryRepository) RecoverExpiredLease(
 	}
 	if err := validateDeliveryStateEventForSnapshot(next, event); err != nil {
 		return err
+	}
+	now = normalizeDeliveryDatabaseTime(now)
+	next = normalizeDeliveryRecordTimes(next)
+	event.ChangedAt = normalizeDeliveryDatabaseTime(event.ChangedAt)
+	if next.UpdatedAt.After(now) {
+		return application.ErrDeliveryLeaseConflict
 	}
 
 	tx, err := r.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
@@ -56,17 +59,6 @@ func (r *MySQLDeliveryRepository) RecoverExpiredLease(
 	if err != nil {
 		return fmt.Errorf("notification storage: lock delivery for recovery: %w", err)
 	}
-	if current.Status != domain.DeliverySending || current.Version != expectedVersion ||
-		next.Version != expectedVersion+1 || event.From != domain.DeliverySending ||
-		!sameDeliveryIdentity(current, next) ||
-		current.AttemptCount != next.AttemptCount ||
-		current.MaxAttempts != next.MaxAttempts ||
-		!current.DeadlineAt.Equal(next.DeadlineAt) ||
-		!current.CreatedAt.Equal(next.CreatedAt) ||
-		next.UpdatedAt.Before(current.UpdatedAt) {
-		return application.ErrDeliveryVersionConflict
-	}
-
 	var workerID sql.NullString
 	var leaseExpiry []byte
 	var currentToken int64
@@ -85,6 +77,17 @@ func (r *MySQLDeliveryRepository) RecoverExpiredLease(
 	}
 	if now.Before(expiresAt) {
 		return application.ErrDeliveryLeaseConflict
+	}
+
+	if current.Status != domain.DeliverySending || current.Version != expectedVersion ||
+		next.Version != expectedVersion+1 || event.From != domain.DeliverySending ||
+		!sameDeliveryIdentity(current, next) ||
+		current.AttemptCount != next.AttemptCount ||
+		current.MaxAttempts != next.MaxAttempts ||
+		!current.DeadlineAt.Equal(next.DeadlineAt) ||
+		!current.CreatedAt.Equal(next.CreatedAt) ||
+		next.UpdatedAt.Before(current.UpdatedAt) {
+		return application.ErrDeliveryVersionConflict
 	}
 
 	result, err := tx.ExecContext(ctx, `UPDATE notification_deliveries SET

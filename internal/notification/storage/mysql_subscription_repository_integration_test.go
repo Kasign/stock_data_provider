@@ -39,7 +39,7 @@ func TestNotificationMariaDBSubscriptionRepositoryIntegration(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	db, err := openNotificationIntegrationDB(ctx, dsn)
+	db, err := openNotificationIntegrationDB(t, ctx, dsn)
 	if err != nil {
 		t.Fatalf("open MariaDB through Platform Storage: %v", err)
 	}
@@ -61,11 +61,47 @@ func TestNotificationMariaDBSubscriptionRepositoryIntegration(t *testing.T) {
 		ChannelRef: "channel-integration", TemplateID: "template-integration",
 		CreatedAt: now, UpdatedAt: now, EffectiveAt: now,
 	}
+	for _, tc := range []struct {
+		name   string
+		mutate func(*domain.Subscription)
+	}{
+		{name: "created_at", mutate: func(s *domain.Subscription) { s.CreatedAt = s.CreatedAt.In(time.FixedZone("UTC+8", 8*60*60)) }},
+		{name: "updated_at", mutate: func(s *domain.Subscription) { s.UpdatedAt = s.UpdatedAt.In(time.FixedZone("UTC+8", 8*60*60)) }},
+		{name: "effective_at", mutate: func(s *domain.Subscription) { s.EffectiveAt = s.EffectiveAt.In(time.FixedZone("UTC+8", 8*60*60)) }},
+	} {
+		t.Run("reject_non_utc_create_"+tc.name, func(t *testing.T) {
+			invalid := initial
+			invalid.SubscriptionID = fmt.Sprintf("subscription-invalid-%s-%d", tc.name, time.Now().UnixNano())
+			tc.mutate(&invalid)
+			if err := repository.Create(ctx, invalid); !errors.Is(err, domain.ErrInvalidSubscription) {
+				t.Fatalf("non-UTC %s must be rejected before normalization, got %v", tc.name, err)
+			}
+		})
+	}
 	if err := repository.Create(ctx, initial); err != nil {
 		t.Fatalf("create subscription: %v", err)
 	}
 	if err := repository.Create(ctx, initial); !errors.Is(err, domain.ErrSubscriptionVersionConflict) {
 		t.Fatalf("duplicate initial subscription must conflict, got %v", err)
+	}
+
+	for _, tc := range []struct {
+		name   string
+		mutate func(*domain.Subscription)
+	}{
+		{name: "updated_at", mutate: func(s *domain.Subscription) { s.UpdatedAt = s.UpdatedAt.In(time.FixedZone("UTC+8", 8*60*60)) }},
+		{name: "effective_at", mutate: func(s *domain.Subscription) { s.EffectiveAt = s.EffectiveAt.In(time.FixedZone("UTC+8", 8*60*60)) }},
+	} {
+		t.Run("reject_non_utc_append_"+tc.name, func(t *testing.T) {
+			invalid := initial
+			invalid.Version = 2
+			invalid.UpdatedAt = now.Add(time.Second)
+			invalid.EffectiveAt = now.Add(time.Second)
+			tc.mutate(&invalid)
+			if err := repository.AppendVersion(ctx, 1, invalid); !errors.Is(err, domain.ErrInvalidSubscription) {
+				t.Fatalf("non-UTC %s must be rejected before normalization, got %v", tc.name, err)
+			}
+		})
 	}
 
 	next := initial

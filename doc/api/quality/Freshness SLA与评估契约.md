@@ -231,3 +231,10 @@ Service 层新增 fake Provider 集成测试，验证 `applyFreshnessProbeResult
 - 独立检查结果没有对应 Provider 探测项时，保留既有兼容行为，允许按其自身时间证据执行 Freshness 评估。
 - DailyBar、Fundamentals、Valuations 未配置 Freshness 策略时仍返回 `skipped/freshness_policy_not_configured`；这表示策略未配置，不代表 Provider 未配置或请求失败。
 - Data 专项验收证据：代码 SHA `f919b4f8568181706053639032cb38fc75a131fb`，Go Test Suite Run `43143964508` 中 Market Data gofmt、单测、Race、Vet，以及 MariaDB Migration/PIT、DailyBar 回退、PIT 修订回退、Probe HTTP + MariaDB 端到端均通过。
+
+
+## 2026-11-12 Repository 存储验收补充
+
+- MariaDB Job `131228387935` / Go Test Suite Run `43231652148` 已通过 `TestMariaDBRevisionPersistenceAndPointInTimeQueries`。
+- 该集成用例新增 Fundamentals 的历史来源版本、`AvailableAt` 精确时间往返、`as_of` 旧/新修订读取；新增 Valuations 的批量请求指纹、历史来源版本、`as_of` 读取和连接重启读回。
+- 此结果只覆盖 Repository 层存储与 PIT，不改变本文关于 DailyBar/Fundamentals/Valuations 独立 Freshness SLA 尚未配置的结论；没有可靠 provider_time 时继续返回 unknown/skipped，不以 fetched_at 替代。

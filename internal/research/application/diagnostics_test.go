@@ -52,13 +52,14 @@ func TestDiagnosticsApplicationBuildsChecksFromExactVersions(t *testing.T) {
 		t.Fatal(err)
 	}
 	service.events = eventRepo
+	service.contextAuthorizer = &contextAuthorizerFake{}
 
 	checks := []struct {
 		name  string
 		build func() (platformdiagnostics.Check, error)
 	}{
 		{"context", func() (platformdiagnostics.Check, error) {
-			return service.BuildContextCheck(context.Background(), ContextRef{ContextID: "ctx_diag", ContextVersion: 1}, now, true)
+			return service.BuildContextCheck(context.Background(), ContextReadRequest{Ref: ContextRef{ContextID: "ctx_diag", ContextVersion: 1}, CallerRef: "researchflow:worker", PurposeCode: string(researchevidence.PurposeResearchAnalysis)}, now, true)
 		}},
 		{"event", func() (platformdiagnostics.Check, error) {
 			return service.BuildEventCheck(context.Background(), EventRef{EventID: "evt_diag", EventVersion: 1}, now, true)
@@ -92,13 +93,13 @@ func TestDiagnosticsApplicationRejectsInvalidReferences(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.BuildContextCheck(context.Background(), ContextRef{ContextID: " ", ContextVersion: 1}, time.Time{}, true); err == nil {
+	if _, err := service.BuildContextCheck(context.Background(), ContextReadRequest{Ref: ContextRef{ContextID: " ", ContextVersion: 1}, CallerRef: "researchflow:worker", PurposeCode: string(researchevidence.PurposeResearchAnalysis)}, time.Time{}, true); err == nil {
 		t.Fatal("blank Context ID must be rejected")
 	}
 	if _, err := service.BuildClaimCheck(context.Background(), ClaimRef{ClaimID: "clm_1", ClaimVersion: 0}, time.Now().UTC(), true); err == nil {
 		t.Fatal("non-positive Claim version must be rejected")
 	}
-	if _, err := service.BuildContextCheck(context.Background(), ContextRef{ContextID: "ctx_1", ContextVersion: 1}, time.Time{}, true); err == nil {
+	if _, err := service.BuildContextCheck(context.Background(), ContextReadRequest{Ref: ContextRef{ContextID: "ctx_1", ContextVersion: 1}, CallerRef: "researchflow:worker", PurposeCode: string(researchevidence.PurposeResearchAnalysis)}, time.Time{}, true); err == nil {
 		t.Fatal("missing Run system_as_of must be rejected before Repository access")
 	}
 	if _, err := service.BuildEventCheck(context.Background(), EventRef{EventID: "evt_1", EventVersion: 1}, time.Date(2026, 11, 9, 5, 0, 0, 0, time.FixedZone("UTC+0", 0)), true); err == nil {
