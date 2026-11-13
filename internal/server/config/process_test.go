@@ -30,7 +30,7 @@ func TestLoadProcessDefaults(t *testing.T) {
 	if cfg.LogLevel != "info" || cfg.AnalysisTimeout != 5*time.Minute ||
 		cfg.AnalysisWorkers != 2 || cfg.AnalysisMaxQueued != 100 ||
 		cfg.Role != RoleAll || cfg.HTTP.Address != ":8092" ||
-		cfg.ResearchNotificationRelay.BatchSize != 20 || cfg.ResearchNotificationRelay.EventLimits.MaxJSONDepth != 16 {
+		cfg.ResearchNotificationRelay.BatchSize != 20 || cfg.ResearchNotificationRelay.EventLimits.MaxJSONDepth != 16 || cfg.ResearchflowCapacity.Configured {
 		t.Fatalf("unexpected process defaults: %+v", cfg)
 	}
 }
