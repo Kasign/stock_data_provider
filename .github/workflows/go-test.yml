@@ -178,7 +178,7 @@ jobs:
         run: go vet ./internal/marketdata/... ./cmd/market-data/...
 
   market-data-mariadb-integration:
-    if: ${{ github.event_name != 'push' || (github.ref == 'refs/heads/feat/full-go-data-providers-api-switch' && contains(github.event.head_commit.message, 'PIT 联调')) }}
+    if: ${{ github.event_name != 'push' || github.ref == 'refs/heads/feat/full-go-data-providers-api-switch' }}
     name: Market-data MariaDB migration and PIT persistence
     runs-on: ubuntu-latest
     timeout-minutes: 15
