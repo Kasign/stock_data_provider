@@ -240,5 +240,32 @@ func Migrations() []platformstorage.Migration {
 					ADD KEY idx_news_observations_retention (retention_until, observation_id)`,
 			},
 		},
+		{
+			Version:     9,
+			Description: "persist immutable current news policy versions",
+			Statements: []string{
+				`CREATE TABLE news_policy_versions (
+					policy_type VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					policy_ref VARCHAR(256) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
+					policy_version VARCHAR(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
+					payload_json JSON NOT NULL,
+					payload_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					created_at DATETIME(6) NOT NULL,
+					PRIMARY KEY (policy_type, policy_ref, policy_version),
+					KEY idx_news_policy_versions_created (policy_type, policy_ref, created_at)
+				) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+				`CREATE TABLE news_current_policy_versions (
+					policy_type VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					policy_ref VARCHAR(256) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
+					policy_version VARCHAR(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
+					updated_at DATETIME(6) NOT NULL,
+					PRIMARY KEY (policy_type, policy_ref),
+					KEY idx_news_current_policy_version (policy_type, policy_ref, policy_version),
+					CONSTRAINT fk_news_current_policy_version
+						FOREIGN KEY (policy_type, policy_ref, policy_version)
+						REFERENCES news_policy_versions (policy_type, policy_ref, policy_version)
+				) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+			},
+		},
 	}
 }

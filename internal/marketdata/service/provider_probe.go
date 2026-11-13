@@ -216,6 +216,22 @@ func fundamentalsProbePeriod(now time.Time) (int, int) {
 	return year, 2
 }
 
+// validateFundamentalsProbeSnapshot 对同一请求期复用字段级 Reporter 与 Service 业务校验。
+// 两层校验必须使用 Provider 实际请求的 year/quarter，不能重新推导当前自然年。
+func validateFundamentalsProbeSnapshot(
+	ctx context.Context,
+	symbol string,
+	year, quarter int,
+	snapshot *model.FundamentalsSnapshot,
+) error {
+	report := validation.ValidateFundamentalsSnapshot(snapshot, symbol, year, quarter)
+	validation.AddContextReport(ctx, report)
+	if report.HasErrors() {
+		return errors.New("fundamentals field validation failed")
+	}
+	return validateFundamentalsSnapshot(symbol, year, quarter, snapshot)
+}
+
 // ProbeProviderCapabilitiesWithOptions 主动探测已启用 Provider 的能力。
 // 每个探测直接调用对应 Provider，不经过业务请求的熔断统计；单项超时和并发均受限。
 func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, options ProviderProbeOptions) (*model.ProviderProbeRun, error) {
@@ -875,16 +891,13 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 			if err != nil {
 				return model.QualityUnknown, "", nil, err
 			}
-			report := validation.ValidateFundamentalsSnapshot(v, barsSymbol, fundamentalProbeYear, fundamentalProbeQuarter)
-			validation.AddContextReport(probeCtx, report)
 			sourceVersion := ""
 			if v != nil {
 				sourceVersion = v.SourceVersion
 			}
-			if report.HasErrors() {
-				return model.QualityInvalid, sourceVersion, nil, errors.New("fundamentals field validation failed")
-			}
-			if err := validateFundamentalsSnapshot(barsSymbol, nowLocal.Year(), 2, v); err != nil {
+			if err := validateFundamentalsProbeSnapshot(
+				probeCtx, barsSymbol, fundamentalProbeYear, fundamentalProbeQuarter, v,
+			); err != nil {
 				return model.QualityInvalid, sourceVersion, nil, err
 			}
 			recordProviderProbeEvidence(probeCtx, barsSymbol, "", len(v.Sections), len(v.Sections), nil)

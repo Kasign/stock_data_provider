@@ -325,7 +325,7 @@ func (r *repositoryBase) MarkOutboxPublished(ctx context.Context, eventID, worke
 		return fmt.Errorf("repository clock returned zero time")
 	}
 	result, err := r.db.ExecContext(ctx,
-		"UPDATE research_notification_outbox SET delivery_status='published', delivered_at=?, lease_owner=NULL, lease_token=NULL, lease_until=NULL, updated_at=? WHERE event_id=? AND delivery_status='leased' AND lease_owner=? AND lease_token=? AND lease_until>?",
+		"UPDATE research_notification_outbox SET delivery_status='published', delivered_at=?, updated_at=? WHERE event_id=? AND delivery_status='leased' AND lease_owner=? AND lease_token=? AND lease_until>?",
 		formatPIT(deliveredAt), deliveredAt, eventID, workerID, leaseToken, formatPIT(now))
 	if err != nil {
 		return fmt.Errorf("confirm Research Outbox delivery: %w", err)
@@ -337,18 +337,22 @@ func (r *repositoryBase) MarkOutboxPublished(ctx context.Context, eventID, worke
 	if affected == 1 {
 		return nil
 	}
-	var status string
-	err = r.db.QueryRowContext(ctx, "SELECT delivery_status FROM research_notification_outbox WHERE event_id=?", eventID).Scan(&status)
+	var status, leaseOwner, storedLeaseToken string
+	err = r.db.QueryRowContext(ctx,
+		"SELECT delivery_status, lease_owner, lease_token FROM research_notification_outbox WHERE event_id=?", eventID).
+		Scan(&status, &leaseOwner, &storedLeaseToken)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ErrNotFound
 	}
 	if err != nil {
 		return fmt.Errorf("read Research Outbox confirmation state: %w", err)
 	}
-	if status == "published" {
+	// Only the exact lease that performed the publication may replay its
+	// confirmation. A published status alone is not proof of caller ownership.
+	if status == "published" && leaseOwner == workerID && storedLeaseToken == leaseToken {
 		return nil
 	}
-	return fmt.Errorf("%w: Research Outbox message is not leased by this worker", ErrConflict)
+	return fmt.Errorf("%w: Research Outbox message is not published by this lease", ErrConflict)
 }
 
 func (r *repositoryBase) ScheduleOutboxRetry(ctx context.Context, eventID, workerID, leaseToken string, retryAt time.Time, reasonCode string, updatedAt time.Time) error {

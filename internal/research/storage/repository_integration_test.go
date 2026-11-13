@@ -183,7 +183,13 @@ func TestResearchOutboxClaimRetryAndConfirmation(t *testing.T) {
 		t.Fatalf("confirm Outbox delivery: %v", err)
 	}
 	if err := repo.base.MarkOutboxPublished(ctx, reclaimed[0].EventID, "worker_test", reclaimed[0].LeaseToken, now); err != nil {
-		t.Fatalf("repeated confirmation must be idempotent: %v", err)
+		t.Fatalf("repeated confirmation must be idempotent for the same lease: %v", err)
+	}
+	if err := repo.base.MarkOutboxPublished(ctx, reclaimed[0].EventID, "worker_other", reclaimed[0].LeaseToken, now); !errors.Is(err, ErrConflict) {
+		t.Fatalf("published confirmation by another worker = %v, want ErrConflict", err)
+	}
+	if err := repo.base.MarkOutboxPublished(ctx, reclaimed[0].EventID, "worker_test", claimed[0].LeaseToken, now); !errors.Is(err, ErrConflict) {
+		t.Fatalf("published confirmation with stale lease token = %v, want ErrConflict", err)
 	}
 	after, err := repo.base.ClaimOutbox(ctx, "worker_test", 10, now.Add(time.Minute))
 	if err != nil {
@@ -845,17 +851,18 @@ func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 	}
 
 	// Claim 历史版本损坏后，同样不得读取或继续追加。
-	if _, err := db.ExecContext(ctx, "UPDATE research_claim_versions SET payload=CONCAT(payload, ' ') WHERE claim_id=? AND claim_version=2", claimID); err != nil {
+	if _, err := db.ExecContext(ctx, "UPDATE research_claim_versions SET payload=CONCAT(payload, ' ') WHERE claim_id=? AND claim_version=3", claimID); err != nil {
 		t.Fatalf("tamper stored Claim payload: %v", err)
 	}
-	if _, err := claimRepo.GetVersion(ctx, claimID, 2); !errors.Is(err, ErrCorruptRecord) {
+	if _, err := claimRepo.GetVersion(ctx, claimID, 3); !errors.Is(err, ErrCorruptRecord) {
 		t.Fatalf("tampered Claim read error = %v, want ErrCorruptRecord", err)
 	}
-	claimV3AfterCorruption := claimV2
-	claimV3AfterCorruption.ClaimVersion = 3
-	claimV3AfterCorruption.SystemAsOf = claimV2.SystemAsOf.Add(time.Minute)
-	if err := claimRepo.Append(ctx, claimV3AfterCorruption); !errors.Is(err, ErrCorruptRecord) {
-		t.Fatalf("append after tampered previous Claim error = %v, want ErrCorruptRecord", err)
+	claimV4AfterCorruption := claimV3
+	claimV4AfterCorruption.ClaimVersion = 4
+	claimV4AfterCorruption.SystemAsOf = claimV3.SystemAsOf.Add(time.Minute)
+	claimV4AfterCorruption.SupersedesVersion = intPointer(3)
+	if err := claimRepo.Append(ctx, claimV4AfterCorruption); !errors.Is(err, ErrCorruptRecord) {
+		t.Fatalf("append after tampered latest Claim error = %v, want ErrCorruptRecord", err)
 	}
 }
 

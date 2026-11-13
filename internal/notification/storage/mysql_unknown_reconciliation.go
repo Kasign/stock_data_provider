@@ -19,22 +19,25 @@ func (r *MySQLDeliveryRepository) ReconcileUnknown(
 	next domain.DeliveryRecord,
 	event domain.DeliveryStateEvent,
 ) error {
+	if !isUTCTime(event.ChangedAt) {
+		return domain.ErrInvalidDeliveryChange
+	}
 	if r == nil || r.db == nil || ctx == nil || expectedVersion < 1 {
 		return errors.New("notification storage: invalid unknown reconciliation request")
 	}
-	next = normalizeDeliveryRecordTimes(next)
-	event.ChangedAt = normalizeDeliveryDatabaseTime(event.ChangedAt)
 	if err := next.Validate(); err != nil {
 		return err
 	}
+	if err := validateDeliveryStateEventForSnapshot(next, event); err != nil {
+		return err
+	}
+	next = normalizeDeliveryRecordTimes(next)
+	event.ChangedAt = normalizeDeliveryDatabaseTime(event.ChangedAt)
 	if next.Version != expectedVersion+1 ||
 		(next.Status != domain.DeliverySent && next.Status != domain.DeliveryFailed && next.Status != domain.DeliveryRetryWait) ||
 		event.From != domain.DeliveryUnknown ||
 		event.EvidenceRef == nil || !validUnknownEvidenceRef(*event.EvidenceRef) {
 		return domain.ErrInvalidDeliveryChange
-	}
-	if err := validateDeliveryStateEventForSnapshot(next, event); err != nil {
-		return err
 	}
 
 	tx, err := r.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
