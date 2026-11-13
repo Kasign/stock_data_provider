@@ -33,7 +33,7 @@ NEWS-CTR-002 DTO 和 Golden 已补齐 AuthorizationRef.schema_version 与 Policy
 
 ### 1.3 本轮 CI 验收
 
-Run 43362987745 对 SHA 23d07e7 的 GOV-CTR-006/News 代码全量通过；其后 Run 43364123334 对 SHA 19394e8 的游标密钥配置代码全量通过：
+Run 43362987745 对 SHA 23d07e7 的 GOV-CTR-006/News 代码全量通过；Run 43364123334 对 SHA 19394e8 的游标密钥配置代码全量通过；本轮 Run 43369529083 对 SHA d664b9f 的全量 CI 及 News/Research MariaDB 集成测试通过：
 
 - 全仓 Go 格式检查；
 - Root Module go vet ./...、go test ./...；
@@ -83,9 +83,9 @@ GetEvidence 的原子内容读取必须保留策略当前指针锁、授权复�
 - Active Key ID 和历史 Key；
 - Snapshot Page 与 ListEvidence Facade。
 
-EvidenceCursorCodec 已要求 Key Secret 长度 32～256 字节，最多 8 个 Key；游标 TTL 为 15 分钟，轮换时旧 Key 至少保留到其签发的游标过期。News Config 已新增 Active Key ID + JSON Key Ring 的可轮换 Secret 配置解析（32～256 字节、最多 8 把 Key、Active Key 必须存在），但 Server 尚未将其注入 EvidenceCursorCodec，也未装配完整查询 Facade。
+EvidenceCursorCodec 已要求 Key Secret 长度 32～256 字节，最多 8 个 Key；游标 TTL 为 15 分钟，轮换时旧 Key 至少保留到其签发的游标过期。News Config 已新增 Active Key ID + JSON Key Ring 的可轮换 Secret 配置解析；Server Bootstrap 已消费该配置，构造 EvidenceCursorCodec 和完整查询 Facade。
 
-不得使用硬编码密钥、空 Key、Mock Facade、永远返回空列表的 ListEvidence，或跳过签名验证的方式绕过该缺口。下一步应由 Server Bootstrap 消费 News Config 的 Key Ring，构造 EvidenceCursorCodec，并为轮换前后旧游标继续可验签增加组合测试。
+不得使用硬编码密钥、空 Key、Mock Facade、永远返回空列表的 ListEvidence，或跳过签名验证的方式绕过该缺口。Bootstrap 组合构造已完成；下一步是以真实 MariaDB 验证分页和旧 Key 轮换期间的验签行为。
 
 ### 2.4 Research 已有实现
 

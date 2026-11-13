@@ -1,25 +1,25 @@
 # Integration 系统接入审查与整体验收基线
 
 - 验收分支：`integration`
-- 本文最近一次核对的 integration 代码 SHA：`19394e856c6909b50a3eb664c2d565262fe2e8a2`（后续 `81e1c8d` 为 docs-only 更新）
-- 当前 CI：Integration Run `43364123334`，对应 SHA `19394e856c6909b50a3eb664c2d565262fe2e8a2`，结论 `success`；gofmt、root/go-core vet/test、Compose、WebUI 语法/单测和 Docker 构建全部通过
+- 本文最近一次核对的 integration 代码 SHA：`d664b9f6ec08d358b914242735fde52f49e9c7c1`；当前分支 HEAD 后续 docs-only 更新为 `1fd9e6c81cac718cf2b6e4690e6277d11cff812b`。
+- 当前 CI：Integration Run `43369529083`，对应代码 SHA `d664b9f6ec08d358b914242735fde52f49e9c7c1`，结论 `success`；gofmt、root/go-core vet/test、News/Research MariaDB 集成测试、Compose、WebUI 语法/单测和 Docker 构建全部通过。
 - 历史审查基线 SHA：`63f49065a5ef3379d95948a6c2c6e504a555a63f`（Run #54），仅作为历史参考
 - 历史参考：Run #23（`43178908392`）仅对应旧 SHA `fdc19b8591223dabccb533389d472713bfecc415`，结论 `success`
 - 本文性质：Integration 当前代码树的源码接入审查、真实依赖 CI 证据与后续验收基线
 - 范围：只记录根组合入口、模块装配、路由、Migration、Worker、事件连接和诊断接入；不替代各模块内部功能验收
-- 限制：本轮基于 GitHub 当前 `integration` 代码树进行源码审查；Run `43364123334` 对代码 SHA `19394e8` 的全量 Go 测试、Compose、WebUI 和 Docker 检查通过。CI 通过不代表真实外部 Provider、LLM Gateway、目标部署网络和生产凭据已验收。Researchflow Outbox → Notification Inbox 的 MariaDB/Redis 集成测试由 Go 测试步骤执行。
+- 限制：Run `43369529083` 对代码 SHA `d664b9f` 的全量检查通过，CI 已启用 `NEWS_MARIADB_TEST_DSN` 与 `RESEARCH_TEST_MYSQL_DSN`，执行 News/Research 模块级 MariaDB 集成测试。CI 通过不代表跨模块 Importer 持久化、真实外部 Provider、LLM Gateway、目标部署网络和生产凭据已验收。Researchflow Outbox → Notification Inbox 的 MariaDB/Redis 集成测试也继续执行。
 
 ## 1. 当前结论
 
-**当前 Integration 代码 SHA 的通用 CI 已通过；Researchflow → Notification 的 MariaDB 成功接收、失败重试、重复处理及 Relay 组件启停测试已有通过证据，但系统整体仍未达到端到端业务联调条件。**
+**当前 Integration 代码 SHA 的通用 CI 已通过；Researchflow → Notification 的 MariaDB 接收/重试/幂等及 Relay 生命周期测试已有通过证据，News 与 Research 模块级 MariaDB 集成测试也已纳入 CI 并通过。News→Research 跨模块 Importer 持久化、Researchflow 生产 StageExecutor、Quant/LLM Provider 和 Notification 真实渠道仍未完成，因此系统整体尚未达到端到端业务联调条件。**
 
-当前 `cmd/analysis-api/main.go` 已委托 `internal/server/bootstrap.Run`，Server 已拥有共享资源、进程配置、HTTP/Worker 生命周期、Health/Readiness 和 Migration Registry 等基础设施；但 Bootstrap 实际创建的业务执行链仍是旧 Analysis Runner、旧 Analysis Task Queue 和旧 Analysis HTTP API。
+当前 `cmd/analysis-api/main.go` 已委托 `internal/server/bootstrap.Run`。Bootstrap 仍以旧 Analysis Runner、旧 Task Queue 和旧 HTTP API 为主业务链；同时已在配置 Key Ring 时构造 News Evidence Query Facade、Research Service、Importer 和 Authorizer，但尚无 Stage/HTTP 消费端调用该组合。
 
-News、Research、Researchflow、Notification 的 Migration 已进入根 Registry，不代表相应 Application Service、业务 Adapter、Worker 或 HTTP Handler 已接入。当前已有 Research 与 Researchflow Outbox → Notification Inbox Relay、News Parser/Provider 配置诊断和 LLM Platform Transport 适配代码；但 Researchflow Scheduler/Worker、生产 StageExecutor、Quant 生产 Facade、LLM 可信 Provider 装载、Notification Fanout/Delivery Worker 仍未形成完整运行链。
+News、Research、Researchflow、Notification 的 Migration 已进入根 Registry，不代表相应业务执行链均已接入。News→Research 组合构造已完成但无消费者；Research 与 Researchflow Outbox → Notification Inbox Relay 已接入；News Parser/Provider 配置诊断已接入。Researchflow Scheduler/Worker/生产 StageExecutor、Quant 生产 Facade、LLM 可信 Provider 装载、Notification Fanout/Delivery Worker 仍未形成完整运行链。
 
 因此当前阶段应判定为：
 
-- 当前代码 SHA CI：`pass`（Run `43364123334`，`19394e8`）
+- 当前代码 SHA CI：`pass`（Run `43369529083`，`d664b9f`）；News/Research MariaDB 模块级集成测试已启用并通过。
 - Root Bootstrap 基础设施：部分完成
 - 新业务模块运行时装配：部分完成；仍以旧 Analysis Runner/Queue/API 为主
 - 新业务 API / Worker：Researchflow 业务 API 与 Worker 未接入
@@ -83,8 +83,8 @@ Registry 已具备 namespace 校验、确定性排序、执行报告和 Schema �
 |---|---|---|---|
 | Platform | Config、Fault、Security、HTTP Client、Storage、Diagnostics、Task Queue 等基础包 | DB/Redis 资源、Security Authenticator、Diagnostics 基础服务和共享 HTTP Client 资源已使用；未见各模块生产 BoundDoer/完整 Check 集合注入 | 基础设施部分接入 |
 | Data | 独立行情服务及迁移中的 Go Data 能力 | 仍由旧 Market Data Adapter 配置和 Runner 使用；未看到新 Data Application Port 装配 | 迁移门禁未通过，不作为新模块接入完成 |
-| News | Application、Provider/Source Adapter、Storage、Evidence 查询能力和 Migration | 已接入 Parser 自检及 Provider 配置诊断；尚未实例化完整 News Application/Provider 采集运行时，也未完成生产 BoundDoer 注入 | 诊断接入部分完成，业务运行时未接入 |
-| Research | Application Service、Port、Storage、Outbox 和 Migration | 当前仅注册 Migration；未构造 Research Service、未向 Researchflow 注入公开 Port | 部分具备，未接入业务运行时 |
+| News | Application、Provider/Source Adapter、Storage、Evidence 查询能力和 Migration | Parser 自检、Provider 配置诊断已接入；当 Key Ring 配置时 Bootstrap 构造 PIT/授权/分页 Evidence Query Facade。Provider 采集运行时和生产 BoundDoer 未装配，Evidence Query 暂无业务消费者 | Evidence Query 依赖图已构造；采集和实际消费链未接入 |
+| Research | Application Service、Port、Storage、Outbox 和 Migration | Bootstrap 在 Key Ring 配置时构造 Context/Evidence Repository、Research Service、News Importer/Authorizer；尚未向 Researchflow 注入公开 Port | News→Research 依赖已构造，尚无消费者和跨模块 MariaDB 验收 |
 | Researchflow | Run/Stage/Attempt 状态、CreateRun、Scheduler 单次 Run 协调、MySQL WorkerStore、Worker 单次执行、固定数量 Worker Pool、Context Assembly、Result Validation | Bootstrap 未装配 Scheduler 周期驱动、Worker Pool 生命周期和生产 StageExecutor Adapter；未提供 Researchflow 业务路由 | 模块核心执行设施已有实现，Server/生产 Adapter 接入未完成 |
 | Quant | Indicator/Factor/Registry/Risk/Result 等能力及查询用例 | Bootstrap 未构造 Quant Application Facade 或结果存储服务 | 未接入 |
 | LLM | Provider Port、Responses JSON/SSE 协议适配与校验 | Bootstrap 未创建具体 Provider；未注入 ProviderConfig、CapabilityState 和受控 BoundDoer | 未接入 |
@@ -107,8 +107,8 @@ Registry 已具备 namespace 校验、确定性排序、执行报告和 Schema �
 | INT-003 | Quant 缺少完整可注入 Application/结果持久化边界 | Researchflow 无法消费生产 Quant 结果 | Quant |
 | INT-004 | LLM 缺少 Provider 生产配置和 BoundDoer 注入 | 无法进行真实模型调用 | LLM + Server |
 | INT-005 | Notification 生产 FanoutPlanFactory、渠道/身份目录和 Server Worker 装配未完成 | 模块内 Inbox/FanoutDispatcher/Delivery 执行设施已存在，但无法形成真实事件到渠道的投递链路 | Notification + Server |
-| INT-006 | Research/News/Quant 等模块间公开 Port 尚未全部形成生产注入图 | 无法确认真实调用链及依赖方向 | 对应模块 + Server |
-| INT-007 | Outbox → Inbox 仅完成 Research 生产方接入；Researchflow 事件仍未进入 Notification | Research 事件可进入 Inbox；Researchflow 终态事件无法触发 Notification | Server + Researchflow；先按冻结事件契约修正生产 Envelope，再接 Relay |
+| INT-006 | News→Research 依赖图已构造但尚无 Stage/HTTP 消费者；Quant/LLM 等公开 Port 仍未形成完整生产注入图 | 只能证明构造成功，不能证明跨模块业务调用 | 对应模块 + Server |
+| INT-007 | Outbox → Inbox 已完成 Research 与 Researchflow 两个生产方接入；Notification 真实渠道投递仍未完成 | 事件可进入 Inbox/FanoutWorkItem，但尚不能送达外部渠道 | Notification + Server |
 | INT-008 | Data 模块化单体迁移未满足门禁 | 新 Data Application Port 无法注入 Root Server | Data |
 | INT-009 | 尚无更多可注册的进程级领域 Diagnostics Check；Research/Researchflow 的现有检查属于 Run-scoped 诊断 | 不得把需要 Run/Stage 上下文的检查伪装成进程级 Readiness；全局检查维持真实资源/Schema/News Provider 语义 | 对应模块 + Server；仅在出现真实进程级依赖检查时扩展 |
 | INT-010 | 真实 MariaDB/Redis、Provider、LLM Gateway 和部署网络验收未执行 | 无法证明运行时和生产环境可用 | Server + Platform + 各模块 + 部署 |
@@ -190,7 +190,7 @@ Registry 已具备 namespace 校验、确定性排序、执行报告和 Schema �
 
 ## 6. 本轮审查结论与下一步
 
-历史轮次在 `integration` 完成 Researchflow → Notification 事件契约修正、Server Relay 接入和组件生命周期测试。Run #54（`43359166036`）对应历史 SHA `63f49065a5ef3379d95948a6c2c6e504a555a63f`，结论 `success`；gofmt、root/go-core vet/test、MariaDB/Redis 集成、WebUI 检查及 Docker 构建全部通过。当前代码验收以 Run `43364123334` / SHA `19394e8` 为准。CI 使用 `SERVER_RELAY_TEST_MYSQL_DSN`，实际执行 `TestResearchflowOutboxToNotificationInboxMariaDB` 的迁移、Outbox 领取、EventReceiver 首次拒绝、`notification_receive_unavailable` 与 next_attempt_at 持久化、到期重试、Outbox 确认、Inbox/FanoutWorkItem 唯一记录和重复处理幂等检查；另有 Relay Start/Stop 组件生命周期单测。
+历史轮次在 `integration` 完成 Researchflow → Notification 事件契约修正、Server Relay 接入和组件生命周期测试。Run #54（`43359166036`）对应历史 SHA `63f49065a5ef3379d95948a6c2c6e504a555a63f`，结论 `success`；gofmt、root/go-core vet/test、MariaDB/Redis 集成、WebUI 检查及 Docker 构建全部通过。当前代码验收以 Run `43369529083` / SHA `d664b9f` 为准。CI 使用 `SERVER_RELAY_TEST_MYSQL_DSN`，实际执行 `TestResearchflowOutboxToNotificationInboxMariaDB` 的迁移、Outbox 领取、EventReceiver 首次拒绝、`notification_receive_unavailable` 与 next_attempt_at 持久化、到期重试、Outbox 确认、Inbox/FanoutWorkItem 唯一记录和重复处理幂等检查；另有 Relay Start/Stop 组件生命周期单测。
 
 **当前已通过的范围仅为 Researchflow Outbox → Notification EventReceiver → Inbox/FanoutWorkItem，包括接收失败重试。** 尚未验收真实渠道发送、Fanout/Delivery Worker 生产装配、外部渠道 Unknown 对账，以及完整 Researchflow 业务执行链。
 
@@ -211,10 +211,10 @@ Registry 已具备 namespace 校验、确定性排序、执行报告和 Schema �
 
 - 最新精确 SHA：23d07e7716aa6d7cd7f0fda4d3dbfa178c148a4e；Integration CI Run [43362987745](https://github.com/Kasign/stock_data_provider/actions/runs/43362987745) success。
 - GOV-CTR-006 公共 JCS Runtime Verifier 已在 internal/platform/authorization 实现；News Adapter 已在 internal/news/adapters/platform 实现。四份 GOV Golden 和 News Binding Golden 已纳入测试。
-- Server Bootstrap 尚未构造 News Evidence Query Facade 和 Research Service；News Config 已新增 Cursor HMAC Key Ring 的 Active Key ID + JSON Secret 配置解析并通过 CI；Server 尚未将其注入 EvidenceCursorCodec，因此暂不能完成生产组合注入。
+- Server Bootstrap 已在 Key Ring 配置时构造 News Evidence Query Facade、EvidenceCursorCodec、Research Service、Importer 和 Authorizer；Key Ring 缺失时不生成默认密钥。当前没有 Stage/HTTP 消费端调用该组合，真实 MariaDB News→Research 持久化链路仍待验收。
 - Research News Evidence Importer/Authorizer 已存在；News MySQL Repository、Research Storage 和 Research Application 的构造入口均可复用，不得重写。
 - Researchflow Scheduler/WorkerPool 的生产生命周期与 StageExecutor Adapter 尚未完成；Quant 的生产计算 Port/Payload Registry 门禁未解除。
 - 不重复 Outbox → Notification Inbox/FanoutWorkItem 的既有 MariaDB 验收；真实渠道投递仍未接入。
 - 不把本轮 GOV Verifier Golden 测试通过描述为 News → Research 或 Researchflow 端到端通过。
 
-本轮 CI 通过后未新增业务链路接入；下一轮应从 Server 消费 Cursor Key Ring 配置开始，再完成 News/Research 组合根构造和 MariaDB 调用链验收。
+- 下一步优先完成 News→Research 的 MariaDB 端到端联调和游标 Key 轮换验收；随后依据冻结 Stage/Template/Output Registry 契约推进 Researchflow，不重复已有 Outbox→Notification MariaDB 验收。
