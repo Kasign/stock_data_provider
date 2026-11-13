@@ -159,6 +159,7 @@ func executionFixture(t *testing.T) (*DeliveryExecutionService, *memoryDeliverie
 	}
 	clock := &sequenceExecutionClock{times: []time.Time{
 		claim.Delivery.UpdatedAt.Add(time.Second),
+		claim.Delivery.UpdatedAt.Add(1100 * time.Millisecond),
 		claim.Delivery.UpdatedAt.Add(2 * time.Second),
 	}}
 	service, err := NewDeliveryExecutionService(preflight, preflightCompletion, renderer, repository, completion, clock)
@@ -439,7 +440,7 @@ func TestDeliveryExecutionCapsAttemptDeadlineByMaxElapsed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("execute within max elapsed budget: %v", err)
 	}
-	expectedTimeout := time.Second
+	expectedTimeout := 900 * time.Millisecond
 	if adapter.calls != 1 || adapter.remaining <= 0 ||
 		adapter.remaining > expectedTimeout ||
 		expectedTimeout-adapter.remaining > 100*time.Millisecond {
@@ -522,13 +523,13 @@ func TestDeliveryExecutionCapsAttemptDeadlineByLeaseExpiry(t *testing.T) {
 
 	repository.mu.Lock()
 	repository.leases[claim.Delivery.DeliveryID] = claim.Lease
-	finishedAt := startedAt.Add(100 * time.Millisecond)
+	finishedAt := startedAt.Add(200 * time.Millisecond)
 	if !finishedAt.Before(leaseExpiry) {
 		t.Fatalf("test completion must remain strictly before lease expiry: finished=%s lease_expiry=%s", finishedAt, leaseExpiry)
 	}
 	repository.now = finishedAt
 	repository.mu.Unlock()
-	service.clock.(*sequenceExecutionClock).times[1] = finishedAt
+	service.clock.(*sequenceExecutionClock).times[2] = finishedAt
 
 	snapshot := channelRegistryTestSnapshot()
 	snapshot.ConfigVersion = claim.Delivery.ChannelConfigVersion
@@ -546,12 +547,59 @@ func TestDeliveryExecutionCapsAttemptDeadlineByLeaseExpiry(t *testing.T) {
 	if err != nil {
 		t.Fatalf("execute within lease deadline: %v", err)
 	}
-	expectedTimeout := leaseExpiry.Sub(startedAt)
+	expectedTimeout := leaseExpiry.Sub(startedAt.Add(100 * time.Millisecond))
 	if adapter.calls != 1 || adapter.remaining <= 0 ||
 		adapter.remaining > expectedTimeout ||
 		expectedTimeout-adapter.remaining > 100*time.Millisecond {
 		t.Fatalf("attempt timeout must be capped by lease expiry: calls=%d remaining=%s expected=%s",
 			adapter.calls, adapter.remaining, expectedTimeout)
+	}
+}
+
+func TestDeliveryExecutionDoesNotCallChannelWhenAttemptBudgetExpiresBeforeSend(t *testing.T) {
+	service, repository, _, claim, event := executionFixture(t)
+	startedAt := claim.Delivery.UpdatedAt.Add(time.Second)
+	sendStartedAt := startedAt.Add(100 * time.Millisecond)
+	finishedAt := startedAt.Add(200 * time.Millisecond)
+	service.completion.retry.MaxElapsed = 100 * time.Millisecond
+	clock := service.clock.(*sequenceExecutionClock)
+	clock.times[0] = startedAt
+	clock.times[1] = sendStartedAt
+	clock.times[2] = finishedAt
+	repository.mu.Lock()
+	repository.now = finishedAt
+	repository.mu.Unlock()
+
+	snapshot := channelRegistryTestSnapshot()
+	snapshot.ConfigVersion = claim.Delivery.ChannelConfigVersion
+	adapter := &deadlineRecordingExecutionAdapter{snapshot: snapshot}
+	registry := NewChannelRegistry()
+	if err := registry.Register(adapter); err != nil {
+		t.Fatal(err)
+	}
+	service.preflight.channels = registry
+
+	result, err := service.Execute(
+		context.Background(), claim, event, "attempt-budget-elapsed-before-send",
+		0.5, "evidence-budget-elapsed-before-send",
+	)
+	if err != nil {
+		t.Fatalf("known not-sent outcome should be persisted without a channel call: %v", err)
+	}
+	if adapter.calls != 0 {
+		t.Fatalf("expired attempt budget must prevent channel invocation, calls=%d", adapter.calls)
+	}
+	if result.ChannelResult == nil || result.ChannelResult.Outcome != domain.ChannelOutcomeNotSent {
+		t.Fatalf("expected explicit not-sent result, got %+v", result)
+	}
+	delivery, found, getErr := repository.Get(context.Background(), claim.Delivery.DeliveryID)
+	if getErr != nil || !found || delivery.Status != domain.DeliverySkipped {
+		t.Fatalf("pre-send budget expiry must converge to skipped: delivery=%+v found=%v err=%v", delivery, found, getErr)
+	}
+	history, listErr := repository.ListByDelivery(context.Background(), claim.Delivery.DeliveryID)
+	if listErr != nil || len(history) != 1 || history[0].FinishedAt == nil ||
+		history[0].Outcome == nil || *history[0].Outcome != domain.DeliveryAttemptNotSent {
+		t.Fatalf("expected one completed not-sent Attempt: history=%+v err=%v", history, listErr)
 	}
 }
 

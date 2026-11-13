@@ -29,7 +29,7 @@ func TestNotificationMariaDBInboxRepositoryIntegration(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
 
-	db, err := openNotificationIntegrationDB(ctx, dsn)
+	db, err := openNotificationIntegrationDB(t, ctx, dsn)
 	if err != nil {
 		t.Fatalf("open MariaDB through Platform Storage: %v", err)
 	}
