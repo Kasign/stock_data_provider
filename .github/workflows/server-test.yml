@@ -21,6 +21,36 @@ jobs:
     name: Test Server-owned packages
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      SERVER_RELAY_TEST_MYSQL_DSN: root:root@tcp(127.0.0.1:3306)/server_relay_test?parseTime=true&loc=UTC
+      PLATFORM_STORAGE_INTEGRATION: "1"
+      PLATFORM_MARIADB_USER: root
+      PLATFORM_MARIADB_PASSWORD: root
+      PLATFORM_MARIADB_ADDR: 127.0.0.1:3306
+      PLATFORM_MARIADB_DATABASE: server_relay_test
+      PLATFORM_REDIS_ADDR: 127.0.0.1:6379
+    services:
+      mariadb:
+        image: mariadb:11.4
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: server_relay_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+      redis:
+        image: redis:7.4
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -45,7 +75,10 @@ jobs:
             ./internal/server/health \
             ./internal/server/migration \
             ./internal/server/resources \
-            ./internal/server/runtime
+            ./internal/server/runtime \
+            ./internal/server/relay \
+            ./internal/server/security \
+            ./internal/server/llmtransport
       - name: Run Server race tests
         run: |
           go test -race ./cmd/analysis-api \
@@ -55,7 +88,10 @@ jobs:
             ./internal/server/health \
             ./internal/server/migration \
             ./internal/server/resources \
-            ./internal/server/runtime
+            ./internal/server/runtime \
+            ./internal/server/relay
+      - name: Run real MariaDB and Redis storage integration tests
+        run: go test -count=1 ./internal/platform/storage -run 'TestMariaDBStorageIntegration|TestRedisStorageIntegration'
       - name: Run Server vet
         run: |
           go vet ./cmd/analysis-api \
@@ -65,4 +101,91 @@ jobs:
             ./internal/server/health \
             ./internal/server/migration \
             ./internal/server/resources \
-            ./internal/server/runtime
+            ./internal/server/runtime \
+            ./internal/server/relay
+
+      - name: Build Server image and verify Notification schemas
+        run: |
+          docker build -t server-relay-packaging-test -f Dockerfile .
+          docker run --rm --entrypoint sh server-relay-packaging-test -c '
+            test -s /app/doc/notification/schema/notification-event-envelope-1.0.0.schema.json &&
+            test -s /app/doc/notification/schema/quant-risk-decision-changed-1.0.0.schema.json &&
+            test -s /app/doc/notification/schema/research-event-lifecycle-changed-1.0.0.schema.json &&
+            test -s /app/doc/notification/schema/researchflow-run-terminal-1.0.0.schema.json
+          '
+      - name: Verify real Server container bootstrap and SIGTERM shutdown
+        env:
+          SERVER_SMOKE_DB_NAME: server_bootstrap_smoke_${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          image=server-relay-packaging-test
+          container=server-bootstrap-smoke
+          owner_token="$(openssl rand -hex 32)"
+          market_data_key="$(openssl rand -hex 32)"
+          cleanup() {
+            docker logs "$container" 2>/dev/null || true
+            docker rm -f "$container" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          # 使用独立数据库，避免与 Relay / Migration 包级集成测试共享 Schema History。
+          docker run --rm --network host mariadb:11.4 \
+            mariadb --protocol=tcp -h127.0.0.1 -uroot -proot \
+            -e "CREATE DATABASE $SERVER_SMOKE_DB_NAME CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
+
+          docker run -d --name "$container" \
+            --add-host=host.docker.internal:host-gateway \
+            -p 127.0.0.1:18092:8092 \
+            -e SERVER_ROLE=all \
+            -e HTTP_ADDR=:8092 \
+            -e HTTP_SHUTDOWN_TIMEOUT=15s \
+            -e PLATFORM_ADMIN_TOKEN="$owner_token" \
+            -e MARKET_DATA_BASE_URL=http://127.0.0.1:8091 \
+            -e MARKET_DATA_API_KEY="$market_data_key" \
+            -e DB_HOST=host.docker.internal \
+            -e DB_PORT=3306 \
+            -e DB_USER=root \
+            -e DB_PASSWORD=root \
+            -e DB_NAME="$SERVER_SMOKE_DB_NAME" \
+            -e DB_AUTO_MIGRATE=true \
+            -e REDIS_ADDR=host.docker.internal:6379 \
+            -e REDIS_PASSWORD= \
+            -e MIGRATION_ENABLED=true \
+            -e MIGRATION_TIMEOUT=2m \
+            -e NOTIFICATION_EVENT_MAX_ENVELOPE_BYTES=1048576 \
+            -e NOTIFICATION_EVENT_MAX_PAYLOAD_BYTES=524288 \
+            -e NOTIFICATION_EVENT_MAX_JSON_DEPTH=64 \
+            "$image"
+
+          ready=false
+          for attempt in $(seq 1 60); do
+            if curl --silent --show-error --fail http://127.0.0.1:18092/healthz >/dev/null 2>&1; then
+              # /readyz 按 Root Server 路由策略要求 Owner Bearer，不能匿名探测。
+              if curl --silent --show-error --fail \
+                -H "Authorization: Bearer $owner_token" \
+                http://127.0.0.1:18092/readyz >/tmp/server-readyz.json 2>/tmp/server-readyz-error.log; then
+                ready=true
+                break
+              fi
+            fi
+            if [ "$(docker inspect -f '{{.State.Running}}' "$container")" != "true" ]; then
+              echo "Server container exited before becoming ready"
+              exit 1
+            fi
+            sleep 2
+          done
+          if [ "$ready" != "true" ]; then
+            echo "Server container did not become ready within 120 seconds"
+            cat /tmp/server-readyz.json 2>/dev/null || true
+            cat /tmp/server-readyz-error.log 2>/dev/null || true
+            exit 1
+          fi
+
+          # docker stop 向容器 PID 1 发送 SIGTERM；退出码必须为 0。
+          docker stop --time 20 "$container" >/dev/null
+          exit_code="$(docker inspect -f '{{.State.ExitCode}}' "$container")"
+          if [ "$exit_code" != "0" ]; then
+            echo "Server container exited with code $exit_code after SIGTERM"
+            exit 1
+          fi
+          echo "Server container reached readiness and exited cleanly after SIGTERM"

@@ -11,6 +11,17 @@ import (
 	"example.com/stock-analysis-flow/internal/news/domain"
 )
 
+// CurrentIngestPolicyIdentityTransaction 在 Identity 写事务内锁定并读取当前策略组合。
+// 生产实现必须使用与 Observation 写入相同的数据库事务。
+type CurrentIngestPolicyIdentityTransaction interface {
+	LockCurrentIngestPolicies(
+		context.Context,
+		string, string,
+		string, string,
+		string, string,
+	) (domain.SourcePolicy, *domain.EndpointPolicy, *domain.ProviderOutputPolicy, error)
+}
+
 var (
 	ErrSourcePersistencePolicyUnavailable = errors.New("news: source persistence policy unavailable")
 	ErrSourcePersistencePolicyDenied      = errors.New("news: source persistence policy denied")
@@ -25,8 +36,8 @@ type IngestCollectedSourceRequest struct {
 	Retention         time.Duration
 }
 
-// IngestCollectedSource 在持久化前重新读取 SourceCatalog，并独立评估元数据持久化权限。
-// 采集时与当前策略版本不一致时拒绝，避免旧采集结果借用新版本授权。
+// IngestCollectedSource 在每条 Observation 写事务内锁定并复核当前 Source/Endpoint 策略，
+// 再评估元数据持久化权限，避免授权预检与持久化之间发生撤销竞态。
 type IngestCollectedSource struct {
 	ingest  *candidateIngest
 	sources SourceCatalog
@@ -57,7 +68,8 @@ func (u *IngestCollectedSource) Execute(ctx context.Context, request IngestColle
 	endpointID := strings.TrimSpace(result.EndpointID)
 	prefix := strings.TrimSpace(request.IdempotencyPrefix)
 	if sourceID == "" || endpointID == "" || prefix == "" ||
-		request.Purpose == "" || request.Retention <= 0 ||
+		request.Purpose == "" || result.CollectionPurpose == "" ||
+		request.Purpose != result.CollectionPurpose || request.Retention <= 0 ||
 		result.PolicyEvaluatedAt.IsZero() || strings.TrimSpace(result.SourcePolicyVersionID) == "" ||
 		!result.hasValidCollectionSeal() {
 		return nil, ErrInvalidRequest
@@ -89,12 +101,6 @@ func (u *IngestCollectedSource) Execute(ctx context.Context, request IngestColle
 		StorageMode:  domain.StoragePersistentMetadata,
 		Retention:    request.Retention,
 	}
-	decision := domain.EvaluateSourceCollectionPolicy(
-		registration.SourcePolicy, registration.EndpointPolicy, policyRequest, now,
-	)
-	if !decision.Allowed {
-		return nil, errors.Join(ErrSourcePersistencePolicyDenied, errors.New(decision.ReasonCode))
-	}
 
 	trace := ObservationPolicyTrace{
 		SourcePolicyVersionID: result.SourcePolicyVersionID,
@@ -113,6 +119,34 @@ func (u *IngestCollectedSource) Execute(ctx context.Context, request IngestColle
 		}
 	}
 
+	checkPersistencePolicy := func(tx IdentityTransaction) error {
+		policyTx, ok := tx.(CurrentIngestPolicyIdentityTransaction)
+		if !ok {
+			return ErrSourcePersistencePolicyUnavailable
+		}
+		sourcePolicy, endpointPolicy, _, policyErr := policyTx.LockCurrentIngestPolicies(
+			ctx, sourceID, result.SourcePolicyVersionID, endpointID, result.EndpointPolicyVersionID, "", "",
+		)
+		if policyErr != nil {
+			return errors.Join(ErrSourcePersistencePolicyUnavailable, policyErr)
+		}
+		decision := domain.EvaluateSourceCollectionPolicy(sourcePolicy, endpointPolicy, policyRequest, u.now().UTC())
+		if !decision.Allowed {
+			return errors.Join(ErrSourcePersistencePolicyDenied, errors.New(decision.ReasonCode))
+		}
+		return nil
+	}
+	if len(result.Entries) == 0 {
+		err := u.ingest.repository.WithinIdentityTransaction(ctx, checkPersistencePolicy)
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return nil, ctxErr
+		}
+		if err != nil {
+			return nil, errors.Join(ErrIdentityTransaction, err)
+		}
+		return []domain.Observation{}, nil
+	}
+
 	observations := make([]domain.Observation, 0, len(result.Entries))
 	for _, entry := range result.Entries {
 		if err := ctx.Err(); err != nil {
@@ -126,8 +160,9 @@ func (u *IngestCollectedSource) Execute(ctx context.Context, request IngestColle
 				candidate.Title + "\x00" + candidate.PublishedAtRaw,
 		))
 		idempotencyKey := prefix + "/" + hex.EncodeToString(fingerprint[:])
-		observation, ingestErr := u.ingest.executeWithPolicyTrace(
+		observation, ingestErr := u.ingest.executeWithPolicyTraceAndCheck(
 			ctx, sourceID, idempotencyKey, candidate, registration.URLPolicy, trace,
+			checkPersistencePolicy,
 		)
 		if ingestErr != nil {
 			return nil, ingestErr

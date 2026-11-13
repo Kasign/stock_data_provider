@@ -325,6 +325,25 @@ func TestEvidenceCheckUsesImmutableSnapshot(t *testing.T) {
 }
 
 func TestEvidenceCheckRequiresComparableStrictPIT(t *testing.T) {
+	t.Run("invalid quality takes precedence over unknown available_at", func(t *testing.T) {
+		value := validEvidenceSnapshot(t, researchevidence.QualityInvalid)
+		value.AvailableAt = nil
+		fingerprint, err := value.ComputeContentFingerprint()
+		if err != nil {
+			t.Fatal(err)
+		}
+		value.ContentFingerprint = fingerprint
+		check, err := NewEvidenceCheck("research.evidence.invalid", "无效 Evidence", true, value, value.SystemAsOf)
+		if err != nil {
+			t.Fatal(err)
+		}
+		result := runCheck(t, check)
+		if result.Observation.Status != platformdiagnostics.StatusFailed ||
+			result.Observation.ReasonCode != "research.evidence.quality_invalid" {
+			t.Fatalf("observation = %+v, want invalid quality failure", result.Observation)
+		}
+	})
+
 	t.Run("unknown available_at is unavailable", func(t *testing.T) {
 		value := validEvidenceSnapshot(t, researchevidence.QualityValid)
 		value.AvailableAt = nil

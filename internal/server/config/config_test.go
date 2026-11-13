@@ -130,3 +130,59 @@ func TestLoadRoleRejectsUnknownRole(t *testing.T) {
 		t.Fatal("LoadRole() error = nil, want invalid role")
 	}
 }
+
+func TestLoadResearchflowCapacityRequiresBothExplicitPositiveLimits(t *testing.T) {
+	tests := []struct {
+		name   string
+		values map[string]string
+		want   bool
+	}{
+		{name: "not configured", values: map[string]string{}, want: false},
+		{name: "both configured", values: map[string]string{
+			"RESEARCHFLOW_MAX_QUEUED_RUNS": "120",
+			"RESEARCHFLOW_MAX_WORKERS":     "6",
+		}, want: true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			env := platformconfig.NewEnvWithLookup(func(key string) (string, bool) {
+				value, ok := test.values[key]
+				return value, ok
+			})
+			got, err := LoadResearchflowCapacity(env)
+			if err != nil {
+				t.Fatalf("LoadResearchflowCapacity() error = %v", err)
+			}
+			if got.Configured != test.want {
+				t.Fatalf("Configured = %v, want %v", got.Configured, test.want)
+			}
+			if test.want && (got.MaxQueuedRuns != 120 || got.MaxWorkers != 6) {
+				t.Fatalf("unexpected capacity: %+v", got)
+			}
+		})
+	}
+}
+
+func TestLoadResearchflowCapacityRejectsPartialOrInvalidValues(t *testing.T) {
+	tests := []struct {
+		name   string
+		values map[string]string
+	}{
+		{name: "missing workers", values: map[string]string{"RESEARCHFLOW_MAX_QUEUED_RUNS": "10"}},
+		{name: "missing queue", values: map[string]string{"RESEARCHFLOW_MAX_WORKERS": "2"}},
+		{name: "zero queue", values: map[string]string{"RESEARCHFLOW_MAX_QUEUED_RUNS": "0", "RESEARCHFLOW_MAX_WORKERS": "2"}},
+		{name: "negative workers", values: map[string]string{"RESEARCHFLOW_MAX_QUEUED_RUNS": "10", "RESEARCHFLOW_MAX_WORKERS": "-1"}},
+		{name: "non integer", values: map[string]string{"RESEARCHFLOW_MAX_QUEUED_RUNS": "many", "RESEARCHFLOW_MAX_WORKERS": "2"}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			env := platformconfig.NewEnvWithLookup(func(key string) (string, bool) {
+				value, ok := test.values[key]
+				return value, ok
+			})
+			if _, err := LoadResearchflowCapacity(env); err == nil {
+				t.Fatal("LoadResearchflowCapacity() error = nil, want validation error")
+			}
+		})
+	}
+}

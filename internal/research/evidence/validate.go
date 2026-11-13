@@ -32,6 +32,9 @@ func (e Evidence) Validate() error {
 	if e.SourceVersion != nil && (*e.SourceVersion == "" || *e.SourceVersion != strings.TrimSpace(*e.SourceVersion)) {
 		return fmt.Errorf("source_version cannot be empty or whitespace-padded when provided")
 	}
+	if e.SourceOwner == SourceNews && e.SourceVersion == nil {
+		return fmt.Errorf("source_version is required for versioned news evidence")
+	}
 	if e.ClaimRef != nil && (*e.ClaimRef == "" || *e.ClaimRef != strings.TrimSpace(*e.ClaimRef)) {
 		return fmt.Errorf("claim_ref cannot be empty or whitespace-padded when provided")
 	}

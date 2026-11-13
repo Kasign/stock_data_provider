@@ -65,8 +65,17 @@ func validProviderIngestPolicy() ProviderOutputPolicyBinding {
 	}
 }
 
+func newProviderPersistenceMemoryRepository(registration SourceEndpointRegistration, binding ProviderOutputPolicyBinding) *memoryIdentityRepository {
+	return &memoryIdentityRepository{
+		sourcePolicy: registration.SourcePolicy, sourcePolicyVersionID: registration.SourcePolicyVersionID,
+		endpointPolicy: registration.EndpointPolicy, endpointPolicyVersionID: registration.EndpointPolicyVersionID,
+		providerOutputPolicy: binding.Policy, providerOutputPolicyRef: binding.PolicyRef,
+		providerOutputPolicyVersionID: binding.PolicyVersion,
+	}
+}
+
 func TestIngestProviderCandidateEvaluatesTrustedPolicyBeforePersistence(t *testing.T) {
-	repository := &memoryIdentityRepository{}
+	repository := newProviderPersistenceMemoryRepository(validProviderIngestRegistration(), validProviderIngestPolicy())
 	ingest := newCandidateIngest(repository, func() string { return "observation-provider-allowed" })
 	usecase, err := NewIngestProviderCandidate(ingest.repository, ingest.newID, providerIngestCatalogStub{
 		registration: validProviderIngestRegistration(),
@@ -159,7 +168,7 @@ func TestIngestProviderCandidateFailsClosedBeforePersistence(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			repository := &memoryIdentityRepository{}
+			repository := newProviderPersistenceMemoryRepository(test.registration, test.policy)
 			ingest := newCandidateIngest(repository, func() string { return "must-not-persist" })
 			usecase, err := NewIngestProviderCandidate(ingest.repository, ingest.newID,
 				providerIngestCatalogStub{registration: test.registration},
