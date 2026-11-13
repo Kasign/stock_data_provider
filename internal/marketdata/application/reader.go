@@ -17,6 +17,10 @@ type serviceBackend interface {
 	Quote(context.Context, string) (*model.Quote, bool, error)
 	DailyBars(context.Context, string, string, string, int, model.AdjustmentBasis) ([]model.DailyBar, bool, []string, error)
 	DailyBarsAsOf(context.Context, string, string, string, int, model.AdjustmentBasis, time.Time) ([]model.DailyBar, []string, error)
+	Fundamentals(context.Context, string, int, int) (*model.FundamentalsSnapshot, bool, error)
+	FundamentalsAsOf(context.Context, string, int, int, time.Time) (*model.FundamentalsSnapshot, error)
+	Valuations(context.Context, []string) (*model.ValuationSnapshot, bool, error)
+	ValuationsAsOf(context.Context, []string, time.Time) (*model.ValuationSnapshot, error)
 }
 
 // Reader adapts the existing DataService use cases to the consumer-facing Application Port.
@@ -32,6 +36,64 @@ func NewReader(svc *service.DataService) (*Reader, error) {
 		return nil, errReaderUnavailable
 	}
 	return &Reader{backend: svc}, nil
+}
+
+func (r *Reader) GetFundamentals(ctx context.Context, query app.FundamentalsQuery) (app.FundamentalsSnapshot, error) {
+	if r == nil || r.backend == nil {
+		return app.FundamentalsSnapshot{}, errReaderUnavailable
+	}
+	if ctx == nil {
+		return app.FundamentalsSnapshot{}, errors.New("context must not be nil")
+	}
+	if err := ctx.Err(); err != nil {
+		return app.FundamentalsSnapshot{}, err
+	}
+
+	var (
+		snapshot *model.FundamentalsSnapshot
+		err      error
+	)
+	if query.SystemObservedAtCutoff != nil {
+		snapshot, err = r.backend.FundamentalsAsOf(ctx, query.Symbol, query.Year, query.Quarter, *query.SystemObservedAtCutoff)
+	} else {
+		snapshot, _, err = r.backend.Fundamentals(ctx, query.Symbol, query.Year, query.Quarter)
+	}
+	if err != nil {
+		return app.FundamentalsSnapshot{}, err
+	}
+	if snapshot == nil {
+		return app.FundamentalsSnapshot{}, errors.New("DataService returned an empty fundamentals snapshot without error")
+	}
+	return mapFundamentals(*snapshot), nil
+}
+
+func (r *Reader) GetValuations(ctx context.Context, query app.ValuationsQuery) (app.ValuationsSnapshot, error) {
+	if r == nil || r.backend == nil {
+		return app.ValuationsSnapshot{}, errReaderUnavailable
+	}
+	if ctx == nil {
+		return app.ValuationsSnapshot{}, errors.New("context must not be nil")
+	}
+	if err := ctx.Err(); err != nil {
+		return app.ValuationsSnapshot{}, err
+	}
+
+	var (
+		snapshot *model.ValuationSnapshot
+		err      error
+	)
+	if query.SystemObservedAtCutoff != nil {
+		snapshot, err = r.backend.ValuationsAsOf(ctx, query.Symbols, *query.SystemObservedAtCutoff)
+	} else {
+		snapshot, _, err = r.backend.Valuations(ctx, query.Symbols)
+	}
+	if err != nil {
+		return app.ValuationsSnapshot{}, err
+	}
+	if snapshot == nil {
+		return app.ValuationsSnapshot{}, errors.New("DataService returned an empty valuations snapshot without error")
+	}
+	return mapValuations(*snapshot), nil
 }
 
 func (r *Reader) GetQuote(ctx context.Context, symbol string) (app.QuoteSnapshot, error) {
@@ -101,6 +163,56 @@ func (r *Reader) GetDailyBars(ctx context.Context, query app.DailyBarsQuery) (ap
 		result.Bars = append(result.Bars, mapDailyBar(bar))
 	}
 	return result, nil
+}
+
+func mapFundamentals(source model.FundamentalsSnapshot) app.FundamentalsSnapshot {
+	result := app.FundamentalsSnapshot{
+		Symbol: source.Symbol, Year: source.Year, Quarter: source.Quarter, HasData: source.HasData,
+		Sections: make([]app.FundamentalSection, 0, len(source.Sections)),
+		Source:   source.Source, SourceVersion: source.SourceVersion, FetchedAt: source.FetchedAt,
+		SystemObservedAt: clonePointer(source.SystemObservedAt),
+		QualityStatus:    app.QualityStatus(source.QualityStatus), QualityReasons: cloneStrings(source.QualityReasons),
+	}
+	for _, section := range source.Sections {
+		mapped := app.FundamentalSection{
+			Category: section.Category, ReportDate: section.ReportDate, PublicationDate: section.PublicationDate,
+			AvailableAt: clonePointer(section.AvailableAt), HasData: section.HasData,
+			Metrics:       make([]app.FundamentalMetric, 0, len(section.Metrics)),
+			QualityStatus: app.QualityStatus(section.QualityStatus), QualityReasons: cloneStrings(section.QualityReasons),
+		}
+		for _, metric := range section.Metrics {
+			mapped.Metrics = append(mapped.Metrics, app.FundamentalMetric{
+				Key: metric.Key, Name: metric.Name, Value: metric.Value, Unit: metric.Unit, SourceField: metric.SourceField,
+			})
+		}
+		result.Sections = append(result.Sections, mapped)
+	}
+	return result
+}
+
+func mapValuations(source model.ValuationSnapshot) app.ValuationsSnapshot {
+	result := app.ValuationsSnapshot{
+		RequestedSymbols: cloneStrings(source.RequestedSymbols), Total: source.Total,
+		Items: make([]app.ValuationItem, 0, len(source.Items)), MissingSymbols: cloneStrings(source.MissingSymbols),
+		ProviderReportDate: source.ProviderReportDate, ProviderTimestamp: clonePointer(source.ProviderTimestamp),
+		Source: source.Source, SourceVersion: source.SourceVersion, FetchedAt: source.FetchedAt,
+		SystemObservedAt: clonePointer(source.SystemObservedAt),
+		QualityStatus:    app.QualityStatus(source.QualityStatus), QualityReasons: cloneStrings(source.QualityReasons),
+	}
+	for _, item := range source.Items {
+		result.Items = append(result.Items, app.ValuationItem{
+			Symbol: item.Symbol, Code: item.Code, Name: item.Name,
+			PETTM: clonePointer(item.PETTM), PEMRQ: clonePointer(item.PEMRQ), PEStatic: clonePointer(item.PEStatic),
+			PBMRQ: clonePointer(item.PBMRQ), PSTTM: clonePointer(item.PSTTM), PCFTTM: clonePointer(item.PCFTTM),
+			TurnoverRatePercent:      clonePointer(item.TurnoverRatePercent),
+			FloatTurnoverRatePercent: clonePointer(item.FloatTurnoverRatePercent),
+			VolumeRatio:              clonePointer(item.VolumeRatio), DividendYieldPercent: clonePointer(item.DividendYieldPercent),
+			DividendYieldTTMPercent: clonePointer(item.DividendYieldTTMPercent),
+			Source:                  item.Source, SourceVersion: item.SourceVersion, FetchedAt: item.FetchedAt,
+			QualityStatus: app.QualityStatus(item.QualityStatus), QualityReasons: cloneStrings(item.QualityReasons),
+		})
+	}
+	return result
 }
 
 func mapQuote(source model.Quote) app.QuoteSnapshot {

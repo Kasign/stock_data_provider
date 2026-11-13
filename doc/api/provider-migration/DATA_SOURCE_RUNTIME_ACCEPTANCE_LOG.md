@@ -1,11 +1,9 @@
-# 数据源真实环境验收记录
-
-> 当前状态核对（2026-11-03，基线 `b423c1ef`）：本文早期记录是对应日期的历史运行证据，不代表当前 HEAD 的实时状态。统一 Probe、Reporter、字段诊断、Freshness 接入、DailyBar 跨 Provider 比较和可选多复权口径探测已有代码实现；真实 Provider 是否通过必须查看对应 HEAD 的最新 Live workflow 单项结果。CI 的 `continue-on-error` 或 workflow 总体 success 不能替代逐 Provider 结果。当前代码任务与优先级以 `doc/api/acceptance/国内A股数据层阶段五统一验收计划.md` 为准。多复权口径 Probe 的 CI 和真实 Provider 复权结果尚未在本记录中判定通过。
+> 当前状态核对（2026-11-12，Data 代码验收基线 `9fe53c43c6c32408bbf59eb8c3c627b18a9bfe24`）：最新 Go Test Suite Run `43231652148` success；其 MariaDB Job `131228387935` 已通过业务表 Repository revision/PIT/reopen 测试（含 Fundamentals、Valuations），以及 DailyBar fallback、AdjustmentFactors/CorporateActions PIT 和 Probe HTTP + MariaDB 集成。BaoStock 加强字段探针 Live Provider Run `43228986723` / Job `131219214147` 明确 PASS。本文是追加式真实 Provider 运行证据账本；MariaDB 代码集成结果不等同于 Provider 真实数据验收，P0-89 也不代表完整 SecurityTradingStatus Provider。当前任务顺序以 [数据侧整体规划](../数据侧整体规划.md) 为准。
 
 - 适用分支：`feat/full-go-data-providers-api-switch`
-- 文档更新日期：2026-10-30
-- 最近代码基线：`4ee2df18621e27b2fd0b1706f69dff78f35b4dfa`
-- 当前结论：已建立国内 A 股主要可选 Provider 的在线验收入口；除非本文件追加了带提交 SHA、日期和脱敏证据的记录，否则真实请求状态均为“未执行”。
+- 文档更新日期：2026-11-12
+- 最近代码验收基线：`9fe53c43c6c32408bbf59eb8c3c627b18a9bfe24`（Go Test Suite Run `43231652148` success）
+- 当前结论：各 Provider/能力状态必须按后续逐条记录判定；没有对应真实请求记录的能力仍为未执行，不能从其他 Provider 的结果外推。
 
 ## 1. 验收状态口径
 
@@ -1145,3 +1143,158 @@ Go suite 覆盖根模块、go-core、market-data 的格式/测试/race/vet、Mar
 - Pytdx ref date 现在有明确算法锚点和真实数据证据，元数据完整性改善。
 - 这不会改变 Pytdx 与 BaoStock 的原生复权算法差异；比较器仍要求 method/ref date 同时一致，不会因此把两边 adjusted OHLC 判为 matched。
 - BaoStock、Eastmoney、Tencent 和 Tushare hfq 的 ref date 仍按 section 63 所列状态处理，不补猜测值。
+
+
+## 65. 2026-11-12 Tushare 财务权限错误语义真实复验
+
+- 对应分支 HEAD：`6d722802073ac2b0c587986d50ec56cf325f505a`。
+- Live Provider Probe Run：`43204747697`，Job `131136953754` success。日志中的 Tushare 9 项能力全部为 `permission_required`，无权限错误没有再被归类为普通 failed。
+- Fundamentals 明确保留 `fina_indicator` 与 `code=40203`；Valuations 因 `trade_cal` 权限不足而无法选取估值交易日，分类为 `permission_required`。
+- Go Test Suite Run：`43204829838` success。Market Data gofmt/unit/race/vet、MariaDB Migration/PIT、DailyBar fallback、PIT revision fallback、Probe HTTP + MariaDB E2E 均 success；Compose/Docker build 和 Market Data module migration Job skipped。
+- 结论：P0-79 权限错误语义修复获得真实请求路径复验。Tushare 相关数据仍不可用，不构成 Fundamentals / Valuations 真实字段验收；未取得新增估值样本。
+- 下一步：继续 D-3 的 Hithink 估值口径与 PIT 证据核验；Tushare 权限未变化前不重复请求，Freshness 与跨源可比性门禁保持不变。
+
+
+## 66. 2026-11-12 Hithink 估值接口专属契约补证
+
+- 来源：同花顺官方估值 API 文档 `https://fuyao.aicubes.cn/docs/api-reference/valuations/`，通过官方聚合文档 `https://fuyao.aicubes.cn/llms-full.txt` 核对。
+- 固定字段为 `pe_ttm`、`pe_mrq`、`pb_mrq`、`ps_ttm`、`pcf_ttm`；TTM 为最近连续 12 个月，MRQ 为最近一个已披露报告期。
+- 官方将 PCF_TTM 描述为股票价格相对于公司经营现金流的市现率，接口语义层分母明确为经营现金流，不是现金及现金等价物净增加额。具体样本数值仍缺同一时点价格和经营现金流原始值，不能独立复算。
+- 官方明确 `data.timestamp` 是本次响应使用的上游指标元数据最大有效时间，不代表所有指标同步更新；未提供逐字段更新时间或报告日期。
+- 对照 Adapter：五项字段直接映射；ProviderTimestamp 仅保留为快照级时间；ProviderReportDate 缺失时维持 degraded。没有代码缺陷证据，不改实现。
+- 判定：接口字段映射/PCF 分母语义为契约层 pass；PCF 数值复算、PE/PB/PS 数值复算为 not_comparable；逐字段 Freshness 与 ProviderReportDate 为 unknown。
+- 文档示例数值不是实时数据，本次不作为验收样本。既有 Live 样本不升级质量状态。
+- 本轮无代码变更，无构建/测试；不重复请求 Tushare（权限未变化）或 Hithink（没有新增授权样本/独立分母输入）。
+
+
+## 67. 2026-11-12 估值独立复算输入链路审查
+
+- 官方估值契约：TTM 通常由最近四个季度数据计算；MRQ 为最近已披露报告期；`data.timestamp` 为上游指标元数据最大有效时间，不是逐字段时间。
+- 官方财报契约：`report_date_ms` = 披露日，`period_end_ms` = 报告期末。现有 Hithink Adapter 已分别映射到 PublicationDate / ReportDate，代码映射正确。
+- 官方现金流字段：`act_cash_flow_net` = 经营活动产生的现金流量净额（原币元）；`cash_equivalents_net_addition` 是不同字段，不得混用。
+- 官方文档没有说明 quarterly 现金流字段是单季还是年初至今累计。现有 `fetchFinancialStatementSection` 每次只选一个报告期，不能将当前单期值直接作为 TTM，也不能未经确认直接累加或差分。
+- 公开 Hithink 估值、行情、财报和财务指标接口没有提供可用于独立复算的总股本/总市值字段。历史日 K 可提供未复权收盘价，但不补足股本，也不证明估值聚合时间与价格精确同步。
+- Tushare `daily_basic` 当前实现没有请求 `total_share` / `total_mv`，真实账号仍返回 40203 权限不足；不重复请求、不把静态代码能力当成真实样本。
+- 判定：披露日/报告期末映射 pass；经营现金流字段语义 pass；quarterly 现金流构造、股本/市值、PCF 数值复算 not_comparable；PE/PB/PS 数值复算 not_comparable；逐字段 Freshness unknown。
+- 后续先获取 quarterly 累计语义、估值有效日和股本口径的官方证据，或等待授权的 Tushare 市值/股本数据；再用同一基准日的真实原始响应离线复算。本轮无代码变更、无 Provider 请求、无构建测试。
+
+
+## 67. 2026-11-12 600519.SH 五项估值真实样本独立复算
+
+### 证据来源
+
+- Live Provider Run `43197384108` / Job `131111700042`：Sina 真实报价 `1410.27 CNY`，源时间 `2026-11-12T07:34:59Z`；BaoStock 2026Q2 fundamentals 返回总股本 `1,250,081,601 shares`。
+- Hithink Live Run `43201375693` / Job `131125379131`：2026-11-12 估值快照 `10:34:16Z`，五项值 PE_TTM=21.457358、PE_MRQ=20.509807、PB_MRQ=6.500449、PS_TTM=10.106706、PCF_TTM=16.417216；该 Job 的其他能力有失败项，估值 capability 本身 passed，快照仍因 ProviderReportDate 缺失为 degraded。
+- [2026 年第三季度报告](https://static.cninfo.com.cn/finalpage/2026-10-31/1225649896.PDF)：2026-09-30 股本 1,250,081,601；归母净资产 271,204,740,541.63；2026/2025 1-9 月经营现金流分别为 84,058,979,832.29 / 38,196,802,155.27；归母净利润分别为 64,467,425,981.95 / 64,626,746,712.18；营业总收入分别为 133,283,652,508.95 / 130,903,889,634.88。
+- [2025 年年度报告](https://static.cninfo.com.cn/finalpage/2026-04-17/1225114741.PDF)：2025 年经营现金流 61,522,204,989.35；归母净利润 82,320,067,101.68；营业总收入 172,054,171,890.91。
+
+### 计算
+
+- 市值 = 1,410.27 × 1,250,081,601 = 1,762,952,579,442.27 CNY。
+- TTM CFO = 61,522,204,989.35 + 84,058,979,832.29 − 38,196,802,155.27 = 107,384,382,666.37 CNY。
+- TTM 归母净利润 = 82,320,067,101.68 + 64,467,425,981.95 − 64,626,746,712.18 = 82,160,746,371.45 CNY。
+- TTM 营业总收入 = 172,054,171,890.91 + 133,283,652,508.95 − 130,903,889,634.88 = 174,433,934,764.98 CNY。
+- PE_MRQ 按 2026 年 1-9 月归母净利润 × 4/3 年化后复算；该解释与样本数值吻合，供应商公式尚待明确。
+
+| 指标 | 独立复算 | Provider | 结果 |
+|---|---:|---:|---|
+| PE_TTM | 21.4573583773 | 21.457358 | pass |
+| PE_MRQ | 20.5098065332 | 20.509807 | pass |
+| PB_MRQ | 6.5004489815 | 6.500449 | pass |
+| PS_TTM | 10.1067064836 | 10.106706 | pass |
+| PCF_TTM | 16.4172157596 | 16.417216 | pass |
+
+### 质量边界
+
+- 本条只关闭 `600519.SH / 2026-11-12` 的单样本五项估值数值复算，不代表全市场或多日期验收通过。
+- 行情源时间为 15:34:59（北京时间），估值响应聚合 timestamp 为 18:34:16；聚合时间不能升级为逐字段 Freshness。
+- Hithink ProviderReportDate 仍缺失，估值快照整体 degraded；PE_MRQ 算法解释尚待供应商确认。
+- 本轮复用历史 Actions 日志与官方报告，没有再次请求 Hithink/Tushare，也没有改代码。
+
+
+
+## 68. 2026-11-12 Hithink 2025 年报资产负债表披露日原始字段核验
+
+- 仓库分支：`feat/full-go-data-providers-api-switch`
+- Live Probe Run：`43213471638`；Job：`131166682925`；测试：`TestLiveHithinkAnnualBalanceSheetPublicationDateRaw`。
+- 请求范围：`GET /api/a-share/financials/balance-sheets`，`thscode=600519.SH`、`period=annual`，只检查报告期末 `2025-12-31` 的目标行；没有重跑其他 Hithink 能力。
+- 原始响应：
+  - `period_end_ms=1767110400000` → `2025-12-31`
+  - `report_date_ms=1793376000000` → `2026-10-31`
+  - `assets_total=303834844021.44 CNY`
+  - `total_debt=49875590112.37 CNY`
+- 该测试以官方年报披露日 `2026-04-17` 为预期，实际返回 `2026-10-31`，因此定向验收断言失败；原始字段已完整记录。Hithink 官方字段契约将 `report_date_ms` 定义为披露日，`period_end_ms` 定义为报告期末。Adapter 直接映射原值，没有发现日期转换错误。
+- PIT 结果：该样本因日期偏晚而被保守延迟可见；未发现本样本提前可见。不得硬编码覆盖供应商日期，不修改 PIT 算法，等待 Provider 解释/修正该报表字段。
+
+## 69. 2026-11-12 Hithink 历史日 K 分页与后复权成交量核验
+
+- 代码修复：提交 `0b5adb085daae4659ea4969838ba5e1b906235ba` 移除历史日 K 不支持的 `offset` 翻页；每个日期窗口只请求一次，单个响应内仍拒绝重复交易日。
+- 单测：`TestHithinkDailyBarsFetchesSingleResponseWithoutOffset` 验证单窗口只发一次请求并返回全部记录；`TestHithinkDailyResponseRejectsDuplicateDatesWithinSingleResponse` 验证同一响应内部重复日期仍被拒绝。
+- 三口径真实验收 Run `43214243770` / Job `131169300123`，`600519.SH`，`2026-10-13..2026-11-12`：
+  - none：23 条，首日 `2026-10-13`，末日 `2026-11-12`。
+  - forward：23 条，首日 `2026-10-13`，末日 `2026-11-12`。
+  - backward：归一化后无有效日 K，真实验收失败。
+- backward 原始字段定向 Run `43214735212` / Job `131170962436`，测试 `TestLiveHithinkDailyBarsBackwardRaw`：
+  - 原始响应有 23 条，首末日期分别为 `2026-10-13`、`2026-11-12`。
+  - 首行 `volume=472172.42721306626`，末行 `volume=575236.0558640865`；接口文档定义 volume 单位为股，当前 Data 契约要求非负整数股数。
+  - Adapter 拒绝小数股数，不做四舍五入；当前后复权模式不通过。该结果归类为 Provider 数据/字段语义异常，而不是将 volume 校验放宽。
+- CI 状态快照：Go-Python data quality parity Run `43214910262` success；Go Test Suite Run `43214976579` 当时仍在执行 Market Data Race 与 root Go test/race；Market-data MariaDB Migration/PIT persistence Job `131171939942` success；Compose/Docker 与 root-module migration Job skipped。
+
+
+## 70. 2026-11-12 Eastmoney / Tencent 复权基准真实样本核验
+
+- 仓库分支：`feat/full-go-data-providers-api-switch`
+- Live Probe Run：`43216445700`；Job：`131176790740`；测试：`TestLiveEastmoneyTencentAdjustmentReferenceEvidence`。
+- 请求范围：`600519.SH`，`2026-10-13..2026-11-12`；Eastmoney `fqt_1/fqt_2`，Tencent `qfqday/hfqday`。
+- 四组响应均返回 23 条，首末日期均覆盖请求窗口；测试的日 K 结构/范围/重复日期检查通过。
+- 标准化结果：
+  - Eastmoney forward/backward 的 `AdjustmentMethod` 分别为 `eastmoney_fqt_1`、`eastmoney_fqt_2`。
+  - Tencent forward/backward 的 `AdjustmentMethod` 分别为 `tencent_qfqday`、`tencent_hfqday`。
+  - 四组 `AdjustmentRefDate` 均为空。
+- 首日收盘价：
+  - Eastmoney forward：`1274.89`；Tencent forward：`1274.890`。
+  - Eastmoney backward：`8011.70`；Tencent backward：`8978.100`。
+  - Hithink backward 原始样本首日收盘价为 `8978.100`，与 Tencent 一致，但 Hithink 成交量字段另有小数股数问题（见第 69 节）。
+- 原始响应采样：
+  - Eastmoney forward/backward 响应体约 2172/2190 bytes。
+  - Tencent forward/backward 响应体约 3307/3313 bytes。
+  - `liveProbeBodySampleLimit=2048`，四个响应的 `BodyTruncated=true`；采样前缀未显示独立参考日期字段，但无法证明完整响应尾部绝无该字段。
+- 判定：真实数据获取通过；复权参考日期不可用；后复权首日价格差异明显，跨 Provider 结果保持 `not-comparable`。不推断参考日、不填充 `AdjustmentRefDate`，不重复本轮四个请求；下一步只核对官方字段契约或获取完整响应证据。
+
+- CI 状态快照：该测试所在 Live Provider Run `43216445700` success；测试只证明单证券、单窗口真实请求和结构验收通过，不代表复权基准已对齐。当前代码基线 `61c9d009ce37380f364f4a0afe0804ab0c1eaf7a` 的 Go Test Suite Run `43216783357`、Go-Python parity Run `43216744832` 当时仍在执行。
+
+
+## 71. 2026-11-12 Pytdx 官方盘中临停与全天停牌日 K 核验
+
+- 仓库分支：`feat/full-go-data-providers-api-switch`
+- Live Probe Run：`43217601588`；Job：`131180700823`；测试：`TestLivePytdxOfficialIntradaySuspensionDailyBars`。
+- 盘中临停官方事件（均返回 1 条对应日期日 K）：
+  - `603072.SH / 2025-01-03`，SSE 公告 `https://www.sse.com.cn/disclosure/announcement/general/mainsuspension/c/c_20250103_10767682.shtml`；close 48.00，volume 50,782,000，amount 2,549,722,624，quality degraded。
+  - `301595.SZ / 2025-05-19`，SZSE 公告 `https://www.szse.cn/disclosure/notice/temp/t20250519_613632.html`；close 54.30，volume 19,489,400，amount 914,551,360，quality degraded。
+  - `001390.SZ / 2025-05-29`，SZSE 公告 `https://www.szse.cn/disclosure/notice/temp/t20250529_613857.html`；close 32.00，volume 39,103,100，amount 1,278,978,688，quality degraded。
+  - `603400.SH / 2025-06-25`，SSE 公告 `https://www.sse.com.cn/disclosure/announcement/general/mainsuspension/c/c_20250625_10783012.shtml`；close 78.81，volume 17,077,900，amount 990,280,256，quality valid。
+- 前三条 degraded 原因均为 `provider_change_percent_unavailable_for_first_bar`，即请求窗口首条缺少前一交易日涨跌幅；日 K 本身存在，不应分类为停牌缺失。
+- 全天停牌样本：
+  - 证券 `002968.SZ`，官方停牌 `2025-09-15..2025-09-28`，官方复牌 `2025-09-29`。
+  - 官方停牌公告：`https://www.szse.cn/disclosure/notice/temp/t20250915_616077.html`；复牌公告：`https://disc.static.szse.cn/download/disc/disk03/finalpage/2025-09-29/8a38844e-6ccc-475f-a8f6-b808a5be55e1.PDF`。
+  - 查询窗口 `2025-09-12..2025-09-30`；观察到 `2025-09-12`、`2025-09-29`、`2025-09-30`；停牌窗口 rows=0，停牌前 rows=1，复牌日 rows=1 且 quality valid；status `suspension_gap_and_resume_verified`。
+- 判定：Pytdx 对盘中临停日保留成交日 K，对全天停牌期间不返回日 K，并在复牌日恢复；本项真实验收通过，范围仅限上述 4 个盘中样本和 1 个全天停牌窗口。
+- 限制：未调用 Tushare；真实 `SecurityTradingStatus` 数据源仍受 `40203 permission_required` 权限限制，因此本结果不代表 Tushare 状态 Provider 或 DataService 状态分类已完成端到端真实验收。
+
+## 72. 2026-11-12 BaoStock tradestatus/isST 加强断言真实验收
+
+### 72.1 首轮真实请求（弱探针）
+
+- 探针提交：`9fb34c717d130ad326be988110b341125be8e510`。
+- Live Provider Run：`43218703614`；专项步骤 success。
+- 该版本测试只检查交易日历、全天停牌窗口日 K、盘中临停日 K 非空，并输出 `tradestatus/isST` 原始字段与计数；没有官方停牌/复牌字段值断言。因此它只证明请求/响应链路可用，不是字段语义验收。
+- Run `43218703390` 实际是 Go Test Suite，结论 cancelled；不能将其归属为 BaoStock Live Provider 探针取消。
+
+### 72.2 加强断言真实运行（通过）
+
+- 加强断言代码提交：`9cfc9ba42e07bdb3c76f40f26e14b97c3ad4fb19`；格式整理后：`8b61eb39ae5061ec0bf6448bfcf124dcea9836bd`；证据字段补充提交：`e39c3d5409b5b4f2c7b79da3dee5a6159e8efb34`。
+- Live Provider Run：`43228986723`；Job：`131219214147`；测试：`TestLiveBaoStockTradeStatusOnOfficialSuspensionWindow`；日志明确 `--- PASS`，耗时约 1.52s。
+- `002968.SZ` 官方停牌窗口 `2025-09-15..2025-09-28`：交易日历识别 10 个交易日，10/10 日 K 的 `TradeStatus=0`；停牌前 `2025-09-12`、复牌日 `2025-09-29`、后续 `2025-09-30` 的 `TradeStatus=1`；13 条返回日 K 的 `IsST=0`。
+- `603072.SH / 2025-01-03` 官方盘中临停样本：返回日 K，`TradeStatus=1`、`IsST=0`，成交量 50,782,036 股。日线状态不表达盘中暂停区间。
+- 原始脱敏报告位于 Job `131219214147` 日志 `LIVE_BAOSTOCK_TRADE_STATUS_REPORT` 行；该日志是本次真实字段证据。
+- 本项通过范围仅限上述证券/日期样本；不代表完整 `SecurityTradingStatusProvider` 已实现或所有证券历史状态均覆盖。Tushare 状态接口仍受 `40203 permission_required` 限制。

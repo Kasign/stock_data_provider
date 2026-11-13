@@ -240,9 +240,23 @@ type CreateContextCommand struct {
 	OmittedSections  []ContextOmittedSection
 	BuilderVersion   string
 }
+
+// ContextRef only identifies an immutable Context version; it is not an access grant.
 type ContextRef struct {
 	ContextID      string
 	ContextVersion int64
+}
+
+// ContextReadRequest carries trusted access metadata separately from the resource locator.
+type ContextReadRequest struct {
+	Ref         ContextRef
+	CallerRef   string // Must be injected from the trusted Principal Context.
+	PurposeCode string
+}
+
+// ContextAuthorizer checks current visibility over the exact Context scope and subjects.
+type ContextAuthorizer interface {
+	AuthorizeContext(context.Context, string, researchevidence.PurposeCode, researchcontext.Context) error
 }
 type AddEvidenceCommand struct {
 	CallerRef   string
@@ -270,27 +284,35 @@ type EvidenceAuthorizer interface {
 type Port interface {
 	CreateContext(context.Context, CreateContextCommand) (ResearchContext, error)
 	AddEvidence(context.Context, AddEvidenceCommand) (EvidenceRecord, error)
-	GetContext(context.Context, ContextRef) (ResearchContext, error)
+	GetContext(context.Context, ContextReadRequest) (ResearchContext, error)
 	GetEvidence(context.Context, EvidenceRef) (EvidenceRecord, error)
 }
 
 type Service struct {
-	contexts   ContextRepository
-	evidence   EvidenceRepository
-	authorizer EvidenceAuthorizer
-	events     EventRepository
-	claims     ClaimRepository
-	clock      Clock
-	ids        IDGenerator
+	contexts          ContextRepository
+	evidence          EvidenceRepository
+	authorizer        EvidenceAuthorizer
+	contextAuthorizer ContextAuthorizer
+	events            EventRepository
+	claims            ClaimRepository
+	clock             Clock
+	ids               IDGenerator
 }
 
 var _ Port = (*Service)(nil)
 var _ EventPort = (*Service)(nil)
 var _ ClaimPort = (*Service)(nil)
 
-func NewService(contexts ContextRepository, evidence EvidenceRepository, authorizer EvidenceAuthorizer, clock Clock, ids IDGenerator) (*Service, error) {
-	if contexts == nil || evidence == nil || authorizer == nil {
+func NewService(contexts ContextRepository, evidence EvidenceRepository, authorizer EvidenceAuthorizer, clock Clock, ids IDGenerator, contextAuthorizers ...ContextAuthorizer) (*Service, error) {
+	if contexts == nil || evidence == nil || authorizer == nil || len(contextAuthorizers) > 1 {
 		return nil, fault.New(fault.ClassInternal, "research_application_not_configured", "Research Application is not configured", researcherrors.ErrInvalidRepository)
+	}
+	var contextAuthorizer ContextAuthorizer
+	if len(contextAuthorizers) == 1 {
+		contextAuthorizer = contextAuthorizers[0]
+		if contextAuthorizer == nil {
+			return nil, fault.New(fault.ClassInternal, "research_context_authorizer_not_configured", "Research Context authorizer is nil", researcherrors.ErrInvalidRepository)
+		}
 	}
 	if clock == nil {
 		clock = func() time.Time { return time.Now().UTC() }
@@ -298,7 +320,7 @@ func NewService(contexts ContextRepository, evidence EvidenceRepository, authori
 	if ids == nil {
 		ids = randomIDGenerator{}
 	}
-	return &Service{contexts: contexts, evidence: evidence, authorizer: authorizer, clock: clock, ids: ids}, nil
+	return &Service{contexts: contexts, evidence: evidence, authorizer: authorizer, contextAuthorizer: contextAuthorizer, clock: clock, ids: ids}, nil
 }
 
 func (s *Service) CreateContext(ctx context.Context, command CreateContextCommand) (ResearchContext, error) {
@@ -361,6 +383,9 @@ func (s *Service) AddEvidence(ctx context.Context, command AddEvidenceCommand) (
 	if err := value.Validate(); err != nil {
 		return EvidenceRecord{}, validationFault("invalid_evidence", "Research Evidence is invalid", err)
 	}
+	if err := s.validateEvidenceReferences(ctx, value.DerivedFromRefs, value.SystemAsOf); err != nil {
+		return EvidenceRecord{}, err
+	}
 	if err := s.authorizer.AuthorizeEvidence(ctx, command.CallerRef, purpose, cloneDomainEvidence(value)); err != nil {
 		return EvidenceRecord{}, mapAuthorizationError(err)
 	}
@@ -370,24 +395,40 @@ func (s *Service) AddEvidence(ctx context.Context, command AddEvidenceCommand) (
 	return fromDomainEvidence(value), nil
 }
 
-func (s *Service) GetContext(ctx context.Context, ref ContextRef) (ResearchContext, error) {
+func (s *Service) GetContext(ctx context.Context, request ContextReadRequest) (ResearchContext, error) {
 	if s == nil {
 		return ResearchContext{}, applicationFault(fault.ClassInternal, "research_application_not_configured", "Research Application is not configured", researcherrors.ErrInvalidRepository)
 	}
-	if ctx == nil || strings.TrimSpace(ref.ContextID) == "" || ref.ContextVersion < 1 {
-		return ResearchContext{}, validationFault("invalid_context_ref", "Context reference is invalid", nil)
+	if ctx == nil || strings.TrimSpace(request.Ref.ContextID) == "" || request.Ref.ContextVersion < 1 ||
+		strings.TrimSpace(request.CallerRef) == "" || !validContextPurpose(researchevidence.PurposeCode(request.PurposeCode)) {
+		return ResearchContext{}, validationFault("invalid_context_read_request", "Context reference, trusted caller and supported purpose are required", nil)
 	}
-	value, err := s.contexts.GetVersion(ctx, ref.ContextID, ref.ContextVersion)
+	if s.contextAuthorizer == nil {
+		return ResearchContext{}, applicationFault(fault.ClassInternal, "research_context_authorizer_not_configured", "Research Context access is not configured", researcherrors.ErrInvalidRepository)
+	}
+	value, err := s.contexts.GetVersion(ctx, request.Ref.ContextID, request.Ref.ContextVersion)
 	if err != nil {
 		return ResearchContext{}, mapRepositoryError(err)
 	}
-	if value.ContextID != ref.ContextID || value.ContextVersion != ref.ContextVersion {
+	if value.ContextID != request.Ref.ContextID || value.ContextVersion != request.Ref.ContextVersion {
 		return ResearchContext{}, applicationFault(fault.ClassInternal, "stored_context_identity_mismatch", "Stored Research Context identity does not match the requested version", researcherrors.ErrCorruptRecord)
 	}
 	if err := value.Validate(); err != nil {
 		return ResearchContext{}, applicationFault(fault.ClassInternal, "stored_context_invalid", "Stored Research Context is invalid", err)
 	}
+	if err := s.contextAuthorizer.AuthorizeContext(ctx, request.CallerRef, researchevidence.PurposeCode(request.PurposeCode), value); err != nil {
+		return ResearchContext{}, mapContextAuthorizationError(err)
+	}
 	return fromDomainContext(value), nil
+}
+
+func validContextPurpose(value researchevidence.PurposeCode) bool {
+	switch value {
+	case researchevidence.PurposeResearchAnalysis, researchevidence.PurposeRiskReview, researchevidence.PurposeUserDisplay:
+		return true
+	default:
+		return false
+	}
 }
 
 func (s *Service) GetEvidence(ctx context.Context, ref EvidenceRef) (EvidenceRecord, error) {
@@ -499,11 +540,11 @@ func cloneDomainEvidence(v researchevidence.Evidence) researchevidence.Evidence 
 	return v
 }
 
-func NewServiceWithEvents(contexts ContextRepository, evidence EvidenceRepository, events EventRepository, authorizer EvidenceAuthorizer, clock Clock, ids IDGenerator) (*Service, error) {
+func NewServiceWithEvents(contexts ContextRepository, evidence EvidenceRepository, events EventRepository, authorizer EvidenceAuthorizer, clock Clock, ids IDGenerator, contextAuthorizers ...ContextAuthorizer) (*Service, error) {
 	if events == nil {
 		return nil, fault.New(fault.ClassInternal, "research_event_repository_not_configured", "Research Event Repository is not configured", researcherrors.ErrInvalidRepository)
 	}
-	service, err := NewService(contexts, evidence, authorizer, clock, ids)
+	service, err := NewService(contexts, evidence, authorizer, clock, ids, contextAuthorizers...)
 	if err != nil {
 		return nil, err
 	}
@@ -536,6 +577,9 @@ func (s *Service) CreateEvent(ctx context.Context, command CreateEventCommand) (
 	}
 	if err := value.Validate(); err != nil {
 		return ResearchEvent{}, validationFault("invalid_research_event", "Research Event is invalid", err)
+	}
+	if err := s.validateEvidenceReferences(ctx, value.EvidenceRefs, value.SystemAsOf); err != nil {
+		return ResearchEvent{}, err
 	}
 	correlationID, err := correlationIDForPublication(ctx, s.ids)
 	if err != nil {
@@ -590,6 +634,9 @@ func (s *Service) UpdateEvent(ctx context.Context, command UpdateEventCommand) (
 	}
 	if err := next.ValidateNextVersion(previous); err != nil {
 		return ResearchEvent{}, validationFault("invalid_research_event_transition", "Research Event revision is invalid", err)
+	}
+	if err := s.validateEvidenceReferences(ctx, next.EvidenceRefs, next.SystemAsOf); err != nil {
+		return ResearchEvent{}, err
 	}
 	if command.ReasonCode != nil && !validCorrelationID(*command.ReasonCode) {
 		return ResearchEvent{}, validationFault("invalid_event_reason_code", "Research Event reason code must be null or a non-empty trimmed value", nil)
@@ -700,11 +747,11 @@ func cloneInt(value *int) *int {
 	return &copy
 }
 
-func NewServiceWithClaims(contexts ContextRepository, evidence EvidenceRepository, claims ClaimRepository, authorizer EvidenceAuthorizer, clock Clock, ids IDGenerator) (*Service, error) {
+func NewServiceWithClaims(contexts ContextRepository, evidence EvidenceRepository, claims ClaimRepository, authorizer EvidenceAuthorizer, clock Clock, ids IDGenerator, contextAuthorizers ...ContextAuthorizer) (*Service, error) {
 	if claims == nil {
 		return nil, fault.New(fault.ClassInternal, "research_claim_repository_not_configured", "Research Claim Repository is not configured", researcherrors.ErrInvalidRepository)
 	}
-	service, err := NewService(contexts, evidence, authorizer, clock, ids)
+	service, err := NewService(contexts, evidence, authorizer, clock, ids, contextAuthorizers...)
 	if err != nil {
 		return nil, err
 	}
@@ -736,6 +783,9 @@ func (s *Service) CreateClaim(ctx context.Context, command CreateClaimCommand) (
 	}
 	if err := value.Validate(); err != nil {
 		return Claim{}, validationFault("invalid_research_claim", "Research Claim is invalid", err)
+	}
+	if err := s.validateClaimEvidenceReferences(ctx, value.SupportingEvidenceRefs, value.ContradictingEvidenceRefs, value.SystemAsOf); err != nil {
+		return Claim{}, err
 	}
 	if err := s.claims.Append(ctx, value); err != nil {
 		return Claim{}, mapRepositoryError(err)
@@ -784,6 +834,9 @@ func (s *Service) UpdateClaim(ctx context.Context, command UpdateClaimCommand) (
 	if err := next.ValidateNextVersion(previous); err != nil {
 		return Claim{}, validationFault("invalid_research_claim_revision", "Research Claim revision is invalid", err)
 	}
+	if err := s.validateClaimEvidenceReferences(ctx, next.SupportingEvidenceRefs, next.ContradictingEvidenceRefs, next.SystemAsOf); err != nil {
+		return Claim{}, err
+	}
 	if err := s.claims.Append(ctx, next); err != nil {
 		return Claim{}, mapRepositoryError(err)
 	}
@@ -820,6 +873,85 @@ func fromDomainClaim(value researchclaim.Claim) Claim {
 		ValidationMethod:          cloneString(value.ValidationMethod), ExpectedObservation: cloneString(value.ExpectedObservation),
 		InvalidationConditions: cloneStrings(value.InvalidationConditions), Status: string(value.Status), Limitations: cloneStrings(value.Limitations),
 	}
+}
+
+func (s *Service) validateClaimEvidenceReferences(ctx context.Context, supporting, contradicting []string, systemAsOf time.Time) error {
+	for _, group := range []struct {
+		name   string
+		refs   []string
+		stance researchevidence.Stance
+	}{
+		{name: "supporting_evidence_refs", refs: supporting, stance: researchevidence.StanceSupports},
+		{name: "contradicting_evidence_refs", refs: contradicting, stance: researchevidence.StanceContradicts},
+	} {
+		for _, ref := range group.refs {
+			if s == nil || s.evidence == nil {
+				return applicationFault(fault.ClassInternal, "research_evidence_repository_not_configured", "Research Evidence Repository is not configured", researcherrors.ErrInvalidRepository)
+			}
+			value, err := s.evidence.Get(ctx, ref)
+			if err != nil {
+				if errors.Is(err, researcherrors.ErrNotFound) {
+					return validationFault("research_evidence_reference_not_found", "Research Evidence reference does not exist", err)
+				}
+				return mapRepositoryError(err)
+			}
+			if value.EvidenceID != ref {
+				return applicationFault(fault.ClassInternal, "stored_evidence_identity_mismatch", "Stored Research Evidence identity does not match the requested reference", researcherrors.ErrCorruptRecord)
+			}
+			if err := value.ValidateForStrictPIT(systemAsOf); err != nil {
+				return validationFault("invalid_research_evidence_reference", "Research Evidence reference is not valid at the requested PIT cutoff", err)
+			}
+			if value.Stance != group.stance {
+				return validationFault("research_claim_evidence_stance_mismatch", "Research Claim Evidence stance does not match its support/contradiction reference list", fmt.Errorf("%s requires stance %q, got %q", group.name, group.stance, value.Stance))
+			}
+		}
+	}
+	return nil
+}
+
+func (s *Service) validateEvidenceReferences(ctx context.Context, refs []string, systemAsOf time.Time) error {
+	if len(refs) == 0 {
+		return nil
+	}
+	if s == nil || s.evidence == nil {
+		return applicationFault(fault.ClassInternal, "research_evidence_repository_not_configured", "Research Evidence Repository is not configured", researcherrors.ErrInvalidRepository)
+	}
+	for _, ref := range refs {
+		value, err := s.evidence.Get(ctx, ref)
+		if err != nil {
+			if errors.Is(err, researcherrors.ErrNotFound) {
+				return validationFault("research_evidence_reference_not_found", "Research Evidence reference does not exist", err)
+			}
+			return mapRepositoryError(err)
+		}
+		if value.EvidenceID != ref {
+			return applicationFault(fault.ClassInternal, "stored_evidence_identity_mismatch", "Stored Research Evidence identity does not match the requested reference", researcherrors.ErrCorruptRecord)
+		}
+		if err := value.ValidateForStrictPIT(systemAsOf); err != nil {
+			return validationFault("invalid_research_evidence_reference", "Research Evidence reference is not valid at the requested PIT cutoff", err)
+		}
+	}
+	return nil
+}
+
+func mapContextAuthorizationError(err error) error {
+	var authorizationErr *AuthorizationError
+	if errors.As(err, &authorizationErr) && authorizationErr != nil {
+		switch authorizationErr.Kind {
+		case AuthorizationDenied:
+			return fault.New(fault.ClassForbidden, "research_context_authorization_rejected", "Research Context is not visible to this caller", err)
+		case AuthorizationUnavailable:
+			return fault.New(fault.ClassUnavailable, "research_context_authorization_unavailable", "Research Context authorization service is unavailable", err)
+		case AuthorizationTimeout:
+			return fault.New(fault.ClassTimeout, "research_context_authorization_timeout", "Research Context authorization check timed out", err)
+		default:
+			return fault.New(fault.ClassInternal, "research_context_authorization_failed", "Research Context authorization check failed", err)
+		}
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return fault.New(fault.ClassTimeout, "research_context_authorization_timeout", "Research Context authorization check timed out", err)
+	}
+	return fault.New(fault.ClassInternal, "research_context_authorization_failed", "Research Context authorization check failed", err)
 }
 
 func mapRepositoryError(err error) error {

@@ -78,6 +78,7 @@ type CollectedSourceEntry struct {
 // collectionSeal 绑定完整采集结果，防止调用方修改已采集的策略版本或候选载荷。
 type CollectSourceResult struct {
 	collectionSeal          [sha256.Size]byte
+	CollectionPurpose       domain.Purpose
 	SourceID                string
 	EndpointID              string
 	SourcePolicyVersionID   string
@@ -239,6 +240,7 @@ func (u *CollectSource) Execute(ctx context.Context, request CollectSourceReques
 	}
 
 	result := CollectSourceResult{
+		CollectionPurpose:       request.Purpose,
 		SourceID:                request.SourceID,
 		EndpointID:              request.EndpointID,
 		SourcePolicyVersionID:   registration.SourcePolicyVersionID,

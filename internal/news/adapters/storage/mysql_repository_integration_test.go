@@ -128,8 +128,8 @@ func mustMarshalAuthorizationBinding(t *testing.T, binding domain.NewsAuthorizat
 func applyNewsMigrationsAndVerifyV8Upgrade(t *testing.T, ctx context.Context, db *sql.DB) {
 	t.Helper()
 	migrations := Migrations()
-	if len(migrations) != 8 {
-		t.Fatalf("News migration count = %d, want 8", len(migrations))
+	if len(migrations) != 9 {
+		t.Fatalf("News migration count = %d, want 9", len(migrations))
 	}
 
 	var ledgerExists int
@@ -155,8 +155,8 @@ func applyNewsMigrationsAndVerifyV8Upgrade(t *testing.T, ctx context.Context, db
 		return
 	}
 
-	// Start from V1-V7 and preserve one pre-existing Observation while V8
-	// adds nullable retention columns to the live table.
+	// Start from V1-V7 and preserve one pre-existing Observation while V8 adds
+	// nullable retention columns and V9 adds the policy version tables.
 	if err := platformstorage.ApplyMigrations(ctx, db, "news", migrations[:7]); err != nil {
 		t.Fatalf("apply News migrations V1-V7: %v", err)
 	}
@@ -174,7 +174,7 @@ func applyNewsMigrationsAndVerifyV8Upgrade(t *testing.T, ctx context.Context, db
 	}
 
 	if err := platformstorage.ApplyMigrations(ctx, db, "news", migrations); err != nil {
-		t.Fatalf("upgrade News schema from V7 to V8: %v", err)
+		t.Fatalf("upgrade News schema from V7 to V9: %v", err)
 	}
 	var sourceID, identityStatus string
 	var candidateJSON []byte
@@ -236,6 +236,48 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	}
 
 	binding := loadIntegrationAuthorizationBinding(t)
+	binding.AuthorizationRef.Decision = domain.AuthorizationDecisionAllowed
+	binding.AuthorizationRef.Conditions = []string{}
+	currentExpiry := time.Now().UTC().Add(time.Hour).Format(time.RFC3339Nano)
+	binding.AuthorizationRef.ExpiresAt.Value = &currentExpiry
+	publisher, err := app.NewPublishNewsPolicyVersion(repository)
+	if err != nil {
+		t.Fatal(err)
+	}
+	purpose := []domain.Purpose{domain.PurposeInternalPersonalResearch}
+	contentKinds := []domain.ContentKind{domain.ContentSnippet}
+	currentPolicyPayloads := map[string]any{
+		domain.NewsPolicyTypeSource: domain.SourcePolicy{
+			Status: domain.AuthorizationApproved, AllowedPurposes: purpose,
+			AllowedContentKinds: contentKinds, EvidenceRef: "integration-source-evidence",
+		},
+		domain.NewsPolicyTypeEndpoint: domain.EndpointPolicy{},
+		domain.NewsPolicyTypeProviderOutput: domain.ProviderOutputPolicy{
+			Status: domain.AuthorizationApproved, AllowedPurposes: purpose,
+			AllowedContentKinds: contentKinds, AllowRequestProcessing: true,
+			EvidenceRef: "integration-provider-evidence",
+		},
+	}
+	for _, expected := range binding.PolicySnapshot.Policies {
+		payload, err := json.Marshal(currentPolicyPayloads[expected.PolicyType])
+		if err != nil {
+			t.Fatalf("marshal %s policy: %v", expected.PolicyType, err)
+		}
+		if err := publisher.Execute(ctx, expected.PolicyType, expected.PolicyRef, expected.PolicyVersion, payload); err != nil {
+			t.Fatalf("publish %s policy %s: %v", expected.PolicyType, expected.PolicyRef, err)
+		}
+	}
+	currentPolicies, err := repository.ResolveCurrentNewsAuthorizationPolicies(ctx, binding)
+	if err != nil {
+		t.Fatalf("resolve current authorization policies: %v", err)
+	}
+	if len(currentPolicies.Policies) != len(binding.PolicySnapshot.Policies) {
+		t.Fatalf("resolved policy count = %d, want %d", len(currentPolicies.Policies), len(binding.PolicySnapshot.Policies))
+	}
+	currentDecision := domain.EvaluateNewsAuthorizationAgainstCurrentPolicies(binding, currentPolicies, time.Now().UTC())
+	if !currentDecision.Allowed {
+		t.Fatalf("matching current policies rejected: %+v", currentDecision)
+	}
 	authorizationObservation, authorizationVersion := integrationAuthorizationEvidence()
 	if err := repository.AppendAuthorizationSnapshot(ctx, binding, authorizationObservation, authorizationVersion); err != nil {
 		t.Fatalf("append authorization snapshot: %v", err)
@@ -684,7 +726,7 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	if len(credentialsBefore) != 0 {
 		t.Fatalf("identity credential visible before creation: %+v", credentialsBefore)
 	}
-	identityAsOf := time.Now().UTC().Add(time.Second)
+	identityAsOf := time.Now().UTC()
 	credentialsAt, err := repository.ListIdentityCredentialsAt(ctx, sourceID, identityCandidates, identityAsOf)
 	if err != nil {
 		t.Fatalf("query identity at system_as_of: %v", err)
@@ -837,6 +879,593 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 		pitRecord.ProviderRef != "" {
 		t.Fatalf("PIT record mismatch: %+v", pitRecord)
 	}
+	if !reflect.DeepEqual(pitRecord.Version.Content, domain.ContentLayers{}) {
+		t.Fatalf("PIT metadata lookup loaded content before authorization: %+v", pitRecord.Version.Content)
+	}
+
+	atomicPolicyVersion := "atomic-source-v1"
+	if _, err := db.ExecContext(ctx, "UPDATE news_observations SET source_policy_version_id = ? WHERE observation_id = ?",
+		atomicPolicyVersion, secondObservation.ID); err != nil {
+		t.Fatalf("set atomic read policy trace: %v", err)
+	}
+	expectedAtomicContent := secondVersion.Version.Content
+	atomicPIT, err := repository.GetEvidenceVersionAt(ctx, app.GetEvidenceRequest{
+		NewsID: secondObservation.NewsID, VersionID: secondVersion.Version.ID, SystemAsOf: time.Now().UTC(),
+	})
+	if err != nil {
+		t.Fatalf("reload Evidence PIT metadata for atomic read: %v", err)
+	}
+	secondObservation = atomicPIT.Observation
+	secondVersion.Version = atomicPIT.Version
+	atomicResourceRef, err := domain.NewsEvidenceResourceRef(secondVersion.Version.NewsID, secondVersion.Version.VersionNo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	atomicBinding := domain.NewsAuthorizationBinding{
+		CallerRef: "service:research", ResourceRef: atomicResourceRef,
+		PurposeCode: "research_analysis", RequestedContentLevel: domain.AuthorizationContentSummary,
+		ProviderRef: domain.NullableOpaqueRef{Present: true},
+		EndpointRef: domain.NullableOpaqueRef{Present: true},
+		SourceRef:   secondObservation.SourceID,
+		AuthorizationRef: domain.NewsAuthorizationRef{
+			AuthorizationRef: fmt.Sprintf("news-it-atomic-auth-%d", time.Now().UnixNano()),
+			PolicyOwner:      "news", PolicyVersion: "news-it-atomic-snapshot",
+			Decision: domain.AuthorizationDecisionAllowed, PurposeCode: "research_analysis",
+			ContentLevel: domain.AuthorizationContentSummary, SubjectRef: "service:research",
+			ResourceRef: atomicResourceRef, DecidedAt: time.Now().UTC().Add(-time.Minute).Format(time.RFC3339Nano),
+			ExpiresAt: domain.NullableDateTime{Present: true}, Conditions: []string{},
+			DecisionFingerprint: strings.Repeat("a", 64),
+		},
+		PolicySnapshot: domain.AuthorizationPolicySnapshot{
+			SnapshotRef: "news-it-atomic-snapshot",
+			Policies: []domain.AuthorizationPolicyVersion{{
+				PolicyType: domain.NewsPolicyTypeSource, PolicyRef: secondObservation.SourceID,
+				PolicyVersion: atomicPolicyVersion,
+			}},
+		},
+	}
+	atomicPayload, err := json.Marshal(domain.SourcePolicy{
+		Status:              domain.AuthorizationApproved,
+		AllowedPurposes:     []domain.Purpose{domain.PurposeInternalPersonalResearch},
+		AllowedContentKinds: []domain.ContentKind{domain.ContentAbstract},
+		EvidenceRef:         "news-it-atomic-source-evidence",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	atomicPublisher, err := app.NewPublishNewsPolicyVersion(repository)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := atomicPublisher.Execute(ctx, domain.NewsPolicyTypeSource, secondObservation.SourceID, atomicPolicyVersion, atomicPayload); err != nil {
+		t.Fatalf("publish atomic read source policy: %v", err)
+	}
+
+	// Source Observation 写入事务也必须锁定同一当前策略指针，避免授权后、持久化前被撤销。
+	lockSourceRef := "news-it-source-ingest-lock"
+	lockSourceV1 := "news-it-source-ingest-v1"
+	lockSourceV2 := "news-it-source-ingest-v2"
+	lockPayloadV1, err := json.Marshal(domain.SourcePolicy{
+		Status:               domain.AuthorizationApproved,
+		AllowedAccessMethods: []domain.AccessMethod{domain.AccessRSS},
+		AllowedPurposes:      []domain.Purpose{domain.PurposeInternalPersonalResearch},
+		AllowedContentKinds:  []domain.ContentKind{domain.ContentMetadata},
+		AllowedStorageModes:  []domain.StorageMode{domain.StoragePersistentMetadata},
+		MaxRetention:         time.Hour,
+		EvidenceRef:          "news-it-source-ingest-lock-evidence",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := atomicPublisher.Execute(ctx, domain.NewsPolicyTypeSource, lockSourceRef, lockSourceV1, lockPayloadV1); err != nil {
+		t.Fatalf("publish source ingest lock policy: %v", err)
+	}
+
+	lockEndpointRef := "news-it-source-ingest-endpoint-with-policy"
+	lockEndpointVersion := "news-it-source-ingest-endpoint-v1"
+	endpointRetention := time.Hour
+	endpointPayload, err := json.Marshal(domain.EndpointPolicy{
+		Status:               domain.AuthorizationApproved,
+		AllowedAccessMethods: []domain.AccessMethod{domain.AccessRSS},
+		AllowedPurposes:      []domain.Purpose{domain.PurposeInternalPersonalResearch},
+		AllowedContentKinds:  []domain.ContentKind{domain.ContentMetadata},
+		AllowedStorageModes:  []domain.StorageMode{domain.StoragePersistentMetadata},
+		MaxRetention:         &endpointRetention,
+		EvidenceRef:          "news-it-endpoint-ingest-evidence",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := atomicPublisher.Execute(ctx, domain.NewsPolicyTypeEndpoint, lockEndpointRef, lockEndpointVersion, endpointPayload); err != nil {
+		t.Fatalf("publish endpoint ingest policy: %v", err)
+	}
+	lockProviderRef := "news-it-source-ingest-provider-output"
+	lockProviderVersion := "news-it-source-ingest-provider-v1"
+	providerPayload, err := json.Marshal(domain.ProviderOutputPolicy{
+		Status:                  domain.AuthorizationApproved,
+		AllowedPurposes:         []domain.Purpose{domain.PurposeInternalPersonalResearch},
+		AllowedContentKinds:     []domain.ContentKind{domain.ContentMetadata},
+		AllowRequestProcessing:  true,
+		MaxRequestRetention:     time.Hour,
+		AllowedStorageModes:     []domain.StorageMode{domain.StoragePersistentMetadata},
+		MaxPersistenceRetention: time.Hour,
+		EvidenceRef:             "news-it-provider-output-ingest-evidence",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := atomicPublisher.Execute(ctx, domain.NewsPolicyTypeProviderOutput, lockProviderRef, lockProviderVersion, providerPayload); err != nil {
+		t.Fatalf("publish provider output ingest policy: %v", err)
+	}
+	var loadedSource domain.SourcePolicy
+	var loadedEndpoint *domain.EndpointPolicy
+	var loadedProvider *domain.ProviderOutputPolicy
+	if err := repository.WithinIdentityTransaction(ctx, func(tx app.IdentityTransaction) error {
+		policyTx, ok := tx.(app.CurrentIngestPolicyIdentityTransaction)
+		if !ok {
+			return errors.New("identity transaction lacks current ingest policy lock")
+		}
+		var loadErr error
+		loadedSource, loadedEndpoint, loadedProvider, loadErr = policyTx.LockCurrentIngestPolicies(
+			ctx, lockSourceRef, lockSourceV1,
+			lockEndpointRef, lockEndpointVersion,
+			lockProviderRef, lockProviderVersion,
+		)
+		return loadErr
+	}); err != nil {
+		t.Fatalf("load complete current ingest policy set: %v", err)
+	}
+	if loadedSource.EvidenceRef != "news-it-source-ingest-lock-evidence" ||
+		loadedEndpoint == nil || loadedEndpoint.EvidenceRef != "news-it-endpoint-ingest-evidence" ||
+		loadedProvider == nil || loadedProvider.EvidenceRef != "news-it-provider-output-ingest-evidence" {
+		t.Fatalf("incomplete current ingest policy set: source=%+v endpoint=%+v provider=%+v",
+			loadedSource, loadedEndpoint, loadedProvider)
+	}
+	lockPayloadV2, err := json.Marshal(domain.SourcePolicy{
+		Status:               domain.AuthorizationRevoked,
+		AllowedAccessMethods: []domain.AccessMethod{domain.AccessRSS},
+		AllowedPurposes:      []domain.Purpose{domain.PurposeInternalPersonalResearch},
+		AllowedContentKinds:  []domain.ContentKind{domain.ContentMetadata},
+		AllowedStorageModes:  []domain.StorageMode{domain.StoragePersistentMetadata},
+		MaxRetention:         time.Hour,
+		EvidenceRef:          "news-it-source-ingest-revoked-evidence",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 没有 Endpoint 当前策略行时，Repeatable Read 的 InnoDB gap lock 也必须阻止并发首次发布。
+	missingEndpointRef := "news-it-source-ingest-endpoint"
+	endpointCreatePayload, err := json.Marshal(domain.EndpointPolicy{
+		Status:               domain.AuthorizationApproved,
+		AllowedAccessMethods: []domain.AccessMethod{domain.AccessRSS},
+		AllowedPurposes:      []domain.Purpose{domain.PurposeInternalPersonalResearch},
+		AllowedContentKinds:  []domain.ContentKind{domain.ContentMetadata},
+		AllowedStorageModes:  []domain.StorageMode{domain.StoragePersistentMetadata},
+		MaxRetention:         &endpointRetention,
+		EvidenceRef:          "news-it-source-ingest-endpoint-first-publish",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sourcePolicyLocked := make(chan struct{})
+	releaseSourceWrite := make(chan struct{})
+	sourceWriteDone := make(chan error, 1)
+	go func() {
+		sourceWriteDone <- repository.WithinIdentityTransaction(ctx, func(tx app.IdentityTransaction) error {
+			policyTx, ok := tx.(app.CurrentIngestPolicyIdentityTransaction)
+			if !ok {
+				return errors.New("identity transaction lacks source policy lock")
+			}
+			if _, _, _, err := policyTx.LockCurrentIngestPolicies(
+				ctx, lockSourceRef, lockSourceV1, "news-it-source-ingest-endpoint", "", "", "",
+			); err != nil {
+				return err
+			}
+			close(sourcePolicyLocked)
+			select {
+			case <-releaseSourceWrite:
+				return nil
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		})
+	}()
+	select {
+	case <-sourcePolicyLocked:
+	case <-time.After(5 * time.Second):
+		close(releaseSourceWrite)
+		t.Fatal("source ingest transaction did not lock current policy")
+	}
+	sourceEndpointPublishDone := make(chan error, 1)
+	go func() {
+		sourceEndpointPublishDone <- atomicPublisher.Execute(
+			ctx, domain.NewsPolicyTypeEndpoint, missingEndpointRef,
+			"news-it-source-ingest-endpoint-first", endpointCreatePayload,
+		)
+	}()
+	select {
+	case publishErr := <-sourceEndpointPublishDone:
+		close(releaseSourceWrite)
+		t.Fatalf("first Endpoint policy publication bypassed missing-row lock: %v", publishErr)
+	case <-time.After(100 * time.Millisecond):
+	}
+	sourceRevokeDone := make(chan error, 1)
+	go func() {
+		sourceRevokeDone <- atomicPublisher.Execute(ctx, domain.NewsPolicyTypeSource, lockSourceRef, lockSourceV2, lockPayloadV2)
+	}()
+	select {
+	case revokeErr := <-sourceRevokeDone:
+		close(releaseSourceWrite)
+		t.Fatalf("source policy replacement completed while Observation transaction held its lock: %v", revokeErr)
+	case <-time.After(100 * time.Millisecond):
+	}
+	close(releaseSourceWrite)
+	if err := <-sourceWriteDone; err != nil {
+		t.Fatalf("source Observation transaction: %v", err)
+	}
+	if err := <-sourceEndpointPublishDone; err != nil {
+		t.Fatalf("publish first Endpoint policy after Observation transaction: %v", err)
+	}
+	if err := <-sourceRevokeDone; err != nil {
+		t.Fatalf("publish source policy revocation after Observation transaction: %v", err)
+	}
+	if err := repository.WithinIdentityTransaction(ctx, func(tx app.IdentityTransaction) error {
+		policyTx, ok := tx.(app.CurrentIngestPolicyIdentityTransaction)
+		if !ok {
+			return errors.New("identity transaction lacks source policy lock")
+		}
+		_, _, _, err := policyTx.LockCurrentIngestPolicies(
+			ctx, lockSourceRef, lockSourceV1,
+			"news-it-source-ingest-endpoint", "news-it-source-ingest-endpoint-first", "", "",
+		)
+		return err
+	}); !errors.Is(err, app.ErrNewsCurrentPolicyUnavailable) {
+		t.Fatalf("stale source policy after committed replacement error = %v, want current policy unavailable", err)
+	}
+
+	// Provider Output 策略替换也必须与完整 Observation 写事务共享当前指针锁。
+	providerLockSourceRef := "news-it-provider-ingest-lock-source"
+	providerLockSourceVersion := "news-it-provider-ingest-source-v1"
+	providerLockSourcePayload, err := json.Marshal(domain.SourcePolicy{
+		Status:               domain.AuthorizationApproved,
+		AllowedAccessMethods: []domain.AccessMethod{domain.AccessRSS},
+		AllowedPurposes:      []domain.Purpose{domain.PurposeInternalPersonalResearch},
+		AllowedContentKinds:  []domain.ContentKind{domain.ContentMetadata},
+		AllowedStorageModes:  []domain.StorageMode{domain.StoragePersistentMetadata},
+		MaxRetention:         time.Hour,
+		EvidenceRef:          "news-it-provider-ingest-source-evidence",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := atomicPublisher.Execute(ctx, domain.NewsPolicyTypeSource, providerLockSourceRef, providerLockSourceVersion, providerLockSourcePayload); err != nil {
+		t.Fatalf("publish Provider Ingest source policy: %v", err)
+	}
+	providerLockRevokedVersion := "news-it-source-ingest-provider-output-v2"
+	providerLockRevokedPayload, err := json.Marshal(domain.ProviderOutputPolicy{
+		Status:                  domain.AuthorizationRevoked,
+		AllowedPurposes:         []domain.Purpose{domain.PurposeInternalPersonalResearch},
+		AllowedContentKinds:     []domain.ContentKind{domain.ContentMetadata},
+		AllowRequestProcessing:  false,
+		MaxRequestRetention:     time.Hour,
+		AllowedStorageModes:     []domain.StorageMode{domain.StoragePersistentMetadata},
+		MaxPersistenceRetention: time.Hour,
+		EvidenceRef:             "news-it-provider-output-ingest-revoked-evidence",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	providerWriteLocked := make(chan struct{})
+	releaseProviderWrite := make(chan struct{})
+	providerWriteDone := make(chan error, 1)
+	go func() {
+		providerWriteDone <- repository.WithinIdentityTransaction(ctx, func(tx app.IdentityTransaction) error {
+			policyTx, ok := tx.(app.CurrentIngestPolicyIdentityTransaction)
+			if !ok {
+				return errors.New("identity transaction lacks current ingest policy lock")
+			}
+			if _, _, _, err := policyTx.LockCurrentIngestPolicies(
+				ctx,
+				providerLockSourceRef, providerLockSourceVersion,
+				lockEndpointRef, lockEndpointVersion,
+				lockProviderRef, lockProviderVersion,
+			); err != nil {
+				return err
+			}
+			close(providerWriteLocked)
+			select {
+			case <-releaseProviderWrite:
+				return nil
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		})
+	}()
+	select {
+	case <-providerWriteLocked:
+	case <-time.After(5 * time.Second):
+		close(releaseProviderWrite)
+		t.Fatal("Provider Ingest transaction did not lock current policy set")
+	}
+	providerRevokeDone := make(chan error, 1)
+	go func() {
+		providerRevokeDone <- atomicPublisher.Execute(
+			ctx, domain.NewsPolicyTypeProviderOutput, lockProviderRef,
+			providerLockRevokedVersion, providerLockRevokedPayload,
+		)
+	}()
+	select {
+	case revokeErr := <-providerRevokeDone:
+		close(releaseProviderWrite)
+		t.Fatalf("Provider Output replacement completed while Observation transaction held its lock: %v", revokeErr)
+	case <-time.After(100 * time.Millisecond):
+	}
+	close(releaseProviderWrite)
+	if err := <-providerWriteDone; err != nil {
+		t.Fatalf("Provider Ingest transaction: %v", err)
+	}
+	if err := <-providerRevokeDone; err != nil {
+		t.Fatalf("publish Provider Output revocation after Observation transaction: %v", err)
+	}
+	if err := repository.WithinIdentityTransaction(ctx, func(tx app.IdentityTransaction) error {
+		policyTx, ok := tx.(app.CurrentIngestPolicyIdentityTransaction)
+		if !ok {
+			return errors.New("identity transaction lacks current ingest policy lock")
+		}
+		_, _, _, err := policyTx.LockCurrentIngestPolicies(
+			ctx,
+			providerLockSourceRef, providerLockSourceVersion,
+			lockEndpointRef, lockEndpointVersion,
+			lockProviderRef, lockProviderVersion,
+		)
+		return err
+	}); !errors.Is(err, app.ErrNewsCurrentPolicyUnavailable) {
+		t.Fatalf("stale Provider Output policy after committed replacement error = %v, want current policy unavailable", err)
+	}
+
+	atomicContent, atomicReadObservation, err := repository.GetEvidenceContentWithCurrentAuthorization(
+		ctx, atomicBinding, secondObservation, secondVersion.Version, time.Now().UTC(),
+		func(readCtx context.Context, current domain.CurrentAuthorizationPolicySet, currentObservation domain.Observation) error {
+			if err := readCtx.Err(); err != nil {
+				return err
+			}
+			decision := domain.EvaluateNewsAuthorizationAgainstCurrentPolicies(atomicBinding, current, time.Now().UTC())
+			if !decision.Allowed {
+				return fmt.Errorf("atomic read authorization denied: %s", decision.ReasonCode)
+			}
+			return nil
+		},
+	)
+	if err != nil {
+		t.Fatalf("atomic authorized evidence read: %v", err)
+	}
+	if atomicContent.SourceSummary != expectedAtomicContent.SourceSummary {
+		t.Fatalf("atomic evidence content mismatch: got %+v want %+v", atomicContent, expectedAtomicContent)
+	}
+	if atomicReadObservation.ID != secondObservation.ID ||
+		atomicReadObservation.SourcePolicyVersionID != atomicPolicyVersion {
+		t.Fatalf("atomic read Observation was not refreshed: %+v", atomicReadObservation)
+	}
+
+	if _, _, err := repository.GetEvidenceContentWithCurrentAuthorization(
+		ctx, atomicBinding, secondObservation, secondVersion.Version, secondVersion.Version.ObservedAt.Add(-time.Second),
+		func(_ context.Context, _ domain.CurrentAuthorizationPolicySet, _ domain.Observation) error {
+			return nil
+		},
+	); !errors.Is(err, app.ErrEvidencePITNotFound) {
+		t.Fatalf("atomic content before system_as_of error = %v, want PIT not found", err)
+	}
+
+	// 读取事务先锁定当前指针时，撤销发布必须等待读取提交；随后旧 Binding 立即失效。
+	revokedPolicyVersion := "atomic-source-v2"
+	revokedPayload, err := json.Marshal(domain.SourcePolicy{
+		Status:              domain.AuthorizationRevoked,
+		AllowedPurposes:     []domain.Purpose{domain.PurposeInternalPersonalResearch},
+		AllowedContentKinds: []domain.ContentKind{domain.ContentAbstract},
+		EvidenceRef:         "news-it-atomic-revocation-evidence",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	locked := make(chan struct{})
+	releaseRead := make(chan struct{})
+	readDone := make(chan error, 1)
+	go func() {
+		_, _, readErr := repository.GetEvidenceContentWithCurrentAuthorization(
+			ctx, atomicBinding, secondObservation, secondVersion.Version, time.Now().UTC(),
+			func(readCtx context.Context, current domain.CurrentAuthorizationPolicySet, currentObservation domain.Observation) error {
+				decision := domain.EvaluateNewsAuthorizationAgainstCurrentPolicies(atomicBinding, current, time.Now().UTC())
+				if !decision.Allowed {
+					return fmt.Errorf("read-first authorization denied: %s", decision.ReasonCode)
+				}
+				close(locked)
+				select {
+				case <-releaseRead:
+					return readCtx.Err()
+				case <-readCtx.Done():
+					return readCtx.Err()
+				}
+			},
+		)
+		readDone <- readErr
+	}()
+	select {
+	case <-locked:
+	case <-time.After(5 * time.Second):
+		close(releaseRead)
+		t.Fatal("atomic read did not acquire current policy locks")
+	}
+	publishStarted := make(chan struct{})
+	publishDone := make(chan error, 1)
+	go func() {
+		close(publishStarted)
+		publishDone <- atomicPublisher.Execute(
+			ctx, domain.NewsPolicyTypeSource, secondObservation.SourceID, revokedPolicyVersion, revokedPayload,
+		)
+	}()
+	<-publishStarted
+	select {
+	case publishErr := <-publishDone:
+		close(releaseRead)
+		t.Fatalf("revocation publication completed while read held the policy lock: %v", publishErr)
+	case <-time.After(100 * time.Millisecond):
+	}
+	close(releaseRead)
+	if err := <-readDone; err != nil {
+		t.Fatalf("read that acquired policy locks before revocation failed: %v", err)
+	}
+	if err := <-publishDone; err != nil {
+		t.Fatalf("publish revocation after read commit: %v", err)
+	}
+	staleBindingCallbackCalled := false
+	_, _, staleBindingErr := repository.GetEvidenceContentWithCurrentAuthorization(
+		ctx, atomicBinding, secondObservation, secondVersion.Version, time.Now().UTC(),
+		func(_ context.Context, _ domain.CurrentAuthorizationPolicySet, _ domain.Observation) error {
+			staleBindingCallbackCalled = true
+			return nil
+		},
+	)
+	if !errors.Is(staleBindingErr, app.ErrNewsCurrentPolicyUnavailable) || staleBindingCallbackCalled {
+		t.Fatalf("stale Binding after policy replacement error=%v authorization_callback_called=%t, want fail closed before authorization",
+			staleBindingErr, staleBindingCallbackCalled)
+	}
+
+	// 撤销已经提交后，匹配新策略版本的读取也必须由领域授权规则拒绝。
+	revokedBinding := atomicBinding
+	revokedBinding.PolicySnapshot.Policies = append([]domain.AuthorizationPolicyVersion(nil), atomicBinding.PolicySnapshot.Policies...)
+	revokedBinding.PolicySnapshot.Policies[0].PolicyVersion = revokedPolicyVersion
+	revokedObservation := secondObservation
+	revokedObservation.SourcePolicyVersionID = revokedPolicyVersion
+	if _, err := db.ExecContext(ctx, "UPDATE news_observations SET source_policy_version_id = ? WHERE observation_id = ?",
+		revokedPolicyVersion, revokedObservation.ID); err != nil {
+		t.Fatalf("set revoked policy trace: %v", err)
+	}
+	_, _, revokedReadErr := repository.GetEvidenceContentWithCurrentAuthorization(
+		ctx, revokedBinding, revokedObservation, secondVersion.Version, time.Now().UTC(),
+		func(readCtx context.Context, current domain.CurrentAuthorizationPolicySet, currentObservation domain.Observation) error {
+			decision := domain.EvaluateNewsAuthorizationAgainstCurrentPolicies(revokedBinding, current, time.Now().UTC())
+			if !decision.Allowed {
+				return app.ErrNewsCurrentPolicyDenied
+			}
+			return nil
+		},
+	)
+	if !errors.Is(revokedReadErr, app.ErrNewsCurrentPolicyDenied) {
+		t.Fatalf("read after committed revocation error = %v, want authorization denied", revokedReadErr)
+	}
+
+	// 策略 Payload Hash 被篡改时，原子读取必须在正文查询前拒绝。
+	var originalPolicyHash string
+	if err := db.QueryRowContext(ctx, `SELECT payload_hash FROM news_policy_versions
+		WHERE policy_type = ? AND policy_ref = ? AND policy_version = ?`,
+		domain.NewsPolicyTypeSource, secondObservation.SourceID, revokedPolicyVersion,
+	).Scan(&originalPolicyHash); err != nil {
+		t.Fatalf("read source policy hash: %v", err)
+	}
+	tamperedPolicyHash := strings.Repeat("0", 64)
+	if tamperedPolicyHash == originalPolicyHash {
+		tamperedPolicyHash = strings.Repeat("1", 64)
+	}
+	if _, err := db.ExecContext(ctx, `UPDATE news_policy_versions SET payload_hash = ?
+		WHERE policy_type = ? AND policy_ref = ? AND policy_version = ?`,
+		tamperedPolicyHash, domain.NewsPolicyTypeSource, secondObservation.SourceID, revokedPolicyVersion,
+	); err != nil {
+		t.Fatalf("tamper source policy hash: %v", err)
+	}
+	_, _, tamperedPolicyErr := repository.GetEvidenceContentWithCurrentAuthorization(
+		ctx, revokedBinding, revokedObservation, secondVersion.Version, time.Now().UTC(),
+		func(_ context.Context, _ domain.CurrentAuthorizationPolicySet, _ domain.Observation) error {
+			return nil
+		},
+	)
+	if _, err := db.ExecContext(ctx, `UPDATE news_policy_versions SET payload_hash = ?
+		WHERE policy_type = ? AND policy_ref = ? AND policy_version = ?`,
+		originalPolicyHash, domain.NewsPolicyTypeSource, secondObservation.SourceID, revokedPolicyVersion,
+	); err != nil {
+		t.Fatalf("restore source policy hash: %v", err)
+	}
+	if !errors.Is(tamperedPolicyErr, app.ErrNewsCurrentPolicyUnavailable) {
+		t.Fatalf("tampered source policy read error = %v, want current policy unavailable", tamperedPolicyErr)
+	}
+
+	// 当前策略指针缺失时 fail closed，不允许回退到历史策略版本。
+	if _, err := db.ExecContext(ctx, `DELETE FROM news_current_policy_versions
+		WHERE policy_type = ? AND policy_ref = ?`, domain.NewsPolicyTypeSource, secondObservation.SourceID); err != nil {
+		t.Fatalf("delete current source policy pointer: %v", err)
+	}
+	_, _, missingPointerErr := repository.GetEvidenceContentWithCurrentAuthorization(
+		ctx, revokedBinding, revokedObservation, secondVersion.Version, time.Now().UTC(),
+		func(_ context.Context, _ domain.CurrentAuthorizationPolicySet, _ domain.Observation) error {
+			return nil
+		},
+	)
+	if _, err := db.ExecContext(ctx, `INSERT INTO news_current_policy_versions
+		(policy_type, policy_ref, policy_version, updated_at) VALUES (?, ?, ?, ?)`,
+		domain.NewsPolicyTypeSource, secondObservation.SourceID, revokedPolicyVersion, time.Now().UTC(),
+	); err != nil {
+		t.Fatalf("restore current source policy pointer: %v", err)
+	}
+	if !errors.Is(missingPointerErr, app.ErrNewsCurrentPolicyUnavailable) {
+		t.Fatalf("missing current policy pointer error = %v, want current policy unavailable", missingPointerErr)
+	}
+
+	// Binding 的资源引用不匹配时，不得进入策略读取或正文读取事务。
+	invalidResourceBinding := revokedBinding
+	invalidResourceBinding.ResourceRef = "news-evidence-wrong-resource"
+	if _, _, err := repository.GetEvidenceContentWithCurrentAuthorization(
+		ctx, invalidResourceBinding, revokedObservation, secondVersion.Version, time.Now().UTC(),
+		func(_ context.Context, _ domain.CurrentAuthorizationPolicySet, _ domain.Observation) error {
+			return nil
+		},
+	); !errors.Is(err, app.ErrInvalidEvidenceQuery) {
+		t.Fatalf("mismatched resource binding error = %v, want invalid evidence query", err)
+	}
+
+	// 授权回调期间取消上下文时，事务必须回滚且不能返回正文。
+	cancelCtx, cancelRead := context.WithCancel(ctx)
+	_, _, canceledReadErr := repository.GetEvidenceContentWithCurrentAuthorization(
+		cancelCtx, revokedBinding, revokedObservation, secondVersion.Version, time.Now().UTC(),
+		func(_ context.Context, _ domain.CurrentAuthorizationPolicySet, _ domain.Observation) error {
+			cancelRead()
+			return nil
+		},
+	)
+	cancelRead()
+	if !errors.Is(canceledReadErr, context.Canceled) {
+		t.Fatalf("canceled atomic read error = %v, want context canceled", canceledReadErr)
+	}
+
+	// RACE-04：元数据定位后，若同一 Version 的 fingerprint 被替换，
+	// 原子读取必须拒绝旧引用，且不得调用授权回调或读取正文。
+	originalVersionFingerprint := secondVersion.Version.Fingerprint
+	changedVersionFingerprint := strings.Repeat("c", 64)
+	if changedVersionFingerprint == originalVersionFingerprint {
+		changedVersionFingerprint = strings.Repeat("d", 64)
+	}
+	if _, err := db.ExecContext(ctx, `UPDATE news_item_versions SET fingerprint = ?
+		WHERE news_id = ? AND version_id = ?`,
+		changedVersionFingerprint, secondVersion.Version.NewsID, secondVersion.Version.ID,
+	); err != nil {
+		t.Fatalf("change evidence version fingerprint: %v", err)
+	}
+	authorizationCallbackCalled := false
+	_, _, changedVersionErr := repository.GetEvidenceContentWithCurrentAuthorization(
+		ctx, revokedBinding, revokedObservation, secondVersion.Version, time.Now().UTC(),
+		func(_ context.Context, _ domain.CurrentAuthorizationPolicySet, _ domain.Observation) error {
+			authorizationCallbackCalled = true
+			return nil
+		},
+	)
+	if _, err := db.ExecContext(ctx, `UPDATE news_item_versions SET fingerprint = ?
+		WHERE news_id = ? AND version_id = ?`,
+		originalVersionFingerprint, secondVersion.Version.NewsID, secondVersion.Version.ID,
+	); err != nil {
+		t.Fatalf("restore evidence version fingerprint: %v", err)
+	}
+	if !errors.Is(changedVersionErr, app.ErrInvalidEvidenceQuery) || authorizationCallbackCalled {
+		t.Fatalf("changed evidence version error=%v authorization_callback_called=%t, want invalid query before authorization",
+			changedVersionErr, authorizationCallbackCalled)
+	}
 	atVersion.SystemAsOf = secondVersion.Version.ObservedAt.Add(-time.Second)
 	if _, err := repository.GetEvidenceVersionAt(ctx, atVersion); !errors.Is(err, app.ErrEvidencePITNotFound) {
 		t.Fatalf("explicit future version error = %v, want PIT not found", err)
@@ -873,6 +1502,9 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	if len(listed) != 1 || listed[0].Version.ID != secondVersion.Version.ID ||
 		listed[0].Observation.ID != secondObservation.ID || listed[0].SourceRef != secondSourceID {
 		t.Fatalf("ListEvidence PIT returned unexpected records: %+v", listed)
+	}
+	if !reflect.DeepEqual(listed[0].Version.Content, domain.ContentLayers{}) {
+		t.Fatalf("ListEvidence PIT metadata lookup loaded content before per-item authorization: %+v", listed[0].Version.Content)
 	}
 	gotObservation := listed[0].Observation
 	if gotObservation.SourcePolicyVersionID != "source-policy-pit-v2" ||
@@ -1123,6 +1755,8 @@ func integrationAuthorizationEvidence() (domain.Observation, domain.NewsItemVers
 
 // TestObservationRetentionPurgeIntegration covers MariaDB V8 retention writes,
 // idempotent purge, and the no-resurrection rule for an expired payload.
+// TestNewsCurrentPolicyResolverMariaDBIntegration verifies that the existing
+// authorization resolver port reads the exact current immutable policy versions.
 func TestObservationRetentionPurgeIntegration(t *testing.T) {
 	dsn := os.Getenv("NEWS_MARIADB_TEST_DSN")
 	if dsn == "" {

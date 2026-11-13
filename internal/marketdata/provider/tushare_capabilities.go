@@ -781,6 +781,10 @@ func (p *Tushare) FetchFundamentals(ctx context.Context, rawSymbol string, year,
 	table, indicatorErr := p.fetchCapabilityTable(ctx, "fina_indicator", map[string]string{
 		"ts_code": symbol, "period": periodCompact,
 	}, fields)
+	var permissionErr error
+	if isTusharePermissionError(indicatorErr) {
+		permissionErr = indicatorErr
+	}
 	if indicatorErr != nil {
 		// 指标端点权限或响应失败不应阻断独立的利润表、资产负债表和现金流量表端点。
 		table = &tushareTable{positions: map[string]int{}, rows: [][]json.RawMessage{}}
@@ -911,6 +915,9 @@ func (p *Tushare) FetchFundamentals(ctx context.Context, rawSymbol string, year,
 			if ctx.Err() != nil {
 				return nil, ctx.Err()
 			}
+			if permissionErr == nil && isTusharePermissionError(statementErr) {
+				permissionErr = statementErr
+			}
 			section = model.FundamentalSection{
 				Category: statementDefinition.category, ReportDate: periodDate, Metrics: []model.FundamentalMetric{},
 				QualityStatus:  model.QualityDegraded,
@@ -928,6 +935,9 @@ func (p *Tushare) FetchFundamentals(ctx context.Context, rawSymbol string, year,
 		sections = append(sections, section)
 	}
 	if !hasData {
+		if permissionErr != nil {
+			return nil, fmt.Errorf("Tushare 在 %s 报告期没有可用财务指标或报表字段，接口权限不足: %w", period.Format("2006-01-02"), permissionErr)
+		}
 		return nil, fmt.Errorf("Tushare 在 %s 报告期没有可用财务指标或报表字段", period.Format("2006-01-02"))
 	}
 
@@ -940,6 +950,16 @@ func (p *Tushare) FetchFundamentals(ctx context.Context, rawSymbol string, year,
 		Source: p.Name(), SourceVersion: tushareFundamentalsVersion, FetchedAt: now,
 		QualityStatus: status, QualityReasons: snapshotReasons,
 	}, nil
+}
+
+func isTusharePermissionError(err error) bool {
+	if err == nil {
+		return false
+	}
+	message := strings.ToLower(err.Error())
+	return strings.Contains(message, "code=40203") ||
+		strings.Contains(message, "权限不足") ||
+		strings.Contains(message, "无接口访问权限")
 }
 
 func appendTushareReason(reasons []string, reason string) []string {
