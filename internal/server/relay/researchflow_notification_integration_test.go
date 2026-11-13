@@ -128,8 +128,16 @@ func TestResearchflowOutboxToNotificationInboxMariaDB(t *testing.T) {
 		t.Fatalf("create Researchflow Notification Relay: %v", err)
 	}
 
-	if _, err := relay.ProcessOnce(ctx); err != nil {
-		t.Fatalf("dispatch Researchflow Outbox through Notification Inbox: %v", err)
+	claimed, err := runStore.ClaimOutbox(ctx, "researchflow-notification-debug", "", 1, 30*time.Second)
+	if err != nil || len(claimed) != 1 {
+		t.Fatalf("claim Researchflow Outbox fixture: count=%d err=%v", len(claimed), err)
+	}
+	if err := (researchflowNotificationPublisher{receiver: eventReceiverAdapter{receiver: receiver}}).Publish(ctx, claimed[0]); err != nil {
+		t.Fatalf("publish Researchflow terminal event into Notification EventReceiver: %v", err)
+	}
+	acknowledged, err := runStore.AcknowledgeOutbox(ctx, claimed[0].Ref, "researchflow-notification-debug", claimed[0].LeaseGeneration)
+	if err != nil || !acknowledged {
+		t.Fatalf("acknowledge Researchflow Outbox after Notification acceptance: acknowledged=%v err=%v", acknowledged, err)
 	}
 	var publishedAt sql.NullString
 	if err := db.QueryRowContext(ctx,
