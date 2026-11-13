@@ -325,6 +325,24 @@ func TestLiveHealthDoesNotRequireAuth(t *testing.T) {
 	}
 }
 
+func TestBundleAsOfRejectsEmptyOrRepeatedValues(t *testing.T) {
+	p := httpFakeProvider{}
+	svc := service.New([]provider.Provider{p}, cache.NewDisabled(), nil, time.Second, time.Minute, 120, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	h := New("secret", "forward_adjusted", svc, []provider.Provider{p}, nil).Handler()
+	for _, path := range []string{
+		"/api/v1/bundles/600519?as_of=",
+		"/api/v1/bundles/600519?as_of=2026-11-12T10%3A00%3A00Z&as_of=2026-11-12T11%3A00%3A00Z",
+	} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		req.Header.Set("X-API-Key", "secret")
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, req)
+		if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), `"code":"VALIDATION_ERROR"`) {
+			t.Fatalf("path=%q status=%d body=%s; expected strict as_of validation", path, w.Code, w.Body.String())
+		}
+	}
+}
+
 func TestFutureAsOfIsValidationError(t *testing.T) {
 	p := httpFakeProvider{}
 	svc := service.New([]provider.Provider{p}, cache.NewDisabled(), nil, time.Second, time.Minute, 120, slog.New(slog.NewTextHandler(io.Discard, nil)))

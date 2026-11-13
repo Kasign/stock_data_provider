@@ -18,6 +18,7 @@ import (
 	"example.com/stock-analysis-flow/internal/marketdata/normalize"
 	"example.com/stock-analysis-flow/internal/marketdata/provider"
 	"example.com/stock-analysis-flow/internal/marketdata/repository"
+	"example.com/stock-analysis-flow/internal/marketdata/validation"
 	platformdiagnostics "example.com/stock-analysis-flow/internal/platform/diagnostics"
 	"example.com/stock-analysis-flow/internal/platform/fault"
 )
@@ -2212,10 +2213,9 @@ func (s *DataService) SetCapitalFlowProviders(providers []provider.CapitalFlowPr
 	s.capitalFlowProviders = append([]provider.CapitalFlowProvider(nil), providers...)
 }
 
-// hasIdentifiableSourceVersion 拒绝空版本和占位值，避免把未知字段映射伪装成可追溯契约。
+// hasIdentifiableSourceVersion 保持 Service 校验入口兼容，规则统一委托给 Validation。
 func hasIdentifiableSourceVersion(value string) bool {
-	value = strings.TrimSpace(value)
-	return value != "" && !strings.EqualFold(value, "unknown")
+	return validation.IsIdentifiableSourceVersion(value)
 }
 
 // CapitalFlowProviders 合并独立资金流 Provider 与旧版 SupplementProvider，按名称去重。
@@ -4003,7 +4003,18 @@ func absDuration(d time.Duration) time.Duration {
 var (
 	ErrDailyBarsAsOfUnavailable = errors.New("daily-bar point-in-time storage is not enabled")
 	ErrDailyBarsAsOfNotFound    = errors.New("no coherent daily-bar revisions were recorded by the requested as_of time")
+	ErrPITStorageFailure        = errors.New("point-in-time revision storage query failed")
 )
+
+func wrapPITStorageFailure(err error) error {
+	if err == nil {
+		return nil
+	}
+	if errors.Is(err, context.Canceled) {
+		return err
+	}
+	return errors.Join(ErrPITStorageFailure, err)
+}
 
 // DailyBarsAsOf reconstructs a single source-coherent bar series from locally recorded revisions.
 // It never calls a live Provider and never substitutes the current-value table.
@@ -4062,7 +4073,7 @@ func (s *DataService) DailyBarsAsOf(ctx context.Context, rawSymbol, start, end s
 	}
 	revisions, err := s.store.ListBarsAsOf(ctx, symbol, start, end, storageBasis, asOf, limit)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, wrapPITStorageFailure(err)
 	}
 	candidates := make([]model.DailyBar, 0, len(revisions))
 	for _, bar := range revisions {
@@ -4088,6 +4099,9 @@ func (s *DataService) DailyBarsAsOf(ctx context.Context, rawSymbol, start, end s
 		// 空 start 只扩大事件历史读取范围，as_of 可见性仍由 Repository 与 Service 双重限制。
 		factors, factorErr := s.AdjustmentFactorsAsOf(ctx, symbol, "", end, asOf)
 		if factorErr != nil {
+			if errors.Is(factorErr, ErrPITStorageFailure) {
+				return nil, nil, factorErr
+			}
 			return nil, nil, fmt.Errorf("%w: cannot rebuild adjusted daily bars without point-in-time adjustment factors: %v", ErrDailyBarsAsOfNotFound, factorErr)
 		}
 		bars, factorErr = rebuildAdjustedDailyBarsPIT(bars, factors, basis, end)

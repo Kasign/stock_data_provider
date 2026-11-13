@@ -2,15 +2,17 @@
 
 - 归属：NTF-001/002/003/004/005/006
 - 对应项目级契约：NTF-CTR-001/002（历史编号仅作审计参考）；NTF-CTR-003 为 not_applicable，Channel Adapter SPI 属模块内部；状态以 `doc/contract/PLAT-002-项目级契约冻结登记簿.md` 为准
-- 当前验收状态：Fixture 与测试代码已建立。最新 CI Run `43142936331` 没有 Notification 专项 Job；`Test go-core` 不覆盖 Notification，根模块 `Test .` 在 gofmt 阶段失败并未执行根模块测试。因此本模块测试当前为 **not_comparable / 无本轮执行证据**，不得标记通过。真实 MariaDB L3 缺少 `NOTIFICATION_MARIADB_TEST_DSN`，为 `not_comparable`。
-- 当前审查基线 HEAD：`e1047fa3482c131a8fa75c83e249879de6016f5a`（以分支 ref 为准）。
+- 当前验收状态：Fixture 与测试代码已建立；最新可复核 L2 证据为 Integration Run `43178908392`（代码 SHA `fdc19b8591223dabccb533389d472713bfecc415`），根模块 `go test ./...` 与 `go vet ./...` 通过，Notification application/domain/schema/storage/template 包均有通过日志。当前 `feat/notification` HEAD 为 `19a60b23458e903dbd2d811d87674d8e6858771d`，相对该 CI SHA 只有文档提交，无 Go 代码差异。根模块 Race 未执行；真实 MariaDB L3 缺少 `NOTIFICATION_MARIADB_TEST_DSN`，为 `not_comparable`。
+- 当前审查基线 HEAD：`19a60b23458e903dbd2d811d87674d8e6858771d`。
 - 日期：2026-11-12
-- 本轮补充：DeliveryExecution 的 CompleteWithLease 提交结果不确定回归场景已加入契约；必须断言 Channel Send 恰好一次，并区分完成事务已提交/未提交后的恢复结果。测试代码已提交，但当前 CI 未执行 Notification 根模块测试。
+- 本轮补充：DeliveryExecution 的 CompleteWithLease 提交结果不确定回归场景已包含在本次通过的根模块测试范围内；仍需独立 Race 与真实 MariaDB L3 验收。
 - 说明：以下均为合成数据与测试场景，不代表已有真实渠道能力。
 - 日期：2026-11-09
 - NTF-004 第一批增量：已新增 DeliveryRecord/DeliveryStateEvent 领域实现与纯迁移测试；覆盖 queued→sending、sending→skipped 证明要求、unknown 对账证据、retry_wait 截止时间、failed 人工重试审计和 UTC/nullable 字段一致性。
 - NTF-004 第二批增量：新增 DeliveryRepository Port 与内存 Fake；覆盖 32 Worker 并发领取仅一个赢家、sending 事件、租约/版本/fencing CAS、retry_wait 到期领取、旧 Worker 迟到写入拒绝和失败原子性。第三批新增 Attempt Repository Port/Fake，覆盖 Start/Complete 租约约束、Repository 权威时钟、单 claim 单 Attempt 和失败原子性。第四批新增只读过期租约恢复评估与 Retry-After 持久化；第五批新增 DeliveryPreflight 发送前复核。新增测试仍未取得 CI 通过证据。
 - 说明：以下均为合成数据与测试场景，不代表已有实现或真实渠道能力。
+
+> 当前 L2 验收快照（2026-11-12）：Integration Run `43178908392`（代码 SHA `fdc19b8591223dabccb533389d472713bfecc415`）已执行根模块 `go test ./...`、`go vet ./...` 并通过；Notification application/domain/schema/storage/template 五个包均有通过日志。当前分支 HEAD `19a60b23458e903dbd2d811d87674d8e6858771d` 相对该 CI SHA 只有文档提交，无 Go 代码差异。Race 未执行；真实 MariaDB L3=`not_comparable`。
 
 ## 1. Fixture 原则
 

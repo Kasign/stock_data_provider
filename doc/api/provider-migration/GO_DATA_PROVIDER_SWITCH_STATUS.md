@@ -4,7 +4,7 @@
 
 - 适用分支：`feat/full-go-data-providers-api-switch`
 - 静态盘点基线：`4c603172448102058f95e6bc625494436a8402c9`
-- 更新日期：2026-10-30
+- 更新日期：2026-11-12（主体静态矩阵仍是历史基线；11-09～11-12 的追加记录仅更新明确涉及的能力与验收证据）
 - 状态口径：只记录当前代码/配置可证明的状态，不把静态实现当作真实生产可用。
 
 
@@ -282,3 +282,55 @@
 - 本轮没有把第三方历史行情展示页的数值冒充 Provider 原始响应；也没有将静态字段映射审查结果标为真实数据验收通过。此前外部展示页基准仍维持：OHLC 可作参考；成交量精确值及成交额精确值为 `not_comparable`。
 - 本轮未修改 Provider 代码，未运行构建、测试或 CI。当前环境没有成功取得真实 Provider 响应，故没有可供 Raw → Normalized 差分的新增数据证据。
 - 下一步仍在同一固定样本下推进真实响应采集：优先在可访问这些 Provider 的运行环境中，通过实际 Adapter 请求链路留存脱敏请求参数、HTTP 状态/响应头和原始响应体；若本地运行环境具备网络但受限于 DNS/代理，应先解决出站网络可达性，再执行同样本采集。取得响应后再逐项核对成交量、成交额字段与单位，不提前改换算逻辑。
+
+
+### 2026-11-12：Tushare 财务权限错误语义真实复验
+
+- 基线 SHA：`6d722802073ac2b0c587986d50ec56cf325f505a`。
+- Live Provider Probe Run：`43204747697`，外层 workflow success；读取 Job 日志确认 Tushare 9 项能力均为 `permission_required`，其中 Fundamentals 明确保留 `fina_indicator`、`code=40203`，Valuations 因 `trade_cal` 权限不足标记为 `permission_required`。
+- 本次确认 P0-79 修复已通过真实 Tushare 请求路径复验，原先 Fundamentals 被错误折叠为普通无数据并标记 failed 的问题已纠正。
+- 不将权限不足解释为无数据、Provider 不可用或业务能力通过；没有拿到财务/估值真实字段样本。
+- Go Test Suite Run：`43204829838` success。Market Data gofmt/unit/race/vet 和 MariaDB PIT / DailyBar fallback / PIT revision fallback / Probe HTTP + MariaDB E2E 均 success；Compose/Docker build、Market Data module migration Job skipped。
+- 后续 D-3 继续核验 Hithink 估值分母与报告期口径、估值 PIT 时间证据；Tushare 仅在账号权限变化后重试。
+
+
+### 2026-11-12：Hithink 估值字段口径与 PIT 边界复核
+
+- `FetchValuations` 已映射五项指标，已对快照级 timestamp、缺失报告日期、缺失/非法指标和请求覆盖执行结构化诊断；不重复实现。
+- PIT 查询已要求系统观察时间、快照采集时间、每个证券项采集时间不晚于 cutoff；存在 ProviderTimestamp / ProviderReportDate 时也检查截止边界。只读取历史版本并保留 degraded，不将其升级为 valid。
+- 同花顺公开估值表文档提供 PE_MRQ、PE_TTM、PB、PS_TTM 的表级公式，但未证明 HTTP `/api/a-share/valuations/snapshot` 的字段映射与该表完全一致。PCF TTM 还存在经营现金流与现金净流量两种不同分母，当前 `pcf_ttm` 没有 endpoint 专属映射证据。
+- 结论：不修改 Provider 映射、PIT 算法或 DTO；估值 Freshness 保持 unknown，PCF_TTM 及未被 endpoint 字典证明的口径保持 not_comparable。后续需取得该 endpoint 的正式字段字典或同一时点可复核原始样本，不能用通用行业公式代替供应商字段证据。
+
+
+### 2026-11-12：Hithink 估值 endpoint 专属契约补证
+
+- 已查阅官方聚合 API 文档的估值数据章节：`https://fuyao.aicubes.cn/docs/api-reference/valuations/`。
+- 官方字段表确认固定五项 `pe_ttm/pe_mrq/pb_mrq/ps_ttm/pcf_ttm`；TTM 为最近连续 12 个月，MRQ 为最近已披露报告期。
+- 官方将 `pcf_ttm` 明确定义为相对于公司经营现金流的市现率，故接口语义层不再保留“经营现金流/现金净流量”二选一疑问；但具体数值仍缺同一时点的价格与经营现金流原始值，不能复算验收。
+- 官方将 `data.timestamp` 定义为本次响应所用上游指标元数据的最大有效时间，并明确不同指标更新时间可能不同。当前 ProviderTimestamp 作为快照级聚合时间的处理合理；不能下沉成五项字段时间。接口不提供逐字段更新时间或 ProviderReportDate。
+- 官方文档示例值仅为结构示例，不是实时样本。既有 `600519.SH` Live 样本仍为真实返回但 degraded，不因文档补证而升级质量状态。
+- 本轮未修改代码、DTO、PIT 算法或质量门槛。契约层 PCF 语义判定 pass；PCF 具体数值、PE/PB/PS 复算仍 not_comparable；逐字段 Freshness 与 ProviderReportDate 仍 unknown。
+- 下一步仅需补齐同一证券/同一快照时点的价格与财务分母原始证据；不重复调用权限不足的 Tushare，也不为取得样本而重复发起相同 Hithink 请求。
+
+
+### 2026-11-12：估值独立复算输入链路审查
+
+- 官方估值文档确认 TTM 通常由最近四个季度数据计算、MRQ 为最近已披露报告期；响应 timestamp 是上游指标元数据最大有效时间，不是每个估值项的独立时间。
+- 官方财报文档明确 `report_date_ms` 是披露日、`period_end_ms` 是报告期末；现有 Hithink Adapter 已正确区分并映射，不重复实现。
+- 官方现金流字段定义明确 `act_cash_flow_net` 为经营活动现金流净额（原币元），`cash_equivalents_net_addition` 为另一独立字段；PCF 分母语义继续采用经营现金流。
+- 但官方文档没有说明 quarterly 现金流值是单季值还是年初至今累计值。现有 helper 每次仅选取一个报告期，不能直接提供四季度原始序列；禁止未经确认直接累加/差分。
+- Hithink 公开估值、行情、财报和财务指标接口中未发现可用于独立复算的总股本/总市值字段。历史日 K 可提供同日 OHLC，但不能替代股本，也不能证明与估值聚合 timestamp 完全同步。
+- Tushare daily_basic 当前真实账号仍为 40203 permission_required；代码当前没有请求 total_share/total_mv。权限未变化前不重复请求，不将静态字段可用性等同于真实数据。
+- 判定：披露日/报告期末映射 pass；经营现金流字段定义 pass；季度现金流构造、股本/市值、PCF 数值复算 not_comparable；逐字段 Freshness unknown。PE/PB/PS 独立复算也保持 not_comparable。
+- 本轮无代码、DTO、API、PIT 或质量门槛变更；无 Provider 请求、无构建测试。下一步先取得 Hithink 对 quarterly 累计语义、估值有效日和股本口径的明确答复，或等待授权的 Tushare 市值/股本数据，再进行同一基准日离线复算。
+
+
+### 2026-11-12：600519.SH 五项估值独立复算通过
+
+- 已复用 Live Provider Run `43197384108` / Job `131111700042` 的 Sina 报价和 BaoStock 2026Q2 股本样本，以及 Hithink Run `43201375693` / Job `131125379131` 的 2025 年报财务字段和 2026-11-12 估值快照。
+- 2026-10-31 贵州茅台三季报确认 2026-09-30 股本 `1,250,081,601`，与 BaoStock 2026Q2 的 `totalShare` 样本一致；归母净资产 `271,204,740,541.63`。
+- 独立复算基准价格 `1410.27 CNY`（Sina 源时间 2026-11-12 15:34:59 北京时间），市值 `1,762,952,579,442.27 CNY`。
+- TTM 经营现金流 `107,384,382,666.37 CNY`；TTM 归母净利润 `82,160,746,371.45 CNY`；TTM 营业总收入 `174,433,934,764.98 CNY`。各值按 2025 FY + 2026 9M - 2025 9M 构造。
+- 复算 PE_TTM `21.4573583773`、PE_MRQ `20.5098065332`、PB_MRQ `6.5004489815`、PS_TTM `10.1067064836`、PCF_TTM `16.4172157596`；与 Hithink `21.457358 / 20.509807 / 6.500449 / 10.106706 / 16.417216` 均在 6 位小数吻合。
+- PE_MRQ 复算采用最新报告期累计归母净利润按季度年化，数值吻合；供应商仍需明确公式契约。
+- Hithink 快照缺 ProviderReportDate，逐字段 Freshness 仍 unknown，整体保持 degraded。该结果只关闭 600519.SH 单证券单日五项估值数值复算，不代表全市场通过。

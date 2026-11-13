@@ -31,6 +31,8 @@ func ValidateValuationSnapshot(snapshot *model.ValuationSnapshot, requested []st
 	}
 	if strings.TrimSpace(snapshot.SourceVersion) == "" {
 		add("", "source_version", "source_version", "required", "identifiable provider schema/version", "valuation source version is missing", SeverityError, -1)
+	} else if !IsIdentifiableSourceVersion(snapshot.SourceVersion) {
+		add("", "source_version", "source_version", "unidentifiable", "identifiable provider schema/version", "valuation source version is an unknown placeholder", SeverityError, -1)
 	}
 	now := time.Now()
 	if snapshot.FetchedAt.IsZero() || snapshot.FetchedAt.After(now.Add(5*time.Minute)) {

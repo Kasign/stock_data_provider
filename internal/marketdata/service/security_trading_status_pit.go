@@ -48,7 +48,7 @@ func (s *DataService) SecurityTradingStatusAsOf(ctx context.Context, rawSymbol, 
 	}
 	revisions, err := s.store.ListSecurityTradingStatusAsOf(ctx, symbol, date, asOf)
 	if err != nil {
-		return nil, err
+		return nil, wrapPITStorageFailure(err)
 	}
 	var best *model.SecurityTradingStatusSnapshot
 	bestScore := -1

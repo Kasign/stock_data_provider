@@ -146,3 +146,29 @@ func TestHithinkDragonTigerReportsStockCountMismatch(t *testing.T) {
 		t.Fatalf("unexpected stock-count Reporter issue: %+v", issues)
 	}
 }
+
+func TestHithinkLimitPoolReportsPositiveTotalWithEmptyPage(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"code": 0,
+			"data": map[string]any{
+				"timestamp":  time.Now().UTC().UnixMilli(),
+				"pagination": map[string]any{"total": 1, "page": 1, "size": 10},
+				"item":       []any{},
+			},
+		})
+	}))
+	defer server.Close()
+
+	reporter := validation.NewReporter(10)
+	ctx := validation.WithReporter(context.Background(), reporter)
+	p := NewHithinkConfigured(2*time.Second, server.URL, "unit-test-key")
+	if _, err := p.FetchLimitPool(ctx, "up", time.Now().In(time.FixedZone("CST", 8*3600)).Format("2006-01-02"), 10); err == nil {
+		t.Fatal("expected a positive provider total with an empty page to be rejected")
+	}
+	issues := reporter.Snapshot().Issues
+	if len(issues) != 1 || issues[0].Field != "pagination" || issues[0].ProviderField != "pagination.total/item" ||
+		issues[0].Code != "page_rows_missing" || issues[0].RowIndex != nil {
+		t.Fatalf("unexpected empty-page Reporter issue: %+v", issues)
+	}
+}
