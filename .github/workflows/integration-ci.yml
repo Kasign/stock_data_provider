@@ -29,6 +29,36 @@ jobs:
     name: Full integration checks
     runs-on: ubuntu-latest
     timeout-minutes: 40
+    env:
+      SERVER_RELAY_TEST_MYSQL_DSN: root:root@tcp(127.0.0.1:3306)/integration_relay_test?parseTime=true&loc=UTC
+      PLATFORM_STORAGE_INTEGRATION: "1"
+      PLATFORM_MARIADB_USER: root
+      PLATFORM_MARIADB_PASSWORD: root
+      PLATFORM_MARIADB_ADDR: 127.0.0.1:3306
+      PLATFORM_MARIADB_DATABASE: integration_relay_test
+      PLATFORM_REDIS_ADDR: 127.0.0.1:6379
+    services:
+      mariadb:
+        image: mariadb:11.4
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: integration_relay_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+      redis:
+        image: redis:7.4
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
     steps:
       - name: Checkout
         id: checkout
@@ -139,6 +169,9 @@ jobs:
           }
 
           echo "========== Integration CI 检查汇总 =========="
+          printf 'CHECKOUT=%s SETUP_GO=%s GOFMT=%s VET_ROOT=%s TEST_ROOT=%s VET_CORE=%s TEST_CORE=%s PREPARE_ENV=%s COMPOSE=%s SETUP_NODE=%s JS_CHECK=%s WEB_TEST=%s WEB_BUILD=%s\n' \
+            "$CHECKOUT" "$SETUP_GO" "$GOFMT" "$VET_ROOT" "$TEST_ROOT" "$VET_CORE" "$TEST_CORE" \
+            "$PREPARE_ENV" "$COMPOSE" "$SETUP_NODE" "$JS_CHECK" "$WEB_TEST" "$WEB_BUILD"
           report "Checkout" "$CHECKOUT"
           report "Go 环境准备" "$SETUP_GO"
           report "Go 格式检查（全部已跟踪文件）" "$GOFMT"
