@@ -167,7 +167,7 @@ func (p researchflowNotificationPublisher) Publish(ctx context.Context, message 
 	envelope := researchflowNotificationEnvelope{
 		EventID: message.Ref, EventType: "researchflow.run.terminal",
 		SchemaVersion: "1.0.0", SourceModule: "researchflow",
-		OccurredAt: payload.FinishedAt,
+		OccurredAt:  payload.FinishedAt,
 		PublishedAt: publishedAt.Format(time.RFC3339Nano),
 		SubjectRef:  message.RunRef, IdempotencyKey: message.IdempotencyKey,
 		CorrelationID:      message.CorrelationID,
