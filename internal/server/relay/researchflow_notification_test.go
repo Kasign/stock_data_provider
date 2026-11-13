@@ -86,7 +86,7 @@ func (*emptyResearchflowOutboxStore) RetryOutbox(context.Context, string, string
 func TestResearchflowNotificationRelayStartStop(t *testing.T) {
 	store := &emptyResearchflowOutboxStore{claimed: make(chan struct{}, 1)}
 	relay, err := NewResearchflowNotificationRelay(store, &researchflowNotificationReceiverStub{}, ResearchflowNotificationConfig{
-		WorkerID:  "test-researchflow-notification-relay",
+		WorkerID:   "test-researchflow-notification-relay",
 		BatchSize: 1, PollInterval: 10 * time.Millisecond,
 		LeaseDuration: time.Second, PublishTimeout: 500 * time.Millisecond,
 	}, nil)
