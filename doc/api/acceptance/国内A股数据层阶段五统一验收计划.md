@@ -407,3 +407,11 @@
 
 - 当前 Data 分支 HEAD `bcc36efbdbee0c74bf2a1f8439943926a2f47a46` 的 Go Test Suite Run `43226759988` success：Data gofmt/tests/race/vet、Root Go tests/race/vet、MariaDB migration/PIT persistence 均通过。
 - 本次仅修复 Fundamentals Probe 报告期校验年份和 Fundamentals/Valuations `source_version=unknown` 的 Reporter/Service 判定一致性；不代表阶段 B 真实 Provider 复权基准与 BaoStock 字段语义验收关闭。
+## 2026-11-13 P1：PIT 存储故障与历史版本缺失分类
+
+- PIT Repository 查询故障统一包装为 `ErrPITStorageFailure`；DailyBar、AdjustmentFactor、CorporateAction、Fundamentals、Valuations、SecurityTradingStatus 的 PIT 读取不再把数据库查询错误当作“无历史版本”。
+- DailyBarsAsOf 的复权因子读取现在区分存储故障与可见因子缺失：前者保留存储故障语义，后者才归入 `PIT_REVISION_NOT_FOUND`。
+- HTTP `writeDomainErr` 将 `ErrPITStorageFailure` 映射为 `503 PIT_STORAGE_UNAVAILABLE`、`retryable=true`；用户主动取消请求仍保留取消语义。
+- 新增关闭 SQL 连接池的 HTTP 回归测试，覆盖 DailyBar、Fundamentals、SecurityTradingStatus 三个 PIT 接口，确认数据库查询失败返回 503，而不是 502 Provider 错误。
+- 验收代码 SHA：`277895d01695422cc50875e8778268653eda96f7`。Go Test Suite Run `43348782880` 全部 Job success；Data 根模块 gofmt、tests、race、vet 全部 success；MariaDB Job `131634603762` success，包含 Repository PIT、DailyBar fallback、AdjustmentFactor/CorporateAction Service PIT 回退、Fundamentals HTTP→MariaDB PIT 和 Probe HTTP→MariaDB 联调。
+- 本批只修复 PIT 读取故障分类，不改变“无可见历史版本”时的 404 语义，不改变 Provider 选择、数据质量门槛或 Freshness SLA。阶段 E 的跨域时间关联、独立 Freshness SLA 和其他 DB/Cache 降级验收仍未关闭。
