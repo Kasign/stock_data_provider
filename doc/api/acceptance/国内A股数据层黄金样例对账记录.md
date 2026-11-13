@@ -527,3 +527,45 @@ Live Provider Probe Run `41788725692` 的 workflow conclusion 为 success，但�
 - 对 Pytdx v0.0.86 解码链路进一步核查：float32 舍入误差不超过半个 ULP，但随后乘以 1000 转为 `Price` 时发生厘单位截断，最大附加误差小于 0.001 CNY；BaoStock 4 位小数精度未声明舍入方式，按完整 0.0001 CNY 保守估计。
 - 因此比较器不再对两侧量化步长求平均，而是直接相加两侧绝对误差上界。600036.SH 最大差 120.74 CNY，对应动态容差 256.0011 CNY；002982.SZ 最大差 7.90 CNY，对应动态容差 8.0011 CNY。18 个日样本的字段结论保持不变，两只证券各 54/54 matched；原始 amount 覆盖 64,685,708–5,860,161,536 CNY，约 90 倍量级。
 - 新增 100,000 CNY 小额测试锁定 Pytdx 0.00490625 CNY 的误差上界，避免低金额区间漏计 Price 截断误差。当前代码 SHA `95383503` CI 待验。
+
+
+## 2026-11-12 DailyBar 复权能力代码审查矩阵（非真实数据验收）
+
+审查基线：Data 分支 HEAD "10c027f94d67b28d6c615e406c248c1dd681c342"。本节根据 Provider Adapter 实现和现有固定测试核对请求口径、算法路径及元数据表达；它是代码/契约证据，不代表当前线上账号请求成功，也不构成真实复权数值对账。
+
+| Provider | none | forward/qfq | backward/hfq | 复权实现与参考基准证据 |
+|---|---|---|---|---|
+| BaoStock | 支持 | 支持 | 支持 | adjustflag=3/2/1，方法 baostock_pct_change；响应未提供独立参考日 |
+| Eastmoney | 支持 | 支持 | 支持 | fqt=0/1/2，方法 eastmoney_fqt_<fqt>；响应未提供独立参考日 |
+| HiThink | 支持 | 支持 | 支持 | adjust=none/forward/backward，方法 hithink_api_<adjust>；响应未提供独立参考日 |
+| Tencent | 支持 | 支持 | 支持 | day/qfqday/hfqday，方法 tencent_<key>；响应未提供独立参考日 |
+| TickFlow | 支持 | 支持 | 支持 | adjust=none/forward/backward，方法 tickflow_api_<adjust>；响应未提供独立参考日 |
+| Tushare | 支持 | 支持 | 支持 | 原始 daily + adj_factor；QFQ 使用请求区间内最新因子作为参考日，HFQ 使用累计因子且不设置单一参考日 |
+| Pytdx | 支持 | 支持 | 支持 | 原始日 K + GBBQ 公司行动；QFQ 参考日为已加载序列最后交易日，HFQ 参考日为已加载完整历史的最早交易日 |
+| Yahoo Finance | 支持 | 支持 | 支持 | adjclose/close 比率；QFQ 重定基到请求区间最后一根 K 线，HFQ 重定基到请求区间第一根 K 线 |
+| Sina | 支持 | 不支持 | 不支持 | 历史 K 线仅允许 none；非 none 请求在网络调用前拒绝 |
+| NetEase | 支持 | 不支持 | 不支持 | 历史 CSV 仅允许 none；非 none 请求在网络调用前拒绝 |
+
+### 质量与比较规则复核
+
+1. 请求参数不等于上游独立回显证据。Adapter 的 method 表示本地采用的协议/算法路径，不应写成 Provider 已独立验证的复权基准。
+2. QFQ 缺少明确参考日时，现有 Service 会保留结果但降为 degraded，并添加 daily_bar_adjustment_reference_date_unverified；不会把它作为 valid 基准参与跨源比较。
+3. 累计因子 HFQ 可以没有单一参考日；现有回归测试明确保护这一语义。不能为了满足通用字段要求而虚构参考日。
+4. 跨 Provider adjusted 比较要求双方 method 与 reference date 均存在且一致；HFQ 虽允许单源无 reference date，但双方缺少可证明的共同锚点时仍为 not_comparable。
+5. Tushare 的 adj_factor、Pytdx 的 GBBQ、Yahoo 的 adjclose 是三种不同证据/算法来源；即使 adjustment_basis 相同，也不能直接比较绝对价格。
+6. none 口径的历史真实样本仍有成交额缺失，质量为 degraded；不能用 none 样本证明 QFQ/HFQ 算法准确。
+
+### 当前结论
+
+- Provider 请求参数和本地算法路径已有较广泛的固定测试覆盖；本轮未发现需要通过改写现有算法才能修复的明确代码缺陷，因此不重复实现复权逻辑。
+- 真实复权数值对账仍未完成：现有 2026-11-04 Live Probe 报告记录了 QFQ/HFQ 请求，但多家来源缺少共同参考基准或质量为 degraded；不能判 matched。
+- D-1 下一步重点是收集同证券、同交易日、同复权参考基准的真实样本，覆盖除权除息前后；若来源无法提供共同锚点，结论保持 not_comparable。
+- 日期边界、交易日历覆盖、当前日 Partial、重复交易日、limit 截断、停牌/上市状态与 MariaDB PIT 已有对应服务测试；后续只修复新发现的具体缺陷，不重写现有测试体系。
+
+### 2026-11-12：贵州茅台五项估值独立复算
+
+- 复用 Run `43197384108` / Job `131111700042`：Sina 真实行情 `600519.SH=1410.27`，源时间 2026-11-12 15:34:59 北京时间；BaoStock 2026Q2 真实财务样本包含总股本 1,250,081,601。
+- 复用 Run `43201375693` / Job `131125379131`：Hithink 估值返回 PE_TTM=21.457358、PE_MRQ=20.509807、PB_MRQ=6.500449、PS_TTM=10.106706、PCF_TTM=16.417216；该 Job 因日 K 分页重复和龙虎榜计数不一致整体失败，但估值 capability 本身 passed。
+- CNINFO 2026Q3 报告确认 2026-09-30 股本 1,250,081,601、归母净资产 271,204,740,541.63，并提供 2026/2025 9M 经营现金流、归母净利润、营业总收入；2025 年年报提供 FY 基准数。
+- 独立复算的五项结果均在 6 位小数上与 Hithink 一致。PE_MRQ 按最新报告期累计归母净利润年化解释，数值吻合但仍待供应商确认公式。
+- 此记录仅关闭 600519.SH 单证券单日估值数值复算；ProviderReportDate/逐字段 Freshness 仍缺，快照保持 degraded；没有新增 Provider 请求或代码变更。

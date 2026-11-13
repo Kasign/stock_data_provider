@@ -13,7 +13,7 @@ import (
 )
 
 type DiagnosticsPort interface {
-	BuildContextCheck(context.Context, ContextRef, time.Time, bool) (platformdiagnostics.Check, error)
+	BuildContextCheck(context.Context, ContextReadRequest, time.Time, bool) (platformdiagnostics.Check, error)
 	BuildEventCheck(context.Context, EventRef, time.Time, bool) (platformdiagnostics.Check, error)
 	BuildClaimCheck(context.Context, ClaimRef, time.Time, bool) (platformdiagnostics.Check, error)
 	BuildEvidenceCheck(context.Context, EvidenceRef, time.Time, bool) (platformdiagnostics.Check, error)
@@ -22,7 +22,8 @@ type DiagnosticsPort interface {
 var _ DiagnosticsPort = (*Service)(nil)
 
 // BuildContextCheck 从指定的不可变 Context 版本构造诊断项；执行调度由调用方交给 Platform Runner。
-func (s *Service) BuildContextCheck(ctx context.Context, ref ContextRef, runAsOf time.Time, required bool) (platformdiagnostics.Check, error) {
+func (s *Service) BuildContextCheck(ctx context.Context, request ContextReadRequest, runAsOf time.Time, required bool) (platformdiagnostics.Check, error) {
+	ref := request.Ref
 	if s == nil || s.contexts == nil {
 		return platformdiagnostics.Check{}, applicationFault(fault.ClassInternal, "research_context_repository_not_configured", "Research Context Repository is not configured", researcherrors.ErrInvalidRepository)
 	}
@@ -32,7 +33,7 @@ func (s *Service) BuildContextCheck(ctx context.Context, ref ContextRef, runAsOf
 	if err := validateDiagnosticRunCutoff(runAsOf); err != nil {
 		return platformdiagnostics.Check{}, err
 	}
-	value, err := s.GetContext(ctx, ref)
+	value, err := s.GetContext(ctx, request)
 	if err != nil {
 		return platformdiagnostics.Check{}, err
 	}

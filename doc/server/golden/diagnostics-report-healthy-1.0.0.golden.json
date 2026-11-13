@@ -1,0 +1,33 @@
+{
+  "schema_version": "1.0.0",
+  "diagnostics": {
+    "summary": {
+      "status": "healthy",
+      "counts": {
+        "healthy": 1,
+        "degraded": 0,
+        "unavailable": 0,
+        "skipped": 0,
+        "failed": 0
+      }
+    },
+    "results": [
+      {
+        "check_id": "server.storage.mariadb",
+        "name": "MariaDB",
+        "required": true,
+        "observation": {
+          "status": "healthy",
+          "safe_message": "MariaDB connection is healthy",
+          "checked_at": "2026-11-12T00:00:00Z",
+          "duration": 1200000,
+          "attributes": { "dependency": "mariadb" }
+        }
+      }
+    ]
+  },
+  "readiness": {
+    "ready": true,
+    "safe_message": "Required dependencies are healthy"
+  }
+}

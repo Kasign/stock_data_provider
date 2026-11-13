@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
 	"time"
 
@@ -38,25 +39,79 @@ func (f *contextRepoFake) GetVersion(_ context.Context, id string, version int64
 
 type evidenceRepoFake struct {
 	value     researchevidence.Evidence
+	values    map[string]researchevidence.Evidence
 	appended  bool
 	appendErr error
 }
 
 func (f *evidenceRepoFake) Append(_ context.Context, value researchevidence.Evidence) error {
 	f.value = value
+	if f.values == nil {
+		f.values = make(map[string]researchevidence.Evidence)
+	}
+	f.values[value.EvidenceID] = value
 	f.appended = true
 	return f.appendErr
 }
 func (f *evidenceRepoFake) Get(_ context.Context, id string) (researchevidence.Evidence, error) {
-	if f.value.EvidenceID != id {
-		return researchevidence.Evidence{}, errors.New("missing")
+	if value, ok := f.values[id]; ok {
+		return value, nil
 	}
-	return f.value, nil
+	if f.value.EvidenceID == id {
+		return f.value, nil
+	}
+	return researchevidence.Evidence{}, researcherrors.ErrNotFound
+}
+
+func evidenceFixtureWithStance(t *testing.T, id string, systemAsOf time.Time, stance researchevidence.Stance) researchevidence.Evidence {
+	t.Helper()
+	value := evidenceFixture(t, id, systemAsOf)
+	value.Stance = stance
+	fingerprint, err := value.ComputeContentFingerprint()
+	if err != nil {
+		t.Fatalf("ComputeContentFingerprint() error = %v", err)
+	}
+	value.ContentFingerprint = fingerprint
+	return value
+}
+
+func evidenceFixture(t *testing.T, id string, systemAsOf time.Time) researchevidence.Evidence {
+	t.Helper()
+	availableAt := systemAsOf.Add(-time.Hour)
+	value := researchevidence.Evidence{
+		EvidenceID: id, EvidenceType: researchevidence.TypeFact,
+		SourceOwner: researchevidence.SourceData, SourceRef: "data:" + id,
+		DerivedFromRefs: []string{}, SubjectRefs: []string{"security:600000"},
+		AvailableAt: &availableAt, SystemObservedAt: systemAsOf.Add(-30 * time.Minute),
+		SystemAsOf: systemAsOf, Stance: researchevidence.StanceNeutral,
+		QualityStatus: researchevidence.QualityValid, ContentLevel: researchevidence.ContentMetadata,
+		AuthorizationRef: "auth:" + id, Limitations: []string{},
+	}
+	fingerprint, err := value.ComputeContentFingerprint()
+	if err != nil {
+		t.Fatalf("ComputeContentFingerprint() error = %v", err)
+	}
+	value.ContentFingerprint = fingerprint
+	return value
 }
 
 type authorizerFake struct {
 	err   error
 	calls int
+}
+
+type contextAuthorizerFake struct {
+	err     error
+	calls   int
+	caller  string
+	purpose researchevidence.PurposeCode
+	value   researchcontext.Context
+}
+
+func (f *contextAuthorizerFake) AuthorizeContext(_ context.Context, caller string, purpose researchevidence.PurposeCode, value researchcontext.Context) error {
+	f.calls++
+	f.caller, f.purpose, f.value = caller, purpose, value
+	return f.err
 }
 
 func (f *authorizerFake) AuthorizeEvidence(_ context.Context, caller string, purpose researchevidence.PurposeCode, value researchevidence.Evidence) error {
@@ -95,6 +150,118 @@ func TestCreateContextAssignsIdentityAndPersistsValidatedSnapshot(t *testing.T) 
 	}
 }
 
+func TestGetContextRequiresTrustedCurrentVisibilityAuthorization(t *testing.T) {
+	now := time.Date(2026, 11, 12, 1, 0, 0, 0, time.UTC)
+	value := researchcontext.Context{
+		SchemaVersion: researchcontext.SchemaVersion, ContextID: "ctx-protected", ContextVersion: 1,
+		ResearchQuestion: "受控 Context", Scope: researchcontext.ScopeStock, SubjectRefs: []string{"security:600000"},
+		SystemAsOf: now, SectionRefs: []researchcontext.SectionRef{{
+			SectionID: "overview", SectionVersion: "1", SourceOwner: researchcontext.SourceOwnerResearch,
+			SourceRefs: []string{}, EvidenceRefs: []string{}, QualityStatus: researchcontext.QualityValid,
+			Required: true, Included: true, AssembledAt: now, SystemAsOf: now,
+		}},
+		QualitySummary:   researchcontext.QualitySummary{Status: researchcontext.QualityValid, ReasonCodes: []string{}},
+		IncludedSections: []string{"overview"}, OmittedSections: []researchcontext.OmittedSection{},
+		BuilderVersion: "1.0.0", CreatedAt: now,
+	}
+	repo := &contextRepoFake{value: value}
+	request := ContextReadRequest{Ref: ContextRef{ContextID: value.ContextID, ContextVersion: value.ContextVersion}, CallerRef: "researchflow:worker", PurposeCode: string(researchevidence.PurposeResearchAnalysis)}
+	service, err := NewService(repo, &evidenceRepoFake{}, &authorizerFake{}, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.GetContext(context.Background(), request); err == nil {
+		t.Fatal("Context read without a current visibility authorizer must fail closed")
+	}
+	access := &contextAuthorizerFake{}
+	service, err = NewService(repo, &evidenceRepoFake{}, &authorizerFake{}, nil, nil, access)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := service.GetContext(context.Background(), request)
+	if err != nil {
+		t.Fatalf("authorized Context read failed: %v", err)
+	}
+	if got.ContextID != value.ContextID || access.calls != 1 || access.caller != request.CallerRef ||
+		access.purpose != researchevidence.PurposeResearchAnalysis || access.value.Scope != value.Scope ||
+		!slices.Equal(access.value.SubjectRefs, value.SubjectRefs) {
+		t.Fatalf("authorization did not receive exact caller/purpose/visibility: got=%+v authorizer=%+v", got, access)
+	}
+	access.err = NewAuthorizationError(AuthorizationDenied, errors.New("not visible"))
+	if _, err := service.GetContext(context.Background(), request); err == nil {
+		t.Fatal("explicit visibility denial must reject Context read")
+	}
+}
+
+func TestCreateContextPreservesFixedDataNewsEvidenceAndOmissionFixture(t *testing.T) {
+	now := time.Date(2026, 11, 12, 1, 0, 0, 0, time.UTC)
+	repo := &contextRepoFake{}
+	service, err := NewService(repo, &evidenceRepoFake{}, &authorizerFake{}, func() time.Time { return now }, &fixedIDs{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	command := CreateContextCommand{
+		ResearchQuestion: "浦发银行盈利质量是否改善",
+		Scope:            string(researchcontext.ScopeStock),
+		SubjectRefs:      []string{"security:600000"},
+		SystemAsOf:       now,
+		SectionRefs: []ContextSectionRef{
+			{
+				SectionID: "daily_bars", SectionVersion: "snapshot-v2",
+				SourceOwner:   string(researchcontext.SourceOwnerData),
+				SourceRefs:    []string{"data:snapshot:daily:600000:2026-11-11"},
+				EvidenceRefs:  []string{"ev_data_daily_001"},
+				QualityStatus: string(researchcontext.QualityDegraded),
+				Required:      true, Included: true, AssembledAt: now, SystemAsOf: now,
+			},
+			{
+				SectionID: "news_evidence", SectionVersion: "news-page-v1",
+				SourceOwner:   string(researchcontext.SourceOwnerNews),
+				SourceRefs:    []string{"news:snapshot:news_001:v3"},
+				EvidenceRefs:  []string{"ev_news_001"},
+				QualityStatus: string(researchcontext.QualityValid),
+				Required:      true, Included: true, AssembledAt: now, SystemAsOf: now,
+			},
+			{
+				SectionID: "quant_evaluation", SectionVersion: "evaluation-request-v1",
+				SourceOwner:   string(researchcontext.SourceOwnerQuant),
+				SourceRefs:    []string{"quant:request:evaluation:600000"},
+				EvidenceRefs:  []string{},
+				QualityStatus: string(researchcontext.QualityUnknown),
+				Required:      false, Included: false, AssembledAt: now, SystemAsOf: now,
+			},
+		},
+		QualitySummary: ContextQualitySummary{
+			Status:               string(researchcontext.QualityDegraded),
+			MissingRequiredCount: 0, MissingOptionalCount: 1,
+			ConflictCount: 0, StaleCount: 0,
+			ReasonCodes: []string{"data_quality_degraded", "optional_quant_unavailable"},
+		},
+		IncludedSections: []string{"daily_bars", "news_evidence"},
+		OmittedSections: []ContextOmittedSection{{
+			SectionID: "quant_evaluation", SourceOwner: string(researchcontext.SourceOwnerQuant),
+			ReasonCode: "unavailable", Required: false,
+			SourceRefs:  []string{"quant:request:evaluation:600000"},
+			SafeMessage: "Quant evaluation is unavailable at the Run cutoff",
+			Retryable:   true,
+		}},
+		BuilderVersion: "researchflow-context-fixture/1.0.0",
+	}
+	got, err := service.CreateContext(context.Background(), command)
+	if err != nil {
+		t.Fatalf("CreateContext() rejected valid fixed fixture: %v", err)
+	}
+	if len(repo.value.SectionRefs) != 3 || len(got.SectionRefs) != 3 ||
+		len(got.SectionRefs[0].EvidenceRefs) != 1 || got.SectionRefs[0].EvidenceRefs[0] != "ev_data_daily_001" ||
+		got.SectionRefs[1].EvidenceRefs[0] != "ev_news_001" ||
+		got.SectionRefs[2].Included || got.QualitySummary.Status != string(researchcontext.QualityDegraded) {
+		t.Fatalf("Context fixture references or quality state were not preserved: %+v", got)
+	}
+	if !got.SystemAsOf.Equal(now) || !got.SectionRefs[0].SystemAsOf.Equal(now) ||
+		!got.SectionRefs[1].SystemAsOf.Equal(now) || !got.SectionRefs[2].SystemAsOf.Equal(now) {
+		t.Fatal("Context and all source sections must preserve the exact Run system_as_of")
+	}
+}
 func TestAddEvidenceGeneratesIdentityFingerprintAndRequiresCurrentAuthorization(t *testing.T) {
 	now := time.Date(2026, 11, 9, 1, 0, 0, 0, time.UTC)
 	repo := &evidenceRepoFake{}
@@ -174,7 +341,10 @@ func (f *eventRepoFake) GetVersion(_ context.Context, id string, version int) (r
 func TestCreateAndGetEventUseApplicationDTOAndServerIdentity(t *testing.T) {
 	now := time.Date(2026, 11, 9, 1, 0, 0, 0, time.UTC)
 	repo := &eventRepoFake{}
-	service, err := NewServiceWithEvents(&contextRepoFake{}, &evidenceRepoFake{}, repo, &authorizerFake{}, func() time.Time { return now }, &fixedIDs{})
+	evidence := &evidenceRepoFake{values: map[string]researchevidence.Evidence{
+		"ev_source_1": evidenceFixture(t, "ev_source_1", now),
+	}}
+	service, err := NewServiceWithEvents(&contextRepoFake{}, evidence, repo, &authorizerFake{}, func() time.Time { return now }, &fixedIDs{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -221,7 +391,10 @@ func TestUpdateEventUsesExpectedVersionAndDomainLifecycleRules(t *testing.T) {
 		}},
 	}
 	repo := &eventRepoFake{value: previous}
-	service, err := NewServiceWithEvents(&contextRepoFake{}, &evidenceRepoFake{}, repo, &authorizerFake{}, nil, nil)
+	evidence := &evidenceRepoFake{values: map[string]researchevidence.Evidence{
+		"ev_source_1": evidenceFixture(t, "ev_source_1", now),
+	}}
+	service, err := NewServiceWithEvents(&contextRepoFake{}, evidence, repo, &authorizerFake{}, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -332,7 +505,10 @@ func (f *claimRepoFake) GetVersion(_ context.Context, id string, version int) (r
 func TestCreateAndGetHypothesisUseApplicationDTO(t *testing.T) {
 	now := time.Date(2026, 11, 9, 1, 0, 0, 0, time.UTC)
 	repo := &claimRepoFake{}
-	service, err := NewServiceWithClaims(&contextRepoFake{}, &evidenceRepoFake{}, repo, &authorizerFake{}, nil, &fixedIDs{})
+	evidence := &evidenceRepoFake{values: map[string]researchevidence.Evidence{
+		"ev_support_1": evidenceFixtureWithStance(t, "ev_support_1", now, researchevidence.StanceSupports),
+	}}
+	service, err := NewServiceWithClaims(&contextRepoFake{}, evidence, repo, &authorizerFake{}, nil, &fixedIDs{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -360,6 +536,63 @@ func TestCreateAndGetHypothesisUseApplicationDTO(t *testing.T) {
 	}
 	if read.Statement != command.Statement || read.EpistemicType != command.EpistemicType {
 		t.Fatalf("unexpected Claim DTO: %+v", read)
+	}
+}
+
+func TestClaimAndEventRejectMissingOrNonPITEvidenceReferences(t *testing.T) {
+	now := time.Date(2026, 11, 12, 1, 0, 0, 0, time.UTC)
+	method, observation := "compare revisions", "forecast increases"
+	claimCommand := CreateClaimCommand{
+		Statement: "盈利改善假设", EpistemicType: string(researchclaim.EpistemicHypothesis),
+		ScopeRefs: []string{"security:600000"}, SystemAsOf: now,
+		SupportingEvidenceRefs: []string{"ev_missing"}, ContradictingEvidenceRefs: []string{},
+		RequiredDataRefs: []string{}, ValidationMethod: &method, ExpectedObservation: &observation,
+		InvalidationConditions: []string{"预测持续下调"}, Status: string(researchclaim.StatusProposed), Limitations: []string{},
+	}
+	claimRepo := &claimRepoFake{}
+	claimService, err := NewServiceWithClaims(&contextRepoFake{}, &evidenceRepoFake{}, claimRepo, &authorizerFake{}, nil, &fixedIDs{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := claimService.CreateClaim(context.Background(), claimCommand); err == nil {
+		t.Fatal("Claim with missing Research Evidence must be rejected")
+	}
+	if claimRepo.appended {
+		t.Fatal("Claim with missing Research Evidence must not be persisted")
+	}
+
+	future := evidenceFixture(t, "ev_future", now.Add(time.Minute))
+	evidenceRepo := &evidenceRepoFake{values: map[string]researchevidence.Evidence{"ev_future": future}}
+	claimService, err = NewServiceWithClaims(&contextRepoFake{}, evidenceRepo, claimRepo, &authorizerFake{}, nil, &fixedIDs{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	claimCommand.SupportingEvidenceRefs = []string{"ev_future"}
+	if _, err := claimService.CreateClaim(context.Background(), claimCommand); err == nil {
+		t.Fatal("Claim must reject Evidence learned after its system_as_of")
+	}
+	if claimRepo.appended {
+		t.Fatal("PIT-invalid Claim must not be persisted")
+	}
+
+	eventRepo := &eventRepoFake{}
+	eventService, err := NewServiceWithEvents(&contextRepoFake{}, &evidenceRepoFake{}, eventRepo, &authorizerFake{}, nil, &fixedIDs{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = eventService.CreateEvent(context.Background(), CreateEventCommand{
+		EventType: "earnings_guidance", Title: "公告事件", Status: string(researchevent.StatusDetected),
+		SubjectRefs: []string{"security:600000"}, EvidenceRefs: []string{"ev_missing"},
+		SystemObservedAt: now, SystemAsOf: now, ImpactHypothesisRefs: []string{},
+		InvalidationConditions: []string{}, Uncertainty: []string{},
+		TimeNormalizationRuleVersion: "1.0.0", DerivedFromRefs: []EventRef{},
+		SourceTimes: []EventSourceTime{{EvidenceRef: "ev_missing", TimeType: string(researchevent.TimeSystemObservedAt), Value: now, AssertedBy: "news"}},
+	})
+	if err == nil {
+		t.Fatal("Event with missing Research Evidence must be rejected")
+	}
+	if eventRepo.appended {
+		t.Fatal("Event with missing Research Evidence must not be persisted")
 	}
 }
 
@@ -394,7 +627,10 @@ func TestUpdateClaimEnforcesExpectedVersionAndDomainTransition(t *testing.T) {
 		ValidationMethod: stringPointer("比较预测修订"), ExpectedObservation: stringPointer("预测上调"),
 		InvalidationConditions: []string{"预测持续下调"}, Status: researchclaim.StatusProposed, Limitations: []string{},
 	}}
-	service, err := NewServiceWithClaims(&contextRepoFake{}, &evidenceRepoFake{}, repo, &authorizerFake{}, nil, &fixedIDs{})
+	evidence := &evidenceRepoFake{values: map[string]researchevidence.Evidence{
+		"ev_support_1": evidenceFixtureWithStance(t, "ev_support_1", now, researchevidence.StanceSupports),
+	}}
+	service, err := NewServiceWithClaims(&contextRepoFake{}, evidence, repo, &authorizerFake{}, nil, &fixedIDs{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -466,11 +702,11 @@ func TestApplicationRejectsRepositoryIdentityMismatch(t *testing.T) {
 		}, IncludedSections: []string{}, OmittedSections: []researchcontext.OmittedSection{},
 		BuilderVersion: "test", CreatedAt: now,
 	}}}
-	service, err := NewService(contextRepo, &evidenceRepoFake{}, &authorizerFake{}, nil, nil)
+	service, err := NewService(contextRepo, &evidenceRepoFake{}, &authorizerFake{}, nil, nil, &contextAuthorizerFake{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.GetContext(context.Background(), ContextRef{ContextID: "ctx_requested", ContextVersion: 1}); err == nil {
+	if _, err := service.GetContext(context.Background(), ContextReadRequest{Ref: ContextRef{ContextID: "ctx_requested", ContextVersion: 1}, CallerRef: "researchflow:worker", PurposeCode: string(researchevidence.PurposeResearchAnalysis)}); err == nil {
 		t.Fatal("Context repository identity mismatch must be rejected")
 	}
 
@@ -565,7 +801,9 @@ func TestEvidenceApplicationDeepCopiesDTOAndAdapterBoundaries(t *testing.T) {
 		QualityStatus: string(researchevidence.QualityValid), ContentLevel: string(researchevidence.ContentMetadata),
 		AuthorizationRef: "auth:deep-copy", Limitations: []string{"limited"},
 	}
-	repo := &evidenceRepoFake{}
+	repo := &evidenceRepoFake{values: map[string]researchevidence.Evidence{
+		"ev_parent": evidenceFixture(t, "ev_parent", now),
+	}}
 	service, err := NewService(&contextRepoFake{}, repo, mutatingEvidenceAuthorizer{}, nil, &fixedIDs{})
 	if err != nil {
 		t.Fatal(err)
@@ -647,5 +885,80 @@ func TestCloneStringsAlwaysReturnsNonNilIndependentSlice(t *testing.T) {
 	got[0] = "changed"
 	if input[0] != "evidence:1" {
 		t.Fatal("cloneStrings must return an independent copy")
+	}
+}
+
+func TestClaimRejectsEvidenceWithMismatchedStance(t *testing.T) {
+	now := time.Date(2026, 11, 12, 2, 0, 0, 0, time.UTC)
+	method, observation := "compare revisions", "forecast increases"
+	base := CreateClaimCommand{
+		Statement: "盈利改善假设", EpistemicType: string(researchclaim.EpistemicHypothesis),
+		ScopeRefs: []string{"security:600000"}, SystemAsOf: now,
+		SupportingEvidenceRefs: []string{"ev_support"}, ContradictingEvidenceRefs: []string{"ev_contradict"},
+		RequiredDataRefs: []string{}, ValidationMethod: &method, ExpectedObservation: &observation,
+		InvalidationConditions: []string{"预测持续下调"}, Status: string(researchclaim.StatusProposed), Limitations: []string{},
+	}
+	for _, tc := range []struct {
+		name          string
+		supporting    researchevidence.Stance
+		contradicting researchevidence.Stance
+	}{
+		{name: "support reference cannot point to contradiction evidence", supporting: researchevidence.StanceContradicts, contradicting: researchevidence.StanceContradicts},
+		{name: "contradiction reference cannot point to support evidence", supporting: researchevidence.StanceSupports, contradicting: researchevidence.StanceSupports},
+		{name: "neutral evidence cannot be classified as support or contradiction", supporting: researchevidence.StanceNeutral, contradicting: researchevidence.StanceContradicts},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := &claimRepoFake{}
+			evidence := &evidenceRepoFake{values: map[string]researchevidence.Evidence{
+				"ev_support":    evidenceFixtureWithStance(t, "ev_support", now, tc.supporting),
+				"ev_contradict": evidenceFixtureWithStance(t, "ev_contradict", now, tc.contradicting),
+			}}
+			service, err := NewServiceWithClaims(&contextRepoFake{}, evidence, repo, &authorizerFake{}, nil, &fixedIDs{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := service.CreateClaim(context.Background(), base); err == nil {
+				t.Fatal("Claim must reject Evidence whose stance conflicts with its reference list")
+			}
+			if repo.appended {
+				t.Fatal("Claim with mismatched Evidence stance must not be persisted")
+			}
+		})
+	}
+}
+
+func TestUpdateClaimRejectsEvidenceWithMismatchedStance(t *testing.T) {
+	now := time.Date(2026, 11, 12, 3, 0, 0, 0, time.UTC)
+	previous := researchclaim.Claim{
+		ClaimID: "clm_existing", ClaimVersion: 1, Statement: "待验证的盈利改善判断",
+		EpistemicType: researchclaim.EpistemicHypothesis, ScopeRefs: []string{"security:600000"},
+		SystemAsOf: now.Add(-time.Minute), SupportingEvidenceRefs: []string{},
+		ContradictingEvidenceRefs: []string{}, RequiredDataRefs: []string{},
+		ValidationMethod: stringPointer("比较预测修订"), ExpectedObservation: stringPointer("预测上调"),
+		InvalidationConditions: []string{"预测持续下调"}, Status: researchclaim.StatusProposed, Limitations: []string{},
+	}
+	repo := &claimRepoFake{value: previous}
+	evidence := &evidenceRepoFake{values: map[string]researchevidence.Evidence{
+		"ev_contradict": evidenceFixtureWithStance(t, "ev_contradict", now, researchevidence.StanceContradicts),
+	}}
+	service, err := NewServiceWithClaims(&contextRepoFake{}, evidence, repo, &authorizerFake{}, nil, &fixedIDs{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	revision := CreateClaimCommand{
+		Statement: "盈利改善判断进入验证阶段", EpistemicType: string(researchclaim.EpistemicHypothesis),
+		ScopeRefs: []string{"security:600000"}, SystemAsOf: now,
+		SupportingEvidenceRefs: []string{"ev_contradict"}, ContradictingEvidenceRefs: []string{},
+		RequiredDataRefs: []string{}, ValidationMethod: stringPointer("比较预测修订"),
+		ExpectedObservation: stringPointer("预测上调"), InvalidationConditions: []string{"预测持续下调"},
+		Status: string(researchclaim.StatusTesting), Limitations: []string{},
+	}
+	if _, err := service.UpdateClaim(context.Background(), UpdateClaimCommand{
+		ClaimID: previous.ClaimID, ExpectedVersion: previous.ClaimVersion, Revision: revision,
+	}); err == nil {
+		t.Fatal("UpdateClaim must reject Evidence whose stance conflicts with its reference list")
+	}
+	if repo.appended || repo.value.ClaimVersion != previous.ClaimVersion {
+		t.Fatal("Claim with mismatched Evidence stance must not be appended")
 	}
 }

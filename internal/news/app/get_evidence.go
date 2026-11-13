@@ -15,16 +15,30 @@ var ErrEvidenceAuthorizationUnavailable = errors.New("news.evidence.authorizatio
 // EvidenceReadAuthorizer 必须执行 NEWS-CTR-002 快照指纹验证及当前策略复核。
 // 实际组合根应注入委托公共 GOV-CTR-006 Verifier 的实现；News 不复制 JCS。
 type EvidenceReadAuthorizer interface {
-	Execute(context.Context, domain.NewsAuthorizationBinding, domain.Observation, domain.NewsItemVersion, string, string, domain.AuthorizationContentLevel) error
+	ExecuteWithCurrentPolicies(context.Context, domain.NewsAuthorizationBinding, domain.Observation, domain.NewsItemVersion, string, string, domain.AuthorizationContentLevel, domain.CurrentAuthorizationPolicySet) error
+}
+
+// EvidenceAtomicContentRepository 在当前策略指针行锁保护下完成授权回调和精确正文读取。
+// 只有事务提交成功后才允许返回正文。
+type EvidenceAtomicContentRepository interface {
+	GetEvidenceContentWithCurrentAuthorization(
+		context.Context,
+		domain.NewsAuthorizationBinding,
+		domain.Observation,
+		domain.NewsItemVersion,
+		time.Time,
+		func(context.Context, domain.CurrentAuthorizationPolicySet, domain.Observation) error,
+	) (domain.ContentLayers, domain.Observation, error)
 }
 
 // GetEvidence 组合单版本 PIT、最新授权快照、当前授权复核和内容级别裁剪。
 // 在授权通过前，不构造任何可向跨模块返回的内容 DTO。
 type GetEvidence struct {
-	repository EvidencePITRepository
-	snapshots  AuthorizationSnapshotRepository
-	authorizer EvidenceReadAuthorizer
-	now        func() time.Time
+	repository    EvidencePITRepository
+	atomicContent EvidenceAtomicContentRepository
+	snapshots     AuthorizationSnapshotRepository
+	authorizer    EvidenceReadAuthorizer
+	now           func() time.Time
 }
 
 // NewGetEvidence 创建单条 Evidence 查询 Facade。
@@ -36,12 +50,16 @@ func NewGetEvidence(
 	if repository == nil || snapshots == nil || authorizer == nil {
 		return nil, ErrEvidenceAuthorizationUnavailable
 	}
-	return &GetEvidence{repository: repository, snapshots: snapshots, authorizer: authorizer, now: time.Now}, nil
+	atomicContent, ok := repository.(EvidenceAtomicContentRepository)
+	if !ok {
+		return nil, ErrEvidenceAuthorizationUnavailable
+	}
+	return &GetEvidence{repository: repository, atomicContent: atomicContent, snapshots: snapshots, authorizer: authorizer, now: time.Now}, nil
 }
 
 // Execute 只返回 PIT 可见且当前授权仍有效的证据；授权失败时返回空 DTO。
 func (u *GetEvidence) Execute(ctx context.Context, request GetEvidenceRequest) (ResearchEvidenceRecord, error) {
-	if u == nil || u.repository == nil || u.snapshots == nil || u.authorizer == nil || u.now == nil || ctx == nil {
+	if u == nil || u.repository == nil || u.atomicContent == nil || u.snapshots == nil || u.authorizer == nil || u.now == nil || ctx == nil {
 		return ResearchEvidenceRecord{}, ErrInvalidEvidenceQuery
 	}
 	if err := ctx.Err(); err != nil {
@@ -60,11 +78,6 @@ func (u *GetEvidence) Execute(ctx context.Context, request GetEvidenceRequest) (
 	}
 	if !validEvidencePITRecord(pit, request) {
 		return ResearchEvidenceRecord{}, ErrInvalidEvidenceQuery
-	}
-	// 到期或历史期限未知的候选载荷不得通过读取路径继续披露，即使清理任务尚未执行。
-	if pit.Observation.PayloadPurgedAt != nil || pit.Observation.RetentionUntil.IsZero() ||
-		!pit.Observation.RetentionUntil.After(now) {
-		pit.Observation.Candidate = domain.Candidate{}
 	}
 	resourceRef, err := domain.NewsEvidenceResourceRef(pit.Version.NewsID, pit.Version.VersionNo)
 	if err != nil {
@@ -91,15 +104,30 @@ func (u *GetEvidence) Execute(ctx context.Context, request GetEvidenceRequest) (
 	if err := ctx.Err(); err != nil {
 		return ResearchEvidenceRecord{}, err
 	}
-	if err := u.authorizer.Execute(
-		ctx, binding, pit.Observation, pit.Version, request.CallerRef,
-		string(request.PurposeCode), contentLevel,
-	); err != nil {
+	// 当前策略锁定、授权复核和正文读取必须共享一个 MariaDB 事务。
+	content, currentObservation, err := u.atomicContent.GetEvidenceContentWithCurrentAuthorization(
+		ctx, binding, pit.Observation, pit.Version, request.SystemAsOf,
+		func(readCtx context.Context, current domain.CurrentAuthorizationPolicySet, observation domain.Observation) error {
+			return u.authorizer.ExecuteWithCurrentPolicies(
+				readCtx, binding, observation, pit.Version, request.CallerRef,
+				string(request.PurposeCode), contentLevel, current,
+			)
+		},
+	)
+	if err != nil {
 		return ResearchEvidenceRecord{}, err
 	}
 	if err := ctx.Err(); err != nil {
 		return ResearchEvidenceRecord{}, err
 	}
+	pit.Observation = currentObservation
+	// 以原子事务中重新读取的 Observation 为准，避免与并发清理任务竞争时披露已过期载荷。
+	afterRead := u.now().UTC()
+	if currentObservation.PayloadPurgedAt != nil || currentObservation.RetentionUntil.IsZero() ||
+		!currentObservation.RetentionUntil.After(afterRead) {
+		pit.Observation.Candidate = domain.Candidate{}
+	}
+	pit.Version.Content = content
 	return researchEvidenceRecordFromPIT(pit, binding, request), nil
 }
 

@@ -125,7 +125,7 @@ func (s *DataService) AdjustmentFactorsAsOf(ctx context.Context, rawSymbol, star
 	}
 	values, err := s.store.ListAdjustmentFactorsAsOf(ctx, symbol, startDate, endDate, asOf)
 	if err != nil {
-		return nil, err
+		return nil, wrapPITStorageFailure(err)
 	}
 	out := make([]model.AdjustmentFactor, 0, len(values))
 	for _, value := range values {
@@ -220,7 +220,7 @@ func (s *DataService) CorporateActionsAsOf(ctx context.Context, rawSymbol, start
 	}
 	values, err := s.store.ListCorporateActionsAsOf(ctx, symbol, startDate, endDate, asOf)
 	if err != nil {
-		return nil, err
+		return nil, wrapPITStorageFailure(err)
 	}
 	out := make([]model.CorporateAction, 0, len(values))
 	for _, value := range values {

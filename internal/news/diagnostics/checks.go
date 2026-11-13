@@ -46,6 +46,9 @@ func ObservationRetentionCheck(probe ObservationRetentionProbe) platformdiag.Che
 			}
 			checkedAt := time.Now().UTC()
 			count, oldest, err := probe.ObservationRetentionBacklog(ctx, checkedAt)
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				return platformdiag.Observation{}, ctxErr
+			}
 			if err != nil {
 				return platformdiag.Observation{}, fault.New(
 					fault.ClassUnavailable, "news.observation.retention_backlog_query_failed",
@@ -193,6 +196,9 @@ func SourceEndpointCheck(catalog app.SourceCatalog, sourceID, endpointID string,
 				)
 			}
 			registration, err := catalog.LookupEndpoint(ctx, sourceID, endpointID)
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				return platformdiag.Observation{}, ctxErr
+			}
 			if err != nil {
 				if errors.Is(err, app.ErrSourceEndpointNotFound) {
 					return platformdiag.Observation{
@@ -257,16 +263,23 @@ func StorageChecks(probe StorageProbe) []platformdiag.Check {
 		{
 			ID: "news.storage.connection", Name: "News storage connection", Required: true, Timeout: 3 * time.Second,
 			Run: func(ctx context.Context) (platformdiag.Observation, error) {
+				if err := ctx.Err(); err != nil {
+					return platformdiag.Observation{}, err
+				}
 				if probe == nil {
 					return platformdiag.Observation{}, fault.New(
 						fault.ClassUnavailable, "news.storage.probe_unavailable",
 						"News storage probe is unavailable", nil,
 					)
 				}
-				if err := probe.Ping(ctx); err != nil {
+				pingErr := probe.Ping(ctx)
+				if ctxErr := ctx.Err(); ctxErr != nil {
+					return platformdiag.Observation{}, ctxErr
+				}
+				if pingErr != nil {
 					return platformdiag.Observation{}, fault.New(
 						fault.ClassUnavailable, "news.storage.connection_failed",
-						"News storage is unavailable", err,
+						"News storage is unavailable", pingErr,
 					)
 				}
 				return platformdiag.Observation{
@@ -278,6 +291,9 @@ func StorageChecks(probe StorageProbe) []platformdiag.Check {
 		{
 			ID: "news.storage.schema", Name: "News storage schema", Required: true, Timeout: 5 * time.Second,
 			Run: func(ctx context.Context) (platformdiag.Observation, error) {
+				if err := ctx.Err(); err != nil {
+					return platformdiag.Observation{}, err
+				}
 				if probe == nil {
 					return platformdiag.Observation{}, fault.New(
 						fault.ClassUnavailable, "news.storage.probe_unavailable",
@@ -285,6 +301,9 @@ func StorageChecks(probe StorageProbe) []platformdiag.Check {
 					)
 				}
 				missing, err := probe.MissingSchemaTables(ctx)
+				if ctxErr := ctx.Err(); ctxErr != nil {
+					return platformdiag.Observation{}, ctxErr
+				}
 				if err != nil {
 					return platformdiag.Observation{}, fault.New(
 						fault.ClassUnavailable, "news.storage.schema_check_failed",

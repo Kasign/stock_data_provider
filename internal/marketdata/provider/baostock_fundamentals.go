@@ -33,7 +33,7 @@ var quarterlyFundamentalMappings = []fundamentalSectionMapping{
 		{"gross_profit_margin", "销售毛利率", "gpMargin", "ratio"},
 		{"net_profit", "净利润", "netProfit", "CNY"},
 		{"eps_ttm", "每股收益TTM", "epsTTM", "CNY/share"},
-		{"main_business_revenue", "主营营业收入", "MBRevenue", "CNY"},
+		{"total_operating_revenue", "营业总收入", "MBRevenue", "CNY"},
 		{"total_shares", "总股本", "totalShare", "shares"},
 		{"float_shares", "流通股本", "liqaShare", "shares"},
 	}},
