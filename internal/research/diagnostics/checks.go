@@ -179,6 +179,9 @@ func NewEvidenceCheck(id, name string, required bool, value researchevidence.Evi
 				return failedObservation("research.evidence.pit_invalid", "Research Evidence 不满足严格 PIT 约束", attributes), nil
 			}
 			if snapshot.AvailableAt == nil {
+				if snapshot.QualityStatus == researchevidence.QualityInvalid {
+					return failedObservation("research.evidence.quality_invalid", "Research Evidence 质量状态无效", attributes), nil
+				}
 				return platformdiagnostics.Observation{
 					Status:      platformdiagnostics.StatusUnavailable,
 					ReasonCode:  "research.evidence.pit_unavailable",

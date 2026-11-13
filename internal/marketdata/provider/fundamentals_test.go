@@ -73,14 +73,16 @@ func TestBaostockFundamentalsPreservesRatioAndDisclosureDate(t *testing.T) {
 	if got.Sections[0].ReportDate != "2026-06-30" || got.Sections[0].PublicationDate != "2026-08-29" {
 		t.Fatalf("report/publication dates changed: %+v", got.Sections[0])
 	}
-	var roe, netProfit *model.FundamentalMetric
+	var roe, netProfit, totalOperatingRevenue *model.FundamentalMetric
 	for i := range got.Sections[0].Metrics {
 		metric := &got.Sections[0].Metrics[i]
-		if metric.SourceField == "roeAvg" {
+		switch metric.SourceField {
+		case "roeAvg":
 			roe = metric
-		}
-		if metric.SourceField == "netProfit" {
+		case "netProfit":
 			netProfit = metric
+		case "MBRevenue":
+			totalOperatingRevenue = metric
 		}
 	}
 	if roe == nil || roe.Value != 0.074617 || roe.Unit != "ratio" {
@@ -88,6 +90,14 @@ func TestBaostockFundamentalsPreservesRatioAndDisclosureDate(t *testing.T) {
 	}
 	if netProfit == nil || netProfit.Value != 28522000000 || netProfit.Unit != "CNY" {
 		t.Fatalf("net profit should preserve yuan unit: %+v", netProfit)
+	}
+	if totalOperatingRevenue == nil || totalOperatingRevenue.Key != "total_operating_revenue" ||
+		totalOperatingRevenue.Name != "营业总收入" || totalOperatingRevenue.Value != 1.25 ||
+		totalOperatingRevenue.Unit != "CNY" {
+		t.Fatalf("BaoStock MBRevenue must retain the verified total-operating-revenue semantics: %+v", totalOperatingRevenue)
+	}
+	if got.Sections[0].AvailableAt != nil {
+		t.Fatalf("date-only pubDate must not be promoted to an exact available_at timestamp: %+v", got.Sections[0])
 	}
 }
 

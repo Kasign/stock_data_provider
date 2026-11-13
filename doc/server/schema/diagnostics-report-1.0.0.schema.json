@@ -1,0 +1,96 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://kasign.github.io/stock_data_provider/server/diagnostics-report-1.0.0.schema.json",
+  "title": "Server Diagnostics HTTP Report",
+  "description": "Owner-only Root Server diagnostics response returned when the diagnostics Runner completes.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "diagnostics", "readiness"],
+  "properties": {
+    "schema_version": { "type": "string", "const": "1.0.0" },
+    "diagnostics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["summary", "results"],
+      "properties": {
+        "summary": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "counts"],
+          "properties": {
+            "status": { "$ref": "#/definitions/status" },
+            "counts": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["healthy", "degraded", "unavailable", "skipped", "failed"],
+              "properties": {
+                "healthy": { "type": "integer", "minimum": 0 },
+                "degraded": { "type": "integer", "minimum": 0 },
+                "unavailable": { "type": "integer", "minimum": 0 },
+                "skipped": { "type": "integer", "minimum": 0 },
+                "failed": { "type": "integer", "minimum": 0 }
+              }
+            }
+          }
+        },
+        "results": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["check_id", "required", "observation"],
+            "properties": {
+              "check_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+              "name": { "type": "string", "maxLength": 128 },
+              "required": { "type": "boolean" },
+              "observation": { "$ref": "#/definitions/observation" }
+            }
+          }
+        }
+      }
+    },
+    "readiness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ready", "safe_message"],
+      "properties": {
+        "ready": { "type": "boolean" },
+        "reason_code": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z0-9][a-z0-9._-]*$" },
+        "safe_message": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^[^\\x00-\\x1F\\x7F]*$" }
+      }
+    }
+  },
+  "definitions": {
+    "status": {
+      "type": "string",
+      "enum": ["healthy", "degraded", "unavailable", "skipped", "failed"]
+    },
+    "observation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "safe_message", "checked_at", "duration"],
+      "properties": {
+        "status": { "$ref": "#/definitions/status" },
+        "reason_code": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z0-9][a-z0-9._-]*$" },
+        "safe_message": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^[^\\x00-\\x1F\\x7F]*$" },
+        "checked_at": { "type": "string", "format": "date-time", "pattern": "Z$" },
+        "duration": { "type": "integer", "minimum": 0 },
+        "evidence_ref": { "type": "string", "maxLength": 512, "pattern": "^[^\\x00-\\x1F\\x7F]*$" },
+        "attributes": {
+          "type": "object",
+          "maxProperties": 16,
+          "propertyNames": { "minLength": 1, "maxLength": 64, "pattern": "^[^\\x00-\\x1F\\x7F]+$" },
+          "additionalProperties": { "type": "string", "maxLength": 256, "pattern": "^[^\\x00-\\x1F\\x7F]*$" }
+        }
+      },
+      "allOf": [{
+        "if": {
+          "properties": { "status": { "const": "healthy" } },
+          "required": ["status"]
+        },
+        "then": {},
+        "else": { "required": ["reason_code"] }
+      }]
+    }
+  }
+}

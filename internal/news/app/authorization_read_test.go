@@ -81,6 +81,38 @@ func TestEvaluateNewsEvidenceReadAuthorizationAllowsOnlyMatchingCurrentPolicies(
 	}
 }
 
+func TestEvaluateNewsEvidenceReadAuthorizationUsesTransactionBoundPolicies(t *testing.T) {
+	binding := allowedAuthorizationBinding(t)
+	observation, version := appAuthorizationEvidence()
+	now := time.Date(2026, 11, 9, 10, 0, 0, 0, time.UTC)
+	verifier := &authorizationFingerprintVerifierStub{}
+	resolver := &currentAuthorizationPolicyResolverStub{set: currentAuthorizationPolicySet(binding, now)}
+	usecase, err := NewEvaluateNewsEvidenceReadAuthorization(verifier, resolver)
+	if err != nil {
+		t.Fatal(err)
+	}
+	usecase.now = func() time.Time { return now }
+
+	current := currentAuthorizationPolicySet(binding, now)
+	err = usecase.ExecuteWithCurrentPolicies(context.Background(), binding, observation, version,
+		binding.CallerRef, binding.PurposeCode, binding.RequestedContentLevel, current)
+	if err != nil {
+		t.Fatalf("ExecuteWithCurrentPolicies() error = %v", err)
+	}
+	if verifier.calls != 1 || resolver.calls != 0 {
+		t.Fatalf("transaction-bound authorization called verifier=%d resolver=%d, want 1 and 0", verifier.calls, resolver.calls)
+	}
+
+	denied := current
+	denied.Policies = append([]domain.CurrentAuthorizationPolicy(nil), current.Policies...)
+	denied.Policies[0].Allows = false
+	err = usecase.ExecuteWithCurrentPolicies(context.Background(), binding, observation, version,
+		binding.CallerRef, binding.PurposeCode, binding.RequestedContentLevel, denied)
+	if !errors.Is(err, ErrNewsCurrentPolicyDenied) || verifier.calls != 2 || resolver.calls != 0 {
+		t.Fatalf("denied transaction-bound authorization err=%v verifier=%d resolver=%d", err, verifier.calls, resolver.calls)
+	}
+}
+
 func TestEvaluateNewsEvidenceReadAuthorizationFailsClosed(t *testing.T) {
 	tests := []struct {
 		name        string
