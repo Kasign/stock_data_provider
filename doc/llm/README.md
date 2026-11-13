@@ -4,8 +4,8 @@
 - 代码范围：`internal/llm/**`
 - 文档范围：`doc/llm/**`
 - 任务前缀：LLM
-- 当前代码状态：Provider Port、DTO、Responses JSON Mapper/Parser、非流式 Adapter、SSE Reader/Stream Adapter、Draft 2020-12 Schema 编译与 Responses strict 子集门禁均已实现；当前没有已确认的 LLM 核心业务代码缺口。
-- 当前模块验证状态：本次代码核对基线（本次文档更新前）为 `f36721efcea2385b83eb1833f62122fde473e307`，该代码基线尚无对应 CI 运行；后续文档提交未修改 `internal/llm/**`。最近一次相关 Run `42989240185` 对应旧 SHA `18e4505f1ce2cecffa84218e95eca5f8a09e6d67`；根模块 gofmt 因 Notification 的 13 个文件失败，失败清单不含 `internal/llm/**`，根模块测试被跳过；`go-core` 测试/race/vet 通过，但不覆盖 LLM；Docker analysis-api 构建失败。LLM 包级 go test、race、vet 仍无成功执行证据。
+- 当前代码状态：Provider Port、DTO、Responses JSON Mapper/Parser、非流式 Adapter、SSE Reader/Stream Adapter、Draft 2020-12 Schema 编译与 Responses strict 子集门禁均已实现；本轮 INT-A 静态接入核对未发现 LLM 模块侧需要新增的接口或 Adapter。
+- 当前代码核对基线：`501fc08da4782d907199fc03bdf0b181a1cf2346`；本轮文档提交 `c7e165016beb8c2875fcd958f3addf6b5a912417` 只更新 `doc/llm/02-任务拆分与验收.md`，未修改 `internal/llm/**`。该文档提交当前无 GitHub commit status/workflow run 证据；LLM 包级 go test、race、vet 仍不能标记为通过。最近一次相关 Run `42989240185` 对应旧 SHA `18e4505f1ce2cecffa84218e95eca5f8a09e6d67`，根模块 gofmt 被其他模块文件阻断，不能作为当前 LLM 包级验证证据。
 - PR #45 已于 2026-11-09 合并到 `integration`，合并提交：`2eeea1c44a3268fc98bbd4c99dc1bf5e464f8814`。该合并提交不等于当前 `feat/llm` HEAD 已有独立 CI 通过证据。
 - 当前 `integration` 已包含 Platform `BoundDoer.OpenStream` / `StreamResponse` 代码；LLM 已实现窄接口和 Stream Adapter。剩余接线责任是 Server 组合根将 Platform 流式响应包装为 LLM 的 `HTTPStreamResponse`，不得在 LLM 复制 HTTP Client 或目的地址策略。
 - LLM 不创建 HTTP Client、不实现 SSRF/目标地址策略、不自行重试；网络传输和目的地址安全由 Platform 提供，组合根包装由 Server 负责。
@@ -23,10 +23,11 @@
 
 ## 当前剩余验收
 
-1. 在全仓 gofmt 阻断解除后，实际执行并记录 LLM 包级 `go test`、`go test -race`、`go vet`。
-2. 由 Server 组合根接入 Platform `BoundDoer.OpenStream`，完成跨模块编译和流式传输接线。
-3. 对真实本地 Gateway 执行 Generate、SSE、多文本分段、Function Call、取消、超限和 Body 关闭 E2E。
-4. 按 Provider/Model/Gateway 版本记录能力证据；未验证能力保持 unknown，不能仅凭路由可达启用。
+1. **Server 组合根接线（blocked，非本分支范围）**：创建固定目标 BoundDoer；将 `BoundDoer.Do` 注入 `HTTPDoer`；包装 `BoundDoer.OpenStream` 返回值为 `HTTPStreamResponse`；解析并注入 SecretRef、ProviderConfig、CapabilityState 和 Clock；再将 `llm.Provider` 注入 Researchflow。
+2. **真实 Gateway 联调（not_run）**：执行 Generate、SSE、取消、超限、错误响应和 Body 关闭 E2E；未验证能力继续保持 unknown。
+3. **当前 SHA 自动化验证**：为 LLM 包级 `go test`、`go test -race`、`go vet` 取得当前代码 SHA 的实际执行证据，不引用旧 SHA 或其他模块的 CI 结果。
+
+INT-A 的 LLM 模块侧接入核对及 Server 精确接线要求见 [02-任务拆分与验收](02-任务拆分与验收.md) 的“2026-11-13 跨模块联调：LLM 接入面核对（INT-A）”。
 
 ## 文档索引
 
