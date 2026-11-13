@@ -88,7 +88,7 @@ GetEvidence 的原子内容读取必须保留策略当前指针锁、授权复�
 
 EvidenceCursorCodec 已要求 Key Secret 长度 32～256 字节，最多 8 个 Key；游标 TTL 为 15 分钟，轮换时旧 Key 至少保留到其签发的游标过期。News Config 已新增 Active Key ID + JSON Key Ring 的可轮换 Secret 配置解析（32～256 字节、最多 8 把 Key、Active Key 必须存在），但 Server 尚未将其注入 EvidenceCursorCodec，也未装配完整查询 Facade。
 
-不得使用硬编码密钥、空 Key、Mock Facade、永远返回空列表的 ListEvidence，或跳过签名验证的方式绕过该缺口。下一步应先按 Platform Env/Secret 约定设计可轮换的密钥配置，并为缺失/非法/轮换场景增加测试。
+不得使用硬编码密钥、空 Key、Mock Facade、永远返回空列表的 ListEvidence，或跳过签名验证的方式绕过该缺口。下一步应由 Server Bootstrap 消费 News Config 的 Key Ring，构造 EvidenceCursorCodec，并为轮换前后旧游标继续可验签增加组合测试。
 
 ### 2.4 Research 已有实现
 

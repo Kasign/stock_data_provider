@@ -1,17 +1,17 @@
 # Integration 系统接入审查与整体验收基线
 
 - 验收分支：`integration`
-- 本文最近一次核对的 integration SHA：`19394e856c6909b50a3eb664c2d565262fe2e8a2`
+- 本文最近一次核对的 integration 代码 SHA：`19394e856c6909b50a3eb664c2d565262fe2e8a2`（后续 `81e1c8d` 为 docs-only 更新）
 - 当前 CI：Integration Run `43364123334`，对应 SHA `19394e856c6909b50a3eb664c2d565262fe2e8a2`，结论 `success`；gofmt、root/go-core vet/test、Compose、WebUI 语法/单测和 Docker 构建全部通过
 - 历史审查基线 SHA：`63f49065a5ef3379d95948a6c2c6e504a555a63f`（Run #54），仅作为历史参考
 - 历史参考：Run #23（`43178908392`）仅对应旧 SHA `fdc19b8591223dabccb533389d472713bfecc415`，结论 `success`
 - 本文性质：Integration 当前代码树的源码接入审查、真实依赖 CI 证据与后续验收基线
 - 范围：只记录根组合入口、模块装配、路由、Migration、Worker、事件连接和诊断接入；不替代各模块内部功能验收
-- 限制：本轮基于 GitHub 当前 `integration` 代码树进行源码审查，并由 Run #54 执行 MariaDB/Redis 集成测试；CI 通过不代表真实外部 Provider、LLM Gateway、目标部署网络和生产凭据已验收。
+- 限制：本轮基于 GitHub 当前 `integration` 代码树进行源码审查；Run `43364123334` 对代码 SHA `19394e8` 的全量 Go 测试、Compose、WebUI 和 Docker 检查通过。CI 通过不代表真实外部 Provider、LLM Gateway、目标部署网络和生产凭据已验收。Researchflow Outbox → Notification Inbox 的 MariaDB/Redis 集成测试由 Go 测试步骤执行。
 
 ## 1. 当前结论
 
-**当前 Integration SHA 的通用 CI 已通过；Researchflow → Notification 的 MariaDB 成功接收、失败重试、重复处理及 Relay 组件启停测试均通过，但系统整体仍未达到端到端业务联调条件。**
+**当前 Integration 代码 SHA 的通用 CI 已通过；Researchflow → Notification 的 MariaDB 成功接收、失败重试、重复处理及 Relay 组件启停测试已有通过证据，但系统整体仍未达到端到端业务联调条件。**
 
 当前 `cmd/analysis-api/main.go` 已委托 `internal/server/bootstrap.Run`，Server 已拥有共享资源、进程配置、HTTP/Worker 生命周期、Health/Readiness 和 Migration Registry 等基础设施；但 Bootstrap 实际创建的业务执行链仍是旧 Analysis Runner、旧 Analysis Task Queue 和旧 Analysis HTTP API。
 
@@ -19,7 +19,7 @@ News、Research、Researchflow、Notification 的 Migration 已进入根 Registr
 
 因此当前阶段应判定为：
 
-- 当前 SHA CI：`pass`（Run #54，`63f4906`）
+- 当前代码 SHA CI：`pass`（Run `43364123334`，`19394e8`）
 - Root Bootstrap 基础设施：部分完成
 - 新业务模块运行时装配：部分完成；仍以旧 Analysis Runner/Queue/API 为主
 - 新业务 API / Worker：Researchflow 业务 API 与 Worker 未接入
@@ -190,7 +190,7 @@ Registry 已具备 namespace 校验、确定性排序、执行报告和 Schema �
 
 ## 6. 本轮审查结论与下一步
 
-本轮在 `integration` 完成 Researchflow → Notification 事件契约修正、Server Relay 接入和组件生命周期测试。Run #54（`43359166036`）对应当前 SHA `63f49065a5ef3379d95948a6c2c6e504a555a63f`，结论 `success`；gofmt、root/go-core vet/test、MariaDB/Redis 集成、WebUI 检查及 Docker 构建全部通过。CI 使用 `SERVER_RELAY_TEST_MYSQL_DSN`，实际执行 `TestResearchflowOutboxToNotificationInboxMariaDB` 的迁移、Outbox 领取、EventReceiver 首次拒绝、`notification_receive_unavailable` 与 next_attempt_at 持久化、到期重试、Outbox 确认、Inbox/FanoutWorkItem 唯一记录和重复处理幂等检查；另有 Relay Start/Stop 组件生命周期单测。
+历史轮次在 `integration` 完成 Researchflow → Notification 事件契约修正、Server Relay 接入和组件生命周期测试。Run #54（`43359166036`）对应历史 SHA `63f49065a5ef3379d95948a6c2c6e504a555a63f`，结论 `success`；gofmt、root/go-core vet/test、MariaDB/Redis 集成、WebUI 检查及 Docker 构建全部通过。当前代码验收以 Run `43364123334` / SHA `19394e8` 为准。CI 使用 `SERVER_RELAY_TEST_MYSQL_DSN`，实际执行 `TestResearchflowOutboxToNotificationInboxMariaDB` 的迁移、Outbox 领取、EventReceiver 首次拒绝、`notification_receive_unavailable` 与 next_attempt_at 持久化、到期重试、Outbox 确认、Inbox/FanoutWorkItem 唯一记录和重复处理幂等检查；另有 Relay Start/Stop 组件生命周期单测。
 
 **当前已通过的范围仅为 Researchflow Outbox → Notification EventReceiver → Inbox/FanoutWorkItem，包括接收失败重试。** 尚未验收真实渠道发送、Fanout/Delivery Worker 生产装配、外部渠道 Unknown 对账，以及完整 Researchflow 业务执行链。
 
