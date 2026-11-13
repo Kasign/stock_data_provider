@@ -1,16 +1,16 @@
 # Integration 系统接入审查与整体验收基线
 
 - 验收分支：`integration`
-- 当前审查基线 SHA：`5099ddd648128def63e8a8b413c8ed5976ae84b8`
-- 当前 CI：Integration Run #32（`43353715052`），状态 `in_progress`；不得沿用旧 Run #23 作为当前 SHA 的 CI 结论
+- 当前审查基线 SHA：`242c7f648ac20410c6ad5b7565e4c6e5d110a0c4`
+- 当前 CI：Integration Run #47（`43357489280`），对应 SHA `242c7f648ac20410c6ad5b7565e4c6e5d110a0c4`，结论 `success`；Run #47 已执行根模块 `go test ./...`，其中 `internal/server/relay` 包通过，CI 为 Researchflow Relay 集成测试提供了 MariaDB DSN
 - 历史参考：Run #23（`43178908392`）仅对应旧 SHA `fdc19b8591223dabccb533389d472713bfecc415`，结论 `success`
 - 本文性质：Integration 当前代码树的静态接入审查记录与后续验收基线
 - 范围：只记录根组合入口、模块装配、路由、Migration、Worker、事件连接和诊断接入；不替代各模块内部功能验收
-- 限制：本轮基于 GitHub 当前 `integration` 代码树进行静态检查；当前 Integration CI 尚在运行。即使 CI 成功，也不能替代真实外部 Provider、LLM Gateway、目标部署网络和生产凭据验收。
+- 限制：本轮基于 GitHub 当前 `integration` 代码树进行静态检查；当前 SHA 的 Integration CI Run #47 已完成。即使 CI 成功，也不能替代真实外部 Provider、LLM Gateway、目标部署网络和生产凭据验收。
 
 ## 1. 当前结论
 
-**当前 Integration SHA 的 CI 尚未完成；从代码接入面看，系统仍未达到端到端联调条件。**
+**当前 Integration SHA 的通用 CI 已通过；Researchflow → Notification Outbox/Inbox 的 MariaDB 集成链路已通过，但系统整体仍未达到端到端联调条件。**
 
 当前 `cmd/analysis-api/main.go` 已委托 `internal/server/bootstrap.Run`，Server 已拥有共享资源、进程配置、HTTP/Worker 生命周期、Health/Readiness 和 Migration Registry 等基础设施；但 Bootstrap 实际创建的业务执行链仍是旧 Analysis Runner、旧 Analysis Task Queue 和旧 Analysis HTTP API。
 
@@ -18,12 +18,12 @@ News、Research、Researchflow、Notification 的 Migration 已进入根 Registr
 
 因此当前阶段应判定为：
 
-- 当前 SHA CI：`in_progress`（Run #32）
+- 当前 SHA CI：`pass`（Run #47，`242c7f6`）
 - Root Bootstrap 基础设施：部分完成
 - 新业务模块运行时装配：部分完成；仍以旧 Analysis Runner/Queue/API 为主
 - 新业务 API / Worker：Researchflow 业务 API 与 Worker 未接入
-- Research → Notification Outbox/Inbox：Server Relay 已接入；Researchflow → Notification 尚未接入
-- MariaDB/Redis：已有 CI 真实依赖测试；当前 SHA Run #32 尚未完成
+- Research → Notification Outbox/Inbox：Server Relay 已接入；Researchflow → Notification Relay 已接入，MariaDB 集成测试通过（Outbox 确认、Inbox/FanoutWorkItem 幂等）；真实渠道投递仍未接入
+- MariaDB/Redis：CI 已启动 MariaDB/Redis 服务；Researchflow Relay 测试实际连接 MariaDB 并通过；不代表生产部署环境验收
 - 外部 Provider、LLM Gateway、目标部署网络：未取得当前 SHA 的真实运行验收
 - 端到端业务验收：尚未具备条件
 
@@ -189,9 +189,11 @@ Registry 已具备 namespace 校验、确定性排序、执行报告和 Schema �
 
 ## 6. 本轮审查结论与下一步
 
-本轮已在 `integration` 纳入 Data 日 K MariaDB fallback 读取失败日志修复（`5099ddd`）；并对当前代码树重新核对了 Bootstrap、Researchflow Outbox、Notification Schema 和模块接入文档。Research → Notification Relay 已有 MariaDB 组合测试，但当前 SHA Run #32 仍在执行，不能提前标记通过。
+本轮在 `integration` 完成 Researchflow → Notification 事件契约修正和 Server Relay 接入。Run #47（`43357489280`）对应当前 SHA `242c7f648ac20410c6ad5b7565e4c6e5d110a0c4`，结论 `success`；CI 的 `go test ./...` 执行了 `internal/server/relay` 包，测试环境设置 `SERVER_RELAY_TEST_MYSQL_DSN`，测试通过。`TestResearchflowOutboxToNotificationInboxMariaDB` 实际执行 MariaDB 迁移、Outbox 领取、EventReceiver 接收、Outbox 确认、Inbox/FanoutWorkItem 唯一记录及重复处理幂等检查。
 
-**下一步不再重复 INT-A 静态盘点，转为按真实契约闭合已有跨模块链路：先处理 Researchflow → Notification 事件生产契约不一致，再在事件 Envelope 对齐后复用现有 Notification EventReceiver/Inbox Relay。** 同时保留 Research/News Evidence Adapter、Data/Quant 和 Researchflow StageExecutor 的明确准入条件；不通过 Server 伪造缺失的模块 Facade、Output Registry 或 Stage 实现。
+**当前已通过的范围仅为 Researchflow Outbox → Notification EventReceiver → Inbox/FanoutWorkItem。** 尚未验收真实渠道发送、Fanout/Delivery Worker 生产装配、外部渠道失败重试/Unknown 对账，以及完整 Researchflow 业务执行链。
+
+下一步按准入条件推进：先完成 Researchflow Relay 生产 Worker 配置/生命周期的独立验收；再选择具备冻结输入/输出契约的 News → Research 或其他模块链路。Data → Quant 仍受 DATA-CTR-005 DailyBarsV2 Decimal 精度证据和 Quant 生产计算 Facade/Result Payload 注册门禁阻断，不在 Server 绕过。
 
 验收状态必须区分：
 
