@@ -73,22 +73,22 @@ func TestResearchflowOutboxToNotificationInboxMariaDB(t *testing.T) {
 	payloadDigest := sha256.Sum256(payloadJSON)
 	idempotencyKey := "run-terminal:" + runRef
 
-	_, err = db.ExecContext(ctx, \`INSERT INTO researchflow_runs (
+	_, err = db.ExecContext(ctx, `INSERT INTO researchflow_runs (
 		run_ref, schema_version, status, version, system_as_of, deadline_at,
 		template_ref, template_version, template_fingerprint, input_snapshot_refs,
 		resolved_template_snapshot, parameters_snapshot, originating_request_id,
 		correlation_id, result_summary_ref, termination_reason, created_at, started_at, finished_at
-	) VALUES (?, '1.0.0', 'succeeded', 3, ?, ?, ?, ?, ?, '[]', '{}', '{}', NULL, ?, ?, NULL, ?, ?, ?)\`,
+	) VALUES (?, '1.0.0', 'succeeded', 3, ?, ?, ?, ?, ?, '[]', '{}', '{}', NULL, ?, ?, NULL, ?, ?, ?)`,
 		runRef, systemAsOf, deadlineAt, payload.TemplateRef, payload.TemplateVersion,
 		strings.Repeat("a", 64), correlationID, summaryRef, createdAt, createdAt, finishedAt)
 	if err != nil {
 		t.Fatalf("insert terminal Researchflow Run fixture: %v", err)
 	}
-	_, err = db.ExecContext(ctx, \`INSERT INTO researchflow_outbox (
+	_, err = db.ExecContext(ctx, `INSERT INTO researchflow_outbox (
 		outbox_ref, run_ref, event_type, schema_version, idempotency_key,
 		correlation_id, payload_fingerprint, payload, created_at,
 		published_at, attempt_count, last_error_code
-	) VALUES (?, ?, 'researchflow.run.terminal', '1.0.0', ?, ?, ?, ?, ?, NULL, 0, NULL)\`,
+	) VALUES (?, ?, 'researchflow.run.terminal', '1.0.0', ?, ?, ?, ?, ?, NULL, 0, NULL)`,
 		outboxRef, runRef, idempotencyKey, correlationID,
 		hex.EncodeToString(payloadDigest[:]), string(payloadJSON), finishedAt)
 	if err != nil {
