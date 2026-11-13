@@ -4003,7 +4003,15 @@ func absDuration(d time.Duration) time.Duration {
 var (
 	ErrDailyBarsAsOfUnavailable = errors.New("daily-bar point-in-time storage is not enabled")
 	ErrDailyBarsAsOfNotFound    = errors.New("no coherent daily-bar revisions were recorded by the requested as_of time")
+	ErrPITStorageFailure       = errors.New("point-in-time revision storage query failed")
 )
+
+func wrapPITStorageFailure(err error) error {
+	if err == nil {
+		return nil
+	}
+	return errors.Join(ErrPITStorageFailure, err)
+}
 
 // DailyBarsAsOf reconstructs a single source-coherent bar series from locally recorded revisions.
 // It never calls a live Provider and never substitutes the current-value table.
@@ -4062,7 +4070,7 @@ func (s *DataService) DailyBarsAsOf(ctx context.Context, rawSymbol, start, end s
 	}
 	revisions, err := s.store.ListBarsAsOf(ctx, symbol, start, end, storageBasis, asOf, limit)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, wrapPITStorageFailure(err)
 	}
 	candidates := make([]model.DailyBar, 0, len(revisions))
 	for _, bar := range revisions {
@@ -4088,6 +4096,9 @@ func (s *DataService) DailyBarsAsOf(ctx context.Context, rawSymbol, start, end s
 		// 空 start 只扩大事件历史读取范围，as_of 可见性仍由 Repository 与 Service 双重限制。
 		factors, factorErr := s.AdjustmentFactorsAsOf(ctx, symbol, "", end, asOf)
 		if factorErr != nil {
+			if errors.Is(factorErr, ErrPITStorageFailure) {
+				return nil, nil, factorErr
+			}
 			return nil, nil, fmt.Errorf("%w: cannot rebuild adjusted daily bars without point-in-time adjustment factors: %v", ErrDailyBarsAsOfNotFound, factorErr)
 		}
 		bars, factorErr = rebuildAdjustedDailyBarsPIT(bars, factors, basis, end)

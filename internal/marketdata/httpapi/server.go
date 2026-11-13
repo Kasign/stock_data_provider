@@ -805,7 +805,12 @@ func writeDomainErr(w http.ResponseWriter, err error, id string) {
 	code := "PROVIDER_BAD_RESPONSE"
 	safeMessage := "upstream data provider returned an invalid response"
 	retryable := false
-	if strings.Contains(msg, "invalid A-share symbol") || strings.Contains(msg, "B-share code") || strings.Contains(msg, "exchange suffix") || strings.Contains(msg, "invalid start date") || strings.Contains(msg, "invalid end date") || strings.Contains(msg, "must not be after") || strings.Contains(msg, "must not be in the future") || strings.Contains(msg, "unsupported adjustment") || strings.Contains(msg, "cannot infer exchange") {
+	if errors.Is(err, service.ErrPITStorageFailure) {
+		status = http.StatusServiceUnavailable
+		code = "PIT_STORAGE_UNAVAILABLE"
+		safeMessage = "point-in-time revision storage is unavailable"
+		retryable = true
+	} else if strings.Contains(msg, "invalid A-share symbol") || strings.Contains(msg, "B-share code") || strings.Contains(msg, "exchange suffix") || strings.Contains(msg, "invalid start date") || strings.Contains(msg, "invalid end date") || strings.Contains(msg, "must not be after") || strings.Contains(msg, "must not be in the future") || strings.Contains(msg, "unsupported adjustment") || strings.Contains(msg, "cannot infer exchange") {
 		status = http.StatusBadRequest
 		code = "VALIDATION_ERROR"
 		safeMessage = msg

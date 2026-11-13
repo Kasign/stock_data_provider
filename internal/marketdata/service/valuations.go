@@ -252,7 +252,7 @@ func (s *DataService) ValuationsAsOf(ctx context.Context, rawSymbols []string, a
 	}
 	revisions, err := s.store.ListValuationsAsOf(ctx, symbols, asOf)
 	if err != nil {
-		return nil, err
+		return nil, wrapPITStorageFailure(err)
 	}
 	var best *model.ValuationSnapshot
 	bestRank := 0
