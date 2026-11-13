@@ -31,6 +31,8 @@ jobs:
     timeout-minutes: 40
     env:
       SERVER_RELAY_TEST_MYSQL_DSN: root:root@tcp(127.0.0.1:3306)/integration_relay_test?parseTime=true&loc=UTC
+      NEWS_MARIADB_TEST_DSN: root:root@tcp(127.0.0.1:3306)/integration_relay_test?parseTime=true&loc=UTC
+      RESEARCH_TEST_MYSQL_DSN: root:root@tcp(127.0.0.1:3306)/integration_relay_test?parseTime=true&loc=UTC
       PLATFORM_STORAGE_INTEGRATION: "1"
       PLATFORM_MARIADB_USER: root
       PLATFORM_MARIADB_PASSWORD: root
