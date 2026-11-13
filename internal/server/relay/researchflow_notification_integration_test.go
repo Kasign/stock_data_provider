@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -20,6 +21,20 @@ import (
 	researchflowstorage "example.com/stock-analysis-flow/internal/researchflow/storage"
 	servermigration "example.com/stock-analysis-flow/internal/server/migration"
 )
+
+type failOnceNotificationReceiver struct {
+	receiver *notificationapplication.EventReceiver
+	failed   bool
+}
+
+func (r *failOnceNotificationReceiver) Receive(ctx context.Context, raw []byte) error {
+	if !r.failed {
+		r.failed = true
+		return errors.New("temporary Notification acceptance failure")
+	}
+	_, err := r.receiver.Receive(ctx, raw)
+	return err
+}
 
 func TestResearchflowOutboxToNotificationInboxMariaDB(t *testing.T) {
 	dsn := os.Getenv("SERVER_RELAY_TEST_MYSQL_DSN")
@@ -137,7 +152,7 @@ func TestResearchflowOutboxToNotificationInboxMariaDB(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create Notification EventReceiver: %v", err)
 	}
-	relay, err := NewResearchflowNotificationRelay(runStore, eventReceiverAdapter{receiver: receiver}, ResearchflowNotificationConfig{
+	relay, err := NewResearchflowNotificationRelay(runStore, &failOnceNotificationReceiver{receiver: receiver}, ResearchflowNotificationConfig{
 		WorkerID: "researchflow-notification-integration", BatchSize: 4,
 		PollInterval: time.Second, LeaseDuration: 30 * time.Second,
 		PublishTimeout: 10 * time.Second,
@@ -146,11 +161,24 @@ func TestResearchflowOutboxToNotificationInboxMariaDB(t *testing.T) {
 		t.Fatalf("create Researchflow Notification Relay: %v", err)
 	}
 
-	dispatchResult, err := relay.ProcessOnce(ctx)
-	if err != nil || dispatchResult.Published != 1 || dispatchResult.Retried != 0 {
-		t.Fatalf("dispatch Researchflow Outbox through Notification Inbox: result=%+v err=%v", dispatchResult, err)
+	firstDispatch, err := relay.ProcessOnce(ctx)
+	if err != nil || firstDispatch.Claimed != 1 || firstDispatch.Published != 0 || firstDispatch.Retried != 1 {
+		t.Fatalf("failed Notification acceptance should schedule Researchflow Outbox retry: result=%+v err=%v", firstDispatch, err)
 	}
-	var publishedAt sql.NullString
+	var publishedAt, nextAttemptAt, lastErrorCode sql.NullString
+	if err := db.QueryRowContext(ctx,
+		"SELECT published_at, next_attempt_at, last_error_code FROM researchflow_outbox WHERE outbox_ref = ?", outboxRef,
+	).Scan(&publishedAt, &nextAttemptAt, &lastErrorCode); err != nil {
+		t.Fatalf("read Researchflow Outbox retry state: %v", err)
+	}
+	if publishedAt.Valid || !nextAttemptAt.Valid || lastErrorCode.String != "publish_failed" {
+		t.Fatalf("failed Notification acceptance was not persisted as retryable: published=%v next_attempt=%v error_code=%q", publishedAt, nextAttemptAt, lastErrorCode.String)
+	}
+	time.Sleep(1200 * time.Millisecond)
+	retryDispatch, err := relay.ProcessOnce(ctx)
+	if err != nil || retryDispatch.Claimed != 1 || retryDispatch.Published != 1 || retryDispatch.Retried != 0 {
+		t.Fatalf("retry Researchflow Outbox through Notification Inbox: result=%+v err=%v", retryDispatch, err)
+	}
 	if err := db.QueryRowContext(ctx,
 		"SELECT published_at FROM researchflow_outbox WHERE outbox_ref = ?", outboxRef,
 	).Scan(&publishedAt); err != nil {
