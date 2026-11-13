@@ -1771,3 +1771,43 @@ Server Bootstrap
 5. Stage/Output Registry 的版本绑定和具体条目必须在真实 Adapter 开始前确定；Template 的 `output_registry_version` 不得使用未经登记的临时版本。
 
 本轮没有改动业务模块、模板数据或契约定义；仅将当前已证实的启用门禁写入 Server 唯一主计划。
+
+### 12.89 SRV-004 Data → Quant 生产计算链路阻断复核（2026-11-13）
+
+本节只读核对以下模块分支当前 HEAD，不对这些分支执行写操作：
+
+- Quant：`feat/quant @ dd686838527978626d1c6af2a905b0c4df01c3b5`
+- Data：`feat/full-go-data-providers-api-switch @ 0d2416f6d5ecd5821bef46afe0cc265b58c7ec8a`
+- Researchflow：`feat/researchflow @ f11a83c14de5a854685e106275619e56a01630e2`
+
+#### Data 输入边界
+
+- Data 的 `app.MarketDataReader` 已组合 Quote、DailyBars、Fundamentals、Valuations 读取 Port；`application.Reader` 已适配 DataService，并支持 DailyBars/Fundamentals/Valuations 的 SystemObservedAt 截止读取。
+- 但当前公开 `app.DailyBar` 的 Open/High/Low/Close、Amount 等精确数值仍为 float64；未发现 DailyBarsV2 Decimal DTO/Provider 精度保真实现。
+- 项目契约目录明确 DATA-CTR-005 为 `pending_evidence`，缺少 v2 OpenAPI、Go Decimal Model、Provider 原始数值精度链路和 Golden；该契约明确阻断真实 Quant Data Adapter，但不阻断 Quant 纯算法/Fixture 开发。
+- 因此现有 Data Reader 可以用于已明确允许的 v1 读取场景，但不能把 float64 DailyBars 接入需要精确日线事实的生产 Factor/Quant Stage，也不能由 Server 在边界处自行转换后声称满足 v2。
+
+#### Quant 计算与结果边界
+
+- `internal/quant/application` 当前只有 `GetResult` 授权读取用例；未发现生产计算 Application Facade。
+- `factor`、`indicator` 包已有纯计算函数；`risk.EvaluateRuleSet` 已有规则执行纯逻辑，但这些函数不等于带可信输入快照、参数校验、质量判定、结果持久化和访问审计的完整生产用例。
+- `quant/result.Repository` 当前是 Save 写入端口；`GetResult` 是授权读取用例。当前 `DecodePayload` 只接受 `trend/1.0.0` 和 `risk/1.0.0`；Indicator 虽有独立 Payload 类型，但代码明确未加入 Envelope 联合类型；未发现 Factor Payload 的可生产注册项。
+- Quant Metric Registry 负责指标/参数元数据与 Metric 校验，不是 Result Payload Registry。项目契约目录中 QNT-CTR-003 仍为 `pending_evidence`；Factor 字段级目标结构也明确保持 deferred，不能因纯算法函数、Schema 文件或 Golden 文件存在就开放 Factor 结果。
+- 结论：当前 Server 不具备可调用的 Quant 生产计算入口；不得在 Server 自行串接纯函数、拼装 Manifest/Envelope 或绕过 Data v2 门禁来制造一个伪 Application Facade。计算 Facade、Payload 注册和持久化生产链路归 Quant；DailyBarsV2 精度输入证据归 Data。
+
+#### Researchflow 执行注册边界
+
+- Researchflow 已有 `StageExecutor`、版本化 Template（含 `stage_code` 与 `output_registry_version`）和 MySQL Template Registry。
+- Template Registry 负责精确版本模板的存储、指纹与模板校验；没有证据表明它同时提供 Output Registry。当前分支树未发现独立 Output Registry 实现/注册清单，Quant Metric Registry 不能代替。
+- 因此即使 Server 能调用某个模块 Port，也仍缺少可核验的 Stage → Output Schema/Validator 绑定。不能由 Server 根据 Stage 名称临时发明输出类型或 Registry 版本。
+
+#### 本轮决策与归属
+
+1. 不实现 Data → Quant 生产 Stage Adapter：DATA-CTR-005 和 Quant 生产计算入口/结果 Payload 注册均未满足启用条件。
+2. Data 继续完成 DATA-CTR-005 的 DailyBarsV2 Decimal 精度链路与 Golden；Quant 完成生产计算 Application Facade、真实输入快照绑定、Result Payload Schema/Golden/Validator/Registry、结果持久化；Researchflow 完成可装载的 Output Registry 及其 Stage 绑定。各模块按自身冻结契约推进。
+3. Server 不复刻上述领域逻辑。待模块公开用例与精确 Registry 条目齐备后，Server 才实现对应 Adapter 和组合注入。
+4. Researchflow `CapacityLimits` 仍是 Server 独立装配缺口，但两个限制值必须显式为正数且无默认值。当前 Server Process Config 尚无 Researchflow 容量配置字段；现有 `ANALYSIS_WORKERS/ANALYSIS_MAX_QUEUED` 属于旧 Analysis 队列，不得未经契约确认映射为 Researchflow 容量。需先依据 Server 配置约定确定显式配置键，再装载并注入 MySQL Run/Worker Claim 路径。
+5. 本轮只更新本分支 Server 主计划；未修改 Data、Quant、Researchflow 分支或业务代码，也未启动 Researchflow Worker/接收生产 Run。
+
+本节结论为跨分支静态代码与契约核查，集成运行状态仍为 pending_evidence。
+
