@@ -85,7 +85,7 @@ GetEvidence 的原子内容读取必须保留策略当前指针锁、授权复�
 - Active Key ID 和历史 Key；
 - Snapshot Page 与 ListEvidence Facade。
 
-EvidenceCursorCodec 已要求 Key Secret 长度 32～256 字节，最多 8 个 Key；游标 TTL 为 15 分钟，轮换时旧 Key 至少保留到其签发的游标过期。目前 internal/news/config/config.go 尚未定义该游标密钥配置，Server 也未装配完整查询 Facade。
+EvidenceCursorCodec 已要求 Key Secret 长度 32～256 字节，最多 8 个 Key；游标 TTL 为 15 分钟，轮换时旧 Key 至少保留到其签发的游标过期。News Config 已新增 Active Key ID + JSON Key Ring 的可轮换 Secret 配置解析（32～256 字节、最多 8 把 Key、Active Key 必须存在），但 Server 尚未将其注入 EvidenceCursorCodec，也未装配完整查询 Facade。
 
 不得使用硬编码密钥、空 Key、Mock Facade、永远返回空列表的 ListEvidence，或跳过签名验证的方式绕过该缺口。下一步应先按 Platform Env/Secret 约定设计可轮换的密钥配置，并为缺失/非法/轮换场景增加测试。
 
@@ -117,7 +117,7 @@ Researchflow 已有 Scheduler、Worker、WorkerPool、Claim/Lease/Fencing、候�
 
 按顺序推进，一次只处理一条真实依赖链：
 
-1. News 游标密钥配置：检查 Platform Env/Secret 约定与现有配置测试；设计 Active Key ID + Key Ring 的配置形态，支持 15 分钟轮换重叠窗口；不提供默认密钥，不把明文写入日志/诊断。更新 doc/news/ 说明和示例配置。
+1. News 游标密钥配置已完成代码入口：NEWS_EVIDENCE_CURSOR_ACTIVE_KEY_ID + NEWS_EVIDENCE_CURSOR_KEYRING_JSON；已实现缺失/非法/轮换 Key 基本校验、Secret 防泄漏和防御性副本。下一步由 CI 验收，并在 Server Bootstrap 装配 EvidenceCursorCodec 时消费该配置；轮换需保留旧 Key 至少 15 分钟。
 2. News/Research 组合构造：在 Server Composition 层构造共享 DB 上的 News Repository、公共 Verifier、当前策略复核器、Get/List Evidence Facade、Research Repository 和 Research Service，再构造已有 Research News Importer/Authorizer。所有必需依赖均为真实实现。
 3. 装配验收：为构造入口补 Bootstrap/Composition 测试；使用真实 MariaDB 集成验证从 News 授权快照读取、当前策略复核到 Research Evidence 持久化的调用链。测试应覆盖指纹篡改、策略撤销、PIT 不可见、事务失败和 Context 取消。
 4. Researchflow Stage 接入：先读取当前冻结 Stage/Template/Output Registry 契约及真实模块代码。只有具体 Stage 输入/输出、Registry 版本、可信 CallerRef 和生产 Provider 均明确后才接入；不创建空壳 StageExecutor。

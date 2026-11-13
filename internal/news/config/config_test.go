@@ -161,3 +161,64 @@ func TestProviderSecretFormattingAndJSONAreRedacted(t *testing.T) {
 		t.Fatalf("secret JSON was not redacted: %s", encoded)
 	}
 }
+
+
+func TestLoadEvidenceCursorKeyRingIsOptionalAndDefensivelyCopied(t *testing.T) {
+	if _, _, configured := mustLoad(t, nil).EvidenceCursorKeyRing(); configured {
+		t.Fatal("cursor key ring should remain optional when not configured")
+	}
+	active := "current-2026-11"
+	values := map[string]string{
+		EvidenceCursorActiveKeyIDEnv: active,
+		EvidenceCursorKeyRingEnv:     `{"current-2026-11":"01234567890123456789012345678901","previous-2026-10":"abcdefghijklmnopqrstuvwxyzABCDEF"}`,
+	}
+	got := mustLoad(t, values)
+	activeID, keys, configured := got.EvidenceCursorKeyRing()
+	if !configured || activeID != active || len(keys) != 2 {
+		t.Fatalf("unexpected cursor key ring: active=%q keys=%d configured=%v", activeID, len(keys), configured)
+	}
+	if keys[active].Value() != "01234567890123456789012345678901" {
+		t.Fatal("active cursor key was not preserved")
+	}
+	delete(keys, active)
+	_, copiedAgain, configured := got.EvidenceCursorKeyRing()
+	if !configured || len(copiedAgain) != 2 {
+		t.Fatal("caller mutation changed stored cursor key ring")
+	}
+}
+
+func TestLoadEvidenceCursorKeyRingRejectsInvalidConfigurationWithoutLeakingSecrets(t *testing.T) {
+	tests := []struct {
+		name   string
+		values map[string]string
+	}{
+		{name: "active key id without key ring", values: map[string]string{EvidenceCursorActiveKeyIDEnv: "current"}},
+		{name: "key ring without active key id", values: map[string]string{EvidenceCursorKeyRingEnv: `{"current":"01234567890123456789012345678901"}`}},
+		{name: "invalid JSON", values: map[string]string{EvidenceCursorActiveKeyIDEnv: "current", EvidenceCursorKeyRingEnv: "not-json"}},
+		{name: "active key missing", values: map[string]string{EvidenceCursorActiveKeyIDEnv: "missing", EvidenceCursorKeyRingEnv: `{"current":"01234567890123456789012345678901"}`}},
+		{name: "short secret", values: map[string]string{EvidenceCursorActiveKeyIDEnv: "current", EvidenceCursorKeyRingEnv: `{"current":"short"}`}},
+		{name: "invalid key id", values: map[string]string{EvidenceCursorActiveKeyIDEnv: "bad/key", EvidenceCursorKeyRingEnv: `{"bad/key":"01234567890123456789012345678901"}`}},
+		{name: "too many keys", values: map[string]string{EvidenceCursorActiveKeyIDEnv: "k1", EvidenceCursorKeyRingEnv: `{"k1":"01234567890123456789012345678901","k2":"01234567890123456789012345678901","k3":"01234567890123456789012345678901","k4":"01234567890123456789012345678901","k5":"01234567890123456789012345678901","k6":"01234567890123456789012345678901","k7":"01234567890123456789012345678901","k8":"01234567890123456789012345678901","k9":"01234567890123456789012345678901"}`}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := Load(env(test.values))
+			if err == nil {
+				t.Fatal("Load() error = nil, want invalid cursor key ring error")
+			}
+			if strings.Contains(err.Error(), "01234567890123456789012345678901") ||
+				strings.Contains(err.Error(), "not-json") {
+				t.Fatalf("error leaked cursor key material: %v", err)
+			}
+		})
+	}
+}
+
+func mustLoad(t *testing.T, values map[string]string) Config {
+	t.Helper()
+	got, err := Load(env(values))
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	return got
+}
