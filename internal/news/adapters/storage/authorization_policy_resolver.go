@@ -223,6 +223,10 @@ func authorizationPurposeForCode(value string) (domain.Purpose, bool) {
 	switch value {
 	case "research_analysis":
 		return domain.PurposeInternalPersonalResearch, true
+	case "risk_review":
+		// risk_review 是受控调用场景显式选择的用途，对应领域内部业务用途；
+		// 不得据此把通用 internal_business 自动推断为 risk_review。
+		return domain.PurposeInternalBusiness, true
 	case "user_display":
 		return domain.PurposePublicDisplay, true
 	default:
