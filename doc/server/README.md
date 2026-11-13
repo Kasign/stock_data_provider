@@ -1742,3 +1742,32 @@ Server Bootstrap
 6. 下一步按冻结契约逐项核对 Data/News/Quant/Research/LLM 的 Stage 清单和 Output Registry 定义；若契约已冻结但代码缺少模块用例，任务归对应模块；若模块 Port 已存在而组合映射缺失，才由 Server 实现 Adapter。
 
 本轮没有修改业务模块代码，没有新增配置或默认值。以上结论为当前代码静态核查；各 Adapter 的集成/运行状态仍为 pending_evidence。
+
+### 12.88 SRV-004 Stage 清单与 Output Schema 启用门禁复核（2026-11-13）
+
+继续对照当前分支保留的流程架构文档及 Quant/Research 跨模块契约，补充区分“流程阶段概念”与“可执行 Stage Registry”。
+
+#### 已有阶段定义（概念层）
+
+`doc/research-analysis-flow-native-go/01-总体架构与分析流程.md` 定义 Stage 0–10 的业务阶段：
+受理/范围、输入快照与质量、市场环境、行业/主题、个股量化、事件与证据、Context 与假设、策略/情景验证、风险门禁、综合与校验、归档与跟踪。
+
+该文档描述业务流程，不等于 Researchflow 当前已注册的 `stage_code`、版本化 DAG、Adapter 或 Output Schema。Researchflow Template 结构要求显式携带 `output_registry_version`，但不能由阶段标题推导 Registry 项。
+
+#### 关键契约启用门禁
+
+- Quant-Research 字段级契约明确：ResultType 名称不代表 Payload 已支持；只有精确的 `result_type + payload_schema_version` 具备完整 Schema、Golden、Go Validator 和 Registry 注册后，才允许产生该结果。
+- Indicator/Factor 的 Registry Entry 与 Quant Result Payload Registry 是不同层次；不得把 Metric Registry 当作 Researchflow Output Registry。
+- Factor 首批仍受 QNT-CTR-003 deferred 和 DATA-CTR-005 DailyBars 输入证据门禁约束；不得在 Data 输入契约未闭合时注册可生产消费的 Factor Payload。
+- RiskDecision 规则要求数据缺失、规则不可评估或输入质量不足时 unknown/reject，不得 pass；Researchflow 的 HardRiskGate Stage 还必须通过受控 stage_code Registry 与 Template gate_type 双重登记，并 fail closed。
+- Researchflow FLOW-006 当前 Registry 是 Validator 容器，不会自动发现或注册 Quant Schema。当前没有依据把所有预留 result_type 批量注册。
+
+#### 当前可执行决策
+
+1. 暂不编写一个“覆盖 Stage 0–10 的通用万能 Executor”。它会掩盖不同模块的输入、授权、时点和输出语义。
+2. 先从已具备公开 Port 且有精确输出契约的单个用例切入，核对其输入快照、system_as_of、授权主体、输出 Schema/Golden 和错误分类是否完整。
+3. 对于只有概念定义、缺少冻结 stage_code/Output Schema 或生产 Application 用例的阶段，保留阻断状态并归属到对应契约/模块，不在 Server 猜字段补齐。
+4. Server Adapter 只做 DTO 映射和模块公开用例调用；OutputRef 必须引用模块真实持久化结果，不能由 Server 生成一个看似有效的引用。
+5. Stage/Output Registry 的版本绑定和具体条目必须在真实 Adapter 开始前确定；Template 的 `output_registry_version` 不得使用未经登记的临时版本。
+
+本轮没有改动业务模块、模板数据或契约定义；仅将当前已证实的启用门禁写入 Server 唯一主计划。
