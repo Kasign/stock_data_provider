@@ -159,6 +159,17 @@ func Run(ctx context.Context) (runErr error) {
 		if err := lifecycle.Register(relay); err != nil {
 			return fmt.Errorf("注册 Research→Notification Outbox Relay 生命周期失败: %w", err)
 		}
+		if processConfig.ResearchflowCapacity.Configured {
+			researchflowRelay, relayErr := newResearchflowNotificationRelay(
+				storageResources, processConfig.ResearchNotificationRelay, processConfig.ResearchflowCapacity,
+			)
+			if relayErr != nil {
+				return fmt.Errorf("创建 Researchflow→Notification Outbox Relay 失败: %w", relayErr)
+			}
+			if err := lifecycle.Register(researchflowRelay); err != nil {
+				return fmt.Errorf("注册 Researchflow→Notification Outbox Relay 生命周期失败: %w", err)
+			}
+		}
 	}
 	var httpComponent *httpServerComponent
 	if serverRole != serverconfig.RoleWorker {
@@ -239,20 +250,12 @@ func (a notificationReceiverAdapter) Receive(ctx context.Context, raw []byte) er
 	return err
 }
 
-// newResearchNotificationRelay connects the Research-owned Outbox Port to
-// Notification's validated Inbox acceptance path. Both modules keep their own
-// persistence and transaction boundaries.
-func newResearchNotificationRelay(shared *serverresources.Resources, cfg serverconfig.ResearchNotificationRelay) (*serverrelay.ResearchOutboxRelay, error) {
+// newNotificationEventReceiver constructs Notification's validated Inbox acceptance path.
+// Both Research and Researchflow relays share this stateless receiver over the same
+// module-owned Inbox and FanoutWorkItem repositories.
+func newNotificationEventReceiver(shared *serverresources.Resources, cfg serverconfig.ResearchNotificationRelay) (*notificationapplication.EventReceiver, error) {
 	if shared == nil || shared.DB == nil {
-		return nil, errors.New("shared MariaDB resource is required for Research Notification relay")
-	}
-	outboxRepository, err := researchstorage.NewOutboxRepository(shared.DB, func() time.Time { return time.Now().UTC() })
-	if err != nil {
-		return nil, fmt.Errorf("创建 Research Outbox Repository 失败: %w", err)
-	}
-	outbox, err := researchapplication.NewOutboxService(outboxRepository, func() time.Time { return time.Now().UTC() })
-	if err != nil {
-		return nil, fmt.Errorf("创建 Research Outbox Service 失败: %w", err)
+		return nil, errors.New("shared MariaDB resource is required for Notification EventReceiver")
 	}
 	fanoutWriter, err := notificationstorage.NewMySQLFanoutWorkItemRepository(shared.DB)
 	if err != nil {
@@ -270,10 +273,62 @@ func newResearchNotificationRelay(shared *serverresources.Resources, cfg serverc
 	if err != nil {
 		return nil, fmt.Errorf("创建 Notification EventReceiver 失败: %w", err)
 	}
+	return receiver, nil
+}
+
+// newResearchNotificationRelay connects the Research-owned Outbox Port to
+// Notification's validated Inbox acceptance path. Both modules keep their own
+// persistence and transaction boundaries.
+func newResearchNotificationRelay(shared *serverresources.Resources, cfg serverconfig.ResearchNotificationRelay) (*serverrelay.ResearchOutboxRelay, error) {
+	if shared == nil || shared.DB == nil {
+		return nil, errors.New("shared MariaDB resource is required for Research Notification relay")
+	}
+	outboxRepository, err := researchstorage.NewOutboxRepository(shared.DB, func() time.Time { return time.Now().UTC() })
+	if err != nil {
+		return nil, fmt.Errorf("创建 Research Outbox Repository 失败: %w", err)
+	}
+	outbox, err := researchapplication.NewOutboxService(outboxRepository, func() time.Time { return time.Now().UTC() })
+	if err != nil {
+		return nil, fmt.Errorf("创建 Research Outbox Service 失败: %w", err)
+	}
+	receiver, err := newNotificationEventReceiver(shared, cfg)
+	if err != nil {
+		return nil, err
+	}
 	return serverrelay.NewResearchOutboxRelay(outbox, notificationReceiverAdapter{receiver: receiver}, serverrelay.Config{
 		WorkerID: cfg.WorkerID, BatchSize: cfg.BatchSize,
 		PollInterval: cfg.PollInterval, LeaseDuration: cfg.LeaseDuration,
 		RetryDelay: cfg.RetryDelay,
+	}, slog.Default())
+}
+
+// newResearchflowNotificationRelay connects the Researchflow terminal Outbox
+// to the same Notification EventReceiver. Capacity is explicit because the
+// Run repository constructor requires the same database-wide admission limits
+// used by CreateRun and Worker claims.
+func newResearchflowNotificationRelay(
+	shared *serverresources.Resources,
+	cfg serverconfig.ResearchNotificationRelay,
+	capacity serverconfig.ResearchflowCapacity,
+) (*serverrelay.ResearchflowNotificationRelay, error) {
+	if shared == nil || shared.DB == nil || !capacity.Configured {
+		return nil, errors.New("shared MariaDB resource and explicit Researchflow capacity are required")
+	}
+	outbox, err := researchflowstorage.NewMySQLRunRepository(shared.DB, researchflowstorage.CapacityLimits{
+		MaxQueuedRuns: capacity.MaxQueuedRuns,
+		MaxWorkers: capacity.MaxWorkers,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("创建 Researchflow Outbox Store 失败: %w", err)
+	}
+	receiver, err := newNotificationEventReceiver(shared, cfg)
+	if err != nil {
+		return nil, err
+	}
+	return serverrelay.NewResearchflowNotificationRelay(outbox, notificationReceiverAdapter{receiver: receiver}, serverrelay.ResearchflowNotificationConfig{
+		WorkerID: cfg.WorkerID, BatchSize: cfg.BatchSize,
+		PollInterval: cfg.PollInterval, LeaseDuration: cfg.LeaseDuration,
+		PublishTimeout: cfg.LeaseDuration / 2,
 	}, slog.Default())
 }
 
