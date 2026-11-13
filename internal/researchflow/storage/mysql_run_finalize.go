@@ -17,7 +17,7 @@ import (
 var ErrRunAlreadyFinalized = errors.New("Researchflow run is already finalized")
 
 const (
-	runFinalizedEventType   = "researchflow.run.finalized"
+	runFinalizedEventType   = "researchflow.run.terminal"
 	runFinalizedEventSchema = "1.0.0"
 )
 
@@ -36,7 +36,7 @@ type RunFinalization struct {
 }
 
 // FinalizeRun atomically fixes ResultSummary, terminal Run state and the
-// run.finalized Outbox event. It serializes with Claim/Commit/Cancel by locking
+// run.terminal Outbox event. It serializes with Claim/Commit/Cancel by locking
 // the Run row first, then Stage rows, then Attempt rows.
 func (r *MySQLRunRepository) FinalizeRun(ctx context.Context, input RunFinalization) (bool, error) {
 	if r == nil || r.db == nil {
@@ -246,7 +246,7 @@ func (r *MySQLRunRepository) FinalizeRun(ctx context.Context, input RunFinalizat
 		TemplateRef: templateRef, TemplateVersion: templateVersion,
 	})
 	if err != nil {
-		return false, fmt.Errorf("encode Researchflow finalized event: %w", err)
+		return false, fmt.Errorf("encode Researchflow terminal event: %w", err)
 	}
 	fingerprint := sha256.Sum256(eventPayload)
 	fingerprintHex := hex.EncodeToString(fingerprint[:])
@@ -266,7 +266,7 @@ func (r *MySQLRunRepository) FinalizeRun(ctx context.Context, input RunFinalizat
 		input.OutboxRef, input.RunRef, runFinalizedEventType, runFinalizedEventSchema,
 		idempotencyKey, correlationID, fingerprintHex,
 		string(eventPayload), finishedAt); err != nil {
-		return false, fmt.Errorf("insert Researchflow finalized Outbox event: %w", err)
+		return false, fmt.Errorf("insert Researchflow terminal Outbox event: %w", err)
 	}
 	result, err := tx.ExecContext(ctx, `UPDATE researchflow_runs SET
 		status = ?, version = version + 1, result_summary_ref = ?,
