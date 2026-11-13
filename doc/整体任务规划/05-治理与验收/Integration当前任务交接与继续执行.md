@@ -4,8 +4,9 @@
 - 当前工作分支：integration
 - 本文更新日期：2026-11-13
 - 本文用途：下一轮新聊天的首要接续入口。新聊天先读本文，再核对 GitHub 当前 HEAD/CI；不得直接假设本文 SHA 仍是最新。
-- 当前代码提交：d664b9f6ec08d358b914242735fde52f49e9c7c1
-- 对应 Integration CI Run：[43369529083](https://github.com/Kasign/stock_data_provider/actions/runs/43369529083)，结论 success，head_sha 与当前代码 SHA 完全一致。
+- 当前 integration HEAD：dde7d4f8fb071912ffa34bb9c50d46507d1a388b
+- 当前代码验收 SHA：dde7d4f8fb071912ffa34bb9c50d46507d1a388b；Integration CI Run [43370552552](https://github.com/Kasign/stock_data_provider/actions/runs/43370552552) success，head_sha 精确匹配。
+- News→Research 组合代码 SHA：d664b9f6ec08d358b914242735fde52f49e9c7c1；Run 43369529083 success。`dde7d4f` 仅移除一次误加的重复 LLM 传输适配器，当前代码树不包含重复实现。
 - News→Research 组合构造提交：06722fdcd2e178c69ee4ae7bb3bf06caf907545d，Run 43368950457 success。
 - 启用 News/Research MariaDB 集成测试后，Run 43369220849 对 SHA 570b001 暴露既有 News 集成夹具缺少 NEWS-CTR-002 schema_version；已在 SHA d664b9f 修正，Run 43369529083 success。
 - CI 现设置 NEWS_MARIADB_TEST_DSN 与 RESEARCH_TEST_MYSQL_DSN，News 与 Research 模块级 MariaDB 集成测试已进入根模块测试并通过；不代表跨模块 Importer 写入链路已验收。
@@ -33,7 +34,7 @@ NEWS-CTR-002 DTO 和 Golden 已补齐 AuthorizationRef.schema_version 与 Policy
 
 ### 1.3 本轮 CI 验收
 
-Run 43362987745 对 SHA 23d07e7 的 GOV-CTR-006/News 代码全量通过；Run 43364123334 对 SHA 19394e8 的游标密钥配置代码全量通过；本轮 Run 43369529083 对 SHA d664b9f 的全量 CI 及 News/Research MariaDB 集成测试通过：
+Run 43362987745 对 SHA 23d07e7 的 GOV-CTR-006/News 代码全量通过；Run 43364123334 对 SHA 19394e8 的游标密钥配置代码全量通过；本轮 Run 43369529083 对 SHA d664b9f 的全量 CI 及 News/Research MariaDB 集成测试通过；随后 Run 43370552552 对当前 HEAD dde7d4f 再次全量通过：
 
 - 全仓 Go 格式检查；
 - Root Module go vet ./...、go test ./...；

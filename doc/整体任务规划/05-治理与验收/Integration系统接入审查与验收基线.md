@@ -1,8 +1,8 @@
 # Integration 系统接入审查与整体验收基线
 
 - 验收分支：`integration`
-- 本文最近一次核对的 integration 代码 SHA：`d664b9f6ec08d358b914242735fde52f49e9c7c1`；当前分支 HEAD 后续 docs-only 更新为 `1fd9e6c81cac718cf2b6e4690e6277d11cff812b`。
-- 当前 CI：Integration Run `43369529083`，对应代码 SHA `d664b9f6ec08d358b914242735fde52f49e9c7c1`，结论 `success`；gofmt、root/go-core vet/test、News/Research MariaDB 集成测试、Compose、WebUI 语法/单测和 Docker 构建全部通过。
+- 本文最近一次核对的 integration 代码 SHA：`d664b9f6ec08d358b914242735fde52f49e9c7c1`；当前分支 HEAD 为 `dde7d4f8fb071912ffa34bb9c50d46507d1a388b`。
+- 当前 CI：Integration Run `43370552552`，对应精确 HEAD `dde7d4f8fb071912ffa34bb9c50d46507d1a388b`，结论 `success`；gofmt、root/go-core vet/test、News/Research MariaDB 集成测试、Compose、WebUI 语法/单测和 Docker 构建全部通过。上一轮 Run `43369529083` 对代码 SHA `d664b9f` 同样 success。
 - 历史审查基线 SHA：`63f49065a5ef3379d95948a6c2c6e504a555a63f`（Run #54），仅作为历史参考
 - 历史参考：Run #23（`43178908392`）仅对应旧 SHA `fdc19b8591223dabccb533389d472713bfecc415`，结论 `success`
 - 本文性质：Integration 当前代码树的源码接入审查、真实依赖 CI 证据与后续验收基线
@@ -209,7 +209,7 @@ Registry 已具备 namespace 校验、确定性排序、执行报告和 Schema �
 
 本节更新当前 integration 的跨模块接入事实。完整可续接任务清单、文件入口和执行顺序见《[Integration 当前任务交接与继续执行](./Integration当前任务交接与继续执行.md)》。
 
-- 最新精确 SHA：23d07e7716aa6d7cd7f0fda4d3dbfa178c148a4e；Integration CI Run [43362987745](https://github.com/Kasign/stock_data_provider/actions/runs/43362987745) success。
+- 最新精确 SHA：`dde7d4f8fb071912ffa34bb9c50d46507d1a388b`；Integration CI Run [43370552552](https://github.com/Kasign/stock_data_provider/actions/runs/43370552552) success。
 - GOV-CTR-006 公共 JCS Runtime Verifier 已在 internal/platform/authorization 实现；News Adapter 已在 internal/news/adapters/platform 实现。四份 GOV Golden 和 News Binding Golden 已纳入测试。
 - Server Bootstrap 已在 Key Ring 配置时构造 News Evidence Query Facade、EvidenceCursorCodec、Research Service、Importer 和 Authorizer；Key Ring 缺失时不生成默认密钥。当前没有 Stage/HTTP 消费端调用该组合，真实 MariaDB News→Research 持久化链路仍待验收。
 - Research News Evidence Importer/Authorizer 已存在；News MySQL Repository、Research Storage 和 Research Application 的构造入口均可复用，不得重写。
