@@ -31,13 +31,13 @@
 | Fanout Factory / Dispatcher | 模块内实现完成 | 非空 Filter 的具体事件语义需事件 Owner 冻结 Schema |
 | Delivery / Attempt / Retry / Recovery | 模块核心实现完成 | 真实渠道回执、幂等和 Lookup 语义需由具体 Provider 验收 |
 | Diagnostics / Consistency | 模块内只读诊断实现完成 | 根 HTTP、权限和审计接入归 Server |
-| Recipient Directory / Worker / 根 Migration | 等待组合根接入 | 真实身份目录、Worker 生命周期和根 Migration 注册归 Server |
+| Recipient Directory / Worker / 根 Migration | 部分接入 | Integration 已注册根 Migration，并接入 Research/Researchflow Outbox → Inbox/FanoutWorkItem Relay；真实身份目录、Fanout/Delivery Worker 和渠道 Provider 仍未装配 |
 
 ## 未完成事项与责任边界
 
 1. **真实渠道 Adapter**：Notification 提供 ChannelAdapter SPI、配置快照和精确版本注册能力。只有确定首个渠道、通信协议、凭据来源及回执/幂等/查询语义后，才能实现真实 Provider；不得用 Fake 或虚构配置宣称生产完成。
 2. **非空 Filter Matcher**：当前已有 Matcher Port，非空 Filter 在没有匹配器时 fail closed。具体字段、版本和匹配语义必须由事件 Owner 冻结，Notification 不自行发明 DSL。
-3. **生产装配**：真实 Recipient Directory、Worker 生命周期、根 Migration 注册、渠道和平台依赖装配由 Server 组合根负责；Notification 分支不修改 Server 或其他模块。
+3. **生产装配**：根 Migration、EventReceiver/Inbox 和 Research/Researchflow Outbox Relay 已在 integration 接入；真实 Recipient Directory、Fanout/Delivery Worker、渠道 Provider 和平台依赖装配仍由 Server 组合根负责；本次 Inbox 接收不代表渠道投递。
 4. **业务模板**：真实模板文案及渠道专属格式由业务决议提供；不创建占位业务模板。
 
 ## 关键安全边界
@@ -59,3 +59,10 @@
 6. 不要求先合并到 integration 才能执行本分支自身测试或 CI；本分支独立验收以其当前 HEAD 对应的工作流结果为准。
 
 当前详细任务状态和历史实施证据以 [任务拆分与验收](02-任务拆分与验收.md) 为准。历史提交记录中的旧 CI 结果仅作为历史证据，不代表当前状态。
+
+
+## Integration 接入状态（2026-11-13）
+
+Server 在 integration 已通过统一 EventReceiver 构造入口装配 Notification Schema Registry、MySQL Inbox Repository 和 FanoutWorkItem Writer，并接入 Research 与 Researchflow 两条 Outbox Relay。Researchflow Relay 的 MariaDB 成功接收、失败重试、幂等和组件启停测试通过；Integration Run #54（`43359166036`，SHA `63f49065a5ef3379d95948a6c2c6e504a555a63f`）全流程 CI 通过。
+
+当前完成边界是 Outbox → EventReceiver → Inbox/FanoutWorkItem。Recipient Directory、真实 Channel Provider、Fanout/Delivery Worker、真实回执与 Unknown 对账仍未完成，不得将 Inbox 接收计为渠道发送成功。
