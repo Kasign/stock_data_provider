@@ -16,6 +16,7 @@
 - 2026-11-14 第 6 项补记（远端提交 `a98823abe`）：LLM Provider 与 Notification Delivery 生产装配条件只读复核已完成，**均判定 `blocked`**，详见本文第 7 节。至此第 3 节 1～6 项全部处理完毕：1、2、3A 为 `pass`；3B、4、5、6 为 `blocked`。**当前没有可推进的 Integration 开发任务**，在新证据或正式生产消费端出现前停止新增 Integration 代码（见第 7.4 节）。这一「等待态」的根因、工作面选择与反空转规则见本文第 10 节；后续若用户未授权跨模块/契约变更，不应再重复盘点或制造文档进度。
 - 2026-11-14 CI 可观测性补记：本机 `gh` 2.104.0 已由用户在本机终端完成网页授权登录（`Kasign` / keyring / `repo,read:org`），`gh run view 43561072301 --log` 已成功取得 Run 68 逐步日志，确认 MariaDB service healthy、三个 DSN 非空、bootstrap 包 `ok`；匿名 REST API 的 job 日志下载返回 403。因 CI 未启用 `-v`，Run 68 日志不含逐用例明细；该限制已由 Run 69 的 `test-integration-verbose` 步骤永久消除。工具链细节、HTTPS fetch 兜底与证据级别见本文第 8 节。
 - 2026-11-14 工作面复盘补记：用户指出「连续多轮没有实质性任务进度」。核对后确认 Integration 分支可独立完成的编码工作已完结，5 条 `blocked` 链全部需要其他模块领域代码 / L1 冻结契约 / 真实外部来源证据；此前把「等 Owner」当作分支内任务反复盘点，是策略偏差。本轮新增第 10 节固化工作面判定、P0 精确解锁清单、三种工作面与反空转规则，并交付两项 Integration 侧代码资产（B 组成功路径用例 + CI `-v` 逐用例证据），Run `43571558064` 对代码 SHA `4752dc104` success。`.workbuddy/memory/2026-11-14.md` 经用户确认已提交（`0f7aab244`），不加入 `.gitignore`。
+- 2026-11-14 工作面 A 补记：用户已「授权A」。按登记簿第 5 节先产出 `doc/contract/NEWS-CTR-001-available_at-来源证据解锁影响分析.md`（提案，待正式决策）。**A 第 1 步经 SEC 官方 FAQ 与 EDGAR PDS 规范核实，判定 `sec-edgar` 与现有 Provider 均不提供「首次公开可获取时间」的合格证据**，故按冻结契约不得新增字段/表、不得改 PIT SQL；当前停在「正式决策」门禁，需项目负责人在提案第 3 节选定 P1/P2/P3。详见本文第 10.7 节。
 
 ## 1. 当前已完成的工作
 
@@ -164,7 +165,7 @@ Researchflow 已有 Scheduler、Worker、WorkerPool、Claim/Lease/Fencing、候�
 1. 打开本文。
 2. 查询 integration 最新 HEAD 和最新 CI（不要复用本文 SHA 作为假定当前值）。
 3. 查看 doc/contract/PLAT-002-项目级契约冻结登记簿.md、GOV-CTR-006、doc/news/README.md、doc/research/README.md、doc/researchflow/README.md、doc/server/README.md；处理第 4 项时另读 FLOW-CTR-001～004 登记行、doc/researchflow/04-ApplicationPort与运行时契约落地补充.md 与本文第 6 节。
-4. **当前总览（2026-11-14，以代码 SHA `c25d881c0` / Run `43574975820` 为准）**：第 3 节 1、2、3A `pass`（A 组已有逐用例级 CI 实证，见第 8.2 节）；3B、4、5、6 `blocked`。Integration 侧可独立完成的工作已完结：A 组真库验收、B 组成功路径待启用用例、CI 逐用例可观测性均已落地。**当前没有可推进的 Integration 开发任务**，不要重复盘点、不要装配空壳、不要重跑已通过的 CI。**关键分流：若用户只说「继续下一步任务」、远端无新证据且未授权工作面 A，直接按第 10.5 节汇报等待态与三个选项，不再产生空转提交。** 第 6 项 LLM / Notification 的 `blocked` 详见第 7 节；Researchflow Stage 与 Quant 按第 6 节条件阻断；News B 组按第 10.2 节的 10 步清单等待解锁。只有出现新证据或正式生产消费端后，才选取**其中一条**真实依赖链推进。
+4. **当前总览（2026-11-14，以代码 SHA `c25d881c0` / Run `43574975820` 为准）**：第 3 节 1、2、3A `pass`（A 组已有逐用例级 CI 实证，见第 8.2 节）；3B、4、5、6 `blocked`。Integration 侧可独立完成的工作已完结：A 组真库验收、B 组成功路径待启用用例、CI 逐用例可观测性均已落地。**当前没有可推进的 Integration 开发任务**，不要重复盘点、不要装配空壳、不要重跑已通过的 CI。**关键分流：若用户只说「继续下一步任务」、远端无新证据且未授权工作面 A，直接按第 10.5 节汇报等待态与三个选项，不再产生空转提交。** 第 6 项 LLM / Notification 的 `blocked` 详见第 7 节；Researchflow Stage 与 Quant 按第 6 节条件阻断；News B 组按第 10.2 节的 10 步清单等待解锁。只有出现新证据或正式生产消费端后，才选取**其中一条**真实依赖链推进。**工作面 A 已于 2026-11-14 授权，但停在契约变更的「正式决策」门禁**（来源语义审核判定不合格，见第 10.7 节与 `doc/contract/NEWS-CTR-001-available_at-来源证据解锁影响分析.md`）；在项目负责人选定 P1/P2/P3 前，下一轮不要重复盘点、不要动代码。
 5. CI 排障与工具链见第 8 节：本机 `gh` 已安装并完成网页授权登录，可用 `gh run view <run-id> --log` 核对逐用例结果；远端同步若 SSH 报主机密钥校验失败可用 HTTPS 只读 fetch 兜底。不要把 PAT 贴进对话、写进 `.zshrc` 明文或提交进仓库。
 
 ## 6. 2026-11-14 第 4 项 Researchflow Stage 契约准入盘点（只读，结论 `blocked`）
@@ -402,3 +403,12 @@ Researchflow 已有 Scheduler、Worker、WorkerPool、Claim/Lease/Fencing、候�
 - `newsResearchPITLayout` 是 `pitTimeLayout` 的手工拷贝，无编译期约束；payload 只校验 4 个留痕键存在（值一致性由列级断言覆盖）；`ListEvidence` 的 `available_at` 与 `GetEvidence` 一致性在解锁后仍缺用例；`count == 1` 是无 WHERE 的全表计数，依赖子测试顺序（当前无 `t.Parallel()`）。
 - CI 逐步日志受 GitHub 保留期限制；`$GITHUB_STEP_SUMMARY` 只写 B 组 SKIP 告警与 PASS 计数，未上传结构化 artifact。
 - 本机 `gh` OAuth token 缺 `workflow` scope，HTTPS push 无法更新 `.github/workflows/*.yml`；本轮最终用 `GIT_SSH_COMMAND="ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new"` 的 SSH 非交互方式推送成功，该差异已记入工作日志。
+
+### 10.7 2026-11-14 工作面 A 已授权：第 1 步完成，停在正式决策门禁
+
+- 用户 2026-11-14 明确「授权A」。按第 10.5 节第 2 条与 `PLAT-002` 登记簿第 5 节，先产出契约变更影响分析，**不直接动代码**。
+- 交付 `doc/contract/NEWS-CTR-001-available_at-来源证据解锁影响分析.md`（提案，待正式决策）：完成影响分析、消费者影响确认材料、版本升级方案、迁移边界、十步实施计划与验收标准，并附来源语义审核的外部官方证据。
+- **决定性结论**：SEC Webmaster FAQ 逐字声明 `There is no timestamp to indicate when filing content is first available on sec.gov.`；`Acceptance Time` 是「被 EDGAR 接受」的系统时间（EST），到 sec.gov 可见还有 1-3 分钟、高负载显著增加且**不可预测**的 lag；EDGAR PDS Technical Specification 的 `<TIMESTAMP>` 是 `Edgar Dissemination date-time, used for Post Acceptance Corrections only`，由 R/A Subsystem 提供，属系统侧证明材料。仓库已接入 Provider 的字段全在契约负面清单。因此 `sec-edgar` 与现有 Provider **均不合格**，与契约 `:48`「当前没有符合条件的已接入来源」一致，且现在有可复核的外部官方出处。
+- 按 `新闻模块开发任务与验收清单.md:799` 与 `新闻数据模型与质量契约.md:48`，此时**不得新增字段/表、不得改 PIT SQL、不得生成 `available_at`**；先动代码即契约明令禁止的「造壳」。这是 A 第 1 步的实质结论，不是等待 Owner 的空转。
+- **下一步必须由项目负责人**在提案第 3 节选定 **P1**（推荐：提供合格真实来源与授权凭据）/ **P2**（按契约 `:47` 新增带区间语义的独立字段，属 MAJOR 且不能替代 `available_at`）/ **P3**（维持现状），并确认版本升级与消费者影响。**未选定前不进入代码实施**；P2 单靠新字段无法解锁 B 组（Research 侧仍要求 `AvailableAt != nil`）。
+- 本轮无 `.go` / workflow 改动，不触发 CI；代码验收仍为 `c25d881c0` / Run `43574975820`（#70）。
