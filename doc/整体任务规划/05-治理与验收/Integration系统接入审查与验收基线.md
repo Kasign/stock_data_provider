@@ -224,7 +224,7 @@ Registry 已具备 namespace 校验、确定性排序、执行报告和 Schema �
 
 - A 组跨模块 MariaDB 验收用例已落地于 `internal/server/bootstrap/research_news_mariadb_integration_test.go`，使用真实双 namespace Migration、真实组合根和冻结 NEWS-CTR-002 Golden。**状态已升级为 `pass`**：提交 `b0aabaa2edf89c44cd2aeb79b1a57210a8017d1b` 的 Integration CI Run [43561072301](https://github.com/Kasign/stock_data_provider/actions/runs/43561072301) success，head_sha 精确匹配，全部检查项通过。本机无 MariaDB 时按 DSN 守卫 `t.Skip` 只代表开发态；已用非空假 DSN 验证三个 DB 子测试进入真实连接阶段而非 Skip，CI job env 提供 `SERVER_RELAY_TEST_MYSQL_DSN` 与 mariadb:11.4 service，确认该 success 包含真库执行。公开仓库逐步日志下载需管理员权限（403），不声称逐用例日志已核对。无 DB 的 Golden 指纹/播种字段/策略载荷自检与游标旧 Key 轮换用例亦在本地通过。
 - B 组（Research Evidence 成功持久化、AuthorizationRef 与派生关系留痕）状态为 `blocked`，不是 `fail`：News 侧 `researchEvidenceRecordFromPIT` 依据 GOV-CTR-002 不设置 `AvailableAt`，Research 侧 `mapNewsEvidence` 要求非 nil 否则 `ErrEvidenceNotPITSafe` 且不落库。前置条件为 News Owner 提供可验证的 `available_at` 来源证据；Integration 不得伪造、回填或修改 News 领域代码绕过。
-- 完整用例清单、代码依据和后续顺序见《[Integration 当前任务交接与继续执行](./Integration当前任务交接与继续执行.md)》第 3 节第 3 项。A 组已 `pass`，不再重复；第 3 节第 4 项 Researchflow Stage 契约盘点已于 2026-11-14 完成并判定 `blocked`（见本文第 9 节与交接文档第 6 节），下一轮从第 3 节第 6 项继续。当前阶段判定仍为 INT-B 进行中，系统整体尚未达到 INT-C 端到端业务联调条件。
+- 完整用例清单、代码依据和后续顺序见《[Integration 当前任务交接与继续执行](./Integration当前任务交接与继续执行.md)》第 3 节第 3 项。A 组已 `pass`，不再重复；第 3 节第 4 项 Researchflow Stage 契约盘点已判定 `blocked`（见本文第 9 节与交接文档第 6 节），第 6 项 LLM / Notification 装配复核亦已完成并判定 `blocked`（见本文第 10 节与交接文档第 7 节）。**第 3 节 1～6 项至此全部处理完毕：1、2、3A `pass`，3B、4、5、6 `blocked`；当前无新增 Integration 开发任务**，收到新证据后只推进其中一条真实依赖链。当前阶段判定仍为 INT-B 进行中，系统整体尚未达到 INT-C 端到端业务联调条件。
 
 ## 9. 2026-11-14 第 4 项 Researchflow Stage 准入判定（`blocked`）
 
@@ -250,3 +250,5 @@ Registry 已具备 namespace 校验、确定性排序、执行报告和 Schema �
 - **Notification**：RecipientDirectory 仍是 Port，ChannelAdapter/Resolver 是内部 SPI；DeliveryExecutionService 只执行已领取任务，当前无真实 Recipient Directory、具体 Channel Adapter、Delivery Worker 和凭据。Bootstrap 只接入 EventReceiver/Inbox 与 Outbox Relay。Run `43359166036` 的既有证据仅覆盖 Outbox→Inbox/FanoutWorkItem，不代表真实渠道发送。结论：不创建 Fake 生产渠道或空壳 Worker。
 - **后续条件**：LLM 需要真实 Gateway 版本、目标模型、SecretRef 与逐项 capability evidence；Notification 需要真实渠道协议/凭据、回执/幂等/查询语义和权威身份目录。条件未满足前，Server 组合根没有可安全装配的生产 Provider/Worker，Integration 不新增代码。
 - **CI 边界**：`integration-ci.yml` 的 paths 不包含 `doc/**`，本轮文档同步提交不会触发 CI；代码验收仍以 SHA `b0aabaa2edf89c44cd2aeb79b1a57210a8017d1b` / Run `43561072301` 为准，不能把新文档 HEAD 记作 CI 通过。
+- **工具链与证据级别**：本机已安装 `gh` 2.104.0，网页设备码登录需用户一次浏览器交互授权（非交互 shell 不能代替）；未认证时 job 逐步日志下载返回 403，授权后可用 `gh run view 43561072301 --log` 核对。A 组 `pass` 的证据组合、「逐用例日志待补齐」口径、`git fetch` 的 HTTPS 兜底方式与多会话协作注意事项，统一见交接文档第 8 节，不在本文重复。
+- **协作事实**：第 6 项结论由远端 docs-only 提交 `a98823abe` 落地；本地曾落后一个提交，已按交接文档第 4 节规则核对证据后快进对齐，未重复盘点。下次新聊天务必先查远端 HEAD/CI，不得假定本文 SHA 为最新。

@@ -3,7 +3,7 @@
 - 仓库：Kasign/stock_data_provider
 - 当前工作分支：integration
 - 本文更新日期：2026-11-14
-- 当前 integration HEAD：`c43fb88f72f33648513e528b9f634acaec71f14e`（docs-only，父提交 `b0aabaa2edf89c44cd2aeb79b1a57210a8017d1b`）；最近代码验收 SHA `b0aabaa2edf89c44cd2aeb79b1a57210a8017d1b`，Run `43561072301` success。
+- 当前 integration HEAD：`a98823abeff35e4ea439161b78b3318f589005c6`（2026-11-14 docs-only，第 6 项 LLM / Notification 装配复核结论）；最近**代码**验收 SHA 仍为 `b0aabaa2edf89c44cd2aeb79b1a57210a8017d1b`，Run `43561072301` success。该代码 SHA 之后均为 docs-only 提交，按 CI paths 规则不触发新 CI，不得把文档 HEAD 记作 CI 通过。
 - 本文用途：下一轮新聊天的首要接续入口。新聊天先读本文，再核对 GitHub 当前 HEAD/CI；不得直接假设本文 SHA 仍是最新。
 - 2026-11-14 联调补记：新增 `internal/server/bootstrap/research_news_mariadb_integration_test.go`，落地第 3 节 A 组跨模块 MariaDB 验收用例与无 DB 自检；提交 `b0aabaa2e` 已推送 integration，Integration CI Run [43561072301](https://github.com/Kasign/stock_data_provider/actions/runs/43561072301) success（head_sha 精确匹配，全部检查项通过），**A 组状态由 `not_comparable` 升级为 `pass`**。本机无 MariaDB/Docker，本地 `t.Skip` 只代表开发态；已用非空假 DSN 在本地验证三个 DB 子测试均进入真实连接阶段而非 Skip，且 CI job env 提供 `SERVER_RELAY_TEST_MYSQL_DSN` 与 mariadb:11.4 service，可确认 CI 上真库执行。公开仓库逐步日志下载需管理员权限（403），故证据组合为「workflow 配置 + DSN 守卫代码 + 精确 SHA success」，不声称逐用例日志已核对。B 组成功写入链路经源码核对确认被 `available_at` 硬阻断，记为 `blocked`。
 - 本轮代码验收 HEAD：b0aabaa2edf89c44cd2aeb79b1a57210a8017d1b；Run 43561072301 success。上一轮代码验收 SHA dde7d4f8fb071912ffa34bb9c50d46507d1a388b（Run 43370552552 success）保留为历史记录。
@@ -13,6 +13,8 @@
 - 启用 News/Research MariaDB 集成测试后，Run 43369220849 对 SHA 570b001 暴露既有 News 集成夹具缺少 NEWS-CTR-002 schema_version；已在 SHA d664b9f 修正，Run 43369529083 success。
 - CI 现设置 NEWS_MARIADB_TEST_DSN 与 RESEARCH_TEST_MYSQL_DSN，News 与 Research 模块级 MariaDB 集成测试已进入根模块测试并通过；不代表跨模块 Importer 写入链路已验收。
 - 2026-11-14 第 4 项补记：完成 Researchflow Stage/Template/Output Registry 冻结契约与真实代码的**只读盘点**，判定**第 4 项 `blocked`（不是 `fail`）**——Stage 输入/输出、Output Registry 版本与注册项、生产 Provider 三项门禁未通过，仅可信 CallerRef 在契约定义层满足、运行时绑定仍有 L2 缺口。完整证据、责任归属与重新进入条件见本文第 6 节。本轮未新增任何 Stage / StageExecutor / Stage Code / 输出 Schema 代码，未改动模块领域代码，未触发新 CI；阶段判定仍为 INT-B 进行中。
+- 2026-11-14 第 6 项补记（远端提交 `a98823abe`）：LLM Provider 与 Notification Delivery 生产装配条件只读复核已完成，**均判定 `blocked`**，详见本文第 7 节。至此第 3 节 1～6 项全部处理完毕：1、2、3A 为 `pass`；3B、4、5、6 为 `blocked`。**当前没有可推进的 Integration 开发任务**，在新证据或正式生产消费端出现前停止新增 Integration 代码（见第 7.4 节）。
+- 2026-11-14 CI 可观测性补记：本机已安装 `gh` 2.104.0，网页设备码登录需要一次浏览器交互授权，非交互 shell 不能代完成；登录后可用 `gh run view 43561072301 --log` 读取逐步日志，用于核对 A 组逐用例输出。未认证时公开 REST API 的 job 逐步日志下载返回 403。工具链细节、`git fetch` 的 HTTPS 兜底方式与 A 组证据级别见本文第 8 节。
 
 ## 1. 当前已完成的工作
 
@@ -161,7 +163,8 @@ Researchflow 已有 Scheduler、Worker、WorkerPool、Claim/Lease/Fencing、候�
 1. 打开本文。
 2. 查询 integration 最新 HEAD 和最新 CI（不要复用本文 SHA 作为假定当前值）。
 3. 查看 doc/contract/PLAT-002-项目级契约冻结登记簿.md、GOV-CTR-006、doc/news/README.md、doc/research/README.md、doc/researchflow/README.md、doc/server/README.md；处理第 4 项时另读 FLOW-CTR-001～004 登记行、doc/researchflow/04-ApplicationPort与运行时契约落地补充.md 与本文第 6 节。
-4. 第 3 节第 6 项已完成只读复核：LLM 与 Notification 均为 `blocked`，详见第 7 节。若没有新的真实 Gateway 版本/CapabilityState 证据，或真实渠道协议、凭据与身份来源，不重复盘点、不装配空壳。Researchflow Stage 与 Quant 生产接入继续按第 6 节条件阻断；News B 组继续等待可证明的 `available_at` 来源证据。只有出现新证据或新消费端后，才选取下一条真实依赖链。
+4. **当前总览（2026-11-14，以 HEAD `a98823abe` 为准）**：第 3 节 1～6 项已全部处理完毕——1、2、3A `pass`；3B、4、5、6 `blocked`。**当前没有可推进的 Integration 开发任务**，不要重复盘点、不要装配空壳、不要重跑已通过的 CI。第 6 项 LLM / Notification 的 `blocked` 详见第 7 节；Researchflow Stage 与 Quant 按第 6 节条件阻断；News B 组继续等待可证明的 `available_at` 来源证据。只有出现新证据（真实 Gateway 版本/CapabilityState、真实渠道协议/凭据/身份目录、Output Registry 与 StageExecutor、Quant Application Port 等）或正式生产消费端后，才选取**其中一条**真实依赖链推进，并先按第 4 节规则核对最新 HEAD/CI。
+5. CI 排障与工具链见第 8 节：本机 `gh` 已安装（登录需一次浏览器设备码授权），远端同步若 SSH 报主机密钥校验失败可用 HTTPS 只读 fetch 兜底。不要把 PAT 贴进对话、写进 `.zshrc` 明文或提交进仓库。
 
 ## 6. 2026-11-14 第 4 项 Researchflow Stage 契约准入盘点（只读，结论 `blocked`）
 
@@ -248,3 +251,23 @@ Researchflow 已有 Scheduler、Worker、WorkerPool、Claim/Lease/Fencing、候�
 - LLM 与 Notification 均为 `blocked`，不是 `fail`；当前没有可在 Integration 越权补齐的模块内实现，也没有满足真实依赖条件的组合根装配任务。
 - Researchflow Stage 的 FLOW-CTR-004/生产 Provider 缺口与 Quant 的 Application/Payload Registry 门禁已分别记录在第 6 节及第 3 节第 5 项；News→Research B 组仍等待来源可证明的 `available_at`。不重复盘点这些既有结论。
 - 在新 Gateway/渠道/身份/来源证据或正式生产消费端出现前，停止新增 Integration 代码；收到新证据后只推进其中一条真实依赖链。
+
+## 8. 2026-11-14 CI 可观测性与本地工具链
+
+### 8.1 远端与 CI 访问边界
+
+- remote 为 `git@github.com:Kasign/stock_data_provider.git`，SSH 认证与 push 可用；`.github/workflows/integration-ci.yml` 的 push 分支为 `integration`、paths 含 `**/*.go` 且不含 `doc/**`，**push 代码自动触发 CI，docs-only 提交不触发**，无需手动 dispatch。job 自带 `mariadb:11.4` + redis service，并在 job 级注入 `SERVER_RELAY_TEST_MYSQL_DSN`、`NEWS_MARIADB_TEST_DSN`、`RESEARCH_TEST_MYSQL_DSN`。
+- 未认证时 GitHub Actions 页面与 REST API 可读 **run / step 级状态**（例如 `/actions/runs/{id}/jobs`），但 job 逐步日志下载返回 **403**（需仓库权限）。这是权限边界，不是日志不存在。
+- 本机已安装 `gh` 2.104.0。推荐登录方式：`gh auth login --web --scopes "repo,read:org"`（OAuth 由 gh 托管、不接触明文 PAT）；设备码流程输出形如 `08E3-2BA8`，需**用户**在 https://github.com/login/device 完成一次浏览器授权，非交互 shell 不能代替。授权后：`gh run view <run-id>` 看各 step、`gh run view <run-id> --log` 读逐步日志、`gh run rerun <run-id>` 重跑、`gh auth status` 验证。
+- 安全边界：不要把 PAT 贴进对话、写进 `.zshrc` 明文或提交进仓库；无人值守（定时任务/自动化）才使用平台 secret，且按最小 scope 配置。本地不建议另装 MariaDB：CI 已是 `mariadb:11.4` + Go 1.23 且已跑绿，本地版本漂移反而制造「本地过、CI 挂」；确需调试播种链时用与 CI 同名镜像、相同 DSN/healthcheck 对齐。
+- 若 `git fetch origin integration` 报 `Host key verification failed`，或本机策略禁止读取 `~/.ssh`，可用 `git -c url."https://github.com/".insteadOf="git@github.com:" fetch origin integration` 走 HTTPS 只读同步（公开仓库无需凭据，只覆盖本次命令、不改 remote 配置），随后 `git merge --ff-only origin/integration`。2026-11-14 已用该方式同步远端提交 `a98823abe`。
+
+### 8.2 A 组 `pass` 的证据级别
+
+- **有效证据**（足以支撑 `pass`、不重复执行）：提交 `b0aabaa2edf89c44cd2aeb79b1a57210a8017d1b` 的 Integration CI Run [43561072301](https://github.com/Kasign/stock_data_provider/actions/runs/43561072301) success，`head_sha` 精确匹配且全部 step success；workflow 配置含真实 DSN 与 MariaDB service；本地用非空假 DSN 验证三个 DB 子测试进入真实连接阶段而非 `t.Skip`。
+- **待补齐（不改变 `pass` 结论）**：逐步日志中三个 DB 子测试的逐用例 PASS 输出。`gh` 完成授权后用 `gh run view 43561072301 --log` 核对并在此记录具体用例名与结果；取得前保持「不声称逐用例日志已核对」的口径。
+- CI Go 版本 1.23.x 与本机 1.27.4 不同，已实测新测试代码兼容；`proxy.golang.org` 在本机返回 Bad Gateway，依赖下载用 `GOPROXY=https://goproxy.cn,direct`。
+
+### 8.3 多会话协作事实
+
+- 2026-11-14 出现由 `Eric.Wang` 推送的远端 docs-only 提交 `a98823abe`（第 6 项结论），本地 HEAD 落后一个提交。**必须每轮先按第 4 节规则查远端 HEAD/CI，再决定是否有任务可做**；发现远端已包含对应工作时只核对证据、不重复开发。本轮即按此处理，未重做第 6 项。
