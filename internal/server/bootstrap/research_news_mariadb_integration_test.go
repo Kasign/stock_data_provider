@@ -31,8 +31,10 @@ import (
 // 本文件是 News→Research 跨模块 MariaDB 联调验收（交接文档第 3 节第 3 项的 A 组）。
 // 与 research_news_test.go 的空壳 &sql.DB{} 构造测试不同，这里所有依赖都是真实实例：
 // 真实 MariaDB、真实双 namespace Migration、真实 Server 组合根、真实冻结 Golden。
-// B 组（Research Evidence 成功持久化）因 News 不提供 available_at 而被 blocked，
-// 见本文件 TestNewsResearchMariaDBIntegration/authorized_read_and_fail_closed_import。
+// B 组（Research Evidence 成功持久化）因 News 不提供 available_at 而被 blocked；
+// 成功路径用例已落地于 successful_import_with_verified_available_at，当前按契约
+// 事实显式 t.Skip，News Owner 完成来源证据接入与冻结契约变更后自动启用。
+// 本文件绝不伪造 available_at、不回填 published_at/observed_at、不使用 Mock Facade。
 
 const (
 	newsResearchDSNEnv    = "SERVER_RELAY_TEST_MYSQL_DSN"
@@ -40,6 +42,8 @@ const (
 	newsResearchCallerRef = "service:researchflow"
 	newsResearchActiveKey = "active-v2"
 	newsResearchOldKey    = "previous-v1"
+	// 与 internal/research/storage/repository.go 的 pitTimeLayout 保持一致。
+	newsResearchPITLayout = "2006-01-02T15:04:05.000000000Z"
 )
 
 var newsResearchDatabaseSeq atomic.Uint64
@@ -490,9 +494,11 @@ func TestNewsResearchMariaDBIntegration(t *testing.T) {
 				t.Fatalf("授权读取结果异常: %+v", record)
 			}
 			// 当前契约事实：News 不提供可验证的 available_at，返回 null。
-			// 这是 B 组成功写入链路被 blocked 的直接原因，显式断言防止被误改。
+			// 这是 B 组成功写入链路被 blocked 的直接原因。若 News Owner 完成来源证据
+			// 接入与冻结契约变更后返回非 nil，本 fail-closed 分支不再适用，改由
+			// successful_import_with_verified_available_at 覆盖成功路径。
 			if record.AvailableAt != nil {
-				t.Fatalf("News 返回了未预期的 available_at: %v", *record.AvailableAt)
+				t.Skip("News 已提供可验证 available_at；fail-closed 分支由 B 组成功路径接管")
 			}
 
 			_, err = f.composition.importer.ImportEvidence(ctx, researchnews.ImportRequest{
@@ -509,6 +515,98 @@ func TestNewsResearchMariaDBIntegration(t *testing.T) {
 			}
 			if persisted != 0 {
 				t.Fatalf("fail-closed 后 Research Evidence 落库行数 = %d, want 0", persisted)
+			}
+		})
+
+		// B 组：真实 Facade → Importer → research_evidence_records 成功落库。
+		// 当前 News 依 GOV-CTR-002 / NEWS-CTR-001 不提供可验证的 available_at，
+		// 故本用例显式 Skip；News Owner 完成来源证据接入与冻结契约变更后自动启用。
+		// 这里不制造任何时间值，只校验「News 输出 ↔ Research 落库」严格一致，
+		// 从而同时拦截回填、篡改与静默改写。
+		t.Run("successful_import_with_verified_available_at", func(t *testing.T) {
+			record, err := f.composition.query.GetEvidence(ctx, f.getRequest())
+			if err != nil {
+				t.Fatalf("B 组授权读取失败: %v", err)
+			}
+			if record.AvailableAt == nil {
+				t.Skip("B 组 blocked：News 尚未提供可验证 available_at 来源证据（GOV-CTR-002 / NEWS-CTR-001）；解锁后本用例自动启用")
+			}
+			if record.AvailableAt.Location() != time.UTC || record.AvailableAt.After(f.systemAsOf) {
+				t.Fatalf("available_at 不满足严格 PIT 边界: %v", *record.AvailableAt)
+			}
+
+			imported, err := f.composition.importer.ImportEvidence(ctx, researchnews.ImportRequest{
+				CallerRef: newsResearchCallerRef, PurposeCode: "research_analysis",
+				RequestedContentLevel: "snippet", SystemAsOf: f.systemAsOf,
+				NewsID: newsResearchNewsID, VersionID: f.version.ID,
+			})
+			if err != nil {
+				t.Fatalf("B 组成功导入失败（依次检查 News 当前授权复核、严格 PIT、Research 落库）: %v", err)
+			}
+			if imported.EvidenceID == "" || imported.ContentFingerprint == "" {
+				t.Fatalf("Importer 返回结果缺少 EvidenceID / ContentFingerprint: %+v", imported)
+			}
+			if imported.AvailableAt == nil || !imported.AvailableAt.Equal(*record.AvailableAt) {
+				t.Fatalf("Importer 的 available_at 与 News 输出不一致（疑似回填或改写）: record=%v imported=%v",
+					record.AvailableAt, imported.AvailableAt)
+			}
+			if imported.AuthorizationRef == "" || imported.AuthorizationRef != record.AuthorizationRef {
+				t.Fatalf("AuthorizationRef 留痕不一致: record=%q imported=%q", record.AuthorizationRef, imported.AuthorizationRef)
+			}
+
+			var count int
+			if err := f.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM research_evidence_records").Scan(&count); err != nil {
+				t.Fatalf("B 组统计落库行数失败: %v", err)
+			}
+			if count != 1 {
+				t.Fatalf("B 组落库行数 = %d, want 1", count)
+			}
+
+			var evidenceID, systemObservedAt, systemAsOf, authRef, fingerprint, payloadSHA, payload, sourceRef, contentLevel string
+			var storedAvailableAt, sourceVersion sql.NullString
+			// 列与格式依据 internal/research/storage/migrations.go 的
+			// research_evidence_records 定义及 repository.go 的 pitTimeLayout。
+			if err := f.db.QueryRowContext(ctx, `SELECT evidence_id, source_ref, source_version, available_at,
+				system_observed_at, system_as_of, authorization_ref, content_fingerprint, payload_sha256, payload, content_level
+				FROM research_evidence_records WHERE evidence_id = ?`, imported.EvidenceID).Scan(
+				&evidenceID, &sourceRef, &sourceVersion, &storedAvailableAt, &systemObservedAt, &systemAsOf,
+				&authRef, &fingerprint, &payloadSHA, &payload, &contentLevel,
+			); err != nil {
+				t.Fatalf("B 组读回 Evidence 失败: %v", err)
+			}
+			if !storedAvailableAt.Valid || storedAvailableAt.String == "" {
+				t.Fatal("B 组落库的 available_at 为 NULL（严格 PIT 不允许）")
+			}
+			parsedAvailable, err := time.Parse(newsResearchPITLayout, storedAvailableAt.String)
+			if err != nil {
+				t.Fatalf("解析落库 available_at 失败: %v", err)
+			}
+			if !parsedAvailable.Equal(*record.AvailableAt) {
+				t.Fatalf("落库 available_at = %v, News 输出 = %v（不得回填或改写）", parsedAvailable, *record.AvailableAt)
+			}
+			parsedAsOf, err := time.Parse(newsResearchPITLayout, systemAsOf)
+			if err != nil || !parsedAsOf.Equal(f.systemAsOf) {
+				t.Fatalf("落库 system_as_of = %q, want %v (err=%v)", systemAsOf, f.systemAsOf, err)
+			}
+			if systemObservedAt == "" || authRef != record.AuthorizationRef ||
+				fingerprint != imported.ContentFingerprint || len(fingerprint) != 64 || len(payloadSHA) != 64 {
+				t.Fatalf("落库审计字段异常: observed=%q auth=%q fp=%q sha=%q", systemObservedAt, authRef, fingerprint, payloadSHA)
+			}
+			if sourceRef != record.SourceRef || !sourceVersion.Valid || sourceVersion.String != record.VersionID ||
+				contentLevel != "snippet" {
+				t.Fatalf("落库来源/内容级别异常: source_ref=%q version=%v level=%q", sourceRef, sourceVersion, contentLevel)
+			}
+			var storedPayload map[string]json.RawMessage
+			if err := json.Unmarshal([]byte(payload), &storedPayload); err != nil {
+				t.Fatalf("解析落库 payload 失败: %v", err)
+			}
+			for _, key := range []string{"available_at", "derived_from_refs", "authorization_ref", "system_as_of"} {
+				if _, ok := storedPayload[key]; !ok {
+					t.Fatalf("落库 payload 缺少 %q 留痕", key)
+				}
+			}
+			if evidenceID != imported.EvidenceID {
+				t.Fatalf("落库 evidence_id = %q, want %q", evidenceID, imported.EvidenceID)
 			}
 		})
 
@@ -548,7 +646,8 @@ func TestNewsResearchMariaDBIntegration(t *testing.T) {
 			if len(page.Items) != 1 || page.Items[0].NewsID != newsResearchNewsID {
 				t.Fatalf("快照页条目异常: %+v", page.Items)
 			}
-			if page.Items[0].AuthorizationStatus != "allowed" || page.Items[0].AvailableAt != nil {
+			// available_at 由 B 组用例校验；解锁后允许非 nil，此处只守住当前授权复核。
+			if page.Items[0].AuthorizationStatus != "allowed" {
 				t.Fatalf("分页条目未逐条执行当前授权复核: %+v", page.Items[0])
 			}
 		})
