@@ -8,6 +8,8 @@
 
 > **Integration 联调更新（2026-11-13，代码 SHA `d664b9f6ec08d358b914242735fde52f49e9c7c1`）**：Server Bootstrap 已在 API/Worker 角色共同加载 News Config；当 Evidence Cursor Key Ring 已配置时，构造共享 MariaDB 上的 News PIT/授权查询、HMAC Cursor 分页、Research Context/Evidence Repository、Research Service、News Importer/Authorizer。未配置 Key Ring 时不生成默认密钥、不构造分页 Facade。当前只是生产依赖组合已构造，尚无 Researchflow Stage 或 HTTP 业务入口消费 Importer；不等同端到端业务链路已启用。精确 SHA 的 Integration CI Run [43370552552](https://github.com/Kasign/stock_data_provider/actions/runs/43370552552) 已 success；News→Research 跨模块真实写入验收仍待完成。
 
+> **Integration 联调更新（2026-11-14）**：`internal/server/bootstrap/research_news_mariadb_integration_test.go` 新增 A 组跨模块 MariaDB 验收，覆盖真实双 namespace Migration、真实 `newResearchNewsComposition` 组合根、冻结 NEWS-CTR-002 Golden 授权快照与当前策略复核、PIT 不可见、指纹篡改、策略版本变更、Context 取消、分页逐条授权、游标旧 Key 轮换验签，以及 Importer fail-closed 零落库。测试复用 `SERVER_RELAY_TEST_MYSQL_DSN` 自建隔离 database，不与共用 `integration_relay_test` 的模块级测试抢表。本地 Go 环境已核对 gofmt、`go vet` 与 `go test`，无 DB 自检用例通过；本机无 MariaDB/Docker，MariaDB 用例按 DSN 守卫 `t.Skip`，须以 integration CI 精确 SHA 的 success 为验收证据，不得记为通过。**B 组（Research Evidence 成功持久化）经源码核对确认被 `available_at` 硬阻断并记为 `blocked`**：News `researchEvidenceRecordFromPIT` 不设置 `AvailableAt`，Research `mapNewsEvidence` 要求非 nil 否则拒绝；责任归 News Owner，Integration 不伪造或回填。完整依据与后续顺序见 [Integration 当前任务交接与继续执行](../整体任务规划/05-治理与验收/Integration当前任务交接与继续执行.md) 第 3 节第 3 项。
+
 ## 1. 目标与边界
 
 Server 是应用组合根（Composition Root）和进程运行入口。它负责把 Platform 与业务模块组装成可运行服务，并管理进程级资源和生命周期；不实现业务领域规则，不拥有业务数据和业务状态机。

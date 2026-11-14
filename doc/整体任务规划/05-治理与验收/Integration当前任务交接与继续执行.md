@@ -2,9 +2,10 @@
 
 - 仓库：Kasign/stock_data_provider
 - 当前工作分支：integration
-- 本文更新日期：2026-11-13
+- 本文更新日期：2026-11-14
 - 本文用途：下一轮新聊天的首要接续入口。新聊天先读本文，再核对 GitHub 当前 HEAD/CI；不得直接假设本文 SHA 仍是最新。
-- 本轮代码验收 HEAD：dde7d4f8fb071912ffa34bb9c50d46507d1a388b；其后仅有 docs-only 更新（包括 `d1fa84d`），不改变本轮代码验收结论。
+- 2026-11-14 联调补记：新增 `internal/server/bootstrap/research_news_mariadb_integration_test.go`，落地第 3 节 A 组跨模块 MariaDB 验收用例与无 DB 自检。本地已核对 gofmt、`go vet` 和 `go test`：无 DB 用例（Golden 指纹/播种字段/策略载荷自检、游标旧 Key 轮换）通过；MariaDB 用例因本机无 MariaDB/Docker 按 DSN 守卫 `t.Skip`，**不得记为通过**，须以 integration CI 的精确 SHA success 为证据。B 组成功写入链路经源码核对确认被 `available_at` 硬阻断，记为 `blocked`。
+- 本轮代码验收 HEAD：dde7d4f8fb071912ffa34bb9c50d46507d1a388b；其后仅有 docs-only 更新（包括 `d1fa84d`、`396fa05d`），不改变本轮代码验收结论。
 - 代码验收 SHA：dde7d4f8fb071912ffa34bb9c50d46507d1a388b；Integration CI Run [43370552552](https://github.com/Kasign/stock_data_provider/actions/runs/43370552552) success，head_sha 精确匹配。
 - News→Research 组合代码 SHA：d664b9f6ec08d358b914242735fde52f49e9c7c1；Run 43369529083 success。`dde7d4f` 仅移除一次误加的重复 LLM 传输适配器，当前代码树不包含重复实现。
 - News→Research 组合构造提交：06722fdcd2e178c69ee4ae7bb3bf06caf907545d，Run 43368950457 success。
@@ -132,7 +133,10 @@ Researchflow 已有 Scheduler、Worker、WorkerPool、Claim/Lease/Fencing、候�
 
 1. News Cursor Key Ring 配置已完成，Run 43364123334 对 SHA 19394e8 success；Bootstrap 已消费配置并构造 EvidenceCursorCodec，部署轮换时旧 Key 至少保留游标 TTL 15 分钟。
 2. News→Research 组合构造代码及 Bootstrap 构造测试已提交；Run 43368950457 对构造代码 SHA 06722fd success。启用 MariaDB 集成测试暴露了既有 News 集成夹具缺少 schema_version，已在 SHA d664b9f 修正，Run 43369529083 success。
-3. 真实 News→Research 跨模块 MariaDB 端到端验收仍未完成：验证授权快照读取、当前策略复核、PIT 不可见、指纹篡改、策略撤销、事务失败、Context 取消，以及 Research Evidence 持久化。现有 News/Research 模块级 MariaDB 集成测试已由 Run 43369529083 执行并通过；不得将其等同跨模块链路验收。另需验证分页游标旧 Key 在轮换期间仍可验签。
+3. 真实 News→Research 跨模块 MariaDB 端到端验收，经源码核对后按 `available_at` 硬阻断拆为 A/B 两组：
+   - **A 组（可验收；测试代码已落地，待 CI 真库执行）**：授权快照读取、当前策略复核、PIT 不可见、指纹篡改、当前策略版本变更、Context 取消、分页快照逐条授权、游标旧 Key 轮换验签，以及 Importer fail-closed 零落库。实现见 `internal/server/bootstrap/research_news_mariadb_integration_test.go`：复用 `SERVER_RELAY_TEST_MYSQL_DSN` 自建隔离 database、注册 news/research 两个 Migration namespace、调用真实 `newResearchNewsComposition`、读取冻结 NEWS-CTR-002 Golden 并用公共 GOV-CTR-006 `Fingerprint` 重算决策指纹；不使用 Mock Facade、空壳 DB、硬编码密钥或伪造时间字段。本地仅 `TestNewsResearchIntegrationFixturesAreValid` 与 `TestNewsEvidenceCursorKeyRotation` 通过；MariaDB 用例在无 DSN 时 `t.Skip`，按 `not_comparable` 理解，不得描述为已通过。
+   - **B 组（`blocked`）**：Research Evidence 成功持久化、AuthorizationRef 与派生关系留痕。阻断依据：`internal/news/app/get_evidence.go` 的 `researchEvidenceRecordFromPIT` 不设置 `AvailableAt`（第 212 行注释明确需独立来源证据，禁止以 observed_at/published_at 推导）；`internal/research/adapters/news/evidence.go` 的 `mapNewsEvidence` 第 152 行要求非 nil，否则返回 `ErrEvidenceNotPITSafe` 且不调用 `AddEvidence`；GOV-CTR-002 与《项目级契约决策记录》第 293/294/452 条要求缺证据时为 null，`doc/news/新闻API契约.md` 第 197 行明确 News 当前不推断 `available_at`。责任归属 News Owner；Integration 不得伪造、回填或改 News 领域代码绕过。现有 `TestImporterRejectsMissingOrFutureAvailableAtWithoutPersisting` 只证明 fail-closed 语义，Importer 成功路径单测靠 mock 注入 `AvailableAt`，不是跨模块证据。
+   - 现有 News/Research **模块级** MariaDB 集成测试已由 Run 43369529083 执行并通过；不得将其等同跨模块链路验收，也不重复执行。
 4. Researchflow Stage 接入：读取冻结 Stage/Template/Output Registry 契约及真实模块代码。只有 Stage 输入/输出、Registry 版本、可信 CallerRef 和生产 Provider 均明确后才接入；不创建空壳 StageExecutor。
 5. Quant：保持生产 Stage 禁止接入，直到 Application Port、Result Payload/Registry 和 DATA-CTR-005/007 门禁满足契约。
 6. 复核 LLM Provider 与 Notification Delivery 的生产装配条件；已有 Outbox→Inbox/FanoutWorkItem MariaDB 验收不重复执行。只推进存在真实契约与可运行依赖的缺口。
@@ -153,4 +157,4 @@ Researchflow 已有 Scheduler、Worker、WorkerPool、Claim/Lease/Fencing、候�
 1. 打开本文。
 2. 查询 integration 最新 HEAD 和最新 CI（不要复用本文 SHA 作为假定当前值）。
 3. 查看 doc/contract/PLAT-002-项目级契约冻结登记簿.md、GOV-CTR-006、doc/news/README.md、doc/research/README.md、doc/server/README.md。
-4. 从第 3 节第 1 项继续；若发现新 HEAD 已经包含对应工作，先核对证据，再推进下一项，不重复开发。
+4. 从第 3 节第 3 项 A 组的 MariaDB 真库验证继续（第 1、2 项已完成）；若发现新 HEAD 已经包含对应工作，先核对证据，再推进下一项，不重复开发。B 组在 News Owner 补齐 `available_at` 来源证据前保持 `blocked`。

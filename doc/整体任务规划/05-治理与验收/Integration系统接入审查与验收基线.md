@@ -218,3 +218,9 @@ Registry 已具备 namespace 校验、确定性排序、执行报告和 Schema �
 - 不把本轮 GOV Verifier Golden 测试通过描述为 News → Research 或 Researchflow 端到端通过。
 
 - 下一步优先完成 News→Research 的 MariaDB 端到端联调和游标 Key 轮换验收；随后依据冻结 Stage/Template/Output Registry 契约推进 Researchflow，不重复已有 Outbox→Notification MariaDB 验收。
+
+## 8. 2026-11-14 A/B 分组与 available_at 阻断
+
+- A 组跨模块 MariaDB 验收用例已落地于 `internal/server/bootstrap/research_news_mariadb_integration_test.go`，使用真实双 namespace Migration、真实组合根和冻结 NEWS-CTR-002 Golden；本地无 MariaDB 时按 DSN 守卫 `t.Skip`，状态为 `not_comparable`，必须以 integration CI 精确 SHA 的 success 升级为 `pass`。无 DB 的 Golden 指纹/播种字段/策略载荷自检与游标旧 Key 轮换用例已在本地通过。
+- B 组（Research Evidence 成功持久化、AuthorizationRef 与派生关系留痕）状态为 `blocked`，不是 `fail`：News 侧 `researchEvidenceRecordFromPIT` 依据 GOV-CTR-002 不设置 `AvailableAt`，Research 侧 `mapNewsEvidence` 要求非 nil 否则 `ErrEvidenceNotPITSafe` 且不落库。前置条件为 News Owner 提供可验证的 `available_at` 来源证据；Integration 不得伪造、回填或修改 News 领域代码绕过。
+- 完整用例清单、代码依据和后续顺序见《[Integration 当前任务交接与继续执行](./Integration当前任务交接与继续执行.md)》第 3 节第 3 项。当前阶段判定仍为 INT-B 进行中，系统整体尚未达到 INT-C 端到端业务联调条件。
