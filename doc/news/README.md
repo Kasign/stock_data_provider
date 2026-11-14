@@ -1,6 +1,6 @@
 # 新闻模块开发任务与验收清单
 
-> **Integration 接入状态更新（2026-11-13）**：代码 SHA `d664b9f6ec08d358b914242735fde52f49e9c7c1` 已由 Server Bootstrap 在配置 Key Ring 时构造完整 Evidence Query Facade（单条 PIT 查询、当前策略复核、快照分页、HMAC 游标）及 Research 侧 Repository/Service/Importer/Authorizer。Key Ring 仍为可选配置；缺少时不创建默认密钥、不启用分页查询。当前构造结果尚无 Researchflow Stage/HTTP 业务消费者，真实 MariaDB News→Research 持久化链路尚未专项验收。Integration CI Run [43370552552](https://github.com/Kasign/stock_data_provider/actions/runs/43370552552) 对精确 HEAD 已 success，且已启用 News/Research MariaDB 模块级集成测试；模块级存储验收不等同跨模块写入验收。后续以 [Integration 当前任务交接](../整体任务规划/05-治理与验收/Integration当前任务交接与继续执行.md) 为准。
+> **Integration 接入状态更新（2026-11-14）**：最近代码 SHA `b0aabaa2edf89c44cd2aeb79b1a57210a8017d1b` 已由 Integration CI Run [43561072301](https://github.com/Kasign/stock_data_provider/actions/runs/43561072301) 精确验收通过。News→Research A 组真实 MariaDB 跨模块验收（授权复核、PIT/分页、旧 Key 轮换验签及 Importer fail-closed 零落库）为 `pass`；B 组 Research Evidence 成功写入仍为 `blocked`，因为 News 尚无可证明的 `available_at` 来源证据。Server Bootstrap 已在配置 Key Ring 时构造完整 Evidence Query Facade 与 Research Importer；当前仍无 Researchflow Stage/HTTP 业务消费者，不能把 A 组通过描述为 Importer 成功持久化。Key Ring 未配置时不创建默认密钥。后续以 [Integration 当前任务交接](../整体任务规划/05-治理与验收/Integration当前任务交接与继续执行.md) 为准。
 
 > 当前验收状态（2026-11-12，News 分支 HEAD：`a8a3763e5dc662d856a438c52a0b1a28975def43`）：NEWS-CTR-002 显式 `risk_review` 用途映射修复及对应测试已通过当前 HEAD 的 CI。News Provider contract workflow Run `43219930444`：Provider contract tests、完整 News 模块测试均 success，包含 gofmt、单测、Race、Vet；Go test suite Run `43219930418`：News MariaDB Repository and Migration integration、根模块 `Test .`、Researchflow 相关测试及 `Test go-core` 均 success。Compose/Docker 与 Market Data 专项 jobs 按条件 skipped，不计为通过。两条 Run 的 `head_sha` 均与当前 HEAD 完全一致。PR [#88](https://github.com/Kasign/stock_data_provider/pull/88) 的历史合并记录不代表本轮再次合并；本轮未执行分支合并。
 
@@ -1148,8 +1148,8 @@
 
 - 新增可选配置：NEWS_EVIDENCE_CURSOR_ACTIVE_KEY_ID 与 NEWS_EVIDENCE_CURSOR_KEYRING_JSON。Key Ring JSON 对象的 Key ID 对应 Secret 值，最多 8 把 Key；Active Key ID 必须存在于 Key Ring。
 - 每个 Key Secret 长度限制为 32～256 字节；Key ID 限制为 1～64 个字母、数字、下划线、点或短横线。配置错误只报告环境变量名，不回显 Key Ring JSON 或 Secret。
-- Config.EvidenceCursorKeyRing 返回 Platform Secret 包装值的防御性副本；未配置时返回 configured=false，不生成默认密钥。Integration Run 43364123334 已覆盖该配置代码的根模块测试、格式和 Vet；Server Bootstrap 尚未将其传给 EvidenceCursorCodec。
+- Config.EvidenceCursorKeyRing 返回 Platform Secret 包装值的防御性副本；未配置时返回 configured=false，不生成默认密钥。Integration Run 43364123334 已覆盖配置解析代码的根模块测试、格式和 Vet；随后 Server Bootstrap 已消费该配置并构造 EvidenceCursorCodec 与完整 Query Facade。
 - 游标 TTL 为 15 分钟。轮换时先加入新 Key，再切换 Active Key ID；旧 Key 至少保留 15 分钟，建议额外覆盖部署时钟偏差窗口。删除旧 Key 前必须确认其签发的游标均已过期。
 - .env.example 只提供注释示例，不包含可用密钥。
 - 新增测试覆盖未配置、成功双 Key 加载、防御性副本、配置不完整、JSON 非法、Active Key 缺失、短密钥、非法 Key ID、Key 数量超限及错误信息不泄露密钥。
-- Integration Run 43364123334 对代码 SHA 19394e8 的 gofmt、root/go-core vet/test、Compose、WebUI 检查和 Docker 构建全部通过；此配置不代表 EvidenceCursorCodec 或 News/Research 查询 Facade 已在 Bootstrap 启用。
+- Integration Run 43364123334 对代码 SHA 19394e8 的配置解析验收通过；Run 43561072301 对代码 SHA b0aabaa 的 A 组跨模块 MariaDB 验收进一步覆盖旧 Key 轮换验签及 Importer fail-closed 零落库。两者均不代表 Research Evidence 成功写入；B 组继续等待可证明的 available_at 来源证据。

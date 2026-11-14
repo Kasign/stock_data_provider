@@ -66,3 +66,8 @@
 Server 在 integration 已通过统一 EventReceiver 构造入口装配 Notification Schema Registry、MySQL Inbox Repository 和 FanoutWorkItem Writer，并接入 Research 与 Researchflow 两条 Outbox Relay。Researchflow Relay 的 MariaDB 成功接收、失败重试、幂等和组件启停测试通过；Integration Run #54（`43359166036`，SHA `63f49065a5ef3379d95948a6c2c6e504a555a63f`）全流程 CI 通过。
 
 当前完成边界是 Outbox → EventReceiver → Inbox/FanoutWorkItem。Recipient Directory、真实 Channel Provider、Fanout/Delivery Worker、真实回执与 Unknown 对账仍未完成，不得将 Inbox 接收计为渠道发送成功。
+## Integration 装配准入复核（2026-11-14）
+
+当前真实渠道投递为 `blocked`，不是 `fail`。代码层已有 RecipientDirectory Port、ChannelAdapter/Resolver SPI、DeliveryExecutionService 与 FanoutDispatcher，但没有真实 RecipientDirectory 实现、具体 ChannelAdapter、Delivery Worker 或可用渠道凭据。DeliveryExecutionService 只执行已领取的单条 Delivery；队列扫描与 Claim 由上层 Worker 负责。Server Bootstrap 当前只装配 EventReceiver/Inbox 与 Research/Researchflow Outbox Relay，没有装配 Fanout/Delivery Worker。
+
+重新进入条件：确定首个真实渠道协议、SecretRef/凭据来源、发送回执/幂等/查询语义及权威身份目录，再由 Server 组合根装配真实 Fanout/Delivery 生命周期。既有 Run `43359166036` 只证明 Outbox→Inbox/FanoutWorkItem 接收、失败重试与幂等，不代表真实渠道发送；不重复验收。

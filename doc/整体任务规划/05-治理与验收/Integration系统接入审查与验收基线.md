@@ -1,8 +1,9 @@
 # Integration 系统接入审查与整体验收基线
 
 - 验收分支：`integration`
-- 本文最近一次核对的 integration 代码验收 SHA：`dde7d4f8fb071912ffa34bb9c50d46507d1a388b`；其后仅有文档同步提交（包括 `d1fa84d`），不改变本次代码验收结论。
-- 当前 CI：Integration Run `43370552552`，对应精确 HEAD `dde7d4f8fb071912ffa34bb9c50d46507d1a388b`，结论 `success`；gofmt、root/go-core vet/test、News/Research MariaDB 集成测试、Compose、WebUI 语法/单测和 Docker 构建全部通过。上一轮 Run `43369529083` 对代码 SHA `d664b9f` 同样 success。
+- 当前 integration HEAD：`c43fb88f72f33648513e528b9f634acaec71f14e`（docs-only，父提交 `b0aabaa2edf89c44cd2aeb79b1a57210a8017d1b`）。
+- 最近代码验收 SHA：`b0aabaa2edf89c44cd2aeb79b1a57210a8017d1b`；Integration CI Run `43561072301` 对精确 SHA success，覆盖全仓 gofmt、root/go-core vet/test、Compose、WebUI 语法/单测和 Docker 构建。当前 HEAD 的文档提交不触发 CI（workflow paths 不包含 doc/**），不得把文档 SHA 标记为已执行代码 CI。
+- 历史代码验收 SHA：`dde7d4f8fb071912ffa34bb9c50d46507d1a388b`（Run `43370552552`）；更早 Run `43369529083` 对 SHA `d664b9f`，均保留为历史证据。
 - 历史审查基线 SHA：`63f49065a5ef3379d95948a6c2c6e504a555a63f`（Run #54），仅作为历史参考
 - 历史参考：Run #23（`43178908392`）仅对应旧 SHA `fdc19b8591223dabccb533389d472713bfecc415`，结论 `success`
 - 本文性质：Integration 当前代码树的源码接入审查、真实依赖 CI 证据与后续验收基线
@@ -19,7 +20,7 @@ News、Research、Researchflow、Notification 的 Migration 已进入根 Registr
 
 因此当前阶段应判定为：
 
-- 当前代码 SHA CI：`pass`（Run `43369529083`，`d664b9f`）；News/Research MariaDB 模块级集成测试已启用并通过。
+- 当前代码 SHA CI：`pass`（Run `43561072301`，`b0aabaa2e`）；A 组 News→Research 跨模块 MariaDB 负向/授权/分页/旧 Key 轮换验收已通过；B 组成功写入仍因 available_at 来源证据缺失而 blocked。News/Research 模块级 MariaDB 集成测试不等同跨模块 Importer 成功写入。
 - Root Bootstrap 基础设施：部分完成
 - 新业务模块运行时装配：部分完成；仍以旧 Analysis Runner/Queue/API 为主
 - 新业务 API / Worker：Researchflow 业务 API 与 Worker 未接入
@@ -241,3 +242,11 @@ Registry 已具备 namespace 校验、确定性排序、执行报告和 Schema �
 - `deferred` 影响范围：`DATA-CTR-005` / `DATA-CTR-007` / `QNT-CTR-003` 阻断 Quant 生产 Stage，`SRV-CTR-001` 阻断新 Researchflow HTTP API；`not_applicable` 两项不阻断。真正卡住第 4 项的是 FLOW-CTR-004 等 frozen 契约的 L2 实现缺口。
 - 重新进入条件（四条，须同时满足，详见交接文档第 6.5 节）：冻结 `stage_code + template_version + output_registry_version` 及 Output Registry 注册项/Schema；各模块公开 Application Port 且 Quant 完成 Payload 注册与 DATA-CTR-005/007 复核；提供生产 `StageExecutor` 与可信 CallerRef 运行时绑定；补跨模块 Contract Test 与 MariaDB 端到端验收并取得精确 SHA 的 CI success。
 - 不重复事项：`doc/server/README.md` 第 12 章 Server 侧门禁核查、Researchflow 模块级 gofmt/test/race/vet 与 MariaDB 验收（Run `43008530832` / `43008538854`）、Outbox→Notification 验收（Run `43359166036`）、第 3 项 A 组（Run `43561072301`）。
+
+## 10. 2026-11-14 LLM / Notification 生产装配准入复核（均为 `blocked`）
+
+- 盘点基线：当前 HEAD `c43fb88f7`（docs-only），最近代码 SHA `b0aabaa2e`，Run [43561072301](https://github.com/Kasign/stock_data_provider/actions/runs/43561072301) 对精确代码 SHA success；本轮无业务 Go 代码变更。
+- **LLM**：ProviderConfig/CapabilityState/ResponsesAdapter 已有代码，但 Bootstrap 没有 Provider 生产装配；CapabilityState 必须绑定真实 Gateway 版本、验证时间、有效期和 evidence_ref。现有 Gateway 盘点明确没有真实调用、没有读取 API Key，也没有可核验运行版本/能力证据。Integration 根模块 `go test ./...` 与 `go vet ./...` 已覆盖并通过 LLM 普通测试/Vet；没有 LLM 专项 Race 或 Gateway E2E 证据。结论：保持能力 unknown，不构造 Provider。
+- **Notification**：RecipientDirectory 仍是 Port，ChannelAdapter/Resolver 是内部 SPI；DeliveryExecutionService 只执行已领取任务，当前无真实 Recipient Directory、具体 Channel Adapter、Delivery Worker 和凭据。Bootstrap 只接入 EventReceiver/Inbox 与 Outbox Relay。Run `43359166036` 的既有证据仅覆盖 Outbox→Inbox/FanoutWorkItem，不代表真实渠道发送。结论：不创建 Fake 生产渠道或空壳 Worker。
+- **后续条件**：LLM 需要真实 Gateway 版本、目标模型、SecretRef 与逐项 capability evidence；Notification 需要真实渠道协议/凭据、回执/幂等/查询语义和权威身份目录。条件未满足前，Server 组合根没有可安全装配的生产 Provider/Worker，Integration 不新增代码。
+- **CI 边界**：`integration-ci.yml` 的 paths 不包含 `doc/**`，本轮文档同步提交不会触发 CI；代码验收仍以 SHA `b0aabaa2edf89c44cd2aeb79b1a57210a8017d1b` / Run `43561072301` 为准，不能把新文档 HEAD 记作 CI 通过。

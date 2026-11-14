@@ -3,6 +3,7 @@
 - 仓库：Kasign/stock_data_provider
 - 当前工作分支：integration
 - 本文更新日期：2026-11-14
+- 当前 integration HEAD：`c43fb88f72f33648513e528b9f634acaec71f14e`（docs-only，父提交 `b0aabaa2edf89c44cd2aeb79b1a57210a8017d1b`）；最近代码验收 SHA `b0aabaa2edf89c44cd2aeb79b1a57210a8017d1b`，Run `43561072301` success。
 - 本文用途：下一轮新聊天的首要接续入口。新聊天先读本文，再核对 GitHub 当前 HEAD/CI；不得直接假设本文 SHA 仍是最新。
 - 2026-11-14 联调补记：新增 `internal/server/bootstrap/research_news_mariadb_integration_test.go`，落地第 3 节 A 组跨模块 MariaDB 验收用例与无 DB 自检；提交 `b0aabaa2e` 已推送 integration，Integration CI Run [43561072301](https://github.com/Kasign/stock_data_provider/actions/runs/43561072301) success（head_sha 精确匹配，全部检查项通过），**A 组状态由 `not_comparable` 升级为 `pass`**。本机无 MariaDB/Docker，本地 `t.Skip` 只代表开发态；已用非空假 DSN 在本地验证三个 DB 子测试均进入真实连接阶段而非 Skip，且 CI job env 提供 `SERVER_RELAY_TEST_MYSQL_DSN` 与 mariadb:11.4 service，可确认 CI 上真库执行。公开仓库逐步日志下载需管理员权限（403），故证据组合为「workflow 配置 + DSN 守卫代码 + 精确 SHA success」，不声称逐用例日志已核对。B 组成功写入链路经源码核对确认被 `available_at` 硬阻断，记为 `blocked`。
 - 本轮代码验收 HEAD：b0aabaa2edf89c44cd2aeb79b1a57210a8017d1b；Run 43561072301 success。上一轮代码验收 SHA dde7d4f8fb071912ffa34bb9c50d46507d1a388b（Run 43370552552 success）保留为历史记录。
@@ -142,7 +143,7 @@ Researchflow 已有 Scheduler、Worker、WorkerPool、Claim/Lease/Fencing、候�
    - 现有 News/Research **模块级** MariaDB 集成测试已由 Run 43369529083 执行并通过；不得将其等同跨模块链路验收，也不重复执行。
 4. Researchflow Stage 接入（**只读盘点已完成，接入判定 `blocked`**）：已按第 4 节执行规则核对 PLAT-002 登记簿 `0.2.60-frozen`、FLOW-CTR-001～004、Researchflow 4 份 Schema + 11 份 Golden、`04-ApplicationPort与运行时契约落地补充.md`，以及 `internal/researchflow/`、`internal/server/bootstrap/` 真实代码。四项门禁判定为「Stage 输入/输出：部分满足；Registry 版本：部分满足；可信 CallerRef：契约定义层满足、运行时绑定有 L2 缺口；生产 Provider：未满足」，**不具备接入条件**。不创建空壳 StageExecutor、不虚构 Stage Code 或输出 Schema、不把 Quant 当生产 Provider。完整证据、责任归属与重新进入条件见本文第 6 节；在此项解锁前不重复盘点。
 5. Quant（**`blocked`，本轮复核确认仍禁止接入**）：保持生产 Stage 禁止接入，直到有可注入的公开 Application Port、Result Payload/Registry 注册项，且 `DATA-CTR-005` / `DATA-CTR-007` / `QNT-CTR-003` 按登记簿重新进入条件完成定点复核。当前 `internal/quant/application/` 只有 `GetResult` 授权读取用例，Indicator/Factor/Trend 仍是纯函数；`internal/quant/result/envelope.go:201-221` 的 `DecodePayload` 只接受 `trend/1.0.0` 与 `risk/1.0.0`，`indicator`/`factor` fail-closed。解锁条件见本文第 6.5 节第 2 条；Integration 不得自行串接纯函数造伪 Application Facade。
-6. 复核 LLM Provider 与 Notification Delivery 的生产装配条件；已有 Outbox→Inbox/FanoutWorkItem MariaDB 验收不重复执行。只推进存在真实契约与可运行依赖的缺口。
+6. LLM Provider 与 Notification Delivery 生产装配条件（只读复核已完成，均为 `blocked`）：LLM 缺少真实 Gateway 版本与可追溯 CapabilityState 证据；Notification 缺少真实渠道协议/凭据、Recipient Directory 实现和 Delivery Worker。详细证据见第 7 节；已有 Outbox→Inbox/FanoutWorkItem MariaDB 验收不重复执行。
 
 ## 4. 执行规则
 
@@ -160,7 +161,7 @@ Researchflow 已有 Scheduler、Worker、WorkerPool、Claim/Lease/Fencing、候�
 1. 打开本文。
 2. 查询 integration 最新 HEAD 和最新 CI（不要复用本文 SHA 作为假定当前值）。
 3. 查看 doc/contract/PLAT-002-项目级契约冻结登记簿.md、GOV-CTR-006、doc/news/README.md、doc/research/README.md、doc/researchflow/README.md、doc/server/README.md；处理第 4 项时另读 FLOW-CTR-001～004 登记行、doc/researchflow/04-ApplicationPort与运行时契约落地补充.md 与本文第 6 节。
-4. 从**第 3 节第 6 项「复核 LLM Provider 与 Notification Delivery 的生产装配条件」**继续（一次只处理一条真实依赖链）：第 1、2 项与第 3 项 A 组已完成，A 组由 Run 43561072301 对 SHA `b0aabaa2e` 的精确 success 验收；第 4 项 Researchflow Stage 接入与第 5 项 Quant 生产接入均为 `blocked`，解锁条件见本文第 6 节，在解锁前**不要重复盘点或空转**。若发现新 HEAD 已包含对应工作，先核对证据再推进，不重复开发。B 组在 News Owner 补齐 `available_at` 来源证据前保持 `blocked`。
+4. 第 3 节第 6 项已完成只读复核：LLM 与 Notification 均为 `blocked`，详见第 7 节。若没有新的真实 Gateway 版本/CapabilityState 证据，或真实渠道协议、凭据与身份来源，不重复盘点、不装配空壳。Researchflow Stage 与 Quant 生产接入继续按第 6 节条件阻断；News B 组继续等待可证明的 `available_at` 来源证据。只有出现新证据或新消费端后，才选取下一条真实依赖链。
 
 ## 6. 2026-11-14 第 4 项 Researchflow Stage 契约准入盘点（只读，结论 `blocked`）
 
@@ -219,3 +220,31 @@ Researchflow 已有 Scheduler、Worker、WorkerPool、Claim/Lease/Fencing、候�
 - Researchflow 模块级 gofmt / test / race / vet 与 MariaDB 普通/Race 集成已通过（Run `43008530832`、PR Run `43008538854`，见 `doc/researchflow/02-任务拆分与验收.md:23`），不重跑。
 - Outbox→Notification MariaDB 验收（Run `43359166036`）与第 3 项 A 组（Run `43561072301`）不重复。
 - 第 4 项在 6.5 的解锁条件满足前不重复盘点；若新 HEAD 已包含对应工作，先核对证据再推进。
+
+## 7. 2026-11-14 LLM Provider / Notification Delivery 装配准入复核（只读，结论均为 `blocked`）
+
+### 7.1 盘点基线
+
+- 当前核对 HEAD：`c43fb88f72f33648513e528b9f634acaec71f14e`（docs-only）；最近代码 SHA：`b0aabaa2edf89c44cd2aeb79b1a57210a8017d1b`；Integration CI Run [43561072301](https://github.com/Kasign/stock_data_provider/actions/runs/43561072301) 对该代码 SHA 精确 success。
+- `.github/workflows/integration-ci.yml` 的根模块 `go test ./...` / `go vet ./...` 覆盖 `internal/llm`，因此本次 Run 已覆盖 LLM 普通测试与 Vet；该 Workflow 未运行 LLM 专项 Race，也没有真实 Gateway E2E。不得将普通测试通过扩展为能力验收。
+- 本轮只核对真实配置边界、Application Port、Server Bootstrap 与模块 README；未修改任何业务 Go 代码，也未重复 Outbox→Notification MariaDB 验收。
+
+### 7.2 LLM：CapabilityState / Provider 装配（`blocked`）
+
+- 已有模块代码：`internal/llm/llm.go` 定义 `ProviderConfig` 与 `CapabilityState`；能力状态必须绑定 provider/model/protocol、真实 `gateway_version`、`verified_at`、`valid_until`、验证方式、`evidence_ref` 和已验证的输出上限。缺少任一关键证据或超过 TTL，能力必须保持 `unknown`。
+- `internal/llm/responses_adapter.go` 的构造要求显式注入 Platform `config.Secret`、固定目的地址的 HTTP Doer、CapabilityState 与 Clock；当前 Server Bootstrap 未导入 LLM Adapter，也未装配 BoundDoer、SecretRef、ProviderConfig、CapabilityState 或 Researchflow Provider。
+- `doc/llm/03-现有模型Gateway协议盘点.md` 明确记录本轮没有向部署 Gateway 发起真实推理请求，也没有读取或使用 API Key；仓库没有可核验的 Gateway 运行版本及对应 capability evidence。静态协议盘点、配置样本或模型名称不能替代真实验证。
+- 结论：不构造生产 Provider、不填充伪造 CapabilityState、不将未知能力标为 supported。重新进入条件：取得可核验 Gateway 版本、目标 model ID、受控 SecretRef 映射，并对 Responses JSON、SSE、Structured Output、Tool Call 等逐项执行真实验证，保存可追溯 evidence_ref 与有效期；随后再由 Server 组合根装配 BoundDoer/Secret/Clock。
+
+### 7.3 Notification：Recipient / Channel / Delivery Worker（`blocked`）
+
+- 已有模块端口和单条执行用例：`recipient_directory.go` 只有 RecipientDirectory Port 与解析适配器；`channel_ports.go` 定义 ChannelAdapter/ChannelResolver/RecipientResolver SPI；`delivery_execution_service.go` 只执行已领取的单条 Delivery，并明确由上层 Worker 负责队列扫描与 Claim；`fanout_dispatcher.go` 的 RunOnce 只处理一个 WorkItem 页面。
+- 当前没有真实 RecipientDirectory 实现、具体 ChannelAdapter、Delivery Worker 生命周期或可用渠道凭据。Server Bootstrap 只装配 EventReceiver/Inbox 与 Research/Researchflow Outbox Relay，没有装配 FanoutPlanFactory、Fanout Worker 或 Delivery Worker。
+- Notification README 已明确首个渠道协议、凭据来源、回执/幂等/查询语义及真实身份目录尚未提供。现有 Run `43359166036` 只证明 Outbox → Inbox/FanoutWorkItem 接收、重试和幂等，不证明真实渠道发送；不重复验收。
+- 结论：不注册 Fake 作为生产 Channel、不虚构 recipient_ref/目标地址、不创建空壳 Worker。重新进入条件：明确首个真实渠道及协议、SecretRef/凭据来源、回执与幂等/查询能力证据、真实身份目录和 RecipientResolver，再由 Server 装配真实 Fanout/Delivery 生命周期。
+
+### 7.4 本轮结论与下一步
+
+- LLM 与 Notification 均为 `blocked`，不是 `fail`；当前没有可在 Integration 越权补齐的模块内实现，也没有满足真实依赖条件的组合根装配任务。
+- Researchflow Stage 的 FLOW-CTR-004/生产 Provider 缺口与 Quant 的 Application/Payload Registry 门禁已分别记录在第 6 节及第 3 节第 5 项；News→Research B 组仍等待来源可证明的 `available_at`。不重复盘点这些既有结论。
+- 在新 Gateway/渠道/身份/来源证据或正式生产消费端出现前，停止新增 Integration 代码；收到新证据后只推进其中一条真实依赖链。
