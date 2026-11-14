@@ -218,7 +218,7 @@ Registry 已具备 namespace 校验、确定性排序、执行报告和 Schema �
 - 不重复 Outbox → Notification Inbox/FanoutWorkItem 的既有 MariaDB 验收；真实渠道投递仍未接入。
 - 不把本轮 GOV Verifier Golden 测试通过描述为 News → Research 或 Researchflow 端到端通过。
 
-- 下一步优先完成 News→Research 的 MariaDB 端到端联调和游标 Key 轮换验收；随后依据冻结 Stage/Template/Output Registry 契约推进 Researchflow，不重复已有 Outbox→Notification MariaDB 验收。
+- 下一步不在 News→Research 重做联调（A 组已 `pass`，逐用例级证据见第 8 节）也不重跑游标 Key 轮换验收；B 组 `available_at` 成功写入已由项目负责人**搁置**（`shelved`，重启条件见交接文档第 10.8 节）。Researchflow 依据冻结 Stage/Template/Output Registry 契约推进前，须先满足交接文档第 6 节的四项门禁。
 
 ## 8. 2026-11-14 A/B 分组与 available_at 阻断
 

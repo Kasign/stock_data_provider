@@ -143,7 +143,7 @@ Researchflow 已有 Scheduler、Worker、WorkerPool、Claim/Lease/Fencing、候�
 2. News→Research 组合构造代码及 Bootstrap 构造测试已提交；Run 43368950457 对构造代码 SHA 06722fd success。启用 MariaDB 集成测试暴露了既有 News 集成夹具缺少 schema_version，已在 SHA d664b9f 修正，Run 43369529083 success。
 3. 真实 News→Research 跨模块 MariaDB 端到端验收，经源码核对后按 `available_at` 硬阻断拆为 A/B 两组：
    - **A 组（已完成，`pass`）**：授权快照读取、当前策略复核、PIT 不可见、指纹篡改、当前策略版本变更、Context 取消、分页快照逐条授权、游标旧 Key 轮换验签，以及 Importer fail-closed 零落库。实现见 `internal/server/bootstrap/research_news_mariadb_integration_test.go`：复用 `SERVER_RELAY_TEST_MYSQL_DSN` 自建隔离 database、注册 news/research 两个 Migration namespace、调用真实 `newResearchNewsComposition`、读取冻结 NEWS-CTR-002 Golden 并用公共 GOV-CTR-006 `Fingerprint` 重算决策指纹；不使用 Mock Facade、空壳 DB、硬编码密钥或伪造时间字段。验收证据为提交 `b0aabaa2edf89c44cd2aeb79b1a57210a8017d1b` 的 Integration CI Run 43561072301 success（gofmt、root/go-core vet 与 test、Compose、WebUI 检查与构建全部通过）。本地无 DSN 时 `t.Skip` 仅为开发态；已用非空假 DSN 确认 DB 子测试不会 Skip，CI 提供同名 env 与 MariaDB service，故该 success 包含真实 MariaDB 执行。不重复执行。
-   - **B 组（`blocked`）**：Research Evidence 成功持久化、AuthorizationRef 与派生关系留痕。阻断依据：`internal/news/app/get_evidence.go` 的 `researchEvidenceRecordFromPIT` 不设置 `AvailableAt`（第 212 行注释明确需独立来源证据，禁止以 observed_at/published_at 推导）；`internal/research/adapters/news/evidence.go` 的 `mapNewsEvidence` 第 152 行要求非 nil，否则返回 `ErrEvidenceNotPITSafe` 且不调用 `AddEvidence`；GOV-CTR-002 与《项目级契约决策记录》第 293/294/452 条要求缺证据时为 null，`doc/news/新闻API契约.md` 第 197 行明确 News 当前不推断 `available_at`。责任归属 News Owner；Integration 不得伪造、回填或改 News 领域代码绕过。现有 `TestImporterRejectsMissingOrFutureAvailableAtWithoutPersisting` 只证明 fail-closed 语义，Importer 成功路径单测靠 mock 注入 `AvailableAt`，不是跨模块证据。
+   - **B 组（`shelved`，原 `blocked`）**：Research Evidence 成功持久化、AuthorizationRef 与派生关系留痕。阻断依据：`internal/news/app/get_evidence.go` 的 `researchEvidenceRecordFromPIT` 不设置 `AvailableAt`（第 212 行注释明确需独立来源证据，禁止以 observed_at/published_at 推导）；`internal/research/adapters/news/evidence.go` 的 `mapNewsEvidence` 第 152 行要求非 nil，否则返回 `ErrEvidenceNotPITSafe` 且不调用 `AddEvidence`；GOV-CTR-002 与《项目级契约决策记录》第 293/294/452 条要求缺证据时为 null，`doc/news/新闻API契约.md` 第 197 行明确 News 当前不推断 `available_at`。责任归属 News Owner；Integration 不得伪造、回填或改 News 领域代码绕过。现有 `TestImporterRejectsMissingOrFutureAvailableAtWithoutPersisting` 只证明 fail-closed 语义，Importer 成功路径单测靠 mock 注入 `AvailableAt`，不是跨模块证据。**2026-11-14 更新：项目负责人决定搁置，重启条件见第 10.8 节。**
    - 现有 News/Research **模块级** MariaDB 集成测试已由 Run 43369529083 执行并通过；不得将其等同跨模块链路验收，也不重复执行。
 4. Researchflow Stage 接入（**只读盘点已完成，接入判定 `blocked`**）：已按第 4 节执行规则核对 PLAT-002 登记簿 `0.2.60-frozen`、FLOW-CTR-001～004、Researchflow 4 份 Schema + 11 份 Golden、`04-ApplicationPort与运行时契约落地补充.md`，以及 `internal/researchflow/`、`internal/server/bootstrap/` 真实代码。四项门禁判定为「Stage 输入/输出：部分满足；Registry 版本：部分满足；可信 CallerRef：契约定义层满足、运行时绑定有 L2 缺口；生产 Provider：未满足」，**不具备接入条件**。不创建空壳 StageExecutor、不虚构 Stage Code 或输出 Schema、不把 Quant 当生产 Provider。完整证据、责任归属与重新进入条件见本文第 6 节；在此项解锁前不重复盘点。
 5. Quant（**`blocked`，本轮复核确认仍禁止接入**）：保持生产 Stage 禁止接入，直到有可注入的公开 Application Port、Result Payload/Registry 注册项，且 `DATA-CTR-005` / `DATA-CTR-007` / `QNT-CTR-003` 按登记簿重新进入条件完成定点复核。当前 `internal/quant/application/` 只有 `GetResult` 授权读取用例，Indicator/Factor/Trend 仍是纯函数；`internal/quant/result/envelope.go:201-221` 的 `DecodePayload` 只接受 `trend/1.0.0` 与 `risk/1.0.0`，`indicator`/`factor` fail-closed。解锁条件见本文第 6.5 节第 2 条；Integration 不得自行串接纯函数造伪 Application Facade。
@@ -165,7 +165,7 @@ Researchflow 已有 Scheduler、Worker、WorkerPool、Claim/Lease/Fencing、候�
 1. 打开本文。
 2. 查询 integration 最新 HEAD 和最新 CI（不要复用本文 SHA 作为假定当前值）。
 3. 查看 doc/contract/PLAT-002-项目级契约冻结登记簿.md、GOV-CTR-006、doc/news/README.md、doc/research/README.md、doc/researchflow/README.md、doc/server/README.md；处理第 4 项时另读 FLOW-CTR-001～004 登记行、doc/researchflow/04-ApplicationPort与运行时契约落地补充.md 与本文第 6 节。
-4. **当前总览（2026-11-14，以代码 SHA `c25d881c0` / Run `43574975820` 为准）**：第 3 节 1、2、3A `pass`（A 组已有逐用例级 CI 实证，见第 8.2 节）；3B、4、5、6 `blocked`。Integration 侧可独立完成的工作已完结：A 组真库验收、B 组成功路径待启用用例、CI 逐用例可观测性均已落地。**当前没有可推进的 Integration 开发任务**，不要重复盘点、不要装配空壳、不要重跑已通过的 CI。**关键分流：若用户只说「继续下一步任务」、远端无新证据且未授权工作面 A，直接按第 10.5 节汇报等待态与三个选项，不再产生空转提交。** 第 6 项 LLM / Notification 的 `blocked` 详见第 7 节；Researchflow Stage 与 Quant 按第 6 节条件阻断；News B 组按第 10.2 节的 10 步清单等待解锁。只有出现新证据或正式生产消费端后，才选取**其中一条**真实依赖链推进。**工作面 A 已于 2026-11-14 授权，但停在契约变更的「正式决策」门禁**（来源语义审核判定不合格，见第 10.7 节与 `doc/contract/NEWS-CTR-001-available_at-来源证据解锁影响分析.md`）；在项目负责人选定 P1/P2/P3 前，下一轮不要重复盘点、不要动代码。
+4. **当前总览（2026-11-14，以代码 SHA `c25d881c0` / Run `43574975820` 为准）**：第 3 节 1、2、3A `pass`（A 组已有逐用例级 CI 实证，见第 8.2 节）；3B、4、5、6 `blocked`。Integration 侧可独立完成的工作已完结：A 组真库验收、B 组成功路径待启用用例、CI 逐用例可观测性均已落地。**当前没有可推进的 Integration 开发任务**，不要重复盘点、不要装配空壳、不要重跑已通过的 CI。**关键分流：若用户只说「继续下一步任务」、远端无新证据且未授权工作面 A，直接按第 10.5 节汇报等待态与三个选项，不再产生空转提交。** 第 6 项 LLM / Notification 的 `blocked` 详见第 7 节；Researchflow Stage 与 Quant 按第 6 节条件阻断；News B 组按第 10.2 节的 10 步清单等待解锁。只有出现新证据或正式生产消费端后，才选取**其中一条**真实依赖链推进。**工作面 A 已于 2026-11-14 授权并完成第 1 步，随后由项目负责人决定 `搁置`（见第 10.7、10.8 节）**：`sec-edgar` 与现有搜索类 Provider 均不合格；全渠道复核找到形式合格但属「法定披露」品类的来源（EDINET / RNS / HKEX）。**P0 状态为 `shelved`，P1/P2/P3 未选定**；重启条件是为 News 引入法定披露类来源这一产品决策，不是「再找来源」。搁置期间不得动 `available_at` 相关字段/表/PIT SQL，也不得重复盘点该 4 家候选。
 5. CI 排障与工具链见第 8 节：本机 `gh` 已安装并完成网页授权登录，可用 `gh run view <run-id> --log` 核对逐用例结果；远端同步若 SSH 报主机密钥校验失败可用 HTTPS 只读 fetch 兜底。不要把 PAT 贴进对话、写进 `.zshrc` 明文或提交进仓库。
 
 ## 6. 2026-11-14 第 4 项 Researchflow Stage 契约准入盘点（只读，结论 `blocked`）
@@ -412,3 +412,21 @@ Researchflow 已有 Scheduler、Worker、WorkerPool、Claim/Lease/Fencing、候�
 - 按 `新闻模块开发任务与验收清单.md:799` 与 `新闻数据模型与质量契约.md:48`，此时**不得新增字段/表、不得改 PIT SQL、不得生成 `available_at`**；先动代码即契约明令禁止的「造壳」。这是 A 第 1 步的实质结论，不是等待 Owner 的空转。
 - **下一步必须由项目负责人**在提案第 3 节选定 **P1**（推荐：提供合格真实来源与授权凭据）/ **P2**（按契约 `:47` 新增带区间语义的独立字段，属 MAJOR 且不能替代 `available_at`）/ **P3**（维持现状），并确认版本升级与消费者影响。**未选定前不进入代码实施**；P2 单靠新字段无法解锁 B 组（Research 侧仍要求 `AvailableAt != nil`）。
 - 本轮无 `.go` / workflow 改动，不触发 CI；代码验收仍为 `c25d881c0` / Run `43574975820`（#70）。
+
+### 10.8 2026-11-14 P0 `available_at` 正式搁置（`shelved`）与全渠道复核结论
+
+- **决定**：项目负责人 2026-11-14 明确「处理不了先搁置」。P0 `available_at` 状态由 `blocked` 改为 **`shelved`（搁置）**，P1/P2/P3 均未选定，不推进版本升级、迁移与代码实施。
+- **上一轮结论的更正（必须记住，避免再犯）**：第 10.7 节据 SEC 官方证据得出「`sec-edgar` 与现有 Provider 不合格」成立；但由此推出「没有合格来源」属**过度外推**，已作废。SEC 那句话限定 `on sec.gov`，且 PDS 规范标题为 `DRAFT`。
+- **全渠道复核结论（本轮新增，详见 `doc/contract/NEWS-CTR-001-available_at-来源证据解锁影响分析.md` 第 1.5 节）**：
+
+| 来源 | 字段 / 实测 | 精度·时区 | 授权 | 判定 |
+|---|---|---|---|---|
+| 日本 EDINET（金融庁） | `submitDateTime` = `"2024-06-20 15:30:45"` | **秒 / JST** | **免费公开 API** | 形式最合格 |
+| LSE RNS | MIT304 `SendingTime`（UTC，`YYYYMMDD-HH:MM:SS.sss`） | **毫秒 / UTC** | 需市场数据牌照 | 语义精度合格、授权受限 |
+| HKEXnews | `Release Time` = `22/10/2026 18:27` | 分 / HKT | 无机读授权 | 授权缺口 |
+| 巨潮 CNINFO 公开接口 | `announcementTime` 实测 4/4 条均为 `00:00:00` | **仅日期** | 有正式 API | **准入 4 硬性不合格** |
+
+- **根因判定（比「缺来源」更准确）**：`available_at` 的语义只对**法定披露类**内容成立，对**新闻报道类**内容不成立。News 现有来源（Bocha/Tavily/Brave/SearXNG）是搜索聚合，字段全在契约 `:44` 负面清单，**换任何一家搜索类 Provider 结果相同**——是品类不匹配，不是覆盖不全。
+- **因此重启条件不是「再找来源」，而是产品决策**：是否为 News 新增一类法定披露来源（EDINET / RNS / HKEX 形态），并落实其授权、字段规范与覆盖市场。该决策属 News 产品定位与输入结构变更，**不在 Integration 分支权限内**。
+- **搁置期间禁止**：不新增 `available_at` 列或证据表、不改 PIT SQL、不生成/回填 `available_at`、不启用 B 组用例、不为消除 `--- SKIP` 改断言、不重复盘点这 4 家候选。
+- 阶段判定：仍为 INT-B 进行中；B 组状态 `shelved`（非 `fail`）；代码验收 `c25d881c0` / Run #70 不变，本轮纯文档、不触发 CI。
