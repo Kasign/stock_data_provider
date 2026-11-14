@@ -41,3 +41,9 @@ Researchflow 是研究应用编排层，通过 Data、News、Quant、Research、
 Server 在 integration 已接入 Researchflow → Notification Outbox Relay。Run 终态事件使用 `researchflow.run.terminal` / Schema `1.0.0`，Server 校验 Outbox Payload Fingerprint 并构造 Notification Event Envelope；只有 Notification EventReceiver 接收成功后才确认 Outbox。当前 Run #54（`43359166036`，SHA `63f49065a5ef3379d95948a6c2c6e504a555a63f`）的 MariaDB 接收、失败重试、重复处理和 Relay 组件启停测试通过。
 
 该接入只覆盖终态事件送入 Notification Inbox/FanoutWorkItem；不代表 Researchflow Run Scheduler/Worker 已由 Server 启动，也不代表生产 StageExecutor、Data/News/Quant/LLM Adapter 或 Notification 渠道投递已完成。
+
+## Integration 接入状态（2026-11-14，第 4 项只读盘点）
+
+Integration 侧已完成 Researchflow Stage 接入的契约与代码准入盘点，判定 **`blocked`（非 `fail`）**：FLOW-CTR-004 的 Stage Provider Result 只有字段表、无权威 Output Registry 与 Envelope Schema；`StageExecutor` 在 `internal/researchflow/application/executor.go:47-49` 只有接口、生产实现为零；`WorkflowTemplate.OutputRegistryVersion` 只是字符串字段；Quant 侧 `DecodePayload` 仅注册 `trend/1.0.0` / `risk/1.0.0`。本轮未改动本模块任何代码或进度表，也未新增 Stage Code / 输出 Schema / 空壳 Executor。
+
+模块自身能力（状态机、Scheduler、WorkerPool、MariaDB 验收）保持本文前述记录，不重复验收。解锁所需的冻结契约、`stage_code + template_version + output_registry_version` 三元组、生产 Provider 与跨模块端到端验收条件，以及下一轮起点，统一以 [Integration 当前任务交接与继续执行](../整体任务规划/05-治理与验收/Integration当前任务交接与继续执行.md) 第 6 节为准。

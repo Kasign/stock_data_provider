@@ -11,6 +11,7 @@
 - News→Research 组合构造提交：06722fdcd2e178c69ee4ae7bb3bf06caf907545d，Run 43368950457 success。
 - 启用 News/Research MariaDB 集成测试后，Run 43369220849 对 SHA 570b001 暴露既有 News 集成夹具缺少 NEWS-CTR-002 schema_version；已在 SHA d664b9f 修正，Run 43369529083 success。
 - CI 现设置 NEWS_MARIADB_TEST_DSN 与 RESEARCH_TEST_MYSQL_DSN，News 与 Research 模块级 MariaDB 集成测试已进入根模块测试并通过；不代表跨模块 Importer 写入链路已验收。
+- 2026-11-14 第 4 项补记：完成 Researchflow Stage/Template/Output Registry 冻结契约与真实代码的**只读盘点**，判定**第 4 项 `blocked`（不是 `fail`）**——Stage 输入/输出、Output Registry 版本与注册项、生产 Provider 三项门禁未通过，仅可信 CallerRef 在契约定义层满足、运行时绑定仍有 L2 缺口。完整证据、责任归属与重新进入条件见本文第 6 节。本轮未新增任何 Stage / StageExecutor / Stage Code / 输出 Schema 代码，未改动模块领域代码，未触发新 CI；阶段判定仍为 INT-B 进行中。
 
 ## 1. 当前已完成的工作
 
@@ -139,8 +140,8 @@ Researchflow 已有 Scheduler、Worker、WorkerPool、Claim/Lease/Fencing、候�
    - **A 组（已完成，`pass`）**：授权快照读取、当前策略复核、PIT 不可见、指纹篡改、当前策略版本变更、Context 取消、分页快照逐条授权、游标旧 Key 轮换验签，以及 Importer fail-closed 零落库。实现见 `internal/server/bootstrap/research_news_mariadb_integration_test.go`：复用 `SERVER_RELAY_TEST_MYSQL_DSN` 自建隔离 database、注册 news/research 两个 Migration namespace、调用真实 `newResearchNewsComposition`、读取冻结 NEWS-CTR-002 Golden 并用公共 GOV-CTR-006 `Fingerprint` 重算决策指纹；不使用 Mock Facade、空壳 DB、硬编码密钥或伪造时间字段。验收证据为提交 `b0aabaa2edf89c44cd2aeb79b1a57210a8017d1b` 的 Integration CI Run 43561072301 success（gofmt、root/go-core vet 与 test、Compose、WebUI 检查与构建全部通过）。本地无 DSN 时 `t.Skip` 仅为开发态；已用非空假 DSN 确认 DB 子测试不会 Skip，CI 提供同名 env 与 MariaDB service，故该 success 包含真实 MariaDB 执行。不重复执行。
    - **B 组（`blocked`）**：Research Evidence 成功持久化、AuthorizationRef 与派生关系留痕。阻断依据：`internal/news/app/get_evidence.go` 的 `researchEvidenceRecordFromPIT` 不设置 `AvailableAt`（第 212 行注释明确需独立来源证据，禁止以 observed_at/published_at 推导）；`internal/research/adapters/news/evidence.go` 的 `mapNewsEvidence` 第 152 行要求非 nil，否则返回 `ErrEvidenceNotPITSafe` 且不调用 `AddEvidence`；GOV-CTR-002 与《项目级契约决策记录》第 293/294/452 条要求缺证据时为 null，`doc/news/新闻API契约.md` 第 197 行明确 News 当前不推断 `available_at`。责任归属 News Owner；Integration 不得伪造、回填或改 News 领域代码绕过。现有 `TestImporterRejectsMissingOrFutureAvailableAtWithoutPersisting` 只证明 fail-closed 语义，Importer 成功路径单测靠 mock 注入 `AvailableAt`，不是跨模块证据。
    - 现有 News/Research **模块级** MariaDB 集成测试已由 Run 43369529083 执行并通过；不得将其等同跨模块链路验收，也不重复执行。
-4. Researchflow Stage 接入：读取冻结 Stage/Template/Output Registry 契约及真实模块代码。只有 Stage 输入/输出、Registry 版本、可信 CallerRef 和生产 Provider 均明确后才接入；不创建空壳 StageExecutor。
-5. Quant：保持生产 Stage 禁止接入，直到 Application Port、Result Payload/Registry 和 DATA-CTR-005/007 门禁满足契约。
+4. Researchflow Stage 接入（**只读盘点已完成，接入判定 `blocked`**）：已按第 4 节执行规则核对 PLAT-002 登记簿 `0.2.60-frozen`、FLOW-CTR-001～004、Researchflow 4 份 Schema + 11 份 Golden、`04-ApplicationPort与运行时契约落地补充.md`，以及 `internal/researchflow/`、`internal/server/bootstrap/` 真实代码。四项门禁判定为「Stage 输入/输出：部分满足；Registry 版本：部分满足；可信 CallerRef：契约定义层满足、运行时绑定有 L2 缺口；生产 Provider：未满足」，**不具备接入条件**。不创建空壳 StageExecutor、不虚构 Stage Code 或输出 Schema、不把 Quant 当生产 Provider。完整证据、责任归属与重新进入条件见本文第 6 节；在此项解锁前不重复盘点。
+5. Quant（**`blocked`，本轮复核确认仍禁止接入**）：保持生产 Stage 禁止接入，直到有可注入的公开 Application Port、Result Payload/Registry 注册项，且 `DATA-CTR-005` / `DATA-CTR-007` / `QNT-CTR-003` 按登记簿重新进入条件完成定点复核。当前 `internal/quant/application/` 只有 `GetResult` 授权读取用例，Indicator/Factor/Trend 仍是纯函数；`internal/quant/result/envelope.go:201-221` 的 `DecodePayload` 只接受 `trend/1.0.0` 与 `risk/1.0.0`，`indicator`/`factor` fail-closed。解锁条件见本文第 6.5 节第 2 条；Integration 不得自行串接纯函数造伪 Application Facade。
 6. 复核 LLM Provider 与 Notification Delivery 的生产装配条件；已有 Outbox→Inbox/FanoutWorkItem MariaDB 验收不重复执行。只推进存在真实契约与可运行依赖的缺口。
 
 ## 4. 执行规则
@@ -158,5 +159,63 @@ Researchflow 已有 Scheduler、Worker、WorkerPool、Claim/Lease/Fencing、候�
 
 1. 打开本文。
 2. 查询 integration 最新 HEAD 和最新 CI（不要复用本文 SHA 作为假定当前值）。
-3. 查看 doc/contract/PLAT-002-项目级契约冻结登记簿.md、GOV-CTR-006、doc/news/README.md、doc/research/README.md、doc/server/README.md。
-4. 从第 3 节第 4 项 Researchflow Stage 契约盘点继续（第 1、2 项与第 3 项 A 组已完成，A 组由 Run 43561072301 精确 SHA success 验收）；若发现新 HEAD 已经包含对应工作，先核对证据，再推进下一项，不重复开发。B 组在 News Owner 补齐 `available_at` 来源证据前保持 `blocked`。
+3. 查看 doc/contract/PLAT-002-项目级契约冻结登记簿.md、GOV-CTR-006、doc/news/README.md、doc/research/README.md、doc/researchflow/README.md、doc/server/README.md；处理第 4 项时另读 FLOW-CTR-001～004 登记行、doc/researchflow/04-ApplicationPort与运行时契约落地补充.md 与本文第 6 节。
+4. 从**第 3 节第 6 项「复核 LLM Provider 与 Notification Delivery 的生产装配条件」**继续（一次只处理一条真实依赖链）：第 1、2 项与第 3 项 A 组已完成，A 组由 Run 43561072301 对 SHA `b0aabaa2e` 的精确 success 验收；第 4 项 Researchflow Stage 接入与第 5 项 Quant 生产接入均为 `blocked`，解锁条件见本文第 6 节，在解锁前**不要重复盘点或空转**。若发现新 HEAD 已包含对应工作，先核对证据再推进，不重复开发。B 组在 News Owner 补齐 `available_at` 来源证据前保持 `blocked`。
+
+## 6. 2026-11-14 第 4 项 Researchflow Stage 契约准入盘点（只读，结论 `blocked`）
+
+### 6.1 盘点基线与范围
+
+- 核对时 `integration` 本地与远端 HEAD 均为 `c43fb88f7`（2026-11-14 docs-only 提交，按 CI paths 不触发 CI）；最近**代码** SHA 为 `b0aabaa2e`，Integration CI Run [43561072301](https://github.com/Kasign/stock_data_provider/actions/runs/43561072301) success。本轮是纯文档盘点，未改动任何 `.go` 文件，其结论以 docs-only 提交落地，**不改变代码验收 SHA**。若后续 HEAD 因文档提交前移，按第 4 节规则以查询到的最新 HEAD/CI 为准，不要用本文记录的反推当前值。
+- 契约权威来源：`doc/contract/PLAT-002-项目级契约冻结登记簿.md`，版本 `0.2.60-frozen`，阶段 `L1_contracts_frozen`，正式 CTR 43 项（`frozen` 37 / `deferred` 4 / `not_applicable` 2），固定代码审计基线 `origin/integration @ b6dfc85ba214fe16268c8cba780641a8bfe15086`。**该基线是 L1 契约冻结时的代码审计点，不是当前 HEAD**；L1 冻结只代表公开契约定义已冻结，不代表 L2 实现符合性或 L3 集成验收通过。
+- Researchflow 的正式契约编号是 **FLOW-CTR-001～004**（登记簿第 55～58 行）。全仓**未找到** `RSF-CTR-*` / `RESEARCHFLOW-CTR-*` 命名的契约，也**未找到**独立的 Stage Registry / Output Registry / Payload Registry 冻结契约文件、冻结的 Stage Code 清单或逐 Stage 输入/输出 Schema。
+- 已有机器可读资产：`doc/researchflow/schema/` 4 份 JSON Schema（run / stage / attempt / result-summary，均 1.0.0）与 `doc/researchflow/golden/` 11 份 Golden；文字契约见 `doc/researchflow/03-CONTRACT-006与007最终决议.md` 与 `04-ApplicationPort与运行时契约落地补充.md`。
+- `doc/server/README.md` 第 12 章已有 Server 侧门禁核查（约第 1697～1912 行），本轮**不重复其结论**，只把 Integration 侧准入判定与下一轮起点固化到本文。
+
+### 6.2 四项门禁逐条判定
+
+| 门禁 | 判定 | 关键证据 |
+|---|---|---|
+| Stage 输入/输出 | **部分满足** | 已具备：`FLOW-CTR-001` 冻结 Run/Stage/Attempt 1.0.0 Schema/Golden；`03-CONTRACT-006与007最终决议.md:159-171` 有 Stage Provider Result Envelope **字段表**；`04-ApplicationPort与运行时契约落地补充.md:53` 要求强类型 payload。缺口：登记簿第 58 行「只有字段表，**无权威 Schema/Output Registry**，Stage Provider Result Envelope Schema 未登记」；`doc/researchflow/schema/stage-1.0.0.schema.json:7-25` 只有不透明 `output_ref`，无 input / payload / output_type；`04-...补充.md:101`「Output Registry 目前只固定版本引用，尚未验证 Provider 的 output_type/schema_version」 |
+| Registry 版本 | **部分满足** | 已具备：Template Registry 精确 `Ref + Version` 查询、禁止 latest / 别名回退、指纹复算、insert-only 发布（`04-...补充.md:428-441`）；`WorkflowTemplate` 保留 `output_registry_version` 字段。缺口：`doc/server/README.md:1737/1805`「未发现可供 Server 装配的完整 Researchflow Output Registry 实例/注册清单」；`internal/researchflow/template/template.go:58` 只有字符串字段，无版本常量、无注册函数、无条目；代码中的 `outputs-v1/v3/v7` 全是测试夹具，不是冻结版本 |
+| 可信 CallerRef | **契约定义层满足，运行时绑定有 L2 缺口** | 已具备：`项目级契约决策记录.md:559` 定义 MVP 直接调用主体为 Researchflow service Principal，Golden 值 `service:researchflow`；`NEWS-CTR-002` Golden 第 3 行 `caller_ref` 与第 51 行 `subject_ref=caller_ref`；`04-...补充.md:24`、`新闻来源授权矩阵.md:121` 要求由可信认证 Context 注入、禁止请求体自报；多处 fail-closed 校验（`internal/researchflow/application/create_run.go:107-110`、`cancel_run.go:68-77`、`internal/news/domain/authorization.go:167`）。缺口：登记簿第 44 行「远程可信 caller 传递机制未定义」、第 57 行「可信 caller/correlation 与各下游 Adapter 字段映射未形成单一权威 Schema/Port 契约」；生产代码中 `service:researchflow` **零出现**，仅见于测试常量与 Golden，不是配置项 |
+| 生产 Provider | **未满足** | `internal/researchflow/application/executor.go:47-49` 的 `StageExecutor` **只有接口**，全仓生产实现为零（`ExecuteStage` 实现仅 `worker_test.go` 三个 fake）；`internal/researchflow/resultvalidation/quant.go:70-97` 的 Registry 生产注册表为空；`internal/quant/result/envelope.go:201-221` 的 `DecodePayload` 只接受 `trend/1.0.0`、`risk/1.0.0`，`indicator`/`factor` fail-closed；`internal/server/bootstrap/bootstrap.go:176-183/233-235/432` 只装配 News→Research 组合、Outbox Relay 与 Migration，无任何 Scheduler / Worker / WorkerPool / StageExecutor 生产构造；`doc/researchflow/README.md:32` 明确 StageExecutor 是注入端口、生产 Adapter 未闭环 |
+
+### 6.3 真实代码事实（避免下次重新盘一遍）
+
+- `internal/researchflow/` 有 11 个子包，**没有** `stage` / `executor` / `registry` / `output` 包；`StageExecutor` 及 `StageExecutionRequest/Result` 定义在 `application/executor.go:17-49`，`ValidateStageExecutionResult` 在同文件第 56 行。**未找到** `StageInput` / `StageOutput` / `StageProvider` 类型。
+- `StageDefinition`（`template/template.go:42-51`）只有 `stage_code / required / dependencies / priority / applicability / retry_policy / propagation / gate_type`，没有输入或输出 Schema 绑定。
+- `internal/server/bootstrap/router.go:22-34` 只有 `healthz/readyz/diagnostics` 与旧 `/api/v1/analysis/*`，**无 researchflow 业务路由**。
+- 已完成的跨模块链路仅 `Researchflow 终态 Outbox → Notification Inbox/FanoutWorkItem`（`bootstrap.go:323-347`、`internal/server/relay/researchflow_notification.go:211-239`），**不创建或执行 Run**。
+- `internal/researchflow/` 有 55 个测试文件，Stage 执行链覆盖全为模块单测 + fake；**不存在** `CreateRun → Schedule → Worker → StageExecutor → CommitAttemptResult` 的跨模块 MariaDB 端到端测试。
+- Quant 侧 `internal/quant/application/` 只有 `GetResult` 授权读取用例，Indicator/Factor/Trend 是纯函数，没有可注入的计算 Application Port；`doc/quant/README.md:34` 明确 `indicator`/`factor` 未注册。
+
+### 6.4 `deferred` 契约与阻断范围
+
+登记簿第 75～78 行的 4 项 `deferred`：`DATA-CTR-005`（DailyBars Decimal v2）、`DATA-CTR-007`（Snapshot 内容寻址与 Evidence locator）、`QNT-CTR-003`（首批 Factor）、`SRV-CTR-001`（新 Researchflow HTTP API）。另有 2 项 `not_applicable`（`DATA-CTR-003`、`NTF-CTR-003`），不阻断任何接入。
+
+- 按登记簿第 15 行「deferred 不得作为已发布接口使用」，前三项**直接阻断 Quant 作为生产 Stage Provider**，`SRV-CTR-001` **直接阻断新 Researchflow HTTP API**；二者都不阻断 Researchflow 自身的 Stage 定义与编排层工作。
+- 但真正卡住第 4 项的是 **frozen 契约的 L2 实现缺口**（FLOW-CTR-004 无 Output Registry / Envelope Schema），不是 deferred 状态本身。按 `doc/server/README.md:1745`「在 Output Registry 权威版本、具体 Stage 清单和各 Stage 输出 Schema 尚未逐项对齐前，不注册推测性的 Stage，不启动可接收生产 Run 的 Worker」。
+
+### 6.5 结论、责任归属与重新进入条件
+
+**结论：第 3 节第 4 项接入判定为 `blocked`（不是 `fail`），阶段仍为 INT-B 进行中，系统整体未达到 INT-C 端到端业务联调条件。** 本轮不产生任何 Stage 相关代码。
+
+按「Owner 先行、Integration 收尾」的顺序，解锁需同时具备以下可验收条件：
+
+1. **Researchflow / 契约 Owner**：冻结具体 `stage_code + template_version + output_registry_version` 三元组；发布 Output Registry 版本号常量、`(output_type, schema_version)` 注册项与对应 Schema + Go Validator；补齐 Stage Provider Result Envelope Schema 与逐 Stage 输入/输出 Schema（当前只有字段表）。
+2. **各业务模块 Owner**：提供公开 Application Port；Quant 需可注入的计算 Facade 并在 Envelope Registry 注册 `indicator`/`factor`；`DATA-CTR-005/007` 与 `QNT-CTR-003` 按登记簿重新进入条件完成定点复核后才可解除 deferred。
+3. **Researchflow / 模块边界**：提供生产 `StageExecutor` 实现（Server 只注入，不复制领域逻辑），并明确可信 CallerRef 运行时绑定（远程可信 caller 传递机制、下游 Adapter 字段映射的单一权威契约）。
+4. **验收证据**：新增 `CreateRun → Schedule → Worker → StageExecutor → CommitAttemptResult` 的跨模块 Contract Test 与 MariaDB 端到端验收，并在精确 SHA 上取得 CI success。
+
+### 6.6 Integration 边界：现在能做什么、不能做什么
+
+- **解锁后可以做（组合根职责）**：用现有 `ResearchflowCapacity`（`internal/server/config/researchflow.go:14-18`）把已存在的 `NewMySQLRunRepository`、`NewMySQLTemplateRegistry`、`NewScheduler`、`NewWorker`、`NewWorkerPool`、`NewSchedulerCandidateScanner` 装配进 `runtime.Lifecycle`；补齐 Server 侧基础设施 Adapter（可信身份 `RequestIdentity`、`DatabaseClock`、`IDGenerator`）；Migration 已在 `bootstrap.go:432` 注册；保持 Outbox Relay 与 Health/Readiness 不变。
+- **任何情况下不能做**：凭空造生产 `StageExecutor`、虚构 Stage Code 或输出 Schema、把 Quant 纯函数串成伪 Application Facade、绕过 `DATA-CTR-005/007` 门禁、用空实现冒充生产实现、把构造成功或模块单测说成端到端业务链路通过。
+
+### 6.7 不要重复执行的事项
+
+- `doc/server/README.md` 第 12 章 Server 侧门禁核查已存在，不重写。
+- Researchflow 模块级 gofmt / test / race / vet 与 MariaDB 普通/Race 集成已通过（Run `43008530832`、PR Run `43008538854`，见 `doc/researchflow/02-任务拆分与验收.md:23`），不重跑。
+- Outbox→Notification MariaDB 验收（Run `43359166036`）与第 3 项 A 组（Run `43561072301`）不重复。
+- 第 4 项在 6.5 的解锁条件满足前不重复盘点；若新 HEAD 已包含对应工作，先核对证据再推进。
