@@ -14,6 +14,8 @@
 
 > **Integration 联调更新（2026-11-14，代码 SHA `4752dc104` / Run [43571558064](https://github.com/Kasign/stock_data_provider/actions/runs/43571558064)）**：`integration-ci.yml` 新增 `test-integration-verbose` 步骤，使 CI 永久输出 `internal/server/bootstrap` 逐用例 PASS/SKIP 明细；Run 69 success 实证 A 组 7 个真库子测试与两个无 DB 自检用例全部 `--- PASS`，A 组 `pass` 由包级证据升级为逐用例级实证。同一提交落地 B 组成功路径用例 `successful_import_with_verified_available_at`：真实 Facade → Importer → `research_evidence_records` 读回，断言 `available_at` 与 News 输出严格一致及授权/来源/指纹/payload 留痕；当前按 GOV-CTR-002 / NEWS-CTR-001 契约事实显式 `--- SKIP`，News Owner 解锁后自动启用，不伪造、不回填、不 Mock Facade。A 组 fail-closed 与分页断言已兼容两种契约状态。**工作面复盘**：Integration 分支可独立完成的工作已完结，5 条 `blocked` 链根因均在其他模块领域代码 / L1 冻结契约 / 真实外部来源证据；继续在组合根边界内盘点只会产生文档空转。P0 精确解锁清单、三种工作面与反空转规则见交接文档第 10 节；未获跨模块/契约变更授权时，下一轮应直接汇报等待态与选项，不制造文档或 Skip 用例充当进度。
 
+> **Integration 联调更新（2026-11-14 独立 review 后，代码 SHA `c25d881c0` / Run [43574975820](https://github.com/Kasign/stock_data_provider/actions/runs/43574975820)）**：对上一轮 B 组用例与 CI `-v` 做挑刺式复核，发现并修复 5 个缺陷——fixture 只播 `SourceSummary` 导致实际内容级别为 `summary`、与冻结 Golden 的 `snippet` 授权快照不匹配（解锁后二次授权必失败）；`content_level` 硬编码断言；CI 把 `SKIP` 与 0 测试当成 PASS；解锁后缺证据 fail-closed 真库覆盖消失；UTC 用 `Location()` 指针比较会误报。现在 fixture 播种 `ContentSnippet` 级 Body 并由无 DB 自检守住，`test-integration-verbose` 会把逐用例结果纳入判定（≥3 顶层 PASS、A 组 7 子测试 PASS、拒绝 0 测试、B 组 SKIP 显式告警）。Run 70 success 实证 A 组 7 个真库子测试全部 PASS、无回归。**B 组成功路径仍按契约 `t.Skip`、从未真库执行**，静态逐字段核对不等于已验证。完整发现、修复与剩余边界见交接文档第 10.6 节。
+
 ## 1. 目标与边界
 
 Server 是应用组合根（Composition Root）和进程运行入口。它负责把 Platform 与业务模块组装成可运行服务，并管理进程级资源和生命周期；不实现业务领域规则，不拥有业务数据和业务状态机。
