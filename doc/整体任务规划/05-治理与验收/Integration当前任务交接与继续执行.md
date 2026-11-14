@@ -3,18 +3,19 @@
 - 仓库：Kasign/stock_data_provider
 - 当前工作分支：integration
 - 本文更新日期：2026-11-14
-- 本文记录时核对的 integration HEAD：`a98823abeff35e4ea439161b78b3318f589005c6`（2026-11-14 docs-only，第 6 项 LLM / Notification 装配复核结论）。**该字段是记录时快照，不是实时值**：本轮及后续 docs-only 提交都会让 HEAD 前移，实际当前值一律按第 4 节规则查远端。最近**代码**验收 SHA 仍为 `b0aabaa2edf89c44cd2aeb79b1a57210a8017d1b`，Run `43561072301` success；该代码 SHA 之后均为 docs-only 提交，按 CI paths 规则不触发新 CI，不得把文档 HEAD 记作 CI 通过。
+- 本文记录时核对的 integration HEAD：`4752dc104`（2026-11-14 代码提交：B 组成功路径验收资产 + CI 逐用例 `-v`）。**该字段是记录时快照，不是实时值**：本轮及后续 docs-only 提交都会让 HEAD 前移，实际当前值一律按第 4 节规则查远端。最近**代码**验收 SHA `4752dc104`，Integration CI Run `43571558064`（#69）success；其后的 docs-only 提交按 CI paths 规则不触发新 CI，不得把文档 HEAD 记作 CI 通过。历史代码验收 SHA `b0aabaa2e` / Run `43561072301`（A 组首验）保留为对照。
 - 本文用途：下一轮新聊天的首要接续入口。新聊天先读本文，再核对 GitHub 当前 HEAD/CI；不得直接假设本文 SHA 仍是最新。
-- 2026-11-14 联调补记：新增 `internal/server/bootstrap/research_news_mariadb_integration_test.go`，落地第 3 节 A 组跨模块 MariaDB 验收用例与无 DB 自检；提交 `b0aabaa2e` 已推送 integration，Integration CI Run [43561072301](https://github.com/Kasign/stock_data_provider/actions/runs/43561072301) success（head_sha 精确匹配，全部检查项通过），**A 组状态由 `not_comparable` 升级为 `pass`**。本机无 MariaDB/Docker，本地 `t.Skip` 只代表开发态；已用非空假 DSN 在本地验证三个 DB 子测试均进入真实连接阶段而非 Skip，且 CI job env 提供 `SERVER_RELAY_TEST_MYSQL_DSN` 与 mariadb:11.4 service，可确认 CI 上真库执行。匿名 job 日志下载需权限（403）；2026-11-14 完成 `gh` 登录后已取得 Run 68 逐步日志，实证 `mariadb:11.4` service healthy、三个 DSN 非空、`internal/server/bootstrap` 包 `ok 0.627s`。但 CI 使用 `go test ./...`（无 `-v`），日志不含逐用例 PASS/SKIP 明细，**仍不声称逐用例日志已核对**，详见第 8.2 节。B 组成功写入链路经源码核对确认被 `available_at` 硬阻断，记为 `blocked`。
-- 本轮代码验收 HEAD：b0aabaa2edf89c44cd2aeb79b1a57210a8017d1b；Run 43561072301 success。上一轮代码验收 SHA dde7d4f8fb071912ffa34bb9c50d46507d1a388b（Run 43370552552 success）保留为历史记录。
-- 代码验收 SHA：b0aabaa2edf89c44cd2aeb79b1a57210a8017d1b；Integration CI Run [43561072301](https://github.com/Kasign/stock_data_provider/actions/runs/43561072301) success，head_sha 精确匹配。
+- 2026-11-14 联调补记：新增 `internal/server/bootstrap/research_news_mariadb_integration_test.go`，落地第 3 节 A 组跨模块 MariaDB 验收用例与无 DB 自检；提交 `b0aabaa2e` 已推送 integration，Integration CI Run [43561072301](https://github.com/Kasign/stock_data_provider/actions/runs/43561072301) success（head_sha 精确匹配，全部检查项通过），**A 组状态由 `not_comparable` 升级为 `pass`**。本机无 MariaDB/Docker，本地 `t.Skip` 只代表开发态；已用非空假 DSN 在本地验证三个 DB 子测试均进入真实连接阶段而非 Skip，且 CI job env 提供 `SERVER_RELAY_TEST_MYSQL_DSN` 与 mariadb:11.4 service，可确认 CI 上真库执行。匿名 job 日志下载需权限（403）；2026-11-14 完成 `gh` 登录后已取得 Run 68 逐步日志，实证 `mariadb:11.4` service healthy、三个 DSN 非空、`internal/server/bootstrap` 包 `ok 0.627s`。但 CI 使用 `go test ./...`（无 `-v`），Run 68 日志不含逐用例 PASS/SKIP 明细；该限制已由 Run 69 新增的 `test-integration-verbose` 步骤消除并取得逐用例实证，详见第 8.2 节。B 组成功写入链路经源码核对确认被 `available_at` 硬阻断，记为 `blocked`；B 组成功路径用例已落地、当前按契约事实 `t.Skip`。
+- 本轮代码验收 HEAD：4752dc104768cdf8dee0ed91f59bd23ed64fc2a4；Run 43571558064 success。历史：b0aabaa2edf89c44cd2aeb79b1a57210a8017d1b（Run 43561072301）、dde7d4f8fb071912ffa34bb9c50d46507d1a388b（Run 43370552552）。
+- 代码验收 SHA：4752dc104768cdf8dee0ed91f59bd23ed64fc2a4；Integration CI Run [43571558064](https://github.com/Kasign/stock_data_provider/actions/runs/43571558064) success，head_sha 精确匹配。
 - News→Research 组合代码 SHA：d664b9f6ec08d358b914242735fde52f49e9c7c1；Run 43369529083 success。`dde7d4f` 仅移除一次误加的重复 LLM 传输适配器，当前代码树不包含重复实现。
 - News→Research 组合构造提交：06722fdcd2e178c69ee4ae7bb3bf06caf907545d，Run 43368950457 success。
 - 启用 News/Research MariaDB 集成测试后，Run 43369220849 对 SHA 570b001 暴露既有 News 集成夹具缺少 NEWS-CTR-002 schema_version；已在 SHA d664b9f 修正，Run 43369529083 success。
 - CI 现设置 NEWS_MARIADB_TEST_DSN 与 RESEARCH_TEST_MYSQL_DSN，News 与 Research 模块级 MariaDB 集成测试已进入根模块测试并通过；不代表跨模块 Importer 写入链路已验收。
 - 2026-11-14 第 4 项补记：完成 Researchflow Stage/Template/Output Registry 冻结契约与真实代码的**只读盘点**，判定**第 4 项 `blocked`（不是 `fail`）**——Stage 输入/输出、Output Registry 版本与注册项、生产 Provider 三项门禁未通过，仅可信 CallerRef 在契约定义层满足、运行时绑定仍有 L2 缺口。完整证据、责任归属与重新进入条件见本文第 6 节。本轮未新增任何 Stage / StageExecutor / Stage Code / 输出 Schema 代码，未改动模块领域代码，未触发新 CI；阶段判定仍为 INT-B 进行中。
-- 2026-11-14 第 6 项补记（远端提交 `a98823abe`）：LLM Provider 与 Notification Delivery 生产装配条件只读复核已完成，**均判定 `blocked`**，详见本文第 7 节。至此第 3 节 1～6 项全部处理完毕：1、2、3A 为 `pass`；3B、4、5、6 为 `blocked`。**当前没有可推进的 Integration 开发任务**，在新证据或正式生产消费端出现前停止新增 Integration 代码（见第 7.4 节）。
-- 2026-11-14 CI 可观测性补记：本机 `gh` 2.104.0 已由用户在本机终端完成网页授权登录（`Kasign` / keyring / `repo,read:org`），`gh run view 43561072301 --log` 已成功取得 Run 68 逐步日志，确认 MariaDB service healthy、三个 DSN 非空、bootstrap 包 `ok`；匿名 REST API 的 job 日志下载返回 403。因 CI 未启用 `-v`，日志不含逐用例明细。工具链细节、HTTPS fetch 兜底与证据级别见本文第 8 节。
+- 2026-11-14 第 6 项补记（远端提交 `a98823abe`）：LLM Provider 与 Notification Delivery 生产装配条件只读复核已完成，**均判定 `blocked`**，详见本文第 7 节。至此第 3 节 1～6 项全部处理完毕：1、2、3A 为 `pass`；3B、4、5、6 为 `blocked`。**当前没有可推进的 Integration 开发任务**，在新证据或正式生产消费端出现前停止新增 Integration 代码（见第 7.4 节）。这一「等待态」的根因、工作面选择与反空转规则见本文第 10 节；后续若用户未授权跨模块/契约变更，不应再重复盘点或制造文档进度。
+- 2026-11-14 CI 可观测性补记：本机 `gh` 2.104.0 已由用户在本机终端完成网页授权登录（`Kasign` / keyring / `repo,read:org`），`gh run view 43561072301 --log` 已成功取得 Run 68 逐步日志，确认 MariaDB service healthy、三个 DSN 非空、bootstrap 包 `ok`；匿名 REST API 的 job 日志下载返回 403。因 CI 未启用 `-v`，Run 68 日志不含逐用例明细；该限制已由 Run 69 的 `test-integration-verbose` 步骤永久消除。工具链细节、HTTPS fetch 兜底与证据级别见本文第 8 节。
+- 2026-11-14 工作面复盘补记：用户指出「连续多轮没有实质性任务进度」。核对后确认 Integration 分支可独立完成的编码工作已完结，5 条 `blocked` 链全部需要其他模块领域代码 / L1 冻结契约 / 真实外部来源证据；此前把「等 Owner」当作分支内任务反复盘点，是策略偏差。本轮新增第 10 节固化工作面判定、P0 精确解锁清单、三种工作面与反空转规则，并交付两项 Integration 侧代码资产（B 组成功路径用例 + CI `-v` 逐用例证据），Run `43571558064` 对代码 SHA `4752dc104` success。`.workbuddy/memory/2026-11-14.md` 经用户确认已提交（`0f7aab244`），不加入 `.gitignore`。
 
 ## 1. 当前已完成的工作
 
@@ -163,8 +164,8 @@ Researchflow 已有 Scheduler、Worker、WorkerPool、Claim/Lease/Fencing、候�
 1. 打开本文。
 2. 查询 integration 最新 HEAD 和最新 CI（不要复用本文 SHA 作为假定当前值）。
 3. 查看 doc/contract/PLAT-002-项目级契约冻结登记簿.md、GOV-CTR-006、doc/news/README.md、doc/research/README.md、doc/researchflow/README.md、doc/server/README.md；处理第 4 项时另读 FLOW-CTR-001～004 登记行、doc/researchflow/04-ApplicationPort与运行时契约落地补充.md 与本文第 6 节。
-4. **当前总览（2026-11-14，以 HEAD `a98823abe` 为准）**：第 3 节 1～6 项已全部处理完毕——1、2、3A `pass`；3B、4、5、6 `blocked`。**当前没有可推进的 Integration 开发任务**，不要重复盘点、不要装配空壳、不要重跑已通过的 CI。第 6 项 LLM / Notification 的 `blocked` 详见第 7 节；Researchflow Stage 与 Quant 按第 6 节条件阻断；News B 组继续等待可证明的 `available_at` 来源证据。只有出现新证据（真实 Gateway 版本/CapabilityState、真实渠道协议/凭据/身份目录、Output Registry 与 StageExecutor、Quant Application Port 等）或正式生产消费端后，才选取**其中一条**真实依赖链推进，并先按第 4 节规则核对最新 HEAD/CI。
-5. CI 排障与工具链见第 8 节：本机 `gh` 已安装（登录需一次浏览器设备码授权），远端同步若 SSH 报主机密钥校验失败可用 HTTPS 只读 fetch 兜底。不要把 PAT 贴进对话、写进 `.zshrc` 明文或提交进仓库。
+4. **当前总览（2026-11-14，以代码 SHA `4752dc104` / Run `43571558064` 为准）**：第 3 节 1、2、3A `pass`（A 组已有逐用例级 CI 实证，见第 8.2 节）；3B、4、5、6 `blocked`。Integration 侧可独立完成的工作已完结：A 组真库验收、B 组成功路径待启用用例、CI 逐用例可观测性均已落地。**当前没有可推进的 Integration 开发任务**，不要重复盘点、不要装配空壳、不要重跑已通过的 CI。**关键分流：若用户只说「继续下一步任务」、远端无新证据且未授权工作面 A，直接按第 10.5 节汇报等待态与三个选项，不再产生空转提交。** 第 6 项 LLM / Notification 的 `blocked` 详见第 7 节；Researchflow Stage 与 Quant 按第 6 节条件阻断；News B 组按第 10.2 节的 10 步清单等待解锁。只有出现新证据或正式生产消费端后，才选取**其中一条**真实依赖链推进。
+5. CI 排障与工具链见第 8 节：本机 `gh` 已安装并完成网页授权登录，可用 `gh run view <run-id> --log` 核对逐用例结果；远端同步若 SSH 报主机密钥校验失败可用 HTTPS 只读 fetch 兜底。不要把 PAT 贴进对话、写进 `.zshrc` 明文或提交进仓库。
 
 ## 6. 2026-11-14 第 4 项 Researchflow Stage 契约准入盘点（只读，结论 `blocked`）
 
@@ -267,8 +268,8 @@ Researchflow 已有 Scheduler、Worker、WorkerPool、Claim/Lease/Fencing、候�
 ### 8.2 A 组 `pass` 的证据级别
 
 - **有效证据**（足以支撑 `pass`、不重复执行）：① 提交 `b0aabaa2edf89c44cd2aeb79b1a57210a8017d1b` 的 Integration CI Run [43561072301](https://github.com/Kasign/stock_data_provider/actions/runs/43561072301) success，`head_sha` 精确匹配且全部 step success；② `gh` 登录后取得的逐步日志实证：`mariadb:11.4` service `healthy`、job env 的 `SERVER_RELAY_TEST_MYSQL_DSN` / `NEWS_MARIADB_TEST_DSN` / `RESEARCH_TEST_MYSQL_DSN` 均为非空 `root:root@tcp(127.0.0.1:3306)/integration_relay_test?...`、`ok example.com/stock-analysis-flow/internal/server/bootstrap 0.627s`、汇总 `go test（根模块） success`；③ 本地用非空假 DSN 验证三个 DB 子测试进入真实连接阶段而非 `t.Skip`，且测试代码仅在 DSN 为空时 Skip。
-- **日志粒度限制（不是证据缺失，不改变 `pass` 结论）**：CI 的测试命令是 `go test ./...`（无 `-v`，逐步日志第 379/380 行），因此日志**不产生逐用例 PASS/SKIP 明细**，无法从日志直接区分三个 DB 子测试是 PASS 还是 SKIP。真库执行由「service healthy + DSN 非空 + DSN 守卫代码 + 本地非空 DSN 不 Skip」共同论证。保持「不声称逐用例日志已核对」的口径，不把包级 `ok` 说成逐用例 PASS。
-- **若将来确需逐用例明细**：最小改动是给该包加 `go test -v ./internal/server/bootstrap/`（或 CI 根模块 test 加 `-v`），会触发一次新 CI。按第 4 节「不重复已通过验收」原则，**不建议仅为日志改 CI 并重跑**；除非出现新的失败证据或 Owner 明确需要逐用例级证据。
+- **逐用例级实证（Run 69 补齐，日志粒度限制已消除）**：Run 68 的 `go test ./...` 无 `-v`，只有包级 `ok`。2026-11-14 在 `integration-ci.yml` 新增 `test-integration-verbose` 步骤（只重跑 `internal/server/bootstrap` 包并开启 `-v`）与汇总项，使每次 CI 永久输出逐用例明细。提交 `4752dc104` 的 Integration CI Run [43571558064](https://github.com/Kasign/stock_data_provider/actions/runs/43571558064)（#69）success，`head_sha` 精确匹配；逐步日志第 505-533 行显示：两个无 DB 自检用例 `--- PASS`；A 组 7 个子测试 `composition_and_schema`、`authorized_read_and_fail_closed_import`、`pit_invisible`、`context_cancelled`、`list_evidence_page_uses_current_authorization`、`fingerprint_tamper_rejected`、`current_policy_version_change_rejected` **全部 `--- PASS`**；`TestNewsResearchMariaDBIntegration` 总耗时 0.40s，步骤 env 三个 DSN 非空，末尾 `PASS` / `ok ... 0.412s`。因此 A 组 `pass` 已由「包级 ok + 环境论证」升级为**逐用例级真库实证**，不再保留「不声称逐用例日志已核对」的口径。
+- **B 组 `--- SKIP` 是契约事实，不是失败**：同一日志第 514/526 行显示 `successful_import_with_verified_available_at` 因 News 未提供可验证 `available_at` 而显式 Skip，跳过原因直接打印在日志里。不得把该 Skip 记为通过，也不得为消除 Skip 伪造字段（第 10.3 节）。
 - CI Go 版本 1.23.x 与本机 1.27.4 不同，已实测新测试代码兼容；`proxy.golang.org` 在本机返回 Bad Gateway，依赖下载用 `GOPROXY=https://goproxy.cn,direct`。
 
 ### 8.3 多会话协作事实
@@ -281,8 +282,8 @@ Researchflow 已有 Scheduler、Worker、WorkerPool、Claim/Lease/Fencing、候�
 
 ### 9.1 等待态判定与分流规则
 
-- 本轮核对（记录时 HEAD `d16671a3f`）：远端无新提交；Integration CI 最新仍为 #68 / `43561072301` success；11 个 workflow 中 10 个最近运行 success，唯一失败项 `One-time Market Data module consolidation #1` 是 2026-11-09 在 `feat/full-go-data-providers-api-switch` 分支上的一次性历史运行（Run `42560200503`），不在 integration 联调门禁内，不作为新失败证据；`main` 与各 `feat/*` 分支 tip 均停留在 2026-11-13，**没有新的 Gateway / 渠道 / available_at / Stage / Quant 实现证据**。`gh` 已完成登录并取得 Run 68 逐步日志（见第 8.1 / 8.2 节）。
-- 因此第 3 节 1～6 项全部处理完毕（1/2/3A `pass`，3B/4/5/6 `blocked`），**Integration 处于等待态，不是有未完成编码任务**。按第 7.4 节，新证据出现前停止新增 Integration 代码。
+- 历史核对（记录时 HEAD `d16671a3f`）：11 个 workflow 中 10 个最近运行 success，唯一失败项 `One-time Market Data module consolidation #1` 是 2026-11-09 在 `feat/full-go-data-providers-api-switch` 上的一次性历史运行（Run `42560200503`），不在 integration 门禁内；`main` 与各 `feat/*` 分支 tip 均停留在 2026-11-13，**没有新的 Gateway / 渠道 / available_at / Stage / Quant 实现证据**。2026-11-14 后续核对：Integration CI 已由 #68 / `43561072301` 推进到 **#69 / `43571558064` success**（代码 SHA `4752dc104`），逐用例日志已补齐（第 8.2 节）。
+- 因此第 3 节 1～6 项全部处理完毕（1/2/3A `pass`，3B/4/5/6 `blocked`），**Integration 处于等待态，不是有未完成编码任务**。按第 7.4 节，新证据出现前停止新增 Integration 代码（项目负责人按第 10.4 节明确授权工作面 A 的除外）；工作面为何会形成「无进度」的循环、以及如何切换工作面，见第 10 节。
 - 新证据到达后的分流：① 按第 4 节查远端 HEAD/CI 与合并状态（分支上有改动不等于已进 integration）；② 判断它解锁 9.2 中的**哪一条**链；③ 只推这一条，先核对契约/代码事实再动手；④ 精确 SHA 取得 CI success；⑤ 同步本文与对应 `doc/<module>/README.md`。不得同时推进多条，不得在证据不足时先写空壳「跑通」。
 
 ### 9.2 五条 `blocked` 链的优先级与触发信号
@@ -301,7 +302,7 @@ Researchflow 已有 Scheduler、Worker、WorkerPool、Claim/Lease/Fencing、候�
 
 1. **验证据**：确认证据是代码/契约/Golden/CI 产物，而不是口头结论或 PR 描述；检查是否已合入 `integration` 并有精确 SHA 的 CI success。
 2. **核契约**：重读 `PLAT-002` 登记簿，确认相关 CTR 状态（尤其 `deferred` 是否按重新进入条件解除）、版本与冻结基线是否变化；L1 冻结不等于 L2 实现符合。
-3. **最小实现**：Integration 只做 Server 组合根装配与跨模块适配；**不修改其他模块领域代码**、不伪造字段、不创建空实现。
+3. **最小实现**：Integration 只做 Server 组合根装配与跨模块适配；**不修改其他模块领域代码**、不伪造字段、不创建空实现。**例外**：项目负责人按第 10.4 节明确授权工作面 A 后，按第 10.2 节清单跨模块实施，且必须先完成契约变更影响分析；未授权时本条严格生效。
 4. **补验收**：按 9.4 写跨模块测试，真实 MariaDB + 真实依赖 + 冻结 Golden；同时确认既有 A 组 fail-closed 用例不回归。
 5. **收口**：push 触发 Integration CI，取精确 SHA success；同步本文第 3 节状态、第 5 节起点、验收基线与模块 README，并写明证据级别（不把 skip/构造测试说成通过）。
 
@@ -322,7 +323,55 @@ Researchflow 已有 Scheduler、Worker、WorkerPool、Claim/Lease/Fencing、候�
 - 环境漂移：CI 为 Go 1.23 + `mariadb:11.4`，本机 Go 1.27.4；`proxy.golang.org` 在本机不可用，依赖下载用 `GOPROXY=https://goproxy.cn,direct`。
 - 风险：新证据若只存在于功能分支而未合入 `integration`，**不得**据其编写组合根代码；需先确认合并与 CI 结果。
 
-### 9.6 不需要新证据即可收尾的两件小事
+### 9.6 不需要新证据即可收尾的两件小事（均已完成）
 
-1. **`gh` 登录与逐步日志核对已完成**：用户已登录，`gh run view 43561072301 --log` 已核对包级输出并实证 MariaDB service / 非空 DSN / `bootstrap` 包 `ok`；受 CI `go test ./...` 无 `-v` 限制，逐用例明细不可得，已在第 8.2 节记为「日志粒度限制」而非待办，不为日志重复触发 CI。
-2. 未跟踪的 `.workbuddy/`（本地工作日志）是否加入 `.gitignore`，由用户决定；此前已从暂存区移出，避免误提交。
+1. **`gh` 登录与逐步日志**：用户已登录，`gh run view 43561072301 --log` 实证 MariaDB service / 非空 DSN / `bootstrap` 包 `ok`。Run 68 因 `go test ./...` 无 `-v` 不含逐用例明细；2026-11-14 已在 `integration-ci.yml` 新增 `test-integration-verbose` 步骤（`go test ./internal/server/bootstrap/ ... -v`）与汇总项，使**每次 CI 永久输出逐用例 PASS/SKIP**，Run 68 的历史限制由后续精确 SHA 的 CI 日志补齐，见第 8.2 节。
+2. **`.workbuddy/`**：用户 2026-11-14 明确「可以提交」，`.workbuddy/memory/2026-11-14.md` 已由提交 `0f7aab244` 纳入版本库；该目录是项目数据而非临时缓存，**不加入 `.gitignore`**，后续工作日志按同样方式提交。
+
+## 10. 工作面判定与授权边界（2026-11-14）
+
+本节回答「为什么连续多轮没有实质性任务进度」，并给出下次必须遵守的反空转规则。只依据本文已记录的证据与 2026-11-14 的只读源码核对，不新增猜测。
+
+### 10.1 根因：Integration 分支可独立完成的工作已经完结
+
+- 第 3 节 1、2、3A 已 `pass`；3B、4、5、6 全部 `blocked`。这 5 条链的共同点是：**解锁条件不在 Server 组合根，而在其他模块领域代码、L1 冻结契约、或真实外部来源证据**。
+- 交接文档第 7.4 节与第 9.3 节把 Integration 的职责限定为「组合根装配 + 跨模块适配 + 验收」，并禁止修改其他模块领域代码、禁止伪造字段、禁止创建空壳。在此边界内，A 组测试落地并取得 CI success 后，**确实不再有能改变系统行为的编码任务**。
+- 因此从第 4 项起，后续多轮的产出必然是「核对远端 → 无新证据 → 判定 blocked → 同步文档 → 推送」。这不是执行不力，而是**工作面选错**：把「等其他 Owner」当成了 Integration 分支内部可以推进的任务，反复盘点把同一批结论写进不同章节，形成了空转循环。这一策略偏差由本轮修正，不推给外部条件。
+
+### 10.2 P0 `available_at` 的精确解锁清单（只读核对结论，非猜测）
+
+2026-11-14 对 GOV-CTR-002、NEWS-CTR-001、`doc/news/` 全套契约、`internal/news/` 领域模型/Provider/Migration/Repository、`internal/research/adapters/news/` 与 Golden 做了逐文件核对，结论是：**P0 不能由 integration 分支单独合法解锁**。阻断不是「字段没填」，而是「字段、列、证据载体、Provider 采集、冻结准入白名单全链路都不存在」。
+
+| 步骤 | 责任方 | 精确位置 / 依据 | 需冻结契约变更 |
+|---|---|---|---|
+| 1 取得真实来源「首次公开可获取时间」并完成语义审核、Source/Endpoint allowlist、字段路径/原始值/时区/证据 URL/采集时间/解析器版本留痕、版本绑定、`verified` 状态 | News Owner + 来源 Owner | `doc/news/新闻数据模型与质量契约.md:31-48`；`新闻模块开发任务与验收清单.md:792-801`（`:800` 仍为 `[ ]`） | 否（先有证据） |
+| 2 冻结「可接受的来源证据类型、可信等级」白名单，消除 `:446` 未决项与 `:792-799` 已冻结首期准入的文字不一致 | 项目契约 Owner（`feat/design_doc`） | `新闻模块开发任务与验收清单.md:446` | 是 |
+| 3 走冻结变更流程：影响分析 → 正式决策 → 消费者影响确认 → 版本升级 → 迁移边界 | 项目契约 Owner | `PLAT-002` 登记簿 `:85-92`；GOV-CTR-002 / NEWS-CTR-001/002/003 / RSC-CTR-001 均 `frozen`；登记簿第 3 节**无** `available_at` 专用 deferred 项 | 是 |
+| 4 News 领域模型 + Migration V10 + Repository INSERT/SELECT 新增证据载体与 nullable 列 | News Owner | `internal/news/domain/{types,observation,version_record,content}.go`（五个结构均无该字段）；`adapters/storage/migrations.go` 9 个 migration 无该列；`mysql_repository.go:282-294,434-441` | 否（实现） |
+| 5 Provider/Parser 保留来源证据（当前 `adapters/provider/http.go:52-113` 只读 body、丢弃全部响应头；`providers.go` 只取 `published_date`，属负面清单） | News Owner | `新闻API契约.md:201`；`代码与文档Review报告.md:338-344` | 否 |
+| 6 Get/List 严格 PIT SQL 门禁 `available_at IS NOT NULL AND available_at <= system_as_of`，Facade `researchEvidenceRecordFromPIT` 赋值 | News Owner | `新闻模块与公共平台接入矩阵.md:364`；`internal/news/app/get_evidence.go:212` | 否 |
+| 7 Schema/Golden 同步（`NEWS-CTR-001-research-evidence-page` 的 golden 当前 `"available_at": null`）+ GOV-CTR-002 `:76` 最小覆盖用例 | News + 契约 Owner | `doc/news/golden/NEWS-CTR-001-research-evidence-page.golden.json:19` | 是 |
+| 8 派生关系留痕（`DerivedFromRefs` / `RelationRefs` 当前双方都是空） | Research + News Owner | `internal/research/adapters/news/evidence.go:177-179`；`internal/news/app/get_evidence.go:184-185` | 需确认 |
+| 9 同步 4 组现有 NULL 断言测试，避免解锁后立刻回归红 | News/Research/Integration Owner | `bootstrap` 集成测试 `authorized_read_and_fail_closed_import` 与分页用例、`evidence_query_golden_test.go:50`、`get_evidence_test.go:183` | 否 |
+| 10 合入 integration 取精确 SHA CI success，再启用 B 组成功路径用例 | Integration Owner | 本文第 9.3 节执行卡 | 否 |
+
+**证据可得性事实**：`internal/news/adapters/provider/providers.go` 的 Tavily/Brave 等生产 Provider 只保留 `published_date`/`page_age`（负面清单），`http.go` 完全不读响应头；Golden `NEWS-CTR-002` 全文无 `available_at` 键，`sec-edgar` 只是授权策略标识而非真实 endpoint 响应。因此不存在「从已有夹具合法映射」的捷径。
+
+### 10.3 绕过尝试会被主动拦截
+
+`internal/research/adapters/news/evidence.go:152-155`（`ErrEvidenceNotPITSafe`）、`:126-127`（落库前二次授权复核）、`internal/research/evidence/validate.go:139-144`（`ValidateForStrictPIT`）、以及 `TestImporterRejectsMissingOrFutureAvailableAtWithoutPersisting`、`get_evidence_test.go:183`、A 组 `authorized_read_and_fail_closed_import` 都会拦截。用 `published_at`/`observed_at`/`fetched_at` 回填会同时违反 GOV-CTR-002 `:23/:45/:51`、决策 `:293`、API 契约 `:197/:201`、数据模型契约 `:44` 与登记簿 `:87-89`，属契约红线。
+
+### 10.4 下一轮的三种工作面（必须由项目负责人选定）
+
+| 工作面 | 内容 | 能产生什么 |
+|---|---|---|
+| **A（唯一能产生业务进度）** | 授权本会话以**契约 Owner + News/Research Owner** 身份，按 10.2 的 10 步推进 P0：先做契约变更提案与来源语义审核，再改领域代码/Migration/Provider/Schema/Golden，最后启用 B 组用例取 CI success | News→Research 成功写入链路真正跑通，B 组由 `blocked` 转 `pass`，阶段向 INT-C 推进 |
+| **B（仅 Integration 侧资产）** | 继续补可观测性、待启用测试、组合根装配（当前已完成：B 组成功路径用例 + CI `-v`） | 验收能力与解锁成本下降，但业务链路状态不变 |
+| **C（等待态）** | 保持现有边界，等外部 Owner 提供新证据 | 不产生业务进度；应直接报告，不制造任务 |
+
+### 10.5 反空转规则（下次新聊天必须遵守）
+
+1. 若用户只说「继续下一步任务」、远端无新提交/新失败/新证据、且**未授权工作面 A**：直接汇报「Integration 独立工作已完结、5 条链阻塞根因、10.4 三个选项」，**不再重复盘点、不再新增进度文档、不再制造 `t.Skip` 用例或工具链改动充当进度**。
+2. 用户授权 A 后，先按 10.2 输出契约变更影响分析并取得确认，再动代码；改动跨模块时按功能聚合提交，每步取精确 SHA 的 CI success，同步本文第 3 节状态与对应 `doc/<module>/README.md`。
+3. 不要把「文档同步完成」「CI 日志补齐」「测试骨架落地」描述为实质性业务进度；三者只属于工作面 B。
+4. 每次仍按第 4 节先查远端 HEAD/CI；`gh` 已登录，可用 `gh run view <run-id> --log` 核对逐用例结果。
