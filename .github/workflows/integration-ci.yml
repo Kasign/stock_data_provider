@@ -100,11 +100,42 @@ jobs:
         run: go test ./...
 
       # 跨模块 MariaDB 验收需要逐用例证据：仅包级 ok 无法区分 PASS 与 t.Skip。
-      # 单独重跑该包并开启 -v，使 Integration CI 日志永久包含每个子测试的结果。
+      # -v 输出必须进入门禁，否则 B 组可以永久 SKIP 而 CI 仍全绿。
       - name: Run News/Research cross-module tests (verbose)
         id: test-integration-verbose
         continue-on-error: true
-        run: go test ./internal/server/bootstrap/ -run 'TestNewsResearchMariaDBIntegration|TestNewsResearchIntegrationFixturesAreValid|TestNewsEvidenceCursorKeyRotation' -count=1 -v
+        run: |
+          set -o pipefail
+          go test ./internal/server/bootstrap/ \
+            -run '^(TestNewsResearchMariaDBIntegration|TestNewsResearchIntegrationFixturesAreValid|TestNewsEvidenceCursorKeyRotation)$' \
+            -count=1 -v 2>&1 | tee /tmp/news_research_verbose.log
+          status=$?
+          if [ "$status" -ne 0 ]; then
+            echo "::error::go test 退出码 $status"
+            exit 1
+          fi
+          if grep -q 'no tests to run' /tmp/news_research_verbose.log; then
+            echo "::error::-run 未匹配到任何测试，逐用例门禁必须失败"
+            exit 1
+          fi
+          pass_count=$(grep -c '^--- PASS: Test' /tmp/news_research_verbose.log || true)
+          if [ "$pass_count" -lt 3 ]; then
+            echo "::error::顶层 PASS 用例数 = $pass_count, want >= 3"
+            exit 1
+          fi
+          for case_name in composition_and_schema authorized_read_and_fail_closed_import pit_invisible context_cancelled list_evidence_page_uses_current_authorization fingerprint_tamper_rejected current_policy_version_change_rejected; do
+            if ! grep -q -- "--- PASS: .*/${case_name} " /tmp/news_research_verbose.log; then
+              echo "::error::A 组子测试 ${case_name} 缺少 PASS 记录"
+              exit 1
+            fi
+          done
+          if grep -q -- '--- SKIP: .*successful_import_with_verified_available_at' /tmp/news_research_verbose.log; then
+            echo "::warning::B 组成功路径仍为 blocked（News 未提供可验证 available_at），按契约事实跳过"
+            echo "- B 组 successful_import_with_verified_available_at: SKIP (blocked, 非 fail)" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "- B 组 successful_import_with_verified_available_at: 已启用" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          echo "- 顶层 PASS 用例数: $pass_count；A 组 7 个子测试均 PASS" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Run go vet (go-core module)
         id: vet-core

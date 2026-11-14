@@ -165,6 +165,24 @@ func makeAllowedBinding(t *testing.T, golden newsdomain.NewsAuthorizationBinding
 	return binding
 }
 
+// newsResearchSeedContent 返回与冻结 NEWS-CTR-002 授权快照
+// content_level="snippet" 匹配的内容层。必须包含 snippet 级 Body：
+// 只播 SourceSummary 时 actualEvidenceContentLevel 退化为 "summary"，
+// 而 Research AddEvidence 的二次授权复核用实际级别查快照，会找不到
+// "snippet" 快照并 fail-closed。fixture 与自检共用此函数，避免漂移。
+func newsResearchSeedContent() newsdomain.ContentLayers {
+	return newsdomain.ContentLayers{
+		SourceSummary:       "SEC filing source summary",
+		SourceSummaryOrigin: newsdomain.ContentOriginFeedSummary,
+		Body: &newsdomain.ContentPayload{
+			Origin: newsdomain.ContentOriginFeedBody,
+			Format: newsdomain.ContentFormatPlainText,
+			Kind:   newsdomain.ContentSnippet,
+			Text:   "SEC filing snippet for News/Research integration",
+		},
+	}
+}
+
 // newsResearchSeedObservation 构造与 NEWS-CTR-002 Golden 策略轨迹完全匹配的
 // Observation。单独抽出以便无 DB 的自检测试也能验证这段最易出错的字段映射。
 func newsResearchSeedObservation(observedAt, retentionUntil time.Time) newsdomain.Observation {
@@ -276,10 +294,7 @@ func newNewsResearchFixture(t *testing.T, ctx context.Context) *newsResearchFixt
 	result, err := updater.Execute(ctx, newsapp.ResearchUpdateRequest{
 		NewsID: newsResearchNewsID, ObservationID: observation.ID,
 		Candidate: candidate,
-		Content: newsdomain.ContentLayers{
-			SourceSummary:       "SEC filing source summary",
-			SourceSummaryOrigin: newsdomain.ContentOriginFeedSummary,
-		},
+		Content:   newsResearchSeedContent(),
 	})
 	if err != nil {
 		t.Fatalf("播种 NewsItemVersion 失败: %v", err)
@@ -356,6 +371,19 @@ func TestNewsResearchIntegrationFixturesAreValid(t *testing.T) {
 	}
 	if err := newsdomain.ValidateNewsAuthorizationBindingForEvidence(binding, observation, version); err != nil {
 		t.Fatalf("播种 Observation/Version 与冻结授权绑定不匹配: %v", err)
+	}
+
+	// 内容级别必须与冻结授权快照一致：Research AddEvidence 的二次授权复核
+	// 用「实际内容级别」查 news_authorization_snapshots.content_level。
+	// 该自检不依赖 DB，可在本地直接发现 fixture 内容层退化。
+	restricted := newsdomain.RestrictContentLayers(newsResearchSeedContent(), newsdomain.ContentSnippet)
+	if restricted.Body == nil || restricted.Body.Kind != newsdomain.ContentSnippet {
+		t.Fatalf("播种内容在 snippet 请求下丢失 Body: %+v", restricted)
+	}
+	bodyLevel, ok := newsdomain.AuthorizationContentLevelForKind(restricted.Body.Kind)
+	if !ok || bodyLevel != newsdomain.AuthorizationContentSnippet {
+		t.Fatalf("播种 Body 的授权内容级别 = %q (ok=%v), want %q",
+			bodyLevel, ok, newsdomain.AuthorizationContentSnippet)
 	}
 
 	payloads := newsResearchPolicyPayloads()
@@ -494,35 +522,37 @@ func TestNewsResearchMariaDBIntegration(t *testing.T) {
 				t.Fatalf("授权读取结果异常: %+v", record)
 			}
 			// 当前契约事实：News 不提供可验证的 available_at，返回 null。
-			// 这是 B 组成功写入链路被 blocked 的直接原因。若 News Owner 完成来源证据
-			// 接入与冻结契约变更后返回非 nil，本 fail-closed 分支不再适用，改由
-			// successful_import_with_verified_available_at 覆盖成功路径。
-			if record.AvailableAt != nil {
-				t.Skip("News 已提供可验证 available_at；fail-closed 分支由 B 组成功路径接管")
-			}
-
-			_, err = f.composition.importer.ImportEvidence(ctx, researchnews.ImportRequest{
-				CallerRef: newsResearchCallerRef, PurposeCode: "research_analysis",
-				RequestedContentLevel: "snippet", SystemAsOf: f.systemAsOf,
-				NewsID: newsResearchNewsID, VersionID: f.version.ID,
-			})
-			if !errors.Is(err, researchnews.ErrEvidenceNotPITSafe) {
-				t.Fatalf("Importer 错误 = %v, want ErrEvidenceNotPITSafe（fail-closed）", err)
-			}
-			var persisted int
-			if err := f.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM research_evidence_records").Scan(&persisted); err != nil {
-				t.Fatalf("读取 Research Evidence 表失败: %v", err)
-			}
-			if persisted != 0 {
-				t.Fatalf("fail-closed 后 Research Evidence 落库行数 = %d, want 0", persisted)
+			// 这是 B 组成功写入链路被 blocked 的直接原因。
+			// review 结论：本 fail-closed 分支只在「缺证据」时可执行。News Owner
+			// 解锁后，B 组只接管成功路径，必须另补一条能显式构造「缺 available_at」
+			// 输入的真库用例来守住这条契约红线（交接文档第 10.2 节第 9 步）。
+			if record.AvailableAt == nil {
+				_, err = f.composition.importer.ImportEvidence(ctx, researchnews.ImportRequest{
+					CallerRef: newsResearchCallerRef, PurposeCode: "research_analysis",
+					RequestedContentLevel: "snippet", SystemAsOf: f.systemAsOf,
+					NewsID: newsResearchNewsID, VersionID: f.version.ID,
+				})
+				if !errors.Is(err, researchnews.ErrEvidenceNotPITSafe) {
+					t.Fatalf("Importer 错误 = %v, want ErrEvidenceNotPITSafe（fail-closed）", err)
+				}
+				var persisted int
+				if err := f.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM research_evidence_records").Scan(&persisted); err != nil {
+					t.Fatalf("读取 Research Evidence 表失败: %v", err)
+				}
+				if persisted != 0 {
+					t.Fatalf("fail-closed 后 Research Evidence 落库行数 = %d, want 0", persisted)
+				}
+			} else {
+				t.Log("News 已提供 available_at：fail-closed 分支不适用；成功路径由 B 组覆盖，缺证据 fail-closed 真库回归用例待 News Owner 解锁后补齐")
 			}
 		})
 
 		// B 组：真实 Facade → Importer → research_evidence_records 成功落库。
 		// 当前 News 依 GOV-CTR-002 / NEWS-CTR-001 不提供可验证的 available_at，
 		// 故本用例显式 Skip；News Owner 完成来源证据接入与冻结契约变更后自动启用。
-		// 这里不制造任何时间值，只校验「News 输出 ↔ Research 落库」严格一致，
-		// 从而同时拦截回填、篡改与静默改写。
+		// 这里不制造任何时间值：时间值与内容级别以 News 输出为唯一基准，
+		// 校验落库列/返回值与之严格一致，从而拦截回填、篡改与静默改写。
+		// payload 只校验关键留痕键存在；值一致性由列级断言覆盖。
 		t.Run("successful_import_with_verified_available_at", func(t *testing.T) {
 			record, err := f.composition.query.GetEvidence(ctx, f.getRequest())
 			if err != nil {
@@ -531,8 +561,19 @@ func TestNewsResearchMariaDBIntegration(t *testing.T) {
 			if record.AvailableAt == nil {
 				t.Skip("B 组 blocked：News 尚未提供可验证 available_at 来源证据（GOV-CTR-002 / NEWS-CTR-001）；解锁后本用例自动启用")
 			}
-			if record.AvailableAt.Location() != time.UTC || record.AvailableAt.After(f.systemAsOf) {
-				t.Fatalf("available_at 不满足严格 PIT 边界: %v", *record.AvailableAt)
+			// GOV-CTR-002 约束的是「RFC3339Nano UTC / 零偏移 / 以 Z 结尾」的表示，
+			// 不是 Go 内部 time.Location 的指针身份；FixedZone("UTC",0) 与
+			// RFC3339Nano "+00:00" 解析结果都是合法零偏移 UTC，用 Location()==time.UTC
+			// 比较会误报。这里按契约语义判 offset，并检查 UTC 规范化后以 Z 结尾。
+			_, offset := record.AvailableAt.Zone()
+			formattedUTC := record.AvailableAt.UTC().Format(time.RFC3339Nano)
+			if offset != 0 || !strings.HasSuffix(formattedUTC, "Z") || record.AvailableAt.After(f.systemAsOf) {
+				t.Fatalf("available_at 不满足严格 PIT 边界: %v (offset=%d, utc=%s)", *record.AvailableAt, offset, formattedUTC)
+			}
+			// Golden 授权快照的 content_level 为 "snippet"；Research AddEvidence 的
+			// 二次授权复核用实际内容级别查快照，二者不一致会 fail-closed。
+			if record.ContentLevel != newsapp.EvidenceContentSnippet {
+				t.Fatalf("fixture 实际内容级别 = %q, want %q（与冻结授权快照一致）", record.ContentLevel, newsapp.EvidenceContentSnippet)
 			}
 
 			imported, err := f.composition.importer.ImportEvidence(ctx, researchnews.ImportRequest{
@@ -592,9 +633,12 @@ func TestNewsResearchMariaDBIntegration(t *testing.T) {
 				fingerprint != imported.ContentFingerprint || len(fingerprint) != 64 || len(payloadSHA) != 64 {
 				t.Fatalf("落库审计字段异常: observed=%q auth=%q fp=%q sha=%q", systemObservedAt, authRef, fingerprint, payloadSHA)
 			}
+			// content_level 来自 string(value.ContentLevel) = string(record.ContentLevel)，
+			// 是「实际内容级别」而非请求级别，不能硬编码成请求值。
 			if sourceRef != record.SourceRef || !sourceVersion.Valid || sourceVersion.String != record.VersionID ||
-				contentLevel != "snippet" {
-				t.Fatalf("落库来源/内容级别异常: source_ref=%q version=%v level=%q", sourceRef, sourceVersion, contentLevel)
+				contentLevel != string(record.ContentLevel) {
+				t.Fatalf("落库来源/内容级别异常: source_ref=%q version=%v level=%q want_level=%q",
+					sourceRef, sourceVersion, contentLevel, record.ContentLevel)
 			}
 			var storedPayload map[string]json.RawMessage
 			if err := json.Unmarshal([]byte(payload), &storedPayload); err != nil {
