@@ -3,7 +3,7 @@
 - 仓库：Kasign/stock_data_provider
 - 当前工作分支：integration
 - 本文更新日期：2026-11-14
-- 当前 integration HEAD：`a98823abeff35e4ea439161b78b3318f589005c6`（2026-11-14 docs-only，第 6 项 LLM / Notification 装配复核结论）；最近**代码**验收 SHA 仍为 `b0aabaa2edf89c44cd2aeb79b1a57210a8017d1b`，Run `43561072301` success。该代码 SHA 之后均为 docs-only 提交，按 CI paths 规则不触发新 CI，不得把文档 HEAD 记作 CI 通过。
+- 本文记录时核对的 integration HEAD：`a98823abeff35e4ea439161b78b3318f589005c6`（2026-11-14 docs-only，第 6 项 LLM / Notification 装配复核结论）。**该字段是记录时快照，不是实时值**：本轮及后续 docs-only 提交都会让 HEAD 前移，实际当前值一律按第 4 节规则查远端。最近**代码**验收 SHA 仍为 `b0aabaa2edf89c44cd2aeb79b1a57210a8017d1b`，Run `43561072301` success；该代码 SHA 之后均为 docs-only 提交，按 CI paths 规则不触发新 CI，不得把文档 HEAD 记作 CI 通过。
 - 本文用途：下一轮新聊天的首要接续入口。新聊天先读本文，再核对 GitHub 当前 HEAD/CI；不得直接假设本文 SHA 仍是最新。
 - 2026-11-14 联调补记：新增 `internal/server/bootstrap/research_news_mariadb_integration_test.go`，落地第 3 节 A 组跨模块 MariaDB 验收用例与无 DB 自检；提交 `b0aabaa2e` 已推送 integration，Integration CI Run [43561072301](https://github.com/Kasign/stock_data_provider/actions/runs/43561072301) success（head_sha 精确匹配，全部检查项通过），**A 组状态由 `not_comparable` 升级为 `pass`**。本机无 MariaDB/Docker，本地 `t.Skip` 只代表开发态；已用非空假 DSN 在本地验证三个 DB 子测试均进入真实连接阶段而非 Skip，且 CI job env 提供 `SERVER_RELAY_TEST_MYSQL_DSN` 与 mariadb:11.4 service，可确认 CI 上真库执行。公开仓库逐步日志下载需管理员权限（403），故证据组合为「workflow 配置 + DSN 守卫代码 + 精确 SHA success」，不声称逐用例日志已核对。B 组成功写入链路经源码核对确认被 `available_at` 硬阻断，记为 `blocked`。
 - 本轮代码验收 HEAD：b0aabaa2edf89c44cd2aeb79b1a57210a8017d1b；Run 43561072301 success。上一轮代码验收 SHA dde7d4f8fb071912ffa34bb9c50d46507d1a388b（Run 43370552552 success）保留为历史记录。
@@ -258,7 +258,8 @@ Researchflow 已有 Scheduler、Worker、WorkerPool、Claim/Lease/Fencing、候�
 
 - remote 为 `git@github.com:Kasign/stock_data_provider.git`，SSH 认证与 push 可用；`.github/workflows/integration-ci.yml` 的 push 分支为 `integration`、paths 含 `**/*.go` 且不含 `doc/**`，**push 代码自动触发 CI，docs-only 提交不触发**，无需手动 dispatch。job 自带 `mariadb:11.4` + redis service，并在 job 级注入 `SERVER_RELAY_TEST_MYSQL_DSN`、`NEWS_MARIADB_TEST_DSN`、`RESEARCH_TEST_MYSQL_DSN`。
 - 未认证时 GitHub Actions 页面与 REST API 可读 **run / step 级状态**（例如 `/actions/runs/{id}/jobs`），但 job 逐步日志下载返回 **403**（需仓库权限）。这是权限边界，不是日志不存在。
-- 本机已安装 `gh` 2.104.0。推荐登录方式：`gh auth login --web --scopes "repo,read:org"`（OAuth 由 gh 托管、不接触明文 PAT）；设备码流程输出形如 `08E3-2BA8`，需**用户**在 https://github.com/login/device 完成一次浏览器授权，非交互 shell 不能代替。授权后：`gh run view <run-id>` 看各 step、`gh run view <run-id> --log` 读逐步日志、`gh run rerun <run-id>` 重跑、`gh auth status` 验证。
+- 本机已安装 `gh` 2.104.0。推荐登录方式：**在用户自己的终端（有 TTY）执行** `gh auth login --web --scopes "repo,read:org"`（OAuth 由 gh 托管、不接触明文 PAT），按提示在 https://github.com/login/device 输入形如 `XXXX-XXXX` 的一次性码完成浏览器授权；该交互不能由 AI 会话的非交互 shell 代替。授权后用 `gh auth status` 验证，`gh run view <run-id>` 看各 step、`gh run view <run-id> --log` 读逐步日志、`gh run rerun <run-id>` 重跑。
+- **已验证的失败模式（2026-11-14）**：在会话后台启动 `gh auth login --web ...` 虽能生成设备码，但后台进程随会话结束被回收，且授权未完成时报 `Post "https://github.com/login/oauth/access_token": unexpected EOF`；设备码短时有效，重试需重新生成。**不要依赖 AI 会话内启动的登录流程**，请用户在本机终端自行完成，再让 AI 验证。匿名兜底同样无效：REST job logs 返回 403，网页版 job 页只返回页面框架（日志由 JS 渲染）。
 - 安全边界：不要把 PAT 贴进对话、写进 `.zshrc` 明文或提交进仓库；无人值守（定时任务/自动化）才使用平台 secret，且按最小 scope 配置。本地不建议另装 MariaDB：CI 已是 `mariadb:11.4` + Go 1.23 且已跑绿，本地版本漂移反而制造「本地过、CI 挂」；确需调试播种链时用与 CI 同名镜像、相同 DSN/healthcheck 对齐。
 - 若 `git fetch origin integration` 报 `Host key verification failed`，或本机策略禁止读取 `~/.ssh`，可用 `git -c url."https://github.com/".insteadOf="git@github.com:" fetch origin integration` 走 HTTPS 只读同步（公开仓库无需凭据，只覆盖本次命令、不改 remote 配置），随后 `git merge --ff-only origin/integration`。2026-11-14 已用该方式同步远端提交 `a98823abe`。
 
