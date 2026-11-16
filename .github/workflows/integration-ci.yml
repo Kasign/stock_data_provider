@@ -219,6 +219,7 @@ jobs:
           VET_ROOT: ${{ steps.vet-root.outcome }}
           TEST_ROOT: ${{ steps.test-root.outcome }}
           TEST_INTEGRATION_VERBOSE: ${{ steps.test-integration-verbose.outcome }}
+          TEST_WORKER_BOOTSTRAP: ${{ steps.test-worker-bootstrap.outcome }}
           VET_CORE: ${{ steps.vet-core.outcome }}
           TEST_CORE: ${{ steps.test-core.outcome }}
           PREPARE_ENV: ${{ steps.prepare-env.outcome }}
@@ -239,8 +240,8 @@ jobs:
           }
 
           echo "========== Integration CI 检查汇总 =========="
-          printf 'CHECKOUT=%s SETUP_GO=%s GOFMT=%s VET_ROOT=%s TEST_ROOT=%s TEST_INTEGRATION_VERBOSE=%s VET_CORE=%s TEST_CORE=%s PREPARE_ENV=%s COMPOSE=%s SETUP_NODE=%s JS_CHECK=%s WEB_TEST=%s WEB_BUILD=%s\n' \
-            "$CHECKOUT" "$SETUP_GO" "$GOFMT" "$VET_ROOT" "$TEST_ROOT" "$TEST_INTEGRATION_VERBOSE" "$VET_CORE" "$TEST_CORE" \
+          printf 'CHECKOUT=%s SETUP_GO=%s GOFMT=%s VET_ROOT=%s TEST_ROOT=%s TEST_INTEGRATION_VERBOSE=%s TEST_WORKER_BOOTSTRAP=%s VET_CORE=%s TEST_CORE=%s PREPARE_ENV=%s COMPOSE=%s SETUP_NODE=%s JS_CHECK=%s WEB_TEST=%s WEB_BUILD=%s\n' \
+            "$CHECKOUT" "$SETUP_GO" "$GOFMT" "$VET_ROOT" "$TEST_ROOT" "$TEST_INTEGRATION_VERBOSE" "$TEST_WORKER_BOOTSTRAP" "$VET_CORE" "$TEST_CORE" \
             "$PREPARE_ENV" "$COMPOSE" "$SETUP_NODE" "$JS_CHECK" "$WEB_TEST" "$WEB_BUILD"
           report "Checkout" "$CHECKOUT"
           report "Go 环境准备" "$SETUP_GO"
@@ -248,6 +249,7 @@ jobs:
           report "go vet（根模块）" "$VET_ROOT"
           report "go test（根模块）" "$TEST_ROOT"
           report "News/Research 跨模块测试（-v 逐用例）" "$TEST_INTEGRATION_VERBOSE"
+          report "Worker Bootstrap MariaDB/Redis 生命周期" "$TEST_WORKER_BOOTSTRAP"
           report "go vet（go-core）" "$VET_CORE"
           report "go test（go-core）" "$TEST_CORE"
           report "Web 环境准备" "$PREPARE_ENV"
