@@ -958,3 +958,13 @@ Researchflow 已有 Scheduler、Worker、WorkerPool、Claim/Lease/Fencing、候�
   5. Notification 是终态事件后的异步投递链，不是同步 DAG Stage Provider；真实渠道未就绪不阻断 Researchflow Stage Envelope/Registry 开发。
 - 下一项任务：先完成 FLOW-CTR-004 已冻结字段的机器化 Envelope DTO/Schema/Golden 与 Registry 通用框架；质量摘要按领域 Provider 注册的强类型 Schema 校验。ResultSummary 的质量枚举、coverage 细则和 Summary 身份/版本绑定作为单独决策项处理，不以猜测值阻塞 Envelope 基础结构。未有真实 Provider 的 stage_code 不得注册占位项。
 - 本轮没有修改 Server、Quant、LLM、Notification 领域代码；没有创建生产 Stage Provider；没有改变任何 deferred 契约状态。
+
+### 2026-11-16 Stage Provider Envelope / Output Registry 通用框架
+
+- 代码提交：`8e0b040badbec3aa295f452ce83f32498d22ecc1`；新增 `internal/researchflow/stageoutput`、Envelope JSON Schema 1.0.0、通用 Golden 和实施记录。
+- 该 SHA 的 Integration CI Run [43831178908](https://github.com/Kasign/stock_data_provider/actions/runs/43831178908) 已启动；gofmt 与根模块 go vet 已通过，根模块 Go tests 正在执行。最终全量 CI 结果尚未确认，不标记为验收通过。
+- Provider 只返回领域输出 discriminator、payload、quality_summary 和 diagnostic_refs；Run/Stage/Attempt/StageCode/TemplateVersion/CompletedAt 由 Orchestrator 组装。精确 Registry version 与 stage_code/output_type/schema_version 不匹配时 fail-closed。
+- Registry 以不可变版本、精确 Schema Ref/Validator 和稳定 SHA-256 fingerprint 标识；拒绝重复注册、缺失 Validator、未知组合、非对象 JSON 和递归重复 JSON Key。
+- 当前没有注册任何业务 Stage Entry；空 Registry 仅用于框架构建，不构成生产 Provider 可用证明。没有虚构 News/Quant/Research/LLM 注册项。
+- 未定义质量枚举、Coverage 分子/分母、Summary 身份/版本绑定；这些仍须契约决议。ResultSummary 不在本次实现范围。
+- 下一步：先取得该代码 SHA 全量 CI 结果；随后将 Registry/Envelope Validator 接入 Researchflow Worker 的提交前边界（保持无注册项时成功业务输出不可提交），再由各模块按真实 Application Port 和领域 Schema 提供注册项。Server 生产装配仍在真实 Provider 完备后进行。
