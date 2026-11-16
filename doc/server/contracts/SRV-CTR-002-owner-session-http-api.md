@@ -56,15 +56,14 @@ Owner 初始化不提供 HTTP 路由。它只能通过受控本机/运维命令�
 - 失败凭证统一返回 401，不泄露 Owner Credential 是否存在；限流拒绝按 PLAT-CTR-001 的稳定错误投影返回 429，并提供 Retry-After（若可确定）。
 - 登录成功后立即提供 CSRF Token，避免首次状态变更必须额外猜测接口。
 
-### 3.2 当前 Session / CSRF 引导
+### 3.2 当前 Session 状态
 
 `GET /api/v1/owner/session`
 
 - 只接受 owner_session；必须完成 Cookie、Session、CredentialVersion 校验。
-- 返回 HTTP 200：
-  `{"schema_version":"1.0.0","authenticated":true,"csrf_token":"<csrf-token>","expires_at":"<RFC3339Nano UTC>"}`
-- CSRF Token 只能来自当前 Session 绑定的 Token。若服务端不保存可恢复的原始 CSRF Token，则不得从摘要反推；该接口应在认证成功后轮换 CSRF Token，或使用受控的 Session CSRF Token 重发策略。首版固定采用轮换策略：原子更新 Session 的 CSRF 摘要后返回新 Token。
-- 未认证/过期返回 401；不得返回 Session Token、摘要或 CredentialVersion。
+- 返回 HTTP 200：`{"schema_version":"1.0.0","authenticated":true,"expires_at":"<RFC3339Nano UTC>"}`。
+- 不返回 CSRF Token；不得返回 Session Token、摘要或 CredentialVersion。
+- 未认证/过期返回 401。
 
 ### 3.3 登出
 
@@ -107,7 +106,7 @@ Owner 初始化不提供 HTTP 路由。它只能通过受控本机/运维命令�
 4. 所有非安全方法必须由 Platform `CSRFSafeSessionStore` 在原子 Touch 操作中比较 CSRF Digest；错误/缺失 CSRF 不得刷新 idle TTL。
 5. Session 请求必须校验 Host 与配置 PublicOrigin；非安全方法必须有恰好一个匹配 Origin。登录也执行同等 Origin/Host 校验以防 Login CSRF。
 6. GET/HEAD/OPTIONS 不得执行任何业务状态变更；GET Session 引导的 CSRF 轮换是认证凭证状态变更，因此改为 POST 专用端点更合适：本契约将 Session 引导定义为 `POST /api/v1/owner/session/csrf`，并从 GET Session 响应中移除 Token 轮换。
-7. `POST /api/v1/owner/session/csrf` 只接受 owner_session，执行 Origin/Host + CSRF 校验后轮换 CSRF Token，返回 `{"schema_version":"1.0.0","csrf_token":"<csrf-token>"}`。新登录和 Session 轮换响应直接返回新 CSRF Token；页面刷新后 WebUI 使用此端点恢复内存 Token。该端点不得 Touch 后才验证 CSRF。
+7. `POST /api/v1/owner/session/csrf` 是唯一 CSRF 恢复例外：只接受有效 owner_session Cookie，必须严格校验恰好一个匹配的 Origin 和 Host，并通过 Platform 原子操作确认 Session 有效、替换 CSRF Digest。该端点不要求旧 CSRF Header（因为页面刷新后 Token 已丢失），但不得执行其他业务状态变更；其防跨站依据是强制 Origin/Host 校验与同源部署。返回 `{"schema_version":"1.0.0","csrf_token":"<csrf-token>"}`。新登录和 Session 轮换响应直接返回新 CSRF Token；页面刷新后 WebUI 使用此端点恢复内存 Token。该端点不得 Touch 后才验证 CSRF。
 
 ## 5. 错误、审计与隐私
 
