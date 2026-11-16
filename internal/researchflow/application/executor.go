@@ -96,7 +96,7 @@ func ValidateStageExecutionResult(result StageExecutionResult) error {
 	if result.OutputRef != nil && strings.TrimSpace(*result.OutputRef) == "" {
 		return fmt.Errorf("%w: output_ref must be null or non-empty", ErrInvalidStageExecutionResult)
 	}
-	
+
 	if result.FaultRef != nil && strings.TrimSpace(*result.FaultRef) == "" {
 		return fmt.Errorf("%w: fault_ref must be null or non-empty", ErrInvalidStageExecutionResult)
 	}

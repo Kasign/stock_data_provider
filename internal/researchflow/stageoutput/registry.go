@@ -173,7 +173,8 @@ type Envelope struct {
 func BuildEnvelope(identity ExecutionIdentity, result ProviderResult, completedAt time.Time) (Envelope, error) {
 	if strings.TrimSpace(identity.RunRef) == "" || strings.TrimSpace(identity.StageRef) == "" ||
 		strings.TrimSpace(identity.AttemptRef) == "" || !codePattern.MatchString(identity.StageCode) ||
-		!versionPattern.MatchString(identity.TemplateVersion) || !versionPattern.MatchString(identity.RegistryVersion) ||
+		strings.TrimSpace(identity.TemplateVersion) == "" || identity.TemplateVersion != strings.TrimSpace(identity.TemplateVersion) ||
+		!versionPattern.MatchString(identity.RegistryVersion) ||
 		!isUTC(completedAt) {
 		return Envelope{}, fmt.Errorf("%w: invalid orchestrator execution identity", ErrInvalidEnvelope)
 	}
