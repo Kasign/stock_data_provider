@@ -132,5 +132,27 @@ func TestNewsAvailabilityPITResolverMariaDBIntegration(t *testing.T) {
 	); err != nil {
 		t.Fatalf("insert superseding unresolved Decision: %v", err)
 	}
+	assertAvailableAt(secondDecisionAt.Add(time.Second), nil)
+
+	thirdDecisionID := "availability-pit-decision-3-" + suffix
+	thirdDecisionAt := now.Add(-500 * time.Millisecond)
+	if _, err := db.ExecContext(ctx, `INSERT INTO news_version_availability_decisions
+		(decision_id, version_id, decision_seq, status, selected_evidence_id,
+		 considered_evidence_ids, reason_code, review_rule_version,
+		 supersedes_decision_id, recorded_at)
+		VALUES (?, ?, 3, 'verified', ?, JSON_ARRAY(?), ?, ?, ?, ?)`,
+		thirdDecisionID, versionID, evidenceID, evidenceID,
+		"availability.reverified", "review-v1", secondDecisionID, thirdDecisionAt,
+	); err != nil {
+		t.Fatalf("insert re-verified Decision: %v", err)
+	}
+	assertAvailableAt(now, &candidateAvailableAt)
+
+	purgedAt := now
+	if _, err := db.ExecContext(ctx, `UPDATE news_version_availability_evidence
+		SET raw_value = NULL, candidate_available_at_utc = NULL, payload_purged_at = ?
+		WHERE evidence_id = ?`, purgedAt, evidenceID); err != nil {
+		t.Fatalf("purge availability Evidence payload: %v", err)
+	}
 	assertAvailableAt(now, nil)
 }

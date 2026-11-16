@@ -28,6 +28,7 @@ type EvidenceAtomicContentRepository interface {
 		domain.NewsItemVersion,
 		time.Time,
 		func(context.Context, domain.CurrentAuthorizationPolicySet, domain.Observation) error,
+		...*time.Time,
 	) (domain.ContentLayers, domain.Observation, error)
 }
 
@@ -113,6 +114,7 @@ func (u *GetEvidence) Execute(ctx context.Context, request GetEvidenceRequest) (
 				string(request.PurposeCode), contentLevel, current,
 			)
 		},
+		pit.AvailableAt,
 	)
 	if err != nil {
 		return ResearchEvidenceRecord{}, err

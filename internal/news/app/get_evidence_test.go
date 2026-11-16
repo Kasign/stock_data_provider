@@ -38,6 +38,7 @@ func (s getEvidencePITRepositoryStub) GetEvidenceContentWithCurrentAuthorization
 	_ domain.NewsItemVersion,
 	_ time.Time,
 	authorize func(context.Context, domain.CurrentAuthorizationPolicySet, domain.Observation) error,
+	_ ...*time.Time,
 ) (domain.ContentLayers, domain.Observation, error) {
 	policies := make([]domain.CurrentAuthorizationPolicy, 0, len(binding.PolicySnapshot.Policies))
 	for _, item := range binding.PolicySnapshot.Policies {

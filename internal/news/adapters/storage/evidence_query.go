@@ -167,6 +167,7 @@ const evidencePITSelect = `SELECT
 			AND availability_evidence.retention_until > UTC_TIMESTAMP(6)
 			AND availability_evidence.retention_until <= o.retention_until
 			AND availability_evidence.payload_purged_at IS NULL
+			AND availability_evidence.raw_value IS NOT NULL
 			AND o.payload_purged_at IS NULL
 			AND o.retention_until > UTC_TIMESTAMP(6)
 			AND availability_evidence.candidate_available_at_utc IS NOT NULL

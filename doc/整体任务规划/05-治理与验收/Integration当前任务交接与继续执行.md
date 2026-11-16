@@ -839,3 +839,12 @@ Researchflow 已有 Scheduler、Worker、WorkerPool、Claim/Lease/Fencing、候�
 - Run #88 `43811921861` 对精确 SHA `ed4abae47509c7e7fd0caf3a0117681eab36a90b` 全量 success：gofmt、root vet/test、News/Research MariaDB 跨模块测试、Worker Bootstrap MariaDB/Redis、go-core、Compose、WebUI 全部通过。V10 迁移在 MariaDB 11.4 CI 服务中随 News Storage 集成测试实际执行成功。
 - Run #89 `43812146279` 对 `b8a847b5bcdfec626393aedd60f09ee7f60bf8d5` 失败原因仅为新 Domain 文件 gofmt 对齐；不是逻辑测试或编译错误。已按日志修复，修复后的精确 SHA 另行验收。
 - 当前下一步是将“最新 system_as_of 可见 Decision → selected Evidence”解析接入 News Evidence PIT 查询；只有最新决策状态为 verified、Evidence 未清理且 retention 有效、候选时间不晚于 Observation 和 system_as_of 时返回非空 available_at。冲突/未决/撤销/缺失/过期/清理均返回 NULL。
+
+
+### News PIT Resolver 的原子复核补充（2026-11-16）
+
+- Run #90 `43812913297` 失败暴露出原子授权重读路径仍复用扩展后的 `evidencePITSelect`，但只传入旧的 4 个参数；该路径现补齐 5 个 system_as_of 子查询参数。
+- `GetEvidence` 在原子授权事务中再次读取同一版本当前可见的 `available_at`，并与事务外 PIT 预检值比对；若决策状态/候选值发生变化则 fail-closed。
+- PIT SQL 同时要求 raw_value 仍存在、Evidence/Observation 均未清理且当前 retention 有效；最新 Decision 非 verified 时不回退到旧 verified 决策。
+- MariaDB 集成用例覆盖 verified → unresolved → re-verified 的 system_as_of 历史切换，以及 payload purge 后 available_at 回到 NULL。
+- 上述修复的精确 SHA 和新 CI 结果待记录；Run #90 不得标记通过。
