@@ -16,7 +16,11 @@ Researchflow 是研究应用编排层，通过 Data、News、Quant、Research、
 - [FLOW-006 Result Validation](06-FLOW-006结果综合与校验实施说明.md)
 - [任务拆分与验收](02-任务拆分与验收.md)
 
-## Stage Provider Envelope 与 Output Registry（2026-11-16）\n\n已新增独立 Envelope DTO/Builder、版本化 Output Registry 通用框架、Schema/Golden。Provider 不能覆盖 Orchestrator 身份和完成时间；Registry 精确匹配版本及输出 discriminator，Payload/QualitySummary 使用注册的强类型 Validator。当前不注册虚构业务 Stage，生产 Provider 仍未解锁。实施与验收状态见 [Stage Provider Envelope 与 Output Registry 实施记录](07-Stage-Provider-Envelope与Output-Registry实施记录.md)。\n\n## 当前代码能力
+## Stage Provider Envelope 与 Output Registry（2026-11-16）
+
+已新增独立 Envelope DTO/Builder、版本化 Output Registry 通用框架、Schema/Golden。Provider 不能覆盖 Orchestrator 身份和完成时间；Registry 精确匹配版本及输出 discriminator，Payload/QualitySummary 使用注册的强类型 Validator。当前不注册虚构业务 Stage，生产 Provider 仍未解锁。实施与验收状态见 [Stage Provider Envelope 与 Output Registry 实施记录](07-Stage-Provider-Envelope与Output-Registry实施记录.md)。
+
+## 当前代码能力
 
 - `domain`、`template`、`state`：Run/Stage/Attempt 模型、模板/DAG 与状态迁移。
 - `application`：CreateRun、Scheduler 单次 Run 运行协调（快照读取、计划计算、Stage CAS、冲突重载重算、并发 Stage 派发）、SchedulerCandidateScanner（可调度 Run keyset 分页）、ExpiredAttemptScanner（过期 running Attempt 复合游标分页）、固定数量 Worker Pool（无缓冲背压、优雅 Shutdown）、Worker 单次执行协调（Lease 心跳检测跨进程取消并确认）、取消、Deadline、Retry、Outbox 与 Run Finalization 用例。
