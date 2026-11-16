@@ -988,3 +988,24 @@ Researchflow 已有 Scheduler、Worker、WorkerPool、Claim/Lease/Fencing、候�
 - 失败、重试、超时、取消结果不生成输出资源，沿用既有状态机。未配置 Registry、无匹配 Entry 或 Validator 失败均不得成功提交；不保留旧 Provider 自报引用的生产旁路。
 - 本次只完成实现设计与文档更新，没有修改 Worker / Migration 代码，没有宣称 Worker 接入已完成。
 - **下一项代码任务：** 按该设计实现 Migration v6、Stage Output 资源读写、Worker Snapshot/Envelope/Registry 接线、CommitAttemptResult 原子写入及 MariaDB 集成测试；更新现有成功提交测试，不重复执行已经通过的状态机/Worker 基础验收。
+
+
+### 2026-11-16 FLOW-CTR-004 Worker Envelope / Stage Output 原子提交闭环已实现
+
+- 实现代码精确 SHA：`7392caaba59aa4d322d4b91e1d34a7294d2f6505`；Integration CI Run [43837079196](https://github.com/Kasign/stock_data_provider/actions/runs/43837079196) 对该 SHA 全量 success。gofmt、根模块 go vet/test（包含 Researchflow MariaDB 集成）、News/Research 跨模块 MariaDB、Worker Bootstrap MariaDB/Redis、go-core vet/test、Compose、WebUI 语法/单测/镜像构建及最终汇总均通过。
+- Researchflow Migration v6 新增 `researchflow_stage_output_resources`，每个成功 Attempt 保存不可变 Payload 与 QualitySummary 两份资源，保留 Stage/Attempt/Run 归属、StageCode、TemplateVersion、Registry Version/Fingerprint、OutputType、SchemaVersion/SchemaRef、原始 JSON 和数据库创建时间。
+- Worker 执行快照从持久化 ResolvedTemplate 读取 OutputRegistryVersion；成功/降级 ProviderResult 由 Worker 注入 Run/Stage/Attempt/StageCode/TemplateVersion/CompletedAt 构造 Envelope，精确匹配注入 Registry 并校验 Payload / QualitySummary Validator。
+- Provider 自报 `output_ref` / `quality_summary_ref` 的成功结果被拒绝。Storage 在原有 Run → Stage → Attempt 锁、Deadline、Lease Owner、FencingToken 和 AttemptNo/version 检查之后，在同一事务插入两份资源、生成不透明引用并更新 Attempt / Stage。事务失败不会留下部分资源或成功状态。
+- 增加按 resource_ref 读取资源的 Storage 能力；MariaDB 集成测试覆盖模板 Registry Version 快照、成功提交、Payload / QualitySummary 资源读取。Worker 单测覆盖 Registry 缺失和 Provider 引用越权拒绝。
+- 文档已更新：`doc/researchflow/README.md`、`doc/researchflow/08-Stage-Output不可变资源与Worker原子提交设计.md`。实现设计不改变 FLOW-CTR-004 冻结字段，不注册虚构业务 Stage。
+- 当前 integration HEAD（文档更新后）：`6bae6b2606181281dd2d9579ab854313236271aa`。这是 docs-only 提交；最近代码验收仍以 SHA `7392caaba59aa4d322d4b91e1d34a7294d2f6505` / Run 43837079196 为准。
+- **本阶段完成边界：** 通用 Envelope / Registry / Worker 校验 / 原子持久化已闭环；没有真实业务 Registry Entry，没有生产 StageExecutor Adapter，也没有 Server 生产 Worker 装配。不得将本阶段报告为 News、Research、Quant 或 LLM Stage 已可生产运行。
+
+**下一项主线不再继续打磨 Stage Output 细节：**
+
+1. 按现有模块公开 Application Port 和已存在领域 Schema/Golden，推进第一个真实可用的 Stage Provider；优先核实 News / Research 是否已有完整可消费能力，缺少领域质量语义或 Schema 的部分由对应模块 Owner 决定，不由 Researchflow 猜测。
+2. Quant Factor 继续受 DATA-CTR-005/007、QNT-CTR-003 deferred 阻断，不影响与 Factor 无关的 Stage。
+3. LLM Provider / CapabilityState 与 Notification Delivery 仍按第 7 节 blocked 处理；Notification 仍是 Run 终态后的异步链路，不作为同步 DAG Stage。
+4. 至少一个真实 Provider 与对应 Registry Entry 完备后，再推进 Server 的 Registry / StageExecutor / Scheduler / WorkerPool 生命周期装配及端到端验收；不先创建空壳 Executor。
+5. `available_at` 来源准入维持项目负责人已确认的 shelved 状态；不重新采样或解除 B 组 SKIP。
+
