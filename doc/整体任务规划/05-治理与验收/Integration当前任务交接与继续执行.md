@@ -899,3 +899,25 @@ Researchflow 已有 Scheduler、Worker、WorkerPool、Claim/Lease/Fencing、候�
 - 本轮发现 V10 Evidence 有独立 `retention_until`，但现有 Observation Retention Cleaner 只清理父 Observation 的候选载荷，未清理 Evidence 自身原始值。已在同一有界清理事务中增加 Evidence 独立到期清理：清除 raw/candidate/ref/hash 并保留 tombstone，保留 Decision 追加历史；结果单独报告 Evidence scanned/purged 数量。
 - 新增 MariaDB 集成覆盖；代码提交 `4040b8aaa27c58641ee097b5b91b4d848d2fb8e3`，Run [43818693172](https://github.com/Kasign/stock_data_provider/actions/runs/43818693172) 的最终状态待验收。
 - 下一步按 available_at 内部链路整体收尾：核对 Evidence 创建/持久化是否具备字段级授权凭据入口；若无，补齐受授权策略约束的写入边界，不允许提供可绕过策略的通用 raw Evidence 写入 API。来源仍未准入，不创建生产 Evidence、不解除 B 组 SKIP。
+
+
+### 2026-11-16 当前继续任务：available_at 字段级授权写入闭环
+
+当前唯一主线仍是 News 内部 `available_at` 证据链，不转向其他模块。
+
+已确认缺口：既有 Source / Endpoint / Provider Output Policy 只覆盖 metadata 类型、存储模式和留存期限，不能表达具体字段授权。已在 News Domain 增加 `AllowedMetadataFields` 精确路径许可，并将其纳入统一 Source ∩ Endpoint ∩ Provider 策略评估。Endpoint 只能继承或收紧 Source 字段集合；Source / Provider 未明确列出字段时拒绝持久化。旧策略版本不自动获得该权限。
+
+已实现的第一版内部写入边界：
+- Application `RecordAvailabilityEvidence` 只接受已解析候选与字段路径，不接受调用方传入授权结论。
+- 通过可信 SourceCatalog / Provider Output Policy Resolver 核对 Observation 记录的策略版本。
+- 在同一 Identity DB 事务中锁定当前 Source / Endpoint / Provider 策略指针，评估个人研究、metadata、persistent_metadata 和剩余 retention。
+- MySQL Adapter 在同一事务中复核 Version / Observation 主体、策略版本、观察时间、父载荷清理状态和 retention 后写入 V10 Evidence。
+- 该写入能力不判定来源时间语义，不创建 Decision，不允许未准入 Provider 写生产 Evidence。
+
+当前代码提交链：`5f7cf979`（策略模型）、`9521d0b5`（策略单测）、`e18de0dc`（Application / Storage 写入边界）、`2d1f0592`（gofmt 修复）。精确 SHA `2d1f0592501e3ff82a32d21110bcc3df84730d1e` 的 Integration CI 正在执行；专门 MariaDB Evidence 写入集成测试仍待补齐。不能将当前能力标记为完成。
+
+下一步严格按序：
+1. 取得 `2d1f0592` 的 CI 结论；仅修复真实失败。
+2. 增加 MariaDB 集成测试，验证当前策略版本锁定、字段授权拒绝、策略版本变化拒绝、成功追加和父 Observation 留存上限。
+3. 增加策略载荷验证用例，非法/重复字段路径必须拒绝；历史策略缺少 AllowedMetadataFields 必须保持字段写入默认拒绝。
+4. 更新 News 验收清单与本交接文档；真实来源准入继续独立 blocked，B 组保持 SKIP。
