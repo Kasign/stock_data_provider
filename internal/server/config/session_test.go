@@ -18,7 +18,7 @@ func TestLoadOwnerSessionDisabledByDefault(t *testing.T) {
 
 func TestLoadOwnerSessionRequiresExplicitArgonCosts(t *testing.T) {
 	values := map[string]string{
-		"OWNER_SESSION_ENABLED":      "true",
+		"OWNER_SESSION_ENABLED":       "true",
 		"OWNER_SESSION_PUBLIC_ORIGIN": "https://stocks.example.com",
 	}
 	_, err := LoadOwnerSession(platformconfig.NewEnvWithLookup(func(key string) (string, bool) {
@@ -32,10 +32,10 @@ func TestLoadOwnerSessionRequiresExplicitArgonCosts(t *testing.T) {
 
 func TestLoadOwnerSessionLoadsExplicitConfiguration(t *testing.T) {
 	values := map[string]string{
-		"OWNER_SESSION_ENABLED":          "true",
-		"OWNER_SESSION_PUBLIC_ORIGIN":    "https://stocks.example.com",
-		"OWNER_SESSION_ARGON2_MEMORY_KIB": "65536",
-		"OWNER_SESSION_ARGON2_ITERATIONS": "3",
+		"OWNER_SESSION_ENABLED":            "true",
+		"OWNER_SESSION_PUBLIC_ORIGIN":      "https://stocks.example.com",
+		"OWNER_SESSION_ARGON2_MEMORY_KIB":  "65536",
+		"OWNER_SESSION_ARGON2_ITERATIONS":  "3",
 		"OWNER_SESSION_ARGON2_PARALLELISM": "2",
 	}
 	cfg, err := LoadOwnerSession(platformconfig.NewEnvWithLookup(func(key string) (string, bool) {
@@ -55,11 +55,11 @@ func TestLoadOwnerSessionLoadsExplicitConfiguration(t *testing.T) {
 
 func TestLoadOwnerSessionRejectsInsecureHTTPSCookie(t *testing.T) {
 	values := map[string]string{
-		"OWNER_SESSION_ENABLED":          "true",
-		"OWNER_SESSION_PUBLIC_ORIGIN":    "https://stocks.example.com",
-		"OWNER_SESSION_COOKIE_SECURE":   "false",
-		"OWNER_SESSION_ARGON2_MEMORY_KIB": "65536",
-		"OWNER_SESSION_ARGON2_ITERATIONS": "3",
+		"OWNER_SESSION_ENABLED":            "true",
+		"OWNER_SESSION_PUBLIC_ORIGIN":      "https://stocks.example.com",
+		"OWNER_SESSION_COOKIE_SECURE":      "false",
+		"OWNER_SESSION_ARGON2_MEMORY_KIB":  "65536",
+		"OWNER_SESSION_ARGON2_ITERATIONS":  "3",
 		"OWNER_SESSION_ARGON2_PARALLELISM": "2",
 	}
 	_, err := LoadOwnerSession(platformconfig.NewEnvWithLookup(func(key string) (string, bool) {
@@ -73,10 +73,10 @@ func TestLoadOwnerSessionRejectsInsecureHTTPSCookie(t *testing.T) {
 
 func TestLoadOwnerSessionRejectsOutOfRangeArgonCosts(t *testing.T) {
 	values := map[string]string{
-		"OWNER_SESSION_ENABLED":          "true",
-		"OWNER_SESSION_PUBLIC_ORIGIN":    "https://stocks.example.com",
-		"OWNER_SESSION_ARGON2_MEMORY_KIB": "4294967296",
-		"OWNER_SESSION_ARGON2_ITERATIONS": "3",
+		"OWNER_SESSION_ENABLED":            "true",
+		"OWNER_SESSION_PUBLIC_ORIGIN":      "https://stocks.example.com",
+		"OWNER_SESSION_ARGON2_MEMORY_KIB":  "4294967296",
+		"OWNER_SESSION_ARGON2_ITERATIONS":  "3",
 		"OWNER_SESSION_ARGON2_PARALLELISM": "2",
 	}
 	_, err := LoadOwnerSession(platformconfig.NewEnvWithLookup(func(key string) (string, bool) {
