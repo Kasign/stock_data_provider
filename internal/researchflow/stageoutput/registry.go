@@ -294,8 +294,8 @@ func consumeJSONValue(decoder *json.Decoder) error {
 	case '[':
 		for decoder.More() {
 			if err := consumeJSONValue(decoder); err != nil {
-		return err
-	}
+				return err
+			}
 		}
 		_, err = decoder.Token()
 		return err

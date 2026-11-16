@@ -151,7 +151,7 @@ func TestRegistryRequiresStrongValidatorsAndUTCCompletionTime(t *testing.T) {
 	}
 	if _, err := NewRegistry("1.0.0", []Entry{{
 		StageCode: "news.collect", OutputType: "news.collection", SchemaVersion: "1.0.0",
-		PayloadSchemaRef:        "schema://payload/1", QualitySummarySchemaRef: "schema://quality/1",
+		PayloadSchemaRef: "schema://payload/1", QualitySummarySchemaRef: "schema://quality/1",
 	}}); !errors.Is(err, ErrInvalidRegistry) {
 		t.Fatal("missing validators must be rejected")
 	}
