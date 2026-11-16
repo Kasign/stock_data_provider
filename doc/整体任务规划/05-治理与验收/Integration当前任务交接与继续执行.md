@@ -642,3 +642,15 @@ Researchflow 已有 Scheduler、Worker、WorkerPool、Claim/Lease/Fencing、候�
 - 明确默认生命周期：自然到期/明确撤销/策略收紧后停止新采集；读取和 PIT 输出 fail-closed；载荷清理依授权条款执行且不得超过 retention。Grandfather 仅在授权文本明确允许既有数据、用途和截止时间时生效。retention_until 不等于读取权。
 - 本轮仅更新 NEWS-CTR-001 影响分析、News 验收清单和 Integration 交接；无 Go、Migration、Provider、Schema、Golden、PIT SQL 变更。没有目标 MariaDB DSN/版本验证，不新增 DDL/CI 结论。
 - 下一步：①项目契约 Owner 审批两个 ContentKind 与兼容矩阵；②确认 NEWS-CTR-002 对新类别的读取授权/撤销清理适用性；③取得具体来源授权文本；④门禁通过后才更新 Policy、Schema/DEC 与数据库实现。继续保持 proposal-only。
+
+### 2026-11-16 available_at MVP 方向纠偏（优先于 10.2 历史两表方案）
+
+项目负责人明确要求先定义简单可落地的结构，数据源缺失单独处理。此前两张追加式 Evidence/Decision 表、双 ContentKind、grandfather 和完整决策状态机均降为历史提案，不再作为 MVP 基线。
+
+**最小结构**：在 `news_item_versions` 上承载 `available_at`、`available_at_raw`、`available_at_field_path`。现有 `observation_id` 已关联 `news_observations`，可追溯 source_id、endpoint_id、provider_code 和策略版本，不重复建表/复制来源字段。只保存必要的原始时间文本与字段路径，不持久化完整 Provider 响应。
+
+**规则**：秒级业务精度，存储沿用 `DATETIME(6)` 并在应用层拒绝非零小数秒；没有合格来源、来源语义未确认、时区不明、解析失败或冲突时 `available_at=NULL`。不得使用 published_at、fetched_at 或 observed_at 替代。Research 已有 nullable available_at 存储与消费校验，News DTO 也已有该字段；保持 JSON 形状时不预设必须升级 Schema 主版本。
+
+**当前状态**：结构提案已收缩并记录；本轮没有实施代码。下一项独立任务是核验中国 A 股真实来源的官方字段语义、真实响应样本、明确时区、内容版本绑定和个人用途授权。来源通过前，不新增 Migration、不改 Provider、不改 PIT SQL、不解除 B 组 SKIP。来源通过后再一次性完成三字段写入、Get/List PIT 过滤、Research 映射及 MariaDB 端到端验收。
+
+**工作规则修正**：不得再以两表设计、授权状态机、跨模块时间精度统一或泛化 RawResponse 作为前置任务；若来源核验失败，只记录具体来源阻塞，不重新扩张结构模型。
