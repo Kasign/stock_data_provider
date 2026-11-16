@@ -53,7 +53,7 @@ func TestNewsSearchStageCompositionRegistersExactOutputAndUsesPlatformClientOnly
 		t.Fatalf("registry schema refs do not match News contract: %+v", entry)
 	}
 	result, err := composition.executor.ExecuteStage(context.Background(), researchflowapplication.StageExecutionRequest{
-		Stage: researchflowdomain.Stage{Code: newsstage.SearchCandidatesStageCode},
+		Stage:      researchflowdomain.Stage{Code: newsstage.SearchCandidatesStageCode},
 		Parameters: json.RawMessage(`{"query":"market","limit":10}`),
 	})
 	if err != nil {
@@ -198,4 +198,3 @@ func executeNewsStage(t *testing.T, executor newsSearchStageExecutor, parameters
 	}
 	return result
 }
-

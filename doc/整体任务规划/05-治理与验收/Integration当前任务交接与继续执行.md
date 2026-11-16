@@ -1066,3 +1066,6 @@ Researchflow 已有 Scheduler、Worker、WorkerPool、Claim/Lease/Fencing、候�
 - 重要边界：当前 `Run` 尚未接入生产 Researchflow Worker 生命周期，本轮只提供可测试的组合工厂与 StageExecutor，不虚构 Worker 消费链，不创建 Workflow Template。后续必须在 Worker 的真实多模块 Executor 装配点接入该 factory，并保证同一 Registry Version 与持久化 Template 一致。
 - 已识别诊断持久化缺口：Worker 只为 succeeded/degraded Stage 构造 StageOutput Envelope；当所有 Provider 失败时，Stage Executor 只能提交稳定 reason code，ProviderOutcome 的逐 Provider 细节不会持久化。不要通过伪造成功/降级输出规避；应在 Fault/diagnostic 持久化契约接入后补齐失败详情。
 - 本阶段不触碰 Research Evidence Import、available_at、Quant、Notification；不启动空壳 Worker 生命周期。
+
+
+- Server Stage 组合 CI Run `43847107485` 对 SHA `b6d5b2e9b1f10738c19623ebe14d060cab2dcf93`：根模块全量 Go 测试（含新增 News Stage / Server Bootstrap 测试）、News/Research 跨模块测试、Worker Bootstrap MariaDB/Redis、go-core vet/test、Compose、WebUI 测试和镜像构建全部通过；唯一失败为新增两个 Go 文件的 gofmt 格式检查。已按 CI diff 修正纯格式问题，等待下一 SHA 验收；该 Run 不作为通过证据。

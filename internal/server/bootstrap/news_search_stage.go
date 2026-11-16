@@ -3,7 +3,7 @@ package bootstrap
 import (
 	"context"
 	"encoding/json"
-		"fmt"
+	"fmt"
 
 	newsprovider "example.com/stock-analysis-flow/internal/news/adapters/provider"
 	newsapp "example.com/stock-analysis-flow/internal/news/app"
@@ -16,7 +16,6 @@ import (
 )
 
 const newsSearchStageOutputRegistryVersion = "1.0.0"
-
 
 type newsSearchStageComposition struct {
 	executor   researchflowapplication.StageExecutor
@@ -49,10 +48,10 @@ func newNewsSearchStageComposition(cfg newsconfig.Config) (*newsSearchStageCompo
 	}
 	registry, err := stageoutput.NewRegistry(newsSearchStageOutputRegistryVersion, []stageoutput.Entry{{
 		StageCode: newsstage.SearchCandidatesStageCode, OutputType: newsstage.SearchCandidatesOutputType,
-		SchemaVersion: newsstage.SearchCandidatesSchemaVersion,
-		PayloadSchemaRef: newsstage.SearchCandidatesPayloadSchemaRef,
+		SchemaVersion:           newsstage.SearchCandidatesSchemaVersion,
+		PayloadSchemaRef:        newsstage.SearchCandidatesPayloadSchemaRef,
 		QualitySummarySchemaRef: newsstage.SearchCandidatesQualitySummarySchemaRef,
-		PayloadValidator: stageoutput.ValidatorFunc(newsstage.ValidatePayloadJSON),
+		PayloadValidator:        stageoutput.ValidatorFunc(newsstage.ValidatePayloadJSON),
 		QualitySummaryValidator: stageoutput.ValidatorFunc(newsstage.ValidateQualitySummaryJSON),
 	}})
 	if err != nil {
@@ -106,23 +105,23 @@ func (e newsSearchStageExecutor) ExecuteStage(ctx context.Context, request resea
 	switch payload.Status {
 	case "success", "empty":
 		return researchflowapplication.StageExecutionResult{
-			AttemptStatus: researchflowdomain.AttemptSucceeded,
-			StageStatus: researchflowdomain.StageSucceeded,
+			AttemptStatus:  researchflowdomain.AttemptSucceeded,
+			StageStatus:    researchflowdomain.StageSucceeded,
 			ProviderResult: providerResult,
 		}, nil
 	case "partial":
 		return researchflowapplication.StageExecutionResult{
-			AttemptStatus: researchflowdomain.AttemptDegraded,
-			StageStatus: researchflowdomain.StageDegraded,
+			AttemptStatus:  researchflowdomain.AttemptDegraded,
+			StageStatus:    researchflowdomain.StageDegraded,
 			ProviderResult: providerResult,
-			ReasonCodes: []string{"news_provider_partial_failure"},
+			ReasonCodes:    []string{"news_provider_partial_failure"},
 		}, nil
 	case "failed":
 		if hasRetryableNewsProviderOutcome(payload.Outcomes) {
 			return researchflowapplication.StageExecutionResult{
 				AttemptStatus: researchflowdomain.AttemptFailed,
-				StageStatus: researchflowdomain.StageRetryWait,
-				ReasonCodes: []string{"news_provider_retryable_failure"},
+				StageStatus:   researchflowdomain.StageRetryWait,
+				ReasonCodes:   []string{"news_provider_retryable_failure"},
 			}, nil
 		}
 		return failedNewsStage(newsFailureReasonCode(payload.FailureCode)), nil
@@ -136,8 +135,8 @@ func (e newsSearchStageExecutor) ExecuteStage(ctx context.Context, request resea
 func failedNewsStage(reasonCode string) researchflowapplication.StageExecutionResult {
 	return researchflowapplication.StageExecutionResult{
 		AttemptStatus: researchflowdomain.AttemptFailed,
-		StageStatus: researchflowdomain.StageFailed,
-		ReasonCodes: []string{reasonCode},
+		StageStatus:   researchflowdomain.StageFailed,
+		ReasonCodes:   []string{reasonCode},
 	}
 }
 
