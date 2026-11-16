@@ -4,7 +4,7 @@
 - 提出日期：2026-11-14
 - 触发：项目负责人授权 Integration「工作面 A」（《[Integration 当前任务交接与继续执行](../整体任务规划/05-治理与验收/Integration当前任务交接与继续执行.md)》第 10.4 节），要求以契约 Owner + News/Research Owner 身份推进 P0。
 - 治理依据：`doc/contract/PLAT-002-项目级契约冻结登记簿.md:85-92` 第 5 节——「公开语义变更必须先完成影响分析、正式决策、消费者影响确认、版本升级和迁移边界定义」；交接文档第 10.5 节反空转规则第 2 条——授权 A 后先输出契约变更影响分析并取得确认，再动代码。
-- 核对基线（2026-11-16 Review）：`integration` 代码基线 `a50302a87c0969eae2377ee3d8ca82d5fe697e5a`；最近已完成代码验收 SHA `c25d881c0` / Run `43574975820`（#70）success；随后 CI 门禁修复 SHA `a992f4cb4dd5e3ba6dababa23010828b2502622c` 的 Run `43788290026` 执行中。登记簿版本 `0.2.60-frozen`，43 项 CTR（37 frozen / 4 deferred / 2 not_applicable）。
+- 核对基线（2026-11-16 Review）：`integration` 代码验收 SHA `d90c6fc5f15c6ea076ce31bc02e866ef4fe5197f`；Integration CI Run `43788740211`（#73）对精确 SHA success。其后的文档同步提交不改变该代码验收证据。登记簿版本 `0.2.60-frozen`，43 项 CTR（37 frozen / 4 deferred / 2 not_applicable）。
 
 ---
 
