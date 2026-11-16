@@ -239,6 +239,12 @@ func TestAppendAvailabilityDecisionSerializesConcurrentWritersMariaDBIntegration
 			RecordedAt: recordedAt,
 		}
 	}
+	unknownEvidence := makeFirst("availability-decision-unknown-evidence-" + suffix)
+	unknownEvidence.ConsideredEvidenceIDs = []string{"evidence-from-another-version"}
+	if err := repository.AppendAvailabilityDecision(ctx, unknownEvidence); err == nil {
+		t.Fatal("append with an Evidence ID not belonging to this Version succeeded")
+	}
+
 	start := make(chan struct{})
 	results := make(chan struct {
 		id  string
