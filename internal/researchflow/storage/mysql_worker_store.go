@@ -126,7 +126,7 @@ func (r *MySQLRunRepository) LoadStageExecutionSnapshot(
 	return application.StageExecutionSnapshot{
 		Run: run, Stage: stage, AuthenticatedCallerRef: authenticatedCallerRef,
 		OutputRegistryVersion: resolved.OutputRegistryVersion,
-		Parameters: parameters, InputSnapshotRefs: append([]string(nil), run.InputSnapshotRefs...),
+		Parameters:            parameters, InputSnapshotRefs: append([]string(nil), run.InputSnapshotRefs...),
 		RetryPolicy: retryPolicy,
 	}, nil
 }
@@ -257,6 +257,6 @@ func workerStageOutputToStorage(input *application.StageOutputCommit) *StageOutp
 	return &StageOutputCommit{
 		Envelope: input.Envelope, RegistryVersion: input.RegistryVersion,
 		RegistryFingerprint: input.RegistryFingerprint,
-		PayloadSchemaRef: input.PayloadSchemaRef, QualitySummarySchemaRef: input.QualitySummarySchemaRef,
+		PayloadSchemaRef:    input.PayloadSchemaRef, QualitySummarySchemaRef: input.QualitySummarySchemaRef,
 	}
 }

@@ -74,10 +74,10 @@ func (r *MySQLRunRepository) GetStageOutputResource(ctx context.Context, ref str
 }
 
 type StageOutputCommit struct {
-	Envelope stageoutput.Envelope
-	RegistryVersion string
-	RegistryFingerprint string
-	PayloadSchemaRef string
+	Envelope                stageoutput.Envelope
+	RegistryVersion         string
+	RegistryFingerprint     string
+	PayloadSchemaRef        string
 	QualitySummarySchemaRef string
 }
 
