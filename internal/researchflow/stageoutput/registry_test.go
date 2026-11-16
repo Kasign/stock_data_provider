@@ -21,17 +21,27 @@ func validRegistry(t *testing.T) *Registry {
 		PayloadSchemaRef:        "schema://news.collection/1.0.0",
 		QualitySummarySchemaRef: "schema://news.collection.quality/1.0.0",
 		PayloadValidator: ValidatorFunc(func(value json.RawMessage) error {
-			var payload struct {\n\t\t\t\tCount int `json:"count"`\n\t\t\t}
+			var payload struct {
+				Count int `json:"count"`
+			}
 			return json.Unmarshal(value, &payload)
 		}),
 		QualitySummaryValidator: ValidatorFunc(func(value json.RawMessage) error {
-			var summary struct {\n\t\t\t\tStatus string `json:"status"`\n\t\t\t}
-			if err := json.Unmarshal(value, &summary); err != nil {\n\t\t\t\treturn err\n\t\t\t}
-			if summary.Status == "" {\n\t\t\t\treturn errors.New("status is required")\n\t\t\t}
+			var summary struct {
+				Status string `json:"status"`
+			}
+			if err := json.Unmarshal(value, &summary); err != nil {
+				return err
+			}
+			if summary.Status == "" {
+				return errors.New("status is required")
+			}
 			return nil
 		}),
 	}})
-	if err != nil {\n\t\tt.Fatal(err)\n\t}
+	if err != nil {
+		t.Fatal(err)
+	}
 	return registry
 }
 
@@ -45,7 +55,9 @@ func validEnvelope(t *testing.T) (*Registry, Envelope, ValidationContext) {
 		QualitySummary: json.RawMessage(`{"status":"complete"}`),
 		DiagnosticRefs: []string{"diag:1"},
 	}, time.Date(2026, 11, 16, 8, 0, 0, 0, time.UTC))
-	if err != nil {\n\t\tt.Fatal(err)\n\t}
+	if err != nil {
+		t.Fatal(err)
+	}
 	return registry, envelope, ValidationContext{Identity: identity}
 }
 
@@ -57,7 +69,9 @@ func TestBuildEnvelopeInjectsOrchestratorIdentityAndCopiesProviderData(t *testin
 		OutputType: "news.collection", SchemaVersion: "1.0.0",
 		Payload: payload, QualitySummary: json.RawMessage(`{"status":"complete"}`), DiagnosticRefs: refs,
 	}, time.Date(2026, 11, 16, 8, 0, 0, 0, time.UTC))
-	if err != nil {\n\t\tt.Fatal(err)\n\t}
+	if err != nil {
+		t.Fatal(err)
+	}
 	payload[2] = 'X'
 	refs[0] = "tampered"
 	if envelope.RunRef != identity.RunRef || string(envelope.Payload) != `{"count":2}` || envelope.DiagnosticRefs[0] != "diag:1" {
@@ -67,7 +81,9 @@ func TestBuildEnvelopeInjectsOrchestratorIdentityAndCopiesProviderData(t *testin
 
 func TestRegistryValidatesExactEntryAndSchemas(t *testing.T) {
 	registry, envelope, context := validEnvelope(t)
-	if err := registry.Validate(envelope, context); err != nil {\n\t\tt.Fatal(err)\n\t}
+	if err := registry.Validate(envelope, context); err != nil {
+		t.Fatal(err)
+	}
 	envelope.OutputType = "unknown.output"
 	if !errors.Is(registry.Validate(envelope, context), ErrUnknownOutput) {
 		t.Fatal("unknown output discriminator must fail closed")
@@ -103,17 +119,23 @@ func TestRegistryRejectsDuplicateJSONKeysAndInvalidQualitySummary(t *testing.T) 
 func TestRegistryIsDeterministicAndRejectsDuplicateEntries(t *testing.T) {
 	one := Entry{
 		StageCode: "news.collect", OutputType: "news.collection", SchemaVersion: "1.0.0",
-		PayloadSchemaRef:        "schema://payload/1", QualitySummarySchemaRef: "schema://quality/1", 
+		PayloadSchemaRef:        "schema://payload/1", QualitySummarySchemaRef: "schema://quality/1",
 		PayloadValidator:        ValidatorFunc(func(json.RawMessage) error { return nil }),
 		QualitySummaryValidator: ValidatorFunc(func(json.RawMessage) error { return nil }),
 	}
 	two := one
 	two.StageCode = "news.publish"
 	a, err := NewRegistry("1.0.0", []Entry{one, two})
-	if err != nil {\n\t\tt.Fatal(err)\n\t}
+	if err != nil {
+		t.Fatal(err)
+	}
 	b, err := NewRegistry("1.0.0", []Entry{two, one})
-	if err != nil {\n\t\tt.Fatal(err)\n\t}
-	if a.Fingerprint() != b.Fingerprint() {\n\t\tt.Fatal("registry fingerprint must not depend on registration order")\n\t}
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a.Fingerprint() != b.Fingerprint() {
+		t.Fatal("registry fingerprint must not depend on registration order")
+	}
 	if _, err := NewRegistry("1.0.0", []Entry{one, one}); !errors.Is(err, ErrInvalidRegistry) {
 		t.Fatal("duplicate registry entry must be rejected")
 	}
@@ -129,7 +151,7 @@ func TestRegistryRequiresStrongValidatorsAndUTCCompletionTime(t *testing.T) {
 	}
 	if _, err := NewRegistry("1.0.0", []Entry{{
 		StageCode: "news.collect", OutputType: "news.collection", SchemaVersion: "1.0.0",
-		PayloadSchemaRef:        "schema://payload/1", QualitySummarySchemaRef: "schema://quality/1", 
+		PayloadSchemaRef:        "schema://payload/1", QualitySummarySchemaRef: "schema://quality/1",
 	}}); !errors.Is(err, ErrInvalidRegistry) {
 		t.Fatal("missing validators must be rejected")
 	}
