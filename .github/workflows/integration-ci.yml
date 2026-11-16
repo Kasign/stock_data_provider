@@ -152,6 +152,17 @@ jobs:
           fi
           echo "- 顶层测试：3/3 PASS；A 组 MariaDB 子测试：7/7 PASS" >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Run Worker Bootstrap MariaDB/Redis integration test
+        id: test-worker-bootstrap
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          go test ./internal/server/bootstrap/ -run TestWorkerBootstrapMariaDBRedisIntegration -count=1 -v 2>&1 | tee /tmp/worker_bootstrap_verbose.log
+          test_status=$?
+          if [ "$test_status" -ne 0 ]; then exit 1; fi
+          if grep -q 'no tests to run' /tmp/worker_bootstrap_verbose.log; then exit 1; fi
+          grep -Fq -- '--- PASS: TestWorkerBootstrapMariaDBRedisIntegration (' /tmp/worker_bootstrap_verbose.log
+
       - name: Run go vet (go-core module)
         id: vet-core
         continue-on-error: true
