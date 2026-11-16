@@ -152,14 +152,16 @@ jobs:
           fi
           echo "- 顶层测试：3/3 PASS；A 组 MariaDB 子测试：7/7 PASS" >> "$GITHUB_STEP_SUMMARY"
 
+
       # Worker Bootstrap 必须使用真实 MariaDB/Redis，并验证 SIGTERM 后完整退出。
       - name: Run Worker Bootstrap MariaDB/Redis integration test
         id: test-worker-bootstrap
         continue-on-error: true
         run: |
           set -o pipefail
-          go test ./internal/server/bootstrap/ \
-            -run '^TestWorkerBootstrapMariaDBRedisIntegration        id: vet-core
+          go test ./internal/server/bootstrap/ \\
+            -run '^TestWorkerBootstrapMariaDBRedisIntegration
+        id: vet-core
         continue-on-error: true
         working-directory: go-core
         run: go vet ./...
@@ -259,7 +261,7 @@ jobs:
             exit 1
           fi
           echo "所有检查均通过。"
- \
+ \\
             -count=1 -v 2>&1 | tee /tmp/worker_bootstrap_verbose.log
           status=$?
           if [ "$status" -ne 0 ]; then
