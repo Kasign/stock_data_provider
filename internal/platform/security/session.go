@@ -26,8 +26,8 @@ const (
 )
 
 var (
-	ErrSessionNotFound = errors.New("session not found or expired")
-	ErrSessionConflict = errors.New("session already exists or cannot be rotated")
+	ErrSessionNotFound     = errors.New("session not found or expired")
+	ErrSessionConflict     = errors.New("session already exists or cannot be rotated")
 	ErrSessionCSRFRejected = errors.New("session CSRF token rejected")
 )
 

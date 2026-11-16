@@ -2,6 +2,7 @@ package security
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"os"
@@ -168,7 +169,9 @@ func TestRedisSessionStoreIntegration(t *testing.T) {
 		t.Fatalf("read session after rejected CSRF: %v", err)
 	}
 	var afterReject redisSessionRecord
-	if err := json.Unmarshal(storedRaw, &afterReject); err != nil { t.Fatalf("decode session after rejected CSRF: %v", err) }
+	if err := json.Unmarshal(storedRaw, &afterReject); err != nil {
+		t.Fatalf("decode session after rejected CSRF: %v", err)
+	}
 	if afterReject.LastSeenAtMS != touchedAt.UnixMilli() {
 		t.Fatalf("rejected CSRF changed LastSeenAt: got %d want %d", afterReject.LastSeenAtMS, touchedAt.UnixMilli())
 	}
@@ -187,11 +190,13 @@ func TestRedisSessionStoreIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("rotate CSRF: %v", err)
 	}
-	if rotatedCSRF.CSRFTokenDigest != newCSRFDigest { t.Fatalf("CSRF digest not rotated: %+v", rotatedCSRF) }
+	if rotatedCSRF.CSRFTokenDigest != newCSRFDigest {
+		t.Fatalf("CSRF digest not rotated: %+v", rotatedCSRF)
+	}
 	if _, err := store.LookupAndTouchWithCSRF(ctx, digest, csrfDigest, rotatedAt.Add(time.Second), DefaultSessionIdleTTL); !errors.Is(err, ErrSessionCSRFRejected) {
 		t.Fatalf("old CSRF token remained valid: %v", err)
 	}
-	if _, err := store.LookupAndTouchWithCSRF(ctx, digest, newCSRFDigest, rotatedAt.Add(2*time.Second), DefaultSessionIdleTTL); err != nil {
+	if _, err := store.LookupAndTouchWithCSRF(ctx, digest, newCSRFDigest, rotatedAt.Add(2 * time.Second), DefaultSessionIdleTTL); err != nil {
 		t.Fatalf("new CSRF token rejected: %v", err)
 	}
 	_, digestA, err := NewSessionToken()
@@ -203,8 +208,8 @@ func TestRedisSessionStoreIntegration(t *testing.T) {
 		t.Fatal(err)
 	}
 	rotated := SessionRecord{
-		Subject: "owner", CreatedAt: now, LastSeenAt: rotatedAt.Add(2*time.Second),
-		IdleExpiresAt:     rotatedAt.Add(2*time.Second).Add(DefaultSessionIdleTTL),
+		Subject: "owner", CreatedAt: now, LastSeenAt: rotatedAt.Add(2 * time.Second),
+		IdleExpiresAt:     rotatedAt.Add(2 * time.Second).Add(DefaultSessionIdleTTL),
 		AbsoluteExpiresAt: record.AbsoluteExpiresAt, CredentialVersion: 1,
 		CSRFTokenDigest: newCSRFDigest,
 	}
@@ -215,7 +220,7 @@ func TestRedisSessionStoreIntegration(t *testing.T) {
 		wait.Add(1)
 		go func() {
 			defer wait.Done()
-			err := store.Rotate(ctx, digest, candidate, rotated, rotatedAt.Add(2*time.Second))
+			err := store.Rotate(ctx, digest, candidate, rotated, rotatedAt.Add(2 * time.Second))
 			if err == nil {
 				winners.Add(1)
 			} else if !errors.Is(err, ErrSessionNotFound) && !errors.Is(err, ErrSessionConflict) {
@@ -227,20 +232,20 @@ func TestRedisSessionStoreIntegration(t *testing.T) {
 	if winners.Load() != 1 {
 		t.Fatalf("concurrent rotations succeeded %d times, want one", winners.Load())
 	}
-	if _, err := store.LookupAndTouch(ctx, digest, rotatedAt.Add(2*time.Second), DefaultSessionIdleTTL); !errors.Is(err, ErrSessionNotFound) {
+	if _, err := store.LookupAndTouch(ctx, digest, rotatedAt.Add(2 * time.Second), DefaultSessionIdleTTL); !errors.Is(err, ErrSessionNotFound) {
 		t.Fatalf("old token still valid: %v", err)
 	}
 	winner := digestA
-	if _, err := store.LookupAndTouch(ctx, winner, rotatedAt.Add(2*time.Second), DefaultSessionIdleTTL); err != nil {
+	if _, err := store.LookupAndTouch(ctx, winner, rotatedAt.Add(2 * time.Second), DefaultSessionIdleTTL); err != nil {
 		winner = digestB
-		if _, retryErr := store.LookupAndTouch(ctx, winner, rotatedAt.Add(2*time.Second), DefaultSessionIdleTTL); retryErr != nil {
+		if _, retryErr := store.LookupAndTouch(ctx, winner, rotatedAt.Add(2 * time.Second), DefaultSessionIdleTTL); retryErr != nil {
 			t.Fatalf("neither rotated token valid: %v", retryErr)
 		}
 	}
 	if err := store.Revoke(ctx, winner); err != nil {
 		t.Fatalf("revoke: %v", err)
 	}
-	if _, err := store.LookupAndTouch(ctx, winner, rotatedAt.Add(2*time.Second), DefaultSessionIdleTTL); !errors.Is(err, ErrSessionNotFound) {
+	if _, err := store.LookupAndTouch(ctx, winner, rotatedAt.Add(2 * time.Second), DefaultSessionIdleTTL); !errors.Is(err, ErrSessionNotFound) {
 		t.Fatalf("revoked token still valid: %v", err)
 	}
 

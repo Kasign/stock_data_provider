@@ -2,14 +2,15 @@ package bootstrap
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
-	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 
+	platformconfig "example.com/stock-analysis-flow/internal/platform/config"
 	platformsecurity "example.com/stock-analysis-flow/internal/platform/security"
 	serversecurity "example.com/stock-analysis-flow/internal/server/security"
 )
@@ -85,6 +86,7 @@ func (s *ownerHTTPTestSessions) Revoke(_ context.Context, digest string) error {
 }
 
 type ownerHTTPTestRateLimiter struct{}
+
 func (ownerHTTPTestRateLimiter) Check(context.Context, string, string) (platformsecurity.LoginRateLimitResult, error) {
 	return platformsecurity.LoginRateLimitResult{Allowed: true}, nil
 }

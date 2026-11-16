@@ -28,14 +28,14 @@ type SessionAuthenticatorConfig struct {
 // SessionAuthenticator verifies browser Owner Sessions independently from
 // Platform Bearer authentication. It never upgrades a Session to Bearer scope.
 type SessionAuthenticator struct {
-	sessions    platformsecurity.SessionStore
+	sessions     platformsecurity.SessionStore
 	csrfSessions platformsecurity.CSRFSafeSessionStore
-	credentials platformsecurity.CredentialStore
-	cookie      platformsecurity.SessionCookieConfig
-	origin      *url.URL
-	csrfHeader  string
-	idleTTL     time.Duration
-	now         func() time.Time
+	credentials  platformsecurity.CredentialStore
+	cookie       platformsecurity.SessionCookieConfig
+	origin       *url.URL
+	csrfHeader   string
+	idleTTL      time.Duration
+	now          func() time.Time
 }
 
 func NewSessionAuthenticator(
@@ -159,8 +159,8 @@ func (a *SessionAuthenticator) Authenticate(request *http.Request) (*http.Reques
 }
 
 // RefreshCSRFToken rotates the in-session CSRF secret after strict same-origin checks.
- // It is intended only for the dedicated POST /owner/session/csrf recovery route,
- // where the browser no longer has its previous in-memory CSRF token.
+// It is intended only for the dedicated POST /owner/session/csrf recovery route,
+// where the browser no longer has its previous in-memory CSRF token.
 func (a *SessionAuthenticator) RefreshCSRFToken(request *http.Request) (*http.Request, *http.Cookie, string, error) {
 	if a == nil || request == nil || request.URL == nil || request.Method != http.MethodPost {
 		return nil, nil, "", platformfault.New(platformfault.ClassValidation, "server.invalid_session_csrf_refresh", "CSRF refresh input is invalid", nil)

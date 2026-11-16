@@ -13,12 +13,12 @@ import (
 )
 
 type testSessionStore struct {
-	record  platformsecurity.SessionRecord
-	err     error
-	digest  string
-	idleTTL time.Duration
+	record     platformsecurity.SessionRecord
+	err        error
+	digest     string
+	idleTTL    time.Duration
 	touchCalls int
-	csrfCalls int
+	csrfCalls  int
 }
 
 func (s *testSessionStore) Create(context.Context, string, platformsecurity.SessionRecord) error {
