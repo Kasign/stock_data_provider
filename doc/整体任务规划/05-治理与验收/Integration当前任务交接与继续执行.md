@@ -1075,3 +1075,12 @@ Researchflow 已有 Scheduler、Worker、WorkerPool、Claim/Lease/Fencing、候�
 
 
 - 最终验收 Run [43848194023](https://github.com/Kasign/stock_data_provider/actions/runs/43848194023) 对精确 SHA `92b90d1b4727cd9f4e572790869da754ee65a306` 全量 success：Go 格式、根模块 vet/test、News/Research 跨模块测试、Worker Bootstrap MariaDB/Redis、go-core vet/test、Compose、WebUI 语法/单测、WebUI 镜像构建全部通过。此前 Run 43844764284 / 43847107485 / 43847712560 的失败均已修复，不作为最终验收结果。
+
+
+### 2026-11-16 News Stage 共享 HTTP Client 所有权修正
+
+- 复核 Root Server 资源所有权后发现，上一版 `newNewsSearchStageComposition` 虽使用 Platform HTTP Client 实现，但自行创建并关闭了另一个 Client；这不符合 `server/resources.Resources` 持有共享 Client 生命周期的组合根约束。
+- 已将 factory 改为显式接收 Root Server 传入的 `*platformhttpclient.Client`。News ProviderSet 继续通过 `NewPlatformProviderSet` 为每个 endpoint 绑定独立 DestinationPolicy；factory 不再创建或关闭 Client。
+- 有 Provider 配置但共享 Client 为 nil 时启动装配失败关闭；无 Provider 配置时允许 nil Client，不创建出站依赖。
+- 测试覆盖 configured + nil client 拒绝、configured + shared client 成功、unconfigured + nil client 成功，以及精确 Registry Entry 保留。
+- 该修正为后续 Researchflow Worker 生产装配准备正确的 HTTP 资源注入边界；本次尚未把 Worker 生命周期接入 Bootstrap，也未创建 Workflow Template。

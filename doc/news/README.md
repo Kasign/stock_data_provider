@@ -1162,6 +1162,6 @@
 - 新增 `internal/news/stage` 适配层，调用既有 `app.SearchCandidates`，输出 Researchflow 可消费的 Payload / QualitySummary JSON；News 不依赖 Researchflow，后续由 Server 组合根负责转换为 `stageoutput.ProviderResult`。
 - QualitySummary 只统计搜索状态、Provider 各状态数量、候选数量和既有 MissingFields 计数，不引入全局 quality_status，不判断候选是否为 Evidence 或已验证事实。
 - `skipped`（包括没有配置 Provider）保留为独立搜索状态，映射为非成功 Stage；不会映射为普通 empty 或成功。Provider partial 映射为 degraded；全部 Provider 失败且至少一个 Outcome 可重试时映射为 retry_wait，是否真正重试仍由 Workflow Template 的 RetryPolicy reason-code allowlist 决定。
-- Server Bootstrap 已提供 News Stage composition factory：有 Provider 配置时构造共享 Platform HTTP Client 并调用既有 `NewPlatformProviderSet`；无 Provider 配置时不创建 HTTP Client，保留空 ProviderSet 并 fail-closed。Registry 1.0.0 注册精确 Payload / QualitySummary Schema Ref 和 News-owned Validator。
+- Server Bootstrap 的 News Stage composition factory 借用 Root Server `Resources.HTTPClient`，只通过既有 `NewPlatformProviderSet` 为各 Provider 绑定独立 DestinationPolicy，不创建或关闭第二个 HTTP Client；Provider 已配置但共享 Client 缺失时 fail-closed。无 Provider 配置时不要求 Client，保留空 ProviderSet。Registry 1.0.0 注册精确 Payload / QualitySummary Schema Ref 和 News-owned Validator。
 - 当前 Server 还没有把 Researchflow Worker 生命周期接入生产 Run；本项只完成可测试的 Stage Executor / Registry 组合工厂，不创建无消费者的 Worker 或 Workflow Template。全 Provider 失败时，Worker 当前只会持久化 Stage reason code；Provider Outcome 详细内容因 StageOutput 仅对 succeeded/degraded 提交而不会持久化，需后续 Fault/diagnostic 持久化能力接入后再解决。
 - 本项不写 Research Evidence，不解除 available_at 来源准入搁置状态。

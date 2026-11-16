@@ -18,32 +18,25 @@ import (
 const newsSearchStageOutputRegistryVersion = "1.0.0"
 
 type newsSearchStageComposition struct {
-	executor   researchflowapplication.StageExecutor
-	registry   *stageoutput.Registry
-	httpClient *platformhttpclient.Client
+	executor researchflowapplication.StageExecutor
+	registry *stageoutput.Registry
 }
 
-func newNewsSearchStageComposition(cfg newsconfig.Config) (*newsSearchStageComposition, error) {
+func newNewsSearchStageComposition(cfg newsconfig.Config, client *platformhttpclient.Client) (*newsSearchStageComposition, error) {
 	providers := newsapp.ProviderSet(newsapp.StaticProviderSet{})
-	var client *platformhttpclient.Client
 	if hasConfiguredNewsSearchProvider(cfg) {
-		var err error
-		client, err = platformhttpclient.New(platformhttpclient.Config{})
-		if err != nil {
-			return nil, fmt.Errorf("创建 News Platform HTTP Client 失败: %w", err)
+		if client == nil {
+			return nil, fmt.Errorf("News Provider 已配置但 Server 共享 Platform HTTP Client 不可用")
 		}
+		var err error
 		providers, err = newsprovider.NewPlatformProviderSet(cfg, client)
 		if err != nil {
-			client.CloseIdleConnections()
 			return nil, fmt.Errorf("创建 News Platform ProviderSet 失败: %w", err)
 		}
 	}
 
 	adapter, err := newsstage.NewSearchCandidatesAdapter(newsapp.NewSearchCandidates(providers))
 	if err != nil {
-		if client != nil {
-			client.CloseIdleConnections()
-		}
 		return nil, fmt.Errorf("创建 News SearchCandidates Adapter 失败: %w", err)
 	}
 	registry, err := stageoutput.NewRegistry(newsSearchStageOutputRegistryVersion, []stageoutput.Entry{{
@@ -55,21 +48,12 @@ func newNewsSearchStageComposition(cfg newsconfig.Config) (*newsSearchStageCompo
 		QualitySummaryValidator: stageoutput.ValidatorFunc(newsstage.ValidateQualitySummaryJSON),
 	}})
 	if err != nil {
-		if client != nil {
-			client.CloseIdleConnections()
-		}
 		return nil, fmt.Errorf("创建 News Stage Output Registry 失败: %w", err)
 	}
 	return &newsSearchStageComposition{
 		executor: newsSearchStageExecutor{adapter: adapter},
-		registry: registry, httpClient: client,
+		registry: registry,
 	}, nil
-}
-
-func (c *newsSearchStageComposition) Close() {
-	if c != nil && c.httpClient != nil {
-		c.httpClient.CloseIdleConnections()
-	}
 }
 
 func hasConfiguredNewsSearchProvider(cfg newsconfig.Config) bool {

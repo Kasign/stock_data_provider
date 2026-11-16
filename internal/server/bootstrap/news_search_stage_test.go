@@ -11,6 +11,7 @@ import (
 	newsdomain "example.com/stock-analysis-flow/internal/news/domain"
 	newsstage "example.com/stock-analysis-flow/internal/news/stage"
 	platformconfig "example.com/stock-analysis-flow/internal/platform/config"
+	platformhttpclient "example.com/stock-analysis-flow/internal/platform/httpclient"
 	researchflowapplication "example.com/stock-analysis-flow/internal/researchflow/application"
 	researchflowdomain "example.com/stock-analysis-flow/internal/researchflow/domain"
 	"example.com/stock-analysis-flow/internal/researchflow/stageoutput"
@@ -32,7 +33,7 @@ func TestNewsSearchStageCompositionRegistersExactOutputAndUsesPlatformClientOnly
 	if err != nil {
 		t.Fatal(err)
 	}
-	composition, err := newNewsSearchStageComposition(unconfigured)
+	composition, err := newNewsSearchStageComposition(unconfigured, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -76,13 +77,17 @@ func TestNewsSearchStageCompositionRegistersExactOutputAndUsesPlatformClientOnly
 	if err != nil {
 		t.Fatal(err)
 	}
-	withProvider, err := newNewsSearchStageComposition(configured)
+	sharedClient, err := platformhttpclient.New(platformhttpclient.Config{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer withProvider.Close()
-	if withProvider.httpClient == nil {
-		t.Fatal("configured provider must use the shared Platform HTTP Client")
+	defer sharedClient.CloseIdleConnections()
+	if _, err := newNewsSearchStageComposition(configured, nil); err == nil {
+		t.Fatal("configured providers must fail closed without the Server-owned shared HTTP Client")
+	}
+	withProvider, err := newNewsSearchStageComposition(configured, sharedClient)
+	if err != nil {
+		t.Fatal(err)
 	}
 	if _, ok := withProvider.registry.Entry(
 		newsstage.SearchCandidatesStageCode, newsstage.SearchCandidatesOutputType, newsstage.SearchCandidatesSchemaVersion,
@@ -145,11 +150,10 @@ func TestNewsSearchStageOutputPassesExactRegistryValidation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	composition, err := newNewsSearchStageComposition(cfg)
+	composition, err := newNewsSearchStageComposition(cfg, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer composition.Close()
 
 	executor := newNewsSearchExecutor(newsapp.StaticProviderSet{Providers: []newsapp.Provider{
 		newsStageTestProvider{code: "empty_provider"},
