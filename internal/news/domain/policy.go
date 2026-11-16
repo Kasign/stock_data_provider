@@ -1,6 +1,9 @@
 package domain
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 // AuthorizationStatus 表示授权核验状态；restricted 仍可在明确限制范围内使用。
 type AuthorizationStatus string
@@ -64,6 +67,7 @@ type SourcePolicy struct {
 	AllowedPurposes      []Purpose
 	AllowedContentKinds  []ContentKind
 	AllowedStorageModes  []StorageMode
+	AllowedMetadataFields []string
 	MaxRetention         time.Duration
 	EffectiveAt          time.Time
 	ExpiresAt            *time.Time
@@ -78,6 +82,7 @@ type EndpointPolicy struct {
 	AllowedPurposes      []Purpose
 	AllowedContentKinds  []ContentKind
 	AllowedStorageModes  []StorageMode
+	AllowedMetadataFields []string
 	MaxRetention         *time.Duration
 	EffectiveAt          time.Time
 	ExpiresAt            *time.Time
@@ -94,6 +99,7 @@ type ProviderOutputPolicy struct {
 	MaxRequestRetention     time.Duration
 	MaxCacheRetention       time.Duration
 	AllowedStorageModes     []StorageMode
+	AllowedMetadataFields []string
 	MaxPersistenceRetention time.Duration
 	EffectiveAt             time.Time
 	ExpiresAt               *time.Time
@@ -108,6 +114,7 @@ type CollectionPolicyRequest struct {
 	StorageMode       StorageMode
 	Retention         time.Duration
 	CrossRequestCache bool
+	FieldPath         string
 }
 
 // PolicyDecision 是新闻领域授权评估结果，不是平台 Diagnostics 状态。
@@ -125,6 +132,9 @@ func EvaluateSourceCollectionPolicy(source SourcePolicy, endpoint *EndpointPolic
 	}
 	if !contentCompatibleWithStorage(request.ContentKind, request.StorageMode) {
 		return denied("news.policy.content_storage_mismatch")
+	}
+	if request.FieldPath != "" && (!validMetadataFieldPath(request.FieldPath) || request.ContentKind != ContentMetadata || request.StorageMode != StoragePersistentMetadata) {
+		return denied("news.policy.metadata_field_request_invalid")
 	}
 	if source.Status != AuthorizationApproved && source.Status != AuthorizationRestricted {
 		if source.Status == AuthorizationPending {
@@ -155,6 +165,9 @@ func EvaluateSourceCollectionPolicy(source SourcePolicy, endpoint *EndpointPolic
 	}
 	if !containsPolicyValue(source.AllowedStorageModes, request.StorageMode) {
 		return denied("news.policy.storage_denied")
+	}
+	if request.FieldPath != "" && !containsPolicyValue(source.AllowedMetadataFields, request.FieldPath) {
+		return denied("news.policy.metadata_field_denied")
 	}
 	if request.StorageMode == StorageNone {
 		if request.Retention != 0 || request.CrossRequestCache {
@@ -219,6 +232,14 @@ func EvaluateSourceCollectionPolicy(source SourcePolicy, endpoint *EndpointPolic
 			return denied("news.policy.endpoint_storage_denied")
 		}
 	}
+	if endpoint.AllowedMetadataFields != nil {
+		if !isPolicySubset(endpoint.AllowedMetadataFields, source.AllowedMetadataFields) {
+			return denied("news.policy.endpoint_expansion_requires_evidence")
+		}
+		if request.FieldPath != "" && !containsPolicyValue(endpoint.AllowedMetadataFields, request.FieldPath) {
+			return denied("news.policy.endpoint_metadata_field_denied")
+		}
+	}
 	if endpoint.MaxRetention != nil {
 		if *endpoint.MaxRetention < 0 {
 			return denied("news.policy.endpoint_policy_invalid")
@@ -269,6 +290,9 @@ func EvaluateProviderOutputPolicy(policy ProviderOutputPolicy, request Collectio
 	}
 	if !containsPolicyValue(policy.AllowedContentKinds, request.ContentKind) {
 		return denied("news.policy.provider_content_denied")
+	}
+	if request.FieldPath != "" && !containsPolicyValue(policy.AllowedMetadataFields, request.FieldPath) {
+		return denied("news.policy.provider_metadata_field_denied")
 	}
 	if !policy.AllowRequestProcessing {
 		return denied("news.policy.provider_processing_denied")
@@ -367,9 +391,43 @@ func (p EndpointPolicy) HasOverrides() bool {
 		p.AllowedPurposes != nil ||
 		p.AllowedContentKinds != nil ||
 		p.AllowedStorageModes != nil ||
+		p.AllowedMetadataFields != nil ||
 		p.MaxRetention != nil ||
 		!p.EffectiveAt.IsZero() ||
 		p.ExpiresAt != nil
+}
+
+
+func validMetadataFieldPath(value string) bool {
+	if value == "" || value != strings.TrimSpace(value) || len(value) > 255 || strings.ContainsAny(value, "*/[]\\") {
+		return false
+	}
+	for _, part := range strings.Split(value, ".") {
+		if part == "" {
+			return false
+		}
+		for _, char := range part {
+			if !(char >= 'a' && char <= 'z') && !(char >= 'A' && char <= 'Z') &&
+				!(char >= '0' && char <= '9') && char != '_' && char != '-' {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func validateMetadataFieldPaths(values []string) bool {
+	seen := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		if !validMetadataFieldPath(value) {
+			return false
+		}
+		if _, exists := seen[value]; exists {
+			return false
+		}
+		seen[value] = struct{}{}
+	}
+	return true
 }
 
 func denied(reason string) PolicyDecision {
