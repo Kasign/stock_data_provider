@@ -606,3 +606,19 @@ Researchflow 已有 Scheduler、Worker、WorkerPool、Claim/Lease/Fencing、候�
 - Ingest 的最终 retention 来自 Source MaxRetention、Endpoint MaxRetention 和 Provider MaxRequest/MaxPersistenceRetention 授权交集，写入 Observation.retention_until。Evidence 不得延长；未来 Evidence 载荷清理必须与 Observation candidate_json/tombstone 在同一事务完成。Policy 撤销/到期后既有 Evidence 的可读/留存行为及 available_at 字段级 StorageMode/ContentKind 尚未定义。
 - 本轮仅更新设计提案、News 验收清单、Integration 交接文档；无 Migration/Go/Provider/PIT SQL 变更。
 - 下一步应冻结跨模块 PIT 精度契约与字段级留存策略；获得真实 MariaDB 版本/DSN 后再执行 DDL 和索引 EXPLAIN。上述门禁未完成前保持 proposal-only。
+
+### 10.24 2026-11-16 available_at 秒级精度与字段级授权提案
+
+- 开始前以 `integration` 为唯一工作分支，基于上一轮 `ff4eb3677284e7613001545a6afaa80f565fe34c` 的 available_at 评审记录继续；本轮只处理契约/任务/交接文档，不实施 Migration 或业务代码。
+- 项目负责人明确 available_at 业务精度采用秒级，不需要微秒/纳秒。契约提案现明确：
+  - API 使用 UTC RFC 3339 秒级形式；
+  - News 新增候选业务时间建议使用 `DATETIME(0)`；
+  - Research 现有 `CHAR(30)` 九位格式可将秒级值编码为尾部九个零，不代表来源具备纳秒精度，也不要求改造 Research 通用 PIT 存储；
+  - 非零小数秒来源值不静默截断/四舍五入，暂按 `unsupported_precision` 处理。
+- 重要边界：秒级只适用于 `available_at` 业务时间。News 现有 `observed_at` / `recorded_at` / `system_as_of` 等系统审计与 PIT 边界保留既有微秒精度；Research 的系统 PIT 时间继续使用现有固定格式。两类时间不要求同精度。
+- 核查 `internal/news/domain/policy.go`：现有 ContentKind 为 metadata/title/snippet/abstract/full_text/attachment，StorageMode 为 none/transient/persistent_metadata/persistent_excerpt/persistent_full_text。现有模型无法区分普通 metadata、来源时间原始证据和规范化派生 available_at 的独立持久化授权。
+- 提出但未实现两个授权类别：`source_time_evidence`（raw_value、field_path、timezone、evidence_ref/hash）与 `derived_availability_time`（规范化秒级候选值及审核后派生值）。需要分别经过 Source / Endpoint / Provider Output Policy 授权；不得从 metadata 许可自动继承。
+- 策略生命周期提案区分自然到期、明确撤销、明确 grandfather：无来源授权文本时默认停止新采集并对既有 Evidence 读取/PIT 输出 fail-closed；只有明确授权既有数据在原 retention 内继续使用时才允许例外。现有 Observation 只存策略版本引用和最终 retention_until，尚不足以推导各策略独立到期/撤销影响范围。
+- 本轮没有修改 Go、Migration、Provider、Schema、Golden、PIT SQL；没有目标 MariaDB DSN/版本验证，不新增 DDL 兼容性结论。
+- 下一步按顺序：①冻结 News / Research API 秒级表示、PIT 边界及存储映射；②决定字段级 ContentKind / StorageMode 和 Provider Output Policy 独立留存许可；③取得真实来源授权文本，明确自然到期、撤销及 grandfather 规则；④完成这些契约门禁后，再进入目标 MariaDB 版本 DDL/Repository 集成测试和正式 Schema/DEC。来源准入仍未通过前不得实施 Migration 或 Provider 采集。
+
