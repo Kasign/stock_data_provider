@@ -1009,3 +1009,35 @@ Researchflow 已有 Scheduler、Worker、WorkerPool、Claim/Lease/Fencing、候�
 4. 至少一个真实 Provider 与对应 Registry Entry 完备后，再推进 Server 的 Registry / StageExecutor / Scheduler / WorkerPool 生命周期装配及端到端验收；不先创建空壳 Executor。
 5. `available_at` 来源准入维持项目负责人已确认的 shelved 状态；不重新采样或解除 B 组 SKIP。
 
+
+
+### 2026-11-16 第一个真实 Stage Provider 选型复核
+
+本轮按主线审查 News / Research 现有能力是否能直接成为第一个 Researchflow 业务 Stage；没有修改领域代码，也没有重新打开已搁置的来源准入任务。
+
+**News 现有能力核查**
+
+- `internal/news/app.SearchCandidates` 是真实 Application 用例，接收 `SearchRequest{Query, QueryDimension, Limit}`，调用 ProviderSet 并返回 `SearchResult`；结果保留候选、Provider 级状态、错误分类、耗时和观察时间。
+- 已有 Bocha、Tavily、Brave News、SearXNG 四种协议 Adapter；`NewPlatformProviderSet` 可按配置创建 Provider，并为各 endpoint 绑定 Platform HTTP Doer。
+- 当前 Server Bootstrap 没有构造或消费 `SearchCandidates` / `NewPlatformProviderSet`；现有 News→Research 组合只装配 Evidence Query / Importer。搜索能力因此是模块内可复用能力，不是已经接通的生产 Stage。
+- 当前没有与该搜索用例对应的 Stage Payload Schema/Golden、QualitySummary Schema/Golden 或业务 Registry Entry。不能把通用 Envelope Golden 当成搜索结果契约。
+
+**Research 现有能力核查**
+
+- Research 已有 Context、Evidence、Event、Claim/Hypothesis、Scenario 等领域与 Application 能力，但没有一个已定义输入、输出和质量语义的独立 Stage Provider。
+- News Evidence Importer 虽已装配，但真实写入仍受 News 来源证据与 PIT 门禁限制；当前 `available_at` 来源准入已搁置。不能把搜索候选直接当成 Research Evidence，也不能以测试 Fixture 代替生产来源。
+
+**选型结论**
+
+当前没有可直接注册并投入生产的完整 Stage Provider。唯一有现成真实业务入口、且不依赖被搁置 `available_at` 的候选是 **News 搜索发现能力**：它只能作为“发现候选线索”的 Stage，输出必须明确标注 Provider 来源、搜索观察时间和字段缺失情况；不能宣称候选已成为 Research Evidence 或已验证事实。
+
+建议以现有 `SearchRequest` / `SearchResult` 为边界实现该候选 Stage，暂拟 Stage Code `news.search_candidates`。实施时需在 News Owner 文档中固化：
+1. 参数 Schema：`query`、`query_dimension`、`limit`，语义直接沿用现有 SearchRequest。
+2. Payload Schema/Golden：按现有 SearchResult、Candidate、ProviderOutcome 映射，不引入无来源字段。
+3. News 自有 QualitySummary Schema/Golden：明确 provider success/empty/failed/skipped 与候选缺失字段的统计口径；不借用或猜测 Researchflow 的全局 quality_status 枚举。
+4. 状态映射：尤其明确“未配置 Provider / 全部 Provider skipped”如何映射 Stage 终态；不能把 skipped 伪装成成功或普通空结果。
+5. 只有上述契约、真实 Adapter 装配和执行测试完成后，才注册该 Stage Entry；没有可用 Provider 配置时必须保持 fail-closed。
+
+**下一项实施任务：** 落地 News 搜索发现 Stage 的领域输出契约与真实 Adapter，并在 Server 组合边界装配现有 Platform ProviderSet；完成后再接入 Researchflow Registry。暂不装配完整 Worker 生命周期，不创建无真实业务意义的模板，不触碰 Research Evidence 导入、`available_at`、Quant 或 Notification。
+
+本轮结论是选型审查完成，不代表 Stage Provider 已实现或生产可用。
