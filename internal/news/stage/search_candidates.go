@@ -16,8 +16,8 @@ import (
 )
 
 const (
-	SearchCandidatesStageCode = "news.search_candidates"
-	SearchCandidatesOutputType = "news.search_candidates"
+	SearchCandidatesStageCode     = "news.search_candidates"
+	SearchCandidatesOutputType    = "news.search_candidates"
 	SearchCandidatesSchemaVersion = "1.0.0"
 )
 
@@ -86,6 +86,14 @@ type SearchCandidatesResult struct {
 	QualitySummary json.RawMessage
 }
 
+// SearchCandidatesParameters is the JSON-facing form of the existing
+// domain.SearchRequest. It keeps external field names out of the domain model.
+type SearchCandidatesParameters struct {
+	Query          string `json:"query"`
+	QueryDimension string `json:"query_dimension"`
+	Limit          int    `json:"limit"`
+}
+
 type SearchCandidatesAdapter struct {
 	search *app.SearchCandidates
 }
@@ -104,16 +112,18 @@ func DecodeParameters(raw json.RawMessage) (domain.SearchRequest, error) {
 	if len(trimmed) == 0 || trimmed[0] != '{' {
 		return domain.SearchRequest{}, errors.New("news stage: parameters must be a JSON object")
 	}
-	var request domain.SearchRequest
+	var parameters SearchCandidatesParameters
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&request); err != nil {
+	if err := decoder.Decode(&parameters); err != nil {
 		return domain.SearchRequest{}, fmt.Errorf("news stage: invalid parameters: %w", err)
 	}
 	if err := decoder.Decode(new(any)); err != io.EOF {
 		return domain.SearchRequest{}, errors.New("news stage: parameters contain trailing JSON")
 	}
-	return request, nil
+	return domain.SearchRequest{
+		Query: parameters.Query, QueryDimension: parameters.QueryDimension, Limit: parameters.Limit,
+	}, nil
 }
 
 func (a *SearchCandidatesAdapter) ExecuteParameters(ctx context.Context, raw json.RawMessage) (SearchCandidatesResult, error) {
@@ -147,7 +157,7 @@ func marshalSearchCandidates(result domain.SearchResult) (json.RawMessage, error
 	payload := SearchCandidatesOutput{
 		Status: result.Status, FailureCode: result.FailureCode,
 		Candidates: make([]Candidate, 0, len(result.Candidates)),
-		Outcomes: make([]ProviderOutcome, 0, len(result.Outcomes)),
+		Outcomes:   make([]ProviderOutcome, 0, len(result.Outcomes)),
 	}
 	for _, candidate := range result.Candidates {
 		payload.Candidates = append(payload.Candidates, Candidate{

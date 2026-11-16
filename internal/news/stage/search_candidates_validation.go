@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	SearchCandidatesPayloadSchemaRef = "doc/news/schema/NEWS-STAGE-search-candidates-payload-1.0.0.schema.json"
+	SearchCandidatesPayloadSchemaRef        = "doc/news/schema/NEWS-STAGE-search-candidates-payload-1.0.0.schema.json"
 	SearchCandidatesQualitySummarySchemaRef = "doc/news/schema/NEWS-STAGE-search-candidates-quality-summary-1.0.0.schema.json"
 )
 

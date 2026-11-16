@@ -1053,3 +1053,6 @@ Researchflow 已有 Scheduler、Worker、WorkerPool、Claim/Lease/Fencing、候�
 - 对 Provider 未配置/全部 skipped，Payload 保留 `status=skipped` 和原始 failure_code；禁止映射成 empty 或成功 Stage。Server StageExecutor 必须将该状态映射为非成功执行结果，不能提交成功 Output。
 - 已新增参数/Payload/QualitySummary Schema 及 Payload Golden，适配层单测与强类型 JSON Validator。下一步先由精确 SHA 的 Integration CI 反馈修复真实问题，再在 Server 组合根使用现有 Platform HTTP Client 构造 ProviderSet、构造 Registry Entry（引用 News 自有 Validator），并实现 StageExecutor 状态映射。只有 Registry 与 ProviderSet 均真实装配后，才进入 Worker 消费链。
 - 当前不触碰 Research Evidence Import、available_at、Quant、Notification；不创建无消费端的 Workflow Template，不启动空壳 Worker 生命周期。
+
+
+- 首轮实现 CI：Run [43844764284](https://github.com/Kasign/stock_data_provider/actions/runs/43844764284)，精确 SHA `5737f7f8e3e52eb40b18ad877eae9b2c42762066`。全仓 Go vet、News/Research 跨模块 MariaDB、Worker Bootstrap MariaDB/Redis、go-core、Compose、WebUI 均通过；全量 Go test 唯一失败为 Stage 参数解码测试，原因是直接将无 JSON tag 的领域 `SearchRequest` 用于小写 JSON 字段解码；Go 格式检查也只指出新增 Stage 文件的格式差异。已改为 News-owned JSON 参数 DTO 并完成格式修正；该 Run 保持 failure，不作为验收通过证据，等待修复 SHA 的新 CI。
