@@ -264,3 +264,160 @@ jobs:
             exit 1
           fi
           echo "所有检查均通过。"
+ \
+            -count=1 -v 2>&1 | tee /tmp/news_research_verbose.log
+          status=$?
+          if [ "$status" -ne 0 ]; then
+            echo "::error::go test 退出码 $status"
+            exit 1
+          fi
+          if grep -q 'no tests to run' /tmp/news_research_verbose.log; then
+            echo "::error::-run 未匹配到任何测试，逐用例门禁必须失败"
+            exit 1
+          fi
+          # 顶层测试必须逐一 PASS；不能用包含子测试在内的 grep 计数代替。
+          for test_name in TestNewsResearchIntegrationFixturesAreValid TestNewsEvidenceCursorKeyRotation TestNewsResearchMariaDBIntegration; do
+            if ! grep -Eq "^[[:space:]]*--- PASS: ${test_name} \\(" /tmp/news_research_verbose.log; then
+              echo "::error::顶层测试 ${test_name} 缺少 PASS 记录"
+              exit 1
+            fi
+          done
+          # read_chain_and_fail_closed_import 内的五个子测试逐一要求 PASS。
+          for case_name in composition_and_schema authorized_read_and_fail_closed_import pit_invisible context_cancelled list_evidence_page_uses_current_authorization; do
+            if ! grep -Eq "^[[:space:]]*--- PASS: TestNewsResearchMariaDBIntegration/read_chain_and_fail_closed_import/${case_name} \\(" /tmp/news_research_verbose.log; then
+              echo "::error::A 组子测试 ${case_name} 缺少精确 PASS 记录"
+              exit 1
+            fi
+          done
+          # 指纹篡改与策略版本变化是 MariaDB 集成测试的根级子测试，不属于 read_chain 分组。
+          for case_name in fingerprint_tamper_rejected current_policy_version_change_rejected; do
+            if ! grep -Eq "^[[:space:]]*--- PASS: TestNewsResearchMariaDBIntegration/${case_name} \\(" /tmp/news_research_verbose.log; then
+              echo "::error::A 组子测试 ${case_name} 缺少精确 PASS 记录"
+              exit 1
+            fi
+          done
+          # B 组只能是明确 PASS 或按当前搁置决议明确 SKIP；缺少结果一律失败。
+          b_case='TestNewsResearchMariaDBIntegration/read_chain_and_fail_closed_import/successful_import_with_verified_available_at'
+          if grep -Eq "^[[:space:]]*--- PASS: ${b_case} \\(" /tmp/news_research_verbose.log; then
+            echo "- B 组 successful_import_with_verified_available_at: PASS" >> "$GITHUB_STEP_SUMMARY"
+          elif grep -Eq "^[[:space:]]*--- SKIP: ${b_case} \\(" /tmp/news_research_verbose.log; then
+            echo "::warning::B 组成功路径已按项目决议 shelved；当前契约无可验证 available_at，显式 SKIP"
+            echo "- B 组 successful_import_with_verified_available_at: SKIP (shelved, 非 fail)" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::error::B 组成功路径没有 PASS 或明确 SKIP 记录"
+            exit 1
+          fi
+          echo "- 顶层测试：3/3 PASS；A 组 MariaDB 子测试：7/7 PASS" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Run Worker Bootstrap MariaDB/Redis integration test
+        id: test-worker-bootstrap
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          go test ./internal/server/bootstrap/ -run TestWorkerBootstrapMariaDBRedisIntegration -count=1 -v 2>&1 | tee /tmp/worker_bootstrap_verbose.log
+          test_status=$?
+          if [ "$test_status" -ne 0 ]; then exit 1; fi
+          if grep -q 'no tests to run' /tmp/worker_bootstrap_verbose.log; then exit 1; fi
+          grep -Fq -- '--- PASS: TestWorkerBootstrapMariaDBRedisIntegration (' /tmp/worker_bootstrap_verbose.log
+
+      - name: Run go vet (go-core module)
+        id: vet-core
+        continue-on-error: true
+        working-directory: go-core
+        run: go vet ./...
+
+      - name: Run Go tests and compile packages (go-core module)
+        id: test-core
+        continue-on-error: true
+        working-directory: go-core
+        run: go test ./...
+
+      - name: Prepare example environment
+        id: prepare-env
+        continue-on-error: true
+        run: cp .env.example .env
+
+      - name: Validate Compose configuration
+        id: compose
+        continue-on-error: true
+        run: docker compose --env-file .env -f docker-compose.yml config --quiet
+
+      - name: Set up Node.js
+        id: setup-node
+        continue-on-error: true
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Check JavaScript syntax
+        id: js-check
+        continue-on-error: true
+        working-directory: web
+        run: npm run check
+
+      - name: Run WebUI unit tests
+        id: web-test
+        continue-on-error: true
+        working-directory: web
+        run: npm test
+
+      - name: Build WebUI image
+        id: web-build
+        continue-on-error: true
+        run: docker build --tag stock-analysis-web:ci --file web/Dockerfile web
+
+      - name: Summarize all checks
+        if: always()
+        shell: bash
+        env:
+          CHECKOUT: ${{ steps.checkout.outcome }}
+          SETUP_GO: ${{ steps.setup-go.outcome }}
+          GOFMT: ${{ steps.gofmt.outcome }}
+          VET_ROOT: ${{ steps.vet-root.outcome }}
+          TEST_ROOT: ${{ steps.test-root.outcome }}
+          TEST_INTEGRATION_VERBOSE: ${{ steps.test-integration-verbose.outcome }}
+          TEST_WORKER_BOOTSTRAP: ${{ steps.test-worker-bootstrap.outcome }}
+          VET_CORE: ${{ steps.vet-core.outcome }}
+          TEST_CORE: ${{ steps.test-core.outcome }}
+          PREPARE_ENV: ${{ steps.prepare-env.outcome }}
+          COMPOSE: ${{ steps.compose.outcome }}
+          SETUP_NODE: ${{ steps.setup-node.outcome }}
+          JS_CHECK: ${{ steps.js-check.outcome }}
+          WEB_TEST: ${{ steps.web-test.outcome }}
+          WEB_BUILD: ${{ steps.web-build.outcome }}
+        run: |
+          failed=0
+          report() {
+            local name="$1"
+            local result="$2"
+            printf '%-48s %s\n' "$name" "$result"
+            if [[ "$result" != "success" ]]; then
+              failed=1
+            fi
+          }
+
+          echo "========== Integration CI 检查汇总 =========="
+          printf 'CHECKOUT=%s SETUP_GO=%s GOFMT=%s VET_ROOT=%s TEST_ROOT=%s TEST_INTEGRATION_VERBOSE=%s TEST_WORKER_BOOTSTRAP=%s VET_CORE=%s TEST_CORE=%s PREPARE_ENV=%s COMPOSE=%s SETUP_NODE=%s JS_CHECK=%s WEB_TEST=%s WEB_BUILD=%s\n' \
+            "$CHECKOUT" "$SETUP_GO" "$GOFMT" "$VET_ROOT" "$TEST_ROOT" "$TEST_INTEGRATION_VERBOSE" "$TEST_WORKER_BOOTSTRAP" "$VET_CORE" "$TEST_CORE" \
+            "$PREPARE_ENV" "$COMPOSE" "$SETUP_NODE" "$JS_CHECK" "$WEB_TEST" "$WEB_BUILD"
+          report "Checkout" "$CHECKOUT"
+          report "Go 环境准备" "$SETUP_GO"
+          report "Go 格式检查（全部已跟踪文件）" "$GOFMT"
+          report "go vet（根模块）" "$VET_ROOT"
+          report "go test（根模块）" "$TEST_ROOT"
+          report "News/Research 跨模块测试（-v 逐用例）" "$TEST_INTEGRATION_VERBOSE"
+          report "Worker Bootstrap MariaDB/Redis 生命周期" "$TEST_WORKER_BOOTSTRAP"
+          report "go vet（go-core）" "$VET_CORE"
+          report "go test（go-core）" "$TEST_CORE"
+          report "Web 环境准备" "$PREPARE_ENV"
+          report "Docker Compose 配置检查" "$COMPOSE"
+          report "Node.js 环境准备" "$SETUP_NODE"
+          report "WebUI JavaScript 语法检查" "$JS_CHECK"
+          report "WebUI 单元测试" "$WEB_TEST"
+          report "WebUI Docker 构建" "$WEB_BUILD"
+
+          if [[ "$failed" -ne 0 ]]; then
+            echo "::error::存在失败或未执行的检查，请查看对应步骤日志。"
+            exit 1
+          fi
+          echo "所有检查均通过。"

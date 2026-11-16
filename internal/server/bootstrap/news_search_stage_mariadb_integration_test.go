@@ -79,8 +79,8 @@ type newsSearchIntegrationProvider struct{}
 func (newsSearchIntegrationProvider) Code() string { return "integration_fixture" }
 func (newsSearchIntegrationProvider) Search(context.Context, newsdomain.SearchRequest) ([]newsdomain.Candidate, error) {
 	return []newsdomain.Candidate{{
-		Title: "Deterministic News Stage integration candidate",
-		RawURL: "https://publisher.example.test/integration-candidate",
+		Title:         "Deterministic News Stage integration candidate",
+		RawURL:        "https://publisher.example.test/integration-candidate",
 		PublisherName: "Integration Fixture Publisher",
 	}}, nil
 }
@@ -127,7 +127,7 @@ func TestNewsSearchStageResearchflowMariaDBIntegration(t *testing.T) {
 		Ref: newsSearchIntegrationTemplateRef, Version: "1.0.0",
 		AllowEmptyInputs: true, ParameterSchemaRef: newsSearchIntegrationSchemaRef,
 		OutputRegistryVersion: newsSearchStageOutputRegistryVersion,
-		ResourcePolicyRef: "integration.news.search_candidates.resource_policy.v1",
+		ResourcePolicyRef:     "integration.news.search_candidates.resource_policy.v1",
 		Stages: []researchflowtemplate.StageDefinition{{
 			Code: newsstage.SearchCandidatesStageCode, Required: true, Dependencies: []string{},
 			Applicability: researchflowtemplate.ApplicabilityRule{
@@ -160,7 +160,7 @@ func TestNewsSearchStageResearchflowMariaDBIntegration(t *testing.T) {
 		TemplateRef: workflowTemplate.Ref, TemplateVersion: workflowTemplate.Version,
 		SystemAsOf: now.Add(-time.Second), DeadlineAt: now.Add(2 * time.Minute),
 		InputSnapshotRefs: []string{},
-		Parameters: json.RawMessage("{\"query\":\"market\",\"query_dimension\":\"market\",\"limit\":10}"),
+		Parameters:        json.RawMessage("{\"query\":\"market\",\"query_dimension\":\"market\",\"limit\":10}"),
 	})
 	if err != nil {
 		t.Fatalf("创建 Researchflow Run 失败: %v", err)
