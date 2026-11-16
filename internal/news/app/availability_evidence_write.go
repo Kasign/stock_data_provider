@@ -123,7 +123,7 @@ func (u *RecordAvailabilityEvidence) Execute(ctx context.Context, request Record
 			return ErrAvailabilityEvidencePolicyUnavailable
 		}
 
-		recordedAt := u.now().UTC()
+		recordedAt := u.now().UTC().Truncate(time.Microsecond)
 		if recordedAt.IsZero() || !observation.RetentionUntil.After(recordedAt) {
 			return ErrAvailabilityEvidencePolicyDenied
 		}

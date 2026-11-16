@@ -2098,7 +2098,7 @@ func TestAvailabilityEvidenceWriteRequiresCurrentFieldPolicyMariaDBIntegration(t
 	}
 	makePolicy := func(fields []string) []byte {
 		payload, marshalErr := json.Marshal(domain.SourcePolicy{
-			Status: AuthorizationApproved,
+			Status: domain.AuthorizationApproved,
 			AllowedAccessMethods: []domain.AccessMethod{domain.AccessRSS},
 			AllowedPurposes: []domain.Purpose{domain.PurposeInternalPersonalResearch},
 			AllowedContentKinds: []domain.ContentKind{domain.ContentMetadata},
