@@ -45,6 +45,152 @@ func NewMySQLRepository(db *sql.DB) (*MySQLRepository, error) {
 	return &MySQLRepository{db: db}, nil
 }
 
+
+var ErrAvailabilityDecisionSequenceConflict = errors.New("news storage: availability decision sequence conflict")
+
+// AppendAvailabilityDecision 在版本行锁保护下追加完整决策状态。
+// 版本行是串行化锚点，因此即使当前尚无 Decision 行，并发首写也不会分叉。
+func (r *MySQLRepository) AppendAvailabilityDecision(ctx context.Context, decision domain.AvailabilityDecision) error {
+	if r == nil || r.db == nil || ctx == nil || decision.Validate() != nil {
+		return app.ErrInvalidRequest
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
+	tx, err := r.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead})
+	if err != nil {
+		return err
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tx.Rollback()
+		}
+	}()
+
+	// 锁定稳定存在的 Version 行，覆盖“尚无 Decision 行”的首写竞争。
+	var lockedVersionID string
+	if err := tx.QueryRowContext(ctx,
+		"SELECT version_id FROM news_item_versions WHERE version_id = ? FOR UPDATE",
+		decision.VersionID,
+	).Scan(&lockedVersionID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("news storage: availability decision version %q not found", decision.VersionID)
+		}
+		return err
+	}
+
+	var latestID string
+	var latestSequence uint64
+	var latestRecordedAt time.Time
+	err = tx.QueryRowContext(ctx, `SELECT decision_id, decision_seq, recorded_at
+		FROM news_version_availability_decisions
+		WHERE version_id = ?
+		ORDER BY decision_seq DESC
+		LIMIT 1 FOR UPDATE`, decision.VersionID,
+	).Scan(&latestID, &latestSequence, &latestRecordedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		if decision.Sequence != 1 || decision.SupersedesDecisionID != nil {
+			return ErrAvailabilityDecisionSequenceConflict
+		}
+	} else if err != nil {
+		return err
+	} else {
+		if latestSequence == ^uint64(0) ||
+			decision.Sequence != latestSequence+1 ||
+			decision.SupersedesDecisionID == nil ||
+			*decision.SupersedesDecisionID != latestID ||
+			decision.RecordedAt.Before(latestRecordedAt) {
+			return ErrAvailabilityDecisionSequenceConflict
+		}
+	}
+
+	// 所有被审阅的 Evidence 都必须属于同一 Version；锁住证据行，
+	// 防止写入期间并发清理选中 Evidence 的受限载荷。
+	if len(decision.ConsideredEvidenceIDs) > 0 {
+		query := `SELECT evidence_id, parse_status, candidate_available_at_utc,
+			raw_value, payload_purged_at, observed_at, recorded_at, retention_until
+			FROM news_version_availability_evidence
+			WHERE version_id = ? AND evidence_id IN (` +
+			evidencePlaceholders(len(decision.ConsideredEvidenceIDs)) + `) FOR UPDATE`
+		args := make([]any, 0, len(decision.ConsideredEvidenceIDs)+1)
+		args = append(args, decision.VersionID)
+		for _, id := range decision.ConsideredEvidenceIDs {
+			args = append(args, id)
+		}
+		rows, queryErr := tx.QueryContext(ctx, query, args...)
+		if queryErr != nil {
+			return queryErr
+		}
+		found := make(map[string]struct{}, len(decision.ConsideredEvidenceIDs))
+		for rows.Next() {
+			var evidenceID, parseStatus string
+			var candidateAvailableAt, payloadPurgedAt sql.NullTime
+			var rawValue sql.NullString
+			var observedAt, recordedAt, retentionUntil time.Time
+			if scanErr := rows.Scan(&evidenceID, &parseStatus, &candidateAvailableAt,
+				&rawValue, &payloadPurgedAt, &observedAt, &recordedAt, &retentionUntil); scanErr != nil {
+				_ = rows.Close()
+				return scanErr
+			}
+			found[evidenceID] = struct{}{}
+			if decision.SelectedEvidenceID != nil && evidenceID == *decision.SelectedEvidenceID {
+				if parseStatus != string(domain.AvailabilityTimeParsed) ||
+					!candidateAvailableAt.Valid || !rawValue.Valid || rawValue.String == "" ||
+					payloadPurgedAt.Valid || recordedAt.After(decision.RecordedAt) ||
+					observedAt.After(decision.RecordedAt) ||
+					!retentionUntil.After(decision.RecordedAt) ||
+					candidateAvailableAt.Time.After(observedAt) {
+					_ = rows.Close()
+					return fmt.Errorf("news storage: selected availability evidence is not eligible")
+				}
+			}
+		}
+		rowsErr := rows.Err()
+		closeErr := rows.Close()
+		if rowsErr != nil {
+			return rowsErr
+		}
+		if closeErr != nil {
+			return closeErr
+		}
+		if len(found) != len(decision.ConsideredEvidenceIDs) {
+			return fmt.Errorf("news storage: considered availability evidence does not belong to version")
+		}
+	}
+
+	consideredJSON, err := json.Marshal(decision.ConsideredEvidenceIDs)
+	if err != nil {
+		return err
+	}
+	_, err = tx.ExecContext(ctx, `INSERT INTO news_version_availability_decisions
+		(decision_id, version_id, decision_seq, status, selected_evidence_id,
+		 considered_evidence_ids, reason_code, review_rule_version,
+		 supersedes_decision_id, recorded_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		decision.ID, decision.VersionID, decision.Sequence, string(decision.Status),
+		nullableStringPointer(decision.SelectedEvidenceID), consideredJSON,
+		decision.ReasonCode, decision.ReviewRuleVersion,
+		nullableStringPointer(decision.SupersedesDecisionID), decision.RecordedAt,
+	)
+	if err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	committed = true
+	return nil
+}
+
+func nullableStringPointer(value *string) any {
+	if value == nil {
+		return nil
+	}
+	return *value
+}
+
 func (r *MySQLRepository) WithinIdentityTransaction(ctx context.Context, fn func(app.IdentityTransaction) error) error {
 	if r == nil || r.db == nil || ctx == nil || fn == nil {
 		return app.ErrInvalidRequest
