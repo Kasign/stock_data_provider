@@ -85,13 +85,25 @@ Owner Session 默认关闭；启用时必须提供显式配置与经过目标硬
 
 这些内容应形成 Server 的权威 HTTP/运维契约，再实现 Handler 和路由。当前 `doc/web/API_CONTRACT.md` 也明确记录 Web 尚未接入 Session/Cookie/CSRF，不构成登录 API 定义。
 
-## 契约编号引用问题
+## 契约归属复核（纠正上一版判断）
 
-`PLAT-CTR-003` 第 9～10 节明确要求 Server 独立实现 Session Middleware，并说明登录 HTTP API 的路径、请求/响应、错误和路由认证矩阵由 `SRV-CTR-001` 定义。
+本轮继续核对了项目级决策记录、契约登记簿、契约变更规则和契约入口：
 
-但当前 `doc/contract/PLAT-002-项目级契约冻结登记簿.md` 中的 `SRV-CTR-001` 描述为“唯一组合根、Bootstrap、依赖注入与生命周期”，其权威内容是组合根和运行生命周期，不是 Owner Session HTTP API。Server README 中对 `SRV-CTR-001` 的部分说明也把 Researchflow HTTP API 混入其中。
+- `DEC-PLAT-002-017` 已明确 Owner 密码登录的总体决策、凭证隔离、Credential/Session/CSRF 原则、Server/Web/部署责任分层。
+- `PLAT-CTR-003` 已冻结身份来源、Session 原语和路由认证边界；其第 9～10 节将登录 HTTP API 的路径、请求/响应、错误和路由矩阵指向 `SRV-CTR-001`。
+- 但登记簿中 `SRV-CTR-001` 的正式名称是“Root Server 组合根、统一 HTTP 宿主与 Researchflow 对外 API”，状态为 `deferred`；重新进入条件明确针对 Researchflow 的消费者范围、活动路由、DTO、认证矩阵、错误投影、分页/Cursor 和事件读取。
+- DEC-PLAT-002-017 第 55 行仅将 `SRV-CTR-001` 列为相关项目契约，并未为 Owner Session HTTP API 单独建立路径/DTO 定义。
+- 契约版本规则要求：已冻结契约语义不得原地改变；若新增或改变公开契约，必须登记决策、消费者影响、迁移方案和兼容边界。
 
-因此当前存在**契约编号/权威路径引用不一致**。在项目契约登记簿明确归属之前，不把组合根契约当作登录 HTTP API 契约，也不在 Server 代码中自行发明公开路由和 DTO。应由项目级契约治理明确：Owner Session HTTP API 是补充到现有 Server 契约，还是单独登记新的 Server HTTP Auth 契约。
+因此，准确结论不是“SRV-CTR-001 已经包含 Owner Session API”，也不是“必须把 Owner Session API 塞进 SRV-CTR-001”。而是：
+
+1. Owner Session 的项目级安全决策已经存在（DEC-PLAT-002-017），不需要重新讨论身份模型。
+2. Owner Session HTTP 路由/DTO 仍缺少权威定义。
+3. 当前登记簿中的 SRV-CTR-001 处于 deferred，且其重新进入条件指向 Researchflow API；不能把它当作已发布的 Owner Session HTTP 契约。
+4. 需要项目契约治理修正 PLAT-CTR-003 对 Server HTTP 契约的引用，明确 Owner Session HTTP API 的权威文档归属。若仅属于 Server 内部管理 API，可由 DEC-017 下的 Server 专项 API 契约承载；是否新增项目级 CTR 编号，应由登记簿治理按跨模块消费者范围决定，不能由实现代码先行决定。
+5. 在引用修正和权威定义落地前，不新增公开路由、DTO 或 Web 调用约定。
+
+**上一版“SRV-CTR-001 可能补充或另建 Server HTTP Auth CTR”的表述过于笼统；本节以当前登记簿和 DEC-017 为准。**
 
 ## 当前代码与测试证据
 
