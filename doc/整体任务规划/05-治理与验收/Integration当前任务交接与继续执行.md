@@ -564,3 +564,15 @@ Researchflow 已有 Scheduler、Worker、WorkerPool、Claim/Lease/Fencing、候�
 - 精度超出纳秒或不能无损表达时拒绝，禁止静默舍入/截断。
 - 本轮仅同步提案、News 清单和交接文档；没有修改 Migration、Go 业务代码、Provider、PIT SQL 或 1.0.0 Schema/Golden。来源准入、消费者兼容和正式 DEC 仍是后续门禁。
 - 下一步评审 MariaDB JSON 存储/校验、索引和外键策略，再结合来源准入证据形成 NEWS-CTR-001 2.0.0 正式变更决议。
+
+
+### 10.20 2026-11-16 available_at Evidence 与 Observation 去重及 MariaDB 约束评审
+
+- 开始前核对 integration HEAD：`8b62aea9435ae7b5c33994112b3454d9b7108028`；读取 News Migration V1-V9、News Repository 和 Research PIT 存储实现。
+- 确认 `news_observations` 已保存 source_id/provider_code/endpoint_id、Source/Endpoint/Provider Output Policy Version、observed_at、candidate_json 和 retention 生命周期。Evidence 不再复制来源身份/策略字段，改为必填 observation_id + version_id，来源元数据从 Observation 关联读取。
+- Evidence 绑定的 observation 必须是实际包含该字段值的响应；验证 Observation 与 version 属于同一 news_id，不能默认使用版本首次 Observation。
+- 明确区分 raw_value_hash 与原始响应 response_hash：前者只能证明本地字段值未变，不能证明供应商响应真实性。当前 Observation 是否保留原始响应引用/摘要仍待核实。
+- MariaDB 方向：复用现有 JSON、InnoDB 外键和 ascii_bin ID；建议 Evidence/Decision 复合外键保证选中证据及前序决策属于同一版本，considered_evidence_ids 由 Go 层校验数组语义。
+- 明确 Evidence 字段保留/清理必须服从 Provider Output Policy，追加式审计不能突破来源授权期限。
+- 本轮仅更新结构提案和任务跟踪，没有 Migration、Go 代码或 PIT SQL 变更。
+- 下一步：核查 Provider 原始响应证据链及 retention 实际能力；之后完成目标 MariaDB DDL 兼容验证和索引计划，仍须在正式 Schema 2.0.0/DEC 前保持不实施。

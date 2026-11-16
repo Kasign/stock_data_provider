@@ -500,3 +500,63 @@
 - [ ] 取得来源字段语义、真实样本和个人用途授权准入证据。
 - [ ] 完成 NEWS-CTR-001 Schema 2.0.0、Research 消费者兼容和正式 DEC。
 - [ ] 上述门禁完成前不实施 Migration、Go 业务代码、Provider、PIT SQL 或 1.0.0 Schema/Golden 修改。
+
+
+## 1.11 与既有 Observation 的来源绑定及 MariaDB 约束评审（2026-11-16）
+
+本节基于当前 News Migration V1/V5/V6/V8/V9 和 Repository 结构，对两表提案进一步去重。仍为设计提案，不实施 DDL。
+
+### 1.11.1 Evidence 必须绑定实际 Observation
+
+当前 `news_observations` 已保存：
+- `observation_id`
+- `source_id`、`provider_code`、`endpoint_id`
+- `source_policy_version_id`、`endpoint_policy_version_id`
+- `provider_output_policy_version_id`
+- `observed_at`、`candidate_json`
+- `retention_until`、`payload_purged_at`
+
+因此 Evidence 表不重复保存 source_id、endpoint_id 和三类策略版本，改为增加必填 `observation_id` 外键。来源身份、Provider、Endpoint 和采集时使用的策略版本通过 observation_id 关联读取，避免两处副本不一致。
+
+Evidence 表最小必要字段调整为：
+- `evidence_id`、`version_id`、`observation_id`
+- `field_path`、`raw_value`、`source_timezone_or_offset`
+- `candidate_available_at_utc`、`parse_status`、`parse_reason_code`
+- `parser_version`
+- `evidence_ref`、`evidence_hash`（仅在有真实、可访问且授权允许留存的证据对象时填写）
+- `observed_at`、`recorded_at`
+- 受来源策略约束的 `retention_until`、`payload_purged_at`（如该来源输出必须按期清理）
+
+`observation_id` 必须指向实际包含该字段值的请求/响应，不得简单复用版本首次创建时的 observation_id。写入前校验 observation 与 version 属于同一 news_id，且本次采集内容确实包含对应 version 和 field_path。Evidence 自己保留最小原始时间字段，避免 Observation 的 candidate_json 按既有 retention 规则清理后失去字段级复核材料。
+
+### 1.11.2 不重复存储来源元数据，但必须验证策略快照
+
+- `source_id`、`provider_code`、`endpoint_id`、Source/Endpoint/Provider Output Policy Version 均以 Observation 记录为权威。
+- 生成 Evidence 时必须确认 Observation 的授权/留存策略允许保存该时间字段和证据摘要；不能因为 Evidence 是内部表就绕过 Provider Output Policy。
+- `evidence_ref` 不得包含 API Key、Cookie、Authorization Header 或敏感 query 参数；只允许受控内部定位符。
+- `evidence_hash` 若只是 raw_value 哈希，只能证明本地值未变，不能证明供应商原始响应真实性。只有实际捕获并计算的原始响应摘要才可标注为 response hash；不可混用两种语义。
+- 当前 Observation 表未证明存在完整原始响应持久化能力；若来源准入要求原始响应级证据，而当前 Provider 链无法提供，必须记录为来源证据缺口，不得伪称 evidence_ref/hash 已闭环。
+
+### 1.11.3 MariaDB 字段、外键和索引方向
+
+当前 News Migration 已使用 MariaDB `JSON`、InnoDB 外键、ascii_bin ID 和复合索引，因此不需要引入新存储技术。
+
+建议约束：
+- Evidence 的 `version_id`、`observation_id` 使用与现有主表完全一致的 `VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin`，分别外键引用 `news_item_versions(version_id)` 与 `news_observations(observation_id)`。
+- Decision 的 `version_id` 同样引用 `news_item_versions(version_id)`。
+- Evidence 增加 `UNIQUE(version_id, evidence_id)`，Decision 的 `(version_id, selected_evidence_id)` 使用复合外键指向该唯一键，数据库层保证被选 Evidence 属于同一版本。
+- Decision 的 `(version_id, supersedes_decision_id)` 使用复合自引用外键指向同一版本的前一决策；`UNIQUE(version_id, decision_seq)` 保证序号唯一，`UNIQUE(supersedes_decision_id)` 防止一个决策产生多个后继分叉（NULL 可重复）。
+- Evidence 建议索引：`(version_id, observed_at, recorded_at)`、`(observation_id)`；Decision 建议索引：`(version_id, recorded_at, decision_seq)`、`(version_id, decision_seq)`。最终索引须以实际 PIT SQL 的 EXPLAIN 和真库数据量验证，不为猜测查询添加冗余索引。
+- `considered_evidence_ids` 可沿用仓库已有 MariaDB JSON 列能力；数据库负责 JSON 文档有效性，数组形状、ID 去重/排序、同版本归属和 selected ID 必须包含于数组等规则由 Go Domain/Repository 校验。该字段用于审计，不作为 PIT 主过滤索引。
+- 现有 `news_observations` 的 `candidate_json` 有清理生命周期。Evidence 原始字段的留存/清理必须遵循同一来源许可；若需定期清理，不能把“追加式”误解为违反法定/合同保留期限的永久保留。应通过受控字段脱敏/清理事件记录清理结果，具体实现和审计要求须在 DDL 冻结前确定。
+
+### 1.11.4 当前可确认与仍待验证
+
+- [x] 来源身份与策略版本复用 Observation，不再在 Evidence 表复制同一组元数据。
+- [x] Evidence 绑定精确 observation_id + version_id，并要求两者属于同一新闻主体。
+- [x] 明确区分 raw_value_hash 与原始响应 response_hash，避免错误声称证据真实性。
+- [x] 确认当前 MariaDB 已使用 JSON、外键和复合索引，可沿用既有技术路径。
+- [ ] 核实 Provider/Observation 是否能产生可复核的原始响应引用或响应摘要；不能时将其列为真实来源证据缺口。
+- [ ] 完成 Evidence 原始字段与响应摘要的保留期限、清理审计和授权策略映射。
+- [ ] 以目标 MariaDB 版本执行 JSON/复合外键 DDL 验证，并用实际 PIT 查询执行 EXPLAIN。
+- [ ] 完成正式 Schema 2.0.0、消费者确认和 DEC 前不实施 Migration/业务代码。
