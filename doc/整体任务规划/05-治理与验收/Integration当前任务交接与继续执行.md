@@ -1041,3 +1041,15 @@ Researchflow 已有 Scheduler、Worker、WorkerPool、Claim/Lease/Fencing、候�
 **下一项实施任务：** 落地 News 搜索发现 Stage 的领域输出契约与真实 Adapter，并在 Server 组合边界装配现有 Platform ProviderSet；完成后再接入 Researchflow Registry。暂不装配完整 Worker 生命周期，不创建无真实业务意义的模板，不触碰 Research Evidence 导入、`available_at`、Quant 或 Notification。
 
 本轮结论是选型审查完成，不代表 Stage Provider 已实现或生产可用。
+
+
+### 2026-11-16 News 搜索发现 Stage 输出契约与适配层
+
+- 本轮基于 integration HEAD `4e80d5ccf4e5a89bf5fe9a6e40224675f5306ab0` 开始实施第一个真实业务 Stage；未重复研究 Researchflow Envelope、Registry、Worker 原子提交等已验收通用框架。
+- 新增 News-owned `internal/news/stage` 适配层：复用既有 `app.SearchCandidates`，将 `SearchResult` 映射为版本化 JSON Payload / QualitySummary；News 不导入 Researchflow，避免反向模块依赖。
+- Stage Code / Output Type 均为 `news.search_candidates`，Schema Version 为 `1.0.0`。输入沿用 SearchRequest 的 `query`、`query_dimension`、`limit`；参数 Schema 不暴露 Provider endpoint 或 API Key。
+- Payload 保留 Candidate 全部现有语义字段、Provider provenance、原始发布时间、可解析发布时间、ObservedAt、MissingFields，以及每个 Provider 的状态、错误码、Retryable、候选数量、耗时纳秒和观察时间。没有增加来源推断字段。
+- QualitySummary 只包含可直接统计的搜索状态、Provider 状态数量、候选数量和 MissingFields 计数；不定义全局 quality_status，不把候选升级为 Research Evidence。
+- 对 Provider 未配置/全部 skipped，Payload 保留 `status=skipped` 和原始 failure_code；禁止映射成 empty 或成功 Stage。Server StageExecutor 必须将该状态映射为非成功执行结果，不能提交成功 Output。
+- 已新增参数/Payload/QualitySummary Schema 及 Payload Golden，适配层单测与强类型 JSON Validator。下一步先由精确 SHA 的 Integration CI 反馈修复真实问题，再在 Server 组合根使用现有 Platform HTTP Client 构造 ProviderSet、构造 Registry Entry（引用 News 自有 Validator），并实现 StageExecutor 状态映射。只有 Registry 与 ProviderSet 均真实装配后，才进入 Worker 消费链。
+- 当前不触碰 Research Evidence Import、available_at、Quant、Notification；不创建无消费端的 Workflow Template，不启动空壳 Worker 生命周期。

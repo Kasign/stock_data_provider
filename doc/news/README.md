@@ -1153,3 +1153,13 @@
 - .env.example 只提供注释示例，不包含可用密钥。
 - 新增测试覆盖未配置、成功双 Key 加载、防御性副本、配置不完整、JSON 非法、Active Key 缺失、短密钥、非法 Key ID、Key 数量超限及错误信息不泄露密钥。
 - Integration Run 43364123334 对代码 SHA 19394e8 的配置解析验收通过；Run 43561072301 对代码 SHA b0aabaa 的 A 组跨模块 MariaDB 验收进一步覆盖旧 Key 轮换验签及 Importer fail-closed 零落库。两者均不代表 Research Evidence 成功写入；B 组继续等待可证明的 available_at 来源证据。
+
+
+## 2026-11-16 News 搜索发现 Stage 输出契约
+
+- 新增 Stage Code / Output Type：`news.search_candidates`；输入沿用现有 `SearchRequest` 的 `query`、`query_dimension`、`limit`，不新增业务参数语义。
+- 新增版本化参数、Payload、QualitySummary JSON Schema 1.0.0 与 Payload/QualitySummary Golden。Payload 映射既有 `SearchResult`、`Candidate`、`ProviderOutcome`；Provider duration 使用整数纳秒，所有时间按 RFC3339 UTC 输出，原始发布时间文本与解析时间分别保留。
+- 新增 `internal/news/stage` 适配层，调用既有 `app.SearchCandidates`，输出 Researchflow 可消费的 Payload / QualitySummary JSON；News 不依赖 Researchflow，后续由 Server 组合根负责转换为 `stageoutput.ProviderResult`。
+- QualitySummary 只统计搜索状态、Provider 各状态数量、候选数量和既有 MissingFields 计数，不引入全局 quality_status，不判断候选是否为 Evidence 或已验证事实。
+- `skipped`（包括没有配置 Provider）保留为独立搜索状态，不能映射为普通 empty 或 Stage 成功；Stage Executor 必须在 Server 层将其映射为非成功执行结果。Provider partial / failed 状态保留原始 Outcome。
+- 本项不装配 Worker 生命周期、不创建 Workflow Template、不写 Research Evidence、不解除 available_at 来源准入搁置状态。Registry Entry 待 Server 侧接入并完成精确 Schema Validator 注册后再启用。
