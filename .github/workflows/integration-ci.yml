@@ -125,9 +125,16 @@ jobs:
               exit 1
             fi
           done
-          # A 组七个真实 MariaDB 子测试逐一要求 PASS，路径必须完整匹配。
-          for case_name in composition_and_schema authorized_read_and_fail_closed_import pit_invisible context_cancelled list_evidence_page_uses_current_authorization fingerprint_tamper_rejected current_policy_version_change_rejected; do
+          # read_chain_and_fail_closed_import 内的五个子测试逐一要求 PASS。
+          for case_name in composition_and_schema authorized_read_and_fail_closed_import pit_invisible context_cancelled list_evidence_page_uses_current_authorization; do
             if ! grep -Eq "^[[:space:]]*--- PASS: TestNewsResearchMariaDBIntegration/read_chain_and_fail_closed_import/${case_name} \\(" /tmp/news_research_verbose.log; then
+              echo "::error::A 组子测试 ${case_name} 缺少精确 PASS 记录"
+              exit 1
+            fi
+          done
+          # 指纹篡改与策略版本变化是 MariaDB 集成测试的根级子测试，不属于 read_chain 分组。
+          for case_name in fingerprint_tamper_rejected current_policy_version_change_rejected; do
+            if ! grep -Eq "^[[:space:]]*--- PASS: TestNewsResearchMariaDBIntegration/${case_name} \\(" /tmp/news_research_verbose.log; then
               echo "::error::A 组子测试 ${case_name} 缺少精确 PASS 记录"
               exit 1
             fi
