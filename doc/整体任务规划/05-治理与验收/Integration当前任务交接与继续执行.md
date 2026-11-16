@@ -782,8 +782,17 @@ Researchflow 已有 Scheduler、Worker、WorkerPool、Claim/Lease/Fencing、候�
 
 1. 定点完成 Evidence / Decision Domain 与 DDL：按 1.10～1.15 现有设计，解决 JSON 列校验、版本/Observation 同主体约束、decision_seq 串行化、复合外键、留存清理联动、目标 MariaDB 版本和秒级 available_at / 微秒系统时间边界。
 2. 实现 News Migration / Repository / PIT 查询还原与 DTO 传递；所有无 verified 决策、证据清理、授权过期/撤销和冲突情况均返回 NULL。
-3. Research News Adapter 增加 available_at 整秒校验，保留现有缺失/未来值拒绝和零落库门禁。
+3. [x] Research News Adapter 已增加 available_at 整秒、available_at 不晚于 system_observed_at 的校验；Importer 和 Authorizer 均 fail-closed，新增测试覆盖亚秒和时间顺序冲突。
 4. 新增 News / Research MariaDB 真实集成测试；不重复 A 组已通过用例。
 5. 来源准入仍是独立 blocked/shelved 项；只有真实字段语义、授权、版本绑定及留存证据齐备后，才允许 Provider 映射和 B 组成功路径。
 
 下次继续前先查询 integration 最新 HEAD/Actions，再按本节任务推进；本节优先于本文此前“当前没有可推进 Integration 业务领域开发任务”的旧快照。
+
+
+### 2026-11-16 Research 消费门禁首批实现
+
+- 已在 `internal/research/adapters/news/evidence.go` 增加 News `available_at` 整秒校验，以及 `available_at <= system_observed_at <= system_as_of` 顺序校验。
+- Importer 不合格时不调用 Research AddEvidence；Authorizer 重新查询 News 后也执行同样约束，避免已存 Evidence 被异常精度/顺序绕过。
+- `internal/research/adapters/news/evidence_test.go` 新增亚秒和 available_at 晚于 system_observed_at 的拒绝用例。
+- 此项不修改 News 的现有 NULL 输出，不产生任何真实来源 available_at；B 组仍保持 shelved。
+- 本轮第二批代码提交及 CI 状态以后续精确 SHA/Run 为准。

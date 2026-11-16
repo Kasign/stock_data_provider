@@ -1033,3 +1033,11 @@ Evidence 表最小必要字段调整为：
 ### 1.16.3 当前执行结论
 
 内部实现已获授权，不再因“尚无合格 Provider”而阻止来源无关代码开发。来源事实和持久化授权仍是非空值写入及 B 组成功验收的独立门禁。后续按上述未完成项推进，不重复普通网页样本调查。
+
+
+### 2026-11-16 首批 Research 消费门禁实现补充
+
+- [x] Research News Adapter 的 Importer 只接受整秒 UTC `available_at`；非零纳秒、晚于系统首次观察时间或晚于 `system_as_of` 均返回 `ErrEvidenceNotPITSafe`，不调用 Research AddEvidence。
+- [x] Research News Authorizer 对当前 News 复核结果和已存 Evidence 同样执行整秒与 `available_at <= system_observed_at` 校验；不匹配或不满足时 fail-closed。
+- [x] 测试新增亚秒值、available_at 晚于 system_observed_at 的拒绝用例；缺失/未来值零落库测试继续保留。
+- 该改动只强化消费边界，不生成 News 的非空 available_at，不改变 News 1.0.0 Schema/Golden，也不解除 B 组来源门禁。

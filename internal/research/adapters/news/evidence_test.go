@@ -94,7 +94,7 @@ func TestImporterMapsAuthorizedPITNewsRecordToResearchEvidence(t *testing.T) {
 	}
 }
 
-func TestImporterRejectsMissingOrFutureAvailableAtWithoutPersisting(t *testing.T) {
+func TestImporterRejectsMissingFutureAndSubsecondAvailableAtWithoutPersisting(t *testing.T) {
 	asOf := time.Date(2026, 11, 12, 1, 0, 0, 0, time.UTC)
 	tests := []struct {
 		name   string
@@ -103,6 +103,11 @@ func TestImporterRejectsMissingOrFutureAvailableAtWithoutPersisting(t *testing.T
 	}{
 		{"missing available_at", func(r *newsapp.ResearchEvidenceRecord) { r.AvailableAt = nil }, ErrEvidenceNotPITSafe},
 		{"future available_at", func(r *newsapp.ResearchEvidenceRecord) { future := asOf.Add(time.Second); r.AvailableAt = &future }, ErrEvidenceNotPITSafe},
+		{"subsecond available_at", func(r *newsapp.ResearchEvidenceRecord) { value := asOf.Add(-time.Hour).Add(250 * time.Millisecond); r.AvailableAt = &value }, ErrEvidenceNotPITSafe},
+		{"available_at after observation", func(r *newsapp.ResearchEvidenceRecord) {
+			value := r.SystemObservedAt.Add(time.Second)
+			r.AvailableAt = &value
+		}, ErrEvidenceNotPITSafe},
 		{"denied", func(r *newsapp.ResearchEvidenceRecord) { r.AuthorizationStatus = "denied" }, ErrEvidenceNotAuthorized},
 		{"wrong cutoff", func(r *newsapp.ResearchEvidenceRecord) { r.SystemAsOf = asOf.Add(-time.Second) }, ErrEvidenceNotPITSafe},
 	}
@@ -152,5 +157,12 @@ func TestAuthorizerRechecksCurrentNewsAuthorizationAndExactVersion(t *testing.T)
 	query.record.AuthorizationStatus = "denied"
 	if err := authorizer.AuthorizeEvidence(context.Background(), "service:researchflow", researchevidence.PurposeResearchAnalysis, value); err == nil {
 		t.Fatal("denied current authorization must fail closed")
+	}
+
+	query.record = validNewsRecord(asOf)
+	subsecond := available.Add(250 * time.Millisecond)
+	value.AvailableAt = &subsecond
+	if err := authorizer.AuthorizeEvidence(context.Background(), "service:researchflow", researchevidence.PurposeResearchAnalysis, value); err == nil {
+		t.Fatal("subsecond News available_at must fail closed")
 	}
 }

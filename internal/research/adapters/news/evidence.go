@@ -124,6 +124,8 @@ func (a *Authorizer) AuthorizeEvidence(ctx context.Context, callerRef string, pu
 		record.SystemAsOf.IsZero() || !record.SystemAsOf.Equal(value.SystemAsOf) ||
 		record.SystemObservedAt.IsZero() || !record.SystemObservedAt.Equal(value.SystemObservedAt) ||
 		record.AvailableAt == nil || value.AvailableAt == nil ||
+		record.AvailableAt.Nanosecond() != 0 || value.AvailableAt.Nanosecond() != 0 ||
+		record.AvailableAt.After(record.SystemObservedAt) || value.AvailableAt.After(value.SystemObservedAt) ||
 		!record.AvailableAt.Equal(*value.AvailableAt) ||
 		string(record.ContentLevel) != string(value.ContentLevel) {
 		return researchapp.NewAuthorizationError(researchapp.AuthorizationDenied, ErrEvidenceNotAuthorized)
@@ -150,7 +152,8 @@ func mapNewsEvidence(record newsapp.ResearchEvidenceRecord, request ImportReques
 		return researchapp.EvidenceDraft{}, ErrEvidenceNotPITSafe
 	}
 	if record.AvailableAt == nil || record.AvailableAt.IsZero() ||
-		!isUTC(*record.AvailableAt) || record.AvailableAt.After(request.SystemAsOf) {
+		!isUTC(*record.AvailableAt) || record.AvailableAt.Nanosecond() != 0 ||
+		record.AvailableAt.After(record.SystemObservedAt) || record.AvailableAt.After(request.SystemAsOf) {
 		return researchapp.EvidenceDraft{}, ErrEvidenceNotPITSafe
 	}
 	if record.PublishedAt != nil && (record.PublishedAt.IsZero() || !isUTC(*record.PublishedAt)) {
