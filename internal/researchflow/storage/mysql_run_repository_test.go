@@ -513,7 +513,8 @@ func TestMariaDBWorkerStoreSnapshotClaimAndCommit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadStageExecutionSnapshot: %v", err)
 	}
-	if snapshot.Run.Ref != runRef || snapshot.Run.Status != domain.RunRunning ||
+	if snapshot.AuthenticatedCallerRef != "researchflow-worker-integration-test" ||
+		snapshot.Run.Ref != runRef || snapshot.Run.Status != domain.RunRunning ||
 		snapshot.Stage.Ref != stageRef || snapshot.Stage.Status != domain.StageRunning ||
 		snapshot.Stage.AttemptNo != attempt.Number ||
 		string(snapshot.Parameters) != `{"symbol":"AAA"}` ||

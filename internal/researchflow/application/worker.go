@@ -19,11 +19,12 @@ var (
 )
 
 type StageExecutionSnapshot struct {
-	Run               domain.Run
-	Stage             domain.Stage
-	Parameters        []byte
-	InputSnapshotRefs []string
-	RetryPolicy       template.RetryPolicy
+	Run                    domain.Run
+	Stage                  domain.Stage
+	AuthenticatedCallerRef string
+	Parameters             []byte
+	InputSnapshotRefs      []string
+	RetryPolicy            template.RetryPolicy
 }
 
 type WorkerResultCommit struct {
@@ -126,7 +127,8 @@ func (w *Worker) Execute(ctx context.Context, runRef, stageRef, attemptRef strin
 		return WorkerExecution{}, fmt.Errorf("load Researchflow retry policy snapshot: %w", err)
 	}
 	if policySnapshot.Run.Ref != runRef || policySnapshot.Stage.Ref != stageRef ||
-		policySnapshot.Stage.RunRef != runRef || policySnapshot.RetryPolicy.MaxAttempts <= 0 {
+		policySnapshot.Stage.RunRef != runRef || policySnapshot.RetryPolicy.MaxAttempts <= 0 ||
+		strings.TrimSpace(policySnapshot.AuthenticatedCallerRef) == "" {
 		return WorkerExecution{}, errors.New("Researchflow retry policy snapshot is inconsistent")
 	}
 	attempt, replayed, err := w.store.ClaimAttempt(ctx, runRef, stageRef, attemptRef, w.config.WorkerID,
@@ -146,6 +148,8 @@ func (w *Worker) Execute(ctx context.Context, runRef, stageRef, attemptRef strin
 		snapshot.Stage.RunRef != runRef || snapshot.Stage.Status != domain.StageRunning ||
 		snapshot.Stage.AttemptNo != attempt.Number || snapshot.Run.Status != domain.RunRunning ||
 		snapshot.Run.DeadlineAt.IsZero() || snapshot.RetryPolicy.AttemptTimeoutMS <= 0 ||
+		snapshot.AuthenticatedCallerRef != policySnapshot.AuthenticatedCallerRef ||
+		strings.TrimSpace(snapshot.AuthenticatedCallerRef) == "" ||
 		!reflect.DeepEqual(snapshot.RetryPolicy, policySnapshot.RetryPolicy) {
 		return WorkerExecution{Attempt: attempt}, errors.New("Researchflow execution snapshot is inconsistent with claimed Attempt")
 	}
@@ -190,6 +194,7 @@ func (w *Worker) Execute(ctx context.Context, runRef, stageRef, attemptRef strin
 
 	request := StageExecutionRequest{
 		Run: snapshot.Run, Stage: snapshot.Stage, Attempt: attempt,
+		AuthenticatedCallerRef: snapshot.AuthenticatedCallerRef,
 		Parameters:        append([]byte(nil), snapshot.Parameters...),
 		InputSnapshotRefs: append([]string(nil), snapshot.InputSnapshotRefs...),
 		SystemAsOf:        snapshot.Run.SystemAsOf, DeadlineAt: snapshot.Run.DeadlineAt,

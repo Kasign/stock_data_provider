@@ -14,6 +14,7 @@ import (
 type workerStoreFake struct {
 	attempt     domain.Attempt
 	snapshot    StageExecutionSnapshot
+	claims      int
 	claimReplay bool
 	renewErr    error
 	commit      WorkerResultCommit
@@ -24,6 +25,7 @@ type workerStoreFake struct {
 }
 
 func (f *workerStoreFake) ClaimAttempt(context.Context, string, string, string, string, time.Duration, int, int) (domain.Attempt, bool, error) {
+	f.claims++
 	return f.attempt, f.claimReplay, nil
 }
 func (f *workerStoreFake) LoadStageExecutionSnapshot(context.Context, string, string) (StageExecutionSnapshot, error) {
@@ -52,8 +54,9 @@ func (f workerFaultNormalizerFake) NormalizeExecutionError(context.Context, erro
 }
 
 type workerExecutorFake struct {
-	result StageExecutionResult
-	err    error
+	result   StageExecutionResult
+	err      error
+	captured *StageExecutionRequest
 }
 
 type blockingWorkerExecutor struct {
@@ -74,7 +77,10 @@ func (timeoutWorkerExecutor) ExecuteStage(ctx context.Context, _ StageExecutionR
 	return StageExecutionResult{}, ctx.Err()
 }
 
-func (f workerExecutorFake) ExecuteStage(context.Context, StageExecutionRequest) (StageExecutionResult, error) {
+func (f workerExecutorFake) ExecuteStage(_ context.Context, request StageExecutionRequest) (StageExecutionResult, error) {
+	if f.captured != nil {
+		*f.captured = request
+	}
 	return f.result, f.err
 }
 
@@ -87,7 +93,7 @@ func newWorkerFixture() (*workerStoreFake, StageExecutionResult) {
 	store := &workerStoreFake{
 		attempt: attempt,
 		snapshot: StageExecutionSnapshot{
-			Run: run, Stage: stage, Parameters: []byte(`{"symbol":"AAA"}`),
+			Run: run, Stage: stage, AuthenticatedCallerRef: "caller-1", Parameters: []byte(`{"symbol":"AAA"}`),
 			RetryPolicy: template.RetryPolicy{
 				Ref: "retry-v1", MaxAttempts: 3,
 				RetryableReasonCodes: []string{"provider_unavailable"},
@@ -160,7 +166,15 @@ func TestWorkerFailsClosedWhenDatabaseClockUnavailable(t *testing.T) {
 
 func TestWorkerExecuteClaimsExecutesAndCommits(t *testing.T) {
 	store, result := newWorkerFixture()
-	got, err := newWorker(t, store, result).Execute(context.Background(), "run-1", "stage-1", "attempt-new")
+	captured := &StageExecutionRequest{}
+	executor := workerExecutorFake{result: result, captured: captured}
+	worker, err := NewWorker(store, executor, workerClockFake{}, WorkerConfig{
+		WorkerID: "worker-1", LeaseDuration: time.Minute, HeartbeatInterval: time.Second, MaxParallel: 2,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := worker.Execute(context.Background(), "run-1", "stage-1", "attempt-new")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -169,6 +183,21 @@ func TestWorkerExecuteClaimsExecutesAndCommits(t *testing.T) {
 	}
 	if store.commit.Stage.Version != 4 || store.commit.Stage.Status != domain.StageSucceeded || store.commit.FencingToken != 7 {
 		t.Fatalf("unexpected commit: %+v", store.commit)
+	}
+	if captured.AuthenticatedCallerRef != "caller-1" {
+		t.Fatalf("StageExecutor caller_ref = %q, want trusted persisted caller_ref", captured.AuthenticatedCallerRef)
+	}
+}
+
+func TestWorkerRejectsMissingAuthenticatedCallerBeforeClaim(t *testing.T) {
+	store, result := newWorkerFixture()
+	store.snapshot.AuthenticatedCallerRef = ""
+	worker := newWorker(t, store, result)
+	if _, err := worker.Execute(context.Background(), "run-1", "stage-1", "attempt-new"); err == nil {
+		t.Fatal("Worker must reject a Run without authenticated caller identity")
+	}
+	if store.claims != 0 || store.commits != 0 {
+		t.Fatalf("missing caller identity must fail before claim: claims=%d commits=%d", store.claims, store.commits)
 	}
 }
 func TestWorkerDoesNotExecuteReplayedClaim(t *testing.T) {

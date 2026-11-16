@@ -171,5 +171,13 @@ func Migrations() []platformstorage.Migration {
 				`INSERT INTO researchflow_capacity_guard (guard_id) VALUES (1)`,
 			},
 		},
+		{
+			Version:     5,
+			Description: "enforce one CreateRun identity record per Run",
+			Statements: []string{
+				`ALTER TABLE researchflow_run_idempotency
+					ADD UNIQUE KEY uq_researchflow_idempotency_run (run_ref)`,
+			},
+		},
 	}
 }

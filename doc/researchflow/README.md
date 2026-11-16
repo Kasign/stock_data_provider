@@ -47,3 +47,11 @@ Server 在 integration 已接入 Researchflow → Notification Outbox Relay。Ru
 Integration 侧已完成 Researchflow Stage 接入的契约与代码准入盘点，判定 **`blocked`（非 `fail`）**：FLOW-CTR-004 的 Stage Provider Result 只有字段表、无权威 Output Registry 与 Envelope Schema；`StageExecutor` 在 `internal/researchflow/application/executor.go:47-49` 只有接口、生产实现为零；`WorkflowTemplate.OutputRegistryVersion` 只是字符串字段；Quant 侧 `DecodePayload` 仅注册 `trend/1.0.0` / `risk/1.0.0`。本轮未改动本模块任何代码或进度表，也未新增 Stage Code / 输出 Schema / 空壳 Executor。
 
 模块自身能力（状态机、Scheduler、WorkerPool、MariaDB 验收）保持本文前述记录，不重复验收。解锁所需的冻结契约、`stage_code + template_version + output_registry_version` 三元组、生产 Provider 与跨模块端到端验收条件，以及下一轮起点，统一以 [Integration 当前任务交接与继续执行](../整体任务规划/05-治理与验收/Integration当前任务交接与继续执行.md) 第 6 节为准。
+
+## 2026-11-16 可信 CallerRef 执行期传播
+
+Researchflow CreateRun 从可信 RequestIdentity 取得 authenticated caller，并将其写入唯一幂等记录。此前 Worker 的执行快照没有读取该身份，StageExecutionRequest 也未向生产 Provider 传递，导致下游模块无法获得创建 Run 时的可信调用主体。
+
+本次在 Migration v5 为 `researchflow_run_idempotency.run_ref` 增加唯一约束；Worker 在同一 Repeatable Read 快照中从 `operation=CreateRun` 的幂等记录读取 caller_ref，并在 claim 前拒绝缺失身份。Worker 第二次读取执行快照时复核身份未变化，再由 Orchestrator 注入 StageExecutionRequest.AuthenticatedCallerRef。该字段仅供内部 Application Port 使用，不进入 Run/Stage/Attempt 公共 DTO，也不接受 Provider 或客户端覆盖。
+
+按项目级决议，生产 Server RequestIdentity 应注入固定服务主体 `service:researchflow`；本次只完成 Worker → StageExecutor 的进程内传递，不代表 Server 生产身份装配或远程认证传输已完成。Provider 仍须按自身 Owner 授权规则校验，不得把 CallerRef 当作 AuthorizationRef 或 Bearer Token。MariaDB 集成用例已增加真实身份读取断言；新提交的 CI 验收结果待记录。

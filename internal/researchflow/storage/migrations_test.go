@@ -10,8 +10,8 @@ func TestMigrationsAreExplicitAndVersioned(t *testing.T) {
 		t.Fatalf("MigrationNamespace = %q, want researchflow", MigrationNamespace)
 	}
 	migrations := Migrations()
-	if len(migrations) != 4 || migrations[0].Version != 1 || migrations[1].Version != 2 || migrations[2].Version != 3 || migrations[3].Version != 4 {
-		t.Fatalf("expected ordered migrations v1, v2, v3 and v4, got %+v", migrations)
+	if len(migrations) != 5 || migrations[0].Version != 1 || migrations[1].Version != 2 || migrations[2].Version != 3 || migrations[3].Version != 4 || migrations[4].Version != 5 {
+		t.Fatalf("expected ordered migrations v1 through v5, got %+v", migrations)
 	}
 	migration := migrations[0]
 	if migration.Description == "" || len(migration.Statements) != 6 {
@@ -50,6 +50,11 @@ func TestMigrationsAreExplicitAndVersioned(t *testing.T) {
 		!strings.Contains(capacityMigration.Statements[0], "CREATE TABLE researchflow_capacity_guard") ||
 		!strings.Contains(capacityMigration.Statements[1], "VALUES (1)") {
 		t.Fatalf("global capacity guard migration is incomplete: %+v", capacityMigration)
+	}
+	callerMigration := migrations[4]
+	if callerMigration.Description == "" || len(callerMigration.Statements) != 1 ||
+		!strings.Contains(callerMigration.Statements[0], "ADD UNIQUE KEY uq_researchflow_idempotency_run (run_ref)") {
+		t.Fatalf("Run caller identity uniqueness migration is incomplete: %+v", callerMigration)
 	}
 
 	joined := strings.Join(migration.Statements, "\n")

@@ -15,10 +15,11 @@ import (
 // Researchflow Worker. Provider implementations must treat its references,
 // timestamps and snapshots as authoritative and must not mutate them.
 type StageExecutionRequest struct {
-	Run               domain.Run
-	Stage             domain.Stage
-	Attempt           domain.Attempt
-	Parameters        json.RawMessage
+	Run                    domain.Run
+	Stage                  domain.Stage
+	Attempt                domain.Attempt
+	AuthenticatedCallerRef string
+	Parameters             json.RawMessage
 	InputSnapshotRefs []string
 	SystemAsOf        time.Time
 	DeadlineAt        time.Time

@@ -184,7 +184,7 @@ Researchflow 已有 Scheduler、Worker、WorkerPool、Claim/Lease/Fencing、候�
 |---|---|---|
 | Stage 输入/输出 | **部分满足** | 已具备：`FLOW-CTR-001` 冻结 Run/Stage/Attempt 1.0.0 Schema/Golden；`03-CONTRACT-006与007最终决议.md:159-171` 有 Stage Provider Result Envelope **字段表**；`04-ApplicationPort与运行时契约落地补充.md:53` 要求强类型 payload。缺口：登记簿第 58 行「只有字段表，**无权威 Schema/Output Registry**，Stage Provider Result Envelope Schema 未登记」；`doc/researchflow/schema/stage-1.0.0.schema.json:7-25` 只有不透明 `output_ref`，无 input / payload / output_type；`04-...补充.md:101`「Output Registry 目前只固定版本引用，尚未验证 Provider 的 output_type/schema_version」 |
 | Registry 版本 | **部分满足** | 已具备：Template Registry 精确 `Ref + Version` 查询、禁止 latest / 别名回退、指纹复算、insert-only 发布（`04-...补充.md:428-441`）；`WorkflowTemplate` 保留 `output_registry_version` 字段。缺口：`doc/server/README.md:1737/1805`「未发现可供 Server 装配的完整 Researchflow Output Registry 实例/注册清单」；`internal/researchflow/template/template.go:58` 只有字符串字段，无版本常量、无注册函数、无条目；代码中的 `outputs-v1/v3/v7` 全是测试夹具，不是冻结版本 |
-| 可信 CallerRef | **契约定义层满足，运行时绑定有 L2 缺口** | 已具备：`项目级契约决策记录.md:559` 定义 MVP 直接调用主体为 Researchflow service Principal，Golden 值 `service:researchflow`；`NEWS-CTR-002` Golden 第 3 行 `caller_ref` 与第 51 行 `subject_ref=caller_ref`；`04-...补充.md:24`、`新闻来源授权矩阵.md:121` 要求由可信认证 Context 注入、禁止请求体自报；多处 fail-closed 校验（`internal/researchflow/application/create_run.go:107-110`、`cancel_run.go:68-77`、`internal/news/domain/authorization.go:167`）。缺口：登记簿第 44 行「远程可信 caller 传递机制未定义」、第 57 行「可信 caller/correlation 与各下游 Adapter 字段映射未形成单一权威 Schema/Port 契约」；生产代码中 `service:researchflow` **零出现**，仅见于测试常量与 Golden，不是配置项 |
+| 可信 CallerRef | **Worker → StageExecutor 内部传播已实现；Server 生产身份注入仍待接入** | 已具备：CreateRun 通过可信 RequestIdentity 形成 caller-scoped 幂等记录；Migration v5 将 run_ref 唯一绑定到一条 CreateRun 身份记录；Worker Store 在 Repeatable Read 快照读取该 caller_ref，Worker 在 claim 前 fail-closed、claim 后复核一致，并注入 StageExecutionRequest.AuthenticatedCallerRef。该字段不进入公共 DTO。仍缺：Server 生产 RequestIdentity 装配必须注入决议要求的 `service:researchflow`；若未来改为跨进程 Provider 调用，必须另行定义认证传输，不能把内部字段直接当远程可信凭据。 |
 | 生产 Provider | **未满足** | `internal/researchflow/application/executor.go:47-49` 的 `StageExecutor` **只有接口**，全仓生产实现为零（`ExecuteStage` 实现仅 `worker_test.go` 三个 fake）；`internal/researchflow/resultvalidation/quant.go:70-97` 的 Registry 生产注册表为空；`internal/quant/result/envelope.go:201-221` 的 `DecodePayload` 只接受 `trend/1.0.0`、`risk/1.0.0`，`indicator`/`factor` fail-closed；`internal/server/bootstrap/bootstrap.go:176-183/233-235/432` 只装配 News→Research 组合、Outbox Relay 与 Migration，无任何 Scheduler / Worker / WorkerPool / StageExecutor 生产构造；`doc/researchflow/README.md:32` 明确 StageExecutor 是注入端口、生产 Adapter 未闭环 |
 
 ### 6.3 真实代码事实（避免下次重新盘一遍）
@@ -929,3 +929,17 @@ Researchflow 已有 Scheduler、Worker、WorkerPool、Claim/Lease/Fencing、候�
 - 当前阶段内部写入授权边界验收完成；不代表任何真实来源已准入。没有获准来源前，不生成生产 Evidence，不创建 verified Decision，B 组保持 SKIP。
 
 **下一项主线：** 来源准入仍是唯一阻塞生产 Evidence 的条件。等待官方/授权服务提供字段语义、逐公告版本绑定、可审计真实响应，以及个人用途的程序化访问、持久化与再利用许可；一旦具备这些证据，再按 Adapter 逐来源接入 `RecordAvailabilityEvidence`。不重复采样已 blocked 的公开页面，不调用非公开接口。
+
+
+### 2026-11-16 Researchflow 可信 CallerRef 执行期传播
+
+**发现并修复的真实 L2 缺口：** CreateRun 已从可信 RequestIdentity 获取 caller_ref，并持久化在 `researchflow_run_idempotency`；但 Worker 的执行快照此前没有读取该身份，`StageExecutionRequest` 也未传递 caller_ref。下游 Provider 因此无法获得创建 Run 时的可信调用主体。这是 Researchflow 使用方/编排方未履行运行时传播责任，不应要求 Provider 自行从普通 Header 或请求参数推断身份。
+
+- Researchflow Migration v5 为 `researchflow_run_idempotency.run_ref` 增加唯一约束，保证每个 Run 只有一条 CreateRun 身份记录；已有重复 run_ref 数据会使迁移失败并要求先核实，不自动合并或覆盖身份。
+- Worker Store 在 Repeatable Read 执行快照中关联 CreateRun 幂等记录读取 caller_ref；无身份时 fail-closed。
+- Worker 在 ClaimAttempt 前校验身份存在，claim 后第二次读取时确认身份未变化，再注入内部 `StageExecutionRequest.AuthenticatedCallerRef`。字段不进入公共 DTO，不由 Provider 提供。
+- 按项目级决议，Server 生产 RequestIdentity 仍须注入固定服务主体 `service:researchflow`；本次实现只完成 Worker → StageExecutor 的进程内传递，不宣称 Server 生产身份装配或远程认证传输已完成。
+- Provider 侧职责：消费可信 caller_ref，并调用自身 Owner 授权 Port；CallerRef 不是 AuthorizationRef/Bearer Token。
+- 已补 Worker 单测及现有 MariaDB WorkerStore 集成断言；新 SHA 的全量 CI / MariaDB 11.4 执行结果待记录。
+
+**卡点重判：** Worker → StageExecutor 的 CallerRef 传播不再是外部阻塞，属于 Researchflow 自身缺口，现已实现。Server 生产 RequestIdentity 装配仍归 Server；Stage Provider 的实际 Application Port、输出 Schema 和领域语义仍归对应业务模块。不要把这项修复误报为生产 StageExecutor 或跨模块 E2E 已完成。
