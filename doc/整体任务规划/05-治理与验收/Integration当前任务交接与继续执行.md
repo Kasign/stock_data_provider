@@ -874,3 +874,16 @@ Researchflow 已有 Scheduler、Worker、WorkerPool、Claim/Lease/Fencing、候�
 - 有效 SQL 修复提交为 `d5da0853ae5cd5cd7f15094fa04b4d3028b5cce0`；测试提交为 `805e79159fe5e29e6919b06e8b42dfd995a19032`。`6595436` 曾产生截断 SQL 字符串，已从 `6ac0d43` 的完整文件恢复并修复；不得把该提交视为有效版本。
 - 当前查询 `d5da085` 的 Combined Status 与 PR workflow runs 均为空；CI 未验证，不能标记通过。
 - 下一项仍按本节原任务：检查并实现 Decision 追加写入的并发串行化/序号与 supersedes 连续性；不扩展到其他领域，不创建真实来源证据，不解除 B 组 SKIP。
+
+
+### 2026-11-16 Decision 追加写入事务串行化已实现
+
+- `MySQLRepository.AppendAvailabilityDecision` 已在 `internal/news/adapters/storage/mysql_repository.go` 实现。
+- 每次追加先锁定目标 `news_item_versions` 行，再读取当前最新 Decision；同一 Version 的首写和后续写入均被串行化，不依赖“锁定空 Decision 集合”。
+- 序列规则：首条必须 `decision_seq=1` 且无 supersedes；后续必须为最新序号加一、supersedes 精确指向最新 Decision，`recorded_at` 不得早于前序记录。
+- 在同一事务内校验全部 considered Evidence 均属于目标 Version；选中 Evidence 必须保持 parsed、候选时间存在、raw payload 未清理、Evidence 记录/观察时间不晚于 Decision，且 retention 覆盖 Decision 时间。相关 Evidence 行在检查期间加锁，防止并发清理改变选中证据状态。
+- 决策插入与校验同事务提交；数据库 V10 的唯一序号、唯一后继和复合外键继续作为最终约束。
+- MariaDB 集成测试覆盖并发首写（恰好一个成功、另一个序列冲突）、错误 supersedes、有效 seq 连续追加，以及 considered Evidence 不属于当前 Version 的拒绝路径。
+- 本次只实现内部 Decision 持久化；没有创建生产 Evidence、接入 Provider 或改变来源准入结论。`available_at` 仍按原规则 fail-closed，B 组 SKIP 不变。
+- 实现提交：`dc56115a4822301915109813000c9ce8694bb417`；测试相关提交：`bcff3b7319b36e30847d1c637bc8385cbfad0425`、`fa7ddeb12482aeca1dc311333deadd4d3a930cf1`、`e3d714c38bfce05fdf16246602df682d7c525893`、`1028abcac8a6dfab3e5f1dd71748b372ce888912`。
+- 本交接文档及 News 验收清单已同步。当前最新代码测试 SHA `1028abcac8a6dfab3e5f1dd71748b372ce888912` 尚无可见 CI status / workflow run；文档提交不代表 CI 通过。下一步仅核验该 SHA 的 CI 和 MariaDB 11.4 集成测试，依据真实失败修复；不另开旁支任务。
