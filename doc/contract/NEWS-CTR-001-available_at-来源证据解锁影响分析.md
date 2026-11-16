@@ -710,8 +710,9 @@ Evidence 表最小必要字段调整为：
 ### 1.15.2 来源精度与归一化规则
 
 - Evidence 必须保留原始时间文本、原始时区/偏移、字段路径和解析器版本；建议额外记录来源声明的时间精度分类（date / minute / second / subsecond），不得仅从数据库列类型反推来源精度。
-- 只有来源字段语义明确、包含明确时区且能精确落在整秒边界的时间，才可生成秒级候选值。
-- 仅日期、仅分钟、无时区本地时间继续不满足现行准入规则。
+- 秒级来源值须包含明确时区，按原始时间点转换 UTC。
+- 分钟级来源值须包含明确时区；为避免把分钟内尚未公开的时刻提前计入 PIT，候选值取该分钟的第 59 秒，并保留 minute 精度标记。
+- 仅日期、仅年月/年份、无时区本地时间不生成 PIT 候选值。
 - 若来源给出非零小数秒，不能静默截断或四舍五入为秒；在秒级契约下先记为 `unsupported_precision`，除非正式契约另行批准有来源语义依据的转换规则。
 - 原始字符串仍用于复核，不意味着系统必须把微秒/纳秒作为业务排序精度保存。
 
@@ -1002,3 +1003,33 @@ Evidence 表最小必要字段调整为：
 
 当前没有可直接用于本项目的合格字段或授权响应；不接入公司侧披露系统、不调用非公开接口、不新增 Provider/Migration，不修改 PIT SQL。后续只有取得授权数据产品的字段字典及逐公告真实响应，才能验证该事件是否可映射为 `available_at`。
 
+
+## 1.16 2026-11-16 项目负责人授权后的内部实现范围
+
+本节记录最新执行授权，优先于本文此前“来源准入/正式 DEC 前不允许任何代码实现”的历史门禁表述。项目负责人已明确授权在 `integration` 分支先行开发 News / Research 的来源无关内部链路，包括必要的 Migration、Repository、DTO、Adapter 和测试；本授权不等于来源准入通过，也不授权将任何当前 Provider 字段映射为有效 `available_at`。
+
+### 1.16.1 实施边界
+
+- 可以先实现来源无关的时间解析、精度归一化、证据与决策内部模型、NULL 安全传递、Research 消费校验及对应测试。
+- 保留两张追加式表作为结构基线：`news_version_availability_evidence` 与 `news_version_availability_decisions`；Evidence 绑定精确 `version_id` 和实际包含字段的 `observation_id`，来源/Endpoint/策略版本复用 Observation，不重复复制。
+- `available_at` 业务精度为 UTC 秒；系统观察/记录时间继续沿用现有系统时间精度。明确时区的秒级值直接转换；明确时区的分钟级值取分钟末秒并保留 minute 精度；日期/月/年、无时区值不产生候选；亚秒值标记 unsupported_precision，不静默截断或舍入。
+- Parser 的 `parsed` 只表示格式和时区可无歧义转换，不代表来源语义、授权、版本绑定或证据留存审核通过。
+- 当前 Bocha、Tavily、Brave、SearXNG、巨潮页面时间及上交所流程线索均不得映射为有效 `available_at`；不回填、不解除 B 组 SKIP，不将未经审核候选值用于 PIT 查询。
+- 不原地修改 NEWS-CTR-001 1.0.0 Schema/Golden。若公开字段语义/格式需要变化，仍须按契约治理流程发布新版本。
+- Evidence 持久化必须遵守 Source / Endpoint / Provider Output Policy 的字段级授权与留存约束；授权未覆盖时不得写入原始值、派生值、hash 或 evidence_ref。此限制不阻止先实现纯解析和拒绝路径。
+
+### 1.16.2 首批实现进度
+
+- [x] 新增 `internal/news/domain/availability_time.go`，保留原始值、来源时区/偏移、精度、解析状态、reason_code 和可选候选时间。
+- [x] 秒级 RFC3339 时间按明确偏移转换 UTC，候选值不包含小数秒。
+- [x] 分钟级 RFC3339 时间取分钟末秒作为保守候选值，并标记 minute 精度。
+- [x] 日期、年月、年份不生成候选；无时区时间保持 ambiguous；亚秒时间保持 unsupported_precision。
+- [x] 新增对应单元测试，覆盖 UTC 偏移、分钟末秒、低精度、缺时区、亚秒、无效值及原始值保留。
+- [ ] 将解析候选接入受控 Evidence 写入端口；必须等待字段级授权、Observation/Version 绑定和留存约束落实，且不得启用未准入来源映射。
+- [ ] 完成 Evidence / Decision Domain、Migration、Repository、按 system_as_of 还原和 Research 秒级消费校验。
+- [ ] 取得目标 MariaDB 版本并运行新增 Migration / Repository 真实集成测试。
+- [ ] 来源准入与正式公开契约升级仍单独跟踪；未通过前 B 组保持 shelved。
+
+### 1.16.3 当前执行结论
+
+内部实现已获授权，不再因“尚无合格 Provider”而阻止来源无关代码开发。来源事实和持久化授权仍是非空值写入及 B 组成功验收的独立门禁。后续按上述未完成项推进，不重复普通网页样本调查。

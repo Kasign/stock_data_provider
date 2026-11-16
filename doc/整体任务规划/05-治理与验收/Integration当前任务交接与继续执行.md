@@ -754,3 +754,36 @@ Researchflow 已有 Scheduler、Worker、WorkerPool、Claim/Lease/Fencing、候�
 
 当前没有可直接用于本项目的合格字段或授权响应；不接入公司侧披露系统、不调用非公开接口、不新增 Provider/Migration，不修改 PIT SQL。后续只有取得授权数据产品的字段字典及逐公告真实响应，才能验证该事件是否可映射为 `available_at`。
 
+
+
+## 2026-11-16 项目负责人新增授权：available_at 内部链路继续开发
+
+### 授权与范围
+
+项目负责人明确授权：在唯一工作分支 `integration` 直接实施 News / Research 的 `available_at` 内部链路，包括必要的 Migration、Repository、DTO、Adapter 和测试。此授权覆盖此前交接文档中“Integration 没有新的业务领域开发任务”的旧结论；本阶段不切分支、不合并分支。
+
+执行边界：
+- `available_at` 仍为某个具体内容版本首次向约定市场参与者公开可获取的时间，不允许由 `published_at`、`observed_at`、`fetched_at` 或抓取时间推导。
+- 业务精度为秒级；明确时区的分钟级值按分钟末秒保守归一化，并保留 minute 精度；日期/月/年、无时区和亚秒值不生成有效候选。
+- Parser 的 parsed 仅表示可解析，不表示来源语义、授权、版本绑定或留存审核通过。
+- 两张追加式表仍为结构基线：`news_version_availability_evidence` 与 `news_version_availability_decisions`。Evidence 绑定精确 Version 和实际 Observation，来源及策略元数据复用 Observation。
+- 不把现有任何 Provider 或 CNINFO / SSE 页面字段映射为有效 available_at；不回填、不解除 B 组 SKIP、不绕过 PIT fail-closed。
+- Evidence 原始值、派生值、hash/ref 的持久化必须服从字段级 Source / Endpoint / Provider Output Policy 授权和 retention。授权未覆盖时只允许实现解析/拒绝路径，不得持久化受限内容。
+- 不原地修改 NEWS-CTR-001 1.0.0 Schema/Golden；公开契约变更仍按版本治理。
+
+### 本轮首批代码
+
+- 新增 `internal/news/domain/availability_time.go` 和 `availability_time_test.go`。
+- 支持秒级 RFC3339、明确时区的分钟级保守末秒归一化；记录 raw value、时区/偏移、precision、status、reason_code。
+- 日期/月/年、无时区、亚秒、无效格式均 fail-closed，不产生候选时间。
+- 隔离 Go 测试通过；尚未运行仓库根模块全量测试或 MariaDB 集成，不能标记 CI passed。
+
+### 下一项明确任务
+
+1. 定点完成 Evidence / Decision Domain 与 DDL：按 1.10～1.15 现有设计，解决 JSON 列校验、版本/Observation 同主体约束、decision_seq 串行化、复合外键、留存清理联动、目标 MariaDB 版本和秒级 available_at / 微秒系统时间边界。
+2. 实现 News Migration / Repository / PIT 查询还原与 DTO 传递；所有无 verified 决策、证据清理、授权过期/撤销和冲突情况均返回 NULL。
+3. Research News Adapter 增加 available_at 整秒校验，保留现有缺失/未来值拒绝和零落库门禁。
+4. 新增 News / Research MariaDB 真实集成测试；不重复 A 组已通过用例。
+5. 来源准入仍是独立 blocked/shelved 项；只有真实字段语义、授权、版本绑定及留存证据齐备后，才允许 Provider 映射和 B 组成功路径。
+
+下次继续前先查询 integration 最新 HEAD/Actions，再按本节任务推进；本节优先于本文此前“当前没有可推进 Integration 业务领域开发任务”的旧快照。
