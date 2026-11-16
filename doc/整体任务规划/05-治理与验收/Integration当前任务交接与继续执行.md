@@ -943,3 +943,18 @@ Researchflow 已有 Scheduler、Worker、WorkerPool、Claim/Lease/Fencing、候�
 - 已补 Worker 单测及现有 MariaDB WorkerStore 集成断言；新 SHA 的全量 CI / MariaDB 11.4 执行结果待记录。
 
 **卡点重判：** Worker → StageExecutor 的 CallerRef 传播不再是外部阻塞，属于 Researchflow 自身缺口，现已实现。Server 生产 RequestIdentity 装配仍归 Server；Stage Provider 的实际 Application Port、输出 Schema 和领域语义仍归对应业务模块。不要把这项修复误报为生产 StageExecutor 或跨模块 E2E 已完成。
+
+### 2026-11-16 Researchflow CallerRef 传播验收与后续卡点重判
+
+- 当前 integration HEAD：`4c21ecfa84dc2bb349ae05c4b0d6c41c9fe1c110`。
+- Researchflow CallerRef 实现提交：`e34089a27f`，后续仅有字段格式整理提交；Integration CI Run [43827807352](https://github.com/Kasign/stock_data_provider/actions/runs/43827807352) 对精确 HEAD `4c21ecfa84dc2bb349ae05c4b0d6c41c9fe1c110` 全量 success。Run 包含根模块测试、News/Research MariaDB 跨模块测试、Worker Bootstrap MariaDB/Redis、go-core、Compose 与 WebUI 检查。
+- Worker Store 在执行快照中读取 CreateRun 身份，Worker 在 ClaimAttempt 前 fail-closed、Claim 后复核身份一致，并将 `AuthenticatedCallerRef` 传入 StageExecutor。该内部传播 L2 缺口已关闭，不再作为 Stage 准入阻塞项。
+- Server 生产 RequestIdentity 注入仍未实现，但当前没有 Researchflow CreateRun 的生产 HTTP/业务消费者；`SRV-CTR-001` 仍为 deferred。此时单独注入固定 `service:researchflow` 而没有实际 CreateRun 调用场景，只会形成未使用装配，不能宣称生产身份链路已通过。待正式 CreateRun 消费入口确定后，Server 必须从可信身份上下文构造 RequestIdentity；系统服务主体只用于明确由该服务发起的 Run，不得覆盖真实用户主体。
+- 重新划分真实阻塞：
+  1. Researchflow 负责 FLOW-CTR-004 的 Stage Provider Result Envelope、版本化 Stage Output Registry、Validator 装载与执行边界校验；这些是当前可独立推进的模块能力。
+  2. 质量状态枚举、coverage 的 scope/numerator/denominator、ResultSummary 资源身份/版本绑定需要补齐权威口径；未形成口径前不得猜测并写入 Schema/Golden。
+  3. 各领域 Provider 负责自己的 Application Port、Payload Schema/Golden、质量语义和真实执行能力。Quant Factor 仍受 DATA-CTR-005/007、QNT-CTR-003 deferred 阻断；不能据此阻断与 Factor 无关的其他 Stage。
+  4. Server 负责在前述 Registry/Provider/可信身份门禁具备后装配 Scheduler、WorkerPool、StageExecutor 和生命周期；当前不应创建空壳 Executor 或未被消费的身份适配器。
+  5. Notification 是终态事件后的异步投递链，不是同步 DAG Stage Provider；真实渠道未就绪不阻断 Researchflow Stage Envelope/Registry 开发。
+- 下一项任务：先完成 FLOW-CTR-004 已冻结字段的机器化 Envelope DTO/Schema/Golden 与 Registry 通用框架；质量摘要按领域 Provider 注册的强类型 Schema 校验。ResultSummary 的质量枚举、coverage 细则和 Summary 身份/版本绑定作为单独决策项处理，不以猜测值阻塞 Envelope 基础结构。未有真实 Provider 的 stage_code 不得注册占位项。
+- 本轮没有修改 Server、Quant、LLM、Notification 领域代码；没有创建生产 Stage Provider；没有改变任何 deferred 契约状态。
