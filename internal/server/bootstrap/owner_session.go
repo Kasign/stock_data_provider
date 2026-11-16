@@ -14,6 +14,7 @@ import (
 type ownerSessionComposition struct {
 	lifecycle     *serversecurity.SessionLifecycleService
 	authenticator *serversecurity.SessionAuthenticator
+	cookie        platformsecurity.SessionCookieConfig
 }
 
 // newOwnerSessionComposition 将 Platform 安全存储和 Server 审计适配器组合为 Owner Session 用例。
@@ -78,5 +79,5 @@ func newOwnerSessionComposition(
 	if err != nil {
 		return nil, fmt.Errorf("创建 Owner Session Authenticator 失败: %w", err)
 	}
-	return &ownerSessionComposition{lifecycle: lifecycle, authenticator: authenticator}, nil
+	return &ownerSessionComposition{lifecycle: lifecycle, authenticator: authenticator, cookie: cfg.Cookie}, nil
 }
