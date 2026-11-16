@@ -23,6 +23,7 @@ func staticCatalogRegistration() app.SourceEndpointRegistration {
 			AllowedPurposes:      []domain.Purpose{domain.PurposeInternalPersonalResearch},
 			AllowedContentKinds:  []domain.ContentKind{domain.ContentMetadata},
 			AllowedStorageModes:  []domain.StorageMode{domain.StorageTransient},
+			AllowedMetadataFields: []string{"payload.publishTime"},
 			MaxRetention:         time.Hour, EffectiveAt: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
 			ExpiresAt: &expiresAt, EvidenceRef: "authorization-evidence",
 		},
@@ -42,6 +43,7 @@ func TestStaticSourceCatalogReturnsDefensiveCopies(t *testing.T) {
 
 	// 修改构造参数不能改变目录中的策略快照。
 	registration.SourcePolicy.AllowedPurposes[0] = domain.PurposePublicDisplay
+	registration.SourcePolicy.AllowedMetadataFields[0] = "payload.title"
 	registration.URLPolicy.AllowedHosts[0] = "attacker.example"
 
 	first, err := catalog.LookupEndpoint(context.Background(), "source-a", "rss-main")
@@ -49,18 +51,21 @@ func TestStaticSourceCatalogReturnsDefensiveCopies(t *testing.T) {
 		t.Fatal(err)
 	}
 	if first.SourcePolicy.AllowedPurposes[0] != domain.PurposeInternalPersonalResearch ||
+		first.SourcePolicy.AllowedMetadataFields[0] != "payload.publishTime" ||
 		first.URLPolicy.AllowedHosts[0] != "publisher.example" {
 		t.Fatalf("catalog changed after input mutation: %+v", first)
 	}
 
 	// 修改查询结果也不能污染后续读取。
 	first.SourcePolicy.AllowedPurposes[0] = domain.PurposePublicDisplay
+	first.SourcePolicy.AllowedMetadataFields[0] = "payload.title"
 	first.URLPolicy.AllowedHosts[0] = "attacker.example"
 	again, err := catalog.LookupEndpoint(context.Background(), "source-a", "rss-main")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if again.SourcePolicy.AllowedPurposes[0] != domain.PurposeInternalPersonalResearch ||
+		again.SourcePolicy.AllowedMetadataFields[0] != "payload.publishTime" ||
 		again.URLPolicy.AllowedHosts[0] != "publisher.example" {
 		t.Fatalf("catalog leaked mutable policy data: %+v", again)
 	}

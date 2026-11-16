@@ -2034,7 +2034,6 @@ func TestObservationRetentionPurgeIntegration(t *testing.T) {
 		t.Fatalf("concurrent purged total=%d, want %d", totalPurged, len(concurrent))
 	}
 }
-
 type availabilityEvidenceSourceCatalogStub struct {
 	registration app.SourceEndpointRegistration
 }
