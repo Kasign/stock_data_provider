@@ -761,3 +761,61 @@ Evidence 表最小必要字段调整为：
 - PIT 比较可直接比较秒级 `available_at` 与更高精度 `system_as_of`；两者语义和精度不同并不构成冲突。系统 cutoff 从 Research 纳秒格式传入 News、而 News Snapshot 现有数据库边界为微秒的转换规则，是独立的跨模块系统时间问题，不得通过降低 available_at 精度顺带处理。
 - 本轮只核查 Schema 与 Adapter 现状，不修改 1.0.0 Schema/Golden、Research Adapter 或数据库代码。
 
+
+
+## 1.16 available_at 字段级授权模型与策略生命周期评审（2026-11-16）
+
+本节在 1.15 的提案基础上，对照当前 `internal/news/domain/policy.go` 的实际枚举与授权评估逻辑，明确最小扩展方向。仍为契约提案，不修改枚举、Policy、Migration 或读取代码。
+
+### 1.16.1 ContentKind 独立，StorageMode 复用现有值
+
+当前 ContentKind 只有 metadata/title/snippet/abstract/full_text/attachment；StorageMode 只有 none/transient/persistent_metadata/persistent_excerpt/persistent_full_text。当前 `contentCompatibleWithStorage` 对 persistent_metadata 只允许 metadata/title。因此只在 Policy 配置中写入两个新字符串，并不能真正获得可执行授权：Domain 兼容性校验也必须在未来契约实现时明确扩展。
+
+建议只增加两个独立 ContentKind：
+- `source_time_evidence`：供应商/发布来源提供的原始时间证据，包括原始值、字段路径、来源时区/偏移及获准保留的证据定位符/摘要。
+- `derived_availability_time`：由获准来源证据解析并审核得到的 UTC 秒级候选值，以及被授权保留的派生结果。
+
+不建议新增 StorageMode。继续复用：
+- `none`：不保留；
+- `transient`：仅请求/处理期间短暂存在，不允许跨请求缓存，除非现有 Provider Policy 明确允许；
+- `persistent_metadata`：仅当 Source、Endpoint、Provider Output Policy 三方分别授权对应 ContentKind 和 StorageMode 时允许持久化。
+
+两个 ContentKind 在未来 Domain 兼容矩阵中只能映射到 `none`、`transient` 或 `persistent_metadata`；不得映射到 excerpt/full_text。原始证据和派生时间必须分别授权、分别计算 retention，不能因为允许保存其中一个就推导允许保存另一个。当前代码尚不兼容这两个新 ContentKind，故在正式契约落地前不可写入 Policy 配置或声称授权已生效。
+
+### 1.16.2 三方授权的判定规则
+
+一次 available_at 证据处理至少需要分别评估：
+1. Source Policy：来源是否允许该访问方式、个人研究用途、对应 ContentKind 和 StorageMode。
+2. Endpoint Policy：该具体入口是否允许相同 ContentKind/StorageMode；Endpoint 只能收紧 Source 权限，不能自行扩大。
+3. Provider Output Policy：若通过搜索/聚合 Provider 获取输出，还必须单独允许该 ContentKind、StorageMode 和请求处理/持久化期限。Provider 允许处理不等于原始发布来源允许采集；Source 允许也不等于 Provider 输出可持久化。
+
+对 `source_time_evidence` 与 `derived_availability_time` 分别运行授权交集；分别使用各自获批的 StorageMode 和 retention 上限。任一适用策略缺失、状态不明、证据引用缺失、过期或不允许对应维度，均拒绝该类数据操作。不能从 metadata、title 或其他 ContentKind 的许可自动继承。
+
+### 1.16.3 策略生命周期矩阵（当前实现能力与建议默认行为）
+
+| 事件 | 新采集/新持久化 | 已有 Evidence 读取 | PIT available_at 输出 | 载荷清理 |
+|---|---|---|---|---|
+| 策略自然到期 | 立即拒绝 | 当前读取授权复核不通过时拒绝 | fail-closed，返回 NULL | 按既定 retention 到期清理；若授权要求立即清理则提前清理 |
+| 明确撤销 | 立即拒绝 | 立即拒绝 | 立即 NULL | 按撤销条款立即清理或按指定期限清理；不能自行延长 |
+| 新版本策略收紧 | 按新策略执行 | 使用当前策略指针和既有授权读取门禁重新评估 | 重新评估失败即 NULL | 按新策略/撤销条款处理 |
+| 明确 grandfather | 仅在授权文本明确范围内继续 | 仅对明确列出的既有数据、用途和期限允许 | 仅在明确允许派生时间继续使用时输出 | 不晚于授权和 retention 的较早截止点 |
+| 授权信息缺失/无法判定 | 拒绝 | 拒绝 | NULL | 按最严格适用要求处理；无法确定时不得扩大保留 |
+
+说明：
+- 当前 `policyTimeActive` 对 ExpiresAt 采用到期即不 active；当前状态 revoked/pending 也会拒绝授权。现有策略模型没有 grandfather 标记或既有数据继续使用范围字段。
+- News 已有 NEWS-CTR-002 Evidence 授权读取能力，会在读取事务中复核当前策略指针与资源版本。available_at 若要对外输出，不得绕开该机制或另建一套较宽松的授权读取路径；但其两种新 ContentKind 尚未进入现有读取授权契约。
+- `retention_until` 是允许保留的最晚时点，不是自动授予读取权的期限。策略到期/撤销可以早于 retention_until 终止读取；物理清理按授权文本和清理义务执行。
+- Grandfather 不是默认推定，也不是“旧数据一律保留到 retention_until”。必须有可审计授权文本明确允许既有 Evidence / 派生时间在指定用途、范围和截止时间内继续读取。
+- 由于 Observation 目前只保存策略版本引用和最终 retention_until，不能从它反推出 Source、Endpoint、Provider 各自独立的撤销/清理截止时间。未来若需执行分层 grandfather，必须在策略快照/授权记录中保存可验证的适用规则或引用；不得猜测。
+
+### 1.16.4 结论与冻结边界
+
+- [x] 确认两个新 ContentKind 是必要的最小区分；普通 metadata 不能代表来源时间证据或派生 available_at 的授权。
+- [x] 确认暂不新增 StorageMode；复用 none/transient/persistent_metadata，并由 ContentKind 分别隔离权限。
+- [x] 确认现有 Domain 兼容矩阵尚不接受两个新 ContentKind；未来实现必须同步更新兼容矩阵及策略测试。
+- [x] 明确 Source、Endpoint、Provider Output Policy 三方独立授权和 retention 交集。
+- [x] 明确到期/撤销默认停止读取和 PIT 输出；grandfather 必须有明确授权依据。
+- [ ] 项目契约 Owner 批准两个 ContentKind 的正式枚举值、兼容矩阵和 API/策略配置版本。
+- [ ] 确认 NEWS-CTR-002 对两种 ContentKind 的读取授权适用范围和撤销时的清理义务。
+- [ ] 取得具体 A 股来源的授权文本，确认个人用途、字段级持久化和既有数据留存范围。
+- [ ] 完成以上契约与来源准入前，不修改 Policy Go 枚举/评估器、Migration、Evidence Repository、Provider 或 PIT SQL。
