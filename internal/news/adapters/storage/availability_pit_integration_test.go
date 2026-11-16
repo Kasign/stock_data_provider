@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -12,6 +13,7 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 
 	"example.com/stock-analysis-flow/internal/news/app"
+	"example.com/stock-analysis-flow/internal/news/domain"
 	platformstorage "example.com/stock-analysis-flow/internal/platform/storage"
 )
 
