@@ -1084,3 +1084,6 @@ Researchflow 已有 Scheduler、Worker、WorkerPool、Claim/Lease/Fencing、候�
 - 有 Provider 配置但共享 Client 为 nil 时启动装配失败关闭；无 Provider 配置时允许 nil Client，不创建出站依赖。
 - 测试覆盖 configured + nil client 拒绝、configured + shared client 成功、unconfigured + nil client 成功，以及精确 Registry Entry 保留。
 - 该修正为后续 Researchflow Worker 生产装配准备正确的 HTTP 资源注入边界；本次尚未把 Worker 生命周期接入 Bootstrap，也未创建 Workflow Template。
+
+
+- 共享 HTTP Client 修正首轮 CI Run `43850461274` 对 SHA `32655a8bafdb56f06636b6faccfd175e7b0a653c`：gofmt、其余独立模块检查和 WebUI/Compose 步骤通过；根模块编译失败的唯一原因是测试仍断言旧的 composition.httpClient 字段，属于重构后的过期测试断言，不是运行逻辑缺陷。已移除该旧断言，保留「未配置 Provider 可无 Client、已配置 Provider 缺 Client 必须失败、注入共享 Client 后装配成功」三项行为验证；该 Run 不作为通过证据。

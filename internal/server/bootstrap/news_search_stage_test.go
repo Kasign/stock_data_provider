@@ -37,9 +37,6 @@ func TestNewsSearchStageCompositionRegistersExactOutputAndUsesPlatformClientOnly
 	if err != nil {
 		t.Fatal(err)
 	}
-	if composition.httpClient != nil {
-		t.Fatal("unconfigured providers must not create an outbound HTTP client")
-	}
 	if composition.registry.Version() != newsSearchStageOutputRegistryVersion {
 		t.Fatalf("unexpected registry version: %s", composition.registry.Version())
 	}
