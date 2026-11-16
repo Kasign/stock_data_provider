@@ -107,7 +107,7 @@ jobs:
         run: |
           set -o pipefail
           go test ./internal/server/bootstrap/ \
-            -run '^(TestNewsResearchMariaDBIntegration|TestNewsResearchIntegrationFixturesAreValid|TestNewsEvidenceCursorKeyRotation|TestNewsSearchStageResearchflowMariaDBIntegration) \
+            -run '^(TestNewsResearchMariaDBIntegration|TestNewsResearchIntegrationFixturesAreValid|TestNewsEvidenceCursorKeyRotation|TestNewsSearchStageResearchflowMariaDBIntegration)$' \
             -count=1 -v 2>&1 | tee /tmp/news_research_verbose.log
           status=$?
           if [ "$status" -ne 0 ]; then
