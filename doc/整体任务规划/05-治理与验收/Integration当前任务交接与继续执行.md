@@ -595,3 +595,14 @@ Researchflow 已有 Scheduler、Worker、WorkerPool、Claim/Lease/Fencing、候�
 - payload 已清理时默认不再输出 available_at；只有来源/Provider Output Policy 明确允许保留派生时间时才例外，不能因历史 verified 决策推断可永久保留。
 - 本轮仅更新结构提案、News 清单和交接文档，没有修改 retention Job、Migration 或业务代码。
 - 下一步仍需来源级策略证据才能冻结具体保留规则；在此之前采用 fail-closed 默认，不扩大数据留存。
+
+
+### 10.23 2026-11-16 available_at MariaDB 约束、精度和授权交集复核
+
+- 开始前核对 integration HEAD：`09c753e0a2f1e2a8aceeb2979f883f5d9ee96354`；检查 News Migrations、MariaDB Repository 集成测试、Source/Endpoint/ProviderOutputPolicy、Ingest retention 计算和 Observation retention 清理事务。
+- 当前 News Migration 已使用 InnoDB/JSON/外键/复合索引/DATETIME(6)；集成测试要求 NEWS_MARIADB_TEST_DSN，但 docker-compose.yml 未固定 MariaDB 镜像/版本，本轮无可用真实 DB DSN。因此只完成静态结构评审，不声称 DDL 通过目标版本验证。
+- Evidence/Decision 约束方向：Evidence 以 (version_id,evidence_id) 唯一键供 Decision 复合 FK；Decision 以 (version_id,decision_seq) 唯一键及 supersedes 自引用/唯一后继约束避免分叉。considered_evidence_ids JSON 的数组元素不能由普通 FK 逐个引用，必须在事务内由 Go 层验证。仅现有单列主键不能强制 observation 与 version 属于同一 news_id，需复合父键/冗余 news_id 或事务锁定校验。
+- 重要修正：Research PIT 用 CHAR(30) 九位 UTC；News Observation、Version、Snapshot PIT 当前均使用 DATETIME(6)，Snapshot Repository 明确比较到微秒。此前 1.10 “News 新表统一 CHAR(30) 纳秒”的表述不能视为已冻结；须先由 News/Research 契约确定统一精度和边界归一化，不能局部引入更高精度。
+- Ingest 的最终 retention 来自 Source MaxRetention、Endpoint MaxRetention 和 Provider MaxRequest/MaxPersistenceRetention 授权交集，写入 Observation.retention_until。Evidence 不得延长；未来 Evidence 载荷清理必须与 Observation candidate_json/tombstone 在同一事务完成。Policy 撤销/到期后既有 Evidence 的可读/留存行为及 available_at 字段级 StorageMode/ContentKind 尚未定义。
+- 本轮仅更新设计提案、News 验收清单、Integration 交接文档；无 Migration/Go/Provider/PIT SQL 变更。
+- 下一步应冻结跨模块 PIT 精度契约与字段级留存策略；获得真实 MariaDB 版本/DSN 后再执行 DDL 和索引 EXPLAIN。上述门禁未完成前保持 proposal-only。

@@ -608,3 +608,81 @@ Evidence 表最小必要字段调整为：
 - [ ] 明确各 Source/Provider Output Policy 对原始时间字段、规范化 available_at、证据摘要和审计元数据的分别留存权限。
 - [ ] 确认到期清理是 Evidence/Observation 同一事务，及其 tombstone 诊断 reason_code。
 - [ ] 确认 payload purged 后 verified 决策是否可继续提供派生时间；默认否，除非策略明确允许。
+
+
+## 1.14 MariaDB 最终约束评审与精度/授权边界复核（2026-11-16）
+
+本节复核 1.10～1.13 的提案，区分已由仓库实现证实的约束、可提出的 DDL 方向，以及仍不能冻结的事项。没有执行目标 MariaDB 实例 DDL；仓库未提供可确认的目标 MariaDB 精确版本和本轮可用的 NEWS_MARIADB_TEST_DSN。
+
+### 1.14.1 数据库兼容性证据
+
+- News Migration 使用 InnoDB、JSON、复合索引、外键、`DATETIME(6)`；现有集成测试通过 `NEWS_MARIADB_TEST_DSN` 连接真实 MariaDB，并应用完整 Migration。
+- `docker-compose.yml` 没有声明 MariaDB 服务或 MariaDB 镜像版本；数据库由外部环境提供。
+- 因此只能确认当前代码依赖上述 MariaDB 能力，不能据此声称已在某个指定 MariaDB 版本验证新增 DDL。下一阶段必须从实际部署/CI DSN 对应数据库读取 `SELECT VERSION()`，并在相同版本跑 Migration 集成测试。
+- 本轮没有可用目标 DB 实例，不执行伪造的语法验证，也不把静态字符串测试当成真实 MariaDB 兼容性验收。
+
+### 1.14.2 两表关系与完整性约束
+
+建议正式 DDL 至少考虑以下关系：
+
+**Evidence**
+- `PRIMARY KEY(evidence_id)`。
+- `UNIQUE(version_id, evidence_id)`，供 Decision 复合外键引用，保证 selected evidence 属于同一 version。
+- `FOREIGN KEY(version_id) REFERENCES news_item_versions(version_id)`。
+- `FOREIGN KEY(observation_id) REFERENCES news_observations(observation_id)`。
+- `KEY(version_id, observed_at, evidence_id)` 与 `KEY(observation_id)` 作为候选索引，最终需按 PIT 查询 EXPLAIN 决定是否保留。
+- Evidence 还必须满足 observation 与 version 属于同一 news_id。现有主键只分别保证 version_id、observation_id 唯一，无法直接以单列外键表达“同一 news_id”。正式 DDL 可选择在父表增加 `UNIQUE(news_id, version_id)`、`UNIQUE(news_id, observation_id)`，Evidence 冗余保存 news_id 并用两组复合外键保证；或在 Repository 同一事务内校验并锁定两行。不得只依靠调用方传入的 ID 声称数据库已保证跨主体一致性。
+- Evidence 必须关联实际包含该 field_path/raw_value 的 Observation；单纯同 news_id 仍不足以证明字段值来自该响应，须由 Adapter/Repository 输入证据和 observation 内容的一致性验证。
+
+**Decision**
+- `PRIMARY KEY(decision_id)`、`UNIQUE(version_id, decision_seq)`。
+- `FOREIGN KEY(version_id) REFERENCES news_item_versions(version_id)`。
+- `(version_id, selected_evidence_id)` 复合外键引用 Evidence 的 `UNIQUE(version_id, evidence_id)`；selected_evidence_id 为空时由状态校验规则允许。
+- `(version_id, supersedes_decision_id)` 复合自引用，确保前序事件属于同一 version；`UNIQUE(supersedes_decision_id)` 防止决策链分叉。
+- `KEY(version_id, recorded_at, decision_seq)` 是候选 PIT 索引；由于决策按序号串行化，读取逻辑可先按 system_as_of 筛选，再取最大可见 decision_seq。实际索引列顺序须以真实查询和 EXPLAIN 验证。
+- JSON `considered_evidence_ids` 不建立主查询索引。MariaDB JSON 不能提供数组元素到 Evidence 的普通关系外键；Go 层必须验证 JSON 数组格式、去重/排序、每个 ID 存在、同版本、均为本次审查对象，并验证 verified 选择项在数组中。它是审计集合，不是数据库强引用关系。
+- 状态组合约束（verified 必须且只能选一份 evidence、conflict 至少两份 evidence、revoked 不得选 evidence）须在 Domain/Repository 事务中强校验；若目标 MariaDB 版本的 CHECK 行为不作为唯一防线，不可依赖它替代应用校验。
+
+### 1.14.3 决策并发与事件链写入
+
+- 当前 `news_item_versions` 是不可变内容版本行，适合作为同 version 决策串行化锁。
+- 事务锁定 version 行后读取最大 decision_seq 和最新 decision_id，检查调用方 supersedes_decision_id 等于当前链尾，分配下一序号并插入；唯一键和唯一后继约束兜底。
+- 所有验证和插入必须在同一事务内。发生重复序号、前序不匹配或 selected evidence 归属不匹配时整个事务回滚。
+- decision_seq 是逻辑事件顺序；recorded_at 是 system_as_of 可见时间。两者不能互相替代。若 recorded_at 因数据库精度归一化发生相等，仍按 decision_seq 确定同一版本事件先后。
+- 由于决策事件写入后不得回填更早的 recorded_at，Repository 应使用数据库生成/校验的 UTC 当前时间，或明确拒绝早于链尾 recorded_at 的写入；不能接受调用方任意指定历史时间。
+
+### 1.14.4 News 与 Research 的 PIT 精度差异必须解决，不能直接声称已统一
+
+- Research `formatPIT` 使用固定九位小数 UTC 字符串；Research PIT 字段使用 `CHAR(30) ascii_bin`。
+- News `news_observations.observed_at`、`retention_until`、`news_item_versions.observed_at`、当前 Evidence Snapshot 的 `system_as_of` 使用 `DATETIME(6)`。现有 Repository 明确按微秒精度比较 Snapshot 元数据。
+- 因此 1.10 将 News 新证据时间全部改为 CHAR(30) 的提议，尚未证明能与现有 News PIT 读取、Observation 采集时间和 retention 边界无损兼容。固定九位字符串只是格式化，不会把已有微秒 Observation 变成纳秒精度。
+- 本提案暂不冻结 News 新表的最终时间列类型。必须由 NEWS-CTR-001 / Research 消费契约明确统一精度、边界归一化规则和 API 表示：要么 News 整个 PIT 边界继续采用微秒并显式映射到 Research；要么在单独契约升级中统一迁移 News PIT 时间列及查询，不能只给新表局部升级到纳秒。
+- 在上述决议前，候选时间的源原文必须保留足以复核精度的 raw_value；规范化值不能静默舍入/截断。对于超过目标合同精度的数据，按 unsupported_precision 处理。
+
+### 1.14.5 留存期限从现有授权交集继承
+
+当前 Ingest 由上游策略评估得出 ObservationPolicyTrace.Retention，并在 Observation 上写入 `retention_until = observed_at + retention`。授权规则分别限制：
+- SourcePolicy.MaxRetention；
+- EndpointPolicy.MaxRetention（若有覆盖）；
+- ProviderOutputPolicy.MaxRequestRetention / MaxPersistenceRetention（按 StorageMode 区分）。
+
+因此 Evidence 不得自行配置 retention。其到期时间必须不晚于 Observation.retention_until，也不得晚于任一适用授权的有效截止时间。当前 Observation schema 没有独立存储 Source/Endpoint/Provider 三个策略各自的 retention deadline，只有策略版本引用、评估时间和最终 retention_until；Evidence 只能继承已计算的最小有效期限，不能重新推导不存在的授权信息。
+
+**还需确认：**
+- available_at 的字段级原始证据属于哪个 ContentKind/StorageMode，不能默认 metadata 的许可自动覆盖新增的来源时间字段。
+- Provider Output Policy 是否允许持久化 raw_value、规范化候选时间、hash/ref 各自要分别确认；允许处理请求不等于允许持久化。
+- Source/Endpoint/Provider Policy 任一到期或撤销后，既有 Evidence 是否立即停止读取、仅停止新增采集，或按既有 retention 到期；当前规则没有明确该字段级差异。必须在来源准入与策略版本合同中明确。
+- Observation 现有 retention 清理事务只更新 `news_observations.candidate_json` 和 `payload_purged_at`，没有 Evidence 表联动；未来若增加 Evidence，必须在同一清理事务锁定到期 Observation，并清理所有关联 Evidence 受限载荷后，再标记 Observation tombstone。任一 Evidence 清理失败应回滚整批。
+- 哈希和 evidence_ref 也是可能受限的派生数据，不能默认永久保留；tombstone 仅保留策略明确允许的最小审计元数据。
+
+### 1.14.6 本轮结论
+
+- [x] 已确认现有 MariaDB 能力与测试入口，但没有目标数据库精确版本和本轮 DSN，不能声称新增 DDL 已兼容。
+- [x] 明确 Evidence/Decision 复合外键、链尾唯一性和 JSON 应用层校验方向。
+- [x] 明确现有主键不足以用单列 FK 保证 Observation 与 Version 同属一个 news_id。
+- [x] 发现 News 当前 PIT 边界为微秒 DATETIME(6)，与 Research 纳秒 CHAR(30) 不一致；1.10 的“统一纳秒”结论降级为待契约决议。
+- [x] 明确 Evidence retention 必须继承 Observation 最终授权交集，并纳入未来同事务清理。
+- [ ] 取得目标 MariaDB 版本并运行真实 DDL/Repository 集成测试。
+- [ ] 冻结 News 与 Research PIT 精度、边界和 API 表示契约。
+- [ ] 明确 available_at 字段级 StorageMode/ContentKind 及策略撤销后的留存行为。
+- [ ] 上述事项完成前不新增 Migration、Evidence 代码、Provider 采集、PIT SQL 或 Schema 2.0.0 正式版。
