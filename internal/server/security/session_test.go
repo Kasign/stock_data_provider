@@ -165,7 +165,7 @@ func TestSessionAuthenticatorRequiresCookieAndRejectsDuplicateCookies(t *testing
 
 func TestSessionAuthenticatorRequiresCSRFAndSameOriginForWrites(t *testing.T) {
 	now := time.Now().UTC()
-	auth, _, rawToken, csrfToken := newTestSessionAuthenticator(t, now)
+	auth, sessions, rawToken, csrfToken := newTestSessionAuthenticator(t, now)
 	request := sessionRequest(http.MethodPost, rawToken)
 	request.Header.Set("Origin", "https://stocks.example.com")
 	if _, _, err := auth.Authenticate(request); err == nil {
