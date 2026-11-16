@@ -415,3 +415,88 @@
 ### 1.9.7 当前实施门禁
 
 项目负责人已确认本两表方案作为结构提案基线；但当前 A 股候选（包括 SSE InfoNet 的“更新时间”）仍未通过首次公开可获取时间语义证明，且授权/字段规范尚未取得。因此本次只更新提案和任务跟踪，不新增 Migration V10、不改 Go 领域模型/Repository/PIT SQL、不修改 1.0.0 Schema/Golden，不启用 B 组成功路径。正式实施仍需：来源准入证据 → 决策记录/消费者影响确认 → NEWS-CTR-001 版本升级与迁移批准 → 代码和真库验收。
+
+
+## 1.10 两表结构的事件顺序、状态快照与时间精度细化（2026-11-16）
+
+本节细化并修订 1.9。若与 1.9 中早期字段类型建议冲突，以本节为准；仍属于结构提案，不表示 Schema/DDL 已冻结。
+
+### 1.10.1 决策表采用“一行一个完整状态事件”
+
+每条决策记录都是某个 `version_id` 在该时点的完整可见性状态快照，不采用同一个 decision_group_id 多行拼接，也不把单条 evidence 的 rejected 结果直接当作版本整体状态。
+
+建议字段：
+- `decision_id`：决策事件 ID。
+- `version_id`：精确内容版本。
+- `decision_seq`：该 version_id 内严格递增；唯一约束 `UNIQUE(version_id, decision_seq)`。
+- `status`：`verified`、`conflict`、`unresolved`、`revoked`。
+- `selected_evidence_id`：仅 verified 时必填，且必须包含于 considered_evidence_ids。
+- `considered_evidence_ids`：本次决策实际审查的 evidence ID 集合，以规范化、去重、稳定排序的 JSON 数组保存，精确还原冲突裁决范围。
+- `reason_code`、`review_rule_version`：决策原因和规则版本。
+- `supersedes_decision_id`：指向本版本前一条决策事件；首条为空。
+- `recorded_at`：决策进入系统的 UTC 纳秒时间。
+
+| 状态 | selected_evidence_id | considered_evidence_ids | PIT 结果 |
+|---|---|---|---|
+| verified | 必填且唯一 | 必须包含选中证据 | 可返回被选证据候选时间 |
+| conflict | NULL | 至少两份冲突证据 | NULL，fail-closed |
+| unresolved | NULL | 可为空或包含本轮审查证据 | NULL |
+| revoked | NULL | 可包含被撤销决策所依据证据 | NULL |
+
+`rejected` 不作为版本整体状态。单条证据解析失败或不符合来源准入条件，记录在 evidence 行的 `parse_status` / `parse_reason_code`。拒绝一条新候选证据，不自动撤销此前仍有效的 verified 决策；只有明确追加新的完整状态事件才改变版本状态。
+
+### 1.10.2 证据行补充解析状态
+
+`news_version_availability_evidence` 增加：
+- `parse_status`：`parsed`、`unparseable`、`ambiguous`、`unsupported_precision`。
+- `parse_reason_code`：稳定原因码；解析成功时可为空。
+- `candidate_available_at_utc`：仅在 parse_status=parsed 且时间可无损表示时非 NULL。
+
+解析成功只表示字段可无歧义转换为时间，不代表来源语义通过审核；仍须经过来源准入和决策审核。
+
+### 1.10.3 决策序号与并发写入
+
+- 同一 version_id 的决策写入必须在单个数据库事务内完成。
+- 事务先对对应 `news_item_versions` 行执行 `SELECT ... FOR UPDATE`，再读取该版本最大 decision_seq 并分配下一序号；同版本决策写入串行化。
+- 写入完整决策事件并提交；唯一索引 `UNIQUE(version_id, decision_seq)` 作为并发防线。
+- decision_seq 是同版本决策顺序的权威依据；recorded_at 用于 system_as_of 可见性过滤，不以客户端时间或单独时间排序。
+- 新决策必须引用前一条决策 ID；前序不匹配时拒绝写入，避免决策链分叉。
+- 证据采集与审核分离：审核只能引用已持久化且属于同一 version_id 的证据。
+
+### 1.10.4 system_as_of 的确定性还原
+
+1. 证据行必须满足 observed_at <= system_as_of 且 recorded_at <= system_as_of。
+2. 决策行必须满足 recorded_at <= system_as_of。
+3. 在可见决策行中选择最大 decision_seq 的完整状态事件。
+4. 最新状态只有 verified 才能返回 selected_evidence_id 指向的证据。
+5. 被选证据必须属于相同 version_id、出现在该决策的 considered_evidence_ids 中且 parse_status=parsed。
+6. 必须满足 candidate_available_at_utc <= observed_at <= system_as_of；候选时间晚于系统首次观察时间时判为冲突，不输出 available_at。
+7. 最新状态为 conflict、unresolved 或 revoked 时返回 NULL；只有后续新追加的 verified 完整状态事件才能恢复非空结果。
+8. 没有可见决策事件时返回 NULL，不能用未来 verified 决策修正过去的 system_as_of。
+
+### 1.10.5 PIT 时间统一采用固定九位 UTC 字符串
+
+对照 Research 的 `internal/research/storage/repository.go`：
+- Research `formatPIT` 固定使用 `2006-01-02T15:04:05.000000000Z`，总长 30 字符、9 位小数、UTC。
+- Research Migration 对 available_at、system_observed_at、system_as_of 使用 `CHAR(30) CHARACTER SET ascii COLLATE ascii_bin`，保证字典序与时间顺序一致。
+- 因此 News 新表中参与 PIT/as-of 比较的 candidate_available_at_utc、observed_at、recorded_at 统一采用相同固定 30 字符格式，不用 DATETIME(6)。
+- Go 层统一 UTC 格式化为固定九位小数；读取时严格解析并验证规范格式。
+- 纳秒精度必须无损往返；来源精度超出系统表达范围或转换会舍入/截断时，标记 unsupported_precision，禁止静默 round/truncate。
+- created_at 等不参与 PIT 的审计字段可用 DATETIME(6)，不得作为历史知识边界。
+- 若现有 News Observation 时间来自 DATETIME(6)，格式化为九位时尾部补零仅表示数据库现有微秒精度，不得声称来源具备纳秒精度。
+
+### 1.10.6 对 1.9 早期提案的修订
+
+1.9 中建议使用 DATETIME(6) 的 candidate_available_at_utc、observed_at、recorded_at，现统一修订为固定 30 字符 UTC RFC3339Nano 字符串。1.9 中 decision_group_id 多行分组模型不再采用，改为一行一个完整状态事件、decision_seq 严格递增、considered_evidence_ids 规范化 JSON 数组。两表数量不变，不新增第三张关联表或可变状态表。
+
+### 1.10.7 本轮评审结论与未完成门禁
+
+- [x] 决策状态定义为完整状态快照，避免单条证据 rejected 误覆盖既有 verified。
+- [x] 决策顺序使用每个 version_id 内单调递增 decision_seq；事务锁定版本行并以唯一索引兜底。
+- [x] 冲突证据集合通过 considered_evidence_ids 规范化 JSON 数组保存，不增加第三张关联表。
+- [x] PIT 时间格式与 Research 已有 CHAR(30) 固定九位 UTC 规则对齐。
+- [x] 精度不支持时拒绝，不允许静默舍入或截断。
+- [ ] 正式评审 JSON 字段的 MariaDB 类型/校验、索引组合、外键策略和删除/保留策略。
+- [ ] 取得来源字段语义、真实样本和个人用途授权准入证据。
+- [ ] 完成 NEWS-CTR-001 Schema 2.0.0、Research 消费者兼容和正式 DEC。
+- [ ] 上述门禁完成前不实施 Migration、Go 业务代码、Provider、PIT SQL 或 1.0.0 Schema/Golden 修改。

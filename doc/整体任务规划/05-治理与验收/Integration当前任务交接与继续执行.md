@@ -552,3 +552,15 @@ Researchflow 已有 Scheduler、Worker、WorkerPool、Claim/Lease/Fencing、候�
 - **本次授权边界**：批准结构提案基线，不代表 NEWS-CTR-001 2.0.0 已冻结；不代表 A 股来源已合格。SSE InfoNet“更新时间”仍为 candidate，需取得官方字段语义、真实响应和个人用途授权证据。
 - **未实施**：没有 Migration V10、Go 领域模型/Repository/Provider/PIT SQL、1.0.0 Schema/Golden 修改，也未解除 B 组 SKIP；没有业务代码 CI 结果可新增。代码验收仍以最近精确代码 SHA `7378b035c88dabb13c6486f7a54d0df2663d96d5` / Run [43796597261](https://github.com/Kasign/stock_data_provider/actions/runs/43796597261)（#83）为准。
 - 下一步按提案第 1.9.6 节完成两表细节评审，再完成来源语义/授权取证与正式 DEC；未满足来源门禁前不进入数据库或业务代码实施。
+
+
+### 10.19 2026-11-16 available_at 两表决策与时间精度细化
+
+- 开始前核对远端 integration HEAD：`87c80e910d5f038763ad943b51a36590c568f93e`，并复读三份任务/契约文档及 Research Evidence 存储实现。
+- Research `internal/research/storage/repository.go` 的 `formatPIT` 固定使用 `2006-01-02T15:04:05.000000000Z`；Research Migration 对 PIT 时间使用 `CHAR(30) ascii_bin`，不是 DATETIME(6)。因此修订 News 提案：候选时间、observed_at、recorded_at 均使用固定 30 字符 UTC 纳秒格式；非 PIT 审计时间可用 DATETIME(6)。
+- 决策表改为每行一条完整状态快照：verified/conflict/unresolved/revoked。单条证据解析失败写入 evidence 的 parse_status/reason_code，不直接覆盖版本既有 verified 状态。
+- 决策按 version_id 使用单调递增 decision_seq 排序；同版本写入事务先锁定对应不可变版本行，再分配序号；唯一索引兜底。每条事件通过 supersedes_decision_id 链接前一决策。
+- 冲突证据集合由 considered_evidence_ids 规范化 JSON 数组记录，不增加第三张关联表或可变 current-state 表。
+- 精度超出纳秒或不能无损表达时拒绝，禁止静默舍入/截断。
+- 本轮仅同步提案、News 清单和交接文档；没有修改 Migration、Go 业务代码、Provider、PIT SQL 或 1.0.0 Schema/Golden。来源准入、消费者兼容和正式 DEC 仍是后续门禁。
+- 下一步评审 MariaDB JSON 存储/校验、索引和外键策略，再结合来源准入证据形成 NEWS-CTR-001 2.0.0 正式变更决议。
