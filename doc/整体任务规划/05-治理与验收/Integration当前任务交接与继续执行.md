@@ -479,3 +479,29 @@ Researchflow 已有 Scheduler、Worker、WorkerPool、Claim/Lease/Fencing、候�
 - 北交所《交易支持平台数据接口规范（V2.1）》第十一章也定义公告文件发送日期/时间及 HQBSL4 最近一次接收时间；均属于交易支持/分发链路，不足以证明公众首次可获取时间。规范：https://www.bse.cn/uploads/6/file/public/202209/20220902201701_kas8vw9r25.pdf。
 - 当前判断：SSE InfoNet API 是迄今最有价值的官方 A 股候选，因为存在可申请的结构化公告 API 和更新时间字段，且覆盖沪深；但仍为 candidate/not_comparable，不是 verified。下一步应索取最新技术文档和原始响应样例，逐字段确认更新时间的产生事件、时区精度、公告版本绑定、授权留存及个人套餐，再决定是否进入 DEC 和实现。
 - P0 available_at 仍 shelved；没有新增业务代码/测试，没有触发 CI。代码验收 SHA 仍为 d1b58b49fee809c5204fafe3409dc36da9615794 / Run #81 success。文档提交不改变代码验收证据。
+
+
+### 10.13 2026-11-16 `available_at` 后续实现的校验与可观测性要求
+
+- 项目负责人提出：`available_at` 来源字段存在较大疑虑，开发时应增加校验逻辑和日志信息，以便核对真实数据。本意见已同步至来源影响分析提案第 1.8 节。
+- 该要求是**未来实现验收要求**，不改变 P0 当前 `shelved` 状态，不构成新增字段/表、修改 PIT SQL 或解除 B 组 Skip 的授权。
+- 解锁后必须保留来源/Endpoint/策略版本、字段路径、原始时间文本、原始时区、解析后 UTC、解析器版本、公告及内容版本绑定、系统观察时间、证据引用/摘要和核验规则版本。
+- 校验至少覆盖：精度及时区、来源时间晚于首次观察时间、公告版本绑定、更正公告追加式修订、跨来源冲突、披露日期与时区一致性、重复采集幂等、verified 以外状态 fail-closed。
+- 结构化诊断不得记录密钥或敏感响应正文；不得把 observed_at/retrieved_at/fetched_at 当作 available_at。来源冲突不自动挑选最早/最晚值，必须保留原始证据与 reason_code。
+- 目前没有真实合格来源，故本轮不写 News 领域代码、不增加 Migration、不改 Schema/Golden/PIT SQL；等待来源与正式 DEC 条件满足后按第 10.2 节顺序执行。
+
+### 10.14 2026-11-16 FLOW-CTR-004 Stage Provider Result / Output Registry 影响分析
+
+- 本轮开始前核对远端 `integration` HEAD：`17ca61fad64e87da8c557f80bdfe66cc71b0bfcd`，工作区通过 GitHub 远端文件读取核对；未切换分支。
+- 按此前交接任务顺序，完成 FLOW-CTR-004 的定点代码/Schema/Golden 盘点，新增提案：`doc/contract/FLOW-CTR-004-Stage-Provider-Result-Envelope影响分析.md`。提案只分析冻结字段与 L2 实现缺口，不改冻结契约、Schema、Golden 或业务代码。
+- 已核实的实现缺口：
+  1. `WorkflowTemplate.OutputRegistryVersion` / `ResolvedTemplate.OutputRegistryVersion` 只是字符串快照；没有可供运行时按版本读取的 Stage Output Registry 实例和权威注册项。
+  2. `StageExecutionResult` 目前只有状态、`output_ref`、`quality_summary_ref`、诊断/原因引用及自由字符串质量/风险状态；没有冻结 Envelope 要求的 `output_type + schema_version + payload + typed quality_summary + completed_at`。
+  3. `ValidateStageExecutionResult` 只校验执行状态与引用非空，不执行按 `(output_type, schema_version)` 的强类型 Payload Schema 校验。
+  4. `internal/researchflow/resultvalidation/quant.go` 中的 Registry 是 Quant Result Envelope 消费校验器，不是 Stage Output Registry；两者不能混用或仅因都有 schema version 就视为已实现。
+  5. `ResultSummary.quality_status` 仍为任意 string；当前 Schema 也只约束非空字符串。coverage 只有 0..1 数值，没有可复算的分子/分母定义；Summary 资源的身份/版本绑定也未形成完整约束。
+  6. `StageExecutionRequest` 没有可信 Principal/CallerRef 字段；CreateRun 的 caller identity 虽来自可信 RequestIdentity，但未证明运行时下游 Adapter 可获得同一可信主体。
+  7. 目前没有生产 StageExecutor 实现；Quant 已有若干 QNT-CTR-004 Schema/Golden 和领域 DTO，但 QNT-CTR-003、DATA-CTR-005/007 等 deferred 项仍阻断 Factor/行情证据链；现有 Quant 结果读取/验证能力不等于可执行 Stage Provider。
+- 责任边界：Researchflow 负责 Envelope/Output Registry/通用 Validator/Stage 执行门禁；各领域模块负责自己的 Stage Code、Payload Schema/Golden、质量语义和真实 Provider；Server 负责按冻结版本装配 Registry、可信 CallerRef 与生产 Executor，不得在 Server 重算领域逻辑。
+- 下一步顺序与门禁见提案第 5 节。先完成正式契约决策/机器 Schema 和注册表，再接入各模块生产 Facade/Provider，最后做真实 MariaDB 跨模块端到端；不能先造空壳 Executor 或猜测质量枚举/coverage 分母。
+- 本轮没有 Go 代码、测试、Workflow、冻结契约、Schema 或 Golden 变更；文档提交不触发 CI，不更新最近代码验收 SHA。当前最近代码验收仍为 `d1b58b49fee809c5204fafe3409dc36da9615794` / Run [43790923451](https://github.com/Kasign/stock_data_provider/actions/runs/43790923451)（#81）。
