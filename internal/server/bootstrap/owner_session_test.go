@@ -2,11 +2,11 @@ package bootstrap
 
 import (
 	"database/sql"
+	"net/http"
 	"os"
 	"strings"
 	"testing"
 	"time"
-	"net/http"
 
 	mysql "github.com/go-sql-driver/mysql"
 	"github.com/redis/go-redis/v9"
@@ -29,7 +29,7 @@ func TestNewOwnerSessionCompositionDisabled(t *testing.T) {
 func TestNewOwnerSessionCompositionRejectsMissingSharedResources(t *testing.T) {
 	cfg := ownerSessionTestConfig()
 	tests := []struct {
-		name string
+		name      string
 		resources *serverresources.Resources
 	}{
 		{name: "nil resources"},
@@ -90,22 +90,16 @@ func TestNewOwnerSessionCompositionBuildsProductionDependencies(t *testing.T) {
 
 func ownerSessionTestConfig() serverconfig.OwnerSession {
 	return serverconfig.OwnerSession{
-		Enabled: true,
+		Enabled:      true,
 		PublicOrigin: "https://stock.example.test",
 		Cookie: platformsecurity.SessionCookieConfig{
 			Name: "__Secure-owner_session", Path: "/api", Secure: true, SameSite: http.SameSiteLaxMode,
 		},
-		CSRFHeader: "X-CSRF-Token",
-		IdleTTL: 12 * time.Hour,
-		AbsoluteTTL: 7 * 24 * time.Hour,
-		RedisKeyPrefix: "owner-session-composition-test",
-		Argon2id: platformsecurity.Argon2idParams{
-			Memory: 64, Iterations: 1, Parallelism: 1, SaltLength: 16, KeyLength: 32,
-		},
-		RateLimitPolicy: platformsecurity.LoginRateLimitPolicy{
-			AccountMaxFailures: 5, IPMaxFailures: 10, Window: 15 * time.Minute,
-			BaseBackoff: time.Second, MaxBackoff: 15 * time.Minute,
-		},
+		CSRFHeader:      "X-CSRF-Token",
+		IdleTTL:         12 * time.Hour,
+		AbsoluteTTL:     7 * 24 * time.Hour,
+		RedisKeyPrefix:  "owner-session-composition-test",
+		Argon2id:        platformsecurity.Argon2idParams{Memory: 64, Iterations: 1, Parallelism: 1, SaltLength: 16, KeyLength: 32},
+		RateLimitPolicy: platformsecurity.LoginRateLimitPolicy{AccountMaxFailures: 5, IPMaxFailures: 10, Window: 15 * time.Minute, BaseBackoff: time.Second, MaxBackoff: 15 * time.Minute},
 	}
 }
-
