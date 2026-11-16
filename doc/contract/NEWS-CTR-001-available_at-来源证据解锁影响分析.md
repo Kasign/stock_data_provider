@@ -751,3 +751,13 @@ Evidence 表最小必要字段调整为：
 - [ ] 取得来源授权文本，确认自然到期、明确撤销和既有数据 grandfather 规则。
 - [ ] 上述正式契约与来源准入门禁完成前，不新增 Migration、Evidence 业务代码、Provider 采集、PIT SQL 或 Schema 2.0.0 正式版。
 
+### 1.15.6 现有 Schema 与 Research Adapter 兼容性核查
+
+- 当前 NEWS-CTR-001 1.0.0 Schema 的 `available_at` 引用通用 `nullableDateTime`，其正则允许 1～9 位小数秒；同一通用定义也被其他时间字段复用。
+- 1.0.0 Schema / Golden 属于已发布契约，不得原地收紧。秒级约束应只在未来 2.0.0 Schema 中为 `available_at` 定义独立的 nullable-second-date-time 规则；不得修改通用定义，否则会意外限制 `published_at`、`system_observed_at`、`fetched_at`、`normalized_at` 等其他时间字段。
+- 2.0.0 的 `available_at` 规则应要求 UTC `Z`、整秒格式且无小数部分；其他系统时间字段继续使用现有 date-time 精度规则。
+- 当前 Research News Adapter 的 `mapNewsEvidence` 将 News `AvailableAt` 作为 Go `time.Time` 校验 UTC、非空和不晚于 `SystemAsOf`，尚未验证纳秒部分为零。正式接入秒级契约后，Adapter 必须拒绝非整秒值，不能依靠 Research 的 `formatPIT` 静默格式化。
+- Research Repository 的 `formatPIT` 固定输出九位小数。整秒 `time.Time` 会被编码为 `...SS.000000000Z`，可继续存入现有 `CHAR(30)`，不需要为 available_at 单独迁移 Research 表。
+- PIT 比较可直接比较秒级 `available_at` 与更高精度 `system_as_of`；两者语义和精度不同并不构成冲突。系统 cutoff 从 Research 纳秒格式传入 News、而 News Snapshot 现有数据库边界为微秒的转换规则，是独立的跨模块系统时间问题，不得通过降低 available_at 精度顺带处理。
+- 本轮只核查 Schema 与 Adapter 现状，不修改 1.0.0 Schema/Golden、Research Adapter 或数据库代码。
+
