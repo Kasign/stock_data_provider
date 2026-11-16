@@ -161,10 +161,12 @@ func TestRedisSessionStoreIntegration(t *testing.T) {
 	if _, err := store.LookupAndTouchWithCSRF(ctx, digest, wrongCSRFDigest, rejectedAt, DefaultSessionIdleTTL); !errors.Is(err, ErrSessionCSRFRejected) {
 		t.Fatalf("wrong CSRF lookup = %v, want ErrSessionCSRFRejected", err)
 	}
-	afterReject, err := store.LookupAndTouch(ctx, digest, rejectedAt, DefaultSessionIdleTTL)
-	if err != nil { t.Fatalf("lookup after rejected CSRF: %v", err) }
-	if !afterReject.LastSeenAt.Equal(touchedAt) {
-		t.Fatalf("rejected CSRF changed LastSeenAt: got %v want %v", afterReject.LastSeenAt, touchedAt)
+	storedRaw, err := client.Get(ctx, store.key(digest)).Bytes()
+	if err != nil { t.Fatalf("read session after rejected CSRF: %v", err) }
+	var afterReject redisSessionRecord
+	if err := json.Unmarshal(storedRaw, &afterReject); err != nil { t.Fatalf("decode session after rejected CSRF: %v", err) }
+	if afterReject.LastSeenAtMS != touchedAt.UnixMilli() {
+		t.Fatalf("rejected CSRF changed LastSeenAt: got %d want %d", afterReject.LastSeenAtMS, touchedAt.UnixMilli())
 	}
 	validAt := rejectedAt.Add(time.Minute)
 	valid, err := store.LookupAndTouchWithCSRF(ctx, digest, csrfDigest, validAt, DefaultSessionIdleTTL)
@@ -173,7 +175,7 @@ func TestRedisSessionStoreIntegration(t *testing.T) {
 	_, newCSRFDigest, err := NewCSRFToken()
 	if err != nil { t.Fatal(err) }
 	rotatedAt := validAt.Add(time.Minute)
-	rotatedCSRF, err := store.RotateCSRFToken(ctx, digest, newCSRFDigest, rotatedAt, DefaultSessionIdleTTL)
+	rotatedCSRF, err := store.RotateCSRFToken(ctx, digest, newCSRFDigest, 1, rotatedAt, DefaultSessionIdleTTL)
 	if err != nil { t.Fatalf("rotate CSRF: %v", err) }
 	if rotatedCSRF.CSRFTokenDigest != newCSRFDigest { t.Fatalf("CSRF digest not rotated: %+v", rotatedCSRF) }
 	if _, err := store.LookupAndTouchWithCSRF(ctx, digest, csrfDigest, rotatedAt.Add(time.Second), DefaultSessionIdleTTL); !errors.Is(err, ErrSessionCSRFRejected) {

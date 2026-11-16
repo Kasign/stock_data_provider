@@ -60,8 +60,9 @@ func (s *testSessionStore) LookupAndTouchWithCSRF(_ context.Context, digest, csr
 	return record, nil
 }
 
-func (s *testSessionStore) RotateCSRFToken(_ context.Context, digest, newCSRFDigest string, now time.Time, idleTTL time.Duration) (platformsecurity.SessionRecord, error) {
+func (s *testSessionStore) RotateCSRFToken(_ context.Context, digest, newCSRFDigest string, expectedCredentialVersion uint64, now time.Time, idleTTL time.Duration) (platformsecurity.SessionRecord, error) {
 	s.digest, s.idleTTL = digest, idleTTL
+	if s.record.CredentialVersion != expectedCredentialVersion { return platformsecurity.SessionRecord{}, platformsecurity.ErrSessionNotFound }
 	s.record.CSRFTokenDigest = newCSRFDigest
 	s.record.LastSeenAt = now
 	s.record.IdleExpiresAt = now.Add(idleTTL)

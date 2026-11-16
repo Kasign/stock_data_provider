@@ -181,7 +181,7 @@ func (a *SessionAuthenticator) RefreshCSRFToken(request *http.Request) (*http.Re
 		return nil, nil, "", err
 	}
 	now := a.now().UTC()
-	record, err := a.csrfSessions.RotateCSRFToken(request.Context(), tokenDigest, csrfDigest, now, a.idleTTL)
+	record, err := a.csrfSessions.RotateCSRFToken(request.Context(), tokenDigest, csrfDigest, credential.CredentialVersion, now, a.idleTTL)
 	if errors.Is(err, platformsecurity.ErrSessionNotFound) {
 		return nil, nil, "", invalidSessionFault()
 	}

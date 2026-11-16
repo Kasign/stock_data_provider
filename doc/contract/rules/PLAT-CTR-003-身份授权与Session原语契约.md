@@ -174,7 +174,7 @@ type SessionStore interface {
 // update idle expiry in the same atomic operation.
 type CSRFSafeSessionStore interface {
     LookupAndTouchWithCSRF(ctx context.Context, tokenDigest, csrfTokenDigest string, now time.Time, idleTTL time.Duration) (SessionRecord, error)
-    RotateCSRFToken(ctx context.Context, tokenDigest, newCSRFTokenDigest string, now time.Time, idleTTL time.Duration) (SessionRecord, error)
+    RotateCSRFToken(ctx context.Context, tokenDigest, newCSRFTokenDigest string, expectedCredentialVersion uint64, now time.Time, idleTTL time.Duration) (SessionRecord, error)
 }
 ```
 

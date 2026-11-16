@@ -56,7 +56,7 @@ type SessionStore interface {
 // Implementations must not touch a session when the supplied CSRF digest is wrong.
 type CSRFSafeSessionStore interface {
 	LookupAndTouchWithCSRF(ctx context.Context, tokenDigest, csrfTokenDigest string, now time.Time, idleTTL time.Duration) (SessionRecord, error)
-	RotateCSRFToken(ctx context.Context, tokenDigest, newCSRFTokenDigest string, now time.Time, idleTTL time.Duration) (SessionRecord, error)
+	RotateCSRFToken(ctx context.Context, tokenDigest, newCSRFTokenDigest string, expectedCredentialVersion uint64, now time.Time, idleTTL time.Duration) (SessionRecord, error)
 }
 
 // NewSessionToken creates a 256-bit URL-safe token and its SHA-256 digest.
@@ -248,6 +248,7 @@ if absolute_exp <= now or idle_exp <= now then
   redis.call('DEL', KEYS[1])
   return false
 end
+if tonumber(record.credential_version or '0') ~= tonumber(ARGV[4]) then return false end
 local next_idle = math.min(now + idle_ttl, absolute_exp)
 record.csrf_token_digest = ARGV[3]
 record.last_seen_at_ms = now
@@ -284,13 +285,13 @@ func (s *RedisSessionStore) LookupAndTouchWithCSRF(ctx context.Context, digest, 
 	return record, nil
 }
 
-func (s *RedisSessionStore) RotateCSRFToken(ctx context.Context, digest, newCSRFDigest string, now time.Time, idleTTL time.Duration) (SessionRecord, error) {
+func (s *RedisSessionStore) RotateCSRFToken(ctx context.Context, digest, newCSRFDigest string, expectedCredentialVersion uint64, now time.Time, idleTTL time.Duration) (SessionRecord, error) {
 	if s == nil || s.client == nil || ctx == nil || !validSessionDigest(digest) ||
-		!validSessionDigest(newCSRFDigest) || now.IsZero() || idleTTL <= 0 || idleTTL > DefaultSessionIdleTTL {
+		!validSessionDigest(newCSRFDigest) || expectedCredentialVersion == 0 || now.IsZero() || idleTTL <= 0 || idleTTL > DefaultSessionIdleTTL {
 		return SessionRecord{}, fault.New(fault.ClassValidation, "platform.security.invalid_session_csrf_rotation", "session CSRF rotation parameters are invalid", nil)
 	}
 	result, err := rotateSessionCSRFScript.Run(ctx, s.client, []string{s.key(digest)},
-		now.UTC().UnixMilli(), idleTTL.Milliseconds(), newCSRFDigest).Text()
+		now.UTC().UnixMilli(), idleTTL.Milliseconds(), newCSRFDigest, expectedCredentialVersion).Text()
 	if errors.Is(err, redis.Nil) {
 		return SessionRecord{}, ErrSessionNotFound
 	}
