@@ -16,8 +16,8 @@ import (
 	platformstorage "example.com/stock-analysis-flow/internal/platform/storage"
 	"example.com/stock-analysis-flow/internal/researchflow/application"
 	"example.com/stock-analysis-flow/internal/researchflow/domain"
-	"example.com/stock-analysis-flow/internal/researchflow/template"
 	"example.com/stock-analysis-flow/internal/researchflow/stageoutput"
+	"example.com/stock-analysis-flow/internal/researchflow/template"
 )
 
 func TestClaimAttemptValidatesArgumentsWithoutDatabase(t *testing.T) {
@@ -107,7 +107,7 @@ func TestMariaDBClaimAttemptLeaseAndFencing(t *testing.T) {
 		},
 		ResolvedTemplate: template.ResolvedTemplate{
 			OutputRegistryVersion: "1.0.0",
-			Ref: "claim-template", Version: "v1", Fingerprint: templateFingerprint,
+			Ref:                   "claim-template", Version: "v1", Fingerprint: templateFingerprint,
 			Stages: []template.ResolvedStage{{Definition: template.StageDefinition{Code: "context"}}, {Definition: template.StageDefinition{Code: "quant"}}, {Definition: template.StageDefinition{Code: "research"}}, {Definition: template.StageDefinition{Code: "report"}}, {Definition: template.StageDefinition{Code: "budget"}}},
 		},
 		Parameters: json.RawMessage(`{}`),

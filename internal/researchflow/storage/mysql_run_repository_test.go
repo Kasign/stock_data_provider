@@ -16,8 +16,8 @@ import (
 	platformstorage "example.com/stock-analysis-flow/internal/platform/storage"
 	"example.com/stock-analysis-flow/internal/researchflow/application"
 	"example.com/stock-analysis-flow/internal/researchflow/domain"
-	"example.com/stock-analysis-flow/internal/researchflow/template"
 	"example.com/stock-analysis-flow/internal/researchflow/stageoutput"
+	"example.com/stock-analysis-flow/internal/researchflow/template"
 )
 
 func TestResearchflowTimestampUsesFixedUTCPrecision(t *testing.T) {
@@ -541,8 +541,8 @@ func TestMariaDBWorkerStoreSnapshotClaimAndCommit(t *testing.T) {
 		AttemptStatus: domain.AttemptSucceeded, Stage: resultStage,
 		StageOutput: &application.StageOutputCommit{
 			Envelope: envelope, RegistryVersion: "1.0.0",
-			RegistryFingerprint: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-			PayloadSchemaRef: "schema://quant/trend/1.0.0",
+			RegistryFingerprint:     "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			PayloadSchemaRef:        "schema://quant/trend/1.0.0",
 			QualitySummarySchemaRef: "schema://quality/trend/1.0.0",
 		},
 	}); err != nil {
