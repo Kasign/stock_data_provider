@@ -1,6 +1,6 @@
 # FLOW-CTR-004 Stage Provider Result Envelope / Output Registry 影响分析（提案）
 
-- 文档状态：只读影响分析提案；未批准契约变更，不修改冻结契约、Schema、Golden 或 Go 代码。
+- 文档状态：影响分析提案；2026-11-16 后续实现状态见第 7 节。未批准契约变更，不修改冻结契约语义。
 - 核对日期：2026-11-16
 - 仓库/分支：`Kasign/stock_data_provider` / `integration`
 - 核对 HEAD：`17ca61fad64e87da8c557f80bdfe66cc71b0bfcd`
@@ -39,7 +39,7 @@ Researchflow 的权威字段定义见 `doc/researchflow/03-CONTRACT-006与007最
 
 另外，FLOW-CTR-004 对 ResultSummary 还要求质量状态、coverage 和 Summary 资源可关联到具体结果。具体枚举、分母口径、资源身份/版本绑定如果尚未由权威决议完整定义，必须走正式契约澄清/变更，不得由 Integration 自行推断。
 
-## 3. 当前代码与 Schema 事实
+## 3. 提案时点的代码与 Schema 事实（后续实现状态见第 7 节）
 
 ### 3.1 Stage 执行结果模型
 
@@ -112,9 +112,32 @@ Quant 侧 `internal/quant/registry` 及 `doc/quant/schema/` 已有部分 QNT-CTR
 7. **ResultSummary 机器校验**：将经正式确认的 quality_status 枚举、coverage 计算口径和 Summary 身份/版本绑定落到 Schema/Golden/Validator；保留 Stage outcomes、excluded/missing stages 与 reason_codes 的可追溯关系。
 8. **跨模块验收**：使用真实 MariaDB 执行 CreateRun→Schedule→Worker→StageExecutor→CommitAttemptResult；覆盖未注册类型/版本、Schema 不匹配、质量摘要无效、身份字段篡改、CallerRef 错配、ResultSummary 质量/coverage 错误和结果原子提交/回滚。取得精确 SHA CI success 后才将 Stage 生产接入状态改为 pass。
 
-## 6. 当前结论与下一项任务
+## 6. 提案时点结论与下一项任务（已由第 7 节更新）
 
 - 当前 FLOW-CTR-004 仍为 `frozen`；本提案不修改登记簿状态。
 - 当前 Researchflow Stage 生产执行保持 `blocked`，不是 fail；现有状态机、Worker、Scheduler、MariaDB 模块验收不重复执行。
 - 目前最先可执行的下一项不是 Server 接线，而是**契约定点澄清与 Envelope/Registry 机器定义**。但其中质量枚举、coverage 分母和 Summary 身份/版本绑定需先得到正式口径；在决议前不写入 Schema/Golden。
 - Integration 本轮完成的是影响分析，不代表生产 Stage 进度已解锁。若要继续实施，应先授权/确认本提案第 5 节第 1 项的契约定点决议；否则保持 blocked，不重复只读盘点。
+
+
+## 7. 2026-11-16 Worker / Output Registry 实施状态更新
+
+本节更新第 3～6 节中 Researchflow 自身执行边界的实现状态；原提案中的历史代码事实保留用于解释本轮改造原因。冻结契约仍为 FLOW-CTR-004，不因实现自动改变契约状态。
+
+### 已实现并通过验收
+
+- Envelope DTO/Builder、JSON Schema/Golden、版本化 Output Registry、精确 discriminator 与强类型 Payload/QualitySummary Validator 已落地。
+- Worker 从持久化 ResolvedTemplate 读取 OutputRegistryVersion，Orchestrator 注入 Run/Stage/Attempt/StageCode/TemplateVersion/CompletedAt，成功/降级 ProviderResult 在提交前执行 Registry 校验。
+- Provider 自报结果引用被拒绝。Migration v6 新增不可变 Stage Output 资源表；Storage 在现有 Run → Stage → Attempt Lease/Fencing 事务中保存 Payload / QualitySummary、生成不透明引用并原子更新 Attempt/Stage。
+- Storage 提供按 resource_ref 读取能力；MariaDB 集成测试覆盖成功提交与两份资源读取。Worker 测试覆盖 Registry 缺失和 Provider 引用越权。
+- 精确代码 SHA：`7392caaba59aa4d322d4b91e1d34a7294d2f6505`；Integration CI Run [43837079196](https://github.com/Kasign/stock_data_provider/actions/runs/43837079196) 全量 success。
+
+### 仍然未解锁
+
+- 没有真实业务 Stage Entry；不得注册占位项。
+- Data / News / Research / Quant / LLM 领域 Provider 仍须由各 Owner 提供明确 Stage Code、Application Port、Payload Schema/Golden、QualitySummary Schema/Golden、质量语义和真实执行能力。
+- Quant Factor 继续受 DATA-CTR-005/007、QNT-CTR-003 deferred 阻断；LLM Provider/CapabilityState 仍 blocked；Notification 是终态异步链路，不作为同步 DAG Stage。
+- Server 生产 StageExecutor、Registry、Scheduler、WorkerPool 生命周期装配须等至少一个真实 Provider/注册项完整后推进；当前不创建空壳 Executor。
+- ResultSummary 的质量枚举、Coverage 分子/分母、Summary 身份/版本绑定未由权威口径完整定义，继续保持独立契约决议项，不影响已完成的通用 Envelope/Output Registry 执行边界。
+
+**后续主线：** 停止重复检查 Worker/Storage。按真实模块 Application Port 与现有领域 Schema/Golden，确认第一个可执行的领域 Stage；优先从 News/Research 现有能力评估，缺少领域语义时由对应 Owner 决定，不由 Researchflow/Integration 猜测。真实 Provider 完备后再做 Server 生产装配与跨模块端到端验收。
