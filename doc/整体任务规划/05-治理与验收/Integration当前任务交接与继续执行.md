@@ -2,8 +2,8 @@
 
 - 仓库：Kasign/stock_data_provider
 - 当前工作分支：integration
-- 本文更新日期：2026-11-14
-- 本文记录时核对的 integration HEAD：`c25d881c0`（2026-11-14 代码提交：独立 review 修复）。**该字段是记录时快照，不是实时值**：本轮及后续 docs-only 提交都会让 HEAD 前移，实际当前值一律按第 4 节规则查远端。最近**代码**验收 SHA `c25d881c0`，Integration CI Run `43574975820`（#70）success；其后的 docs-only 提交按 CI paths 规则不触发新 CI，不得把文档 HEAD 记作 CI 通过。历史代码验收 SHA：`4752dc104` / Run `43571558064`（B 组资产 + CI `-v`）、`b0aabaa2e` / Run `43561072301`（A 组首验）。
+- 本文更新日期：2026-11-16
+- 本文记录时核对的 integration HEAD：`a992f4cb4dd5e3ba6dababa23010828b2502622c`（CI 门禁修复提交，Run `43788290026` 执行中）。**该字段是记录时快照，不是实时值**：后续提交会让 HEAD 前移，实际当前值一律按第 4 节规则查远端。最近已完成代码验收 SHA `c25d881c0`，Run `43574975820`（#70）success；`a992f4c` 为 workflow 代码变更，须以 Run `43788290026` 对精确 SHA 的最终结果更新验收状态。历史代码验收 SHA：`4752dc104` / Run `43571558064`、`b0aabaa2e` / Run `43561072301`。
 - 本文用途：下一轮新聊天的首要接续入口。新聊天先读本文，再核对 GitHub 当前 HEAD/CI；不得直接假设本文 SHA 仍是最新。
 - 2026-11-14 联调补记：新增 `internal/server/bootstrap/research_news_mariadb_integration_test.go`，落地第 3 节 A 组跨模块 MariaDB 验收用例与无 DB 自检；提交 `b0aabaa2e` 已推送 integration，Integration CI Run [43561072301](https://github.com/Kasign/stock_data_provider/actions/runs/43561072301) success（head_sha 精确匹配，全部检查项通过），**A 组状态由 `not_comparable` 升级为 `pass`**。本机无 MariaDB/Docker，本地 `t.Skip` 只代表开发态；已用非空假 DSN 在本地验证三个 DB 子测试均进入真实连接阶段而非 Skip，且 CI job env 提供 `SERVER_RELAY_TEST_MYSQL_DSN` 与 mariadb:11.4 service，可确认 CI 上真库执行。匿名 job 日志下载需权限（403）；2026-11-14 完成 `gh` 登录后已取得 Run 68 逐步日志，实证 `mariadb:11.4` service healthy、三个 DSN 非空、`internal/server/bootstrap` 包 `ok 0.627s`。但 CI 使用 `go test ./...`（无 `-v`），Run 68 日志不含逐用例 PASS/SKIP 明细；该限制已由 Run 69 新增的 `test-integration-verbose` 步骤消除并取得逐用例实证，详见第 8.2 节。B 组成功写入链路经源码核对确认被 `available_at` 硬阻断，记为 `blocked`；B 组成功路径用例已落地、当前按契约事实 `t.Skip`。
 - 本轮代码验收 HEAD：c25d881c041eb349450c004c42c4cf227c9bf437；Run 43574975820 success。历史：4752dc104（Run 43571558064）、b0aabaa2e（Run 43561072301）、dde7d4f8（Run 43370552552）。
@@ -16,7 +16,7 @@
 - 2026-11-14 第 6 项补记（远端提交 `a98823abe`）：LLM Provider 与 Notification Delivery 生产装配条件只读复核已完成，**均判定 `blocked`**，详见本文第 7 节。至此第 3 节 1～6 项全部处理完毕：1、2、3A 为 `pass`；3B、4、5、6 为 `blocked`。**当前没有可推进的 Integration 开发任务**，在新证据或正式生产消费端出现前停止新增 Integration 代码（见第 7.4 节）。这一「等待态」的根因、工作面选择与反空转规则见本文第 10 节；后续若用户未授权跨模块/契约变更，不应再重复盘点或制造文档进度。
 - 2026-11-14 CI 可观测性补记：本机 `gh` 2.104.0 已由用户在本机终端完成网页授权登录（`Kasign` / keyring / `repo,read:org`），`gh run view 43561072301 --log` 已成功取得 Run 68 逐步日志，确认 MariaDB service healthy、三个 DSN 非空、bootstrap 包 `ok`；匿名 REST API 的 job 日志下载返回 403。因 CI 未启用 `-v`，Run 68 日志不含逐用例明细；该限制已由 Run 69 的 `test-integration-verbose` 步骤永久消除。工具链细节、HTTPS fetch 兜底与证据级别见本文第 8 节。
 - 2026-11-14 工作面复盘补记：用户指出「连续多轮没有实质性任务进度」。核对后确认 Integration 分支可独立完成的编码工作已完结，5 条 `blocked` 链全部需要其他模块领域代码 / L1 冻结契约 / 真实外部来源证据；此前把「等 Owner」当作分支内任务反复盘点，是策略偏差。本轮新增第 10 节固化工作面判定、P0 精确解锁清单、三种工作面与反空转规则，并交付两项 Integration 侧代码资产（B 组成功路径用例 + CI `-v` 逐用例证据），Run `43571558064` 对代码 SHA `4752dc104` success。`.workbuddy/memory/2026-11-14.md` 经用户确认已提交（`0f7aab244`），不加入 `.gitignore`。
-- 2026-11-14 工作面 A 补记：用户已「授权A」。按登记簿第 5 节先产出 `doc/contract/NEWS-CTR-001-available_at-来源证据解锁影响分析.md`（提案，待正式决策）。**A 第 1 步经 SEC 官方 FAQ 与 EDGAR PDS 规范核实，判定 `sec-edgar` 与现有 Provider 均不提供「首次公开可获取时间」的合格证据**，故按冻结契约不得新增字段/表、不得改 PIT SQL；当前停在「正式决策」门禁，需项目负责人在提案第 3 节选定 P1/P2/P3。详见本文第 10.7 节。
+- 2026-11-14 工作面 A 补记：项目负责人已授权先做影响分析；提案保持待正式决策，P0 后续已由负责人决定 `shelved`。SEC 官方证据只否决 EDGAR 接受时间作为首次公开可获取时间，不证明所有市场来源均不存在。来源候选复核已在 2026-11-16 Review 中降级为待证实候选，详见第 10.8、10.9 节及提案第 1.5 节。
 
 ## 1. 当前已完成的工作
 
@@ -430,3 +430,15 @@ Researchflow 已有 Scheduler、Worker、WorkerPool、Claim/Lease/Fencing、候�
 - **因此重启条件不是「再找来源」，而是产品决策**：是否为 News 新增一类法定披露来源（EDINET / RNS / HKEX 形态），并落实其授权、字段规范与覆盖市场。该决策属 News 产品定位与输入结构变更，**不在 Integration 分支权限内**。
 - **搁置期间禁止**：不新增 `available_at` 列或证据表、不改 PIT SQL、不生成/回填 `available_at`、不启用 B 组用例、不为消除 `--- SKIP` 改断言、不重复盘点这 4 家候选。
 - 阶段判定：仍为 INT-B 进行中；B 组状态 `shelved`（非 `fail`）；代码验收 `c25d881c0` / Run #70 不变，本轮纯文档、不触发 CI。
+
+
+### 10.9 2026-11-16 Integration Review 与门禁修正
+
+- 开始前核对远端 `integration` HEAD：`a50302a87c0969eae2377ee3d8ca82d5fe697e5a`；本次只在当前分支工作。
+- Review 覆盖从 `396fa05d10bcb65eec2087cd4ef060b1a7eda720` 到该 HEAD 的 15 个提交。未发现本轮引入可确认的生产业务代码回归；主要问题集中在 CI 逐用例门禁、来源分析证据等级和验收文档过期。
+- CI 原门禁用 `grep -c '^--- PASS: Test'` 统计顶层 PASS，实际会把子测试 PASS 一并计数；B 组只要没有匹配到 SKIP 就会被写成「已启用」，未验证明确 PASS，也未拒绝缺失结果。
+- 2026-11-16 已修复 `.github/workflows/integration-ci.yml`：三个顶层测试逐一精确要求 PASS；A 组七个子测试按完整测试路径逐一要求 PASS；B 组必须明确 PASS 或明确 SKIP，缺少两者均失败。当前 B 组按项目负责人既有决议标记 `shelved`，SKIP 不是 fail，也不是 PASS。代码提交 `a992f4cb4dd5e3ba6dababa23010828b2502622c`，Run `43788290026` 对精确 SHA 执行中；未取得 success 前不得标记门禁修复验收通过。
+- 来源提案第 1.5 节原结论过度：EDINET `submitDateTime` 只能先视为提交时间候选，尚未证明为首次公众可获取时间；LSE RNS FIX `SendingTime` 定义为消息传输时间，不能直接推定为公众可获取时间；HKEX 分钟级时间不满足契约精度；CNINFO 公开接口实测值仅日期精度。项目范围是中国 A 股、海外市场暂缓，EDINET/RNS 不得作为当前 A 股验收来源。所有候选均不得标记 `verified`。
+- 现有 SEC 官方 FAQ 仅支持「EDGAR Acceptance Time 不等于 sec.gov 首次公开可获取时间」的否定结论；不得由此推出市场上不存在其他合格来源。
+- 项目总览第 3 节已按当前联调授权修正：Integration 可维护跨模块测试、CI 门禁和现有验收证据；不得修改模块领域代码、公共平台实现或冻结契约。该职责是当前阶段性授权，不改变长期模块 Owner 边界。
+- 本轮没有修改 Go 业务代码、冻结契约、Schema 或 Golden；没有新增接口/字段；没有合并其他分支。

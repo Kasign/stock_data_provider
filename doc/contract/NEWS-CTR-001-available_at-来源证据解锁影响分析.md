@@ -4,7 +4,7 @@
 - 提出日期：2026-11-14
 - 触发：项目负责人授权 Integration「工作面 A」（《[Integration 当前任务交接与继续执行](../整体任务规划/05-治理与验收/Integration当前任务交接与继续执行.md)》第 10.4 节），要求以契约 Owner + News/Research Owner 身份推进 P0。
 - 治理依据：`doc/contract/PLAT-002-项目级契约冻结登记簿.md:85-92` 第 5 节——「公开语义变更必须先完成影响分析、正式决策、消费者影响确认、版本升级和迁移边界定义」；交接文档第 10.5 节反空转规则第 2 条——授权 A 后先输出契约变更影响分析并取得确认，再动代码。
-- 核对基线：`integration` HEAD `a7a2f3054`；最近代码验收 SHA `c25d881c0` / Integration CI Run `43574975820`（#70）success；登记簿版本 `0.2.60-frozen`，43 项 CTR（37 frozen / 4 deferred / 2 not_applicable）。
+- 核对基线（2026-11-16 Review）：`integration` 代码基线 `a50302a87c0969eae2377ee3d8ca82d5fe697e5a`；最近已完成代码验收 SHA `c25d881c0` / Run `43574975820`（#70）success；随后 CI 门禁修复 SHA `a992f4cb4dd5e3ba6dababa23010828b2502622c` 的 Run `43788290026` 执行中。登记簿版本 `0.2.60-frozen`，43 项 CTR（37 frozen / 4 deferred / 2 not_applicable）。
 
 ---
 
@@ -13,9 +13,9 @@
 > **状态（2026-11-14）：`搁置`（P0 挂起）。** 项目负责人决定：本项暂不推进，结论固化于本文，等待新的外部条件（采购/授权到合格的法定披露类来源）再重启。挂起不改变 `available_at` 语义，也不解除 `新闻模块开发任务与验收清单.md:799` 的「不得新增字段/表、不得改 PIT SQL」禁令。
 
 1. **A 的法定第一步已完成，结论是「冻结 Golden 指定的 `sec-edgar` 与仓库已接入的全部 Provider 均不合格」**：SEC 官方文档逐字声明 `There is no timestamp to indicate when filing content is first available on sec.gov.`；`Acceptance Time` 是「被 EDGAR 接受」的 EST 系统时间，到 sec.gov 可见还有 1-3 分钟且**不可预测**的 lag；PDS 规范里唯一的 `<TIMESTAMP>` 只用于「受理后更正」且由 R/A Subsystem 提供。详见第 1 节。
-2. **⚠️ 上一轮结论的更正**：第 1 节只能证明「`sec-edgar` 与现有搜索类 Provider 不合格」，**不能推出「不存在合格来源」**。2026-11-14 补充的全渠道复核（第 1.5 节）已找到形态合格的来源（日本 EDINET `submitDateTime` 秒级、JST、免费公开 API；LSE RNS `SendingTime` 毫秒级、UTC、法定披露渠道）。因此正确的表述是：**合格来源存在，但它属于「法定披露」内容品类，而本模块现有来源是「新闻报道/搜索聚合」品类——是品类不匹配，不是供给为零。**
+2. **2026-11-16 Review 更正**：第 1.5 节此前把时间精度和时区误当成语义证明。EDINET `submitDateTime` 目前只能列为提交时间候选，尚未证明为首次公众可获取时间；LSE RNS FIX `SendingTime` 是消息传输时间，不能直接等同公众可获取时间。两者均未通过准入 1 的语义证明，且属于海外市场，不符合当前中国 A 股项目范围。不能声称已找到合格来源。
 3. **因此当前不得动代码**。`新闻模块开发任务与验收清单.md:799` 冻结了「当前来源没有合格字段，因此**不新增无实际来源支撑的字段/表，也不修改 PIT SQL**」；`新闻数据模型与质量契约.md:48` 规定「现阶段所有记录的 `available_at` 保持 NULL」。先加列、先建证据表、先改 PIT SQL 或先造 verified 值，都是契约明令禁止的「造壳」，不是解锁。
-4. **挂起而非取消的理由**：要让 B 组真跑通，需要的不是「换一家数据商」，而是**为 News 模块新增一类法定披露来源**（EDINET / RNS / HKEX 形态）。这是 News 的产品定位与输入结构变更，超出「补一个字段」的范围，须由项目负责人决策。在该决策作出前，本提案保持挂起，不做版本升级、不做迁移、不动代码。
+4. **挂起而非取消的理由**：当前 A 股范围内尚无通过全部准入条件的来源证据。海外 EDINET/RNS 候选既未证明时间语义，又超出当前项目范围；HKEX 时间精度不足；CNINFO 公开接口仅日期精度。若未来扩展海外市场或取得 A 股来源的官方字段规范与授权，必须重新按契约逐项审核。在此之前本提案保持挂起，不做版本升级、不做迁移、不动代码。
 
 ---
 
@@ -83,40 +83,28 @@
 
 因此即便项目负责人决定放宽，也**不能**把「首次抓取时间/系统分发时间」塞进 `available_at`；只能新增一个带区间语义的独立字段并重新定义 PIT 边界。这属于 GOV-CTR-004 `:28` 的 MAJOR 语义变更，必须重走本文第 4 节版本升级流程。
 
-### 1.5 全渠道复核（2026-11-14 补充）：合格来源存在，但属另一内容品类
+### 1.5 来源候选复核与适用范围（2026-11-16 Review 更正）
 
-第 1.3 节只否决了「已接入来源」，为排除「是不是根本没找过」的疑问，本节按**渠道品类**重扫一遍。这类字段的分布规律如下：
+本节只登记候选和已知排除项，不把「字段有秒/毫秒精度」当作「首次向公众公开可获取时间」的语义证明。契约准入必须同时满足语义、授权、证据留痕、精确时间点、内容版本绑定等条件。
 
-| 渠道品类 | 代表 | 字段规范可公开获取 | 语义是否可能合格 |
-|---|---|---|---|
-| ① 监管机构 API | 日本 EDINET、LSE RNS（MIT304）、SEC EDGAR API | **是，官方免费公开** | 可能合格 |
-| ② 交易所披露平台 | HKEXnews、巨潮 CNINFO、TDnet | 部分（页面可见，无字段规范） | 视精度而定 |
-| ③ 商业数据厂商 | Wind / Choice / Refinitiv / Bloomberg / RavenPack | **否（付费墙或 NDA 后的字段字典）** | 通常最好 |
-| ④ 学术/爬虫数据集 | GDELT、Common Crawl | 是 | 不合格（系统侧时间，契约 `:44` 负面清单） |
-
-逐项核查结果：
-
-| 来源 | 字段与实测值 | 精度 / 时区 | 授权 | 判定 |
+| 来源 | 已知字段 / 观察 | 精度 / 时区 | 当前适用性 | 当前判定 |
 |---|---|---|---|---|
-| **日本 EDINET**（金融庁法定开示） | `submitDateTime`，实例 `"2024-06-20 15:30:45"` | **秒级 / JST** | **免费公开 API + 公开规格** | **准入 1、2、4 可能全过**，形式最合格 |
-| **LSE RNS**（FCA 批准 Primary Information Provider） | MIT304 规范 FIX 字段 `SendingTime`：`Time the message was transmitted specified in UTC and in the YYYYMMDD-HH:MM:SS.sss format` | **毫秒级 / UTC** | 市场数据牌照，无免费通道 | 语义与精度合格，**授权受限** |
-| **HKEXnews**（港交所披露易） | `Release Time`，实例 `22/10/2026 18:27` | 分钟级 / HKT | 官方 RSS 不含上市公司公告，无机读授权 | 语义有规则背书（见下），**授权缺口** |
-| **巨潮 CNINFO** | 公开查询接口 `announcementTime`，实测 4/4 条：`1792771200000 → 2026-10-24 00:00:00`、`1791820800000 → 2026-10-13 00:00:00`，毫秒位均为 0 | **仅日期** | 有正式 API（Access Key/Secret + token） | **契约准入 4 明确「只有日期…均不准入」→ 公开接口硬性不合格**；付费 API 字段字典无法验证 |
+| 日本 EDINET | `submitDateTime`；字段名称指向提交时间，尚未取得足以证明其等于公众首次可获取时间的官方语义证据 | 公开样例呈秒级本地时间；须以当前官方 API 规范确认时区与解析约束 | 日本市场，超出当前中国 A 股范围 | `candidate`，准入 1 未通过，不得标记 `verified` |
+| LSE RNS / MIT304 | FIX `SendingTime` 定义为消息传输时间（message transmitted），不是公众可获取时间的直接证明 | 规范格式含毫秒及 UTC | 英国市场，超出当前中国 A 股范围；另有市场数据授权限制 | `rejected_for_available_at`（现有证据不满足准入 1）；如未来取得不同的官方公开时间字段，再重新评估 |
+| HKEXnews | 页面可见 `Release Time` 样例 | 分钟级 / HKT | 香港市场，超出当前中国 A 股范围 | 当前精度不满足契约准入 4；不作为候选通过项 |
+| 巨潮 CNINFO 公开查询接口 | `announcementTime` 公开接口样例 4/4 条时间部分均为 `00:00:00` | 实际仅日期精度 | 中国 A 股范围内 | 当前公开接口不满足准入 4；付费服务字段字典未取得，保持 `not_comparable`，不得推定其提供秒级时间 |
+| Bocha / Tavily / Brave / SearXNG | 当前已接入字段为搜索/聚合发布时间或页面年龄 | 不构成来源原始首次公开时间 | 当前 News 已接入来源 | 依据契约负面清单，不合格 |
 
-补充事实与依据：
+**证据边界与修正：**
 
-- **EDINET 语义**：FSA 官方原文 `The corporate disclosure documents submitted by these entities are publicly available on the Internet through EDINET.` —— 提交即在 EDINET 公开，不存在 EDGAR 那种「接受 ≠ 公开」的两阶段。
-- **HKEXnews 语义**：港交所规则官网 FAQ 原文 `Under the Listing Rules, the release of information by way of a formal announcement via the HKEx website is regarded as the formal channel of communication with the investing public.`
-- **巨潮实测方法**：`POST http://www.cninfo.com.cn/new/hisAnnouncement/query`（HTTP 200，4 条平安银行公告）。测的是免费公开查询接口；**付费数据服务（`p_sysapi1075`）的字段字典在付费墙后，本轮无法验证其是否提供时分秒**，故巨潮只能记为「公开层已排除、付费层待验证」。
-- **深交所自律监管指南第 1 号（2026 修订）** 说明精度丢失发生在字段层而非规则层：`交易日 6:00-7:30 完成公告提交，本所技术平台于当日 7:30 后自动发送…；7:30-8:00 提交，实时发送；…11:30 后…；15:30 后…；16:00 后…`。即每份公告本有明确披露时刻，是平台字段只给到日期。
+- SEC 官方 FAQ 明确说明 EDGAR Acceptance Time 是提交被 EDGAR 接受的时间，且 SEC 网站内容可见存在不保证、不可预测的延迟；该证据只支持否决 Acceptance Time 作为 `available_at`，不支持推断其他市场不存在合格来源。官方出处：[SEC Webmaster FAQ](https://www.sec.gov/about/webmaster-frequently-asked-questions)。
+- EDINET 的 `submitDateTime` 不因秒级格式或「提交文件经 EDINET 公开」的概括性描述，就自动证明该字段记录的是公众可获取的准确时刻。必须取得现行官方 API 字段定义、发布时间流程及字段与公众页面实际可见时刻的对应证据。
+- LSE FIX `SendingTime` 只说明消息发送时间。消息发送、接收、供应商分发与公众可获取可能是不同事件；没有官方规则明确证明其对应首次公开时刻，不得通过准入 1。
+- HKEX 分钟级字段不满足当前契约要求的精确时间点；CNINFO 公开接口的日期级值也不满足。CNINFO 付费 API 未取得字段字典，属于 `not_comparable`，不是通过或失败的实测结论。
+- 项目总览明确当前范围为中国 A 股、海外市场暂缓。因此 EDINET、LSE RNS、HKEX 即使未来通过各自市场的语义审核，也不能直接作为当前 A 股业务验收证据，除非项目负责人先批准范围变更。
+- 本次未找到可在当前 A 股范围内标记为 `verified` 的 `available_at` 来源。P0 维持 `shelved`；不新增字段/表、不修改 PIT SQL、不生成或回填 `available_at`。
 
-**本节结论（也是本次挂起的核心理由）**：
-
-1. 契约要求的语义**不是乌托邦**——法定披露系统确有「发布即公开」的秒级时间字段，且 EDINET 官方免费公开。
-2. 但**现有搜索类 Provider 在结构上不可能提供该字段**：Tavily `published_date`、Brave `page_age`、SearXNG `published` 全部是索引/聚合时间，逐条命中契约 `:44` 负面清单。换任何一家搜索类 Provider 结果相同。
-3. 因此 `available_at` 只对**法定披露类**内容成立，对**新闻报道类**内容不成立。本项目 News 模块当前是后者。要解锁就必须**新增一类法定披露来源**（改变 News 输入结构），属产品范围决策，不在 Integration 分支权限内。
-
-
+**本节结论：** 目前没有足够证据证明存在符合当前项目范围与 NEWS-CTR-001 全部准入条件的已授权来源。这里的结论是「当前证据不足」，不是「市场上绝对不存在合格来源」。
 
 ### 2.1 权威契约 / 规则文件
 
@@ -168,7 +156,7 @@
 >
 > 依据第 1.5 节，P1 的真实前置不是「找到来源」，而是「为 News 新增法定披露类来源品类」这一产品定位决策；P2 按契约 `:47` 不能替代 `available_at`、且单靠新字段打不通 B 组；P3 无需变更即维持现状。三者都不构成 Integration 分支内可执行的开发动作。
 >
-> **重启条件（唯一）**：项目负责人决定为 News 引入法定披露类来源（EDINET / RNS / HKEX 形态任一），并落实其授权（凭据或牌照）、字段规范文档与覆盖市场。达到后按第 6 节实施计划从第 1 步重走，届时本文 §1.5 的候选评估可直接复用。
+> **重启条件（唯一）**：取得符合当前中国 A 股项目范围的官方来源字段规范、授权证明和首次公众可获取时间语义证据，并由项目负责人批准按冻结流程推进。若考虑海外来源，必须先批准项目范围扩展，再独立完成该市场的语义、授权和版本绑定审核；不得直接复用当前 A 股验收结论。
 >
 > **搁置期间禁止**：不新增 `available_at` 列或证据表、不改 PIT SQL、不生成或回填 `available_at`、不启用 B 组用例、不为消除 `--- SKIP` 而改断言。
 
