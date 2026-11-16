@@ -796,3 +796,12 @@ Researchflow 已有 Scheduler、Worker、WorkerPool、Claim/Lease/Fencing、候�
 - `internal/research/adapters/news/evidence_test.go` 新增亚秒和 available_at 晚于 system_observed_at 的拒绝用例。
 - 此项不修改 News 的现有 NULL 输出，不产生任何真实来源 available_at；B 组仍保持 shelved。
 - 本轮第二批代码提交及 CI 状态以后续精确 SHA/Run 为准。
+
+
+### Run #85 格式门禁排障
+
+- 精确 SHA：`ea79dc5503f36280af2b944d3557fd0fd4ccb08f`。
+- Run [43810902921](https://github.com/Kasign/stock_data_provider/actions/runs/43810902921) 失败原因仅为 `internal/research/adapters/news/evidence_test.go` 中一条匿名函数复合字面量未按 gofmt 展开。
+- 同一 Run 的根模块 vet/test、News/Research 跨模块 MariaDB 逐用例、Worker Bootstrap MariaDB/Redis、go-core vet/test、Compose 和 WebUI 检查均 success。
+- 已按日志 diff 修复格式；Run #85 不得标记通过，等待新 SHA 的全量 CI。
+- CI 使用的 MariaDB 镜像为 `mariadb:11.4`，日志实际版本 `11.4.13-MariaDB`。后续 Migration DDL 测试可以使用该已知版本；生产数据库版本仍需核实。

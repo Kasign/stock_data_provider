@@ -103,7 +103,10 @@ func TestImporterRejectsMissingFutureAndSubsecondAvailableAtWithoutPersisting(t 
 	}{
 		{"missing available_at", func(r *newsapp.ResearchEvidenceRecord) { r.AvailableAt = nil }, ErrEvidenceNotPITSafe},
 		{"future available_at", func(r *newsapp.ResearchEvidenceRecord) { future := asOf.Add(time.Second); r.AvailableAt = &future }, ErrEvidenceNotPITSafe},
-		{"subsecond available_at", func(r *newsapp.ResearchEvidenceRecord) { value := asOf.Add(-time.Hour).Add(250 * time.Millisecond); r.AvailableAt = &value }, ErrEvidenceNotPITSafe},
+		{"subsecond available_at", func(r *newsapp.ResearchEvidenceRecord) {
+			value := asOf.Add(-time.Hour).Add(250 * time.Millisecond)
+			r.AvailableAt = &value
+		}, ErrEvidenceNotPITSafe},
 		{"available_at after observation", func(r *newsapp.ResearchEvidenceRecord) {
 			value := r.SystemObservedAt.Add(time.Second)
 			r.AvailableAt = &value

@@ -1041,3 +1041,12 @@ Evidence 表最小必要字段调整为：
 - [x] Research News Authorizer 对当前 News 复核结果和已存 Evidence 同样执行整秒与 `available_at <= system_observed_at` 校验；不匹配或不满足时 fail-closed。
 - [x] 测试新增亚秒值、available_at 晚于 system_observed_at 的拒绝用例；缺失/未来值零落库测试继续保留。
 - 该改动只强化消费边界，不生成 News 的非空 available_at，不改变 News 1.0.0 Schema/Golden，也不解除 B 组来源门禁。
+
+
+### 2026-11-16 Research 消费门禁 CI 反馈
+
+Integration CI Run 43810902921（#85）对提交 `ea79dc5503f36280af2b944d3557fd0fd4ccb08f` 的结果：
+- 根模块 `go vet ./...`、`go test ./...`、News/Research 跨模块逐用例测试、Worker Bootstrap MariaDB/Redis、go-core vet/test、Compose 和 WebUI 检查均通过。
+- 唯一失败项是新增 `internal/research/adapters/news/evidence_test.go` 的 gofmt；不是编译或测试失败。
+- 已按 CI 输出修正格式，修复提交的精确 SHA 与后续 CI 结果另行记录。
+- CI 服务容器明确为 MariaDB `11.4.13`；后续新增 Migration 可在同一 Integration CI 服务版本上执行真实 DDL 测试。生产部署数据库版本仍需独立核实。
