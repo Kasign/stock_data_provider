@@ -670,3 +670,14 @@ Researchflow 已有 Scheduler、Worker、WorkerPool、Claim/Lease/Fencing、候�
 交易所商业公告 API 许可阻塞后，找到巨潮资讯网官方公告列表字段 `announcementTime`（页面显示“公告时间”）。巨潮资讯网由深圳证券信息有限公司运营；深交所 2026 年修订指南明确了直通/非直通公告送达符合条件媒体的时点规则。当前公开页面样本多显示 16:00，但这不能证明该字段等于逐公告首次公开可获取时间；网站公开浏览也不自动证明自动化采集/持久化许可。
 
 **状态：secondary candidate / not verified。** 下一步用少量真实样本核对早间、午间、盘后直通及非直通公告的 `announcementTime`、规则媒体送达时点、首次可访问时间，并检查更正/替换版本行为和个人自动化访问许可。验证前不接入 Provider、不生成 available_at、不新增 Migration 或修改 PIT SQL。
+
+
+### 2026-11-16 available_at 内部标准纠偏与本轮继续任务
+
+项目负责人明确：`available_at` 是 Kasign 内部字段，应按 PIT 研究诉求定义；外部数据源众多，不应把任何一个来源字段作为唯一标准。已将该原则同步到 NEWS-CTR-001 影响分析和 News 验收清单。
+
+内部唯一语义：**具体内容版本首次公开、可被市场参与者获取的时间**。各 Provider Adapter 将不同来源的字段名、格式、时区/偏移、发布流程及版本标识转换为内部 UTC 秒级值。来源资格逐一核验，不要求所有来源都具备该字段，也不设全局权威源；不能证明语义/版本或使用许可的来源不参与写入，无法解释的多源冲突保持 NULL。`available_at_raw` / `available_at_field_path` 只追溯实际产生所选值的 Observation，不新增原始响应存档或 Evidence/Decision 表。
+
+本轮补充检索再次观察到巨潮公告列表的 `announcementTime` 样本普遍显示 `2026-11-13 16:00`，官方页面确认其为“公告时间”，但这不足以证明每条公告的首次公开可获取时刻。巨潮公开页面免责声明没有明确授予自动化批量访问、持久化和再利用许可；官方数据 API 的公开文档可见与实际数据接口授权是两回事，社区整理资料报告数据端点存在未授权访问响应，不能作为绕过授权的依据。当前候选仍为 `not verified / blocked for ingestion`。
+
+下一步继续围绕同一目标：找可合法使用的来源样本，验证原始时间字段、版本身份和首次公开可获取语义；巨潮只有在样本及许可门禁通过后才可进入 Provider。当前不改代码、Migration、PIT SQL，不解除 B 组 SKIP，不将任何 `announcementTime` 写入 `available_at`。
