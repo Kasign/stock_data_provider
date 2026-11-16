@@ -865,3 +865,12 @@ Researchflow 已有 Scheduler、Worker、WorkerPool、Claim/Lease/Fencing、候�
 - 代码提交：`65954360b7db2605546047fb8ea69e6a47d99eb8`；测试提交：`805e79159fe5e29e6919b06e8b42dfd995a19032`。当前尚未取得精确 SHA 的全量 CI 结果，不能标记通过。
 - 测试夹具是内部一致性测试，不是来源证据；不得据此创建生产 Evidence、映射 Provider 或解除 B 组 SKIP。
 - 后续先检查该 SHA 的 Integration CI。通过后继续检查 Decision 序列化/追加写入的事务边界；任何 Evidence 原始值持久化仍须先满足字段级授权与 retention。
+
+
+### PIT Decision 读取端完整性修正（2026-11-16）
+
+- 读取端条件要求最新可见决策 `status='verified'`，并且 `selected_evidence_id` 必须属于 `considered_evidence_ids`；使用 MariaDB `JSON_CONTAINS` 实现，不依赖 Domain Validator 单层保护。
+- 对应真库集成测试新增异常 verified 决策（selected 不在 considered 集合），预期 PIT 返回 NULL。
+- 有效 SQL 修复提交为 `d5da0853ae5cd5cd7f15094fa04b4d3028b5cce0`；测试提交为 `805e79159fe5e29e6919b06e8b42dfd995a19032`。`6595436` 曾产生截断 SQL 字符串，已从 `6ac0d43` 的完整文件恢复并修复；不得把该提交视为有效版本。
+- 当前查询 `d5da085` 的 Combined Status 与 PR workflow runs 均为空；CI 未验证，不能标记通过。
+- 下一项仍按本节原任务：检查并实现 Decision 追加写入的并发串行化/序号与 supersedes 连续性；不扩展到其他领域，不创建真实来源证据，不解除 B 组 SKIP。
