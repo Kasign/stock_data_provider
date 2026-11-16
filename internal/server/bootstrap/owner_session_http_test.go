@@ -40,15 +40,15 @@ type ownerHTTPTestSessions struct {
 }
 
 func (s *ownerHTTPTestSessions) Create(_ context.Context, digest string, record platformsecurity.SessionRecord) error {
-	if s.records == nil { s.records = make(map[string]platformsecurity.SessionRecord) }
-	if _, exists := s.records[digest]; exists { return platformsecurity.ErrSessionConflict }
+	if s.records == nil {\n\t\ts.records = make(map[string]platformsecurity.SessionRecord)\n\t}
+	if _, exists := s.records[digest]; exists {\n\t\treturn platformsecurity.ErrSessionConflict\n\t}
 	s.records[digest] = record
 	return nil
 }
 func (s *ownerHTTPTestSessions) LookupAndTouch(_ context.Context, digest string, now time.Time, idle time.Duration) (platformsecurity.SessionRecord, error) {
 	s.touches++
 	record, ok := s.records[digest]
-	if !ok { return platformsecurity.SessionRecord{}, platformsecurity.ErrSessionNotFound }
+	if !ok {\n\t\treturn platformsecurity.SessionRecord{}, platformsecurity.ErrSessionNotFound\n\t}
 	record.LastSeenAt = now
 	record.IdleExpiresAt = minOwnerHTTPTime(now.Add(idle), record.AbsoluteExpiresAt)
 	s.records[digest] = record
@@ -57,22 +57,22 @@ func (s *ownerHTTPTestSessions) LookupAndTouch(_ context.Context, digest string,
 func (s *ownerHTTPTestSessions) LookupAndTouchWithCSRF(_ context.Context, digest, csrfDigest string, now time.Time, idle time.Duration) (platformsecurity.SessionRecord, error) {
 	s.csrfTouches++
 	record, ok := s.records[digest]
-	if !ok { return platformsecurity.SessionRecord{}, platformsecurity.ErrSessionNotFound }
-	if record.CSRFTokenDigest != csrfDigest { return platformsecurity.SessionRecord{}, platformsecurity.ErrSessionCSRFRejected }
+	if !ok {\n\t\treturn platformsecurity.SessionRecord{}, platformsecurity.ErrSessionNotFound\n\t}
+	if record.CSRFTokenDigest != csrfDigest {\n\t\treturn platformsecurity.SessionRecord{}, platformsecurity.ErrSessionCSRFRejected\n\t}
 	record.LastSeenAt = now
 	record.IdleExpiresAt = minOwnerHTTPTime(now.Add(idle), record.AbsoluteExpiresAt)
 	s.records[digest] = record
 	return record, nil
 }
 func (s *ownerHTTPTestSessions) Rotate(_ context.Context, oldDigest, newDigest string, record platformsecurity.SessionRecord, _ time.Time) error {
-	if _, ok := s.records[oldDigest]; !ok { return platformsecurity.ErrSessionNotFound }
+	if _, ok := s.records[oldDigest]; !ok {\n\t\treturn platformsecurity.ErrSessionNotFound\n\t}
 	delete(s.records, oldDigest)
 	s.records[newDigest] = record
 	return nil
 }
 func (s *ownerHTTPTestSessions) RotateCSRFToken(_ context.Context, digest, newCSRFDigest string, version uint64, now time.Time, idle time.Duration) (platformsecurity.SessionRecord, error) {
 	record, ok := s.records[digest]
-	if !ok || record.CredentialVersion != version { return platformsecurity.SessionRecord{}, platformsecurity.ErrSessionNotFound }
+	if !ok || record.CredentialVersion != version {\n\t\treturn platformsecurity.SessionRecord{}, platformsecurity.ErrSessionNotFound\n\t}
 	record.CSRFTokenDigest = newCSRFDigest
 	record.LastSeenAt = now
 	record.IdleExpiresAt = minOwnerHTTPTime(now.Add(idle), record.AbsoluteExpiresAt)
@@ -94,16 +94,20 @@ func (ownerHTTPTestRateLimiter) RecordFailure(context.Context, string, string, p
 func (ownerHTTPTestRateLimiter) ResetAccount(context.Context, string) error { return nil }
 
 type ownerHTTPTestHasher struct{}
-func (ownerHTTPTestHasher) Hash(password []byte) (string, error) { return "hash:" + string(password), nil }
+func (ownerHTTPTestHasher) Hash(password []byte) (string, error) {
+	return "hash:" + string(password), nil
+}
 func (ownerHTTPTestHasher) Verify(encoded string, password []byte) (bool, error) {
 	return encoded == "hash:"+string(password), nil
 }
 
 type ownerHTTPTestAudit struct{}
-func (ownerHTTPTestAudit) Write(context.Context, platformsecurity.SecurityAuditEvent) error { return nil }
+func (ownerHTTPTestAudit) Write(context.Context, platformsecurity.SecurityAuditEvent) error {
+	return nil
+}
 
 func minOwnerHTTPTime(a, b time.Time) time.Time {
-	if b.Before(a) { return b }
+	if b.Before(a) {\n\t\treturn b\n\t}
 	return a
 }
 
@@ -120,31 +124,31 @@ func newOwnerHTTPTestHandler(t *testing.T, sessions *ownerHTTPTestSessions, cred
 		Credentials: credentials, Sessions: sessions, RateLimiter: ownerHTTPTestRateLimiter{},
 		Hasher: ownerHTTPTestHasher{}, Audit: ownerHTTPTestAudit{},
 	}, serversecurity.SessionLifecycleConfig{
-		Cookie: cookie, IdleTTL: time.Hour, AbsoluteTTL: 24*time.Hour,
+		Cookie: cookie, IdleTTL: time.Hour, AbsoluteTTL: 24 * time.Hour,
 		RateLimitPolicy: policy,
 	})
-	if err != nil { t.Fatal(err) }
+	if err != nil {\n\t\tt.Fatal(err)\n\t}
 	authenticator, err := serversecurity.NewSessionAuthenticator(sessions, credentials, serversecurity.SessionAuthenticatorConfig{
 		Cookie: cookie, PublicOrigin: "https://stocks.example.com", CSRFHeader: "X-CSRF-Token", IdleTTL: time.Hour,
 	})
-	if err != nil { t.Fatal(err) }
+	if err != nil {\n\t\tt.Fatal(err)\n\t}
 	composition := &ownerSessionComposition{lifecycle: lifecycle, authenticator: authenticator, cookie: cookie}
 	ownerToken := strings.Repeat("a", 43)
 	env := platformconfigForOwnerHTTP(ownerToken)
 	bearer, err := platformsecurity.NewAuthenticator(env, nil)
-	if err != nil { t.Fatal(err) }
+	if err != nil {\n\t\tt.Fatal(err)\n\t}
 	legacy := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })
 	health := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
 	handler, err := newHTTPHandler(bearer, health, legacy, composition)
-	if err != nil { t.Fatal(err) }
+	if err != nil {\n\t\tt.Fatal(err)\n\t}
 	handler, err = newHTTPMiddleware(handler, httpMiddlewareConfig{maxRequestBodyBytes: 64 * 1024, maxConcurrentRequests: 8})
-	if err != nil { t.Fatal(err) }
+	if err != nil {\n\t\tt.Fatal(err)\n\t}
 	return handler
 }
 
 func platformconfigForOwnerHTTP(token string) platformconfig.Secret {
 	return platformconfig.NewEnvWithLookup(func(key string) (string, bool) {
-		if key == "PLATFORM_ADMIN_TOKEN" { return token, true }
+		if key == "PLATFORM_ADMIN_TOKEN" {\n\t\t\treturn token, true\n\t\t}
 		return "", false
 	}).Secret("PLATFORM_ADMIN_TOKEN")
 }
@@ -192,13 +196,13 @@ func TestOwnerSessionHTTPLoginRefreshCSRFAndLogout(t *testing.T) {
 	if refreshResponse.Code != http.StatusOK {
 		t.Fatalf("CSRF refresh status=%d body=%s", refreshResponse.Code, refreshResponse.Body.String())
 	}
-	var refreshed struct { CSRFToken string `json:"csrf_token"` }
+	var refreshed struct {\n\t\tCSRFToken string `json:"csrf_token"`\n\t}
 	if err := json.Unmarshal(refreshResponse.Body.Bytes(), &refreshed); err != nil || refreshed.CSRFToken == "" || refreshed.CSRFToken == csrfToken.CSRFToken {
 		t.Fatalf("CSRF refresh did not rotate token: %v body=%s", err, refreshResponse.Body.String())
 	}
 
 	digest, err := platformsecurity.SessionTokenDigest(cookies[0].Value)
-	if err != nil { t.Fatal(err) }
+	if err != nil {\n\t\tt.Fatal(err)\n\t}
 	recordBefore := sessions.records[digest]
 	badWrite := httptest.NewRequest(http.MethodDelete, "https://stocks.example.com/api/v1/owner/session", nil)
 	badWrite.AddCookie(cookies[0])
