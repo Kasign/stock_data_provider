@@ -175,7 +175,7 @@ func TestNewsSearchStageResearchflowMariaDBIntegration(t *testing.T) {
 	worker, err := researchflowapplication.NewWorkerWithStageOutputRegistry(
 		repository, composition.executor, clock,
 		researchflowapplication.WorkerConfig{
-			WorkerID: "integration-news-search-worker",
+			WorkerID:      "integration-news-search-worker",
 			LeaseDuration: 30 * time.Second, HeartbeatInterval: 5 * time.Second,
 			MaxParallel: capacity.MaxWorkers,
 		},
