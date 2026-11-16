@@ -16,6 +16,7 @@ import (
 	"example.com/stock-analysis-flow/internal/researchflow/application"
 	"example.com/stock-analysis-flow/internal/researchflow/domain"
 	"example.com/stock-analysis-flow/internal/researchflow/template"
+	"example.com/stock-analysis-flow/internal/researchflow/stageoutput"
 )
 
 func TestClaimAttemptValidatesArgumentsWithoutDatabase(t *testing.T) {
@@ -104,6 +105,7 @@ func TestMariaDBClaimAttemptLeaseAndFencing(t *testing.T) {
 			},
 		},
 		ResolvedTemplate: template.ResolvedTemplate{
+			OutputRegistryVersion: "1.0.0",
 			Ref: "claim-template", Version: "v1", Fingerprint: templateFingerprint,
 			Stages: []template.ResolvedStage{{Definition: template.StageDefinition{Code: "context"}}, {Definition: template.StageDefinition{Code: "quant"}}, {Definition: template.StageDefinition{Code: "research"}}, {Definition: template.StageDefinition{Code: "report"}}, {Definition: template.StageDefinition{Code: "budget"}}},
 		},
@@ -223,13 +225,23 @@ func TestMariaDBClaimAttemptLeaseAndFencing(t *testing.T) {
 	nextStage := stage
 	nextStage.Version++
 	nextStage.Status = domain.StageSucceeded
-	nextStage.OutputRef = stringRef("result-" + suffix)
+	nextStage.OutputRef = nil
+	nextStage.QualitySummaryRef = nil
 	nextStage.FinishedAt = &finished
 	staleCommit := AttemptResultCommit{
 		RunRef: runRef, StageRef: stageRef, AttemptRef: first.Ref,
 		WorkerID: "worker-a", FencingToken: first.FencingToken,
 		AttemptStatus: domain.AttemptSucceeded, Stage: nextStage,
-		OutputRef: nextStage.OutputRef,
+		StageOutput: &StageOutputCommit{
+			Envelope: stageoutput.Envelope{
+				RunRef: runRef, StageRef: stageRef, AttemptRef: second.Ref, StageCode: "claim",
+				TemplateVersion: "v1", OutputType: "trend", SchemaVersion: "1.0.0",
+				Payload: json.RawMessage(`{"trend":"up"}`), QualitySummary: json.RawMessage(`{"quality":"valid"}`),
+				DiagnosticRefs: []string{}, CompletedAt: second.StartedAt.UTC(),
+			},
+			RegistryVersion: "1.0.0", RegistryFingerprint: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			PayloadSchemaRef: "schema://quant/trend/1.0.0", QualitySummarySchemaRef: "schema://quality/trend/1.0.0",
+		},
 	}
 	if err := repository.CommitAttemptResult(ctx, staleCommit); !errors.Is(err, ErrAttemptLeaseHeld) {
 		t.Fatalf("stale worker result error=%v, want ErrAttemptLeaseHeld", err)
@@ -257,7 +269,14 @@ func TestMariaDBClaimAttemptLeaseAndFencing(t *testing.T) {
 
 	// Attempt and Stage must reference the same immutable output artifact.
 	mismatchedOutput := currentCommit
-	mismatchedOutput.OutputRef = stringRef("different-result-" + suffix)
+	mismatchedOutput.StageOutput = &StageOutputCommit{
+		Envelope: currentCommit.StageOutput.Envelope,
+		RegistryVersion: currentCommit.StageOutput.RegistryVersion,
+		RegistryFingerprint: currentCommit.StageOutput.RegistryFingerprint,
+		PayloadSchemaRef: currentCommit.StageOutput.PayloadSchemaRef,
+		QualitySummarySchemaRef: currentCommit.StageOutput.QualitySummarySchemaRef,
+	}
+	mismatchedOutput.StageOutput.Envelope.StageRef = "different-stage"
 	if err := repository.CommitAttemptResult(ctx, mismatchedOutput); err == nil {
 		t.Fatal("result commit must reject different Attempt and Stage output refs")
 	}
@@ -270,7 +289,7 @@ func TestMariaDBClaimAttemptLeaseAndFencing(t *testing.T) {
 		t.Fatalf("load committed attempt: %v", err)
 	}
 	if loadedSecond.Status != domain.AttemptSucceeded || loadedSecond.OutputRef == nil ||
-		*loadedSecond.OutputRef != "result-"+suffix {
+		!strings.HasPrefix(*loadedSecond.OutputRef, "stage-output:") {
 		t.Fatalf("committed attempt has unexpected result: %#v", loadedSecond)
 	}
 	if loadedSecond.LeaseOwner != "" || loadedSecond.LeaseExpiresAt != nil {

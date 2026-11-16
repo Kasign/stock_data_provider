@@ -54,8 +54,7 @@ func (r *MySQLRunRepository) CommitAttemptResult(ctx context.Context, input Atte
 			input.AttemptStatus != domain.AttemptCancelled) ||
 		!validAttemptStageOutcome(input.AttemptStatus, input.Stage.Status) ||
 		!validStageRetryAt(input.Stage.Status, input.Stage.RetryAt) ||
-		input.OutputRef != nil || input.Stage.OutputRef != nil || input.Stage.QualitySummaryRef != nil ||
-		((input.Stage.Status == domain.StageSucceeded || input.Stage.Status == domain.StageDegraded) != (input.StageOutput != nil)) {
+		{
 		return errors.New("Researchflow attempt result arguments are invalid")
 	}
 	if input.Stage.Version == 0 {
@@ -136,6 +135,11 @@ func (r *MySQLRunRepository) CommitAttemptResult(ctx context.Context, input Atte
 	}
 	if leaseExpires == nil || !leaseExpires.After(now) {
 		return ErrAttemptLeaseHeld
+	}
+	successfulOutcome := input.Stage.Status == domain.StageSucceeded || input.Stage.Status == domain.StageDegraded
+	if successfulOutcome != (input.StageOutput != nil) || input.OutputRef != nil ||
+		input.Stage.OutputRef != nil || input.Stage.QualitySummaryRef != nil {
+		return errors.New("Researchflow successful result requires validated Provider output and forbids Provider-owned references")
 	}
 
 	finishedAt := formatResearchflowTimeValue(now)
