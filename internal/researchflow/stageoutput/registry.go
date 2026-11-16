@@ -35,13 +35,13 @@ func (f ValidatorFunc) ValidateJSON(value json.RawMessage) error { return f(valu
 
 // Entry binds one Stage output discriminator to its exact payload and quality schemas.
 type Entry struct {
-	StageCode                string
-	OutputType               string
-	SchemaVersion            string
-	PayloadSchemaRef         string
-	QualitySummarySchemaRef  string
-	PayloadValidator         PayloadValidator
-	QualitySummaryValidator  PayloadValidator
+	StageCode               string
+	OutputType              string
+	SchemaVersion           string
+	PayloadSchemaRef        string
+	QualitySummarySchemaRef string
+	PayloadValidator        PayloadValidator
+	QualitySummaryValidator PayloadValidator
 }
 
 type fingerprintEntry struct {
@@ -71,8 +71,8 @@ func NewRegistry(version string, entries []Entry) (*Registry, error) {
 	copyEntries := append([]Entry(nil), entries...)
 	sort.Slice(copyEntries, func(i, j int) bool {
 		a, b := copyEntries[i], copyEntries[j]
-		if a.StageCode != b.StageCode { return a.StageCode < b.StageCode }
-		if a.OutputType != b.OutputType { return a.OutputType < b.OutputType }
+		if a.StageCode != b.StageCode {\n\t\t\treturn a.StageCode < b.StageCode\n\t\t}
+		if a.OutputType != b.OutputType {\n\t\t\treturn a.OutputType < b.OutputType\n\t\t}
 		return a.SchemaVersion < b.SchemaVersion
 	})
 	registry := &Registry{version: version, entries: make(map[entryKey]Entry, len(copyEntries))}
@@ -99,30 +99,30 @@ func NewRegistry(version string, entries []Entry) (*Registry, error) {
 		Version string             `json:"version"`
 		Entries []fingerprintEntry `json:"entries"`
 	}{version, fingerprintEntries})
-	if err != nil { return nil, fmt.Errorf("%w: fingerprint registry: %v", ErrInvalidRegistry, err) }
+	if err != nil {\n\t\treturn nil, fmt.Errorf("%w: fingerprint registry: %v", ErrInvalidRegistry, err)\n\t}
 	sum := sha256.Sum256(canonical)
 	registry.fingerprint = "sha256:" + hex.EncodeToString(sum[:])
 	return registry, nil
 }
 
 func (r *Registry) Version() string {
-	if r == nil { return "" }
+	if r == nil {\n\t\treturn ""\n\t}
 	return r.version
 }
 
 func (r *Registry) Fingerprint() string {
-	if r == nil { return "" }
+	if r == nil {\n\t\treturn ""\n\t}
 	return r.fingerprint
 }
 
 // ProviderResult contains only provider-owned fields. Orchestrator identity and
 // timing fields are added by BuildEnvelope and cannot be supplied by a provider.
 type ProviderResult struct {
-	OutputType      string
-	SchemaVersion   string
-	Payload         json.RawMessage
-	QualitySummary  json.RawMessage
-	DiagnosticRefs  []string
+	OutputType     string
+	SchemaVersion  string
+	Payload        json.RawMessage
+	QualitySummary json.RawMessage
+	DiagnosticRefs []string
 }
 
 type ExecutionIdentity struct {
@@ -142,11 +142,11 @@ type Envelope struct {
 	AttemptRef      string          `json:"attempt_ref"`
 	StageCode       string          `json:"stage_code"`
 	TemplateVersion string          `json:"template_version"`
-	OutputType      string          `json:"output_type"`
-	SchemaVersion   string          `json:"schema_version"`
-	Payload         json.RawMessage `json:"payload"`
-	QualitySummary  json.RawMessage `json:"quality_summary"`
-	DiagnosticRefs  []string        `json:"diagnostic_refs"`
+	OutputType     string          `json:"output_type"`
+	SchemaVersion  string          `json:"schema_version"`
+	Payload        json.RawMessage `json:"payload"`
+	QualitySummary json.RawMessage `json:"quality_summary"`
+	DiagnosticRefs []string        `json:"diagnostic_refs"`
 	CompletedAt     time.Time       `json:"completed_at"`
 }
 
@@ -167,7 +167,7 @@ func BuildEnvelope(identity ExecutionIdentity, result ProviderResult, completedA
 		RunRef: identity.RunRef, StageRef: identity.StageRef, AttemptRef: identity.AttemptRef,
 		StageCode: identity.StageCode, TemplateVersion: identity.TemplateVersion,
 		OutputType: result.OutputType, SchemaVersion: result.SchemaVersion,
-		Payload: append(json.RawMessage(nil), result.Payload...),
+		Payload:        append(json.RawMessage(nil), result.Payload...),
 		QualitySummary: append(json.RawMessage(nil), result.QualitySummary...),
 		DiagnosticRefs: refs, CompletedAt: completedAt,
 	}, nil
@@ -180,7 +180,7 @@ type ValidationContext struct {
 // Validate checks exact execution identity, registry version, discriminator,
 // JSON structure and the two registered strong validators. There is no fallback.
 func (r *Registry) Validate(envelope Envelope, context ValidationContext) error {
-	if r == nil { return ErrInvalidRegistry }
+	if r == nil {\n\t\treturn ErrInvalidRegistry\n\t}
 	id := context.Identity
 	if envelope.RunRef != id.RunRef || envelope.StageRef != id.StageRef ||
 		envelope.AttemptRef != id.AttemptRef || envelope.StageCode != id.StageCode ||
@@ -190,7 +190,7 @@ func (r *Registry) Validate(envelope Envelope, context ValidationContext) error 
 	}
 	key := entryKey{envelope.StageCode, envelope.OutputType, envelope.SchemaVersion}
 	entry, ok := r.entries[key]
-	if !ok { return fmt.Errorf("%w: %s/%s/%s", ErrUnknownOutput, key.stageCode, key.outputType, key.schemaVersion) }
+	if !ok {\n\t\treturn fmt.Errorf("%w: %s/%s/%s", ErrUnknownOutput, key.stageCode, key.outputType, key.schemaVersion)\n\t}
 	if err := validateJSONObject(envelope.Payload); err != nil {
 		return fmt.Errorf("%w: payload: %v", ErrInvalidEnvelope, err)
 	}
@@ -215,20 +215,20 @@ func (r *Registry) Validate(envelope Envelope, context ValidationContext) error 
 }
 
 func validateJSONObject(raw json.RawMessage) error {
-	if len(raw) == 0 { return errors.New("value is required") }
-	if err := rejectDuplicateJSONKeys(raw); err != nil { return err }
+	if len(raw) == 0 {\n\t\treturn errors.New("value is required")\n\t}
+	if err := rejectDuplicateJSONKeys(raw); err != nil {\n\t\treturn err\n\t}
 	var value map[string]json.RawMessage
-	if err := json.Unmarshal(raw, &value); err != nil { return err }
-	if value == nil { return errors.New("value must be an object") }
+	if err := json.Unmarshal(raw, &value); err != nil {\n\t\treturn err\n\t}
+	if value == nil {\n\t\treturn errors.New("value must be an object")\n\t}
 	return nil
 }
 
 func rejectDuplicateJSONKeys(raw []byte) error {
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.UseNumber()
-	if err := consumeJSONValue(decoder); err != nil { return err }
+	if err := consumeJSONValue(decoder); err != nil {\n\t\treturn err\n\t}
 	if _, err := decoder.Token(); err != io.EOF {
-		if err == nil { return errors.New("trailing JSON value") }
+		if err == nil {\n\t\t\treturn errors.New("trailing JSON value")\n\t\t}
 		return err
 	}
 	return nil
@@ -236,26 +236,26 @@ func rejectDuplicateJSONKeys(raw []byte) error {
 
 func consumeJSONValue(decoder *json.Decoder) error {
 	token, err := decoder.Token()
-	if err != nil { return err }
+	if err != nil {\n\t\treturn err\n\t}
 	delim, ok := token.(json.Delim)
-	if !ok { return nil }
+	if !ok {\n\t\treturn nil\n\t}
 	switch delim {
 	case '{':
 		seen := make(map[string]struct{})
 		for decoder.More() {
 			keyToken, err := decoder.Token()
-			if err != nil { return err }
+			if err != nil {\n\t\treturn err\n\t}
 			key, ok := keyToken.(string)
-			if !ok { return errors.New("object key is not a string") }
-			if _, exists := seen[key]; exists { return fmt.Errorf("duplicate JSON object key %q", key) }
+			if !ok {\n\t\t\t\treturn errors.New("object key is not a string")\n\t\t\t}
+			if _, exists := seen[key]; exists {\n\t\t\t\treturn fmt.Errorf("duplicate JSON object key %q", key)\n\t\t\t}
 			seen[key] = struct{}{}
-			if err := consumeJSONValue(decoder); err != nil { return err }
+			if err := consumeJSONValue(decoder); err != nil {\n\t\treturn err\n\t}
 		}
 		_, err = decoder.Token()
 		return err
 	case '[':
 		for decoder.More() {
-			if err := consumeJSONValue(decoder); err != nil { return err }
+			if err := consumeJSONValue(decoder); err != nil {\n\t\treturn err\n\t}
 		}
 		_, err = decoder.Token()
 		return err
@@ -265,6 +265,6 @@ func consumeJSONValue(decoder *json.Decoder) error {
 }
 
 func isUTC(value time.Time) bool {
-	if value.IsZero() || value.Location() != time.UTC { return false }
+	if value.IsZero() || value.Location() != time.UTC {\n\t\treturn false\n\t}
 	return strings.HasSuffix(value.Format(time.RFC3339Nano), "Z")
 }
