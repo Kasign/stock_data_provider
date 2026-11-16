@@ -586,3 +586,12 @@ Researchflow 已有 Scheduler、Worker、WorkerPool、Claim/Lease/Fencing、候�
 - 结论：当前没有可直接复用的通用 available_at 原始来源证据持久化链路。具体来源准入后，必须在该来源 Parser 边界提取获批字段原始值/路径，绑定实际 Observation，再按 Provider Output Policy 留存；不应提前为所有 Provider 增加泛化 RawResponse。
 - 本轮仅更新证据链核查文档、News 清单和交接文档，没有修改 Provider、Candidate、Observation、Migration 或 PIT SQL。
 - 下一步继续完成结构层的留存/删除语义和时钟边界评审；来源未准入前不进入代码实施。
+
+
+### 10.22 2026-11-16 available_at Evidence 留存与到期清理边界
+
+- 开始前核对 integration HEAD：`fd62c0e345eef2573f5be28146a40b13ee246885`；复核 Observation 的 retention_until/payload_purged_at、到期清理事务和 Provider Output Policy 关联。
+- 两表结构提案增加 Evidence 留存约束：原始字段、证据引用/摘要和派生时间均不得绕过 Observation 对应策略延长保留；Evidence 与 Observation candidate_json 清理需同一事务，保留最小 tombstone。
+- payload 已清理时默认不再输出 available_at；只有来源/Provider Output Policy 明确允许保留派生时间时才例外，不能因历史 verified 决策推断可永久保留。
+- 本轮仅更新结构提案、News 清单和交接文档，没有修改 retention Job、Migration 或业务代码。
+- 下一步仍需来源级策略证据才能冻结具体保留规则；在此之前采用 fail-closed 默认，不扩大数据留存。

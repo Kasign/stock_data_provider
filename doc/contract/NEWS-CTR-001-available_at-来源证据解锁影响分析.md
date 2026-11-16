@@ -581,3 +581,30 @@ Evidence 表最小必要字段调整为：
 - 来源准入完成后，需在对应 Provider/Feed Adapter 的响应解析边界提取获批字段的原始值、字段路径和精确 Observation 关联，并通过受控端口交给 Evidence Repository；是否留存完整响应、仅留存字段级证据或响应摘要，必须先由 Provider Output Policy 和来源授权确定。
 - 不应现在为所有 Provider 统一增加泛化 RawResponse 字段；只针对已通过准入的来源和字段实现最小证据提取，避免持久化无授权的整份供应商数据。
 - 本项是来源准入后的实现依赖，不改变当前来源未合格的事实，也不解除 Migration/业务代码门禁。
+
+
+## 1.13 Evidence 原始字段留存与到期清理边界（2026-11-16）
+
+当前 News Observation 已有 `retention_until` / `payload_purged_at` 和到期清理机制。新增 Evidence 不得成为绕过 Provider Output Policy 的第二份长期副本。
+
+### 1.13.1 留存约束
+
+- Evidence 的 `observation_id` 是留存策略来源；Evidence 保存的 `raw_value`、`evidence_ref`、响应摘要及派生候选时间都必须受该 Observation 对应的 Provider Output Policy / Source Policy 约束。
+- Evidence 的有效留存截止时间不得晚于来源授权允许的截止时间；如需独立字段，`retention_until` 必须由可信策略计算，不接受调用方任意延长。
+- 追加式是指证据与决策历史不被覆盖，不代表可违反来源授权永久保留原始数据。依法/依约到期清理是受控生命周期操作。
+- 到期清理时至少要清除策略要求清除的 raw_value、evidence_ref、响应摘要及其他来源派生载荷，并写入 `payload_purged_at`；保留最小审计元数据、证据 ID、版本/Observation 关联、清理时间和清理原因（前提是策略允许保留这些元数据）。
+- 证据载荷清理与对应 Observation 的 `candidate_json` 清理应在同一数据库事务中完成，避免一个已清理、另一个仍保留造成策略不一致。
+- 清理后 Evidence 行作为 tombstone 保留，不物理删除；哈希是否允许保留也由策略决定，不能默认哈希永远不属于受限派生数据。
+
+### 1.13.2 PIT 输出门禁
+
+- 若选中的 Evidence 已被清理，默认不再输出非空 `available_at`，除非来源/Provider Output Policy 明确允许在原始载荷到期后继续保留并使用该规范化时间。
+- 允许保留派生时间时，必须有可审计的策略版本/授权依据；不能仅因为决策曾经 verified 就推断派生时间可永久保留。
+- 如果策略要求派生时间同步到期，应追加 revoked/unresolved 决策事件或由 PIT 查询按可见的 retention 截止时间 fail-closed；不得物理删除历史决策。
+- 历史 `system_as_of` 查询仍须遵守当时的策略可见性和当前依法/依约可保留范围；不能为了历史回放重新暴露已到期载荷。
+
+### 1.13.3 待决
+
+- [ ] 明确各 Source/Provider Output Policy 对原始时间字段、规范化 available_at、证据摘要和审计元数据的分别留存权限。
+- [ ] 确认到期清理是 Evidence/Observation 同一事务，及其 tombstone 诊断 reason_code。
+- [ ] 确认 payload purged 后 verified 决策是否可继续提供派生时间；默认否，除非策略明确允许。
