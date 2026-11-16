@@ -201,8 +201,8 @@ func (w *Worker) Execute(ctx context.Context, runRef, stageRef, attemptRef strin
 		InputSnapshotRefs:      append([]string(nil), snapshot.InputSnapshotRefs...),
 		SystemAsOf:             snapshot.Run.SystemAsOf,
 		DeadlineAt:             snapshot.Run.DeadlineAt,
-		AttemptDeadlineAt:       attemptDeadline,
-		CorrelationID:           snapshot.Run.CorrelationID,
+		AttemptDeadlineAt:      attemptDeadline,
+		CorrelationID:          snapshot.Run.CorrelationID,
 	}
 	result, executeErr := w.executor.ExecuteStage(execCtx, request)
 	close(stopHeartbeat)
