@@ -129,3 +129,11 @@ func (r *MySQLRepository) GetEvidenceContentWithCurrentAuthorization(
 	committed = true
 	return content, currentObservation, nil
 }
+
+
+func sameAvailabilityTime(left, right *time.Time) bool {
+	if left == nil || right == nil {
+		return left == nil && right == nil
+	}
+	return left.Equal(*right) && left.Nanosecond() == 0 && right.Nanosecond() == 0
+}

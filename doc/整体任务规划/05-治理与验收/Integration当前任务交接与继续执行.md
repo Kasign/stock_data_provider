@@ -848,3 +848,10 @@ Researchflow 已有 Scheduler、Worker、WorkerPool、Claim/Lease/Fencing、候�
 - PIT SQL 同时要求 raw_value 仍存在、Evidence/Observation 均未清理且当前 retention 有效；最新 Decision 非 verified 时不回退到旧 verified 决策。
 - MariaDB 集成用例覆盖 verified → unresolved → re-verified 的 system_as_of 历史切换，以及 payload purge 后 available_at 回到 NULL。
 - 上述修复的精确 SHA 和新 CI 结果待记录；Run #90 不得标记通过。
+
+
+### PIT 原子复核 CI 排障记录
+
+- Run #91 `43813886523` 对提交 `6ac0d43510e1b7e0c0d581f154d43425077e0cb4` 失败：`evidence_authorization_read.go` 调用了 `sameAvailabilityTime`，但 helper 未实际写入文件；这是本轮补丁条件误判（检测到了调用点，误以为 helper 已存在）。
+- 已补充 helper 定义，按 nil/非 nil 一致性、时间点相等和整秒精度比较。
+- Run #91 未进入根模块编译后的测试阶段；修复提交需重新执行完整 CI。
