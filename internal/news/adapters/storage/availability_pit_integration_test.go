@@ -277,7 +277,8 @@ func TestAppendAvailabilityDecisionSerializesConcurrentWritersMariaDBIntegration
 
 	wrongParent := makeFirst("availability-decision-wrong-parent-" + suffix)
 	wrongParent.Sequence = 2
-	wrongParent.SupersedesDecisionID = stringPointer("not-the-latest-decision")
+	wrongParentID := "not-the-latest-decision"
+	wrongParent.SupersedesDecisionID = &wrongParentID
 	if err := repository.AppendAvailabilityDecision(ctx, wrongParent); !errors.Is(err, ErrAvailabilityDecisionSequenceConflict) {
 		t.Fatalf("wrong predecessor error = %v, want sequence conflict", err)
 	}
@@ -306,4 +307,3 @@ func TestAppendAvailabilityDecisionSerializesConcurrentWritersMariaDBIntegration
 	}
 }
 
-func stringPointer(value string) *string { return &value }
