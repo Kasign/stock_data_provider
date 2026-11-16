@@ -397,7 +397,6 @@ func (p EndpointPolicy) HasOverrides() bool {
 		p.ExpiresAt != nil
 }
 
-
 func validMetadataFieldPath(value string) bool {
 	if value == "" || value != strings.TrimSpace(value) || len(value) > 255 || strings.ContainsAny(value, "*/[]\\") {
 		return false
