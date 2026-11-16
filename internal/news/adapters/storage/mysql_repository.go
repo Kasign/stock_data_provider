@@ -587,6 +587,78 @@ func (t *mysqlNewsTransaction) AppendNewsItemVersion(ctx context.Context, versio
 	return err
 }
 
+
+var _ app.AvailabilityEvidenceWriteTransaction = (*mysqlNewsTransaction)(nil)
+
+// AppendAvailabilityEvidence 在当前策略锁事务内追加字段级授权通过的 Evidence。
+// 父 Version、Observation 和授权版本均从数据库重新核对，不信任请求对象中的快照。
+func (t *mysqlNewsTransaction) AppendAvailabilityEvidence(
+	ctx context.Context,
+	evidence domain.AvailabilityEvidence,
+	observation domain.Observation,
+	version domain.NewsItemVersion,
+) error {
+	if t == nil || t.tx == nil || ctx == nil || evidence.Validate() != nil ||
+		evidence.NewsID != version.NewsID || evidence.VersionID != version.ID ||
+		evidence.ObservationID != observation.ID || version.NewsID != observation.NewsID ||
+		version.ObservationID != observation.ID {
+		return app.ErrInvalidRequest
+	}
+
+	var newsID, observationID, sourceID, providerCode, endpointID, sourcePolicyVersionID string
+	var endpointPolicyVersionID, providerPolicyRef, providerPolicyVersionID string
+	var versionObservedAt, observationObservedAt, retentionUntil time.Time
+	var payloadPurgedAt sql.NullTime
+	err := t.tx.QueryRowContext(ctx, `SELECT v.news_id, v.observation_id, v.observed_at,
+		o.source_id, o.provider_code, o.endpoint_id, o.source_policy_version_id,
+		o.endpoint_policy_version_id, o.provider_output_policy_ref, o.provider_output_policy_version_id,
+		o.observed_at, o.retention_until, o.payload_purged_at
+		FROM news_item_versions v
+		INNER JOIN news_observations o
+			ON o.observation_id = v.observation_id AND o.news_id = v.news_id
+		WHERE v.version_id = ? FOR UPDATE`, version.ID,
+	).Scan(&newsID, &observationID, &versionObservedAt,
+		&sourceID, &providerCode, &endpointID, &sourcePolicyVersionID,
+		&endpointPolicyVersionID, &providerPolicyRef, &providerPolicyVersionID,
+		&observationObservedAt, &retentionUntil, &payloadPurgedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return app.ErrInvalidRequest
+	}
+	if err != nil {
+		return err
+	}
+	if payloadPurgedAt.Valid ||
+		newsID != evidence.NewsID || observationID != evidence.ObservationID ||
+		sourceID != observation.SourceID || providerCode != observation.ProviderCode ||
+		endpointID != observation.EndpointID || sourcePolicyVersionID != observation.SourcePolicyVersionID ||
+		endpointPolicyVersionID != observation.EndpointPolicyVersionID ||
+		providerPolicyRef != observation.ProviderOutputPolicyRef ||
+		providerPolicyVersionID != observation.ProviderOutputPolicyVersionID ||
+		!versionObservedAt.UTC().Equal(version.ObservedAt.UTC()) ||
+		!observationObservedAt.UTC().Equal(observation.ObservedAt.UTC()) ||
+		!evidence.ObservedAt.Equal(observationObservedAt.UTC()) ||
+		!retentionUntil.UTC().Equal(observation.RetentionUntil.UTC()) ||
+		evidence.RetentionUntil.After(retentionUntil.UTC()) ||
+		!retentionUntil.After(evidence.RecordedAt) {
+		return app.ErrInvalidRequest
+	}
+
+	_, err = t.tx.ExecContext(ctx, `INSERT INTO news_version_availability_evidence
+		(evidence_id, news_id, version_id, observation_id, field_path, raw_value,
+		 source_timezone_or_offset, source_precision, parse_status, parse_reason_code,
+		 candidate_available_at_utc, parser_version, evidence_ref, evidence_hash,
+		 observed_at, recorded_at, retention_until)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		evidence.ID, evidence.NewsID, evidence.VersionID, evidence.ObservationID,
+		evidence.FieldPath, evidence.RawValue, nullableString(evidence.SourceTimezoneOrOffset),
+		string(evidence.Precision), string(evidence.ParseStatus), evidence.ParseReasonCode,
+		nullableTimePointer(evidence.CandidateAvailableAt), evidence.ParserVersion,
+		nullableStringPointer(evidence.EvidenceRef), nullableStringPointer(evidence.EvidenceHash),
+		evidence.ObservedAt.UTC(), evidence.RecordedAt.UTC(), evidence.RetentionUntil.UTC(),
+	)
+	return err
+}
+
 func (t *mysqlNewsTransaction) ListRelationAssertions(ctx context.Context, newsID string) ([]domain.RelationAssertion, error) {
 	if t == nil || t.tx == nil || strings.TrimSpace(newsID) == "" {
 		return nil, app.ErrInvalidRequest
