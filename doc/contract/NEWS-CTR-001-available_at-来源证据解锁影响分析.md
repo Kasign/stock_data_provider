@@ -560,3 +560,24 @@ Evidence 表最小必要字段调整为：
 - [ ] 完成 Evidence 原始字段与响应摘要的保留期限、清理审计和授权策略映射。
 - [ ] 以目标 MariaDB 版本执行 JSON/复合外键 DDL 验证，并用实际 PIT 查询执行 EXPLAIN。
 - [ ] 完成正式 Schema 2.0.0、消费者确认和 DEC 前不实施 Migration/业务代码。
+
+
+## 1.12 当前 Provider 原始响应证据链核查（2026-11-16）
+
+本节是对当前代码的只读核查结果，用于明确未来来源接入的真实实现缺口；不授权提前修改 Provider。
+
+### 已确认事实
+
+1. `internal/news/adapters/provider/http.go` 的 `config.do` 会读取受大小限制的成功响应原始字节并返回给具体 Provider Parser。
+2. `internal/news/adapters/provider/providers.go` 中 Bocha、Tavily、Brave、SearXNG Parser 将响应映射为 `domain.Candidate` 后，原始响应字节不再向 Application/Repository 传递。
+3. 当前 `domain.Candidate` 仅保留 `PublishedAtRaw` 这一发布时间原始文本，没有通用的 `field_path + raw_value + source_time_type` 证据集合，也没有 `available_at` 专用来源字段。
+4. `news_observations.candidate_json` 保存的是规范化后的 Candidate，不是完整原始 Provider Response；`PurgeExpiredObservationPayloads` 到期后会将其置为 `JSON_OBJECT()` 并保留 tombstone。
+5. RSS/Atom 的 `CollectSource` 读取响应并解析 Entry，再映射为 Candidate；当前 Observation 同样只保存 Candidate，不保存完整原始 XML/JSON 响应或响应摘要。
+
+### 结论
+
+- 当前 Provider/Feed 链路可以保留一部分发布时间原始文本，但**没有通用、可追溯的来源时间证据通道，也没有已确认的原始响应级 response_hash/evidence_ref 持久化链路**。
+- 因此未来即使某个来源被准入，也不能仅靠现有 Candidate/Observation 结构就声称完成 available_at 证据留痕。
+- 来源准入完成后，需在对应 Provider/Feed Adapter 的响应解析边界提取获批字段的原始值、字段路径和精确 Observation 关联，并通过受控端口交给 Evidence Repository；是否留存完整响应、仅留存字段级证据或响应摘要，必须先由 Provider Output Policy 和来源授权确定。
+- 不应现在为所有 Provider 统一增加泛化 RawResponse 字段；只针对已通过准入的来源和字段实现最小证据提取，避免持久化无授权的整份供应商数据。
+- 本项是来源准入后的实现依赖，不改变当前来源未合格的事实，也不解除 Migration/业务代码门禁。

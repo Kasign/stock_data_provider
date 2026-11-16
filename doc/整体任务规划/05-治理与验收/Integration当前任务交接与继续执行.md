@@ -576,3 +576,13 @@ Researchflow 已有 Scheduler、Worker、WorkerPool、Claim/Lease/Fencing、候�
 - 明确 Evidence 字段保留/清理必须服从 Provider Output Policy，追加式审计不能突破来源授权期限。
 - 本轮仅更新结构提案和任务跟踪，没有 Migration、Go 代码或 PIT SQL 变更。
 - 下一步：核查 Provider 原始响应证据链及 retention 实际能力；之后完成目标 MariaDB DDL 兼容验证和索引计划，仍须在正式 Schema 2.0.0/DEC 前保持不实施。
+
+
+### 10.21 2026-11-16 available_at Provider 原始响应证据链核查
+
+- 开始前核对 integration HEAD：`d0390977f7d03fff3153e5f86a1c53b9b15ecbf7`；只读检查 Provider HTTP/Parser、Candidate、Observation、RSS/Atom CollectSource 和 Observation retention。
+- `provider/http.go` 会读取受限响应字节，但 `providers.go` 将响应解析成 Candidate 后原始字节即丢弃；Candidate 只有 PublishedAtRaw，没有通用 field_path/raw_value/time-type 证据。
+- `news_observations.candidate_json` 是规范化 Candidate，不是完整原始响应；现有 retention 会清空 candidate_json 并保留 tombstone。RSS/Atom 同样只保存 Candidate，不保存原始响应或摘要。
+- 结论：当前没有可直接复用的通用 available_at 原始来源证据持久化链路。具体来源准入后，必须在该来源 Parser 边界提取获批字段原始值/路径，绑定实际 Observation，再按 Provider Output Policy 留存；不应提前为所有 Provider 增加泛化 RawResponse。
+- 本轮仅更新证据链核查文档、News 清单和交接文档，没有修改 Provider、Candidate、Observation、Migration 或 PIT SQL。
+- 下一步继续完成结构层的留存/删除语义和时钟边界评审；来源未准入前不进入代码实施。
