@@ -1059,3 +1059,10 @@ Integration CI Run 43810902921（#85）对提交 `ea79dc5503f36280af2b944d3557fd
 - `candidate_available_at_utc` 使用 `DATETIME(0)`；Observation/recorded/retention 系统时间沿用 `DATETIME(6)`。Evidence 必须具有明确 retention；清理时保留 tombstone。
 - V10 目前只建立存储结构，不代表已有字段级授权或来源准入；没有获准来源时不产生 Evidence 行或 verified Decision。
 - 新增 V10 DDL 的真实 MariaDB 11.4 执行结果以本提交精确 SHA 的 Integration CI 为准。
+
+
+### V10 首轮 CI 结构错误修正记录
+
+- Run #87 对提交 `b384a1ee1b68313c9af195202732de669a2a6723` 的失败发生在 Go 解析阶段：V10 插入位置少关闭 V9 Migration 对象，导致 migrations.go:269 报告 mixture of field:value and value elements in struct literal。
+- 该 Run 未进入 Migration DDL 的真实 MariaDB 验证，不能据此判断 SQL 成功或失败。
+- 已补齐 V9 对象闭合并移除多余闭合；修复后的精确 SHA 及新 CI 结果待记录。

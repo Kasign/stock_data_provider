@@ -816,3 +816,10 @@ Researchflow 已有 Scheduler、Worker、WorkerPool、Claim/Lease/Fencing、候�
 - `requiredNewsSchemaTables` 与 Migration 静态测试、MariaDB 集成迁移测试已同步到 V10。
 - Integration CI 的 MariaDB 服务是 11.4，Run #85 日志实际版本 11.4.13。V10 DDL 必须在后续精确 SHA CI 中实际执行成功，不能仅凭静态测试关闭。
 - 本轮只建立 schema，不新增 Provider 映射、不写 Evidence/Decision 记录、不改现有 PIT 输出；字段级授权与来源准入继续 fail-closed。
+
+
+### V10 首轮 CI 结构错误修正记录
+
+- Run #87 对提交 `b384a1ee1b68313c9af195202732de669a2a6723` 的失败发生在 Go 解析阶段：V10 插入位置少关闭 V9 Migration 对象，导致 migrations.go:269 报告 mixture of field:value and value elements in struct literal。
+- 该 Run 未进入 Migration DDL 的真实 MariaDB 验证，不能据此判断 SQL 成功或失败。
+- 已补齐 V9 对象闭合并移除多余闭合；修复后的精确 SHA 及新 CI 结果待记录。

@@ -266,6 +266,7 @@ func Migrations() []platformstorage.Migration {
 						REFERENCES news_policy_versions (policy_type, policy_ref, policy_version)
 				) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 			},
+		},
 		{
 			Version:     10,
 			Description: "persist append-only version availability evidence and decisions",
@@ -330,7 +331,6 @@ func Migrations() []platformstorage.Migration {
 						REFERENCES news_version_availability_decisions (version_id, decision_id)
 				) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 			},
-		},
 		},
 	}
 }
