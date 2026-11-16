@@ -9,10 +9,10 @@ import (
 // Scanned 是本批事务成功领取并锁定的到期记录数，不是全局 backlog 数。
 // Purged 是本批实际清除载荷的记录数；全局剩余量应通过 ObservationRetentionBacklog 查询。
 type ObservationPayloadPurgeResult struct {
-	Scanned              int
-	Purged               int
-	EvidenceScanned      int
-	EvidencePurged       int
+	Scanned         int
+	Purged          int
+	EvidenceScanned int
+	EvidencePurged  int
 }
 
 // ObservationRetentionRepository 是 Observation 保留期清理的持久化端口。
