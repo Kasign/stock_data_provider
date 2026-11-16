@@ -219,6 +219,14 @@ func (a *SessionAuthenticator) RefreshCSRFToken(request *http.Request) (*http.Re
 	return request.WithContext(ctx), cookie, csrfToken, nil
 }
 
+// ValidateLoginOrigin applies the same strict Host/Origin policy to the anonymous login route.
+func (a *SessionAuthenticator) ValidateLoginOrigin(request *http.Request) error {
+	if a == nil || request == nil || request.Method != http.MethodPost {
+		return platformfault.New(platformfault.ClassValidation, "server.invalid_owner_login_request", "login request is invalid", nil)
+	}
+	return a.validateRequestOrigin(request)
+}
+
 func (a *SessionAuthenticator) validateRequestOrigin(request *http.Request) error {
 	if !strings.EqualFold(request.Host, a.origin.Host) {
 		return platformfault.New(platformfault.ClassForbidden, "server.host_rejected", "request Host is not allowed", nil)
