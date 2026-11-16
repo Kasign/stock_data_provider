@@ -199,6 +199,41 @@ func TestWorkerExecuteClaimsExecutesAndCommits(t *testing.T) {
 	}
 }
 
+
+func TestWorkerRejectsProviderOwnedOutputReferences(t *testing.T) {
+	store, _ := newWorkerFixture()
+	ref := "provider://forged"
+	result := StageExecutionResult{
+		AttemptStatus: domain.AttemptSucceeded, StageStatus: domain.StageSucceeded,
+		OutputRef: &ref, ProviderResult: &stageoutput.ProviderResult{
+			OutputType: "trend", SchemaVersion: "1.0.0",
+			Payload: []byte(`{"trend":"up"}`), QualitySummary: []byte(`{"quality":"valid"}`),
+		},
+	}
+	if _, err := newWorker(t, store, result).Execute(context.Background(), "run-1", "stage-1", "attempt-new"); err == nil {
+		t.Fatal("Worker must reject Provider-owned result references")
+	}
+	if store.commits != 0 {
+		t.Fatal("invalid Provider result must not commit")
+	}
+}
+
+func TestWorkerFailsClosedWithoutOutputRegistry(t *testing.T) {
+	store, result := newWorkerFixture()
+	worker, err := NewWorker(store, workerExecutorFake{result: result}, workerClockFake{}, WorkerConfig{
+		WorkerID: "worker-1", LeaseDuration: time.Minute, HeartbeatInterval: time.Second, MaxParallel: 2,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := worker.Execute(context.Background(), "run-1", "stage-1", "attempt-new"); err == nil {
+		t.Fatal("successful Provider output must not pass without an Output Registry")
+	}
+	if store.commits != 0 {
+		t.Fatal("missing Registry must not commit a successful result")
+	}
+}
+
 func TestWorkerRejectsMissingAuthenticatedCallerBeforeClaim(t *testing.T) {
 	store, result := newWorkerFixture()
 	store.snapshot.AuthenticatedCallerRef = ""

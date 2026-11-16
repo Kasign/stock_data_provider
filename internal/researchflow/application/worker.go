@@ -328,6 +328,7 @@ func (w *Worker) Execute(ctx context.Context, runRef, stageRef, attemptRef strin
 		if !ok {
 			return WorkerExecution{Attempt: attempt}, errors.New("validated Researchflow Stage Output Registry entry disappeared")
 		}
+		result.DiagnosticRefs = append([]string(nil), envelope.DiagnosticRefs...)
 		stageOutput = &StageOutputCommit{
 			Envelope: envelope, RegistryVersion: w.outputRegistry.Version(),
 			RegistryFingerprint: w.outputRegistry.Fingerprint(),
