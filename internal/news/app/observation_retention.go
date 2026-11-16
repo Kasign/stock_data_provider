@@ -9,8 +9,10 @@ import (
 // Scanned 是本批事务成功领取并锁定的到期记录数，不是全局 backlog 数。
 // Purged 是本批实际清除载荷的记录数；全局剩余量应通过 ObservationRetentionBacklog 查询。
 type ObservationPayloadPurgeResult struct {
-	Scanned int
-	Purged  int
+	Scanned              int
+	Purged               int
+	EvidenceScanned      int
+	EvidencePurged       int
 }
 
 // ObservationRetentionRepository 是 Observation 保留期清理的持久化端口。
@@ -45,7 +47,8 @@ func (u *ObservationRetentionCleaner) Execute(ctx context.Context, now time.Time
 	}
 	// Repository 返回成功表示事务已提交；提交后观察到 Context 取消不能
 	// 将已确认的清理结果改报为取消，避免调用方误判并重复处理。
-	if result.Scanned < 0 || result.Purged < 0 || result.Purged > result.Scanned || result.Scanned > limit {
+	if result.Scanned < 0 || result.Purged < 0 || result.Purged > result.Scanned || result.Scanned > limit ||
+		result.EvidenceScanned < 0 || result.EvidencePurged < 0 || result.EvidencePurged > result.EvidenceScanned || result.EvidenceScanned > limit {
 		return ObservationPayloadPurgeResult{}, ErrObservationRetentionResultInvalid
 	}
 	return result, nil

@@ -792,6 +792,53 @@ func (r *MySQLRepository) PurgeExpiredObservationPayloads(ctx context.Context, n
 	}
 	result := app.ObservationPayloadPurgeResult{}
 	err := r.withTransaction(ctx, "news_observation_retention", nil, func(tx *sql.Tx, _ func(string) error) error {
+		// Availability Evidence 有独立 retention；不能等父 Observation 到期才清理，
+		// 否则会在更短的来源许可期限结束后继续保留原始时间值。
+		evidenceRows, err := tx.QueryContext(ctx, `SELECT evidence_id FROM news_version_availability_evidence
+			WHERE retention_until <= ? AND payload_purged_at IS NULL
+			ORDER BY retention_until, evidence_id LIMIT ? FOR UPDATE SKIP LOCKED`, now.UTC(), limit)
+		if err != nil {
+			return err
+		}
+		evidenceIDs := make([]string, 0, limit)
+		for evidenceRows.Next() {
+			var id string
+			if err := evidenceRows.Scan(&id); err != nil {
+				_ = evidenceRows.Close()
+				return err
+			}
+			evidenceIDs = append(evidenceIDs, id)
+		}
+		evidenceRowsErr := evidenceRows.Err()
+		evidenceCloseErr := evidenceRows.Close()
+		if err := errors.Join(evidenceRowsErr, evidenceCloseErr); err != nil {
+			return err
+		}
+		result.EvidenceScanned = len(evidenceIDs)
+		if len(evidenceIDs) > 0 {
+			placeholders := strings.TrimRight(strings.Repeat("?,", len(evidenceIDs)), ",")
+			args := make([]any, 0, len(evidenceIDs)+1)
+			args = append(args, now.UTC())
+			for _, id := range evidenceIDs {
+				args = append(args, id)
+			}
+			updated, err := tx.ExecContext(ctx, fmt.Sprintf(`UPDATE news_version_availability_evidence
+				SET raw_value = NULL, candidate_available_at_utc = NULL,
+					evidence_ref = NULL, evidence_hash = NULL, payload_purged_at = ?
+				WHERE payload_purged_at IS NULL AND evidence_id IN (%s)`, placeholders), args...)
+			if err != nil {
+				return err
+			}
+			affected, err := updated.RowsAffected()
+			if err != nil {
+				return err
+			}
+			if affected != int64(len(evidenceIDs)) {
+				return app.ErrObservationRetentionResultInvalid
+			}
+			result.EvidencePurged = int(affected)
+		}
+
 		rows, err := tx.QueryContext(ctx, `SELECT observation_id FROM news_observations
 			WHERE retention_until IS NOT NULL AND retention_until <= ? AND payload_purged_at IS NULL
 			ORDER BY retention_until, observation_id LIMIT ? FOR UPDATE SKIP LOCKED`, now.UTC(), limit)

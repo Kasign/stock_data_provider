@@ -1824,10 +1824,35 @@ func TestObservationRetentionPurgeIntegration(t *testing.T) {
 		observations[0].ObservedAt, observations[0].ID); err != nil {
 		t.Fatalf("insert version referencing observation: %v", err)
 	}
+	availabilityEvidenceID := fmt.Sprintf("news-retention-availability-%d", time.Now().UnixNano())
+	candidateAvailableAt := now.Add(-3 * time.Hour).Truncate(time.Second)
+	if _, err := db.ExecContext(ctx, `INSERT INTO news_version_availability_evidence
+		(evidence_id, news_id, version_id, observation_id, field_path, raw_value,
+		 source_timezone_or_offset, source_precision, parse_status, parse_reason_code,
+		 candidate_available_at_utc, parser_version, evidence_ref, evidence_hash,
+		 observed_at, recorded_at, retention_until)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '', ?, ?, ?, ?, ?, ?, ?)`,
+		availabilityEvidenceID, referenceNewsID, referenceVersionID, observations[0].ID,
+		"payload.publishTime", "2026-11-16T06:00:00Z", "UTC", "second", "parsed",
+		candidateAvailableAt, "test-parser/1", "evidence://retention-test", strings.Repeat("b", 64),
+		observations[0].ObservedAt, observations[0].ObservedAt.Add(time.Second), now.Add(-time.Hour)); err != nil {
+		t.Fatalf("insert expiring availability evidence: %v", err)
+	}
 
 	firstBatch, err := repository.PurgeExpiredObservationPayloads(ctx, now, 2)
-	if err != nil || firstBatch.Scanned != 2 || firstBatch.Purged != 2 {
+	if err != nil || firstBatch.Scanned != 2 || firstBatch.Purged != 2 || firstBatch.EvidenceScanned != 1 || firstBatch.EvidencePurged != 1 {
 		t.Fatalf("first batch result=%+v err=%v", firstBatch, err)
+	}
+	var rawValue sql.NullString
+	var candidateAt, evidencePurgedAt sql.NullTime
+	var evidenceRef, evidenceHash sql.NullString
+	if err := db.QueryRowContext(ctx, `SELECT raw_value, candidate_available_at_utc, evidence_ref,
+		evidence_hash, payload_purged_at FROM news_version_availability_evidence WHERE evidence_id = ?`,
+		availabilityEvidenceID).Scan(&rawValue, &candidateAt, &evidenceRef, &evidenceHash, &evidencePurgedAt); err != nil {
+		t.Fatalf("read purged availability evidence: %v", err)
+	}
+	if rawValue.Valid || candidateAt.Valid || evidenceRef.Valid || evidenceHash.Valid || !evidencePurgedAt.Valid {
+		t.Fatalf("availability evidence payload was not fully purged: raw=%+v candidate=%+v ref=%+v hash=%+v purged=%+v", rawValue, candidateAt, evidenceRef, evidenceHash, evidencePurgedAt)
 	}
 	secondBatch, err := repository.PurgeExpiredObservationPayloads(ctx, now, 2)
 	if err != nil || secondBatch.Scanned != 1 || secondBatch.Purged != 1 {
