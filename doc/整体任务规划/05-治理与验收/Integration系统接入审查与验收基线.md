@@ -195,7 +195,7 @@ Registry 已具备 namespace 校验、确定性排序、执行报告和 Schema �
 
 **当前已通过的范围仅为 Researchflow Outbox → Notification EventReceiver → Inbox/FanoutWorkItem，包括接收失败重试。** 尚未验收真实渠道发送、Fanout/Delivery Worker 生产装配、外部渠道 Unknown 对账，以及完整 Researchflow 业务执行链。
 
-下一步不重复 Relay 组件启停与 Outbox 重试测试。可继续完成 Server Worker 角色的 Bootstrap 级启动/关闭集成验证；其后只有在模块提供冻结 Stage 定义、Output Registry 和真实公开 Facade 后，才接入 News → Researchflow、Data → Quant、Research/Quant/LLM → Researchflow。Quant 风险决策 Outbox 生产方、Notification Recipient Directory/渠道 Provider/Delivery Worker、Web 新业务 API 仍是模块或组合根阻塞项，不用空实现绕过。
+Researchflow/Notification Relay 组件启停与 Outbox 重试不重复验收。Server Worker 角色的 Bootstrap 级启动/关闭集成验证已于 2026-11-16 完成，真实 MariaDB/Redis + SIGTERM + HTTP 不监听的精确 SHA 证据见第 13 节。后续只有在模块提供冻结 Stage 定义、Output Registry 和真实公开 Facade 后，才接入 News → Researchflow、Data → Quant、Research/Quant/LLM → Researchflow。Quant 风险决策 Outbox 生产方、Notification Recipient Directory/渠道 Provider/Delivery Worker、Web 新业务 API 仍是模块或组合根阻塞项，不用空实现绕过。
 
 验收状态必须区分：
 
@@ -271,3 +271,13 @@ Registry 已具备 namespace 校验、确定性排序、执行报告和 Schema �
 - 本轮确认：A 组 `pass`；B 组 `shelved`；Researchflow Stage、Quant、LLM、Notification 生产装配仍为 `blocked`；系统整体未达到 INT-C。
 - 来源提案第 1.5 节已纠正：EDINET `submitDateTime` 与 LSE FIX `SendingTime` 都不能仅凭精度/时区认定为首次公开可获取时间；HKEX 分钟级精度不足；CNINFO 公开接口当前只有日期精度。项目目标范围为中国 A 股、海外市场暂缓，海外候选不构成当前项目验收证据。当前无来源可标记 `verified`，P0 继续 `shelved`，不改冻结契约、不新增字段/表、不修改 PIT SQL。
 - 本轮无 Go 业务代码、冻结契约、Schema、Golden 变更；Integration 的阶段性职责仅为跨模块测试、CI 门禁和现有验收文档维护。
+
+## 13. 2026-11-16 Server Worker Bootstrap 真实依赖生命周期验收
+
+- **验收代码 SHA**：`d1b58b49fee809c5204fafe3409dc36da9615794`；Integration CI Run [43790923451](https://github.com/Kasign/stock_data_provider/actions/runs/43790923451)（#81）对精确 SHA `success`。
+- 新增 `internal/server/bootstrap/worker_bootstrap_integration_test.go`，用 CI 的真实 MariaDB 11.4 与 Redis 7.4 执行完整 `bootstrap.Run`。测试为 Worker 创建隔离数据库，开启模块 Migration 与旧 Analysis schema migration，使用子进程接收真实 SIGTERM，并等待进程完成正常退出。
+- 测试通过占用 `HTTP_ADDR` 且注入非法 `HTTP_READ_TIMEOUT`，验证 Worker 角色不加载 HTTP 配置、不创建 HTTP 监听器；独立 CI 步骤精确要求 `TestWorkerBootstrapMariaDBRedisIntegration` 的顶层 `PASS`，禁止 `SKIP` 或无测试匹配。
+- Run #81 的 gofmt、root/go-core vet/test、News/Research 逐用例门禁、Worker Bootstrap 真实依赖测试、Compose、WebUI 语法/单测/镜像构建及最终汇总全部 success。Run #80 曾因新增测试 map 字面量格式未 gofmt 而最终汇总失败；该格式问题已修正，Run #81 是最终有效证据。
+- 现有 `worker_lifecycle_test.go` 的模拟 SQL Driver 测试仍负责组件级启停、禁用和启动失败回滚；本轮不重复其覆盖。`TestStopConsumersThenCloseResourcesPreservesOrder` 继续验证先停止消费者、后关闭共享资源的通用顺序。
+- **边界**：本项只验收当前 Server Worker 角色和已有旧 Analysis/Outbox Relay 运行链，不代表 Researchflow Stage Worker、生产 StageExecutor 或 INT-C 业务端到端链路已接通。
+- **下一步**：Integration 侧不再重复补 Worker 生命周期测试。按交接文档第 9.2 节，下一条主干为 Researchflow Stage，但状态仍是 `blocked`；等待 Researchflow/契约 Owner 提供冻结 Stage 三元组、Output Registry/Schema、生产 StageExecutor 与可信 CallerRef 运行时绑定后，再做 Server 装配和真实 MariaDB 端到端验收。P0 `available_at` 继续 `shelved`。
