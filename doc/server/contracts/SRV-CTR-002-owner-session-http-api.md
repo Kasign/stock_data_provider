@@ -35,7 +35,7 @@ Owner 初始化不提供 HTTP 路由。它只能通过受控本机/运维命令�
 
 ## 3. 请求与响应 DTO
 
-所有 JSON 请求必须设置 `Content-Type: application/json`；拒绝未知字段、重复 JSON 值、尾随第二个 JSON 值和超出 Server 请求体上限的输入。所有响应使用 UTF-8 JSON，并遵循 PLAT-CTR-001 错误投影。Cookie 通过 Set-Cookie Header 发放/更新/清除，不在 JSON 中返回 Session Token。
+所有 JSON 请求必须设置 `Content-Type: application/json`；拒绝未知字段和尾随第二个 JSON 值和超出 Server 请求体上限的输入。所有响应使用 UTF-8 JSON，并遵循 PLAT-CTR-001 错误投影。Cookie 通过 Set-Cookie Header 发放/更新/清除，不在 JSON 中返回 Session Token。
 
 ### 3.1 登录
 

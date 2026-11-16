@@ -232,7 +232,11 @@ func (h *ownerSessionHTTPHandler) noStore(w http.ResponseWriter) {
 }
 
 func decodeOwnerJSON(r *http.Request, target any) error {
-	if r == nil || r.Body == nil || !strings.EqualFold(strings.TrimSpace(r.Header.Get("Content-Type")), "application/json") {
+	if r == nil || r.Body == nil {
+		return errors.New("application/json request body is required")
+	}
+	mediaType, _, mediaErr := mime.ParseMediaType(r.Header.Get("Content-Type"))
+	if mediaErr != nil || !strings.EqualFold(mediaType, "application/json") {
 		return errors.New("application/json request body is required")
 	}
 	decoder := json.NewDecoder(r.Body)

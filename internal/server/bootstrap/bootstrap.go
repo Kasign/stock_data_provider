@@ -212,7 +212,7 @@ func Run(ctx context.Context) (runErr error) {
 		if err != nil {
 			return fmt.Errorf("创建 Health/Readiness Handler 失败: %w", err)
 		}
-		handler, err := newHTTPHandler(authenticator, healthHandler, api.Handler())
+		handler, err := newHTTPHandler(authenticator, healthHandler, api.Handler(), ownerSession)
 		if err != nil {
 			return fmt.Errorf("注册 HTTP 路由失败: %w", err)
 		}
