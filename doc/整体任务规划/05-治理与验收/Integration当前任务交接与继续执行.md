@@ -901,7 +901,7 @@ Researchflow 已有 Scheduler、Worker、WorkerPool、Claim/Lease/Fencing、候�
 - 下一步按 available_at 内部链路整体收尾：核对 Evidence 创建/持久化是否具备字段级授权凭据入口；若无，补齐受授权策略约束的写入边界，不允许提供可绕过策略的通用 raw Evidence 写入 API。来源仍未准入，不创建生产 Evidence、不解除 B 组 SKIP。
 
 
-### 2026-11-16 当前继续任务：available_at 字段级授权写入闭环
+### 2026-11-16 available_at 字段级授权写入闭环（历史任务，已完成）
 
 当前唯一主线仍是 News 内部 `available_at` 证据链，不转向其他模块。
 
@@ -914,13 +914,7 @@ Researchflow 已有 Scheduler、Worker、WorkerPool、Claim/Lease/Fencing、候�
 - MySQL Adapter 在同一事务中复核 Version / Observation 主体、策略版本、观察时间、父载荷清理状态和 retention 后写入 V10 Evidence。
 - 该写入能力不判定来源时间语义，不创建 Decision，不允许未准入 Provider 写生产 Evidence。
 
-当前代码提交链：`5f7cf979`（策略模型）、`9521d0b5`（策略单测）、`e18de0dc`（Application / Storage 写入边界）、`2d1f0592`（gofmt 修复）。精确 SHA `2d1f0592501e3ff82a32d21110bcc3df84730d1e` 的 Integration CI 正在执行；专门 MariaDB Evidence 写入集成测试仍待补齐。不能将当前能力标记为完成。
-
-下一步严格按序：
-1. 取得 `2d1f0592` 的 CI 结论；仅修复真实失败。
-2. 增加 MariaDB 集成测试，验证当前策略版本锁定、字段授权拒绝、策略版本变化拒绝、成功追加和父 Observation 留存上限。
-3. 增加策略载荷验证用例，非法/重复字段路径必须拒绝；历史策略缺少 AllowedMetadataFields 必须保持字段写入默认拒绝。
-4. 更新 News 验收清单与本交接文档；真实来源准入继续独立 blocked，B 组保持 SKIP。
+已完成并由最终代码 SHA `7d43043ed0eed070c3313c64f8aa7d6dc13e8fa3` 的 Integration CI Run [43823338222](https://github.com/Kasign/stock_data_provider/actions/runs/43823338222) 全量验收。MariaDB 写入测试覆盖当前策略锁定、字段授权拒绝、策略版本变化拒绝、成功追加和父 Observation 留存上限；策略载荷测试覆盖非法/重复字段路径及历史策略默认拒绝。详细验收结论见下节。
 
 
 ### 2026-11-16 字段级授权写入边界验收完成
