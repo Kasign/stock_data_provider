@@ -127,13 +127,12 @@ func (u *RecordAvailabilityEvidence) Execute(ctx context.Context, request Record
 		if recordedAt.IsZero() || !observation.RetentionUntil.After(recordedAt) {
 			return ErrAvailabilityEvidencePolicyDenied
 		}
-		retention := observation.RetentionUntil.Sub(recordedAt)
 		policyRequest := domain.CollectionPolicyRequest{
 			AccessMethod: registration.AccessMethod,
 			Purpose:      domain.PurposeInternalPersonalResearch,
 			ContentKind:  domain.ContentMetadata,
 			StorageMode:  domain.StoragePersistentMetadata,
-			Retention:    retention,
+			Retention:    time.Second,
 			FieldPath:    request.FieldPath,
 		}
 		decision := domain.EvaluateCandidateCollectionPolicy(providerPolicy, sourcePolicy, endpointPolicy, policyRequest, recordedAt)
