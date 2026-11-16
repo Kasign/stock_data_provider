@@ -10,7 +10,7 @@ func TestMigrationsAreExplicitAndVersioned(t *testing.T) {
 		t.Fatalf("MigrationNamespace = %q, want researchflow", MigrationNamespace)
 	}
 	migrations := Migrations()
-	if len(migrations) != 5 || migrations[0].Version != 1 || migrations[1].Version != 2 || migrations[2].Version != 3 || migrations[3].Version != 4 || migrations[4].Version != 5 {
+	if len(migrations) != 6 || migrations[0].Version != 1 || migrations[1].Version != 2 || migrations[2].Version != 3 || migrations[3].Version != 4 || migrations[4].Version != 5 || migrations[5].Version != 6 {
 		t.Fatalf("expected ordered migrations v1 through v5, got %+v", migrations)
 	}
 	migration := migrations[0]
@@ -55,6 +55,25 @@ func TestMigrationsAreExplicitAndVersioned(t *testing.T) {
 	if callerMigration.Description == "" || len(callerMigration.Statements) != 1 ||
 		!strings.Contains(callerMigration.Statements[0], "ADD UNIQUE KEY uq_researchflow_idempotency_run (run_ref)") {
 		t.Fatalf("Run caller identity uniqueness migration is incomplete: %+v", callerMigration)
+	}
+	outputMigration := migrations[5]
+	if outputMigration.Description == "" || len(outputMigration.Statements) != 1 {
+		t.Fatalf("Stage Output resource migration is incomplete: %+v", outputMigration)
+	}
+	outputDDL := outputMigration.Statements[0]
+	for _, fragment := range []string{
+		"CREATE TABLE researchflow_stage_output_resources",
+		"UNIQUE KEY uq_researchflow_stage_output_attempt_kind (attempt_ref, resource_kind)",
+		"registry_fingerprint VARCHAR(80)",
+		"schema_ref VARCHAR(512)",
+		"content LONGTEXT",
+		"FOREIGN KEY (stage_ref, run_ref)",
+		"FOREIGN KEY (attempt_ref)",
+		"CHECK (resource_kind IN ('payload', 'quality_summary'))",
+	} {
+		if !strings.Contains(outputDDL, fragment) {
+			t.Errorf("Stage Output resource migration is missing %q", fragment)
+		}
 	}
 
 	joined := strings.Join(migration.Statements, "\n")

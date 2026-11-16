@@ -179,5 +179,37 @@ func Migrations() []platformstorage.Migration {
 					ADD UNIQUE KEY uq_researchflow_idempotency_run (run_ref)`,
 			},
 		},
+		{
+			Version:     6,
+			Description: "persist immutable, versioned Stage Provider output resources",
+			Statements: []string{
+				`CREATE TABLE researchflow_stage_output_resources (
+					resource_ref VARCHAR(255) NOT NULL,
+					run_ref VARCHAR(255) NOT NULL,
+					stage_ref VARCHAR(255) NOT NULL,
+					attempt_ref VARCHAR(255) NOT NULL,
+					resource_kind VARCHAR(24) NOT NULL,
+					stage_code VARCHAR(128) NOT NULL,
+					template_version VARCHAR(64) NOT NULL,
+					registry_version VARCHAR(64) NOT NULL,
+					registry_fingerprint VARCHAR(80) NOT NULL,
+					output_type VARCHAR(128) NOT NULL,
+					schema_version VARCHAR(64) NOT NULL,
+					schema_ref VARCHAR(512) NOT NULL,
+					content LONGTEXT NOT NULL,
+					created_at CHAR(30) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					PRIMARY KEY (resource_ref),
+					UNIQUE KEY uq_researchflow_stage_output_attempt_kind (attempt_ref, resource_kind),
+					KEY idx_researchflow_stage_output_run_stage (run_ref, stage_ref),
+				CONSTRAINT chk_researchflow_stage_output_kind CHECK (resource_kind IN ('payload', 'quality_summary')),
+				CONSTRAINT fk_researchflow_stage_output_run FOREIGN KEY (run_ref)
+						REFERENCES researchflow_runs (run_ref),
+				CONSTRAINT fk_researchflow_stage_output_stage FOREIGN KEY (stage_ref, run_ref)
+						REFERENCES researchflow_stages (stage_ref, run_ref),
+				CONSTRAINT fk_researchflow_stage_output_attempt FOREIGN KEY (attempt_ref)
+						REFERENCES researchflow_attempts (attempt_ref)
+				) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin`,
+			},
+		},
 	}
 }
