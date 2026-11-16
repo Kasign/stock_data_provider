@@ -1,13 +1,12 @@
 package bootstrap
 
 import (
-	"context"
 	"database/sql"
-	"net"
 	"os"
 	"strings"
 	"testing"
 	"time"
+	"net/http"
 
 	mysql "github.com/go-sql-driver/mysql"
 	"github.com/redis/go-redis/v9"
@@ -94,7 +93,7 @@ func ownerSessionTestConfig() serverconfig.OwnerSession {
 		Enabled: true,
 		PublicOrigin: "https://stock.example.test",
 		Cookie: platformsecurity.SessionCookieConfig{
-			Name: "__Secure-owner_session", Path: "/api", Secure: true, SameSite: 2,
+			Name: "__Secure-owner_session", Path: "/api", Secure: true, SameSite: http.SameSiteLaxMode,
 		},
 		CSRFHeader: "X-CSRF-Token",
 		IdleTTL: 12 * time.Hour,
@@ -110,5 +109,3 @@ func ownerSessionTestConfig() serverconfig.OwnerSession {
 	}
 }
 
-var _ = context.Background
-var _ = net.IPv4len
