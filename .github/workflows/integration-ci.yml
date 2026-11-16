@@ -120,23 +120,23 @@ jobs:
           fi
           # 顶层测试必须逐一 PASS；不能用包含子测试在内的 grep 计数代替。
           for test_name in TestNewsResearchIntegrationFixturesAreValid TestNewsEvidenceCursorKeyRotation TestNewsResearchMariaDBIntegration; do
-            if ! grep -Eq "^--- PASS: ${test_name} \\(" /tmp/news_research_verbose.log; then
+            if ! grep -Eq "^[[:space:]]*--- PASS: ${test_name} \\(" /tmp/news_research_verbose.log; then
               echo "::error::顶层测试 ${test_name} 缺少 PASS 记录"
               exit 1
             fi
           done
           # A 组七个真实 MariaDB 子测试逐一要求 PASS，路径必须完整匹配。
           for case_name in composition_and_schema authorized_read_and_fail_closed_import pit_invisible context_cancelled list_evidence_page_uses_current_authorization fingerprint_tamper_rejected current_policy_version_change_rejected; do
-            if ! grep -Eq "^--- PASS: TestNewsResearchMariaDBIntegration/read_chain_and_fail_closed_import/${case_name} \\(" /tmp/news_research_verbose.log; then
+            if ! grep -Eq "^[[:space:]]*--- PASS: TestNewsResearchMariaDBIntegration/read_chain_and_fail_closed_import/${case_name} \\(" /tmp/news_research_verbose.log; then
               echo "::error::A 组子测试 ${case_name} 缺少精确 PASS 记录"
               exit 1
             fi
           done
           # B 组只能是明确 PASS 或按当前搁置决议明确 SKIP；缺少结果一律失败。
           b_case='TestNewsResearchMariaDBIntegration/read_chain_and_fail_closed_import/successful_import_with_verified_available_at'
-          if grep -Eq "^--- PASS: ${b_case} \\(" /tmp/news_research_verbose.log; then
+          if grep -Eq "^[[:space:]]*--- PASS: ${b_case} \\(" /tmp/news_research_verbose.log; then
             echo "- B 组 successful_import_with_verified_available_at: PASS" >> "$GITHUB_STEP_SUMMARY"
-          elif grep -Eq "^--- SKIP: ${b_case} \\(" /tmp/news_research_verbose.log; then
+          elif grep -Eq "^[[:space:]]*--- SKIP: ${b_case} \\(" /tmp/news_research_verbose.log; then
             echo "::warning::B 组成功路径已按项目决议 shelved；当前契约无可验证 available_at，显式 SKIP"
             echo "- B 组 successful_import_with_verified_available_at: SKIP (shelved, 非 fail)" >> "$GITHUB_STEP_SUMMARY"
           else
