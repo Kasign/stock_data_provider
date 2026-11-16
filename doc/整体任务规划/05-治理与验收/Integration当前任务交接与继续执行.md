@@ -165,7 +165,7 @@ Researchflow 已有 Scheduler、Worker、WorkerPool、Claim/Lease/Fencing、候�
 1. 打开本文。
 2. 查询 integration 最新 HEAD 和最新 CI（不要复用本文 SHA 作为假定当前值）。
 3. 查看 doc/contract/PLAT-002-项目级契约冻结登记簿.md、GOV-CTR-006、doc/news/README.md、doc/research/README.md、doc/researchflow/README.md、doc/server/README.md；处理第 4 项时另读 FLOW-CTR-001～004 登记行、doc/researchflow/04-ApplicationPort与运行时契约落地补充.md 与本文第 6 节。
-4. **当前总览（2026-11-16 校准；代码门禁 SHA `a992f4c` / Run `43788290026` 待最终结果）**：第 3 节 1、2、3A `pass`；3B `shelved`；4、5、6 `blocked`。A 组真实 MariaDB 验收已通过；B 组成功路径仅有测试资产、未真实执行。CI 逐用例门禁已收紧，须以 Run 71 对精确 SHA 的最终结论验收。**当前没有可推进的 Integration 业务领域开发任务**；本阶段仅允许经授权的跨模块测试、CI 和验收文档维护。第 6 项 LLM / Notification 的 `blocked` 详见第 7 节；Researchflow Stage 与 Quant 按第 6 节条件阻断。P0 `available_at` 维持 `shelved`：SEC 证据仅否决 EDGAR Acceptance Time；EDINET/RNS/HKEX 候选未证明首次公开可获取语义，且超出当前 A 股范围；CNINFO 公开接口精度不足。具体以第 10.9 节及提案第 1.5 节为准。
+4. **当前总览（2026-11-16 校准；最新代码验收 SHA `d1b58b49fee809c5204fafe3409dc36da9615794` / Run [43790923451](https://github.com/Kasign/stock_data_provider/actions/runs/43790923451)（#81）success）**：第 3 节 1、2、3A `pass`；3B `shelved`；4、5、6 `blocked`。A 组真实 MariaDB 验收已通过；B 组成功路径仅有测试资产、未真实执行。Server Worker Bootstrap 真实 MariaDB/Redis 生命周期验收已通过，详见第 10.10 节。**当前没有新的可推进 Integration 业务领域开发任务**；只在出现新的外部证据或模块 Owner 解锁条件后推进对应链路。第 6 项 LLM / Notification 的 `blocked` 详见第 7 节；Researchflow Stage 与 Quant 按第 6 节条件阻断。P0 `available_at` 维持 `shelved`：现有候选均未证明满足首次公开可获取语义和当前 A 股范围。具体以第 10.9 节及提案第 1.5 节为准。
 5. CI 排障与工具链见第 8 节：本机 `gh` 已安装并完成网页授权登录，可用 `gh run view <run-id> --log` 核对逐用例结果；远端同步若 SSH 报主机密钥校验失败可用 HTTPS 只读 fetch 兜底。不要把 PAT 贴进对话、写进 `.zshrc` 明文或提交进仓库。
 
 ## 6. 2026-11-14 第 4 项 Researchflow Stage 契约准入盘点（只读，结论 `blocked`）
@@ -447,3 +447,15 @@ Researchflow 已有 Scheduler、Worker、WorkerPool、Claim/Lease/Fencing、候�
 
 
 - 2026-11-16 最终门禁验收：Run #71（`43788290026`）因 grep 未匹配缩进后的子测试输出误失败；Run #72（`43788537976`）因将 `fingerprint_tamper_rejected` 与 `current_policy_version_change_rejected` 错归到 `read_chain_and_fail_closed_import` 路径误失败。两次失败均为新增门禁自身的匹配逻辑缺陷，实际测试用例均 PASS。Run #73（`43788740211`）在 `d90c6fc5f15c6ea076ce31bc02e866ef4fe5197f` 上通过，已按真实 Go 测试层级分别验证 5 个 read_chain 子测试、2 个根级子测试，及三个顶层测试；B 组明确 SKIP。不得将 Run #71/#72 记录为业务测试失败，也不得省略其门禁缺陷修复过程。
+
+### 10.10 2026-11-16 Server Worker Bootstrap 真实依赖生命周期验收
+
+- 本项是 Server 组合根基础设施验收，不改变模块领域代码或冻结契约。开始前确认 `integration` HEAD 为 `9bcc8f7e`；当前仅在 `integration` 分支工作。
+- 复核发现 `internal/server/bootstrap/worker_lifecycle_test.go` 已覆盖 `legacyAnalysisWorker` 的启停、禁用与启动失败回滚，但使用模拟 SQL Driver，只是组件级单测；不重复扩展该测试。
+- 新增 `internal/server/bootstrap/worker_bootstrap_integration_test.go`：父测试从 CI 提供的 `SERVER_RELAY_TEST_MYSQL_DSN` 创建隔离 MariaDB database，使用真实 Redis 地址启动独立子进程并执行完整 `bootstrap.Run`；开启模块 Migration 与旧 Analysis schema migration；等待 Worker 启动日志后向子进程发送真实 `SIGTERM`，要求 `Run` 正常返回并完成其生命周期停止及共享资源关闭 defer，最后清理隔离数据库。
+- HTTP 不启动的负向验证：父测试先占用一个 TCP 地址，将该地址作为 `HTTP_ADDR` 传入子进程，同时设置非法 `HTTP_READ_TIMEOUT`。Worker 角色若错误加载 HTTP 配置或尝试启动 HTTP Server，子进程将无法通过启动；真实测试通过说明 Worker 角色跳过 HTTP 配置和监听器装配。
+- `.github/workflows/integration-ci.yml` 增加独立 verbose 步骤 `test-worker-bootstrap`，精确要求 `TestWorkerBootstrapMariaDBRedisIntegration` 顶层 `PASS`；缺失结果或 `SKIP` 均失败，并纳入最终检查汇总。Job 使用现有 MariaDB 11.4 / Redis 7.4 服务，不引入新依赖。
+- 首轮 Run [43790574994](https://github.com/Kasign/stock_data_provider/actions/runs/43790574994)（#80）中 Worker 真库集成步骤已 `success`，根模块测试、vet、News/Research 门禁及其他检查通过；唯一失败为新增 Go 测试文件 map 字面量未 gofmt。已修正格式，不是运行逻辑缺陷。
+- 最终提交 `d1b58b49fee809c5204fafe3409dc36da9615794` 的 Run [43790923451](https://github.com/Kasign/stock_data_provider/actions/runs/43790923451)（#81）对精确 SHA `success`。逐步日志显示 Worker Bootstrap MariaDB/Redis 集成用例 `--- PASS`；独立门禁步骤通过；gofmt、root/go-core vet/test、News/Research 逐用例门禁、Compose、WebUI 语法/单测/镜像构建和最终汇总全部 success。
+- 验收范围：`pass` 的是当前 Worker 角色下完整 Bootstrap 启动、真实依赖连接、SIGTERM 触发关闭、Run 正常退出及 HTTP 不监听。消费者先停止、共享资源后关闭的通用顺序仍由 `TestStopConsumersThenCloseResourcesPreservesOrder` 验证；本测试不代表 Researchflow Stage Worker 已接入，也不代表新业务链路达到 INT-C。
+- 后续任务：Integration 侧不再为 Worker 生命周期重复补测试。按第 9.2 节优先级，下一条主干是 Researchflow Stage；但当前仍 `blocked`，须等 Researchflow/契约 Owner 提供冻结 Stage 三元组、Output Registry/Schema、生产 StageExecutor 和可信 CallerRef 运行时绑定后，Integration 才进行装配与 MariaDB 端到端验收。P0 `available_at` 仍 `shelved`，不得用本任务绕过。
