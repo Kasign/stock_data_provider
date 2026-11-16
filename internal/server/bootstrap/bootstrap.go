@@ -145,6 +145,9 @@ func Run(ctx context.Context) (runErr error) {
 			return fmt.Errorf("装配 Owner Session 依赖失败: %w", err)
 		}
 	}
+	if ownerSession != nil {
+		slog.Info("Owner Session 依赖已装配；HTTP 生命周期入口将在后续接入阶段开放")
+	}
 
 	// Key Ring 配置为可选项；未配置时不创建分页 Facade，也不生成任何默认密钥。
 	// 已配置时在 API/Worker 两种角色下使用同一共享 DB 构造真实 News/Research 依赖。
