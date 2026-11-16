@@ -1,6 +1,6 @@
 # NEWS-CTR-001 `available_at` 来源证据解锁：契约变更影响分析（提案）
 
-- 文档状态：**提案，待项目负责人正式决策**。本文不是已批准的契约变更，未修改任何冻结契约、Schema、Golden 或 Go 代码。
+- 文档状态：**结构提案已获项目负责人确认，来源准入与公开契约决策仍待完成**。本次确认仅批准以两张追加式表作为后续结构设计基线，不等于 NEWS-CTR-001 2.0.0 已冻结，不授权 Migration、Provider 接入、PIT SQL 或 Go 业务代码实施。
 - 提出日期：2026-11-14
 - 触发：项目负责人授权 Integration「工作面 A」（《[Integration 当前任务交接与继续执行](../整体任务规划/05-治理与验收/Integration当前任务交接与继续执行.md)》第 10.4 节），要求以契约 Owner + News/Research Owner 身份推进 P0。
 - 治理依据：`doc/contract/PLAT-002-项目级契约冻结登记簿.md:85-92` 第 5 节——「公开语义变更必须先完成影响分析、正式决策、消费者影响确认、版本升级和迁移边界定义」；交接文档第 10.5 节反空转规则第 2 条——授权 A 后先输出契约变更影响分析并取得确认，再动代码。
@@ -10,7 +10,7 @@
 
 ## 0. 结论摘要（先看这里）
 
-> **状态（2026-11-14）：`搁置`（P0 挂起）。** 项目负责人决定：本项暂不推进，结论固化于本文，等待新的外部条件（采购/授权到合格的法定披露类来源）再重启。挂起不改变 `available_at` 语义，也不解除 `新闻模块开发任务与验收清单.md:799` 的「不得新增字段/表、不得改 PIT SQL」禁令。
+> **状态（2026-11-16）：`reopened / proposal-only`（重新启动，仅推进结构提案）。** 项目负责人已确认重新启动 P0，并同意以本提案第 1.9 节的“两表追加式模型”作为结构设计基线。历史 `shelved` 决议保留为过程记录；当前来源准入仍未通过，公开契约版本尚未升级。因此当前只推进结构定义、消费者影响和决策材料；不得提前实施 Migration、Provider、PIT SQL 或生成非空 `available_at`。
 
 1. **A 的法定第一步已完成，结论是「冻结 Golden 指定的 `sec-edgar` 与仓库已接入的全部 Provider 均不合格」**：SEC 官方文档逐字声明 `There is no timestamp to indicate when filing content is first available on sec.gov.`；`Acceptance Time` 是「被 EDGAR 接受」的 EST 系统时间，到 sec.gov 可见还有 1-3 分钟且**不可预测**的 lag；PDS 规范里唯一的 `<TIMESTAMP>` 只用于「受理后更正」且由 R/A Subsystem 提供。详见第 1 节。
 2. **2026-11-16 Review 更正**：第 1.5 节此前把时间精度和时区误当成语义证明。EDINET `submitDateTime` 目前只能列为提交时间候选，尚未证明为首次公众可获取时间；LSE RNS FIX `SendingTime` 是消息传输时间，不能直接等同公众可获取时间。两者均未通过准入 1 的语义证明，且属于海外市场，不符合当前中国 A 股项目范围。不能声称已找到合格来源。
@@ -311,3 +311,107 @@
 ### 对验收的补充
 
 未来来源接入至少要提供：原始响应脱敏样本、字段语义证明、时间解析测试、时区/跨日测试、未来时间拒绝、采集先后冲突拒绝、版本更正追加、跨来源冲突留痕、重复采集幂等，以及真实 MariaDB 持久化后按证据引用回读核对。单元测试或模拟响应不能代替真实来源样本验收。
+
+
+## 1.9 `available_at` 证据与审核决策的两表结构提案（2026-11-16）
+
+### 1.9.1 设计目标与边界
+
+本节记录项目负责人已确认的结构设计方向。**它是 NEWS-CTR-001 公开契约变更的提案基线，不是已冻结 Schema 或数据库实现。**
+
+设计目标：
+
+- `available_at` 仍表示某一具体内容版本首次向约定市场参与者公开可获取的精确时间点；不改变 GOV-CTR-002 / NEWS-CTR-001 的既有语义。
+- 将来源原始证据与系统审核决策分开保存，二者均采用追加式记录，不覆盖历史。
+- 证据必须绑定精确 `version_id`，不能仅绑定 `news_id`。
+- 不把可变 `available_at` 写入不可变的 `news_item_versions` 内容快照，也不把其纳入内容版本 fingerprint。
+- 不额外维护可变的 current-state 表；当前有效状态由截至指定 `system_as_of` 的决策事件推导。
+- 来源没有合格证据时，DTO 仍返回 `available_at: null`；不为了表达缺失而伪造 evidence/decision 行。
+
+### 1.9.2 表一：`news_version_availability_evidence`
+
+一行代表某个 News 内容版本从一个已授权来源响应中取得的一份原始时间证据。记录不可更新、不可物理覆盖；纠错或重新采集产生新 evidence 行。
+
+| 字段 | 建议类型 | 约束与含义 |
+|---|---|---|
+| `evidence_id` | VARCHAR(128) | 主键，稳定唯一 ID |
+| `version_id` | VARCHAR(128) | 必填；外键/逻辑引用 `news_item_versions.version_id` |
+| `source_id` | VARCHAR(128) | 来源身份 |
+| `endpoint_id` | VARCHAR(128) | 实际请求的 Endpoint |
+| `source_policy_version` | VARCHAR(128) | 采集时使用的 Source 策略版本 |
+| `provider_output_policy_version` | VARCHAR(128) NULL | Provider 输出许可策略版本；不适用时 NULL |
+| `field_path` | VARCHAR(255) | 响应中的精确字段路径 |
+| `raw_value` | TEXT | 原始时间值文本，不以解析结果替代 |
+| `candidate_available_at_utc` | DATETIME(6) NULL | 解析候选值；仅当精确解析成功时填写，按 UTC 存储 |
+| `source_timezone_or_offset` | VARCHAR(64) NULL | 原始时区/偏移文本，保留来源表达 |
+| `parser_version` | VARCHAR(128) | 解析器版本 |
+| `evidence_ref` | VARCHAR(512) NULL | 受控原始响应/证据定位符；不得包含凭据或敏感 query 参数 |
+| `evidence_hash` | CHAR(64) NULL | 原始证据规范化摘要或内容哈希 |
+| `observed_at` | DATETIME(6) | 系统首次取得该证据的 UTC 时间 |
+| `recorded_at` | DATETIME(6) | 该证据写入系统的 UTC 时间 |
+
+补充约束：
+
+- MySQL `DATETIME(6)` 本身不携带时区；所有 UTC 列必须由应用层统一转换、校验并以 UTC 写入/读取，Schema 明确使用 RFC3339Nano UTC 表达。
+- 原始响应留存必须服从 Source/Endpoint 授权和保留期限；表中只保存受控引用/摘要，不默认复制完整正文。
+- `candidate_available_at_utc` 只是候选，不因非 NULL 自动获得可信资格。
+- 原始值、字段路径、证据引用和版本绑定共同构成可复核证据；缺少任一必需项不能进入 verified。
+
+### 1.9.3 表二：`news_version_availability_decisions`
+
+一行代表针对一个内容版本及一份证据的审核决策事件。决策只追加，不更新旧行。
+
+| 字段 | 建议类型 | 约束与含义 |
+|---|---|---|
+| `decision_id` | VARCHAR(128) | 主键 |
+| `decision_group_id` | VARCHAR(128) | 同一次审核/冲突裁决的分组 ID；冲突可关联多份 evidence |
+| `version_id` | VARCHAR(128) | 必填；与 evidence 的版本归属一致 |
+| `evidence_id` | VARCHAR(128) NULL | 对应证据；无证据的撤销/状态事件可为空，但必须有 reason_code |
+| `status` | VARCHAR(24) | `verified` / `conflict` / `rejected` / `revoked` |
+| `reason_code` | VARCHAR(128) | 稳定原因码，禁止只依赖自由文本 |
+| `review_rule_version` | VARCHAR(128) | 审核规则版本 |
+| `supersedes_decision_id` | VARCHAR(128) NULL | 被本事件修订/替代的决策 |
+| `recorded_at` | DATETIME(6) | 决策写入系统的 UTC 时间；PIT 认知边界 |
+
+状态语义：
+
+- `verified`：该 evidence 通过来源语义、授权、精度/时区、版本绑定和采集先后校验；一个决策组只能选定一份 evidence 作为当前可信候选。
+- `conflict`：同一版本的多份证据发生无法按冻结规则消解的冲突；该版本在冲突解决前不得输出 available_at。
+- `rejected`：证据不符合准入规则，保留记录用于审计，但不得参与 PIT。
+- `revoked`：撤销此前的有效决策；必须通过追加事件指向被撤销决策，不删除历史。
+- 无证据/未审核不强制写入 `unknown` 行；无可用 verified 决策即表现为 NULL。避免把“没有记录”与“经过审核确认 unknown”混为一谈。
+
+### 1.9.4 决策一致性与 PIT 规则
+
+对某个 `version_id` 和 `system_as_of`：
+
+1. 只考虑 `recorded_at <= system_as_of` 的决策事件。
+2. 只考虑 `observed_at <= system_as_of` 的证据事件。
+3. 按 `decision_group_id` 解析截至该时点最新的决策状态；不得读取未来才记录的 verified、conflict 或 revoked 事件。
+4. 只有截至该时点的有效决策为 `verified`，且唯一选定的 evidence 完整、版本匹配时，才允许返回候选时间。
+5. 必须满足 `candidate_available_at_utc <= observed_at <= system_as_of`，并满足 `candidate_available_at_utc <= system_as_of`；违反时作为证据冲突拒绝。
+6. 若截至该时点存在未解决的冲突或已生效撤销，必须 fail-closed，返回 NULL。
+7. 同一版本存在多个可选 verified 决策时，不能按最早/最晚时间自动挑选；必须由审核决策显式给出唯一选择。
+8. 所有决策的生效顺序、同一时间戳并列处理和唯一性约束必须在正式 Schema/SQL 设计中明确，不能依赖数据库返回顺序。
+
+### 1.9.5 为什么不把字段直接加到 `news_item_versions`
+
+`news_item_versions` 是内容快照，按版本指纹不可变；而来源证据可能在版本首次采集后才到达，审核结果也可能被后续追加修订。直接在版本表上更新 `available_at` 会破坏不可变快照和历史 PIT 认知；仅在版本表加 nullable 列也无法留存多来源冲突、证据原文和审核历史。
+
+因此提案采用两张独立表：证据表回答“来源实际给出了什么”，决策表回答“系统在何时基于哪些证据认可了什么”。不另建可变状态表，避免重复维护 current pointer。
+
+### 1.9.6 尚待正式冻结的细节
+
+以下内容进入 Schema/DDL 设计前必须完成，不在本次确认中视为已决：
+
+- ID 格式、字段长度、索引、外键策略、删除/保留策略及 Migration 回滚边界。
+- `decision_group_id` 的分组规则、同组多证据冲突表达，以及撤销/替代决策的完整状态转移矩阵。
+- 多个 verified 证据之间的权威选择规则；不能简单按时间排序。
+- `DATETIME(6)` UTC 写入/读取约定、RFC3339Nano 输出、微秒精度损失/舍入政策。
+- evidence_ref 的安全存储、脱敏、访问控制、原始响应保留期限及哈希算法/规范化方式。
+- 是否需要额外的证据采集批次/Provider 请求关联 ID；如需，必须复用已有 ID，不重复发明。
+- NEWS-CTR-001 Schema/Golden 版本升级方式、Research 消费者兼容策略及旧 1.0.0 保留规则。
+
+### 1.9.7 当前实施门禁
+
+项目负责人已确认本两表方案作为结构提案基线；但当前 A 股候选（包括 SSE InfoNet 的“更新时间”）仍未通过首次公开可获取时间语义证明，且授权/字段规范尚未取得。因此本次只更新提案和任务跟踪，不新增 Migration V10、不改 Go 领域模型/Repository/PIT SQL、不修改 1.0.0 Schema/Golden，不启用 B 组成功路径。正式实施仍需：来源准入证据 → 决策记录/消费者影响确认 → NEWS-CTR-001 版本升级与迁移批准 → 代码和真库验收。

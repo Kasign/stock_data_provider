@@ -539,3 +539,16 @@ Researchflow 已有 Scheduler、Worker、WorkerPool、Claim/Lease/Fencing、候�
 - Integration CI Run [43796272232](https://github.com/Kasign/stock_data_provider/actions/runs/43796272232)（#82）对代码提交 `4ad77c2c813503e05aeb41c541ebaad295ac3a14` 的结果为 failure。逐步日志确认根模块 go vet/test、News/Research 跨模块测试、Worker MariaDB/Redis 生命周期、go-core vet/test、Compose 与 WebUI 检查均通过。
 - 唯一失败项是全仓 gofmt：`internal/news/adapters/provider/live_probe_test.go` 的结构体字段对齐不符合 gofmt，并存在多余空行。测试逻辑本身通过；CI 汇总步骤因 GOFMT=failure 而失败。
 - 本轮只修正该测试文件格式，不改变统计逻辑、断言、Provider 请求或业务语义。修复提交 `7378b035c88dabb13c6486f7a54d0df2663d96d5` 的 Run [43796597261](https://github.com/Kasign/stock_data_provider/actions/runs/43796597261)（#83）对精确 SHA 全量 `success`：gofmt、Root Go vet/test、News/Research 跨模块测试、Worker Bootstrap MariaDB/Redis 集成、go-core vet/test、Compose、WebUI 语法/单测/镜像构建及最终汇总全部通过。Run #82 仍记为失败，不回写为通过。
+
+
+### 10.18 2026-11-16 `available_at` P0 重新启动：两表结构提案获确认
+
+- 开始前核对 `integration` 远端 HEAD：`17bac6e9625733faf02d3bf98beb07868a6c4e02`；本轮仅更新契约提案和任务跟踪文档。
+- 项目负责人明确同意重新启动 `available_at` P0，并确认以两张追加式表作为结构提案基线：
+  1. `news_version_availability_evidence`：绑定精确 `version_id`，保存来源身份/策略版本、字段路径、原始时间文本、UTC 候选值、原始时区、解析器版本、受控证据引用/摘要、`observed_at` 和 `recorded_at`。
+  2. `news_version_availability_decisions`：保存审核决策事件、状态、原因码、规则版本、决策分组、被替代决策引用和 `recorded_at`。
+- 结构原则：News 内容版本保持不可变；不把 `available_at` 写入 `news_item_versions`，不增加可变 current-state 表；PIT 根据 `system_as_of` 推导当时已记录的审核状态，只有唯一有效 `verified` 证据可提供时间。冲突/撤销/未审核均 fail-closed。
+- 已将提案写入 `doc/contract/NEWS-CTR-001-available_at-来源证据解锁影响分析.md` 第 1.9 节，并在 News 任务清单新增一百零八节。
+- **本次授权边界**：批准结构提案基线，不代表 NEWS-CTR-001 2.0.0 已冻结；不代表 A 股来源已合格。SSE InfoNet“更新时间”仍为 candidate，需取得官方字段语义、真实响应和个人用途授权证据。
+- **未实施**：没有 Migration V10、Go 领域模型/Repository/Provider/PIT SQL、1.0.0 Schema/Golden 修改，也未解除 B 组 SKIP；没有业务代码 CI 结果可新增。代码验收仍以最近精确代码 SHA `7378b035c88dabb13c6486f7a54d0df2663d96d5` / Run [43796597261](https://github.com/Kasign/stock_data_provider/actions/runs/43796597261)（#83）为准。
+- 下一步按提案第 1.9.6 节完成两表细节评审，再完成来源语义/授权取证与正式 DEC；未满足来源门禁前不进入数据库或业务代码实施。
