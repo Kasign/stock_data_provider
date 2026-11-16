@@ -1,6 +1,6 @@
 # Stage Output 不可变资源与 Worker 原子提交设计
 
-- 状态：Researchflow 内部实现设计，遵循冻结契约 FLOW-CTR-004；不改变公共契约字段语义。
+- 状态：已实现并通过 Integration CI；本文件记录实施设计与验收边界。遵循冻结契约 FLOW-CTR-004，不改变公共契约字段语义。
 - 日期：2026-11-16
 - 范围：Provider Result Envelope 校验后的结果资源持久化、引用生成及 Attempt/Stage 原子提交。
 - 非目标：注册业务 Stage、定义领域质量枚举、定义 ResultSummary Coverage、装配 Server 生产 StageExecutor。
@@ -82,6 +82,16 @@ Storage 提供按 `resource_ref` 精确读取不可变资源的能力，返回�
 - RetryWait、Failed、TimedOut、Cancelled 路径保持原行为，不生成输出资源。
 - MariaDB 集成测试与根模块测试、gofmt、vet、全量 Integration CI 均通过后，才标记本阶段完成。
 
-## 8. 当前不解锁事项
+## 8. 实施结果与验收
+
+- Migration v6 已新增 `researchflow_stage_output_resources`，按 Attempt / resource_kind 唯一，保存 Payload 与 QualitySummary 原始 JSON 及 Schema / Registry 元数据。
+- `StageExecutionSnapshot` 从持久化 ResolvedTemplate 传播 OutputRegistryVersion；Worker 通过注入的 StageOutputRegistry 构造 Envelope 并验证。
+- `StageExecutionResult` 成功/降级结果使用 ProviderResult；旧 Provider 自报引用被拒绝。
+- `CommitAttemptResult` 在原有 Run → Stage → Attempt 锁定和 Lease/Fencing 检查后，在同一事务插入两条资源、生成引用并更新 Attempt / Stage。Storage 提供按不透明 resource_ref 读取资源的能力。
+- MariaDB 集成用例覆盖成功提交、资源引用生成及 Payload / QualitySummary 读取；Worker 单测覆盖缺少 Registry 与 Provider 引用越权拒绝。
+- 验收 SHA：`7392caaba59aa4d322d4b91e1d34a7294d2f6505`；Integration CI Run [43837079196](https://github.com/Kasign/stock_data_provider/actions/runs/43837079196) 全量 success。
+- 该实现不注册业务 Stage，不提供真实 Provider，不代表 Server 已装配生产 Worker。Registry 缺失或未注册输出仍 fail-closed。
+
+## 9. 当前不解锁事项
 
 本设计只闭合 Researchflow 的通用执行与持久化边界，不代表任何业务 Stage 已注册或可运行。领域 Provider、真实 Payload/QualitySummary Schema、质量语义仍由各模块提供；ResultSummary 质量枚举、Coverage 分母和 Summary 身份/版本绑定仍按独立契约决议处理。

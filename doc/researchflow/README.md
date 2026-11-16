@@ -29,13 +29,19 @@ Researchflow 是研究应用编排层，通过 Data、News、Quant、Research、
 - `contextassembly`、`toolpolicy`、`resultvalidation`：上下文装配、工具授权、Quant Envelope 与风险校验。
 - `diagnostics`：Platform Diagnostics 适配入口。
 
-## Worker 提交前 Envelope / Registry 接入（2026-11-16）
+## Stage Provider Envelope / Output Registry 与 Worker 原子提交（2026-11-16）
 
-Envelope / Output Registry 通用框架已通过 Integration CI：代码 SHA `a46d9f16db3975d05d7f521ba9eb7982fa29fe28` / Run [43832742482](https://github.com/Kasign/stock_data_provider/actions/runs/43832742482)。下一步是 Worker 提交前精确校验，但必须先闭合 Provider Payload / QualitySummary 的持久化：当前 Worker 仅接收 Provider 引用，Researchflow Migration 没有对应资源表。不得只校验后丢弃 payload，也不得继续让 Provider 决定 Orchestrator 所有的引用。持久化模型、不可变引用、读取边界和原子提交方案已明确，详见 [Stage Output 不可变资源与 Worker 原子提交设计](08-Stage-Output不可变资源与Worker原子提交设计.md)；具体进度仍以 Integration 交接文档为准。
+FLOW-CTR-004 的通用 Envelope / Registry 已接入 Worker 成功/降级提交链路：
 
-## Worker 提交前结果资源持久化设计（2026-11-16）
+- Worker 从持久化 ResolvedTemplate 读取 OutputRegistryVersion；Provider 仅返回 output_type、schema_version、payload、quality_summary、diagnostic_refs。
+- Worker 注入 Run/Stage/Attempt/StageCode/TemplateVersion/CompletedAt，Registry 精确校验输出组合和两份 JSON Schema；未注入 Registry、版本不匹配、未知输出组合或 Validator 失败均不能提交成功。
+- Provider 自报 output_ref / quality_summary_ref 的成功结果被拒绝。Storage 在原有 Run → Stage → Attempt 锁和 Lease/Fencing 事务中生成不透明引用，原子写入 Payload、QualitySummary 两条不可变资源，再更新 Attempt / Stage。
+- Migration v6 新增 `researchflow_stage_output_resources`；Storage 提供按 resource_ref 精确读取能力。
+- MariaDB 集成测试覆盖模板 Registry 版本快照、成功提交、两份资源读取及元数据；Worker 单测覆盖无 Registry 和 Provider 引用越权拒绝。
 
-已明确每个 Attempt 的 Payload / QualitySummary 不可变资源模型，Storage 在原有 Attempt/Stage fenced transaction 中生成引用并原子写入；下游按不透明 resource_ref 精确读取。未注册 Stage 不允许成功提交。设计细节见 [Stage Output 不可变资源与 Worker 原子提交设计](08-Stage-Output不可变资源与Worker原子提交设计.md)。当前仅完成设计，Migration / Worker 接线尚未实现。
+代码 SHA：`7392caaba59aa4d322d4b91e1d34a7294d2f6505`；Integration CI Run [43837079196](https://github.com/Kasign/stock_data_provider/actions/runs/43837079196) 全量 success（gofmt、root/go-core vet/test、MariaDB 跨模块与 Worker Bootstrap、Compose、WebUI 检查及构建）。
+
+当前仍未注册任何业务 Stage Entry，也没有生产 StageExecutor Adapter 或 Server Worker 生产装配。通用执行/持久化边界完成，不代表 News、Research、Quant 或 LLM 已成为生产 Provider；不得创建占位 Entry。实现设计与验收范围见 [Stage Output 不可变资源与 Worker 原子提交设计](08-Stage-Output不可变资源与Worker原子提交设计.md)。
 
 ## 当前明确缺口
 
