@@ -1105,3 +1105,15 @@ Researchflow 已有 Scheduler、Worker、WorkerPool、Claim/Lease/Fencing、候�
 4. 正式模板与真实 Run 来源明确后，再装配 Server Worker Runtime。进程本地 Worker 并发必须与数据库全局 `RESEARCHFLOW_MAX_WORKERS` 容量上限分开配置；多实例 Worker ID 必须唯一；Lease / Heartbeat / 扫描周期遵循 Worker 时间约束；关闭时先停止 Scheduler / Worker / Scanner，再关闭共享 Resources。
 5. 失败 Provider 的逐 Provider Outcome 诊断持久化仍是独立缺口；不得伪造成功 Output 来保存失败信息。它不影响本轮成功路径验收，但应在正式 Runtime / 诊断契约接入时按既有 Fault / Diagnostics 设计处理。
 
+
+
+### 2026-11-16 生产 News Template 发布准入复核
+
+对正式 Template 的代码依赖做了进一步只读核验，当前不能安全发布生产版本：
+
+- `internal/researchflow/parameterschema/validator.go` 只有 Validator 和 Registry 接口；仓库中未找到 Server 生产 Registry 实现或正式 News Search 参数 Schema。测试 Stub 固定返回指纹，不做真实 JSON Schema 校验。
+- `internal/researchflow/template/template.go` 只有 ApplicabilityRule 数据结构和 Evaluator 接口；未找到 `news.search_candidates` 的生产规则实现。测试中的恒 true evaluator 不能作为生产规则证据。
+- `WorkflowTemplate.ResourcePolicyRef` 是必填并参与 Template fingerprint 的不透明引用；未找到相应 Resource Policy Registry/Resolver/预算执行实现。Researchflow 运行时契约要求 Server 在调用前按 Template 资源策略授权，单纯填充字符串不满足要求。
+- 没有真实生产 CreateRun 消费方负责输入快照、可信 CallerRef、授权和幂等键。不能为无消费者的模板注入固定服务主体，也不能新增未经契约要求的公网路由。
+
+因此正式 Template 发布的最小前置条件是：确定真实内部消费场景和身份/授权责任；提供严格且不可变的参数 Schema Registry；提供版本化 Applicability 规则；明确 Resource Policy 的解析与授权执行边界。条件齐备后再使用现有不可变 `MySQLTemplateRegistry.Publish` 发布并做 MariaDB 验收。此复核不改变 News Stage 已完成的 Fixture-backed MariaDB 执行结论，也不把真实 Provider 网络验收列为上述开发的前置条件。
