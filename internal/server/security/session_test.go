@@ -171,7 +171,9 @@ func TestSessionAuthenticatorRequiresCSRFAndSameOriginForWrites(t *testing.T) {
 	if _, _, err := auth.Authenticate(request); err == nil {
 		t.Fatal("unsafe request without CSRF token was accepted")
 	}
-	request.Header.Set(DefaultCSRFAuthHeader, csrfToken+"invalid")
+	wrongCSRFToken, _, err := platformsecurity.NewCSRFToken()
+	if err != nil { t.Fatal(err) }
+	request.Header.Set(DefaultCSRFAuthHeader, wrongCSRFToken)
 	beforeTouch := sessions.touchCalls
 	if _, _, err := auth.Authenticate(request); err == nil {
 		t.Fatal("invalid CSRF token was accepted")

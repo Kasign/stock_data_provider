@@ -37,10 +37,13 @@ func TestSessionTokenAndDigest(t *testing.T) {
 
 func TestSessionRecordValidation(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Millisecond)
+	_, csrfDigest, err := NewCSRFToken()
+	if err != nil { t.Fatal(err) }
 	record := SessionRecord{
 		Subject: "owner", CreatedAt: now, LastSeenAt: now,
 		IdleExpiresAt:     now.Add(DefaultSessionIdleTTL),
 		AbsoluteExpiresAt: now.Add(DefaultSessionAbsoluteTTL), CredentialVersion: 1,
+		CSRFTokenDigest: csrfDigest,
 	}
 	if err := record.validate(); err != nil {
 		t.Fatalf("valid record rejected: %v", err)
@@ -135,7 +138,7 @@ func TestRedisSessionStoreIntegration(t *testing.T) {
 		t.Fatalf("duplicate create = %v", err)
 	}
 	touchedAt := now.Add(2 * time.Minute)
-	touched, err := store.LookupAndTouch(ctx, digest, touchedAt, DefaultSessionIdleTTL)
+	touched, err := store.LookupAndTouch(ctx, digest, rotatedAt.Add(2*time.Second), DefaultSessionIdleTTL)
 	if err != nil {
 		t.Fatalf("touch: %v", err)
 	}
@@ -149,6 +152,33 @@ func TestRedisSessionStoreIntegration(t *testing.T) {
 	if err != nil || touchedTTL <= 0 || absDuration(touchedTTL-wantTTL) > time.Second {
 		t.Fatalf("touched session TTL = %v, want about %v, err=%v", touchedTTL, wantTTL, err)
 	}
+	_, wrongCSRFDigest, err := NewCSRFToken()
+	if err != nil { t.Fatal(err) }
+	rejectedAt := touchedAt.Add(time.Minute)
+	if _, err := store.LookupAndTouchWithCSRF(ctx, digest, wrongCSRFDigest, rejectedAt, DefaultSessionIdleTTL); !errors.Is(err, ErrSessionCSRFRejected) {
+		t.Fatalf("wrong CSRF lookup = %v, want ErrSessionCSRFRejected", err)
+	}
+	afterReject, err := store.LookupAndTouch(ctx, digest, rejectedAt, DefaultSessionIdleTTL)
+	if err != nil { t.Fatalf("lookup after rejected CSRF: %v", err) }
+	if !afterReject.LastSeenAt.Equal(touchedAt) {
+		t.Fatalf("rejected CSRF changed LastSeenAt: got %v want %v", afterReject.LastSeenAt, touchedAt)
+	}
+	validAt := rejectedAt.Add(time.Minute)
+	valid, err := store.LookupAndTouchWithCSRF(ctx, digest, csrfDigest, validAt, DefaultSessionIdleTTL)
+	if err != nil { t.Fatalf("valid CSRF touch: %v", err) }
+	if !valid.LastSeenAt.Equal(validAt) { t.Fatalf("valid CSRF did not touch session: %+v", valid) }
+	_, newCSRFDigest, err := NewCSRFToken()
+	if err != nil { t.Fatal(err) }
+	rotatedAt := validAt.Add(time.Minute)
+	rotatedCSRF, err := store.RotateCSRFToken(ctx, digest, newCSRFDigest, rotatedAt, DefaultSessionIdleTTL)
+	if err != nil { t.Fatalf("rotate CSRF: %v", err) }
+	if rotatedCSRF.CSRFTokenDigest != newCSRFDigest { t.Fatalf("CSRF digest not rotated: %+v", rotatedCSRF) }
+	if _, err := store.LookupAndTouchWithCSRF(ctx, digest, csrfDigest, rotatedAt.Add(time.Second), DefaultSessionIdleTTL); !errors.Is(err, ErrSessionCSRFRejected) {
+		t.Fatalf("old CSRF token remained valid: %v", err)
+	}
+	if _, err := store.LookupAndTouchWithCSRF(ctx, digest, newCSRFDigest, rotatedAt.Add(2*time.Second), DefaultSessionIdleTTL); err != nil {
+		t.Fatalf("new CSRF token rejected: %v", err)
+	}
 	_, digestA, err := NewSessionToken()
 	if err != nil {
 		t.Fatal(err)
@@ -158,8 +188,8 @@ func TestRedisSessionStoreIntegration(t *testing.T) {
 		t.Fatal(err)
 	}
 	rotated := SessionRecord{
-		Subject: "owner", CreatedAt: now, LastSeenAt: touchedAt,
-		IdleExpiresAt:     touchedAt.Add(DefaultSessionIdleTTL),
+		Subject: "owner", CreatedAt: now, LastSeenAt: rotatedAt.Add(2*time.Second),
+		IdleExpiresAt:     rotatedAt.Add(2*time.Second).Add(DefaultSessionIdleTTL),
 		AbsoluteExpiresAt: record.AbsoluteExpiresAt, CredentialVersion: 1,
 	}
 	var winners atomic.Int32
@@ -185,7 +215,7 @@ func TestRedisSessionStoreIntegration(t *testing.T) {
 		t.Fatalf("old token still valid: %v", err)
 	}
 	winner := digestA
-	if _, err := store.LookupAndTouch(ctx, winner, touchedAt, DefaultSessionIdleTTL); err != nil {
+	if _, err := store.LookupAndTouch(ctx, winner, rotatedAt.Add(2*time.Second), DefaultSessionIdleTTL); err != nil {
 		winner = digestB
 		if _, retryErr := store.LookupAndTouch(ctx, winner, touchedAt, DefaultSessionIdleTTL); retryErr != nil {
 			t.Fatalf("neither rotated token valid: %v", retryErr)

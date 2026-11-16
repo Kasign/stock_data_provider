@@ -217,18 +217,17 @@ func fromRedisSessionRecord(record redisSessionRecord) SessionRecord {
 
 var lookupAndTouchSessionWithCSRFScript = redis.NewScript(`
 local raw = redis.call('GET', KEYS[1])
-if not raw then return 0 end
+if not raw then return false end
 local record = cjson.decode(raw)
 local now = tonumber(ARGV[1])
 local idle_ttl = tonumber(ARGV[2])
-local last_seen = tonumber(record.last_seen_at_ms or '0')
 local idle_exp = tonumber(record.idle_expires_at_ms or '0')
 local absolute_exp = tonumber(record.absolute_expires_at_ms or '0')
 if absolute_exp <= now or idle_exp <= now then
   redis.call('DEL', KEYS[1])
-  return 0
+  return false
 end
-if record.csrf_token_digest ~= ARGV[3] then return -1 end
+if record.csrf_token_digest ~= ARGV[3] then return '-1' end
 local next_idle = math.min(now + idle_ttl, absolute_exp)
 record.last_seen_at_ms = now
 record.idle_expires_at_ms = next_idle
