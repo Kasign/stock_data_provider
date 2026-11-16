@@ -35,6 +35,13 @@ func newNewsSearchStageComposition(cfg newsconfig.Config, client *platformhttpcl
 		}
 	}
 
+	return newNewsSearchStageCompositionWithProviders(providers)
+}
+
+func newNewsSearchStageCompositionWithProviders(providers newsapp.ProviderSet) (*newsSearchStageComposition, error) {
+	if providers == nil {
+		return nil, fmt.Errorf("News ProviderSet 不可用")
+	}
 	adapter, err := newsstage.NewSearchCandidatesAdapter(newsapp.NewSearchCandidates(providers))
 	if err != nil {
 		return nil, fmt.Errorf("创建 News SearchCandidates Adapter 失败: %w", err)
