@@ -53,8 +53,7 @@ func (r *MySQLRunRepository) CommitAttemptResult(ctx context.Context, input Atte
 			input.AttemptStatus != domain.AttemptTimedOut &&
 			input.AttemptStatus != domain.AttemptCancelled) ||
 		!validAttemptStageOutcome(input.AttemptStatus, input.Stage.Status) ||
-		!validStageRetryAt(input.Stage.Status, input.Stage.RetryAt) ||
-		{
+		!validStageRetryAt(input.Stage.Status, input.Stage.RetryAt) {
 		return errors.New("Researchflow attempt result arguments are invalid")
 	}
 	if input.Stage.Version == 0 {
