@@ -88,8 +88,8 @@ func (f workerExecutorFake) ExecuteStage(_ context.Context, request StageExecuti
 
 func newWorkerFixture() (*workerStoreFake, StageExecutionResult) {
 	deadline := time.Now().Add(time.Hour)
-	run := domain.Run{Ref: "run-1", Status: domain.RunRunning, DeadlineAt: deadline, SystemAsOf: time.Now().UTC(), CorrelationID: "corr-1"}
-	stage := domain.Stage{Ref: "stage-1", RunRef: "run-1", Status: domain.StageRunning, Version: 3, AttemptNo: 1}
+	run := domain.Run{Ref: "run-1", Status: domain.RunRunning, TemplateVersion: "v1", DeadlineAt: deadline, SystemAsOf: time.Now().UTC(), CorrelationID: "corr-1"}
+	stage := domain.Stage{Ref: "stage-1", RunRef: "run-1", Code: "quant", Status: domain.StageRunning, Version: 3, AttemptNo: 1}
 	attempt := domain.Attempt{Ref: "attempt-1", StageRef: stage.Ref, Number: 1, Status: domain.AttemptRunning, LeaseOwner: "worker-1", FencingToken: 7, StartedAt: time.Now().UTC()}
 	providerResult := &stageoutput.ProviderResult{OutputType: "trend", SchemaVersion: "1.0.0", Payload: []byte(`{"trend":"up"}`), QualitySummary: []byte(`{"quality":"valid"}`), DiagnosticRefs: []string{}}
 	store := &workerStoreFake{
