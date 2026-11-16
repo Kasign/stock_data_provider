@@ -227,6 +227,21 @@ func TestAppendAvailabilityDecisionSerializesConcurrentWritersMariaDBIntegration
 	); err != nil {
 		t.Fatalf("insert Version: %v", err)
 	}
+	evidenceID := "availability-decision-evidence-" + suffix
+	candidateAvailableAt := now.Add(-2 * time.Minute).Truncate(time.Second)
+	if _, err := db.ExecContext(ctx, `INSERT INTO news_version_availability_evidence
+		(evidence_id, news_id, version_id, observation_id, field_path, raw_value,
+		 source_timezone_or_offset, source_precision, parse_status, parse_reason_code,
+		 candidate_available_at_utc, parser_version, observed_at, recorded_at,
+		 retention_until)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '', ?, ?, ?, ?, ?)`,
+		evidenceID, newsID, versionID, observationID, "data.available_time",
+		candidateAvailableAt.Format(time.RFC3339), "Z", "second", "parsed",
+		candidateAvailableAt, "availability-time-v1", now.Add(-time.Minute),
+		now.Add(-30*time.Second), retentionUntil,
+	); err != nil {
+		t.Fatalf("insert availability Evidence: %v", err)
+	}
 
 	recordedAt := now
 	makeFirst := func(id string) domain.AvailabilityDecision {
@@ -301,6 +316,20 @@ func TestAppendAvailabilityDecisionSerializesConcurrentWritersMariaDBIntegration
 	if err := repository.AppendAvailabilityDecision(ctx, next); err != nil {
 		t.Fatalf("append valid successor: %v", err)
 	}
+	selectedEvidenceID := evidenceID
+	verified := domain.AvailabilityDecision{
+		ID: "availability-decision-verified-" + suffix, VersionID: versionID, Sequence: 3,
+		Status: domain.AvailabilityDecisionVerified,
+		SelectedEvidenceID: &selectedEvidenceID,
+		ConsideredEvidenceIDs: []string{evidenceID},
+		ReasonCode: "availability.source_verified",
+		ReviewRuleVersion: "review-v1",
+		SupersedesDecisionID: &next.ID,
+		RecordedAt: recordedAt,
+	}
+	if err := repository.AppendAvailabilityDecision(ctx, verified); err != nil {
+		t.Fatalf("append verified Decision with eligible Evidence: %v", err)
+	}
 
 	var count int
 	var maxSequence uint64
@@ -308,8 +337,8 @@ func TestAppendAvailabilityDecisionSerializesConcurrentWritersMariaDBIntegration
 		FROM news_version_availability_decisions WHERE version_id = ?`, versionID).Scan(&count, &maxSequence); err != nil {
 		t.Fatal(err)
 	}
-	if count != 2 || maxSequence != 2 {
-		t.Fatalf("decision chain count=%d max_sequence=%d, want 2 and 2", count, maxSequence)
+	if count != 3 || maxSequence != 3 {
+		t.Fatalf("decision chain count=%d max_sequence=%d, want 3 and 3", count, maxSequence)
 	}
 }
 
