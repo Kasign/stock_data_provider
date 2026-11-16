@@ -20,7 +20,7 @@ News、Research、Researchflow、Notification 的 Migration 已进入根 Registr
 
 因此当前阶段应判定为：
 
-- 当前代码 SHA CI：`pass`（Run `43561072301`，`b0aabaa2e`）；A 组 News→Research 跨模块 MariaDB 负向/授权/分页/旧 Key 轮换验收已通过；B 组成功写入仍因 available_at 来源证据缺失而 blocked。News/Research 模块级 MariaDB 集成测试不等同跨模块 Importer 成功写入。
+- 最近已完成代码 SHA CI：`pass`（Run `43574975820`，`c25d881c0`）；其后 CI 门禁修复 SHA `a992f4c` 的 Run `43788290026` 执行中，尚未验收。A 组 News→Research 跨模块 MariaDB 负向/授权/分页/旧 Key 轮换验收已通过；B 组成功写入因来源证据缺失按负责人决议 `shelved`。News/Research 模块级 MariaDB 集成测试不等同跨模块 Importer 成功写入。
 - Root Bootstrap 基础设施：部分完成
 - 新业务模块运行时装配：部分完成；仍以旧 Analysis Runner/Queue/API 为主
 - 新业务 API / Worker：Researchflow 业务 API 与 Worker 未接入

@@ -146,7 +146,7 @@
 |---|---|---|---|
 | **P1（推荐）提供合格真实来源** | 项目负责人指定一个真实数据源，其官方稳定字段规范明确声明「首次公开可获取时间」，并提供 Endpoint 授权/凭据与字段文档；由来源 Owner 完成语义审核、allowlist、证据留痕与版本绑定 | 冻结语义**不变**；新增具体来源条目 + L2 实现；NEWS-CTR-001 因公开字段/Schema 变化仍需 MAJOR 版本升级 | **能**，这是唯一能让 B 组真正跑通且不动 PIT 语义的路径 |
 | **P2 新增带区间语义的时间边界** | 按契约 `:47` 另行定义「在抓取时已可获取」的区间边界字段（**不复用 `available_at`**），重新设计 PIT 边界 | 属 GOV-CTR-004 `:28` MAJOR 语义变更，需 DEC + 全消费者影响确认 + Schema/Golden 2.0.0；Research 侧 `available_at` 仍须非 nil，因此**单靠新字段并不能直接解锁 B 组** | 部分（研究性，不直接打通现有链路） |
-| **P3 维持现状** | 冻结契约保持不变，继续 `available_at = NULL`、B 组 `blocked` | 无需变更 | 否，但合规 |
+| **P3 维持现状** | 冻结契约保持不变，继续 `available_at = NULL`、B 组 `shelved` | 无需变更 | 否，但合规 |
 
 **推荐 P1**：Research 侧 DTO/Schema/表/校验全部就绪，P1 只需 News 侧补来源证据与实现，改动面最小、语义风险最低。**P2 不能作为「绕过 P1」的捷径**：Research `mapNewsEvidence` 要求 `record.AvailableAt != nil`，新区间字段无法替代它。
 
