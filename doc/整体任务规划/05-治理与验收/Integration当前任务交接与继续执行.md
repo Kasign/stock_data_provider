@@ -921,3 +921,17 @@ Researchflow 已有 Scheduler、Worker、WorkerPool、Claim/Lease/Fencing、候�
 2. 增加 MariaDB 集成测试，验证当前策略版本锁定、字段授权拒绝、策略版本变化拒绝、成功追加和父 Observation 留存上限。
 3. 增加策略载荷验证用例，非法/重复字段路径必须拒绝；历史策略缺少 AllowedMetadataFields 必须保持字段写入默认拒绝。
 4. 更新 News 验收清单与本交接文档；真实来源准入继续独立 blocked，B 组保持 SKIP。
+
+
+### 2026-11-16 字段级授权写入边界验收完成
+
+- 已在 News Source / Endpoint / Provider Output Policy 中增加 `AllowedMetadataFields` 精确字段许可；Source 与 Provider 必须明确列出，Endpoint nil 继承、非 nil 只能收紧，旧策略缺少字段许可时默认拒绝新 Evidence 写入。
+- 已实现统一策略评估中的 `CollectionPolicyRequest.FieldPath`，仅适用于 `metadata + persistent_metadata`；字段路径为精确点分路径，不接受通配符或表达式。
+- 已实现 `RecordAvailabilityEvidence` Application 用例：可信目录版本核对、Identity 事务内锁定当前策略指针、字段授权评估、个人研究用途、持久化元数据和留存上限交集，再追加 Evidence。
+- 已实现 MySQL 事务写入端对 Version / Observation / Source / Endpoint / Provider 策略版本、父载荷清理状态及 retention 的数据库复核。没有暴露无策略保护的通用 Repository raw Evidence 写入入口。
+- Static Source / Provider Policy Catalog 深拷贝新增字段数组，防止可变引用污染授权快照。
+- 单测覆盖三层字段许可、Endpoint 不可扩权、非法/重复路径、历史策略默认拒绝；MariaDB 11.4 测试覆盖成功追加、父 Observation retention 上限、策略版本变更和字段未授权拒绝。
+- 最终代码 SHA：`7d43043ed0eed070c3313c64f8aa7d6dc13e8fa3`。Integration CI Run [43823338222](https://github.com/Kasign/stock_data_provider/actions/runs/43823338222) 全量 success。
+- 当前阶段内部写入授权边界验收完成；不代表任何真实来源已准入。没有获准来源前，不生成生产 Evidence，不创建 verified Decision，B 组保持 SKIP。
+
+**下一项主线：** 来源准入仍是唯一阻塞生产 Evidence 的条件。等待官方/授权服务提供字段语义、逐公告版本绑定、可审计真实响应，以及个人用途的程序化访问、持久化与再利用许可；一旦具备这些证据，再按 Adapter 逐来源接入 `RecordAvailabilityEvidence`。不重复采样已 blocked 的公开页面，不调用非公开接口。
