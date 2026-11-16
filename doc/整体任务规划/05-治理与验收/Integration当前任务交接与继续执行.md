@@ -885,7 +885,9 @@ Researchflow 已有 Scheduler、Worker、WorkerPool、Claim/Lease/Fencing、候�
 - 决策插入与校验同事务提交；数据库 V10 的唯一序号、唯一后继和复合外键继续作为最终约束。
 - MariaDB 集成测试覆盖并发首写（恰好一个成功、另一个序列冲突）、错误 supersedes、有效 seq 连续追加，以及 considered Evidence 不属于当前 Version 的拒绝路径。
 - 本次只实现内部 Decision 持久化；没有创建生产 Evidence、接入 Provider 或改变来源准入结论。`available_at` 仍按原规则 fail-closed，B 组 SKIP 不变。
-- 实现提交：`dc56115a4822301915109813000c9ce8694bb417`；测试相关提交：`bcff3b7319b36e30847d1c637bc8385cbfad0425`、`fa7ddeb12482aeca1dc311333deadd4d3a930cf1`、`e3d714c38bfce05fdf16246602df682d7c525893`、`850c33c4d28d6b8a4105470fa6f8840261964531`。
-- 本交接文档及 News 验收清单已同步。当前最新代码测试 SHA `850c33c4d28d6b8a4105470fa6f8840261964531` 尚无可见 CI status / workflow run；文档提交不代表 CI 通过。下一步仅核验该 SHA 的 CI 和 MariaDB 11.4 集成测试，依据真实失败修复；不另开旁支任务。
+- 实现提交：`dc56115a4822301915109813000c9ce8694bb417`；测试相关提交：`bcff3b7319b36e30847d1c637bc8385cbfad0425`、`fa7ddeb12482aeca1dc311333deadd4d3a930cf1`、`e3d714c38bfce05fdf16246602df682d7c525893`、`06e94b80ef07a7001d44a8ce831ca11e47b8d51f`。
+- 本交接文档及 News 验收清单已同步。当前最新代码测试 SHA `06e94b80ef07a7001d44a8ce831ca11e47b8d51f` 尚无可见 CI status / workflow run；文档提交不代表 CI 通过。下一步仅核验该 SHA 的 CI 和 MariaDB 11.4 集成测试，依据真实失败修复；不另开旁支任务。
 
 - 后续集成测试另补充了有效 `verified` Decision 路径：选中 Evidence 必须存在于同一 Version、保持 parsed、候选时间有效、payload 未清理且 retention 覆盖决策时间；该用例包含在最新测试提交中。
+
+- 后续格式整理提交：实现文件 `3eca05a5f3544b37576efeb8ea32bbfad331d9b9`，集成测试 `06e94b80ef07a7001d44a8ce831ca11e47b8d51f`；最终测试 SHA 仍未返回 Combined Status / workflow run，验收状态保持 pending。
