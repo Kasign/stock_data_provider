@@ -622,3 +622,12 @@ Researchflow 已有 Scheduler、Worker、WorkerPool、Claim/Lease/Fencing、候�
 - 本轮没有修改 Go、Migration、Provider、Schema、Golden、PIT SQL；没有目标 MariaDB DSN/版本验证，不新增 DDL 兼容性结论。
 - 下一步按顺序：①冻结 News / Research API 秒级表示、PIT 边界及存储映射；②决定字段级 ContentKind / StorageMode 和 Provider Output Policy 独立留存许可；③取得真实来源授权文本，明确自然到期、撤销及 grandfather 规则；④完成这些契约门禁后，再进入目标 MariaDB 版本 DDL/Repository 集成测试和正式 Schema/DEC。来源准入仍未通过前不得实施 Migration 或 Provider 采集。
 
+#### 10.24 补充：Schema / Research Adapter 兼容性核查
+
+- 核实 1.0.0 NEWS-CTR-001 Schema 的通用 `nullableDateTime` 允许 1～9 位小数秒，并被多个时间字段复用。旧 1.0.0 Schema / Golden 不得原地修改。
+- 未来 2.0.0 只为 `available_at` 定义秒级专用 nullable schema；其他 `published_at`、`system_observed_at`、`fetched_at`、`normalized_at` 保留各自现有精度，不修改通用定义。
+- Research News Adapter 当前将 AvailableAt 映射为 `time.Time`，校验 UTC、非空和 cutoff，但未校验小数秒为零；正式接入 2.0.0 时必须拒绝非整秒值。
+- Research `formatPIT` 固定输出九位小数；整秒值可编码为 `...SS.000000000Z`，无需单独迁移 Research 表。
+- Research 纳秒 `system_as_of` 传入 News、而 News Snapshot 现有数据库边界为微秒的转换仍是独立待评审问题，不得因 available_at 采用秒级而降低系统 cutoff 精度。
+- 本补充仅同步评审证据，没有修改 Schema / Golden / Adapter / Migration / PIT SQL。
+
