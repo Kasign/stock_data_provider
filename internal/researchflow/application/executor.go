@@ -20,11 +20,11 @@ type StageExecutionRequest struct {
 	Attempt                domain.Attempt
 	AuthenticatedCallerRef string
 	Parameters             json.RawMessage
-	InputSnapshotRefs []string
-	SystemAsOf        time.Time
-	DeadlineAt        time.Time
-	AttemptDeadlineAt time.Time
-	CorrelationID     string
+	InputSnapshotRefs      []string
+	SystemAsOf             time.Time
+	DeadlineAt             time.Time
+	AttemptDeadlineAt      time.Time
+	CorrelationID          string
 }
 
 // StageExecutionResult is a provider outcome before it is committed by the

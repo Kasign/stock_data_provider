@@ -193,13 +193,16 @@ func (w *Worker) Execute(ctx context.Context, runRef, stageRef, attemptRef strin
 	go w.heartbeat(runCtx, cancelExecutionCause, snapshot, attempt, stopHeartbeat, heartbeatDone, heartbeatErr)
 
 	request := StageExecutionRequest{
-		Run: snapshot.Run, Stage: snapshot.Stage, Attempt: attempt,
+		Run:                    snapshot.Run,
+		Stage:                  snapshot.Stage,
+		Attempt:                attempt,
 		AuthenticatedCallerRef: snapshot.AuthenticatedCallerRef,
-		Parameters:        append([]byte(nil), snapshot.Parameters...),
-		InputSnapshotRefs: append([]string(nil), snapshot.InputSnapshotRefs...),
-		SystemAsOf:        snapshot.Run.SystemAsOf, DeadlineAt: snapshot.Run.DeadlineAt,
-		AttemptDeadlineAt: attemptDeadline,
-		CorrelationID:     snapshot.Run.CorrelationID,
+		Parameters:             append([]byte(nil), snapshot.Parameters...),
+		InputSnapshotRefs:      append([]string(nil), snapshot.InputSnapshotRefs...),
+		SystemAsOf:             snapshot.Run.SystemAsOf,
+		DeadlineAt:              snapshot.Run.DeadlineAt,
+		AttemptDeadlineAt:       attemptDeadline,
+		CorrelationID:           snapshot.Run.CorrelationID,
 	}
 	result, executeErr := w.executor.ExecuteStage(execCtx, request)
 	close(stopHeartbeat)
