@@ -176,6 +176,17 @@ func (a *SessionAuthenticator) RefreshCSRFToken(request *http.Request) (*http.Re
 	if err != nil {
 		return nil, nil, "", invalidSessionFault()
 	}
+	credential, err := a.credentials.GetOwnerCredential(request.Context())
+	if err != nil {
+		var credentialFault *platformfault.Fault
+		if errors.As(err, &credentialFault) && credentialFault.Class == platformfault.ClassNotFound {
+			return nil, nil, "", invalidSessionFault()
+		}
+		return nil, nil, "", err
+	}
+	if credential.Subject != "owner" || credential.CredentialVersion == 0 {
+		return nil, nil, "", invalidSessionFault()
+	}
 	csrfToken, csrfDigest, err := platformsecurity.NewCSRFToken()
 	if err != nil {
 		return nil, nil, "", err
@@ -191,15 +202,7 @@ func (a *SessionAuthenticator) RefreshCSRFToken(request *http.Request) (*http.Re
 	if record.Subject != "owner" || record.CredentialVersion == 0 || !validDigest(record.CSRFTokenDigest) {
 		return nil, nil, "", invalidSessionFault()
 	}
-	credential, err := a.credentials.GetOwnerCredential(request.Context())
-	if err != nil {
-		var credentialFault *platformfault.Fault
-		if errors.As(err, &credentialFault) && credentialFault.Class == platformfault.ClassNotFound {
-			return nil, nil, "", invalidSessionFault()
-		}
-		return nil, nil, "", err
-	}
-	if credential.Subject != "owner" || credential.CredentialVersion == 0 || credential.CredentialVersion != record.CredentialVersion {
+	if credential.CredentialVersion != record.CredentialVersion {
 		return nil, nil, "", invalidSessionFault()
 	}
 	expiresAt := record.IdleExpiresAt

@@ -38,7 +38,9 @@ func TestSessionTokenAndDigest(t *testing.T) {
 func TestSessionRecordValidation(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Millisecond)
 	_, csrfDigest, err := NewCSRFToken()
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	record := SessionRecord{
 		Subject: "owner", CreatedAt: now, LastSeenAt: now,
 		IdleExpiresAt:     now.Add(DefaultSessionIdleTTL),
@@ -162,7 +164,9 @@ func TestRedisSessionStoreIntegration(t *testing.T) {
 		t.Fatalf("wrong CSRF lookup = %v, want ErrSessionCSRFRejected", err)
 	}
 	storedRaw, err := client.Get(ctx, store.key(digest)).Bytes()
-	if err != nil { t.Fatalf("read session after rejected CSRF: %v", err) }
+	if err != nil {
+		t.Fatalf("read session after rejected CSRF: %v", err)
+	}
 	var afterReject redisSessionRecord
 	if err := json.Unmarshal(storedRaw, &afterReject); err != nil { t.Fatalf("decode session after rejected CSRF: %v", err) }
 	if afterReject.LastSeenAtMS != touchedAt.UnixMilli() {
@@ -170,13 +174,19 @@ func TestRedisSessionStoreIntegration(t *testing.T) {
 	}
 	validAt := rejectedAt.Add(time.Minute)
 	valid, err := store.LookupAndTouchWithCSRF(ctx, digest, csrfDigest, validAt, DefaultSessionIdleTTL)
-	if err != nil { t.Fatalf("valid CSRF touch: %v", err) }
-	if !valid.LastSeenAt.Equal(validAt) { t.Fatalf("valid CSRF did not touch session: %+v", valid) }
+	if err != nil {
+		t.Fatalf("valid CSRF touch: %v", err)
+	}
+	if !valid.LastSeenAt.Equal(validAt) {
+		t.Fatalf("valid CSRF did not touch session: %+v", valid)
+	}
 	_, newCSRFDigest, err := NewCSRFToken()
 	if err != nil { t.Fatal(err) }
 	rotatedAt := validAt.Add(time.Minute)
 	rotatedCSRF, err := store.RotateCSRFToken(ctx, digest, newCSRFDigest, 1, rotatedAt, DefaultSessionIdleTTL)
-	if err != nil { t.Fatalf("rotate CSRF: %v", err) }
+	if err != nil {
+		t.Fatalf("rotate CSRF: %v", err)
+	}
 	if rotatedCSRF.CSRFTokenDigest != newCSRFDigest { t.Fatalf("CSRF digest not rotated: %+v", rotatedCSRF) }
 	if _, err := store.LookupAndTouchWithCSRF(ctx, digest, csrfDigest, rotatedAt.Add(time.Second), DefaultSessionIdleTTL); !errors.Is(err, ErrSessionCSRFRejected) {
 		t.Fatalf("old CSRF token remained valid: %v", err)

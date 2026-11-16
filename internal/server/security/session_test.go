@@ -51,18 +51,26 @@ func (s *testSessionStore) Revoke(context.Context, string) error {
 func (s *testSessionStore) LookupAndTouchWithCSRF(_ context.Context, digest, csrfDigest string, now time.Time, idleTTL time.Duration) (platformsecurity.SessionRecord, error) {
 	s.digest, s.idleTTL = digest, idleTTL
 	s.csrfCalls++
-	if s.err != nil { return platformsecurity.SessionRecord{}, s.err }
-	if csrfDigest != s.record.CSRFTokenDigest { return platformsecurity.SessionRecord{}, platformsecurity.ErrSessionCSRFRejected }
+	if s.err != nil {
+		return platformsecurity.SessionRecord{}, s.err
+	}
+	if csrfDigest != s.record.CSRFTokenDigest {
+		return platformsecurity.SessionRecord{}, platformsecurity.ErrSessionCSRFRejected
+	}
 	record := s.record
 	record.LastSeenAt = now
 	record.IdleExpiresAt = now.Add(idleTTL)
-	if record.AbsoluteExpiresAt.Before(record.IdleExpiresAt) { record.IdleExpiresAt = record.AbsoluteExpiresAt }
+	if record.AbsoluteExpiresAt.Before(record.IdleExpiresAt) {
+		record.IdleExpiresAt = record.AbsoluteExpiresAt
+	}
 	return record, nil
 }
 
 func (s *testSessionStore) RotateCSRFToken(_ context.Context, digest, newCSRFDigest string, expectedCredentialVersion uint64, now time.Time, idleTTL time.Duration) (platformsecurity.SessionRecord, error) {
 	s.digest, s.idleTTL = digest, idleTTL
-	if s.record.CredentialVersion != expectedCredentialVersion { return platformsecurity.SessionRecord{}, platformsecurity.ErrSessionNotFound }
+	if s.record.CredentialVersion != expectedCredentialVersion {
+		return platformsecurity.SessionRecord{}, platformsecurity.ErrSessionNotFound
+	}
 	s.record.CSRFTokenDigest = newCSRFDigest
 	s.record.LastSeenAt = now
 	s.record.IdleExpiresAt = now.Add(idleTTL)
@@ -173,7 +181,9 @@ func TestSessionAuthenticatorRequiresCSRFAndSameOriginForWrites(t *testing.T) {
 		t.Fatal("unsafe request without CSRF token was accepted")
 	}
 	wrongCSRFToken, _, err := platformsecurity.NewCSRFToken()
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	request.Header.Set(DefaultCSRFAuthHeader, wrongCSRFToken)
 	beforeTouch := sessions.touchCalls
 	if _, _, err := auth.Authenticate(request); err == nil {
@@ -212,9 +222,13 @@ func TestSessionAuthenticatorRefreshesCSRFOnlyForSameOriginPost(t *testing.T) {
 	}
 	request.Header.Set("Origin", "https://stocks.example.com")
 	_, _, newCSRF, err := auth.RefreshCSRFToken(request)
-	if err != nil { t.Fatalf("same-origin CSRF refresh failed: %v", err) }
+	if err != nil {
+		t.Fatalf("same-origin CSRF refresh failed: %v", err)
+	}
 	newDigest, err := platformsecurity.CSRFTokenDigest(newCSRF)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	if sessions.record.CSRFTokenDigest != newDigest || newCSRF == oldCSRF {
 		t.Fatal("CSRF refresh did not replace the session-bound digest")
 	}
