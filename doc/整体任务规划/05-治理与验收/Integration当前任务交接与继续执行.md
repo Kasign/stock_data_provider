@@ -459,3 +459,13 @@ Researchflow 已有 Scheduler、Worker、WorkerPool、Claim/Lease/Fencing、候�
 - 最终提交 `d1b58b49fee809c5204fafe3409dc36da9615794` 的 Run [43790923451](https://github.com/Kasign/stock_data_provider/actions/runs/43790923451)（#81）对精确 SHA `success`。逐步日志显示 Worker Bootstrap MariaDB/Redis 集成用例 `--- PASS`；独立门禁步骤通过；gofmt、root/go-core vet/test、News/Research 逐用例门禁、Compose、WebUI 语法/单测/镜像构建和最终汇总全部 success。
 - 验收范围：`pass` 的是当前 Worker 角色下完整 Bootstrap 启动、真实依赖连接、SIGTERM 触发关闭、Run 正常退出及 HTTP 不监听。消费者先停止、共享资源后关闭的通用顺序仍由 `TestStopConsumersThenCloseResourcesPreservesOrder` 验证；本测试不代表 Researchflow Stage Worker 已接入，也不代表新业务链路达到 INT-C。
 - 后续任务：Integration 侧不再为 Worker 生命周期重复补测试。按第 9.2 节优先级，下一条主干是 Researchflow Stage；但当前仍 `blocked`，须等 Researchflow/契约 Owner 提供冻结 Stage 三元组、Output Registry/Schema、生产 StageExecutor 和可信 CallerRef 运行时绑定后，Integration 才进行装配与 MariaDB 端到端验收。P0 `available_at` 仍 `shelved`，不得用本任务绕过。
+
+### 10.11 2026-11-16 A股交易所公告首次公开可获取时间二次调查
+
+- 本轮继续固定在 integration，开始时远端 HEAD 为 cd3edd33474a277473532f381fbf9a2e6dfa79a8；未切换分支、未修改业务代码、冻结契约、Schema 或 Golden。
+- 新增官方流程证据：上交所科创板信息披露办理指南明确非直通公告经审查后由发行人确认发布；选择上交所网站披露时，公告确认发布后直接上网。上交所直通车官方答记者问同时说明 15:30 前确认发布的公告会从 15:30 起集中披露，15:30 后确认发布则按提交时间披露。北交所信息披露办理指南也规定最终由发行人确认发布，且其他媒体披露不得早于规定平台。
+- 深交所《数据接口规范（Ver4.72）》明确行情系统信息公告结构头含发送日期/时间，SJSHQ.dbf 的 HQBSL4 是当日最近一次收到信息公告的时间（HHMMSSss）。它是行情分发接收时间且非逐条公告字段，不能作为首次公众可获取时间；不能因为有亚秒精度就准入。
+- 本轮结论：上交所/北交所“确认发布”是新的 A 股候选业务事件，比搜索引擎时间、公告日期和首次抓取时间更接近公开可获取边界；但尚未取得面向消费者的逐公告时间字段规范、时区、Endpoint 授权、原始响应证据和内容版本绑定，也未证明确认动作时间等于公众实际可访问时间。候选不等于 verified。
+- P0 available_at 仍为 shelved，但不是停止调查。下一步明确为向交易所/官方信息服务运营方核实机器接口：确认事件时间字段、网站实际上线时间、15:30 集中披露行为、公告更正版本、时区精度、历史覆盖、授权和留存许可；以真实公告逐条核对时间顺序。只有满足 NEWS-CTR-001 全部准入条件并完成正式 DEC/版本升级后，才实施 V10、证据载体、PIT 与 B 组真实成功路径。
+- 参考官方材料：上交所指南 https://www.sse.com.cn/lawandrules/guide/stock/kcbxxpljg/c/c_20250425_10777769.shtml；上交所直通车说明 https://big5.sse.com.cn/site/cht/www.sse.com.cn/aboutus/mediacenter/hotandd/c/c_20150912_3988653.shtml；北交所指南 https://www.bse.cn/cxjg_list/200025676.html；深交所接口规范 https://www.szse.cn/www/marketServices/technicalservice/history/P020180328468171229352.pdf。
+- 本轮没有新增业务代码或测试，没有触发 CI。代码验收 SHA 仍为 d1b58b49fee809c5204fafe3409dc36da9615794 / Run #81 success；本轮文档提交不改变该代码验收证据。
