@@ -45,7 +45,6 @@ func NewMySQLRepository(db *sql.DB) (*MySQLRepository, error) {
 	return &MySQLRepository{db: db}, nil
 }
 
-
 var ErrAvailabilityDecisionSequenceConflict = errors.New("news storage: availability decision sequence conflict")
 
 // AppendAvailabilityDecision 在版本行锁保护下追加完整决策状态。
