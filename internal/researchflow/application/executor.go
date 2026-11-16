@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"example.com/stock-analysis-flow/internal/researchflow/domain"
+	"example.com/stock-analysis-flow/internal/researchflow/stageoutput"
 )
 
 // StageExecutionRequest is the immutable execution envelope assembled by the
@@ -28,13 +29,14 @@ type StageExecutionRequest struct {
 }
 
 // StageExecutionResult is a provider outcome before it is committed by the
-// Worker. Providers return opaque references; they never write Researchflow
-// persistence or choose Run/Stage/Attempt identities.
+// Worker. Providers return domain payloads only; Researchflow owns references
+// and persists the validated Envelope.
 type StageExecutionResult struct {
 	AttemptStatus     domain.AttemptStatus
 	StageStatus       domain.StageStatus
-	OutputRef         *string
-	QualitySummaryRef *string
+	ProviderResult    *stageoutput.ProviderResult
+	OutputRef         *string // Deprecated: provider-owned references are rejected.
+	QualitySummaryRef *string // Deprecated: provider-owned references are rejected.
 	DiagnosticRefs    []string
 	ReasonCodes       []string
 	QualityStatus     string
@@ -57,11 +59,11 @@ var ErrInvalidStageExecutionResult = errors.New("invalid Researchflow stage exec
 func ValidateStageExecutionResult(result StageExecutionResult) error {
 	switch result.StageStatus {
 	case domain.StageSucceeded:
-		if result.AttemptStatus != domain.AttemptSucceeded || !nonEmptyRef(result.OutputRef) || result.RetryAt != nil {
+		if result.AttemptStatus != domain.AttemptSucceeded || result.ProviderResult == nil || result.OutputRef != nil || result.QualitySummaryRef != nil || result.RetryAt != nil {
 			return fmt.Errorf("%w: succeeded requires a succeeded Attempt, output_ref and no retry_at", ErrInvalidStageExecutionResult)
 		}
 	case domain.StageDegraded:
-		if result.AttemptStatus != domain.AttemptDegraded || !nonEmptyRef(result.OutputRef) || result.RetryAt != nil {
+		if result.AttemptStatus != domain.AttemptDegraded || result.ProviderResult == nil || result.OutputRef != nil || result.QualitySummaryRef != nil || result.RetryAt != nil {
 			return fmt.Errorf("%w: degraded requires a degraded Attempt, output_ref and no retry_at", ErrInvalidStageExecutionResult)
 		}
 	case domain.StageRetryWait:
@@ -85,12 +87,16 @@ func ValidateStageExecutionResult(result StageExecutionResult) error {
 	default:
 		return fmt.Errorf("%w: unsupported Stage status %q", ErrInvalidStageExecutionResult, result.StageStatus)
 	}
+	if result.OutputRef != nil {
+		return fmt.Errorf("%w: Provider cannot supply output_ref", ErrInvalidStageExecutionResult)
+	}
+	if result.QualitySummaryRef != nil {
+		return fmt.Errorf("%w: Provider cannot supply quality_summary_ref", ErrInvalidStageExecutionResult)
+	}
 	if result.OutputRef != nil && strings.TrimSpace(*result.OutputRef) == "" {
 		return fmt.Errorf("%w: output_ref must be null or non-empty", ErrInvalidStageExecutionResult)
 	}
-	if result.QualitySummaryRef != nil && strings.TrimSpace(*result.QualitySummaryRef) == "" {
-		return fmt.Errorf("%w: quality_summary_ref must be null or non-empty", ErrInvalidStageExecutionResult)
-	}
+	
 	if result.FaultRef != nil && strings.TrimSpace(*result.FaultRef) == "" {
 		return fmt.Errorf("%w: fault_ref must be null or non-empty", ErrInvalidStageExecutionResult)
 	}

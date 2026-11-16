@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"example.com/stock-analysis-flow/internal/researchflow/domain"
+	"example.com/stock-analysis-flow/internal/researchflow/stageoutput"
 	"example.com/stock-analysis-flow/internal/researchflow/template"
 )
 
@@ -25,6 +26,7 @@ type StageExecutionSnapshot struct {
 	Parameters             []byte
 	InputSnapshotRefs      []string
 	RetryPolicy            template.RetryPolicy
+	OutputRegistryVersion   string
 }
 
 type WorkerResultCommit struct {
@@ -37,6 +39,7 @@ type WorkerResultCommit struct {
 	Stage         domain.Stage
 	FaultRef      *string
 	OutputRef     *string
+	StageOutput   *StageOutputCommit
 }
 
 // WorkerStore is the Application boundary. Its persistence adapter must map
@@ -51,6 +54,21 @@ type ExecutionFault struct {
 // the immutable template RetryPolicy allowlist.
 type ExecutionFaultNormalizer interface {
 	NormalizeExecutionError(context.Context, error) (ExecutionFault, error)
+}
+
+type StageOutputCommit struct {
+	Envelope stageoutput.Envelope
+	RegistryVersion string
+	RegistryFingerprint string
+	PayloadSchemaRef string
+	QualitySummarySchemaRef string
+}
+
+type StageOutputRegistry interface {
+	Version() string
+	Fingerprint() string
+	Validate(stageoutput.Envelope, stageoutput.ValidationContext) error
+	Entry(string, string, string) (stageoutput.Entry, bool)
 }
 
 type WorkerStore interface {
@@ -82,6 +100,7 @@ type Worker struct {
 	now             func() time.Time
 	cancellations   *workerCancellationRegistry
 	faultNormalizer ExecutionFaultNormalizer
+	outputRegistry StageOutputRegistry
 }
 
 func NewWorker(store WorkerStore, executor StageExecutor, clock DatabaseClock, config WorkerConfig) (*Worker, error) {
@@ -92,6 +111,19 @@ func NewWorker(store WorkerStore, executor StageExecutor, clock DatabaseClock, c
 		return nil, errors.New("Researchflow worker dependencies or configuration are invalid")
 	}
 	return &Worker{store: store, executor: executor, clock: clock, config: config, now: time.Now, cancellations: newWorkerCancellationRegistry()}, nil
+}
+
+// NewWorkerWithStageOutputRegistry enables fail-closed Provider output validation.
+func NewWorkerWithStageOutputRegistry(store WorkerStore, executor StageExecutor, clock DatabaseClock, config WorkerConfig, registry StageOutputRegistry) (*Worker, error) {
+	if registry == nil || strings.TrimSpace(registry.Version()) == "" || strings.TrimSpace(registry.Fingerprint()) == "" {
+		return nil, errors.New("Researchflow Stage Output Registry is required")
+	}
+	worker, err := NewWorker(store, executor, clock, config)
+	if err != nil {
+		return nil, err
+	}
+	worker.outputRegistry = registry
+	return worker, nil
 }
 
 // NewWorkerWithFaultNormalizer enables controlled Provider error normalization.
@@ -148,6 +180,7 @@ func (w *Worker) Execute(ctx context.Context, runRef, stageRef, attemptRef strin
 		snapshot.Stage.RunRef != runRef || snapshot.Stage.Status != domain.StageRunning ||
 		snapshot.Stage.AttemptNo != attempt.Number || snapshot.Run.Status != domain.RunRunning ||
 		snapshot.Run.DeadlineAt.IsZero() || snapshot.RetryPolicy.AttemptTimeoutMS <= 0 ||
+		snapshot.OutputRegistryVersion != policySnapshot.OutputRegistryVersion ||
 		snapshot.AuthenticatedCallerRef != policySnapshot.AuthenticatedCallerRef ||
 		strings.TrimSpace(snapshot.AuthenticatedCallerRef) == "" ||
 		!reflect.DeepEqual(snapshot.RetryPolicy, policySnapshot.RetryPolicy) {
@@ -272,6 +305,35 @@ func (w *Worker) Execute(ctx context.Context, runRef, stageRef, attemptRef strin
 	if err := ValidateStageExecutionResult(result); err != nil {
 		return WorkerExecution{Attempt: attempt}, err
 	}
+	var stageOutput *StageOutputCommit
+	if result.StageStatus == domain.StageSucceeded || result.StageStatus == domain.StageDegraded {
+		if w.outputRegistry == nil || w.outputRegistry.Version() != snapshot.OutputRegistryVersion {
+			return WorkerExecution{Attempt: attempt}, errors.New("Researchflow Stage Output Registry is missing or differs from the persisted template")
+		}
+		providerResult := *result.ProviderResult
+		identity := stageoutput.ExecutionIdentity{
+			RunRef: snapshot.Run.Ref, StageRef: snapshot.Stage.Ref, AttemptRef: attempt.Ref,
+			StageCode: snapshot.Stage.Code, TemplateVersion: snapshot.Run.TemplateVersion,
+			RegistryVersion: snapshot.OutputRegistryVersion,
+		}
+		envelope, buildErr := stageoutput.BuildEnvelope(identity, providerResult, completedAt.UTC())
+		if buildErr != nil {
+			return WorkerExecution{Attempt: attempt}, fmt.Errorf("build Researchflow Stage Provider Envelope: %w", buildErr)
+		}
+		validationContext := stageoutput.ValidationContext{Identity: identity}
+		if validateErr := w.outputRegistry.Validate(envelope, validationContext); validateErr != nil {
+			return WorkerExecution{Attempt: attempt}, fmt.Errorf("validate Researchflow Stage Provider Envelope: %w", validateErr)
+		}
+		entry, ok := w.outputRegistry.Entry(envelope.StageCode, envelope.OutputType, envelope.SchemaVersion)
+		if !ok {
+			return WorkerExecution{Attempt: attempt}, errors.New("validated Researchflow Stage Output Registry entry disappeared")
+		}
+		stageOutput = &StageOutputCommit{
+			Envelope: envelope, RegistryVersion: w.outputRegistry.Version(),
+			RegistryFingerprint: w.outputRegistry.Fingerprint(),
+			PayloadSchemaRef: entry.PayloadSchemaRef, QualitySummarySchemaRef: entry.QualitySummarySchemaRef,
+		}
+	}
 	if result.StageStatus == domain.StageRetryWait {
 		retryNow, retryErr := w.clock.NowUTC(ctx)
 		if retryErr != nil {
@@ -300,8 +362,8 @@ func (w *Worker) Execute(ctx context.Context, runRef, stageRef, attemptRef strin
 	stage.Version++
 	stage.Status = result.StageStatus
 	stage.RetryAt = cloneTime(result.RetryAt)
-	stage.OutputRef = cloneString(result.OutputRef)
-	stage.QualitySummaryRef = cloneString(result.QualitySummaryRef)
+	stage.OutputRef = nil
+	stage.QualitySummaryRef = nil
 	stage.DiagnosticRefs = append([]string(nil), result.DiagnosticRefs...)
 	stage.ReasonCodes = append([]string(nil), result.ReasonCodes...)
 	stage.QualityStatus = result.QualityStatus
@@ -311,7 +373,7 @@ func (w *Worker) Execute(ctx context.Context, runRef, stageRef, attemptRef strin
 		RunRef: runRef, StageRef: stageRef, AttemptRef: attempt.Ref,
 		WorkerID: w.config.WorkerID, FencingToken: attempt.FencingToken,
 		AttemptStatus: result.AttemptStatus, Stage: stage,
-		FaultRef: cloneString(result.FaultRef), OutputRef: cloneString(result.OutputRef),
+		FaultRef: cloneString(result.FaultRef), StageOutput: stageOutput,
 	}
 	if err := w.store.CommitWorkerResult(ctx, commit); err != nil {
 		return WorkerExecution{Attempt: attempt}, fmt.Errorf("commit Researchflow Stage result: %w", err)

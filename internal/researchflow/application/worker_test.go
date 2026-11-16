@@ -3,12 +3,14 @@ package application
 import (
 	"context"
 	"errors"
+	"encoding/json"
 	"sync"
 	"testing"
 	"time"
 
 	"example.com/stock-analysis-flow/internal/researchflow/domain"
 	"example.com/stock-analysis-flow/internal/researchflow/template"
+	"example.com/stock-analysis-flow/internal/researchflow/stageoutput"
 )
 
 type workerStoreFake struct {
@@ -89,11 +91,12 @@ func newWorkerFixture() (*workerStoreFake, StageExecutionResult) {
 	run := domain.Run{Ref: "run-1", Status: domain.RunRunning, DeadlineAt: deadline, SystemAsOf: time.Now().UTC(), CorrelationID: "corr-1"}
 	stage := domain.Stage{Ref: "stage-1", RunRef: "run-1", Status: domain.StageRunning, Version: 3, AttemptNo: 1}
 	attempt := domain.Attempt{Ref: "attempt-1", StageRef: stage.Ref, Number: 1, Status: domain.AttemptRunning, LeaseOwner: "worker-1", FencingToken: 7, StartedAt: time.Now().UTC()}
-	output := "snapshot://result"
+	providerResult := &stageoutput.ProviderResult{OutputType: "trend", SchemaVersion: "1.0.0", Payload: []byte(`{"trend":"up"}`), QualitySummary: []byte(`{"quality":"valid"}`), DiagnosticRefs: []string{}}
 	store := &workerStoreFake{
 		attempt: attempt,
 		snapshot: StageExecutionSnapshot{
 			Run: run, Stage: stage, AuthenticatedCallerRef: "caller-1", Parameters: []byte(`{"symbol":"AAA"}`),
+			OutputRegistryVersion: "1.0.0",
 			RetryPolicy: template.RetryPolicy{
 				Ref: "retry-v1", MaxAttempts: 3,
 				RetryableReasonCodes: []string{"provider_unavailable"},
@@ -102,7 +105,7 @@ func newWorkerFixture() (*workerStoreFake, StageExecutionResult) {
 			},
 		},
 	}
-	return store, StageExecutionResult{AttemptStatus: domain.AttemptSucceeded, StageStatus: domain.StageSucceeded, OutputRef: &output}
+	return store, StageExecutionResult{AttemptStatus: domain.AttemptSucceeded, StageStatus: domain.StageSucceeded, ProviderResult: providerResult}
 }
 
 type workerClockFake struct {
@@ -122,7 +125,14 @@ func (f workerClockFake) NowUTC(context.Context) (time.Time, error) {
 
 func newWorker(t *testing.T, store *workerStoreFake, result StageExecutionResult) *Worker {
 	t.Helper()
-	w, err := NewWorker(store, workerExecutorFake{result: result}, workerClockFake{}, WorkerConfig{WorkerID: "worker-1", LeaseDuration: time.Minute, HeartbeatInterval: time.Second, MaxParallel: 2})
+	registry, err := stageoutput.NewRegistry("1.0.0", []stageoutput.Entry{{
+		StageCode: "quant", OutputType: "trend", SchemaVersion: "1.0.0",
+		PayloadSchemaRef: "schema://quant/trend/1.0.0", QualitySummarySchemaRef: "schema://quality/trend/1.0.0",
+		PayloadValidator: stageoutput.ValidatorFunc(func(json.RawMessage) error { return nil }),
+		QualitySummaryValidator: stageoutput.ValidatorFunc(func(json.RawMessage) error { return nil }),
+	}})
+	if err != nil { t.Fatal(err) }
+	w, err := NewWorkerWithStageOutputRegistry(store, workerExecutorFake{result: result}, workerClockFake{}, WorkerConfig{WorkerID: "worker-1", LeaseDuration: time.Minute, HeartbeatInterval: time.Second, MaxParallel: 2}, registry)
 	if err != nil {
 		t.Fatal(err)
 	}

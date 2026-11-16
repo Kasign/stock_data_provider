@@ -214,6 +214,7 @@ func workerResultCommitToStorage(input application.WorkerResultCommit) (AttemptR
 		WorkerID: input.WorkerID, FencingToken: input.FencingToken,
 		AttemptStatus: input.AttemptStatus, Stage: input.Stage,
 		FaultRef: cloneWorkerString(input.FaultRef), OutputRef: cloneWorkerString(input.OutputRef),
+		StageOutput: workerStageOutputToStorage(input.StageOutput),
 	}, nil
 }
 
@@ -246,4 +247,15 @@ func resolveWorkerRetryPolicy(resolved template.ResolvedTemplate, stage domain.S
 		return template.RetryPolicy{}, errors.New("Researchflow Stage retry policy is missing or invalid in resolved template")
 	}
 	return *found, nil
+}
+
+func workerStageOutputToStorage(input *application.StageOutputCommit) *StageOutputCommit {
+	if input == nil {
+		return nil
+	}
+	return &StageOutputCommit{
+		Envelope: input.Envelope, RegistryVersion: input.RegistryVersion,
+		RegistryFingerprint: input.RegistryFingerprint,
+		PayloadSchemaRef: input.PayloadSchemaRef, QualitySummarySchemaRef: input.QualitySummarySchemaRef,
+	}
 }

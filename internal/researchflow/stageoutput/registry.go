@@ -125,6 +125,16 @@ func (r *Registry) Fingerprint() string {
 	return r.fingerprint
 }
 
+// Entry returns a copy of the exact registered discriminator. Validators are
+// immutable ports owned by the Registry configuration.
+func (r *Registry) Entry(stageCode, outputType, schemaVersion string) (Entry, bool) {
+	if r == nil {
+		return Entry{}, false
+	}
+	entry, ok := r.entries[entryKey{stageCode, outputType, schemaVersion}]
+	return entry, ok
+}
+
 // ProviderResult contains only provider-owned fields. Orchestrator identity and
 // timing fields are added by BuildEnvelope and cannot be supplied by a provider.
 type ProviderResult struct {
