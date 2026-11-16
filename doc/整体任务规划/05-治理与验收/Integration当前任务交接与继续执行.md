@@ -1072,3 +1072,6 @@ Researchflow 已有 Scheduler、Worker、WorkerPool、Claim/Lease/Fencing、候�
 
 
 - 第二轮 Server 组合 CI Run `43847712560`：所有代码、MariaDB/Redis、跨模块、WebUI、Compose 和镜像构建检查通过；仅 gofmt 检查指出测试文件中第二处 StageExecutionRequest 字段对齐。已统一修正两处字段对齐，等待最终验收。
+
+
+- 最终验收 Run [43848194023](https://github.com/Kasign/stock_data_provider/actions/runs/43848194023) 对精确 SHA `92b90d1b4727cd9f4e572790869da754ee65a306` 全量 success：Go 格式、根模块 vet/test、News/Research 跨模块测试、Worker Bootstrap MariaDB/Redis、go-core vet/test、Compose、WebUI 语法/单测、WebUI 镜像构建全部通过。此前 Run 43844764284 / 43847107485 / 43847712560 的失败均已修复，不作为最终验收结果。
