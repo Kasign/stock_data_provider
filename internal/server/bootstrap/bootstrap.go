@@ -136,6 +136,16 @@ func Run(ctx context.Context) (runErr error) {
 	}
 	migrationCancel()
 
+	// Owner Session 复用共享 MariaDB/Redis 资源与 Platform 安全原语，不创建独立连接池。
+	// HTTP Handler 尚未注册前，该组合仅供后续生命周期路由接入，不改变现有 Bearer 路由策略。
+	var ownerSession *ownerSessionComposition
+	if processConfig.OwnerSession.Enabled {
+		ownerSession, err = newOwnerSessionComposition(storageResources, processConfig.OwnerSession)
+		if err != nil {
+			return fmt.Errorf("装配 Owner Session 依赖失败: %w", err)
+		}
+	}
+
 	// Key Ring 配置为可选项；未配置时不创建分页 Facade，也不生成任何默认密钥。
 	// 已配置时在 API/Worker 两种角色下使用同一共享 DB 构造真实 News/Research 依赖。
 	var researchNews *researchNewsComposition
