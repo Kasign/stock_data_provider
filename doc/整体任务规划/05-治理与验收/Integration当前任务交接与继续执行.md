@@ -891,3 +891,11 @@ Researchflow 已有 Scheduler、Worker、WorkerPool、Claim/Lease/Fencing、候�
 - 后续集成测试另补充了有效 `verified` Decision 路径：选中 Evidence 必须存在于同一 Version、保持 parsed、候选时间有效、payload 未清理且 retention 覆盖决策时间；该用例包含在最新测试提交中。
 
 - 后续格式整理提交：实现文件 `3eca05a5f3544b37576efeb8ea32bbfad331d9b9`，集成测试 `06e94b80ef07a7001d44a8ce831ca11e47b8d51f`；最终测试 SHA 仍未返回 Combined Status / workflow run，验收状态保持 pending。
+
+
+### 2026-11-16 available_at Evidence 留存执行缺口修复
+
+- 前一轮 Decision 追加写入与 PIT 读取完整性修复已由精确 SHA `997b4c1a2989d6db20db6c976fc6ddf8d0af0778` 的 Integration CI Run [43818069869](https://github.com/Kasign/stock_data_provider/actions/runs/43818069869) 全量 success。
+- 本轮发现 V10 Evidence 有独立 `retention_until`，但现有 Observation Retention Cleaner 只清理父 Observation 的候选载荷，未清理 Evidence 自身原始值。已在同一有界清理事务中增加 Evidence 独立到期清理：清除 raw/candidate/ref/hash 并保留 tombstone，保留 Decision 追加历史；结果单独报告 Evidence scanned/purged 数量。
+- 新增 MariaDB 集成覆盖；代码提交 `4040b8aaa27c58641ee097b5b91b4d848d2fb8e3`，Run [43818693172](https://github.com/Kasign/stock_data_provider/actions/runs/43818693172) 的最终状态待验收。
+- 下一步按 available_at 内部链路整体收尾：核对 Evidence 创建/持久化是否具备字段级授权凭据入口；若无，补齐受授权策略约束的写入边界，不允许提供可绕过策略的通用 raw Evidence 写入 API。来源仍未准入，不创建生产 Evidence、不解除 B 组 SKIP。
