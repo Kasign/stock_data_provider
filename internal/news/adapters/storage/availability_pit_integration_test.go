@@ -148,6 +148,22 @@ func TestNewsAvailabilityPITResolverMariaDBIntegration(t *testing.T) {
 	}
 	assertAvailableAt(now, &candidateAvailableAt)
 
+	// PIT 读取必须独立验证 selected_evidence_id 属于 considered_evidence_ids；
+	// 即使数据库中存在绕过 Domain Validator 的异常历史决策，也不能采信。
+	invalidDecisionID := "availability-pit-decision-4-" + suffix
+	invalidDecisionAt := now.Add(-250 * time.Millisecond)
+	if _, err := db.ExecContext(ctx, `INSERT INTO news_version_availability_decisions
+		(decision_id, version_id, decision_seq, status, selected_evidence_id,
+		 considered_evidence_ids, reason_code, review_rule_version,
+		 supersedes_decision_id, recorded_at)
+		VALUES (?, ?, 4, 'verified', ?, JSON_ARRAY(), ?, ?, ?, ?)`,
+		invalidDecisionID, versionID, evidenceID,
+		"availability.invalid_selected_evidence", "review-v1", thirdDecisionID, invalidDecisionAt,
+	); err != nil {
+		t.Fatalf("insert malformed verified Decision: %v", err)
+	}
+	assertAvailableAt(now, nil)
+
 	purgedAt := now
 	if _, err := db.ExecContext(ctx, `UPDATE news_version_availability_evidence
 		SET raw_value = NULL, candidate_available_at_utc = NULL, payload_purged_at = ?
