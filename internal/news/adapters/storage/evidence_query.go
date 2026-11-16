@@ -160,6 +160,90 @@ const evidencePITSelect = `SELECT
 			)
 			AND availability_decision.recorded_at <= ?
 			AND availability_decision.status = 'verified'
+			AND JSON_CONTAINS(availability_decision.considered_evidence_ids,
+				JSON_QUOTE(availability_decision.selected_evidence_id), '			AND availability_evidence.parse_status = 'parsed'
+			AND availability_evidence.recorded_at <= availability_decision.recorded_at
+			AND availability_evidence.recorded_at <= ?
+			AND availability_evidence.observed_at <= ?
+			AND availability_evidence.retention_until > UTC_TIMESTAMP(6)
+			AND availability_evidence.retention_until <= o.retention_until
+			AND availability_evidence.payload_purged_at IS NULL
+			AND availability_evidence.raw_value IS NOT NULL
+			AND o.payload_purged_at IS NULL
+			AND o.retention_until > UTC_TIMESTAMP(6)
+			AND availability_evidence.candidate_available_at_utc IS NOT NULL
+			AND availability_evidence.candidate_available_at_utc <= availability_evidence.observed_at
+			AND availability_evidence.candidate_available_at_utc <= o.observed_at
+			AND availability_evidence.candidate_available_at_utc <= ?
+		LIMIT 1
+	) AS available_at
+	FROM news_item_versions v
+	INNER JOIN news_observations o
+		ON o.observation_id = v.observation_id AND o.news_id = v.news_id`
+
+func scanEvidencePITRecord(row rowScanner) (app.EvidencePITRecord, error) {
+	var result app.EvidencePITRecord
+	var observation domain.Observation
+	var version domain.NewsItemVersion
+	var policyAt, retentionUntil, payloadPurgedAt, publishedAt, availableAt sql.NullTime
+	var newsID sql.NullString
+	var candidateJSON []byte
+	var identityStatus string
+
+	err := row.Scan(
+		&observation.ID, &observation.IdempotencyKey, &observation.SourceID,
+		&observation.ProviderCode, &observation.QueryDimension, &observation.EndpointID,
+		&observation.SourcePolicyVersionID, &observation.EndpointPolicyVersionID,
+		&observation.ProviderOutputPolicyRef, &observation.ProviderOutputPolicyVersionID,
+		&policyAt, &candidateJSON, &observation.ObservedAt, &retentionUntil, &payloadPurgedAt, &identityStatus,
+		&newsID, &observation.ReasonCode,
+		&version.ID, &version.NewsID, &version.VersionNo, &version.Fingerprint,
+		&version.Title, &version.PublisherName, &version.PublisherDomain, &version.Author,
+		&publishedAt, &version.ObservedAt, &version.ObservationID, &availableAt,
+	)
+	if err != nil {
+		return app.EvidencePITRecord{}, err
+	}
+	if err := json.Unmarshal(candidateJSON, &observation.Candidate); err != nil {
+		return app.EvidencePITRecord{}, err
+	}
+	if policyAt.Valid {
+		observation.PolicyEvaluatedAt = policyAt.Time.UTC()
+	}
+	if newsID.Valid {
+		observation.NewsID = newsID.String
+	}
+	if publishedAt.Valid {
+		value := publishedAt.Time.UTC()
+		version.PublishedAt = &value
+	}
+	if availableAt.Valid {
+		value := availableAt.Time.UTC()
+		result.AvailableAt = &value
+	}
+	observation.IdentityStatus = domain.ObservationStatus(identityStatus)
+	observation.ObservedAt = observation.ObservedAt.UTC()
+	if retentionUntil.Valid {
+		observation.RetentionUntil = retentionUntil.Time.UTC()
+	}
+	if payloadPurgedAt.Valid {
+		value := payloadPurgedAt.Time.UTC()
+		observation.PayloadPurgedAt = &value
+		observation.Candidate = domain.Candidate{}
+	}
+	version.ObservedAt = version.ObservedAt.UTC()
+	result.SourceRef = observation.SourceID
+	result.ProviderRef = observation.ProviderCode
+	result.Observation = observation
+	result.Version = version
+	return result, nil
+}
+
+func isEvidenceUTC(value time.Time) bool {
+	_, offset := value.Zone()
+	return offset == 0
+}
+) = 1
 			AND availability_evidence.parse_status = 'parsed'
 			AND availability_evidence.recorded_at <= availability_decision.recorded_at
 			AND availability_evidence.recorded_at <= ?
