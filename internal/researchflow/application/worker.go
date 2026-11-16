@@ -200,7 +200,7 @@ func (w *Worker) Execute(ctx context.Context, runRef, stageRef, attemptRef strin
 		Parameters:             append([]byte(nil), snapshot.Parameters...),
 		InputSnapshotRefs:      append([]string(nil), snapshot.InputSnapshotRefs...),
 		SystemAsOf:             snapshot.Run.SystemAsOf,
-		DeadlineAt:              snapshot.Run.DeadlineAt,
+		DeadlineAt:             snapshot.Run.DeadlineAt,
 		AttemptDeadlineAt:       attemptDeadline,
 		CorrelationID:           snapshot.Run.CorrelationID,
 	}
