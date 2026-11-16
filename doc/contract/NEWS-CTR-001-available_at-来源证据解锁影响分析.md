@@ -686,3 +686,68 @@ Evidence 表最小必要字段调整为：
 - [ ] 冻结 News 与 Research PIT 精度、边界和 API 表示契约。
 - [ ] 明确 available_at 字段级 StorageMode/ContentKind 及策略撤销后的留存行为。
 - [ ] 上述事项完成前不新增 Migration、Evidence 代码、Provider 采集、PIT SQL 或 Schema 2.0.0 正式版。
+
+## 1.15 available_at 秒级业务精度与字段级授权提案（2026-11-16）
+
+本节记录项目负责人对精度方向的明确意见：**available_at 业务精度采用秒，不要求微秒或纳秒**。本节是跨模块契约评审提案；在正式 DEC / NEWS-CTR-001 2.0.0 冻结前，不代表允许实施 Migration、Provider 或 PIT SQL。
+
+### 1.15.1 秒级业务时间与系统审计时间分离
+
+| 时间字段 | 语义 | 建议精度/存储 | 说明 |
+|---|---|---|---|
+| `available_at` | 内容版本首次向约定市场参与者公开可获取的业务时间 | UTC 秒级；News 候选列建议 `DATETIME(0)` | 不携带小数秒；API 使用 RFC 3339 秒级格式 |
+| `candidate_available_at_utc` | Evidence 解析出的候选业务时间 | UTC 秒级；候选 DDL 可用 `DATETIME(0)` | 只有通过来源准入和审核后才可能被决策选中 |
+| `observed_at` | 系统实际观察来源响应的时间 | 保留 News 现有 `DATETIME(6)` | 系统侧审计时间，不因 available_at 降精度 |
+| `recorded_at` | Evidence / Decision 被系统记录、对 PIT 可见的时间 | 保留 News 现有 `DATETIME(6)` | 决策事件可在同一微秒内发生，使用 decision_seq 解决同版本事件逻辑顺序 |
+| `system_as_of` | Researchflow/Research 的系统知识截止时间 | 保留各模块现有 PIT 表示与精度 | 不为单一业务字段而全局降低系统截止时间精度 |
+
+- API 的 `available_at` 规范形式为 `YYYY-MM-DDTHH:MM:SSZ`，不输出小数秒；明确偏移的来源时间先转换为 UTC。
+- Research 当前 PIT 存储使用固定 30 字符、九位小数 UTC 字符串。该格式可以将秒级 available_at 编码为 `...SS.000000000Z`，但尾部零只表示存储格式，不表示来源有纳秒精度；Research 的通用 PIT 存储格式不因此改造。
+- News 当前 Observation、Version、Snapshot 的系统时间仍为 `DATETIME(6)`。新 Evidence/Decision 的系统观察/记录时间应沿用既有系统时间精度；不应把这些系统时间统一降为秒。
+- PIT 比较继续分别使用 `available_at <= system_as_of` 与 `system_observed_at <= system_as_of`。秒级业务时间与更高精度系统 cutoff 比较是有效的，不要求两者存储精度相同。
+- `decision_seq` 只解决同一版本决策事件的逻辑顺序；不能用它推断同一秒内两个外部内容版本的真实先后。秒级相同的 available_at 视为同一业务时间粒度，不制造亚秒顺序。
+
+### 1.15.2 来源精度与归一化规则
+
+- Evidence 必须保留原始时间文本、原始时区/偏移、字段路径和解析器版本；建议额外记录来源声明的时间精度分类（date / minute / second / subsecond），不得仅从数据库列类型反推来源精度。
+- 只有来源字段语义明确、包含明确时区且能精确落在整秒边界的时间，才可生成秒级候选值。
+- 仅日期、仅分钟、无时区本地时间继续不满足现行准入规则。
+- 若来源给出非零小数秒，不能静默截断或四舍五入为秒；在秒级契约下先记为 `unsupported_precision`，除非正式契约另行批准有来源语义依据的转换规则。
+- 原始字符串仍用于复核，不意味着系统必须把微秒/纳秒作为业务排序精度保存。
+
+### 1.15.3 字段级授权模型缺口与最小提案
+
+现有 `ContentKind` 只有 metadata/title/snippet/abstract/full_text/attachment；`StorageMode` 有 none/transient/persistent_metadata/persistent_excerpt/persistent_full_text。现有策略可判断内容类别和保存方式，但不能区分“普通新闻 metadata”与“新增来源时间证据”的授权，也不能分别表达原始证据与规范化派生时间的持久化权限。
+
+建议在契约层评估两个独立内容类别（仅提案，不新增代码枚举）：
+
+1. `source_time_evidence`：来源原始时间文本、字段路径、时区/偏移、来源证据引用及响应/字段摘要。该类别的持久化必须有 Source、Endpoint、Provider Output 三方明确许可；哈希和引用不得自动豁免留存限制。
+2. `derived_availability_time`：由获准原始证据解析出的规范化秒级 UTC 候选时间，以及经审核可供 PIT 使用的派生值。它必须单独获得持久化许可，不能因为允许处理原始响应就推定允许长期保存派生值。
+
+两类内容均应显式绑定 `PurposeInternalPersonalResearch` 与实际 `StorageMode`；默认不允许 public_display、redistribution 或 model_training。若具体来源授权不允许持久化，则最多按获准的 transient 处理，不得写入 Evidence 长期载荷。Evidence 的最小 tombstone 元数据也须确认是否允许保留，不能默认由上述两类许可覆盖。
+
+### 1.15.4 策略到期、撤销与既有 Evidence 的默认行为提案
+
+| 事件 | 新采集/新写入 | 既有 Evidence 读取与 PIT 输出 | 清理 |
+|---|---|---|---|
+| Source / Endpoint / Provider Policy 自然到期 | 立即拒绝新的采集和证据写入 | 默认 fail-closed；只有策略明确允许到期后按既有 retention 继续使用，才可继续读取 | 不晚于既有授权与 Observation.retention_until 中较早者 |
+| 任一适用 Policy 被明确撤销 | 立即拒绝新的采集和证据写入 | 默认立即停止读取原始证据和派生 available_at，PIT 返回 NULL | 按撤销决定要求清除受限载荷；仅在允许时保留 tombstone |
+| Policy 明确声明既有数据可按原期限 grandfather | 停止新采集（除非另有授权） | 仅对撤销/到期前已合法取得的数据，在原 retention 截止前按明确范围读取 | 到原授权截止或 Observation.retention_until，取较早者 |
+
+- Source、Endpoint、Provider Output 三类策略是授权交集；任一适用策略拒绝或撤销，不能由其他策略的允许状态覆盖。
+- 自然到期与明确撤销必须分开：自然到期是否 grandfather、撤销是否追溯影响既有数据，必须有来源授权文本/策略版本证据，不得从当前状态枚举自行推断。
+- 当前 Observation 只保存策略版本引用、评估时间和最终 retention_until，没有分别保存三类策略的独立到期时刻及撤销影响范围；因此当前数据模型不足以可靠执行 grandfather 例外。未补齐明确授权证据前，执行上述 fail-closed 默认。
+- 到期/撤销导致 Evidence 不可再使用时，应追加 unresolved/revoked 决策事件或由 PIT 查询按策略可见性 fail-closed；不删除历史 Decision。受限载荷清理必须与 Observation payload 清理同一事务。
+
+### 1.15.5 本节结论与门禁
+
+- [x] 项目负责人确认 available_at 采用秒级业务精度，不需要微秒/纳秒业务精度。
+- [x] 区分 available_at 业务精度与 observed_at / recorded_at / system_as_of 系统审计精度；不做全局降精度。
+- [x] 明确 Research 固定 9 位存储格式可以承载秒级值，但不代表来源纳秒精度。
+- [x] 识别现有 ContentKind / StorageMode 无法单独授权来源时间证据和规范化派生时间。
+- [x] 提出策略到期/撤销的 fail-closed 默认和 grandfather 例外边界。
+- [ ] News / Research Owner 确认 API 秒级格式与 Research 存储映射，并补充 NEWS-CTR-001 / Research 消费契约决议。
+- [ ] 契约 Owner 决定是否新增独立 ContentKind，以及 Provider Output Policy 的字段级持久化许可和留存期限。
+- [ ] 取得来源授权文本，确认自然到期、明确撤销和既有数据 grandfather 规则。
+- [ ] 上述正式契约与来源准入门禁完成前，不新增 Migration、Evidence 业务代码、Provider 采集、PIT SQL 或 Schema 2.0.0 正式版。
+
