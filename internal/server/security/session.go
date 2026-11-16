@@ -29,6 +29,7 @@ type SessionAuthenticatorConfig struct {
 // Platform Bearer authentication. It never upgrades a Session to Bearer scope.
 type SessionAuthenticator struct {
 	sessions    platformsecurity.SessionStore
+	csrfSessions platformsecurity.CSRFSafeSessionStore
 	credentials platformsecurity.CredentialStore
 	cookie      platformsecurity.SessionCookieConfig
 	origin      *url.URL
@@ -44,6 +45,10 @@ func NewSessionAuthenticator(
 ) (*SessionAuthenticator, error) {
 	if sessions == nil || credentials == nil {
 		return nil, errors.New("SessionStore and CredentialStore are required")
+	}
+	csrfSessions, ok := sessions.(platformsecurity.CSRFSafeSessionStore)
+	if !ok {
+		return nil, errors.New("SessionStore must implement CSRFSafeSessionStore")
 	}
 	if err := cfg.Cookie.Validate(); err != nil {
 		return nil, fmt.Errorf("Session Cookie 配置无效: %w", err)
@@ -72,7 +77,7 @@ func NewSessionAuthenticator(
 		now = time.Now
 	}
 	return &SessionAuthenticator{
-		sessions: sessions, credentials: credentials, cookie: cfg.Cookie,
+		sessions: sessions, csrfSessions: csrfSessions, credentials: credentials, cookie: cfg.Cookie,
 		origin: origin, csrfHeader: header, idleTTL: cfg.IdleTTL, now: now,
 	}, nil
 }
@@ -97,7 +102,23 @@ func (a *SessionAuthenticator) Authenticate(request *http.Request) (*http.Reques
 		return nil, nil, invalidSessionFault()
 	}
 	now := a.now().UTC()
-	record, err := a.sessions.LookupAndTouch(request.Context(), digest, now, a.idleTTL)
+	var record platformsecurity.SessionRecord
+	if isSafeMethod(request.Method) {
+		record, err = a.sessions.LookupAndTouch(request.Context(), digest, now, a.idleTTL)
+	} else {
+		csrfValues := request.Header.Values(a.csrfHeader)
+		if len(csrfValues) != 1 {
+			return nil, nil, platformfault.New(platformfault.ClassForbidden, "server.csrf_rejected", "request origin or CSRF token is invalid", nil)
+		}
+		csrfDigest, digestErr := platformsecurity.CSRFTokenDigest(csrfValues[0])
+		if digestErr != nil {
+			return nil, nil, platformfault.New(platformfault.ClassForbidden, "server.csrf_rejected", "request origin or CSRF token is invalid", nil)
+		}
+		record, err = a.csrfSessions.LookupAndTouchWithCSRF(request.Context(), digest, csrfDigest, now, a.idleTTL)
+		if errors.Is(err, platformsecurity.ErrSessionCSRFRejected) {
+			return nil, nil, platformfault.New(platformfault.ClassForbidden, "server.csrf_rejected", "request origin or CSRF token is invalid", nil)
+		}
+	}
 	if errors.Is(err, platformsecurity.ErrSessionNotFound) {
 		return nil, nil, invalidSessionFault()
 	}
@@ -106,12 +127,6 @@ func (a *SessionAuthenticator) Authenticate(request *http.Request) (*http.Reques
 	}
 	if record.Subject != "owner" || record.CredentialVersion == 0 || !validDigest(record.CSRFTokenDigest) {
 		return nil, nil, invalidSessionFault()
-	}
-	if !isSafeMethod(request.Method) {
-		csrfValues := request.Header.Values(a.csrfHeader)
-		if len(csrfValues) != 1 || !platformsecurity.VerifyCSRFToken(csrfValues[0], record.CSRFTokenDigest) {
-			return nil, nil, platformfault.New(platformfault.ClassForbidden, "server.csrf_rejected", "request origin or CSRF token is invalid", nil)
-		}
 	}
 	credential, err := a.credentials.GetOwnerCredential(request.Context())
 	if err != nil {

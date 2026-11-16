@@ -17,6 +17,8 @@ type testSessionStore struct {
 	err     error
 	digest  string
 	idleTTL time.Duration
+	touchCalls int
+	csrfCalls int
 }
 
 func (s *testSessionStore) Create(context.Context, string, platformsecurity.SessionRecord) error {
@@ -25,6 +27,7 @@ func (s *testSessionStore) Create(context.Context, string, platformsecurity.Sess
 
 func (s *testSessionStore) LookupAndTouch(_ context.Context, digest string, now time.Time, idleTTL time.Duration) (platformsecurity.SessionRecord, error) {
 	s.digest, s.idleTTL = digest, idleTTL
+	s.touchCalls++
 	if s.err != nil {
 		return platformsecurity.SessionRecord{}, s.err
 	}
@@ -43,6 +46,27 @@ func (s *testSessionStore) Rotate(context.Context, string, string, platformsecur
 
 func (s *testSessionStore) Revoke(context.Context, string) error {
 	return nil
+}
+
+func (s *testSessionStore) LookupAndTouchWithCSRF(_ context.Context, digest, csrfDigest string, now time.Time, idleTTL time.Duration) (platformsecurity.SessionRecord, error) {
+	s.digest, s.idleTTL = digest, idleTTL
+	s.csrfCalls++
+	if s.err != nil { return platformsecurity.SessionRecord{}, s.err }
+	if csrfDigest != s.record.CSRFTokenDigest { return platformsecurity.SessionRecord{}, platformsecurity.ErrSessionCSRFRejected }
+	record := s.record
+	record.LastSeenAt = now
+	record.IdleExpiresAt = now.Add(idleTTL)
+	if record.AbsoluteExpiresAt.Before(record.IdleExpiresAt) { record.IdleExpiresAt = record.AbsoluteExpiresAt }
+	return record, nil
+}
+
+func (s *testSessionStore) RotateCSRFToken(_ context.Context, digest, newCSRFDigest string, now time.Time, idleTTL time.Duration) (platformsecurity.SessionRecord, error) {
+	s.digest, s.idleTTL = digest, idleTTL
+	s.record.CSRFTokenDigest = newCSRFDigest
+	s.record.LastSeenAt = now
+	s.record.IdleExpiresAt = now.Add(idleTTL)
+	if s.record.AbsoluteExpiresAt.Before(s.record.IdleExpiresAt) { s.record.IdleExpiresAt = s.record.AbsoluteExpiresAt }
+	return s.record, nil
 }
 
 type testCredentialStore struct {
@@ -121,7 +145,7 @@ func TestSessionAuthenticatorAddsOwnerSessionPrincipalAndRefreshCookie(t *testin
 		cookie.SameSite != http.SameSiteLaxMode || cookie.Path != "/api" {
 		t.Fatalf("unexpected refreshed Session Cookie: %+v", cookie)
 	}
-	if sessions.idleTTL != 12*time.Hour || sessions.digest == "" {
+	if sessions.idleTTL != 12*time.Hour || sessions.digest == "" || sessions.touchCalls != 1 {
 		t.Fatalf("SessionStore lookup arguments were not passed: %+v", sessions)
 	}
 }
@@ -146,6 +170,14 @@ func TestSessionAuthenticatorRequiresCSRFAndSameOriginForWrites(t *testing.T) {
 	request.Header.Set("Origin", "https://stocks.example.com")
 	if _, _, err := auth.Authenticate(request); err == nil {
 		t.Fatal("unsafe request without CSRF token was accepted")
+	}
+	request.Header.Set(DefaultCSRFAuthHeader, csrfToken+"invalid")
+	beforeTouch := sessions.touchCalls
+	if _, _, err := auth.Authenticate(request); err == nil {
+		t.Fatal("invalid CSRF token was accepted")
+	}
+	if sessions.touchCalls != beforeTouch || sessions.csrfCalls != 1 {
+		t.Fatalf("invalid CSRF must not use non-atomic Touch: %+v", sessions)
 	}
 	request.Header.Set(DefaultCSRFAuthHeader, csrfToken)
 	request.Header.Add(DefaultCSRFAuthHeader, csrfToken)
