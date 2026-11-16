@@ -148,6 +148,12 @@ func validEvidencePITRecord(pit EvidencePITRecord, request GetEvidenceRequest) b
 		(!validEvidenceUTC(observation.RetentionUntil) || !observation.RetentionUntil.After(observation.ObservedAt)) {
 		return false
 	}
+	if pit.AvailableAt != nil &&
+		(pit.AvailableAt.IsZero() || !validEvidenceUTC(*pit.AvailableAt) ||
+			pit.AvailableAt.Nanosecond() != 0 || pit.AvailableAt.After(observation.ObservedAt) ||
+			pit.AvailableAt.After(request.SystemAsOf)) {
+		return false
+	}
 	if observation.PayloadPurgedAt != nil {
 		if observation.PayloadPurgedAt.IsZero() || !validEvidenceUTC(*observation.PayloadPurgedAt) ||
 			observation.RetentionUntil.IsZero() || observation.PayloadPurgedAt.Before(observation.RetentionUntil) ||
@@ -176,6 +182,7 @@ func researchEvidenceRecordFromPIT(
 		BusinessQualityStatus: EvidenceBusinessQualityUnknown,
 		QualityStatus:         EvidenceQualityUnknown,
 		PublishedAt:           cloneEvidenceTime(pit.Version.PublishedAt),
+		AvailableAt:           cloneEvidenceTime(pit.AvailableAt),
 		SystemObservedAt:      pit.Version.ObservedAt.UTC(),
 		ContentLevel:          actualEvidenceContentLevel(layers),
 		AuthorizationRef:      binding.AuthorizationRef.AuthorizationRef,

@@ -443,3 +443,43 @@ func TestGetEvidenceSuppressesCandidateAtExactRetentionDeadline(t *testing.T) {
 		t.Fatalf("authorized version content unexpectedly unavailable: result=%+v calls=%d", result, authorizer.calls)
 	}
 }
+
+func TestGetEvidenceReturnsOnlyVerifiedSecondPrecisionAvailableAt(t *testing.T) {
+	now := time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)
+	request, pit, binding := validGetEvidenceFixture(now)
+	candidate := pit.Observation.ObservedAt.Add(-time.Second).Truncate(time.Second)
+	pit.AvailableAt = &candidate
+	authorizer := &getEvidenceAuthorizerStub{}
+	usecase, err := NewGetEvidence(
+		getEvidencePITRepositoryStub{record: pit},
+		getEvidenceAuthorizationSnapshotStub{binding: binding},
+		authorizer,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	usecase.now = func() time.Time { return now }
+	result, err := usecase.Execute(context.Background(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.AvailableAt == nil || !result.AvailableAt.Equal(candidate) {
+		t.Fatalf("verified available_at was not returned: %+v", result)
+	}
+
+	fractional := candidate.Add(250 * time.Millisecond)
+	pit.AvailableAt = &fractional
+	authorizer = &getEvidenceAuthorizerStub{}
+	usecase, err = NewGetEvidence(
+		getEvidencePITRepositoryStub{record: pit},
+		getEvidenceAuthorizationSnapshotStub{binding: binding},
+		authorizer,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	usecase.now = func() time.Time { return now }
+	if _, err := usecase.Execute(context.Background(), request); !errors.Is(err, ErrInvalidEvidenceQuery) || authorizer.calls != 0 {
+		t.Fatalf("subsecond available_at was not rejected before authorization: err=%v calls=%d", err, authorizer.calls)
+	}
+}

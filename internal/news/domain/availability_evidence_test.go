@@ -89,7 +89,7 @@ func TestAvailabilityDecisionValidatesCompleteStateAndStableEvidenceSet(t *testi
 		ID: "decision-1", VersionID: "version-1", Sequence: 1,
 		Status: AvailabilityDecisionVerified, SelectedEvidenceID: &selected,
 		ConsideredEvidenceIDs: []string{"evidence-1", "evidence-2"},
-		ReasonCode: "availability.source_verified", ReviewRuleVersion: "review-v1",
+		ReasonCode:            "availability.source_verified", ReviewRuleVersion: "review-v1",
 		RecordedAt: time.Date(2026, 11, 16, 3, 0, 0, 0, time.UTC),
 	}
 	if err := decision.Validate(); err != nil {

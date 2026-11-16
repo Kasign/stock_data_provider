@@ -42,11 +42,11 @@ type AvailabilityEvidence struct {
 
 func (e AvailabilityEvidence) Validate() error {
 	for name, value := range map[string]string{
-		"evidence_id": e.ID,
-		"news_id": e.NewsID,
-		"version_id": e.VersionID,
+		"evidence_id":    e.ID,
+		"news_id":        e.NewsID,
+		"version_id":     e.VersionID,
 		"observation_id": e.ObservationID,
-		"field_path": e.FieldPath,
+		"field_path":     e.FieldPath,
 		"parser_version": e.ParserVersion,
 	} {
 		if value == "" || value != strings.TrimSpace(value) {
