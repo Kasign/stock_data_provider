@@ -532,3 +532,10 @@ Researchflow 已有 Scheduler、Worker、WorkerPool、Claim/Lease/Fencing、候�
 - 日志只输出聚合计数和 Provider Code；不输出原始时间、标题、URL、摘要、响应正文、凭证或 Header。默认仍由 `NEWS_LIVE_PROBE` 控制，未启用时测试继续 `skipped`，不在普通 CI 中触发外网请求。
 - 新增固定样本单测，覆盖 RFC3339 +08:00、RFC1123Z、日期级、无时区本地日期时间、不可解析值、未来时间和缺失值；统计函数只返回聚合结果。
 - 本项不新增生产 DTO 字段、DB 列/表、Migration、Schema、Golden 或 PIT SQL。它只提供后续真实在线探测时的低风险数据质量观测；不能把搜索 Provider 发布时间升级为 `available_at`。
+
+
+### 10.17 2026-11-16 Live Probe gofmt 门禁修复
+
+- Integration CI Run [43796272232](https://github.com/Kasign/stock_data_provider/actions/runs/43796272232)（#82）对代码提交 `4ad77c2c813503e05aeb41c541ebaad295ac3a14` 的结果为 failure。逐步日志确认根模块 go vet/test、News/Research 跨模块测试、Worker MariaDB/Redis 生命周期、go-core vet/test、Compose 与 WebUI 检查均通过。
+- 唯一失败项是全仓 gofmt：`internal/news/adapters/provider/live_probe_test.go` 的结构体字段对齐不符合 gofmt，并存在多余空行。测试逻辑本身通过；CI 汇总步骤因 GOFMT=failure 而失败。
+- 本轮只修正该测试文件格式，不改变统计逻辑、断言、Provider 请求或业务语义；并同步本交接记录。修复提交后的代码验收以新 SHA 对应的 CI 为准，Run #82 不得记为通过。

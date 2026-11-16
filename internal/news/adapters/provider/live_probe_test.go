@@ -72,17 +72,16 @@ func TestLiveProviderProbe(t *testing.T) {
 	}
 }
 
-
 type publicationTimeStats struct {
-	Total                          int
-	RawPresent                     int
-	RawMissing                     int
-	Parsed                         int
-	DateOnly                       int
-	LocalDateTimeWithoutTimezone   int
-	Unparseable                    int
-	ExplicitTimezone               int
-	FutureOver5m                   int
+	Total                        int
+	RawPresent                   int
+	RawMissing                   int
+	Parsed                       int
+	DateOnly                     int
+	LocalDateTimeWithoutTimezone int
+	Unparseable                  int
+	ExplicitTimezone             int
+	FutureOver5m                 int
 }
 
 // summarizePublicationTimes only returns aggregate counts. It never emits raw
