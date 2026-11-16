@@ -41,15 +41,21 @@ type ownerHTTPTestSessions struct {
 }
 
 func (s *ownerHTTPTestSessions) Create(_ context.Context, digest string, record platformsecurity.SessionRecord) error {
-	if s.records == nil {\n\t\ts.records = make(map[string]platformsecurity.SessionRecord)\n\t}
-	if _, exists := s.records[digest]; exists {\n\t\treturn platformsecurity.ErrSessionConflict\n\t}
+	if s.records == nil {
+\t\ts.records = make(map[string]platformsecurity.SessionRecord)
+\t}
+	if _, exists := s.records[digest]; exists {
+\t\treturn platformsecurity.ErrSessionConflict
+\t}
 	s.records[digest] = record
 	return nil
 }
 func (s *ownerHTTPTestSessions) LookupAndTouch(_ context.Context, digest string, now time.Time, idle time.Duration) (platformsecurity.SessionRecord, error) {
 	s.touches++
 	record, ok := s.records[digest]
-	if !ok {\n\t\treturn platformsecurity.SessionRecord{}, platformsecurity.ErrSessionNotFound\n\t}
+	if !ok {
+\t\treturn platformsecurity.SessionRecord{}, platformsecurity.ErrSessionNotFound
+\t}
 	record.LastSeenAt = now
 	record.IdleExpiresAt = minOwnerHTTPTime(now.Add(idle), record.AbsoluteExpiresAt)
 	s.records[digest] = record
@@ -58,22 +64,30 @@ func (s *ownerHTTPTestSessions) LookupAndTouch(_ context.Context, digest string,
 func (s *ownerHTTPTestSessions) LookupAndTouchWithCSRF(_ context.Context, digest, csrfDigest string, now time.Time, idle time.Duration) (platformsecurity.SessionRecord, error) {
 	s.csrfTouches++
 	record, ok := s.records[digest]
-	if !ok {\n\t\treturn platformsecurity.SessionRecord{}, platformsecurity.ErrSessionNotFound\n\t}
-	if record.CSRFTokenDigest != csrfDigest {\n\t\treturn platformsecurity.SessionRecord{}, platformsecurity.ErrSessionCSRFRejected\n\t}
+	if !ok {
+\t\treturn platformsecurity.SessionRecord{}, platformsecurity.ErrSessionNotFound
+\t}
+	if record.CSRFTokenDigest != csrfDigest {
+\t\treturn platformsecurity.SessionRecord{}, platformsecurity.ErrSessionCSRFRejected
+\t}
 	record.LastSeenAt = now
 	record.IdleExpiresAt = minOwnerHTTPTime(now.Add(idle), record.AbsoluteExpiresAt)
 	s.records[digest] = record
 	return record, nil
 }
 func (s *ownerHTTPTestSessions) Rotate(_ context.Context, oldDigest, newDigest string, record platformsecurity.SessionRecord, _ time.Time) error {
-	if _, ok := s.records[oldDigest]; !ok {\n\t\treturn platformsecurity.ErrSessionNotFound\n\t}
+	if _, ok := s.records[oldDigest]; !ok {
+\t\treturn platformsecurity.ErrSessionNotFound
+\t}
 	delete(s.records, oldDigest)
 	s.records[newDigest] = record
 	return nil
 }
 func (s *ownerHTTPTestSessions) RotateCSRFToken(_ context.Context, digest, newCSRFDigest string, version uint64, now time.Time, idle time.Duration) (platformsecurity.SessionRecord, error) {
 	record, ok := s.records[digest]
-	if !ok || record.CredentialVersion != version {\n\t\treturn platformsecurity.SessionRecord{}, platformsecurity.ErrSessionNotFound\n\t}
+	if !ok || record.CredentialVersion != version {
+\t\treturn platformsecurity.SessionRecord{}, platformsecurity.ErrSessionNotFound
+\t}
 	record.CSRFTokenDigest = newCSRFDigest
 	record.LastSeenAt = now
 	record.IdleExpiresAt = minOwnerHTTPTime(now.Add(idle), record.AbsoluteExpiresAt)
@@ -109,7 +123,9 @@ func (ownerHTTPTestAudit) Write(context.Context, platformsecurity.SecurityAuditE
 }
 
 func minOwnerHTTPTime(a, b time.Time) time.Time {
-	if b.Before(a) {\n\t\treturn b\n\t}
+	if b.Before(a) {
+\t\treturn b
+\t}
 	return a
 }
 
@@ -129,28 +145,40 @@ func newOwnerHTTPTestHandler(t *testing.T, sessions *ownerHTTPTestSessions, cred
 		Cookie: cookie, IdleTTL: time.Hour, AbsoluteTTL: 24 * time.Hour,
 		RateLimitPolicy: policy,
 	})
-	if err != nil {\n\t\tt.Fatal(err)\n\t}
+	if err != nil {
+\t\tt.Fatal(err)
+\t}
 	authenticator, err := serversecurity.NewSessionAuthenticator(sessions, credentials, serversecurity.SessionAuthenticatorConfig{
 		Cookie: cookie, PublicOrigin: "https://stocks.example.com", CSRFHeader: "X-CSRF-Token", IdleTTL: time.Hour,
 	})
-	if err != nil {\n\t\tt.Fatal(err)\n\t}
+	if err != nil {
+\t\tt.Fatal(err)
+\t}
 	composition := &ownerSessionComposition{lifecycle: lifecycle, authenticator: authenticator, cookie: cookie}
 	ownerToken := strings.Repeat("a", 43)
 	env := platformconfigForOwnerHTTP(ownerToken)
 	bearer, err := platformsecurity.NewAuthenticator(env, nil)
-	if err != nil {\n\t\tt.Fatal(err)\n\t}
+	if err != nil {
+\t\tt.Fatal(err)
+\t}
 	legacy := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })
 	health := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
 	handler, err := newHTTPHandler(bearer, health, legacy, composition)
-	if err != nil {\n\t\tt.Fatal(err)\n\t}
+	if err != nil {
+\t\tt.Fatal(err)
+\t}
 	handler, err = newHTTPMiddleware(handler, httpMiddlewareConfig{maxRequestBodyBytes: 64 * 1024, maxConcurrentRequests: 8})
-	if err != nil {\n\t\tt.Fatal(err)\n\t}
+	if err != nil {
+\t\tt.Fatal(err)
+\t}
 	return handler
 }
 
 func platformconfigForOwnerHTTP(token string) platformconfig.Secret {
 	return platformconfig.NewEnvWithLookup(func(key string) (string, bool) {
-		if key == "PLATFORM_ADMIN_TOKEN" {\n\t\t\treturn token, true\n\t\t}
+		if key == "PLATFORM_ADMIN_TOKEN" {
+\t\t\treturn token, true
+\t\t}
 		return "", false
 	}).Secret("PLATFORM_ADMIN_TOKEN")
 }
@@ -198,13 +226,17 @@ func TestOwnerSessionHTTPLoginRefreshCSRFAndLogout(t *testing.T) {
 	if refreshResponse.Code != http.StatusOK {
 		t.Fatalf("CSRF refresh status=%d body=%s", refreshResponse.Code, refreshResponse.Body.String())
 	}
-	var refreshed struct {\n\t\tCSRFToken string `json:"csrf_token"`\n\t}
+	var refreshed struct {
+\t\tCSRFToken string `json:"csrf_token"`
+\t}
 	if err := json.Unmarshal(refreshResponse.Body.Bytes(), &refreshed); err != nil || refreshed.CSRFToken == "" || refreshed.CSRFToken == csrfToken.CSRFToken {
 		t.Fatalf("CSRF refresh did not rotate token: %v body=%s", err, refreshResponse.Body.String())
 	}
 
 	digest, err := platformsecurity.SessionTokenDigest(cookies[0].Value)
-	if err != nil {\n\t\tt.Fatal(err)\n\t}
+	if err != nil {
+\t\tt.Fatal(err)
+\t}
 	recordBefore := sessions.records[digest]
 	badWrite := httptest.NewRequest(http.MethodDelete, "https://stocks.example.com/api/v1/owner/session", nil)
 	badWrite.AddCookie(cookies[0])
