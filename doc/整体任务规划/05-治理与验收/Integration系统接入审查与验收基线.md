@@ -1,8 +1,8 @@
 # Integration 系统接入审查与整体验收基线
 
 - 验收分支：`integration`
-- 当前 integration HEAD 快照（更新至本轮 CI 门禁提交）：`a992f4cb4dd5e3ba6dababa23010828b2502622c`；该 SHA 的 Run `43788290026` 正在执行，尚未判定 success。
-- 最近已完成代码验收 SHA：`c25d881c041eb349450c004c42c4cf227c9bf437`；Run `43574975820`（#70）success。文档提交不触发 CI（workflow paths 不包含 doc/**），不得把文档 SHA 标记为代码 CI 通过。当前 CI 门禁修复的验收状态以 Run `43788290026` 对精确 SHA 的最终结论为准。
+- 最近代码验收 SHA：`d90c6fc5f15c6ea076ce31bc02e866ef4fe5197f`；Integration CI Run [43788740211](https://github.com/Kasign/stock_data_provider/actions/runs/43788740211)（#73）对精确 SHA success。当前分支后续 docs-only 提交不触发 CI（workflow paths 不包含 doc/**），不得把文档 HEAD 标记为代码 CI 通过。
+- 前两次门禁修复尝试 Run #71（`43788290026`）和 Run #72（`43788537976`）因测试日志匹配规则错误误失败，最终修正提交 `d90c6fc` / Run #73 success；完整说明见第 12 节。
 - 历史代码验收 SHA：`dde7d4f8fb071912ffa34bb9c50d46507d1a388b`（Run `43370552552`）；更早 Run `43369529083` 对 SHA `d664b9f`，均保留为历史证据。
 - 历史审查基线 SHA：`63f49065a5ef3379d95948a6c2c6e504a555a63f`（Run #54），仅作为历史参考
 - 历史参考：Run #23（`43178908392`）仅对应旧 SHA `fdc19b8591223dabccb533389d472713bfecc415`，结论 `success`
@@ -20,7 +20,7 @@ News、Research、Researchflow、Notification 的 Migration 已进入根 Registr
 
 因此当前阶段应判定为：
 
-- 最近已完成代码 SHA CI：`pass`（Run `43574975820`，`c25d881c0`）；其后 CI 门禁修复 SHA `a992f4c` 的 Run `43788290026` 执行中，尚未验收。A 组 News→Research 跨模块 MariaDB 负向/授权/分页/旧 Key 轮换验收已通过；B 组成功写入因来源证据缺失按负责人决议 `shelved`。News/Research 模块级 MariaDB 集成测试不等同跨模块 Importer 成功写入。
+- 最近代码 SHA CI：`pass`（Run `43788740211`，`d90c6fc`）；A 组 News→Research 跨模块 MariaDB 负向/授权/分页/旧 Key 轮换验收已通过；B 组成功写入因来源证据缺失按负责人决议 `shelved`。News/Research 模块级 MariaDB 集成测试不等同跨模块 Importer 成功写入。
 - Root Bootstrap 基础设施：部分完成
 - 新业务模块运行时装配：部分完成；仍以旧 Analysis Runner/Queue/API 为主
 - 新业务 API / Worker：Researchflow 业务 API 与 Worker 未接入
@@ -265,9 +265,9 @@ Registry 已具备 namespace 校验、确定性排序、执行报告和 Schema �
 
 ## 12. 2026-11-16 Review 与当前 CI 门禁状态
 
-- Review 起点：`396fa05d10bcb65eec2087cd4ef060b1a7eda720`；Review 时远端 HEAD：`a50302a87c0969eae2377ee3d8ca82d5fe697e5a`。
-- 2026-11-16 提交 `a992f4cb4dd5e3ba6dababa23010828b2502622c` 收紧 `.github/workflows/integration-ci.yml`：三个顶层测试逐一精确 PASS；A 组七个 MariaDB 子测试逐一精确 PASS；B 组要求明确 PASS 或 SKIP，缺少结果失败。B 组 SKIP 对应当前 `shelved` 决议，不代表成功写入已验收。
-- Run [43788290026](https://github.com/Kasign/stock_data_provider/actions/runs/43788290026) 对 `a992f4c` 执行中；在其完成前，门禁修复为待验收。上一份成功代码证据仍是 `c25d881c0` / Run [43574975820](https://github.com/Kasign/stock_data_provider/actions/runs/43574975820)。
+- Review 起点：`396fa05d10bcb65eec2087cd4ef060b1a7eda720`；Review 时远端 HEAD：`a50302a87c0969eae2377ee3d8ca82d5fe697e5a`；最终代码验收 SHA：`d90c6fc5f15c6ea076ce31bc02e866ef4fe5197f`。
+- 2026-11-16 最终门禁提交 `d90c6fc5f15c6ea076ce31bc02e866ef4fe5197f` 按真实 Go 测试层级分别校验：三个顶层测试 PASS；A 组 `read_chain_and_fail_closed_import` 内五个子测试 PASS，根级两个子测试 PASS；B 组必须明确 PASS 或 SKIP，缺少结果失败。
+- Run [43788740211](https://github.com/Kasign/stock_data_provider/actions/runs/43788740211)（#73）对精确 SHA `d90c6fc` success。Run #71 `43788290026` 因未匹配缩进输出误失败；Run #72 `43788537976` 因两个根级子测试路径归类错误误失败。两次均为门禁代码缺陷，非业务测试失败；最终修复已由 #73 通过。
 - 本轮确认：A 组 `pass`；B 组 `shelved`；Researchflow Stage、Quant、LLM、Notification 生产装配仍为 `blocked`；系统整体未达到 INT-C。
 - 来源提案第 1.5 节已纠正：EDINET `submitDateTime` 与 LSE FIX `SendingTime` 都不能仅凭精度/时区认定为首次公开可获取时间；HKEX 分钟级精度不足；CNINFO 公开接口当前只有日期精度。项目目标范围为中国 A 股、海外市场暂缓，海外候选不构成当前项目验收证据。当前无来源可标记 `verified`，P0 继续 `shelved`，不改冻结契约、不新增字段/表、不修改 PIT SQL。
 - 本轮无 Go 业务代码、冻结契约、Schema、Golden 变更；Integration 的阶段性职责仅为跨模块测试、CI 门禁和现有验收文档维护。
