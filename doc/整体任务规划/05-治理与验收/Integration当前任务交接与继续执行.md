@@ -1087,3 +1087,21 @@ Researchflow 已有 Scheduler、Worker、WorkerPool、Claim/Lease/Fencing、候�
 
 
 - 共享 HTTP Client 修正首轮 CI Run `43850461274` 对 SHA `32655a8bafdb56f06636b6faccfd175e7b0a653c`：gofmt、其余独立模块检查和 WebUI/Compose 步骤通过；根模块编译失败的唯一原因是测试仍断言旧的 composition.httpClient 字段，属于重构后的过期测试断言，不是运行逻辑缺陷。已移除该旧断言，保留「未配置 Provider 可无 Client、已配置 Provider 缺 Client 必须失败、注入共享 Client 后装配成功」三项行为验证；该 Run 不作为通过证据。
+
+### 2026-11-16 News Search Stage → Researchflow MariaDB 端到端执行验收
+
+- 本轮代码验收精确 SHA：`651bf9a054788311d61e3edf241719bd6256185e`；Integration CI Run [43860850724](https://github.com/Kasign/stock_data_provider/actions/runs/43860850724) 对该 SHA 全量 success。
+- 新增 `newNewsSearchStageCompositionWithProviders`，将 News SearchCandidates Adapter 与 Output Registry 的组合逻辑集中在同一工厂；生产配置工厂和测试 ProviderSet 共用同一组合路径，避免测试复制另一套 Stage 装配。
+- 新增 `internal/server/bootstrap/news_search_stage_mariadb_integration_test.go` / `TestNewsSearchStageResearchflowMariaDBIntegration`：使用隔离 MariaDB 与 Researchflow Migration，发布仅供测试的 Workflow Template 和参数 Schema，经正式 `CreateRun` Application Service 创建 Run，再由 Scheduler → WorkerPool → Worker 执行 News `SearchCandidates` Stage。
+- 测试验证 Worker 通过 News Adapter 执行、Output Registry 校验、Attempt 成功提交；Stage / Attempt 的 OutputRef 一致；Payload 与 QualitySummary 两份不可变资源均能读取，资源的 StageCode、OutputType、SchemaVersion、RegistryVersion 等元数据与冻结 Registry 一致。
+- Provider 使用确定性测试 Fixture，不访问外部新闻源，不代表真实 Provider 网络可用性或真实市场数据验收。测试 Template、参数 Schema、Applicability 和 ResourcePolicyRef 都是测试夹具，不是生产模板注册；本轮没有开放 Researchflow HTTP API，也没有创建生产 Run 触发入口。
+- CI Run 43860850724 全量 success：Go 格式检查、根模块 go vet/test、News/Research/Researchflow 逐用例跨模块测试（4/4 顶层测试）、Worker Bootstrap MariaDB/Redis、go-core vet/test、Compose、WebUI 语法/单测和镜像构建、最终汇总全部通过。
+
+**当前完成边界与下一步**
+
+1. 已证明单个 News Search Stage 可以沿正式 CreateRun / Scheduler / Worker / Output Registry / MariaDB 持久化链路完成执行；不再需要重复验证该 Stage 的单模块适配细节。
+2. 这不是生产 Worker Runtime 完成。Server Bootstrap 尚未装配生产 WorkerPool、Scheduler 周期调度、过期 Attempt 扫描、Deadline Scanner、Finalization 和优雅停止生命周期；本测试也没有验证 Run 终态 Finalization。
+3. 生产 Template 与生产 Run 来源仍未建立。下一项先按现有 SearchRequest / News Stage Schema 固化正式模板的业务语义（参数、Applicability、Retry / Propagation、ResourcePolicyRef、OutputRegistryVersion），并提供内部 CreateRun 调用入口及可信 Caller Identity；不擅自开放外部 HTTP API。
+4. 正式模板与真实 Run 来源明确后，再装配 Server Worker Runtime。进程本地 Worker 并发必须与数据库全局 `RESEARCHFLOW_MAX_WORKERS` 容量上限分开配置；多实例 Worker ID 必须唯一；Lease / Heartbeat / 扫描周期遵循 Worker 时间约束；关闭时先停止 Scheduler / Worker / Scanner，再关闭共享 Resources。
+5. 失败 Provider 的逐 Provider Outcome 诊断持久化仍是独立缺口；不得伪造成功 Output 来保存失败信息。它不影响本轮成功路径验收，但应在正式 Runtime / 诊断契约接入时按既有 Fault / Diagnostics 设计处理。
+
