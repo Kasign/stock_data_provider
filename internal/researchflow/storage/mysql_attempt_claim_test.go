@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -232,16 +233,6 @@ func TestMariaDBClaimAttemptLeaseAndFencing(t *testing.T) {
 		RunRef: runRef, StageRef: stageRef, AttemptRef: first.Ref,
 		WorkerID: "worker-a", FencingToken: first.FencingToken,
 		AttemptStatus: domain.AttemptSucceeded, Stage: nextStage,
-		StageOutput: &StageOutputCommit{
-			Envelope: stageoutput.Envelope{
-				RunRef: runRef, StageRef: stageRef, AttemptRef: second.Ref, StageCode: "claim",
-				TemplateVersion: "v1", OutputType: "trend", SchemaVersion: "1.0.0",
-				Payload: json.RawMessage(`{"trend":"up"}`), QualitySummary: json.RawMessage(`{"quality":"valid"}`),
-				DiagnosticRefs: []string{}, CompletedAt: second.StartedAt.UTC(),
-			},
-			RegistryVersion: "1.0.0", RegistryFingerprint: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-			PayloadSchemaRef: "schema://quant/trend/1.0.0", QualitySummarySchemaRef: "schema://quality/trend/1.0.0",
-		},
 	}
 	if err := repository.CommitAttemptResult(ctx, staleCommit); !errors.Is(err, ErrAttemptLeaseHeld) {
 		t.Fatalf("stale worker result error=%v, want ErrAttemptLeaseHeld", err)
@@ -251,7 +242,16 @@ func TestMariaDBClaimAttemptLeaseAndFencing(t *testing.T) {
 		RunRef: runRef, StageRef: stageRef, AttemptRef: second.Ref,
 		WorkerID: "worker-b", FencingToken: second.FencingToken,
 		AttemptStatus: domain.AttemptSucceeded, Stage: nextStage,
-		OutputRef: nextStage.OutputRef,
+		StageOutput: &StageOutputCommit{
+			Envelope: stageoutput.Envelope{
+				RunRef: runRef, StageRef: stageRef, AttemptRef: second.Ref, StageCode: "context",
+				TemplateVersion: "v1", OutputType: "trend", SchemaVersion: "1.0.0",
+				Payload: json.RawMessage(`{"trend":"up"}`), QualitySummary: json.RawMessage(`{"quality":"valid"}`),
+				DiagnosticRefs: []string{}, CompletedAt: second.StartedAt.UTC(),
+			},
+			RegistryVersion: "1.0.0", RegistryFingerprint: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			PayloadSchemaRef: "schema://quant/trend/1.0.0", QualitySummarySchemaRef: "schema://quality/trend/1.0.0",
+		},
 	}
 	// Storage must enforce retry scheduling metadata independently of Application.
 	missingRetryAt := currentCommit
