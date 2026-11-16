@@ -25,7 +25,8 @@ Root Server 同源 API 前缀固定为 `/api/v1/owner`：
 | 方法 | 路径 | 用途 | 允许身份 |
 |---|---|---|---|
 | POST | `/api/v1/owner/session` | 使用 Owner 密码登录并创建 Session | anonymous |
-| GET | `/api/v1/owner/session` | 查询当前 Session 状态并取得当前 CSRF Token | owner_session |
+| GET | `/api/v1/owner/session` | 查询当前 Session 状态 | owner_session |
+| POST | `/api/v1/owner/session/csrf` | 页面刷新后原子轮换并恢复 CSRF Token | owner_session（Origin/Host 必须匹配；不要求旧 CSRF） |
 | DELETE | `/api/v1/owner/session` | 撤销当前 Session 并清除 Cookie | owner_session |
 | POST | `/api/v1/owner/session/rotate` | 轮换当前 Session Token 与 CSRF Token | owner_session |
 | PUT | `/api/v1/owner/password` | 修改 Owner 密码并递增 CredentialVersion | owner_session |
@@ -105,7 +106,7 @@ Owner 初始化不提供 HTTP 路由。它只能通过受控本机/运维命令�
 3. CSRF Header 固定为 `X-CSRF-Token`；必须恰好一个非空值。Token 由 Platform CSPRNG 生成并与 Session 绑定。
 4. 所有非安全方法必须由 Platform `CSRFSafeSessionStore` 在原子 Touch 操作中比较 CSRF Digest；错误/缺失 CSRF 不得刷新 idle TTL。
 5. Session 请求必须校验 Host 与配置 PublicOrigin；非安全方法必须有恰好一个匹配 Origin。登录也执行同等 Origin/Host 校验以防 Login CSRF。
-6. GET/HEAD/OPTIONS 不得执行任何业务状态变更；GET Session 引导的 CSRF 轮换是认证凭证状态变更，因此改为 POST 专用端点更合适：本契约将 Session 引导定义为 `POST /api/v1/owner/session/csrf`，并从 GET Session 响应中移除 Token 轮换。
+6. GET/HEAD/OPTIONS 不得执行任何业务状态变更。CSRF Token 恢复属于凭证状态变更，必须使用专用 POST 端点，不得借 GET 执行。
 7. `POST /api/v1/owner/session/csrf` 是唯一 CSRF 恢复例外：只接受有效 owner_session Cookie，必须严格校验恰好一个匹配的 Origin 和 Host，并通过 Platform 原子操作确认 Session 有效、替换 CSRF Digest。该端点不要求旧 CSRF Header（因为页面刷新后 Token 已丢失），但不得执行其他业务状态变更；其防跨站依据是强制 Origin/Host 校验与同源部署。返回 `{"schema_version":"1.0.0","csrf_token":"<csrf-token>"}`。新登录和 Session 轮换响应直接返回新 CSRF Token；页面刷新后 WebUI 使用此端点恢复内存 Token。该端点不得 Touch 后才验证 CSRF。
 
 ## 5. 错误、审计与隐私
@@ -127,7 +128,7 @@ Owner 初始化不提供 HTTP 路由。它只能通过受控本机/运维命令�
 
 ## 7. 路由认证矩阵
 
-- 本契约五个浏览器接口按表中身份执行；CSRF Token 恢复端点为 `POST /api/v1/owner/session/csrf`，身份为 owner_session。
+- 本契约六个浏览器接口按表中身份执行；CSRF Token 恢复端点为 `POST /api/v1/owner/session/csrf`，身份为 owner_session，且是唯一不要求旧 CSRF Header 的状态端点。
 - `/healthz` 保持 anonymous；`/readyz`、`/diagnostics` 保持 owner_bearer，除非各自独立契约明确改变。
 - 现有旧 Analysis/兼容管理路由继续按当前 owner_bearer 策略，不因启用 Session 自动放宽。
 - Researchflow 新业务路由由 SRV-CTR-001 定义；需要 WebUI 浏览器访问的用户用例必须明确声明 owner_session，并由领域 Owner 继续执行资源级授权。Server 不得把 owner_session 映射成 owner_bearer。
