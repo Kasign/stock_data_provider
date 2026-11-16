@@ -270,10 +270,10 @@ func TestMariaDBClaimAttemptLeaseAndFencing(t *testing.T) {
 	// Attempt and Stage must reference the same immutable output artifact.
 	mismatchedOutput := currentCommit
 	mismatchedOutput.StageOutput = &StageOutputCommit{
-		Envelope: currentCommit.StageOutput.Envelope,
-		RegistryVersion: currentCommit.StageOutput.RegistryVersion,
-		RegistryFingerprint: currentCommit.StageOutput.RegistryFingerprint,
-		PayloadSchemaRef: currentCommit.StageOutput.PayloadSchemaRef,
+		Envelope:                currentCommit.StageOutput.Envelope,
+		RegistryVersion:         currentCommit.StageOutput.RegistryVersion,
+		RegistryFingerprint:     currentCommit.StageOutput.RegistryFingerprint,
+		PayloadSchemaRef:        currentCommit.StageOutput.PayloadSchemaRef,
 		QualitySummarySchemaRef: currentCommit.StageOutput.QualitySummarySchemaRef,
 	}
 	mismatchedOutput.StageOutput.Envelope.StageRef = "different-stage"

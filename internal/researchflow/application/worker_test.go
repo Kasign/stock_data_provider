@@ -128,7 +128,7 @@ func newWorker(t *testing.T, store *workerStoreFake, result StageExecutionResult
 	registry, err := stageoutput.NewRegistry("1.0.0", []stageoutput.Entry{{
 		StageCode: "quant", OutputType: "trend", SchemaVersion: "1.0.0",
 		PayloadSchemaRef: "schema://quant/trend/1.0.0", QualitySummarySchemaRef: "schema://quality/trend/1.0.0",
-		PayloadValidator: stageoutput.ValidatorFunc(func(json.RawMessage) error { return nil }),
+		PayloadValidator:        stageoutput.ValidatorFunc(func(json.RawMessage) error { return nil }),
 		QualitySummaryValidator: stageoutput.ValidatorFunc(func(json.RawMessage) error { return nil }),
 	}})
 	if err != nil {
@@ -183,10 +183,12 @@ func TestWorkerExecuteClaimsExecutesAndCommits(t *testing.T) {
 	registry, err := stageoutput.NewRegistry("1.0.0", []stageoutput.Entry{{
 		StageCode: "quant", OutputType: "trend", SchemaVersion: "1.0.0",
 		PayloadSchemaRef: "schema://quant/trend/1.0.0", QualitySummarySchemaRef: "schema://quality/trend/1.0.0",
-		PayloadValidator: stageoutput.ValidatorFunc(func(json.RawMessage) error { return nil }),
+		PayloadValidator:        stageoutput.ValidatorFunc(func(json.RawMessage) error { return nil }),
 		QualitySummaryValidator: stageoutput.ValidatorFunc(func(json.RawMessage) error { return nil }),
 	}})
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	worker, err := NewWorkerWithStageOutputRegistry(store, executor, workerClockFake{}, WorkerConfig{
 		WorkerID: "worker-1", LeaseDuration: time.Minute, HeartbeatInterval: time.Second, MaxParallel: 2,
 	}, registry)
