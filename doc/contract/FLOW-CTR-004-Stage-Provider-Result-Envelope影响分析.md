@@ -117,4 +117,4 @@ Quant 侧 `internal/quant/registry` 及 `doc/quant/schema/` 已有部分 QNT-CTR
 - 当前 FLOW-CTR-004 仍为 `frozen`；本提案不修改登记簿状态。
 - 当前 Researchflow Stage 生产执行保持 `blocked`，不是 fail；现有状态机、Worker、Scheduler、MariaDB 模块验收不重复执行。
 - 目前最先可执行的下一项不是 Server 接线，而是**契约定点澄清与 Envelope/Registry 机器定义**。但其中质量枚举、coverage 分母和 Summary 身份/版本绑定需先得到正式口径；在决议前不写入 Schema/Golden。
-- Integration 本轮完成的是影响分析，不代表生产 Stage 进度已解锁。若要继续实施，应先授权/确认本提案第 5.1 节的契约定点决议；否则保持 blocked，不重复只读盘点。
+- Integration 本轮完成的是影响分析，不代表生产 Stage 进度已解锁。若要继续实施，应先授权/确认本提案第 5 节第 1 项的契约定点决议；否则保持 blocked，不重复只读盘点。
