@@ -172,3 +172,136 @@ func TestNewsAvailabilityPITResolverMariaDBIntegration(t *testing.T) {
 	}
 	assertAvailableAt(now, nil)
 }
+
+func TestAppendAvailabilityDecisionSerializesConcurrentWritersMariaDBIntegration(t *testing.T) {
+	dsn := os.Getenv("NEWS_MARIADB_TEST_DSN")
+	if dsn == "" {
+		t.Skip("set NEWS_MARIADB_TEST_DSN to run News availability decision integration")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	db, err := sql.Open("mysql", dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if err := db.PingContext(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := platformstorage.ApplyMigrations(ctx, db, "news", Migrations()); err != nil {
+		t.Fatalf("apply News migrations: %v", err)
+	}
+	repository, err := NewMySQLRepository(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
+	newsID := "availability-decision-news-" + suffix
+	sourceID := "availability-decision-source-" + suffix
+	observationID := "availability-decision-observation-" + suffix
+	versionID := "availability-decision-version-" + suffix
+	if _, err := db.ExecContext(ctx, `INSERT INTO news_items (news_id, origin_source_id) VALUES (?, ?)`, newsID, sourceID); err != nil {
+		t.Fatalf("insert News item: %v", err)
+	}
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	retentionUntil := now.Add(time.Hour)
+	if _, err := db.ExecContext(ctx, `INSERT INTO news_observations
+		(observation_id, idempotency_key, source_id, provider_code, candidate_json,
+		 observed_at, identity_status, news_id, retention_until)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		observationID, observationID+"-key", sourceID, "test-provider",
+		[]byte(`{"title":"decision append fixture"}`), now.Add(-time.Minute),
+		"matched", newsID, retentionUntil,
+	); err != nil {
+		t.Fatalf("insert Observation: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, `INSERT INTO news_item_versions
+		(version_id, news_id, version_no, fingerprint, title, content_json, observed_at, observation_id)
+		VALUES (?, ?, 1, ?, ?, ?, ?, ?)`,
+		versionID, newsID, strings.Repeat("b", 64), "decision append fixture",
+		[]byte(`{"title":"decision append fixture"}`), now.Add(-time.Minute), observationID,
+	); err != nil {
+		t.Fatalf("insert Version: %v", err)
+	}
+
+	recordedAt := now
+	makeFirst := func(id string) domain.AvailabilityDecision {
+		return domain.AvailabilityDecision{
+			ID: id, VersionID: versionID, Sequence: 1,
+			Status: domain.AvailabilityDecisionUnresolved,
+			ConsideredEvidenceIDs: []string{},
+			ReasonCode: "availability.review_pending",
+			ReviewRuleVersion: "review-v1",
+			RecordedAt: recordedAt,
+		}
+	}
+	start := make(chan struct{})
+	results := make(chan struct {
+		id  string
+		err error
+	}, 2)
+	ids := []string{"availability-decision-a-" + suffix, "availability-decision-b-" + suffix}
+	for _, id := range ids {
+		go func(id string) {
+			<-start
+			results <- struct {
+				id  string
+				err error
+			}{id: id, err: repository.AppendAvailabilityDecision(ctx, makeFirst(id))}
+		}(id)
+	}
+	close(start)
+
+	var winner string
+	successes := 0
+	conflicts := 0
+	for range ids {
+		result := <-results
+		switch {
+		case result.err == nil:
+			successes++
+			winner = result.id
+		case errors.Is(result.err, ErrAvailabilityDecisionSequenceConflict):
+			conflicts++
+		default:
+			t.Fatalf("concurrent append returned unexpected error: %v", result.err)
+		}
+	}
+	if successes != 1 || conflicts != 1 {
+		t.Fatalf("concurrent append successes=%d conflicts=%d, want 1 and 1", successes, conflicts)
+	}
+
+	wrongParent := makeFirst("availability-decision-wrong-parent-" + suffix)
+	wrongParent.Sequence = 2
+	wrongParent.SupersedesDecisionID = stringPointer("not-the-latest-decision")
+	if err := repository.AppendAvailabilityDecision(ctx, wrongParent); !errors.Is(err, ErrAvailabilityDecisionSequenceConflict) {
+		t.Fatalf("wrong predecessor error = %v, want sequence conflict", err)
+	}
+
+	next := domain.AvailabilityDecision{
+		ID: "availability-decision-next-" + suffix, VersionID: versionID, Sequence: 2,
+		Status: domain.AvailabilityDecisionUnresolved,
+		ConsideredEvidenceIDs: []string{},
+		ReasonCode: "availability.review_pending",
+		ReviewRuleVersion: "review-v1",
+		SupersedesDecisionID: &winner,
+		RecordedAt: recordedAt,
+	}
+	if err := repository.AppendAvailabilityDecision(ctx, next); err != nil {
+		t.Fatalf("append valid successor: %v", err)
+	}
+
+	var count int
+	var maxSequence uint64
+	if err := db.QueryRowContext(ctx, `SELECT COUNT(*), MAX(decision_seq)
+		FROM news_version_availability_decisions WHERE version_id = ?`, versionID).Scan(&count, &maxSequence); err != nil {
+		t.Fatal(err)
+	}
+	if count != 2 || maxSequence != 2 {
+		t.Fatalf("decision chain count=%d max_sequence=%d, want 2 and 2", count, maxSequence)
+	}
+}
+
+func stringPointer(value string) *string { return &value }
