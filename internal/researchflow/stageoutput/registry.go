@@ -155,8 +155,8 @@ type Envelope struct {
 	OutputType      string          `json:"output_type"`
 	SchemaVersion   string          `json:"schema_version"`
 	Payload         json.RawMessage `json:"payload"`
-	QualitySummary json.RawMessage `json:"quality_summary"`
-	DiagnosticRefs []string        `json:"diagnostic_refs"`
+	QualitySummary  json.RawMessage `json:"quality_summary"`
+	DiagnosticRefs  []string        `json:"diagnostic_refs"`
 	CompletedAt     time.Time       `json:"completed_at"`
 }
 
@@ -275,8 +275,8 @@ func consumeJSONValue(decoder *json.Decoder) error {
 		for decoder.More() {
 			keyToken, err := decoder.Token()
 			if err != nil {
-		return err
-	}
+				return err
+			}
 			key, ok := keyToken.(string)
 			if !ok {
 				return errors.New("object key is not a string")
@@ -286,8 +286,8 @@ func consumeJSONValue(decoder *json.Decoder) error {
 			}
 			seen[key] = struct{}{}
 			if err := consumeJSONValue(decoder); err != nil {
-		return err
-	}
+				return err
+			}
 		}
 		_, err = decoder.Token()
 		return err

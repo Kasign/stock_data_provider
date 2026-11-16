@@ -119,7 +119,7 @@ func TestRegistryRejectsDuplicateJSONKeysAndInvalidQualitySummary(t *testing.T) 
 func TestRegistryIsDeterministicAndRejectsDuplicateEntries(t *testing.T) {
 	one := Entry{
 		StageCode: "news.collect", OutputType: "news.collection", SchemaVersion: "1.0.0",
-		PayloadSchemaRef:        "schema://payload/1", QualitySummarySchemaRef: "schema://quality/1",
+		PayloadSchemaRef: "schema://payload/1", QualitySummarySchemaRef: "schema://quality/1",
 		PayloadValidator:        ValidatorFunc(func(json.RawMessage) error { return nil }),
 		QualitySummaryValidator: ValidatorFunc(func(json.RawMessage) error { return nil }),
 	}
