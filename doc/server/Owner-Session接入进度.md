@@ -105,6 +105,30 @@ Owner Session 默认关闭；启用时必须提供显式配置与经过目标硬
 
 **上一版“SRV-CTR-001 可能补充或另建 Server HTTP Auth CTR”的表述过于笼统；本节以当前登记簿和 DEC-017 为准。**
 
+## 代码已确定的 HTTP 接入约束
+
+进一步核对 `internal/server/security/session_service.go`、`session.go` 与 `config/session.go` 后，以下内容无需再从零设计：
+
+- 登录业务固定为单 Owner，内部 `LoginInput` 只有 Password、由可信入口解析的 SourceIP 和 RequestID；不存在用户名/邮箱字段。HTTP DTO 不应自行引入账号选择。
+- 登录密码上限已由 Service 校验为 1024 字节；空密码拒绝。HTTP 层仍需设置合理请求体上限并拒绝未知/重复 JSON 字段。
+- 登录来源 IP 必须由 Server 可信入口策略解析后传入；Lifecycle Service 明确不读取 `X-Forwarded-For`。当前配置尚未展示可信代理 CIDR 配置项，因此生产接入前仍须确定可信代理边界。
+- 登录成功返回内部 `SessionIssue`：HttpOnly Session Cookie + 明文 CSRF Token。HTTP 层必须将 Cookie 放入 Set-Cookie，并通过响应 DTO 将 CSRF Token 交给 Web；不能返回 Session Token。
+- 默认 CSRF Header 已在 Server 代码中定义为 `X-CSRF-Token`，配置项为 `OWNER_SESSION_CSRF_HEADER`。
+- 当前默认 Cookie Name 为 `__Secure-owner_session`，Path 为 `/api`；Public Origin 必须显式配置；HTTPS Origin 强制 Secure Cookie。
+- 登录限流配置已有默认值：账号失败阈值 5、IP 失败阈值 10；Window/Backoff 参数由配置结构提供。不能在 Handler 内另造一套限流。
+- Lifecycle 的 `ChangePassword` 当前只接受当前密码、新密码和 RequestID；成功后 CredentialVersion 更新使旧 Session 认证失效。HTTP 层应在调用前完成当前 Session 身份、Origin/Host 和 CSRF 校验。
+- `InitializeOwner` 是内部运维用例，不是浏览器 API；调用后必须从 Secret 来源清理初始 Secret，方法会清理传入字节切片。
+
+### 发现的真实协议缺口：页面刷新后的 CSRF 恢复
+
+登录和 Session 轮换会返回明文 CSRF Token，但 Platform SessionStore 只保存 CSRF Digest；当前 Server 没有“为已登录 Session 安全重新签发/恢复 CSRF Token”的独立用例。
+
+这会造成实际浏览器问题：CSRF Token 只保存在 JS 内存，页面刷新后内存丢失；仅靠 HttpOnly Session Cookie 无法恢复原始 CSRF Token。不能通过读取 Digest 还原 Token，也不能把 Token 改存 localStorage 来绕过。
+
+HTTP 契约必须明确安全恢复方案。当前可评估的最小方向是：提供一个严格同源、校验 Host/Origin、只接受有效 Owner Session Cookie 的 CSRF 引导操作，重新生成并绑定 CSRF Token 后返回给 Web；但该操作会改变 Session CSRF Digest，不能伪装成无副作用 GET，也必须在契约中明确其 CSRF 豁免边界、重放/并发行为和审计语义。现有 `RotateSession` 会同时轮换 Session Token，不应未经确认就把它当成普通页面刷新接口。
+
+此外，当前 `SessionAuthenticator` 在验证 CSRF 前调用 Platform `LookupAndTouch`，错误 CSRF 请求可能刷新 Idle TTL；该问题已有 Server README 记录，需 Platform 提供只读 Lookup 或原子校验/Touch 原语，Server 不复制 Redis 实现。
+
 ## 当前代码与测试证据
 
 Bootstrap 组合测试覆盖：
