@@ -469,3 +469,13 @@ Researchflow 已有 Scheduler、Worker、WorkerPool、Claim/Lease/Fencing、候�
 - P0 available_at 仍为 shelved，但不是停止调查。下一步明确为向交易所/官方信息服务运营方核实机器接口：确认事件时间字段、网站实际上线时间、15:30 集中披露行为、公告更正版本、时区精度、历史覆盖、授权和留存许可；以真实公告逐条核对时间顺序。只有满足 NEWS-CTR-001 全部准入条件并完成正式 DEC/版本升级后，才实施 V10、证据载体、PIT 与 B 组真实成功路径。
 - 参考官方材料：上交所指南 https://www.sse.com.cn/lawandrules/guide/stock/kcbxxpljg/c/c_20250425_10777769.shtml；上交所直通车说明 https://big5.sse.com.cn/site/cht/www.sse.com.cn/aboutus/mediacenter/hotandd/c/c_20150912_3988653.shtml；北交所指南 https://www.bse.cn/cxjg_list/200025676.html；深交所接口规范 https://www.szse.cn/www/marketServices/technicalservice/history/P020180328468171229352.pdf。
 - 本轮没有新增业务代码或测试，没有触发 CI。代码验收 SHA 仍为 d1b58b49fee809c5204fafe3409dc36da9615794 / Run #81 success；本轮文档提交不改变该代码验收证据。
+
+### 10.12 2026-11-16 上证信息官方公告文件 API 候选核实
+
+- 在 10.11 的交易所披露流程调查基础上，发现上证所信息网络有限公司（SSE InfoNet）有正式“公告文件下载接口服务”。其官方说明书列出沪市主板、科创板和深市上市公司公告；按天查询元数据，包含索引、证券代码、标题、分类、更新时间、下载地址，并支持 7×24 小时轮询。产品需申请试用/审核开通认证，正式使用需签约。
+- 官方价目表公开公告文件服务 6 万元人民币/年。对个人低频研究场景成本明显偏高；在拿到技术字段字典、试用样例和个人用途授权确认前，不购买、不接入生产。
+- 关键未知：元数据“更新时间”究竟是交易所确认发布、官网实际可访问、上证信息采集/入库，还是文件更新/供应商同步时间；其精度、时区、公告版本/更正关联和历史覆盖均未由公开产品说明书定义。字段名本身不能通过 NEWS-CTR-001 准入。
+- 官方材料：产品说明书 https://www.sseinfo.com/services/data/szjr/ggwjfw/c/10010710/files/5f5989f49fb142f380fb027bb9997179.pdf；价目表 https://www.sseinfo.com/services/charge/pricelist/c/10010718/files/6e4e8d001bbd4554a254aeac11ee0e50.pdf；申请指引 https://bsp.sseinfo.com/business/?id=1703679027550273537；产品入口 https://www.sseinfo.com/services/data/szjr/。公开咨询电话 4008888400（按键 2-5），邮箱 ywsun@sse.com.cn。
+- 北交所《交易支持平台数据接口规范（V2.1）》第十一章也定义公告文件发送日期/时间及 HQBSL4 最近一次接收时间；均属于交易支持/分发链路，不足以证明公众首次可获取时间。规范：https://www.bse.cn/uploads/6/file/public/202209/20220902201701_kas8vw9r25.pdf。
+- 当前判断：SSE InfoNet API 是迄今最有价值的官方 A 股候选，因为存在可申请的结构化公告 API 和更新时间字段，且覆盖沪深；但仍为 candidate/not_comparable，不是 verified。下一步应索取最新技术文档和原始响应样例，逐字段确认更新时间的产生事件、时区精度、公告版本绑定、授权留存及个人套餐，再决定是否进入 DEC 和实现。
+- P0 available_at 仍 shelved；没有新增业务代码/测试，没有触发 CI。代码验收 SHA 仍为 d1b58b49fee809c5204fafe3409dc36da9615794 / Run #81 success。文档提交不改变代码验收证据。
