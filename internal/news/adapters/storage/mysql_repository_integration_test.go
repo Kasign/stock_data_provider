@@ -2034,3 +2034,205 @@ func TestObservationRetentionPurgeIntegration(t *testing.T) {
 		t.Fatalf("concurrent purged total=%d, want %d", totalPurged, len(concurrent))
 	}
 }
+
+
+type availabilityEvidenceSourceCatalogStub struct {
+	registration app.SourceEndpointRegistration
+}
+
+func (s availabilityEvidenceSourceCatalogStub) LookupEndpoint(
+	_ context.Context, sourceID, endpointID string,
+) (app.SourceEndpointRegistration, error) {
+	if sourceID != s.registration.SourceID || endpointID != s.registration.EndpointID {
+		return app.SourceEndpointRegistration{}, app.ErrSourceEndpointNotFound
+	}
+	return s.registration, nil
+}
+
+func TestAvailabilityEvidenceWriteRequiresCurrentFieldPolicyMariaDBIntegration(t *testing.T) {
+	dsn := os.Getenv("NEWS_MARIADB_TEST_DSN")
+	if dsn == "" {
+		t.Skip("set NEWS_MARIADB_TEST_DSN to run News availability Evidence write integration")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	db, err := sql.Open("mysql", dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	db.SetMaxOpenConns(8)
+	defer db.Close()
+	if err := db.PingContext(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := platformstorage.ApplyMigrations(ctx, db, "news", Migrations()); err != nil {
+		t.Fatal(err)
+	}
+	repository, err := NewMySQLRepository(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
+	sourceID := "available-write-source-" + suffix
+	endpointID := "available-write-endpoint-" + suffix
+	sourceV1 := "available-write-source-v1-" + suffix
+	sourceV2 := "available-write-source-v2-" + suffix
+	newsIDs := []string{"available-write-news-a-" + suffix, "available-write-news-b-" + suffix}
+	observationIDs := []string{"available-write-observation-a-" + suffix, "available-write-observation-b-" + suffix}
+	versionIDs := []string{"available-write-version-a-" + suffix, "available-write-version-b-" + suffix}
+	defer func() {
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM news_version_availability_decisions WHERE version_id IN (?, ?)", versionIDs[0], versionIDs[1])
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM news_version_availability_evidence WHERE version_id IN (?, ?)", versionIDs[0], versionIDs[1])
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM news_item_versions WHERE version_id IN (?, ?)", versionIDs[0], versionIDs[1])
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM news_observations WHERE observation_id IN (?, ?)", observationIDs[0], observationIDs[1])
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM news_items WHERE news_id IN (?, ?)", newsIDs[0], newsIDs[1])
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM news_current_policy_versions WHERE policy_type = ? AND policy_ref = ?", domain.NewsPolicyTypeSource, sourceID)
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM news_policy_versions WHERE policy_type = ? AND policy_ref = ?", domain.NewsPolicyTypeSource, sourceID)
+	}()
+
+	publisher, err := app.NewPublishNewsPolicyVersion(repository)
+	if err != nil {
+		t.Fatal(err)
+	}
+	makePolicy := func(fields []string) []byte {
+		payload, marshalErr := json.Marshal(domain.SourcePolicy{
+			Status: AuthorizationApproved,
+			AllowedAccessMethods: []domain.AccessMethod{domain.AccessRSS},
+			AllowedPurposes: []domain.Purpose{domain.PurposeInternalPersonalResearch},
+			AllowedContentKinds: []domain.ContentKind{domain.ContentMetadata},
+			AllowedStorageModes: []domain.StorageMode{domain.StoragePersistentMetadata},
+			AllowedMetadataFields: fields,
+			MaxRetention: 2 * time.Hour,
+			EvidenceRef: "integration-source-policy-evidence",
+		})
+		if marshalErr != nil {
+			t.Fatal(marshalErr)
+		}
+		return payload
+	}
+	if err := publisher.Execute(ctx, domain.NewsPolicyTypeSource, sourceID, sourceV1, makePolicy([]string{"payload.publishTime"})); err != nil {
+		t.Fatalf("publish initial field policy: %v", err)
+	}
+
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	insertParents := func(index int, policyVersion string) (domain.Observation, domain.NewsItemVersion) {
+		t.Helper()
+		observedAt := now.Add(-time.Minute)
+		retentionUntil := now.Add(10 * time.Minute)
+		if _, execErr := db.ExecContext(ctx, "INSERT INTO news_items (news_id, origin_source_id) VALUES (?, ?)", newsIDs[index], sourceID); execErr != nil {
+			t.Fatalf("insert news item: %v", execErr)
+		}
+		observation := domain.Observation{
+			ID: observationIDs[index], IdempotencyKey: "available-write-idempotency-" + suffix + fmt.Sprint(index),
+			SourceID: sourceID, EndpointID: endpointID, SourcePolicyVersionID: policyVersion,
+			PolicyEvaluatedAt: now, Candidate: domain.Candidate{SourceItemID: "source-item"},
+			ObservedAt: observedAt, RetentionUntil: retentionUntil,
+			IdentityStatus: domain.ObservationMatched, NewsID: newsIDs[index],
+		}
+		candidateJSON, marshalErr := json.Marshal(observation.Candidate)
+		if marshalErr != nil {
+			t.Fatal(marshalErr)
+		}
+		if _, execErr := db.ExecContext(ctx, `INSERT INTO news_observations
+			(observation_id, idempotency_key, source_id, provider_code, query_dimension, endpoint_id,
+			 source_policy_version_id, endpoint_policy_version_id, provider_output_policy_ref,
+			 provider_output_policy_version_id, policy_evaluated_at, candidate_json, observed_at,
+			 retention_until, payload_purged_at, identity_status, news_id, reason_code)
+			VALUES (?, ?, ?, '', '', ?, ?, '', '', '', ?, ?, ?, ?, NULL, ?, ?, '')`,
+			observation.ID, observation.IdempotencyKey, observation.SourceID, observation.EndpointID,
+			observation.SourcePolicyVersionID, observation.PolicyEvaluatedAt, candidateJSON,
+			observation.ObservedAt, observation.RetentionUntil, string(observation.IdentityStatus), observation.NewsID,
+		); execErr != nil {
+			t.Fatalf("insert observation: %v", execErr)
+		}
+		version := domain.NewsItemVersion{
+			ID: versionIDs[index], NewsID: newsIDs[index], VersionNo: 1,
+			Fingerprint: strings.Repeat("a", 64), Title: "availability write integration",
+			Content: domain.ContentLayers{}, ObservedAt: observedAt, ObservationID: observation.ID,
+		}
+		contentJSON, marshalErr := json.Marshal(version.Content)
+		if marshalErr != nil {
+			t.Fatal(marshalErr)
+		}
+		if _, execErr := db.ExecContext(ctx, `INSERT INTO news_item_versions
+			(version_id, news_id, version_no, fingerprint, title, content_json, observed_at, observation_id)
+			VALUES (?, ?, 1, ?, ?, ?, ?, ?)`,
+			version.ID, version.NewsID, version.Fingerprint, version.Title, contentJSON,
+			version.ObservedAt, version.ObservationID,
+		); execErr != nil {
+			t.Fatalf("insert version: %v", execErr)
+		}
+		return observation, version
+	}
+
+	observationA, versionA := insertParents(0, sourceV1)
+	registration := app.SourceEndpointRegistration{
+		SourceID: sourceID, EndpointID: endpointID, Enabled: true, AccessMethod: domain.AccessRSS,
+		SourcePolicyVersionID: sourceV1,
+	}
+	usecase, err := app.NewRecordAvailabilityEvidence(repository,
+		availabilityEvidenceSourceCatalogStub{registration: registration}, nil,
+		func() string { return "available-write-evidence-" + suffix })
+	if err != nil {
+		t.Fatal(err)
+	}
+	candidate := domain.ParseAvailabilityTime(observationA.ObservedAt.Format(time.RFC3339))
+	evidence, err := usecase.Execute(ctx, app.RecordAvailabilityEvidenceRequest{
+		Observation: observationA, Version: versionA, FieldPath: "payload.publishTime",
+		Candidate: candidate, ParserVersion: "integration-parser/1",
+	})
+	if err != nil {
+		t.Fatalf("append authorized Evidence: %v", err)
+	}
+	if evidence.RetentionUntil.After(observationA.RetentionUntil) {
+		t.Fatalf("Evidence retention exceeds parent Observation: evidence=%s observation=%s",
+			evidence.RetentionUntil, observationA.RetentionUntil)
+	}
+	var storedFieldPath, storedRaw string
+	var storedRetention time.Time
+	if err := db.QueryRowContext(ctx, `SELECT field_path, raw_value, retention_until
+		FROM news_version_availability_evidence WHERE evidence_id = ?`, evidence.ID,
+	).Scan(&storedFieldPath, &storedRaw, &storedRetention); err != nil {
+		t.Fatalf("read appended Evidence: %v", err)
+	}
+	if storedFieldPath != "payload.publishTime" || storedRaw != candidate.RawValue ||
+		storedRetention.After(observationA.RetentionUntil) {
+		t.Fatalf("stored Evidence mismatch: field=%q raw=%q retention=%s", storedFieldPath, storedRaw, storedRetention)
+	}
+
+	if err := publisher.Execute(ctx, domain.NewsPolicyTypeSource, sourceID, sourceV2, makePolicy([]string{"payload.title"})); err != nil {
+		t.Fatalf("publish tightened field policy: %v", err)
+	}
+	if _, err := usecase.Execute(ctx, app.RecordAvailabilityEvidenceRequest{
+		Observation: observationA, Version: versionA, FieldPath: "payload.publishTime",
+		Candidate: candidate, ParserVersion: "integration-parser/1",
+	}); !errors.Is(err, app.ErrAvailabilityEvidencePolicyUnavailable) {
+		t.Fatalf("stale Observation policy error = %v, want policy unavailable", err)
+	}
+
+	observationB, versionB := insertParents(1, sourceV2)
+	registration.SourcePolicyVersionID = sourceV2
+	deniedUsecase, err := app.NewRecordAvailabilityEvidence(repository,
+		availabilityEvidenceSourceCatalogStub{registration: registration}, nil,
+		func() string { return "must-not-write-" + suffix })
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = deniedUsecase.Execute(ctx, app.RecordAvailabilityEvidenceRequest{
+		Observation: observationB, Version: versionB, FieldPath: "payload.publishTime",
+		Candidate: domain.ParseAvailabilityTime(observationB.ObservedAt.Format(time.RFC3339)),
+		ParserVersion: "integration-parser/1",
+	})
+	if !errors.Is(err, app.ErrAvailabilityEvidencePolicyDenied) {
+		t.Fatalf("field not listed in current policy error = %v, want policy denied", err)
+	}
+	var deniedCount int
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM news_version_availability_evidence WHERE version_id = ?", versionB.ID).Scan(&deniedCount); err != nil {
+		t.Fatal(err)
+	}
+	if deniedCount != 0 {
+		t.Fatalf("unauthorized field Evidence rows = %d, want 0", deniedCount)
+	}
+}
