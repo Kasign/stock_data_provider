@@ -733,6 +733,8 @@ var requiredNewsSchemaTables = []string{
 	"news_evidence_snapshots",
 	"news_policy_versions",
 	"news_current_policy_versions",
+	"news_version_availability_evidence",
+	"news_version_availability_decisions",
 }
 
 // Ping verifies the borrowed SQL pool without taking ownership of it.

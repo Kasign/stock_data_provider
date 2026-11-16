@@ -805,3 +805,14 @@ Researchflow 已有 Scheduler、Worker、WorkerPool、Claim/Lease/Fencing、候�
 - 同一 Run 的根模块 vet/test、News/Research 跨模块 MariaDB 逐用例、Worker Bootstrap MariaDB/Redis、go-core vet/test、Compose 和 WebUI 检查均 success。
 - 已按日志 diff 修复格式；Run #85 不得标记通过，等待新 SHA 的全量 CI。
 - CI 使用的 MariaDB 镜像为 `mariadb:11.4`，日志实际版本 `11.4.13-MariaDB`。后续 Migration DDL 测试可以使用该已知版本；生产数据库版本仍需核实。
+
+
+### 2026-11-16 News V10 Evidence / Decision 存储结构首批落地
+
+- 在 Migration V9 后新增 V10；V1～V9 保持不变。
+- V10 新增 `news_version_availability_evidence` 和 `news_version_availability_decisions` 两张追加式表。
+- Evidence 通过复合外键约束 `version_id + news_id` 与 `observation_id + news_id`，避免跨 News 主体错绑；Decision 的 selected Evidence 和前序 Decision 使用同版本复合外键；唯一后继约束避免决策链分叉。
+- 候选业务时间为 `DATETIME(0)` 秒级；系统观察、记录和 retention 使用 `DATETIME(6)`。
+- `requiredNewsSchemaTables` 与 Migration 静态测试、MariaDB 集成迁移测试已同步到 V10。
+- Integration CI 的 MariaDB 服务是 11.4，Run #85 日志实际版本 11.4.13。V10 DDL 必须在后续精确 SHA CI 中实际执行成功，不能仅凭静态测试关闭。
+- 本轮只建立 schema，不新增 Provider 映射、不写 Evidence/Decision 记录、不改现有 PIT 输出；字段级授权与来源准入继续 fail-closed。

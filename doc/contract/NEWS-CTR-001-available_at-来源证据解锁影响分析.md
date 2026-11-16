@@ -1050,3 +1050,12 @@ Integration CI Run 43810902921（#85）对提交 `ea79dc5503f36280af2b944d3557fd
 - 唯一失败项是新增 `internal/research/adapters/news/evidence_test.go` 的 gofmt；不是编译或测试失败。
 - 已按 CI 输出修正格式，修复提交的精确 SHA 与后续 CI 结果另行记录。
 - CI 服务容器明确为 MariaDB `11.4.13`；后续新增 Migration 可在同一 Integration CI 服务版本上执行真实 DDL 测试。生产部署数据库版本仍需独立核实。
+
+
+### 2026-11-16 V10 DDL 实施进度
+
+- CI 工作流 `.github/workflows/integration-ci.yml` 已明确使用 `mariadb:11.4`；Run #85 服务日志实测版本为 `11.4.13-MariaDB`。此前“CI 未知目标版本”的记录已修正：CI 验收目标明确，线上生产数据库版本仍需独立核实。
+- V10 首批 DDL 已按两表结构基线建立：Evidence 绑定同一 `news_id` 下的精确 Version 与 Observation；Decision 使用版本内递增序号、selected Evidence 复合外键和单后继约束。
+- `candidate_available_at_utc` 使用 `DATETIME(0)`；Observation/recorded/retention 系统时间沿用 `DATETIME(6)`。Evidence 必须具有明确 retention；清理时保留 tombstone。
+- V10 目前只建立存储结构，不代表已有字段级授权或来源准入；没有获准来源时不产生 Evidence 行或 verified Decision。
+- 新增 V10 DDL 的真实 MariaDB 11.4 执行结果以本提交精确 SHA 的 Integration CI 为准。
