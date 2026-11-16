@@ -819,3 +819,35 @@ Evidence 表最小必要字段调整为：
 - [ ] 确认 NEWS-CTR-002 对两种 ContentKind 的读取授权适用范围和撤销时的清理义务。
 - [ ] 取得具体 A 股来源的授权文本，确认个人用途、字段级持久化和既有数据留存范围。
 - [ ] 完成以上契约与来源准入前，不修改 Policy Go 枚举/评估器、Migration、Evidence Repository、Provider 或 PIT SQL。
+
+## 2026-11-16 最小可用结构复核（优先于前述两表提案）
+
+项目负责人要求避免把当前字段交付扩展为通用证据治理工程：先给出可落地的最小结构；真实数据源若暂时缺失，作为独立接入阻塞处理。本节调整此前两张追加式表、双 ContentKind 和完整决策事件模型的设计方向。此前内容保留为历史评审材料，不再作为 MVP 实施基线。
+
+### 最小结构建议
+
+复用现有 `news_item_versions` 与其 `observation_id` 外键，不新增 Evidence / Decision 两张表：
+
+| 字段 | 落点 | 含义 |
+|---|---|---|
+| `available_at` | `news_item_versions` | 可验证的首次公开可获取时间；NULL 表示当前版本没有合格证据 |
+| `available_at_raw` | `news_item_versions` | 来源字段的原始时间文本，保留原始偏移/时区表达 |
+| `available_at_field_path` | `news_item_versions` | 来源响应中的字段路径，便于定位解析来源 |
+
+来源身份、Endpoint、Provider 和策略版本已由该 Version 关联的 `news_observations` 保存，不重复复制。`observation_id` 已将版本绑定到产生该版本的观测。原始值、字段路径与规范化时间随不可变 Version 保存；不保存完整 Provider 原始响应，不增加通用 RawResponse 系统。
+
+### 最小规则
+
+1. `available_at` 仅在来源字段语义经过确认、值可解析且含明确时区、版本归属明确时写入；否则保持 NULL。
+2. 业务精度按秒；数据库可沿用 News 现有 `DATETIME(6)`，写入前要求小数秒为零，不改变 `observed_at` / `system_as_of` 精度。
+3. `available_at_raw` 保留来源原文，不从规范化值反推；`available_at_field_path` 必须是实际 Provider 响应字段路径。
+4. 缺失、解析失败、时区不明或来源语义未确认时，不写入 `available_at`；不新增状态表。冲突时不选值，保持 NULL 并记录现有诊断/错误证据。
+5. PIT 只消费非 NULL 且不晚于 `system_as_of` 的 `available_at`。Research 现有字段和 Adapter 已有 fail-closed 校验可复用。
+6. 不新增 ContentKind，不实现 grandfather，不新增决策事件、冲突状态机或通用授权框架。字段持久化仍必须服从现有 Observation 所绑定的授权策略；具体来源授权不明确时，该来源不接入。
+
+### 契约与实施边界
+
+- News DTO 已包含 nullable `available_at`，Research 存储也已有 `available_at`；若保持现有字段语义和 JSON 表示，不因“有值”本身升级整个 NEWS-CTR-001 Schema 主版本。需在现有契约中补充字段来源/秒级精度约束及相应测试；只有确实改变冻结 Schema 结构或公共语义时才启动版本升级。
+- 本提案是结构基线，不代表当前已找到合格 A 股来源，也不授权立即生成非空值。Migration / Provider / PIT SQL 实施仍需至少有一个真实来源字段通过语义、时区、版本绑定和个人用途授权核验。
+- 当前已接入搜索 Provider 的 `published_date`、RSS/Atom 发布时间、抓取时间仍不合格；不得映射。
+- 暂不执行代码变更。本轮只将后续实现范围收缩到上述最小结构；来源寻找与准入作为独立下一任务。
