@@ -505,3 +505,21 @@ Researchflow 已有 Scheduler、Worker、WorkerPool、Claim/Lease/Fencing、候�
 - 责任边界：Researchflow 负责 Envelope/Output Registry/通用 Validator/Stage 执行门禁；各领域模块负责自己的 Stage Code、Payload Schema/Golden、质量语义和真实 Provider；Server 负责按冻结版本装配 Registry、可信 CallerRef 与生产 Executor，不得在 Server 重算领域逻辑。
 - 下一步顺序与门禁见提案第 5 节。先完成正式契约决策/机器 Schema 和注册表，再接入各模块生产 Facade/Provider，最后做真实 MariaDB 跨模块端到端；不能先造空壳 Executor 或猜测质量枚举/coverage 分母。
 - 本轮没有 Go 代码、测试、Workflow、冻结契约、Schema 或 Golden 变更；文档提交不触发 CI，不更新最近代码验收 SHA。当前最近代码验收仍为 `d1b58b49fee809c5204fafe3409dc36da9615794` / Run [43790923451](https://github.com/Kasign/stock_data_provider/actions/runs/43790923451)（#81）。
+
+
+### 10.15 2026-11-16 新闻 Provider 时间字段映射与真实样本核验边界
+
+- 开始前核对 `integration` HEAD：`9a37aa6a3646471769bada057419619cc1ebc67d`；本轮只在 `integration` 工作，未切换分支。
+- 按项目负责人确认的方向，复核 News 搜索 Provider、MarketData 东方财富公告 Adapter、对应测试夹具和字段文档。新增规范章节《新闻Provider接入与诊断规范.md》第 16 节，记录逐 Provider 原始字段路径、现有解析行为、时区/日期边界、固定样本证据和真实数据缺口。
+- 当前代码事实：
+  - Bocha 使用 `data.webPages.value[].datePublished`；Tavily 使用 `results[].published_date`；Brave 仅将 `published_date` 作为发布时间候选，明确不使用 `page_age`；SearXNG 依次读取 `publishedDate/published_date/published_at`。
+  - News 候选保留 `PublishedAtRaw`；公共标准化当前只解析带明确时区的 RFC3339Nano、RFC1123Z、RFC822Z。日期级或无时区值不推断为精确时间。
+  - 东方财富公告 Adapter 解析 `display_time`，按 Asia/Shanghai 处理无偏移的本地时间；`eiTime`、`sort_date`、`notice_date` 仅保留，不作为自动回退。纯日期不会变成零点时间。
+- 重要的证据限制：
+  - 仓库内东方财富样本来自 httptest 固定夹具，不是真实上游响应。夹具里 `display_time` 与 `eiTime` 相同、`sort_date` 晚一分钟，只能证明测试输入与解析行为，不能证明生产字段语义或真实冲突率。
+  - News `TestLiveProviderProbe` 默认跳过，只有 `NEWS_LIVE_PROBE=1` 且实际 Provider 配置/凭证齐备才执行；当前测试只记录候选数量和耗时，没有时间字段覆盖率统计。
+  - 本轮尝试通过公开文档/网页获取东方财富 `np-anotice-stock` 原始 JSON，网页读取端点不可访问；没有取得可审计的实时响应。因此 `display_time/eiTime/sort_date` 的真实存在率、非空率、解析率、精度分布和冲突率均记为 `not_comparable`，不能拿测试夹具冒充实测。
+- 外部定义复核：东方财富 EMQuant 官方文档说明 `datetime` 是展示时间（公告可能仅展示日期，盘后公告可能显示为下一交易日），`eitime` 是生产时间且只含日期；这足以说明不能把两者直接当成首次公众可获取时间，但不等于已完成当前 HTTP Endpoint 的字段语义验证。SearXNG 官方 Result 文档将 `publishedDate` 定义为 datetime；Bocha 文档确认 `datePublished` 字段存在，但当前未取得足以冻结其格式的完整规范。
+- 本轮结论：现有 Provider 已有多种原始时间字段和部分标准化能力，但尚无逐字段溯源持久化，也没有真实在线样本覆盖率/冲突率证据。所有搜索/聚合 Provider 仍不得作为 NEWS-CTR-001 `available_at` 来源；不新增 `available_at_estimate`，不新增字段/表，不改 PIT SQL，不启用 B 组成功路径。
+- 后续明确任务：在不改变业务语义的前提下，给现有受控只读 Live Probe 增加脱敏聚合时间统计（raw_present、parsed、date_only、unparseable、future、timezone/format 分类），默认仍 skipped、不记录原始时间/标题/凭证/正文；用固定样本测试统计逻辑。取得真实响应后再评估是否需要 Provider-specific parser 或字段溯源实现。若要把时间证据用于新的业务字段或 PIT 边界，必须先走契约决策。
+- 本轮仅新增文档，没有 Go 代码、测试、Schema、Golden、Migration 或 Workflow 变更，不触发 CI。文档提交：`b4ee08f996a48dd69215f3ff5c111639ba39a540`；最近代码验收仍为 `d1b58b49fee809c5204fafe3409dc36da9615794` / Run [43790923451](https://github.com/Kasign/stock_data_provider/actions/runs/43790923451)（#81），不能把本次文档 HEAD 描述为新代码 CI 通过。
