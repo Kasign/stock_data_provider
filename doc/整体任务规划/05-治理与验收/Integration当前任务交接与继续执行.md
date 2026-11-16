@@ -523,3 +523,12 @@ Researchflow 已有 Scheduler、Worker、WorkerPool、Claim/Lease/Fencing、候�
 - 本轮结论：现有 Provider 已有多种原始时间字段和部分标准化能力，但尚无逐字段溯源持久化，也没有真实在线样本覆盖率/冲突率证据。所有搜索/聚合 Provider 仍不得作为 NEWS-CTR-001 `available_at` 来源；不新增 `available_at_estimate`，不新增字段/表，不改 PIT SQL，不启用 B 组成功路径。
 - 后续明确任务：在不改变业务语义的前提下，给现有受控只读 Live Probe 增加脱敏聚合时间统计（raw_present、parsed、date_only、unparseable、future、timezone/format 分类），默认仍 skipped、不记录原始时间/标题/凭证/正文；用固定样本测试统计逻辑。取得真实响应后再评估是否需要 Provider-specific parser 或字段溯源实现。若要把时间证据用于新的业务字段或 PIT 边界，必须先走契约决策。
 - 本轮仅新增文档，没有 Go 代码、测试、Schema、Golden、Migration 或 Workflow 变更，不触发 CI。文档提交：`b4ee08f996a48dd69215f3ff5c111639ba39a540`；最近代码验收仍为 `d1b58b49fee809c5204fafe3409dc36da9615794` / Run [43790923451](https://github.com/Kasign/stock_data_provider/actions/runs/43790923451)（#81），不能把本次文档 HEAD 描述为新代码 CI 通过。
+
+
+### 10.16 2026-11-16 News Live Probe 发布时间字段聚合统计
+
+- 在 10.15 已明确的真实样本缺口基础上，为现有可选、只读的 `TestLiveProviderProbe` 增加发布时间聚合统计，不改变 Provider 请求、候选入库、业务字段或 NEWS-CTR-001 语义。
+- 每个 Provider 的 Live Probe 现在额外输出：候选总数、原始时间字段非空/缺失数、按现有 Domain 解析器可解析数、仅日期数、无时区本地日期时间数、未知格式不可解析数、明确时区数，以及超过观察时间 5 分钟的未来时间数。
+- 日志只输出聚合计数和 Provider Code；不输出原始时间、标题、URL、摘要、响应正文、凭证或 Header。默认仍由 `NEWS_LIVE_PROBE` 控制，未启用时测试继续 `skipped`，不在普通 CI 中触发外网请求。
+- 新增固定样本单测，覆盖 RFC3339 +08:00、RFC1123Z、日期级、无时区本地日期时间、不可解析值、未来时间和缺失值；统计函数只返回聚合结果。
+- 本项不新增生产 DTO 字段、DB 列/表、Migration、Schema、Golden 或 PIT SQL。它只提供后续真实在线探测时的低风险数据质量观测；不能把搜索 Provider 发布时间升级为 `available_at`。

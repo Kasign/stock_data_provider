@@ -63,7 +63,119 @@ func TestLiveProviderProbe(t *testing.T) {
 				}
 				t.Fatalf("live Provider probe failed: provider=%s duration=%s", provider.Code(), duration)
 			}
+			stats := summarizePublicationTimes(candidates, time.Now().UTC())
 			t.Logf("live Provider probe responded: provider=%s candidate_count=%d duration=%s", provider.Code(), len(candidates), duration)
+			t.Logf("live Provider publication-time stats: provider=%s total=%d raw_present=%d raw_missing=%d parsed=%d date_only=%d local_datetime_without_timezone=%d unparseable=%d explicit_timezone=%d future_over_5m=%d",
+				provider.Code(), stats.Total, stats.RawPresent, stats.RawMissing, stats.Parsed, stats.DateOnly,
+				stats.LocalDateTimeWithoutTimezone, stats.Unparseable, stats.ExplicitTimezone, stats.FutureOver5m)
 		})
+	}
+}
+
+
+type publicationTimeStats struct {
+	Total                          int
+	RawPresent                     int
+	RawMissing                     int
+	Parsed                         int
+	DateOnly                       int
+	LocalDateTimeWithoutTimezone   int
+	Unparseable                    int
+	ExplicitTimezone               int
+	FutureOver5m                   int
+}
+
+// summarizePublicationTimes only returns aggregate counts. It never emits raw
+// timestamps, titles, URLs, snippets, credentials, or response bodies.
+func summarizePublicationTimes(candidates []domain.Candidate, observedAt time.Time) publicationTimeStats {
+	stats := publicationTimeStats{Total: len(candidates)}
+	if observedAt.IsZero() {
+		observedAt = time.Now().UTC()
+	}
+	observedAt = observedAt.UTC()
+
+	for _, candidate := range candidates {
+		raw := strings.TrimSpace(candidate.PublishedAtRaw)
+		if raw == "" {
+			stats.RawMissing++
+			continue
+		}
+		stats.RawPresent++
+
+		if isPublicationDateOnly(raw) {
+			stats.DateOnly++
+		} else if hasExplicitPublicationTimezone(raw) {
+			stats.ExplicitTimezone++
+		} else if isLocalPublicationDateTime(raw) {
+			stats.LocalDateTimeWithoutTimezone++
+		}
+
+		normalized := domain.NormalizeCandidate(candidate, observedAt, candidate.QueryDimension)
+		if normalized.PublishedAt == nil {
+			if !isPublicationDateOnly(raw) && !isLocalPublicationDateTime(raw) {
+				stats.Unparseable++
+			}
+			continue
+		}
+		stats.Parsed++
+		if normalized.PublishedAt.After(observedAt.Add(5 * time.Minute)) {
+			stats.FutureOver5m++
+		}
+	}
+	return stats
+}
+
+func isPublicationDateOnly(raw string) bool {
+	for _, layout := range []string{"2006-01-02", "2006/01/02"} {
+		parsed, err := time.Parse(layout, raw)
+		if err == nil && parsed.Format(layout) == raw {
+			return true
+		}
+	}
+	return false
+}
+
+func hasExplicitPublicationTimezone(raw string) bool {
+	for _, layout := range []string{time.RFC3339Nano, time.RFC1123Z, time.RFC822Z} {
+		if _, err := time.Parse(layout, raw); err == nil {
+			return true
+		}
+	}
+	return false
+}
+
+func isLocalPublicationDateTime(raw string) bool {
+	for _, layout := range []string{
+		"2006-01-02 15:04:05",
+		"2006-01-02T15:04:05",
+		"2006-01-02 15:04",
+		"2006/01/02 15:04:05",
+	} {
+		if _, err := time.Parse(layout, raw); err == nil {
+			return true
+		}
+	}
+	return false
+}
+
+func TestSummarizePublicationTimesUsesOnlyAggregateCounts(t *testing.T) {
+	observedAt := time.Date(2026, 11, 16, 10, 0, 0, 0, time.UTC)
+	candidates := []domain.Candidate{
+		{PublishedAtRaw: "2026-11-16T10:30:00+08:00"},
+		{PublishedAtRaw: "Mon, 16 Nov 2026 10:30:00 +0800"},
+		{PublishedAtRaw: "2026-11-16"},
+		{PublishedAtRaw: "2026-11-16 10:30:00"},
+		{PublishedAtRaw: "not-a-timestamp"},
+		{PublishedAtRaw: "2026-11-16T10:06:00Z"},
+		{},
+	}
+
+	got := summarizePublicationTimes(candidates, observedAt)
+	want := publicationTimeStats{
+		Total: 7, RawPresent: 6, RawMissing: 1, Parsed: 3, DateOnly: 1,
+		LocalDateTimeWithoutTimezone: 1, Unparseable: 1, ExplicitTimezone: 3, FutureOver5m: 1,
+	}
+	if got != want {
+		t.Fatalf("publication-time stats=%+v want %+v", got, want)
 	}
 }
