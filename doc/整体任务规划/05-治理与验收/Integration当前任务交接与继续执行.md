@@ -1069,3 +1069,6 @@ Researchflow 已有 Scheduler、Worker、WorkerPool、Claim/Lease/Fencing、候�
 
 
 - Server Stage 组合 CI Run `43847107485` 对 SHA `b6d5b2e9b1f10738c19623ebe14d060cab2dcf93`：根模块全量 Go 测试（含新增 News Stage / Server Bootstrap 测试）、News/Research 跨模块测试、Worker Bootstrap MariaDB/Redis、go-core vet/test、Compose、WebUI 测试和镜像构建全部通过；唯一失败为新增两个 Go 文件的 gofmt 格式检查。已按 CI diff 修正纯格式问题，等待下一 SHA 验收；该 Run 不作为通过证据。
+
+
+- 第二轮 Server 组合 CI Run `43847712560`：所有代码、MariaDB/Redis、跨模块、WebUI、Compose 和镜像构建检查通过；仅 gofmt 检查指出测试文件中第二处 StageExecutionRequest 字段对齐。已统一修正两处字段对齐，等待最终验收。

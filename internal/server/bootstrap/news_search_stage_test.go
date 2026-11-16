@@ -190,7 +190,7 @@ func newNewsSearchExecutor(providers newsapp.ProviderSet) newsSearchStageExecuto
 func executeNewsStage(t *testing.T, executor newsSearchStageExecutor, parameters string) researchflowapplication.StageExecutionResult {
 	t.Helper()
 	result, err := executor.ExecuteStage(context.Background(), researchflowapplication.StageExecutionRequest{
-		Stage: researchflowdomain.Stage{Code: newsstage.SearchCandidatesStageCode},
+		Stage:      researchflowdomain.Stage{Code: newsstage.SearchCandidatesStageCode},
 		Parameters: json.RawMessage(parameters),
 	})
 	if err != nil {
