@@ -1056,3 +1056,13 @@ Researchflow 已有 Scheduler、Worker、WorkerPool、Claim/Lease/Fencing、候�
 
 
 - 首轮实现 CI：Run [43844764284](https://github.com/Kasign/stock_data_provider/actions/runs/43844764284)，精确 SHA `5737f7f8e3e52eb40b18ad877eae9b2c42762066`。全仓 Go vet、News/Research 跨模块 MariaDB、Worker Bootstrap MariaDB/Redis、go-core、Compose、WebUI 均通过；全量 Go test 唯一失败为 Stage 参数解码测试，原因是直接将无 JSON tag 的领域 `SearchRequest` 用于小写 JSON 字段解码；Go 格式检查也只指出新增 Stage 文件的格式差异。已改为 News-owned JSON 参数 DTO 并完成格式修正；该 Run 保持 failure，不作为验收通过证据，等待修复 SHA 的新 CI。
+
+
+### 2026-11-16 News Stage Server 组合与状态映射
+
+- Server Bootstrap 新增 `newNewsSearchStageComposition`：根据 News 配置决定是否创建 Platform HTTP Client；配置 Provider 时通过既有 `NewPlatformProviderSet` 装配 Bocha/Tavily/Brave/SearXNG，不复制 HTTP Client 或 Provider 协议；未配置 Provider 时使用空 ProviderSet，不创建 HTTP Client。
+- Server 侧 `newsSearchStageExecutor` 将 News 搜索状态映射为 Researchflow 执行状态：success/empty → succeeded；partial → degraded；全部失败且存在 retryable Outcome → retry_wait（仍受模板 RetryPolicy reason-code allowlist 控制）；skipped / 不可重试失败 / 参数错误 → failed。没有使用 Researchflow 不支持的 StageSkipped。
+- Registry 1.0.0 注册 `news.search_candidates` 的 Payload/QualitySummary 1.0.0 精确 Schema Ref 和 News-owned Validator；新增 Server 组合、状态映射、Registry Envelope 精确校验测试。
+- 重要边界：当前 `Run` 尚未接入生产 Researchflow Worker 生命周期，本轮只提供可测试的组合工厂与 StageExecutor，不虚构 Worker 消费链，不创建 Workflow Template。后续必须在 Worker 的真实多模块 Executor 装配点接入该 factory，并保证同一 Registry Version 与持久化 Template 一致。
+- 已识别诊断持久化缺口：Worker 只为 succeeded/degraded Stage 构造 StageOutput Envelope；当所有 Provider 失败时，Stage Executor 只能提交稳定 reason code，ProviderOutcome 的逐 Provider 细节不会持久化。不要通过伪造成功/降级输出规避；应在 Fault/diagnostic 持久化契约接入后补齐失败详情。
+- 本阶段不触碰 Research Evidence Import、available_at、Quant、Notification；不启动空壳 Worker 生命周期。
