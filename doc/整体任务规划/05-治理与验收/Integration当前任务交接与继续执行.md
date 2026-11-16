@@ -631,3 +631,14 @@ Researchflow 已有 Scheduler、Worker、WorkerPool、Claim/Lease/Fencing、候�
 - Research 纳秒 `system_as_of` 传入 News、而 News Snapshot 现有数据库边界为微秒的转换仍是独立待评审问题，不得因 available_at 采用秒级而降低系统 cutoff 精度。
 - 本补充仅同步评审证据，没有修改 Schema / Golden / Adapter / Migration / PIT SQL。
 
+
+
+### 10.25 2026-11-16 available_at 字段级授权与策略生命周期评审
+
+- 开始前确认 `integration` 与 `d28eda3df2fcdc5c9c26e9cac639bb9c71c394c6` 完全一致（compare status=identical，ahead/behind=0）；本轮只更新契约/任务/交接文档。
+- 复核 `internal/news/domain/policy.go`：现有 ContentKind 为 metadata/title/snippet/abstract/full_text/attachment；StorageMode 为 none/transient/persistent_metadata/persistent_excerpt/persistent_full_text。当前 `contentCompatibleWithStorage` 的 persistent_metadata 仅允许 metadata/title，直接在策略配置写新字符串并不能获得有效授权。
+- 形成最小提案：新增 `source_time_evidence` 与 `derived_availability_time` 两个独立 ContentKind；暂不新增 StorageMode，复用 none/transient/persistent_metadata。两个 ContentKind 分别经 Source、Endpoint、Provider Output Policy 授权交集，分别计算留存期限；不得继承 metadata 许可。
+- 复核当前策略行为：ExpiresAt 到期即不 active；revoked/pending 状态拒绝。策略模型没有 grandfather 范围字段。NEWS-CTR-002 已有当前策略指针下的原子 Evidence 授权读取能力；available_at 未来读取必须复用，不可绕过，但新 ContentKind 尚未纳入读取授权契约。
+- 明确默认生命周期：自然到期/明确撤销/策略收紧后停止新采集；读取和 PIT 输出 fail-closed；载荷清理依授权条款执行且不得超过 retention。Grandfather 仅在授权文本明确允许既有数据、用途和截止时间时生效。retention_until 不等于读取权。
+- 本轮仅更新 NEWS-CTR-001 影响分析、News 验收清单和 Integration 交接；无 Go、Migration、Provider、Schema、Golden、PIT SQL 变更。没有目标 MariaDB DSN/版本验证，不新增 DDL/CI 结论。
+- 下一步：①项目契约 Owner 审批两个 ContentKind 与兼容矩阵；②确认 NEWS-CTR-002 对新类别的读取授权/撤销清理适用性；③取得具体来源授权文本；④门禁通过后才更新 Policy、Schema/DEC 与数据库实现。继续保持 proposal-only。
