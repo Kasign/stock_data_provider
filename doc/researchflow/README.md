@@ -29,6 +29,10 @@ Researchflow 是研究应用编排层，通过 Data、News、Quant、Research、
 - `contextassembly`、`toolpolicy`、`resultvalidation`：上下文装配、工具授权、Quant Envelope 与风险校验。
 - `diagnostics`：Platform Diagnostics 适配入口。
 
+## Worker 提交前 Envelope / Registry 接入（2026-11-16）
+
+Envelope / Output Registry 通用框架已通过 Integration CI：代码 SHA `a46d9f16db3975d05d7f521ba9eb7982fa29fe28` / Run [43832742482](https://github.com/Kasign/stock_data_provider/actions/runs/43832742482)。下一步是 Worker 提交前精确校验，但必须先闭合 Provider Payload / QualitySummary 的持久化：当前 Worker 仅接收 Provider 引用，Researchflow Migration 没有对应资源表。不得只校验后丢弃 payload，也不得继续让 Provider 决定 Orchestrator 所有的引用。详见 Integration 交接文档“Worker 提交前 Registry 接入的真实边界”。
+
 ## 当前明确缺口
 
 - Scheduler 已提供单次 Run 的运行协调服务；周期扫描、Server 生命周期启停与多 Run 调度入口尚未接入。当前派发直接调用 Worker.Execute，不引入第二套队列；跨进程并发仍由 ClaimAttempt 事务兜底。

@@ -962,9 +962,18 @@ Researchflow 已有 Scheduler、Worker、WorkerPool、Claim/Lease/Fencing、候�
 ### 2026-11-16 Stage Provider Envelope / Output Registry 通用框架
 
 - 代码提交：`8e0b040badbec3aa295f452ce83f32498d22ecc1`；新增 `internal/researchflow/stageoutput`、Envelope JSON Schema 1.0.0、通用 Golden 和实施记录。
-- 该 SHA 的 Integration CI Run [43831178908](https://github.com/Kasign/stock_data_provider/actions/runs/43831178908) 已启动；gofmt 与根模块 go vet 已通过，根模块 Go tests 正在执行。最终全量 CI 结果尚未确认，不标记为验收通过。
+- 后续格式修正代码 SHA：`a46d9f16db3975d05d7f521ba9eb7982fa29fe28`；Integration CI Run [43832742482](https://github.com/Kasign/stock_data_provider/actions/runs/43832742482) 对该精确 SHA 全量 success（gofmt、root/go-core vet/test、News/Research MariaDB 跨模块测试、Worker Bootstrap MariaDB/Redis、Compose、WebUI 检查与构建均通过）。随后 docs-only 提交 `d90129280e6dc0f3ad545d2e47d532b72825538d` 修正 README 换行；当前 HEAD 以远端查询为准。此前 Run 43831178908/43831780222/43832200394 的失败由新文件 gofmt 引起，非业务测试失败，已在 a46d9f1 修复。
 - Provider 只返回领域输出 discriminator、payload、quality_summary 和 diagnostic_refs；Run/Stage/Attempt/StageCode/TemplateVersion/CompletedAt 由 Orchestrator 组装。精确 Registry version 与 stage_code/output_type/schema_version 不匹配时 fail-closed。
 - Registry 以不可变版本、精确 Schema Ref/Validator 和稳定 SHA-256 fingerprint 标识；拒绝重复注册、缺失 Validator、未知组合、非对象 JSON 和递归重复 JSON Key。
 - 当前没有注册任何业务 Stage Entry；空 Registry 仅用于框架构建，不构成生产 Provider 可用证明。没有虚构 News/Quant/Research/LLM 注册项。
 - 未定义质量枚举、Coverage 分子/分母、Summary 身份/版本绑定；这些仍须契约决议。ResultSummary 不在本次实现范围。
 - 下一步：先取得该代码 SHA 全量 CI 结果；随后将 Registry/Envelope Validator 接入 Researchflow Worker 的提交前边界（保持无注册项时成功业务输出不可提交），再由各模块按真实 Application Port 和领域 Schema 提供注册项。Server 生产装配仍在真实 Provider 完备后进行。
+
+
+### 2026-11-16 Worker 提交前 Registry 接入的真实边界
+
+- FLOW-CTR-004 的 Envelope / Output Registry 通用框架已由代码 SHA `a46d9f16db3975d05d7f521ba9eb7982fa29fe28` 全量 CI 验收通过；docs-only 修订为 `d90129280e6dc0f3ad545d2e47d532b72825538d`。
+- 下一项仍是将 Envelope/Registry Validator 接入 Worker 提交前边界；无注册项或未注册的 `stage_code + output_type + schema_version` 不得提交成功结果。
+- 实施前发现一个不能靠 Validator 单独解决的内部存储缺口：冻结 Envelope 要求 Provider 返回 `payload` 与 `quality_summary` 原始对象，Orchestrator 负责生成引用；当前 `StageExecutionResult` 只有 `output_ref` / `quality_summary_ref`，Worker 直接把引用写入 `researchflow_stages`，现有 Migration 也没有持久化 Provider Payload / QualitySummary 的资源表或写入 Port。若只把 Envelope 校验后丢弃 payload，或继续接受 Provider 自带引用，就会出现“验证了但未保存”或“Provider 越权生成引用”的契约违例。
+- 这是 Researchflow 自身的实现缺口，不是等待 Quant/News/LLM，也不是外部数据卡点。合理的闭环是由 Researchflow 在受 fencing 保护的结果提交事务中持久化已验证 Envelope 的 payload/quality_summary，并由 Orchestrator 生成 `output_ref` / `quality_summary_ref`；需要据此确定最小资源表、不可变引用规则和读取 Port，再将 Registry 校验放在该事务之前。不得在没有持久化闭环的情况下只做表面 Validator 接线。
+- 本轮未新增此存储设计或 Migration；下一步应先按 FLOW-CTR-004 和现有 Run/Stage/Attempt 原子提交边界完成该最小设计，再一次性实现 Migration、Worker、MySQL 事务和 MariaDB 集成测试。质量枚举、Coverage 和 ResultSummary 身份口径仍保持独立 deferred，不随本任务猜测补齐。
