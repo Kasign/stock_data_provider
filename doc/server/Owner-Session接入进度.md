@@ -157,3 +157,16 @@ Server 内部已有：
 7. 更新 Web API 契约并完成 WebUI 同源 Cookie/CSRF 接入；通过前不得宣称浏览器认证闭环完成。
 
 **当前结论：Owner Session 内部安全能力和 Bootstrap 依赖组合已具备；HTTP 契约与 HTTP 接入仍未完成。不得接入 Researchflow Owner API，也不得开放匿名业务路由。**
+
+
+## 2026-11-16 主流程决策更新
+
+当前 integration 基线：`c40e58482f5bded7fbdaeb8958c674be63be2d74`。本轮依据项目负责人授权形成 DEC-PLAT-002-053，明确两项前置工作：
+
+1. **契约归属**：新增独立 `SRV-CTR-002` 管理 Owner Session HTTP/运维协议；`SRV-CTR-001` 保持 Researchflow 对外 API 的 deferred 状态，不将登录 DTO、CSRF 协议或 Owner 初始化混入 Researchflow 契约。
+2. **CSRF 原子 Touch**：保留既有 `SessionStore` 接口，增加可选 `CSRFSafeSessionStore` 能力。Platform Redis 实现必须在单个原子操作中比较 CSRF Digest 并 Touch；错误 CSRF 不得刷新 idle TTL。Server 对非安全 Session 请求缺少该能力时 fail closed。
+3. **浏览器预期**：Cookie 为 HttpOnly/SameSite=Lax/无 Domain；登录和轮换返回内存态 CSRF Token；页面刷新后通过 `POST /api/v1/owner/session/csrf` 恢复新 Token。WebUI 不保存 Owner Bearer 或 CSRF Token 到 localStorage。
+4. **权限预期**：owner_session 不继承 platform:admin；旧运维/诊断入口继续 owner_bearer；Researchflow 浏览器业务路由待 SRV-CTR-001 明确后逐条允许 owner_session，领域资源授权仍由领域 Owner 完成。
+5. **初始化预期**：Owner 首次初始化与密码恢复均不提供匿名 HTTP 接口，只能走受控本机/运维 Secret 流程。
+
+本次只完成契约定义与任务边界调整，不宣称 Platform 原子操作、Server HTTP 路由或 WebUI 登录已经实现。下一步直接实现 Platform 可选扩展接口与 Redis 原子脚本，再接 Server SessionAuthenticator；契约 Schema/Golden/OpenAPI 与 HTTP Handler 按同一 SRV-CTR-002 定义推进。
