@@ -4,11 +4,15 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"database/sql"
+
+	"example.com/stock-analysis-flow/internal/researchflow/stageoutput"
 )
 
 // StageOutputResource is an immutable, schema-qualified Provider result object.
@@ -67,4 +71,54 @@ func (r *MySQLRunRepository) GetStageOutputResource(ctx context.Context, ref str
 	}
 	resource.Content = append([]byte(nil), resource.Content...)
 	return resource, nil
+}
+
+type StageOutputCommit struct {
+	Envelope               stageoutput.Envelope
+	RegistryVersion        string
+	RegistryFingerprint    string
+	PayloadSchemaRef       string
+	QualitySummarySchemaRef string
+}
+
+func persistStageOutputResources(
+	ctx context.Context,
+	tx *sql.Tx,
+	runRef, stageRef, attemptRef string,
+	output StageOutputCommit,
+	createdAt string,
+) (string, string, error) {
+	if output.RegistryVersion == "" || output.RegistryFingerprint == "" ||
+		output.PayloadSchemaRef == "" || output.QualitySummarySchemaRef == "" ||
+		len(output.Envelope.Payload) == 0 || !json.Valid(output.Envelope.Payload) ||
+		len(output.Envelope.QualitySummary) == 0 || !json.Valid(output.Envelope.QualitySummary) ||
+		output.Envelope.CompletedAt.IsZero() || output.Envelope.CompletedAt.Location() != time.UTC {
+		return "", "", errors.New("Researchflow validated Stage Output metadata is incomplete")
+	}
+	payloadRef, err := newStageOutputResourceRef()
+	if err != nil {
+		return "", "", err
+	}
+	qualityRef, err := newStageOutputResourceRef()
+	if err != nil {
+		return "", "", err
+	}
+	insert := func(ref, kind, schemaRef string, content []byte) error {
+		_, err := tx.ExecContext(ctx, `INSERT INTO researchflow_stage_output_resources (
+			resource_ref, run_ref, stage_ref, attempt_ref, resource_kind, stage_code,
+			template_version, registry_version, registry_fingerprint, output_type,
+			schema_version, schema_ref, content, created_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			ref, runRef, stageRef, attemptRef, kind, output.Envelope.StageCode,
+			output.Envelope.TemplateVersion, output.RegistryVersion, output.RegistryFingerprint,
+			output.Envelope.OutputType, output.Envelope.SchemaVersion, schemaRef, string(content), createdAt)
+		return err
+	}
+	if err := insert(payloadRef, "payload", output.PayloadSchemaRef, output.Envelope.Payload); err != nil {
+		return "", "", fmt.Errorf("persist Researchflow Stage Output payload: %w", err)
+	}
+	if err := insert(qualityRef, "quality_summary", output.QualitySummarySchemaRef, output.Envelope.QualitySummary); err != nil {
+		return "", "", fmt.Errorf("persist Researchflow Stage Output quality summary: %w", err)
+	}
+	return payloadRef, qualityRef, nil
 }
