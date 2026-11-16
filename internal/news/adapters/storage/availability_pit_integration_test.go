@@ -246,12 +246,14 @@ func TestAppendAvailabilityDecisionSerializesConcurrentWritersMariaDBIntegration
 	recordedAt := now
 	makeFirst := func(id string) domain.AvailabilityDecision {
 		return domain.AvailabilityDecision{
-			ID: id, VersionID: versionID, Sequence: 1,
-			Status: domain.AvailabilityDecisionUnresolved,
+			ID:                    id,
+			VersionID:             versionID,
+			Sequence:              1,
+			Status:                domain.AvailabilityDecisionUnresolved,
 			ConsideredEvidenceIDs: []string{},
-			ReasonCode: "availability.review_pending",
-			ReviewRuleVersion: "review-v1",
-			RecordedAt: recordedAt,
+			ReasonCode:            "availability.review_pending",
+			ReviewRuleVersion:     "review-v1",
+			RecordedAt:            recordedAt,
 		}
 	}
 	unknownEvidence := makeFirst("availability-decision-unknown-evidence-" + suffix)
@@ -305,27 +307,31 @@ func TestAppendAvailabilityDecisionSerializesConcurrentWritersMariaDBIntegration
 	}
 
 	next := domain.AvailabilityDecision{
-		ID: "availability-decision-next-" + suffix, VersionID: versionID, Sequence: 2,
-		Status: domain.AvailabilityDecisionUnresolved,
+		ID:                    "availability-decision-next-" + suffix,
+		VersionID:             versionID,
+		Sequence:              2,
+		Status:                domain.AvailabilityDecisionUnresolved,
 		ConsideredEvidenceIDs: []string{},
-		ReasonCode: "availability.review_pending",
-		ReviewRuleVersion: "review-v1",
-		SupersedesDecisionID: &winner,
-		RecordedAt: recordedAt,
+		ReasonCode:            "availability.review_pending",
+		ReviewRuleVersion:     "review-v1",
+		SupersedesDecisionID:  &winner,
+		RecordedAt:            recordedAt,
 	}
 	if err := repository.AppendAvailabilityDecision(ctx, next); err != nil {
 		t.Fatalf("append valid successor: %v", err)
 	}
 	selectedEvidenceID := evidenceID
 	verified := domain.AvailabilityDecision{
-		ID: "availability-decision-verified-" + suffix, VersionID: versionID, Sequence: 3,
-		Status: domain.AvailabilityDecisionVerified,
-		SelectedEvidenceID: &selectedEvidenceID,
+		ID:                    "availability-decision-verified-" + suffix,
+		VersionID:             versionID,
+		Sequence:              3,
+		Status:                domain.AvailabilityDecisionVerified,
+		SelectedEvidenceID:    &selectedEvidenceID,
 		ConsideredEvidenceIDs: []string{evidenceID},
-		ReasonCode: "availability.source_verified",
-		ReviewRuleVersion: "review-v1",
-		SupersedesDecisionID: &next.ID,
-		RecordedAt: recordedAt,
+		ReasonCode:            "availability.source_verified",
+		ReviewRuleVersion:     "review-v1",
+		SupersedesDecisionID:  &next.ID,
+		RecordedAt:            recordedAt,
 	}
 	if err := repository.AppendAvailabilityDecision(ctx, verified); err != nil {
 		t.Fatalf("append verified Decision with eligible Evidence: %v", err)
