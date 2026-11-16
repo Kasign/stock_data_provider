@@ -35,8 +35,8 @@ func (s *ownerHTTPTestCredentials) UpdateOwnerPassword(_ context.Context, versio
 }
 
 type ownerHTTPTestSessions struct {
-	records map[string]platformsecurity.SessionRecord
-	touches int
+	records     map[string]platformsecurity.SessionRecord
+	touches     int
 	csrfTouches int
 }
 
@@ -110,6 +110,7 @@ func (ownerHTTPTestRateLimiter) RecordFailure(context.Context, string, string, p
 func (ownerHTTPTestRateLimiter) ResetAccount(context.Context, string) error { return nil }
 
 type ownerHTTPTestHasher struct{}
+
 func (ownerHTTPTestHasher) Hash(password []byte) (string, error) {
 	return "hash:" + string(password), nil
 }
@@ -118,6 +119,7 @@ func (ownerHTTPTestHasher) Verify(encoded string, password []byte) (bool, error)
 }
 
 type ownerHTTPTestAudit struct{}
+
 func (ownerHTTPTestAudit) Write(context.Context, platformsecurity.SecurityAuditEvent) error {
 	return nil
 }
