@@ -977,3 +977,14 @@ Researchflow 已有 Scheduler、Worker、WorkerPool、Claim/Lease/Fencing、候�
 - 实施前发现一个不能靠 Validator 单独解决的内部存储缺口：冻结 Envelope 要求 Provider 返回 `payload` 与 `quality_summary` 原始对象，Orchestrator 负责生成引用；当前 `StageExecutionResult` 只有 `output_ref` / `quality_summary_ref`，Worker 直接把引用写入 `researchflow_stages`，现有 Migration 也没有持久化 Provider Payload / QualitySummary 的资源表或写入 Port。若只把 Envelope 校验后丢弃 payload，或继续接受 Provider 自带引用，就会出现“验证了但未保存”或“Provider 越权生成引用”的契约违例。
 - 这是 Researchflow 自身的实现缺口，不是等待 Quant/News/LLM，也不是外部数据卡点。合理的闭环是由 Researchflow 在受 fencing 保护的结果提交事务中持久化已验证 Envelope 的 payload/quality_summary，并由 Orchestrator 生成 `output_ref` / `quality_summary_ref`；需要据此确定最小资源表、不可变引用规则和读取 Port，再将 Registry 校验放在该事务之前。不得在没有持久化闭环的情况下只做表面 Validator 接线。
 - 本轮未新增此存储设计或 Migration；下一步应先按 FLOW-CTR-004 和现有 Run/Stage/Attempt 原子提交边界完成该最小设计，再一次性实现 Migration、Worker、MySQL 事务和 MariaDB 集成测试。质量枚举、Coverage 和 ResultSummary 身份口径仍保持独立 deferred，不随本任务猜测补齐。
+
+
+### 2026-11-16 Stage Output 不可变资源与 Worker 原子提交设计
+
+- 已新增设计文档：[Stage Output 不可变资源与 Worker 原子提交设计](../../researchflow/08-Stage-Output不可变资源与Worker原子提交设计.md)。
+- 设计基于现有 `CommitAttemptResult` 事务，不另起提交流程：保持 Run -> Stage -> Attempt 锁顺序、数据库 Deadline、Lease Owner、FencingToken 和 AttemptNo/version 校验。
+- 成功/降级 Provider 结果由 Worker 依据持久化 ResolvedTemplate 的 TemplateVersion / OutputRegistryVersion 构造 Envelope；Registry 精确校验通过后，才允许进入原子提交。
+- 新增的持久化模型为每个 Attempt 保存两条不可变资源：payload 与 quality_summary；资源记录包含 Schema Ref、OutputType、SchemaVersion、RegistryVersion/Fingerprint、Run/Stage/Attempt 归属和数据库创建时间。引用由 Storage 在事务内生成，Stage/Attempt 引用与资源插入同事务提交。
+- 失败、重试、超时、取消结果不生成输出资源，沿用既有状态机。未配置 Registry、无匹配 Entry 或 Validator 失败均不得成功提交；不保留旧 Provider 自报引用的生产旁路。
+- 本次只完成实现设计与文档更新，没有修改 Worker / Migration 代码，没有宣称 Worker 接入已完成。
+- **下一项代码任务：** 按该设计实现 Migration v6、Stage Output 资源读写、Worker Snapshot/Envelope/Registry 接线、CommitAttemptResult 原子写入及 MariaDB 集成测试；更新现有成功提交测试，不重复执行已经通过的状态机/Worker 基础验收。

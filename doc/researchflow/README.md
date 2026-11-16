@@ -31,9 +31,9 @@ Researchflow 是研究应用编排层，通过 Data、News、Quant、Research、
 
 ## Worker 提交前 Envelope / Registry 接入（2026-11-16）
 
-Envelope / Output Registry 通用框架已通过 Integration CI：代码 SHA `a46d9f16db3975d05d7f521ba9eb7982fa29fe28` / Run [43832742482](https://github.com/Kasign/stock_data_provider/actions/runs/43832742482)。下一步是 Worker 提交前精确校验，但必须先闭合 Provider Payload / QualitySummary 的持久化：当前 Worker 仅接收 Provider 引用，Researchflow Migration 没有对应资源表。不得只校验后丢弃 payload，也不得继续让 Provider 决定 Orchestrator 所有的引用。详见 Integration 交接文档“Worker 提交前 Registry 接入的真实边界”。
+Envelope / Output Registry 通用框架已通过 Integration CI：代码 SHA `a46d9f16db3975d05d7f521ba9eb7982fa29fe28` / Run [43832742482](https://github.com/Kasign/stock_data_provider/actions/runs/43832742482)。下一步是 Worker 提交前精确校验，但必须先闭合 Provider Payload / QualitySummary 的持久化：当前 Worker 仅接收 Provider 引用，Researchflow Migration 没有对应资源表。不得只校验后丢弃 payload，也不得继续让 Provider 决定 Orchestrator 所有的引用。持久化模型、不可变引用、读取边界和原子提交方案已明确，详见 [Stage Output 不可变资源与 Worker 原子提交设计](08-Stage-Output不可变资源与Worker原子提交设计.md)；具体进度仍以 Integration 交接文档为准。
 
-## 当前明确缺口
+## Worker 提交前结果资源持久化设计（2026-11-16）\n\n已明确每个 Attempt 的 Payload / QualitySummary 不可变资源模型，Storage 在原有 Attempt/Stage fenced transaction 中生成引用并原子写入；下游按不透明 resource_ref 精确读取。未注册 Stage 不允许成功提交。设计细节见 [Stage Output 不可变资源与 Worker 原子提交设计](08-Stage-Output不可变资源与Worker原子提交设计.md)。当前仅完成设计，Migration / Worker 接线尚未实现。\n\n## 当前明确缺口
 
 - Scheduler 已提供单次 Run 的运行协调服务；周期扫描、Server 生命周期启停与多 Run 调度入口尚未接入。当前派发直接调用 Worker.Execute，不引入第二套队列；跨进程并发仍由 ClaimAttempt 事务兜底。
 - Worker 有单次 `Execute` 协调器；MySQLRunRepository 已实现 WorkerStore，执行快照读取与结果提交映射已落地。全局容量事务守卫和固定数量 Worker Pool 已通过模块 gofmt/test/race/vet 与 MariaDB 普通/Race 集成；queued Run 周期恢复由 Server 调用 SchedulerCandidateScanner 分页接入；进程崩溃后 running Stage 的过期 Attempt 由 ExpiredAttemptScanner 发现，Server 应调用 Worker.Execute 触发 ClaimAttempt 原子回收；Worker Lease 心跳已能检测跨进程 Run 取消并确认。ExpiredAttemptScanner 已通过当前 HEAD 的模块 gofmt/test/race/vet 与 MariaDB 普通/Race 集成验收。Server 已在 integration 接入终态 Outbox Relay，并验证 Relay 组件 Start/Stop；Researchflow Run Scheduler/Worker 的 Server 生命周期接线、生产 StageExecutor Adapter 仍未闭环。Worker Pool 已提供模块内优雅 Shutdown。
