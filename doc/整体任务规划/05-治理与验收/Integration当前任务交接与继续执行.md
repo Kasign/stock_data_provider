@@ -855,3 +855,13 @@ Researchflow 已有 Scheduler、Worker、WorkerPool、Claim/Lease/Fencing、候�
 - Run #91 `43813886523` 对提交 `6ac0d43510e1b7e0c0d581f154d43425077e0cb4` 失败：`evidence_authorization_read.go` 调用了 `sameAvailabilityTime`，但 helper 未实际写入文件；这是本轮补丁条件误判（检测到了调用点，误以为 helper 已存在）。
 - 已补充 helper 定义，按 nil/非 nil 一致性、时间点相等和整秒精度比较。
 - Run #91 未进入根模块编译后的测试阶段；修复提交需重新执行完整 CI。
+
+
+### 2026-11-16 PIT 决策读取端完整性补强
+
+- 复核发现 PIT SQL 仅检查最新决策 `status='verified'`，未再次确认 `selected_evidence_id` 属于 `considered_evidence_ids`；Domain Validator 不能替代读取端对异常历史记录的防御。
+- `internal/news/adapters/storage/evidence_query.go` 已新增 MariaDB `JSON_CONTAINS` 条件；最新 verified 决策的选中证据不在 considered 集合时，不返回 `available_at`。
+- `internal/news/adapters/storage/availability_pit_integration_test.go` 新增异常决策真库夹具，验证上述情况 fail-closed。
+- 代码提交：`65954360b7db2605546047fb8ea69e6a47d99eb8`；测试提交：`805e79159fe5e29e6919b06e8b42dfd995a19032`。当前尚未取得精确 SHA 的全量 CI 结果，不能标记通过。
+- 测试夹具是内部一致性测试，不是来源证据；不得据此创建生产 Evidence、映射 Provider 或解除 B 组 SKIP。
+- 后续先检查该 SHA 的 Integration CI。通过后继续检查 Decision 序列化/追加写入的事务边界；任何 Evidence 原始值持久化仍须先满足字段级授权与 retention。
