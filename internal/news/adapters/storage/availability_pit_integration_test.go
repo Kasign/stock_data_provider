@@ -347,4 +347,3 @@ func TestAppendAvailabilityDecisionSerializesConcurrentWritersMariaDBIntegration
 		t.Fatalf("decision chain count=%d max_sequence=%d, want 3 and 3", count, maxSequence)
 	}
 }
-
