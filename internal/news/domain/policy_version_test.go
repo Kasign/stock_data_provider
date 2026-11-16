@@ -15,8 +15,8 @@ func TestValidateNewsPolicyVersionRejectsInvalidMetadataFieldPaths(t *testing.T)
 		{"payload[0].publishTime"},
 	} {
 		payload, err := json.Marshal(SourcePolicy{
-			Status: AuthorizationApproved,
-			EvidenceRef: "policy-evidence",
+			Status:                AuthorizationApproved,
+			EvidenceRef:           "policy-evidence",
 			AllowedMetadataFields: fields,
 		})
 		if err != nil {
@@ -36,7 +36,7 @@ func TestValidateNewsPolicyVersionRejectsInvalidMetadataFieldPaths(t *testing.T)
 
 func TestValidateNewsPolicyVersionKeepsLegacyFieldPolicyDefaultDenied(t *testing.T) {
 	payload, err := json.Marshal(SourcePolicy{
-		Status: AuthorizationApproved,
+		Status:      AuthorizationApproved,
 		EvidenceRef: "legacy-policy-evidence",
 	})
 	if err != nil {

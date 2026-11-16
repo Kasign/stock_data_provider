@@ -153,7 +153,7 @@ func (u *RecordAvailabilityEvidence) Execute(ctx context.Context, request Record
 			FieldPath: request.FieldPath, RawValue: request.Candidate.RawValue,
 			SourceTimezoneOrOffset: request.Candidate.SourceTimezoneOrOffset,
 			Precision:              request.Candidate.Precision, ParseStatus: request.Candidate.Status,
-			ParseReasonCode:        request.Candidate.ReasonCode,
+			ParseReasonCode:      request.Candidate.ReasonCode,
 			CandidateAvailableAt: cloneAvailabilityTime(request.Candidate.CandidateAvailableAt),
 			ParserVersion:        request.ParserVersion, EvidenceRef: cloneAvailabilityString(request.EvidenceRef),
 			EvidenceHash: cloneAvailabilityString(request.EvidenceHash),

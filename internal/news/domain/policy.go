@@ -99,7 +99,7 @@ type ProviderOutputPolicy struct {
 	MaxRequestRetention     time.Duration
 	MaxCacheRetention       time.Duration
 	AllowedStorageModes     []StorageMode
-	AllowedMetadataFields []string
+	AllowedMetadataFields   []string
 	MaxPersistenceRetention time.Duration
 	EffectiveAt             time.Time
 	ExpiresAt               *time.Time

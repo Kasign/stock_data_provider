@@ -2035,7 +2035,6 @@ func TestObservationRetentionPurgeIntegration(t *testing.T) {
 	}
 }
 
-
 type availabilityEvidenceSourceCatalogStub struct {
 	registration app.SourceEndpointRegistration
 }
@@ -2098,14 +2097,14 @@ func TestAvailabilityEvidenceWriteRequiresCurrentFieldPolicyMariaDBIntegration(t
 	}
 	makePolicy := func(fields []string) []byte {
 		payload, marshalErr := json.Marshal(domain.SourcePolicy{
-			Status: domain.AuthorizationApproved,
-			AllowedAccessMethods: []domain.AccessMethod{domain.AccessRSS},
-			AllowedPurposes: []domain.Purpose{domain.PurposeInternalPersonalResearch},
-			AllowedContentKinds: []domain.ContentKind{domain.ContentMetadata},
-			AllowedStorageModes: []domain.StorageMode{domain.StoragePersistentMetadata},
+			Status:                domain.AuthorizationApproved,
+			AllowedAccessMethods:  []domain.AccessMethod{domain.AccessRSS},
+			AllowedPurposes:       []domain.Purpose{domain.PurposeInternalPersonalResearch},
+			AllowedContentKinds:   []domain.ContentKind{domain.ContentMetadata},
+			AllowedStorageModes:   []domain.StorageMode{domain.StoragePersistentMetadata},
 			AllowedMetadataFields: fields,
-			MaxRetention: 2 * time.Hour,
-			EvidenceRef: "integration-source-policy-evidence",
+			MaxRetention:          2 * time.Hour,
+			EvidenceRef:           "integration-source-policy-evidence",
 		})
 		if marshalErr != nil {
 			t.Fatal(marshalErr)
@@ -2222,7 +2221,7 @@ func TestAvailabilityEvidenceWriteRequiresCurrentFieldPolicyMariaDBIntegration(t
 	}
 	_, err = deniedUsecase.Execute(ctx, app.RecordAvailabilityEvidenceRequest{
 		Observation: observationB, Version: versionB, FieldPath: "payload.publishTime",
-		Candidate: domain.ParseAvailabilityTime(observationB.ObservedAt.Format(time.RFC3339)),
+		Candidate:     domain.ParseAvailabilityTime(observationB.ObservedAt.Format(time.RFC3339)),
 		ParserVersion: "integration-parser/1",
 	})
 	if !errors.Is(err, app.ErrAvailabilityEvidencePolicyDenied) {
