@@ -823,3 +823,12 @@ Researchflow 已有 Scheduler、Worker、WorkerPool、Claim/Lease/Fencing、候�
 - Run #87 对提交 `b384a1ee1b68313c9af195202732de669a2a6723` 的失败发生在 Go 解析阶段：V10 插入位置少关闭 V9 Migration 对象，导致 migrations.go:269 报告 mixture of field:value and value elements in struct literal。
 - 该 Run 未进入 Migration DDL 的真实 MariaDB 验证，不能据此判断 SQL 成功或失败。
 - 已补齐 V9 对象闭合并移除多余闭合；修复后的精确 SHA 及新 CI 结果待记录。
+
+
+### 2026-11-16 Availability Evidence / Decision Domain 首批实现
+
+- 新增 `internal/news/domain/availability_evidence.go` 与单元测试。
+- Evidence Validator 检查 Version/Observation 绑定标识、字段路径/解析器版本、精度/解析状态、UTC 时间顺序、候选值整秒及不晚于 Observation、Retention 和 payload purge tombstone。
+- Decision Validator 检查 verified/conflict/unresolved/revoked 状态形状、selected Evidence 必须包含在 considered 列表、列表显式非 NULL/排序/去重、decision_seq 与 supersedes 关系。
+- 该层只定义并校验领域记录，不提供写入入口，不代表任何来源已通过授权或可产生 verified 决策。
+- 隔离 Go 测试通过；全仓 CI 尚待本提交精确 SHA 验证。
