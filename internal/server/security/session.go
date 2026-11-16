@@ -158,6 +158,67 @@ func (a *SessionAuthenticator) Authenticate(request *http.Request) (*http.Reques
 	return request.WithContext(ctx), cookie, nil
 }
 
+// RefreshCSRFToken rotates the in-session CSRF secret after strict same-origin checks.
+ // It is intended only for the dedicated POST /owner/session/csrf recovery route,
+ // where the browser no longer has its previous in-memory CSRF token.
+func (a *SessionAuthenticator) RefreshCSRFToken(request *http.Request) (*http.Request, *http.Cookie, string, error) {
+	if a == nil || request == nil || request.URL == nil || request.Method != http.MethodPost {
+		return nil, nil, "", platformfault.New(platformfault.ClassValidation, "server.invalid_session_csrf_refresh", "CSRF refresh input is invalid", nil)
+	}
+	if err := a.validateRequestOrigin(request); err != nil {
+		return nil, nil, "", err
+	}
+	rawToken, err := a.sessionCookie(request)
+	if err != nil {
+		return nil, nil, "", err
+	}
+	tokenDigest, err := platformsecurity.SessionTokenDigest(rawToken)
+	if err != nil {
+		return nil, nil, "", invalidSessionFault()
+	}
+	csrfToken, csrfDigest, err := platformsecurity.NewCSRFToken()
+	if err != nil {
+		return nil, nil, "", err
+	}
+	now := a.now().UTC()
+	record, err := a.csrfSessions.RotateCSRFToken(request.Context(), tokenDigest, csrfDigest, now, a.idleTTL)
+	if errors.Is(err, platformsecurity.ErrSessionNotFound) {
+		return nil, nil, "", invalidSessionFault()
+	}
+	if err != nil {
+		return nil, nil, "", err
+	}
+	if record.Subject != "owner" || record.CredentialVersion == 0 || !validDigest(record.CSRFTokenDigest) {
+		return nil, nil, "", invalidSessionFault()
+	}
+	credential, err := a.credentials.GetOwnerCredential(request.Context())
+	if err != nil {
+		var credentialFault *platformfault.Fault
+		if errors.As(err, &credentialFault) && credentialFault.Class == platformfault.ClassNotFound {
+			return nil, nil, "", invalidSessionFault()
+		}
+		return nil, nil, "", err
+	}
+	if credential.Subject != "owner" || credential.CredentialVersion == 0 || credential.CredentialVersion != record.CredentialVersion {
+		return nil, nil, "", invalidSessionFault()
+	}
+	expiresAt := record.IdleExpiresAt
+	if record.AbsoluteExpiresAt.Before(expiresAt) {
+		expiresAt = record.AbsoluteExpiresAt
+	}
+	cookie, err := platformsecurity.NewSessionCookie(a.cookie, rawToken, expiresAt, now)
+	if err != nil {
+		return nil, nil, "", invalidSessionFault()
+	}
+	ctx, err := platformsecurity.WithPrincipal(request.Context(), platformsecurity.Principal{
+		Kind: platformsecurity.IdentityOwner, AuthMethod: platformsecurity.AuthMethodOwnerSession, Subject: "owner",
+	})
+	if err != nil {
+		return nil, nil, "", fmt.Errorf("建立 Owner Session Principal 失败: %w", err)
+	}
+	return request.WithContext(ctx), cookie, csrfToken, nil
+}
+
 func (a *SessionAuthenticator) validateRequestOrigin(request *http.Request) error {
 	if !strings.EqualFold(request.Host, a.origin.Host) {
 		return platformfault.New(platformfault.ClassForbidden, "server.host_rejected", "request Host is not allowed", nil)

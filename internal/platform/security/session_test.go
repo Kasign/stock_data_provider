@@ -122,10 +122,13 @@ func TestRedisSessionStoreIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	_, csrfDigest, err := NewCSRFToken()
+	if err != nil { t.Fatal(err) }
 	record := SessionRecord{
 		Subject: "owner", CreatedAt: now, LastSeenAt: now,
 		IdleExpiresAt:     now.Add(DefaultSessionIdleTTL),
 		AbsoluteExpiresAt: now.Add(DefaultSessionAbsoluteTTL), CredentialVersion: 1,
+		CSRFTokenDigest: csrfDigest,
 	}
 	if err := store.Create(ctx, digest, record); err != nil {
 		t.Fatalf("create: %v", err)
@@ -138,7 +141,7 @@ func TestRedisSessionStoreIntegration(t *testing.T) {
 		t.Fatalf("duplicate create = %v", err)
 	}
 	touchedAt := now.Add(2 * time.Minute)
-	touched, err := store.LookupAndTouch(ctx, digest, rotatedAt.Add(2*time.Second), DefaultSessionIdleTTL)
+	touched, err := store.LookupAndTouch(ctx, digest, touchedAt, DefaultSessionIdleTTL)
 	if err != nil {
 		t.Fatalf("touch: %v", err)
 	}
@@ -191,6 +194,7 @@ func TestRedisSessionStoreIntegration(t *testing.T) {
 		Subject: "owner", CreatedAt: now, LastSeenAt: rotatedAt.Add(2*time.Second),
 		IdleExpiresAt:     rotatedAt.Add(2*time.Second).Add(DefaultSessionIdleTTL),
 		AbsoluteExpiresAt: record.AbsoluteExpiresAt, CredentialVersion: 1,
+		CSRFTokenDigest: newCSRFDigest,
 	}
 	var winners atomic.Int32
 	var wait sync.WaitGroup
@@ -199,7 +203,7 @@ func TestRedisSessionStoreIntegration(t *testing.T) {
 		wait.Add(1)
 		go func() {
 			defer wait.Done()
-			err := store.Rotate(ctx, digest, candidate, rotated, touchedAt)
+			err := store.Rotate(ctx, digest, candidate, rotated, rotatedAt.Add(2*time.Second))
 			if err == nil {
 				winners.Add(1)
 			} else if !errors.Is(err, ErrSessionNotFound) && !errors.Is(err, ErrSessionConflict) {
@@ -211,20 +215,20 @@ func TestRedisSessionStoreIntegration(t *testing.T) {
 	if winners.Load() != 1 {
 		t.Fatalf("concurrent rotations succeeded %d times, want one", winners.Load())
 	}
-	if _, err := store.LookupAndTouch(ctx, digest, touchedAt, DefaultSessionIdleTTL); !errors.Is(err, ErrSessionNotFound) {
+	if _, err := store.LookupAndTouch(ctx, digest, rotatedAt.Add(2*time.Second), DefaultSessionIdleTTL); !errors.Is(err, ErrSessionNotFound) {
 		t.Fatalf("old token still valid: %v", err)
 	}
 	winner := digestA
 	if _, err := store.LookupAndTouch(ctx, winner, rotatedAt.Add(2*time.Second), DefaultSessionIdleTTL); err != nil {
 		winner = digestB
-		if _, retryErr := store.LookupAndTouch(ctx, winner, touchedAt, DefaultSessionIdleTTL); retryErr != nil {
+		if _, retryErr := store.LookupAndTouch(ctx, winner, rotatedAt.Add(2*time.Second), DefaultSessionIdleTTL); retryErr != nil {
 			t.Fatalf("neither rotated token valid: %v", retryErr)
 		}
 	}
 	if err := store.Revoke(ctx, winner); err != nil {
 		t.Fatalf("revoke: %v", err)
 	}
-	if _, err := store.LookupAndTouch(ctx, winner, touchedAt, DefaultSessionIdleTTL); !errors.Is(err, ErrSessionNotFound) {
+	if _, err := store.LookupAndTouch(ctx, winner, rotatedAt.Add(2*time.Second), DefaultSessionIdleTTL); !errors.Is(err, ErrSessionNotFound) {
 		t.Fatalf("revoked token still valid: %v", err)
 	}
 

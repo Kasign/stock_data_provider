@@ -198,6 +198,35 @@ func TestSessionAuthenticatorRequiresCSRFAndSameOriginForWrites(t *testing.T) {
 	}
 }
 
+func TestSessionAuthenticatorRefreshesCSRFOnlyForSameOriginPost(t *testing.T) {
+	now := time.Date(2026, 11, 12, 9, 0, 0, 0, time.UTC)
+	auth, sessions, rawToken, oldCSRF := newTestSessionAuthenticator(t, now)
+	request := sessionRequest(http.MethodPost, rawToken)
+	if _, _, _, err := auth.RefreshCSRFToken(request); err == nil {
+		t.Fatal("CSRF refresh without Origin must be rejected")
+	}
+	request.Header.Set("Origin", "https://attacker.example")
+	if _, _, _, err := auth.RefreshCSRFToken(request); err == nil {
+		t.Fatal("cross-origin CSRF refresh must be rejected")
+	}
+	request.Header.Set("Origin", "https://stocks.example.com")
+	_, _, newCSRF, err := auth.RefreshCSRFToken(request)
+	if err != nil { t.Fatalf("same-origin CSRF refresh failed: %v", err) }
+	newDigest, err := platformsecurity.CSRFTokenDigest(newCSRF)
+	if err != nil { t.Fatal(err) }
+	if sessions.record.CSRFTokenDigest != newDigest || newCSRF == oldCSRF {
+		t.Fatal("CSRF refresh did not replace the session-bound digest")
+	}
+	if _, _, err := auth.Authenticate(func() *http.Request {
+		r := sessionRequest(http.MethodPost, rawToken)
+		r.Header.Set("Origin", "https://stocks.example.com")
+		r.Header.Set(DefaultCSRFAuthHeader, oldCSRF)
+		return r
+	}()); err == nil {
+		t.Fatal("old CSRF token remained valid after refresh")
+	}
+}
+
 func TestSessionAuthenticatorRejectsHostMismatch(t *testing.T) {
 	now := time.Now().UTC()
 	auth, _, rawToken, _ := newTestSessionAuthenticator(t, now)
