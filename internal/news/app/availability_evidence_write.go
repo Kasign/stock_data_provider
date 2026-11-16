@@ -153,12 +153,12 @@ func (u *RecordAvailabilityEvidence) Execute(ctx context.Context, request Record
 			ID: u.newID(), NewsID: version.NewsID, VersionID: version.ID, ObservationID: observation.ID,
 			FieldPath: request.FieldPath, RawValue: request.Candidate.RawValue,
 			SourceTimezoneOrOffset: request.Candidate.SourceTimezoneOrOffset,
-			Precision: request.Candidate.Precision, ParseStatus: request.Candidate.Status,
-			ParseReasonCode: request.Candidate.ReasonCode,
+			Precision:              request.Candidate.Precision, ParseStatus: request.Candidate.Status,
+			ParseReasonCode:        request.Candidate.ReasonCode,
 			CandidateAvailableAt: cloneAvailabilityTime(request.Candidate.CandidateAvailableAt),
-			ParserVersion: request.ParserVersion, EvidenceRef: cloneAvailabilityString(request.EvidenceRef),
+			ParserVersion:        request.ParserVersion, EvidenceRef: cloneAvailabilityString(request.EvidenceRef),
 			EvidenceHash: cloneAvailabilityString(request.EvidenceHash),
-			ObservedAt: observation.ObservedAt.UTC(), RecordedAt: recordedAt, RetentionUntil: retentionUntil,
+			ObservedAt:   observation.ObservedAt.UTC(), RecordedAt: recordedAt, RetentionUntil: retentionUntil,
 		}
 		if err := evidence.Validate(); err != nil {
 			return errors.Join(ErrInvalidRequest, err)

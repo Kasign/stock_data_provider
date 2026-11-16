@@ -19,7 +19,7 @@ func TestRecordAvailabilityEvidenceRequiresFieldAndPolicyPermission(t *testing.T
 		ID: "observation-available-at", NewsID: "news-available-at",
 		SourceID: registration.SourceID, EndpointID: registration.EndpointID,
 		SourcePolicyVersionID: registration.SourcePolicyVersionID,
-		ObservedAt: observedAt, RetentionUntil: now.Add(2 * time.Hour),
+		ObservedAt:            observedAt, RetentionUntil: now.Add(2 * time.Hour),
 	}
 	version := domain.NewsItemVersion{
 		ID: "version-available-at", NewsID: observation.NewsID, VersionNo: 1,

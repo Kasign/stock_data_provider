@@ -106,7 +106,6 @@ func (tx memoryIdentityTransaction) AppendObservation(_ context.Context, observa
 	return observation, nil
 }
 
-
 func (tx memoryIdentityTransaction) AppendAvailabilityEvidence(_ context.Context, evidence domain.AvailabilityEvidence, _ domain.Observation, _ domain.NewsItemVersion) error {
 	if tx.repository == nil {
 		return ErrAvailabilityEvidenceWriteUnavailable

@@ -587,7 +587,6 @@ func (t *mysqlNewsTransaction) AppendNewsItemVersion(ctx context.Context, versio
 	return err
 }
 
-
 var _ app.AvailabilityEvidenceWriteTransaction = (*mysqlNewsTransaction)(nil)
 
 // AppendAvailabilityEvidence 在当前策略锁事务内追加字段级授权通过的 Evidence。

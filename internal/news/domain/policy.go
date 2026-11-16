@@ -62,31 +62,31 @@ const (
 
 // SourcePolicy 是发布来源级授权规则。空白许可集合表示不授予该维度权限。
 type SourcePolicy struct {
-	Status               AuthorizationStatus
-	AllowedAccessMethods []AccessMethod
-	AllowedPurposes      []Purpose
-	AllowedContentKinds  []ContentKind
-	AllowedStorageModes  []StorageMode
+	Status                AuthorizationStatus
+	AllowedAccessMethods  []AccessMethod
+	AllowedPurposes       []Purpose
+	AllowedContentKinds   []ContentKind
+	AllowedStorageModes   []StorageMode
 	AllowedMetadataFields []string
-	MaxRetention         time.Duration
-	EffectiveAt          time.Time
-	ExpiresAt            *time.Time
-	EvidenceRef          string
+	MaxRetention          time.Duration
+	EffectiveAt           time.Time
+	ExpiresAt             *time.Time
+	EvidenceRef           string
 }
 
 // EndpointPolicy 只表达入口相对 Source 默认规则的差异。
 // nil 集合/MaxRetention 表示继承；非 nil 空集合表示明确禁止该维度。
 type EndpointPolicy struct {
-	Status               AuthorizationStatus
-	AllowedAccessMethods []AccessMethod
-	AllowedPurposes      []Purpose
-	AllowedContentKinds  []ContentKind
-	AllowedStorageModes  []StorageMode
+	Status                AuthorizationStatus
+	AllowedAccessMethods  []AccessMethod
+	AllowedPurposes       []Purpose
+	AllowedContentKinds   []ContentKind
+	AllowedStorageModes   []StorageMode
 	AllowedMetadataFields []string
-	MaxRetention         *time.Duration
-	EffectiveAt          time.Time
-	ExpiresAt            *time.Time
-	EvidenceRef          string
+	MaxRetention          *time.Duration
+	EffectiveAt           time.Time
+	ExpiresAt             *time.Time
+	EvidenceRef           string
 }
 
 // ProviderOutputPolicy 描述搜索 Provider 对自身输出授予的用途和留存权限。
