@@ -2,15 +2,15 @@ package application
 
 import (
 	"context"
-	"errors"
 	"encoding/json"
+	"errors"
 	"sync"
 	"testing"
 	"time"
 
 	"example.com/stock-analysis-flow/internal/researchflow/domain"
-	"example.com/stock-analysis-flow/internal/researchflow/template"
 	"example.com/stock-analysis-flow/internal/researchflow/stageoutput"
+	"example.com/stock-analysis-flow/internal/researchflow/template"
 )
 
 type workerStoreFake struct {
@@ -131,7 +131,9 @@ func newWorker(t *testing.T, store *workerStoreFake, result StageExecutionResult
 		PayloadValidator: stageoutput.ValidatorFunc(func(json.RawMessage) error { return nil }),
 		QualitySummaryValidator: stageoutput.ValidatorFunc(func(json.RawMessage) error { return nil }),
 	}})
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	w, err := NewWorkerWithStageOutputRegistry(store, workerExecutorFake{result: result}, workerClockFake{}, WorkerConfig{WorkerID: "worker-1", LeaseDuration: time.Minute, HeartbeatInterval: time.Second, MaxParallel: 2}, registry)
 	if err != nil {
 		t.Fatal(err)
@@ -205,7 +207,6 @@ func TestWorkerExecuteClaimsExecutesAndCommits(t *testing.T) {
 		t.Fatalf("StageExecutor caller_ref = %q, want trusted persisted caller_ref", captured.AuthenticatedCallerRef)
 	}
 }
-
 
 func TestWorkerRejectsProviderOwnedOutputReferences(t *testing.T) {
 	store, _ := newWorkerFixture()

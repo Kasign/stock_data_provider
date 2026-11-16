@@ -26,7 +26,7 @@ type StageExecutionSnapshot struct {
 	Parameters             []byte
 	InputSnapshotRefs      []string
 	RetryPolicy            template.RetryPolicy
-	OutputRegistryVersion   string
+	OutputRegistryVersion  string
 }
 
 type WorkerResultCommit struct {
@@ -57,10 +57,10 @@ type ExecutionFaultNormalizer interface {
 }
 
 type StageOutputCommit struct {
-	Envelope stageoutput.Envelope
-	RegistryVersion string
-	RegistryFingerprint string
-	PayloadSchemaRef string
+	Envelope                stageoutput.Envelope
+	RegistryVersion         string
+	RegistryFingerprint     string
+	PayloadSchemaRef        string
 	QualitySummarySchemaRef string
 }
 
@@ -100,7 +100,7 @@ type Worker struct {
 	now             func() time.Time
 	cancellations   *workerCancellationRegistry
 	faultNormalizer ExecutionFaultNormalizer
-	outputRegistry StageOutputRegistry
+	outputRegistry  StageOutputRegistry
 }
 
 func NewWorker(store WorkerStore, executor StageExecutor, clock DatabaseClock, config WorkerConfig) (*Worker, error) {
@@ -332,7 +332,7 @@ func (w *Worker) Execute(ctx context.Context, runRef, stageRef, attemptRef strin
 		stageOutput = &StageOutputCommit{
 			Envelope: envelope, RegistryVersion: w.outputRegistry.Version(),
 			RegistryFingerprint: w.outputRegistry.Fingerprint(),
-			PayloadSchemaRef: entry.PayloadSchemaRef, QualitySummarySchemaRef: entry.QualitySummarySchemaRef,
+			PayloadSchemaRef:    entry.PayloadSchemaRef, QualitySummarySchemaRef: entry.QualitySummarySchemaRef,
 		}
 	}
 	if result.StageStatus == domain.StageRetryWait {
