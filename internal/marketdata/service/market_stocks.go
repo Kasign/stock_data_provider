@@ -153,7 +153,7 @@ func (s *DataService) MarketStocks(ctx context.Context, page, pageSize int, incl
 		Page: page, PageSize: pageSize, Total: universe.Total, TotalIsLowerBound: universe.TotalIsLowerBound,
 		Returned: len(items), IncludeMA: includeMA, MAAdjustmentBasis: basis,
 		UniverseSource: universe.Source, UniverseSourceVersion: universe.SourceVersion,
-		UniverseFetchedAt: universe.FetchedAt, FetchedAt: time.Now().UTC(), Items: items,
+		UniverseFetchedAt: universe.FetchedAt, FetchedAt: s.nowUTC(), Items: items,
 		QualityStatus: model.QualityValid, QualityReasons: append([]string(nil), universe.QualityReasons...),
 	}
 	if universe.QualityStatus != model.QualityValid || universe.TotalIsLowerBound {
