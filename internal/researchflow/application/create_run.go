@@ -80,6 +80,7 @@ type RunRepository interface {
 type CreateRunService struct {
 	identity         RequestIdentity
 	clock            DatabaseClock
+	runDeadline      time.Duration
 	ids              IDGenerator
 	templates        TemplateRegistry
 	schemas          template.ParameterSchemaValidator
@@ -92,6 +93,7 @@ type CreateRunService struct {
 func NewCreateRunService(
 	identity RequestIdentity,
 	clock DatabaseClock,
+	runDeadline time.Duration,
 	ids IDGenerator,
 	templates TemplateRegistry,
 	schemas template.ParameterSchemaValidator,
@@ -100,12 +102,12 @@ func NewCreateRunService(
 	resourcePolicies ResourcePolicyResolver,
 	runs RunRepository,
 ) (*CreateRunService, error) {
-	if identity == nil || clock == nil || ids == nil || templates == nil || schemas == nil ||
+	if identity == nil || clock == nil || runDeadline <= 0 || ids == nil || templates == nil || schemas == nil ||
 		applicability == nil || resourcePolicies == nil || runs == nil {
 		return nil, errors.New("create run service dependencies are incomplete")
 	}
 	return &CreateRunService{
-		identity: identity, clock: clock, ids: ids, templates: templates,
+		identity: identity, clock: clock, runDeadline: runDeadline, ids: ids, templates: templates,
 		schemas: schemas, applicability: applicability, gates: gates,
 		resourcePolicies: resourcePolicies, runs: runs,
 	}, nil
@@ -116,12 +118,10 @@ func (s *CreateRunService) CreateRun(ctx context.Context, command domain.CreateR
 	if err != nil || strings.TrimSpace(callerRef) == "" {
 		return CreateRunResult{}, fmt.Errorf("%w: %v", ErrUnauthenticated, err)
 	}
-	command.OriginatingRequestID = cloneString(s.identity.OriginatingRequestID(ctx))
-	command.CorrelationID = strings.TrimSpace(s.identity.CorrelationID(ctx))
-	if strings.TrimSpace(command.IdempotencyKey) == "" || len(command.IdempotencyKey) > 128 ||
-		strings.TrimSpace(command.SchemaVersion) == "" || strings.TrimSpace(command.TemplateRef) == "" ||
-		strings.TrimSpace(command.TemplateVersion) == "" {
-		return CreateRunResult{}, fmt.Errorf("%w: schema, idempotency key and exact template identity are required", domain.ErrInvalidCommand)
+	originatingRequestID := cloneString(s.identity.OriginatingRequestID(ctx))
+	correlationID := strings.TrimSpace(s.identity.CorrelationID(ctx))
+	if err := domain.ValidateCreateRunCommand(command, true); err != nil {
+		return CreateRunResult{}, err
 	}
 	fingerprint, err := domain.RequestFingerprint(callerRef, command)
 	if err != nil {
@@ -139,8 +139,8 @@ func (s *CreateRunService) CreateRun(ctx context.Context, command domain.CreateR
 		existing.Replayed = true
 		return existing, nil
 	}
-	if command.CorrelationID == "" {
-		command.CorrelationID, err = s.ids.NewRef(ctx, "correlation")
+	if correlationID == "" {
+		correlationID, err = s.ids.NewRef(ctx, "correlation")
 		if err != nil {
 			return CreateRunResult{}, fmt.Errorf("generate correlation id: %w", err)
 		}
@@ -158,7 +158,7 @@ func (s *CreateRunService) CreateRun(ctx context.Context, command domain.CreateR
 		return CreateRunResult{}, fmt.Errorf("read database UTC clock: %w", err)
 	}
 	now = now.UTC()
-	if err := domain.ValidateCreateRunCommand(command, now, tmpl.AllowEmptyInputs); err != nil {
+	if err := domain.ValidateCreateRunCommand(command, tmpl.AllowEmptyInputs); err != nil {
 		return CreateRunResult{}, err
 	}
 
@@ -193,6 +193,15 @@ func (s *CreateRunService) CreateRun(ctx context.Context, command domain.CreateR
 	if err != nil {
 		return CreateRunResult{}, fmt.Errorf("%w: canonicalize parameters for snapshot: %v", domain.ErrInvalidCommand, err)
 	}
+	now, err := s.clock.NowUTC(ctx)
+	if err != nil {
+		return CreateRunResult{}, fmt.Errorf("read database UTC clock: %w", err)
+	}
+	now = now.UTC()
+	deadlineAt := now.Add(s.runDeadline)
+	if !deadlineAt.After(now) || deadlineAt.Year() > 9999 {
+		return CreateRunResult{}, fmt.Errorf("%w: configured Run Deadline is outside the supported database time range", domain.ErrInvalidCommand)
+	}
 	stages := make([]domain.Stage, 0, len(resolved.Stages))
 	for _, resolvedStage := range resolved.Stages {
 		definition := resolvedStage.Definition
@@ -221,11 +230,11 @@ func (s *CreateRunService) CreateRun(ctx context.Context, command domain.CreateR
 	}
 	run := domain.Run{
 		Ref: runRef, SchemaVersion: command.SchemaVersion, Status: domain.RunCreated, Version: 1,
-		SystemAsOf: command.SystemAsOf.UTC(), DeadlineAt: command.DeadlineAt.UTC(),
+		SystemAsOf: now, DeadlineAt: deadlineAt,
 		TemplateRef: resolved.Ref, TemplateVersion: resolved.Version, TemplateFingerprint: resolved.Fingerprint,
 		ExcludedStages:       cloneExcludedStages(resolved.Excluded),
 		InputSnapshotRefs:    append([]string{}, command.InputSnapshotRefs...),
-		OriginatingRequestID: cloneString(command.OriginatingRequestID), CorrelationID: command.CorrelationID,
+		OriginatingRequestID: originatingRequestID, CorrelationID: correlationID,
 		CreatedAt: now,
 	}
 	record := CreateRunRecord{

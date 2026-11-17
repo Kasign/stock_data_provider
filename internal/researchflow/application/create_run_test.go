@@ -106,10 +106,10 @@ func validTemplate() template.WorkflowTemplate {
 
 func newService(t *testing.T, repo *repositoryStub, ids *idsStub, templateReader *templatesStub, now time.Time) (*CreateRunService, error) {
 	t.Helper()
-	return NewCreateRunService(identityStub{caller: "caller_1"}, clockStub{now}, ids, templateReader, schemasStub{}, applicabilityStub{}, nil, &resourcePoliciesStub{}, repo)
+	return NewCreateRunService(identityStub{caller: "caller_1"}, clockStub{now}, 30*time.Minute, ids, templateReader, schemasStub{}, applicabilityStub{}, nil, &resourcePoliciesStub{}, repo)
 }
 func command(now time.Time) domain.CreateRunCommand {
-	return domain.CreateRunCommand{SchemaVersion: "1.0.0", IdempotencyKey: "idem_1", TemplateRef: "daily", TemplateVersion: "1.0.0", SystemAsOf: now.Add(-time.Minute), DeadlineAt: now.Add(time.Hour), InputSnapshotRefs: []string{"snapshot_1"}, Parameters: json.RawMessage("{}")}
+	return domain.CreateRunCommand{SchemaVersion: "1.0.0", IdempotencyKey: "idem_1", TemplateRef: "daily", TemplateVersion: "1.0.0", InputSnapshotRefs: []string{"snapshot_1"}, Parameters: json.RawMessage("{}")}
 }
 
 func TestCreateRunRejectsInvalidSnapshotRefBeforeIdempotencyLookup(t *testing.T) {
@@ -215,14 +215,11 @@ func TestCreateRunOverridesUntrustedTracingFields(t *testing.T) {
 	requestID := "trusted-request"
 	repo := &repositoryStub{}
 	reader := &templatesStub{value: validTemplate()}
-	service, err := NewCreateRunService(identityStub{caller: "caller_1", requestID: &requestID, correlation: "trusted-correlation"}, clockStub{now}, &idsStub{}, reader, schemasStub{}, applicabilityStub{}, nil, &resourcePoliciesStub{}, repo)
+	service, err := NewCreateRunService(identityStub{caller: "caller_1", requestID: &requestID, correlation: "trusted-correlation"}, clockStub{now}, 30*time.Minute, &idsStub{}, reader, schemasStub{}, applicabilityStub{}, nil, &resourcePoliciesStub{}, repo)
 	if err != nil {
 		t.Fatal(err)
 	}
 	cmd := command(now)
-	cmd.CorrelationID = "client-spoof"
-	spoof := "client-spoof"
-	cmd.OriginatingRequestID = &spoof
 	got, err := service.CreateRun(context.Background(), cmd)
 	if err != nil {
 		t.Fatal(err)
@@ -294,7 +291,7 @@ func TestCreateRunPersistsOptionalNonApplicableStageAsSkipped(t *testing.T) {
 	tmpl.Stages[1].Applicability.RuleRef = "optional-research"
 	repo := &repositoryStub{}
 	reader := &templatesStub{value: tmpl}
-	service, err := NewCreateRunService(identityStub{caller: "caller_1"}, clockStub{now}, &idsStub{}, reader, schemasStub{}, selectiveApplicabilityStub{"always": true}, nil, &resourcePoliciesStub{}, repo)
+	service, err := NewCreateRunService(identityStub{caller: "caller_1"}, clockStub{now}, 30*time.Minute, &idsStub{}, reader, schemasStub{}, selectiveApplicabilityStub{"always": true}, nil, &resourcePoliciesStub{}, repo)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -339,4 +336,17 @@ func TestCreateRunFailsClosedWhenResourcePolicyCannotResolve(t *testing.T) {
 	if err == nil || repo.created != nil {
 		t.Fatalf("CreateRun must fail closed without a resolved resource policy: err=%v record=%#v", err, repo.created)
 	}
+}
+
+
+func TestCreateRunGeneratesCurrentPITAndAbsoluteDeadlineFromDatabaseClock(t *testing.T) {
+	now := time.Date(2026, 11, 17, 9, 30, 0, 0, time.UTC)
+	repo := &repositoryStub{}
+	service, err := newService(t, repo, &idsStub{}, &templatesStub{value: validTemplate()}, now)
+	if err != nil { t.Fatal(err) }
+	got, err := service.CreateRun(context.Background(), command(now))
+	if err != nil { t.Fatal(err) }
+	if !got.Run.SystemAsOf.Equal(now) { t.Fatalf("system_as_of = %s, want %s", got.Run.SystemAsOf, now) }
+	wantDeadline := now.Add(30 * time.Minute)
+	if !got.Run.DeadlineAt.Equal(wantDeadline) { t.Fatalf("deadline_at = %s, want %s", got.Run.DeadlineAt, wantDeadline) }
 }
