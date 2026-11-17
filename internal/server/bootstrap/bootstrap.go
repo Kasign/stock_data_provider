@@ -147,6 +147,15 @@ func Run(ctx context.Context) (runErr error) {
 	}
 	if ownerSession != nil {
 		slog.Info("Owner Session HTTP 路由已挂载", "enabled", true)
+		if processConfig.ResearchflowCapacity.Configured {
+			ownerSession.researchflow, err = newResearchflowOwnerComposition(
+				storageResources, newsConfig, processConfig.ResearchflowCapacity,
+			)
+			if err != nil {
+				return fmt.Errorf("装配 Researchflow Owner 内部用例失败: %w", err)
+			}
+			slog.Info("Researchflow Owner 内部 CreateRun/GetRun/CancelRun 用例已装配", "http_routes", false)
+		}
 	}
 
 	// Key Ring 配置为可选项；未配置时不创建分页 Facade，也不生成任何默认密钥。

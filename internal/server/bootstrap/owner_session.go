@@ -13,6 +13,7 @@ import (
 // ownerSessionComposition 仅组合依赖，不拥有共享 DB/Redis 的生命周期。
 type ownerSessionComposition struct {
 	lifecycle     *serversecurity.SessionLifecycleService
+	researchflow  *researchflowOwnerComposition
 	authenticator *serversecurity.SessionAuthenticator
 	cookie        platformsecurity.SessionCookieConfig
 }

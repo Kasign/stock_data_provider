@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 
 	newsprovider "example.com/stock-analysis-flow/internal/news/adapters/provider"
 	newsapp "example.com/stock-analysis-flow/internal/news/app"
@@ -22,6 +23,7 @@ import (
 const newsSearchStageOutputRegistryVersion = "1.0.0"
 
 type newsSearchStageComposition struct {
+	providers        newsapp.ProviderSet
 	executor         researchflowapplication.StageExecutor
 	registry         *stageoutput.Registry
 	parameterSchemas *parameterschema.Validator
@@ -65,11 +67,35 @@ func newNewsSearchStageCompositionWithProviders(providers newsapp.ProviderSet) (
 		return nil, fmt.Errorf("创建 News Search 参数 Schema Validator 失败: %w", err)
 	}
 	return &newsSearchStageComposition{
+		providers:        providers,
 		executor:         newsSearchStageExecutor{providers: providers},
 		registry:         registry,
 		parameterSchemas: parameterSchemas,
 		applicability:    newsSearchApplicabilityEvaluator{},
 	}, nil
+}
+
+
+func (c *newsSearchStageComposition) providerCodes() ([]string, error) {
+	if c == nil || c.providers == nil {
+		return nil, fmt.Errorf("News ProviderSet is not configured")
+	}
+	providers := c.providers.All()
+	codes := make([]string, 0, len(providers))
+	seen := make(map[string]struct{}, len(providers))
+	for _, provider := range providers {
+		if provider == nil || provider.Code() == "" {
+			return nil, fmt.Errorf("News Provider inventory contains an invalid Provider")
+		}
+		code := provider.Code()
+		if _, exists := seen[code]; exists {
+			return nil, fmt.Errorf("News Provider inventory contains duplicate Provider Code %q", code)
+		}
+		seen[code] = struct{}{}
+		codes = append(codes, code)
+	}
+	sort.Strings(codes)
+	return codes, nil
 }
 
 func hasConfiguredNewsSearchProvider(cfg newsconfig.Config) bool {
