@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	platformdiagnostics "example.com/stock-analysis-flow/internal/platform/diagnostics"
 	serverdiagnostics "example.com/stock-analysis-flow/internal/server/diagnostics"
@@ -233,7 +234,6 @@ func TestHealthHandlerHeadRequestsKeepStatusHeadersAndExecuteReadiness(t *testin
 		t.Fatalf("readiness checker calls = %d, want 2 (readyz + diagnostics)", checker.calls)
 	}
 }
-
 
 type healthFixedClock struct {
 	now time.Time
