@@ -43,7 +43,6 @@ func TestScheduledMarketSessionBoundaries(t *testing.T) {
 	}
 }
 
-
 // marketDataFixedClock 为时间相关测试提供确定的当前时刻。
 type marketDataFixedClock struct {
 	now time.Time
@@ -70,7 +69,7 @@ func TestMarketSessionUsesInjectedClock(t *testing.T) {
 	calendarProvider := &marketSessionCalendarProvider{snapshot: &model.TradingCalendarSnapshot{
 		Market: "cn_a_share", StartDate: "2026-10-22", EndDate: "2026-10-22",
 		TotalDays: 1, TradingDays: 1,
-		Items: []model.TradingCalendarDay{{Date: "2026-10-22", IsTradingDay: true}},
+		Items:  []model.TradingCalendarDay{{Date: "2026-10-22", IsTradingDay: true}},
 		Source: "market-session-test", SourceVersion: "fixture-v1",
 		FetchedAt: now.UTC(), QualityStatus: model.QualityValid,
 	}}
