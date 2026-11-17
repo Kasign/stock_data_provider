@@ -1174,3 +1174,18 @@ Owner Session 不再安排新的功能开发。目标环境部署验收可在具
 - **尚未生产接线：** `bootstrap.Run` 当前没有调用 `newNewsSearchStageComposition`；这些依赖由 factory 组合并通过单测验证，待正式 Worker Runtime 接入后才成为生产运行链的一部分。
 
 当前剩余准入重点是 ResourcePolicyRef 的权威语义/执行责任和正式 Owner CreateRun 消费组合；之后还需把已实现的 Schema/Applicability factory 接入生产 Worker Runtime。未发布正式 Template，未开放 SRV-CTR-001 HTTP API，未装配生产 Worker Runtime。
+
+
+### 2026-11-17 ResourcePolicy 语义 Review 决议
+
+ResourcePolicy 的语义已完成 Review，权威实施细节见 `doc/researchflow/02-任务拆分与验收.md` 的“2026-11-17 ResourcePolicy 语义与快照决议”。
+
+关键结论：
+- 固定首批策略引用 `news.search.configured-providers@1.0.0`；Provider Code 是稳定身份，Endpoint/API Key/连接参数是可变配置。
+- CreateRun 时由 Root Server Resolver 根据成功装配的 ProviderSet 生成 Run 级不可变允许 Provider Code 快照；无已装配 Provider 时 fail-closed。
+- Provider 配置变化不改变策略身份或旧 Run 授权；新增 Provider 只对新 Run 生效，移除 Provider 不得自动替换，Key 轮换不改变授权。
+- WorkflowTemplate Fingerprint 已包含 ResourcePolicyRef；ResolvedTemplate Fingerprint 还需纳入策略定义 Fingerprint，但不得纳入动态 Provider inventory/config。
+- Snapshot 复用现有 `researchflow_runs.resolved_template_snapshot` JSON 原子持久化，不新增首版业务表/Migration；Worker 重试复用原 Snapshot，并在 Claim 前后检查一致性。
+- News Stage 必须执行受限 ProviderSet，不能只在 Stage 层做校验。
+
+下一项按上述决议实施 ResourcePolicy Registry/Resolver、CreateRun 快照持久化、Worker 传播与 News ProviderSet 强制执行。生产 Template 与 Worker Runtime 仍未接通；SRV-CTR-001 仍 deferred，不开放 Researchflow HTTP API。
