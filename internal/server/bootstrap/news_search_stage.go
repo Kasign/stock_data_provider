@@ -48,7 +48,7 @@ func newNewsSearchStageCompositionWithProviders(providers newsapp.ProviderSet) (
 	if providers == nil {
 		return nil, fmt.Errorf("News ProviderSet 不可用")
 	}
-	
+
 	registry, err := stageoutput.NewRegistry(newsSearchStageOutputRegistryVersion, []stageoutput.Entry{{
 		StageCode: newsstage.SearchCandidatesStageCode, OutputType: newsstage.SearchCandidatesOutputType,
 		SchemaVersion:           newsstage.SearchCandidatesSchemaVersion,

@@ -214,7 +214,7 @@ func TestWorkerPersistsProviderDiagnosticOutputForFailedStage(t *testing.T) {
 	store, _ := newWorkerFixture()
 	result := StageExecutionResult{
 		AttemptStatus: domain.AttemptFailed, StageStatus: domain.StageFailed,
-		ReasonCodes:    []string{"news_all_providers_skipped"},
+		ReasonCodes: []string{"news_all_providers_skipped"},
 		ProviderResult: &stageoutput.ProviderResult{
 			OutputType: "trend", SchemaVersion: "1.0.0",
 			Payload:        []byte(`{"trend":"unavailable"}`),

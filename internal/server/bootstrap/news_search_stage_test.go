@@ -55,8 +55,8 @@ func TestNewsSearchStageCompositionRegistersExactOutputAndUsesPlatformClientOnly
 		t.Fatalf("registry schema refs do not match News contract: %+v", entry)
 	}
 	result, err := composition.executor.ExecuteStage(context.Background(), researchflowapplication.StageExecutionRequest{
-		Stage:      researchflowdomain.Stage{Code: newsstage.SearchCandidatesStageCode},
-		Parameters: json.RawMessage(`{"query":"market","limit":10}`),
+		Stage:          researchflowdomain.Stage{Code: newsstage.SearchCandidatesStageCode},
+		Parameters:     json.RawMessage(`{"query":"market","limit":10}`),
 		ResourcePolicy: testNewsResourcePolicy(t, []string{"bocha"}),
 	})
 	if err != nil {
@@ -146,7 +146,7 @@ func TestNewsSearchStageExecutorRejectsInvalidResourcePolicy(t *testing.T) {
 		newsStageTestProvider{code: "bocha"},
 	}})
 	result, err := executor.ExecuteStage(context.Background(), researchflowapplication.StageExecutionRequest{
-		Stage: researchflowdomain.Stage{Code: newsstage.SearchCandidatesStageCode},
+		Stage:      researchflowdomain.Stage{Code: newsstage.SearchCandidatesStageCode},
 		Parameters: json.RawMessage(`{"query":"market","limit":10}`),
 	})
 	if err != nil {
@@ -292,8 +292,8 @@ func executeNewsStageWithPolicy(t *testing.T, executor newsSearchStageExecutor, 
 func executeNewsStage(t *testing.T, executor newsSearchStageExecutor, parameters string) researchflowapplication.StageExecutionResult {
 	t.Helper()
 	result, err := executor.ExecuteStage(context.Background(), researchflowapplication.StageExecutionRequest{
-		Stage:      researchflowdomain.Stage{Code: newsstage.SearchCandidatesStageCode},
-		Parameters: json.RawMessage(parameters),
+		Stage:          researchflowdomain.Stage{Code: newsstage.SearchCandidatesStageCode},
+		Parameters:     json.RawMessage(parameters),
 		ResourcePolicy: testNewsResourcePolicy(t, newsProviderCodes(executor.providers)),
 	})
 	if err != nil {
