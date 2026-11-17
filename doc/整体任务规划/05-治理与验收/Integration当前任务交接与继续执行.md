@@ -1263,9 +1263,11 @@ GetRun 与 CancelRun 的持久化创建者授权已在 Application/Storage 层�
 - 当前 News Search 不声明 hard-risk Stage，故不注入虚假 Gate Registry；未来 hard-risk Template 继续 fail-closed。
 
 当前边界：
-- 这是进程内服务组合，不是已接通的 WebUI 消费者；没有 Researchflow HTTP 路由。
-- 正式 News Search Template 尚未发布。WebUI W2 的输入快照、system_as_of、deadline、幂等键和 API 接入契约未完成前，不写猜测的 Template 默认值。
-- Worker Runtime / Scheduler / WorkerPool / ExpiredAttempt / Deadline / Finalization / Shutdown 尚未接入 Bootstrap。
-- `SRV-CTR-001=deferred` 不变；Owner Bearer 不自动获得 Owner Session 的 Researchflow 权限。
+- 仍是进程内 CreateRun/GetRun/CancelRun 组合，不是已接通的 WebUI 消费者；没有 Researchflow HTTP 路由。
+- W2-B 的 CreateRun 输入、幂等、MariaDB UTC system_as_of / deadline 已实现；不需要等待 SRV-CTR-001 才能发布内部模板。
+- 正式模板 `news.search_candidates@1.0.0` 已加入 Server Bootstrap：启动时预检参数 Schema、Applicability 精确版本、Output Registry 精确条目和 ResourcePolicy 注册，再通过 MySQL Template Registry 幂等发布；同版本内容冲突阻止启动。配置冻结与执行语义见 `doc/researchflow/README.md`。
+- 模板允许空输入快照，但 ResourcePolicy Provider inventory 仍必须非空；没有可用 Provider 时 CreateRun fail-closed，不创建无法执行的 Run。
+- Worker Runtime / Scheduler 周期扫描 / WorkerPool / ExpiredAttempt 恢复 / Deadline 扫描 / Finalization / Shutdown 仍未接入 Bootstrap；模板发布不代表生产执行链闭环。
+- `SRV-CTR-001=deferred` 不变；未开放 Researchflow HTTP API，Owner Bearer 不自动获得 Owner Session 的 Researchflow 权限。
 
-后续主线：先完成 WebUI W2 的真实调用契约及 SRV-CTR-001 正式解冻，再发布正式 Template；之后将当前保留的 News Stage composition 接入生产 Worker Runtime，并验收完整生命周期。不要重复实现已经通过的 ResourcePolicy、Owner 身份适配、Run 访问授权或 DatabaseClock。
+后续主线：装配现有 Researchflow Scheduler、Worker、WorkerPool、SchedulerCandidateScanner、ExpiredAttemptScanner、DeadlineScanner、RunFinalizationCoordinator 与现有 MySQL Repository，接入 Server Lifecycle；按进程角色明确 API/Worker 装配边界，并验证 Run 正常完成、Retry、崩溃恢复、Deadline、取消、终态 Outbox 和优雅关闭。不要重复实现已经通过的 ResourcePolicy、Owner 身份适配、Run 访问授权、DatabaseClock、WorkerPool 或 Scheduler。
