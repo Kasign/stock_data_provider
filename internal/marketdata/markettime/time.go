@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"sync"
 	"time"
-	_ "time/tzdata"
 
 	platformtime "example.com/stock-analysis-flow/internal/platform/time"
 )
@@ -15,7 +14,7 @@ var (
 	locationErr  error
 )
 
-// LoadLocation 返回缓存的 A 股业务时区；时区数据由程序内嵌，不依赖宿主机 tzdata。
+// LoadLocation 返回缓存的 A 股业务时区；时区数据通过 Platform 时间服务统一加载。
 func LoadLocation() (*time.Location, error) {
 	locationOnce.Do(func() {
 		location, locationErr = platformtime.LoadLocation("Asia/Shanghai")

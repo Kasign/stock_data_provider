@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	_ "time/tzdata"
 	stdtime "time"
 )
 
