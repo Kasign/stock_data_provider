@@ -8,9 +8,9 @@ import (
 )
 
 type ExpiredCancellationAttemptCandidate struct {
-	RunRef             string
-	StageRef           string
-	AttemptRef         string
+	RunRef               string
+	StageRef             string
+	AttemptRef           string
 	ExpectedStageVersion uint64
 }
 
@@ -63,7 +63,7 @@ func (s *CancellationRecoveryScanner) ListNextPage(ctx context.Context, afterRun
 	}
 	page := CancellationRecoveryPage{
 		Candidates: append([]ExpiredCancellationAttemptCandidate{}, items...),
-		HasMore: len(items) == s.batchSize,
+		HasMore:    len(items) == s.batchSize,
 	}
 	previousRun, previousStage := afterRunRef, afterStageRef
 	for _, item := range items {
