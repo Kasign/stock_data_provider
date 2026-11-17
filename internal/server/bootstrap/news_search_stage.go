@@ -192,10 +192,16 @@ func (e newsSearchStageExecutor) ExecuteStage(ctx context.Context, request resea
 		}
 		return failedNewsStage(newsFailureReasonCode(payload.FailureCode)), nil
 	case "skipped":
-		return failedNewsStage(newsSkippedReasonCode(payload.FailureCode)), nil
+		return failedNewsStageWithProviderResult(newsSkippedReasonCode(payload.FailureCode), providerResult), nil
 	default:
 		return failedNewsStage("news_search_status_invalid"), nil
 	}
+}
+
+func failedNewsStageWithProviderResult(reasonCode string, providerResult *stageoutput.ProviderResult) researchflowapplication.StageExecutionResult {
+	result := failedNewsStage(reasonCode)
+	result.ProviderResult = providerResult
+	return result
 }
 
 func failedNewsStage(reasonCode string) researchflowapplication.StageExecutionResult {

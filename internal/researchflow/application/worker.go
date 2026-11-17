@@ -312,7 +312,8 @@ func (w *Worker) Execute(ctx context.Context, runRef, stageRef, attemptRef strin
 		return WorkerExecution{Attempt: attempt}, err
 	}
 	var stageOutput *StageOutputCommit
-	if result.StageStatus == domain.StageSucceeded || result.StageStatus == domain.StageDegraded {
+	if result.StageStatus == domain.StageSucceeded || result.StageStatus == domain.StageDegraded ||
+		(result.StageStatus == domain.StageFailed && result.ProviderResult != nil) {
 		if w.outputRegistry == nil || w.outputRegistry.Version() != snapshot.OutputRegistryVersion {
 			return WorkerExecution{Attempt: attempt}, errors.New("Researchflow Stage Output Registry is missing or differs from the persisted template")
 		}

@@ -136,8 +136,9 @@ func (r *MySQLRunRepository) CommitAttemptResult(ctx context.Context, input Atte
 		return ErrAttemptLeaseHeld
 	}
 	successfulOutcome := input.Stage.Status == domain.StageSucceeded || input.Stage.Status == domain.StageDegraded
-	if successfulOutcome != (input.StageOutput != nil) || input.OutputRef != nil ||
-		input.Stage.OutputRef != nil || input.Stage.QualitySummaryRef != nil {
+	if (successfulOutcome && input.StageOutput == nil) ||
+		(input.StageOutput != nil && !successfulOutcome && input.Stage.Status != domain.StageFailed) ||
+		input.OutputRef != nil || input.Stage.OutputRef != nil || input.Stage.QualitySummaryRef != nil {
 		return errors.New("Researchflow successful result requires validated Provider output and forbids Provider-owned references")
 	}
 
