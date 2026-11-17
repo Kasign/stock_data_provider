@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -87,11 +88,18 @@ func (newsSearchIntegrationApplicability) Evaluate(context.Context, researchflow
 }
 
 type newsSearchIntegrationProvider struct {
-	calls atomic.Int32
+	calls              atomic.Int32
+	cancellationStarted chan struct{}
+	cancellationOnce    sync.Once
 }
 
 func (*newsSearchIntegrationProvider) Code() string { return "integration_fixture" }
-func (p *newsSearchIntegrationProvider) Search(_ context.Context, _ newsdomain.SearchRequest) ([]newsdomain.Candidate, error) {
+func (p *newsSearchIntegrationProvider) Search(ctx context.Context, request newsdomain.SearchRequest) ([]newsdomain.Candidate, error) {
+	if request.Query == "inflight-cancel" {
+		p.cancellationOnce.Do(func() { close(p.cancellationStarted) })
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}
 	if p.calls.Add(1) == 1 {
 		return nil, &newsapp.ProviderError{Code: newsapp.ProviderErrorRateLimited}
 	}
@@ -235,7 +243,17 @@ func TestNewsSearchStageResearchflowMariaDBIntegration(t *testing.T) {
 		t.Fatalf("用户取消意图未正确持久化: %+v", cancelResult)
 	}
 
-	fixtureProvider := &newsSearchIntegrationProvider{}
+	inFlightCancelCreated, err := createRun.CreateRun(ctx, researchflowdomain.CreateRunCommand{
+		SchemaVersion: "1.0.0", IdempotencyKey: "news-search-stage-inflight-cancel-integration",
+		TemplateRef: workflowTemplate.Ref, TemplateVersion: workflowTemplate.Version,
+		InputSnapshotRefs: []string{},
+		Parameters:        json.RawMessage("{\"query\":\"inflight-cancel\",\"query_dimension\":\"market\",\"limit\":10}"),
+	})
+	if err != nil {
+		t.Fatalf("创建在途取消 Researchflow Run 失败: %v", err)
+	}
+
+	fixtureProvider := &newsSearchIntegrationProvider{cancellationStarted: make(chan struct{})}
 	composition, err := newNewsSearchStageCompositionWithProviders(newsapp.StaticProviderSet{
 		Providers: []newsapp.Provider{fixtureProvider},
 	})
@@ -262,6 +280,19 @@ func TestNewsSearchStageResearchflowMariaDBIntegration(t *testing.T) {
 	if err := runtimeComponent.Start(ctx); err != nil {
 		t.Fatalf("启动 Researchflow 生产 Runtime 失败: %v", err)
 	}
+	select {
+	case <-fixtureProvider.cancellationStarted:
+	case <-ctx.Done():
+		t.Fatalf("Runtime 未开始执行在途取消 Provider: %v", ctx.Err())
+	}
+	inFlightCancelResult, err := cancelService.CancelRun(ctx, inFlightCancelCreated.Run.Ref)
+	if err != nil {
+		t.Fatalf("取消正在执行 Stage 的 Researchflow Run 失败: %v", err)
+	}
+	if !inFlightCancelResult.Started || inFlightCancelResult.Run.Status != researchflowdomain.RunCancelling ||
+		len(inFlightCancelResult.Stages) != 1 || inFlightCancelResult.Stages[0].Status != researchflowdomain.StageRunning {
+		t.Fatalf("在途取消必须保留 Running Stage，等待 Worker 确认停止: %+v", inFlightCancelResult)
+	}
 	defer func() {
 		stopCtx, stopCancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer stopCancel()
@@ -285,7 +316,12 @@ func TestNewsSearchStageResearchflowMariaDBIntegration(t *testing.T) {
 		if loadErr != nil {
 			t.Fatalf("轮询取消 Researchflow Runtime Run 状态失败: %v", loadErr)
 		}
-		if normalRun.Run.Status.Terminal() && expiredRun.Run.Status.Terminal() && cancelledRun.Run.Status.Terminal() {
+		inFlightCancelledRun, loadErr := repository.GetRun(ctx, inFlightCancelCreated.Run.Ref)
+		if loadErr != nil {
+			t.Fatalf("轮询在途取消 Researchflow Runtime Run 状态失败: %v", loadErr)
+		}
+		if normalRun.Run.Status.Terminal() && expiredRun.Run.Status.Terminal() &&
+			cancelledRun.Run.Status.Terminal() && inFlightCancelledRun.Run.Status.Terminal() {
 			break
 		}
 		select {
@@ -320,6 +356,36 @@ func TestNewsSearchStageResearchflowMariaDBIntegration(t *testing.T) {
 	}
 	if cancellationOutboxCount != 1 {
 		t.Fatalf("Cancellation Finalization 应原子生成一条终态 Outbox，实际=%d", cancellationOutboxCount)
+	}
+	inFlightCancelledLoaded, err := repository.GetRun(ctx, inFlightCancelCreated.Run.Ref)
+	if err != nil {
+		t.Fatalf("读取在途取消 Runtime 完成后的 Run 失败: %v", err)
+	}
+	if inFlightCancelledLoaded.Run.Status != researchflowdomain.RunCancelled ||
+		inFlightCancelledLoaded.Run.TerminationReason != "user_cancelled" ||
+		inFlightCancelledLoaded.Run.ResultSummaryRef == nil || len(inFlightCancelledLoaded.Stages) != 1 ||
+		inFlightCancelledLoaded.Stages[0].Status != researchflowdomain.StageCancelled {
+		t.Fatalf("在途取消未由 Worker 确认停止并完成 Finalization: run=%+v stages=%+v", inFlightCancelledLoaded.Run, inFlightCancelledLoaded.Stages)
+	}
+	var inFlightAttemptRef string
+	if err := db.QueryRowContext(ctx, `SELECT attempt_ref FROM researchflow_attempts
+		WHERE run_ref = ? ORDER BY attempt_no DESC LIMIT 1`, inFlightCancelCreated.Run.Ref).Scan(&inFlightAttemptRef); err != nil {
+		t.Fatalf("读取在途取消 Attempt 引用失败: %v", err)
+	}
+	inFlightAttempt, err := repository.GetAttempt(ctx, inFlightAttemptRef)
+	if err != nil {
+		t.Fatalf("读取在途取消 Attempt 失败: %v", err)
+	}
+	if inFlightAttempt.Status != researchflowdomain.AttemptCancelled {
+		t.Fatalf("Worker 未将已确认停止的在途 Attempt 标记为 Cancelled: %+v", inFlightAttempt)
+	}
+	var inFlightOutboxCount int
+	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM researchflow_outbox
+		WHERE run_ref = ? AND event_type = 'researchflow.run.terminal'`, inFlightCancelCreated.Run.Ref).Scan(&inFlightOutboxCount); err != nil {
+		t.Fatalf("读取在途取消终态 Outbox 失败: %v", err)
+	}
+	if inFlightOutboxCount != 1 {
+		t.Fatalf("在途 Cancellation Finalization 应原子生成一条终态 Outbox，实际=%d", inFlightOutboxCount)
 	}
 	if deadlineLoaded.Run.Status != researchflowdomain.RunFailed ||
 		deadlineLoaded.Run.TerminationReason != "deadline_exceeded" ||
