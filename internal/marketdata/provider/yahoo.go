@@ -639,11 +639,7 @@ func yahooFinanceTicker(symbol string) (string, error) {
 }
 
 func yahooChinaLocation() *time.Location {
-	loc, err := time.LoadLocation("Asia/Shanghai")
-	if err != nil {
-		return time.FixedZone("CST", 8*60*60)
-	}
-	return loc
+	return providerMarketLocation()
 }
 
 func yahooDateRange(startDate, endDate string, limit int, now time.Time) (time.Time, time.Time, error) {

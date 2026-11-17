@@ -272,11 +272,7 @@ func parseSinaKlineNumber(raw json.RawMessage) (float64, error) {
 }
 
 func sinaChinaLocation() *time.Location {
-	loc, err := time.LoadLocation("Asia/Shanghai")
-	if err != nil {
-		return time.FixedZone("CST", 8*60*60)
-	}
-	return loc
+	return providerMarketLocation()
 }
 
 func sinaDailyDateRange(startDate, endDate string, limit int, now time.Time) (time.Time, time.Time, error) {

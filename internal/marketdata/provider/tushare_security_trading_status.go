@@ -31,10 +31,7 @@ func (p *Tushare) FetchSecurityTradingStatus(ctx context.Context, rawSymbol, raw
 	if err != nil {
 		return nil, err
 	}
-	shanghai, err := time.LoadLocation("Asia/Shanghai")
-	if err != nil {
-		shanghai = time.FixedZone("CST", 8*60*60)
-	}
+	shanghai := providerMarketLocation()
 	date := tradeDate.Format("2006-01-02")
 	if date > time.Now().In(shanghai).Format("2006-01-02") {
 		return nil, errors.New("Tushare security-status trade date must not be in the future")

@@ -31,10 +31,7 @@ func (p *Tushare) FetchMarketCapitalFlow(ctx context.Context, startDate, endDate
 	if err != nil || end.Format("2006-01-02") != endDate || end.Before(start) {
 		return nil, errors.New("Tushare market-capital-flow end date must use YYYY-MM-DD and not precede start")
 	}
-	loc, locErr := time.LoadLocation("Asia/Shanghai")
-	if locErr != nil {
-		loc = time.FixedZone("CST", 8*60*60)
-	}
+	loc := providerMarketLocation()
 	if end.Format("2006-01-02") > time.Now().In(loc).Format("2006-01-02") {
 		return nil, errors.New("Tushare market-capital-flow end date must not be in the future")
 	}
