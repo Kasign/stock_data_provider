@@ -317,12 +317,11 @@ func newResearchNotificationRelay(shared *serverresources.Resources, cfg serverc
 	if shared == nil || shared.DB == nil {
 		return nil, errors.New("shared MariaDB resource is required for Research Notification relay")
 	}
-	clock := platformtime.SystemClock{}
-	outboxRepository, err := researchstorage.NewOutboxRepository(shared.DB, clock.Now)
+	outboxRepository, err := researchstorage.NewOutboxRepository(shared.DB)
 	if err != nil {
 		return nil, fmt.Errorf("创建 Research Outbox Repository 失败: %w", err)
 	}
-	outbox, err := researchapplication.NewOutboxService(outboxRepository, clock.Now)
+	outbox, err := researchapplication.NewOutboxService(outboxRepository)
 	if err != nil {
 		return nil, fmt.Errorf("创建 Research Outbox Service 失败: %w", err)
 	}
