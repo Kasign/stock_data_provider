@@ -13,13 +13,17 @@ import (
 	researchflowapplication "example.com/stock-analysis-flow/internal/researchflow/application"
 	researchflowdomain "example.com/stock-analysis-flow/internal/researchflow/domain"
 	"example.com/stock-analysis-flow/internal/researchflow/stageoutput"
+	"example.com/stock-analysis-flow/internal/researchflow/parameterschema"
+	"example.com/stock-analysis-flow/internal/researchflow/template"
 )
 
 const newsSearchStageOutputRegistryVersion = "1.0.0"
 
 type newsSearchStageComposition struct {
-	executor researchflowapplication.StageExecutor
-	registry *stageoutput.Registry
+	executor         researchflowapplication.StageExecutor
+	registry         *stageoutput.Registry
+	parameterSchemas *parameterschema.Validator
+	applicability    template.ApplicabilityEvaluator
 }
 
 func newNewsSearchStageComposition(cfg newsconfig.Config, client *platformhttpclient.Client) (*newsSearchStageComposition, error) {
@@ -57,9 +61,15 @@ func newNewsSearchStageCompositionWithProviders(providers newsapp.ProviderSet) (
 	if err != nil {
 		return nil, fmt.Errorf("创建 News Stage Output Registry 失败: %w", err)
 	}
+	parameterSchemas, err := newNewsSearchParameterSchemaValidator()
+	if err != nil {
+		return nil, fmt.Errorf("创建 News Search 参数 Schema Validator 失败: %w", err)
+	}
 	return &newsSearchStageComposition{
 		executor: newsSearchStageExecutor{adapter: adapter},
 		registry: registry,
+		parameterSchemas: parameterSchemas,
+		applicability: newsSearchApplicabilityEvaluator{},
 	}, nil
 }
 

@@ -1163,3 +1163,13 @@ Owner Session 不再安排新的功能开发。目标环境部署验收可在具
 - 不使用恒 true Applicability、固定 Schema Fingerprint、空 ResourcePolicy 或测试 Caller 作为生产实现。
 - 不重启 `available_at` 来源准入；该项保持 shelved。
 - 每次提交按完整功能切片聚合，完成后更新本交接文档与模块任务文档。
+
+
+### 2026-11-17 News Search 参数准入第一切片更新
+
+已在 Server Bootstrap 实现并测试：
+- 不可变 News Search Parameter Schema Registry（ref `doc/researchflow/schema/news-search-parameters-1.0.0.schema.json`，version `1.0.0`）。
+- 参数字段来源于现有 News Stage：query、query_dimension、limit；limit 范围 1～100，拒绝额外字段。
+- 版本化 Applicability Rule `news.search_candidates.always@1.0.0`；未知规则或版本 fail closed。
+
+当前剩余准入重点是 ResourcePolicyRef 的权威语义/执行责任和正式 Owner CreateRun 消费组合。未发布正式 Template，未开放 SRV-CTR-001 HTTP API，未装配生产 Worker Runtime。

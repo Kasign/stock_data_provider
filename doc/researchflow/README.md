@@ -73,3 +73,12 @@ Researchflow CreateRun 从可信 RequestIdentity 取得 authenticated caller，�
 本次在 Migration v5 为 `researchflow_run_idempotency.run_ref` 增加唯一约束；Worker 在同一 Repeatable Read 快照中从 `operation=CreateRun` 的幂等记录读取 caller_ref，并在 claim 前拒绝缺失身份。Worker 第二次读取执行快照时复核身份未变化，再由 Orchestrator 注入 StageExecutionRequest.AuthenticatedCallerRef。该字段仅供内部 Application Port 使用，不进入 Run/Stage/Attempt 公共 DTO，也不接受 Provider 或客户端覆盖。
 
 本节只完成 Worker → StageExecutor 的可信 CallerRef 进程内传递，不代表 Server 生产身份装配或远程认证传输已完成。生产 RequestIdentity 必须来自 Server 已验证的 Principal：Owner 主动发起 Run 时，CallerRef 使用该 Principal 的可信 Subject（当前单 Owner Subject 为 `owner`），不能从请求 DTO/Header 自报；AuthMethod 由 Server 路由策略单独校验。`service:researchflow` 是 DEC-PLAT-002-050 中 Quant Result 读取授权的特定服务主体示例，不是所有 Researchflow CreateRun 的通用 CallerRef，不得据此把 Owner 发起的 Run 改记为服务主体。Provider 仍须按自身 Owner 授权规则校验，不得把 CallerRef 当作 AuthorizationRef 或 Bearer Token。MariaDB 集成用例已增加真实身份读取断言；新提交的 CI 验收结果待记录。
+
+
+## 2026-11-17 News Search 参数准入第一切片
+
+- Server Bootstrap 已提供不可变参数 Schema Registry，引用为 `doc/researchflow/schema/news-search-parameters-1.0.0.schema.json`，版本 `1.0.0`。
+- Schema 从 News Stage 已有输入形状与 `internal/news/app/search.go` 校验边界推导：`query` 必填且非空白，`limit` 必填且为 1～100 的整数，`query_dimension` 可选字符串，拒绝额外字段。
+- Schema Registry 返回副本，未知 ref 使用明确的 `ErrSchemaNotFound`；Researchflow Validator 负责编译、实例校验和 fingerprint。
+- Server 已注册精确版本的 `news.search_candidates.always@1.0.0` Applicability Rule。该规则只适用于 News Search 工作流：该流程的 News 搜索 Stage 始终参与 DAG；未知 ref/version fail closed。改变适用条件必须发布新版本。
+- 这只是正式 Template 的两个准入依赖，不代表已发布生产 Template、Resource Policy 已就绪、CreateRun 已装配或 Worker Runtime 已启动。
