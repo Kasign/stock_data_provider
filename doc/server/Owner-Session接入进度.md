@@ -170,3 +170,27 @@ Server 内部已有：
 5. **初始化预期**：Owner 首次初始化与密码恢复均不提供匿名 HTTP 接口，只能走受控本机/运维 Secret 流程。
 
 本次只完成契约定义与任务边界调整，不宣称 Platform 原子操作、Server HTTP 路由或 WebUI 登录已经实现。下一步直接实现 Platform 可选扩展接口与 Redis 原子脚本，再接 Server SessionAuthenticator；契约 Schema/Golden/OpenAPI 与 HTTP Handler 按同一 SRV-CTR-002 定义推进。
+
+
+## 2026-11-17 实现状态校正（以本节为最新）
+
+本节覆盖并纠正前文“等待 HTTP API 定义 / HTTP 接入未完成”的历史状态。权威接口定义已存在于 `SRV-CTR-002`；当前实现状态如下。
+
+- 代码验收基线：`46109c58d440327973a21d833f215928543a14b6`。
+- Integration CI Run [43996341918](https://github.com/Kasign/stock_data_provider/actions/runs/43996341918)：对该精确 SHA 为 `success`；覆盖全仓 gofmt、根模块 go vet/test、News/Research/Researchflow 跨模块测试、Worker Bootstrap MariaDB/Redis、go-core vet/test、Compose、WebUI 检查和镜像构建。
+- `internal/server/bootstrap/router.go` 已在 Owner Session 启用时挂载 `/api/v1/owner/` Handler；旧 Analysis、/readyz、/diagnostics 仍保持 Owner Bearer，不自动接受 Owner Session。
+- `internal/server/bootstrap/owner_session_http.go` 已实现 SRV-CTR-002 定义的登录、当前 Session、CSRF 恢复、登出、Session 轮换和密码修改路由。
+- `cmd/analysis-api owner-init` 已提供受控本机初始化命令；通过 `OWNER_SESSION_INITIAL_SECRET_FILE` 读取仅 Owner 可访问的普通文件。命令不会自动删除 Secret 文件，运维流程必须在成功后删除/卸载该文件；重复初始化由 MariaDB 一次性 Credential 插入约束拒绝。
+- HTTP 单测覆盖登录、Cookie 属性、当前 Session、CSRF 恢复和轮换、错误 CSRF 不 Touch、登出清 Cookie、Origin 拒绝、密码修改后旧 CredentialVersion Session 失效，以及 Bearer/Session 身份隔离。
+- 密码修改 Service 已补齐当前密码与新密码均为 1～1024 字节的限制；超限输入在访问 Credential 和写审计前拒绝。
+
+### 当前仍未完成的验收
+
+1. **SRV-CTR-002 L1 配套资产**：契约登记簿仍为 `freeze-ready`；`doc/server/schema/SRV-CTR-002/**`、`doc/server/golden/SRV-CTR-002/**` 和 `doc/server/openapi/owner-session.openapi.yaml` 尚未落地。契约定义本身不得自行扩展或改写，配套资产应逐项映射现有 DTO 和路径。
+2. **真实存储端到端**：现有 CI 分别验证 MariaDB Credential Store、Redis Platform 原语和 Bootstrap 依赖组合，但尚无一条真实 MariaDB + Redis 的完整 HTTP 生命周期测试，覆盖初始化→登录→认证→CSRF→轮换→密码修改→旧 Session 失效→重新登录→登出。
+3. **WebUI 消费端**：`web/src/api.js` 尚无 Owner Session API 封装，页面也没有登录/退出和内存态 CSRF 恢复流程；`doc/web/API_CONTRACT.md` 已更新服务端路由事实，但 WebUI 尚未接入。
+4. **部署验收**：尚未验证目标 Nginx/Compose 环境中的同源 Cookie、Secure、Path、Origin/Host 和反向代理行为；不得将 CI 的 Handler 测试描述为生产部署闭环。
+
+### 下一步执行顺序
+
+先补齐 SRV-CTR-002 Schema/Golden/OpenAPI 并核对实现与契约逐项一致；再增加真实 MariaDB/Redis HTTP 生命周期集成测试；通过后接入 WebUI 登录、Session 恢复、CSRF 内存态、登出和密码修改。完成上述步骤前，旧 Analysis Bearer 路由保持原策略，Researchflow 浏览器业务路由不提前开放。
