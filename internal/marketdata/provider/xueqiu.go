@@ -164,7 +164,7 @@ func xueqiuProviderTime(raw json.RawMessage, now time.Time) *time.Time {
 			if layout == time.RFC3339Nano {
 				parsed, err = time.Parse(layout, text)
 			} else {
-				parsed, err = time.ParseInLocation(layout, text, time.FixedZone("CST", 8*60*60))
+				parsed, err = time.ParseInLocation(layout, text, providerMarketLocation())
 			}
 			if err == nil && !parsed.After(now.Add(5*time.Minute)) && !parsed.Before(now.AddDate(-1, 0, 0)) {
 				parsed = parsed.UTC()

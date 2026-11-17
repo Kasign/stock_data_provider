@@ -616,8 +616,8 @@ func tencentCode(symbol string) (string, error) {
 func tencentChinaLocation(loadLocation func(string) (*time.Location, error)) *time.Location {
 	loc, err := loadLocation("Asia/Shanghai")
 	if err != nil || loc == nil {
-		// 精简容器可能没有 zoneinfo 数据；腾讯返回的是中国本地行情时间，回退到固定 UTC+8。
-		return time.FixedZone("CST", 8*60*60)
+		// 系统时区数据库不可用时，使用内嵌 IANA 时区数据。
+		return providerMarketLocation()
 	}
 	return loc
 }

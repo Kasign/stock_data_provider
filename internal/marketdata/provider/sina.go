@@ -463,7 +463,7 @@ func (p *Sina) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quote, 
 	var quoteTime *time.Time
 	dateText, timeText := strings.TrimSpace(fields[30]), strings.TrimSpace(fields[31])
 	if dateText != "" && timeText != "" {
-		if parsed, parseErr := time.ParseInLocation("2006-01-02 15:04:05", dateText+" "+timeText, time.FixedZone("CST", 8*60*60)); parseErr == nil {
+		if parsed, parseErr := time.ParseInLocation("2006-01-02 15:04:05", dateText+" "+timeText, providerMarketLocation()); parseErr == nil {
 			utc := parsed.UTC()
 			quoteTime = &utc
 		} else {

@@ -495,6 +495,9 @@ func TestTencentChinaLocationFallsBackWhenZoneinfoIsUnavailable(t *testing.T) {
 	if offset != 8*60*60 {
 		t.Fatalf("fallback location offset = %d seconds, want UTC+8", offset)
 	}
+	if loc.String() != "Asia/Shanghai" {
+		t.Fatalf("fallback location = %q, want Asia/Shanghai", loc.String())
+	}
 }
 
 func TestParseTencentTimeTreatsProviderTimestampAsChinaLocalTime(t *testing.T) {
