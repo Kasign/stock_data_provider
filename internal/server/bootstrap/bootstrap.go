@@ -137,7 +137,7 @@ func Run(ctx context.Context) (runErr error) {
 	migrationCancel()
 
 	// Owner Session 复用共享 MariaDB/Redis 资源与 Platform 安全原语，不创建独立连接池。
-	// HTTP Handler 尚未注册前，该组合仅供后续生命周期路由接入，不改变现有 Bearer 路由策略。
+	// 显式启用时由 newHTTPHandler 挂载 SRV-CTR-002 路由；旧 Bearer 路由认证策略保持不变。
 	var ownerSession *ownerSessionComposition
 	if processConfig.OwnerSession.Enabled {
 		ownerSession, err = newOwnerSessionComposition(storageResources, processConfig.OwnerSession)
@@ -146,7 +146,7 @@ func Run(ctx context.Context) (runErr error) {
 		}
 	}
 	if ownerSession != nil {
-		slog.Info("Owner Session 依赖已装配；HTTP 生命周期入口将在后续接入阶段开放")
+		slog.Info("Owner Session HTTP 路由已挂载", "enabled", true)
 	}
 
 	// Key Ring 配置为可选项；未配置时不创建分页 Facade，也不生成任何默认密钥。

@@ -77,8 +77,9 @@ Researchflow CreateRun 从可信 RequestIdentity 取得 authenticated caller，�
 
 ## 2026-11-17 News Search 参数准入第一切片
 
-- Server Bootstrap 已提供不可变参数 Schema Registry，引用为 `doc/researchflow/schema/news-search-parameters-1.0.0.schema.json`，版本 `1.0.0`。
+- Server Bootstrap 包已实现不可变参数 Schema Registry，引用为 `doc/researchflow/schema/news-search-parameters-1.0.0.schema.json`，版本 `1.0.0`；它目前由 `newNewsSearchStageCompositionWithProviders` 组合工厂持有。
 - Schema 从 News Stage 已有输入形状与 `internal/news/app/search.go` 校验边界推导：`query` 必填且非空白，`limit` 必填且为 1～100 的整数，`query_dimension` 可选字符串，拒绝额外字段。
 - Schema Registry 返回副本，未知 ref 使用明确的 `ErrSchemaNotFound`；Researchflow Validator 负责编译、实例校验和 fingerprint。
-- Server 已注册精确版本的 `news.search_candidates.always@1.0.0` Applicability Rule。该规则只适用于 News Search 工作流：该流程的 News 搜索 Stage 始终参与 DAG；未知 ref/version fail closed。改变适用条件必须发布新版本。
+- Server Bootstrap 包已实现精确版本的 `news.search_candidates.always@1.0.0` Applicability Rule。该规则只适用于 News Search 工作流：该流程的 News 搜索 Stage 始终参与 DAG；未知 ref/version fail closed。改变适用条件必须发布新版本。
+- **接线边界：** 当前 `bootstrap.Run` 尚未调用 `newNewsSearchStageComposition`，Researchflow 生产 Worker Runtime 也未装配；因此 Registry/Rule 的实现与定向测试已完成，但尚不能称为生产运行时已接入。
 - 这只是正式 Template 的两个准入依赖，不代表已发布生产 Template、Resource Policy 已就绪、CreateRun 已装配或 Worker Runtime 已启动。

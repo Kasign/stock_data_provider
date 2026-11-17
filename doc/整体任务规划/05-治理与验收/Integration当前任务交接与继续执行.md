@@ -1167,9 +1167,10 @@ Owner Session 不再安排新的功能开发。目标环境部署验收可在具
 
 ### 2026-11-17 News Search 参数准入第一切片更新
 
-已在 Server Bootstrap 实现并测试：
+已在 Server Bootstrap 包实现并测试：
 - 不可变 News Search Parameter Schema Registry（ref `doc/researchflow/schema/news-search-parameters-1.0.0.schema.json`，version `1.0.0`）。
 - 参数字段来源于现有 News Stage：query、query_dimension、limit；limit 范围 1～100，拒绝额外字段。
 - 版本化 Applicability Rule `news.search_candidates.always@1.0.0`；未知规则或版本 fail closed。
+- **尚未生产接线：** `bootstrap.Run` 当前没有调用 `newNewsSearchStageComposition`；这些依赖由 factory 组合并通过单测验证，待正式 Worker Runtime 接入后才成为生产运行链的一部分。
 
-当前剩余准入重点是 ResourcePolicyRef 的权威语义/执行责任和正式 Owner CreateRun 消费组合。未发布正式 Template，未开放 SRV-CTR-001 HTTP API，未装配生产 Worker Runtime。
+当前剩余准入重点是 ResourcePolicyRef 的权威语义/执行责任和正式 Owner CreateRun 消费组合；之后还需把已实现的 Schema/Applicability factory 接入生产 Worker Runtime。未发布正式 Template，未开放 SRV-CTR-001 HTTP API，未装配生产 Worker Runtime。
