@@ -1911,7 +1911,7 @@ func (p *Eastmoney) loadStockSearchIndex(ctx context.Context) ([]model.StockSear
 		fetchedAt := p.stockSearchFetchedAt
 		quality := p.stockSearchQuality
 		reasons := append([]string(nil), p.stockSearchReasons...)
-		age := time.Since(fetchedAt)
+		age := providerNowUTC().Sub(fetchedAt)
 		fresh := len(cached) > 0 && !fetchedAt.IsZero() && age >= 0 && age < eastmoneyStockSearchIndexTTL
 		if fresh {
 			p.stockSearchMu.Unlock()
@@ -1926,7 +1926,7 @@ func (p *Eastmoney) loadStockSearchIndex(ctx context.Context) ([]model.StockSear
 				continue
 			}
 		}
-		if time.Now().Before(p.stockSearchRetryAfter) {
+		if providerNowUTC().Before(p.stockSearchRetryAfter) {
 			lastError := p.stockSearchLastError
 			p.stockSearchMu.Unlock()
 			if len(cached) > 0 {
