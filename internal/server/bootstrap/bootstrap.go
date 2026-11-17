@@ -150,7 +150,7 @@ func Run(ctx context.Context) (runErr error) {
 		slog.Info("Owner Session HTTP 路由已挂载", "enabled", true)
 		if processConfig.ResearchflowCapacity.Configured {
 			ownerSession.researchflow, err = newResearchflowOwnerComposition(
-				storageResources, newsConfig, processConfig.ResearchflowCapacity,
+				storageResources, newsConfig, processConfig.ResearchflowCapacity, processConfig.ResearchflowRunDeadline,
 			)
 			if err != nil {
 				return fmt.Errorf("装配 Researchflow Owner 内部用例失败: %w", err)

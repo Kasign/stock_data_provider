@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	platformconfig "example.com/stock-analysis-flow/internal/platform/config"
 )
@@ -40,4 +41,25 @@ func LoadResearchflowCapacity(env platformconfig.Env) (ResearchflowCapacity, err
 	return ResearchflowCapacity{
 		Configured: true, MaxQueuedRuns: maxQueuedRuns, MaxWorkers: maxWorkers,
 	}, nil
+}
+
+
+// LoadResearchflowRunDeadline reads the Server-owned absolute Run budget.
+// It has no default: enabling Researchflow requires an explicit positive duration.
+func LoadResearchflowRunDeadline(env platformconfig.Env, runtimeConfigured bool) (time.Duration, error) {
+	raw := strings.TrimSpace(env.String("RESEARCHFLOW_RUN_DEADLINE", ""))
+	if !runtimeConfigured {
+		if raw != "" {
+			return 0, fmt.Errorf("RESEARCHFLOW_RUN_DEADLINE requires Researchflow capacity configuration")
+		}
+		return 0, nil
+	}
+	if raw == "" {
+		return 0, fmt.Errorf("RESEARCHFLOW_RUN_DEADLINE must be explicitly configured when Researchflow is enabled")
+	}
+	deadline, err := time.ParseDuration(raw)
+	if err != nil || deadline <= 0 {
+		return 0, fmt.Errorf("RESEARCHFLOW_RUN_DEADLINE must be a positive Go duration such as 30m or 2h")
+	}
+	return deadline, nil
 }

@@ -22,6 +22,7 @@ type Process struct {
 	HTTP                      HTTP
 	ResearchNotificationRelay ResearchNotificationRelay
 	ResearchflowCapacity      ResearchflowCapacity
+	ResearchflowRunDeadline   time.Duration
 }
 
 // LoadProcess 在启动阶段一次性解析 Server 进程级配置。
@@ -80,6 +81,9 @@ func LoadProcess(env platformconfig.Env) (Process, error) {
 		}
 	}
 	if cfg.ResearchflowCapacity, err = LoadResearchflowCapacity(env); err != nil {
+		return Process{}, err
+	}
+	if cfg.ResearchflowRunDeadline, err = LoadResearchflowRunDeadline(env, cfg.ResearchflowCapacity.Configured); err != nil {
 		return Process{}, err
 	}
 	return cfg, nil

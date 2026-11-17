@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	newsconfig "example.com/stock-analysis-flow/internal/news/config"
 	researchflowapplication "example.com/stock-analysis-flow/internal/researchflow/application"
@@ -27,12 +28,13 @@ func newResearchflowOwnerComposition(
 	shared *serverresources.Resources,
 	newsConfig newsconfig.Config,
 	capacity serverconfig.ResearchflowCapacity,
+	runDeadline time.Duration,
 ) (*researchflowOwnerComposition, error) {
 	if shared == nil || shared.DB == nil || shared.HTTPClient == nil {
 		return nil, errors.New("Researchflow Owner composition requires shared MariaDB and Platform HTTP Client resources")
 	}
-	if !capacity.Configured {
-		return nil, errors.New("Researchflow Owner composition requires explicit capacity configuration")
+	if !capacity.Configured || runDeadline <= 0 {
+		return nil, errors.New("Researchflow Owner composition requires explicit capacity and positive Run Deadline configuration")
 	}
 
 	newsStage, err := newNewsSearchStageComposition(newsConfig, shared.HTTPClient)
@@ -76,7 +78,7 @@ func newResearchflowOwnerComposition(
 	identity := ownerSessionResearchflowIdentity{}
 
 	createRun, err := researchflowapplication.NewCreateRunService(
-		identity, clock, ids, templateRegistry,
+		identity, clock, runDeadline, ids, templateRegistry,
 		newsStage.parameterSchemas, newsStage.applicability, nil,
 		policyResolver, runRepository,
 	)

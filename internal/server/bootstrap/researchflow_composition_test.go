@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"testing"
+	"time"
 
 	newsconfig "example.com/stock-analysis-flow/internal/news/config"
 	platformconfig "example.com/stock-analysis-flow/internal/platform/config"
@@ -29,6 +30,7 @@ func TestResearchflowOwnerCompositionBuildsInternalOwnerServices(t *testing.T) {
 		&serverresources.Resources{DB: &sql.DB{}, HTTPClient: sharedClient},
 		newsCfg,
 		serverconfig.ResearchflowCapacity{Configured: true, MaxQueuedRuns: 10, MaxWorkers: 2},
+		30*time.Minute,
 	)
 	if err != nil {
 		t.Fatal(err)
