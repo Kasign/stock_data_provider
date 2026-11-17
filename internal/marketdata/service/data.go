@@ -21,6 +21,7 @@ import (
 	"example.com/stock-analysis-flow/internal/marketdata/validation"
 	platformdiagnostics "example.com/stock-analysis-flow/internal/platform/diagnostics"
 	"example.com/stock-analysis-flow/internal/platform/fault"
+	platformtime "example.com/stock-analysis-flow/internal/platform/time"
 )
 
 type chipDistributionSource interface {
@@ -61,6 +62,7 @@ type DataService struct {
 	barsTTL                        time.Duration
 	defaultBars                    int
 	logger                         *slog.Logger
+	clock                          platformtime.Clock
 }
 
 func New(providers []provider.Provider, c cache.Cache, store *repository.Store, quoteTTL, barsTTL time.Duration, defaultBars int, logger *slog.Logger) *DataService {
@@ -94,7 +96,15 @@ func NewConfiguredWithResilience(allProviders, quoteProviders, barProviders []pr
 // preferred constructor for future quote-only, historical-only and other
 // data-domain adapters.
 func NewWithCapabilities(allProviders []provider.NamedProvider, quoteProviders []provider.QuoteProvider, barProviders []provider.DailyBarProvider, c cache.Cache, store *repository.Store, quoteTTL, barsTTL time.Duration, defaultBars, maxBars int, resilience ResilienceConfig, logger *slog.Logger) *DataService {
+	return NewWithCapabilitiesAndClock(allProviders, quoteProviders, barProviders, c, store, quoteTTL, barsTTL, defaultBars, maxBars, resilience, logger, platformtime.SystemClock{})
+}
+
+// NewWithCapabilitiesAndClock 在保留原构造入口的同时，允许测试注入确定性时钟。
+func NewWithCapabilitiesAndClock(allProviders []provider.NamedProvider, quoteProviders []provider.QuoteProvider, barProviders []provider.DailyBarProvider, c cache.Cache, store *repository.Store, quoteTTL, barsTTL time.Duration, defaultBars, maxBars int, resilience ResilienceConfig, logger *slog.Logger, clock platformtime.Clock) *DataService {
 	resilience = resilience.normalized()
+	if clock == nil {
+		clock = platformtime.SystemClock{}
+	}
 	if c == nil {
 		c = cache.NewDisabled()
 	}
@@ -117,8 +127,16 @@ func NewWithCapabilities(allProviders []provider.NamedProvider, quoteProviders [
 		maxBars:        maxBars, retries: resilience.Retries,
 		breaker: newCircuitBreaker(resilience.CircuitFailureThreshold, resilience.CircuitCooldown),
 		cache:   c, store: store, quoteTTL: quoteTTL, barsTTL: barsTTL,
-		defaultBars: defaultBars, logger: logger,
+		defaultBars: defaultBars, logger: logger, clock: clock,
 	}
+}
+
+// nowUTC 返回统一时钟提供的 UTC 当前时刻。
+func (s *DataService) nowUTC() time.Time {
+	if s == nil || s.clock == nil {
+		return platformtime.SystemClock{}.Now()
+	}
+	return s.clock.Now().UTC()
 }
 
 func (s *DataService) Providers() []provider.NamedProvider {

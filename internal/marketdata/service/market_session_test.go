@@ -1,9 +1,13 @@
 package service
 
 import (
+	"context"
 	"testing"
+	"time"
 
+	"example.com/stock-analysis-flow/internal/marketdata/cache"
 	"example.com/stock-analysis-flow/internal/marketdata/model"
+	"example.com/stock-analysis-flow/internal/marketdata/provider"
 )
 
 func TestScheduledMarketSessionBoundaries(t *testing.T) {
@@ -36,5 +40,54 @@ func TestScheduledMarketSessionBoundaries(t *testing.T) {
 					tc.phase, tc.inSession, tc.continuous, tc.auction)
 			}
 		})
+	}
+}
+
+
+// marketDataFixedClock 为时间相关测试提供确定的当前时刻。
+type marketDataFixedClock struct {
+	now time.Time
+}
+
+func (c marketDataFixedClock) Now() time.Time { return c.now }
+
+type marketSessionCalendarProvider struct {
+	snapshot *model.TradingCalendarSnapshot
+}
+
+func (*marketSessionCalendarProvider) Name() string { return "market-session-test" }
+
+func (p *marketSessionCalendarProvider) FetchTradingCalendar(context.Context, string, string) (*model.TradingCalendarSnapshot, error) {
+	return p.snapshot, nil
+}
+
+func TestMarketSessionUsesInjectedClock(t *testing.T) {
+	location, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 10, 22, 10, 0, 0, 0, location)
+	calendarProvider := &marketSessionCalendarProvider{snapshot: &model.TradingCalendarSnapshot{
+		Market: "cn_a_share", StartDate: "2026-10-22", EndDate: "2026-10-22",
+		TotalDays: 1, TradingDays: 1,
+		Items: []model.TradingCalendarDay{{Date: "2026-10-22", IsTradingDay: true}},
+		Source: "market-session-test", SourceVersion: "fixture-v1",
+		FetchedAt: now.UTC(), QualityStatus: model.QualityValid,
+	}}
+	svc := NewWithCapabilitiesAndClock(
+		[]provider.NamedProvider{calendarProvider}, nil, nil, cache.NewDisabled(), nil,
+		time.Second, time.Second, 120, 2000, ResilienceConfig{}, nil,
+		marketDataFixedClock{now: now},
+	)
+	svc.SetTradingCalendarProviders([]provider.TradingCalendarProvider{calendarProvider})
+	got, err := svc.MarketSession(context.Background(), now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.ServerTime.Equal(now.UTC()) || !got.FetchedAt.Equal(now.UTC()) {
+		t.Fatalf("market-session timestamps must use injected clock: server=%s fetched=%s want=%s", got.ServerTime, got.FetchedAt, now.UTC())
+	}
+	if got.LocalDate != "2026-10-22" || got.LocalTime != "10:00:00" {
+		t.Fatalf("market-session local time must use Asia/Shanghai: date=%s time=%s", got.LocalDate, got.LocalTime)
 	}
 }
