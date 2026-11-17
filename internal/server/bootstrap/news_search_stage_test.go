@@ -6,16 +6,16 @@ import (
 	"testing"
 	"time"
 
+	"example.com/stock-analysis-flow/internal/researchflow/resourcepolicy"
+	"example.com/stock-analysis-flow/internal/researchflow/stageoutput"
 	newsapp "example.com/stock-analysis-flow/internal/news/app"
 	newsconfig "example.com/stock-analysis-flow/internal/news/config"
 	newsdomain "example.com/stock-analysis-flow/internal/news/domain"
 	newsstage "example.com/stock-analysis-flow/internal/news/stage"
-	"example.com/stock-analysis-flow/internal/researchflow/resourcepolicy"
 	platformconfig "example.com/stock-analysis-flow/internal/platform/config"
 	platformhttpclient "example.com/stock-analysis-flow/internal/platform/httpclient"
 	researchflowapplication "example.com/stock-analysis-flow/internal/researchflow/application"
 	researchflowdomain "example.com/stock-analysis-flow/internal/researchflow/domain"
-	"example.com/stock-analysis-flow/internal/researchflow/stageoutput"
 )
 
 type newsStageTestProvider struct {

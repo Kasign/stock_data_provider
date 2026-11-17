@@ -5,25 +5,24 @@ import (
 	"encoding/json"
 	"fmt"
 
-	newsprovider "example.com/stock-analysis-flow/internal/news/adapters/provider"
-	newsdomain "example.com/stock-analysis-flow/internal/news/domain"
-	newsapp "example.com/stock-analysis-flow/internal/news/app"
-	newsconfig "example.com/stock-analysis-flow/internal/news/config"
-	newsstage "example.com/stock-analysis-flow/internal/news/stage"
-	platformhttpclient "example.com/stock-analysis-flow/internal/platform/httpclient"
-	researchflowapplication "example.com/stock-analysis-flow/internal/researchflow/application"
-	researchflowdomain "example.com/stock-analysis-flow/internal/researchflow/domain"
 	"example.com/stock-analysis-flow/internal/researchflow/parameterschema"
 	"example.com/stock-analysis-flow/internal/researchflow/resourcepolicy"
 	"example.com/stock-analysis-flow/internal/researchflow/stageoutput"
 	"example.com/stock-analysis-flow/internal/researchflow/template"
+	newsapp "example.com/stock-analysis-flow/internal/news/app"
+	newsconfig "example.com/stock-analysis-flow/internal/news/config"
+	newsdomain "example.com/stock-analysis-flow/internal/news/domain"
+	newsprovider "example.com/stock-analysis-flow/internal/news/adapters/provider"
+	newsstage "example.com/stock-analysis-flow/internal/news/stage"
+	platformhttpclient "example.com/stock-analysis-flow/internal/platform/httpclient"
+	researchflowapplication "example.com/stock-analysis-flow/internal/researchflow/application"
+	researchflowdomain "example.com/stock-analysis-flow/internal/researchflow/domain"
 )
 
 const newsSearchStageOutputRegistryVersion = "1.0.0"
 
 type newsSearchStageComposition struct {
 	executor         researchflowapplication.StageExecutor
-	providers        newsapp.ProviderSet
 	registry         *stageoutput.Registry
 	parameterSchemas *parameterschema.Validator
 	applicability    template.ApplicabilityEvaluator
@@ -67,7 +66,6 @@ func newNewsSearchStageCompositionWithProviders(providers newsapp.ProviderSet) (
 	}
 	return &newsSearchStageComposition{
 		executor:         newsSearchStageExecutor{providers: providers},
-		providers:        providers,
 		registry:         registry,
 		parameterSchemas: parameterSchemas,
 		applicability:    newsSearchApplicabilityEvaluator{},
@@ -81,7 +79,6 @@ func hasConfiguredNewsSearchProvider(cfg newsconfig.Config) bool {
 
 type newsSearchStageExecutor struct {
 	providers newsapp.ProviderSet
-	adapter   *newsstage.SearchCandidatesAdapter // 仅供不经过生产 Worker 的旧式单元测试迁移使用
 }
 
 type unavailableNewsProvider struct {
@@ -138,19 +135,12 @@ func (e newsSearchStageExecutor) ExecuteStage(ctx context.Context, request resea
 	if request.Stage.Code != newsstage.SearchCandidatesStageCode {
 		return researchflowapplication.StageExecutionResult{}, fmt.Errorf("News Stage Executor does not support stage code %q", request.Stage.Code)
 	}
-	if e.adapter == nil {
-		return failedNewsStage("news_stage_adapter_unavailable"), nil
-	}
 	var adapter *newsstage.SearchCandidatesAdapter
-	if e.providers != nil {
-		restricted, restrictErr := resolveNewsExecutionProviders(e.providers, request.ResourcePolicy)
-		if restrictErr != nil {
-			return failedNewsStage("news_resource_policy_invalid"), nil
-		}
-		adapter, err = newsstage.NewSearchCandidatesAdapter(newsapp.NewSearchCandidates(restricted))
-	} else {
-		adapter = e.adapter
+	restricted, restrictErr := resolveNewsExecutionProviders(e.providers, request.ResourcePolicy)
+	if restrictErr != nil {
+		return failedNewsStage("news_resource_policy_invalid"), nil
 	}
+	adapter, err := newsstage.NewSearchCandidatesAdapter(newsapp.NewSearchCandidates(restricted))
 	if err != nil || adapter == nil {
 		return failedNewsStage("news_stage_adapter_unavailable"), nil
 	}
