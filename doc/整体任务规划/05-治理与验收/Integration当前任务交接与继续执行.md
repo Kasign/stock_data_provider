@@ -1117,3 +1117,16 @@ Researchflow 已有 Scheduler、Worker、WorkerPool、Claim/Lease/Fencing、候�
 - 没有真实生产 CreateRun 消费方负责输入快照、可信 CallerRef、授权和幂等键。不能为无消费者的模板注入固定服务主体，也不能新增未经契约要求的公网路由。
 
 因此正式 Template 发布的最小前置条件是：确定真实内部消费场景和身份/授权责任；提供严格且不可变的参数 Schema Registry；提供版本化 Applicability 规则；明确 Resource Policy 的解析与授权执行边界。条件齐备后再使用现有不可变 `MySQLTemplateRegistry.Publish` 发布并做 MariaDB 验收。此复核不改变 News Stage 已完成的 Fixture-backed MariaDB 执行结论，也不把真实 Provider 网络验收列为上述开发的前置条件。
+
+
+## 2026-11-17 主流程续接：Owner Session Server 闭环完成，转 WebUI 消费接入
+
+本节覆盖此前“Integration 无可推进业务开发任务”的历史等待态判断；该等待态形成后，项目负责人继续授权推进 Owner Session 主流程。
+
+- 当前代码基线：`5f23e1a0723a25c90ef2456ff318e25fa3e61b94`。
+- Integration CI Run [43998030882](https://github.com/Kasign/stock_data_provider/actions/runs/43998030882) 对精确 SHA success；全仓 gofmt、root/go-core vet/test、跨模块测试、MariaDB/Redis Bootstrap、Compose、WebUI 检查与构建全部通过。
+- Owner Session Server HTTP Handler 已按 SRV-CTR-002 挂载；Schema/Golden/OpenAPI 配套资产已补齐；真实 MariaDB/Redis HTTP 生命周期测试通过。
+- 当前 Server 端仍保持安全隔离：Owner Session 不继承 Owner Bearer 权限；旧 Analysis/运维诊断路由不接受 Owner Session；Owner 初始化仅受控本机 Secret 命令。
+- 当前下一项唯一主流程任务：WebUI 消费 SRV-CTR-002，完成同源 Cookie 登录态、内存态 CSRF、刷新恢复、登出与密码修改。具体进度和验收边界见 `doc/server/Owner-Session接入进度.md` 与 `doc/web/API_CONTRACT.md`。
+- WebUI 完成前不得声称浏览器登录闭环完成；Nginx/Compose 真实部署验证仍是后续验收项。
+- Researchflow 新 HTTP API 仍属于 SRV-CTR-001 deferred，不得把 Owner Session 接口当作 Researchflow 业务 API，也不得提前开放业务路由。

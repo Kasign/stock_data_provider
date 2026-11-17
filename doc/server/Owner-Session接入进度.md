@@ -208,3 +208,24 @@ Server 内部已有：
 契约登记簿状态仍为 `freeze-ready`，没有擅自改为 `frozen`。配套资产补齐不等于契约冻结审批，也不等于真实 MariaDB/Redis 生命周期或 WebUI 部署验收完成。
 
 下一项主流程工作：增加真实 MariaDB + Redis 的完整 HTTP 生命周期集成测试。测试通过后，再实现 WebUI 同源登录、页面刷新 CSRF 恢复、登出与密码修改。
+
+
+## 2026-11-17 真实 MariaDB/Redis HTTP 生命周期验收
+
+<badge color="success">已通过</badge>
+
+- 代码验收 SHA：`5f23e1a0723a25c90ef2456ff318e25fa3e61b94`。
+- Integration CI Run [43998030882](https://github.com/Kasign/stock_data_provider/actions/runs/43998030882)：对该精确 SHA 为 `success`。CI 的根模块测试使用真实 MariaDB 11.4 与 Redis 7.4 服务；`PLATFORM_STORAGE_INTEGRATION=1`、MariaDB DSN 和 Redis 地址均由 Workflow 注入。
+- 新增 `internal/server/bootstrap/owner_session_mariadb_redis_integration_test.go`。测试创建隔离 MariaDB Database、执行 Root Server 全部 Migration，并使用唯一 Redis Key Prefix；不复用 CI 其他测试的 Owner Credential 或 Session。
+- 完整 HTTP 生命周期实际执行：一次性初始化 Owner → 密码登录 → GET 当前 Session → POST CSRF 恢复 → POST Session 轮换 → PUT 密码修改 → 验证旧 CredentialVersion Session 返回 401 → 使用新密码重新登录 → DELETE 登出并清 Cookie。
+- 使用真实 SQL Credential Store、SQL Security Audit Writer、Redis Session Store、Redis Login Rate Limiter 和 Root Server 路由。测试校验审计记录数量，结束后清理隔离 Database 和 Redis 前缀数据。
+- 该结果证明测试环境的 MariaDB/Redis 与 Handler 生命周期闭环通过；不等于目标服务器 Nginx/Compose 部署已验收，也不等于 WebUI 已接入。
+
+### 当前剩余主流程
+
+1. WebUI 增加 Owner Session API 封装：登录、当前状态、页面刷新 CSRF 恢复、登出、Session 轮换、密码修改；CSRF Token 只保存在运行时内存，Owner Bearer 与行情 API Key 不进入浏览器。
+2. 增加登录/退出界面和受保护页面的登录态初始化；登录失败、Session 过期、服务不可用分别显示，不得将未认证误判为网络成功。
+3. WebUI 单测覆盖 Cookie 同源凭据、CSRF Header、页面刷新恢复、退出清理、密码修改后重新登录；随后执行真实 Nginx/Compose 同源部署验收。
+4. SRV-CTR-002 当前仍为 `freeze-ready`，未擅自冻结；Schema/Golden/OpenAPI 已建立，后续需做契约校验和消费者符合性验收。
+
+Owner Session 的 Server 端真实存储生命周期已不再是阻塞项。WebUI 接入是当前 P0 下一步；Researchflow 新业务 API 仍保持 SRV-CTR-001 的 deferred 边界，不得提前开放。
