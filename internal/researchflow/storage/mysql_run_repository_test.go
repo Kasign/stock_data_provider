@@ -162,14 +162,6 @@ func TestMariaDBCreateRunAtomicConcurrentIdempotency(t *testing.T) {
 	now := time.Now().UTC()
 	fingerprint := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	templateFingerprint := "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-	policyRegistry, err := resourcepolicy.NewRegistry()
-	if err != nil {
-		t.Fatal(err)
-	}
-	policySnapshot, err := policyRegistry.Resolve(resourcepolicy.NewsSearchConfiguredProvidersRef, []string{"bocha"})
-	if err != nil {
-		t.Fatal(err)
-	}
 	makeRecord := func(runRef, stageRef string) application.CreateRunRecord {
 		return application.CreateRunRecord{
 			Scope: application.IdempotencyScope{
@@ -451,6 +443,14 @@ func TestMariaDBWorkerStoreSnapshotClaimAndCommit(t *testing.T) {
 	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
 	now := time.Now().UTC()
 	templateFingerprint := "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+	policyRegistry, err := resourcepolicy.NewRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	policySnapshot, err := policyRegistry.Resolve(resourcepolicy.NewsSearchConfiguredProvidersRef, []string{"bocha"})
+	if err != nil {
+		t.Fatal(err)
+	}
 	runRef, stageRef := "worker-run-"+suffix, "worker-stage-"+suffix
 	record := application.CreateRunRecord{
 		Scope: application.IdempotencyScope{
