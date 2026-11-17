@@ -1005,3 +1005,12 @@ func TestParseQuarterlyFinancialPageReportsRequiredStructureFieldEvidence(t *tes
 		})
 	}
 }
+
+func TestQueryQuarterlyFinancialDataUsesChinaYearAtUTCYearBoundary(t *testing.T) {
+	// UTC 仍处于上一年时，中国市场日期已进入下一年。
+	now := time.Date(2026, 12, 31, 16, 0, 0, 0, time.UTC)
+	c := NewClient(Config{Clock: baoStockFixedClock{now: now}})
+	if _, err := c.QueryQuarterlyFinancialData(context.Background(), "sh.600519", "profitability", 2027, 1); err == nil || !strings.Contains(err.Error(), "is in the future") {
+		t.Fatalf("应按中国市场年份接受 2027 年报告期校验，实际错误: %v", err)
+	}
+}

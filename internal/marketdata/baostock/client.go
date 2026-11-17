@@ -172,15 +172,15 @@ func (c *Client) QueryQuarterlyFinancialData(ctx context.Context, code, category
 	if len(codeParts) != 2 || (codeParts[0] != "sh" && codeParts[0] != "sz") || len(codeParts[1]) != 6 {
 		return nil, fmt.Errorf("invalid BaoStock financial security code %q", code)
 	}
-	now := c.cfg.Clock.Now().UTC()
-	if year < 2007 || year > now.Year() {
-		return nil, fmt.Errorf("BaoStock financial year %d is outside supported range 2007..%d", year, now.Year())
+	marketNow := c.cfg.Clock.Now().In(markettime.Location())
+	if year < 2007 || year > marketNow.Year() {
+		return nil, fmt.Errorf("BaoStock financial year %d is outside supported range 2007..%d", year, marketNow.Year())
 	}
 	if quarter < 1 || quarter > 4 {
 		return nil, fmt.Errorf("BaoStock financial quarter %d is outside 1..4", quarter)
 	}
 	periodEnd := time.Date(year, time.Month(quarter*3+1), 0, 0, 0, 0, 0, time.UTC).Format("2006-01-02")
-	chinaToday := now.In(markettime.Location()).Format("2006-01-02")
+	chinaToday := marketNow.Format("2006-01-02")
 	if periodEnd > chinaToday {
 		return nil, fmt.Errorf("BaoStock financial reporting period %s is in the future as of China market date %s", periodEnd, chinaToday)
 	}
