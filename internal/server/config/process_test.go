@@ -147,6 +147,52 @@ func TestLoadProcessRequiresExplicitResearchflowRunDeadline(t *testing.T) {
 	}
 }
 
+func TestLoadProcessRequiresIndependentLocalWorkerCapacity(t *testing.T) {
+	base := map[string]string{
+		"SERVER_ROLE": "worker",
+		"RESEARCHFLOW_MAX_QUEUED_RUNS": "100",
+		"RESEARCHFLOW_MAX_WORKERS": "8",
+		"RESEARCHFLOW_RUN_DEADLINE": "45m",
+	}
+	load := func(extra map[string]string) (Process, error) {
+		values := make(map[string]string, len(base)+len(extra))
+		for key, value := range base { values[key] = value }
+		for key, value := range extra { values[key] = value }
+		return LoadProcess(platformconfig.NewEnvWithLookup(func(key string) (string, bool) {
+			if value, ok := relayRequiredTestValues[key]; ok { return value, true }
+			value, ok := values[key]
+			return value, ok
+		}))
+	}
+	if _, err := load(nil); err == nil {
+		t.Fatal("Worker role must require explicit RESEARCHFLOW_LOCAL_WORKERS")
+	}
+	for _, raw := range []string{"0", "-1", "33", "1.5", "invalid"} {
+		if _, err := load(map[string]string{"RESEARCHFLOW_LOCAL_WORKERS": raw}); err == nil {
+			t.Errorf("invalid local worker count %q accepted", raw)
+		}
+	}
+	cfg, err := load(map[string]string{"RESEARCHFLOW_LOCAL_WORKERS": "3"})
+	if err != nil { t.Fatal(err) }
+	if cfg.ResearchflowLocalWorkers != 3 || cfg.ResearchflowCapacity.MaxWorkers != 8 {
+		t.Fatalf("local and global capacities were not kept independent: %+v", cfg)
+	}
+}
+
+func TestLoadProcessRejectsLocalWorkersForAPIRole(t *testing.T) {
+	values := map[string]string{
+		"SERVER_ROLE": "api",
+		"RESEARCHFLOW_LOCAL_WORKERS": "2",
+	}
+	if _, err := LoadProcess(platformconfig.NewEnvWithLookup(func(key string) (string, bool) {
+		if value, ok := relayRequiredTestValues[key]; ok { return value, true }
+		value, ok := values[key]
+		return value, ok
+	})); err == nil {
+		t.Fatal("API role must reject unused RESEARCHFLOW_LOCAL_WORKERS")
+	}
+}
+
 func TestLoadProcessRejectsRunDeadlineWithoutResearchflowRuntime(t *testing.T) {
 	env := platformconfig.NewEnvWithLookup(func(key string) (string, bool) {
 		if key == "SERVER_ROLE" {
