@@ -223,7 +223,9 @@ func TestWorkerPersistsProviderDiagnosticOutputForRetryWaitStage(t *testing.T) {
 		},
 	}
 	got, err := newWorker(t, store, result).Execute(context.Background(), "run-1", "stage-1", "attempt-new")
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !got.Committed || store.commit.Stage.Status != domain.StageRetryWait ||
 		store.commit.StageOutput == nil || store.commit.Stage.RetryAt == nil {
 		t.Fatalf("retry_wait Stage must retain validated Provider diagnostic output: %+v", store.commit)
