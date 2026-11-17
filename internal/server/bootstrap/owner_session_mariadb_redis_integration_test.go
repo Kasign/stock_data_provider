@@ -104,12 +104,13 @@ func TestOwnerSessionHTTPMariaDBRedisLifecycleIntegration(t *testing.T) {
 	}
 
 	bearerToken := strings.Repeat("b", 43)
-	bearer, err := platformsecurity.NewAuthenticator(platformconfig.NewEnvWithLookup(func(key string) (string, bool) {
+	bearerSecret := platformconfig.NewEnvWithLookup(func(key string) (string, bool) {
 		if key == "PLATFORM_ADMIN_TOKEN" {
 			return bearerToken, true
 		}
 		return "", false
-	}), nil)
+	}).Secret("PLATFORM_ADMIN_TOKEN")
+	bearer, err := platformsecurity.NewAuthenticator(bearerSecret, nil)
 	if err != nil {
 		t.Fatalf("create Owner Bearer authenticator: %v", err)
 	}
