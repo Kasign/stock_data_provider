@@ -85,6 +85,7 @@ type ParameterSchemaValidator interface {
 type ResolvedTemplate struct {
 	Ref                   string
 	Version               string
+	TemplateFingerprint   string `json:"template_fingerprint"`
 	Fingerprint           string
 	RequiresHardRiskGate  bool
 	AllowEmptyInputs      bool
@@ -271,7 +272,10 @@ func BindResourcePolicySnapshot(resolved ResolvedTemplate, snapshot resourcepoli
 	}
 	snapshot.AllowedProviderCodes = codes
 	resolved.ResourcePolicy = snapshot
-	fingerprint, err := resolvedFingerprint(resolved.Fingerprint, resolved.ParameterSchema, snapshot.PolicyFingerprint)
+	if resolved.TemplateFingerprint == "" {
+		return ResolvedTemplate{}, fmt.Errorf("%w: resolved template fingerprint is missing", ErrInvalidTemplate)
+	}
+	fingerprint, err := resolvedFingerprint(resolved.TemplateFingerprint, resolved.ParameterSchema, snapshot.PolicyFingerprint)
 	if err != nil {
 		return ResolvedTemplate{}, err
 	}
@@ -323,7 +327,7 @@ func Resolve(ctx context.Context, t WorkflowTemplate, parameters json.RawMessage
 		return ResolvedTemplate{}, err
 	}
 	resolved := ResolvedTemplate{
-		Ref: t.Ref, Version: t.Version, Fingerprint: fingerprint,
+		Ref: t.Ref, Version: t.Version, TemplateFingerprint: templateFingerprint, Fingerprint: fingerprint,
 		RequiresHardRiskGate: t.RequiresHardRiskGate, AllowEmptyInputs: t.AllowEmptyInputs,
 		OutputRegistryVersion: t.OutputRegistryVersion, ResourcePolicyRef: t.ResourcePolicyRef,
 		ParameterSchema: parameterSchema,

@@ -412,6 +412,16 @@ func TestResourcePolicySnapshotFingerprintExcludesDynamicProviderInventory(t *te
 	if first.Fingerprint != second.Fingerprint {
 		t.Fatal("dynamic Provider inventory must not change ResolvedTemplate fingerprint")
 	}
+	rebound, err := BindResourcePolicySnapshot(first, resourcepolicy.Snapshot{
+		PolicyRef: first.ResourcePolicy.PolicyRef, PolicyFingerprint: first.ResourcePolicy.PolicyFingerprint,
+		AllowedProviderCodes: []string{"bocha", "tavily"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rebound.Fingerprint != first.Fingerprint {
+		t.Fatal("binding the same ResourcePolicy snapshot twice must be idempotent")
+	}
 	third, err := BindResourcePolicySnapshot(base, resourcepolicy.Snapshot{
 		PolicyRef: base.ResourcePolicyRef, PolicyFingerprint: strings.Repeat("b", 64),
 		AllowedProviderCodes: []string{"bocha"},
