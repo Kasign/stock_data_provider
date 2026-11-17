@@ -11,6 +11,7 @@ import (
 	"example.com/stock-analysis-flow/internal/marketdata/model"
 	"example.com/stock-analysis-flow/internal/marketdata/normalize"
 	"example.com/stock-analysis-flow/internal/marketdata/provider"
+	platformtime "example.com/stock-analysis-flow/internal/platform/time"
 )
 
 // SetAnnouncementProviders installs providers independent from real-time quotes and daily bars.
@@ -23,11 +24,12 @@ func (s *DataService) AnnouncementProviders() []provider.AnnouncementProvider {
 }
 
 func normalizeAnnouncementRange(rawStart, rawEnd string) (string, string, error) {
-	loc, err := time.LoadLocation("Asia/Shanghai")
-	if err != nil {
-		loc = time.FixedZone("CST", 8*60*60)
-	}
-	today := time.Now().In(loc).Format("2006-01-02")
+	return normalizeAnnouncementRangeAt(rawStart, rawEnd, platformtime.SystemClock{}.Now())
+}
+
+func normalizeAnnouncementRangeAt(rawStart, rawEnd string, now time.Time) (string, string, error) 
+	loc := marketLocation()
+	today := now.In(loc).Format("2006-01-02")
 	startDate, endDate := strings.TrimSpace(rawStart), strings.TrimSpace(rawEnd)
 	if endDate == "" {
 		endDate = today
@@ -52,6 +54,10 @@ func normalizeAnnouncementRange(rawStart, rawEnd string) (string, string, error)
 }
 
 func validateStockAnnouncementSnapshot(symbol, startDate, endDate string, page, pageSize int, snapshot *model.StockAnnouncementSnapshot) error {
+	return validateStockAnnouncementSnapshotAt(symbol, startDate, endDate, page, pageSize, snapshot, platformtime.SystemClock{}.Now())
+}
+
+func validateStockAnnouncementSnapshotAt(symbol, startDate, endDate string, page, pageSize int, snapshot *model.StockAnnouncementSnapshot, now time.Time) error 
 	if page < 1 || pageSize < 1 {
 		return errors.New("announcement page and page size must be positive")
 	}
@@ -65,7 +71,7 @@ func validateStockAnnouncementSnapshot(symbol, startDate, endDate string, page, 
 	if strings.TrimSpace(snapshot.Source) == "" || !hasIdentifiableSourceVersion(snapshot.SourceVersion) || snapshot.FetchedAt.IsZero() {
 		return errors.New("announcement source, source_version or fetched_at is missing")
 	}
-	if snapshot.FetchedAt.After(time.Now().UTC().Add(5 * time.Minute)) {
+	if snapshot.FetchedAt.After(now.UTC().Add(5 * time.Minute)) {
 		return errors.New("announcement fetched_at is in the future")
 	}
 	if snapshot.Total < 0 || snapshot.Pages < 0 || snapshot.Returned != len(snapshot.Items) || snapshot.Returned > pageSize {
@@ -99,7 +105,7 @@ func validateStockAnnouncementSnapshot(symbol, startDate, endDate string, page, 
 			item.Symbol != symbol || item.Source != snapshot.Source || item.SourceVersion != snapshot.SourceVersion || item.FetchedAt.IsZero() {
 			return errors.New("announcement item is missing ID/title or has mismatched symbol/source/version")
 		}
-		if item.FetchedAt.After(time.Now().UTC().Add(5 * time.Minute)) {
+		if item.FetchedAt.After(now.UTC().Add(5 * time.Minute)) {
 			return errors.New("announcement item fetched_at is in the future")
 		}
 		if _, ok := seen[item.ArticleID]; ok {
@@ -117,7 +123,7 @@ func validateStockAnnouncementSnapshot(symbol, startDate, endDate string, page, 
 		if item.PublishedAt == nil && item.QualityStatus == model.QualityValid {
 			return errors.New("announcement without a source publishing time must not be marked valid quality")
 		}
-		if item.PublishedAt != nil && (item.PublishedAt.IsZero() || item.PublishedAt.After(time.Now().Add(5*time.Minute))) {
+		if item.PublishedAt != nil && (item.PublishedAt.IsZero() || item.PublishedAt.After(now.Add(5*time.Minute))) {
 			return errors.New("announcement publishing time is zero or in the future")
 		}
 		if item.QualityStatus != model.QualityValid && item.QualityStatus != model.QualityDegraded {
@@ -175,7 +181,7 @@ func (s *DataService) StockAnnouncements(ctx context.Context, rawSymbol, rawStar
 	if err != nil {
 		return nil, false, err
 	}
-	startDate, endDate, err := normalizeAnnouncementRange(rawStartDate, rawEndDate)
+	startDate, endDate, err := normalizeAnnouncementRangeAt(rawStartDate, rawEndDate, s.nowUTC())
 	if err != nil {
 		return nil, false, err
 	}
@@ -197,8 +203,8 @@ func (s *DataService) StockAnnouncements(ctx context.Context, rawSymbol, rawStar
 	if data, ok, cacheErr := s.cache.Get(ctx, key); cacheErr == nil && ok {
 		var cached model.StockAnnouncementSnapshot
 		if json.Unmarshal(data, &cached) == nil &&
-			validateStockAnnouncementSnapshot(symbol, startDate, endDate, page, pageSize, &cached) == nil &&
-			time.Since(cached.FetchedAt) >= 0 {
+			validateStockAnnouncementSnapshotAt(symbol, startDate, endDate, page, pageSize, &cached, s.nowUTC()) == nil &&
+			!cached.FetchedAt.After(s.nowUTC()) {
 			ttl := positiveTTL
 			cacheEligible := cached.HasData && cached.QualityStatus != model.QualityUnknown
 			if !cached.HasData || cached.QualityStatus == model.QualityUnknown {
@@ -213,7 +219,7 @@ func (s *DataService) StockAnnouncements(ctx context.Context, rawSymbol, rawStar
 				}
 				cacheEligible = fallbackExhausted || len(s.announcementProviders) <= 1
 			}
-			if cacheEligible && time.Since(cached.FetchedAt) < ttl {
+			if cacheEligible && cacheEntryWithinTTL(cached.FetchedAt, ttl, s.nowUTC()) {
 				return &cached, true, nil
 			}
 		}
@@ -238,7 +244,7 @@ func (s *DataService) StockAnnouncements(ctx context.Context, rawSymbol, rawStar
 			failures = append(failures, p.Name()+": announcement source does not match Provider.Name()")
 			continue
 		}
-		if err := validateStockAnnouncementSnapshot(symbol, startDate, endDate, page, pageSize, snapshot); err != nil {
+		if err := validateStockAnnouncementSnapshotAt(symbol, startDate, endDate, page, pageSize, snapshot, s.nowUTC()); err != nil {
 			failures = append(failures, p.Name()+": "+err.Error())
 			continue
 		}
