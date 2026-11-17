@@ -27,7 +27,7 @@ func normalizeAnnouncementRange(rawStart, rawEnd string) (string, string, error)
 	return normalizeAnnouncementRangeAt(rawStart, rawEnd, platformtime.SystemClock{}.Now())
 }
 
-func normalizeAnnouncementRangeAt(rawStart, rawEnd string, now time.Time) (string, string, error) 
+func normalizeAnnouncementRangeAt(rawStart, rawEnd string, now time.Time) (string, string, error) { 
 	loc := marketLocation()
 	today := now.In(loc).Format("2006-01-02")
 	startDate, endDate := strings.TrimSpace(rawStart), strings.TrimSpace(rawEnd)
@@ -57,7 +57,7 @@ func validateStockAnnouncementSnapshot(symbol, startDate, endDate string, page, 
 	return validateStockAnnouncementSnapshotAt(symbol, startDate, endDate, page, pageSize, snapshot, platformtime.SystemClock{}.Now())
 }
 
-func validateStockAnnouncementSnapshotAt(symbol, startDate, endDate string, page, pageSize int, snapshot *model.StockAnnouncementSnapshot, now time.Time) error 
+func validateStockAnnouncementSnapshotAt(symbol, startDate, endDate string, page, pageSize int, snapshot *model.StockAnnouncementSnapshot, now time.Time) error { 
 	if page < 1 || pageSize < 1 {
 		return errors.New("announcement page and page size must be positive")
 	}

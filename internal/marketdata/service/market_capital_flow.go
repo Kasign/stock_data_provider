@@ -98,7 +98,7 @@ func validateMarketCapitalFlowSnapshot(startDate, endDate string, snapshot *mode
 	return validateMarketCapitalFlowSnapshotAt(startDate, endDate, snapshot, platformtime.SystemClock{}.Now())
 }
 
-func validateMarketCapitalFlowSnapshotAt(startDate, endDate string, snapshot *model.MarketCapitalFlowSnapshot, now time.Time) error 
+func validateMarketCapitalFlowSnapshotAt(startDate, endDate string, snapshot *model.MarketCapitalFlowSnapshot, now time.Time) error { 
 	if snapshot == nil {
 		return errors.New("market-capital-flow provider returned an empty response")
 	}
