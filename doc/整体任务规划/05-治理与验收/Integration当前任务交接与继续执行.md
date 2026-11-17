@@ -1248,3 +1248,24 @@ GetRun 与 CancelRun 的持久化创建者授权已在 Application/Storage 层�
 精确 SHA `1c82c16bbbf67084d85a0579f5e0f2d5796358c1` 的 Integration CI Run [44016866061](https://github.com/Kasign/stock_data_provider/actions/runs/44016866061) 全量 success。
 
 下一步是内部组合根装配 CreateRun/GetRun/CancelRun，并先核实现有 DatabaseClock、IDGenerator、HardRiskGateRegistry 实现。不得开放公网 API；SRV-CTR-001 仍 deferred。
+
+
+### 2026-11-17 Server Owner 内部 Run 组合最新交接
+
+**当前唯一工作分支：`integration`。代码验收 SHA：`fc2f7793fe22c6760f8756d9f277b4b579012a51`。** Integration CI Run [44024703289](https://github.com/Kasign/stock_data_provider/actions/runs/44024703289) 对精确 SHA 全量 success。
+
+已完成：
+- Server Owner Session 组合在 Owner Session 启用且 Researchflow Capacity 显式配置时，装配进程内 CreateRun/GetRun/CancelRun；不注册 HTTP 路由。
+- 三个服务共用 MySQLRunRepository；可信身份固定来自 Owner Session Principal，GetRun/CancelRun 继续执行持久化创建者关联授权。
+- 同一 News Stage composition 同时提供真实 ProviderSet、参数 Schema、Applicability 和 Output Registry；ResourcePolicy Resolver 只从成功装配的 Provider 实例生成授权 inventory。
+- MySQL DatabaseClock 使用数据库 UTC 时间；真实 MariaDB 集成测试通过。
+- Server IDGenerator 使用 crypto/rand 生成 128-bit 引用熵。
+- 当前 News Search 不声明 hard-risk Stage，故不注入虚假 Gate Registry；未来 hard-risk Template 继续 fail-closed。
+
+当前边界：
+- 这是进程内服务组合，不是已接通的 WebUI 消费者；没有 Researchflow HTTP 路由。
+- 正式 News Search Template 尚未发布。WebUI W2 的输入快照、system_as_of、deadline、幂等键和 API 接入契约未完成前，不写猜测的 Template 默认值。
+- Worker Runtime / Scheduler / WorkerPool / ExpiredAttempt / Deadline / Finalization / Shutdown 尚未接入 Bootstrap。
+- `SRV-CTR-001=deferred` 不变；Owner Bearer 不自动获得 Owner Session 的 Researchflow 权限。
+
+后续主线：先完成 WebUI W2 的真实调用契约及 SRV-CTR-001 正式解冻，再发布正式 Template；之后将当前保留的 News Stage composition 接入生产 Worker Runtime，并验收完整生命周期。不要重复实现已经通过的 ResourcePolicy、Owner 身份适配、Run 访问授权或 DatabaseClock。

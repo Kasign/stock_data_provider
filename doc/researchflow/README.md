@@ -109,3 +109,14 @@ Server 可信 Owner Session RequestIdentity Adapter 和内部 CreateRun/GetRun/C
 ## Owner Session Researchflow 身份适配
 
 Server 已提供 `ownerSessionResearchflowIdentity`：只接受可信 Principal 中的 Owner Session（`Kind=owner`、`Subject=owner`、`AuthMethod=owner_session`），拒绝 Owner Bearer、Service Bearer 和匿名请求。Request ID 从 Observability Context 传播；CorrelationID 由 CreateRun IDGenerator 生成。该适配器尚未接入生产 CreateRun/GetRun/CancelRun 组合。代码 SHA `1c82c16bbbf67084d85a0579f5e0f2d5796358c1` 的 Integration CI Run [44016866061](https://github.com/Kasign/stock_data_provider/actions/runs/44016866061) 全量 success。
+
+
+## 2026-11-17 Server Owner 内部 Run 组合
+
+Server 已在 Owner Session 启用且 Researchflow Capacity 显式配置时，装配进程内 CreateRun/GetRun/CancelRun Application 服务。三项服务共用 MySQLRunRepository 与持久化创建者授权；CreateRun 的 RequestIdentity 只接受可信 Owner Session Principal。ResourcePolicy Resolver 从同一 News Stage composition 实际成功装配的 Provider 实例生成 inventory，不读取客户端字段或自行创建 HTTP Client。
+
+新增 Researchflow MySQL DatabaseClock，使用 MariaDB UTC 时间；MariaDB 集成测试验证了真实数据库时间读取。Server IDGenerator 使用 crypto/rand 的 128-bit 熵。当前 News Search 组合没有 hard-risk Stage，因此不伪造 HardRiskGateRegistry；未来声明 hard-risk Stage 会 fail-closed。
+
+代码 SHA `fc2f7793fe22c6760f8756d9f277b4b579012a51` 的 Integration CI Run [44024703289](https://github.com/Kasign/stock_data_provider/actions/runs/44024703289) 全量 success。
+
+**边界：** 当前只有进程内服务组合，没有实际调用方、正式 Workflow Template 或 Worker Runtime；未新增 HTTP 路由，SRV-CTR-001 继续 deferred。WebUI W2 尚未接通。
