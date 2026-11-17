@@ -178,7 +178,7 @@ func (p *Eastmoney) FetchStockAnnouncements(ctx context.Context, rawSymbol, star
 		addEastmoneyAnnouncementResponseIssue(ctx, "total", "data.total_hits", "invalid_pagination_total", "non-negative total_hits", strconv.Itoa(total), "东方财富公告响应 total_hits 为负数")
 		return nil, fmt.Errorf("Eastmoney announcement total_hits is negative: %d", total)
 	}
-	fetchedAt := time.Now().UTC()
+	fetchedAt := providerNowUTC()
 	pages := 0
 	if total > 0 {
 		// 使用减一后整除，避免 total 接近 int 上界时加法溢出。
@@ -297,7 +297,7 @@ func emptyEastmoneyAnnouncementSnapshot(symbol, startDate, endDate string, page,
 	return &model.StockAnnouncementSnapshot{
 		Symbol: symbol, StartDate: startDate, EndDate: endDate, Page: page, PageSize: pageSize,
 		Total: 0, Pages: 0, Returned: 0, HasData: false, HasMore: false, Items: []model.StockAnnouncement{},
-		Source: "eastmoney", SourceVersion: "eastmoney-announcement-v1", FetchedAt: time.Now().UTC(),
+		Source: "eastmoney", SourceVersion: "eastmoney-announcement-v1", FetchedAt: providerNowUTC(),
 		QualityStatus:  model.QualityUnknown,
 		QualityReasons: []string{"provider_returned_empty_announcement_list_not_confirmed_as_no_announcements"},
 	}

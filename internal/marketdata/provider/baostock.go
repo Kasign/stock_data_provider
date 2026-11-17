@@ -74,7 +74,7 @@ func (p *Baostock) FetchDailyBars(ctx context.Context, rawSymbol, startDate, end
 	if limit > 2000 {
 		limit = 2000
 	}
-	start, end, err := baostockDateRange(startDate, endDate, limit, time.Now())
+	start, end, err := baostockDateRange(startDate, endDate, limit, providerNowUTC())
 	if err != nil {
 		return nil, err
 	}
@@ -90,7 +90,7 @@ func (p *Baostock) FetchDailyBars(ctx context.Context, rawSymbol, startDate, end
 		return nil, errors.New("BaoStock returned no daily K-line rows")
 	}
 
-	fetchedAt := time.Now().UTC()
+	fetchedAt := providerNowUTC()
 	out := make([]model.DailyBar, 0, len(rows))
 	seenDates := make(map[string]struct{}, len(rows))
 	for index, row := range rows {
@@ -214,7 +214,7 @@ func (p *Baostock) FetchDailyBars(ctx context.Context, rawSymbol, startDate, end
 			Volume: &volume, Amount: amount, ChangePercent: changePercent,
 			AdjustmentBasis: adjustment, AdjustmentMethod: adjustmentMethod,
 			Source: p.Name(), SourceVersion: baostockVersion,
-			FetchedAt: fetchedAt, NormalizedAt: time.Now().UTC(),
+			FetchedAt: fetchedAt, NormalizedAt: providerNowUTC(),
 			RawVolume: &rawVolume, RawVolumeUnit: "shares",
 			RawAmount: rawAmount, RawAmountUnit: rawAmountUnit, RawAmountField: rawAmountField,
 			VolumeUnit: "shares", AmountUnit: amountUnit,
