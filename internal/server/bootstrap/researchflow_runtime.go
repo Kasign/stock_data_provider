@@ -14,8 +14,8 @@ import (
 // researchflowRuntimeComponent owns only the in-process execution lifecycle.
 // Its durable state, admission limits and recovery decisions remain in MariaDB.
 type researchflowRuntimeComponent struct {
-	pool                  *researchflowapplication.WorkerPool
-	ids                   researchflowapplication.IDGenerator
+	pool                   *researchflowapplication.WorkerPool
+	ids                    researchflowapplication.IDGenerator
 	scheduler              *researchflowapplication.Scheduler
 	schedulerCandidates    *researchflowapplication.SchedulerCandidateScanner
 	expiredAttempts        *researchflowapplication.ExpiredAttemptScanner
@@ -199,7 +199,9 @@ func (c *researchflowRuntimeComponent) scanCancellationRecovery(ctx context.Cont
 	for pageCount := 0; pageCount < 10; pageCount++ {
 		page, err := c.cancellations.ListNextPage(ctx, c.cancelRunCursor, c.cancelStageCursor)
 		if err != nil {
-			if ctx.Err() == nil { c.logger.Error("Researchflow Cancellation Recovery 候选扫描失败", "error", err) }
+			if ctx.Err() == nil {
+				c.logger.Error("Researchflow Cancellation Recovery 候选扫描失败", "error", err)
+			}
 			return
 		}
 		for _, candidate := range page.Candidates {
@@ -208,7 +210,10 @@ func (c *researchflowRuntimeComponent) scanCancellationRecovery(ctx context.Cont
 				c.logger.Error("Researchflow Cancellation Attempt 恢复失败", "run_ref", candidate.RunRef, "stage_ref", candidate.StageRef, "error", err)
 			}
 		}
-		if !page.HasMore { c.cancelRunCursor, c.cancelStageCursor = "", ""; return }
+		if !page.HasMore {
+			c.cancelRunCursor, c.cancelStageCursor = "", ""
+			return
+		}
 		c.cancelRunCursor, c.cancelStageCursor = page.NextRunRef, page.NextStageRef
 	}
 }
@@ -217,20 +222,27 @@ func (c *researchflowRuntimeComponent) scanExpiredAttempts(ctx context.Context) 
 	for pageCount := 0; pageCount < 10; pageCount++ {
 		page, err := c.expiredAttempts.ListNextPage(ctx, c.expiredRunCursor, c.expiredStageCursor)
 		if err != nil {
-			if ctx.Err() == nil { c.logger.Error("Researchflow Expired Attempt 候选扫描失败", "error", err) }
+			if ctx.Err() == nil {
+				c.logger.Error("Researchflow Expired Attempt 候选扫描失败", "error", err)
+			}
 			return
 		}
 		for _, candidate := range page.Candidates {
 			attemptRef, idErr := c.ids.NewRef(ctx, "attempt")
 			if idErr != nil {
-				if ctx.Err() == nil { c.logger.Error("生成 Researchflow 恢复 Attempt ID 失败", "error", idErr) }
+				if ctx.Err() == nil {
+					c.logger.Error("生成 Researchflow 恢复 Attempt ID 失败", "error", idErr)
+				}
 				continue
 			}
 			if _, executeErr := c.pool.Execute(ctx, candidate.RunRef, candidate.StageRef, attemptRef); executeErr != nil && ctx.Err() == nil {
 				c.logger.Error("Researchflow Expired Attempt 恢复执行失败", "run_ref", candidate.RunRef, "stage_ref", candidate.StageRef, "error", executeErr)
 			}
 		}
-		if !page.HasMore { c.expiredRunCursor, c.expiredStageCursor = "", ""; return }
+		if !page.HasMore {
+			c.expiredRunCursor, c.expiredStageCursor = "", ""
+			return
+		}
 		c.expiredRunCursor, c.expiredStageCursor = page.NextRunRef, page.NextStageRef
 	}
 }
@@ -239,7 +251,9 @@ func (c *researchflowRuntimeComponent) scanSchedulableRuns(ctx context.Context) 
 	for pageCount := 0; pageCount < 10; pageCount++ {
 		page, err := c.schedulerCandidates.ListNextPage(ctx, c.schedulerCursor)
 		if err != nil {
-			if ctx.Err() == nil { c.logger.Error("Researchflow Scheduler 候选扫描失败", "error", err) }
+			if ctx.Err() == nil {
+				c.logger.Error("Researchflow Scheduler 候选扫描失败", "error", err)
+			}
 			return
 		}
 		for _, runRef := range page.RunRefs {
@@ -247,7 +261,10 @@ func (c *researchflowRuntimeComponent) scanSchedulableRuns(ctx context.Context) 
 				c.logger.Error("Researchflow Run 调度失败", "run_ref", runRef, "error", scheduleErr)
 			}
 		}
-		if !page.HasMore { c.schedulerCursor = ""; return }
+		if !page.HasMore {
+			c.schedulerCursor = ""
+			return
+		}
 		c.schedulerCursor = page.NextCursor
 	}
 }
@@ -256,7 +273,9 @@ func (c *researchflowRuntimeComponent) scanFinalizableRuns(ctx context.Context) 
 	for pageCount := 0; pageCount < 10; pageCount++ {
 		page, err := c.finalizationCandidates.ListNextPage(ctx, c.finalizerCursor)
 		if err != nil {
-			if ctx.Err() == nil { c.logger.Error("Researchflow Run Finalization 候选扫描失败", "error", err) }
+			if ctx.Err() == nil {
+				c.logger.Error("Researchflow Run Finalization 候选扫描失败", "error", err)
+			}
 			return
 		}
 		for _, runRef := range page.RunRefs {
@@ -264,7 +283,10 @@ func (c *researchflowRuntimeComponent) scanFinalizableRuns(ctx context.Context) 
 				c.logger.Error("Researchflow Run Finalization 失败", "run_ref", runRef, "error", finalizeErr)
 			}
 		}
-		if !page.HasMore { c.finalizerCursor = ""; return }
+		if !page.HasMore {
+			c.finalizerCursor = ""
+			return
+		}
 		c.finalizerCursor = page.NextCursor
 	}
 }

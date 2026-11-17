@@ -66,6 +66,7 @@ func newResearchflowOwnerCompositionFromExecution(
 		resourcePolicies: execution.resourcePolicies,
 	}, nil
 }
+
 // publishWorkflowTemplate remains an Owner composition convenience for existing
 // bootstrap call sites; publication belongs to the shared execution composition.
 func (c *researchflowOwnerComposition) publishWorkflowTemplate(ctx context.Context) error {
