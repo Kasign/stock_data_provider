@@ -79,6 +79,8 @@ Root Server 在 `OWNER_SESSION_ENABLED=true` 时，已按 `doc/server/contracts/
 
 浏览器只使用 HttpOnly Session Cookie；CSRF Token 应保存在 JS 运行时内存，通过 `X-CSRF-Token` 回传，不写入 localStorage/sessionStorage。Owner Bearer 与行情服务 API Key 继续独立，不能用于替代 Session。
 
+Nginx 的浏览器可见路径为 `/analysis-api/api/...`，而 Root Server 实际接收的路径为 `/api/...`。因此 `web/default.conf.template` 必须使用 `proxy_cookie_path /api /analysis-api/api;` 将 Set-Cookie 的 Path 改写到浏览器可见前缀；该规则同时覆盖登录/续期 Cookie 与登出/密码修改的清除 Cookie。直连 Root Server 的部署不经过该改写，仍使用 Server 配置的 `/api` Path。
+
 当前 SRV-CTR-002 在项目契约登记簿中的状态仍为 `freeze-ready`，其 Schema/Golden/OpenAPI 配套资产尚未落地。WebUI 尚无 Owner Session API 封装和登录界面，因此“服务端路由已挂载”不等于“浏览器认证闭环已完成”。真实 MariaDB/Redis HTTP 生命周期和 Nginx/Compose 同源部署验收也仍待完成。
 
 ## 5. 跨模块目标能力与接入状态
