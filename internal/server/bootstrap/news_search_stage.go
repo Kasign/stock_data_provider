@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	newsprovider "example.com/stock-analysis-flow/internal/news/adapters/provider"
+	newsdomain "example.com/stock-analysis-flow/internal/news/domain"
 	newsapp "example.com/stock-analysis-flow/internal/news/app"
 	newsconfig "example.com/stock-analysis-flow/internal/news/config"
 	newsstage "example.com/stock-analysis-flow/internal/news/stage"
@@ -13,6 +14,7 @@ import (
 	researchflowapplication "example.com/stock-analysis-flow/internal/researchflow/application"
 	researchflowdomain "example.com/stock-analysis-flow/internal/researchflow/domain"
 	"example.com/stock-analysis-flow/internal/researchflow/parameterschema"
+	"example.com/stock-analysis-flow/internal/researchflow/resourcepolicy"
 	"example.com/stock-analysis-flow/internal/researchflow/stageoutput"
 	"example.com/stock-analysis-flow/internal/researchflow/template"
 )
@@ -21,6 +23,7 @@ const newsSearchStageOutputRegistryVersion = "1.0.0"
 
 type newsSearchStageComposition struct {
 	executor         researchflowapplication.StageExecutor
+	providers        newsapp.ProviderSet
 	registry         *stageoutput.Registry
 	parameterSchemas *parameterschema.Validator
 	applicability    template.ApplicabilityEvaluator
@@ -46,10 +49,7 @@ func newNewsSearchStageCompositionWithProviders(providers newsapp.ProviderSet) (
 	if providers == nil {
 		return nil, fmt.Errorf("News ProviderSet 不可用")
 	}
-	adapter, err := newsstage.NewSearchCandidatesAdapter(newsapp.NewSearchCandidates(providers))
-	if err != nil {
-		return nil, fmt.Errorf("创建 News SearchCandidates Adapter 失败: %w", err)
-	}
+	
 	registry, err := stageoutput.NewRegistry(newsSearchStageOutputRegistryVersion, []stageoutput.Entry{{
 		StageCode: newsstage.SearchCandidatesStageCode, OutputType: newsstage.SearchCandidatesOutputType,
 		SchemaVersion:           newsstage.SearchCandidatesSchemaVersion,
@@ -66,7 +66,8 @@ func newNewsSearchStageCompositionWithProviders(providers newsapp.ProviderSet) (
 		return nil, fmt.Errorf("创建 News Search 参数 Schema Validator 失败: %w", err)
 	}
 	return &newsSearchStageComposition{
-		executor:         newsSearchStageExecutor{adapter: adapter},
+		executor:         newsSearchStageExecutor{providers: providers},
+		providers:        providers,
 		registry:         registry,
 		parameterSchemas: parameterSchemas,
 		applicability:    newsSearchApplicabilityEvaluator{},
@@ -79,7 +80,58 @@ func hasConfiguredNewsSearchProvider(cfg newsconfig.Config) bool {
 }
 
 type newsSearchStageExecutor struct {
-	adapter *newsstage.SearchCandidatesAdapter
+	providers newsapp.ProviderSet
+	adapter   *newsstage.SearchCandidatesAdapter // 仅供不经过生产 Worker 的旧式单元测试迁移使用
+}
+
+type unavailableNewsProvider struct {
+	code string
+}
+
+func (p unavailableNewsProvider) Code() string { return p.code }
+func (p unavailableNewsProvider) Search(context.Context, newsdomain.SearchRequest) ([]newsdomain.Candidate, error) {
+	return nil, &newsapp.ProviderError{Code: newsapp.ProviderErrorNotConfigured, Skipped: true}
+}
+
+type restrictedNewsProviderSet struct {
+	providers []newsapp.Provider
+}
+
+func (s restrictedNewsProviderSet) All() []newsapp.Provider {
+	return append([]newsapp.Provider(nil), s.providers...)
+}
+
+func resolveNewsExecutionProviders(inventory newsapp.ProviderSet, snapshot resourcepolicy.Snapshot) (newsapp.ProviderSet, error) {
+	registry, err := resourcepolicy.NewRegistry()
+	if err != nil {
+		return nil, err
+	}
+	if err := registry.ValidateSnapshot(snapshot); err != nil {
+		return nil, fmt.Errorf("News ResourcePolicy snapshot is invalid: %w", err)
+	}
+	available := make(map[string]newsapp.Provider)
+	if inventory != nil {
+		for _, provider := range inventory.All() {
+			if provider == nil || provider.Code() == "" {
+				return nil, fmt.Errorf("News Provider inventory contains an invalid Provider")
+			}
+			if _, exists := available[provider.Code()]; exists {
+				return nil, fmt.Errorf("News Provider inventory contains duplicate Provider Code %q", provider.Code())
+			}
+			available[provider.Code()] = provider
+		}
+	}
+	allowed := make([]newsapp.Provider, 0, len(snapshot.AllowedProviderCodes))
+	for _, code := range snapshot.AllowedProviderCodes {
+		provider, exists := available[code]
+		if !exists {
+			// 历史 Run 的授权不随当前配置缩小；缺失资源必须形成明确 Outcome，
+			// 不能静默删除或以其他 Provider 替代。
+			provider = unavailableNewsProvider{code: code}
+		}
+		allowed = append(allowed, provider)
+	}
+	return restrictedNewsProviderSet{providers: allowed}, nil
 }
 
 func (e newsSearchStageExecutor) ExecuteStage(ctx context.Context, request researchflowapplication.StageExecutionRequest) (researchflowapplication.StageExecutionResult, error) {
@@ -89,7 +141,20 @@ func (e newsSearchStageExecutor) ExecuteStage(ctx context.Context, request resea
 	if e.adapter == nil {
 		return failedNewsStage("news_stage_adapter_unavailable"), nil
 	}
-	output, err := e.adapter.ExecuteParameters(ctx, request.Parameters)
+	var adapter *newsstage.SearchCandidatesAdapter
+	if e.providers != nil {
+		restricted, restrictErr := resolveNewsExecutionProviders(e.providers, request.ResourcePolicy)
+		if restrictErr != nil {
+			return failedNewsStage("news_resource_policy_invalid"), nil
+		}
+		adapter, err = newsstage.NewSearchCandidatesAdapter(newsapp.NewSearchCandidates(restricted))
+	} else {
+		adapter = e.adapter
+	}
+	if err != nil || adapter == nil {
+		return failedNewsStage("news_stage_adapter_unavailable"), nil
+	}
+	output, err := adapter.ExecuteParameters(ctx, request.Parameters)
 	if err != nil {
 		return failedNewsStage("news_search_invalid_parameters"), nil
 	}

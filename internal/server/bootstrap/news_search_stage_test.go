@@ -10,6 +10,7 @@ import (
 	newsconfig "example.com/stock-analysis-flow/internal/news/config"
 	newsdomain "example.com/stock-analysis-flow/internal/news/domain"
 	newsstage "example.com/stock-analysis-flow/internal/news/stage"
+	"example.com/stock-analysis-flow/internal/researchflow/resourcepolicy"
 	platformconfig "example.com/stock-analysis-flow/internal/platform/config"
 	platformhttpclient "example.com/stock-analysis-flow/internal/platform/httpclient"
 	researchflowapplication "example.com/stock-analysis-flow/internal/researchflow/application"
@@ -56,12 +57,13 @@ func TestNewsSearchStageCompositionRegistersExactOutputAndUsesPlatformClientOnly
 	result, err := composition.executor.ExecuteStage(context.Background(), researchflowapplication.StageExecutionRequest{
 		Stage:      researchflowdomain.Stage{Code: newsstage.SearchCandidatesStageCode},
 		Parameters: json.RawMessage(`{"query":"market","limit":10}`),
+		ResourcePolicy: testNewsResourcePolicy(t, []string{"bocha"}),
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if result.StageStatus != researchflowdomain.StageFailed ||
-		len(result.ReasonCodes) != 1 || result.ReasonCodes[0] != "news_provider_not_configured" {
+		len(result.ReasonCodes) != 1 || result.ReasonCodes[0] != "news_all_providers_skipped" {
 		t.Fatalf("missing providers must fail closed: %+v", result)
 	}
 	if err := researchflowapplication.ValidateStageExecutionResult(result); err != nil {
@@ -183,6 +185,21 @@ func TestNewsSearchStageExecutorRejectsUnsupportedStageCode(t *testing.T) {
 	}
 }
 
+func testNewsResourcePolicy(t *testing.T, codes []string) resourcepolicy.Snapshot {
+	t.Helper()
+	registry, err := resourcepolicy.NewRegistry()
+	if err != nil { t.Fatal(err) }
+	snapshot, err := registry.Resolve(resourcepolicy.NewsSearchConfiguredProvidersRef, codes)
+	if err != nil { t.Fatal(err) }
+	return snapshot
+}
+
+func providerCodes(adapter *newsstage.SearchCandidatesAdapter) []string {
+	// Existing direct adapter tests use this helper with a deterministic test ProviderSet;
+	// their allowlist is provided explicitly by the helper below when needed.
+	return []string{"empty_provider"}
+}
+
 func newNewsSearchExecutor(providers newsapp.ProviderSet) newsSearchStageExecutor {
 	adapter, err := newsstage.NewSearchCandidatesAdapter(newsapp.NewSearchCandidates(providers))
 	if err != nil {
@@ -196,6 +213,7 @@ func executeNewsStage(t *testing.T, executor newsSearchStageExecutor, parameters
 	result, err := executor.ExecuteStage(context.Background(), researchflowapplication.StageExecutionRequest{
 		Stage:      researchflowdomain.Stage{Code: newsstage.SearchCandidatesStageCode},
 		Parameters: json.RawMessage(parameters),
+		ResourcePolicy: testNewsResourcePolicy(t, providerCodes(executor.adapter)),
 	})
 	if err != nil {
 		t.Fatal(err)
