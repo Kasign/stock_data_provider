@@ -87,6 +87,12 @@ func (newsSearchIntegrationApplicability) Evaluate(context.Context, researchflow
 	return true, "", nil
 }
 
+type newsSearchIntegrationNoopDispatcher struct{}
+
+func (newsSearchIntegrationNoopDispatcher) Execute(context.Context, string, string, string) (researchflowapplication.WorkerExecution, error) {
+	return researchflowapplication.WorkerExecution{}, nil
+}
+
 type newsSearchIntegrationProvider struct {
 	calls               atomic.Int32
 	cancellationStarted chan struct{}
@@ -253,6 +259,43 @@ func TestNewsSearchStageResearchflowMariaDBIntegration(t *testing.T) {
 		t.Fatalf("创建在途取消 Researchflow Run 失败: %v", err)
 	}
 
+	recoveryCreated, err := createRun.CreateRun(ctx, researchflowdomain.CreateRunCommand{
+		SchemaVersion: "1.0.0", IdempotencyKey: "news-search-stage-expired-attempt-recovery-integration",
+		TemplateRef: workflowTemplate.Ref, TemplateVersion: workflowTemplate.Version,
+		InputSnapshotRefs: []string{},
+		Parameters:        json.RawMessage("{\"query\":\"expired-attempt-recovery\",\"query_dimension\":\"market\",\"limit\":10}"),
+	})
+	if err != nil {
+		t.Fatalf("创建 Expired Attempt 恢复 Researchflow Run 失败: %v", err)
+	}
+	recoveryScheduler, err := researchflowapplication.NewScheduler(
+		repository, repository, clock, ids, nil, newsSearchIntegrationNoopDispatcher{},
+		researchflowapplication.SchedulerConfig{MaxParallel: 1, MaxReplans: 1},
+	)
+	if err != nil {
+		t.Fatalf("创建恢复测试用 Scheduler 失败: %v", err)
+	}
+	if _, err := recoveryScheduler.ScheduleRun(ctx, recoveryCreated.Run.Ref); err != nil {
+		t.Fatalf("将恢复测试 Stage 推进到 Ready 失败: %v", err)
+	}
+	recoveryStageRef := recoveryCreated.Stages[0].Ref
+	crashedAttempt, claimed, err := repository.ClaimAttempt(
+		ctx, recoveryCreated.Run.Ref, recoveryStageRef,
+		"integration:attempt:crashed-worker", "integration:worker:crashed",
+		30*time.Second, 2, 2,
+	)
+	if err != nil {
+		t.Fatalf("模拟进程崩溃前 Claim Attempt 失败: %v", err)
+	}
+	if !claimed || crashedAttempt.Status != researchflowdomain.AttemptRunning {
+		t.Fatalf("恢复测试未建立 Running Attempt: claimed=%t attempt=%+v", claimed, crashedAttempt)
+	}
+	if _, err := db.ExecContext(ctx, `UPDATE researchflow_attempts SET
+		lease_expires_at = DATE_FORMAT(DATE_SUB(UTC_TIMESTAMP(6), INTERVAL 1 SECOND), '%Y-%m-%dT%H:%i:%s.%f000Z')
+		WHERE attempt_ref = ? AND status = 'running'`, crashedAttempt.Ref); err != nil {
+		t.Fatalf("模拟崩溃 Worker Lease 过期失败: %v", err)
+	}
+
 	fixtureProvider := &newsSearchIntegrationProvider{cancellationStarted: make(chan struct{})}
 	composition, err := newNewsSearchStageCompositionWithProviders(newsapp.StaticProviderSet{
 		Providers: []newsapp.Provider{fixtureProvider},
@@ -320,8 +363,13 @@ func TestNewsSearchStageResearchflowMariaDBIntegration(t *testing.T) {
 		if loadErr != nil {
 			t.Fatalf("轮询在途取消 Researchflow Runtime Run 状态失败: %v", loadErr)
 		}
+		recoveredRun, loadErr := repository.GetRun(ctx, recoveryCreated.Run.Ref)
+		if loadErr != nil {
+			t.Fatalf("轮询 Expired Attempt 恢复 Researchflow Run 状态失败: %v", loadErr)
+		}
 		if normalRun.Run.Status.Terminal() && expiredRun.Run.Status.Terminal() &&
-			cancelledRun.Run.Status.Terminal() && inFlightCancelledRun.Run.Status.Terminal() {
+			cancelledRun.Run.Status.Terminal() && inFlightCancelledRun.Run.Status.Terminal() &&
+			recoveredRun.Run.Status.Terminal() {
 			break
 		}
 		select {
@@ -386,6 +434,45 @@ func TestNewsSearchStageResearchflowMariaDBIntegration(t *testing.T) {
 	}
 	if inFlightOutboxCount != 1 {
 		t.Fatalf("在途 Cancellation Finalization 应原子生成一条终态 Outbox，实际=%d", inFlightOutboxCount)
+	}
+	recoveredLoaded, err := repository.GetRun(ctx, recoveryCreated.Run.Ref)
+	if err != nil {
+		t.Fatalf("读取 Expired Attempt 恢复后的 Run 失败: %v", err)
+	}
+	if recoveredLoaded.Run.Status != researchflowdomain.RunSucceeded ||
+		recoveredLoaded.Run.ResultSummaryRef == nil || len(recoveredLoaded.Stages) != 1 ||
+		recoveredLoaded.Stages[0].Status != researchflowdomain.StageSucceeded ||
+		recoveredLoaded.Stages[0].AttemptNo != 2 {
+		t.Fatalf("Expired Attempt 未重新 Claim 并完成 Run: run=%+v stages=%+v", recoveredLoaded.Run, recoveredLoaded.Stages)
+	}
+	recoveredFirstAttempt, err := repository.GetAttempt(ctx, crashedAttempt.Ref)
+	if err != nil {
+		t.Fatalf("读取崩溃前 Attempt 失败: %v", err)
+	}
+	var recoveredAttemptRef string
+	if err := db.QueryRowContext(ctx, `SELECT attempt_ref FROM researchflow_attempts
+		WHERE run_ref = ? ORDER BY attempt_no DESC LIMIT 1`, recoveryCreated.Run.Ref).Scan(&recoveredAttemptRef); err != nil {
+		t.Fatalf("读取恢复后 Attempt 引用失败: %v", err)
+	}
+	recoveredSecondAttempt, err := repository.GetAttempt(ctx, recoveredAttemptRef)
+	if err != nil {
+		t.Fatalf("读取恢复后 Attempt 失败: %v", err)
+	}
+	if recoveredFirstAttempt.Status != researchflowdomain.AttemptTimedOut ||
+		recoveredSecondAttempt.Status != researchflowdomain.AttemptSucceeded ||
+		recoveredSecondAttempt.OutputRef == nil ||
+		recoveredLoaded.Stages[0].OutputRef == nil ||
+		*recoveredSecondAttempt.OutputRef != *recoveredLoaded.Stages[0].OutputRef {
+		t.Fatalf("Expired Attempt Fencing/重新执行结果不正确: first=%+v second=%+v stage=%+v",
+			recoveredFirstAttempt, recoveredSecondAttempt, recoveredLoaded.Stages[0])
+	}
+	var recoveryOutboxCount int
+	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM researchflow_outbox
+		WHERE run_ref = ? AND event_type = 'researchflow.run.terminal'`, recoveryCreated.Run.Ref).Scan(&recoveryOutboxCount); err != nil {
+		t.Fatalf("读取恢复 Run 终态 Outbox 失败: %v", err)
+	}
+	if recoveryOutboxCount != 1 {
+		t.Fatalf("崩溃恢复后的 Run Finalization 应原子生成一条终态 Outbox，实际=%d", recoveryOutboxCount)
 	}
 	if deadlineLoaded.Run.Status != researchflowdomain.RunFailed ||
 		deadlineLoaded.Run.TerminationReason != "deadline_exceeded" ||
@@ -466,8 +553,8 @@ func TestNewsSearchStageResearchflowMariaDBIntegration(t *testing.T) {
 		*secondAttempt.OutputRef != *stage.OutputRef {
 		t.Fatalf("重试 Attempt 与 Stage 输出引用不一致: %+v / %+v", secondAttempt, stage)
 	}
-	if fixtureProvider.calls.Load() != 2 {
-		t.Fatalf("News Provider 应执行首次请求与一次重试，实际调用=%d", fixtureProvider.calls.Load())
+	if fixtureProvider.calls.Load() != 3 {
+		t.Fatalf("News Provider 应执行正常 Run 两次（首次失败后重试）及崩溃恢复 Run 一次，实际调用=%d", fixtureProvider.calls.Load())
 	}
 	var outboxCount int
 	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM researchflow_outbox
