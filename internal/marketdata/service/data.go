@@ -335,7 +335,7 @@ func (s *DataService) IndexQuotes(ctx context.Context) (*model.IndexQuoteSnapsho
 	const key = "md:v1:index-quotes:core"
 	if data, ok, cacheErr := s.cache.Get(ctx, key); cacheErr == nil && ok {
 		var cached model.IndexQuoteSnapshot
-		if json.Unmarshal(data, &cached) == nil && validateIndexQuoteSnapshot(&cached) == nil {
+		if json.Unmarshal(data, &cached) == nil && validateIndexQuoteSnapshotAt(&cached, s.nowUTC()) == nil {
 			cacheTTL := ttl
 			if cached.QualityStatus == model.QualityDegraded {
 				cacheTTL = degradedCacheTTL(ttl)
@@ -376,7 +376,7 @@ func (s *DataService) IndexQuotes(ctx context.Context) (*model.IndexQuoteSnapsho
 			failures = append(failures, p.Name()+": index-quote source does not match Provider.Name()")
 			continue
 		}
-		if err := validateIndexQuoteSnapshot(snapshot); err != nil {
+		if err := validateIndexQuoteSnapshotAt(snapshot, s.nowUTC()); err != nil {
 			s.breaker.ContractFailure(breakerKey)
 			failures = append(failures, p.Name()+": "+err.Error())
 			continue
@@ -612,7 +612,7 @@ func (s *DataService) MarketBreadth(ctx context.Context) (*model.MarketBreadthSn
 	const key = "md:v1:market-breadth:cn-a-share"
 	if data, ok, cacheErr := s.cache.Get(ctx, key); cacheErr == nil && ok {
 		var cached model.MarketBreadthSnapshot
-		if json.Unmarshal(data, &cached) == nil && validateMarketBreadth(&cached) == nil {
+		if json.Unmarshal(data, &cached) == nil && validateMarketBreadthSnapshotAt(&cached, true, s.nowUTC()) == nil {
 			cacheTTL := ttl
 			if cached.QualityStatus == model.QualityDegraded {
 				cacheTTL = degradedCacheTTL(ttl)
@@ -653,7 +653,7 @@ func (s *DataService) MarketBreadth(ctx context.Context) (*model.MarketBreadthSn
 			failures = append(failures, p.Name()+": market-breadth source does not match Provider.Name()")
 			continue
 		}
-		if err := validateMarketBreadth(snapshot); err != nil {
+		if err := validateMarketBreadthSnapshotAt(snapshot, true, s.nowUTC()); err != nil {
 			s.breaker.ContractFailure(breakerKey)
 			failures = append(failures, p.Name()+": "+err.Error())
 			continue
@@ -890,7 +890,7 @@ func (s *DataService) LimitPool(ctx context.Context, rawType, rawDate string, li
 	if poolType != "up" && poolType != "down" && poolType != "broken" {
 		return nil, false, fmt.Errorf("unsupported limit-pool type %q; want up, down or broken", rawType)
 	}
-	date, err := normalizeLimitPoolDate(rawDate)
+	date, err := normalizeLimitPoolDateAt(rawDate, s.nowUTC())
 	if err != nil {
 		return nil, false, err
 	}
@@ -910,7 +910,7 @@ func (s *DataService) LimitPool(ctx context.Context, rawType, rawDate string, li
 	key := fmt.Sprintf("md:v1:limit-pool:%s:%s:%d", poolType, date, limit)
 	if data, ok, cacheErr := s.cache.Get(ctx, key); cacheErr == nil && ok {
 		var cached model.LimitPoolSnapshot
-		if json.Unmarshal(data, &cached) == nil && cached.HasData && cached.QualityStatus != model.QualityUnknown && validateLimitPoolSnapshot(poolType, date, limit, &cached) == nil && time.Since(cached.FetchedAt) >= 0 && time.Since(cached.FetchedAt) < ttl {
+		if json.Unmarshal(data, &cached) == nil && cached.HasData && cached.QualityStatus != model.QualityUnknown && validateLimitPoolSnapshotAt(poolType, date, limit, &cached, s.nowUTC()) == nil && cacheEntryWithinTTL(cached.FetchedAt, ttl, s.nowUTC()) {
 			// 兼容升级前缓存：若供应商总数大于实际条数，不能沿用缓存中的 valid。
 			markLimitPoolTruncated(&cached)
 			return &cached, true, nil
@@ -936,7 +936,7 @@ func (s *DataService) LimitPool(ctx context.Context, rawType, rawDate string, li
 			failures = append(failures, p.Name()+": limit-pool source does not match Provider.Name()")
 			continue
 		}
-		if err := validateLimitPoolSnapshot(poolType, date, limit, snapshot); err != nil {
+		if err := validateLimitPoolSnapshotAt(poolType, date, limit, snapshot, s.nowUTC()); err != nil {
 			failures = append(failures, p.Name()+": "+err.Error())
 			continue
 		}
@@ -1153,7 +1153,7 @@ func betterUnknownDragonTigerSnapshot(candidate, current *model.DragonTigerSnaps
 }
 
 func (s *DataService) DragonTiger(ctx context.Context, rawDate string, page, pageSize int) (*model.DragonTigerSnapshot, bool, error) {
-	date, err := normalizeDragonTigerDate(rawDate)
+	date, err := normalizeDragonTigerDateAt(rawDate, s.nowUTC())
 	if err != nil {
 		return nil, false, err
 	}
@@ -1174,7 +1174,7 @@ func (s *DataService) DragonTiger(ctx context.Context, rawDate string, page, pag
 	key := fmt.Sprintf("md:v1:dragon-tiger:%s:%d:%d", date, page, pageSize)
 	if data, ok, cacheErr := s.cache.Get(ctx, key); cacheErr == nil && ok {
 		var cached model.DragonTigerSnapshot
-		if json.Unmarshal(data, &cached) == nil && validateDragonTigerSnapshot(date, page, pageSize, &cached) == nil && time.Since(cached.FetchedAt) >= 0 {
+		if json.Unmarshal(data, &cached) == nil && validateDragonTigerSnapshotAt(date, page, pageSize, &cached, s.nowUTC()) == nil && !cached.FetchedAt.After(s.nowUTC()) {
 			expiry := ttl
 			cacheEligible := cached.HasData && cached.QualityStatus != model.QualityUnknown
 			if !cached.HasData || cached.QualityStatus == model.QualityUnknown {
@@ -1189,7 +1189,7 @@ func (s *DataService) DragonTiger(ctx context.Context, rawDate string, page, pag
 				}
 				cacheEligible = fallbackExhausted || len(s.dragonTigerProviders) <= 1
 			}
-			if cacheEligible && time.Since(cached.FetchedAt) < expiry {
+			if cacheEligible && cacheEntryWithinTTL(cached.FetchedAt, expiry, s.nowUTC()) {
 				return &cached, true, nil
 			}
 		}
@@ -1214,7 +1214,7 @@ func (s *DataService) DragonTiger(ctx context.Context, rawDate string, page, pag
 			failures = append(failures, p.Name()+": dragon-tiger source does not match Provider.Name()")
 			continue
 		}
-		if err := validateDragonTigerSnapshot(date, page, pageSize, snapshot); err != nil {
+		if err := validateDragonTigerSnapshotAt(date, page, pageSize, snapshot, s.nowUTC()); err != nil {
 			failures = append(failures, p.Name()+": "+err.Error())
 			continue
 		}
@@ -1446,8 +1446,8 @@ func (s *DataService) SectorRankingsByMetric(ctx context.Context, rawCategory, r
 	key := fmt.Sprintf("md:v3:sector-ranking:%s:%s:%s:%d", category, sortBy, direction, limit)
 	if data, ok, cacheErr := s.cache.Get(ctx, key); cacheErr == nil && ok {
 		var cached model.SectorRankingSnapshot
-		if json.Unmarshal(data, &cached) == nil && cached.SortBy == sortBy && validateSectorRankingSnapshot(category, limit, &cached) == nil &&
-			time.Since(cached.FetchedAt) >= 0 && time.Since(cached.FetchedAt) < ttl {
+		if json.Unmarshal(data, &cached) == nil && cached.SortBy == sortBy && validateSectorRankingSnapshotAt(category, limit, &cached, s.nowUTC()) == nil &&
+			cacheEntryWithinTTL(cached.FetchedAt, ttl, s.nowUTC()) {
 			return &cached, true, nil
 		}
 	} else if cacheErr != nil {
@@ -1534,7 +1534,7 @@ func (s *DataService) SectorRankingsByMetric(ctx context.Context, rawCategory, r
 			failures = append(failures, p.Name()+": sector-ranking source does not match Provider.Name()")
 			continue
 		}
-		if err := validateSectorRankingSnapshot(category, limit, snapshot); err != nil {
+		if err := validateSectorRankingSnapshotAt(category, limit, snapshot, s.nowUTC()); err != nil {
 			s.breaker.ContractFailure(breakerKey)
 			failures = append(failures, p.Name()+": "+err.Error())
 			continue
@@ -1686,7 +1686,7 @@ func (s *DataService) StockBasic(ctx context.Context, rawSymbol string) (*model.
 	key := "md:v1:stock-basic:" + symbol
 	if data, ok, cacheErr := s.cache.Get(ctx, key); cacheErr == nil && ok {
 		var item model.StockBasic
-		if json.Unmarshal(data, &item) == nil && validateStockBasic(symbol, &item) == nil && time.Since(item.FetchedAt) >= 0 {
+		if json.Unmarshal(data, &item) == nil && validateStockBasic(symbol, &item) == nil && !item.FetchedAt.After(s.nowUTC()) {
 			item.Symbol = symbol
 			maxAge := ttl
 			if item.QualityStatus == model.QualityDegraded {
@@ -1705,7 +1705,7 @@ func (s *DataService) StockBasic(ctx context.Context, rawSymbol string) (*model.
 				}
 				cacheEligible = fallbackExhausted || len(s.stockBasicProviders) <= 1
 			}
-			if cacheEligible && time.Since(item.FetchedAt) < maxAge {
+			if cacheEligible && cacheEntryWithinTTL(item.FetchedAt, maxAge, s.nowUTC()) {
 				return &item, true, nil
 			}
 		}
@@ -2081,7 +2081,7 @@ func (s *DataService) StockBoards(ctx context.Context, rawSymbol string) (*model
 	key := "md:v1:stock-boards:" + symbol
 	if data, ok, cacheErr := s.cache.Get(ctx, key); cacheErr == nil && ok {
 		var cached model.StockBoardSnapshot
-		if json.Unmarshal(data, &cached) == nil && validateStockBoardsSnapshot(symbol, &cached) == nil && time.Since(cached.FetchedAt) >= 0 {
+		if json.Unmarshal(data, &cached) == nil && validateStockBoardsSnapshot(symbol, &cached) == nil && !cached.FetchedAt.After(s.nowUTC()) {
 			cached.Symbol = symbol
 			ttl := positiveTTL
 			cacheEligible := cached.HasData && cached.QualityStatus != model.QualityUnknown
@@ -2097,7 +2097,7 @@ func (s *DataService) StockBoards(ctx context.Context, rawSymbol string) (*model
 				}
 				cacheEligible = fallbackExhausted || len(s.stockBoardsProviders) <= 1
 			}
-			if cacheEligible && time.Since(cached.FetchedAt) < ttl {
+			if cacheEligible && cacheEntryWithinTTL(cached.FetchedAt, ttl, s.nowUTC()) {
 				return &cached, true, nil
 			}
 		}
@@ -2449,7 +2449,7 @@ func (s *DataService) ChipDistribution(ctx context.Context, rawSymbol string) (*
 	key := "md:v1:chip:" + symbol
 	if data, ok, cacheErr := s.cache.Get(ctx, key); cacheErr == nil && ok {
 		var item model.ChipDistribution
-		if json.Unmarshal(data, &item) == nil && validateChipDistributionSnapshot(symbol, &item) == nil && time.Since(item.FetchedAt) >= 0 && time.Since(item.FetchedAt) < 5*time.Minute {
+		if json.Unmarshal(data, &item) == nil && validateChipDistributionSnapshotAt(symbol, &item, s.nowUTC()) == nil && cacheEntryWithinTTL(item.FetchedAt, 5*time.Minute, s.nowUTC()) {
 			cacheEligible := item.QualityStatus != model.QualityUnknown
 			if item.QualityStatus == model.QualityUnknown {
 				fallbackExhausted := false
@@ -2510,7 +2510,7 @@ func (s *DataService) ChipDistribution(ctx context.Context, rawSymbol string) (*
 		if item.QualityStatus == model.QualityValid {
 			item.QualityStatus = model.QualityDegraded
 		}
-		if err := validateChipDistributionSnapshot(symbol, item); err != nil {
+		if err := validateChipDistributionSnapshotAt(symbol, item, s.nowUTC()); err != nil {
 			failures = append(failures, p.Name()+": "+err.Error())
 			continue
 		}
@@ -2622,7 +2622,7 @@ func (s *DataService) CapitalFlow(ctx context.Context, rawSymbol string) (*model
 	key := "md:v1:capital-flow:" + symbol
 	if data, ok, cacheErr := s.cache.Get(ctx, key); cacheErr == nil && ok {
 		var item model.CapitalFlow
-		if json.Unmarshal(data, &item) == nil && validateCapitalFlowSnapshot(symbol, &item) == nil && time.Since(item.FetchedAt) >= 0 && time.Since(item.FetchedAt) < 5*time.Minute {
+		if json.Unmarshal(data, &item) == nil && validateCapitalFlowSnapshotAt(symbol, &item, s.nowUTC()) == nil && cacheEntryWithinTTL(item.FetchedAt, 5*time.Minute, s.nowUTC()) {
 			cacheEligible := item.QualityStatus != model.QualityUnknown
 			if item.QualityStatus == model.QualityUnknown {
 				fallbackExhausted := false
@@ -2687,7 +2687,7 @@ func (s *DataService) CapitalFlow(ctx context.Context, rawSymbol string) (*model
 		if item.QualityStatus == model.QualityValid {
 			item.QualityStatus = model.QualityDegraded
 		}
-		if err := validateCapitalFlowSnapshot(symbol, item); err != nil {
+		if err := validateCapitalFlowSnapshotAt(symbol, item, s.nowUTC()); err != nil {
 			failures = append(failures, p.Name()+": "+err.Error())
 			continue
 		}
@@ -3093,7 +3093,7 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 							break
 						}
 					}
-					adjustmentWarnings, adjustmentErr := applyDailyBarAdjustmentMetadataQuality(validated, basis)
+					adjustmentWarnings, adjustmentErr := applyDailyBarAdjustmentMetadataQualityAt(validated, basis, s.nowUTC())
 					if !cacheAgeOK {
 						contractMismatch = true
 					} else if adjustmentErr != nil {
@@ -3250,7 +3250,7 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 			errs = append(errs, p.Name()+" response failed bar validation")
 			continue
 		}
-		adjustmentWarnings, adjustmentErr := applyDailyBarAdjustmentMetadataQuality(bars, basis)
+		adjustmentWarnings, adjustmentErr := applyDailyBarAdjustmentMetadataQualityAt(bars, basis, s.nowUTC())
 		if adjustmentErr != nil {
 			s.breaker.ContractFailure(breakerKey)
 			errs = append(errs, p.Name()+": "+adjustmentErr.Error())
