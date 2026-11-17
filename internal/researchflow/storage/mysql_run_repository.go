@@ -14,7 +14,7 @@ import (
 
 	mysql "github.com/go-sql-driver/mysql"
 
-	platformtime "example.com/stock-analysis-flow/internal/platform/time"
+	mariadbtime "example.com/stock-analysis-flow/internal/platform/time/mariadb"
 	"example.com/stock-analysis-flow/internal/researchflow/application"
 	"example.com/stock-analysis-flow/internal/researchflow/domain"
 	"example.com/stock-analysis-flow/internal/researchflow/state"
@@ -788,7 +788,7 @@ func insertResearchflowStage(ctx context.Context, tx *sql.Tx, stage domain.Stage
 }
 
 func readDatabaseUTC(tx *sql.Tx, ctx context.Context) (time.Time, error) {
-	return platformtime.ReadMariaDBUTC(ctx, tx)
+	return mariadbtime.ReadUTC(ctx, tx)
 }
 
 func formatResearchflowTime(value time.Time) (string, error) {

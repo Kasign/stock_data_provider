@@ -6,23 +6,21 @@ import (
 	"errors"
 	"time"
 
-	platformtime "example.com/stock-analysis-flow/internal/platform/time"
+	mariadbtime "example.com/stock-analysis-flow/internal/platform/time/mariadb"
 	"example.com/stock-analysis-flow/internal/researchflow/application"
 )
-
-const researchflowDatabaseClockQuery = platformtime.MariaDBClockQuery
 
 // MySQLDatabaseClock preserves the Researchflow application port while
 // delegating the shared MariaDB UTC clock implementation to Platform.
 type MySQLDatabaseClock struct {
-	source *platformtime.MariaDBSource
+	source *mariadbtime.Source
 }
 
 func NewMySQLDatabaseClock(db *sql.DB) (*MySQLDatabaseClock, error) {
 	if db == nil {
 		return nil, errors.New("Researchflow database clock requires a SQL database")
 	}
-	source, err := platformtime.NewMariaDBSource(db)
+	source, err := mariadbtime.NewSource(db)
 	if err != nil {
 		return nil, err
 	}

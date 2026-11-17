@@ -8,6 +8,8 @@ import (
 	"time"
 
 	mysql "github.com/go-sql-driver/mysql"
+
+	mariadbtime "example.com/stock-analysis-flow/internal/platform/time/mariadb"
 )
 
 func TestNewMySQLDatabaseClockRejectsNilDatabase(t *testing.T) {
@@ -53,11 +55,7 @@ func TestMariaDBDatabaseClockUsesDatabaseUTC(t *testing.T) {
 		t.Fatal(err)
 	}
 	read := func() (time.Time, error) {
-		var value string
-		if err := db.QueryRowContext(ctx, researchflowDatabaseClockQuery).Scan(&value); err != nil {
-			return time.Time{}, err
-		}
-		return parseResearchflowTime(value)
+		return mariadbtime.ReadUTC(ctx, db)
 	}
 	before, err := read()
 	if err != nil {
