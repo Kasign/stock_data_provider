@@ -19,6 +19,7 @@ import (
 	"example.com/stock-analysis-flow/internal/researchflow/resourcepolicy"
 	researchflowstorage "example.com/stock-analysis-flow/internal/researchflow/storage"
 	researchflowtemplate "example.com/stock-analysis-flow/internal/researchflow/template"
+	serverconfig "example.com/stock-analysis-flow/internal/server/config"
 )
 
 type newsSearchIntegrationResourcePolicyResolver struct{}
@@ -181,51 +182,52 @@ func TestNewsSearchStageResearchflowMariaDBIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("创建真实 News Stage 适配组合失败: %v", err)
 	}
-	worker, err := researchflowapplication.NewWorkerWithStageOutputRegistry(
-		repository, composition.executor, clock,
-		researchflowapplication.WorkerConfig{
-			WorkerID:      "integration-news-search-worker",
-			LeaseDuration: 30 * time.Second, HeartbeatInterval: 5 * time.Second,
-			MaxParallel: capacity.MaxWorkers,
+	runtimeComponent, err := newResearchflowRuntimeComponent(
+		&researchflowComposition{
+			newsStage: composition, runRepository: repository,
+			clock: clock, ids: ids,
 		},
-		composition.registry,
+		serverconfig.ResearchflowCapacity{
+			Configured: true, MaxQueuedRuns: capacity.MaxQueuedRuns, MaxWorkers: capacity.MaxWorkers,
+		},
+		1,
 	)
 	if err != nil {
-		t.Fatalf("创建 Researchflow Worker 失败: %v", err)
+		t.Fatalf("创建 Researchflow 生产 Runtime 失败: %v", err)
 	}
-	pool, err := researchflowapplication.NewWorkerPool(worker, researchflowapplication.WorkerPoolConfig{Workers: 1})
-	if err != nil {
-		t.Fatalf("创建 Researchflow WorkerPool 失败: %v", err)
-	}
-	if err := pool.Start(ctx); err != nil {
-		t.Fatalf("启动 Researchflow WorkerPool 失败: %v", err)
+	if err := runtimeComponent.Start(ctx); err != nil {
+		t.Fatalf("启动 Researchflow 生产 Runtime 失败: %v", err)
 	}
 	defer func() {
 		stopCtx, stopCancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer stopCancel()
-		if err := pool.Shutdown(stopCtx); err != nil {
-			t.Errorf("停止 Researchflow WorkerPool 失败: %v", err)
+		if err := runtimeComponent.Stop(stopCtx); err != nil {
+			t.Errorf("停止 Researchflow 生产 Runtime 失败: %v", err)
 		}
 	}()
 
-	scheduler, err := researchflowapplication.NewScheduler(
-		repository, repository, clock, ids, nil, pool,
-		researchflowapplication.SchedulerConfig{MaxParallel: 1, MaxReplans: 3},
-	)
-	if err != nil {
-		t.Fatalf("创建 Researchflow Scheduler 失败: %v", err)
-	}
-	scheduled, err := scheduler.ScheduleRun(ctx, created.Run.Ref)
-	if err != nil {
-		t.Fatalf("调度 News Search Stage 失败: %v", err)
-	}
-	if len(scheduled.Executions) != 1 || !scheduled.Executions[0].Execution.Committed {
-		t.Fatalf("News Search Stage 未完成持久化提交: %+v", scheduled)
+	// 通过生产周期扫描器完成候选发现、Scheduler 派发、Worker 执行和 Run Finalization。
+	for {
+		loaded, loadErr := repository.GetRun(ctx, created.Run.Ref)
+		if loadErr != nil {
+			t.Fatalf("轮询 Researchflow Runtime Run 状态失败: %v", loadErr)
+		}
+		if loaded.Run.Status.Terminal() {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			t.Fatalf("Researchflow Runtime 未在截止时间内完成 Run: %v", ctx.Err())
+		case <-time.After(100 * time.Millisecond):
+		}
 	}
 
 	loaded, err := repository.GetRun(ctx, created.Run.Ref)
 	if err != nil {
-		t.Fatalf("读取 Researchflow Run 失败: %v", err)
+		t.Fatalf("读取 Researchflow Runtime 完成后的 Run 失败: %v", err)
+	}
+	if loaded.Run.Status != researchflowdomain.RunSucceeded || loaded.Run.ResultSummaryRef == nil {
+		t.Fatalf("Researchflow Runtime 未完成正常 Run Finalization: %+v", loaded.Run)
 	}
 	if len(loaded.Stages) != 1 {
 		t.Fatalf("Run Stage 数量=%d，期望 1", len(loaded.Stages))
@@ -234,12 +236,26 @@ func TestNewsSearchStageResearchflowMariaDBIntegration(t *testing.T) {
 	if stage.Status != researchflowdomain.StageSucceeded || stage.OutputRef == nil || stage.QualitySummaryRef == nil {
 		t.Fatalf("News Search Stage 状态或输出引用不完整: %+v", stage)
 	}
-	attempt, err := repository.GetAttempt(ctx, scheduled.Executions[0].AttemptRef)
+	var attemptRef string
+	if err := db.QueryRowContext(ctx, `SELECT attempt_ref FROM researchflow_attempts
+		WHERE run_ref = ? AND stage_ref = ? ORDER BY attempt_no DESC LIMIT 1`,
+		created.Run.Ref, stage.Ref).Scan(&attemptRef); err != nil {
+		t.Fatalf("读取 Runtime 创建的 Attempt 引用失败: %v", err)
+	}
+	attempt, err := repository.GetAttempt(ctx, attemptRef)
 	if err != nil {
 		t.Fatalf("读取 Researchflow Attempt 失败: %v", err)
 	}
 	if attempt.Status != researchflowdomain.AttemptSucceeded || attempt.OutputRef == nil || *attempt.OutputRef != *stage.OutputRef {
 		t.Fatalf("Attempt 与 Stage 输出引用不一致: %+v / %+v", attempt, stage)
+	}
+	var outboxCount int
+	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM researchflow_outbox
+		WHERE run_ref = ? AND event_type = 'researchflow.run.terminal'`, created.Run.Ref).Scan(&outboxCount); err != nil {
+		t.Fatalf("读取 Run 终态 Outbox 失败: %v", err)
+	}
+	if outboxCount != 1 {
+		t.Fatalf("正常 Run Finalization 应原子生成一条终态 Outbox，实际=%d", outboxCount)
 	}
 
 	payloadResource, err := repository.GetStageOutputResource(ctx, *stage.OutputRef)
