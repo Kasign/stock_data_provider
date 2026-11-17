@@ -85,10 +85,7 @@ func eastmoneyAnnouncementTime(raw string) *time.Time {
 			}
 		}
 	}
-	loc, err := time.LoadLocation("Asia/Shanghai")
-	if err != nil {
-		loc = time.FixedZone("CST", 8*60*60)
-	}
+	loc := providerMarketLocation()
 	for _, layout := range []string{time.RFC3339Nano, "2006-01-02 15:04:05.000", "2006-01-02 15:04:05", "2006-01-02 15:04", "2006/01/02 15:04:05"} {
 		var parsed time.Time
 		if layout == time.RFC3339Nano {

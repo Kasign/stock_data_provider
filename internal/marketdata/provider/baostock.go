@@ -274,10 +274,7 @@ func baostockAdjustFlag(adjustment model.AdjustmentBasis) (string, string, error
 // Explicit start/end dates are preserved. An implicit start uses a bounded
 // lookback so an unbounded all-history scan does not flood the public endpoint.
 func baostockDateRange(startDate, endDate string, limit int, now time.Time) (string, string, error) {
-	loc, err := time.LoadLocation("Asia/Shanghai")
-	if err != nil {
-		loc = time.FixedZone("CST", 8*60*60)
-	}
+	loc := providerMarketLocation()
 	end := now.In(loc)
 	if strings.TrimSpace(endDate) != "" {
 		end, err = time.ParseInLocation("2006-01-02", strings.TrimSpace(endDate), loc)

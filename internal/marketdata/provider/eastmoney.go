@@ -1610,10 +1610,7 @@ func (p *Eastmoney) FetchDailyBars(ctx context.Context, rawSymbol, startDate, en
 // Four calendar days per requested bar plus a 30-day buffer accommodates
 // weekends, exchange holidays, and short suspensions without relying on lmt alone.
 func eastmoneyDateRange(startDate, endDate string, limit int, now time.Time) (string, string, error) {
-	loc, err := time.LoadLocation("Asia/Shanghai")
-	if err != nil {
-		loc = time.FixedZone("CST", 8*60*60)
-	}
+	loc := providerMarketLocation()
 	if limit <= 0 {
 		limit = 400
 	}
@@ -1751,10 +1748,7 @@ func parseEastmoneyTime(s string) *time.Time {
 	if s == "" || s == "-" {
 		return nil
 	}
-	loc, err := time.LoadLocation("Asia/Shanghai")
-	if err != nil {
-		loc = time.FixedZone("CST", 8*60*60)
-	}
+	loc := providerMarketLocation()
 	// 常见响应将 f86 编码为上海本地时间；遇到数字型 Unix 时间戳时再按秒/毫秒处理。
 	for _, layout := range []string{"20060102150405", "200601021504", "2006-01-02 15:04:05", "2006-01-02 15:04"} {
 		if t, parseErr := time.ParseInLocation(layout, s, loc); parseErr == nil {
@@ -2582,10 +2576,7 @@ func (p *Eastmoney) fetchMarketTurnover(ctx context.Context, reportDate string) 
 		return fail("market_amount_report_date_invalid")
 	}
 
-	location, err := time.LoadLocation("Asia/Shanghai")
-	if err != nil {
-		location = time.FixedZone("CST", 8*60*60)
-	}
+	location := providerMarketLocation()
 
 	fetchPage := func(requestCtx context.Context, page, expectedTotal int) (int, []eastmoneyMarketTurnoverItem, string) {
 		baseURL := strings.TrimSpace(p.stockListURL)
@@ -2954,10 +2945,7 @@ func (p *Eastmoney) FetchLimitPool(ctx context.Context, poolType, tradeDate stri
 	if err != nil || date.Format("2006-01-02") != rawDate {
 		return nil, fmt.Errorf("invalid limit-pool trade date %q: expected YYYY-MM-DD", tradeDate)
 	}
-	loc, locErr := time.LoadLocation("Asia/Shanghai")
-	if locErr != nil {
-		loc = time.FixedZone("CST", 8*60*60)
-	}
+	loc := providerMarketLocation()
 	today := time.Now().In(loc).Format("2006-01-02")
 	if rawDate > today {
 		return nil, fmt.Errorf("limit-pool trade date %s must not be in the future (China market date %s)", rawDate, today)

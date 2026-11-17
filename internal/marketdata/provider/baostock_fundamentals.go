@@ -275,10 +275,7 @@ func (p *Baostock) FetchFundamentals(ctx context.Context, rawSymbol string, year
 
 // baostockChinaMarketDate returns the current date in the mainland China market timezone.
 func baostockChinaMarketDate(now time.Time) string {
-	loc, err := time.LoadLocation("Asia/Shanghai")
-	if err != nil {
-		loc = time.FixedZone("CST", 8*60*60)
-	}
+	loc := providerMarketLocation()
 	return now.In(loc).Format("2006-01-02")
 }
 

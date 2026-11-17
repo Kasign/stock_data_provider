@@ -34,10 +34,7 @@ func (p *Eastmoney) FetchDragonTiger(ctx context.Context, tradeDate string, page
 		return nil, fmt.Errorf("invalid dragon-tiger trade date %q: expected YYYY-MM-DD", tradeDate)
 	}
 	tradeDate = parsedDate.Format("2006-01-02")
-	loc, locationErr := time.LoadLocation("Asia/Shanghai")
-	if locationErr != nil {
-		loc = time.FixedZone("CST", 8*60*60)
-	}
+	loc := providerMarketLocation()
 	today := time.Now().In(loc).Format("2006-01-02")
 	if tradeDate > today {
 		return nil, fmt.Errorf("dragon-tiger trade date %s must not be in the future (China market date %s)", tradeDate, today)

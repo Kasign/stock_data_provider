@@ -405,10 +405,7 @@ func (p *Hithink) FetchTradingCalendar(ctx context.Context, startDate, endDate s
 	if start.After(end) {
 		return nil, errors.New("同花顺交易日历起始日期不能晚于结束日期")
 	}
-	loc, err := time.LoadLocation("Asia/Shanghai")
-	if err != nil {
-		loc = time.FixedZone("CST", 8*60*60)
-	}
+	loc := providerMarketLocation()
 	nowCN := time.Now().In(loc)
 	todayDate := nowCN.Format("2006-01-02")
 	firstSupportedDate := nowCN.AddDate(-1, 0, 0).Format("2006-01-02")
@@ -669,10 +666,7 @@ func (p *Hithink) FetchLimitPool(ctx context.Context, poolType, tradeDate string
 		return nil, errors.New("同花顺涨跌停池单页条数不能超过 100")
 	}
 
-	loc, err := time.LoadLocation("Asia/Shanghai")
-	if err != nil {
-		loc = time.FixedZone("CST", 8*60*60)
-	}
+	loc := providerMarketLocation()
 	rawDate := strings.TrimSpace(tradeDate)
 	if rawDate == "" {
 		rawDate = time.Now().In(loc).Format("2006-01-02")
@@ -921,10 +915,7 @@ func (p *Hithink) FetchDragonTiger(ctx context.Context, tradeDate string, page, 
 	if pageSize < 1 || pageSize > 500 {
 		return nil, errors.New("同花顺龙虎榜 page_size 必须在 1..500")
 	}
-	loc, err := time.LoadLocation("Asia/Shanghai")
-	if err != nil {
-		loc = time.FixedZone("CST", 8*60*60)
-	}
+	loc := providerMarketLocation()
 	rawDate := strings.TrimSpace(tradeDate)
 	if rawDate != "" {
 		date, parseErr := time.Parse("2006-01-02", rawDate)
@@ -1376,10 +1367,7 @@ func (p *Hithink) FetchIndexDailyBars(ctx context.Context, rawIndexSymbol, start
 	if end.After(start.AddDate(10, 0, 0)) {
 		return nil, errors.New("同花顺指数日 K 单次查询范围不能超过 10 年")
 	}
-	loc, err := time.LoadLocation("Asia/Shanghai")
-	if err != nil {
-		loc = time.FixedZone("CST", 8*60*60)
-	}
+	loc := providerMarketLocation()
 	if endText > time.Now().In(loc).Format("2006-01-02") {
 		return nil, errors.New("同花顺指数日 K 结束日期不能晚于今日")
 	}
@@ -1905,10 +1893,7 @@ func (p *Hithink) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 	if start.After(end) {
 		return nil, errors.New("同花顺日 K 起始日期不能晚于结束日期")
 	}
-	loc, err := time.LoadLocation("Asia/Shanghai")
-	if err != nil {
-		loc = time.FixedZone("CST", 8*60*60)
-	}
+	loc := providerMarketLocation()
 	if end.Format("2006-01-02") > time.Now().In(loc).Format("2006-01-02") {
 		return nil, errors.New("同花顺日 K 结束日期不能晚于 Asia/Shanghai 今日")
 	}
@@ -2273,10 +2258,7 @@ func (p *Hithink) fetchFinancialStatementSection(ctx context.Context, symbol str
 	if err := json.Unmarshal(dataRaw, &data); err != nil {
 		return model.FundamentalSection{}, fmt.Errorf("解析同花顺 %s 失败: %w", category, err)
 	}
-	loc, err := time.LoadLocation("Asia/Shanghai")
-	if err != nil {
-		loc = time.FixedZone("CST", 8*60*60)
-	}
+	loc := providerMarketLocation()
 	var selected map[string]json.RawMessage
 	selectedRowIndex := -1
 	for rowIndex, row := range data.Item {

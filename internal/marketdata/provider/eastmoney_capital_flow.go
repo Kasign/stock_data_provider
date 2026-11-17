@@ -95,10 +95,7 @@ func (p *Eastmoney) FetchCapitalFlow(ctx context.Context, rawSymbol string) (*mo
 		return nil, fmt.Errorf("Eastmoney capital-flow symbol mismatch: requested %s, returned code %q", symbol, returnedCode)
 	}
 
-	loc, locErr := time.LoadLocation("Asia/Shanghai")
-	if locErr != nil {
-		loc = time.FixedZone("CST", 8*60*60)
-	}
+	loc := providerMarketLocation()
 	today := time.Now().In(loc).Format("2006-01-02")
 	observations := make([]eastmoneyCapitalFlowObservation, 0, len(payload.Data.KLines))
 	seen := make(map[string]struct{}, len(payload.Data.KLines))
