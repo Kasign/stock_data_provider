@@ -1573,6 +1573,7 @@ func parseTusharePublishedTime(raw string) *time.Time {
 		return nil
 	}
 	loc := providerMarketLocation()
+	var err error
 	for _, layout := range []string{time.RFC3339Nano, "2006-01-02 15:04:05", "2006/01/02 15:04:05", "2006-01-02 15:04"} {
 		var parsed time.Time
 		if layout == time.RFC3339Nano {
