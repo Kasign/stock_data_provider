@@ -211,6 +211,25 @@ func TestWorkerRejectsResourcePolicySnapshotChangedAfterClaim(t *testing.T) {
 	}
 }
 
+func TestWorkerPersistsProviderDiagnosticOutputForFailedStage(t *testing.T) {
+	store, _ := newWorkerFixture()
+	result := StageExecutionResult{
+		AttemptStatus: domain.AttemptFailed, StageStatus: domain.StageFailed,
+		ReasonCodes: []string{"news_all_providers_skipped"},
+		ProviderResult: &stageoutput.ProviderResult{
+			OutputType: "trend", SchemaVersion: "1.0.0",
+			Payload: []byte(`{"trend":"unavailable"}`),
+			QualitySummary: []byte(`{"quality":"unavailable"}`),
+			DiagnosticRefs: []string{},
+		},
+	}
+	got, err := newWorker(t, store, result).Execute(context.Background(), "run-1", "stage-1", "attempt-new")
+	if err != nil { t.Fatal(err) }
+	if !got.Committed || store.commit.Stage.Status != domain.StageFailed || store.commit.StageOutput == nil {
+		t.Fatalf("failed Stage must retain validated Provider diagnostic output: %+v", store.commit)
+	}
+}
+
 func TestWorkerPassesOwnedResourcePolicySnapshotToExecutor(t *testing.T) {
 	store, result := newWorkerFixture()
 	captured := &StageExecutionRequest{}
