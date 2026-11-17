@@ -155,7 +155,13 @@ func Run(ctx context.Context) (runErr error) {
 			if err != nil {
 				return fmt.Errorf("装配 Researchflow Owner 内部用例失败: %w", err)
 			}
-			slog.Info("Researchflow Owner 内部 CreateRun/GetRun/CancelRun 用例已装配", "http_routes", false)
+			publishCtx, publishCancel := context.WithTimeout(ctx, 10*time.Second)
+			publishErr := ownerSession.researchflow.publishWorkflowTemplate(publishCtx)
+			publishCancel()
+			if publishErr != nil {
+				return fmt.Errorf("发布 Researchflow 正式 Workflow Template 失败: %w", publishErr)
+			}
+			slog.Info("Researchflow Owner 内部用例及正式 Workflow Template 已装配", "template_ref", newsSearchWorkflowTemplateRef, "template_version", newsSearchWorkflowTemplateVersion, "http_routes", false)
 		}
 	}
 
