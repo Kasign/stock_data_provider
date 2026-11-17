@@ -214,8 +214,8 @@ func TestRedisSessionStoreIntegration(t *testing.T) {
 		t.Fatal(err)
 	}
 	rotated := SessionRecord{
-		Subject: "owner", CreatedAt: now, LastSeenAt: rotatedAt.Add(2*time.Second),
-		IdleExpiresAt:     rotatedAt.Add(2*time.Second).Add(DefaultSessionIdleTTL),
+		Subject: "owner", CreatedAt: now, LastSeenAt: rotatedAt.Add(2 * time.Second),
+		IdleExpiresAt:     rotatedAt.Add(2 * time.Second).Add(DefaultSessionIdleTTL),
 		AbsoluteExpiresAt: record.AbsoluteExpiresAt, CredentialVersion: 1,
 		CSRFTokenDigest: newCSRFDigest,
 	}
