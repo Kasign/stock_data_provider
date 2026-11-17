@@ -1196,3 +1196,26 @@ ResourcePolicy 的语义已完成 Review，权威实施细节见 `doc/researchfl
 - 已新增 `internal/researchflow/resourcepolicy` 固定策略 Registry/Resolver 基础实现，策略定义指纹与 Run 级 Provider Code Snapshot 已有单元测试。
 - 该代码目前尚未接入 CreateRun、ResolvedTemplate 持久化、Worker 或 News Stage；在完成这些接线前，不能宣称生产授权已生效。
 - 下一切片：CreateRun 注入 Resolver 并把 Snapshot 纳入 ResolvedTemplate；随后 Worker 读取/比较并传递，News Stage 按 allowlist 过滤真实 ProviderSet。
+
+
+### 2026-11-17 ResourcePolicy / Worker / News Stage 接线最新交接
+
+本节覆盖本文前文“ResourcePolicy Registry/Resolver 尚未接入 CreateRun、Worker 或 News Stage”的历史状态。
+
+**当前唯一工作分支：`integration`。最新代码 SHA：`8db50e263f3383defd3d9b216d0c81d37ed3dd63`。**
+
+已完成：
+- CreateRun Resolver 接口注入、fail-closed 解析，并将 ResourcePolicy Snapshot 与 ResolvedTemplate 原子持久化在既有 JSON 快照中，无新增 Migration。
+- Template Fingerprint 与策略定义 Fingerprint 分层；动态 Provider inventory 不进入身份指纹，重复绑定快照保持幂等。
+- MySQL Worker Store 读取并验证持久化策略快照；Worker Claim 前后深比较，向 StageExecutor 传递独立 allowlist 副本。
+- News Stage 只使用 Run 授权 Provider 集合；Provider 被移除时保留 skipped/not_configured Outcome，不自动替换；全部授权 Provider 不可用时失败。
+- StageFailed / StageRetryWait 的 Provider 诊断输出可经 Output Registry 校验后写入现有不可变 Stage Output 资源；重试等待不会丢弃已观测 Outcome。
+- CI Run [44014768749](https://github.com/Kasign/stock_data_provider/actions/runs/44014768749) 对精确 SHA success，覆盖 Go 全仓格式、root/go-core vet/test、跨模块测试、Worker Bootstrap MariaDB/Redis、Compose、WebUI 和 Docker 构建。
+
+后续唯一主线：
+1. **生产 Bootstrap 接线**：将 News Stage composition、Schema Registry、Applicability、真实 ProviderSet 和 ResourcePolicy Resolver 接入 `bootstrap.Run` 的 Worker Runtime；Resolver 必须基于 Server 实际成功装配 Provider inventory，不读环境变量、不自行创建 HTTP Client。
+2. **可信 Owner 进程内消费组合**：建立 CreateRun/GetRun/CancelRun 的内部组合与授权 Adapter。CreateRun CallerRef 来自已验证 Principal.Subject；GetRun/CancelRun 校验持久化 Run 创建者关联。
+3. **正式 Template 与 Runtime 验收**：完成生产 Template 发布，再验收 Scheduler/WorkerPool/ExpiredAttempt/Deadline/Finalization/Shutdown。
+4. SRV-CTR-001 仍为 `deferred`；未获正式契约解冻前不开放 Researchflow HTTP API。
+
+限制：不重做已通过的 Stage Fixture MariaDB 测试；不声称真实外部 Provider 网络验收完成；不创建空壳 Template、Resolver 或固定 Owner CallerRef；每个完整切片结束后同步本交接文档和 Researchflow 任务文档。

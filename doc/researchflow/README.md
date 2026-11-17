@@ -83,3 +83,17 @@ Researchflow CreateRun 从可信 RequestIdentity 取得 authenticated caller，�
 - Server Bootstrap 包已实现精确版本的 `news.search_candidates.always@1.0.0` Applicability Rule。该规则只适用于 News Search 工作流：该流程的 News 搜索 Stage 始终参与 DAG；未知 ref/version fail closed。改变适用条件必须发布新版本。
 - **接线边界：** 当前 `bootstrap.Run` 尚未调用 `newNewsSearchStageComposition`，Researchflow 生产 Worker Runtime 也未装配；因此 Registry/Rule 的实现与定向测试已完成，但尚不能称为生产运行时已接入。
 - 这只是正式 Template 的两个准入依赖，不代表已发布生产 Template、Resource Policy 已就绪、CreateRun 已装配或 Worker Runtime 已启动。
+
+
+## ResourcePolicy 授权快照与 News Stage 执行约束（2026-11-17）
+
+ResourcePolicy 已接入 CreateRun、Worker 与 News Stage 的应用执行链：
+
+- CreateRun 在原子持久化前解析策略，并将策略定义指纹与 Run 级 Provider allowlist 快照写入现有 ResolvedTemplate JSON。
+- Worker 从 Run 持久化快照恢复授权，Claim 前后深比较，并把独立 Provider Code allowlist 传入 StageExecutor。
+- News Stage 只执行快照允许的 Provider；当前配置新增 Provider 不扩大旧 Run，移除 Provider 不静默替换，而是输出 not_configured Outcome。
+- 失败及 retry_wait 阶段可持久化经 Output Registry 校验的 Provider 诊断输出。
+
+代码 SHA `8db50e263f3383defd3d9b216d0c81d37ed3dd63` 的 Integration CI Run [44014768749](https://github.com/Kasign/stock_data_provider/actions/runs/44014768749) 全量 success。
+
+**边界：** 这完成的是 ResourcePolicy 应用层授权执行链，不代表 Server 生产 Worker Runtime、生产 CreateRun 消费者或正式 Workflow Template 已接入。生产 Bootstrap、可信 Owner 内部消费组合和正式 Template 仍是后续主线；SRV-CTR-001 继续 deferred。
