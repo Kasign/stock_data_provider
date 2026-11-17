@@ -9,8 +9,8 @@ import (
 	newsconfig "example.com/stock-analysis-flow/internal/news/config"
 	researchflowapplication "example.com/stock-analysis-flow/internal/researchflow/application"
 	"example.com/stock-analysis-flow/internal/researchflow/resourcepolicy"
-	"example.com/stock-analysis-flow/internal/researchflow/template"
 	researchflowstorage "example.com/stock-analysis-flow/internal/researchflow/storage"
+	"example.com/stock-analysis-flow/internal/researchflow/template"
 	serverconfig "example.com/stock-analysis-flow/internal/server/config"
 	serverresources "example.com/stock-analysis-flow/internal/server/resources"
 )
