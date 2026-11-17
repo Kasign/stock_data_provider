@@ -17,6 +17,8 @@ import (
 type workerStoreFake struct {
 	attempt     domain.Attempt
 	snapshot    StageExecutionSnapshot
+	snapshots   []StageExecutionSnapshot
+	loads       int
 	claims      int
 	claimReplay bool
 	renewErr    error
@@ -32,6 +34,14 @@ func (f *workerStoreFake) ClaimAttempt(context.Context, string, string, string, 
 	return f.attempt, f.claimReplay, nil
 }
 func (f *workerStoreFake) LoadStageExecutionSnapshot(context.Context, string, string) (StageExecutionSnapshot, error) {
+	f.loads++
+	if len(f.snapshots) > 0 {
+		index := f.loads - 1
+		if index >= len(f.snapshots) {
+			index = len(f.snapshots) - 1
+		}
+		return f.snapshots[index], nil
+	}
 	return f.snapshot, nil
 }
 func (f *workerStoreFake) RenewAttemptLease(context.Context, string, string, string, string, uint64, time.Duration) (time.Time, error) {
@@ -185,6 +195,20 @@ func TestWorkerFailsClosedWhenDatabaseClockUnavailable(t *testing.T) {
 	}
 }
 
+
+func TestWorkerRejectsResourcePolicySnapshotChangedAfterClaim(t *testing.T) {
+	store, result := newWorkerFixture()
+	changed := store.snapshot
+	changed.ResourcePolicy.AllowedProviderCodes = []string{"brave", "tavily"}
+	store.snapshots = []StageExecutionSnapshot{store.snapshot, changed}
+	worker := newWorker(t, store, result)
+	if _, err := worker.Execute(context.Background(), "run-1", "stage-1", "attempt-new"); err == nil {
+		t.Fatal("Worker must reject ResourcePolicy allowlist changes between pre-claim and execution snapshots")
+	}
+	if store.commits != 0 {
+		t.Fatal("changed ResourcePolicy snapshot must not execute or commit")
+	}
+}
 
 func TestWorkerPassesOwnedResourcePolicySnapshotToExecutor(t *testing.T) {
 	store, result := newWorkerFixture()
