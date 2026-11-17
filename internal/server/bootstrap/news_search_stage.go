@@ -66,10 +66,10 @@ func newNewsSearchStageCompositionWithProviders(providers newsapp.ProviderSet) (
 		return nil, fmt.Errorf("创建 News Search 参数 Schema Validator 失败: %w", err)
 	}
 	return &newsSearchStageComposition{
-		executor: newsSearchStageExecutor{adapter: adapter},
-		registry: registry,
+		executor:         newsSearchStageExecutor{adapter: adapter},
+		registry:         registry,
 		parameterSchemas: parameterSchemas,
-		applicability: newsSearchApplicabilityEvaluator{},
+		applicability:    newsSearchApplicabilityEvaluator{},
 	}, nil
 }
 
