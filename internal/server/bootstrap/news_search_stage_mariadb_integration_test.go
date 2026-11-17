@@ -95,6 +95,7 @@ func (newsSearchIntegrationNoopDispatcher) Execute(context.Context, string, stri
 
 type newsSearchIntegrationProvider struct {
 	calls               atomic.Int32
+	recoveryCalls       atomic.Int32
 	cancellationStarted chan struct{}
 	cancellationOnce    sync.Once
 }
@@ -105,6 +106,14 @@ func (p *newsSearchIntegrationProvider) Search(ctx context.Context, request news
 		p.cancellationOnce.Do(func() { close(p.cancellationStarted) })
 		<-ctx.Done()
 		return nil, ctx.Err()
+	}
+	if request.Query == "expired-attempt-recovery" {
+		p.recoveryCalls.Add(1)
+		return []newsdomain.Candidate{{
+			Title: "Deterministic recovered News Stage candidate",
+			RawURL: "https://publisher.example.test/recovered-candidate",
+			PublisherName: "Integration Fixture Publisher",
+		}}, nil
 	}
 	if p.calls.Add(1) == 1 {
 		return nil, &newsapp.ProviderError{Code: newsapp.ProviderErrorRateLimited}
@@ -553,8 +562,9 @@ func TestNewsSearchStageResearchflowMariaDBIntegration(t *testing.T) {
 		*secondAttempt.OutputRef != *stage.OutputRef {
 		t.Fatalf("重试 Attempt 与 Stage 输出引用不一致: %+v / %+v", secondAttempt, stage)
 	}
-	if fixtureProvider.calls.Load() != 3 {
-		t.Fatalf("News Provider 应执行正常 Run 两次（首次失败后重试）及崩溃恢复 Run 一次，实际调用=%d", fixtureProvider.calls.Load())
+	if fixtureProvider.calls.Load() != 2 || fixtureProvider.recoveryCalls.Load() != 1 {
+		t.Fatalf("正常 Run 应调用两次（首次失败后重试），崩溃恢复 Run 应执行一次：normal=%d recovery=%d",
+			fixtureProvider.calls.Load(), fixtureProvider.recoveryCalls.Load())
 	}
 	var outboxCount int
 	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM researchflow_outbox
