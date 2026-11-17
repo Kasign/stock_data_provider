@@ -29,12 +29,19 @@ func newResearchflowOwnerComposition(
 	capacity serverconfig.ResearchflowCapacity,
 	runDeadline time.Duration,
 ) (*researchflowOwnerComposition, error) {
-	if runDeadline <= 0 {
-		return nil, errors.New("Researchflow Owner composition requires a positive Run Deadline")
-	}
 	execution, err := newResearchflowComposition(shared, newsConfig, capacity)
 	if err != nil {
 		return nil, err
+	}
+	return newResearchflowOwnerCompositionFromExecution(execution, runDeadline)
+}
+
+func newResearchflowOwnerCompositionFromExecution(
+	execution *researchflowComposition,
+	runDeadline time.Duration,
+) (*researchflowOwnerComposition, error) {
+	if execution == nil || runDeadline <= 0 {
+		return nil, errors.New("Researchflow Owner composition requires execution dependencies and a positive Run Deadline")
 	}
 	identity := ownerSessionResearchflowIdentity{}
 	createRun, err := researchflowapplication.NewCreateRunService(
@@ -53,14 +60,12 @@ func newResearchflowOwnerComposition(
 	if err != nil {
 		return nil, fmt.Errorf("create Researchflow CancelRun service: %w", err)
 	}
-
 	return &researchflowOwnerComposition{
 		execution: execution, newsStage: execution.newsStage,
 		createRun: createRun, getRun: getRun, cancelRun: cancelRun,
 		resourcePolicies: execution.resourcePolicies,
 	}, nil
 }
-
 // publishWorkflowTemplate remains an Owner composition convenience for existing
 // bootstrap call sites; publication belongs to the shared execution composition.
 func (c *researchflowOwnerComposition) publishWorkflowTemplate(ctx context.Context) error {

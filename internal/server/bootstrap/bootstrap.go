@@ -137,8 +137,7 @@ func Run(ctx context.Context) (runErr error) {
 	}
 	migrationCancel()
 
-	// Owner Session 复用共享 MariaDB/Redis 资源与 Platform 安全原语，不创建独立连接池。
-	// 显式启用时由 newHTTPHandler 挂载 SRV-CTR-002 路由；旧 Bearer 路由认证策略保持不变。
+	// Owner Session 只提供可信身份；Researchflow 执行依赖独立于 Owner Session 装配。
 	var ownerSession *ownerSessionComposition
 	if processConfig.OwnerSession.Enabled {
 		ownerSession, err = newOwnerSessionComposition(storageResources, processConfig.OwnerSession)
@@ -146,23 +145,33 @@ func Run(ctx context.Context) (runErr error) {
 			return fmt.Errorf("装配 Owner Session 依赖失败: %w", err)
 		}
 	}
-	if ownerSession != nil {
-		slog.Info("Owner Session HTTP 路由已挂载", "enabled", true)
-		if processConfig.ResearchflowCapacity.Configured {
-			ownerSession.researchflow, err = newResearchflowOwnerComposition(
-				storageResources, newsConfig, processConfig.ResearchflowCapacity, processConfig.ResearchflowRunDeadline,
-			)
-			if err != nil {
-				return fmt.Errorf("装配 Researchflow Owner 内部用例失败: %w", err)
-			}
-			publishCtx, publishCancel := context.WithTimeout(ctx, 10*time.Second)
-			publishErr := ownerSession.researchflow.publishWorkflowTemplate(publishCtx)
-			publishCancel()
-			if publishErr != nil {
-				return fmt.Errorf("发布 Researchflow 正式 Workflow Template 失败: %w", publishErr)
-			}
-			slog.Info("Researchflow Owner 内部用例及正式 Workflow Template 已装配", "template_ref", newsSearchWorkflowTemplateRef, "template_version", newsSearchWorkflowTemplateVersion, "http_routes", false)
+	var researchflowExecution *researchflowComposition
+	if processConfig.ResearchflowCapacity.Configured &&
+		(serverRole != serverconfig.RoleAPI || ownerSession != nil) {
+		researchflowExecution, err = newResearchflowComposition(
+			storageResources, newsConfig, processConfig.ResearchflowCapacity,
+		)
+		if err != nil {
+			return fmt.Errorf("装配 Researchflow 执行依赖失败: %w", err)
 		}
+		publishCtx, publishCancel := context.WithTimeout(ctx, 10*time.Second)
+		publishErr := researchflowExecution.publishWorkflowTemplate(publishCtx)
+		publishCancel()
+		if publishErr != nil {
+			return fmt.Errorf("发布 Researchflow 正式 Workflow Template 失败: %w", publishErr)
+		}
+		slog.Info("Researchflow 执行依赖及正式 Workflow Template 已装配",
+			"template_ref", newsSearchWorkflowTemplateRef,
+			"template_version", newsSearchWorkflowTemplateVersion)
+	}
+	if ownerSession != nil && researchflowExecution != nil {
+		ownerSession.researchflow, err = newResearchflowOwnerCompositionFromExecution(
+			researchflowExecution, processConfig.ResearchflowRunDeadline,
+		)
+		if err != nil {
+			return fmt.Errorf("装配 Researchflow Owner 内部用例失败: %w", err)
+		}
+		slog.Info("Researchflow Owner 内部用例已装配", "http_routes", false)
 	}
 
 	// Key Ring 配置为可选项；未配置时不创建分页 Facade，也不生成任何默认密钥。
@@ -212,6 +221,20 @@ func Run(ctx context.Context) (runErr error) {
 			if err := lifecycle.Register(researchflowRelay); err != nil {
 				return fmt.Errorf("注册 Researchflow→Notification Outbox Relay 生命周期失败: %w", err)
 			}
+		}
+	}
+	if serverRole != serverconfig.RoleAPI && processConfig.ResearchflowCapacity.Configured {
+		if researchflowExecution == nil {
+			return errors.New("Researchflow Worker Runtime requires an execution composition")
+		}
+		researchflowRuntime, runtimeErr := newResearchflowRuntimeComponent(
+			researchflowExecution, processConfig.ResearchflowCapacity, processConfig.ResearchflowLocalWorkers,
+		)
+		if runtimeErr != nil {
+			return fmt.Errorf("创建 Researchflow Worker Runtime 失败: %w", runtimeErr)
+		}
+		if err := lifecycle.Register(researchflowRuntime); err != nil {
+			return fmt.Errorf("注册 Researchflow Worker Runtime 生命周期失败: %w", err)
 		}
 	}
 	var httpComponent *httpServerComponent
