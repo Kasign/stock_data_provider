@@ -103,7 +103,7 @@ ResourcePolicy 已接入 CreateRun、Worker 与 News Stage 的应用执行链：
 
 Researchflow 的 GetRun 和 CancelRun 均要求通过持久化 Run 创建者关联授权。MySQLRunRepository 使用既有 `researchflow_run_idempotency` 中的 `caller_ref + operation=CreateRun + run_ref` 记录验证权限；GetRun 在读取 Run 前授权，避免未授权调用者枚举 RunRef。精确 SHA `1600c321792a5172f56b8ca7bc49adf67aec5f6a` 的 Integration CI Run [44015922257](https://github.com/Kasign/stock_data_provider/actions/runs/44015922257) 全量 success。
 
-Server 可信 Owner Session RequestIdentity Adapter 和内部 CreateRun/GetRun/CancelRun 组合仍未接入；SRV-CTR-001 继续 deferred。
+Server 可信 Owner Session RequestIdentity Adapter 和内部 CreateRun/GetRun/CancelRun 组合已在 Owner Session + Researchflow Capacity 启用路径接入；仍无实际业务调用方和正式 Workflow Template。SRV-CTR-001 继续 deferred。
 
 
 ## Owner Session Researchflow 身份适配
@@ -119,7 +119,7 @@ Server 已在 Owner Session 启用且 Researchflow Capacity 显式配置时，�
 
 代码 SHA `fc2f7793fe22c6760f8756d9f277b4b579012a51` 的 Integration CI Run [44024703289](https://github.com/Kasign/stock_data_provider/actions/runs/44024703289) 全量 success。
 
-**边界：** 当前只有进程内服务组合，没有实际调用方、正式 Workflow Template 或 Worker Runtime；未新增 HTTP 路由，SRV-CTR-001 继续 deferred。WebUI W2 尚未接通。
+**边界：** 当前只有进程内服务组合，没有实际业务调用方、正式 Workflow Template 或 Worker Runtime；未新增 HTTP 路由，SRV-CTR-001 继续 deferred。WebUI W2 尚未接通。首期输入责任和 CreateRun 时间/幂等实现已在后续 W2-B 变更中冻结与验收。
 
 ## 2026-11-17 CreateRun 首期时间与幂等输入约束
 
@@ -129,3 +129,14 @@ Server 已在 Owner Session 启用且 Researchflow Capacity 显式配置时，�
 - Server Run Deadline 必须由显式配置提供，不设隐式默认值；它是整个 Run 的绝对上限。Attempt Timeout 仍只约束单次 Attempt，首期不另增 Stage 总超时；Retry 不得重置 Run Deadline。
 - `CreateRunAtomic` 在事务写入前及提交前继续用数据库 UTC 时钟复核绝对 Deadline，不能只依赖 Application 层校验。
 - WebUI 输入契约与公开 API 状态以 [Web整体规划 W2-B](../web/Web整体规划.md) 和 [Web API 边界](../web/API_CONTRACT.md) 为准；SRV-CTR-001 未重新进入前不增加公开 HTTP API。
+
+## 2026-11-17 W2-B CreateRun 与 Server Deadline 落地
+
+- WebUI 首期只提交请求 Schema 版本、幂等键、精确模板 ref/version、输入快照引用和模板参数；不提交 `system_as_of`、`deadline_at`、CallerRef 或追踪 ID。SRV-CTR-001 仍 deferred，没有新增 HTTP 路由。
+- Server 新增显式配置 `RESEARCHFLOW_RUN_DEADLINE`，使用 Go duration 字符串；Researchflow Capacity 启用时必须提供正数配置，不设默认值。该时长注入 CreateRun Application。
+- CreateRun 指纹只覆盖请求意图，加入请求 Schema 版本，排除 Server PIT/Deadline 时间及追踪 ID。先查幂等记录；重放不读取数据库时钟、不分配新 ID、不解析当前模板。
+- 新 Run 在模板、参数和 ResourcePolicy 解析完成后读取一次 MariaDB UTC 时间，生成 `system_as_of` 和 `deadline_at = db_now + RunDeadline`；Repository 继续在事务写入前和提交前复核 Deadline。
+- 已补充幂等重放不读取时钟的单测，以及真实 MariaDB CreateRun 的 PIT/Deadline 间隔持久化断言。
+- Integration CI Run [44063735491](https://github.com/Kasign/stock_data_provider/actions/runs/44063735491) 对 SHA `e00e6e5c99e5d128b8087e2038d613a8400f23d1` 全量 success。
+
+**未完成：** 正式 Workflow Template 的 required/allow_empty_inputs、RetryPolicy、Propagation、Applicability 和 template_ref/version 尚未全部由用户定稿；不得把当前集成测试夹具直接提升为正式模板。下一步先冻结该发布契约，再发布 `news.search_candidates`。

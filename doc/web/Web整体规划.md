@@ -102,7 +102,7 @@ Web 负责交互、请求编排、状态展示和有限的浏览器本地工作�
 
 ### W2 当前状态与执行拆分（更新于 2026-11-17）
 
-**当前结论：Owner Session 浏览器接入代码已完成；W2 的 Researchflow 业务接入仍未开始。** 不再沿用 2026-11-12 的“等待 Session 登录实现”判断。当前 integration 精确基线为 `446cc1a65c307726a1171e1341d529452ea09f55`，Integration CI Run `43999751873` 对该 SHA 为 success。
+**当前结论：Owner Session 浏览器接入代码已完成；W2-B 的首期 CreateRun 输入契约、Server Run Deadline 配置、PIT/Deadline 生成和幂等语义已落地并通过 CI。** 正式 Workflow Template 发布、Worker Runtime 和 WebUI 实际接入仍未完成。当前 integration 精确基线为 `e00e6e5c99e5d128b8087e2038d613a8400f23d1`，Integration CI Run `44063735491` 对该 SHA 为 success。
 
 #### Owner Session 接入状态
 
@@ -121,7 +121,7 @@ Web 负责交互、请求编排、状态展示和有限的浏览器本地工作�
 | 批次 | 任务 | 完成条件 | 当前状态 |
 |---|---|---|---|
 | W2-A | Owner Session 浏览器认证接入 | Server 契约、Handler、真实存储生命周期、Web API/UI、自动化测试 | 代码和自动化测试已完成；目标环境部署验收待完成 |
-| W2-B | Researchflow 生产入口与正式模板 | 明确正式 Workflow Template、不可变参数 Schema Registry、版本化 Applicability、Resource Policy Resolver、真实内部 CreateRun 消费者、Caller Identity/授权/幂等键责任 | 待开展；不得用测试 Stub 或固定 Caller 代替生产身份 |
+| W2-B | Researchflow 生产入口与正式模板 | 明确正式 Workflow Template、不可变参数 Schema Registry、版本化 Applicability、Resource Policy Resolver、真实内部 CreateRun 消费者、Caller Identity/授权/幂等键责任 | 首期 CreateRun 输入契约已冻结；Server Deadline、PIT/Deadline 生成、幂等指纹和真实 MariaDB 时间持久化验收通过；正式 Template 字段仍待定稿与发布，不得用测试 Stub 或固定 Caller 代替生产身份 |
 | W2-C | Researchflow Server 生产运行时 | Migration、Scheduler、WorkerPool、过期 Attempt/Deadline 扫描、Finalization、优雅停止、故障恢复和诊断；真实 Stage Executor 接入 | 待 W2-B 的生产运行边界明确后实施 |
 | W2-D | Researchflow HTTP 契约与 Web 工作区 | SRV-CTR-001 重新进入并冻结；明确模板发现、Run 创建/查询、Stage/Attempt/ResultSummary、取消/Retry、历史分页、错误与权限；Root Server 注册真实 Handler | deferred；不得提前开放或猜测 API |
 | W2-E | 真实端到端研究闭环 | 真实 Root Server、MariaDB/Redis、News Stage、权限、幂等、事件续读、取消、Finalization 和结果读取 | 待 W2-B/C/D 完成 |
