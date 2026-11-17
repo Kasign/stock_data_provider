@@ -226,7 +226,7 @@ func validateIndexQuoteSnapshot(snapshot *model.IndexQuoteSnapshot) error {
 	return validateIndexQuoteSnapshotAt(snapshot, platformtime.SystemClock{}.Now())
 }
 
-func validateIndexQuoteSnapshotAt(snapshot *model.IndexQuoteSnapshot, now time.Time) error { {
+func validateIndexQuoteSnapshotAt(snapshot *model.IndexQuoteSnapshot, now time.Time) error {
 	if snapshot == nil || len(snapshot.Items) == 0 {
 		return errors.New("index-quote provider returned an empty snapshot")
 	}
@@ -489,7 +489,7 @@ func validateMarketBreadthSnapshot(snapshot *model.MarketBreadthSnapshot, requir
 	return validateMarketBreadthSnapshotAt(snapshot, requireFullCoverage, platformtime.SystemClock{}.Now())
 }
 
-func validateMarketBreadthSnapshotAt(snapshot *model.MarketBreadthSnapshot, requireFullCoverage bool, now time.Time) error { {
+func validateMarketBreadthSnapshotAt(snapshot *model.MarketBreadthSnapshot, requireFullCoverage bool, now time.Time) error {
 	if snapshot == nil {
 		return errors.New("market-breadth provider returned an empty snapshot")
 	}
@@ -706,7 +706,7 @@ func normalizeLimitPoolDate(rawDate string) (string, error) {
 	return normalizeLimitPoolDateAt(rawDate, platformtime.SystemClock{}.Now())
 }
 
-func normalizeLimitPoolDateAt(rawDate string, now time.Time) (string, error) { {
+func normalizeLimitPoolDateAt(rawDate string, now time.Time) (string, error) {
 	rawDate = strings.TrimSpace(rawDate)
 	today := now.In(marketLocation()).Format("2006-01-02")
 	if rawDate == "" {
@@ -727,7 +727,7 @@ func validateLimitPoolSnapshot(poolType, tradeDate string, limit int, snapshot *
 	return validateLimitPoolSnapshotAt(poolType, tradeDate, limit, snapshot, platformtime.SystemClock{}.Now())
 }
 
-func validateLimitPoolSnapshotAt(poolType, tradeDate string, limit int, snapshot *model.LimitPoolSnapshot, now time.Time) error { {
+func validateLimitPoolSnapshotAt(poolType, tradeDate string, limit int, snapshot *model.LimitPoolSnapshot, now time.Time) error {
 	if snapshot == nil {
 		return errors.New("limit-pool provider returned an empty snapshot")
 	}
@@ -982,7 +982,7 @@ func normalizeDragonTigerDate(rawDate string) (string, error) {
 	return normalizeDragonTigerDateAt(rawDate, platformtime.SystemClock{}.Now())
 }
 
-func normalizeDragonTigerDateAt(rawDate string, now time.Time) (string, error) { {
+func normalizeDragonTigerDateAt(rawDate string, now time.Time) (string, error) {
 	rawDate = strings.TrimSpace(rawDate)
 	today := now.In(marketLocation()).Format("2006-01-02")
 	if rawDate == "" {
@@ -1003,7 +1003,7 @@ func validateDragonTigerSnapshot(tradeDate string, page, pageSize int, snapshot 
 	return validateDragonTigerSnapshotAt(tradeDate, page, pageSize, snapshot, platformtime.SystemClock{}.Now())
 }
 
-func validateDragonTigerSnapshotAt(tradeDate string, page, pageSize int, snapshot *model.DragonTigerSnapshot, now time.Time) error { {
+func validateDragonTigerSnapshotAt(tradeDate string, page, pageSize int, snapshot *model.DragonTigerSnapshot, now time.Time) error {
 	if page < 1 || pageSize < 1 {
 		return errors.New("dragon-tiger page and page size must be positive")
 	}
@@ -1258,7 +1258,7 @@ func validateSectorRankingSnapshot(category string, limit int, snapshot *model.S
 	return validateSectorRankingSnapshotAt(category, limit, snapshot, platformtime.SystemClock{}.Now())
 }
 
-func validateSectorRankingSnapshotAt(category string, limit int, snapshot *model.SectorRankingSnapshot, now time.Time) error { {
+func validateSectorRankingSnapshotAt(category string, limit int, snapshot *model.SectorRankingSnapshot, now time.Time) error {
 	if snapshot == nil {
 		return errors.New("sector-ranking provider returned an empty response")
 	}
@@ -2293,7 +2293,7 @@ func validateChipDistributionSnapshot(symbol string, item *model.ChipDistributio
 	return validateChipDistributionSnapshotAt(symbol, item, platformtime.SystemClock{}.Now())
 }
 
-func validateChipDistributionSnapshotAt(symbol string, item *model.ChipDistribution, now time.Time) error { {
+func validateChipDistributionSnapshotAt(symbol string, item *model.ChipDistribution, now time.Time) error {
 	if item == nil {
 		return errors.New("chip-distribution response is empty")
 	}
@@ -2352,7 +2352,7 @@ func validateCapitalFlowSnapshot(symbol string, item *model.CapitalFlow) error {
 	return validateCapitalFlowSnapshotAt(symbol, item, platformtime.SystemClock{}.Now())
 }
 
-func validateCapitalFlowSnapshotAt(symbol string, item *model.CapitalFlow, now time.Time) error { {
+func validateCapitalFlowSnapshotAt(symbol string, item *model.CapitalFlow, now time.Time) error {
 	if item == nil {
 		return errors.New("capital-flow response is empty")
 	}
@@ -4201,7 +4201,7 @@ func applyDailyBarAdjustmentMetadataQuality(bars []model.DailyBar, basis model.A
 	return applyDailyBarAdjustmentMetadataQualityAt(bars, basis, platformtime.SystemClock{}.Now())
 }
 
-func applyDailyBarAdjustmentMetadataQualityAt(bars []model.DailyBar, basis model.AdjustmentBasis, now time.Time) ([]string, error) { {
+func applyDailyBarAdjustmentMetadataQualityAt(bars []model.DailyBar, basis model.AdjustmentBasis, now time.Time) ([]string, error) {
 	if basis == model.AdjustmentNone || len(bars) == 0 {
 		return nil, nil
 	}
