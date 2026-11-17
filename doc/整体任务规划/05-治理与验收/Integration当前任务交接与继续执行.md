@@ -1189,3 +1189,10 @@ ResourcePolicy 的语义已完成 Review，权威实施细节见 `doc/researchfl
 - News Stage 必须执行受限 ProviderSet，不能只在 Stage 层做校验。
 
 下一项按上述决议实施 ResourcePolicy Registry/Resolver、CreateRun 快照持久化、Worker 传播与 News ProviderSet 强制执行。生产 Template 与 Worker Runtime 仍未接通；SRV-CTR-001 仍 deferred，不开放 Researchflow HTTP API。
+
+
+### ResourcePolicy 代码实施进度（2026-11-17）
+
+- 已新增 `internal/researchflow/resourcepolicy` 固定策略 Registry/Resolver 基础实现，策略定义指纹与 Run 级 Provider Code Snapshot 已有单元测试。
+- 该代码目前尚未接入 CreateRun、ResolvedTemplate 持久化、Worker 或 News Stage；在完成这些接线前，不能宣称生产授权已生效。
+- 下一切片：CreateRun 注入 Resolver 并把 Snapshot 纳入 ResolvedTemplate；随后 Worker 读取/比较并传递，News Stage 按 allowlist 过滤真实 ProviderSet。
