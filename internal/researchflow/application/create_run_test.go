@@ -4,9 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
-	"strings"
 
 	"example.com/stock-analysis-flow/internal/researchflow/domain"
 	"example.com/stock-analysis-flow/internal/researchflow/template"
@@ -314,5 +314,20 @@ func TestCreateRunPersistsOptionalNonApplicableStageAsSkipped(t *testing.T) {
 	}
 	if len(got.Run.ExcludedStages) != 0 {
 		t.Fatalf("optional skipped Stage must not be written to excluded_stages: %#v", got.Run.ExcludedStages)
+	}
+}
+
+func TestCreateRunFailsClosedWhenResourcePolicyCannotResolve(t *testing.T) {
+	now := time.Date(2026, 11, 6, 1, 0, 0, 0, time.UTC)
+	repo := &repositoryStub{}
+	reader := &templatesStub{value: validTemplate()}
+	resolver := &resourcePoliciesStub{err: errors.New("no configured providers")}
+	service, err := NewCreateRunService(identityStub{caller: "caller_1"}, clockStub{now}, &idsStub{}, reader, schemasStub{}, applicabilityStub{}, nil, resolver, repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = service.CreateRun(context.Background(), command(now))
+	if err == nil || repo.created != nil {
+		t.Fatalf("CreateRun must fail closed without a resolved resource policy: err=%v record=%#v", err, repo.created)
 	}
 }

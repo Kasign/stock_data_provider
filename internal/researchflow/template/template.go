@@ -7,9 +7,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
-	"regexp"
 	"time"
 
 	"github.com/gowebpki/jcs"
@@ -371,13 +371,13 @@ func resolvedFingerprint(templateFingerprint string, schema ParameterSchemaSnaps
 	templateFingerprint := resolved.Fingerprint
 	// Resolve's initial fingerprint already binds template and parameter schema. Recompute
 	// from those stable components, adding only the immutable policy definition digest.
-	base, err := resolvedFingerprint(templateFingerprint, ParameterSchemaSnapshot{}, snapshot.PolicyFingerprint)
+	base, err := resolvedFingerprint(templateFingerprint, resolved.ParameterSchema, snapshot.PolicyFingerprint)
 	if err != nil {
 		return ResolvedTemplate{}, err
 	}
 	resolved.Fingerprint = base
 	return resolved, nil
- }
+}
 
 func cloneStageDefinition(stage StageDefinition) StageDefinition {
 	stage.Dependencies = append([]string(nil), stage.Dependencies...)
