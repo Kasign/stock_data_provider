@@ -88,7 +88,7 @@ func (newsSearchIntegrationApplicability) Evaluate(context.Context, researchflow
 }
 
 type newsSearchIntegrationProvider struct {
-	calls              atomic.Int32
+	calls               atomic.Int32
 	cancellationStarted chan struct{}
 	cancellationOnce    sync.Once
 }
