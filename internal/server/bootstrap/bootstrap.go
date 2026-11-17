@@ -390,21 +390,24 @@ func joinShutdownError(runErr, shutdownErr error) error {
 }
 
 // stopConsumersThenCloseResources enforces the ownership boundary: all
-// lifecycle-managed consumers stop before shared DB/Redis/HTTP resources close.
-// Resource closure still runs when consumer shutdown reports an error.
+// lifecycle-managed consumers must stop successfully before shared DB/Redis/HTTP
+// resources close. If shutdown fails or times out, keep resources open so an
+// in-flight consumer cannot use a closed connection pool; the process owner
+// should then terminate the process rather than continue serving.
 func stopConsumersThenCloseResources(
 	ctx context.Context,
 	stopConsumers func(context.Context) error,
 	closeResources func() error,
 ) error {
-	var stopErr, closeErr error
 	if stopConsumers != nil {
-		stopErr = stopConsumers(ctx)
+		if err := stopConsumers(ctx); err != nil {
+			return fmt.Errorf("停止生命周期消费者失败；为避免在途任务访问已关闭资源，保留共享资源: %w", err)
+		}
 	}
-	if closeResources != nil {
-		closeErr = closeResources()
+	if closeResources == nil {
+		return nil
 	}
-	return errors.Join(stopErr, closeErr)
+	return closeResources()
 }
 
 type legacyAnalysisWorker struct {
