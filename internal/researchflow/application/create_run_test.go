@@ -59,11 +59,19 @@ func (applicabilityStub) Evaluate(_ context.Context, _ template.ApplicabilityRul
 	return true, "", nil
 }
 
-type resourcePoliciesStub struct { snapshot resourcepolicy.Snapshot; err error; calls int }
+type resourcePoliciesStub struct {
+	snapshot resourcepolicy.Snapshot
+	err      error
+	calls    int
+}
 func (s *resourcePoliciesStub) Resolve(_ context.Context, ref string) (resourcepolicy.Snapshot, error) {
 	s.calls++
-	if s.err != nil { return resourcepolicy.Snapshot{}, s.err }
-	if s.snapshot.PolicyRef == "" { s.snapshot = resourcepolicy.Snapshot{PolicyRef: ref, PolicyFingerprint: strings.Repeat("c", 64), AllowedProviderCodes: []string{"bocha", "tavily"}} }
+	if s.err != nil {
+		return resourcepolicy.Snapshot{}, s.err
+	}
+	if s.snapshot.PolicyRef == "" {
+		s.snapshot = resourcepolicy.Snapshot{PolicyRef: ref, PolicyFingerprint: strings.Repeat("c", 64), AllowedProviderCodes: []string{"bocha", "tavily"}}
+	}
 	return s.snapshot, nil
 }
 

@@ -16,9 +16,20 @@ import (
 	researchflowapplication "example.com/stock-analysis-flow/internal/researchflow/application"
 	researchflowdomain "example.com/stock-analysis-flow/internal/researchflow/domain"
 	researchflowparameterschema "example.com/stock-analysis-flow/internal/researchflow/parameterschema"
+	"example.com/stock-analysis-flow/internal/researchflow/resourcepolicy"
 	researchflowstorage "example.com/stock-analysis-flow/internal/researchflow/storage"
 	researchflowtemplate "example.com/stock-analysis-flow/internal/researchflow/template"
 )
+
+type newsSearchIntegrationResourcePolicyResolver struct{}
+
+func (newsSearchIntegrationResourcePolicyResolver) Resolve(_ context.Context, ref string) (resourcepolicy.Snapshot, error) {
+	registry, err := resourcepolicy.NewRegistry()
+	if err != nil {
+		return resourcepolicy.Snapshot{}, err
+	}
+	return registry.Resolve(ref, []string{"integration_fixture"})
+}
 
 const (
 	newsSearchIntegrationTemplateRef = "integration.news.search_candidates"
@@ -127,7 +138,7 @@ func TestNewsSearchStageResearchflowMariaDBIntegration(t *testing.T) {
 		Ref: newsSearchIntegrationTemplateRef, Version: "1.0.0",
 		AllowEmptyInputs: true, ParameterSchemaRef: newsSearchIntegrationSchemaRef,
 		OutputRegistryVersion: newsSearchStageOutputRegistryVersion,
-		ResourcePolicyRef:     "integration.news.search_candidates.resource_policy.v1",
+		ResourcePolicyRef:     resourcepolicy.NewsSearchConfiguredProvidersRef,
 		Stages: []researchflowtemplate.StageDefinition{{
 			Code: newsstage.SearchCandidatesStageCode, Required: true, Dependencies: []string{},
 			Applicability: researchflowtemplate.ApplicabilityRule{
@@ -146,7 +157,7 @@ func TestNewsSearchStageResearchflowMariaDBIntegration(t *testing.T) {
 	}
 	createRun, err := researchflowapplication.NewCreateRunService(
 		newsSearchIntegrationIdentity{}, clock, ids, templateRegistry, parameterValidator,
-		newsSearchIntegrationApplicability{}, nil, repository,
+		newsSearchIntegrationApplicability{}, nil, newsSearchIntegrationResourcePolicyResolver{}, repository,
 	)
 	if err != nil {
 		t.Fatalf("创建 Researchflow CreateRun Service 失败: %v", err)

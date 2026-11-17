@@ -237,7 +237,7 @@ func resolvedFingerprint(templateFingerprint string, schema ParameterSchemaSnaps
 		ParameterSchemaRef         string `json:"parameter_schema_ref"`
 		ParameterSchemaVersion     string `json:"parameter_schema_version"`
 		ParameterSchemaFingerprint string `json:"parameter_schema_fingerprint"`
-		ResourcePolicyFingerprint string `json:"resource_policy_fingerprint"`
+		ResourcePolicyFingerprint  string `json:"resource_policy_fingerprint"`
 	}{templateFingerprint, schema.Ref, schema.Version, schema.Fingerprint, resourcePolicyFingerprint}
 	raw, err := json.Marshal(payload)
 	if err != nil {

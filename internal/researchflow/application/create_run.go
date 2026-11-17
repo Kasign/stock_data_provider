@@ -78,15 +78,15 @@ type RunRepository interface {
 }
 
 type CreateRunService struct {
-	identity      RequestIdentity
-	clock         DatabaseClock
-	ids           IDGenerator
-	templates     TemplateRegistry
-	schemas       template.ParameterSchemaValidator
-	applicability template.ApplicabilityEvaluator
-	gates         template.HardRiskGateRegistry
+	identity         RequestIdentity
+	clock            DatabaseClock
+	ids              IDGenerator
+	templates        TemplateRegistry
+	schemas          template.ParameterSchemaValidator
+	applicability    template.ApplicabilityEvaluator
+	gates            template.HardRiskGateRegistry
 	resourcePolicies ResourcePolicyResolver
-	runs          RunRepository
+	runs             RunRepository
 }
 
 func NewCreateRunService(
