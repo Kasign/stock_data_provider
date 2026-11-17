@@ -31,6 +31,14 @@ func buildNewsSearchWorkflowTemplate(stage *newsSearchStageComposition, policies
 	if resourcepolicy.NewsSearchConfiguredProvidersRef != "news.search.configured-providers@1.0.0" {
 		return template.WorkflowTemplate{}, errors.New("News Search ResourcePolicy identity is invalid")
 	}
+	// Resolve with an empty inventory: ErrNoProviders proves the exact policy
+	// ref is registered while preserving the intentional fail-closed behavior.
+	if _, err := policies.Resolve(resourcepolicy.NewsSearchConfiguredProvidersRef, nil); !errors.Is(err, resourcepolicy.ErrNoProviders) {
+		if err != nil {
+			return template.WorkflowTemplate{}, fmt.Errorf("resolve registered News Search ResourcePolicy: %w", err)
+		}
+		return template.WorkflowTemplate{}, errors.New("News Search ResourcePolicy unexpectedly accepted an empty Provider inventory")
+	}
 
 	parameters := json.RawMessage(`{"query":"template publication preflight","limit":10}`)
 	schemaSnapshot, err := stage.parameterSchemas.Validate(context.Background(), newsSearchParameterSchemaRef, parameters)
