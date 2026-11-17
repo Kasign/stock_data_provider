@@ -13,6 +13,7 @@ import (
 	"example.com/stock-analysis-flow/internal/marketdata/model"
 	"example.com/stock-analysis-flow/internal/marketdata/normalize"
 	"example.com/stock-analysis-flow/internal/marketdata/provider"
+	platformtime "example.com/stock-analysis-flow/internal/platform/time"
 )
 
 func (s *DataService) SetIndexCatalogProviders(providers []provider.IndexCatalogProvider) {
@@ -69,6 +70,10 @@ func validSnapshotQuality(q model.QualityStatus) bool {
 }
 
 func validateIndexCatalogSnapshot(tag string, snapshot *model.IndexCatalogSnapshot) error {
+	return validateIndexCatalogSnapshotAt(tag, snapshot, platformtime.SystemClock{}.Now())
+}
+
+func validateIndexCatalogSnapshotAt(tag string, snapshot *model.IndexCatalogSnapshot, now time.Time) error 
 	if snapshot == nil || snapshot.Tag != tag || snapshot.Total != len(snapshot.Items) {
 		return errors.New("index catalog snapshot identity/count mismatch")
 	}
@@ -83,10 +88,10 @@ func validateIndexCatalogSnapshot(tag string, snapshot *model.IndexCatalogSnapsh
 	if strings.TrimSpace(snapshot.Source) == "" || !hasIdentifiableSourceVersion(snapshot.SourceVersion) || snapshot.FetchedAt.IsZero() || !validSnapshotQuality(snapshot.QualityStatus) {
 		return errors.New("index catalog snapshot source, source_version, timestamp or quality invalid")
 	}
-	if snapshot.FetchedAt.After(time.Now().UTC().Add(5 * time.Minute)) {
+	if snapshot.FetchedAt.After(now.UTC().Add(5 * time.Minute)) {
 		return errors.New("index catalog fetched_at is in the future")
 	}
-	if snapshot.ProviderTime != nil && (snapshot.ProviderTime.IsZero() || snapshot.ProviderTime.After(time.Now().Add(5*time.Minute))) {
+	if snapshot.ProviderTime != nil && (snapshot.ProviderTime.IsZero() || snapshot.ProviderTime.After(now.Add(5*time.Minute))) {
 		return errors.New("index catalog provider_time is zero or in the future")
 	}
 	if snapshot.QualityStatus == model.QualityValid && snapshot.ProviderTime == nil {
@@ -110,13 +115,17 @@ func validateIndexCatalogSnapshot(tag string, snapshot *model.IndexCatalogSnapsh
 }
 
 func validateIndexConstituentsSnapshot(indexSymbol string, snapshot *model.IndexConstituentSnapshot) error {
+	return validateIndexConstituentsSnapshotAt(indexSymbol, snapshot, platformtime.SystemClock{}.Now())
+}
+
+func validateIndexConstituentsSnapshotAt(indexSymbol string, snapshot *model.IndexConstituentSnapshot, now time.Time) error 
 	if snapshot == nil || snapshot.IndexSymbol != indexSymbol || snapshot.Total != len(snapshot.Items) {
 		return errors.New("index constituent snapshot identity/count mismatch")
 	}
 	if strings.TrimSpace(snapshot.Source) == "" || !hasIdentifiableSourceVersion(snapshot.SourceVersion) || snapshot.FetchedAt.IsZero() || !validSnapshotQuality(snapshot.QualityStatus) {
 		return errors.New("index constituent snapshot source, source_version, timestamp or quality invalid")
 	}
-	if snapshot.FetchedAt.After(time.Now().UTC().Add(5 * time.Minute)) {
+	if snapshot.FetchedAt.After(now.UTC().Add(5 * time.Minute)) {
 		return errors.New("index constituent fetched_at is in the future")
 	}
 	if snapshot.ProviderReturned < 0 || snapshot.ExcludedCount < 0 ||
@@ -132,7 +141,7 @@ func validateIndexConstituentsSnapshot(indexSymbol string, snapshot *model.Index
 		if err != nil || date.Format("2006-01-02") != snapshot.ProviderReportDate {
 			return errors.New("index constituent provider_report_date is invalid")
 		}
-		if snapshot.ProviderReportDate > time.Now().In(marketLocation()).Format("2006-01-02") {
+		if snapshot.ProviderReportDate > now.In(marketLocation()).Format("2006-01-02") {
 			return errors.New("index constituent provider_report_date is in the future")
 		}
 	}
@@ -141,14 +150,14 @@ func validateIndexConstituentsSnapshot(indexSymbol string, snapshot *model.Index
 		if err != nil || asOf.Format("2006-01-02") != snapshot.AsOfDate {
 			return errors.New("index constituent as_of_date is invalid")
 		}
-		if snapshot.AsOfDate > time.Now().In(marketLocation()).Format("2006-01-02") {
+		if snapshot.AsOfDate > now.In(marketLocation()).Format("2006-01-02") {
 			return errors.New("index constituent as_of_date is in the future")
 		}
 		if snapshot.ProviderReportDate != "" && snapshot.ProviderReportDate > snapshot.AsOfDate {
 			return errors.New("index constituent provider_report_date is later than as_of_date")
 		}
 	}
-	if snapshot.ProviderTime != nil && (snapshot.ProviderTime.IsZero() || snapshot.ProviderTime.After(time.Now().Add(5*time.Minute))) {
+	if snapshot.ProviderTime != nil && (snapshot.ProviderTime.IsZero() || snapshot.ProviderTime.After(now.Add(5*time.Minute))) {
 		return errors.New("index constituent provider_time is zero or in the future")
 	}
 	if snapshot.QualityStatus == model.QualityValid && snapshot.ProviderTime == nil && snapshot.ProviderReportDate == "" {
@@ -176,6 +185,10 @@ func validateIndexConstituentsSnapshot(indexSymbol string, snapshot *model.Index
 
 // markHistoricalConstituentIntervalQuality 防止将历史权重快照误标为完整的成员生效区间。
 func markHistoricalConstituentIntervalQuality(snapshot *model.IndexConstituentSnapshot) {
+	markHistoricalConstituentIntervalQualityAt(snapshot, platformtime.SystemClock{}.Now())
+}
+
+func markHistoricalConstituentIntervalQualityAt(snapshot *model.IndexConstituentSnapshot, now time.Time) 
 	if snapshot == nil || snapshot.AsOfDate == "" {
 		return
 	}
@@ -191,7 +204,7 @@ func markHistoricalConstituentIntervalQuality(snapshot *model.IndexConstituentSn
 			item.AvailableAt == nil || item.SystemObservedAt == nil ||
 			item.AvailableAt.IsZero() || item.SystemObservedAt.IsZero() ||
 			item.AvailableAt.After(snapshot.FetchedAt) || item.SystemObservedAt.Before(*item.AvailableAt) ||
-			item.SystemObservedAt.After(time.Now().Add(5*time.Minute)) {
+			item.SystemObservedAt.After(now.Add(5*time.Minute)) {
 			degradeHistoricalConstituentInterval(snapshot)
 			return
 		}
@@ -224,16 +237,20 @@ func markIndexConstituentCoverage(snapshot *model.IndexConstituentSnapshot) {
 }
 
 func validateIndexDailyBarsSnapshot(indexSymbol, startDate, endDate string, snapshot *model.IndexDailyBarsSnapshot) error {
+	return validateIndexDailyBarsSnapshotAt(indexSymbol, startDate, endDate, snapshot, platformtime.SystemClock{}.Now())
+}
+
+func validateIndexDailyBarsSnapshotAt(indexSymbol, startDate, endDate string, snapshot *model.IndexDailyBarsSnapshot, now time.Time) error 
 	if snapshot == nil || snapshot.IndexSymbol != indexSymbol || snapshot.StartDate != startDate || snapshot.EndDate != endDate || snapshot.Total != len(snapshot.Items) {
 		return errors.New("index daily-bars snapshot identity/range/count mismatch")
 	}
 	if strings.TrimSpace(snapshot.Source) == "" || !hasIdentifiableSourceVersion(snapshot.SourceVersion) || snapshot.FetchedAt.IsZero() || !validSnapshotQuality(snapshot.QualityStatus) {
 		return errors.New("index daily-bars snapshot source, source_version, timestamp or quality invalid")
 	}
-	if snapshot.FetchedAt.After(time.Now().UTC().Add(5 * time.Minute)) {
+	if snapshot.FetchedAt.After(now.UTC().Add(5 * time.Minute)) {
 		return errors.New("index daily-bars fetched_at is in the future")
 	}
-	if snapshot.ProviderTime != nil && (snapshot.ProviderTime.IsZero() || snapshot.ProviderTime.After(time.Now().Add(5*time.Minute))) {
+	if snapshot.ProviderTime != nil && (snapshot.ProviderTime.IsZero() || snapshot.ProviderTime.After(now.Add(5*time.Minute))) {
 		return errors.New("index daily-bars provider_time is zero or in the future")
 	}
 	if snapshot.QualityStatus == model.QualityValid && snapshot.ProviderTime == nil {
@@ -246,7 +263,7 @@ func validateIndexDailyBarsSnapshot(indexSymbol, startDate, endDate string, snap
 		if item.IndexSymbol != indexSymbol || item.TradeDate < startDate || item.TradeDate > endDate || item.Source != snapshot.Source || item.SourceVersion != snapshot.SourceVersion || item.FetchedAt.IsZero() {
 			return errors.New("index daily bar identity, date or source/version invalid")
 		}
-		if item.FetchedAt.After(time.Now().UTC().Add(5 * time.Minute)) {
+		if item.FetchedAt.After(now.UTC().Add(5 * time.Minute)) {
 			return fmt.Errorf("index daily bar %s fetched_at is in the future", item.TradeDate)
 		}
 		parsedDate, dateErr := time.Parse("2006-01-02", item.TradeDate)
@@ -300,7 +317,7 @@ func validateIndexDailyBarsSnapshot(indexSymbol, startDate, endDate string, snap
 		if (item.Volume == nil || item.Amount == nil) && item.QualityStatus == model.QualityValid {
 			return fmt.Errorf("index daily bar %s cannot be valid with missing volume or amount", item.TradeDate)
 		}
-		if item.ProviderTime != nil && (item.ProviderTime.IsZero() || item.ProviderTime.After(time.Now().Add(5*time.Minute))) {
+		if item.ProviderTime != nil && (item.ProviderTime.IsZero() || item.ProviderTime.After(now.Add(5*time.Minute))) {
 			return fmt.Errorf("index daily bar %s has zero or future provider_time", item.TradeDate)
 		}
 		if !validSnapshotQuality(item.QualityStatus) || item.QualityStatus == model.QualityUnknown {
@@ -366,7 +383,7 @@ func (s *DataService) IndexCatalog(ctx context.Context, rawTag string) (*model.I
 	key := "md:v1:index-catalog:" + tag
 	if data, ok, cacheErr := s.cache.Get(ctx, key); cacheErr == nil && ok {
 		var cached model.IndexCatalogSnapshot
-		if json.Unmarshal(data, &cached) == nil && validateIndexCatalogSnapshot(tag, &cached) == nil && time.Since(cached.FetchedAt) >= 0 {
+		if json.Unmarshal(data, &cached) == nil && validateIndexCatalogSnapshotAt(tag, &cached, s.nowUTC()) == nil && !cached.FetchedAt.After(s.nowUTC()) {
 			ttl := indexCatalogCacheTTL(&cached)
 			cacheEligible := len(cached.Items) > 0 && cached.QualityStatus != model.QualityUnknown
 			if cached.QualityStatus == model.QualityUnknown {
@@ -380,7 +397,7 @@ func (s *DataService) IndexCatalog(ctx context.Context, rawTag string) (*model.I
 				}
 				cacheEligible = fallbackExhausted || len(s.indexCatalogProviders) <= 1
 			}
-			if cacheEligible && time.Since(cached.FetchedAt) < ttl {
+			if cacheEligible && cacheEntryWithinTTL(cached.FetchedAt, ttl, s.nowUTC()) {
 				return &cached, true, nil
 			}
 		}
@@ -406,7 +423,7 @@ func (s *DataService) IndexCatalog(ctx context.Context, rawTag string) (*model.I
 			failures = append(failures, p.Name()+": index-catalog source does not match Provider.Name()")
 			continue
 		}
-		if err := validateIndexCatalogSnapshot(tag, snapshot); err != nil {
+		if err := validateIndexCatalogSnapshotAt(tag, snapshot, s.nowUTC()); err != nil {
 			failures = append(failures, p.Name()+": "+err.Error())
 			continue
 		}
@@ -519,7 +536,7 @@ func (s *DataService) IndexConstituentsFromSource(ctx context.Context, rawIndexS
 	key := fmt.Sprintf("md:v2:index-constituents:%s:%s", sourceKey, indexSymbol)
 	if data, ok, cacheErr := s.cache.Get(ctx, key); cacheErr == nil && ok {
 		var cached model.IndexConstituentSnapshot
-		if json.Unmarshal(data, &cached) == nil && validateIndexConstituentsSnapshot(indexSymbol, &cached) == nil && time.Since(cached.FetchedAt) >= 0 {
+		if json.Unmarshal(data, &cached) == nil && validateIndexConstituentsSnapshotAt(indexSymbol, &cached, s.nowUTC()) == nil && !cached.FetchedAt.After(s.nowUTC()) {
 			// 缓存与新 Provider 回包使用同一覆盖计数处理；unknown 只补原因，不改变其未知语义。
 			markIndexConstituentCoverage(&cached)
 			ttl := 30 * time.Minute
@@ -538,7 +555,7 @@ func (s *DataService) IndexConstituentsFromSource(ctx context.Context, rawIndexS
 				}
 				cacheEligible = fallbackExhausted || len(providers) <= 1
 			}
-			if cacheEligible && time.Since(cached.FetchedAt) < ttl {
+			if cacheEligible && cacheEntryWithinTTL(cached.FetchedAt, ttl, s.nowUTC()) {
 				return &cached, true, nil
 			}
 		}
@@ -556,7 +573,7 @@ func (s *DataService) IndexConstituentsFromSource(ctx context.Context, rawIndexS
 			failures = append(failures, p.Name()+": "+fetchErr.Error())
 			continue
 		}
-		if err := validateIndexConstituentsSnapshot(indexSymbol, snapshot); err != nil {
+		if err := validateIndexConstituentsSnapshotAt(indexSymbol, snapshot, s.nowUTC()); err != nil {
 			failures = append(failures, p.Name()+": "+err.Error())
 			continue
 		}
@@ -612,7 +629,7 @@ func (s *DataService) IndexConstituentsAsOfFromSource(ctx context.Context, rawIn
 	if parseErr != nil || asOf.Format("2006-01-02") != asOfDate {
 		return nil, false, errors.New("as_of must use YYYY-MM-DD")
 	}
-	if asOfDate > time.Now().In(marketLocation()).Format("2006-01-02") {
+	if asOfDate > s.nowUTC().In(marketLocation()).Format("2006-01-02") {
 		return nil, false, errors.New("as_of must not be in the future")
 	}
 	if ctx == nil {
@@ -640,10 +657,10 @@ func (s *DataService) IndexConstituentsAsOfFromSource(ctx context.Context, rawIn
 		var cached model.IndexConstituentSnapshot
 		if json.Unmarshal(data, &cached) == nil &&
 			cached.AsOfDate == asOfDate &&
-			validateIndexConstituentsSnapshot(indexSymbol, &cached) == nil &&
-			time.Since(cached.FetchedAt) >= 0 {
+			validateIndexConstituentsSnapshotAt(indexSymbol, &cached, s.nowUTC()) == nil &&
+			!cached.FetchedAt.After(s.nowUTC()) {
 			markIndexConstituentCoverage(&cached)
-			markHistoricalConstituentIntervalQuality(&cached)
+			markHistoricalConstituentIntervalQualityAt(&cached, s.nowUTC())
 			ttl := 24 * time.Hour
 			cacheEligible := len(cached.Items) > 0 && cached.QualityStatus != model.QualityUnknown
 			if cached.QualityStatus == model.QualityUnknown {
@@ -658,7 +675,7 @@ func (s *DataService) IndexConstituentsAsOfFromSource(ctx context.Context, rawIn
 			} else if cached.QualityStatus != model.QualityValid {
 				ttl = 6 * time.Hour
 			}
-			if cacheEligible && time.Since(cached.FetchedAt) < ttl {
+			if cacheEligible && cacheEntryWithinTTL(cached.FetchedAt, ttl, s.nowUTC()) {
 				return &cached, true, nil
 			}
 		}
@@ -685,12 +702,12 @@ func (s *DataService) IndexConstituentsAsOfFromSource(ctx context.Context, rawIn
 			failures = append(failures, p.Name()+": historical constituent response has no source report date")
 			continue
 		}
-		if err := validateIndexConstituentsSnapshot(indexSymbol, snapshot); err != nil {
+		if err := validateIndexConstituentsSnapshotAt(indexSymbol, snapshot, s.nowUTC()); err != nil {
 			failures = append(failures, p.Name()+": "+err.Error())
 			continue
 		}
 		markIndexConstituentCoverage(snapshot)
-		markHistoricalConstituentIntervalQuality(snapshot)
+		markHistoricalConstituentIntervalQualityAt(snapshot, s.nowUTC())
 		if snapshot.QualityStatus == model.QualityUnknown || len(snapshot.Items) == 0 {
 			if betterUnknownIndexConstituentSnapshot(snapshot, unknownCandidate) {
 				unknownCandidate = snapshot
@@ -795,7 +812,7 @@ func (s *DataService) IndexDailyBarsFromSource(ctx context.Context, rawIndexSymb
 	if start.After(end) {
 		return nil, false, errors.New("start must not be after end")
 	}
-	if endDate > time.Now().In(marketLocation()).Format("2006-01-02") {
+	if endDate > s.nowUTC().In(marketLocation()).Format("2006-01-02") {
 		return nil, false, errors.New("index daily-bars end date must not be in the future")
 	}
 	if end.After(start.AddDate(10, 0, 0)) {
@@ -820,7 +837,7 @@ func (s *DataService) IndexDailyBarsFromSource(ctx context.Context, rawIndexSymb
 	key := fmt.Sprintf("md:v2:index-daily-bars:%s:%s:%s:%s", sourceKey, indexSymbol, startDate, endDate)
 	if data, ok, cacheErr := s.cache.Get(ctx, key); cacheErr == nil && ok {
 		var cached model.IndexDailyBarsSnapshot
-		if json.Unmarshal(data, &cached) == nil && validateIndexDailyBarsSnapshot(indexSymbol, startDate, endDate, &cached) == nil && time.Since(cached.FetchedAt) >= 0 {
+		if json.Unmarshal(data, &cached) == nil && validateIndexDailyBarsSnapshotAt(indexSymbol, startDate, endDate, &cached, s.nowUTC()) == nil && !cached.FetchedAt.After(s.nowUTC()) {
 			ttl := 15 * time.Minute
 			cacheEligible := len(cached.Items) > 0 && cached.QualityStatus != model.QualityUnknown
 			if cached.QualityStatus != model.QualityValid {
@@ -838,7 +855,7 @@ func (s *DataService) IndexDailyBarsFromSource(ctx context.Context, rawIndexSymb
 				// 多 Provider 场景忽略未记录回退耗尽的 unknown 缓存，包括“有 K 线条目但质量未知”的旧缓存。
 				cacheEligible = fallbackExhausted || len(providers) <= 1
 			}
-			if cacheEligible && time.Since(cached.FetchedAt) < ttl {
+			if cacheEligible && cacheEntryWithinTTL(cached.FetchedAt, ttl, s.nowUTC()) {
 				return &cached, true, nil
 			}
 		}
@@ -856,7 +873,7 @@ func (s *DataService) IndexDailyBarsFromSource(ctx context.Context, rawIndexSymb
 			failures = append(failures, p.Name()+": "+fetchErr.Error())
 			continue
 		}
-		if err := validateIndexDailyBarsSnapshot(indexSymbol, startDate, endDate, snapshot); err != nil {
+		if err := validateIndexDailyBarsSnapshotAt(indexSymbol, startDate, endDate, snapshot, s.nowUTC()); err != nil {
 			failures = append(failures, p.Name()+": "+err.Error())
 			continue
 		}
