@@ -3825,7 +3825,9 @@ func coherentStoredSeries(bars []model.DailyBar, basis model.AdjustmentBasis) ([
 	return best.bars, ""
 }
 
-func newFetchID() string { return platformtime.SystemClock{}.Now().Format("20060102T150405.000000000Z") }
+func newFetchID() string {
+	return platformtime.SystemClock{}.Now().Format("20060102T150405.000000000Z")
+}
 
 func newFetchIDAt(now time.Time) string { return now.UTC().Format("20060102T150405.000000000Z") }
 
