@@ -104,3 +104,8 @@ ResourcePolicy 已接入 CreateRun、Worker 与 News Stage 的应用执行链：
 Researchflow 的 GetRun 和 CancelRun 均要求通过持久化 Run 创建者关联授权。MySQLRunRepository 使用既有 `researchflow_run_idempotency` 中的 `caller_ref + operation=CreateRun + run_ref` 记录验证权限；GetRun 在读取 Run 前授权，避免未授权调用者枚举 RunRef。精确 SHA `1600c321792a5172f56b8ca7bc49adf67aec5f6a` 的 Integration CI Run [44015922257](https://github.com/Kasign/stock_data_provider/actions/runs/44015922257) 全量 success。
 
 Server 可信 Owner Session RequestIdentity Adapter 和内部 CreateRun/GetRun/CancelRun 组合仍未接入；SRV-CTR-001 继续 deferred。
+
+
+## Owner Session Researchflow 身份适配
+
+Server 已提供 `ownerSessionResearchflowIdentity`：只接受可信 Principal 中的 Owner Session（`Kind=owner`、`Subject=owner`、`AuthMethod=owner_session`），拒绝 Owner Bearer、Service Bearer 和匿名请求。Request ID 从 Observability Context 传播；CorrelationID 由 CreateRun IDGenerator 生成。该适配器尚未接入生产 CreateRun/GetRun/CancelRun 组合。代码 SHA `1c82c16bbbf67084d85a0579f5e0f2d5796358c1` 的 Integration CI Run [44016866061](https://github.com/Kasign/stock_data_provider/actions/runs/44016866061) 全量 success。

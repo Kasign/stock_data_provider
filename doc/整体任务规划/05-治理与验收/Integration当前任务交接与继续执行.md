@@ -1234,3 +1234,17 @@ GetRun 与 CancelRun 的持久化创建者授权已在 Application/Storage 层�
 精确 SHA `1600c321792a5172f56b8ca7bc49adf67aec5f6a` 的 CI Run [44015922257](https://github.com/Kasign/stock_data_provider/actions/runs/44015922257) 全量 success。
 
 后续主线：Server 可信 Owner Session RequestIdentity Adapter → 内部 CreateRun/GetRun/CancelRun 组合 → 正式 Template 与生产 Worker Runtime。Owner Session Subject 固定为 `owner`，AuthMethod 必须单独校验为 `owner_session`；不接受客户端自报 CallerRef，不开放 SRV-CTR-001 deferred 的 Researchflow HTTP API。
+
+
+### 2026-11-17 Owner Session RequestIdentity Adapter 最新状态
+
+此前待办的 Server 可信 Owner Session RequestIdentity Adapter 已完成：
+
+- Platform Security 提供 `PrincipalFromContextValue`，支持进程内 Adapter 读取可信 Principal。
+- Server `ownerSessionResearchflowIdentity` 只接受 Owner Session（Kind=owner、Subject=owner、AuthMethod=owner_session）；Owner Bearer、Service Bearer 和匿名上下文拒绝。
+- Request ID 来自 Observability Context；CorrelationID 由 CreateRun 的 IDGenerator 生成。
+- GetRun/CancelRun 已通过 MySQLRunRepository 的持久化创建者关联授权；MariaDB 测试覆盖其他 CallerRef 无权读/取消。
+
+精确 SHA `1c82c16bbbf67084d85a0579f5e0f2d5796358c1` 的 Integration CI Run [44016866061](https://github.com/Kasign/stock_data_provider/actions/runs/44016866061) 全量 success。
+
+下一步是内部组合根装配 CreateRun/GetRun/CancelRun，并先核实现有 DatabaseClock、IDGenerator、HardRiskGateRegistry 实现。不得开放公网 API；SRV-CTR-001 仍 deferred。
