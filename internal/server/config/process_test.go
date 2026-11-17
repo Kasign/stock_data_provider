@@ -112,34 +112,55 @@ func TestLoadProcessReturnsStableSnapshot(t *testing.T) {
 	}
 }
 
-
 func TestLoadProcessRequiresExplicitResearchflowRunDeadline(t *testing.T) {
 	base := map[string]string{"SERVER_ROLE": "worker", "RESEARCHFLOW_MAX_QUEUED_RUNS": "100", "RESEARCHFLOW_MAX_WORKERS": "2"}
 	load := func(extra map[string]string) (Process, error) {
 		values := make(map[string]string, len(base)+len(extra))
-		for k, v := range base { values[k] = v }
-		for k, v := range extra { values[k] = v }
+		for k, v := range base {
+			values[k] = v
+		}
+		for k, v := range extra {
+			values[k] = v
+		}
 		return LoadProcess(platformconfig.NewEnvWithLookup(func(key string) (string, bool) {
-			if value, ok := relayRequiredTestValues[key]; ok { return value, true }
+			if value, ok := relayRequiredTestValues[key]; ok {
+				return value, true
+			}
 			value, ok := values[key]
 			return value, ok
 		}))
 	}
-	if _, err := load(nil); err == nil { t.Fatal("Researchflow without explicit Run Deadline must fail") }
+	if _, err := load(nil); err == nil {
+		t.Fatal("Researchflow without explicit Run Deadline must fail")
+	}
 	for _, raw := range []string{"0s", "-1m", "invalid", "30"} {
-		if _, err := load(map[string]string{"RESEARCHFLOW_RUN_DEADLINE": raw}); err == nil { t.Errorf("invalid Run Deadline %q accepted", raw) }
+		if _, err := load(map[string]string{"RESEARCHFLOW_RUN_DEADLINE": raw}); err == nil {
+			t.Errorf("invalid Run Deadline %q accepted", raw)
+		}
 	}
 	cfg, err := load(map[string]string{"RESEARCHFLOW_RUN_DEADLINE": "45m"})
-	if err != nil { t.Fatal(err) }
-	if cfg.ResearchflowRunDeadline != 45*time.Minute { t.Fatalf("Run Deadline = %s, want 45m", cfg.ResearchflowRunDeadline) }
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.ResearchflowRunDeadline != 45*time.Minute {
+		t.Fatalf("Run Deadline = %s, want 45m", cfg.ResearchflowRunDeadline)
+	}
 }
 
 func TestLoadProcessRejectsRunDeadlineWithoutResearchflowRuntime(t *testing.T) {
 	env := platformconfig.NewEnvWithLookup(func(key string) (string, bool) {
-		if key == "SERVER_ROLE" { return "worker", true }
-		if key == "RESEARCHFLOW_RUN_DEADLINE" { return "30m", true }
-		if value, ok := relayRequiredTestValues[key]; ok { return value, true }
+		if key == "SERVER_ROLE" {
+			return "worker", true
+		}
+		if key == "RESEARCHFLOW_RUN_DEADLINE" {
+			return "30m", true
+		}
+		if value, ok := relayRequiredTestValues[key]; ok {
+			return value, true
+		}
 		return "", false
 	})
-	if _, err := LoadProcess(env); err == nil { t.Fatal("Run Deadline without Researchflow capacity must fail") }
+	if _, err := LoadProcess(env); err == nil {
+		t.Fatal("Run Deadline without Researchflow capacity must fail")
+	}
 }

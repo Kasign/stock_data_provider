@@ -43,7 +43,6 @@ func LoadResearchflowCapacity(env platformconfig.Env) (ResearchflowCapacity, err
 	}, nil
 }
 
-
 // LoadResearchflowRunDeadline reads the Server-owned absolute Run budget.
 // It has no default: enabling Researchflow requires an explicit positive duration.
 func LoadResearchflowRunDeadline(env platformconfig.Env, runtimeConfigured bool) (time.Duration, error) {

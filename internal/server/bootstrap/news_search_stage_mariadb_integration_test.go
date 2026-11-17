@@ -156,20 +156,15 @@ func TestNewsSearchStageResearchflowMariaDBIntegration(t *testing.T) {
 		t.Fatalf("创建参数 Schema Validator 失败: %v", err)
 	}
 	createRun, err := researchflowapplication.NewCreateRunService(
-		newsSearchIntegrationIdentity{}, clock, ids, templateRegistry, parameterValidator,
+		newsSearchIntegrationIdentity{}, clock, 2*time.Minute, ids, templateRegistry, parameterValidator,
 		newsSearchIntegrationApplicability{}, nil, newsSearchIntegrationResourcePolicyResolver{}, repository,
 	)
 	if err != nil {
 		t.Fatalf("创建 Researchflow CreateRun Service 失败: %v", err)
 	}
-	now, err := clock.NowUTC(ctx)
-	if err != nil {
-		t.Fatalf("读取 MariaDB UTC 时间失败: %v", err)
-	}
 	created, err := createRun.CreateRun(ctx, researchflowdomain.CreateRunCommand{
 		SchemaVersion: "1.0.0", IdempotencyKey: "news-search-stage-integration",
 		TemplateRef: workflowTemplate.Ref, TemplateVersion: workflowTemplate.Version,
-		SystemAsOf: now.Add(-time.Second), DeadlineAt: now.Add(2 * time.Minute),
 		InputSnapshotRefs: []string{},
 		Parameters:        json.RawMessage("{\"query\":\"market\",\"query_dimension\":\"market\",\"limit\":10}"),
 	})

@@ -338,7 +338,6 @@ func TestCreateRunFailsClosedWhenResourcePolicyCannotResolve(t *testing.T) {
 	}
 }
 
-
 func TestCreateRunGeneratesCurrentPITAndAbsoluteDeadlineFromDatabaseClock(t *testing.T) {
 	now := time.Date(2026, 11, 17, 9, 30, 0, 0, time.UTC)
 	repo := &repositoryStub{}
