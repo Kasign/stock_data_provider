@@ -246,7 +246,6 @@ func TestRunnerRejectsNonLogicalDependency(t *testing.T) {
 	}
 }
 
-
 type diagnosticsFixedClock struct {
 	now time.Time
 }
