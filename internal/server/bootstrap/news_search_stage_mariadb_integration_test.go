@@ -171,6 +171,9 @@ func TestNewsSearchStageResearchflowMariaDBIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("创建 Researchflow Run 失败: %v", err)
 	}
+	if created.Run.SystemAsOf.IsZero() || created.Run.DeadlineAt.Sub(created.Run.SystemAsOf) != 2*time.Minute {
+		t.Fatalf("Run PIT/Deadline must be server-generated from one database instant: system_as_of=%s deadline_at=%s", created.Run.SystemAsOf, created.Run.DeadlineAt)
+	}
 
 	composition, err := newNewsSearchStageCompositionWithProviders(newsapp.StaticProviderSet{
 		Providers: []newsapp.Provider{newsSearchIntegrationProvider{}},

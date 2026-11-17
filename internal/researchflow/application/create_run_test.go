@@ -26,6 +26,16 @@ type clockStub struct{ now time.Time }
 
 func (s clockStub) NowUTC(context.Context) (time.Time, error) { return s.now, nil }
 
+type countingClockStub struct {
+	now   time.Time
+	calls int
+}
+
+func (s *countingClockStub) NowUTC(context.Context) (time.Time, error) {
+	s.calls++
+	return s.now, nil
+}
+
 type idsStub struct{ next int }
 
 func (s *idsStub) NewRef(_ context.Context, kind string) (string, error) {
@@ -166,7 +176,11 @@ func TestCreateRunReplaysBeforeTemplateLookup(t *testing.T) {
 	repo := &repositoryStub{existing: &existing, existingFingerprint: fingerprint}
 	reader := &templatesStub{value: validTemplate()}
 	ids := &idsStub{}
-	service, err := newService(t, repo, ids, reader, now)
+	clock := &countingClockStub{now: now}
+	service, err := NewCreateRunService(
+		identityStub{caller: "caller_1"}, clock, 30*time.Minute, ids,
+		reader, schemasStub{}, applicabilityStub{}, nil, &resourcePoliciesStub{}, repo,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -174,8 +188,8 @@ func TestCreateRunReplaysBeforeTemplateLookup(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !got.Replayed || got.Run.Ref != "run_existing" || reader.calls != 0 || ids.next != 0 {
-		t.Fatalf("expected idempotent replay before template lookup or ID allocation: %#v, calls=%d, ids=%d", got, reader.calls, ids.next)
+	if !got.Replayed || got.Run.Ref != "run_existing" || reader.calls != 0 || ids.next != 0 || clock.calls != 0 {
+		t.Fatalf("expected replay before template lookup, ID allocation or clock read: %#v, template_calls=%d, ids=%d, clock_calls=%d", got, reader.calls, ids.next, clock.calls)
 	}
 }
 
