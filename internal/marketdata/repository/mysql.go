@@ -331,7 +331,7 @@ func (s *Store) SaveQuote(ctx context.Context, q *model.Quote) error {
 	if q.QuoteTime != nil {
 		quoteTime = q.QuoteTime.In(time.UTC).Format("2006-01-02 15:04:05.999999")
 	}
-	return exec(ctx, s.db, `INSERT INTO market_data_quotes (symbol,quote_time,fetched_at,normalized_at,source,current_price,change_value,change_percent,open_price,high_price,low_price,prev_close,volume_shares,amount_cny,volume_ratio,turnover_rate,quality_status,metadata) VALUES (?,?,?,?,?,?,UTC_TIMESTAMP(6),?,?,?,?,?,?,?,?,?,?,?)`, q.Symbol, quoteTime, q.FetchedAt.UTC().Format("2006-01-02 15:04:05.999999"), q.NormalizedAt.UTC().Format("2006-01-02 15:04:05.999999"), q.Source, q.CurrentPrice, q.Change, q.ChangePercent, q.Open, q.High, q.Low, q.PrevClose, q.Volume, q.Amount, q.VolumeRatio, q.TurnoverRate, string(q.QualityStatus), meta)
+	return exec(ctx, s.db, `INSERT INTO market_data_quotes (symbol,quote_time,fetched_at,normalized_at,source,current_price,change_value,change_percent,open_price,high_price,low_price,prev_close,volume_shares,amount_cny,volume_ratio,turnover_rate,quality_status,metadata) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, q.Symbol, quoteTime, q.FetchedAt.UTC().Format("2006-01-02 15:04:05.999999"), q.NormalizedAt.UTC().Format("2006-01-02 15:04:05.999999"), q.Source, q.CurrentPrice, q.Change, q.ChangePercent, q.Open, q.High, q.Low, q.PrevClose, q.Volume, q.Amount, q.VolumeRatio, q.TurnoverRate, string(q.QualityStatus), meta)
 }
 
 // PurgeQuotesBefore removes old real-time audit snapshots in bounded batches.
@@ -371,7 +371,7 @@ func (s *Store) UpsertBars(ctx context.Context, bars []model.DailyBar) error {
 	}
 	defer tx.Rollback()
 	stmt := `INSERT INTO market_data_daily_bars (symbol,trade_date,period,adjustment_basis,source,open_price,high_price,low_price,close_price,volume_shares,amount_cny,change_percent,fetched_at,normalized_at,quality_status,metadata) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE open_price=VALUES(open_price),high_price=VALUES(high_price),low_price=VALUES(low_price),close_price=VALUES(close_price),volume_shares=VALUES(volume_shares),amount_cny=VALUES(amount_cny),change_percent=VALUES(change_percent),fetched_at=VALUES(fetched_at),normalized_at=VALUES(normalized_at),quality_status=VALUES(quality_status),metadata=VALUES(metadata)`
-	versionStmt := `INSERT INTO market_data_daily_bar_versions (symbol,trade_date,period,adjustment_basis,source,revision_hash,recorded_at,open_price,high_price,low_price,close_price,volume_shares,amount_cny,change_percent,fetched_at,normalized_at,quality_status,metadata) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+	versionStmt := `INSERT INTO market_data_daily_bar_versions (symbol,trade_date,period,adjustment_basis,source,revision_hash,recorded_at,open_price,high_price,low_price,close_price,volume_shares,amount_cny,change_percent,fetched_at,normalized_at,quality_status,metadata) VALUES (?,?,?,?,?,?,UTC_TIMESTAMP(6),?,?,?,?,?,?,?,?,?,?,?)`
 	for _, bar := range bars {
 		metadata, e := json.Marshal(bar)
 		if e != nil {
