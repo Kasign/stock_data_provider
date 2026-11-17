@@ -193,7 +193,9 @@ func TestLoadProcessRejectsLocalWorkersForAPIRole(t *testing.T) {
 		"RESEARCHFLOW_LOCAL_WORKERS": "2",
 	}
 	if _, err := LoadProcess(platformconfig.NewEnvWithLookup(func(key string) (string, bool) {
-		if value, ok := relayRequiredTestValues[key]; ok { return value, true }
+		if value, ok := relayRequiredTestValues[key]; ok {
+			return value, true
+		}
 		value, ok := values[key]
 		return value, ok
 	})); err == nil {
