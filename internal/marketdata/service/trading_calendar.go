@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"example.com/stock-analysis-flow/internal/marketdata/model"
+	platformtime "example.com/stock-analysis-flow/internal/platform/time"
 )
 
 const maxTradingCalendarDays = 3660
@@ -33,7 +34,7 @@ func parseTradingCalendarRange(startDate, endDate string) (time.Time, time.Time,
 }
 
 func validateTradingCalendarSnapshot(snapshot *model.TradingCalendarSnapshot, startDate, endDate string) error {
-	return validateTradingCalendarSnapshotAt(snapshot, startDate, endDate, time.Now().UTC())
+	return validateTradingCalendarSnapshotAt(snapshot, startDate, endDate, platformtime.SystemClock{}.Now().UTC())
 }
 
 func validateTradingCalendarSnapshotAt(snapshot *model.TradingCalendarSnapshot, startDate, endDate string, now time.Time) error {

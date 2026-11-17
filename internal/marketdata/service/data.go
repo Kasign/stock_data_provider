@@ -4175,7 +4175,7 @@ func (s *DataService) DailyBarsAsOf(ctx context.Context, rawSymbol, start, end s
 			}
 			return nil, nil, fmt.Errorf("%w: cannot rebuild adjusted daily bars without point-in-time adjustment factors: %v", ErrDailyBarsAsOfNotFound, factorErr)
 		}
-		bars, factorErr = rebuildAdjustedDailyBarsPIT(bars, factors, basis, end)
+		bars, factorErr = rebuildAdjustedDailyBarsWithModeAt(bars, factors, basis, end, adjustmentFactorRebuildPIT, s.nowUTC())
 		if factorErr != nil {
 			return nil, nil, fmt.Errorf("%w: %v", ErrDailyBarsAsOfNotFound, factorErr)
 		}
