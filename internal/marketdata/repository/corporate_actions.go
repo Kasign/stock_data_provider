@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"example.com/stock-analysis-flow/internal/marketdata/model"
+	platformtime "example.com/stock-analysis-flow/internal/platform/time"
 )
 
 func validISODate(value string, optional bool) bool {
@@ -158,7 +159,7 @@ func (s *Store) ListAdjustmentFactorsAsOf(ctx context.Context, symbol, startDate
 	if s == nil || s.db == nil {
 		return nil, errors.New("MariaDB adjustment-factor storage disabled")
 	}
-	if strings.TrimSpace(symbol) == "" || !validISODate(startDate, true) || !validISODate(endDate, true) || asOf.IsZero() || asOf.After(time.Now().UTC()) {
+	if strings.TrimSpace(symbol) == "" || !validISODate(startDate, true) || !validISODate(endDate, true) || asOf.IsZero() || asOf.After(platformtime.SystemClock{}.Now()) {
 		return nil, errors.New("invalid adjustment-factor as_of query")
 	}
 	asOfUTC := asOf.UTC()
@@ -323,7 +324,7 @@ func (s *Store) ListCorporateActionsAsOf(ctx context.Context, symbol, startDate,
 	if s == nil || s.db == nil {
 		return nil, errors.New("MariaDB corporate-action storage disabled")
 	}
-	if strings.TrimSpace(symbol) == "" || !validISODate(startDate, true) || !validISODate(endDate, true) || asOf.IsZero() || asOf.After(time.Now().UTC()) {
+	if strings.TrimSpace(symbol) == "" || !validISODate(startDate, true) || !validISODate(endDate, true) || asOf.IsZero() || asOf.After(platformtime.SystemClock{}.Now()) {
 		return nil, errors.New("invalid corporate-action as_of query")
 	}
 	asOfUTC := asOf.UTC()
