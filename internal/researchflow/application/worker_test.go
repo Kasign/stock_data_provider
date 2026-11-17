@@ -210,6 +210,26 @@ func TestWorkerRejectsResourcePolicySnapshotChangedAfterClaim(t *testing.T) {
 	}
 }
 
+func TestWorkerPersistsProviderDiagnosticOutputForRetryWaitStage(t *testing.T) {
+	store, _ := newWorkerFixture()
+	result := StageExecutionResult{
+		AttemptStatus: domain.AttemptFailed, StageStatus: domain.StageRetryWait,
+		ReasonCodes: []string{"provider_unavailable"},
+		ProviderResult: &stageoutput.ProviderResult{
+			OutputType: "trend", SchemaVersion: "1.0.0",
+			Payload: []byte(`{"trend":"partial_unavailable"}`),
+			QualitySummary: []byte(`{"quality":"partial_unavailable"}`),
+			DiagnosticRefs: []string{},
+		},
+	}
+	got, err := newWorker(t, store, result).Execute(context.Background(), "run-1", "stage-1", "attempt-new")
+	if err != nil { t.Fatal(err) }
+	if !got.Committed || store.commit.Stage.Status != domain.StageRetryWait ||
+		store.commit.StageOutput == nil || store.commit.Stage.RetryAt == nil {
+		t.Fatalf("retry_wait Stage must retain validated Provider diagnostic output: %+v", store.commit)
+	}
+}
+
 func TestWorkerPersistsProviderDiagnosticOutputForFailedStage(t *testing.T) {
 	store, _ := newWorkerFixture()
 	result := StageExecutionResult{

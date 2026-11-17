@@ -175,9 +175,10 @@ func (e newsSearchStageExecutor) ExecuteStage(ctx context.Context, request resea
 	case "failed":
 		if hasRetryableNewsProviderOutcome(payload.Outcomes) {
 			return researchflowapplication.StageExecutionResult{
-				AttemptStatus: researchflowdomain.AttemptFailed,
-				StageStatus:   researchflowdomain.StageRetryWait,
-				ReasonCodes:   []string{"news_provider_retryable_failure"},
+				AttemptStatus:  researchflowdomain.AttemptFailed,
+				StageStatus:    researchflowdomain.StageRetryWait,
+				ProviderResult: providerResult,
+				ReasonCodes:    []string{"news_provider_retryable_failure"},
 			}, nil
 		}
 		return failedNewsStage(newsFailureReasonCode(payload.FailureCode)), nil

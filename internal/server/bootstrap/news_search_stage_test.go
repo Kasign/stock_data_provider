@@ -191,7 +191,7 @@ func TestNewsSearchStageExecutorMapsEmptyPartialRetryableAndInvalidResults(t *te
 			Code: newsapp.ProviderErrorTimeout, Retryable: true,
 		}},
 	}})
-	retry := executeNewsStage(t, retryExecutor, `{"query":"market","limit":10}`)
+	retry := executeNewsStageWithPolicy(t, retryExecutor, `{"query":"market","limit":10}`, []string{"removed_provider", "timeout_provider"})
 	if retry.StageStatus != researchflowdomain.StageRetryWait || retry.AttemptStatus != researchflowdomain.AttemptFailed ||
 		len(retry.ReasonCodes) != 1 || retry.ReasonCodes[0] != "news_provider_retryable_failure" {
 		t.Fatalf("retryable all-provider failure was not mapped to retry_wait: %+v", retry)
@@ -199,6 +199,17 @@ func TestNewsSearchStageExecutorMapsEmptyPartialRetryableAndInvalidResults(t *te
 	if err := researchflowapplication.ValidateStageExecutionResult(retry); err != nil {
 		t.Fatal(err)
 	}
+	if retry.ProviderResult == nil {
+		t.Fatal("retryable Provider outcomes must be retained in the Stage diagnostic output")
+	}
+	var retryPayload newsstage.SearchCandidatesOutput
+	if err := json.Unmarshal(retry.ProviderResult.Payload, &retryPayload); err != nil {
+		t.Fatal(err)
+	}
+	if len(retryPayload.Outcomes) != 2 {
+		t.Fatalf("retry diagnostic output lost a Provider Outcome: %+v", retryPayload.Outcomes)
+	}
+
 
 	invalid := executeNewsStage(t, emptyExecutor, `{"query":"market","limit":10,"unknown":true}`)
 	if invalid.StageStatus != researchflowdomain.StageFailed ||
