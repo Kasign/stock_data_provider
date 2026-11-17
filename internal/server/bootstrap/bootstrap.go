@@ -26,6 +26,7 @@ import (
 	platformsecurity "example.com/stock-analysis-flow/internal/platform/security"
 	platformstorage "example.com/stock-analysis-flow/internal/platform/storage"
 	"example.com/stock-analysis-flow/internal/platform/taskqueue"
+	platformtime "example.com/stock-analysis-flow/internal/platform/time"
 	researchapplication "example.com/stock-analysis-flow/internal/research/application"
 	researchstorage "example.com/stock-analysis-flow/internal/research/storage"
 	researchflowstorage "example.com/stock-analysis-flow/internal/researchflow/storage"
@@ -270,10 +271,6 @@ func Run(ctx context.Context) (runErr error) {
 	}
 }
 
-type notificationClock struct{}
-
-func (notificationClock) Now() time.Time { return time.Now().UTC() }
-
 type notificationReceiverAdapter struct {
 	receiver *notificationapplication.EventReceiver
 }
@@ -305,7 +302,8 @@ func newNotificationEventReceiver(shared *serverresources.Resources, cfg serverc
 	if err != nil {
 		return nil, fmt.Errorf("加载 Notification Event Schema Registry 失败: %w", err)
 	}
-	receiver, err := notificationapplication.NewEventReceiver(registry, inbox, notificationClock{})
+	clock := platformtime.SystemClock{}
+	receiver, err := notificationapplication.NewEventReceiver(registry, inbox, clock)
 	if err != nil {
 		return nil, fmt.Errorf("创建 Notification EventReceiver 失败: %w", err)
 	}
@@ -319,11 +317,12 @@ func newResearchNotificationRelay(shared *serverresources.Resources, cfg serverc
 	if shared == nil || shared.DB == nil {
 		return nil, errors.New("shared MariaDB resource is required for Research Notification relay")
 	}
-	outboxRepository, err := researchstorage.NewOutboxRepository(shared.DB, func() time.Time { return time.Now().UTC() })
+	clock := platformtime.SystemClock{}
+	outboxRepository, err := researchstorage.NewOutboxRepository(shared.DB, clock.Now)
 	if err != nil {
 		return nil, fmt.Errorf("创建 Research Outbox Repository 失败: %w", err)
 	}
-	outbox, err := researchapplication.NewOutboxService(outboxRepository, func() time.Time { return time.Now().UTC() })
+	outbox, err := researchapplication.NewOutboxService(outboxRepository, clock.Now)
 	if err != nil {
 		return nil, fmt.Errorf("创建 Research Outbox Service 失败: %w", err)
 	}

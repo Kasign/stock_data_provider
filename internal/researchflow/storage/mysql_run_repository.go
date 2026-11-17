@@ -14,6 +14,7 @@ import (
 
 	mysql "github.com/go-sql-driver/mysql"
 
+	platformtime "example.com/stock-analysis-flow/internal/platform/time"
 	mariadbtime "example.com/stock-analysis-flow/internal/platform/time/mariadb"
 	"example.com/stock-analysis-flow/internal/researchflow/application"
 	"example.com/stock-analysis-flow/internal/researchflow/domain"
@@ -251,7 +252,7 @@ func (r *MySQLRunRepository) CompareAndSwapRun(
 		return false, errors.New("Researchflow Run CAS cannot modify a Run with a ResultSummary; use finalization")
 	}
 	current := domain.Run{Status: domain.RunStatus(currentStatus)}
-	if _, err := state.TransitionRun(current, next.Status, time.Now().UTC()); err != nil {
+	if _, err := state.TransitionRun(current, next.Status, (platformtime.SystemClock{}).Now()); err != nil {
 		return false, fmt.Errorf("reject invalid Researchflow Run CAS transition %s -> %s: %w",
 			currentStatus, next.Status, err)
 	}
@@ -337,7 +338,7 @@ func (r *MySQLRunRepository) CompareAndSwapStage(
 		// The database clock, not the scheduler snapshot, owns the terminal timestamp.
 	}
 	if _, err := state.TransitionStage(domain.Stage{Status: domain.StageStatus(currentStatus)},
-		next.Status, time.Now().UTC()); err != nil {
+		next.Status, (platformtime.SystemClock{}).Now()); err != nil {
 		return false, fmt.Errorf("reject invalid Researchflow Stage CAS transition %s -> %s: %w",
 			currentStatus, next.Status, err)
 	}
