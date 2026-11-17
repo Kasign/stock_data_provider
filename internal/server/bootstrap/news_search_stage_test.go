@@ -98,6 +98,56 @@ func TestNewsSearchStageCompositionRegistersExactOutputAndUsesPlatformClientOnly
 	}
 }
 
+func TestNewsSearchStageExecutorEnforcesRunProviderAllowlist(t *testing.T) {
+	providers := newsapp.StaticProviderSet{Providers: []newsapp.Provider{
+		newsStageTestProvider{code: "bocha", candidates: []newsdomain.Candidate{{Title: "authorized", RawURL: "https://a.example/item"}}},
+		newsStageTestProvider{code: "tavily", candidates: []newsdomain.Candidate{{Title: "not-authorized", RawURL: "https://b.example/item"}}},
+	}}
+	executor := newNewsSearchExecutor(providers)
+	result := executeNewsStageWithPolicy(t, executor, `{"query":"market","limit":10}`, []string{"bocha"})
+	if result.ProviderResult == nil { t.Fatal("authorized Provider should produce a result") }
+	var payload newsstage.SearchCandidatesOutput
+	if err := json.Unmarshal(result.ProviderResult.Payload, &payload); err != nil { t.Fatal(err) }
+	if len(payload.Outcomes) != 1 || payload.Outcomes[0].ProviderCode != "bocha" {
+		t.Fatalf("executor called Provider outside Run allowlist: %+v", payload.Outcomes)
+	}
+	if len(payload.Candidates) != 1 || payload.Candidates[0].Title != "authorized" {
+		t.Fatalf("unexpected authorized Provider candidates: %+v", payload.Candidates)
+	}
+}
+
+func TestNewsSearchStageExecutorReportsProviderRemovedAfterRunCreation(t *testing.T) {
+	executor := newNewsSearchExecutor(newsapp.StaticProviderSet{})
+	result := executeNewsStageWithPolicy(t, executor, `{"query":"market","limit":10}`, []string{"bocha"})
+	if result.StageStatus != researchflowdomain.StageFailed || len(result.ReasonCodes) != 1 ||
+		result.ReasonCodes[0] != "news_all_providers_skipped" {
+		t.Fatalf("removed Provider must be an explicit skipped outcome, not silently replaced: %+v", result)
+	}
+	if result.ProviderResult == nil { t.Fatal("removed Provider outcome should remain observable") }
+	var payload newsstage.SearchCandidatesOutput
+	if err := json.Unmarshal(result.ProviderResult.Payload, &payload); err != nil { t.Fatal(err) }
+	if len(payload.Outcomes) != 1 || payload.Outcomes[0].ProviderCode != "bocha" ||
+		payload.Outcomes[0].Status != newsdomain.ProviderSkipped ||
+		payload.Outcomes[0].ErrorCode != newsapp.ProviderErrorNotConfigured {
+		t.Fatalf("removed Provider outcome is not explicit: %+v", payload.Outcomes)
+	}
+}
+
+func TestNewsSearchStageExecutorRejectsInvalidResourcePolicy(t *testing.T) {
+	executor := newNewsSearchExecutor(newsapp.StaticProviderSet{Providers: []newsapp.Provider{
+		newsStageTestProvider{code: "bocha"},
+	}})
+	result, err := executor.ExecuteStage(context.Background(), researchflowapplication.StageExecutionRequest{
+		Stage: researchflowdomain.Stage{Code: newsstage.SearchCandidatesStageCode},
+		Parameters: json.RawMessage(`{"query":"market","limit":10}`),
+	})
+	if err != nil { t.Fatal(err) }
+	if result.StageStatus != researchflowdomain.StageFailed || len(result.ReasonCodes) != 1 ||
+		result.ReasonCodes[0] != "news_resource_policy_invalid" {
+		t.Fatalf("missing ResourcePolicy must fail closed: %+v", result)
+	}
+}
+
 func TestNewsSearchStageExecutorMapsEmptyPartialRetryableAndInvalidResults(t *testing.T) {
 	emptyExecutor := newNewsSearchExecutor(newsapp.StaticProviderSet{Providers: []newsapp.Provider{
 		newsStageTestProvider{code: "empty_provider"},
@@ -204,6 +254,17 @@ func newsProviderCodes(providers newsapp.ProviderSet) []string {
 
 func newNewsSearchExecutor(providers newsapp.ProviderSet) newsSearchStageExecutor {
 	return newsSearchStageExecutor{providers: providers}
+}
+
+func executeNewsStageWithPolicy(t *testing.T, executor newsSearchStageExecutor, parameters string, allowed []string) researchflowapplication.StageExecutionResult {
+	t.Helper()
+	result, err := executor.ExecuteStage(context.Background(), researchflowapplication.StageExecutionRequest{
+		Stage: researchflowdomain.Stage{Code: newsstage.SearchCandidatesStageCode},
+		Parameters: json.RawMessage(parameters),
+		ResourcePolicy: testNewsResourcePolicy(t, allowed),
+	})
+	if err != nil { t.Fatal(err) }
+	return result
 }
 
 func executeNewsStage(t *testing.T, executor newsSearchStageExecutor, parameters string) researchflowapplication.StageExecutionResult {
