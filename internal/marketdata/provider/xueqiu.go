@@ -303,7 +303,7 @@ func (p *Xueqiu) FetchHotStocks(ctx context.Context, rankingType string, limit i
 	}
 	var dataObject map[string]json.RawMessage
 	_ = json.Unmarshal(dataRaw, &dataObject)
-	now := time.Now().UTC()
+	now := providerNowUTC()
 	providerTime := xueqiuProviderTime(dataObject["timestamp"], now)
 	snapshot := &model.HotRankingSnapshot{
 		RankingType: rankingType, Items: make([]model.HotRankingItem, 0, min(requestLimit, len(rows))),

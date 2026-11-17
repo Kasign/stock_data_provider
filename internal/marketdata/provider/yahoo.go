@@ -218,7 +218,7 @@ func (p *YahooFinance) FetchQuote(ctx context.Context, rawSymbol string) (*model
 	if name == "" {
 		name = strings.TrimSpace(meta.ShortName)
 	}
-	now := time.Now().UTC()
+	now := providerNowUTC()
 	q := &model.Quote{
 		Symbol: symbol, Name: name,
 		CurrentPrice: &price, Change: &change, ChangePercent: &changePercent,
@@ -266,7 +266,7 @@ func (p *YahooFinance) FetchDailyBars(ctx context.Context, rawSymbol, startDate,
 	if limit > 2000 {
 		limit = 2000
 	}
-	start, end, err := yahooDateRange(startDate, endDate, limit, time.Now())
+	start, end, err := yahooDateRange(startDate, endDate, limit, providerNowUTC())
 	if err != nil {
 		return nil, err
 	}
@@ -465,7 +465,7 @@ func (p *YahooFinance) FetchDailyBars(ctx context.Context, rawSymbol, startDate,
 		return nil, errors.New("Yahoo Finance reference adjustment factor is invalid")
 	}
 
-	now := time.Now().UTC()
+	now := providerNowUTC()
 	bars := make([]model.DailyBar, 0, len(rawBars))
 	for _, raw := range rawBars {
 		factor := 1.0

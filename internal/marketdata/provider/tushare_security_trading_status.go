@@ -33,7 +33,7 @@ func (p *Tushare) FetchSecurityTradingStatus(ctx context.Context, rawSymbol, raw
 	}
 	shanghai := providerMarketLocation()
 	date := tradeDate.Format("2006-01-02")
-	if date > time.Now().In(shanghai).Format("2006-01-02") {
+	if date > providerNowUTC().In(shanghai).Format("2006-01-02") {
 		return nil, errors.New("Tushare security-status trade date must not be in the future")
 	}
 	if ctx == nil {
@@ -75,7 +75,7 @@ func (p *Tushare) FetchSecurityTradingStatus(ctx context.Context, rawSymbol, raw
 				RiskWarningStatus: model.RiskWarningUnknown, DelistingStatus: model.DelistingStatusUnknown,
 				ListingDate: listingDate, ListingTradingDayNumber: 0, ListingStatusKnown: true,
 				IsTradingDay: tradingDay, TradingDayKnown: true, SuspensionStatus: suspension,
-				Source: p.Name(), SourceVersion: tushareSecurityTradingStatusVersion, FetchedAt: time.Now().UTC(),
+				Source: p.Name(), SourceVersion: tushareSecurityTradingStatusVersion, FetchedAt: providerNowUTC(),
 				QualityStatus:  model.QualityUnknown,
 				QualityReasons: []string{"security_not_yet_listed_on_requested_date"},
 			}, nil
@@ -97,7 +97,7 @@ func (p *Tushare) FetchSecurityTradingStatus(ctx context.Context, rawSymbol, raw
 		SuspensionType:    suspensionType,
 		Source:            p.Name(),
 		SourceVersion:     tushareSecurityTradingStatusVersion,
-		FetchedAt:         time.Now().UTC(),
+		FetchedAt:         providerNowUTC(),
 		QualityStatus:     model.QualityDegraded,
 		QualityReasons:    []string{"provider_exact_snapshot_time_not_exposed"},
 	}

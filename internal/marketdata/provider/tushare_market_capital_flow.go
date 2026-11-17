@@ -32,7 +32,7 @@ func (p *Tushare) FetchMarketCapitalFlow(ctx context.Context, startDate, endDate
 		return nil, errors.New("Tushare market-capital-flow end date must use YYYY-MM-DD and not precede start")
 	}
 	loc := providerMarketLocation()
-	if end.Format("2006-01-02") > time.Now().In(loc).Format("2006-01-02") {
+	if end.Format("2006-01-02") > providerNowUTC().In(loc).Format("2006-01-02") {
 		return nil, errors.New("Tushare market-capital-flow end date must not be in the future")
 	}
 	if end.Sub(start) > 2000*24*time.Hour {
@@ -122,7 +122,7 @@ func (p *Tushare) FetchMarketCapitalFlow(ctx context.Context, startDate, endDate
 		return nil, errors.New("Tushare returned no market-capital-flow observations")
 	}
 
-	fetchedAt := time.Now().UTC()
+	fetchedAt := providerNowUTC()
 	reasons := []string{"provider_snapshot_timestamp_not_exposed"}
 	out := &model.MarketCapitalFlowSnapshot{
 		StartDate: start.Format("2006-01-02"), EndDate: end.Format("2006-01-02"),

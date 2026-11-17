@@ -52,7 +52,7 @@ func (p *Tushare) FetchCorporateActions(ctx context.Context, rawSymbol, startDat
 	const pageSize = 2000
 	const maxPages = 10
 	out := make([]model.CorporateAction, 0)
-	fetchedAt := time.Now().UTC()
+	fetchedAt := providerNowUTC()
 	for page := 0; page < maxPages; page++ {
 		table, fetchErr := p.fetchCapabilityTable(ctx, "dividend", map[string]string{
 			"ts_code": symbol, "limit": fmt.Sprintf("%d", pageSize), "offset": fmt.Sprintf("%d", page*pageSize),
