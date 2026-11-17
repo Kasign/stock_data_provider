@@ -181,7 +181,7 @@ func TestNewsSearchStageResearchflowMariaDBIntegration(t *testing.T) {
 		t.Fatalf("Run PIT/Deadline must be server-generated from one database instant: system_as_of=%s deadline_at=%s", created.Run.SystemAsOf, created.Run.DeadlineAt)
 	}
 	deadlineCreateRun, err := researchflowapplication.NewCreateRunService(
-		newsSearchIntegrationIdentity{}, clock, time.Millisecond, ids, templateRegistry, parameterValidator,
+		newsSearchIntegrationIdentity{}, clock, time.Second, ids, templateRegistry, parameterValidator,
 		newsSearchIntegrationApplicability{}, nil, newsSearchIntegrationResourcePolicyResolver{}, repository,
 	)
 	if err != nil {
