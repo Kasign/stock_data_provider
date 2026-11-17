@@ -138,7 +138,7 @@ func TestLoadProcessRequiresExplicitResearchflowRunDeadline(t *testing.T) {
 			t.Errorf("invalid Run Deadline %q accepted", raw)
 		}
 	}
-	cfg, err := load(map[string]string{"RESEARCHFLOW_RUN_DEADLINE": "45m"})
+	cfg, err := load(map[string]string{"RESEARCHFLOW_RUN_DEADLINE": "45m", "RESEARCHFLOW_LOCAL_WORKERS": "2"})
 	if err != nil {
 		t.Fatal(err)
 	}
