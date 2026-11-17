@@ -210,7 +210,6 @@ func TestNewsSearchStageExecutorMapsEmptyPartialRetryableAndInvalidResults(t *te
 		t.Fatalf("retry diagnostic output lost a Provider Outcome: %+v", retryPayload.Outcomes)
 	}
 
-
 	invalid := executeNewsStage(t, emptyExecutor, `{"query":"market","limit":10,"unknown":true}`)
 	if invalid.StageStatus != researchflowdomain.StageFailed ||
 		len(invalid.ReasonCodes) != 1 || invalid.ReasonCodes[0] != "news_search_invalid_parameters" {

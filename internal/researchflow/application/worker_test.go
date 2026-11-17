@@ -217,7 +217,7 @@ func TestWorkerPersistsProviderDiagnosticOutputForRetryWaitStage(t *testing.T) {
 		ReasonCodes: []string{"provider_unavailable"},
 		ProviderResult: &stageoutput.ProviderResult{
 			OutputType: "trend", SchemaVersion: "1.0.0",
-			Payload: []byte(`{"trend":"partial_unavailable"}`),
+			Payload:        []byte(`{"trend":"partial_unavailable"}`),
 			QualitySummary: []byte(`{"quality":"partial_unavailable"}`),
 			DiagnosticRefs: []string{},
 		},
