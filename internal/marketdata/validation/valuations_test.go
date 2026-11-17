@@ -78,7 +78,6 @@ func TestValidateValuationSnapshotRejectsUnknownSourceVersion(t *testing.T) {
 	}
 }
 
-
 func TestValidateValuationSnapshotAtUsesProvidedClock(t *testing.T) {
 	snapshot := validValuationSnapshot()
 	now := time.Date(2026, 8, 19, 15, 0, 0, 0, time.UTC)

@@ -95,7 +95,6 @@ func TestValidateFundamentalsSnapshotRejectsUnknownSourceVersion(t *testing.T) {
 	}
 }
 
-
 func TestValidateFundamentalsSnapshotAtUsesProvidedClock(t *testing.T) {
 	snapshot := validFundamentalsFixture()
 	now := time.Date(2026, 8, 19, 15, 0, 0, 0, time.UTC)

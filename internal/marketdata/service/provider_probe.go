@@ -228,8 +228,9 @@ func validateFundamentalsProbeSnapshot(
 	symbol string,
 	year, quarter int,
 	snapshot *model.FundamentalsSnapshot,
+	now time.Time,
 ) error {
-	report := validation.ValidateFundamentalsSnapshotAt(snapshot, symbol, year, quarter, s.nowUTC())
+	report := validation.ValidateFundamentalsSnapshotAt(snapshot, symbol, year, quarter, now)
 	validation.AddContextReport(ctx, report)
 	if report.HasErrors() {
 		return errors.New("fundamentals field validation failed")
@@ -901,7 +902,7 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 				sourceVersion = v.SourceVersion
 			}
 			if err := validateFundamentalsProbeSnapshot(
-				probeCtx, barsSymbol, fundamentalProbeYear, fundamentalProbeQuarter, v,
+				probeCtx, barsSymbol, fundamentalProbeYear, fundamentalProbeQuarter, v, s.nowUTC(),
 			); err != nil {
 				return model.QualityInvalid, sourceVersion, nil, err
 			}
