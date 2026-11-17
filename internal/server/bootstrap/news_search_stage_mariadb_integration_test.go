@@ -282,8 +282,20 @@ func TestNewsSearchStageResearchflowMariaDBIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("读取重试 Researchflow Attempt 失败: %v", err)
 	}
-	if firstAttempt.Status != researchflowdomain.AttemptFailed || firstAttempt.OutputRef != nil {
-		t.Fatalf("首次 RateLimited Attempt 状态不正确: %+v", firstAttempt)
+	if firstAttempt.Status != researchflowdomain.AttemptFailed || firstAttempt.OutputRef == nil {
+		t.Fatalf("首次 RateLimited Attempt 必须保留失败 Provider 输出证据: %+v", firstAttempt)
+	}
+	firstOutput, err := repository.GetStageOutputResource(ctx, *firstAttempt.OutputRef)
+	if err != nil {
+		t.Fatalf("读取首次 RateLimited Attempt 输出证据失败: %v", err)
+	}
+	var firstPayload newsstage.SearchCandidatesOutput
+	if err := json.Unmarshal(firstOutput.Content, &firstPayload); err != nil {
+		t.Fatalf("解析首次 RateLimited Attempt 输出证据失败: %v", err)
+	}
+	if firstPayload.Status != newsdomain.SearchFailed || len(firstPayload.Outcomes) != 1 ||
+		!firstPayload.Outcomes[0].Retryable || firstPayload.Outcomes[0].ErrorCode != newsapp.ProviderErrorRateLimited {
+		t.Fatalf("首次 Attempt 未保留可重试限流证据: %+v", firstPayload)
 	}
 	if secondAttempt.Status != researchflowdomain.AttemptSucceeded || secondAttempt.OutputRef == nil ||
 		*secondAttempt.OutputRef != *stage.OutputRef {
