@@ -7,8 +7,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	_ "time/tzdata"
 	stdtime "time"
+	_ "time/tzdata"
 )
 
 // Source is the authoritative source of the current instant.
