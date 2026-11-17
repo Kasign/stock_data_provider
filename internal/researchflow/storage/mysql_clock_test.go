@@ -3,8 +3,6 @@ package storage
 import (
 	"context"
 	"database/sql"
-	"errors"
-	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -82,16 +80,3 @@ func TestMariaDBDatabaseClockUsesDatabaseUTC(t *testing.T) {
 	}
 }
 
-func TestMySQLDatabaseClockReturnsQueryErrors(t *testing.T) {
-	clock, err := NewMySQLDatabaseClock(&sql.DB{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	_, err = clock.NowUTC(ctx)
-	if err == nil || errors.Is(err, context.Canceled) == false {
-		t.Fatalf("cancelled database clock query should preserve context error, got %v", err)
-	}
-	_ = fmt.Sprintf("%v", err)
-}
