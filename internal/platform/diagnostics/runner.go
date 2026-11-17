@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"example.com/stock-analysis-flow/internal/platform/fault"
+	platformtime "example.com/stock-analysis-flow/internal/platform/time"
 )
 
 const (
@@ -19,6 +20,15 @@ const (
 type Runner struct {
 	MaxConcurrent int
 	TotalTimeout  time.Duration
+	// Clock 仅用于诊断观察时间；执行耗时仍使用单调时钟。
+	Clock platformtime.Clock
+}
+
+func (r Runner) clock() platformtime.Clock {
+	if r.Clock == nil {
+		return platformtime.SystemClock{}
+	}
+	return r.Clock
 }
 
 func (r Runner) Run(ctx context.Context, checks []Check) (Report, error) {
@@ -68,7 +78,7 @@ func (r Runner) Run(ctx context.Context, checks []Check) (Report, error) {
 		go func() {
 			defer wg.Done()
 			for index := range jobs {
-				results[index] = execute(totalCtx, checks[index])
+				results[index] = execute(totalCtx, checks[index], r.clock())
 			}
 		}()
 	}
@@ -81,13 +91,13 @@ func (r Runner) Run(ctx context.Context, checks []Check) (Report, error) {
 	return Report{Summary: aggregate(results), Results: results}, nil
 }
 
-func execute(parent context.Context, check Check) (result Result) {
+func execute(parent context.Context, check Check, clock platformtime.Clock) (result Result) {
 	result.CheckID = check.ID
 	result.Name = check.Name
 	result.Required = check.Required
 
 	if err := parent.Err(); err != nil {
-		result.Observation = notStartedObservation(err)
+		result.Observation = notStartedObservation(err, clock)
 		return result
 	}
 
@@ -125,13 +135,13 @@ func execute(parent context.Context, check Check) (result Result) {
 		}
 		result.Observation = Observation{
 			Status: status, ReasonCode: f.Code, SafeMessage: f.SafeMessage,
-			CheckedAt: time.Now().UTC(), Duration: elapsed,
+			CheckedAt: clock.Now().UTC(), Duration: elapsed,
 		}
 		return result
 	}
 
 	if observation.CheckedAt.IsZero() {
-		observation.CheckedAt = time.Now().UTC()
+		observation.CheckedAt = clock.Now().UTC()
 	} else {
 		observation.CheckedAt = observation.CheckedAt.UTC()
 	}
@@ -144,7 +154,7 @@ func execute(parent context.Context, check Check) (result Result) {
 		result.Fault = f
 		result.Observation = Observation{
 			Status: StatusFailed, ReasonCode: f.Code, SafeMessage: f.SafeMessage,
-			CheckedAt: time.Now().UTC(), Duration: elapsed,
+			CheckedAt: clock.Now().UTC(), Duration: elapsed,
 		}
 		return result
 	}
@@ -202,7 +212,7 @@ func normalizeFault(err error, contextErr error) *fault.Fault {
 	}
 }
 
-func notStartedObservation(cause error) Observation {
+func notStartedObservation(cause error, clock platformtime.Clock) Observation {
 	code := "platform.diagnostics.deadline_exceeded"
 	message := "check was not completed before the execution deadline"
 	if errors.Is(cause, context.Canceled) {
@@ -210,6 +220,6 @@ func notStartedObservation(cause error) Observation {
 		message = "check was canceled before execution"
 	}
 	return Observation{
-		Status: StatusUnavailable, ReasonCode: code, SafeMessage: message, CheckedAt: time.Now().UTC(),
+		Status: StatusUnavailable, ReasonCode: code, SafeMessage: message, CheckedAt: clock.Now().UTC(),
 	}
 }
