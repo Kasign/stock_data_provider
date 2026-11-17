@@ -14,7 +14,7 @@ import (
 
 	mysql "github.com/go-sql-driver/mysql"
 
-	"example.com/stock-analysis-flow/internal/platform/time"
+	platformtime "example.com/stock-analysis-flow/internal/platform/time"
 	"example.com/stock-analysis-flow/internal/researchflow/application"
 	"example.com/stock-analysis-flow/internal/researchflow/domain"
 	"example.com/stock-analysis-flow/internal/researchflow/state"
