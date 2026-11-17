@@ -19,9 +19,7 @@ func TestResolveSnapshotsSortedProviderIdentityOnly(t *testing.T) {
 	if !reflect.DeepEqual(snapshot.AllowedProviderCodes, []string{"bocha", "tavily"}) {
 		t.Fatal("snapshot retained caller-owned inventory memory")
 	}
-	if err := registry.ValidateSnapshot(snapshot); err != nil {
-		t.Fatalf("valid snapshot rejected: %v", err)
-	}
+	if err := registry.ValidateSnapshot(snapshot); err != nil { t.Fatalf("valid snapshot rejected: %v", err) }
 }
 
 func TestResolveFailsClosedForUnknownPolicyAndEmptyInventory(t *testing.T) {
@@ -38,12 +36,7 @@ func TestResolveFailsClosedForUnknownPolicyAndEmptyInventory(t *testing.T) {
 func TestResolveRejectsInvalidAndDuplicateProviderCodes(t *testing.T) {
 	registry, err := NewRegistry()
 	if err != nil { t.Fatal(err) }
-	for _, inventory := range [][]string{
-		{"bocha", "bocha"},
-		{"bocha", "Tavily"},
-		{"bocha", " tavily"},
-		{"bocha", "../tavily"},
-	} {
+	for _, inventory := range [][]string{{"bocha", "bocha"}, {"bocha", "Tavily"}, {"bocha", " tavily"}, {"bocha", "../tavily"}} {
 		if _, err := registry.Resolve(NewsSearchConfiguredProvidersRef, inventory); !errors.Is(err, ErrInvalidInventory) {
 			t.Errorf("inventory %#v must be rejected, got %v", inventory, err)
 		}
