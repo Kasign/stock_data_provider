@@ -93,7 +93,9 @@ func TestGetRunRejectsUnauthenticatedOrUnauthorizedCallerBeforeStorage(t *testin
 			reader := &runReaderStub{result: validReadResult()}
 			authorizer := &getRunAuthorizerStub{err: tc.authErr}
 			service, err := NewGetRunService(tc.identity, authorizer, reader)
-			if err != nil { t.Fatal(err) }
+			if err != nil {
+		t.Fatal(err)
+	}
 			_, err = service.GetRun(context.Background(), "run-1")
 			if err == nil {
 				t.Fatal("expected caller rejection")
