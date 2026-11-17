@@ -29,7 +29,6 @@ func (p newsStageTestProvider) Search(context.Context, newsdomain.SearchRequest)
 	return p.candidates, p.err
 }
 
-
 func TestNewsSearchStageCompositionProviderCodesAreStableAndValidated(t *testing.T) {
 	composition, err := newNewsSearchStageCompositionWithProviders(newsapp.StaticProviderSet{Providers: []newsapp.Provider{
 		newsStageTestProvider{code: "tavily"},
