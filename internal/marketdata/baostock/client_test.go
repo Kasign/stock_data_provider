@@ -336,7 +336,7 @@ func TestQueryDailyKLinesHandlesLoginCompressedQueryAndLogout(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	client := NewClient(Config{Host: host, Port: port, ConnectTimeout: time.Second, RequestTimeout: time.Second, Clock: baoStockFixedClock{now: fixedNow}}
+	client := NewClient(Config{Host: host, Port: port, ConnectTimeout: time.Second, RequestTimeout: time.Second, Clock: baoStockFixedClock{now: fixedNow}})
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
