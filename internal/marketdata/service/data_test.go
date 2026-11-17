@@ -3877,7 +3877,6 @@ func TestHotRankingRejectsMismatchedProviderSourceAndFallsBack(t *testing.T) {
 	}
 }
 
-
 func TestMarketDateNormalizationUsesInjectedClock(t *testing.T) {
 	// UTC 16:00 对应中国标准时间次日 00:00，用于覆盖交易日切换边界。
 	now := time.Date(2026, 11, 17, 16, 0, 0, 0, time.UTC)

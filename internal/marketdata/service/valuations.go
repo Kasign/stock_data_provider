@@ -27,7 +27,7 @@ func validateValuationSnapshot(requested []string, snapshot *model.ValuationSnap
 	return validateValuationSnapshotAt(requested, snapshot, platformtime.SystemClock{}.Now())
 }
 
-func validateValuationSnapshotAt(requested []string, snapshot *model.ValuationSnapshot, now time.Time) error { 
+func validateValuationSnapshotAt(requested []string, snapshot *model.ValuationSnapshot, now time.Time) error {
 	if snapshot == nil {
 		return errors.New("valuation provider returned an empty snapshot")
 	}

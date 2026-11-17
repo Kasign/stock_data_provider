@@ -27,7 +27,7 @@ func validateHotRankingSnapshot(rankingType string, snapshot *model.HotRankingSn
 	return validateHotRankingSnapshotAt(rankingType, snapshot, platformtime.SystemClock{}.Now())
 }
 
-func validateHotRankingSnapshotAt(rankingType string, snapshot *model.HotRankingSnapshot, now time.Time) error { 
+func validateHotRankingSnapshotAt(rankingType string, snapshot *model.HotRankingSnapshot, now time.Time) error {
 	if snapshot == nil || snapshot.RankingType != rankingType || snapshot.Total != len(snapshot.Items) {
 		return errors.New("hot-ranking snapshot identity/count mismatch")
 	}

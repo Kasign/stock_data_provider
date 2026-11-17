@@ -73,7 +73,7 @@ func validateIndexCatalogSnapshot(tag string, snapshot *model.IndexCatalogSnapsh
 	return validateIndexCatalogSnapshotAt(tag, snapshot, platformtime.SystemClock{}.Now())
 }
 
-func validateIndexCatalogSnapshotAt(tag string, snapshot *model.IndexCatalogSnapshot, now time.Time) error { 
+func validateIndexCatalogSnapshotAt(tag string, snapshot *model.IndexCatalogSnapshot, now time.Time) error {
 	if snapshot == nil || snapshot.Tag != tag || snapshot.Total != len(snapshot.Items) {
 		return errors.New("index catalog snapshot identity/count mismatch")
 	}
@@ -118,7 +118,7 @@ func validateIndexConstituentsSnapshot(indexSymbol string, snapshot *model.Index
 	return validateIndexConstituentsSnapshotAt(indexSymbol, snapshot, platformtime.SystemClock{}.Now())
 }
 
-func validateIndexConstituentsSnapshotAt(indexSymbol string, snapshot *model.IndexConstituentSnapshot, now time.Time) error { 
+func validateIndexConstituentsSnapshotAt(indexSymbol string, snapshot *model.IndexConstituentSnapshot, now time.Time) error {
 	if snapshot == nil || snapshot.IndexSymbol != indexSymbol || snapshot.Total != len(snapshot.Items) {
 		return errors.New("index constituent snapshot identity/count mismatch")
 	}
@@ -188,7 +188,7 @@ func markHistoricalConstituentIntervalQuality(snapshot *model.IndexConstituentSn
 	markHistoricalConstituentIntervalQualityAt(snapshot, platformtime.SystemClock{}.Now())
 }
 
-func markHistoricalConstituentIntervalQualityAt(snapshot *model.IndexConstituentSnapshot, now time.Time) { 
+func markHistoricalConstituentIntervalQualityAt(snapshot *model.IndexConstituentSnapshot, now time.Time) {
 	if snapshot == nil || snapshot.AsOfDate == "" {
 		return
 	}
@@ -240,7 +240,7 @@ func validateIndexDailyBarsSnapshot(indexSymbol, startDate, endDate string, snap
 	return validateIndexDailyBarsSnapshotAt(indexSymbol, startDate, endDate, snapshot, platformtime.SystemClock{}.Now())
 }
 
-func validateIndexDailyBarsSnapshotAt(indexSymbol, startDate, endDate string, snapshot *model.IndexDailyBarsSnapshot, now time.Time) error { 
+func validateIndexDailyBarsSnapshotAt(indexSymbol, startDate, endDate string, snapshot *model.IndexDailyBarsSnapshot, now time.Time) error {
 	if snapshot == nil || snapshot.IndexSymbol != indexSymbol || snapshot.StartDate != startDate || snapshot.EndDate != endDate || snapshot.Total != len(snapshot.Items) {
 		return errors.New("index daily-bars snapshot identity/range/count mismatch")
 	}

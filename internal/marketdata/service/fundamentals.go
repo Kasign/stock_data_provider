@@ -29,7 +29,7 @@ func validateFundamentalsSnapshot(symbol string, year, quarter int, snapshot *mo
 	return validateFundamentalsSnapshotAt(symbol, year, quarter, snapshot, platformtime.SystemClock{}.Now())
 }
 
-func validateFundamentalsSnapshotAt(symbol string, year, quarter int, snapshot *model.FundamentalsSnapshot, now time.Time) error { 
+func validateFundamentalsSnapshotAt(symbol string, year, quarter int, snapshot *model.FundamentalsSnapshot, now time.Time) error {
 	if snapshot == nil {
 		return errors.New("fundamentals provider returned an empty snapshot")
 	}
