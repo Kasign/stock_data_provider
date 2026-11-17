@@ -214,3 +214,14 @@ Server 已在 Owner Session 启用且 Researchflow Capacity 显式配置时，�
 - Worker 心跳检测到 Run 已进入 cancelling，取消 Stage Context；Provider 退出后 Worker 调用 ConfirmAttemptCancellation，以 WorkerID、FencingToken 和 StageVersion 确认停止。
 - 验证 Attempt 进入 Cancelled、Stage 进入 Cancelled、Run 经 CancellationFinalizer 进入 Cancelled，并原子写入唯一 terminal Outbox。
 - 该路径验证的是 Worker 正常收到取消后的停止确认，不等同于进程崩溃恢复；后者仍需单独通过过期 Lease 重新 Claim 验收。
+
+
+## 2026-11-17 Researchflow Runtime 崩溃恢复与通知交付验收
+
+- 生产 Runtime 的 MariaDB 集成测试已覆盖过期 Attempt 恢复：先通过正式 Scheduler 将 Stage 推进到 Ready，再由模拟崩溃 Worker 使用真实 `ClaimAttempt` 建立 Running Attempt；测试仅将其 Lease 到期时间前移模拟进程崩溃。
+- 启动生产 Runtime 后，ExpiredAttemptScanner 发现过期 Lease，Worker 重新 Claim；旧 Attempt 被标记 TimedOut 并释放 Lease，新 Attempt 使用新的 Worker 身份和更高 FencingToken 执行成功，Stage/Run Finalization 完成并原子生成唯一 terminal Outbox。
+- 精确代码 SHA `fe4189f94d0f41327b7fe6a8cc696f2aa99902c7` 的 Integration CI 仍待本轮提交后的新运行确认；上一精确代码 SHA `cf6aefaa01fc09cf188b909beceb6246b08c0190` 的 Integration CI Run [44088958318](https://github.com/Kasign/stock_data_provider/actions/runs/44088958318) 全量 success。
+- Outbox→Notification MariaDB 集成测试已覆盖首次接收失败、Outbox 退避重试、第二次接收成功，以及重复处理不重复创建 Inbox/Fanout WorkItem。
+- MariaDB `TestMariaDBGlobalWorkerCapacitySerializesClaimsAcrossRuns` 验证两个 Run 并发 Claim 时全局 Worker Capacity 只允许一个成功；Lease 过期后容量槽位可重新 Claim。该测试验证数据库原子容量边界，不等同于启动两个独立 Server 进程的部署验收。
+- 当前 Researchflow Runtime 主链的正常完成、Retry、Deadline、启动前取消、在途取消、崩溃后 Lease 恢复均有 MariaDB 证据。SRV-CTR-001 仍 deferred，不新增公开 Researchflow HTTP API。
+- 后续重点转为生产配置与生命周期的整体 Review、独立进程部署验收，以及将真实 News Provider 接入生产配置后的数据质量/可用性验收；不要把集成 Fixture 的结果解释为外部 Provider 质量验收。

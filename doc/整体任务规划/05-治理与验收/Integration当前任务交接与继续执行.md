@@ -1287,3 +1287,14 @@ GetRun 与 CancelRun 的持久化创建者授权已在 Application/Storage 层�
 - Provider 使用确定性 Fixture，不访问外部 Provider；测试验证 Runtime/Storage 编排，不代表外部 Provider 生产质量已验收。
 - 尚未完成：进程崩溃后的 ExpiredAttemptScanner 重新 Claim；多 Worker 进程数据库全局 Capacity 竞争；Outbox Relay 实际投递、失败重试和幂等重复处理。SRV-CTR-001 继续 deferred，不增加公开 Researchflow HTTP API。
 - 下一步：通过真实 MariaDB 过期 Lease 模拟进程崩溃，验证旧 Attempt Fencing 和新 Attempt 重新执行；之后验证多进程 Capacity 与 Outbox Relay 投递/重试。不得将 Worker 正常取消确认等同于崩溃恢复已验收。
+
+## 15. 2026-11-17 Researchflow 崩溃恢复与交付链验收
+
+- 当前 integration 代码 SHA：`fe4189f94d0f41327b7fe6a8cc696f2aa99902c7`；该 SHA 的 CI 待本轮提交后重新触发并确认。此前代码 SHA `cf6aefaa01fc09cf188b909beceb6246b08c0190` 的 Integration CI Run [44088958318](https://github.com/Kasign/stock_data_provider/actions/runs/44088958318) 全量 success。
+- 新增 MariaDB 生产 Runtime 崩溃恢复场景：Scheduler 先将 Stage 持久化为 Ready；模拟 Worker 通过真实 `ClaimAttempt` 创建 Attempt 1；只把该 Attempt 的 Lease 时间前移，模拟进程在执行前崩溃。
+- Runtime 启动后，ExpiredAttemptScanner 发现候选并调用 WorkerPool；Worker 重新 Claim，旧 Attempt 变为 TimedOut 并清空 Lease Owner，新 Attempt 成功；验证新旧 Attempt FencingToken 单调递增、Stage/Run 成功终态及唯一 terminal Outbox。
+- 在途取消场景另已通过 CI [44087900122](https://github.com/Kasign/stock_data_provider/actions/runs/44087900122)；正常取消与崩溃恢复是两条不同路径，现均有独立 MariaDB 验收。
+- Outbox→Notification MariaDB 集成测试覆盖接收失败后重试、成功 ACK，以及重复处理时 Inbox/Fanout WorkItem 幂等；该测试随根模块全量测试执行。
+- `TestMariaDBGlobalWorkerCapacitySerializesClaimsAcrossRuns` 覆盖两个 Run 并发争抢全局 Worker Capacity，只有一个 Claim 成功；过期 Lease 释放槽位后另一 Run 可成功 Claim。它验证 DB 原子全局容量守卫，但尚未以两个独立 Server OS 进程做完整部署级压测。
+- 目前正常完成、Provider Retry、Deadline、启动前取消、在途取消、Expired Attempt 崩溃恢复均有真实 MariaDB 集成验证；Outbox 投递重试/幂等与 DB 全局 Capacity 也有独立集成测试。
+- 下一步：对 Server Runtime、Lifecycle 注册/逆序关闭、Worker-only/All 角色配置和 Shutdown 资源保护做一次整体代码 Review；补齐必要的双进程部署级验证后，再评估真实 Provider 配置接入。SRV-CTR-001 继续 deferred，不新增公开 Researchflow HTTP API。
