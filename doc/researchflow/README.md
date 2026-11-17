@@ -140,3 +140,14 @@ Server 已在 Owner Session 启用且 Researchflow Capacity 显式配置时，�
 - Integration CI Run [44063735491](https://github.com/Kasign/stock_data_provider/actions/runs/44063735491) 对 SHA `e00e6e5c99e5d128b8087e2038d613a8400f23d1` 全量 success。
 
 **未完成：** 正式 Workflow Template 的 required/allow_empty_inputs、RetryPolicy、Propagation、Applicability 和 template_ref/version 尚未全部由用户定稿；不得把当前集成测试夹具直接提升为正式模板。下一步先冻结该发布契约，再发布 `news.search_candidates`。
+
+## 2026-11-17 正式 News Search Template 发布切片
+
+- Server Bootstrap 在 Owner Session + Researchflow Capacity 显式启用时，构建并预检不可变模板 `news.search_candidates@1.0.0`，再通过 MySQL Template Registry 幂等发布；同版本不同内容由 Registry 拒绝并阻止启动。
+- 模板固定参数 Schema Ref、Output Registry Version、ResourcePolicy Ref、Applicability Rule Ref/Version；Stage 必需，`AllowEmptyInputs=true`、`RequiresHardRiskGate=false`。
+- RetryPolicy：`MaxAttempts=2`（含首次执行）、Attempt Timeout 30s、Full Jitter 100ms～1s，只允许 `news_provider_retryable_failure` 重试。
+- Propagation：Degraded=Accept；Skipped/Failed/TimedOut/Blocked=Fail。Degraded 状态不会被伪装为 Succeeded。
+- 启动预检实际执行参数 Schema 校验、Applicability 精确版本评估、Output Registry 精确 Stage/OutputType/SchemaVersion 与 Schema Ref 匹配，并执行 Template.Validate。
+- 无 Provider inventory 时模板仍可发布，但 ResourcePolicy Resolve/CreateRun 继续 fail-closed；不创建无 Provider 的可执行 Run。
+- 本切片没有开放 SRV-CTR-001 HTTP 路由，也没有声称 Worker Runtime 已接入。Server Scheduler/WorkerPool/Deadline scanner/Finalization 的生产生命周期装配仍是下一阶段；不得将模板发布等同于生产执行链闭环。
+
