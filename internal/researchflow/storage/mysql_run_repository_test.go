@@ -6,11 +6,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/go-sql-driver/mysql"
 	"os"
 	"sync"
 	"testing"
 	"time"
+	"github.com/go-sql-driver/mysql"
 
 	platformstorage "example.com/stock-analysis-flow/internal/platform/storage"
 	"example.com/stock-analysis-flow/internal/researchflow/application"
@@ -279,6 +279,18 @@ func TestMariaDBCreateRunAtomicConcurrentIdempotency(t *testing.T) {
 	loadedRun, err := repository.GetRun(ctx, winningRunRef)
 	if err != nil {
 		t.Fatalf("GetRun: %v", err)
+	}
+	if err := repository.AuthorizeRunRead(ctx, "researchflow-integration-test", winningRunRef); err != nil {
+		t.Fatalf("creator should be allowed to read Run: %v", err)
+	}
+	if err := repository.AuthorizeRunCancellation(ctx, "researchflow-integration-test", winningRunRef); err != nil {
+		t.Fatalf("creator should be allowed to cancel Run: %v", err)
+	}
+	if err := repository.AuthorizeRunRead(ctx, "another-caller", winningRunRef); !errors.Is(err, application.ErrRunAccessDenied) {
+		t.Fatalf("another caller read authorization error=%v, want ErrRunAccessDenied", err)
+	}
+	if err := repository.AuthorizeRunCancellation(ctx, "another-caller", winningRunRef); !errors.Is(err, application.ErrRunAccessDenied) {
+		t.Fatalf("another caller cancellation authorization error=%v, want ErrRunAccessDenied", err)
 	}
 	if loadedRun.Run.Ref != winningRunRef || len(loadedRun.Stages) != 1 {
 		t.Fatalf("GetRun returned unexpected run/stages: run=%q stages=%d", loadedRun.Run.Ref, len(loadedRun.Stages))

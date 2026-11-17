@@ -35,7 +35,9 @@ func (*getRunAuthorizerStub) AuthorizeRunCancellation(context.Context, string, s
 func newGetRunService(t *testing.T, reader RunReader, authorizer *getRunAuthorizerStub) *GetRunService {
 	t.Helper()
 	service, err := NewGetRunService(getRunIdentityStub{caller: "owner"}, authorizer, reader)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	return service
 }
 
@@ -77,7 +79,6 @@ func TestGetRunReturnsValidatedAggregate(t *testing.T) {
 	}
 }
 
-
 func TestGetRunRejectsUnauthenticatedOrUnauthorizedCallerBeforeStorage(t *testing.T) {
 	for _, tc := range []struct {
 		name string
@@ -94,8 +95,12 @@ func TestGetRunRejectsUnauthenticatedOrUnauthorizedCallerBeforeStorage(t *testin
 			service, err := NewGetRunService(tc.identity, authorizer, reader)
 			if err != nil { t.Fatal(err) }
 			_, err = service.GetRun(context.Background(), "run-1")
-			if err == nil { t.Fatal("expected caller rejection") }
-			if reader.called != "" { t.Fatal("unauthenticated/unauthorized request reached Run reader") }
+			if err == nil {
+				t.Fatal("expected caller rejection")
+			}
+			if reader.called != "" {
+				t.Fatal("unauthenticated/unauthorized request reached Run reader")
+			}
 		})
 	}
 }
@@ -143,7 +148,7 @@ func TestGetRunRejectsCrossRunAndDuplicateStages(t *testing.T) {
 func TestGetRunRequiresResultSummaryForTerminalRun(t *testing.T) {
 	result := validReadResult()
 	result.Run.Status = domain.RunSucceeded
-	service, _ := NewGetRunService(&runReaderStub{result: result})
+	service := newGetRunService(t, &runReaderStub{result: result}, &getRunAuthorizerStub{})
 	if _, err := service.GetRun(context.Background(), "run-1"); err == nil {
 		t.Fatal("terminal Run without ResultSummary must be rejected")
 	}
