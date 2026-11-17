@@ -1,0 +1,14 @@
+# Go build/test artifacts
+/bin/
+/dist/
+/coverage.out
+*.test
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+
+# Runtime artifacts
+/logs/
+/tmp/

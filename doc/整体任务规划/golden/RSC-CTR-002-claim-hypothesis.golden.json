@@ -1,0 +1,27 @@
+{
+  "claim_id": "research_claim:claim-001",
+  "claim_version": 2,
+  "supersedes_version": 1,
+  "statement": "The policy change is expected to affect the sector's operating costs.",
+  "epistemic_type": "hypothesis",
+  "scope_refs": [
+    "industry:example"
+  ],
+  "system_as_of": "2026-11-10T08:06:00Z",
+  "supporting_evidence_refs": [
+    "evidence:news-001"
+  ],
+  "contradicting_evidence_refs": [],
+  "required_data_refs": [
+    "data_snapshot:example"
+  ],
+  "validation_method": "Compare affected issuers' disclosed operating costs across reporting periods.",
+  "expected_observation": "A measurable increase in operating cost ratio after the effective date.",
+  "invalidation_conditions": [
+    "Subsequent disclosures show no material cost change."
+  ],
+  "status": "testing",
+  "limitations": [
+    "Initial evidence is based on one public announcement."
+  ]
+}

@@ -1,0 +1,1213 @@
+package provider
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"math"
+	"net/http"
+	"net/url"
+	"os"
+	"sort"
+	"strconv"
+	"strings"
+	"testing"
+	"time"
+
+	"example.com/stock-analysis-flow/internal/marketdata/model"
+)
+
+type optionalProviderProbeResult struct {
+	Provider    string         `json:"provider"`
+	Capability  string         `json:"capability"`
+	Status      string         `json:"status"`
+	ElapsedMS   int64          `json:"elapsed_ms"`
+	Rows        int            `json:"rows,omitempty"`
+	Quality     string         `json:"quality,omitempty"`
+	QualityNote []string       `json:"quality_notes,omitempty"`
+	Details     map[string]any `json:"details,omitempty"`
+	Error       string         `json:"error,omitempty"`
+}
+
+func optionalProbeDateRange(now time.Time) (string, string) {
+	end := now.Format("2006-01-02")
+	start := now.AddDate(0, 0, -30).Format("2006-01-02")
+	return start, end
+}
+
+func logOptionalProviderProbe(t *testing.T, results []optionalProviderProbeResult, failures []string) {
+	t.Helper()
+	encoded, _ := json.Marshal(results)
+	t.Logf("LIVE_OPTIONAL_PROVIDER_RESULT %s", encoded)
+	if len(failures) > 0 {
+		t.Fatalf("optional provider live acceptance failed: %v", failures)
+	}
+}
+
+func isTusharePermissionRequired(err error) bool {
+	return isTusharePermissionError(err)
+}
+
+func TestIsTusharePermissionRequired(t *testing.T) {
+	cases := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{name: "permission code", err: errors.New("Tushare daily 错误 code=40203: 接口权限不足"), want: true},
+		{name: "permission message", err: errors.New("当前账号无接口访问权限"), want: true},
+		{name: "invalid token", err: errors.New("Tushare token invalid"), want: false},
+		{name: "network error", err: errors.New("connection timeout"), want: false},
+	}
+	for _, item := range cases {
+		t.Run(item.name, func(t *testing.T) {
+			if got := isTusharePermissionRequired(item.err); got != item.want {
+				t.Fatalf("isTusharePermissionRequired()=%v want %v", got, item.want)
+			}
+		})
+	}
+}
+
+// 最小权限探测通过提交标记 [include_tushare] [tushare_daily_only] 显式触发。
+type hithinkLiveStatementGolden struct {
+	category    string
+	sourceField string
+	unit        string
+	value       float64
+}
+
+func hithinkLiveAnnualStatementEvidence(snapshot *model.FundamentalsSnapshot) ([]map[string]any, bool) {
+	// 固定样本取自贵州茅台 2025 年年度报告（2026-04-17）合并报表。
+	expected := []hithinkLiveStatementGolden{
+		{category: "income_statement", sourceField: "operating_income", unit: "CNY", value: 168838102514.79},
+		{category: "income_statement", sourceField: "net_profit", unit: "CNY", value: 85310324833.67},
+		{category: "income_statement", sourceField: "basic_eps", unit: "CNY/share", value: 65.66},
+		{category: "balance_sheet", sourceField: "assets_total", unit: "CNY", value: 303834844021.44},
+		{category: "balance_sheet", sourceField: "total_debt", unit: "CNY", value: 49875590112.37},
+		{category: "cash_flow_statement", sourceField: "act_cash_flow_net", unit: "CNY", value: 61522204989.35},
+		{category: "cash_flow_statement", sourceField: "invest_cash_flow_net", unit: "CNY", value: -31641898948.89},
+		{category: "cash_flow_statement", sourceField: "financing_cash_flow_net", unit: "CNY", value: -73427081208.87},
+	}
+	evidence := make([]map[string]any, 0, len(expected))
+	mismatch := false
+	for _, want := range expected {
+		metric, ok := hithinkLiveFindStatementMetric(snapshot, want.category, want.sourceField)
+		matched := false
+		var observed any
+		var observedUnit string
+		if ok {
+			observed = metric.Value
+			observedUnit = metric.Unit
+			delta := metric.Value - want.value
+			if delta < 0 {
+				delta = -delta
+			}
+			matched = metric.Unit == want.unit && delta <= 0.01
+		}
+		if !matched {
+			mismatch = true
+		}
+		evidence = append(evidence, map[string]any{
+			"category": want.category, "source_field": want.sourceField,
+			"expected_value": want.value, "expected_unit": want.unit,
+			"observed_value": observed, "observed_unit": observedUnit,
+			"status": map[bool]string{true: "matched", false: "mismatch"}[matched],
+		})
+	}
+	return evidence, mismatch
+}
+
+func hithinkLiveFindStatementMetric(snapshot *model.FundamentalsSnapshot, category, sourceField string) (model.FundamentalMetric, bool) {
+	if snapshot == nil {
+		return model.FundamentalMetric{}, false
+	}
+	for _, section := range snapshot.Sections {
+		if section.Category != category {
+			continue
+		}
+		for _, metric := range section.Metrics {
+			if metric.SourceField == sourceField {
+				return metric, true
+			}
+		}
+	}
+	return model.FundamentalMetric{}, false
+}
+
+func TestLiveTushareCapabilities(t *testing.T) {
+	if os.Getenv("MARKET_DATA_LIVE_TUSHARE_TESTS") != "1" {
+		t.Skip("set MARKET_DATA_LIVE_TUSHARE_TESTS=1 to call Tushare Pro endpoints")
+	}
+	token := os.Getenv("MARKET_DATA_TUSHARE_TOKEN")
+	if token == "" {
+		token = os.Getenv("TUSHARE_TOKEN")
+	}
+	if token == "" {
+		t.Skip("Tushare live probe skipped: MARKET_DATA_TUSHARE_TOKEN or TUSHARE_TOKEN is not configured")
+	}
+
+	endpoint := os.Getenv("MARKET_DATA_TUSHARE_API_URL")
+	if endpoint == "" {
+		endpoint = os.Getenv("TUSHARE_HTTP_URL")
+	}
+	client := NewTushareConfigured(25*time.Second, endpoint, token)
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Minute)
+	defer cancel()
+
+	now := time.Now().In(time.FixedZone("CST", 8*60*60))
+	startDate, endDate := optionalProbeDateRange(now)
+	const symbol = "600519.SH"
+	results := make([]optionalProviderProbeResult, 0, 9)
+	failures := make([]string, 0, 9)
+	detailsByCapability := make(map[string]map[string]any)
+
+	run := func(capability string, call func() (int, model.QualityStatus, []string, error)) {
+		started := time.Now()
+		rows, quality, notes, err := call()
+		item := optionalProviderProbeResult{Provider: "tushare", Capability: capability, Status: "passed", ElapsedMS: time.Since(started).Milliseconds(), Rows: rows, Quality: string(quality), QualityNote: notes}
+		if details, ok := detailsByCapability[capability]; ok {
+			item.Details = details
+		}
+		if err != nil {
+			_, safeMessage := liveProbeErrorSummary(err)
+			item.Error = safeMessage
+			if isTusharePermissionRequired(err) {
+				// Tushare 接口权限受账号积分档位和单接口权限约束；权限不足不能等同于 Token 无效或 Provider 不可用。
+				item.Status = "permission_required"
+			} else {
+				item.Status = "failed"
+				failures = append(failures, capability+": "+safeMessage)
+			}
+		}
+		results = append(results, item)
+	}
+
+	tradeDate := endDate
+	if os.Getenv("MARKET_DATA_LIVE_TUSHARE_DAILY_ONLY") != "1" {
+		run("stock_basic", func() (int, model.QualityStatus, []string, error) {
+			item, err := client.FetchStockBasic(ctx, symbol)
+			if err != nil {
+				return 0, "", nil, err
+			}
+			if item == nil || item.Symbol != symbol || item.Source != "tushare" || item.FetchedAt.IsZero() {
+				return 0, "", nil, errLiveProbeContract("stock_basic identity/source/fetched_at mismatch")
+			}
+			return 1, item.QualityStatus, item.QualityReasons, nil
+		})
+
+		calendarStart := now.AddDate(0, 0, -14).Format("2006-01-02")
+		calendar, calendarErr := client.FetchTradingCalendar(ctx, calendarStart, endDate)
+		run("trading_calendar", func() (int, model.QualityStatus, []string, error) {
+			if calendarErr != nil {
+				return 0, "", nil, calendarErr
+			}
+			if calendar == nil || calendar.Market != "cn_a_share" || calendar.StartDate != calendarStart ||
+				calendar.EndDate != endDate || calendar.Source != "tushare" || calendar.FetchedAt.IsZero() {
+				return 0, "", nil, errLiveProbeContract("trading_calendar identity/source/date-range/fetched_at mismatch")
+			}
+			start, startErr := time.Parse("2006-01-02", calendarStart)
+			end, endErr := time.Parse("2006-01-02", endDate)
+			if startErr != nil || endErr != nil {
+				return 0, "", nil, errLiveProbeContract("trading_calendar probe date range invalid")
+			}
+			expectedDays := int(end.Sub(start)/(24*time.Hour)) + 1
+			if calendar.TotalDays != expectedDays || len(calendar.Items) != expectedDays {
+				return len(calendar.Items), "", nil, errLiveProbeContract("trading_calendar returned incomplete natural-day coverage")
+			}
+			return len(calendar.Items), calendar.QualityStatus, calendar.QualityReasons, nil
+		})
+
+		tradeDate = endDate
+		if calendarErr == nil && calendar != nil {
+			for i := len(calendar.Items) - 1; i >= 0; i-- {
+				if calendar.Items[i].IsTradingDay {
+					tradeDate = calendar.Items[i].Date
+					break
+				}
+			}
+		}
+	}
+
+	run("daily_bars", func() (int, model.QualityStatus, []string, error) {
+		bars, err := client.FetchDailyBars(ctx, symbol, startDate, endDate, 40, model.AdjustmentNone)
+		if err != nil {
+			return 0, "", nil, err
+		}
+		if len(bars) == 0 {
+			return 0, "", nil, errLiveProbeContract("daily_bars returned no rows in the recent date range")
+		}
+		if message := liveProbeDailyContractError(bars, "tushare", "tushare", symbol, model.AdjustmentNone, startDate, endDate, 40); message != "" {
+			return len(bars), "", nil, errLiveProbeContract(message)
+		}
+		return len(bars), bars[len(bars)-1].QualityStatus, bars[len(bars)-1].QualityReasons, nil
+	})
+
+	if os.Getenv("MARKET_DATA_LIVE_TUSHARE_DAILY_ONLY") != "1" {
+		run("security_trading_status", func() (int, model.QualityStatus, []string, error) {
+			item, err := client.FetchSecurityTradingStatus(ctx, symbol, tradeDate)
+			if err != nil {
+				return 0, "", nil, err
+			}
+			if item == nil || item.Symbol != symbol || item.TradeDate != tradeDate || item.Source != "tushare" || item.FetchedAt.IsZero() {
+				return 0, "", nil, errLiveProbeContract("security_trading_status identity/source/fetched_at mismatch")
+			}
+			return 1, item.QualityStatus, item.QualityReasons, nil
+		})
+
+		run("fundamentals", func() (int, model.QualityStatus, []string, error) {
+			item, err := client.FetchFundamentals(ctx, symbol, 2025, 4)
+			if err != nil {
+				return 0, "", nil, err
+			}
+			if item == nil || item.Symbol != symbol || item.Year != 2025 || item.Quarter != 4 || item.Source != "tushare" || item.FetchedAt.IsZero() {
+				return 0, "", nil, errLiveProbeContract("fundamentals identity/period/source/fetched_at mismatch")
+			}
+			sections := make([]map[string]any, 0, len(item.Sections))
+			for _, section := range item.Sections {
+				metrics := make([]map[string]any, 0, len(section.Metrics))
+				for _, metric := range section.Metrics {
+					metrics = append(metrics, map[string]any{
+						"key": metric.Key, "name": metric.Name, "value": metric.Value,
+						"unit": metric.Unit, "source_field": metric.SourceField,
+					})
+				}
+				sections = append(sections, map[string]any{
+					"category": section.Category, "report_date": section.ReportDate,
+					"publication_date": section.PublicationDate, "available_at": section.AvailableAt,
+					"has_data": section.HasData, "metrics": metrics,
+					"quality_status": section.QualityStatus, "quality_reasons": section.QualityReasons,
+				})
+			}
+			detailsByCapability["fundamentals"] = map[string]any{
+				"symbol": item.Symbol, "year": item.Year, "quarter": item.Quarter,
+				"source": item.Source, "source_version": item.SourceVersion, "fetched_at": item.FetchedAt,
+				"system_observed_at": item.SystemObservedAt, "has_data": item.HasData,
+				"quality_status": item.QualityStatus, "quality_reasons": item.QualityReasons,
+				"sections": sections,
+			}
+			return len(item.Sections), item.QualityStatus, item.QualityReasons, nil
+		})
+
+		run("valuations", func() (int, model.QualityStatus, []string, error) {
+			item, err := client.FetchValuations(ctx, []string{symbol})
+			if err != nil {
+				return 0, "", nil, err
+			}
+			if item == nil || item.Source != "tushare" || item.FetchedAt.IsZero() || len(item.RequestedSymbols) != 1 || item.RequestedSymbols[0] != symbol {
+				return 0, "", nil, errLiveProbeContract("valuations request/source/fetched_at mismatch")
+			}
+			valuationItems := make([]map[string]any, 0, len(item.Items))
+			for _, value := range item.Items {
+				valuationItems = append(valuationItems, map[string]any{
+					"symbol": value.Symbol, "code": value.Code, "name": value.Name,
+					"pe_ttm": value.PETTM, "pe_mrq": value.PEMRQ, "pe_static": value.PEStatic,
+					"pb_mrq": value.PBMRQ, "ps_ttm": value.PSTTM, "pcf_ttm": value.PCFTTM,
+					"turnover_rate_percent":       value.TurnoverRatePercent,
+					"float_turnover_rate_percent": value.FloatTurnoverRatePercent,
+					"volume_ratio":                value.VolumeRatio,
+					"dividend_yield_percent":      value.DividendYieldPercent,
+					"dividend_yield_ttm_percent":  value.DividendYieldTTMPercent,
+					"source":                      value.Source, "source_version": value.SourceVersion,
+					"fetched_at": value.FetchedAt, "quality_status": value.QualityStatus,
+					"quality_reasons": value.QualityReasons,
+				})
+			}
+			detailsByCapability["valuations"] = map[string]any{
+				"requested_symbols": item.RequestedSymbols, "missing_symbols": item.MissingSymbols,
+				"provider_report_date": item.ProviderReportDate, "provider_timestamp": item.ProviderTimestamp,
+				"source": item.Source, "source_version": item.SourceVersion, "fetched_at": item.FetchedAt,
+				"quality_status": item.QualityStatus, "quality_reasons": item.QualityReasons,
+				"items": valuationItems,
+			}
+			return len(item.Items), item.QualityStatus, item.QualityReasons, nil
+		})
+
+		run("index_catalog", func() (int, model.QualityStatus, []string, error) {
+			item, err := client.FetchIndexCatalog(ctx, "tushare")
+			if err != nil {
+				return 0, "", nil, err
+			}
+			if item == nil || item.Tag != "tushare" || item.Source != "tushare" || item.FetchedAt.IsZero() ||
+				item.Total != len(item.Items) || len(item.Items) == 0 {
+				return 0, "", nil, errLiveProbeContract("index_catalog identity/source/count/fetched_at mismatch")
+			}
+			return len(item.Items), item.QualityStatus, item.QualityReasons, nil
+		})
+
+		run("index_constituents", func() (int, model.QualityStatus, []string, error) {
+			item, err := client.FetchIndexConstituents(ctx, "000300.SH")
+			if err != nil {
+				return 0, "", nil, err
+			}
+			if item == nil || item.IndexSymbol != "000300.SH" || item.Source != "tushare" || item.FetchedAt.IsZero() ||
+				item.ProviderReportDate == "" || item.Total != len(item.Items) || len(item.Items) == 0 {
+				return 0, "", nil, errLiveProbeContract("index_constituents identity/report-date/count/fetched_at mismatch")
+			}
+			return len(item.Items), item.QualityStatus, item.QualityReasons, nil
+		})
+
+		run("index_daily_bars", func() (int, model.QualityStatus, []string, error) {
+			item, err := client.FetchIndexDailyBars(ctx, "000300.SH", startDate, endDate)
+			if err != nil {
+				return 0, "", nil, err
+			}
+			if item == nil || item.IndexSymbol != "000300.SH" || item.Source != "tushare" || item.FetchedAt.IsZero() ||
+				item.StartDate != startDate || item.EndDate != endDate || item.Total != len(item.Items) || len(item.Items) == 0 {
+				return 0, "", nil, errLiveProbeContract("index_daily_bars identity/date-range/count/fetched_at mismatch")
+			}
+			for _, bar := range item.Items {
+				if bar.IndexSymbol != "000300.SH" || bar.TradeDate < startDate || bar.TradeDate > endDate ||
+					bar.Open <= 0 || bar.High <= 0 || bar.Low <= 0 || bar.Close <= 0 || bar.Low > bar.High ||
+					bar.Open < bar.Low || bar.Open > bar.High || bar.Close < bar.Low || bar.Close > bar.High {
+					return len(item.Items), "", nil, errLiveProbeContract("index_daily_bars row contract mismatch")
+				}
+			}
+			return len(item.Items), item.QualityStatus, item.QualityReasons, nil
+		})
+	}
+	logOptionalProviderProbe(t, results, failures)
+}
+
+type liveTushareAdjustmentEvidenceItem struct {
+	Symbol                string                   `json:"symbol"`
+	AdjustmentFactors     []model.AdjustmentFactor `json:"adjustment_factors,omitempty"`
+	CorporateActions      []model.CorporateAction  `json:"corporate_actions,omitempty"`
+	FactorStatus          string                   `json:"factor_status"`
+	FactorError           string                   `json:"factor_error,omitempty"`
+	CorporateActionStatus string                   `json:"corporate_action_status"`
+	CorporateActionError  string                   `json:"corporate_action_error,omitempty"`
+}
+
+type liveTushareAdjustmentEvidenceReport struct {
+	GeneratedAt string                              `json:"generated_at"`
+	StartDate   string                              `json:"start_date"`
+	EndDate     string                              `json:"end_date"`
+	Items       []liveTushareAdjustmentEvidenceItem `json:"items"`
+}
+
+// TestLiveTushareHistoricalAdjustmentEvidence checks whether the existing Tushare
+// token can supply historical adjustment factors and dividend/corporate-action
+// evidence for the same golden windows used by the public daily-bar probes.
+func TestLiveTushareHistoricalAdjustmentEvidence(t *testing.T) {
+	if os.Getenv("MARKET_DATA_LIVE_TUSHARE_ADJUSTMENT_TESTS") != "1" {
+		t.Skip("set MARKET_DATA_LIVE_TUSHARE_ADJUSTMENT_TESTS=1 to query Tushare historical adjustment evidence")
+	}
+	token := strings.TrimSpace(os.Getenv("MARKET_DATA_TUSHARE_TOKEN"))
+	if token == "" {
+		token = strings.TrimSpace(os.Getenv("TUSHARE_TOKEN"))
+	}
+	if token == "" {
+		t.Skip("Tushare adjustment evidence probe skipped: token is not configured")
+	}
+	startDate := strings.TrimSpace(os.Getenv("LIVE_PROBE_DAILY_START_DATE"))
+	if startDate == "" {
+		startDate = "2025-07-07"
+	}
+	endDate := strings.TrimSpace(os.Getenv("LIVE_PROBE_DAILY_END_DATE"))
+	if endDate == "" {
+		endDate = "2025-07-17"
+	}
+	if _, err := time.Parse("2006-01-02", startDate); err != nil {
+		t.Fatalf("invalid LIVE_PROBE_DAILY_START_DATE: %v", err)
+	}
+	if _, err := time.Parse("2006-01-02", endDate); err != nil {
+		t.Fatalf("invalid LIVE_PROBE_DAILY_END_DATE: %v", err)
+	}
+	if startDate > endDate {
+		t.Fatalf("historical adjustment range is reversed: %s..%s", startDate, endDate)
+	}
+	symbols := []string{"600036.SH", "002982.SZ"}
+	if configured := strings.TrimSpace(os.Getenv("LIVE_PROBE_DAILY_SYMBOLS")); configured != "" {
+		symbols = strings.Split(configured, ",")
+	}
+	endpoint := strings.TrimSpace(os.Getenv("MARKET_DATA_TUSHARE_API_URL"))
+	client := NewTushareConfigured(25*time.Second, endpoint, token)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	defer cancel()
+
+	report := liveTushareAdjustmentEvidenceReport{
+		GeneratedAt: time.Now().UTC().Format(time.RFC3339),
+		StartDate:   startDate, EndDate: endDate,
+		Items: make([]liveTushareAdjustmentEvidenceItem, 0, len(symbols)),
+	}
+	var failures []string
+	for _, rawSymbol := range symbols {
+		symbol := strings.ToUpper(strings.TrimSpace(rawSymbol))
+		if symbol == "" {
+			t.Fatalf("LIVE_PROBE_DAILY_SYMBOLS contains an empty symbol")
+		}
+		item := liveTushareAdjustmentEvidenceItem{Symbol: symbol}
+		factors, factorErr := client.FetchAdjustmentFactors(ctx, symbol, startDate, endDate)
+		if factorErr != nil {
+			_, safe := liveProbeErrorSummary(factorErr)
+			item.FactorError = safe
+			if isTusharePermissionRequired(factorErr) {
+				item.FactorStatus = "permission_required"
+			} else {
+				item.FactorStatus = "failed"
+				failures = append(failures, symbol+" adjustment_factors: "+safe)
+			}
+		} else {
+			item.AdjustmentFactors = factors
+			item.FactorStatus = "returned"
+			if len(factors) == 0 {
+				item.FactorStatus = "returned_empty"
+			}
+			for _, factor := range factors {
+				if factor.Symbol != symbol || factor.TradeDate < startDate || factor.TradeDate > endDate ||
+					factor.Factor <= 0 || math.IsNaN(factor.Factor) || math.IsInf(factor.Factor, 0) ||
+					factor.Source != "tushare" || factor.FetchedAt.IsZero() {
+					failures = append(failures, symbol+" adjustment_factors: row contract invalid at "+factor.TradeDate)
+					item.FactorStatus = "contract_invalid"
+					break
+				}
+			}
+		}
+
+		actions, actionErr := client.FetchCorporateActions(ctx, symbol, startDate, endDate)
+		if actionErr != nil {
+			_, safe := liveProbeErrorSummary(actionErr)
+			item.CorporateActionError = safe
+			if isTusharePermissionRequired(actionErr) {
+				item.CorporateActionStatus = "permission_required"
+			} else {
+				item.CorporateActionStatus = "failed"
+				failures = append(failures, symbol+" corporate_actions: "+safe)
+			}
+		} else {
+			item.CorporateActions = actions
+			item.CorporateActionStatus = "returned"
+			if len(actions) == 0 {
+				item.CorporateActionStatus = "returned_empty"
+			}
+			for _, action := range actions {
+				eventDate := action.ExDate
+				if eventDate == "" {
+					eventDate = action.AnnouncementDate
+				}
+				if action.Symbol != symbol || eventDate < startDate || eventDate > endDate ||
+					action.Source != "tushare" || action.FetchedAt.IsZero() {
+					failures = append(failures, symbol+" corporate_actions: row contract invalid at "+eventDate)
+					item.CorporateActionStatus = "contract_invalid"
+					break
+				}
+			}
+		}
+		report.Items = append(report.Items, item)
+	}
+
+	encoded, err := json.MarshalIndent(report, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal Tushare historical adjustment evidence report: %v", err)
+	}
+	t.Logf("LIVE_TUSHARE_ADJUSTMENT_REPORT_BEGIN\n%s\nLIVE_TUSHARE_ADJUSTMENT_REPORT_END", encoded)
+	if outputPath := strings.TrimSpace(os.Getenv("LIVE_TUSHARE_ADJUSTMENT_REPORT_PATH")); outputPath != "" {
+		if writeErr := os.WriteFile(outputPath, append(encoded, '\n'), 0o644); writeErr != nil {
+			t.Errorf("write Tushare historical adjustment evidence report: %v", writeErr)
+		}
+	}
+	if len(failures) > 0 {
+		t.Errorf("Tushare historical adjustment evidence failed: %s", strings.Join(failures, " | "))
+	}
+}
+
+// TestLiveHithinkAnnualBalanceSheetPublicationDateRaw isolates the annual balance-sheet
+// endpoint so a publication-date mismatch can be traced to the provider's raw fields.
+func TestLiveHithinkAnnualBalanceSheetPublicationDateRaw(t *testing.T) {
+	if os.Getenv("MARKET_DATA_LIVE_HITHINK_BALANCE_SHEET_RAW") != "1" {
+		t.Skip("set MARKET_DATA_LIVE_HITHINK_BALANCE_SHEET_RAW=1 to query the Hithink balance-sheet endpoint")
+	}
+	apiKey := os.Getenv("MARKET_DATA_HITHINK_API_KEY")
+	if apiKey == "" {
+		apiKey = os.Getenv("HITHINK_FINANCE_API_KEY")
+	}
+	if apiKey == "" {
+		t.Skip("Hithink balance-sheet probe skipped: API key is not configured")
+	}
+
+	client := NewHithinkConfigured(25*time.Second, os.Getenv("MARKET_DATA_HITHINK_BASE_URL"), apiKey)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	symbol, err := hithinkDomesticSymbol("600519.SH")
+	if err != nil {
+		t.Fatalf("normalize target symbol: %v", err)
+	}
+	query := url.Values{}
+	query.Set("thscode", symbol)
+	query.Set("period", "annual")
+	query.Set("limit", "20")
+	raw, err := client.get(ctx, "/api/a-share/financials/balance-sheets", query)
+	if err != nil {
+		t.Fatalf("request Hithink annual balance-sheet endpoint: %v", err)
+	}
+	dataRaw, err := hithinkResponseData(raw)
+	if err != nil {
+		t.Fatalf("decode Hithink response envelope: %v", err)
+	}
+	var data struct {
+		Item []map[string]json.RawMessage `json:"item"`
+	}
+	if err := json.Unmarshal(dataRaw, &data); err != nil {
+		t.Fatalf("decode Hithink balance-sheet rows: %v", err)
+	}
+
+	location := time.FixedZone("Asia/Shanghai", 8*60*60)
+	evidence := make([]map[string]any, 0, 1)
+	for rowIndex, row := range data.Item {
+		var rowSymbol string
+		if err := json.Unmarshal(row["thscode"], &rowSymbol); err != nil ||
+			!strings.EqualFold(strings.TrimSpace(rowSymbol), symbol) {
+			continue
+		}
+		periodEndValue, periodEndOK := hithinkParseFundamentalValue(row["period_end_ms"])
+		periodEndDate, periodEndDateOK := hithinkDateFromMillis(periodEndValue, location)
+		if !periodEndOK || !periodEndDateOK || periodEndDate != "2025-12-31" {
+			continue
+		}
+		publicationRaw := row["report_date_ms"]
+		publicationValue, publicationOK := hithinkParseFundamentalValue(publicationRaw)
+		publicationDate, publicationDateOK := hithinkDateFromMillis(publicationValue, location)
+		evidence = append(evidence, map[string]any{
+			"row_index":              rowIndex,
+			"thscode":                rowSymbol,
+			"period_end_ms_raw":      string(row["period_end_ms"]),
+			"period_end_date":        periodEndDate,
+			"report_date_ms_raw":     string(publicationRaw),
+			"publication_date":       publicationDate,
+			"publication_date_valid": publicationOK && publicationDateOK,
+			"assets_total_raw":       string(row["assets_total"]),
+			"total_debt_raw":         string(row["total_debt"]),
+		})
+	}
+	encoded, err := json.Marshal(map[string]any{
+		"provider":           "hithink",
+		"endpoint":           "/api/a-share/financials/balance-sheets",
+		"symbol":             symbol,
+		"period":             "annual",
+		"target_report_date": "2025-12-31",
+		"rows":               evidence,
+	})
+	if err != nil {
+		t.Fatalf("marshal raw balance-sheet evidence: %v", err)
+	}
+	t.Logf("LIVE_HITHINK_BALANCE_SHEET_RAW_EVIDENCE %s", encoded)
+	if len(evidence) != 1 {
+		t.Fatalf("expected exactly one 600519.SH / 2025-12-31 balance-sheet row, got %d", len(evidence))
+	}
+	if evidence[0]["publication_date_valid"] != true {
+		t.Fatalf("Hithink report_date_ms is missing or invalid for 2025-12-31 balance sheet")
+	}
+	if evidence[0]["publication_date"] != "2026-04-17" {
+		t.Errorf("Hithink balance-sheet publication date mismatch: observed=%v expected=2026-04-17",
+			evidence[0]["publication_date"])
+	}
+}
+
+// TestLiveHithinkDailyBarsSingleWindow verifies one bounded real window without unsupported offset pagination.
+func TestLiveHithinkDailyBarsSingleWindow(t *testing.T) {
+	if os.Getenv("MARKET_DATA_LIVE_HITHINK_DAILY_BARS_SINGLE_WINDOW") != "1" {
+		t.Skip("set MARKET_DATA_LIVE_HITHINK_DAILY_BARS_SINGLE_WINDOW=1 to query Hithink DailyBar adjustment modes")
+	}
+	apiKey := os.Getenv("MARKET_DATA_HITHINK_API_KEY")
+	if apiKey == "" {
+		apiKey = os.Getenv("HITHINK_FINANCE_API_KEY")
+	}
+	if apiKey == "" {
+		t.Skip("Hithink DailyBar probe skipped: API key is not configured")
+	}
+
+	client := NewHithinkConfigured(25*time.Second, os.Getenv("MARKET_DATA_HITHINK_BASE_URL"), apiKey)
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+
+	cases := []struct {
+		name       string
+		adjustment model.AdjustmentBasis
+	}{
+		{name: "none", adjustment: model.AdjustmentNone},
+		{name: "forward", adjustment: model.AdjustmentForward},
+		{name: "backward", adjustment: model.AdjustmentBackward},
+	}
+	for _, tc := range cases {
+		bars, err := client.FetchDailyBars(ctx, "600519.SH", "2026-10-13", "2026-11-12", 100, tc.adjustment)
+		if err != nil {
+			t.Fatalf("Hithink DailyBar %s: %v", tc.name, err)
+		}
+		if len(bars) == 0 {
+			t.Fatalf("Hithink DailyBar %s returned no rows", tc.name)
+		}
+		seen := make(map[string]struct{}, len(bars))
+		firstDate, lastDate := bars[0].TradeDate, bars[0].TradeDate
+		for _, bar := range bars {
+			if bar.TradeDate < "2026-10-13" || bar.TradeDate > "2026-11-12" {
+				t.Fatalf("Hithink DailyBar %s returned out-of-range date %s", tc.name, bar.TradeDate)
+			}
+			if _, exists := seen[bar.TradeDate]; exists {
+				t.Fatalf("Hithink DailyBar %s returned duplicate date %s", tc.name, bar.TradeDate)
+			}
+			seen[bar.TradeDate] = struct{}{}
+			if bar.TradeDate < firstDate {
+				firstDate = bar.TradeDate
+			}
+			if bar.TradeDate > lastDate {
+				lastDate = bar.TradeDate
+			}
+			if bar.AdjustmentBasis != tc.adjustment {
+				t.Fatalf("Hithink DailyBar %s returned adjustment basis %q", tc.name, bar.AdjustmentBasis)
+			}
+		}
+		t.Logf("LIVE_HITHINK_DAILY_BAR_SINGLE_WINDOW adjustment=%s rows=%d first=%s last=%s", tc.name, len(bars), firstDate, lastDate)
+	}
+}
+
+// TestLiveHithinkDailyBarsBackwardRaw isolates the raw backward-adjusted response
+// to distinguish provider-side empty data from normalization rejection.
+func TestLiveHithinkDailyBarsBackwardRaw(t *testing.T) {
+	if os.Getenv("MARKET_DATA_LIVE_HITHINK_DAILY_BARS_BACKWARD_RAW") != "1" {
+		t.Skip("set MARKET_DATA_LIVE_HITHINK_DAILY_BARS_BACKWARD_RAW=1 to query the raw Hithink backward-adjusted endpoint")
+	}
+	apiKey := os.Getenv("MARKET_DATA_HITHINK_API_KEY")
+	if apiKey == "" {
+		apiKey = os.Getenv("HITHINK_FINANCE_API_KEY")
+	}
+	if apiKey == "" {
+		t.Skip("Hithink backward DailyBar probe skipped: API key is not configured")
+	}
+
+	client := NewHithinkConfigured(25*time.Second, os.Getenv("MARKET_DATA_HITHINK_BASE_URL"), apiKey)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	location := time.FixedZone("Asia/Shanghai", 8*60*60)
+	symbol, err := hithinkDomesticSymbol("600519.SH")
+	if err != nil {
+		t.Fatalf("normalize target symbol: %v", err)
+	}
+	startMS := time.Date(2026, time.October, 13, 0, 0, 0, 0, location).UnixMilli()
+	endMS := time.Date(2026, time.November, 12, 23, 59, 59, int(time.Second-time.Nanosecond), location).UnixMilli()
+	query := url.Values{}
+	query.Set("thscode", symbol)
+	query.Set("interval", "1d")
+	query.Set("start", strconv.FormatInt(startMS, 10))
+	query.Set("end", strconv.FormatInt(endMS, 10))
+	query.Set("adjust", "backward")
+	raw, err := client.get(ctx, "/api/a-share/prices/historical", query)
+	if err != nil {
+		t.Fatalf("request Hithink backward-adjusted historical endpoint: %v", err)
+	}
+	dataRaw, err := hithinkResponseData(raw)
+	if err != nil {
+		t.Fatalf("decode Hithink backward-adjusted response envelope: %v", err)
+	}
+	var data struct {
+		Timestamp *int64                       `json:"timestamp"`
+		Item      []map[string]json.RawMessage `json:"item"`
+	}
+	if err := json.Unmarshal(dataRaw, &data); err != nil {
+		t.Fatalf("decode Hithink backward-adjusted rows: %v", err)
+	}
+	evidence := map[string]any{
+		"provider":  "hithink",
+		"endpoint":  "/api/a-share/prices/historical",
+		"symbol":    symbol,
+		"adjust":    "backward",
+		"start":     "2026-10-13",
+		"end":       "2026-11-12",
+		"row_count": len(data.Item),
+		"timestamp": data.Timestamp,
+	}
+	if len(data.Item) > 0 {
+		first, last := data.Item[0], data.Item[len(data.Item)-1]
+		for key, row := range map[string]map[string]json.RawMessage{"first": first, "last": last} {
+			dateValue, dateOK := hithinkParseFundamentalValue(row["date_ms"])
+			dateText, dateValid := hithinkDateFromMillis(dateValue, location)
+			evidence[key+"_date"] = dateText
+			evidence[key+"_date_valid"] = dateOK && dateValid
+			evidence[key+"_open_price_raw"] = string(row["open_price"])
+			evidence[key+"_close_price_raw"] = string(row["close_price"])
+			evidence[key+"_volume_raw"] = string(row["volume"])
+			evidence[key+"_turnover_raw"] = string(row["turnover"])
+		}
+	}
+	encoded, err := json.Marshal(evidence)
+	if err != nil {
+		t.Fatalf("marshal backward-adjusted raw evidence: %v", err)
+	}
+	t.Logf("LIVE_HITHINK_DAILY_BAR_BACKWARD_RAW %s", encoded)
+	if len(data.Item) == 0 {
+		t.Errorf("Hithink returned an empty raw backward-adjusted response for the requested window")
+	}
+}
+
+func liveAdjustmentReferenceKeyPaths(raw string) []string {
+	var value any
+	if err := json.Unmarshal([]byte(raw), &value); err != nil {
+		return nil
+	}
+	paths := make([]string, 0)
+	var visit func(any, string)
+	visit = func(node any, prefix string) {
+		switch current := node.(type) {
+		case map[string]any:
+			for key, child := range current {
+				path := key
+				if prefix != "" {
+					path = prefix + "." + key
+				}
+				lower := strings.ToLower(key)
+				if strings.Contains(lower, "reference") || strings.Contains(lower, "ref_date") || strings.Contains(lower, "refdate") {
+					paths = append(paths, path)
+				}
+				visit(child, path)
+			}
+		case []any:
+			for index, child := range current {
+				visit(child, fmt.Sprintf("%s[%d]", prefix, index))
+			}
+		}
+	}
+	visit(value, "")
+	sort.Strings(paths)
+	return paths
+}
+
+// TestLiveEastmoneyTencentAdjustmentReferenceEvidence captures a small real adjusted
+// window and records whether the provider response exposes an independent reference date.
+func TestLiveEastmoneyTencentAdjustmentReferenceEvidence(t *testing.T) {
+	if os.Getenv("MARKET_DATA_LIVE_EASTMONEY_TENCENT_ADJUSTMENT_TESTS") != "1" {
+		t.Skip("set MARKET_DATA_LIVE_EASTMONEY_TENCENT_ADJUSTMENT_TESTS=1 to query Eastmoney and Tencent adjusted K-lines")
+	}
+	const symbol = "600519.SH"
+	const startDate = "2026-10-13"
+	const endDate = "2026-11-12"
+	type probeCase struct {
+		provider   string
+		adjustment model.AdjustmentBasis
+	}
+	cases := []probeCase{
+		{provider: "eastmoney", adjustment: model.AdjustmentForward},
+		{provider: "eastmoney", adjustment: model.AdjustmentBackward},
+		{provider: "tencent", adjustment: model.AdjustmentForward},
+		{provider: "tencent", adjustment: model.AdjustmentBackward},
+	}
+	for _, tc := range cases {
+		capture := &liveProbeCapture{}
+		var bars []model.DailyBar
+		var err error
+		switch tc.provider {
+		case "eastmoney":
+			klineURL := "https://push2his.eastmoney.com/api/qt/stock/kline/get"
+			origin, originErr := EastmoneyHTTPOrigin(klineURL)
+			if originErr != nil {
+				t.Fatalf("resolve Eastmoney K-line origin: %v", originErr)
+			}
+			doer := &http.Client{
+				Timeout:       25 * time.Second,
+				Transport:     capture.transport(),
+				CheckRedirect: eastmoneyRedirectPolicy,
+			}
+			provider := NewEastmoneyConfigured(25*time.Second, "", klineURL, "").WithHTTPDoers(map[string]HTTPDoer{origin: doer})
+			bars, err = provider.FetchDailyBars(context.Background(), symbol, startDate, endDate, 100, tc.adjustment)
+		case "tencent":
+			doer := &http.Client{
+				Timeout:       25 * time.Second,
+				Transport:     capture.transport(),
+				CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse },
+			}
+			provider := NewTencentConfiguredWithHTTPDoers(25*time.Second, "", "", "", "", nil, doer, doer, nil)
+			bars, err = provider.FetchDailyBars(context.Background(), symbol, startDate, endDate, 100, tc.adjustment)
+		default:
+			t.Fatalf("unsupported provider %q", tc.provider)
+		}
+		if err != nil {
+			t.Fatalf("%s %s adjusted DailyBar request: %v", tc.provider, tc.adjustment, err)
+		}
+		if len(bars) == 0 {
+			t.Fatalf("%s %s returned no adjusted DailyBar rows", tc.provider, tc.adjustment)
+		}
+		if contractErr := liveProbeDailyContractError(bars, tc.provider, tc.provider, symbol, tc.adjustment, startDate, endDate, 100); contractErr != "" {
+			t.Fatalf("%s %s DailyBar contract: %s", tc.provider, tc.adjustment, contractErr)
+		}
+		methods := make([]string, 0, len(bars))
+		referenceDates := make([]string, 0, len(bars))
+		for _, bar := range bars {
+			if bar.AdjustmentMethod != "" && (len(methods) == 0 || methods[len(methods)-1] != bar.AdjustmentMethod) {
+				methods = append(methods, bar.AdjustmentMethod)
+			}
+			if bar.AdjustmentRefDate != "" && (len(referenceDates) == 0 || referenceDates[len(referenceDates)-1] != bar.AdjustmentRefDate) {
+				referenceDates = append(referenceDates, bar.AdjustmentRefDate)
+			}
+		}
+		responses := capture.snapshot()
+		if len(responses) == 0 {
+			t.Fatalf("%s %s returned bars without captured HTTP response evidence", tc.provider, tc.adjustment)
+		}
+		lastResponse := responses[len(responses)-1]
+		evidence := map[string]any{
+			"provider":                         tc.provider,
+			"symbol":                           symbol,
+			"adjustment":                       tc.adjustment,
+			"rows":                             len(bars),
+			"first_trade_date":                 bars[0].TradeDate,
+			"last_trade_date":                  bars[len(bars)-1].TradeDate,
+			"adjustment_methods":               methods,
+			"adjustment_reference_dates":       referenceDates,
+			"raw_response_reference_key_paths": liveAdjustmentReferenceKeyPaths(lastResponse.BodySample),
+			"raw_response_truncated":           lastResponse.BodyTruncated,
+			"http_responses":                   responses,
+		}
+		encoded, marshalErr := json.Marshal(evidence)
+		if marshalErr != nil {
+			t.Fatalf("marshal %s %s adjustment evidence: %v", tc.provider, tc.adjustment, marshalErr)
+		}
+		t.Logf("LIVE_ADJUSTMENT_REFERENCE_EVIDENCE %s", encoded)
+	}
+}
+
+func TestLiveHithinkCapabilities(t *testing.T) {
+	if os.Getenv("MARKET_DATA_LIVE_HITHINK_TESTS") != "1" {
+		t.Skip("set MARKET_DATA_LIVE_HITHINK_TESTS=1 to call Hithink Finance endpoints")
+	}
+	apiKey := os.Getenv("MARKET_DATA_HITHINK_API_KEY")
+	if apiKey == "" {
+		apiKey = os.Getenv("HITHINK_FINANCE_API_KEY")
+	}
+	if apiKey == "" {
+		t.Skip("Hithink live probe skipped: MARKET_DATA_HITHINK_API_KEY or HITHINK_FINANCE_API_KEY is not configured")
+	}
+	baseURL := os.Getenv("MARKET_DATA_HITHINK_BASE_URL")
+	client := NewHithinkConfigured(25*time.Second, baseURL, apiKey)
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Minute)
+	defer cancel()
+
+	now := time.Now().In(time.FixedZone("CST", 8*60*60))
+	startDate, endDate := optionalProbeDateRange(now)
+	const symbol = "600519.SH"
+	results := make([]optionalProviderProbeResult, 0, 14)
+	failures := make([]string, 0, 14)
+	detailsByCapability := make(map[string]map[string]any)
+
+	run := func(capability string, call func() (int, model.QualityStatus, []string, error)) {
+		started := time.Now()
+		rows, quality, notes, err := call()
+		item := optionalProviderProbeResult{Provider: "hithink", Capability: capability, Status: "passed", ElapsedMS: time.Since(started).Milliseconds(), Rows: rows, Quality: string(quality), QualityNote: notes}
+		if details, ok := detailsByCapability[capability]; ok {
+			item.Details = details
+		}
+		if err != nil {
+			_, safeMessage := liveProbeErrorSummary(err)
+			item.Status, item.Error = "failed", safeMessage
+			failures = append(failures, capability+": "+safeMessage)
+		}
+		results = append(results, item)
+	}
+
+	// daily-only 仅运行一次日线能力探测；客户端仍按接口返回条数递增 offset 读取分页，记录首次/重复 page、offset、row，发现重复即拒绝整次结果，不自动去重。
+	if os.Getenv("MARKET_DATA_LIVE_HITHINK_DAILY_ONLY") == "1" {
+		run("daily_bars_none", func() (int, model.QualityStatus, []string, error) {
+			bars, err := client.FetchDailyBars(ctx, symbol, startDate, endDate, 40, model.AdjustmentNone)
+			if err != nil {
+				return 0, "", nil, err
+			}
+			if len(bars) == 0 {
+				return 0, "", nil, errLiveProbeContract("daily_bars_none returned no rows in the recent date range")
+			}
+			if message := liveProbeDailyContractError(bars, "hithink", "hithink", symbol, model.AdjustmentNone, startDate, endDate, 40); message != "" {
+				return len(bars), "", nil, errLiveProbeContract(message)
+			}
+			return len(bars), bars[len(bars)-1].QualityStatus, bars[len(bars)-1].QualityReasons, nil
+		})
+		logOptionalProviderProbe(t, results, failures)
+		return
+	}
+
+	run("quote", func() (int, model.QualityStatus, []string, error) {
+		item, err := client.FetchQuote(ctx, symbol)
+		if err != nil {
+			return 0, "", nil, err
+		}
+		if item == nil || item.Symbol != symbol || item.Source != "hithink" || item.FetchedAt.IsZero() || item.CurrentPrice == nil {
+			return 0, "", nil, errLiveProbeContract("quote identity/source/fetched_at/current_price mismatch")
+		}
+		return 1, item.QualityStatus, item.QualityReasons, nil
+	})
+
+	for _, adjustment := range []model.AdjustmentBasis{
+		model.AdjustmentNone, model.AdjustmentForward, model.AdjustmentBackward,
+	} {
+		adjustment := adjustment
+		capability := "daily_bars_" + string(adjustment)
+		run(capability, func() (int, model.QualityStatus, []string, error) {
+			bars, err := client.FetchDailyBars(ctx, symbol, startDate, endDate, 40, adjustment)
+			if err != nil {
+				return 0, "", nil, err
+			}
+			if len(bars) == 0 {
+				return 0, "", nil, errLiveProbeContract(capability + " returned no rows in the recent date range")
+			}
+			if message := liveProbeDailyContractError(bars, "hithink", "hithink", symbol, adjustment, startDate, endDate, 40); message != "" {
+				return len(bars), "", nil, errLiveProbeContract(message)
+			}
+			if adjustment != model.AdjustmentNone {
+				for _, bar := range bars {
+					if bar.AdjustmentMethod != "hithink_api_"+string(adjustment) {
+						return len(bars), "", nil, errLiveProbeContract(capability + " adjustment method metadata mismatch")
+					}
+				}
+			}
+			return len(bars), bars[len(bars)-1].QualityStatus, bars[len(bars)-1].QualityReasons, nil
+		})
+	}
+
+	run("index_quotes", func() (int, model.QualityStatus, []string, error) {
+		item, err := client.FetchIndexQuotes(ctx)
+		if err != nil {
+			return 0, "", nil, err
+		}
+		if item == nil || item.Source != "hithink" || item.FetchedAt.IsZero() || len(item.Items) != len(hithinkCoreIndexDefinitions) {
+			return 0, "", nil, errLiveProbeContract("core index snapshot coverage mismatch")
+		}
+		return len(item.Items), item.QualityStatus, item.QualityReasons, nil
+	})
+
+	run("hot_rankings_popular", func() (int, model.QualityStatus, []string, error) {
+		item, err := client.FetchHotStocks(ctx, "popular", 20)
+		if err != nil {
+			return 0, "", nil, err
+		}
+		if item == nil || item.RankingType != "popular" || item.Source != "hithink" || item.FetchedAt.IsZero() || len(item.Items) == 0 {
+			return 0, "", nil, errLiveProbeContract("popular ranking identity/source/fetched_at/rows mismatch")
+		}
+		return len(item.Items), item.QualityStatus, item.QualityReasons, nil
+	})
+
+	run("valuations", func() (int, model.QualityStatus, []string, error) {
+		item, err := client.FetchValuations(ctx, []string{symbol})
+		if err != nil {
+			return 0, "", nil, err
+		}
+		if item == nil || item.Source != "hithink" || item.FetchedAt.IsZero() || len(item.RequestedSymbols) != 1 || item.RequestedSymbols[0] != symbol {
+			return 0, "", nil, errLiveProbeContract("valuations request/source/fetched_at mismatch")
+		}
+		valuationItems := make([]map[string]any, 0, len(item.Items))
+		for _, value := range item.Items {
+			valuationItems = append(valuationItems, map[string]any{
+				"symbol": value.Symbol, "code": value.Code, "name": value.Name,
+				"pe_ttm": value.PETTM, "pe_mrq": value.PEMRQ, "pe_static": value.PEStatic,
+				"pb_mrq": value.PBMRQ, "ps_ttm": value.PSTTM, "pcf_ttm": value.PCFTTM,
+				"turnover_rate_percent":       value.TurnoverRatePercent,
+				"float_turnover_rate_percent": value.FloatTurnoverRatePercent,
+				"volume_ratio":                value.VolumeRatio,
+				"dividend_yield_percent":      value.DividendYieldPercent,
+				"dividend_yield_ttm_percent":  value.DividendYieldTTMPercent,
+				"source":                      value.Source, "source_version": value.SourceVersion,
+				"fetched_at": value.FetchedAt, "quality_status": value.QualityStatus,
+				"quality_reasons": value.QualityReasons,
+			})
+		}
+		detailsByCapability["valuations"] = map[string]any{
+			"requested_symbols": item.RequestedSymbols, "missing_symbols": item.MissingSymbols,
+			"provider_report_date": item.ProviderReportDate, "provider_timestamp": item.ProviderTimestamp,
+			"source": item.Source, "source_version": item.SourceVersion, "fetched_at": item.FetchedAt,
+			"quality_status": item.QualityStatus, "quality_reasons": item.QualityReasons,
+			"items": valuationItems,
+		}
+		return len(item.Items), item.QualityStatus, item.QualityReasons, nil
+	})
+
+	tradeDate := endDate
+	run("trading_calendar", func() (int, model.QualityStatus, []string, error) {
+		item, err := client.FetchTradingCalendar(ctx, startDate, endDate)
+		if err != nil {
+			return 0, "", nil, err
+		}
+		if item == nil || item.Market != "cn_a_share" || item.Source != "hithink" ||
+			item.StartDate != startDate || item.EndDate != endDate || item.FetchedAt.IsZero() ||
+			item.TotalDays != len(item.Items) || len(item.Items) == 0 {
+			return 0, "", nil, errLiveProbeContract("trading_calendar identity/date-range/count/fetched_at mismatch")
+		}
+		for i := len(item.Items) - 1; i >= 0; i-- {
+			if item.Items[i].IsTradingDay {
+				tradeDate = item.Items[i].Date
+				break
+			}
+		}
+		return len(item.Items), item.QualityStatus, item.QualityReasons, nil
+	})
+
+	run("limit_up_pool", func() (int, model.QualityStatus, []string, error) {
+		item, err := client.FetchLimitPool(ctx, "up", tradeDate, 20)
+		if err != nil {
+			return 0, "", nil, err
+		}
+		if item == nil || item.PoolType != "up" || item.TradeDate != tradeDate ||
+			item.Source != "hithink" || item.FetchedAt.IsZero() || item.Total < len(item.Items) {
+			return 0, "", nil, errLiveProbeContract("limit_up_pool identity/date/count/fetched_at mismatch")
+		}
+		return len(item.Items), item.QualityStatus, item.QualityReasons, nil
+	})
+
+	run("dragon_tiger", func() (int, model.QualityStatus, []string, error) {
+		item, err := client.FetchDragonTiger(ctx, tradeDate, 1, 20)
+		if err != nil {
+			return 0, "", nil, err
+		}
+		if item == nil || item.TradeDate != tradeDate || item.Source != "hithink" ||
+			item.FetchedAt.IsZero() || item.Total < len(item.Items) || item.Returned != len(item.Items) {
+			return 0, "", nil, errLiveProbeContract("dragon_tiger identity/date/count/fetched_at mismatch")
+		}
+		return len(item.Items), item.QualityStatus, item.QualityReasons, nil
+	})
+
+	indexSymbol := ""
+	run("index_catalog_industry", func() (int, model.QualityStatus, []string, error) {
+		item, err := client.FetchIndexCatalog(ctx, "industry")
+		if err != nil {
+			return 0, "", nil, err
+		}
+		if item == nil || item.Tag != "industry" || item.Source != "hithink" ||
+			item.FetchedAt.IsZero() || item.Total != len(item.Items) || len(item.Items) == 0 {
+			return 0, "", nil, errLiveProbeContract("index_catalog identity/count/fetched_at mismatch")
+		}
+		indexSymbol = item.Items[0].Symbol
+		return len(item.Items), item.QualityStatus, item.QualityReasons, nil
+	})
+
+	run("index_constituents", func() (int, model.QualityStatus, []string, error) {
+		if indexSymbol == "" {
+			return 0, "", nil, errLiveProbeContract("index_constituents skipped because index catalog was unavailable")
+		}
+		item, err := client.FetchIndexConstituents(ctx, indexSymbol)
+		if err != nil {
+			return 0, "", nil, err
+		}
+		if item == nil || item.IndexSymbol != indexSymbol || item.Source != "hithink" ||
+			item.FetchedAt.IsZero() || item.Total != len(item.Items) || len(item.Items) == 0 {
+			return 0, "", nil, errLiveProbeContract("index_constituents identity/count/fetched_at mismatch")
+		}
+		return len(item.Items), item.QualityStatus, item.QualityReasons, nil
+	})
+
+	run("index_daily_bars", func() (int, model.QualityStatus, []string, error) {
+		if indexSymbol == "" {
+			return 0, "", nil, errLiveProbeContract("index_daily_bars skipped because index catalog was unavailable")
+		}
+		item, err := client.FetchIndexDailyBars(ctx, indexSymbol, startDate, endDate)
+		if err != nil {
+			return 0, "", nil, err
+		}
+		if item == nil || item.IndexSymbol != indexSymbol || item.Source != "hithink" ||
+			item.FetchedAt.IsZero() || item.StartDate != startDate || item.EndDate != endDate ||
+			item.Total != len(item.Items) || len(item.Items) == 0 {
+			return 0, "", nil, errLiveProbeContract("index_daily_bars identity/date-range/count/fetched_at mismatch")
+		}
+		for _, bar := range item.Items {
+			if bar.IndexSymbol != indexSymbol || bar.TradeDate < startDate || bar.TradeDate > endDate ||
+				bar.Open <= 0 || bar.High <= 0 || bar.Low <= 0 || bar.Close <= 0 || bar.Low > bar.High ||
+				bar.Open < bar.Low || bar.Open > bar.High || bar.Close < bar.Low || bar.Close > bar.High {
+				return len(item.Items), "", nil, errLiveProbeContract("index_daily_bars row contract mismatch")
+			}
+		}
+		return len(item.Items), item.QualityStatus, item.QualityReasons, nil
+	})
+
+	run("fundamentals", func() (int, model.QualityStatus, []string, error) {
+		item, err := client.FetchFundamentals(ctx, symbol, 2025, 4)
+		if err != nil {
+			return 0, "", nil, err
+		}
+		if item == nil || item.Symbol != symbol || item.Year != 2025 || item.Quarter != 4 ||
+			item.Source != "hithink" || item.FetchedAt.IsZero() {
+			return 0, "", nil, errLiveProbeContract("fundamentals identity/period/source/fetched_at mismatch")
+		}
+		sections := make([]map[string]any, 0, len(item.Sections))
+		for _, section := range item.Sections {
+			metrics := make([]map[string]any, 0, len(section.Metrics))
+			for _, metric := range section.Metrics {
+				metrics = append(metrics, map[string]any{
+					"key": metric.Key, "name": metric.Name, "value": metric.Value,
+					"unit": metric.Unit, "source_field": metric.SourceField,
+				})
+			}
+			sections = append(sections, map[string]any{
+				"category": section.Category, "report_date": section.ReportDate,
+				"publication_date": section.PublicationDate, "available_at": section.AvailableAt,
+				"has_data": section.HasData, "metrics": metrics,
+				"quality_status": section.QualityStatus, "quality_reasons": section.QualityReasons,
+			})
+		}
+		statementPublicationDates := make(map[string]string, 3)
+		publicationDateMismatch := false
+		for _, section := range item.Sections {
+			switch section.Category {
+			case "income_statement", "balance_sheet", "cash_flow_statement":
+				statementPublicationDates[section.Category] = section.PublicationDate
+				if section.PublicationDate != "2026-04-17" {
+					publicationDateMismatch = true
+				}
+			}
+		}
+		notes := append([]string(nil), item.QualityReasons...)
+		if publicationDateMismatch {
+			notes = append(notes, "official_2025_annual_report_publication_date_mismatch")
+		}
+		metricEvidence, metricMismatch := hithinkLiveAnnualStatementEvidence(item)
+		if metricMismatch {
+			notes = append(notes, "official_2025_annual_report_statement_metric_mismatch")
+		}
+		detailsByCapability["fundamentals"] = map[string]any{
+			"symbol": item.Symbol, "year": item.Year, "quarter": item.Quarter,
+			"source": item.Source, "source_version": item.SourceVersion, "fetched_at": item.FetchedAt,
+			"system_observed_at": item.SystemObservedAt, "has_data": item.HasData,
+			"quality_status": item.QualityStatus, "quality_reasons": item.QualityReasons,
+			"publication_date_evidence": map[string]any{
+				"expected": "2026-04-17",
+				"observed": statementPublicationDates,
+				"status":   map[bool]string{true: "mismatch", false: "matched"}[publicationDateMismatch],
+				"basis":    "贵州茅台 2025 年年度报告官方披露日期",
+			},
+			"official_metric_evidence": map[string]any{
+				"basis":  "贵州茅台 2025 年年度报告合并报表；仅适用于 600519.SH / 2025Q4 固定样本",
+				"status": map[bool]string{true: "mismatch", false: "matched"}[metricMismatch],
+				"items":  metricEvidence,
+			},
+			"sections": sections,
+		}
+		return len(item.Sections), item.QualityStatus, notes, nil
+	})
+	logOptionalProviderProbe(t, results, failures)
+}
+
+func TestLiveXueqiuHotRankings(t *testing.T) {
+	if os.Getenv("MARKET_DATA_LIVE_XUEQIU_TESTS") != "1" {
+		t.Skip("set MARKET_DATA_LIVE_XUEQIU_TESTS=1 to call Xueqiu ranking endpoints")
+	}
+	cookie := os.Getenv("MARKET_DATA_XUEQIU_COOKIE")
+	baseURL := os.Getenv("MARKET_DATA_XUEQIU_BASE_URL")
+	client := NewXueqiuConfigured(25*time.Second, baseURL, cookie)
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+
+	results := make([]optionalProviderProbeResult, 0, 2)
+	failures := make([]string, 0, 2)
+	for _, rankingType := range []string{"popular", "surge"} {
+		started := time.Now()
+		item, err := client.FetchHotStocks(ctx, rankingType, 20)
+		result := optionalProviderProbeResult{Provider: "xueqiu", Capability: "hot_rankings_" + rankingType, Status: "passed", ElapsedMS: time.Since(started).Milliseconds()}
+		if err != nil {
+			_, safeMessage := liveProbeErrorSummary(err)
+			result.Status, result.Error = "failed", safeMessage
+			failures = append(failures, rankingType+": "+safeMessage)
+		} else if item == nil || item.RankingType != rankingType || item.Source != "xueqiu" || item.FetchedAt.IsZero() || len(item.Items) == 0 {
+			result.Status, result.Error = "failed", "ranking identity/source/fetched_at/rows mismatch"
+			failures = append(failures, rankingType+": "+result.Error)
+		} else {
+			result.Rows = len(item.Items)
+			result.Quality = string(item.QualityStatus)
+			result.QualityNote = item.QualityReasons
+		}
+		results = append(results, result)
+	}
+	logOptionalProviderProbe(t, results, failures)
+}

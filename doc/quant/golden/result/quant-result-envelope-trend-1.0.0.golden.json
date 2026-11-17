@@ -1,0 +1,30 @@
+{
+  "schema_version": "1.0.0",
+  "result_id": "quant_result:sha256:3e79ef57af5ff29f07d169d38fca13349751bb8f62ac51cab2bbd96f2804d1dc",
+  "result_type": "trend",
+  "scope": "stock",
+  "security_id": "600000.SH",
+  "system_as_of": "2026-11-09T00:59:00Z",
+  "period": "20d",
+  "algorithm_version": "trend-algorithm.v1",
+  "parameter_fingerprint": "sha256:envelope-test-parameters",
+  "input_snapshot_refs": [
+    "snapshot:envelope-test"
+  ],
+  "quality_status": "valid",
+  "result_status": "completed",
+  "authorization_ref": "authorization-ref:current",
+  "payload_schema_version": "1.0.0",
+  "payload": {
+    "trend_code": "price_trend",
+    "direction": "unknown",
+    "phase": "emerging",
+    "strength": null,
+    "period": "20d",
+    "evidence_metrics": [],
+    "conflict_refs": [],
+    "quality_status": "valid",
+    "system_as_of": "2026-11-09T00:59:00Z",
+    "algorithm_version": "trend-algorithm.v1"
+  }
+}

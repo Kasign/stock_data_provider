@@ -1,0 +1,1 @@
+{"id":"resp-failed","object":"response","model":"qwen-local","status":"failed","output":[],"error":{"type":"server_error","code":"model_failed","message":"sensitive upstream detail"}}

@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:kasign:stock_data_provider:research:notification-event-envelope:1.0.0",
+  "title": "Research Notification Event Envelope Contract",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["event_id", "event_type", "schema_version", "source_module", "occurred_at", "published_at", "subject_ref", "idempotency_key", "correlation_id", "payload_fingerprint", "payload"],
+  "properties": {
+    "event_id": {"type": "string", "minLength": 1},
+    "event_type": {"const": "research.event.lifecycle_changed"},
+    "schema_version": {"const": "1.0.0"},
+    "source_module": {"const": "research"},
+    "occurred_at": {"type": "string", "format": "date-time"},
+    "published_at": {"type": "string", "format": "date-time"},
+    "subject_ref": {"type": "string", "minLength": 1},
+    "idempotency_key": {"type": "string", "minLength": 1},
+    "correlation_id": {"type": "string", "minLength": 1},
+    "payload_fingerprint": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "payload": {"$ref": "#/$defs/payload"}
+  },
+  "$defs": {
+    "payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_event_ref", "research_event_ref", "event_version", "previous_state", "current_state", "reason_code", "system_as_of", "changed_at"],
+      "properties": {
+        "source_event_ref": {"type": "string", "minLength": 1},
+        "research_event_ref": {"type": "string", "minLength": 1},
+        "event_version": {"type": "integer", "minimum": 1},
+        "previous_state": {"type": ["string", "null"], "enum": ["detected", "consolidating", "active", "materializing", "fading", "invalidated", "closed", null]},
+        "current_state": {"type": "string", "enum": ["detected", "consolidating", "active", "materializing", "fading", "invalidated", "closed"]},
+        "reason_code": {"type": ["string", "null"]},
+        "system_as_of": {"type": "string", "format": "date-time"},
+        "changed_at": {"type": "string", "format": "date-time"}
+      }
+    }
+  }
+}

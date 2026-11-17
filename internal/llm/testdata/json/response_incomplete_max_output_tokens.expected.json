@@ -1,0 +1,7 @@
+{
+  "response_id": "resp_fixture_003",
+  "status": "incomplete",
+  "output_items": [],
+  "model_actual": "fixture-model",
+  "incomplete_reason": "max_output_tokens"
+}

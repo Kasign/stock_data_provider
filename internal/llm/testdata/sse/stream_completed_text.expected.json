@@ -1,0 +1,13 @@
+{
+  "response_id": "resp_stream_001",
+  "status": "completed",
+  "sequence_number_status": "available",
+  "output_items": [{
+    "type": "message",
+    "item_id": "msg_stream_001",
+    "content_parts": [{ "type": "output_text", "text": "Fixture stream" }]
+  }],
+  "output_text": "Fixture stream",
+  "model_actual": "fixture-model",
+  "usage": { "input_tokens": 8, "output_tokens": 2, "total_tokens": 10, "source": "upstream" }
+}

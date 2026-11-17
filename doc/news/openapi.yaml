@@ -1,0 +1,142 @@
+openapi: 3.0.3
+info:
+  title: News Data API
+  version: 0.1.0-draft
+  description: |
+    未来 HTTP API 评估草案。当前没有新闻独立对外 API 计划，本文件中的 paths 不得注册或作为当前实现任务。
+    新闻模块作为 stock-analysis-server:8092 进程内业务模块，由同进程 Application 接口提供能力。
+    若未来既有 Server API 需要输出新闻数据，由该既有 API 负责认证、授权和限流；不新增新闻独立服务或独立入口。
+    本文件仅保留未来评估参考，不代表接口已经实现。
+servers:
+  - url: /
+tags:
+  - name: News
+    description: 未来可能的新闻 HTTP 契约（当前不注册、不对外提供）
+paths:
+  /api/v1/news:
+    get:
+      tags: [News]
+      summary: 查询已入库新闻
+      operationId: listNews
+      parameters:
+        - name: from
+          in: query
+          description: 查询起始时间，时区和使用的时间字段须在契约冻结时明确
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          description: 查询结束时间，时区和使用的时间字段须在契约冻结时明确
+          schema:
+            type: string
+            format: date-time
+        - name: symbol
+          in: query
+          description: 规范化证券代码，例如 600519.SH；当前不假设存在统一 security_id
+          schema:
+            type: string
+        - name: source_id
+          in: query
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: 查询成功；具体 envelope 待与现有 API 规范统一
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '400':
+          description: 参数错误
+        '401':
+          description: 未授权
+        '500':
+          description: 服务内部错误
+  /api/v1/news/search:
+    post:
+      tags: [News]
+      summary: 搜索候选新闻
+      operationId: searchNews
+      description: 未来候选接口；当前不注册。若未来由既有 Server API 承载，认证授权由该 API 负责。搜索默认只返回候选，不隐式入库。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [q]
+              properties:
+                q:
+                  type: string
+                  minLength: 1
+                from:
+                  type: string
+                  format: date-time
+                to:
+                  type: string
+                  format: date-time
+                persist:
+                  type: boolean
+                  default: false
+      responses:
+        '200':
+          description: 搜索结果；部分 Provider 失败语义待冻结
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '400':
+          description: 参数错误
+        '500':
+          description: 服务内部错误
+  /api/v1/news/{id}:
+    get:
+      tags: [News]
+      summary: 获取新闻详情
+      operationId: getNews
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 新闻详情
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '404':
+          description: 新闻不存在
+  /api/v1/news/sources:
+    get:
+      tags: [News]
+      summary: 查询新闻来源
+      operationId: listNewsSources
+      description: 未来候选接口；当前不注册。来源写操作和主动采集属于内部运维能力，不应直接暴露为公网接口。
+      responses:
+        '200':
+          description: 来源列表和状态
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true

@@ -1,0 +1,260 @@
+{
+  "schema_version": 1,
+  "workflow_run_id": 41042950111,
+  "source_commit": "720f2fc685376e29452ce3742ba398ff79089a03",
+  "captured_at": "2026-10-30T18:44:57+08:00",
+  "runner": "GitHub Actions hosted runner",
+  "requested_range": {
+    "start_date": "2026-09-25",
+    "end_date": "2026-10-29",
+    "limit": 8
+  },
+  "markets": [
+    {
+      "market": "CHINEXT",
+      "symbol": "300750.SZ",
+      "quotes": [
+        {
+          "source": "sina",
+          "source_version": "sina-finance-quote-v1",
+          "symbol": "300750.SZ",
+          "quote_time": "2026-10-30T07:35:45Z",
+          "volume_unit": "shares",
+          "amount_unit": "CNY",
+          "quality_status": "valid",
+          "quality_reasons": null
+        },
+        {
+          "source": "tencent",
+          "source_version": "tencent-finance-api-v1",
+          "symbol": "300750.SZ",
+          "quote_time": "2026-10-30T08:14:45Z",
+          "volume_unit": "shares",
+          "amount_unit": "CNY",
+          "quality_status": "degraded",
+          "quality_reasons": [
+            "volume_unit_inferred_from_turnover_metrics",
+            "volume_ratio_unsupported_by_tencent_quote_contract"
+          ]
+        }
+      ],
+      "daily_bars": [
+        {
+          "source": "sina",
+          "source_version": "sina-finance-kline-v1",
+          "adjustment_basis": "none",
+          "quality_status": "degraded",
+          "volume_unit": "shares",
+          "amount_unit": "unknown",
+          "quality_reasons": [
+            "amount_missing_from_provider",
+            "amount_unit_unknown_because_amount_missing",
+            "provider_amount_unavailable",
+            "provider_response_contract_warning",
+            "provider_symbol_not_echoed_by_kline_response"
+          ],
+          "bars": [
+            {
+              "trade_date": "2026-10-27",
+              "open": 238.8,
+              "high": 238.8,
+              "low": 232.67,
+              "close": 233,
+              "volume": 37504953,
+              "amount": null,
+              "quality_status": "degraded"
+            },
+            {
+              "trade_date": "2026-10-28",
+              "open": 233.34,
+              "high": 234,
+              "low": 228.6,
+              "close": 229.14,
+              "volume": 44387920,
+              "amount": null,
+              "quality_status": "degraded"
+            },
+            {
+              "trade_date": "2026-10-29",
+              "open": 226.86,
+              "high": 232.11,
+              "low": 225.45,
+              "close": 229.07,
+              "volume": 37482175,
+              "amount": null,
+              "quality_status": "degraded"
+            }
+          ]
+        },
+        {
+          "source": "tencent",
+          "source_version": "tencent-finance-api-v1",
+          "adjustment_basis": "none",
+          "quality_status": "degraded",
+          "volume_unit": "shares",
+          "amount_unit": "unknown",
+          "quality_reasons": [
+            "amount_missing_from_provider",
+            "amount_unit_unknown_because_amount_missing",
+            "tencent_daily_kline_has_no_verified_amount_field"
+          ],
+          "bars": [
+            {
+              "trade_date": "2026-10-27",
+              "open": 238.8,
+              "high": 238.8,
+              "low": 232.67,
+              "close": 233,
+              "volume": 37505000,
+              "amount": null,
+              "quality_status": "degraded"
+            },
+            {
+              "trade_date": "2026-10-28",
+              "open": 233.34,
+              "high": 234,
+              "low": 228.6,
+              "close": 229.14,
+              "volume": 44387900,
+              "amount": null,
+              "quality_status": "degraded"
+            },
+            {
+              "trade_date": "2026-10-29",
+              "open": 226.86,
+              "high": 232.11,
+              "low": 225.45,
+              "close": 229.07,
+              "volume": 37482200,
+              "amount": null,
+              "quality_status": "degraded"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "market": "STAR",
+      "symbol": "688981.SH",
+      "quotes": [
+        {
+          "source": "sina",
+          "source_version": "sina-finance-quote-v1",
+          "symbol": "688981.SH",
+          "quote_time": "2026-10-30T07:34:59Z",
+          "volume_unit": "shares",
+          "amount_unit": "CNY",
+          "quality_status": "valid",
+          "quality_reasons": null
+        },
+        {
+          "source": "tencent",
+          "source_version": "tencent-finance-api-v1",
+          "symbol": "688981.SH",
+          "quote_time": "2026-10-30T08:14:56Z",
+          "volume_unit": "shares",
+          "amount_unit": "CNY",
+          "quality_status": "degraded",
+          "quality_reasons": [
+            "volume_unit_inferred_from_turnover_metrics",
+            "volume_ratio_unsupported_by_tencent_quote_contract"
+          ]
+        }
+      ],
+      "daily_bars": [
+        {
+          "source": "sina",
+          "source_version": "sina-finance-kline-v1",
+          "adjustment_basis": "none",
+          "quality_status": "degraded",
+          "volume_unit": "shares",
+          "amount_unit": "unknown",
+          "quality_reasons": [
+            "amount_missing_from_provider",
+            "amount_unit_unknown_because_amount_missing",
+            "provider_amount_unavailable",
+            "provider_response_contract_warning",
+            "provider_symbol_not_echoed_by_kline_response"
+          ],
+          "bars": [
+            {
+              "trade_date": "2026-10-27",
+              "open": 102.77,
+              "high": 103.87,
+              "low": 99.91,
+              "close": 100,
+              "volume": 24807797,
+              "amount": null,
+              "quality_status": "degraded"
+            },
+            {
+              "trade_date": "2026-10-28",
+              "open": 103.42,
+              "high": 103.5,
+              "low": 99.9,
+              "close": 102,
+              "volume": 28098839,
+              "amount": null,
+              "quality_status": "degraded"
+            },
+            {
+              "trade_date": "2026-10-29",
+              "open": 102,
+              "high": 102,
+              "low": 99.5,
+              "close": 101,
+              "volume": 28429754,
+              "amount": null,
+              "quality_status": "degraded"
+            }
+          ]
+        },
+        {
+          "source": "tencent",
+          "source_version": "tencent-finance-api-v1",
+          "adjustment_basis": "none",
+          "quality_status": "degraded",
+          "volume_unit": "shares",
+          "amount_unit": "unknown",
+          "quality_reasons": [
+            "amount_missing_from_provider",
+            "amount_unit_unknown_because_amount_missing",
+            "tencent_daily_kline_has_no_verified_amount_field"
+          ],
+          "bars": [
+            {
+              "trade_date": "2026-10-27",
+              "open": 102.77,
+              "high": 103.87,
+              "low": 99.91,
+              "close": 100,
+              "volume": 24807797,
+              "amount": null,
+              "quality_status": "degraded"
+            },
+            {
+              "trade_date": "2026-10-28",
+              "open": 103.42,
+              "high": 103.5,
+              "low": 99.9,
+              "close": 102,
+              "volume": 28098839,
+              "amount": null,
+              "quality_status": "degraded"
+            },
+            {
+              "trade_date": "2026-10-29",
+              "open": 102,
+              "high": 102,
+              "low": 99.5,
+              "close": 101,
+              "volume": 28429754,
+              "amount": null,
+              "quality_status": "degraded"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

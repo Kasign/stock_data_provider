@@ -1,0 +1,14 @@
+{
+  "schema_version":"1.0.0",
+  "attempt_ref":"attempt_01",
+  "stage_ref":"stage_01",
+  "attempt_no":1,
+  "status":"running",
+  "lease_owner":"worker-01",
+  "lease_expires_at":"2026-11-06T01:05:00Z",
+  "fencing_token":1,
+  "started_at":"2026-11-06T01:00:00Z",
+  "finished_at":null,
+  "fault_ref":null,
+  "output_ref":null
+}

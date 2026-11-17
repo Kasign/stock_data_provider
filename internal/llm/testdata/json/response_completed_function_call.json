@@ -1,0 +1,14 @@
+{
+  "id": "resp_fixture_002",
+  "object": "response",
+  "model": "fixture-model",
+  "status": "completed",
+  "output": [{
+    "id": "fc_item_001",
+    "type": "function_call",
+    "status": "completed",
+    "call_id": "call_fixture_001",
+    "name": "lookup_quote",
+    "arguments": "{\"symbol\":\"600000.SH\"}"
+  }]
+}

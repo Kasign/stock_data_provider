@@ -1,0 +1,5 @@
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","sequence_number":10,"delta":"a"}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","sequence_number":12,"delta":"b"}

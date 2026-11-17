@@ -1,0 +1,152 @@
+# WebUI 真实 API 与配置边界
+
+更新时间：2026-11-12  
+代码核对基线：integration @ 46109c58d440327973a21d833f215928543a14b6（2026-11-17；WebUI 仍未接入 Owner Session）
+
+> 本文只记录当前请求封装、仓库可核对的路由事实和接入门禁。必须区分 OpenAPI 声明、Handler 注册、Root Server 挂载、部署可达和真实数据验收。
+
+## 1. Web API 原则
+
+1. 浏览器只访问 Root Server 对外 HTTP API，不访问模块内部 Repository、ApplicationPort 或 Provider。
+2. 不根据模块名称自行设计 URL、字段、枚举、游标和错误语义。
+3. 前端封装不代表服务端注册；Handler 注册不代表 Root Server 挂载；路由可达不代表 Provider 有权限或返回真实数据。
+4. Mock/Fixture 只证明前端行为，不证明真实服务端联调。
+5. 新 API 必须明确用户场景、调用时机、字段来源、权限、分页/超时/取消语义和验收证据。
+
+## 2. 当前服务配置与认证边界
+
+| 配置 | 当前行为 | 迁移目标 | 限制 |
+|---|---|---|---|
+| 行情 API 基础路径 | 浏览器配置代理路径 | Root Server Market Data Adapter | 以 Server 路由和部署验证为准 |
+| 行情 API Key | 迁移期由浏览器配置并用于行情请求 | Server 注入 Data 服务凭据 | 当前兼容实现不是目标安全模型 |
+| 分析 API 基础路径 | 使用分析兼容代理路径 | Root Server 注册 Researchflow 路由 | 需统一 Server 入口 |
+| 分析认证 | 当前分析路由使用 Owner Bearer；Web 不持有该凭据 | Web Session/Cookie + CSRF + 资源授权 | 不把 Owner Token 放入 localStorage，不匿名开放受保护接口 |
+
+行情健康检查使用 /health/live、/health/ready；分析服务使用 /healthz、/readyz。两组路径属于不同服务契约。
+
+## 3. 当前 Web 已封装的行情 API
+
+以下路径来自当前 API 封装及行情 Adapter 路由核对；仍需 Root Server 装配、部署可达和真实 Provider 验收，才能视为目标环境可用。
+
+| 能力 | 方法与路径 | 用途 |
+|---|---|---|
+| Provider 清单/运行诊断 | GET /api/v1/data-sources、GET /api/v1/data-sources/diagnostics | 能力声明与只读进程内请求统计 |
+| 主动探测/历史 | POST /api/v1/data-sources/probe、GET /api/v1/data-sources/probe/history | 用户显式触发探测、查询历史 |
+| 批量报价 | GET /api/v1/market/quotes | 查询明确传入的证券 |
+| 指数 | GET /api/v1/market/indices、index-catalog、indices/{symbol}/constituents、indices/{symbol}/daily | 指数快照、目录、成分和日线 |
+| 市场行情/活动 | GET /api/v1/market/breadth、sectors、stocks、sentiment、sentiment/history、hot-stocks、limit-pools、dragon-tiger、trading-calendar、session | 市场总览、全市场分页和市场活动 |
+| 个股行情/日线 | GET /api/v1/quotes/{symbol}、bars/{symbol}/daily、bundles/{symbol} | 单股报价、日线和组合行情 |
+| 个股资料 | GET /api/v1/stocks/{symbol}/profile、fundamentals、announcements、boards | 个股研究补充资料 |
+| 市场资金流 | GET /api/v1/market/capital-flow | Tushare 市场级资金流历史，依赖 Provider 权限 |
+| 个股资金流/筹码 | GET /api/v1/stocks/{symbol}/capital-flow、chip-distribution | 个股级资金流和筹码，不可替代市场级资金流 |
+
+完整参数、响应字段和函数名以当前 web/src/api.js、internal/marketdata/httpapi/server.go 与行情 OpenAPI 为准；本文不复制完整 Schema。
+
+## 4. 当前分析任务 API
+
+当前 Web 使用独立分析服务连接配置：
+- POST /api/v1/analysis/tasks：创建任务。
+- GET /api/v1/analysis/tasks/{task_id}：读取任务状态。
+- GET /api/v1/analysis/tasks/{task_id}/events：读取阶段事件。
+- GET /api/v1/analysis/runs/{run_id}：读取 Run 结果。
+
+字段契约以 doc/api/contracts/分析任务.openapi.yaml 为准。最近任务区只保存有限数量的浏览器任务引用，不是服务端完整历史。
+
+当前分析路由 Owner Bearer 与浏览器 Session 尚未形成可验收的认证闭环。服务端历史分页、模板、取消和综合结果接口未完成 Application API、Server 注册、认证和部署验证前，Web 不新增推测请求。
+
+### 4.1 旧分析 API 的认证差异（保持原有边界）
+
+旧 Analysis Task/Run 路由仍由 Root Server 的 Platform Bearer Router 保护，Owner Session 不会自动授权这些旧路由：
+
+- `web/src/api.js` 的通用 `request()` 使用 `credentials: "same-origin"`，但旧分析 API 函数没有发送 `Authorization: Bearer` 或 CSRF Header。
+- `internal/server/bootstrap/router.go` 仍将旧分析任务/Run、`/readyz` 和 `/diagnostics` 注册为 Owner Bearer 路由。
+- `web/default.conf.template` 的 `/analysis-api/` 代理不会注入长期 Owner Token；浏览器不得持有或保存 Owner Bearer。
+
+因此，Owner Session 路由可用不代表旧 Analysis API 已可由浏览器访问。旧 Analysis API 的退役和 Researchflow 新 API 接入，仍按 SRV-CTR-001 的 deferred 边界推进；不得把 `owner_session` 映射为 `owner_bearer`，不得把旧 Analysis API 当作 Researchflow 新契约。
+
+## 4.2 Owner Session 浏览器接入（代码已接入，部署待验收）
+
+Root Server 在 `OWNER_SESSION_ENABLED=true` 时，按 `doc/server/contracts/SRV-CTR-002-owner-session-http-api.md` 挂载以下接口；WebUI 已在 `web/src/api.js` 封装并由 `web/src/app.js` 接入设置中心：
+
+| 方法 | 路径 | WebUI 行为 | 认证 |
+|---|---|---|---|
+| POST | `/api/v1/owner/session` | 密码登录并建立 Session | anonymous + 严格 Origin/Host |
+| GET | `/api/v1/owner/session` | 查询当前登录态 | owner_session Cookie |
+| POST | `/api/v1/owner/session/csrf` | 页面刷新后恢复新的 CSRF Token | owner_session Cookie + 严格 Origin/Host |
+| DELETE | `/api/v1/owner/session` | 登出并撤销 Session | owner_session + CSRF |
+| POST | `/api/v1/owner/session/rotate` | 轮换 Session 与 CSRF Token | owner_session + CSRF |
+| PUT | `/api/v1/owner/password` | 修改密码并递增 CredentialVersion | owner_session + CSRF |
+
+### 当前实现事实
+
+- `web/src/api.js` 已封装登录、当前 Session、刷新后 CSRF 恢复、登出、Session 轮换和密码修改。
+- 请求统一使用 `credentials: "same-origin"`；CSRF Header 为 `X-CSRF-Token`，Token 只保存在 JS 模块运行时变量，不写入 localStorage/sessionStorage。
+- 登录与轮换响应校验 CSRF Token；Session 失效时清理内存 Token；密码修改成功后清理 Token，要求重新登录。
+- 行情 API Key 仅由行情请求携带；Owner Session 请求不携带行情 API Key，也不发送 Owner Bearer。
+- 设置中心已有登录、退出、密码修改界面；页面初始化时查询 Session 并通过专用 POST 接口恢复 CSRF。
+- 登录失败、Session 过期、服务端未启用、服务不可用和来源/CSRF 拒绝分别显示，不把未知状态报告为登录成功。
+- 旧 Analysis、`/readyz`、`/diagnostics` 仍保持 Owner Bearer 认证；Owner Session 不会自动解锁这些路由。
+
+### 当前代码验收证据
+
+- Integration CI Run [43999751873](https://github.com/Kasign/stock_data_provider/actions/runs/43999751873) 对精确 SHA `446cc1a65c307726a1171e1341d529452ea09f55` 为 success。
+- CI 覆盖根模块 gofmt/vet/test、News/Research/Researchflow 跨模块测试、Worker Bootstrap MariaDB/Redis 集成、go-core vet/test、Compose 配置校验、JavaScript 语法、WebUI 单测和 Web 镜像构建。
+- `web/tests/api.test.mjs` 覆盖同源 Cookie 凭据、CSRF 仅内存保存、登录/恢复/轮换/登出请求顺序、CSRF Header、密码 UTF-8 字节限制、密码修改后清理 Token，以及当前密码错误时保留有效 CSRF。
+- `web/tests/ui-contract.test.mjs` 覆盖登录表单、密码修改表单、退出入口、刷新恢复调用、CSRF 不写入浏览器存储，以及 Owner Session 与服务密钥管理边界。
+- 上述 CI 与测试只证明该 SHA 的代码和自动化行为，不证明目标服务器已部署或真实浏览器请求已穿过外部入口 Nginx。
+
+### 部署验收仍未完成
+
+1. 在目标 Compose 部署中确认 Web 容器 Nginx 的 `/analysis-api/` 代理实际指向 Root Server。
+2. 确认 `proxy_cookie_path /api /analysis-api/api;` 对登录 Set-Cookie、Session 轮换和登出清除 Cookie 均生效。
+3. 在 HTTPS 入口检查 HttpOnly、Secure、SameSite、Path、无 Domain 等属性；确认 Server 的 Public Origin 与外部入口一致。
+4. 使用真实浏览器验证登录、刷新后 CSRF 恢复、登出、密码修改后旧 Session 失效及重新登录。
+5. 单独确认可信代理链和来源 IP 解析配置；不能仅因 Nginx 传递了 `X-Forwarded-For` 就信任该头。
+
+当前结论：Owner Session WebUI 代码接入已完成，精确 SHA 的 Integration CI 已通过；目标环境 Nginx/Compose 端到端部署仍待验收。SRV-CTR-002 登记簿状态仍为 `freeze-ready`，不得写成已正式冻结。Researchflow 新业务 API 仍受 SRV-CTR-001 deferred 边界约束。
+## 5. 跨模块目标能力与接入状态
+
+| 领域 | Web 目标场景 | 前置条件 | 当前处理 |
+|---|---|---|---|
+| News | 新闻、来源、事件线索 | 公开查询边界、来源授权字段 | 未接入为正式页面数据 |
+| Research | Context、Evidence、Event、Claim、Hypothesis、Scenario | Research Application API；News-Research 只读 Evidence Query；来源授权/引用定位 | 个股行情/资料可用；结构化研究明确 not_integrated，本地笔记不是 Evidence |
+| Quant | 指标、因子、趋势、策略、回测、风险/评估 | Quant-Research DTO、Application API、PIT/质量/风险语义 | 当前仅本地派生指标和当前页筛选 |
+| Researchflow | Run/Stage/Attempt、模板、取消、历史、综合结果 | Application Service、HTTP/OpenAPI、Root Server DI/路由、Migration/Worker 运行时、Session/CSRF/资源授权 | 现有 Web 仅消费旧版 Task/Run；新 Researchflow HTTP 尚未注册，真实接入阻塞 |
+| LLM | 模型选择、结构化解释、受控生成 | LLM Gateway、Server 代理、凭据托管、权限和输出 Schema | 不在浏览器保存模型密钥 |
+| Notification | 订阅、渠道、投递历史 | Notification API、权限和投递状态契约 | 仅保留本地通知偏好 |
+| Portfolio/Alert/Report | 组合、规则、服务端报告 | 领域归属和持久化边界评审 | 不从本地功能推断服务端模块存在 |
+
+跨模块契约见 doc/整体任务规划/03-模块接口契约/。契约冻结不代表实现、Server 注册、部署或真实数据验收完成。
+
+## 6. 数据、诊断与安全约束
+
+- 质量、覆盖率、Freshness、来源时间和采集时间由服务端给出；前端不补算业务口径。
+- skipped、not_configured、not_supported 不得显示为健康/成功。
+- Evidence 展示来源、授权范围、事件时间、可用时间、采集时间及引用定位；缺字段显示未知。
+- Quant RiskDecision=block 是硬门禁，不能被 LLM 分数或 UI 覆盖。
+- Run 最终状态由 Researchflow 决定，LLM 流式输出只是过程。
+- 浏览器不存 Owner Token、模型密钥或第三方 Provider Key。
+- OpenAPI、Handler、Root Server 路由、部署和真实数据是独立验收项。
+
+## 7. 新增 API 准入模板
+
+新增 Web API 前必须明确：
+1. 用户场景和页面入口。
+2. 领域 Owner 与 Server 路由 Owner。
+3. 方法、路径、请求/响应 Schema、字段来源和单位。
+4. 身份认证、资源授权和数据来源授权。
+5. 分页、排序、超时、取消、幂等和错误语义。
+6. 空数据、跳过、降级、部分成功和不可比较的表达。
+7. 单元/契约/浏览器测试及真实部署/真实数据验收证据。
+
+不满足条件时标记“待契约/待服务端接入”，不写成已实现 API。
+
+## 8. Researchflow W2 首期输入边界（非公开 API）
+
+首期仅定义未来 Web 工作区的 CreateRun 输入责任，不代表 Researchflow HTTP API 已获准公开。`SRV-CTR-001` 仍为 deferred，Web 不得据此自行实现请求 URL 或 DTO。
+
+WebUI 只提交请求 Schema 版本、一次逻辑提交的幂等键、精确模板 ref/version、真实输入快照引用和符合模板 Parameter Schema 的 parameters。首期固定 current mode：WebUI 不提交 `system_as_of` 或 `deadline_at`；Server 从可信 Owner Session Principal 取得 CallerRef，从 MariaDB UTC 时钟生成 `system_as_of`，并按显式 Server Run Deadline 配置生成绝对 `deadline_at`。Request ID/Correlation ID 由 Server 生成或传播。
+
+同一幂等键重试必须复用原始请求意图。指纹包含 caller、操作、请求 Schema 版本、精确模板身份、规范化快照引用集合和 JCS 参数；排除服务端生成时间及追踪 ID。命中幂等记录必须先于时钟读取和模板解析，返回原 Run，不改变其 PIT/Deadline。
+
+首个 News Search 参数 Schema 的真实字段为 `query`（必填）、`limit`（必填，1–100）和 `query_dimension`（可选）；额外字段拒绝。此参数 Schema 不等于正式 Workflow Template 已发布，也不等于 HTTP API 已开放。

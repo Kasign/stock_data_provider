@@ -1,0 +1,65 @@
+{
+  "schema_version": "1.0.0",
+  "context_id": "ctx-001",
+  "context_version": 1,
+  "research_question": "分析证券 600000.SH 的趋势",
+  "scope": "stock",
+  "subject_refs": [
+    "600000.SH"
+  ],
+  "system_as_of": "2026-11-06T08:00:00Z",
+  "section_refs": [
+    {
+      "section_id": "stock_profile",
+      "section_version": "v1",
+      "source_owner": "data",
+      "source_refs": [
+        "data:snapshot:001"
+      ],
+      "evidence_refs": [],
+      "quality_status": "valid",
+      "required": true,
+      "included": true,
+      "assembled_at": "2026-11-06T08:00:00Z",
+      "system_as_of": "2026-11-06T08:00:00Z"
+    },
+    {
+      "section_id": "risk_review",
+      "section_version": "v1",
+      "source_owner": "research",
+      "source_refs": [],
+      "evidence_refs": [],
+      "quality_status": "unknown",
+      "required": false,
+      "included": false,
+      "assembled_at": "2026-11-06T08:00:00Z",
+      "system_as_of": "2026-11-06T08:00:00Z"
+    }
+  ],
+  "quality_summary": {
+    "status": "degraded",
+    "missing_required_count": 0,
+    "missing_optional_count": 1,
+    "conflict_count": 0,
+    "stale_count": 0,
+    "reason_codes": [
+      "optional_section_omitted"
+    ]
+  },
+  "included_sections": [
+    "stock_profile"
+  ],
+  "omitted_sections": [
+    {
+      "section_id": "risk_review",
+      "source_owner": "research",
+      "reason_code": "not_requested",
+      "required": false,
+      "source_refs": [],
+      "safe_message": "该研究请求未要求风险分区",
+      "retryable": false
+    }
+  ],
+  "builder_version": "research-context-v1",
+  "created_at": "2026-11-06T08:00:00Z"
+}

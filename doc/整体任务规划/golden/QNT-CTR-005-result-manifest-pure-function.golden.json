@@ -1,0 +1,26 @@
+{
+  "manifest": {
+    "result_id": "quant_result:sha256:f9f1af610091d827751ba4f338bf9217c6a8d7f952397da177afa83a058bc04f",
+    "manifest_fingerprint": "f9f1af610091d827751ba4f338bf9217c6a8d7f952397da177afa83a058bc04f",
+    "result_type": "indicator",
+    "schema_version": "1.0.0",
+    "payload_schema_version": "1.0.0",
+    "algorithm_version": "constant-rule.v1",
+    "parameter_fingerprint": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "system_as_of": "2026-11-10T00:00:00Z",
+    "input_snapshot_refs": [],
+    "result_fingerprint": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+  },
+  "fingerprint_input": {
+    "algorithm_version": "constant-rule.v1",
+    "input_snapshot_refs": [],
+    "parameter_fingerprint": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "payload_schema_version": "1.0.0",
+    "result_fingerprint": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "result_type": "indicator",
+    "schema_version": "1.0.0",
+    "system_as_of": "2026-11-10T00:00:00Z"
+  },
+  "canonical_json": "{\"algorithm_version\":\"constant-rule.v1\",\"input_snapshot_refs\":[],\"parameter_fingerprint\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"payload_schema_version\":\"1.0.0\",\"result_fingerprint\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\",\"result_type\":\"indicator\",\"schema_version\":\"1.0.0\",\"system_as_of\":\"2026-11-10T00:00:00Z\"}",
+  "expected_sha256": "f9f1af610091d827751ba4f338bf9217c6a8d7f952397da177afa83a058bc04f"
+}
