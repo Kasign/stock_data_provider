@@ -110,8 +110,8 @@ func (p *newsSearchIntegrationProvider) Search(ctx context.Context, request news
 	if request.Query == "expired-attempt-recovery" {
 		p.recoveryCalls.Add(1)
 		return []newsdomain.Candidate{{
-			Title: "Deterministic recovered News Stage candidate",
-			RawURL: "https://publisher.example.test/recovered-candidate",
+			Title:         "Deterministic recovered News Stage candidate",
+			RawURL:        "https://publisher.example.test/recovered-candidate",
 			PublisherName: "Integration Fixture Publisher",
 		}}, nil
 	}
