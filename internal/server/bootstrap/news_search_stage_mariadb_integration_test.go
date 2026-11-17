@@ -86,10 +86,15 @@ func (newsSearchIntegrationApplicability) Evaluate(context.Context, researchflow
 	return true, "", nil
 }
 
-type newsSearchIntegrationProvider struct{}
+type newsSearchIntegrationProvider struct {
+	calls atomic.Int32
+}
 
-func (newsSearchIntegrationProvider) Code() string { return "integration_fixture" }
-func (newsSearchIntegrationProvider) Search(context.Context, newsdomain.SearchRequest) ([]newsdomain.Candidate, error) {
+func (*newsSearchIntegrationProvider) Code() string { return "integration_fixture" }
+func (p *newsSearchIntegrationProvider) Search(_ context.Context, _ newsdomain.SearchRequest) ([]newsdomain.Candidate, error) {
+	if p.calls.Add(1) == 1 {
+		return nil, &newsapp.ProviderError{Code: newsapp.ProviderErrorRateLimited}
+	}
 	return []newsdomain.Candidate{{
 		Title:         "Deterministic News Stage integration candidate",
 		RawURL:        "https://publisher.example.test/integration-candidate",
@@ -176,8 +181,9 @@ func TestNewsSearchStageResearchflowMariaDBIntegration(t *testing.T) {
 		t.Fatalf("Run PIT/Deadline must be server-generated from one database instant: system_as_of=%s deadline_at=%s", created.Run.SystemAsOf, created.Run.DeadlineAt)
 	}
 
+	fixtureProvider := &newsSearchIntegrationProvider{}
 	composition, err := newNewsSearchStageCompositionWithProviders(newsapp.StaticProviderSet{
-		Providers: []newsapp.Provider{newsSearchIntegrationProvider{}},
+		Providers: []newsapp.Provider{fixtureProvider},
 	})
 	if err != nil {
 		t.Fatalf("创建真实 News Stage 适配组合失败: %v", err)
@@ -240,18 +246,51 @@ func TestNewsSearchStageResearchflowMariaDBIntegration(t *testing.T) {
 	if stage.Status != researchflowdomain.StageSucceeded || stage.OutputRef == nil || stage.QualitySummaryRef == nil {
 		t.Fatalf("News Search Stage 状态或输出引用不完整: %+v", stage)
 	}
-	var attemptRef string
-	if err := db.QueryRowContext(ctx, `SELECT attempt_ref FROM researchflow_attempts
-		WHERE run_ref = ? AND stage_ref = ? ORDER BY attempt_no DESC LIMIT 1`,
-		created.Run.Ref, stage.Ref).Scan(&attemptRef); err != nil {
-		t.Fatalf("读取 Runtime 创建的 Attempt 引用失败: %v", err)
-	}
-	attempt, err := repository.GetAttempt(ctx, attemptRef)
+	rows, err := db.QueryContext(ctx, `SELECT attempt_ref, attempt_no FROM researchflow_attempts
+		WHERE run_ref = ? AND stage_ref = ? ORDER BY attempt_no`, created.Run.Ref, stage.Ref)
 	if err != nil {
-		t.Fatalf("读取 Researchflow Attempt 失败: %v", err)
+		t.Fatalf("查询 Runtime Attempts 失败: %v", err)
 	}
-	if attempt.Status != researchflowdomain.AttemptSucceeded || attempt.OutputRef == nil || *attempt.OutputRef != *stage.OutputRef {
-		t.Fatalf("Attempt 与 Stage 输出引用不一致: %+v / %+v", attempt, stage)
+	type attemptIdentity struct {
+		ref string
+		no  int
+	}
+	attempts := make([]attemptIdentity, 0, 2)
+	for rows.Next() {
+		var item attemptIdentity
+		if err := rows.Scan(&item.ref, &item.no); err != nil {
+			_ = rows.Close()
+			t.Fatalf("读取 Runtime Attempt 身份失败: %v", err)
+		}
+		attempts = append(attempts, item)
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		t.Fatalf("遍历 Runtime Attempts 失败: %v", err)
+	}
+	if err := rows.Close(); err != nil {
+		t.Fatalf("关闭 Runtime Attempts 查询失败: %v", err)
+	}
+	if len(attempts) != 2 || attempts[0].no != 1 || attempts[1].no != 2 || stage.AttemptNo != 2 {
+		t.Fatalf("RateLimited 首次执行应触发一次重试，attempts=%+v stage=%+v", attempts, stage)
+	}
+	firstAttempt, err := repository.GetAttempt(ctx, attempts[0].ref)
+	if err != nil {
+		t.Fatalf("读取首次 Researchflow Attempt 失败: %v", err)
+	}
+	secondAttempt, err := repository.GetAttempt(ctx, attempts[1].ref)
+	if err != nil {
+		t.Fatalf("读取重试 Researchflow Attempt 失败: %v", err)
+	}
+	if firstAttempt.Status != researchflowdomain.AttemptFailed || firstAttempt.OutputRef != nil {
+		t.Fatalf("首次 RateLimited Attempt 状态不正确: %+v", firstAttempt)
+	}
+	if secondAttempt.Status != researchflowdomain.AttemptSucceeded || secondAttempt.OutputRef == nil ||
+		*secondAttempt.OutputRef != *stage.OutputRef {
+		t.Fatalf("重试 Attempt 与 Stage 输出引用不一致: %+v / %+v", secondAttempt, stage)
+	}
+	if fixtureProvider.calls.Load() != 2 {
+		t.Fatalf("News Provider 应执行首次请求与一次重试，实际调用=%d", fixtureProvider.calls.Load())
 	}
 	var outboxCount int
 	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM researchflow_outbox
