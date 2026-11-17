@@ -342,10 +342,18 @@ func TestCreateRunGeneratesCurrentPITAndAbsoluteDeadlineFromDatabaseClock(t *tes
 	now := time.Date(2026, 11, 17, 9, 30, 0, 0, time.UTC)
 	repo := &repositoryStub{}
 	service, err := newService(t, repo, &idsStub{}, &templatesStub{value: validTemplate()}, now)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	got, err := service.CreateRun(context.Background(), command(now))
-	if err != nil { t.Fatal(err) }
-	if !got.Run.SystemAsOf.Equal(now) { t.Fatalf("system_as_of = %s, want %s", got.Run.SystemAsOf, now) }
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.Run.SystemAsOf.Equal(now) {
+		t.Fatalf("system_as_of = %s, want %s", got.Run.SystemAsOf, now)
+	}
 	wantDeadline := now.Add(30 * time.Minute)
-	if !got.Run.DeadlineAt.Equal(wantDeadline) { t.Fatalf("deadline_at = %s, want %s", got.Run.DeadlineAt, wantDeadline) }
+	if !got.Run.DeadlineAt.Equal(wantDeadline) {
+		t.Fatalf("deadline_at = %s, want %s", got.Run.DeadlineAt, wantDeadline)
+	}
 }

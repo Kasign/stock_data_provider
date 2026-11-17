@@ -46,12 +46,12 @@ const (
 )
 
 type CreateRunCommand struct {
-	SchemaVersion        string          `json:"schema_version"`
-	IdempotencyKey       string          `json:"idempotency_key"`
-	TemplateRef          string          `json:"template_ref"`
-	TemplateVersion      string          `json:"template_version"`
-	InputSnapshotRefs    []string        `json:"input_snapshot_refs"`
-	Parameters           json.RawMessage `json:"parameters"`
+	SchemaVersion     string          `json:"schema_version"`
+	IdempotencyKey    string          `json:"idempotency_key"`
+	TemplateRef       string          `json:"template_ref"`
+	TemplateVersion   string          `json:"template_version"`
+	InputSnapshotRefs []string        `json:"input_snapshot_refs"`
+	Parameters        json.RawMessage `json:"parameters"`
 }
 
 type Run struct {
