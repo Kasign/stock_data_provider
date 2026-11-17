@@ -340,7 +340,7 @@ func (s *DataService) IndexQuotes(ctx context.Context) (*model.IndexQuoteSnapsho
 			if cached.QualityStatus == model.QualityDegraded {
 				cacheTTL = degradedCacheTTL(ttl)
 			}
-			if cacheEntryWithinTTL(cached.FetchedAt, cacheTTL, time.Now()) {
+			if cacheEntryWithinTTL(cached.FetchedAt, cacheTTL, s.nowUTC()) {
 				return &cached, true, nil
 			}
 		}
@@ -617,7 +617,7 @@ func (s *DataService) MarketBreadth(ctx context.Context) (*model.MarketBreadthSn
 			if cached.QualityStatus == model.QualityDegraded {
 				cacheTTL = degradedCacheTTL(ttl)
 			}
-			if cacheEntryWithinTTL(cached.FetchedAt, cacheTTL, time.Now()) {
+			if cacheEntryWithinTTL(cached.FetchedAt, cacheTTL, s.nowUTC()) {
 				return &cached, true, nil
 			}
 		}
@@ -1747,7 +1747,7 @@ func (s *DataService) StockBasic(ctx context.Context, rawSymbol string) (*model.
 			item.QualityReasons = appendReason(item.QualityReasons, "provider_source_missing_assumed_from_provider_name")
 		}
 		if item.FetchedAt.IsZero() {
-			item.FetchedAt = time.Now().UTC()
+			item.FetchedAt = s.nowUTC()
 		}
 		if item.SecurityTypeLabel == "" {
 			item.SecurityTypeLabel = map[int]string{1: "stock", 2: "index", 3: "other", 4: "convertible_bond"}[item.SecurityType]
@@ -1865,7 +1865,7 @@ func (s *DataService) SearchStocks(ctx context.Context, rawQuery string, limit i
 			snapshot.Query = query
 		}
 		if snapshot.FetchedAt.IsZero() {
-			snapshot.FetchedAt = time.Now().UTC()
+			snapshot.FetchedAt = s.nowUTC()
 		}
 		if snapshot.QualityStatus == "" {
 			snapshot.QualityStatus = model.QualityUnknown
@@ -2140,7 +2140,7 @@ func (s *DataService) StockBoards(ctx context.Context, rawSymbol string) (*model
 			item.QualityReasons = appendReason(item.QualityReasons, "provider_source_missing_assumed_from_provider_name")
 		}
 		if item.FetchedAt.IsZero() {
-			item.FetchedAt = time.Now().UTC()
+			item.FetchedAt = s.nowUTC()
 		}
 		for index := range item.Items {
 			boardSource := strings.TrimSpace(item.Items[index].Source)
@@ -2501,7 +2501,7 @@ func (s *DataService) ChipDistribution(ctx context.Context, rawSymbol string) (*
 		}
 
 		// fetched_at 表示服务收到回包的时刻，不信任上游同名字段。
-		item.FetchedAt = time.Now().UTC()
+		item.FetchedAt = s.nowUTC()
 		if item.QualityStatus == "" {
 			item.QualityStatus = model.QualityDegraded
 			item.QualityReasons = appendReason(item.QualityReasons, "provider_quality_status_missing")
@@ -2678,7 +2678,7 @@ func (s *DataService) CapitalFlow(ctx context.Context, rawSymbol string) (*model
 		}
 
 		// fetched_at 表示服务收到回包的时刻，不信任上游同名字段。
-		item.FetchedAt = time.Now().UTC()
+		item.FetchedAt = s.nowUTC()
 		if item.QualityStatus == "" {
 			item.QualityStatus = model.QualityDegraded
 			item.QualityReasons = appendReason(item.QualityReasons, "provider_quality_status_missing")
@@ -2832,7 +2832,7 @@ func (s *DataService) Quote(ctx context.Context, rawSymbol string) (*model.Quote
 			if symbolErr == nil && cachedSymbol == symbol {
 				q.Symbol = cachedSymbol
 			}
-			cacheNow := time.Now()
+			cacheNow := s.nowUTC()
 			if symbolErr == nil && cachedSymbol == symbol && hasIdentifiableSourceVersion(q.SourceVersion) && q.NormalizationVer == normalize.Version &&
 				serviceTimestampIsSane(q.FetchedAt, cacheNow) && serviceTimestampIsSane(q.NormalizedAt, cacheNow) &&
 				normalize.ValidateQuote(&q) == nil {
@@ -2858,7 +2858,7 @@ func (s *DataService) Quote(ctx context.Context, rawSymbol string) (*model.Quote
 	timeoutFailures := 0
 	var degradedFallback *model.Quote
 	var qualityFallback *model.Quote
-	fetchID := newFetchID()
+	fetchID := newFetchIDAt(s.nowUTC())
 	if len(s.quoteProviders) == 0 {
 		return nil, false, errors.New("no enabled quote provider")
 	}
@@ -2907,7 +2907,7 @@ func (s *DataService) Quote(ctx context.Context, rawSymbol string) (*model.Quote
 			appendReasonOnce(&q.QualityReasons, "provider_source_missing_assumed_from_provider_name")
 		}
 		// fetched_at 是服务接收到 Provider 回包的时间，不能信任上游同名字段。
-		receivedAt := time.Now().UTC()
+		receivedAt := s.nowUTC()
 		if strings.TrimSpace(q.Symbol) != "" {
 			providerSymbol, symbolErr := normalize.NormalizeSymbol(q.Symbol)
 			if symbolErr != nil || providerSymbol != symbol {
@@ -2944,8 +2944,8 @@ func (s *DataService) Quote(ctx context.Context, rawSymbol string) (*model.Quote
 			errs = append(errs, p.Name()+" failed contract validation: "+e.Error())
 			continue
 		}
-		applyQuoteFreshness(q, time.Now())
-		q.NormalizedAt = time.Now().UTC()
+		applyQuoteFreshness(q, s.nowUTC())
+		q.NormalizedAt = s.nowUTC()
 		if !quoteCacheEligible(q) {
 			s.breaker.QualityDegraded(breakerKey)
 			errs = append(errs, p.Name()+": quote not suitable as a fresh live snapshot: "+strings.Join(q.QualityReasons, ","))
@@ -3036,9 +3036,9 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 		// response blindly. Some quote endpoints use a distant sentinel end date.
 		// Canonicalizing the implicit end date also prevents cache entries from
 		// silently crossing the exchange-local date boundary.
-		end = time.Now().In(marketLocation()).Format("2006-01-02")
+		end = s.nowUTC().In(marketLocation()).Format("2006-01-02")
 	}
-	today := time.Now().In(marketLocation()).Format("2006-01-02")
+	today := s.nowUTC().In(marketLocation()).Format("2006-01-02")
 	if end > today {
 		return nil, false, nil, errors.New("end date must not be after today in Asia/Shanghai")
 	}
@@ -3057,7 +3057,7 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 		if json.Unmarshal(data, &v) == nil {
 			candidates := make([]model.DailyBar, 0, len(v.Bars))
 			contractMismatch := false
-			cacheNow := time.Now()
+			cacheNow := s.nowUTC()
 			cachedSource, cachedSourceVersion := "", ""
 			for _, bar := range v.Bars {
 				cachedSymbol, symbolErr := normalize.NormalizeSymbol(bar.Symbol)
@@ -3098,7 +3098,7 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 						contractMismatch = true
 					} else if adjustmentErr != nil {
 						contractMismatch = true
-					} else if dailyBarsCacheNeedsPostCloseRefresh(validated, time.Now()) {
+					} else if dailyBarsCacheNeedsPostCloseRefresh(validated, s.nowUTC()) {
 						s.logger.Info("daily-bar cache has today's partial candle after close; refreshing provider", "symbol", symbol, "trade_date", validated[len(validated)-1].TradeDate)
 					} else if coverageOK, coverageWarnings := s.dailyBarCoverageSufficient(ctx, start, end, limit, len(validated)); coverageOK {
 						applyDailyBarCoverageWarnings(validated, coverageWarnings)
@@ -3124,7 +3124,7 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 	var bestPartialWarnings []string
 	var bestDegraded []model.DailyBar
 	var bestDegradedWarnings []string
-	fetchID := newFetchID()
+	fetchID := newFetchIDAt(s.nowUTC())
 	if len(s.barProviders) == 0 {
 		return nil, false, nil, errors.New("no enabled daily-bar provider")
 	}
@@ -3153,7 +3153,7 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 			errs = append(errs, p.Name()+": "+safeError)
 			continue
 		}
-		receivedAt := time.Now().UTC()
+		receivedAt := s.nowUTC()
 		if len(bars) == 0 {
 			s.breaker.ContractFailure(breakerKey)
 			errs = append(errs, p.Name()+": empty daily-bar response without error")
@@ -3215,7 +3215,7 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 			bars[j].Source = p.Name()
 			bars[j].SourceVersion = strings.TrimSpace(bars[j].SourceVersion)
 			bars[j].RequestID = fetchID
-			isPartial, partialReason := s.currentDailyBarPartialState(ctx, bars[j].TradeDate, time.Now())
+			isPartial, partialReason := s.currentDailyBarPartialState(ctx, bars[j].TradeDate, s.nowUTC())
 			if isPartial {
 				bars[j].IsPartial = true
 				degradeQualityStatus(&bars[j].QualityStatus)
@@ -3257,7 +3257,7 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 			continue
 		}
 		warnings = append(warnings, adjustmentWarnings...)
-		normalizedAt := time.Now().UTC()
+		normalizedAt := s.nowUTC()
 		for index := range bars {
 			bars[index].NormalizedAt = normalizedAt
 		}
@@ -3434,7 +3434,7 @@ func (s *DataService) Bundle(ctx context.Context, rawSymbol string, lookback int
 	if err != nil {
 		return nil, err
 	}
-	if asOfProvided && asOf.After(time.Now()) {
+	if asOfProvided && asOf.After(s.nowUTC()) {
 		return nil, errors.New("as_of must not be in the future")
 	}
 	if lookback <= 0 {
@@ -3453,7 +3453,7 @@ func (s *DataService) Bundle(ctx context.Context, rawSymbol string, lookback int
 		// weekend or holiday. Fetch through the requested date, then remove that
 		// date's full-session candle when the cutoff is before market close.
 		excludeAsOfDate = localAsOf.Hour() < 15 || (localAsOf.Hour() == 15 && localAsOf.Minute() < 5)
-		age := time.Since(asOf)
+		age := s.nowUTC().Sub(asOf)
 		quoteAllowed = age >= 0 && age <= 2*time.Minute
 	}
 	outputLookback := lookback
@@ -3486,7 +3486,7 @@ func (s *DataService) Bundle(ctx context.Context, rawSymbol string, lookback int
 		bars = bars[len(bars)-outputLookback:]
 	}
 	bundle := &model.Bundle{Symbol: symbol, DailyBars: bars, Sources: map[string]string{}, Warnings: append([]string{}, warnings...), QualityStatus: model.QualityValid}
-	if asOfProvided && basis != model.AdjustmentNone && time.Since(asOf) > 5*time.Minute {
+	if asOfProvided && basis != model.AdjustmentNone && s.nowUTC().Sub(asOf) > 5*time.Minute {
 		bundle.Warnings = append(bundle.Warnings, "historical_adjusted_bars_may_use_current_corporate_action_factors; point_in_time_adjustment_not_verified")
 		bundle.QualityStatus = mergeBundleQualityStatus(bundle.QualityStatus, model.QualityDegraded)
 	}
@@ -3551,8 +3551,8 @@ func (s *DataService) Bundle(ctx context.Context, rawSymbol string, lookback int
 			bundle.Warnings = append(bundle.Warnings, "moving_average_history_insufficient")
 		}
 	}
-	bundle.SnapshotID = newFetchID()
-	bundle.FetchedAt = time.Now().UTC()
+	bundle.SnapshotID = newFetchIDAt(s.nowUTC())
+	bundle.FetchedAt = s.nowUTC()
 	if asOfProvided {
 		bundle.AnalysisReferenceTime = asOf.UTC()
 	} else {
@@ -3825,7 +3825,9 @@ func coherentStoredSeries(bars []model.DailyBar, basis model.AdjustmentBasis) ([
 	return best.bars, ""
 }
 
-func newFetchID() string { return time.Now().UTC().Format("20060102T150405.000000000Z") }
+func newFetchID() string { return platformtime.SystemClock{}.Now().Format("20060102T150405.000000000Z") }
+
+func newFetchIDAt(now time.Time) string { return now.UTC().Format("20060102T150405.000000000Z") }
 
 // serviceTimestampIsSane rejects missing/future service timestamps in persisted payloads.
 func serviceTimestampIsSane(value, now time.Time) bool {
@@ -4093,7 +4095,7 @@ func (s *DataService) DailyBarsAsOf(ctx context.Context, rawSymbol, start, end s
 	if err != nil {
 		return nil, nil, err
 	}
-	if asOf.IsZero() || asOf.After(time.Now().UTC()) {
+	if asOf.IsZero() || asOf.After(s.nowUTC()) {
 		return nil, nil, errors.New("daily-bar as_of must be a valid non-future timestamp")
 	}
 	if limit <= 0 {
