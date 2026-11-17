@@ -203,7 +203,6 @@ func (c *researchflowRuntimeComponent) run(ctx context.Context) {
 	}
 }
 
-
 // launchTask runs a blocking Application operation outside the scan loop.
 // The local slot bound prevents an unbounded goroutine backlog; inFlight prevents
 // repeated scans from launching the same durable candidate concurrently.

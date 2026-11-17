@@ -8,15 +8,15 @@ import (
 
 func TestResearchflowRuntimeLaunchTaskBoundsAndDeduplicatesWork(t *testing.T) {
 	component := &researchflowRuntimeComponent{
-		taskSlots: make(chan struct{}, 1),
+		taskSlots: make(chan struct{}, 2),
 		inFlight:  make(map[string]struct{}),
 	}
 	ctx := context.Background()
-	started := make(chan struct{})
+	started := make(chan struct{}, 2)
 	release := make(chan struct{})
 
 	if !component.launchTask(ctx, "run:one", func() {
-		close(started)
+		started <- struct{}{}
 		<-release
 	}) {
 		t.Fatal("first task was not launched")
@@ -27,9 +27,20 @@ func TestResearchflowRuntimeLaunchTaskBoundsAndDeduplicatesWork(t *testing.T) {
 		t.Fatal("first task did not start")
 	}
 	if component.launchTask(ctx, "run:one", func() {}) {
-		t.Fatal("duplicate task key was launched")
+		t.Fatal("duplicate task key was launched while a slot was available")
 	}
-	if component.launchTask(ctx, "run:two", func() {}) {
+	if !component.launchTask(ctx, "run:two", func() {
+		started <- struct{}{}
+		<-release
+	}) {
+		t.Fatal("second task within the local concurrency bound was not launched")
+	}
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("second task did not start")
+	}
+	if component.launchTask(ctx, "run:three", func() {}) {
 		t.Fatal("task beyond local concurrency bound was launched")
 	}
 
