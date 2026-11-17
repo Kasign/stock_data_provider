@@ -448,7 +448,6 @@ func TestSessionLifecycleChangePasswordRejectsWrongCurrentPassword(t *testing.T)
 	}
 }
 
-
 func TestSessionLifecycleChangePasswordRejectsOversizedPasswords(t *testing.T) {
 	service, credentials, _, _, audit := newLifecycleTestService(t, nil)
 	oversized := make([]byte, 1025)
