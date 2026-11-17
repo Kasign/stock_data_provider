@@ -17,12 +17,12 @@ func (s getRunIdentityStub) AuthenticatedCallerRef(context.Context) (string, err
 	return s.caller, s.err
 }
 func (getRunIdentityStub) OriginatingRequestID(context.Context) *string { return nil }
-func (getRunIdentityStub) CorrelationID(context.Context) string { return "" }
+func (getRunIdentityStub) CorrelationID(context.Context) string         { return "" }
 
 type getRunAuthorizerStub struct {
 	caller, run string
-	err error
-	calls int
+	err         error
+	calls       int
 }
 
 func (s *getRunAuthorizerStub) AuthorizeRunRead(_ context.Context, caller, run string) error {
@@ -30,7 +30,9 @@ func (s *getRunAuthorizerStub) AuthorizeRunRead(_ context.Context, caller, run s
 	s.caller, s.run = caller, run
 	return s.err
 }
-func (*getRunAuthorizerStub) AuthorizeRunCancellation(context.Context, string, string) error { return nil }
+func (*getRunAuthorizerStub) AuthorizeRunCancellation(context.Context, string, string) error {
+	return nil
+}
 
 func newGetRunService(t *testing.T, reader RunReader, authorizer *getRunAuthorizerStub) *GetRunService {
 	t.Helper()
@@ -81,9 +83,9 @@ func TestGetRunReturnsValidatedAggregate(t *testing.T) {
 
 func TestGetRunRejectsUnauthenticatedOrUnauthorizedCallerBeforeStorage(t *testing.T) {
 	for _, tc := range []struct {
-		name string
+		name     string
 		identity RequestIdentity
-		authErr error
+		authErr  error
 	}{
 		{name: "missing caller", identity: getRunIdentityStub{}},
 		{name: "identity error", identity: getRunIdentityStub{err: errors.New("identity unavailable")}},
@@ -94,8 +96,8 @@ func TestGetRunRejectsUnauthenticatedOrUnauthorizedCallerBeforeStorage(t *testin
 			authorizer := &getRunAuthorizerStub{err: tc.authErr}
 			service, err := NewGetRunService(tc.identity, authorizer, reader)
 			if err != nil {
-		t.Fatal(err)
-	}
+				t.Fatal(err)
+			}
 			_, err = service.GetRun(context.Background(), "run-1")
 			if err == nil {
 				t.Fatal("expected caller rejection")
