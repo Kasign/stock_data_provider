@@ -77,3 +77,23 @@ func TestValidateValuationSnapshotRejectsUnknownSourceVersion(t *testing.T) {
 		t.Fatalf("expected unknown source_version to be rejected, got %+v", report.Issues)
 	}
 }
+
+
+func TestValidateValuationSnapshotAtUsesProvidedClock(t *testing.T) {
+	snapshot := validValuationSnapshot()
+	now := time.Date(2026, 8, 19, 15, 0, 0, 0, time.UTC)
+	snapshot.FetchedAt = now
+	snapshot.ProviderTimestamp = &now
+	snapshot.ProviderReportDate = "2026-08-20"
+	report := ValidateValuationSnapshotAt(snapshot, []string{"600000.SH"}, now)
+	foundFutureDate := false
+	for _, issue := range report.Issues {
+		if issue.Field == "provider_report_date" && issue.Code == "future_date" {
+			foundFutureDate = true
+			break
+		}
+	}
+	if !foundFutureDate {
+		t.Fatalf("固定时钟下应报告未来的中国市场报告日期，issues=%+v", report.Issues)
+	}
+}

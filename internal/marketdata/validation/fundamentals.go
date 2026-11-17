@@ -6,11 +6,19 @@ import (
 	"strings"
 	"time"
 
+	"example.com/stock-analysis-flow/internal/marketdata/markettime"
 	"example.com/stock-analysis-flow/internal/marketdata/model"
+	platformtime "example.com/stock-analysis-flow/internal/platform/time"
 )
 
 // ValidateFundamentalsSnapshot reports field-level issues without changing provider data.
 func ValidateFundamentalsSnapshot(snapshot *model.FundamentalsSnapshot, requestedSymbol string, year, quarter int) Report {
+	return ValidateFundamentalsSnapshotAt(snapshot, requestedSymbol, year, quarter, platformtime.SystemClock{}.Now())
+}
+
+// ValidateFundamentalsSnapshotAt 使用调用方提供的 UTC 时刻执行确定性校验。
+func ValidateFundamentalsSnapshotAt(snapshot *model.FundamentalsSnapshot, requestedSymbol string, year, quarter int, now time.Time) Report {
+	now = now.UTC()
 	report := NewReport(DefaultMaxIssues)
 	add := func(field, providerField, code, expected, message string, severity Severity, row int) {
 		item := FieldIssue{Stage: StageValidate, Field: field, ProviderField: providerField, Code: code,
@@ -41,7 +49,7 @@ func ValidateFundamentalsSnapshot(snapshot *model.FundamentalsSnapshot, requeste
 	} else if !IsIdentifiableSourceVersion(snapshot.SourceVersion) {
 		add("source_version", "source_version", "unidentifiable", "identifiable provider schema/version", "fundamentals source version is an unknown placeholder", SeverityError, -1)
 	}
-	if snapshot.FetchedAt.IsZero() || snapshot.FetchedAt.After(time.Now().UTC().Add(5*time.Minute)) {
+	if snapshot.FetchedAt.IsZero() || snapshot.FetchedAt.After(now.Add(5*time.Minute)) {
 		add("fetched_at", "fetched_at", "invalid_timestamp", "non-zero timestamp not more than five minutes in the future", "fundamentals fetched_at is missing or in the future", SeverityError, -1)
 	}
 	if quarter < 1 || quarter > 4 || year < 2007 {
@@ -55,8 +63,8 @@ func ValidateFundamentalsSnapshot(snapshot *model.FundamentalsSnapshot, requeste
 	seen := make(map[string]bool, len(snapshot.Sections))
 	hasData := false
 	allValid := true
-	marketLocation := time.FixedZone("Asia/Shanghai", 8*60*60)
-	today := time.Now().In(marketLocation).Format("2006-01-02")
+	marketLocation := markettime.Location()
+	today := now.In(marketLocation).Format("2006-01-02")
 	for index, section := range snapshot.Sections {
 		row := index
 		if !allowed[section.Category] || seen[section.Category] {
@@ -93,7 +101,7 @@ func ValidateFundamentalsSnapshot(snapshot *model.FundamentalsSnapshot, requeste
 			}
 			if section.AvailableAt != nil {
 				availableDate := section.AvailableAt.In(marketLocation).Format("2006-01-02")
-				if section.AvailableAt.IsZero() || section.AvailableAt.After(time.Now().UTC()) || availableDate < section.ReportDate ||
+				if section.AvailableAt.IsZero() || section.AvailableAt.After(now) || availableDate < section.ReportDate ||
 					(section.PublicationDate != "" && availableDate != section.PublicationDate) {
 					add("sections.available_at", "available_at", "invalid_availability_time", "non-future timestamp consistent with report/publication date", "fundamentals availability timestamp is invalid or conflicts with publication date", SeverityError, row)
 				}

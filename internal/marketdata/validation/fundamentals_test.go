@@ -94,3 +94,19 @@ func TestValidateFundamentalsSnapshotRejectsUnknownSourceVersion(t *testing.T) {
 		t.Fatalf("expected unknown source_version to be rejected, got %+v", report.Issues)
 	}
 }
+
+
+func TestValidateFundamentalsSnapshotAtUsesProvidedClock(t *testing.T) {
+	snapshot := validFundamentalsFixture()
+	now := time.Date(2026, 8, 19, 15, 0, 0, 0, time.UTC)
+	snapshot.FetchedAt = now
+	availableAt := time.Date(2026, 8, 19, 16, 30, 0, 0, time.UTC)
+	for i := range snapshot.Sections {
+		snapshot.Sections[i].PublicationDate = "2026-08-20"
+		snapshot.Sections[i].AvailableAt = &availableAt
+	}
+	report := ValidateFundamentalsSnapshotAt(snapshot, "600036.SH", 2026, 2, now)
+	if !report.HasErrors() {
+		t.Fatal("未来的中国市场发布日期和 available_at 必须被拒绝")
+	}
+}
