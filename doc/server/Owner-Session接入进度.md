@@ -194,3 +194,17 @@ Server 内部已有：
 ### 下一步执行顺序
 
 先补齐 SRV-CTR-002 Schema/Golden/OpenAPI 并核对实现与契约逐项一致；再增加真实 MariaDB/Redis HTTP 生命周期集成测试；通过后接入 WebUI 登录、Session 恢复、CSRF 内存态、登出和密码修改。完成上述步骤前，旧 Analysis Bearer 路由保持原策略，Researchflow 浏览器业务路由不提前开放。
+
+
+## 2026-11-17 SRV-CTR-002 契约资产补齐
+
+依据既有 SRV-CTR-002 1.0.0 文本定义，没有改变接口路径、字段、认证矩阵或安全语义，补齐契约配套文件：
+
+- JSON Schema：登录请求、Session 签发响应、当前 Session 响应、CSRF 恢复响应、密码修改请求，共 5 份。
+- Golden：登录、当前 Session、CSRF 恢复、Session 轮换、登出、密码修改，共 6 份。
+- OpenAPI：`doc/server/openapi/owner-session.openapi.yaml`，覆盖六条接口及 Cookie/CSRF 安全方案。
+- OpenAPI Schema 相对引用指向 `doc/server/schema/SRV-CTR-002/`；Cookie/CSRF 原始值只以测试占位符表达，不记录任何真实凭证。
+
+契约登记簿状态仍为 `freeze-ready`，没有擅自改为 `frozen`。配套资产补齐不等于契约冻结审批，也不等于真实 MariaDB/Redis 生命周期或 WebUI 部署验收完成。
+
+下一项主流程工作：增加真实 MariaDB + Redis 的完整 HTTP 生命周期集成测试。测试通过后，再实现 WebUI 同源登录、页面刷新 CSRF 恢复、登出与密码修改。

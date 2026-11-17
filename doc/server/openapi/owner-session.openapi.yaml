@@ -17,7 +17,7 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: './schema/SRV-CTR-002/owner-login-request-1.0.0.schema.json' }
+            schema: { $ref: '../schema/SRV-CTR-002/owner-login-request-1.0.0.schema.json' }
       responses:
         '200':
           description: Session created; token is delivered only in HttpOnly cookie.
@@ -25,7 +25,7 @@ paths:
             Set-Cookie: { $ref: '#/components/headers/SessionCookie' }
           content:
             application/json:
-              schema: { $ref: './schema/SRV-CTR-002/session-issued-response-1.0.0.schema.json' }
+              schema: { $ref: '../schema/SRV-CTR-002/session-issued-response-1.0.0.schema.json' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '429': { $ref: '#/components/responses/RateLimited' }
@@ -42,7 +42,7 @@ paths:
             Set-Cookie: { $ref: '#/components/headers/SessionCookie' }
           content:
             application/json:
-              schema: { $ref: './schema/SRV-CTR-002/session-status-response-1.0.0.schema.json' }
+              schema: { $ref: '../schema/SRV-CTR-002/session-status-response-1.0.0.schema.json' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
     delete:
@@ -72,9 +72,11 @@ paths:
       responses:
         '200':
           description: A new in-memory CSRF token was issued.
+          headers:
+            Set-Cookie: { $ref: '#/components/headers/SessionCookie' }
           content:
             application/json:
-              schema: { $ref: './schema/SRV-CTR-002/csrf-refresh-response-1.0.0.schema.json' }
+              schema: { $ref: '../schema/SRV-CTR-002/csrf-refresh-response-1.0.0.schema.json' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
   /api/v1/owner/session/rotate:
@@ -93,7 +95,7 @@ paths:
             Set-Cookie: { $ref: '#/components/headers/SessionCookie' }
           content:
             application/json:
-              schema: { $ref: './schema/SRV-CTR-002/session-issued-response-1.0.0.schema.json' }
+              schema: { $ref: '../schema/SRV-CTR-002/session-issued-response-1.0.0.schema.json' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '409': { $ref: '#/components/responses/Conflict' }
@@ -110,7 +112,7 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: './schema/SRV-CTR-002/password-change-request-1.0.0.schema.json' }
+            schema: { $ref: '../schema/SRV-CTR-002/password-change-request-1.0.0.schema.json' }
       responses:
         '204':
           description: Password changed; previous credential-version sessions are invalid.
