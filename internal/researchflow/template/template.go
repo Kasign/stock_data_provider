@@ -9,11 +9,13 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"regexp"
 	"time"
 
 	"github.com/gowebpki/jcs"
 
 	"example.com/stock-analysis-flow/internal/researchflow/domain"
+	"example.com/stock-analysis-flow/internal/researchflow/resourcepolicy"
 )
 
 type PropagationPolicy struct {
@@ -88,12 +90,112 @@ type ResolvedTemplate struct {
 	AllowEmptyInputs      bool
 	OutputRegistryVersion string
 	ResourcePolicyRef     string
+	ResourcePolicy        resourcepolicy.Snapshot `json:"resource_policy_snapshot"`
 	ParameterSchema       ParameterSchemaSnapshot
 	Stages                []ResolvedStage
 	Excluded              []domain.ExcludedStage
 }
 
 var ErrInvalidTemplate = errors.New("invalid workflow template")
+
+var providerCodePattern = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}package template
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"sort"
+	"strings"
+	"time"
+
+	"github.com/gowebpki/jcs"
+
+	"example.com/stock-analysis-flow/internal/researchflow/domain"
+	"example.com/stock-analysis-flow/internal/researchflow/resourcepolicy"
+)
+
+type PropagationPolicy struct {
+	OnDegraded domain.Propagation `json:"on_degraded"`
+	OnSkipped  domain.Propagation `json:"on_skipped"`
+	OnFailed   domain.Propagation `json:"on_failed"`
+	OnTimedOut domain.Propagation `json:"on_timed_out"`
+	OnBlocked  domain.Propagation `json:"on_blocked"`
+}
+type BackoffPolicy struct {
+	Algorithm   string `json:"algorithm"`
+	BaseDelayMS int64  `json:"base_delay_ms"`
+	MaxDelayMS  int64  `json:"max_delay_ms"`
+}
+type RetryPolicy struct {
+	Ref                  string        `json:"retry_policy_ref"`
+	MaxAttempts          int           `json:"max_attempts"`
+	RetryableReasonCodes []string      `json:"retryable_reason_codes"`
+	Backoff              BackoffPolicy `json:"backoff_policy"`
+	AttemptTimeoutMS     int64         `json:"attempt_timeout_ms"`
+}
+type ApplicabilityRule struct {
+	RuleVersion string `json:"rule_version"`
+	RuleRef     string `json:"rule_ref"`
+}
+type StageDefinition struct {
+	Code          string            `json:"stage_code"`
+	Required      bool              `json:"required"`
+	Dependencies  []string          `json:"dependencies"`
+	Priority      int               `json:"priority"`
+	Applicability ApplicabilityRule `json:"applicability"`
+	Retry         RetryPolicy       `json:"retry_policy"`
+	Propagation   PropagationPolicy `json:"propagation"`
+	GateType      string            `json:"gate_type,omitempty"`
+}
+type WorkflowTemplate struct {
+	Ref                   string            `json:"template_ref"`
+	Version               string            `json:"version"`
+	RequiresHardRiskGate  bool              `json:"requires_hard_risk_gate"`
+	AllowEmptyInputs      bool              `json:"allow_empty_inputs"`
+	ParameterSchemaRef    string            `json:"parameter_schema_ref"`
+	OutputRegistryVersion string            `json:"output_registry_version"`
+	ResourcePolicyRef     string            `json:"resource_policy_ref"`
+	Stages                []StageDefinition `json:"stages"`
+	Fingerprint           string            `json:"fingerprint,omitempty"`
+}
+type ApplicabilityEvaluator interface {
+	Evaluate(context.Context, ApplicabilityRule, json.RawMessage) (bool, string, error)
+}
+type HardRiskGateRegistry interface{ Contains(stageCode string) bool }
+type ResolvedStage struct {
+	Definition    StageDefinition
+	Dependencies  []string
+	InitialStatus domain.StageStatus
+	ReasonCodes   []string
+}
+type ParameterSchemaSnapshot struct {
+	Ref         string
+	Version     string
+	Fingerprint string
+}
+
+type ParameterSchemaValidator interface {
+	Validate(context.Context, string, json.RawMessage) (ParameterSchemaSnapshot, error)
+}
+
+type ResolvedTemplate struct {
+	Ref                   string
+	Version               string
+	Fingerprint           string
+	RequiresHardRiskGate  bool
+	AllowEmptyInputs      bool
+	OutputRegistryVersion string
+	ResourcePolicyRef     string
+	ResourcePolicy        resourcepolicy.Snapshot `json:"resource_policy_snapshot"`
+	ParameterSchema       ParameterSchemaSnapshot
+	Stages                []ResolvedStage
+	Excluded              []domain.ExcludedStage
+}
+
+)
 
 const maxRetryDelayMS = int64(1<<63-1) / int64(time.Millisecond)
 
@@ -226,13 +328,14 @@ func Fingerprint(t WorkflowTemplate) (string, error) {
 	return hex.EncodeToString(sum[:]), nil
 }
 
-func resolvedFingerprint(templateFingerprint string, schema ParameterSchemaSnapshot) (string, error) {
+func resolvedFingerprint(templateFingerprint string, schema ParameterSchemaSnapshot, resourcePolicyFingerprint string) (string, error) {
 	payload := struct {
 		TemplateFingerprint        string `json:"template_fingerprint"`
 		ParameterSchemaRef         string `json:"parameter_schema_ref"`
 		ParameterSchemaVersion     string `json:"parameter_schema_version"`
 		ParameterSchemaFingerprint string `json:"parameter_schema_fingerprint"`
-	}{templateFingerprint, schema.Ref, schema.Version, schema.Fingerprint}
+		ResourcePolicyFingerprint string `json:"resource_policy_fingerprint"`
+	}{templateFingerprint, schema.Ref, schema.Version, schema.Fingerprint, resourcePolicyFingerprint}
 	raw, err := json.Marshal(payload)
 	if err != nil {
 		return "", fmt.Errorf("encode resolved template fingerprint: %w", err)
@@ -244,6 +347,37 @@ func resolvedFingerprint(templateFingerprint string, schema ParameterSchemaSnaps
 	sum := sha256.Sum256(canonical)
 	return hex.EncodeToString(sum[:]), nil
 }
+
+
+ // BindResourcePolicySnapshot binds the immutable policy definition to a resolved template.
+ // The dynamic Provider allowlist is persisted but deliberately excluded from the fingerprint.
+ func BindResourcePolicySnapshot(resolved ResolvedTemplate, snapshot resourcepolicy.Snapshot) (ResolvedTemplate, error) {
+	if snapshot.PolicyRef == "" || snapshot.PolicyRef != resolved.ResourcePolicyRef ||
+		len(snapshot.PolicyFingerprint) != 64 || snapshot.PolicyFingerprint != strings.ToLower(snapshot.PolicyFingerprint) ||
+		len(snapshot.AllowedProviderCodes) == 0 {
+		return ResolvedTemplate{}, fmt.Errorf("%w: resource policy snapshot identity or inventory is invalid", ErrInvalidTemplate)
+	}
+	if _, err := hex.DecodeString(snapshot.PolicyFingerprint); err != nil {
+		return ResolvedTemplate{}, fmt.Errorf("%w: resource policy fingerprint must be SHA-256 hex", ErrInvalidTemplate)
+	}
+	codes := append([]string(nil), snapshot.AllowedProviderCodes...)
+	for i, code := range codes {
+		if !providerCodePattern.MatchString(code) || (i > 0 && codes[i-1] >= code) {
+			return ResolvedTemplate{}, fmt.Errorf("%w: resource policy Provider Codes must be valid, unique and sorted", ErrInvalidTemplate)
+		}
+	}
+	snapshot.AllowedProviderCodes = codes
+	resolved.ResourcePolicy = snapshot
+	templateFingerprint := resolved.Fingerprint
+	// Resolve's initial fingerprint already binds template and parameter schema. Recompute
+	// from those stable components, adding only the immutable policy definition digest.
+	base, err := resolvedFingerprint(templateFingerprint, ParameterSchemaSnapshot{}, snapshot.PolicyFingerprint)
+	if err != nil {
+		return ResolvedTemplate{}, err
+	}
+	resolved.Fingerprint = base
+	return resolved, nil
+ }
 
 func cloneStageDefinition(stage StageDefinition) StageDefinition {
 	stage.Dependencies = append([]string(nil), stage.Dependencies...)
@@ -284,7 +418,7 @@ func Resolve(ctx context.Context, t WorkflowTemplate, parameters json.RawMessage
 	if err != nil {
 		return ResolvedTemplate{}, err
 	}
-	fingerprint, err := resolvedFingerprint(templateFingerprint, parameterSchema)
+	fingerprint, err := resolvedFingerprint(templateFingerprint, parameterSchema, "")
 	if err != nil {
 		return ResolvedTemplate{}, err
 	}

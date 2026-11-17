@@ -6,9 +6,11 @@ import (
 	"errors"
 	"testing"
 	"time"
+	"strings"
 
 	"example.com/stock-analysis-flow/internal/researchflow/domain"
 	"example.com/stock-analysis-flow/internal/researchflow/template"
+	"example.com/stock-analysis-flow/internal/researchflow/resourcepolicy"
 )
 
 type identityStub struct {
@@ -57,6 +59,14 @@ func (applicabilityStub) Evaluate(_ context.Context, _ template.ApplicabilityRul
 	return true, "", nil
 }
 
+type resourcePoliciesStub struct { snapshot resourcepolicy.Snapshot; err error; calls int }
+func (s *resourcePoliciesStub) Resolve(_ context.Context, ref string) (resourcepolicy.Snapshot, error) {
+	s.calls++
+	if s.err != nil { return resourcepolicy.Snapshot{}, s.err }
+	if s.snapshot.PolicyRef == "" { s.snapshot = resourcepolicy.Snapshot{PolicyRef: ref, PolicyFingerprint: strings.Repeat("c", 64), AllowedProviderCodes: []string{"bocha", "tavily"}} }
+	return s.snapshot, nil
+}
+
 type repositoryStub struct {
 	existing            *CreateRunResult
 	existingFingerprint string
@@ -87,7 +97,7 @@ func validTemplate() template.WorkflowTemplate {
 
 func newService(t *testing.T, repo *repositoryStub, ids *idsStub, templateReader *templatesStub, now time.Time) (*CreateRunService, error) {
 	t.Helper()
-	return NewCreateRunService(identityStub{caller: "caller_1"}, clockStub{now}, ids, templateReader, schemasStub{}, applicabilityStub{}, nil, repo)
+	return NewCreateRunService(identityStub{caller: "caller_1"}, clockStub{now}, ids, templateReader, schemasStub{}, applicabilityStub{}, nil, &resourcePoliciesStub{}, repo)
 }
 func command(now time.Time) domain.CreateRunCommand {
 	return domain.CreateRunCommand{SchemaVersion: "1.0.0", IdempotencyKey: "idem_1", TemplateRef: "daily", TemplateVersion: "1.0.0", SystemAsOf: now.Add(-time.Minute), DeadlineAt: now.Add(time.Hour), InputSnapshotRefs: []string{"snapshot_1"}, Parameters: json.RawMessage("{}")}
@@ -196,7 +206,7 @@ func TestCreateRunOverridesUntrustedTracingFields(t *testing.T) {
 	requestID := "trusted-request"
 	repo := &repositoryStub{}
 	reader := &templatesStub{value: validTemplate()}
-	service, err := NewCreateRunService(identityStub{caller: "caller_1", requestID: &requestID, correlation: "trusted-correlation"}, clockStub{now}, &idsStub{}, reader, schemasStub{}, applicabilityStub{}, nil, repo)
+	service, err := NewCreateRunService(identityStub{caller: "caller_1", requestID: &requestID, correlation: "trusted-correlation"}, clockStub{now}, &idsStub{}, reader, schemasStub{}, applicabilityStub{}, nil, &resourcePoliciesStub{}, repo)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -275,7 +285,7 @@ func TestCreateRunPersistsOptionalNonApplicableStageAsSkipped(t *testing.T) {
 	tmpl.Stages[1].Applicability.RuleRef = "optional-research"
 	repo := &repositoryStub{}
 	reader := &templatesStub{value: tmpl}
-	service, err := NewCreateRunService(identityStub{caller: "caller_1"}, clockStub{now}, &idsStub{}, reader, schemasStub{}, selectiveApplicabilityStub{"always": true}, nil, repo)
+	service, err := NewCreateRunService(identityStub{caller: "caller_1"}, clockStub{now}, &idsStub{}, reader, schemasStub{}, selectiveApplicabilityStub{"always": true}, nil, &resourcePoliciesStub{}, repo)
 	if err != nil {
 		t.Fatal(err)
 	}

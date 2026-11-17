@@ -12,6 +12,7 @@ import (
 	"github.com/gowebpki/jcs"
 
 	"example.com/stock-analysis-flow/internal/researchflow/domain"
+	"example.com/stock-analysis-flow/internal/researchflow/resourcepolicy"
 	"example.com/stock-analysis-flow/internal/researchflow/template"
 )
 
@@ -37,6 +38,10 @@ type IDGenerator interface {
 
 type TemplateRegistry interface {
 	Get(context.Context, string, string) (template.WorkflowTemplate, error)
+}
+
+type ResourcePolicyResolver interface {
+	Resolve(context.Context, string) (resourcepolicy.Snapshot, error)
 }
 
 type IdempotencyScope struct {
@@ -80,6 +85,7 @@ type CreateRunService struct {
 	schemas       template.ParameterSchemaValidator
 	applicability template.ApplicabilityEvaluator
 	gates         template.HardRiskGateRegistry
+	resourcePolicies ResourcePolicyResolver
 	runs          RunRepository
 }
 
@@ -91,15 +97,17 @@ func NewCreateRunService(
 	schemas template.ParameterSchemaValidator,
 	applicability template.ApplicabilityEvaluator,
 	gates template.HardRiskGateRegistry,
+	resourcePolicies ResourcePolicyResolver,
 	runs RunRepository,
 ) (*CreateRunService, error) {
 	if identity == nil || clock == nil || ids == nil || templates == nil || schemas == nil ||
-		applicability == nil || runs == nil {
+		applicability == nil || resourcePolicies == nil || runs == nil {
 		return nil, errors.New("create run service dependencies are incomplete")
 	}
 	return &CreateRunService{
 		identity: identity, clock: clock, ids: ids, templates: templates,
-		schemas: schemas, applicability: applicability, gates: gates, runs: runs,
+		schemas: schemas, applicability: applicability, gates: gates,
+		resourcePolicies: resourcePolicies, runs: runs,
 	}, nil
 }
 
@@ -157,6 +165,14 @@ func (s *CreateRunService) CreateRun(ctx context.Context, command domain.CreateR
 	resolved, err := template.Resolve(ctx, tmpl, command.Parameters, s.schemas, s.applicability, s.gates)
 	if err != nil {
 		return CreateRunResult{}, fmt.Errorf("resolve workflow template: %w", err)
+	}
+	resourceSnapshot, err := s.resourcePolicies.Resolve(ctx, resolved.ResourcePolicyRef)
+	if err != nil {
+		return CreateRunResult{}, fmt.Errorf("resolve Researchflow resource policy: %w", err)
+	}
+	resolved, err = template.BindResourcePolicySnapshot(resolved, resourceSnapshot)
+	if err != nil {
+		return CreateRunResult{}, fmt.Errorf("bind Researchflow resource policy snapshot: %w", err)
 	}
 	runRef, err := s.ids.NewRef(ctx, "run")
 	if err != nil {
