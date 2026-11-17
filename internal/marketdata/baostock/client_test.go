@@ -223,7 +223,7 @@ func TestQueryAdjustmentFactorsHandlesLoginQueryAndLogout(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	client := NewClient(Config{Host: host, Port: port, ConnectTimeout: time.Second, RequestTimeout: time.Second, Clock: baoStockFixedClock{now: fixedNow}})
+	client := NewClient(Config{Host: host, Port: port, ConnectTimeout: time.Second, RequestTimeout: time.Second})
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	rows, err := client.QueryAdjustmentFactors(ctx, "sh.600036", "2025-01-01", "2025-12-31")
@@ -336,7 +336,7 @@ func TestQueryDailyKLinesHandlesLoginCompressedQueryAndLogout(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	client := NewClient(Config{Host: host, Port: port, ConnectTimeout: time.Second, RequestTimeout: time.Second})
+	client := NewClient(Config{Host: host, Port: port, ConnectTimeout: time.Second, RequestTimeout: time.Second, Clock: baoStockFixedClock{now: fixedNow}}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
