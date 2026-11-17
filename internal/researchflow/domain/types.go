@@ -50,12 +50,8 @@ type CreateRunCommand struct {
 	IdempotencyKey       string          `json:"idempotency_key"`
 	TemplateRef          string          `json:"template_ref"`
 	TemplateVersion      string          `json:"template_version"`
-	SystemAsOf           time.Time       `json:"system_as_of"`
-	DeadlineAt           time.Time       `json:"deadline_at"`
 	InputSnapshotRefs    []string        `json:"input_snapshot_refs"`
 	Parameters           json.RawMessage `json:"parameters"`
-	OriginatingRequestID *string         `json:"originating_request_id"`
-	CorrelationID        string          `json:"correlation_id"`
 }
 
 type Run struct {
