@@ -332,10 +332,7 @@ func parseNeteaseQuoteTime(raw string) *time.Time {
 	if raw == "" {
 		return nil
 	}
-	loc, err := time.LoadLocation("Asia/Shanghai")
-	if err != nil {
-		loc = time.FixedZone("CST", 8*60*60)
-	}
+	loc := providerMarketLocation()
 	for _, layout := range []string{"2006/01/02 15:04:05", "2006-01-02 15:04:05", time.RFC3339} {
 		var parsed time.Time
 		var parseErr error
@@ -678,10 +675,7 @@ func neteaseCode(symbol string) (string, error) {
 }
 
 func neteaseDateRange(startDate, endDate string, limit int, now time.Time) (time.Time, time.Time, error) {
-	loc, err := time.LoadLocation("Asia/Shanghai")
-	if err != nil {
-		loc = time.FixedZone("CST", 8*60*60)
-	}
+	loc := providerMarketLocation()
 	localNow := now.In(loc)
 	end := time.Date(localNow.Year(), localNow.Month(), localNow.Day(), 0, 0, 0, 0, loc).AddDate(0, 0, -1)
 	if strings.TrimSpace(endDate) != "" {

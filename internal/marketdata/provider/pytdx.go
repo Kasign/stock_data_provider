@@ -246,10 +246,7 @@ func (p *Pytdx) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endDat
 	if start.After(end) {
 		return nil, errors.New("Pytdx start date must not be after end date")
 	}
-	loc, err := time.LoadLocation("Asia/Shanghai")
-	if err != nil {
-		loc = time.FixedZone("CST", 8*60*60)
-	}
+	loc := providerMarketLocation()
 	today := time.Now().In(loc).Format("2006-01-02")
 	if end.Format("2006-01-02") > today {
 		return nil, errors.New("Pytdx end date must not be after today in Asia/Shanghai")

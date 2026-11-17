@@ -627,10 +627,7 @@ func (p *TickFlow) FetchMarketBreadth(ctx context.Context) (*model.MarketBreadth
 	}
 
 	fetchedAt := time.Now().UTC()
-	location, err := time.LoadLocation("Asia/Shanghai")
-	if err != nil {
-		location = time.FixedZone("CST", 8*60*60)
-	}
+	location := providerMarketLocation()
 	snapshot := &model.MarketBreadthSnapshot{
 		Market: "cn_a_share", TotalSecurities: universe.SymbolCount, CoveredSecurities: len(quotesBySymbol),
 		ExcludedNonAShareCount: len(excluded),
@@ -991,10 +988,7 @@ func (p *TickFlow) FetchSectorRankings(ctx context.Context, rawCategory string, 
 	quotesBySymbol := make(map[string]tickflowQuotePayload, len(quotes))
 	reportDate := ""
 	fetchedAt := time.Now().UTC()
-	location, err := time.LoadLocation("Asia/Shanghai")
-	if err != nil {
-		location = time.FixedZone("CST", 8*60*60)
-	}
+	location := providerMarketLocation()
 	timestampIncomplete := false
 	for _, quote := range quotes {
 		symbol, supported, normalizeErr := tickflowClassifyUniverseSymbol(quote.Symbol)
@@ -1219,10 +1213,7 @@ func (p *TickFlow) FetchDailyBars(ctx context.Context, rawSymbol, startDate, end
 	if start.After(end) {
 		return nil, errors.New("TickFlow start date must not be after end date")
 	}
-	loc, err := time.LoadLocation("Asia/Shanghai")
-	if err != nil {
-		loc = time.FixedZone("CST", 8*60*60)
-	}
+	loc := providerMarketLocation()
 	if end.Format("2006-01-02") > time.Now().In(loc).Format("2006-01-02") {
 		return nil, errors.New("TickFlow end date must not be after today in Asia/Shanghai")
 	}

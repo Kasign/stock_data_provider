@@ -262,10 +262,7 @@ func (p *Tencent) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 		}
 	}
 	// 日期边界和区间错误必须在发起上游请求前拒绝，避免浪费调用额度并防止未来日期进入日 K 链路。
-	loc, locErr := time.LoadLocation("Asia/Shanghai")
-	if locErr != nil {
-		loc = time.FixedZone("CST", 8*60*60)
-	}
+	loc := providerMarketLocation()
 	today := time.Now().In(loc).Format("2006-01-02")
 	if start != "" && start > today {
 		return nil, errors.New("Tencent start date must not be after today in Asia/Shanghai")
