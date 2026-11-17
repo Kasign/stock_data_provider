@@ -469,6 +469,7 @@ func TestNewsSearchStageResearchflowMariaDBIntegration(t *testing.T) {
 	}
 	if recoveredFirstAttempt.Status != researchflowdomain.AttemptTimedOut ||
 		recoveredSecondAttempt.Status != researchflowdomain.AttemptSucceeded ||
+		recoveredSecondAttempt.FencingToken <= recoveredFirstAttempt.FencingToken ||
 		recoveredSecondAttempt.OutputRef == nil ||
 		recoveredLoaded.Stages[0].OutputRef == nil ||
 		*recoveredSecondAttempt.OutputRef != *recoveredLoaded.Stages[0].OutputRef {
