@@ -1038,7 +1038,6 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 			defer wg.Done()
 			item := model.ProviderProbeItem{Provider: job.provider, Capability: job.capability, AdjustmentBasis: job.adjustmentBasis, Status: "failed", QualityStatus: model.QualityUnknown}
 			elapsedStarted := time.Now()
-			checkedAt := s.nowUTC()
 			select {
 			case sem <- struct{}{}:
 			case <-ctx.Done():
