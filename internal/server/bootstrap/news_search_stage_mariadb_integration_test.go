@@ -180,6 +180,36 @@ func TestNewsSearchStageResearchflowMariaDBIntegration(t *testing.T) {
 	if created.Run.SystemAsOf.IsZero() || created.Run.DeadlineAt.Sub(created.Run.SystemAsOf) != 2*time.Minute {
 		t.Fatalf("Run PIT/Deadline must be server-generated from one database instant: system_as_of=%s deadline_at=%s", created.Run.SystemAsOf, created.Run.DeadlineAt)
 	}
+	deadlineCreateRun, err := researchflowapplication.NewCreateRunService(
+		newsSearchIntegrationIdentity{}, clock, time.Millisecond, ids, templateRegistry, parameterValidator,
+		newsSearchIntegrationApplicability{}, nil, newsSearchIntegrationResourcePolicyResolver{}, repository,
+	)
+	if err != nil {
+		t.Fatalf("创建 Deadline 集成 CreateRun Service 失败: %v", err)
+	}
+	deadlineCreated, err := deadlineCreateRun.CreateRun(ctx, researchflowdomain.CreateRunCommand{
+		SchemaVersion: "1.0.0", IdempotencyKey: "news-search-stage-deadline-integration",
+		TemplateRef: workflowTemplate.Ref, TemplateVersion: workflowTemplate.Version,
+		InputSnapshotRefs: []string{},
+		Parameters:        json.RawMessage("{\"query\":\"deadline\",\"query_dimension\":\"market\",\"limit\":10}"),
+	})
+	if err != nil {
+		t.Fatalf("创建短 Deadline Researchflow Run 失败: %v", err)
+	}
+	for {
+		now, clockErr := clock.NowUTC(ctx)
+		if clockErr != nil {
+			t.Fatalf("读取数据库 UTC 时间等待 Deadline 到期失败: %v", clockErr)
+		}
+		if !now.Before(deadlineCreated.Run.DeadlineAt) {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			t.Fatalf("等待测试 Run Deadline 到期失败: %v", ctx.Err())
+		case <-time.After(time.Millisecond):
+		}
+	}
 
 	fixtureProvider := &newsSearchIntegrationProvider{}
 	composition, err := newNewsSearchStageCompositionWithProviders(newsapp.StaticProviderSet{
@@ -216,18 +246,23 @@ func TestNewsSearchStageResearchflowMariaDBIntegration(t *testing.T) {
 		}
 	}()
 
-	// 通过生产周期扫描器完成候选发现、Scheduler 派发、Worker 执行和 Run Finalization。
+	// 通过生产周期扫描器完成正常 Run 的候选发现、调度、执行和 Finalization，
+	// 同时让已过期 Run 走 Deadline Scanner / Deadline Finalizer 路径。
 	for {
-		loaded, loadErr := repository.GetRun(ctx, created.Run.Ref)
+		normalRun, loadErr := repository.GetRun(ctx, created.Run.Ref)
 		if loadErr != nil {
-			t.Fatalf("轮询 Researchflow Runtime Run 状态失败: %v", loadErr)
+			t.Fatalf("轮询正常 Researchflow Runtime Run 状态失败: %v", loadErr)
 		}
-		if loaded.Run.Status.Terminal() {
+		expiredRun, loadErr := repository.GetRun(ctx, deadlineCreated.Run.Ref)
+		if loadErr != nil {
+			t.Fatalf("轮询 Deadline Researchflow Runtime Run 状态失败: %v", loadErr)
+		}
+		if normalRun.Run.Status.Terminal() && expiredRun.Run.Status.Terminal() {
 			break
 		}
 		select {
 		case <-ctx.Done():
-			t.Fatalf("Researchflow Runtime 未在截止时间内完成 Run: %v", ctx.Err())
+			t.Fatalf("Researchflow Runtime 未在截止时间内完成正常与 Deadline Run: %v", ctx.Err())
 		case <-time.After(100 * time.Millisecond):
 		}
 	}
@@ -235,6 +270,24 @@ func TestNewsSearchStageResearchflowMariaDBIntegration(t *testing.T) {
 	loaded, err := repository.GetRun(ctx, created.Run.Ref)
 	if err != nil {
 		t.Fatalf("读取 Researchflow Runtime 完成后的 Run 失败: %v", err)
+	}
+	deadlineLoaded, err := repository.GetRun(ctx, deadlineCreated.Run.Ref)
+	if err != nil {
+		t.Fatalf("读取 Deadline Runtime 完成后的 Run 失败: %v", err)
+	}
+	if deadlineLoaded.Run.Status != researchflowdomain.RunFailed ||
+		deadlineLoaded.Run.TerminationReason != "deadline_exceeded" ||
+		deadlineLoaded.Run.ResultSummaryRef == nil || len(deadlineLoaded.Stages) != 1 ||
+		deadlineLoaded.Stages[0].Status != researchflowdomain.StageTimedOut {
+		t.Fatalf("超期 Run 未走 Deadline Finalizer 正确终止: run=%+v stages=%+v", deadlineLoaded.Run, deadlineLoaded.Stages)
+	}
+	var deadlineOutboxCount int
+	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM researchflow_outbox
+		WHERE run_ref = ? AND event_type = 'researchflow.run.terminal'`, deadlineCreated.Run.Ref).Scan(&deadlineOutboxCount); err != nil {
+		t.Fatalf("读取 Deadline 终态 Outbox 失败: %v", err)
+	}
+	if deadlineOutboxCount != 1 {
+		t.Fatalf("Deadline Finalization 应原子生成一条终态 Outbox，实际=%d", deadlineOutboxCount)
 	}
 	if loaded.Run.Status != researchflowdomain.RunSucceeded || loaded.Run.ResultSummaryRef == nil {
 		t.Fatalf("Researchflow Runtime 未完成正常 Run Finalization: %+v", loaded.Run)
