@@ -328,7 +328,7 @@ func TestCreateRunFailsClosedWhenResourcePolicyCannotResolve(t *testing.T) {
 	repo := &repositoryStub{}
 	reader := &templatesStub{value: validTemplate()}
 	resolver := &resourcePoliciesStub{err: errors.New("no configured providers")}
-	service, err := NewCreateRunService(identityStub{caller: "caller_1"}, clockStub{now}, &idsStub{}, reader, schemasStub{}, applicabilityStub{}, nil, resolver, repo)
+	service, err := NewCreateRunService(identityStub{caller: "caller_1"}, clockStub{now}, 30*time.Minute, &idsStub{}, reader, schemasStub{}, applicabilityStub{}, nil, resolver, repo)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -153,11 +153,6 @@ func (s *CreateRunService) CreateRun(ctx context.Context, command domain.CreateR
 	if tmpl.Ref != command.TemplateRef || tmpl.Version != command.TemplateVersion {
 		return CreateRunResult{}, ErrTemplateVersionMismatch
 	}
-	now, err := s.clock.NowUTC(ctx)
-	if err != nil {
-		return CreateRunResult{}, fmt.Errorf("read database UTC clock: %w", err)
-	}
-	now = now.UTC()
 	if err := domain.ValidateCreateRunCommand(command, tmpl.AllowEmptyInputs); err != nil {
 		return CreateRunResult{}, err
 	}
