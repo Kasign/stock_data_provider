@@ -79,4 +79,3 @@ func TestMariaDBDatabaseClockUsesDatabaseUTC(t *testing.T) {
 		t.Fatalf("database clock returned %s; expected UTC timestamp between %s and %s", got, before, after)
 	}
 }
-
