@@ -3,7 +3,7 @@
 - 分支：`feat/researchflow`
 - 代码：`internal/researchflow/**`
 - 任务前缀：FLOW
-- 当前状态：领域状态机、MySQL 核心事务、Worker、Scheduler、固定数量 WorkerPool、Deadline/Attempt/取消恢复与 Run Finalization 均已实现；`integration` 已将正式 News Search Template、Owner 内部用例和 Worker-only Runtime 接入 Server Lifecycle。当前 Runtime 周期扫描、并发执行与优雅关闭已具备生产装配代码，但真实 MariaDB 端到端 Run 生命周期、崩溃恢复与多进程容量验收仍需补齐。生产 StageExecutor 当前只覆盖 News Search Provider。
+- 当前状态：领域状态机、MySQL 核心事务、Worker、Scheduler、固定数量 WorkerPool、Deadline/Attempt/取消恢复与 Run Finalization 均已实现；`integration` 已将正式 News Search Template、Owner 内部用例和 Worker-only Runtime 接入 Server Lifecycle。当前 Runtime 周期扫描、并发执行与优雅关闭已具备生产装配代码；真实 MariaDB 已覆盖正常成功、Provider Retry、Deadline 和无在途 Attempt 的用户取消终态路径。进程崩溃恢复、在途取消 Fencing、多进程容量与 Outbox Relay 实际投递仍需补齐。生产 StageExecutor 当前只覆盖 News Search Provider。
 
 Researchflow 是研究应用编排层，通过 Data、News、Quant、Research、LLM 的公开 Application Port 编排研究流程。Notification 不作为同步 DAG Stage；Run 终态 CAS 成功后按 INT-CTR-001 写本地 Outbox。它拥有 Run/Stage/Attempt 状态，不拥有其他模块内部领域规则。Platform Task Runner 只提供执行基础设施，不替代 Researchflow 业务状态机。
 
@@ -47,7 +47,7 @@ FLOW-CTR-004 的通用 Envelope / Registry 已接入 Worker 成功/降级提交�
 
 - `integration` 已装配 Researchflow Worker-only Runtime：正式 Template 发布、Scheduler、WorkerPool、Deadline、过期 Attempt、取消恢复、Run Finalization 和终态 Outbox Relay 均已注册到 Server Lifecycle；Outbox Relay 先启动、Runtime 后启动，关闭时按逆序先停 Runtime 再停 Relay。
 - Runtime 的调度和过期 Attempt 恢复任务已按本地 Worker 并发上限做有界异步派发；扫描循环不等待 Stage 执行完成，重复候选通过进程内 in-flight key 去重，Stop 会先取消扫描/执行上下文并等待任务退出，再关闭 WorkerPool。跨进程容量仍由 MariaDB ClaimAttempt 事务兜底。
-- 最新代码 SHA `ef5e471b09511d8de017e8577b4c1ec29ee4c48f` 的 Integration CI Run [44084307957](https://github.com/Kasign/stock_data_provider/actions/runs/44084307957) 全量 success。真实 MariaDB Runtime 集成测试已覆盖正常 Run：候选扫描、Scheduler、Worker、Stage Output、ResultSummary、终态 Outbox；Retry、Deadline、用户取消、崩溃恢复和跨进程容量仍待验收。
+- 最新代码 SHA `0623b3f65876be56658d2443686cca6b281644bf` 的 Integration CI Run [44086825786](https://github.com/Kasign/stock_data_provider/actions/runs/44086825786) 全量 success。真实 MariaDB Runtime 集成测试已覆盖正常成功、RateLimited 后一次 Retry 成功、Deadline 到期失败、用户取消后 Cancelled Finalization；上述终态均验证 ResultSummary 与唯一 terminal Outbox。进程崩溃恢复、在途取消 Fencing、多进程容量和 Outbox Relay 实际投递仍待验收。
 - `StageExecutor` 是注入端口，Data/News/Quant/Research/LLM 的生产 Adapter 尚未在本分支闭环。
 - Worker Pool 是模块内有界执行协程池，不是持久化队列；周期扫描与池生命周期由 Server 驱动。跨 Worker 的 Run 并发和全局 Worker 上限由 ClaimAttempt 数据库事务兜底。
 - Go 测试、Race、Vet、真实 MariaDB、进程崩溃恢复和跨模块端到端验收必须按实际 SHA 记录，不以测试文件存在代替通过证据。
@@ -193,3 +193,15 @@ Server 已在 Owner Session 启用且 Researchflow Capacity 显式配置时，�
 - 该测试发现并修复状态聚合的空切片克隆问题：非 nil 空 ExcludedStages 经 append(nil, empty...) 变成 nil，导致 Storage 拒绝完整性校验。修复后 normal aggregation 与 cancellation aggregation 都保持非 nil 空数组。
 - 精确代码 SHA `ef5e471b09511d8de017e8577b4c1ec29ee4c48f` 的 Integration CI Run [44084307957](https://github.com/Kasign/stock_data_provider/actions/runs/44084307957) 全量 success。
 - 尚未覆盖：Retry 重新执行、Deadline 扫描与终止、用户取消和 Cancellation Recovery、进程中断后的 Expired Attempt Recovery、多 Worker 进程争抢全局 Claim 容量，以及 Outbox Relay 实际发送/重试。
+
+
+## 2026-11-17 Researchflow Runtime 四类终态路径验收
+
+- 精确代码 SHA `0623b3f65876be56658d2443686cca6b281644bf` 的 Integration CI Run [44086825786](https://github.com/Kasign/stock_data_provider/actions/runs/44086825786) 全量 success。
+- 同一 MariaDB Runtime 集成用例通过生产周期扫描器验证四类路径：
+  1. 正常成功：Scheduler → Worker → Stage Output → Run Finalization。
+  2. Retry：首次 Provider RateLimited，Attempt 1 失败并保留输出证据；按精确 reason code 重试一次，Attempt 2 成功。
+  3. Deadline：创建时固化短 Deadline，等数据库 UTC 到期后启动 Runtime；Deadline Scanner 先终止 Stage，Deadline Finalizer 将 Run 置为 Failed。
+  4. 用户取消：Run 尚未开始执行时提交 CancelRun，Runtime 通过 Finalization Candidate Scanner 和 Cancellation Finalizer 将 Run 置为 Cancelled。
+- 四类路径都验证 ResultSummary 引用及 terminal Outbox 原子写入。Provider 使用确定性 Fixture，测试不访问外部服务。
+- 尚未验收：在途 Attempt 用户取消后的 Worker Context 停止确认与 Lease Fencing；进程崩溃后 ExpiredAttemptScanner 重新 Claim；多 Worker 进程的数据库全局 Capacity 竞争；Outbox Relay 对终态事件的实际投递、失败重试和幂等重复处理。
