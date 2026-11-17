@@ -284,3 +284,104 @@ func TestOwnerSessionHTTPRejectsLoginOriginMismatch(t *testing.T) {
 		t.Fatalf("cross-origin login status=%d body=%s", response.Code, response.Body.String())
 	}
 }
+
+
+func TestOwnerSessionHTTPRotateAndChangePassword(t *testing.T) {
+	credentials := &ownerHTTPTestCredentials{credential: platformsecurity.OwnerCredential{
+		Subject: "owner", PasswordHash: "hash:correct", CredentialVersion: 1,
+	}}
+	sessions := &ownerHTTPTestSessions{records: make(map[string]platformsecurity.SessionRecord)}
+	handler := newOwnerHTTPTestHandler(t, sessions, credentials)
+
+	login := httptest.NewRequest(http.MethodPost, "https://stocks.example.com/api/v1/owner/session", strings.NewReader(`{"password":"correct"}`))
+	login.Header.Set("Content-Type", "application/json")
+	login.Header.Set("Origin", "https://stocks.example.com")
+	login.RemoteAddr = "192.0.2.10:4321"
+	loginResponse := httptest.NewRecorder()
+	handler.ServeHTTP(loginResponse, login)
+	if loginResponse.Code != http.StatusOK {
+		t.Fatalf("login status=%d body=%s", loginResponse.Code, loginResponse.Body.String())
+	}
+	loginCookies := loginResponse.Result().Cookies()
+	if len(loginCookies) != 1 {
+		t.Fatalf("login cookie count=%d", len(loginCookies))
+	}
+	var loginBody ownerSessionResponse
+	if err := json.Unmarshal(loginResponse.Body.Bytes(), &loginBody); err != nil || loginBody.CSRFToken == "" {
+		t.Fatalf("login response missing CSRF token: %v", err)
+	}
+	oldDigest, err := platformsecurity.SessionTokenDigest(loginCookies[0].Value)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rotate := httptest.NewRequest(http.MethodPost, "https://stocks.example.com/api/v1/owner/session/rotate", nil)
+	rotate.AddCookie(loginCookies[0])
+	rotate.Header.Set("Origin", "https://stocks.example.com")
+	rotate.Header.Set("X-CSRF-Token", loginBody.CSRFToken)
+	rotateResponse := httptest.NewRecorder()
+	handler.ServeHTTP(rotateResponse, rotate)
+	if rotateResponse.Code != http.StatusOK {
+		t.Fatalf("rotate status=%d body=%s", rotateResponse.Code, rotateResponse.Body.String())
+	}
+	rotatedCookies := rotateResponse.Result().Cookies()
+	if len(rotatedCookies) != 1 || rotatedCookies[0].Value == loginCookies[0].Value {
+		t.Fatalf("rotation did not issue a new cookie: %+v", rotatedCookies)
+	}
+	if _, exists := sessions.records[oldDigest]; exists {
+		t.Fatal("rotation did not revoke the previous session token")
+	}
+	var rotateBody ownerSessionResponse
+	if err := json.Unmarshal(rotateResponse.Body.Bytes(), &rotateBody); err != nil || rotateBody.CSRFToken == "" || rotateBody.CSRFToken == loginBody.CSRFToken {
+		t.Fatalf("rotation did not issue a new CSRF token: %v", err)
+	}
+
+	change := httptest.NewRequest(http.MethodPut, "https://stocks.example.com/api/v1/owner/password", strings.NewReader(`{"current_password":"correct","new_password":"new-correct"}`))
+	change.AddCookie(rotatedCookies[0])
+	change.Header.Set("Content-Type", "application/json")
+	change.Header.Set("Origin", "https://stocks.example.com")
+	change.Header.Set("X-CSRF-Token", rotateBody.CSRFToken)
+	changeResponse := httptest.NewRecorder()
+	handler.ServeHTTP(changeResponse, change)
+	if changeResponse.Code != http.StatusNoContent {
+		t.Fatalf("password change status=%d body=%s", changeResponse.Code, changeResponse.Body.String())
+	}
+	if credentials.credential.CredentialVersion != 2 || credentials.credential.PasswordHash != "hash:new-correct" {
+		t.Fatalf("password change did not update credential version/hash: %+v", credentials.credential)
+	}
+	cleared := changeResponse.Result().Cookies()
+	if len(cleared) != 1 || cleared[0].MaxAge >= 0 {
+		t.Fatal("password change did not clear the current Session Cookie")
+	}
+
+	current := httptest.NewRequest(http.MethodGet, "https://stocks.example.com/api/v1/owner/session", nil)
+	current.AddCookie(rotatedCookies[0])
+	currentResponse := httptest.NewRecorder()
+	handler.ServeHTTP(currentResponse, current)
+	if currentResponse.Code != http.StatusUnauthorized {
+		t.Fatalf("old credential-version session status=%d body=%s", currentResponse.Code, currentResponse.Body.String())
+	}
+}
+
+func TestOwnerSessionDoesNotInheritBearerOrAuthorizeLegacyRoutes(t *testing.T) {
+	credentials := &ownerHTTPTestCredentials{credential: platformsecurity.OwnerCredential{
+		Subject: "owner", PasswordHash: "hash:correct", CredentialVersion: 1,
+	}}
+	handler := newOwnerHTTPTestHandler(t, &ownerHTTPTestSessions{records: make(map[string]platformsecurity.SessionRecord)}, credentials)
+
+	ownerSessionOnLegacyRoute := httptest.NewRequest(http.MethodGet, "https://stocks.example.com/readyz", nil)
+	ownerSessionOnLegacyRoute.AddCookie(&http.Cookie{Name: "__Secure-owner_session", Value: strings.Repeat("a", 43)})
+	legacyResponse := httptest.NewRecorder()
+	handler.ServeHTTP(legacyResponse, ownerSessionOnLegacyRoute)
+	if legacyResponse.Code != http.StatusUnauthorized {
+		t.Fatalf("Owner Session unexpectedly authorized legacy Owner Bearer route: status=%d", legacyResponse.Code)
+	}
+
+	bearerOnSessionRoute := httptest.NewRequest(http.MethodGet, "https://stocks.example.com/api/v1/owner/session", nil)
+	bearerOnSessionRoute.Header.Set("Authorization", "Bearer "+strings.Repeat("a", 43))
+	bearerResponse := httptest.NewRecorder()
+	handler.ServeHTTP(bearerResponse, bearerOnSessionRoute)
+	if bearerResponse.Code != http.StatusUnauthorized {
+		t.Fatalf("Owner Bearer unexpectedly authorized Owner Session route: status=%d", bearerResponse.Code)
+	}
+}
