@@ -15,6 +15,7 @@ import (
 	platformstorage "example.com/stock-analysis-flow/internal/platform/storage"
 	"example.com/stock-analysis-flow/internal/researchflow/application"
 	"example.com/stock-analysis-flow/internal/researchflow/domain"
+	"example.com/stock-analysis-flow/internal/researchflow/resourcepolicy"
 	"example.com/stock-analysis-flow/internal/researchflow/stageoutput"
 	"example.com/stock-analysis-flow/internal/researchflow/template"
 )
@@ -161,6 +162,14 @@ func TestMariaDBCreateRunAtomicConcurrentIdempotency(t *testing.T) {
 	now := time.Now().UTC()
 	fingerprint := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	templateFingerprint := "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+	policyRegistry, err := resourcepolicy.NewRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	policySnapshot, err := policyRegistry.Resolve(resourcepolicy.NewsSearchConfiguredProvidersRef, []string{"bocha"})
+	if err != nil {
+		t.Fatal(err)
+	}
 	makeRecord := func(runRef, stageRef string) application.CreateRunRecord {
 		return application.CreateRunRecord{
 			Scope: application.IdempotencyScope{
