@@ -814,7 +814,7 @@ func TestFundamentalsProbeSnapshotValidationUsesSelectedCompletedPeriod(t *testi
 	}
 
 	if err := validateFundamentalsProbeSnapshot(
-		context.Background(), "600519.SH", year, quarter, snapshot,
+		context.Background(), "600519.SH", year, quarter, snapshot, now,
 	); err != nil {
 		t.Fatalf("selected prior-year Q2 snapshot should pass both Probe validators: %v", err)
 	}
