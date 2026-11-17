@@ -5,18 +5,18 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"example.com/stock-analysis-flow/internal/researchflow/parameterschema"
-	"example.com/stock-analysis-flow/internal/researchflow/resourcepolicy"
-	"example.com/stock-analysis-flow/internal/researchflow/stageoutput"
-	"example.com/stock-analysis-flow/internal/researchflow/template"
+	newsprovider "example.com/stock-analysis-flow/internal/news/adapters/provider"
 	newsapp "example.com/stock-analysis-flow/internal/news/app"
 	newsconfig "example.com/stock-analysis-flow/internal/news/config"
 	newsdomain "example.com/stock-analysis-flow/internal/news/domain"
-	newsprovider "example.com/stock-analysis-flow/internal/news/adapters/provider"
 	newsstage "example.com/stock-analysis-flow/internal/news/stage"
 	platformhttpclient "example.com/stock-analysis-flow/internal/platform/httpclient"
 	researchflowapplication "example.com/stock-analysis-flow/internal/researchflow/application"
 	researchflowdomain "example.com/stock-analysis-flow/internal/researchflow/domain"
+	"example.com/stock-analysis-flow/internal/researchflow/parameterschema"
+	"example.com/stock-analysis-flow/internal/researchflow/resourcepolicy"
+	"example.com/stock-analysis-flow/internal/researchflow/stageoutput"
+	"example.com/stock-analysis-flow/internal/researchflow/template"
 )
 
 const newsSearchStageOutputRegistryVersion = "1.0.0"

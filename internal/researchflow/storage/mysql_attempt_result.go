@@ -139,7 +139,7 @@ func (r *MySQLRunRepository) CommitAttemptResult(ctx context.Context, input Atte
 	if (successfulOutcome && input.StageOutput == nil) ||
 		(input.StageOutput != nil && !successfulOutcome && input.Stage.Status != domain.StageFailed) ||
 		input.OutputRef != nil || input.Stage.OutputRef != nil || input.Stage.QualitySummaryRef != nil {
-		return errors.New("Researchflow successful result requires validated Provider output and forbids Provider-owned references")
+		return errors.New("Researchflow Stage output requires a successful/degraded result or a failed diagnostic result and forbids Provider-owned references")
 	}
 
 	finishedAt := formatResearchflowTimeValue(now)
