@@ -15,7 +15,9 @@ func TestValidatePersistedResourcePolicySnapshot(t *testing.T) {
 		t.Fatal(err)
 	}
 	snapshot, err := registry.Resolve(resourcepolicy.NewsSearchConfiguredProvidersRef, []string{"bocha", "tavily"})
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	resolved := template.ResolvedTemplate{ResourcePolicyRef: resourcepolicy.NewsSearchConfiguredProvidersRef, ResourcePolicy: snapshot}
 	if resolved.ResourcePolicy.PolicyRef != resolved.ResourcePolicyRef {
 		t.Fatal("policy reference mismatch")

@@ -105,9 +105,13 @@ func TestNewsSearchStageExecutorEnforcesRunProviderAllowlist(t *testing.T) {
 	}}
 	executor := newNewsSearchExecutor(providers)
 	result := executeNewsStageWithPolicy(t, executor, `{"query":"market","limit":10}`, []string{"bocha"})
-	if result.ProviderResult == nil { t.Fatal("authorized Provider should produce a result") }
+	if result.ProviderResult == nil {
+		t.Fatal("authorized Provider should produce a result")
+	}
 	var payload newsstage.SearchCandidatesOutput
-	if err := json.Unmarshal(result.ProviderResult.Payload, &payload); err != nil { t.Fatal(err) }
+	if err := json.Unmarshal(result.ProviderResult.Payload, &payload); err != nil {
+		t.Fatal(err)
+	}
 	if len(payload.Outcomes) != 1 || payload.Outcomes[0].ProviderCode != "bocha" {
 		t.Fatalf("executor called Provider outside Run allowlist: %+v", payload.Outcomes)
 	}
@@ -123,9 +127,13 @@ func TestNewsSearchStageExecutorReportsProviderRemovedAfterRunCreation(t *testin
 		result.ReasonCodes[0] != "news_all_providers_skipped" {
 		t.Fatalf("removed Provider must be an explicit skipped outcome, not silently replaced: %+v", result)
 	}
-	if result.ProviderResult == nil { t.Fatal("removed Provider outcome should remain observable") }
+	if result.ProviderResult == nil {
+		t.Fatal("removed Provider outcome should remain observable")
+	}
 	var payload newsstage.SearchCandidatesOutput
-	if err := json.Unmarshal(result.ProviderResult.Payload, &payload); err != nil { t.Fatal(err) }
+	if err := json.Unmarshal(result.ProviderResult.Payload, &payload); err != nil {
+		t.Fatal(err)
+	}
 	if len(payload.Outcomes) != 1 || payload.Outcomes[0].ProviderCode != "bocha" ||
 		payload.Outcomes[0].Status != newsdomain.ProviderSkipped ||
 		payload.Outcomes[0].ErrorCode != newsapp.ProviderErrorNotConfigured {
@@ -141,7 +149,9 @@ func TestNewsSearchStageExecutorRejectsInvalidResourcePolicy(t *testing.T) {
 		Stage: researchflowdomain.Stage{Code: newsstage.SearchCandidatesStageCode},
 		Parameters: json.RawMessage(`{"query":"market","limit":10}`),
 	})
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	if result.StageStatus != researchflowdomain.StageFailed || len(result.ReasonCodes) != 1 ||
 		result.ReasonCodes[0] != "news_resource_policy_invalid" {
 		t.Fatalf("missing ResourcePolicy must fail closed: %+v", result)
@@ -238,17 +248,27 @@ func TestNewsSearchStageExecutorRejectsUnsupportedStageCode(t *testing.T) {
 func testNewsResourcePolicy(t *testing.T, codes []string) resourcepolicy.Snapshot {
 	t.Helper()
 	registry, err := resourcepolicy.NewRegistry()
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	snapshot, err := registry.Resolve(resourcepolicy.NewsSearchConfiguredProvidersRef, codes)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	return snapshot
 }
 
 func newsProviderCodes(providers newsapp.ProviderSet) []string {
-	if providers == nil { return nil }
+	if providers == nil {
+		return nil
+	}
 	all := providers.All()
 	codes := make([]string, 0, len(all))
-	for _, provider := range all { if provider != nil { codes = append(codes, provider.Code()) } }
+	for _, provider := range all {
+		if provider != nil {
+			codes = append(codes, provider.Code())
+		}
+	}
 	return codes
 }
 
@@ -263,7 +283,9 @@ func executeNewsStageWithPolicy(t *testing.T, executor newsSearchStageExecutor, 
 		Parameters: json.RawMessage(parameters),
 		ResourcePolicy: testNewsResourcePolicy(t, allowed),
 	})
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	return result
 }
 
