@@ -227,7 +227,7 @@ func valuationSnapshotEligibleAsOf(symbols []string, candidate *model.ValuationS
 		candidate.SystemObservedAt.After(asOf) || candidate.FetchedAt.IsZero() || candidate.FetchedAt.After(asOf) ||
 		(candidate.ProviderTimestamp != nil && candidate.ProviderTimestamp.After(asOf)) ||
 		(candidate.ProviderReportDate != "" && candidate.ProviderReportDate > asOf.In(marketLocation()).Format("2006-01-02")) ||
-		validateValuationSnapshotAt(symbols, candidate, s.nowUTC()) != nil {
+		validateValuationSnapshotAt(symbols, candidate, asOf) != nil {
 		return false
 	}
 	for _, item := range candidate.Items {

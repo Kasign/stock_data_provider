@@ -17,6 +17,7 @@ import (
 	"example.com/stock-analysis-flow/internal/marketdata/normalize"
 	"example.com/stock-analysis-flow/internal/marketdata/provider"
 	"example.com/stock-analysis-flow/internal/marketdata/validation"
+	platformtime "example.com/stock-analysis-flow/internal/platform/time"
 )
 
 // ErrProviderProbePersistence 表示探测结果历史写入失败。
