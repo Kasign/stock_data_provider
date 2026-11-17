@@ -107,6 +107,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -348,10 +349,10 @@ func resolvedFingerprint(templateFingerprint string, schema ParameterSchemaSnaps
 	return hex.EncodeToString(sum[:]), nil
 }
 
-
- // BindResourcePolicySnapshot binds the immutable policy definition to a resolved template.
- // The dynamic Provider allowlist is persisted but deliberately excluded from the fingerprint.
- func BindResourcePolicySnapshot(resolved ResolvedTemplate, snapshot resourcepolicy.Snapshot) (ResolvedTemplate, error) {
+// BindResourcePolicySnapshot binds an immutable policy decision to a resolved template.
+// The policy definition fingerprint participates in identity; the dynamic Provider
+// allowlist is persisted for execution but deliberately excluded from that identity.
+func BindResourcePolicySnapshot(resolved ResolvedTemplate, snapshot resourcepolicy.Snapshot) (ResolvedTemplate, error) {
 	if snapshot.PolicyRef == "" || snapshot.PolicyRef != resolved.ResourcePolicyRef ||
 		len(snapshot.PolicyFingerprint) != 64 || snapshot.PolicyFingerprint != strings.ToLower(snapshot.PolicyFingerprint) ||
 		len(snapshot.AllowedProviderCodes) == 0 {
@@ -368,14 +369,11 @@ func resolvedFingerprint(templateFingerprint string, schema ParameterSchemaSnaps
 	}
 	snapshot.AllowedProviderCodes = codes
 	resolved.ResourcePolicy = snapshot
-	templateFingerprint := resolved.Fingerprint
-	// Resolve's initial fingerprint already binds template and parameter schema. Recompute
-	// from those stable components, adding only the immutable policy definition digest.
-	base, err := resolvedFingerprint(templateFingerprint, resolved.ParameterSchema, snapshot.PolicyFingerprint)
+	fingerprint, err := resolvedFingerprint(resolved.Fingerprint, resolved.ParameterSchema, snapshot.PolicyFingerprint)
 	if err != nil {
 		return ResolvedTemplate{}, err
 	}
-	resolved.Fingerprint = base
+	resolved.Fingerprint = fingerprint
 	return resolved, nil
 }
 
