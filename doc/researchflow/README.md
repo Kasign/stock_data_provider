@@ -97,3 +97,10 @@ ResourcePolicy 已接入 CreateRun、Worker 与 News Stage 的应用执行链：
 代码 SHA `8db50e263f3383defd3d9b216d0c81d37ed3dd63` 的 Integration CI Run [44014768749](https://github.com/Kasign/stock_data_provider/actions/runs/44014768749) 全量 success。
 
 **边界：** 这完成的是 ResourcePolicy 应用层授权执行链，不代表 Server 生产 Worker Runtime、生产 CreateRun 消费者或正式 Workflow Template 已接入。生产 Bootstrap、可信 Owner 内部消费组合和正式 Template 仍是后续主线；SRV-CTR-001 继续 deferred。
+
+
+## Run 访问授权
+
+Researchflow 的 GetRun 和 CancelRun 均要求通过持久化 Run 创建者关联授权。MySQLRunRepository 使用既有 `researchflow_run_idempotency` 中的 `caller_ref + operation=CreateRun + run_ref` 记录验证权限；GetRun 在读取 Run 前授权，避免未授权调用者枚举 RunRef。精确 SHA `1600c321792a5172f56b8ca7bc49adf67aec5f6a` 的 Integration CI Run [44015922257](https://github.com/Kasign/stock_data_provider/actions/runs/44015922257) 全量 success。
+
+Server 可信 Owner Session RequestIdentity Adapter 和内部 CreateRun/GetRun/CancelRun 组合仍未接入；SRV-CTR-001 继续 deferred。

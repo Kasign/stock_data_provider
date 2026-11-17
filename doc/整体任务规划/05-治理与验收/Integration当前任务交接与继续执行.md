@@ -1219,3 +1219,18 @@ ResourcePolicy 的语义已完成 Review，权威实施细节见 `doc/researchfl
 4. SRV-CTR-001 仍为 `deferred`；未获正式契约解冻前不开放 Researchflow HTTP API。
 
 限制：不重做已通过的 Stage Fixture MariaDB 测试；不声称真实外部 Provider 网络验收完成；不创建空壳 Template、Resolver 或固定 Owner CallerRef；每个完整切片结束后同步本交接文档和 Researchflow 任务文档。
+
+
+### 2026-11-17 Run 访问授权最新进度
+
+GetRun 与 CancelRun 的持久化创建者授权已在 Application/Storage 层补齐：
+
+- GetRun 在读取聚合前验证 RequestIdentity 与 `caller_ref + operation=CreateRun + run_ref` 持久化关联；未授权请求不会访问 RunReader。
+- CancelRun 使用同一持久化创建者关联授权。
+- MySQLRunRepository 已实现统一 RunAccessAuthorizer；未找到关联统一返回 `ErrRunAccessDenied`，不泄漏 Run 是否存在。
+- MariaDB 集成测试覆盖创建者允许、其他 CallerRef 拒绝读和取消；应用测试覆盖未认证/未授权短路。
+- 无新增 Migration。
+
+精确 SHA `1600c321792a5172f56b8ca7bc49adf67aec5f6a` 的 CI Run [44015922257](https://github.com/Kasign/stock_data_provider/actions/runs/44015922257) 全量 success。
+
+后续主线：Server 可信 Owner Session RequestIdentity Adapter → 内部 CreateRun/GetRun/CancelRun 组合 → 正式 Template 与生产 Worker Runtime。Owner Session Subject 固定为 `owner`，AuthMethod 必须单独校验为 `owner_session`；不接受客户端自报 CallerRef，不开放 SRV-CTR-001 deferred 的 Researchflow HTTP API。
