@@ -27,7 +27,9 @@ func TestOwnerSessionResearchflowIdentityAcceptsOnlyOwnerSession(t *testing.T) {
 		Kind: platformsecurity.IdentityOwner, AuthMethod: platformsecurity.AuthMethodOwnerBearer, Subject: "owner",
 		Scopes: []string{platformsecurity.ScopePlatformAdmin},
 	})
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	if _, err := identity.AuthenticatedCallerRef(ownerBearer); !errors.Is(err, researchflowapp.ErrUnauthenticated) {
 		t.Fatalf("Owner Bearer must not be treated as Owner Session: %v", err)
 	}
@@ -36,7 +38,9 @@ func TestOwnerSessionResearchflowIdentityAcceptsOnlyOwnerSession(t *testing.T) {
 		Kind: platformsecurity.IdentityService, AuthMethod: platformsecurity.AuthMethodServiceBearer,
 		Subject: "researchflow-worker", Scopes: []string{platformsecurity.ScopeResearchRun},
 	})
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	if _, err := identity.AuthenticatedCallerRef(serviceBearer); !errors.Is(err, researchflowapp.ErrUnauthenticated) {
 		t.Fatalf("service Bearer must not be treated as Owner Session: %v", err)
 	}
