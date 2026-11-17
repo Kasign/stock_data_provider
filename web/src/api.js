@@ -464,7 +464,7 @@ function ownerRequest(settings, path, { method = "GET", body, signal, csrf = fal
     headers["X-CSRF-Token"] = ownerCSRFToken;
   }
   return request(settings.analysisBase, path, { method, body, signal, headers }).catch((error) => {
-    if (error?.status === 401) ownerCSRFToken = "";
+    if (error?.status === 401 && error?.code === "server.session_unauthenticated") ownerCSRFToken = "";
     throw error;
   });
 }

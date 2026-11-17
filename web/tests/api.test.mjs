@@ -849,3 +849,29 @@ test("Owner password change validates UTF-8 byte limits and clears runtime CSRF 
     globalThis.fetch = originalFetch;
   }
 });
+
+
+test("wrong current password does not discard a still-valid Owner CSRF token", async () => {
+  const originalFetch = globalThis.fetch;
+  const requests = [];
+  clearOwnerSessionMemory();
+  globalThis.fetch = async (url, init) => {
+    requests.push({ url: String(url), ...init });
+    if (init.method === "POST") return jsonResponse({ csrf_token: "valid-session-csrf" });
+    if (init.method === "PUT") {
+      return jsonResponse({ error: { code: "server.current_password_rejected", message: "current password is invalid" } }, 401);
+    }
+    return new Response(null, { status: 204 });
+  };
+  const settings = { analysisBase: "/analysis-api" };
+  try {
+    await loginOwnerSession(settings, "current-password");
+    await assert.rejects(changeOwnerPassword(settings, "wrong-password", "new-password"), /current password is invalid/);
+    await logoutOwnerSession(settings);
+    assert.equal(requests[2].headers["X-CSRF-Token"], "valid-session-csrf",
+      "a rejected current password must not clear the authenticated session's CSRF token");
+  } finally {
+    clearOwnerSessionMemory();
+    globalThis.fetch = originalFetch;
+  }
+});
