@@ -212,7 +212,7 @@ func (p *TickFlow) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quo
 	}
 	change := *price - *prev
 	changePct := change / *prev * 100
-	now := time.Now().UTC()
+	now := providerNowUTC()
 	var quoteTime *time.Time
 	quality := model.QualityValid
 	reasons := []string{}
@@ -409,7 +409,7 @@ func (p *TickFlow) FetchIndexQuotes(ctx context.Context) (*model.IndexQuoteSnaps
 		quotes = append(quotes, batchQuotes...)
 	}
 
-	fetchedAt := time.Now().UTC()
+	fetchedAt := providerNowUTC()
 	snapshot := &model.IndexQuoteSnapshot{Source: p.Name(), SourceVersion: tickflowVersion + "-index-quotes-v1", FetchedAt: fetchedAt, QualityStatus: model.QualityValid, Items: make([]model.MarketIndexQuote, 0, len(tickflowCoreIndexDefinitions))}
 	markSnapshotDegraded := func(reason string) {
 		snapshot.QualityStatus = model.QualityDegraded
@@ -626,7 +626,7 @@ func (p *TickFlow) FetchMarketBreadth(ctx context.Context) (*model.MarketBreadth
 		quotesBySymbol[symbol] = quote
 	}
 
-	fetchedAt := time.Now().UTC()
+	fetchedAt := providerNowUTC()
 	location := providerMarketLocation()
 	snapshot := &model.MarketBreadthSnapshot{
 		Market: "cn_a_share", TotalSecurities: universe.SymbolCount, CoveredSecurities: len(quotesBySymbol),
@@ -987,7 +987,7 @@ func (p *TickFlow) FetchSectorRankings(ctx context.Context, rawCategory string, 
 	}
 	quotesBySymbol := make(map[string]tickflowQuotePayload, len(quotes))
 	reportDate := ""
-	fetchedAt := time.Now().UTC()
+	fetchedAt := providerNowUTC()
 	location := providerMarketLocation()
 	timestampIncomplete := false
 	for _, quote := range quotes {
@@ -1214,7 +1214,7 @@ func (p *TickFlow) FetchDailyBars(ctx context.Context, rawSymbol, startDate, end
 		return nil, errors.New("TickFlow start date must not be after end date")
 	}
 	loc := providerMarketLocation()
-	if end.Format("2006-01-02") > time.Now().In(loc).Format("2006-01-02") {
+	if end.Format("2006-01-02") > providerNowUTC().In(loc).Format("2006-01-02") {
 		return nil, errors.New("TickFlow end date must not be after today in Asia/Shanghai")
 	}
 	if limit <= 0 {
@@ -1286,7 +1286,7 @@ func (p *TickFlow) FetchDailyBars(ctx context.Context, rawSymbol, startDate, end
 			return nil, fmt.Errorf("TickFlow K-line %s length %d does not match timestamp length %d", name, length, n)
 		}
 	}
-	fetchedAt := time.Now().UTC()
+	fetchedAt := providerNowUTC()
 	out := make([]model.DailyBar, 0, n)
 	seen := make(map[string]struct{}, n)
 	for i := 0; i < n; i++ {
@@ -1383,7 +1383,7 @@ func (p *TickFlow) FetchDailyBars(ctx context.Context, rawSymbol, startDate, end
 			Amount: amount, ChangePercent: pct, AdjustmentBasis: adjustment,
 			AdjustmentMethod: "tickflow_api_" + adjust,
 			Source:           p.Name(), SourceVersion: tickflowVersion,
-			FetchedAt: fetchedAt, NormalizedAt: time.Now().UTC(),
+			FetchedAt: fetchedAt, NormalizedAt: providerNowUTC(),
 			RawVolume: &rawVolumeCopy, RawVolumeUnit: "hands",
 			RawAmount: rawAmount, RawAmountUnit: rawAmountUnit, RawAmountField: rawAmountField,
 			VolumeUnit: "shares", AmountUnit: amountUnit, QualityStatus: quality, QualityReasons: reasons,
