@@ -166,3 +166,10 @@ Server 已在 Owner Session 启用且 Researchflow Capacity 显式配置时，�
 - Bootstrap 的共享资源关闭策略已调整为：只有所有 Lifecycle 消费者均成功停止，才关闭共享 MariaDB/Redis/HTTP 资源；任一组件停止失败或超时，保留共享资源并向上返回错误，避免在途消费者访问已关闭的连接池。
 - 该保护是异常关闭时的安全兜底，不代表消费者已成功停止；进程收到该错误后应退出。资源最终由进程退出回收。
 - 本次变更只修复资源关闭顺序，不代表 Researchflow Worker Runtime 已装配。Scheduler、WorkerPool、Deadline、ExpiredAttempt、Cancellation Recovery 与 Finalization 的周期生命周期仍待接入。
+
+## 2026-11-17 进程本地 Worker 并发配置
+
+- 新增 Server 配置 `RESEARCHFLOW_LOCAL_WORKERS`，仅在 `SERVER_ROLE=worker|all` 且 Researchflow Capacity 已启用时必填，范围 1～32。
+- `RESEARCHFLOW_LOCAL_WORKERS` 只控制当前进程 WorkerPool 的并发；`RESEARCHFLOW_MAX_WORKERS` 仍是 MariaDB 原子 Claim/Capacity 使用的跨进程全局并发上限。两者不能互相替代，也不能将全局值直接作为每个进程的本地池大小。
+- API 角色不创建 WorkerPool，因此拒绝配置 `RESEARCHFLOW_LOCAL_WORKERS`；未启用 Researchflow Capacity 时也拒绝单独配置该项。
+- 本次只完成配置契约和验证，Worker Runtime 尚未装配；后续装配必须使用 `Process.ResearchflowLocalWorkers` 创建本地 WorkerPool。
