@@ -12,6 +12,28 @@ const MariaDBClockQuery = "SELECT DATE_FORMAT(UTC_TIMESTAMP(6), '%Y-%m-%dT%H:%i:
 
 const mariaDBTimestampLayout = "2006-01-02T15:04:05.000000000Z"
 
+// MariaDBQueryer is implemented by *sql.DB and *sql.Tx.
+type MariaDBQueryer interface {
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+}
+
+// ReadMariaDBUTC reads and parses the MariaDB UTC clock through the supplied
+// database handle or transaction.
+func ReadMariaDBUTC(ctx context.Context, queryer MariaDBQueryer) (stdtime.Time, error) {
+	if ctx == nil || queryer == nil {
+		return stdtime.Time{}, errors.New("MariaDB time query and context are required")
+	}
+	var value string
+	if err := queryer.QueryRowContext(ctx, MariaDBClockQuery).Scan(&value); err != nil {
+		return stdtime.Time{}, fmt.Errorf("read MariaDB UTC clock: %w", err)
+	}
+	parsed, err := stdtime.Parse(mariaDBTimestampLayout, value)
+	if err != nil {
+		return stdtime.Time{}, fmt.Errorf("parse MariaDB UTC clock: %w", err)
+	}
+	return parsed.UTC(), nil
+}
+
 // MariaDBSource uses the same MariaDB authority as persisted application data.
 // Use it for cross-instance decisions that must share the database clock.
 type MariaDBSource struct {
@@ -29,13 +51,5 @@ func (s *MariaDBSource) NowUTC(ctx context.Context) (stdtime.Time, error) {
 	if s == nil || s.db == nil || ctx == nil {
 		return stdtime.Time{}, errors.New("MariaDB time source is not configured")
 	}
-	var value string
-	if err := s.db.QueryRowContext(ctx, MariaDBClockQuery).Scan(&value); err != nil {
-		return stdtime.Time{}, fmt.Errorf("read MariaDB UTC clock: %w", err)
-	}
-	parsed, err := stdtime.Parse(mariaDBTimestampLayout, value)
-	if err != nil {
-		return stdtime.Time{}, fmt.Errorf("parse MariaDB UTC clock: %w", err)
-	}
-	return parsed.UTC(), nil
+return ReadMariaDBUTC(ctx, s.db)
 }

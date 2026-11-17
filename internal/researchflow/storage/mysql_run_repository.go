@@ -14,6 +14,7 @@ import (
 
 	mysql "github.com/go-sql-driver/mysql"
 
+	"example.com/stock-analysis-flow/internal/platform/time"
 	"example.com/stock-analysis-flow/internal/researchflow/application"
 	"example.com/stock-analysis-flow/internal/researchflow/domain"
 	"example.com/stock-analysis-flow/internal/researchflow/state"
@@ -787,15 +788,7 @@ func insertResearchflowStage(ctx context.Context, tx *sql.Tx, stage domain.Stage
 }
 
 func readDatabaseUTC(tx *sql.Tx, ctx context.Context) (time.Time, error) {
-	var value string
-	if err := tx.QueryRowContext(ctx, "SELECT DATE_FORMAT(UTC_TIMESTAMP(6), '%Y-%m-%dT%H:%i:%s.%f000Z')").Scan(&value); err != nil {
-		return time.Time{}, fmt.Errorf("read MariaDB UTC clock: %w", err)
-	}
-	parsed, err := parseResearchflowTime(value)
-	if err != nil {
-		return time.Time{}, fmt.Errorf("parse MariaDB UTC clock: %w", err)
-	}
-	return parsed, nil
+	return platformtime.ReadMariaDBUTC(ctx, tx)
 }
 
 func formatResearchflowTime(value time.Time) (string, error) {
