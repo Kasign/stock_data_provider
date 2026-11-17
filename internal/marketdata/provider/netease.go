@@ -209,7 +209,7 @@ func (p *Netease) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quot
 	if amountErr == nil && rawAmount >= 0 && finiteNumber(rawAmount) {
 		amount = &rawAmount
 	}
-	now := time.Now().UTC()
+	now := providerNowUTC()
 	quoteTime := validProviderSnapshotTime(parseNeteaseQuoteTime(firstNonEmptyString(row.Time, row.Update)), now)
 	q := &model.Quote{
 		Symbol: symbol, Name: strings.TrimSpace(row.Name),
@@ -382,7 +382,7 @@ func (p *Netease) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 	if limit > 2000 {
 		limit = 2000
 	}
-	start, end, err := neteaseDateRange(startDate, endDate, limit, time.Now())
+	start, end, err := neteaseDateRange(startDate, endDate, limit, providerNowUTC())
 	if err != nil {
 		return nil, err
 	}
@@ -451,7 +451,7 @@ func (p *Netease) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 
 	rows := make([]model.DailyBar, 0, 256)
 	rejectedRows := 0
-	now := time.Now().UTC()
+	now := providerNowUTC()
 	rowIndex := 0
 	for {
 		record, readErr := reader.Read()

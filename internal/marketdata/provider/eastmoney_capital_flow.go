@@ -55,7 +55,7 @@ func (p *Eastmoney) FetchCapitalFlow(ctx context.Context, rawSymbol string) (*mo
 		"lmt":     {"20"},
 		"end":     {"20500101"},
 		"ut":      {p.ut},
-		"_":       {strconv.FormatInt(time.Now().UnixMilli(), 10)},
+		"_":       {strconv.FormatInt(providerNowUTC().UnixMilli(), 10)},
 	}
 	var payload struct {
 		RC   *int `json:"rc"`
@@ -96,7 +96,7 @@ func (p *Eastmoney) FetchCapitalFlow(ctx context.Context, rawSymbol string) (*mo
 	}
 
 	loc := providerMarketLocation()
-	today := time.Now().In(loc).Format("2006-01-02")
+	today := providerNowUTC().In(loc).Format("2006-01-02")
 	observations := make([]eastmoneyCapitalFlowObservation, 0, len(payload.Data.KLines))
 	seen := make(map[string]struct{}, len(payload.Data.KLines))
 	for index, line := range payload.Data.KLines {
@@ -143,7 +143,7 @@ func (p *Eastmoney) FetchCapitalFlow(ctx context.Context, rawSymbol string) (*mo
 		return nil, errors.New("Eastmoney capital-flow response contains no usable observations")
 	}
 
-	now := time.Now().UTC()
+	now := providerNowUTC()
 	out := &model.CapitalFlow{
 		Symbol: symbol, ProviderDate: observations[0].date,
 		SourceVersion: eastmoneyCapitalFlowVersion, Observations: len(observations),

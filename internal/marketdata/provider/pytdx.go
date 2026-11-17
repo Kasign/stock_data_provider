@@ -247,7 +247,7 @@ func (p *Pytdx) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endDat
 		return nil, errors.New("Pytdx start date must not be after end date")
 	}
 	loc := providerMarketLocation()
-	today := time.Now().In(loc).Format("2006-01-02")
+	today := providerNowUTC().In(loc).Format("2006-01-02")
 	if end.Format("2006-01-02") > today {
 		return nil, errors.New("Pytdx end date must not be after today in Asia/Shanghai")
 	}
@@ -369,7 +369,7 @@ func (p *Pytdx) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endDat
 		adjustmentRefDate = all[0].Time.In(loc).Format("2006-01-02")
 	}
 
-	fetchedAt := time.Now().UTC()
+	fetchedAt := providerNowUTC()
 	out := make([]model.DailyBar, 0, min(limit, len(adjusted)))
 	for i, item := range adjusted {
 		if item.Time.IsZero() {
@@ -428,7 +428,7 @@ func (p *Pytdx) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endDat
 			Source:            p.Name(),
 			SourceVersion:     pytdxVersion,
 			FetchedAt:         fetchedAt,
-			NormalizedAt:      time.Now().UTC(),
+			NormalizedAt:      providerNowUTC(),
 			RawVolume:         &rawVolumeCopy,
 			RawVolumeUnit:     "hands",
 			RawAmount:         amountInfo.RawAmount,
@@ -478,7 +478,7 @@ func buildPytdxQuote(ctx context.Context, symbol string, current, prevClose, ope
 
 	change := current - prevClose
 	changePercent := change / prevClose * 100
-	now := time.Now().UTC()
+	now := providerNowUTC()
 	var amount, rawAmount *float64
 	amountUnit, rawAmountUnit, rawAmountField := "unknown", "", ""
 	quality := model.QualityDegraded

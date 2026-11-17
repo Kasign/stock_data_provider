@@ -109,7 +109,7 @@ func NewMiaoXiangWithHTTPDoer(apiKey, endpoint string, timeout time.Duration, do
 	return &MiaoXiang{
 		apiKey: apiKey, endpoint: u.String(), client: client, httpDoer: doer,
 		logger: slog.Default(),
-		now:    func() time.Time { return time.Now().UTC() },
+		now:    func() time.Time { return providerNowUTC() },
 		cache:  make(map[string]cacheEntry), cacheTTL: miaoXiangCacheTTL,
 	}, nil
 }
