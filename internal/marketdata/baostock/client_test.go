@@ -842,25 +842,21 @@ func TestQueryQuarterlyFinancialDataHandlesLoginQueryAndLogout(t *testing.T) {
 	}
 }
 
-func TestQueryQuarterlyFinancialDataRejectsFutureReportingPeriodBeforeNetworkIO(t *testing.T) {
-	loc, err := time.LoadLocation("Asia/Shanghai")
-	if err != nil {
-		loc = time.FixedZone("CST", 8*60*60)
-	}
-	now := time.Now().In(loc)
-	today := now.Format("2006-01-02")
-	quarter := int((int(now.Month())-1)/3) + 1
-	periodEnd := time.Date(now.Year(), time.Month(quarter*3+1), 0, 0, 0, 0, 0, time.UTC).Format("2006-01-02")
-	if periodEnd <= today {
-		quarter++
-	}
-	if quarter > 4 {
-		t.Skip("no future quarter end remains in the current year")
-	}
+type baoStockFixedClock struct {
+	now time.Time
+}
 
-	c := NewClient(Config{})
-	if _, err := c.QueryQuarterlyFinancialData(context.Background(), "sh.600519", "profitability", now.Year(), quarter); err == nil || !strings.Contains(err.Error(), "is in the future") {
-		t.Fatalf("future quarterly reporting period should be rejected before network IO, got %v", err)
+func (c baoStockFixedClock) Now() time.Time { return c.now }
+
+func TestQueryQuarterlyFinancialDataRejectsFutureReportingPeriodBeforeNetworkIO(t *testing.T) {
+	// 固定时刻对应中国市场日期 2026-11-18，第四季度报告期尚未结束。
+	now := time.Date(2026, 11, 17, 16, 0, 0, 0, time.UTC)
+	c := NewClient(Config{Clock: baoStockFixedClock{now: now}})
+	if _, err := c.QueryQuarterlyFinancialData(context.Background(), "sh.600519", "profitability", 2026, 4); err == nil || !strings.Contains(err.Error(), "is in the future") {
+		t.Fatalf("未来报告期应在网络请求前被拒绝，实际错误: %v", err)
+	}
+	if _, err := c.QueryQuarterlyFinancialData(context.Background(), "sh.600519", "profitability", 2027, 1); err == nil || !strings.Contains(err.Error(), "outside supported range") {
+		t.Fatalf("未来年份应在网络请求前被拒绝，实际错误: %v", err)
 	}
 }
 
