@@ -1,8 +1,8 @@
 # Owner Session 接入进度
 
-## 当前阶段：WebUI 已接入，目标环境部署验收待完成
+## 当前阶段：HTTP 契约核对完成，等待 Server API 定义
 
-当前文档核对基线：`integration` @ `446cc1a65c307726a1171e1341d529452ea09f55`。下方早期内容保留为历史记录；以文末最新状态校正为准。
+当前 `integration` 基线：`c6b6894b3cd6ba3d241da1c9a6badeac5f145cc5`。
 
 对应 Integration CI Run `43869239700`：success。该 SHA 的 gofmt、根模块测试、跨模块测试、MariaDB/Redis Bootstrap 集成、go-core、Compose 与 WebUI 检查均通过。
 
@@ -229,36 +229,3 @@ Server 内部已有：
 4. SRV-CTR-002 当前仍为 `freeze-ready`，未擅自冻结；Schema/Golden/OpenAPI 已建立，后续需做契约校验和消费者符合性验收。
 
 Owner Session 的 Server 端真实存储生命周期已不再是阻塞项。WebUI 接入是当前 P0 下一步；Researchflow 新业务 API 仍保持 SRV-CTR-001 的 deferred 边界，不得提前开放。
-
-
-## 2026-11-17 WebUI 接入状态校正（以本节为最新）
-
-当前代码基线：`integration` @ `446cc1a65c307726a1171e1341d529452ea09f55`。
-
-### 已完成的 WebUI 消费接入
-
-- `web/src/api.js` 已封装 SRV-CTR-002 六条 Owner Session 接口：登录、当前 Session、CSRF 恢复、登出、Session 轮换、密码修改。
-- Owner Session 请求使用同源 Cookie；不附加 Owner Bearer，也不附加行情 API Key。
-- CSRF Token 保存在模块级运行时内存，通过 `X-CSRF-Token` 发送；无 localStorage/sessionStorage 持久化。
-- 页面初始化先恢复当前 Session，再调用专用 POST CSRF 恢复接口；401 清理内存 Token，网络/服务端异常显示为不可用，不误报为已登出成功。
-- 设置中心包含 Owner 密码登录、退出和密码修改表单；密码修改成功后清理当前 CSRF Token 并要求重新登录。
-- 旧 Analysis、`/readyz`、`/diagnostics` 仍保持 Owner Bearer 认证；Owner Session 不继承 `platform:admin`，也不自动授权旧路由。
-
-### 自动化验收证据
-
-- 精确 SHA：`446cc1a65c307726a1171e1341d529452ea09f55`。
-- Integration CI Run [43999751873](https://github.com/Kasign/stock_data_provider/actions/runs/43999751873)：success。
-- CI 覆盖全仓 gofmt、根模块 go vet/test、News/Research/Researchflow 跨模块测试、Worker Bootstrap MariaDB/Redis、go-core vet/test、Compose 配置、JavaScript 语法、WebUI 单测和 Web 镜像构建。
-- `web/tests/api.test.mjs` 覆盖 same-origin credentials、登录/当前 Session/CSRF 恢复/轮换/登出顺序、CSRF Header、运行时内存状态、密码字节长度限制和密码错误后保留 CSRF。
-- `web/tests/ui-contract.test.mjs` 覆盖登录表单、退出和密码修改入口、刷新恢复调用、CSRF 不写入 localStorage/sessionStorage，以及 Owner Session 与服务密钥边界。
-
-### 仍未完成
-
-1. 目标服务器的外部 Nginx / Compose / HTTPS 部署验收。
-2. 真实浏览器在目标域名下验证登录 Cookie、代理 Cookie Path、Secure、SameSite、Origin/Host。
-3. 真实浏览器验证刷新 CSRF 恢复、登出清 Cookie、密码修改后旧 Session 失效并重新登录。
-4. SRV-CTR-002 项目契约登记状态仍为 `freeze-ready`；需由契约治理流程完成冻结，不能以代码和 CI 通过代替正式冻结。
-
-### 下一步
-
-Owner Session 不再安排新的功能开发。目标环境验收完成后，将开发主线转回 Researchflow 生产入口和运行时；SRV-CTR-001 仍保持 deferred，不能提前开放 Researchflow 浏览器业务 API。

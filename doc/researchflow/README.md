@@ -72,4 +72,4 @@ Researchflow CreateRun 从可信 RequestIdentity 取得 authenticated caller，�
 
 本次在 Migration v5 为 `researchflow_run_idempotency.run_ref` 增加唯一约束；Worker 在同一 Repeatable Read 快照中从 `operation=CreateRun` 的幂等记录读取 caller_ref，并在 claim 前拒绝缺失身份。Worker 第二次读取执行快照时复核身份未变化，再由 Orchestrator 注入 StageExecutionRequest.AuthenticatedCallerRef。该字段仅供内部 Application Port 使用，不进入 Run/Stage/Attempt 公共 DTO，也不接受 Provider 或客户端覆盖。
 
-按项目级决议，生产 Server RequestIdentity 应注入固定服务主体 `service:researchflow`；本次只完成 Worker → StageExecutor 的进程内传递，不代表 Server 生产身份装配或远程认证传输已完成。Provider 仍须按自身 Owner 授权规则校验，不得把 CallerRef 当作 AuthorizationRef 或 Bearer Token。MariaDB 集成用例已增加真实身份读取断言；新提交的 CI 验收结果待记录。
+本节只完成 Worker → StageExecutor 的可信 CallerRef 进程内传递，不代表 Server 生产身份装配或远程认证传输已完成。生产 RequestIdentity 必须来自 Server 已验证的 Principal：Owner 主动发起 Run 时，CallerRef 使用该 Principal 的可信 Subject（当前单 Owner Subject 为 `owner`），不能从请求 DTO/Header 自报；AuthMethod 由 Server 路由策略单独校验。`service:researchflow` 是 DEC-PLAT-002-050 中 Quant Result 读取授权的特定服务主体示例，不是所有 Researchflow CreateRun 的通用 CallerRef，不得据此把 Owner 发起的 Run 改记为服务主体。Provider 仍须按自身 Owner 授权规则校验，不得把 CallerRef 当作 AuthorizationRef 或 Bearer Token。MariaDB 集成用例已增加真实身份读取断言；新提交的 CI 验收结果待记录。

@@ -1,7 +1,7 @@
 # WebUI 整体规划
 
-更新时间：2026-11-17  
-文档核对基线：integration @ 446cc1a65c307726a1171e1341d529452ea09f55  
+更新时间：2026-11-12  
+文档核对基线：feat/webui-market-data-console @ 902525b3cf7926df294e153329328c5f52d92809  
 范围：web/** 与 doc/web/**。
 
 > 本文是 WebUI 产品路线、任务状态、跨模块依赖和下一步安排的唯一入口。本轮先完成 W0 文档规划，不代表已经实现目标信息架构或接入新模块。
@@ -72,8 +72,8 @@ Web 负责交互、请求编排、状态展示和有限的浏览器本地工作�
 | 阶段 | 目标 | 主要任务 | 依赖/完成条件 | 状态 |
 |---|---|---|---|---|
 | W0 | 产品规划和文档基线 | 统一目标 IA；梳理页面与服务能力；清理过期排期/路径/状态；更新 API、架构、诊断和验收边界 | 文档内部链接、事实、基线和 Git diff 复核 | 已完成 |
-| W1 | 现有工作台收口 | 目标导航映射；明确研究对象/过程/结果/跟踪边界；页面状态和响应式体验收口 | 不新增业务 API；页面状态与本地/服务端边界明确 | W1-A/W1-B/W1-C/W1-D 已完成 |
-| W2 | 研究任务工作区升级 | Owner Session 认证收尾；Researchflow 生产入口、运行时、HTTP 契约与真实任务工作区 | Owner Session 部署验证；Researchflow 正式 Template、Caller/授权边界、Server Runtime 与 SRV-CTR-001 契约 | Owner Session WebUI 代码已接入；部署验收待完成。Researchflow 生产入口仍是后续主线 |
+| W1 | 现有工作台收口 | 目标导航映射；明确研究对象/过程/结果/跟踪边界；页面状态和响应式体验收口；认证迁移准备 | 不新增业务 API；不假设 Session 已上线 | W1-A/W1-B/W1-C/W1-D 已完成；当前 SHA 的 CI、浏览器历史导航、Reduced Motion 与七视口验收通过 |
+| W2 | 研究任务工作区升级 | 真实模板、Run/Stage/Attempt、执行进度、取消、服务端历史分页、结果综合和历史回看 | Researchflow Application Facade、Server HTTP/DI/Worker/Migration、Session/CSRF 与分页/取消契约可用 | 已完成 Web 侧准备审计；阻塞于 Server/Researchflow HTTP 与认证运行时接入 |
 | W3 | 研究中心与量化研究 | Research Evidence/Context/Event/Claim/Hypothesis/Scenario；Quant 指标/因子/趋势/策略/回测/风险 | Research、News Evidence Query、Quant DTO/API、PIT/质量/风险契约及 Server 注册可用 | 等待依赖 |
 | W4 | 跟踪与通知 | 服务端订阅、通知渠道、投递状态、告警规则/触发历史 | Notification API 和告警领域归属评审完成 | 等待依赖 |
 | W5 | 端到端验收 | 真实数据闭环、权限与证据授权、PIT、风险门禁、失败/降级、历史回看、部署和响应式 | 纳入范围的 API/模块均注册且目标环境可验证 | 待开始 |
@@ -100,46 +100,48 @@ Web 负责交互、请求编排、状态展示和有限的浏览器本地工作�
 - [x] W1-D：W1-C 提交 SHA `7f1b8510d349b9d166b6efceddee874ddb7703c0` 的 WebUI Checks（43160148859）和 Chromium Browser Smoke（43160149003）通过，覆盖 320/375/600/768/900/1280/1600px。
 - [x] W1-D：真实 API 与 Mock 的验收边界已记录在 API_CONTRACT 和提测清单；本轮 Mock 浏览器测试不作为真实服务端联调证据。
 
-### W2 当前状态与执行拆分（更新于 2026-11-17）
+### W2 准备审计与执行拆分（2026-11-12）
 
-**当前结论：Owner Session 浏览器接入代码已完成；W2 的 Researchflow 业务接入仍未开始。** 不再沿用 2026-11-12 的“等待 Session 登录实现”判断。当前 integration 精确基线为 `446cc1a65c307726a1171e1341d529452ea09f55`，Integration CI Run `43999751873` 对该 SHA 为 success。
+**当前结论：W2 尚不能进入真实业务 API 开发。** Web 侧现有任务链路已经具备创建旧版 Analysis Task、查询 Task、增量读取事件和查询 Run 结果的能力；Researchflow 模块已有部分 Application Service，但 Root Server 尚未将其作为 Web 可消费的 HTTP API 暴露。先完成接入门禁，不在 Web 分支猜测路径或 DTO。
 
-#### Owner Session 接入状态
+#### 现有代码事实
 
-| 检查项 | 当前可核对事实 | 状态 |
+| 检查项 | 当前可核对事实 | 对 W2 的影响 |
 |---|---|---|
-| Server HTTP | SRV-CTR-002 六条接口已挂载，真实 MariaDB/Redis HTTP 生命周期已通过前序集成测试 | 已完成代码与集成测试 |
-| Web API | 登录、当前 Session、CSRF 恢复、登出、轮换、密码修改；same-origin credentials；CSRF 仅内存 | 已完成 |
-| Web 设置界面 | 登录表单、退出、密码修改、登录态状态反馈和初始化恢复 | 已完成 |
-| 安全边界 | Owner Bearer 不进入浏览器；Owner Session 不解锁旧 Bearer 路由；行情 API Key 不进入 Owner Session 请求 | 已由代码与静态契约测试覆盖 |
-| 自动化验证 | 当前精确 SHA 的 Integration CI、WebUI 单测和镜像构建通过 | 已通过 |
-| 目标环境部署 | 外部 HTTPS/Nginx/Compose 路径、Cookie Path/Secure/Origin、真实浏览器生命周期 | 待目标环境验收 |
-| SRV-CTR-002 登记 | 当前登记簿状态为 freeze-ready | 待契约治理正式冻结，不得擅自改状态 |
+| Web 现有请求 | `web/src/api.js` 封装旧版 POST Task、GET Task、GET Task Events、GET Run；事件按 `after_sequence` 增量读取 | 可复用现有任务过程 UI，但不能视为 Researchflow Run/Stage/Attempt 新契约 |
+| 旧版 API 契约 | `doc/api/contracts/分析任务.openapi.yaml` 仅声明旧版 Task 创建/查询/事件；描述中明确当前不包含取消和自动重试 | 不能据此添加模板、取消、历史分页或 Retry 请求 |
+| Root Server 路由 | `internal/server/bootstrap/router.go` 只注册旧版 `/api/v1/analysis/tasks...`、`/api/v1/analysis/runs...` 等显式路由，均使用 OwnerAccess；没有 Researchflow HTTP 路由 | 新 Application Service 尚未成为浏览器可调用接口 |
+| Root Server 运行时 | `internal/server/bootstrap/bootstrap.go` 当前装配旧版 Analysis Runner/Task Queue；Migration Registry 注册 News、Research、Notification，未注册 Researchflow | Researchflow Migration、Scheduler/Worker 生命周期尚未进入 Server 组合根 |
+| Researchflow Application | 已有 CreateRun、GetRun、CancelRun、RetryStage、GetWorkflowTemplate 等用例；模板读取要求精确 ref + version，不提供 latest 回退 | 领域/应用能力可作为 Server Adapter 输入，但方法存在不等于 HTTP 接口可用 |
+| Researchflow 运行时 | `doc/researchflow/README.md` 与任务拆分记录指出 Scheduler 运行协调、常驻 Worker Pool、生产 StageExecutor Adapter、跨进程取消通知及真实 MariaDB/并发验收仍未闭环 | 仅挂载 Handler 仍不足以证明 Run 可实际执行、取消和恢复 |
+| 浏览器认证 | `web/src/api.js` 使用 same-origin credentials，但分析请求没有 Authorization Bearer；当前 `request()` 也没有 CSRF Token 注入 | Cookie 自动携带不能通过当前 OwnerAccess Bearer 校验 |
+| Nginx 代理 | `web/default.conf.template` 将 `/analysis-api/` 直接代理到 Server，没有注入 Authorization；`docker-compose.yml` 也没有 Web 到 Server 的可信凭据注入配置 | 仓库内当前部署链路没有证明浏览器分析请求可通过 Owner 认证 |
+| Platform Session | Platform 已有 Session/CSRF 原语，但当前 Server bootstrap/router 尚未装配 Session 登录、Cookie 认证和 CSRF 中间件 | 不能把 Platform 原语存在写成 Web Session 闭环已完成 |
 
-#### W2-A 至 W2-E 分批任务
+**认证阻塞为 P0：** 当前 Root Server 的 `OwnerAccess` 由 Platform Authenticator 的 Authorization Bearer 认证；浏览器不能通过 localStorage 保存 Owner Token 来绕过此问题。必须由 Server/Platform 完成受控 Session/Cookie + CSRF + 资源授权，或提供经过安全评审的可信代理认证方案。不得在 Web 侧补存 Owner Token，也不得让 Nginx 注入长期 Owner Token 作为临时捷径。
+
+#### W2 分批任务
 
 | 批次 | 任务 | 完成条件 | 当前状态 |
 |---|---|---|---|
-| W2-A | Owner Session 浏览器认证接入 | Server 契约、Handler、真实存储生命周期、Web API/UI、自动化测试 | 代码和自动化测试已完成；目标环境部署验收待完成 |
-| W2-B | Researchflow 生产入口与正式模板 | 明确正式 Workflow Template、不可变参数 Schema Registry、版本化 Applicability、Resource Policy Resolver、真实内部 CreateRun 消费者、Caller Identity/授权/幂等键责任 | 待开展；不得用测试 Stub 或固定 Caller 代替生产身份 |
-| W2-C | Researchflow Server 生产运行时 | Migration、Scheduler、WorkerPool、过期 Attempt/Deadline 扫描、Finalization、优雅停止、故障恢复和诊断；真实 Stage Executor 接入 | 待 W2-B 的生产运行边界明确后实施 |
-| W2-D | Researchflow HTTP 契约与 Web 工作区 | SRV-CTR-001 重新进入并冻结；明确模板发现、Run 创建/查询、Stage/Attempt/ResultSummary、取消/Retry、历史分页、错误与权限；Root Server 注册真实 Handler | deferred；不得提前开放或猜测 API |
-| W2-E | 真实端到端研究闭环 | 真实 Root Server、MariaDB/Redis、News Stage、权限、幂等、事件续读、取消、Finalization 和结果读取 | 待 W2-B/C/D 完成 |
+| W2-A | Server/Platform 认证闭环 | 登录/会话建立、HttpOnly Cookie、CSRF、会话续期/撤销、Owner 身份到应用调用者身份映射、资源授权；OpenAPI 安全声明与真实中间件一致 | 阻塞，Web 不改认证 |
+| W2-B | Researchflow HTTP 契约与 Handler | 冻结模板读取/发现、Run 创建/查询、Stage/Attempt/ResultSummary 投影、取消、Retry、历史分页的 DTO、错误、幂等、游标和权限；Root Server 注册真实 Handler | 阻塞，当前只有部分 Application Service |
+| W2-C | Server 运行时接入 | Researchflow Migration 注册；Scheduler/Worker/StageExecutor/取消通知按角色装配；Health/Readiness 与优雅关闭可诊断；MariaDB 并发/恢复验收 | 阻塞，不能只接路由 |
+| W2-D | Web 研究任务工作区 | 仅按冻结 OpenAPI 接入模板和参数 Schema、Run/Stage/Attempt、服务端历史分页、取消状态与 ResultSummary；本地最近任务引用继续单独标识 | 待 W2-A/B/C 通过 |
+| W2-E | 真实联调验收 | 当前 SHA 的 WebUI Checks；真实 Root Server + MariaDB 环境验证登录/CSRF、创建/幂等、事件续读、取消竞态、历史游标、结果摘要、失败/降级/阻断与权限隔离 | 待 W2-A/B/C/D 完成 |
 
-#### 当前执行顺序
+#### Web 分支可独立完成的准备项
 
-1. 更新 Owner Session 相关文档的实现状态，保留目标部署验收为明确未完成项；不得将 CI 通过等同于生产部署通过。
-2. 在目标环境执行 Nginx/Compose/HTTPS 真实浏览器验收。该步骤需要目标服务器环境和运行配置，仓库 CI 无法替代。
-3. 转入 Researchflow 生产入口：先依照现有模块文档核对 Template、Schema、Applicability、Resource Policy、CreateRun 调用者和授权责任；只实现文档已有明确任务，不自行补造业务语义。
-4. 生产入口成立后，再装配 Server Runtime；之后才重新进入 SRV-CTR-001 的 HTTP/API 设计和 Web 消费开发。
+- [x] 盘点旧版 Analysis API、Web 请求封装和事件分页行为。
+- [x] 对照 Root Server 路由注册，确认现有旧路由与缺失的 Researchflow HTTP 路由。
+- [x] 对照 Researchflow Application Service 与模块运行时说明，区分已实现用例和未完成运行时。
+- [x] 核对浏览器请求、Nginx 代理与 OwnerAccess 认证方式，确认当前仓库部署链路缺少可验收的浏览器认证闭环。
+- [x] 明确 W2-A 至 W2-E 的依赖顺序和验收门禁；不添加推测 API、不改变旧 Task/Run 状态机。
+- [ ] 等 Server/Platform 提供可验证 Session/CSRF 与资源授权入口。
+- [ ] 等 Researchflow HTTP/OpenAPI、Root DI/Migration/Worker 接入和真实 MariaDB 验收。
+- [ ] 依照冻结契约实施 W2-D，不提前构造模板或历史分页接口。
 
-#### 现有边界保持不变
-
-- 旧 Analysis Task/Run API 仍是兼容接口，不把它们改名或包装成 Researchflow 新契约。
-- Owner Session 只解决 Owner 浏览器身份，不自动赋予领域资源权限，也不自动放行旧 Owner Bearer 路由。
-- SRV-CTR-001 仍为 deferred；不得提前公开 Researchflow CreateRun/Run/Stage/Event API。
-- News Search Stage Fixture 测试只证明执行框架链路，不代表生产 News 数据源和正式 Workflow 已接入。
-- `available_at` 来源准入继续保持原有搁置状态，不因本阶段推进重新启动。
+**进入 W2-D 的硬门禁：** OpenAPI 有安全声明且与 Handler 一致；Root Server 已注册真实路由；Session/CSRF/资源授权可在目标部署环境验证；Researchflow Migration、Scheduler/Worker 和生产 Adapter 已满足运行要求；模板、Run、Stage、Attempt、ResultSummary、取消、重试和历史分页均有字段级契约。任一项缺失时，Web 仅修复已确认的前端缺陷，不通过 Mock 冒充真实接入。
 
 ### 后续执行门禁
 

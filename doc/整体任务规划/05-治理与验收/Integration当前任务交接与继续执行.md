@@ -1130,3 +1130,36 @@ Researchflow 已有 Scheduler、Worker、WorkerPool、Claim/Lease/Fencing、候�
 - 当前下一项唯一主流程任务：WebUI 消费 SRV-CTR-002，完成同源 Cookie 登录态、内存态 CSRF、刷新恢复、登出与密码修改。具体进度和验收边界见 `doc/server/Owner-Session接入进度.md` 与 `doc/web/API_CONTRACT.md`。
 - WebUI 完成前不得声称浏览器登录闭环完成；Nginx/Compose 真实部署验证仍是后续验收项。
 - Researchflow 新 HTTP API 仍属于 SRV-CTR-001 deferred，不得把 Owner Session 接口当作 Researchflow 业务 API，也不得提前开放业务路由。
+
+
+## 2026-11-17 当前状态校正与下一主线
+
+本节为当前 integration 任务交接的最新状态；覆盖此前“Owner Session WebUI 尚未接入”的历史下一步记录。
+
+### 当前基线
+
+- 当前唯一工作分支：`integration`。
+- 本次文档核对时的代码基线：`446cc1a65c307726a1171e1341d529452ea09f55`。
+- Owner Session 文档状态同步提交：`4fd28bdeb621ae1d88224b7541afc5979d2fb204`。
+- 代码基线 `446cc1a` 的 Integration CI Run `43999751873` 为 success；`4fd28bd` 是文档状态更新，不把前一 SHA 的 CI 误记为新 SHA 的代码验收。
+- Owner Session Server + MariaDB/Redis HTTP 生命周期、WebUI API/UI 和自动化测试已完成；目标环境 Nginx/Compose/HTTPS 真实浏览器验收未完成。
+- SRV-CTR-002 状态保持 `freeze-ready`；SRV-CTR-001 仍为 `deferred`。
+
+### 当前主线任务
+
+Owner Session 不再安排新的功能开发。目标环境部署验收可在具备目标服务器访问条件时完成；仓库内下一主线转为 Researchflow 生产入口，而不是重复验证已通过的 Stage/Worker 测试。
+
+1. **Server 内部 Researchflow 消费组合**：目标场景为已登录 Owner 在 WebUI 研究任务工作区发起 Run。先实现/验证进程内 CreateRun、GetRun、CancelRun 的组合与可信 RequestIdentity；不开放公网 HTTP 路由。
+2. **Run 访问授权**：CreateRun CallerRef 从 Server 已验证 Principal.Subject 派生；Owner Session Subject 为 `owner`，AuthMethod 由 Server 显式路由策略判断。GetRun/CancelRun 必须检查持久化 Run 创建者关联，不能仅凭登录态访问任意 Run。当前 idempotency 表已有 caller_ref/operation/run_ref 关联，可作为实现基础。
+3. **News Search 生产准入**：基于现有 News Stage 输入与验证实现严格、不可变的参数 Schema Registry 和版本化 Applicability Rule。
+4. **Resource Policy**：当前只有 Template 必填的 ResourcePolicyRef 字符串，没有权威策略定义、Registry/Resolver/执行实现。该项必须先按现有契约/项目决策查清，不得填充虚构策略或发布生产 Template。
+5. **正式 Template 与生产 Runtime**：以上条件满足后发布不可变 News Search Template，再装配 Scheduler、WorkerPool、过期 Attempt 扫描、Deadline Scanner、Finalization 和优雅停止。
+
+### 继续执行约束
+
+- 不重做 News Search Stage 的 Fixture-backed MariaDB 验收。
+- 不把 DEC-PLAT-002-050 的 `service:researchflow` Quant 授权主体误用为 Owner 创建 Run 的 CallerRef；Owner Run 应由可信 Owner Principal 标识。
+- 不在 SRV-CTR-001 deferred 时开放 Researchflow HTTP API。
+- 不使用恒 true Applicability、固定 Schema Fingerprint、空 ResourcePolicy 或测试 Caller 作为生产实现。
+- 不重启 `available_at` 来源准入；该项保持 shelved。
+- 每次提交按完整功能切片聚合，完成后更新本交接文档与模块任务文档。
