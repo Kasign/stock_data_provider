@@ -11,7 +11,9 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
+	_ "time/tzdata"
 
 	"example.com/stock-analysis-flow/internal/marketdata/cache"
 	"example.com/stock-analysis-flow/internal/marketdata/model"
@@ -4006,12 +4008,21 @@ func isCurrentIncompleteSessionBar(tradeDate string, now time.Time) bool {
 	return minutes < 15*60+5
 }
 
+var (
+	marketLocationOnce sync.Once
+	marketLocationValue *time.Location
+	marketLocationErr error
+)
+
+// marketLocation 返回 A 股业务时区；使用内嵌时区数据库，避免依赖宿主机安装 tzdata。
 func marketLocation() *time.Location {
-	l, e := time.LoadLocation("Asia/Shanghai")
-	if e != nil {
-		return time.FixedZone("CST", 8*3600)
+	marketLocationOnce.Do(func() {
+		marketLocationValue, marketLocationErr = platformtime.LoadLocation("Asia/Shanghai")
+	})
+	if marketLocationErr != nil {
+		panic(fmt.Sprintf("加载 A 股业务时区 Asia/Shanghai 失败: %v", marketLocationErr))
 	}
-	return l
+	return marketLocationValue
 }
 func absDuration(d time.Duration) time.Duration {
 	if d < 0 {
