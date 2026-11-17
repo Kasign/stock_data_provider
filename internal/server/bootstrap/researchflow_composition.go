@@ -9,6 +9,7 @@ import (
 	newsconfig "example.com/stock-analysis-flow/internal/news/config"
 	researchflowapplication "example.com/stock-analysis-flow/internal/researchflow/application"
 	"example.com/stock-analysis-flow/internal/researchflow/resourcepolicy"
+	"example.com/stock-analysis-flow/internal/researchflow/template"
 	researchflowstorage "example.com/stock-analysis-flow/internal/researchflow/storage"
 	serverconfig "example.com/stock-analysis-flow/internal/server/config"
 	serverresources "example.com/stock-analysis-flow/internal/server/resources"
@@ -22,6 +23,8 @@ type researchflowOwnerComposition struct {
 	getRun           *researchflowapplication.GetRunService
 	cancelRun        *researchflowapplication.CancelRunService
 	resourcePolicies researchflowapplication.ResourcePolicyResolver
+	templateRegistry *researchflowstorage.MySQLTemplateRegistry
+	workflowTemplate template.WorkflowTemplate
 }
 
 func newResearchflowOwnerComposition(
@@ -70,6 +73,10 @@ func newResearchflowOwnerComposition(
 	if err != nil {
 		return nil, fmt.Errorf("create Researchflow Template Registry: %w", err)
 	}
+	workflowTemplate, err := buildNewsSearchWorkflowTemplate(newsStage, policyRegistry)
+	if err != nil {
+		return nil, fmt.Errorf("preflight News Search workflow template: %w", err)
+	}
 	clock, err := researchflowstorage.NewMySQLDatabaseClock(shared.DB)
 	if err != nil {
 		return nil, fmt.Errorf("create Researchflow database clock: %w", err)
@@ -98,6 +105,8 @@ func newResearchflowOwnerComposition(
 		newsStage: newsStage,
 		createRun: createRun, getRun: getRun, cancelRun: cancelRun,
 		resourcePolicies: policyResolver,
+		templateRegistry: templateRegistry,
+		workflowTemplate: workflowTemplate,
 	}, nil
 }
 
@@ -119,3 +128,18 @@ func (r configuredNewsResourcePolicyResolver) Resolve(ctx context.Context, ref s
 }
 
 var _ researchflowapplication.ResourcePolicyResolver = configuredNewsResourcePolicyResolver{}
+
+// publishWorkflowTemplate publishes the preflighted immutable definition. Existing
+// identical versions are idempotent; conflicting content aborts Server startup.
+func (c *researchflowOwnerComposition) publishWorkflowTemplate(ctx context.Context) error {
+	if c == nil || c.templateRegistry == nil {
+		return errors.New("Researchflow workflow template registry is not configured")
+	}
+	if ctx == nil {
+		return errors.New("Researchflow workflow template publication context is required")
+	}
+	if err := c.templateRegistry.Publish(ctx, c.workflowTemplate); err != nil {
+		return fmt.Errorf("publish Researchflow workflow template %s@%s: %w", c.workflowTemplate.Ref, c.workflowTemplate.Version, err)
+	}
+	return nil
+}
