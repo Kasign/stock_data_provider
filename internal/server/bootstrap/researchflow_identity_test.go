@@ -15,7 +15,9 @@ func TestOwnerSessionResearchflowIdentityAcceptsOnlyOwnerSession(t *testing.T) {
 	ctx, err := platformsecurity.WithPrincipal(context.Background(), platformsecurity.Principal{
 		Kind: platformsecurity.IdentityOwner, AuthMethod: platformsecurity.AuthMethodOwnerSession, Subject: "owner",
 	})
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	caller, err := identity.AuthenticatedCallerRef(ctx)
 	if err != nil || caller != "owner" {
 		t.Fatalf("Owner Session identity caller=%q err=%v", caller, err)
@@ -32,7 +34,7 @@ func TestOwnerSessionResearchflowIdentityAcceptsOnlyOwnerSession(t *testing.T) {
 
 	serviceBearer, err := platformsecurity.WithPrincipal(context.Background(), platformsecurity.Principal{
 		Kind: platformsecurity.IdentityService, AuthMethod: platformsecurity.AuthMethodServiceBearer,
-		Subject: "service:researchflow", Scopes: []string{platformsecurity.ScopeResearchRun},
+		Subject: "researchflow-worker", Scopes: []string{platformsecurity.ScopeResearchRun},
 	})
 	if err != nil { t.Fatal(err) }
 	if _, err := identity.AuthenticatedCallerRef(serviceBearer); !errors.Is(err, researchflowapp.ErrUnauthenticated) {
