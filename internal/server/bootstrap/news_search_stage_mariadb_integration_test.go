@@ -211,6 +211,30 @@ func TestNewsSearchStageResearchflowMariaDBIntegration(t *testing.T) {
 		}
 	}
 
+	cancelCreated, err := createRun.CreateRun(ctx, researchflowdomain.CreateRunCommand{
+		SchemaVersion: "1.0.0", IdempotencyKey: "news-search-stage-cancel-integration",
+		TemplateRef: workflowTemplate.Ref, TemplateVersion: workflowTemplate.Version,
+		InputSnapshotRefs: []string{},
+		Parameters:        json.RawMessage("{\"query\":\"cancel\",\"query_dimension\":\"market\",\"limit\":10}"),
+	})
+	if err != nil {
+		t.Fatalf("创建待取消 Researchflow Run 失败: %v", err)
+	}
+	cancelService, err := researchflowapplication.NewCancelRunService(
+		newsSearchIntegrationIdentity{}, repository, repository, repository,
+	)
+	if err != nil {
+		t.Fatalf("创建 Researchflow CancelRun Service 失败: %v", err)
+	}
+	cancelResult, err := cancelService.CancelRun(ctx, cancelCreated.Run.Ref)
+	if err != nil {
+		t.Fatalf("在 Runtime 启动前提交用户取消意图失败: %v", err)
+	}
+	if !cancelResult.Started || cancelResult.Run.Status != researchflowdomain.RunCancelling ||
+		len(cancelResult.Stages) != 1 || cancelResult.Stages[0].Status != researchflowdomain.StageCancelled {
+		t.Fatalf("用户取消意图未正确持久化: %+v", cancelResult)
+	}
+
 	fixtureProvider := &newsSearchIntegrationProvider{}
 	composition, err := newNewsSearchStageCompositionWithProviders(newsapp.StaticProviderSet{
 		Providers: []newsapp.Provider{fixtureProvider},
@@ -257,7 +281,11 @@ func TestNewsSearchStageResearchflowMariaDBIntegration(t *testing.T) {
 		if loadErr != nil {
 			t.Fatalf("轮询 Deadline Researchflow Runtime Run 状态失败: %v", loadErr)
 		}
-		if normalRun.Run.Status.Terminal() && expiredRun.Run.Status.Terminal() {
+		cancelledRun, loadErr := repository.GetRun(ctx, cancelCreated.Run.Ref)
+		if loadErr != nil {
+			t.Fatalf("轮询取消 Researchflow Runtime Run 状态失败: %v", loadErr)
+		}
+		if normalRun.Run.Status.Terminal() && expiredRun.Run.Status.Terminal() && cancelledRun.Run.Status.Terminal() {
 			break
 		}
 		select {
@@ -274,6 +302,24 @@ func TestNewsSearchStageResearchflowMariaDBIntegration(t *testing.T) {
 	deadlineLoaded, err := repository.GetRun(ctx, deadlineCreated.Run.Ref)
 	if err != nil {
 		t.Fatalf("读取 Deadline Runtime 完成后的 Run 失败: %v", err)
+	}
+	cancelledLoaded, err := repository.GetRun(ctx, cancelCreated.Run.Ref)
+	if err != nil {
+		t.Fatalf("读取 Cancellation Runtime 完成后的 Run 失败: %v", err)
+	}
+	if cancelledLoaded.Run.Status != researchflowdomain.RunCancelled ||
+		cancelledLoaded.Run.TerminationReason != "user_cancelled" ||
+		cancelledLoaded.Run.ResultSummaryRef == nil || len(cancelledLoaded.Stages) != 1 ||
+		cancelledLoaded.Stages[0].Status != researchflowdomain.StageCancelled {
+		t.Fatalf("用户取消 Run 未走 Cancellation Finalizer 正确终止: run=%+v stages=%+v", cancelledLoaded.Run, cancelledLoaded.Stages)
+	}
+	var cancellationOutboxCount int
+	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM researchflow_outbox
+		WHERE run_ref = ? AND event_type = 'researchflow.run.terminal'`, cancelCreated.Run.Ref).Scan(&cancellationOutboxCount); err != nil {
+		t.Fatalf("读取 Cancellation 终态 Outbox 失败: %v", err)
+	}
+	if cancellationOutboxCount != 1 {
+		t.Fatalf("Cancellation Finalization 应原子生成一条终态 Outbox，实际=%d", cancellationOutboxCount)
 	}
 	if deadlineLoaded.Run.Status != researchflowdomain.RunFailed ||
 		deadlineLoaded.Run.TerminationReason != "deadline_exceeded" ||
