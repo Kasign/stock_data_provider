@@ -292,7 +292,7 @@ func (s *SessionLifecycleService) ChangePassword(ctx context.Context, currentPas
 	if err := s.validateOperation(ctx, requestID); err != nil {
 		return err
 	}
-	if len(currentPassword) == 0 || len(newPassword) == 0 || len(newPassword) > 1024 {
+	if len(currentPassword) == 0 || len(currentPassword) > 1024 || len(newPassword) == 0 || len(newPassword) > 1024 {
 		return platformfault.New(platformfault.ClassValidation, "server.invalid_password_change", "password change input is invalid", nil)
 	}
 	credential, err := s.credentials.GetOwnerCredential(ctx)
