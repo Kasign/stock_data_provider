@@ -446,3 +446,92 @@ export function getCapitalFlow(settings, symbol, signal, { timeoutMs = 30000 } =
     timeoutMs
   });
 }
+
+
+// Owner CSRF state is intentionally memory-only; never persist it in browser storage.
+let ownerCSRFToken = "";
+
+function validateOwnerPassword(value, fieldName) {
+  if (typeof value !== "string") throw new Error(`${fieldName} 必须是字符串。`);
+  const bytes = new TextEncoder().encode(value).byteLength;
+  if (bytes < 1 || bytes > 1024) throw new Error(`${fieldName} 的 UTF-8 长度必须为 1–1024 字节。`);
+}
+
+function ownerRequest(settings, path, { method = "GET", body, signal, csrf = false } = {}) {
+  const headers = {};
+  if (csrf) {
+    if (!ownerCSRFToken) throw new Error("当前页面没有可用的 CSRF Token，请先恢复 Owner Session。");
+    headers["X-CSRF-Token"] = ownerCSRFToken;
+  }
+  return request(settings.analysisBase, path, { method, body, signal, headers }).catch((error) => {
+    if (error?.status === 401) ownerCSRFToken = "";
+    throw error;
+  });
+}
+
+export function clearOwnerSessionMemory() {
+  ownerCSRFToken = "";
+}
+
+export async function loginOwnerSession(settings, password, signal) {
+  validateOwnerPassword(password, "管理员密码");
+  const result = await ownerRequest(settings, "/api/v1/owner/session", {
+    method: "POST", body: { password }, signal
+  });
+  if (typeof result?.csrf_token !== "string" || !result.csrf_token) {
+    ownerCSRFToken = "";
+    throw new Error("登录响应缺少 CSRF Token，无法建立安全会话。");
+  }
+  ownerCSRFToken = result.csrf_token;
+  return result;
+}
+
+export function getOwnerSession(settings, signal) {
+  return ownerRequest(settings, "/api/v1/owner/session", { signal });
+}
+
+export async function restoreOwnerSession(settings, signal) {
+  const session = await getOwnerSession(settings, signal);
+  const result = await ownerRequest(settings, "/api/v1/owner/session/csrf", {
+    method: "POST", signal
+  });
+  if (typeof result?.csrf_token !== "string" || !result.csrf_token) {
+    ownerCSRFToken = "";
+    throw new Error("CSRF 恢复响应无效，请重新登录。");
+  }
+  ownerCSRFToken = result.csrf_token;
+  return { ...session, csrf_token: ownerCSRFToken };
+}
+
+export async function logoutOwnerSession(settings, signal) {
+  const result = await ownerRequest(settings, "/api/v1/owner/session", {
+    method: "DELETE", signal, csrf: true
+  });
+  ownerCSRFToken = "";
+  return result;
+}
+
+export async function rotateOwnerSession(settings, signal) {
+  const result = await ownerRequest(settings, "/api/v1/owner/session/rotate", {
+    method: "POST", signal, csrf: true
+  });
+  if (typeof result?.csrf_token !== "string" || !result.csrf_token) {
+    ownerCSRFToken = "";
+    throw new Error("Session 轮换响应缺少 CSRF Token，请重新登录。");
+  }
+  ownerCSRFToken = result.csrf_token;
+  return result;
+}
+
+export async function changeOwnerPassword(settings, currentPassword, newPassword, signal) {
+  validateOwnerPassword(currentPassword, "当前密码");
+  validateOwnerPassword(newPassword, "新密码");
+  const result = await ownerRequest(settings, "/api/v1/owner/password", {
+    method: "PUT",
+    body: { current_password: currentPassword, new_password: newPassword },
+    signal,
+    csrf: true
+  });
+  ownerCSRFToken = "";
+  return result;
+}

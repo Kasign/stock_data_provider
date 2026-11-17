@@ -2,7 +2,14 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   analysisHealth,
+  changeOwnerPassword,
+  clearOwnerSessionMemory,
   createAnalysisTask,
+  getOwnerSession,
+  loginOwnerSession,
+  logoutOwnerSession,
+  restoreOwnerSession,
+  rotateOwnerSession,
   getAnalysisRun,
   getAnalysisTask,
   getAnalysisTaskEvents,
@@ -757,6 +764,88 @@ test("sets timeouts for all individual stock research data endpoints", async () 
     assert.equal(signals.length, 7);
     assert.ok(signals.every((signal) => signal.aborted), "timed-out research fetches must abort their underlying requests");
   } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+
+test("Owner Session uses same-origin cookies and keeps CSRF only in runtime memory", async () => {
+  const originalFetch = globalThis.fetch;
+  const requests = [];
+  clearOwnerSessionMemory();
+  globalThis.fetch = async (url, init) => {
+    requests.push({ url: String(url), ...init });
+    if (String(url).endsWith("/api/v1/owner/session") && init.method === "POST") {
+      return jsonResponse({ schema_version: "1.0.0", authenticated: true, csrf_token: "login-csrf-token", expires_at: "2026-11-17T10:00:00Z" });
+    }
+    if (String(url).endsWith("/api/v1/owner/session") && init.method === "GET") {
+      return jsonResponse({ schema_version: "1.0.0", authenticated: true, expires_at: "2026-11-17T10:00:00Z" });
+    }
+    if (String(url).endsWith("/api/v1/owner/session/csrf")) {
+      return jsonResponse({ schema_version: "1.0.0", authenticated: true, csrf_token: "restored-csrf-token" });
+    }
+    if (String(url).endsWith("/api/v1/owner/session/rotate")) {
+      return jsonResponse({ schema_version: "1.0.0", authenticated: true, csrf_token: "rotated-csrf-token", expires_at: "2026-11-17T10:00:00Z" });
+    }
+    return new Response(null, { status: 204 });
+  };
+  const settings = { analysisBase: "/analysis-api", apiKey: "market-secret" };
+  try {
+    await loginOwnerSession(settings, "管理员密码");
+    assert.equal(requests[0].url, "/analysis-api/api/v1/owner/session");
+    assert.equal(requests[0].method, "POST");
+    assert.equal(requests[0].credentials, "same-origin");
+    assert.equal(requests[0].headers["Content-Type"], "application/json");
+    assert.equal(requests[0].headers["X-API-Key"], undefined);
+    assert.equal(requests[0].headers.Authorization, undefined);
+    assert.deepEqual(JSON.parse(requests[0].body), { password: "管理员密码" });
+
+    clearOwnerSessionMemory();
+    const restored = await restoreOwnerSession(settings);
+    assert.equal(restored.csrf_token, "restored-csrf-token");
+    assert.equal(requests[1].method, "GET");
+    assert.equal(requests[2].method, "POST");
+    assert.equal(requests[2].headers["X-CSRF-Token"], undefined);
+
+    await rotateOwnerSession(settings);
+    assert.equal(requests[3].headers["X-CSRF-Token"], "restored-csrf-token");
+    await logoutOwnerSession(settings);
+    assert.equal(requests[4].method, "DELETE");
+    assert.equal(requests[4].headers["X-CSRF-Token"], "rotated-csrf-token");
+  } finally {
+    clearOwnerSessionMemory();
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Owner password change validates UTF-8 byte limits and clears runtime CSRF state", async () => {
+  const originalFetch = globalThis.fetch;
+  const requests = [];
+  clearOwnerSessionMemory();
+  globalThis.fetch = async (url, init) => {
+    requests.push({ url: String(url), ...init });
+    if (init.method === "POST") {
+      return jsonResponse({ schema_version: "1.0.0", authenticated: true, csrf_token: "password-change-csrf" });
+    }
+    return new Response(null, { status: 204 });
+  };
+  const settings = { analysisBase: "/analysis-api" };
+  try {
+    await loginOwnerSession(settings, "current-password");
+    await assert.rejects(changeOwnerPassword(settings, "x".repeat(1025), "new-password"), /1–1024 字节/);
+    await assert.rejects(changeOwnerPassword(settings, "current-password", "新".repeat(342)), /1–1024 字节/);
+    assert.equal(requests.length, 1, "invalid password lengths must not issue HTTP requests");
+
+    await changeOwnerPassword(settings, "current-password", "new-password");
+    assert.equal(requests[1].method, "PUT");
+    assert.equal(requests[1].headers["X-CSRF-Token"], "password-change-csrf");
+    assert.deepEqual(JSON.parse(requests[1].body), {
+      current_password: "current-password", new_password: "new-password"
+    });
+    await assert.rejects(logoutOwnerSession(settings), /没有可用的 CSRF Token/);
+    assert.equal(requests.length, 2, "password change must clear the in-memory CSRF token");
+  } finally {
+    clearOwnerSessionMemory();
     globalThis.fetch = originalFetch;
   }
 });
