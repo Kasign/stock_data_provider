@@ -35,7 +35,6 @@ func TestValidateIndexConstituentsAsOfQueryAtUsesChinaMarketDate(t *testing.T) {
 	}
 }
 
-
 func TestHealthLiveUsesInjectedClock(t *testing.T) {
 	now := time.Date(2026, 11, 17, 16, 0, 0, 0, time.UTC)
 	server := NewWithApplicationAndClock("", "forward_adjusted", ApplicationDependencies{}, nil, 0, 0, nil, httpAPIFixedClock{now: now})
