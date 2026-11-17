@@ -140,3 +140,13 @@ Root Server 在 `OWNER_SESSION_ENABLED=true` 时，按 `doc/server/contracts/SRV
 7. 单元/契约/浏览器测试及真实部署/真实数据验收证据。
 
 不满足条件时标记“待契约/待服务端接入”，不写成已实现 API。
+
+## 8. Researchflow W2 首期输入边界（非公开 API）
+
+首期仅定义未来 Web 工作区的 CreateRun 输入责任，不代表 Researchflow HTTP API 已获准公开。`SRV-CTR-001` 仍为 deferred，Web 不得据此自行实现请求 URL 或 DTO。
+
+WebUI 只提交请求 Schema 版本、一次逻辑提交的幂等键、精确模板 ref/version、真实输入快照引用和符合模板 Parameter Schema 的 parameters。首期固定 current mode：WebUI 不提交 `system_as_of` 或 `deadline_at`；Server 从可信 Owner Session Principal 取得 CallerRef，从 MariaDB UTC 时钟生成 `system_as_of`，并按显式 Server Run Deadline 配置生成绝对 `deadline_at`。Request ID/Correlation ID 由 Server 生成或传播。
+
+同一幂等键重试必须复用原始请求意图。指纹包含 caller、操作、请求 Schema 版本、精确模板身份、规范化快照引用集合和 JCS 参数；排除服务端生成时间及追踪 ID。命中幂等记录必须先于时钟读取和模板解析，返回原 Run，不改变其 PIT/Deadline。
+
+首个 News Search 参数 Schema 的真实字段为 `query`（必填）、`limit`（必填，1–100）和 `query_dimension`（可选）；额外字段拒绝。此参数 Schema 不等于正式 Workflow Template 已发布，也不等于 HTTP API 已开放。

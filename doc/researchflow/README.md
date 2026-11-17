@@ -120,3 +120,12 @@ Server 已在 Owner Session 启用且 Researchflow Capacity 显式配置时，�
 代码 SHA `fc2f7793fe22c6760f8756d9f277b4b579012a51` 的 Integration CI Run [44024703289](https://github.com/Kasign/stock_data_provider/actions/runs/44024703289) 全量 success。
 
 **边界：** 当前只有进程内服务组合，没有实际调用方、正式 Workflow Template 或 Worker Runtime；未新增 HTTP 路由，SRV-CTR-001 继续 deferred。WebUI W2 尚未接通。
+
+## 2026-11-17 CreateRun 首期时间与幂等输入约束
+
+- 首期只支持 current mode。CreateRun Command 不接收客户端 `system_as_of`、`deadline_at`、`originating_request_id` 或 `correlation_id`；后两者由 Server Observability/ID 设施注入。
+- CreateRun 指纹覆盖可信 Caller、操作、请求 Schema 版本、精确 Template Ref/Version、规范化快照引用集合和 JCS 参数；不覆盖 Server 生成的 PIT/Deadline 时间或追踪 ID。
+- 必须先按 caller-scoped idempotency key 查询；只有未命中才读取 MariaDB UTC 时钟并生成 `system_as_of` 与 `deadline_at`。重放返回原 Run；并发同键请求由 MySQL Repository 原子唯一键和指纹比较收敛。
+- Server Run Deadline 必须由显式配置提供，不设隐式默认值；它是整个 Run 的绝对上限。Attempt Timeout 仍只约束单次 Attempt，首期不另增 Stage 总超时；Retry 不得重置 Run Deadline。
+- `CreateRunAtomic` 在事务写入前及提交前继续用数据库 UTC 时钟复核绝对 Deadline，不能只依赖 Application 层校验。
+- WebUI 输入契约与公开 API 状态以 [Web整体规划 W2-B](../web/Web整体规划.md) 和 [Web API 边界](../web/API_CONTRACT.md) 为准；SRV-CTR-001 未重新进入前不增加公开 HTTP API。

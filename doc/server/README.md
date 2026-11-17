@@ -1918,3 +1918,14 @@ Server Bootstrap
 - Researchflow 生产 StageExecutor 尚未装配；Quant 生产 Application Port/Payload Registry 门禁仍未满足。不得因 News/Research 组合构造完成而直接宣称完整 Researchflow 业务链路通过。
 
 下一轮任务顺序、具体文件入口和验收标准见 [Integration 当前任务交接与继续执行](../整体任务规划/05-治理与验收/Integration当前任务交接与继续执行.md)。
+
+### 12.94 Researchflow Run Deadline 配置与 CreateRun 时间责任（2026-11-17）
+
+Researchflow Run Deadline 是 Server 进程级配置，不属于旧 Analysis Timeout，也不属于单次 Attempt Timeout。
+
+- 配置键：`RESEARCHFLOW_RUN_DEADLINE`，使用 Go duration 字符串（例如 `30m`、`2h`）；必须显式配置，不提供默认值。
+- 当 Researchflow Capacity（`RESEARCHFLOW_MAX_QUEUED_RUNS` 与 `RESEARCHFLOW_MAX_WORKERS`）未启用时，不允许单独配置 Run Deadline；启用 Capacity 时 Run Deadline 必须同时配置且为正数。
+- Server 将该时长注入 CreateRun Application；CreateRun 在幂等未命中后读取 MariaDB UTC 时间，设置 `system_as_of = db_now`、`deadline_at = db_now + RESEARCHFLOW_RUN_DEADLINE`。
+- 绝对 `deadline_at` 在 Run 创建时固化；后续配置变化不追溯修改已创建 Run，Retry 不重置 Deadline。
+- Attempt Timeout 仍由 Template RetryPolicy 的 `attempt_timeout_ms` 控制单次 Attempt；Run Deadline 是跨 Stage/Retry 的最终上限。HTTP Read/Write Timeout 和 Shutdown Timeout 只约束传输/进程生命周期，不替代业务 Deadline。
+- CreateRun 指纹不包含 Server 生成的 `system_as_of`、`deadline_at`；同一 caller/operation/idempotency key 的重放返回原 Run 和原 Deadline。Repository 仍在事务写入前、提交前复核数据库 UTC Deadline。

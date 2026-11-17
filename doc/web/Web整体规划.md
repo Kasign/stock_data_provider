@@ -171,3 +171,35 @@ Web 负责交互、请求编排、状态展示和有限的浏览器本地工作�
 ## 9. 本轮执行记录
 
 2026-11-12：W0/W1-A/W1-B/W1-C/W1-D 已完成。W1-C 提交 `7f1b8510d349b9d166b6efceddee874ddb7703c0` 的 CI/浏览器视口验收通过；W1-D 在提交 `82460cad6668c34ff6fde103efc28815ee21a02d` 增加浏览器前进/后退与 Reduced Motion 断言，WebUI Checks（43160974526）及 Chromium Browser Smoke（43160974640，attempt 2）通过。Browser Smoke 首次 attempt 在既有行情重试断言处超时，重跑通过；记录为测试稳定性观察。
+
+### W2-B 首期 CreateRun 输入契约（2026-11-17 冻结）
+
+本节冻结的是 WebUI 与未来 Server 内部 CreateRun 消费者之间的输入责任，不是对外 HTTP API。`SRV-CTR-001` 仍为 deferred；在该契约重新进入并冻结前，不新增 Researchflow HTTP 路由或前端请求。
+
+首期只支持当前时点研究（current mode），不提供历史回溯时间选择：
+
+| 字段 | 首期输入方 | 语义与约束 |
+|---|---|---|
+| `schema_version` | Web/调用方按活动请求契约提供 | 请求结构版本；参与幂等指纹 |
+| `idempotency_key` | Web 为一次逻辑提交生成 | 同一逻辑提交的网络重试必须复用；新建一次研究任务才生成新值 |
+| `template_ref` | 从 Server 发布的模板清单选择 | 必须精确指定，不允许 latest/别名回退 |
+| `template_version` | 与模板一起选择 | 必须精确版本；不能由 Server 静默替换 |
+| `input_snapshot_refs` | Web 只传已有、真实、不可变的快照引用 | 不传原始行情/新闻内容；空数组是否允许由模板声明 |
+| `parameters` | Web 提交模板参数 | 必须匹配模板绑定的不可变 Parameter Schema；首个 News Search 模板参数以 `news-search-parameters-1.0.0.schema.json` 为准 |
+
+以下字段不属于 WebUI 输入，必须由 Server 可信上下文或服务端时钟生成：
+
+- `system_as_of`：首期由 Server 在创建新 Run 时读取 MariaDB UTC 时钟生成；作为当前模式的 PIT 截止时点并随 Run 固化。
+- `deadline_at`：Server 使用同一次数据库 UTC 读数加显式配置的 Run Deadline 计算，作为整个 Run 的绝对完成上限并随 Run 固化。
+- `originating_request_id`、`correlation_id`：由 Server Observability/ID 设施生成或传播。
+- `caller_ref`：只从 Server 已验证的 Owner Session Principal 取得；不得从请求字段或 Header 自报。
+
+幂等规则：
+
+1. 幂等作用域为可信 `caller_ref + operation(CreateRun) + idempotency_key`。
+2. 指纹只覆盖请求意图：请求 Schema 版本、精确模板身份、规范化快照引用集合和 JCS 规范化参数。
+3. `system_as_of`、`deadline_at`、Request ID、Correlation ID 等服务端生成/追踪字段不进入指纹。
+4. 先查询幂等记录；命中且指纹一致时返回原 Run，不重新读取时钟、不重新计算 Deadline、不解析当前模板；指纹不同则返回冲突。
+5. 未命中后才读取数据库 UTC 时钟并生成时间字段；并发同键请求由 Repository 唯一键和事务锁裁决，指纹一致者返回同一个已持久化 Run。
+
+未来 historical mode 如需用户指定 `system_as_of`，必须作为独立、显式版本化的输入模式重新评审；不得让当前模式接受客户端时间覆盖。Attempt Timeout 是单次 Attempt 上限；首期不另增 Stage 总超时。Run Deadline 不可修改，Retry 不得重置。HTTP Timeout 与 Shutdown Timeout 不参与 Run Deadline 计算。
