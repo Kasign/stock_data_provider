@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -19,6 +20,7 @@ import (
 	researchflowparameterschema "example.com/stock-analysis-flow/internal/researchflow/parameterschema"
 	"example.com/stock-analysis-flow/internal/researchflow/resourcepolicy"
 	researchflowstorage "example.com/stock-analysis-flow/internal/researchflow/storage"
+	serverrelay "example.com/stock-analysis-flow/internal/server/relay"
 	researchflowtemplate "example.com/stock-analysis-flow/internal/researchflow/template"
 	serverconfig "example.com/stock-analysis-flow/internal/server/config"
 )
@@ -91,6 +93,53 @@ type newsSearchIntegrationNoopDispatcher struct{}
 
 func (newsSearchIntegrationNoopDispatcher) Execute(context.Context, string, string, string) (researchflowapplication.WorkerExecution, error) {
 	return researchflowapplication.WorkerExecution{}, nil
+}
+
+type newsSearchIntegrationOutboxStore struct {
+	repository *researchflowstorage.MySQLRunRepository
+	runRef     string
+}
+
+func (s newsSearchIntegrationOutboxStore) ClaimOutbox(
+	ctx context.Context, workerID, _ string, limit int, leaseDuration time.Duration,
+) ([]researchflowapplication.OutboxMessage, error) {
+	return s.repository.ClaimOutbox(ctx, workerID, s.runRef, limit, leaseDuration)
+}
+
+func (s newsSearchIntegrationOutboxStore) AcknowledgeOutbox(
+	ctx context.Context, outboxRef, workerID string, leaseGeneration uint64,
+) (bool, error) {
+	return s.repository.AcknowledgeOutbox(ctx, outboxRef, workerID, leaseGeneration)
+}
+
+func (s newsSearchIntegrationOutboxStore) RetryOutbox(
+	ctx context.Context, outboxRef, workerID string, leaseGeneration uint64,
+	nextAttemptAt time.Time, errorCode string,
+) (bool, error) {
+	return s.repository.RetryOutbox(ctx, outboxRef, workerID, leaseGeneration, nextAttemptAt, errorCode)
+}
+
+type newsSearchIntegrationNotificationReceiver struct {
+	failFirst atomic.Bool
+	mu        sync.Mutex
+	events    []map[string]any
+}
+
+func (r *newsSearchIntegrationNotificationReceiver) Receive(ctx context.Context, raw []byte) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if r.failFirst.CompareAndSwap(true, false) {
+		return errors.New("temporary Notification receiver failure")
+	}
+	var event map[string]any
+	if err := json.Unmarshal(raw, &event); err != nil {
+		return err
+	}
+	r.mu.Lock()
+	r.events = append(r.events, event)
+	r.mu.Unlock()
+	return nil
 }
 
 type newsSearchIntegrationProvider struct {
@@ -483,6 +532,101 @@ func TestNewsSearchStageResearchflowMariaDBIntegration(t *testing.T) {
 	}
 	if recoveryOutboxCount != 1 {
 		t.Fatalf("崩溃恢复后的 Run Finalization 应原子生成一条终态 Outbox，实际=%d", recoveryOutboxCount)
+	}
+
+	// 使用真实 MariaDB Outbox Store 和 Server Relay，验证发布、暂时失败重试及确认提交。
+	receiver := &newsSearchIntegrationNotificationReceiver{}
+	receiver.failFirst.Store(true)
+	runRefs := []string{
+		created.Run.Ref, deadlineCreated.Run.Ref, cancelCreated.Run.Ref,
+		inFlightCancelCreated.Run.Ref, recoveryCreated.Run.Ref,
+	}
+	for index, runRef := range runRefs {
+		relay, err := serverrelay.NewResearchflowNotificationRelay(
+			newsSearchIntegrationOutboxStore{repository: repository, runRef: runRef},
+			receiver,
+			serverrelay.ResearchflowNotificationConfig{
+				WorkerID: "integration:notification-relay:" + runRef,
+				BatchSize: 1, PollInterval: 10 * time.Millisecond,
+				LeaseDuration: time.Second, PublishTimeout: 500 * time.Millisecond,
+			},
+			nil,
+		)
+		if err != nil {
+			t.Fatalf("创建 Researchflow Notification Relay 失败: %v", err)
+		}
+		firstDispatch, err := relay.ProcessOnce(ctx)
+		if err != nil {
+			t.Fatalf("执行 Researchflow Outbox 首次投递失败: %v", err)
+		}
+		if firstDispatch.Claimed != 1 {
+			t.Fatalf("Run %s 应恰好 Claim 一条终态 Outbox，实际=%+v", runRef, firstDispatch)
+		}
+		if index == 0 {
+			if firstDispatch.Retried != 1 || firstDispatch.Published != 0 {
+				t.Fatalf("首次 Notification 暂时失败应进入 Outbox Retry：%+v", firstDispatch)
+			}
+			retryDeadline := time.Now().Add(10 * time.Second)
+			for {
+				retryDispatch, retryErr := relay.ProcessOnce(ctx)
+				if retryErr != nil {
+					t.Fatalf("执行 Researchflow Outbox 重试失败: %v", retryErr)
+				}
+				if retryDispatch.Published == 1 {
+					break
+				}
+				if time.Now().After(retryDeadline) {
+					t.Fatalf("暂时失败的 Outbox 未在重试窗口内重新投递: %+v", retryDispatch)
+				}
+				select {
+				case <-ctx.Done():
+					t.Fatalf("等待 Outbox 重试成功失败: %v", ctx.Err())
+				case <-time.After(50 * time.Millisecond):
+				}
+			}
+		} else if firstDispatch.Published != 1 || firstDispatch.Retried != 0 {
+			t.Fatalf("Run %s 的终态 Outbox 未成功投递: %+v", runRef, firstDispatch)
+		}
+	}
+
+	receiver.mu.Lock()
+	receivedEvents := append([]map[string]any(nil), receiver.events...)
+	receiver.mu.Unlock()
+	if len(receivedEvents) != len(runRefs) {
+		t.Fatalf("Notification EventReceiver 应收到全部终态事件，实际=%d 期望=%d", len(receivedEvents), len(runRefs))
+	}
+	seenIdempotencyKeys := make(map[string]struct{}, len(receivedEvents))
+	for _, event := range receivedEvents {
+		if event["event_type"] != "researchflow.run.terminal" {
+			t.Fatalf("收到非预期 Notification EventType: %+v", event)
+		}
+		key, ok := event["idempotency_key"].(string)
+		if !ok || key == "" {
+			t.Fatalf("Notification Envelope 缺少 IdempotencyKey: %+v", event)
+		}
+		if _, exists := seenIdempotencyKeys[key]; exists {
+			t.Fatalf("Notification Envelope IdempotencyKey 重复: %s", key)
+		}
+		seenIdempotencyKeys[key] = struct{}{}
+	}
+	for index, runRef := range runRefs {
+		var publishedAt sql.NullString
+		var attemptCount uint32
+		var leaseOwner, leaseExpires sql.NullString
+		if err := db.QueryRowContext(ctx, `SELECT published_at, attempt_count, lease_owner, lease_expires_at
+			FROM researchflow_outbox WHERE run_ref = ?`, runRef).Scan(
+			&publishedAt, &attemptCount, &leaseOwner, &leaseExpires,
+		); err != nil {
+			t.Fatalf("读取已投递 Outbox 状态失败（Run %s）: %v", runRef, err)
+		}
+		expectedAttempts := uint32(1)
+		if index == 0 {
+			expectedAttempts = 2
+		}
+		if !publishedAt.Valid || attemptCount != expectedAttempts || leaseOwner.Valid || leaseExpires.Valid {
+			t.Fatalf("Outbox 投递确认/重试状态不正确（Run %s）：published=%+v attempts=%d owner=%+v lease=%+v",
+				runRef, publishedAt, attemptCount, leaseOwner, leaseExpires)
+		}
 	}
 	if deadlineLoaded.Run.Status != researchflowdomain.RunFailed ||
 		deadlineLoaded.Run.TerminationReason != "deadline_exceeded" ||
