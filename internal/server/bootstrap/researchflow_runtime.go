@@ -144,6 +144,7 @@ func (c *researchflowRuntimeComponent) Start(ctx context.Context) error {
 		return errors.New("Researchflow Runtime and start context are required")
 	}
 	if err := c.pool.Start(context.WithoutCancel(ctx)); err != nil {
+		close(c.done)
 		return fmt.Errorf("start Researchflow Worker Pool: %w", err)
 	}
 	loopCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
