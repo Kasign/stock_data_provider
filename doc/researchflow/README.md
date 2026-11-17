@@ -151,3 +151,11 @@ Server 已在 Owner Session 启用且 Researchflow Capacity 显式配置时，�
 - 无 Provider inventory 时模板仍可发布，但 ResourcePolicy Resolve/CreateRun 继续 fail-closed；不创建无 Provider 的可执行 Run。
 - 本切片没有开放 SRV-CTR-001 HTTP 路由，也没有声称 Worker Runtime 已接入。Server Scheduler/WorkerPool/Deadline scanner/Finalization 的生产生命周期装配仍是下一阶段；不得将模板发布等同于生产执行链闭环。
 
+## 2026-11-17 终态与取消恢复发现能力
+
+- 新增 `RunFinalizationCandidateScanner`：通过 RunRef Keyset 分页发现正常完成、Deadline 终止和用户取消的 Run；只有所有 Stage 均为终态且不存在运行中 Attempt 才返回候选。
+- 新增 MariaDB `ListFinalizableRunRefs`，只负责无锁候选发现；Finalization Coordinator 仍重新加载不可变 Run/Stage/Attempt 快照，并由原子 Finalize 事务决定是否提交。
+- 新增 `CancellationRecoveryScanner`：按 (RunRef, StageRef) 分页发现 `RunCancelling` 下 Lease 已过期的 Attempt，并调用既有 `FenceExpiredCancellationAttempt` 做事务内复核和 Fencing。
+- 以上扫描器目前已具备 Application / Storage 实现和测试，但尚未装配进 Server 周期 Runtime；不能据此认定崩溃恢复已在生产进程中运行。
+- 最新验证：Integration CI 对提交 `4996a1d8550269bdf4b5198a279483c2e9a9f03a` 全量成功，包含根模块测试、Worker Bootstrap MariaDB/Redis 生命周期、go-core、Compose 与 WebUI 检查。
+
