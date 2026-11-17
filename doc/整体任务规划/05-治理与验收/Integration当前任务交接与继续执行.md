@@ -1267,7 +1267,11 @@ GetRun 与 CancelRun 的持久化创建者授权已在 Application/Storage 层�
 - W2-B 的 CreateRun 输入、幂等、MariaDB UTC system_as_of / deadline 已实现；不需要等待 SRV-CTR-001 才能发布内部模板。
 - 正式模板 `news.search_candidates@1.0.0` 已加入 Server Bootstrap：启动时预检参数 Schema、Applicability 精确版本、Output Registry 精确条目和 ResourcePolicy 注册，再通过 MySQL Template Registry 幂等发布；同版本内容冲突阻止启动。配置冻结与执行语义见 `doc/researchflow/README.md`。
 - 模板允许空输入快照，但 ResourcePolicy Provider inventory 仍必须非空；没有可用 Provider 时 CreateRun fail-closed，不创建无法执行的 Run。
-- Worker Runtime / Scheduler 周期扫描 / WorkerPool / ExpiredAttempt 恢复 / Deadline 扫描 / Finalization / Shutdown 仍未接入 Bootstrap；模板发布不代表生产执行链闭环。
+- Worker Runtime / Scheduler 周期扫描 / WorkerPool / ExpiredAttempt 恢复 / Deadline 扫描 / Finalization / Shutdown 仍未接入 Bootstrap；模板发布和候选扫描器实现均不代表生产执行链闭环。
+- 已新增 `RunFinalizationCandidateScanner` 与 MariaDB `ListFinalizableRunRefs`，覆盖正常完成、Deadline 终止和用户取消三类候选；要求 Stage 全部终态且没有运行中的 Attempt。
+- 已新增 `CancellationRecoveryScanner` 与 MariaDB 过期取消 Attempt 候选查询，复用 `FenceExpiredCancellationAttempt` 做事务内复核和 Fencing。
+- 精确 SHA `4996a1d8550269bdf4b5198a279483c2e9a9f03a` 的 Integration CI Run [44074611330](https://github.com/Kasign/stock_data_provider/actions/runs/44074611330) 全量 success（gofmt、root/go-core vet/test、跨模块 MariaDB、Worker Bootstrap 生命周期、Compose、WebUI 检查与构建）。
+
 - `SRV-CTR-001=deferred` 不变；未开放 Researchflow HTTP API，Owner Bearer 不自动获得 Owner Session 的 Researchflow 权限。
 
-后续主线：装配现有 Researchflow Scheduler、Worker、WorkerPool、SchedulerCandidateScanner、ExpiredAttemptScanner、DeadlineScanner、RunFinalizationCoordinator 与现有 MySQL Repository，接入 Server Lifecycle；按进程角色明确 API/Worker 装配边界，并验证 Run 正常完成、Retry、崩溃恢复、Deadline、取消、终态 Outbox 和优雅关闭。不要重复实现已经通过的 ResourcePolicy、Owner 身份适配、Run 访问授权、DatabaseClock、WorkerPool 或 Scheduler。
+后续主线：装配现有 Researchflow Worker、WorkerPool、Scheduler、SchedulerCandidateScanner、ExpiredAttemptScanner、CancellationRecoveryScanner、DeadlineScanner、RunFinalizationCandidateScanner、RunFinalizationCoordinator 与现有 MySQL Repository，接入 Server Lifecycle。必须先解决 Worker 角色不依赖 Owner Session 的组合边界，再验证 Run 正常完成、Retry、崩溃恢复、Deadline、取消、终态 Outbox 和优雅关闭。不要重复实现已经通过的 ResourcePolicy、Owner 身份适配、Run 访问授权、DatabaseClock、WorkerPool、Scheduler 或上述恢复扫描器。
