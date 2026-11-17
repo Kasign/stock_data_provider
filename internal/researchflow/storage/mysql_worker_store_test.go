@@ -9,7 +9,6 @@ import (
 	"example.com/stock-analysis-flow/internal/researchflow/template"
 )
 
-
 func TestValidatePersistedResourcePolicySnapshot(t *testing.T) {
 	registry, err := resourcepolicy.NewRegistry()
 	if err != nil { t.Fatal(err) }
@@ -18,7 +17,7 @@ func TestValidatePersistedResourcePolicySnapshot(t *testing.T) {
 	resolved := template.ResolvedTemplate{ResourcePolicyRef: resourcepolicy.NewsSearchConfiguredProvidersRef, ResourcePolicy: snapshot}
 	if resolved.ResourcePolicy.PolicyRef != resolved.ResourcePolicyRef { t.Fatal("policy reference mismatch") }
 	if err := registry.ValidateSnapshot(resolved.ResourcePolicy); err != nil { t.Fatal(err) }
-	resolved.ResourcePolicy.AllowedProviderCodes[0] = "forged"
+	resolved.ResourcePolicy.AllowedProviderCodes[0] = "invalid code"
 	if err := registry.ValidateSnapshot(resolved.ResourcePolicy); err == nil { t.Fatal("tampered allowlist must be rejected") }
 }
 

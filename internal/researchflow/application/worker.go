@@ -424,7 +424,6 @@ func (w *Worker) heartbeat(ctx context.Context, cancel context.CancelCauseFunc, 
 	}
 }
 
-
 func validateWorkerResourcePolicySnapshot(snapshot resourcepolicy.Snapshot) error {
 	registry, err := resourcepolicy.NewRegistry()
 	if err != nil {

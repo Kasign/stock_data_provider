@@ -10,7 +10,6 @@ import (
 	"sync"
 	"testing"
 	"time"
-
 	"github.com/go-sql-driver/mysql"
 
 	platformstorage "example.com/stock-analysis-flow/internal/platform/storage"
@@ -463,7 +462,9 @@ func TestMariaDBWorkerStoreSnapshotClaimAndCommit(t *testing.T) {
 			DiagnosticRefs: []string{}, ReasonCodes: []string{},
 		}},
 		ResolvedTemplate: template.ResolvedTemplate{
-			Ref: "worker-template", Version: "v1", Fingerprint: templateFingerprint, OutputRegistryVersion: "1.0.0",
+			Ref: "worker-template", Version: "v1", TemplateFingerprint: templateFingerprint, Fingerprint: templateFingerprint,
+			ResourcePolicyRef: resourcepolicy.NewsSearchConfiguredProvidersRef, ResourcePolicy: policySnapshot,
+			OutputRegistryVersion: "1.0.0",
 			Stages: []template.ResolvedStage{{
 				Definition: template.StageDefinition{
 					Code: "quant",

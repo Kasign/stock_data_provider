@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"example.com/stock-analysis-flow/internal/researchflow/domain"
-	"example.com/stock-analysis-flow/internal/researchflow/template"
 	"example.com/stock-analysis-flow/internal/researchflow/resourcepolicy"
+	"example.com/stock-analysis-flow/internal/researchflow/template"
 )
 
 type identityStub struct {
@@ -64,6 +64,7 @@ type resourcePoliciesStub struct {
 	err      error
 	calls    int
 }
+
 func (s *resourcePoliciesStub) Resolve(_ context.Context, ref string) (resourcepolicy.Snapshot, error) {
 	s.calls++
 	if s.err != nil {
