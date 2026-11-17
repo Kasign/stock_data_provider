@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 
 	researchflowapplication "example.com/stock-analysis-flow/internal/researchflow/application"
@@ -27,6 +28,11 @@ type researchflowRuntimeComponent struct {
 	logger *slog.Logger
 	cancel context.CancelFunc
 	done   chan struct{}
+
+	taskSlots chan struct{}
+	taskMu    sync.Mutex
+	inFlight  map[string]struct{}
+	tasks     sync.WaitGroup
 
 	schedulerCursor    string
 	expiredRunCursor   string
@@ -134,6 +140,7 @@ func newResearchflowRuntimeComponent(
 		deadlines: deadlines, cancellations: cancellations,
 		finalizationCandidates: finalizationCandidates, finalizer: finalizer,
 		logger: slog.Default(), done: make(chan struct{}),
+		taskSlots: make(chan struct{}, localWorkers), inFlight: make(map[string]struct{}),
 	}, nil
 }
 
@@ -165,6 +172,16 @@ func (c *researchflowRuntimeComponent) Stop(ctx context.Context) error {
 	case <-ctx.Done():
 		return fmt.Errorf("wait for Researchflow scan loop: %w", ctx.Err())
 	}
+	tasksDone := make(chan struct{})
+	go func() {
+		c.tasks.Wait()
+		close(tasksDone)
+	}()
+	select {
+	case <-tasksDone:
+	case <-ctx.Done():
+		return fmt.Errorf("wait for Researchflow execution tasks: %w", ctx.Err())
+	}
 	if err := c.pool.Shutdown(ctx); err != nil {
 		return fmt.Errorf("shutdown Researchflow Worker Pool: %w", err)
 	}
@@ -183,6 +200,42 @@ func (c *researchflowRuntimeComponent) run(ctx context.Context) {
 		case <-ticker.C:
 		}
 	}
+}
+
+
+// launchTask runs a blocking Application operation outside the scan loop.
+// The local slot bound prevents an unbounded goroutine backlog; inFlight prevents
+// repeated scans from launching the same durable candidate concurrently.
+func (c *researchflowRuntimeComponent) launchTask(ctx context.Context, key string, execute func()) bool {
+	if c == nil || ctx == nil || strings.TrimSpace(key) == "" || execute == nil || ctx.Err() != nil {
+		return false
+	}
+	select {
+	case c.taskSlots <- struct{}{}:
+	default:
+		return false
+	}
+	c.taskMu.Lock()
+	if _, exists := c.inFlight[key]; exists {
+		c.taskMu.Unlock()
+		<-c.taskSlots
+		return false
+	}
+	c.inFlight[key] = struct{}{}
+	c.tasks.Add(1)
+	c.taskMu.Unlock()
+
+	go func() {
+		defer func() {
+			c.taskMu.Lock()
+			delete(c.inFlight, key)
+			c.taskMu.Unlock()
+			<-c.taskSlots
+			c.tasks.Done()
+		}()
+		execute()
+	}()
+	return true
 }
 
 func (c *researchflowRuntimeComponent) scanCycle(ctx context.Context) {
@@ -228,16 +281,20 @@ func (c *researchflowRuntimeComponent) scanExpiredAttempts(ctx context.Context) 
 			return
 		}
 		for _, candidate := range page.Candidates {
-			attemptRef, idErr := c.ids.NewRef(ctx, "attempt")
-			if idErr != nil {
-				if ctx.Err() == nil {
-					c.logger.Error("生成 Researchflow 恢复 Attempt ID 失败", "error", idErr)
+			candidate := candidate
+			key := "stage:" + candidate.RunRef + ":" + candidate.StageRef
+			c.launchTask(ctx, key, func() {
+				attemptRef, idErr := c.ids.NewRef(ctx, "attempt")
+				if idErr != nil {
+					if ctx.Err() == nil {
+						c.logger.Error("生成 Researchflow 恢复 Attempt ID 失败", "error", idErr)
+					}
+					return
 				}
-				continue
-			}
-			if _, executeErr := c.pool.Execute(ctx, candidate.RunRef, candidate.StageRef, attemptRef); executeErr != nil && ctx.Err() == nil {
-				c.logger.Error("Researchflow Expired Attempt 恢复执行失败", "run_ref", candidate.RunRef, "stage_ref", candidate.StageRef, "error", executeErr)
-			}
+				if _, executeErr := c.pool.Execute(ctx, candidate.RunRef, candidate.StageRef, attemptRef); executeErr != nil && ctx.Err() == nil {
+					c.logger.Error("Researchflow Expired Attempt 恢复执行失败", "run_ref", candidate.RunRef, "stage_ref", candidate.StageRef, "error", executeErr)
+				}
+			})
 		}
 		if !page.HasMore {
 			c.expiredRunCursor, c.expiredStageCursor = "", ""
@@ -257,9 +314,12 @@ func (c *researchflowRuntimeComponent) scanSchedulableRuns(ctx context.Context) 
 			return
 		}
 		for _, runRef := range page.RunRefs {
-			if _, scheduleErr := c.scheduler.ScheduleRun(ctx, runRef); scheduleErr != nil && ctx.Err() == nil {
-				c.logger.Error("Researchflow Run 调度失败", "run_ref", runRef, "error", scheduleErr)
-			}
+			runRef := runRef
+			c.launchTask(ctx, "run:"+runRef, func() {
+				if _, scheduleErr := c.scheduler.ScheduleRun(ctx, runRef); scheduleErr != nil && ctx.Err() == nil {
+					c.logger.Error("Researchflow Run 调度失败", "run_ref", runRef, "error", scheduleErr)
+				}
+			})
 		}
 		if !page.HasMore {
 			c.schedulerCursor = ""

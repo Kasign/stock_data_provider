@@ -3,7 +3,7 @@
 - 分支：`feat/researchflow`
 - 代码：`internal/researchflow/**`
 - 任务前缀：FLOW
-- 当前状态：领域状态机、MySQL 核心生命周期事务、Application Worker 单次执行协调器、MySQL WorkerStore Adapter、Scheduler 单次 Run 运行协调器均已有代码；全局容量事务守卫（CreateRun 排队容量、ClaimAttempt 全局 Worker Lease）与固定数量 Worker Pool 已实现，并通过代码 SHA `6692cf1dfdb67509dca3dd564600d3085e935509` 的 Researchflow 模块门禁和 MariaDB 普通/Race 集成；Server 生命周期与周期调度接入、生产 StageExecutor Adapter 仍未闭环。WorkerStore 与 Scheduler 已有模块级及 MariaDB 验收证据，详见任务进度文档。
+- 当前状态：领域状态机、MySQL 核心事务、Worker、Scheduler、固定数量 WorkerPool、Deadline/Attempt/取消恢复与 Run Finalization 均已实现；`integration` 已将正式 News Search Template、Owner 内部用例和 Worker-only Runtime 接入 Server Lifecycle。当前 Runtime 周期扫描、并发执行与优雅关闭已具备生产装配代码，但真实 MariaDB 端到端 Run 生命周期、崩溃恢复与多进程容量验收仍需补齐。生产 StageExecutor 当前只覆盖 News Search Provider。
 
 Researchflow 是研究应用编排层，通过 Data、News、Quant、Research、LLM 的公开 Application Port 编排研究流程。Notification 不作为同步 DAG Stage；Run 终态 CAS 成功后按 INT-CTR-001 写本地 Outbox。它拥有 Run/Stage/Attempt 状态，不拥有其他模块内部领域规则。Platform Task Runner 只提供执行基础设施，不替代 Researchflow 业务状态机。
 
@@ -45,8 +45,9 @@ FLOW-CTR-004 的通用 Envelope / Registry 已接入 Worker 成功/降级提交�
 
 ## 当前明确缺口
 
-- Scheduler 已提供单次 Run 的运行协调服务；周期扫描、Server 生命周期启停与多 Run 调度入口尚未接入。当前派发直接调用 Worker.Execute，不引入第二套队列；跨进程并发仍由 ClaimAttempt 事务兜底。
-- Worker 有单次 `Execute` 协调器；MySQLRunRepository 已实现 WorkerStore，执行快照读取与结果提交映射已落地。全局容量事务守卫和固定数量 Worker Pool 已通过模块 gofmt/test/race/vet 与 MariaDB 普通/Race 集成；queued Run 周期恢复由 Server 调用 SchedulerCandidateScanner 分页接入；进程崩溃后 running Stage 的过期 Attempt 由 ExpiredAttemptScanner 发现，Server 应调用 Worker.Execute 触发 ClaimAttempt 原子回收；Worker Lease 心跳已能检测跨进程 Run 取消并确认。ExpiredAttemptScanner 已通过当前 HEAD 的模块 gofmt/test/race/vet 与 MariaDB 普通/Race 集成验收。Server 已在 integration 接入终态 Outbox Relay，并验证 Relay 组件 Start/Stop；Researchflow Run Scheduler/Worker 的 Server 生命周期接线、生产 StageExecutor Adapter 仍未闭环。Worker Pool 已提供模块内优雅 Shutdown。
+- `integration` 已装配 Researchflow Worker-only Runtime：正式 Template 发布、Scheduler、WorkerPool、Deadline、过期 Attempt、取消恢复、Run Finalization 和终态 Outbox Relay 均已注册到 Server Lifecycle；Outbox Relay 先启动、Runtime 后启动，关闭时按逆序先停 Runtime 再停 Relay。
+- Runtime 的调度和过期 Attempt 恢复任务已按本地 Worker 并发上限做有界异步派发；扫描循环不等待 Stage 执行完成，重复候选通过进程内 in-flight key 去重，Stop 会先取消扫描/执行上下文并等待任务退出，再关闭 WorkerPool。跨进程容量仍由 MariaDB ClaimAttempt 事务兜底。
+- 最新代码 SHA `7dacd70fa95d8de2d6db2ed8c481125cf8888df8` 的 Integration CI Run [44080549891](https://github.com/Kasign/stock_data_provider/actions/runs/44080549891) 全量 success。当前并发改进与测试仍待本轮 CI 验证；不能把 CI 通过等同于生产业务端到端验收。
 - `StageExecutor` 是注入端口，Data/News/Quant/Research/LLM 的生产 Adapter 尚未在本分支闭环。
 - Worker Pool 是模块内有界执行协程池，不是持久化队列；周期扫描与池生命周期由 Server 驱动。跨 Worker 的 Run 并发和全局 Worker 上限由 ClaimAttempt 数据库事务兜底。
 - Go 测试、Race、Vet、真实 MariaDB、进程崩溃恢复和跨模块端到端验收必须按实际 SHA 记录，不以测试文件存在代替通过证据。
@@ -173,3 +174,12 @@ Server 已在 Owner Session 启用且 Researchflow Capacity 显式配置时，�
 - `RESEARCHFLOW_LOCAL_WORKERS` 只控制当前进程 WorkerPool 的并发；`RESEARCHFLOW_MAX_WORKERS` 仍是 MariaDB 原子 Claim/Capacity 使用的跨进程全局并发上限。两者不能互相替代，也不能将全局值直接作为每个进程的本地池大小。
 - API 角色不创建 WorkerPool，因此拒绝配置 `RESEARCHFLOW_LOCAL_WORKERS`；未启用 Researchflow Capacity 时也拒绝单独配置该项。
 - 本次只完成配置契约和验证，Worker Runtime 尚未装配；后续装配必须使用 `Process.ResearchflowLocalWorkers` 创建本地 WorkerPool。
+
+
+## 2026-11-17 Server Researchflow Runtime 接入与并发审查
+
+- Worker-only 角色不依赖 Owner Session；Owner Session 只负责可信身份和 CreateRun/GetRun/CancelRun 内部用例，公共执行组合独立装配。
+- Server Lifecycle 注册顺序为 Notification Outbox Relay → Researchflow Runtime；逆序关闭确保 Runtime Finalizer 不会向已停止的 Relay 写入终态 Outbox。
+- Deadline、取消恢复和 Finalization 保留在周期扫描线程中；调度 Run 与过期 Attempt 恢复通过有界异步任务执行，避免单个 Stage 执行时间阻塞其他恢复扫描。
+- 异步任务受 `RESEARCHFLOW_LOCAL_WORKERS` 限制，按 Run/Stage 候选键去重；Runtime Stop 取消工作上下文并等待所有异步任务退出，随后才关闭 WorkerPool。
+- 仍需通过真实 MariaDB 场景验证：正常 Run 完成、Provider retry、Deadline、用户取消、进程中断后的 Attempt 恢复、跨进程 Claim 容量竞争，以及 Outbox 投递/重试。公开 Researchflow HTTP API（SRV-CTR-001）仍 deferred。
