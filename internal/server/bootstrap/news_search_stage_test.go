@@ -279,8 +279,8 @@ func newNewsSearchExecutor(providers newsapp.ProviderSet) newsSearchStageExecuto
 func executeNewsStageWithPolicy(t *testing.T, executor newsSearchStageExecutor, parameters string, allowed []string) researchflowapplication.StageExecutionResult {
 	t.Helper()
 	result, err := executor.ExecuteStage(context.Background(), researchflowapplication.StageExecutionRequest{
-		Stage: researchflowdomain.Stage{Code: newsstage.SearchCandidatesStageCode},
-		Parameters: json.RawMessage(parameters),
+		Stage:          researchflowdomain.Stage{Code: newsstage.SearchCandidatesStageCode},
+		Parameters:     json.RawMessage(parameters),
 		ResourcePolicy: testNewsResourcePolicy(t, allowed),
 	})
 	if err != nil {
