@@ -11,6 +11,7 @@ import (
 	"example.com/stock-analysis-flow/internal/researchflow/application"
 	"example.com/stock-analysis-flow/internal/researchflow/domain"
 	"example.com/stock-analysis-flow/internal/researchflow/template"
+	"example.com/stock-analysis-flow/internal/researchflow/resourcepolicy"
 )
 
 var _ application.WorkerStore = (*MySQLRunRepository)(nil)
@@ -112,6 +113,16 @@ func (r *MySQLRunRepository) LoadStageExecutionSnapshot(
 		resolved.Fingerprint != run.TemplateFingerprint {
 		return application.StageExecutionSnapshot{}, errors.New("Researchflow resolved template identity differs from Run")
 	}
+	policyRegistry, err := resourcepolicy.NewRegistry()
+	if err != nil {
+		return application.StageExecutionSnapshot{}, fmt.Errorf("initialize Researchflow resource policy registry: %w", err)
+	}
+	if resolved.ResourcePolicy.PolicyRef != resolved.ResourcePolicyRef {
+		return application.StageExecutionSnapshot{}, errors.New("Researchflow resolved template resource policy reference differs from snapshot")
+	}
+	if err := policyRegistry.ValidateSnapshot(resolved.ResourcePolicy); err != nil {
+		return application.StageExecutionSnapshot{}, fmt.Errorf("validate persisted Researchflow resource policy snapshot: %w", err)
+	}
 	retryPolicy, err := resolveWorkerRetryPolicy(resolved, stage)
 	if err != nil {
 		return application.StageExecutionSnapshot{}, err
@@ -127,7 +138,7 @@ func (r *MySQLRunRepository) LoadStageExecutionSnapshot(
 		Run: run, Stage: stage, AuthenticatedCallerRef: authenticatedCallerRef,
 		OutputRegistryVersion: resolved.OutputRegistryVersion,
 		Parameters:            parameters, InputSnapshotRefs: append([]string(nil), run.InputSnapshotRefs...),
-		RetryPolicy: retryPolicy,
+		RetryPolicy: retryPolicy, ResourcePolicy: cloneStorageResourcePolicySnapshot(resolved.ResourcePolicy),
 	}, nil
 }
 
@@ -217,6 +228,11 @@ func workerResultCommitToStorage(input application.WorkerResultCommit) (AttemptR
 		FaultRef: cloneWorkerString(input.FaultRef), OutputRef: cloneWorkerString(input.OutputRef),
 		StageOutput: workerStageOutputToStorage(input.StageOutput),
 	}, nil
+}
+
+func cloneStorageResourcePolicySnapshot(snapshot resourcepolicy.Snapshot) resourcepolicy.Snapshot {
+	snapshot.AllowedProviderCodes = append([]string(nil), snapshot.AllowedProviderCodes...)
+	return snapshot
 }
 
 func cloneWorkerString(value *string) *string {

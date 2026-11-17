@@ -6,7 +6,21 @@ import (
 	"example.com/stock-analysis-flow/internal/researchflow/application"
 	"example.com/stock-analysis-flow/internal/researchflow/domain"
 	"example.com/stock-analysis-flow/internal/researchflow/template"
+	"example.com/stock-analysis-flow/internal/researchflow/resourcepolicy"
 )
+
+
+func TestValidatePersistedResourcePolicySnapshot(t *testing.T) {
+	registry, err := resourcepolicy.NewRegistry()
+	if err != nil { t.Fatal(err) }
+	snapshot, err := registry.Resolve(resourcepolicy.NewsSearchConfiguredProvidersRef, []string{"bocha", "tavily"})
+	if err != nil { t.Fatal(err) }
+	resolved := template.ResolvedTemplate{ResourcePolicyRef: resourcepolicy.NewsSearchConfiguredProvidersRef, ResourcePolicy: snapshot}
+	if resolved.ResourcePolicy.PolicyRef != resolved.ResourcePolicyRef { t.Fatal("policy reference mismatch") }
+	if err := registry.ValidateSnapshot(resolved.ResourcePolicy); err != nil { t.Fatal(err) }
+	resolved.ResourcePolicy.AllowedProviderCodes[0] = "forged"
+	if err := registry.ValidateSnapshot(resolved.ResourcePolicy); err == nil { t.Fatal("tampered allowlist must be rejected") }
+}
 
 func TestWorkerResultCommitMapsToExistingStorageTransaction(t *testing.T) {
 	output := "snapshot://output"

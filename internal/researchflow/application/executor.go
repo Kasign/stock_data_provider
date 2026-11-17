@@ -10,6 +10,7 @@ import (
 
 	"example.com/stock-analysis-flow/internal/researchflow/domain"
 	"example.com/stock-analysis-flow/internal/researchflow/stageoutput"
+	"example.com/stock-analysis-flow/internal/researchflow/resourcepolicy"
 )
 
 // StageExecutionRequest is the immutable execution envelope assembled by the
@@ -26,6 +27,7 @@ type StageExecutionRequest struct {
 	DeadlineAt             time.Time
 	AttemptDeadlineAt      time.Time
 	CorrelationID          string
+	ResourcePolicy         resourcepolicy.Snapshot
 }
 
 // StageExecutionResult is a provider outcome before it is committed by the

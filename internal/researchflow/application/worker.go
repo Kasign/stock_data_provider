@@ -11,6 +11,7 @@ import (
 	"example.com/stock-analysis-flow/internal/researchflow/domain"
 	"example.com/stock-analysis-flow/internal/researchflow/stageoutput"
 	"example.com/stock-analysis-flow/internal/researchflow/template"
+	"example.com/stock-analysis-flow/internal/researchflow/resourcepolicy"
 )
 
 var (
@@ -27,6 +28,7 @@ type StageExecutionSnapshot struct {
 	InputSnapshotRefs      []string
 	RetryPolicy            template.RetryPolicy
 	OutputRegistryVersion  string
+	ResourcePolicy         resourcepolicy.Snapshot
 }
 
 type WorkerResultCommit struct {
@@ -160,6 +162,7 @@ func (w *Worker) Execute(ctx context.Context, runRef, stageRef, attemptRef strin
 	}
 	if policySnapshot.Run.Ref != runRef || policySnapshot.Stage.Ref != stageRef ||
 		policySnapshot.Stage.RunRef != runRef || policySnapshot.RetryPolicy.MaxAttempts <= 0 ||
+		validateWorkerResourcePolicySnapshot(policySnapshot.ResourcePolicy) != nil ||
 		strings.TrimSpace(policySnapshot.AuthenticatedCallerRef) == "" {
 		return WorkerExecution{}, errors.New("Researchflow retry policy snapshot is inconsistent")
 	}
@@ -183,7 +186,9 @@ func (w *Worker) Execute(ctx context.Context, runRef, stageRef, attemptRef strin
 		snapshot.OutputRegistryVersion != policySnapshot.OutputRegistryVersion ||
 		snapshot.AuthenticatedCallerRef != policySnapshot.AuthenticatedCallerRef ||
 		strings.TrimSpace(snapshot.AuthenticatedCallerRef) == "" ||
-		!reflect.DeepEqual(snapshot.RetryPolicy, policySnapshot.RetryPolicy) {
+		!reflect.DeepEqual(snapshot.RetryPolicy, policySnapshot.RetryPolicy) ||
+		!reflect.DeepEqual(snapshot.ResourcePolicy, policySnapshot.ResourcePolicy) ||
+		validateWorkerResourcePolicySnapshot(snapshot.ResourcePolicy) != nil {
 		return WorkerExecution{Attempt: attempt}, errors.New("Researchflow execution snapshot is inconsistent with claimed Attempt")
 	}
 	// DeadlineAt 与 Attempt.StartedAt 均由数据库写入，必须使用同一数据库时钟
@@ -236,6 +241,7 @@ func (w *Worker) Execute(ctx context.Context, runRef, stageRef, attemptRef strin
 		DeadlineAt:             snapshot.Run.DeadlineAt,
 		AttemptDeadlineAt:      attemptDeadline,
 		CorrelationID:          snapshot.Run.CorrelationID,
+		ResourcePolicy:         cloneResourcePolicySnapshot(snapshot.ResourcePolicy),
 	}
 	result, executeErr := w.executor.ExecuteStage(execCtx, request)
 	close(stopHeartbeat)
@@ -415,6 +421,20 @@ func (w *Worker) heartbeat(ctx context.Context, cancel context.CancelCauseFunc, 
 			}
 		}
 	}
+}
+
+
+func validateWorkerResourcePolicySnapshot(snapshot resourcepolicy.Snapshot) error {
+	registry, err := resourcepolicy.NewRegistry()
+	if err != nil {
+		return err
+	}
+	return registry.ValidateSnapshot(snapshot)
+}
+
+func cloneResourcePolicySnapshot(snapshot resourcepolicy.Snapshot) resourcepolicy.Snapshot {
+	snapshot.AllowedProviderCodes = append([]string(nil), snapshot.AllowedProviderCodes...)
+	return snapshot
 }
 
 func cloneTime(value *time.Time) *time.Time {

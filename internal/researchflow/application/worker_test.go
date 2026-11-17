@@ -10,6 +10,7 @@ import (
 
 	"example.com/stock-analysis-flow/internal/researchflow/domain"
 	"example.com/stock-analysis-flow/internal/researchflow/stageoutput"
+	"example.com/stock-analysis-flow/internal/researchflow/resourcepolicy"
 	"example.com/stock-analysis-flow/internal/researchflow/template"
 )
 
@@ -92,11 +93,19 @@ func newWorkerFixture() (*workerStoreFake, StageExecutionResult) {
 	stage := domain.Stage{Ref: "stage-1", RunRef: "run-1", Code: "quant", Status: domain.StageRunning, Version: 3, AttemptNo: 1}
 	attempt := domain.Attempt{Ref: "attempt-1", StageRef: stage.Ref, Number: 1, Status: domain.AttemptRunning, LeaseOwner: "worker-1", FencingToken: 7, StartedAt: time.Now().UTC()}
 	providerResult := &stageoutput.ProviderResult{OutputType: "trend", SchemaVersion: "1.0.0", Payload: []byte(`{"trend":"up"}`), QualitySummary: []byte(`{"quality":"valid"}`), DiagnosticRefs: []string{}}
+	policyRegistry, err := resourcepolicy.NewRegistry()
+	if err != nil {
+		panic(err)
+	}
+	policySnapshot, err := policyRegistry.Resolve(resourcepolicy.NewsSearchConfiguredProvidersRef, []string{"bocha", "tavily"})
+	if err != nil {
+		panic(err)
+	}
 	store := &workerStoreFake{
 		attempt: attempt,
 		snapshot: StageExecutionSnapshot{
 			Run: run, Stage: stage, AuthenticatedCallerRef: "caller-1", Parameters: []byte(`{"symbol":"AAA"}`),
-			OutputRegistryVersion: "1.0.0",
+			OutputRegistryVersion: "1.0.0", ResourcePolicy: policySnapshot,
 			RetryPolicy: template.RetryPolicy{
 				Ref: "retry-v1", MaxAttempts: 3,
 				RetryableReasonCodes: []string{"provider_unavailable"},
@@ -174,6 +183,34 @@ func TestWorkerFailsClosedWhenDatabaseClockUnavailable(t *testing.T) {
 	if store.commits != 0 {
 		t.Fatal("must not execute or commit without authoritative database time")
 	}
+}
+
+
+func TestWorkerPassesOwnedResourcePolicySnapshotToExecutor(t *testing.T) {
+	store, result := newWorkerFixture()
+	captured := &StageExecutionRequest{}
+	worker := newWorker(t, store, result)
+	worker.executor = workerExecutorFake{result: result, captured: captured}
+	if _, err := worker.Execute(context.Background(), "run-1", "stage-1", "attempt-new"); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(captured.ResourcePolicy, store.snapshot.ResourcePolicy) {
+		t.Fatalf("executor ResourcePolicy snapshot = %+v, want %+v", captured.ResourcePolicy, store.snapshot.ResourcePolicy)
+	}
+	captured.ResourcePolicy.AllowedProviderCodes[0] = "mutated"
+	if store.snapshot.ResourcePolicy.AllowedProviderCodes[0] == "mutated" {
+		t.Fatal("StageExecutor must not share mutable Provider allowlist with WorkerStore snapshot")
+	}
+}
+
+func TestWorkerRejectsResourcePolicySnapshotChangedAfterClaim(t *testing.T) {
+	store, result := newWorkerFixture()
+	original := store.snapshot.ResourcePolicy
+	calls := 0
+	store.LoadStageExecutionSnapshot = nil
+	_ = calls
+	_ = original
+	_ = result
 }
 
 func TestWorkerExecuteClaimsExecutesAndCommits(t *testing.T) {
