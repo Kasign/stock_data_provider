@@ -37,6 +37,9 @@ func TestNewsSearchStageCompositionRegistersExactOutputAndUsesPlatformClientOnly
 	if err != nil {
 		t.Fatal(err)
 	}
+	if composition.parameterSchemas == nil || composition.applicability == nil {
+		t.Fatal("News Search production parameter schema and applicability dependencies must be composed")
+	}
 	if composition.registry.Version() != newsSearchStageOutputRegistryVersion {
 		t.Fatalf("unexpected registry version: %s", composition.registry.Version())
 	}

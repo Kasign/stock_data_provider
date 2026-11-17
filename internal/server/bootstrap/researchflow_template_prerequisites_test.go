@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
 	"testing"
 
 	"example.com/stock-analysis-flow/internal/researchflow/parameterschema"
@@ -15,7 +16,7 @@ func TestNewsSearchParameterSchemaRegistryIsStrictAndImmutable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	valid := json.RawMessage(`{"query":"market news","query_dimension":"company","limit":20}`)
+	valid := json.RawMessage(" \n{\"query\":\"market news\",\"query_dimension\":\"company\",\"limit\":20}")
 	snapshot, err := validator.Validate(context.Background(), newsSearchParameterSchemaRef, valid)
 	if err != nil {
 		t.Fatalf("valid News Search parameters rejected: %v", err)
@@ -54,6 +55,20 @@ func TestNewsSearchParameterSchemaRegistryIsStrictAndImmutable(t *testing.T) {
 	}
 	if !json.Valid(again.Document) {
 		t.Fatal("mutating a returned schema definition changed the immutable registry")
+	}
+	documentedSchema, err := os.ReadFile("../../../doc/researchflow/schema/news-search-parameters-1.0.0.schema.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(documentedSchema) != newsSearchParameterSchemaDocument+"\n" {
+		t.Fatal("documented News Search parameter schema drifted from the Server registry definition")
+	}
+	golden, err := os.ReadFile("../../../doc/researchflow/golden/news-search-parameters-1.0.0.golden.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := validator.Validate(context.Background(), newsSearchParameterSchemaRef, golden); err != nil {
+		t.Fatalf("News Search parameter Golden does not satisfy its Schema: %v", err)
 	}
 }
 

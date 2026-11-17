@@ -85,7 +85,8 @@ func (newsSearchApplicabilityEvaluator) Evaluate(
 	// represented by this rule is a News Search workflow, so its News discovery
 	// stage is always part of the DAG. Conditional business variants require a
 	// new immutable rule ref/version rather than changing this rule in place.
-	if len(parameters) == 0 || !json.Valid(parameters) || parameters[0] != '{' {
+	var object map[string]json.RawMessage
+	if err := json.Unmarshal(parameters, &object); err != nil || object == nil {
 		return false, "", errors.New("News Search applicability requires validated object parameters")
 	}
 	return true, "", nil
