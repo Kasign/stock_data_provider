@@ -285,7 +285,6 @@ func TestOwnerSessionHTTPRejectsLoginOriginMismatch(t *testing.T) {
 	}
 }
 
-
 func TestOwnerSessionHTTPRotateAndChangePassword(t *testing.T) {
 	credentials := &ownerHTTPTestCredentials{credential: platformsecurity.OwnerCredential{
 		Subject: "owner", PasswordHash: "hash:correct", CredentialVersion: 1,
