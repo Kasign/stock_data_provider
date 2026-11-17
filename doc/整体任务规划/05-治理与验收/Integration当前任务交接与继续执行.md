@@ -1275,3 +1275,14 @@ GetRun 与 CancelRun 的持久化创建者授权已在 Application/Storage 层�
 - `SRV-CTR-001=deferred` 不变；未开放 Researchflow HTTP API，Owner Bearer 不自动获得 Owner Session 的 Researchflow 权限。
 
 后续主线：装配现有 Researchflow Worker、WorkerPool、Scheduler、SchedulerCandidateScanner、ExpiredAttemptScanner、CancellationRecoveryScanner、DeadlineScanner、RunFinalizationCandidateScanner、RunFinalizationCoordinator 与现有 MySQL Repository，接入 Server Lifecycle。必须先解决 Worker 角色不依赖 Owner Session 的组合边界，再验证 Run 正常完成、Retry、崩溃恢复、Deadline、取消、终态 Outbox 和优雅关闭。不要重复实现已经通过的 ResourcePolicy、Owner 身份适配、Run 访问授权、DatabaseClock、WorkerPool、Scheduler 或上述恢复扫描器。
+
+## 14. 2026-11-17 Researchflow Server Runtime 生产生命周期接入
+
+- 当前 integration 代码 SHA：4bd41be4c56357124356ee9b21a084bcadeb70a6；本轮 Integration CI Run [44081768099](https://github.com/Kasign/stock_data_provider/actions/runs/44081768099) 正在执行，最终结论必须以精确 head_sha 匹配为准。
+- 已拆分 Server Researchflow 组合根：公共执行依赖独立于 Owner Session；Owner Session 只构造可信 CreateRun/GetRun/CancelRun 内部服务；Worker-only 角色可独立装配 News Stage、Worker、WorkerPool 和周期 Runtime。
+- 已在 Server Lifecycle 注册正式 Template 发布、Scheduler、Deadline Scanner、Expired Attempt Recovery、Cancellation Recovery、Run Finalization 与 WorkerPool。Researchflow Outbox Relay 在 Runtime 之前注册，生命周期逆序关闭时先停止 Runtime、后停止 Relay。
+- 最新 Review 发现同步执行 Scheduler.ScheduleRun / WorkerPool.Execute 会阻塞单一扫描循环，使 Deadline 和其他恢复扫描等待一个 Stage 执行结束。已改为有界异步任务：扫描循环继续执行；任务数受 RESEARCHFLOW_LOCAL_WORKERS 限制；Run/Stage in-flight key 防止周期重复派发；Stop 取消 Runtime Context、等待扫描循环和在途任务退出，最后才 Shutdown WorkerPool。
+- 新增 Runtime 任务并发上限、重复任务去重、取消 Context 拒绝派发的单测。Researchflow README 的当前状态与缺口已同步。
+- 本轮代码变更：4bd41be4c56357124356ee9b21a084bcadeb70a6（异步扫描执行及测试）；上一轮 Runtime 基础接入 7dacd70fa95d8de2d6db2ed8c481125cf8888df8 的 Integration CI Run [44080549891](https://github.com/Kasign/stock_data_provider/actions/runs/44080549891) 已全量 success。
+- 尚未完成的验收：真实 MariaDB 正常 Run / Retry / Deadline / 用户取消 / 进程中断恢复；多 Worker 进程的全局 Claim 容量竞争；终态 Outbox 在 Runtime Finalization 后的实际 Relay 投递与重试。SRV-CTR-001 继续 deferred，不增加公开 Researchflow HTTP API。
+- 下一步：先取得本轮精确 SHA 的全量 CI success；随后补充真实 MariaDB Runtime 场景测试，重点验证多 Run 调度、单个候选失败隔离、Shutdown 等待边界及 Outbox 顺序。不得将 Bootstrap 成功或单测通过等同于生产业务端到端验收。
