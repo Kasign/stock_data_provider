@@ -12,6 +12,7 @@ import (
 	"example.com/stock-analysis-flow/internal/marketdata/model"
 	"example.com/stock-analysis-flow/internal/marketdata/normalize"
 	"example.com/stock-analysis-flow/internal/marketdata/provider"
+	platformtime "example.com/stock-analysis-flow/internal/platform/time"
 )
 
 func (s *DataService) SetFundamentalsProviders(providers []provider.FundamentalsProvider) {
@@ -25,6 +26,10 @@ func fundamentalPeriodEnd(year, quarter int) string {
 }
 
 func validateFundamentalsSnapshot(symbol string, year, quarter int, snapshot *model.FundamentalsSnapshot) error {
+	return validateFundamentalsSnapshotAt(symbol, year, quarter, snapshot, platformtime.SystemClock{}.Now())
+}
+
+func validateFundamentalsSnapshotAt(symbol string, year, quarter int, snapshot *model.FundamentalsSnapshot, now time.Time) error { 
 	if snapshot == nil {
 		return errors.New("fundamentals provider returned an empty snapshot")
 	}
@@ -36,7 +41,7 @@ func validateFundamentalsSnapshot(symbol string, year, quarter int, snapshot *mo
 		return errors.New("fundamentals source, source_version or fetched_at is missing")
 	}
 	// FetchedAt 是 Provider 侧采集时间；未来时间通常意味着时钟/单位错误，不能进入缓存或 PIT。
-	if snapshot.FetchedAt.After(time.Now().UTC().Add(5 * time.Minute)) {
+	if snapshot.FetchedAt.After(now.UTC().Add(5 * time.Minute)) {
 		return errors.New("fundamentals snapshot fetched_at is in the future")
 	}
 	// 六个标准指标分区始终必需；同花顺可额外返回三张独立财务报表。
@@ -51,7 +56,7 @@ func validateFundamentalsSnapshot(symbol string, year, quarter int, snapshot *mo
 	standardCategories := []string{"profitability", "operating", "growth", "solvency", "cash_flow", "dupont"}
 	seen := make(map[string]bool, len(snapshot.Sections))
 	hasData, allValid := false, true
-	today := time.Now().In(marketLocation()).Format("2006-01-02")
+	today := now.In(marketLocation()).Format("2006-01-02")
 	for _, section := range snapshot.Sections {
 		if !allowed[section.Category] || seen[section.Category] {
 			return fmt.Errorf("unsupported or duplicate fundamentals section %q", section.Category)
@@ -88,7 +93,7 @@ func validateFundamentalsSnapshot(symbol string, year, quarter int, snapshot *mo
 				}
 			}
 			if section.AvailableAt != nil {
-				if section.AvailableAt.IsZero() || section.AvailableAt.After(time.Now().UTC()) {
+				if section.AvailableAt.IsZero() || section.AvailableAt.After(now.UTC()) {
 					return fmt.Errorf("fundamentals section %s has invalid or future available_at", section.Category)
 				}
 				availableDate := section.AvailableAt.In(marketLocation()).Format("2006-01-02")
@@ -189,14 +194,14 @@ func (s *DataService) Fundamentals(ctx context.Context, rawSymbol string, year, 
 	if err != nil {
 		return nil, false, err
 	}
-	if year < 2007 || year > time.Now().Year() {
-		return nil, false, fmt.Errorf("fundamental year must be between 2007 and %d", time.Now().Year())
+	if year < 2007 || year > s.nowUTC().Year() {
+		return nil, false, fmt.Errorf("fundamental year must be between 2007 and %d", s.nowUTC().Year())
 	}
 	if quarter < 1 || quarter > 4 {
 		return nil, false, errors.New("fundamental quarter must be between 1 and 4")
 	}
 	periodEnd := fundamentalPeriodEnd(year, quarter)
-	if periodEnd > time.Now().In(marketLocation()).Format("2006-01-02") {
+	if periodEnd > s.nowUTC().In(marketLocation()).Format("2006-01-02") {
 		return nil, false, errors.New("fundamental report period must not be in the future")
 	}
 	if ctx == nil {
@@ -208,7 +213,7 @@ func (s *DataService) Fundamentals(ctx context.Context, rawSymbol string, year, 
 	key := fmt.Sprintf("md:v1:fundamentals:%s:%d:%d", symbol, year, quarter)
 	if data, ok, cacheErr := s.cache.Get(ctx, key); cacheErr == nil && ok {
 		var cached model.FundamentalsSnapshot
-		if json.Unmarshal(data, &cached) == nil && validateFundamentalsSnapshot(symbol, year, quarter, &cached) == nil && time.Since(cached.FetchedAt) >= 0 {
+		if json.Unmarshal(data, &cached) == nil && validateFundamentalsSnapshotAt(symbol, year, quarter, &cached, s.nowUTC()) == nil && !cached.FetchedAt.After(s.nowUTC()) {
 			ttl := fundamentalsCacheTTL(&cached)
 			cacheEligible := cached.QualityStatus != model.QualityUnknown
 			if cached.QualityStatus == model.QualityUnknown {
@@ -223,7 +228,7 @@ func (s *DataService) Fundamentals(ctx context.Context, rawSymbol string, year, 
 				// 多 Provider 场景忽略未记录回退耗尽标记的 unknown 缓存，让更可靠来源有机会刷新结果。
 				cacheEligible = fallbackExhausted || len(s.fundamentalsProviders) <= 1
 			}
-			if cacheEligible && time.Since(cached.FetchedAt) < ttl {
+			if cacheEligible && cacheEntryWithinTTL(cached.FetchedAt, ttl, s.nowUTC()) {
 				s.saveFundamentalsRevision(ctx, &cached)
 				return &cached, true, nil
 			}
@@ -252,9 +257,9 @@ func (s *DataService) Fundamentals(ctx context.Context, rawSymbol string, year, 
 		}
 		if snapshot != nil {
 			// fetched_at 是本服务收到 Provider 回包的时间，不能沿用上游传入值。
-			snapshot.FetchedAt = time.Now().UTC()
+			snapshot.FetchedAt = s.nowUTC()
 		}
-		if err := validateFundamentalsSnapshot(symbol, year, quarter, snapshot); err != nil {
+		if err := validateFundamentalsSnapshotAt(symbol, year, quarter, snapshot, s.nowUTC()); err != nil {
 			failures = append(failures, p.Name()+": "+err.Error())
 			continue
 		}
@@ -340,13 +345,13 @@ func (s *DataService) FundamentalsAsOf(ctx context.Context, rawSymbol string, ye
 	if err != nil {
 		return nil, err
 	}
-	if year < 2007 || year > time.Now().Year() || quarter < 1 || quarter > 4 {
+	if year < 2007 || year > s.nowUTC().Year() || quarter < 1 || quarter > 4 {
 		return nil, errors.New("fundamental report year/quarter is invalid")
 	}
 	if asOf.IsZero() || asOf.After(time.Now().UTC()) {
 		return nil, errors.New("fundamentals as_of must be a valid non-future timestamp")
 	}
-	if fundamentalPeriodEnd(year, quarter) > time.Now().In(marketLocation()).Format("2006-01-02") {
+	if fundamentalPeriodEnd(year, quarter) > s.nowUTC().In(marketLocation()).Format("2006-01-02") {
 		return nil, errors.New("fundamental report period must not be in the future")
 	}
 	if s == nil || s.store == nil {
@@ -363,7 +368,7 @@ func (s *DataService) FundamentalsAsOf(ctx context.Context, rawSymbol string, ye
 	bestScore := -1
 	for index := range snapshots {
 		candidate := &snapshots[index]
-		if validateFundamentalsSnapshot(symbol, year, quarter, candidate) != nil ||
+		if validateFundamentalsSnapshotAt(symbol, year, quarter, candidate, s.nowUTC()) != nil ||
 			candidate.FetchedAt.After(asOf) || candidate.SystemObservedAt == nil ||
 			candidate.SystemObservedAt.After(asOf) || !candidate.HasData ||
 			candidate.QualityStatus == model.QualityUnknown {

@@ -12,6 +12,7 @@ import (
 	"example.com/stock-analysis-flow/internal/marketdata/model"
 	"example.com/stock-analysis-flow/internal/marketdata/normalize"
 	"example.com/stock-analysis-flow/internal/marketdata/provider"
+	platformtime "example.com/stock-analysis-flow/internal/platform/time"
 )
 
 func (s *DataService) SetValuationProviders(providers []provider.ValuationProvider) {
@@ -23,13 +24,17 @@ func (s *DataService) ValuationProviders() []provider.ValuationProvider {
 }
 
 func validateValuationSnapshot(requested []string, snapshot *model.ValuationSnapshot) error {
+	return validateValuationSnapshotAt(requested, snapshot, platformtime.SystemClock{}.Now())
+}
+
+func validateValuationSnapshotAt(requested []string, snapshot *model.ValuationSnapshot, now time.Time) error { 
 	if snapshot == nil {
 		return errors.New("valuation provider returned an empty snapshot")
 	}
 	if strings.TrimSpace(snapshot.Source) == "" || !hasIdentifiableSourceVersion(snapshot.SourceVersion) || snapshot.FetchedAt.IsZero() {
 		return errors.New("valuation snapshot source, source_version or fetched_at is missing")
 	}
-	if snapshot.FetchedAt.After(time.Now().Add(5 * time.Minute)) {
+	if snapshot.FetchedAt.After(now.Add(5 * time.Minute)) {
 		return errors.New("valuation snapshot fetched_at is in the future")
 	}
 	if snapshot.ProviderReportDate != "" {
@@ -37,7 +42,7 @@ func validateValuationSnapshot(requested []string, snapshot *model.ValuationSnap
 		if dateErr != nil || reportDate.Format("2006-01-02") != snapshot.ProviderReportDate {
 			return errors.New("valuation snapshot provider_report_date is invalid")
 		}
-		today := time.Now().In(marketLocation()).Format("2006-01-02")
+		today := now.In(marketLocation()).Format("2006-01-02")
 		if snapshot.ProviderReportDate > today {
 			return fmt.Errorf("valuation snapshot provider_report_date %s is in the future (China market date %s)", snapshot.ProviderReportDate, today)
 		}
@@ -46,7 +51,7 @@ func validateValuationSnapshot(requested []string, snapshot *model.ValuationSnap
 		if snapshot.ProviderTimestamp.IsZero() {
 			return errors.New("valuation snapshot provider_timestamp is zero")
 		}
-		if snapshot.ProviderTimestamp.After(time.Now().Add(60 * time.Second)) {
+		if snapshot.ProviderTimestamp.After(now.Add(60 * time.Second)) {
 			return errors.New("valuation snapshot provider_timestamp is in the future")
 		}
 	}
@@ -84,7 +89,7 @@ func validateValuationSnapshot(requested []string, snapshot *model.ValuationSnap
 			item.Source != snapshot.Source || item.SourceVersion != snapshot.SourceVersion || item.FetchedAt.IsZero() {
 			return fmt.Errorf("valuation item %s has inconsistent identity/source/version metadata", symbol)
 		}
-		if item.FetchedAt.After(time.Now().Add(5 * time.Minute)) {
+		if item.FetchedAt.After(now.Add(5 * time.Minute)) {
 			return fmt.Errorf("valuation item %s fetched_at is in the future", symbol)
 		}
 		if item.QualityStatus != model.QualityValid && item.QualityStatus != model.QualityDegraded {
@@ -222,7 +227,7 @@ func valuationSnapshotEligibleAsOf(symbols []string, candidate *model.ValuationS
 		candidate.SystemObservedAt.After(asOf) || candidate.FetchedAt.IsZero() || candidate.FetchedAt.After(asOf) ||
 		(candidate.ProviderTimestamp != nil && candidate.ProviderTimestamp.After(asOf)) ||
 		(candidate.ProviderReportDate != "" && candidate.ProviderReportDate > asOf.In(marketLocation()).Format("2006-01-02")) ||
-		validateValuationSnapshot(symbols, candidate) != nil {
+		validateValuationSnapshotAt(symbols, candidate, s.nowUTC()) != nil {
 		return false
 	}
 	for _, item := range candidate.Items {
@@ -238,7 +243,7 @@ func (s *DataService) ValuationsAsOf(ctx context.Context, rawSymbols []string, a
 	if err != nil {
 		return nil, err
 	}
-	if asOf.IsZero() || asOf.After(time.Now().UTC()) {
+	if asOf.IsZero() || asOf.After(s.nowUTC()) {
 		return nil, errors.New("valuation as_of must be a valid non-future timestamp")
 	}
 	if s == nil || s.store == nil {
@@ -297,7 +302,7 @@ func (s *DataService) Valuations(ctx context.Context, rawSymbols []string) (*mod
 	cacheKey := "md:v1:valuations:" + strings.Join(symbols, ",")
 	if data, ok, cacheErr := s.cache.Get(ctx, cacheKey); cacheErr == nil && ok {
 		var cached model.ValuationSnapshot
-		if json.Unmarshal(data, &cached) == nil && validateValuationSnapshot(symbols, &cached) == nil && time.Since(cached.FetchedAt) >= 0 {
+		if json.Unmarshal(data, &cached) == nil && validateValuationSnapshotAt(symbols, &cached, s.nowUTC()) == nil && !cached.FetchedAt.After(s.nowUTC()) {
 			ttl := 5 * time.Minute
 			if cached.QualityStatus == model.QualityDegraded {
 				ttl = time.Minute
@@ -316,7 +321,7 @@ func (s *DataService) Valuations(ctx context.Context, rawSymbols []string) (*mod
 				}
 				cacheEligible = fallbackExhausted || len(s.valuationProviders) <= 1
 			}
-			if cacheEligible && time.Since(cached.FetchedAt) < ttl {
+			if cacheEligible && cacheEntryWithinTTL(cached.FetchedAt, ttl, s.nowUTC()) {
 				s.saveValuationRevision(ctx, &cached)
 				return &cached, true, nil
 			}
@@ -343,7 +348,7 @@ func (s *DataService) Valuations(ctx context.Context, rawSymbols []string) (*mod
 			failures = append(failures, p.Name()+": valuation source does not match Provider.Name()")
 			continue
 		}
-		if err := validateValuationSnapshot(symbols, snapshot); err != nil {
+		if err := validateValuationSnapshotAt(symbols, snapshot, s.nowUTC()); err != nil {
 			failures = append(failures, p.Name()+": "+err.Error())
 			continue
 		}
