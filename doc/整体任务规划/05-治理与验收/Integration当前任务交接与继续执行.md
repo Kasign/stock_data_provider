@@ -1267,14 +1267,14 @@ GetRun 与 CancelRun 的持久化创建者授权已在 Application/Storage 层�
 - W2-B 的 CreateRun 输入、幂等、MariaDB UTC system_as_of / deadline 已实现；不需要等待 SRV-CTR-001 才能发布内部模板。
 - 正式模板 `news.search_candidates@1.0.0` 已加入 Server Bootstrap：启动时预检参数 Schema、Applicability 精确版本、Output Registry 精确条目和 ResourcePolicy 注册，再通过 MySQL Template Registry 幂等发布；同版本内容冲突阻止启动。配置冻结与执行语义见 `doc/researchflow/README.md`。
 - 模板允许空输入快照，但 ResourcePolicy Provider inventory 仍必须非空；没有可用 Provider 时 CreateRun fail-closed，不创建无法执行的 Run。
-- Worker Runtime / Scheduler 周期扫描 / WorkerPool / ExpiredAttempt 恢复 / Deadline 扫描 / Finalization / Shutdown 仍未接入 Bootstrap；模板发布和候选扫描器实现均不代表生产执行链闭环。
+- （历史状态）该段记录时 Worker Runtime / Scheduler 周期扫描 / WorkerPool / ExpiredAttempt 恢复 / Deadline 扫描 / Finalization / Shutdown 尚未接入 Bootstrap；当前状态以本文件第 14、15 节为准。
 - 已新增 `RunFinalizationCandidateScanner` 与 MariaDB `ListFinalizableRunRefs`，覆盖正常完成、Deadline 终止和用户取消三类候选；要求 Stage 全部终态且没有运行中的 Attempt。
 - 已新增 `CancellationRecoveryScanner` 与 MariaDB 过期取消 Attempt 候选查询，复用 `FenceExpiredCancellationAttempt` 做事务内复核和 Fencing。
 - 精确 SHA `4996a1d8550269bdf4b5198a279483c2e9a9f03a` 的 Integration CI Run [44074611330](https://github.com/Kasign/stock_data_provider/actions/runs/44074611330) 全量 success（gofmt、root/go-core vet/test、跨模块 MariaDB、Worker Bootstrap 生命周期、Compose、WebUI 检查与构建）。
 
 - `SRV-CTR-001=deferred` 不变；未开放 Researchflow HTTP API，Owner Bearer 不自动获得 Owner Session 的 Researchflow 权限。
 
-后续主线：装配现有 Researchflow Worker、WorkerPool、Scheduler、SchedulerCandidateScanner、ExpiredAttemptScanner、CancellationRecoveryScanner、DeadlineScanner、RunFinalizationCandidateScanner、RunFinalizationCoordinator 与现有 MySQL Repository，接入 Server Lifecycle。必须先解决 Worker 角色不依赖 Owner Session 的组合边界，再验证 Run 正常完成、Retry、崩溃恢复、Deadline、取消、终态 Outbox 和优雅关闭。不要重复实现已经通过的 ResourcePolicy、Owner 身份适配、Run 访问授权、DatabaseClock、WorkerPool、Scheduler 或上述恢复扫描器。
+历史后续主线已由第 14、15 节推进完成。不要重复实现已经通过的 ResourcePolicy、Owner 身份适配、Run 访问授权、DatabaseClock、WorkerPool、Scheduler 或上述恢复扫描器。
 
 ## 14. 2026-11-17 Researchflow Server Runtime 生产生命周期接入
 
@@ -1290,7 +1290,7 @@ GetRun 与 CancelRun 的持久化创建者授权已在 Application/Storage 层�
 
 ## 15. 2026-11-17 Researchflow 崩溃恢复与交付链验收
 
-- 当前 integration 代码 SHA：`fe4189f94d0f41327b7fe6a8cc696f2aa99902c7`；该 SHA 的 CI 待本轮提交后重新触发并确认。此前代码 SHA `cf6aefaa01fc09cf188b909beceb6246b08c0190` 的 Integration CI Run [44088958318](https://github.com/Kasign/stock_data_provider/actions/runs/44088958318) 全量 success。
+- 当前 integration 代码 SHA：`4bf21587e96e4c85eb0e7dbf29e0f765b2ee81ee`（后续为文档更新）；精确代码 SHA `fe4189f94d0f41327b7fe6a8cc696f2aa99902c7` 的 Integration CI Run [44089458082](https://github.com/Kasign/stock_data_provider/actions/runs/44089458082) 全量 success。
 - 新增 MariaDB 生产 Runtime 崩溃恢复场景：Scheduler 先将 Stage 持久化为 Ready；模拟 Worker 通过真实 `ClaimAttempt` 创建 Attempt 1；只把该 Attempt 的 Lease 时间前移，模拟进程在执行前崩溃。
 - Runtime 启动后，ExpiredAttemptScanner 发现候选并调用 WorkerPool；Worker 重新 Claim，旧 Attempt 变为 TimedOut 并清空 Lease Owner，新 Attempt 成功；验证新旧 Attempt FencingToken 单调递增、Stage/Run 成功终态及唯一 terminal Outbox。
 - 在途取消场景另已通过 CI [44087900122](https://github.com/Kasign/stock_data_provider/actions/runs/44087900122)；正常取消与崩溃恢复是两条不同路径，现均有独立 MariaDB 验收。

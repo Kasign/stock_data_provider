@@ -173,7 +173,7 @@ Server 已在 Owner Session 启用且 Researchflow Capacity 显式配置时，�
 - 新增 Server 配置 `RESEARCHFLOW_LOCAL_WORKERS`，仅在 `SERVER_ROLE=worker|all` 且 Researchflow Capacity 已启用时必填，范围 1～32。
 - `RESEARCHFLOW_LOCAL_WORKERS` 只控制当前进程 WorkerPool 的并发；`RESEARCHFLOW_MAX_WORKERS` 仍是 MariaDB 原子 Claim/Capacity 使用的跨进程全局并发上限。两者不能互相替代，也不能将全局值直接作为每个进程的本地池大小。
 - API 角色不创建 WorkerPool，因此拒绝配置 `RESEARCHFLOW_LOCAL_WORKERS`；未启用 Researchflow Capacity 时也拒绝单独配置该项。
-- 本次只完成配置契约和验证，Worker Runtime 尚未装配；后续装配必须使用 `Process.ResearchflowLocalWorkers` 创建本地 WorkerPool。
+- 配置契约提交时，Worker Runtime 尚未装配；当前 Runtime 已使用 `Process.ResearchflowLocalWorkers` 创建本地 WorkerPool，见下方 2026-11-17 Runtime 生命周期与崩溃恢复验收记录。
 
 
 ## 2026-11-17 Server Researchflow Runtime 接入与并发审查
