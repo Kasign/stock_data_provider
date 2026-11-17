@@ -74,7 +74,9 @@ func (s *testSessionStore) RotateCSRFToken(_ context.Context, digest, newCSRFDig
 	s.record.CSRFTokenDigest = newCSRFDigest
 	s.record.LastSeenAt = now
 	s.record.IdleExpiresAt = now.Add(idleTTL)
-	if s.record.AbsoluteExpiresAt.Before(s.record.IdleExpiresAt) { s.record.IdleExpiresAt = s.record.AbsoluteExpiresAt }
+	if s.record.AbsoluteExpiresAt.Before(s.record.IdleExpiresAt) {
+		s.record.IdleExpiresAt = s.record.AbsoluteExpiresAt
+	}
 	return s.record, nil
 }
 

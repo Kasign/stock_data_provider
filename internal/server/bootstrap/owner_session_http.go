@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"example.com/stock-analysis-flow/internal/platform/observability"
 	platformfault "example.com/stock-analysis-flow/internal/platform/fault"
+	"example.com/stock-analysis-flow/internal/platform/observability"
 	platformsecurity "example.com/stock-analysis-flow/internal/platform/security"
 	serversecurity "example.com/stock-analysis-flow/internal/server/security"
 )
