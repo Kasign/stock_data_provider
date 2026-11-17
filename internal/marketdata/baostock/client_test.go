@@ -223,7 +223,7 @@ func TestQueryAdjustmentFactorsHandlesLoginQueryAndLogout(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	client := NewClient(Config{Host: host, Port: port, ConnectTimeout: time.Second, RequestTimeout: time.Second})
+	client := NewClient(Config{Host: host, Port: port, ConnectTimeout: time.Second, RequestTimeout: time.Second, Clock: baoStockFixedClock{now: fixedNow}})
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	rows, err := client.QueryAdjustmentFactors(ctx, "sh.600036", "2025-01-01", "2025-12-31")
@@ -243,6 +243,7 @@ func TestQueryAdjustmentFactorsHandlesLoginQueryAndLogout(t *testing.T) {
 }
 
 func TestQueryDailyKLinesHandlesLoginCompressedQueryAndLogout(t *testing.T) {
+	fixedNow := time.Date(2026, 11, 17, 16, 0, 0, 0, time.UTC)
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -310,7 +311,7 @@ func TestQueryDailyKLinesHandlesLoginCompressedQueryAndLogout(t *testing.T) {
 				}
 			case messageLogoutRequest:
 				logoutParts := strings.Split(body, messageSplit)
-				if len(logoutParts) != 3 || logoutParts[1] != "anonymous" {
+				if len(logoutParts) != 3 || logoutParts[1] != "anonymous" || logoutParts[2] != "20261118000000" {
 					serverErr <- fmt.Errorf("logout must use configured session user ID, got %q", body)
 					return
 				}

@@ -754,7 +754,7 @@ func (c *Client) Close() error {
 
 	var logoutErr error
 	if c.conn != nil && c.logged {
-		body := strings.Join([]string{"logout", c.userID, time.Now().Format("20060102150405")}, messageSplit)
+		body := strings.Join([]string{"logout", c.userID, c.cfg.Clock.Now().In(markettime.Location()).Format("20060102150405")}, messageSplit)
 		messageType, responseBody, err := c.exchangeLocked(ctx, messageLogoutRequest, body)
 		if err != nil {
 			logoutErr = fmt.Errorf("BaoStock logout: %w", err)
