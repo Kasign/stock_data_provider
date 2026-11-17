@@ -75,7 +75,6 @@ func newNewsSearchStageCompositionWithProviders(providers newsapp.ProviderSet) (
 	}, nil
 }
 
-
 func (c *newsSearchStageComposition) providerCodes() ([]string, error) {
 	if c == nil || c.providers == nil {
 		return nil, fmt.Errorf("News ProviderSet is not configured")
@@ -84,10 +83,13 @@ func (c *newsSearchStageComposition) providerCodes() ([]string, error) {
 	codes := make([]string, 0, len(providers))
 	seen := make(map[string]struct{}, len(providers))
 	for _, provider := range providers {
-		if provider == nil || provider.Code() == "" {
+		if provider == nil {
 			return nil, fmt.Errorf("News Provider inventory contains an invalid Provider")
 		}
 		code := provider.Code()
+		if code == "" {
+			return nil, fmt.Errorf("News Provider inventory contains an empty Provider Code")
+		}
 		if _, exists := seen[code]; exists {
 			return nil, fmt.Errorf("News Provider inventory contains duplicate Provider Code %q", code)
 		}

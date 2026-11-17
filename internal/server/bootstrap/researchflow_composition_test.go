@@ -33,7 +33,7 @@ func TestResearchflowOwnerCompositionBuildsInternalOwnerServices(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if composition.createRun == nil || composition.getRun == nil || composition.cancelRun == nil {
+	if composition.newsStage == nil || composition.createRun == nil || composition.getRun == nil || composition.cancelRun == nil {
 		t.Fatal("internal CreateRun/GetRun/CancelRun services must be composed together")
 	}
 	if _, err := composition.resourcePolicies.Resolve(context.Background(), researchflowresourcepolicy.NewsSearchConfiguredProvidersRef); !errors.Is(err, researchflowresourcepolicy.ErrNoProviders) {

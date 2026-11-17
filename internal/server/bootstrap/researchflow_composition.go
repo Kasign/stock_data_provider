@@ -16,6 +16,7 @@ import (
 // researchflowOwnerComposition is an in-process Application composition.
 // It deliberately does not register HTTP routes; SRV-CTR-001 remains deferred.
 type researchflowOwnerComposition struct {
+	newsStage        *newsSearchStageComposition
 	createRun        *researchflowapplication.CreateRunService
 	getRun           *researchflowapplication.GetRunService
 	cancelRun        *researchflowapplication.CancelRunService
@@ -46,12 +47,17 @@ func newResearchflowOwnerComposition(
 	if err != nil {
 		return nil, fmt.Errorf("create Researchflow ResourcePolicy Registry: %w", err)
 	}
+	if len(providerCodes) > 0 {
+		if _, err := policyRegistry.Resolve(resourcepolicy.NewsSearchConfiguredProvidersRef, providerCodes); err != nil {
+			return nil, fmt.Errorf("validate assembled News Provider inventory: %w", err)
+		}
+	}
 	policyResolver := configuredNewsResourcePolicyResolver{
-		registry: policyRegistry, providerCodes: providerCodes,
+		registry: policyRegistry, providerCodes: append([]string(nil), providerCodes...),
 	}
 
-	// The first production Template is News Search only and declares no hard-risk
-	// stage. A nil gate registry therefore fails closed if a future Template adds one.
+	// The current News Search composition declares no hard-risk stage. A nil
+	// gate registry therefore fails closed if a future Template adds one.
 	runRepository, err := researchflowstorage.NewMySQLRunRepository(shared.DB, researchflowstorage.CapacityLimits{
 		MaxQueuedRuns: capacity.MaxQueuedRuns, MaxWorkers: capacity.MaxWorkers,
 	})
@@ -87,6 +93,7 @@ func newResearchflowOwnerComposition(
 	}
 
 	return &researchflowOwnerComposition{
+		newsStage: newsStage,
 		createRun: createRun, getRun: getRun, cancelRun: cancelRun,
 		resourcePolicies: policyResolver,
 	}, nil

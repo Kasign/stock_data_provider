@@ -29,6 +29,35 @@ func (p newsStageTestProvider) Search(context.Context, newsdomain.SearchRequest)
 	return p.candidates, p.err
 }
 
+
+func TestNewsSearchStageCompositionProviderCodesAreStableAndValidated(t *testing.T) {
+	composition, err := newNewsSearchStageCompositionWithProviders(newsapp.StaticProviderSet{Providers: []newsapp.Provider{
+		newsStageTestProvider{code: "tavily"},
+		newsStageTestProvider{code: "bocha"},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	codes, err := composition.providerCodes()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(codes) != 2 || codes[0] != "bocha" || codes[1] != "tavily" {
+		t.Fatalf("Provider inventory is not canonical: %#v", codes)
+	}
+
+	duplicate, err := newNewsSearchStageCompositionWithProviders(newsapp.StaticProviderSet{Providers: []newsapp.Provider{
+		newsStageTestProvider{code: "bocha"},
+		newsStageTestProvider{code: "bocha"},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := duplicate.providerCodes(); err == nil {
+		t.Fatal("duplicate Provider Code was accepted")
+	}
+}
+
 func TestNewsSearchStageCompositionRegistersExactOutputAndUsesPlatformClientOnlyWhenConfigured(t *testing.T) {
 	unconfigured, err := newsconfig.Load(platformconfig.NewEnvWithLookup(nil))
 	if err != nil {
