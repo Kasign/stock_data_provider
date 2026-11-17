@@ -288,7 +288,7 @@ func TestNewsSearchStageResearchflowMariaDBIntegration(t *testing.T) {
 		t.Fatalf("将恢复测试 Stage 推进到 Ready 失败: %v", err)
 	}
 	recoveryStageRef := recoveryCreated.Stages[0].Ref
-	crashedAttempt, claimed, err := repository.ClaimAttempt(
+	crashedAttempt, replayed, err := repository.ClaimAttempt(
 		ctx, recoveryCreated.Run.Ref, recoveryStageRef,
 		"integration:attempt:crashed-worker", "integration:worker:crashed",
 		30*time.Second, 2, 2,
@@ -296,8 +296,8 @@ func TestNewsSearchStageResearchflowMariaDBIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("模拟进程崩溃前 Claim Attempt 失败: %v", err)
 	}
-	if !claimed || crashedAttempt.Status != researchflowdomain.AttemptRunning {
-		t.Fatalf("恢复测试未建立 Running Attempt: claimed=%t attempt=%+v", claimed, crashedAttempt)
+	if replayed || crashedAttempt.Status != researchflowdomain.AttemptRunning {
+		t.Fatalf("恢复测试必须建立全新的 Running Attempt: replayed=%t attempt=%+v", replayed, crashedAttempt)
 	}
 	if _, err := db.ExecContext(ctx, `UPDATE researchflow_attempts SET
 		lease_expires_at = DATE_FORMAT(DATE_SUB(UTC_TIMESTAMP(6), INTERVAL 1 SECOND), '%Y-%m-%dT%H:%i:%s.%f000Z')
