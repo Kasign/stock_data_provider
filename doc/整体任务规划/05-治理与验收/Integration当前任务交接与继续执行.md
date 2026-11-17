@@ -1278,11 +1278,11 @@ GetRun 与 CancelRun 的持久化创建者授权已在 Application/Storage 层�
 
 ## 14. 2026-11-17 Researchflow Server Runtime 生产生命周期接入
 
-- 当前 integration 代码 SHA：4bd41be4c56357124356ee9b21a084bcadeb70a6；本轮 Integration CI Run [44081768099](https://github.com/Kasign/stock_data_provider/actions/runs/44081768099) 正在执行，最终结论必须以精确 head_sha 匹配为准。
+- 当前 integration 代码 SHA：`ef5e471b09511d8de017e8577b4c1ec29ee4c48f`；Integration CI Run [44084307957](https://github.com/Kasign/stock_data_provider/actions/runs/44084307957) 对精确 SHA 全量 success。
 - 已拆分 Server Researchflow 组合根：公共执行依赖独立于 Owner Session；Owner Session 只构造可信 CreateRun/GetRun/CancelRun 内部服务；Worker-only 角色可独立装配 News Stage、Worker、WorkerPool 和周期 Runtime。
 - 已在 Server Lifecycle 注册正式 Template 发布、Scheduler、Deadline Scanner、Expired Attempt Recovery、Cancellation Recovery、Run Finalization 与 WorkerPool。Researchflow Outbox Relay 在 Runtime 之前注册，生命周期逆序关闭时先停止 Runtime、后停止 Relay。
-- 最新 Review 发现同步执行 Scheduler.ScheduleRun / WorkerPool.Execute 会阻塞单一扫描循环，使 Deadline 和其他恢复扫描等待一个 Stage 执行结束。已改为有界异步任务：扫描循环继续执行；任务数受 RESEARCHFLOW_LOCAL_WORKERS 限制；Run/Stage in-flight key 防止周期重复派发；Stop 取消 Runtime Context、等待扫描循环和在途任务退出，最后才 Shutdown WorkerPool。
-- 新增 Runtime 任务并发上限、重复任务去重、取消 Context 拒绝派发的单测。Researchflow README 的当前状态与缺口已同步。
-- 本轮代码变更：4bd41be4c56357124356ee9b21a084bcadeb70a6（异步扫描执行及测试）；上一轮 Runtime 基础接入 7dacd70fa95d8de2d6db2ed8c481125cf8888df8 的 Integration CI Run [44080549891](https://github.com/Kasign/stock_data_provider/actions/runs/44080549891) 已全量 success。
-- 尚未完成的验收：真实 MariaDB 正常 Run / Retry / Deadline / 用户取消 / 进程中断恢复；多 Worker 进程的全局 Claim 容量竞争；终态 Outbox 在 Runtime Finalization 后的实际 Relay 投递与重试。SRV-CTR-001 继续 deferred，不增加公开 Researchflow HTTP API。
-- 下一步：先取得本轮精确 SHA 的全量 CI success；随后补充真实 MariaDB Runtime 场景测试，重点验证多 Run 调度、单个候选失败隔离、Shutdown 等待边界及 Outbox 顺序。不得将 Bootstrap 成功或单测通过等同于生产业务端到端验收。
+- 调度与过期 Attempt 恢复通过有界异步任务执行；扫描循环不等待 Stage 执行完成；任务数受 RESEARCHFLOW_LOCAL_WORKERS 限制；Run/Stage in-flight key 防止周期重复派发；Stop 取消 Runtime Context、等待扫描循环和在途任务退出，最后才 Shutdown WorkerPool。
+- 真实 MariaDB 正常 Run Runtime 集成测试已通过，覆盖候选扫描、Scheduler、Worker Claim/执行、News Stage Output 持久化、ResultSummary Finalization 和 terminal Outbox 原子写入。测试使用确定性 Provider Fixture，不访问外部 Provider。
+- 集成测试发现状态聚合的空切片克隆问题：非 nil 空 ExcludedStages 会被 append(nil, empty...) 克隆成 nil，导致 Storage 完整性校验拒绝 Finalization。已修复 cloneExcludedStages，并增加 normal/cancellation 两条状态聚合回归测试。
+- 尚未完成：Retry 重新执行、Deadline 终止、用户取消/Cancellation Recovery、进程中断后的 Expired Attempt Recovery、多 Worker 进程全局 Claim 容量竞争、终态 Outbox Relay 实际投递与重试。SRV-CTR-001 继续 deferred，不增加公开 Researchflow HTTP API。
+- 下一步按顺序补齐真实 MariaDB Retry、Deadline、取消和崩溃恢复场景；之后再验收多进程 Capacity 与 Outbox Relay 投递/重试。不得将正常成功路径通过外推为所有终态路径已验收。

@@ -18,7 +18,7 @@ Researchflow 是研究应用编排层，通过 Data、News、Quant、Research、
 
 ## Stage Provider Envelope 与 Output Registry（2026-11-16）
 
-已新增独立 Envelope DTO/Builder、版本化 Output Registry 通用框架、Schema/Golden。Provider 不能覆盖 Orchestrator 身份和完成时间；Registry 精确匹配版本及输出 discriminator，Payload/QualitySummary 使用注册的强类型 Validator。当前不注册虚构业务 Stage，生产 Provider 仍未解锁。实施与验收状态见 [Stage Provider Envelope 与 Output Registry 实施记录](07-Stage-Provider-Envelope与Output-Registry实施记录.md)。
+已新增独立 Envelope DTO/Builder、版本化 Output Registry 通用框架、Schema/Golden。Provider 不能覆盖 Orchestrator 身份和完成时间；Registry 精确匹配版本及输出 discriminator，Payload/QualitySummary 使用注册的强类型 Validator。截至 2026-11-16，当时尚未注册业务 Stage；当前已在 integration 注册并装配正式 News Search Stage，生产 Provider 能力仍限于 News Search。实施与验收状态见 [Stage Provider Envelope 与 Output Registry 实施记录](07-Stage-Provider-Envelope与Output-Registry实施记录.md)。
 
 ## 当前代码能力
 
@@ -41,13 +41,13 @@ FLOW-CTR-004 的通用 Envelope / Registry 已接入 Worker 成功/降级提交�
 
 代码 SHA：`7392caaba59aa4d322d4b91e1d34a7294d2f6505`；Integration CI Run [43837079196](https://github.com/Kasign/stock_data_provider/actions/runs/43837079196) 全量 success（gofmt、root/go-core vet/test、MariaDB 跨模块与 Worker Bootstrap、Compose、WebUI 检查及构建）。
 
-当前仍未注册任何业务 Stage Entry，也没有生产 StageExecutor Adapter 或 Server Worker 生产装配。通用执行/持久化边界完成，不代表 News、Research、Quant 或 LLM 已成为生产 Provider；不得创建占位 Entry。实现设计与验收范围见 [Stage Output 不可变资源与 Worker 原子提交设计](08-Stage-Output不可变资源与Worker原子提交设计.md)。
+截至该历史记录 SHA，当时尚未注册业务 Stage Entry。当前 integration 已注册 News Search Stage，并由 Server Worker Runtime 执行；Data、Quant、Research、LLM 等其他 Stage Adapter 仍未完成，不得创建占位 Entry。实现设计与验收范围见 [Stage Output 不可变资源与 Worker 原子提交设计](08-Stage-Output不可变资源与Worker原子提交设计.md)。
 
 ## 当前明确缺口
 
 - `integration` 已装配 Researchflow Worker-only Runtime：正式 Template 发布、Scheduler、WorkerPool、Deadline、过期 Attempt、取消恢复、Run Finalization 和终态 Outbox Relay 均已注册到 Server Lifecycle；Outbox Relay 先启动、Runtime 后启动，关闭时按逆序先停 Runtime 再停 Relay。
 - Runtime 的调度和过期 Attempt 恢复任务已按本地 Worker 并发上限做有界异步派发；扫描循环不等待 Stage 执行完成，重复候选通过进程内 in-flight key 去重，Stop 会先取消扫描/执行上下文并等待任务退出，再关闭 WorkerPool。跨进程容量仍由 MariaDB ClaimAttempt 事务兜底。
-- 最新代码 SHA `7dacd70fa95d8de2d6db2ed8c481125cf8888df8` 的 Integration CI Run [44080549891](https://github.com/Kasign/stock_data_provider/actions/runs/44080549891) 全量 success。当前并发改进与测试仍待本轮 CI 验证；不能把 CI 通过等同于生产业务端到端验收。
+- 最新代码 SHA `ef5e471b09511d8de017e8577b4c1ec29ee4c48f` 的 Integration CI Run [44084307957](https://github.com/Kasign/stock_data_provider/actions/runs/44084307957) 全量 success。真实 MariaDB Runtime 集成测试已覆盖正常 Run：候选扫描、Scheduler、Worker、Stage Output、ResultSummary、终态 Outbox；Retry、Deadline、用户取消、崩溃恢复和跨进程容量仍待验收。
 - `StageExecutor` 是注入端口，Data/News/Quant/Research/LLM 的生产 Adapter 尚未在本分支闭环。
 - Worker Pool 是模块内有界执行协程池，不是持久化队列；周期扫描与池生命周期由 Server 驱动。跨 Worker 的 Run 并发和全局 Worker 上限由 ClaimAttempt 数据库事务兜底。
 - Go 测试、Race、Vet、真实 MariaDB、进程崩溃恢复和跨模块端到端验收必须按实际 SHA 记录，不以测试文件存在代替通过证据。
@@ -63,7 +63,7 @@ Server 在 integration 已接入 Researchflow → Notification Outbox Relay。Ru
 
 ## Integration 接入状态（2026-11-14，第 4 项只读盘点）
 
-Integration 侧已完成 Researchflow Stage 接入的契约与代码准入盘点，判定 **`blocked`（非 `fail`）**：FLOW-CTR-004 的 Stage Provider Result 只有字段表、无权威 Output Registry 与 Envelope Schema；`StageExecutor` 在 `internal/researchflow/application/executor.go:47-49` 只有接口、生产实现为零；`WorkflowTemplate.OutputRegistryVersion` 只是字符串字段；Quant 侧 `DecodePayload` 仅注册 `trend/1.0.0` / `risk/1.0.0`。本轮未改动本模块任何代码或进度表，也未新增 Stage Code / 输出 Schema / 空壳 Executor。
+截至 2026-11-14 的历史盘点，Integration 侧 Researchflow Stage 接入曾判定 **`blocked`（非 `fail`）**：FLOW-CTR-004 的 Stage Provider Result 只有字段表、无权威 Output Registry 与 Envelope Schema；`StageExecutor` 在 `internal/researchflow/application/executor.go:47-49` 只有接口、生产实现为零；`WorkflowTemplate.OutputRegistryVersion` 只是字符串字段；Quant 侧 `DecodePayload` 仅注册 `trend/1.0.0` / `risk/1.0.0`。本轮未改动本模块任何代码或进度表，也未新增 Stage Code / 输出 Schema / 空壳 Executor。
 
 模块自身能力（状态机、Scheduler、WorkerPool、MariaDB 验收）保持本文前述记录，不重复验收。解锁所需的冻结契约、`stage_code + template_version + output_registry_version` 三元组、生产 Provider 与跨模块端到端验收条件，以及下一轮起点，统一以 [Integration 当前任务交接与继续执行](../整体任务规划/05-治理与验收/Integration当前任务交接与继续执行.md) 第 6 节为准。
 
@@ -183,3 +183,13 @@ Server 已在 Owner Session 启用且 Researchflow Capacity 显式配置时，�
 - Deadline、取消恢复和 Finalization 保留在周期扫描线程中；调度 Run 与过期 Attempt 恢复通过有界异步任务执行，避免单个 Stage 执行时间阻塞其他恢复扫描。
 - 异步任务受 `RESEARCHFLOW_LOCAL_WORKERS` 限制，按 Run/Stage 候选键去重；Runtime Stop 取消工作上下文并等待所有异步任务退出，随后才关闭 WorkerPool。
 - 仍需通过真实 MariaDB 场景验证：正常 Run 完成、Provider retry、Deadline、用户取消、进程中断后的 Attempt 恢复、跨进程 Claim 容量竞争，以及 Outbox 投递/重试。公开 Researchflow HTTP API（SRV-CTR-001）仍 deferred。
+
+
+## 2026-11-17 正常 Run 生产 Runtime MariaDB 端到端验收
+
+- 将既有 News Search MariaDB 集成测试从直接调用 Scheduler/WorkerPool，升级为调用 Server 生产组合的 Researchflow Runtime。
+- 测试使用真实 MariaDB DatabaseClock、MySQLRunRepository、正式 Worker/Stage Output Registry、Scheduler Candidate Scanner、WorkerPool 和 Run Finalization Coordinator；Provider 使用确定性集成 Fixture，不访问外部服务，也不把 Fixture 当作真实市场数据。
+- 验收通过：Run 从 Created/Queued 经周期扫描和调度进入 Running；Worker Claim 并执行 News Search Stage；Stage Payload/QualitySummary 与 Attempt 状态持久化；Finalization 生成完整 ResultSummary；Run 终态与唯一 terminal Outbox 在同一 Storage 事务中提交。
+- 该测试发现并修复状态聚合的空切片克隆问题：非 nil 空 ExcludedStages 经 append(nil, empty...) 变成 nil，导致 Storage 拒绝完整性校验。修复后 normal aggregation 与 cancellation aggregation 都保持非 nil 空数组。
+- 精确代码 SHA `ef5e471b09511d8de017e8577b4c1ec29ee4c48f` 的 Integration CI Run [44084307957](https://github.com/Kasign/stock_data_provider/actions/runs/44084307957) 全量 success。
+- 尚未覆盖：Retry 重新执行、Deadline 扫描与终止、用户取消和 Cancellation Recovery、进程中断后的 Expired Attempt Recovery、多 Worker 进程争抢全局 Claim 容量，以及 Outbox Relay 实际发送/重试。
