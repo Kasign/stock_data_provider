@@ -47,7 +47,7 @@ func TestTencentQuoteNormalizesVolumeAndAmount(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if q.QuoteTime == nil || q.QuoteTime.In(time.FixedZone("CST", 8*3600)).Format("2006-01-02 15:04:05") != "2026-10-21 11:28:02" {
+	if q.QuoteTime == nil || q.QuoteTime.In(providerMarketLocation()).Format("2006-01-02 15:04:05") != "2026-10-21 11:28:02" {
 		t.Fatalf("unexpected Tencent provider timestamp: %#v", q.QuoteTime)
 	}
 	if q.QuoteTimeSemantics != "provider_snapshot_time" {
@@ -319,10 +319,7 @@ func TestTencentDailyBarsRejectsReversedDateRangeBeforeRequest(t *testing.T) {
 }
 
 func TestTencentDailyBarsRejectsFutureDateBeforeRequest(t *testing.T) {
-	loc, err := time.LoadLocation("Asia/Shanghai")
-	if err != nil {
-		loc = time.FixedZone("CST", 8*60*60)
-	}
+	loc := providerMarketLocation()
 	nextDay := time.Now().In(loc).AddDate(0, 0, 1).Format("2006-01-02")
 	cases := []struct {
 		name, start, end string
