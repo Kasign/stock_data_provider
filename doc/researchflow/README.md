@@ -159,3 +159,10 @@ Server 已在 Owner Session 启用且 Researchflow Capacity 显式配置时，�
 - 以上扫描器目前已具备 Application / Storage 实现和测试，但尚未装配进 Server 周期 Runtime；不能据此认定崩溃恢复已在生产进程中运行。
 - 最新验证：Integration CI 对提交 `4996a1d8550269bdf4b5198a279483c2e9a9f03a` 全量成功，包含根模块测试、Worker Bootstrap MariaDB/Redis 生命周期、go-core、Compose 与 WebUI 检查。
 
+
+## 2026-11-17 Server 共享资源关闭保护
+
+- 复核发现 WorkerPool 的 Shutdown 超时路径会取消池上下文后返回；这不等于所有在途 Worker goroutine 已退出。
+- Bootstrap 的共享资源关闭策略已调整为：只有所有 Lifecycle 消费者均成功停止，才关闭共享 MariaDB/Redis/HTTP 资源；任一组件停止失败或超时，保留共享资源并向上返回错误，避免在途消费者访问已关闭的连接池。
+- 该保护是异常关闭时的安全兜底，不代表消费者已成功停止；进程收到该错误后应退出。资源最终由进程退出回收。
+- 本次变更只修复资源关闭顺序，不代表 Researchflow Worker Runtime 已装配。Scheduler、WorkerPool、Deadline、ExpiredAttempt、Cancellation Recovery 与 Finalization 的周期生命周期仍待接入。
