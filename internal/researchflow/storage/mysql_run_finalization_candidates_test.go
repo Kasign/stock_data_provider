@@ -51,16 +51,16 @@ func TestMariaDBListFinalizableRunRefsSelectsOnlyFullyStoppedRuns(t *testing.T) 
 	now := time.Now().UTC()
 	fingerprint := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	templateFingerprint := "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-	refs := []string{prefix + "normal", prefix + "deadline", prefix + "cancel", prefix + "active", prefix + "unrouted"}
+	refs := []string{prefix + "active", prefix + "cancel", prefix + "deadline", prefix + "normal", prefix + "unrouted"}
 	stageStatuses := []domain.StageStatus{
-		domain.StageSucceeded, domain.StageTimedOut, domain.StageCancelled,
-		domain.StageRunning, domain.StageSucceeded,
+		domain.StageRunning, domain.StageCancelled, domain.StageTimedOut,
+		domain.StageSucceeded, domain.StageSucceeded,
 	}
 	runStatuses := []domain.RunStatus{
-		domain.RunRunning, domain.RunCreated, domain.RunCancelling,
+		domain.RunRunning, domain.RunCancelling, domain.RunCreated,
 		domain.RunRunning, domain.RunQueued,
 	}
-	reasons := []string{"", "deadline_exceeded", "user_cancelled", "", ""}
+	reasons := []string{"", "user_cancelled", "deadline_exceeded", "", ""}
 	for index, runRef := range refs {
 		stageRef := fmt.Sprintf("finalize-candidate-stage-%d-%s", index, suffix)
 		record := application.CreateRunRecord{
@@ -105,7 +105,7 @@ func TestMariaDBListFinalizableRunRefsSelectsOnlyFullyStoppedRuns(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	wantFirst := refs[:2]
+	wantFirst := refs[1:3]
 	if len(first) != len(wantFirst) || first[0] != wantFirst[0] || first[1] != wantFirst[1] {
 		t.Fatalf("first finalizable page=%v, want %v", first, wantFirst)
 	}
@@ -113,7 +113,7 @@ func TestMariaDBListFinalizableRunRefsSelectsOnlyFullyStoppedRuns(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(second) != 1 || second[0] != refs[2] {
-		t.Fatalf("second finalizable page=%v, want only %q", second, refs[2])
+	if len(second) != 1 || second[0] != refs[3] {
+		t.Fatalf("second finalizable page=%v, want only %q", second, refs[3])
 	}
 }
