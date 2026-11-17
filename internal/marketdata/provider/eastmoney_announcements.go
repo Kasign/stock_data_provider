@@ -86,6 +86,7 @@ func eastmoneyAnnouncementTime(raw string) *time.Time {
 		}
 	}
 	loc := providerMarketLocation()
+	var err error
 	for _, layout := range []string{time.RFC3339Nano, "2006-01-02 15:04:05.000", "2006-01-02 15:04:05", "2006-01-02 15:04", "2006/01/02 15:04:05"} {
 		var parsed time.Time
 		if layout == time.RFC3339Nano {

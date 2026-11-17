@@ -275,6 +275,7 @@ func baostockAdjustFlag(adjustment model.AdjustmentBasis) (string, string, error
 // lookback so an unbounded all-history scan does not flood the public endpoint.
 func baostockDateRange(startDate, endDate string, limit int, now time.Time) (string, string, error) {
 	loc := providerMarketLocation()
+	var err error
 	end := now.In(loc)
 	if strings.TrimSpace(endDate) != "" {
 		end, err = time.ParseInLocation("2006-01-02", strings.TrimSpace(endDate), loc)
