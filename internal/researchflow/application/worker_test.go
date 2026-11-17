@@ -203,16 +203,6 @@ func TestWorkerPassesOwnedResourcePolicySnapshotToExecutor(t *testing.T) {
 	}
 }
 
-func TestWorkerRejectsResourcePolicySnapshotChangedAfterClaim(t *testing.T) {
-	store, result := newWorkerFixture()
-	original := store.snapshot.ResourcePolicy
-	calls := 0
-	store.LoadStageExecutionSnapshot = nil
-	_ = calls
-	_ = original
-	_ = result
-}
-
 func TestWorkerExecuteClaimsExecutesAndCommits(t *testing.T) {
 	store, result := newWorkerFixture()
 	captured := &StageExecutionRequest{}
