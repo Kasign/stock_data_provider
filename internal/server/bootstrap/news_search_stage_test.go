@@ -194,18 +194,16 @@ func testNewsResourcePolicy(t *testing.T, codes []string) resourcepolicy.Snapsho
 	return snapshot
 }
 
-func providerCodes(adapter *newsstage.SearchCandidatesAdapter) []string {
-	// Existing direct adapter tests use this helper with a deterministic test ProviderSet;
-	// their allowlist is provided explicitly by the helper below when needed.
-	return []string{"empty_provider"}
+func newsProviderCodes(providers newsapp.ProviderSet) []string {
+	if providers == nil { return nil }
+	all := providers.All()
+	codes := make([]string, 0, len(all))
+	for _, provider := range all { if provider != nil { codes = append(codes, provider.Code()) } }
+	return codes
 }
 
 func newNewsSearchExecutor(providers newsapp.ProviderSet) newsSearchStageExecutor {
-	adapter, err := newsstage.NewSearchCandidatesAdapter(newsapp.NewSearchCandidates(providers))
-	if err != nil {
-		panic(err)
-	}
-	return newsSearchStageExecutor{adapter: adapter}
+	return newsSearchStageExecutor{providers: providers}
 }
 
 func executeNewsStage(t *testing.T, executor newsSearchStageExecutor, parameters string) researchflowapplication.StageExecutionResult {
@@ -213,7 +211,7 @@ func executeNewsStage(t *testing.T, executor newsSearchStageExecutor, parameters
 	result, err := executor.ExecuteStage(context.Background(), researchflowapplication.StageExecutionRequest{
 		Stage:      researchflowdomain.Stage{Code: newsstage.SearchCandidatesStageCode},
 		Parameters: json.RawMessage(parameters),
-		ResourcePolicy: testNewsResourcePolicy(t, providerCodes(executor.adapter)),
+		ResourcePolicy: testNewsResourcePolicy(t, newsProviderCodes(executor.providers)),
 	})
 	if err != nil {
 		t.Fatal(err)
