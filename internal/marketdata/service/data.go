@@ -4047,9 +4047,9 @@ func isCurrentIncompleteSessionBar(tradeDate string, now time.Time) bool {
 }
 
 var (
-	marketLocationOnce sync.Once
+	marketLocationOnce  sync.Once
 	marketLocationValue *time.Location
-	marketLocationErr error
+	marketLocationErr   error
 )
 
 // marketLocation 返回 A 股业务时区；使用内嵌时区数据库，避免依赖宿主机安装 tzdata。
