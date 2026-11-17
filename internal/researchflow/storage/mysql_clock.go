@@ -4,40 +4,36 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"fmt"
 	"time"
 
+	platformtime "example.com/stock-analysis-flow/internal/platform/time"
 	"example.com/stock-analysis-flow/internal/researchflow/application"
 )
 
-const researchflowDatabaseClockQuery = "SELECT DATE_FORMAT(UTC_TIMESTAMP(6), '%Y-%m-%dT%H:%i:%s.%f000Z')"
+const researchflowDatabaseClockQuery = platformtime.MariaDBClockQuery
 
-// MySQLDatabaseClock reads time from the same database authority used by
-// Researchflow persistence. It does not use the Server host clock.
+// MySQLDatabaseClock preserves the Researchflow application port while
+// delegating the shared MariaDB UTC clock implementation to Platform.
 type MySQLDatabaseClock struct {
-	db *sql.DB
+	source *platformtime.MariaDBSource
 }
 
 func NewMySQLDatabaseClock(db *sql.DB) (*MySQLDatabaseClock, error) {
 	if db == nil {
 		return nil, errors.New("Researchflow database clock requires a SQL database")
 	}
-	return &MySQLDatabaseClock{db: db}, nil
+	source, err := platformtime.NewMariaDBSource(db)
+	if err != nil {
+		return nil, err
+	}
+	return &MySQLDatabaseClock{source: source}, nil
 }
 
 func (c *MySQLDatabaseClock) NowUTC(ctx context.Context) (time.Time, error) {
-	if c == nil || c.db == nil || ctx == nil {
+	if c == nil || c.source == nil || ctx == nil {
 		return time.Time{}, errors.New("Researchflow database clock is not configured")
 	}
-	var value string
-	if err := c.db.QueryRowContext(ctx, researchflowDatabaseClockQuery).Scan(&value); err != nil {
-		return time.Time{}, fmt.Errorf("read MariaDB UTC clock: %w", err)
-	}
-	parsed, err := parseResearchflowTime(value)
-	if err != nil {
-		return time.Time{}, fmt.Errorf("parse MariaDB UTC clock: %w", err)
-	}
-	return parsed.UTC(), nil
+	return c.source.NowUTC(ctx)
 }
 
 var _ application.DatabaseClock = (*MySQLDatabaseClock)(nil)
