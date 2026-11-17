@@ -49,15 +49,17 @@ func NewRegistry() (*Registry, error) {
 	definitions := []definition{{
 		Ref: NewsSearchConfiguredProvidersRef, Version: newsSearchPolicyVersion,
 		ResourceType: "news.provider",
-		Selection: "server_successfully_assembled_provider_set_at_run_creation",
+		Selection:    "server_successfully_assembled_provider_set_at_run_creation",
 	}}
 	registry := &Registry{
-		definitions: make(map[string]definition, len(definitions)),
+		definitions:  make(map[string]definition, len(definitions)),
 		fingerprints: make(map[string]string, len(definitions)),
 	}
 	for _, item := range definitions {
 		fingerprint, err := fingerprintDefinition(item)
-		if err != nil { return nil, err }
+		if err != nil {
+			return nil, err
+		}
 		registry.definitions[item.Ref] = item
 		registry.fingerprints[item.Ref] = fingerprint
 	}
@@ -66,10 +68,16 @@ func NewRegistry() (*Registry, error) {
 
 // Resolve snapshots the successfully assembled Provider inventory for one exact policy version.
 func (r *Registry) Resolve(ref string, providerCodes []string) (Snapshot, error) {
-	if r == nil { return Snapshot{}, ErrPolicyNotFound }
+	if r == nil {
+		return Snapshot{}, ErrPolicyNotFound
+	}
 	item, ok := r.definitions[ref]
-	if !ok { return Snapshot{}, fmt.Errorf("%w: %q", ErrPolicyNotFound, ref) }
-	if len(providerCodes) == 0 { return Snapshot{}, ErrNoProviders }
+	if !ok {
+		return Snapshot{}, fmt.Errorf("%w: %q", ErrPolicyNotFound, ref)
+	}
+	if len(providerCodes) == 0 {
+		return Snapshot{}, ErrNoProviders
+	}
 	codes := append([]string(nil), providerCodes...)
 	for i, code := range codes {
 		if code == "" || strings.TrimSpace(code) != code || !providerCodePattern.MatchString(code) {
@@ -86,9 +94,13 @@ func (r *Registry) Resolve(ref string, providerCodes []string) (Snapshot, error)
 }
 
 func (r *Registry) ValidateSnapshot(snapshot Snapshot) error {
-	if r == nil { return ErrPolicyNotFound }
+	if r == nil {
+		return ErrPolicyNotFound
+	}
 	fingerprint, ok := r.fingerprints[snapshot.PolicyRef]
-	if !ok { return fmt.Errorf("%w: %q", ErrPolicyNotFound, snapshot.PolicyRef) }
+	if !ok {
+		return fmt.Errorf("%w: %q", ErrPolicyNotFound, snapshot.PolicyRef)
+	}
 	if snapshot.PolicyFingerprint != fingerprint || len(snapshot.AllowedProviderCodes) == 0 {
 		return ErrInvalidInventory
 	}
@@ -103,7 +115,9 @@ func (r *Registry) ValidateSnapshot(snapshot Snapshot) error {
 
 func fingerprintDefinition(item definition) (string, error) {
 	raw, err := json.Marshal(item)
-	if err != nil { return "", fmt.Errorf("encode Researchflow resource policy: %w", err) }
+	if err != nil {
+		return "", fmt.Errorf("encode Researchflow resource policy: %w", err)
+	}
 	sum := sha256.Sum256(raw)
 	return hex.EncodeToString(sum[:]), nil
 }

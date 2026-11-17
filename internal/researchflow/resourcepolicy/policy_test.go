@@ -8,10 +8,14 @@ import (
 
 func TestResolveSnapshotsSortedProviderIdentityOnly(t *testing.T) {
 	registry, err := NewRegistry()
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	inventory := []string{"tavily", "bocha"}
 	snapshot, err := registry.Resolve(NewsSearchConfiguredProvidersRef, inventory)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !reflect.DeepEqual(snapshot.AllowedProviderCodes, []string{"bocha", "tavily"}) {
 		t.Fatalf("provider allowlist is not canonical: %#v", snapshot.AllowedProviderCodes)
 	}
@@ -19,12 +23,16 @@ func TestResolveSnapshotsSortedProviderIdentityOnly(t *testing.T) {
 	if !reflect.DeepEqual(snapshot.AllowedProviderCodes, []string{"bocha", "tavily"}) {
 		t.Fatal("snapshot retained caller-owned inventory memory")
 	}
-	if err := registry.ValidateSnapshot(snapshot); err != nil { t.Fatalf("valid snapshot rejected: %v", err) }
+	if err := registry.ValidateSnapshot(snapshot); err != nil {
+		t.Fatalf("valid snapshot rejected: %v", err)
+	}
 }
 
 func TestResolveFailsClosedForUnknownPolicyAndEmptyInventory(t *testing.T) {
 	registry, err := NewRegistry()
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	if _, err := registry.Resolve("news.search.configured-providers@latest", []string{"bocha"}); !errors.Is(err, ErrPolicyNotFound) {
 		t.Fatalf("unknown policy must fail closed, got %v", err)
 	}
@@ -35,7 +43,9 @@ func TestResolveFailsClosedForUnknownPolicyAndEmptyInventory(t *testing.T) {
 
 func TestResolveRejectsInvalidAndDuplicateProviderCodes(t *testing.T) {
 	registry, err := NewRegistry()
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, inventory := range [][]string{{"bocha", "bocha"}, {"bocha", "Tavily"}, {"bocha", " tavily"}, {"bocha", "../tavily"}} {
 		if _, err := registry.Resolve(NewsSearchConfiguredProvidersRef, inventory); !errors.Is(err, ErrInvalidInventory) {
 			t.Errorf("inventory %#v must be rejected, got %v", inventory, err)
@@ -43,12 +53,16 @@ func TestResolveRejectsInvalidAndDuplicateProviderCodes(t *testing.T) {
 	}
 }
 
-func TestValidateSnapshotRejectsMutation(t *testing.T) {
+func TestValidateSnapshotRejectsNonCanonicalMutation(t *testing.T) {
 	registry, err := NewRegistry()
-	if err != nil { t.Fatal(err) }
-	snapshot, err := registry.Resolve(NewsSearchConfiguredProvidersRef, []string{"bocha"})
-	if err != nil { t.Fatal(err) }
-	snapshot.AllowedProviderCodes[0] = "tavily"
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := registry.Resolve(NewsSearchConfiguredProvidersRef, []string{"bocha", "tavily"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot.AllowedProviderCodes[1] = "bocha"
 	if err := registry.ValidateSnapshot(snapshot); !errors.Is(err, ErrInvalidInventory) {
 		t.Fatalf("mutated snapshot accepted: %v", err)
 	}
