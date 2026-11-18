@@ -219,11 +219,11 @@ func TestProviderChecksHaveBoundedTimeouts(t *testing.T) {
 }
 
 type sourceCollectionPolicyResolverStub struct {
-	source domain.SourcePolicy
-	endpoint *domain.EndpointPolicy
-	err error
+	source                                                 domain.SourcePolicy
+	endpoint                                               *domain.EndpointPolicy
+	err                                                    error
 	sourceRef, sourceVersion, endpointRef, endpointVersion string
-	calls int
+	calls                                                  int
 }
 
 func (s *sourceCollectionPolicyResolverStub) ResolveCurrentSourceCollectionPolicies(
@@ -239,10 +239,11 @@ func validSourceCollectionPolicyRegistration() app.SourceEndpointRegistration {
 	return app.SourceEndpointRegistration{
 		SourceID: "source-1", EndpointID: "endpoint-1", Enabled: true,
 		SourcePolicyVersionID: "source-policy-v2",
-		URL: "https://feeds.example.com/rss", AccessMethod: domain.AccessRSS,
+		URL:                   "https://feeds.example.com/rss",
+		AccessMethod:          domain.AccessRSS,
 		URLPolicy: domain.SourceURLPolicy{
 			AllowedSchemes: []string{"https"},
-			AllowedHosts: []string{"feeds.example.com"},
+			AllowedHosts:   []string{"feeds.example.com"},
 		},
 	}
 }
@@ -253,9 +254,13 @@ func TestSourceCollectionPolicyCheckReportsCurrentMatchingPolicies(t *testing.T)
 		source: domain.SourcePolicy{Status: domain.AuthorizationApproved},
 	}
 	report, err := (platformdiag.Runner{}).Run(context.Background(), []platformdiag.Check{
-		SourceCollectionPolicyCheck(sourceCatalogStub{registration: registration}, resolver, "source-1", "endpoint-1", true),
+		SourceCollectionPolicyCheck(
+			sourceCatalogStub{registration: registration}, resolver, "source-1", "endpoint-1", true,
+		),
 	})
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	observation := report.Results[0].Observation
 	if observation.Status != platformdiag.StatusHealthy ||
 		observation.Attributes["source_authorization_status"] != string(domain.AuthorizationApproved) ||
@@ -267,14 +272,19 @@ func TestSourceCollectionPolicyCheckReportsCurrentMatchingPolicies(t *testing.T)
 func TestSourceCollectionPolicyCheckReportsStaleOrUnavailablePolicy(t *testing.T) {
 	registration := validSourceCollectionPolicyRegistration()
 	report, err := (platformdiag.Runner{}).Run(context.Background(), []platformdiag.Check{
-		SourceCollectionPolicyCheck(sourceCatalogStub{registration: registration},
+		SourceCollectionPolicyCheck(
+			sourceCatalogStub{registration: registration},
 			&sourceCollectionPolicyResolverStub{err: app.ErrSourceCollectionPolicyUnavailable},
-			"source-1", "endpoint-1", true),
+			"source-1", "endpoint-1", true,
+		),
 	})
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	observation := report.Results[0].Observation
 	if observation.Status != platformdiag.StatusUnavailable ||
-		report.Results[0].Fault == nil || report.Results[0].Fault.Code != "news.source.current_policy_lookup_failed" {
+		report.Results[0].Fault == nil ||
+		report.Results[0].Fault.Code != "news.source.current_policy_lookup_failed" {
 		t.Fatalf("result=%+v", report.Results[0])
 	}
 }
@@ -285,9 +295,13 @@ func TestSourceCollectionPolicyCheckReportsRevokedPolicyAsDegraded(t *testing.T)
 		source: domain.SourcePolicy{Status: domain.AuthorizationRevoked},
 	}
 	report, err := (platformdiag.Runner{}).Run(context.Background(), []platformdiag.Check{
-		SourceCollectionPolicyCheck(sourceCatalogStub{registration: registration}, resolver, "source-1", "endpoint-1", true),
+		SourceCollectionPolicyCheck(
+			sourceCatalogStub{registration: registration}, resolver, "source-1", "endpoint-1", true,
+		),
 	})
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	observation := report.Results[0].Observation
 	if observation.Status != platformdiag.StatusDegraded ||
 		observation.ReasonCode != "news.source.current_policy_not_collectable" {
@@ -299,12 +313,20 @@ func TestSourceCollectionPolicyCheckSkipsUnregisteredAndDisabledEndpoints(t *tes
 	disabled := validSourceCollectionPolicyRegistration()
 	disabled.Enabled = false
 	cases := []struct {
-		name string
-		catalog sourceCatalogStub
+		name       string
+		catalog    sourceCatalogStub
 		wantReason string
 	}{
-		{name: "unregistered", catalog: sourceCatalogStub{err: app.ErrSourceEndpointNotFound}, wantReason: "news.source.endpoint_not_registered"},
-		{name: "disabled", catalog: sourceCatalogStub{registration: disabled}, wantReason: "news.source.endpoint_disabled"},
+		{
+			name:       "unregistered",
+			catalog:    sourceCatalogStub{err: app.ErrSourceEndpointNotFound},
+			wantReason: "news.source.endpoint_not_registered",
+		},
+		{
+			name:       "disabled",
+			catalog:    sourceCatalogStub{registration: disabled},
+			wantReason: "news.source.endpoint_disabled",
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -312,9 +334,12 @@ func TestSourceCollectionPolicyCheckSkipsUnregisteredAndDisabledEndpoints(t *tes
 			report, err := (platformdiag.Runner{}).Run(context.Background(), []platformdiag.Check{
 				SourceCollectionPolicyCheck(tc.catalog, resolver, "source-1", "endpoint-1", false),
 			})
-			if err != nil { t.Fatal(err) }
+			if err != nil {
+				t.Fatal(err)
+			}
 			observation := report.Results[0].Observation
-			if observation.Status != platformdiag.StatusSkipped || observation.ReasonCode != tc.wantReason || resolver.calls != 0 {
+			if observation.Status != platformdiag.StatusSkipped ||
+				observation.ReasonCode != tc.wantReason || resolver.calls != 0 {
 				t.Fatalf("observation=%+v resolver_calls=%d", observation, resolver.calls)
 			}
 		})
@@ -325,13 +350,17 @@ func TestSourceCollectionPolicyCheckRejectsEndpointPolicyPresenceMismatch(t *tes
 	registration := validSourceCollectionPolicyRegistration()
 	endpoint := &domain.EndpointPolicy{Status: domain.AuthorizationApproved}
 	resolver := &sourceCollectionPolicyResolverStub{
-		source: domain.SourcePolicy{Status: domain.AuthorizationApproved},
+		source:   domain.SourcePolicy{Status: domain.AuthorizationApproved},
 		endpoint: endpoint,
 	}
 	report, err := (platformdiag.Runner{}).Run(context.Background(), []platformdiag.Check{
-		SourceCollectionPolicyCheck(sourceCatalogStub{registration: registration}, resolver, "source-1", "endpoint-1", true),
+		SourceCollectionPolicyCheck(
+			sourceCatalogStub{registration: registration}, resolver, "source-1", "endpoint-1", true,
+		),
 	})
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	observation := report.Results[0].Observation
 	if observation.Status != platformdiag.StatusFailed ||
 		observation.ReasonCode != "news.source.endpoint_policy_snapshot_mismatch" {
@@ -343,9 +372,12 @@ func TestSourceCollectionPolicyCheckFailsWhenDependenciesMissing(t *testing.T) {
 	report, err := (platformdiag.Runner{}).Run(context.Background(), []platformdiag.Check{
 		SourceCollectionPolicyCheck(nil, nil, "source-1", "endpoint-1", true),
 	})
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	observation := report.Results[0].Observation
-	if observation.Status != platformdiag.StatusUnavailable || report.Results[0].Fault == nil ||
+	if observation.Status != platformdiag.StatusUnavailable ||
+		report.Results[0].Fault == nil ||
 		report.Results[0].Fault.Code != "news.source.collection_policy_dependency_unavailable" {
 		t.Fatalf("result=%+v", report.Results[0])
 	}

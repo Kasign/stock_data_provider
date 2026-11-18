@@ -275,7 +275,8 @@ func SourceCollectionPolicyCheck(
 			if err := ctx.Err(); err != nil {
 				return platformdiag.Observation{}, err
 			}
-			if catalog == nil || resolver == nil || strings.TrimSpace(sourceID) == "" || strings.TrimSpace(endpointID) == "" {
+			if catalog == nil || resolver == nil ||
+				strings.TrimSpace(sourceID) == "" || strings.TrimSpace(endpointID) == "" {
 				return platformdiag.Observation{}, fault.New(
 					fault.ClassUnavailable, "news.source.collection_policy_dependency_unavailable",
 					"Source collection policy diagnostic dependencies are unavailable", nil,
@@ -337,32 +338,34 @@ func SourceCollectionPolicyCheck(
 				)
 			}
 			attributes := map[string]string{
-				"source_policy_versioned": "true",
-				"source_authorization_status": string(sourcePolicy.Status),
-				"endpoint_policy_present": strconv.FormatBool(endpointPolicy != nil),
+				"source_policy_versioned":        "true",
+				"source_authorization_status":    string(sourcePolicy.Status),
+				"endpoint_policy_present":        strconv.FormatBool(endpointPolicy != nil),
 			}
 			if endpointPolicy != nil {
 				attributes["endpoint_authorization_status"] = string(endpointPolicy.Status)
 			}
-			if sourcePolicy.Status != domain.AuthorizationApproved && sourcePolicy.Status != domain.AuthorizationRestricted {
+			if sourcePolicy.Status != domain.AuthorizationApproved &&
+				sourcePolicy.Status != domain.AuthorizationRestricted {
 				return platformdiag.Observation{
 					Status: platformdiag.StatusDegraded, ReasonCode: "news.source.current_policy_not_collectable",
 					SafeMessage: "Current Source policy is not in an active collection authorization state",
-					CheckedAt: time.Now().UTC(), Attributes: attributes,
+					CheckedAt:   time.Now().UTC(), Attributes: attributes,
 				}, nil
 			}
 			if endpointPolicy != nil && endpointPolicy.Status != "" &&
-				endpointPolicy.Status != domain.AuthorizationApproved && endpointPolicy.Status != domain.AuthorizationRestricted {
+				endpointPolicy.Status != domain.AuthorizationApproved &&
+				endpointPolicy.Status != domain.AuthorizationRestricted {
 				return platformdiag.Observation{
 					Status: platformdiag.StatusDegraded, ReasonCode: "news.source.current_policy_not_collectable",
 					SafeMessage: "Current Endpoint policy is not in an active collection authorization state",
-					CheckedAt: time.Now().UTC(), Attributes: attributes,
+					CheckedAt:   time.Now().UTC(), Attributes: attributes,
 				}, nil
 			}
 			return platformdiag.Observation{
 				Status: platformdiag.StatusHealthy,
 				SafeMessage: "Current Source/Endpoint policy versions match the registered snapshot",
-				CheckedAt: time.Now().UTC(), Attributes: attributes,
+				CheckedAt:   time.Now().UTC(), Attributes: attributes,
 			}, nil
 		},
 	}
