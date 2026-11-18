@@ -43,7 +43,8 @@
 - DATA-007 已有多 Provider/能力级真实样本、权限阻塞和失败记录；只补明确缺口，不重复已有证券/日期/能力/Run。
 - DATA-003 当前阶段记录已归档至 `doc/api/任务历史/03-DATA-003-Fundamentals-PIT完整性阶段记录.md`，真实 Provider 披露时点仍外部阻塞，不重复执行已有 PIT 机制验收。
 - DATA-009 已完成并归档：Fundamentals/Valuations 重复保存不新增修订、内容变化新增修订的 MariaDB 集成断言通过；Go Test Suite Run `44307383999` success。详见 `doc/api/任务历史/05-DATA-009-Fundamentals-Valuations修订写入幂等性验收完成状态.md`。
-- 下一任务尚未切换；先复用 DATA-004～DATA-007 历史证据，做只读缺口核对后再登记唯一执行入口。
+- DATA-009 完成后已核对 DATA-003～DATA-007 的剩余缺口：DATA-003 缺披露时点证据；DATA-004 缺 PE_MRQ 公式/ProviderReportDate/逐字段源端更新时间证据；DATA-005 缺 DailyBar 发布宽限规则及财务/估值源端时间；DATA-006 缺固定 Python 运行环境下的双侧配对样本；DATA-007 缺专项 Provider 真实请求证据。以上均不能通过重复静态审查、合成数据或 Go-only CI 关闭。
+- 当前无可独立执行的已登记任务。恢复条件和禁止重复事项见 `doc/api/当前任务状态和进度.md`。DATA-008 继续 DEFERRED。
 - DATA-004～DATA-007 的历史证据已在总规划标记为部分进行；后续切换时必须先复用这些证据、只处理未关闭子项，并按总规划正式更新当前任务状态。
 
 ## 非 Data Owner 卡点（仅供责任边界追踪）
