@@ -61,3 +61,18 @@
 - 不把本次 CI 归类为全通过，也不把失败笼统归因于 Data。
 - 不在 Server 分支直接修改 Data/Platform 私有实现或复制公共能力。
 - 不提前删除旧 Analysis API/Worker；SRV-013 仍按依赖保持 deferred。
+
+
+## 5. WebUI 尚未切换到 Root Data Handler
+
+状态：BLOCKED（依赖 Web/Data/部署任务，不作为 Server Root 装配已完成的证据）
+
+当前代码事实：
+- `web/src/api.js` 行情基路径仍为 `/market-api`，行情请求仍发送 `X-API-Key`。
+- `web/default.conf.template` 的 `/market-api/` 仍代理到 `MARKET_DATA_SERVICE_NAME:8091`。
+- Root Data Handler 挂载在 `/api/v1/...`，由 Owner Bearer 保护；不接受旧的 Data API Key，也不自动把 Owner Session Cookie 转成 Owner Bearer。
+
+结论：
+- 本轮删除的只是 Server 内部 `internal/adapters/marketdata/**` 旧 HTTP Adapter。
+- 不删除 `cmd/market-data`、`services/market-data`、Nginx `/market-api/` 代理和独立 Data 部署资产。
+- 在 WebUI API 基路径、Owner Session/CSRF、Root 路由认证和 Nginx upstream 完成切换并通过真实浏览器/部署验收前，独立 Data Service 必须保留。
