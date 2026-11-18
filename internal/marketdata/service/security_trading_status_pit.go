@@ -31,10 +31,10 @@ func (s *DataService) SecurityTradingStatusAsOf(ctx context.Context, rawSymbol, 
 	if err != nil || parsedDate.Format("2006-01-02") != date {
 		return nil, fmt.Errorf("invalid trade date %q", rawTradeDate)
 	}
-	if asOf.IsZero() || asOf.After(time.Now().UTC()) {
+	if asOf.IsZero() || asOf.After(s.nowUTC()) {
 		return nil, errors.New("security-trading-status as_of must be a valid non-future timestamp")
 	}
-	if date > time.Now().In(marketLocation()).Format("2006-01-02") {
+	if date > s.nowUTC().In(marketLocation()).Format("2006-01-02") {
 		return nil, errors.New("trade date must not be in the future in Asia/Shanghai")
 	}
 	if s.store == nil {
@@ -58,7 +58,7 @@ func (s *DataService) SecurityTradingStatusAsOf(ctx context.Context, rawSymbol, 
 			candidate.FetchedAt.After(asOf) || candidate.Source == "" {
 			continue
 		}
-		if err := validateSecurityTradingStatusSnapshot(symbol, date, candidate.Source, candidate); err != nil {
+		if err := validateSecurityTradingStatusSnapshotAt(symbol, date, candidate.Source, candidate, s.nowUTC()); err != nil {
 			continue
 		}
 		score := securityTradingStatusEvidenceScore(candidate)

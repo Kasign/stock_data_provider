@@ -126,11 +126,11 @@ func TestResearchOutboxRelayMariaDB(t *testing.T) {
 		t.Fatalf("create Research Event and transactional Outbox: %v", err)
 	}
 
-	outboxRepository, err := researchstorage.NewOutboxRepository(db, clock)
+	outboxRepository, err := researchstorage.NewOutboxRepository(db)
 	if err != nil {
 		t.Fatalf("create Research Outbox Repository: %v", err)
 	}
-	outbox, err := researchapp.NewOutboxService(outboxRepository, clock)
+	outbox, err := researchapp.NewOutboxService(outboxRepository)
 	if err != nil {
 		t.Fatalf("create Research Outbox Service: %v", err)
 	}

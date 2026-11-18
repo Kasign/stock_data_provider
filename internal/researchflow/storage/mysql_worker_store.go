@@ -6,9 +6,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"example.com/stock-analysis-flow/internal/researchflow/application"
 	"example.com/stock-analysis-flow/internal/researchflow/domain"
+	"example.com/stock-analysis-flow/internal/researchflow/resourcepolicy"
 	"example.com/stock-analysis-flow/internal/researchflow/template"
 )
 
@@ -37,23 +39,32 @@ func (r *MySQLRunRepository) LoadStageExecutionSnapshot(
 	defer func() { _ = tx.Rollback() }()
 
 	var run domain.Run
+	var authenticatedCallerRef string
 	var runStatus, systemAsOf, deadlineAt, createdAt string
 	var inputRefsJSON, resolvedJSON, parametersJSON string
 	var startedAt, originatingRequestID, resultSummaryRef, terminationReason sql.NullString
 	err = tx.QueryRowContext(ctx, `SELECT
-		run_ref, schema_version, status, version, system_as_of, deadline_at,
-		template_ref, template_version, template_fingerprint, input_snapshot_refs,
-		resolved_template_snapshot, parameters_snapshot, correlation_id, created_at,
-		started_at, originating_request_id, result_summary_ref, termination_reason
-		FROM researchflow_runs WHERE run_ref = ?`, runRef,
+		i.caller_ref,
+		r.run_ref, r.schema_version, r.status, r.version, r.system_as_of, r.deadline_at,
+		r.template_ref, r.template_version, r.template_fingerprint, r.input_snapshot_refs,
+		r.resolved_template_snapshot, r.parameters_snapshot, r.correlation_id, r.created_at,
+		r.started_at, r.originating_request_id, r.result_summary_ref, r.termination_reason
+		FROM researchflow_runs r
+		INNER JOIN researchflow_run_idempotency i
+			ON i.run_ref = r.run_ref AND i.operation = 'CreateRun'
+		WHERE r.run_ref = ?`, runRef,
 	).Scan(
+		&authenticatedCallerRef,
 		&run.Ref, &run.SchemaVersion, &runStatus, &run.Version, &systemAsOf, &deadlineAt,
 		&run.TemplateRef, &run.TemplateVersion, &run.TemplateFingerprint,
 		&inputRefsJSON, &resolvedJSON, &parametersJSON, &run.CorrelationID, &createdAt,
 		&startedAt, &originatingRequestID, &resultSummaryRef, &terminationReason,
 	)
 	if err != nil {
-		return application.StageExecutionSnapshot{}, fmt.Errorf("load Researchflow execution Run: %w", err)
+		return application.StageExecutionSnapshot{}, fmt.Errorf("load Researchflow execution Run and authenticated caller: %w", err)
+	}
+	if strings.TrimSpace(authenticatedCallerRef) == "" {
+		return application.StageExecutionSnapshot{}, errors.New("Researchflow Run has no authenticated CreateRun caller")
 	}
 	run.Status = domain.RunStatus(runStatus)
 	if run.SystemAsOf, err = parseResearchflowTime(systemAsOf); err != nil {
@@ -102,6 +113,16 @@ func (r *MySQLRunRepository) LoadStageExecutionSnapshot(
 		resolved.Fingerprint != run.TemplateFingerprint {
 		return application.StageExecutionSnapshot{}, errors.New("Researchflow resolved template identity differs from Run")
 	}
+	policyRegistry, err := resourcepolicy.NewRegistry()
+	if err != nil {
+		return application.StageExecutionSnapshot{}, fmt.Errorf("initialize Researchflow resource policy registry: %w", err)
+	}
+	if resolved.ResourcePolicy.PolicyRef != resolved.ResourcePolicyRef {
+		return application.StageExecutionSnapshot{}, errors.New("Researchflow resolved template resource policy reference differs from snapshot")
+	}
+	if err := policyRegistry.ValidateSnapshot(resolved.ResourcePolicy); err != nil {
+		return application.StageExecutionSnapshot{}, fmt.Errorf("validate persisted Researchflow resource policy snapshot: %w", err)
+	}
 	retryPolicy, err := resolveWorkerRetryPolicy(resolved, stage)
 	if err != nil {
 		return application.StageExecutionSnapshot{}, err
@@ -114,9 +135,10 @@ func (r *MySQLRunRepository) LoadStageExecutionSnapshot(
 		return application.StageExecutionSnapshot{}, fmt.Errorf("finish Researchflow execution snapshot: %w", err)
 	}
 	return application.StageExecutionSnapshot{
-		Run: run, Stage: stage, Parameters: parameters,
-		InputSnapshotRefs: append([]string(nil), run.InputSnapshotRefs...),
-		RetryPolicy:       retryPolicy,
+		Run: run, Stage: stage, AuthenticatedCallerRef: authenticatedCallerRef,
+		OutputRegistryVersion: resolved.OutputRegistryVersion,
+		Parameters:            parameters, InputSnapshotRefs: append([]string(nil), run.InputSnapshotRefs...),
+		RetryPolicy: retryPolicy, ResourcePolicy: cloneStorageResourcePolicySnapshot(resolved.ResourcePolicy),
 	}, nil
 }
 
@@ -204,7 +226,13 @@ func workerResultCommitToStorage(input application.WorkerResultCommit) (AttemptR
 		WorkerID: input.WorkerID, FencingToken: input.FencingToken,
 		AttemptStatus: input.AttemptStatus, Stage: input.Stage,
 		FaultRef: cloneWorkerString(input.FaultRef), OutputRef: cloneWorkerString(input.OutputRef),
+		StageOutput: workerStageOutputToStorage(input.StageOutput),
 	}, nil
+}
+
+func cloneStorageResourcePolicySnapshot(snapshot resourcepolicy.Snapshot) resourcepolicy.Snapshot {
+	snapshot.AllowedProviderCodes = append([]string(nil), snapshot.AllowedProviderCodes...)
+	return snapshot
 }
 
 func cloneWorkerString(value *string) *string {
@@ -236,4 +264,15 @@ func resolveWorkerRetryPolicy(resolved template.ResolvedTemplate, stage domain.S
 		return template.RetryPolicy{}, errors.New("Researchflow Stage retry policy is missing or invalid in resolved template")
 	}
 	return *found, nil
+}
+
+func workerStageOutputToStorage(input *application.StageOutputCommit) *StageOutputCommit {
+	if input == nil {
+		return nil
+	}
+	return &StageOutputCommit{
+		Envelope: input.Envelope, RegistryVersion: input.RegistryVersion,
+		RegistryFingerprint: input.RegistryFingerprint,
+		PayloadSchemaRef:    input.PayloadSchemaRef, QualitySummarySchemaRef: input.QualitySummarySchemaRef,
+	}
 }

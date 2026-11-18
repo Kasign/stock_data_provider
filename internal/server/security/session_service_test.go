@@ -447,3 +447,20 @@ func TestSessionLifecycleChangePasswordRejectsWrongCurrentPassword(t *testing.T)
 		t.Fatalf("wrong current password was not audited: %+v", audit.events)
 	}
 }
+
+func TestSessionLifecycleChangePasswordRejectsOversizedPasswords(t *testing.T) {
+	service, credentials, _, _, audit := newLifecycleTestService(t, nil)
+	oversized := make([]byte, 1025)
+	if err := service.ChangePassword(context.Background(), oversized, []byte("new-owner-password"), "req-password"); err == nil {
+		t.Fatal("ChangePassword() accepted an oversized current password")
+	}
+	if err := service.ChangePassword(context.Background(), []byte("correct"), oversized, "req-password"); err == nil {
+		t.Fatal("ChangePassword() accepted an oversized new password")
+	}
+	if credentials.credential.CredentialVersion != 7 || credentials.credential.PasswordHash != "encoded:correct" {
+		t.Fatalf("invalid password input modified credential: %+v", credentials.credential)
+	}
+	if len(audit.events) != 0 {
+		t.Fatalf("invalid password input should be rejected before credential/audit work: %+v", audit.events)
+	}
+}

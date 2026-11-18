@@ -16,22 +16,34 @@ type RunReader interface {
 
 // GetRunService exposes a stable Application query without leaking Storage models.
 type GetRunService struct {
-	reader RunReader
+	identity   RequestIdentity
+	authorizer RunAccessAuthorizer
+	reader     RunReader
 }
 
-func NewGetRunService(reader RunReader) (*GetRunService, error) {
-	if reader == nil {
-		return nil, errors.New("Researchflow Run reader is required")
+func NewGetRunService(identity RequestIdentity, authorizer RunAccessAuthorizer, reader RunReader) (*GetRunService, error) {
+	if identity == nil || authorizer == nil || reader == nil {
+		return nil, errors.New("Researchflow GetRun dependencies are incomplete")
 	}
-	return &GetRunService{reader: reader}, nil
+	return &GetRunService{identity: identity, authorizer: authorizer, reader: reader}, nil
 }
 
 func (s *GetRunService) GetRun(ctx context.Context, runRef string) (CreateRunResult, error) {
-	if s == nil || s.reader == nil {
+	if s == nil || s.identity == nil || s.authorizer == nil || s.reader == nil {
 		return CreateRunResult{}, errors.New("Researchflow GetRun service is not configured")
 	}
 	if strings.TrimSpace(runRef) == "" || len(runRef) > 255 || strings.TrimSpace(runRef) != runRef {
 		return CreateRunResult{}, fmt.Errorf("%w: Run reference is invalid", domain.ErrInvalidCommand)
+	}
+	callerRef, err := s.identity.AuthenticatedCallerRef(ctx)
+	if err != nil || strings.TrimSpace(callerRef) == "" {
+		return CreateRunResult{}, fmt.Errorf("%w: %v", ErrUnauthenticated, err)
+	}
+	if err := s.authorizer.AuthorizeRunRead(ctx, callerRef, runRef); err != nil {
+		if errors.Is(err, ErrRunAccessDenied) {
+			return CreateRunResult{}, ErrRunAccessDenied
+		}
+		return CreateRunResult{}, fmt.Errorf("authorize Researchflow Run read: %w", err)
 	}
 	result, err := s.reader.GetRun(ctx, runRef)
 	if err != nil {

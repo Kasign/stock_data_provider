@@ -1,6 +1,10 @@
+# 受控在线探测：仅在显式触发标记存在时访问真实 Provider。
 name: News live Provider and Feed probe
 
 on:
+  push:
+    branches:
+      - integration
   workflow_dispatch:
     inputs:
       confirm_live_probe:
@@ -12,9 +16,13 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: news-live-probe-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   live-probe:
-    if: inputs.confirm_live_probe
+    if: ${{ (github.event_name == 'push' && contains(github.event.head_commit.message, '[run_news_live_probe]')) || (github.event_name == 'workflow_dispatch' && inputs.confirm_live_probe) }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
@@ -40,6 +48,18 @@ jobs:
           cache-dependency-path: go.sum
       - name: Download dependencies
         run: go mod download
+      - name: Require at least one configured News Provider
+        shell: bash
+        run: |
+          if [[ -n "$NEWS_PROVIDER_BOCHA_ENDPOINT" && -n "$NEWS_PROVIDER_BOCHA_API_KEY" ]] || \
+             [[ -n "$NEWS_PROVIDER_TAVILY_ENDPOINT" && -n "$NEWS_PROVIDER_TAVILY_API_KEY" ]] || \
+             [[ -n "$NEWS_PROVIDER_BRAVE_ENDPOINT" && -n "$NEWS_PROVIDER_BRAVE_API_KEY" ]] || \
+             [[ -n "$NEWS_PROVIDER_SEARXNG_ENDPOINT" ]]; then
+            echo "检测到至少一个完整配置的 News Provider。"
+          else
+            echo "::error::未配置完整的 NEWS_PROVIDER_* Provider；本次 Live Probe 不会产生有效验收证据。"
+            exit 1
+          fi
       - name: Probe configured real Providers
         run: go test ./internal/news/adapters/provider -run '^TestLiveProviderProbe$' -count=1 -v
       - name: Probe explicitly authorized RSS/Atom Feed

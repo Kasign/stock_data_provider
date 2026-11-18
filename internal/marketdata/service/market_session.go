@@ -29,7 +29,7 @@ func (s *DataService) MarketSession(ctx context.Context, at time.Time) (*model.M
 		return nil, err
 	}
 	phase, inSession, continuous, auction := scheduledMarketSession(calendar.Items[0].IsTradingDay, local.Hour(), local.Minute())
-	now := time.Now().UTC()
+	now := s.nowUTC()
 	return &model.MarketSessionSnapshot{
 		Market:              "cn_a_share",
 		At:                  at.UTC(),

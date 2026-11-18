@@ -1,12 +1,12 @@
 # PLAT-CTR-003 身份、授权与 Session 原语契约
 
 - 契约编号：PLAT-CTR-003
-- 契约版本：1.0.0
+- 契约版本：1.1.0
 - 状态：freeze-ready（待项目负责人确认冻结）
 - 代码审计基线：`origin/integration @ b6dfc85ba214fe16268c8cba780641a8bfe15086`
 - 生产方：Platform Security 原语；Server 负责 HTTP 入口、Session Middleware 和路由装配
 - 消费者：Root Server、服务端领域 Application、WebUI（仅 Cookie/CSRF 浏览器协议）
-- 权威性：本文件定义身份来源、Principal、Bearer/Session 原语、Service Scope、Secret 和安全审计边界；Server 登录 HTTP API/路由矩阵由 SRV-CTR-001 定义，领域资源授权由 GOV-CTR-006 及各领域 CTR 定义。
+- 权威性：本文件定义身份来源、Principal、Bearer/Session 原语、Service Scope、Secret 和安全审计边界；Owner Session HTTP API/路由矩阵由 SRV-CTR-002 定义；Researchflow 对外业务 API 由 SRV-CTR-001 定义，领域资源授权由 GOV-CTR-006 及各领域 CTR 定义。
 
 ## 1. 身份模型与凭证隔离
 
@@ -168,6 +168,14 @@ type SessionStore interface {
     Rotate(ctx context.Context, oldTokenDigest, newTokenDigest string, record SessionRecord, now time.Time) error
     Revoke(ctx context.Context, tokenDigest string) error
 }
+
+// CSRFSafeSessionStore adds an atomic CSRF-verified touch operation.
+// Implementations compare the supplied digest with the stored digest and
+// update idle expiry in the same atomic operation.
+type CSRFSafeSessionStore interface {
+    LookupAndTouchWithCSRF(ctx context.Context, tokenDigest, csrfTokenDigest string, now time.Time, idleTTL time.Duration) (SessionRecord, error)
+    RotateCSRFToken(ctx context.Context, tokenDigest, newCSRFTokenDigest string, expectedCredentialVersion uint64, now time.Time, idleTTL time.Duration) (SessionRecord, error)
+}
 ```
 
 - Token 使用 CSPRNG 生成 32 字节随机值，以无填充 URL-safe Base64 交给浏览器；原始 Token 只在创建时返回一次。
@@ -175,6 +183,9 @@ type SessionStore interface {
 - 空闲期限默认/最大 12 小时；绝对期限默认/最大 7 天。Touch 可滑动 idle expiry，但不得延长 absolute expiry。
 - SessionRecord 必须固定 Subject=owner、CredentialVersion 非零；CreatedAt、LastSeenAt、IdleExpiresAt、AbsoluteExpiresAt 必须满足时间顺序和 TTL 上限；CSRFTokenDigest 可选但若存在必须是 SHA-256 小写十六进制摘要。
 - Create、LookupAndTouch、Rotate、Revoke 对同一 Session 必须具备原子语义。Rotate 必须原子创建新摘要并撤销旧摘要，同时保留原 Subject、CreatedAt、CredentialVersion 和 AbsoluteExpiresAt。
+- 浏览器非安全方法的认证必须使用 `CSRFSafeSessionStore.LookupAndTouchWithCSRF`：Platform 在同一 Redis 原子操作内比较请求 CSRF Token 摘要与 SessionRecord.CSRFTokenDigest，只有匹配且 Session 未过期时才更新 LastSeenAt/IdleExpiresAt 并返回记录。CSRF 不匹配不得 Touch、不得延长 TTL。
+- 安全方法可使用 `LookupAndTouch`；非安全方法不得先调用 `LookupAndTouch` 再在 Server 校验 CSRF。缺少 `CSRFSafeSessionStore` 能力时，Server Session Middleware 必须拒绝启用/认证非安全 Session 请求，不得降级。
+- `CSRFSafeSessionStore` 是可选扩展接口，不改变既有 `SessionStore` 方法集合；生产 RedisSessionStore 必须实现。Platform Contract Test 必须覆盖 CSRF 不匹配不 Touch、正确 CSRF 原子 Touch、过期/撤销/并发轮换边界。
 - SessionStore 只接受 Token Digest；Redis 实现复用 Server 注入的现有 go-redis Client，不创建或关闭第二套连接池。
 - Redis 读写/Touch/Rotate/Revoke 失败必须 fail closed；不回退内存 Session、Bearer 或匿名身份。Redis 数据丢失时所有 Session 视为失效，用户重新登录。
 - Redis 内部记录与 Key 格式是 Platform 私有实现，不构成公开 JSON DTO；Redis Session 数据允许在版本升级时整体失效，不承诺跨版本持久兼容。
@@ -290,8 +301,8 @@ func WriteSecurityAudit(ctx context.Context, writer SecurityAuditWriter, event S
 
 等价机器定义为 Platform Go API 与 Contract Test。SessionRecord 的 Redis JSON 是短期内部存储格式，可在升级时整体失效；OwnerCredential 由 Platform Migration 管理；SecurityAuditEvent 是注入式内部事件，不是浏览器或领域模块的公共 HTTP DTO。
 
-Server 登录 HTTP API 的路径、请求/响应、错误、路由认证矩阵、Origin/Host 和 CSRF 行为由 SRV-CTR-001 另行定义；WebUI 登录交互和部署 HTTPS/可信代理属于后续实现符合性，不阻断 PLAT-CTR-003 定义冻结。
+Owner Session HTTP API 的路径、请求/响应、错误、路由认证矩阵、Origin/Host 和 CSRF 行为由 SRV-CTR-002 定义；Researchflow 对外业务 API 由 SRV-CTR-001 定义；WebUI 登录交互和部署 HTTPS/可信代理属于后续实现符合性，不阻断 PLAT-CTR-003 定义冻结。
 
 ## 11. 版本与兼容
 
-本契约首版为 1.0.0。身份类别/AuthMethod、Principal 字段、凭证格式、Service Scope、路由身份隔离、Session 生命周期、CredentialVersion 撤销、CSRF、限流或审计事件语义发生不兼容变化时，按 GOV-CTR-004 升级版本。新增 Service Scope 或 Audit EventType 不得只改代码，必须更新本契约并评估消费者。
+本契约当前版本为 1.1.0。1.1.0 增加可选的 CSRFSafeSessionStore 扩展能力，不改变既有 SessionStore 方法集合和既有 Bearer/Session 身份语义。身份类别/AuthMethod、Principal 字段、凭证格式、Service Scope、路由身份隔离、Session 生命周期、CredentialVersion 撤销、CSRF、限流或审计事件语义发生不兼容变化时，按 GOV-CTR-004 升级版本。新增 Service Scope 或 Audit EventType 不得只改代码，必须更新本契约并评估消费者。

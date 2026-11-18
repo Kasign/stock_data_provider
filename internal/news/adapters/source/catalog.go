@@ -117,6 +117,7 @@ func cloneSourceRegistration(value app.SourceEndpointRegistration) app.SourceEnd
 	value.SourcePolicy.AllowedPurposes = append([]domain.Purpose(nil), value.SourcePolicy.AllowedPurposes...)
 	value.SourcePolicy.AllowedContentKinds = append([]domain.ContentKind(nil), value.SourcePolicy.AllowedContentKinds...)
 	value.SourcePolicy.AllowedStorageModes = append([]domain.StorageMode(nil), value.SourcePolicy.AllowedStorageModes...)
+	value.SourcePolicy.AllowedMetadataFields = append([]string(nil), value.SourcePolicy.AllowedMetadataFields...)
 	if value.SourcePolicy.ExpiresAt != nil {
 		expiresAt := *value.SourcePolicy.ExpiresAt
 		value.SourcePolicy.ExpiresAt = &expiresAt
@@ -128,6 +129,7 @@ func cloneSourceRegistration(value app.SourceEndpointRegistration) app.SourceEnd
 		endpoint.AllowedPurposes = append([]domain.Purpose(nil), endpoint.AllowedPurposes...)
 		endpoint.AllowedContentKinds = append([]domain.ContentKind(nil), endpoint.AllowedContentKinds...)
 		endpoint.AllowedStorageModes = append([]domain.StorageMode(nil), endpoint.AllowedStorageModes...)
+		endpoint.AllowedMetadataFields = append([]string(nil), endpoint.AllowedMetadataFields...)
 		if endpoint.MaxRetention != nil {
 			retention := *endpoint.MaxRetention
 			endpoint.MaxRetention = &retention

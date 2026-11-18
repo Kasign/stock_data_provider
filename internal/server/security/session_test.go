@@ -13,10 +13,12 @@ import (
 )
 
 type testSessionStore struct {
-	record  platformsecurity.SessionRecord
-	err     error
-	digest  string
-	idleTTL time.Duration
+	record     platformsecurity.SessionRecord
+	err        error
+	digest     string
+	idleTTL    time.Duration
+	touchCalls int
+	csrfCalls  int
 }
 
 func (s *testSessionStore) Create(context.Context, string, platformsecurity.SessionRecord) error {
@@ -25,6 +27,7 @@ func (s *testSessionStore) Create(context.Context, string, platformsecurity.Sess
 
 func (s *testSessionStore) LookupAndTouch(_ context.Context, digest string, now time.Time, idleTTL time.Duration) (platformsecurity.SessionRecord, error) {
 	s.digest, s.idleTTL = digest, idleTTL
+	s.touchCalls++
 	if s.err != nil {
 		return platformsecurity.SessionRecord{}, s.err
 	}
@@ -43,6 +46,38 @@ func (s *testSessionStore) Rotate(context.Context, string, string, platformsecur
 
 func (s *testSessionStore) Revoke(context.Context, string) error {
 	return nil
+}
+
+func (s *testSessionStore) LookupAndTouchWithCSRF(_ context.Context, digest, csrfDigest string, now time.Time, idleTTL time.Duration) (platformsecurity.SessionRecord, error) {
+	s.digest, s.idleTTL = digest, idleTTL
+	s.csrfCalls++
+	if s.err != nil {
+		return platformsecurity.SessionRecord{}, s.err
+	}
+	if csrfDigest != s.record.CSRFTokenDigest {
+		return platformsecurity.SessionRecord{}, platformsecurity.ErrSessionCSRFRejected
+	}
+	record := s.record
+	record.LastSeenAt = now
+	record.IdleExpiresAt = now.Add(idleTTL)
+	if record.AbsoluteExpiresAt.Before(record.IdleExpiresAt) {
+		record.IdleExpiresAt = record.AbsoluteExpiresAt
+	}
+	return record, nil
+}
+
+func (s *testSessionStore) RotateCSRFToken(_ context.Context, digest, newCSRFDigest string, expectedCredentialVersion uint64, now time.Time, idleTTL time.Duration) (platformsecurity.SessionRecord, error) {
+	s.digest, s.idleTTL = digest, idleTTL
+	if s.record.CredentialVersion != expectedCredentialVersion {
+		return platformsecurity.SessionRecord{}, platformsecurity.ErrSessionNotFound
+	}
+	s.record.CSRFTokenDigest = newCSRFDigest
+	s.record.LastSeenAt = now
+	s.record.IdleExpiresAt = now.Add(idleTTL)
+	if s.record.AbsoluteExpiresAt.Before(s.record.IdleExpiresAt) {
+		s.record.IdleExpiresAt = s.record.AbsoluteExpiresAt
+	}
+	return s.record, nil
 }
 
 type testCredentialStore struct {
@@ -121,7 +156,7 @@ func TestSessionAuthenticatorAddsOwnerSessionPrincipalAndRefreshCookie(t *testin
 		cookie.SameSite != http.SameSiteLaxMode || cookie.Path != "/api" {
 		t.Fatalf("unexpected refreshed Session Cookie: %+v", cookie)
 	}
-	if sessions.idleTTL != 12*time.Hour || sessions.digest == "" {
+	if sessions.idleTTL != 12*time.Hour || sessions.digest == "" || sessions.touchCalls != 1 {
 		t.Fatalf("SessionStore lookup arguments were not passed: %+v", sessions)
 	}
 }
@@ -141,11 +176,23 @@ func TestSessionAuthenticatorRequiresCookieAndRejectsDuplicateCookies(t *testing
 
 func TestSessionAuthenticatorRequiresCSRFAndSameOriginForWrites(t *testing.T) {
 	now := time.Now().UTC()
-	auth, _, rawToken, csrfToken := newTestSessionAuthenticator(t, now)
+	auth, sessions, rawToken, csrfToken := newTestSessionAuthenticator(t, now)
 	request := sessionRequest(http.MethodPost, rawToken)
 	request.Header.Set("Origin", "https://stocks.example.com")
 	if _, _, err := auth.Authenticate(request); err == nil {
 		t.Fatal("unsafe request without CSRF token was accepted")
+	}
+	wrongCSRFToken, _, err := platformsecurity.NewCSRFToken()
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set(DefaultCSRFAuthHeader, wrongCSRFToken)
+	beforeTouch := sessions.touchCalls
+	if _, _, err := auth.Authenticate(request); err == nil {
+		t.Fatal("invalid CSRF token was accepted")
+	}
+	if sessions.touchCalls != beforeTouch || sessions.csrfCalls != 1 {
+		t.Fatalf("invalid CSRF must not use non-atomic Touch: %+v", sessions)
 	}
 	request.Header.Set(DefaultCSRFAuthHeader, csrfToken)
 	request.Header.Add(DefaultCSRFAuthHeader, csrfToken)
@@ -161,6 +208,39 @@ func TestSessionAuthenticatorRequiresCSRFAndSameOriginForWrites(t *testing.T) {
 	request.Header.Set("Origin", "https://stocks.example.com")
 	if _, _, err := auth.Authenticate(request); err != nil {
 		t.Fatalf("same-origin CSRF-protected request failed: %v", err)
+	}
+}
+
+func TestSessionAuthenticatorRefreshesCSRFOnlyForSameOriginPost(t *testing.T) {
+	now := time.Date(2026, 11, 12, 9, 0, 0, 0, time.UTC)
+	auth, sessions, rawToken, oldCSRF := newTestSessionAuthenticator(t, now)
+	request := sessionRequest(http.MethodPost, rawToken)
+	if _, _, _, err := auth.RefreshCSRFToken(request); err == nil {
+		t.Fatal("CSRF refresh without Origin must be rejected")
+	}
+	request.Header.Set("Origin", "https://attacker.example")
+	if _, _, _, err := auth.RefreshCSRFToken(request); err == nil {
+		t.Fatal("cross-origin CSRF refresh must be rejected")
+	}
+	request.Header.Set("Origin", "https://stocks.example.com")
+	_, _, newCSRF, err := auth.RefreshCSRFToken(request)
+	if err != nil {
+		t.Fatalf("same-origin CSRF refresh failed: %v", err)
+	}
+	newDigest, err := platformsecurity.CSRFTokenDigest(newCSRF)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sessions.record.CSRFTokenDigest != newDigest || newCSRF == oldCSRF {
+		t.Fatal("CSRF refresh did not replace the session-bound digest")
+	}
+	if _, _, err := auth.Authenticate(func() *http.Request {
+		r := sessionRequest(http.MethodPost, rawToken)
+		r.Header.Set("Origin", "https://stocks.example.com")
+		r.Header.Set(DefaultCSRFAuthHeader, oldCSRF)
+		return r
+	}()); err == nil {
+		t.Fatal("old CSRF token remained valid after refresh")
 	}
 }
 

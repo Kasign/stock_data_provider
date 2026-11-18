@@ -17,6 +17,7 @@ import (
 	"example.com/stock-analysis-flow/internal/marketdata/normalize"
 	"example.com/stock-analysis-flow/internal/marketdata/provider"
 	"example.com/stock-analysis-flow/internal/marketdata/validation"
+	platformtime "example.com/stock-analysis-flow/internal/platform/time"
 )
 
 // ErrProviderProbePersistence 表示探测结果历史写入失败。
@@ -172,6 +173,10 @@ type ProviderProbeOptions = model.ProviderProbeOptions
 
 // normalizeDailyBarProbeRange 校验显式历史日 K 探测窗口；日期按 Asia/Shanghai 交易日解释。
 func normalizeDailyBarProbeRange(startText, endText string) (string, string, error) {
+	return normalizeDailyBarProbeRangeAt(startText, endText, platformtime.SystemClock{}.Now())
+}
+
+func normalizeDailyBarProbeRangeAt(startText, endText string, now time.Time) (string, string, error) {
 	startText = strings.TrimSpace(startText)
 	endText = strings.TrimSpace(endText)
 	if startText == "" && endText == "" {
@@ -191,7 +196,7 @@ func normalizeDailyBarProbeRange(startText, endText string) (string, string, err
 	if start.After(end) {
 		return "", "", errors.New("provider-probe daily_bar_start_date must not be after daily_bar_end_date")
 	}
-	if end.Format("2006-01-02") > time.Now().In(marketLocation()).Format("2006-01-02") {
+	if end.Format("2006-01-02") > now.In(marketLocation()).Format("2006-01-02") {
 		return "", "", errors.New("provider-probe daily_bar_end_date must not be after today in Asia/Shanghai")
 	}
 	// 最多 31 个自然日（首尾均包含），限制历史 Probe 的 Provider 请求成本。
@@ -223,8 +228,9 @@ func validateFundamentalsProbeSnapshot(
 	symbol string,
 	year, quarter int,
 	snapshot *model.FundamentalsSnapshot,
+	now time.Time,
 ) error {
-	report := validation.ValidateFundamentalsSnapshot(snapshot, symbol, year, quarter)
+	report := validation.ValidateFundamentalsSnapshotAt(snapshot, symbol, year, quarter, now)
 	validation.AddContextReport(ctx, report)
 	if report.HasErrors() {
 		return errors.New("fundamentals field validation failed")
@@ -333,7 +339,7 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 		if !selected["daily_bars"] {
 			return nil, errors.New("provider-probe daily_bar_start_date and daily_bar_end_date require daily_bars capability")
 		}
-		startDate, endDate, rangeErr := normalizeDailyBarProbeRange(options.DailyBarStartDate, options.DailyBarEndDate)
+		startDate, endDate, rangeErr := normalizeDailyBarProbeRangeAt(options.DailyBarStartDate, options.DailyBarEndDate, s.nowUTC())
 		if rangeErr != nil {
 			return nil, rangeErr
 		}
@@ -385,13 +391,13 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 			}
 		}
 	}
-	startedAt := time.Now().UTC()
+	startedAt := s.nowUTC()
 	requested := make([]string, 0, len(selected))
 	for capability := range selected {
 		requested = append(requested, capability)
 	}
 	sort.Strings(requested)
-	run := &model.ProviderProbeRun{RunID: newFetchID(), Scope: options.Scope, RequestedCapabilities: requested, RequestedChecks: requestedChecks, RequestedMarkets: append([]string(nil), options.Markets...), RequestedSymbols: append([]string(nil), options.Symbols...), RequestedDailyBarAdjustments: append([]model.AdjustmentBasis(nil), options.DailyBarAdjustments...), RequestedDailyBarStartDate: options.DailyBarStartDate, RequestedDailyBarEndDate: options.DailyBarEndDate, TimeoutSeconds: options.TimeoutSeconds, StartedAt: startedAt, Items: make([]model.ProviderProbeItem, 0)}
+	run := &model.ProviderProbeRun{RunID: newFetchIDAt(startedAt), Scope: options.Scope, RequestedCapabilities: requested, RequestedChecks: requestedChecks, RequestedMarkets: append([]string(nil), options.Markets...), RequestedSymbols: append([]string(nil), options.Symbols...), RequestedDailyBarAdjustments: append([]model.AdjustmentBasis(nil), options.DailyBarAdjustments...), RequestedDailyBarStartDate: options.DailyBarStartDate, RequestedDailyBarEndDate: options.DailyBarEndDate, TimeoutSeconds: options.TimeoutSeconds, StartedAt: startedAt, Items: make([]model.ProviderProbeItem, 0)}
 	jobs := make([]providerProbeJob, 0)
 	add := func(name, capability string, fn providerProbeFunc, adjustment ...model.AdjustmentBasis) {
 		job := providerProbeJob{provider: name, capability: capability, run: fn}
@@ -402,7 +408,7 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 	}
 
 	loc := marketLocation()
-	nowLocal := time.Now().In(loc)
+	nowLocal := s.nowUTC().In(loc)
 	probeDate := nowLocal.Format("2006-01-02")
 	dailyBarEndDate := nowLocal.AddDate(0, 0, -1).Format("2006-01-02")
 	calendarStart := nowLocal.AddDate(0, 0, -14).Format("2006-01-02")
@@ -700,13 +706,13 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 		p := p
 		add(p.Name(), "market_capital_flow", func(probeCtx context.Context) (model.QualityStatus, string, []string, error) {
 			loc := marketLocation()
-			end := time.Now().In(loc)
+			end := s.nowUTC().In(loc)
 			start := end.AddDate(0, 0, -14)
 			snapshot, err := p.FetchMarketCapitalFlow(probeCtx, start.Format("2006-01-02"), end.Format("2006-01-02"))
 			if err != nil {
 				return model.QualityUnknown, "", nil, err
 			}
-			if err := validateMarketCapitalFlowSnapshot(start.Format("2006-01-02"), end.Format("2006-01-02"), snapshot); err != nil {
+			if err := validateMarketCapitalFlowSnapshotAt(start.Format("2006-01-02"), end.Format("2006-01-02"), snapshot, s.nowUTC()); err != nil {
 				return model.QualityInvalid, "", nil, err
 			}
 			if snapshot != nil {
@@ -896,7 +902,7 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 				sourceVersion = v.SourceVersion
 			}
 			if err := validateFundamentalsProbeSnapshot(
-				probeCtx, barsSymbol, fundamentalProbeYear, fundamentalProbeQuarter, v,
+				probeCtx, barsSymbol, fundamentalProbeYear, fundamentalProbeQuarter, v, s.nowUTC(),
 			); err != nil {
 				return model.QualityInvalid, sourceVersion, nil, err
 			}
@@ -911,7 +917,7 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 			if err != nil {
 				return model.QualityUnknown, "", nil, err
 			}
-			report := validation.ValidateValuationSnapshot(v, []string{barsSymbol})
+			report := validation.ValidateValuationSnapshotAt(v, []string{barsSymbol}, s.nowUTC())
 			validation.AddContextReport(probeCtx, report)
 			sourceVersion := ""
 			if v != nil {
@@ -1033,13 +1039,13 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 		go func(index int, job providerProbeJob) {
 			defer wg.Done()
 			item := model.ProviderProbeItem{Provider: job.provider, Capability: job.capability, AdjustmentBasis: job.adjustmentBasis, Status: "failed", QualityStatus: model.QualityUnknown}
-			checkedAt := time.Now().UTC()
+			elapsedStarted := time.Now()
 			select {
 			case sem <- struct{}{}:
 			case <-ctx.Done():
 				setProbeFailure(&item, ctx.Err())
-				item.ElapsedMS = time.Since(checkedAt).Milliseconds()
-				item.CheckedAt = time.Now().UTC()
+				item.ElapsedMS = time.Since(elapsedStarted).Milliseconds()
+				item.CheckedAt = s.nowUTC()
 				results[index] = item
 				return
 			}
@@ -1071,8 +1077,8 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 			item.ProviderTimeType = evidence.providerTimeType
 			item.FetchedAt = evidence.fetchedAt
 			dailySnapshots[index] = evidence.dailySnapshot
-			item.ElapsedMS = time.Since(checkedAt).Milliseconds()
-			item.CheckedAt = time.Now().UTC()
+			item.ElapsedMS = time.Since(elapsedStarted).Milliseconds()
+			item.CheckedAt = s.nowUTC()
 			item.SourceVersion = version
 			item.QualityReasons = reasons
 			item.ValidationTotalCount = evidence.validationReport.TotalCount
@@ -1163,7 +1169,7 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 	if run.NotConfigured == run.Total && run.Total > 0 {
 		run.Status = "not_configured"
 	}
-	run.FinishedAt = time.Now().UTC()
+	run.FinishedAt = s.nowUTC()
 	if len(jobs) == 0 {
 		run.Status = "no_capabilities_configured"
 	}
@@ -1197,7 +1203,7 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 			// passed 表示本次历史写入尝试已执行，最终是否成功由 SaveProviderProbeRun 的返回值确认。
 			run.CheckResults = append(run.CheckResults, model.ProviderProbeCheckResult{
 				Check: "storage", Provider: "system", Capability: "provider_probe_history",
-				Status: "passed", CheckedAt: time.Now().UTC(),
+				Status: "passed", CheckedAt: s.nowUTC(),
 			})
 		}
 	}
@@ -1215,7 +1221,7 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 					result.Status = "failed"
 					result.ErrorCode = "storage_write_failed"
 					result.ErrorMessage = sanitizeProbeError(err)
-					result.CheckedAt = time.Now().UTC()
+					result.CheckedAt = s.nowUTC()
 					break
 				}
 			}

@@ -43,7 +43,7 @@ func (p *Eastmoney) fetchSectorRankings5D(ctx context.Context, category, directi
 			"pn": {strconv.Itoa(page)}, "pz": {strconv.Itoa(pageSize)}, "po": {"1"}, "np": {"1"},
 			"ut": {p.ut}, "fltt": {"2"}, "invt": {"2"}, "fid": {"f3"}, "fs": {filter},
 			"fields": {"f2,f3,f4,f6,f12,f14,f104,f105,f128,f136"},
-			"_":      {strconv.FormatInt(time.Now().UnixMilli(), 10)},
+			"_":      {strconv.FormatInt(providerNowUTC().UnixMilli(), 10)},
 		}
 		var payload struct {
 			RC   *int `json:"rc"`
@@ -136,7 +136,7 @@ func (p *Eastmoney) fetchSectorRankings5D(ctx context.Context, category, directi
 	items := make([]model.SectorRanking, 0, len(candidates))
 	reportDate := ""
 	failed := 0
-	fetchedAt := time.Now().UTC()
+	fetchedAt := providerNowUTC()
 	for result := range results {
 		if result.err != nil {
 			failed++
@@ -204,7 +204,7 @@ func (p *Eastmoney) fetchSectorBoard5D(ctx context.Context, category string, can
 		"secid": {"90." + candidate.code}, "fields1": {"f1,f2,f3,f4,f5,f6"},
 		"fields2": {"f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61"},
 		"klt":     {"101"}, "fqt": {"0"}, "beg": {"0"}, "end": {"20500101"}, "lmt": {"6"},
-		"ut": {p.ut}, "_": {strconv.FormatInt(time.Now().UnixMilli(), 10)},
+		"ut": {p.ut}, "_": {strconv.FormatInt(providerNowUTC().UnixMilli(), 10)},
 	}
 	var payload struct {
 		RC   *int `json:"rc"`
