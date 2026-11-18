@@ -2,13 +2,39 @@
 
 ## 阶段结论
 
-Quant Result Envelope 基础校验、精确 Payload Schema Validator Registry Port、RiskDecision 硬门禁、Research Evidence/Claim 引用闭环、LLM 非权威解释隔离和 Result Composer 已有实现。
+Result Composer/Validator 的纯函数层已实现；本轮发现并修复了 Researchflow 与 Quant Envelope 的字段/版本模型不一致。当前代码能按 Quant 的真实 Envelope 1.0.0 结构映射并验证 trend/risk Payload，但生产 Facade/Server 接线及完整结果持久化仍未完成。
 
 ## 已有证据
 
-- `internal/researchflow/resultvalidation/**`
-- `doc/researchflow/06-FLOW-006结果综合与校验实施说明.md`
+- Researchflow：`internal/researchflow/resultvalidation/**`
+- Quant Envelope：`internal/quant/result/envelope.go`
+- Quant Application：`internal/quant/application/get_result.go`
+- Quant Schema：`doc/quant/schema/QNT-CTR-004-quant-result-envelope-1.0.0.schema.json`、`QNT-CTR-004-quant-result-ref-1.0.0.schema.json`
+- 当前代码验收 SHA：`43188259c4b96579ab587742e063d0f254c4009d`；Actions Run 44299178336 中 Researchflow module gofmt/tests/race/vet Job success。
+
+## 2026-11-18 Review 发现与修复
+
+原实现存在四项具体不一致：
+
+1. 将 Quant Envelope 的 `schema_version` 当成 Payload Schema 版本；实际 Envelope 另有必填 `payload_schema_version`。
+2. Researchflow Envelope DTO 带有 `created_at`，但 Quant Envelope 不含该字段；`created_at` 属于 QuantResultRef。
+3. Researchflow 预先允许 indicator/factor/market 等类型，但 Quant Envelope 1.0.0 的 result_type 联合目前仅支持 trend/risk。
+4. 测试使用 `qres-1` 和 indicator 假数据，不符合 Quant 的内容寻址 ResultID 与真实 Envelope 联合。
+
+修复结果：
+
+- QuantResultEnvelope 现在区分 Envelope SchemaVersion 与 PayloadSchemaVersion，并移除 CreatedAt。
+- ResultID 校验为 `quant_result:sha256:<64位小写hex>`。
+- Registry 精确键为 `result_type + payload_schema_version`，当前只注册 trend/risk 1.0.0。
+- 默认 Validator 复用 Quant `DecodePayload`，不复制 Quant Payload Schema。
+- 新增 `FromQuantEnvelope`，先执行 Quant Envelope.Validate，再映射内部 DTO；它不执行授权，必须在 Quant Application GetResult 当前授权和 Manifest 校验之后调用。
+- Composer 测试使用真实 Trend Payload 结构和内容寻址 ResultID；Run、Quant、Research、LLM 测试 PIT 使用同一 SystemAsOf。
+- 规范 UTC 检查要求 `time.UTC`，拒绝零偏移但非 UTC Location 的时间对象。
 
 ## 未完成边界
 
-Quant 具体 result_type/schema_version Payload Schema/Golden、Quant/Research/LLM 生产 Facade Adapter、当前授权复核和真实结果版本/输入快照一致性仍需按各 Owner 契约接入。不能将测试 DTO 组合标记为生产数据验收。
+- 当前没有 Server/Worker 生产调用 Result Composer；ResultValidation 仍是纯函数/DTO 校验层。
+- 需要通过 Quant GetResult、Research Context/Evidence/Claim Facade 和 LLM Provider 读取数据，并在各 Owner 读取时复核当前授权。
+- Run SystemAsOf/Deadline 必须端到端继承；不得重新生成 PIT 或 Deadline。
+- `ComposedResearchResult` 尚无持久化 Store/ResultRef。Run `ResultSummaryRef` 是执行摘要，不是完整研究报告；完整结果唯一持久化 Owner 尚未确定。
+- 真实数据、真实授权、真实模型调用和跨模块 Contract Test 未完成。
