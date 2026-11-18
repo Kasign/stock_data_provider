@@ -129,7 +129,7 @@ func buildPayload(content domain.RenderedContent) (messagePayload, error) {
 	switch content.Format {
 	case domain.TemplateFormatText:
 		return messagePayload{MsgType: "text", Text: &textContent{Content: content.Body}}, nil
-	case domain.TemplateFormatHTML:
+	case domain.TemplateFormatMarkdown:
 		return messagePayload{MsgType: "markdown", Markdown: &textContent{Content: content.Body}}, nil
 	default:
 		return messagePayload{}, ErrUnsupportedFormat

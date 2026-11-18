@@ -65,7 +65,7 @@ func TestNewRejectsUntrustedWebhookDestinations(t *testing.T) {
 func TestSendTextAndMarkdown(t *testing.T) {
 	for _, tc := range []struct{format domain.TemplateFormat; want string}{
 		{domain.TemplateFormatText, `"msgtype":"text"`},
-		{domain.TemplateFormatHTML, `"msgtype":"markdown"`},
+		{domain.TemplateFormatMarkdown, `"msgtype":"markdown"`},
 	} {
 		t.Run(string(tc.format), func(t *testing.T) {
 			doer := &stubDoer{response:&http.Response{StatusCode:200, Body:io.NopCloser(strings.NewReader(`{"errcode":0,"errmsg":"ok"}`))}}

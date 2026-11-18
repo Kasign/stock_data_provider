@@ -126,7 +126,7 @@ func (r ChannelSendRequest) Validate(channel ChannelConfigSnapshot) error {
 		r.Content.TemplateID == "" || r.Content.TemplateVersion < 1 ||
 		!validSHA256Digest(r.Content.TemplateDigest) ||
 		!validSHA256Digest(r.Content.EventPayloadFingerprint) ||
-		(r.Content.Format != TemplateFormatText && r.Content.Format != TemplateFormatHTML) {
+		(r.Content.Format != TemplateFormatText && r.Content.Format != TemplateFormatHTML && r.Content.Format != TemplateFormatMarkdown) {
 		return ErrInvalidChannelSendRequest
 	}
 	if int64(len(r.Content.Subject)+len(r.Content.Body)) > channel.Capabilities.MaxPayloadBytes {

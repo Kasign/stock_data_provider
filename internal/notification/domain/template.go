@@ -5,6 +5,7 @@ type TemplateFormat string
 const (
 	TemplateFormatText TemplateFormat = "text"
 	TemplateFormatHTML TemplateFormat = "html"
+	TemplateFormatMarkdown TemplateFormat = "markdown"
 )
 
 // RenderedContent is the immutable output snapshot produced from a fixed template version.
