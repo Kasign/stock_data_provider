@@ -244,8 +244,8 @@ func (r *Registry) ValidateApplied(ctx context.Context, db *sql.DB) error {
 	return nil
 }
 
-// validateAppliedNamespaces requires the database history to contain exactly
-// the namespaces and versions registered by the current Server composition.
+// validateAppliedNamespaces requires exact namespace/version sets for static
+// registrations and applied history for explicitly external module namespaces.
 func validateAppliedNamespaces(
 	expected map[string][]platformstorage.Migration,
 	applied map[string]map[uint64]string,
