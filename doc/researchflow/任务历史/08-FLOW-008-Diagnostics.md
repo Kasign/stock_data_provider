@@ -64,6 +64,6 @@ Platform `Observation.Validate` 负责结构、长度和控制字符校验，并
 - Attributes 的 key/value 必须是有效 UTF-8；原有 allowlist、稳定代码和保留字段约束保持不变。
 - 新增 7 组无效 UTF-8 负向测试，覆盖上述字段及属性键值。
 
-代码 SHA：`384582d37f679d272de708b87b32a6b4c93cf649`。GitHub Actions Run [44309745636](https://github.com/Kasign/stock_data_provider/actions/runs/44309745636) 中 Researchflow module format/tests/race/vet、WorkerStore unit/race/vet、MariaDB lifecycle integration 均 success；根模块 Test 当时仍在执行 Race Detector，不能据此宣称根模块全量 CI 完成。
+代码 SHA：`384582d37f679d272de708b87b32a6b4c93cf649`。GitHub Actions Run [44309745636](https://github.com/Kasign/stock_data_provider/actions/runs/44309745636) 中 Researchflow module format/tests/race/vet、WorkerStore unit/race/vet、MariaDB lifecycle integration 均 success；该 Run 最终结论为 success，根模块 Test（含 Race Detector、go vet）、go-core Test、Research MariaDB、Notification MariaDB Job 也均 success。Market Data、News 专项集成 Job 为 skipped，不纳入通过范围。
 
 该补强只收紧 Researchflow Diagnostics Adapter 的输入边界，不修改 Platform 公共实现，也不代表真实 StageAssessment Provider 或 Server Diagnostics 注册已经完成。
