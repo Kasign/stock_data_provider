@@ -283,6 +283,38 @@ func TestRetryPolicySchedulesOnlyExternallyConfirmedUnknownAttempt(t *testing.T)
 	}
 }
 
+func TestRetryPolicySchedulesInFlightAttemptOnlyAfterAuthoritativeLookup(t *testing.T) {
+	delivery, attempts, now := retryPolicyFixture(t, 1, 3)
+	delivery.Status = domain.DeliveryUnknown
+	reasonCode := "lease_expired_during_attempt"
+	delivery.ReasonCode = &reasonCode
+	delivery.UpdatedAt = now.Add(-time.Second)
+
+	attempt := attempts[0]
+	attempt.FinishedAt = nil
+	attempt.Outcome = nil
+	attempt.ProviderMessageRef = nil
+	attempt.ErrorCode = nil
+	attempt.Retryable = false
+	attempt.RetryAfterAt = nil
+	attempt.DurationMS = nil
+	attempt.EvidenceRef = nil
+	attempts[0] = attempt
+
+	observedAt := attempt.StartedAt.Add(time.Second)
+	policy := standardRetryPolicy()
+	decision, err := policy.ScheduleRetryAfterUnknownLookup(
+		delivery, attempts, now, 0.5, "lookup-evidence-in-flight", observedAt,
+	)
+	if err != nil || !decision.Retry || decision.AttemptID != attempt.AttemptID ||
+		decision.EvidenceRef != "lookup-evidence-in-flight" || decision.NextAttemptAt == nil {
+		t.Fatalf("authoritative not-accepted lookup should allow policy evaluation for in-flight Attempt: decision=%+v err=%v", decision, err)
+	}
+	if _, err := policy.ScheduleRetry(delivery, attempts, now, 0.5); !errors.Is(err, ErrRetryNotApplicable) {
+		t.Fatalf("ordinary retry must not retry an unfinished Attempt without provider evidence: %v", err)
+	}
+}
+
 func TestRetryPolicyRejectsUnverifiedUnknownRetryEvidence(t *testing.T) {
 	delivery, attempts, now := retryPolicyFixture(t, 1, 3)
 	delivery.Status = domain.DeliveryUnknown

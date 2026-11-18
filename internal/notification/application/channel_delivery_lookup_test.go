@@ -47,6 +47,29 @@ func lookupResult(request domain.ChannelDeliveryLookupRequest) domain.ChannelDel
 	}
 }
 
+func TestBuildChannelDeliveryLookupRequestAllowsExpiredInFlightAttempt(t *testing.T) {
+	delivery, channel, attempts, _, _ := unknownReconciliationFixture(t)
+	channel.Capabilities.SupportsIdempotency = domain.CapabilitySupported
+	attempt := attempts[0]
+	attempt.FinishedAt = nil
+	attempt.Outcome = nil
+	attempt.ProviderMessageRef = nil
+	attempt.ErrorCode = nil
+	attempt.Retryable = false
+	attempt.RetryAfterAt = nil
+	attempt.DurationMS = nil
+	attempt.EvidenceRef = nil
+
+	request, err := BuildChannelDeliveryLookupRequest(delivery, channel, attempt)
+	if err != nil {
+		t.Fatalf("expired in-flight attempt should be eligible for authoritative lookup: %v", err)
+	}
+	if request.DeliveryID != delivery.DeliveryID || request.AttemptID != attempt.AttemptID ||
+		request.IdempotencyKey != delivery.DeliveryIdempotencyKey || request.ProviderMessageRef != "" {
+		t.Fatalf("lookup request must preserve exact in-flight identity: %+v", request)
+	}
+}
+
 func TestChannelRegistryOptionalDeliveryLookup(t *testing.T) {
 	snapshot := lookupSnapshot(domain.CapabilitySupported)
 	adapter := &fakeLookupChannelAdapter{

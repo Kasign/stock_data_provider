@@ -10,7 +10,7 @@ import (
 
 var ErrChannelDeliveryLookupUnavailable = errors.New("notification: channel delivery lookup unavailable")
 
-// BuildChannelDeliveryLookupRequest 从 Delivery 和最后一次模糊 Attempt 构造查询请求。
+// BuildChannelDeliveryLookupRequest 从 Delivery 和最后一次未完成或结果模糊的 Attempt 构造查询请求。
 func BuildChannelDeliveryLookupRequest(
 	delivery domain.DeliveryRecord,
 	channel domain.ChannelConfigSnapshot,
@@ -22,8 +22,7 @@ func BuildChannelDeliveryLookupRequest(
 		delivery.ChannelConfigVersion != channel.ConfigVersion ||
 		attempt.DeliveryID != delivery.DeliveryID ||
 		attempt.AttemptNo != delivery.AttemptCount ||
-		attempt.FinishedAt == nil || attempt.Outcome == nil ||
-		*attempt.Outcome != domain.DeliveryAttemptAmbiguous ||
+		(attempt.FinishedAt != nil && (attempt.Outcome == nil || *attempt.Outcome != domain.DeliveryAttemptAmbiguous)) ||
 		channel.Capabilities.SupportsDeliveryLookup != domain.CapabilitySupported {
 		return domain.ChannelDeliveryLookupRequest{}, domain.ErrInvalidChannelLookupRequest
 	}

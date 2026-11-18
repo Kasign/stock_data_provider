@@ -42,6 +42,7 @@ type unknownReconciliationLookupAdapter struct {
 	lookupErr   error
 	lookupCalls int
 	observedAt  time.Time
+	lastRequest domain.ChannelDeliveryLookupRequest
 	cancel      context.CancelFunc
 }
 
@@ -49,6 +50,7 @@ func (a *unknownReconciliationLookupAdapter) LookupDelivery(
 	_ context.Context, request domain.ChannelDeliveryLookupRequest,
 ) (domain.ChannelDeliveryLookupResult, error) {
 	a.lookupCalls++
+	a.lastRequest = request
 	if a.cancel != nil {
 		a.cancel()
 	}
@@ -70,7 +72,7 @@ func (a *unknownReconciliationLookupAdapter) LookupDelivery(
 	return result, nil
 }
 
-func unknownReconciliationServiceFixture(t *testing.T, outcome domain.ChannelLookupOutcome) (
+func unknownReconciliationServiceFixture(t *testing.T, outcome domain.ChannelLookupOutcome, inFlight ...bool) (
 	*UnknownDeliveryReconciliationService, *unknownReconciliationLookupAdapter,
 	*unknownReconciliationRepositoryFake, time.Time,
 ) {
@@ -92,13 +94,19 @@ func unknownReconciliationServiceFixture(t *testing.T, outcome domain.ChannelLoo
 		AttemptNo: 1, WorkerID: lease.WorkerID, FencingToken: lease.FencingToken,
 		LeaseExpiresAt: lease.ExpiresAt, StartedAt: sendingAt.Add(time.Second),
 	}
+	isInFlight := len(inFlight) > 0 && inFlight[0]
 	finishedAt := attempt.StartedAt.Add(time.Second)
-	attempt, err = attempt.Complete(finishedAt, domain.DeliveryAttemptAmbiguous, "", "request_timeout", false, "")
-	if err != nil {
-		t.Fatal(err)
+	if !isInFlight {
+		attempt, err = attempt.Complete(finishedAt, domain.DeliveryAttemptAmbiguous, "", "request_timeout", false, "")
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
 	sending.AttemptCount = 1
 	unknownAt := finishedAt.Add(time.Second)
+	if isInFlight {
+		unknownAt = lease.ExpiresAt.Add(time.Second)
+	}
 	unknown, unknownEvent, err := sending.Transition(domain.DeliveryTransition{
 		To: domain.DeliveryUnknown, At: unknownAt,
 		ReasonCode: "channel_outcome_ambiguous", EvidenceRef: attempt.AttemptID,
@@ -141,6 +149,39 @@ func unknownReconciliationServiceFixture(t *testing.T, outcome domain.ChannelLoo
 	}
 	now := unknownAt.Add(2 * time.Second)
 	return service, adapter, repository, now
+}
+
+func TestUnknownDeliveryReconciliationServiceLooksUpExpiredInFlightAttempt(t *testing.T) {
+	for _, tc := range []struct {
+		name           string
+		outcome        domain.ChannelLookupOutcome
+		wantAction     UnknownReconciliationAction
+		wantStatus     domain.DeliveryStatus
+		wantWriteCount int
+	}{
+		{"accepted", domain.ChannelLookupAccepted, UnknownReconciliationFinalizeSent, domain.DeliverySent, 1},
+		{"not accepted", domain.ChannelLookupNotAccepted, UnknownReconciliationFinalizeFailed, domain.DeliveryFailed, 1},
+		{"indeterminate", domain.ChannelLookupIndeterminate, UnknownReconciliationRemainUnknown, domain.DeliveryUnknown, 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			service, adapter, repository, now := unknownReconciliationServiceFixture(t, tc.outcome, true)
+			deliveryID := serviceDeliveryID(service)
+			assessment, _, err := service.Reconcile(context.Background(), deliveryID, now, 0.5)
+			if err != nil || assessment.Action != tc.wantAction ||
+				adapter.lookupCalls != 1 || repository.calls != tc.wantWriteCount {
+				t.Fatalf("unexpected in-flight lookup result: assessment=%+v writes=%d lookups=%d err=%v",
+					assessment, repository.calls, adapter.lookupCalls, err)
+			}
+			if adapter.lastRequest.DeliveryID != deliveryID ||
+				adapter.lastRequest.AttemptID != assessment.AttemptID ||
+				adapter.lastRequest.IdempotencyKey == "" {
+				t.Fatalf("lookup must use exact delivery/attempt identity and stable idempotency key: %+v", adapter.lastRequest)
+			}
+			if tc.wantWriteCount == 1 && repository.next.Status != tc.wantStatus {
+				t.Fatalf("unexpected reconciled Delivery status: want=%s got=%s", tc.wantStatus, repository.next.Status)
+			}
+		})
+	}
 }
 
 func TestUnknownDeliveryReconciliationServiceFailsClosedBeforeLookup(t *testing.T) {
