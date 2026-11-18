@@ -9,6 +9,7 @@ import (
 
 	"example.com/stock-analysis-flow/internal/marketdata/model"
 	"example.com/stock-analysis-flow/internal/marketdata/normalize"
+	platformtime "example.com/stock-analysis-flow/internal/platform/time"
 )
 
 const (
@@ -164,7 +165,7 @@ func ResolvePriceLimitRuleWithEvidence(
 			sourceURL.Host == "" || (sourceURL.Scheme != "http" && sourceURL.Scheme != "https") ||
 			evidence.ObservedAt.IsZero() {
 			incompleteReason = "price_limit_event_evidence_source_or_observation_missing"
-		} else if evidence.ObservedAt.After(time.Now().UTC().Add(5 * time.Minute)) {
+		} else if evidence.ObservedAt.After(platformtime.SystemClock{}.Now().UTC().Add(5 * time.Minute)) {
 			incompleteReason = "price_limit_event_evidence_observation_time_in_future"
 		} else if evidence.Status == model.PriceLimitExceptionNone {
 			if !evidence.CoverageConfirmed {
@@ -348,7 +349,7 @@ func ResolvePriceLimitRuleFromTradingStatus(
 	// hand-built snapshot that lacks source provenance even when its fields look complete.
 	if strings.TrimSpace(tradingStatus.Source) == "" ||
 		!hasIdentifiableSourceVersion(tradingStatus.SourceVersion) ||
-		!serviceTimestampIsSane(tradingStatus.FetchedAt, time.Now().UTC()) {
+		!serviceTimestampIsSane(tradingStatus.FetchedAt, platformtime.SystemClock{}.Now().UTC()) {
 		result, resolveErr := ResolvePriceLimitRuleWithEvidence(
 			symbol, tradeDate, model.RiskWarningUnknown, 0, false, nil,
 		)

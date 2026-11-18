@@ -31,7 +31,7 @@
 | 15-受控HTTP流式传输设计与验收方案.md | PLAT-CTR-005 流式扩展的现状审查、API、生命周期、安全、错误和验收设计 |
 | 16-公共平台剩余开发任务与跨模块接入责任清单.md | 消费者/Server/部署剩余事项、责任归属和接入顺序；状态须与 01 对齐 |
 | 17-PLAT-002公共契约差异与待决事项.md | Platform 候选契约差异、待决事项、责任归属和本地 API Review |
-| 18-Web登录与Session安全原语设计.md | 单一 Owner Web Session、密码、Redis Store、Cookie、CSRF、登录限流和安全审计原语及 Server 接入边界 |
+| 18-Web登录与Session安全原语设计.md | 单一 Owner Web Session、密码、Redis Store、Cookie、CSRF、登录限流和安全审计原语及 Server 接入边界 |\n| 19-统一时间服务设计与实施.md | UTC 时间源、IANA 时区、MariaDB 权威时钟和跨模块时间语义 |
 
 ## 规则
 

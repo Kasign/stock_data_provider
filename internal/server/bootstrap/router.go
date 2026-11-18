@@ -9,7 +9,7 @@ import (
 
 // newHTTPHandler registers every currently supported endpoint through the
 // Platform policy-enforcing Router. No legacy catch-all route is retained.
-func newHTTPHandler(authenticator *platformsecurity.Authenticator, health, legacy http.Handler) (http.Handler, error) {
+func newHTTPHandler(authenticator *platformsecurity.Authenticator, health, legacy http.Handler, ownerSession *ownerSessionComposition) (http.Handler, error) {
 	if authenticator == nil || health == nil || legacy == nil {
 		return nil, errors.New("HTTP authenticator, health handler and legacy handler are required")
 	}
@@ -38,5 +38,20 @@ func newHTTPHandler(authenticator *platformsecurity.Authenticator, health, legac
 			return nil, err
 		}
 	}
-	return router.Handler(), nil
+	legacyHandler := router.Handler()
+	if ownerSession == nil {
+		return legacyHandler, nil
+	}
+	ownerHandler, err := newOwnerSessionHTTPHandler(ownerSession, ownerSessionCookie(ownerSession))
+	if err != nil {
+		return nil, err
+	}
+	mux := http.NewServeMux()
+	mux.Handle("/api/v1/owner/", ownerHandler)
+	mux.Handle("/", legacyHandler)
+	return mux, nil
+}
+
+func ownerSessionCookie(composition *ownerSessionComposition) platformsecurity.SessionCookieConfig {
+	return composition.cookie
 }

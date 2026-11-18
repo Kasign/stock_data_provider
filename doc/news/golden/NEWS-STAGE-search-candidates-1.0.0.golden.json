@@ -1,0 +1,59 @@
+{
+  "payload": {
+    "status": "partial",
+    "failure_code": "provider_partial_failure",
+    "candidates": [
+      {
+        "provider_code": "bocha",
+        "provider_item_id": "item-1",
+        "source_item_id": "",
+        "publisher_name": "",
+        "author": "",
+        "publisher_domain": "example.com",
+        "title": "示例标题",
+        "provider_summary": "候选摘要",
+        "raw_url": "https://example.com/news/1",
+        "canonical_url": "",
+        "published_at_raw": "2026-11-16T08:00:00Z",
+        "published_at": "2026-11-16T08:00:00Z",
+        "fetched_at": null,
+        "normalized_at": null,
+        "observed_at": "2026-11-16T08:01:00Z",
+        "query_dimension": "market",
+        "missing_fields": ["publisher"]
+      }
+    ],
+    "outcomes": [
+      {
+        "provider_code": "bocha",
+        "query_dimension": "market",
+        "status": "success",
+        "candidate_count": 1,
+        "error_code": "",
+        "retryable": false,
+        "duration_ns": 120000000,
+        "observed_at": "2026-11-16T08:01:00Z"
+      },
+      {
+        "provider_code": "tavily",
+        "query_dimension": "market",
+        "status": "failed",
+        "candidate_count": 0,
+        "error_code": "provider_timeout",
+        "retryable": true,
+        "duration_ns": 200000000,
+        "observed_at": "2026-11-16T08:01:01Z"
+      }
+    ]
+  },
+  "quality_summary": {
+    "search_status": "partial",
+    "provider_count": 2,
+    "provider_success_count": 1,
+    "provider_empty_count": 0,
+    "provider_failed_count": 1,
+    "provider_skipped_count": 0,
+    "candidate_count": 1,
+    "candidate_missing_field_count": {"publisher": 1}
+  }
+}

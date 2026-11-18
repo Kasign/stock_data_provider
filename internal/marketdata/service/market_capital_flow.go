@@ -11,6 +11,7 @@ import (
 
 	"example.com/stock-analysis-flow/internal/marketdata/model"
 	"example.com/stock-analysis-flow/internal/marketdata/provider"
+	platformtime "example.com/stock-analysis-flow/internal/platform/time"
 )
 
 func (s *DataService) SetMarketCapitalFlowProviders(providers []provider.MarketCapitalFlowProvider) {
@@ -55,7 +56,7 @@ func (s *DataService) MarketCapitalFlow(ctx context.Context, startDate, endDate 
 	key := fmt.Sprintf("md:v2:market-capital-flow:%s:%s:%s", strings.Join(providerNames, ","), startDate, endDate)
 	if data, ok, cacheErr := s.cache.Get(ctx, key); cacheErr == nil && ok {
 		var cached model.MarketCapitalFlowSnapshot
-		if json.Unmarshal(data, &cached) == nil && validateMarketCapitalFlowSnapshot(startDate, endDate, &cached) == nil && time.Since(cached.FetchedAt) >= 0 && time.Since(cached.FetchedAt) < 15*time.Minute {
+		if json.Unmarshal(data, &cached) == nil && validateMarketCapitalFlowSnapshotAt(startDate, endDate, &cached, s.nowUTC()) == nil && cacheEntryWithinTTL(cached.FetchedAt, 15*time.Minute, s.nowUTC()) {
 			return &cached, true, nil
 		}
 	}
@@ -76,7 +77,7 @@ func (s *DataService) MarketCapitalFlow(ctx context.Context, startDate, endDate 
 			failures = append(failures, p.Name()+": provider source does not match configured provider")
 			continue
 		}
-		if validateErr := validateMarketCapitalFlowSnapshot(startDate, endDate, snapshot); validateErr != nil {
+		if validateErr := validateMarketCapitalFlowSnapshotAt(startDate, endDate, snapshot, s.nowUTC()); validateErr != nil {
 			failures = append(failures, p.Name()+": "+validateErr.Error())
 			continue
 		}
@@ -94,6 +95,10 @@ func (s *DataService) MarketCapitalFlow(ctx context.Context, startDate, endDate 
 }
 
 func validateMarketCapitalFlowSnapshot(startDate, endDate string, snapshot *model.MarketCapitalFlowSnapshot) error {
+	return validateMarketCapitalFlowSnapshotAt(startDate, endDate, snapshot, platformtime.SystemClock{}.Now())
+}
+
+func validateMarketCapitalFlowSnapshotAt(startDate, endDate string, snapshot *model.MarketCapitalFlowSnapshot, now time.Time) error {
 	if snapshot == nil {
 		return errors.New("market-capital-flow provider returned an empty response")
 	}
@@ -103,7 +108,7 @@ func validateMarketCapitalFlowSnapshot(startDate, endDate string, snapshot *mode
 	if strings.TrimSpace(snapshot.Source) == "" || !hasIdentifiableSourceVersion(snapshot.SourceVersion) || snapshot.FetchedAt.IsZero() {
 		return errors.New("market-capital-flow source, source_version or fetched_at is missing")
 	}
-	if snapshot.FetchedAt.After(time.Now().UTC().Add(5 * time.Minute)) {
+	if snapshot.FetchedAt.After(now.UTC().Add(5 * time.Minute)) {
 		return errors.New("market-capital-flow fetched_at is in the future")
 	}
 	if snapshot.QualityStatus != model.QualityDegraded {

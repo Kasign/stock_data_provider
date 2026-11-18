@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -14,6 +15,7 @@ import (
 	"github.com/gowebpki/jcs"
 
 	"example.com/stock-analysis-flow/internal/researchflow/domain"
+	"example.com/stock-analysis-flow/internal/researchflow/resourcepolicy"
 )
 
 type PropagationPolicy struct {
@@ -83,17 +85,21 @@ type ParameterSchemaValidator interface {
 type ResolvedTemplate struct {
 	Ref                   string
 	Version               string
+	TemplateFingerprint   string `json:"template_fingerprint"`
 	Fingerprint           string
 	RequiresHardRiskGate  bool
 	AllowEmptyInputs      bool
 	OutputRegistryVersion string
 	ResourcePolicyRef     string
+	ResourcePolicy        resourcepolicy.Snapshot `json:"resource_policy_snapshot"`
 	ParameterSchema       ParameterSchemaSnapshot
 	Stages                []ResolvedStage
 	Excluded              []domain.ExcludedStage
 }
 
 var ErrInvalidTemplate = errors.New("invalid workflow template")
+
+var providerCodePattern = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
 
 const maxRetryDelayMS = int64(1<<63-1) / int64(time.Millisecond)
 
@@ -226,13 +232,14 @@ func Fingerprint(t WorkflowTemplate) (string, error) {
 	return hex.EncodeToString(sum[:]), nil
 }
 
-func resolvedFingerprint(templateFingerprint string, schema ParameterSchemaSnapshot) (string, error) {
+func resolvedFingerprint(templateFingerprint string, schema ParameterSchemaSnapshot, resourcePolicyFingerprint string) (string, error) {
 	payload := struct {
 		TemplateFingerprint        string `json:"template_fingerprint"`
 		ParameterSchemaRef         string `json:"parameter_schema_ref"`
 		ParameterSchemaVersion     string `json:"parameter_schema_version"`
 		ParameterSchemaFingerprint string `json:"parameter_schema_fingerprint"`
-	}{templateFingerprint, schema.Ref, schema.Version, schema.Fingerprint}
+		ResourcePolicyFingerprint  string `json:"resource_policy_fingerprint"`
+	}{templateFingerprint, schema.Ref, schema.Version, schema.Fingerprint, resourcePolicyFingerprint}
 	raw, err := json.Marshal(payload)
 	if err != nil {
 		return "", fmt.Errorf("encode resolved template fingerprint: %w", err)
@@ -243,6 +250,37 @@ func resolvedFingerprint(templateFingerprint string, schema ParameterSchemaSnaps
 	}
 	sum := sha256.Sum256(canonical)
 	return hex.EncodeToString(sum[:]), nil
+}
+
+// BindResourcePolicySnapshot binds an immutable policy decision to a resolved template.
+// The policy definition fingerprint participates in identity; the dynamic Provider
+// allowlist is persisted for execution but deliberately excluded from that identity.
+func BindResourcePolicySnapshot(resolved ResolvedTemplate, snapshot resourcepolicy.Snapshot) (ResolvedTemplate, error) {
+	if snapshot.PolicyRef == "" || snapshot.PolicyRef != resolved.ResourcePolicyRef ||
+		len(snapshot.PolicyFingerprint) != 64 || snapshot.PolicyFingerprint != strings.ToLower(snapshot.PolicyFingerprint) ||
+		len(snapshot.AllowedProviderCodes) == 0 {
+		return ResolvedTemplate{}, fmt.Errorf("%w: resource policy snapshot identity or inventory is invalid", ErrInvalidTemplate)
+	}
+	if _, err := hex.DecodeString(snapshot.PolicyFingerprint); err != nil {
+		return ResolvedTemplate{}, fmt.Errorf("%w: resource policy fingerprint must be SHA-256 hex", ErrInvalidTemplate)
+	}
+	codes := append([]string(nil), snapshot.AllowedProviderCodes...)
+	for i, code := range codes {
+		if !providerCodePattern.MatchString(code) || (i > 0 && codes[i-1] >= code) {
+			return ResolvedTemplate{}, fmt.Errorf("%w: resource policy Provider Codes must be valid, unique and sorted", ErrInvalidTemplate)
+		}
+	}
+	snapshot.AllowedProviderCodes = codes
+	resolved.ResourcePolicy = snapshot
+	if resolved.TemplateFingerprint == "" {
+		return ResolvedTemplate{}, fmt.Errorf("%w: resolved template fingerprint is missing", ErrInvalidTemplate)
+	}
+	fingerprint, err := resolvedFingerprint(resolved.TemplateFingerprint, resolved.ParameterSchema, snapshot.PolicyFingerprint)
+	if err != nil {
+		return ResolvedTemplate{}, err
+	}
+	resolved.Fingerprint = fingerprint
+	return resolved, nil
 }
 
 func cloneStageDefinition(stage StageDefinition) StageDefinition {
@@ -284,12 +322,12 @@ func Resolve(ctx context.Context, t WorkflowTemplate, parameters json.RawMessage
 	if err != nil {
 		return ResolvedTemplate{}, err
 	}
-	fingerprint, err := resolvedFingerprint(templateFingerprint, parameterSchema)
+	fingerprint, err := resolvedFingerprint(templateFingerprint, parameterSchema, "")
 	if err != nil {
 		return ResolvedTemplate{}, err
 	}
 	resolved := ResolvedTemplate{
-		Ref: t.Ref, Version: t.Version, Fingerprint: fingerprint,
+		Ref: t.Ref, Version: t.Version, TemplateFingerprint: templateFingerprint, Fingerprint: fingerprint,
 		RequiresHardRiskGate: t.RequiresHardRiskGate, AllowEmptyInputs: t.AllowEmptyInputs,
 		OutputRegistryVersion: t.OutputRegistryVersion, ResourcePolicyRef: t.ResourcePolicyRef,
 		ParameterSchema: parameterSchema,

@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/gowebpki/jcs"
 )
@@ -19,21 +18,11 @@ var (
 	ErrIdempotencyConflict = errors.New("idempotency key conflicts with a different request")
 )
 
-func ValidateCreateRunCommand(cmd CreateRunCommand, now time.Time, allowEmptyInputs bool) error {
+func ValidateCreateRunCommand(cmd CreateRunCommand, allowEmptyInputs bool) error {
 	if strings.TrimSpace(cmd.SchemaVersion) == "" || strings.TrimSpace(cmd.IdempotencyKey) == "" ||
 		len(cmd.IdempotencyKey) > 128 || strings.TrimSpace(cmd.TemplateRef) == "" ||
-		strings.TrimSpace(cmd.TemplateVersion) == "" || strings.TrimSpace(cmd.CorrelationID) == "" {
-		return fmt.Errorf("%w: required field missing or idempotency key exceeds 128 characters", ErrInvalidCommand)
-	}
-	if cmd.SystemAsOf.IsZero() || cmd.DeadlineAt.IsZero() || !isUTC(cmd.SystemAsOf) || !isUTC(cmd.DeadlineAt) {
-		return fmt.Errorf("%w: system_as_of and deadline_at must be UTC timestamps", ErrInvalidCommand)
-	}
-	now = now.UTC()
-	if cmd.SystemAsOf.After(now) {
-		return fmt.Errorf("%w: system_as_of must not be in the future", ErrInvalidCommand)
-	}
-	if !cmd.DeadlineAt.After(now) {
-		return fmt.Errorf("%w: deadline_at must be later than database UTC now", ErrInvalidCommand)
+		strings.TrimSpace(cmd.TemplateVersion) == "" {
+		return fmt.Errorf("%w: schema, idempotency key and exact template identity are required", ErrInvalidCommand)
 	}
 	if _, err := canonicalInputSnapshotRefs(cmd.InputSnapshotRefs, allowEmptyInputs); err != nil {
 		return err
@@ -41,9 +30,6 @@ func ValidateCreateRunCommand(cmd CreateRunCommand, now time.Time, allowEmptyInp
 	parameters := bytes.TrimSpace(cmd.Parameters)
 	if len(parameters) == 0 || !json.Valid(parameters) || parameters[0] != '{' {
 		return fmt.Errorf("%w: parameters must be a JSON object; use {} when empty", ErrInvalidCommand)
-	}
-	if cmd.OriginatingRequestID != nil && strings.TrimSpace(*cmd.OriginatingRequestID) == "" {
-		return fmt.Errorf("%w: originating_request_id must be null or non-empty", ErrInvalidCommand)
 	}
 	return nil
 }
@@ -74,38 +60,28 @@ func canonicalInputSnapshotRefs(refs []string, allowEmpty bool) ([]string, error
 	return canonical, nil
 }
 
-func isUTC(value time.Time) bool {
-	_, offset := value.Zone()
-	return offset == 0
-}
-
-// RequestFingerprint scopes idempotency to the authenticated caller and CreateRun operation.
-// Tracing IDs are deliberately excluded. callerRef must come from trusted authentication context.
+// RequestFingerprint scopes semantic request intent to the authenticated caller.
+// Server-generated PIT/Deadline timestamps and tracing identifiers are deliberately excluded.
 func RequestFingerprint(callerRef string, cmd CreateRunCommand) (string, error) {
 	if strings.TrimSpace(callerRef) == "" {
 		return "", fmt.Errorf("%w: authenticated caller is required", ErrInvalidCommand)
 	}
-	if cmd.SystemAsOf.IsZero() || cmd.DeadlineAt.IsZero() || !isUTC(cmd.SystemAsOf) || !isUTC(cmd.DeadlineAt) {
-		return "", fmt.Errorf("%w: system_as_of and deadline_at must be non-zero UTC timestamps", ErrInvalidCommand)
+	if err := ValidateCreateRunCommand(cmd, true); err != nil {
+		return "", err
 	}
 	refs, err := canonicalInputSnapshotRefs(cmd.InputSnapshotRefs, true)
 	if err != nil {
 		return "", err
 	}
-	parameters := bytes.TrimSpace(cmd.Parameters)
-	if len(parameters) == 0 || !json.Valid(parameters) || parameters[0] != '{' {
-		return "", fmt.Errorf("%w: parameters must be a valid JSON object", ErrInvalidCommand)
-	}
 	payload := struct {
 		CallerRef         string          `json:"caller_ref"`
 		Operation         string          `json:"operation"`
+		SchemaVersion     string          `json:"schema_version"`
 		TemplateRef       string          `json:"template_ref"`
 		TemplateVersion   string          `json:"template_version"`
-		SystemAsOf        time.Time       `json:"system_as_of"`
-		DeadlineAt        time.Time       `json:"deadline_at"`
 		InputSnapshotRefs []string        `json:"input_snapshot_refs"`
 		Parameters        json.RawMessage `json:"parameters"`
-	}{callerRef, "CreateRun", cmd.TemplateRef, cmd.TemplateVersion, cmd.SystemAsOf.UTC(), cmd.DeadlineAt.UTC(), refs, parameters}
+	}{callerRef, "CreateRun", cmd.SchemaVersion, cmd.TemplateRef, cmd.TemplateVersion, refs, bytes.TrimSpace(cmd.Parameters)}
 	raw, err := json.Marshal(payload)
 	if err != nil {
 		return "", fmt.Errorf("encode create run fingerprint: %w", err)
