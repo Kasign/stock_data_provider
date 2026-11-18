@@ -338,9 +338,9 @@ func SourceCollectionPolicyCheck(
 				)
 			}
 			attributes := map[string]string{
-				"source_policy_versioned":       "true",
-				"source_authorization_status":   string(sourcePolicy.Status),
-				"endpoint_policy_present":       strconv.FormatBool(endpointPolicy != nil),
+				"source_policy_versioned":     "true",
+				"source_authorization_status": string(sourcePolicy.Status),
+				"endpoint_policy_present":     strconv.FormatBool(endpointPolicy != nil),
 			}
 			if endpointPolicy != nil {
 				attributes["endpoint_authorization_status"] = string(endpointPolicy.Status)
