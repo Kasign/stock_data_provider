@@ -49,3 +49,10 @@
 ## 原始记录
 
 完整历史执行记录保留于 [各个子任务完成状态.md](./各个子任务完成状态.md)。
+
+## 2026-11-18 News Search Payload Validator 一致性 Review
+
+- 生产 Output Registry 将 `newsstage.ValidatePayloadJSON` 注册为 `news.search_candidates` Payload Validator。
+- 权威 Schema `doc/news/schema/NEWS-STAGE-search-candidates-payload-1.0.0.schema.json` 对 `candidate.missing_fields` 声明 `uniqueItems: true`。
+- `internal/news/stage/search_candidates_validation.go::ValidatePayloadJSON` 当前逐项检查 missing field 枚举，但没有检查重复值；因此重复项可通过代码 Validator，却违反冻结 Schema。
+- 这是 News Owner 的领域 Validator 缺口，不在 Researchflow 分支复制校验逻辑；卡点见 RF-BLOCK-009。修复前该 Payload Validator 不能标记为完全符合 Schema。

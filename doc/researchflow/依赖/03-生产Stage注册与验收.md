@@ -34,6 +34,12 @@ skipped 仅表示适用性规则判定不执行，不代表 Provider 可用，�
 - Output Registry 的 Validator 必须对应精确冻结 Schema，不允许 unknown discriminator fallback。
 - Provider Payload/QualitySummary 不等于独立 Platform Diagnostic Record；DiagnosticRefs 无独立记录时允许为空。
 
+### 当前 News Search Payload Validator 差异
+
+- Schema `doc/news/schema/NEWS-STAGE-search-candidates-payload-1.0.0.schema.json` 要求 `candidate.missing_fields` `uniqueItems: true`。
+- News 代码 `internal/news/stage/search_candidates_validation.go::ValidatePayloadJSON` 当前只校验每个值属于允许枚举，不检查重复值。
+- Researchflow Stage Output Registry 直接使用该 News Validator，因此不能宣称对该 Schema 的全部约束均已执行。
+- 责任方：News Owner；Researchflow 只记录跨模块准入缺口，不在 `internal/news/**` 复制领域校验。修复前该项诊断为 fail/未完全符合，不得标记 pass。
 ## 4. 生产验收记录最小字段
 
 任务编号、分支 HEAD SHA、Provider/模型版本、真实数据来源、输入快照/PIT、Schema/Golden 版本、执行 Run/Stage/Attempt 引用、诊断四态、失败/降级原因、MariaDB 证据、Actions Run 和明确未覆盖范围。

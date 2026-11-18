@@ -2,7 +2,7 @@
 
 更新时间：2026-11-18  
 对应分支：`feat/researchflow`  
-代码验收基线 SHA：`43188259c4b96579ab587742e063d0f254c4009d`  
+代码验收基线 SHA：`132415777bdfcd81f6d4cf2f812dfbefbd225dde`  
 维护范围：记录 Researchflow 推进所依赖的跨模块决策、契约同步和验收阻塞；不替代模块任务状态文档。
 
 ## 1. 当前卡点
@@ -68,7 +68,7 @@
 - Run/Stage/Attempt DTO 时间统一规范化 UTC；ResultSummary 的 quality/coverage/actionability 语义已明确并补测试。
 - Diagnostics Adapter 已统一 UTC CheckedAt，并限制属性白名单；当前尚无真实 Assessment 生产者和 Server 注册。
 - Context Assembly 生产接入所需的 Research Owner 授权、Run PIT/Deadline 绑定、LLM Tokenizer 和 Server/Worker 接线已明确卡点。
-- 代码验收 SHA `43188259c4b96579ab587742e063d0f254c4009d` 的 Actions Run 44299178336 整体 success，Researchflow module、根模块 Test 和相关集成 Job 均通过。
+- 代码验收 SHA `132415777bdfcd81f6d4cf2f812dfbefbd225dde` 的 Actions Run 44300750509 整体 success，Researchflow module、根模块 Test、Race/Vet 和相关集成 Job 均通过。
 
 ## 3. 下一步解除顺序
 
@@ -102,6 +102,14 @@
 - **解除条件**：冻结唯一 Owner/来源、字段映射、时间规则、Reason 引用规则和 Status 聚合算法；补充 Quant 真实 Payload 到 Composer 的正反向 Contract Test，证明 block triggered/unknown、缺少 block、状态与 Reason 不一致时均 fail-closed。
 - **当前状态**：OPEN；阻断 FLOW-006 风险结论生产接入，不阻断 Quant trend/risk Payload 的独立强类型验证。
 
+### RF-BLOCK-009：News Search Payload Validator 未执行 Schema uniqueItems 约束
+
+- **现状**：News Payload Schema `doc/news/schema/NEWS-STAGE-search-candidates-payload-1.0.0.schema.json` 对 `candidate.missing_fields` 声明 `uniqueItems: true`。
+- **代码事实**：`internal/news/stage/search_candidates_validation.go::ValidatePayloadJSON` 只检查每个 missing field 是否属于允许枚举，没有检查重复值；因此重复项可通过 Validator，却不符合冻结 Schema。
+- **影响**：Researchflow 的 `StageOutputRegistry` 复用 News 提供的 Validator，生产 Envelope/Payload 校验目前不能证明完全符合该 Schema。不能将当前 Validator 标记为完整 pass。
+- **责任边界**：由 News Owner 修复 News 自己的 Payload Validator 和测试；Researchflow 不复制 `internal/news/**` 的领域规则。
+- **解除条件**：News 增加重复 missing field 拒绝测试并通过 News 模块 CI；Researchflow 在集成基线上确认复用的新 Validator 后，重新验收 Stage Output Registry。
+- **当前状态**：OPEN；阻断 News Search Payload Schema 的完整一致性验收，不阻断 Researchflow 其他模块能力。
 ## 4. 状态定义
 
 - `OPEN`：有明确责任人和解除条件，当前未解除。
