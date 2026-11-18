@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"example.com/stock-analysis-flow/internal/marketdata/markettime"
 	"example.com/stock-analysis-flow/internal/marketdata/model"
 	"example.com/stock-analysis-flow/internal/marketdata/service"
 )
@@ -22,7 +23,7 @@ func (s *Server) securityTradingStatus(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", "date must use YYYY-MM-DD", requestID(r))
 		return
 	}
-	if date > time.Now().In(time.FixedZone("CST", 8*60*60)).Format("2006-01-02") {
+	if date > s.nowUTC().In(markettime.Location()).Format("2006-01-02") {
 		writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", "date must not be in the future in Asia/Shanghai", requestID(r))
 		return
 	}
@@ -35,7 +36,7 @@ func (s *Server) securityTradingStatus(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		asOf, parseErr := time.Parse(time.RFC3339Nano, strings.TrimSpace(asOfValues[0]))
-		if parseErr != nil || asOf.After(time.Now().UTC()) {
+		if parseErr != nil || asOf.After(s.nowUTC()) {
 			writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", "as_of must be a valid non-future RFC3339 timestamp", requestID(r))
 			return
 		}

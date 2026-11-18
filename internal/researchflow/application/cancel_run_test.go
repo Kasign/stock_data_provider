@@ -25,6 +25,8 @@ type cancelAuthorizerStub struct {
 	calls       int
 }
 
+func (s *cancelAuthorizerStub) AuthorizeRunRead(context.Context, string, string) error { return nil }
+
 func (s *cancelAuthorizerStub) AuthorizeRunCancellation(_ context.Context, caller, run string) error {
 	s.calls++
 	s.caller, s.run = caller, run

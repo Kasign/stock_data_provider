@@ -1,7 +1,7 @@
 # WebUI 真实 API 与配置边界
 
 更新时间：2026-11-12  
-代码核对基线：feat/webui-market-data-console @ 902525b3cf7926df294e153329328c5f52d92809
+代码核对基线：integration @ 46109c58d440327973a21d833f215928543a14b6（2026-11-17；WebUI 仍未接入 Owner Session）
 
 > 本文只记录当前请求封装、仓库可核对的路由事实和接入门禁。必须区分 OpenAPI 声明、Handler 注册、Root Server 挂载、部署可达和真实数据验收。
 
@@ -54,22 +54,56 @@
 
 当前分析路由 Owner Bearer 与浏览器 Session 尚未形成可验收的认证闭环。服务端历史分页、模板、取消和综合结果接口未完成 Application API、Server 注册、认证和部署验证前，Web 不新增推测请求。
 
-### 4.1 旧分析 API 的认证差异（已核实，W2 P0 阻塞）
+### 4.1 旧分析 API 的认证差异（保持原有边界）
 
-当前仓库内的调用链存在明确差异，不能把“same-origin Cookie”当作 Owner 认证已打通：
+旧 Analysis Task/Run 路由仍由 Root Server 的 Platform Bearer Router 保护，Owner Session 不会自动授权这些旧路由：
 
-- `web/src/api.js` 的通用 `request()` 设置 `credentials: "same-origin"`，但只在传入 `apiKey` 时设置 `X-API-Key`；旧分析 API 函数没有传入 API Key，也没有发送 `Authorization: Bearer` 或 CSRF Header。
-- `internal/platform/security/security.go` 的当前 Authenticator 从 `Authorization` Header 读取 Bearer 凭据；没有该 Header 时身份为 anonymous。
-- `internal/server/bootstrap/router.go` 将旧分析任务/Run 路由注册为 `OwnerAccess`。
-- `web/default.conf.template` 的 `/analysis-api/` 仅执行直通反向代理，没有注入 Authorization；当前 `docker-compose.yml` 未定义可信 Owner 凭据注入链路。
-- Platform 已有 Session/CSRF 原语，但当前 `internal/server/bootstrap/bootstrap.go` 尚未将 Session 登录、Cookie 认证和 CSRF 中间件装配到 Root Server。
+- `web/src/api.js` 的通用 `request()` 使用 `credentials: "same-origin"`，但旧分析 API 函数没有发送 `Authorization: Bearer` 或 CSRF Header。
+- `internal/server/bootstrap/router.go` 仍将旧分析任务/Run、`/readyz` 和 `/diagnostics` 注册为 Owner Bearer 路由。
+- `web/default.conf.template` 的 `/analysis-api/` 代理不会注入长期 Owner Token；浏览器不得持有或保存 Owner Bearer。
 
-因此，在仓库当前 Compose + Nginx + Root Server 链路下，Web 的同源 Cookie 请求没有证据能够通过 OwnerAccess；除非部署环境另有仓库外的可信代理认证，否则分析 API 请求会被拒绝。该问题不能通过把 Owner Token 放进浏览器 localStorage 解决。
+因此，Owner Session 路由可用不代表旧 Analysis API 已可由浏览器访问。旧 Analysis API 的退役和 Researchflow 新 API 接入，仍按 SRV-CTR-001 的 deferred 边界推进；不得把 `owner_session` 映射为 `owner_bearer`，不得把旧 Analysis API 当作 Researchflow 新契约。
 
-此外，`doc/api/contracts/分析任务.openapi.yaml` 没有声明对应的 Security Scheme/操作级 security，而 Root Server 已要求 OwnerAccess，OpenAPI 与实际路由安全策略不一致。服务端应在认证方案确定后同步修正 OpenAPI 和部署契约。
+## 4.2 Owner Session 浏览器接入（代码已接入，部署待验收）
 
-**Web 侧处理：** 保持不向浏览器发送或保存 Owner Token；不在 Nginx 模板中硬编码/注入长期 Owner Token；等待 Server/Platform 提供可验证的 Session/Cookie + CSRF + 资源授权闭环，或经过安全评审的等效方案。真实认证闭环通过前，现有 Mock 测试不代表分析 API 真实可用。
+Root Server 在 `OWNER_SESSION_ENABLED=true` 时，按 `doc/server/contracts/SRV-CTR-002-owner-session-http-api.md` 挂载以下接口；WebUI 已在 `web/src/api.js` 封装并由 `web/src/app.js` 接入设置中心：
 
+| 方法 | 路径 | WebUI 行为 | 认证 |
+|---|---|---|---|
+| POST | `/api/v1/owner/session` | 密码登录并建立 Session | anonymous + 严格 Origin/Host |
+| GET | `/api/v1/owner/session` | 查询当前登录态 | owner_session Cookie |
+| POST | `/api/v1/owner/session/csrf` | 页面刷新后恢复新的 CSRF Token | owner_session Cookie + 严格 Origin/Host |
+| DELETE | `/api/v1/owner/session` | 登出并撤销 Session | owner_session + CSRF |
+| POST | `/api/v1/owner/session/rotate` | 轮换 Session 与 CSRF Token | owner_session + CSRF |
+| PUT | `/api/v1/owner/password` | 修改密码并递增 CredentialVersion | owner_session + CSRF |
+
+### 当前实现事实
+
+- `web/src/api.js` 已封装登录、当前 Session、刷新后 CSRF 恢复、登出、Session 轮换和密码修改。
+- 请求统一使用 `credentials: "same-origin"`；CSRF Header 为 `X-CSRF-Token`，Token 只保存在 JS 模块运行时变量，不写入 localStorage/sessionStorage。
+- 登录与轮换响应校验 CSRF Token；Session 失效时清理内存 Token；密码修改成功后清理 Token，要求重新登录。
+- 行情 API Key 仅由行情请求携带；Owner Session 请求不携带行情 API Key，也不发送 Owner Bearer。
+- 设置中心已有登录、退出、密码修改界面；页面初始化时查询 Session 并通过专用 POST 接口恢复 CSRF。
+- 登录失败、Session 过期、服务端未启用、服务不可用和来源/CSRF 拒绝分别显示，不把未知状态报告为登录成功。
+- 旧 Analysis、`/readyz`、`/diagnostics` 仍保持 Owner Bearer 认证；Owner Session 不会自动解锁这些路由。
+
+### 当前代码验收证据
+
+- Integration CI Run [43999751873](https://github.com/Kasign/stock_data_provider/actions/runs/43999751873) 对精确 SHA `446cc1a65c307726a1171e1341d529452ea09f55` 为 success。
+- CI 覆盖根模块 gofmt/vet/test、News/Research/Researchflow 跨模块测试、Worker Bootstrap MariaDB/Redis 集成、go-core vet/test、Compose 配置校验、JavaScript 语法、WebUI 单测和 Web 镜像构建。
+- `web/tests/api.test.mjs` 覆盖同源 Cookie 凭据、CSRF 仅内存保存、登录/恢复/轮换/登出请求顺序、CSRF Header、密码 UTF-8 字节限制、密码修改后清理 Token，以及当前密码错误时保留有效 CSRF。
+- `web/tests/ui-contract.test.mjs` 覆盖登录表单、密码修改表单、退出入口、刷新恢复调用、CSRF 不写入浏览器存储，以及 Owner Session 与服务密钥管理边界。
+- 上述 CI 与测试只证明该 SHA 的代码和自动化行为，不证明目标服务器已部署或真实浏览器请求已穿过外部入口 Nginx。
+
+### 部署验收仍未完成
+
+1. 在目标 Compose 部署中确认 Web 容器 Nginx 的 `/analysis-api/` 代理实际指向 Root Server。
+2. 确认 `proxy_cookie_path /api /analysis-api/api;` 对登录 Set-Cookie、Session 轮换和登出清除 Cookie 均生效。
+3. 在 HTTPS 入口检查 HttpOnly、Secure、SameSite、Path、无 Domain 等属性；确认 Server 的 Public Origin 与外部入口一致。
+4. 使用真实浏览器验证登录、刷新后 CSRF 恢复、登出、密码修改后旧 Session 失效及重新登录。
+5. 单独确认可信代理链和来源 IP 解析配置；不能仅因 Nginx 传递了 `X-Forwarded-For` 就信任该头。
+
+当前结论：Owner Session WebUI 代码接入已完成，精确 SHA 的 Integration CI 已通过；目标环境 Nginx/Compose 端到端部署仍待验收。SRV-CTR-002 登记簿状态仍为 `freeze-ready`，不得写成已正式冻结。Researchflow 新业务 API 仍受 SRV-CTR-001 deferred 边界约束。
 ## 5. 跨模块目标能力与接入状态
 
 | 领域 | Web 目标场景 | 前置条件 | 当前处理 |
@@ -106,3 +140,13 @@
 7. 单元/契约/浏览器测试及真实部署/真实数据验收证据。
 
 不满足条件时标记“待契约/待服务端接入”，不写成已实现 API。
+
+## 8. Researchflow W2 首期输入边界（非公开 API）
+
+首期仅定义未来 Web 工作区的 CreateRun 输入责任，不代表 Researchflow HTTP API 已获准公开。`SRV-CTR-001` 仍为 deferred，Web 不得据此自行实现请求 URL 或 DTO。
+
+WebUI 只提交请求 Schema 版本、一次逻辑提交的幂等键、精确模板 ref/version、真实输入快照引用和符合模板 Parameter Schema 的 parameters。首期固定 current mode：WebUI 不提交 `system_as_of` 或 `deadline_at`；Server 从可信 Owner Session Principal 取得 CallerRef，从 MariaDB UTC 时钟生成 `system_as_of`，并按显式 Server Run Deadline 配置生成绝对 `deadline_at`。Request ID/Correlation ID 由 Server 生成或传播。
+
+同一幂等键重试必须复用原始请求意图。指纹包含 caller、操作、请求 Schema 版本、精确模板身份、规范化快照引用集合和 JCS 参数；排除服务端生成时间及追踪 ID。命中幂等记录必须先于时钟读取和模板解析，返回原 Run，不改变其 PIT/Deadline。
+
+首个 News Search 参数 Schema 的真实字段为 `query`（必填）、`limit`（必填，1–100）和 `query_dimension`（可选）；额外字段拒绝。此参数 Schema 不等于正式 Workflow Template 已发布，也不等于 HTTP API 已开放。

@@ -7,9 +7,9 @@ import (
 	"errors"
 	"net/http"
 	"sync/atomic"
-	"time"
 
 	platformdiagnostics "example.com/stock-analysis-flow/internal/platform/diagnostics"
+	platformtime "example.com/stock-analysis-flow/internal/platform/time"
 	serverdiagnostics "example.com/stock-analysis-flow/internal/server/diagnostics"
 )
 
@@ -19,14 +19,23 @@ type readinessChecker interface {
 
 type Handler struct {
 	checker  readinessChecker
+	clock    platformtime.Clock
 	draining atomic.Bool
 }
 
 func NewHandler(checker readinessChecker) (*Handler, error) {
+	return NewHandlerWithClock(checker, platformtime.SystemClock{})
+}
+
+// NewHandlerWithClock 允许组合根注入 Platform Clock，统一健康响应中的当前时刻。
+func NewHandlerWithClock(checker readinessChecker, clock platformtime.Clock) (*Handler, error) {
 	if checker == nil {
 		return nil, errors.New("readiness checker is required")
 	}
-	return &Handler{checker: checker}, nil
+	if clock == nil {
+		clock = platformtime.SystemClock{}
+	}
+	return &Handler{checker: checker, clock: clock}, nil
 }
 
 // MarkDraining 在关闭 HTTP Listener 前立即撤销 Readiness。
@@ -45,7 +54,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	switch r.URL.Path {
 	case "/healthz":
-		writeJSON(w, r, http.StatusOK, map[string]any{"status": "ok", "time": time.Now().UTC()})
+		writeJSON(w, r, http.StatusOK, map[string]any{"status": "ok", "time": h.clock.Now().UTC()})
 	case "/diagnostics":
 		report, err := h.checker.Run(r.Context())
 		if err != nil {
@@ -80,7 +89,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, r, http.StatusOK, map[string]any{
 			"status":       "ready",
 			"dependencies": dependencies,
-			"time":         time.Now().UTC(),
+			"time":         h.clock.Now().UTC(),
 		})
 	default:
 		http.NotFound(w, r)

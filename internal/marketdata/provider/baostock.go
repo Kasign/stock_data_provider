@@ -74,7 +74,7 @@ func (p *Baostock) FetchDailyBars(ctx context.Context, rawSymbol, startDate, end
 	if limit > 2000 {
 		limit = 2000
 	}
-	start, end, err := baostockDateRange(startDate, endDate, limit, time.Now())
+	start, end, err := baostockDateRange(startDate, endDate, limit, providerNowUTC())
 	if err != nil {
 		return nil, err
 	}
@@ -90,7 +90,7 @@ func (p *Baostock) FetchDailyBars(ctx context.Context, rawSymbol, startDate, end
 		return nil, errors.New("BaoStock returned no daily K-line rows")
 	}
 
-	fetchedAt := time.Now().UTC()
+	fetchedAt := providerNowUTC()
 	out := make([]model.DailyBar, 0, len(rows))
 	seenDates := make(map[string]struct{}, len(rows))
 	for index, row := range rows {
@@ -214,7 +214,7 @@ func (p *Baostock) FetchDailyBars(ctx context.Context, rawSymbol, startDate, end
 			Volume: &volume, Amount: amount, ChangePercent: changePercent,
 			AdjustmentBasis: adjustment, AdjustmentMethod: adjustmentMethod,
 			Source: p.Name(), SourceVersion: baostockVersion,
-			FetchedAt: fetchedAt, NormalizedAt: time.Now().UTC(),
+			FetchedAt: fetchedAt, NormalizedAt: providerNowUTC(),
 			RawVolume: &rawVolume, RawVolumeUnit: "shares",
 			RawAmount: rawAmount, RawAmountUnit: rawAmountUnit, RawAmountField: rawAmountField,
 			VolumeUnit: "shares", AmountUnit: amountUnit,
@@ -274,10 +274,8 @@ func baostockAdjustFlag(adjustment model.AdjustmentBasis) (string, string, error
 // Explicit start/end dates are preserved. An implicit start uses a bounded
 // lookback so an unbounded all-history scan does not flood the public endpoint.
 func baostockDateRange(startDate, endDate string, limit int, now time.Time) (string, string, error) {
-	loc, err := time.LoadLocation("Asia/Shanghai")
-	if err != nil {
-		loc = time.FixedZone("CST", 8*60*60)
-	}
+	loc := providerMarketLocation()
+	var err error
 	end := now.In(loc)
 	if strings.TrimSpace(endDate) != "" {
 		end, err = time.ParseInLocation("2006-01-02", strings.TrimSpace(endDate), loc)

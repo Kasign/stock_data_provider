@@ -79,6 +79,33 @@ func TestCancelAndDeadlineDoNotPretendInflightWorkStopped(t *testing.T) {
 	}
 }
 
+func TestTerminalSummariesKeepEmptyExcludedStagesNonNil(t *testing.T) {
+	now := time.Date(2026, 11, 6, 10, 0, 0, 0, time.UTC)
+	excluded := []domain.ExcludedStage{}
+	stage := []domain.Stage{{Code: "done", Status: domain.StageSucceeded}}
+	policies := map[string]template.PropagationPolicy{"done": {OnFailed: domain.PropagateFail}}
+
+	aggregated, err := AggregateRun(domain.Run{
+		Status: domain.RunRunning, ExcludedStages: excluded,
+	}, stage, nil, policies, nil, false, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if aggregated.ResultSummary == nil || aggregated.ResultSummary.ExcludedStages == nil {
+		t.Fatal("normal aggregation must preserve an empty ExcludedStages array")
+	}
+
+	cancelled, err := FinalizeCancellation(domain.Run{
+		Status: domain.RunCancelling, TerminationReason: "user_cancelled", ExcludedStages: excluded,
+	}, stage, nil, policies, nil, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cancelled.ResultSummary == nil || cancelled.ResultSummary.ExcludedStages == nil {
+		t.Fatal("cancellation aggregation must preserve an empty ExcludedStages array")
+	}
+}
+
 func TestAggregateKeepsQualitySeparateFromActionability(t *testing.T) {
 	now := time.Date(2026, 11, 6, 10, 0, 0, 0, time.UTC)
 	run := domain.Run{Status: domain.RunRunning}

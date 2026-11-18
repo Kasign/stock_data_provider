@@ -383,7 +383,17 @@ func PrincipalFromContext(request *http.Request) (Principal, bool) {
 	if request == nil {
 		return Principal{}, false
 	}
-	principal, ok := request.Context().Value(principalContextKey{}).(Principal)
+	return PrincipalFromContextValue(request.Context())
+}
+
+// PrincipalFromContextValue returns the trusted Principal stored in a context.
+// It is intended for in-process adapters that receive context.Context rather
+// than an HTTP request. Callers must still enforce the required Kind/AuthMethod.
+func PrincipalFromContextValue(ctx context.Context) (Principal, bool) {
+	if ctx == nil {
+		return Principal{}, false
+	}
+	principal, ok := ctx.Value(principalContextKey{}).(Principal)
 	if !ok {
 		return Principal{}, false
 	}

@@ -1119,7 +1119,7 @@
               </section>
 
               <section class="settings-section" id="settings-ai-section" aria-labelledby="settings-ai-title">
-                <div class="settings-section-heading"><div><h2 id="settings-ai-title">AI 模型与问股</h2><p>管理模型 Provider、默认模型、推理策略、上下文与成本预算。</p></div><span class="availability-pill is-unavailable">服务端配置待接入</span></div>
+                <div class="settings-section-heading"><div><h2 id="settings-ai-title">AI 模型与问股</h2><p>管理模型 Provider、默认模型、推理策略、上下文与成本预算。</p></div><span class="availability-pill is-readonly">Owner Session 已接入；其他配置待接入</span></div>
                 <div class="panel settings-config-panel">
                   <div class="settings-group-heading"><div><strong>模型服务连接</strong><p>模型凭据必须由服务端安全保存，页面只允许脱敏状态回显。</p></div><span class="settings-config-scope">建议配置项</span></div>
                   <div class="settings-field-grid">
@@ -1224,14 +1224,25 @@
               <section class="settings-section" id="settings-security-section" aria-labelledby="settings-security-title">
                 <div class="settings-section-heading"><div><h2 id="settings-security-title">安全与备份</h2><p>服务器身份认证、服务密钥、访问控制和配置备份必须由受保护的服务端接口管理。</p></div><span class="availability-pill is-unavailable">服务端配置待接入</span></div>
                 <div class="panel settings-config-panel">
-                  <div class="settings-group-heading"><div><strong>身份认证与访问控制</strong><p>管理员登录态与行情服务 API Key 是两套独立机制。</p></div></div>
-                  <div class="settings-field-grid">
-                    <label class="field"><span>管理员登录方式</span><select disabled><option>服务端会话认证待接入</option></select></label>
-                    <label class="field"><span>管理员密码</span><input type="password" disabled placeholder="服务端密码哈希与修改接口待接入" /></label>
-                    <label class="field"><span>会话有效期</span><input type="number" disabled placeholder="分钟" /></label>
-                    <label class="field"><span>登录失败锁定策略</span><input disabled placeholder="失败次数 / 锁定时长" /></label>
-                    <label class="field"><span>管理 API 访问范围</span><select disabled><option>仅内网 / 可信代理 / 指定网段</option></select></label>
-                    <label class="field"><span>操作审计</span><select disabled><option>记录配置修改、密钥轮换与备份操作</option></select></label>
+                  <div class="settings-group-heading"><div><strong>Owner 身份认证与访问控制</strong><p>管理员 Session 与行情服务 API Key 独立；Owner Session 不会继承旧 Owner Bearer 的管理权限。</p></div></div>
+                  <div class="owner-session-panel" id="owner-session-panel">
+                    <div class="owner-session-status-row">
+                      <span class="availability-pill is-readonly" id="owner-session-status-pill" role="status" aria-live="polite">正在检查登录态</span>
+                      <span class="field-hint" id="owner-session-expiry">正在检查服务端会话</span>
+                    </div>
+                    <form class="settings-field-grid owner-session-form" id="owner-login-form" hidden>
+                      <label class="field"><span>Owner 密码</span><input id="owner-login-password" type="password" autocomplete="current-password" maxlength="1024" required /></label>
+                      <div class="owner-session-actions"><button class="button button-primary" id="owner-login-button" type="submit">登录</button></div>
+                    </form>
+                    <div id="owner-session-authenticated" hidden>
+                      <div class="owner-session-actions"><span class="field-hint">当前浏览器已建立 Owner Session。</span><button class="button button-secondary" id="owner-session-logout" type="button">退出登录</button></div>
+                      <form class="settings-field-grid owner-session-form" id="owner-password-change-form">
+                        <label class="field"><span>当前密码</span><input id="owner-current-password" type="password" autocomplete="current-password" maxlength="1024" required /></label>
+                        <label class="field"><span>新密码</span><input id="owner-new-password" type="password" autocomplete="new-password" maxlength="1024" required /></label>
+                        <div class="owner-session-actions"><button class="button button-secondary" id="owner-password-change-button" type="submit">修改密码</button></div>
+                      </form>
+                    </div>
+                    <p class="settings-boundary-note" id="owner-session-feedback" role="status" aria-live="polite">Owner Session 只证明登录身份；旧 Analysis/运维路由仍要求 Owner Bearer，不会因登录而放行。</p>
                   </div>
                   <div class="settings-divider"></div>
                   <div class="settings-group-heading"><div><strong>服务密钥管理</strong><p>仅管理服务访问密钥，不用于表示用户登录身份。</p></div></div>
@@ -1247,7 +1258,7 @@
                     <label class="field"><span>备份内容范围</span><select disabled><option>应用配置 / 数据库 / 配置与数据库</option></select></label>
                     <label class="field"><span>最近备份状态</span><input disabled placeholder="需要服务端备份任务与审计 API" /></label>
                   </div>
-                  <p class="settings-boundary-note">目前没有管理员认证、服务器配置读写、密钥轮换、审计和备份恢复 API。相关控件保持禁用；不会在浏览器端比对密码或模拟服务器文件操作。</p>
+                  <p class="settings-boundary-note">Owner Session 登录、退出与密码修改已接入。服务密钥轮换、管理 API 访问范围、审计记录查询和服务器备份恢复尚无可用接口，相关控件继续保持禁用；浏览器不会读取服务器文件或保存管理员密码。</p>
                 </div>
               </section>
             </div>

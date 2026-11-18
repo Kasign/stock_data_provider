@@ -102,13 +102,13 @@ func (p *Baostock) FetchFundamentals(ctx context.Context, rawSymbol string, year
 	if err != nil {
 		return nil, err
 	}
-	if year < 2007 || year > time.Now().Year() {
-		return nil, fmt.Errorf("fundamental year must be between 2007 and %d", time.Now().Year())
+	if year < 2007 || year > providerNowUTC().Year() {
+		return nil, fmt.Errorf("fundamental year must be between 2007 and %d", providerNowUTC().Year())
 	}
 	if quarter < 1 || quarter > 4 {
 		return nil, errors.New("fundamental quarter must be between 1 and 4")
 	}
-	chinaToday := baostockChinaMarketDate(time.Now())
+	chinaToday := baostockChinaMarketDate(providerNowUTC())
 	requestedPeriodEnd := fundamentalQuarterEnd(year, quarter)
 	if requestedPeriodEnd > chinaToday {
 		return nil, fmt.Errorf("requested BaoStock report period %s is in the future as of China market date %s", requestedPeriodEnd, chinaToday)
@@ -117,7 +117,7 @@ func (p *Baostock) FetchFundamentals(ctx context.Context, rawSymbol string, year
 		Symbol: symbol, Year: year, Quarter: quarter,
 		Sections: make([]model.FundamentalSection, 0, len(quarterlyFundamentalMappings)),
 		Source:   p.Name(), SourceVersion: "baostock-quarterly-financial-v1",
-		FetchedAt: time.Now().UTC(), QualityStatus: model.QualityUnknown,
+		FetchedAt: providerNowUTC(), QualityStatus: model.QualityUnknown,
 	}
 	queryErrors := 0
 	var queryErrorMessages []string
@@ -275,10 +275,7 @@ func (p *Baostock) FetchFundamentals(ctx context.Context, rawSymbol string, year
 
 // baostockChinaMarketDate returns the current date in the mainland China market timezone.
 func baostockChinaMarketDate(now time.Time) string {
-	loc, err := time.LoadLocation("Asia/Shanghai")
-	if err != nil {
-		loc = time.FixedZone("CST", 8*60*60)
-	}
+	loc := providerMarketLocation()
 	return now.In(loc).Format("2006-01-02")
 }
 

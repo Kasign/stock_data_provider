@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"example.com/stock-analysis-flow/internal/marketdata/cache"
+	"example.com/stock-analysis-flow/internal/marketdata/markettime"
 	"example.com/stock-analysis-flow/internal/marketdata/model"
 	"example.com/stock-analysis-flow/internal/marketdata/normalize"
 	"example.com/stock-analysis-flow/internal/marketdata/provider"
@@ -21,6 +22,7 @@ import (
 	"example.com/stock-analysis-flow/internal/marketdata/validation"
 	platformdiagnostics "example.com/stock-analysis-flow/internal/platform/diagnostics"
 	"example.com/stock-analysis-flow/internal/platform/fault"
+	platformtime "example.com/stock-analysis-flow/internal/platform/time"
 )
 
 type chipDistributionSource interface {
@@ -61,6 +63,7 @@ type DataService struct {
 	barsTTL                        time.Duration
 	defaultBars                    int
 	logger                         *slog.Logger
+	clock                          platformtime.Clock
 }
 
 func New(providers []provider.Provider, c cache.Cache, store *repository.Store, quoteTTL, barsTTL time.Duration, defaultBars int, logger *slog.Logger) *DataService {
@@ -94,7 +97,15 @@ func NewConfiguredWithResilience(allProviders, quoteProviders, barProviders []pr
 // preferred constructor for future quote-only, historical-only and other
 // data-domain adapters.
 func NewWithCapabilities(allProviders []provider.NamedProvider, quoteProviders []provider.QuoteProvider, barProviders []provider.DailyBarProvider, c cache.Cache, store *repository.Store, quoteTTL, barsTTL time.Duration, defaultBars, maxBars int, resilience ResilienceConfig, logger *slog.Logger) *DataService {
+	return NewWithCapabilitiesAndClock(allProviders, quoteProviders, barProviders, c, store, quoteTTL, barsTTL, defaultBars, maxBars, resilience, logger, platformtime.SystemClock{})
+}
+
+// NewWithCapabilitiesAndClock 在保留原构造入口的同时，允许测试注入确定性时钟。
+func NewWithCapabilitiesAndClock(allProviders []provider.NamedProvider, quoteProviders []provider.QuoteProvider, barProviders []provider.DailyBarProvider, c cache.Cache, store *repository.Store, quoteTTL, barsTTL time.Duration, defaultBars, maxBars int, resilience ResilienceConfig, logger *slog.Logger, clock platformtime.Clock) *DataService {
 	resilience = resilience.normalized()
+	if clock == nil {
+		clock = platformtime.SystemClock{}
+	}
 	if c == nil {
 		c = cache.NewDisabled()
 	}
@@ -117,8 +128,16 @@ func NewWithCapabilities(allProviders []provider.NamedProvider, quoteProviders [
 		maxBars:        maxBars, retries: resilience.Retries,
 		breaker: newCircuitBreaker(resilience.CircuitFailureThreshold, resilience.CircuitCooldown),
 		cache:   c, store: store, quoteTTL: quoteTTL, barsTTL: barsTTL,
-		defaultBars: defaultBars, logger: logger,
+		defaultBars: defaultBars, logger: logger, clock: clock,
 	}
+}
+
+// nowUTC 返回统一时钟提供的 UTC 当前时刻。
+func (s *DataService) nowUTC() time.Time {
+	if s == nil || s.clock == nil {
+		return platformtime.SystemClock{}.Now()
+	}
+	return s.clock.Now().UTC()
 }
 
 func (s *DataService) Providers() []provider.NamedProvider {
@@ -203,6 +222,10 @@ func (s *DataService) IndexQuoteProviders() []provider.IndexQuoteProvider {
 	return append([]provider.IndexQuoteProvider(nil), s.indexQuoteProviders...)
 }
 func validateIndexQuoteSnapshot(snapshot *model.IndexQuoteSnapshot) error {
+	return validateIndexQuoteSnapshotAt(snapshot, platformtime.SystemClock{}.Now())
+}
+
+func validateIndexQuoteSnapshotAt(snapshot *model.IndexQuoteSnapshot, now time.Time) error {
 	if snapshot == nil || len(snapshot.Items) == 0 {
 		return errors.New("index-quote provider returned an empty snapshot")
 	}
@@ -260,7 +283,7 @@ func validateIndexQuoteSnapshot(snapshot *model.IndexQuoteSnapshot) error {
 			if item.QuoteTimeSemantics != "provider_snapshot_time" {
 				return fmt.Errorf("index %s has unsupported quote-time semantics %q", item.Symbol, item.QuoteTimeSemantics)
 			}
-			if item.QuoteTime.IsZero() || item.QuoteTime.After(item.FetchedAt.Add(5*time.Minute)) || item.QuoteTime.After(time.Now().Add(5*time.Minute)) {
+			if item.QuoteTime.IsZero() || item.QuoteTime.After(item.FetchedAt.Add(5*time.Minute)) || item.QuoteTime.After(now.Add(5*time.Minute)) {
 				return fmt.Errorf("index %s has a zero or future provider quote timestamp", item.Symbol)
 			}
 		}
@@ -311,12 +334,12 @@ func (s *DataService) IndexQuotes(ctx context.Context) (*model.IndexQuoteSnapsho
 	const key = "md:v1:index-quotes:core"
 	if data, ok, cacheErr := s.cache.Get(ctx, key); cacheErr == nil && ok {
 		var cached model.IndexQuoteSnapshot
-		if json.Unmarshal(data, &cached) == nil && validateIndexQuoteSnapshot(&cached) == nil {
+		if json.Unmarshal(data, &cached) == nil && validateIndexQuoteSnapshotAt(&cached, s.nowUTC()) == nil {
 			cacheTTL := ttl
 			if cached.QualityStatus == model.QualityDegraded {
 				cacheTTL = degradedCacheTTL(ttl)
 			}
-			if cacheEntryWithinTTL(cached.FetchedAt, cacheTTL, time.Now()) {
+			if cacheEntryWithinTTL(cached.FetchedAt, cacheTTL, s.nowUTC()) {
 				return &cached, true, nil
 			}
 		}
@@ -352,7 +375,7 @@ func (s *DataService) IndexQuotes(ctx context.Context) (*model.IndexQuoteSnapsho
 			failures = append(failures, p.Name()+": index-quote source does not match Provider.Name()")
 			continue
 		}
-		if err := validateIndexQuoteSnapshot(snapshot); err != nil {
+		if err := validateIndexQuoteSnapshotAt(snapshot, s.nowUTC()); err != nil {
 			s.breaker.ContractFailure(breakerKey)
 			failures = append(failures, p.Name()+": "+err.Error())
 			continue
@@ -462,6 +485,10 @@ func validateMarketBreadthProbeSnapshot(snapshot *model.MarketBreadthSnapshot) e
 }
 
 func validateMarketBreadthSnapshot(snapshot *model.MarketBreadthSnapshot, requireFullCoverage bool) error {
+	return validateMarketBreadthSnapshotAt(snapshot, requireFullCoverage, platformtime.SystemClock{}.Now())
+}
+
+func validateMarketBreadthSnapshotAt(snapshot *model.MarketBreadthSnapshot, requireFullCoverage bool, now time.Time) error {
 	if snapshot == nil {
 		return errors.New("market-breadth provider returned an empty snapshot")
 	}
@@ -511,7 +538,7 @@ func validateMarketBreadthSnapshot(snapshot *model.MarketBreadthSnapshot, requir
 		if snapshot.OldestQuoteTime.IsZero() || snapshot.NewestQuoteTime.IsZero() || snapshot.NewestQuoteTime.Before(*snapshot.OldestQuoteTime) {
 			return errors.New("market-breadth quote timestamp bounds are invalid")
 		}
-		if snapshot.OldestQuoteTime.After(time.Now().Add(5*time.Minute)) || snapshot.NewestQuoteTime.After(time.Now().Add(5*time.Minute)) {
+		if snapshot.OldestQuoteTime.After(now.Add(5*time.Minute)) || snapshot.NewestQuoteTime.After(now.Add(5*time.Minute)) {
 			return errors.New("market-breadth quote timestamp is in the future")
 		}
 		if snapshot.OldestQuoteTime.In(marketLocation()).Format("2006-01-02") != snapshot.ProviderReportDate ||
@@ -550,7 +577,7 @@ func validateMarketBreadthSnapshot(snapshot *model.MarketBreadthSnapshot, requir
 		if reportDateErr != nil || parsedReportDate.Format("2006-01-02") != reportDate {
 			return errors.New("market-breadth provider_report_date is missing or invalid")
 		}
-		if reportDate > time.Now().In(marketLocation()).Format("2006-01-02") {
+		if reportDate > now.In(marketLocation()).Format("2006-01-02") {
 			return fmt.Errorf("market-breadth provider_report_date %s is in the future", reportDate)
 		}
 	}
@@ -584,12 +611,12 @@ func (s *DataService) MarketBreadth(ctx context.Context) (*model.MarketBreadthSn
 	const key = "md:v1:market-breadth:cn-a-share"
 	if data, ok, cacheErr := s.cache.Get(ctx, key); cacheErr == nil && ok {
 		var cached model.MarketBreadthSnapshot
-		if json.Unmarshal(data, &cached) == nil && validateMarketBreadth(&cached) == nil {
+		if json.Unmarshal(data, &cached) == nil && validateMarketBreadthSnapshotAt(&cached, true, s.nowUTC()) == nil {
 			cacheTTL := ttl
 			if cached.QualityStatus == model.QualityDegraded {
 				cacheTTL = degradedCacheTTL(ttl)
 			}
-			if cacheEntryWithinTTL(cached.FetchedAt, cacheTTL, time.Now()) {
+			if cacheEntryWithinTTL(cached.FetchedAt, cacheTTL, s.nowUTC()) {
 				return &cached, true, nil
 			}
 		}
@@ -625,7 +652,7 @@ func (s *DataService) MarketBreadth(ctx context.Context) (*model.MarketBreadthSn
 			failures = append(failures, p.Name()+": market-breadth source does not match Provider.Name()")
 			continue
 		}
-		if err := validateMarketBreadth(snapshot); err != nil {
+		if err := validateMarketBreadthSnapshotAt(snapshot, true, s.nowUTC()); err != nil {
 			s.breaker.ContractFailure(breakerKey)
 			failures = append(failures, p.Name()+": "+err.Error())
 			continue
@@ -675,8 +702,12 @@ func (s *DataService) MarketBreadth(ctx context.Context) (*model.MarketBreadthSn
 }
 
 func normalizeLimitPoolDate(rawDate string) (string, error) {
+	return normalizeLimitPoolDateAt(rawDate, platformtime.SystemClock{}.Now())
+}
+
+func normalizeLimitPoolDateAt(rawDate string, now time.Time) (string, error) {
 	rawDate = strings.TrimSpace(rawDate)
-	today := time.Now().In(marketLocation()).Format("2006-01-02")
+	today := now.In(marketLocation()).Format("2006-01-02")
 	if rawDate == "" {
 		return today, nil
 	}
@@ -692,6 +723,10 @@ func normalizeLimitPoolDate(rawDate string) (string, error) {
 }
 
 func validateLimitPoolSnapshot(poolType, tradeDate string, limit int, snapshot *model.LimitPoolSnapshot) error {
+	return validateLimitPoolSnapshotAt(poolType, tradeDate, limit, snapshot, platformtime.SystemClock{}.Now())
+}
+
+func validateLimitPoolSnapshotAt(poolType, tradeDate string, limit int, snapshot *model.LimitPoolSnapshot, now time.Time) error {
 	if snapshot == nil {
 		return errors.New("limit-pool provider returned an empty snapshot")
 	}
@@ -701,7 +736,7 @@ func validateLimitPoolSnapshot(poolType, tradeDate string, limit int, snapshot *
 	if strings.TrimSpace(snapshot.Source) == "" || !hasIdentifiableSourceVersion(snapshot.SourceVersion) || snapshot.FetchedAt.IsZero() {
 		return errors.New("limit-pool source, source_version or fetched_at is missing")
 	}
-	if snapshot.FetchedAt.After(time.Now().UTC().Add(5 * time.Minute)) {
+	if snapshot.FetchedAt.After(now.UTC().Add(5 * time.Minute)) {
 		return errors.New("limit-pool fetched_at is in the future")
 	}
 	if snapshot.ProviderReportDate != "" {
@@ -709,7 +744,7 @@ func validateLimitPoolSnapshot(poolType, tradeDate string, limit int, snapshot *
 		if dateErr != nil || parsed.Format("2006-01-02") != snapshot.ProviderReportDate {
 			return errors.New("limit-pool provider report date is invalid")
 		}
-		if snapshot.ProviderReportDate > time.Now().In(marketLocation()).Format("2006-01-02") {
+		if snapshot.ProviderReportDate > now.In(marketLocation()).Format("2006-01-02") {
 			return errors.New("limit-pool provider report date is in the future")
 		}
 		if snapshot.ProviderReportDate != tradeDate {
@@ -748,7 +783,7 @@ func validateLimitPoolSnapshot(poolType, tradeDate string, limit int, snapshot *
 			if item.Source != snapshot.Source || item.SourceVersion != snapshot.SourceVersion || item.FetchedAt.IsZero() {
 				return errors.New("limit-pool item source/version or fetched_at mismatch")
 			}
-			if item.FetchedAt.After(time.Now().UTC().Add(5 * time.Minute)) {
+			if item.FetchedAt.After(now.UTC().Add(5 * time.Minute)) {
 				return fmt.Errorf("limit-pool item %s fetched_at is in the future", item.Symbol)
 			}
 			if item.QualityStatus != model.QualityValid && item.QualityStatus != model.QualityDegraded {
@@ -854,7 +889,7 @@ func (s *DataService) LimitPool(ctx context.Context, rawType, rawDate string, li
 	if poolType != "up" && poolType != "down" && poolType != "broken" {
 		return nil, false, fmt.Errorf("unsupported limit-pool type %q; want up, down or broken", rawType)
 	}
-	date, err := normalizeLimitPoolDate(rawDate)
+	date, err := normalizeLimitPoolDateAt(rawDate, s.nowUTC())
 	if err != nil {
 		return nil, false, err
 	}
@@ -874,7 +909,7 @@ func (s *DataService) LimitPool(ctx context.Context, rawType, rawDate string, li
 	key := fmt.Sprintf("md:v1:limit-pool:%s:%s:%d", poolType, date, limit)
 	if data, ok, cacheErr := s.cache.Get(ctx, key); cacheErr == nil && ok {
 		var cached model.LimitPoolSnapshot
-		if json.Unmarshal(data, &cached) == nil && cached.HasData && cached.QualityStatus != model.QualityUnknown && validateLimitPoolSnapshot(poolType, date, limit, &cached) == nil && time.Since(cached.FetchedAt) >= 0 && time.Since(cached.FetchedAt) < ttl {
+		if json.Unmarshal(data, &cached) == nil && cached.HasData && cached.QualityStatus != model.QualityUnknown && validateLimitPoolSnapshotAt(poolType, date, limit, &cached, s.nowUTC()) == nil && cacheEntryWithinTTL(cached.FetchedAt, ttl, s.nowUTC()) {
 			// 兼容升级前缓存：若供应商总数大于实际条数，不能沿用缓存中的 valid。
 			markLimitPoolTruncated(&cached)
 			return &cached, true, nil
@@ -900,7 +935,7 @@ func (s *DataService) LimitPool(ctx context.Context, rawType, rawDate string, li
 			failures = append(failures, p.Name()+": limit-pool source does not match Provider.Name()")
 			continue
 		}
-		if err := validateLimitPoolSnapshot(poolType, date, limit, snapshot); err != nil {
+		if err := validateLimitPoolSnapshotAt(poolType, date, limit, snapshot, s.nowUTC()); err != nil {
 			failures = append(failures, p.Name()+": "+err.Error())
 			continue
 		}
@@ -943,8 +978,12 @@ func (s *DataService) LimitPool(ctx context.Context, rawType, rawDate string, li
 }
 
 func normalizeDragonTigerDate(rawDate string) (string, error) {
+	return normalizeDragonTigerDateAt(rawDate, platformtime.SystemClock{}.Now())
+}
+
+func normalizeDragonTigerDateAt(rawDate string, now time.Time) (string, error) {
 	rawDate = strings.TrimSpace(rawDate)
-	today := time.Now().In(marketLocation()).Format("2006-01-02")
+	today := now.In(marketLocation()).Format("2006-01-02")
 	if rawDate == "" {
 		return today, nil
 	}
@@ -960,6 +999,10 @@ func normalizeDragonTigerDate(rawDate string) (string, error) {
 }
 
 func validateDragonTigerSnapshot(tradeDate string, page, pageSize int, snapshot *model.DragonTigerSnapshot) error {
+	return validateDragonTigerSnapshotAt(tradeDate, page, pageSize, snapshot, platformtime.SystemClock{}.Now())
+}
+
+func validateDragonTigerSnapshotAt(tradeDate string, page, pageSize int, snapshot *model.DragonTigerSnapshot, now time.Time) error {
 	if page < 1 || pageSize < 1 {
 		return errors.New("dragon-tiger page and page size must be positive")
 	}
@@ -972,7 +1015,7 @@ func validateDragonTigerSnapshot(tradeDate string, page, pageSize int, snapshot 
 	if strings.TrimSpace(snapshot.Source) == "" || !hasIdentifiableSourceVersion(snapshot.SourceVersion) || snapshot.FetchedAt.IsZero() {
 		return errors.New("dragon-tiger source, source_version or fetched_at is missing")
 	}
-	if snapshot.FetchedAt.After(time.Now().UTC().Add(5 * time.Minute)) {
+	if snapshot.FetchedAt.After(now.UTC().Add(5 * time.Minute)) {
 		return errors.New("dragon-tiger fetched_at is in the future")
 	}
 	if snapshot.Total < 0 || snapshot.Pages < 0 || snapshot.SourceReturned < 0 ||
@@ -1019,7 +1062,7 @@ func validateDragonTigerSnapshot(tradeDate string, page, pageSize int, snapshot 
 			if item.Source != snapshot.Source || item.SourceVersion != snapshot.SourceVersion || item.FetchedAt.IsZero() || (item.QualityStatus != model.QualityValid && item.QualityStatus != model.QualityDegraded) {
 				return errors.New("dragon-tiger item source/version, fetched_at, or quality is invalid")
 			}
-			if item.FetchedAt.After(time.Now().UTC().Add(5 * time.Minute)) {
+			if item.FetchedAt.After(now.UTC().Add(5 * time.Minute)) {
 				return errors.New("dragon-tiger item fetched_at is in the future")
 			}
 			if item.QualityStatus == model.QualityDegraded {
@@ -1109,7 +1152,7 @@ func betterUnknownDragonTigerSnapshot(candidate, current *model.DragonTigerSnaps
 }
 
 func (s *DataService) DragonTiger(ctx context.Context, rawDate string, page, pageSize int) (*model.DragonTigerSnapshot, bool, error) {
-	date, err := normalizeDragonTigerDate(rawDate)
+	date, err := normalizeDragonTigerDateAt(rawDate, s.nowUTC())
 	if err != nil {
 		return nil, false, err
 	}
@@ -1130,7 +1173,7 @@ func (s *DataService) DragonTiger(ctx context.Context, rawDate string, page, pag
 	key := fmt.Sprintf("md:v1:dragon-tiger:%s:%d:%d", date, page, pageSize)
 	if data, ok, cacheErr := s.cache.Get(ctx, key); cacheErr == nil && ok {
 		var cached model.DragonTigerSnapshot
-		if json.Unmarshal(data, &cached) == nil && validateDragonTigerSnapshot(date, page, pageSize, &cached) == nil && time.Since(cached.FetchedAt) >= 0 {
+		if json.Unmarshal(data, &cached) == nil && validateDragonTigerSnapshotAt(date, page, pageSize, &cached, s.nowUTC()) == nil && !cached.FetchedAt.After(s.nowUTC()) {
 			expiry := ttl
 			cacheEligible := cached.HasData && cached.QualityStatus != model.QualityUnknown
 			if !cached.HasData || cached.QualityStatus == model.QualityUnknown {
@@ -1145,7 +1188,7 @@ func (s *DataService) DragonTiger(ctx context.Context, rawDate string, page, pag
 				}
 				cacheEligible = fallbackExhausted || len(s.dragonTigerProviders) <= 1
 			}
-			if cacheEligible && time.Since(cached.FetchedAt) < expiry {
+			if cacheEligible && cacheEntryWithinTTL(cached.FetchedAt, expiry, s.nowUTC()) {
 				return &cached, true, nil
 			}
 		}
@@ -1170,7 +1213,7 @@ func (s *DataService) DragonTiger(ctx context.Context, rawDate string, page, pag
 			failures = append(failures, p.Name()+": dragon-tiger source does not match Provider.Name()")
 			continue
 		}
-		if err := validateDragonTigerSnapshot(date, page, pageSize, snapshot); err != nil {
+		if err := validateDragonTigerSnapshotAt(date, page, pageSize, snapshot, s.nowUTC()); err != nil {
 			failures = append(failures, p.Name()+": "+err.Error())
 			continue
 		}
@@ -1211,6 +1254,10 @@ func (s *DataService) DragonTiger(ctx context.Context, rawDate string, page, pag
 }
 
 func validateSectorRankingSnapshot(category string, limit int, snapshot *model.SectorRankingSnapshot) error {
+	return validateSectorRankingSnapshotAt(category, limit, snapshot, platformtime.SystemClock{}.Now())
+}
+
+func validateSectorRankingSnapshotAt(category string, limit int, snapshot *model.SectorRankingSnapshot, now time.Time) error {
 	if snapshot == nil {
 		return errors.New("sector-ranking provider returned an empty response")
 	}
@@ -1230,7 +1277,7 @@ func validateSectorRankingSnapshot(category string, limit int, snapshot *model.S
 	if strings.TrimSpace(snapshot.Source) == "" || !hasIdentifiableSourceVersion(snapshot.SourceVersion) || snapshot.FetchedAt.IsZero() {
 		return errors.New("sector-ranking source, source_version or fetched_at is missing")
 	}
-	if snapshot.FetchedAt.After(time.Now().UTC().Add(5 * time.Minute)) {
+	if snapshot.FetchedAt.After(now.UTC().Add(5 * time.Minute)) {
 		return errors.New("sector-ranking fetched_at is in the future")
 	}
 	if snapshot.QualityStatus == model.QualityValid {
@@ -1282,7 +1329,7 @@ func validateSectorRankingSnapshot(category string, limit int, snapshot *model.S
 		if item.FetchedAt.IsZero() || item.QualityStatus != model.QualityDegraded {
 			return errors.New("sector-ranking item has invalid retrieval time or quality status")
 		}
-		if item.FetchedAt.After(time.Now().UTC().Add(5 * time.Minute)) {
+		if item.FetchedAt.After(now.UTC().Add(5 * time.Minute)) {
 			return fmt.Errorf("sector-ranking item %s fetched_at is in the future", item.Code)
 		}
 		for _, value := range []*float64{item.LatestPrice, item.Change, item.ChangePercent, item.ChangePercent5D, item.Amount, item.LeaderChangePercent} {
@@ -1398,8 +1445,8 @@ func (s *DataService) SectorRankingsByMetric(ctx context.Context, rawCategory, r
 	key := fmt.Sprintf("md:v3:sector-ranking:%s:%s:%s:%d", category, sortBy, direction, limit)
 	if data, ok, cacheErr := s.cache.Get(ctx, key); cacheErr == nil && ok {
 		var cached model.SectorRankingSnapshot
-		if json.Unmarshal(data, &cached) == nil && cached.SortBy == sortBy && validateSectorRankingSnapshot(category, limit, &cached) == nil &&
-			time.Since(cached.FetchedAt) >= 0 && time.Since(cached.FetchedAt) < ttl {
+		if json.Unmarshal(data, &cached) == nil && cached.SortBy == sortBy && validateSectorRankingSnapshotAt(category, limit, &cached, s.nowUTC()) == nil &&
+			cacheEntryWithinTTL(cached.FetchedAt, ttl, s.nowUTC()) {
 			return &cached, true, nil
 		}
 	} else if cacheErr != nil {
@@ -1486,7 +1533,7 @@ func (s *DataService) SectorRankingsByMetric(ctx context.Context, rawCategory, r
 			failures = append(failures, p.Name()+": sector-ranking source does not match Provider.Name()")
 			continue
 		}
-		if err := validateSectorRankingSnapshot(category, limit, snapshot); err != nil {
+		if err := validateSectorRankingSnapshotAt(category, limit, snapshot, s.nowUTC()); err != nil {
 			s.breaker.ContractFailure(breakerKey)
 			failures = append(failures, p.Name()+": "+err.Error())
 			continue
@@ -1638,7 +1685,7 @@ func (s *DataService) StockBasic(ctx context.Context, rawSymbol string) (*model.
 	key := "md:v1:stock-basic:" + symbol
 	if data, ok, cacheErr := s.cache.Get(ctx, key); cacheErr == nil && ok {
 		var item model.StockBasic
-		if json.Unmarshal(data, &item) == nil && validateStockBasic(symbol, &item) == nil && time.Since(item.FetchedAt) >= 0 {
+		if json.Unmarshal(data, &item) == nil && validateStockBasic(symbol, &item) == nil && !item.FetchedAt.After(s.nowUTC()) {
 			item.Symbol = symbol
 			maxAge := ttl
 			if item.QualityStatus == model.QualityDegraded {
@@ -1657,7 +1704,7 @@ func (s *DataService) StockBasic(ctx context.Context, rawSymbol string) (*model.
 				}
 				cacheEligible = fallbackExhausted || len(s.stockBasicProviders) <= 1
 			}
-			if cacheEligible && time.Since(item.FetchedAt) < maxAge {
+			if cacheEligible && cacheEntryWithinTTL(item.FetchedAt, maxAge, s.nowUTC()) {
 				return &item, true, nil
 			}
 		}
@@ -1699,7 +1746,7 @@ func (s *DataService) StockBasic(ctx context.Context, rawSymbol string) (*model.
 			item.QualityReasons = appendReason(item.QualityReasons, "provider_source_missing_assumed_from_provider_name")
 		}
 		if item.FetchedAt.IsZero() {
-			item.FetchedAt = time.Now().UTC()
+			item.FetchedAt = s.nowUTC()
 		}
 		if item.SecurityTypeLabel == "" {
 			item.SecurityTypeLabel = map[int]string{1: "stock", 2: "index", 3: "other", 4: "convertible_bond"}[item.SecurityType]
@@ -1817,7 +1864,7 @@ func (s *DataService) SearchStocks(ctx context.Context, rawQuery string, limit i
 			snapshot.Query = query
 		}
 		if snapshot.FetchedAt.IsZero() {
-			snapshot.FetchedAt = time.Now().UTC()
+			snapshot.FetchedAt = s.nowUTC()
 		}
 		if snapshot.QualityStatus == "" {
 			snapshot.QualityStatus = model.QualityUnknown
@@ -2033,7 +2080,7 @@ func (s *DataService) StockBoards(ctx context.Context, rawSymbol string) (*model
 	key := "md:v1:stock-boards:" + symbol
 	if data, ok, cacheErr := s.cache.Get(ctx, key); cacheErr == nil && ok {
 		var cached model.StockBoardSnapshot
-		if json.Unmarshal(data, &cached) == nil && validateStockBoardsSnapshot(symbol, &cached) == nil && time.Since(cached.FetchedAt) >= 0 {
+		if json.Unmarshal(data, &cached) == nil && validateStockBoardsSnapshot(symbol, &cached) == nil && !cached.FetchedAt.After(s.nowUTC()) {
 			cached.Symbol = symbol
 			ttl := positiveTTL
 			cacheEligible := cached.HasData && cached.QualityStatus != model.QualityUnknown
@@ -2049,7 +2096,7 @@ func (s *DataService) StockBoards(ctx context.Context, rawSymbol string) (*model
 				}
 				cacheEligible = fallbackExhausted || len(s.stockBoardsProviders) <= 1
 			}
-			if cacheEligible && time.Since(cached.FetchedAt) < ttl {
+			if cacheEligible && cacheEntryWithinTTL(cached.FetchedAt, ttl, s.nowUTC()) {
 				return &cached, true, nil
 			}
 		}
@@ -2092,7 +2139,7 @@ func (s *DataService) StockBoards(ctx context.Context, rawSymbol string) (*model
 			item.QualityReasons = appendReason(item.QualityReasons, "provider_source_missing_assumed_from_provider_name")
 		}
 		if item.FetchedAt.IsZero() {
-			item.FetchedAt = time.Now().UTC()
+			item.FetchedAt = s.nowUTC()
 		}
 		for index := range item.Items {
 			boardSource := strings.TrimSpace(item.Items[index].Source)
@@ -2242,6 +2289,10 @@ func (s *DataService) CapitalFlowProviders() []provider.CapitalFlowProvider {
 	return out
 }
 func validateChipDistributionSnapshot(symbol string, item *model.ChipDistribution) error {
+	return validateChipDistributionSnapshotAt(symbol, item, platformtime.SystemClock{}.Now())
+}
+
+func validateChipDistributionSnapshotAt(symbol string, item *model.ChipDistribution, now time.Time) error {
 	if item == nil {
 		return errors.New("chip-distribution response is empty")
 	}
@@ -2268,7 +2319,7 @@ func validateChipDistributionSnapshot(symbol string, item *model.ChipDistributio
 			return errors.New("chip-distribution ratio is outside [0,1]")
 		}
 	}
-	today := time.Now().In(marketLocation()).Format("2006-01-02")
+	today := now.In(marketLocation()).Format("2006-01-02")
 	for _, date := range []string{item.Date, item.ProviderDate} {
 		if strings.TrimSpace(date) == "" {
 			continue
@@ -2284,7 +2335,7 @@ func validateChipDistributionSnapshot(symbol string, item *model.ChipDistributio
 	if strings.TrimSpace(item.Source) == "" || !hasIdentifiableSourceVersion(item.SourceVersion) || item.FetchedAt.IsZero() {
 		return errors.New("chip-distribution source/source_version is missing or unidentifiable, or fetched_at is missing")
 	}
-	if item.FetchedAt.After(time.Now().UTC().Add(5 * time.Minute)) {
+	if item.FetchedAt.After(now.UTC().Add(5 * time.Minute)) {
 		return errors.New("chip-distribution fetched_at is in the future")
 	}
 	if item.QualityStatus == model.QualityValid {
@@ -2297,6 +2348,10 @@ func validateChipDistributionSnapshot(symbol string, item *model.ChipDistributio
 }
 
 func validateCapitalFlowSnapshot(symbol string, item *model.CapitalFlow) error {
+	return validateCapitalFlowSnapshotAt(symbol, item, platformtime.SystemClock{}.Now())
+}
+
+func validateCapitalFlowSnapshotAt(symbol string, item *model.CapitalFlow, now time.Time) error {
 	if item == nil {
 		return errors.New("capital-flow response is empty")
 	}
@@ -2309,14 +2364,14 @@ func validateCapitalFlowSnapshot(symbol string, item *model.CapitalFlow) error {
 		return errors.New("capital-flow provider date is missing")
 	}
 	parsedDate, dateErr := time.Parse("2006-01-02", providerDate)
-	today := time.Now().In(marketLocation()).Format("2006-01-02")
+	today := now.In(marketLocation()).Format("2006-01-02")
 	if dateErr != nil || parsedDate.Format("2006-01-02") != providerDate || providerDate > today {
 		return errors.New("capital-flow provider date is invalid or in the future")
 	}
 	if strings.TrimSpace(item.Source) == "" || !hasIdentifiableSourceVersion(item.SourceVersion) || item.FetchedAt.IsZero() {
 		return errors.New("capital-flow source/source_version is missing or unidentifiable, or fetched_at is missing")
 	}
-	if item.FetchedAt.After(time.Now().Add(5 * time.Minute)) {
+	if item.FetchedAt.After(now.Add(5 * time.Minute)) {
 		return errors.New("capital-flow fetched_at is in the future")
 	}
 	if item.Observations < 0 {
@@ -2393,7 +2448,7 @@ func (s *DataService) ChipDistribution(ctx context.Context, rawSymbol string) (*
 	key := "md:v1:chip:" + symbol
 	if data, ok, cacheErr := s.cache.Get(ctx, key); cacheErr == nil && ok {
 		var item model.ChipDistribution
-		if json.Unmarshal(data, &item) == nil && validateChipDistributionSnapshot(symbol, &item) == nil && time.Since(item.FetchedAt) >= 0 && time.Since(item.FetchedAt) < 5*time.Minute {
+		if json.Unmarshal(data, &item) == nil && validateChipDistributionSnapshotAt(symbol, &item, s.nowUTC()) == nil && cacheEntryWithinTTL(item.FetchedAt, 5*time.Minute, s.nowUTC()) {
 			cacheEligible := item.QualityStatus != model.QualityUnknown
 			if item.QualityStatus == model.QualityUnknown {
 				fallbackExhausted := false
@@ -2445,7 +2500,7 @@ func (s *DataService) ChipDistribution(ctx context.Context, rawSymbol string) (*
 		}
 
 		// fetched_at 表示服务收到回包的时刻，不信任上游同名字段。
-		item.FetchedAt = time.Now().UTC()
+		item.FetchedAt = s.nowUTC()
 		if item.QualityStatus == "" {
 			item.QualityStatus = model.QualityDegraded
 			item.QualityReasons = appendReason(item.QualityReasons, "provider_quality_status_missing")
@@ -2454,7 +2509,7 @@ func (s *DataService) ChipDistribution(ctx context.Context, rawSymbol string) (*
 		if item.QualityStatus == model.QualityValid {
 			item.QualityStatus = model.QualityDegraded
 		}
-		if err := validateChipDistributionSnapshot(symbol, item); err != nil {
+		if err := validateChipDistributionSnapshotAt(symbol, item, s.nowUTC()); err != nil {
 			failures = append(failures, p.Name()+": "+err.Error())
 			continue
 		}
@@ -2566,7 +2621,7 @@ func (s *DataService) CapitalFlow(ctx context.Context, rawSymbol string) (*model
 	key := "md:v1:capital-flow:" + symbol
 	if data, ok, cacheErr := s.cache.Get(ctx, key); cacheErr == nil && ok {
 		var item model.CapitalFlow
-		if json.Unmarshal(data, &item) == nil && validateCapitalFlowSnapshot(symbol, &item) == nil && time.Since(item.FetchedAt) >= 0 && time.Since(item.FetchedAt) < 5*time.Minute {
+		if json.Unmarshal(data, &item) == nil && validateCapitalFlowSnapshotAt(symbol, &item, s.nowUTC()) == nil && cacheEntryWithinTTL(item.FetchedAt, 5*time.Minute, s.nowUTC()) {
 			cacheEligible := item.QualityStatus != model.QualityUnknown
 			if item.QualityStatus == model.QualityUnknown {
 				fallbackExhausted := false
@@ -2622,7 +2677,7 @@ func (s *DataService) CapitalFlow(ctx context.Context, rawSymbol string) (*model
 		}
 
 		// fetched_at 表示服务收到回包的时刻，不信任上游同名字段。
-		item.FetchedAt = time.Now().UTC()
+		item.FetchedAt = s.nowUTC()
 		if item.QualityStatus == "" {
 			item.QualityStatus = model.QualityDegraded
 			item.QualityReasons = appendReason(item.QualityReasons, "provider_quality_status_missing")
@@ -2631,7 +2686,7 @@ func (s *DataService) CapitalFlow(ctx context.Context, rawSymbol string) (*model
 		if item.QualityStatus == model.QualityValid {
 			item.QualityStatus = model.QualityDegraded
 		}
-		if err := validateCapitalFlowSnapshot(symbol, item); err != nil {
+		if err := validateCapitalFlowSnapshotAt(symbol, item, s.nowUTC()); err != nil {
 			failures = append(failures, p.Name()+": "+err.Error())
 			continue
 		}
@@ -2776,7 +2831,7 @@ func (s *DataService) Quote(ctx context.Context, rawSymbol string) (*model.Quote
 			if symbolErr == nil && cachedSymbol == symbol {
 				q.Symbol = cachedSymbol
 			}
-			cacheNow := time.Now()
+			cacheNow := s.nowUTC()
 			if symbolErr == nil && cachedSymbol == symbol && hasIdentifiableSourceVersion(q.SourceVersion) && q.NormalizationVer == normalize.Version &&
 				serviceTimestampIsSane(q.FetchedAt, cacheNow) && serviceTimestampIsSane(q.NormalizedAt, cacheNow) &&
 				normalize.ValidateQuote(&q) == nil {
@@ -2802,7 +2857,7 @@ func (s *DataService) Quote(ctx context.Context, rawSymbol string) (*model.Quote
 	timeoutFailures := 0
 	var degradedFallback *model.Quote
 	var qualityFallback *model.Quote
-	fetchID := newFetchID()
+	fetchID := newFetchIDAt(s.nowUTC())
 	if len(s.quoteProviders) == 0 {
 		return nil, false, errors.New("no enabled quote provider")
 	}
@@ -2851,7 +2906,7 @@ func (s *DataService) Quote(ctx context.Context, rawSymbol string) (*model.Quote
 			appendReasonOnce(&q.QualityReasons, "provider_source_missing_assumed_from_provider_name")
 		}
 		// fetched_at 是服务接收到 Provider 回包的时间，不能信任上游同名字段。
-		receivedAt := time.Now().UTC()
+		receivedAt := s.nowUTC()
 		if strings.TrimSpace(q.Symbol) != "" {
 			providerSymbol, symbolErr := normalize.NormalizeSymbol(q.Symbol)
 			if symbolErr != nil || providerSymbol != symbol {
@@ -2888,8 +2943,8 @@ func (s *DataService) Quote(ctx context.Context, rawSymbol string) (*model.Quote
 			errs = append(errs, p.Name()+" failed contract validation: "+e.Error())
 			continue
 		}
-		applyQuoteFreshness(q, time.Now())
-		q.NormalizedAt = time.Now().UTC()
+		applyQuoteFreshness(q, s.nowUTC())
+		q.NormalizedAt = s.nowUTC()
 		if !quoteCacheEligible(q) {
 			s.breaker.QualityDegraded(breakerKey)
 			errs = append(errs, p.Name()+": quote not suitable as a fresh live snapshot: "+strings.Join(q.QualityReasons, ","))
@@ -2980,9 +3035,9 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 		// response blindly. Some quote endpoints use a distant sentinel end date.
 		// Canonicalizing the implicit end date also prevents cache entries from
 		// silently crossing the exchange-local date boundary.
-		end = time.Now().In(marketLocation()).Format("2006-01-02")
+		end = s.nowUTC().In(marketLocation()).Format("2006-01-02")
 	}
-	today := time.Now().In(marketLocation()).Format("2006-01-02")
+	today := s.nowUTC().In(marketLocation()).Format("2006-01-02")
 	if end > today {
 		return nil, false, nil, errors.New("end date must not be after today in Asia/Shanghai")
 	}
@@ -3001,7 +3056,7 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 		if json.Unmarshal(data, &v) == nil {
 			candidates := make([]model.DailyBar, 0, len(v.Bars))
 			contractMismatch := false
-			cacheNow := time.Now()
+			cacheNow := s.nowUTC()
 			cachedSource, cachedSourceVersion := "", ""
 			for _, bar := range v.Bars {
 				cachedSymbol, symbolErr := normalize.NormalizeSymbol(bar.Symbol)
@@ -3037,12 +3092,12 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 							break
 						}
 					}
-					adjustmentWarnings, adjustmentErr := applyDailyBarAdjustmentMetadataQuality(validated, basis)
+					adjustmentWarnings, adjustmentErr := applyDailyBarAdjustmentMetadataQualityAt(validated, basis, s.nowUTC())
 					if !cacheAgeOK {
 						contractMismatch = true
 					} else if adjustmentErr != nil {
 						contractMismatch = true
-					} else if dailyBarsCacheNeedsPostCloseRefresh(validated, time.Now()) {
+					} else if dailyBarsCacheNeedsPostCloseRefresh(validated, s.nowUTC()) {
 						s.logger.Info("daily-bar cache has today's partial candle after close; refreshing provider", "symbol", symbol, "trade_date", validated[len(validated)-1].TradeDate)
 					} else if coverageOK, coverageWarnings := s.dailyBarCoverageSufficient(ctx, start, end, limit, len(validated)); coverageOK {
 						applyDailyBarCoverageWarnings(validated, coverageWarnings)
@@ -3068,7 +3123,7 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 	var bestPartialWarnings []string
 	var bestDegraded []model.DailyBar
 	var bestDegradedWarnings []string
-	fetchID := newFetchID()
+	fetchID := newFetchIDAt(s.nowUTC())
 	if len(s.barProviders) == 0 {
 		return nil, false, nil, errors.New("no enabled daily-bar provider")
 	}
@@ -3097,7 +3152,7 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 			errs = append(errs, p.Name()+": "+safeError)
 			continue
 		}
-		receivedAt := time.Now().UTC()
+		receivedAt := s.nowUTC()
 		if len(bars) == 0 {
 			s.breaker.ContractFailure(breakerKey)
 			errs = append(errs, p.Name()+": empty daily-bar response without error")
@@ -3159,7 +3214,7 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 			bars[j].Source = p.Name()
 			bars[j].SourceVersion = strings.TrimSpace(bars[j].SourceVersion)
 			bars[j].RequestID = fetchID
-			isPartial, partialReason := s.currentDailyBarPartialState(ctx, bars[j].TradeDate, time.Now())
+			isPartial, partialReason := s.currentDailyBarPartialState(ctx, bars[j].TradeDate, s.nowUTC())
 			if isPartial {
 				bars[j].IsPartial = true
 				degradeQualityStatus(&bars[j].QualityStatus)
@@ -3194,14 +3249,14 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 			errs = append(errs, p.Name()+" response failed bar validation")
 			continue
 		}
-		adjustmentWarnings, adjustmentErr := applyDailyBarAdjustmentMetadataQuality(bars, basis)
+		adjustmentWarnings, adjustmentErr := applyDailyBarAdjustmentMetadataQualityAt(bars, basis, s.nowUTC())
 		if adjustmentErr != nil {
 			s.breaker.ContractFailure(breakerKey)
 			errs = append(errs, p.Name()+": "+adjustmentErr.Error())
 			continue
 		}
 		warnings = append(warnings, adjustmentWarnings...)
-		normalizedAt := time.Now().UTC()
+		normalizedAt := s.nowUTC()
 		for index := range bars {
 			bars[index].NormalizedAt = normalizedAt
 		}
@@ -3308,6 +3363,8 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 					}
 				}
 			}
+		} else if e != nil && s.logger != nil {
+			s.logger.Warn("MariaDB daily-bar fallback read failed", "symbol", symbol, "adjustment", basis, "error", e)
 		}
 	}
 	if err := ctx.Err(); err != nil {
@@ -3376,7 +3433,7 @@ func (s *DataService) Bundle(ctx context.Context, rawSymbol string, lookback int
 	if err != nil {
 		return nil, err
 	}
-	if asOfProvided && asOf.After(time.Now()) {
+	if asOfProvided && asOf.After(s.nowUTC()) {
 		return nil, errors.New("as_of must not be in the future")
 	}
 	if lookback <= 0 {
@@ -3395,7 +3452,7 @@ func (s *DataService) Bundle(ctx context.Context, rawSymbol string, lookback int
 		// weekend or holiday. Fetch through the requested date, then remove that
 		// date's full-session candle when the cutoff is before market close.
 		excludeAsOfDate = localAsOf.Hour() < 15 || (localAsOf.Hour() == 15 && localAsOf.Minute() < 5)
-		age := time.Since(asOf)
+		age := s.nowUTC().Sub(asOf)
 		quoteAllowed = age >= 0 && age <= 2*time.Minute
 	}
 	outputLookback := lookback
@@ -3428,7 +3485,7 @@ func (s *DataService) Bundle(ctx context.Context, rawSymbol string, lookback int
 		bars = bars[len(bars)-outputLookback:]
 	}
 	bundle := &model.Bundle{Symbol: symbol, DailyBars: bars, Sources: map[string]string{}, Warnings: append([]string{}, warnings...), QualityStatus: model.QualityValid}
-	if asOfProvided && basis != model.AdjustmentNone && time.Since(asOf) > 5*time.Minute {
+	if asOfProvided && basis != model.AdjustmentNone && s.nowUTC().Sub(asOf) > 5*time.Minute {
 		bundle.Warnings = append(bundle.Warnings, "historical_adjusted_bars_may_use_current_corporate_action_factors; point_in_time_adjustment_not_verified")
 		bundle.QualityStatus = mergeBundleQualityStatus(bundle.QualityStatus, model.QualityDegraded)
 	}
@@ -3493,8 +3550,8 @@ func (s *DataService) Bundle(ctx context.Context, rawSymbol string, lookback int
 			bundle.Warnings = append(bundle.Warnings, "moving_average_history_insufficient")
 		}
 	}
-	bundle.SnapshotID = newFetchID()
-	bundle.FetchedAt = time.Now().UTC()
+	bundle.SnapshotID = newFetchIDAt(s.nowUTC())
+	bundle.FetchedAt = s.nowUTC()
 	if asOfProvided {
 		bundle.AnalysisReferenceTime = asOf.UTC()
 	} else {
@@ -3767,7 +3824,11 @@ func coherentStoredSeries(bars []model.DailyBar, basis model.AdjustmentBasis) ([
 	return best.bars, ""
 }
 
-func newFetchID() string { return time.Now().UTC().Format("20060102T150405.000000000Z") }
+func newFetchID() string {
+	return platformtime.SystemClock{}.Now().Format("20060102T150405.000000000Z")
+}
+
+func newFetchIDAt(now time.Time) string { return now.UTC().Format("20060102T150405.000000000Z") }
 
 // serviceTimestampIsSane rejects missing/future service timestamps in persisted payloads.
 func serviceTimestampIsSane(value, now time.Time) bool {
@@ -3986,12 +4047,9 @@ func isCurrentIncompleteSessionBar(tradeDate string, now time.Time) bool {
 	return minutes < 15*60+5
 }
 
+// marketLocation 返回 MarketData 统一缓存的 A 股业务时区。
 func marketLocation() *time.Location {
-	l, e := time.LoadLocation("Asia/Shanghai")
-	if e != nil {
-		return time.FixedZone("CST", 8*3600)
-	}
-	return l
+	return markettime.Location()
 }
 func absDuration(d time.Duration) time.Duration {
 	if d < 0 {
@@ -4026,7 +4084,7 @@ func (s *DataService) DailyBarsAsOf(ctx context.Context, rawSymbol, start, end s
 	if err != nil {
 		return nil, nil, err
 	}
-	if asOf.IsZero() || asOf.After(time.Now().UTC()) {
+	if asOf.IsZero() || asOf.After(s.nowUTC()) {
 		return nil, nil, errors.New("daily-bar as_of must be a valid non-future timestamp")
 	}
 	if limit <= 0 {
@@ -4104,7 +4162,7 @@ func (s *DataService) DailyBarsAsOf(ctx context.Context, rawSymbol, start, end s
 			}
 			return nil, nil, fmt.Errorf("%w: cannot rebuild adjusted daily bars without point-in-time adjustment factors: %v", ErrDailyBarsAsOfNotFound, factorErr)
 		}
-		bars, factorErr = rebuildAdjustedDailyBarsPIT(bars, factors, basis, end)
+		bars, factorErr = rebuildAdjustedDailyBarsWithModeAt(bars, factors, basis, end, adjustmentFactorRebuildPIT, s.nowUTC())
 		if factorErr != nil {
 			return nil, nil, fmt.Errorf("%w: %v", ErrDailyBarsAsOfNotFound, factorErr)
 		}
@@ -4131,6 +4189,10 @@ func (s *DataService) DailyBarsAsOf(ctx context.Context, rawSymbol, start, end s
 }
 
 func applyDailyBarAdjustmentMetadataQuality(bars []model.DailyBar, basis model.AdjustmentBasis) ([]string, error) {
+	return applyDailyBarAdjustmentMetadataQualityAt(bars, basis, platformtime.SystemClock{}.Now())
+}
+
+func applyDailyBarAdjustmentMetadataQualityAt(bars []model.DailyBar, basis model.AdjustmentBasis, now time.Time) ([]string, error) {
 	if basis == model.AdjustmentNone || len(bars) == 0 {
 		return nil, nil
 	}
@@ -4147,7 +4209,7 @@ func applyDailyBarAdjustmentMetadataQuality(bars []model.DailyBar, basis model.A
 		if err != nil || parsed.Format("2006-01-02") != referenceDate {
 			return nil, fmt.Errorf("provider returned invalid adjustment reference date %q", referenceDate)
 		}
-		if referenceDate > time.Now().In(marketLocation()).Format("2006-01-02") {
+		if referenceDate > now.In(marketLocation()).Format("2006-01-02") {
 			return nil, fmt.Errorf("adjustment reference date %s is in the future", referenceDate)
 		}
 		if basis == model.AdjustmentForward {

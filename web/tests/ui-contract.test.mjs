@@ -2444,7 +2444,7 @@ test("设置中心导航、区块和本地配置交互保持一致", () => {
 test("未接入的服务端设置必须保持禁用并明确配置边界", () => {
   const targets = [
     "settings-data-source-section", "settings-ai-section",
-    "settings-scheduler-section", "settings-screening-section", "settings-security-section"
+    "settings-scheduler-section", "settings-screening-section"
   ];
   for (const target of targets) {
     const start = html.indexOf('id="' + target + '"');
@@ -2460,7 +2460,20 @@ test("未接入的服务端设置必须保持禁用并明确配置边界", () =>
   assert.match(html, /凭据不能写入浏览器 localStorage/);
   assert.match(html, /没有周期调度 CRUD/);
   assert.match(html, /不会伪造候选结果或扫描记录/);
-  assert.match(html, /管理员登录态与行情服务 API Key 是两套独立机制/);
+  const securityStart = html.indexOf('id="settings-security-section"');
+  const securityEnd = html.indexOf("</section>", securityStart);
+  const securitySection = html.slice(securityStart, securityEnd);
+  assert.match(securitySection, /id="owner-login-form"/, "Owner Session login must be an active server-backed form");
+  assert.match(securitySection, /id="owner-password-change-form"/, "Owner password change must be an active server-backed form");
+  assert.match(securitySection, /id="owner-session-logout"/, "Owner Session logout must be available after authentication");
+  assert.match(securitySection, /服务密钥管理/);
+  assert.match(securitySection, /服务器配置备份与恢复/);
+  assert.match(securitySection, /type="password"[^>]*autocomplete="current-password"/);
+  assert.match(app, /restoreOwnerSession\(state\.settings\)/, "page reload must restore CSRF through the dedicated endpoint");
+  assert.match(app, /clearOwnerSessionMemory\(\)/, "session loss must clear the runtime CSRF token");
+  assert.match(apiClient, /let ownerCSRFToken = ""/, "CSRF token must remain in module runtime memory");
+  assert.doesNotMatch(apiClient, /localStorage\.(?:getItem|setItem)\([^)]*csrf/i, "CSRF token must never be persisted");
+  assert.match(html, /管理员 Session 与行情服务 API Key 独立/);
 });
 
 test("行情服务接口文档、Handler 与 WebUI 调用边界明确区分", () => {

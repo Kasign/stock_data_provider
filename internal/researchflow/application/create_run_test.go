@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
 	"example.com/stock-analysis-flow/internal/researchflow/domain"
+	"example.com/stock-analysis-flow/internal/researchflow/resourcepolicy"
 	"example.com/stock-analysis-flow/internal/researchflow/template"
 )
 
@@ -23,6 +25,16 @@ func (s identityStub) CorrelationID(context.Context) string                   { 
 type clockStub struct{ now time.Time }
 
 func (s clockStub) NowUTC(context.Context) (time.Time, error) { return s.now, nil }
+
+type countingClockStub struct {
+	now   time.Time
+	calls int
+}
+
+func (s *countingClockStub) NowUTC(context.Context) (time.Time, error) {
+	s.calls++
+	return s.now, nil
+}
 
 type idsStub struct{ next int }
 
@@ -57,6 +69,23 @@ func (applicabilityStub) Evaluate(_ context.Context, _ template.ApplicabilityRul
 	return true, "", nil
 }
 
+type resourcePoliciesStub struct {
+	snapshot resourcepolicy.Snapshot
+	err      error
+	calls    int
+}
+
+func (s *resourcePoliciesStub) Resolve(_ context.Context, ref string) (resourcepolicy.Snapshot, error) {
+	s.calls++
+	if s.err != nil {
+		return resourcepolicy.Snapshot{}, s.err
+	}
+	if s.snapshot.PolicyRef == "" {
+		s.snapshot = resourcepolicy.Snapshot{PolicyRef: ref, PolicyFingerprint: strings.Repeat("c", 64), AllowedProviderCodes: []string{"bocha", "tavily"}}
+	}
+	return s.snapshot, nil
+}
+
 type repositoryStub struct {
 	existing            *CreateRunResult
 	existingFingerprint string
@@ -87,10 +116,10 @@ func validTemplate() template.WorkflowTemplate {
 
 func newService(t *testing.T, repo *repositoryStub, ids *idsStub, templateReader *templatesStub, now time.Time) (*CreateRunService, error) {
 	t.Helper()
-	return NewCreateRunService(identityStub{caller: "caller_1"}, clockStub{now}, ids, templateReader, schemasStub{}, applicabilityStub{}, nil, repo)
+	return NewCreateRunService(identityStub{caller: "caller_1"}, clockStub{now}, 30*time.Minute, ids, templateReader, schemasStub{}, applicabilityStub{}, nil, &resourcePoliciesStub{}, repo)
 }
 func command(now time.Time) domain.CreateRunCommand {
-	return domain.CreateRunCommand{SchemaVersion: "1.0.0", IdempotencyKey: "idem_1", TemplateRef: "daily", TemplateVersion: "1.0.0", SystemAsOf: now.Add(-time.Minute), DeadlineAt: now.Add(time.Hour), InputSnapshotRefs: []string{"snapshot_1"}, Parameters: json.RawMessage("{}")}
+	return domain.CreateRunCommand{SchemaVersion: "1.0.0", IdempotencyKey: "idem_1", TemplateRef: "daily", TemplateVersion: "1.0.0", InputSnapshotRefs: []string{"snapshot_1"}, Parameters: json.RawMessage("{}")}
 }
 
 func TestCreateRunRejectsInvalidSnapshotRefBeforeIdempotencyLookup(t *testing.T) {
@@ -147,7 +176,11 @@ func TestCreateRunReplaysBeforeTemplateLookup(t *testing.T) {
 	repo := &repositoryStub{existing: &existing, existingFingerprint: fingerprint}
 	reader := &templatesStub{value: validTemplate()}
 	ids := &idsStub{}
-	service, err := newService(t, repo, ids, reader, now)
+	clock := &countingClockStub{now: now}
+	service, err := NewCreateRunService(
+		identityStub{caller: "caller_1"}, clock, 30*time.Minute, ids,
+		reader, schemasStub{}, applicabilityStub{}, nil, &resourcePoliciesStub{}, repo,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -155,8 +188,8 @@ func TestCreateRunReplaysBeforeTemplateLookup(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !got.Replayed || got.Run.Ref != "run_existing" || reader.calls != 0 || ids.next != 0 {
-		t.Fatalf("expected idempotent replay before template lookup or ID allocation: %#v, calls=%d, ids=%d", got, reader.calls, ids.next)
+	if !got.Replayed || got.Run.Ref != "run_existing" || reader.calls != 0 || ids.next != 0 || clock.calls != 0 {
+		t.Fatalf("expected replay before template lookup, ID allocation or clock read: %#v, template_calls=%d, ids=%d, clock_calls=%d", got, reader.calls, ids.next, clock.calls)
 	}
 }
 
@@ -196,14 +229,11 @@ func TestCreateRunOverridesUntrustedTracingFields(t *testing.T) {
 	requestID := "trusted-request"
 	repo := &repositoryStub{}
 	reader := &templatesStub{value: validTemplate()}
-	service, err := NewCreateRunService(identityStub{caller: "caller_1", requestID: &requestID, correlation: "trusted-correlation"}, clockStub{now}, &idsStub{}, reader, schemasStub{}, applicabilityStub{}, nil, repo)
+	service, err := NewCreateRunService(identityStub{caller: "caller_1", requestID: &requestID, correlation: "trusted-correlation"}, clockStub{now}, 30*time.Minute, &idsStub{}, reader, schemasStub{}, applicabilityStub{}, nil, &resourcePoliciesStub{}, repo)
 	if err != nil {
 		t.Fatal(err)
 	}
 	cmd := command(now)
-	cmd.CorrelationID = "client-spoof"
-	spoof := "client-spoof"
-	cmd.OriginatingRequestID = &spoof
 	got, err := service.CreateRun(context.Background(), cmd)
 	if err != nil {
 		t.Fatal(err)
@@ -275,7 +305,7 @@ func TestCreateRunPersistsOptionalNonApplicableStageAsSkipped(t *testing.T) {
 	tmpl.Stages[1].Applicability.RuleRef = "optional-research"
 	repo := &repositoryStub{}
 	reader := &templatesStub{value: tmpl}
-	service, err := NewCreateRunService(identityStub{caller: "caller_1"}, clockStub{now}, &idsStub{}, reader, schemasStub{}, selectiveApplicabilityStub{"always": true}, nil, repo)
+	service, err := NewCreateRunService(identityStub{caller: "caller_1"}, clockStub{now}, 30*time.Minute, &idsStub{}, reader, schemasStub{}, selectiveApplicabilityStub{"always": true}, nil, &resourcePoliciesStub{}, repo)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -304,5 +334,40 @@ func TestCreateRunPersistsOptionalNonApplicableStageAsSkipped(t *testing.T) {
 	}
 	if len(got.Run.ExcludedStages) != 0 {
 		t.Fatalf("optional skipped Stage must not be written to excluded_stages: %#v", got.Run.ExcludedStages)
+	}
+}
+
+func TestCreateRunFailsClosedWhenResourcePolicyCannotResolve(t *testing.T) {
+	now := time.Date(2026, 11, 6, 1, 0, 0, 0, time.UTC)
+	repo := &repositoryStub{}
+	reader := &templatesStub{value: validTemplate()}
+	resolver := &resourcePoliciesStub{err: errors.New("no configured providers")}
+	service, err := NewCreateRunService(identityStub{caller: "caller_1"}, clockStub{now}, 30*time.Minute, &idsStub{}, reader, schemasStub{}, applicabilityStub{}, nil, resolver, repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = service.CreateRun(context.Background(), command(now))
+	if err == nil || repo.created != nil {
+		t.Fatalf("CreateRun must fail closed without a resolved resource policy: err=%v record=%#v", err, repo.created)
+	}
+}
+
+func TestCreateRunGeneratesCurrentPITAndAbsoluteDeadlineFromDatabaseClock(t *testing.T) {
+	now := time.Date(2026, 11, 17, 9, 30, 0, 0, time.UTC)
+	repo := &repositoryStub{}
+	service, err := newService(t, repo, &idsStub{}, &templatesStub{value: validTemplate()}, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := service.CreateRun(context.Background(), command(now))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.Run.SystemAsOf.Equal(now) {
+		t.Fatalf("system_as_of = %s, want %s", got.Run.SystemAsOf, now)
+	}
+	wantDeadline := now.Add(30 * time.Minute)
+	if !got.Run.DeadlineAt.Equal(wantDeadline) {
+		t.Fatalf("deadline_at = %s, want %s", got.Run.DeadlineAt, wantDeadline)
 	}
 }

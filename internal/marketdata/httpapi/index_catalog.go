@@ -4,6 +4,9 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"example.com/stock-analysis-flow/internal/marketdata/markettime"
+	platformtime "example.com/stock-analysis-flow/internal/platform/time"
 )
 
 func (s *Server) indexCatalog(w http.ResponseWriter, r *http.Request) {
@@ -40,6 +43,10 @@ func validateIndexProviderSource(rawSource string) (string, string) {
 }
 
 func validateIndexConstituentsAsOfQuery(rawAsOfDate string) (string, string) {
+	return validateIndexConstituentsAsOfQueryAt(rawAsOfDate, platformtime.SystemClock{}.Now())
+}
+
+func validateIndexConstituentsAsOfQueryAt(rawAsOfDate string, now time.Time) (string, string) {
 	asOfDate := strings.TrimSpace(rawAsOfDate)
 	if asOfDate == "" {
 		return "", ""
@@ -48,11 +55,8 @@ func validateIndexConstituentsAsOfQuery(rawAsOfDate string) (string, string) {
 	if err != nil || parsed.Format("2006-01-02") != asOfDate {
 		return "", "as_of must use YYYY-MM-DD"
 	}
-	location, err := time.LoadLocation("Asia/Shanghai")
-	if err != nil {
-		location = time.FixedZone("CST", 8*60*60)
-	}
-	if asOfDate > time.Now().In(location).Format("2006-01-02") {
+	location := markettime.Location()
+	if asOfDate > now.In(location).Format("2006-01-02") {
 		return "", "as_of must not be in the future"
 	}
 	return asOfDate, ""
@@ -65,7 +69,7 @@ func (s *Server) indexConstituents(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", validationErr, requestID(r))
 		return
 	}
-	asOfDate, asOfValidationErr := validateIndexConstituentsAsOfQuery(r.URL.Query().Get("as_of"))
+	asOfDate, asOfValidationErr := validateIndexConstituentsAsOfQueryAt(r.URL.Query().Get("as_of"), s.nowUTC())
 	if asOfValidationErr != "" {
 		writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", asOfValidationErr, requestID(r))
 		return

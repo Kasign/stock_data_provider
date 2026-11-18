@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"example.com/stock-analysis-flow/internal/researchflow/domain"
+	"example.com/stock-analysis-flow/internal/researchflow/template"
 )
 
 // AttemptResultCommit is the storage projection of an already validated
@@ -25,6 +26,7 @@ type AttemptResultCommit struct {
 	Stage         domain.Stage
 	FaultRef      *string
 	OutputRef     *string
+	StageOutput   *StageOutputCommit
 }
 
 // CommitAttemptResult persists a worker result only while its lease is current.
@@ -51,8 +53,7 @@ func (r *MySQLRunRepository) CommitAttemptResult(ctx context.Context, input Atte
 			input.AttemptStatus != domain.AttemptTimedOut &&
 			input.AttemptStatus != domain.AttemptCancelled) ||
 		!validAttemptStageOutcome(input.AttemptStatus, input.Stage.Status) ||
-		!validStageRetryAt(input.Stage.Status, input.Stage.RetryAt) ||
-		!sameOptionalString(input.OutputRef, input.Stage.OutputRef) {
+		!validStageRetryAt(input.Stage.Status, input.Stage.RetryAt) {
 		return errors.New("Researchflow attempt result arguments are invalid")
 	}
 	if input.Stage.Version == 0 {
@@ -73,24 +74,23 @@ func (r *MySQLRunRepository) CommitAttemptResult(ctx context.Context, input Atte
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	var runStatus string
-	var deadlineValue string
-	if err := tx.QueryRowContext(ctx, `SELECT status, deadline_at
+	var runStatus, deadlineValue, templateVersion, resolvedTemplateJSON string
+	if err := tx.QueryRowContext(ctx, `SELECT status, deadline_at, template_version, resolved_template_snapshot
 		FROM researchflow_runs WHERE run_ref = ? FOR UPDATE`, input.RunRef,
-	).Scan(&runStatus, &deadlineValue); err != nil {
+	).Scan(&runStatus, &deadlineValue, &templateVersion, &resolvedTemplateJSON); err != nil {
 		return fmt.Errorf("lock Researchflow result run %q: %w", input.RunRef, err)
 	}
 	if domain.RunStatus(runStatus) != domain.RunRunning {
 		return ErrClaimRunUnavailable
 	}
 
-	var stageStatus, stageStartedAt string
+	var stageStatus, stageStartedAt, stageCode string
 	var stageVersion uint64
 	var stageAttemptNo int
-	if err := tx.QueryRowContext(ctx, `SELECT status, version, attempt_no, started_at
+	if err := tx.QueryRowContext(ctx, `SELECT status, version, attempt_no, started_at, stage_code
 		FROM researchflow_stages WHERE stage_ref = ? AND run_ref = ? FOR UPDATE`,
 		input.StageRef, input.RunRef,
-	).Scan(&stageStatus, &stageVersion, &stageAttemptNo, &stageStartedAt); err != nil {
+	).Scan(&stageStatus, &stageVersion, &stageAttemptNo, &stageStartedAt, &stageCode); err != nil {
 		return fmt.Errorf("lock Researchflow result stage %q: %w", input.StageRef, err)
 	}
 	if domain.StageStatus(stageStatus) != domain.StageRunning ||
@@ -103,11 +103,12 @@ func (r *MySQLRunRepository) CommitAttemptResult(ctx context.Context, input Atte
 	var owner, leaseValue sql.NullString
 	var fencingToken uint64
 	var attemptNo int
-	if err := tx.QueryRowContext(ctx, `SELECT status, lease_owner, lease_expires_at, fencing_token, attempt_no
+	var attemptStartedAt string
+	if err := tx.QueryRowContext(ctx, `SELECT status, lease_owner, lease_expires_at, fencing_token, attempt_no, started_at
 		FROM researchflow_attempts
 		WHERE attempt_ref = ? AND stage_ref = ? AND run_ref = ? FOR UPDATE`,
 		input.AttemptRef, input.StageRef, input.RunRef,
-	).Scan(&attemptStatus, &owner, &leaseValue, &fencingToken, &attemptNo); err != nil {
+	).Scan(&attemptStatus, &owner, &leaseValue, &fencingToken, &attemptNo, &attemptStartedAt); err != nil {
 		return fmt.Errorf("lock Researchflow result attempt %q: %w", input.AttemptRef, err)
 	}
 	if domain.AttemptStatus(attemptStatus) != domain.AttemptRunning ||
@@ -134,8 +135,41 @@ func (r *MySQLRunRepository) CommitAttemptResult(ctx context.Context, input Atte
 	if leaseExpires == nil || !leaseExpires.After(now) {
 		return ErrAttemptLeaseHeld
 	}
+	successfulOutcome := input.Stage.Status == domain.StageSucceeded || input.Stage.Status == domain.StageDegraded
+	if (successfulOutcome && input.StageOutput == nil) ||
+		(input.StageOutput != nil && !successfulOutcome &&
+			input.Stage.Status != domain.StageFailed && input.Stage.Status != domain.StageRetryWait) ||
+		input.OutputRef != nil || input.Stage.OutputRef != nil || input.Stage.QualitySummaryRef != nil {
+		return errors.New("Researchflow Stage output requires a successful/degraded result or a failed/retry diagnostic result and forbids Provider-owned references")
+	}
 
 	finishedAt := formatResearchflowTimeValue(now)
+	var outputRef, qualitySummaryRef *string
+	if input.StageOutput != nil {
+		var resolved template.ResolvedTemplate
+		if err := json.Unmarshal([]byte(resolvedTemplateJSON), &resolved); err != nil {
+			return fmt.Errorf("decode Researchflow resolved template for Stage Output: %w", err)
+		}
+		envelope := input.StageOutput.Envelope
+		startedAt, err := parseResearchflowTime(attemptStartedAt)
+		if err != nil {
+			return fmt.Errorf("decode Researchflow Attempt start time for Stage Output: %w", err)
+		}
+		if envelope.RunRef != input.RunRef || envelope.StageRef != input.StageRef ||
+			envelope.AttemptRef != input.AttemptRef || envelope.StageCode != stageCode ||
+			envelope.TemplateVersion != templateVersion || resolved.Version != templateVersion ||
+			resolved.OutputRegistryVersion != input.StageOutput.RegistryVersion ||
+			envelope.CompletedAt.After(now) || envelope.CompletedAt.Before(startedAt) {
+			return errors.New("Researchflow Stage Output envelope identity differs from locked execution records")
+		}
+		payloadRef, qualityRef, persistErr := persistStageOutputResources(
+			ctx, tx, input.RunRef, input.StageRef, input.AttemptRef, *input.StageOutput, finishedAt,
+		)
+		if persistErr != nil {
+			return persistErr
+		}
+		outputRef, qualitySummaryRef = &payloadRef, &qualityRef
+	}
 	var stageFinishedAt any
 	if input.Stage.Status.Terminal() {
 		stageFinishedAt = finishedAt
@@ -147,7 +181,7 @@ func (r *MySQLRunRepository) CommitAttemptResult(ctx context.Context, input Atte
 			AND status = ? AND lease_owner = ? AND fencing_token = ?
 			AND lease_expires_at > ?`,
 		string(input.AttemptStatus), finishedAt, nullableString(input.FaultRef),
-		nullableString(input.OutputRef), input.AttemptRef, input.RunRef, input.StageRef, stageAttemptNo,
+		nullableString(outputRef), input.AttemptRef, input.RunRef, input.StageRef, stageAttemptNo,
 		string(domain.AttemptRunning), input.WorkerID, input.FencingToken, finishedAt)
 	if err != nil {
 		return fmt.Errorf("update Researchflow result attempt: %w", err)
@@ -165,7 +199,7 @@ func (r *MySQLRunRepository) CommitAttemptResult(ctx context.Context, input Atte
 		started_at = ?, finished_at = ?
 		WHERE stage_ref = ? AND run_ref = ? AND version = ? AND status = ? AND attempt_no = ?`,
 		string(input.Stage.Status), input.Stage.Version, nullableTime(input.Stage.RetryAt),
-		nullableString(input.Stage.OutputRef), nullableString(input.Stage.QualitySummaryRef),
+		nullableString(outputRef), nullableString(qualitySummaryRef),
 		diagnostics, nullableText(input.Stage.QualityStatus), reasons,
 		nullableText(input.Stage.RiskDecision), stageStartedAt,
 		stageFinishedAt, input.StageRef, input.RunRef,

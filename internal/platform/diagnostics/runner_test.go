@@ -245,3 +245,46 @@ func TestRunnerRejectsNonLogicalDependency(t *testing.T) {
 		})
 	}
 }
+
+type diagnosticsFixedClock struct {
+	now time.Time
+}
+
+func (c diagnosticsFixedClock) Now() time.Time { return c.now }
+
+func TestRunnerUsesInjectedClockForObservationTimestamps(t *testing.T) {
+	fixedNow := time.Date(2026, 11, 17, 9, 30, 0, 0, time.UTC)
+	runner := Runner{Clock: diagnosticsFixedClock{now: fixedNow}}
+	checks := []Check{
+		healthyCheck("healthy-fixed-time", true),
+		{ID: "failed-fixed-time", Required: true, Run: func(context.Context) (Observation, error) {
+			return Observation{}, errors.New("provider unavailable")
+		}},
+		{ID: "invalid-fixed-time", Required: true, Run: func(context.Context) (Observation, error) {
+			return Observation{Status: Status("invalid"), SafeMessage: "invalid"}, nil
+		}},
+	}
+	report, err := runner.Run(context.Background(), checks)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, result := range report.Results {
+		if !result.Observation.CheckedAt.Equal(fixedNow) {
+			t.Errorf("%s CheckedAt = %s, want %s", result.CheckID, result.Observation.CheckedAt, fixedNow)
+		}
+	}
+}
+
+func TestRunnerUsesInjectedClockWhenCheckDoesNotStart(t *testing.T) {
+	fixedNow := time.Date(2026, 11, 17, 9, 30, 0, 0, time.UTC)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	result := execute(ctx, healthyCheck("not-started-fixed-time", true), diagnosticsFixedClock{now: fixedNow})
+	if !result.Observation.CheckedAt.Equal(fixedNow) {
+		t.Fatalf("CheckedAt = %s, want %s", result.Observation.CheckedAt, fixedNow)
+	}
+	if result.Observation.Status != StatusUnavailable {
+		t.Fatalf("status = %s, want %s", result.Observation.Status, StatusUnavailable)
+	}
+}
