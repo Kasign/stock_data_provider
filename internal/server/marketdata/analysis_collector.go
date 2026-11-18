@@ -109,9 +109,9 @@ func (c *AnalysisCollector) Collect(ctx context.Context, request domain.RunReque
 	out := domain.RawSnapshot{AsOf: request.AsOf}
 	if len(jobs) == 0 {
 		out.SourceNotes = append(out.SourceNotes, domain.SourceNote{
-			Dataset: datasetName(wantHistory, wantQuote, wantIndex),
+			Dataset:       datasetName(wantHistory, wantQuote, wantIndex),
 			QualityStatus: "unavailable",
-			Diagnostic: "analysis universe contains no securities for the requested Data capabilities",
+			Diagnostic:    "analysis universe contains no securities for the requested Data capabilities",
 		})
 		return out, nil
 	}
