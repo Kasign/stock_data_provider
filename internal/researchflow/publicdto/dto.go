@@ -137,7 +137,7 @@ func cloneStringPointer(v *string) *string {
 	if v == nil {
 		return nil
 	}
-	out := *v
+	out := v.UTC()
 	return &out
 }
 func cloneTimePointer(v *time.Time) *time.Time {
