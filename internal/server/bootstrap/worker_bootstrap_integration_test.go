@@ -64,6 +64,75 @@ func signalNotifyContext() (context.Context, func()) {
 	return signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 }
 
+type workerBootstrapChild struct {
+	cmd      *exec.Cmd
+	output   *workerBootstrapOutput
+	waitDone chan error
+	finished bool
+}
+
+func startWorkerBootstrapChild(t *testing.T, values map[string]string) *workerBootstrapChild {
+	t.Helper()
+	cmd := exec.Command(os.Args[0], "-test.run=^TestWorkerBootstrapHelperProcess$")
+	cmd.Env = workerBootstrapEnvironment(values)
+	output := &workerBootstrapOutput{}
+	cmd.Stdout = output
+	cmd.Stderr = output
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("启动 Worker Bootstrap 子进程失败: %v", err)
+	}
+	child := &workerBootstrapChild{
+		cmd: cmd, output: output, waitDone: make(chan error, 1),
+	}
+	go func() { child.waitDone <- cmd.Wait() }()
+	return child
+}
+
+func (c *workerBootstrapChild) waitReady(t *testing.T) {
+	t.Helper()
+	startupDeadline := time.Now().Add(60 * time.Second)
+	for {
+		if strings.Contains(c.output.String(), "股票分析 Worker 已启动") {
+			return
+		}
+		select {
+		case err := <-c.waitDone:
+			c.finished = true
+			t.Fatalf("Worker 子进程未完成启动，提前退出: %v\n%s", err, c.output.String())
+		default:
+		}
+		if time.Now().After(startupDeadline) {
+			t.Fatalf("Worker 子进程在 60 秒内未完成启动\n%s", c.output.String())
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+func (c *workerBootstrapChild) stop(t *testing.T) {
+	t.Helper()
+	if err := c.cmd.Process.Signal(syscall.SIGTERM); err != nil {
+		t.Fatalf("向 Worker 子进程发送 SIGTERM 失败: %v", err)
+	}
+	select {
+	case err := <-c.waitDone:
+		c.finished = true
+		if err != nil {
+			t.Fatalf("Worker 子进程收到 SIGTERM 后退出失败: %v\n%s", err, c.output.String())
+		}
+	case <-time.After(20 * time.Second):
+		t.Fatalf("Worker 子进程收到 SIGTERM 后未在 20 秒内完成关闭\n%s", c.output.String())
+	}
+}
+
+func (c *workerBootstrapChild) killIfRunning() {
+	if c == nil || c.finished {
+		return
+	}
+	_ = c.cmd.Process.Kill()
+	<-c.waitDone
+	c.finished = true
+}
+
 func TestWorkerBootstrapMariaDBRedisIntegration(t *testing.T) {
 	adminDSN := strings.TrimSpace(os.Getenv("SERVER_RELAY_TEST_MYSQL_DSN"))
 	redisAddr := strings.TrimSpace(os.Getenv("PLATFORM_REDIS_ADDR"))
@@ -139,56 +208,34 @@ func TestWorkerBootstrapMariaDBRedisIntegration(t *testing.T) {
 		"HTTP_ADDR":                             httpListener.Addr().String(),
 		"HTTP_READ_TIMEOUT":                     "not-a-duration",
 	}
-	cmd := exec.Command(os.Args[0], "-test.run=^TestWorkerBootstrapHelperProcess$")
-	cmd.Env = workerBootstrapEnvironment(values)
-	output := &workerBootstrapOutput{}
-	cmd.Stdout = output
-	cmd.Stderr = output
-	if err := cmd.Start(); err != nil {
-		t.Fatalf("启动 Worker Bootstrap 子进程失败: %v", err)
-	}
-
-	waitDone := make(chan error, 1)
-	go func() { waitDone <- cmd.Wait() }()
-	finished := false
+	children := make([]*workerBootstrapChild, 0, 2)
 	defer func() {
-		if !finished {
-			_ = cmd.Process.Kill()
-			<-waitDone
+		for _, child := range children {
+			child.killIfRunning()
 		}
 	}()
 
-	startupDeadline := time.Now().Add(60 * time.Second)
-	for {
-		if strings.Contains(output.String(), "股票分析 Worker 已启动") {
-			break
+	// 两个独立 Server 进程共享同一 MariaDB/Redis 和容量配置。
+	// Relay Worker ID 按进程区分，避免部署时误用相同的消费者身份。
+	for index := 1; index <= 2; index++ {
+		childValues := make(map[string]string, len(values)+1)
+		for key, value := range values {
+			childValues[key] = value
 		}
-		select {
-		case err := <-waitDone:
-			finished = true
-			t.Fatalf("Worker 未完成启动，子进程提前退出: %v\n%s", err, output.String())
-		default:
-		}
-		if time.Now().After(startupDeadline) {
-			t.Fatalf("Worker 在 60 秒内未完成启动\n%s", output.String())
-		}
-		time.Sleep(20 * time.Millisecond)
+		childValues["RESEARCH_NOTIFICATION_RELAY_WORKER_ID"] = fmt.Sprintf("integration-worker-%d", index)
+		children = append(children, startWorkerBootstrapChild(t, childValues))
 	}
 
-	if err := cmd.Process.Signal(syscall.SIGTERM); err != nil {
-		t.Fatalf("向 Worker 发送 SIGTERM 失败: %v", err)
+	for _, child := range children {
+		child.waitReady(t)
 	}
-	select {
-	case err := <-waitDone:
-		finished = true
-		if err != nil {
-			t.Fatalf("Worker 收到 SIGTERM 后退出失败: %v\n%s", err, output.String())
+	for _, child := range children {
+		child.stop(t)
+	}
+	for index, child := range children {
+		if !strings.Contains(child.output.String(), "股票分析 Worker 已启动") {
+			t.Fatalf("Worker 子进程 %d 启动日志缺失: %s", index+1, child.output.String())
 		}
-	case <-time.After(20 * time.Second):
-		t.Fatal("Worker 收到 SIGTERM 后未在 20 秒内完成关闭")
-	}
-	if !strings.Contains(output.String(), "股票分析 Worker 已启动") {
-		t.Fatalf("Worker 启动日志缺失: %s", output.String())
 	}
 }
 
