@@ -431,11 +431,17 @@ func TestIndicatorPayloadRejectsPartialCompositeResult(t *testing.T) {
 			for _, code := range metricCodes[:len(metricCodes)-1] {
 				count := 10
 				items = append(items, metric.Metric{
-					MetricCode: code, Value: json.RawMessage("1.25"), Unit: "fixture_unit",
-					Period: "20d", SystemAsOf: "2026-11-12T00:00:00Z",
-					QualityStatus: metric.QualityValid, MetricStatus: metric.StatusAvailable,
-					CalculationVersion: "fixture-v1", SampleCount: &count,
-					LowerBound: json.RawMessage("null"), UpperBound: json.RawMessage("null"),
+					MetricCode:         code,
+					Value:              json.RawMessage("1.25"),
+					Unit:               "fixture_unit",
+					Period:             "20d",
+					SystemAsOf:         "2026-11-12T00:00:00Z",
+					QualityStatus:      metric.QualityValid,
+					MetricStatus:       metric.StatusAvailable,
+					CalculationVersion: "fixture-v1",
+					SampleCount:        &count,
+					LowerBound:         json.RawMessage("null"),
+					UpperBound:         json.RawMessage("null"),
 				})
 			}
 			if _, err := NewIndicatorPayload(indicatorCode, items); err == nil {
