@@ -95,11 +95,11 @@ func TestNewsResearchflowTavilyMariaDBLive(t *testing.T) {
 		query = "A股上市公司公告"
 	}
 	created, err := owner.createRun.CreateRun(principalCtx, researchflowdomain.CreateRunCommand{
-		SchemaVersion: "1.0.0",
+		SchemaVersion:  "1.0.0",
 		IdempotencyKey: fmt.Sprintf("tavily-live-%d", time.Now().UTC().UnixNano()),
-		TemplateRef: newsSearchWorkflowTemplateRef, TemplateVersion: newsSearchWorkflowTemplateVersion,
+		TemplateRef:    newsSearchWorkflowTemplateRef, TemplateVersion: newsSearchWorkflowTemplateVersion,
 		InputSnapshotRefs: []string{},
-		Parameters: json.RawMessage(fmt.Sprintf("{\"query\":%q,\"limit\":3}", query)),
+		Parameters:        json.RawMessage(fmt.Sprintf("{\"query\":%q,\"limit\":3}", query)),
 	})
 	if err != nil {
 		t.Fatalf("通过内部 Owner Session CreateRun 创建真实 Tavily Run 失败: %v", err)
