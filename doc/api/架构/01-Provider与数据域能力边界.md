@@ -34,6 +34,29 @@
 
 MiaoXiang 是由 `MXEnabled` 单独控制的补充 Provider，不在上述 ProviderPriority 主列表中；当前补充接口覆盖筹码分布和个股资金流。其启用状态必须读取实际运行配置，不能从主 Provider 配置推断。
 
+## 2.1 已核对的具体实现入口
+
+本轮逐个读取了以下 Provider 主要实现文件，并核对其公开方法。这里仅列本次已确认的实现，不将文件未覆盖的方法推定为不存在。
+
+| Provider | 已确认的公开实现 | 默认配置 | 说明 |
+|---|---|---|---|
+| Eastmoney | Quote、DailyBars、StockBasic、StockBoards、HotRankings、ChipDistribution、StockSearch、SectorRankings（含 Metric/Direction）、IndexQuotes、MarketBreadth、LimitPool；另有龙虎榜和公告独立文件 | 启用 | 默认能力较广；资金流等能力还需继续核对具体实现文件和运行注册 |
+| Hithink | StockSearch、IndexQuotes、TradingCalendar、HotRankings、LimitPool、DragonTiger、IndexCatalog/Constituents/DailyBars、Valuations、Quote、DailyBars、Fundamentals | 关闭 | 代码实现存在不代表已配置或已获得真实接口权限 |
+| BaoStock | DailyBars、Fundamentals | 启用 | 默认还配置 TradingCalendar；其具体实现文件需继续定位；真实字段证据只按 Runtime Log 指定样本 |
+| Tencent | Quote、DailyBars | 启用 | 默认还配置 StockSearch；搜索能力的独立实现文件需继续定位 |
+| Sina | Quote、DailyBars | 启用 | 当前默认只启用这两项 |
+| NetEase | Quote、DailyBars | 启用 | 当前默认只启用这两项 |
+| TickFlow | Quote、IndexQuotes、MarketBreadth、SectorRankings（含 Direction）、DailyBars | 启用 | 默认仅启用 DailyBars；其他已实现能力默认关闭 |
+| Pytdx | Quote、DailyBars | 启用 | TCP Provider；出站连接由 Root 注入 |
+| Yahoo | Quote、DailyBars | 关闭 | 海外市场能力不属于当前国内 A 股优先范围 |
+| Tushare | 当前主文件确认 DailyBars；复权因子方法需结合接口完整实现核对 | 关闭 | 真实财务/估值权限曾返回 40203，不得记为数据通过 |
+| Xueqiu | HotRankings | 关闭 | 真实在线验收仍需独立证据 |
+| MiaoXiang | ChipDistribution、CapitalFlow | 独立开关 `MXEnabled` | 作为 SupplementProvider 注入，不进入 Quote/DailyBars 主回退链 |
+
+实现文件核对基线为当前任务开始时的 `feat/data @ 90871455b282d6124d3c25fb9189fbd274894e67`。Bootstrap 的能力类型断言是运行装配的最终门禁；若配置启用但 Provider 未实现接口，模块构造应失败。
+
+尚待逐项定位的实现包括：BaoStock TradingCalendar、Tencent StockSearch、Eastmoney CapitalFlow 等。此处标记“待定位”是代码盘点未完成，不代表功能缺失。
+
 ## 3. Bootstrap 装配规则
 
 `internal/marketdata/bootstrap/module.go` 当前创建 11 个主 Provider，并按 ProviderPriority 与 ProviderSettings 过滤。配置启用某项能力时，Bootstrap 必须验证对应 Provider 实现该 Capability Interface，否则启动失败。
