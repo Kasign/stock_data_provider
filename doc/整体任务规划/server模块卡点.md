@@ -2,7 +2,7 @@
 
 更新时间：2026-11-18
 维护分支：feat/server
-代码验收基线：c3602ca9369e116a3dece751d420e660e2614450；当前文档 HEAD：db99de11c7c7827aaceb307e36371163dab8bce8
+代码验收基线：f5821a356e23691d9738f4b3808abf8e0e3494d8；当前文档 HEAD：f5821a356e23691d9738f4b3808abf8e0e3494d8
 当前主线：SRV-015 其他业务模块 Root 装配盘点与可接入服务装配
 
 ## 1. Root Readiness 503 根因已定位并修复（当前装配范围验收通过）
@@ -66,6 +66,7 @@
 已接入：
 - News Storage Connection/Schema Diagnostics。
 - Worker/All 角色的 News Observation/Availability Evidence Retention Cleaner 和 Evidence Snapshot Cleaner。
+- Root News Observation Retention Cleaner 的真实 MariaDB 批次/保留边界集成测试已通过，CI Run [44309516411](https://github.com/Kasign/stock_data_provider/actions/runs/44309516411)，精确 SHA `f5821a356e23691d9738f4b3808abf8e0e3494d8`；真实 RSS/Atom 来源采集仍因生产 Source/Endpoint 配置缺失保持阻塞。
 - Researchflow News Search Stage/Runtime、Research/Researchflow Outbox 到 Notification Inbox 的接收 Relay 已存在，不重复开发。
 
 尚未装配及原因：
