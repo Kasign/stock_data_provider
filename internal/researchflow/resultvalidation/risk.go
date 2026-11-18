@@ -50,12 +50,17 @@ func ValidateRiskDecision(decision RiskDecision, expectedSystemAsOf time.Time) e
 		return ErrInvalidRiskDecision
 	}
 	blockingUnresolved := false
+	seenReasonCodes := make(map[string]struct{}, len(decision.Reasons))
 	for _, reason := range decision.Reasons {
 		if strings.TrimSpace(reason.Code) == "" || strings.TrimSpace(reason.RuleRef) == "" ||
 			strings.TrimSpace(reason.SafeMessage) == "" || reason.EvidenceRefs == nil ||
 			hasDuplicateOrInvalidRefs(reason.EvidenceRefs) || !validObservedValue(reason.ObservedValue) {
 			return fmt.Errorf("%w: incomplete risk reason", ErrInvalidRiskDecision)
 		}
+		if _, exists := seenReasonCodes[reason.Code]; exists {
+			return fmt.Errorf("%w: duplicate risk reason code %q", ErrInvalidRiskDecision, reason.Code)
+		}
+		seenReasonCodes[reason.Code] = struct{}{}
 		if reason.Severity != "block" && reason.Severity != "warn" && reason.Severity != "info" {
 			return fmt.Errorf("%w: unsupported severity %q", ErrInvalidRiskDecision, reason.Severity)
 		}

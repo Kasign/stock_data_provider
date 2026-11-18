@@ -50,6 +50,28 @@ func TestValidateRiskDecisionRequiresSameRunSystemAsOf(t *testing.T) {
 	}
 }
 
+func TestValidateRiskDecisionRejectsDuplicateReasonCodes(t *testing.T) {
+	base := validRiskDecision()
+	duplicate := base.Reasons[0]
+	duplicate.SafeMessage = "重复规则代码"
+	base.Reasons = append(base.Reasons, duplicate)
+	if err := ValidateRiskDecision(base, base.SystemAsOf); !errors.Is(err, ErrInvalidRiskDecision) {
+		t.Fatalf("duplicate reason codes must fail closed, got %v", err)
+	}
+}
+
+func TestValidateRiskDecisionAcceptsDistinctMultipleReasons(t *testing.T) {
+	base := validRiskDecision()
+	base.Reasons = append(base.Reasons, RiskReason{
+		Code: "turnover_spike", Severity: "warn", Status: "not_triggered",
+		SafeMessage: "换手率未达到提示阈值", RuleRef: "rule-turnover-v1",
+		EvidenceRefs: []string{"ev-2"},
+	})
+	if err := ValidateRiskDecision(base, base.SystemAsOf); err != nil {
+		t.Fatalf("distinct reason codes should be accepted: %v", err)
+	}
+}
+
 func TestValidateRiskDecisionRejectsEmptyReasons(t *testing.T) {
 	base := validRiskDecision()
 	base.Reasons = []RiskReason{}
