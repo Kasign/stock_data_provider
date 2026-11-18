@@ -1361,3 +1361,15 @@ GetRun 与 CancelRun 的持久化创建者授权已在 Application/Storage 层�
 - Live Probe 原先在无 Provider 配置时会 `SKIP`，可能让工作流整体呈现成功但没有任何真实 Provider 证据；现已增加 preflight，至少一个 Provider 完整配置才允许继续。单次 Probe 只输出候选数量与发布时间聚合统计，不等于完整质量验收。
 - 实际运行方式需二选一：用户在本地加载自己的 `.env` 后执行只读 Probe；或用户明确批准后，为 integration 增加带显式标记和配置门禁的 push 触发入口。当前没有可由本轮直接安全触发该手动工作流的 GitHub Action 调用入口，因此不伪称已执行真实网络请求。
 - 根 `.env.example` 同时补充 `RESEARCHFLOW_RUN_DEADLINE` 与 `RESEARCHFLOW_LOCAL_WORKERS` 注释示例，避免部署时遗漏已冻结的必需配置。
+
+
+## 19. 2026-11-18 News Live Probe 受控 Push 触发
+
+- `.github/workflows/news-live-probe.yml` 已增加仅监听 `integration` 分支的 push 事件。
+- Push 事件只有在本次 Push 的最新提交标题/正文包含精确标记 `[run_news_live_probe]` 时才运行 Live Probe Job；普通提交只触发常规 Integration CI，Live Probe Job 会跳过。
+- 保留原 `workflow_dispatch` + `confirm_live_probe=true` 入口；由于该工作流当前仍只存在于 integration，而仓库默认分支为 main，手动入口尚不能从 Actions UI 触发。
+- 增加同分支并发组且不自动取消正在执行的 Probe，避免重复提交打断已发出的在线请求。
+- Provider preflight 保持 fail-closed：Bocha/Tavily/Brave 必须 endpoint 与 API Key 成对配置，或配置 SearXNG endpoint；否则失败，不以 Skip 伪装成功。
+- 真实 Provider 请求只读、不持久化结果，日志只保留 Provider 名称、候选数量、耗时和发布时间统计；Feed Probe 仅在 Feed URL 与授权证据引用均配置时执行。
+- 本次修改提交本身不包含触发标记，不会主动发起真实 Provider 请求。后续如需执行，在 integration 上创建一条明确包含 `[run_news_live_probe]` 的提交即可；该提交会同时运行常规 CI 与 Live Probe。
+- 凭证存放：Provider endpoint、查询词、Feed URL 和授权证据引用放 GitHub Actions Variables；Provider API Key 放 GitHub Actions Secrets。不要把密钥写入提交、日志或普通变量。

@@ -1181,3 +1181,13 @@ Bocha/Tavily/Brave 的 endpoint 与 API Key 必须成对配置；SearXNG 不需�
 仓库已有手动工作流 `.github/workflows/news-live-probe.yml`：必须显式确认后才发起只读在线请求，输出候选数量和发布时间聚合统计，不持久化候选内容。现已增加 Provider 配置 preflight，避免无 Provider 配置时以 SKIP 形成虚假的 Live Probe 成功证据。该 Probe 是连通性与基础时间字段抽样，不替代来源授权、完整数据质量、持久化和真实 Researchflow Run 验收。
 
 注意：当前工作流文件只存在于 `integration`，仓库默认分支为 `main`；GitHub `workflow_dispatch` 要求工作流文件位于默认分支，因此此版本目前不能直接从 Actions UI 手动触发。本轮不修改 main。真实请求需由用户在本地执行只读 Probe，或在明确批准后为 integration 增加受控 push 触发入口。
+
+
+## 2026-11-18 News Live Probe 受控触发方式
+
+- `.github/workflows/news-live-probe.yml` 仅监听 `integration` 分支 push；只有 Push 最新提交信息含精确标记 `[run_news_live_probe]` 才执行真实 Provider 探测。普通提交不发起外部请求。
+- Provider endpoint、查询词、Feed URL、Feed 授权证据引用配置在 GitHub Actions Variables；API Key 配置在 GitHub Actions Secrets。
+- 至少一个 Provider 必须完整配置：Bocha/Tavily/Brave 的 endpoint + API Key，或 SearXNG endpoint。否则 preflight 失败，不允许形成无 Provider 的成功记录。
+- Live Probe 只读，不持久化 Provider 输出；Feed URL 和授权证据引用均配置时才探测 Feed。
+- 本次改动提交没有触发标记，不会自动请求真实 Provider。执行时在 integration 提交信息加入 `[run_news_live_probe]`。
+- 保留 workflow_dispatch 入口，但该工作流只在 integration，当前默认分支 main 尚未包含它，故暂不能从 Actions UI 手动触发。
