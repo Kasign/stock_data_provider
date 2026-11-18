@@ -1382,3 +1382,11 @@ GetRun 与 CancelRun 的持久化创建者授权已在 Application/Storage 层�
 - 已在 `internal/news/adapters/provider/live_probe_test.go` 增加脱敏时间格式签名统计：仅将数字映射为 `9`、字母映射为 `A`，保留分隔符并统计数量；不输出原始时间、标题、URL、摘要或响应正文。新增单元测试验证签名不泄漏时间值。待本次 CI 与下一次 Live Probe 通过后，依据实际签名决定是否扩展解析格式。
 - Bocha 与 Brave 网站在用户当前网络环境不可访问；这只记录为网站入口访问问题，不能推断其 API Endpoint 不可用。当前没有这两个 Provider 的有效配置和真实 API 探测证据，因此不将其列为本轮阻塞；继续以已通过真实请求的 Tavily 推进。不得为绕过网站访问限制而猜测 API 地址或配置未验证的代理。
 - 本次文档提交显式触发下一次 Tavily Live Probe，以同时验证脱敏格式签名与 Provider 真实响应；常规 Integration CI 也会对当前代码执行 gofmt/单元测试。只有在签名与可信格式契约明确后，才增加对应解析规则及固定测试。`available_at` 继续严格依赖来源授权与可用性证据，不能由 `published_date` 自动填充。
+
+
+## 21. 2026-11-18 Tavily RFC1123 发布时间解析修复
+
+- 上一轮脱敏签名为 `AAA, 99 AAA 9999 99:99:99 AAA`，3 条候选均匹配该结构。该结构与 RFC1123 日期时间一致；签名本身不暴露末尾时区文本，不能单凭签名确认其具体时区。
+- `internal/news/domain/candidate.go` 已在原有 RFC3339Nano、RFC1123Z、RFC822Z 解析规则之外，增加 RFC1123 的受限解析：仅接受明确的 `UTC` 或 `GMT`，且解析偏移必须为零；未知时区缩写（例如 CST）继续拒绝，避免 Go 将未知缩写解释为伪零偏移。
+- `candidate_test.go` 新增 UTC、GMT 正向测试及未知时区缩写拒绝测试；Live Probe 的显式时区统计同步识别该格式。
+- 下一次 Live Probe 将验证真实 Tavily 时间字段能否被新规则解析。即使解析成功，也只代表 Provider 声明的发布时间可解析；不改变 `available_at` 的来源授权和 PIT 证据要求。
