@@ -333,7 +333,7 @@ func TestNewsSearchStageResearchflowMariaDBIntegration(t *testing.T) {
 		SchemaVersion: "1.0.0", IdempotencyKey: "news-search-stage-permanent-failure-integration",
 		TemplateRef: workflowTemplate.Ref, TemplateVersion: workflowTemplate.Version,
 		InputSnapshotRefs: []string{},
-		Parameters: json.RawMessage("{\"query\":\"permanent-failure\",\"query_dimension\":\"market\",\"limit\":10}"),
+		Parameters:        json.RawMessage("{\"query\":\"permanent-failure\",\"query_dimension\":\"market\",\"limit\":10}"),
 	})
 	if err != nil {
 		t.Fatalf("创建不可重试 Provider 失败 Researchflow Run 失败: %v", err)
