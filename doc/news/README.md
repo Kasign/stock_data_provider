@@ -1165,3 +1165,17 @@
 - Server Bootstrap 的 News Stage composition factory 借用 Root Server `Resources.HTTPClient`，只通过既有 `NewPlatformProviderSet` 为各 Provider 绑定独立 DestinationPolicy，不创建或关闭第二个 HTTP Client；Provider 已配置但共享 Client 缺失时 fail-closed。无 Provider 配置时不要求 Client，保留空 ProviderSet。Registry 1.0.0 注册精确 Payload / QualitySummary Schema Ref 和 News-owned Validator。
 - 当前 Server 还没有把 Researchflow Worker 生命周期接入生产 Run；本项只完成可测试的 Stage Executor / Registry 组合工厂，不创建无消费者的 Worker 或 Workflow Template。全 Provider 失败时，Worker 当前只会持久化 Stage reason code；Provider Outcome 详细内容因 StageOutput 仅对 succeeded/degraded 提交而不会持久化，需后续 Fault/diagnostic 持久化能力接入后再解决。
 - 本项不写 Research Evidence，不解除 available_at 来源准入搁置状态。
+
+
+## 2026-11-18 Server News Provider 配置与 Live Probe
+
+当前 Server Researchflow 使用的 Provider 配置入口为：
+
+- Bocha：`NEWS_PROVIDER_BOCHA_ENDPOINT` + `NEWS_PROVIDER_BOCHA_API_KEY`
+- Tavily：`NEWS_PROVIDER_TAVILY_ENDPOINT` + `NEWS_PROVIDER_TAVILY_API_KEY`
+- Brave：`NEWS_PROVIDER_BRAVE_ENDPOINT` + `NEWS_PROVIDER_BRAVE_API_KEY`
+- SearXNG：`NEWS_PROVIDER_SEARXNG_ENDPOINT`
+
+Bocha/Tavily/Brave 的 endpoint 与 API Key 必须成对配置；SearXNG 不需要 API Key。历史 `BOCHA_API_KEYS`、`GO_NEWS_*` 等变量不用于当前 Server `internal/news/config`。根 `.env.example` 已明确区分两套配置，避免旧变量被误认为已接入生产 Worker。
+
+仓库已有手动工作流 `.github/workflows/news-live-probe.yml`：必须显式确认后才发起只读在线请求，输出候选数量和发布时间聚合统计，不持久化候选内容。现已增加 Provider 配置 preflight，避免无 Provider 配置时以 SKIP 形成虚假的 Live Probe 成功证据。该 Probe 是连通性与基础时间字段抽样，不替代来源授权、完整数据质量、持久化和真实 Researchflow Run 验收。

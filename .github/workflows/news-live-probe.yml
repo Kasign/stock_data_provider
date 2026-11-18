@@ -40,6 +40,18 @@ jobs:
           cache-dependency-path: go.sum
       - name: Download dependencies
         run: go mod download
+      - name: Require at least one configured News Provider
+        shell: bash
+        run: |
+          if [[ -n "$NEWS_PROVIDER_BOCHA_ENDPOINT" && -n "$NEWS_PROVIDER_BOCHA_API_KEY" ]] || \
+             [[ -n "$NEWS_PROVIDER_TAVILY_ENDPOINT" && -n "$NEWS_PROVIDER_TAVILY_API_KEY" ]] || \
+             [[ -n "$NEWS_PROVIDER_BRAVE_ENDPOINT" && -n "$NEWS_PROVIDER_BRAVE_API_KEY" ]] || \
+             [[ -n "$NEWS_PROVIDER_SEARXNG_ENDPOINT" ]]; then
+            echo "检测到至少一个完整配置的 News Provider。"
+          else
+            echo "::error::未配置完整的 NEWS_PROVIDER_* Provider；本次 Live Probe 不会产生有效验收证据。"
+            exit 1
+          fi
       - name: Probe configured real Providers
         run: go test ./internal/news/adapters/provider -run '^TestLiveProviderProbe$' -count=1 -v
       - name: Probe explicitly authorized RSS/Atom Feed

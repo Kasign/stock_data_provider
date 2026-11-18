@@ -1349,3 +1349,14 @@ GetRun 与 CancelRun 的持久化创建者授权已在 Application/Storage 层�
 ### 下一步
 
 主线转为真实 News Provider 配置的生产可用性和数据质量验收；随后再做两个 Server Worker 进程执行同一组真实 Run 的端到端部署验证。不得把本节的双进程 Claim 测试扩大解释为真实 Provider 执行验收。
+
+
+## 18. 2026-11-18 News Provider 生产配置入口核对
+
+- 当前 Server News/Researchflow 只读取 `NEWS_PROVIDER_BOCHA_ENDPOINT/API_KEY`、`NEWS_PROVIDER_TAVILY_ENDPOINT/API_KEY`、`NEWS_PROVIDER_BRAVE_ENDPOINT/API_KEY` 和 `NEWS_PROVIDER_SEARXNG_ENDPOINT`。
+- 根 `.env.example` 原有 `BOCHA_API_KEYS`、`TAVILY_API_KEYS`、`BRAVE_SEARCH_API_KEYS`、`SEARXNG_BASE_URLS`、`GO_NEWS_*` 属于历史旧链路配置，不能作为当前 Server Provider inventory 已装配的证据。现已在示例中明确区分，并补充当前变量名。
+- Bocha/Tavily/Brave 必须 endpoint 与 API Key 成对配置；SearXNG 只需 endpoint。没有 Provider 配置时，News Stage 仍可装配，但 ResourcePolicy/CreateRun fail-closed，不创建无可执行 Provider 的 Run。
+- 已有手动工作流 `.github/workflows/news-live-probe.yml`，通过 `workflow_dispatch` 的 `confirm_live_probe=true` 显式确认后，使用 GitHub Variables 提供 endpoint、GitHub Secrets 提供 API Key，执行只读 Provider Search Probe，不持久化 Provider 输出。
+- Live Probe 原先在无 Provider 配置时会 `SKIP`，可能让工作流整体呈现成功但没有任何真实 Provider 证据；现已增加 preflight，至少一个 Provider 完整配置才允许继续。单次 Probe 只输出候选数量与发布时间聚合统计，不等于完整质量验收。
+- 下一步需要在 GitHub Actions Variables/Secrets 配置至少一个真实 Provider，然后手动确认运行 Live Probe。当前没有可由本轮直接安全触发该手动工作流的 GitHub Action 调用入口，因此不伪称已执行真实网络请求。
+- 根 `.env.example` 同时补充 `RESEARCHFLOW_RUN_DEADLINE` 与 `RESEARCHFLOW_LOCAL_WORKERS` 注释示例，避免部署时遗漏已冻结的必需配置。
