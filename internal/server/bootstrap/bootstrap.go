@@ -67,7 +67,7 @@ func Run(ctx context.Context) (runErr error) {
 	if err != nil {
 		return fmt.Errorf("存储配置无效: %w", err)
 	}
-	marketDataCfg, err := marketdataconfig.LoadForInProcess()
+	marketDataCfg, err := marketdataconfig.LoadForRoot()
 	if err != nil {
 		return fmt.Errorf("Data 模块配置无效: %w", err)
 	}
