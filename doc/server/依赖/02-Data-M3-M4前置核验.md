@@ -114,7 +114,17 @@ Data Store.Migrate 先调用 Platform `ApplyMigrations` 执行 `market_data` nam
 - 停止顺序：停止 Analysis/其他消费者和 Worker → Data Module.Stop → Data Module.Close 自有资源 → 关闭 Root 共享 HTTP Client/Redis/DB。
 - 仍需真实 API/Worker 两种角色测试启动失败回滚、重复 Stop/Close、SIGTERM 和并发关闭。
 
-## 5. SRV-009 完成门槛
+## 5. WebUI 与独立 Data Service 迁移边界
+
+当前仓库事实：
+- `web/src/api.js` 的行情 API 默认基路径仍是 `/market-api`，请求仍携带 `X-API-Key`。
+- `web/default.conf.template` 的 `/market-api/` 仍反向代理到 `MARKET_DATA_SERVICE_NAME:8091`。
+- 本轮 Root Data Handler 暴露的是 `/api/v1/quotes/`、`bars/`、`bundles/`、`data-sources/`、`market/`、`stocks/`，并由 Owner Bearer 保护；它不接受旧的 Data API Key，也不会自动将 Owner Session Cookie 提升为 Owner Bearer。
+- 因此 Root Data Module 已供 Server 内部 Analysis 使用，但当前 WebUI 仍走独立 Data Service；不能声称 WebUI 已切换到 Root Data Module。
+
+当前 Server 变更只删除 `internal/adapters/marketdata/**` 旧 HTTP Client/Collector/Config/DTO，不删除 `cmd/market-data`、`services/market-data`、Nginx `/market-api/` 代理或独立 Data 部署资产。WebUI 的 API 基路径、Owner Session/CSRF 调用、Root 路由认证策略、Nginx upstream 和独立服务下线需要由 Web/Data/部署任务单独完成。没有真实浏览器与部署验收前，保留旧独立服务是正确的兼容边界。
+
+## 6. SRV-009 完成门槛
 
 - Data Module 使用唯一 Root 共享 DB/Redis/HTTP Client，无重复连接池。
 - 所有实际启用 Provider 的 HTTP/TCP 出口均受控；disabled Provider 的空 URL 不阻断启动；缺少必需出口 fail-closed。
