@@ -5,35 +5,27 @@
 代码验收基线：81e0ddf020cb69a050a9e0c7f3f509378de49989；当前文档核对前 HEAD：6d51690e299d48ae9f4824928a655d1f0ed2ad10
 当前主线：SRV-009 Data/MarketData M3/M4 Root 生产装配
 
-## 1. Root Readiness 503 根因已定位，修复待精确 SHA 验收
+## 1. Root Readiness 503 根因已定位并修复（当前装配范围验收通过）
 
-状态：FIX IMPLEMENTED / CI PENDING
+状态：RESOLVED（最终 Migration 收口仍见第 2 节）
 
-证据：
+根因证据：
 - 失败 CI Run：44298185039，精确 SHA `f88af64ef5d91c357dec4f48214d52e2b81d8077`。
-- Job：Test Server-owned packages。
-- Job ID：134780625939。
-- CI 已输出受保护的 `/diagnostics` 报告，唯一失败 Required Check：`server.storage.schema`。
-- 根因：Data Module 通过自身 `MigrationRunner.Migrate` 创建了 `market_data` namespace；Root `Registry.ValidateApplied` 只知道 Server 静态注册的 namespace，把 `market_data` 视为数据库中未注册的 namespace，导致 Schema Check 返回 unhealthy，`/readyz` 503。
-- 不是 MariaDB/Redis Ping 失败，不是 Data Module Ready 失败，也不是 HTTP Listener 未启动。
+- 受保护 `/diagnostics` 报告中的唯一失败 Required Check：`server.storage.schema`。
+- Data Module 自己执行 Migration 创建了 `market_data` namespace；Root Registry 只登记静态 Migration namespace，遂将 Data 的合法 namespace 判为未注册。
+- 这不是 MariaDB/Redis Ping 失败、Data Module Ready 失败或 HTTP Listener 未启动。
 
-已实施修复：
-- Server Migration Registry 新增显式 `RegisterExternalNamespace`。
-- Bootstrap 将 `market_data` 登记为由 Data 模块自有 Runner 管理的外部 namespace。
-- Read-only validation 要求该 namespace 的 history 至少存在一条记录，且所有版本非零、状态均为 `applied`。
-- 外部 namespace 不加入 Registry 的 Migration 执行清单，不会向 Platform Runner 传入空 Migration，也不复制 Data SQL。
-- 新增外部 namespace 注册、重复注册、缺失 history、failed status 等测试。
+修复与验收：
+- Registry 新增 `RegisterExternalNamespace`；Bootstrap 显式登记 `market_data`。
+- 外部 namespace 只读校验要求 history 至少存在一条记录，所有版本非零且状态均为 `applied`；外部 namespace 不进入 Root Migration 执行清单，不复制 Data SQL。
+- 新增注册、重复注册、缺失 history、failed status、外部 namespace 不参与执行等测试。
+- Server CI Run [44305939060](https://github.com/Kasign/stock_data_provider/actions/runs/44305939060)，精确 SHA `c3602ca9369e116a3dece751d420e660e2614450`：gofmt、Server package tests、Race、真实 MariaDB/Redis、Vet、镜像构建、Notification Schema、真实容器 Readiness 和 SIGTERM 清洁退出全部 success。
+- 容器日志确认 Data Migration 与其他静态 namespace Migration succeeded；smoke 输出 `Server container reached readiness and exited cleanly after SIGTERM`。
 
 限制：
-- 外部 namespace 检查不验证预期版本集合和 checksum；这只是过渡性修复。
-- Data Store.Migrate 在 Platform ApplyMigrations 锁释放后仍执行兼容索引/补列 DDL，多实例竞态仍存在。
-- 该修复是否真正使容器 `/readyz` 变为 200，必须以包含本次修改的精确 SHA CI 为准；尚未通过前不能关闭本卡点。
+- 外部 namespace 只校验 history 存在和 applied 状态，不验证预期版本集合和 checksum；这只是过渡性校验。
+- Data Store.Migrate 在 Platform ApplyMigrations 锁释放后仍执行兼容索引/补列 DDL，多实例竞态仍存在；最终 Migration 收口仍 BLOCKED。
 
-下一步：
-1. 等当前精确 SHA 的 Server CI 完成 gofmt、package tests、race、真实 MariaDB/Redis、vet、镜像构建和真实容器 Bootstrap。
-2. 确认 `server.storage.schema` 变为 healthy，`/readyz` 返回 200。
-3. 确认同一容器随后执行 SIGTERM 并以退出码 0 结束。
-4. 若出现新的 Required Check 失败，以新 `/diagnostics` 证据单独定位，不回退到猜测 Data/Redis 故障。
 
 ## 2. 跨模块前置：Data Migration 定义与并发安全
 
