@@ -2037,24 +2037,25 @@ func TestObservationRetentionPurgeIntegration(t *testing.T) {
 	// 精确到期边界应清理；独立 Evidence 的更短 Retention 不应等待父 Observation 到期。
 	boundary := now.Add(time.Minute).Truncate(time.Microsecond)
 	boundaryObservation := domain.Observation{
-		ID: fmt.Sprintf("news-retention-boundary-%d", time.Now().UnixNano()),
+		ID:             fmt.Sprintf("news-retention-boundary-%d", time.Now().UnixNano()),
 		IdempotencyKey: fmt.Sprintf("news-retention-boundary-key-%d", time.Now().UnixNano()),
-		SourceID: "news-retention-boundary",
-		Candidate: domain.Candidate{SourceItemID: "retention-boundary-item", Title: "boundary payload"},
-		ObservedAt: boundary.Add(-time.Hour), RetentionUntil: boundary,
+		SourceID:       "news-retention-boundary",
+		Candidate:      domain.Candidate{SourceItemID: "retention-boundary-item", Title: "boundary payload"},
+		ObservedAt:     boundary.Add(-time.Hour), RetentionUntil: boundary,
 		IdentityStatus: domain.ObservationUnidentified,
 	}
 	evidenceOnlyObservation := domain.Observation{
-		ID: fmt.Sprintf("news-retention-evidence-only-%d", time.Now().UnixNano()),
+		ID:             fmt.Sprintf("news-retention-evidence-only-%d", time.Now().UnixNano()),
 		IdempotencyKey: fmt.Sprintf("news-retention-evidence-only-key-%d", time.Now().UnixNano()),
-		SourceID: "news-retention-boundary",
-		Candidate: domain.Candidate{SourceItemID: "retention-evidence-only-item", Title: "parent still retained"},
-		ObservedAt: boundary.Add(-time.Hour), RetentionUntil: boundary.Add(time.Hour),
+		SourceID:       "news-retention-boundary",
+		Candidate:      domain.Candidate{SourceItemID: "retention-evidence-only-item", Title: "parent still retained"},
+		ObservedAt:     boundary.Add(-time.Hour), RetentionUntil: boundary.Add(time.Hour),
 		IdentityStatus: domain.ObservationUnidentified,
 	}
 	boundaryNewsID := fmt.Sprintf("news-retention-boundary-news-%d", time.Now().UnixNano())
 	boundaryVersionID := fmt.Sprintf("news-retention-boundary-version-%d", time.Now().UnixNano())
 	boundaryEvidenceID := fmt.Sprintf("news-retention-boundary-evidence-%d", time.Now().UnixNano())
+	candidateAvailableAt := evidenceOnlyObservation.ObservedAt.Add(-time.Minute)
 	defer func() {
 		_, _ = db.ExecContext(context.Background(), "DELETE FROM news_version_availability_evidence WHERE evidence_id = ?", boundaryEvidenceID)
 		_, _ = db.ExecContext(context.Background(), "DELETE FROM news_item_versions WHERE version_id = ?", boundaryVersionID)
@@ -2089,8 +2090,8 @@ func TestObservationRetentionPurgeIntegration(t *testing.T) {
 		 observed_at, recorded_at, retention_until)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '', ?, ?, ?, ?, ?, ?, ?)`,
 		boundaryEvidenceID, boundaryNewsID, boundaryVersionID, evidenceOnlyObservation.ID,
-		"payload.publishTime", "2026-11-18T00:00:00Z", "UTC", "second", "parsed",
-		boundary.Add(-time.Minute), "test-parser/1", "evidence://retention-boundary",
+		"payload.publishTime", candidateAvailableAt.Format(time.RFC3339Nano), "UTC", "second", "parsed",
+		candidateAvailableAt, "test-parser/1", "evidence://retention-boundary",
 		strings.Repeat("d", 64), evidenceOnlyObservation.ObservedAt,
 		evidenceOnlyObservation.ObservedAt.Add(time.Second), boundary); err != nil {
 		t.Fatalf("insert shorter-retention availability evidence: %v", err)
