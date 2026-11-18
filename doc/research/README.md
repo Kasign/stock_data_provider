@@ -15,6 +15,7 @@ doc/research/
 │   ├── 10-整体任务规划与阶段门禁校准.md
 │   ├── 11-RSC-001-Context消费契约与授权边界验收.md
 │   ├── 12-RSC-003-Event版本血缘约束补齐.md
+│   ├── 13-RSC-007-Outbox租约过期与拒绝路径回归验收.md
 │   └── 各个子任务完成状态.md
 ├── 架构/
 │   └── 01-研究领域模型与证据体系.md
@@ -31,6 +32,7 @@ doc/research/
 - [整体任务规划校准](./任务历史/10-整体任务规划与阶段门禁校准.md)：四阶段路线、依赖门禁和唯一当前任务。
 - [RSC-001 Context 消费契约验收](./任务历史/11-RSC-001-Context消费契约与授权边界验收.md)：Application Port 精确版本、CallerRef/Purpose 传递及 fail-closed 测试矩阵。
 - [RSC-003 Event 版本血缘约束](./任务历史/12-RSC-003-Event版本血缘约束补齐.md)：同一 Event 新版本必须引用直接前一版本，且保留合并父版本能力。
+- [RSC-007 Outbox 租约过期与拒绝路径回归](./任务历史/13-RSC-007-Outbox租约过期与拒绝路径回归验收.md)：自然租约过期后的重新领取、旧 token fencing 和 rejected 终态回归。
 
 ## 架构与说明
 
