@@ -360,7 +360,6 @@ func assertEnvelopeGolden(t *testing.T, name string, envelope Envelope) {
 	}
 }
 
-
 func TestIndicatorPayloadAcceptsFixedMappingsForAvailableAndUnavailableResults(t *testing.T) {
 	mappings := map[string][]string{
 		"sma":        {"sma"},
