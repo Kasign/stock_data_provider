@@ -20,9 +20,9 @@ import (
 	researchflowparameterschema "example.com/stock-analysis-flow/internal/researchflow/parameterschema"
 	"example.com/stock-analysis-flow/internal/researchflow/resourcepolicy"
 	researchflowstorage "example.com/stock-analysis-flow/internal/researchflow/storage"
-	serverrelay "example.com/stock-analysis-flow/internal/server/relay"
 	researchflowtemplate "example.com/stock-analysis-flow/internal/researchflow/template"
 	serverconfig "example.com/stock-analysis-flow/internal/server/config"
+	serverrelay "example.com/stock-analysis-flow/internal/server/relay"
 )
 
 type newsSearchIntegrationResourcePolicyResolver struct{}
@@ -546,7 +546,7 @@ func TestNewsSearchStageResearchflowMariaDBIntegration(t *testing.T) {
 			newsSearchIntegrationOutboxStore{repository: repository, runRef: runRef},
 			receiver,
 			serverrelay.ResearchflowNotificationConfig{
-				WorkerID: "integration:notification-relay:" + runRef,
+				WorkerID:  "integration:notification-relay:" + runRef,
 				BatchSize: 1, PollInterval: 10 * time.Millisecond,
 				LeaseDuration: time.Second, PublishTimeout: 500 * time.Millisecond,
 			},
