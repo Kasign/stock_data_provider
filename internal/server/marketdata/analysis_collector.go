@@ -40,7 +40,10 @@ func NewAnalysisCollector(reader dataapp.MarketDataReader, historyLimit int, adj
 	if len(symbols) == 0 {
 		symbols = []string{"000001.SH"}
 	}
-	return &AnalysisCollector{reader: reader, historyLimit: historyLimit, adjustment: adjustment, maxConcurrent: 8, indexSymbols: symbols}, nil
+	return &AnalysisCollector{
+		reader: reader, historyLimit: historyLimit, adjustment: adjustment,
+		maxConcurrent: 8, indexSymbols: symbols,
+	}, nil
 }
 
 var _ analysisapp.DataCollector = (*AnalysisCollector)(nil)
