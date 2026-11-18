@@ -34,6 +34,8 @@ test("Nginx envsubst only rewrites configured upstream names", () => {
   assert.ok(nginxConfig.includes("include /etc/nginx/conf.d/*.conf;"));
   assert.ok(nginxTemplate.includes("proxy_pass http://${MARKET_DATA_SERVICE_NAME}:8091/;"));
   assert.ok(nginxTemplate.includes("proxy_pass http://${ANALYSIS_SERVICE_NAME}:8092/;"));
+  assert.ok(nginxTemplate.includes("proxy_cookie_path /api /analysis-api/api;"),
+    "Owner Session Cookie Path must match the browser-visible analysis proxy prefix");
   assert.ok(nginxTemplate.includes("proxy_set_header Host $host;"));
   assert.ok(nginxTemplate.includes("proxy_set_header X-Forwarded-Proto $scheme;"));
 });

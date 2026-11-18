@@ -31,7 +31,7 @@ func TestHTTPHandlerEnforcesExplicitRoutePolicies(t *testing.T) {
 	}
 	legacy := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusNoContent) })
 	health := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
-	handler, err := newHTTPHandler(auth, health, legacy)
+	handler, err := newHTTPHandler(auth, health, legacy, nil)
 	if err != nil {
 		t.Fatalf("newHTTPHandler() error = %v", err)
 	}
@@ -55,6 +55,7 @@ func TestHTTPHandlerEnforcesExplicitRoutePolicies(t *testing.T) {
 		{name: "Owner 读取 Diagnostics", method: http.MethodGet, path: "/diagnostics", authorization: "Bearer " + token, want: http.StatusOK},
 		{name: "Owner 创建 Run", method: http.MethodPost, path: "/api/v1/analysis/runs", authorization: "Bearer " + token, want: http.StatusNoContent},
 		{name: "Owner 查询事件", method: http.MethodGet, path: "/api/v1/analysis/runs/run-1/events", authorization: "Bearer " + token, want: http.StatusNoContent},
+		{name: "Owner Session 未启用时不注册登录路由", method: http.MethodPost, path: "/api/v1/owner/session", want: http.StatusNotFound},
 		{name: "未注册路由", method: http.MethodGet, path: "/internal/debug", authorization: "Bearer " + token, want: http.StatusNotFound},
 	}
 	for _, tt := range tests {

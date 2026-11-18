@@ -36,8 +36,9 @@ type AuthorizationPolicyVersion struct {
 }
 
 type AuthorizationPolicySnapshot struct {
-	SnapshotRef string                       `json:"snapshot_ref"`
-	Policies    []AuthorizationPolicyVersion `json:"policies"`
+	SnapshotRef   string                       `json:"snapshot_ref"`
+	Policies      []AuthorizationPolicyVersion `json:"policies"`
+	SchemaVersion string                       `json:"schema_version"`
 }
 
 // NullableDateTime distinguishes an explicit JSON null from an omitted field.
@@ -113,6 +114,7 @@ type NewsAuthorizationRef struct {
 	ExpiresAt           NullableDateTime          `json:"expires_at"`
 	Conditions          []string                  `json:"conditions"`
 	DecisionFingerprint string                    `json:"decision_fingerprint"`
+	SchemaVersion       string                    `json:"schema_version"`
 }
 
 // NewsAuthorizationBinding is the NEWS-CTR-002 cross-object binding DTO.
@@ -158,6 +160,7 @@ func ValidateNewsAuthorizationBinding(binding NewsAuthorizationBinding) error {
 	ref := binding.AuthorizationRef
 	snapshot := binding.PolicySnapshot
 	if !canonicalOpaqueRef(ref.AuthorizationRef) ||
+		ref.SchemaVersion != "1.0.0" || snapshot.SchemaVersion != "1.0.0" ||
 		ref.PolicyOwner != "news" ||
 		!canonicalOpaqueRef(ref.PolicyVersion) ||
 		ref.PolicyVersion != snapshot.SnapshotRef ||

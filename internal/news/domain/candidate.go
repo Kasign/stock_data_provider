@@ -73,6 +73,15 @@ func parseCandidateTimestamp(raw string) (time.Time, bool) {
 			return parsed, true
 		}
 	}
+	// Tavily 返回的部分发布时间使用 RFC1123 的 UTC/GMT 时区缩写。
+	// 只接受明确的零时区缩写，拒绝 Go 对未知缩写生成的伪零偏移时区。
+	parsed, err := time.Parse(time.RFC1123, raw)
+	if err == nil && !parsed.IsZero() {
+		zone, offset := parsed.Zone()
+		if offset == 0 && (strings.EqualFold(zone, "UTC") || strings.EqualFold(zone, "GMT")) {
+			return parsed, true
+		}
+	}
 	return time.Time{}, false
 }
 

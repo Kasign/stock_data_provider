@@ -371,7 +371,7 @@ func (s *Store) UpsertBars(ctx context.Context, bars []model.DailyBar) error {
 	}
 	defer tx.Rollback()
 	stmt := `INSERT INTO market_data_daily_bars (symbol,trade_date,period,adjustment_basis,source,open_price,high_price,low_price,close_price,volume_shares,amount_cny,change_percent,fetched_at,normalized_at,quality_status,metadata) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE open_price=VALUES(open_price),high_price=VALUES(high_price),low_price=VALUES(low_price),close_price=VALUES(close_price),volume_shares=VALUES(volume_shares),amount_cny=VALUES(amount_cny),change_percent=VALUES(change_percent),fetched_at=VALUES(fetched_at),normalized_at=VALUES(normalized_at),quality_status=VALUES(quality_status),metadata=VALUES(metadata)`
-	versionStmt := `INSERT INTO market_data_daily_bar_versions (symbol,trade_date,period,adjustment_basis,source,revision_hash,recorded_at,open_price,high_price,low_price,close_price,volume_shares,amount_cny,change_percent,fetched_at,normalized_at,quality_status,metadata) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+	versionStmt := `INSERT INTO market_data_daily_bar_versions (symbol,trade_date,period,adjustment_basis,source,revision_hash,recorded_at,open_price,high_price,low_price,close_price,volume_shares,amount_cny,change_percent,fetched_at,normalized_at,quality_status,metadata) VALUES (?,?,?,?,?,?,UTC_TIMESTAMP(6),?,?,?,?,?,?,?,?,?,?,?)`
 	for _, bar := range bars {
 		metadata, e := json.Marshal(bar)
 		if e != nil {
@@ -390,8 +390,7 @@ ORDER BY recorded_at DESC, id DESC LIMIT 1 FOR UPDATE`,
 			return fmt.Errorf("read latest daily bar revision %s %s: %w", bar.Symbol, bar.TradeDate, lookupErr)
 		}
 		if shouldRecordRevision(latestHash, lookupErr == nil, revisionHash) {
-			recordedAt := time.Now().UTC().Format("2006-01-02 15:04:05.999999")
-			_, e = tx.ExecContext(ctx, versionStmt, bar.Symbol, bar.TradeDate, bar.Period, string(bar.AdjustmentBasis), bar.Source, revisionHash, recordedAt, bar.Open, bar.High, bar.Low, bar.Close, bar.Volume, bar.Amount, bar.ChangePercent, bar.FetchedAt.UTC().Format("2006-01-02 15:04:05.999999"), bar.NormalizedAt.UTC().Format("2006-01-02 15:04:05.999999"), string(bar.QualityStatus), metadata)
+			_, e = tx.ExecContext(ctx, versionStmt, bar.Symbol, bar.TradeDate, bar.Period, string(bar.AdjustmentBasis), bar.Source, revisionHash, bar.Open, bar.High, bar.Low, bar.Close, bar.Volume, bar.Amount, bar.ChangePercent, bar.FetchedAt.UTC().Format("2006-01-02 15:04:05.999999"), bar.NormalizedAt.UTC().Format("2006-01-02 15:04:05.999999"), string(bar.QualityStatus), metadata)
 			if e != nil {
 				return fmt.Errorf("record daily bar revision %s %s: %w", bar.Symbol, bar.TradeDate, e)
 			}
@@ -538,11 +537,10 @@ ORDER BY recorded_at DESC, id DESC LIMIT 1 FOR UPDATE`,
 		return fmt.Errorf("read latest fundamentals revision %s %dQ%d: %w", stored.Symbol, stored.Year, stored.Quarter, lookupErr)
 	}
 	if shouldRecordRevision(latestHash, lookupErr == nil, revisionHash) {
-		recordedAt := time.Now().UTC().Format("2006-01-02 15:04:05.999999")
 		_, err = tx.ExecContext(ctx, `INSERT INTO market_data_fundamental_versions
 (symbol,report_year,report_quarter,source,revision_hash,recorded_at,fetched_at,quality_status,metadata)
-VALUES (?,?,?,?,?,?,?,?,?)`,
-			stored.Symbol, stored.Year, stored.Quarter, stored.Source, revisionHash, recordedAt,
+VALUES (?,?,?,?,?,UTC_TIMESTAMP(6),?,?,?)`,
+			stored.Symbol, stored.Year, stored.Quarter, stored.Source, revisionHash,
 			stored.FetchedAt.UTC().Format("2006-01-02 15:04:05.999999"), string(stored.QualityStatus), metadata)
 		if err != nil {
 			return fmt.Errorf("record fundamentals revision %s %dQ%d: %w", stored.Symbol, stored.Year, stored.Quarter, err)
@@ -629,9 +627,8 @@ func (s *Store) SaveValuations(ctx context.Context, snapshot *model.ValuationSna
 		return fmt.Errorf("read latest valuation revision for %s: %w", stored.Source, lookupErr)
 	}
 	if shouldRecordRevision(latestHash, lookupErr == nil, revisionHash) {
-		recordedAt := time.Now().UTC().Format("2006-01-02 15:04:05.999999")
-		_, err = tx.ExecContext(ctx, "INSERT INTO market_data_valuation_versions (request_fingerprint,source,revision_hash,recorded_at,fetched_at,quality_status,metadata) VALUES (?,?,?,?,?,?,?)",
-			fingerprint, stored.Source, revisionHash, recordedAt,
+		_, err = tx.ExecContext(ctx, "INSERT INTO market_data_valuation_versions (request_fingerprint,source,revision_hash,recorded_at,fetched_at,quality_status,metadata) VALUES (?,?,?,UTC_TIMESTAMP(6),?,?,?)",
+			fingerprint, stored.Source, revisionHash,
 			stored.FetchedAt.UTC().Format("2006-01-02 15:04:05.999999"), string(stored.QualityStatus), metadata)
 		if err != nil {
 			return fmt.Errorf("record valuation revision for %s: %w", stored.Source, err)

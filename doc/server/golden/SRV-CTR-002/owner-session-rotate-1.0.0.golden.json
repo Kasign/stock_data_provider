@@ -1,0 +1,24 @@
+{
+  "name": "owner_session_rotate",
+  "request": {
+    "method": "POST",
+    "path": "/api/v1/owner/session/rotate",
+    "headers": {
+      "Cookie": "SESSION_COOKIE_REDACTED",
+      "Origin": "https://stocks.example.com",
+      "X-CSRF-Token": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Set-Cookie": "SESSION_COOKIE_REDACTED; Path=/api; HttpOnly; Secure; SameSite=Lax"
+    },
+    "body": {
+      "schema_version": "1.0.0",
+      "authenticated": true,
+      "csrf_token": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "expires_at": "2026-11-17T10:00:00Z"
+    }
+  }
+}

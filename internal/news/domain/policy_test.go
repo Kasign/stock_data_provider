@@ -217,3 +217,65 @@ func TestCollectionPolicyRejectsContentStorageMismatch(t *testing.T) {
 		t.Fatalf("provider decision=%+v", decision)
 	}
 }
+
+func TestEvaluateCandidateCollectionPolicyRequiresFieldLevelPermission(t *testing.T) {
+	now := time.Date(2026, 11, 16, 2, 0, 0, 0, time.UTC)
+	request := CollectionPolicyRequest{
+		AccessMethod: AccessOfficialAPI, Purpose: PurposeInternalPersonalResearch,
+		ContentKind: ContentMetadata, StorageMode: StoragePersistentMetadata,
+		Retention: time.Hour, FieldPath: "payload.publishTime",
+	}
+	source := validSourcePolicy()
+	source.AllowedContentKinds = []ContentKind{ContentMetadata}
+	source.AllowedStorageModes = []StorageMode{StoragePersistentMetadata}
+	source.AllowedMetadataFields = []string{"payload.publishTime", "payload.title"}
+	provider := validProviderOutputPolicy()
+	provider.AllowedMetadataFields = []string{"payload.publishTime", "payload.title"}
+
+	decision := EvaluateCandidateCollectionPolicy(&provider, source, nil, request, now)
+	if !decision.Allowed {
+		t.Fatalf("explicitly authorized field rejected: %+v", decision)
+	}
+
+	source.AllowedMetadataFields = []string{"payload.title"}
+	decision = EvaluateCandidateCollectionPolicy(&provider, source, nil, request, now)
+	if decision.Allowed || decision.ReasonCode != "news.policy.metadata_field_denied" {
+		t.Fatalf("source field denial was not enforced: %+v", decision)
+	}
+
+	source.AllowedMetadataFields = []string{"payload.publishTime"}
+	endpoint := &EndpointPolicy{AllowedMetadataFields: []string{}, EvidenceRef: "agreement:endpoint:v1"}
+	decision = EvaluateCandidateCollectionPolicy(&provider, source, endpoint, request, now)
+	if decision.Allowed || decision.ReasonCode != "news.policy.endpoint_metadata_field_denied" {
+		t.Fatalf("endpoint field denial was not enforced: %+v", decision)
+	}
+
+	endpoint.AllowedMetadataFields = []string{"payload.title"}
+	decision = EvaluateCandidateCollectionPolicy(&provider, source, endpoint, request, now)
+	if decision.Allowed || decision.ReasonCode != "news.policy.endpoint_expansion_requires_evidence" {
+		t.Fatalf("endpoint field expansion was not rejected: %+v", decision)
+	}
+
+	endpoint = nil
+	provider.AllowedMetadataFields = []string{"payload.title"}
+	decision = EvaluateCandidateCollectionPolicy(&provider, source, endpoint, request, now)
+	if decision.Allowed || decision.ReasonCode != "news.policy.provider_metadata_field_denied" {
+		t.Fatalf("provider field denial was not enforced: %+v", decision)
+	}
+}
+
+func TestMetadataFieldPathMustBeStableDottedPath(t *testing.T) {
+	for _, invalid := range []string{"", ".publishTime", "payload.", "payload.*", "payload[0]", " payload.publishTime", "payload/publishTime"} {
+		if validMetadataFieldPath(invalid) {
+			t.Fatalf("invalid metadata field path accepted: %q", invalid)
+		}
+	}
+	for _, valid := range []string{"payload.publishTime", "data.items_1.publish-time", "A1.value"} {
+		if !validMetadataFieldPath(valid) {
+			t.Fatalf("valid metadata field path rejected: %q", valid)
+		}
+	}
+	if validateMetadataFieldPaths([]string{"payload.publishTime", "payload.publishTime"}) {
+		t.Fatal("duplicate metadata field path accepted")
+	}
+}

@@ -26,6 +26,7 @@ import (
 	platformsecurity "example.com/stock-analysis-flow/internal/platform/security"
 	platformstorage "example.com/stock-analysis-flow/internal/platform/storage"
 	"example.com/stock-analysis-flow/internal/platform/taskqueue"
+	platformtime "example.com/stock-analysis-flow/internal/platform/time"
 	researchapplication "example.com/stock-analysis-flow/internal/research/application"
 	researchstorage "example.com/stock-analysis-flow/internal/research/storage"
 	researchflowstorage "example.com/stock-analysis-flow/internal/researchflow/storage"
@@ -66,6 +67,10 @@ func Run(ctx context.Context) (runErr error) {
 	marketDataCfg, err := marketdata.LoadConfig(env)
 	if err != nil {
 		return fmt.Errorf("Go 行情服务配置无效: %w", err)
+	}
+	newsConfig, err := newsconfig.Load(env)
+	if err != nil {
+		return fmt.Errorf("News 配置无效: %w", err)
 	}
 	migrationCfg := processConfig.Migration
 	serverRole := processConfig.Role
@@ -132,6 +137,53 @@ func Run(ctx context.Context) (runErr error) {
 	}
 	migrationCancel()
 
+	// Owner Session 只提供可信身份；Researchflow 执行依赖独立于 Owner Session 装配。
+	var ownerSession *ownerSessionComposition
+	if processConfig.OwnerSession.Enabled {
+		ownerSession, err = newOwnerSessionComposition(storageResources, processConfig.OwnerSession)
+		if err != nil {
+			return fmt.Errorf("装配 Owner Session 依赖失败: %w", err)
+		}
+	}
+	var researchflowExecution *researchflowComposition
+	if processConfig.ResearchflowCapacity.Configured &&
+		(serverRole != serverconfig.RoleAPI || ownerSession != nil) {
+		researchflowExecution, err = newResearchflowComposition(
+			storageResources, newsConfig, processConfig.ResearchflowCapacity,
+		)
+		if err != nil {
+			return fmt.Errorf("装配 Researchflow 执行依赖失败: %w", err)
+		}
+		publishCtx, publishCancel := context.WithTimeout(ctx, 10*time.Second)
+		publishErr := researchflowExecution.publishWorkflowTemplate(publishCtx)
+		publishCancel()
+		if publishErr != nil {
+			return fmt.Errorf("发布 Researchflow 正式 Workflow Template 失败: %w", publishErr)
+		}
+		slog.Info("Researchflow 执行依赖及正式 Workflow Template 已装配",
+			"template_ref", newsSearchWorkflowTemplateRef,
+			"template_version", newsSearchWorkflowTemplateVersion)
+	}
+	if ownerSession != nil && researchflowExecution != nil {
+		ownerSession.researchflow, err = newResearchflowOwnerCompositionFromExecution(
+			researchflowExecution, processConfig.ResearchflowRunDeadline,
+		)
+		if err != nil {
+			return fmt.Errorf("装配 Researchflow Owner 内部用例失败: %w", err)
+		}
+		slog.Info("Researchflow Owner 内部用例已装配", "http_routes", false)
+	}
+
+	// Key Ring 配置为可选项；未配置时不创建分页 Facade，也不生成任何默认密钥。
+	// 已配置时在 API/Worker 两种角色下使用同一共享 DB 构造真实 News/Research 依赖。
+	var researchNews *researchNewsComposition
+	if _, _, configured := newsConfig.EvidenceCursorKeyRing(); configured {
+		researchNews, err = newResearchNewsComposition(storageResources.DB, newsConfig)
+		if err != nil {
+			return fmt.Errorf("装配 News→Research 依赖失败: %w", err)
+		}
+	}
+
 	runner, err := service.NewRunnerWithMarketDataStores(marketDataCfg, store, store)
 	if err != nil {
 		return fmt.Errorf("创建分析 Runner 失败: %w", err)
@@ -159,16 +211,37 @@ func Run(ctx context.Context) (runErr error) {
 		if err := lifecycle.Register(relay); err != nil {
 			return fmt.Errorf("注册 Research→Notification Outbox Relay 生命周期失败: %w", err)
 		}
+		if processConfig.ResearchflowCapacity.Configured {
+			researchflowRelay, relayErr := newResearchflowNotificationRelay(
+				storageResources, processConfig.ResearchNotificationRelay, processConfig.ResearchflowCapacity,
+			)
+			if relayErr != nil {
+				return fmt.Errorf("创建 Researchflow→Notification Outbox Relay 失败: %w", relayErr)
+			}
+			if err := lifecycle.Register(researchflowRelay); err != nil {
+				return fmt.Errorf("注册 Researchflow→Notification Outbox Relay 生命周期失败: %w", err)
+			}
+		}
+	}
+	if serverRole != serverconfig.RoleAPI && processConfig.ResearchflowCapacity.Configured {
+		if researchflowExecution == nil {
+			return errors.New("Researchflow Worker Runtime requires an execution composition")
+		}
+		researchflowRuntime, runtimeErr := newResearchflowRuntimeComponent(
+			researchflowExecution, processConfig.ResearchflowCapacity, processConfig.ResearchflowLocalWorkers,
+		)
+		if runtimeErr != nil {
+			return fmt.Errorf("创建 Researchflow Worker Runtime 失败: %w", runtimeErr)
+		}
+		if err := lifecycle.Register(researchflowRuntime); err != nil {
+			return fmt.Errorf("注册 Researchflow Worker Runtime 生命周期失败: %w", err)
+		}
 	}
 	var httpComponent *httpServerComponent
 	if serverRole != serverconfig.RoleWorker {
 		api, err := httpapi.NewWithTasks(runner, store, analysisTimeout, tasks)
 		if err != nil {
 			return fmt.Errorf("创建旧 Analysis HTTP API 失败: %w", err)
-		}
-		newsConfig, configErr := newsconfig.Load(env)
-		if configErr != nil {
-			return fmt.Errorf("News Provider 配置无效: %w", configErr)
 		}
 		diagnosticsService, err := newDiagnosticsService(storageResources, migrationRegistry, newsConfig)
 		if err != nil {
@@ -178,7 +251,7 @@ func Run(ctx context.Context) (runErr error) {
 		if err != nil {
 			return fmt.Errorf("创建 Health/Readiness Handler 失败: %w", err)
 		}
-		handler, err := newHTTPHandler(authenticator, healthHandler, api.Handler())
+		handler, err := newHTTPHandler(authenticator, healthHandler, api.Handler(), ownerSession)
 		if err != nil {
 			return fmt.Errorf("注册 HTTP 路由失败: %w", err)
 		}
@@ -209,6 +282,10 @@ func Run(ctx context.Context) (runErr error) {
 	if err := lifecycle.Start(ctx); err != nil {
 		return fmt.Errorf("启动 Server 运行组件失败: %w", err)
 	}
+	if researchNews != nil {
+		// 目前没有 Researchflow Stage/HTTP 用例消费该组合；这里只确认生产依赖装配成功。
+		slog.Info("News→Research 生产依赖已装配，等待业务消费端接入")
+	}
 	if serverRole == serverconfig.RoleWorker {
 		slog.Info("股票分析 Worker 已启动", "service", "stock-analysis-worker", "role", serverRole)
 		<-ctx.Done()
@@ -223,10 +300,6 @@ func Run(ctx context.Context) (runErr error) {
 	}
 }
 
-type notificationClock struct{}
-
-func (notificationClock) Now() time.Time { return time.Now().UTC() }
-
 type notificationReceiverAdapter struct {
 	receiver *notificationapplication.EventReceiver
 }
@@ -239,20 +312,12 @@ func (a notificationReceiverAdapter) Receive(ctx context.Context, raw []byte) er
 	return err
 }
 
-// newResearchNotificationRelay connects the Research-owned Outbox Port to
-// Notification's validated Inbox acceptance path. Both modules keep their own
-// persistence and transaction boundaries.
-func newResearchNotificationRelay(shared *serverresources.Resources, cfg serverconfig.ResearchNotificationRelay) (*serverrelay.ResearchOutboxRelay, error) {
+// newNotificationEventReceiver constructs Notification's validated Inbox acceptance path.
+// Both Research and Researchflow relays share this stateless receiver over the same
+// module-owned Inbox and FanoutWorkItem repositories.
+func newNotificationEventReceiver(shared *serverresources.Resources, cfg serverconfig.ResearchNotificationRelay) (*notificationapplication.EventReceiver, error) {
 	if shared == nil || shared.DB == nil {
-		return nil, errors.New("shared MariaDB resource is required for Research Notification relay")
-	}
-	outboxRepository, err := researchstorage.NewOutboxRepository(shared.DB, func() time.Time { return time.Now().UTC() })
-	if err != nil {
-		return nil, fmt.Errorf("创建 Research Outbox Repository 失败: %w", err)
-	}
-	outbox, err := researchapplication.NewOutboxService(outboxRepository, func() time.Time { return time.Now().UTC() })
-	if err != nil {
-		return nil, fmt.Errorf("创建 Research Outbox Service 失败: %w", err)
+		return nil, errors.New("shared MariaDB resource is required for Notification EventReceiver")
 	}
 	fanoutWriter, err := notificationstorage.NewMySQLFanoutWorkItemRepository(shared.DB)
 	if err != nil {
@@ -266,14 +331,67 @@ func newResearchNotificationRelay(shared *serverresources.Resources, cfg serverc
 	if err != nil {
 		return nil, fmt.Errorf("加载 Notification Event Schema Registry 失败: %w", err)
 	}
-	receiver, err := notificationapplication.NewEventReceiver(registry, inbox, notificationClock{})
+	clock := platformtime.SystemClock{}
+	receiver, err := notificationapplication.NewEventReceiver(registry, inbox, clock)
 	if err != nil {
 		return nil, fmt.Errorf("创建 Notification EventReceiver 失败: %w", err)
+	}
+	return receiver, nil
+}
+
+// newResearchNotificationRelay connects the Research-owned Outbox Port to
+// Notification's validated Inbox acceptance path. Both modules keep their own
+// persistence and transaction boundaries.
+func newResearchNotificationRelay(shared *serverresources.Resources, cfg serverconfig.ResearchNotificationRelay) (*serverrelay.ResearchOutboxRelay, error) {
+	if shared == nil || shared.DB == nil {
+		return nil, errors.New("shared MariaDB resource is required for Research Notification relay")
+	}
+	outboxRepository, err := researchstorage.NewOutboxRepository(shared.DB)
+	if err != nil {
+		return nil, fmt.Errorf("创建 Research Outbox Repository 失败: %w", err)
+	}
+	outbox, err := researchapplication.NewOutboxService(outboxRepository)
+	if err != nil {
+		return nil, fmt.Errorf("创建 Research Outbox Service 失败: %w", err)
+	}
+	receiver, err := newNotificationEventReceiver(shared, cfg)
+	if err != nil {
+		return nil, err
 	}
 	return serverrelay.NewResearchOutboxRelay(outbox, notificationReceiverAdapter{receiver: receiver}, serverrelay.Config{
 		WorkerID: cfg.WorkerID, BatchSize: cfg.BatchSize,
 		PollInterval: cfg.PollInterval, LeaseDuration: cfg.LeaseDuration,
 		RetryDelay: cfg.RetryDelay,
+	}, slog.Default())
+}
+
+// newResearchflowNotificationRelay connects the Researchflow terminal Outbox
+// to the same Notification EventReceiver. Capacity is explicit because the
+// Run repository constructor requires the same database-wide admission limits
+// used by CreateRun and Worker claims.
+func newResearchflowNotificationRelay(
+	shared *serverresources.Resources,
+	cfg serverconfig.ResearchNotificationRelay,
+	capacity serverconfig.ResearchflowCapacity,
+) (*serverrelay.ResearchflowNotificationRelay, error) {
+	if shared == nil || shared.DB == nil || !capacity.Configured {
+		return nil, errors.New("shared MariaDB resource and explicit Researchflow capacity are required")
+	}
+	outbox, err := researchflowstorage.NewMySQLRunRepository(shared.DB, researchflowstorage.CapacityLimits{
+		MaxQueuedRuns: capacity.MaxQueuedRuns,
+		MaxWorkers:    capacity.MaxWorkers,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("创建 Researchflow Outbox Store 失败: %w", err)
+	}
+	receiver, err := newNotificationEventReceiver(shared, cfg)
+	if err != nil {
+		return nil, err
+	}
+	return serverrelay.NewResearchflowNotificationRelay(outbox, notificationReceiverAdapter{receiver: receiver}, serverrelay.ResearchflowNotificationConfig{
+		WorkerID: cfg.WorkerID, BatchSize: cfg.BatchSize,
+		PollInterval: cfg.PollInterval, LeaseDuration: cfg.LeaseDuration,
+		PublishTimeout: cfg.LeaseDuration / 2,
 	}, slog.Default())
 }
 
@@ -295,21 +413,24 @@ func joinShutdownError(runErr, shutdownErr error) error {
 }
 
 // stopConsumersThenCloseResources enforces the ownership boundary: all
-// lifecycle-managed consumers stop before shared DB/Redis/HTTP resources close.
-// Resource closure still runs when consumer shutdown reports an error.
+// lifecycle-managed consumers must stop successfully before shared DB/Redis/HTTP
+// resources close. If shutdown fails or times out, keep resources open so an
+// in-flight consumer cannot use a closed connection pool; the process owner
+// should then terminate the process rather than continue serving.
 func stopConsumersThenCloseResources(
 	ctx context.Context,
 	stopConsumers func(context.Context) error,
 	closeResources func() error,
 ) error {
-	var stopErr, closeErr error
 	if stopConsumers != nil {
-		stopErr = stopConsumers(ctx)
+		if err := stopConsumers(ctx); err != nil {
+			return fmt.Errorf("停止生命周期消费者失败；为避免在途任务访问已关闭资源，保留共享资源: %w", err)
+		}
 	}
-	if closeResources != nil {
-		closeErr = closeResources()
+	if closeResources == nil {
+		return nil
 	}
-	return errors.Join(stopErr, closeErr)
+	return closeResources()
 }
 
 type legacyAnalysisWorker struct {
