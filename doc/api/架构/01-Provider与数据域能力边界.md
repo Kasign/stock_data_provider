@@ -1,142 +1,152 @@
 # Provider 与数据域能力边界
 
-更新时间：2026-11-18  
-代码基线：`feat/data @ 90871455b282d6124d3c25fb9189fbd274894e67`
+更新日期：2026-11-18  
+代码核对基线：`feat/data @ 90871455b282d6124d3c25fb9189fbd274894e67`  
+核对范围：`internal/marketdata/provider/**`、`internal/marketdata/service/**`、`internal/marketdata/bootstrap/module.go`、`internal/marketdata/config/**`、`configs/marketdata/providers.json`
 
-## 1. 事实来源与判定层级
+本文只描述代码实现、默认配置、Bootstrap 注册和已有真实证据。部署环境可能通过环境变量覆盖配置；没有运行环境配置快照时，不推断线上实际启用状态。
 
-本文件是代码静态能力盘点，不是 Provider 真实数据验收报告。能力状态必须区分：
+## 1. 判定层次
 
-- **接口存在**：Provider 实现对应 Go Capability Interface。
-- **配置启用**：`configs/marketdata/providers.json` 将 Provider 与能力设为 enabled。
-- **运行装配**：Bootstrap 通过类型断言并将能力注册到 Service。
-- **真实验收**：有明确代码 SHA、Provider、证券/日期/字段、原始响应或脱敏 Artifact、判定结果的真实请求证据。
+| 层次 | 含义 | 证据 |
+|---|---|---|
+| 接口 | Provider 实现某个细粒度 Capability Interface | `internal/marketdata/provider/provider.go` |
+| 实现 | 具体 Provider 有对应方法及来源字段映射 | `internal/marketdata/provider/*.go` |
+| 默认配置 | `providers.json` 中 ProviderPriority、enabled 和能力开关 | `configs/marketdata/providers.json` |
+| 运行注册 | Bootstrap 按配置筛选并注入 Service；动态能力按既有类型断言发现 | `internal/marketdata/bootstrap/module.go`、对应 Service |
+| 真实验收 | 指定代码 SHA、Run/Artifact、样本和字段质量证据 | [Provider Runtime Acceptance Log](../provider-migration/DATA_SOURCE_RUNTIME_ACCEPTANCE_LOG.md) |
 
-上述四层不可互相替代。
+以上五层不能互相替代。配置启用不证明凭据/权限有效；接口注册不证明上游可用；请求成功不等于字段质量通过。
 
-## 2. 默认配置启用情况
+## 2. 主 Provider 与默认配置
 
-以下矩阵来自 `configs/marketdata/providers.json`，表示仓库默认配置，不代表线上环境实际配置，也不代表真实数据通过。
+Bootstrap 的 `available` 映射定义 11 个 Provider Adapter 候选；默认 `ProviderPriority` 只列出其中 10 个，Yahoo 虽被构造但不在默认优先级列表。默认配置实际启用 7 个主 Provider。MiaoXiang 不属于主列表，使用独立 `MARKET_DATA_MX_ENABLED`，默认 false。
 
-| Provider | 默认启用 | 默认配置能力 |
-|---|---:|---|
-| Eastmoney | 是 | Quote、DailyBars、StockBasic、StockSearch、SectorRankings、IndexQuotes、MarketBreadth、LimitPools、StockBoards、DragonTiger、Announcements、ChipDistribution、CapitalFlow、HotRankings |
-| BaoStock | 是 | DailyBars、TradingCalendar、Fundamentals |
-| Tencent | 是 | Quote、DailyBars、StockSearch |
-| Sina | 是 | Quote、DailyBars |
-| NetEase | 是 | Quote、DailyBars |
-| TickFlow | 是 | DailyBars |
-| Pytdx | 是 | Quote、DailyBars |
-| Hithink | 否 | 配置默认关闭 |
-| Tushare | 否 | 配置默认关闭 |
-| Yahoo | 否 | 配置默认关闭 |
-| Xueqiu | 否 | 配置默认关闭 |
+| Provider | 代码已实现能力 | 默认优先级 | 默认启用 | 默认注册能力/说明 |
+|---|---|---:|---:|---|
+| Eastmoney | Quote、DailyBars、StockBasic、StockSearch、StockUniverse、SectorRankings（Metric/Direction）、IndexQuotes、MarketBreadth、StockBoards、LimitPools、DragonTiger、Announcements、ChipDistribution、CapitalFlow、HotRankings | 是 | 是 | 上述 `providers.json` 明确开启的能力均注册；StockUniverse 通过已注册 StockSearchProvider 的动态类型断言发现 |
+| BaoStock | DailyBars、TradingCalendar、Fundamentals、AdjustmentFactors | 是 | 是 | DailyBars、TradingCalendar、Fundamentals 显式注册；AdjustmentFactorProvider 从已启用主 Provider 列表动态发现 |
+| Tencent | Quote、DailyBars、StockSearch | 是 | 是 | 三项能力均显式注册；StockSearch 使用独立优先级 |
+| Sina | Quote、DailyBars | 是 | 是 | Quote、DailyBars 显式注册 |
+| NetEase | Quote、DailyBars | 是 | 是 | Quote、DailyBars 显式注册 |
+| TickFlow | Quote、DailyBars、IndexQuotes、MarketBreadth、SectorRankings（含 Direction） | 是 | 是 | 默认仅 DailyBars 开启；其余能力虽有实现但默认关闭 |
+| Pytdx | Quote、DailyBars | 是 | 是 | Quote、DailyBars 显式注册；TCP 出站连接由 Root 注入 |
+| Hithink | Quote、DailyBars、StockSearch、IndexQuotes、TradingCalendar、HotRankings、LimitPools、DragonTiger、IndexCatalog（目录/当前成分/指数日线）、Valuations、Fundamentals | 是 | 否 | 代码已实现但默认关闭；不能计入默认运行能力 |
+| Tushare | DailyBars、StockBasic、TradingCalendar、SecurityTradingStatus、Fundamentals、Valuations、LimitPools、DragonTiger、Announcements、IndexCatalog（含历史成分）、AdjustmentFactors、CorporateActions、MarketCapitalFlow | 是 | 否 | 代码已实现但默认关闭；权限/积分阻塞按具体接口记录 |
+| Xueqiu | HotRankings | 是 | 否 | 代码已实现但默认关闭；Cookie/登录态与限流另行验收 |
+| Yahoo Finance | Quote、DailyBars | 否 | 否 | Adapter 已构造，但默认 ProviderPriority 不含 yahoo；仅启用开关不足以进入主 Provider 列表 |
 
-MiaoXiang 是由 `MXEnabled` 单独控制的补充 Provider，不在上述 ProviderPriority 主列表中；当前补充接口覆盖筹码分布和个股资金流。其启用状态必须读取实际运行配置，不能从主 Provider 配置推断。
+默认配置来自仓库文件，不代表线上运行时配置。默认启用主 Provider：Eastmoney、BaoStock、Tencent、Sina、NetEase、TickFlow、Pytdx。默认关闭：Hithink、Tushare、Xueqiu、Yahoo（Yahoo 还不在默认优先级中）。
 
-## 2.2 按数据域的默认启用 Provider
-
-以下按 `configs/marketdata/providers.json` 的默认配置反向汇总；只表示默认开关，不表示线上部署配置或真实数据通过。
+### 2.1 默认启用能力矩阵
 
 | 数据域 | 默认启用 Provider |
 |---|---|
 | Quote | Eastmoney、Tencent、Sina、NetEase、Pytdx |
 | DailyBars | Eastmoney、BaoStock、Tencent、Sina、NetEase、TickFlow、Pytdx |
 | StockBasic | Eastmoney |
-| StockSearch | Eastmoney、Tencent |
+| StockSearch | Tencent、Eastmoney（搜索优先级为 Tencent → Eastmoney） |
+| StockUniverse | Eastmoney（通过 StockSearchProvider 列表动态发现） |
 | SectorRankings | Eastmoney |
 | IndexQuotes | Eastmoney |
 | MarketBreadth | Eastmoney |
-| LimitPools | Eastmoney |
 | StockBoards | Eastmoney |
+| LimitPools | Eastmoney |
 | DragonTiger | Eastmoney |
 | Announcements | Eastmoney |
 | TradingCalendar | BaoStock |
-| SecurityTradingStatus | 无默认启用 Provider |
+| SecurityTradingStatus | 无 |
 | Fundamentals | BaoStock |
-| Valuations | 无默认启用 Provider |
-| IndexCatalog | 无默认启用 Provider |
+| Valuations | 无 |
+| IndexCatalog | 无 |
 | ChipDistribution | Eastmoney |
 | CapitalFlow | Eastmoney |
-| MarketCapitalFlow | 无默认启用 Provider |
+| MarketCapitalFlow | 无 |
 | HotRankings | Eastmoney |
+| AdjustmentFactors | BaoStock（动态发现，不是独立配置开关） |
+| CorporateActions | 无 |
+| HistoricalIndexConstituents | 无 |
+| PriceLimitEvents | 无 |
 
-MiaoXiang 的 ChipDistribution/CapitalFlow 由 `MXEnabled` 独立控制，不纳入上述默认矩阵。Hithink、Tushare、Yahoo、Xueqiu 虽有部分代码实现或配置项，但默认均关闭。
+MiaoXiang 的 ChipDistribution/CapitalFlow 由独立 `MARKET_DATA_MX_ENABLED` 控制，默认关闭，不纳入主 Provider 默认矩阵。
 
+## 3. 扩展能力的真实注册路径
 
-## 2.1 已核对的具体实现入口
+这些能力没有各自独立的 ProviderSettings 开关，不能仅凭配置文件中的字段判断是否接入。
 
-本轮逐个读取了以下 Provider 主要实现文件，并核对其公开方法。这里仅列本次已确认的实现，不将文件未覆盖的方法推定为不存在。
-
-| Provider | 已确认的公开实现 | 默认配置 | 说明 |
+| 能力 | 实现 Provider | 注册/消费路径 | 默认运行状态 |
 |---|---|---|---|
-| Eastmoney | Quote、DailyBars、StockBasic、StockBoards、HotRankings、ChipDistribution、CapitalFlow、StockSearch、ListStockUniverse、SectorRankings（含 Metric/Direction）、IndexQuotes、MarketBreadth、LimitPool；另有龙虎榜和公告独立文件 | 启用 | 默认能力较广；ListStockUniverse 是 Provider 方法，但当前 Bootstrap 未将 StockUniverseProvider 作为独立能力集合；其他已启用能力仍须以 SourceStatus 和真实证据确认 |
-| Hithink | StockSearch、IndexQuotes、TradingCalendar、HotRankings、LimitPool、DragonTiger、IndexCatalog/Constituents/DailyBars、Valuations、Quote、DailyBars、Fundamentals | 关闭 | 代码实现存在不代表已配置或已获得真实接口权限 |
-| BaoStock | DailyBars、TradingCalendar、Fundamentals；另有 AdjustmentFactorProvider 实现 | 启用 | 真实字段证据只按 Runtime Log 指定样本 |
-| Tencent | Quote、DailyBars、StockSearch | 启用 | 搜索能力由独立实现文件提供 |
-| Sina | Quote、DailyBars | 启用 | 当前默认只启用这两项 |
-| NetEase | Quote、DailyBars | 启用 | 当前默认只启用这两项 |
-| TickFlow | Quote、IndexQuotes、MarketBreadth、SectorRankings（含 Direction）、DailyBars | 启用 | 默认仅启用 DailyBars；其他已实现能力默认关闭 |
-| Pytdx | Quote、DailyBars | 启用 | TCP Provider；出站连接由 Root 注入 |
-| Yahoo | Quote、DailyBars | 关闭 | 海外市场能力不属于当前国内 A 股优先范围 |
-| Tushare | 当前主文件确认 DailyBars；复权因子方法需结合接口完整实现核对 | 关闭 | 真实财务/估值权限曾返回 40203，不得记为数据通过 |
-| Xueqiu | HotRankings | 关闭 | 真实在线验收仍需独立证据 |
-| MiaoXiang | ChipDistribution、CapitalFlow | 独立开关 `MXEnabled` | 作为 SupplementProvider 注入，不进入 Quote/DailyBars 主回退链 |
+| StockUniverse | Eastmoney | `StockSearchProvider` 列表中动态断言 `StockUniverseProvider`；`DataService.StockUniverse` 被 `MarketStocks` 用例调用 | Eastmoney 默认 StockSearch 开启，因此已接入 |
+| AdjustmentFactors | BaoStock、Tushare | DataService 遍历已启用的 NamedProvider 并动态断言 `AdjustmentFactorProvider` | BaoStock 默认启用；Tushare 默认关闭 |
+| CorporateActions | Tushare | DataService 遍历已启用的 NamedProvider 并动态断言 `CorporateActionProvider` | 无默认来源 |
+| HistoricalIndexConstituents | Tushare | IndexCatalog Provider 列表中动态断言 `HistoricalIndexConstituentProvider` | 无默认来源 |
+| MetricSectorRankings | Eastmoney | 复用已注册的 `SectorRankingProvider` 列表，调用时按需断言 | Eastmoney 默认启用 |
+| DirectionalSectorRankings | Eastmoney、TickFlow | 复用已注册的 `SectorRankingProvider` 列表，调用时按需断言 | Eastmoney 默认启用；TickFlow 的 SectorRankings 默认关闭 |
+| SecurityTradingStatus | Tushare | 显式 `security_trading_status` 开关；同时要求该 Provider 的 `stock_basic` 和 `trading_calendar` 开关开启 | 无默认来源；Tushare 默认关闭 |
+| MarketCapitalFlow | Tushare | 显式 `market_capital_flow` 开关和独立能力切片 | 无默认来源；Tushare 默认关闭 |
+| PriceLimitEvents | 当前未发现 Provider 实现 | Bootstrap 会扫描已启用 Provider 并收集 `PriceLimitEventProvider`，但当前扫描结果为空 | 未接入 |
 
-实现文件核对基线为当前任务开始时的 `feat/data @ 90871455b282d6124d3c25fb9189fbd274894e67`。Bootstrap 的能力类型断言是运行装配的最终门禁；若配置启用但 Provider 未实现接口，模块构造应失败。
+**StockUniverse 不是孤立接口。** `internal/marketdata/service/market_stocks.go` 中 `DataService.StockUniverse` 遍历已注册的 StockSearchProvider，动态识别 StockUniverseProvider；`MarketStocks` 调用该方法获取全量证券目录，再做分页及行情/均线增强。因此无需新增独立配置项或重复注册机制。HTTP SourceStatus 目前只反映 StockSearch 能力，不单独暴露 StockUniverse 能力位；这不改变 Service 内部的真实消费路径。
 
-本轮已定位 BaoStock TradingCalendar/AdjustmentFactor、Tencent StockSearch、Eastmoney CapitalFlow 的独立实现文件。进一步核对确认：AdjustmentFactorProvider/CorporateActionProvider 由 DataService 遍历已装配的 NamedProvider 并做运行时类型断言；HistoricalIndexConstituentProvider 在 IndexCatalog Provider 中按需类型断言；PriceLimitEventProvider 由 Bootstrap 遍历全部启用 Provider 自动收集；SecurityTradingStatus 与 MarketCapitalFlow 则通过显式配置、能力切片和 Set 方法装配。StockUniverseProvider/Eastmoney.ListStockUniverse 复用 SearchStocks 的同一份证券目录缓存；当前未发现独立配置开关、Bootstrap 能力切片或独立 Service Port。暂不把它统计为独立数据域能力，待全仓引用核对后再决定是否保留接口抽象。
+**PriceLimitEventProvider 目前只有接口与 Service 装配槽位。** Provider 目录中未发现 `FetchPriceLimitEventEvidence` 的具体实现，Bootstrap 自动收集不会凭空产生可用 Provider；不得将其列为已接入或真实可用能力。
 
-## 3. Bootstrap 装配规则
+## 4. Provider 实现文件核对索引
 
-`internal/marketdata/bootstrap/module.go` 当前创建 11 个主 Provider，并按 ProviderPriority 与 ProviderSettings 过滤。配置启用某项能力时，Bootstrap 必须验证对应 Provider 实现该 Capability Interface，否则启动失败。
+| Provider | 主要实现文件 |
+|---|---|
+| Eastmoney | `eastmoney.go`、`eastmoney_capital_flow.go`、`eastmoney_announcements.go`、`eastmoney_dragon_tiger.go` |
+| Hithink | `hithink.go` |
+| BaoStock | `baostock.go`、`baostock_calendar.go`、`baostock_fundamentals.go`、`baostock_adjustment_factors.go` |
+| Tencent | `tencent.go`、`tencent_search.go` |
+| Sina / NetEase / TickFlow / Pytdx / Yahoo / Xueqiu / MiaoXiang | 各自同名 Provider 文件 |
+| Tushare | `tushare.go`、`tushare_capabilities.go`、`tushare_adjustment_factors.go`、`tushare_corporate_actions.go`、`tushare_security_trading_status.go`、`tushare_market_capital_flow.go` |
 
-当前装配的能力域包括：
+## 5. 真实数据证据矩阵
 
-- Quote、DailyBars；
-- StockBasic、StockSearch；
-- SectorRankings、IndexQuotes、MarketBreadth；
-- LimitPools、DragonTiger、Announcements、StockBoards；
-- TradingCalendar、SecurityTradingStatus；
-- Fundamentals、Valuations；
-- IndexCatalog；
-- ChipDistribution、CapitalFlow、MarketCapitalFlow、HotRankings；
-- 自动识别 PriceLimitEventProvider。
+本表只汇总 Runtime Acceptance Log 已记录的样本，不把静态实现、普通测试或 CI 成功当作真实数据通过。
 
-Provider 接口还定义 AdjustmentFactorProvider、CorporateActionProvider、StockUniverseProvider、MetricSectorRankingProvider、DirectionalSectorRankingProvider、HistoricalIndexConstituentProvider 等扩展能力；这些接口的存在不代表已由 Bootstrap 注册。必须继续追踪具体 Provider 的实现与实际调用路径。
+| Provider | 已有真实证据 | 当前判定 | 不可外推范围 |
+|---|---|---|---|
+| BaoStock | 复权因子与日 K 一致性、停牌/复牌及 ST 字段样本（Runtime Log 第 61、72 节） | 对应样本通过 | 不代表全证券、全日期状态覆盖或所有字段通过 |
+| Pytdx | GBBQ 公司行为、复权参考日、停牌/临停样本（第 62、64、71 节） | 对应样本通过；不同复权模式结论分别处理 | 不代表与 BaoStock 原生算法完全等价 |
+| Hithink | 600519.SH 五项估值复算、披露日期字段、日 K 分页及后复权成交量核验（第 66～69 节） | 五项估值样本通过；快照整体 degraded | 不代表全市场估值、所有财务字段或 Freshness 通过 |
+| Eastmoney | 公共源日 K、复权请求与字段样本（第 41～57、70 节） | 按字段/复权模式判定；绝对参考日证据不足时 not_comparable | 不代表其他数据域已通过 |
+| Tencent | 公共源日 K、复权请求与字段样本（第 41～57、70 节） | 按字段/复权模式判定；绝对参考日证据不足时 not_comparable | 不代表其他数据域已通过 |
+| Sina | 公共源历史日 K 与跨源比较样本（第 41～57 节） | 按样本/口径判定；部分 adjusted 能力 not_supported | 不代表全部复权模式通过 |
+| NetEase | 公共源历史日 K 与跨源比较样本（第 41～57 节） | 按样本/口径判定 | 不代表 Quote 或所有字段通过 |
+| TickFlow | 日线成交量单位修复及线上复测（第 47～50 节） | 对应样本修复后通过 | 不外推到其他能力、证券或时间窗口 |
+| Tushare | 财务/估值、复权因子/公司行动部分接口返回 40203 权限错误（第 60、65 节及相关记录） | 对应接口 permission_required | 不代表 Tushare 所有接口均失败；未获权限前不重复请求 |
+| Xueqiu | 有在线探测入口，无对应真实请求验收记录 | 未执行/待凭据与证据 | 不得由接口存在推断通过 |
+| MiaoXiang | 有在线探测入口，无对应真实请求验收记录 | 未执行/待凭据与证据 | 不得由接口存在推断筹码/资金流字段通过 |
+| Yahoo | 海外市场能力暂缓 | deferred | 不属于当前国内 A 股优先验收范围 |
 
-`httpapi.BuildSourceStatuses` 根据 Bootstrap 实际注册的 Provider 列表构造 SourceStatus，不从静态配置直接推断运行能力。该状态只说明装配能力，不是数据质量或真实可用性证明。
+真实证据的原始记录、Run/Artifact、代码 SHA 和样本边界以 [DATA_SOURCE_RUNTIME_ACCEPTANCE_LOG.md](../provider-migration/DATA_SOURCE_RUNTIME_ACCEPTANCE_LOG.md) 为准。对没有逐能力真实证据的格子，状态保持未执行；缺少同口径或独立参考基准时标记不可比较。
 
-## 4. 尚待核验的扩展能力
+## 6. 统一状态判定
 
-- `StockUniverseProvider`：Eastmoney 的 `ListStockUniverse` 与 `SearchStocks` 复用同一证券目录缓存；当前未发现独立 Service Port/Bootstrap 注册。需完成全仓引用核对，判断接口是否有独立消费者；不能仅凭 Provider 方法存在宣称已接入完整证券目录 API。
-- `CorporateActionProvider` / `AdjustmentFactorProvider`：Service 已通过遍历已装配 Provider 动态发现；仍需核对各 Provider 实现和真实样本，不需要为此新增重复注册接口。
-- `HistoricalIndexConstituentProvider`：由 IndexCatalog Provider 按需类型断言；当前真实历史成分证据仍需单独核验。
-- `SecurityTradingStatusProvider` / `MarketCapitalFlowProvider`：显式配置与 Bootstrap 切片存在；需核对实际 Provider 实现和真实数据证据。
-- `PriceLimitEventProvider`：Bootstrap 对全部启用 Provider 自动发现；不应再新增重复配置项。
+| 状态 | 判定标准 |
+|---|---|
+| 通过 | 指定样本的字段、单位、时间、覆盖和质量契约均有真实证据支持 |
+| 降级 | 数据可用但存在已明确的时间、字段、覆盖或来源限制；限制不会被伪装为有效 |
+| 失败 | 真实请求返回错误数据，或违反字段、单位、时间、覆盖等硬契约 |
+| 不可比较 | 缺少同口径、独立参考日期、来源可用时间或可比样本，不能作正确性结论 |
+| 未执行 | 没有该 Provider × 能力的真实请求证据 |
+| 权限阻塞 | 凭据、积分、Cookie、API Key 或账号权限不足；不等于数据质量失败 |
 
-接口存在、动态发现或 SourceStatus 注册都不是真实数据验收通过。
+无凭据/无权限记为 skipped、not_configured 或 permission_required；不支持的能力记为 not_supported；不能把 skipped/not_configured 统计为失败或通过。
 
-## 5. 真实验收入口
+## 7. 依赖与职责边界
 
-- 追加式 Provider 真实运行证据：`../provider-migration/DATA_SOURCE_RUNTIME_ACCEPTANCE_LOG.md`
-- 阶段五历史验收方案：`../acceptance/国内A股数据层阶段五统一验收计划.md`
-- 字段校验与诊断规则：`../quality/字段校验与诊断体系实施方案.md`
+- Platform 提供 HTTP Client/BoundDoer、Fault、Storage、Diagnostics、Time 等公共技术能力；Data 不重复实现。
+- Server 是组合根，负责共享 DB/Redis、配置与 Secret 注入、Migration 总注册、Root 路由和生命周期；Data 只暴露已有 Module、Application Port、Handler、Diagnostics 与 MigrationRunner。
+- Research/Quant/Researchflow 通过 Data Application Port 消费数据，不直接依赖 Provider/Repository。
+- Web 只消费已经批准并实现的 API，不反向决定 Provider 能力或数据字段。
+- MDM 并入 Root Server 的剩余装配由 Server SRV-009 负责，不属于本任务的 Data Provider 能力开发。
 
-当前已知限制：
-- BaoStock 停牌/复牌字段存在明确样本证据，但不能外推为全市场完整覆盖。
-- Eastmoney/Tencent 的复权绝对参考日缺少独立来源证据时必须保持不可比较。
-- Tushare、Hithink、Yahoo、Xueqiu 默认关闭；无凭据或未启用的 Probe 应记为 skipped/not_configured，不记为失败，也不能记为通过。
-- 真实数据验收以 Runtime Acceptance Log 对应的具体记录为准，不能用 Go 测试、配置启用或 CI 总体成功替代。
+## 8. 后续核验入口
 
-## 6. 后续盘点要求
-
-对每个 Provider × 数据域至少补齐：
-1. Go 接口和实现文件；
-2. 默认配置与部署实际配置；
-3. Bootstrap 注册路径；
-4. 字段来源、单位、时间语义、复权口径及限制；
-5. 真实请求证据及状态（通过/降级/失败/不可比较/未执行）；
-6. 证据 SHA、Run/Artifact 和适用样本范围。
-
-没有证据的格子保持未执行或不可比较，不允许按能力接口存在推定通过。
+- 任务唯一状态：[模块总任务规划和进度](../模块总任务规划和进度.md)
+- 当前任务：[当前任务状态和进度](../当前任务状态和进度.md)
+- 真实请求账本：[DATA_SOURCE_RUNTIME_ACCEPTANCE_LOG.md](../provider-migration/DATA_SOURCE_RUNTIME_ACCEPTANCE_LOG.md)
+- 字段质量与诊断规则：[字段校验与诊断体系实施方案](../quality/字段校验与诊断体系实施方案.md)
+- 阶段验收方案：[国内 A 股数据层阶段五统一验收计划](../acceptance/国内A股数据层阶段五统一验收计划.md)
