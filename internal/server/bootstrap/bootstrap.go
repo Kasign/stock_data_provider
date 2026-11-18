@@ -13,8 +13,10 @@ import (
 	"strings"
 	"time"
 
-	"example.com/stock-analysis-flow/internal/adapters/marketdata"
 	"example.com/stock-analysis-flow/internal/adapters/storage/mysqlredis"
+	marketdataapp "example.com/stock-analysis-flow/internal/marketdata/app"
+	marketdatabootstrap "example.com/stock-analysis-flow/internal/marketdata/bootstrap"
+	marketdataconfig "example.com/stock-analysis-flow/internal/marketdata/config"
 	newsstorage "example.com/stock-analysis-flow/internal/news/adapters/storage"
 	newsconfig "example.com/stock-analysis-flow/internal/news/config"
 	newsdiagnostics "example.com/stock-analysis-flow/internal/news/diagnostics"
@@ -38,6 +40,7 @@ import (
 	serverresources "example.com/stock-analysis-flow/internal/server/resources"
 	runtime "example.com/stock-analysis-flow/internal/server/runtime"
 	serversecurity "example.com/stock-analysis-flow/internal/server/security"
+	servermarketdata "example.com/stock-analysis-flow/internal/server/marketdata"
 	"example.com/stock-analysis-flow/internal/service"
 )
 
@@ -59,14 +62,14 @@ func Run(ctx context.Context) (runErr error) {
 	}
 	slog.SetDefault(newJSONLogger(processConfig.LogLevel))
 
-	// 存储与行情配置仍由各自兼容 Adapter 负责解析；Server 不复制其领域配置 Schema。
+	// Server 只聚合进程级存储配置；行情 Provider 配置由 Data 模块自己的 Config Loader 解析。
 	storageCfg, err := mysqlredis.LoadConfig(env)
 	if err != nil {
 		return fmt.Errorf("存储配置无效: %w", err)
 	}
-	marketDataCfg, err := marketdata.LoadConfig(env)
+	marketDataCfg, err := marketdataconfig.LoadForInProcess()
 	if err != nil {
-		return fmt.Errorf("Go 行情服务配置无效: %w", err)
+		return fmt.Errorf("Data 模块配置无效: %w", err)
 	}
 	newsConfig, err := newsconfig.Load(env)
 	if err != nil {
@@ -96,6 +99,11 @@ func Run(ctx context.Context) (runErr error) {
 	if err != nil {
 		return fmt.Errorf("连接 MariaDB/Redis 失败（检查 DB_HOST/DB_PASSWORD/REDIS_ADDR 和 DB_AUTO_MIGRATE）: %w", err)
 	}
+	marketDataModule, err := newMarketDataModule(storageResources, marketDataCfg)
+	if err != nil {
+		_ = storageResources.Close()
+		return fmt.Errorf("装配 Data Module 失败: %w", err)
+	}
 	var lifecycle *runtime.Lifecycle
 	defer func() {
 		stopCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
@@ -108,7 +116,14 @@ func Run(ctx context.Context) (runErr error) {
 				}
 				return lifecycle.Stop(ctx)
 			},
-			storageResources.Close,
+			func() error {
+				var closeErr error
+				if marketDataModule != nil {
+					closeErr = errors.Join(closeErr, marketDataModule.Close(stopCtx))
+				}
+				closeErr = errors.Join(closeErr, storageResources.Close())
+				return closeErr
+			},
 		); shutdownErr != nil {
 			slog.Error("停止 Server 并关闭共享资源失败", "error", shutdownErr.Error())
 			runErr = joinShutdownError(runErr, shutdownErr)
@@ -121,19 +136,36 @@ func Run(ctx context.Context) (runErr error) {
 	}
 	migrationCtx, migrationCancel := context.WithTimeout(ctx, migrationCfg.Timeout)
 	if migrationCfg.Enabled {
+		// Data 当前公开 MigrationRunner，由 Data Store 内部调用 Platform Migration Runner。
+		// Server 负责在模块启动前显式调度，不复制 Data SQL 或 Migration checksum 规则。
+		dataMigration := marketDataModule.MigrationRunner()
+		if dataMigration == nil {
+			migrationCancel()
+			return errors.New("Data Module 已配置共享存储，但未提供 MigrationRunner")
+		}
+		if err := dataMigration.Migrate(migrationCtx); err != nil {
+			migrationCancel()
+			return fmt.Errorf("执行 Data Module Migration 失败: %w", err)
+		}
 		migrationReport, migrationErr := migrationRegistry.RunWithReport(migrationCtx, storageResources.DB)
 		if migrationErr != nil {
 			migrationCancel()
 			slog.Error("模块 Migration 执行失败", "report", migrationReport, "error", migrationErr.Error())
 			return fmt.Errorf("执行模块 Migration 失败: %w", migrationErr)
 		}
+		slog.Info("Data Module Migration 执行完成", "namespace", "market_data")
 		slog.Info("模块 Migration 执行完成", "report", migrationReport)
 	} else {
 		if err := migrationRegistry.ValidateApplied(migrationCtx, storageResources.DB); err != nil {
 			migrationCancel()
-			return fmt.Errorf("数据库 Schema 尚未满足当前模块版本要求（MIGRATION_ENABLED=false）: %w", err)
+			return fmt.Errorf("数据库 Schema 尚未满足当前已注册模块版本要求（MIGRATION_ENABLED=false）: %w", err)
 		}
-		slog.Info("模块 Schema 预检通过", "migration_enabled", false)
+		// 当前 Data 公开 Diagnostics.Ready 只验证共享 DB/Redis 依赖，不校验 Migration checksum。
+		if err := marketDataModule.Diagnostics().Ready(migrationCtx); err != nil {
+			migrationCancel()
+			return fmt.Errorf("Data Module 依赖就绪检查失败（MIGRATION_ENABLED=false）: %w", err)
+		}
+		slog.Info("已注册模块 Schema 预检通过；Data Module 依赖检查通过，Data Migration history 未由当前公开接口校验", "migration_enabled", false)
 	}
 	migrationCancel()
 
@@ -184,7 +216,17 @@ func Run(ctx context.Context) (runErr error) {
 		}
 	}
 
-	runner, err := service.NewRunnerWithMarketDataStores(marketDataCfg, store, store)
+	historyLimit := marketDataCfg.DefaultDailyBars
+	if historyLimit < 21 {
+		historyLimit = 21
+	}
+	analysisCollector, err := servermarketdata.NewAnalysisCollector(
+		marketDataModule.Application(), historyLimit, marketdataapp.AdjustmentBasis(marketDataCfg.Adjustment),
+	)
+	if err != nil {
+		return fmt.Errorf("创建 Data Application Port 适配器失败: %w", err)
+	}
+	runner, err := service.NewRunnerWithDataCollector(analysisCollector, store, store)
 	if err != nil {
 		return fmt.Errorf("创建分析 Runner 失败: %w", err)
 	}
@@ -198,6 +240,9 @@ func Run(ctx context.Context) (runErr error) {
 	lifecycle, err = runtime.NewLifecycleWithRollbackTimeout(shutdownTimeout)
 	if err != nil {
 		return fmt.Errorf("创建 Server Lifecycle 失败: %w", err)
+	}
+	if err := lifecycle.Register(marketDataComponent{module: marketDataModule}); err != nil {
+		return fmt.Errorf("注册 Data Module 生命周期失败: %w", err)
 	}
 	if err := lifecycle.Register(legacyAnalysisWorker{name: "legacy-analysis-worker", queue: tasks, enabled: serverRole == serverconfig.RoleWorker || serverRole == serverconfig.RoleAll}); err != nil {
 		return fmt.Errorf("注册旧 Analysis Worker 生命周期失败: %w", err)
@@ -243,7 +288,7 @@ func Run(ctx context.Context) (runErr error) {
 		if err != nil {
 			return fmt.Errorf("创建旧 Analysis HTTP API 失败: %w", err)
 		}
-		diagnosticsService, err := newDiagnosticsService(storageResources, migrationRegistry, newsConfig)
+		diagnosticsService, err := newDiagnosticsService(storageResources, migrationRegistry, newsConfig, marketDataModule)
 		if err != nil {
 			return fmt.Errorf("创建 Server 诊断服务失败: %w", err)
 		}
@@ -251,7 +296,7 @@ func Run(ctx context.Context) (runErr error) {
 		if err != nil {
 			return fmt.Errorf("创建 Health/Readiness Handler 失败: %w", err)
 		}
-		handler, err := newHTTPHandler(authenticator, healthHandler, api.Handler(), ownerSession)
+		handler, err := newHTTPHandler(authenticator, healthHandler, api.Handler(), marketDataModule.InProcessHandler(), ownerSession)
 		if err != nil {
 			return fmt.Errorf("注册 HTTP 路由失败: %w", err)
 		}
@@ -397,11 +442,12 @@ func newResearchflowNotificationRelay(
 
 // newDiagnosticsService composes Server resource/schema checks with the
 // deterministic News parser self-checks. Domain checks remain owned by News.
-func newDiagnosticsService(shared *serverresources.Resources, registry *servermigration.Registry, newsConfig newsconfig.Config) (*serverdiagnostics.Service, error) {
+func newDiagnosticsService(shared *serverresources.Resources, registry *servermigration.Registry, newsConfig newsconfig.Config, marketDataModule *marketdatabootstrap.Module) (*serverdiagnostics.Service, error) {
 	return serverdiagnostics.NewServiceWithMigration(
 		shared, registry,
 		newsdiagnostics.ParserChecks(),
 		newsdiagnostics.ProviderConfigChecks(newsConfig),
+		marketDataReadinessChecks(marketDataModule),
 	)
 }
 
