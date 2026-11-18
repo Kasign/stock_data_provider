@@ -25,12 +25,21 @@ import (
 const researchflowTimestampLayout = "2006-01-02T15:04:05.000000000Z"
 
 var _ application.RunRepository = (*MySQLRunRepository)(nil)
+var _ application.DatabaseClock = (*MySQLRunRepository)(nil)
 
 // MySQLRunRepository stores Researchflow runs in the module-owned MariaDB tables.
 // The caller owns db lifecycle and migration execution.
 type MySQLRunRepository struct {
 	db       *sql.DB
 	capacity CapacityLimits
+}
+
+// NowUTC exposes the same MariaDB clock used by Run/Outbox persistence.
+func (r *MySQLRunRepository) NowUTC(ctx context.Context) (time.Time, error) {
+	if r == nil || r.db == nil || ctx == nil {
+		return time.Time{}, errors.New("Researchflow Run Repository database clock is not configured")
+	}
+	return mariadbtime.ReadUTC(ctx, r.db)
 }
 
 func NewMySQLRunRepository(db *sql.DB, capacity CapacityLimits) (*MySQLRunRepository, error) {

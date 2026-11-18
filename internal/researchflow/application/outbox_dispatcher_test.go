@@ -18,7 +18,11 @@ type fakeOutboxStore struct {
 	retryAt        map[string]time.Time
 	retryErrorCode map[string]string
 	claimErr       error
+	now            time.Time
+	clockErr       error
 }
+
+func (s *fakeOutboxStore) NowUTC(context.Context) (time.Time, error) { return s.now, s.clockErr }
 
 func (s *fakeOutboxStore) ClaimOutbox(_ context.Context, _, _ string, _ int, _ time.Duration) ([]OutboxMessage, error) {
 	s.mu.Lock()
@@ -73,7 +77,7 @@ func TestOutboxDispatcherPublishesAndSchedulesRetry(t *testing.T) {
 			{Ref: "event-ok", IdempotencyKey: "idem-ok", AttemptCount: 1, LeaseGeneration: 1},
 			{Ref: "event-fail", IdempotencyKey: "idem-fail", AttemptCount: 2, LeaseGeneration: 3},
 		},
-		retryAt: map[string]time.Time{}, retryErrorCode: map[string]string{},
+		retryAt: map[string]time.Time{}, retryErrorCode: map[string]string{}, now: now,
 		staleAck: map[string]bool{}, staleRetry: map[string]bool{},
 	}
 	publisher := &fakeOutboxPublisher{errors: map[string]error{
@@ -87,8 +91,6 @@ func TestOutboxDispatcherPublishesAndSchedulesRetry(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	dispatcher.now = func() time.Time { return now }
-
 	result, err := dispatcher.DispatchBatch(context.Background())
 	if err != nil {
 		t.Fatal(err)
