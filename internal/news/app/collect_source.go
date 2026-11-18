@@ -109,13 +109,22 @@ func (e *SourceCollectionError) Error() string {
 // CollectSource 仅采集已登记且授权通过的 RSS/Atom Endpoint。
 // 本用例只在当前请求内处理内容，不写入 DB/Redis，不下载附件或 Atom 外部正文。
 type CollectSource struct {
-	catalog   SourceCatalog
-	transport SourceTransport
-	now       func() time.Time
+	catalog          SourceCatalog
+	transport        SourceTransport
+	policyResolver   CurrentSourceCollectionPolicyResolver
+	now              func() time.Time
 }
 
 func NewCollectSource(catalog SourceCatalog, transport SourceTransport) *CollectSource {
 	return &CollectSource{catalog: catalog, transport: transport, now: time.Now}
+}
+
+// NewCollectSourceWithPolicyResolver 创建生产采集用例；没有当前策略解析器时不得用于生产装配。
+func NewCollectSourceWithPolicyResolver(catalog SourceCatalog, transport SourceTransport, resolver CurrentSourceCollectionPolicyResolver) (*CollectSource, error) {
+	if catalog == nil || transport == nil || resolver == nil {
+		return nil, ErrSourceCollectionPolicyUnavailable
+	}
+	return &CollectSource{catalog: catalog, transport: transport, policyResolver: resolver, now: time.Now}, nil
 }
 
 func (u *CollectSource) Execute(ctx context.Context, request CollectSourceRequest) (CollectSourceResult, error) {
@@ -172,7 +181,23 @@ func (u *CollectSource) Execute(ctx context.Context, request CollectSourceReques
 		Retention:    request.Retention,
 	}
 	policyEvaluatedAt := u.now().UTC()
-	decision := domain.EvaluateSourceCollectionPolicy(registration.SourcePolicy, registration.EndpointPolicy, policyRequest, policyEvaluatedAt)
+	sourcePolicy := registration.SourcePolicy
+	endpointPolicy := registration.EndpointPolicy
+	if u.policyResolver != nil {
+		currentSource, currentEndpoint, resolveErr := u.policyResolver.ResolveCurrentSourceCollectionPolicies(
+			ctx, registration.SourceID, registration.SourcePolicyVersionID,
+			registration.EndpointID, registration.EndpointPolicyVersionID,
+		)
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return CollectSourceResult{}, ctxErr
+		}
+		if resolveErr != nil {
+			return CollectSourceResult{}, &SourceCollectionError{Code: "source_current_policy_unavailable"}
+		}
+		sourcePolicy = currentSource
+		endpointPolicy = currentEndpoint
+	}
+	decision := domain.EvaluateSourceCollectionPolicy(sourcePolicy, endpointPolicy, policyRequest, policyEvaluatedAt)
 	if !decision.Allowed {
 		return CollectSourceResult{}, &SourceCollectionError{Code: decision.ReasonCode, Skipped: true}
 	}
