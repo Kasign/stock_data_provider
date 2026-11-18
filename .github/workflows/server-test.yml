@@ -122,7 +122,6 @@ jobs:
           image=server-relay-packaging-test
           container=server-bootstrap-smoke
           owner_token="$(openssl rand -hex 32)"
-          market_data_key="$(openssl rand -hex 32)"
           cleanup() {
             docker logs "$container" 2>/dev/null || true
             docker rm -f "$container" >/dev/null 2>&1 || true
@@ -141,8 +140,6 @@ jobs:
             -e HTTP_ADDR=:8092 \
             -e HTTP_SHUTDOWN_TIMEOUT=15s \
             -e PLATFORM_ADMIN_TOKEN="$owner_token" \
-            -e MARKET_DATA_BASE_URL=http://127.0.0.1:8091 \
-            -e MARKET_DATA_API_KEY="$market_data_key" \
             -e DB_HOST=host.docker.internal \
             -e DB_PORT=3306 \
             -e DB_USER=root \
@@ -160,11 +157,13 @@ jobs:
 
           ready=false
           for attempt in $(seq 1 60); do
-            if curl --silent --show-error --fail http://127.0.0.1:18092/healthz >/dev/null 2>&1; then
+            if curl --silent --show-error http://127.0.0.1:18092/healthz >/dev/null 2>&1; then
               # /readyz 按 Root Server 路由策略要求 Owner Bearer，不能匿名探测。
-              if curl --silent --show-error --fail \
+              ready_status="$(curl --silent --show-error \
                 -H "Authorization: Bearer $owner_token" \
-                http://127.0.0.1:18092/readyz >/tmp/server-readyz.json 2>/tmp/server-readyz-error.log; then
+                -o /tmp/server-readyz.json -w "%{http_code}" \
+                http://127.0.0.1:18092/readyz 2>/tmp/server-readyz-error.log || true)"
+              if [ "$ready_status" = "200" ]; then
                 ready=true
                 break
               fi
@@ -177,8 +176,13 @@ jobs:
           done
           if [ "$ready" != "true" ]; then
             echo "Server container did not become ready within 120 seconds"
+            echo "Last /readyz HTTP status: ${ready_status:-unavailable}"
             cat /tmp/server-readyz.json 2>/dev/null || true
             cat /tmp/server-readyz-error.log 2>/dev/null || true
+            echo "Detailed diagnostics:"
+            curl --silent --show-error \
+              -H "Authorization: Bearer $owner_token" \
+              http://127.0.0.1:18092/diagnostics || true
             exit 1
           fi
 
