@@ -9,7 +9,7 @@ on:
       - 'scripts/deploy-go.sh'
       - '.github/workflows/webui-check.yml'
   push:
-    branches: [main, feat/webui-market-data-console]
+    branches: [main, feat/web]
     paths:
       - 'web/**'
       - 'docker-compose.yml'

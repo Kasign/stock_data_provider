@@ -3,7 +3,7 @@ name: Live provider probe
 on:
   push:
     branches:
-      - feat/full-go-data-providers-api-switch
+      - feat/data
     paths:
       - ".github/workflows/live-provider-smoke.yml"
       - "internal/marketdata/**"
