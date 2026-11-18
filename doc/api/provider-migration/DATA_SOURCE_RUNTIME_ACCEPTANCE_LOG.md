@@ -1,6 +1,6 @@
-> 当前状态核对（2026-11-12，Data 代码验收基线 `9fe53c43c6c32408bbf59eb8c3c627b18a9bfe24`）：最新 Go Test Suite Run `43231652148` success；其 MariaDB Job `131228387935` 已通过业务表 Repository revision/PIT/reopen 测试（含 Fundamentals、Valuations），以及 DailyBar fallback、AdjustmentFactors/CorporateActions PIT 和 Probe HTTP + MariaDB 集成。BaoStock 加强字段探针 Live Provider Run `43228986723` / Job `131219214147` 明确 PASS。本文是追加式真实 Provider 运行证据账本；MariaDB 代码集成结果不等同于 Provider 真实数据验收，P0-89 也不代表完整 SecurityTradingStatus Provider。当前任务顺序以 [数据侧整体规划](../数据侧整体规划.md) 为准。
+> 当前状态核对（2026-11-12，Data 代码验收基线 `9fe53c43c6c32408bbf59eb8c3c627b18a9bfe24`）：最新 Go Test Suite Run `43231652148` success；其 MariaDB Job `131228387935` 已通过业务表 Repository revision/PIT/reopen 测试（含 Fundamentals、Valuations），以及 DailyBar fallback、AdjustmentFactors/CorporateActions PIT 和 Probe HTTP + MariaDB 集成。BaoStock 加强字段探针 Live Provider Run `43228986723` / Job `131219214147` 明确 PASS。本文是追加式真实 Provider 运行证据账本；MariaDB 代码集成结果不等同于 Provider 真实数据验收，P0-89 也不代表完整 SecurityTradingStatus Provider。当前任务顺序以 [模块总任务规划和进度](../模块总任务规划和进度.md) 为准。
 
-- 适用分支：`feat/full-go-data-providers-api-switch`
+- 适用分支：`feat/data`（历史记录中的 `feat/full-go-data-providers-api-switch` 为旧名称）
 - 文档更新日期：2026-11-12
 - 最近代码验收基线：`9fe53c43c6c32408bbf59eb8c3c627b18a9bfe24`（Go Test Suite Run `43231652148` success）
 - 当前结论：各 Provider/能力状态必须按后续逐条记录判定；没有对应真实请求记录的能力仍为未执行，不能从其他 Provider 的结果外推。
