@@ -1,0 +1,66 @@
+# 受控真实链路验收：真实 Tavily 请求必须经过 Server Researchflow Runtime 并持久化到隔离 MariaDB。
+name: News Researchflow Tavily live integration
+
+on:
+  push:
+    branches:
+      - integration
+  workflow_dispatch:
+    inputs:
+      confirm_live_test:
+        description: "确认发起真实 Tavily 请求并写入一次性隔离 MariaDB"
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: news-researchflow-tavily-live-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  live-integration:
+    if: ${{ (github.event_name == 'push' && contains(github.event.head_commit.message, '[run_news_researchflow_live]')) || (github.event_name == 'workflow_dispatch' && inputs.confirm_live_test) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      NEWS_RESEARCHFLOW_LIVE_TEST: "1"
+      NEWS_PROVIDER_TAVILY_ENDPOINT: ${{ vars.NEWS_PROVIDER_TAVILY_ENDPOINT }}
+      NEWS_PROVIDER_TAVILY_API_KEY: ${{ secrets.NEWS_PROVIDER_TAVILY_API_KEY }}
+      NEWS_LIVE_QUERY: ${{ vars.NEWS_LIVE_QUERY }}
+      SERVER_RELAY_TEST_MYSQL_DSN: root:root@tcp(127.0.0.1:3306)/integration_live_admin?parseTime=true&loc=UTC
+    services:
+      mariadb:
+        image: mariadb:11.4
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: integration_live_admin
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.23.x"
+          cache: true
+      - name: Validate explicit Tavily configuration
+        shell: bash
+        run: |
+          if [[ -z "$NEWS_PROVIDER_TAVILY_ENDPOINT" || -z "$NEWS_PROVIDER_TAVILY_API_KEY" ]]; then
+            echo "::error::真实 Researchflow 验收需要配置 NEWS_PROVIDER_TAVILY_ENDPOINT Repository Variable 和 NEWS_PROVIDER_TAVILY_API_KEY Repository Secret。"
+            exit 1
+          fi
+          echo "Tavily endpoint 与凭证均已配置；不输出凭证内容。"
+      - name: Execute real Tavily through Server Researchflow Runtime
+        run: |
+          go test -p 1 ./internal/server/bootstrap/ \
+            -run '^TestNewsResearchflowTavilyMariaDBLive$' -count=1 -v
