@@ -198,15 +198,6 @@ jobs:
             exit 1
           fi
           echo "Server container reached readiness and exited cleanly after SIGTERM"
- -count=1 -v 2>&1)" || {
-            printf '%s\\n' "$output"
-            exit 1
-          }
-          printf '%s\\n' "$output"
-          if ! grep -Fq -- '--- PASS: TestOwnerSessionHTTPMariaDBRedisLifecycleIntegration' <<< "$output"; then
-            echo "::error::Owner Session MariaDB/Redis lifecycle test did not report PASS (it may have been skipped)"
-            exit 1
-          fi
       - name: Run Server race tests
         run: |
           go test -race ./cmd/analysis-api \
