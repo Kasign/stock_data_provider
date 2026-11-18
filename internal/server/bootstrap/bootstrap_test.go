@@ -18,7 +18,7 @@ func TestNewMigrationRegistryRegistersAvailableModules(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newMigrationRegistry() error = %v", err)
 	}
-	want := []string{"news", "notification", "platform.security", "research", "researchflow", "server.security_audit"}
+	want := []string{"market_data", "news", "notification", "platform.security", "research", "researchflow", "server.security_audit"}
 	if got := registry.Namespaces(); !reflect.DeepEqual(got, want) {
 		t.Fatalf("registered namespaces = %v, want %v", got, want)
 	}
@@ -106,7 +106,7 @@ func TestNewDiagnosticsServiceRegistersNewsParserAndProviderConfigChecks(t *test
 	if err != nil {
 		t.Fatalf("newsconfig.Load() error = %v", err)
 	}
-	service, err := newDiagnosticsService(nil, servermigration.NewRegistry(), newsConfig, nil)
+	service, err := newDiagnosticsService(nil, servermigration.NewRegistry(), newsConfig, nil, nil)
 	if err != nil {
 		t.Fatalf("newDiagnosticsService() error = %v", err)
 	}
