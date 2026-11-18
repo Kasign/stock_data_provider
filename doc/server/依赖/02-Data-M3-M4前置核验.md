@@ -2,7 +2,7 @@
 
 更新时间：2026-11-18  
 Server 分支：feat/server  
-Server HEAD：a2ecf3a80bce9394aab79c786b9aaa53817866a3  
+代码核对基线：a2ecf3a80bce9394aab79c786b9aaa53817866a3（后续提交仅修改 doc/server）  
 范围：只记录 Server 消费 Data 公开能力的前置条件；不修改 Data/Platform 代码。
 
 ## 1. Data 已有公开能力
@@ -48,18 +48,33 @@ BaoStock/Pytdx 使用 TCP DialContext，不属于 HTTP BoundDoer。当前 Platfo
 
 ## 4. Migration 对接问题与复核结论
 
-Server 当前 Registry.Register 接收 platformstorage.Migration 定义，RunWithReport/ValidateApplied 负责统一执行和只读版本校验。
+### 已核实的代码事实
 
-Data Module 对外只提供 MigrationRunner.Migrate(ctx) error，没有公开迁移定义，也没有独立 ValidateApplied。Data Store.Migrate 内部调用 Platform ApplyMigrations 执行 market_data namespace 的版本化迁移；调用结束后仍执行兼容索引/补列逻辑。
+- Data Module 的 `MigrationRunner` 仅公开 `Migrate(ctx) error`；Server Registry 的 `Register` 接收 `[]platformstorage.Migration`，二者不能直接注册。
+- `Store.Migrate` 先通过 `platformstorage.ApplyMigrations` 执行 `market_data` namespace 的版本 1～3。
+- Platform ApplyMigrations 在单个 MariaDB 连接上获取 namespace GET_LOCK；锁只覆盖 ApplyMigrations 调用本身。
+- 返回后，Data 继续调用 `ensureNonUniqueHistoryIndex` 和 `ensureColumn`。这些方法先查 information_schema，再执行 DROP/CREATE INDEX 或 ADD COLUMN，全部在 Platform 锁外。
+- 多个 API/Worker 实例可同时观察到索引/列缺失并执行 DDL；后执行者可能遇到索引/列已存在或已删除错误。现有 Platform 并发测试只覆盖 ApplyMigrations，不覆盖这些锁外 DDL。
+- Platform migration checksum 根据 Statement 计算；已发布版本 1～3 不得修改 Statement。
 
-因此：
-1. Data MigrationRunner 不能直接传给当前 Server Registry.Register。
-2. 不得由 Server 复制 Data 私有 SQL 或访问 Repository 私有实现来补齐。
-3. 必须明确 MIGRATION_ENABLED=false 时的只读 Schema 验证方式。
-4. 必须核实兼容 DDL 是否已全部迁入版本化 Runner；若仍在 Runner 外执行，需验证多 API/Worker 实例并发启动安全，不能仅凭 ApplyMigrations 的 namespace lock 宣称整段 Migrate 都受锁保护。
-5. 方案必须继续复用 Platform Migration Runner；Server 可以负责调度和报告，但不能另建一套 SQL Migration Engine。
+### 推荐方案（明确结论）
 
-这是 SRV-009 的实施前置，不在本文件擅自决定 Data 是否需要新增公开方法或 Server 是否新增 Runner 注册形式。
+1. **Data 定义迁移，Server 汇总注册，Platform 执行。** Data 在公开 Bootstrap API 提供完整、不可变的 `Migrations() []platformstorage.Migration`（或等价只读定义接口），Server 在构造 Data Module 前即可注册 `market_data` namespace。迁移 SQL 仍归 Data 所有。
+2. **保留版本 1～3，兼容修复追加版本 4+。** 将当前锁外的索引修复和补列逻辑纳入新版本。必须同时兼容全新库和历史库，不能假设旧索引一定存在，也不能修改旧版本来改变 checksum。
+3. **所有 Schema DDL 必须受同一 Platform namespace lock 保护。** 优先使用经目标 MariaDB/MySQL 版本验证的条件 DDL；如果静态 SQL 无法兼容目标版本，由 Platform Owner 评审受锁条件迁移能力。不得继续在 Runner 外执行 information_schema 检查后再 ALTER。
+4. **补齐只读 checksum 校验。** Server Registry 当前 `ValidateApplied` 只读取 namespace/version/status，没有读取或比较 `platform_schema_migrations.checksum`。它的注释称 checksum 由 Platform Runner 校验，但 `MIGRATION_ENABLED=false` 时不会执行 ApplyMigrations，因此该模式确实漏检。建议 Platform 提供与 ApplyMigrations 共用 migration preparation/checksum 逻辑的只读 `ValidateAppliedMigrations` 公共方法，Server Registry 逐 namespace 调用；不要在 Server 重写 SHA-256 规则。
+5. **保持失败恢复语义。** DDL 可能隐式提交；失败版本由 Platform 标记 failed 并要求人工恢复。不能自动把 failed 版本改成 applied，也不能在未确认部分 DDL 状态时盲目重跑。
+
+### Root 调用顺序
+
+- Bootstrap 创建共享 MariaDB 连接池。
+- 静态 Migration Registry 获取各模块公开定义并注册（Data 定义无需先构造 Module）。
+- `MIGRATION_ENABLED=true`：Registry 调用 Platform ApplyMigrations。
+- `MIGRATION_ENABLED=false`：Registry 调用 Platform 只读版本、状态和 checksum 校验。
+- Migration 成功后再构造 Data Module，注入 borrowed Store/Cache；Module 不拥有共享 DB/Redis。
+- Data Module Ready 另行检查运行所需依赖和实际 Schema；migration history 显示 applied 不等于物理表结构绝无漂移。
+
+**实施责任：Data Owner 提供公开定义并收敛锁外 DDL；Platform Owner 提供只读 checksum 校验；Server 只负责注册和调度。两个前置未完成前，不接入当前 `MigrationRunner.Migrate`，也不宣称 SRV-002/SRV-009 Migration 完成。**
 
 ## 5. Diagnostics 与 Readiness
 
