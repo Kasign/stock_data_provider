@@ -444,3 +444,36 @@ func TestReturnSimpleCanRoundToNegativeOneForExtremePositivePrices(t *testing.T)
 		t.Fatalf("result=%+v, want available value -1 after float64 underflow", got)
 	}
 }
+
+
+func TestReturnInsufficientDataSampleCountCountsObservedReturns(t *testing.T) {
+	cases := []struct {
+		name   string
+		closes []float64
+		window int
+		want   int
+	}{
+		{name: "empty input", closes: nil, window: 1, want: 0},
+		{name: "one close", closes: []float64{100}, window: 1, want: 0},
+		{name: "one observed return", closes: []float64{100, 101}, window: 2, want: 1},
+		{name: "two observed returns", closes: []float64{100, 101, 102}, window: 3, want: 2},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := Return(tc.closes, ReturnParams{
+				Window:      tc.window,
+				ReturnBasis: "simple",
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got.Status != StatusInsufficientData {
+				t.Fatalf("status=%s, want %s", got.Status, StatusInsufficientData)
+			}
+			if got.SampleCount != tc.want {
+				t.Fatalf("sample_count=%d, want %d", got.SampleCount, tc.want)
+			}
+		})
+	}
+}
