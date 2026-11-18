@@ -235,8 +235,10 @@ func TestPublicationTimeShapeSummaryDoesNotExposeTimestampDigitsOrLetters(t *tes
 	if got != want {
 		t.Fatalf("shape summary=%q want %q", got, want)
 	}
-	// 9 和 A 是脱敏占位符；检查原始数字与字母均未泄漏，不能把占位符本身误判为原文。
-	if strings.ContainsAny(got, "012345678TZ") {
-		t.Fatalf("shape summary leaked timestamp characters: %q", got)
+	// 输出必须只包含结构占位符和聚合计数，不能包含输入中的具体时间片段。
+	for _, raw := range []string{"2026-11-18", "08:30:12", ".123Z", "+0800", "2026-11-19", "09:31:13", ".456Z", "2026-11-20", "10:32:14"} {
+		if strings.Contains(got, raw) {
+			t.Fatalf("shape summary leaked raw timestamp fragment %q: %q", raw, got)
+		}
 	}
 }
