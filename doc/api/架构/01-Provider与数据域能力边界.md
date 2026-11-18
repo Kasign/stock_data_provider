@@ -103,24 +103,33 @@ MiaoXiang 的 ChipDistribution/CapitalFlow 由独立 `MARKET_DATA_MX_ENABLED` �
 
 ## 5. 真实数据证据矩阵
 
-本表只汇总 Runtime Acceptance Log 已记录的样本，不把静态实现、普通测试或 CI 成功当作真实数据通过。
+下表按 Provider 汇总账本中已经存在的真实请求结论。状态只适用于所列能力、代码基线和样本；未列出的已实现能力一律为**未执行**，不从同一 Provider 的其他能力推断。具体原始记录、Run/Artifact 和代码 SHA 以 [DATA_SOURCE_RUNTIME_ACCEPTANCE_LOG.md](../provider-migration/DATA_SOURCE_RUNTIME_ACCEPTANCE_LOG.md) 为准。
 
-| Provider | 已有真实证据 | 当前判定 | 不可外推范围 |
-|---|---|---|---|
-| BaoStock | 复权因子与日 K 一致性、停牌/复牌及 ST 字段样本（Runtime Log 第 61、72 节） | 对应样本通过 | 不代表全证券、全日期状态覆盖或所有字段通过 |
-| Pytdx | GBBQ 公司行为、复权参考日、停牌/临停样本（第 62、64、71 节） | 对应样本通过；不同复权模式结论分别处理 | 不代表与 BaoStock 原生算法完全等价 |
-| Hithink | 600519.SH 五项估值复算、披露日期字段、日 K 分页及后复权成交量核验（第 66～69 节） | 五项估值样本通过；快照整体 degraded | 不代表全市场估值、所有财务字段或 Freshness 通过 |
-| Eastmoney | 公共源日 K、复权请求与字段样本（第 41～57、70 节） | 按字段/复权模式判定；绝对参考日证据不足时 not_comparable | 不代表其他数据域已通过 |
-| Tencent | 公共源日 K、复权请求与字段样本（第 41～57、70 节） | 按字段/复权模式判定；绝对参考日证据不足时 not_comparable | 不代表其他数据域已通过 |
-| Sina | 公共源历史日 K 与跨源比较样本（第 41～57 节） | 按样本/口径判定；部分 adjusted 能力 not_supported | 不代表全部复权模式通过 |
-| NetEase | 公共源历史日 K 与跨源比较样本（第 41～57 节） | 按样本/口径判定 | 不代表 Quote 或所有字段通过 |
-| TickFlow | 日线成交量单位修复及线上复测（第 47～50 节） | 对应样本修复后通过 | 不外推到其他能力、证券或时间窗口 |
-| Tushare | 财务/估值、复权因子/公司行动部分接口返回 40203 权限错误（第 60、65 节及相关记录） | 对应接口 permission_required | 不代表 Tushare 所有接口均失败；未获权限前不重复请求 |
-| Xueqiu | 有在线探测入口，无对应真实请求验收记录 | 未执行/待凭据与证据 | 不得由接口存在推断通过 |
-| MiaoXiang | 有在线探测入口，无对应真实请求验收记录 | 未执行/待凭据与证据 | 不得由接口存在推断筹码/资金流字段通过 |
-| Yahoo | 海外市场能力暂缓 | deferred | 不属于当前国内 A 股优先验收范围 |
+| Provider | 已有真实证据及判定 | 尚未验收/适用边界 |
+|---|---|---|
+| Eastmoney | DailyBars：600036.SH 未复权 8 条样本 valid；qfq 因参考日期缺失 degraded，后续 qfq/hfq 参考日期仍不可比较（第 43、51、70 节）。StockSearch：历史一次 HTTP 502（第 22 节） | Quote、StockBasic、StockUniverse、SectorRankings、IndexQuotes、MarketBreadth、StockBoards、LimitPools、DragonTiger、Announcements、ChipDistribution、CapitalFlow、HotRankings 均无对应完整字段质量验收记录，未执行 |
+| BaoStock | AdjustmentFactors 与自身 qfq/hfq 日 K 一致性样本通过（第 61 节）；停牌/复牌、tradestatus/isST 指定样本通过（第 72 节）；Fundamentals 曾返回股本字段样本（第 67 节）；TradingCalendar 实际返回但缺少源端快照时间，degraded（第 59 节） | 其他证券/日期状态覆盖、完整 Fundamentals 字段、普通 DailyBars 全面可用性仍未验收；历史连接拒绝记录仍保留，不用其他样本外推 |
+| Tencent | DailyBars：none 样本 degraded（成交额缺失）；qfq/hfq 返回数据但参考日期缺失，not_comparable（第 43、51、70 节）；Quote 有限样本存在但不能据此认定全字段质量通过 | StockSearch 及其他未列能力未执行；历史成交额字段缺失不得推算 |
+| Sina | DailyBars：none 样本 degraded（成交额缺失）；调整口径 not_supported（第 43、51、57 节）；Quote 有限样本存在但不代表全部字段通过 | StockSearch 不支持；Quote 完整字段质量和其他未列能力未执行 |
+| NetEase | 历史 Quote/DailyBars 请求曾出现 DNS/HTTP 502（第 22 节）；该记录仅代表当时请求失败 | 尚无后续对应真实成功和质量复验；当前能力状态未确认，不将历史瞬时失败外推为永久失败 |
+| TickFlow | Quote：600519.SH 单行样本 valid（第 47 节）；IndexQuotes：6 个核心指数 valid（第 41 节）；DailyBars：手转股修复后 8 条样本通过单位交叉校验，但缺 prev_close，整体 degraded（第 49～50 节） | MarketBreadth、SectorRankings 未执行；Quote/DailyBars 证据只适用于对应样本，不外推全市场 |
+| Pytdx | DailyBars：none/qfq/hfq 各 9 条样本通过结构/质量断言（第 64 节）；GBBQ 与 BaoStock 公司行动事件 3/3 对账（第 62 节）；盘中临停/全天停牌指定窗口通过（第 71 节） | Pytdx 与 BaoStock 原生复权算法不可直接等同；跨 Provider adjusted OHLC 仍 not_comparable；SecurityTradingStatus Provider 本身未做端到端真实验收 |
+| Yahoo | DailyBars：有限窗口 none/qfq/hfq 返回样本，但成交额缺失，degraded（第 41、43、51 节） | 海外市场能力暂缓；不属于当前国内 A 股优先验收范围 |
+| Hithink | Valuations：600519.SH 五项指标独立复算通过，但快照整体 degraded（第 67 节）；Fundamentals：披露日期字段样本与官方年报日期不一致，PIT 保守延迟可见（第 68 节）；DailyBars：none/forward 返回 23 条，backward 因小数股数被拒绝（第 69 节） | IndexCatalog、TradingCalendar、LimitPools、DragonTiger 等虽有在线探测入口，但不能将入口/单能力结果外推为全部通过；其余能力未执行 |
+| Tushare | DailyBars、Fundamentals、Valuations、adj_factor、dividend 等指定接口出现 40203，按对应接口标记 permission_required（第 60、65 节） | 未获得权限前不重复请求；不能将这些权限结果外推为全部 Tushare 能力失败；SecurityTradingStatus、IndexCatalog 等其他能力未执行 |
+| Xueqiu | 无真实请求验收记录 | HotRankings 未执行；Cookie/登录态与限流状态未知 |
+| MiaoXiang | 无真实请求验收记录 | ChipDistribution、CapitalFlow 未执行；`MARKET_DATA_MX_ENABLED` 默认 false |
 
-真实证据的原始记录、Run/Artifact、代码 SHA 和样本边界以 [DATA_SOURCE_RUNTIME_ACCEPTANCE_LOG.md](../provider-migration/DATA_SOURCE_RUNTIME_ACCEPTANCE_LOG.md) 为准。对没有逐能力真实证据的格子，状态保持未执行；缺少同口径或独立参考基准时标记不可比较。
+### 5.1 Provider × 能力状态的缺省规则
+
+为避免把“没有写入证据表”误解为“通过”，DATA-001 矩阵按以下规则解释：
+
+1. 在第 2～4 节确认有具体实现、但第 5 节没有该 Provider × 能力的独立真实证据：状态为 **未执行**。
+2. Provider 没有实现对应 Capability Interface：状态为 **不支持**，不应发起请求或虚构结果。
+3. 已请求但权限/积分/凭据被拒绝：状态为 **权限阻塞**，不是数据质量失败，也不是通过。
+4. 请求返回但字段、单位、覆盖或时间语义不满足质量门禁：状态为 **降级**；违反硬契约且不能安全使用时为 **失败**。
+5. 缺少同口径、复权参考日、来源可用时间或独立基准：状态为 **不可比较**，不能通过放宽门禁改成 matched。
+6. CI、Provider 接口单测、模拟 HTTP Fixture、MariaDB Repository/PIT 测试，只证明各自测试范围，不是上游真实数据证据。
 
 ## 6. 统一状态判定
 
