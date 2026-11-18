@@ -393,3 +393,24 @@ func dailyBarDiagnostics(snapshot dataapp.DailyBarsSnapshot) []string {
 	}
 	return items
 }
+
+func uniqueIndexSymbols(values []string) []string {
+	seen := make(map[string]struct{}, len(values))
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		symbol := strings.TrimSpace(value)
+		if symbol == "" {
+			continue
+		}
+		key := strings.ToUpper(symbol)
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
+		result = append(result, symbol)
+	}
+	if len(result) == 0 {
+		return []string{"000001.SH"}
+	}
+	return result
+}
