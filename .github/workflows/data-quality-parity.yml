@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - feat/full-go-data-providers-api-switch
+      - feat/data
     paths:
       - 'internal/marketdata/normalize/**'
       - 'internal/marketdata/provider/**'
