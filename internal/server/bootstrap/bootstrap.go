@@ -216,19 +216,15 @@ func Run(ctx context.Context) (runErr error) {
 		}
 	}
 
+	// 旧 Analysis Collector 默认拉取 200 根日线；沿用该历史窗口，并受 Data MaxDailyBars 上限约束。
 	historyLimit := marketDataCfg.DefaultDailyBars
-	if historyLimit < 21 {
-		return fmt.Errorf("MARKET_DATA_DEFAULT_DAILY_BARS must be at least 21 for the legacy Analysis Runner, got %d", historyLimit)
+	if historyLimit < 200 {
+		historyLimit = 200
 	}
-	indexSymbols := []string{"000001.SH"}
-	if raw := strings.TrimSpace(os.Getenv("MARKET_DATA_INDEX_SYMBOLS")); raw != "" {
-		indexSymbols = make([]string, 0)
-		for _, symbol := range strings.Split(raw, ",") {
-			if symbol = strings.TrimSpace(symbol); symbol != "" {
-				indexSymbols = append(indexSymbols, symbol)
-			}
-		}
+	if historyLimit > marketDataCfg.MaxDailyBars {
+		historyLimit = marketDataCfg.MaxDailyBars
 	}
+	indexSymbols := parseMarketDataIndexSymbols(os.Getenv("MARKET_DATA_INDEX_SYMBOLS"))
 	analysisCollector, err := servermarketdata.NewAnalysisCollector(
 		marketDataModule.Application(), historyLimit,
 		marketdataapp.AdjustmentBasis(marketDataCfg.Adjustment), indexSymbols,
