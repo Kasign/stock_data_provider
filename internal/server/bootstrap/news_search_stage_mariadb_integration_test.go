@@ -695,7 +695,7 @@ func TestNewsSearchStageResearchflowMariaDBIntegration(t *testing.T) {
 		{"MalformedResponse", malformedResponseCreated.Run.Ref, newsapp.ProviderErrorResponseInvalid, 1},
 	} {
 		var attemptRef string
-			if err := db.QueryRowContext(ctx, "SELECT attempt_ref FROM researchflow_attempts WHERE run_ref = ? AND attempt_no = ? ORDER BY attempt_no LIMIT 1", tc.runRef, tc.attemptNo).Scan(&attemptRef); err != nil {
+		if err := db.QueryRowContext(ctx, "SELECT attempt_ref FROM researchflow_attempts WHERE run_ref = ? AND attempt_no = ? ORDER BY attempt_no LIMIT 1", tc.runRef, tc.attemptNo).Scan(&attemptRef); err != nil {
 			t.Fatalf("读取 %s Attempt %d 失败: %v", tc.name, tc.attemptNo, err)
 		}
 		attempt, err := repository.GetAttempt(ctx, attemptRef)
