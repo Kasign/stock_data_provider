@@ -19,6 +19,41 @@ import (
 	"example.com/stock-analysis-flow/internal/researchflow/template"
 )
 
+type runTerminalOutboxPayload struct {
+	SourceEventRef    string           `json:"source_event_ref"`
+	RunRef            string           `json:"run_ref"`
+	Status            domain.RunStatus `json:"status"`
+	TerminationReason *string          `json:"termination_reason"`
+	SystemAsOf        string           `json:"system_as_of"`
+	FinishedAt        string           `json:"finished_at"`
+	ResultSummaryRef  *string          `json:"result_summary_ref"`
+	TemplateRef       string           `json:"template_ref"`
+	TemplateVersion   string           `json:"template_version"`
+}
+
+func readRunTerminalOutboxPayload(t *testing.T, db *sql.DB, outboxRef string) runTerminalOutboxPayload {
+	t.Helper()
+	var eventType, schemaVersion, rawPayload string
+	if err := db.QueryRowContext(context.Background(), `SELECT event_type, schema_version, payload
+		FROM researchflow_outbox WHERE outbox_ref = ?`, outboxRef).Scan(&eventType, &schemaVersion, &rawPayload); err != nil {
+		t.Fatalf("read Researchflow terminal Outbox payload: %v", err)
+	}
+	if eventType != "researchflow.run.terminal" || schemaVersion != "1.0.0" {
+		t.Fatalf("Researchflow terminal event metadata = (%s, %s), want researchflow.run.terminal/1.0.0", eventType, schemaVersion)
+	}
+	var payload runTerminalOutboxPayload
+	if err := json.Unmarshal([]byte(rawPayload), &payload); err != nil {
+		t.Fatalf("decode Researchflow terminal Outbox payload: %v", err)
+	}
+	if _, err := parseResearchflowTime(payload.SystemAsOf); err != nil {
+		t.Fatalf("invalid terminal payload system_as_of %q: %v", payload.SystemAsOf, err)
+	}
+	if _, err := parseResearchflowTime(payload.FinishedAt); err != nil {
+		t.Fatalf("invalid terminal payload finished_at %q: %v", payload.FinishedAt, err)
+	}
+	return payload
+}
+
 func TestMariaDBFinalizeRunAtomicallyPersistsSummaryAndOutbox(t *testing.T) {
 	if os.Getenv("PLATFORM_STORAGE_INTEGRATION") != "1" {
 		t.Skip("set PLATFORM_STORAGE_INTEGRATION=1 to run Researchflow MariaDB integration tests")
@@ -139,6 +174,14 @@ func TestMariaDBFinalizeRunAtomicallyPersistsSummaryAndOutbox(t *testing.T) {
 	}
 	if summaryCount != 1 || outboxCount != 1 {
 		t.Fatalf("summary count=%d outbox count=%d, want one each", summaryCount, outboxCount)
+	}
+	terminalPayload := readRunTerminalOutboxPayload(t, db, input.OutboxRef)
+	if terminalPayload.SourceEventRef != runRef || terminalPayload.RunRef != runRef ||
+		terminalPayload.Status != domain.RunSucceeded || terminalPayload.TerminationReason != nil ||
+		terminalPayload.ResultSummaryRef == nil || *terminalPayload.ResultSummaryRef != input.ResultSummaryRef ||
+		terminalPayload.TemplateRef != record.Run.TemplateRef ||
+		terminalPayload.TemplateVersion != record.Run.TemplateVersion {
+		t.Fatalf("Researchflow terminal event payload does not match finalized Run: %+v", terminalPayload)
 	}
 	if _, err := repository.FinalizeRun(ctx, input); !errors.Is(err, ErrRunAlreadyFinalized) {
 		t.Fatalf("duplicate FinalizeRun error=%v, want ErrRunAlreadyFinalized", err)
@@ -340,6 +383,12 @@ func TestMariaDBFinalizeCancellationRunAtomicallyPersistsSummaryAndOutbox(t *tes
 	}
 	if summaryCount != 1 || outboxCount != 1 {
 		t.Fatalf("summary count=%d outbox count=%d, want one each", summaryCount, outboxCount)
+	}
+	terminalPayload := readRunTerminalOutboxPayload(t, db, input.OutboxRef)
+	if terminalPayload.SourceEventRef != runRef || terminalPayload.RunRef != runRef ||
+		terminalPayload.Status != domain.RunCancelled || terminalPayload.TerminationReason == nil ||
+		*terminalPayload.TerminationReason != "user_cancelled" || terminalPayload.ResultSummaryRef != nil {
+		t.Fatalf("Researchflow cancelled event payload does not match frozen Golden: %+v", terminalPayload)
 	}
 }
 

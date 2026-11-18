@@ -64,10 +64,10 @@ func insertResearchLifecycleOutbox(ctx context.Context, tx *sql.Tx, previous, ne
 		return err
 	}
 	_, err = tx.ExecContext(ctx,
-		"INSERT INTO research_notification_outbox (event_id, event_type, schema_version, source_module, occurred_at, published_at, subject_ref, idempotency_key, correlation_id, payload_fingerprint, payload, created_at, available_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		"INSERT INTO research_notification_outbox (event_id, event_type, schema_version, source_module, occurred_at, published_at, subject_ref, idempotency_key, correlation_id, payload_fingerprint, payload, created_at, available_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP(6), CONCAT(DATE_FORMAT(UTC_TIMESTAMP(6), '%Y-%m-%dT%H:%i:%s.%f'), '000Z'), UTC_TIMESTAMP(6))",
 		envelope.EventID, envelope.EventType, envelope.SchemaVersion, envelope.SourceModule,
 		envelope.OccurredAt, envelope.PublishedAt, envelope.SubjectRef, envelope.IdempotencyKey,
-		envelope.CorrelationID, envelope.PayloadFingerprint, string(payload), publishedAt.UTC(), formatPIT(publishedAt), publishedAt.UTC())
+		envelope.CorrelationID, envelope.PayloadFingerprint, string(payload))
 	if err != nil {
 		return fmt.Errorf("insert Research lifecycle Outbox record: %w", err)
 	}
@@ -168,10 +168,10 @@ func insertResearchLifecycleCreatedOutbox(ctx context.Context, tx *sql.Tx, next 
 		return err
 	}
 	_, err = tx.ExecContext(ctx,
-		"INSERT INTO research_notification_outbox (event_id, event_type, schema_version, source_module, occurred_at, published_at, subject_ref, idempotency_key, correlation_id, payload_fingerprint, payload, created_at, available_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		"INSERT INTO research_notification_outbox (event_id, event_type, schema_version, source_module, occurred_at, published_at, subject_ref, idempotency_key, correlation_id, payload_fingerprint, payload, created_at, available_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP(6), CONCAT(DATE_FORMAT(UTC_TIMESTAMP(6), '%Y-%m-%dT%H:%i:%s.%f'), '000Z'), UTC_TIMESTAMP(6))",
 		envelope.EventID, envelope.EventType, envelope.SchemaVersion, envelope.SourceModule,
 		envelope.OccurredAt, envelope.PublishedAt, envelope.SubjectRef, envelope.IdempotencyKey,
-		envelope.CorrelationID, envelope.PayloadFingerprint, string(payload), publishedAt.UTC(), formatPIT(publishedAt), publishedAt.UTC())
+		envelope.CorrelationID, envelope.PayloadFingerprint, string(payload))
 	if err != nil {
 		return fmt.Errorf("insert Research lifecycle-created Outbox record: %w", err)
 	}
@@ -201,65 +201,36 @@ func newOutboxEventID() (string, error) {
 	return "nte_" + hex.EncodeToString(value[:]), nil
 }
 
-type OutboxRepository struct{ base repositoryBase }
-
-func NewOutboxRepository(db *sql.DB, clock Clock) (*OutboxRepository, error) {
-	base, err := newRepositoryBase(db, clock)
-	if err != nil {
-		return nil, err
-	}
-	return &OutboxRepository{base: base}, nil
+type OutboxRepository struct {
+	db *sql.DB
 }
 
-func (r *OutboxRepository) ClaimOutbox(ctx context.Context, workerID string, limit int, leaseUntil time.Time) ([]researchapp.NotificationEventEnvelope, error) {
-	if r == nil {
+func NewOutboxRepository(db *sql.DB) (*OutboxRepository, error) {
+	if db == nil {
 		return nil, ErrInvalidRepository
 	}
-	return r.base.ClaimOutbox(ctx, workerID, limit, leaseUntil)
-}
-
-func (r *OutboxRepository) MarkOutboxPublished(ctx context.Context, eventID, workerID, leaseToken string, deliveredAt time.Time) error {
-	if r == nil {
-		return ErrInvalidRepository
-	}
-	return r.base.MarkOutboxPublished(ctx, eventID, workerID, leaseToken, deliveredAt)
-}
-
-func (r *OutboxRepository) ScheduleOutboxRetry(ctx context.Context, eventID, workerID, leaseToken string, retryAt time.Time, reasonCode string, updatedAt time.Time) error {
-	if r == nil {
-		return ErrInvalidRepository
-	}
-	return r.base.ScheduleOutboxRetry(ctx, eventID, workerID, leaseToken, retryAt, reasonCode, updatedAt)
-}
-
-func (r *OutboxRepository) RejectOutbox(ctx context.Context, eventID, workerID, leaseToken, reasonCode string, rejectedAt time.Time) error {
-	if r == nil {
-		return ErrInvalidRepository
-	}
-	return r.base.RejectOutbox(ctx, eventID, workerID, leaseToken, reasonCode, rejectedAt)
+	return &OutboxRepository{db: db}, nil
 }
 
 var _ researchapp.OutboxDeliveryRepository = (*OutboxRepository)(nil)
 
-func (r *repositoryBase) ClaimOutbox(ctx context.Context, workerID string, limit int, leaseUntil time.Time) ([]researchapp.NotificationEventEnvelope, error) {
+func (r *OutboxRepository) ClaimOutbox(ctx context.Context, workerID string, limit int, leaseDuration time.Duration) ([]researchapp.NotificationEventEnvelope, error) {
 	if r == nil || r.db == nil {
 		return nil, ErrInvalidRepository
 	}
-	if ctx == nil || !validCorrelationID(workerID) || limit < 1 || limit > 100 {
+	if ctx == nil || !validCorrelationID(workerID) || limit < 1 || limit > 100 ||
+		leaseDuration <= 0 || leaseDuration%time.Microsecond != 0 {
 		return nil, fmt.Errorf("invalid Outbox claim parameters")
-	}
-	now := r.now().UTC()
-	if now.IsZero() || leaseUntil.IsZero() || leaseUntil.Location() != time.UTC || !leaseUntil.After(now) {
-		return nil, fmt.Errorf("Outbox lease deadline must be a future UTC time")
 	}
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, fmt.Errorf("begin Research Outbox claim: %w", err)
 	}
 	defer tx.Rollback()
+	dbNow := "CONCAT(DATE_FORMAT(UTC_TIMESTAMP(6), '%Y-%m-%dT%H:%i:%s.%f'), '000Z')"
 	rows, err := tx.QueryContext(ctx,
-		"SELECT event_id, event_type, schema_version, source_module, occurred_at, published_at, subject_ref, idempotency_key, correlation_id, payload_fingerprint, payload FROM research_notification_outbox WHERE ((delivery_status IN ('pending','retry_wait') AND available_at <= ?) OR (delivery_status='leased' AND lease_until <= ?)) ORDER BY created_at, event_id LIMIT ? FOR UPDATE",
-		formatPIT(now), formatPIT(now), limit)
+		"SELECT event_id, event_type, schema_version, source_module, occurred_at, published_at, subject_ref, idempotency_key, correlation_id, payload_fingerprint, payload FROM research_notification_outbox WHERE ((delivery_status IN ('pending','retry_wait') AND available_at <= "+dbNow+") OR (delivery_status='leased' AND lease_until <= "+dbNow+")) ORDER BY created_at, event_id LIMIT ? FOR UPDATE",
+		limit)
 	if err != nil {
 		return nil, fmt.Errorf("select Research Outbox messages: %w", err)
 	}
@@ -285,16 +256,16 @@ func (r *repositoryBase) ClaimOutbox(ctx context.Context, workerID string, limit
 	if err := rows.Close(); err != nil {
 		return nil, fmt.Errorf("close Research Outbox rows: %w", err)
 	}
+	leaseMicros := int64(leaseDuration / time.Microsecond)
 	for index := range values {
 		leaseToken, err := newOutboxLeaseToken()
 		if err != nil {
 			return nil, err
 		}
 		values[index].LeaseToken = leaseToken
-		value := values[index]
 		result, err := tx.ExecContext(ctx,
-			"UPDATE research_notification_outbox SET delivery_status='leased', lease_owner=?, lease_token=?, lease_until=?, attempt_count=attempt_count+1, updated_at=? WHERE event_id=?",
-			workerID, leaseToken, formatPIT(leaseUntil), now, value.EventID)
+			"UPDATE research_notification_outbox SET delivery_status='leased', lease_owner=?, lease_token=?, lease_until=CONCAT(DATE_FORMAT(TIMESTAMPADD(MICROSECOND, ?, UTC_TIMESTAMP(6)), '%Y-%m-%dT%H:%i:%s.%f'), '000Z'), attempt_count=attempt_count+1, updated_at=UTC_TIMESTAMP(6) WHERE event_id=?",
+			workerID, leaseToken, leaseMicros, values[index].EventID)
 		if err != nil {
 			return nil, fmt.Errorf("lease Research Outbox message: %w", err)
 		}
@@ -312,21 +283,17 @@ func (r *repositoryBase) ClaimOutbox(ctx context.Context, workerID string, limit
 	return values, nil
 }
 
-func (r *repositoryBase) MarkOutboxPublished(ctx context.Context, eventID, workerID, leaseToken string, deliveredAt time.Time) error {
+func (r *OutboxRepository) MarkOutboxPublished(ctx context.Context, eventID, workerID, leaseToken string) error {
 	if r == nil || r.db == nil {
 		return ErrInvalidRepository
 	}
-	if ctx == nil || strings.TrimSpace(eventID) == "" || !validCorrelationID(workerID) || !validLeaseToken(leaseToken) ||
-		deliveredAt.IsZero() || deliveredAt.Location() != time.UTC {
+	if ctx == nil || strings.TrimSpace(eventID) == "" || !validCorrelationID(workerID) || !validLeaseToken(leaseToken) {
 		return fmt.Errorf("invalid Research Outbox confirmation")
 	}
-	now := r.now().UTC()
-	if now.IsZero() {
-		return fmt.Errorf("repository clock returned zero time")
-	}
+	dbNow := "CONCAT(DATE_FORMAT(UTC_TIMESTAMP(6), '%Y-%m-%dT%H:%i:%s.%f'), '000Z')"
 	result, err := r.db.ExecContext(ctx,
-		"UPDATE research_notification_outbox SET delivery_status='published', delivered_at=?, updated_at=? WHERE event_id=? AND delivery_status='leased' AND lease_owner=? AND lease_token=? AND lease_until>?",
-		formatPIT(deliveredAt), deliveredAt, eventID, workerID, leaseToken, formatPIT(now))
+		"UPDATE research_notification_outbox SET delivery_status='published', delivered_at=CONCAT(DATE_FORMAT(UTC_TIMESTAMP(6), '%Y-%m-%dT%H:%i:%s.%f'), '000Z'), updated_at=UTC_TIMESTAMP(6) WHERE event_id=? AND delivery_status='leased' AND lease_owner=? AND lease_token=? AND lease_until>"+dbNow,
+		eventID, workerID, leaseToken)
 	if err != nil {
 		return fmt.Errorf("confirm Research Outbox delivery: %w", err)
 	}
@@ -347,36 +314,55 @@ func (r *repositoryBase) MarkOutboxPublished(ctx context.Context, eventID, worke
 	if err != nil {
 		return fmt.Errorf("read Research Outbox confirmation state: %w", err)
 	}
-	// Only the exact lease that performed the publication may replay its
-	// confirmation. A published status alone is not proof of caller ownership.
 	if status == "published" && leaseOwner == workerID && storedLeaseToken == leaseToken {
 		return nil
 	}
 	return fmt.Errorf("%w: Research Outbox message is not published by this lease", ErrConflict)
 }
 
-func (r *repositoryBase) ScheduleOutboxRetry(ctx context.Context, eventID, workerID, leaseToken string, retryAt time.Time, reasonCode string, updatedAt time.Time) error {
+func (r *OutboxRepository) ScheduleOutboxRetry(ctx context.Context, eventID, workerID, leaseToken string, delay time.Duration, reasonCode string) error {
 	if r == nil || r.db == nil {
 		return ErrInvalidRepository
 	}
 	if ctx == nil || strings.TrimSpace(eventID) == "" || !validCorrelationID(workerID) || !validLeaseToken(leaseToken) ||
-		!validCorrelationID(reasonCode) || retryAt.IsZero() || retryAt.Location() != time.UTC ||
-		updatedAt.IsZero() || updatedAt.Location() != time.UTC || !retryAt.After(updatedAt) {
+		!validCorrelationID(reasonCode) || delay <= 0 || delay%time.Microsecond != 0 {
 		return fmt.Errorf("invalid Research Outbox retry parameters")
 	}
-	now := r.now().UTC()
-	if now.IsZero() {
-		return fmt.Errorf("repository clock returned zero time")
-	}
+	dbNow := "CONCAT(DATE_FORMAT(UTC_TIMESTAMP(6), '%Y-%m-%dT%H:%i:%s.%f'), '000Z')"
 	result, err := r.db.ExecContext(ctx,
-		"UPDATE research_notification_outbox SET delivery_status='retry_wait', available_at=?, lease_owner=NULL, lease_token=NULL, lease_until=NULL, last_error_code=?, updated_at=? WHERE event_id=? AND delivery_status='leased' AND lease_owner=? AND lease_token=? AND lease_until>?",
-		formatPIT(retryAt), reasonCode, updatedAt, eventID, workerID, leaseToken, formatPIT(now))
+		"UPDATE research_notification_outbox SET delivery_status='retry_wait', available_at=CONCAT(DATE_FORMAT(TIMESTAMPADD(MICROSECOND, ?, UTC_TIMESTAMP(6)), '%Y-%m-%dT%H:%i:%s.%f'), '000Z'), lease_owner=NULL, lease_token=NULL, lease_until=NULL, last_error_code=?, updated_at=UTC_TIMESTAMP(6) WHERE event_id=? AND delivery_status='leased' AND lease_owner=? AND lease_token=? AND lease_until>"+dbNow,
+		int64(delay/time.Microsecond), reasonCode, eventID, workerID, leaseToken)
 	if err != nil {
 		return fmt.Errorf("schedule Research Outbox retry: %w", err)
 	}
 	affected, err := result.RowsAffected()
 	if err != nil {
 		return fmt.Errorf("verify Research Outbox retry: %w", err)
+	}
+	if affected != 1 {
+		return fmt.Errorf("%w: Research Outbox message is not leased by this worker", ErrConflict)
+	}
+	return nil
+}
+
+func (r *OutboxRepository) RejectOutbox(ctx context.Context, eventID, workerID, leaseToken, reasonCode string) error {
+	if r == nil || r.db == nil {
+		return ErrInvalidRepository
+	}
+	if ctx == nil || strings.TrimSpace(eventID) == "" || !validCorrelationID(workerID) || !validLeaseToken(leaseToken) ||
+		!validCorrelationID(reasonCode) {
+		return fmt.Errorf("invalid Research Outbox rejection parameters")
+	}
+	dbNow := "CONCAT(DATE_FORMAT(UTC_TIMESTAMP(6), '%Y-%m-%dT%H:%i:%s.%f'), '000Z')"
+	result, err := r.db.ExecContext(ctx,
+		"UPDATE research_notification_outbox SET delivery_status='rejected', last_error_code=?, lease_owner=NULL, lease_token=NULL, lease_until=NULL, updated_at=UTC_TIMESTAMP(6) WHERE event_id=? AND delivery_status='leased' AND lease_owner=? AND lease_token=? AND lease_until>"+dbNow,
+		reasonCode, eventID, workerID, leaseToken)
+	if err != nil {
+		return fmt.Errorf("reject Research Outbox message: %w", err)
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("verify Research Outbox rejection: %w", err)
 	}
 	if affected != 1 {
 		return fmt.Errorf("%w: Research Outbox message is not leased by this worker", ErrConflict)

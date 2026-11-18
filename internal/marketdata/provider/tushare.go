@@ -94,11 +94,8 @@ func (p *Tushare) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 	// 统一使用解析后的标准日期比较，避免接受首尾空白后又用原始字符串误判未来日期。
 	startDate = start.Format("2006-01-02")
 	endDate = end.Format("2006-01-02")
-	loc, err := time.LoadLocation("Asia/Shanghai")
-	if err != nil {
-		loc = time.FixedZone("CST", 8*60*60)
-	}
-	if endDate > time.Now().In(loc).Format("2006-01-02") {
+	loc := providerMarketLocation()
+	if endDate > providerNowUTC().In(loc).Format("2006-01-02") {
 		return nil, errors.New("Tushare end date must not be after today in Asia/Shanghai")
 	}
 	if limit <= 0 {
@@ -202,7 +199,7 @@ func (p *Tushare) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 		}
 		return row[index], nil
 	}
-	fetchedAt := time.Now().UTC()
+	fetchedAt := providerNowUTC()
 	out := make([]model.DailyBar, 0, len(envelope.Data.Items))
 	seenDates := make(map[string]struct{}, len(envelope.Data.Items))
 	for rowIndex, row := range envelope.Data.Items {
@@ -343,7 +340,7 @@ func (p *Tushare) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 			Open: open, High: high, Low: low, Close: closePrice,
 			Volume: &volume, Amount: amount, ChangePercent: pct,
 			AdjustmentBasis: model.AdjustmentNone, AdjustmentMethod: "tushare_daily_raw_ohlc_no_adjustment",
-			Source: p.Name(), SourceVersion: tushareVersion, FetchedAt: fetchedAt, NormalizedAt: time.Now().UTC(),
+			Source: p.Name(), SourceVersion: tushareVersion, FetchedAt: fetchedAt, NormalizedAt: providerNowUTC(),
 			RawVolume: &rawVolumeCopy, RawVolumeUnit: "hands", RawAmount: rawAmount, RawAmountUnit: rawAmountUnit, RawAmountField: rawAmountField,
 			VolumeUnit: "shares", AmountUnit: amountUnit, QualityStatus: quality, QualityReasons: reasons, NormalizationVer: normalize.Version,
 		})

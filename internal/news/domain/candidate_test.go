@@ -113,3 +113,39 @@ func TestNormalizeCandidateNormalizesFetchAndNormalizationTimes(t *testing.T) {
 		t.Fatalf("fetch/normalize times changed: fetched=%v normalized=%v", got.FetchedAt, got.NormalizedAt)
 	}
 }
+
+func TestNormalizeCandidateParsesRFC1123WithExplicitUTCOrGMT(t *testing.T) {
+	tests := []struct {
+		name string
+		raw  string
+		want time.Time
+	}{
+		{
+			name: "UTC",
+			raw:  "Wed, 18 Nov 2026 02:47:39 UTC",
+			want: time.Date(2026, 11, 18, 2, 47, 39, 0, time.UTC),
+		},
+		{
+			name: "GMT",
+			raw:  "Wed, 18 Nov 2026 02:47:39 GMT",
+			want: time.Date(2026, 11, 18, 2, 47, 39, 0, time.UTC),
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := NormalizeCandidate(Candidate{PublishedAtRaw: test.raw}, time.Time{}, "")
+			if got.PublishedAt == nil || !got.PublishedAt.Equal(test.want) {
+				t.Fatalf("published_at=%v want=%v", got.PublishedAt, test.want)
+			}
+		})
+	}
+}
+
+func TestNormalizeCandidateRejectsUnknownRFC1123TimezoneAbbreviation(t *testing.T) {
+	got := NormalizeCandidate(Candidate{
+		PublishedAtRaw: "Wed, 18 Nov 2026 02:47:39 CST",
+	}, time.Time{}, "")
+	if got.PublishedAt != nil {
+		t.Fatalf("unknown timezone abbreviation must not be interpreted: %v", got.PublishedAt)
+	}
+}

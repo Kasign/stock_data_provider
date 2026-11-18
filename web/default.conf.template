@@ -26,6 +26,8 @@ server {
     location = /analysis-api { return 308 /analysis-api/; }
     location ^~ /analysis-api/ {
         proxy_pass http://${ANALYSIS_SERVICE_NAME}:8092/;
+        # Browser-visible path includes /analysis-api while Root Server sees /api.
+        proxy_cookie_path /api /analysis-api/api;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Request-ID $request_id;

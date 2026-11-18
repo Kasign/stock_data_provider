@@ -95,7 +95,7 @@ func (p *Sina) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endDate
 	if limit > 2000 {
 		limit = 2000
 	}
-	start, end, err := sinaDailyDateRange(startDate, endDate, limit, time.Now())
+	start, end, err := sinaDailyDateRange(startDate, endDate, limit, providerNowUTC())
 	if err != nil {
 		return nil, err
 	}
@@ -182,7 +182,7 @@ func (p *Sina) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endDate
 		return nil, fmt.Errorf("Sina K-line lookback limit reached: requested start %s but oldest returned row is %s", startISO, oldestDate)
 	}
 
-	now := time.Now().UTC()
+	now := providerNowUTC()
 	bars := make([]model.DailyBar, 0, len(dated))
 	for _, item := range dated {
 		openV, errOpen := parseSinaKlineNumber(item.row.Open)
@@ -221,7 +221,7 @@ func (p *Sina) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endDate
 		}
 		rawVolumeCopy := rawVolume
 		reasons := []string{"provider_amount_unavailable", "provider_symbol_not_echoed_by_kline_response"}
-		if item.date == time.Now().In(sinaChinaLocation()).Format("2006-01-02") {
+		if item.date == providerNowUTC().In(sinaChinaLocation()).Format("2006-01-02") {
 			reasons = append(reasons, "sina_current_day_daily_bar_may_be_partial")
 		}
 		bars = append(bars, model.DailyBar{
@@ -272,11 +272,7 @@ func parseSinaKlineNumber(raw json.RawMessage) (float64, error) {
 }
 
 func sinaChinaLocation() *time.Location {
-	loc, err := time.LoadLocation("Asia/Shanghai")
-	if err != nil {
-		return time.FixedZone("CST", 8*60*60)
-	}
-	return loc
+	return providerMarketLocation()
 }
 
 func sinaDailyDateRange(startDate, endDate string, limit int, now time.Time) (time.Time, time.Time, error) {
@@ -318,7 +314,7 @@ func sinaDailyDateRange(startDate, endDate string, limit int, now time.Time) (ti
 func sinaKlineDataLength(start, end time.Time, limit int) int {
 	// Sina K-line API 仅提供 datalen，不支持指定结束日期。请求历史窗口时，
 	// 必须从目标起始日期一直取到当前最新数据，再由下游按 end 日期过滤。
-	requestEnd := time.Now().In(end.Location())
+	requestEnd := providerNowUTC().In(end.Location())
 	if end.After(requestEnd) {
 		requestEnd = end
 	}
@@ -463,11 +459,11 @@ func (p *Sina) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quote, 
 	}
 	change := price - prevClose
 	changePct := change / prevClose * 100
-	fetchedAt := time.Now().UTC()
+	fetchedAt := providerNowUTC()
 	var quoteTime *time.Time
 	dateText, timeText := strings.TrimSpace(fields[30]), strings.TrimSpace(fields[31])
 	if dateText != "" && timeText != "" {
-		if parsed, parseErr := time.ParseInLocation("2006-01-02 15:04:05", dateText+" "+timeText, time.FixedZone("CST", 8*60*60)); parseErr == nil {
+		if parsed, parseErr := time.ParseInLocation("2006-01-02 15:04:05", dateText+" "+timeText, providerMarketLocation()); parseErr == nil {
 			utc := parsed.UTC()
 			quoteTime = &utc
 		} else {

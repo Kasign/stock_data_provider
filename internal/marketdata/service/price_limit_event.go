@@ -27,7 +27,7 @@ func (s *DataService) PriceLimitEventEvidence(ctx context.Context, rawSymbol, ra
 	if err != nil || parsedDate.Format("2006-01-02") != tradeDate {
 		return nil, fmt.Errorf("invalid trade date %q", rawTradeDate)
 	}
-	if tradeDate > time.Now().In(marketLocation()).Format("2006-01-02") {
+	if tradeDate > s.nowUTC().In(marketLocation()).Format("2006-01-02") {
 		return nil, errors.New("trade date must not be in the future in Asia/Shanghai")
 	}
 	if ctx == nil {
@@ -44,7 +44,7 @@ func (s *DataService) PriceLimitEventEvidence(ctx context.Context, rawSymbol, ra
 			failures = append(failures, p.Name()+": "+fetchErr.Error())
 			continue
 		}
-		if err := validatePriceLimitEventEvidence(symbol, tradeDate, p.Name(), evidence, time.Now().UTC()); err != nil {
+		if err := validatePriceLimitEventEvidence(symbol, tradeDate, p.Name(), evidence, s.nowUTC()); err != nil {
 			failures = append(failures, p.Name()+": "+err.Error())
 			continue
 		}
