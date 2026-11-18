@@ -12,14 +12,15 @@
 
 ## 按编号归档
 
-- [NTF-001：Event / Inbox / Subscription](./任务历史/NTF-001-事件接收与订阅.md)
-- [NTF-002：Template / Renderer](./任务历史/NTF-002-模板与渲染.md)
-- [NTF-003：Channel Adapter](./任务历史/NTF-003-渠道适配器.md)
-- [NTF-004：Fanout / Dispatcher](./任务历史/NTF-004-Fanout与Dispatcher.md)
-- [NTF-005：Retry / Attempt / Recovery / Unknown](./任务历史/NTF-005-重试与恢复.md)
-- [NTF-006：Repository / Migration](./任务历史/NTF-006-存储与迁移.md)
-- [NTF-007：Diagnostics / Consistency](./任务历史/NTF-007-诊断与一致性.md)
+- [NTF-001 Event/Inbox/Subscription](./任务历史/NTF-001-事件接收与订阅.md)
+- [NTF-002 Template/Renderer](./任务历史/NTF-002-模板与渲染.md)
+- [NTF-003 Channel Adapter](./任务历史/NTF-003-渠道适配器.md)
+- [NTF-004 Fanout/Dispatcher](./任务历史/NTF-004-Fanout与Dispatcher.md)
+- [NTF-005 Retry/Attempt/Recovery](./任务历史/NTF-005-重试与恢复.md)
+- [NTF-006 Repository/Migration](./任务历史/NTF-006-存储与迁移.md)
+- [NTF-007 Diagnostics/Consistency](./任务历史/NTF-007-诊断与一致性.md)
 - [NTF-008 文档治理](./任务历史/NTF-008-文档治理.md)
+- [NTF-009 当前代码与验收证据复核](./任务历史/NTF-009-当前代码与验收证据复核.md)
 
 ## 领域设计与契约
 
