@@ -24,6 +24,7 @@ import (
 	notificationschema "example.com/stock-analysis-flow/internal/notification/schema"
 	notificationstorage "example.com/stock-analysis-flow/internal/notification/storage"
 	"example.com/stock-analysis-flow/internal/platform/config"
+	platformdiagnostics "example.com/stock-analysis-flow/internal/platform/diagnostics"
 	"example.com/stock-analysis-flow/internal/platform/httpapi"
 	platformsecurity "example.com/stock-analysis-flow/internal/platform/security"
 	platformstorage "example.com/stock-analysis-flow/internal/platform/storage"
@@ -469,11 +470,16 @@ func newDiagnosticsService(
 	newsRepository newsdiagnostics.StorageProbe,
 	marketDataModule *marketdatabootstrap.Module,
 ) (*serverdiagnostics.Service, error) {
+	retentionBacklogCheck := newsdiagnostics.ObservationRetentionCheck(newsRepository)
+	// Retention backlog is an operational signal, not an API process dependency;
+	// it must be visible without taking the whole API process out of readiness.
+	retentionBacklogCheck.Required = false
 	return serverdiagnostics.NewServiceWithMigration(
 		shared, registry,
 		newsdiagnostics.StorageChecks(newsRepository),
 		newsdiagnostics.ParserChecks(),
 		newsdiagnostics.ProviderConfigChecks(newsConfig),
+		[]platformdiagnostics.Check{retentionBacklogCheck},
 		marketDataReadinessChecks(marketDataModule),
 	)
 }
