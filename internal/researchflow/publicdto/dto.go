@@ -137,13 +137,13 @@ func cloneStringPointer(v *string) *string {
 	if v == nil {
 		return nil
 	}
-	out := v.UTC()
+	out := *v
 	return &out
 }
 func cloneTimePointer(v *time.Time) *time.Time {
 	if v == nil {
 		return nil
 	}
-	out := *v
+	out := v.UTC()
 	return &out
 }
