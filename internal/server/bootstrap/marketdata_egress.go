@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"context"
+	"log/slog"
 	"errors"
 	"fmt"
 	"net"
@@ -13,7 +14,8 @@ import (
 
 	marketdatabootstrap "example.com/stock-analysis-flow/internal/marketdata/bootstrap"
 	marketdataconfig "example.com/stock-analysis-flow/internal/marketdata/config"
-	marketdatatransport "example.com/stock-analysis-flow/internal/marketdata/transport"\n\t"example.com/stock-analysis-flow/internal/marketdata/provider"
+	marketdatatransport "example.com/stock-analysis-flow/internal/marketdata/transport"
+	"example.com/stock-analysis-flow/internal/marketdata/provider"
 	platformhttpclient "example.com/stock-analysis-flow/internal/platform/httpclient"
 	"example.com/stock-analysis-flow/internal/server/resources"
 
@@ -54,7 +56,7 @@ func newMarketDataDependencies(shared *resources.Resources, cfg marketdataconfig
 			AllowRedirects: false, Idempotent: true,
 		})
 	}
-	bindOne := func(raw, dependency string) (marketdatabootstrapProviderHTTPDoer, error) {
+	bindOne := func(raw, dependency string) (provider.HTTPDoer, error) {
 		doer, err := bind(raw, dependency)
 		if err != nil {
 			return nil, err
@@ -206,8 +208,11 @@ func resolvePublicMarketDataIPs(ctx context.Context, host string) ([]netip.Addr,
 		return []netip.Addr{literal}, nil
 	}
 	resolved, err := net.DefaultResolver.LookupNetIP(ctx, "ip", host)
-	if err != nil || len(resolved) == 0 {
+	if err != nil {
 		return nil, fmt.Errorf("resolve Market Data TCP destination: %w", err)
+	}
+	if len(resolved) == 0 {
+		return nil, errors.New("Market Data TCP destination resolved to no IP addresses")
 	}
 	ips := make([]netip.Addr, 0, len(resolved))
 	for _, ip := range resolved {
