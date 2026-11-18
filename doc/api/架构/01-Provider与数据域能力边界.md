@@ -20,7 +20,7 @@
 
 | Provider | 默认启用 | 默认配置能力 |
 |---|---:|---|
-| Eastmoney | 是 | Quote、DailyBars、StockSearch、StockBasic、StockSearch、SectorRankings、IndexQuotes、MarketBreadth、LimitPools、StockBoards、DragonTiger、Announcements、ChipDistribution、CapitalFlow、HotRankings |
+| Eastmoney | 是 | Quote、DailyBars、StockBasic、StockSearch、SectorRankings、IndexQuotes、MarketBreadth、LimitPools、StockBoards、DragonTiger、Announcements、ChipDistribution、CapitalFlow、HotRankings |
 | BaoStock | 是 | DailyBars、TradingCalendar、Fundamentals |
 | Tencent | 是 | Quote、DailyBars、StockSearch |
 | Sina | 是 | Quote、DailyBars |
@@ -41,8 +41,8 @@ MiaoXiang 是由 `MXEnabled` 单独控制的补充 Provider，不在上述 Provi
 | Provider | 已确认的公开实现 | 默认配置 | 说明 |
 |---|---|---|---|
 | Eastmoney | Quote、DailyBars、StockBasic、StockBoards、HotRankings、ChipDistribution、CapitalFlow、StockSearch、ListStockUniverse、SectorRankings（含 Metric/Direction）、IndexQuotes、MarketBreadth、LimitPool；另有龙虎榜和公告独立文件 | 启用 | 默认能力较广；ListStockUniverse 是 Provider 方法，但当前 Bootstrap 未将 StockUniverseProvider 作为独立能力集合；其他已启用能力仍须以 SourceStatus 和真实证据确认 |
-| Hithink | StockSearch、IndexQuotes、TradingCalendar、HotRankings、LimitPool、DragonTiger、IndexCatalog/Constituents/DailyBars、Valuations、Quote、DailyBars、Fundamentals、TradingCalendar、AdjustmentFactors | 关闭 | 代码实现存在不代表已配置或已获得真实接口权限 |
-| BaoStock | DailyBars、Fundamentals | 启用 | TradingCalendar 与 AdjustmentFactor 的实现文件已定位；真实字段证据只按 Runtime Log 指定样本 |
+| Hithink | StockSearch、IndexQuotes、TradingCalendar、HotRankings、LimitPool、DragonTiger、IndexCatalog/Constituents/DailyBars、Valuations、Quote、DailyBars、Fundamentals | 关闭 | 代码实现存在不代表已配置或已获得真实接口权限 |
+| BaoStock | DailyBars、TradingCalendar、Fundamentals；另有 AdjustmentFactorProvider 实现 | 启用 | 真实字段证据只按 Runtime Log 指定样本 |
 | Tencent | Quote、DailyBars | 启用 | StockSearch 的独立实现文件已定位 |
 | Sina | Quote、DailyBars | 启用 | 当前默认只启用这两项 |
 | NetEase | Quote、DailyBars | 启用 | 当前默认只启用这两项 |
