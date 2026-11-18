@@ -105,7 +105,7 @@ func runResearchflowOutboxToNotificationInboxMariaDB(t *testing.T, terminalStatu
 	payload := researchflowTerminalPayload{
 		SourceEventRef: runRef, RunRef: runRef, Status: terminalStatus,
 		TerminationReason: terminationReason,
-		SystemAsOf: systemAsOf, FinishedAt: finishedAt,
+		SystemAsOf:        systemAsOf, FinishedAt: finishedAt,
 		ResultSummaryRef: &summaryRef, TemplateRef: "daily_stock_analysis",
 		TemplateVersion: "1.0.0",
 	}
