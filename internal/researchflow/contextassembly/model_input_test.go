@@ -119,3 +119,25 @@ func TestComposeModelInputRejectsTokenizerMismatch(t *testing.T) {
 		t.Fatalf("expected tokenizer mismatch rejection, got %v", err)
 	}
 }
+
+func TestComposeModelInputRejectsInvalidUTF8SectionContent(t *testing.T) {
+	now := time.Date(2026, 11, 9, 8, 0, 0, 0, time.UTC)
+	candidate := SectionCandidate{ID: "market", SourceOwner: "data", Required: true, EstimatedTokens: 1, SourceRefs: []string{"snapshot-1"}}
+	plan, err := BuildPlan([]SectionCandidate{candidate}, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot := ResearchContextSnapshot{
+		ResearchQuestion: "分析", Scope: "stock", SubjectRefs: []string{"600000.SH"},
+		SystemAsOf: now, BuilderVersion: "v1",
+		QualitySummary: researchapp.ContextQualitySummary{Status: "valid", ReasonCodes: []string{}},
+	}
+	metadata := map[string]SectionMetadata{"market": {Version: "1", QualityStatus: "valid", AssembledAt: now}}
+	tokenizer := testTokenizer{modelID: "model-a", version: "v1", count: func(string) (int, error) { return 1, nil }}
+	_, err = ComposeModelInput(snapshot, []SectionCandidate{candidate}, metadata, plan,
+		[]SectionContent{{SectionID: "market", Text: string([]byte{0xff})}},
+		tokenizer, "model-a", 10)
+	if !errors.Is(err, ErrInvalidModelInput) {
+		t.Fatalf("invalid UTF-8 section content should be rejected, got %v", err)
+	}
+}

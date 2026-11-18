@@ -269,3 +269,42 @@ func TestAssembleResearchContextWithTokenizerRunsCompleteBudgetAndInputPipeline(
 		t.Fatalf("unexpected complete assembly: %+v", result)
 	}
 }
+
+func TestToResearchCreateContextCommandRejectsInvalidUTF8SnapshotAndMetadata(t *testing.T) {
+	invalid := string([]byte{0xff})
+	now := time.Date(2026, 11, 9, 8, 0, 0, 0, time.UTC)
+	candidate := SectionCandidate{ID: "market", SourceOwner: "data", EstimatedTokens: 1, SourceRefs: []string{"snapshot-1"}}
+	plan, err := BuildPlan([]SectionCandidate{candidate}, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := ResearchContextSnapshot{
+		ResearchQuestion: "分析", Scope: "stock", SubjectRefs: []string{"600000.SH"},
+		SystemAsOf: now, BuilderVersion: "v1",
+		QualitySummary: researchapp.ContextQualitySummary{Status: "valid", ReasonCodes: []string{}},
+	}
+	metadata := map[string]SectionMetadata{"market": {Version: "1", QualityStatus: "valid", AssembledAt: now}}
+	cases := []struct {
+		name string
+		edit func(*ResearchContextSnapshot, map[string]SectionMetadata)
+	}{
+		{name: "research question", edit: func(v *ResearchContextSnapshot, _ map[string]SectionMetadata) { v.ResearchQuestion = invalid }},
+		{name: "scope", edit: func(v *ResearchContextSnapshot, _ map[string]SectionMetadata) { v.Scope = invalid }},
+		{name: "subject ref", edit: func(v *ResearchContextSnapshot, _ map[string]SectionMetadata) { v.SubjectRefs = []string{invalid} }},
+		{name: "reason code", edit: func(v *ResearchContextSnapshot, _ map[string]SectionMetadata) { v.QualitySummary.ReasonCodes = []string{invalid} }},
+		{name: "builder version", edit: func(v *ResearchContextSnapshot, _ map[string]SectionMetadata) { v.BuilderVersion = invalid }},
+		{name: "section version", edit: func(_ *ResearchContextSnapshot, m map[string]SectionMetadata) { m["market"] = SectionMetadata{Version: invalid, QualityStatus: "valid", AssembledAt: now} }},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			snapshot := base
+			snapshot.SubjectRefs = append([]string{}, base.SubjectRefs...)
+			snapshot.QualitySummary.ReasonCodes = append([]string{}, base.QualitySummary.ReasonCodes...)
+			meta := map[string]SectionMetadata{"market": metadata["market"]}
+			testCase.edit(&snapshot, meta)
+			if _, err := ToResearchCreateContextCommand(snapshot, []SectionCandidate{candidate}, meta, plan); !errors.Is(err, ErrInvalidResearchContextProjection) {
+				t.Fatalf("invalid UTF-8 snapshot or metadata should be rejected, got %v", err)
+			}
+		})
+	}
+}

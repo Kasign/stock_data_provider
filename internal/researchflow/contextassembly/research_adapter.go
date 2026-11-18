@@ -42,7 +42,8 @@ func ToResearchCreateContextCommand(
 	metadata map[string]SectionMetadata,
 	plan Plan,
 ) (researchapp.CreateContextCommand, error) {
-	if strings.TrimSpace(snapshot.ResearchQuestion) == "" ||
+	if !validUTF8(snapshot.ResearchQuestion) || !validUTF8(snapshot.Scope) || !validUTF8(snapshot.BuilderVersion) ||
+		strings.TrimSpace(snapshot.ResearchQuestion) == "" ||
 		snapshot.ResearchQuestion != strings.TrimSpace(snapshot.ResearchQuestion) ||
 		strings.TrimSpace(snapshot.Scope) == "" || snapshot.Scope != strings.TrimSpace(snapshot.Scope) ||
 		snapshot.BuilderVersion == "" || snapshot.BuilderVersion != strings.TrimSpace(snapshot.BuilderVersion) ||
@@ -68,11 +69,15 @@ func ToResearchCreateContextCommand(
 	}
 	candidateByID := make(map[string]SectionCandidate, len(candidates))
 	for _, candidate := range candidates {
-		if candidate.ID == "" || candidate.SourceOwner == "" {
+		if candidate.ID == "" || !validUTF8(candidate.ID) || candidate.SourceOwner == "" || !validUTF8(candidate.SourceOwner) {
 			return researchapp.CreateContextCommand{}, ErrInvalidResearchContextProjection
 		}
 		if _, exists := candidateByID[candidate.ID]; exists {
 			return researchapp.CreateContextCommand{}, fmt.Errorf("%w: duplicate candidate %q", ErrInvalidResearchContextProjection, candidate.ID)
+		}
+		if !validUTF8Strings(candidate.SourceRefs) || !validUTF8Strings(candidate.EvidenceRefs) ||
+			!validUTF8Strings(candidate.ProtectedEvidenceRefs) {
+			return researchapp.CreateContextCommand{}, fmt.Errorf("%w: candidate %q contains invalid UTF-8 references", ErrInvalidResearchContextProjection, candidate.ID)
 		}
 		candidateByID[candidate.ID] = candidate
 	}
@@ -124,7 +129,7 @@ func ToResearchCreateContextCommand(
 	sectionRefs := make([]researchapp.ContextSectionRef, 0, len(candidates))
 	for _, candidate := range candidates {
 		section, exists := metadata[candidate.ID]
-		if !exists || section.Version == "" || section.Version != strings.TrimSpace(section.Version) ||
+		if !exists || section.Version == "" || !validUTF8(section.Version) || section.Version != strings.TrimSpace(section.Version) ||
 			!validQualityStatus(section.QualityStatus) || section.AssembledAt.IsZero() ||
 			section.AssembledAt.Location() != time.UTC {
 			return researchapp.CreateContextCommand{}, fmt.Errorf("%w: missing or invalid metadata for section %q", ErrInvalidResearchContextProjection, candidate.ID)
@@ -173,7 +178,7 @@ func validQualityStatus(value string) bool {
 func hasDuplicates(values []string) bool {
 	seen := make(map[string]struct{}, len(values))
 	for _, value := range values {
-		if value == "" || value != strings.TrimSpace(value) {
+		if value == "" || !validUTF8(value) || value != strings.TrimSpace(value) {
 			return true
 		}
 		if _, exists := seen[value]; exists {

@@ -20,11 +20,11 @@ type Tokenizer interface {
 }
 
 func validateTokenizer(tokenizer Tokenizer, expectedModelID string) (TokenizerProvenance, error) {
-	if tokenizer == nil || expectedModelID == "" || expectedModelID != strings.TrimSpace(expectedModelID) {
+	if tokenizer == nil || expectedModelID == "" || !validUTF8(expectedModelID) || expectedModelID != strings.TrimSpace(expectedModelID) {
 		return TokenizerProvenance{}, ErrTokenizerUnavailable
 	}
 	modelID, version := tokenizer.ModelID(), tokenizer.Version()
-	if modelID != expectedModelID || version == "" || version != strings.TrimSpace(version) {
+	if !validUTF8(modelID) || !validUTF8(version) || modelID != expectedModelID || version == "" || version != strings.TrimSpace(version) {
 		return TokenizerProvenance{}, fmt.Errorf("%w: tokenizer identity does not match target model", ErrTokenizerUnavailable)
 	}
 	return TokenizerProvenance{ModelID: modelID, Version: version}, nil
@@ -62,8 +62,8 @@ func EstimateSectionTokens(
 
 	contentByID := make(map[string]string, len(contents))
 	for _, content := range contents {
-		if content.SectionID == "" || content.SectionID != strings.TrimSpace(content.SectionID) ||
-			strings.TrimSpace(content.Text) == "" {
+		if content.SectionID == "" || !validUTF8(content.SectionID) || content.SectionID != strings.TrimSpace(content.SectionID) ||
+			!validUTF8(content.Text) || strings.TrimSpace(content.Text) == "" {
 			return nil, TokenizerProvenance{}, fmt.Errorf("%w: invalid section content", ErrInvalidTokenEstimate)
 		}
 		if _, exists := contentByID[content.SectionID]; exists {
@@ -75,7 +75,7 @@ func EstimateSectionTokens(
 	estimated := make([]SectionCandidate, len(candidates))
 	seen := make(map[string]struct{}, len(candidates))
 	for i, candidate := range candidates {
-		if candidate.ID == "" || candidate.ID != strings.TrimSpace(candidate.ID) {
+		if candidate.ID == "" || !validUTF8(candidate.ID) || candidate.ID != strings.TrimSpace(candidate.ID) {
 			return nil, TokenizerProvenance{}, fmt.Errorf("%w: invalid candidate section id", ErrInvalidTokenEstimate)
 		}
 		if _, exists := seen[candidate.ID]; exists {

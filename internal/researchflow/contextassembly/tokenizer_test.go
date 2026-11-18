@@ -112,3 +112,15 @@ func TestEstimateSectionTokensPropagatesTokenizerFailure(t *testing.T) {
 		t.Fatalf("expected tokenizer failure, got %v", err)
 	}
 }
+
+func TestEstimateSectionTokensRejectsInvalidUTF8Text(t *testing.T) {
+	invalid := string([]byte{0xff})
+	tokenizer := testTokenizer{modelID: "model-a", version: "v1", count: func(string) (int, error) { return 1, nil }}
+	_, _, err := EstimateSectionTokens(tokenizer, "model-a",
+		[]SectionCandidate{{ID: "market"}},
+		[]SectionContent{{SectionID: "market", Text: invalid}},
+	)
+	if !errors.Is(err, ErrInvalidTokenEstimate) {
+		t.Fatalf("invalid UTF-8 section content should be rejected, got %v", err)
+	}
+}
