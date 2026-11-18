@@ -378,3 +378,20 @@ func TestRegisterExternalNamespaceRejectsDuplicatesAndLateRegistration(t *testin
 		t.Fatal("late external registration must be rejected")
 	}
 }
+
+func TestRunWithReportDoesNotExecuteExternalNamespace(t *testing.T) {
+	registry := NewRegistry()
+	if err := registry.RegisterExternalNamespace("market_data"); err != nil {
+		t.Fatalf("RegisterExternalNamespace() error = %v", err)
+	}
+	report, err := registry.RunWithReport(context.Background(), &sql.DB{})
+	if err == nil {
+		t.Fatal("RunWithReport() should not treat external-only namespaces as executable migrations")
+	}
+	if len(report.Namespaces) != 0 {
+		t.Fatalf("external namespace appeared in execution report: %+v", report.Namespaces)
+	}
+	if got := registry.Namespaces(); !reflect.DeepEqual(got, []string{"market_data"}) {
+		t.Fatalf("Namespaces() = %v, want [market_data]", got)
+	}
+}
