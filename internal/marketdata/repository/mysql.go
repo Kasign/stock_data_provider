@@ -513,6 +513,7 @@ func (s *Store) SaveFundamentals(ctx context.Context, snapshot *model.Fundamenta
 		return errors.New("fundamentals snapshot identity, period, source or fetched_at is invalid")
 	}
 	stored := *snapshot
+	stored.NormalizeInstantsUTC()
 	stored.SystemObservedAt = nil
 	metadata, err := json.Marshal(&stored)
 	if err != nil {
@@ -716,6 +717,7 @@ ORDER BY v.recorded_at DESC, v.source ASC`, symbol, year, quarter, asOfText, asO
 		if err := json.Unmarshal(metadata, &snapshot); err != nil {
 			return nil, fmt.Errorf("decode fundamentals revision metadata: %w", err)
 		}
+		snapshot.NormalizeInstantsUTC()
 		recordedAt, err := time.ParseInLocation("2006-01-02 15:04:05.000000", recordedAtText, time.UTC)
 		if err != nil {
 			return nil, fmt.Errorf("parse fundamentals record timestamp: %w", err)
