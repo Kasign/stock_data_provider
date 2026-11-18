@@ -12,10 +12,9 @@
 
 ## 设计与契约
 
-- [Server 架构与组合根设计](./01-Server架构与组合根设计.md)
-- [Server Bootstrap 与生命周期](./02-Bootstrap与生命周期.md)
-- [HTTP/认证/错误投影](./03-HTTP与安全接入.md)
-- [Migration/Diagnostics/Readiness](./04-Migration与Diagnostics.md)
+- [Owner Session HTTP API 契约](./contracts/SRV-CTR-002-owner-session-http-api.md)
+- [Owner Session 接入进度](./Owner-Session接入进度.md)
+- [历史架构、Bootstrap、Migration 与 Integration 决议](./任务历史/各个子任务完成状态.md)
 - 项目级契约：doc/contract/ 与 doc/整体任务规划/。
 
 ## 维护规则
