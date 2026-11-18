@@ -58,10 +58,10 @@ func marketDataReadinessChecks(module *marketdatabootstrap.Module) []platformdia
 			}
 			summary := module.ProviderSummary()
 			return platformdiagnostics.Observation{
-				Status: platformdiagnostics.StatusHealthy,
+				Status:      platformdiagnostics.StatusHealthy,
 				SafeMessage: "Market Data module dependencies are ready",
-				CheckedAt: time.Now().UTC(),
-				Attributes: map[string]string{
+				CheckedAt:   time.Now().UTC(),
+				Attributes:  map[string]string{
 					"providers": fmt.Sprintf("%d", len(summary.All)),
 					"quote_providers": fmt.Sprintf("%d", len(summary.Quotes)),
 					"daily_bar_providers": fmt.Sprintf("%d", len(summary.DailyBars)),
