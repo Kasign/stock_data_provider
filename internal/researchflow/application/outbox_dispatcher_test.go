@@ -127,7 +127,7 @@ func TestOutboxDispatcherPublishesAndSchedulesRetry(t *testing.T) {
 func TestOutboxDispatcherDoesNotScheduleRetryWhenDatabaseClockFails(t *testing.T) {
 	store := &fakeOutboxStore{
 		messages: []OutboxMessage{{Ref: "event-fail", AttemptCount: 1, LeaseGeneration: 1}},
-		retryAt: map[string]time.Time{}, retryErrorCode: map[string]string{},
+		retryAt:  map[string]time.Time{}, retryErrorCode: map[string]string{},
 		clockErr: errors.New("database clock unavailable"),
 	}
 	publisher := &fakeOutboxPublisher{errors: map[string]error{
