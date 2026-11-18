@@ -5,31 +5,35 @@
 代码验收基线：81e0ddf020cb69a050a9e0c7f3f509378de49989；当前文档核对前 HEAD：6d51690e299d48ae9f4824928a655d1f0ed2ad10
 当前主线：SRV-009 Data/MarketData M3/M4 Root 生产装配
 
-## 1. 当前阻塞：真实 Root Readiness 未通过
+## 1. Root Readiness 503 根因已定位，修复待精确 SHA 验收
 
-状态：BLOCKED（待定位具体 Required Check）
+状态：FIX IMPLEMENTED / CI PENDING
 
 证据：
-- Server 专项 CI Run：44295762065
-- Job：Test Server-owned packages
-- Job ID：134772255903
-- 精确检出 SHA：81e0ddf020cb69a050a9e0c7f3f509378de49989
-- gofmt、Server package tests、race tests、真实 MariaDB/Redis storage integration、Server vet、镜像构建及 Notification schemas 均通过。
-- 容器启动日志显示 Data Module Migration 成功，Server Migration Registry 报告 succeeded，异步分析 Worker 启动，Root Server HTTP 监听 `[::]:8092`。
-- 随后的真实容器验收在 120 秒内未能通过带 Owner Bearer 的 `/readyz`，HTTP 返回 503；`/healthz` 探测已成功，因此容器进程和 HTTP 服务并非未启动。
-- 该失败 SHA 所使用的旧 smoke 脚本通过 `curl --fail` 请求 `/readyz`，HTTP 503 时没有保留响应体，因此 Run 44295762065 无法直接确认具体失败的 Required Check。
-- 随后的当前分支版本 `.github/workflows/server-test.yml` 已改为记录 HTTP 状态码和响应体，并在失败时请求 `/diagnostics`；但这只是诊断能力改进，尚无新的成功 CI 证据，根因仍未定位。
+- 失败 CI Run：44298185039，精确 SHA `f88af64ef5d91c357dec4f48214d52e2b81d8077`。
+- Job：Test Server-owned packages。
+- Job ID：134780625939。
+- CI 已输出受保护的 `/diagnostics` 报告，唯一失败 Required Check：`server.storage.schema`。
+- 根因：Data Module 通过自身 `MigrationRunner.Migrate` 创建了 `market_data` namespace；Root `Registry.ValidateApplied` 只知道 Server 静态注册的 namespace，把 `market_data` 视为数据库中未注册的 namespace，导致 Schema Check 返回 unhealthy，`/readyz` 503。
+- 不是 MariaDB/Redis Ping 失败，不是 Data Module Ready 失败，也不是 HTTP Listener 未启动。
 
-原因边界：
-- 已确认：Readiness 检查未通过。
-- 尚未确认：究竟是 Data Diagnostics.Ready、其他 Required Diagnostics Check、配置缺失还是检查适配错误。不能仅凭 Data Module Migration 成功就推断 Data Ready 必然健康，也不能未经证据归因于 Data 模块。
-- 本次失败发生在 Ready 探测阶段；SIGTERM 清洁退出步骤未执行，因此不能声称真实容器关闭验收通过。
+已实施修复：
+- Server Migration Registry 新增显式 `RegisterExternalNamespace`。
+- Bootstrap 将 `market_data` 登记为由 Data 模块自有 Runner 管理的外部 namespace。
+- Read-only validation 要求该 namespace 的 history 至少存在一条记录，且所有版本非零、状态均为 `applied`。
+- 外部 namespace 不加入 Registry 的 Migration 执行清单，不会向 Platform Runner 传入空 Migration，也不复制 Data SQL。
+- 新增外部 namespace 注册、重复注册、缺失 history、failed status 等测试。
+
+限制：
+- 外部 namespace 检查不验证预期版本集合和 checksum；这只是过渡性修复。
+- Data Store.Migrate 在 Platform ApplyMigrations 锁释放后仍执行兼容索引/补列 DDL，多实例竞态仍存在。
+- 该修复是否真正使容器 `/readyz` 变为 200，必须以包含本次修改的精确 SHA CI 为准；尚未通过前不能关闭本卡点。
 
 下一步：
-1. 验证当前分支已更新的 Server smoke 验收脚本：确认下一次运行会保留 HTTP 状态码和响应体，并输出 `/diagnostics`；若新日志仍缺少 Required Check 细节，再补充容器日志或报告输出。
-2. 在相同真实 MariaDB/Redis Bootstrap 环境中复现，读取每个 Required Check 的 name/status/reason_code/evidence，定位唯一失败项。
-3. 若失败属于 Server 装配/配置/检查适配，在 `internal/server/**` 修复并补充回归测试；若属于 Data/Platform 模块公开契约或实现缺陷，记录为对应模块前置，不在 Server 分支复制或绕过其实现。
-4. 修复后重新运行精确 SHA 的 Server CI，要求 Readiness 成功并完成 SIGTERM 退出码 0。
+1. 等当前精确 SHA 的 Server CI 完成 gofmt、package tests、race、真实 MariaDB/Redis、vet、镜像构建和真实容器 Bootstrap。
+2. 确认 `server.storage.schema` 变为 healthy，`/readyz` 返回 200。
+3. 确认同一容器随后执行 SIGTERM 并以退出码 0 结束。
+4. 若出现新的 Required Check 失败，以新 `/diagnostics` 证据单独定位，不回退到猜测 Data/Redis 故障。
 
 ## 2. 跨模块前置：Data Migration 定义与并发安全
 
@@ -63,7 +67,26 @@
 - 不提前删除旧 Analysis API/Worker；SRV-013 仍按依赖保持 deferred。
 
 
-## 5. WebUI 尚未切换到 Root Data Handler
+## 6. 其他模块生产服务尚未全部装配
+
+状态：PARTIAL（可安全装配项已推进，其余按真实依赖阻塞）
+
+已接入：
+- News Storage Connection/Schema Diagnostics。
+- Worker/All 角色的 News Observation/Availability Evidence Retention Cleaner 和 Evidence Snapshot Cleaner。
+- Researchflow News Search Stage/Runtime、Research/Researchflow Outbox 到 Notification Inbox 的接收 Relay 已存在，不重复开发。
+
+尚未装配及原因：
+- News RSS/Atom Source Collection：缺生产 Source/Endpoint Catalog 配置与受治理的 Endpoint BoundDoer，不可凭空生成来源或开放任意 URL。
+- Research：News→Research 组合只在 Cursor Key Ring 配置时构造，当前无真实 Stage/HTTP 消费者；不能创建无调用场景的 Handler。
+- Quant：只有确定性计算能力和 Memory Result Repository，缺生产持久化 Repository、Root Facade/Worker 及 Researchflow Stage 输入契约。
+- LLM：传输适配器存在，但无已验证 Gateway 版本/Capability Evidence、SecretRef 和生产 Provider 配置。
+- Notification Delivery：虽有持久化 Repository 和领域用例，但缺权威 Recipient Directory、真实 Channel Adapter/凭据、投递 Worker 与回执/Unknown Lookup 闭环。
+- Researchflow：当前只装配 News Search Stage；其他 Stage 等各模块公开 Facade、Schema、授权和真实输入证据。
+
+原则：已具备生产条件的服务直接装配；缺真实数据源、调用者、持久化或外部依赖的服务保持 BLOCKED，不创建空 Worker、恒 true Check、Fake Provider 或虚构接收人。
+
+## 7. WebUI 尚未切换到 Root Data Handler
 
 状态：BLOCKED（依赖 Web/Data/部署任务，不作为 Server Root 装配已完成的证据）
 
