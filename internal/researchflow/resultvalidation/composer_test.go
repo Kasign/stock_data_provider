@@ -234,10 +234,15 @@ func TestComposeResultAcceptsRiskReferencesResolvedByContextAndQuant(t *testing.
 
 func TestComposeResultRejectsRiskPassContradiction(t *testing.T) {
 	input := validCompositionInput()
+	input.QuantResults = []QuantResultEnvelope{validQuantResult()}
+	registry, err := NewQuantPayloadRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	risk := validRiskDecision()
 	risk.Reasons[0].Status = "triggered"
 	input.RiskDecision = &risk
-	if _, err := ComposeResult(input, nil); !errors.Is(err, ErrInvalidResultComposition) {
+	if _, err := ComposeResult(input, registry); !errors.Is(err, ErrInvalidResultComposition) {
 		t.Fatalf("blocking risk must prevent composition as pass, got %v", err)
 	}
 }
