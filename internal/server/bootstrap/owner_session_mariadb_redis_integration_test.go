@@ -116,7 +116,8 @@ func TestOwnerSessionHTTPMariaDBRedisLifecycleIntegration(t *testing.T) {
 	}
 	health := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
 	legacy := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })
-	handler, err := newHTTPHandler(bearer, health, legacy, composition)
+	marketData := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })
+	handler, err := newHTTPHandler(bearer, health, legacy, marketData, composition)
 	if err != nil {
 		t.Fatalf("mount Root Server routes: %v", err)
 	}
