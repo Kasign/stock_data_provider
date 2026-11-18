@@ -2,12 +2,12 @@
 
 - 所属治理任务：GOV-004
 - 状态：目标契约设计，尚未实现、尚未冻结。
-- 规划归属：`feat/design_doc`；News 业务实现归 `feat/research-news-ingestion`，Research 消费侧归未来 `feat/research`。
+- 规划归属：`feat/design_doc`；News 业务实现归 `feat/news`，Research 消费侧归未来 `feat/research`。
 - 设计原则：News 是来源、采集、身份、版本、授权和内容的权威所有者；Research 只接收被授权的稳定 DTO，不访问 News Repository、SQL 或私有 Domain。
 
 ## 1. 当前实现核查与边界
 
-本轮通过 `feat/research-news-ingestion` 分支读取以下文件：
+本轮通过 `feat/news` 分支读取以下文件：
 - `internal/news/app/ports.go`
 - `internal/news/app/search.go`
 - `internal/news/app/ingest.go`
