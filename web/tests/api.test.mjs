@@ -844,7 +844,11 @@ test("Owner password change validates UTF-8 byte limits and clears runtime CSRF 
 
     await changeOwnerPassword(settings, "current-password", "new-password");
     assert.equal(requests[1].method, "PUT");
+    assert.equal(requests[1].url, "/analysis-api/api/v1/owner/password");
+    assert.equal(requests[1].credentials, "same-origin");
     assert.equal(requests[1].headers["X-CSRF-Token"], "password-change-csrf");
+    assert.equal(requests[1].headers["X-API-Key"], undefined);
+    assert.equal(requests[1].headers.Authorization, undefined);
     assert.deepEqual(JSON.parse(requests[1].body), {
       current_password: "current-password", new_password: "new-password"
     });
