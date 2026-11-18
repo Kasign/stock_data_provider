@@ -274,8 +274,8 @@ func TestSourceCollectionPolicyCheckReportsStaleOrUnavailablePolicy(t *testing.T
 	if err != nil { t.Fatal(err) }
 	observation := report.Results[0].Observation
 	if observation.Status != platformdiag.StatusUnavailable ||
-		observation.Fault == nil || observation.Fault.Code != "news.source.current_policy_lookup_failed" {
-		t.Fatalf("observation=%+v", observation)
+		report.Results[0].Fault == nil || report.Results[0].Fault.Code != "news.source.current_policy_lookup_failed" {
+		t.Fatalf("result=%+v", report.Results[0])
 	}
 }
 
@@ -345,9 +345,9 @@ func TestSourceCollectionPolicyCheckFailsWhenDependenciesMissing(t *testing.T) {
 	})
 	if err != nil { t.Fatal(err) }
 	observation := report.Results[0].Observation
-	if observation.Status != platformdiag.StatusUnavailable || observation.Fault == nil ||
-		observation.Fault.Code != "news.source.collection_policy_dependency_unavailable" {
-		t.Fatalf("observation=%+v", observation)
+	if observation.Status != platformdiag.StatusUnavailable || report.Results[0].Fault == nil ||
+		report.Results[0].Fault.Code != "news.source.collection_policy_dependency_unavailable" {
+		t.Fatalf("result=%+v", report.Results[0])
 	}
 }
 

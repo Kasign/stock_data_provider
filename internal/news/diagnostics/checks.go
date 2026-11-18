@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"strconv"
 	"time"
 
 	"example.com/stock-analysis-flow/internal/news/adapters/parser"
