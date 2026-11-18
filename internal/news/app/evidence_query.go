@@ -154,6 +154,7 @@ func NewResearchEvidencePage(systemAsOf time.Time) ResearchEvidencePage {
 type EvidencePITRecord struct {
 	SourceRef   string
 	ProviderRef string
+	AvailableAt *time.Time
 	Observation domain.Observation
 	Version     domain.NewsItemVersion
 }

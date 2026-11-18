@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"example.com/stock-analysis-flow/internal/marketdata/model"
+	platformtime "example.com/stock-analysis-flow/internal/platform/time"
 )
 
 func validISODate(value string, optional bool) bool {
@@ -139,8 +140,8 @@ WHERE symbol=? AND trade_date=? AND source=? AND source_version=? AND factor_bas
 			}
 			_, insertErr := tx.ExecContext(ctx, `INSERT INTO market_data_adjustment_factor_versions
 (symbol,trade_date,source,source_version,factor_basis,revision_hash,recorded_at,fetched_at,available_at,quality_status,metadata)
-VALUES (?,?,?,?,?,?,?,?,?,?,?)`, value.Symbol, value.TradeDate, value.Source, value.SourceVersion, string(value.Basis), item.hash,
-				time.Now().UTC(), value.FetchedAt.UTC(), nullableTime(value.AvailableAt), string(value.QualityStatus), metadata)
+VALUES (?,?,?,?,?,?,UTC_TIMESTAMP(6),?,?,?,?)`, value.Symbol, value.TradeDate, value.Source, value.SourceVersion, string(value.Basis), item.hash,
+				value.FetchedAt.UTC(), nullableTime(value.AvailableAt), string(value.QualityStatus), metadata)
 			if insertErr != nil {
 				return fmt.Errorf("insert adjustment-factor revision for %s on %s: %w", value.Symbol, value.TradeDate, insertErr)
 			}
@@ -158,7 +159,7 @@ func (s *Store) ListAdjustmentFactorsAsOf(ctx context.Context, symbol, startDate
 	if s == nil || s.db == nil {
 		return nil, errors.New("MariaDB adjustment-factor storage disabled")
 	}
-	if strings.TrimSpace(symbol) == "" || !validISODate(startDate, true) || !validISODate(endDate, true) || asOf.IsZero() || asOf.After(time.Now().UTC()) {
+	if strings.TrimSpace(symbol) == "" || !validISODate(startDate, true) || !validISODate(endDate, true) || asOf.IsZero() || asOf.After(platformtime.SystemClock{}.Now()) {
 		return nil, errors.New("invalid adjustment-factor as_of query")
 	}
 	asOfUTC := asOf.UTC()
@@ -304,8 +305,8 @@ WHERE symbol=? AND provider_event_id=? AND source=? ORDER BY recorded_at DESC,id
 			}
 			_, insertErr := tx.ExecContext(ctx, `INSERT INTO market_data_corporate_action_versions
 (symbol,provider_event_id,source,ex_date,announcement_date,revision_hash,recorded_at,fetched_at,available_at,quality_status,metadata)
-VALUES (?,?,?,?,?,?,?,?,?,?,?)`, value.Symbol, value.ProviderEventID, value.Source, nullableDate(value.ExDate), nullableDate(value.AnnouncementDate), item.hash,
-				time.Now().UTC(), value.FetchedAt.UTC(), nullableTime(value.AvailableAt), string(value.QualityStatus), metadata)
+VALUES (?,?,?,?,?,?,UTC_TIMESTAMP(6),?,?,?,?)`, value.Symbol, value.ProviderEventID, value.Source, nullableDate(value.ExDate), nullableDate(value.AnnouncementDate), item.hash,
+				value.FetchedAt.UTC(), nullableTime(value.AvailableAt), string(value.QualityStatus), metadata)
 			if insertErr != nil {
 				return fmt.Errorf("insert corporate-action revision for %s: %w", value.ProviderEventID, insertErr)
 			}
@@ -323,7 +324,7 @@ func (s *Store) ListCorporateActionsAsOf(ctx context.Context, symbol, startDate,
 	if s == nil || s.db == nil {
 		return nil, errors.New("MariaDB corporate-action storage disabled")
 	}
-	if strings.TrimSpace(symbol) == "" || !validISODate(startDate, true) || !validISODate(endDate, true) || asOf.IsZero() || asOf.After(time.Now().UTC()) {
+	if strings.TrimSpace(symbol) == "" || !validISODate(startDate, true) || !validISODate(endDate, true) || asOf.IsZero() || asOf.After(platformtime.SystemClock{}.Now()) {
 		return nil, errors.New("invalid corporate-action as_of query")
 	}
 	asOfUTC := asOf.UTC()

@@ -2731,3 +2731,16 @@ CSS AST 检查器进一步扩展：
 - [x] 静态相对 import 图未发现循环；没有领域模块反向 import `app.js`。
 - [x] 当前 app.js 5,547 行、70 个 state 对象字段；未以行数/字段数为理由启动迁移。
 - [x] 本轮只更新架构事实和验收文档，不修改运行时代码。
+
+
+## 2026-11-17 Owner Session WebUI 接入验收补记
+
+- [x] 精确 SHA `446cc1a65c307726a1171e1341d529452ea09f55` 的 Integration CI Run [43999751873](https://github.com/Kasign/stock_data_provider/actions/runs/43999751873) 通过。
+- [x] WebUI API 封装覆盖登录、当前 Session、刷新后 CSRF 恢复、Session 轮换、登出和密码修改。
+- [x] 同源 Cookie 凭据、CSRF Header、Token 仅存 JS 运行时内存，不写 localStorage/sessionStorage。
+- [x] 设置中心登录、退出、密码修改入口及状态反馈通过 UI 契约检查。
+- [x] 旧 Owner Bearer 路由与 Owner Session 隔离；行情 API Key 不附加到 Owner Session 请求。
+- [ ] 目标服务器外部 Nginx / Compose / HTTPS 真实部署验收。
+- [ ] 目标域名真实浏览器 Cookie Path/Secure/SameSite/Origin/Host 与刷新恢复全生命周期验证。
+
+本节的自动化通过仅属于所列精确 SHA；未勾选部署项必须在真实目标环境验证，不得用 Mock 或 CI 代替。

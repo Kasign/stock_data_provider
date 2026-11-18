@@ -19,7 +19,7 @@ func (s *Server) fundamentals(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		parsed, parseErr := time.Parse(time.RFC3339Nano, strings.TrimSpace(asOfValues[0]))
-		if parseErr != nil || parsed.After(time.Now().UTC()) {
+		if parseErr != nil || parsed.After(s.nowUTC()) {
 			writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", "as_of must be a valid non-future RFC3339 timestamp", requestID(r))
 			return
 		}
@@ -32,7 +32,7 @@ func (s *Server) fundamentals(w http.ResponseWriter, r *http.Request) {
 	}
 	year, yearErr := strconv.Atoi(yearText)
 	quarter, quarterErr := strconv.Atoi(quarterText)
-	if yearErr != nil || quarterErr != nil || year < 2007 || year > time.Now().Year() || quarter < 1 || quarter > 4 {
+	if yearErr != nil || quarterErr != nil || year < 2007 || year > s.nowUTC().Year() || quarter < 1 || quarter > 4 {
 		writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", "year must be 2007..current year and quarter must be 1..4", requestID(r))
 		return
 	}

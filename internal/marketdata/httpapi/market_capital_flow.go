@@ -4,6 +4,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"example.com/stock-analysis-flow/internal/marketdata/markettime"
 )
 
 func (s *Server) marketCapitalFlow(w http.ResponseWriter, r *http.Request) {
@@ -19,11 +21,8 @@ func (s *Server) marketCapitalFlow(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", "start/end must be valid YYYY-MM-DD dates with an inclusive range no longer than 2000 calendar days", requestID(r))
 		return
 	}
-	loc, locErr := time.LoadLocation("Asia/Shanghai")
-	if locErr != nil {
-		loc = time.FixedZone("CST", 8*60*60)
-	}
-	if end > time.Now().In(loc).Format("2006-01-02") {
+	loc := markettime.Location()
+	if end > s.nowUTC().In(loc).Format("2006-01-02") {
 		writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", "end must not be in the future in Asia/Shanghai", requestID(r))
 		return
 	}

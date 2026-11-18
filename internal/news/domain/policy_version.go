@@ -45,7 +45,7 @@ func ValidateNewsPolicyVersion(value NewsPolicyVersion) error {
 		if err := decodeNewsPolicyPayload(value.Payload, &policy); err != nil ||
 			!validAuthorizationStatus(policy.Status, false) ||
 			strings.TrimSpace(policy.EvidenceRef) == "" ||
-			policy.MaxRetention < 0 ||
+			policy.MaxRetention < 0 || !validateMetadataFieldPaths(policy.AllowedMetadataFields) ||
 			!validNewsPolicyTimeRange(policy.EffectiveAt, policy.ExpiresAt) {
 			return ErrNewsPolicyVersionInvalid
 		}
@@ -55,6 +55,7 @@ func ValidateNewsPolicyVersion(value NewsPolicyVersion) error {
 			!validAuthorizationStatus(policy.Status, true) ||
 			(policy.HasOverrides() && strings.TrimSpace(policy.EvidenceRef) == "") ||
 			(policy.MaxRetention != nil && *policy.MaxRetention < 0) ||
+			!validateMetadataFieldPaths(policy.AllowedMetadataFields) ||
 			!validNewsPolicyTimeRange(policy.EffectiveAt, policy.ExpiresAt) {
 			return ErrNewsPolicyVersionInvalid
 		}
@@ -64,7 +65,7 @@ func ValidateNewsPolicyVersion(value NewsPolicyVersion) error {
 			!validAuthorizationStatus(policy.Status, false) ||
 			strings.TrimSpace(policy.EvidenceRef) == "" ||
 			policy.MaxRequestRetention < 0 || policy.MaxCacheRetention < 0 ||
-			policy.MaxPersistenceRetention < 0 ||
+			policy.MaxPersistenceRetention < 0 || !validateMetadataFieldPaths(policy.AllowedMetadataFields) ||
 			!validNewsPolicyTimeRange(policy.EffectiveAt, policy.ExpiresAt) {
 			return ErrNewsPolicyVersionInvalid
 		}

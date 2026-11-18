@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"example.com/stock-analysis-flow/internal/marketdata/model"
+	platformtime "example.com/stock-analysis-flow/internal/platform/time"
 )
 
 type adjustmentFactorRebuildMode uint8
@@ -39,6 +40,11 @@ func rebuildAdjustedDailyBarsCurrent(raw []model.DailyBar, factors []model.Adjus
 }
 
 func rebuildAdjustedDailyBarsWithMode(raw []model.DailyBar, factors []model.AdjustmentFactor, basis model.AdjustmentBasis, requestedReferenceDate string, mode adjustmentFactorRebuildMode) ([]model.DailyBar, error) {
+	return rebuildAdjustedDailyBarsWithModeAt(raw, factors, basis, requestedReferenceDate, mode, platformtime.SystemClock{}.Now())
+}
+
+// rebuildAdjustedDailyBarsWithModeAt 使用指定时刻筛选已观察且可用的复权因子。
+func rebuildAdjustedDailyBarsWithModeAt(raw []model.DailyBar, factors []model.AdjustmentFactor, basis model.AdjustmentBasis, requestedReferenceDate string, mode adjustmentFactorRebuildMode, now time.Time) ([]model.DailyBar, error) {
 	if mode != adjustmentFactorRebuildCurrent && mode != adjustmentFactorRebuildPIT {
 		return nil, errors.New("unsupported adjustment factor rebuild mode")
 	}
@@ -87,7 +93,7 @@ func rebuildAdjustedDailyBarsWithMode(raw []model.DailyBar, factors []model.Adju
 		}
 	}
 
-	now := time.Now().UTC()
+	now = now.UTC()
 	type factorKey struct {
 		source  string
 		version string

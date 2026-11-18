@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"example.com/stock-analysis-flow/internal/researchflow/domain"
+	"example.com/stock-analysis-flow/internal/researchflow/resourcepolicy"
 )
 
 type testEvaluator map[string]bool
@@ -386,5 +387,67 @@ func TestResolveIsolatesParameterBytesAcrossInjectedBoundaries(t *testing.T) {
 	}
 	if len(resolved.Stages) != 2 {
 		t.Fatalf("unexpected resolved stages after evaluator mutation: %#v", resolved.Stages)
+	}
+}
+
+func TestResourcePolicySnapshotFingerprintExcludesDynamicProviderInventory(t *testing.T) {
+	base, err := Resolve(context.Background(), testTemplate(), json.RawMessage("{}"), testParameterSchemas{}, testEvaluator{"always": true}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := BindResourcePolicySnapshot(base, resourcepolicy.Snapshot{
+		PolicyRef: base.ResourcePolicyRef, PolicyFingerprint: strings.Repeat("a", 64),
+		AllowedProviderCodes: []string{"bocha", "tavily"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := BindResourcePolicySnapshot(base, resourcepolicy.Snapshot{
+		PolicyRef: base.ResourcePolicyRef, PolicyFingerprint: strings.Repeat("a", 64),
+		AllowedProviderCodes: []string{"bocha"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.Fingerprint != second.Fingerprint {
+		t.Fatal("dynamic Provider inventory must not change ResolvedTemplate fingerprint")
+	}
+	rebound, err := BindResourcePolicySnapshot(first, resourcepolicy.Snapshot{
+		PolicyRef: first.ResourcePolicy.PolicyRef, PolicyFingerprint: first.ResourcePolicy.PolicyFingerprint,
+		AllowedProviderCodes: []string{"bocha", "tavily"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rebound.Fingerprint != first.Fingerprint {
+		t.Fatal("binding the same ResourcePolicy snapshot twice must be idempotent")
+	}
+	third, err := BindResourcePolicySnapshot(base, resourcepolicy.Snapshot{
+		PolicyRef: base.ResourcePolicyRef, PolicyFingerprint: strings.Repeat("b", 64),
+		AllowedProviderCodes: []string{"bocha"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.Fingerprint == third.Fingerprint {
+		t.Fatal("resource policy definition fingerprint must affect ResolvedTemplate fingerprint")
+	}
+	first.ResourcePolicy.AllowedProviderCodes[0] = "mutated"
+	if second.ResourcePolicy.AllowedProviderCodes[0] != "bocha" {
+		t.Fatal("resource policy snapshot retained caller-owned Provider inventory")
+	}
+}
+
+func TestBindResourcePolicySnapshotRejectsNonCanonicalProviderInventory(t *testing.T) {
+	base, err := Resolve(context.Background(), testTemplate(), json.RawMessage("{}"), testParameterSchemas{}, testEvaluator{"always": true}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = BindResourcePolicySnapshot(base, resourcepolicy.Snapshot{
+		PolicyRef: base.ResourcePolicyRef, PolicyFingerprint: strings.Repeat("a", 64),
+		AllowedProviderCodes: []string{"tavily", "bocha"},
+	})
+	if err == nil {
+		t.Fatal("unsorted Provider inventory accepted")
 	}
 }

@@ -173,7 +173,7 @@ func (p *Tencent) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quot
 		return nil, fmt.Errorf("normalize Tencent quote volume: %w", conversionErr)
 	}
 	rawAmount, amount, amountField, rawAmountUnit := tencentQuoteAmount(fields, low, high, volume)
-	fetchedAt := time.Now().UTC()
+	fetchedAt := providerNowUTC()
 	var qtime *time.Time
 	if len(fields) > 30 {
 		qtime = parseTencentTime(fields[30])
@@ -262,11 +262,8 @@ func (p *Tencent) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 		}
 	}
 	// 日期边界和区间错误必须在发起上游请求前拒绝，避免浪费调用额度并防止未来日期进入日 K 链路。
-	loc, locErr := time.LoadLocation("Asia/Shanghai")
-	if locErr != nil {
-		loc = time.FixedZone("CST", 8*60*60)
-	}
-	today := time.Now().In(loc).Format("2006-01-02")
+	loc := providerMarketLocation()
+	today := providerNowUTC().In(loc).Format("2006-01-02")
 	if start != "" && start > today {
 		return nil, errors.New("Tencent start date must not be after today in Asia/Shanghai")
 	}
@@ -415,7 +412,7 @@ func (p *Tencent) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 		quality := model.QualityDegraded
 		reasons := []string{"tencent_daily_kline_has_no_verified_amount_field"}
 		amountUnit := "unknown"
-		b := model.DailyBar{Symbol: symbol, TradeDate: vals[0], Period: "1d", Open: open, High: high, Low: low, Close: closeV, Volume: &shares, Amount: amount, AdjustmentBasis: adjustment, AdjustmentMethod: "tencent_" + key, Source: p.Name(), SourceVersion: tencentVersion, FetchedAt: time.Now().UTC(), NormalizedAt: time.Now().UTC(), RawVolume: &rv, RawVolumeUnit: rawVolumeUnit, RawAmount: rawAmount, RawAmountUnit: optionalUnit(rawAmount, "CNY"), RawAmountField: optionalUnitName(rawAmount, "kline_field_6"), VolumeUnit: "shares", AmountUnit: amountUnit, QualityStatus: quality, QualityReasons: reasons, NormalizationVer: normalize.Version}
+		b := model.DailyBar{Symbol: symbol, TradeDate: vals[0], Period: "1d", Open: open, High: high, Low: low, Close: closeV, Volume: &shares, Amount: amount, AdjustmentBasis: adjustment, AdjustmentMethod: "tencent_" + key, Source: p.Name(), SourceVersion: tencentVersion, FetchedAt: providerNowUTC(), NormalizedAt: providerNowUTC(), RawVolume: &rv, RawVolumeUnit: rawVolumeUnit, RawAmount: rawAmount, RawAmountUnit: optionalUnit(rawAmount, "CNY"), RawAmountField: optionalUnitName(rawAmount, "kline_field_6"), VolumeUnit: "shares", AmountUnit: amountUnit, QualityStatus: quality, QualityReasons: reasons, NormalizationVer: normalize.Version}
 		out = append(out, b)
 	}
 
@@ -619,8 +616,8 @@ func tencentCode(symbol string) (string, error) {
 func tencentChinaLocation(loadLocation func(string) (*time.Location, error)) *time.Location {
 	loc, err := loadLocation("Asia/Shanghai")
 	if err != nil || loc == nil {
-		// 精简容器可能没有 zoneinfo 数据；腾讯返回的是中国本地行情时间，回退到固定 UTC+8。
-		return time.FixedZone("CST", 8*60*60)
+		// 系统时区数据库不可用时，使用内嵌 IANA 时区数据。
+		return providerMarketLocation()
 	}
 	return loc
 }

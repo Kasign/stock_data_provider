@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"example.com/stock-analysis-flow/internal/marketdata/model"
+	platformtime "example.com/stock-analysis-flow/internal/platform/time"
 )
 
 const maxTradingCalendarDays = 3660
@@ -33,6 +34,10 @@ func parseTradingCalendarRange(startDate, endDate string) (time.Time, time.Time,
 }
 
 func validateTradingCalendarSnapshot(snapshot *model.TradingCalendarSnapshot, startDate, endDate string) error {
+	return validateTradingCalendarSnapshotAt(snapshot, startDate, endDate, platformtime.SystemClock{}.Now().UTC())
+}
+
+func validateTradingCalendarSnapshotAt(snapshot *model.TradingCalendarSnapshot, startDate, endDate string, now time.Time) error {
 	if snapshot == nil {
 		return errors.New("trading-calendar provider returned an empty snapshot")
 	}
@@ -62,7 +67,7 @@ func validateTradingCalendarSnapshot(snapshot *model.TradingCalendarSnapshot, st
 	if strings.TrimSpace(snapshot.Source) == "" || !hasIdentifiableSourceVersion(snapshot.SourceVersion) || snapshot.FetchedAt.IsZero() {
 		return errors.New("trading-calendar source, source_version or fetched_at is missing")
 	}
-	if snapshot.FetchedAt.After(time.Now().UTC().Add(5 * time.Minute)) {
+	if snapshot.FetchedAt.After(now.UTC().Add(5 * time.Minute)) {
 		return errors.New("trading-calendar fetched_at is in the future")
 	}
 	if snapshot.QualityStatus != model.QualityValid && snapshot.QualityStatus != model.QualityDegraded {
@@ -84,11 +89,12 @@ func (s *DataService) TradingCalendar(ctx context.Context, rawStartDate, rawEndD
 		return nil, false, err
 	}
 	const ttl = 12 * time.Hour
+	now := s.nowUTC()
 	key := fmt.Sprintf("md:v1:trading-calendar:cn-a-share:%s:%s", startDate, endDate)
 	if data, ok, cacheErr := s.cache.Get(ctx, key); cacheErr == nil && ok {
 		var cached model.TradingCalendarSnapshot
-		if json.Unmarshal(data, &cached) == nil && validateTradingCalendarSnapshot(&cached, startDate, endDate) == nil &&
-			time.Since(cached.FetchedAt) >= 0 && time.Since(cached.FetchedAt) < ttl {
+		if json.Unmarshal(data, &cached) == nil && validateTradingCalendarSnapshotAt(&cached, startDate, endDate, now) == nil &&
+			!cached.FetchedAt.After(now) && now.Sub(cached.FetchedAt) < ttl {
 			return &cached, true, nil
 		}
 	} else if cacheErr != nil {
@@ -114,7 +120,7 @@ func (s *DataService) TradingCalendar(ctx context.Context, rawStartDate, rawEndD
 			failures = append(failures, p.Name()+": trading-calendar source does not match Provider.Name()")
 			continue
 		}
-		if err := validateTradingCalendarSnapshot(snapshot, startDate, endDate); err != nil {
+		if err := validateTradingCalendarSnapshotAt(snapshot, startDate, endDate, now); err != nil {
 			failures = append(failures, p.Name()+": "+err.Error())
 			continue
 		}

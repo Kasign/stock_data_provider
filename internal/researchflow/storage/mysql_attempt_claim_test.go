@@ -5,7 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
+	"os/exec"
+	"path/filepath"
+	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -15,8 +20,99 @@ import (
 	platformstorage "example.com/stock-analysis-flow/internal/platform/storage"
 	"example.com/stock-analysis-flow/internal/researchflow/application"
 	"example.com/stock-analysis-flow/internal/researchflow/domain"
+	"example.com/stock-analysis-flow/internal/researchflow/stageoutput"
 	"example.com/stock-analysis-flow/internal/researchflow/template"
 )
+
+const globalCapacityProcessHelperEnv = "RESEARCHFLOW_GLOBAL_CAPACITY_HELPER"
+
+type globalCapacityProcessResult struct {
+	Claimed          bool   `json:"claimed"`
+	CapacityRejected bool   `json:"capacity_rejected"`
+	AttemptRef       string `json:"attempt_ref,omitempty"`
+}
+
+func TestMariaDBGlobalCapacityClaimHelperProcess(t *testing.T) {
+	if os.Getenv(globalCapacityProcessHelperEnv) != "1" {
+		return
+	}
+	readyPath := os.Getenv("RESEARCHFLOW_GLOBAL_CAPACITY_READY_FILE")
+	startPath := os.Getenv("RESEARCHFLOW_GLOBAL_CAPACITY_START_FILE")
+	resultPath := os.Getenv("RESEARCHFLOW_GLOBAL_CAPACITY_RESULT_FILE")
+	if readyPath == "" || startPath == "" || resultPath == "" {
+		t.Fatal("global capacity helper file paths are required")
+	}
+	if err := os.WriteFile(readyPath, []byte("ready"), 0o600); err != nil {
+		t.Fatalf("write helper ready marker: %v", err)
+	}
+	waitDeadline := time.Now().Add(15 * time.Second)
+	for {
+		if _, err := os.Stat(startPath); err == nil {
+			break
+		} else if !os.IsNotExist(err) {
+			t.Fatalf("check helper start marker: %v", err)
+		}
+		if time.Now().After(waitDeadline) {
+			t.Fatal("timed out waiting for global capacity process barrier")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	dsn := fmt.Sprintf("%s:%s@tcp(%s)/%s?parseTime=true",
+		os.Getenv("PLATFORM_MARIADB_USER"), os.Getenv("PLATFORM_MARIADB_PASSWORD"),
+		os.Getenv("PLATFORM_MARIADB_ADDR"), os.Getenv("PLATFORM_MARIADB_DATABASE"))
+	config, err := mysql.ParseDSN(dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	connector, err := mysql.NewConnector(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := platformstorage.OpenSQL(ctx, connector, platformstorage.DefaultSQLConfig())
+	if err != nil {
+		t.Fatalf("open helper MariaDB connection: %v", err)
+	}
+	defer db.Close()
+
+	maxWorkers, err := strconv.Atoi(os.Getenv("RESEARCHFLOW_GLOBAL_CAPACITY_MAX_WORKERS"))
+	if err != nil || maxWorkers < 1 {
+		t.Fatal("global capacity helper MaxWorkers is invalid")
+	}
+	repository, err := NewMySQLRunRepository(db, CapacityLimits{MaxQueuedRuns: 10, MaxWorkers: maxWorkers})
+	if err != nil {
+		t.Fatal(err)
+	}
+	attempt, _, claimErr := repository.ClaimAttempt(
+		ctx,
+		os.Getenv("RESEARCHFLOW_GLOBAL_CAPACITY_RUN_REF"),
+		os.Getenv("RESEARCHFLOW_GLOBAL_CAPACITY_STAGE_REF"),
+		os.Getenv("RESEARCHFLOW_GLOBAL_CAPACITY_ATTEMPT_REF"),
+		os.Getenv("RESEARCHFLOW_GLOBAL_CAPACITY_WORKER_ID"),
+		time.Minute,
+		2,
+		2,
+	)
+	result := globalCapacityProcessResult{}
+	switch {
+	case claimErr == nil:
+		result.Claimed = true
+		result.AttemptRef = attempt.Ref
+	case errors.Is(claimErr, ErrGlobalWorkerCapacityExceeded):
+		result.CapacityRejected = true
+	default:
+		t.Fatalf("ClaimAttempt returned an unexpected error: %v", claimErr)
+	}
+	raw, err := json.Marshal(result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(resultPath, raw, 0o600); err != nil {
+		t.Fatalf("write helper result: %v", err)
+	}
+}
 
 func TestClaimAttemptValidatesArgumentsWithoutDatabase(t *testing.T) {
 	repository := &MySQLRunRepository{}
@@ -104,7 +200,8 @@ func TestMariaDBClaimAttemptLeaseAndFencing(t *testing.T) {
 			},
 		},
 		ResolvedTemplate: template.ResolvedTemplate{
-			Ref: "claim-template", Version: "v1", Fingerprint: templateFingerprint,
+			OutputRegistryVersion: "1.0.0",
+			Ref:                   "claim-template", Version: "v1", Fingerprint: templateFingerprint,
 			Stages: []template.ResolvedStage{{Definition: template.StageDefinition{Code: "context"}}, {Definition: template.StageDefinition{Code: "quant"}}, {Definition: template.StageDefinition{Code: "research"}}, {Definition: template.StageDefinition{Code: "report"}}, {Definition: template.StageDefinition{Code: "budget"}}},
 		},
 		Parameters: json.RawMessage(`{}`),
@@ -223,13 +320,13 @@ func TestMariaDBClaimAttemptLeaseAndFencing(t *testing.T) {
 	nextStage := stage
 	nextStage.Version++
 	nextStage.Status = domain.StageSucceeded
-	nextStage.OutputRef = stringRef("result-" + suffix)
+	nextStage.OutputRef = nil
+	nextStage.QualitySummaryRef = nil
 	nextStage.FinishedAt = &finished
 	staleCommit := AttemptResultCommit{
 		RunRef: runRef, StageRef: stageRef, AttemptRef: first.Ref,
 		WorkerID: "worker-a", FencingToken: first.FencingToken,
 		AttemptStatus: domain.AttemptSucceeded, Stage: nextStage,
-		OutputRef: nextStage.OutputRef,
 	}
 	if err := repository.CommitAttemptResult(ctx, staleCommit); !errors.Is(err, ErrAttemptLeaseHeld) {
 		t.Fatalf("stale worker result error=%v, want ErrAttemptLeaseHeld", err)
@@ -239,7 +336,16 @@ func TestMariaDBClaimAttemptLeaseAndFencing(t *testing.T) {
 		RunRef: runRef, StageRef: stageRef, AttemptRef: second.Ref,
 		WorkerID: "worker-b", FencingToken: second.FencingToken,
 		AttemptStatus: domain.AttemptSucceeded, Stage: nextStage,
-		OutputRef: nextStage.OutputRef,
+		StageOutput: &StageOutputCommit{
+			Envelope: stageoutput.Envelope{
+				RunRef: runRef, StageRef: stageRef, AttemptRef: second.Ref, StageCode: "context",
+				TemplateVersion: "v1", OutputType: "trend", SchemaVersion: "1.0.0",
+				Payload: json.RawMessage(`{"trend":"up"}`), QualitySummary: json.RawMessage(`{"quality":"valid"}`),
+				DiagnosticRefs: []string{}, CompletedAt: second.StartedAt.UTC(),
+			},
+			RegistryVersion: "1.0.0", RegistryFingerprint: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			PayloadSchemaRef: "schema://quant/trend/1.0.0", QualitySummarySchemaRef: "schema://quality/trend/1.0.0",
+		},
 	}
 	// Storage must enforce retry scheduling metadata independently of Application.
 	missingRetryAt := currentCommit
@@ -257,7 +363,14 @@ func TestMariaDBClaimAttemptLeaseAndFencing(t *testing.T) {
 
 	// Attempt and Stage must reference the same immutable output artifact.
 	mismatchedOutput := currentCommit
-	mismatchedOutput.OutputRef = stringRef("different-result-" + suffix)
+	mismatchedOutput.StageOutput = &StageOutputCommit{
+		Envelope:                currentCommit.StageOutput.Envelope,
+		RegistryVersion:         currentCommit.StageOutput.RegistryVersion,
+		RegistryFingerprint:     currentCommit.StageOutput.RegistryFingerprint,
+		PayloadSchemaRef:        currentCommit.StageOutput.PayloadSchemaRef,
+		QualitySummarySchemaRef: currentCommit.StageOutput.QualitySummarySchemaRef,
+	}
+	mismatchedOutput.StageOutput.Envelope.StageRef = "different-stage"
 	if err := repository.CommitAttemptResult(ctx, mismatchedOutput); err == nil {
 		t.Fatal("result commit must reject different Attempt and Stage output refs")
 	}
@@ -270,7 +383,7 @@ func TestMariaDBClaimAttemptLeaseAndFencing(t *testing.T) {
 		t.Fatalf("load committed attempt: %v", err)
 	}
 	if loadedSecond.Status != domain.AttemptSucceeded || loadedSecond.OutputRef == nil ||
-		*loadedSecond.OutputRef != "result-"+suffix {
+		!strings.HasPrefix(*loadedSecond.OutputRef, "stage-output:") {
 		t.Fatalf("committed attempt has unexpected result: %#v", loadedSecond)
 	}
 	if loadedSecond.LeaseOwner != "" || loadedSecond.LeaseExpiresAt != nil {
@@ -593,36 +706,132 @@ func TestMariaDBGlobalWorkerCapacitySerializesClaimsAcrossRuns(t *testing.T) {
 	type outcome struct {
 		target  claimTarget
 		attempt domain.Attempt
-		err     error
 	}
-	outcomes := make(chan outcome, len(targets))
-	var wait sync.WaitGroup
-	for _, target := range targets {
-		target := target
-		wait.Add(1)
-		go func() {
-			defer wait.Done()
-			attempt, _, err := repository.ClaimAttempt(ctx, target.runRef, target.stageRef,
-				target.attemptRef, "global-worker-"+target.runRef, time.Minute, 2, 2)
-			outcomes <- outcome{target: target, attempt: attempt, err: err}
-		}()
+	type helperProcess struct {
+		target     claimTarget
+		cmd        *exec.Cmd
+		readyPath  string
+		resultPath string
+		waitDone   chan error
+		finished   bool
 	}
-	wait.Wait()
-	close(outcomes)
+	tempDir, err := os.MkdirTemp("", "researchflow-global-capacity-")
+	if err != nil {
+		t.Fatalf("create process test directory: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+	startPath := filepath.Join(tempDir, "start")
+	helpers := make([]*helperProcess, 0, len(targets))
+	defer func() {
+		for _, helper := range helpers {
+			if helper.finished {
+				continue
+			}
+			_ = helper.cmd.Process.Kill()
+			<-helper.waitDone
+			helper.finished = true
+		}
+	}()
+
+	maxWorkers := activeBaseline + 1
+	for index, target := range targets {
+		readyPath := filepath.Join(tempDir, fmt.Sprintf("ready-%d", index))
+		resultPath := filepath.Join(tempDir, fmt.Sprintf("result-%d.json", index))
+		overrides := map[string]string{
+			globalCapacityProcessHelperEnv:             "1",
+			"RESEARCHFLOW_GLOBAL_CAPACITY_READY_FILE":  readyPath,
+			"RESEARCHFLOW_GLOBAL_CAPACITY_START_FILE":  startPath,
+			"RESEARCHFLOW_GLOBAL_CAPACITY_RESULT_FILE": resultPath,
+			"RESEARCHFLOW_GLOBAL_CAPACITY_MAX_WORKERS": fmt.Sprintf("%d", maxWorkers),
+			"RESEARCHFLOW_GLOBAL_CAPACITY_RUN_REF":     target.runRef,
+			"RESEARCHFLOW_GLOBAL_CAPACITY_STAGE_REF":   target.stageRef,
+			"RESEARCHFLOW_GLOBAL_CAPACITY_ATTEMPT_REF": target.attemptRef,
+			"RESEARCHFLOW_GLOBAL_CAPACITY_WORKER_ID":   "global-worker-process-" + fmt.Sprint(index),
+		}
+		env := make([]string, 0, len(os.Environ())+len(overrides))
+		for _, entry := range os.Environ() {
+			key, _, _ := strings.Cut(entry, "=")
+			if _, replaced := overrides[key]; !replaced {
+				env = append(env, entry)
+			}
+		}
+		for key, value := range overrides {
+			env = append(env, key+"="+value)
+		}
+		cmd := exec.Command(os.Args[0], "-test.run=^TestMariaDBGlobalCapacityClaimHelperProcess$")
+		cmd.Env = env
+		cmd.Stdout = io.Discard
+		cmd.Stderr = io.Discard
+		if err := cmd.Start(); err != nil {
+			t.Fatalf("start global capacity helper process %d: %v", index, err)
+		}
+		helper := &helperProcess{
+			target: target, cmd: cmd, readyPath: readyPath, resultPath: resultPath,
+			waitDone: make(chan error, 1),
+		}
+		go func() { helper.waitDone <- cmd.Wait() }()
+		helpers = append(helpers, helper)
+	}
+
+	readyDeadline := time.Now().Add(15 * time.Second)
+	for _, helper := range helpers {
+		for {
+			if _, err := os.Stat(helper.readyPath); err == nil {
+				break
+			} else if !os.IsNotExist(err) {
+				t.Fatalf("check helper ready marker: %v", err)
+			}
+			if time.Now().After(readyDeadline) {
+				t.Fatalf("timed out waiting for helper process %q to become ready", helper.target.runRef)
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+	if err := os.WriteFile(startPath, []byte("start"), 0o600); err != nil {
+		t.Fatalf("release global capacity process barrier: %v", err)
+	}
+
+	outcomes := make([]outcome, 0, len(helpers))
+	for _, helper := range helpers {
+		select {
+		case waitErr := <-helper.waitDone:
+			helper.finished = true
+			if waitErr != nil {
+				t.Fatalf("global capacity helper process failed: %v", waitErr)
+			}
+			raw, err := os.ReadFile(helper.resultPath)
+			if err != nil {
+				t.Fatalf("read helper result for %q: %v", helper.target.runRef, err)
+			}
+			var result globalCapacityProcessResult
+			if err := json.Unmarshal(raw, &result); err != nil {
+				t.Fatalf("decode helper result for %q: %v", helper.target.runRef, err)
+			}
+			if result.Claimed {
+				outcomes = append(outcomes, outcome{
+					target: helper.target, attempt: domain.Attempt{Ref: result.AttemptRef},
+				})
+			} else if result.CapacityRejected {
+				outcomes = append(outcomes, outcome{target: helper.target})
+			} else {
+				t.Fatalf("helper process returned neither claim nor capacity rejection: %+v", result)
+			}
+		case <-ctx.Done():
+			t.Fatalf("timed out waiting for independent claim processes: %v", ctx.Err())
+		}
+	}
 
 	var winner *outcome
 	var rejected *outcome
-	for item := range outcomes {
-		item := item
-		if item.err == nil {
+	for index := range outcomes {
+		item := outcomes[index]
+		if item.attempt.Ref != "" {
 			if winner != nil {
-				t.Fatal("global Worker capacity allowed two concurrent claims")
+				t.Fatal("global Worker capacity allowed two independent processes to claim")
 			}
 			winner = &item
-		} else if errors.Is(item.err, ErrGlobalWorkerCapacityExceeded) {
-			rejected = &item
 		} else {
-			t.Fatalf("unexpected global capacity claim error: %v", item.err)
+			rejected = &item
 		}
 	}
 	if winner == nil || rejected == nil {

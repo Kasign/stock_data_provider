@@ -327,7 +327,7 @@ func (p *Eastmoney) FetchStockBoards(ctx context.Context, rawSymbol string) (*mo
 		"invt":    {"2"},
 		"secid":   {secID},
 		"ut":      {p.ut},
-		"_":       {strconv.FormatInt(time.Now().UnixMilli(), 10)},
+		"_":       {strconv.FormatInt(providerNowUTC().UnixMilli(), 10)},
 	}
 	var payload struct {
 		RC   *int `json:"rc"`
@@ -355,7 +355,7 @@ func (p *Eastmoney) FetchStockBoards(ctx context.Context, rawSymbol string) (*mo
 	if payload.Data.Total != len(rows) {
 		return nil, fmt.Errorf("Eastmoney stock boards coverage incomplete: received %d of %d rows", len(rows), payload.Data.Total)
 	}
-	now := time.Now().UTC()
+	now := providerNowUTC()
 	snapshot := &model.StockBoardSnapshot{
 		Symbol: symbol, Total: payload.Data.Total, HasData: payload.Data.Total > 0,
 		ProviderReturned: len(rows),
@@ -421,7 +421,7 @@ func (p *Eastmoney) FetchStockBasic(ctx context.Context, rawSymbol string) (*mod
 			"sortColumns":  {""},
 			"source":       {"HSF10"},
 			"client":       {"PC"},
-			"v":            {strconv.FormatInt(time.Now().UnixMilli(), 10)},
+			"v":            {strconv.FormatInt(providerNowUTC().UnixMilli(), 10)},
 		}
 		var payload struct {
 			Result *struct {
@@ -547,7 +547,7 @@ func (p *Eastmoney) FetchStockBasic(ctx context.Context, rawSymbol string) (*mod
 		SecurityType: 1, SecurityTypeLabel: "stock",
 		ListingStatus: status, ListingStatusLabel: statusLabel,
 		Source: p.Name(), SourceVersion: "eastmoney-f10-market-profile-v3",
-		FetchedAt: time.Now().UTC(), QualityStatus: model.QualityDegraded,
+		FetchedAt: providerNowUTC(), QualityStatus: model.QualityDegraded,
 		QualityReasons:   []string{"market_profile_timestamp_not_exposed"},
 		NormalizationVer: normalize.Version,
 	}
@@ -786,7 +786,7 @@ func (p *Eastmoney) FetchQuote(ctx context.Context, rawSymbol string) (*model.Qu
 	q.Set("fields", "f43,f44,f45,f46,f47,f48,f50,f57,f58,f60,f86,f169,f170,f168")
 	q.Set("fltt", "2") // request formatted prices in yuan and percentages in percentage points
 	q.Set("invt", "2")
-	q.Set("_", strconv.FormatInt(time.Now().UnixMilli(), 10))
+	q.Set("_", strconv.FormatInt(providerNowUTC().UnixMilli(), 10))
 	var payload struct {
 		RC   *int                       `json:"rc"`
 		Data map[string]json.RawMessage `json:"data"`
@@ -856,7 +856,7 @@ func (p *Eastmoney) FetchQuote(ctx context.Context, rawSymbol string) (*model.Qu
 		return nil, fmt.Errorf("Eastmoney quote parse: %w", errors.Join(parseErrors...))
 	}
 	name := getString("f58")
-	fetchedAt := time.Now().UTC()
+	fetchedAt := providerNowUTC()
 	providerTime := validProviderSnapshotTime(parseEastmoneyTime(getString("f86")), fetchedAt)
 	quote := &model.Quote{Symbol: symbol, Name: name, CurrentPrice: price, Change: change, ChangePercent: pct, Open: open, High: high, Low: low, PrevClose: prev, Volume: volume, Amount: amount, VolumeRatio: volumeRatio, TurnoverRate: turnoverRate, QuoteTime: providerTime, QuoteTimeSemantics: "provider_snapshot_time", FetchedAt: fetchedAt, NormalizedAt: fetchedAt, Source: p.Name(), SourceVersion: eastmoneyVersion, RawVolume: volumePtr, RawVolumeUnit: "hands", RawAmount: rawAmount, RawAmountUnit: optionalUnit(rawAmount, "CNY"), RawAmountField: optionalUnitName(rawAmount, "f48"), VolumeUnit: "shares", AmountUnit: optionalUnit(amount, "CNY"), AdjustmentBasis: model.AdjustmentNone, QualityStatus: model.QualityValid, NormalizationVer: normalize.Version}
 	if reportedSymbol == "" {
@@ -1026,7 +1026,7 @@ func (p *Eastmoney) FetchHotStocks(ctx context.Context, rankingType string, limi
 		}
 		quotes[code] = row
 	}
-	now := time.Now().UTC()
+	now := providerNowUTC()
 	sourceVersion := eastmoneyVersion + "-hot-ranking-v1"
 	snapshot := &model.HotRankingSnapshot{
 		RankingType: rankingType, Items: make([]model.HotRankingItem, 0, len(ranked)),
@@ -1238,10 +1238,10 @@ func (p *Eastmoney) FetchChipDistribution(ctx context.Context, rawSymbol string)
 		"klt":     []string{"101"},
 		"fqt":     []string{"0"},
 		"beg":     []string{"0"},
-		"end":     []string{time.Now().Format("20060102")},
+		"end":     []string{providerNowUTC().Format("20060102")},
 		"lmt":     []string{"210"},
 		"ut":      []string{p.ut},
-		"_":       []string{strconv.FormatInt(time.Now().UnixMilli(), 10)},
+		"_":       []string{strconv.FormatInt(providerNowUTC().UnixMilli(), 10)},
 	}
 	var payload struct {
 		RC   *int `json:"rc"`
@@ -1304,7 +1304,7 @@ func (p *Eastmoney) FetchChipDistribution(ctx context.Context, rawSymbol string)
 	if err != nil {
 		return nil, err
 	}
-	now := time.Now().UTC()
+	now := providerNowUTC()
 	return &model.ChipDistribution{
 		Symbol: symbol, Date: rows[len(rows)-1].date, ProviderDate: rows[len(rows)-1].date,
 		AverageCost: metrics.averageCost, ProfitRatio: &metrics.profitRatio,
@@ -1455,7 +1455,7 @@ func (p *Eastmoney) FetchDailyBars(ctx context.Context, rawSymbol, startDate, en
 	if limit > 2000 {
 		limit = 2000
 	}
-	beg, end, err := eastmoneyDateRange(startDate, endDate, limit, time.Now())
+	beg, end, err := eastmoneyDateRange(startDate, endDate, limit, providerNowUTC())
 	if err != nil {
 		return nil, err
 	}
@@ -1481,7 +1481,7 @@ func (p *Eastmoney) FetchDailyBars(ctx context.Context, rawSymbol, startDate, en
 	q.Set("end", end)
 	q.Set("lmt", strconv.Itoa(limit))
 	q.Set("ut", p.ut)
-	q.Set("_", strconv.FormatInt(time.Now().UnixMilli(), 10))
+	q.Set("_", strconv.FormatInt(providerNowUTC().UnixMilli(), 10))
 	var payload struct {
 		RC   *int `json:"rc"`
 		Data *struct {
@@ -1576,7 +1576,7 @@ func (p *Eastmoney) FetchDailyBars(ctx context.Context, rawSymbol, startDate, en
 		amountValue := amount
 		rawVolume := rawVol
 		rawAmount := amount
-		bar := model.DailyBar{Symbol: symbol, TradeDate: tradeDate, Period: "1d", Open: open, High: high, Low: low, Close: closeV, Volume: &shares, Amount: &amountValue, AdjustmentBasis: basis, AdjustmentMethod: "eastmoney_fqt_" + fqt, Source: p.Name(), SourceVersion: eastmoneyVersion, FetchedAt: time.Now().UTC(), NormalizedAt: time.Now().UTC(), RawVolume: &rawVolume, RawVolumeUnit: "hands", RawAmount: &rawAmount, RawAmountUnit: "CNY", RawAmountField: "kline_field_6", VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid, NormalizationVer: normalize.Version}
+		bar := model.DailyBar{Symbol: symbol, TradeDate: tradeDate, Period: "1d", Open: open, High: high, Low: low, Close: closeV, Volume: &shares, Amount: &amountValue, AdjustmentBasis: basis, AdjustmentMethod: "eastmoney_fqt_" + fqt, Source: p.Name(), SourceVersion: eastmoneyVersion, FetchedAt: providerNowUTC(), NormalizedAt: providerNowUTC(), RawVolume: &rawVolume, RawVolumeUnit: "hands", RawAmount: &rawAmount, RawAmountUnit: "CNY", RawAmountField: "kline_field_6", VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid, NormalizationVer: normalize.Version}
 		if len(parts) > 8 && strings.TrimSpace(parts[8]) != "" && strings.TrimSpace(parts[8]) != "-" {
 			if pct, parseErr := strconv.ParseFloat(strings.TrimSpace(parts[8]), 64); parseErr == nil && finiteNumber(pct) {
 				bar.ChangePercent = &pct
@@ -1610,10 +1610,7 @@ func (p *Eastmoney) FetchDailyBars(ctx context.Context, rawSymbol, startDate, en
 // Four calendar days per requested bar plus a 30-day buffer accommodates
 // weekends, exchange holidays, and short suspensions without relying on lmt alone.
 func eastmoneyDateRange(startDate, endDate string, limit int, now time.Time) (string, string, error) {
-	loc, err := time.LoadLocation("Asia/Shanghai")
-	if err != nil {
-		loc = time.FixedZone("CST", 8*60*60)
-	}
+	loc := providerMarketLocation()
 	if limit <= 0 {
 		limit = 400
 	}
@@ -1751,10 +1748,7 @@ func parseEastmoneyTime(s string) *time.Time {
 	if s == "" || s == "-" {
 		return nil
 	}
-	loc, err := time.LoadLocation("Asia/Shanghai")
-	if err != nil {
-		loc = time.FixedZone("CST", 8*60*60)
-	}
+	loc := providerMarketLocation()
 	// 常见响应将 f86 编码为上海本地时间；遇到数字型 Unix 时间戳时再按秒/毫秒处理。
 	for _, layout := range []string{"20060102150405", "200601021504", "2006-01-02 15:04:05", "2006-01-02 15:04"} {
 		if t, parseErr := time.ParseInLocation(layout, s, loc); parseErr == nil {
@@ -1773,7 +1767,7 @@ func parseEastmoneyTime(s string) *time.Time {
 			return nil
 		}
 		// 避免把任意十位数字或明显错误的时间值当成有效报价时间。
-		if t.Year() < 2000 || t.After(time.Now().Add(24*time.Hour)) {
+		if t.Year() < 2000 || t.After(providerNowUTC().Add(24*time.Hour)) {
 			return nil
 		}
 		return &t
@@ -1917,7 +1911,7 @@ func (p *Eastmoney) loadStockSearchIndex(ctx context.Context) ([]model.StockSear
 		fetchedAt := p.stockSearchFetchedAt
 		quality := p.stockSearchQuality
 		reasons := append([]string(nil), p.stockSearchReasons...)
-		age := time.Since(fetchedAt)
+		age := providerNowUTC().Sub(fetchedAt)
 		fresh := len(cached) > 0 && !fetchedAt.IsZero() && age >= 0 && age < eastmoneyStockSearchIndexTTL
 		if fresh {
 			p.stockSearchMu.Unlock()
@@ -1932,7 +1926,7 @@ func (p *Eastmoney) loadStockSearchIndex(ctx context.Context) ([]model.StockSear
 				continue
 			}
 		}
-		if time.Now().Before(p.stockSearchRetryAfter) {
+		if providerNowUTC().Before(p.stockSearchRetryAfter) {
 			lastError := p.stockSearchLastError
 			p.stockSearchMu.Unlock()
 			if len(cached) > 0 {
@@ -1948,7 +1942,7 @@ func (p *Eastmoney) loadStockSearchIndex(ctx context.Context) ([]model.StockSear
 		p.stockSearchMu.Unlock()
 
 		items, loadedQuality, loadedReasons, err := p.fetchStockSearchIndex(ctx)
-		now := time.Now().UTC()
+		now := providerNowUTC()
 
 		p.stockSearchMu.Lock()
 		if err == nil {
@@ -1995,7 +1989,7 @@ func (p *Eastmoney) fetchStockSearchIndex(ctx context.Context) ([]model.StockSea
 			"pn": {strconv.Itoa(page)}, "pz": {strconv.Itoa(eastmoneyStockSearchPageSize)},
 			"po": {"1"}, "np": {"1"}, "ut": {p.ut}, "fltt": {"2"}, "invt": {"2"},
 			"fid": {"f3"}, "fs": {"m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23,m:0+t:81+s:2048"},
-			"fields": {"f12,f13,f14"}, "_": {strconv.FormatInt(time.Now().UnixMilli(), 10)},
+			"fields": {"f12,f13,f14"}, "_": {strconv.FormatInt(providerNowUTC().UnixMilli(), 10)},
 		}
 		var payload struct {
 			RC   *int `json:"rc"`
@@ -2168,7 +2162,7 @@ func (p *Eastmoney) FetchSectorRankingsByMetric(ctx context.Context, rawCategory
 		"pn": {"1"}, "pz": {strconv.Itoa(limit)}, "po": {sortOrder}, "np": {"1"},
 		"ut": {p.ut}, "fltt": {"2"}, "invt": {"2"}, "fid": {sortField},
 		"fs": {filter}, "fields": {"f2,f3,f4,f6,f12,f14,f104,f105,f128,f136"},
-		"_": {strconv.FormatInt(time.Now().UnixMilli(), 10)},
+		"_": {strconv.FormatInt(providerNowUTC().UnixMilli(), 10)},
 	}
 	var payload struct {
 		RC   *int `json:"rc"`
@@ -2207,7 +2201,7 @@ func (p *Eastmoney) FetchSectorRankingsByMetric(ctx context.Context, rawCategory
 			)
 		}
 	}
-	fetchedAt := time.Now().UTC()
+	fetchedAt := providerNowUTC()
 	snapshot := &model.SectorRankingSnapshot{
 		Category: category, Direction: direction, SortBy: sortBy, Total: reportedTotal,
 		ProviderReturned: len(payload.Data.Diff), TotalIsLowerBound: !sourceTotalKnown,
@@ -2397,7 +2391,7 @@ func (p *Eastmoney) FetchIndexQuotes(ctx context.Context) (*model.IndexQuoteSnap
 		"secids": {strings.Join(secids, ",")},
 		"fields": {"f2,f3,f4,f6,f12,f13,f14,f15,f16,f17,f18,f86"},
 		"fltt":   {"2"}, "invt": {"2"}, "ut": {p.ut},
-		"_": {strconv.FormatInt(time.Now().UnixMilli(), 10)},
+		"_": {strconv.FormatInt(providerNowUTC().UnixMilli(), 10)},
 	}
 	var payload struct {
 		RC   *int `json:"rc"`
@@ -2429,7 +2423,7 @@ func (p *Eastmoney) FetchIndexQuotes(ctx context.Context) (*model.IndexQuoteSnap
 	if len(payload.Data.Diff) == 0 {
 		return nil, errors.New("Eastmoney index quote returned no rows")
 	}
-	fetchedAt := time.Now().UTC()
+	fetchedAt := providerNowUTC()
 	snapshot := &model.IndexQuoteSnapshot{Source: p.Name(), SourceVersion: "eastmoney-ulist-index-v1", FetchedAt: fetchedAt, QualityStatus: model.QualityValid, Items: make([]model.MarketIndexQuote, 0, len(eastmoneyCoreIndexDefinitions))}
 	if payload.Data.Total != nil && *payload.Data.Total > len(payload.Data.Diff) {
 		snapshot.QualityStatus = model.QualityDegraded
@@ -2505,7 +2499,7 @@ func (p *Eastmoney) FetchIndexQuotes(ctx context.Context) (*model.IndexQuoteSnap
 		if amount == nil {
 			addEastmoneyDragonTigerIssue(ctx, &rowIndex, "amount", "f6", "missing_or_invalid_value", "finite non-negative amount", "number", parseEastmoneyBoardString(raw, "f6"), "东方财富指数行情成交额缺失或非法")
 		}
-		quoteTime := validProviderSnapshotTime(parseEastmoneyTime(parseEastmoneyBoardString(raw, "f86")), time.Now().UTC())
+		quoteTime := validProviderSnapshotTime(parseEastmoneyTime(parseEastmoneyBoardString(raw, "f86")), providerNowUTC())
 		quoteTimeSemantics := ""
 		if quoteTime == nil {
 			reasons = append(reasons, "provider_snapshot_timestamp_not_exposed")
@@ -2582,10 +2576,7 @@ func (p *Eastmoney) fetchMarketTurnover(ctx context.Context, reportDate string) 
 		return fail("market_amount_report_date_invalid")
 	}
 
-	location, err := time.LoadLocation("Asia/Shanghai")
-	if err != nil {
-		location = time.FixedZone("CST", 8*60*60)
-	}
+	location := providerMarketLocation()
 
 	fetchPage := func(requestCtx context.Context, page, expectedTotal int) (int, []eastmoneyMarketTurnoverItem, string) {
 		baseURL := strings.TrimSpace(p.stockListURL)
@@ -2604,7 +2595,7 @@ func (p *Eastmoney) fetchMarketTurnover(ctx context.Context, reportDate string) 
 			"fltt":   {"2"},
 			"invt":   {"2"},
 			"ut":     {p.ut},
-			"_":      {strconv.FormatInt(time.Now().UnixMilli(), 10)},
+			"_":      {strconv.FormatInt(providerNowUTC().UnixMilli(), 10)},
 		}
 		var payload struct {
 			RC   *int `json:"rc"`
@@ -2804,7 +2795,7 @@ func (p *Eastmoney) FetchMarketBreadth(ctx context.Context) (*model.MarketBreadt
 	params := url.Values{
 		"dpt": {"wz.ztzt"},
 		"ut":  {p.ut},
-		"_":   {strconv.FormatInt(time.Now().UnixMilli(), 10)},
+		"_":   {strconv.FormatInt(providerNowUTC().UnixMilli(), 10)},
 	}
 	var payload struct {
 		RC   *int `json:"rc"`
@@ -2838,7 +2829,7 @@ func (p *Eastmoney) FetchMarketBreadth(ctx context.Context) (*model.MarketBreadt
 		Source:             p.Name(),
 		SourceVersion:      "eastmoney-push2ex-zdfenbu-v1",
 		ProviderReportDate: reportDate,
-		FetchedAt:          time.Now().UTC(),
+		FetchedAt:          providerNowUTC(),
 		QualityStatus:      model.QualityDegraded,
 		QualityReasons: []string{
 			"provider_snapshot_timestamp_not_exposed",
@@ -2954,11 +2945,8 @@ func (p *Eastmoney) FetchLimitPool(ctx context.Context, poolType, tradeDate stri
 	if err != nil || date.Format("2006-01-02") != rawDate {
 		return nil, fmt.Errorf("invalid limit-pool trade date %q: expected YYYY-MM-DD", tradeDate)
 	}
-	loc, locErr := time.LoadLocation("Asia/Shanghai")
-	if locErr != nil {
-		loc = time.FixedZone("CST", 8*60*60)
-	}
-	today := time.Now().In(loc).Format("2006-01-02")
+	loc := providerMarketLocation()
+	today := providerNowUTC().In(loc).Format("2006-01-02")
 	if rawDate > today {
 		return nil, fmt.Errorf("limit-pool trade date %s must not be in the future (China market date %s)", rawDate, today)
 	}
@@ -2981,7 +2969,7 @@ func (p *Eastmoney) FetchLimitPool(ctx context.Context, poolType, tradeDate stri
 		params := url.Values{
 			"ut": {p.ut}, "dpt": {"wz.ztzt"}, "Pageindex": {strconv.Itoa(pageIndex)}, "pagesize": {strconv.Itoa(pageSize)},
 			"sort": {sortField}, "date": {date.Format("20060102")},
-			"_": {strconv.FormatInt(time.Now().UnixMilli(), 10)},
+			"_": {strconv.FormatInt(providerNowUTC().UnixMilli(), 10)},
 		}
 		var payload struct {
 			RC   *int `json:"rc"`
@@ -3093,7 +3081,7 @@ func (p *Eastmoney) FetchLimitPool(ctx context.Context, poolType, tradeDate stri
 			return nil, fmt.Errorf("Eastmoney %s limit-pool exceeded pagination safety limit", poolType)
 		}
 	}
-	fetchedAt, requestedDate := time.Now().UTC(), date.Format("2006-01-02")
+	fetchedAt, requestedDate := providerNowUTC(), date.Format("2006-01-02")
 	snapshot := &model.LimitPoolSnapshot{
 		PoolType: poolType, TradeDate: requestedDate, ProviderReportDate: normalizeEastmoneyCompactDate(strings.Trim(strings.TrimSpace(string(sourceQDate)), `"`)),
 		Total: sourceTotal, ProviderReturned: sourceRowsReturned,

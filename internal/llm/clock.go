@@ -1,15 +1,17 @@
 package llm
 
-import "time"
+import (
+	"time"
 
-// Clock provides the current UTC time for deterministic validation and timing.
+	platformtime "example.com/stock-analysis-flow/internal/platform/time"
+)
+
+// Clock preserves the LLM application clock port.
 type Clock interface {
 	Now() time.Time
 }
 
-// SystemClock is the production clock implementation.
-type SystemClock struct{}
+// SystemClock reuses the shared Platform operating-system clock.
+type SystemClock = platformtime.SystemClock
 
-func (SystemClock) Now() time.Time {
-	return time.Now().UTC()
-}
+var _ Clock = SystemClock{}

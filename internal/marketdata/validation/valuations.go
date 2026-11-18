@@ -6,13 +6,21 @@ import (
 	"strings"
 	"time"
 
+	"example.com/stock-analysis-flow/internal/marketdata/markettime"
 	"example.com/stock-analysis-flow/internal/marketdata/model"
+	platformtime "example.com/stock-analysis-flow/internal/platform/time"
 )
 
 // ValidateValuationSnapshot reports structural and field-level valuation issues.
 // Nullable metrics are informational: a null value is not converted to zero and
 // does not imply that the provider explicitly reported an unavailable value.
 func ValidateValuationSnapshot(snapshot *model.ValuationSnapshot, requested []string) Report {
+	return ValidateValuationSnapshotAt(snapshot, requested, platformtime.SystemClock{}.Now())
+}
+
+// ValidateValuationSnapshotAt 使用调用方提供的 UTC 时刻执行确定性校验。
+func ValidateValuationSnapshotAt(snapshot *model.ValuationSnapshot, requested []string, now time.Time) Report {
+	now = now.UTC()
 	report := NewReport(DefaultMaxIssues)
 	add := func(symbol, field, providerField, code, expected, message string, severity Severity, row int) {
 		item := FieldIssue{Stage: StageValidate, Field: field, ProviderField: providerField, Code: code,
@@ -34,7 +42,7 @@ func ValidateValuationSnapshot(snapshot *model.ValuationSnapshot, requested []st
 	} else if !IsIdentifiableSourceVersion(snapshot.SourceVersion) {
 		add("", "source_version", "source_version", "unidentifiable", "identifiable provider schema/version", "valuation source version is an unknown placeholder", SeverityError, -1)
 	}
-	now := time.Now()
+	now = now.UTC()
 	if snapshot.FetchedAt.IsZero() || snapshot.FetchedAt.After(now.Add(5*time.Minute)) {
 		add("", "fetched_at", "fetched_at", "invalid_timestamp", "non-zero timestamp not more than five minutes in the future", "valuation fetched_at is missing or in the future", SeverityError, -1)
 	}
@@ -42,7 +50,7 @@ func ValidateValuationSnapshot(snapshot *model.ValuationSnapshot, requested []st
 		date, err := time.Parse("2006-01-02", snapshot.ProviderReportDate)
 		if err != nil || date.Format("2006-01-02") != snapshot.ProviderReportDate {
 			add("", "provider_report_date", "provider_report_date", "invalid_date", "YYYY-MM-DD", "valuation provider report date is invalid", SeverityError, -1)
-		} else if snapshot.ProviderReportDate > now.In(time.FixedZone("Asia/Shanghai", 8*60*60)).Format("2006-01-02") {
+		} else if snapshot.ProviderReportDate > now.In(markettime.Location()).Format("2006-01-02") {
 			add("", "provider_report_date", "provider_report_date", "future_date", "not later than China market date", "valuation provider report date is in the future", SeverityError, -1)
 		}
 	} else {

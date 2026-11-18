@@ -17,7 +17,7 @@ import (
 var ErrRunAlreadyFinalized = errors.New("Researchflow run is already finalized")
 
 const (
-	runFinalizedEventType   = "researchflow.run.finalized"
+	runFinalizedEventType   = "researchflow.run.terminal"
 	runFinalizedEventSchema = "1.0.0"
 )
 
@@ -36,7 +36,7 @@ type RunFinalization struct {
 }
 
 // FinalizeRun atomically fixes ResultSummary, terminal Run state and the
-// run.finalized Outbox event. It serializes with Claim/Commit/Cancel by locking
+// run.terminal Outbox event. It serializes with Claim/Commit/Cancel by locking
 // the Run row first, then Stage rows, then Attempt rows.
 func (r *MySQLRunRepository) FinalizeRun(ctx context.Context, input RunFinalization) (bool, error) {
 	if r == nil || r.db == nil {
@@ -68,13 +68,13 @@ func (r *MySQLRunRepository) FinalizeRun(ctx context.Context, input RunFinalizat
 
 	var runStatus string
 	var runVersion uint64
-	var correlationID string
+	var correlationID, systemAsOf, templateRef, templateVersion string
 	var existingSummaryRef sql.NullString
 	var existingReason sql.NullString
 	if err := tx.QueryRowContext(ctx, `SELECT status, version, correlation_id,
-		result_summary_ref, termination_reason
+		system_as_of, template_ref, template_version, result_summary_ref, termination_reason
 		FROM researchflow_runs WHERE run_ref = ? FOR UPDATE`, input.RunRef,
-	).Scan(&runStatus, &runVersion, &correlationID, &existingSummaryRef, &existingReason); err != nil {
+	).Scan(&runStatus, &runVersion, &correlationID, &systemAsOf, &templateRef, &templateVersion, &existingSummaryRef, &existingReason); err != nil {
 		return false, fmt.Errorf("lock Researchflow finalization Run: %w", err)
 	}
 	if domain.RunStatus(runStatus).Terminal() {
@@ -214,23 +214,39 @@ func (r *MySQLRunRepository) FinalizeRun(ctx context.Context, input RunFinalizat
 		return false, err
 	}
 	finishedAt := formatResearchflowTimeValue(now)
+	systemAsOfTime, err := parseResearchflowTime(systemAsOf)
+	if err != nil {
+		return false, fmt.Errorf("parse Researchflow Run system_as_of for terminal event: %w", err)
+	}
+	var terminationReasonValue *string
+	if input.TerminationReason != "" {
+		value := input.TerminationReason
+		terminationReasonValue = &value
+	}
+	var resultSummaryRefValue *string
+	if input.TerminalStatus != domain.RunCancelled {
+		value := input.ResultSummaryRef
+		resultSummaryRefValue = &value
+	}
 	eventPayload, err := json.Marshal(struct {
-		EventType         string           `json:"event_type"`
-		SchemaVersion     string           `json:"schema_version"`
+		SourceEventRef    string           `json:"source_event_ref"`
 		RunRef            string           `json:"run_ref"`
-		RunStatus         domain.RunStatus `json:"run_status"`
-		ResultSummaryRef  string           `json:"result_summary_ref"`
-		TerminationReason string           `json:"termination_reason,omitempty"`
-		CorrelationID     string           `json:"correlation_id"`
+		Status            domain.RunStatus `json:"status"`
+		TerminationReason *string          `json:"termination_reason"`
+		SystemAsOf        string           `json:"system_as_of"`
 		FinishedAt        string           `json:"finished_at"`
+		ResultSummaryRef  *string          `json:"result_summary_ref"`
+		TemplateRef       string           `json:"template_ref"`
+		TemplateVersion   string           `json:"template_version"`
 	}{
-		EventType: runFinalizedEventType, SchemaVersion: runFinalizedEventSchema,
-		RunRef: input.RunRef, RunStatus: input.TerminalStatus,
-		ResultSummaryRef: input.ResultSummaryRef, TerminationReason: input.TerminationReason,
-		CorrelationID: correlationID, FinishedAt: finishedAt,
+		SourceEventRef: input.RunRef, RunRef: input.RunRef, Status: input.TerminalStatus,
+		TerminationReason: terminationReasonValue,
+		SystemAsOf:        systemAsOfTime.UTC().Format("2006-01-02T15:04:05.000000000Z"),
+		FinishedAt:        finishedAt, ResultSummaryRef: resultSummaryRefValue,
+		TemplateRef: templateRef, TemplateVersion: templateVersion,
 	})
 	if err != nil {
-		return false, fmt.Errorf("encode Researchflow finalized event: %w", err)
+		return false, fmt.Errorf("encode Researchflow terminal event: %w", err)
 	}
 	fingerprint := sha256.Sum256(eventPayload)
 	fingerprintHex := hex.EncodeToString(fingerprint[:])
@@ -250,7 +266,7 @@ func (r *MySQLRunRepository) FinalizeRun(ctx context.Context, input RunFinalizat
 		input.OutboxRef, input.RunRef, runFinalizedEventType, runFinalizedEventSchema,
 		idempotencyKey, correlationID, fingerprintHex,
 		string(eventPayload), finishedAt); err != nil {
-		return false, fmt.Errorf("insert Researchflow finalized Outbox event: %w", err)
+		return false, fmt.Errorf("insert Researchflow terminal Outbox event: %w", err)
 	}
 	result, err := tx.ExecContext(ctx, `UPDATE researchflow_runs SET
 		status = ?, version = version + 1, result_summary_ref = ?,
