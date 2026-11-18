@@ -28,6 +28,7 @@ func TestParseMarketDataIndexSymbolsPreservesDefaultsAndDeduplicates(t *testing.
 
 func TestMarketDataProviderActiveRequiresEnabledCapability(t *testing.T) {
 	cfg := marketdataconfig.Config{
+		ProviderPriority: []string{"eastmoney", "sina", "tencent"},
 		ProviderSettings: map[string]marketdataconfig.ProviderSettings{
 			"eastmoney": {Enabled: true},
 			"sina":      {Enabled: true, Quote: true},
