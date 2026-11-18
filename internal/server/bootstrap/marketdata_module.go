@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	marketdatabootstrap "example.com/stock-analysis-flow/internal/marketdata/bootstrap"
