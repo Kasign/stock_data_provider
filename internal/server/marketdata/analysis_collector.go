@@ -10,9 +10,9 @@ import (
 	"sync"
 	"time"
 
-	analysisapp	"example.com/stock-analysis-flow/internal/analysis/app"
+	analysisapp "example.com/stock-analysis-flow/internal/analysis/app"
 	"example.com/stock-analysis-flow/internal/analysis/domain"
-	dataapp		"example.com/stock-analysis-flow/internal/marketdata/app"
+	dataapp "example.com/stock-analysis-flow/internal/marketdata/app"
 )
 
 // AnalysisCollector 只依赖 Data 的公开 Application Port，不访问 Provider、Repository 或 HTTP API。
@@ -267,7 +267,7 @@ func (c *AnalysisCollector) collectOne(ctx context.Context, asOf time.Time, secu
 				Volume: int64ToFloat(bar.Volume), Amount: cloneFloat(bar.Amount),
 				Source: bar.Source, FetchedAt: bar.FetchedAt,
 				AdjustBasis: string(bar.AdjustmentBasis),
-				
+
 			})
 		}
 		note := domain.SourceNote{
