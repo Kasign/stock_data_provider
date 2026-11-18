@@ -10,10 +10,10 @@ import (
 	quantresult "example.com/stock-analysis-flow/internal/quant/result"
 )
 
-const validTrendPayload = `{"trend_code":"price_trend","direction":"unknown","phase":"emerging","strength":null,"period":"20d","evidence_metrics":[],"conflict_refs":[],"quality_status":"valid","system_as_of":"2026-11-09T00:59:00Z","algorithm_version":"trend-algorithm.v1"}`
+const validTrendPayload = `{"trend_code":"price_trend","direction":"unknown","phase":"emerging","strength":null,"period":"20d","evidence_metrics":[],"conflict_refs":[],"quality_status":"valid","system_as_of":"2026-11-09T08:00:00Z","algorithm_version":"trend-algorithm.v1"}`
 
 func validQuantResult() QuantResultEnvelope {
-	now := time.Date(2026, 11, 9, 0, 59, 0, 0, time.UTC)
+	now := time.Date(2026, 11, 9, 8, 0, 0, 0, time.UTC)
 	return QuantResultEnvelope{
 		SchemaVersion: quantresult.EnvelopeSchemaVersion, PayloadSchemaVersion: "1.0.0",
 		ResultID: "quant_result:sha256:" + strings.Repeat("a", 64), ResultType: "trend",
@@ -40,7 +40,7 @@ func TestRegistryValidatesExactDiscriminatorAndStrongPayload(t *testing.T) {
 		t.Fatal(err)
 	}
 	result, err := registry.Validate(validQuantResult(), ValidationPolicy{
-		ExpectedSystemAsOf: time.Date(2026, 11, 9, 0, 59, 0, 0, time.UTC),
+		ExpectedSystemAsOf: time.Date(2026, 11, 9, 8, 0, 0, 0, time.UTC),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -117,7 +117,7 @@ func TestFromQuantEnvelopePreservesSeparateSchemaVersions(t *testing.T) {
 	envelope := quantresult.Envelope{
 		SchemaVersion: quantresult.EnvelopeSchemaVersion,
 		ResultID:      base.ResultID, ResultType: "trend", Scope: "stock",
-		SecurityID: "600000.SH", SystemAsOf: "2026-11-09T00:59:00Z",
+		SecurityID: "600000.SH", SystemAsOf: "2026-11-09T08:00:00Z",
 		Period: "20d", AlgorithmVersion: "trend-algorithm.v1",
 		ParameterFingerprint: "sha256:parameter-fingerprint",
 		InputSnapshotRefs:    []string{"snapshot-1"}, QualityStatus: "valid",
