@@ -68,7 +68,7 @@
 - Run/Stage/Attempt DTO 时间统一规范化 UTC；ResultSummary 的 quality/coverage/actionability 语义已明确并补测试。
 - Diagnostics Adapter 已统一 UTC CheckedAt，并限制属性白名单；当前尚无真实 Assessment 生产者和 Server 注册。
 - Context Assembly 生产接入所需的 Research Owner 授权、Run PIT/Deadline 绑定、LLM Tokenizer 和 Server/Worker 接线已明确卡点。
-- 代码验收 SHA `43188259c4b96579ab587742e063d0f254c4009d` 的 Researchflow module gofmt/tests/race/vet 已通过。
+- 代码验收 SHA `43188259c4b96579ab587742e063d0f254c4009d` 的 Actions Run 44299178336 整体 success，Researchflow module、根模块 Test 和相关集成 Job 均通过。
 
 ## 3. 下一步解除顺序
 
@@ -83,7 +83,7 @@
 - **现状**：Researchflow 的 Result Composer/Validator 已是纯函数实现；Quant Envelope 的版本/字段错配已修复。当前通过 `NewQuantPayloadRegistry` 精确注册 Quant Envelope 1.0.0 的 trend/risk Payload，并通过 `FromQuantEnvelope` 映射 Quant Typed Envelope。
 - **安全边界**：生产调用必须先通过 Quant Application `GetResult`，由 Quant Owner 完成当前授权、Manifest 绑定和读取审计；`FromQuantEnvelope` 本身只验证/映射，不授权。Research/LLM 同样必须使用各自 Owner Facade。
 - **Run 绑定**：Composer 要求 Context/Quant/LLM/Risk 的 SystemAsOf 与 Run 完全一致；Server/Worker 必须将同一 Run 的 SystemAsOf/DeadlineAt 传给各 Adapter，不得重新取当前时间。
-- **结果持久化缺口**：`ComposedResearchResult` 当前没有持久化 Store/ResultRef。Run 的 `ResultSummaryRef` 只指向执行摘要，不等于完整研究报告。完整组合结果必须确定唯一持久化 Owner 和 ResultRef 契约，不能误用 ResultSummaryRef 或在 Research/Researchflow 两边重复存储。
+- **结果持久化缺口**：`ComposedResearchResult` 当前没有持久化 Store/ResultRef。Run 的 `ResultSummaryRef` 只指向执行摘要，不等于完整研究报告。\n- **建议方案**：由 Researchflow 持有按 RunRef 唯一关联的 `RunResult` 子资源；只持久化组合输出、LLM 解释和来源引用，不复制 Research/Quant 原始资源；`ResultSummaryRef` 保持执行摘要语义，不增加 Run Schema 1.0.0 字段。该归属需项目架构确认后再实现。
 - **影响**：纯函数组合测试通过不代表真实 Quant/Research/LLM 数据、授权、模型调用和 Run 完成后的结果可检索。
 - **处理责任**：Quant Owner（GetResult/授权/Manifest）、Research Owner（Context/Evidence/Claim/授权）、LLM Owner（真实模型调用/Tokenizer）、Researchflow（组合与版本校验）、Server Owner（Worker/Adapter/持久化装配）；完整结果 Owner 需项目架构确认。
 - **解除条件**：确定唯一结果资源 Owner；Server/Worker 通过各 Owner Facade 获取数据；绑定 Run PIT/Deadline；完成真实 Quant/Research/LLM 组合、持久化、ResultRef 读取和 Contract Test。
