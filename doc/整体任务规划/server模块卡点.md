@@ -2,8 +2,8 @@
 
 更新时间：2026-11-18
 维护分支：feat/server
-代码验收基线：81e0ddf020cb69a050a9e0c7f3f509378de49989；当前文档核对前 HEAD：6d51690e299d48ae9f4824928a655d1f0ed2ad10
-当前主线：SRV-009 Data/MarketData M3/M4 Root 生产装配
+代码验收基线：c3602ca9369e116a3dece751d420e660e2614450；当前文档 HEAD：db99de11c7c7827aaceb307e36371163dab8bce8
+当前主线：SRV-015 其他业务模块 Root 装配盘点与可接入服务装配
 
 ## 1. Root Readiness 503 根因已定位并修复（当前装配范围验收通过）
 
@@ -53,13 +53,13 @@
 
 ## 4. 当前不应做的事
 
-- 不重做已经接入的 Data Root 装配，不以重构代替当前 Readiness 根因定位。
-- 不把本次 CI 归类为全通过，也不把失败笼统归因于 Data。
+- 不重做已经接入并通过当前精确 SHA CI 的 Data Root 装配；后续只处理明确的剩余验收项。
+- 不把过渡性外部 namespace 状态检查描述成最终 checksum/Schema 校验。
 - 不在 Server 分支直接修改 Data/Platform 私有实现或复制公共能力。
 - 不提前删除旧 Analysis API/Worker；SRV-013 仍按依赖保持 deferred。
 
 
-## 6. 其他模块生产服务尚未全部装配
+## 5. 其他模块生产服务尚未全部装配
 
 状态：PARTIAL（可安全装配项已推进，其余按真实依赖阻塞）
 
@@ -78,7 +78,7 @@
 
 原则：已具备生产条件的服务直接装配；缺真实数据源、调用者、持久化或外部依赖的服务保持 BLOCKED，不创建空 Worker、恒 true Check、Fake Provider 或虚构接收人。
 
-## 7. WebUI 尚未切换到 Root Data Handler
+## 6. WebUI 尚未切换到 Root Data Handler
 
 状态：BLOCKED（依赖 Web/Data/部署任务，不作为 Server Root 装配已完成的证据）
 
