@@ -2,7 +2,7 @@
 
 更新时间：2026-11-18  
 对应分支：`feat/researchflow`  
-代码验收基线 SHA：`132415777bdfcd81f6d4cf2f812dfbefbd225dde`  
+代码验收基线 SHA：`799384a87a07ea3c63acb1d5a895a3a097cde3f5`  
 维护范围：记录 Researchflow 推进所依赖的跨模块决策、契约同步和验收阻塞；不替代模块任务状态文档。
 
 ## 1. 当前卡点
@@ -68,7 +68,7 @@
 - Run/Stage/Attempt DTO 时间统一规范化 UTC；ResultSummary 的 quality/coverage/actionability 语义已明确并补测试。
 - Diagnostics Adapter 已统一 UTC CheckedAt，并限制属性白名单；当前尚无真实 Assessment 生产者和 Server 注册。
 - Context Assembly 生产接入所需的 Research Owner 授权、Run PIT/Deadline 绑定、LLM Tokenizer 和 Server/Worker 接线已明确卡点。
-- 代码验收 SHA `132415777bdfcd81f6d4cf2f812dfbefbd225dde` 的 Actions Run 44300750509 整体 success，Researchflow module、根模块 Test、Race/Vet 和相关集成 Job 均通过。
+- 代码验收 SHA `799384a87a07ea3c63acb1d5a895a3a097cde3f5` 的 Actions Run [44302171395](https://github.com/Kasign/stock_data_provider/actions/runs/44302171395) 为 success；Researchflow module format/tests/race/vet、WorkerStore 单测/Race/Vet、MariaDB lifecycle integration 均通过。该 Run 中 Market Data、News 专项集成 Job 为 skipped，不作为其真实集成验收证据。
 
 ## 3. 下一步解除顺序
 
