@@ -123,3 +123,24 @@ func TestMetricValidateRejectsInvalidUTF8TextAndJSONValues(t *testing.T) {
 		})
 	}
 }
+
+
+func TestMetricValidateEnforcesSafeJSONIntegerForSampleCount(t *testing.T) {
+	base := Metric{
+		MetricCode: "sample_metric", Value: json.RawMessage("0.25"),
+		Unit: "ratio", Period: "20d", SystemAsOf: "2026-11-09T01:00:00Z",
+		QualityStatus: QualityValid, MetricStatus: StatusAvailable,
+		CalculationVersion: "1.0.0", LowerBound: json.RawMessage("null"),
+		UpperBound: json.RawMessage("null"),
+	}
+	maxSafe := int(MaxSafeJSONInteger)
+	base.SampleCount = &maxSafe
+	if err := base.Validate(); err != nil {
+		t.Fatalf("maximum safe JSON integer rejected: %v", err)
+	}
+	unsafe := int(MaxSafeJSONInteger + 1)
+	base.SampleCount = &unsafe
+	if err := base.Validate(); err == nil {
+		t.Fatal("sample_count above JavaScript safe integer range unexpectedly accepted")
+	}
+}

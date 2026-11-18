@@ -614,3 +614,27 @@ func TestParseNumericDecimalStringLexicalContract(t *testing.T) {
 		t.Fatal("decimal string exceeding fractional precision unexpectedly succeeded")
 	}
 }
+
+
+func TestRegistryValidateParametersEnforcesSafeAnnualizationFactor(t *testing.T) {
+	registry := New()
+	entry := validEntry("volatility", "1.0.0")
+	entry.ParametersSchema = json.RawMessage(`{
+		"$schema":"https://json-schema.org/draft/2020-12/schema",
+		"type":"object",
+		"additionalProperties":false,
+		"required":["annualization_factor"],
+		"properties":{"annualization_factor":{"type":"integer","minimum":1}}
+	}`)
+	if err := registry.Register(entry, true); err != nil {
+		t.Fatal(err)
+	}
+	maxSafe := json.RawMessage(`{"annualization_factor":9007199254740991}`)
+	if err := registry.ValidateParameters("volatility", "1.0.0", "1.0.0", maxSafe); err != nil {
+		t.Fatalf("maximum safe annualization_factor rejected: %v", err)
+	}
+	unsafe := json.RawMessage(`{"annualization_factor":9007199254740992}`)
+	if err := registry.ValidateParameters("volatility", "1.0.0", "1.0.0", unsafe); !errors.Is(err, ErrInvalidParameters) {
+		t.Fatalf("expected unsafe annualization_factor rejection, got %v", err)
+	}
+}

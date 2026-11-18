@@ -410,6 +410,37 @@ func (r *Registry) ValidateParameters(code, schemaVersion, algorithmVersion stri
 	if err := validateJSONSchemaInstance(schema, parameters); err != nil {
 		return fmt.Errorf("%w: %v", ErrInvalidParameters, err)
 	}
+	if err := validateSafeIntegerParameters(code, parameters); err != nil {
+		return fmt.Errorf("%w: %v", ErrInvalidParameters, err)
+	}
+	return nil
+}
+
+// validateSafeIntegerParameters 补齐冻结参数 Schema 未表达的 GOV-CTR-001 安全整数上限。
+// 当前 QNT-CTR-002 仅 annualization_factor 缺少 maximum；不修改已冻结的 1.0.0 Schema。
+func validateSafeIntegerParameters(code string, parameters json.RawMessage) error {
+	if code != "volatility" {
+		return nil
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(parameters, &fields); err != nil {
+		return err
+	}
+	raw, exists := fields["annualization_factor"]
+	if !exists {
+		return nil
+	}
+	number, err := decodeJSONNumber(raw)
+	if err != nil {
+		return err
+	}
+	value, ok := new(big.Rat).SetString(number.String())
+	if !ok || !value.IsInt() {
+		return nil // JSON Schema 已负责拒绝非整数。
+	}
+	if new(big.Int).Abs(value.Num()).Cmp(big.NewInt(metric.MaxSafeJSONInteger)) > 0 {
+		return errors.New("annualization_factor exceeds GOV-CTR-001 safe integer limit")
+	}
 	return nil
 }
 
