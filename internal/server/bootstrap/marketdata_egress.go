@@ -121,11 +121,6 @@ func newMarketDataDependencies(shared *resources.Resources, cfg marketdataconfig
 	return deps, nil
 }
 
-// marketdatabootstrapProviderHTTPDoer is the exact narrow interface required by Data Providers.
-type marketdatabootstrapProviderHTTPDoer interface {
-	Do(*http.Request) (*http.Response, error)
-}
-
 func endpointOrigin(raw string) (string, error) {
 	u, err := url.Parse(strings.TrimSpace(raw))
 	if err != nil || u == nil || u.Host == "" {
