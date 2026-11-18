@@ -481,7 +481,7 @@ func TestNewsSearchStageResearchflowMariaDBIntegration(t *testing.T) {
 			t.Fatalf("轮询 Timeout Provider Researchflow Run 状态失败: %v", loadErr)
 		}
 		malformedResponseRun, loadErr := repository.GetRun(ctx, malformedResponseCreated.Run.Ref)
-			if loadErr != nil {
+		if loadErr != nil {
 			t.Fatalf("轮询 Malformed Response Researchflow Run 状态失败: %v", loadErr)
 		}
 		permanentFailureRun, loadErr := repository.GetRun(ctx, permanentFailureCreated.Run.Ref)
@@ -666,17 +666,23 @@ func TestNewsSearchStageResearchflowMariaDBIntegration(t *testing.T) {
 	}
 
 	rateLimitedLoaded, err := repository.GetRun(ctx, rateLimitedCreated.Run.Ref)
-	if err != nil { t.Fatalf("读取 RateLimited Run 失败: %v", err) }
+	if err != nil {
+		t.Fatalf("读取 RateLimited Run 失败: %v", err)
+	}
 	if rateLimitedLoaded.Run.Status != researchflowdomain.RunSucceeded || rateLimitedLoaded.Stages[0].AttemptNo != 2 {
 		t.Fatalf("RateLimited 未按 RetryPolicy 重试并成功: %+v", rateLimitedLoaded)
 	}
 	timeoutProviderLoaded, err := repository.GetRun(ctx, timeoutProviderCreated.Run.Ref)
-	if err != nil { t.Fatalf("读取 Timeout Provider Run 失败: %v", err) }
+	if err != nil {
+		t.Fatalf("读取 Timeout Provider Run 失败: %v", err)
+	}
 	if timeoutProviderLoaded.Run.Status != researchflowdomain.RunSucceeded || timeoutProviderLoaded.Stages[0].AttemptNo != 2 {
 		t.Fatalf("Timeout Provider 未按 RetryPolicy 重试并成功: %+v", timeoutProviderLoaded)
 	}
 	malformedResponseLoaded, err := repository.GetRun(ctx, malformedResponseCreated.Run.Ref)
-	if err != nil { t.Fatalf("读取 Malformed Response Run 失败: %v", err) }
+	if err != nil {
+		t.Fatalf("读取 Malformed Response Run 失败: %v", err)
+	}
 	if malformedResponseLoaded.Run.Status != researchflowdomain.RunFailed || malformedResponseLoaded.Stages[0].AttemptNo != 1 || malformedResponseLoaded.Stages[0].Status != researchflowdomain.StageFailed {
 		t.Fatalf("Malformed Response 不应重试: %+v", malformedResponseLoaded)
 	}
@@ -689,7 +695,7 @@ func TestNewsSearchStageResearchflowMariaDBIntegration(t *testing.T) {
 		{"MalformedResponse", malformedResponseCreated.Run.Ref, newsapp.ProviderErrorResponseInvalid, 1},
 	} {
 		var attemptRef string
-		if err := db.QueryRowContext(ctx, "SELECT attempt_ref FROM researchflow_attempts WHERE run_ref = ? AND attempt_no = ? ORDER BY attempt_no LIMIT 1", tc.runRef, tc.attemptNo).Scan(&attemptRef); err != nil {
+			if err := db.QueryRowContext(ctx, "SELECT attempt_ref FROM researchflow_attempts WHERE run_ref = ? AND attempt_no = ? ORDER BY attempt_no LIMIT 1", tc.runRef, tc.attemptNo).Scan(&attemptRef); err != nil {
 			t.Fatalf("读取 %s Attempt %d 失败: %v", tc.name, tc.attemptNo, err)
 		}
 		attempt, err := repository.GetAttempt(ctx, attemptRef)
