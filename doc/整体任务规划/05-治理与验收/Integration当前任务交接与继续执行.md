@@ -1498,3 +1498,36 @@ GetRun 与 CancelRun 的持久化创建者授权已在 Application/Storage 层�
 - 保持当前单一部署配置源，不为当前个人部署引入动态容量配置 API。
 - 在进入更多独立 Worker 部署或滚动容量调整前，决定是否增加数据库持久化容量策略一致性校验。
 - 继续按真实运行结果验证 Shutdown、ExpiredAttempt Recovery 与 Outbox Relay；不要仅凭单 Worker/双 Worker 正常成功推断崩溃恢复和消息投递所有边界均已通过。
+
+
+## 26. 2026-11-18 News 不可重试 Provider 失败证据持久化
+
+### Review 发现与修复
+
+- Review 发现 `newsSearchStageExecutor` 对 SearchResult `failed` 且无可重试 Outcome 的分支，只返回 Stage ReasonCode，丢弃了已生成的 Provider Payload/QualitySummary。
+- 这会让不可重试的鉴权/业务拒绝等 Provider 故障只剩一个 Stage ReasonCode，无法从 Attempt/Stage 资源追溯 Provider Outcome。
+- 已修复：非重试失败仍保持 `AttemptFailed + StageFailed` 和既有 ReasonCode，但通过 `failedNewsStageWithProviderResult` 保留 Payload 与 QualitySummary；没有将永久失败改成 Retry，也没有伪造 Platform DiagnosticRef。
+- 新增单元测试：使用 Unauthorized Provider 错误验证 SearchFailed、ProviderFailed、稳定 ErrorCode、Retryable=false 和 StageExecutionResult 校验。
+
+### MariaDB Runtime 持久化验收
+
+扩展 `TestNewsSearchStageResearchflowMariaDBIntegration`，增加不可重试 Provider 失败 Run，使用生产 Researchflow Runtime + MariaDB 验证：
+
+- Run 最终为 `RunFailed`，Stage 为 `StageFailed`，Attempt 为 `AttemptFailed`，且只执行 1 次。
+- Stage 与 Attempt 保留同一个 Payload 引用，QualitySummary 引用存在。
+- 从 MariaDB 读取 Payload，确认 Provider Outcome 的 `provider_unauthorized`、`ProviderFailed`、`Retryable=false` 未丢失。
+- 从 MariaDB 读取 QualitySummary，确认 ProviderCount=1、ProviderFailedCount=1、CandidateCount=0。
+- Run Finalization 仍生成唯一 ResultSummary 和终态 Outbox，Notification Relay 测试覆盖该失败 Run 的终态事件投递。
+
+### CI
+
+- Integration CI Run [44235562214](https://github.com/Kasign/stock_data_provider/actions/runs/44235562214) success。
+- 精确 SHA：`a5f52083c1bfeaa69a95ab513ae8fba2947ac736`。
+- gofmt、根模块 vet/test、News/Research/Researchflow MariaDB 跨模块测试、Worker Bootstrap MariaDB/Redis、go-core vet/test、Compose、WebUI 检查与镜像构建全部通过。
+- 本次没有新增独立 Platform Diagnostic 记录；Provider Outcome 作为 Stage Output Evidence 持久化，Stage ReasonCode 保持独立。二者职责不能混为一谈。
+
+### 后续边界
+
+- 失败 Outcome 的持久化已补齐；仍需在真实 Provider 故障条件下验证生产链路能保留安全的错误分类，但不能为了验收故意让生产凭证失效或输出密钥。
+- `DiagnosticRefs` 只有在实际创建并持久化 Platform Diagnostic 记录后才填写；当前 Provider Outcome Payload 不冒充 Diagnostic。
+- 不可重试失败不重试；RateLimited/Timeout/UpstreamUnavailable 等仍按现有 RetryPolicy 决定是否进入 RetryWait。
