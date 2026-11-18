@@ -16,7 +16,7 @@
 | 仓库 / 分支 | 核验 SHA | 用途 |
 |---|---|---|
 | Kasign/stock_data_provider / feat/design_doc | 00b4a733001d5b1eb3ef539b7e39a3c43749bb27 | 总规划基线 |
-| Kasign/stock_data_provider / feat/data | d91b2abf1fbc2a55e5db07ac06097a42e3436342 | Go 服务端、Bridge、部署和 CI 基线 |
+| Kasign/stock_data_provider / feat/data（原 feat/full-go-data-providers-api-switch） | d91b2abf1fbc2a55e5db07ac06097a42e3436342 | 重命名前固定的 Go 服务端、Bridge、部署和 CI 基线 |
 | Kasign/daily_stock_analysis / main 固定提交 | 7a21cd76952c7fe44a7fc5a6113a5b2b8a16bb32 | 旧 Python 主项目源码基线 |
 
 数据侧分支完整 Git Tree 共 447 个路径。本轮只通过 GitHub 接口读取分支、Tree 和文件；未 clone，未修改数据侧、WebUI 分支、代码、测试、部署文件或 PR。
@@ -380,17 +380,17 @@ Go/Python 对照不是要求逐字节或所有数值完全一致。每项差异�
 
 ## 13. 参考文件
 
-### 当前 Go 仓库（数据侧基线 d91b2abf1fbc2a55e5db07ac06097a42e3436342）
+### Go 仓库历史基线（固定提交 d91b2abf1fbc2a55e5db07ac06097a42e3436342）
 
-- [Python Bridge 应用](https://github.com/Kasign/stock_data_provider/blob/feat/data/python_bridge/capability_app.py)
-- [Python Bridge 行情适配](https://github.com/Kasign/stock_data_provider/blob/feat/data/python_bridge/capabilities/market_data.py)
-- [Python Bridge LLM 适配](https://github.com/Kasign/stock_data_provider/blob/feat/data/python_bridge/capabilities/llm.py)
-- [Python Bridge 持久化适配](https://github.com/Kasign/stock_data_provider/blob/feat/data/python_bridge/capabilities/persistence.py)
-- [Python Bridge 通知适配](https://github.com/Kasign/stock_data_provider/blob/feat/data/python_bridge/capabilities/notification.py)
-- [Go Core 启动装配](https://github.com/Kasign/stock_data_provider/blob/feat/data/go-core/cmd/analysisd/main.go)
-- [Go Core Python Bridge Adapter](https://github.com/Kasign/stock_data_provider/tree/feat/data/go-core/internal/adapters/pythonbridge)
-- [旧 Python API Adapter](https://github.com/Kasign/stock_data_provider/tree/feat/data/internal/adapters/pythonapi)
-- [迁移 Compose Profile](https://github.com/Kasign/stock_data_provider/blob/feat/data/docker/docker-compose.go-migration.yml)
+- [Python Bridge 应用](https://github.com/Kasign/stock_data_provider/blob/d91b2abf1fbc2a55e5db07ac06097a42e3436342/python_bridge/capability_app.py)
+- [Python Bridge 行情适配](https://github.com/Kasign/stock_data_provider/blob/d91b2abf1fbc2a55e5db07ac06097a42e3436342/python_bridge/capabilities/market_data.py)
+- [Python Bridge LLM 适配](https://github.com/Kasign/stock_data_provider/blob/d91b2abf1fbc2a55e5db07ac06097a42e3436342/python_bridge/capabilities/llm.py)
+- [Python Bridge 持久化适配](https://github.com/Kasign/stock_data_provider/blob/d91b2abf1fbc2a55e5db07ac06097a42e3436342/python_bridge/capabilities/persistence.py)
+- [Python Bridge 通知适配](https://github.com/Kasign/stock_data_provider/blob/d91b2abf1fbc2a55e5db07ac06097a42e3436342/python_bridge/capabilities/notification.py)
+- [Go Core 启动装配](https://github.com/Kasign/stock_data_provider/blob/d91b2abf1fbc2a55e5db07ac06097a42e3436342/go-core/cmd/analysisd/main.go)
+- [Go Core Python Bridge Adapter](https://github.com/Kasign/stock_data_provider/tree/d91b2abf1fbc2a55e5db07ac06097a42e3436342/go-core/internal/adapters/pythonbridge)
+- [旧 Python API Adapter](https://github.com/Kasign/stock_data_provider/tree/d91b2abf1fbc2a55e5db07ac06097a42e3436342/internal/adapters/pythonapi)
+- [迁移 Compose Profile](https://github.com/Kasign/stock_data_provider/blob/d91b2abf1fbc2a55e5db07ac06097a42e3436342/docker/docker-compose.go-migration.yml)
 - [Go/Python 迁移矩阵](https://github.com/Kasign/stock_data_provider/blob/feat/data/doc/api/provider-migration/PYTHON_PROVIDER_GO_MIGRATION_MATRIX.md)
 - [Go/Python 数据质量对账报告](https://github.com/Kasign/stock_data_provider/blob/feat/data/doc/api/provider-migration/GO_PYTHON_DATA_QUALITY_PARITY_REPORT.md)
 
