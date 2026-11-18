@@ -345,7 +345,7 @@ func TestAPIBootstrapMariaDBRedisIntegration(t *testing.T) {
 
 	ownerToken := "api-bootstrap-integration-owner-token-0123456789"
 	values := map[string]string{
-		serverBootstrapHelperEnv:               "1",
+		serverBootstrapHelperEnv:                "1",
 		"SERVER_ROLE":                           "api",
 		"DB_HOST":                               host,
 		"DB_PORT":                               port,
