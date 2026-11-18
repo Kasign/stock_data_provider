@@ -139,15 +139,20 @@ func defaultProviderFile() providerFile {
 
 // Load 加载独立 HTTP 部署配置，要求配置 Data API Key。
 func Load() (Config, error) {
-	return load(true)
+	return load(true, false)
 }
 
 // LoadForInProcess 加载同进程模块配置；外部入口认证由 Root Server 负责，因此不要求 Data API Key。
 func LoadForInProcess() (Config, error) {
-	return load(false)
+	return load(false, false)
 }
 
-func load(requireHTTPAPIKey bool) (Config, error) {
+// LoadForRoot 加载由 Root Server 注入 DB/Redis 的 Data 配置；不要求独立 Data 存储连接参数。
+func LoadForRoot() (Config, error) {
+	return load(false, true)
+}
+
+func load(requireHTTPAPIKey, allowRootInjectedStorage bool) (Config, error) {
 	if err := validateEnvironment(); err != nil {
 		return Config{}, err
 	}
@@ -290,7 +295,7 @@ func load(requireHTTPAPIKey bool) (Config, error) {
 		AllowNoStorage:            boolEnv("MARKET_DATA_ALLOW_NO_STORAGE", false),
 	}
 	var dsnErr error
-	cfg.MySQLDSN, dsnErr = resolveMySQLDSN(cfg.AllowNoStorage)
+	cfg.MySQLDSN, dsnErr = resolveMySQLDSN(cfg.AllowNoStorage || allowRootInjectedStorage)
 	if dsnErr != nil {
 		return cfg, dsnErr
 	}
