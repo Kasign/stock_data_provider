@@ -1587,3 +1587,20 @@ GetRun 与 CancelRun 的持久化创建者授权已在 Application/Storage 层�
 - 不为了制造生产失败而修改用户真实凭证。
 - 可使用受控本地 Provider/httptest 模拟 401、429、Timeout、Malformed Response，验证生产 Stage Executor 的分类、RetryPolicy、Payload、QualitySummary、Finalization 和 Outbox。
 - 真实 Tavily 成功证据与受控故障证据必须分开记录，不能互相替代。
+
+
+## 28. 2026-11-18 Provider Retry/Non-Retry Runtime 验收扩展
+
+本轮已在真实 MariaDB Researchflow Runtime 集成测试中增加受控 Provider 故障场景：
+
+- rate-limited：首次返回 provider_rate_limited，第二次成功；预期按现有 RetryPolicy 产生 Attempt 1/2，最终 RunSucceeded。
+- timeout-provider：首次返回 provider_timeout，第二次成功；预期按现有 RetryPolicy 产生 Attempt 1/2，最终 RunSucceeded。
+- malformed-response：返回 provider_response_invalid；预期不可重试，仅 Attempt 1，最终 RunFailed。
+- 三种场景均检查最终 Attempt 的 Stage Payload，并确认稳定 Provider ErrorCode 被持久化。
+- RateLimited/Timeout 各自增加调用计数，防止测试仅检查最终状态而漏掉“是否真的重试”。
+
+该改动仅使用 integration fixture，不访问真实 Provider，不修改真实凭证。
+
+当前提交：799661d6bc2fb868ab0b336e7a4b35c7a12e32d5。
+
+注意：本轮提交后尚未获得新的 CI Run；不能把上述测试称为 CI 已通过。下一步应先取得该 SHA 的 CI 结果，再根据实际失败继续修复，不能先更新为 success。
