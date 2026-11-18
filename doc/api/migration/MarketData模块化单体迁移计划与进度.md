@@ -1,15 +1,12 @@
 # Market Data 模块化单体迁移计划与进度
 
-- 历史实施分支：`feat/data`（原名 `feat/full-go-data-providers-api-switch`；重命名不改变提交历史）。HEAD `d75ddbe1eb4fac74ca1c15d9be153af1a8184517` 已并入 `integration` 历史；当前聚合代码基线以 `integration` HEAD 为准。
-- 迁移决策：采用 Root Server 同进程模块化单体
-- 当前分支关系核对（2026-11-12）：Data 代码验收基线 `9fe53c43c6c32408bbf59eb8c3c627b18a9bfe24`；`integration` HEAD `85c78f19e4d8d231b29d78f5815bc72868dc326d`；两分支仍为 `diverged`，当前 Data 分支存在未集成提交。历史 SHA `d75ddbe1` 曾进入 integration，不代表当前 Data HEAD 已集成。integration 的 `internal/server/bootstrap/bootstrap.go` 仍导入旧 `internal/adapters/marketdata`，当前树仍包含 `services/market-data/**`，未接入 Data 分支的 `internal/marketdata/app` Application Port。故 M1/M2 Data 侧交付不等于 M3 Root Server 装配完成；M3/M4 仍需 Server/Platform 在其负责分支推进并用 integration 精确 SHA 验收。Data 分支本轮未修改 Server、Platform、integration 或工作流。
-- 方案依据：`doc/整体任务规划/04-架构方案/Market Data并入Root Server模块化单体调整方案.md`
-- 总体规划：`doc/整体任务规划/01-项目总览/整体任务规划总览.md`
-- 跨模块准入：`doc/整体任务规划/01-项目总览/跨模块接入执行说明.md`、`doc/整体任务规划/01-项目总览/跨模块接入准入清单.md`
-- 本记录建立时的代码基线：`d8595f408337f62be3697aac661ba1570fdd3667`
-- 最近一次 M0 审计基线：`9687337743ff5ad8b5b81209831d43689693ae47`
-- 最近一次代码基线：`da62740bd05fd75a8d07290aac930a62ea27cda6`（Provider 能力/出站装配一致性复核前的当前分支基线；随后提交以 GitHub HEAD 为准）
-- 最近一次专项状态记录（2026-11-10）：M1/M2 Data 侧代码与专项验收已完成；M3 Root Server 实际装配、M4 共享资源/受控出站接入及兼容 DDL 迁移仍有未关闭项。该状态记录基于历史 Data 分支 SHA/CI，不能直接代表 2026-11-11 的 integration 现状；当前是否已由 Server/Platform 后续提交关闭，必须以 integration 当前代码、Server/Platform 文档和精确 SHA CI 重新核验。本文件未提供 2026-11-11 最新 M3/M4 复验，因此不宣称迁移整体完成。
+
+- 当前维护分支：`feat/data`；当前分支 HEAD（文档整理开始时）：`90871455b282d6124d3c25fb9189fbd274894e67`。
+- 迁移决策：Root Server 同进程模块化单体。
+- 当前阶段：M1 Go Module 归并 DONE；M2 Data Application Port/Bootstrap DONE（Data 侧）；M3 Root Server 实际装配仍由 Server SRV-009 负责，当前 Root Bootstrap 仍使用旧 MarketData Adapter/Runner；M4 共享资源、Migration 注册、Diagnostics/Readiness/Lifecycle 和受控 TCP 出站注入由 Server 负责，Platform Migration Lock/ApplyMigrations 已存在；M5 部署切换、M6 最终验收未关闭。
+- Integration 全量 CI 的成功只证明对应精确 SHA 的门禁通过，不代表 Data Module 已完成 Root Server 生产装配。Data 分支不重复实现 Server 组合根或 Platform 公共能力。
+- 方案依据：`doc/整体任务规划/04-架构方案/Market Data并入Root Server模块化单体调整方案.md`。
+- 本文保留 M0～M6 迁移映射、历史提交和验收记录；旧 SHA/旧分支关系均按记录日期理解，当前阶段以本段和文末最新状态为准。
 
 > 本文记录 Data 从独立 Go Module/服务迁入 Root Server 根 Go Module、同进程运行的实施计划和进度。若本文与上述架构决策文档冲突，以架构决策文档为准；公共平台及 DATA 契约以冻结契约文档为准。本文不重新定义契约。
 
