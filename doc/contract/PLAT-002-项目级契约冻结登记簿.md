@@ -3,7 +3,8 @@
 - 仓库：`Kasign/stock_data_provider`
 - 登记簿版本：`0.2.60-frozen`
 - 当前阶段：`L1_contracts_frozen`
-- 固定代码审计基线：`origin/integration @ b6dfc85ba214fe16268c8cba780641a8bfe15086`
+- 固定代码审计基线（L1 冻结审计时点，非当前分支 HEAD）：`origin/integration @ b6dfc85ba214fe16268c8cba780641a8bfe15086`
+- 当前 Integration 分支 HEAD（2026-11-18）：`422543e2a1bf40a2582f7eff3cb35e2b2d8fddde`；该值仅用于定位当前聚合代码，不替代固定的 L1 契约冻结审计基线。
 - 冻结登记维护分支：`feat/design_doc`
 - 正式 CTR：43 项；`frozen` 37 项、`deferred` 4 项、`not_applicable` 2 项；`pending_evidence` 和 `pending_decision` 均为 0。
 
@@ -14,7 +15,7 @@
 - `frozen`：项目级公开契约定义已冻结，后续实现必须遵守其权威定义。
 - `deferred`：明确不纳入本轮冻结，按重新进入条件管理；不得作为已发布接口使用。
 - `not_applicable`：属于模块内部约定，不属于项目级跨模块公开契约。
-- 冻结基线：`origin/integration @ b6dfc85ba214fe16268c8cba780641a8bfe15086`。
+- 冻结基线：`origin/integration @ b6dfc85ba214fe16268c8cba780641a8bfe15086`（L1 定义冻结的固定审计时点；不是当前 Integration HEAD）。
 - 冻结依据：DEC-PLAT-002-051、项目负责人明确确认及本登记簿版本 `0.2.59-frozen`。
 - 实现符合性、模块测试、Schema/Golden/Validator 同步、消费者测试、CI、Server 装配和真实依赖验收均属于后续 L2/L3 工作，不改变本次 L1 冻结状态。
 

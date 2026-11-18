@@ -3,7 +3,7 @@
 - 所属治理任务：GOV-004
 - 状态：目标认证边界设计，待 Data / Server / Platform 对齐；不代表已实现统一服务身份系统。
 - 规划归属：`feat/design_doc`
-- 相关实现分支：Data `feat/full-go-data-providers-api-switch`、Platform `feat/platform-foundation`、Server 集成分支。
+- 相关实现分支：Data `feat/data`、Platform `feat/platform`、Server 集成分支。
 
 > **架构决议更新（2026-11-06）：** 本文件原先以 Data 独立部署为默认前提；现已由《Market Data并入Root Server模块化单体调整方案》调整为同进程模块化单体默认模式。下文关于 Data API Key、Server 注入 `X-API-Key`、Data 独立 Module 的内容仅适用于保留的远程 HTTP Adapter/独立部署兼容模式。当前进程内调用通过 Root Server 注入可信 Principal/Scope Context 和 Data Application Port，不使用 Data API Key；不得因此取消 DATA-CTR-008 授权、Scope、Manifest 和读取时复核。
 - 迁移前核查文件：`services/market-data/openapi.yaml`（本轮读取 blob SHA：`9a15f7810a07c60887a574d82e1f84d56a8c9964`）；MDM-002 后目标路径为 `internal/marketdata/httpapi/openapi.yaml`。
