@@ -153,7 +153,7 @@ func TestStatisticalIndicatorsAgainstHighPrecisionReference(t *testing.T) {
 			closes: []float64{1e-100, 1e100, 1.000000000000001e100, 1e-100, 1.000000000000002e100, 1e-100},
 		},
 		{
-			name:   "near flat long sequence",
+			name: "near flat long sequence",
 			closes: func() []float64 {
 				values := make([]float64, 2049)
 				for i := range values {
