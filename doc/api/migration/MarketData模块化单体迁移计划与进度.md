@@ -1150,3 +1150,40 @@ Data 分支在代码 SHA `6d722802073ac2b0c587986d50ec56cf325f505a` 的 Go Test 
 - Data 分支不修改 `internal/server/**`，不代替 Server 实现 M3。
 - 不在 Data 内复制 Platform BoundDialer、统一 Migration Runner 或共享资源生命周期。
 - 当前 Data 侧没有需要为 M3 再增加的重复接口。下一主线继续 Data 领域真实数据质量与 PIT 证据；Root 装配缺口作为 Server 的明确依赖，不阻断 Data Provider 独立推进。
+
+## 2026-11-18：当前 Data 代码与 Root Server 组合复核
+
+本节是当前核验记录，覆盖并更新 11 月 12 日 Root Server 状态快照；旧快照保留作历史证据。
+
+### 当前代码基线
+
+- Data 分支代码基线：`7f9570e52615d6c52f8e3857ea3d1d7ec40ab657`；后续提交只调整 Workflow/文档，没有改变 Data/Server 领域代码。
+- Data Go Test Suite 最新运行：Run `44264608160`，对应分支提交 `12055b29fc5fe69e922133779086486532a6d617`，当前仍在执行；其中 Root Module migration 脚本已完成，MarketData MariaDB/PIT 与 Root Module 测试仍在执行。
+- 该 Migration Job 的“Commit and push migration”步骤成功，但“Trigger validation for migrated commit”步骤 skipped；当前分支 HEAD 未变化，说明本轮没有产生新的迁移提交。Job success 不等于 M3/M4 已完成。
+
+### Root Server 当前事实（重新读取代码）
+
+- `internal/marketdata/**` 已位于根 Go Module；Data 自有 Application Port、Bootstrap Module、HTTP API、Repository 和 Migration Runner 代码均存在。
+- `internal/server/bootstrap/bootstrap.go` 仍导入 `internal/adapters/marketdata`，调用旧 `marketdata.LoadConfig` 与 `service.NewRunnerWithMarketDataStores`，没有构造 `internal/marketdata/bootstrap.Module`。
+- `internal/server/migration/registry.go` 当前没有注册 MarketData Migration Namespace。
+- `internal/server/bootstrap/router.go` 当前没有挂载 Data InProcessHandler 或 `/market-api` 路由。
+- Root Diagnostics/Readiness 与 Lifecycle 尚未注册 Data Module 的 Diagnostics、Start/Stop/Close。
+- 因此，不能把“代码已进入根 Go Module”表述成“MarketData 已完成 Root Server 生产装配”。
+
+### 当前阶段判定
+
+| 阶段 | 当前状态 | 证据/责任 |
+|---|---|---|
+| M0 迁移前审计 | DONE（历史冻结） | 原审计和契约记录保留 |
+| M1 Go Module 归并 | DONE | `internal/marketdata/**` 位于根 Go Module；迁移脚本本轮无新变更 |
+| M2 Data Application Port / Bootstrap | DONE（Data 侧） | Data 自有 Module、Application Port、HTTP Handler 和 MigrationRunner 已实现 |
+| M3 Root Server 同进程装配 | BLOCKED_BY_SERVER | Server 必须构造 Data Module、注入共享资源/受控出口、挂载 InProcessHandler |
+| M4 共享资源与生命周期统一 | BLOCKED_BY_SERVER_AND_PLATFORM | Server 负责资源所有权、Migration、Diagnostics、Readiness、Lifecycle；Platform 提供缺失的公共 TCP/迁移锁原语 |
+| M5 部署与 WebUI 路由切换 | NOT_STARTED | 等 M3/M4 完成后再切换；浏览器不得持有 Data API Key |
+| M6 迁移最终验收 | NOT_STARTED | 需要 Root 真实 MariaDB/Redis、HTTP、Provider 出站、启动/关闭和回滚证据 |
+
+### 执行边界
+
+- Data Owner 不再重复搬迁根 Go Module，也不在 Data 内复制 Server Bootstrap 或 Platform 公共原语。
+- 下一步由 Server Owner 完成 M3；Platform Owner 只补 M4 中确实缺失且可被多个模块复用的公共能力。
+- Data 领域 Provider 精度、PIT、Freshness 和 Python parity 按 Data 总规划继续推进，不因 Root M3/M4 阻塞而停摆。
