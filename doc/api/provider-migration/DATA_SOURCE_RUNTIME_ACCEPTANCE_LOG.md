@@ -91,7 +91,10 @@ go test ./internal/provider -run '^TestLiveXueqiuHotRankings$' -count=1 -v
 MARKET_DATA_LIVE_PROVIDER_TESTS=1 \
 MARKET_DATA_LIVE_MX_TESTS=1 \
 MARKET_DATA_MX_API_KEY="$MX_API_KEY" \
-go test ./internal/provider -run '^TestLiveProviderProbe
+go test ./internal/provider -run '^TestLiveProviderProbe' -count=1 -v
+```
+
+可选 URL：`MARKET_DATA_MX_API_URL`；未设置时使用 Provider 内置默认 HTTPS endpoint。兼容 Key 环境变量：`MX_APIKEY`。筹码和资金流是补充数据，验收必须校验 FetchedAt/ProviderDate/观察数，并保留发布时间不可用导致的 degraded 状态。
 
 ## 4. 安全与执行约束
 
@@ -134,7 +137,10 @@ go test ./internal/provider -run '^TestLiveProviderProbe
 
 | 日期 | Provider | 能力 | 代码 SHA | 结果 | 说明 |
 |---|---|---|---|---|---|
-| 2026-11-12 | BaoStock | 全天停牌/复牌、ST 字段 | `8b61eb39` / `e39c3d54` | 对应样本通过 | Live Run `43228986723`，详见第 72 节；范围不外推至全市场 |\n| 2026-11-12 | Hithink | 600519.SH 五项估值 | 历史代码基线见第 67 节 | 数值复算通过、快照 degraded | ProviderReportDate 缺失；只关闭单证券单日样本 |\n| 2026-11-12 | Tushare | 财务/估值权限语义 | 历史代码基线见第 65 节 | permission_required | 40203 权限阻塞，不是数据验收通过 |\n| 2026-11-12 | Eastmoney/Tencent | 复权参考基准 | 历史代码基线见第 70 节 | not_comparable | 缺少独立参考日期证据 |
+| 2026-11-12 | BaoStock | 全天停牌/复牌、ST 字段 | `8b61eb39` / `e39c3d54` | 对应样本通过 | Live Run `43228986723`，详见第 72 节；范围不外推至全市场 |
+| 2026-11-12 | Hithink | 600519.SH 五项估值 | 历史代码基线见第 67 节 | 数值复算通过、快照 degraded | ProviderReportDate 缺失；只关闭单证券单日样本 |
+| 2026-11-12 | Tushare | 财务/估值权限语义 | 历史代码基线见第 65 节 | permission_required | 40203 权限阻塞，不是数据验收通过 |
+| 2026-11-12 | Eastmoney/Tencent | 复权参考基准 | 历史代码基线见第 70 节 | not_comparable | 缺少独立参考日期证据 |
 
 后续只追加有真实请求证据的记录。阶段二的代码入口和 CI 通过情况不得填入本表作为 Provider 在线验收通过证据。
 ## 8. 统一主动诊断接口开发记录（2026-10-30）
