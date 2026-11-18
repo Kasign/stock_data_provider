@@ -1531,3 +1531,59 @@ GetRun 与 CancelRun 的持久化创建者授权已在 Application/Storage 层�
 - 失败 Outcome 的持久化已补齐；仍需在真实 Provider 故障条件下验证生产链路能保留安全的错误分类，但不能为了验收故意让生产凭证失效或输出密钥。
 - `DiagnosticRefs` 只有在实际创建并持久化 Platform Diagnostic 记录后才填写；当前 Provider Outcome Payload 不冒充 Diagnostic。
 - 不可重试失败不重试；RateLimited/Timeout/UpstreamUnavailable 等仍按现有 RetryPolicy 决定是否进入 RetryWait。
+
+
+## 27. 2026-11-18 Researchflow Diagnostics 与 Stage Evidence 职责边界复核
+
+### Review 结论
+
+本轮重点复核 internal/researchflow/diagnostics、Platform Diagnostics、Server Diagnostics 以及 News Stage Output 的实际装配关系。
+
+1. **Platform/Server Diagnostics 是进程健康与依赖就绪检查，不是 Run/Stage 结果存储。**
+   - Server 当前通过 newDiagnosticsService 装配 MariaDB、Redis、Schema、News Parser 和 Provider Configuration checks。
+   - /health/Readiness 使用这些检查判断实例是否可以服务。
+   - Runner 会执行 Check、规范化 Fault、聚合状态并生成安全的 HTTP Report；没有将每次健康检查自动写入 Researchflow Stage。
+
+2. **Researchflow NewStageCheck 当前是适配能力，不应直接接入 SearchCandidatesStageExecutor。**
+   - 它把 Researchflow 四态 pass/degraded/fail/not_comparable 投影到 Platform Diagnostics 的 healthy/degraded/failed/degraded，并保留 assessment_status。
+   - 该适配器没有持久化能力，也没有 Diagnostic Record ID 生成/存储契约。
+   - 如果把 Provider Outcome 或 QualitySummary 直接包装成 Platform Diagnostic，再写入 Stage DiagnosticRefs，会把“执行证据”和“独立诊断记录”混为一谈。
+
+3. **当前真实 Tavily Run 的 DiagnosticRefs=[] 是正确状态，不是遗漏。**
+   - Tavily Provider Outcome、Payload、QualitySummary 是 Stage Output Evidence，已经随 Attempt/Stage 持久化。
+   - 只有实际执行了独立 Platform Diagnostic，并且该诊断有自己的持久化 Record/Reference 契约时，才允许向 Stage 写入 DiagnosticRefs。
+   - Provider 错误码、Retryable、CandidateCount 等不能因为被写进 Payload 就冒充 Platform Diagnostic。
+
+4. **News BusinessQualityCheck 也不能直接替代 Stage Evidence。**
+   - 它适合对已有 Evidence Snapshot 做独立质量评估；当前返回的是 Platform Diagnostic Check，不改变 News-owned BusinessQuality 语义。
+   - 若未来需要将质量评估持久化，应先定义 Diagnostic Record 的 Owner、EvidenceRef、生命周期和幂等键，再接入 Stage Finalization；本轮不新增临时持久化表。
+
+5. **Server Diagnostics 当前不存在重复装配问题。**
+   - Server 统一负责共享 MariaDB/Redis/Schema checks。
+   - News 负责自己的 Parser/Provider Configuration checks。
+   - Researchflow 尚未向 Server Health 注册独立 Stage 运行检查；因此没有把 Researchflow 领域语义错误地塞入 Server 基础健康检查。
+
+### 决策
+
+当前不修改 DiagnosticRefs、不新增 Diagnostic 持久化表、不把 Researchflow Stage Output 转成 Platform Diagnostic。
+
+后续如果产品真正需要“某次 Run 的独立质量诊断历史”，应单独设计：
+- Diagnostic Record 唯一引用；
+- Run/Stage/Attempt 关联；
+- EvidenceRef 与安全摘要；
+- Check/Assessment 版本；
+- 幂等键；
+- 生命周期与保留策略；
+- API/查询边界。
+
+在上述契约不存在之前，保持 DiagnosticRefs=[] 比生成没有持久化语义的伪引用更正确。
+
+### 当前主线
+
+真实 Tavily 单 Worker 与双 Worker 已完成；Provider 不可重试失败证据也已通过 MariaDB Runtime 验收。Diagnostics 职责边界完成 Review 后，下一项不再重复做诊断适配，而是继续验证 **真实 Provider 失败/降级情况下的生产 Runtime Finalization 与通知交付链**。
+
+约束保持：
+- 不故意泄漏或打印真实 API Key。
+- 不为了制造生产失败而修改用户真实凭证。
+- 可使用受控本地 Provider/httptest 模拟 401、429、Timeout、Malformed Response，验证生产 Stage Executor 的分类、RetryPolicy、Payload、QualitySummary、Finalization 和 Outbox。
+- 真实 Tavily 成功证据与受控故障证据必须分开记录，不能互相替代。
