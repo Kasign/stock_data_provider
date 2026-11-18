@@ -118,6 +118,30 @@ func TestAuthorizeEnforcesPerToolCallLimit(t *testing.T) {
 	}
 }
 
+func TestAuthorizeRejectsNonUTCBudgetTimes(t *testing.T) {
+	now := time.Date(2026, 11, 9, 9, 0, 0, 0, time.UTC)
+	intent := Intent{CallID: "call-1", Name: "research.lookup", ArgumentsJSON: `{"symbol":"600000.SH"}`}
+	budget := validBudget(now)
+	budget.Now = time.Date(2026, 11, 9, 17, 0, 0, 0, time.FixedZone("UTC+8", 8*60*60))
+	if _, err := testRegistry(t).Authorize(intent, budget); !errors.Is(err, ErrInvalidToolIntent) {
+		t.Fatalf("non-UTC budget clock must fail, got %v", err)
+	}
+	budget = validBudget(now)
+	budget.RunDeadline = now.Add(time.Minute).In(time.FixedZone("UTC+8", 8*60*60))
+	if _, err := testRegistry(t).Authorize(intent, budget); !errors.Is(err, ErrInvalidToolIntent) {
+		t.Fatalf("non-UTC Run deadline must fail, got %v", err)
+	}
+}
+
+func TestToolDefinitionsForHidesToolsWhenBudgetTimesAreNotUTC(t *testing.T) {
+	registry := testRegistry(t)
+	now := time.Date(2026, 11, 9, 9, 0, 0, 0, time.UTC)
+	budget := validBudget(now)
+	budget.Now = now.In(time.FixedZone("UTC+8", 8*60*60))
+	if got := registry.ToolDefinitionsFor(budget); len(got) != 0 {
+		t.Fatalf("tools must not be advertised with non-UTC clock: %+v", got)
+	}
+}
 func TestToolDefinitionsForOnlyAdvertisesScopedToolsWithinBudget(t *testing.T) {
 	registry := testRegistry(t)
 	now := time.Date(2026, 11, 9, 9, 0, 0, 0, time.UTC)

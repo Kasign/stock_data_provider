@@ -94,6 +94,10 @@ type Budget struct {
 	GrantedScopes   []string
 }
 
+func validUTCTime(value time.Time) bool {
+	return !value.IsZero() && value.Location() == time.UTC
+}
+
 type AuthorizedCall struct {
 	CallID         string
 	Name           string
@@ -114,7 +118,7 @@ func (r *Registry) Authorize(intent Intent, budget Budget) (AuthorizedCall, erro
 	budget.IdempotencyKey = strings.TrimSpace(budget.IdempotencyKey)
 	if intent.CallID == "" || len(intent.CallID) > 256 || intent.Name == "" ||
 		budget.IdempotencyKey == "" || len(budget.IdempotencyKey) > 256 ||
-		budget.Now.IsZero() || budget.RunDeadline.IsZero() || !budget.RunDeadline.After(budget.Now) {
+		!validUTCTime(budget.Now) || !validUTCTime(budget.RunDeadline) || !budget.RunDeadline.After(budget.Now) {
 		return AuthorizedCall{}, ErrInvalidToolIntent
 	}
 	definition, ok := r.definitions[intent.Name]
