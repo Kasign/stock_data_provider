@@ -381,7 +381,7 @@ func TestSourceCollectionPolicyCheckFailsForUnknownAuthorizationStatus(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	if report.Results[0].Observation.Status != platformdiag.StatusUnavailable ||
+	if report.Results[0].Observation.Status != platformdiag.StatusFailed ||
 		report.Results[0].Fault == nil ||
 		report.Results[0].Fault.Code != "news.source.current_policy_status_invalid" {
 		t.Fatalf("result=%+v", report.Results[0])
