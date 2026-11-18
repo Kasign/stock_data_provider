@@ -74,5 +74,4 @@ jobs:
       - name: Execute real Tavily through Server Researchflow Runtime
         run: |
           go test -p 1 ./internal/server/bootstrap/ \
-            -run '^(TestNewsResearchflowTavilyMariaDBLive|TestNewsResearchflowTavilyMultiWorkerMariaDBRedisLive)
- -count=1 -v
+            -run '^(TestNewsResearchflowTavilyMariaDBLive|TestNewsResearchflowTavilyMultiWorkerMariaDBRedisLive)$' -count=1 -v
