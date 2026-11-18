@@ -373,11 +373,11 @@ func TestIndicatorPayloadAcceptsFixedMappingsForAvailableAndUnavailableResults(t
 	}
 	for indicatorCode, metricCodes := range mappings {
 		for _, state := range []struct {
-			name          string
-			value         json.RawMessage
-			quality       metric.QualityStatus
-			status        metric.Status
-			sampleCount   int
+			name        string
+			value       json.RawMessage
+			quality     metric.QualityStatus
+			status      metric.Status
+			sampleCount int
 		}{
 			{name: "available", value: json.RawMessage("1.25"), quality: metric.QualityValid, status: metric.StatusAvailable, sampleCount: 10},
 			{name: "insufficient_data", value: json.RawMessage("null"), quality: metric.QualityUnknown, status: metric.StatusInsufficientData, sampleCount: 3},
