@@ -231,7 +231,7 @@ func TestPublicationTimeShapeSummaryDoesNotExposeTimestampDigitsOrLetters(t *tes
 		{PublishedAtRaw: "2026-11-20 10:32:14 +0800"},
 		{},
 	})
-	want := "9999-99-99A99:99:99.999A=2,9999-99-99 99:99:99 +9999=1"
+	want := "9999-99-99 99:99:99 +9999=1,9999-99-99A99:99:99.999A=2"
 	if got != want {
 		t.Fatalf("shape summary=%q want %q", got, want)
 	}
