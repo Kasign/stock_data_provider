@@ -2,7 +2,7 @@
 
 更新时间：2026-11-18  
 对应分支：`feat/researchflow`  
-当前代码 HEAD：`dc603d97eea867d56aa4ff0600ae37d496805b77`  
+当前代码 HEAD：`9acf56fc93bb6d6b7cae8d13f243e08170f0bdd2`  
 维护范围：仅记录 Researchflow 推进所依赖的跨模块决策、契约同步和验收阻塞；不替代模块任务状态文档。
 
 ## 1. 当前卡点
@@ -41,7 +41,7 @@
 - `MySQLDatabaseClock` 复用 Platform MariaDB UTC Source，不重复实现数据库时钟。
 - Run/Stage/Attempt DTO 投影现对必填时间调用 `UTC()`，对可空时间指针统一复制并转 UTC。
 - 新增非 UTC（+08:00）来源时间的 DTO 序列化测试，要求输出均以 `Z` 结尾。
-- 前一实现 SHA 的 GitHub Actions Run 44290441307 失败，原因已定位为字符串指针复制函数误改，并已在 `6017867d0652a5d8bd94caef44f71887961bd864` 修复；当前 HEAD CI 尚待完成，在成功前不标记通过。
+- 前两次代码 SHA 的 GitHub Actions 分别因字符串指针误改、gofmt 检查失败；已分别修复。当前代码 SHA `9acf56fc93bb6d6b7cae8d13f243e08170f0bdd2` 的 Run 44291201486 处于 queued，尚未通过。
 
 ## 3. 下一步解除顺序
 
