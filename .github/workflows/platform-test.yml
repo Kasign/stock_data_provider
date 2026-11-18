@@ -3,7 +3,7 @@ name: Platform Go checks
 on:
   push:
     branches:
-      - feat/platform-foundation
+      - feat/platform
     paths:
       - 'internal/platform/**'
       - 'doc/platform/schema/**'
