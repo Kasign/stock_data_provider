@@ -97,12 +97,14 @@
 - **现状**：Quant 的权威结构是 `internal/quant/risk/decision.go`，对应 `doc/quant/schema/QNT-CTR-004-risk-decision-1.0.0.schema.json`；Researchflow 另有 `internal/researchflow/resultvalidation/risk.go` 的 RiskDecision/RiskReason。
 - **字段差异**：Researchflow Reason 增加 `rule_ref`、`observed_value`、`expected_range`、`remediation_code`，Quant QNT-CTR-004 1.0.0 不包含这些字段；Quant 时间是规范 UTC 字符串，Researchflow 使用 `time.Time`。
 - **语义差异**：Quant `Decision.Validate` 要求 EvaluatedAt 不早于 SystemAsOf、Reason Code 唯一、Decision.Status 与 `AggregateStatus(Reasons)` 一致；Quant AggregateStatus 要求至少一条 block 规则，所有 block 明确 not_triggered 才能 pass。Researchflow `ValidateRiskDecision` 已拒绝空 Reasons、`EvaluatedAt < SystemAsOf`，并阻止 block triggered/unknown 与 pass 冲突；本轮已按 Quant DTO 结构约束补齐 Reason Code 唯一性校验；本轮继续补齐 DecisionID、RuleSetVersion、Reason.Code/RuleRef/SafeMessage、InputRefs、EvidenceRefs 的有效 UTF-8、非空且无首尾空白约束，与 Quant `nonBlank` 规则一致；仍未复用 Quant 的完整聚合约束。
-- **调用边界**：`ComposeResult` 将 Researchflow RiskDecision 作为独立输入，与 QuantResultEnvelope 分开接收；当前没有 Quant `risk.Decision` 到该类型的正式 Adapter。
-- **原因**：尚未明确 Composer 的 RiskDecision 是 Quant RiskDecision 的跨模块投影，还是某个独立 HardRiskGate Provider 产生的编排层结论。
+- **新增来源证据**：Quant `result.RiskPayload` 明确包装 `quant/risk.Decision`，Quant `result_type=risk` 的 Golden Payload 也是 QNT-CTR-004 RiskDecision；这意味着 Quant 风险决策已经作为 Quant ResultEnvelope 的一部分输出。
+- **调用边界**：`ComposeResult` 当前同时接收 `QuantResults []QuantResultEnvelope` 和独立 `RiskDecision *RiskDecision`，但没有正式 Adapter 或来源绑定。若 Composer RiskDecision 意在表达 Quant 风险结论，应从已验证的 Quant `risk` Payload 投影，避免调用方另行传入一份可能冲突的决策；若它代表独立 HardRiskGate，则必须使用不同的领域身份/契约，不能继续把它描述为 Quant RiskDecision。
+- **原因**：虽然 Quant 已有权威 RiskDecision Payload，但 Composer 独立参数包含 Quant DTO 不存在的 `rule_ref`、`observed_value`、`expected_range`、`remediation_code`，因此无法仅凭字段相似性判定它是 Quant 投影还是独立 HardRiskGate 结论。
 - **影响**：不能将 Quant 的 risk Payload 直接映射到 Composer RiskDecision，也不能宣称两边硬风险语义已完成端到端一致性验收。
 - **处理责任**：Quant Owner + Researchflow Owner；若属于独立 Gate 结果，由项目契约 Owner 确认其归属和公共语义。
 - **本模块独立推进**：Researchflow 在 `ValidateRiskDecision` 中拒绝重复 Reason.Code，并校验关键文本字段与引用为有效 UTF-8、非空且无首尾空白；增加对应拒绝测试和多条不同 Reason.Code 接受测试。该结构约束与 Quant `Decision.Validate` 的要求一致，不代表已经完成 Quant DTO Adapter 或聚合语义对齐。
-- **解除条件**：冻结唯一 Owner/来源、字段映射、时间规则、Reason 引用规则和 Status 聚合算法；补充 Quant 真实 Payload 到 Composer 的正反向 Contract Test，证明 block triggered/unknown、缺少 block、状态与 Reason 不一致时均 fail-closed。
+- **建议决策**：优先考虑将 Quant 风险决策作为 `QuantResults` 中 `result_type=risk` 的权威来源；Composer 不再接受第二份无来源绑定的 Quant RiskDecision。只有在确有独立 HardRiskGate 时，才单独定义 Gate 决策类型和 Owner。
+- **解除条件**：由 Quant Owner + Researchflow Owner 确认上述来源选择；冻结字段映射、时间规则、Reason 引用规则和状态聚合边界；补充 Quant RiskPayload 到 Composer 的 Contract Test，证明 block triggered/unknown、缺少 block、状态与 Reason 不一致时均 fail-closed。
 - **当前状态**：OPEN；阻断 FLOW-006 风险结论生产接入，不阻断 Quant trend/risk Payload 的独立强类型验证。Reason.Code 本地结构校验补齐后，剩余卡点仍需跨模块决议。
 
 ### RF-BLOCK-009：News Search Payload Validator 未执行 Schema uniqueItems 约束

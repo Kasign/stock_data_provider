@@ -10,7 +10,7 @@ import (
 )
 
 var (
-	ErrInvalidRiskDecision      = errors.New("invalid Quant RiskDecision")
+	ErrInvalidRiskDecision      = errors.New("invalid Researchflow RiskDecision")
 	ErrRiskPassContradictsBlock = errors.New("RiskDecision pass contradicts a blocking reason")
 )
 
@@ -26,6 +26,7 @@ type RiskReason struct {
 	RemediationCode *string         `json:"remediation_code,omitempty"`
 }
 
+// RiskDecision is Researchflow’s composition-side risk input. It is not wire-compatible with QNT-CTR-004.
 type RiskDecision struct {
 	DecisionID     string       `json:"decision_id"`
 	Status         string       `json:"status"`
