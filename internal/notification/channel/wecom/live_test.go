@@ -37,7 +37,7 @@ func TestLiveWebhook(t *testing.T) {
 	secret := config.NewEnvWithLookup(func(key string) (string, bool) { return raw, key == "WECHAT_WORK_WEBHOOK_URL" }).Secret("WECHAT_WORK_WEBHOOK_URL")
 	snapshot := domain.ChannelConfigSnapshot{
 		ChannelRef: "wecom-live-test", ConfigVersion: 1, ChannelKind: "wecom_group_bot", Enabled: true,
-		Capabilities:domain.ChannelCapabilities{
+		Capabilities: domain.ChannelCapabilities{
 			SupportsIdempotency:    domain.CapabilityUnsupported,
 			SupportsDeliveryLookup: domain.CapabilityUnsupported,
 			SupportsRetryAfter:     domain.CapabilityUnsupported,
@@ -51,10 +51,10 @@ func TestLiveWebhook(t *testing.T) {
 	request := domain.ChannelSendRequest{
 		DeliveryID: "live-smoke-test",
 		Target:     domain.RecipientTarget{RecipientRef: "live-test", ChannelRef: snapshot.ChannelRef, ConfigVersion: 1, AdapterTargetRef: "test-group"},
-		Content:domain.RenderedContent{
+		Content: domain.RenderedContent{
 			TemplateID: "wecom-live-smoke", TemplateVersion: 1,
 			TemplateDigest: strings.Repeat("a", 64), EventPayloadFingerprint: strings.Repeat("b", 64),
-			Format:domain.TemplateFormatText,
+			Format: domain.TemplateFormatText,
 			Body:   "【Notification 渠道验收】这是一条自动化测试消息。验收完成后可删除临时群机器人。",
 		},
 	}
