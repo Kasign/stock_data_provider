@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"example.com/stock-analysis-flow/internal/platform/config"
+	"example.com/stock-analysis-flow/internal/platform/fault"
 )
 
 type fixedTestClock struct {
@@ -720,6 +721,37 @@ type closeTrackingReadCloser struct {
 func (r *closeTrackingReadCloser) Close() error {
 	r.closed = true
 	return nil
+}
+
+func TestResponsesAdapterStreamMapsPlatformBodyLimitFault(t *testing.T) {
+	provider, secret, capabilities, clock := streamAdapterTestConfig()
+	request := validResponsesRequest()
+	request.ProviderID = provider.ProviderID
+	platformLimitFault := &fault.Fault{
+		Class: fault.ClassValidation, Code: "platform.httpclient.stream_body_too_large",
+		SafeMessage: "HTTP stream body exceeds configured limit",
+	}
+	body := io.NopCloser(&errorAfterSSEDataReader{err: platformLimitFault})
+	streamDoer := HTTPStreamDoerFunc(func(context.Context, *http.Request) (*HTTPStreamResponse, error) {
+		return &HTTPStreamResponse{
+			StatusCode: http.StatusOK,
+			Header: http.Header{"Content-Type": []string{"text/event-stream"}},
+			Body: body,
+		}, nil
+	})
+	adapter, err := NewResponsesAdapterWithStream(provider, secret,
+		doerFunc(func(*http.Request) (*http.Response, error) { return nil, errors.New("unused") }),
+		streamDoer, capabilities, clock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := adapter.Stream(context.Background(), request, nil)
+	var adapterErr *AdapterError
+	if !errors.As(err, &adapterErr) || adapterErr.Info.Kind != ErrorResourceLimit ||
+		adapterErr.Info.StableCode != "platform.httpclient.stream_body_too_large" ||
+		got.Status != ResponseIncomplete {
+		t.Fatalf("Platform stream body limit must map to resource_limit and preserve incomplete status: response=%+v err=%v", got, err)
+	}
 }
 
 func TestResponsesAdapterStreamEnforcesProviderResponseLimitAndClosesBody(t *testing.T) {
