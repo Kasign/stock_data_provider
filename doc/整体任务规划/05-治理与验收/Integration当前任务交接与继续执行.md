@@ -1399,3 +1399,35 @@ GetRun 与 CancelRun 的持久化创建者授权已在 Application/Storage 层�
 - Probe 重点确认 Tavily 的 3 条候选发布时间能否由受限 RFC1123 UTC/GMT 规则解析；Bocha/Brave 未配置不阻塞。Feed Probe 仍因缺少 Feed URL 和授权证据而预期 SKIP。
 - Probe 通过只证明真实 Provider 请求与本次候选发布时间统计，不等于 Researchflow Stage→Worker→MariaDB 的真实 Run 验收；下一步仍需检查 Server 生产装配、执行真实 Researchflow Run，并最终验证两个独立 Worker OS 进程执行真实 Provider Run。
 - `available_at` 仍须具备独立来源授权与首次公开可获取证据，禁止从 `published_at` 或 Provider 的 `published_date` 推导。
+
+
+
+## 23. 2026-11-18 Tavily Live Probe 复验与生产链路差距复核
+
+### Tavily Live Probe 复验
+
+- Live Probe Run [44230808401](https://github.com/Kasign/stock_data_provider/actions/runs/44230808401) 对精确 SHA `b94e2dc21209d340c7863d6fe10a386189657f89` success。
+- 日志确认当前只配置 Tavily：endpoint 为 Repository Variable，API Key 从 Repository Secret 注入；没有输出密钥。
+- Tavily 真实请求返回 3 条候选，耗时约 3.115 秒；发布时间统计 `total=3 raw_present=3 raw_missing=0 parsed=3 date_only=0 local_datetime_without_timezone=0 unparseable=0 explicit_timezone=3 future_over_5m=0`。
+- Feed Probe 因 `NEWS_LIVE_FEED_URL` 与 `NEWS_LIVE_FEED_AUTHORIZATION_EVIDENCE` 均未配置而 SKIP。Bocha、Brave、SearXNG 未配置，不计为通过或失败。
+- 本次只证明 Tavily 网络请求和 Provider 声明发布时间解析；不证明 Stage/Worker/MariaDB 生产执行。
+
+### 生产执行路径 Review
+
+只读复核当前 `integration` 代码：
+
+1. `bootstrap.Run` 在 Researchflow Capacity 启用时构造共享执行组合；`newResearchflowComposition` 使用共享 MariaDB、共享 Platform HTTP Client 和 News Config 创建生产 News Stage、ProviderSet、ResourcePolicy inventory、Run Repository、Template Registry、DatabaseClock。
+2. `newNewsSearchStageComposition` 在 Tavily 配置完整时调用 `newsprovider.NewPlatformProviderSet`，生产 Stage Executor 通过 ResourcePolicy 快照限制 Provider，执行 `news.search_candidates`。
+3. Worker Runtime 的周期扫描器负责发现 Run、Scheduler、WorkerPool 执行 Stage、Finalizer 终结 Run；这些组件已由 Server Lifecycle 装配。
+4. 现有 `TestNewsSearchStageResearchflowMariaDBIntegration` 确实启动 Server 生产 Runtime，并验证真实 MariaDB 的调度、Attempt、重试、崩溃恢复、取消、Deadline、Stage Output、QualitySummary、ResultSummary 与 Outbox；但测试注入的是 `newsSearchIntegrationProvider` 确定性 Fixture，CreateRun 也使用测试 Identity。它不能作为 Tavily 真实请求通过生产 Stage 的证据。
+5. 现有 Worker 双 OS 进程测试验证 Bootstrap、MariaDB/Redis 共享、启动关闭和全局 Claim Capacity，但没有播种可执行的真实 Provider Run。不能将其描述为双进程真实 Provider 执行验收。
+6. Stage 输出的 `DiagnosticRefs` 当前为空数组；Provider Outcome / ReasonCode 保留在 Stage Payload 和状态中。后续验收应读取持久化输出及 Diagnostics，确认没有将 Provider Outcome 错误地描述为独立平台 Diagnostic 记录。
+7. `published_date` 解析成功不代表 PIT `available_at` 可用。当前没有新增来源授权或首次公开可获取证据，不得将其填充到 Evidence。
+
+### 下一步唯一主线
+
+新增受控、可复现的真实生产链路验收切片：使用真实 Tavily 配置、真实 MariaDB、生产 Platform HTTP Client、生产 News Stage Composition 和 Server Researchflow Runtime，创建一个内部 Run 并等待终态；随后核对 Run/Stage/Attempt、Provider 输出、QualitySummary、ResultSummary、Outbox 和 Diagnostics。测试必须显式区分外部 Provider 请求失败、数据质量不合格、持久化失败和授权/配置缺失；没有证据的 Feed 与其他 Provider 保持 skipped/not_comparable。该切片通过后，再把同类真实 Run 放入两个独立 Server Worker OS 进程共享 MariaDB/Redis 的部署级验收。
+
+- 不开放 Researchflow HTTP API，`SRV-CTR-001` 继续 deferred。
+- 不使用 Fixture 结果替代 Tavily 结果，不因 Probe 成功而自动通过 Stage 质量验收。
+- 不从 Provider `published_date` 推导 `available_at`。
