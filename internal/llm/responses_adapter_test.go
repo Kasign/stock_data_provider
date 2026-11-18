@@ -735,8 +735,8 @@ func TestResponsesAdapterStreamMapsPlatformBodyLimitFault(t *testing.T) {
 	streamDoer := HTTPStreamDoerFunc(func(context.Context, *http.Request) (*HTTPStreamResponse, error) {
 		return &HTTPStreamResponse{
 			StatusCode: http.StatusOK,
-			Header: http.Header{"Content-Type": []string{"text/event-stream"}},
-			Body: body,
+			Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
+			Body:       body,
 		}, nil
 	})
 	adapter, err := NewResponsesAdapterWithStream(provider, secret,
