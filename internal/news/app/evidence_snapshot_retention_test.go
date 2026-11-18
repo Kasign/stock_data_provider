@@ -8,11 +8,11 @@ import (
 )
 
 type evidenceSnapshotRetentionRepositoryStub struct {
-	deleted int64
-	err     error
-	now     time.Time
-	limit   int
-	calls   int
+	deleted     int64
+	err         error
+	now         time.Time
+	limit       int
+	calls       int
 	afterDelete func()
 }
 
@@ -114,7 +114,7 @@ func TestEvidenceSnapshotRetentionCleanerHonorsContextCancellation(t *testing.T)
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 		repository := &evidenceSnapshotRetentionRepositoryStub{
-			deleted: 3,
+			deleted:     3,
 			afterDelete: cancel,
 		}
 		cleaner, err := NewEvidenceSnapshotRetentionCleaner(repository)
