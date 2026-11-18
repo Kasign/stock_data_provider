@@ -467,7 +467,10 @@ func newDiagnosticsService(
 	shared *serverresources.Resources,
 	registry *servermigration.Registry,
 	newsConfig newsconfig.Config,
-	newsRepository newsdiagnostics.StorageProbe,
+	newsRepository interface {
+		newsdiagnostics.StorageProbe
+		newsdiagnostics.ObservationRetentionProbe
+	},
 	marketDataModule *marketdatabootstrap.Module,
 ) (*serverdiagnostics.Service, error) {
 	retentionBacklogCheck := newsdiagnostics.ObservationRetentionCheck(newsRepository)
