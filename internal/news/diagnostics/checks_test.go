@@ -427,6 +427,47 @@ func TestSourceCollectionPolicyCheckFailsWhenDependenciesMissing(t *testing.T) {
 	}
 }
 
+func TestSourceCollectionPolicyCheckStopsWhenContextIsCanceled(t *testing.T) {
+	registration := validSourceCollectionPolicyRegistration()
+	resolver := &sourceCollectionPolicyResolverStub{
+		source: domain.SourcePolicy{Status: domain.AuthorizationApproved},
+	}
+
+	t.Run("already canceled", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		report, err := (platformdiag.Runner{}).Run(ctx, []platformdiag.Check{
+			SourceCollectionPolicyCheck(
+				sourceCatalogStub{registration: registration}, resolver, "source-1", "endpoint-1", true,
+			),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if report.Results[0].Observation.Status != platformdiag.StatusUnavailable || resolver.calls != 0 {
+			t.Fatalf("result=%+v resolver_calls=%d", report.Results[0], resolver.calls)
+		}
+	})
+
+	t.Run("canceled during catalog lookup", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		resolver := &sourceCollectionPolicyResolverStub{
+			source: domain.SourcePolicy{Status: domain.AuthorizationApproved},
+		}
+		report, err := (platformdiag.Runner{}).Run(ctx, []platformdiag.Check{
+			SourceCollectionPolicyCheck(
+				cancellationSourceCatalog{cancel: cancel}, resolver, "source-1", "endpoint-1", true,
+			),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if report.Results[0].Observation.Status != platformdiag.StatusUnavailable || resolver.calls != 0 {
+			t.Fatalf("result=%+v resolver_calls=%d", report.Results[0], resolver.calls)
+		}
+	})
+}
+
 func TestSourceEndpointCheckReportsApprovedRegistration(t *testing.T) {
 	catalog := sourceCatalogStub{registration: app.SourceEndpointRegistration{
 		SourceID: "source-1", EndpointID: "endpoint-1", Enabled: true,
