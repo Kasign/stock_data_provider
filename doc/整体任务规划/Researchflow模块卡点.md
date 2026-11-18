@@ -2,7 +2,7 @@
 
 更新时间：2026-11-18  
 对应分支：`feat/researchflow`  
-当前代码 HEAD：`9acf56fc93bb6d6b7cae8d13f243e08170f0bdd2`  
+当前代码 HEAD：`9a321f31af1f85ad8842497f0f8f7a9054fe479c`  
 维护范围：仅记录 Researchflow 推进所依赖的跨模块决策、契约同步和验收阻塞；不替代模块任务状态文档。
 
 ## 1. 当前卡点
@@ -38,7 +38,7 @@
 ## 2. 本模块已继续推进的工作
 
 - `CreateRunService` 通过 `DatabaseClock.NowUTC` 获取当前时刻，并由同一时刻生成 `system_as_of` 与 `deadline_at`；调用方不传入这两个值。
-- `MySQLDatabaseClock` 复用 Platform MariaDB UTC Source，不重复实现数据库时钟。
+- `MySQLDatabaseClock` 复用 Platform MariaDB UTC Source，不重复实现数据库时钟。\n- Outbox RetryAt 原先通过 `time.Now()` 计算，属于持久化的跨实例调度时间，和统一时钟规则不一致。现 `MySQLRunRepository` 实现 `DatabaseClock`，`OutboxDispatcher` 在重试前读取数据库 UTC 时钟；时钟能力缺失或读取失败时不写入 retry_at。新增时钟故障 fail-closed 测试。
 - Run/Stage/Attempt DTO 投影现对必填时间调用 `UTC()`，对可空时间指针统一复制并转 UTC。
 - 新增非 UTC（+08:00）来源时间的 DTO 序列化测试，要求输出均以 `Z` 结尾。
 - 前两次代码 SHA 的 GitHub Actions 分别因字符串指针误改、gofmt 检查失败；已分别修复。当前代码 SHA `9acf56fc93bb6d6b7cae8d13f243e08170f0bdd2` 的 Run 44291201486 处于 queued，尚未通过。
@@ -57,3 +57,14 @@
 - `IN_PROGRESS`：正在按解除条件处理。
 - `RESOLVED`：有对应 SHA、测试或权威契约证据证明解除。
 - 卡点不等于整个模块停止；只暂停依赖该卡点的具体变更。
+
+
+### RF-BLOCK-004：Outbox RetryAt 使用进程时钟
+
+- **现状**：原 `OutboxDispatcher` 使用 `time.Now()` 计算下一次重试时间，并将其持久化到 MariaDB；该时间会被其他 Server/Worker 实例用于后续调度。
+- **原因**：这是跨实例协调时间，进程系统时钟不能作为权威来源，应与 Outbox 数据库使用同一 UTC 时钟。
+- **修复**：`MySQLRunRepository` 实现 `DatabaseClock`，复用 Platform MariaDB UTC Source；Dispatcher 计算 RetryAt 前读取该数据库时钟。缺少数据库时钟能力或读取失败时 fail-closed，不写入重试时间。
+- **测试**：fake store 提供固定数据库时钟；新增数据库时钟不可用时不提交 retry 的测试。
+- **代码提交**：`e0e8d8a0579f974de44bc69870ae5b129b59c937`；测试提交 `9a321f31af1f85ad8842497f0f8f7a9054fe479c`。
+- **验收**：Run 44292179542 / 44292322382 尚待完成；成功后将此项改为 RESOLVED。
+- **当前状态**：IN_PROGRESS。
