@@ -32,6 +32,7 @@ var _ application.DatabaseClock = (*MySQLRunRepository)(nil)
 type MySQLRunRepository struct {
 	db       *sql.DB
 	capacity CapacityLimits
+	clock    *MySQLDatabaseClock
 }
 
 // NowUTC exposes the same MariaDB clock used by Run/Outbox persistence.
@@ -39,7 +40,10 @@ func (r *MySQLRunRepository) NowUTC(ctx context.Context) (time.Time, error) {
 	if r == nil || r.db == nil || ctx == nil {
 		return time.Time{}, errors.New("Researchflow Run Repository database clock is not configured")
 	}
-	return mariadbtime.ReadUTC(ctx, r.db)
+	if r.clock == nil {
+		return time.Time{}, errors.New("Researchflow Run Repository database clock is not configured")
+	}
+	return r.clock.NowUTC(ctx)
 }
 
 func NewMySQLRunRepository(db *sql.DB, capacity CapacityLimits) (*MySQLRunRepository, error) {
@@ -49,7 +53,11 @@ func NewMySQLRunRepository(db *sql.DB, capacity CapacityLimits) (*MySQLRunReposi
 	if err := capacity.Validate(); err != nil {
 		return nil, err
 	}
-	return &MySQLRunRepository{db: db, capacity: capacity}, nil
+	clock, err := NewMySQLDatabaseClock(db)
+	if err != nil {
+		return nil, err
+	}
+	return &MySQLRunRepository{db: db, capacity: capacity, clock: clock}, nil
 }
 
 func (r *MySQLRunRepository) FindIdempotentRun(
