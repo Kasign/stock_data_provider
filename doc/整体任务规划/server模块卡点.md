@@ -2,7 +2,7 @@
 
 更新时间：2026-11-18
 维护分支：feat/server
-当前代码 HEAD：81e0ddf020cb69a050a9e0c7f3f509378de49989
+代码验收基线：81e0ddf020cb69a050a9e0c7f3f509378de49989；当前文档核对前 HEAD：6d51690e299d48ae9f4824928a655d1f0ed2ad10
 当前主线：SRV-009 Data/MarketData M3/M4 Root 生产装配
 
 ## 1. 当前阻塞：真实 Root Readiness 未通过
