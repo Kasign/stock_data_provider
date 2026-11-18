@@ -151,6 +151,9 @@ type newsSearchIntegrationProvider struct {
 
 func (*newsSearchIntegrationProvider) Code() string { return "integration_fixture" }
 func (p *newsSearchIntegrationProvider) Search(ctx context.Context, request newsdomain.SearchRequest) ([]newsdomain.Candidate, error) {
+	if request.Query == "permanent-failure" {
+		return nil, &newsapp.ProviderError{Code: newsapp.ProviderErrorUnauthorized}
+	}
 	if request.Query == "inflight-cancel" {
 		p.cancellationOnce.Do(func() { close(p.cancellationStarted) })
 		<-ctx.Done()
@@ -326,6 +329,15 @@ func TestNewsSearchStageResearchflowMariaDBIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("创建 Expired Attempt 恢复 Researchflow Run 失败: %v", err)
 	}
+	permanentFailureCreated, err := createRun.CreateRun(ctx, researchflowdomain.CreateRunCommand{
+		SchemaVersion: "1.0.0", IdempotencyKey: "news-search-stage-permanent-failure-integration",
+		TemplateRef: workflowTemplate.Ref, TemplateVersion: workflowTemplate.Version,
+		InputSnapshotRefs: []string{},
+		Parameters: json.RawMessage("{\"query\":\"permanent-failure\",\"query_dimension\":\"market\",\"limit\":10}"),
+	})
+	if err != nil {
+		t.Fatalf("创建不可重试 Provider 失败 Researchflow Run 失败: %v", err)
+	}
 	recoveryScheduler, err := researchflowapplication.NewScheduler(
 		repository, repository, clock, ids, nil, newsSearchIntegrationNoopDispatcher{},
 		researchflowapplication.SchedulerConfig{MaxParallel: 1, MaxReplans: 1},
@@ -425,9 +437,13 @@ func TestNewsSearchStageResearchflowMariaDBIntegration(t *testing.T) {
 		if loadErr != nil {
 			t.Fatalf("轮询 Expired Attempt 恢复 Researchflow Run 状态失败: %v", loadErr)
 		}
+		permanentFailureRun, loadErr := repository.GetRun(ctx, permanentFailureCreated.Run.Ref)
+		if loadErr != nil {
+			t.Fatalf("轮询不可重试 Provider 失败 Researchflow Run 状态失败: %v", loadErr)
+		}
 		if normalRun.Run.Status.Terminal() && expiredRun.Run.Status.Terminal() &&
 			cancelledRun.Run.Status.Terminal() && inFlightCancelledRun.Run.Status.Terminal() &&
-			recoveredRun.Run.Status.Terminal() {
+			recoveredRun.Run.Status.Terminal() && permanentFailureRun.Run.Status.Terminal() {
 			break
 		}
 		select {
@@ -534,12 +550,80 @@ func TestNewsSearchStageResearchflowMariaDBIntegration(t *testing.T) {
 		t.Fatalf("崩溃恢复后的 Run Finalization 应原子生成一条终态 Outbox，实际=%d", recoveryOutboxCount)
 	}
 
+	permanentFailureLoaded, err := repository.GetRun(ctx, permanentFailureCreated.Run.Ref)
+	if err != nil {
+		t.Fatalf("读取不可重试 Provider 失败后的 Run 失败: %v", err)
+	}
+	if permanentFailureLoaded.Run.Status != researchflowdomain.RunFailed ||
+		permanentFailureLoaded.Run.ResultSummaryRef == nil || len(permanentFailureLoaded.Stages) != 1 {
+		t.Fatalf("不可重试 Provider 失败未正确终结 Run: run=%+v stages=%+v",
+			permanentFailureLoaded.Run, permanentFailureLoaded.Stages)
+	}
+	permanentFailureStage := permanentFailureLoaded.Stages[0]
+	if permanentFailureStage.Status != researchflowdomain.StageFailed || permanentFailureStage.AttemptNo != 1 ||
+		permanentFailureStage.OutputRef == nil || permanentFailureStage.QualitySummaryRef == nil ||
+		len(permanentFailureStage.ReasonCodes) != 1 ||
+		permanentFailureStage.ReasonCodes[0] != "news_all_provider_requests_failed" {
+		t.Fatalf("不可重试 Provider 失败 Stage 缺少状态或持久化诊断输出: %+v", permanentFailureStage)
+	}
+	var permanentFailureAttemptRef string
+	if err := db.QueryRowContext(ctx, `SELECT attempt_ref FROM researchflow_attempts
+		WHERE run_ref = ? ORDER BY attempt_no DESC LIMIT 1`, permanentFailureCreated.Run.Ref).Scan(&permanentFailureAttemptRef); err != nil {
+		t.Fatalf("读取不可重试 Provider 失败 Attempt 引用失败: %v", err)
+	}
+	permanentFailureAttempt, err := repository.GetAttempt(ctx, permanentFailureAttemptRef)
+	if err != nil {
+		t.Fatalf("读取不可重试 Provider 失败 Attempt 失败: %v", err)
+	}
+	if permanentFailureAttempt.Status != researchflowdomain.AttemptFailed ||
+		permanentFailureAttempt.OutputRef == nil ||
+		*permanentFailureAttempt.OutputRef != *permanentFailureStage.OutputRef {
+		t.Fatalf("不可重试 Provider 失败 Attempt 未保留 Stage Payload 引用: %+v", permanentFailureAttempt)
+	}
+	permanentFailurePayloadResource, err := repository.GetStageOutputResource(ctx, *permanentFailureStage.OutputRef)
+	if err != nil {
+		t.Fatalf("读取不可重试 Provider 失败 Payload 资源失败: %v", err)
+	}
+	var permanentFailurePayload newsstage.SearchCandidatesOutput
+	if err := json.Unmarshal(permanentFailurePayloadResource.Content, &permanentFailurePayload); err != nil {
+		t.Fatalf("解析不可重试 Provider 失败 Payload 失败: %v", err)
+	}
+	if permanentFailurePayload.Status != newsdomain.SearchFailed ||
+		permanentFailurePayload.FailureCode != "all_provider_requests_failed" ||
+		len(permanentFailurePayload.Outcomes) != 1 ||
+		permanentFailurePayload.Outcomes[0].Status != newsdomain.ProviderFailed ||
+		permanentFailurePayload.Outcomes[0].ErrorCode != newsapp.ProviderErrorUnauthorized ||
+		permanentFailurePayload.Outcomes[0].Retryable {
+		t.Fatalf("不可重试 Provider 失败 Outcome 未完整持久化: %+v", permanentFailurePayload)
+	}
+	permanentFailureQualityResource, err := repository.GetStageOutputResource(ctx, *permanentFailureStage.QualitySummaryRef)
+	if err != nil {
+		t.Fatalf("读取不可重试 Provider 失败 QualitySummary 资源失败: %v", err)
+	}
+	var permanentFailureQuality newsstage.SearchCandidatesQualitySummary
+	if err := json.Unmarshal(permanentFailureQualityResource.Content, &permanentFailureQuality); err != nil {
+		t.Fatalf("解析不可重试 Provider 失败 QualitySummary 失败: %v", err)
+	}
+	if permanentFailureQuality.ProviderCount != 1 || permanentFailureQuality.ProviderSuccessCount != 0 ||
+		permanentFailureQuality.ProviderFailedCount != 1 || permanentFailureQuality.ProviderSkippedCount != 0 ||
+		permanentFailureQuality.CandidateCount != 0 {
+		t.Fatalf("不可重试 Provider 失败 QualitySummary 与 Outcome 不一致: %+v", permanentFailureQuality)
+	}
+	var permanentFailureOutboxCount int
+	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM researchflow_outbox
+		WHERE run_ref = ? AND event_type = 'researchflow.run.terminal'`, permanentFailureCreated.Run.Ref).Scan(&permanentFailureOutboxCount); err != nil {
+		t.Fatalf("读取不可重试 Provider 失败 Run 终态 Outbox 失败: %v", err)
+	}
+	if permanentFailureOutboxCount != 1 {
+		t.Fatalf("不可重试 Provider 失败 Run Finalization 应生成一条终态 Outbox，实际=%d", permanentFailureOutboxCount)
+	}
+
 	// 使用真实 MariaDB Outbox Store 和 Server Relay，验证发布、暂时失败重试及确认提交。
 	receiver := &newsSearchIntegrationNotificationReceiver{}
 	receiver.failFirst.Store(true)
 	runRefs := []string{
 		created.Run.Ref, deadlineCreated.Run.Ref, cancelCreated.Run.Ref,
-		inFlightCancelCreated.Run.Ref, recoveryCreated.Run.Ref,
+		inFlightCancelCreated.Run.Ref, recoveryCreated.Run.Ref, permanentFailureCreated.Run.Ref,
 	}
 	for index, runRef := range runRefs {
 		relay, err := serverrelay.NewResearchflowNotificationRelay(
