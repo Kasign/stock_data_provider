@@ -10,9 +10,9 @@ import (
 	"sync"
 	"time"
 
-	analysisapp "example.com/stock-analysis-flow/internal/analysis/app"
+	analysisapp	"example.com/stock-analysis-flow/internal/analysis/app"
 	"example.com/stock-analysis-flow/internal/analysis/domain"
-	dataapp "example.com/stock-analysis-flow/internal/marketdata/app"
+	dataapp		"example.com/stock-analysis-flow/internal/marketdata/app"
 )
 
 // AnalysisCollector 只依赖 Data 的公开 Application Port，不访问 Provider、Repository 或 HTTP API。
