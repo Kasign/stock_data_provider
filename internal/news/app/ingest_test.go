@@ -12,6 +12,7 @@ import (
 type memoryIdentityRepository struct {
 	credentials                   []domain.IdentityCredential
 	observations                  []domain.Observation
+	availabilityEvidence          []domain.AvailabilityEvidence
 	items                         []string
 	failAppend                    bool
 	sourcePolicy                  domain.SourcePolicy
@@ -34,6 +35,7 @@ func (r *memoryIdentityRepository) WithinIdentityTransaction(ctx context.Context
 	working := *r
 	working.credentials = append([]domain.IdentityCredential(nil), r.credentials...)
 	working.observations = append([]domain.Observation(nil), r.observations...)
+	working.availabilityEvidence = append([]domain.AvailabilityEvidence(nil), r.availabilityEvidence...)
 	working.items = append([]string(nil), r.items...)
 	if err := fn(memoryIdentityTransaction{repository: &working}); err != nil {
 		return err
@@ -102,6 +104,14 @@ func (tx memoryIdentityTransaction) AppendObservation(_ context.Context, observa
 	}
 	tx.repository.observations = append(tx.repository.observations, observation)
 	return observation, nil
+}
+
+func (tx memoryIdentityTransaction) AppendAvailabilityEvidence(_ context.Context, evidence domain.AvailabilityEvidence, _ domain.Observation, _ domain.NewsItemVersion) error {
+	if tx.repository == nil {
+		return ErrAvailabilityEvidenceWriteUnavailable
+	}
+	tx.repository.availabilityEvidence = append(tx.repository.availabilityEvidence, evidence)
+	return nil
 }
 
 func TestIngestCandidateRejectsProviderOutputWithoutPolicyTrace(t *testing.T) {

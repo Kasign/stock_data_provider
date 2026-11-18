@@ -34,11 +34,8 @@ func (p *Eastmoney) FetchDragonTiger(ctx context.Context, tradeDate string, page
 		return nil, fmt.Errorf("invalid dragon-tiger trade date %q: expected YYYY-MM-DD", tradeDate)
 	}
 	tradeDate = parsedDate.Format("2006-01-02")
-	loc, locationErr := time.LoadLocation("Asia/Shanghai")
-	if locationErr != nil {
-		loc = time.FixedZone("CST", 8*60*60)
-	}
-	today := time.Now().In(loc).Format("2006-01-02")
+	loc := providerMarketLocation()
+	today := providerNowUTC().In(loc).Format("2006-01-02")
 	if tradeDate > today {
 		return nil, fmt.Errorf("dragon-tiger trade date %s must not be in the future (China market date %s)", tradeDate, today)
 	}
@@ -77,7 +74,7 @@ func (p *Eastmoney) FetchDragonTiger(ctx context.Context, tradeDate string, page
 			TradeDate: tradeDate, Page: page, PageSize: pageSize, Total: 0, Pages: 0,
 			Returned: 0, SourceReturned: 0, ExcludedNonAShareCount: 0, HasData: false, HasMore: false,
 			Items: []model.DragonTigerItem{}, Source: p.Name(),
-			SourceVersion: "eastmoney-datacenter-dragon-tiger-v1", FetchedAt: time.Now().UTC(),
+			SourceVersion: "eastmoney-datacenter-dragon-tiger-v1", FetchedAt: providerNowUTC(),
 			QualityStatus:  model.QualityUnknown,
 			QualityReasons: []string{"provider_returned_empty_report_cannot_distinguish_no_events_from_unavailable_or_not_yet_published", "provider_empty_response_code_9201"},
 		}, nil
@@ -111,7 +108,7 @@ func (p *Eastmoney) FetchDragonTiger(ctx context.Context, tradeDate string, page
 		return &model.DragonTigerSnapshot{
 			TradeDate: tradeDate, Page: page, PageSize: pageSize, Total: 0, Pages: 0,
 			Returned: 0, SourceReturned: 0, ExcludedNonAShareCount: 0, HasData: false, HasMore: false,
-			Items: []model.DragonTigerItem{}, Source: p.Name(), SourceVersion: "eastmoney-datacenter-dragon-tiger-v1", FetchedAt: time.Now().UTC(),
+			Items: []model.DragonTigerItem{}, Source: p.Name(), SourceVersion: "eastmoney-datacenter-dragon-tiger-v1", FetchedAt: providerNowUTC(),
 			QualityStatus:  model.QualityUnknown,
 			QualityReasons: []string{"provider_returned_empty_report_cannot_distinguish_no_events_from_unavailable_or_not_yet_published"},
 		}, nil
@@ -141,7 +138,7 @@ func (p *Eastmoney) FetchDragonTiger(ctx context.Context, tradeDate string, page
 		addEastmoneyDragonTigerIssue(ctx, nil, "pagination", "result.data", "row_count_mismatch", "current page returns exact rows implied by count/page_size", "number", fmt.Sprintf("page=%d returned=%d expected=%d", page, len(payload.Result.Data), expectedRows), "东方财富龙虎榜当前页返回行数与分页总数不一致")
 		return nil, fmt.Errorf("Eastmoney dragon-tiger page %d returned %d raw rows, expected %d from count=%d and page_size=%d", page, len(payload.Result.Data), expectedRows, total, pageSize)
 	}
-	fetchedAt := time.Now().UTC()
+	fetchedAt := providerNowUTC()
 	snapshot := &model.DragonTigerSnapshot{
 		TradeDate: tradeDate, ProviderReportDate: tradeDate,
 		Page: page, PageSize: pageSize, Total: total, Pages: pages,

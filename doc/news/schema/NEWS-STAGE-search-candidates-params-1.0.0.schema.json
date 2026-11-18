@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:kasign:stock_data_provider:news:stage:search_candidates:params:1.0.0",
+  "title": "News Search Candidates Stage Parameters",
+  "type": "object",
+  "properties": {
+    "query": {"type": "string", "minLength": 1, "pattern": ".*\\S.*"},
+    "query_dimension": {"type": "string"},
+    "limit": {"type": "integer", "minimum": 1, "maximum": 100}
+  },
+  "required": ["query", "limit"],
+  "additionalProperties": false
+}

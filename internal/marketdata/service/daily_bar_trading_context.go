@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"example.com/stock-analysis-flow/internal/marketdata/model"
+	platformtime "example.com/stock-analysis-flow/internal/platform/time"
 )
 
 const maxDailyBarSecurityStatusLookupsPerProbe = 10
@@ -107,17 +108,21 @@ func (s *DataService) assessDailyBarTradingContext(ctx context.Context, symbol s
 		}
 		statuses[day.Date] = status
 	}
-	return assessDailyBarTradingContext(calendar, bars, statuses, statusErrors)
+	return assessDailyBarTradingContextAt(calendar, bars, statuses, statusErrors, s.nowUTC())
 }
 
 // historicalCalendarTimestampOnlyDegradation accepts a complete historical date calendar
 // when the only provider quality gap is an unavailable source publication timestamp.
 func historicalCalendarTimestampOnlyDegradation(calendar *model.TradingCalendarSnapshot) bool {
+	return historicalCalendarTimestampOnlyDegradationAt(calendar, platformtime.SystemClock{}.Now())
+}
+
+func historicalCalendarTimestampOnlyDegradationAt(calendar *model.TradingCalendarSnapshot, now time.Time) bool {
 	if calendar == nil || calendar.QualityStatus != model.QualityDegraded || calendar.EndDate == "" {
 		return false
 	}
 	endDate, err := time.ParseInLocation("2006-01-02", calendar.EndDate, marketLocation())
-	today := time.Now().In(marketLocation()).Format("2006-01-02")
+	today := now.In(marketLocation()).Format("2006-01-02")
 	if err != nil || endDate.Format("2006-01-02") >= today {
 		return false
 	}
@@ -136,6 +141,10 @@ func historicalCalendarTimestampOnlyDegradation(calendar *model.TradingCalendarS
 
 // assessDailyBarTradingContext never treats an unknown security state as a confirmed missing bar.
 func assessDailyBarTradingContext(calendar *model.TradingCalendarSnapshot, bars []model.DailyBar, statuses map[string]*model.SecurityTradingStatusSnapshot, statusErrors map[string]error) dailyBarTradingContextResult {
+	return assessDailyBarTradingContextAt(calendar, bars, statuses, statusErrors, platformtime.SystemClock{}.Now())
+}
+
+func assessDailyBarTradingContextAt(calendar *model.TradingCalendarSnapshot, bars []model.DailyBar, statuses map[string]*model.SecurityTradingStatusSnapshot, statusErrors map[string]error, now time.Time) dailyBarTradingContextResult {
 	result := dailyBarTradingContextResult{QualityStatus: model.QualityValid}
 	if calendar == nil {
 		result.QualityStatus = model.QualityDegraded
@@ -144,7 +153,7 @@ func assessDailyBarTradingContext(calendar *model.TradingCalendarSnapshot, bars 
 	}
 	calendarCanConfirmMissingBar := calendar.QualityStatus == model.QualityValid
 	if calendar.QualityStatus != model.QualityValid {
-		if historicalCalendarTimestampOnlyDegradation(calendar) {
+		if historicalCalendarTimestampOnlyDegradationAt(calendar, now) {
 			// 历史交易日历日期是稳定事实；缺少上游发布时间不应单独污染历史 K 线质量。
 			// 该元数据缺口仍显式保留，当前/未来日历则继续降级。
 			result.Reasons = appendDailyBarContextReason(result.Reasons, "daily_bar_context_calendar_snapshot_time_unverified")

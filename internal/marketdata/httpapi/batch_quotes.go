@@ -4,7 +4,6 @@ import (
 	"net/http"
 	"strings"
 	"sync"
-	"time"
 
 	"example.com/stock-analysis-flow/internal/marketdata/model"
 	"example.com/stock-analysis-flow/internal/marketdata/normalize"
@@ -85,6 +84,6 @@ func (s *Server) batchQuotes(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"items": items, "total": len(items), "succeeded": succeeded, "failed": failed,
-		"fetched_at": time.Now().UTC(), "quality_status": quality,
+		"fetched_at": s.nowUTC(), "quality_status": quality,
 	})
 }

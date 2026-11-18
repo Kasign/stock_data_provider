@@ -14,7 +14,7 @@ import (
 // 任一辅助池不可用时对应计数保持 null，不能按零处理。
 func (s *DataService) MarketSentiment(ctx context.Context, rawDate string) (*model.MarketSentimentSnapshot, error) {
 	loc := marketLocation()
-	requestedDate := time.Now().In(loc).Format("2006-01-02")
+	requestedDate := s.nowUTC().In(loc).Format("2006-01-02")
 	if rawDate != "" {
 		parsed, err := time.Parse("2006-01-02", rawDate)
 		if err != nil || parsed.Format("2006-01-02") != rawDate {
@@ -33,7 +33,7 @@ func (s *DataService) MarketSentiment(ctx context.Context, rawDate string) (*mod
 	if tradeDate == "" {
 		tradeDate = requestedDate
 	}
-	now := time.Now().UTC()
+	now := s.nowUTC()
 	item := &model.MarketSentimentSnapshot{
 		Market: "cn_a_share", TradeDate: tradeDate,
 		ProviderReportDate: breadth.ProviderReportDate,

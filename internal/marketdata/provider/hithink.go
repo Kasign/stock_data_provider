@@ -105,7 +105,7 @@ func (p *Hithink) SearchStocks(ctx context.Context, queryText string, limit int)
 	if err := json.Unmarshal(dataRaw, &data); err != nil {
 		return nil, fmt.Errorf("解析同花顺证券目录失败: %w", err)
 	}
-	now := time.Now().UTC()
+	now := providerNowUTC()
 	snapshot := &model.StockSearchSnapshot{
 		Query: queryText, Items: make([]model.StockSearchItem, 0, len(data.Item)),
 		Source: p.Name(), SourceVersion: hithinkVersion,
@@ -255,7 +255,7 @@ func (p *Hithink) FetchIndexQuotes(ctx context.Context) (*model.IndexQuoteSnapsh
 	if len(data.Item) == 0 {
 		return nil, errors.New("同花顺指数行情未返回任何记录")
 	}
-	now := time.Now().UTC()
+	now := providerNowUTC()
 	snapshot := &model.IndexQuoteSnapshot{
 		Items:  make([]model.MarketIndexQuote, 0, len(hithinkCoreIndexDefinitions)),
 		Source: p.Name(), SourceVersion: hithinkVersion, FetchedAt: now, QualityStatus: model.QualityValid,
@@ -405,11 +405,8 @@ func (p *Hithink) FetchTradingCalendar(ctx context.Context, startDate, endDate s
 	if start.After(end) {
 		return nil, errors.New("同花顺交易日历起始日期不能晚于结束日期")
 	}
-	loc, err := time.LoadLocation("Asia/Shanghai")
-	if err != nil {
-		loc = time.FixedZone("CST", 8*60*60)
-	}
-	nowCN := time.Now().In(loc)
+	loc := providerMarketLocation()
+	nowCN := providerNowUTC().In(loc)
 	todayDate := nowCN.Format("2006-01-02")
 	firstSupportedDate := nowCN.AddDate(-1, 0, 0).Format("2006-01-02")
 	if startDate < firstSupportedDate || endDate > todayDate {
@@ -489,7 +486,7 @@ func (p *Hithink) FetchTradingCalendar(ctx context.Context, startDate, endDate s
 	snapshot := &model.TradingCalendarSnapshot{
 		Market: "cn_a_share", StartDate: startDate, EndDate: endDate,
 		TotalDays: totalDays, TradingDays: tradingDays, Items: items,
-		Source: p.Name(), SourceVersion: hithinkVersion, FetchedAt: time.Now().UTC(),
+		Source: p.Name(), SourceVersion: hithinkVersion, FetchedAt: providerNowUTC(),
 		QualityStatus:  model.QualityDegraded,
 		QualityReasons: []string{"provider_returns_trading_days_only_non_trading_dates_inferred"},
 	}
@@ -552,7 +549,7 @@ func (p *Hithink) FetchHotStocks(ctx context.Context, rankingType string, limit 
 	if len(data.Item) > 5000 {
 		return nil, errors.New("同花顺榜单响应超过 5000 项安全上限")
 	}
-	now := time.Now().UTC()
+	now := providerNowUTC()
 	sourceVersion := hithinkVersion + "-hot-ranking-v1"
 	snapshot := &model.HotRankingSnapshot{
 		RankingType: rankingType, Items: make([]model.HotRankingItem, 0, min(limit, len(data.Item))),
@@ -669,19 +666,16 @@ func (p *Hithink) FetchLimitPool(ctx context.Context, poolType, tradeDate string
 		return nil, errors.New("同花顺涨跌停池单页条数不能超过 100")
 	}
 
-	loc, err := time.LoadLocation("Asia/Shanghai")
-	if err != nil {
-		loc = time.FixedZone("CST", 8*60*60)
-	}
+	loc := providerMarketLocation()
 	rawDate := strings.TrimSpace(tradeDate)
 	if rawDate == "" {
-		rawDate = time.Now().In(loc).Format("2006-01-02")
+		rawDate = providerNowUTC().In(loc).Format("2006-01-02")
 	}
 	date, err := time.Parse("2006-01-02", rawDate)
 	if err != nil || date.Format("2006-01-02") != rawDate {
 		return nil, fmt.Errorf("无效的同花顺涨跌停池交易日 %q，应为 YYYY-MM-DD", tradeDate)
 	}
-	if rawDate > time.Now().In(loc).Format("2006-01-02") {
+	if rawDate > providerNowUTC().In(loc).Format("2006-01-02") {
 		return nil, errors.New("同花顺涨跌停池交易日不能晚于今日")
 	}
 	if ctx == nil {
@@ -734,7 +728,7 @@ func (p *Hithink) FetchLimitPool(ctx context.Context, poolType, tradeDate string
 		return nil, fmt.Errorf("同花顺 %s 池返回的分页 size 无效: %d", poolType, *data.Pagination.Size)
 	}
 
-	now := time.Now().UTC()
+	now := providerNowUTC()
 	// 仅从可信的供应商时间戳派生报告日期，不能用请求日期伪造来源报告日期。
 	reportDate := ""
 	providerTimestampValid := false
@@ -921,18 +915,15 @@ func (p *Hithink) FetchDragonTiger(ctx context.Context, tradeDate string, page, 
 	if pageSize < 1 || pageSize > 500 {
 		return nil, errors.New("同花顺龙虎榜 page_size 必须在 1..500")
 	}
-	loc, err := time.LoadLocation("Asia/Shanghai")
-	if err != nil {
-		loc = time.FixedZone("CST", 8*60*60)
-	}
+	loc := providerMarketLocation()
 	rawDate := strings.TrimSpace(tradeDate)
 	if rawDate != "" {
 		date, parseErr := time.Parse("2006-01-02", rawDate)
 		if parseErr != nil || date.Format("2006-01-02") != rawDate {
 			return nil, fmt.Errorf("无效的同花顺龙虎榜交易日 %q，应为 YYYY-MM-DD", tradeDate)
 		}
-		today := time.Now().In(loc).Format("2006-01-02")
-		firstSupported := time.Now().In(loc).AddDate(-1, 0, 0).Format("2006-01-02")
+		today := providerNowUTC().In(loc).Format("2006-01-02")
+		firstSupported := providerNowUTC().In(loc).AddDate(-1, 0, 0).Format("2006-01-02")
 		if rawDate < firstSupported || rawDate > today {
 			return nil, errors.New("同花顺龙虎榜显式交易日需位于最近一年且不能晚于今日")
 		}
@@ -973,7 +964,7 @@ func (p *Hithink) FetchDragonTiger(ctx context.Context, tradeDate string, page, 
 		addHithinkFieldIssue(ctx, nil, "trade_date", "trade_date", "invalid_value", "valid YYYY-MM-DD provider trade date", "string", responseDate, "同花顺龙虎榜返回交易日非法")
 		return nil, fmt.Errorf("同花顺龙虎榜返回了无效交易日 %q", responseDate)
 	}
-	today := time.Now().In(loc).Format("2006-01-02")
+	today := providerNowUTC().In(loc).Format("2006-01-02")
 	if responseDate > today {
 		return nil, fmt.Errorf("同花顺龙虎榜源端交易日 %s 晚于中国市场当前日期 %s", responseDate, today)
 	}
@@ -989,7 +980,7 @@ func (p *Hithink) FetchDragonTiger(ctx context.Context, tradeDate string, page, 
 		}
 		total = *data.StockCount
 	}
-	now := time.Now().UTC()
+	now := providerNowUTC()
 	sourceVersion := hithinkVersion + "-dragon-tiger-v1"
 	pages := 0
 	if total > 0 {
@@ -1209,7 +1200,7 @@ func (p *Hithink) FetchIndexCatalog(ctx context.Context, rawTag string) (*model.
 		addHithinkFieldIssue(ctx, nil, "catalog_items", "item", "result_limit_exceeded", "at most 30000 catalog items", "row_count", strconv.Itoa(len(data.Item)), "同花顺指数/板块目录超过本地安全行数上限")
 		return nil, fmt.Errorf("同花顺指数/板块目录 %s 超过 30000 项安全上限", tag)
 	}
-	now := time.Now().UTC()
+	now := providerNowUTC()
 	snapshot := &model.IndexCatalogSnapshot{
 		Tag: tag, Items: make([]model.IndexCatalogItem, 0, len(data.Item)),
 		ProviderReturned: len(data.Item),
@@ -1302,7 +1293,7 @@ func (p *Hithink) FetchIndexConstituents(ctx context.Context, rawIndexSymbol str
 	if len(data.Item) > 10000 {
 		return nil, errors.New("同花顺成分股返回超过 10000 项安全上限")
 	}
-	now := time.Now().UTC()
+	now := providerNowUTC()
 	snapshot := &model.IndexConstituentSnapshot{
 		IndexSymbol: indexSymbol, Items: make([]model.IndexConstituent, 0, len(data.Item)),
 		ProviderReturned: len(data.Item),
@@ -1376,11 +1367,8 @@ func (p *Hithink) FetchIndexDailyBars(ctx context.Context, rawIndexSymbol, start
 	if end.After(start.AddDate(10, 0, 0)) {
 		return nil, errors.New("同花顺指数日 K 单次查询范围不能超过 10 年")
 	}
-	loc, err := time.LoadLocation("Asia/Shanghai")
-	if err != nil {
-		loc = time.FixedZone("CST", 8*60*60)
-	}
-	if endText > time.Now().In(loc).Format("2006-01-02") {
+	loc := providerMarketLocation()
+	if endText > providerNowUTC().In(loc).Format("2006-01-02") {
 		return nil, errors.New("同花顺指数日 K 结束日期不能晚于今日")
 	}
 	if ctx == nil {
@@ -1420,7 +1408,7 @@ func (p *Hithink) FetchIndexDailyBars(ctx context.Context, rawIndexSymbol, start
 	if len(data.Item) > 4000 {
 		return nil, errors.New("同花顺指数历史 K 线超过 4000 行安全上限")
 	}
-	now := time.Now().UTC()
+	now := providerNowUTC()
 	sourceVersion := hithinkVersion + "-index-daily-bars-v1"
 	snapshot := &model.IndexDailyBarsSnapshot{
 		IndexSymbol: indexSymbol, StartDate: startText, EndDate: endText,
@@ -1559,7 +1547,7 @@ func (p *Hithink) FetchValuations(ctx context.Context, rawSymbols []string) (*mo
 			"同花顺估值响应 total 与 item 数量不一致")
 		return nil, fmt.Errorf("同花顺估值响应 total 与 item 数量不一致: total=%d items=%d", *data.Total, len(data.Item))
 	}
-	now := time.Now().UTC()
+	now := providerNowUTC()
 	snapshot := &model.ValuationSnapshot{
 		RequestedSymbols: append([]string(nil), symbols...),
 		Items:            make([]model.ValuationItem, 0, len(data.Item)),
@@ -1818,7 +1806,7 @@ func (p *Hithink) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quot
 		addProviderQuoteIssue(ctx, validation.StageValidate, "change_percent", "price_change_ratio_pct", "cross_field_mismatch", "calculated percentage points", "number", fmt.Sprintf("%g", *v), "同花顺行情涨跌幅与最新价/昨收价不一致", validation.SeverityError)
 		return nil, errors.New("同花顺行情涨跌幅与最新价/昨收价不一致")
 	}
-	now := time.Now().UTC()
+	now := providerNowUTC()
 	var quoteTime *time.Time
 	quoteTimeSemantics := ""
 	var timestamp int64
@@ -1905,11 +1893,8 @@ func (p *Hithink) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 	if start.After(end) {
 		return nil, errors.New("同花顺日 K 起始日期不能晚于结束日期")
 	}
-	loc, err := time.LoadLocation("Asia/Shanghai")
-	if err != nil {
-		loc = time.FixedZone("CST", 8*60*60)
-	}
-	if end.Format("2006-01-02") > time.Now().In(loc).Format("2006-01-02") {
+	loc := providerMarketLocation()
+	if end.Format("2006-01-02") > providerNowUTC().In(loc).Format("2006-01-02") {
 		return nil, errors.New("同花顺日 K 结束日期不能晚于 Asia/Shanghai 今日")
 	}
 	if limit <= 0 {
@@ -1991,7 +1976,7 @@ func (p *Hithink) FetchFundamentals(ctx context.Context, rawSymbol string, year,
 	if err != nil {
 		return nil, err
 	}
-	nowYear := time.Now().Year()
+	nowYear := providerNowUTC().Year()
 	if year < 2000 || year > nowYear {
 		return nil, fmt.Errorf("同花顺财务指标年份必须在 2000..%d", nowYear)
 	}
@@ -2043,7 +2028,7 @@ func (p *Hithink) FetchFundamentals(ctx context.Context, rawSymbol string, year,
 		Symbol: symbol, Year: year, Quarter: quarter,
 		Sections: make([]model.FundamentalSection, 0, len(data.Abilities)),
 		Source:   p.Name(), SourceVersion: hithinkVersion,
-		FetchedAt: time.Now().UTC(), QualityStatus: model.QualityDegraded,
+		FetchedAt: providerNowUTC(), QualityStatus: model.QualityDegraded,
 		QualityReasons: []string{"publication_date_not_exposed_by_provider", "indicator_units_not_exposed_by_provider"},
 	}
 	standardCategories := []string{"profitability", "operating", "growth", "solvency", "cash_flow", "dupont"}
@@ -2273,10 +2258,7 @@ func (p *Hithink) fetchFinancialStatementSection(ctx context.Context, symbol str
 	if err := json.Unmarshal(dataRaw, &data); err != nil {
 		return model.FundamentalSection{}, fmt.Errorf("解析同花顺 %s 失败: %w", category, err)
 	}
-	loc, err := time.LoadLocation("Asia/Shanghai")
-	if err != nil {
-		loc = time.FixedZone("CST", 8*60*60)
-	}
+	loc := providerMarketLocation()
 	var selected map[string]json.RawMessage
 	selectedRowIndex := -1
 	for rowIndex, row := range data.Item {
@@ -2427,7 +2409,7 @@ func (p *Hithink) fetchDailySegment(ctx context.Context, symbol string, start, e
 
 	responseFirstDate := hithinkDailyDateForDiagnostic(data.Item[0].DateMS, loc)
 	responseLastDate := hithinkDailyDateForDiagnostic(data.Item[len(data.Item)-1].DateMS, loc)
-	fetchedAt := time.Now().UTC()
+	fetchedAt := providerNowUTC()
 	out := make([]model.DailyBar, 0, len(data.Item))
 	seen := make(map[string]int, len(data.Item))
 	for rowIndex, item := range data.Item {
@@ -2524,7 +2506,7 @@ func (p *Hithink) fetchDailySegment(ctx context.Context, symbol string, start, e
 			AdjustmentBasis:  model.AdjustmentBasis(hithinkAdjustmentBasis(adjust)),
 			AdjustmentMethod: "hithink_api_" + adjust,
 			Source:           p.Name(), SourceVersion: hithinkVersion,
-			FetchedAt: fetchedAt, NormalizedAt: time.Now().UTC(),
+			FetchedAt: fetchedAt, NormalizedAt: providerNowUTC(),
 			RawVolume: rawVolume, RawVolumeUnit: "shares",
 			RawAmount: rawAmount, RawAmountUnit: rawAmountUnit, RawAmountField: rawAmountField,
 			VolumeUnit: "shares", AmountUnit: amountUnit,

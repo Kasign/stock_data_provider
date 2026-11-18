@@ -66,11 +66,10 @@ ORDER BY recorded_at DESC, id DESC LIMIT 1 FOR UPDATE`,
 		return fmt.Errorf("read latest security-trading-status revision %s %s: %w", stored.Symbol, stored.TradeDate, lookupErr)
 	}
 	if shouldRecordRevision(latestHash, lookupErr == nil, revisionHash) {
-		recordedAt := time.Now().UTC().Format("2006-01-02 15:04:05.999999")
 		_, err = tx.ExecContext(ctx, `INSERT INTO market_data_security_trading_status_versions
 (symbol,trade_date,source,revision_hash,recorded_at,fetched_at,quality_status,metadata)
-VALUES (?,?,?,?,?,?,?,?)`,
-			stored.Symbol, stored.TradeDate, stored.Source, revisionHash, recordedAt,
+VALUES (?,?,?,?,UTC_TIMESTAMP(6),?,?,?)`,
+			stored.Symbol, stored.TradeDate, stored.Source, revisionHash,
 			stored.FetchedAt.UTC().Format("2006-01-02 15:04:05.999999"), string(stored.QualityStatus), metadata)
 		if err != nil {
 			return fmt.Errorf("record security-trading-status revision %s %s: %w", stored.Symbol, stored.TradeDate, err)

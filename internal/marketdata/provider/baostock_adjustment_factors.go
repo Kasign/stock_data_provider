@@ -54,7 +54,7 @@ func (p *Baostock) FetchAdjustmentFactors(ctx context.Context, rawSymbol, startD
 		return nil, fmt.Errorf("BaoStock returned no adjustment-factor rows for %s", symbol)
 	}
 
-	fetchedAt := time.Now().UTC()
+	fetchedAt := providerNowUTC()
 	out := make([]model.AdjustmentFactor, 0, len(rows)*2)
 	seen := make(map[string]struct{}, len(rows))
 	previousDate := ""

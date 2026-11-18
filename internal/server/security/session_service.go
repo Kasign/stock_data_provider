@@ -146,7 +146,7 @@ func (s *SessionLifecycleService) Login(ctx context.Context, input LoginInput) (
 			"anonymous", platformsecurity.AuditResultBlocked, platformsecurity.AuditSourceAnonymous, "login_rate_limited"); auditErr != nil {
 			return SessionIssue{}, auditErr
 		}
-		return SessionIssue{}, unauthenticatedLoginFault()
+		return SessionIssue{}, rateLimitedLoginFault()
 	}
 	credential, err := s.credentials.GetOwnerCredential(ctx)
 	if err != nil {
@@ -181,6 +181,9 @@ func (s *SessionLifecycleService) Login(ctx context.Context, input LoginInput) (
 		if auditErr := s.writeAudit(ctx, input.RequestID, eventType, "anonymous", resultType,
 			platformsecurity.AuditSourceAnonymous, reason); auditErr != nil {
 			return SessionIssue{}, auditErr
+		}
+		if !result.Allowed {
+			return SessionIssue{}, rateLimitedLoginFault()
 		}
 		return SessionIssue{}, unauthenticatedLoginFault()
 	}
@@ -289,7 +292,7 @@ func (s *SessionLifecycleService) ChangePassword(ctx context.Context, currentPas
 	if err := s.validateOperation(ctx, requestID); err != nil {
 		return err
 	}
-	if len(currentPassword) == 0 || len(newPassword) == 0 || len(newPassword) > 1024 {
+	if len(currentPassword) == 0 || len(currentPassword) > 1024 || len(newPassword) == 0 || len(newPassword) > 1024 {
 		return platformfault.New(platformfault.ClassValidation, "server.invalid_password_change", "password change input is invalid", nil)
 	}
 	credential, err := s.credentials.GetOwnerCredential(ctx)
@@ -373,6 +376,10 @@ func isCredentialNotFound(err error) bool {
 
 func unauthenticatedLoginFault() error {
 	return platformfault.New(platformfault.ClassUnauthenticated, "server.owner_login_rejected", "account or password is invalid", nil)
+}
+
+func rateLimitedLoginFault() error {
+	return platformfault.New(platformfault.ClassUnauthenticated, "server.owner_login_rate_limited", "login is temporarily blocked", nil)
 }
 
 func canonicalIP(ip net.IP) string {

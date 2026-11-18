@@ -267,5 +267,70 @@ func Migrations() []platformstorage.Migration {
 				) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 			},
 		},
+		{
+			Version:     10,
+			Description: "persist append-only version availability evidence and decisions",
+			Statements: []string{
+				`ALTER TABLE news_observations
+					ADD UNIQUE KEY uk_news_observations_id_news (observation_id, news_id)`,
+				`ALTER TABLE news_item_versions
+					ADD UNIQUE KEY uk_news_versions_id_news (version_id, news_id)`,
+				`CREATE TABLE news_version_availability_evidence (
+					evidence_id VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					news_id VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					version_id VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					observation_id VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					field_path VARCHAR(255) NOT NULL,
+					raw_value MEDIUMTEXT NULL,
+					source_timezone_or_offset VARCHAR(64) NULL,
+					source_precision VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					parse_status VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					parse_reason_code VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT '',
+					candidate_available_at_utc DATETIME(0) NULL,
+					parser_version VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					evidence_ref VARCHAR(512) NULL,
+					evidence_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NULL,
+					observed_at DATETIME(6) NOT NULL,
+					recorded_at DATETIME(6) NOT NULL,
+					retention_until DATETIME(6) NOT NULL,
+					payload_purged_at DATETIME(6) NULL,
+					PRIMARY KEY (evidence_id),
+					UNIQUE KEY uk_news_availability_evidence_version (version_id, evidence_id),
+					KEY idx_news_availability_evidence_pit (version_id, observed_at, recorded_at),
+					KEY idx_news_availability_evidence_observation (observation_id),
+					CONSTRAINT fk_news_availability_evidence_item
+						FOREIGN KEY (news_id) REFERENCES news_items (news_id),
+					CONSTRAINT fk_news_availability_evidence_version
+						FOREIGN KEY (version_id, news_id) REFERENCES news_item_versions (version_id, news_id),
+					CONSTRAINT fk_news_availability_evidence_observation
+						FOREIGN KEY (observation_id, news_id) REFERENCES news_observations (observation_id, news_id)
+				) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+				`CREATE TABLE news_version_availability_decisions (
+					decision_id VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					version_id VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					decision_seq BIGINT UNSIGNED NOT NULL,
+					status VARCHAR(24) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					selected_evidence_id VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NULL,
+					considered_evidence_ids JSON NOT NULL,
+					reason_code VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					review_rule_version VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					supersedes_decision_id VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NULL,
+					recorded_at DATETIME(6) NOT NULL,
+					PRIMARY KEY (decision_id),
+					UNIQUE KEY uk_news_availability_decision_seq (version_id, decision_seq),
+					UNIQUE KEY uk_news_availability_decision_version_id (version_id, decision_id),
+					UNIQUE KEY uk_news_availability_decision_successor (supersedes_decision_id),
+					KEY idx_news_availability_decision_pit (version_id, recorded_at, decision_seq),
+					CONSTRAINT fk_news_availability_decision_version
+						FOREIGN KEY (version_id) REFERENCES news_item_versions (version_id),
+					CONSTRAINT fk_news_availability_decision_evidence
+						FOREIGN KEY (version_id, selected_evidence_id)
+						REFERENCES news_version_availability_evidence (version_id, evidence_id),
+					CONSTRAINT fk_news_availability_decision_parent
+						FOREIGN KEY (version_id, supersedes_decision_id)
+						REFERENCES news_version_availability_decisions (version_id, decision_id)
+				) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+			},
+		},
 	}
 }

@@ -209,7 +209,7 @@ func (p *Netease) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quot
 	if amountErr == nil && rawAmount >= 0 && finiteNumber(rawAmount) {
 		amount = &rawAmount
 	}
-	now := time.Now().UTC()
+	now := providerNowUTC()
 	quoteTime := validProviderSnapshotTime(parseNeteaseQuoteTime(firstNonEmptyString(row.Time, row.Update)), now)
 	q := &model.Quote{
 		Symbol: symbol, Name: strings.TrimSpace(row.Name),
@@ -332,10 +332,7 @@ func parseNeteaseQuoteTime(raw string) *time.Time {
 	if raw == "" {
 		return nil
 	}
-	loc, err := time.LoadLocation("Asia/Shanghai")
-	if err != nil {
-		loc = time.FixedZone("CST", 8*60*60)
-	}
+	loc := providerMarketLocation()
 	for _, layout := range []string{"2006/01/02 15:04:05", "2006-01-02 15:04:05", time.RFC3339} {
 		var parsed time.Time
 		var parseErr error
@@ -385,7 +382,7 @@ func (p *Netease) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 	if limit > 2000 {
 		limit = 2000
 	}
-	start, end, err := neteaseDateRange(startDate, endDate, limit, time.Now())
+	start, end, err := neteaseDateRange(startDate, endDate, limit, providerNowUTC())
 	if err != nil {
 		return nil, err
 	}
@@ -454,7 +451,7 @@ func (p *Netease) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 
 	rows := make([]model.DailyBar, 0, 256)
 	rejectedRows := 0
-	now := time.Now().UTC()
+	now := providerNowUTC()
 	rowIndex := 0
 	for {
 		record, readErr := reader.Read()
@@ -678,10 +675,7 @@ func neteaseCode(symbol string) (string, error) {
 }
 
 func neteaseDateRange(startDate, endDate string, limit int, now time.Time) (time.Time, time.Time, error) {
-	loc, err := time.LoadLocation("Asia/Shanghai")
-	if err != nil {
-		loc = time.FixedZone("CST", 8*60*60)
-	}
+	loc := providerMarketLocation()
 	localNow := now.In(loc)
 	end := time.Date(localNow.Year(), localNow.Month(), localNow.Day(), 0, 0, 0, 0, loc).AddDate(0, 0, -1)
 	if strings.TrimSpace(endDate) != "" {

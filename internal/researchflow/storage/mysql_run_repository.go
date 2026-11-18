@@ -14,6 +14,8 @@ import (
 
 	mysql "github.com/go-sql-driver/mysql"
 
+	platformtime "example.com/stock-analysis-flow/internal/platform/time"
+	mariadbtime "example.com/stock-analysis-flow/internal/platform/time/mariadb"
 	"example.com/stock-analysis-flow/internal/researchflow/application"
 	"example.com/stock-analysis-flow/internal/researchflow/domain"
 	"example.com/stock-analysis-flow/internal/researchflow/state"
@@ -250,7 +252,7 @@ func (r *MySQLRunRepository) CompareAndSwapRun(
 		return false, errors.New("Researchflow Run CAS cannot modify a Run with a ResultSummary; use finalization")
 	}
 	current := domain.Run{Status: domain.RunStatus(currentStatus)}
-	if _, err := state.TransitionRun(current, next.Status, time.Now().UTC()); err != nil {
+	if _, err := state.TransitionRun(current, next.Status, (platformtime.SystemClock{}).Now()); err != nil {
 		return false, fmt.Errorf("reject invalid Researchflow Run CAS transition %s -> %s: %w",
 			currentStatus, next.Status, err)
 	}
@@ -336,7 +338,7 @@ func (r *MySQLRunRepository) CompareAndSwapStage(
 		// The database clock, not the scheduler snapshot, owns the terminal timestamp.
 	}
 	if _, err := state.TransitionStage(domain.Stage{Status: domain.StageStatus(currentStatus)},
-		next.Status, time.Now().UTC()); err != nil {
+		next.Status, (platformtime.SystemClock{}).Now()); err != nil {
 		return false, fmt.Errorf("reject invalid Researchflow Stage CAS transition %s -> %s: %w",
 			currentStatus, next.Status, err)
 	}
@@ -787,15 +789,7 @@ func insertResearchflowStage(ctx context.Context, tx *sql.Tx, stage domain.Stage
 }
 
 func readDatabaseUTC(tx *sql.Tx, ctx context.Context) (time.Time, error) {
-	var value string
-	if err := tx.QueryRowContext(ctx, "SELECT DATE_FORMAT(UTC_TIMESTAMP(6), '%Y-%m-%dT%H:%i:%s.%f000Z')").Scan(&value); err != nil {
-		return time.Time{}, fmt.Errorf("read MariaDB UTC clock: %w", err)
-	}
-	parsed, err := parseResearchflowTime(value)
-	if err != nil {
-		return time.Time{}, fmt.Errorf("parse MariaDB UTC clock: %w", err)
-	}
-	return parsed, nil
+	return mariadbtime.ReadUTC(ctx, tx)
 }
 
 func formatResearchflowTime(value time.Time) (string, error) {

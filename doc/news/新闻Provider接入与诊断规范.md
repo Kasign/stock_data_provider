@@ -527,3 +527,50 @@ RSS/Atom 采集结果和搜索 Provider 候选的持久化用例必须由 Server
 - [ ] 业务调用方只依赖 Application Facade，不导入具体 Adapter。
 - [ ] 测试覆盖 success、empty、partial、failed、skipped、Context Deadline/取消；并确认搜索结果不能绕过既有授权持久化入口。
 - [ ] 真实供应商网络、账号配额、输出许可与生产 endpoint 仍分别验收，不以 Fake/CI 代替。
+
+
+## 16. Provider 时间字段映射与当前实测边界（2026-11-16）
+
+本节只规范搜索候选的 `published_at` 原始字段适配和时间解析，不改变 NEWS-CTR-001 的 `available_at` 语义，不授权新增 `available_at` 字段/证据表、修改 PIT SQL 或回填历史值。
+
+### 16.1 现有代码字段映射
+
+| Provider / 来源 | 响应字段路径 | 当前代码行为 | 时间限制 / 注意事项 |
+|---|---|---|---|
+| Bocha | `data.webPages.value[].datePublished` | 保留原始文本到 `PublishedAtRaw` | 字段路径明确；当前没有按 Bocha 独立格式解析，最终只接受公共解析器支持的带时区格式 |
+| Tavily | `results[].published_date` | 保留原始文本到 `PublishedAtRaw` | 测试样本为 `YYYY-MM-DD`，仅日期时保持 `PublishedAt=nil`；不得补成零点 |
+| Brave News | `results[].published_date` | 仅该字段作为发布时间候选 | `page_age` 不得回退为发布时间；当前适配代码不证明上游一定返回 `published_date` |
+| SearXNG | `results[].publishedDate`、`published_date`、`published_at` | 按上述优先级取第一个非空原始值 | 标准 SearXNG Result 的 `publishedDate` 是 datetime；`pubdate` 是其字符串表示，但当前 Adapter 未读取 `pubdate` |
+| 东方财富 A 股公告（MarketData 独立 Adapter） | `data.list[].display_time` | 按 Asia/Shanghai 解析为 `StockAnnouncement.PublishedAt` | 只在源值包含可解析时分秒时填充；纯日期保持 nil |
+| 东方财富公告其他时间字段 | `eiTime`、`sort_date`、`notice_date` | 原始值分别保留；不作为 `display_time` 的自动回退 | 不允许因为字段有值就推断其等于首次公众可获取时间 |
+
+News 搜索候选的解析分为两处：Provider Adapter 的 `candidate()` 当前直接识别 RFC3339；候选进入 `NormalizeCandidate` 后，还可识别 RFC3339Nano、RFC1123Z、RFC822Z。未带时区的日期或本地日期时间不推断时区，不生成标准时间点。原始文本仍保留，缺失/不可解析仍进入 `MissingFields`。
+
+东方财富公告 Adapter 的解析器使用 Asia/Shanghai（带显式偏移的 RFC3339 则尊重其偏移），支持 RFC3339Nano、常见年月日时分秒格式及其毫秒变体；对 `HH:mm:ss:SSS` 形式只规范化末尾三位毫秒。它不会用 `notice_date`、`eiTime` 或 `sort_date` 伪造 `PublishedAt`。
+
+### 16.2 时间语义和证据边界
+
+- `published_at` 是 Provider/来源声明的发布时间候选；对搜索/聚合 Provider，它可能来自索引、网页结构化数据或聚合处理，不能提升为原始发布来源事实。
+- `fetched_at` / `observed_at` 只证明系统何时取得/观察到候选，不得回填为 `published_at` 或 `available_at`。
+- `page_age`、页面更新时间、索引时间和仅日期字段不得转换成精确时间点。
+- 不同 Provider 的原始格式应由各自 Adapter 声明字段路径和格式策略，再转换为 UTC；禁止在公共层猜测无时区值的时区。
+- 跨来源时间冲突不得自动选择最早或最晚值。应保留各来源原始候选并记录冲突原因；在尚无时间证据载体前，不生成 `available_at`。
+- 本节所列搜索 Provider 均属于发现/聚合入口，不是已通过 NEWS-CTR-001 准入的法定披露来源。
+
+### 16.3 当前样本和覆盖率状态
+
+截至本次核对，仓库中可确认的证据分为：
+
+1. **固定测试样本**：News Provider 测试覆盖 Bocha 无时间字段、Tavily 仅日期、SearXNG 带明确 `+08:00` 的 RFC3339；Brave 测试明确验证 `page_age` 不作为发布时间。
+2. **东方财富模拟响应**：MarketData Provider 测试样本包含 `display_time=2026-10-23 18:30:00`、`eiTime=2026-10-23 18:30:00`、`sort_date=2026-10-23 18:31:00`、`notice_date=2026-10-23`。这是 httptest 固定夹具，不是真实上游响应；不能用它统计真实字段覆盖率或证明字段间语义一致。
+3. **真实在线样本**：当前没有取得可审计的东方财富原始 HTTP 响应；News 的 `TestLiveProviderProbe` 只有显式设置 `NEWS_LIVE_PROBE=1` 且配置真实 Provider 凭证才执行，默认跳过。该测试目前只记录 Provider、候选数量和耗时，不统计时间字段覆盖率。
+
+因此当前真实数据的 `display_time/eiTime/sort_date` 有效率、格式分布和跨字段冲突率均为 **not_comparable**，不能把模拟夹具的 1/1 样本写成实测结果。后续取得真实响应后，先只统计字段存在率、非空率、可解析率、日期级比例、时区分布、未来时间比例和字段间冲突；日志只输出聚合计数、`reason_code`、Provider/Endpoint/规则版本，不输出凭证、标题或未获准正文。
+
+### 16.4 外部字段定义参考
+
+- Bocha Web Search API 产品文档：<https://netmarket.oss-cn-hangzhou.aliyuncs.com/f0f21b3fc270430796edaa67e49fe203.%E5%8D%9A%E6%9F%A5%E6%90%9C%E7%B4%A2api%E4%BA%A7%E5%93%81%E6%9C%8D%E5%8A%A1%E6%96%87%E6%A1%A3v1.0.0.pdf>（列出 `datePublished`，但未在本次审核中取得足以冻结具体格式的规范）。
+- SearXNG Result 类型：<https://docs.searxng.org/_modules/searx/result_types/_base.html>（`publishedDate` 为 datetime；`pubdate` 是其字符串表示）。
+- 东方财富 EMQuant API 资讯字段说明：<https://quantapi.eastmoney.com/Upload/EMQuantAPI_Csharp.html>（`datetime` 为展示时间，公告可能仅展示日期且盘后可能显示为下一交易日；`eitime` 为生产时间且仅日期）。该说明可作为字段语义警示，不代替当前 `np-anotice-stock` Endpoint 的逐字段正式规范。
+
+**本节结论：** 现有代码已能保留多家 Provider 的原始发布时间文本，并对一部分带时区格式做统一解析；尚缺的是逐字段来源路径/解析结果的持久化溯源，以及真实上游样本统计。当前不应新增估计时间字段或改变 `available_at`；下一步先为可控的只读在线探测补充脱敏聚合统计，并在获得真实响应后决定是否需要 Provider-specific parser 扩展。

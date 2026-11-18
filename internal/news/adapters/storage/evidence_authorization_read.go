@@ -22,6 +22,7 @@ func (r *MySQLRepository) GetEvidenceContentWithCurrentAuthorization(
 	version domain.NewsItemVersion,
 	systemAsOf time.Time,
 	authorize func(context.Context, domain.CurrentAuthorizationPolicySet, domain.Observation) error,
+	expectedAvailableAt ...*time.Time,
 ) (domain.ContentLayers, domain.Observation, error) {
 	if r == nil || r.db == nil || ctx == nil || authorize == nil ||
 		domain.ValidateNewsAuthorizationBindingForEvidence(binding, observation, version) != nil ||
@@ -55,15 +56,22 @@ func (r *MySQLRepository) GetEvidenceContentWithCurrentAuthorization(
 
 	// 元数据定位发生在事务外；这里重新读取 Observation 与 Version，防止并发策略轨迹
 	// 修改、载荷清理或版本变更在预检之后、正文读取之前形成 TOCTOU。
+	if len(expectedAvailableAt) > 1 {
+		return domain.ContentLayers{}, domain.Observation{}, app.ErrInvalidEvidenceQuery
+	}
+	asOf := systemAsOf.UTC()
 	record, err := scanEvidencePITRecord(tx.QueryRowContext(ctx, evidencePITSelect+` WHERE
 		v.news_id = ? AND v.version_id = ? AND v.observed_at <= ? AND o.observed_at <= ? FOR UPDATE`,
-		version.NewsID, version.ID, systemAsOf.UTC(), systemAsOf.UTC(),
+		asOf, asOf, asOf, asOf, asOf, version.NewsID, version.ID, asOf, asOf,
 	))
 	if errors.Is(err, sql.ErrNoRows) || errors.Is(err, app.ErrEvidencePITNotFound) {
 		return domain.ContentLayers{}, domain.Observation{}, app.ErrEvidencePITNotFound
 	}
 	if err != nil {
 		return domain.ContentLayers{}, domain.Observation{}, err
+	}
+	if len(expectedAvailableAt) == 1 && !sameAvailabilityTime(record.AvailableAt, expectedAvailableAt[0]) {
+		return domain.ContentLayers{}, domain.Observation{}, app.ErrInvalidEvidenceQuery
 	}
 	currentObservation := record.Observation
 	currentVersion := record.Version
@@ -120,4 +128,11 @@ func (r *MySQLRepository) GetEvidenceContentWithCurrentAuthorization(
 	}
 	committed = true
 	return content, currentObservation, nil
+}
+
+func sameAvailabilityTime(left, right *time.Time) bool {
+	if left == nil || right == nil {
+		return left == nil && right == nil
+	}
+	return left.Equal(*right) && left.Nanosecond() == 0 && right.Nanosecond() == 0
 }
