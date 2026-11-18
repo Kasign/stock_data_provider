@@ -43,7 +43,7 @@ MiaoXiang 是由 `MXEnabled` 单独控制的补充 Provider，不在上述 Provi
 | Eastmoney | Quote、DailyBars、StockBasic、StockBoards、HotRankings、ChipDistribution、CapitalFlow、StockSearch、ListStockUniverse、SectorRankings（含 Metric/Direction）、IndexQuotes、MarketBreadth、LimitPool；另有龙虎榜和公告独立文件 | 启用 | 默认能力较广；ListStockUniverse 是 Provider 方法，但当前 Bootstrap 未将 StockUniverseProvider 作为独立能力集合；其他已启用能力仍须以 SourceStatus 和真实证据确认 |
 | Hithink | StockSearch、IndexQuotes、TradingCalendar、HotRankings、LimitPool、DragonTiger、IndexCatalog/Constituents/DailyBars、Valuations、Quote、DailyBars、Fundamentals | 关闭 | 代码实现存在不代表已配置或已获得真实接口权限 |
 | BaoStock | DailyBars、TradingCalendar、Fundamentals；另有 AdjustmentFactorProvider 实现 | 启用 | 真实字段证据只按 Runtime Log 指定样本 |
-| Tencent | Quote、DailyBars | 启用 | StockSearch 的独立实现文件已定位 |
+| Tencent | Quote、DailyBars、StockSearch | 启用 | 搜索能力由独立实现文件提供 |
 | Sina | Quote、DailyBars | 启用 | 当前默认只启用这两项 |
 | NetEase | Quote、DailyBars | 启用 | 当前默认只启用这两项 |
 | TickFlow | Quote、IndexQuotes、MarketBreadth、SectorRankings（含 Direction）、DailyBars | 启用 | 默认仅启用 DailyBars；其他已实现能力默认关闭 |
@@ -75,9 +75,9 @@ MiaoXiang 是由 `MXEnabled` 单独控制的补充 Provider，不在上述 Provi
 
 `httpapi.BuildSourceStatuses` 根据 Bootstrap 实际注册的 Provider 列表构造 SourceStatus，不从静态配置直接推断运行能力。该状态只说明装配能力，不是数据质量或真实可用性证明。
 
-## 4. 需单独核验的接口能力
+## 4. 尚待核验的扩展能力
 
-Provider 接口还定义了部分可选/扩展能力，例如历史指数成分、指标排序和方向性行业排名。不能因为接口类型存在就视为已注册或已有真实 Provider 支持。需逐一追踪具体实现、装配路径、调用场景和证据后再纳入有效能力矩阵。
+当前仍需逐一核验 CorporateActionProvider、HistoricalIndexConstituentProvider、SecurityTradingStatusProvider、MarketCapitalFlowProvider，以及 StockUniverseProvider 的独立注册路径。必须确认具体实现、Bootstrap 注册、真实消费者和真实数据证据后，才能纳入有效运行能力矩阵。
 
 ## 5. 真实验收入口
 
