@@ -36,7 +36,7 @@ MiaoXiang 是由 `MXEnabled` 单独控制的补充 Provider，不在上述 Provi
 
 ## 3. Bootstrap 装配规则
 
-`internal/marketdata/bootstrap/module.go` 当前创建 10 个主 Provider，并按 ProviderPriority 与 ProviderSettings 过滤。配置启用某项能力时，Bootstrap 必须验证对应 Provider 实现该 Capability Interface，否则启动失败。
+`internal/marketdata/bootstrap/module.go` 当前创建 11 个主 Provider，并按 ProviderPriority 与 ProviderSettings 过滤。配置启用某项能力时，Bootstrap 必须验证对应 Provider 实现该 Capability Interface，否则启动失败。
 
 当前装配的能力域包括：
 
@@ -48,7 +48,7 @@ MiaoXiang 是由 `MXEnabled` 单独控制的补充 Provider，不在上述 Provi
 - Fundamentals、Valuations；
 - IndexCatalog；
 - ChipDistribution、CapitalFlow、MarketCapitalFlow、HotRankings；
-- 自动识别 PriceLimitEventProvider。
+- 自动识别 PriceLimitEventProvider。\n\nProvider 接口还定义 AdjustmentFactorProvider、CorporateActionProvider、StockUniverseProvider、MetricSectorRankingProvider、DirectionalSectorRankingProvider、HistoricalIndexConstituentProvider 等扩展能力；这些接口的存在不代表已由 Bootstrap 注册。必须继续追踪具体 Provider 的实现与实际调用路径。
 
 `httpapi.BuildSourceStatuses` 根据 Bootstrap 实际注册的 Provider 列表构造 SourceStatus，不从静态配置直接推断运行能力。该状态只说明装配能力，不是数据质量或真实可用性证明。
 
