@@ -1,8 +1,8 @@
 # GOV-CTR-004 Schema 版本、兼容、废弃与迁移规则
 
 - 契约编号：GOV-CTR-004
-- 规则版本：1.0.0
-- 状态：freeze-ready（待项目负责人确认冻结）
+- 规则版本：1.1.0
+- 状态：`frozen`
 - 适用范围：所有跨模块 DTO、Event Envelope/Payload、Result Manifest/Ref 和可独立演进的 Application Contract
 - 权威性：本文件是 GOV-CTR-004 公共版本兼容语义的唯一权威来源。逐 DTO/Event 的版本、兼容矩阵和消费者支持范围由对应领域 CTR 登记。
 
@@ -43,6 +43,13 @@
 - 未知 MAJOR、不兼容版本、未知必需枚举或不允许的未知字段必须拒绝；不得回退到“最新可用”、近似版本或旧 Schema 猜测。
 - 生产方和每个直接消费者必须维护支持版本/兼容范围；兼容性由明确矩阵和针对实际消费方向的 Golden/Contract Test 证明。
 - JSON Schema 结构校验不等于消费者兼容性证明。
+
+## 4.1 时间字段的输入兼容与规范输出
+
+- 时间字符串的通用 RFC 3339 `date-time` 语法允许 `Z` 或明确的数字 UTC offset；但 Schema 是否进一步要求 canonical UTC `Z`，必须由具体字段契约明确。
+- 对 GOV-CTR-002 约束的跨模块绝对时间输出，生产方必须输出 RFC3339Nano UTC `Z`。消费方不得把生产方违反 canonical 输出要求的行为当作默认兼容格式。
+- 外部入口若需要接受带 offset 的用户输入或 Provider 原始时间，应在入口/Provider Adapter 层解析并转换为 UTC，再构造符合跨模块 Schema 的 DTO；不得为了入口兼容而放宽已发布跨模块 DTO Schema。
+- 如果修改已发布 Schema 本身的接受范围（包括新增 offset、移除 Z 限制或其他格式范围变化），按本规则第 2 节判断是否属于 MAJOR；不能以“解析更宽松”为由绕过版本治理。
 
 ## 5. Schema 与 Golden 不可变
 

@@ -1,7 +1,7 @@
 # PLAT-002 项目级契约冻结登记簿
 
 - 仓库：`Kasign/stock_data_provider`
-- 登记簿版本：`0.2.60-frozen`
+- 登记簿版本：`0.2.61-frozen`
 - 当前阶段：`L1_contracts_frozen`
 - 固定代码审计基线（L1 冻结审计时点，非当前分支 HEAD）：`origin/integration @ b6dfc85ba214fe16268c8cba780641a8bfe15086`
 - 当前 Integration 分支 HEAD（2026-11-18）：`422543e2a1bf40a2582f7eff3cb35e2b2d8fddde`；该值仅用于定位当前聚合代码，不替代固定的 L1 契约冻结审计基线。
@@ -23,7 +23,7 @@
 | 契约编号 | 契约主题 | 定义方 | 直接消费者 | 当前权威定义/证据入口 | 契约版本 | 当前状态 | 后续 L2/L3 实现符合性关注点 |
 |---|---|---|---|---|---|---|
 | GOV-CTR-001 | JSON 类型、Decimal、整数、比例、null/缺失 | 项目级规则；各 DTO 生产方 | 所有 DTO 消费者 | [GOV-CTR-001 公共 JSON 数值与空值规则](./rules/GOV-CTR-001-公共JSON类型数值与空值规则.md)；各领域字段映射见对应 CTR | 1.0.0 | `frozen` | 公共 JSON 类型、Decimal 语法、integer 安全范围、number 精度/舍入原则、单位/比例和缺失/null/zero/empty/unknown 语义已统一版本化；字段级 scale、单位、范围、舍入、tolerance 和 nullable 仍由对应领域 CTR 负责，不作为本公共规则冻结阻断 |
-| GOV-CTR-002 | 时间、交易日、时区、PIT、system_as_of | 项目级时间语义；Data/News/Quant/Research/Researchflow | 所有历史研究及执行消费者 | [GOV-CTR-002 公共时间与 PIT 规则](./rules/GOV-CTR-002-公共时间与PIT规则.md)；各领域时间字段映射见对应 CTR | 1.0.0 | `frozen` | RFC3339Nano UTC、交易日、occurred/published/available/system_observed/system_as_of/valid_time 等公共语义、Run 截止传播和严格 PIT 边界已版本化；Provider/领域字段映射与各 DTO Schema 约束仍由对应 CTR 负责，不作为公共规则冻结阻断 |
+| GOV-CTR-002 | 时间、交易日、时区、PIT、system_as_of | 项目级时间语义；Data/News/Quant/Research/Researchflow | 所有历史研究及执行消费者 | [GOV-CTR-002 公共时间与 PIT 规则](./rules/GOV-CTR-002-公共时间与PIT规则.md)；各领域时间字段映射见对应 CTR | 1.1.0 | `frozen` | 跨模块规范化输出使用 RFC3339Nano UTC `Z`；外部输入可按入口契约接受 `Z` 或明确 offset，解析后转 UTC，禁止无时区猜测；Platform 统一当前时钟抽象，跨实例协调使用数据库权威时钟；交易日、PIT 语义及字段映射边界保持明确 |
 | GOV-CTR-003 | ID、Request/Correlation/Event/Idempotency 作用域 | Platform 提供 Request ID 原语；各模块拥有领域 ID | Server、所有模块、Worker、事件消费者 | [GOV-CTR-003 公共标识符与幂等作用域规则](./rules/GOV-CTR-003-标识符与幂等作用域规则.md)；运行时传播见 PLAT-CTR-002；字段映射见各领域 CTR | 1.0.0 | `frozen` | request/originating/correlation/event/idempotency/trace 身份职责、唯一性边界、重放冲突语义和 fingerprint 原则已版本化；Header/Context/Worker/事件 Envelope 的实际字段映射与执行证据仍由 PLAT/FLOW/NTF/各生产方 CTR 负责，不作为公共规则冻结阻断 |
 | GOV-CTR-004 | Schema 版本、兼容、废弃和迁移 | 各契约生产模块；项目级规则由治理登记 | 所有直接消费者 | [GOV-CTR-004 Schema 版本与兼容规则](./rules/GOV-CTR-004-Schema版本兼容与废弃规则.md)；逐 DTO/Event 版本矩阵见对应 CTR | 1.0.0 | `frozen` | SemVer、破坏性变更边界、closed/open enum、未知字段策略、消费者支持版本、Schema/G​​olden 不可变、废弃和直接退役规则已版本化；逐 DTO/Event 兼容矩阵和消费者证据仍由各 CTR 负责，不作为公共规则冻结阻断 |
 | GOV-CTR-005 | 契约状态、冻结证据和变更审批 | 项目契约治理 | 所有模块 | doc/contract/README、登记簿第5节、决策记录、契约版本与变更记录 | 0.2.19-review（治理规则） | `frozen` | 项目级定义冻结门禁、状态、版本变更/解冻记录规则已统一；模块实现符合性不混入契约定义冻结 |
