@@ -2,7 +2,7 @@
 
 更新时间：2026-11-18
 维护分支：feat/server
-代码验收基线：f5821a356e23691d9738f4b3808abf8e0e3494d8；当前文档 HEAD：f5821a356e23691d9738f4b3808abf8e0e3494d8
+代码验收基线：f5821a356e23691d9738f4b3808abf8e0e3494d8
 当前主线：SRV-015 其他业务模块 Root 装配盘点与可接入服务装配
 
 ## 1. Root Readiness 503 根因已定位并修复（当前装配范围验收通过）
@@ -74,7 +74,7 @@
 - Research：News→Research 组合只在 Cursor Key Ring 配置时构造，当前无真实 Stage/HTTP 消费者；不能创建无调用场景的 Handler。
 - Quant：只有确定性计算能力和 Memory Result Repository，缺生产持久化 Repository、Root Facade/Worker 及 Researchflow Stage 输入契约。
 - LLM：传输适配器存在，但无已验证 Gateway 版本/Capability Evidence、SecretRef 和生产 Provider 配置。
-- Notification Delivery：虽有持久化 Repository 和领域用例，但缺权威 Recipient Directory、真实 Channel Adapter/凭据、投递 Worker 与回执/Unknown Lookup 闭环。
+- Notification Delivery：`feat/notification` 已提供 WeCom Webhook Adapter，Live Smoke Run 44295239517 成功且用户确认真实收信；但当前 `feat/server` 代码树尚无该 Adapter。仍缺共同集成基线、生产 Secret 注入、权威 Recipient Directory、Fanout/Delivery Worker 与可靠回执/Unknown Lookup 闭环。Server 不复制其他模块 Adapter。
 - Researchflow：当前只装配 News Search Stage；其他 Stage 等各模块公开 Facade、Schema、授权和真实输入证据。
 
 原则：已具备生产条件的服务直接装配；缺真实数据源、调用者、持久化或外部依赖的服务保持 BLOCKED，不创建空 Worker、恒 true Check、Fake Provider 或虚构接收人。
