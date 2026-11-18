@@ -177,6 +177,34 @@ func TestNotificationMariaDBDeliveryRepositoryIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Repository 必须独立保护 Delivery 不可变快照，不能只依赖调用方使用领域 Transition。
+	mutations := []struct {
+		name   string
+		mutate func(*domain.DeliveryRecord)
+	}{
+		{"recipient", func(value *domain.DeliveryRecord) { value.RecipientRef = "recipient-tampered" }},
+		{"channel", func(value *domain.DeliveryRecord) { value.ChannelRef = "channel-tampered" }},
+		{"template version", func(value *domain.DeliveryRecord) { value.TemplateVersion++ }},
+		{"payload fingerprint", func(value *domain.DeliveryRecord) { value.PayloadFingerprint = fmt.Sprintf("%064x", 1) }},
+		{"idempotency key", func(value *domain.DeliveryRecord) { value.DeliveryIdempotencyKey = "different-idempotency-key" }},
+		{"attempt count", func(value *domain.DeliveryRecord) { value.AttemptCount++ }},
+		{"max attempts", func(value *domain.DeliveryRecord) { value.MaxAttempts++ }},
+		{"deadline", func(value *domain.DeliveryRecord) { value.DeadlineAt = value.DeadlineAt.Add(time.Minute) }},
+		{"created at", func(value *domain.DeliveryRecord) { value.CreatedAt = value.CreatedAt.Add(-time.Second) }},
+	}
+	for _, mutation := range mutations {
+		t.Run("reject immutable mutation "+mutation.name, func(t *testing.T) {
+			candidate := next
+			mutation.mutate(&candidate)
+			if err := repository.UpdateWithLease(ctx, winner.Delivery.Version, winner.Lease.FencingToken, candidate, event, finishedAt); !errors.Is(err, application.ErrDeliveryVersionConflict) {
+				t.Fatalf("immutable %s mutation must be rejected, got %v", mutation.name, err)
+			}
+		})
+	}
+	unchanged, found, err := repository.Get(ctx, delivery.DeliveryID)
+	if err != nil || !found || unchanged.Status != domain.DeliverySending || unchanged.Version != winner.Delivery.Version {
+		t.Fatalf("rejected immutable mutations must not persist: found=%v delivery=%+v err=%v", found, unchanged, err)
+	}
 	// Force the append-only event insert to fail and prove the snapshot update rolls back.
 	if _, err := db.ExecContext(ctx, `INSERT INTO notification_delivery_state_events (
 		delivery_id, version, from_status, to_status, changed_at
