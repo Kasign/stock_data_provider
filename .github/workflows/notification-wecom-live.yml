@@ -2,6 +2,11 @@ name: Notification WeCom Webhook Live Smoke
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - feat/notification
+    paths:
+      - .github/workflows/notification-wecom-live.yml
 
 permissions:
   contents: read
@@ -12,6 +17,7 @@ concurrency:
 
 jobs:
   wecom-webhook:
+    if: github.event_name == 'workflow_dispatch' || github.event.head_commit.message == 'ci(notification): one-time WeCom live smoke 20261118'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
