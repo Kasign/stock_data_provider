@@ -2235,3 +2235,86 @@ func TestAvailabilityEvidenceWriteRequiresCurrentFieldPolicyMariaDBIntegration(t
 		t.Fatalf("unauthorized field Evidence rows = %d, want 0", deniedCount)
 	}
 }
+
+
+func TestResolveCurrentSourceCollectionPoliciesMariaDBIntegration(t *testing.T) {
+	dsn := os.Getenv("NEWS_MARIADB_TEST_DSN")
+	if dsn == "" {
+		t.Skip("set NEWS_MARIADB_TEST_DSN to run News source collection policy integration")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	db, err := sql.Open("mysql", dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	db.SetMaxOpenConns(4)
+	defer db.Close()
+	if err := db.PingContext(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := platformstorage.ApplyMigrations(ctx, db, "news", Migrations()); err != nil {
+		t.Fatal(err)
+	}
+	repository, err := NewMySQLRepository(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	publisher, err := app.NewPublishNewsPolicyVersion(repository)
+	if err != nil {
+		t.Fatal(err)
+	}
+	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
+	sourceRef := "collect-policy-source-" + suffix
+	endpointRef := "collect-policy-endpoint-" + suffix
+	sourceV1, sourceV2 := "source-v1-"+suffix, "source-v2-"+suffix
+	endpointV1 := "endpoint-v1-" + suffix
+	defer func() {
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM news_current_policy_versions WHERE (policy_type = ? AND policy_ref = ?) OR (policy_type = ? AND policy_ref = ?)",
+			domain.NewsPolicyTypeSource, sourceRef, domain.NewsPolicyTypeEndpoint, endpointRef)
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM news_policy_versions WHERE (policy_type = ? AND policy_ref = ?) OR (policy_type = ? AND policy_ref = ?)",
+			domain.NewsPolicyTypeSource, sourceRef, domain.NewsPolicyTypeEndpoint, endpointRef)
+	}()
+	makeSourcePolicy := func(status domain.AuthorizationStatus) []byte {
+		payload, marshalErr := json.Marshal(domain.SourcePolicy{
+			Status: status,
+			AllowedAccessMethods: []domain.AccessMethod{domain.AccessRSS},
+			AllowedPurposes: []domain.Purpose{domain.PurposeInternalPersonalResearch},
+			AllowedContentKinds: []domain.ContentKind{domain.ContentFullText},
+			AllowedStorageModes: []domain.StorageMode{domain.StorageTransient},
+			MaxRetention: time.Hour,
+			EvidenceRef: "integration-source-license",
+		})
+		if marshalErr != nil { t.Fatal(marshalErr) }
+		return payload
+	}
+	if err := publisher.Execute(ctx, domain.NewsPolicyTypeSource, sourceRef, sourceV1, makeSourcePolicy(domain.AuthorizationApproved)); err != nil {
+		t.Fatalf("publish source policy v1: %v", err)
+	}
+	source, endpoint, err := repository.ResolveCurrentSourceCollectionPolicies(ctx, sourceRef, sourceV1, endpointRef, "")
+	if err != nil || source.Status != domain.AuthorizationApproved || endpoint != nil {
+		t.Fatalf("resolve source policy v1: source=%+v endpoint=%+v err=%v", source, endpoint, err)
+	}
+	if err := publisher.Execute(ctx, domain.NewsPolicyTypeSource, sourceRef, sourceV2, makeSourcePolicy(domain.AuthorizationRevoked)); err != nil {
+		t.Fatalf("publish source policy v2: %v", err)
+	}
+	if _, _, err := repository.ResolveCurrentSourceCollectionPolicies(ctx, sourceRef, sourceV1, endpointRef, ""); !errors.Is(err, app.ErrSourceCollectionPolicyUnavailable) {
+		t.Fatalf("stale source version error=%v, want unavailable", err)
+	}
+	source, endpoint, err = repository.ResolveCurrentSourceCollectionPolicies(ctx, sourceRef, sourceV2, endpointRef, "")
+	if err != nil || source.Status != domain.AuthorizationRevoked || endpoint != nil {
+		t.Fatalf("resolve current revoked source policy: source=%+v endpoint=%+v err=%v", source, endpoint, err)
+	}
+	endpointPayload, err := json.Marshal(domain.EndpointPolicy{Status: domain.AuthorizationRevoked})
+	if err != nil { t.Fatal(err) }
+	if err := publisher.Execute(ctx, domain.NewsPolicyTypeEndpoint, endpointRef, endpointV1, endpointPayload); err != nil {
+		t.Fatalf("publish endpoint policy: %v", err)
+	}
+	if _, _, err := repository.ResolveCurrentSourceCollectionPolicies(ctx, sourceRef, sourceV2, endpointRef, ""); !errors.Is(err, app.ErrSourceCollectionPolicyUnavailable) {
+		t.Fatalf("unexpected endpoint policy with empty catalog version error=%v, want unavailable", err)
+	}
+	source, endpoint, err = repository.ResolveCurrentSourceCollectionPolicies(ctx, sourceRef, sourceV2, endpointRef, endpointV1)
+	if err != nil || endpoint == nil || endpoint.Status != domain.AuthorizationRevoked || source.Status != domain.AuthorizationRevoked {
+		t.Fatalf("resolve current source+endpoint policies: source=%+v endpoint=%+v err=%v", source, endpoint, err)
+	}
+}
