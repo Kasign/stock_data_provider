@@ -812,6 +812,12 @@ test("Owner Session uses same-origin cookies and keeps CSRF only in runtime memo
     await logoutOwnerSession(settings);
     assert.equal(requests[4].method, "DELETE");
     assert.equal(requests[4].headers["X-CSRF-Token"], "rotated-csrf-token");
+
+    assert.ok(requests.every((request) => request.credentials === "same-origin"),
+      "every Owner Session operation must rely on same-origin browser cookies");
+    assert.ok(requests.every((request) =>
+      request.headers["X-API-Key"] === undefined && request.headers.Authorization === undefined
+    ), "Owner Session operations must never receive market API keys or Owner Bearer credentials");
   } finally {
     clearOwnerSessionMemory();
     globalThis.fetch = originalFetch;
