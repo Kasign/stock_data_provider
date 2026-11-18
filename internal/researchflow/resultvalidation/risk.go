@@ -44,8 +44,9 @@ func ValidateRiskDecision(decision RiskDecision, expectedSystemAsOf time.Time) e
 		!isUTC(decision.EvaluatedAt) || !isUTC(decision.SystemAsOf) ||
 		expectedSystemAsOf.IsZero() || !isUTC(expectedSystemAsOf) ||
 		!decision.SystemAsOf.Equal(expectedSystemAsOf) ||
-		decision.Reasons == nil || decision.InputRefs == nil ||
-		hasDuplicateOrInvalidRefs(decision.InputRefs) {
+		len(decision.Reasons) == 0 || decision.InputRefs == nil ||
+		hasDuplicateOrInvalidRefs(decision.InputRefs) ||
+		decision.EvaluatedAt.Before(decision.SystemAsOf) {
 		return ErrInvalidRiskDecision
 	}
 	blockingUnresolved := false

@@ -50,6 +50,21 @@ func TestValidateRiskDecisionRequiresSameRunSystemAsOf(t *testing.T) {
 	}
 }
 
+func TestValidateRiskDecisionRejectsEmptyReasons(t *testing.T) {
+	base := validRiskDecision()
+	base.Reasons = []RiskReason{}
+	if err := ValidateRiskDecision(base, base.SystemAsOf); !errors.Is(err, ErrInvalidRiskDecision) {
+		t.Fatalf("empty risk reasons must fail closed, got %v", err)
+	}
+}
+
+func TestValidateRiskDecisionRejectsEvaluationBeforeSystemAsOf(t *testing.T) {
+	base := validRiskDecision()
+	base.EvaluatedAt = base.SystemAsOf.Add(-time.Second)
+	if err := ValidateRiskDecision(base, base.SystemAsOf); !errors.Is(err, ErrInvalidRiskDecision) {
+		t.Fatalf("evaluation before the PIT must fail, got %v", err)
+	}
+}
 func TestValidateRiskDecisionAcceptsOnlyScalarObservedValues(t *testing.T) {
 	base := validRiskDecision()
 	for _, raw := range []string{`"10.25"`, "10.25", "null"} {
