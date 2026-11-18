@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"example.com/stock-analysis-flow/internal/notification/domain"
 	"example.com/stock-analysis-flow/internal/platform/config"
@@ -16,9 +17,12 @@ import (
 func TestLiveWebhook(t *testing.T) {
 	raw := os.Getenv("WECHAT_WORK_WEBHOOK_URL")
 	if strings.TrimSpace(raw) == "" {
+		if os.Getenv("CI") == "true" {
+			t.Fatal("WECHAT_WORK_WEBHOOK_URL is required in CI")
+		}
 		t.Skip("WECHAT_WORK_WEBHOOK_URL is not configured")
 	}
-	client, err := httpclient.New(httpclient.Config{Timeout: 12_000_000_000, MaxRetries: 0})
+	client, err := httpclient.New(httpclient.Config{Timeout: 12 * time.Second, MaxRetries: 0})
 	if err != nil { t.Fatal("create platform HTTP client failed") }
 	defer client.CloseIdleConnections()
 	doer, err := client.Bind(httpclient.DestinationPolicy{
