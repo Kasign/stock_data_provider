@@ -136,3 +136,42 @@ func TestMemoryRepositoryCanonicalPayloadIsIdempotent(t *testing.T) {
 		t.Fatalf("stored record count = %d, want 1 for canonical-equivalent payloads", len(repository.records))
 	}
 }
+
+func TestMemoryRepositorySaveRejectsExistingIdentityConflict(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		mutate func(*manifest.Manifest)
+	}{
+		{
+			name: "manifest fingerprint mismatch",
+			mutate: func(value *manifest.Manifest) {
+				value.ManifestFingerprint = "0000000000000000000000000000000000000000000000000000000000000000"
+			},
+		},
+		{
+			name: "result fingerprint mismatch",
+			mutate: func(value *manifest.Manifest) {
+				value.ResultFingerprint = "0000000000000000000000000000000000000000000000000000000000000000"
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			repository := NewMemoryRepository()
+			record := validRecord(t, `{"metric_code":"momentum_20d","value":0.12}`)
+			existing := record
+			existing.Payload = append(json.RawMessage(nil), record.Payload...)
+			existing.Manifest.InputSnapshotRefs = append([]string(nil), record.Manifest.InputSnapshotRefs...)
+			tc.mutate(&existing.Manifest)
+			repository.records[record.Manifest.ResultID] = existing
+
+			if err := repository.Save(context.Background(), record); !errors.Is(err, ErrResultConflict) {
+				t.Fatalf("Save() error = %v, want ErrResultConflict", err)
+			}
+			stored := repository.records[record.Manifest.ResultID]
+			if stored.Manifest.ManifestFingerprint != existing.Manifest.ManifestFingerprint ||
+				stored.Manifest.ResultFingerprint != existing.Manifest.ResultFingerprint {
+				t.Fatal("conflicting Save() overwrote the existing record")
+			}
+		})
+	}
+}
