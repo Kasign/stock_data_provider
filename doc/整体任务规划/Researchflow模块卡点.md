@@ -2,7 +2,8 @@
 
 更新时间：2026-11-18  
 对应分支：`feat/researchflow`  
-代码验收基线 SHA：`799384a87a07ea3c63acb1d5a895a3a097cde3f5`  
+最近一次已通过代码验收 SHA：`799384a87a07ea3c63acb1d5a895a3a097cde3f5`  
+待验收代码变更 SHA：`b9a5503fe5640627efcb85b6f532bff5308615f7`（Reason.Code 唯一性校验，CI 待确认）  
 维护范围：记录 Researchflow 推进所依赖的跨模块决策、契约同步和验收阻塞；不替代模块任务状态文档。
 
 ## 1. 当前卡点
