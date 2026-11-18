@@ -17,7 +17,8 @@
 - gofmt、Server package tests、race tests、真实 MariaDB/Redis storage integration、Server vet、镜像构建及 Notification schemas 均通过。
 - 容器启动日志显示 Data Module Migration 成功，Server Migration Registry 报告 succeeded，异步分析 Worker 启动，Root Server HTTP 监听 `[::]:8092`。
 - 随后的真实容器验收在 120 秒内未能通过带 Owner Bearer 的 `/readyz`，HTTP 返回 503；`/healthz` 探测已成功，因此容器进程和 HTTP 服务并非未启动。
-- 当前 CI 脚本使用 `curl --fail` 请求 `/readyz`。HTTP 503 时响应体未被保存到 `/tmp/server-readyz.json`，日志只保留了状态码错误，无法从本次 Job 直接确认具体失败的 Required Check。
+- 该失败 SHA 所使用的旧 smoke 脚本通过 `curl --fail` 请求 `/readyz`，HTTP 503 时没有保留响应体，因此 Run 44295762065 无法直接确认具体失败的 Required Check。
+- 随后的当前分支版本 `.github/workflows/server-test.yml` 已改为记录 HTTP 状态码和响应体，并在失败时请求 `/diagnostics`；但这只是诊断能力改进，尚无新的成功 CI 证据，根因仍未定位。
 
 原因边界：
 - 已确认：Readiness 检查未通过。
@@ -25,7 +26,7 @@
 - 本次失败发生在 Ready 探测阶段；SIGTERM 清洁退出步骤未执行，因此不能声称真实容器关闭验收通过。
 
 下一步：
-1. 改进 Server smoke 验收脚本：保留 HTTP 状态码和响应体，即使状态为 503 也输出 JSON；同时保存容器日志和 Readiness 诊断结果，避免再次丢失根因证据。
+1. 验证当前分支已更新的 Server smoke 验收脚本：确认下一次运行会保留 HTTP 状态码和响应体，并输出 `/diagnostics`；若新日志仍缺少 Required Check 细节，再补充容器日志或报告输出。
 2. 在相同真实 MariaDB/Redis Bootstrap 环境中复现，读取每个 Required Check 的 name/status/reason_code/evidence，定位唯一失败项。
 3. 若失败属于 Server 装配/配置/检查适配，在 `internal/server/**` 修复并补充回归测试；若属于 Data/Platform 模块公开契约或实现缺陷，记录为对应模块前置，不在 Server 分支复制或绕过其实现。
 4. 修复后重新运行精确 SHA 的 Server CI，要求 Readiness 成功并完成 SIGTERM 退出码 0。
