@@ -21,7 +21,7 @@ on:
       - 'docker-compose.yml'
       - 'scripts/**'
   push:
-    branches: [main, feat/data, feat/news, feat/notification, feat/quant, feat/research, feat/researchflow]
+    branches: [main, feat/data, feat/news, feat/llm, feat/notification, feat/quant, feat/research, feat/researchflow]
     paths:
       - 'go.mod'
       - 'go.sum'

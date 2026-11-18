@@ -1,70 +1,24 @@
-# Research 模块
+# Research 模块文档索引
 
-- 分支：`feat/research`
-- 当前代码与 CI 验收基线（2026-11-12）：Research `6cbe2d7763522f8c094a17c37d70e67c993adcf0`；Workflow Run [43197749469](https://github.com/Kasign/stock_data_provider/actions/runs/43197749469) 对应同一 SHA，整体结论 success。
-- 本次 Research 专项 gofmt、go test、race、vet 和 MariaDB Migration/Repository 集成 Job 全部通过；根模块 Test、go-core Test 也通过。Researchflow 相关 Job 同样通过，但不作为 Research 自身实现范围。
-- 当前 Workflow 已包含 `feat/research` push 触发、Research 专项验证 Job 和专用 MariaDB Job；不得继续引用此前“缺少 Research CI 门禁”的历史状态。
-- 详细任务进度与依赖边界见 [02-任务拆分与验收](./02-任务拆分与验收.md)。
-- 代码范围：`internal/research/**`
-- 文档范围：`doc/research/**`
-- 任务与验收权威记录：[02-任务拆分与验收](./02-任务拆分与验收.md)
-- 领域设计：[01-研究领域模型与证据体系](./01-研究领域模型与证据体系.md)
-- 字段语义及授权链：[03-Context与Evidence字段语义及授权链补充](./03-Context与Evidence字段语义及授权链补充.md)
+维护分支：`feat/research`  
+代码目录：`internal/research/**`
 
-## 模块职责
+## 唯一任务入口
 
-Research 拥有 Context、Evidence、Event、Claim、Hypothesis、Scenario 等研究语义模型。
+- [模块总任务规划和进度](./模块总任务规划和进度.md)：模块目标、职责、能力基线、完整任务清单与依赖。
+- [当前任务状态和进度](./当前任务状态和进度.md)：当前 HEAD、精确 SHA 验收、阻塞和下一步。
+- [任务历史](./任务历史/各个子任务完成状态.md)：原任务拆分、阶段实施记录、历史测试与验收证据。
 
-- Data：行情、财务、证券主数据、PIT 数据及其质量。
-- News：新闻采集、原文、身份、版本、授权和只读证据查询。
-- Quant：确定性数值计算及其版本化结果；Research 不直接依赖或调用 Quant。
-- Researchflow：Run/Stage/Attempt 生命周期、单次 Run 的 Context Assembly、分区选择、Token Budget 和裁剪。
-- Platform：提供 Fault、Storage、Diagnostics Runner 等公共基础能力，不接管 Research 领域规则。
+## 领域设计与契约
 
-Research 不采集新闻、不拥有行情事实、不重算 Quant 指标，不依赖 Quant 或 Researchflow。跨模块输入必须经公开 Application Port/Adapter；不得访问其他模块私有 Repository、SQL 或 Domain。Research 不因本地 Fixture 验收而宣称真实 Data/News 接入通过。
-
-## 当前实现与剩余边界
-
-| 任务 | 当前实现与验收 | 未完成边界 |
-|---|---|---|
-| RSC-001 Context | Domain、结构/版本链校验、v1 Golden/Schema Validator、Application Create/Get、SQL Repository；新增 Data/News/Quant 固定分区 Fixture；GetContext 新增独立 caller/purpose 请求与 ContextAuthorizer 当前可见范围复核，未装配时 fail-closed | 消费方 Contract Test、远端引用与授权版本验证；Context Assembly 本身归 Researchflow |
-| RSC-002 Evidence | Domain、JCS/SHA-256 指纹、严格 PIT、AuthorizationRef 绑定、Application Add/Get、SQL Repository；新增 Research-owned News Evidence Importer/Authorizer，消费 News `ResearchEvidenceQuery`，固定 Fixture 覆盖来源/版本/授权/PIT 映射与拒绝写入；Evidence Validator 已对 `source_owner=news` 强制要求 `source_version` | NEWS-CTR-001/002 已在项目级冻结登记簿登记为 frozen（定义冻结不等于生产实现验收）；News 当前 available_at 仍为 null，且 Get/List 尚未按 available_at 严格排除记录；授权复核与内容读取未处于同一一致性边界，真实新闻不能作为已验收的生产 Evidence 导入；授权续期历史留档仍待治理语义 |
-| RSC-003 Event | Domain、SourceTime、版本追加、生命周期、事务 Outbox、Application Create/Update；EvidenceRefs 精确记录与严格 PIT 校验；Event 派生引用由 SQL Repository 在追加事务内解析精确版本并做递归无环检查；时间规则 1.0.0 已实现 UTC 精确值共识归一、冲突置 null、无来源置 null、未注册版本拒绝 | 多来源归并/拆分仍需真实来源证据；真实来源时间精度和 asserted_by 语义仍需 News Owner 证据；Event 不读取 News 私有存储 |
-| RSC-004 实体关联 | 尚未实现 | 等待 Data 提供稳定 Security/Industry 引用、版本/时间语义及公开 Application Port |
-| RSC-005 Claim/Hypothesis | Domain、认识论校验、状态迁移、版本追加、supersedes_version 字段及当前版本头校验、Application、SQL Repository；创建和更新时解析 supporting/contradicting EvidenceRefs，并校验严格 PIT cutoff 与 Evidence.stance 分组一致性 | Scope 的外部实体/来源版本解析和真实研究样本仍受 Data/News 公开契约限制；本地 Evidence 引用已不再依赖生产 Owner 实现 |
-| RSC-006 Scenario | 新增 Scenario/Condition/ConditionGroup 领域模型，expected_value 限定为标量或一层标量数组，递归 ConditionGroup 校验按 DEC-033 执行 | Quant Metric Registry/QuantEvaluationRef 由 Quant Owner 校验；Researchflow 获取并复核 Quant Evaluation 后传入授权 DTO/引用，Research 不直接调用 Quant；当前冻结契约未要求独立 Scenario Application/Storage API |
-| RSC-007 Storage/Outbox | Context/Event/Claim/Evidence Repository、Migration v1、事务 Outbox、领取/租约/重试/确认/拒绝；发布确认仅允许同一 Worker+Lease Token 幂等重放，错误身份拒绝 | 最新提交尚无 CI/MariaDB 执行证据；根 Server Migration 注册、Server→Notification Relay 接线、授权续期历史留档语义 |
-| RSC-008 Diagnostics | Context/Event/Claim/Evidence 快照 Check、Run PIT、脱敏和快照隔离；Evidence Check 通过 Application GetEvidence 执行 Owner Authorizer 调用；invalid Evidence 质量失败优先于 available_at 不可比较；Research-owned News Authorizer 已实现 | News Owner 完整 TOCTOU/available_at 证据仍不完整；Researchflow FLOW-009 Facade 和 Runner 集成待接入 |
-
-## 诊断边界
-
-- Context：结构非法或必需分区缺失却标 valid 为失败；可选分区缺失且原因明确为降级；知识截止/引用版本缺少可比较证据时不可比较。
-- Evidence：结构或指纹错误、明确授权拒绝/撤销、明确 PIT 越界为失败；来源质量受限且 Owner 明确允许为降级；available_at 未知、授权服务不可用或状态 unknown 为不可比较/不可用。严格 PIT 不得将不可比较证据纳入有效事实集合。
-- Event：结构、来源时间引用、available_at 晚于 system_as_of 或生命周期版本非法为失败；来源时间冲突但完整保留为降级；缺少时间/精度证据时不可比较。
-- Claim/Hypothesis：结构、状态迁移或正反 Evidence 冲突规则非法为失败；证据覆盖不足但引用可解析为降级；引用版本或知识时点不可比较时不得推断结论。
-- Platform Runner 负责 Check 调度、并发、超时和聚合；Research 只提供领域 Check，不建设 Run/Stage/Attempt 或第二套诊断 Runner。
-
-## 当前验收结论
-
-- 当前验收：Workflow Run [43197749469](https://github.com/Kasign/stock_data_provider/actions/runs/43197749469)，SHA `6cbe2d7763522f8c094a17c37d70e67c993adcf0`。Research 专项 gofmt、go test、race、vet 与单一 Migration v1 的 MariaDB Repository 集成全部通过；根模块 Test 与 go-core Test 通过。
-- 该 Run 还覆盖 Researchflow 专项测试、race、vet、WorkerStore 与 MariaDB 生命周期集成；这些结果仅作为同一 Workflow 的其他 Job 记录，不改变模块归属。News/Market Data Job 在本次 Run 中 skipped，不代表它们验收通过。
-- 历史 Run `42616788237`、`43187007758` 保留为历史证据，不再作为当前 HEAD 的验收依据。
-- 本轮 Research 新增 News Evidence Importer/Authorizer、Data/News/Quant Context 固定样本，以及 Evidence/Claim/Event 的本地引用解析与严格 PIT 校验；最新 CI 覆盖根模块编译与测试。测试替身只在测试中使用，不写入生产业务流程。
-- 本轮代码复核发现并修复 Event.available_at PIT 边界；本次进一步按 RSC-CTR-002 补齐 Event 时间规则版本/派生引用及严格 JSON 字段校验、Claim supersedes_version 及严格 JSON 字段校验、Scenario 闭合条件模型和数值标量类型校验。新改动的 CI 验收状态以对应提交后的 Workflow 为准。
-- Research 已实现 News 公开 Evidence Query Port 的消费 Adapter，但 News 当前所有可用来源均缺少可验证 available_at，故生产导入会 fail-closed；测试替身只用于契约映射和门禁测试，不产生生产证据。Data 证券/行业主数据引用仍缺公开 Port，DATA-CTR-007 仍为 deferred。根 Server Migration 注册和 Notification Relay 由 Server 组合根负责。
+- [研究领域模型与证据体系](./01-研究领域模型与证据体系.md)
+- [Context 与 Evidence 字段语义及授权链补充](./03-Context与Evidence字段语义及授权链补充.md)
+- `schema/`、`golden/`：机器契约和固定样例。
 
 ## 维护规则
 
-1. 先核对现有代码和公共 Platform 能力，已有能力只修缺陷。
-2. 新接口必须对应明确调用场景；新字段必须记录来源和语义。
-3. 不新增无真实调用场景的查询/API，不为 WebUI 提前扩展 DTO。
-4. 阶段状态、诊断标准和测试证据更新在本目录现有文档；不重复创建进度文档。
-5. 契约字段定义以项目级契约目录和生产方 DTO 为准；本模块文档只记录 Research 的消费规则与实现进度。
-
-
-### 初版存储结构收敛（2026-11-12）
-
-- Research 当前为初版且无历史业务数据，Migration 已收敛为单个 version 1，直接创建最终结构。
-- 移除 v2-v5 中为既有表回填 PIT 精度、扩大版本列、升级 Outbox 状态所做的过渡迁移；最终字段类型直接写入初始 DDL。
-- 删除 v1→v5 历史数据升级集成测试，保留最终结构初始化、Repository、并发、PIT 与 Outbox 行为测试。
-- 不创建 legacy/v2 表，不做数据复制或兼容迁移。该变更要求 Research 数据库按初版空库重新初始化；不得对已有非空数据库直接执行。
+1. 总体任务只写入模块总任务规划；当前执行状态只写入当前任务状态文件。
+2. README 只做索引，不复制任务状态表。
+3. 已完成子任务的证据写入任务历史，保留当时的分支、SHA、Run、测试范围和验收边界。
+4. 项目级契约状态以 `doc/contract/` 为准；跨模块生产装配以 Server/Integration 的实际代码和精确 CI 证据为准。
+5. 历史文档中的旧 SHA、旧分支名和旧待办仅作历史记录，不得当作当前状态。
