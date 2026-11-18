@@ -2876,6 +2876,21 @@ func (s *DataService) Quote(ctx context.Context, rawSymbol string) (*model.Quote
 			return nil, false, ctx.Err()
 		}
 		if e != nil {
+			if isUnsupportedDailyBarAdjustmentError(e) {
+				// 能力/复权口径不支持不是 Provider 可用性故障；不增加熔断失败计数。
+				// Abandon 同时释放半开探测，避免静态不支持结果卡住熔断器。
+				s.breaker.Abandon(breakerKey)
+				_, safeError := providerFailureSummary(e)
+				s.logger.Debug("daily-bar provider does not support requested adjustment",
+					"fetch_id", fetchID,
+					"symbol", symbol,
+					"provider", p.Name(),
+					"adjustment", basis,
+					"error", safeError,
+				)
+				errs = append(errs, p.Name()+": "+safeError)
+				continue
+			}
 			recordProviderCallFailure(s.breaker, breakerKey, e)
 			if errors.Is(e, context.DeadlineExceeded) {
 				timeoutFailures++

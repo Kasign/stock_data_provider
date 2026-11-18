@@ -155,9 +155,10 @@ func (b *circuitBreaker) QualityDegraded(key string) {
 	state.totalQualityDegraded++
 }
 
-// Abandon releases a half-open probe when the caller cancels the request. Caller
-// cancellation is not a provider health result and must neither close nor reopen
-// the circuit, but it must not leave probeInFlight stuck forever.
+// Abandon releases a half-open probe when the call is canceled or the result is not
+// a provider-health signal (for example, an unsupported adjustment capability).
+// Such outcomes must neither close nor reopen the circuit, and must not leave
+// probeInFlight stuck forever.
 func (b *circuitBreaker) Abandon(key string) {
 	b.mu.Lock()
 	defer b.mu.Unlock()

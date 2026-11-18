@@ -37,6 +37,42 @@ func (f fakeProvider) FetchDailyBars(_ context.Context, _ string, _ string, end 
 	return f.bars, f.barsErr
 }
 
+func TestDailyBarsUnsupportedAdjustmentDoesNotOpenCircuit(t *testing.T) {
+	cases := []struct {
+		name string
+		err  string
+	}{
+		{name: "sina", err: `Sina historical K-line endpoint only supports verified adjustment basis "none"`},
+		{name: "netease", err: `Netease historical CSV only supports verified adjustment basis "none"`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			p := fakeProvider{name: tc.name, barsErr: errors.New(tc.err)}
+			svc := NewWithCapabilities(
+				[]provider.NamedProvider{p},
+				nil,
+				[]provider.DailyBarProvider{p},
+				nil, nil, 0, 0, 1, 10,
+				ResilienceConfig{Retries: 0, CircuitFailureThreshold: 2, CircuitCooldown: time.Minute},
+				nil,
+			)
+			for attempt := 0; attempt < 2; attempt++ {
+				_, _, _, err := svc.DailyBars(context.Background(), "600519.SH", "2026-11-17", "2026-11-17", 1, model.AdjustmentForward)
+				if err == nil {
+					t.Fatal("unsupported adjustment must not produce daily bars")
+				}
+			}
+			key := tc.name + ":daily_bars"
+			if !svc.breaker.Allow(key) {
+				t.Fatal("unsupported adjustment must not open the provider availability circuit")
+			}
+			if state := svc.breaker.states[key]; state != nil && state.totalFailure != 0 {
+				t.Fatalf("unsupported adjustment counted as provider health failure: %+v", state)
+			}
+		})
+	}
+}
+
 type transientProvider struct {
 	name                   string
 	quote                  *model.Quote
