@@ -445,7 +445,6 @@ func TestReturnSimpleCanRoundToNegativeOneForExtremePositivePrices(t *testing.T)
 	}
 }
 
-
 func TestReturnInsufficientDataSampleCountCountsObservedReturns(t *testing.T) {
 	cases := []struct {
 		name   string
