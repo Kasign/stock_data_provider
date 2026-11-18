@@ -1179,3 +1179,5 @@
 Bocha/Tavily/Brave 的 endpoint 与 API Key 必须成对配置；SearXNG 不需要 API Key。历史 `BOCHA_API_KEYS`、`GO_NEWS_*` 等变量不用于当前 Server `internal/news/config`。根 `.env.example` 已明确区分两套配置，避免旧变量被误认为已接入生产 Worker。
 
 仓库已有手动工作流 `.github/workflows/news-live-probe.yml`：必须显式确认后才发起只读在线请求，输出候选数量和发布时间聚合统计，不持久化候选内容。现已增加 Provider 配置 preflight，避免无 Provider 配置时以 SKIP 形成虚假的 Live Probe 成功证据。该 Probe 是连通性与基础时间字段抽样，不替代来源授权、完整数据质量、持久化和真实 Researchflow Run 验收。
+
+注意：当前工作流文件只存在于 `integration`，仓库默认分支为 `main`；GitHub `workflow_dispatch` 要求工作流文件位于默认分支，因此此版本目前不能直接从 Actions UI 手动触发。本轮不修改 main。真实请求需由用户在本地执行只读 Probe，或在明确批准后为 integration 增加受控 push 触发入口。
