@@ -325,3 +325,56 @@ func TestValidateAppliedVersionsRequiresExactAppliedSet(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateAppliedNamespacesAllowsExplicitExternalNamespace(t *testing.T) {
+	expected := map[string][]platformstorage.Migration{
+		"news": {{Version: 1}, {Version: 2}},
+	}
+	external := map[string]struct{}{"market_data": {}}
+	applied := map[string]map[uint64]string{
+		"news":        {1: "applied", 2: "applied"},
+		"market_data": {1: "applied", 2: "applied", 3: "applied"},
+	}
+	if err := validateAppliedNamespaces(expected, applied, external); err != nil {
+		t.Fatalf("explicit external namespace rejected: %v", err)
+	}
+}
+
+func TestValidateAppliedNamespacesRejectsInvalidExternalNamespace(t *testing.T) {
+	expected := map[string][]platformstorage.Migration{
+		"news": {{Version: 1}},
+	}
+	external := map[string]struct{}{"market_data": {}}
+	tests := []struct {
+		name    string
+		applied map[string]map[uint64]string
+	}{
+		{name: "missing namespace", applied: map[string]map[uint64]string{"news": {1: "applied"}}},
+		{name: "empty history", applied: map[string]map[uint64]string{"news": {1: "applied"}, "market_data": {}}},
+		{name: "failed external version", applied: map[string]map[uint64]string{"news": {1: "applied"}, "market_data": {1: "applied", 2: "failed"}}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := validateAppliedNamespaces(expected, tt.applied, external); err == nil {
+				t.Fatal("expected external namespace validation error")
+			}
+		})
+	}
+}
+
+func TestRegisterExternalNamespaceRejectsDuplicatesAndLateRegistration(t *testing.T) {
+	registry := NewRegistry()
+	if err := registry.RegisterExternalNamespace("market_data"); err != nil {
+		t.Fatalf("RegisterExternalNamespace() error = %v", err)
+	}
+	if err := registry.RegisterExternalNamespace("market_data"); err == nil {
+		t.Fatal("duplicate external namespace must be rejected")
+	}
+	if err := registry.Register("market_data", []platformstorage.Migration{{Version: 1, Description: "init", Statements: []string{"SELECT 1"}}}); err == nil {
+		t.Fatal("same namespace cannot be registered both externally and internally")
+	}
+	_ = registry.snapshotForRun()
+	if err := registry.RegisterExternalNamespace("notification"); err == nil {
+		t.Fatal("late external registration must be rejected")
+	}
+}
