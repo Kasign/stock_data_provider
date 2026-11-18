@@ -72,12 +72,12 @@
 
 ## 3. 下一步解除顺序
 
-1. 项目契约 Owner/Integration 将 GOV-CTR-002/004 1.1.0 同步到共同集成基线。
-2. 核对 FLOW-CTR-004 Envelope 项目登记簿状态与模块 Schema/Golden/Registry 资产。
-3. 推进 FLOW-005：Research Owner Adapter、Run PIT/Deadline 绑定、LLM Tokenizer 和 Server/Worker Context Stage。
-4. 推进 FLOW-008：从真实 Stage Provider 接入 Assessment，并由 Server 注册 Platform Diagnostics.Check。
-5. 继续 FLOW-001 Fault/Context 机器契约和 FLOW-002 其他领域真实 Stage 的定点验收。
-
+1. FLOW-006：先明确 RF-BLOCK-008 中 Composer RiskDecision 的唯一 Owner、来源和聚合语义。
+2. FLOW-006：确认 RunResult 唯一持久化 Owner，再接通 Quant/Research/LLM Owner Facade 与 Server/Worker。
+3. FLOW-005：Research Owner Adapter、Run PIT/Deadline 绑定、LLM Tokenizer 和 Server/Worker Context Stage。
+4. FLOW-002：继续核对真实生产 Template、HardRiskGateRegistry 和 Stage Output Registry；不为缺失 Provider 注册占位项。
+5. FLOW-008：由真实 Stage Provider 提供 Assessment，再由 Server 注册 Platform Diagnostics.Check。
+6. 项目契约 Owner/Integration 核对 GOV-CTR-002/004 1.1.0 和 FLOW-CTR-004 Envelope 登记簿。
 ### RF-BLOCK-007：FLOW-006 Result Composer 尚无生产 Facade 与结果资源持久化
 
 - **现状**：Researchflow 的 Result Composer/Validator 已是纯函数实现；Quant Envelope 的版本/字段错配已修复。当前通过 `NewQuantPayloadRegistry` 精确注册 Quant Envelope 1.0.0 的 trend/risk Payload，并通过 `FromQuantEnvelope` 映射 Quant Typed Envelope。
@@ -101,6 +101,7 @@
 - **处理责任**：Quant Owner + Researchflow Owner；若属于独立 Gate 结果，由项目契约 Owner 确认其归属和公共语义。
 - **解除条件**：冻结唯一 Owner/来源、字段映射、时间规则、Reason 引用规则和 Status 聚合算法；补充 Quant 真实 Payload 到 Composer 的正反向 Contract Test，证明 block triggered/unknown、缺少 block、状态与 Reason 不一致时均 fail-closed。
 - **当前状态**：OPEN；阻断 FLOW-006 风险结论生产接入，不阻断 Quant trend/risk Payload 的独立强类型验证。
+
 ## 4. 状态定义
 
 - `OPEN`：有明确责任人和解除条件，当前未解除。
