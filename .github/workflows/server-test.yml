@@ -85,14 +85,19 @@ jobs:
       - name: Verify Owner Session MariaDB/Redis lifecycle is not skipped
         run: |
           set -euo pipefail
-          output="$(go test ./internal/server/bootstrap -run '^TestOwnerSessionHTTPMariaDBRedisLifecycleIntegration          go test -race ./cmd/analysis-api \
-            ./internal/server/bootstrap \
-            ./internal/server/config \
-            ./internal/server/diagnostics \
-            ./internal/server/health \
-            ./internal/server/migration \
-            ./internal/server/resources \
-            ./internal/server/runtime \
+          output="$(go test ./internal/server/bootstrap -run TestOwnerSessionHTTPMariaDBRedisLifecycleIntegration -count=1 -v)"
+          printf '%s\\n' "$output"
+          grep -Fq -- '--- PASS: TestOwnerSessionHTTPMariaDBRedisLifecycleIntegration' <<< "$output"
+      - name: Run Server race tests
+        run: |
+          go test -race ./cmd/analysis-api \\
+            ./internal/server/bootstrap \\
+            ./internal/server/config \\
+            ./internal/server/diagnostics \\
+            ./internal/server/health \\
+            ./internal/server/migration \\
+            ./internal/server/resources \\
+            ./internal/server/runtime \\
             ./internal/server/relay
       - name: Run real MariaDB and Redis storage integration tests
         run: go test -count=1 ./internal/platform/storage -run 'TestMariaDBStorageIntegration|TestRedisStorageIntegration'
