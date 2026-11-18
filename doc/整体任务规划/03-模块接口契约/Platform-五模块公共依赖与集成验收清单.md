@@ -3,7 +3,7 @@
 - 所属治理任务：GOV-004
 - 状态：依赖边界与首期可复用能力清单；不是 Platform API 永久冻结声明。
 - 规划分支：`feat/design_doc`
-- 实现归属：`feat/platform-foundation`
+- 实现归属：`feat/platform`
 - 核查说明：本轮将 Platform 分支 ref 与既有核查点 `a30ee12130d2a50bc3db672d9d12d1e14040e34f` 比较，当前分支 ahead 2 个提交；变化涉及 Platform 配置文档、dotenv 实现/测试和 security 测试。未发现改变既有 Fault、Diagnostics、HTTP Client、Storage、Task Queue 职责边界的证据。当前不能仅凭比较结果宣称真实部署集成已验收。
 
 ## 1. 目标与原则
