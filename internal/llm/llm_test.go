@@ -409,12 +409,19 @@ func TestModelErrorFromPlatformFaultDoesNotExposeDependencyOrCause(t *testing.T)
 }
 
 func TestModelErrorFromPlatformFaultResponseLimit(t *testing.T) {
-	f := &fault.Fault{
-		Class: fault.ClassValidation, Code: "platform.httpclient.response_too_large",
-		SafeMessage: "response body exceeds configured limit",
-	}
-	if got := ModelErrorFromPlatformFault(f); got == nil || got.Kind != ErrorResourceLimit {
-		t.Fatalf("response size limit must map to resource_limit: %+v", got)
+	for _, code := range []string{
+		"platform.httpclient.response_too_large",
+		"platform.httpclient.stream_body_too_large",
+	} {
+		t.Run(code, func(t *testing.T) {
+			f := &fault.Fault{
+				Class: fault.ClassValidation, Code: code,
+				SafeMessage: "response body exceeds configured limit",
+			}
+			if got := ModelErrorFromPlatformFault(f); got == nil || got.Kind != ErrorResourceLimit {
+				t.Fatalf("response size limit must map to resource_limit: %+v", got)
+			}
+		})
 	}
 }
 
