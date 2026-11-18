@@ -1,8 +1,8 @@
 # Research Context / Evidence 字段语义与授权链补充
 
-- 适用任务：RSC-001～003
+- 适用任务：RSC-001～006
 - 契约范围：RSC-CTR-001～003、DATA-CTR-007、NEWS-CTR-001～003、GOV-CTR-002/006
-- 状态：Research 本地 DTO/Schema/Golden/Fixture 与专项存储验收已完成对应范围；消费方 Contract Test、生产 Owner Adapter、跨模块授权/TOCTOU 和真实数据验收仍按依赖项推进，不得将本地测试等同于生产接入通过
+- 状态（2026-11-18 校准）：Research 本地 DTO/Schema/Golden、领域校验、Repository、News Adapter 和 Outbox 已有实现；News→Research A 组授权/PIT/fail-closed 验收已通过，B 组真实 Evidence 成功写入为 shelved；消费者 Contract Test、Context Owner Authorizer 生产装配和真实数据验收仍按依赖推进。
 - 权威关系：项目级契约目录及生产方 DTO 是公共语义权威；本文件约束 Research 的消费、留存和派生行为
 
 ## 1. 模块职责和依赖边界
@@ -88,7 +88,9 @@ ResearchEvent 是跨来源现实事件，不是 News Article 别名。创建、�
 Research Event 与 Claim 作为 Run 诊断快照时，其 system_as_of 必须不晚于 Researchflow CreateRun 的 runAsOf；Context 的 system_as_of 则必须与 Run cutoff 完全一致。四类诊断统一通过 Application Build*Check 显式接收该参数，不扩展领域 DTO。
 - Event 若提供 available_at，必须满足 available_at <= system_as_of；Research Event 的 Domain 校验与 Evidence 严格 PIT 规则保持一致。由于 Event.system_as_of 还必须 <= Run cutoff，该约束可传递保证 available_at 不晚于 Run cutoff。
 
-当前 `internal/research/event/` 已实现 Event/SourceTime 领域校验、版本追加校验和 MVP 生命周期转换；`internal/research/storage/` 已实现 Event SQL Repository，版本追加与生命周期 Outbox 在同一事务提交，并支持 Outbox 领取、租约、重试、确认和拒绝。Research 仍不查询 News Evidence Repository，也不执行多来源事实归并。非 null 的 occurred_at/published_at/available_at 至少要求存在相同 time_type 的 SourceTime；这只是来源类型存在性检查，不等于已验证规范化规则版本。
+当前 `internal/research/event/` 已实现 Event/SourceTime 领域校验、版本追加校验和 MVP 生命周期转换；Event DTO 含 `time_normalization_rule_version`，仅接受已注册的 V1 规则版本。Validator 要求非 null 的 occurred_at/published_at/available_at 有匹配 SourceTime；同类来源时间一致时规范化值必须等于共识值，来源冲突时规范化值必须为 null。该实现证明规则版本字段与确定性共识校验已存在，不证明真实来源时间精度、来源声明主体或多来源合并/拆分业务样本已经验收。
+
+`internal/research/storage/` 已实现 Event SQL Repository，版本追加与生命周期 Outbox 在同一事务提交，并支持 Outbox 领取、租约、重试、确认和拒绝。Research Event Domain 不直接查询 News Evidence Repository；News→Research Evidence Query/Importer 是独立 Adapter 链路。
 
 生命周期：detected/consolidating/active/materializing/fading/invalidated/closed。只有状态真正迁移并持久化后才按 INT-CTR-001 发布 lifecycle_changed；Evidence 追加、来源补录或描述修订但状态未变，不发布。事件通过 Research 本地事务 Outbox 发布，不直接调用 Notification 内部接口。
 
@@ -96,9 +98,11 @@ Research Event 与 Claim 作为 Run 诊断快照时，其 system_as_of 必须不
 
 2026-11-09 只读核对 Data 分支 `feat/full-go-data-providers-api-switch`，HEAD 为 `7b3aa2a099b29b841caf93b0890985ecbc002cf4`。Market Data 已迁入根 Go Module（`internal/marketdata` 存在，`services/market-data/go.mod` 已不存在）；代码树仍未发现 SecurityRef、IndustryRef、SecurityMaster、IndustryClassification 或独立 GetSecurity/ListIndustries 查询端口。当前 `SecurityTradingStatus` 是具体状态数据，不是稳定证券主数据身份；旧 `internal/analysis/app/ports.go` 泛化 UniverseResolver 也不能视为 Data 所有的稳定实体契约。故 RSC-004 暂不开发 Adapter，也不在 Research 中复制 Security/Industry 模型。待 Data 提供稳定引用、历史版本/知识时间语义和公开 Application Port 后再继续。
 
-## 6.2 RSC-006 Scenario 契约准入检查
+## 6.2 RSC-006 Scenario 契约准入复核（2026-11-18）
 
-当前仍受本文件 `RSC-OPEN-006` 阻断：Scenario 主体字段及 QuantResultRef 元数据已明确，但 `ScenarioCondition.expected_value` 尚无按 condition_type、metric_ref、unit 定义的类型映射或 JSON Schema，ConditionGroup（all/any）也尚无与 `conditions[]` 对应的机器可验证联合结构。Research 不直接调用 Quant；Quant Evaluation 由 Researchflow 获取并完成当前授权复核后传入。契约补齐前不使用 `any`、任意 map 或 JSON RawMessage 代替强类型定义。
+此前关于缺少 expected_value Schema 和 ConditionGroup 联合结构的 `RSC-OPEN-006` 已过期：当前已存在 `doc/整体任务规划/schema/RSC-CTR-002-scenario-1.0.0.schema.json`、对应 Golden，以及 `internal/research/scenario/model.go` 的递归 Condition/ConditionGroup 校验。expected_value 在 Go DTO 中使用通用承载类型，但 Validator 只接受字符串、有限数值、布尔值或非空标量数组；不接受任意对象/嵌套表达式；exists/not_exists 必须省略 expected_value，in/not_in 必须使用非空数组。ConditionType 对 metric_ref/unit 的要求也已有校验。
+
+剩余边界不是再造 Schema，而是 Quant Metric Registry 的具体指标类型/单位/版本映射、QuantEvaluationRef 的真实来源和授权复核，以及 Researchflow 是否存在真实消费场景。Research 不直接调用 Quant。未有真实消费者前，不新增 Scenario Application API、Repository、Migration 或独立 Worker。
 
 ## 6.3 Claim / Hypothesis 领域实现边界
 
@@ -125,7 +129,7 @@ Fixture/Fake Adapter 只能证明 Research 自身模型和消费边界；真实 
 - Research 拥有领域表、SQL、Repository Port 和 Migration 定义；连接池、Ping/Close、Migration 执行与历史校验复用 `internal/platform/storage`。
 - Research Migration namespace 为 `research`，由组合根显式注册和执行；Research 分支不修改服务启动入口或根 Migration 注册表。
 - system_as_of、system_observed_at、available_at 使用固定 30 字符 UTC RFC3339Nano（9 位小数）字符串并以 ascii_bin 排序，保证 PIT 纳秒精度；初版 Migration v1 直接使用 CHAR(30) RFC3339Nano，不做历史精度回填。created_at/updated_at 仍使用 DATETIME(6)，只作审计时间。payload_sha256 只用于完整 DTO 序列化内容的幂等校验。
-- Event lifecycle_changed 的 changed_at 已按项目级 INT-CTR-001 映射决议，在 Event 新版本和 Outbox 同一事务中固化；Outbox 重试复用原值。Server → Notification PublishEvent Relay 接线仍待组合根集成。
+- Event lifecycle_changed 的 changed_at 已按项目级 INT-CTR-001 映射决议，在 Event 新版本和 Outbox 同一事务中固化；Outbox 重试复用原值。项目级 Integration 接入审查已记录 Research 与 Researchflow 两个 Outbox→Notification Relay 已进入 Root Server 组合接入；Research 不承担 Server Relay/Worker 生命周期开发，也不重复实现 Notification 接收端。该接入记录不代表真实外部通知渠道投递通过。
 - Evidence SQL Adapter 的 Append/Get 已实现；RSC-OPEN-007 仅保留授权快照续期历史的独立留档语义待决，不再阻断 Evidence 基础不可变存储。
 
 ## 9. 跨模块边界决议与待决项
@@ -142,29 +146,31 @@ Fixture/Fake Adapter 只能证明 Research 自身模型和消费边界；真实 
 
 因此，该项是边界解释，不再作为 Research → Quant 直接调用的开放阻断；Quant 内容读取仍由 Researchflow 调用 Quant Owner 负责。
 
-### RSC-OPEN-003：Event 规范化时间缺少规则版本字段
+### RSC-DEC-003：Event 时间规则版本字段与 V1 共识校验已实现
 
-Quant-Research DTO 要求非 null 的 occurred_at/published_at/available_at 规范化值可追溯到来源 Evidence 和采用的规则版本，但 ResearchEvent DTO 目前没有 normalization_rule_version 或等价的规则引用字段。当前 Domain 只能检查相应 time_type 的 SourceTime 存在，不能证明归一规则版本。未完成项目级字段/元数据决议前，不将规范化时间完整性标记通过；多来源冲突时保留 source_times 并将规范化值置 null。
+旧 `RSC-OPEN-003` 关于缺少规范化规则版本字段的描述已失效。当前 ResearchEvent DTO 已有 `time_normalization_rule_version`，Domain 仅接受 `TimeNormalizationRuleVersionV1=1.0.0`；Validator 校验来源时间类型、Evidence 引用、同类时间共识和冲突时规范化值必须为空。Application 负责透传该版本，不自动推断来源时间。
 
-### RSC-OPEN-004：Event 合并/拆分的来源关系字段缺失
+尚未完成的是来源方对时间字段的真实语义/精度证据，以及真实多来源事件样本。不得把本地共识校验通过扩大为真实来源时间验收通过。
 
-早期契约草案曾缺少跨 Event 来源字段。该问题已由冻结 RSC-CTR-002 的 `derived_from_refs` 解决：每项引用必须指向精确 Event 版本；Research Repository 在同一追加事务内解析引用并递归拒绝缺失节点、损坏节点和循环图。当前不再使用 `supersedes_event_version`。
+### RSC-DEC-004：Event 派生血缘字段已冻结，真实合并/拆分样本待验收
 
-在项目级契约明确字段、方向、基数和历史查询语义前，Research 只实现单 Event 版本追加与状态转换，不新增本地私有字段，不实现跨 Event 合并/拆分写入。
+旧 `RSC-OPEN-004` 关于缺少跨 Event 来源字段的描述已失效。冻结 RSC-CTR-002 使用 `derived_from_refs` 表达精确 Event 版本血缘；Research Repository 在版本追加事务内解析引用并递归拒绝缺失节点、损坏节点和循环图，不使用 `supersedes_event_version`。
 
-### RSC-OPEN-005：Claim/Hypothesis 版本替代字段缺失
+当前不把字段/存储能力等同于多来源合并/拆分业务已完成。是否增加专门用例或 Application 行为，必须先有真实调用场景、来源证据和明确的版本关系语义；不得为了功能完整而预建接口。
 
-Quant-Research DTO 第 3.4 节定义 claim_version，但没有 `supersedes_version`；第 9.9 节又要求修正声明 supersedes_version。当前实现使用冻结 DTO 的 supersedes_version 字段表达显式修正关系；若提供该字段，必须指向同一 Claim 的前一版本。
+### RSC-DEC-005：Claim/Hypothesis supersedes_version 已落地
+
+旧 `RSC-OPEN-005` 关于版本替代字段缺失的描述已过期。当前 Application DTO 和 Claim Domain 已包含 `supersedes_version`；版本追加时校验其指向同一 Claim 的前一版本。该字段只表达语义结论被替代，不用于普通证据追加。剩余工作是 Scope 引用解析与真实研究样本，不再新增同义字段。
 
 ### RSC-DEC-002：Lifecycle changed_at 的事务时间语义
 
-项目级决议已明确 changed_at 是 Event 状态迁移提交时间，必须随 Event 新版本和 Outbox 在同一领域事务内持久化；Outbox 重试复用持久化值。它不是 occurred_at 或 system_observed_at。当前 Research 已实现该事务和 Outbox 机制，专用 MariaDB 验收已通过；剩余是 Server → Notification Relay 接线。
+项目级决议已明确 changed_at 是 Event 状态迁移提交时间，必须随 Event 新版本和 Outbox 在同一领域事务内持久化；Outbox 重试复用持久化值。它不是 occurred_at 或 system_observed_at。当前 Research 已实现该事务和 Outbox 机制；Root Server 的 Research Relay 已有项目级组合接入记录。真实外部通知渠道投递仍由 Notification Owner 验收，不属于 Research 剩余开发。
 
-### RSC-OPEN-002：Server → Notification Relay 接线待完成
+### RSC-DEC-006：Research → Notification Relay 已进入 Root Server 组合接入
 
-INT-CTR-001 已接受 `lifecycle_changed` Payload 映射：`source_event_ref`、`research_event_ref`、`event_version`、`previous_state`、`current_state`、`reason_code`、`system_as_of`、`changed_at`。`changed_at` 是状态迁移提交时间，不得用 `occurred_at` 或 `system_observed_at` 代替。Research 初版 Migration v1 直接创建事务 Outbox 和领取/租约/重试/确认/拒绝；CreateEvent 首次创建与 UpdateEvent 状态迁移均在同一事务写入 Outbox；Schema/Golden 自动 Contract Test 与专用 MariaDB 验收已通过。当前未完成的是 Server 组合根消费 Research Outbox 并调用 Notification `PublishEvent` 的 Relay 接线；这不是 DTO 映射或 Research Outbox 本身的缺口。
+INT-CTR-001 的 `lifecycle_changed` Payload 映射及 Research 事务 Outbox 已实现；`changed_at` 是状态迁移提交时间，随 Event 新版本和 Outbox 同事务固化，不能用 `occurred_at` 或 `system_observed_at` 代替。项目级 Integration 接入审查记录已将 Research 与 Researchflow 两个 Outbox→Notification Relay 记为已接入；Research 分支不再承担 Server Relay/Worker 生命周期开发，也不重复实现 Notification 接收端。
 
-
+该状态是组合根接入记录，不自动代表真实外部通知渠道投递通过。Research 后续只处理自身 Outbox 数据/契约缺陷；Relay 生命周期、MariaDB 组合验收和渠道投递分别以 Server/Integration/Notification 的权威记录为准。
 
 ### RSC-OPEN-007：Evidence 授权快照续期与存储幂等边界
 
