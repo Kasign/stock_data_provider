@@ -78,14 +78,6 @@
 4. 推进 FLOW-008：从真实 Stage Provider 接入 Assessment，并由 Server 注册 Platform Diagnostics.Check。
 5. 继续 FLOW-001 Fault/Context 机器契约和 FLOW-002 其他领域真实 Stage 的定点验收。
 
-## 4. 状态定义
-
-- `OPEN`：有明确责任人和解除条件，当前未解除。
-- `IN_PROGRESS`：正在按解除条件处理。
-- `RESOLVED`：有对应 SHA、测试或权威契约证据证明解除。
-- 卡点不等于整个模块停止；只暂停依赖该卡点的具体变更。
-
-
 ### RF-BLOCK-007：FLOW-006 Result Composer 尚无生产 Facade 与结果资源持久化
 
 - **现状**：Researchflow 的 Result Composer/Validator 已是纯函数实现；Quant Envelope 的版本/字段错配已修复。当前通过 `NewQuantPayloadRegistry` 精确注册 Quant Envelope 1.0.0 的 trend/risk Payload，并通过 `FromQuantEnvelope` 映射 Quant Typed Envelope。
@@ -96,3 +88,10 @@
 - **处理责任**：Quant Owner（GetResult/授权/Manifest）、Research Owner（Context/Evidence/Claim/授权）、LLM Owner（真实模型调用/Tokenizer）、Researchflow（组合与版本校验）、Server Owner（Worker/Adapter/持久化装配）；完整结果 Owner 需项目架构确认。
 - **解除条件**：确定唯一结果资源 Owner；Server/Worker 通过各 Owner Facade 获取数据；绑定 Run PIT/Deadline；完成真实 Quant/Research/LLM 组合、持久化、ResultRef 读取和 Contract Test。
 - **当前状态**：OPEN；阻断 FLOW-006 生产闭环，不阻断纯函数校验继续完善。
+
+## 4. 状态定义
+
+- `OPEN`：有明确责任人和解除条件，当前未解除。
+- `IN_PROGRESS`：正在按解除条件处理。
+- `RESOLVED`：有对应 SHA、测试或权威契约证据证明解除。
+- 卡点不等于整个模块停止；只暂停依赖该卡点的具体变更。
