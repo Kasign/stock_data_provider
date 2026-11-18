@@ -7,8 +7,8 @@ import (
 	"time"
 
 	newsapp "example.com/stock-analysis-flow/internal/news/app"
-	serverconfig "example.com/stock-analysis-flow/internal/server/config"
 	platformtime "example.com/stock-analysis-flow/internal/platform/time"
+	serverconfig "example.com/stock-analysis-flow/internal/server/config"
 )
 
 type newsRetentionComponent struct {
@@ -48,11 +48,11 @@ func newNewsRetentionComponent(
 	}
 	return &newsRetentionComponent{
 		observationCleaner: observationCleaner,
-		snapshotCleaner: snapshotCleaner,
-		config: cfg,
-		clock: platformtime.SystemClock{},
-		logger: logger,
-		done: make(chan struct{}),
+		snapshotCleaner:    snapshotCleaner,
+		config:             cfg,
+		clock:              platformtime.SystemClock{},
+		logger:             logger,
+		done:               make(chan struct{}),
 	}, nil
 }
 
