@@ -92,7 +92,7 @@ func validateAssessment(value StageAssessment) error {
 	if strings.TrimSpace(value.StageRef) == "" || len(value.StageRef) > 255 ||
 		strings.TrimSpace(value.StageRef) != value.StageRef ||
 		strings.TrimSpace(value.StageCode) == "" || len(value.StageCode) > 128 ||
-		strings.TrimSpace(value.StageCode) != value.StageCode {
+		strings.TrimSpace(value.StageCode) != value.StageCode || !validAttributeCode(value.StageCode) {
 		return errors.New("Researchflow diagnostic stage identity is invalid")
 	}
 	switch value.Kind {

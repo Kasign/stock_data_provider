@@ -81,6 +81,8 @@ func TestNewStageCheckRejectsInvalidOrUnsafeProjection(t *testing.T) {
 	}{
 		{name: "unknown status", edit: func(v *StageAssessment) { v.Status = "unknown" }},
 		{name: "missing stage ref", edit: func(v *StageAssessment) { v.StageRef = " " }},
+		{name: "invalid stage code with spaces", edit: func(v *StageAssessment) { v.StageCode = "market search" }},
+		{name: "invalid uppercase stage code", edit: func(v *StageAssessment) { v.StageCode = "Market" }},
 		{name: "missing safe message", edit: func(v *StageAssessment) { v.SafeMessage = "" }},
 		{name: "missing reason", edit: func(v *StageAssessment) { v.Status = AssessmentFail }},
 		{name: "invalid reason", edit: func(v *StageAssessment) { v.Status = AssessmentFail; v.ReasonCode = "Provider unavailable" }},
