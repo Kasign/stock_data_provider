@@ -27,7 +27,7 @@
 - 总规划新增唯一任务编号和状态：DATA-DOC-001 已完成；DATA-001 为当前唯一执行任务。
 - 将 Provider 静态能力区分为接口存在、配置启用、Bootstrap 注册、真实数据验收四层。
 - 将 Data 领域任务与 MDM 工程迁移拆分；Root Server M3/M4 装配由 Server SRV-009 负责，Data 不重复实现组合根和公共基础设施。
-- 更新 README，移除指向不存在的 `contracts/`、`architecture/`、`acceptance/`、`provider-migration/` 之外错误入口；改为指向实际存在的资料目录。
+- 更新 README：新增规范目录入口；保留已确认存在的 `quality/`、`acceptance/`、`provider-migration/`、`migration/` 专项资料入口；移除未能确认具体内容的 `contracts/` 目录链接，不虚构契约文档路径。
 - 更新字段质量方案、阶段五验收方案、Provider Runtime Acceptance Log 和 MDM 迁移文档的当前分支/任务入口引用。
 - 将 Provider Runtime Acceptance Log 顶部过时的“全部未执行”矩阵修正为按已有样本限定范围的状态摘要。
 - 删除 Runtime Acceptance Log 中重复的安全约束、样本范围和空白执行记录块；保留后续第 8～72 节历史证据。
