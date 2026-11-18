@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:kasign:server:srv-ctr-002:csrf-refresh-response:1.0.0",
+  "title": "CSRF Refresh Response",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "authenticated",
+    "csrf_token"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0.0"
+    },
+    "authenticated": {
+      "const": true
+    },
+    "csrf_token": {
+      "type": "string",
+      "minLength": 43,
+      "maxLength": 43
+    }
+  }
+}

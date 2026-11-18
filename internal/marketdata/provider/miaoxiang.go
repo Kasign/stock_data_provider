@@ -109,7 +109,7 @@ func NewMiaoXiangWithHTTPDoer(apiKey, endpoint string, timeout time.Duration, do
 	return &MiaoXiang{
 		apiKey: apiKey, endpoint: u.String(), client: client, httpDoer: doer,
 		logger: slog.Default(),
-		now:    func() time.Time { return time.Now().UTC() },
+		now:    func() time.Time { return providerNowUTC() },
 		cache:  make(map[string]cacheEntry), cacheTTL: miaoXiangCacheTTL,
 	}, nil
 }
@@ -215,7 +215,7 @@ func (p *MiaoXiang) FetchCapitalFlow(ctx context.Context, rawSymbol string) (*mo
 	rows := tableRows(*target)
 	series := make([]mxFlowObservation, 0, len(rows))
 	seenDates := make(map[string]struct{}, len(rows))
-	loc := time.FixedZone("CST", 8*60*60)
+	loc := providerMarketLocation()
 	today := p.now().In(loc).Format("2006-01-02")
 	for index, row := range rows {
 		date := normalizeMXDate(row["_date"])

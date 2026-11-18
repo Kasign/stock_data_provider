@@ -594,8 +594,5 @@ func FinalizeDeadline(run domain.Run, stages []domain.Stage, attempts []domain.A
 }
 
 func cloneExcludedStages(values []domain.ExcludedStage) []domain.ExcludedStage {
-	if values == nil {
-		return []domain.ExcludedStage{}
-	}
-	return append([]domain.ExcludedStage(nil), values...)
+	return append([]domain.ExcludedStage{}, values...)
 }

@@ -25,6 +25,7 @@ type DeadlineScanResult struct {
 	Scanned   int
 	Expired   int
 	Conflicts int
+	Failures  int
 }
 
 // DeadlineScanner fences expired Runs in bounded batches. Run aggregation and
@@ -51,6 +52,7 @@ func (s *DeadlineScanner) ScanBatch(ctx context.Context) (DeadlineScanResult, er
 	}
 	result := DeadlineScanResult{Scanned: len(candidates)}
 	seen := make(map[string]struct{}, len(candidates))
+	var failures []error
 	for _, candidate := range candidates {
 		if strings.TrimSpace(candidate.RunRef) == "" {
 			return result, errors.New("Researchflow deadline candidate has an empty Run reference")
@@ -61,7 +63,9 @@ func (s *DeadlineScanner) ScanBatch(ctx context.Context) (DeadlineScanResult, er
 		seen[candidate.RunRef] = struct{}{}
 		changed, _, expireErr := s.store.ExpireRunDeadline(ctx, candidate.RunRef, candidate.Version)
 		if expireErr != nil {
-			return result, fmt.Errorf("expire Researchflow Run %q: %w", candidate.RunRef, expireErr)
+			result.Failures++
+			failures = append(failures, fmt.Errorf("expire Researchflow Run %q: %w", candidate.RunRef, expireErr))
+			continue
 		}
 		if changed {
 			result.Expired++
@@ -69,5 +73,5 @@ func (s *DeadlineScanner) ScanBatch(ctx context.Context) (DeadlineScanResult, er
 			result.Conflicts++
 		}
 	}
-	return result, nil
+	return result, errors.Join(failures...)
 }

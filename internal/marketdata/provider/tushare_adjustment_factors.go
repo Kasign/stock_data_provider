@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"sort"
-	"time"
 
 	"example.com/stock-analysis-flow/internal/marketdata/model"
 )
@@ -48,7 +47,7 @@ func (p *Tushare) FetchAdjustmentFactors(ctx context.Context, rawSymbol, startDa
 	if err != nil {
 		return nil, err
 	}
-	fetchedAt := time.Now().UTC()
+	fetchedAt := providerNowUTC()
 	out := make([]model.AdjustmentFactor, 0, len(values))
 	for tradeDate, factor := range values {
 		out = append(out, model.AdjustmentFactor{

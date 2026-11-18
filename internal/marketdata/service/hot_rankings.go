@@ -12,6 +12,7 @@ import (
 	"example.com/stock-analysis-flow/internal/marketdata/model"
 	"example.com/stock-analysis-flow/internal/marketdata/normalize"
 	"example.com/stock-analysis-flow/internal/marketdata/provider"
+	platformtime "example.com/stock-analysis-flow/internal/platform/time"
 )
 
 func (s *DataService) SetHotRankingProviders(providers []provider.HotRankingProvider) {
@@ -23,13 +24,17 @@ func (s *DataService) HotRankingProviders() []provider.HotRankingProvider {
 }
 
 func validateHotRankingSnapshot(rankingType string, snapshot *model.HotRankingSnapshot) error {
+	return validateHotRankingSnapshotAt(rankingType, snapshot, platformtime.SystemClock{}.Now())
+}
+
+func validateHotRankingSnapshotAt(rankingType string, snapshot *model.HotRankingSnapshot, now time.Time) error {
 	if snapshot == nil || snapshot.RankingType != rankingType || snapshot.Total != len(snapshot.Items) {
 		return errors.New("hot-ranking snapshot identity/count mismatch")
 	}
 	if strings.TrimSpace(snapshot.Source) == "" || !hasIdentifiableSourceVersion(snapshot.SourceVersion) || snapshot.FetchedAt.IsZero() {
 		return errors.New("hot-ranking source, source_version or fetched_at is missing")
 	}
-	if snapshot.FetchedAt.After(time.Now().UTC().Add(5 * time.Minute)) {
+	if snapshot.FetchedAt.After(now.UTC().Add(5 * time.Minute)) {
 		return errors.New("hot-ranking fetched_at is in the future")
 	}
 	if snapshot.QualityStatus != model.QualityValid && snapshot.QualityStatus != model.QualityDegraded && snapshot.QualityStatus != model.QualityUnknown {
@@ -39,7 +44,7 @@ func validateHotRankingSnapshot(rankingType string, snapshot *model.HotRankingSn
 		if snapshot.QualityStatus == model.QualityValid {
 			return errors.New("hot-ranking snapshot cannot be valid without provider time")
 		}
-	} else if snapshot.ProviderTime.IsZero() || snapshot.ProviderTime.After(time.Now().Add(5*time.Minute)) {
+	} else if snapshot.ProviderTime.IsZero() || snapshot.ProviderTime.After(now.Add(5*time.Minute)) {
 		return errors.New("hot-ranking provider time is zero or in the future")
 	}
 	seen := make(map[string]struct{}, len(snapshot.Items))
@@ -69,7 +74,7 @@ func validateHotRankingSnapshot(rankingType string, snapshot *model.HotRankingSn
 		if item.Source != snapshot.Source || item.SourceVersion != snapshot.SourceVersion || item.FetchedAt.IsZero() {
 			return errors.New("hot-ranking item source/version/fetched_at mismatch")
 		}
-		if item.FetchedAt.After(time.Now().UTC().Add(5 * time.Minute)) {
+		if item.FetchedAt.After(now.UTC().Add(5 * time.Minute)) {
 			return fmt.Errorf("hot-ranking item %s fetched_at is in the future", item.Symbol)
 		}
 		if item.QualityStatus != model.QualityValid && item.QualityStatus != model.QualityDegraded {
@@ -166,7 +171,7 @@ func (s *DataService) HotStocks(ctx context.Context, rawType string, limit int) 
 	key := fmt.Sprintf("md:v1:hot-ranking:%s:%d", rankingType, limit)
 	if data, ok, cacheErr := s.cache.Get(ctx, key); cacheErr == nil && ok {
 		var cached model.HotRankingSnapshot
-		if json.Unmarshal(data, &cached) == nil && validateHotRankingSnapshot(rankingType, &cached) == nil && time.Since(cached.FetchedAt) >= 0 {
+		if json.Unmarshal(data, &cached) == nil && validateHotRankingSnapshotAt(rankingType, &cached, s.nowUTC()) == nil && !cached.FetchedAt.After(s.nowUTC()) {
 			ttl := 90 * time.Second
 			if cached.QualityStatus == model.QualityDegraded {
 				ttl = 30 * time.Second
@@ -186,7 +191,7 @@ func (s *DataService) HotStocks(ctx context.Context, rawType string, limit int) 
 				// 多 Provider 场景中，unknown 即使带有条目，也必须先让后备源刷新。
 				cacheEligible = fallbackExhausted || len(s.hotRankingProviders) <= 1
 			}
-			if cacheEligible && time.Since(cached.FetchedAt) < ttl {
+			if cacheEligible && cacheEntryWithinTTL(cached.FetchedAt, ttl, s.nowUTC()) {
 				return &cached, true, nil
 			}
 		}
@@ -211,7 +216,7 @@ func (s *DataService) HotStocks(ctx context.Context, rawType string, limit int) 
 			failures = append(failures, p.Name()+": hot-ranking source does not match Provider.Name()")
 			continue
 		}
-		if err := validateHotRankingSnapshot(rankingType, snapshot); err != nil {
+		if err := validateHotRankingSnapshotAt(rankingType, snapshot, s.nowUTC()); err != nil {
 			failures = append(failures, p.Name()+": "+err.Error())
 			continue
 		}

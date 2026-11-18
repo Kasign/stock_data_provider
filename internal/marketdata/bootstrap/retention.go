@@ -4,6 +4,8 @@ import (
 	"context"
 	"log/slog"
 	"time"
+
+	platformtime "example.com/stock-analysis-flow/internal/platform/time"
 )
 
 type quoteRetentionStore interface {
@@ -24,7 +26,7 @@ func runQuoteRetentionWorker(ctx context.Context, store quoteRetentionStore, ret
 		}
 		jobCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		defer cancel()
-		cutoff := time.Now().UTC().Add(-retention)
+		cutoff := platformtime.SystemClock{}.Now().Add(-retention)
 		deleted, err := store.PurgeQuotesBefore(jobCtx, cutoff)
 		if err != nil {
 			logger.Error("quote snapshot retention purge failed", "cutoff", cutoff.Format(time.RFC3339Nano), "error", err)

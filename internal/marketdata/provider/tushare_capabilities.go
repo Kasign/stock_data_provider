@@ -304,7 +304,7 @@ func (p *Tushare) FetchStockBasic(ctx context.Context, rawSymbol string) (*model
 	default:
 		return nil, fmt.Errorf("Tushare stock_basic 返回未知或缺失的市场分类 %q，拒绝默认归类为主板", market)
 	}
-	now := time.Now().UTC()
+	now := providerNowUTC()
 	return &model.StockBasic{
 		Symbol: symbol, Name: name, IPODate: listDate, OutDate: delistDate,
 		SecurityType: securityType, SecurityTypeLabel: securityLabel,
@@ -386,13 +386,13 @@ func (p *Tushare) FetchTradingCalendar(ctx context.Context, startDate, endDate s
 	return &model.TradingCalendarSnapshot{
 		Market: "cn_a_share", StartDate: start.Format("2006-01-02"), EndDate: end.Format("2006-01-02"),
 		TotalDays: totalDays, TradingDays: tradingDays, Items: items,
-		Source: p.Name(), SourceVersion: tushareCalendarVersion, FetchedAt: time.Now().UTC(),
+		Source: p.Name(), SourceVersion: tushareCalendarVersion, FetchedAt: providerNowUTC(),
 		QualityStatus: model.QualityValid,
 	}, nil
 }
 
 func tushareQuarterEnd(year, quarter int) (time.Time, error) {
-	if year < 2007 || year > time.Now().Year() || quarter < 1 || quarter > 4 {
+	if year < 2007 || year > providerNowUTC().Year() || quarter < 1 || quarter > 4 {
 		return time.Time{}, errors.New("Tushare 财报年份或季度无效")
 	}
 	return time.Date(year, time.Month(quarter*3+1), 0, 0, 0, 0, 0, time.UTC), nil
@@ -663,11 +663,8 @@ func (p *Tushare) fetchStatementSection(ctx context.Context, symbol, periodCompa
 		return model.FundamentalSection{}, err
 	}
 
-	loc, locErr := time.LoadLocation("Asia/Shanghai")
-	if locErr != nil {
-		loc = time.FixedZone("CST", 8*60*60)
-	}
-	today := time.Now().In(loc).Format("2006-01-02")
+	loc := providerMarketLocation()
+	today := providerNowUTC().In(loc).Format("2006-01-02")
 	var selected []json.RawMessage
 	selectedPublicationDate := ""
 	for rowIndex, row := range table.rows {
@@ -791,11 +788,8 @@ func (p *Tushare) FetchFundamentals(ctx context.Context, rawSymbol string, year,
 	}
 	var selected []json.RawMessage
 	selectedAnnouncementDate := ""
-	location, err := time.LoadLocation("Asia/Shanghai")
-	if err != nil {
-		location = time.FixedZone("CST", 8*60*60)
-	}
-	today := time.Now().In(location).Format("2006-01-02")
+	location := providerMarketLocation()
+	today := providerNowUTC().In(location).Format("2006-01-02")
 	periodDate := period.Format("2006-01-02")
 	for index, row := range table.rows {
 		code, readErr := table.stringValue(row, "ts_code")
@@ -835,7 +829,7 @@ func (p *Tushare) FetchFundamentals(ctx context.Context, rawSymbol string, year,
 			selectedAnnouncementDate = announcementDate
 		}
 	}
-	now := time.Now().UTC()
+	now := providerNowUTC()
 	sections := make([]model.FundamentalSection, 0, 6)
 	snapshotReasons := []string{}
 	allSectionsComplete := selectedAnnouncementDate != ""
@@ -987,11 +981,8 @@ func tushareCalendarOpen(table *tushareTable, row []json.RawMessage) (bool, erro
 }
 
 func (p *Tushare) latestValuationTradeDate(ctx context.Context) (string, error) {
-	loc, err := time.LoadLocation("Asia/Shanghai")
-	if err != nil {
-		loc = time.FixedZone("CST", 8*60*60)
-	}
-	now := time.Now().In(loc)
+	loc := providerMarketLocation()
+	now := providerNowUTC().In(loc)
 	reference := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc)
 	// daily_basic 通常在收盘后更新；18:00 前只选此前已完成的交易日。
 	if now.Hour() < 18 {
@@ -1077,7 +1068,7 @@ func (p *Tushare) FetchValuations(ctx context.Context, rawSymbols []string) (*mo
 		item model.ValuationItem
 	}
 	bySymbol := make(map[string]values, len(table.rows))
-	now := time.Now().UTC()
+	now := providerNowUTC()
 	snapshotReasons := []string{"provider_exact_snapshot_time_not_exposed", "provider_pcf_ttm_not_supported_by_tushare_daily_basic", "provider_pe_mrq_not_supported_by_tushare_daily_basic"}
 	for index, row := range table.rows {
 		rawSymbol, readErr := table.stringValue(row, "ts_code")
@@ -1238,11 +1229,8 @@ func (p *Tushare) FetchLimitPool(ctx context.Context, rawPoolType, rawTradeDate 
 	}
 	tradeDate := strings.TrimSpace(rawTradeDate)
 	if tradeDate == "" {
-		loc, err := time.LoadLocation("Asia/Shanghai")
-		if err != nil {
-			loc = time.FixedZone("CST", 8*60*60)
-		}
-		tradeDate = time.Now().In(loc).Format("2006-01-02")
+		loc := providerMarketLocation()
+		tradeDate = providerNowUTC().In(loc).Format("2006-01-02")
 	}
 	compactDate, err := tushareCompactDate(tradeDate)
 	if err != nil {
@@ -1250,11 +1238,8 @@ func (p *Tushare) FetchLimitPool(ctx context.Context, rawPoolType, rawTradeDate 
 	}
 	parsedDate, _ := time.Parse("20060102", compactDate)
 	tradeDate = parsedDate.Format("2006-01-02")
-	loc, locErr := time.LoadLocation("Asia/Shanghai")
-	if locErr != nil {
-		loc = time.FixedZone("CST", 8*60*60)
-	}
-	if tradeDate > time.Now().In(loc).Format("2006-01-02") {
+	loc := providerMarketLocation()
+	if tradeDate > providerNowUTC().In(loc).Format("2006-01-02") {
 		return nil, errors.New("Tushare 涨跌停池交易日期不能晚于中国市场当前日期")
 	}
 	table, err := p.fetchCapabilityTable(ctx, "limit_list_d", map[string]string{
@@ -1263,7 +1248,7 @@ func (p *Tushare) FetchLimitPool(ctx context.Context, rawPoolType, rawTradeDate 
 	if err != nil {
 		return nil, err
 	}
-	now := time.Now().UTC()
+	now := providerNowUTC()
 	allItems := make([]model.LimitPoolItem, 0, len(table.rows))
 	reasons := []string{"provider_amount_units_not_normalized", "provider_exact_snapshot_time_not_exposed"}
 	totalIsLowerBound := len(table.rows) >= 2500
@@ -1424,11 +1409,8 @@ func isTushareConvertibleBondCode(raw string) bool {
 func (p *Tushare) FetchDragonTiger(ctx context.Context, rawTradeDate string, page, pageSize int) (*model.DragonTigerSnapshot, error) {
 	tradeDate := strings.TrimSpace(rawTradeDate)
 	if tradeDate == "" {
-		loc, err := time.LoadLocation("Asia/Shanghai")
-		if err != nil {
-			loc = time.FixedZone("CST", 8*60*60)
-		}
-		tradeDate = time.Now().In(loc).Format("2006-01-02")
+		loc := providerMarketLocation()
+		tradeDate = providerNowUTC().In(loc).Format("2006-01-02")
 	}
 	compactDate, err := tushareCompactDate(tradeDate)
 	if err != nil {
@@ -1436,11 +1418,8 @@ func (p *Tushare) FetchDragonTiger(ctx context.Context, rawTradeDate string, pag
 	}
 	parsedDate, _ := time.Parse("20060102", compactDate)
 	tradeDate = parsedDate.Format("2006-01-02")
-	loc, locErr := time.LoadLocation("Asia/Shanghai")
-	if locErr != nil {
-		loc = time.FixedZone("CST", 8*60*60)
-	}
-	if tradeDate > time.Now().In(loc).Format("2006-01-02") {
+	loc := providerMarketLocation()
+	if tradeDate > providerNowUTC().In(loc).Format("2006-01-02") {
 		return nil, errors.New("Tushare 龙虎榜交易日期不能晚于中国市场当前日期")
 	}
 	if page < 1 || page > 1000 {
@@ -1454,7 +1433,7 @@ func (p *Tushare) FetchDragonTiger(ctx context.Context, rawTradeDate string, pag
 	if err != nil {
 		return nil, err
 	}
-	now := time.Now().UTC()
+	now := providerNowUTC()
 	total := len(table.rows)
 	totalIsLowerBound := total >= 10000
 	pages := 0
@@ -1593,10 +1572,8 @@ func parseTusharePublishedTime(raw string) *time.Time {
 	if value == "" {
 		return nil
 	}
-	loc, err := time.LoadLocation("Asia/Shanghai")
-	if err != nil {
-		loc = time.FixedZone("CST", 8*60*60)
-	}
+	loc := providerMarketLocation()
+	var err error
 	for _, layout := range []string{time.RFC3339Nano, "2006-01-02 15:04:05", "2006/01/02 15:04:05", "2006-01-02 15:04"} {
 		var parsed time.Time
 		if layout == time.RFC3339Nano {
@@ -1648,7 +1625,7 @@ func (p *Tushare) FetchStockAnnouncements(ctx context.Context, rawSymbol, rawSta
 	if err != nil {
 		return nil, err
 	}
-	now := time.Now().UTC()
+	now := providerNowUTC()
 	allItems := make([]model.StockAnnouncement, 0, len(table.rows))
 	seen := make(map[string]struct{}, len(table.rows))
 	snapshotReasons := []string{}
@@ -1802,7 +1779,7 @@ func (p *Tushare) FetchIndexCatalog(ctx context.Context, rawTag string) (*model.
 	if err != nil {
 		return nil, err
 	}
-	now := time.Now().UTC()
+	now := providerNowUTC()
 	items := make([]model.IndexCatalogItem, 0, len(table.rows))
 	seen := make(map[string]struct{}, len(table.rows))
 	reasons := []string{"provider_index_catalog_has_no_precise_snapshot_timestamp"}
@@ -1874,11 +1851,8 @@ func (p *Tushare) fetchIndexConstituents(ctx context.Context, rawIndexSymbol, ra
 		return nil, err
 	}
 
-	loc, err := time.LoadLocation("Asia/Shanghai")
-	if err != nil {
-		loc = time.FixedZone("CST", 8*60*60)
-	}
-	nowLocal := time.Now().In(loc)
+	loc := providerMarketLocation()
+	nowLocal := providerNowUTC().In(loc)
 	today := nowLocal.Format("2006-01-02")
 	requestedAsOfDate := strings.TrimSpace(rawAsOfDate)
 	anchorDate := nowLocal
@@ -1988,7 +1962,7 @@ func (p *Tushare) fetchIndexConstituents(ctx context.Context, rawIndexSymbol, ra
 		}
 	}
 
-	now := time.Now().UTC()
+	now := providerNowUTC()
 	if !foundMonth || latestDate == "" || len(latest) == 0 {
 		noSnapshotReason := "provider_has_no_constituent_snapshot_in_recent_four_months"
 		if requestedAsOfDate != "" {
@@ -2102,11 +2076,8 @@ func (p *Tushare) FetchIndexDailyBars(ctx context.Context, rawIndexSymbol, rawSt
 	if start.After(end) || end.After(start.AddDate(10, 0, 0)) {
 		return nil, errors.New("Tushare 指数日 K 日期范围无效或超过 10 年")
 	}
-	loc, locErr := time.LoadLocation("Asia/Shanghai")
-	if locErr != nil {
-		loc = time.FixedZone("CST", 8*60*60)
-	}
-	if end.Format("2006-01-02") > time.Now().In(loc).Format("2006-01-02") {
+	loc := providerMarketLocation()
+	if end.Format("2006-01-02") > providerNowUTC().In(loc).Format("2006-01-02") {
 		return nil, errors.New("Tushare 指数日 K end_date 不能晚于中国市场当前日期")
 	}
 	table, err := p.fetchCapabilityTable(ctx, "index_daily", map[string]string{
@@ -2115,7 +2086,7 @@ func (p *Tushare) FetchIndexDailyBars(ctx context.Context, rawIndexSymbol, rawSt
 	if err != nil {
 		return nil, err
 	}
-	now := time.Now().UTC()
+	now := providerNowUTC()
 	items := make([]model.IndexDailyBar, 0, len(table.rows))
 	seen := make(map[string]struct{}, len(table.rows))
 	snapshotReasons := []string{}

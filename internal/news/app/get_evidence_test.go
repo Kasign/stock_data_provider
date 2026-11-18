@@ -38,6 +38,7 @@ func (s getEvidencePITRepositoryStub) GetEvidenceContentWithCurrentAuthorization
 	_ domain.NewsItemVersion,
 	_ time.Time,
 	authorize func(context.Context, domain.CurrentAuthorizationPolicySet, domain.Observation) error,
+	_ ...*time.Time,
 ) (domain.ContentLayers, domain.Observation, error) {
 	policies := make([]domain.CurrentAuthorizationPolicy, 0, len(binding.PolicySnapshot.Policies))
 	for _, item := range binding.PolicySnapshot.Policies {
@@ -136,7 +137,7 @@ func validGetEvidenceFixture(now time.Time) (GetEvidenceRequest, EvidencePITReco
 		EndpointRef:           domain.NullableOpaqueRef{Present: true},
 		SourceRef:             observation.SourceID,
 		AuthorizationRef: domain.NewsAuthorizationRef{
-			AuthorizationRef: "authorization-evidence-1", PolicyOwner: "news",
+			AuthorizationRef: "authorization-evidence-1", PolicyOwner: "news", SchemaVersion: "1.0.0",
 			PolicyVersion: "snapshot-evidence-v1", Decision: domain.AuthorizationDecisionAllowed,
 			PurposeCode: string(request.PurposeCode), ContentLevel: domain.AuthorizationContentSummary,
 			SubjectRef: request.CallerRef, ResourceRef: resourceRef,
@@ -145,7 +146,7 @@ func validGetEvidenceFixture(now time.Time) (GetEvidenceRequest, EvidencePITReco
 			Conditions: []string{}, DecisionFingerprint: strings.Repeat("a", 64),
 		},
 		PolicySnapshot: domain.AuthorizationPolicySnapshot{
-			SnapshotRef: "snapshot-evidence-v1",
+			SnapshotRef: "snapshot-evidence-v1", SchemaVersion: "1.0.0",
 			Policies: []domain.AuthorizationPolicyVersion{{
 				PolicyType: "source", PolicyRef: observation.SourceID, PolicyVersion: observation.SourcePolicyVersionID,
 			}},
@@ -441,5 +442,45 @@ func TestGetEvidenceSuppressesCandidateAtExactRetentionDeadline(t *testing.T) {
 	}
 	if authorizer.calls != 1 || result.ContentExcerpt == nil || *result.ContentExcerpt != "source summary" {
 		t.Fatalf("authorized version content unexpectedly unavailable: result=%+v calls=%d", result, authorizer.calls)
+	}
+}
+
+func TestGetEvidenceReturnsOnlyVerifiedSecondPrecisionAvailableAt(t *testing.T) {
+	now := time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)
+	request, pit, binding := validGetEvidenceFixture(now)
+	candidate := pit.Observation.ObservedAt.Add(-time.Second).Truncate(time.Second)
+	pit.AvailableAt = &candidate
+	authorizer := &getEvidenceAuthorizerStub{}
+	usecase, err := NewGetEvidence(
+		getEvidencePITRepositoryStub{record: pit},
+		getEvidenceAuthorizationSnapshotStub{binding: binding},
+		authorizer,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	usecase.now = func() time.Time { return now }
+	result, err := usecase.Execute(context.Background(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.AvailableAt == nil || !result.AvailableAt.Equal(candidate) {
+		t.Fatalf("verified available_at was not returned: %+v", result)
+	}
+
+	fractional := candidate.Add(250 * time.Millisecond)
+	pit.AvailableAt = &fractional
+	authorizer = &getEvidenceAuthorizerStub{}
+	usecase, err = NewGetEvidence(
+		getEvidencePITRepositoryStub{record: pit},
+		getEvidenceAuthorizationSnapshotStub{binding: binding},
+		authorizer,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	usecase.now = func() time.Time { return now }
+	if _, err := usecase.Execute(context.Background(), request); !errors.Is(err, ErrInvalidEvidenceQuery) || authorizer.calls != 0 {
+		t.Fatalf("subsecond available_at was not rejected before authorization: err=%v calls=%d", err, authorizer.calls)
 	}
 }
