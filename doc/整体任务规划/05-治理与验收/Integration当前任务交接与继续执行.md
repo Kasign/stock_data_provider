@@ -1381,4 +1381,4 @@ GetRun 与 CancelRun 的持久化创建者授权已在 Application/Storage 层�
 - 本次 3 条候选均有 `published_date` 原始值，但现有 `domain.parseCandidateTimestamp` 仅接受 RFC3339Nano、RFC1123Z、RFC822Z，3 条均未解析。当前不能把该字段当作可信发布时间，也不能据此生成 `available_at`。
 - 已在 `internal/news/adapters/provider/live_probe_test.go` 增加脱敏时间格式签名统计：仅将数字映射为 `9`、字母映射为 `A`，保留分隔符并统计数量；不输出原始时间、标题、URL、摘要或响应正文。新增单元测试验证签名不泄漏时间值。待本次 CI 与下一次 Live Probe 通过后，依据实际签名决定是否扩展解析格式。
 - Bocha 与 Brave 网站在用户当前网络环境不可访问；这只记录为网站入口访问问题，不能推断其 API Endpoint 不可用。当前没有这两个 Provider 的有效配置和真实 API 探测证据，因此不将其列为本轮阻塞；继续以已通过真实请求的 Tavily 推进。不得为绕过网站访问限制而猜测 API 地址或配置未验证的代理。
-- 下一步：验证本次脱敏诊断代码的 gofmt/单元测试/Integration CI；再次执行 Tavily Live Probe 获取时间格式签名；只有在签名与可信格式契约明确后，才增加对应解析规则及固定测试。`available_at` 继续严格依赖来源授权与可用性证据，不能由 `published_date` 自动填充。
+- 本次文档提交显式触发下一次 Tavily Live Probe，以同时验证脱敏格式签名与 Provider 真实响应；常规 Integration CI 也会对当前代码执行 gofmt/单元测试。只有在签名与可信格式契约明确后，才增加对应解析规则及固定测试。`available_at` 继续严格依赖来源授权与可用性证据，不能由 `published_date` 自动填充。
