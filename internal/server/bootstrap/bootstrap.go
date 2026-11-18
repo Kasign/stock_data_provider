@@ -542,5 +542,10 @@ func newMigrationRegistry() (*servermigration.Registry, error) {
 			return nil, fmt.Errorf("注册 %s Migration: %w", registration.namespace, err)
 		}
 	}
+	// Data 仍通过模块公开 MigrationRunner 自行调用 Platform Runner；
+	// 在 Data 暴露静态 Migration 定义前，显式登记其外部命名空间，避免被误判为未知 Schema。
+	if err := registry.RegisterExternalNamespace("market_data"); err != nil {
+		return nil, fmt.Errorf("登记外部 Data Migration 命名空间: %w", err)
+	}
 	return registry, nil
 }
