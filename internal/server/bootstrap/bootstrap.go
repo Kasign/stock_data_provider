@@ -220,8 +220,18 @@ func Run(ctx context.Context) (runErr error) {
 	if historyLimit < 21 {
 		historyLimit = 21
 	}
+	indexSymbols := []string{"000001.SH"}
+	if raw := strings.TrimSpace(os.Getenv("MARKET_DATA_INDEX_SYMBOLS")); raw != "" {
+		indexSymbols = make([]string, 0)
+		for _, symbol := range strings.Split(raw, ",") {
+			if symbol = strings.TrimSpace(symbol); symbol != "" {
+				indexSymbols = append(indexSymbols, symbol)
+			}
+		}
+	}
 	analysisCollector, err := servermarketdata.NewAnalysisCollector(
-		marketDataModule.Application(), historyLimit, marketdataapp.AdjustmentBasis(marketDataCfg.Adjustment),
+		marketDataModule.Application(), historyLimit,
+		marketdataapp.AdjustmentBasis(marketDataCfg.Adjustment), indexSymbols,
 	)
 	if err != nil {
 		return fmt.Errorf("创建 Data Application Port 适配器失败: %w", err)
