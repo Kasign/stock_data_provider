@@ -24,8 +24,9 @@ Platform `Observation.Validate` 负责结构、长度和控制字符校验，并
 2. Attributes 仅接受显式 allowlist key `source`，且 value 必须是稳定小写代码。
 3. 拒绝 Adapter 保留字段，防止调用方覆盖 assessment_status、diagnostic_kind、stage_ref、stage_code。
 4. 新增 +08:00 CheckedAt 输出 Z、未知/敏感属性、保留字段和自由文本属性拒绝测试。
+5. 追加 StageCode 稳定标识校验，拒绝含空格或大写字符的 StageCode；新增对应负向测试。
 
-代码验收 SHA：`9ec3ebdbdf79cf548f98c438019b5aff2e2dc929`；Actions Run 44296700307 中 Researchflow module gofmt/tests/race/vet Job 已 success。
+代码验收 SHA：`43188259c4b96579ab587742e063d0f254c4009d`；Actions Run 44299178336 中 Researchflow module gofmt/tests/race/vet、根模块 Test、WorkerStore 和相关 MariaDB 集成 Job 均 success。
 
 ## 未完成边界
 
@@ -47,3 +48,8 @@ Platform `Observation.Validate` 负责结构、长度和控制字符校验，并
 - 真实 StageAssessment 生产者：待各实际 Stage Provider 接入。
 - Server Diagnostics 注册与聚合：待真实 Checks 装配。
 - 独立 DiagnosticRecord：当前无明确业务用例，不建设。
+
+## 当前结论
+
+- Diagnostics Adapter 的模块内映射、UTC、安全属性和 StageCode 校验已完成并通过 SHA `43188259c4b96579ab587742e063d0f254c4009d` 的 CI。
+- 真实 StageAssessment 生产者和 Server Checks 注册仍未接入；该部分由真实领域 Stage Provider 与 Server 组合根负责，不在 Researchflow 内制造模拟生产诊断。

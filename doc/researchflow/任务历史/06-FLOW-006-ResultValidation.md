@@ -38,3 +38,10 @@ Result Composer/Validator 的纯函数层已实现；本轮发现并修复了 Re
 - Run SystemAsOf/Deadline 必须端到端继承；不得重新生成 PIT 或 Deadline。
 - `ComposedResearchResult` 尚无持久化 Store/ResultRef。Run `ResultSummaryRef` 是执行摘要，不是完整研究报告；完整结果唯一持久化 Owner 尚未确定。
 - 真实数据、真实授权、真实模型调用和跨模块 Contract Test 未完成。
+
+## 2026-11-18 RiskDecision 契约差异 Review
+
+- Quant `risk.Decision` 与 Researchflow `resultvalidation.RiskDecision` 不是同一结构：Researchflow 增加了 Quant Schema 不包含的 rule_ref、observed_value、expected_range、remediation_code。
+- Quant `Decision.Validate` 要求唯一 Reason Code、EvaluatedAt 不早于 SystemAsOf、Status 与 `AggregateStatus(Reasons)` 一致；Researchflow 当前仅检查 pass 不得与 block triggered/unknown 冲突，未实现相同聚合语义。
+- Composer 将 Researchflow RiskDecision 作为独立输入，当前没有从 Quant `risk.Decision` 到该类型的正式映射。
+- 在确认该对象属于 Quant 投影还是独立编排层 HardRiskGate 结果之前，不做生产映射、不擅自修改硬风险聚合规则。卡点见 `doc/整体任务规划/Researchflow模块卡点.md` 的 RF-BLOCK-008。
