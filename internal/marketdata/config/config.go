@@ -351,7 +351,7 @@ func load(requireHTTPAPIKey, allowRootInjectedStorage bool) (Config, error) {
 	if cfg.MXEnabled && !validMiaoXiangKey(cfg.MXAPIKey) {
 		return cfg, errors.New("MARKET_DATA_MX_ENABLED=true requires a non-placeholder MARKET_DATA_MX_API_KEY or MX_APIKEY")
 	}
-	if !cfg.AllowNoStorage {
+	if !cfg.AllowNoStorage && !allowRootInjectedStorage {
 		if cfg.MySQLDSN == "" {
 			return cfg, errors.New("MARKET_DATA_DB_HOST, MARKET_DATA_DB_USER and MARKET_DATA_DB_NAME are required; the legacy MARKET_DATA_MYSQL_DSN is temporarily supported; set MARKET_DATA_ALLOW_NO_STORAGE=true only for local no-storage smoke tests")
 		}
