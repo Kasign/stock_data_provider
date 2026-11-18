@@ -165,7 +165,8 @@ func newOwnerHTTPTestHandler(t *testing.T, sessions *ownerHTTPTestSessions, cred
 	}
 	legacy := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })
 	health := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
-	handler, err := newHTTPHandler(bearer, health, legacy, composition)
+	marketData := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })
+	handler, err := newHTTPHandler(bearer, health, legacy, marketData, composition)
 	if err != nil {
 		t.Fatal(err)
 	}
