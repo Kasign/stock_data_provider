@@ -2236,7 +2236,6 @@ func TestAvailabilityEvidenceWriteRequiresCurrentFieldPolicyMariaDBIntegration(t
 	}
 }
 
-
 func TestResolveCurrentSourceCollectionPoliciesMariaDBIntegration(t *testing.T) {
 	dsn := os.Getenv("NEWS_MARIADB_TEST_DSN")
 	if dsn == "" {
@@ -2277,15 +2276,17 @@ func TestResolveCurrentSourceCollectionPoliciesMariaDBIntegration(t *testing.T) 
 	}()
 	makeSourcePolicy := func(status domain.AuthorizationStatus) []byte {
 		payload, marshalErr := json.Marshal(domain.SourcePolicy{
-			Status: status,
+			Status:               status,
 			AllowedAccessMethods: []domain.AccessMethod{domain.AccessRSS},
-			AllowedPurposes: []domain.Purpose{domain.PurposeInternalPersonalResearch},
-			AllowedContentKinds: []domain.ContentKind{domain.ContentFullText},
-			AllowedStorageModes: []domain.StorageMode{domain.StorageTransient},
-			MaxRetention: time.Hour,
-			EvidenceRef: "integration-source-license",
+			AllowedPurposes:      []domain.Purpose{domain.PurposeInternalPersonalResearch},
+			AllowedContentKinds:  []domain.ContentKind{domain.ContentFullText},
+			AllowedStorageModes:  []domain.StorageMode{domain.StorageTransient},
+			MaxRetention:         time.Hour,
+			EvidenceRef:          "integration-source-license",
 		})
-		if marshalErr != nil { t.Fatal(marshalErr) }
+		if marshalErr != nil {
+			t.Fatal(marshalErr)
+		}
 		return payload
 	}
 	if err := publisher.Execute(ctx, domain.NewsPolicyTypeSource, sourceRef, sourceV1, makeSourcePolicy(domain.AuthorizationApproved)); err != nil {
@@ -2306,7 +2307,9 @@ func TestResolveCurrentSourceCollectionPoliciesMariaDBIntegration(t *testing.T) 
 		t.Fatalf("resolve current revoked source policy: source=%+v endpoint=%+v err=%v", source, endpoint, err)
 	}
 	endpointPayload, err := json.Marshal(domain.EndpointPolicy{Status: domain.AuthorizationRevoked})
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := publisher.Execute(ctx, domain.NewsPolicyTypeEndpoint, endpointRef, endpointV1, endpointPayload); err != nil {
 		t.Fatalf("publish endpoint policy: %v", err)
 	}

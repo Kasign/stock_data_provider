@@ -26,11 +26,11 @@ func (s sourceCatalogStub) LookupEndpoint(context.Context, string, string) (Sour
 }
 
 type sourceCollectionPolicyResolverStub struct {
-	source   domain.SourcePolicy
-	endpoint *domain.EndpointPolicy
-	err      error
+	source                                                 domain.SourcePolicy
+	endpoint                                               *domain.EndpointPolicy
+	err                                                    error
 	sourceRef, sourceVersion, endpointRef, endpointVersion string
-	calls int
+	calls                                                  int
 }
 
 func (s *sourceCollectionPolicyResolverStub) ResolveCurrentSourceCollectionPolicies(

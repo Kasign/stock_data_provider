@@ -109,10 +109,10 @@ func (e *SourceCollectionError) Error() string {
 // CollectSource 仅采集已登记且授权通过的 RSS/Atom Endpoint。
 // 本用例只在当前请求内处理内容，不写入 DB/Redis，不下载附件或 Atom 外部正文。
 type CollectSource struct {
-	catalog          SourceCatalog
-	transport        SourceTransport
-	policyResolver   CurrentSourceCollectionPolicyResolver
-	now              func() time.Time
+	catalog        SourceCatalog
+	transport      SourceTransport
+	policyResolver CurrentSourceCollectionPolicyResolver
+	now            func() time.Time
 }
 
 func NewCollectSource(catalog SourceCatalog, transport SourceTransport) *CollectSource {
