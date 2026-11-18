@@ -291,9 +291,13 @@ func TestToResearchCreateContextCommandRejectsInvalidUTF8SnapshotAndMetadata(t *
 		{name: "research question", edit: func(v *ResearchContextSnapshot, _ map[string]SectionMetadata) { v.ResearchQuestion = invalid }},
 		{name: "scope", edit: func(v *ResearchContextSnapshot, _ map[string]SectionMetadata) { v.Scope = invalid }},
 		{name: "subject ref", edit: func(v *ResearchContextSnapshot, _ map[string]SectionMetadata) { v.SubjectRefs = []string{invalid} }},
-		{name: "reason code", edit: func(v *ResearchContextSnapshot, _ map[string]SectionMetadata) { v.QualitySummary.ReasonCodes = []string{invalid} }},
+		{name: "reason code", edit: func(v *ResearchContextSnapshot, _ map[string]SectionMetadata) {
+			v.QualitySummary.ReasonCodes = []string{invalid}
+		}},
 		{name: "builder version", edit: func(v *ResearchContextSnapshot, _ map[string]SectionMetadata) { v.BuilderVersion = invalid }},
-		{name: "section version", edit: func(_ *ResearchContextSnapshot, m map[string]SectionMetadata) { m["market"] = SectionMetadata{Version: invalid, QualityStatus: "valid", AssembledAt: now} }},
+		{name: "section version", edit: func(_ *ResearchContextSnapshot, m map[string]SectionMetadata) {
+			m["market"] = SectionMetadata{Version: invalid, QualityStatus: "valid", AssembledAt: now}
+		}},
 	}
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
