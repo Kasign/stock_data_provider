@@ -21,7 +21,7 @@ on:
       - 'docker-compose.yml'
       - 'scripts/**'
   push:
-    branches: [main, feat/data, feat/news, feat/notification, feat/quant, feat/research, feat/researchflow]
+    branches: [main, feat/data, feat/news, feat/llm, feat/notification, feat/quant, feat/research, feat/researchflow]
     paths:
       - 'go.mod'
       - 'go.sum'
@@ -87,7 +87,7 @@ jobs:
           git push origin HEAD:refs/heads/feat/data
           echo "changed=true" >> "$GITHUB_OUTPUT"
       - name: Trigger validation for migrated commit
-        if: ${{ steps.commit.outputs.changed == 'true' || github.event_name == 'push' }}
+        if: ${{ steps.commit.outputs.changed == 'true' }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh workflow run go-test.yml --ref feat/data

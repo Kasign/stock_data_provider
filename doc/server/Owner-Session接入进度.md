@@ -1,5 +1,7 @@
 # Owner Session 接入进度
 
+> **状态口径（2026-11-18）：** 本文件保留 Owner Session 专项实现和历史验收证据；当前 Server 总体状态以 [当前任务状态和进度](./当前任务状态和进度.md) 为准。Run 43869239700 是历史 Integration SHA 的验收，不代表当前 Server HEAD 或目标生产环境部署已通过。WebUI Checks/Browser Smoke 已在 Web 代码验收基线上通过；Owner Session 目标环境部署、安全运维和 Cookie/Origin/CSRF 实测仍待完成。
+
 ## 当前阶段：WebUI 已接入，目标环境部署验收待完成
 
 当前文档核对基线：`integration` @ `446cc1a65c307726a1171e1341d529452ea09f55`。下方早期内容保留为历史记录；以文末最新状态校正为准。
