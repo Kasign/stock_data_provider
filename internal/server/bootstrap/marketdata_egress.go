@@ -30,8 +30,8 @@ func newMarketDataDependencies(shared *resources.Resources, cfg marketdataconfig
 	}
 	deps := marketdatabootstrap.Dependencies{
 		RequireEgressDependencies: true,
-		Logger:                   slog.Default(),
-		EastmoneyHTTPDoers:       make(map[string]provider.HTTPDoer),
+		Logger:                    slog.Default(),
+		EastmoneyHTTPDoers:        make(map[string]provider.HTTPDoer),
 	}
 
 	bind := func(raw, dependency string) (*platformhttpclient.BoundDoer, error) {
