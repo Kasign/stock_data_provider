@@ -84,11 +84,11 @@ MiaoXiang 的 ChipDistribution/CapitalFlow 由独立 `MARKET_DATA_MX_ENABLED` �
 | DirectionalSectorRankings | Eastmoney、TickFlow | 复用已注册的 `SectorRankingProvider` 列表，调用时按需断言 | Eastmoney 默认启用；TickFlow 的 SectorRankings 默认关闭 |
 | SecurityTradingStatus | Tushare | 显式 `security_trading_status` 开关；同时要求该 Provider 的 `stock_basic` 和 `trading_calendar` 开关开启 | 无默认来源；Tushare 默认关闭 |
 | MarketCapitalFlow | Tushare | 显式 `market_capital_flow` 开关和独立能力切片 | 无默认来源；Tushare 默认关闭 |
-| PriceLimitEvents | 当前未发现 Provider 实现 | Bootstrap 会扫描已启用 Provider 并收集 `PriceLimitEventProvider`，但当前扫描结果为空 | 未接入 |
+| PriceLimitEvents | 当前没有 Provider 实现 | Bootstrap 会扫描已启用 Provider 并收集 `PriceLimitEventProvider`，但当前扫描结果为空；HTTP `price_limit_rule` 已有真实消费者，缺少事件源时返回 unknown 并失败关闭 | 能力缺口 |
 
 **StockUniverse 不是孤立接口。** `internal/marketdata/service/market_stocks.go` 中 `DataService.StockUniverse` 遍历已注册的 StockSearchProvider，动态识别 StockUniverseProvider；`MarketStocks` 调用该方法获取全量证券目录，再做分页及行情/均线增强。因此无需新增独立配置项或重复注册机制。HTTP SourceStatus 目前只反映 StockSearch 能力，不单独暴露 StockUniverse 能力位；这不改变 Service 内部的真实消费路径。
 
-**PriceLimitEventProvider 目前只有接口与 Service 装配槽位。** Provider 目录中未发现 `FetchPriceLimitEventEvidence` 的具体实现，Bootstrap 自动收集不会凭空产生可用 Provider；不得将其列为已接入或真实可用能力。
+**PriceLimitEventProvider 是已存在调用场景但缺少数据源实现的能力缺口。** Provider 目录中未发现 `FetchPriceLimitEventEvidence` 的具体实现，Bootstrap 自动收集结果为空；但 `internal/marketdata/httpapi/price_limit_rule.go` 会调用 `DataService.PriceLimitEventEvidence`，缺少独立事件证据时接口将状态置为 unknown、清空可用涨跌幅并保留质量原因，属于有意失败关闭。不能将其当作“无消费者的孤立接口”，也不能用普通涨跌停池代替特殊事件证据。
 
 ## 4. Provider 实现文件核对索引
 
