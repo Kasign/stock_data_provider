@@ -337,6 +337,7 @@ func SourceCollectionPolicyCheck(
 					"Current Endpoint policy does not match the registered policy snapshot", nil,
 				)
 			}
+			checkedAt := time.Now().UTC()
 			attributes := map[string]string{
 				"source_policy_versioned":     "true",
 				"source_authorization_status": string(sourcePolicy.Status),
@@ -345,27 +346,71 @@ func SourceCollectionPolicyCheck(
 			if endpointPolicy != nil {
 				attributes["endpoint_authorization_status"] = string(endpointPolicy.Status)
 			}
-			if sourcePolicy.Status != domain.AuthorizationApproved &&
-				sourcePolicy.Status != domain.AuthorizationRestricted {
+			if sourcePolicy.Status == domain.AuthorizationPending ||
+				sourcePolicy.Status == domain.AuthorizationRevoked {
 				return platformdiag.Observation{
 					Status: platformdiag.StatusDegraded, ReasonCode: "news.source.current_policy_not_collectable",
 					SafeMessage: "Current Source policy is not in an active collection authorization state",
-					CheckedAt:   time.Now().UTC(), Attributes: attributes,
+					CheckedAt:   checkedAt, Attributes: attributes,
 				}, nil
 			}
-			if endpointPolicy != nil && endpointPolicy.Status != "" &&
-				endpointPolicy.Status != domain.AuthorizationApproved &&
-				endpointPolicy.Status != domain.AuthorizationRestricted {
+			if sourcePolicy.Status != domain.AuthorizationApproved &&
+				sourcePolicy.Status != domain.AuthorizationRestricted {
+				return platformdiag.Observation{}, fault.New(
+					fault.ClassInternal, "news.source.current_policy_status_invalid",
+					"Current Source policy has an unsupported authorization status", nil,
+				)
+			}
+			if !sourcePolicy.EffectiveAt.IsZero() && checkedAt.Before(sourcePolicy.EffectiveAt) {
 				return platformdiag.Observation{
-					Status: platformdiag.StatusDegraded, ReasonCode: "news.source.current_policy_not_collectable",
-					SafeMessage: "Current Endpoint policy is not in an active collection authorization state",
-					CheckedAt:   time.Now().UTC(), Attributes: attributes,
+					Status: platformdiag.StatusDegraded, ReasonCode: "news.source.current_policy_not_yet_effective",
+					SafeMessage: "Current Source policy is not yet effective",
+					CheckedAt:   checkedAt, Attributes: attributes,
 				}, nil
+			}
+			if sourcePolicy.ExpiresAt != nil && !checkedAt.Before(*sourcePolicy.ExpiresAt) {
+				return platformdiag.Observation{
+					Status: platformdiag.StatusDegraded, ReasonCode: "news.source.current_policy_expired",
+					SafeMessage: "Current Source policy has expired",
+					CheckedAt:   checkedAt, Attributes: attributes,
+				}, nil
+			}
+			if endpointPolicy != nil {
+				if endpointPolicy.Status == domain.AuthorizationPending ||
+					endpointPolicy.Status == domain.AuthorizationRevoked {
+					return platformdiag.Observation{
+						Status: platformdiag.StatusDegraded, ReasonCode: "news.source.current_policy_not_collectable",
+						SafeMessage: "Current Endpoint policy is not in an active collection authorization state",
+						CheckedAt:   checkedAt, Attributes: attributes,
+					}, nil
+				}
+				if endpointPolicy.Status != "" &&
+					endpointPolicy.Status != domain.AuthorizationApproved &&
+					endpointPolicy.Status != domain.AuthorizationRestricted {
+					return platformdiag.Observation{}, fault.New(
+						fault.ClassInternal, "news.source.current_policy_status_invalid",
+						"Current Endpoint policy has an unsupported authorization status", nil,
+					)
+				}
+				if !endpointPolicy.EffectiveAt.IsZero() && checkedAt.Before(endpointPolicy.EffectiveAt) {
+					return platformdiag.Observation{
+						Status: platformdiag.StatusDegraded, ReasonCode: "news.source.current_policy_not_yet_effective",
+						SafeMessage: "Current Endpoint policy is not yet effective",
+						CheckedAt:   checkedAt, Attributes: attributes,
+					}, nil
+				}
+				if endpointPolicy.ExpiresAt != nil && !checkedAt.Before(*endpointPolicy.ExpiresAt) {
+					return platformdiag.Observation{
+						Status: platformdiag.StatusDegraded, ReasonCode: "news.source.current_policy_expired",
+						SafeMessage: "Current Endpoint policy has expired",
+						CheckedAt:   checkedAt, Attributes: attributes,
+					}, nil
+				}
 			}
 			return platformdiag.Observation{
 				Status: platformdiag.StatusHealthy,
 				SafeMessage: "Current Source/Endpoint policy versions match the registered snapshot",
-				CheckedAt:   time.Now().UTC(), Attributes: attributes,
+				CheckedAt:   checkedAt, Attributes: attributes,
 			}, nil
 		},
 	}

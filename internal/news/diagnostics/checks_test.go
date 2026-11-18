@@ -368,6 +368,50 @@ func TestSourceCollectionPolicyCheckRejectsEndpointPolicyPresenceMismatch(t *tes
 	}
 }
 
+func TestSourceCollectionPolicyCheckFailsForUnknownAuthorizationStatus(t *testing.T) {
+	registration := validSourceCollectionPolicyRegistration()
+	resolver := &sourceCollectionPolicyResolverStub{
+		source: domain.SourcePolicy{Status: domain.AuthorizationStatus("unknown")},
+	}
+	report, err := (platformdiag.Runner{}).Run(context.Background(), []platformdiag.Check{
+		SourceCollectionPolicyCheck(
+			sourceCatalogStub{registration: registration}, resolver, "source-1", "endpoint-1", true,
+		),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Results[0].Observation.Status != platformdiag.StatusUnavailable ||
+		report.Results[0].Fault == nil ||
+		report.Results[0].Fault.Code != "news.source.current_policy_status_invalid" {
+		t.Fatalf("result=%+v", report.Results[0])
+	}
+}
+
+func TestSourceCollectionPolicyCheckDegradesExpiredPolicy(t *testing.T) {
+	registration := validSourceCollectionPolicyRegistration()
+	expiredAt := time.Now().UTC().Add(-time.Minute)
+	resolver := &sourceCollectionPolicyResolverStub{
+		source: domain.SourcePolicy{
+			Status: domain.AuthorizationApproved,
+			ExpiresAt: &expiredAt,
+		},
+	}
+	report, err := (platformdiag.Runner{}).Run(context.Background(), []platformdiag.Check{
+		SourceCollectionPolicyCheck(
+			sourceCatalogStub{registration: registration}, resolver, "source-1", "endpoint-1", true,
+		),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	observation := report.Results[0].Observation
+	if observation.Status != platformdiag.StatusDegraded ||
+		observation.ReasonCode != "news.source.current_policy_expired" {
+		t.Fatalf("observation=%+v", observation)
+	}
+}
+
 func TestSourceCollectionPolicyCheckFailsWhenDependenciesMissing(t *testing.T) {
 	report, err := (platformdiag.Runner{}).Run(context.Background(), []platformdiag.Check{
 		SourceCollectionPolicyCheck(nil, nil, "source-1", "endpoint-1", true),
