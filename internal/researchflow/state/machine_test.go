@@ -791,4 +791,3 @@ func TestResultSummaryCoverageExcludesApplicabilityExcludedStages(t *testing.T) 
 		t.Fatalf("summary lost excluded/missing stage evidence: %#v", got.ResultSummary)
 	}
 }
-
