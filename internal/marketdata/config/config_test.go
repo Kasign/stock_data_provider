@@ -37,6 +37,26 @@ func TestLoadForInProcessDoesNotRequireDataAPIKey(t *testing.T) {
 	}
 }
 
+func TestLoadForRootAllowsRootInjectedStorage(t *testing.T) {
+	setDefaultProviderConfig(t)
+	t.Setenv("MARKET_DATA_API_KEY", "")
+	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "false")
+	t.Setenv("MARKET_DATA_MYSQL_DSN", "")
+	t.Setenv("MARKET_DATA_DB_HOST", "")
+	t.Setenv("MARKET_DATA_DB_USER", "")
+	t.Setenv("MARKET_DATA_DB_PASSWORD", "")
+	t.Setenv("MARKET_DATA_DB_NAME", "")
+	t.Setenv("MARKET_DATA_REDIS_ADDR", "")
+
+	cfg, err := LoadForRoot()
+	if err != nil {
+		t.Fatalf("LoadForRoot() error = %v", err)
+	}
+	if cfg.MySQLDSN != "" || cfg.RedisAddr != "" {
+		t.Fatalf("Root config must not create independent storage settings: MySQLDSN=%q RedisAddr=%q", cfg.MySQLDSN, cfg.RedisAddr)
+	}
+}
+
 func TestLoadProviderConfigAndEnvironmentOverrides(t *testing.T) {
 	file := filepath.Join(t.TempDir(), "providers.json")
 	data := `{"provider_priority":["eastmoney","tencent"],"adjustment_basis":"backward_adjusted","providers":{"eastmoney":{"enabled":true,"quote":false,"daily_bars":true},"tencent":{"enabled":true,"quote":true,"daily_bars":false}}}`
