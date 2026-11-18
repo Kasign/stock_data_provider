@@ -631,7 +631,7 @@ Owner：Data + Server + Platform；Quant/Researchflow 作为消费者验收方�
 ### 12.3 明确不在本轮做的事情
 
 - 不在 `feat/design_doc` 修改业务 Go 代码。
-- 不直接修改 `feat/full-go-data-providers-api-switch`、`feat/platform-foundation`、WebUI 或其他模块分支。
+- 不直接修改 `feat/data`、`feat/platform`、`feat/web` 或其他模块分支。
 - 不删除 DATA-CTR-006、PLAT-CTR-005 或 Data HTTP API 的既有定义；先按本方案明确适用模式，再由项目总规划更新契约登记。
 - 不因部署合并把所有业务模块强行放入同一个 package。
 - 不创建 Portfolio、Alert、Report 等候选模块分支。

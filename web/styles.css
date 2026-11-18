@@ -5204,9 +5204,6 @@ button:disabled {
   line-height: 1.65;
   overflow-wrap: anywhere;
 }
-.owner-session-panel [hidden] {
-  display: none !important;
-}
 @media (max-width: 640px) {
   .owner-session-actions .button {
     width: 100%;
