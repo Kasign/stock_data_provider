@@ -473,11 +473,11 @@ func TestNewsSearchStageResearchflowMariaDBIntegration(t *testing.T) {
 			t.Fatalf("轮询 Expired Attempt 恢复 Researchflow Run 状态失败: %v", loadErr)
 		}
 		rateLimitedRun, loadErr := repository.GetRun(ctx, rateLimitedCreated.Run.Ref)
-			if loadErr != nil {
+		if loadErr != nil {
 			t.Fatalf("轮询 RateLimited Researchflow Run 状态失败: %v", loadErr)
 		}
 		timeoutProviderRun, loadErr := repository.GetRun(ctx, timeoutProviderCreated.Run.Ref)
-			if loadErr != nil {
+		if loadErr != nil {
 			t.Fatalf("轮询 Timeout Provider Researchflow Run 状态失败: %v", loadErr)
 		}
 		malformedResponseRun, loadErr := repository.GetRun(ctx, malformedResponseCreated.Run.Ref)
