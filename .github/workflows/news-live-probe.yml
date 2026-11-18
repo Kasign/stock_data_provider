@@ -1,3 +1,4 @@
+# 受控在线探测：仅在显式触发标记存在时访问真实 Provider。
 name: News live Provider and Feed probe
 
 on:
