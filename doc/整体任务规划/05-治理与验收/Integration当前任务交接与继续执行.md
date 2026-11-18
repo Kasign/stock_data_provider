@@ -1390,3 +1390,12 @@ GetRun 与 CancelRun 的持久化创建者授权已在 Application/Storage 层�
 - `internal/news/domain/candidate.go` 已在原有 RFC3339Nano、RFC1123Z、RFC822Z 解析规则之外，增加 RFC1123 的受限解析：仅接受明确的 `UTC` 或 `GMT`，且解析偏移必须为零；未知时区缩写（例如 CST）继续拒绝，避免 Go 将未知缩写解释为伪零偏移。
 - `candidate_test.go` 新增 UTC、GMT 正向测试及未知时区缩写拒绝测试；Live Probe 的显式时区统计同步识别该格式。
 - 下一次 Live Probe 将验证真实 Tavily 时间字段能否被新规则解析。即使解析成功，也只代表 Provider 声明的发布时间可解析；不改变 `available_at` 的来源授权和 PIT 证据要求。
+
+## 22. 2026-11-18 最新 CI 与 Tavily Live Probe 待验收
+
+- Integration CI Run [44230188416](https://github.com/Kasign/stock_data_provider/actions/runs/44230188416) 对精确 SHA `29809fea9da8f12b3949e27513e7d06e38e14c53` 全量 success：根模块 gofmt/vet/test、News/Research/Researchflow 跨模块测试、Worker MariaDB/Redis 集成、go-core vet/test、Compose、WebUI 检查与构建全部通过。
+- 根模块测试改为 `go test -p 1 ./...` 后通过；原因是根模块集成测试共享 CI MariaDB，串行执行避免跨包并发争用。发布时间结构脱敏测试改为检查具体原始时间片段不出现在签名中，保留对真实值泄漏的验证，不把脱敏占位符 9/A 误判为原始数据。
+- 当前分支 HEAD 为 `29809fea9da8f12b3949e27513e7d06e38e14c53`。本次文档提交带有 `[run_news_live_probe]` 标记，将触发 integration 上的只读真实 Provider Probe 与常规 CI。
+- Probe 重点确认 Tavily 的 3 条候选发布时间能否由受限 RFC1123 UTC/GMT 规则解析；Bocha/Brave 未配置不阻塞。Feed Probe 仍因缺少 Feed URL 和授权证据而预期 SKIP。
+- Probe 通过只证明真实 Provider 请求与本次候选发布时间统计，不等于 Researchflow Stage→Worker→MariaDB 的真实 Run 验收；下一步仍需检查 Server 生产装配、执行真实 Researchflow Run，并最终验证两个独立 Worker OS 进程执行真实 Provider Run。
+- `available_at` 仍须具备独立来源授权与首次公开可获取证据，禁止从 `published_at` 或 Provider 的 `published_date` 推导。
