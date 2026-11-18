@@ -1,10 +1,10 @@
 # WebUI 功能提测与集中验收清单
 
-更新时间：2026-11-12  
-当前代码核对基线：feat/webui-market-data-console @ 7f1b8510d349b9d166b6efceddee874ddb7703c0  
+历史记录更新时间：2026-11-12  
+历史代码核对基线：feat/webui-market-data-console @ 7f1b8510d349b9d166b6efceddee874ddb7703c0  
 W1-C 提交 `7f1b8510d349b9d166b6efceddee874ddb7703c0` 的 WebUI Checks（43160148859）和 Chromium Browser Smoke（43160149003）通过；后续 W1-D 提交 `82460cad6668c34ff6fde103efc28815ee21a02d` 的 WebUI Checks（43160974526）和 Chromium Browser Smoke（43160974640，attempt 2）通过。浏览器结果仅证明对应 SHA 的前端行为与指定视口，不代表真实 API/生产部署验收。
 
-> 本文保留历史功能验收证据。历史 CI/Browser Smoke 只对其记录的 SHA 有效，不自动代表当前 HEAD 或 integration 最新提交通过。总体任务顺序、当前状态和下一步统一以《WebUI 整体规划》为准。
+> 本文保留历史功能验收证据。历史 CI/Browser Smoke 只对其记录的 SHA 有效，不自动代表当前 HEAD 或 integration 最新提交通过。总体任务顺序、当前状态和下一步统一以《模块总任务规划和进度.md》为准。
 >
 > 2026-11-12 起的跨模块验收新增强制维度：真实 Root Server 路由、Session/CSRF/资源授权、Evidence 来源与授权、PIT 时间语义、Quant RiskDecision 硬门禁、Researchflow Run/Stage/Attempt 状态所有权、LLM 流式输出与 Run 终态分离、Notification 实际投递状态。没有真实服务端/部署证据时，Mock 仅作为前端行为测试。
 
