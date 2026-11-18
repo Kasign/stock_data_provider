@@ -13,7 +13,7 @@
 
 - [研究领域模型与证据体系](./01-研究领域模型与证据体系.md)
 - [Context 与 Evidence 字段语义及授权链补充](./03-Context与Evidence字段语义及授权链补充.md)
-- `schema/`、`golden/`：机器契约和固定样例。
+- 机器契约 Schema/Golden：以 `doc/整体任务规划/schema/`、`doc/整体任务规划/golden/` 中的项目级冻结文件为准；Research 不在模块目录复制第二份权威契约。
 
 ## 维护规则
 
