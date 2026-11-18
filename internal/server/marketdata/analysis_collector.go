@@ -165,6 +165,9 @@ func (c *AnalysisCollector) Collect(ctx context.Context, request domain.RunReque
 		out.IndexBars = append(out.IndexBars, result.index...)
 		out.SourceNotes = append(out.SourceNotes, result.notes...)
 	}
+	if err := ctx.Err(); err != nil {
+		return domain.RawSnapshot{}, err
+	}
 	sort.Slice(out.Quotes, func(i, j int) bool {
 		return out.Quotes[i].Symbol < out.Quotes[j].Symbol
 	})
@@ -270,7 +273,7 @@ func (c *AnalysisCollector) collectOne(ctx context.Context, asOf time.Time, secu
 		note := domain.SourceNote{
 			Dataset: dataset, Symbol: security.Symbol, Source: firstSource(snapshot.Bars),
 			QualityStatus: analysisQualityStatus(snapshot.QualityStatus),
-			Diagnostic: strings.Join(snapshot.Warnings, "; "),
+			Diagnostic: strings.Join(dailyBarDiagnostics(snapshot), "; "),
 			AdjustmentBasis: string(snapshot.AdjustmentBasis),
 		}
 		if len(rows) == 0 {
@@ -382,4 +385,12 @@ func int64ToFloat(value *int64) *float64 {
 	}
 	converted := float64(*value)
 	return &converted
+}
+
+func dailyBarDiagnostics(snapshot dataapp.DailyBarsSnapshot) []string {
+	items := append([]string(nil), snapshot.Warnings...)
+	for _, bar := range snapshot.Bars {
+		items = append(items, bar.QualityReasons...)
+	}
+	return items
 }
