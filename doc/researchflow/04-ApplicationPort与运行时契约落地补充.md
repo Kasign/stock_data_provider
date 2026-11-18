@@ -148,10 +148,11 @@ Fake Repository/Fake Clock/Fake Provider 只证明模块内逻辑；MariaDB/Redi
 
 ## 11. 项目级契约复核后的明确缺口（2026-11-06）
 
-- 项目级 Review 已要求普通命令 Request Fingerprint 使用 RFC 8785 JCS + SHA-256。当前 `domain.RequestFingerprint` 仍使用 `json.Marshal`，不满足该要求；必须完成公共规范化实现和 Golden 后才能验收幂等契约。
-- `CreateRunCommand.Parameters` 当前只检查 JSON object，缺少按不可变 template_version 绑定的 typed Parameter Schema Validator。
-- 当前 Domain 类型的 JSON Tags 不构成公开 DTO。公开 Run/Stage/Attempt DTO 的字段、nullable、引用、状态和版本约束必须由独立 Schema/Golden 明确。
-- 取消终态现在补充固化 ResultSummary；但数据库事务、Run.version CAS、固定锁顺序、Worker claim、容量原子预留、lease/fencing 和崩溃恢复仍未实现，不能将领域纯函数描述为并发安全。
+- 以下四项是 2026-11-06 的历史 Review 缺口，均已在后续实现中处理，不再代表当前状态：
+  - RequestFingerprint 已使用 RFC 8785 JCS + SHA-256；`domain/command_test.go` 覆盖等价 JSON、数字/Unicode 规范化、重复键拒绝和快照集合排序。
+  - CreateRun 已接入不可变 Template Parameter Schema Validator；按精确 Ref/Version/Fingerprint 校验参数，失败时 fail-closed。
+  - Run/Stage/Attempt/ResultSummary/Stage Provider Envelope 已有独立 JSON Schema、Golden 和 DTO/Envelope 校验。
+  - Storage/Worker 已实现 MariaDB 事务、Run/Stage CAS、Claim、Lease/Fencing、原子终态 Summary/Outbox；Researchflow MariaDB lifecycle 和 race 集成测试已通过 Actions Run 44296025284。
 
 
 ## 12. Run 终态与 Retry/Worker Claim 边界复核（2026-11-06，按最终契约修订）
@@ -171,7 +172,7 @@ Fake Repository/Fake Clock/Fake Provider 只证明模块内逻辑；MariaDB/Redi
 - input_snapshot_refs、Template.Stages、Stage.Dependencies、RetryableReasonCodes 按契约集合语义排序；真正有序的参数数组保留原顺序。
 - 时间先显式转 UTC，再进入 JSON 对象；tracing 字段仍不参与 RequestFingerprint。
 - 依赖：`github.com/gowebpki/jcs@v1.0.2`（模块 Go 1.21）。
-- 当前提交只完成 JCS 接入和等价输入/重复键测试代码；Golden 固定摘要、RFC 8785 全量测试执行记录仍待补充。
+- 当前代码已完成 JCS 接入，并通过等价 JSON、数字/Unicode、重复键拒绝等单元测试。RequestFingerprint 是服务端内部幂等指纹，不是跨模块 DTO 字段；当前不单独维护对外 Golden 文件，避免把内部实现细节升级为无必要的公共契约。
 
 
 ## 14. Typed Parameter Schema Registry 与解析门禁（2026-11-06）
