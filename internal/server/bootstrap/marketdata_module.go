@@ -7,11 +7,11 @@ import (
 	"log/slog"
 	"time"
 
-	marketdatabootstrap "example.com/stock-analysis-flow/internal/marketdata/bootstrap"
-	marketdatacache "example.com/stock-analysis-flow/internal/marketdata/cache"
-	marketdataconfig "example.com/stock-analysis-flow/internal/marketdata/config"
-	marketdatarepository "example.com/stock-analysis-flow/internal/marketdata/repository"
-	platformdiagnostics "example.com/stock-analysis-flow/internal/platform/diagnostics"
+	marketdatabootstrap	"example.com/stock-analysis-flow/internal/marketdata/bootstrap"
+	marketdatacache		"example.com/stock-analysis-flow/internal/marketdata/cache"
+	marketdataconfig		"example.com/stock-analysis-flow/internal/marketdata/config"
+	marketdatarepository	"example.com/stock-analysis-flow/internal/marketdata/repository"
+	platformdiagnostics	"example.com/stock-analysis-flow/internal/platform/diagnostics"
 	"example.com/stock-analysis-flow/internal/server/resources"
 )
 
