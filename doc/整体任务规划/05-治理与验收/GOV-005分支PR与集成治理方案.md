@@ -24,16 +24,16 @@
 |---|---|---|
 | `feat/design_doc` | 项目级规划、架构、跨模块契约和治理 | `doc/整体任务规划/**` |
 | `integration` | 代码聚合 | 接收完成的开发分支代码；必要时解决聚合冲突 |
-| `feat/research-analysis-flow-native-go` | Server 实施和旧 Analysis 迁移 | 根启动入口、`internal/server/**`、经任务确认的旧 Analysis 迁移 |
-| `feat/platform-foundation` | 公共平台能力 | `internal/platform/**`、`doc/platform/**` |
-| `feat/full-go-data-providers-api-switch` | Data/Provider/API 专项 | Data 领域实现、Provider、Repository、Data API 和迁移 |
-| `feat/research-news-ingestion` | News 专项 | `internal/news/**`、`doc/news/**` |
+| `feat/server` | Server 实施和旧 Analysis 迁移 | 根启动入口、`internal/server/**`、经任务确认的旧 Analysis 迁移 |
+| `feat/platform` | 公共平台能力 | `internal/platform/**`、`doc/platform/**` |
+| `feat/data` | Data/Provider/API 专项 | Data 领域实现、Provider、Repository、Data API 和迁移 |
+| `feat/news` | News 专项 | `internal/news/**`、`doc/news/**` |
 | `feat/quant` | Quant 专项 | `internal/quant/**`、`doc/quant/**` |
 | `feat/research` | Research 专项 | `internal/research/**`、`doc/research/**` |
 | `feat/researchflow` | Researchflow 专项 | `internal/researchflow/**`、`doc/researchflow/**` |
 | `feat/llm` | LLM 专项 | `internal/llm/**`、`doc/llm/**` |
 | `feat/notification` | Notification 专项 | `internal/notification/**`、`doc/notification/**` |
-| `feat/webui-market-data-console` | WebUI 专项 | `web/**`、`doc/web/**` |
+| `feat/web` | WebUI 专项 | `web/**`、`doc/web/**` |
 
 以上是职责归属，不代表各分支当前任务全部完成。各分支的实施状态、测试结果和专项验收由对应分支记录；本方案不维护各模块 HEAD 快照。
 
@@ -127,5 +127,5 @@
 
 - 本文件冻结治理职责，不自动授权任何分支创建、PR 创建、合并或发布操作。
 - 各分支按用户指令和仓库既定流程操作；不得为执行本方案擅自创建 `feat/research-integration` 或 `feat/analysis`。
-- integration 只聚合代码；Server 实施由 `feat/research-analysis-flow-native-go` 承担。
+- integration 只聚合代码；Server 实施由 `feat/server` 承担。
 - 其他模块专项任务和文档维护由对应分支负责。
