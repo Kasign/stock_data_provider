@@ -46,7 +46,7 @@ BaoStock/Pytdx 使用 TCP DialContext，不属于 HTTP BoundDoer。当前 Platfo
 - 若有多个模块需要相同安全能力，再由 Platform Owner 评估公共化。
 - 无论归属如何，未注入受控拨号时必须 fail-closed；不能把 net.Dialer 直连作为生产通过。
 
-## 4. Migration 对接问题
+## 4. Migration 对接问题与复核结论
 
 Server 当前 Registry.Register 接收 platformstorage.Migration 定义，RunWithReport/ValidateApplied 负责统一执行和只读版本校验。
 
@@ -61,7 +61,7 @@ Data Module 对外只提供 MigrationRunner.Migrate(ctx) error，没有公开迁
 
 这是 SRV-009 的实施前置，不在本文件擅自决定 Data 是否需要新增公开方法或 Server 是否新增 Runner 注册形式。
 
-## 5. Diagnostics 与 Readiness
+## 6. Diagnostics 与 Readiness
 
 Data Diagnostics.Ready(ctx) 是模块公开的就绪检查入口。Server 接入时必须将它适配为 Platform Diagnostics Check，并明确 Required/Optional。
 
@@ -72,7 +72,7 @@ Data Diagnostics.Ready(ctx) 是模块公开的就绪检查入口。Server 接入
 
 ProviderDiagnostics 的具体字段只有在确认字段来源、含义、敏感信息和稳定性后才可映射；不把任意 map[string]any 原样暴露到 Root Diagnostics。
 
-## 6. HTTP 路由与认证
+## 7. HTTP 路由与认证
 
 - Root 使用 Data InProcessHandler，不通过 localhost 或远程 HTTP 自调用。
 - 路由必须遵循 DATA-CTR-006：同进程可信 Principal Context 与远程兼容 X-API-Key 模式严格区分；不得恢复已被禁止的 Bearer/API Key 混用。
@@ -80,7 +80,7 @@ ProviderDiagnostics 的具体字段只有在确认字段来源、含义、敏感
 - 路由认证主体、Owner Session 是否可访问、错误投影、Request ID、超时和请求体上限必须有明确契约映射；没有证据的路由不注册。
 - 只有在真实调用路径确认后才挂载 /market-api；不为 UI 预先增加接口或字段。
 
-## 7. Lifecycle 与资源所有权
+## 8. Lifecycle 与资源所有权
 
 Data Module 自身 Start/Stop/Close 与 Server runtime.Component 的接口不完全相同。Root 需要一个 Server-owned 生命周期适配器：
 - Start 调用 Data Module.Start。
@@ -89,7 +89,7 @@ Data Module 自身 Start/Stop/Close 与 Server runtime.Component 的接口不完
 - 只有全部模块消费者停止后，Server 才关闭共享 HTTP Client、Redis、DB。
 - 启动失败时按逆序回滚；停止超时不得提前关闭仍被在途任务使用的共享资源。
 
-## 8. SRV-009 完成门槛
+## 9. SRV-009 完成门槛
 
 - Data Module 使用唯一 Root 共享 DB/Redis/HTTP Client，无重复连接池。
 - 每个实际启用 Provider 能力均有精确、受控的 HTTP/TCP 执行器；缺失依赖 fail-closed。
@@ -99,3 +99,13 @@ Data Module 自身 Start/Stop/Close 与 Server runtime.Component 的接口不完
 - Module Start/Stop/Close、Server Lifecycle 和共享资源关闭顺序有测试。
 - API/Worker 独立角色、真实 MariaDB/Redis、SIGTERM 和并发启动均有精确 SHA 验收。
 - 真实 Provider 数据验收单独记录；Mock/Fixture/CI 不能替代真实行情数据证据。
+
+
+## 10. 项目总览 MDM 状态快照差异
+
+项目总览《整体任务规划总览.md》中的 MDM 进度说明标注为 2026-11-06，仍写明 `services/market-data/go.mod` 存在、MDM-002 尚未开始。对本轮 `feat/server` HEAD 的 Git Tree 核对结果：
+- 根目录只有一个 `go.mod`；当前 Tree 中不存在 `services/market-data/go.mod`。
+- 根模块已存在 `internal/marketdata/**`。
+- 但仍存在 `services/market-data/Dockerfile`、`services/market-data/migrations/**`、`cmd/market-data/**` 等旧部署/入口资产。
+
+因此总览中“嵌套 go.mod 仍存在”的具体事实已经过时；但 MDM-002 是否整体完成仍不能据此判定，因为旧 Docker/迁移/命令入口尚在，且 MDM-002 还包含 Go 版本、依赖、CI 和 Docker Builder 统一。Server 分支不修改项目级权威总览；应由总览维护方基于当前 Data 分支/Integration 精确 SHA 更新 MDM 状态和残留清单。SRV-009 只处理 Root Server M3/M4 装配，不代替 MDM-002/006/007 验收。

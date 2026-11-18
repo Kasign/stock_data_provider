@@ -1,6 +1,14 @@
-# Owner Session 接入进度
+# SRV-008 Owner Session 接入与验收历史
 
-> **状态口径（2026-11-18）：** 本文件保留 Owner Session 专项实现和历史验收证据；当前 Server 总体状态以 [当前任务状态和进度](./当前任务状态和进度.md) 为准。Run 43869239700 是历史 Integration SHA 的验收，不代表当前 Server HEAD 或目标生产环境部署已通过。WebUI Checks/Browser Smoke 已在 Web 代码验收基线上通过；Owner Session 目标环境部署、安全运维和 Cookie/Origin/CSRF 实测仍待完成。
+> 历史归档说明（2026-11-18）：本文完整保留 Owner Session 的阶段性实现、历史问题、决策和验收记录，按时间顺序追溯；正文中“当前状态”“下一步”等表述均指对应记录当时的状态，不再作为 Server 当前任务状态来源。当前唯一任务和最终状态以 [模块总任务规划和进度](../模块总任务规划和进度.md) 与 [当前任务状态和进度](../当前任务状态和进度.md) 为准。目标环境部署/浏览器验收仍未完成；Owner Session 不再是当前开发主线。
+
+## 归档时状态（2026-11-18）
+
+- SRV-CTR-002 Handler、Schema/Golden/OpenAPI、真实 MariaDB/Redis HTTP 生命周期和 WebUI 消费代码均已有对应历史验收记录。
+- 未完成项仅为目标 Nginx/Compose/HTTPS/真实浏览器 Cookie、Origin/Host/CSRF 验收，以及契约治理冻结。
+- 不再安排 Owner Session 新功能开发；后续环境验收由 SRV-008 跟踪，不占用唯一当前任务文档。
+
+## 历史执行记录（以下内容按记录日期理解）
 
 ## 当前阶段：WebUI 已接入，目标环境部署验收待完成
 
