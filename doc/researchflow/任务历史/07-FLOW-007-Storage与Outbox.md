@@ -13,3 +13,11 @@ MySQL/MariaDB Migration、Run/Stage/Attempt 持久化、Template Registry、Work
 ## 未完成边界
 
 新增变更只做定点回归。Outbox 终态事件与 Notification 的幂等消费/渠道投递分属跨模块责任；Researchflow 不建设 Notification Relay。
+
+
+## 2026-11-18 时间权威修正
+
+- 原 `OutboxDispatcher` 使用进程 `time.Now()` 计算并持久化 `next_attempt_at`。该时间被多个 Server/Worker 实例共同用于后续调度，不能以单机时钟为权威。
+- `MySQLRunRepository` 现实现 `application.DatabaseClock`；`MySQLDatabaseClock` 通过 Platform `time.Service` 包装 MariaDB UTC Source；Outbox Dispatcher 在安排 RetryAt 前读取同一数据库 UTC 时钟。
+- 缺少 DatabaseClock 能力或时钟读取失败时 fail-closed，不写入 retry 时间；新增时钟不可用测试。
+- 代码验收 SHA：`2df5ee14b5c39613a10f124da463ae3f939e13b3`；Researchflow 模块 gofmt/tests/race/vet Job 已通过，见 Actions Run 44293452576。

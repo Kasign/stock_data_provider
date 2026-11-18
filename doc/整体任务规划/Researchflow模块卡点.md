@@ -2,7 +2,7 @@
 
 更新时间：2026-11-18  
 对应分支：`feat/researchflow`  
-当前代码 HEAD：`c40da6492163ca364325bd04275a5407ce9943bb`  
+代码验收基线 SHA：`2df5ee14b5c39613a10f124da463ae3f939e13b3`  
 维护范围：仅记录 Researchflow 推进所依赖的跨模块决策、契约同步和验收阻塞；不替代模块任务状态文档。
 
 ## 1. 当前卡点
@@ -22,9 +22,9 @@
 - **原因**：GOV-CTR-004 规定收紧已发布 Schema 的接受范围属于 MAJOR。直接增加 UTC Z 正则或非终态引用约束，会改变 1.0.0 的接受范围。
 - **影响**：不能简单修改 1.0.0 Schema/Golden 并仍声称版本不变；也不能把 Schema 当前接受 offset 等同于生产方可以输出 offset。
 - **当前绕行**：生产 DTO 映射层已统一将所有绝对时间转为 UTC；新增偏移时区反例测试，保证生产输出为 `Z`。该修改不收紧 Schema 接受范围。
-- **待决事项**：是否需要发布 Run/Stage/Attempt Schema 2.0.0，以机器校验 UTC Z 和非终态 `result_summary_ref=null`。若现有生产/消费链路通过 DTO 输出测试与运行时不变量已足够，则可不为形式上的 Schema 正则单独升版。
+- **复核结论**：DTO 输出已规范化 UTC Z；Storage 的 `loadResultSummary`、CreateRun 校验和 Run CAS 已保证非终态不得携带 ResultSummary ref。Schema 1.0.0 保留较宽接受范围，不为形式上的 Schema 正则单独升版；只有未来消费者明确要求 Schema 级拒绝时再评估 2.0.0。
 - **处理责任**：项目契约 Owner 与 Researchflow；按真实消费者兼容影响决策。
-- **当前状态**：OPEN；UTC 输出实现已提交，Schema MAJOR 升版不是当前代码修复的前置条件。
+- **当前状态**：RESOLVED（生产输出与运行时不变量已通过模块 CI；Schema 1.0.0 保持较宽消费者接受范围是有意兼容策略）。
 
 ### RF-BLOCK-003：FLOW-CTR-004 Envelope 登记状态与模块资产不一致
 
@@ -41,7 +41,7 @@
 - `MySQLDatabaseClock` 复用 Platform MariaDB UTC Source，不重复实现数据库时钟。\n- Outbox RetryAt 原先通过 `time.Now()` 计算，属于持久化的跨实例调度时间，和统一时钟规则不一致。现 `MySQLRunRepository` 实现 `DatabaseClock`，`OutboxDispatcher` 在重试前读取数据库 UTC 时钟；时钟能力缺失或读取失败时不写入 retry_at。新增时钟故障 fail-closed 测试。
 - Run/Stage/Attempt DTO 投影现对必填时间调用 `UTC()`，对可空时间指针统一复制并转 UTC。
 - 新增非 UTC（+08:00）来源时间的 DTO 序列化测试，要求输出均以 `Z` 结尾。
-- 前两次代码 SHA 的 GitHub Actions 分别因字符串指针误改、gofmt 检查失败；已分别修复。代码 SHA `9acf56fc93bb6d6b7cae8d13f243e08170f0bdd2` 的 Run 44291201486 已 success，Researchflow gofmt、tests、race、vet 全部通过。Outbox 时钟修复与故障测试的后续 CI Run 44292179542 / 44292322382 尚待完成。
+- DTO UTC 输出规范化 SHA `9acf56fc93bb6d6b7cae8d13f243e08170f0bdd2` 的 Run 44291201486 已 success。包含 Outbox 数据库时钟修复和故障测试的代码验收 SHA `2df5ee14b5c39613a10f124da463ae3f939e13b3`，Run 44293452576 中 Researchflow module format/tests/race/vet Job 已 success；根模块 Job 当时仍在执行。
 
 ## 3. 下一步解除顺序
 
@@ -67,4 +67,4 @@
 - **测试**：fake store 提供固定数据库时钟；新增数据库时钟不可用时不提交 retry 的测试。
 - **代码提交**：`e0e8d8a0579f974de44bc69870ae5b129b59c937`；测试提交 `9a321f31af1f85ad8842497f0f8f7a9054fe479c`。
 - **验收**：Run 44292179542 / 44292322382 尚待完成；成功后将此项改为 RESOLVED。
-- **当前状态**：IN_PROGRESS。
+- **当前状态**：RESOLVED；Researchflow 模块 gofmt/tests/race/vet 已通过 Actions Run 44293452576。
