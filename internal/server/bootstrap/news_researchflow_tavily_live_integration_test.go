@@ -15,6 +15,8 @@ import (
 	platformconfig "example.com/stock-analysis-flow/internal/platform/config"
 	platformhttpclient "example.com/stock-analysis-flow/internal/platform/httpclient"
 	platformsecurity "example.com/stock-analysis-flow/internal/platform/security"
+	platformstorage "example.com/stock-analysis-flow/internal/platform/storage"
+	researchflowapplication "example.com/stock-analysis-flow/internal/researchflow/application"
 	researchflowdomain "example.com/stock-analysis-flow/internal/researchflow/domain"
 	researchflowstorage "example.com/stock-analysis-flow/internal/researchflow/storage"
 	serverconfig "example.com/stock-analysis-flow/internal/server/config"
@@ -38,7 +40,7 @@ func TestNewsResearchflowTavilyMariaDBLive(t *testing.T) {
 	defer cancel()
 
 	db := openNewsResearchMariaDB(t, ctx)
-	if err := platformstorageApplyResearchflow(ctx, db); err != nil {
+	if err := platformstorage.ApplyMigrations(ctx, db, researchflowstorage.MigrationNamespace, researchflowstorage.Migrations()); err != nil {
 		t.Fatalf("应用 Researchflow Migration 失败: %v", err)
 	}
 
