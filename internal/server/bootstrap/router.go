@@ -10,8 +10,8 @@ import (
 // newHTTPHandler registers every currently supported endpoint through the
 // Platform policy-enforcing Router. No legacy catch-all route is retained.
 func newHTTPHandler(authenticator *platformsecurity.Authenticator, health, legacy, marketData http.Handler, ownerSession *ownerSessionComposition) (http.Handler, error) {
-	if authenticator == nil || health == nil || legacy == nil {
-		return nil, errors.New("HTTP authenticator, health handler and legacy handler are required")
+	if authenticator == nil || health == nil || legacy == nil || marketData == nil {
+		return nil, errors.New("HTTP authenticator, health, legacy and Market Data handlers are required")
 	}
 	router := platformsecurity.NewRouter()
 	routes := []struct {
