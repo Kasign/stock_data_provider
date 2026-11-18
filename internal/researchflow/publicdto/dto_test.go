@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -193,6 +194,51 @@ func TestDomainProjectionsValidateAgainstTheirPublicSchemas(t *testing.T) {
 	}, "1.0.0")
 	assertDTO("SkippedStage", "stage-1.0.0.schema.json", skippedStage)
 	assertDTO("Attempt", "attempt-1.0.0.schema.json", attempt)
+}
+
+
+func TestPublicDTOTimeFieldsAreCanonicalUTC(t *testing.T) {
+	local := time.Date(2026, 11, 18, 18, 0, 0, 123456789, time.FixedZone("UTC+8", 8*60*60))
+	utc := local.UTC()
+	started := local.Add(time.Minute)
+	finished := local.Add(2 * time.Minute)
+	retryAt := local.Add(3 * time.Minute)
+	leaseUntil := local.Add(4 * time.Minute)
+
+	run := RunFromDomain(domain.Run{
+		SystemAsOf: local, DeadlineAt: local.Add(time.Hour), CreatedAt: local,
+		StartedAt: &started, FinishedAt: &finished,
+	})
+	stage := StageFromDomain(domain.Stage{
+		RetryAt: &retryAt, CreatedAt: local, StartedAt: &started, FinishedAt: &finished,
+	}, "1.0.0")
+	attempt := AttemptFromDomain(domain.Attempt{
+		LeaseExpiresAt: &leaseUntil, StartedAt: local, FinishedAt: &finished,
+	}, "1.0.0")
+
+	assertUTC := func(name string, value any, fields ...string) {
+		t.Helper()
+		raw, err := json.Marshal(value)
+		if err != nil {
+			t.Fatalf("%s marshal: %v", name, err)
+		}
+		var object map[string]any
+		if err := json.Unmarshal(raw, &object); err != nil {
+			t.Fatalf("%s unmarshal: %v", name, err)
+		}
+		for _, field := range fields {
+			got, ok := object[field].(string)
+			if !ok || !strings.HasSuffix(got, "Z") {
+				t.Errorf("%s.%s must be serialized with UTC Z, got %#v (json=%s)", name, field, object[field], raw)
+			}
+		}
+	}
+	assertUTC("Run", run, "system_as_of", "deadline_at", "created_at", "started_at", "finished_at")
+	assertUTC("Stage", stage, "retry_at", "created_at", "started_at", "finished_at")
+	assertUTC("Attempt", attempt, "lease_expires_at", "started_at", "finished_at")
+	if !run.SystemAsOf.Equal(utc) || run.SystemAsOf.Location() != time.UTC {
+		t.Fatalf("Run DTO time must be normalized to UTC: %#v", run.SystemAsOf)
+	}
 }
 
 func TestAttemptDTOClonesNullableTimePointers(t *testing.T) {
