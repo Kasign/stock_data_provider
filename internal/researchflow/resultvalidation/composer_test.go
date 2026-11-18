@@ -2,6 +2,7 @@ package resultvalidation
 
 import (
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -188,8 +189,8 @@ func TestComposeResultRejectsRiskPassUsingUnusableQuantResult(t *testing.T) {
 	quant := validQuantResult()
 	quant.QualityStatus = "unknown"
 	input.QuantResults = []QuantResultEnvelope{quant}
-	registry := NewRegistry()
-	if err := registry.Register("indicator", "1.0.0", PayloadValidatorFunc(func(json.RawMessage) error { return nil })); err != nil {
+	registry, err := NewQuantPayloadRegistry()
+	if err != nil {
 		t.Fatal(err)
 	}
 	risk := validRiskDecision()
