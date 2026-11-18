@@ -2,7 +2,7 @@
 
 更新时间：2026-11-18  
 Server 分支：feat/server  
-代码核对基线：e58479145dcd866da84b0566dd34f6bbc074286e  
+代码核对基线：677798233ebd5d7aec525191d82bf350a38cbad2  
 范围：记录 Server 对 Data 公开能力的装配现状和未闭环前置；不复制 Data 领域实现。
 
 ## 1. 当前已装配能力
@@ -16,7 +16,7 @@ Root 已使用最新根模块 `internal/marketdata/bootstrap.Module`，不再通
 | HTTP Egress | 复用 Platform HTTP Client BoundDoer；按启用 Provider 和能力构建出口；Data RequireEgressDependencies=true | 每类启用配置的 BoundDoer 目标策略和真实连接 |
 | TCP Egress | BaoStock/Pytdx 由 Server 构造 allowlist DialContext；限制 TCP、Host/Port，解析后拒绝非公网 IP，并向解析 IP 拨号 | 目标环境 DNS/网络和真实 Provider 连通性 |
 | Application | Server AnalysisCollector 适配 Data Application Port，旧 Analysis Runner 直接同进程调用 Data | 数据映射、时点、质量状态和真实行情验证 |
-| HTTP | Data InProcessHandler 挂载到 Root `/api/v1/` 路由，由 Platform Router 统一 Owner Bearer 认证 | DATA-CTR-006 请求体限制、Request ID、Fault、路由集成测试 |
+| HTTP | Data InProcessHandler 挂载到 Root 明确的 `/api/v1/quotes/`、`bars/`、`bundles/`、`data-sources/`、`market/`、`stocks/` 路径前缀，由 Platform Router 统一 Owner Bearer 认证 | DATA-CTR-006 请求体限制、Request ID、Fault、路由集成测试 |
 | Diagnostics | Data Diagnostics.Ready 注册为 Required Check；输出 Provider 数量摘要，不展开任意 ProviderDiagnostics | Data Ready 目前主要检查 DB/Redis Ping；不等同 Schema/checksum 校验 |
 | Lifecycle | Server-owned Component 调用 Data Start/Stop；退出时先停消费者/模块，再 Close Data 自有资源，最后关 Root 共享资源 | 真实 API/Worker、失败回滚、SIGTERM、并发关闭 |
 | Legacy | 删除 `internal/adapters/marketdata/**` 旧 HTTP Client/Collector/Config/DTO 文件 | 全仓 CI 确认无遗留引用 |
