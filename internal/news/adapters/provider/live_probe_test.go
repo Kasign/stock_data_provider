@@ -235,7 +235,8 @@ func TestPublicationTimeShapeSummaryDoesNotExposeTimestampDigitsOrLetters(t *tes
 	if got != want {
 		t.Fatalf("shape summary=%q want %q", got, want)
 	}
-	if strings.ContainsAny(got, "0123456789") || strings.Contains(got, "2026") {
-		t.Fatalf("shape summary leaked timestamp values: %q", got)
+	// 9 和 A 是脱敏占位符；检查原始数字与字母均未泄漏，不能把占位符本身误判为原文。
+	if strings.ContainsAny(got, "012345678TZ") {
+		t.Fatalf("shape summary leaked timestamp characters: %q", got)
 	}
 }
