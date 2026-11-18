@@ -55,7 +55,7 @@ Bootstrap 的 `available` 映射定义 11 个 Provider Adapter 候选；默认 `
 | DragonTiger | Eastmoney |
 | Announcements | Eastmoney |
 | TradingCalendar | BaoStock |
-| SecurityTradingStatus | 无 |
+| SecurityTradingStatus | 无（Tushare 有实现，但默认关闭） |
 | Fundamentals | BaoStock |
 | Valuations | 无 |
 | IndexCatalog | 无 |
@@ -66,7 +66,7 @@ Bootstrap 的 `available` 映射定义 11 个 Provider Adapter 候选；默认 `
 | AdjustmentFactors | BaoStock（动态发现，不是独立配置开关） |
 | CorporateActions | 无 |
 | HistoricalIndexConstituents | 无 |
-| PriceLimitEvents | 无 |
+| PriceLimitEvents | 无（当前无 Provider 实现） |
 
 MiaoXiang 的 ChipDistribution/CapitalFlow 由独立 `MARKET_DATA_MX_ENABLED` 控制，默认关闭，不纳入主 Provider 默认矩阵。
 
@@ -89,6 +89,8 @@ MiaoXiang 的 ChipDistribution/CapitalFlow 由独立 `MARKET_DATA_MX_ENABLED` �
 **StockUniverse 不是孤立接口。** `internal/marketdata/service/market_stocks.go` 中 `DataService.StockUniverse` 遍历已注册的 StockSearchProvider，动态识别 StockUniverseProvider；`MarketStocks` 调用该方法获取全量证券目录，再做分页及行情/均线增强。因此无需新增独立配置项或重复注册机制。HTTP SourceStatus 目前只反映 StockSearch 能力，不单独暴露 StockUniverse 能力位；这不改变 Service 内部的真实消费路径。
 
 **PriceLimitEventProvider 是已存在调用场景但缺少数据源实现的能力缺口。** Provider 目录中未发现 `FetchPriceLimitEventEvidence` 的具体实现，Bootstrap 自动收集结果为空；但 `internal/marketdata/httpapi/price_limit_rule.go` 会调用 `DataService.PriceLimitEventEvidence`，缺少独立事件证据时接口将状态置为 unknown、清空可用涨跌幅并保留质量原因，属于有意失败关闭。不能将其当作“无消费者的孤立接口”，也不能用普通涨跌停池代替特殊事件证据。
+
+**SecurityTradingStatus 的默认覆盖同样存在缺口。** 当前仅 Tushare 实现专用 `SecurityTradingStatusProvider`，但 Tushare 默认关闭；BaoStock 日 K 中 `tradestatus/isST` 的指定样本不等于完整的按日证券状态 Provider。HTTP `price_limit_rule` 需要先获取该状态，再获取独立特殊事件证据；默认配置下两项来源都不齐全，接口必须返回 unknown，而不是推断正常状态。
 
 ## 4. Provider 实现文件核对索引
 
