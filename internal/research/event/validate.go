@@ -88,6 +88,12 @@ func (e ResearchEvent) Validate() error {
 		}
 		derivedRefs[ref] = struct{}{}
 	}
+	if e.EventVersion > 1 {
+		previousVersion := ResearchEventRef{EventID: e.EventID, EventVersion: e.EventVersion - 1}
+		if _, exists := derivedRefs[previousVersion]; !exists {
+			return fmt.Errorf("derived_from_refs must include the immediately previous Event version %s@%d", previousVersion.EventID, previousVersion.EventVersion)
+		}
+	}
 	if e.SourceTimes == nil {
 		return fmt.Errorf("source_times must be a non-null array")
 	}

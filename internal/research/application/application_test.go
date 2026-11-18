@@ -406,7 +406,7 @@ func TestUpdateEventUsesExpectedVersionAndDomainLifecycleRules(t *testing.T) {
 		SubjectRefs: []string{"security:600000"}, EvidenceRefs: []string{"ev_source_1"},
 		SystemObservedAt: now, SystemAsOf: now.Add(time.Minute),
 		ImpactHypothesisRefs: []string{}, InvalidationConditions: []string{"公告撤回"},
-		Uncertainty: []string{}, TimeNormalizationRuleVersion: "1.0.0", DerivedFromRefs: []EventRef{}, SourceTimes: []EventSourceTime{{
+		Uncertainty: []string{}, TimeNormalizationRuleVersion: "1.0.0", DerivedFromRefs: []EventRef{{EventID: previous.EventID, EventVersion: previous.EventVersion}}, SourceTimes: []EventSourceTime{{
 			EvidenceRef: "ev_source_1", TimeType: string(researchevent.TimeSystemObservedAt),
 			Value: now, AssertedBy: "news:observation",
 		}},
@@ -419,6 +419,16 @@ func TestUpdateEventUsesExpectedVersionAndDomainLifecycleRules(t *testing.T) {
 	}
 	if repo.appended {
 		t.Fatal("invalid reason_code must not append an Event")
+	}
+	missingLineage := revision
+	missingLineage.DerivedFromRefs = []EventRef{}
+	if _, err := service.UpdateEvent(context.Background(), UpdateEventCommand{
+		EventID: previous.EventID, ExpectedVersion: 1, Revision: missingLineage,
+	}); err == nil {
+		t.Fatal("Event revision without the direct previous version reference must be rejected")
+	}
+	if repo.appended {
+		t.Fatal("invalid Event lineage must not append an Event")
 	}
 	got, err := service.UpdateEvent(context.Background(), UpdateEventCommand{
 		EventID: previous.EventID, ExpectedVersion: 1, Revision: revision,

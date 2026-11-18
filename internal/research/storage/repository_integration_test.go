@@ -103,6 +103,7 @@ func TestResearchEventLifecycleOutboxFailureRollsBackEventVersion(t *testing.T) 
 	next.EventVersion = 2
 	next.Status = researchevent.StatusConsolidating
 	next.SystemAsOf = now.Add(time.Minute)
+	next.DerivedFromRefs = []researchevent.ResearchEventRef{{EventID: previous.EventID, EventVersion: previous.EventVersion}}
 	idempotencyKey := "research-event-state:research-event:" + eventID + ":2"
 	if _, err := db.ExecContext(ctx,
 		"INSERT INTO research_notification_outbox (event_id, event_type, schema_version, source_module, occurred_at, published_at, subject_ref, idempotency_key, correlation_id, payload_fingerprint, payload, created_at, available_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -625,6 +626,18 @@ func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 	if err := eventRepo.Append(ctx, missingDerived); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("append Event with missing derived reference = %v, want ErrNotFound", err)
 	}
+	wrongVersionDerived := eventV1
+	wrongVersionDerived.EventID = missingDerivedID
+	wrongVersionDerived.DerivedFromRefs = []researchevent.ResearchEventRef{{EventID: derivedParentID, EventVersion: 2}}
+	if err := eventRepo.Append(ctx, wrongVersionDerived); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("append Event with existing ID but missing exact derived version = %v, want ErrNotFound", err)
+	}
+	selfDerived := eventV1
+	selfDerived.EventID = missingDerivedID
+	selfDerived.DerivedFromRefs = []researchevent.ResearchEventRef{{EventID: missingDerivedID, EventVersion: 1}}
+	if err := eventRepo.Append(ctx, selfDerived); err == nil || !strings.Contains(err.Error(), "cannot derive from itself") {
+		t.Fatalf("append Event with self-reference = %v, want self-reference rejection", err)
+	}
 	var missingHeadCount int
 	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM research_aggregate_heads WHERE aggregate_type='event' AND aggregate_id=?", missingDerivedID).Scan(&missingHeadCount); err != nil {
 		t.Fatalf("count rejected derived Event head: %v", err)
@@ -670,14 +683,22 @@ func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 	}
 	eventGap := eventV1
 	eventGap.EventVersion = 3
+	eventGap.DerivedFromRefs = []researchevent.ResearchEventRef{{EventID: eventV1.EventID, EventVersion: 2}}
 	if err := eventRepo.Append(ctx, eventGap); !errors.Is(err, ErrConflict) {
 		t.Fatalf("Event version gap error = %v, want ErrConflict", err)
 	}
 	eventV2 := eventV1
 	eventV2.EventVersion = 2
 	eventV2.SystemAsOf = cutoff.Add(time.Minute)
+	if err := eventRepo.Append(ctx, eventV2); err == nil || !strings.Contains(err.Error(), "immediately previous Event version") {
+		t.Fatalf("append Event v2 without direct previous reference = %v, want lineage rejection", err)
+	}
+	if _, err := eventRepo.GetVersion(ctx, eventID, 2); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("Event v2 after missing-lineage rejection = %v, want ErrNotFound", err)
+	}
+	eventV2.DerivedFromRefs = []researchevent.ResearchEventRef{{EventID: eventV1.EventID, EventVersion: eventV1.EventVersion}}
 	if err := eventRepo.Append(ctx, eventV2); err != nil {
-		t.Fatalf("append Event v2: %v", err)
+		t.Fatalf("append Event v2 with direct previous reference: %v", err)
 	}
 	if got, err := eventRepo.GetVersion(ctx, eventID, 2); err != nil || got.EventVersion != 2 {
 		t.Fatalf("get Event v2 = version %d, error %v", got.EventVersion, err)
@@ -857,6 +878,7 @@ func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 	eventV3 := eventV2
 	eventV3.EventVersion = 3
 	eventV3.SystemAsOf = eventV2.SystemAsOf.Add(time.Minute)
+	eventV3.DerivedFromRefs = []researchevent.ResearchEventRef{{EventID: eventV2.EventID, EventVersion: eventV2.EventVersion}}
 	if err := eventRepo.Append(ctx, eventV3); !errors.Is(err, ErrCorruptRecord) {
 		t.Fatalf("append after tampered previous Event error = %v, want ErrCorruptRecord", err)
 	}
@@ -907,7 +929,9 @@ func TestResearchAppendRejectsAggregateHeadWithMissingLatestVersion(t *testing.T
 		SubjectRefs: []string{}, EvidenceRefs: []string{},
 		SystemObservedAt: now, SystemAsOf: now,
 		ImpactHypothesisRefs: []string{}, InvalidationConditions: []string{},
-		Uncertainty: []string{}, TimeNormalizationRuleVersion: "1.0.0", DerivedFromRefs: []researchevent.ResearchEventRef{}, SourceTimes: []researchevent.EventSourceTime{},
+		Uncertainty: []string{}, TimeNormalizationRuleVersion: "1.0.0",
+		DerivedFromRefs: []researchevent.ResearchEventRef{{EventID: eventID, EventVersion: 1}},
+		SourceTimes:     []researchevent.EventSourceTime{},
 	}
 	if err := repo.Append(ctx, next); !errors.Is(err, ErrCorruptRecord) {
 		t.Fatalf("append with missing latest Event row = %v, want ErrCorruptRecord", err)

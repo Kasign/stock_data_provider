@@ -24,6 +24,7 @@ func TestBuildResearchLifecycleEnvelopeKeepsStablePublicationIdentity(t *testing
 	next.EventVersion = 2
 	next.Status = researchevent.StatusConsolidating
 	next.SystemAsOf = now.Add(time.Second)
+	next.DerivedFromRefs = []researchevent.ResearchEventRef{{EventID: previous.EventID, EventVersion: previous.EventVersion}}
 	transition, err := researchevent.NewLifecycleTransition(previous, next, now.Add(2*time.Second))
 	if err != nil {
 		t.Fatal(err)
