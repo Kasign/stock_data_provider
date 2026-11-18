@@ -145,6 +145,8 @@ func (r *newsSearchIntegrationNotificationReceiver) Receive(ctx context.Context,
 type newsSearchIntegrationProvider struct {
 	calls               atomic.Int32
 	recoveryCalls       atomic.Int32
+	rateLimitCalls      atomic.Int32
+	timeoutCalls        atomic.Int32
 	cancellationStarted chan struct{}
 	cancellationOnce    sync.Once
 }
@@ -154,6 +156,9 @@ func (p *newsSearchIntegrationProvider) Search(ctx context.Context, request news
 	if request.Query == "permanent-failure" {
 		return nil, &newsapp.ProviderError{Code: newsapp.ProviderErrorUnauthorized}
 	}
+	if request.Query == "malformed-response" { return nil, &newsapp.ProviderError{Code: newsapp.ProviderErrorResponseInvalid} }
+	if request.Query == "rate-limited" { if p.rateLimitCalls.Add(1) == 1 { return nil, &newsapp.ProviderError{Code: newsapp.ProviderErrorRateLimited} }; return []newsdomain.Candidate{{Title: "Deterministic rate-limited recovery candidate", RawURL: "https://publisher.example.test/rate-limited-recovery", PublisherName: "Integration Fixture Publisher"}}, nil }
+	if request.Query == "timeout-provider" { if p.timeoutCalls.Add(1) == 1 { return nil, &newsapp.ProviderError{Code: newsapp.ProviderErrorTimeout} }; return []newsdomain.Candidate{{Title: "Deterministic timeout recovery candidate", RawURL: "https://publisher.example.test/timeout-recovery", PublisherName: "Integration Fixture Publisher"}}, nil }
 	if request.Query == "inflight-cancel" {
 		p.cancellationOnce.Do(func() { close(p.cancellationStarted) })
 		<-ctx.Done()
@@ -329,6 +334,18 @@ func TestNewsSearchStageResearchflowMariaDBIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("创建 Expired Attempt 恢复 Researchflow Run 失败: %v", err)
 	}
+	rateLimitedCreated, err := createRun.CreateRun(ctx, researchflowdomain.CreateRunCommand{
+		SchemaVersion: "1.0.0", IdempotencyKey: "news-search-stage-rate-limited-integration", TemplateRef: workflowTemplate.Ref, TemplateVersion: workflowTemplate.Version, InputSnapshotRefs: []string{}, Parameters: json.RawMessage("{\"query\":\"rate-limited\",\"query_dimension\":\"market\",\"limit\":10}"),
+	})
+	if err != nil { t.Fatalf("创建 RateLimited Provider 失败 Researchflow Run 失败: %v", err) }
+	timeoutProviderCreated, err := createRun.CreateRun(ctx, researchflowdomain.CreateRunCommand{
+		SchemaVersion: "1.0.0", IdempotencyKey: "news-search-stage-timeout-provider-integration", TemplateRef: workflowTemplate.Ref, TemplateVersion: workflowTemplate.Version, InputSnapshotRefs: []string{}, Parameters: json.RawMessage("{\"query\":\"timeout-provider\",\"query_dimension\":\"market\",\"limit\":10}"),
+	})
+	if err != nil { t.Fatalf("创建 Timeout Provider 失败 Researchflow Run 失败: %v", err) }
+	malformedResponseCreated, err := createRun.CreateRun(ctx, researchflowdomain.CreateRunCommand{
+		SchemaVersion: "1.0.0", IdempotencyKey: "news-search-stage-malformed-response-integration", TemplateRef: workflowTemplate.Ref, TemplateVersion: workflowTemplate.Version, InputSnapshotRefs: []string{}, Parameters: json.RawMessage("{\"query\":\"malformed-response\",\"query_dimension\":\"market\",\"limit\":10}"),
+	})
+	if err != nil { t.Fatalf("创建 Malformed Response Provider 失败 Researchflow Run 失败: %v", err) }
 	permanentFailureCreated, err := createRun.CreateRun(ctx, researchflowdomain.CreateRunCommand{
 		SchemaVersion: "1.0.0", IdempotencyKey: "news-search-stage-permanent-failure-integration",
 		TemplateRef: workflowTemplate.Ref, TemplateVersion: workflowTemplate.Version,
@@ -437,13 +454,19 @@ func TestNewsSearchStageResearchflowMariaDBIntegration(t *testing.T) {
 		if loadErr != nil {
 			t.Fatalf("轮询 Expired Attempt 恢复 Researchflow Run 状态失败: %v", loadErr)
 		}
+		rateLimitedRun, loadErr := repository.GetRun(ctx, rateLimitedCreated.Run.Ref)
+		if loadErr != nil { t.Fatalf("轮询 RateLimited Researchflow Run 状态失败: %v", loadErr) }
+		timeoutProviderRun, loadErr := repository.GetRun(ctx, timeoutProviderCreated.Run.Ref)
+		if loadErr != nil { t.Fatalf("轮询 Timeout Provider Researchflow Run 状态失败: %v", loadErr) }
+		malformedResponseRun, loadErr := repository.GetRun(ctx, malformedResponseCreated.Run.Ref)
+		if loadErr != nil { t.Fatalf("轮询 Malformed Response Researchflow Run 状态失败: %v", loadErr) }
 		permanentFailureRun, loadErr := repository.GetRun(ctx, permanentFailureCreated.Run.Ref)
 		if loadErr != nil {
 			t.Fatalf("轮询不可重试 Provider 失败 Researchflow Run 状态失败: %v", loadErr)
 		}
 		if normalRun.Run.Status.Terminal() && expiredRun.Run.Status.Terminal() &&
 			cancelledRun.Run.Status.Terminal() && inFlightCancelledRun.Run.Status.Terminal() &&
-			recoveredRun.Run.Status.Terminal() && permanentFailureRun.Run.Status.Terminal() {
+			recoveredRun.Run.Status.Terminal() && rateLimitedRun.Run.Status.Terminal() && timeoutProviderRun.Run.Status.Terminal() && malformedResponseRun.Run.Status.Terminal() && permanentFailureRun.Run.Status.Terminal() {
 			break
 		}
 		select {
@@ -618,12 +641,35 @@ func TestNewsSearchStageResearchflowMariaDBIntegration(t *testing.T) {
 		t.Fatalf("不可重试 Provider 失败 Run Finalization 应生成一条终态 Outbox，实际=%d", permanentFailureOutboxCount)
 	}
 
+	rateLimitedLoaded, err := repository.GetRun(ctx, rateLimitedCreated.Run.Ref)
+	if err != nil { t.Fatalf("读取 RateLimited Run 失败: %v", err) }
+	if rateLimitedLoaded.Run.Status != researchflowdomain.RunSucceeded || rateLimitedLoaded.Stages[0].AttemptNo != 2 { t.Fatalf("RateLimited 未按 RetryPolicy 重试并成功: %+v", rateLimitedLoaded) }
+	timeoutProviderLoaded, err := repository.GetRun(ctx, timeoutProviderCreated.Run.Ref)
+	if err != nil { t.Fatalf("读取 Timeout Provider Run 失败: %v", err) }
+	if timeoutProviderLoaded.Run.Status != researchflowdomain.RunSucceeded || timeoutProviderLoaded.Stages[0].AttemptNo != 2 { t.Fatalf("Timeout Provider 未按 RetryPolicy 重试并成功: %+v", timeoutProviderLoaded) }
+	malformedResponseLoaded, err := repository.GetRun(ctx, malformedResponseCreated.Run.Ref)
+	if err != nil { t.Fatalf("读取 Malformed Response Run 失败: %v", err) }
+	if malformedResponseLoaded.Run.Status != researchflowdomain.RunFailed || malformedResponseLoaded.Stages[0].AttemptNo != 1 || malformedResponseLoaded.Stages[0].Status != researchflowdomain.StageFailed { t.Fatalf("Malformed Response 不应重试: %+v", malformedResponseLoaded) }
+	for _, tc := range []struct{name, runRef, wantCode string}{{"RateLimited", rateLimitedCreated.Run.Ref, newsapp.ProviderErrorRateLimited}, {"Timeout", timeoutProviderCreated.Run.Ref, newsapp.ProviderErrorTimeout}, {"MalformedResponse", malformedResponseCreated.Run.Ref, newsapp.ProviderErrorResponseInvalid}} {
+		var attemptRef string
+		if err := db.QueryRowContext(ctx, "SELECT attempt_ref FROM researchflow_attempts WHERE run_ref = ? ORDER BY attempt_no DESC LIMIT 1", tc.runRef).Scan(&attemptRef); err != nil { t.Fatalf("读取 %s 最终 Attempt 失败: %v", tc.name, err) }
+		attempt, err := repository.GetAttempt(ctx, attemptRef)
+		if err != nil { t.Fatalf("读取 %s 最终 Attempt 失败: %v", tc.name, err) }
+		if attempt.OutputRef == nil { t.Fatalf("%s 最终 Attempt 缺少 OutputRef: %+v", tc.name, attempt) }
+		resource, err := repository.GetStageOutputResource(ctx, *attempt.OutputRef)
+		if err != nil { t.Fatalf("读取 %s Payload 失败: %v", tc.name, err) }
+		var payload newsstage.SearchCandidatesOutput
+		if err := json.Unmarshal(resource.Content, &payload); err != nil { t.Fatalf("解析 %s Payload 失败: %v", tc.name, err) }
+		if len(payload.Outcomes) != 1 || payload.Outcomes[0].ErrorCode != tc.wantCode { t.Fatalf("%s Provider ErrorCode 未持久化: %+v", tc.name, payload) }
+	}
+	if fixtureProvider.rateLimitCalls.Load() != 2 || fixtureProvider.timeoutCalls.Load() != 2 { t.Fatalf("RateLimited/Timeout 应各执行两次: rate=%d timeout=%d", fixtureProvider.rateLimitCalls.Load(), fixtureProvider.timeoutCalls.Load()) }
+
 	// 使用真实 MariaDB Outbox Store 和 Server Relay，验证发布、暂时失败重试及确认提交。
 	receiver := &newsSearchIntegrationNotificationReceiver{}
 	receiver.failFirst.Store(true)
 	runRefs := []string{
 		created.Run.Ref, deadlineCreated.Run.Ref, cancelCreated.Run.Ref,
-		inFlightCancelCreated.Run.Ref, recoveryCreated.Run.Ref, permanentFailureCreated.Run.Ref,
+		inFlightCancelCreated.Run.Ref, recoveryCreated.Run.Ref, rateLimitedCreated.Run.Ref, timeoutProviderCreated.Run.Ref, malformedResponseCreated.Run.Ref, permanentFailureCreated.Run.Ref,
 	}
 	for index, runRef := range runRefs {
 		relay, err := serverrelay.NewResearchflowNotificationRelay(
