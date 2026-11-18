@@ -286,35 +286,55 @@ func (c *AnalysisCollector) collectOne(ctx context.Context, asOf time.Time, secu
 
 func requestedDatasets(requirements domain.RequirementSet) (history, quote, index bool) {
 	all := append([]domain.DataRequirement(nil), requirements.Core...)
-	for _, items := range requirements.ByStrategy { all = append(all, items...) }
-	for _, items := range requirements.ByFactor { all = append(all, items...) }
+	for _, items := range requirements.ByStrategy {
+		all = append(all, items...)
+	}
+	for _, items := range requirements.ByFactor {
+		all = append(all, items...)
+	}
 	for _, item := range all {
 		switch strings.ToLower(strings.TrimSpace(item.Dataset)) {
-		case "daily_bars", "daily.kline", "kline": history = true
-		case "realtime_quote": quote = true
-		case "index_bars", "index_daily": index = true
+		case "daily_bars", "daily.kline", "kline":
+			history = true
+		case "realtime_quote":
+			quote = true
+		case "index_bars", "index_daily":
+			index = true
 		}
 	}
 	return
 }
 
 func isIndexSecurity(security domain.Security) bool {
-	if strings.EqualFold(strings.TrimSpace(security.AssetType), "index") || strings.EqualFold(strings.TrimSpace(security.AssetType), "benchmark") {
+	if strings.EqualFold(strings.TrimSpace(security.AssetType), "index") ||
+		strings.EqualFold(strings.TrimSpace(security.AssetType), "benchmark") {
 		return true
 	}
 	for key, value := range security.Attributes {
-		if strings.EqualFold(key, "is_index") && strings.EqualFold(strings.TrimSpace(value), "true") { return true }
-		if strings.EqualFold(key, "instrument_type") && strings.EqualFold(strings.TrimSpace(value), "index") { return true }
+		if strings.EqualFold(key, "is_index") && strings.EqualFold(strings.TrimSpace(value), "true") {
+			return true
+		}
+		if strings.EqualFold(key, "instrument_type") && strings.EqualFold(strings.TrimSpace(value), "index") {
+			return true
+		}
 	}
 	return false
 }
 
 func datasetName(history, quote, index bool) string {
 	parts := make([]string, 0, 3)
-	if history { parts = append(parts, "daily_bars") }
-	if quote { parts = append(parts, "realtime_quote") }
-	if index { parts = append(parts, "index_bars") }
-	if len(parts) == 0 { return "unknown" }
+	if history {
+		parts = append(parts, "daily_bars")
+	}
+	if quote {
+		parts = append(parts, "realtime_quote")
+	}
+	if index {
+		parts = append(parts, "index_bars")
+	}
+	if len(parts) == 0 {
+		return "unknown"
+	}
 	return strings.Join(parts, ",")
 }
 
@@ -331,13 +351,17 @@ func analysisQualityStatus(status dataapp.QualityStatus) string {
 
 func firstSource(bars []dataapp.DailyBar) string {
 	for _, bar := range bars {
-		if strings.TrimSpace(bar.Source) != "" { return bar.Source }
+		if strings.TrimSpace(bar.Source) != "" {
+			return bar.Source
+		}
 	}
 	return ""
 }
 
 func cloneFloat(value *float64) *float64 {
-	if value == nil { return nil }
+	if value == nil {
+		return nil
+	}
 	copy := *value
 	return &copy
 }
@@ -349,7 +373,9 @@ func cloneTime(value *time.Time) *time.Time {
 }
 
 func int64ToFloat(value *int64) *float64 {
-	if value == nil { return nil }
+	if value == nil {
+		return nil
+	}
 	converted := float64(*value)
 	return &converted
 }
