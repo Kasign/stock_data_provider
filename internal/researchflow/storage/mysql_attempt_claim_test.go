@@ -791,37 +791,28 @@ func TestMariaDBGlobalWorkerCapacitySerializesClaimsAcrossRuns(t *testing.T) {
 		t.Fatalf("release global capacity process barrier: %v", err)
 	}
 
-	type processWaitResult struct {
-		helper *helperProcess
-		err    error
-	}
-	waitResults := make(chan processWaitResult, len(helpers))
-	for _, helper := range helpers {
-		helper := helper
-		go func() { waitResults <- processWaitResult{helper: helper, err: <-helper.waitDone} }()
-	}
 	outcomes := make([]outcome, 0, len(helpers))
-	for range helpers {
+	for _, helper := range helpers {
 		select {
-		case waited := <-waitResults:
-			waited.helper.finished = true
-			if waited.err != nil {
-				t.Fatalf("global capacity helper process failed: %v", waited.err)
+		case waitErr := <-helper.waitDone:
+			helper.finished = true
+			if waitErr != nil {
+				t.Fatalf("global capacity helper process failed: %v", waitErr)
 			}
-			raw, err := os.ReadFile(waited.helper.resultPath)
+			raw, err := os.ReadFile(helper.resultPath)
 			if err != nil {
-				t.Fatalf("read helper result for %q: %v", waited.helper.target.runRef, err)
+				t.Fatalf("read helper result for %q: %v", helper.target.runRef, err)
 			}
 			var result globalCapacityProcessResult
 			if err := json.Unmarshal(raw, &result); err != nil {
-				t.Fatalf("decode helper result for %q: %v", waited.helper.target.runRef, err)
+				t.Fatalf("decode helper result for %q: %v", helper.target.runRef, err)
 			}
 			if result.Claimed {
 				outcomes = append(outcomes, outcome{
-					target: waited.helper.target, attempt: domain.Attempt{Ref: result.AttemptRef},
+					target: helper.target, attempt: domain.Attempt{Ref: result.AttemptRef},
 				})
 			} else if result.CapacityRejected {
-				outcomes = append(outcomes, outcome{target: waited.helper.target})
+				outcomes = append(outcomes, outcome{target: helper.target})
 			} else {
 				t.Fatalf("helper process returned neither claim nor capacity rejection: %+v", result)
 			}
