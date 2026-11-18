@@ -32,3 +32,13 @@
 ## 4. 后续约束
 
 Web 端只消费正式冻结并由 Root Server 注册的契约；在冻结和路由门禁满足前，不新增猜测 API、Mock 业务数据或重复领域逻辑。
+
+
+## 5. Review 修复后的回归验证
+
+提交 SHA：`07c581e19d07901682c666ab17394dfbe100ebbb`
+
+- [WebUI Checks Run 44290255419](https://github.com/Kasign/stock_data_provider/actions/runs/44290255419)：success。
+- [WebUI Browser Smoke Run 44290255445](https://github.com/Kasign/stock_data_provider/actions/runs/44290255445)：success。
+- Browser Smoke 的响应式布局、CSS 结构/CSSOM 基线及工作台各主要交互验收步骤均成功。
+- 本次回归验证覆盖本提交中的 Web API 凭据隔离测试与现有 Web 浏览器验收；不代表项目级 SRV-CTR-002 已冻结，也不覆盖 Server Race/Vet 缺口。
