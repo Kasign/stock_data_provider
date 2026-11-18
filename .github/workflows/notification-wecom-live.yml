@@ -1,0 +1,31 @@
+name: Notification WeCom Webhook Live Smoke
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: notification-wecom-live-smoke
+  cancel-in-progress: false
+
+jobs:
+  wecom-webhook:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Unit tests
+        run: go test ./internal/notification/channel/wecom -run 'Test(NewRejectsUntrustedWebhookDestinations|SendTextAndMarkdown|SendClassifiesProviderOutcomes|AdapterErrorsDoNotContainWebhookSecret)$' -count=1
+      - name: Live WeCom webhook smoke test
+        env:
+          WECHAT_WORK_WEBHOOK_URL: ${{ secrets.WECHAT_WORK_WEBHOOK_URL }}
+          WECHAT_LIVE_SMOKE: "1"
+        run: go test ./internal/notification/channel/wecom -run '^TestLiveWebhook$' -count=1 -v
