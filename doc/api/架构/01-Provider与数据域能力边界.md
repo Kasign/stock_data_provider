@@ -85,7 +85,7 @@ MiaoXiang 的 ChipDistribution/CapitalFlow 由 `MXEnabled` 独立控制，不纳
 
 实现文件核对基线为当前任务开始时的 `feat/data @ 90871455b282d6124d3c25fb9189fbd274894e67`。Bootstrap 的能力类型断言是运行装配的最终门禁；若配置启用但 Provider 未实现接口，模块构造应失败。
 
-本轮已定位 BaoStock TradingCalendar/AdjustmentFactor、Tencent StockSearch、Eastmoney CapitalFlow 的独立实现文件。进一步核对确认：AdjustmentFactorProvider/CorporateActionProvider 由 DataService 遍历已装配的 NamedProvider 并做运行时类型断言；HistoricalIndexConstituentProvider 在 IndexCatalog Provider 中按需类型断言；PriceLimitEventProvider 由 Bootstrap 遍历全部启用 Provider 自动收集；SecurityTradingStatus 与 MarketCapitalFlow 则通过显式配置、能力切片和 Set 方法装配。StockUniverseProvider 虽有 Eastmoney 方法，但当前未发现独立配置开关和 Bootstrap 能力切片，需继续核实是否存在实际 Service 调用场景。
+本轮已定位 BaoStock TradingCalendar/AdjustmentFactor、Tencent StockSearch、Eastmoney CapitalFlow 的独立实现文件。进一步核对确认：AdjustmentFactorProvider/CorporateActionProvider 由 DataService 遍历已装配的 NamedProvider 并做运行时类型断言；HistoricalIndexConstituentProvider 在 IndexCatalog Provider 中按需类型断言；PriceLimitEventProvider 由 Bootstrap 遍历全部启用 Provider 自动收集；SecurityTradingStatus 与 MarketCapitalFlow 则通过显式配置、能力切片和 Set 方法装配。StockUniverseProvider/Eastmoney.ListStockUniverse 复用 SearchStocks 的同一份证券目录缓存；当前未发现独立配置开关、Bootstrap 能力切片或独立 Service Port。暂不把它统计为独立数据域能力，待全仓引用核对后再决定是否保留接口抽象。
 
 ## 3. Bootstrap 装配规则
 
@@ -109,7 +109,7 @@ Provider 接口还定义 AdjustmentFactorProvider、CorporateActionProvider、St
 
 ## 4. 尚待核验的扩展能力
 
-- `StockUniverseProvider`：Eastmoney 实现了 `ListStockUniverse`，但当前 Bootstrap 没有独立能力集合或配置开关；需确认 Service 是否实际消费，避免把孤立方法算作已接入能力。
+- `StockUniverseProvider`：Eastmoney 的 `ListStockUniverse` 与 `SearchStocks` 复用同一证券目录缓存；当前未发现独立 Service Port/Bootstrap 注册。需完成全仓引用核对，判断接口是否有独立消费者；不能仅凭 Provider 方法存在宣称已接入完整证券目录 API。
 - `CorporateActionProvider` / `AdjustmentFactorProvider`：Service 已通过遍历已装配 Provider 动态发现；仍需核对各 Provider 实现和真实样本，不需要为此新增重复注册接口。
 - `HistoricalIndexConstituentProvider`：由 IndexCatalog Provider 按需类型断言；当前真实历史成分证据仍需单独核验。
 - `SecurityTradingStatusProvider` / `MarketCapitalFlowProvider`：显式配置与 Bootstrap 切片存在；需核对实际 Provider 实现和真实数据证据。
