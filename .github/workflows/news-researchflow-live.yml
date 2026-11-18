@@ -27,6 +27,8 @@ jobs:
     timeout-minutes: 10
     env:
       NEWS_RESEARCHFLOW_LIVE_TEST: "1"
+      NEWS_RESEARCHFLOW_MULTIWORKER_LIVE_TEST: "1"
+      PLATFORM_REDIS_ADDR: 127.0.0.1:6379
       NEWS_PROVIDER_TAVILY_ENDPOINT: ${{ vars.NEWS_PROVIDER_TAVILY_ENDPOINT }}
       NEWS_PROVIDER_TAVILY_API_KEY: ${{ secrets.NEWS_PROVIDER_TAVILY_API_KEY }}
       NEWS_LIVE_QUERY: ${{ vars.NEWS_LIVE_QUERY }}
@@ -41,6 +43,15 @@ jobs:
           - 3306:3306
         options: >-
           --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+      redis:
+        image: redis:7.4
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
           --health-interval=5s
           --health-timeout=5s
           --health-retries=20
@@ -63,4 +74,5 @@ jobs:
       - name: Execute real Tavily through Server Researchflow Runtime
         run: |
           go test -p 1 ./internal/server/bootstrap/ \
-            -run '^TestNewsResearchflowTavilyMariaDBLive$' -count=1 -v
+            -run '^(TestNewsResearchflowTavilyMariaDBLive|TestNewsResearchflowTavilyMultiWorkerMariaDBRedisLive)
+ -count=1 -v
