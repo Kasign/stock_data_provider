@@ -21,9 +21,10 @@ type AnalysisCollector struct {
 	historyLimit  int
 	adjustment    dataapp.AdjustmentBasis
 	maxConcurrent int
+	indexSymbols  []string
 }
 
-func NewAnalysisCollector(reader dataapp.MarketDataReader, historyLimit int, adjustment dataapp.AdjustmentBasis) (*AnalysisCollector, error) {
+func NewAnalysisCollector(reader dataapp.MarketDataReader, historyLimit int, adjustment dataapp.AdjustmentBasis, indexSymbols []string) (*AnalysisCollector, error) {
 	if reader == nil {
 		return nil, errors.New("Market Data Application Port is required")
 	}
@@ -35,7 +36,7 @@ func NewAnalysisCollector(reader dataapp.MarketDataReader, historyLimit int, adj
 	default:
 		return nil, fmt.Errorf("unsupported Market Data adjustment basis %q", adjustment)
 	}
-	return &AnalysisCollector{reader: reader, historyLimit: historyLimit, adjustment: adjustment, maxConcurrent: 8}, nil
+	symbols := append([]string(nil), indexSymbols...)\n\tif len(symbols) == 0 {\n\t\tsymbols = []string{"000001.SH"}\n\t}\n\treturn &AnalysisCollector{reader: reader, historyLimit: historyLimit, adjustment: adjustment, maxConcurrent: 8, indexSymbols: symbols}, nil
 }
 
 var _ analysisapp.DataCollector = (*AnalysisCollector)(nil)
@@ -72,7 +73,7 @@ func (c *AnalysisCollector) Collect(ctx context.Context, request domain.RunReque
 		kind     string
 	}
 	jobs := make([]job, 0, len(universe.Securities)*2)
-	for _, security := range universe.Securities {
+	seenIndexSymbols := make(map[string]struct{})\n\tfor _, security := range universe.Securities {
 		isIndex := isIndexSecurity(security)
 		if isIndex {
 			if wantHistory || wantIndex {
@@ -176,7 +177,7 @@ func (c *AnalysisCollector) collectOne(ctx context.Context, asOf time.Time, secu
 		if err != nil {
 			return collectResult{notes: []domain.SourceNote{{
 				Dataset: "realtime_quote", Symbol: security.Symbol, QualityStatus: "unavailable",
-				Diagnostic: "Data Application Port quote read failed: " + err.Error(),
+				Diagnostic: "Data Application Port quote read failed",
 				MissingFields: []string{"current_price"},
 			}}}
 		}
@@ -228,7 +229,7 @@ func (c *AnalysisCollector) collectOne(ctx context.Context, asOf time.Time, secu
 		if err != nil {
 			return collectResult{notes: []domain.SourceNote{{
 				Dataset: dataset, Symbol: security.Symbol, QualityStatus: "unavailable",
-				Diagnostic: "Data Application Port daily-bars read failed: " + err.Error(),
+				Diagnostic: "Data Application Port daily-bars read failed",
 				MissingFields: []string{"daily_bars"},
 			}}}
 		}
