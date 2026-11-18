@@ -17,7 +17,7 @@ import (
 func TestLiveWebhook(t *testing.T) {
 	raw := os.Getenv("WECHAT_WORK_WEBHOOK_URL")
 	if strings.TrimSpace(raw) == "" {
-		if os.Getenv("CI") == "true" {
+		if os.Getenv("WECHAT_LIVE_SMOKE") == "1" {
 			t.Fatal("WECHAT_WORK_WEBHOOK_URL is required in CI")
 		}
 		t.Skip("WECHAT_WORK_WEBHOOK_URL is not configured")

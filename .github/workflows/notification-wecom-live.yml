@@ -27,4 +27,5 @@ jobs:
       - name: Live WeCom webhook smoke test
         env:
           WECHAT_WORK_WEBHOOK_URL: ${{ secrets.WECHAT_WORK_WEBHOOK_URL }}
+          WECHAT_LIVE_SMOKE: "1"
         run: go test ./internal/notification/channel/wecom -run '^TestLiveWebhook$' -count=1 -v
