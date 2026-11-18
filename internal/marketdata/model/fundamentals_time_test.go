@@ -21,8 +21,8 @@ func TestFundamentalsSnapshotNormalizeInstantsUTC(t *testing.T) {
 	snapshot.NormalizeInstantsUTC()
 
 	for name, value := range map[string]time.Time{
-		"fetched_at": snapshot.FetchedAt,
-		"available_at": *snapshot.Sections[0].AvailableAt,
+		"fetched_at":         snapshot.FetchedAt,
+		"available_at":       *snapshot.Sections[0].AvailableAt,
 		"system_observed_at": *snapshot.SystemObservedAt,
 	} {
 		if value.Location() != time.UTC || value.Format("Z07:00") != "Z" {
