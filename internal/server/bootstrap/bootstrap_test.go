@@ -118,6 +118,18 @@ func TestNewDiagnosticsServiceRegistersNewsParserAndProviderConfigChecks(t *test
 	for _, result := range report.Diagnostics.Results {
 		got[result.CheckID] = result.Observation.Status
 	}
+	retentionBacklogFound := false
+	for _, result := range report.Diagnostics.Results {
+		if result.CheckID == "news.observation.retention_backlog" {
+			retentionBacklogFound = true
+			if result.Required {
+				t.Fatal("News retention backlog must be diagnostic-only and must not gate API readiness")
+			}
+		}
+	}
+	if !retentionBacklogFound {
+		t.Fatal("News retention backlog diagnostic is missing")
+	}
 	for _, id := range []string{"news.parser.rss", "news.parser.atom", "news.provider.bocha.configuration"} {
 		if status, exists := got[id]; !exists {
 			t.Fatalf("diagnostics result %q is missing", id)
