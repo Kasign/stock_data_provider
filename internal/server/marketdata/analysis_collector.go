@@ -267,7 +267,6 @@ func (c *AnalysisCollector) collectOne(ctx context.Context, asOf time.Time, secu
 				Volume: int64ToFloat(bar.Volume), Amount: cloneFloat(bar.Amount),
 				Source: bar.Source, FetchedAt: bar.FetchedAt,
 				AdjustBasis: string(bar.AdjustmentBasis),
-
 			})
 		}
 		note := domain.SourceNote{
