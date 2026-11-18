@@ -262,7 +262,6 @@ func serverBootstrapEnvironment(overrides map[string]string) []string {
 	return env
 }
 
-
 func (c *serverBootstrapChild) waitAPIReady(t *testing.T, baseURL, ownerToken string) {
 	t.Helper()
 	client := &http.Client{Timeout: 2 * time.Second}
@@ -346,28 +345,28 @@ func TestAPIBootstrapMariaDBRedisIntegration(t *testing.T) {
 
 	ownerToken := "api-bootstrap-integration-owner-token-0123456789"
 	values := map[string]string{
-		serverBootstrapHelperEnv:                "1",
-		"SERVER_ROLE":                            "api",
-		"DB_HOST":                                host,
-		"DB_PORT":                                port,
-		"DB_USER":                                adminConfig.User,
-		"DB_PASSWORD":                            adminConfig.Passwd,
-		"DB_NAME":                                database,
-		"DB_AUTO_MIGRATE":                        "true",
-		"DB_PARAMS":                              "charset=utf8mb4&parseTime=true&loc=UTC",
-		"REDIS_ADDR":                             redisAddr,
-		"REDIS_PASSWORD":                         os.Getenv("REDIS_PASSWORD"),
-		"REDIS_DB":                               os.Getenv("REDIS_DB"),
-		"MARKET_DATA_BASE_URL":                   "http://127.0.0.1:8091",
-		"MARKET_DATA_API_KEY":                    "api-bootstrap-integration-secret-0123456789",
-		"MIGRATION_ENABLED":                      "true",
-		"PLATFORM_ADMIN_TOKEN":                   ownerToken,
-		"HTTP_ADDR":                              httpAddress,
-		"HTTP_SHUTDOWN_TIMEOUT":                  "10s",
-		"HTTP_READ_TIMEOUT":                      "5s",
-		"NOTIFICATION_EVENT_MAX_ENVELOPE_BYTES":  "65536",
-		"NOTIFICATION_EVENT_MAX_PAYLOAD_BYTES":   "32768",
-		"NOTIFICATION_EVENT_MAX_JSON_DEPTH":      "32",
+		serverBootstrapHelperEnv:               "1",
+		"SERVER_ROLE":                           "api",
+		"DB_HOST":                               host,
+		"DB_PORT":                               port,
+		"DB_USER":                               adminConfig.User,
+		"DB_PASSWORD":                           adminConfig.Passwd,
+		"DB_NAME":                               database,
+		"DB_AUTO_MIGRATE":                       "true",
+		"DB_PARAMS":                             "charset=utf8mb4&parseTime=true&loc=UTC",
+		"REDIS_ADDR":                            redisAddr,
+		"REDIS_PASSWORD":                        os.Getenv("REDIS_PASSWORD"),
+		"REDIS_DB":                              os.Getenv("REDIS_DB"),
+		"MARKET_DATA_BASE_URL":                  "http://127.0.0.1:8091",
+		"MARKET_DATA_API_KEY":                   "api-bootstrap-integration-secret-0123456789",
+		"MIGRATION_ENABLED":                     "true",
+		"PLATFORM_ADMIN_TOKEN":                  ownerToken,
+		"HTTP_ADDR":                             httpAddress,
+		"HTTP_SHUTDOWN_TIMEOUT":                 "10s",
+		"HTTP_READ_TIMEOUT":                     "5s",
+		"NOTIFICATION_EVENT_MAX_ENVELOPE_BYTES": "65536",
+		"NOTIFICATION_EVENT_MAX_PAYLOAD_BYTES":  "32768",
+		"NOTIFICATION_EVENT_MAX_JSON_DEPTH":     "32",
 	}
 
 	child := startServerBootstrapChild(t, values)
