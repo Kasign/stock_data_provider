@@ -235,3 +235,13 @@ Server 已在 Owner Session 启用且 Researchflow Capacity 显式配置时，�
 - 精确代码 SHA `cb381134daa56bdf3c358f691df3864cd7611122` 的 Integration CI Run [44216370742](https://github.com/Kasign/stock_data_provider/actions/runs/44216370742) 全量 success。
 - 非阻断加固项：`RESEARCHFLOW_MAX_WORKERS` 尚无上限。当前单 Stage 模板和本地 WorkerPool 限制下不构成本轮阻断；新增多 Stage 模板前需增加全局上限或 Scheduler 有界 Dispatch fan-out。
 - 下一步为双 OS 进程 Worker 部署级验收及真实 News Provider 质量/可用性验收。SRV-CTR-001 继续 deferred。
+
+
+## 2026-11-18 双进程 Worker 与全局 Capacity 验收
+
+- Worker Bootstrap 集成测试已同时启动两个独立 Server Worker OS 进程，共享隔离 MariaDB/Redis；两者均完成启动并在 SIGTERM 后正常退出。测试同时验证 Worker-only 不加载 HTTP 配置、不绑定 HTTP Listener。
+- 全局 Worker Capacity 测试已由两个独立 OS 测试进程分别创建 MariaDB 连接池，并通过同步屏障并发执行真实 `ClaimAttempt`；在只剩一个全局槽位时只有一个 Claim 成功，另一个被 `ErrGlobalWorkerCapacityExceeded` 拒绝。过期成功 Attempt Lease 后，被拒绝 Run 可以重新 Claim。
+- 精确代码 SHA `170bac1c466d493bf9fe949c9ddbd719561432a4` 的 Integration CI Run [44218250540](https://github.com/Kasign/stock_data_provider/actions/runs/44218250540) 全量 success。
+- 该证据覆盖双 Worker 进程 Bootstrap 和跨进程数据库容量原子性；尚未覆盖两个完整 Server Worker 进程同时执行真实 Run/真实外部 Provider 请求。真实 Provider 可用性与数据质量继续单独验收。
+- `RESEARCHFLOW_MAX_WORKERS` 尚无配置上限；当前单 Stage 模板不构成本轮阻断，多 Stage 模板启用前需增加全局上限或有界 Dispatch fan-out。
+- 下一步：真实 News Provider 生产配置、可用性和数据质量验收；之后完成双 Server Worker 进程的真实 Run 端到端执行验证。SRV-CTR-001 继续 deferred。

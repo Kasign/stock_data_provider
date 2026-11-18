@@ -1324,3 +1324,28 @@ GetRun 与 CancelRun 的持久化创建者授权已在 Application/Storage 层�
 2. 验收真实 News Provider 配置、外部请求可用性和数据质量；确定性 Fixture 不作为外部 Provider 质量证据。
 3. 在多 Stage 模板启用前处理上述全局 MaxWorkers 上限/Dispatch fan-out 加固项。
 4. `SRV-CTR-001` 继续 deferred，不开放 Researchflow HTTP API。
+
+
+## 17. 2026-11-18 双进程 Worker 与全局 Capacity 验收
+
+**代码验收 SHA：** `170bac1c466d493bf9fe949c9ddbd719561432a4`。Integration CI Run [44218250540](https://github.com/Kasign/stock_data_provider/actions/runs/44218250540) 对该精确 SHA 全量 success。
+
+### 已完成的进程级验证
+
+1. Server Worker Bootstrap 集成测试同时启动两个独立 OS 子进程，共享同一个隔离 MariaDB 和 Redis；两个进程使用相同 Capacity/Deadline/LocalWorkers 配置，并分别设置 Relay Worker ID。
+2. 两个 Worker 进程同时启动时均完成 Bootstrap 和 Runtime 启动；父测试持续占用 HTTP Listener，并提供非法 HTTP_READ_TIMEOUT，验证 Worker-only 不加载 HTTP 配置、不绑定 HTTP 端口。
+3. 两个进程分别收到 SIGTERM，均在关闭时限内退出；共享数据库 Migration、Runtime、Relay 和资源关闭没有出现冲突。
+4. Researchflow 全局 Capacity 集成测试新增两个独立 OS 测试进程，各自创建独立 MariaDB 连接池，并通过文件屏障同时调用真实 `MySQLRunRepository.ClaimAttempt`。在全局容量只剩一个槽位时，只有一个进程 Claim 成功，另一个收到 `ErrGlobalWorkerCapacityExceeded`；将成功 Attempt 的 Lease 过期后，原被拒绝 Run 可以再次 Claim。
+5. 该验证证明了独立进程共享 MariaDB 时的 Claim 原子容量守卫，不再只是同进程 Goroutine 竞争测试。
+
+### 验收边界
+
+- 已通过：两个 Server Worker OS 进程共享 MariaDB/Redis 启动与关闭；独立 OS 进程共享 MariaDB 的全局 Claim 容量竞争。
+- 尚未通过本轮验证：两个完整 Server Worker 进程同时消费真实 Run、执行真实外部 News Provider 请求并观测运行中并发上限。当前进程级 Claim 子测试直接调用生产 Repository；Worker Bootstrap 双进程测试没有播种可执行 Run。
+- 真实 News Provider 的网络可用性、返回数据质量与供应商故障行为仍需单独验收；Fixture 不可替代该证据。
+- `RESEARCHFLOW_MAX_WORKERS` 尚无配置上限；当前模板仅一个 Stage，非本轮阻断。多 Stage 模板启用前仍需增加全局上限或 Scheduler 有界 Dispatch fan-out。
+- `SRV-CTR-001` 继续 deferred，不开放 Researchflow HTTP API。
+
+### 下一步
+
+主线转为真实 News Provider 配置的生产可用性和数据质量验收；随后再做两个 Server Worker 进程执行同一组真实 Run 的端到端部署验证。不得把本节的双进程 Claim 测试扩大解释为真实 Provider 执行验收。
