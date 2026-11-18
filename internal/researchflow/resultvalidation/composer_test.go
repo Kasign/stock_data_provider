@@ -1,7 +1,6 @@
 package resultvalidation
 
 import (
-	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -61,8 +60,8 @@ func validCompositionInput() ResultCompositionInput {
 func TestComposeResultKeepsFactsEvidenceExplanationAndRiskSeparate(t *testing.T) {
 	input := validCompositionInput()
 	input.QuantResults = []QuantResultEnvelope{validQuantResult()}
-	registry := NewRegistry()
-	if err := registry.Register("indicator", "1.0.0", PayloadValidatorFunc(func(payload json.RawMessage) error { return nil })); err != nil {
+	registry, err := NewQuantPayloadRegistry()
+	if err != nil {
 		t.Fatal(err)
 	}
 	risk := validRiskDecision()
@@ -93,8 +92,8 @@ func TestComposeResultRetainsNonUsableQuantResultsWithoutPromotingThem(t *testin
 	quant := validQuantResult()
 	quant.QualityStatus = "unknown"
 	input.QuantResults = []QuantResultEnvelope{quant}
-	registry := NewRegistry()
-	if err := registry.Register("indicator", "1.0.0", PayloadValidatorFunc(func(json.RawMessage) error { return nil })); err != nil {
+	registry, err := NewQuantPayloadRegistry()
+	if err != nil {
 		t.Fatal(err)
 	}
 	result, err := ComposeResult(input, registry)
@@ -194,7 +193,7 @@ func TestComposeResultRejectsRiskPassUsingUnusableQuantResult(t *testing.T) {
 		t.Fatal(err)
 	}
 	risk := validRiskDecision()
-	risk.InputRefs = []string{"qres-1"}
+	risk.InputRefs = []string{validQuantResult().ResultID}
 	input.RiskDecision = &risk
 	if _, err := ComposeResult(input, registry); !errors.Is(err, ErrInvalidResultComposition) {
 		t.Fatalf("RiskDecision pass must not consume unusable Quant result, got %v", err)
@@ -214,7 +213,7 @@ func TestComposeResultAcceptsRiskReferencesResolvedByContextAndQuant(t *testing.
 		t.Fatal(err)
 	}
 	risk := validRiskDecision()
-	risk.InputRefs = []string{"qres-1", "snapshot-1"}
+	risk.InputRefs = []string{validQuantResult().ResultID, "snapshot-1"}
 	input.RiskDecision = &risk
 	result, err := ComposeResult(input, registry)
 	if err != nil {
@@ -225,7 +224,7 @@ func TestComposeResultAcceptsRiskReferencesResolvedByContextAndQuant(t *testing.
 	}
 
 	// 引用必须精确匹配已纳入的 Quant Result ID；相似但不存在的别名仍应拒绝。
-	risk.InputRefs = []string{"qres_1"}
+	risk.InputRefs = []string{"quant_result:sha256:" + strings.Repeat("b", 64)}
 	input.RiskDecision = &risk
 	if _, err := ComposeResult(input, registry); !errors.Is(err, ErrInvalidResultComposition) {
 		t.Fatalf("unknown near-match Quant result reference must fail closed, got %v", err)
