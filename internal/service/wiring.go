@@ -14,7 +14,6 @@ import (
 	"strings"
 	"time"
 
-	"example.com/stock-analysis-flow/internal/adapters/marketdata"
 	"example.com/stock-analysis-flow/internal/adapters/pythonapi"
 	"example.com/stock-analysis-flow/internal/analysis/app"
 	"example.com/stock-analysis-flow/internal/analysis/domain"
@@ -435,16 +434,12 @@ func NewRunnerWithStores(pyCfg pythonapi.Config, store app.RunStore, snapshots a
 	return newRunnerWithCollector(collector, store, snapshots)
 }
 
-// NewRunnerWithMarketDataStores builds the main API runner around the native Go
-// market-data service. It deliberately has no Python fallback.
-func NewRunnerWithMarketDataStores(cfg marketdata.Config, store app.RunStore, snapshots app.SnapshotStore) (*app.Runner, error) {
-	client, err := marketdata.NewClient(cfg)
-	if err != nil {
-		return nil, err
-	}
-	collector, err := marketdata.NewCollector(client, cfg)
-	if err != nil {
-		return nil, err
+// NewRunnerWithDataCollector wires the Analysis Runner to a caller-owned
+// DataCollector. The Root Server owns the adapter from the current Data
+// Application Port; this package does not know whether the source is in-process.
+func NewRunnerWithDataCollector(collector app.DataCollector, store app.RunStore, snapshots app.SnapshotStore) (*app.Runner, error) {
+	if collector == nil {
+		return nil, errors.New("analysis DataCollector is required")
 	}
 	return newRunnerWithCollector(collector, store, snapshots)
 }
