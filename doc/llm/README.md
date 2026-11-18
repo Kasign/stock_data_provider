@@ -15,6 +15,12 @@
 - [Provider Port 与 DTO 字段契约](./架构/02-ProviderPort与DTO字段契约.md)
 - [Adapter 与 Platform/Server 接入边界](./架构/03-Adapter与Platform接入边界.md)
 
+## 依赖
+
+- [Platform 公共能力依赖](./依赖/01-Platform公共能力依赖.md)
+- [Server 生产装配依赖](./依赖/02-Server生产装配依赖.md)
+- [Researchflow 消费者依赖](./依赖/03-Researchflow消费者依赖.md)
+
 ## 说明与验证资产
 
 - [现有 Gateway 协议盘点](./说明/01-Gateway协议盘点.md)
