@@ -66,7 +66,13 @@ Platform 当前没有可直接复用的公共 TCP BoundDialer，因此 Server �
 
 ### 3.1 当前实际调用
 
-Root 当前在 `MIGRATION_ENABLED=true` 时调用 Data Module 公开的 `MigrationRunner.Migrate(ctx)`，随后执行 Server Registry 中其他模块 Migration。这是对 Data 当前公开 API 的临时接入，不是最终统一注册方案。
+Root 在 `MIGRATION_ENABLED=true` 时调用 Data Module 公开的 `MigrationRunner.Migrate(ctx)`，随后执行 Server Registry 中其他模块 Migration。
+
+本轮 Server 已在 Registry 显式登记外部 namespace `market_data`：
+- Data 仍由自身 Runner 调用 Platform Migration Runner；Root Registry 不执行空 Migration，不复制 Data SQL。
+- `ValidateApplied` 对外部 namespace 要求 Migration History 存在，所有记录版本号非零且状态为 `applied`。
+- 该检查不验证 Data 预期版本集合和 checksum，属于过渡性校验。其目的首先是避免 Root 将 Data 自己合法创建的 namespace 错判为未注册 Schema。
+- `MIGRATION_ENABLED=false` 时同样只执行上述存在性/status 校验，不调用 Data Runner，也不检查 checksum。
 
 ### 3.2 仍存在的竞态
 
@@ -79,16 +85,17 @@ Data Store.Migrate 先调用 Platform `ApplyMigrations` 执行 `market_data` nam
 ### 3.3 只读校验缺口
 
 `MIGRATION_ENABLED=false` 时：
-- Server Registry.ValidateApplied 只校验已注册 namespace/version/status，不比较 Data checksum；
-- Data Module.Diagnostics.Ready 当前验证 DB/Redis 依赖 Ping，不验证 Data Schema 或 migration checksum。
+- 静态注册模块按精确 namespace/version/status 校验；
+- 外部 `market_data` 只校验 history 存在且所有已记录版本 status 为 applied，不比较预期版本集合和 checksum；
+- Data Module.Diagnostics.Ready 当前验证 DB/Redis 依赖 Ping，不验证 Data 物理 Schema 或 migration checksum。
 
-因此当前启动日志只能说明已注册的 Server Migration 预检及 Data 依赖 Ping 通过，不能说明 Data Schema/checksum 已通过。
+因此外部 namespace 被登记只修复“合法 Data namespace 被误判为未注册”的问题，不代表 Data Schema/checksum 已完成最终校验。
 
 ### 3.4 最终责任分工
 
 1. **Data Owner**：公开完整、不可变的 `Migrations() []platformstorage.Migration` 或等价只读定义；保持已发布 v1～v3 Statement/checksum 不变；将兼容 DDL 纳入版本 4+，并覆盖全新库和历史库。
 2. **Platform Owner**：提供与 ApplyMigrations 共用 checksum preparation 的只读 `ValidateAppliedMigrations` 能力；保留 failed 状态和人工恢复语义。
-3. **Server Owner**：在 Registry 注册 Data namespace、调用 Platform Apply/Validate；不访问 Data 私有 SQL，不复制 Migration Runner/checksum 算法。
+3. **Server Owner**：当前显式登记 `market_data` 外部 namespace，继续调用 Data MigrationRunner 并验证历史记录状态；待 Data/Platform 提供正式静态定义和只读 checksum API 后，再迁移到统一 Registry；不访问 Data 私有 SQL，不复制 Migration Runner/checksum 算法。
 
 前置完成前保留当前 Data MigrationRunner 调用作为兼容路径，但 SRV-002/SRV-009 Migration 仍为 IN_PROGRESS。若要进入多实例生产部署，必须先完成上述 Data/Platform 修复和真实 MariaDB 并发启动验收。
 
