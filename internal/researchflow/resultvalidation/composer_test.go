@@ -209,8 +209,8 @@ func TestComposeResultRejectsRiskPassUsingUnusableQuantResult(t *testing.T) {
 func TestComposeResultAcceptsRiskReferencesResolvedByContextAndQuant(t *testing.T) {
 	input := validCompositionInput()
 	input.QuantResults = []QuantResultEnvelope{validQuantResult()}
-	registry := NewRegistry()
-	if err := registry.Register("indicator", "1.0.0", PayloadValidatorFunc(func(json.RawMessage) error { return nil })); err != nil {
+	registry, err := NewQuantPayloadRegistry()
+	if err != nil {
 		t.Fatal(err)
 	}
 	risk := validRiskDecision()
