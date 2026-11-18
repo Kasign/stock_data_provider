@@ -218,7 +218,7 @@ func Run(ctx context.Context) (runErr error) {
 
 	historyLimit := marketDataCfg.DefaultDailyBars
 	if historyLimit < 21 {
-		historyLimit = 21
+		return fmt.Errorf("MARKET_DATA_DEFAULT_DAILY_BARS must be at least 21 for the legacy Analysis Runner, got %d", historyLimit)
 	}
 	indexSymbols := []string{"000001.SH"}
 	if raw := strings.TrimSpace(os.Getenv("MARKET_DATA_INDEX_SYMBOLS")); raw != "" {
