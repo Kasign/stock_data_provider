@@ -1373,3 +1373,12 @@ GetRun 与 CancelRun 的持久化创建者授权已在 Application/Storage 层�
 - 真实 Provider 请求只读、不持久化结果，日志只保留 Provider 名称、候选数量、耗时和发布时间统计；Feed Probe 仅在 Feed URL 与授权证据引用均配置时执行。
 - 本次修改提交本身不包含触发标记，不会主动发起真实 Provider 请求。后续如需执行，在 integration 上创建一条明确包含 `[run_news_live_probe]` 的提交即可；该提交会同时运行常规 CI 与 Live Probe。
 - 凭证存放：Provider endpoint、查询词、Feed URL 和授权证据引用放 GitHub Actions Variables；Provider API Key 放 GitHub Actions Secrets。不要把密钥写入提交、日志或普通变量。
+
+
+## 20. 2026-11-18 Tavily 真实发布时间格式诊断
+
+- Live Probe 第 3 次尝试在精确提交 `5137d71051f95dd521a72113d4b75c52268d49c7` 上成功：Tavily API 返回 3 条候选，耗时约 3.95 秒；Provider 测试 PASS。Feed Probe 因未配置 Feed URL 与授权证据而 SKIP，不影响 Tavily 结果。
+- 本次 3 条候选均有 `published_date` 原始值，但现有 `domain.parseCandidateTimestamp` 仅接受 RFC3339Nano、RFC1123Z、RFC822Z，3 条均未解析。当前不能把该字段当作可信发布时间，也不能据此生成 `available_at`。
+- 已在 `internal/news/adapters/provider/live_probe_test.go` 增加脱敏时间格式签名统计：仅将数字映射为 `9`、字母映射为 `A`，保留分隔符并统计数量；不输出原始时间、标题、URL、摘要或响应正文。新增单元测试验证签名不泄漏时间值。待本次 CI 与下一次 Live Probe 通过后，依据实际签名决定是否扩展解析格式。
+- Bocha 与 Brave 网站在用户当前网络环境不可访问；这只记录为网站入口访问问题，不能推断其 API Endpoint 不可用。当前没有这两个 Provider 的有效配置和真实 API 探测证据，因此不将其列为本轮阻塞；继续以已通过真实请求的 Tavily 推进。不得为绕过网站访问限制而猜测 API 地址或配置未验证的代理。
+- 下一步：验证本次脱敏诊断代码的 gofmt/单元测试/Integration CI；再次执行 Tavily Live Probe 获取时间格式签名；只有在签名与可信格式契约明确后，才增加对应解析规则及固定测试。`available_at` 继续严格依赖来源授权与可用性证据，不能由 `published_date` 自动填充。
