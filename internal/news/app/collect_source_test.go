@@ -135,7 +135,7 @@ func TestCollectSourceUsesCurrentPolicyBeforeNetwork(t *testing.T) {
 	current := registration.SourcePolicy
 	current.Status = domain.AuthorizationApproved
 	resolver := &sourceCollectionPolicyResolverStub{source: current}
-	transport := &sourceTransportStub{response: feedResponse("<rss/>", "application/rss+xml", http.StatusOK)}
+	transport := &sourceTransportStub{response: feedResponse(`<?xml version="1.0"?><rss version="2.0"><channel><title>媒体</title></channel></rss>`, "application/rss+xml", http.StatusOK)}
 	useCase, err := NewCollectSourceWithPolicyResolver(
 		sourceCatalogStub{registration: registration}, transport, resolver,
 	)
