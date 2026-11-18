@@ -2,10 +2,13 @@ name: Server package validation
 
 on:
   push:
-    branches: [feat/server]
+    branches: [feat/server, feat/web]
     paths:
       - 'cmd/analysis-api/**'
       - 'internal/server/**'
+      - 'internal/platform/security/**'
+      - 'go.mod'
+      - 'go.sum'
       - 'doc/server/**'
       - '.github/workflows/server-test.yml'
 
