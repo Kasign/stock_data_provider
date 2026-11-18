@@ -1158,8 +1158,8 @@ Data 分支在代码 SHA `6d722802073ac2b0c587986d50ec56cf325f505a` 的 Go Test 
 ### 当前代码基线
 
 - Data 分支代码基线：`7f9570e52615d6c52f8e3857ea3d1d7ec40ab657`；后续提交只调整 Workflow/文档，没有改变 Data/Server 领域代码。
-- Data Go Test Suite 最新运行：Run `44264608160`，对应分支提交 `12055b29fc5fe69e922133779086486532a6d617`，当前仍在执行；其中 Root Module migration 脚本已完成，MarketData MariaDB/PIT 与 Root Module 测试仍在执行。
-- 该 Migration Job 的“Commit and push migration”步骤成功，但“Trigger validation for migrated commit”步骤 skipped；当前分支 HEAD 未变化，说明本轮没有产生新的迁移提交。Job success 不等于 M3/M4 已完成。
+- Data Go Test Suite：Run `44264608160`，对应分支提交 `12055b29fc5fe69e922133779086486532a6d617`，success；Go test、Race、Vet、MarketData MariaDB/PIT persistence 和 Root Module MarketData tests 均通过。Root Module migration 脚本 job success，但没有产生新的迁移提交，后续 validation step skipped。
+- 该 Migration Job 的“Commit and push migration”步骤成功，但“Trigger validation for migrated commit”步骤 skipped；当前分支 HEAD 未变化，说明本轮没有产生新的迁移提交。Job success 不等于 M3/M4 已完成；Root Server 的实际装配仍需按下方代码事实判断。
 
 ### Root Server 当前事实（重新读取代码）
 
