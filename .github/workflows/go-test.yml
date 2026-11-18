@@ -21,7 +21,7 @@ on:
       - 'docker-compose.yml'
       - 'scripts/**'
   push:
-    branches: [main, feat/full-go-data-providers-api-switch, feat/research-news-ingestion, feat/notification, feat/quant, feat/research, feat/researchflow]
+    branches: [main, feat/data, feat/news, feat/notification, feat/quant, feat/research, feat/researchflow]
     paths:
       - 'go.mod'
       - 'go.sum'
@@ -48,7 +48,7 @@ concurrency:
 
 jobs:
   migrate-market-data-module:
-    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/feat/full-go-data-providers-api-switch' }}
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/feat/data' }}
     name: Migrate Market Data into root Go module
     runs-on: ubuntu-latest
     permissions:
@@ -84,13 +84,13 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -m "chore(api): 整理 Data 模块迁移与根模块依赖"
-          git push origin HEAD:refs/heads/feat/full-go-data-providers-api-switch
+          git push origin HEAD:refs/heads/feat/data
           echo "changed=true" >> "$GITHUB_OUTPUT"
       - name: Trigger validation for migrated commit
         if: ${{ steps.commit.outputs.changed == 'true' || github.event_name == 'push' }}
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh workflow run go-test.yml --ref feat/full-go-data-providers-api-switch
+        run: gh workflow run go-test.yml --ref feat/data
 
   test:
     name: Test ${{ matrix.module }}
@@ -126,7 +126,7 @@ jobs:
       - name: Check gofmt
         working-directory: ${{ matrix.module }}
         run: |
-          if [[ "$GITHUB_REF" == "refs/heads/feat/research-analysis-flow-native-go" && "$PWD" == "$GITHUB_WORKSPACE" ]]; then
+          if [[ "$GITHUB_REF" == "refs/heads/feat/server" && "$PWD" == "$GITHUB_WORKSPACE" ]]; then
             files="$(gofmt -l ./cmd/analysis-api ./internal/server)"
           else
             files="$(gofmt -l ./cmd ./internal)"
@@ -154,7 +154,7 @@ jobs:
 
   market-data-module-test:
     timeout-minutes: 20
-    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'feat/full-go-data-providers-api-switch') || (github.event_name == 'push' && github.ref == 'refs/heads/feat/full-go-data-providers-api-switch') }}
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'feat/data') || (github.event_name == 'push' && github.ref == 'refs/heads/feat/data') }}
     name: Test Market Data in root module
     runs-on: ubuntu-latest
     steps:
@@ -180,7 +180,7 @@ jobs:
         run: go vet ./internal/marketdata/... ./cmd/market-data/...
 
   market-data-mariadb-integration:
-    if: ${{ github.event_name != 'push' || github.ref == 'refs/heads/feat/full-go-data-providers-api-switch' }}
+    if: ${{ github.event_name != 'push' || github.ref == 'refs/heads/feat/data' }}
     name: Market-data MariaDB migration and PIT persistence
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -247,7 +247,7 @@ jobs:
           fi
 
   news-mariadb-integration:
-    if: ${{ github.event_name != 'push' || github.ref == 'refs/heads/feat/research-news-ingestion' }}
+    if: ${{ github.event_name != 'push' || github.ref == 'refs/heads/feat/news' }}
     name: News MariaDB Repository and Migration integration
     runs-on: ubuntu-latest
     timeout-minutes: 15
