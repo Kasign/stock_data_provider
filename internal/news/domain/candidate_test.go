@@ -114,7 +114,6 @@ func TestNormalizeCandidateNormalizesFetchAndNormalizationTimes(t *testing.T) {
 	}
 }
 
-
 func TestNormalizeCandidateParsesRFC1123WithExplicitUTCOrGMT(t *testing.T) {
 	tests := []struct {
 		name string
