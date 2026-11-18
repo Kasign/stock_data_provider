@@ -40,7 +40,7 @@ func referenceLn(value *big.Float) *big.Float {
 	for denominator := int64(1); denominator < 10000; denominator += 2 {
 		sum = referenceAdd(sum, referenceDiv(term, referenceFloat(float64(denominator))))
 		term = referenceMul(term, zSquared)
-		if term.Sign() == 0 || term.MantExp(nil) < -referencePrecision {
+		if term.Sign() == 0 || term.MantExp(nil) < -int(referencePrecision) {
 			break
 		}
 	}
@@ -53,7 +53,7 @@ func referenceLn(value *big.Float) *big.Float {
 	for denominator := int64(1); denominator < 10000; denominator += 2 {
 		lnTwoSum = referenceAdd(lnTwoSum, referenceDiv(term, referenceFloat(float64(denominator))))
 		term = referenceMul(term, thirdSquared)
-		if term.Sign() == 0 || term.MantExp(nil) < -referencePrecision {
+		if term.Sign() == 0 || term.MantExp(nil) < -int(referencePrecision) {
 			break
 		}
 	}
