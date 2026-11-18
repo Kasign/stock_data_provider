@@ -25,6 +25,23 @@ func (s sourceCatalogStub) LookupEndpoint(context.Context, string, string) (Sour
 	return s.registration, s.err
 }
 
+type sourceCollectionPolicyResolverStub struct {
+	source   domain.SourcePolicy
+	endpoint *domain.EndpointPolicy
+	err      error
+	sourceRef, sourceVersion, endpointRef, endpointVersion string
+	calls int
+}
+
+func (s *sourceCollectionPolicyResolverStub) ResolveCurrentSourceCollectionPolicies(
+	_ context.Context, sourceRef, sourceVersion, endpointRef, endpointVersion string,
+) (domain.SourcePolicy, *domain.EndpointPolicy, error) {
+	s.calls++
+	s.sourceRef, s.sourceVersion = sourceRef, sourceVersion
+	s.endpointRef, s.endpointVersion = endpointRef, endpointVersion
+	return s.source, s.endpoint, s.err
+}
+
 type sourceTransportStub struct {
 	response   *http.Response
 	err        error
@@ -78,6 +95,55 @@ func validCollectRequest() CollectSourceRequest {
 		SourceID: "source-1", EndpointID: "rss-main",
 		Purpose: domain.PurposeInternalPersonalResearch, ContentKind: domain.ContentFullText,
 		StorageMode: domain.StorageTransient, Retention: time.Second, MaxEntries: 10,
+	}
+}
+
+func TestCollectSourceUsesCurrentPolicyBeforeNetwork(t *testing.T) {
+	registration := approvedSourceRegistration()
+	// Catalog 中的策略故意保持旧快照；当前解析器返回的策略才是授权判断依据。
+	registration.SourcePolicy.Status = domain.AuthorizationPending
+	current := registration.SourcePolicy
+	current.Status = domain.AuthorizationApproved
+	resolver := &sourceCollectionPolicyResolverStub{source: current}
+	transport := &sourceTransportStub{response: feedResponse("<rss/>", "application/rss+xml", http.StatusOK)}
+	useCase, err := NewCollectSourceWithPolicyResolver(
+		sourceCatalogStub{registration: registration}, transport, resolver,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := useCase.Execute(context.Background(), validCollectRequest()); err != nil {
+		t.Fatal(err)
+	}
+	if resolver.calls != 1 || resolver.sourceRef != "source-1" ||
+		resolver.sourceVersion != "source-policy-v3" ||
+		resolver.endpointRef != "rss-main" || resolver.endpointVersion != "" {
+		t.Fatalf("resolver request mismatch: %+v", resolver)
+	}
+	if transport.calls != 1 {
+		t.Fatalf("transport calls=%d, want 1", transport.calls)
+	}
+}
+
+func TestCollectSourceFailsClosedWhenCurrentPolicyCannotBeResolved(t *testing.T) {
+	registration := approvedSourceRegistration()
+	resolver := &sourceCollectionPolicyResolverStub{err: ErrSourceCollectionPolicyUnavailable}
+	transport := &sourceTransportStub{}
+	useCase, err := NewCollectSourceWithPolicyResolver(
+		sourceCatalogStub{registration: registration}, transport, resolver,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = useCase.Execute(context.Background(), validCollectRequest())
+	if SourceCollectionErrorCode(err) != "source_current_policy_unavailable" || transport.calls != 0 {
+		t.Fatalf("error=%v transport calls=%d, want fail-closed before network", err, transport.calls)
+	}
+}
+
+func TestNewCollectSourceWithPolicyResolverRequiresResolver(t *testing.T) {
+	if _, err := NewCollectSourceWithPolicyResolver(sourceCatalogStub{}, &sourceTransportStub{}, nil); !errors.Is(err, ErrSourceCollectionPolicyUnavailable) {
+		t.Fatalf("constructor error=%v, want resolver required", err)
 	}
 }
 
