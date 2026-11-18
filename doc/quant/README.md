@@ -8,24 +8,20 @@
 - [模块总任务规划和进度](./模块总任务规划和进度.md)
 - [当前任务状态和进度](./当前任务状态和进度.md)
 - [任务历史](./任务历史/各个子任务完成状态.md)
-
-## 跨模块依赖
-
 - [跨模块依赖与解锁条件](./依赖/01-跨模块依赖与解锁条件.md)
 
-## 设计与契约
+## 设计与契约资料
 
 - [量化引擎总体设计](./01-量化引擎总体设计.md)
 - [首批输入输出契约与验收补充](./03-首批输入输出契约与验收补充.md)
-- [RiskDecision/TrendResult 与计算上下文专项文档](./04-RiskDecision%20DTO.md)
-- [Factor 质量策略执行入口](./07-Factor质量策略执行入口.md)
-- [RiskDecision 硬门禁与版本化规则](./08-RiskDecision硬门禁状态聚合.md)
-- [RepositoryPort 与不可变结果记录](./11-RepositoryPort与不可变结果记录.md)
-- `schema/`、`golden/`：机器契约和固定样例。
+- [RiskDecision DTO](./04-RiskDecision%20DTO.md)
+- [TrendResult DTO](./05-TrendResult%20DTO.md)
+- `schema/`：机器可校验的项目契约 Schema。
+- `golden/`：算法固定样例、结构样例及负例验收输入。
 
-## 维护规则
+## 文档维护规则
 
-1. 总体任务与当前状态分别由两个任务文档维护。
-2. README 只做索引，不复制任务状态表。
-3. 项目级 QNT-CTR 状态以 `doc/contract/` 为准。
-4. 真实 Data、生产授权/存储和 Researchflow 消费证据分别记录，不用 Fixture 或模块 CI 替代。
+1. 任务状态只维护在模块总任务规划和进度中；当前任务文档只描述唯一正在执行的任务。
+2. 历史文档追加完整执行证据，不随任务切换删除。
+3. 项目级契约编号、冻结状态和跨模块决议以 `doc/contract/` 为准。
+4. 本目录不保留已经迁入任务历史的重复阶段说明；机器 Schema/Golden 不作为普通说明文档清理。
