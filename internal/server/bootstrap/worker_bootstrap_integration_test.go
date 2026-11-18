@@ -3,6 +3,7 @@ package bootstrap
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
@@ -364,6 +365,7 @@ func TestAPIBootstrapMariaDBRedisIntegration(t *testing.T) {
 		"HTTP_ADDR":                             httpAddress,
 		"HTTP_SHUTDOWN_TIMEOUT":                 "10s",
 		"HTTP_READ_TIMEOUT":                     "5s",
+		"HTTP_MAX_REQUEST_BYTES":                "1024",
 		"NOTIFICATION_EVENT_MAX_ENVELOPE_BYTES": "65536",
 		"NOTIFICATION_EVENT_MAX_PAYLOAD_BYTES":  "32768",
 		"NOTIFICATION_EVENT_MAX_JSON_DEPTH":     "32",
@@ -401,6 +403,86 @@ func TestAPIBootstrapMariaDBRedisIntegration(t *testing.T) {
 	_ = anonymousReadyResponse.Body.Close()
 	if anonymousReadyStatus != http.StatusUnauthorized {
 		t.Fatalf("匿名 /readyz 状态码 = %d，期望 401", anonymousReadyStatus)
+	}
+
+	// Root 必须在真实 Data InProcessHandler 前执行 Owner Bearer 认证。
+	unauthorizedRequest, err := http.NewRequest(http.MethodGet, baseURL+"/api/v1/bars/INVALID/daily", nil)
+	if err != nil {
+		t.Fatalf("构造未认证 Data 请求失败: %v", err)
+	}
+	unauthorizedResponse, err := client.Do(unauthorizedRequest)
+	if err != nil {
+		t.Fatalf("未认证 Data 请求失败: %v", err)
+	}
+	unauthorizedStatus := unauthorizedResponse.StatusCode
+	_ = unauthorizedResponse.Body.Close()
+	if unauthorizedStatus != http.StatusUnauthorized {
+		t.Fatalf("未认证 Data 路由状态码 = %d，期望 401", unauthorizedStatus)
+	}
+
+	// 非法 Symbol 在 Data Handler 的参数校验阶段被拒绝，不触发任何 Provider 调用。
+	// 不携带 X-API-Key，证明进程内 Data Handler 复用 Root Owner Bearer。
+	dataRequest, err := http.NewRequest(http.MethodGet, baseURL+"/api/v1/bars/INVALID/daily", nil)
+	if err != nil {
+		t.Fatalf("构造 Data 路由请求失败: %v", err)
+	}
+	dataRequest.Header.Set("Authorization", "Bearer "+ownerToken)
+	dataRequest.Header.Set("X-Request-ID", "caller-supplied-request-id")
+	dataResponse, err := client.Do(dataRequest)
+	if err != nil {
+		t.Fatalf("真实 Data InProcessHandler 请求失败: %v", err)
+	}
+	if dataResponse.StatusCode != http.StatusBadRequest {
+		_ = dataResponse.Body.Close()
+		t.Fatalf("Data 非法 Symbol 状态码 = %d，期望 400", dataResponse.StatusCode)
+	}
+	requestID := dataResponse.Header.Get("X-Request-ID")
+	if requestID == "" || requestID == "caller-supplied-request-id" {
+		_ = dataResponse.Body.Close()
+		t.Fatalf("Root 未生成可信 X-Request-ID: %q", requestID)
+	}
+	var dataError struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	if err := json.NewDecoder(dataResponse.Body).Decode(&dataError); err != nil {
+		_ = dataResponse.Body.Close()
+		t.Fatalf("解析 Data Validation Fault 失败: %v", err)
+	}
+	_ = dataResponse.Body.Close()
+	if dataError.Error.Code != "VALIDATION_ERROR" {
+		t.Fatalf("Data Validation Fault code = %q，期望 VALIDATION_ERROR", dataError.Error.Code)
+	}
+
+	// Root 请求体限制必须覆盖 Data Probe 路由，并返回可关联的 Request ID。
+	oversizedBody := strings.NewReader(strings.Repeat("x", 1025))
+	probeRequest, err := http.NewRequest(http.MethodPost, baseURL+"/api/v1/data-sources/probe", oversizedBody)
+	if err != nil {
+		t.Fatalf("构造超限 Probe 请求失败: %v", err)
+	}
+	probeRequest.Header.Set("Authorization", "Bearer "+ownerToken)
+	probeRequest.Header.Set("Content-Type", "application/json")
+	probeResponse, err := client.Do(probeRequest)
+	if err != nil {
+		t.Fatalf("超限 Probe 请求失败: %v", err)
+	}
+	if probeResponse.StatusCode != http.StatusRequestEntityTooLarge {
+		_ = probeResponse.Body.Close()
+		t.Fatalf("超限 Probe 状态码 = %d，期望 413", probeResponse.StatusCode)
+	}
+	var oversizedError publicErrorEnvelope
+	if err := json.NewDecoder(probeResponse.Body).Decode(&oversizedError); err != nil {
+		_ = probeResponse.Body.Close()
+		t.Fatalf("解析 Root 请求体超限 Fault 失败: %v", err)
+	}
+	probeRequestID := probeResponse.Header.Get("X-Request-ID")
+	_ = probeResponse.Body.Close()
+	if oversizedError.Error.Code != "server.request_too_large" {
+		t.Fatalf("请求体超限 Fault code = %q，期望 server.request_too_large", oversizedError.Error.Code)
+	}
+	if probeRequestID == "" || oversizedError.Error.RequestID != probeRequestID {
+		t.Fatalf("请求体超限 Request ID 不一致: header=%q body=%q", probeRequestID, oversizedError.Error.RequestID)
 	}
 
 	child.stop(t)
