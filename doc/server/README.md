@@ -1,10 +1,20 @@
 # Server 层实施规划
 
 > 文档状态：实施规划（项目级 L1 契约已冻结；Server 的模块装配、消费者符合性和真实运行验收仍按任务证据推进）
-> 适用代码分支：`feat/research-analysis-flow-native-go`
+> Server 独立开发分支：`feat/research-analysis-flow-native-go`；用户明确授权的跨模块组合根装配与联调可在 `integration` 执行
 > 文档目录：`doc/server/`
 > 代码范围：Server 运行入口、应用装配、HTTP Transport、Worker 生命周期、Migration 汇总、事件连接和运行诊断。
 > 本文是 Server 分支的唯一任务主计划。模块内部实现仍以各模块自己的 `doc/<module>/` 为准；项目级架构和跨模块契约以 `feat/design_doc` 上的项目总览及契约目录为准；当前项目总览权威路径为 `doc/整体任务规划/01-项目总览/整体任务规划总览.md`，契约登记簿为 `doc/contract/PLAT-002-项目级契约冻结登记簿.md`。
+
+> **Integration 联调更新（2026-11-13，代码 SHA `d664b9f6ec08d358b914242735fde52f49e9c7c1`）**：Server Bootstrap 已在 API/Worker 角色共同加载 News Config；当 Evidence Cursor Key Ring 已配置时，构造共享 MariaDB 上的 News PIT/授权查询、HMAC Cursor 分页、Research Context/Evidence Repository、Research Service、News Importer/Authorizer。未配置 Key Ring 时不生成默认密钥、不构造分页 Facade。当前只是生产依赖组合已构造，尚无 Researchflow Stage 或 HTTP 业务入口消费 Importer；不等同端到端业务链路已启用。精确 SHA 的 Integration CI Run [43370552552](https://github.com/Kasign/stock_data_provider/actions/runs/43370552552) 已 success；News→Research 跨模块真实写入验收仍待完成。
+
+> **Integration 联调更新（2026-11-14，第 4 项契约准入盘点）**：已按 PLAT-002 登记簿 `0.2.60-frozen`、FLOW-CTR-001～004、Researchflow 4 Schema + 11 Golden 与 `internal/researchflow/`、`internal/server/bootstrap/` 真实代码，完成 Researchflow Stage 接入的**只读**准入盘点，判定 `blocked`（非 `fail`）：Stage 输入/输出与 Output Registry 版本/注册项仅有字段表或字符串字段，生产 `StageExecutor` 实现为零，Quant Envelope 仅注册 `trend/1.0.0`、`risk/1.0.0`。本轮未新增任何 Stage 相关代码，未重复本文第 12 章已有的 Server 侧门禁核查。完整证据、责任归属、重新进入条件与下一轮起点见 [Integration 当前任务交接与继续执行](../整体任务规划/05-治理与验收/Integration当前任务交接与继续执行.md) 第 6 节；下一轮从第 3 节第 6 项 LLM Provider / Notification Delivery 生产装配条件复核继续，阶段仍为 INT-B 进行中。
+
+> **Integration 联调更新（2026-11-14）**：`internal/server/bootstrap/research_news_mariadb_integration_test.go` 新增 A 组跨模块 MariaDB 验收，覆盖真实双 namespace Migration、真实 `newResearchNewsComposition` 组合根、冻结 NEWS-CTR-002 Golden 授权快照与当前策略复核、PIT 不可见、指纹篡改、策略版本变更、Context 取消、分页逐条授权、游标旧 Key 轮换验签，以及 Importer fail-closed 零落库。测试复用 `SERVER_RELAY_TEST_MYSQL_DSN` 自建隔离 database，不与共用 `integration_relay_test` 的模块级测试抢表。本地 Go 环境已核对 gofmt、`go vet` 与 `go test`，无 DB 自检用例通过。**A 组已由提交 `b0aabaa2edf89c44cd2aeb79b1a57210a8017d1b` 的 Integration CI Run [43561072301](https://github.com/Kasign/stock_data_provider/actions/runs/43561072301) 在精确 SHA 上验收 success，状态 `pass`**：CI job env 提供 `SERVER_RELAY_TEST_MYSQL_DSN` 与 mariadb:11.4 service，且已验证测试在非空 DSN 下不会 `t.Skip`，故该 success 包含真实 MariaDB 执行；本机无 MariaDB/Docker 的 `t.Skip` 仅为本地开发态。**B 组（Research Evidence 成功持久化）经源码核对确认被 `available_at` 硬阻断并记为 `blocked`**：News `researchEvidenceRecordFromPIT` 不设置 `AvailableAt`，Research `mapNewsEvidence` 要求非 nil 否则拒绝；责任归 News Owner，Integration 不伪造或回填。完整依据见 [Integration 当前任务交接与继续执行](../整体任务规划/05-治理与验收/Integration当前任务交接与继续执行.md) 第 3 节第 3 项；A 组已 `pass`，后续起点以该文第 5 / 10 节为准（第 4 项已完成并判定 `blocked`）。
+
+> **Integration 联调更新（2026-11-14，代码 SHA `4752dc104` / Run [43571558064](https://github.com/Kasign/stock_data_provider/actions/runs/43571558064)）**：`integration-ci.yml` 新增 `test-integration-verbose` 步骤，使 CI 永久输出 `internal/server/bootstrap` 逐用例 PASS/SKIP 明细；Run 69 success 实证 A 组 7 个真库子测试与两个无 DB 自检用例全部 `--- PASS`，A 组 `pass` 由包级证据升级为逐用例级实证。同一提交落地 B 组成功路径用例 `successful_import_with_verified_available_at`：真实 Facade → Importer → `research_evidence_records` 读回，断言 `available_at` 与 News 输出严格一致及授权/来源/指纹/payload 留痕；当前按 GOV-CTR-002 / NEWS-CTR-001 契约事实显式 `--- SKIP`，News Owner 解锁后自动启用，不伪造、不回填、不 Mock Facade。A 组 fail-closed 与分页断言已兼容两种契约状态。**工作面复盘**：Integration 分支可独立完成的工作已完结，5 条 `blocked` 链根因均在其他模块领域代码 / L1 冻结契约 / 真实外部来源证据；继续在组合根边界内盘点只会产生文档空转。P0 精确解锁清单、三种工作面与反空转规则见交接文档第 10 节；未获跨模块/契约变更授权时，下一轮应直接汇报等待态与选项，不制造文档或 Skip 用例充当进度。
+
+> **Integration 联调更新（2026-11-14 独立 review 后，代码 SHA `c25d881c0` / Run [43574975820](https://github.com/Kasign/stock_data_provider/actions/runs/43574975820)）**：对上一轮 B 组用例与 CI `-v` 做挑刺式复核，发现并修复 5 个缺陷——fixture 只播 `SourceSummary` 导致实际内容级别为 `summary`、与冻结 Golden 的 `snippet` 授权快照不匹配（解锁后二次授权必失败）；`content_level` 硬编码断言；CI 把 `SKIP` 与 0 测试当成 PASS；解锁后缺证据 fail-closed 真库覆盖消失；UTC 用 `Location()` 指针比较会误报。现在 fixture 播种 `ContentSnippet` 级 Body 并由无 DB 自检守住，`test-integration-verbose` 会把逐用例结果纳入判定（≥3 顶层 PASS、A 组 7 子测试 PASS、拒绝 0 测试、B 组 SKIP 显式告警）。Run 70 success 实证 A 组 7 个真库子测试全部 PASS、无回归。**B 组成功路径仍按契约 `t.Skip`、从未真库执行**，静态逐字段核对不等于已验证。完整发现、修复与剩余边界见交接文档第 10.6 节。
 
 ## 1. 目标与边界
 
@@ -1868,3 +1878,54 @@ Server Bootstrap
 - Server 仍没有可安全启用的具体 Researchflow Stage。当前可独立完成的容量配置读取已在 12.90 实现并通过 Server CI；其生产注入必须与真实 Worker 装配同批完成。
 - 下一步等待模块按冻结契约补齐 Stage 所需的生产 Application Port、Output Registry 和可信配置来源；条件满足后再由 Server 实现精确 Adapter 组合。若没有新的模块契约/公开 Port 变化，Server 不再重复静态盘点这些已确认的阻断项。
 
+
+
+### 12.92 SRV-005 Researchflow → Notification 终态 Outbox 接入（2026-11-13）
+
+本轮在 integration 完成 Researchflow 终态事件生产与 Server Relay 的契约闭合：
+
+- `internal/researchflow/storage/mysql_run_finalize.go` 将终态事件类型统一为 `researchflow.run.terminal` / Schema `1.0.0`，Payload 对齐 `doc/notification/schema/researchflow-run-terminal-1.0.0.schema.json`；`source_event_ref` 与 `run_ref` 使用 Run 引用，携带 `system_as_of`、`finished_at`、`template_ref`、`template_version` 和终态摘要引用。
+- `internal/server/relay/researchflow_notification.go` 新增 Outbox Publisher/Relay：校验 Outbox 原始 SHA-256、事件身份、终态状态和 UTC 时间；生成 Notification Event Envelope，并按 JCS 计算 Envelope Payload Fingerprint。
+- `internal/server/bootstrap/bootstrap.go` 在 Worker/All 角色装配 Relay；只有 `ResearchflowCapacity.Configured` 时才创建 Run Repository/Relay。Research 与 Researchflow 共用 Notification EventReceiver 构造入口，仍由各自 Outbox Store 管理租约与确认。
+- Outbox 只有在 Notification EventReceiver 接收成功后才 Ack；Inbox/FanoutWorkItem 的幂等唯一约束承担重复投递去重。此处完成的是 Outbox → Inbox/FanoutWorkItem，不代表真实渠道发送完成。
+
+#### 验收证据
+
+- `internal/researchflow/storage/mysql_run_finalize_test.go`：MariaDB 测试验证成功与取消终态事件类型、Payload 字段及取消 Golden 语义。
+- `internal/server/relay/researchflow_notification_integration_test.go`：独立 MariaDB 数据库验证 Researchflow Outbox 经 Relay 进入 Notification Inbox/FanoutWorkItem，重复执行不重复创建；接收失败时保留 Outbox、持久化诊断码与 next_attempt_at，到期后重试成功。
+- `internal/server/relay/researchflow_notification_test.go`：Relay Start/Stop 组件生命周期测试。
+- Integration Run #54（`43359166036`），代码基线 SHA `63f49065a5ef3379d95948a6c2c6e504a555a63f`：gofmt、root/go-core vet/test、MariaDB/Redis 集成、WebUI 检查和 Docker 构建全部通过。
+
+#### 当前边界与上线前置检查
+
+- Researchflow Scheduler/Worker 生命周期和生产 StageExecutor Adapter 仍未装配；本次 Relay 不会创建或执行 Run。
+- Notification 的真实 Recipient Directory、Channel Provider、Fanout/Delivery Worker 仍未装配；Relay 成功只表示事件被 Inbox 接收。
+- Quant 目前没有生产 RiskDecision Outbox 生产方，因此 Notification 中的 Quant 事件映射尚无来源。
+- 升级前应确认没有待处理的旧事件类型：`SELECT COUNT(*) FROM researchflow_outbox WHERE event_type='researchflow.run.finalized' AND published_at IS NULL`。若结果非零，先按冻结契约做显式对账/修复，不允许新 Relay 静默丢弃旧事件。
+
+
+### 12.93 SRV-006 GOV-CTR-006 Runtime Verifier 与 News → Research 装配复核（2026-11-13）
+
+本轮只核对并更新 integration 组合根接入事实，未修改 Server 业务代码。
+
+- integration 的 internal/platform/authorization 已提供 RFC 8785 JCS + SHA-256 Runtime Verifier；News 通过 internal/news/adapters/platform 消费，不复制 JCS。
+- NEWS-CTR-002 的 AuthorizationRef 与 PolicySnapshot 均已带 schema_version=1.0.0，NEWS Golden 与 GOV-CTR-006 News Golden 对齐。
+- Integration CI Run [43364123334](https://github.com/Kasign/stock_data_provider/actions/runs/43364123334)，head_sha 19394e856c6909b50a3eb664c2d565262fe2e8a2，gofmt、root/go-core vet/test、Compose、WebUI 检查和 Docker 构建全部 success。
+- Server Bootstrap 尚未构造 News Evidence Query Facade 或 Research Application Service；不将 Runtime Verifier 存在等同于生产接入。
+- News MySQLRepository 可复用 PIT Repository、Atomic Content Repository、AuthorizationSnapshotRepository、CurrentPolicyResolver 和 EvidenceSnapshotRepository；News Application 已有 Get/List Evidence Facade 构造入口。
+- 完整 ListEvidence Facade 需要 EvidenceCursorCodec 的 HMAC Key Ring。News Config 已新增 Active Key ID + JSON Secret Key Ring 的可轮换配置解析，覆盖最多 8 把 Key、32～256 字节 Secret、Active Key 必须存在和错误不泄密；CI 已通过。游标 TTL 为 15 分钟，旧 Key 必须在轮换窗口内保留。下一步由 Bootstrap 消费该配置并构造 News/Research 真实依赖。
+- Research 的 internal/research/adapters/news/evidence.go 已有 Importer/Authorizer；Research Context/Evidence Repository 和 Service 构造入口已存在，不得重复实现 Adapter。
+- Researchflow 生产 StageExecutor 尚未装配；Quant 生产 Application Port/Payload Registry 门禁仍未满足。不得因 News/Research 组合构造完成而直接宣称完整 Researchflow 业务链路通过。
+
+下一轮任务顺序、具体文件入口和验收标准见 [Integration 当前任务交接与继续执行](../整体任务规划/05-治理与验收/Integration当前任务交接与继续执行.md)。
+
+### 12.94 Researchflow Run Deadline 配置与 CreateRun 时间责任（2026-11-17）
+
+Researchflow Run Deadline 是 Server 进程级配置，不属于旧 Analysis Timeout，也不属于单次 Attempt Timeout。
+
+- 配置键：`RESEARCHFLOW_RUN_DEADLINE`，使用 Go duration 字符串（例如 `30m`、`2h`）；必须显式配置，不提供默认值。
+- 当 Researchflow Capacity（`RESEARCHFLOW_MAX_QUEUED_RUNS` 与 `RESEARCHFLOW_MAX_WORKERS`）未启用时，不允许单独配置 Run Deadline；启用 Capacity 时 Run Deadline 必须同时配置且为正数。
+- Server 将该时长注入 CreateRun Application；CreateRun 在幂等未命中后读取 MariaDB UTC 时间，设置 `system_as_of = db_now`、`deadline_at = db_now + RESEARCHFLOW_RUN_DEADLINE`。
+- 绝对 `deadline_at` 在 Run 创建时固化；后续配置变化不追溯修改已创建 Run，Retry 不重置 Deadline。
+- Attempt Timeout 仍由 Template RetryPolicy 的 `attempt_timeout_ms` 控制单次 Attempt；Run Deadline 是跨 Stage/Retry 的最终上限。HTTP Read/Write Timeout 和 Shutdown Timeout 只约束传输/进程生命周期，不替代业务 Deadline。
+- CreateRun 指纹不包含 Server 生成的 `system_as_of`、`deadline_at`；同一 caller/operation/idempotency key 的重放返回原 Run 和原 Deadline。Repository 仍在事务写入前、提交前复核数据库 UTC Deadline。

@@ -8,7 +8,7 @@ import (
 
 func (s *Server) marketSession(w http.ResponseWriter, r *http.Request) {
 	values, supplied := r.URL.Query()["at"]
-	at := time.Now()
+	at := s.nowUTC()
 	if supplied {
 		if len(values) != 1 || strings.TrimSpace(values[0]) == "" {
 			writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", "at must be a single RFC3339 timestamp", requestID(r))

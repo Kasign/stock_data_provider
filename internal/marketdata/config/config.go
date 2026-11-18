@@ -13,6 +13,8 @@ import (
 	"strings"
 	"time"
 
+	platformtime "example.com/stock-analysis-flow/internal/platform/time"
+
 	mysqlDriver "github.com/go-sql-driver/mysql"
 )
 
@@ -547,7 +549,7 @@ func resolveMySQLDSN(allowNoStorage bool) (string, error) {
 	if timezone == "" {
 		timezone = "UTC"
 	}
-	location, err := time.LoadLocation(timezone)
+	location, err := platformtime.LoadLocation(timezone)
 	if err != nil {
 		return "", fmt.Errorf("MARKET_DATA_DB_TIMEZONE must be a valid IANA timezone: %w", err)
 	}

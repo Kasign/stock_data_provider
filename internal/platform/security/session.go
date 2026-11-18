@@ -26,8 +26,9 @@ const (
 )
 
 var (
-	ErrSessionNotFound = errors.New("session not found or expired")
-	ErrSessionConflict = errors.New("session already exists or cannot be rotated")
+	ErrSessionNotFound     = errors.New("session not found or expired")
+	ErrSessionConflict     = errors.New("session already exists or cannot be rotated")
+	ErrSessionCSRFRejected = errors.New("session CSRF token rejected")
 )
 
 // SessionRecord contains only server-side session metadata. The bearer token
@@ -49,6 +50,13 @@ type SessionStore interface {
 	LookupAndTouch(ctx context.Context, tokenDigest string, now time.Time, idleTTL time.Duration) (SessionRecord, error)
 	Rotate(ctx context.Context, oldTokenDigest, newTokenDigest string, record SessionRecord, now time.Time) error
 	Revoke(ctx context.Context, tokenDigest string) error
+}
+
+// CSRFSafeSessionStore provides atomic CSRF verification and CSRF-token rotation.
+// Implementations must not touch a session when the supplied CSRF digest is wrong.
+type CSRFSafeSessionStore interface {
+	LookupAndTouchWithCSRF(ctx context.Context, tokenDigest, csrfTokenDigest string, now time.Time, idleTTL time.Duration) (SessionRecord, error)
+	RotateCSRFToken(ctx context.Context, tokenDigest, newCSRFTokenDigest string, expectedCredentialVersion uint64, now time.Time, idleTTL time.Duration) (SessionRecord, error)
 }
 
 // NewSessionToken creates a 256-bit URL-safe token and its SHA-256 digest.
@@ -205,6 +213,100 @@ func fromRedisSessionRecord(record redisSessionRecord) SessionRecord {
 		AbsoluteExpiresAt: time.UnixMilli(record.AbsoluteExpiresAtMS).UTC(),
 		CredentialVersion: record.CredentialVersion, CSRFTokenDigest: record.CSRFTokenDigest,
 	}
+}
+
+var lookupAndTouchSessionWithCSRFScript = redis.NewScript(`
+local raw = redis.call('GET', KEYS[1])
+if not raw then return false end
+local record = cjson.decode(raw)
+local now = tonumber(ARGV[1])
+local idle_ttl = tonumber(ARGV[2])
+local idle_exp = tonumber(record.idle_expires_at_ms or '0')
+local absolute_exp = tonumber(record.absolute_expires_at_ms or '0')
+if absolute_exp <= now or idle_exp <= now then
+  redis.call('DEL', KEYS[1])
+  return false
+end
+if record.csrf_token_digest ~= ARGV[3] then return '-1' end
+local next_idle = math.min(now + idle_ttl, absolute_exp)
+record.last_seen_at_ms = now
+record.idle_expires_at_ms = next_idle
+local updated = cjson.encode(record)
+redis.call('SET', KEYS[1], updated, 'PX', absolute_exp - now)
+return updated
+`)
+
+var rotateSessionCSRFScript = redis.NewScript(`
+local raw = redis.call('GET', KEYS[1])
+if not raw then return false end
+local record = cjson.decode(raw)
+local now = tonumber(ARGV[1])
+local idle_ttl = tonumber(ARGV[2])
+local idle_exp = tonumber(record.idle_expires_at_ms or '0')
+local absolute_exp = tonumber(record.absolute_expires_at_ms or '0')
+if absolute_exp <= now or idle_exp <= now then
+  redis.call('DEL', KEYS[1])
+  return false
+end
+if tonumber(record.credential_version or '0') ~= tonumber(ARGV[4]) then return false end
+local next_idle = math.min(now + idle_ttl, absolute_exp)
+record.csrf_token_digest = ARGV[3]
+record.last_seen_at_ms = now
+record.idle_expires_at_ms = next_idle
+local updated = cjson.encode(record)
+redis.call('SET', KEYS[1], updated, 'PX', absolute_exp - now)
+return updated
+`)
+
+func (s *RedisSessionStore) LookupAndTouchWithCSRF(ctx context.Context, digest, csrfDigest string, now time.Time, idleTTL time.Duration) (SessionRecord, error) {
+	if s == nil || s.client == nil || ctx == nil || !validSessionDigest(digest) ||
+		!validSessionDigest(csrfDigest) || now.IsZero() || idleTTL <= 0 || idleTTL > DefaultSessionIdleTTL {
+		return SessionRecord{}, fault.New(fault.ClassValidation, "platform.security.invalid_session_lookup", "session lookup parameters are invalid", nil)
+	}
+	result, err := lookupAndTouchSessionWithCSRFScript.Run(ctx, s.client, []string{s.key(digest)},
+		now.UTC().UnixMilli(), idleTTL.Milliseconds(), csrfDigest).Text()
+	if errors.Is(err, redis.Nil) {
+		return SessionRecord{}, ErrSessionNotFound
+	}
+	if err != nil {
+		return SessionRecord{}, sessionRedisFault("lookup", err)
+	}
+	if result == "-1" {
+		return SessionRecord{}, ErrSessionCSRFRejected
+	}
+	var stored redisSessionRecord
+	if err := json.Unmarshal([]byte(result), &stored); err != nil {
+		return SessionRecord{}, fault.New(fault.ClassInternal, "platform.security.session_decode_failed", "session data is invalid", err)
+	}
+	record := fromRedisSessionRecord(stored)
+	if err := record.validate(); err != nil {
+		return SessionRecord{}, fault.New(fault.ClassInternal, "platform.security.session_corrupt", "session data is invalid", err)
+	}
+	return record, nil
+}
+
+func (s *RedisSessionStore) RotateCSRFToken(ctx context.Context, digest, newCSRFDigest string, expectedCredentialVersion uint64, now time.Time, idleTTL time.Duration) (SessionRecord, error) {
+	if s == nil || s.client == nil || ctx == nil || !validSessionDigest(digest) ||
+		!validSessionDigest(newCSRFDigest) || expectedCredentialVersion == 0 || now.IsZero() || idleTTL <= 0 || idleTTL > DefaultSessionIdleTTL {
+		return SessionRecord{}, fault.New(fault.ClassValidation, "platform.security.invalid_session_csrf_rotation", "session CSRF rotation parameters are invalid", nil)
+	}
+	result, err := rotateSessionCSRFScript.Run(ctx, s.client, []string{s.key(digest)},
+		now.UTC().UnixMilli(), idleTTL.Milliseconds(), newCSRFDigest, expectedCredentialVersion).Text()
+	if errors.Is(err, redis.Nil) {
+		return SessionRecord{}, ErrSessionNotFound
+	}
+	if err != nil {
+		return SessionRecord{}, sessionRedisFault("rotate_csrf", err)
+	}
+	var stored redisSessionRecord
+	if err := json.Unmarshal([]byte(result), &stored); err != nil {
+		return SessionRecord{}, fault.New(fault.ClassInternal, "platform.security.session_decode_failed", "session data is invalid", err)
+	}
+	record := fromRedisSessionRecord(stored)
+	if err := record.validate(); err != nil {
+		return SessionRecord{}, fault.New(fault.ClassInternal, "platform.security.session_corrupt", "session data is invalid", err)
+	}
+	return record, nil
 }
 
 func (s *RedisSessionStore) LookupAndTouch(ctx context.Context, digest string, now time.Time, idleTTL time.Duration) (SessionRecord, error) {

@@ -18,6 +18,7 @@ import (
 	"example.com/stock-analysis-flow/internal/marketdata/normalize"
 	"example.com/stock-analysis-flow/internal/marketdata/provider"
 	"example.com/stock-analysis-flow/internal/marketdata/service"
+	platformtime "example.com/stock-analysis-flow/internal/platform/time"
 )
 
 var (
@@ -44,6 +45,7 @@ type Server struct {
 	diagnostics       DiagnosticsApplication
 	sources           []model.SourceStatus
 	logger            *slog.Logger
+	clock             platformtime.Clock
 }
 type errorBody struct {
 	Error struct {
@@ -130,6 +132,11 @@ func NewWithCapabilityInterfaces(apiKey, defaultAdjustment string, svc *service.
 // NewWithApplication 使用显式 Application 用例实现和来源能力快照构造 HTTP Adapter。
 // sources 由 Bootstrap 根据已启用的 Provider 能力生成；Server 不再查询 Provider 集合。
 func NewWithApplication(apiKey, defaultAdjustment string, apps ApplicationDependencies, sources []model.SourceStatus, maxBars int, requestTimeout time.Duration, logger *slog.Logger) *Server {
+	return NewWithApplicationAndClock(apiKey, defaultAdjustment, apps, sources, maxBars, requestTimeout, logger, platformtime.SystemClock{})
+}
+
+// NewWithApplicationAndClock 允许装配层注入统一时钟，供 API 时间校验和响应时间使用。
+func NewWithApplicationAndClock(apiKey, defaultAdjustment string, apps ApplicationDependencies, sources []model.SourceStatus, maxBars int, requestTimeout time.Duration, logger *slog.Logger, clock platformtime.Clock) *Server {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -139,12 +146,24 @@ func NewWithApplication(apiKey, defaultAdjustment string, apps ApplicationDepend
 	if requestTimeout <= 0 {
 		requestTimeout = 110 * time.Second
 	}
+	if clock == nil {
+		clock = platformtime.SystemClock{}
+	}
 	sourceSnapshot := append([]model.SourceStatus(nil), sources...)
 	return &Server{
 		apiKey: apiKey, defaultAdjustment: defaultAdjustment, maxBars: maxBars,
-		requestTimeout: requestTimeout, quotes: apps.Quotes, marketOverview: apps.MarketOverview, securities: apps.Securities, fundamentalsApp: apps.Fundamentals, index: apps.Index, trading: apps.Trading, diagnostics: apps.Diagnostics, sources: sourceSnapshot, logger: logger,
+		requestTimeout: requestTimeout, quotes: apps.Quotes, marketOverview: apps.MarketOverview, securities: apps.Securities, fundamentalsApp: apps.Fundamentals, index: apps.Index, trading: apps.Trading, diagnostics: apps.Diagnostics, sources: sourceSnapshot, logger: logger, clock: clock,
 	}
 }
+
+// nowUTC 返回 Server 注入时钟的 UTC 当前时刻。
+func (s *Server) nowUTC() time.Time {
+	if s == nil || s.clock == nil {
+		return platformtime.SystemClock{}.Now()
+	}
+	return s.clock.Now().UTC()
+}
+
 func (s *Server) Handler() http.Handler {
 	routes := s.routes(true, true)
 	return securityHeaders(s.requestID(s.accessLog(s.timeoutContext(s.requestTimeout, routes))))
@@ -206,7 +225,7 @@ func (s *Server) routes(requireAPIKey, includeHealth bool) *http.ServeMux {
 }
 
 func (s *Server) live(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, 200, map[string]any{"status": "ok", "service": "market-data", "time": time.Now().UTC()})
+	writeJSON(w, 200, map[string]any{"status": "ok", "service": "market-data", "time": s.nowUTC()})
 }
 func (s *Server) ready(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
@@ -239,7 +258,7 @@ func (s *Server) bars(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		parsed, parseErr := time.Parse(time.RFC3339Nano, strings.TrimSpace(asOfValues[0]))
-		if parseErr != nil || parsed.After(time.Now().UTC()) {
+		if parseErr != nil || parsed.After(s.nowUTC()) {
 			writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", "as_of must be a valid non-future RFC3339 timestamp", requestID(r))
 			return
 		}
@@ -342,7 +361,7 @@ func (s *Server) bundle(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		parsed, parseErr := time.Parse(time.RFC3339Nano, strings.TrimSpace(asOfValues[0]))
-		if parseErr != nil || parsed.After(time.Now().UTC()) {
+		if parseErr != nil || parsed.After(s.nowUTC()) {
 			writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", "as_of must be a valid non-future RFC3339 timestamp", requestID(r))
 			return
 		}
@@ -728,7 +747,7 @@ func newRequestID() string {
 	if _, err := rand.Read(value[:]); err == nil {
 		return hex.EncodeToString(value[:])
 	}
-	return time.Now().UTC().Format("20060102T150405.000000000Z")
+	return platformtime.SystemClock{}.Now().Format("20060102T150405.000000000Z")
 }
 func validRequestID(value string) bool {
 	if value == "" || len(value) > 128 {

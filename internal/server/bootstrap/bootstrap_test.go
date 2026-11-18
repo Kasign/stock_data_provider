@@ -24,10 +24,9 @@ func TestNewMigrationRegistryRegistersAvailableModules(t *testing.T) {
 	}
 }
 
-func TestStopConsumersThenCloseResourcesPreservesOrder(t *testing.T) {
+func TestStopConsumersThenCloseResourcesPreservesResourcesOnStopFailure(t *testing.T) {
 	var events []string
 	stopErr := errors.New("consumer stop failed")
-	closeErr := errors.New("resource close failed")
 	err := stopConsumersThenCloseResources(
 		context.Background(),
 		func(context.Context) error {
@@ -36,11 +35,33 @@ func TestStopConsumersThenCloseResourcesPreservesOrder(t *testing.T) {
 		},
 		func() error {
 			events = append(events, "close-resources")
-			return closeErr
+			return nil
 		},
 	)
-	if !errors.Is(err, stopErr) || !errors.Is(err, closeErr) {
-		t.Fatalf("shutdown error = %v, want both stop and close errors", err)
+	if !errors.Is(err, stopErr) {
+		t.Fatalf("shutdown error = %v, want consumer stop error", err)
+	}
+	want := []string{"stop-consumers"}
+	if !reflect.DeepEqual(events, want) {
+		t.Fatalf("shutdown order = %v, want %v; shared resources must remain open", events, want)
+	}
+}
+
+func TestStopConsumersThenCloseResourcesPreservesOrderOnSuccess(t *testing.T) {
+	var events []string
+	err := stopConsumersThenCloseResources(
+		context.Background(),
+		func(context.Context) error {
+			events = append(events, "stop-consumers")
+			return nil
+		},
+		func() error {
+			events = append(events, "close-resources")
+			return nil
+		},
+	)
+	if err != nil {
+		t.Fatalf("shutdown error = %v, want nil", err)
 	}
 	want := []string{"stop-consumers", "close-resources"}
 	if !reflect.DeepEqual(events, want) {

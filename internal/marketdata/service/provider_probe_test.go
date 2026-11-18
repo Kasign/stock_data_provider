@@ -814,7 +814,7 @@ func TestFundamentalsProbeSnapshotValidationUsesSelectedCompletedPeriod(t *testi
 	}
 
 	if err := validateFundamentalsProbeSnapshot(
-		context.Background(), "600519.SH", year, quarter, snapshot,
+		context.Background(), "600519.SH", year, quarter, snapshot, now,
 	); err != nil {
 		t.Fatalf("selected prior-year Q2 snapshot should pass both Probe validators: %v", err)
 	}
@@ -1893,5 +1893,36 @@ func TestProviderProbeStorageFailureFailsBatchWithoutStorageCheck(t *testing.T) 
 	}
 	if run == nil || run.Persisted || run.Status != "failed" {
 		t.Fatalf("failed persistence must clear persisted and fail the batch even when storage check was not requested: %+v", run)
+	}
+}
+
+type providerProbeFixedClock struct {
+	now time.Time
+}
+
+func (c providerProbeFixedClock) Now() time.Time { return c.now }
+
+func TestProviderProbeUsesInjectedClockForRunAndItemTimestamps(t *testing.T) {
+	fixedNow := time.Date(2026, 11, 17, 9, 30, 0, 0, time.UTC)
+	ds := NewWithCapabilitiesAndClock(
+		nil, nil, nil, cache.NewDisabled(), nil,
+		time.Second, time.Minute, 120, 2000, ResilienceConfig{}, nil,
+		providerProbeFixedClock{now: fixedNow},
+	)
+	run, err := ds.ProbeProviderCapabilitiesWithOptions(context.Background(), ProviderProbeOptions{
+		Scope: "all", Capabilities: []string{"quote"},
+		Checks: []string{"connectivity"}, TimeoutSeconds: 1,
+	})
+	if err != nil {
+		t.Fatalf("ProbeProviderCapabilitiesWithOptions() error = %v", err)
+	}
+	if !run.StartedAt.Equal(fixedNow) || !run.FinishedAt.Equal(fixedNow) {
+		t.Fatalf("probe run timestamps = (%s, %s), want %s", run.StartedAt, run.FinishedAt, fixedNow)
+	}
+	if len(run.Items) != 1 {
+		t.Fatalf("probe items = %d, want 1: %+v", len(run.Items), run.Items)
+	}
+	if !run.Items[0].CheckedAt.Equal(fixedNow) {
+		t.Fatalf("probe item CheckedAt = %s, want %s", run.Items[0].CheckedAt, fixedNow)
 	}
 }

@@ -1008,10 +1008,10 @@ type NotificationEventEnvelope struct {
 }
 
 type OutboxDeliveryRepository interface {
-	ClaimOutbox(context.Context, string, int, time.Time) ([]NotificationEventEnvelope, error)
-	MarkOutboxPublished(context.Context, string, string, string, time.Time) error
-	ScheduleOutboxRetry(context.Context, string, string, string, time.Time, string, time.Time) error
-	RejectOutbox(context.Context, string, string, string, string, time.Time) error
+	ClaimOutbox(context.Context, string, int, time.Duration) ([]NotificationEventEnvelope, error)
+	MarkOutboxPublished(context.Context, string, string, string) error
+	ScheduleOutboxRetry(context.Context, string, string, string, time.Duration, string) error
+	RejectOutbox(context.Context, string, string, string, string) error
 }
 
 type OutboxDeliveryPort interface {
@@ -1023,19 +1023,15 @@ type OutboxDeliveryPort interface {
 
 type OutboxService struct {
 	repository OutboxDeliveryRepository
-	clock      Clock
 }
 
 var _ OutboxDeliveryPort = (*OutboxService)(nil)
 
-func NewOutboxService(repository OutboxDeliveryRepository, clock Clock) (*OutboxService, error) {
+func NewOutboxService(repository OutboxDeliveryRepository) (*OutboxService, error) {
 	if repository == nil {
 		return nil, applicationFault(fault.ClassInternal, "research_outbox_repository_not_configured", "Research Outbox Repository is not configured", researcherrors.ErrInvalidRepository)
 	}
-	if clock == nil {
-		clock = func() time.Time { return time.Now().UTC() }
-	}
-	return &OutboxService{repository: repository, clock: clock}, nil
+	return &OutboxService{repository: repository}, nil
 }
 
 func (s *OutboxService) Claim(ctx context.Context, workerID string, limit int, leaseDuration time.Duration) ([]NotificationEventEnvelope, error) {
@@ -1045,11 +1041,7 @@ func (s *OutboxService) Claim(ctx context.Context, workerID string, limit int, l
 	if ctx == nil || !validCorrelationID(workerID) || limit < 1 || limit > 100 || leaseDuration < time.Second || leaseDuration > 5*time.Minute {
 		return nil, validationFault("invalid_research_outbox_claim", "Research Outbox claim parameters are invalid", nil)
 	}
-	now := s.clock().UTC()
-	if now.IsZero() {
-		return nil, applicationFault(fault.ClassInternal, "research_clock_invalid", "Research application clock is invalid", nil)
-	}
-	values, err := s.repository.ClaimOutbox(ctx, workerID, limit, now.Add(leaseDuration))
+	values, err := s.repository.ClaimOutbox(ctx, workerID, limit, leaseDuration)
 	if err != nil {
 		return nil, mapRepositoryError(err)
 	}
@@ -1063,11 +1055,7 @@ func (s *OutboxService) Confirm(ctx context.Context, eventID, workerID, leaseTok
 	if ctx == nil || strings.TrimSpace(eventID) == "" || !validCorrelationID(workerID) || !validLeaseToken(leaseToken) {
 		return validationFault("invalid_research_outbox_confirmation", "Research Outbox confirmation is invalid", nil)
 	}
-	now := s.clock().UTC()
-	if now.IsZero() {
-		return applicationFault(fault.ClassInternal, "research_clock_invalid", "Research application clock is invalid", nil)
-	}
-	if err := s.repository.MarkOutboxPublished(ctx, eventID, workerID, leaseToken, now); err != nil {
+	if err := s.repository.MarkOutboxPublished(ctx, eventID, workerID, leaseToken); err != nil {
 		return mapRepositoryError(err)
 	}
 	return nil
@@ -1078,14 +1066,10 @@ func (s *OutboxService) Retry(ctx context.Context, eventID, workerID, leaseToken
 		return applicationFault(fault.ClassInternal, "research_outbox_repository_not_configured", "Research Outbox Repository is not configured", researcherrors.ErrInvalidRepository)
 	}
 	if ctx == nil || strings.TrimSpace(eventID) == "" || !validCorrelationID(workerID) || !validLeaseToken(leaseToken) ||
-		delay <= 0 || delay > 24*time.Hour || !validCorrelationID(reasonCode) {
+		delay <= 0 || delay > 24*time.Hour || delay%time.Microsecond != 0 || !validCorrelationID(reasonCode) {
 		return validationFault("invalid_research_outbox_retry", "Research Outbox retry parameters are invalid", nil)
 	}
-	now := s.clock().UTC()
-	if now.IsZero() {
-		return applicationFault(fault.ClassInternal, "research_clock_invalid", "Research application clock is invalid", nil)
-	}
-	if err := s.repository.ScheduleOutboxRetry(ctx, eventID, workerID, leaseToken, now.Add(delay), reasonCode, now); err != nil {
+	if err := s.repository.ScheduleOutboxRetry(ctx, eventID, workerID, leaseToken, delay, reasonCode); err != nil {
 		return mapRepositoryError(err)
 	}
 	return nil
@@ -1098,11 +1082,7 @@ func (s *OutboxService) Reject(ctx context.Context, eventID, workerID, leaseToke
 	if ctx == nil || strings.TrimSpace(eventID) == "" || !validCorrelationID(workerID) || !validLeaseToken(leaseToken) || !validCorrelationID(reasonCode) {
 		return validationFault("invalid_research_outbox_rejection", "Research Outbox rejection is invalid", nil)
 	}
-	now := s.clock().UTC()
-	if now.IsZero() {
-		return applicationFault(fault.ClassInternal, "research_clock_invalid", "Research application clock is invalid", nil)
-	}
-	if err := s.repository.RejectOutbox(ctx, eventID, workerID, leaseToken, reasonCode, now); err != nil {
+	if err := s.repository.RejectOutbox(ctx, eventID, workerID, leaseToken, reasonCode); err != nil {
 		return mapRepositoryError(err)
 	}
 	return nil

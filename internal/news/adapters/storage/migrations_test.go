@@ -7,8 +7,8 @@ import (
 
 func TestMigrationsDefineNewsOwnedPersistenceSchema(t *testing.T) {
 	migrations := Migrations()
-	if len(migrations) != 9 {
-		t.Fatalf("Migrations() count = %d, want 9", len(migrations))
+	if len(migrations) != 10 {
+		t.Fatalf("Migrations() count = %d, want 10", len(migrations))
 	}
 	for index, migration := range migrations {
 		if migration.Version != uint64(index+1) || strings.TrimSpace(migration.Description) == "" || len(migration.Statements) == 0 {
@@ -48,8 +48,8 @@ func TestMigrationsDefineNewsOwnedPersistenceSchema(t *testing.T) {
 
 func TestMigrationsAddImmutablePolicyVersionsAndCurrentPointers(t *testing.T) {
 	migrations := Migrations()
-	if len(migrations) != 9 {
-		t.Fatalf("Migrations() count = %d, want 9", len(migrations))
+	if len(migrations) != 10 {
+		t.Fatalf("Migrations() count = %d, want 10", len(migrations))
 	}
 	policySchema := strings.Join(migrations[8].Statements, "\n")
 	for _, fragment := range []string{
@@ -74,8 +74,8 @@ func TestMigrationsAddImmutablePolicyVersionsAndCurrentPointers(t *testing.T) {
 
 func TestMigrationsReturnIndependentStatementSlices(t *testing.T) {
 	first, second := Migrations(), Migrations()
-	if len(first) != 9 || len(second) != 9 {
-		t.Fatalf("migration counts = %d/%d, want 9", len(first), len(second))
+	if len(first) != 10 || len(second) != 10 {
+		t.Fatalf("migration counts = %d/%d, want 10", len(first), len(second))
 	}
 	for index := range first {
 		if len(first[index].Statements) == 0 || len(second[index].Statements) == 0 {
@@ -90,8 +90,8 @@ func TestMigrationsReturnIndependentStatementSlices(t *testing.T) {
 
 func TestMigrationsPreserveNewsPointInTimeAccessPaths(t *testing.T) {
 	migrations := Migrations()
-	if len(migrations) != 9 {
-		t.Fatalf("Migrations() count = %d, want 9", len(migrations))
+	if len(migrations) != 10 {
+		t.Fatalf("Migrations() count = %d, want 10", len(migrations))
 	}
 
 	versionSchema := strings.Join(migrations[0].Statements, "\n")
@@ -162,8 +162,8 @@ func TestMigrationsAddObservationRetentionLifecycle(t *testing.T) {
 
 func TestMigrationsEnforceSingleSuccessorForRelationHistory(t *testing.T) {
 	migrations := Migrations()
-	if len(migrations) != 9 {
-		t.Fatalf("Migrations() count = %d, want 9", len(migrations))
+	if len(migrations) != 10 {
+		t.Fatalf("Migrations() count = %d, want 10", len(migrations))
 	}
 	relationHistorySchema := strings.Join(migrations[6].Statements, "\n")
 	for _, fragment := range []string{
@@ -172,6 +172,35 @@ func TestMigrationsEnforceSingleSuccessorForRelationHistory(t *testing.T) {
 	} {
 		if !strings.Contains(relationHistorySchema, fragment) {
 			t.Errorf("V7 migration is missing append-only chain constraint %q", fragment)
+		}
+	}
+}
+
+func TestMigrationsAddAppendOnlyAvailabilityEvidenceAndDecisionTables(t *testing.T) {
+	migrations := Migrations()
+	if len(migrations) != 10 {
+		t.Fatalf("Migrations() count = %d, want 10", len(migrations))
+	}
+	availabilitySchema := strings.Join(migrations[9].Statements, "\n")
+	for _, fragment := range []string{
+		"ADD UNIQUE KEY uk_news_observations_id_news (observation_id, news_id)",
+		"ADD UNIQUE KEY uk_news_versions_id_news (version_id, news_id)",
+		"CREATE TABLE news_version_availability_evidence",
+		"candidate_available_at_utc DATETIME(0) NULL",
+		"raw_value MEDIUMTEXT NULL",
+		"retention_until DATETIME(6) NOT NULL",
+		"payload_purged_at DATETIME(6) NULL",
+		"FOREIGN KEY (version_id, news_id) REFERENCES news_item_versions (version_id, news_id)",
+		"FOREIGN KEY (observation_id, news_id) REFERENCES news_observations (observation_id, news_id)",
+		"CREATE TABLE news_version_availability_decisions",
+		"considered_evidence_ids JSON NOT NULL",
+		"UNIQUE KEY uk_news_availability_decision_seq (version_id, decision_seq)",
+		"UNIQUE KEY uk_news_availability_decision_successor (supersedes_decision_id)",
+		"FOREIGN KEY (version_id, selected_evidence_id)",
+		"FOREIGN KEY (version_id, supersedes_decision_id)",
+	} {
+		if !strings.Contains(availabilitySchema, fragment) {
+			t.Errorf("V10 availability schema is missing %q", fragment)
 		}
 	}
 }
