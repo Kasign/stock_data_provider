@@ -21,17 +21,16 @@ News 不需要因下列卡点暂停本模块开发。授权预检、Diagnostics 
 | NEWS-BLK-03 | Server 尚未装配 Source Feed 生产组合 | News 已有 SourceCatalog/SourceTransport/CollectSource/IngestCollectedSource 和当前策略 Resolver；Server 当前已装配 Provider Search Stage 与 Evidence Query，但尚未装配 Source Feed 组合 | Server Owner：使用共享 Platform HTTP Client/每 Endpoint 独立 DestinationPolicy、News MySQLRepository Resolver 和可信 SourceCatalog，构造 CollectSource/IngestCollectedSource；管理生命周期但不替业务调用方决定触发策略 | 阻塞真实部署运行和生产网络验收；不阻塞 News 侧 Adapter/Port/测试 | Server 组合根提交装配代码，并在目标部署配置中验证依赖注入；由调用方驱动真实 Collect→Ingest |
 | NEWS-BLK-04 | 真实 Source 授权与网络验收条件不足 | 没有当前可用于本轮验收的、许可明确的 Source/Endpoint 清单及对应真实部署出口证据；测试替身和离线 Feed Fixture 不能证明授权或真实网络能力 | 实际业务/来源 Owner 提供可核验许可依据、允许的访问方式/内容/存储范围、合法测试 URL；Server/运维提供真实 DNS、出口和部署环境 | 阻塞真实网络采集、授权闭环和 Observation 端到端验收；不能把 skipped/not_comparable 改成 PASS | 对指定 Source/Endpoint 有许可证据、配置快照、真实请求、解析结果和 Ingest 持久化证据 |
 | NEWS-BLK-05 | News Diagnostics 的共享 Runner/Registry 生产注册由 Server 负责 | News 只拥有领域 Check 工厂；Server 拥有共享 Runner、Registry 和诊断入口。News 已补 `SourceCollectionPolicyCheck` 并完成 News 模块单测/契约测试；尚未由 Server 注册 | News：完成工厂、依赖接口、四态语义和安全输出；Server：在 Repository/Catalog 等真实依赖装配后注册对应 Check，避免 nil/fake 依赖 | 不阻塞 News Check 开发；阻塞共享 Diagnostics 入口观察到全部 News 检查 | News 提供工厂清单与依赖说明；Server 按真实装配逐项注册并完成集成测试 |
-| NEWS-BLK-06 | Cleaner 周期触发方与频率未确认 | News 提供一次性、有界 Cleaner；当前没有确认它是业务流程的一部分还是部署级维护任务，也没有频率/重叠执行/停机语义决策 | 实际业务调用方或 Server/运维 Owner：确定触发责任、周期、批次、并发上限、超时、重试、关闭和告警策略。Server 只负责进程级装配/启停，不替业务决定周期 | 阻塞周期运行闭环；不阻塞 News 对 Cleaner 单次执行、边界、并发和取消行为的测试 | 有明确 Owner、运行频率和生命周期契约；真实环境有周期执行记录 |
+| NEWS-BLK-06 | Cleaner 周期触发方与频率未确认 | News 的一次性、有界 Cleaner、Application 边界测试及 MariaDB 到期/批次/重复/并发/回滚验收已完成；当前只缺周期触发 Owner、频率/重叠执行/停机语义决策 | 实际业务调用方或 Server/运维 Owner：确定触发责任、周期、批次、并发上限、超时、重试、关闭和告警策略。Server 只负责进程级装配/启停，不替业务决定周期 | 阻塞周期运行闭环；不阻塞 News 对 Cleaner 单次执行、边界、并发和取消行为的测试 | 有明确 Owner、运行频率和生命周期契约；真实环境有周期执行记录 |
 | NEWS-BLK-07 | 合格 `available_at` 来源证据不足 | 已有 PIT/Authorization 机制，但尚无来源明确声明的首次公开可获取时间证据及内容版本绑定/再利用许可。published_at、RSS pubDate、HTTP Date、fetched_at、observed_at 均不能替代 | 业务/来源 Owner：提供官方字段语义、首次公开可获取时间证据、内容版本绑定方式及再利用许可；News 负责适配和证据保存 | POST-05/POST-06 保持 SHELVED；不得推导时间或写入伪造的 Research Evidence | 来源语义、授权、原始字段、证据 URL、内容版本和可审计样本均经审核通过 |
 
 ## 3. 卡点与当前可执行任务的边界
 
 ### 不需要等待外部模块的 News 任务
 
-1. 完成 NEWS-POST-03：News-owned Diagnostics Check 工厂、四态判定、超时/取消/错误边界、安全 Attributes 和单元测试。
-2. 完成 NEWS-POST-04 中 News 侧一次性 Cleaner 的批次上限、幂等/重复执行、并发、失败重试、Context 取消和事务边界测试。
-3. 继续修复可复现的 News Repository、授权、身份/版本和质量诊断缺陷。
-4. 维护本模块任务文档和向 Server 的依赖交接说明。
+1. NEWS-POST-03 News-owned Diagnostics Check 工厂、状态判定、测试和依赖交接已完成；Server Registry 注册仍是外部卡点。
+2. NEWS-POST-04 News-owned 一次性 Cleaner、批次/幂等/并发/失败恢复/Context 取消及 MariaDB 边界验收已完成；周期触发仍是外部卡点。
+3. 当前没有需要为了等待其他模块而停下的 News 侧已知代码任务；后续只修复审查证实的缺陷，不虚构新功能。
 
 ### 必须等待或协作的工作
 
