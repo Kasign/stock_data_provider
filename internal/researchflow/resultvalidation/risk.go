@@ -80,7 +80,7 @@ func ValidateRiskDecision(decision RiskDecision, expectedSystemAsOf time.Time) e
 }
 
 // validRiskText 与 Quant risk.Decision 的 nonBlank 约束保持一致：
- // 必须是有效 UTF-8、非空且不含首尾空白。
+// 必须是有效 UTF-8、非空且不含首尾空白。
 func validRiskText(value string) bool {
 	return utf8.ValidString(value) && strings.TrimSpace(value) != "" && strings.TrimSpace(value) == value
 }

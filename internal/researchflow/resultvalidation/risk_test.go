@@ -72,19 +72,18 @@ func TestValidateRiskDecisionAcceptsDistinctMultipleReasons(t *testing.T) {
 	}
 }
 
-
 func TestValidateRiskDecisionRejectsNonCanonicalText(t *testing.T) {
 	cases := map[string]func(*RiskDecision){
-		"decision id padded": func(d *RiskDecision) { d.DecisionID = " risk-1 " },
-		"rule set version padded": func(d *RiskDecision) { d.RuleSetVersion = " risk-v1 " },
-		"input ref padded": func(d *RiskDecision) { d.InputRefs[0] = " " + d.InputRefs[0] },
-		"reason code padded": func(d *RiskDecision) { d.Reasons[0].Code = " max_drawdown " },
-		"rule ref padded": func(d *RiskDecision) { d.Reasons[0].RuleRef = " rule-max-drawdown-v1 " },
-		"safe message padded": func(d *RiskDecision) { d.Reasons[0].SafeMessage = " 未触发阻断条件 " },
-		"evidence ref padded": func(d *RiskDecision) { d.Reasons[0].EvidenceRefs[0] = " ev-1 " },
-		"invalid UTF-8 decision id": func(d *RiskDecision) { d.DecisionID = string([]byte{0xff}) },
-		"invalid UTF-8 reason code": func(d *RiskDecision) { d.Reasons[0].Code = string([]byte{0xff}) },
-		"invalid UTF-8 input ref": func(d *RiskDecision) { d.InputRefs[0] = string([]byte{0xff}) },
+		"decision id padded":         func(d *RiskDecision) { d.DecisionID = " risk-1 " },
+		"rule set version padded":    func(d *RiskDecision) { d.RuleSetVersion = " risk-v1 " },
+		"input ref padded":           func(d *RiskDecision) { d.InputRefs[0] = " " + d.InputRefs[0] },
+		"reason code padded":         func(d *RiskDecision) { d.Reasons[0].Code = " max_drawdown " },
+		"rule ref padded":            func(d *RiskDecision) { d.Reasons[0].RuleRef = " rule-max-drawdown-v1 " },
+		"safe message padded":        func(d *RiskDecision) { d.Reasons[0].SafeMessage = " 未触发阻断条件 " },
+		"evidence ref padded":        func(d *RiskDecision) { d.Reasons[0].EvidenceRefs[0] = " ev-1 " },
+		"invalid UTF-8 decision id":  func(d *RiskDecision) { d.DecisionID = string([]byte{0xff}) },
+		"invalid UTF-8 reason code":  func(d *RiskDecision) { d.Reasons[0].Code = string([]byte{0xff}) },
+		"invalid UTF-8 input ref":    func(d *RiskDecision) { d.InputRefs[0] = string([]byte{0xff}) },
 		"invalid UTF-8 evidence ref": func(d *RiskDecision) { d.Reasons[0].EvidenceRefs[0] = string([]byte{0xff}) },
 	}
 	for name, mutate := range cases {
