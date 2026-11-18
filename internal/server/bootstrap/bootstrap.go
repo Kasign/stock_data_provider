@@ -169,6 +169,11 @@ func Run(ctx context.Context) (runErr error) {
 	}
 	migrationCancel()
 
+	newsRepository, err := newsstorage.NewMySQLRepository(storageResources.DB)
+	if err != nil {
+		return fmt.Errorf("创建 News Repository 失败: %w", err)
+	}
+
 	// Owner Session 只提供可信身份；Researchflow 执行依赖独立于 Owner Session 装配。
 	var ownerSession *ownerSessionComposition
 	if processConfig.OwnerSession.Enabled {
@@ -250,6 +255,15 @@ func Run(ctx context.Context) (runErr error) {
 	if err := lifecycle.Register(marketDataComponent{module: marketDataModule}); err != nil {
 		return fmt.Errorf("注册 Data Module 生命周期失败: %w", err)
 	}
+	if serverRole != serverconfig.RoleAPI {
+		newsRetention, retentionErr := newNewsRetentionComponent(newsRepository, processConfig.NewsRetention, slog.Default())
+		if retentionErr != nil {
+			return fmt.Errorf("创建 News 保留期清理 Worker 失败: %w", retentionErr)
+		}
+		if err := lifecycle.Register(newsRetention); err != nil {
+			return fmt.Errorf("注册 News 保留期清理 Worker 生命周期失败: %w", err)
+		}
+	}
 	if err := lifecycle.Register(legacyAnalysisWorker{name: "legacy-analysis-worker", queue: tasks, enabled: serverRole == serverconfig.RoleWorker || serverRole == serverconfig.RoleAll}); err != nil {
 		return fmt.Errorf("注册旧 Analysis Worker 生命周期失败: %w", err)
 	}
@@ -294,7 +308,7 @@ func Run(ctx context.Context) (runErr error) {
 		if err != nil {
 			return fmt.Errorf("创建旧 Analysis HTTP API 失败: %w", err)
 		}
-		diagnosticsService, err := newDiagnosticsService(storageResources, migrationRegistry, newsConfig, marketDataModule)
+		diagnosticsService, err := newDiagnosticsService(storageResources, migrationRegistry, newsConfig, newsRepository, marketDataModule)
 		if err != nil {
 			return fmt.Errorf("创建 Server 诊断服务失败: %w", err)
 		}
@@ -448,9 +462,16 @@ func newResearchflowNotificationRelay(
 
 // newDiagnosticsService composes Server resource/schema checks with the
 // deterministic News parser self-checks. Domain checks remain owned by News.
-func newDiagnosticsService(shared *serverresources.Resources, registry *servermigration.Registry, newsConfig newsconfig.Config, marketDataModule *marketdatabootstrap.Module) (*serverdiagnostics.Service, error) {
+func newDiagnosticsService(
+	shared *serverresources.Resources,
+	registry *servermigration.Registry,
+	newsConfig newsconfig.Config,
+	newsRepository newsdiagnostics.StorageProbe,
+	marketDataModule *marketdatabootstrap.Module,
+) (*serverdiagnostics.Service, error) {
 	return serverdiagnostics.NewServiceWithMigration(
 		shared, registry,
+		newsdiagnostics.StorageChecks(newsRepository),
 		newsdiagnostics.ParserChecks(),
 		newsdiagnostics.ProviderConfigChecks(newsConfig),
 		marketDataReadinessChecks(marketDataModule),
