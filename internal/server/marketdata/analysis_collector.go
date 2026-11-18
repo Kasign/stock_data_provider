@@ -183,7 +183,7 @@ func (c *AnalysisCollector) collectOne(ctx context.Context, asOf time.Time, secu
 		if quote.CurrentPrice == nil {
 			return collectResult{notes: []domain.SourceNote{{
 				Dataset: "realtime_quote", Symbol: security.Symbol, Source: quote.Source,
-				FetchedAt: quote.FetchedAt, QualityStatus: string(quote.QualityStatus),
+				FetchedAt: quote.FetchedAt, QualityStatus: analysisQualityStatus(quote.QualityStatus),
 				Diagnostic: strings.Join(quote.QualityReasons, "; "),
 				MissingFields: []string{"current_price"},
 			}}}
@@ -205,7 +205,7 @@ func (c *AnalysisCollector) collectOne(ctx context.Context, asOf time.Time, secu
 			Source: quote.Source, FetchedAt: quote.FetchedAt,
 		}, notes: []domain.SourceNote{{
 			Dataset: "realtime_quote", Symbol: quote.Symbol, Source: quote.Source,
-			FetchedAt: quote.FetchedAt, QualityStatus: string(quote.QualityStatus),
+			FetchedAt: quote.FetchedAt, QualityStatus: analysisQualityStatus(quote.QualityStatus),
 			Diagnostic: strings.Join(quote.QualityReasons, "; "),
 		}}}
 	case "history", "index":
