@@ -124,7 +124,6 @@ func TestOutboxDispatcherPublishesAndSchedulesRetry(t *testing.T) {
 	}
 }
 
-
 func TestOutboxDispatcherDoesNotScheduleRetryWhenDatabaseClockFails(t *testing.T) {
 	store := &fakeOutboxStore{
 		messages: []OutboxMessage{{Ref: "event-fail", AttemptCount: 1, LeaseGeneration: 1}},
