@@ -2055,7 +2055,7 @@ func TestObservationRetentionPurgeIntegration(t *testing.T) {
 	boundaryNewsID := fmt.Sprintf("news-retention-boundary-news-%d", time.Now().UnixNano())
 	boundaryVersionID := fmt.Sprintf("news-retention-boundary-version-%d", time.Now().UnixNano())
 	boundaryEvidenceID := fmt.Sprintf("news-retention-boundary-evidence-%d", time.Now().UnixNano())
-	candidateAvailableAt := evidenceOnlyObservation.ObservedAt.Add(-time.Minute)
+	boundaryCandidateAvailableAt := evidenceOnlyObservation.ObservedAt.Add(-time.Minute)
 	defer func() {
 		_, _ = db.ExecContext(context.Background(), "DELETE FROM news_version_availability_evidence WHERE evidence_id = ?", boundaryEvidenceID)
 		_, _ = db.ExecContext(context.Background(), "DELETE FROM news_item_versions WHERE version_id = ?", boundaryVersionID)
@@ -2090,8 +2090,8 @@ func TestObservationRetentionPurgeIntegration(t *testing.T) {
 		 observed_at, recorded_at, retention_until)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '', ?, ?, ?, ?, ?, ?, ?)`,
 		boundaryEvidenceID, boundaryNewsID, boundaryVersionID, evidenceOnlyObservation.ID,
-		"payload.publishTime", candidateAvailableAt.Format(time.RFC3339Nano), "UTC", "second", "parsed",
-		candidateAvailableAt, "test-parser/1", "evidence://retention-boundary",
+		"payload.publishTime", boundaryCandidateAvailableAt.Format(time.RFC3339Nano), "UTC", "second", "parsed",
+		boundaryCandidateAvailableAt, "test-parser/1", "evidence://retention-boundary",
 		strings.Repeat("d", 64), evidenceOnlyObservation.ObservedAt,
 		evidenceOnlyObservation.ObservedAt.Add(time.Second), boundary); err != nil {
 		t.Fatalf("insert shorter-retention availability evidence: %v", err)
@@ -2129,16 +2129,16 @@ func TestObservationRetentionPurgeIntegration(t *testing.T) {
 	if retainedCandidate.Title != evidenceOnlyObservation.Candidate.Title || retainedPurgedAt.Valid {
 		t.Fatalf("parent Observation was purged before its own expiry: candidate=%+v purged_at=%+v", retainedCandidate, retainedPurgedAt)
 	}
-	var rawValue, evidenceRef, evidenceHash sql.NullString
-	var evidencePurgedAt sql.NullTime
+	var boundaryRawValue, boundaryEvidenceRef, boundaryEvidenceHash sql.NullString
+	var boundaryEvidencePurgedAt sql.NullTime
 	if err := db.QueryRowContext(ctx, `SELECT raw_value, evidence_ref, evidence_hash, payload_purged_at
 		FROM news_version_availability_evidence WHERE evidence_id = ?`, boundaryEvidenceID,
-	).Scan(&rawValue, &evidenceRef, &evidenceHash, &evidencePurgedAt); err != nil {
+	).Scan(&boundaryRawValue, &boundaryEvidenceRef, &boundaryEvidenceHash, &boundaryEvidencePurgedAt); err != nil {
 		t.Fatalf("read independently purged availability evidence: %v", err)
 	}
-	if rawValue.Valid || evidenceRef.Valid || evidenceHash.Valid || !evidencePurgedAt.Valid {
+	if boundaryRawValue.Valid || boundaryEvidenceRef.Valid || boundaryEvidenceHash.Valid || !boundaryEvidencePurgedAt.Valid {
 		t.Fatalf("shorter-retention Evidence payload remains: raw=%+v ref=%+v hash=%+v purged_at=%+v",
-			rawValue, evidenceRef, evidenceHash, evidencePurgedAt)
+			boundaryRawValue, boundaryEvidenceRef, boundaryEvidenceHash, boundaryEvidencePurgedAt)
 	}
 }
 
