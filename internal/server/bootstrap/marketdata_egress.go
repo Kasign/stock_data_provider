@@ -1,3 +1,5 @@
+package bootstrap
+
 import (
 	"context"
 	"errors"
@@ -14,28 +16,6 @@ import (
 	marketdataconfig "example.com/stock-analysis-flow/internal/marketdata/config"
 	"example.com/stock-analysis-flow/internal/marketdata/provider"
 	marketdatatransport "example.com/stock-analysis-flow/internal/marketdata/transport"
-	platformhttpclient "example.com/stock-analysis-flow/internal/platform/httpclient"
-	"example.com/stock-analysis-flow/internal/server/resources"
-
-	"github.com/injoyai/tdx"
-)package bootstrap
-
-import (
-	"context"
-	"log/slog"
-	"errors"
-	"fmt"
-	"net"
-	"net/netip"
-	"net/url"
-	"strconv"
-	"strings"
-	"time"
-
-	marketdatabootstrap "example.com/stock-analysis-flow/internal/marketdata/bootstrap"
-	marketdataconfig "example.com/stock-analysis-flow/internal/marketdata/config"
-	marketdatatransport "example.com/stock-analysis-flow/internal/marketdata/transport"
-	"example.com/stock-analysis-flow/internal/marketdata/provider"
 	platformhttpclient "example.com/stock-analysis-flow/internal/platform/httpclient"
 	"example.com/stock-analysis-flow/internal/server/resources"
 
