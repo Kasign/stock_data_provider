@@ -124,6 +124,31 @@ func TestOutboxDispatcherPublishesAndSchedulesRetry(t *testing.T) {
 	}
 }
 
+
+func TestOutboxDispatcherDoesNotScheduleRetryWhenDatabaseClockFails(t *testing.T) {
+	store := &fakeOutboxStore{
+		messages: []OutboxMessage{{Ref: "event-fail", AttemptCount: 1, LeaseGeneration: 1}},
+		retryAt: map[string]time.Time{}, retryErrorCode: map[string]string{},
+		clockErr: errors.New("database clock unavailable"),
+	}
+	publisher := &fakeOutboxPublisher{errors: map[string]error{
+		"event-fail": errors.New("broker unavailable"),
+	}}
+	dispatcher, err := NewOutboxDispatcher(store, publisher, OutboxDispatcherConfig{
+		WorkerID: "worker-1", BatchSize: 1, MaxConcurrency: 1,
+		LeaseDuration: 30 * time.Second, PublishTimeout: 10 * time.Second,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := dispatcher.DispatchBatch(context.Background()); err == nil {
+		t.Fatal("expected database clock failure to prevent retry scheduling")
+	}
+	if len(store.retried) != 0 {
+		t.Fatalf("retry was persisted without an authoritative database time: %v", store.retried)
+	}
+}
+
 func TestOutboxDispatcherCountsStaleLeaseAndClaimFailure(t *testing.T) {
 	store := &fakeOutboxStore{
 		messages:   []OutboxMessage{{Ref: "stale", AttemptCount: 1, LeaseGeneration: 2}},
