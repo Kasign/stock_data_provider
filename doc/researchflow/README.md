@@ -3,7 +3,7 @@
 - 分支：`feat/researchflow`
 - 代码：`internal/researchflow/**`
 - 任务前缀：FLOW
-- 当前状态：领域状态机、MySQL 核心事务、Worker、Scheduler、固定数量 WorkerPool、Deadline/Attempt/取消恢复与 Run Finalization 均已实现；`integration` 已将正式 News Search Template、Owner 内部用例和 Worker-only Runtime 接入 Server Lifecycle。当前 Runtime 周期扫描、并发执行与优雅关闭已具备生产装配代码；真实 MariaDB 已覆盖正常成功、Provider Retry、Deadline 和无在途 Attempt 的用户取消终态路径。在途取消确认与 Attempt Fencing 已通过真实 MariaDB 验收；进程崩溃恢复、多进程容量与 Outbox Relay 实际投递仍需补齐。生产 StageExecutor 当前只覆盖 News Search Provider。
+- 当前状态：领域状态机、MySQL 核心事务、Worker、Scheduler、固定数量 WorkerPool、Deadline/Attempt/取消恢复与 Run Finalization 均已实现；`integration` 已将正式 News Search Template、Owner 内部用例和 Worker-only Runtime 接入 Server Lifecycle。真实 MariaDB 已覆盖正常成功、Provider Retry、Deadline、启动前/在途取消、过期 Attempt 恢复、ResultSummary/Outbox Finalization；两个独立 Server Worker OS 进程已通过真实 Tavily Run 并发验收。不可重试 Provider 失败的 Payload/QualitySummary 也已通过 MariaDB Runtime 验收。生产 StageExecutor 当前仍只覆盖 News Search Provider。
 
 Researchflow 是研究应用编排层，通过 Data、News、Quant、Research、LLM 的公开 Application Port 编排研究流程。Notification 不作为同步 DAG Stage；Run 终态 CAS 成功后按 INT-CTR-001 写本地 Outbox。它拥有 Run/Stage/Attempt 状态，不拥有其他模块内部领域规则。Platform Task Runner 只提供执行基础设施，不替代 Researchflow 业务状态机。
 
@@ -47,9 +47,11 @@ FLOW-CTR-004 的通用 Envelope / Registry 已接入 Worker 成功/降级提交�
 
 - `integration` 已装配 Researchflow Worker-only Runtime：正式 Template 发布、Scheduler、WorkerPool、Deadline、过期 Attempt、取消恢复、Run Finalization 和终态 Outbox Relay 均已注册到 Server Lifecycle；Outbox Relay 先启动、Runtime 后启动，关闭时按逆序先停 Runtime 再停 Relay。
 - Runtime 的调度和过期 Attempt 恢复任务已按本地 Worker 并发上限做有界异步派发；扫描循环不等待 Stage 执行完成，重复候选通过进程内 in-flight key 去重，Stop 会先取消扫描/执行上下文并等待任务退出，再关闭 WorkerPool。跨进程容量仍由 MariaDB ClaimAttempt 事务兜底。
-- 最新代码 SHA `0623b3f65876be56658d2443686cca6b281644bf` 的 Integration CI Run [44086825786](https://github.com/Kasign/stock_data_provider/actions/runs/44086825786) 全量 success。真实 MariaDB Runtime 集成测试已覆盖正常成功、RateLimited 后一次 Retry 成功、Deadline 到期失败、用户取消后 Cancelled Finalization；上述终态均验证 ResultSummary 与唯一 terminal Outbox。在途 Attempt 用户取消后的 Worker Context 停止确认与 Attempt Fencing 已通过真实 MariaDB 验收；进程崩溃后的 ExpiredAttemptScanner 重新 Claim、多进程容量和 Outbox Relay 实际投递仍待验收。
+- 2026-11-18 最新验收以 [Integration 当前任务交接与继续执行](../整体任务规划/05-治理与验收/Integration当前任务交接与继续执行.md) 第 23～26 节为准：真实 Tavily 单 Worker 链路、两个独立 Worker OS 进程同时执行两个真实 Run、MariaDB Capacity/Claim/Fencing/Finalization 边界和不可重试 Provider 失败证据持久化均已验收。真实双 Worker Live Workflow Run [44233847418](https://github.com/Kasign/stock_data_provider/actions/runs/44233847418) success；最新 Integration CI Run [44235562214](https://github.com/Kasign/stock_data_provider/actions/runs/44235562214) success。
 - `StageExecutor` 是注入端口，Data/News/Quant/Research/LLM 的生产 Adapter 尚未在本分支闭环。
 - Worker Pool 是模块内有界执行协程池，不是持久化队列；周期扫描与池生命周期由 Server 驱动。跨 Worker 的 Run 并发和全局 Worker 上限由 ClaimAttempt 数据库事务兜底。
+- 过期 Attempt 恢复测试通过真实 Runtime 和 MariaDB 模拟 Lease 到期，不等同于 SIGKILL 后端到端故障注入；Outbox Relay 已验证 MariaDB Outbox → Notification EventReceiver 的 ACK/重试/幂等，不代表外部通知渠道投递已完成。
+- 同一部署的所有 Server 进程必须使用完全相同的 `RESEARCHFLOW_MAX_QUEUED_RUNS` 与 `RESEARCHFLOW_MAX_WORKERS`；当前 Capacity Guard 不在数据库持久化并校验进程配置值的一致性。
 - Go 测试、Race、Vet、真实 MariaDB、进程崩溃恢复和跨模块端到端验收必须按实际 SHA 记录，不以测试文件存在代替通过证据。
 
 后续实施顺序以任务文档最新状态盘点为准；不要依据早期历史记录重复建设已经落地的 Repository、Worker 或状态机能力。
