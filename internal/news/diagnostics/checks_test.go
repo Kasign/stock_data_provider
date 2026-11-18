@@ -218,6 +218,139 @@ func TestProviderChecksHaveBoundedTimeouts(t *testing.T) {
 	}
 }
 
+type sourceCollectionPolicyResolverStub struct {
+	source domain.SourcePolicy
+	endpoint *domain.EndpointPolicy
+	err error
+	sourceRef, sourceVersion, endpointRef, endpointVersion string
+	calls int
+}
+
+func (s *sourceCollectionPolicyResolverStub) ResolveCurrentSourceCollectionPolicies(
+	_ context.Context, sourceRef, sourceVersion, endpointRef, endpointVersion string,
+) (domain.SourcePolicy, *domain.EndpointPolicy, error) {
+	s.calls++
+	s.sourceRef, s.sourceVersion = sourceRef, sourceVersion
+	s.endpointRef, s.endpointVersion = endpointRef, endpointVersion
+	return s.source, s.endpoint, s.err
+}
+
+func validSourceCollectionPolicyRegistration() app.SourceEndpointRegistration {
+	return app.SourceEndpointRegistration{
+		SourceID: "source-1", EndpointID: "endpoint-1", Enabled: true,
+		SourcePolicyVersionID: "source-policy-v2",
+		URL: "https://feeds.example.com/rss", AccessMethod: domain.AccessRSS,
+		URLPolicy: domain.SourceURLPolicy{
+			AllowedSchemes: []string{"https"},
+			AllowedHosts: []string{"feeds.example.com"},
+		},
+	}
+}
+
+func TestSourceCollectionPolicyCheckReportsCurrentMatchingPolicies(t *testing.T) {
+	registration := validSourceCollectionPolicyRegistration()
+	resolver := &sourceCollectionPolicyResolverStub{
+		source: domain.SourcePolicy{Status: domain.AuthorizationApproved},
+	}
+	report, err := (platformdiag.Runner{}).Run(context.Background(), []platformdiag.Check{
+		SourceCollectionPolicyCheck(sourceCatalogStub{registration: registration}, resolver, "source-1", "endpoint-1", true),
+	})
+	if err != nil { t.Fatal(err) }
+	observation := report.Results[0].Observation
+	if observation.Status != platformdiag.StatusHealthy ||
+		observation.Attributes["source_authorization_status"] != string(domain.AuthorizationApproved) ||
+		resolver.calls != 1 || resolver.sourceVersion != "source-policy-v2" {
+		t.Fatalf("observation=%+v resolver=%+v", observation, resolver)
+	}
+}
+
+func TestSourceCollectionPolicyCheckReportsStaleOrUnavailablePolicy(t *testing.T) {
+	registration := validSourceCollectionPolicyRegistration()
+	report, err := (platformdiag.Runner{}).Run(context.Background(), []platformdiag.Check{
+		SourceCollectionPolicyCheck(sourceCatalogStub{registration: registration},
+			&sourceCollectionPolicyResolverStub{err: app.ErrSourceCollectionPolicyUnavailable},
+			"source-1", "endpoint-1", true),
+	})
+	if err != nil { t.Fatal(err) }
+	observation := report.Results[0].Observation
+	if observation.Status != platformdiag.StatusUnavailable ||
+		observation.Fault == nil || observation.Fault.Code != "news.source.current_policy_lookup_failed" {
+		t.Fatalf("observation=%+v", observation)
+	}
+}
+
+func TestSourceCollectionPolicyCheckReportsRevokedPolicyAsDegraded(t *testing.T) {
+	registration := validSourceCollectionPolicyRegistration()
+	resolver := &sourceCollectionPolicyResolverStub{
+		source: domain.SourcePolicy{Status: domain.AuthorizationRevoked},
+	}
+	report, err := (platformdiag.Runner{}).Run(context.Background(), []platformdiag.Check{
+		SourceCollectionPolicyCheck(sourceCatalogStub{registration: registration}, resolver, "source-1", "endpoint-1", true),
+	})
+	if err != nil { t.Fatal(err) }
+	observation := report.Results[0].Observation
+	if observation.Status != platformdiag.StatusDegraded ||
+		observation.ReasonCode != "news.source.current_policy_not_collectable" {
+		t.Fatalf("observation=%+v", observation)
+	}
+}
+
+func TestSourceCollectionPolicyCheckSkipsUnregisteredAndDisabledEndpoints(t *testing.T) {
+	disabled := validSourceCollectionPolicyRegistration()
+	disabled.Enabled = false
+	cases := []struct {
+		name string
+		catalog sourceCatalogStub
+		wantReason string
+	}{
+		{name: "unregistered", catalog: sourceCatalogStub{err: app.ErrSourceEndpointNotFound}, wantReason: "news.source.endpoint_not_registered"},
+		{name: "disabled", catalog: sourceCatalogStub{registration: disabled}, wantReason: "news.source.endpoint_disabled"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			resolver := &sourceCollectionPolicyResolverStub{}
+			report, err := (platformdiag.Runner{}).Run(context.Background(), []platformdiag.Check{
+				SourceCollectionPolicyCheck(tc.catalog, resolver, "source-1", "endpoint-1", false),
+			})
+			if err != nil { t.Fatal(err) }
+			observation := report.Results[0].Observation
+			if observation.Status != platformdiag.StatusSkipped || observation.ReasonCode != tc.wantReason || resolver.calls != 0 {
+				t.Fatalf("observation=%+v resolver_calls=%d", observation, resolver.calls)
+			}
+		})
+	}
+}
+
+func TestSourceCollectionPolicyCheckRejectsEndpointPolicyPresenceMismatch(t *testing.T) {
+	registration := validSourceCollectionPolicyRegistration()
+	endpoint := &domain.EndpointPolicy{Status: domain.AuthorizationApproved}
+	resolver := &sourceCollectionPolicyResolverStub{
+		source: domain.SourcePolicy{Status: domain.AuthorizationApproved},
+		endpoint: endpoint,
+	}
+	report, err := (platformdiag.Runner{}).Run(context.Background(), []platformdiag.Check{
+		SourceCollectionPolicyCheck(sourceCatalogStub{registration: registration}, resolver, "source-1", "endpoint-1", true),
+	})
+	if err != nil { t.Fatal(err) }
+	observation := report.Results[0].Observation
+	if observation.Status != platformdiag.StatusFailed ||
+		observation.ReasonCode != "news.source.endpoint_policy_snapshot_mismatch" {
+		t.Fatalf("observation=%+v", observation)
+	}
+}
+
+func TestSourceCollectionPolicyCheckFailsWhenDependenciesMissing(t *testing.T) {
+	report, err := (platformdiag.Runner{}).Run(context.Background(), []platformdiag.Check{
+		SourceCollectionPolicyCheck(nil, nil, "source-1", "endpoint-1", true),
+	})
+	if err != nil { t.Fatal(err) }
+	observation := report.Results[0].Observation
+	if observation.Status != platformdiag.StatusUnavailable || observation.Fault == nil ||
+		observation.Fault.Code != "news.source.collection_policy_dependency_unavailable" {
+		t.Fatalf("observation=%+v", observation)
+	}
+}
+
 func TestSourceEndpointCheckReportsApprovedRegistration(t *testing.T) {
 	catalog := sourceCatalogStub{registration: app.SourceEndpointRegistration{
 		SourceID: "source-1", EndpointID: "endpoint-1", Enabled: true,

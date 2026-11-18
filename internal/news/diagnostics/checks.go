@@ -256,6 +256,117 @@ func SourceEndpointCheck(catalog app.SourceCatalog, sourceID, endpointID string,
 	}
 }
 
+// SourceCollectionPolicyCheck verifies that the current persisted Source/Endpoint policy
+// versions still match the trusted Catalog snapshot. It does not authorize a concrete
+// collection request; CollectSource must evaluate that request again before network access.
+func SourceCollectionPolicyCheck(
+	catalog app.SourceCatalog,
+	resolver app.CurrentSourceCollectionPolicyResolver,
+	sourceID, endpointID string,
+	required bool,
+) platformdiag.Check {
+	sum := sha256.Sum256([]byte(sourceID + "\x00" + endpointID))
+	checkID := "news.source.collection_policy." + hex.EncodeToString(sum[:12])
+	return platformdiag.Check{
+		ID: checkID, Name: "News source collection policy version readiness",
+		Required: required, Timeout: 4 * time.Second,
+		Run: func(ctx context.Context) (platformdiag.Observation, error) {
+			if err := ctx.Err(); err != nil {
+				return platformdiag.Observation{}, err
+			}
+			if catalog == nil || resolver == nil || strings.TrimSpace(sourceID) == "" || strings.TrimSpace(endpointID) == "" {
+				return platformdiag.Observation{}, fault.New(
+					fault.ClassUnavailable, "news.source.collection_policy_dependency_unavailable",
+					"Source collection policy diagnostic dependencies are unavailable", nil,
+				)
+			}
+			registration, err := catalog.LookupEndpoint(ctx, sourceID, endpointID)
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				return platformdiag.Observation{}, ctxErr
+			}
+			if err != nil {
+				if errors.Is(err, app.ErrSourceEndpointNotFound) {
+					return platformdiag.Observation{
+						Status: platformdiag.StatusSkipped, ReasonCode: "news.source.endpoint_not_registered",
+						SafeMessage: "Source endpoint is not registered", CheckedAt: time.Now().UTC(),
+					}, nil
+				}
+				return platformdiag.Observation{}, fault.New(
+					fault.ClassUnavailable, "news.source.catalog_lookup_failed",
+					"Source catalog lookup failed during policy readiness check", err,
+				)
+			}
+			if registration.SourceID != sourceID || registration.EndpointID != endpointID {
+				return platformdiag.Observation{}, fault.New(
+					fault.ClassInternal, "news.source.registration_mismatch",
+					"Source catalog returned a mismatched endpoint", nil,
+				)
+			}
+			if !registration.Enabled {
+				return platformdiag.Observation{
+					Status: platformdiag.StatusSkipped, ReasonCode: "news.source.endpoint_disabled",
+					SafeMessage: "Source endpoint is disabled", CheckedAt: time.Now().UTC(),
+				}, nil
+			}
+			if registration.SourcePolicyVersionID == "" ||
+				(registration.EndpointPolicy != nil && registration.EndpointPolicyVersionID == "") ||
+				(registration.EndpointPolicy == nil && registration.EndpointPolicyVersionID != "") {
+				return platformdiag.Observation{
+					Status: platformdiag.StatusDegraded, ReasonCode: "news.source.policy_version_invalid",
+					SafeMessage: "Source endpoint policy version is incomplete", CheckedAt: time.Now().UTC(),
+				}, nil
+			}
+			sourcePolicy, endpointPolicy, err := resolver.ResolveCurrentSourceCollectionPolicies(
+				ctx, sourceID, registration.SourcePolicyVersionID,
+				endpointID, registration.EndpointPolicyVersionID,
+			)
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				return platformdiag.Observation{}, ctxErr
+			}
+			if err != nil {
+				return platformdiag.Observation{}, fault.New(
+					fault.ClassUnavailable, "news.source.current_policy_lookup_failed",
+					"Current Source/Endpoint policy could not be verified", err,
+				)
+			}
+			if (registration.EndpointPolicy == nil) != (endpointPolicy == nil) {
+				return platformdiag.Observation{}, fault.New(
+					fault.ClassInternal, "news.source.endpoint_policy_snapshot_mismatch",
+					"Current Endpoint policy does not match the registered policy snapshot", nil,
+				)
+			}
+			attributes := map[string]string{
+				"source_policy_versioned": "true",
+				"source_authorization_status": string(sourcePolicy.Status),
+				"endpoint_policy_present": strconv.FormatBool(endpointPolicy != nil),
+			}
+			if endpointPolicy != nil {
+				attributes["endpoint_authorization_status"] = string(endpointPolicy.Status)
+			}
+			if sourcePolicy.Status != domain.AuthorizationApproved && sourcePolicy.Status != domain.AuthorizationRestricted {
+				return platformdiag.Observation{
+					Status: platformdiag.StatusDegraded, ReasonCode: "news.source.current_policy_not_collectable",
+					SafeMessage: "Current Source policy is not in an active collection authorization state",
+					CheckedAt: time.Now().UTC(), Attributes: attributes,
+				}, nil
+			}
+			if endpointPolicy != nil && endpointPolicy.Status != "" &&
+				endpointPolicy.Status != domain.AuthorizationApproved && endpointPolicy.Status != domain.AuthorizationRestricted {
+				return platformdiag.Observation{
+					Status: platformdiag.StatusDegraded, ReasonCode: "news.source.current_policy_not_collectable",
+					SafeMessage: "Current Endpoint policy is not in an active collection authorization state",
+					CheckedAt: time.Now().UTC(), Attributes: attributes,
+				}, nil
+			}
+			return platformdiag.Observation{
+				Status: platformdiag.StatusHealthy,
+				SafeMessage: "Current Source/Endpoint policy versions match the registered snapshot",
+				CheckedAt: time.Now().UTC(), Attributes: attributes,
+			}, nil
+		},
+	}
+}
+
 // StorageChecks verifies the shared database connection and News-owned schema.
 // It does not create tables, run migrations, or inspect stored article content.
 func StorageChecks(probe StorageProbe) []platformdiag.Check {
