@@ -37,6 +37,15 @@ func (r *failOnceNotificationReceiver) Receive(ctx context.Context, raw []byte) 
 }
 
 func TestResearchflowOutboxToNotificationInboxMariaDB(t *testing.T) {
+	runResearchflowOutboxToNotificationInboxMariaDB(t, "succeeded", nil)
+}
+
+func TestResearchflowFailedTerminalEventNotificationMariaDB(t *testing.T) {
+	terminationReason := "deadline_exceeded"
+	runResearchflowOutboxToNotificationInboxMariaDB(t, "failed", &terminationReason)
+}
+
+func runResearchflowOutboxToNotificationInboxMariaDB(t *testing.T, terminalStatus string, terminationReason *string) {
 	dsn := os.Getenv("SERVER_RELAY_TEST_MYSQL_DSN")
 	if dsn == "" {
 		t.Skip("SERVER_RELAY_TEST_MYSQL_DSN is not configured")
@@ -94,7 +103,8 @@ func TestResearchflowOutboxToNotificationInboxMariaDB(t *testing.T) {
 	deadlineAt := now.Add(time.Hour).Format("2006-01-02T15:04:05.000000000Z")
 
 	payload := researchflowTerminalPayload{
-		SourceEventRef: runRef, RunRef: runRef, Status: "succeeded",
+		SourceEventRef: runRef, RunRef: runRef, Status: terminalStatus,
+		TerminationReason: terminationReason,
 		SystemAsOf: systemAsOf, FinishedAt: finishedAt,
 		ResultSummaryRef: &summaryRef, TemplateRef: "daily_stock_analysis",
 		TemplateVersion: "1.0.0",
@@ -106,14 +116,18 @@ func TestResearchflowOutboxToNotificationInboxMariaDB(t *testing.T) {
 	payloadDigest := sha256.Sum256(payloadJSON)
 	idempotencyKey := "run-terminal:" + runRef
 
+	var terminationReasonValue any
+	if terminationReason != nil {
+		terminationReasonValue = *terminationReason
+	}
 	_, err = db.ExecContext(ctx, `INSERT INTO researchflow_runs (
 		run_ref, schema_version, status, version, system_as_of, deadline_at,
 		template_ref, template_version, template_fingerprint, input_snapshot_refs,
 		resolved_template_snapshot, parameters_snapshot, originating_request_id,
 		correlation_id, result_summary_ref, termination_reason, created_at, started_at, finished_at
-	) VALUES (?, '1.0.0', 'succeeded', 3, ?, ?, ?, ?, ?, '[]', '{}', '{}', NULL, ?, ?, NULL, ?, ?, ?)`,
-		runRef, systemAsOf, deadlineAt, payload.TemplateRef, payload.TemplateVersion,
-		strings.Repeat("a", 64), correlationID, summaryRef, createdAt, createdAt, finishedAt)
+	) VALUES (?, '1.0.0', ?, 3, ?, ?, ?, ?, ?, '[]', '{}', '{}', NULL, ?, ?, ?, ?, ?, ?)`,
+		runRef, terminalStatus, systemAsOf, deadlineAt, payload.TemplateRef, payload.TemplateVersion,
+		strings.Repeat("a", 64), correlationID, summaryRef, terminationReasonValue, createdAt, createdAt, finishedAt)
 	if err != nil {
 		t.Fatalf("insert terminal Researchflow Run fixture: %v", err)
 	}
