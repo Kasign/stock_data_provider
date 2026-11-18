@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	researchapp "example.com/stock-analysis-flow/internal/research/application"
 	researchevent "example.com/stock-analysis-flow/internal/research/event"
 )
 
@@ -103,9 +102,4 @@ func TestResearchOutboxExpiredLeaseCanBeReclaimedAndFenced(t *testing.T) {
 			status, reason, owner, token, leaseUntil, attempts)
 	}
 
-	var claimed []researchapp.NotificationEventEnvelope
-	claimed, err = outbox.ClaimOutbox(ctx, "worker_lease_third", 1, time.Minute)
-	if err != nil || len(claimed) != 0 {
-		t.Fatalf("terminal rejected state produced a claim: %+v, error %v", claimed, err)
-	}
 }

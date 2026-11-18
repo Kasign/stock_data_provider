@@ -304,7 +304,8 @@ func (r *OutboxRepository) MarkOutboxPublished(ctx context.Context, eventID, wor
 	if affected == 1 {
 		return nil
 	}
-	var status, leaseOwner, storedLeaseToken string
+	var status string
+	var leaseOwner, storedLeaseToken sql.NullString
 	err = r.db.QueryRowContext(ctx,
 		"SELECT delivery_status, lease_owner, lease_token FROM research_notification_outbox WHERE event_id=?", eventID).
 		Scan(&status, &leaseOwner, &storedLeaseToken)
@@ -314,7 +315,8 @@ func (r *OutboxRepository) MarkOutboxPublished(ctx context.Context, eventID, wor
 	if err != nil {
 		return fmt.Errorf("read Research Outbox confirmation state: %w", err)
 	}
-	if status == "published" && leaseOwner == workerID && storedLeaseToken == leaseToken {
+	if status == "published" && leaseOwner.Valid && storedLeaseToken.Valid &&
+		leaseOwner.String == workerID && storedLeaseToken.String == leaseToken {
 		return nil
 	}
 	return fmt.Errorf("%w: Research Outbox message is not published by this lease", ErrConflict)
