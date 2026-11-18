@@ -2,7 +2,7 @@ name: Server package validation
 
 on:
   push:
-    branches: [feat/research-analysis-flow-native-go]
+    branches: [feat/server]
     paths:
       - 'cmd/analysis-api/**'
       - 'internal/server/**'

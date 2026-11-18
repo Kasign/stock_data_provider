@@ -243,7 +243,7 @@
 
 ### 11.1 核查基线与方法
 
-- Data 分支：`feat/full-go-data-providers-api-switch`
+- Data 分支：`feat/data`
 - HEAD：`fd39c663c4ad59836acdf963d5fb8b2f9227abe8`
 - OpenAPI：`services/market-data/openapi.yaml`，Blob `9a15f7810a07c60887a574d82e1f84d56a8c9964`
 - Model：`services/market-data/internal/model/*.go` 下 11 个 Go 文件。
