@@ -124,7 +124,6 @@ func TestMetricValidateRejectsInvalidUTF8TextAndJSONValues(t *testing.T) {
 	}
 }
 
-
 func TestMetricValidateEnforcesSafeJSONIntegerForSampleCount(t *testing.T) {
 	base := Metric{
 		MetricCode: "sample_metric", Value: json.RawMessage("0.25"),

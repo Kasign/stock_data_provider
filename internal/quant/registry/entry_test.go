@@ -615,7 +615,6 @@ func TestParseNumericDecimalStringLexicalContract(t *testing.T) {
 	}
 }
 
-
 func TestRegistryValidateParametersEnforcesSafeAnnualizationFactor(t *testing.T) {
 	registry := New()
 	entry := validEntry("volatility", "1.0.0")
