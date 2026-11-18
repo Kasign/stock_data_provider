@@ -359,3 +359,89 @@ func assertEnvelopeGolden(t *testing.T, name string, envelope Envelope) {
 		t.Fatalf("Envelope JSON differs from %s\n got: %s\nwant: %s", name, encoded, raw)
 	}
 }
+
+
+func TestIndicatorPayloadAcceptsFixedMappingsForAvailableAndUnavailableResults(t *testing.T) {
+	mappings := map[string][]string{
+		"sma":        {"sma"},
+		"ema":        {"ema"},
+		"return":     {"return"},
+		"volatility": {"volatility"},
+		"rsi":        {"rsi"},
+		"atr":        {"atr"},
+		"macd":       {"macd_dif", "macd_dea", "macd_histogram"},
+		"bollinger":  {"bollinger_middle", "bollinger_upper", "bollinger_lower"},
+	}
+	for indicatorCode, metricCodes := range mappings {
+		for _, state := range []struct {
+			name          string
+			value         json.RawMessage
+			quality       metric.QualityStatus
+			status        metric.Status
+			sampleCount   int
+		}{
+			{name: "available", value: json.RawMessage("1.25"), quality: metric.QualityValid, status: metric.StatusAvailable, sampleCount: 10},
+			{name: "insufficient_data", value: json.RawMessage("null"), quality: metric.QualityUnknown, status: metric.StatusInsufficientData, sampleCount: 3},
+		} {
+			t.Run(indicatorCode+"/"+state.name, func(t *testing.T) {
+				items := make([]metric.Metric, 0, len(metricCodes))
+				for _, code := range metricCodes {
+					count := state.sampleCount
+					items = append(items, metric.Metric{
+						MetricCode:         code,
+						Value:              append(json.RawMessage{}, state.value...),
+						Unit:               "fixture_unit",
+						Period:             "20d",
+						SystemAsOf:         "2026-11-12T00:00:00Z",
+						QualityStatus:      state.quality,
+						MetricStatus:       state.status,
+						CalculationVersion: "fixture-v1",
+						SampleCount:        &count,
+						LowerBound:         json.RawMessage("null"),
+						UpperBound:         json.RawMessage("null"),
+					})
+				}
+				payload, err := NewIndicatorPayload(indicatorCode, items)
+				if err != nil {
+					t.Fatalf("NewIndicatorPayload rejected fixed mapping: %v", err)
+				}
+				if payload.IndicatorCode() != indicatorCode || len(payload.Metrics()) != len(metricCodes) {
+					t.Fatalf("payload mapping shape changed: indicator=%q metrics=%d", payload.IndicatorCode(), len(payload.Metrics()))
+				}
+				for index, item := range payload.Metrics() {
+					if item.MetricCode != metricCodes[index] {
+						t.Fatalf("metric[%d] = %q, want %q", index, item.MetricCode, metricCodes[index])
+					}
+					if state.status != metric.StatusAvailable && string(item.Value) != "null" {
+						t.Fatalf("unavailable metric[%d] value = %s, want null", index, item.Value)
+					}
+				}
+			})
+		}
+	}
+}
+
+func TestIndicatorPayloadRejectsPartialCompositeResult(t *testing.T) {
+	mappings := map[string][]string{
+		"macd":      {"macd_dif", "macd_dea", "macd_histogram"},
+		"bollinger": {"bollinger_middle", "bollinger_upper", "bollinger_lower"},
+	}
+	for indicatorCode, metricCodes := range mappings {
+		t.Run(indicatorCode, func(t *testing.T) {
+			items := make([]metric.Metric, 0, len(metricCodes)-1)
+			for _, code := range metricCodes[:len(metricCodes)-1] {
+				count := 10
+				items = append(items, metric.Metric{
+					MetricCode: code, Value: json.RawMessage("1.25"), Unit: "fixture_unit",
+					Period: "20d", SystemAsOf: "2026-11-12T00:00:00Z",
+					QualityStatus: metric.QualityValid, MetricStatus: metric.StatusAvailable,
+					CalculationVersion: "fixture-v1", SampleCount: &count,
+					LowerBound: json.RawMessage("null"), UpperBound: json.RawMessage("null"),
+				})
+			}
+			if _, err := NewIndicatorPayload(indicatorCode, items); err == nil {
+				t.Fatal("NewIndicatorPayload accepted a partially published composite indicator")
+			}
+		})
+	}
+}
