@@ -76,7 +76,7 @@ func IntentsFromModelResponse(response llm.ModelResponse) ([]Intent, error) {
 func (r *Registry) ToolDefinitionsFor(budget Budget) []llm.ToolDefinition {
 	if r == nil || budget.MaxCalls <= 0 || budget.CallsUsed < 0 || budget.MaxCalls <= budget.CallsUsed ||
 		budget.MaxTotalTimeout <= 0 || budget.TimeoutUsed < 0 || budget.MaxTotalTimeout <= budget.TimeoutUsed ||
-		budget.Now.IsZero() || !budget.RunDeadline.After(budget.Now) {
+		!validUTCTime(budget.Now) || !validUTCTime(budget.RunDeadline) || !budget.RunDeadline.After(budget.Now) {
 		return nil
 	}
 	granted := make(map[string]struct{}, len(budget.GrantedScopes))
