@@ -164,7 +164,6 @@ func TestNewStageCheckNormalizesCheckedAtToUTC(t *testing.T) {
 	}
 }
 
-
 func TestNewStageCheckRejectsInvalidUTF8Text(t *testing.T) {
 	invalid := string([]byte{0xff, 0xfe})
 	base := StageAssessment{
