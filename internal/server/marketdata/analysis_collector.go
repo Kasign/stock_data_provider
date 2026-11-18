@@ -165,7 +165,9 @@ func (c *AnalysisCollector) Collect(ctx context.Context, request domain.RunReque
 		out.IndexBars = append(out.IndexBars, result.index...)
 		out.SourceNotes = append(out.SourceNotes, result.notes...)
 	}
-	sort.Slice(out.Quotes, func(i, j int) bool { return out.Quotes[i].Symbol < out.Quotes[j].Symbol })
+	sort.Slice(out.Quotes, func(i, j int) bool {
+		return out.Quotes[i].Symbol < out.Quotes[j].Symbol
+	})
 	sort.Slice(out.Bars, func(i, j int) bool {
 		if out.Bars[i].Symbol != out.Bars[j].Symbol {
 			return out.Bars[i].Symbol < out.Bars[j].Symbol
@@ -367,7 +369,9 @@ func cloneFloat(value *float64) *float64 {
 }
 
 func cloneTime(value *time.Time) *time.Time {
-	if value == nil { return nil }
+	if value == nil {
+		return nil
+	}
 	copy := *value
 	return &copy
 }
