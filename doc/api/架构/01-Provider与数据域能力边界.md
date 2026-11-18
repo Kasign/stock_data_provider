@@ -107,6 +107,8 @@ MiaoXiang 的 ChipDistribution/CapitalFlow 由独立 `MARKET_DATA_MX_ENABLED` �
 
 下表按 Provider 汇总账本中已经存在的真实请求结论。状态只适用于所列能力、代码基线和样本；未列出的已实现能力一律为**未执行**，不从同一 Provider 的其他能力推断。具体原始记录、Run/Artifact 和代码 SHA 以 [DATA_SOURCE_RUNTIME_ACCEPTANCE_LOG.md](../provider-migration/DATA_SOURCE_RUNTIME_ACCEPTANCE_LOG.md) 为准。
 
+**重要：** 本节表格中的“通过/降级/失败/不可比较/权限阻塞”是历史 Run 对应样本的判定，不是 `feat/data @ 90871455b282d6124d3c25fb9189fbd274894e67` 当前代码基线的整体验收状态。当前代码基线尚未针对所有 Provider × 能力重新执行真实请求；没有完成差异审查和必要复验的格子，在当前基线仍按未执行处理。
+
 **历史证据与当前代码基线的关系：** Runtime Acceptance Log 中多项真实请求发生在旧分支名 `feat/full-go-data-providers-api-switch` 或旧目录 `services/market-data/internal/provider/**`。当前核对基线为 `feat/data @ 90871455b282d6124d3c25fb9189fbd274894e67`。对 TickFlow、BaoStock、Hithink、Eastmoney、Tencent 的日 K 实现文件进行历史版本对照时，当前文件 Blob 与历史版本不完全相同（部分路径还发生了迁移）。因此这些真实请求仍是有效的历史样本事实，但**不能自动升级为当前代码 SHA 的实时验收通过**；需要逐 Provider/能力核对差异，必要时再做一次最小化真实复验。此规则同样适用于旧 SHA 的 CI 结果。
 
 本轮进一步对照了历史/当前的 `FetchDailyBars` 实现：BaoStock、Hithink（含 `fetchDailySegment`）、Eastmoney、Tencent 的相关方法差异集中在统一时钟注入；对应历史样本仍可作为字段/单位结论的参考，但当前 SHA 的端到端结果仍未重新执行。TickFlow 当前日 K 方法新增了逐字段解析诊断、数组长度/日期/OHLC/数值校验和缺失字段报告；`HandsToShares` 归一化仍保留，历史 8 条样本可证明当时的手转股根因与修复，但不能替代当前代码对同一样本的复验。TickFlow Quote 的手转股逻辑保持，主要变化为统一时钟注入和索引行情原始结构定义。
