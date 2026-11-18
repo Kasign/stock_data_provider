@@ -18,8 +18,8 @@ import (
 )
 
 const (
-	webhookHost = "qyapi.weixin.qq.com"
-	webhookPath = "/cgi-bin/webhook/send"
+	webhookHost      = "qyapi.weixin.qq.com"
+	webhookPath      = "/cgi-bin/webhook/send"
 	maxResponseBytes = 64 << 10
 )
 
@@ -113,9 +113,9 @@ func (a *Adapter) Send(ctx context.Context, request domain.ChannelSendRequest) (
 }
 
 type messagePayload struct {
-	MsgType  string          `json:"msgtype"`
-	Text     *textContent    `json:"text,omitempty"`
-	Markdown *textContent    `json:"markdown,omitempty"`
+	MsgType  string       `json:"msgtype"`
+	Text     *textContent `json:"text,omitempty"`
+	Markdown *textContent `json:"markdown,omitempty"`
 }
 
 type textContent struct {

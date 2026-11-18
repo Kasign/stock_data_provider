@@ -3,8 +3,8 @@ package domain
 type TemplateFormat string
 
 const (
-	TemplateFormatText TemplateFormat = "text"
-	TemplateFormatHTML TemplateFormat = "html"
+	TemplateFormatText     TemplateFormat = "text"
+	TemplateFormatHTML     TemplateFormat = "html"
 	TemplateFormatMarkdown TemplateFormat = "markdown"
 )
 
