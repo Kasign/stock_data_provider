@@ -26,8 +26,13 @@ func newHTTPHandler(authenticator *platformsecurity.Authenticator, health, legac
 		{pattern: "GET /diagnostics", policy: platformsecurity.OwnerAccess(), handler: health},
 		{pattern: "HEAD /diagnostics", policy: platformsecurity.OwnerAccess(), handler: health},
 		{pattern: "GET /{$}", policy: platformsecurity.OwnerAccess(), handler: legacy},
-		// Data 的 InProcessHandler 保留模块内完整路由；Root 统一执行 Owner 认证和入口中间件。
-		{pattern: "/api/v1/", policy: platformsecurity.OwnerAccess(), handler: marketData},
+		// 仅挂载 Data OpenAPI 定义的业务路径前缀；不把 /api/v1/owner/ 等其他模块路由交给 Data Handler。
+		{pattern: "/api/v1/quotes/", policy: platformsecurity.OwnerAccess(), handler: marketData},
+		{pattern: "/api/v1/bars/", policy: platformsecurity.OwnerAccess(), handler: marketData},
+		{pattern: "/api/v1/bundles/", policy: platformsecurity.OwnerAccess(), handler: marketData},
+		{pattern: "/api/v1/data-sources/", policy: platformsecurity.OwnerAccess(), handler: marketData},
+		{pattern: "/api/v1/market/", policy: platformsecurity.OwnerAccess(), handler: marketData},
+		{pattern: "/api/v1/stocks/", policy: platformsecurity.OwnerAccess(), handler: marketData},
 		{pattern: "POST /api/v1/analysis/runs", policy: platformsecurity.OwnerAccess(), handler: legacy},
 		{pattern: "GET /api/v1/analysis/runs/{run_id}", policy: platformsecurity.OwnerAccess(), handler: legacy},
 		{pattern: "GET /api/v1/analysis/runs/{run_id}/events", policy: platformsecurity.OwnerAccess(), handler: legacy},
