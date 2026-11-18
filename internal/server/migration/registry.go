@@ -78,6 +78,9 @@ func (r *Registry) Register(namespace string, migrations []platformstorage.Migra
 	if _, exists := r.entries[namespace]; exists {
 		return fmt.Errorf("migration namespace %q is already registered", namespace)
 	}
+	if _, exists := r.externalNamespaces[namespace]; exists {
+		return fmt.Errorf("migration namespace %q is already registered as external", namespace)
+	}
 	r.entries[namespace] = snapshot
 	return nil
 }
@@ -168,9 +171,6 @@ func (r *Registry) RunWithReport(ctx context.Context, db *sql.DB) (RunReport, er
 
 	namespaces := make([]string, 0, len(entries))
 	for namespace := range entries {
-		namespaces = append(namespaces, namespace)
-	}
-	for namespace := range r.externalSnapshot() {
 		namespaces = append(namespaces, namespace)
 	}
 	sort.Strings(namespaces)
@@ -349,8 +349,12 @@ func (r *Registry) Namespaces() []string {
 		return nil
 	}
 	entries := r.snapshot()
-	namespaces := make([]string, 0, len(entries))
+	external := r.externalSnapshot()
+	namespaces := make([]string, 0, len(entries)+len(external))
 	for namespace := range entries {
+		namespaces = append(namespaces, namespace)
+	}
+	for namespace := range external {
 		namespaces = append(namespaces, namespace)
 	}
 	sort.Strings(namespaces)
