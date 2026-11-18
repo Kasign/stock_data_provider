@@ -163,3 +163,30 @@ func TestValuationRequestFingerprintValidatesAndPreservesRequestOrder(t *testing
 		t.Fatal("empty valuation request must be rejected")
 	}
 }
+
+
+func TestFundamentalsRevisionHashNormalizesEquivalentOffsetInstants(t *testing.T) {
+	availableAtOffset := time.Date(2026, 8, 29, 10, 0, 0, 123456789, time.FixedZone("UTC+8", 8*60*60))
+	snapshot := model.FundamentalsSnapshot{
+		Symbol: "600519.SH", Year: 2026, Quarter: 2, HasData: true,
+		Sections: []model.FundamentalSection{{
+			Category: "profitability", ReportDate: "2026-06-30", PublicationDate: "2026-08-29",
+			AvailableAt: &availableAtOffset, HasData: true, QualityStatus: model.QualityValid,
+			Metrics: []model.FundamentalMetric{{Key: "roe", Name: "净资产收益率", Value: 0.12, Unit: "ratio", SourceField: "roe"}},
+		}},
+		Source: "fixture", SourceVersion: "fixture-v1", FetchedAt: availableAtOffset, QualityStatus: model.QualityValid,
+	}
+	first, err := fundamentalsRevisionHash(snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	availableAtUTC := availableAtOffset.UTC()
+	snapshot.Sections[0].AvailableAt = &availableAtUTC
+	second, err := fundamentalsRevisionHash(snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first != second {
+		t.Fatal("equivalent instants with different offsets must produce the same fundamentals revision hash")
+	}
+}
