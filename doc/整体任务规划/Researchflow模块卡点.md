@@ -72,12 +72,13 @@
 
 ## 3. 下一步解除顺序
 
-1. FLOW-006：先明确 RF-BLOCK-008 中 Composer RiskDecision 的唯一 Owner、来源和聚合语义。
-2. FLOW-006：确认 RunResult 唯一持久化 Owner，再接通 Quant/Research/LLM Owner Facade 与 Server/Worker。
-3. FLOW-005：Research Owner Adapter、Run PIT/Deadline 绑定、LLM Tokenizer 和 Server/Worker Context Stage。
-4. FLOW-002：继续核对真实生产 Template、HardRiskGateRegistry 和 Stage Output Registry；不为缺失 Provider 注册占位项。
-5. FLOW-008：由真实 Stage Provider 提供 Assessment，再由 Server 注册 Platform Diagnostics.Check。
-6. 项目契约 Owner/Integration 核对 GOV-CTR-002/004 1.1.0 和 FLOW-CTR-004 Envelope 登记簿。
+1. FLOW-002：由 News Owner 修复 Payload Validator 的 uniqueItems 缺口；Researchflow 在集成基线复验。
+2. FLOW-002：继续核对真实生产 Template、HardRiskGateRegistry 和 Stage Output Registry；不为缺失 Provider 注册占位项。
+3. FLOW-006：明确 RF-BLOCK-008 中 Composer RiskDecision 的唯一 Owner、来源和聚合语义。
+4. FLOW-006：确认 RunResult 唯一持久化 Owner，再接通 Quant/Research/LLM Owner Facade 与 Server/Worker。
+5. FLOW-005：Research Owner Adapter、Run PIT/Deadline 绑定、LLM Tokenizer 和 Server/Worker Context Stage。
+6. FLOW-008：由真实 Stage Provider 提供 Assessment，再由 Server 注册 Platform Diagnostics.Check。
+7. 项目契约 Owner/Integration 核对 GOV-CTR-002/004 1.1.0 和 FLOW-CTR-004 Envelope 登记簿。
 ### RF-BLOCK-007：FLOW-006 Result Composer 尚无生产 Facade 与结果资源持久化
 
 - **现状**：Researchflow 的 Result Composer/Validator 已是纯函数实现；Quant Envelope 的版本/字段错配已修复。当前通过 `NewQuantPayloadRegistry` 精确注册 Quant Envelope 1.0.0 的 trend/risk Payload，并通过 `FromQuantEnvelope` 映射 Quant Typed Envelope。
@@ -94,7 +95,7 @@
 
 - **现状**：Quant 的权威结构是 `internal/quant/risk/decision.go`，对应 `doc/quant/schema/QNT-CTR-004-risk-decision-1.0.0.schema.json`；Researchflow 另有 `internal/researchflow/resultvalidation/risk.go` 的 RiskDecision/RiskReason。
 - **字段差异**：Researchflow Reason 增加 `rule_ref`、`observed_value`、`expected_range`、`remediation_code`，Quant QNT-CTR-004 1.0.0 不包含这些字段；Quant 时间是规范 UTC 字符串，Researchflow 使用 `time.Time`。
-- **语义差异**：Quant `Decision.Validate` 要求 EvaluatedAt 不早于 SystemAsOf、Reason Code 唯一、Decision.Status 与 `AggregateStatus(Reasons)` 一致；Quant AggregateStatus 要求至少一条 block 规则，所有 block 明确 not_triggered 才能 pass。Researchflow `ValidateRiskDecision` 当前只拒绝 block triggered/unknown 与 pass 冲突，没有实现完整聚合约束。
+- **语义差异**：Quant `Decision.Validate` 要求 EvaluatedAt 不早于 SystemAsOf、Reason Code 唯一、Decision.Status 与 `AggregateStatus(Reasons)` 一致；Quant AggregateStatus 要求至少一条 block 规则，所有 block 明确 not_triggered 才能 pass。Researchflow `ValidateRiskDecision` 已拒绝空 Reasons、`EvaluatedAt < SystemAsOf`，并阻止 block triggered/unknown 与 pass 冲突；但尚未强制 Reason Code 唯一，也没有复用 Quant 的完整聚合约束。
 - **调用边界**：`ComposeResult` 将 Researchflow RiskDecision 作为独立输入，与 QuantResultEnvelope 分开接收；当前没有 Quant `risk.Decision` 到该类型的正式 Adapter。
 - **原因**：尚未明确 Composer 的 RiskDecision 是 Quant RiskDecision 的跨模块投影，还是某个独立 HardRiskGate Provider 产生的编排层结论。
 - **影响**：不能将 Quant 的 risk Payload 直接映射到 Composer RiskDecision，也不能宣称两边硬风险语义已完成端到端一致性验收。
@@ -110,6 +111,7 @@
 - **责任边界**：由 News Owner 修复 News 自己的 Payload Validator 和测试；Researchflow 不复制 `internal/news/**` 的领域规则。
 - **解除条件**：News 增加重复 missing field 拒绝测试并通过 News 模块 CI；Researchflow 在集成基线上确认复用的新 Validator 后，重新验收 Stage Output Registry。
 - **当前状态**：OPEN；阻断 News Search Payload Schema 的完整一致性验收，不阻断 Researchflow 其他模块能力。
+
 ## 4. 状态定义
 
 - `OPEN`：有明确责任人和解除条件，当前未解除。

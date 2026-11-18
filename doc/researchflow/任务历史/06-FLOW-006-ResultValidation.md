@@ -42,7 +42,7 @@ Result Composer/Validator 的纯函数层已实现；本轮发现并修复了 Re
 ## 2026-11-18 RiskDecision 契约差异 Review
 
 - Quant `risk.Decision` 与 Researchflow `resultvalidation.RiskDecision` 不是同一结构：Researchflow 增加了 Quant Schema 不包含的 rule_ref、observed_value、expected_range、remediation_code。
-- Quant `Decision.Validate` 要求唯一 Reason Code、EvaluatedAt 不早于 SystemAsOf、Status 与 `AggregateStatus(Reasons)` 一致；Researchflow 当前仅检查 pass 不得与 block triggered/unknown 冲突，未实现相同聚合语义。
+- Quant `Decision.Validate` 要求唯一 Reason Code、EvaluatedAt 不早于 SystemAsOf、Status 与 `AggregateStatus(Reasons)` 一致；Researchflow 现已拒绝空 Reasons 和 PIT 前评估，但仍未检查 Reason Code 唯一性或实现完整 AggregateStatus。
 - Composer 将 Researchflow RiskDecision 作为独立输入，当前没有从 Quant `risk.Decision` 到该类型的正式映射。
 - Researchflow 本轮额外加固：拒绝空 Reasons，并拒绝 `EvaluatedAt < SystemAsOf`；这两项不预设完整 Quant 聚合语义。
 - Template `HardRiskGateRegistry` 目前只是 `Contains(stageCode)` 存在性接口，不负责执行 Gate 或产生 RiskDecision；没有生产 Gate Provider 证明 Composer RiskDecision 的真实来源。
