@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"example.com/stock-analysis-flow/internal/platform/fault"
+
 	researcherrors "example.com/stock-analysis-flow/internal/research"
 	researchclaim "example.com/stock-analysis-flow/internal/research/claim"
 	researchcontext "example.com/stock-analysis-flow/internal/research/context"
@@ -960,5 +962,202 @@ func TestUpdateClaimRejectsEvidenceWithMismatchedStance(t *testing.T) {
 	}
 	if repo.appended || repo.value.ClaimVersion != previous.ClaimVersion {
 		t.Fatal("Claim with mismatched Evidence stance must not be appended")
+	}
+}
+
+// contractContextRepository records the exact immutable version requested by the
+// Application Port consumer contract tests.
+type contractContextRepository struct {
+	value            researchcontext.Context
+	getCalls         int
+	requestedID      string
+	requestedVersion int64
+}
+
+func (r *contractContextRepository) Append(_ context.Context, value researchcontext.Context) error {
+	r.value = value
+	return nil
+}
+
+func (r *contractContextRepository) GetVersion(_ context.Context, id string, version int64) (researchcontext.Context, error) {
+	r.getCalls++
+	r.requestedID, r.requestedVersion = id, version
+	if id != r.value.ContextID || version != r.value.ContextVersion {
+		return researchcontext.Context{}, researcherrors.ErrNotFound
+	}
+	return r.value, nil
+}
+
+func validContextForApplicationContract() researchcontext.Context {
+	now := time.Date(2026, 11, 12, 1, 0, 0, 0, time.UTC)
+	return researchcontext.Context{
+		SchemaVersion: researchcontext.SchemaVersion, ContextID: "ctx-contract", ContextVersion: 3,
+		ResearchQuestion: "验证 Context 访问边界", Scope: researchcontext.ScopeStock,
+		SubjectRefs: []string{"security:600000"}, SystemAsOf: now,
+		SectionRefs: []researchcontext.SectionRef{{
+			SectionID: "overview", SectionVersion: "v3", SourceOwner: researchcontext.SourceOwnerResearch,
+			SourceRefs: []string{}, EvidenceRefs: []string{}, QualityStatus: researchcontext.QualityValid,
+			Required: true, Included: true, AssembledAt: now, SystemAsOf: now,
+		}},
+		QualitySummary:   researchcontext.QualitySummary{Status: researchcontext.QualityValid, ReasonCodes: []string{}},
+		IncludedSections: []string{"overview"}, OmittedSections: []researchcontext.OmittedSection{},
+		BuilderVersion: "contract-test/1.0.0", CreatedAt: now,
+	}
+}
+
+func TestContextPortConsumerAuthorizationContract(t *testing.T) {
+	value := validContextForApplicationContract()
+	if err := value.Validate(); err != nil {
+		t.Fatalf("invalid Context contract fixture: %v", err)
+	}
+
+	tests := []struct {
+		name      string
+		authErr   error
+		wantClass fault.Class
+		wantCode  string
+		wantAllow bool
+	}{
+		{name: "允许当前读取", wantAllow: true},
+		{name: "明确拒绝", authErr: NewAuthorizationError(AuthorizationDenied, errors.New("denied")), wantClass: fault.ClassForbidden, wantCode: "research_context_authorization_rejected"},
+		{name: "授权结果未知", authErr: &AuthorizationError{Kind: AuthorizationFailureKind("unknown")}, wantClass: fault.ClassInternal, wantCode: "research_context_authorization_failed"},
+		{name: "授权依赖不可用", authErr: NewAuthorizationError(AuthorizationUnavailable, errors.New("unavailable")), wantClass: fault.ClassUnavailable, wantCode: "research_context_authorization_unavailable"},
+		{name: "授权检查超时", authErr: NewAuthorizationError(AuthorizationTimeout, errors.New("timeout")), wantClass: fault.ClassTimeout, wantCode: "research_context_authorization_timeout"},
+		{name: "未分类授权故障", authErr: errors.New("unexpected owner failure"), wantClass: fault.ClassInternal, wantCode: "research_context_authorization_failed"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := &contractContextRepository{value: value}
+			authorizer := &contextAuthorizerFake{err: tt.authErr}
+			service, err := NewService(repo, &evidenceRepoFake{}, &authorizerFake{}, nil, nil, authorizer)
+			if err != nil {
+				t.Fatalf("NewService() error = %v", err)
+			}
+
+			request := ContextReadRequest{
+				Ref:         ContextRef{ContextID: value.ContextID, ContextVersion: value.ContextVersion},
+				CallerRef:   "researchflow:trusted-worker",
+				PurposeCode: string(researchevidence.PurposeResearchAnalysis),
+			}
+			got, err := service.GetContext(context.Background(), request)
+			if tt.wantAllow {
+				if err != nil {
+					t.Fatalf("GetContext() error = %v", err)
+				}
+				if got.ContextID != value.ContextID || got.ContextVersion != value.ContextVersion {
+					t.Fatalf("returned Context version mismatch: %+v", got)
+				}
+			} else {
+				if err == nil {
+					t.Fatal("authorization failure must not return Context")
+				}
+				if got.ContextID != "" {
+					t.Fatalf("failed authorization returned Context data: %+v", got)
+				}
+				var gotFault *fault.Fault
+				if !errors.As(err, &gotFault) || gotFault.Class != tt.wantClass || gotFault.Code != tt.wantCode {
+					t.Fatalf("authorization failure mapping = %v, want class=%q code=%q", err, tt.wantClass, tt.wantCode)
+				}
+			}
+
+			if repo.getCalls != 1 || repo.requestedID != value.ContextID || repo.requestedVersion != value.ContextVersion {
+				t.Fatalf("repository did not receive exact immutable version: %+v", repo)
+			}
+			if authorizer.calls != 1 || authorizer.caller != request.CallerRef ||
+				authorizer.purpose != researchevidence.PurposeResearchAnalysis ||
+				authorizer.value.ContextID != value.ContextID || authorizer.value.ContextVersion != value.ContextVersion ||
+				authorizer.value.Scope != value.Scope || !slices.Equal(authorizer.value.SubjectRefs, value.SubjectRefs) {
+				t.Fatalf("authorizer did not receive exact caller, purpose and Context scope: %+v", authorizer)
+			}
+		})
+	}
+}
+
+func TestContextPortConsumerFailsClosedBeforeReadWhenAuthorizerMissing(t *testing.T) {
+	value := validContextForApplicationContract()
+	repo := &contractContextRepository{value: value}
+	service, err := NewService(repo, &evidenceRepoFake{}, &authorizerFake{}, nil, nil)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	_, err = service.GetContext(context.Background(), ContextReadRequest{
+		Ref:         ContextRef{ContextID: value.ContextID, ContextVersion: value.ContextVersion},
+		CallerRef:   "researchflow:trusted-worker",
+		PurposeCode: string(researchevidence.PurposeResearchAnalysis),
+	})
+	var gotFault *fault.Fault
+	if !errors.As(err, &gotFault) || gotFault.Class != fault.ClassInternal ||
+		gotFault.Code != "research_context_authorizer_not_configured" {
+		t.Fatalf("missing authorizer error = %v, want fail-closed configuration fault", err)
+	}
+	if repo.getCalls != 0 {
+		t.Fatalf("repository must not be read without an authorizer, got %d reads", repo.getCalls)
+	}
+}
+
+func TestContextPortConsumerRejectsMissingOrUnsupportedReadMetadata(t *testing.T) {
+	value := validContextForApplicationContract()
+	tests := []struct {
+		name    string
+		request ContextReadRequest
+	}{
+		{name: "缺少 CallerRef", request: ContextReadRequest{Ref: ContextRef{ContextID: value.ContextID, ContextVersion: value.ContextVersion}, PurposeCode: string(researchevidence.PurposeResearchAnalysis)}},
+		{name: "空白 CallerRef", request: ContextReadRequest{Ref: ContextRef{ContextID: value.ContextID, ContextVersion: value.ContextVersion}, CallerRef: "  ", PurposeCode: string(researchevidence.PurposeResearchAnalysis)}},
+		{name: "不支持的 Purpose", request: ContextReadRequest{Ref: ContextRef{ContextID: value.ContextID, ContextVersion: value.ContextVersion}, CallerRef: "researchflow:trusted-worker", PurposeCode: "admin_override"}},
+		{name: "缺少精确版本", request: ContextReadRequest{Ref: ContextRef{ContextID: value.ContextID}, CallerRef: "researchflow:trusted-worker", PurposeCode: string(researchevidence.PurposeResearchAnalysis)}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := &contractContextRepository{value: value}
+			authorizer := &contextAuthorizerFake{}
+			service, err := NewService(repo, &evidenceRepoFake{}, &authorizerFake{}, nil, nil, authorizer)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, err = service.GetContext(context.Background(), tt.request)
+			var gotFault *fault.Fault
+			if !errors.As(err, &gotFault) || gotFault.Class != fault.ClassValidation ||
+				gotFault.Code != "invalid_context_read_request" {
+				t.Fatalf("invalid read metadata error = %v", err)
+			}
+			if repo.getCalls != 0 || authorizer.calls != 0 {
+				t.Fatalf("invalid metadata reached dependencies: repository=%d authorizer=%d", repo.getCalls, authorizer.calls)
+			}
+		})
+	}
+}
+
+// TestContextPortConsumerForwardsAllSupportedPurposes keeps the Purpose allowlist
+// and the trusted CallerRef forwarding contract explicit at the public Port.
+func TestContextPortConsumerForwardsAllSupportedPurposes(t *testing.T) {
+	value := validContextForApplicationContract()
+	tests := []researchevidence.PurposeCode{
+		researchevidence.PurposeResearchAnalysis,
+		researchevidence.PurposeRiskReview,
+		researchevidence.PurposeUserDisplay,
+	}
+	for _, purpose := range tests {
+		t.Run(string(purpose), func(t *testing.T) {
+			repo := &contractContextRepository{value: value}
+			authorizer := &contextAuthorizerFake{}
+			service, err := NewService(repo, &evidenceRepoFake{}, &authorizerFake{}, nil, nil, authorizer)
+			if err != nil {
+				t.Fatal(err)
+			}
+			caller := "server:principal:subject-001"
+			_, err = service.GetContext(context.Background(), ContextReadRequest{
+				Ref:         ContextRef{ContextID: value.ContextID, ContextVersion: value.ContextVersion},
+				CallerRef:   caller,
+				PurposeCode: string(purpose),
+			})
+			if err != nil {
+				t.Fatalf("GetContext() rejected supported purpose %q: %v", purpose, err)
+			}
+			if authorizer.calls != 1 || authorizer.caller != caller || authorizer.purpose != purpose {
+				t.Fatalf("trusted access metadata was not forwarded unchanged: %+v", authorizer)
+			}
+		})
 	}
 }
