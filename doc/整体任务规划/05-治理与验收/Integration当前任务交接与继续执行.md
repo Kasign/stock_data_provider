@@ -1604,3 +1604,26 @@ GetRun 与 CancelRun 的持久化创建者授权已在 Application/Storage 层�
 当前提交：799661d6bc2fb868ab0b336e7a4b35c7a12e32d5。
 
 注意：本轮提交后尚未获得新的 CI Run；不能把上述测试称为 CI 已通过。下一步应先取得该 SHA 的 CI 结果，再根据实际失败继续修复，不能先更新为 success。
+
+
+## 2026-11-18 最终收尾 Review
+
+本节为当前状态的最终收口记录；早期章节中的历史 SHA、历史 NO-GO 和旧待办不再作为当前状态依据。
+
+### 本轮集中联调结论
+
+- Integration 当前基线：`5e41240d3fcc4f7ce98057e1729d5f9d0b97303e`。
+- Integration CI Run `44251844794`：success。
+- Tavily 真实 Researchflow 单 Worker：success。
+- Tavily 真实 Researchflow 双 Worker：success；两个独立 OS Worker 均实际领取并完成 Provider Run。
+- Claim / Lease / Fencing / Finalization：既有 MariaDB 边界测试与真实双 Worker 证据通过 Review。
+- Provider Retry / Non-Retry：受控 RateLimited、Timeout、Malformed Response 场景已覆盖并通过当前 Integration CI。
+- Notification Relay：正常投递、失败重试、终态 Outbox、Inbox/Fanout 幂等边界已覆盖；最终 Integration CI 通过。
+- Provider Outcome 与 Platform Diagnostic：职责边界保持；无独立 Diagnostic Record 时不填充 DiagnosticRefs。
+- `available_at`：没有独立授权与首次公开可获取证据时继续保持不可用，不从 `published_at`/`published_date` 推导。
+- Bocha / Brave：当前未配置，不计为 PASS，也不作为本轮集中联调阻塞。
+- Researchflow HTTP API：继续 deferred，本轮不开放。
+
+### 收口决策
+
+本轮集中联调达到封板条件。后续任务不再重复 Provider/Tavily/Notification Relay 联调，转入整体规划中的下一模块/阶段任务；若未来发生代码变化，只针对变更范围重新执行相应门禁。
