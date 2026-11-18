@@ -106,7 +106,7 @@ func TestNewDiagnosticsServiceRegistersNewsParserAndProviderConfigChecks(t *test
 	if err != nil {
 		t.Fatalf("newsconfig.Load() error = %v", err)
 	}
-	service, err := newDiagnosticsService(nil, servermigration.NewRegistry(), newsConfig)
+	service, err := newDiagnosticsService(nil, servermigration.NewRegistry(), newsConfig, nil)
 	if err != nil {
 		t.Fatalf("newDiagnosticsService() error = %v", err)
 	}
