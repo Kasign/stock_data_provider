@@ -9,7 +9,7 @@
 
 ## 1. 卡点结论
 
-<badge>BLOCKED</badge>
+**状态：BLOCKED**
 
 LLM 模块的 Provider Port、Responses JSON/SSE Adapter、Structured Output Schema 校验、Usage/错误归一化、Context Deadline/取消和资源边界等模块内实现已存在；当前代码 Review 和自动化验收已完成。
 
