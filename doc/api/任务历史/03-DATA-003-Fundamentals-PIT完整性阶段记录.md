@@ -1,0 +1,184 @@
+# Data 当前任务状态和进度
+
+更新时间：2026-11-18  
+维护分支：`feat/data`  
+当前唯一任务：DATA-003 Fundamentals PIT 完整性
+
+## 1. 当前分支与验收基线
+
+- DATA-002 已完成并归档，完成记录见 [04-DATA-002](./任务历史/04-DATA-002-DailyBar质量与复权参考基准完成状态.md)。
+- DATA-002 代码静态核对基线：`90871455b282d6124d3c25fb9189fbd274894e67`。
+- DATA-002 真实 Provider 运行证据均保留在 [Runtime Acceptance Log](./provider-migration/DATA_SOURCE_RUNTIME_ACCEPTANCE_LOG.md)，每条结论只适用于对应历史 SHA、Provider 和样本。
+- 本轮仅归档文档，没有修改 `internal/marketdata/**`，没有新触发 Provider 请求。
+- 不把历史 Run/Artifact 或其他 SHA 的 CI 状态继承为当前 HEAD 的验收结果。
+
+## 2. 当前任务：DATA-003 Fundamentals PIT 完整性
+
+**目标：** 核实披露时间、可用时间、报告期、修订版本、来源版本及历史读回语义一致；使用已有真实样本和 MariaDB PIT 证据形成可追溯结论。
+
+**执行边界：**
+1. 先复用现有 Fundamentals Adapter、Normalize、Validation、Repository、PIT Service 和历史 Runtime Acceptance Log。
+2. 重点区分 ReportDate、PublicationDate、AvailableAt、SystemObservedAt、PeriodEnd、SourceVersion，不把报告期末当披露日，也不把系统抓取时间冒充源端可用时间。
+3. 先审查现有 PIT 查询、修订回退、历史可见性和 MariaDB 持久化测试；已有能力不重复开发。
+4. 真实 Provider 证据只复用已有 Run/Artifact；Tushare 40203 权限未变化时不重复请求。
+5. 发现代码缺陷才修改代码；新增字段必须有上游来源、时间语义和消费者。
+6. 诊断继续区分 passed、degraded、failed、not_comparable、permission_required、not_executed。
+7. 不修改 Platform、Server、其他模块或项目级契约。
+
+## 3. DATA-002 最终结论摘要
+
+| 验收面 | 结论 |
+|---|---|
+| DailyBar 现有质量链 | passed（静态实现/测试审查） |
+| raw 双源真实样本 | passed（600036.SH、002982.SZ，各 9 个交易日） |
+| BaoStock 自身复权一致性 | passed（8 只证券 × 9 条窗口 OHLC） |
+| Pytdx/BaoStock 公司行为事件 | passed（3 个事件；不代表 adjusted OHLC 跨源匹配） |
+| adjusted 跨 Provider | not_comparable（锚点/算法未统一） |
+| Hithink backward 样本 | failed（真实小数股数违反整数股契约） |
+| Tushare | permission_required / not_executed |
+| 停牌/临停 | passed（限定真实样本；非全市场覆盖） |
+| 上市/退市全量边界 | not_executed / unknown |
+| BaoStock PIT 因子可见性 | AvailableAt 未知，继续 fail-closed |
+
+DATA-002 的 DONE 不代表所有 Provider 全量通过；详细 Run、Job、Artifact、日期和限制见任务历史与 Runtime Acceptance Log。
+
+## 4. 本轮执行纪律
+
+- 先读取当前分支最新 HEAD 和本任务相关文档。
+- 每个核验点必须有明确问题、关闭标准和证据出口；达到标准立即关闭。
+- 没有证据就标记 unknown/not_executed，并判断是否阻塞当前交付；不为填满矩阵而无限追查。
+- 不新增重复规划文档；总规划只维护任务总体状态，当前文档只维护当前任务，历史记录保留已完成任务的证据和结论。
+
+## 5. DATA-003 首轮审查：PIT 与 UTC 时间契约
+
+审查基线：`59622d07e0f9fb6a80a4e9060d7b7f9fe5981d5c`  
+时间归一化代码提交：`8387c46dbb6b82c46325ad8f8234cbccf4e3791e`
+
+### 5.1 项目统一时间规则在 Data 的落点
+
+- 绝对时间输入接受 RFC3339 的 `Z` 或明确 UTC offset；不带时区的绝对时间拒绝。Fundamentals HTTP `as_of` 当前使用 `time.RFC3339Nano` 解析，已增加 offset 接受和无时区拒绝测试。
+- 进入 Data PIT Service 后将 `as_of` 规范为 UTC Instant；所有比较仍按时间点比较，不改变实际历史时刻。
+- Fundamentals 的 `FetchedAt`、`AvailableAt`、`SystemObservedAt` 是绝对时间，缓存、修订指纹、MariaDB 元数据读写和 API 输出统一 UTC；Go JSON 序列化输出 `Z`。
+- `ReportDate`、`PublicationDate`、`PeriodEnd` 是 A 股市场日期字符串，不是绝对时间戳，不追加 `Z`，按 `Asia/Shanghai` 市场日历解释。
+- MariaDB 的 `DATETIME(6)` 不携带时区，Data 写入和读取时按 UTC 解释；不在 SQL 字符串中拼接 `Z`。
+
+### 5.2 已有实现确认
+
+- `FundamentalsAsOf` 只读取本地修订记录，不调用实时 Provider。
+- PIT 同时要求 `FetchedAt`、`SystemObservedAt` 不晚于 `as_of`；候选修订按来源分别选出截至时点的最新版本，再由 Service 按质量选择。
+- 有精确 `AvailableAt` 时按 Instant 判断；只有 `PublicationDate` 时，必须早于 `as_of` 所在中国市场自然日，同日数据不提前纳入。
+- 修订表使用 `recorded_at DATETIME(6)`，写入 `UTC_TIMESTAMP(6)`；`fetched_at` 写入 UTC；历史查询以 `recorded_at <= as_of` 限制观察时点。
+- BaoStock 的 `pubDate` 只有日期，Adapter 不把它伪装成精确 `AvailableAt`。Hithink 财务指标端点没有可确认披露时间，保持 degraded。
+
+### 5.3 本轮修复
+
+- 新增 `FundamentalsSnapshot.NormalizeInstantsUTC()`，统一规范快照级和分区级绝对时间，保留日期字段原值。
+- 在 Provider 返回边界、缓存读回、MariaDB 保存/读回及修订哈希计算前调用归一化，避免同一 Instant 的 `+08:00` 与 `Z` 形成不同内容指纹或非 `Z` 输出。
+- `FundamentalsAsOf` 将输入 `as_of` 规范为 UTC，并使用 Data 注入的当前时钟做未来时间校验，不再单独读取系统墙钟。
+- 新增模型序列化、修订哈希等价时刻、HTTP offset 输入和 UTC `Z` 输出测试。
+- 未修改 SQL Schema、API 字段、报告日期语义或 PIT 可见性门禁；未把缺失的源端披露时刻补成抓取时间。
+
+### 5.4 已有真实证据与限制
+
+| Provider / 场景 | 证据 | 当前结论 |
+|---|---|---|
+| Tushare Fundamentals | Runtime Log 第 65 节：Run `43204747697` / Job `131136953754`，`fina_indicator` 返回 40203 | `permission_required`；不重复请求，不构成真实字段验收 |
+| Hithink 财务指标 | `FetchFundamentals` 使用 financials/indicators；响应不提供可确认披露时间 | `degraded`；不能严格证明同日 PIT 可见性 |
+| Hithink 财务报表 | Runtime Log 第 68 节：Run `43213471638` / Job `131166682925`；2025-12-31 报告行的 `report_date_ms` 转为 2026-10-31，与官方年报披露日 2026-04-17 不符 | Adapter 字段映射符合文档定义，但该真实样本源端日期异常，按其返回值会延迟可见；保守，不提前放行 |
+| BaoStock 财务 | `pubDate` 为日期粒度，未提供首次公开的精确时刻 | 只能按日期级 PIT 规则；同日不可证明可见 |
+| MariaDB PIT | 已有版本表、按来源修订回退代码及条件式 MariaDB 集成测试；历史 Runtime Log 第 65 节包含 MariaDB Migration/PIT 测试 Job 成功记录 | 代码链存在；本轮尚未取得当前代码 SHA 的新 MariaDB Job 结果 |
+
+### 5.5 DATA-003 子项进度与关闭条件
+
+| 子项 | 状态 | 关闭条件 |
+|---|---|---|
+| A：现有 PIT、修订和存储链审查 | DONE（静态审查） | 已确认 Service/Repository/SQL 的可见性和修订选择逻辑 |
+| B：UTC 输入/输出与时间归一化 | IN_PROGRESS | 新增测试通过，并取得当前 SHA 的 Go CI；MariaDB 集成若未配置则单独标记 not_executed |
+| C：Provider 披露时间证据矩阵 | IN_PROGRESS | 按 Provider 归档时间字段来源/粒度/权限/异常；缺证据标记 unknown，不发起无授权请求 |
+| D：PIT 真实历史读回验收 | NOT_STARTED | 复用已有 MariaDB 证据并区分历史 SHA；当前 SHA 的集成证据单独记录，不把历史 Run 自动继承 |
+
+当前没有新增字段的依据。B 项完成后不再重复核验时间格式；C/D 只补充明确缺失的 Provider/存储证据。
+
+## 6. DATA-003 第二轮验收：UTC CI、Provider 时间矩阵与 MariaDB PIT
+
+验收代码基线：`3a4ee76b63ab319d9521393b3ebd1d808698d6e5`（2026-11-18）
+
+### 6.1 当前 SHA 自动化验收
+
+| 验收项 | GitHub Actions | 结果 |
+|---|---|---|
+| Go Test Suite | Run `44297261928` | passed |
+| Market Data gofmt / tests | Job `Test Market Data in root module` | passed |
+| Market Data race detector | 同上 | passed |
+| Market Data go vet | 同上 | passed |
+| MariaDB Migration / PIT | Job `Market-data MariaDB migration and PIT persistence` | passed |
+| Live Provider Probe workflow | Run `44297262002` | workflow passed，但本轮 Fundamentals / Hithink / Tushare live probe 均因 opt-in 环境变量未开启而 skipped；不构成真实 Provider 数据验收 |
+
+Go Test Suite 的 Go 测试、Race、Vet 和 gofmt 均在上述精确 SHA 执行。此前因 gofmt 失败的运行 `44297007302` 已由格式修复后的当前 SHA 运行取代，不再作为当前验收结论。
+
+### 6.2 Provider 披露时间证据矩阵
+
+| Provider / 接口 | 上游字段 | 代码映射与精度 | PIT 结论 | 证据限制 |
+|---|---|---|---|---|
+| BaoStock 季度财务 | `pubDate` | 映射为 `PublicationDate`，`YYYY-MM-DD` 日期粒度；不产生 `AvailableAt` | degraded / 日期级保守判定 | 没有首次公开精确时刻；同一市场日内无法证明具体可见时点 |
+| Hithink 财务指标 | financials/indicators 响应 | 未提供可确认披露时间；Adapter 不推导 `AvailableAt` | degraded | 指标接口无法证明严格同日 PIT 可见性 |
+| Hithink 财务报表 | `period_end_ms`、`report_date_ms` | 分别映射报告期末 `ReportDate` 与披露日 `PublicationDate`；毫秒时间戳在 Adapter 中转为市场日期，不当作精确披露时刻 | degraded / 异常样本保守处理 | Runtime Log 第 68 节：600519.SH 2025-12-31 报告行实际 `report_date_ms` 转为 2026-10-31，与官方年报披露日 2026-04-17 不符；字段映射未发现转换错误，源端样本异常 |
+| Tushare 财务指标/报表 | `f_ann_date`，缺失时回退 `ann_date`；报告期 `end_date` | 公告日映射为 `PublicationDate`，日期粒度；不产生精确 `AvailableAt` | permission_required / not_executed | Runtime Log 第 65 节 Run `43204747697` / Job `131136953754`，`fina_indicator` 返回 40203；当前 SHA 的 Live Probe 未开启 Tushare opt-in，未重复请求 |
+
+**矩阵结论：** 现有 Provider 均未提供经本项目真实样本证明的首次公开精确时刻 `AvailableAt`。日期级 `PublicationDate` 与精确 `AvailableAt` 不可互换；不以抓取时间、系统观察时间或报告期末补造来源可用时间。严格 PIT 对无法证明同日可见性的记录继续 fail-closed。
+
+### 6.3 MariaDB PIT 历史读回
+
+当前 SHA Run `44297261928` 的 MariaDB Job `Market-data MariaDB migration and PIT persistence` 成功，日志明确包含：
+
+- `TestMariaDBRevisionPersistenceAndPointInTimeQueries`：PASS。
+- `TestFundamentalsHTTPToMariaDBPointInTime`：PASS。
+- 同一 Job 的 DailyBar fallback、AdjustmentFactors/CorporateActions PIT 与 Probe HTTP + MariaDB 集成也通过。
+
+Fundamentals HTTP + MariaDB 测试使用集成测试构造的版本数据，验证持久化、历史时点查询和 HTTP 输出链路；它证明 PIT 存储/服务机制，不等于任何 Provider 的真实财务披露时间已通过验收。Provider 真实样本仍按 6.2 的降级/权限状态处理。
+
+### 6.4 子项状态与剩余阻塞
+
+| 子项 | 状态 | 结论 |
+|---|---|---|
+| A：现有 PIT、修订和存储链审查 | DONE | 已完成静态审查 |
+| B：UTC 输入/输出与时间归一化 | DONE | 当前 SHA Go Test Suite、gofmt、Race、Vet 全部通过 |
+| C：Provider 披露时间证据矩阵 | DONE（证据边界已收敛） | 字段来源、精度、异常和权限限制已逐项归档；缺少精确来源时刻的 Provider 不标记通过 |
+| D：MariaDB PIT 历史读回机制 | DONE（集成测试范围） | 当前 SHA MariaDB revision/PIT 与 Fundamentals HTTP PIT 测试通过 |
+| D：真实 Provider 披露时点历史读回 | BLOCKED / NOT_COMPARABLE | 当前没有可证明精确首次公开时刻的真实 Provider 样本；Tushare 权限受限，Hithink 存在异常披露日样本，BaoStock 只有日期粒度 |
+
+**DATA-003 尚不整体关闭。** 剩余阻塞不是 Data 侧缺少 PIT 代码或存储测试，而是上游真实披露时间证据不足。只有获得可信、可复核的 Provider 披露时间样本后，才能补做真实数据历史可见性验收；在此之前保持 fail-closed，不放宽门禁、不伪造 `AvailableAt`，也不重复请求权限未变化的 Tushare 接口。
+
+## 7. DATA-003 补充审查：现有公告发布时间候选不构成 Fundamentals PIT 证据
+
+审查基线：分支 HEAD `4d178afcc58253ba5b37f94099ca845adfb09091`；只读审查，未修改 `internal/marketdata/**`。
+
+### 7.1 已有能力
+
+- `internal/marketdata/provider/eastmoney_announcements.go` 已解析公告响应的 `display_time`，通过 `eastmoneyAnnouncementTime` 转换为 UTC，并写入现有 `model.StockAnnouncement.PublishedAt`。
+- 同一模型还保留 `AnnouncementDate`、原始 `DisplayTime`、`EITime`、`SortDate` 和独立的 `FetchedAt`；缺少或无法解析展示时间时，记录降级，不使用公告日期伪造时间。
+- `internal/marketdata/provider/eastmoney_announcements_test.go` 的时间样例为 httptest 合成响应，只能证明解析和缺失处理逻辑，不能证明生产接口字段语义或真实财报首次公开时间。
+
+### 7.2 证据判定
+
+| 检查项 | 结果 | 判定理由 |
+|---|---|---|
+| 现有 Adapter 是否保留公告展示时间 | passed（代码存在） | 已有 PublishedAt 与原始字段，不需要新增接口或字段 |
+| 时间解析是否有单测 | passed（合成样例） | 覆盖可解析、日期粒度不伪造精确时间和异常值降级 |
+| 是否有真实 Provider 响应 Artifact | not_executed | 当前 Runtime Acceptance Log 未找到该能力的真实响应记录 |
+| 是否证明 display_time 等于财务数据首次公开时刻 | not_comparable | 公告展示时间与 Fundamentals 数据首次可用时间不是同一语义；尚无供应商契约或真实交叉证据证明二者等价 |
+| 是否可以回填 Fundamentals.AvailableAt | failed（禁止该映射） | 会把公告展示时间误作财务数据可用时间，破坏严格 PIT 语义 |
+
+### 7.3 外部字段语义边界
+
+东方财富公开 EMQuant 文档对其资讯字段说明：`datetime` 是展示时间，部分盘后公告展示日期可能落到下一交易日；`eitime` 是生产时间，公告仅提供日期。该文档并非当前 REST 公告接口 `display_time` 的字段契约，不能将 EMQuant 字段定义直接套用到 REST 字段。参考：[东方财富 EMQuant API 字段说明](https://quantapi.eastmoney.com/Upload/EMQuantAPI_Java.html)。
+
+因此本次仅确认“已有公告展示时间解析能力”，不确认其为财务数据首次公开时间，也不新增字段、API、Provider 请求或时间映射。
+
+### 7.4 后续关闭条件
+
+只有获得可复核的真实财报公告样本，并同时证明证券、报告期、公告 ID/原文、公告展示时间及财务数据来源记录之间的对应关系，且有可靠依据证明时间字段的业务含义，才继续真实历史可见性验收。若只能获得日期粒度，仍按日期级降级处理；若时间语义不能证明，保持 not_comparable。Tushare 40203 权限未变化时不重复请求。
+
+当前 DATA-003 仍为 IN_PROGRESS；本次审查没有解除外部证据阻塞。
+
+卡点统一记录见 [Data 模块卡点](../整体任务规划/Data模块卡点.md)。
