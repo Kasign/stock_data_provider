@@ -54,7 +54,8 @@ Run `44286491873` 的 head SHA 与代码验收 SHA 完全一致：
 
 - Research module validation：gofmt、`go test ./internal/research/...`、`go test -race ./internal/research/...`、`go vet ./internal/research/...` 全部 success。
 - Research MariaDB Migration/Repository integration：success。
-- 根模块 `Test .` 的 gofmt 与 `go test ./...` 已通过；本记录只将 Research 专项 Job 作为 RSC-001 的直接验收门禁，不把其他模块 skipped 解释为通过。
+- 根模块 `Test .` 的 gofmt 与 `go test ./...` 已通过。
+- 后续文档提交触发分支更新后，该 GitHub Actions Run 的整体结论为 cancelled；上述 Research 专项 Job 和根模块测试步骤在取消前已 success。根模块 race/vet 未完成，不宣称完整工作流通过。
 
 ## 6. 未完成事项与后续任务
 

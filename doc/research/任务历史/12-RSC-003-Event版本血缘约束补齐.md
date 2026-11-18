@@ -35,6 +35,7 @@ Run `44288143013` 的 head SHA 与代码验收 SHA 完全一致：
 - Research module validation：gofmt、`go test ./internal/research/...`、`go test -race ./internal/research/...`、`go vet ./internal/research/...` 全部 success。
 - Research MariaDB Migration/Repository integration：success。
 - 根模块 `go test ./...`：success。完整根模块 race/vet 不作为本任务的直接验收依据。
+- 后续文档提交触发分支更新后，该 GitHub Actions Run 的整体结论为 cancelled；上述 Research 专项 Job 和根模块测试步骤在取消前已 success。根模块 race/vet 未完成，不宣称完整工作流通过。
 
 ## 5. 尚待外部证据
 
