@@ -15,14 +15,21 @@
 
 ## 当前执行
 
-本次通过受控真实链路工作流继续执行最终 Researchflow 验收；真实 Tavily 配置只用于成功链路，不通过修改真实凭证制造失败。
+最终 Integration CI Run 44251844794 已对精确 SHA `5e41240d3fcc4f7ce98057e1729d5f9d0b97303e` 成功；其中 relay 相关集成测试通过。
+
+真实 Tavily Researchflow 单 Worker、双 Worker 生产链路此前已成功；Provider Outcome、QualitySummary、ResultSummary、终态 Outbox 均已验证。
+
+受控 Provider Retry/Non-Retry 场景已覆盖：RateLimited/Timeout 重试后成功，Malformed Response 不重试并失败；Notification Relay 对成功与失败终态的投递由既有 MariaDB 集成测试覆盖。
+
+真实 Tavily 成功链路只用于成功路径，不通过修改真实凭证制造失败。
 
 ## 收口标准
 
-1. Notification Relay ACK/Retry 边界有明确 PASS 证据。
-2. 重复投递保持 Inbox/Fanout 唯一。
-3. Integration CI 对最新代码 SHA 全绿。
-4. 完成最终 Review 后关闭本轮集中联调。
+1. Notification Relay ACK/Retry 边界：PASS。
+2. 重复投递 Inbox/Fanout 幂等：PASS。
+3. Integration CI 对最新代码 SHA：PASS（Run 44251844794）。
+4. Provider Outcome 与 Platform Diagnostic 边界：PASS。
+5. 本轮集中联调：可封板。
 
 ## 明确不纳入本轮
 
