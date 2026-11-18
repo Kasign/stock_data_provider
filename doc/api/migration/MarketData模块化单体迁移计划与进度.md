@@ -1167,6 +1167,8 @@ Data 分支在代码 SHA `6d722802073ac2b0c587986d50ec56cf325f505a` 的 Go Test 
 - `internal/server/bootstrap/bootstrap.go` 仍导入 `internal/adapters/marketdata`，调用旧 `marketdata.LoadConfig` 与 `service.NewRunnerWithMarketDataStores`，没有构造 `internal/marketdata/bootstrap.Module`。
 - `internal/server/migration/registry.go` 当前没有注册 MarketData Migration Namespace。
 - `internal/server/bootstrap/router.go` 当前没有挂载 Data InProcessHandler 或 `/market-api` 路由。
+- Platform `internal/platform/storage/storage.go` 已提供 `ApplyMigrations`，通过 MariaDB `GET_LOCK` 实现 namespace 级迁移锁；Data `internal/marketdata/repository/mysql.go` 的 `Store.Migrate` 已调用该能力。因此 M4 不需要新增 Platform Migration Lock。
+- Platform 当前公开 `httpclient.BoundDoer` 是 HTTP 出站原语，不是 TCP Dialer。Data `internal/marketdata/bootstrap.Module` 通过 Data-owned `transport.DialContextFunc` 接收 BaoStock/Pytdx TCP 出站函数；BaoStock/Pytdx 在未注入时仍可回退到标准 `net.Dialer`。Root 尚未注入受控 TCP DialContext。是否应由 Platform 新增跨模块 TCP BoundDialer，需先确认除 Data 外的真实消费者，再决定公共化；否则由 Server 组合根提供 Data 专属受控实现。
 - Root Diagnostics/Readiness 与 Lifecycle 尚未注册 Data Module 的 Diagnostics、Start/Stop/Close。
 - 因此，不能把“代码已进入根 Go Module”表述成“MarketData 已完成 Root Server 生产装配”。
 
@@ -1178,7 +1180,7 @@ Data 分支在代码 SHA `6d722802073ac2b0c587986d50ec56cf325f505a` 的 Go Test 
 | M1 Go Module 归并 | DONE | `internal/marketdata/**` 位于根 Go Module；迁移脚本本轮无新变更 |
 | M2 Data Application Port / Bootstrap | DONE（Data 侧） | Data 自有 Module、Application Port、HTTP Handler 和 MigrationRunner 已实现 |
 | M3 Root Server 同进程装配 | BLOCKED_BY_SERVER | Server 必须构造 Data Module、注入共享资源/受控出口、挂载 InProcessHandler |
-| M4 共享资源与生命周期统一 | BLOCKED_BY_SERVER_AND_PLATFORM | Server 负责资源所有权、Migration、Diagnostics、Readiness、Lifecycle；Platform 提供缺失的公共 TCP/迁移锁原语 |
+| M4 共享资源与生命周期统一 | BLOCKED_BY_SERVER；TCP 出站能力归属待 Platform 决策 | Server 负责共享资源所有权、Migration Registry、Diagnostics、Readiness、Lifecycle；Data Store.Migrate 已调用 Platform `storage.ApplyMigrations`，统一 Migration Lock 已存在；当前缺口是 Root 注入受控 TCP DialContext，以及是否需要 Platform 公共 TCP BoundDialer |
 | M5 部署与 WebUI 路由切换 | NOT_STARTED | 等 M3/M4 完成后再切换；浏览器不得持有 Data API Key |
 | M6 迁移最终验收 | NOT_STARTED | 需要 Root 真实 MariaDB/Redis、HTTP、Provider 出站、启动/关闭和回滚证据 |
 
