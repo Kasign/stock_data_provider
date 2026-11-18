@@ -13,7 +13,7 @@ func TestFundamentalsSnapshotNormalizeInstantsUTC(t *testing.T) {
 	availableAt := fetchedAt.Add(time.Minute)
 	observedAt := fetchedAt.Add(2 * time.Minute)
 	snapshot := FundamentalsSnapshot{
-		FetchedAt: fetchedAt,
+		FetchedAt:        fetchedAt,
 		SystemObservedAt: &observedAt,
 		Sections:         []FundamentalSection{{AvailableAt: &availableAt}},
 	}
