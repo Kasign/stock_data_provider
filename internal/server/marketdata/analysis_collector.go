@@ -199,7 +199,7 @@ func (c *AnalysisCollector) collectOne(ctx context.Context, asOf time.Time, secu
 		if err != nil {
 			return collectResult{notes: []domain.SourceNote{{
 				Dataset: "realtime_quote", Symbol: security.Symbol, QualityStatus: "unavailable",
-				Diagnostic: "Data Application Port quote read failed",
+				Diagnostic:    "Data Application Port quote read failed",
 				MissingFields: []string{"current_price"},
 			}}}
 		}
@@ -207,7 +207,7 @@ func (c *AnalysisCollector) collectOne(ctx context.Context, asOf time.Time, secu
 			return collectResult{notes: []domain.SourceNote{{
 				Dataset: "realtime_quote", Symbol: security.Symbol, Source: quote.Source,
 				FetchedAt: quote.FetchedAt, QualityStatus: analysisQualityStatus(quote.QualityStatus),
-				Diagnostic: strings.Join(quote.QualityReasons, "; "),
+				Diagnostic:    strings.Join(quote.QualityReasons, "; "),
 				MissingFields: []string{"current_price"},
 			}}}
 		}
@@ -215,7 +215,7 @@ func (c *AnalysisCollector) collectOne(ctx context.Context, asOf time.Time, secu
 			return collectResult{notes: []domain.SourceNote{{
 				Dataset: "realtime_quote", Symbol: security.Symbol, Source: quote.Source,
 				FetchedAt: quote.FetchedAt, QualityStatus: "unavailable",
-				Diagnostic: "Data quote_time is missing; the quote cannot be aligned to analysis as_of",
+				Diagnostic:    "Data quote_time is missing; the quote cannot be aligned to analysis as_of",
 				MissingFields: []string{"quote_time"},
 			}}}
 		}
@@ -223,7 +223,7 @@ func (c *AnalysisCollector) collectOne(ctx context.Context, asOf time.Time, secu
 			return collectResult{notes: []domain.SourceNote{{
 				Dataset: "realtime_quote", Symbol: security.Symbol, Source: quote.Source,
 				FetchedAt: quote.FetchedAt, QualityStatus: "unavailable",
-				Diagnostic: "Data quote_time is later than the requested analysis as_of",
+				Diagnostic:    "Data quote_time is later than the requested analysis as_of",
 				MissingFields: []string{"quote_at_or_before_as_of"},
 			}}}
 		}
@@ -251,7 +251,7 @@ func (c *AnalysisCollector) collectOne(ctx context.Context, asOf time.Time, secu
 		if err != nil {
 			return collectResult{notes: []domain.SourceNote{{
 				Dataset: dataset, Symbol: security.Symbol, QualityStatus: "unavailable",
-				Diagnostic: "Data Application Port daily-bars read failed",
+				Diagnostic:    "Data Application Port daily-bars read failed",
 				MissingFields: []string{"daily_bars"},
 			}}}
 		}
@@ -272,8 +272,8 @@ func (c *AnalysisCollector) collectOne(ctx context.Context, asOf time.Time, secu
 		}
 		note := domain.SourceNote{
 			Dataset: dataset, Symbol: security.Symbol, Source: firstSource(snapshot.Bars),
-			QualityStatus: analysisQualityStatus(snapshot.QualityStatus),
-			Diagnostic: strings.Join(dailyBarDiagnostics(snapshot), "; "),
+			QualityStatus:   analysisQualityStatus(snapshot.QualityStatus),
+			Diagnostic:      strings.Join(dailyBarDiagnostics(snapshot), "; "),
 			AdjustmentBasis: string(snapshot.AdjustmentBasis),
 		}
 		if len(rows) == 0 {
