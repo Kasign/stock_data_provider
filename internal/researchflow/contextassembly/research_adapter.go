@@ -48,7 +48,7 @@ func ToResearchCreateContextCommand(
 		strings.TrimSpace(snapshot.Scope) == "" || snapshot.Scope != strings.TrimSpace(snapshot.Scope) ||
 		snapshot.BuilderVersion == "" || snapshot.BuilderVersion != strings.TrimSpace(snapshot.BuilderVersion) ||
 		snapshot.SystemAsOf.IsZero() || snapshot.SystemAsOf.Location() != time.UTC ||
-		snapshot.SubjectRefs == nil || snapshot.QualitySummary.ReasonCodes == nil {
+		snapshot.SubjectRefs == nil || !validUTF8Strings(snapshot.SubjectRefs) || snapshot.QualitySummary.ReasonCodes == nil {
 		return researchapp.CreateContextCommand{}, ErrInvalidResearchContextProjection
 	}
 	if plan.BudgetTokens <= 0 || plan.UsedTokens < 0 || plan.UsedTokens > plan.BudgetTokens ||
