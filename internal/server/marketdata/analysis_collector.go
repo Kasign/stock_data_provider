@@ -36,7 +36,11 @@ func NewAnalysisCollector(reader dataapp.MarketDataReader, historyLimit int, adj
 	default:
 		return nil, fmt.Errorf("unsupported Market Data adjustment basis %q", adjustment)
 	}
-	symbols := append([]string(nil), indexSymbols...)\n\tif len(symbols) == 0 {\n\t\tsymbols = []string{"000001.SH"}\n\t}\n\treturn &AnalysisCollector{reader: reader, historyLimit: historyLimit, adjustment: adjustment, maxConcurrent: 8, indexSymbols: symbols}, nil
+	symbols := append([]string(nil), indexSymbols...)
+	if len(symbols) == 0 {
+		symbols = []string{"000001.SH"}
+	}
+	return &AnalysisCollector{reader: reader, historyLimit: historyLimit, adjustment: adjustment, maxConcurrent: 8, indexSymbols: symbols}, nil
 }
 
 var _ analysisapp.DataCollector = (*AnalysisCollector)(nil)
@@ -73,7 +77,8 @@ func (c *AnalysisCollector) Collect(ctx context.Context, request domain.RunReque
 		kind     string
 	}
 	jobs := make([]job, 0, len(universe.Securities)*2)
-	seenIndexSymbols := make(map[string]struct{})\n\tfor _, security := range universe.Securities {
+	seenIndexSymbols := make(map[string]struct{})
+	for _, security := range universe.Securities {
 		isIndex := isIndexSecurity(security)
 		if isIndex {
 			if wantHistory || wantIndex {
