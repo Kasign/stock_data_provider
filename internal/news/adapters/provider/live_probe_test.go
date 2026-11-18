@@ -5,7 +5,10 @@ import (
 	"errors"
 	"os"
 	"strings"
+	"sort"
+	"strconv"
 	"testing"
+	"unicode"
 	"time"
 
 	"example.com/stock-analysis-flow/internal/news/app"
@@ -64,6 +67,7 @@ func TestLiveProviderProbe(t *testing.T) {
 				t.Fatalf("live Provider probe failed: provider=%s duration=%s", provider.Code(), duration)
 			}
 			stats := summarizePublicationTimes(candidates, time.Now().UTC())
+			t.Logf("live Provider publication-time shape signatures: provider=%s shapes=%s", provider.Code(), publicationTimeShapeSummary(candidates))
 			t.Logf("live Provider probe responded: provider=%s candidate_count=%d duration=%s", provider.Code(), len(candidates), duration)
 			t.Logf("live Provider publication-time stats: provider=%s total=%d raw_present=%d raw_missing=%d parsed=%d date_only=%d local_datetime_without_timezone=%d unparseable=%d explicit_timezone=%d future_over_5m=%d",
 				provider.Code(), stats.Total, stats.RawPresent, stats.RawMissing, stats.Parsed, stats.DateOnly,
@@ -124,6 +128,42 @@ func summarizePublicationTimes(candidates []domain.Candidate, observedAt time.Ti
 	return stats
 }
 
+// publicationTimeShapeSummary 输出时间字符串的字符结构，不输出原始时间值。
+// 该信息用于定位 Provider 时间格式差异，同时避免将新闻元数据原文写入 CI 日志。
+func publicationTimeShapeSummary(candidates []domain.Candidate) string {
+	counts := make(map[string]int)
+	for _, candidate := range candidates {
+		raw := strings.TrimSpace(candidate.PublishedAtRaw)
+		if raw == "" {
+			continue
+		}
+		var shape strings.Builder
+		for _, r := range raw {
+			switch {
+			case unicode.IsDigit(r):
+				shape.WriteRune('9')
+			case unicode.IsLetter(r):
+				shape.WriteRune('A')
+			case unicode.IsSpace(r):
+				shape.WriteRune(' ')
+			default:
+				shape.WriteRune(r)
+			}
+		}
+		counts[shape.String()]++
+	}
+	shapes := make([]string, 0, len(counts))
+	for shape := range counts {
+		shapes = append(shapes, shape)
+	}
+	sort.Strings(shapes)
+	parts := make([]string, 0, len(shapes))
+	for _, shape := range shapes {
+		parts = append(parts, shape+"="+strconv.Itoa(counts[shape]))
+	}
+	return strings.Join(parts, ",")
+}
+
 func isPublicationDateOnly(raw string) bool {
 	for _, layout := range []string{"2006-01-02", "2006/01/02"} {
 		parsed, err := time.Parse(layout, raw)
@@ -176,5 +216,21 @@ func TestSummarizePublicationTimesUsesOnlyAggregateCounts(t *testing.T) {
 	}
 	if got != want {
 		t.Fatalf("publication-time stats=%+v want %+v", got, want)
+	}
+}
+
+func TestPublicationTimeShapeSummaryDoesNotExposeTimestampDigitsOrLetters(t *testing.T) {
+	got := publicationTimeShapeSummary([]domain.Candidate{
+		{PublishedAtRaw: "2026-11-18T08:30:12.123Z"},
+		{PublishedAtRaw: "2026-11-19T09:31:13.456Z"},
+		{PublishedAtRaw: "2026-11-20 10:32:14 +0800"},
+		{},
+	})
+	want := "9999-99-99A99:99:99.999A=2,9999-99-99 99:99:99 +9999=1"
+	if got != want {
+		t.Fatalf("shape summary=%q want %q", got, want)
+	}
+	if strings.ContainsAny(got, "0123456789") || strings.Contains(got, "2026") {
+		t.Fatalf("shape summary leaked timestamp values: %q", got)
 	}
 }
