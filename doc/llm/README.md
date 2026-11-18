@@ -26,7 +26,7 @@
 - [现有 Gateway 协议盘点](./说明/01-Gateway协议盘点.md)
 - [JSON 与 SSE 契约 Fixture 清单](./说明/02-JSON与SSE契约Fixture清单.md)
 - [旧任务拆分文档迁移说明](./说明/03-旧任务拆分文档迁移说明.md)
-- `说明/schema/`：版本化机器契约 Schema。
+- `schema/`：版本化机器契约 Schema。该路径由 DTO Schema 测试直接引用，保持稳定。
 
 ## 文档维护规则
 
