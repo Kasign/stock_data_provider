@@ -34,6 +34,36 @@
 
 MiaoXiang 是由 `MXEnabled` 单独控制的补充 Provider，不在上述 ProviderPriority 主列表中；当前补充接口覆盖筹码分布和个股资金流。其启用状态必须读取实际运行配置，不能从主 Provider 配置推断。
 
+## 2.2 按数据域的默认启用 Provider
+
+以下按 `configs/marketdata/providers.json` 的默认配置反向汇总；只表示默认开关，不表示线上部署配置或真实数据通过。
+
+| 数据域 | 默认启用 Provider |
+|---|---|
+| Quote | Eastmoney、Tencent、Sina、NetEase、Pytdx |
+| DailyBars | Eastmoney、BaoStock、Tencent、Sina、NetEase、TickFlow、Pytdx |
+| StockBasic | Eastmoney |
+| StockSearch | Eastmoney、Tencent |
+| SectorRankings | Eastmoney |
+| IndexQuotes | Eastmoney |
+| MarketBreadth | Eastmoney |
+| LimitPools | Eastmoney |
+| StockBoards | Eastmoney |
+| DragonTiger | Eastmoney |
+| Announcements | Eastmoney |
+| TradingCalendar | BaoStock |
+| SecurityTradingStatus | 无默认启用 Provider |
+| Fundamentals | BaoStock |
+| Valuations | 无默认启用 Provider |
+| IndexCatalog | 无默认启用 Provider |
+| ChipDistribution | Eastmoney |
+| CapitalFlow | Eastmoney |
+| MarketCapitalFlow | 无默认启用 Provider |
+| HotRankings | Eastmoney |
+
+MiaoXiang 的 ChipDistribution/CapitalFlow 由 `MXEnabled` 独立控制，不纳入上述默认矩阵。Hithink、Tushare、Yahoo、Xueqiu 虽有部分代码实现或配置项，但默认均关闭。
+
+
 ## 2.1 已核对的具体实现入口
 
 本轮逐个读取了以下 Provider 主要实现文件，并核对其公开方法。这里仅列本次已确认的实现，不将文件未覆盖的方法推定为不存在。
