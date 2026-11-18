@@ -188,7 +188,15 @@ func (c *AnalysisCollector) collectOne(ctx context.Context, asOf time.Time, secu
 				MissingFields: []string{"current_price"},
 			}}}
 		}
-		if quote.QuoteTime == nil {\n\t\t\treturn collectResult{notes: []domain.SourceNote{{\n\t\t\t\tDataset: "realtime_quote", Symbol: security.Symbol, Source: quote.Source,\n\t\t\t\tFetchedAt: quote.FetchedAt, QualityStatus: "unavailable",\n\t\t\t\tDiagnostic: "Data quote_time is missing; the quote cannot be aligned to analysis as_of",\n\t\t\t\tMissingFields: []string{"quote_time"},\n\t\t\t}}}\n\t\t}\n\t\tif quote.QuoteTime.After(asOf) {
+		if quote.QuoteTime == nil {
+			return collectResult{notes: []domain.SourceNote{{
+				Dataset: "realtime_quote", Symbol: security.Symbol, Source: quote.Source,
+				FetchedAt: quote.FetchedAt, QualityStatus: "unavailable",
+				Diagnostic: "Data quote_time is missing; the quote cannot be aligned to analysis as_of",
+				MissingFields: []string{"quote_time"},
+			}}}
+		}
+		if quote.QuoteTime.After(asOf) {
 			return collectResult{notes: []domain.SourceNote{{
 				Dataset: "realtime_quote", Symbol: security.Symbol, Source: quote.Source,
 				FetchedAt: quote.FetchedAt, QualityStatus: "unavailable",
@@ -292,7 +300,18 @@ func datasetName(history, quote, index bool) string {
 	return strings.Join(parts, ",")
 }
 
-func analysisQualityStatus(status dataapp.QualityStatus) string {\n\tswitch status {\n\tcase dataapp.QualityValid:\n\t\treturn "valid"\n\tcase dataapp.QualityInvalid:\n\t\treturn "unavailable"\n\tdefault:\n\t\treturn "partial_metadata"\n\t}\n}\n\nfunc firstSource(bars []dataapp.DailyBar) string {
+func analysisQualityStatus(status dataapp.QualityStatus) string {
+	switch status {
+	case dataapp.QualityValid:
+		return "valid"
+	case dataapp.QualityInvalid:
+		return "unavailable"
+	default:
+		return "partial_metadata"
+	}
+}
+
+func firstSource(bars []dataapp.DailyBar) string {
 	for _, bar := range bars {
 		if strings.TrimSpace(bar.Source) != "" { return bar.Source }
 	}
