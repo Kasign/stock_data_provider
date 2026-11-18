@@ -164,7 +164,6 @@ func TestValuationRequestFingerprintValidatesAndPreservesRequestOrder(t *testing
 	}
 }
 
-
 func TestFundamentalsRevisionHashNormalizesEquivalentOffsetInstants(t *testing.T) {
 	availableAtOffset := time.Date(2026, 8, 29, 10, 0, 0, 123456789, time.FixedZone("UTC+8", 8*60*60))
 	snapshot := model.FundamentalsSnapshot{
