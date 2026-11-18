@@ -181,6 +181,7 @@ func TestRegistryRejectsEnvelopeAndPayloadContractViolations(t *testing.T) {
 		want   error
 	}{
 		{"as-of mismatch", func(v *QuantResultEnvelope) { v.SystemAsOf = v.SystemAsOf.Add(time.Second) }, ErrInvalidQuantResult},
+		{"zero-offset non-UTC location", func(v *QuantResultEnvelope) { v.SystemAsOf = time.Date(2026, 11, 9, 8, 0, 0, 0, time.FixedZone("UTC", 0)) }, ErrInvalidQuantResult},
 		{"missing authorization", func(v *QuantResultEnvelope) { v.AuthorizationRef = "" }, ErrInvalidQuantResult},
 		{"missing input refs", func(v *QuantResultEnvelope) { v.InputSnapshotRefs = nil }, ErrInvalidQuantResult},
 		{"unsorted input refs", func(v *QuantResultEnvelope) { v.InputSnapshotRefs = []string{"snapshot-2", "snapshot-1"} }, ErrInvalidQuantResult},

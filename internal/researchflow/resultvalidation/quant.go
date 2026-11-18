@@ -103,8 +103,10 @@ func NewQuantPayloadRegistry() (*Registry, error) {
 }
 
 // FromQuantEnvelope validates and adapts the Quant-owned typed Envelope into
-// Researchflow's composition input. Envelope and payload schema versions stay
-// separate; CreatedAt belongs to QuantResultRef, not the Envelope.
+// Researchflow's composition input. Call it only after Quant Application GetResult,
+// which performs current authorization and Manifest binding; this mapper does not
+// authorize access. Envelope and payload schema versions stay separate; CreatedAt
+// belongs to QuantResultRef, not the Envelope.
 func FromQuantEnvelope(envelope quantresult.Envelope) (QuantResultEnvelope, error) {
 	if err := envelope.Validate(); err != nil {
 		return QuantResultEnvelope{}, fmt.Errorf("%w: Quant envelope: %v", ErrInvalidQuantResult, err)
@@ -283,11 +285,7 @@ func validResultStatus(value string) bool {
 }
 
 func isUTC(value time.Time) bool {
-	if value.IsZero() {
-		return false
-	}
-	_, offset := value.Zone()
-	return offset == 0
+	return !value.IsZero() && value.Location() == time.UTC
 }
 
 func hasDuplicateOrInvalidRefs(values []string) bool {
