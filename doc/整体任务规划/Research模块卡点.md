@@ -2,7 +2,8 @@
 
 - 更新日期：2026-11-18
 - 对应模块分支：`feat/research`
-- 当前核对的 Research HEAD：`54df58e9ad6c201eb904b437f8cd67568433dfef`
+- Research 代码与模块状态核对基线：`54df58e9ad6c201eb904b437f8cd67568433dfef`（本轮卡点复核前的最新模块提交）
+- 本轮卡点文档及索引提交后 HEAD：`ee21f4c8fed2c1fdddd737d3fe85d18d9cc6ce67`（仅文档变更）
 - 代码范围：`internal/research/**`
 - 模块文档：`doc/research/**`
 - 本文用途：记录 Research 当前无法独立闭环的外部依赖、责任方、影响和重新进入条件；不替代 Research 模块任务规划，也不冻结或修改跨模块契约。
