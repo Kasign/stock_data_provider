@@ -2,7 +2,7 @@
 
 更新时间：2026-11-18  
 对应分支：`feat/researchflow`  
-代码验收基线 SHA：`2df5ee14b5c39613a10f124da463ae3f939e13b3`  
+代码验收基线 SHA：`0aaab4172d8cda075549bd6c69f2b6e1d465706b`  
 维护范围：记录 Researchflow 推进所依赖的跨模块决策、契约同步和验收阻塞；不替代模块任务状态文档。
 
 ## 1. 当前卡点
@@ -37,7 +37,7 @@
 - **原问题**：OutboxDispatcher 原先使用 `time.Now()` 计算下一次重试时间，并将其持久化到 MariaDB；该时间由多个 Server/Worker 实例共同用于调度。
 - **修复**：`MySQLDatabaseClock` 通过 Platform `time.Service` 包装 MariaDB UTC Source；`MySQLRunRepository` 实现 `DatabaseClock`；Dispatcher 在安排 RetryAt 前读取数据库 UTC 时钟。
 - **失败处理**：缺少 DatabaseClock 能力或读取失败时 fail-closed，不写入 retry 时间。
-- **测试与验收**：新增固定数据库时钟和时钟不可用时不提交 retry 的测试；代码验收 SHA `2df5ee14b5c39613a10f124da463ae3f939e13b3` 的 Actions Run 44293452576 中 Researchflow module gofmt/tests/race/vet Job 已 success。
+- **测试与验收**：新增固定数据库时钟和时钟不可用时不提交 retry 的测试；代码验收 SHA `0aaab4172d8cda075549bd6c69f2b6e1d465706b` 的 Actions Run 44296025284 中 Researchflow module gofmt/tests/race/vet Job 已 success。
 - **当前状态**：RESOLVED。
 
 ## 2. 本模块已继续推进的工作
@@ -47,7 +47,7 @@
 - Run/Stage/Attempt DTO 投影将必填时间和可空时间统一规范化为 UTC；新增 +08:00 输入的 Z 输出测试。
 - Outbox RetryAt 不再依赖进程时钟；数据库时钟缺失/失败时不提交重试计划。
 - `doc/researchflow/04-ApplicationPort与运行时契约落地补充.md` 已校正 CreateRun 命令字段、RequestFingerprint 输入和服务端时间生成方式。
-- 代码验收 SHA `2df5ee14b5c39613a10f124da463ae3f939e13b3` 的 Researchflow module gofmt/tests/race/vet 已通过。
+- 代码验收 SHA `0aaab4172d8cda075549bd6c69f2b6e1d465706b` 的 Researchflow module gofmt/tests/race/vet 已通过。
 
 ## 3. 下一步解除顺序
 
