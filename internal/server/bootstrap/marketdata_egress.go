@@ -13,7 +13,7 @@ import (
 
 	marketdatabootstrap "example.com/stock-analysis-flow/internal/marketdata/bootstrap"
 	marketdataconfig "example.com/stock-analysis-flow/internal/marketdata/config"
-	marketdatatransport "example.com/stock-analysis-flow/internal/marketdata/transport"
+	marketdatatransport "example.com/stock-analysis-flow/internal/marketdata/transport"\n\t"example.com/stock-analysis-flow/internal/marketdata/provider"
 	platformhttpclient "example.com/stock-analysis-flow/internal/platform/httpclient"
 	"example.com/stock-analysis-flow/internal/server/resources"
 
