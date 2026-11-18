@@ -1,6 +1,6 @@
 # Market Data 模块化单体迁移计划与进度
 
-- 历史实施分支：`feat/full-go-data-providers-api-switch`（HEAD `d75ddbe1eb4fac74ca1c15d9be153af1a8184517` 已并入 `integration` 历史）；当前聚合代码基线以 `integration` HEAD 为准。
+- 历史实施分支：`feat/data`（原名 `feat/full-go-data-providers-api-switch`；重命名不改变提交历史）。HEAD `d75ddbe1eb4fac74ca1c15d9be153af1a8184517` 已并入 `integration` 历史；当前聚合代码基线以 `integration` HEAD 为准。
 - 迁移决策：采用 Root Server 同进程模块化单体
 - 当前分支关系核对（2026-11-12）：Data 代码验收基线 `9fe53c43c6c32408bbf59eb8c3c627b18a9bfe24`；`integration` HEAD `85c78f19e4d8d231b29d78f5815bc72868dc326d`；两分支仍为 `diverged`，当前 Data 分支存在未集成提交。历史 SHA `d75ddbe1` 曾进入 integration，不代表当前 Data HEAD 已集成。integration 的 `internal/server/bootstrap/bootstrap.go` 仍导入旧 `internal/adapters/marketdata`，当前树仍包含 `services/market-data/**`，未接入 Data 分支的 `internal/marketdata/app` Application Port。故 M1/M2 Data 侧交付不等于 M3 Root Server 装配完成；M3/M4 仍需 Server/Platform 在其负责分支推进并用 integration 精确 SHA 验收。Data 分支本轮未修改 Server、Platform、integration 或工作流。
 - 方案依据：`doc/整体任务规划/04-架构方案/Market Data并入Root Server模块化单体调整方案.md`
@@ -1120,7 +1120,7 @@ internal/
 
 ### 核验基线
 
-- Data 开发分支：`feat/full-go-data-providers-api-switch`，当前文档 HEAD `f41053fefbe2e6f6d12b00102e1c4dd06d9aa368`；最近代码提交 `8b61eb39ae5061ec0bf6448bfcf124dcea9836bd` 仅收敛 BaoStock 探针格式与对应验收记录，不改变 M1/M2 迁移边界。
+- Data 开发分支：`feat/data`（原名 `feat/full-go-data-providers-api-switch`）；本段所记文档 HEAD `f41053fefbe2e6f6d12b00102e1c4dd06d9aa368` 与代码提交 `8b61eb39ae5061ec0bf6448bfcf124dcea9836bd` 均为历史核对节点，不代表当前 HEAD；当时仅收敛 BaoStock 探针格式与验收记录，不改变 M1/M2 迁移边界。
 - 只读核验聚合分支 `integration` HEAD：`8542b5d73da6c3b047fb275b05f58d8c0ade552e`。
 - 本轮未修改 integration、Server 或 Platform 代码，也未执行构建/测试。
 
