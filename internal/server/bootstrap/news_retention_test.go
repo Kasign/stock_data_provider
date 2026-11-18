@@ -95,7 +95,7 @@ func (r *newsRetentionLifecycleRepository) DeleteExpiredEvidenceSnapshots(
 func TestNewsRetentionComponentLifecycleStopsCleanly(t *testing.T) {
 	repository := &newsRetentionLifecycleRepository{
 		observationCalled: make(chan struct{}, 1),
-		snapshotCalled: make(chan struct{}, 1),
+		snapshotCalled:    make(chan struct{}, 1),
 	}
 	component, err := newNewsRetentionComponent(
 		repository,
@@ -110,7 +110,7 @@ func TestNewsRetentionComponentLifecycleStopsCleanly(t *testing.T) {
 	}
 	for name, called := range map[string]<-chan struct{}{
 		"observation": repository.observationCalled,
-		"snapshot": repository.snapshotCalled,
+		"snapshot":    repository.snapshotCalled,
 	} {
 		select {
 		case <-called:
