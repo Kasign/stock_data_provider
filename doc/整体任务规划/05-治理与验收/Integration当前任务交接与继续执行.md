@@ -1466,3 +1466,35 @@ GetRun 与 CancelRun 的持久化创建者授权已在 Application/Storage 层�
 2. 复核真实 Provider Outcome 与 Diagnostics 的职责边界，只有确有独立 Diagnostic 证据时才填充 DiagnosticRefs。
 3. `available_at` 继续保持缺失/不可用于 PIT，等待来源授权和首次公开可获取证据；不从 `published_date`、`published_at` 或 `observed_at` 推导。
 4. 保持 Feed 与未配置 Provider 为 skipped/not_comparable，不将缺少配置解释为失败或通过。
+
+
+## 25. 2026-11-18 双 Worker 后容量、Claim、Fencing 与 Finalization 边界复核
+
+### 复核结论
+
+本轮只读复核未发现需要立即修改的 Claim/Fencing/Finalization 事务缺陷；相关能力由既有 MariaDB 多进程测试与本轮真实 Provider 双 Worker 验收共同覆盖：
+
+1. **全局容量串行化**：Migration v4 创建唯一 `researchflow_capacity_guard(guard_id=1)`。CreateRun 与 ClaimAttempt 共用该行锁；ClaimAttempt 的锁顺序为 CapacityGuard → Run → Stage → Attempt。全局 Worker 计数只统计未过期的 running Lease；running Attempt 缺少 owner/expiry 等关键字段时 fail closed。
+2. **Run 内并发限制**：Run 行锁串行化同一 Run 的 Claim；其他 Stage 只在存在有效未过期 Lease 时占用该 Run 的并发槽位。过期 Lease 可恢复，不继续占用 Worker 槽位。
+3. **重复 Claim**：同 Worker 对仍有效 Lease 重复 Claim 返回原 Attempt（replayed），不增加 AttemptNo；不同 Worker 不能抢占有效 Lease。
+4. **Expired Lease 与 Fencing**：过期 Attempt 先转为 timed_out 并释放 owner/lease，同时推进旧 Attempt 的 fencing token；新 Attempt 使用更高 token。旧 Worker 的 Renew/Commit 仍需匹配当前 owner、token、有效 Lease，因此无法覆盖新 Worker 结果。
+5. **Finalization**：Finalizer 按 Run → Stage → Attempt 锁顺序校验终态与完整 Attempt 历史；ResultSummary、终态 Outbox 和 Run 状态在同一事务提交。重复 FinalizeRun 返回 already-finalized；并发 CAS 测试验证同一 Run 只有一个 Finalizer 能写入 Summary/Outbox。
+
+### 对应验收证据
+
+- `TestMariaDBClaimAttemptLeaseAndFencing`：同 Worker replay、异 Worker 拒绝、Lease 续租、过期回收、token 单调推进、旧 Worker 结果提交拒绝、当前 Worker 成功提交及 Attempt 历史损坏 fail closed。
+- `TestMariaDBGlobalWorkerCapacitySerializesClaimsAcrossRuns`：两个独立 OS 测试进程同时 Claim 不同 Run，数据库全局 Worker 上限只允许一个成功；过期 Lease 释放容量后，另一个 Run 可继续 Claim。
+- `TestMariaDBFinalizeRunConcurrentCAS`：竞争 Finalizer 只有一个成功，数据库只保留一条 ResultSummary 和一条 terminal Outbox。
+- 本文第 24 节的真实 Tavily 双 Worker 验收：两个完整 Server Worker OS 进程同时持有不同 Run 的活动 Lease，并完成两个真实 Provider Run；两个进程正常 SIGTERM 关闭。
+
+### 当前保留的部署约束
+
+`RESEARCHFLOW_MAX_QUEUED_RUNS` 与 `RESEARCHFLOW_MAX_WORKERS` 必须在同一部署的所有 Server 进程中使用完全相同的显式正整数配置。本轮双 Worker 验收通过同一配置映射启动两个进程。
+
+需要明确：当前 Capacity Guard 负责事务串行化和计数，但数据库尚未持久化/校验各进程配置值的一致性。若不同进程被人为配置成不同的 MaxWorkers/MaxQueuedRuns，事务锁本身不能消除配置差异。当前部署应使用同一份环境配置；若后续需要独立滚动修改容量配置，应另行设计数据库容量策略版本与受控变更流程，不能直接让新旧配置的 Worker 混跑。
+
+### 下一步
+
+- 保持当前单一部署配置源，不为当前个人部署引入动态容量配置 API。
+- 在进入更多独立 Worker 部署或滚动容量调整前，决定是否增加数据库持久化容量策略一致性校验。
+- 继续按真实运行结果验证 Shutdown、ExpiredAttempt Recovery 与 Outbox Relay；不要仅凭单 Worker/双 Worker 正常成功推断崩溃恢复和消息投递所有边界均已通过。
