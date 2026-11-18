@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	platformdiagnostics "example.com/stock-analysis-flow/internal/platform/diagnostics"
 )
@@ -89,6 +90,11 @@ func NewStageCheck(assessment StageAssessment) (platformdiagnostics.Check, error
 }
 
 func validateAssessment(value StageAssessment) error {
+	if !utf8.ValidString(value.StageRef) || !utf8.ValidString(value.StageCode) ||
+		!utf8.ValidString(value.ReasonCode) || !utf8.ValidString(value.SafeMessage) ||
+		!utf8.ValidString(value.EvidenceRef) {
+		return errors.New("Researchflow diagnostic text must be valid UTF-8")
+	}
 	if strings.TrimSpace(value.StageRef) == "" || len(value.StageRef) > 255 ||
 		strings.TrimSpace(value.StageRef) != value.StageRef ||
 		strings.TrimSpace(value.StageCode) == "" || len(value.StageCode) > 128 ||
@@ -116,6 +122,9 @@ func validateAssessment(value StageAssessment) error {
 		return errors.New("too many Researchflow diagnostic attributes")
 	}
 	for key, attribute := range value.Attributes {
+		if !utf8.ValidString(key) || !utf8.ValidString(attribute) {
+			return errors.New("Researchflow diagnostic attributes must be valid UTF-8")
+		}
 		if _, allowed := allowedAttributeKeys[key]; !allowed {
 			return fmt.Errorf("Researchflow diagnostic attribute %q is not allowlisted", key)
 		}

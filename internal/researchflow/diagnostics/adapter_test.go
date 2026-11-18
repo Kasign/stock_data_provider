@@ -163,3 +163,34 @@ func TestNewStageCheckNormalizesCheckedAtToUTC(t *testing.T) {
 		t.Fatalf("checked_at must serialize with UTC Z, got %#v", payload["checked_at"])
 	}
 }
+
+
+func TestNewStageCheckRejectsInvalidUTF8Text(t *testing.T) {
+	invalid := string([]byte{0xff, 0xfe})
+	base := StageAssessment{
+		StageRef: "stage-utf8", StageCode: "market", Kind: KindStageExecution,
+		Status: AssessmentPass, SafeMessage: "completed",
+		CheckedAt: time.Now().UTC(),
+	}
+	cases := []struct {
+		name string
+		edit func(*StageAssessment)
+	}{
+		{name: "stage ref", edit: func(v *StageAssessment) { v.StageRef = invalid }},
+		{name: "stage code", edit: func(v *StageAssessment) { v.StageCode = invalid }},
+		{name: "reason code", edit: func(v *StageAssessment) { v.ReasonCode = invalid }},
+		{name: "safe message", edit: func(v *StageAssessment) { v.SafeMessage = invalid }},
+		{name: "evidence ref", edit: func(v *StageAssessment) { v.EvidenceRef = invalid }},
+		{name: "attribute value", edit: func(v *StageAssessment) { v.Attributes = map[string]string{"source": invalid} }},
+		{name: "attribute key", edit: func(v *StageAssessment) { v.Attributes = map[string]string{invalid: "research"} }},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			value := base
+			testCase.edit(&value)
+			if _, err := NewStageCheck(value); err == nil {
+				t.Fatal("invalid UTF-8 diagnostic text was accepted")
+			}
+		})
+	}
+}
