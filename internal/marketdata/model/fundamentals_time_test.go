@@ -25,7 +25,7 @@ func TestFundamentalsSnapshotNormalizeInstantsUTC(t *testing.T) {
 		"available_at": *snapshot.Sections[0].AvailableAt,
 		"system_observed_at": *snapshot.SystemObservedAt,
 	} {
-		if value.Location() != time.UTC || value.Format("-07:00") != "Z" {
+		if value.Location() != time.UTC || value.Format("Z07:00") != "Z" {
 			t.Errorf("%s was not normalized to UTC: %s (%s)", name, value.Format(time.RFC3339Nano), value.Location())
 		}
 	}
