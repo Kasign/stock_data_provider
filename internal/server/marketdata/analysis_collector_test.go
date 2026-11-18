@@ -43,7 +43,7 @@ func TestAnalysisCollectorMapsDailyBarsFromDataApplication(t *testing.T) {
 					Open: 100, High: 110, Low: 99, Close: 108,
 					Source: "eastmoney", FetchedAt: time.Date(2026, 11, 18, 9, 0, 0, 0, time.UTC),
 					AdjustmentBasis: dataapp.AdjustmentForward,
-					QualityStatus: dataapp.QualityValid,
+					QualityStatus:   dataapp.QualityValid,
 				}},
 			},
 		},
