@@ -688,7 +688,7 @@ func TestNewsSearchStageResearchflowMariaDBIntegration(t *testing.T) {
 	}
 	for _, tc := range []struct {
 		name, runRef, wantCode string
-		attemptNo             int
+		attemptNo              int
 	}{
 		{"RateLimited", rateLimitedCreated.Run.Ref, newsapp.ProviderErrorRateLimited, 1},
 		{"Timeout", timeoutProviderCreated.Run.Ref, newsapp.ProviderErrorTimeout, 1},
