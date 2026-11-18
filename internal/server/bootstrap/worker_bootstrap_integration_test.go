@@ -19,29 +19,29 @@ import (
 	mysql "github.com/go-sql-driver/mysql"
 )
 
-const serverBootstrapHelperEnv = "SERVER_BOOTSTRAP_HELPER"
+const workerBootstrapHelperEnv = "SERVER_WORKER_BOOTSTRAP_HELPER"
 
-type serverBootstrapOutput struct {
+type workerBootstrapOutput struct {
 	mu   sync.Mutex
 	text strings.Builder
 }
 
-func (o *serverBootstrapOutput) Write(p []byte) (int, error) {
+func (o *workerBootstrapOutput) Write(p []byte) (int, error) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	return o.text.Write(p)
 }
 
-func (o *serverBootstrapOutput) String() string {
+func (o *workerBootstrapOutput) String() string {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	return o.text.String()
 }
 
-// TestServerBootstrapHelperProcess 在独立进程中运行真实 Server Worker Bootstrap，
+// TestWorkerBootstrapHelperProcess 在独立进程中运行真实 Server Worker Bootstrap，
 // 由父测试发送 SIGTERM，覆盖 Run 的信号取消与资源释放路径。
-func TestServerBootstrapHelperProcess(t *testing.T) {
-	if os.Getenv(serverBootstrapHelperEnv) != "1" {
+func TestWorkerBootstrapHelperProcess(t *testing.T) {
+	if os.Getenv(workerBootstrapHelperEnv) != "1" {
 		return
 	}
 	workingDir, err := os.Getwd()
@@ -65,31 +65,31 @@ func signalNotifyContext() (context.Context, func()) {
 	return signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 }
 
-type serverBootstrapChild struct {
+type workerBootstrapChild struct {
 	cmd      *exec.Cmd
-	output   *serverBootstrapOutput
+	output   *workerBootstrapOutput
 	waitDone chan error
 	finished bool
 }
 
-func startServerBootstrapChild(t *testing.T, values map[string]string) *serverBootstrapChild {
+func startWorkerBootstrapChild(t *testing.T, values map[string]string) *workerBootstrapChild {
 	t.Helper()
-	cmd := exec.Command(os.Args[0], "-test.run=^TestServerBootstrapHelperProcess$")
-	cmd.Env = serverBootstrapEnvironment(values)
-	output := &serverBootstrapOutput{}
+	cmd := exec.Command(os.Args[0], "-test.run=^TestWorkerBootstrapHelperProcess$")
+	cmd.Env = workerBootstrapEnvironment(values)
+	output := &workerBootstrapOutput{}
 	cmd.Stdout = output
 	cmd.Stderr = output
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("启动 Server Bootstrap 子进程失败: %v", err)
 	}
-	child := &serverBootstrapChild{
+	child := &workerBootstrapChild{
 		cmd: cmd, output: output, waitDone: make(chan error, 1),
 	}
 	go func() { child.waitDone <- cmd.Wait() }()
 	return child
 }
 
-func (c *serverBootstrapChild) waitWorkerReady(t *testing.T) {
+func (c *workerBootstrapChild) waitReady(t *testing.T) {
 	t.Helper()
 	startupDeadline := time.Now().Add(60 * time.Second)
 	for {
@@ -109,7 +109,7 @@ func (c *serverBootstrapChild) waitWorkerReady(t *testing.T) {
 	}
 }
 
-func (c *serverBootstrapChild) stop(t *testing.T) {
+func (c *workerBootstrapChild) stop(t *testing.T) {
 	t.Helper()
 	if err := c.cmd.Process.Signal(syscall.SIGTERM); err != nil {
 		t.Fatalf("向 Server 子进程发送 SIGTERM 失败: %v", err)
@@ -125,7 +125,7 @@ func (c *serverBootstrapChild) stop(t *testing.T) {
 	}
 }
 
-func (c *serverBootstrapChild) killIfRunning() {
+func (c *workerBootstrapChild) killIfRunning() {
 	if c == nil || c.finished {
 		return
 	}
@@ -184,7 +184,7 @@ func TestWorkerBootstrapMariaDBRedisIntegration(t *testing.T) {
 	defer httpListener.Close()
 
 	values := map[string]string{
-		serverBootstrapHelperEnv:                "1",
+		workerBootstrapHelperEnv:                "1",
 		"SERVER_ROLE":                           "worker",
 		"DB_HOST":                               host,
 		"DB_PORT":                               port,
@@ -209,7 +209,7 @@ func TestWorkerBootstrapMariaDBRedisIntegration(t *testing.T) {
 		"HTTP_ADDR":                             httpListener.Addr().String(),
 		"HTTP_READ_TIMEOUT":                     "not-a-duration",
 	}
-	children := make([]*serverBootstrapChild, 0, 2)
+	children := make([]*workerBootstrapChild, 0, 2)
 	defer func() {
 		for _, child := range children {
 			child.killIfRunning()
@@ -224,11 +224,11 @@ func TestWorkerBootstrapMariaDBRedisIntegration(t *testing.T) {
 			childValues[key] = value
 		}
 		childValues["RESEARCH_NOTIFICATION_RELAY_WORKER_ID"] = fmt.Sprintf("integration-worker-%d", index)
-		children = append(children, startServerBootstrapChild(t, childValues))
+		children = append(children, startWorkerBootstrapChild(t, childValues))
 	}
 
 	for _, child := range children {
-		child.waitWorkerReady(t)
+		child.waitReady(t)
 	}
 	for _, child := range children {
 		child.stop(t)
@@ -240,7 +240,7 @@ func TestWorkerBootstrapMariaDBRedisIntegration(t *testing.T) {
 	}
 }
 
-func serverBootstrapEnvironment(overrides map[string]string) []string {
+func workerBootstrapEnvironment(overrides map[string]string) []string {
 	env := make([]string, 0, len(os.Environ())+len(overrides))
 	for _, entry := range os.Environ() {
 		key, _, _ := strings.Cut(entry, "=")
@@ -262,7 +262,7 @@ func serverBootstrapEnvironment(overrides map[string]string) []string {
 	return env
 }
 
-func (c *serverBootstrapChild) waitAPIReady(t *testing.T, baseURL, ownerToken string) {
+func (c *workerBootstrapChild) waitAPIReady(t *testing.T, baseURL, ownerToken string) {
 	t.Helper()
 	client := &http.Client{Timeout: 2 * time.Second}
 	deadline := time.Now().Add(60 * time.Second)
@@ -345,7 +345,7 @@ func TestAPIBootstrapMariaDBRedisIntegration(t *testing.T) {
 
 	ownerToken := "api-bootstrap-integration-owner-token-0123456789"
 	values := map[string]string{
-		serverBootstrapHelperEnv:                "1",
+		workerBootstrapHelperEnv:                "1",
 		"SERVER_ROLE":                           "api",
 		"DB_HOST":                               host,
 		"DB_PORT":                               port,
@@ -369,7 +369,7 @@ func TestAPIBootstrapMariaDBRedisIntegration(t *testing.T) {
 		"NOTIFICATION_EVENT_MAX_JSON_DEPTH":     "32",
 	}
 
-	child := startServerBootstrapChild(t, values)
+	child := startWorkerBootstrapChild(t, values)
 	defer child.killIfRunning()
 	baseURL := "http://" + httpAddress
 	child.waitAPIReady(t, baseURL, ownerToken)
