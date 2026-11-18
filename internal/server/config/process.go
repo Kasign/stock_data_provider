@@ -18,9 +18,12 @@ type Process struct {
 	Role                      Role
 	Migration                 Migration
 	Security                  Security
+	OwnerSession              OwnerSession
 	HTTP                      HTTP
 	ResearchNotificationRelay ResearchNotificationRelay
 	ResearchflowCapacity      ResearchflowCapacity
+	ResearchflowRunDeadline   time.Duration
+	ResearchflowLocalWorkers  int
 }
 
 // LoadProcess 在启动阶段一次性解析 Server 进程级配置。
@@ -66,6 +69,9 @@ func LoadProcess(env platformconfig.Env) (Process, error) {
 		if cfg.Security, err = LoadSecurity(env); err != nil {
 			return Process{}, err
 		}
+		if cfg.OwnerSession, err = LoadOwnerSession(env); err != nil {
+			return Process{}, err
+		}
 		if cfg.HTTP, err = LoadHTTP(env, cfg.AnalysisTimeout); err != nil {
 			return Process{}, err
 		}
@@ -77,6 +83,16 @@ func LoadProcess(env platformconfig.Env) (Process, error) {
 	}
 	if cfg.ResearchflowCapacity, err = LoadResearchflowCapacity(env); err != nil {
 		return Process{}, err
+	}
+	if cfg.ResearchflowRunDeadline, err = LoadResearchflowRunDeadline(env, cfg.ResearchflowCapacity.Configured); err != nil {
+		return Process{}, err
+	}
+	if cfg.ResearchflowCapacity.Configured && cfg.Role != RoleAPI {
+		if cfg.ResearchflowLocalWorkers, err = LoadResearchflowLocalWorkers(env); err != nil {
+			return Process{}, err
+		}
+	} else if raw := strings.TrimSpace(env.String("RESEARCHFLOW_LOCAL_WORKERS", "")); raw != "" {
+		return Process{}, fmt.Errorf("RESEARCHFLOW_LOCAL_WORKERS 仅在 Researchflow Worker 或 All 角色且已启用 Capacity 时允许配置")
 	}
 	return cfg, nil
 }

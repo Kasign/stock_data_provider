@@ -5,6 +5,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"example.com/stock-analysis-flow/internal/marketdata/markettime"
 )
 
 func (s *Server) marketSentiment(w http.ResponseWriter, r *http.Request) {
@@ -15,11 +17,8 @@ func (s *Server) marketSentiment(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", "date must use YYYY-MM-DD", requestID(r))
 			return
 		}
-		loc, locErr := time.LoadLocation("Asia/Shanghai")
-		if locErr != nil {
-			loc = time.FixedZone("Asia/Shanghai", 8*60*60)
-		}
-		if date != time.Now().In(loc).Format("2006-01-02") {
+		loc := markettime.Location()
+		if date != s.nowUTC().In(loc).Format("2006-01-02") {
 			writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", "live collection only supports the current China market date; use the history endpoint for persisted dates", requestID(r))
 			return
 		}

@@ -20,6 +20,7 @@ var (
 // RunAccessAuthorizer must verify ownership or an explicit read/write grant
 // against trusted caller identity and persisted Run ownership.
 type RunAccessAuthorizer interface {
+	AuthorizeRunRead(context.Context, string, string) error
 	AuthorizeRunCancellation(context.Context, string, string) error
 }
 

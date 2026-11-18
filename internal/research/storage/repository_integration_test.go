@@ -131,9 +131,16 @@ func TestResearchOutboxClaimRetryAndConfirmation(t *testing.T) {
 	db := openResearchIntegrationDB(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
-	now := time.Date(2026, 11, 9, 3, 0, 0, 123456789, time.UTC)
+
+	// The Event's application clock is intentionally one day ahead. Outbox
+	// scheduling must still be immediately available according to MariaDB time.
+	now := time.Now().UTC().Add(24 * time.Hour).Truncate(time.Microsecond)
 	eventID := fmt.Sprintf("event-outbox-delivery-%d", time.Now().UnixNano())
 	repo, err := NewEventRepository(db, func() time.Time { return now })
+	if err != nil {
+		t.Fatal(err)
+	}
+	outbox, err := NewOutboxRepository(db)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -146,57 +153,57 @@ func TestResearchOutboxClaimRetryAndConfirmation(t *testing.T) {
 		EventID: eventID, EventVersion: 1, EventType: "integration_fixture", Title: "Outbox delivery fixture",
 		Status: researchevent.StatusDetected, SubjectRefs: []string{}, EvidenceRefs: []string{},
 		SystemObservedAt: now, SystemAsOf: now, ImpactHypothesisRefs: []string{},
-		InvalidationConditions: []string{}, Uncertainty: []string{}, TimeNormalizationRuleVersion: "1.0.0", DerivedFromRefs: []researchevent.ResearchEventRef{}, SourceTimes: []researchevent.EventSourceTime{},
+		InvalidationConditions: []string{}, Uncertainty: []string{}, TimeNormalizationRuleVersion: "1.0.0",
+		DerivedFromRefs: []researchevent.ResearchEventRef{}, SourceTimes: []researchevent.EventSourceTime{},
 	}
 	if err := repo.AppendWithLifecycle(ctx, value, nil, "corr_integration"); err != nil {
 		t.Fatalf("append Event and initial Outbox: %v", err)
 	}
-	claimed, err := repo.base.ClaimOutbox(ctx, "worker_test", 10, now.Add(time.Minute))
+
+	claimed, err := outbox.ClaimOutbox(ctx, "worker_test", 10, time.Minute)
 	if err != nil {
 		t.Fatalf("claim Outbox: %v", err)
 	}
 	if len(claimed) != 1 || claimed[0].IdempotencyKey != "research-event-state:research-event:"+eventID+":1" {
 		t.Fatalf("unexpected claimed Outbox messages: %+v", claimed)
 	}
-	if err := repo.base.ScheduleOutboxRetry(ctx, claimed[0].EventID, "worker_test", claimed[0].LeaseToken, now.Add(2*time.Minute), "notification_unavailable", now); err != nil {
+	duplicate, err := outbox.ClaimOutbox(ctx, "worker_other", 10, time.Minute)
+	if err != nil || len(duplicate) != 0 {
+		t.Fatalf("active lease claimed twice: %+v, error %v", duplicate, err)
+	}
+	if err := outbox.ScheduleOutboxRetry(ctx, claimed[0].EventID, "worker_test", claimed[0].LeaseToken, 300*time.Millisecond, "notification_unavailable"); err != nil {
 		t.Fatalf("schedule retry: %v", err)
 	}
-	tooEarly, err := repo.base.ClaimOutbox(ctx, "worker_test", 10, now.Add(3*time.Minute))
-	if err != nil {
-		t.Fatalf("claim before retry time: %v", err)
+	early, err := outbox.ClaimOutbox(ctx, "worker_test", 10, time.Minute)
+	if err != nil || len(early) != 0 {
+		t.Fatalf("retry became available too early: %+v, error %v", early, err)
 	}
-	if len(tooEarly) != 0 {
-		t.Fatalf("retry became available too early: %+v", tooEarly)
-	}
-	now = now.Add(2 * time.Minute)
-	reclaimed, err := repo.base.ClaimOutbox(ctx, "worker_test", 10, now.Add(time.Minute))
+	time.Sleep(350 * time.Millisecond)
+	reclaimed, err := outbox.ClaimOutbox(ctx, "worker_test", 10, time.Minute)
 	if err != nil {
 		t.Fatalf("reclaim retry: %v", err)
 	}
 	if len(reclaimed) != 1 || reclaimed[0].EventID != claimed[0].EventID || reclaimed[0].LeaseToken == claimed[0].LeaseToken {
-		t.Fatalf("retry must reuse the persisted Envelope identity: %+v", reclaimed)
+		t.Fatalf("retry identity/token mismatch: %+v", reclaimed)
 	}
-	if err := repo.base.MarkOutboxPublished(ctx, claimed[0].EventID, "worker_test", claimed[0].LeaseToken, now); !errors.Is(err, ErrConflict) {
+	if err := outbox.MarkOutboxPublished(ctx, claimed[0].EventID, "worker_test", claimed[0].LeaseToken); !errors.Is(err, ErrConflict) {
 		t.Fatalf("stale lease token confirmation = %v, want ErrConflict", err)
 	}
-	if err := repo.base.MarkOutboxPublished(ctx, reclaimed[0].EventID, "worker_test", reclaimed[0].LeaseToken, now); err != nil {
+	if err := outbox.MarkOutboxPublished(ctx, reclaimed[0].EventID, "worker_test", reclaimed[0].LeaseToken); err != nil {
 		t.Fatalf("confirm Outbox delivery: %v", err)
 	}
-	if err := repo.base.MarkOutboxPublished(ctx, reclaimed[0].EventID, "worker_test", reclaimed[0].LeaseToken, now); err != nil {
+	if err := outbox.MarkOutboxPublished(ctx, reclaimed[0].EventID, "worker_test", reclaimed[0].LeaseToken); err != nil {
 		t.Fatalf("repeated confirmation must be idempotent for the same lease: %v", err)
 	}
-	if err := repo.base.MarkOutboxPublished(ctx, reclaimed[0].EventID, "worker_other", reclaimed[0].LeaseToken, now); !errors.Is(err, ErrConflict) {
+	if err := outbox.MarkOutboxPublished(ctx, reclaimed[0].EventID, "worker_other", reclaimed[0].LeaseToken); !errors.Is(err, ErrConflict) {
 		t.Fatalf("published confirmation by another worker = %v, want ErrConflict", err)
 	}
-	if err := repo.base.MarkOutboxPublished(ctx, reclaimed[0].EventID, "worker_test", claimed[0].LeaseToken, now); !errors.Is(err, ErrConflict) {
+	if err := outbox.MarkOutboxPublished(ctx, reclaimed[0].EventID, "worker_test", claimed[0].LeaseToken); !errors.Is(err, ErrConflict) {
 		t.Fatalf("published confirmation with stale lease token = %v, want ErrConflict", err)
 	}
-	after, err := repo.base.ClaimOutbox(ctx, "worker_test", 10, now.Add(time.Minute))
-	if err != nil {
-		t.Fatalf("claim after confirmation: %v", err)
-	}
-	if len(after) != 0 {
-		t.Fatalf("delivered Outbox message was claimed again: %+v", after)
+	after, err := outbox.ClaimOutbox(ctx, "worker_test", 10, time.Minute)
+	if err != nil || len(after) != 0 {
+		t.Fatalf("published message reclaimed: %+v, error %v", after, err)
 	}
 	var attempts int
 	var status string
@@ -216,6 +223,10 @@ func TestResearchOutboxConcurrentClaimsDoNotDuplicateLease(t *testing.T) {
 	now := time.Date(2026, 11, 9, 7, 0, 0, 123456789, time.UTC)
 	eventID := fmt.Sprintf("event-outbox-concurrent-%d", time.Now().UnixNano())
 	repo, err := NewEventRepository(db, func() time.Time { return now })
+	if err != nil {
+		t.Fatal(err)
+	}
+	outbox, err := NewOutboxRepository(db)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -251,7 +262,7 @@ func TestResearchOutboxConcurrentClaimsDoNotDuplicateLease(t *testing.T) {
 		go func() {
 			defer workers.Done()
 			<-start
-			values, err := repo.base.ClaimOutbox(ctx, worker, 1, now.Add(time.Minute))
+			values, err := outbox.ClaimOutbox(ctx, worker, 1, time.Minute)
 			results <- claimResult{worker: worker, values: values, err: err}
 		}()
 	}
@@ -923,10 +934,13 @@ func TestResearchOutboxRejectsExpiredLeaseEvenWithBackdatedActionTime(t *testing
 	db := openResearchIntegrationDB(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
-
-	now := time.Date(2026, 11, 9, 6, 0, 0, 123456789, time.UTC)
+	now := time.Now().UTC().Truncate(time.Microsecond)
 	eventID := fmt.Sprintf("event-outbox-expired-lease-%d", time.Now().UnixNano())
 	repo, err := NewEventRepository(db, func() time.Time { return now })
+	if err != nil {
+		t.Fatal(err)
+	}
+	outbox, err := NewOutboxRepository(db)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -935,46 +949,39 @@ func TestResearchOutboxRejectsExpiredLeaseEvenWithBackdatedActionTime(t *testing
 		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_event_versions WHERE event_id=?", eventID)
 		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_aggregate_heads WHERE aggregate_type='event' AND aggregate_id=?", eventID)
 	})
-
 	value := researchevent.ResearchEvent{
-		EventID: eventID, EventVersion: 1, EventType: "integration_fixture",
-		Title: "Expired lease fixture", Status: researchevent.StatusDetected,
-		SubjectRefs: []string{}, EvidenceRefs: []string{},
-		SystemObservedAt: now, SystemAsOf: now,
-		ImpactHypothesisRefs: []string{}, InvalidationConditions: []string{},
-		Uncertainty: []string{}, TimeNormalizationRuleVersion: "1.0.0", DerivedFromRefs: []researchevent.ResearchEventRef{}, SourceTimes: []researchevent.EventSourceTime{},
+		EventID: eventID, EventVersion: 1, EventType: "integration_fixture", Title: "Expired lease fixture",
+		Status: researchevent.StatusDetected, SubjectRefs: []string{}, EvidenceRefs: []string{},
+		SystemObservedAt: now, SystemAsOf: now, ImpactHypothesisRefs: []string{},
+		InvalidationConditions: []string{}, Uncertainty: []string{}, TimeNormalizationRuleVersion: "1.0.0",
+		DerivedFromRefs: []researchevent.ResearchEventRef{}, SourceTimes: []researchevent.EventSourceTime{},
 	}
 	if err := repo.AppendWithLifecycle(ctx, value, nil, "corr_expired_lease"); err != nil {
-		t.Fatalf("append Event and Outbox: %v", err)
+		t.Fatal(err)
 	}
-	claimed, err := repo.base.ClaimOutbox(ctx, "worker_expired", 10, now.Add(time.Minute))
+	claimed, err := outbox.ClaimOutbox(ctx, "worker_expired", 10, time.Second)
 	if err != nil || len(claimed) != 1 {
-		t.Fatalf("claim Outbox = %d messages, error %v", len(claimed), err)
+		t.Fatalf("claim = %+v, error %v", claimed, err)
 	}
-
-	// Advance the trusted repository clock beyond the lease deadline, but
-	// deliberately supply action timestamps from before that deadline.
-	now = now.Add(2 * time.Minute)
-	backdated := now.Add(-2 * time.Minute)
-	if err := repo.base.MarkOutboxPublished(ctx, claimed[0].EventID, "worker_expired", claimed[0].LeaseToken, backdated); !errors.Is(err, ErrConflict) {
-		t.Fatalf("confirm with expired lease and backdated timestamp = %v, want ErrConflict", err)
+	time.Sleep(1100 * time.Millisecond)
+	if err := outbox.MarkOutboxPublished(ctx, claimed[0].EventID, "worker_expired", claimed[0].LeaseToken); !errors.Is(err, ErrConflict) {
+		t.Fatalf("confirm with expired lease = %v, want ErrConflict", err)
 	}
-	if err := repo.base.ScheduleOutboxRetry(ctx, claimed[0].EventID, "worker_expired", claimed[0].LeaseToken, now.Add(time.Minute), "temporary_failure", backdated); !errors.Is(err, ErrConflict) {
-		t.Fatalf("retry with expired lease and backdated timestamp = %v, want ErrConflict", err)
+	if err := outbox.ScheduleOutboxRetry(ctx, claimed[0].EventID, "worker_expired", claimed[0].LeaseToken, time.Minute, "temporary_failure"); !errors.Is(err, ErrConflict) {
+		t.Fatalf("retry with expired lease = %v, want ErrConflict", err)
 	}
-	if err := repo.base.RejectOutbox(ctx, claimed[0].EventID, "worker_expired", claimed[0].LeaseToken, "permanent_failure", backdated); !errors.Is(err, ErrConflict) {
-		t.Fatalf("reject with expired lease and backdated timestamp = %v, want ErrConflict", err)
+	if err := outbox.RejectOutbox(ctx, claimed[0].EventID, "worker_expired", claimed[0].LeaseToken, "permanent_failure"); !errors.Is(err, ErrConflict) {
+		t.Fatalf("reject with expired lease = %v, want ErrConflict", err)
 	}
-
 	var status string
 	if err := db.QueryRowContext(ctx, "SELECT delivery_status FROM research_notification_outbox WHERE event_id=?", claimed[0].EventID).Scan(&status); err != nil {
-		t.Fatalf("read expired Outbox state: %v", err)
+		t.Fatal(err)
 	}
 	if status != "leased" {
-		t.Fatalf("expired action changed Outbox state to %q, want leased until reclaimed", status)
+		t.Fatalf("expired action changed Outbox state to %q", status)
 	}
-	reclaimed, err := repo.base.ClaimOutbox(ctx, "worker_reclaimed", 10, now.Add(time.Minute))
+	reclaimed, err := outbox.ClaimOutbox(ctx, "worker_reclaimed", 10, time.Minute)
 	if err != nil || len(reclaimed) != 1 || reclaimed[0].LeaseToken == claimed[0].LeaseToken {
-		t.Fatalf("reclaim expired Outbox lease = %+v, error %v", reclaimed, err)
+		t.Fatalf("reclaim expired lease = %+v, error %v", reclaimed, err)
 	}
 }

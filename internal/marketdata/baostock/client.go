@@ -13,7 +13,9 @@ import (
 	"strings"
 	"time"
 
+	"example.com/stock-analysis-flow/internal/marketdata/markettime"
 	"example.com/stock-analysis-flow/internal/marketdata/transport"
+	platformtime "example.com/stock-analysis-flow/internal/platform/time"
 )
 
 const (
@@ -38,6 +40,8 @@ type Config struct {
 	RequestTimeout time.Duration
 	// DialContext 由 Root 注入的受控 TCP 出站函数；nil 时保留标准 net.Dialer 兼容行为。
 	DialContext transport.DialContextFunc
+	// Clock 用于季度年份和 A 股市场日期边界；网络超时仍使用单调时钟。
+	Clock platformtime.Clock
 }
 
 // DailyKLine contains the source fields needed by the daily-bar adapter.
@@ -168,18 +172,15 @@ func (c *Client) QueryQuarterlyFinancialData(ctx context.Context, code, category
 	if len(codeParts) != 2 || (codeParts[0] != "sh" && codeParts[0] != "sz") || len(codeParts[1]) != 6 {
 		return nil, fmt.Errorf("invalid BaoStock financial security code %q", code)
 	}
-	if year < 2007 || year > time.Now().Year() {
-		return nil, fmt.Errorf("BaoStock financial year %d is outside supported range 2007..%d", year, time.Now().Year())
+	marketNow := c.cfg.Clock.Now().In(markettime.Location())
+	if year < 2007 || year > marketNow.Year() {
+		return nil, fmt.Errorf("BaoStock financial year %d is outside supported range 2007..%d", year, marketNow.Year())
 	}
 	if quarter < 1 || quarter > 4 {
 		return nil, fmt.Errorf("BaoStock financial quarter %d is outside 1..4", quarter)
 	}
-	loc, locErr := time.LoadLocation("Asia/Shanghai")
-	if locErr != nil {
-		loc = time.FixedZone("CST", 8*60*60)
-	}
 	periodEnd := time.Date(year, time.Month(quarter*3+1), 0, 0, 0, 0, 0, time.UTC).Format("2006-01-02")
-	chinaToday := time.Now().In(loc).Format("2006-01-02")
+	chinaToday := marketNow.Format("2006-01-02")
 	if periodEnd > chinaToday {
 		return nil, fmt.Errorf("BaoStock financial reporting period %s is in the future as of China market date %s", periodEnd, chinaToday)
 	}
@@ -344,6 +345,9 @@ func NewClient(cfg Config) *Client {
 	}
 	if cfg.RequestTimeout <= 0 {
 		cfg.RequestTimeout = 15 * time.Second
+	}
+	if cfg.Clock == nil {
+		cfg.Clock = platformtime.SystemClock{}
 	}
 	c := &Client{cfg: cfg, gate: make(chan struct{}, 1), userID: cfg.UserID}
 	c.gate <- struct{}{}
@@ -750,7 +754,7 @@ func (c *Client) Close() error {
 
 	var logoutErr error
 	if c.conn != nil && c.logged {
-		body := strings.Join([]string{"logout", c.userID, time.Now().Format("20060102150405")}, messageSplit)
+		body := strings.Join([]string{"logout", c.userID, c.cfg.Clock.Now().In(markettime.Location()).Format("20060102150405")}, messageSplit)
 		messageType, responseBody, err := c.exchangeLocked(ctx, messageLogoutRequest, body)
 		if err != nil {
 			logoutErr = fmt.Errorf("BaoStock logout: %w", err)

@@ -1,8 +1,10 @@
 # 新闻模块开发任务与验收清单
 
+> **Integration 接入状态更新（2026-11-14）**：最近代码 SHA `c25d881c0` 已由 Integration CI Run [43574975820](https://github.com/Kasign/stock_data_provider/actions/runs/43574975820)（#70）精确验收通过，逐用例日志实证 A 组 7 个真库子测试全部 `PASS`。News→Research A 组真实 MariaDB 跨模块验收（授权复核、PIT/分页、旧 Key 轮换验签及 Importer fail-closed 零落库）为 `pass`；B 组 Research Evidence 成功写入为 **`shelved`（搁置）**——News 尚无可证明的 `available_at` 来源证据，全渠道复核确认合格字段只存在于「法定披露」类来源（EDINET / RNS / HKEX 形态），现有搜索类 Provider 结构上无法提供，需产品决策后重启。详见 [交接文档第 10.8 节](../整体任务规划/05-治理与验收/Integration当前任务交接与继续执行.md)。Server Bootstrap 已在配置 Key Ring 时构造完整 Evidence Query Facade 与 Research Importer；当前仍无 Researchflow Stage/HTTP 业务消费者，不能把 A 组通过描述为 Importer 成功持久化。Key Ring 未配置时不创建默认密钥。后续以 [Integration 当前任务交接](../整体任务规划/05-治理与验收/Integration当前任务交接与继续执行.md) 为准。
+
 > 当前验收状态（2026-11-12，News 分支 HEAD：`a8a3763e5dc662d856a438c52a0b1a28975def43`）：NEWS-CTR-002 显式 `risk_review` 用途映射修复及对应测试已通过当前 HEAD 的 CI。News Provider contract workflow Run `43219930444`：Provider contract tests、完整 News 模块测试均 success，包含 gofmt、单测、Race、Vet；Go test suite Run `43219930418`：News MariaDB Repository and Migration integration、根模块 `Test .`、Researchflow 相关测试及 `Test go-core` 均 success。Compose/Docker 与 Market Data 专项 jobs 按条件 skipped，不计为通过。两条 Run 的 `head_sha` 均与当前 HEAD 完全一致。PR [#88](https://github.com/Kasign/stock_data_provider/pull/88) 的历史合并记录不代表本轮再次合并；本轮未执行分支合并。
 
-> 当前模块状态：News 自有领域代码质量门禁、Provider 固定响应契约和 MariaDB 11.4 持久化专项验收已有通过证据；生产受限内容披露仍受公共 JCS Runtime Verifier 注入和 Server 生产装配阻断；News 内部的策略指针锁定、授权复核与精确 Version 正文读取事务机制已实现。NEWS-CTR-001 的 available_at 严格 PIT 继续等待合格来源证据，不得从 published_at/fetched_at/observed_at 推导。
+> 当前模块状态：News 自有领域代码质量门禁、Provider 固定响应契约和 MariaDB 11.4 持久化专项验收已有通过证据；公共 JCS Runtime Verifier 与 News Adapter 已在 integration 实现，并以 GOV-CTR-006 四份 Golden 为验收向量；Server Bootstrap 在 Key Ring 配置时已构造该 Verifier 的查询链路及 Evidence Query Facade。当前尚无 Stage/HTTP 消费者，不能宣称 News→Research 实际导入完成；受限内容披露只在真实查询时由当前策略与事务边界控制。News 内部的策略指针锁定、授权复核与精确 Version 正文读取事务机制已实现。NEWS-CTR-001 的 available_at 严格 PIT 继续等待合格来源证据，不得从 published_at/fetched_at/observed_at 推导。
 > 历史记录说明：本文按日期累积的早期实施段落保留为过程记录；其中旧的未完成项、等待 CI 项和旧阻断状态不代表当前任务状态。当前状态以本段及文末“2026-11-12 当前任务边界与后续计划”为准。
 > 状态：本分支只维护 News 领域实现和专项文档；公共平台原语来自共同基线，根组合根由 Server 实施分支负责。
 
@@ -118,6 +120,7 @@
 
 - [x] Config/Secret：News 定义独立配置结构，复用 Platform Env/Secret；真实仓库根 Go 测试已通过，Provider 凭证不存入新闻表或日志。
 - [x] Error/Request ID：Provider 与 Source 适配器映射 Platform Fault，保留稳定 Code/Retryable，不透传 Cause；Request ID 由 Platform Client 从验证过的 Context 传播。Logger/Trace 结构化字段接入仍待验收。
+- [x] GOV-CTR-006 Runtime Verifier：integration 的 `internal/platform/authorization` 使用 RFC 8785 JCS + SHA-256 重建并验证完整策略快照指纹；News 通过 `internal/news/adapters/platform` 实现窄 Port 适配，AuthorizationRef 与 PolicySnapshot 均保留 `schema_version=1.0.0`。四份项目 Golden 和 News 绑定 Golden 已纳入运行时测试；Server 注入与最新 SHA CI 通过后才可解除受限内容披露门禁。
 - [x] HTTP Client 模块适配：Provider/Source 均已新增 Platform Client + DestinationPolicy 适配器；生产组合根注入和公网 DNS/出口验收仍待完成。
 - [ ] Security：当前同进程 Application 不引入 Service Key；未来既有 HTTP API 暴露新闻操作时，由该 API 统一认证和 Scope 授权。
 - [ ] 不导入平台未冻结的内部实现路径；公共契约变更通过版本和接入评审处理。
@@ -1139,3 +1142,52 @@
 - Go test suite Run [43219930418](https://github.com/Kasign/stock_data_provider/actions/runs/43219930418)：News MariaDB Repository and Migration integration、根模块 `Test .`、Researchflow MariaDB lifecycle integration、Researchflow format/tests/race/vet、WorkerStore tests/race/vet、`Test go-core` 均 success。Compose/Docker 和 Market Data 专项 jobs 为 skipped，不计入通过范围。
 - 两条 Run 的 `head_sha` 均精确匹配验收 HEAD；因此 `risk_review` 映射及新增存储层测试已被当前 HEAD 的 News 全量测试、Race、Vet 覆盖。
 - 该结果不代表真实 Provider/Feed 网络、来源授权、部署 DNS/出口、Server 生产装配或 available_at 严格 PIT 已验收。
+
+
+### 2026-11-13 Evidence Cursor Key Ring 配置入口
+
+- 新增可选配置：NEWS_EVIDENCE_CURSOR_ACTIVE_KEY_ID 与 NEWS_EVIDENCE_CURSOR_KEYRING_JSON。Key Ring JSON 对象的 Key ID 对应 Secret 值，最多 8 把 Key；Active Key ID 必须存在于 Key Ring。
+- 每个 Key Secret 长度限制为 32～256 字节；Key ID 限制为 1～64 个字母、数字、下划线、点或短横线。配置错误只报告环境变量名，不回显 Key Ring JSON 或 Secret。
+- Config.EvidenceCursorKeyRing 返回 Platform Secret 包装值的防御性副本；未配置时返回 configured=false，不生成默认密钥。Integration Run 43364123334 已覆盖配置解析代码的根模块测试、格式和 Vet；随后 Server Bootstrap 已消费该配置并构造 EvidenceCursorCodec 与完整 Query Facade。
+- 游标 TTL 为 15 分钟。轮换时先加入新 Key，再切换 Active Key ID；旧 Key 至少保留 15 分钟，建议额外覆盖部署时钟偏差窗口。删除旧 Key 前必须确认其签发的游标均已过期。
+- .env.example 只提供注释示例，不包含可用密钥。
+- 新增测试覆盖未配置、成功双 Key 加载、防御性副本、配置不完整、JSON 非法、Active Key 缺失、短密钥、非法 Key ID、Key 数量超限及错误信息不泄露密钥。
+- Integration Run 43364123334 对代码 SHA 19394e8 的配置解析验收通过；Run 43561072301 对代码 SHA b0aabaa 的 A 组跨模块 MariaDB 验收进一步覆盖旧 Key 轮换验签及 Importer fail-closed 零落库。两者均不代表 Research Evidence 成功写入；B 组继续等待可证明的 available_at 来源证据。
+
+
+## 2026-11-16 News 搜索发现 Stage 输出契约
+
+- 新增 Stage Code / Output Type：`news.search_candidates`；输入沿用现有 `SearchRequest` 的 `query`、`query_dimension`、`limit`，不新增业务参数语义。
+- 新增版本化参数、Payload、QualitySummary JSON Schema 1.0.0 与 Payload/QualitySummary Golden。Payload 映射既有 `SearchResult`、`Candidate`、`ProviderOutcome`；Provider duration 使用整数纳秒，所有时间按 RFC3339 UTC 输出，原始发布时间文本与解析时间分别保留。
+- 新增 `internal/news/stage` 适配层，调用既有 `app.SearchCandidates`，输出 Researchflow 可消费的 Payload / QualitySummary JSON；News 不依赖 Researchflow，后续由 Server 组合根负责转换为 `stageoutput.ProviderResult`。
+- QualitySummary 只统计搜索状态、Provider 各状态数量、候选数量和既有 MissingFields 计数，不引入全局 quality_status，不判断候选是否为 Evidence 或已验证事实。
+- `skipped`（包括没有配置 Provider）保留为独立搜索状态，映射为非成功 Stage；不会映射为普通 empty 或成功。Provider partial 映射为 degraded；全部 Provider 失败且至少一个 Outcome 可重试时映射为 retry_wait，是否真正重试仍由 Workflow Template 的 RetryPolicy reason-code allowlist 决定。
+- Server Bootstrap 的 News Stage composition factory 借用 Root Server `Resources.HTTPClient`，只通过既有 `NewPlatformProviderSet` 为各 Provider 绑定独立 DestinationPolicy，不创建或关闭第二个 HTTP Client；Provider 已配置但共享 Client 缺失时 fail-closed。无 Provider 配置时不要求 Client，保留空 ProviderSet。Registry 1.0.0 注册精确 Payload / QualitySummary Schema Ref 和 News-owned Validator。
+- 当前 Server 还没有把 Researchflow Worker 生命周期接入生产 Run；本项只完成可测试的 Stage Executor / Registry 组合工厂，不创建无消费者的 Worker 或 Workflow Template。全 Provider 失败时，Worker 当前只会持久化 Stage reason code；Provider Outcome 详细内容因 StageOutput 仅对 succeeded/degraded 提交而不会持久化，需后续 Fault/diagnostic 持久化能力接入后再解决。
+- 本项不写 Research Evidence，不解除 available_at 来源准入搁置状态。
+
+
+## 2026-11-18 Server News Provider 配置与 Live Probe
+
+当前 Server Researchflow 使用的 Provider 配置入口为：
+
+- Bocha：`NEWS_PROVIDER_BOCHA_ENDPOINT` + `NEWS_PROVIDER_BOCHA_API_KEY`
+- Tavily：`NEWS_PROVIDER_TAVILY_ENDPOINT` + `NEWS_PROVIDER_TAVILY_API_KEY`
+- Brave：`NEWS_PROVIDER_BRAVE_ENDPOINT` + `NEWS_PROVIDER_BRAVE_API_KEY`
+- SearXNG：`NEWS_PROVIDER_SEARXNG_ENDPOINT`
+
+Bocha/Tavily/Brave 的 endpoint 与 API Key 必须成对配置；SearXNG 不需要 API Key。历史 `BOCHA_API_KEYS`、`GO_NEWS_*` 等变量不用于当前 Server `internal/news/config`。根 `.env.example` 已明确区分两套配置，避免旧变量被误认为已接入生产 Worker。
+
+仓库已有手动工作流 `.github/workflows/news-live-probe.yml`：必须显式确认后才发起只读在线请求，输出候选数量和发布时间聚合统计，不持久化候选内容。现已增加 Provider 配置 preflight，避免无 Provider 配置时以 SKIP 形成虚假的 Live Probe 成功证据。该 Probe 是连通性与基础时间字段抽样，不替代来源授权、完整数据质量、持久化和真实 Researchflow Run 验收。
+
+注意：当前工作流文件只存在于 `integration`，仓库默认分支为 `main`；GitHub `workflow_dispatch` 要求工作流文件位于默认分支，因此此版本目前不能直接从 Actions UI 手动触发。本轮不修改 main。真实请求需由用户在本地执行只读 Probe，或在明确批准后为 integration 增加受控 push 触发入口。
+
+
+## 2026-11-18 News Live Probe 受控触发方式
+
+- `.github/workflows/news-live-probe.yml` 仅监听 `integration` 分支 push；只有 Push 最新提交信息含精确标记 `[run_news_live_probe]` 才执行真实 Provider 探测。普通提交不发起外部请求。
+- Provider endpoint、查询词、Feed URL、Feed 授权证据引用配置在 GitHub Actions Variables；API Key 配置在 GitHub Actions Secrets。
+- 至少一个 Provider 必须完整配置：Bocha/Tavily/Brave 的 endpoint + API Key，或 SearXNG endpoint。否则 preflight 失败，不允许形成无 Provider 的成功记录。
+- Live Probe 只读，不持久化 Provider 输出；Feed URL 和授权证据引用均配置时才探测 Feed。
+- 本次改动提交没有触发标记，不会自动请求真实 Provider。执行时在 integration 提交信息加入 `[run_news_live_probe]`。
+- 保留 workflow_dispatch 入口，但该工作流只在 integration，当前默认分支 main 尚未包含它，故暂不能从 Actions UI 手动触发。

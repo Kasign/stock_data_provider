@@ -164,7 +164,7 @@ func xueqiuProviderTime(raw json.RawMessage, now time.Time) *time.Time {
 			if layout == time.RFC3339Nano {
 				parsed, err = time.Parse(layout, text)
 			} else {
-				parsed, err = time.ParseInLocation(layout, text, time.FixedZone("CST", 8*60*60))
+				parsed, err = time.ParseInLocation(layout, text, providerMarketLocation())
 			}
 			if err == nil && !parsed.After(now.Add(5*time.Minute)) && !parsed.Before(now.AddDate(-1, 0, 0)) {
 				parsed = parsed.UTC()
@@ -303,7 +303,7 @@ func (p *Xueqiu) FetchHotStocks(ctx context.Context, rankingType string, limit i
 	}
 	var dataObject map[string]json.RawMessage
 	_ = json.Unmarshal(dataRaw, &dataObject)
-	now := time.Now().UTC()
+	now := providerNowUTC()
 	providerTime := xueqiuProviderTime(dataObject["timestamp"], now)
 	snapshot := &model.HotRankingSnapshot{
 		RankingType: rankingType, Items: make([]model.HotRankingItem, 0, min(requestLimit, len(rows))),

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	platformdiagnostics "example.com/stock-analysis-flow/internal/platform/diagnostics"
 	serverdiagnostics "example.com/stock-analysis-flow/internal/server/diagnostics"
@@ -231,5 +232,30 @@ func TestHealthHandlerHeadRequestsKeepStatusHeadersAndExecuteReadiness(t *testin
 	}
 	if checker.calls != 2 {
 		t.Fatalf("readiness checker calls = %d, want 2 (readyz + diagnostics)", checker.calls)
+	}
+}
+
+type healthFixedClock struct {
+	now time.Time
+}
+
+func (c healthFixedClock) Now() time.Time { return c.now }
+
+func TestHealthzUsesInjectedPlatformClock(t *testing.T) {
+	now := time.Date(2026, 11, 17, 9, 30, 0, 0, time.UTC)
+	handler, err := NewHandlerWithClock(&fakeReadinessChecker{}, healthFixedClock{now: now})
+	if err != nil {
+		t.Fatalf("NewHandlerWithClock() error = %v", err)
+	}
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/healthz", nil))
+	var body struct {
+		Time time.Time `json:"time"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode health response: %v", err)
+	}
+	if !body.Time.Equal(now) {
+		t.Fatalf("health response time = %s, want %s", body.Time, now)
 	}
 }

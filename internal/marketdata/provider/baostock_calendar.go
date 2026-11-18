@@ -57,7 +57,7 @@ func (p *Baostock) FetchTradingCalendar(ctx context.Context, startDate, endDate 
 		Market: "cn_a_share", StartDate: startDate, EndDate: endDate,
 		TotalDays: totalDays, TradingDays: tradingDays, Items: items,
 		Source: p.Name(), SourceVersion: "baostock-query-trade-dates-v1",
-		FetchedAt: time.Now().UTC(), QualityStatus: model.QualityDegraded,
+		FetchedAt: providerNowUTC(), QualityStatus: model.QualityDegraded,
 		QualityReasons: []string{"provider_snapshot_timestamp_not_exposed"},
 	}, nil
 }

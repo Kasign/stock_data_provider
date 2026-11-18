@@ -75,6 +75,7 @@ func cloneOutputPolicyBinding(value app.ProviderOutputPolicyBinding) app.Provide
 	value.Policy.AllowedPurposes = append([]domain.Purpose(nil), value.Policy.AllowedPurposes...)
 	value.Policy.AllowedContentKinds = append([]domain.ContentKind(nil), value.Policy.AllowedContentKinds...)
 	value.Policy.AllowedStorageModes = append([]domain.StorageMode(nil), value.Policy.AllowedStorageModes...)
+	value.Policy.AllowedMetadataFields = append([]string(nil), value.Policy.AllowedMetadataFields...)
 	if value.Policy.ExpiresAt != nil {
 		expiresAt := *value.Policy.ExpiresAt
 		value.Policy.ExpiresAt = &expiresAt
