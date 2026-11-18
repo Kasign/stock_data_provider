@@ -490,6 +490,7 @@ ORDER BY v.trade_date DESC, v.recorded_at DESC, v.source ASC`
 
 func fundamentalsRevisionHash(snapshot model.FundamentalsSnapshot) (string, error) {
 	fingerprint := snapshot
+	fingerprint.NormalizeInstantsUTC()
 	fingerprint.FetchedAt = time.Time{}
 	fingerprint.SystemObservedAt = nil
 	payload, err := json.Marshal(fingerprint)
