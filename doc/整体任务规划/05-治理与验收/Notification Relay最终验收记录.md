@@ -49,7 +49,7 @@
 
 ### 2.3 当前 Integration 精确 SHA 验收
 
-<badge color="success">PASS</badge> Run [44269583998](https://github.com/Kasign/stock_data_provider/actions/runs/44269583998)
+**PASS** Run [44269583998](https://github.com/Kasign/stock_data_provider/actions/runs/44269583998)
 
 - Integration SHA：`bceadab032639d78bd7d0cd81533e183781e6720`
 - 结果：success。
