@@ -1,6 +1,5 @@
 name: Integration CI
 
-# 最终联调收口：保持 integration push 与 workflow_dispatch 门禁可直接触发。
 on:
   push:
     branches:
