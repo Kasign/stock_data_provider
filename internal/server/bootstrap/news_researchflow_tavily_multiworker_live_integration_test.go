@@ -21,7 +21,6 @@ import (
 	platformhttpclient "example.com/stock-analysis-flow/internal/platform/httpclient"
 	platformsecurity "example.com/stock-analysis-flow/internal/platform/security"
 	researchflowdomain "example.com/stock-analysis-flow/internal/researchflow/domain"
-	researchflowstorage "example.com/stock-analysis-flow/internal/researchflow/storage"
 	serverconfig "example.com/stock-analysis-flow/internal/server/config"
 	serverresources "example.com/stock-analysis-flow/internal/server/resources"
 )
@@ -153,11 +152,11 @@ func TestNewsResearchflowTavilyMultiWorkerMariaDBRedisLive(t *testing.T) {
 	runRefs := make([]string, 0, len(queries))
 	for index, query := range queries {
 		created, err := owner.createRun.CreateRun(principalCtx, researchflowdomain.CreateRunCommand{
-			SchemaVersion: "1.0.0",
+			SchemaVersion:  "1.0.0",
 			IdempotencyKey: fmt.Sprintf("tavily-multiworker-live-%d-%d", time.Now().UTC().UnixNano(), index),
-			TemplateRef: newsSearchWorkflowTemplateRef, TemplateVersion: newsSearchWorkflowTemplateVersion,
+			TemplateRef:    newsSearchWorkflowTemplateRef, TemplateVersion: newsSearchWorkflowTemplateVersion,
 			InputSnapshotRefs: []string{},
-			Parameters: json.RawMessage(fmt.Sprintf("{\"query\":%q,\"limit\":3}", query)),
+			Parameters:        json.RawMessage(fmt.Sprintf("{\"query\":%q,\"limit\":3}", query)),
 		})
 		if err != nil {
 			t.Fatalf("创建双 Worker 真实 Tavily Run %d 失败: %v", index+1, err)
@@ -186,7 +185,7 @@ func TestNewsResearchflowTavilyMultiWorkerMariaDBRedisLive(t *testing.T) {
 		"RESEARCHFLOW_LOCAL_WORKERS":            "1",
 		"MIGRATION_ENABLED":                     "true",
 		"NEWS_PROVIDER_TAVILY_ENDPOINT":         endpoint,
-		"NEWS_PROVIDER_TAVILY_API_KEY":           apiKey,
+		"NEWS_PROVIDER_TAVILY_API_KEY":          apiKey,
 		"NOTIFICATION_EVENT_MAX_ENVELOPE_BYTES": "65536",
 		"NOTIFICATION_EVENT_MAX_PAYLOAD_BYTES":  "32768",
 		"NOTIFICATION_EVENT_MAX_JSON_DEPTH":     "32",
@@ -257,7 +256,7 @@ func TestNewsResearchflowTavilyMultiWorkerMariaDBRedisLive(t *testing.T) {
 
 	startedAt := time.Now()
 	loadedRuns := make([]string, 0, len(runRefs))
-	totalCandidates := 0
+	candidateCounts := make(map[string]int, len(runRefs))
 	for {
 		loadedRuns = loadedRuns[:0]
 		allTerminal := true
@@ -340,7 +339,7 @@ func TestNewsResearchflowTavilyMultiWorkerMariaDBRedisLive(t *testing.T) {
 			if outbox != 1 || summaries != 1 {
 				t.Fatalf("双 Worker Finalization 不完整: outbox=%d summaries=%d", outbox, summaries)
 			}
-			totalCandidates += len(payload.Candidates)
+			candidateCounts[runRef] = len(payload.Candidates)
 			loadedRuns = append(loadedRuns, runRef)
 		}
 		if allTerminal {
@@ -353,6 +352,10 @@ func TestNewsResearchflowTavilyMultiWorkerMariaDBRedisLive(t *testing.T) {
 		}
 	}
 
+	totalCandidates := 0
+	for _, candidateCount := range candidateCounts {
+		totalCandidates += candidateCount
+	}
 	for _, child := range children {
 		child.stop(t)
 	}
