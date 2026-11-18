@@ -23,6 +23,8 @@ const (
 
 type DiagnosticKind string
 
+var allowedAttributeKeys = map[string]struct{}{"source": {}}
+
 const (
 	KindStageExecution DiagnosticKind = "stage_execution"
 	KindDependency     DiagnosticKind = "dependency"
@@ -58,7 +60,7 @@ func NewStageCheck(assessment StageAssessment) (platformdiagnostics.Check, error
 		Status:      platformStatus(assessment.Status),
 		ReasonCode:  assessment.ReasonCode,
 		SafeMessage: assessment.SafeMessage,
-		CheckedAt:   assessment.CheckedAt,
+		CheckedAt:   assessment.CheckedAt.UTC(),
 		Duration:    assessment.Duration,
 		EvidenceRef: assessment.EvidenceRef,
 		Attributes:  cloneAttributes(assessment.Attributes),
@@ -113,6 +115,26 @@ func validateAssessment(value StageAssessment) error {
 	if len(value.Attributes) > 12 {
 		return errors.New("too many Researchflow diagnostic attributes")
 	}
+	for key, attribute := range value.Attributes {
+		if _, allowed := allowedAttributeKeys[key]; !allowed {
+			return fmt.Errorf("Researchflow diagnostic attribute %q is not allowlisted", key)
+		}
+		if !validAttributeCode(attribute) {
+			return fmt.Errorf("Researchflow diagnostic attribute %q must be a stable code", key)
+		}
+	}
+	if _, reserved := value.Attributes["assessment_status"]; reserved {
+		return errors.New("assessment_status is a reserved Researchflow diagnostic attribute")
+	}
+	if _, reserved := value.Attributes["diagnostic_kind"]; reserved {
+		return errors.New("diagnostic_kind is a reserved Researchflow diagnostic attribute")
+	}
+	if _, reserved := value.Attributes["stage_ref"]; reserved {
+		return errors.New("stage_ref is a reserved Researchflow diagnostic attribute")
+	}
+	if _, reserved := value.Attributes["stage_code"]; reserved {
+		return errors.New("stage_code is a reserved Researchflow diagnostic attribute")
+	}
 	return nil
 }
 
@@ -138,4 +160,18 @@ func cloneAttributes(source map[string]string) map[string]string {
 		result[key] = value
 	}
 	return result
+}
+
+func validAttributeCode(value string) bool {
+	if value == "" || len(value) > 64 {
+		return false
+	}
+	for index, char := range value {
+		if (char >= 'a' && char <= 'z') || (char >= '0' && char <= '9') ||
+			(index > 0 && (char == '.' || char == '_' || char == '-')) {
+			continue
+		}
+		return false
+	}
+	return true
 }
