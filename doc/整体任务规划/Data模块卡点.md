@@ -41,7 +41,9 @@
 - DATA-005 Freshness 已有 Evaluator、策略注册表和 Probe 接入；DailyBar、Fundamentals、Valuations 的独立 SLA 仍缺可靠源端时间/业务周期证据。不得重建框架或用 fetched_at 代替 provider_time。
 - DATA-006 Go/Python parity 已有 Go 侧契约与工作流；缺少固定旧 Python 可执行基线及同输入双侧真实输出，不能把 Go-only 工作流成功视为双侧数值对账。
 - DATA-007 已有多 Provider/能力级真实样本、权限阻塞和失败记录；只补明确缺口，不重复已有证券/日期/能力/Run。
-- 当前唯一执行任务仍是 DATA-003。DATA-004～DATA-007 的历史证据已在总规划标记为部分进行；后续切换时必须先复用这些证据、只处理未关闭子项，并按总规划正式更新当前任务状态。
+- DATA-003 当前阶段记录已归档至 `doc/api/任务历史/03-DATA-003-Fundamentals-PIT完整性阶段记录.md`，真实 Provider 披露时点仍外部阻塞，不重复执行已有 PIT 机制验收。
+- 当前唯一执行任务切换为 DATA-009：只验证 Fundamentals/Valuations 相同内容重复保存是否产生多余 MariaDB 修订行，以及内容变化是否仍生成新修订。不得重复 HTTP→Service→MariaDB 主链路、PIT 历史读回和重启读回测试。
+- DATA-004～DATA-007 的历史证据已在总规划标记为部分进行；后续切换时必须先复用这些证据、只处理未关闭子项，并按总规划正式更新当前任务状态。
 
 ## 非 Data Owner 卡点（仅供责任边界追踪）
 
