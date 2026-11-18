@@ -37,7 +37,7 @@ func TestAnalysisCollectorMapsDailyBarsFromDataApplication(t *testing.T) {
 		bars: map[string]dataapp.DailyBarsSnapshot{
 			"600519.SH": {
 				Symbol: "600519.SH", AdjustmentBasis: dataapp.AdjustmentForward,
-				QualityStatus:   dataapp.QualityValid,
+				QualityStatus: dataapp.QualityValid,
 				Bars: []dataapp.DailyBar{{
 					Symbol: "600519.SH", TradeDate: "2026-11-17",
 					Open: 100, High: 110, Low: 99, Close: 108,
