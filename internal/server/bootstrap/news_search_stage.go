@@ -209,7 +209,7 @@ func (e newsSearchStageExecutor) ExecuteStage(ctx context.Context, request resea
 				ReasonCodes:    []string{"news_provider_retryable_failure"},
 			}, nil
 		}
-		return failedNewsStage(newsFailureReasonCode(payload.FailureCode)), nil
+		return failedNewsStageWithProviderResult(newsFailureReasonCode(payload.FailureCode), providerResult), nil
 	case "skipped":
 		return failedNewsStageWithProviderResult(newsSkippedReasonCode(payload.FailureCode), providerResult), nil
 	default:

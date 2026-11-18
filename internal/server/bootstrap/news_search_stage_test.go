@@ -238,6 +238,35 @@ func TestNewsSearchStageExecutorMapsEmptyPartialRetryableAndInvalidResults(t *te
 		t.Fatalf("retry diagnostic output lost a Provider Outcome: %+v", retryPayload.Outcomes)
 	}
 
+	permanentFailureExecutor := newNewsSearchExecutor(newsapp.StaticProviderSet{Providers: []newsapp.Provider{
+		newsStageTestProvider{code: "unauthorized_provider", err: &newsapp.ProviderError{
+			Code: newsapp.ProviderErrorUnauthorized,
+		}},
+	}})
+	permanentFailure := executeNewsStage(t, permanentFailureExecutor, `{"query":"market","limit":10}`)
+	if permanentFailure.StageStatus != researchflowdomain.StageFailed ||
+		permanentFailure.AttemptStatus != researchflowdomain.AttemptFailed ||
+		len(permanentFailure.ReasonCodes) != 1 ||
+		permanentFailure.ReasonCodes[0] != "news_all_provider_requests_failed" ||
+		permanentFailure.ProviderResult == nil {
+		t.Fatalf("non-retryable Provider failure must fail the Stage and retain its diagnostic output: %+v", permanentFailure)
+	}
+	if err := researchflowapplication.ValidateStageExecutionResult(permanentFailure); err != nil {
+		t.Fatalf("non-retryable Provider failure is not a valid Researchflow outcome: %v", err)
+	}
+	var permanentFailurePayload newsstage.SearchCandidatesOutput
+	if err := json.Unmarshal(permanentFailure.ProviderResult.Payload, &permanentFailurePayload); err != nil {
+		t.Fatal(err)
+	}
+	if permanentFailurePayload.Status != newsdomain.SearchFailed ||
+		permanentFailurePayload.FailureCode != "all_provider_requests_failed" ||
+		len(permanentFailurePayload.Outcomes) != 1 ||
+		permanentFailurePayload.Outcomes[0].Status != newsdomain.ProviderFailed ||
+		permanentFailurePayload.Outcomes[0].ErrorCode != newsapp.ProviderErrorUnauthorized ||
+		permanentFailurePayload.Outcomes[0].Retryable {
+		t.Fatalf("non-retryable Provider failure evidence was lost or misclassified: %+v", permanentFailurePayload)
+	}
+
 	invalid := executeNewsStage(t, emptyExecutor, `{"query":"market","limit":10,"unknown":true}`)
 	if invalid.StageStatus != researchflowdomain.StageFailed ||
 		len(invalid.ReasonCodes) != 1 || invalid.ReasonCodes[0] != "news_search_invalid_parameters" {
