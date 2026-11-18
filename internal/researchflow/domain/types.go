@@ -125,10 +125,10 @@ type ResultSummary struct {
 	DegradedStageCodes  []string               `json:"degraded_stage_codes"`
 	BlockedStageCodes   []string               `json:"blocked_stage_codes"`
 	ReasonCodes         []string               `json:"reason_codes"`
-	Coverage            float64                `json:"coverage"`
-	QualityStatus       string                 `json:"quality_status"`
+	Coverage            float64                `json:"coverage"` // Execution coverage across instantiated, applicable Stages; excluded Stages are outside the denominator.
+	QualityStatus       string                 `json:"quality_status"` // Quality of available Stage outputs, independent from Run execution status; current producer values are valid/degraded.
 	RiskGateDecisions   map[string]string      `json:"risk_gate_decisions"`
-	ActionabilityStatus string                 `json:"actionability_status"`
+	ActionabilityStatus string                 `json:"actionability_status"` // Hard-risk evaluation result; it never replaces Run status or QualityStatus.
 }
 
 func (s StageStatus) Terminal() bool {

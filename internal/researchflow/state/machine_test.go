@@ -757,3 +757,38 @@ func TestCreatedRunCanStillEnterQueuedBeforeStarting(t *testing.T) {
 		t.Fatalf("queued start has incorrect version or start time: %#v", started)
 	}
 }
+
+func TestResultSummaryCoverageExcludesApplicabilityExcludedStages(t *testing.T) {
+	now := time.Date(2026, 11, 18, 10, 0, 0, 0, time.UTC)
+	run := domain.Run{
+		Status: domain.RunRunning,
+		ExcludedStages: []domain.ExcludedStage{{
+			StageCode: "optional_news", RuleVersion: "v1", ReasonCode: "market_closed",
+		}},
+	}
+	stages := []domain.Stage{
+		{Code: "quote", Required: true, Status: domain.StageSucceeded},
+		{Code: "news", Required: true, Status: domain.StageFailed},
+	}
+	policies := map[string]template.PropagationPolicy{
+		"quote": {OnFailed: domain.PropagateFail},
+		"news":  {OnFailed: domain.PropagateFail},
+	}
+	got, err := AggregateRun(run, stages, nil, policies, nil, false, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != domain.RunFailed {
+		t.Fatalf("Run status = %s, want failed", got.Status)
+	}
+	if got.ResultSummary.Coverage != 0.5 {
+		t.Fatalf("coverage = %v, want 0.5 over the two instantiated stages only", got.ResultSummary.Coverage)
+	}
+	if got.ResultSummary.QualityStatus != "valid" {
+		t.Fatalf("quality_status = %q, want valid; execution failure is represented by Run status/missing stages", got.ResultSummary.QualityStatus)
+	}
+	if len(got.ResultSummary.ExcludedStages) != 1 || len(got.ResultSummary.MissingStageCodes) != 1 {
+		t.Fatalf("summary lost excluded/missing stage evidence: %#v", got.ResultSummary)
+	}
+}
+
