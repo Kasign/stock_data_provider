@@ -14,6 +14,8 @@ import (
 	"strings"
 	"sync"
 	"unicode/utf8"
+
+	"example.com/stock-analysis-flow/internal/quant/metric"
 )
 
 type ValueType string
