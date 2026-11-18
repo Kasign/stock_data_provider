@@ -393,7 +393,7 @@ func TestSourceCollectionPolicyCheckDegradesExpiredPolicy(t *testing.T) {
 	expiredAt := time.Now().UTC().Add(-time.Minute)
 	resolver := &sourceCollectionPolicyResolverStub{
 		source: domain.SourcePolicy{
-			Status: domain.AuthorizationApproved,
+			Status:    domain.AuthorizationApproved,
 			ExpiresAt: &expiredAt,
 		},
 	}

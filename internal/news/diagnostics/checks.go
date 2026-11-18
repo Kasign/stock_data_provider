@@ -408,7 +408,7 @@ func SourceCollectionPolicyCheck(
 				}
 			}
 			return platformdiag.Observation{
-				Status: platformdiag.StatusHealthy,
+				Status:      platformdiag.StatusHealthy,
 				SafeMessage: "Current Source/Endpoint policy versions match the registered snapshot",
 				CheckedAt:   checkedAt, Attributes: attributes,
 			}, nil
