@@ -27,9 +27,9 @@ import (
 const globalCapacityProcessHelperEnv = "RESEARCHFLOW_GLOBAL_CAPACITY_HELPER"
 
 type globalCapacityProcessResult struct {
-	Claimed           bool   `json:"claimed"`
-	CapacityRejected  bool   `json:"capacity_rejected"`
-	AttemptRef        string `json:"attempt_ref,omitempty"`
+	Claimed          bool   `json:"claimed"`
+	CapacityRejected bool   `json:"capacity_rejected"`
+	AttemptRef       string `json:"attempt_ref,omitempty"`
 }
 
 func TestMariaDBGlobalCapacityClaimHelperProcess(t *testing.T) {
@@ -738,15 +738,15 @@ func TestMariaDBGlobalWorkerCapacitySerializesClaimsAcrossRuns(t *testing.T) {
 		readyPath := filepath.Join(tempDir, fmt.Sprintf("ready-%d", index))
 		resultPath := filepath.Join(tempDir, fmt.Sprintf("result-%d.json", index))
 		overrides := map[string]string{
-			globalCapacityProcessHelperEnv:              "1",
-			"RESEARCHFLOW_GLOBAL_CAPACITY_READY_FILE":   readyPath,
-			"RESEARCHFLOW_GLOBAL_CAPACITY_START_FILE":   startPath,
-			"RESEARCHFLOW_GLOBAL_CAPACITY_RESULT_FILE":  resultPath,
-			"RESEARCHFLOW_GLOBAL_CAPACITY_MAX_WORKERS":  fmt.Sprintf("%d", maxWorkers),
-			"RESEARCHFLOW_GLOBAL_CAPACITY_RUN_REF":      target.runRef,
-			"RESEARCHFLOW_GLOBAL_CAPACITY_STAGE_REF":    target.stageRef,
-			"RESEARCHFLOW_GLOBAL_CAPACITY_ATTEMPT_REF":  target.attemptRef,
-			"RESEARCHFLOW_GLOBAL_CAPACITY_WORKER_ID":    "global-worker-process-" + fmt.Sprint(index),
+			globalCapacityProcessHelperEnv:             "1",
+			"RESEARCHFLOW_GLOBAL_CAPACITY_READY_FILE":  readyPath,
+			"RESEARCHFLOW_GLOBAL_CAPACITY_START_FILE":  startPath,
+			"RESEARCHFLOW_GLOBAL_CAPACITY_RESULT_FILE": resultPath,
+			"RESEARCHFLOW_GLOBAL_CAPACITY_MAX_WORKERS": fmt.Sprintf("%d", maxWorkers),
+			"RESEARCHFLOW_GLOBAL_CAPACITY_RUN_REF":     target.runRef,
+			"RESEARCHFLOW_GLOBAL_CAPACITY_STAGE_REF":   target.stageRef,
+			"RESEARCHFLOW_GLOBAL_CAPACITY_ATTEMPT_REF": target.attemptRef,
+			"RESEARCHFLOW_GLOBAL_CAPACITY_WORKER_ID":   "global-worker-process-" + fmt.Sprint(index),
 		}
 		env := make([]string, 0, len(os.Environ())+len(overrides))
 		for _, entry := range os.Environ() {
