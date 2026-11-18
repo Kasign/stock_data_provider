@@ -2,7 +2,7 @@
 
 更新时间：2026-11-18  
 对应分支：`feat/researchflow`  
-代码验收基线 SHA：`0aaab4172d8cda075549bd6c69f2b6e1d465706b`  
+代码验收基线 SHA：`9ec3ebdbdf79cf548f98c438019b5aff2e2dc929`  
 维护范围：记录 Researchflow 推进所依赖的跨模块决策、契约同步和验收阻塞；不替代模块任务状态文档。
 
 ## 1. 当前卡点
@@ -37,33 +37,8 @@
 - **原问题**：OutboxDispatcher 原先使用 `time.Now()` 计算下一次重试时间，并将其持久化到 MariaDB；该时间由多个 Server/Worker 实例共同用于调度。
 - **修复**：`MySQLDatabaseClock` 通过 Platform `time.Service` 包装 MariaDB UTC Source；`MySQLRunRepository` 实现 `DatabaseClock`；Dispatcher 在安排 RetryAt 前读取数据库 UTC 时钟。
 - **失败处理**：缺少 DatabaseClock 能力或读取失败时 fail-closed，不写入 retry 时间。
-- **测试与验收**：新增固定数据库时钟和时钟不可用时不提交 retry 的测试；代码验收 SHA `0aaab4172d8cda075549bd6c69f2b6e1d465706b` 的 Actions Run 44296025284 中 Researchflow module gofmt/tests/race/vet Job 已 success。
+- **测试与验收**：新增固定数据库时钟和时钟不可用时不提交 retry 的测试；Researchflow 模块 CI 已通过。
 - **当前状态**：RESOLVED。
-
-## 2. 本模块已继续推进的工作
-
-- `CreateRunService` 通过 `DatabaseClock.NowUTC` 生成 `system_as_of`，并用同一次数据库 UTC 时钟读取计算 `deadline_at`。
-- `MySQLDatabaseClock` 通过 Platform `time.Service` 获取当前数据库 UTC 时间；`MySQLRunRepository` 复用同一时钟用于 Outbox RetryAt。
-- Run/Stage/Attempt DTO 投影将必填时间和可空时间统一规范化为 UTC；新增 +08:00 输入的 Z 输出测试。
-- Outbox RetryAt 不再依赖进程时钟；数据库时钟缺失/失败时不提交重试计划。
-- `doc/researchflow/04-ApplicationPort与运行时契约落地补充.md` 已校正 CreateRun 命令字段、RequestFingerprint 输入和服务端时间生成方式。
-- 代码验收 SHA `0aaab4172d8cda075549bd6c69f2b6e1d465706b` 的 Researchflow module gofmt/tests/race/vet 已通过。
-
-## 3. 下一步解除顺序
-
-1. 项目契约 Owner/Integration 将 GOV-CTR-002/004 1.1.0 同步到共同集成基线。
-2. 核对 FLOW-CTR-004 Envelope 项目登记簿状态与模块 Schema/Golden/Registry 资产。
-3. 继续 FLOW-001 命令 DTO、执行上下文机器契约和 Fault 投影的定点 Review。
-4. 继续 FLOW-002 真实生产 Template、HardRiskGateRegistry 和 Stage Output Registry 注册来源核对。
-5. 不重复建设已验收的 Worker、Storage、Outbox；仅对实际缺口和真实生产 Stage 接入补验收。
-
-## 4. 状态定义
-
-- `OPEN`：有明确责任人和解除条件，当前未解除。
-- `IN_PROGRESS`：正在按解除条件处理。
-- `RESOLVED`：有对应 SHA、测试或权威契约证据证明解除。
-- 卡点不等于整个模块停止；只暂停依赖该卡点的具体变更。
-
 
 ### RF-BLOCK-005：FLOW-005 Context Assembly 尚未形成生产链路
 
@@ -75,3 +50,37 @@
 - **处理责任**：Research Owner（Context Facade/授权语义）、LLM Owner（真实 Tokenizer）、Server Owner（组合根/Worker 接入）、Researchflow（适配和 Run Context 绑定）。
 - **解除条件**：完成 Owner Adapter 与当前授权；Run/Context/LLM 的 SystemAsOf 和 Deadline 一致性测试；生产 Tokenizer 与模型版本绑定及准确性证据；Server/Worker 真实 Stage 注册和集成测试。
 - **当前状态**：OPEN；阻断 FLOW-005 真实生产链路，不阻断 FLOW-001/002 其他工作。
+
+### RF-BLOCK-006：FLOW-008 尚无真实诊断生产者和 Server 注册
+
+- **现状**：Researchflow 的 `NewStageCheck` 只把已提供的 StageAssessment 投影为 Platform Diagnostics.Check；当前未发现生产代码调用该函数，Server bootstrap/composition 也未注册 Researchflow Diagnostics.Check。
+- **边界**：该 Adapter 不会自动诊断 Data/News/Quant/Research/LLM，也不产生独立 DiagnosticRecord。它只负责四态映射与安全投影。
+- **本轮修复**：CheckedAt 统一转 UTC；Attributes 使用 allowlist（当前仅 `source` 稳定代码），拒绝自由文本、未知 key 和保留字段；相关模块测试通过。
+- **影响**：目前只能证明 Adapter 结构和安全投影正确，不能宣称真实模块诊断已接入或运行。
+- **处理责任**：各领域 Stage Provider 产生真实 Assessment；Researchflow 维护映射；Server 负责注册/聚合 Platform Checks。
+- **解除条件**：至少一个真实 Stage Provider 提供有来源证据的 Assessment，Server 注册 Check 并通过聚合测试；后续按真实 Stage 逐项覆盖。
+- **当前状态**：OPEN；只阻断 FLOW-008 端到端诊断验收，不阻断其他模块任务。
+
+## 2. 本模块已继续推进的工作
+
+- CreateRun 通过 DatabaseClock 生成 `system_as_of` 和 `deadline_at`；两者不属于调用方命令体。
+- MySQLDatabaseClock 通过 Platform `time.Service` 获取数据库 UTC；Outbox RetryAt 使用同一数据库时钟。
+- Run/Stage/Attempt DTO 时间统一规范化 UTC；ResultSummary 的 quality/coverage/actionability 语义已明确并补测试。
+- Diagnostics Adapter 已统一 UTC CheckedAt，并限制属性白名单；当前尚无真实 Assessment 生产者和 Server 注册。
+- Context Assembly 生产接入所需的 Research Owner 授权、Run PIT/Deadline 绑定、LLM Tokenizer 和 Server/Worker 接线已明确卡点。
+- 代码验收 SHA `9ec3ebdbdf79cf548f98c438019b5aff2e2dc929` 的 Researchflow module gofmt/tests/race/vet 已通过。
+
+## 3. 下一步解除顺序
+
+1. 项目契约 Owner/Integration 将 GOV-CTR-002/004 1.1.0 同步到共同集成基线。
+2. 核对 FLOW-CTR-004 Envelope 项目登记簿状态与模块 Schema/Golden/Registry 资产。
+3. 推进 FLOW-005：Research Owner Adapter、Run PIT/Deadline 绑定、LLM Tokenizer 和 Server/Worker Context Stage。
+4. 推进 FLOW-008：从真实 Stage Provider 接入 Assessment，并由 Server 注册 Platform Diagnostics.Check。
+5. 继续 FLOW-001 Fault/Context 机器契约和 FLOW-002 其他领域真实 Stage 的定点验收。
+
+## 4. 状态定义
+
+- `OPEN`：有明确责任人和解除条件，当前未解除。
+- `IN_PROGRESS`：正在按解除条件处理。
+- `RESOLVED`：有对应 SHA、测试或权威契约证据证明解除。
+- 卡点不等于整个模块停止；只暂停依赖该卡点的具体变更。
