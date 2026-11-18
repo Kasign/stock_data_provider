@@ -1,7 +1,7 @@
 # WebUI 真实 API 与配置边界
 
 更新时间：2026-11-18  
-最近分支 HEAD：feat/web @ c47d9942db20c53643043e731a02a97b5c690b0e  
+最近核对分支 HEAD：feat/web @ 53d838ebd00d9bafb3f0526f6e4d567cdc84e581  
 最近 Web 自动化验收 SHA：3e191543d372eae316e1416b0944a7647b713a87（不等于当前 HEAD）
 
 > 本文只记录当前请求封装、仓库可核对的路由事实和接入门禁。必须区分 OpenAPI 声明、Handler 注册、Root Server 挂载、部署可达和真实数据验收。
