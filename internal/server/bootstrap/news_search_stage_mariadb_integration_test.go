@@ -355,7 +355,9 @@ func TestNewsSearchStageResearchflowMariaDBIntegration(t *testing.T) {
 	timeoutProviderCreated, err := createRun.CreateRun(ctx, researchflowdomain.CreateRunCommand{
 		SchemaVersion: "1.0.0", IdempotencyKey: "news-search-stage-timeout-provider-integration", TemplateRef: workflowTemplate.Ref, TemplateVersion: workflowTemplate.Version, InputSnapshotRefs: []string{}, Parameters: json.RawMessage("{\"query\":\"timeout-provider\",\"query_dimension\":\"market\",\"limit\":10}"),
 	})
-	if err != nil { t.Fatalf("创建 Timeout Provider 失败 Researchflow Run 失败: %v", err) }
+	if err != nil {
+		t.Fatalf("创建 Timeout Provider 失败 Researchflow Run 失败: %v", err)
+	}
 	malformedResponseCreated, err := createRun.CreateRun(ctx, researchflowdomain.CreateRunCommand{
 		SchemaVersion: "1.0.0", IdempotencyKey: "news-search-stage-malformed-response-integration", TemplateRef: workflowTemplate.Ref, TemplateVersion: workflowTemplate.Version, InputSnapshotRefs: []string{}, Parameters: json.RawMessage("{\"query\":\"malformed-response\",\"query_dimension\":\"market\",\"limit\":10}"),
 	})
