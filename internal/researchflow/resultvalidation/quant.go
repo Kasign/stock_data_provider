@@ -21,61 +21,16 @@ var (
 	ErrPayloadValidatorUnavailable = errors.New("Quant payload validator is unavailable")
 )
 
-var schemaVersionRE = regexp.MustCompile(`^[0-9]+[.][0-9]+[.][0-9]+(-[0-9A-Za-z.-]+)?package resultvalidation
+var schemaVersionRE = regexp.MustCompile(`^[0-9]+[.][0-9]+[.][0-9]+(-[0-9A-Za-z.-]+)?$`)
+var quantResultIDRE = regexp.MustCompile(`^quant_result:sha256:[0-9a-f]{64}$`)
 
-import (
-	"encoding/json"
-	"errors"
-	"fmt"
-	"regexp"
-	"sort"
-	"strings"
-	"sync"
-	"time"
-
-	quantresult "example.com/stock-analysis-flow/internal/quant/result"
-)
-
-var (
-	ErrUnsupportedResultType       = errors.New("unsupported Quant result type")
-	ErrUnsupportedSchema           = errors.New("unsupported Quant result schema")
-	ErrInvalidQuantResult          = errors.New("invalid Quant result envelope")
-	ErrInvalidQuantPayload         = errors.New("invalid Quant result payload")
-	ErrPayloadValidatorUnavailable = errors.New("Quant payload validator is unavailable")
-)
-
-)
-var quantResultIDRE = regexp.MustCompile(`^quant_result:sha256:[0-9a-f]{64}package resultvalidation
-
-import (
-	"encoding/json"
-	"errors"
-	"fmt"
-	"regexp"
-	"sort"
-	"strings"
-	"sync"
-	"time"
-
-	quantresult "example.com/stock-analysis-flow/internal/quant/result"
-)
-
-var (
-	ErrUnsupportedResultType       = errors.New("unsupported Quant result type")
-	ErrUnsupportedSchema           = errors.New("unsupported Quant result schema")
-	ErrInvalidQuantResult          = errors.New("invalid Quant result envelope")
-	ErrInvalidQuantPayload         = errors.New("invalid Quant result payload")
-	ErrPayloadValidatorUnavailable = errors.New("Quant payload validator is unavailable")
-)
-
-)
-
+// Quant's frozen Envelope 1.0.0 currently supports only trend and risk payloads.
 var supportedResultTypes = map[string]struct{}{
 	"trend": {}, "risk": {},
 }
 
-// QuantResultEnvelope is the stable Quant Application envelope. Payload stays
-// raw until the exact result_type/schema_version validator accepts it.
+// QuantResultEnvelope mirrors the Quant-owned Envelope fields used by Researchflow.
+// Payload stays raw until the exact result_type/payload_schema_version validator accepts it.
 type QuantResultEnvelope struct {
 	SchemaVersion        string          `json:"schema_version"`
 	PayloadSchemaVersion string          `json:"payload_schema_version"`
@@ -95,9 +50,8 @@ type QuantResultEnvelope struct {
 	Payload              json.RawMessage `json:"payload"`
 }
 
-// PayloadValidator validates one exact result_type/schema_version payload
-// against its frozen strong schema. The registry key is result_type + payload_schema_version. Implementations must not accept arbitrary
-// object properties or perform remote schema resolution.
+// PayloadValidator validates one exact result_type/payload_schema_version payload.
+// Implementations must not accept arbitrary object properties or perform remote schema resolution.
 type PayloadValidator interface {
 	ValidatePayload(payload json.RawMessage) error
 }
@@ -208,8 +162,8 @@ type QuantValidation struct {
 }
 
 // Validate checks common envelope semantics and delegates the discriminated
-// payload to the exact registered validator. Non-completed or non-usable
-// quality results are returned as non-usable facts, not promoted to errors.
+// payload to the exact registered payload schema validator. Non-completed or
+// non-usable quality results are returned as non-usable facts, not promoted to errors.
 func (r *Registry) Validate(result QuantResultEnvelope, policy ValidationPolicy) (QuantValidation, error) {
 	if r == nil {
 		return QuantValidation{}, ErrPayloadValidatorUnavailable
@@ -260,7 +214,7 @@ func validateEnvelope(result QuantResultEnvelope, policy ValidationPolicy) error
 	if !quantResultIDRE.MatchString(result.ResultID) || strings.TrimSpace(result.Scope) == "" ||
 		strings.TrimSpace(result.Period) == "" || strings.TrimSpace(result.AlgorithmVersion) == "" ||
 		strings.TrimSpace(result.ParameterFingerprint) == "" || strings.TrimSpace(result.AuthorizationRef) == "" {
-		return fmt.Errorf("%w: required envelope field is empty", ErrInvalidQuantResult)
+		return fmt.Errorf("%w: required envelope field is empty or invalid", ErrInvalidQuantResult)
 	}
 	if !validScope(result.Scope) {
 		return fmt.Errorf("%w: unsupported scope %q", ErrInvalidQuantResult, result.Scope)
@@ -281,9 +235,8 @@ func validateEnvelope(result QuantResultEnvelope, policy ValidationPolicy) error
 		hasDuplicateOrInvalidRefs(result.InputSnapshotRefs) || !sort.StringsAreSorted(result.InputSnapshotRefs) {
 		return fmt.Errorf("%w: input_snapshot_refs is missing, empty or invalid", ErrInvalidQuantResult)
 	}
-	if !isUTC(result.SystemAsOf) ||
-		policy.ExpectedSystemAsOf.IsZero() || !isUTC(policy.ExpectedSystemAsOf) ||
-		!result.SystemAsOf.Equal(policy.ExpectedSystemAsOf) {
+	if !isUTC(result.SystemAsOf) || policy.ExpectedSystemAsOf.IsZero() ||
+		!isUTC(policy.ExpectedSystemAsOf) || !result.SystemAsOf.Equal(policy.ExpectedSystemAsOf) {
 		return fmt.Errorf("%w: system_as_of must match the Run and timestamps must be UTC", ErrInvalidQuantResult)
 	}
 	if result.TradeDate != "" {
