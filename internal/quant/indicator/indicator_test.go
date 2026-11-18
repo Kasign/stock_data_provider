@@ -430,3 +430,17 @@ func TestInsufficientDataAndInvalidInputs(t *testing.T) {
 		t.Fatalf("expected invalid MACD windows, got %v", err)
 	}
 }
+
+func TestReturnSimpleCanRoundToNegativeOneForExtremePositivePrices(t *testing.T) {
+	got, err := Return([]float64{1e308, 1e-308}, ReturnParams{
+		Window:      1,
+		ReturnBasis: "simple",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 数学值严格大于 -1，但 float64 比值下溢为 0 后，结果会舍入为 -1。
+	if got.Status != StatusAvailable || got.Value != -1 {
+		t.Fatalf("result=%+v, want available value -1 after float64 underflow", got)
+	}
+}
