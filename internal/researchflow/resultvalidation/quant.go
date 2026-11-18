@@ -123,8 +123,8 @@ func FromQuantEnvelope(envelope quantresult.Envelope) (QuantResultEnvelope, erro
 		SecurityID: envelope.SecurityID, SystemAsOf: systemAsOf, TradeDate: envelope.TradeDate,
 		Period: envelope.Period, AlgorithmVersion: envelope.AlgorithmVersion,
 		ParameterFingerprint: envelope.ParameterFingerprint,
-		InputSnapshotRefs: append([]string{}, envelope.InputSnapshotRefs...),
-		QualityStatus: envelope.QualityStatus, ResultStatus: envelope.ResultStatus,
+		InputSnapshotRefs:    append([]string{}, envelope.InputSnapshotRefs...),
+		QualityStatus:        envelope.QualityStatus, ResultStatus: envelope.ResultStatus,
 		AuthorizationRef: envelope.AuthorizationRef, Payload: json.RawMessage(payload),
 	}, nil
 }

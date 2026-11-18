@@ -20,7 +20,7 @@ func validQuantResult() QuantResultEnvelope {
 		Scope: "stock", SecurityID: "600000.SH", SystemAsOf: now,
 		TradeDate: "2026-11-09", Period: "20d", AlgorithmVersion: "trend-algorithm.v1",
 		ParameterFingerprint: "sha256:parameter-fingerprint",
-		InputSnapshotRefs: []string{"snapshot-1"}, QualityStatus: "valid",
+		InputSnapshotRefs:    []string{"snapshot-1"}, QualityStatus: "valid",
 		ResultStatus: "completed", AuthorizationRef: "auth-1",
 		Payload: json.RawMessage(validTrendPayload),
 	}
@@ -116,7 +116,7 @@ func TestFromQuantEnvelopePreservesSeparateSchemaVersions(t *testing.T) {
 	base := validQuantResult()
 	envelope := quantresult.Envelope{
 		SchemaVersion: quantresult.EnvelopeSchemaVersion,
-		ResultID: base.ResultID, ResultType: "trend", Scope: "stock",
+		ResultID:      base.ResultID, ResultType: "trend", Scope: "stock",
 		SecurityID: "600000.SH", SystemAsOf: "2026-11-09T00:59:00Z",
 		Period: "20d", AlgorithmVersion: "trend-algorithm.v1",
 		ParameterFingerprint: "sha256:parameter-fingerprint",
