@@ -82,7 +82,7 @@ func TestMariaDBExpireRunDeadlineAtomicallyTimesOutPendingStages(t *testing.T) {
 			Ref: "deadline-expire-template", Version: "v1", Fingerprint: templateFingerprint,
 			Stages: []template.ResolvedStage{{
 				Definition: template.StageDefinition{
-					Code: "context",
+					Code:        "context",
 					Propagation: template.PropagationPolicy{OnTimedOut: domain.PropagateFail},
 				},
 			}},
@@ -189,9 +189,9 @@ func TestMariaDBExpireRunDeadlineAtomicallyTimesOutPendingStages(t *testing.T) {
 		t.Fatalf("read failed terminal Outbox payload: %v", err)
 	}
 	var terminalEvent struct {
-		Status domain.RunStatus `json:"status"`
-		TerminationReason *string `json:"termination_reason"`
-		ResultSummaryRef *string `json:"result_summary_ref"`
+		Status            domain.RunStatus `json:"status"`
+		TerminationReason *string          `json:"termination_reason"`
+		ResultSummaryRef  *string          `json:"result_summary_ref"`
 	}
 	if err := json.Unmarshal([]byte(eventPayload), &terminalEvent); err != nil {
 		t.Fatalf("decode failed terminal Outbox payload: %v", err)
