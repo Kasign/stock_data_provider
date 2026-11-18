@@ -2,6 +2,7 @@ package marketdata
 
 import (
 	"context"
+	"reflect"
 	"testing"
 	"time"
 
@@ -126,5 +127,16 @@ func TestAnalysisCollectorRejectsQuoteAfterAsOf(t *testing.T) {
 	}
 	if len(result.SourceNotes) != 1 || result.SourceNotes[0].QualityStatus != "unavailable" {
 		t.Fatalf("future quote diagnostic missing: %+v", result.SourceNotes)
+	}
+}
+
+func TestUniqueIndexSymbolsDeduplicatesCaseInsensitively(t *testing.T) {
+	got := uniqueIndexSymbols([]string{"000001.SH", " 399001.SZ ", "000001.sh", ""})
+	want := []string{"000001.SH", "399001.SZ"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("uniqueIndexSymbols() = %#v, want %#v", got, want)
+	}
+	if got := uniqueIndexSymbols(nil); !reflect.DeepEqual(got, []string{"000001.SH"}) {
+		t.Fatalf("uniqueIndexSymbols(nil) = %#v, want default index", got)
 	}
 }
