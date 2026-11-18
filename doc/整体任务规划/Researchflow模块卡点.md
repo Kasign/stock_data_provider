@@ -3,7 +3,7 @@
 更新时间：2026-11-18  
 对应分支：`feat/researchflow`  
 最近一次已通过代码验收 SHA：`799384a87a07ea3c63acb1d5a895a3a097cde3f5`  
-最近一次代码变更 SHA：`d3cfd6b112d3b992c1227d16989d1f953792d602`（Reason.Code 唯一性及文本结构校验；前一提交 gofmt 检查失败，格式修正后 CI 运行中）  
+最近一次代码变更 SHA：`6f3b909dbc85a1cc83e93e3822624a29b8077ff8`（Reason.Code 唯一性、文本结构校验及 RiskDecision 类型边界注释；CI 待完成）  
 维护范围：记录 Researchflow 推进所依赖的跨模块决策、契约同步和验收阻塞；不替代模块任务状态文档。
 
 ## 1. 当前卡点
