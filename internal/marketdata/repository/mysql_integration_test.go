@@ -277,6 +277,21 @@ WHERE symbol=? AND trade_date=? AND source=?`, basisSymbol, "2026-10-30", "baost
 	if err := store.SaveFundamentals(ctx, &fundamentalV1); err != nil {
 		t.Fatalf("save first fundamentals revision: %v", err)
 	}
+	// 只改变采集时间属于重复观察，不应新增内容修订。
+	fundamentalDuplicate := fundamentalV1
+	fundamentalDuplicate.FetchedAt = fundamentalV1.FetchedAt.Add(time.Minute)
+	if err := store.SaveFundamentals(ctx, &fundamentalDuplicate); err != nil {
+		t.Fatalf("save duplicate fundamentals observation: %v", err)
+	}
+	var fundamentalRevisionCount int
+	if err := store.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM market_data_fundamental_versions
+WHERE symbol=? AND report_year=? AND report_quarter=? AND source=?`,
+		symbol, fundamentalV1.Year, fundamentalV1.Quarter, fundamentalV1.Source).Scan(&fundamentalRevisionCount); err != nil {
+		t.Fatalf("count fundamentals revisions after duplicate save: %v", err)
+	}
+	if fundamentalRevisionCount != 1 {
+		t.Fatalf("identical fundamentals content must produce one revision, got %d", fundamentalRevisionCount)
+	}
 	fundamentalsFirstAsOf := time.Now().UTC()
 	time.Sleep(5 * time.Millisecond)
 	fundamentalAvailableAtV2 := time.Date(2026, 11, 10, 8, 0, 0, 0, time.UTC)
@@ -290,6 +305,14 @@ WHERE symbol=? AND trade_date=? AND source=?`, basisSymbol, "2026-10-30", "baost
 	fundamentalV2.Sections[0].Metrics[0].Value = fundamentalValueV2
 	if err := store.SaveFundamentals(ctx, &fundamentalV2); err != nil {
 		t.Fatalf("save second fundamentals revision: %v", err)
+	}
+	if err := store.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM market_data_fundamental_versions
+WHERE symbol=? AND report_year=? AND report_quarter=? AND source=?`,
+		symbol, fundamentalV2.Year, fundamentalV2.Quarter, fundamentalV2.Source).Scan(&fundamentalRevisionCount); err != nil {
+		t.Fatalf("count fundamentals revisions after content change: %v", err)
+	}
+	if fundamentalRevisionCount != 2 {
+		t.Fatalf("changed fundamentals content must create a second revision, got %d", fundamentalRevisionCount)
 	}
 	fundamentalsSecondAsOf := time.Now().UTC()
 	fundamentalsBeforeRevision, err := store.ListFundamentalsAsOf(ctx, symbol, 2026, 3, fundamentalsFirstAsOf)
@@ -323,6 +346,27 @@ WHERE symbol=? AND trade_date=? AND source=?`, basisSymbol, "2026-10-30", "baost
 	if err := store.SaveValuations(ctx, &valuationV1); err != nil {
 		t.Fatalf("save first valuation revision: %v", err)
 	}
+	// 批量估值快照及条目的采集时间变化不应制造内容修订。
+	valuationDuplicate := valuationV1
+	valuationDuplicate.FetchedAt = valuationV1.FetchedAt.Add(time.Minute)
+	valuationDuplicate.Items = append([]model.ValuationItem(nil), valuationV1.Items...)
+	valuationDuplicate.Items[0].FetchedAt = valuationV1.Items[0].FetchedAt.Add(time.Minute)
+	if err := store.SaveValuations(ctx, &valuationDuplicate); err != nil {
+		t.Fatalf("save duplicate valuation observation: %v", err)
+	}
+	valuationFingerprint, err := valuationRequestFingerprint(valuationV1.RequestedSymbols)
+	if err != nil {
+		t.Fatalf("fingerprint valuation request: %v", err)
+	}
+	var valuationRevisionCount int
+	if err := store.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM market_data_valuation_versions
+WHERE request_fingerprint=? AND source=?`,
+		valuationFingerprint, valuationV1.Source).Scan(&valuationRevisionCount); err != nil {
+		t.Fatalf("count valuation revisions after duplicate save: %v", err)
+	}
+	if valuationRevisionCount != 1 {
+		t.Fatalf("identical valuation content must produce one revision, got %d", valuationRevisionCount)
+	}
 	valuationsFirstAsOf := time.Now().UTC()
 	time.Sleep(5 * time.Millisecond)
 	peV2 := 13.75
@@ -335,6 +379,14 @@ WHERE symbol=? AND trade_date=? AND source=?`, basisSymbol, "2026-10-30", "baost
 	valuationV2.Items[0].FetchedAt = valuationV2.FetchedAt
 	if err := store.SaveValuations(ctx, &valuationV2); err != nil {
 		t.Fatalf("save second valuation revision: %v", err)
+	}
+	if err := store.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM market_data_valuation_versions
+WHERE request_fingerprint=? AND source=?`,
+		valuationFingerprint, valuationV2.Source).Scan(&valuationRevisionCount); err != nil {
+		t.Fatalf("count valuation revisions after content change: %v", err)
+	}
+	if valuationRevisionCount != 2 {
+		t.Fatalf("changed valuation content must create a second revision, got %d", valuationRevisionCount)
 	}
 	valuationsSecondAsOf := time.Now().UTC()
 	valuationsBeforeRevision, err := store.ListValuationsAsOf(ctx, []string{symbol}, valuationsFirstAsOf)
