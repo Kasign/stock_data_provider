@@ -70,3 +70,28 @@ func marketDataReadinessChecks(module *marketdatabootstrap.Module) []platformdia
 		},
 	}}
 }
+
+// parseMarketDataIndexSymbols 保留旧 Analysis 配置的默认指数和去重语义。
+func parseMarketDataIndexSymbols(raw string) []string {
+	if strings.TrimSpace(raw) == "" {
+		return []string{"000001.SH"}
+	}
+	seen := make(map[string]struct{})
+	symbols := make([]string, 0)
+	for _, value := range strings.Split(raw, ",") {
+		symbol := strings.TrimSpace(value)
+		if symbol == "" {
+			continue
+		}
+		key := strings.ToUpper(symbol)
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
+		symbols = append(symbols, symbol)
+	}
+	if len(symbols) == 0 {
+		return []string{"000001.SH"}
+	}
+	return symbols
+}
