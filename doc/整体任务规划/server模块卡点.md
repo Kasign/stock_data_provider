@@ -1,9 +1,13 @@
 # Server 模块卡点
 
+当前执行任务：SRV-003 HTTP 宿主/认证/Fault 映射。
+- SRV-001 已完成：API/Worker/All 角色真实启动、Readiness、SIGTERM 和 Lifecycle 回滚/关闭顺序均有精确 SHA 验收证据。
+- SRV-015 已转 BLOCKED：当前可安全装配的 News 服务已完成；其他业务模块等待真实消费者、生产配置、持久化、Gateway 或渠道依赖。
+
 更新时间：2026-11-18
 维护分支：feat/server
-代码验收基线：f5821a356e23691d9738f4b3808abf8e0e3494d8
-当前主线：SRV-015 其他业务模块 Root 装配盘点与可接入服务装配
+代码验收基线：2116117ebb022805f3f4ed1274e11bb35033b117
+当前主线：SRV-003 HTTP 宿主/认证/Fault 映射
 
 ## 1. Root Readiness 503 根因已定位并修复（当前装配范围验收通过）
 
@@ -47,9 +51,9 @@
 ## 3. 尚未闭环的 Server 自身验收
 
 - Data Handler 的 DATA-CTR-006 端到端行为：Owner 身份上下文、请求体限制、Request ID、Fault 投影和实际路由分发。
-- API 与 Worker 两种角色的真实 Root Bootstrap、启动失败回滚和生命周期关闭。
+- API/Worker/All 角色 Root Bootstrap、Readiness、SIGTERM、Lifecycle 回滚和多实例独立启停已通过 Run 44312706873；该项不再作为未完成卡点。
 - 启用 Provider 配置矩阵及 HTTP/TCP 受控出口注入；真实 Provider 连通性没有真实上游证据时标记 NOT_COMPARABLE。
-- Data Module Start/Stop/Close 与 Root 共享资源的关闭顺序、幂等性和并发边界。
+- Data Module Start/Stop/Close 与 Root 共享资源的关闭顺序由现有 Lifecycle/Bootstrap 测试覆盖；后续只在出现新的可复现缺陷时补充，不重复创建生命周期实现。
 
 ## 4. 当前不应做的事
 
