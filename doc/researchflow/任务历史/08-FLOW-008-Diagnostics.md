@@ -53,3 +53,17 @@ Platform `Observation.Validate` 负责结构、长度和控制字符校验，并
 
 - Diagnostics Adapter 的模块内映射、UTC、安全属性和 StageCode 校验已完成并通过 SHA `43188259c4b96579ab587742e063d0f254c4009d` 的 CI。
 - 真实 StageAssessment 生产者和 Server Checks 注册仍未接入；该部分由真实领域 Stage Provider 与 Server 组合根负责，不在 Researchflow 内制造模拟生产诊断。
+
+## 2026-11-18 UTF-8 输入边界补强
+
+复核发现 Platform Observation 对长度和控制字符有通用校验，但不能代替领域 Adapter 的 UTF-8 完整性校验。无效 UTF-8 字符串可能在 JSON 序列化时被替换，造成诊断字段失真。
+
+本轮在 Researchflow Adapter 增加以下拒绝条件：
+
+- StageRef、StageCode、ReasonCode、SafeMessage、EvidenceRef 必须是有效 UTF-8。
+- Attributes 的 key/value 必须是有效 UTF-8；原有 allowlist、稳定代码和保留字段约束保持不变。
+- 新增 7 组无效 UTF-8 负向测试，覆盖上述字段及属性键值。
+
+代码 SHA：`384582d37f679d272de708b87b32a6b4c93cf649`。GitHub Actions Run [44309745636](https://github.com/Kasign/stock_data_provider/actions/runs/44309745636) 中 Researchflow module format/tests/race/vet、WorkerStore unit/race/vet、MariaDB lifecycle integration 均 success；根模块 Test 当时仍在执行 Race Detector，不能据此宣称根模块全量 CI 完成。
+
+该补强只收紧 Researchflow Diagnostics Adapter 的输入边界，不修改 Platform 公共实现，也不代表真实 StageAssessment Provider 或 Server Diagnostics 注册已经完成。
