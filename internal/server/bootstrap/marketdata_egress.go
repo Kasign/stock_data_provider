@@ -322,6 +322,16 @@ func isPublicMarketDataIP(ip netip.Addr) bool {
 
 // marketDataProviderActive 只为启用且声明了业务能力的 Provider 创建受控出口。
 func marketDataProviderActive(cfg marketdataconfig.Config, name string) bool {
+	inPriority := false
+	for _, configured := range cfg.ProviderPriority {
+		if configured == name {
+			inPriority = true
+			break
+		}
+	}
+	if !inPriority {
+		return false
+	}
 	settings, ok := cfg.ProviderSettings[name]
 	if !ok || !settings.Enabled {
 		return false
