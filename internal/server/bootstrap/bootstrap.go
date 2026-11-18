@@ -35,12 +35,12 @@ import (
 	serverconfig "example.com/stock-analysis-flow/internal/server/config"
 	serverdiagnostics "example.com/stock-analysis-flow/internal/server/diagnostics"
 	serverhealth "example.com/stock-analysis-flow/internal/server/health"
+	servermarketdata "example.com/stock-analysis-flow/internal/server/marketdata"
 	servermigration "example.com/stock-analysis-flow/internal/server/migration"
 	serverrelay "example.com/stock-analysis-flow/internal/server/relay"
 	serverresources "example.com/stock-analysis-flow/internal/server/resources"
 	runtime "example.com/stock-analysis-flow/internal/server/runtime"
 	serversecurity "example.com/stock-analysis-flow/internal/server/security"
-	servermarketdata "example.com/stock-analysis-flow/internal/server/marketdata"
 	"example.com/stock-analysis-flow/internal/service"
 )
 
