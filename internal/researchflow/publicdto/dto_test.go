@@ -196,7 +196,6 @@ func TestDomainProjectionsValidateAgainstTheirPublicSchemas(t *testing.T) {
 	assertDTO("Attempt", "attempt-1.0.0.schema.json", attempt)
 }
 
-
 func TestPublicDTOTimeFieldsAreCanonicalUTC(t *testing.T) {
 	local := time.Date(2026, 11, 18, 18, 0, 0, 123456789, time.FixedZone("UTC+8", 8*60*60))
 	utc := local.UTC()
