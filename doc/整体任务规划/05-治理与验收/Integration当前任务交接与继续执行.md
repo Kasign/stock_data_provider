@@ -1298,3 +1298,29 @@ GetRun 与 CancelRun 的持久化创建者授权已在 Application/Storage 层�
 - `TestMariaDBGlobalWorkerCapacitySerializesClaimsAcrossRuns` 覆盖两个 Run 并发争抢全局 Worker Capacity，只有一个 Claim 成功；过期 Lease 释放槽位后另一 Run 可成功 Claim。它验证 DB 原子全局容量守卫，但尚未以两个独立 Server OS 进程做完整部署级压测。
 - 目前正常完成、Provider Retry、Deadline、启动前取消、在途取消、Expired Attempt 崩溃恢复均有真实 MariaDB 集成验证；Outbox 投递重试/幂等与 DB 全局 Capacity 也有独立集成测试。
 - 下一步：对 Server Runtime、Lifecycle 注册/逆序关闭、Worker-only/All 角色配置和 Shutdown 资源保护做一次整体代码 Review；补齐必要的双进程部署级验证后，再评估真实 Provider 配置接入。SRV-CTR-001 继续 deferred，不新增公开 Researchflow HTTP API。
+
+
+## 16. 2026-11-18 Researchflow Runtime 整体 Review
+
+**Review 代码基线：** `cb381134daa56bdf3c358f691df3864cd7611122`。Integration CI Run [44216370742](https://github.com/Kasign/stock_data_provider/actions/runs/44216370742) 对该精确 SHA 全量 success。
+
+### Review 结论
+
+- Lifecycle 只允许启动前注册，拒绝重复 Start；组件按注册顺序启动、逆序停止，重复 Stop 等待首次 Stop 完成。当前 Runtime 由 Lifecycle 单次调用，不存在重复 Start 导致 done 通道提前关闭的生产路径。
+- 当前组件注册顺序为旧 Analysis Worker、Research Relay、Researchflow Relay、Researchflow Runtime、HTTP；关闭顺序相反。HTTP 先停止接收请求，Runtime 再停止扫描与执行，之后停止 Outbox Relay，最后停止旧 Worker。
+- Runtime Stop 先取消扫描 Context 并等待扫描循环退出，再等待异步任务，最后 Shutdown WorkerPool。所有任务注册都发生在扫描循环内；扫描循环退出后才 Wait，因此没有发现 WaitGroup Add/Wait 竞态。
+- Runtime 的 taskSlots 与 WorkerPool 均按 `RESEARCHFLOW_LOCAL_WORKERS` 限制在进程内；Run/Stage in-flight key 防止重复派发。WorkerPool 使用固定 Worker 和无缓冲任务通道，不存在无界持久化任务队列。
+- Scheduler/ExpiredAttempt/Finalization/Cancellation Recovery 使用 Keyset 分页；单周期最多推进 10 页并保留游标，候选因本地槽位已满而未派发时不会永久丢失，后续完整扫描会重新发现。候选级执行错误会记录并继续处理其他候选。
+- Worker-only 不加载 Owner Session 与 HTTP 配置；现有 MariaDB/Redis 子进程集成测试通过非法 HTTP_READ_TIMEOUT 和占用中的 HTTP 地址验证 Worker 不依赖 HTTP Listener。
+- Bootstrap 只有在全部 Lifecycle 消费者成功停止后才关闭共享资源；任一消费者停止失败或超时均保留 MariaDB/Redis/HTTP 资源，避免在途任务访问已关闭连接池。
+
+### 非阻断加固项
+
+`RESEARCHFLOW_MAX_WORKERS` 当前校验为正整数，但没有配置上限。当前正式模板只有一个 Stage，实际进程执行并发仍受 `RESEARCHFLOW_LOCAL_WORKERS` 的 1～32 限制；但 Scheduler 的单 Run Dispatch goroutine 数量受全局 MaxWorkers 影响。新增多 Stage 模板前，应为全局 MaxWorkers 增加明确上限，或为 Scheduler 增加独立的有界 Dispatch fan-out，避免高配置放大 goroutine 数量。
+
+### 下一步
+
+1. 完成两个独立 Server Worker OS 进程共享 MariaDB 的部署级验收；现有双 Run Claim 测试只证明数据库原子容量守卫，不替代双进程验收。
+2. 验收真实 News Provider 配置、外部请求可用性和数据质量；确定性 Fixture 不作为外部 Provider 质量证据。
+3. 在多 Stage 模板启用前处理上述全局 MaxWorkers 上限/Dispatch fan-out 加固项。
+4. `SRV-CTR-001` 继续 deferred，不开放 Researchflow HTTP API。

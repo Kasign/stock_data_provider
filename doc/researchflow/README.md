@@ -225,3 +225,13 @@ Server 已在 Owner Session 启用且 Researchflow Capacity 显式配置时，�
 - MariaDB `TestMariaDBGlobalWorkerCapacitySerializesClaimsAcrossRuns` 验证两个 Run 并发 Claim 时全局 Worker Capacity 只允许一个成功；Lease 过期后容量槽位可重新 Claim。该测试验证数据库原子容量边界，不等同于启动两个独立 Server 进程的部署验收。
 - 当前 Researchflow Runtime 主链的正常完成、Retry、Deadline、启动前取消、在途取消、崩溃后 Lease 恢复均有 MariaDB 证据。SRV-CTR-001 仍 deferred，不新增公开 Researchflow HTTP API。
 - 后续重点转为生产配置与生命周期的整体 Review、独立进程部署验收，以及将真实 News Provider 接入生产配置后的数据质量/可用性验收；不要把集成 Fixture 的结果解释为外部 Provider 质量验收。
+
+
+## 2026-11-18 Researchflow Runtime 整体 Review
+
+- 生产 Runtime、Lifecycle、Worker-only/All 角色配置、WorkerPool 背压、扫描分页、任务去重与共享资源关闭顺序已完成整体 Review；当前未发现需要修改 Runtime 核心逻辑的阻断缺陷。
+- Runtime Stop 的顺序为：取消扫描、等待扫描循环、等待异步任务、关闭 WorkerPool。Lifecycle 逆序关闭保证 HTTP 先停、Runtime 后停、Outbox Relay 再停；消费者停止失败时 Bootstrap 保留共享资源。
+- Worker-only 独立进程 MariaDB/Redis 启动与 SIGTERM 集成测试通过；该证据仍不等同于两个独立 Server Worker 进程共同竞争 Capacity 的部署级验收。
+- 精确代码 SHA `cb381134daa56bdf3c358f691df3864cd7611122` 的 Integration CI Run [44216370742](https://github.com/Kasign/stock_data_provider/actions/runs/44216370742) 全量 success。
+- 非阻断加固项：`RESEARCHFLOW_MAX_WORKERS` 尚无上限。当前单 Stage 模板和本地 WorkerPool 限制下不构成本轮阻断；新增多 Stage 模板前需增加全局上限或 Scheduler 有界 Dispatch fan-out。
+- 下一步为双 OS 进程 Worker 部署级验收及真实 News Provider 质量/可用性验收。SRV-CTR-001 继续 deferred。
