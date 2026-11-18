@@ -9,6 +9,7 @@ import (
 
 	"example.com/stock-analysis-flow/internal/marketdata/model"
 	"example.com/stock-analysis-flow/internal/marketdata/normalize"
+	platformtime "example.com/stock-analysis-flow/internal/platform/time"
 )
 
 // SecurityTradingStatus loads historical name/risk-warning and suspension evidence for a date.
@@ -26,7 +27,8 @@ func (s *DataService) SecurityTradingStatus(ctx context.Context, rawSymbol, rawT
 		return nil, fmt.Errorf("invalid trade date %q", rawTradeDate)
 	}
 	tradeDate := parsedDate.Format("2006-01-02")
-	if tradeDate > time.Now().In(marketLocation()).Format("2006-01-02") {
+	now := s.nowUTC()
+	if tradeDate > now.In(marketLocation()).Format("2006-01-02") {
 		return nil, errors.New("trade date must not be in the future in Asia/Shanghai")
 	}
 	if ctx == nil {
@@ -44,7 +46,7 @@ func (s *DataService) SecurityTradingStatus(ctx context.Context, rawSymbol, rawT
 			failures = append(failures, p.Name()+": "+fetchErr.Error())
 			continue
 		}
-		if err := validateSecurityTradingStatusSnapshot(symbol, tradeDate, p.Name(), candidate); err != nil {
+		if err := validateSecurityTradingStatusSnapshotAt(symbol, tradeDate, p.Name(), candidate, s.nowUTC()); err != nil {
 			failures = append(failures, p.Name()+": "+err.Error())
 			continue
 		}
@@ -55,7 +57,7 @@ func (s *DataService) SecurityTradingStatus(ctx context.Context, rawSymbol, rawT
 				if s.logger != nil {
 					s.logger.Warn("security-trading-status revision write failed", "symbol", symbol, "trade_date", tradeDate, "source", p.Name(), "error", saveErr)
 				}
-			} else if revisions, readErr := s.store.ListSecurityTradingStatusAsOf(ctx, symbol, tradeDate, time.Now().UTC()); readErr == nil {
+			} else if revisions, readErr := s.store.ListSecurityTradingStatusAsOf(ctx, symbol, tradeDate, s.nowUTC()); readErr == nil {
 				foundObservationTime := false
 				for index := range revisions {
 					if revisions[index].Source == p.Name() {
@@ -94,6 +96,10 @@ func (s *DataService) SecurityTradingStatus(ctx context.Context, rawSymbol, rawT
 }
 
 func validateSecurityTradingStatusSnapshot(symbol, tradeDate, providerName string, snapshot *model.SecurityTradingStatusSnapshot) error {
+	return validateSecurityTradingStatusSnapshotAt(symbol, tradeDate, providerName, snapshot, platformtime.SystemClock{}.Now())
+}
+
+func validateSecurityTradingStatusSnapshotAt(symbol, tradeDate, providerName string, snapshot *model.SecurityTradingStatusSnapshot, now time.Time) error {
 	if snapshot == nil {
 		return errors.New("security-trading-status provider returned an empty snapshot")
 	}
@@ -103,7 +109,7 @@ func validateSecurityTradingStatusSnapshot(symbol, tradeDate, providerName strin
 	}
 	if strings.TrimSpace(snapshot.Source) == "" || snapshot.Source != providerName ||
 		!hasIdentifiableSourceVersion(snapshot.SourceVersion) ||
-		!serviceTimestampIsSane(snapshot.FetchedAt, time.Now().UTC()) {
+		!serviceTimestampIsSane(snapshot.FetchedAt, now.UTC()) {
 		return errors.New("security-trading-status source, version or fetched_at is missing/invalid")
 	}
 	switch snapshot.DelistingStatus {

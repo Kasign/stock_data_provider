@@ -50,10 +50,11 @@ func TestDeadlineScannerRejectsDuplicateAndPropagatesErrors(t *testing.T) {
 	if _, err := scanner.ScanBatch(context.Background()); err == nil {
 		t.Fatal("expected duplicate candidate to fail")
 	}
-	store.candidates = []DeadlineCandidate{{RunRef: "run-a"}}
+	store.candidates = []DeadlineCandidate{{RunRef: "run-a"}, {RunRef: "run-b"}}
 	store.expireErr = errors.New("database unavailable")
-	if _, err := scanner.ScanBatch(context.Background()); err == nil {
-		t.Fatal("expected expiration error to propagate")
+	result, err := scanner.ScanBatch(context.Background())
+	if err == nil || result.Scanned != 2 || result.Failures != 2 {
+		t.Fatalf("expiration failures must be reported after all candidates are processed: result=%+v err=%v", result, err)
 	}
 }
 

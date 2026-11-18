@@ -1,0 +1,198 @@
+openapi: 3.1.0
+info:
+  title: SRV-CTR-002 Owner Session API
+  version: 1.0.0
+  description: Single Owner browser session API. CSRF token stays in browser runtime memory.
+servers:
+  - url: /
+security: []
+paths:
+  /api/v1/owner/session:
+    post:
+      operationId: ownerLogin
+      summary: Authenticate Owner and create a session
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '../schema/SRV-CTR-002/owner-login-request-1.0.0.schema.json' }
+      responses:
+        '200':
+          description: Session created; token is delivered only in HttpOnly cookie.
+          headers:
+            Set-Cookie: { $ref: '#/components/headers/SessionCookie' }
+          content:
+            application/json:
+              schema: { $ref: '../schema/SRV-CTR-002/session-issued-response-1.0.0.schema.json' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+    get:
+      operationId: getOwnerSession
+      summary: Read current session state
+      security:
+        - OwnerSessionCookie: []
+      responses:
+        '200':
+          description: Current session is valid.
+          headers:
+            Set-Cookie: { $ref: '#/components/headers/SessionCookie' }
+          content:
+            application/json:
+              schema: { $ref: '../schema/SRV-CTR-002/session-status-response-1.0.0.schema.json' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    delete:
+      operationId: ownerLogout
+      summary: Revoke current session
+      security:
+        - OwnerSessionCookie: []
+          OwnerSessionCSRF: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+      responses:
+        '204':
+          description: Session revoked and cookie cleared.
+          headers:
+            Set-Cookie: { $ref: '#/components/headers/ClearedSessionCookie' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /api/v1/owner/session/csrf:
+    post:
+      operationId: refreshOwnerCSRF
+      summary: Rotate and restore CSRF token after page reload
+      description: Requires a valid session cookie and exact same-origin Origin/Host; previous CSRF header is intentionally not required.
+      security:
+        - OwnerSessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+      responses:
+        '200':
+          description: A new in-memory CSRF token was issued.
+          headers:
+            Set-Cookie: { $ref: '#/components/headers/SessionCookie' }
+          content:
+            application/json:
+              schema: { $ref: '../schema/SRV-CTR-002/csrf-refresh-response-1.0.0.schema.json' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /api/v1/owner/session/rotate:
+    post:
+      operationId: rotateOwnerSession
+      summary: Rotate session and CSRF tokens
+      security:
+        - OwnerSessionCookie: []
+          OwnerSessionCSRF: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+      responses:
+        '200':
+          description: New session cookie and CSRF token issued.
+          headers:
+            Set-Cookie: { $ref: '#/components/headers/SessionCookie' }
+          content:
+            application/json:
+              schema: { $ref: '../schema/SRV-CTR-002/session-issued-response-1.0.0.schema.json' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/owner/password:
+    put:
+      operationId: changeOwnerPassword
+      summary: Change Owner password and advance credential version
+      security:
+        - OwnerSessionCookie: []
+          OwnerSessionCSRF: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '../schema/SRV-CTR-002/password-change-request-1.0.0.schema.json' }
+      responses:
+        '204':
+          description: Password changed; previous credential-version sessions are invalid.
+          headers:
+            Set-Cookie: { $ref: '#/components/headers/ClearedSessionCookie' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+components:
+  securitySchemes:
+    OwnerSessionCookie:
+      type: apiKey
+      in: cookie
+      name: __Secure-owner_session
+    OwnerSessionCSRF:
+      type: apiKey
+      in: header
+      name: X-CSRF-Token
+  parameters:
+    Origin:
+      name: Origin
+      in: header
+      required: true
+      schema: { type: string, format: uri }
+      description: Must exactly match configured public origin.
+  headers:
+    SessionCookie:
+      description: HttpOnly; SameSite=Lax; no Domain; Secure for HTTPS.
+      schema: { type: string }
+    ClearedSessionCookie:
+      description: Same cookie scope attributes with Max-Age=0.
+      schema: { type: string }
+  responses:
+    BadRequest:
+      description: Invalid request.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    Unauthorized:
+      description: Authentication failed.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    Forbidden:
+      description: Origin, Host or CSRF validation failed.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    Conflict:
+      description: Session or credential version conflict.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    RateLimited:
+      description: Login is rate limited.
+      headers:
+        Retry-After: { schema: { type: string } }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    Unavailable:
+      description: Required security dependency unavailable.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+  schemas:
+    ErrorEnvelope:
+      type: object
+      additionalProperties: false
+      required: [schema_version, error]
+      properties:
+        schema_version: { type: string, const: '1.0.0' }
+        error:
+          type: object
+          additionalProperties: false
+          required: [class, code, message, retryable]
+          properties:
+            class: { type: string, enum: [validation, unauthenticated, forbidden, not_found, conflict, unavailable, timeout, internal] }
+            code: { type: string, minLength: 1, maxLength: 160 }
+            message: { type: string, minLength: 1, maxLength: 512 }
+            retryable: { type: boolean }
+            request_id: { type: string, minLength: 1, maxLength: 128 }

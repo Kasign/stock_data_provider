@@ -12,6 +12,8 @@ import (
 	"fmt"
 	"math"
 	"time"
+
+	platformtime "example.com/stock-analysis-flow/internal/platform/time"
 	"unicode/utf8"
 )
 
@@ -36,7 +38,8 @@ func newRepositoryBase(db *sql.DB, clock Clock) (repositoryBase, error) {
 		return repositoryBase{}, ErrInvalidRepository
 	}
 	if clock == nil {
-		clock = func() time.Time { return time.Now().UTC() }
+		systemClock := platformtime.SystemClock{}
+		clock = systemClock.Now
 	}
 	return repositoryBase{db: db, now: clock}, nil
 }

@@ -2,18 +2,25 @@ package application
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"reflect"
 	"sync"
 	"testing"
 	"time"
 
 	"example.com/stock-analysis-flow/internal/researchflow/domain"
+	"example.com/stock-analysis-flow/internal/researchflow/resourcepolicy"
+	"example.com/stock-analysis-flow/internal/researchflow/stageoutput"
 	"example.com/stock-analysis-flow/internal/researchflow/template"
 )
 
 type workerStoreFake struct {
 	attempt     domain.Attempt
 	snapshot    StageExecutionSnapshot
+	snapshots   []StageExecutionSnapshot
+	loads       int
+	claims      int
 	claimReplay bool
 	renewErr    error
 	commit      WorkerResultCommit
@@ -24,9 +31,18 @@ type workerStoreFake struct {
 }
 
 func (f *workerStoreFake) ClaimAttempt(context.Context, string, string, string, string, time.Duration, int, int) (domain.Attempt, bool, error) {
+	f.claims++
 	return f.attempt, f.claimReplay, nil
 }
 func (f *workerStoreFake) LoadStageExecutionSnapshot(context.Context, string, string) (StageExecutionSnapshot, error) {
+	f.loads++
+	if len(f.snapshots) > 0 {
+		index := f.loads - 1
+		if index >= len(f.snapshots) {
+			index = len(f.snapshots) - 1
+		}
+		return f.snapshots[index], nil
+	}
 	return f.snapshot, nil
 }
 func (f *workerStoreFake) RenewAttemptLease(context.Context, string, string, string, string, uint64, time.Duration) (time.Time, error) {
@@ -52,8 +68,9 @@ func (f workerFaultNormalizerFake) NormalizeExecutionError(context.Context, erro
 }
 
 type workerExecutorFake struct {
-	result StageExecutionResult
-	err    error
+	result   StageExecutionResult
+	err      error
+	captured *StageExecutionRequest
 }
 
 type blockingWorkerExecutor struct {
@@ -74,20 +91,32 @@ func (timeoutWorkerExecutor) ExecuteStage(ctx context.Context, _ StageExecutionR
 	return StageExecutionResult{}, ctx.Err()
 }
 
-func (f workerExecutorFake) ExecuteStage(context.Context, StageExecutionRequest) (StageExecutionResult, error) {
+func (f workerExecutorFake) ExecuteStage(_ context.Context, request StageExecutionRequest) (StageExecutionResult, error) {
+	if f.captured != nil {
+		*f.captured = request
+	}
 	return f.result, f.err
 }
 
 func newWorkerFixture() (*workerStoreFake, StageExecutionResult) {
 	deadline := time.Now().Add(time.Hour)
-	run := domain.Run{Ref: "run-1", Status: domain.RunRunning, DeadlineAt: deadline, SystemAsOf: time.Now().UTC(), CorrelationID: "corr-1"}
-	stage := domain.Stage{Ref: "stage-1", RunRef: "run-1", Status: domain.StageRunning, Version: 3, AttemptNo: 1}
+	run := domain.Run{Ref: "run-1", Status: domain.RunRunning, TemplateVersion: "v1", DeadlineAt: deadline, SystemAsOf: time.Now().UTC(), CorrelationID: "corr-1"}
+	stage := domain.Stage{Ref: "stage-1", RunRef: "run-1", Code: "quant", Status: domain.StageRunning, Version: 3, AttemptNo: 1}
 	attempt := domain.Attempt{Ref: "attempt-1", StageRef: stage.Ref, Number: 1, Status: domain.AttemptRunning, LeaseOwner: "worker-1", FencingToken: 7, StartedAt: time.Now().UTC()}
-	output := "snapshot://result"
+	providerResult := &stageoutput.ProviderResult{OutputType: "trend", SchemaVersion: "1.0.0", Payload: []byte(`{"trend":"up"}`), QualitySummary: []byte(`{"quality":"valid"}`), DiagnosticRefs: []string{}}
+	policyRegistry, err := resourcepolicy.NewRegistry()
+	if err != nil {
+		panic(err)
+	}
+	policySnapshot, err := policyRegistry.Resolve(resourcepolicy.NewsSearchConfiguredProvidersRef, []string{"bocha", "tavily"})
+	if err != nil {
+		panic(err)
+	}
 	store := &workerStoreFake{
 		attempt: attempt,
 		snapshot: StageExecutionSnapshot{
-			Run: run, Stage: stage, Parameters: []byte(`{"symbol":"AAA"}`),
+			Run: run, Stage: stage, AuthenticatedCallerRef: "caller-1", Parameters: []byte(`{"symbol":"AAA"}`),
+			OutputRegistryVersion: "1.0.0", ResourcePolicy: policySnapshot,
 			RetryPolicy: template.RetryPolicy{
 				Ref: "retry-v1", MaxAttempts: 3,
 				RetryableReasonCodes: []string{"provider_unavailable"},
@@ -96,7 +125,7 @@ func newWorkerFixture() (*workerStoreFake, StageExecutionResult) {
 			},
 		},
 	}
-	return store, StageExecutionResult{AttemptStatus: domain.AttemptSucceeded, StageStatus: domain.StageSucceeded, OutputRef: &output}
+	return store, StageExecutionResult{AttemptStatus: domain.AttemptSucceeded, StageStatus: domain.StageSucceeded, ProviderResult: providerResult}
 }
 
 type workerClockFake struct {
@@ -116,7 +145,16 @@ func (f workerClockFake) NowUTC(context.Context) (time.Time, error) {
 
 func newWorker(t *testing.T, store *workerStoreFake, result StageExecutionResult) *Worker {
 	t.Helper()
-	w, err := NewWorker(store, workerExecutorFake{result: result}, workerClockFake{}, WorkerConfig{WorkerID: "worker-1", LeaseDuration: time.Minute, HeartbeatInterval: time.Second, MaxParallel: 2})
+	registry, err := stageoutput.NewRegistry("1.0.0", []stageoutput.Entry{{
+		StageCode: "quant", OutputType: "trend", SchemaVersion: "1.0.0",
+		PayloadSchemaRef: "schema://quant/trend/1.0.0", QualitySummarySchemaRef: "schema://quality/trend/1.0.0",
+		PayloadValidator:        stageoutput.ValidatorFunc(func(json.RawMessage) error { return nil }),
+		QualitySummaryValidator: stageoutput.ValidatorFunc(func(json.RawMessage) error { return nil }),
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	w, err := NewWorkerWithStageOutputRegistry(store, workerExecutorFake{result: result}, workerClockFake{}, WorkerConfig{WorkerID: "worker-1", LeaseDuration: time.Minute, HeartbeatInterval: time.Second, MaxParallel: 2}, registry)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -158,9 +196,100 @@ func TestWorkerFailsClosedWhenDatabaseClockUnavailable(t *testing.T) {
 	}
 }
 
+func TestWorkerRejectsResourcePolicySnapshotChangedAfterClaim(t *testing.T) {
+	store, result := newWorkerFixture()
+	changed := store.snapshot
+	changed.ResourcePolicy.AllowedProviderCodes = []string{"brave", "tavily"}
+	store.snapshots = []StageExecutionSnapshot{store.snapshot, changed}
+	worker := newWorker(t, store, result)
+	if _, err := worker.Execute(context.Background(), "run-1", "stage-1", "attempt-new"); err == nil {
+		t.Fatal("Worker must reject ResourcePolicy allowlist changes between pre-claim and execution snapshots")
+	}
+	if store.commits != 0 {
+		t.Fatal("changed ResourcePolicy snapshot must not execute or commit")
+	}
+}
+
+func TestWorkerPersistsProviderDiagnosticOutputForRetryWaitStage(t *testing.T) {
+	store, _ := newWorkerFixture()
+	result := StageExecutionResult{
+		AttemptStatus: domain.AttemptFailed, StageStatus: domain.StageRetryWait,
+		ReasonCodes: []string{"provider_unavailable"},
+		ProviderResult: &stageoutput.ProviderResult{
+			OutputType: "trend", SchemaVersion: "1.0.0",
+			Payload:        []byte(`{"trend":"partial_unavailable"}`),
+			QualitySummary: []byte(`{"quality":"partial_unavailable"}`),
+			DiagnosticRefs: []string{},
+		},
+	}
+	got, err := newWorker(t, store, result).Execute(context.Background(), "run-1", "stage-1", "attempt-new")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.Committed || store.commit.Stage.Status != domain.StageRetryWait ||
+		store.commit.StageOutput == nil || store.commit.Stage.RetryAt == nil {
+		t.Fatalf("retry_wait Stage must retain validated Provider diagnostic output: %+v", store.commit)
+	}
+}
+
+func TestWorkerPersistsProviderDiagnosticOutputForFailedStage(t *testing.T) {
+	store, _ := newWorkerFixture()
+	result := StageExecutionResult{
+		AttemptStatus: domain.AttemptFailed, StageStatus: domain.StageFailed,
+		ReasonCodes: []string{"news_all_providers_skipped"},
+		ProviderResult: &stageoutput.ProviderResult{
+			OutputType: "trend", SchemaVersion: "1.0.0",
+			Payload:        []byte(`{"trend":"unavailable"}`),
+			QualitySummary: []byte(`{"quality":"unavailable"}`),
+			DiagnosticRefs: []string{},
+		},
+	}
+	got, err := newWorker(t, store, result).Execute(context.Background(), "run-1", "stage-1", "attempt-new")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.Committed || store.commit.Stage.Status != domain.StageFailed || store.commit.StageOutput == nil {
+		t.Fatalf("failed Stage must retain validated Provider diagnostic output: %+v", store.commit)
+	}
+}
+
+func TestWorkerPassesOwnedResourcePolicySnapshotToExecutor(t *testing.T) {
+	store, result := newWorkerFixture()
+	captured := &StageExecutionRequest{}
+	worker := newWorker(t, store, result)
+	worker.executor = workerExecutorFake{result: result, captured: captured}
+	if _, err := worker.Execute(context.Background(), "run-1", "stage-1", "attempt-new"); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(captured.ResourcePolicy, store.snapshot.ResourcePolicy) {
+		t.Fatalf("executor ResourcePolicy snapshot = %+v, want %+v", captured.ResourcePolicy, store.snapshot.ResourcePolicy)
+	}
+	captured.ResourcePolicy.AllowedProviderCodes[0] = "mutated"
+	if store.snapshot.ResourcePolicy.AllowedProviderCodes[0] == "mutated" {
+		t.Fatal("StageExecutor must not share mutable Provider allowlist with WorkerStore snapshot")
+	}
+}
+
 func TestWorkerExecuteClaimsExecutesAndCommits(t *testing.T) {
 	store, result := newWorkerFixture()
-	got, err := newWorker(t, store, result).Execute(context.Background(), "run-1", "stage-1", "attempt-new")
+	captured := &StageExecutionRequest{}
+	executor := workerExecutorFake{result: result, captured: captured}
+	registry, err := stageoutput.NewRegistry("1.0.0", []stageoutput.Entry{{
+		StageCode: "quant", OutputType: "trend", SchemaVersion: "1.0.0",
+		PayloadSchemaRef: "schema://quant/trend/1.0.0", QualitySummarySchemaRef: "schema://quality/trend/1.0.0",
+		PayloadValidator:        stageoutput.ValidatorFunc(func(json.RawMessage) error { return nil }),
+		QualitySummaryValidator: stageoutput.ValidatorFunc(func(json.RawMessage) error { return nil }),
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	worker, err := NewWorkerWithStageOutputRegistry(store, executor, workerClockFake{}, WorkerConfig{
+		WorkerID: "worker-1", LeaseDuration: time.Minute, HeartbeatInterval: time.Second, MaxParallel: 2,
+	}, registry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := worker.Execute(context.Background(), "run-1", "stage-1", "attempt-new")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -169,6 +298,55 @@ func TestWorkerExecuteClaimsExecutesAndCommits(t *testing.T) {
 	}
 	if store.commit.Stage.Version != 4 || store.commit.Stage.Status != domain.StageSucceeded || store.commit.FencingToken != 7 {
 		t.Fatalf("unexpected commit: %+v", store.commit)
+	}
+	if captured.AuthenticatedCallerRef != "caller-1" {
+		t.Fatalf("StageExecutor caller_ref = %q, want trusted persisted caller_ref", captured.AuthenticatedCallerRef)
+	}
+}
+
+func TestWorkerRejectsProviderOwnedOutputReferences(t *testing.T) {
+	store, _ := newWorkerFixture()
+	ref := "provider://forged"
+	result := StageExecutionResult{
+		AttemptStatus: domain.AttemptSucceeded, StageStatus: domain.StageSucceeded,
+		OutputRef: &ref, ProviderResult: &stageoutput.ProviderResult{
+			OutputType: "trend", SchemaVersion: "1.0.0",
+			Payload: []byte(`{"trend":"up"}`), QualitySummary: []byte(`{"quality":"valid"}`),
+		},
+	}
+	if _, err := newWorker(t, store, result).Execute(context.Background(), "run-1", "stage-1", "attempt-new"); err == nil {
+		t.Fatal("Worker must reject Provider-owned result references")
+	}
+	if store.commits != 0 {
+		t.Fatal("invalid Provider result must not commit")
+	}
+}
+
+func TestWorkerFailsClosedWithoutOutputRegistry(t *testing.T) {
+	store, result := newWorkerFixture()
+	worker, err := NewWorker(store, workerExecutorFake{result: result}, workerClockFake{}, WorkerConfig{
+		WorkerID: "worker-1", LeaseDuration: time.Minute, HeartbeatInterval: time.Second, MaxParallel: 2,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := worker.Execute(context.Background(), "run-1", "stage-1", "attempt-new"); err == nil {
+		t.Fatal("successful Provider output must not pass without an Output Registry")
+	}
+	if store.commits != 0 {
+		t.Fatal("missing Registry must not commit a successful result")
+	}
+}
+
+func TestWorkerRejectsMissingAuthenticatedCallerBeforeClaim(t *testing.T) {
+	store, result := newWorkerFixture()
+	store.snapshot.AuthenticatedCallerRef = ""
+	worker := newWorker(t, store, result)
+	if _, err := worker.Execute(context.Background(), "run-1", "stage-1", "attempt-new"); err == nil {
+		t.Fatal("Worker must reject a Run without authenticated caller identity")
+	}
+	if store.claims != 0 || store.commits != 0 {
+		t.Fatalf("missing caller identity must fail before claim: claims=%d commits=%d", store.claims, store.commits)
 	}
 }
 func TestWorkerDoesNotExecuteReplayedClaim(t *testing.T) {

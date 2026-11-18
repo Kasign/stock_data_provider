@@ -64,7 +64,7 @@ func (s *DataService) RefreshAdjustmentFactors(ctx context.Context, rawSymbol, s
 			failures = append(failures, p.Name()+": empty adjustment-factor response")
 			continue
 		}
-		now := time.Now().UTC()
+		now := s.nowUTC()
 		valid := make([]model.AdjustmentFactor, 0, len(values))
 		seen := make(map[string]struct{}, len(values))
 		for _, value := range values {
@@ -117,7 +117,7 @@ func (s *DataService) AdjustmentFactorsAsOf(ctx context.Context, rawSymbol, star
 	if err != nil {
 		return nil, err
 	}
-	if !validServiceDateRange(startDate, endDate) || asOf.IsZero() || asOf.After(time.Now().UTC()) {
+	if !validServiceDateRange(startDate, endDate) || asOf.IsZero() || asOf.After(s.nowUTC()) {
 		return nil, errors.New("invalid adjustment-factor as_of query")
 	}
 	if s == nil || s.store == nil {
@@ -212,7 +212,7 @@ func (s *DataService) CorporateActionsAsOf(ctx context.Context, rawSymbol, start
 	if err != nil {
 		return nil, err
 	}
-	if !validServiceDateRange(startDate, endDate) || asOf.IsZero() || asOf.After(time.Now().UTC()) {
+	if !validServiceDateRange(startDate, endDate) || asOf.IsZero() || asOf.After(s.nowUTC()) {
 		return nil, errors.New("invalid corporate-action as_of query")
 	}
 	if s == nil || s.store == nil {

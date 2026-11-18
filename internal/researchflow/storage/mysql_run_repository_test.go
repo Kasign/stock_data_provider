@@ -6,16 +6,17 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/go-sql-driver/mysql"
 	"os"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/go-sql-driver/mysql"
-
 	platformstorage "example.com/stock-analysis-flow/internal/platform/storage"
 	"example.com/stock-analysis-flow/internal/researchflow/application"
 	"example.com/stock-analysis-flow/internal/researchflow/domain"
+	"example.com/stock-analysis-flow/internal/researchflow/resourcepolicy"
+	"example.com/stock-analysis-flow/internal/researchflow/stageoutput"
 	"example.com/stock-analysis-flow/internal/researchflow/template"
 )
 
@@ -279,6 +280,18 @@ func TestMariaDBCreateRunAtomicConcurrentIdempotency(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetRun: %v", err)
 	}
+	if err := repository.AuthorizeRunRead(ctx, "researchflow-integration-test", winningRunRef); err != nil {
+		t.Fatalf("creator should be allowed to read Run: %v", err)
+	}
+	if err := repository.AuthorizeRunCancellation(ctx, "researchflow-integration-test", winningRunRef); err != nil {
+		t.Fatalf("creator should be allowed to cancel Run: %v", err)
+	}
+	if err := repository.AuthorizeRunRead(ctx, "another-caller", winningRunRef); !errors.Is(err, application.ErrRunAccessDenied) {
+		t.Fatalf("another caller read authorization error=%v, want ErrRunAccessDenied", err)
+	}
+	if err := repository.AuthorizeRunCancellation(ctx, "another-caller", winningRunRef); !errors.Is(err, application.ErrRunAccessDenied) {
+		t.Fatalf("another caller cancellation authorization error=%v, want ErrRunAccessDenied", err)
+	}
 	if loadedRun.Run.Ref != winningRunRef || len(loadedRun.Stages) != 1 {
 		t.Fatalf("GetRun returned unexpected run/stages: run=%q stages=%d", loadedRun.Run.Ref, len(loadedRun.Stages))
 	}
@@ -442,6 +455,14 @@ func TestMariaDBWorkerStoreSnapshotClaimAndCommit(t *testing.T) {
 	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
 	now := time.Now().UTC()
 	templateFingerprint := "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+	policyRegistry, err := resourcepolicy.NewRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	policySnapshot, err := policyRegistry.Resolve(resourcepolicy.NewsSearchConfiguredProvidersRef, []string{"bocha"})
+	if err != nil {
+		t.Fatal(err)
+	}
 	runRef, stageRef := "worker-run-"+suffix, "worker-stage-"+suffix
 	record := application.CreateRunRecord{
 		Scope: application.IdempotencyScope{
@@ -462,7 +483,9 @@ func TestMariaDBWorkerStoreSnapshotClaimAndCommit(t *testing.T) {
 			DiagnosticRefs: []string{}, ReasonCodes: []string{},
 		}},
 		ResolvedTemplate: template.ResolvedTemplate{
-			Ref: "worker-template", Version: "v1", Fingerprint: templateFingerprint,
+			Ref: "worker-template", Version: "v1", TemplateFingerprint: templateFingerprint, Fingerprint: templateFingerprint,
+			ResourcePolicyRef: resourcepolicy.NewsSearchConfiguredProvidersRef, ResourcePolicy: policySnapshot,
+			OutputRegistryVersion: "1.0.0",
 			Stages: []template.ResolvedStage{{
 				Definition: template.StageDefinition{
 					Code: "quant",
@@ -513,27 +536,37 @@ func TestMariaDBWorkerStoreSnapshotClaimAndCommit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadStageExecutionSnapshot: %v", err)
 	}
-	if snapshot.Run.Ref != runRef || snapshot.Run.Status != domain.RunRunning ||
+	if snapshot.AuthenticatedCallerRef != "researchflow-worker-integration-test" ||
+		snapshot.Run.Ref != runRef || snapshot.Run.Status != domain.RunRunning ||
 		snapshot.Stage.Ref != stageRef || snapshot.Stage.Status != domain.StageRunning ||
 		snapshot.Stage.AttemptNo != attempt.Number ||
 		string(snapshot.Parameters) != `{"symbol":"AAA"}` ||
 		len(snapshot.InputSnapshotRefs) != 1 || snapshot.InputSnapshotRefs[0] != "input-snapshot-"+suffix ||
 		snapshot.RetryPolicy.Ref != "retry-v1" || snapshot.RetryPolicy.MaxAttempts != 3 ||
-		snapshot.RetryPolicy.AttemptTimeoutMS != 60000 {
+		snapshot.RetryPolicy.AttemptTimeoutMS != 60000 || snapshot.OutputRegistryVersion != "1.0.0" {
 		t.Fatalf("unexpected Worker execution snapshot: %+v", snapshot)
 	}
 
-	outputRef := "worker-output-" + suffix
 	resultStage := snapshot.Stage
 	resultStage.Version++
 	resultStage.Status = domain.StageSucceeded
-	resultStage.OutputRef = &outputRef
 	resultStage.FinishedAt = nil // Storage assigns the authoritative database timestamp.
+	envelope := stageoutput.Envelope{
+		RunRef: runRef, StageRef: stageRef, AttemptRef: attempt.Ref, StageCode: "quant",
+		TemplateVersion: "v1", OutputType: "trend", SchemaVersion: "1.0.0",
+		Payload: json.RawMessage(`{"trend":"up"}`), QualitySummary: json.RawMessage(`{"quality":"valid"}`),
+		DiagnosticRefs: []string{}, CompletedAt: attempt.StartedAt.UTC(),
+	}
 	if err := repository.CommitWorkerResult(ctx, application.WorkerResultCommit{
 		RunRef: runRef, StageRef: stageRef, AttemptRef: attempt.Ref,
 		WorkerID: "worker-integration", FencingToken: attempt.FencingToken,
 		AttemptStatus: domain.AttemptSucceeded, Stage: resultStage,
-		OutputRef: &outputRef,
+		StageOutput: &application.StageOutputCommit{
+			Envelope: envelope, RegistryVersion: "1.0.0",
+			RegistryFingerprint:     "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			PayloadSchemaRef:        "schema://quant/trend/1.0.0",
+			QualitySummarySchemaRef: "schema://quality/trend/1.0.0",
+		},
 	}); err != nil {
 		t.Fatalf("CommitWorkerResult: %v", err)
 	}
@@ -544,7 +577,18 @@ func TestMariaDBWorkerStoreSnapshotClaimAndCommit(t *testing.T) {
 	}
 	persistedStage, err := repository.GetStage(ctx, stageRef)
 	if err != nil || persistedStage.Status != domain.StageSucceeded ||
-		persistedStage.OutputRef == nil || *persistedStage.OutputRef != outputRef {
+		persistedStage.OutputRef == nil || persistedStage.QualitySummaryRef == nil ||
+		*persistedStage.OutputRef == *persistedStage.QualitySummaryRef {
 		t.Fatalf("persisted Stage = %+v err=%v", persistedStage, err)
+	}
+	payload, err := repository.GetStageOutputResource(ctx, *persistedStage.OutputRef)
+	if err != nil || payload.Kind != "payload" || string(payload.Content) != `{"trend":"up"}` ||
+		payload.RegistryVersion != "1.0.0" || payload.SchemaRef != "schema://quant/trend/1.0.0" {
+		t.Fatalf("persisted Payload resource = %+v err=%v", payload, err)
+	}
+	quality, err := repository.GetStageOutputResource(ctx, *persistedStage.QualitySummaryRef)
+	if err != nil || quality.Kind != "quality_summary" || string(quality.Content) != `{"quality":"valid"}` ||
+		quality.SchemaRef != "schema://quality/trend/1.0.0" {
+		t.Fatalf("persisted QualitySummary resource = %+v err=%v", quality, err)
 	}
 }

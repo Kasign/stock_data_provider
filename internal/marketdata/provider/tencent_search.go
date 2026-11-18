@@ -8,7 +8,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"time"
 	"unicode/utf8"
 
 	"golang.org/x/text/encoding/simplifiedchinese"
@@ -111,7 +110,7 @@ func (p *Tencent) SearchStocks(ctx context.Context, rawQuery string, limit int) 
 		Items:          items,
 		Source:         p.Name(),
 		SourceVersion:  tencentStockSearchVersion,
-		FetchedAt:      time.Now().UTC(),
+		FetchedAt:      providerNowUTC(),
 		QualityStatus:  model.QualityDegraded,
 		QualityReasons: []string{"provider_search_total_not_reported"},
 	}, nil

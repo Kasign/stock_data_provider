@@ -5175,3 +5175,40 @@ button:disabled {
 .research-note-import-preview[hidden]{display:none}
 .research-note-import-preview p{line-height:1.65;overflow-wrap:anywhere}
 @media(max-width:640px){.research-note-import-preview .research-note-actions{align-items:stretch}.research-note-import-preview .research-note-actions .button{width:100%}}
+
+
+/* Owner Session：密码只在提交时进入请求体，CSRF Token 仅驻留 JS 内存。 */
+.owner-session-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+.owner-session-status-row,
+.owner-session-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.owner-session-form {
+  margin-top: 12px;
+}
+.owner-session-actions {
+  grid-column: 1 / -1;
+  justify-content: flex-start;
+}
+#owner-session-feedback {
+  margin: 0;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+.owner-session-panel [hidden] {
+  display: none !important;
+}
+@media (max-width: 640px) {
+  .owner-session-actions .button {
+    width: 100%;
+  }
+}

@@ -15,7 +15,12 @@ import { resolveAlertCapability, resolveAlertEvaluationState, resolveAlertCollec
 import {
   analysisHealth,
   clearSettings,
+  clearOwnerSessionMemory,
+  changeOwnerPassword,
   createAnalysisTask,
+  loginOwnerSession,
+  logoutOwnerSession,
+  restoreOwnerSession,
   getAnalysisRun,
   getAnalysisTask,
   getAnalysisTaskEvents,
@@ -5571,3 +5576,128 @@ setView(initialView, { updateHash: false, refreshData: true });
 syncSettingsThemeButtons(readTheme());
 void refreshServices();
 if (initialView === "market") void refreshMarketWorkspace();
+
+
+// Owner Session is scoped to its own protected APIs; it does not unlock legacy Bearer routes.
+function renderOwnerSessionControls(mode, { expiresAt = "", message = "" } = {}) {
+  const pill = $("#owner-session-status-pill");
+  const expiry = $("#owner-session-expiry");
+  const loginForm = $("#owner-login-form");
+  const authenticated = $("#owner-session-authenticated");
+  const feedback = $("#owner-session-feedback");
+  if (!pill || !expiry || !loginForm || !authenticated || !feedback) return;
+  const states = {
+    checking: ["正在检查登录态", "is-readonly"],
+    logged_out: ["未登录", "is-warning"],
+    logged_in: ["已登录", "is-local"],
+    disabled: ["服务端未启用", "is-unavailable"],
+    unavailable: ["服务端不可用", "is-error"]
+  };
+  const [label, tone] = states[mode] || states.unavailable;
+  pill.textContent = label;
+  pill.className = `availability-pill ${tone}`;
+  loginForm.hidden = mode !== "logged_out" && mode !== "unavailable";
+  authenticated.hidden = mode !== "logged_in";
+  expiry.textContent = mode === "logged_in"
+    ? `会话有效至 ${formatDateTime(expiresAt)}`
+    : mode === "disabled"
+      ? "请启用 OWNER_SESSION_ENABLED 并配置公开 Origin。"
+      : mode === "checking"
+        ? "正在读取服务端会话状态。"
+        : "登录态不会保存在浏览器本地存储中。";
+  feedback.textContent = message || (mode === "logged_in"
+    ? "登录成功。CSRF Token 仅保存在当前页面运行时内存。"
+    : mode === "logged_out"
+      ? "请使用 Owner 密码登录。"
+      : mode === "disabled"
+        ? "当前服务端未挂载 Owner Session 接口。"
+        : mode === "unavailable"
+          ? "无法确认服务端登录状态，请检查连接后重试。"
+          : "正在检查登录态。");
+}
+
+function ownerSessionErrorMessage(error) {
+  if (error?.status === 401 && error?.code === "server.current_password_rejected") return "当前密码不正确，登录会话仍保持有效。";
+  if (error?.status === 401) return "登录态或密码验证失败，请重新确认凭据。";
+  if (error?.status === 403) return "请求来源或 CSRF 校验失败，请刷新页面后重试。";
+  if (error?.status === 404) return "服务端尚未启用 Owner Session。";
+  if (error?.status === 429) return "登录尝试过多，请等待限流窗口结束后重试。";
+  if (error?.status >= 500) return "服务端暂不可用，请稍后重试。";
+  return error?.message || "Owner Session 请求失败。";
+}
+
+async function initializeOwnerSessionControls() {
+  renderOwnerSessionControls("checking");
+  try {
+    const session = await restoreOwnerSession(state.settings);
+    renderOwnerSessionControls("logged_in", { expiresAt: session.expires_at });
+  } catch (error) {
+    clearOwnerSessionMemory();
+    if (error?.status === 401) {
+      renderOwnerSessionControls("logged_out", { message: "当前浏览器没有有效的 Owner Session，请登录。" });
+    } else if (error?.status === 404) {
+      renderOwnerSessionControls("disabled", { message: ownerSessionErrorMessage(error) });
+    } else {
+      renderOwnerSessionControls("unavailable", { message: ownerSessionErrorMessage(error) });
+    }
+  }
+}
+
+$("#owner-login-form")?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const button = $("#owner-login-button");
+  const password = $("#owner-login-password")?.value ?? "";
+  if (button) button.disabled = true;
+  try {
+    const session = await loginOwnerSession(state.settings, password);
+    form.reset();
+    renderOwnerSessionControls("logged_in", { expiresAt: session.expires_at, message: "登录成功。" });
+  } catch (error) {
+    const mode = error?.status === 404 ? "disabled" : "logged_out";
+    renderOwnerSessionControls(mode, { message: ownerSessionErrorMessage(error) });
+  } finally {
+    if (button) button.disabled = false;
+  }
+});
+
+$("#owner-session-logout")?.addEventListener("click", async () => {
+  const button = $("#owner-session-logout");
+  if (button) button.disabled = true;
+  try {
+    await logoutOwnerSession(state.settings);
+    renderOwnerSessionControls("logged_out", { message: "已退出登录。" });
+  } catch (error) {
+    if (error?.code === "server.session_unauthenticated") {
+      await initializeOwnerSessionControls();
+    } else {
+      renderOwnerSessionControls("logged_in", { message: ownerSessionErrorMessage(error) });
+    }
+  } finally {
+    if (button) button.disabled = false;
+  }
+});
+
+$("#owner-password-change-form")?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const button = $("#owner-password-change-button");
+  const currentPassword = $("#owner-current-password")?.value ?? "";
+  const newPassword = $("#owner-new-password")?.value ?? "";
+  if (button) button.disabled = true;
+  try {
+    await changeOwnerPassword(state.settings, currentPassword, newPassword);
+    form.reset();
+    renderOwnerSessionControls("logged_out", { message: "密码已修改，当前会话已失效，请使用新密码重新登录。" });
+  } catch (error) {
+    if (error?.code === "server.session_unauthenticated") {
+      await initializeOwnerSessionControls();
+    } else {
+      renderOwnerSessionControls("logged_in", { message: ownerSessionErrorMessage(error) });
+    }
+  } finally {
+    if (button) button.disabled = false;
+  }
+});
+
+void initializeOwnerSessionControls();
