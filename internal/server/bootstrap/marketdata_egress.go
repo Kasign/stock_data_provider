@@ -1,4 +1,24 @@
-package bootstrap
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log/slog"
+	"net"
+	"net/netip"
+	"net/url"
+	"strconv"
+	"strings"
+	"time"
+
+	marketdatabootstrap "example.com/stock-analysis-flow/internal/marketdata/bootstrap"
+	marketdataconfig "example.com/stock-analysis-flow/internal/marketdata/config"
+	"example.com/stock-analysis-flow/internal/marketdata/provider"
+	marketdatatransport "example.com/stock-analysis-flow/internal/marketdata/transport"
+	platformhttpclient "example.com/stock-analysis-flow/internal/platform/httpclient"
+	"example.com/stock-analysis-flow/internal/server/resources"
+
+	"github.com/injoyai/tdx"
+)package bootstrap
 
 import (
 	"context"
@@ -87,22 +107,52 @@ func newMarketDataDependencies(shared *resources.Resources, cfg marketdataconfig
 	}
 
 	var err error
-	if deps.HithinkHTTPDoer, err = bindOne(cfg.HithinkBaseURL, "market_data_hithink"); err != nil { return marketdatabootstrap.Dependencies{}, err }
-	if deps.TencentQuoteHTTPDoer, err = bindOne(cfg.TencentQuoteURL, "market_data_tencent"); err != nil { return marketdatabootstrap.Dependencies{}, err }
-	if deps.TencentKlineHTTPDoer, err = bindOne(cfg.TencentKlineURL, "market_data_tencent"); err != nil { return marketdatabootstrap.Dependencies{}, err }
-	if deps.TencentNoneKlineHTTPDoer, err = bindOne(cfg.TencentNoneKlineURL, "market_data_tencent"); err != nil { return marketdatabootstrap.Dependencies{}, err }
-	if deps.TencentSearchHTTPDoer, err = bindOne(cfg.TencentStockSearchURL, "market_data_tencent"); err != nil { return marketdatabootstrap.Dependencies{}, err }
-	if deps.SinaQuoteHTTPDoer, err = bindOne(cfg.SinaQuoteURL, "market_data_sina"); err != nil { return marketdatabootstrap.Dependencies{}, err }
-	if deps.SinaKlineHTTPDoer, err = bindOne(cfg.SinaKlineURL, "market_data_sina"); err != nil { return marketdatabootstrap.Dependencies{}, err }
-	if deps.YahooHTTPDoer, err = bindOne(cfg.YahooChartURL, "market_data_yahoo"); err != nil { return marketdatabootstrap.Dependencies{}, err }
-	if deps.NeteaseQuoteHTTPDoer, err = bindOne(cfg.NeteaseQuoteURL, "market_data_netease"); err != nil { return marketdatabootstrap.Dependencies{}, err }
-	if deps.NeteaseHistoryHTTPDoer, err = bindOne(cfg.NeteaseHistoryURL, "market_data_netease"); err != nil { return marketdatabootstrap.Dependencies{}, err }
-	if deps.TushareHTTPDoer, err = bindOne(cfg.TushareAPIURL, "market_data_tushare"); err != nil { return marketdatabootstrap.Dependencies{}, err }
-	if deps.TickFlowAuthenticatedHTTPDoer, err = bindOne(cfg.TickFlowAPIURL, "market_data_tickflow"); err != nil { return marketdatabootstrap.Dependencies{}, err }
-	if deps.TickFlowPublicHTTPDoer, err = bindOne(cfg.TickFlowFreeAPIURL, "market_data_tickflow_public"); err != nil { return marketdatabootstrap.Dependencies{}, err }
-	if deps.XueqiuHTTPDoer, err = bindOne(cfg.XueqiuBaseURL, "market_data_xueqiu"); err != nil { return marketdatabootstrap.Dependencies{}, err }
+	if deps.HithinkHTTPDoer, err = bindOne(cfg.HithinkBaseURL, "market_data_hithink"); err != nil {
+		return marketdatabootstrap.Dependencies{}, err
+	}
+	if deps.TencentQuoteHTTPDoer, err = bindOne(cfg.TencentQuoteURL, "market_data_tencent"); err != nil {
+		return marketdatabootstrap.Dependencies{}, err
+	}
+	if deps.TencentKlineHTTPDoer, err = bindOne(cfg.TencentKlineURL, "market_data_tencent"); err != nil {
+		return marketdatabootstrap.Dependencies{}, err
+	}
+	if deps.TencentNoneKlineHTTPDoer, err = bindOne(cfg.TencentNoneKlineURL, "market_data_tencent"); err != nil {
+		return marketdatabootstrap.Dependencies{}, err
+	}
+	if deps.TencentSearchHTTPDoer, err = bindOne(cfg.TencentStockSearchURL, "market_data_tencent"); err != nil {
+		return marketdatabootstrap.Dependencies{}, err
+	}
+	if deps.SinaQuoteHTTPDoer, err = bindOne(cfg.SinaQuoteURL, "market_data_sina"); err != nil {
+		return marketdatabootstrap.Dependencies{}, err
+	}
+	if deps.SinaKlineHTTPDoer, err = bindOne(cfg.SinaKlineURL, "market_data_sina"); err != nil {
+		return marketdatabootstrap.Dependencies{}, err
+	}
+	if deps.YahooHTTPDoer, err = bindOne(cfg.YahooChartURL, "market_data_yahoo"); err != nil {
+		return marketdatabootstrap.Dependencies{}, err
+	}
+	if deps.NeteaseQuoteHTTPDoer, err = bindOne(cfg.NeteaseQuoteURL, "market_data_netease"); err != nil {
+		return marketdatabootstrap.Dependencies{}, err
+	}
+	if deps.NeteaseHistoryHTTPDoer, err = bindOne(cfg.NeteaseHistoryURL, "market_data_netease"); err != nil {
+		return marketdatabootstrap.Dependencies{}, err
+	}
+	if deps.TushareHTTPDoer, err = bindOne(cfg.TushareAPIURL, "market_data_tushare"); err != nil {
+		return marketdatabootstrap.Dependencies{}, err
+	}
+	if deps.TickFlowAuthenticatedHTTPDoer, err = bindOne(cfg.TickFlowAPIURL, "market_data_tickflow"); err != nil {
+		return marketdatabootstrap.Dependencies{}, err
+	}
+	if deps.TickFlowPublicHTTPDoer, err = bindOne(cfg.TickFlowFreeAPIURL, "market_data_tickflow_public"); err != nil {
+		return marketdatabootstrap.Dependencies{}, err
+	}
+	if deps.XueqiuHTTPDoer, err = bindOne(cfg.XueqiuBaseURL, "market_data_xueqiu"); err != nil {
+		return marketdatabootstrap.Dependencies{}, err
+	}
 	if cfg.MXEnabled {
-		if deps.MiaoXiangHTTPDoer, err = bindOne(cfg.MXAPIURL, "market_data_miaoxiang"); err != nil { return marketdatabootstrap.Dependencies{}, err }
+		if deps.MiaoXiangHTTPDoer, err = bindOne(cfg.MXAPIURL, "market_data_miaoxiang"); err != nil {
+			return marketdatabootstrap.Dependencies{}, err
+		}
 	}
 
 	baostockAddress := net.JoinHostPort(strings.Trim(cfg.BaostockHost, "[]"), strconv.Itoa(cfg.BaostockPort))
