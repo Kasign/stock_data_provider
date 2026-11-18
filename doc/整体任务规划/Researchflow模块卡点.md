@@ -47,6 +47,7 @@
 - **PIT 绑定缺口**：`ResearchContextSnapshot.SystemAsOf` 当前仅校验非零 UTC，未与 Run.SystemAsOf 比较。Research Context 的 SectionRefs 必须与 Context.SystemAsOf 一致，但调用方仍必须在 CreateContext 前和读取后验证 Context.SystemAsOf 与 Run.SystemAsOf 完全相同。
 - **Deadline 绑定缺口**：构造 LLM ModelRequest 时必须直接继承同一 Run 的 SystemAsOf/DeadlineAt；LLM Validate 只能校验 UTC 和时间边界，不能替代 Run 关联一致性验证。
 - **授权边界**：Researchflow contextassembly 不获取资源、不签发/复核授权；必须由各资源 Owner 的当前授权 Adapter 获取可进入上下文的正文，且仅把授权后的 included section 内容交给模型。
+- **Researchflow 本模块已补齐**：Context Assembly 对 ResearchQuestion、Scope、BuilderVersion、SubjectRefs、QualitySummary.ReasonCodes、候选 ID/Owner/引用、Section Metadata.Version、Tokenizer ModelID/Version 和 SectionContent ID/Text 增加有效 UTF-8 校验，避免 JSON 序列化将无效字节静默替换。代码 SHA `e6e941c71c9960b6675ce846df1b621a16064f06` 的 Run [44311895491](https://github.com/Kasign/stock_data_provider/actions/runs/44311895491) 中 Researchflow format/tests/race/vet、WorkerStore unit/race/vet、MariaDB lifecycle integration 均通过。
 - **影响**：现有测试只能证明纯函数预算/映射/JSON 组合逻辑，不能证明生产数据可授权、PIT 正确、Tokenizer 预算准确或真实 LLM 调用成功。
 - **处理责任**：Research Owner（Context Facade/授权语义）、LLM Owner（真实 Tokenizer）、Server Owner（组合根/Worker 接入）、Researchflow（适配和 Run Context 绑定）。
 - **解除条件**：完成 Owner Adapter 与当前授权；Run/Context/LLM 的 SystemAsOf 和 Deadline 一致性测试；生产 Tokenizer 与模型版本绑定及准确性证据；Server/Worker 真实 Stage 注册和集成测试。
