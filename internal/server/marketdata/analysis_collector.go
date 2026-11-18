@@ -76,13 +76,14 @@ func (c *AnalysisCollector) Collect(ctx context.Context, request domain.RunReque
 		security domain.Security
 		kind     string
 	}
-	jobs := make([]job, 0, len(universe.Securities)*2)
+	jobs := make([]job, 0, len(universe.Securities)*2+len(c.indexSymbols))
 	seenIndexSymbols := make(map[string]struct{})
 	for _, security := range universe.Securities {
 		isIndex := isIndexSecurity(security)
 		if isIndex {
 			if wantHistory || wantIndex {
 				jobs = append(jobs, job{security: security, kind: "index"})
+				seenIndexSymbols[strings.ToUpper(security.Symbol)] = struct{}{}
 			}
 			continue
 		}
@@ -91,6 +92,14 @@ func (c *AnalysisCollector) Collect(ctx context.Context, request domain.RunReque
 		}
 		if wantQuote {
 			jobs = append(jobs, job{security: security, kind: "quote"})
+		}
+	}
+	if wantIndex {
+		for _, symbol := range c.indexSymbols {
+			if _, exists := seenIndexSymbols[strings.ToUpper(symbol)]; exists {
+				continue
+			}
+			jobs = append(jobs, job{security: domain.Security{Symbol: symbol, AssetType: "index"}, kind: "index"})
 		}
 	}
 
