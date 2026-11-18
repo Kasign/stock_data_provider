@@ -25,6 +25,19 @@ func (s sourceCatalogStub) LookupEndpoint(context.Context, string, string) (Sour
 	return s.registration, s.err
 }
 
+func (s sourceCatalogStub) ResolveCurrentSourceCollectionPolicies(
+	_ context.Context, sourceRef, sourceVersion, endpointRef, endpointVersion string,
+) (domain.SourcePolicy, *domain.EndpointPolicy, error) {
+	if s.err != nil {
+		return domain.SourcePolicy{}, nil, s.err
+	}
+	if sourceRef != s.registration.SourceID || sourceVersion != s.registration.SourcePolicyVersionID ||
+		endpointRef != s.registration.EndpointID || endpointVersion != s.registration.EndpointPolicyVersionID {
+		return domain.SourcePolicy{}, nil, ErrSourceCollectionPolicyUnavailable
+	}
+	return s.registration.SourcePolicy, s.registration.EndpointPolicy, nil
+}
+
 type sourceCollectionPolicyResolverStub struct {
 	source                                                 domain.SourcePolicy
 	endpoint                                               *domain.EndpointPolicy
@@ -96,6 +109,23 @@ func validCollectRequest() CollectSourceRequest {
 		Purpose: domain.PurposeInternalPersonalResearch, ContentKind: domain.ContentFullText,
 		StorageMode: domain.StorageTransient, Retention: time.Second, MaxEntries: 10,
 	}
+}
+
+func TestCollectSourceFailsClosedWithoutCurrentPolicyResolver(t *testing.T) {
+	transport := &sourceTransportStub{}
+	useCase := NewCollectSource(sourceCatalogWithoutPolicyResolver{registration: approvedSourceRegistration()}, transport)
+	_, err := useCase.Execute(context.Background(), validCollectRequest())
+	if SourceCollectionErrorCode(err) != "source_current_policy_unavailable" || transport.calls != 0 {
+		t.Fatalf("error=%v transport calls=%d, want fail-closed before network", err, transport.calls)
+	}
+}
+
+type sourceCatalogWithoutPolicyResolver struct {
+	registration SourceEndpointRegistration
+}
+
+func (s sourceCatalogWithoutPolicyResolver) LookupEndpoint(context.Context, string, string) (SourceEndpointRegistration, error) {
+	return s.registration, nil
 }
 
 func TestCollectSourceUsesCurrentPolicyBeforeNetwork(t *testing.T) {

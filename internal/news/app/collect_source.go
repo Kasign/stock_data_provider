@@ -116,7 +116,8 @@ type CollectSource struct {
 }
 
 func NewCollectSource(catalog SourceCatalog, transport SourceTransport) *CollectSource {
-	return &CollectSource{catalog: catalog, transport: transport, now: time.Now}
+	resolver, _ := catalog.(CurrentSourceCollectionPolicyResolver)
+	return &CollectSource{catalog: catalog, transport: transport, policyResolver: resolver, now: time.Now}
 }
 
 // NewCollectSourceWithPolicyResolver 创建生产采集用例；没有当前策略解析器时不得用于生产装配。
@@ -181,9 +182,12 @@ func (u *CollectSource) Execute(ctx context.Context, request CollectSourceReques
 		Retention:    request.Retention,
 	}
 	policyEvaluatedAt := u.now().UTC()
+	if u.policyResolver == nil {
+		return CollectSourceResult{}, &SourceCollectionError{Code: "source_current_policy_unavailable"}
+	}
 	sourcePolicy := registration.SourcePolicy
 	endpointPolicy := registration.EndpointPolicy
-	if u.policyResolver != nil {
+	{
 		currentSource, currentEndpoint, resolveErr := u.policyResolver.ResolveCurrentSourceCollectionPolicies(
 			ctx, registration.SourceID, registration.SourcePolicyVersionID,
 			registration.EndpointID, registration.EndpointPolicyVersionID,
