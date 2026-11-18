@@ -19,16 +19,29 @@ Platform 提供公共执行/技术原语；Researchflow 拥有 Run/Stage/Attempt
 
 ## 2. CreateRun 命令与身份
 
-CreateRunCommand 必须显式包含 schema_version、idempotency_key、template_ref、template_version、system_as_of、deadline_at、input_snapshot_refs、parameters、originating_request_id、correlation_id。
+当前 `CreateRunCommand` 只承载调用方提交的业务意图：
 
-- authenticated_caller_ref 从可信认证 Context 获取，不作为请求体字段，不接受客户端自报主体。
-- idempotency_key 唯一作用域为 (authenticated_caller_ref, CreateRun)；相同键/相同指纹返回原 Run，不同指纹返回 idempotency_conflict。
-- 请求指纹覆盖调用主体、template_ref/version、system_as_of、deadline_at、规范化 input_snapshot_refs 和 parameters；不覆盖 request_id、originating_request_id、correlation_id 和接收时间。
-- `input_snapshot_refs` 是不透明 Ref 集合：必须为非 null 数组；Ref 必须非空、首尾无空白且不重复。规范化只做字典序排序，不静默 Trim 或改写 Ref；空数组仍由模板 `allow_empty_inputs` 决定是否允许。指纹计算本身也执行上述结构校验，避免幂等记录查询先于完整命令校验时接收非法 Ref。
-- `RequestFingerprint` 在幂等查询之前还必须拒绝零值或非 UTC 的 `system_as_of/deadline_at`，不能先转 UTC 后再比较，否则同一瞬间的偏移时区输入可能绕过命令格式校验并命中已有幂等记录。
-- system_as_of 必须为 RFC3339Nano UTC 且不晚于可信服务端当前时间；deadline_at 必须晚于数据库 UTC 当前时间。二者独立。
-- originating_request_id 从可信 Request Context 注入；纯内部触发显式 null。correlation_id 从可信父链路继承，否则由 Researchflow 生成高熵 ID；不得信任客户端自报 Header。
-- input_snapshot_refs 必须为非 null 数组；空数组仅允许模板注册时声明 allow_empty_inputs=true 的纯函数流程。
+- `schema_version`
+- `idempotency_key`
+- `template_ref`、`template_version`
+- `input_snapshot_refs`
+- `parameters`
+
+以下字段不由调用方在命令体中提供：
+
+- `authenticated_caller_ref`：从可信认证 Context 获取，不接受请求体自报主体。
+- `originating_request_id`：从可信 Request Context 注入；纯内部触发显式 null。
+- `correlation_id`：从可信父链路继承；缺失时由 Researchflow 生成高熵 ID。
+- `system_as_of`：CreateRun Application 使用 `DatabaseClock.NowUTC` 获取的数据库权威当前时刻。
+- `deadline_at`：由同一次数据库 UTC 时钟读取结果加上服务端配置的 Run Deadline 计算。
+
+幂等规则：
+
+- idempotency_key 唯一作用域为 `(authenticated_caller_ref, CreateRun)`；相同键/相同指纹返回原 Run，不同指纹返回 `idempotency_conflict`。
+- RequestFingerprint 覆盖调用主体、固定操作名、schema_version、template_ref/version、规范化 input_snapshot_refs 和 parameters；使用 RFC 8785 JCS + SHA-256。
+- `system_as_of`、`deadline_at`、`request_id`、`originating_request_id`、`correlation_id` 和接收时间均为服务端生成/链路字段，不进入请求指纹。相同业务命令重放时返回原 Run，因此不会刷新 PIT 或 Deadline。
+- `input_snapshot_refs` 是不透明 Ref 集合：必须为非 null 数组；Ref 必须非空、首尾无空白且不重复。规范化只做字典序排序，不静默 Trim 或改写 Ref；空数组仅由模板 `allow_empty_inputs` 授权。
+- 时间由服务端通过 Platform 时间抽象获取。Researchflow 当前跨实例协调使用 `DatabaseClock`，其 MariaDB Adapter 复用 Platform `time/mariadb.Source`；Run 的 `system_as_of` 与 `deadline_at` 基于同一次数据库 UTC 时钟读取生成。调用方不能指定或覆盖它们。
 
 ## 3. Workflow Template 与参数快照
 
@@ -87,13 +100,24 @@ Fake Repository/Fake Clock/Fake Provider 只证明模块内逻辑；MariaDB/Redi
 
 | 字段/组 | 来源 | 语义与约束 |
 |---|---|---|
-| system_as_of / deadline_at | CreateRunCommand 显式调用参数 | 两者独立；前者不晚于可信服务端当前 UTC，后者晚于数据库 UTC 当前时间 |
+| system_as_of / deadline_at | CreateRun Application 的 DatabaseClock；deadline 由服务端配置计算 | 同一次数据库 UTC 时钟读取生成 system_as_of，并计算 deadline_at；不属于 CreateRunCommand，也不进入 RequestFingerprint |
 | input_snapshot_refs | 调用方提供的已存在快照引用 | 非 null 数组；空数组必须由模板 allow_empty_inputs 授权 |
 | originating_request_id | 可信 Request Context | 可空；内部触发为 null，不接受伪造客户端值 |
 | correlation_id | 可信父链路或 Researchflow 生成器 | 必填；当前领域包只校验非空，注入/生成由后续 Application 层实现 |
 | template_ref/version/fingerprint | 精确版本化 Template | 禁止隐式 latest；fingerprint 覆盖执行语义字段 |
 | retry_policy | Template 的 Stage 定义 | max_attempts 包含首次执行；reason code 精确白名单；退避单位毫秒 |
 | risk_decision | 已注册 Hard Risk Stage 的领域输出 | pass/reject/unknown 是业务决策；不得与 Stage 执行状态混为一谈 |
+
+
+
+### 现行实现核对（2026-11-18）
+
+本节早期记录中关于 CreateRun 时间字段的描述曾与后续代码实现不一致，现以当前实现为准：
+
+- `domain.CreateRunCommand` 不含 `system_as_of`、`deadline_at`、`originating_request_id`、`correlation_id`。
+- `application.CreateRunService` 先完成调用身份、幂等、模板和参数校验，再通过 `DatabaseClock.NowUTC` 生成 Run 的 `system_as_of` 和 `created_at`，并计算 `deadline_at`。
+- `domain.RequestFingerprint` 对调用主体、操作、Schema 版本、模板身份、输入快照和参数执行 JCS + SHA-256；不包含服务端生成的 PIT/Deadline 或链路追踪字段。
+- `storage.MySQLDatabaseClock` 复用 Platform MariaDB UTC Source；Researchflow 不再自建数据库时钟实现。
 
 ### 当前实现限制
 
