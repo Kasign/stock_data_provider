@@ -180,7 +180,12 @@ func hasExplicitPublicationTimezone(raw string) bool {
 			return true
 		}
 	}
-	return false
+	parsed, err := time.Parse(time.RFC1123, raw)
+	if err != nil {
+		return false
+	}
+	zone, offset := parsed.Zone()
+	return offset == 0 && (strings.EqualFold(zone, "UTC") || strings.EqualFold(zone, "GMT"))
 }
 
 func isLocalPublicationDateTime(raw string) bool {
