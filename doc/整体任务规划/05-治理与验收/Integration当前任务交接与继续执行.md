@@ -1431,3 +1431,38 @@ GetRun 与 CancelRun 的持久化创建者授权已在 Application/Storage 层�
 - 不开放 Researchflow HTTP API，`SRV-CTR-001` 继续 deferred。
 - 不使用 Fixture 结果替代 Tavily 结果，不因 Probe 成功而自动通过 Stage 质量验收。
 - 不从 Provider `published_date` 推导 `available_at`。
+
+
+## 24. 2026-11-18 Tavily 真实生产链路与双 Worker OS 进程验收
+
+### 单 Worker 真实生产链路
+
+- Live Workflow Run [44232359576](https://github.com/Kasign/stock_data_provider/actions/runs/44232359576) success，验收 SHA `66cade34f6421cd70ff0d64bcd16db2664b816dc`。
+- 使用真实 Tavily 配置、Platform HTTP Client、Server 生产 Researchflow Owner/Execution Composition、正式 `news.search_candidates@1.0.0` Template、生产 Worker Runtime 和一次性隔离 MariaDB。
+- 通过可信 Owner Session Principal 调用内部 CreateRun；未开放 HTTP API。
+- 实际结果：Run `succeeded`；Stage `succeeded`；Attempt 1 次且成功；Tavily 候选 3 条；QualitySummary 与 Provider Payload 一致；ResultSummary 持久化 1 条；终态 Outbox 1 条。
+- Stage DiagnosticRefs 为 0。成功 Provider Outcome 保存在 Payload 中；本次没有独立 Platform Diagnostic 记录。不能将 Payload Outcome 描述为独立 Diagnostic。
+- 候选时间字段仍只有 Provider 声明的发布时间相关字段；没有授权证据支持 PIT `available_at`，不补造、不回填。
+
+### 双 Worker OS 进程真实并发验收
+
+- Live Workflow Run [44233847418](https://github.com/Kasign/stock_data_provider/actions/runs/44233847418) success，验收 SHA `9ad9db5d88094725426efbdf9eb2e84cff5e4989`。
+- 同一工作流依次执行单 Worker 与双 Worker 两个真实链路测试；MariaDB 和 Redis 均为独立服务容器，测试数据库按用例隔离并在结束后删除。
+- 双 Worker 测试通过两个独立 OS 子进程执行完整 Server Worker Bootstrap；两个进程共享 MariaDB、Redis、Tavily 配置和数据库级 `MaxWorkers=2`，每进程本地 Worker 数为 1。
+- 验收不是只看进程启动：测试在数据库中观察到两个不同 `lease_owner` 同时持有两个真实 Run 的活动 Lease，证明两个 Worker 进程都实际领取了 Provider 工作。
+- 实际结果：2 个独立进程；同时观察到 2 个不同 Worker ID；2 个真实 Tavily Run 均 `succeeded`；2 个 Stage 均 `succeeded`；各 1 次成功 Attempt；共持久化 6 条 Tavily 候选；每个 Run 各有 1 条 ResultSummary 和 1 条终态 Outbox；两个 Worker 均正常收到 SIGTERM 并完成关闭。
+- 双 Worker Stage DiagnosticRefs 均为空；Provider Outcome、QualitySummary 和 Run Finalization 证据均从 MariaDB 读取验证。Feed 未配置授权 URL，仍保持 SKIP，不纳入通过项。
+
+### CI 与代码状态
+
+- Integration CI Run [44233472699](https://github.com/Kasign/stock_data_provider/actions/runs/44233472699) success，代码验收 SHA `f887b612e442587e687aa68f517f09eebcff514a`。
+- 该 CI 覆盖双 Worker 测试的格式、编译、go vet 和普通测试路径；真实 Tavily/双 OS 进程执行由上述受控 Live Workflow 验收。
+- 真实 Live Workflow 只在提交消息含 `[run_news_researchflow_live]` 时执行；普通代码/文档提交不会自动发起真实 Provider 请求。
+- `SRV-CTR-001` 继续 deferred；没有开放 Researchflow HTTP API。
+
+### 下一步
+
+1. 对真实双 Worker Run 的全局 Capacity、重复 Claim、Fencing 和终态幂等再做一轮有针对性的边界审查；现有独立 MariaDB/Redis 测试仍保留，不能因本次真实执行成功而省略。
+2. 复核真实 Provider Outcome 与 Diagnostics 的职责边界，只有确有独立 Diagnostic 证据时才填充 DiagnosticRefs。
+3. `available_at` 继续保持缺失/不可用于 PIT，等待来源授权和首次公开可获取证据；不从 `published_date`、`published_at` 或 `observed_at` 推导。
+4. 保持 Feed 与未配置 Provider 为 skipped/not_comparable，不将缺少配置解释为失败或通过。
