@@ -450,3 +450,52 @@ func TestIndicatorPayloadRejectsPartialCompositeResult(t *testing.T) {
 		})
 	}
 }
+
+
+func TestEnvelopePreservesExplicitEmptySnapshotRefs(t *testing.T) {
+	payload := validTrendPayload(t)
+	payloadJSON, err := payload.marshalPayload()
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifestValue, err := manifest.BuildWithPayload(manifest.Input{
+		ResultType:           "trend",
+		Scope:                "stock",
+		SecurityID:           "600000.SH",
+		Period:               "20d",
+		QualityStatus:        "valid",
+		ResultStatus:         "completed",
+		SchemaVersion:        "1.0.0",
+		PayloadSchemaVersion: "1.0.0",
+		AlgorithmVersion:     "trend-algorithm.v1",
+		ParameterFingerprint: "sha256:envelope-empty-snapshots",
+		SystemAsOf:           envelopeTestTime(t),
+		InputSnapshotRefs:    []string{},
+	}, payloadJSON)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	envelope, err := BuildEnvelope(manifestValue, "authorization-ref:current", payload)
+	if err != nil {
+		t.Fatalf("BuildEnvelope() error = %v", err)
+	}
+	if envelope.InputSnapshotRefs == nil || len(envelope.InputSnapshotRefs) != 0 {
+		t.Fatalf("BuildEnvelope() refs = %#v, want explicit empty array", envelope.InputSnapshotRefs)
+	}
+
+	encoded, err := json.Marshal(envelope)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded Envelope
+	if err := json.Unmarshal(encoded, &decoded); err != nil {
+		t.Fatalf("UnmarshalJSON() error = %v", err)
+	}
+	if decoded.InputSnapshotRefs == nil || len(decoded.InputSnapshotRefs) != 0 {
+		t.Fatalf("round-trip refs = %#v, want explicit empty array", decoded.InputSnapshotRefs)
+	}
+	if err := decoded.ValidateAgainstManifest(manifestValue); err != nil {
+		t.Fatalf("round-tripped Envelope does not match Manifest: %v", err)
+	}
+}
