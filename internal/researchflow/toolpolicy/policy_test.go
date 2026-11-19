@@ -167,7 +167,7 @@ func TestNewRegistryRejectsInvalidUTF8DefinitionFields(t *testing.T) {
 		Name: "research.lookup", Description: "lookup",
 		ParametersJSON: []byte(`{"type":"object"}`),
 		RequiredScopes: []string{"research:read"},
-		Timeout: time.Second, MaxCallsPerRun: 1,
+		Timeout:        time.Second, MaxCallsPerRun: 1,
 	}
 	cases := []struct {
 		name string
