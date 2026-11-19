@@ -25,7 +25,8 @@ func ModelErrorFromPlatformFault(err error) *ModelErrorInfo {
 		kind = ErrorCancelled
 	case errors.Is(err, context.DeadlineExceeded), platformFault.Class == fault.ClassTimeout:
 		kind = ErrorTimeout
-	case platformFault.Code == "platform.httpclient.response_too_large":
+	case platformFault.Code == "platform.httpclient.response_too_large",
+		platformFault.Code == "platform.httpclient.stream_body_too_large":
 		kind = ErrorResourceLimit
 	default:
 		switch platformFault.Class {
