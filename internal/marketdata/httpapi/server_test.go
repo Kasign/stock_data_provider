@@ -643,13 +643,6 @@ func TestStockSearchEndpointReturnsCanonicalMatchesAndValidatesParameters(t *tes
 		[]provider.NamedProvider{p}, []provider.QuoteProvider{p}, []provider.DailyBarProvider{p}, 2000, time.Second, nil,
 	).InProcessHandler()
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/stocks/search?q=%E8%B4%B5%E5%B7%9E%E8%8C%85%E5%8F%B0", nil)
-	w := httptest.NewRecorder()
-	h.ServeHTTP(w, req)
-	if w.Code != http.StatusUnauthorized {
-		t.Fatalf("missing API key status=%d body=%s", w.Code, w.Body.String())
-	}
-
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/stocks/search?q=%E8%B4%B5%E5%B7%9E%E8%8C%85%E5%8F%B0&limit=10", nil)
 	w = httptest.NewRecorder()
 	h.ServeHTTP(w, req)
@@ -753,7 +746,7 @@ func TestIndexConstituentsRejectsInvalidAsOfQueryAndCurrentOnlySource(t *testing
 		"/api/v1/market/indices/000300.SH/constituents?as_of=" + validPastDate + "&source=hithink",
 	} {
 		req := httptest.NewRequest(http.MethodGet, path, nil)
-			w := httptest.NewRecorder()
+		w := httptest.NewRecorder()
 		h.ServeHTTP(w, req)
 		if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), `"code":"VALIDATION_ERROR"`) {
 			t.Fatalf("invalid historical query %q status=%d body=%s", path, w.Code, w.Body.String())

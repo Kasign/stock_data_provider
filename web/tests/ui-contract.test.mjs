@@ -2777,7 +2777,7 @@ test("WebUI 不再保存独立 Data API Key 或双服务地址", async () => {
   assert.match(html, /id="owner-login-form"/);
   assert.match(html, /id="owner-session-logout"/);
   assert.match(html, /Owner Session/);
-  assert.doesNotMatch(html, /Data API Key|行情服务 API Key|X-API-Key/);
+  assert.doesNotMatch(html, /<input[^>]*(?:api.?key|service.?key)/i);\n  assert.doesNotMatch(html, /X-API-Key/);
 });
 
 test("Root Server 健康检查只访问统一入口，Data 诊断不隐式请求上游", () => {

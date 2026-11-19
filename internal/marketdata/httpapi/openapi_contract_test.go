@@ -639,8 +639,6 @@ func TestOpenAPIParameterInventoryMatchesReviewedHandlerMatrix(t *testing.T) {
 		t.Fatal("OpenAPI paths object missing")
 	}
 	expected := map[string][]string{
-		"GET /health/live":                                 {},
-		"GET /health/ready":                                {},
 		"GET /api/v1/market/quotes":                        {"symbols@query!required"},
 		"GET /api/v1/quotes/{symbol}":                      {"symbol@path!required"},
 		"GET /api/v1/bars/{symbol}/daily":                  {"symbol@path!required", "start@query!optional", "end@query!optional", "limit@query!optional", "adjustment@query!optional", "as_of@query!optional"},
@@ -675,8 +673,8 @@ func TestOpenAPIParameterInventoryMatchesReviewedHandlerMatrix(t *testing.T) {
 		"GET /api/v1/market/dragon-tiger":                  {"date@query!optional", "page@query!optional", "page_size@query!optional"},
 		"GET /api/v1/market/limit-pools":                   {"type@query!optional", "date@query!optional", "limit@query!optional"},
 	}
-	if len(expected) != 35 {
-		t.Fatalf("reviewed parameter matrix has %d operations, want 35", len(expected))
+	if len(expected) != 33 {
+		t.Fatalf("reviewed parameter matrix has %d operations, want 33", len(expected))
 	}
 	for route, want := range expected {
 		parts := strings.SplitN(route, " ", 2)
@@ -1013,8 +1011,6 @@ func TestOpenAPIParameterTypesAndFormatsMatchReviewedHandlerMatrix(t *testing.T)
 	}
 	paths := document["paths"].(map[string]any)
 	expected := map[string]map[string]map[string]any{
-		"GET /health/live":                     {},
-		"GET /health/ready":                    {},
 		"POST /api/v1/data-sources/probe":      {},
 		"GET /api/v1/data-sources/diagnostics": {},
 		"GET /api/v1/data-sources":             {},
