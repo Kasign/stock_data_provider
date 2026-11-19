@@ -1,4 +1,4 @@
-import { analysisHealth, analysisLiveness, getDataSources, getDataSourceDiagnostics, getDataSourceProbeHistory, marketHealth, marketLiveness, runDataSourceProbe } from "./api.js";
+import { analysisHealth, analysisLiveness, getDataSources, getDataSourceDiagnostics, getDataSourceProbeHistory, runDataSourceProbe } from "./api.js";
 import { runHealthCheck } from "./health-check.js";
 import { describeApiError, formatDateTime } from "./format.js";
 
@@ -701,7 +701,7 @@ function renderProviderProbeHistory(payload) {
 
 function showProviderProbeFailure(error, skipped = false) {
   setBadge("#data-center-probe-status", skipped ? "unknown" : "failed",
-    skipped ? "需要行情服务 API Key" : "主动探测失败");
+    "主动探测失败");
   setText("#data-center-probe-summary", skipped
     ? "未发起主动探测。请先配置行情服务 API Key；此凭据不是第三方 Provider API Key。"
     : "主动探测请求失败：" + safeError(error));
@@ -711,7 +711,7 @@ function showProviderProbeFailure(error, skipped = false) {
 
 function showProviderProbeHistoryFailure(error, skipped = false) {
   setBadge("#data-center-probe-history-status", skipped ? "unknown" : "failed",
-    skipped ? "需要 API Key" : "历史读取失败");
+    "历史读取失败");
   setText("#data-center-probe-history-summary", skipped
     ? "配置行情服务 API Key 后才能读取探测历史。"
     : "探测历史读取失败：" + safeError(error)
@@ -721,7 +721,7 @@ function showProviderProbeHistoryFailure(error, skipped = false) {
     root.replaceChildren();
     const empty = document.createElement("div");
     empty.className = "empty-row";
-    empty.textContent = skipped ? "未执行历史读取。" : "历史暂不可读；不推断 Provider 健康状态。";
+    empty.textContent = "历史暂不可读；不推断 Provider 健康状态。";
     root.append(empty);
   }
 }
@@ -913,7 +913,7 @@ export function bindDataCenter(getSettings) {
       ]);
       if (current !== generation) return;
 
-      const [webUi, marketLive, marketReady, analysisLive, analysisReady, sources, diagnostics] = checks;
+      const [webUi, analysisLive, analysisReady, sources, diagnostics] = checks;
       const webUiState = probeState(webUi);
       setBadge("#data-service-webui-status", webUiState, webUiState === "healthy" ? "正常" : statusWord(webUiState));
       setText("#data-service-webui-detail", webUi.ok
@@ -970,7 +970,7 @@ export function bindDataCenter(getSettings) {
       }
       void loadProbeHistory(settings);
 
-      const serviceStates = [webUiState, marketLiveState, marketReadyState, analysisLiveState, analysisReadyState];
+      const serviceStates = [webUiState, analysisLiveState, analysisReadyState];
       const healthyServices = serviceStates.filter((status) => status === "healthy").length;
       const failedServices = serviceStates.filter((status) => status === "failed" || status === "timeout").length;
       const degradedServices = serviceStates.filter((status) => status === "degraded").length;
@@ -983,8 +983,8 @@ export function bindDataCenter(getSettings) {
         ? sources.data.sources.filter((source) => source && typeof source === "object" && source.enabled === true).length
         : 0;
       const endpointOrDependencyFailures = failedServices + failedDependencies + degradedServices;
-      const providerReadFailed = !sources.ok && !sources.skipped;
-      const unknown = unknownServices + unknownDependencies + (sources.skipped ? 1 : 0) + providerUnprobed;
+      const providerReadFailed = !sources.ok;
+      const unknown = unknownServices + unknownDependencies + providerUnprobed;
       const failed = endpointOrDependencyFailures + (providerReadFailed ? 1 : 0);
       setText("#data-center-count-healthy", healthyServices + healthyDependencies);
       setText("#data-center-count-failed", failed);

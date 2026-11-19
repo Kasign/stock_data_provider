@@ -1,31 +1,28 @@
 import { normalizeBasePath } from "./format.js";
 
 export const SETTINGS_KEY = "stock-provider-webui.settings.v1";
-const DEFAULTS = Object.freeze({ marketBase: "/market-api", analysisBase: "/analysis-api", apiKey: "" });
+const DEFAULTS = Object.freeze({ marketBase: "/", analysisBase: "/" });
 
 export function loadSettings() {
   try {
-    const saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}");
-    return {
-      marketBase: normalizeBasePath(saved.marketBase, DEFAULTS.marketBase),
-      analysisBase: normalizeBasePath(saved.analysisBase, DEFAULTS.analysisBase),
-      apiKey: typeof saved.apiKey === "string" ? saved.apiKey : ""
-    };
+    const raw = localStorage.getItem(SETTINGS_KEY);
+    const value = { ...DEFAULTS };
+    const serialized = JSON.stringify(value);
+    // Remove legacy browser Data API Key and split upstream paths instead of
+    // migrating them into another client-side credential/configuration store.
+    if (raw !== null && raw !== serialized) localStorage.setItem(SETTINGS_KEY, serialized);
+    return value;
   } catch {
     return { ...DEFAULTS };
   }
 }
 
-export function saveSettings(settings) {
-  const value = {
-    marketBase: normalizeBasePath(settings.marketBase, DEFAULTS.marketBase),
-    analysisBase: normalizeBasePath(settings.analysisBase, DEFAULTS.analysisBase),
-    apiKey: String(settings.apiKey ?? "").trim()
-  };
+export function saveSettings() {
+  const value = { ...DEFAULTS };
   const serialized = JSON.stringify(value);
   localStorage.setItem(SETTINGS_KEY, serialized);
   if (localStorage.getItem(SETTINGS_KEY) !== serialized) {
-    throw new Error("设置未能保存到当前浏览器，请检查存储权限或可用空间。");
+    throw new Error("Root Server API 配置未能保存，请检查浏览器存储权限或可用空间。");
   }
   return value;
 }
@@ -45,10 +42,10 @@ function isValidISODate(value) {
   return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
 }
 
-async function request(base, path, { apiKey = "", method = "GET", body, signal, timeoutMs = 0, headers: extraHeaders = {} } = {}) {
+async function request(base, path, { method = "GET", body, signal, timeoutMs = 0, csrf = false, headers: extraHeaders = {} } = {}) {
   const prefix = normalizeBasePath(base, "/");
   const headers = { Accept: "application/json", ...extraHeaders };
-  if (apiKey) headers["X-API-Key"] = apiKey;
+  if (csrf) {\n    if (!ownerCSRFToken) throw new Error("当前页面没有可用的 CSRF Token，请先恢复 Owner Session。");\n    headers["X-CSRF-Token"] = ownerCSRFToken;\n  }
   if (body !== undefined) headers["Content-Type"] = "application/json";
   const requestPath = prefix === "/" ? path : `${prefix}${path}`;
   let requestSignal = signal;
@@ -211,7 +208,7 @@ export function runDataSourceProbe(settings, options = {}, signal) {
     if (symbols.length) body.symbols = symbols;
   }
   return request(settings.marketBase, "/api/v1/data-sources/probe", {
-    apiKey: settings.apiKey, method: "POST", body, signal
+    apiKey: settings.apiKey, method: "POST", body, signal, csrf: true
   });
 }
 

@@ -1189,7 +1189,7 @@ async function loadStockSearch(query, generation) {
     const message = error.status === 404
       ? "当前部署的行情服务尚未提供股票搜索接口，请更新 market-data 服务后再使用。"
       : error.status === 401 || error.status === 403
-        ? "行情服务 API Key 验证失败，请检查连接与密钥设置。"
+        ? "Owner Session 已失效或当前账号无权访问，请重新登录。"
         : "股票搜索失败：" + errorMessage(error);
     setStockSearchMessage(message, { show: true });
   } finally {
@@ -2551,7 +2551,7 @@ async function checkDraftConnectionFromSettings() {
         const currentSettingsToCheck = mergeConnectionDraft(currentDraft, state.settings);
         configurationChanged = currentSettingsToCheck.marketBase !== settingsToCheck.marketBase ||
           currentSettingsToCheck.analysisBase !== settingsToCheck.analysisBase ||
-          currentSettingsToCheck.apiKey !== settingsToCheck.apiKey;
+          false;
       } catch {
         configurationChanged = true;
       }
@@ -4473,7 +4473,7 @@ function discardConnectionDraft() {
 }
 
 function clearLocalSettings() {
-  if (!window.confirm("确定清除当前浏览器保存的 API Key 与自定义 API 路径？这不会修改服务器 .env。")) return;
+  if (!window.confirm("确定清除当前浏览器保存的旧连接配置？不会修改服务器配置。")) return;
   try {
     const next = clearSettings();
     applySettings(next);
@@ -4599,7 +4599,7 @@ function handleLocalStorageChange(event) {
     const nextSettings = loadSettings();
     const changed = nextSettings.marketBase !== state.settings.marketBase ||
       nextSettings.analysisBase !== state.settings.analysisBase ||
-      nextSettings.apiKey !== state.settings.apiKey;
+      false;
     if (!changed) return;
 
     try {
@@ -4833,7 +4833,7 @@ async function importBrowserDataFile(file) {
   const watchlistConflicts = imported.watchlist.filter((record) => existingSymbols.has(watchlistIdentity(record))).length;
   const taskConflicts = imported.recentTasks.filter((record) => existingTaskIdentities.has(recentTaskIdentity(record))).length;
   $("#browser-data-import-summary").textContent = "文件包含自选股 " + imported.watchlist.length + " 条（冲突 " + watchlistConflicts + " 条），最近任务 " + imported.recentTasks.length + " 条（冲突 " + taskConflicts + " 条）。";
-  $("#browser-data-import-settings").textContent = "主题、本地偏好和 API 路径将采用文件中的设置；当前行情 API Key 保留。";
+  $("#browser-data-import-settings").textContent = "主题和本地偏好将采用文件中的设置；服务 API 入口固定为 Root Server 的同源 /api。";
   $("#browser-data-import-current").textContent = "当前浏览器：" + (currentWatchlist.storageReadable && currentWatchlist.storageValid ? currentWatchlistItems.length : "不可读取") + " 条自选股，" + (currentRecentTasks.storageReadable && currentRecentTasks.storageValid ? currentRecentTaskItems.length : "不可读取") + " 条最近任务。";
   const mergeDisabled = !currentWatchlist.storageReadable || !currentWatchlist.storageValid ||
     !currentRecentTasks.storageReadable || !currentRecentTasks.storageValid ||
@@ -4966,7 +4966,7 @@ async function applyBrowserDataImport(imported, currentWatchlist, currentRecentT
     if (state.quote) renderQuote(state.quote);
     if (state.view === "research") renderResearchOverview();
     renderRecentTasks();
-    setBrowserDataFeedback("导入完成：主题、本地偏好、同源 API 路径、自选股、分组归属与本地任务引用已更新。原有 API Key 已保留。", "success");
+    setBrowserDataFeedback("导入完成：主题、本地偏好、自选股、分组归属与本地任务引用已更新。服务 API 入口固定为 Root Server。", "success");
   } catch (error) {
     setBrowserDataFeedback(
       "本地数据已导入，但页面状态刷新未完成；请重新载入页面。原因：" + (error?.message || "界面更新异常。"),
@@ -5340,7 +5340,7 @@ $("#refresh-button").addEventListener("click", async () => {
       if (state.view === "market") await refreshMarketWorkspace();
       else if (state.view === "stocks") {
         await refreshSources();
-        if (state.settings.apiKey) await runQuoteQuery();
+        await runQuoteQuery();
       } else if (state.view === "watchlist") renderWatchlist();
       else if (state.view === "research") {
         await stockResearch.refresh();
