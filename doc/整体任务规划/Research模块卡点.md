@@ -63,3 +63,13 @@ Research 的领域基础能力、Repository/Outbox、Context 消费契约测试�
 - Research Diagnostics 脱敏测试使用符合 Event 版本血缘规则的 EventVersion=1 样本；不放宽生产版本校验。诊断结果语义、PIT 时间边界、Owner 授权复核、快照隔离和敏感信息不泄露的测试结论记录于 `doc/research/任务历史/14-RSC-008-Diagnostics脱敏边界与结果语义审查.md`。
 - 本次 Compose、Market Data、News 等 Job 为 skipped；它们不构成通过证据，也不改变相应模块卡点。
 - 跨模块卡点仍按本文表格执行：News/Data/Quant/Researchflow 提供重新进入证据，Server 负责生产身份、Migration/Relay/Worker 组合装配。
+
+
+## 7. RepairAll Data / News → Research 交叉审查更新（2026-11-19）
+
+- 审查基线：repair_all 代码树 5334043ea8e1abc2c4006c371a3f95b123098946；随后仅有总体计划文档校准提交。
+- Data→Research：当前 internal/research/ 仅有 News Adapter，没有 Data Adapter；internal/marketdata/app/port.go 虽提供 MarketDataReader/DailyBarsSnapshot，但 DATA-CTR-007 在项目级登记中为 deferred。缺少不可变内容寻址 SnapshotRef、Manifest/Payload 绑定、AuthorizationRef 及 Research Evidence source_ref/version/locator 映射。保持 RSC-004 BLOCKED，不新增猜测性 Adapter/DTO。
+- News→Research：internal/research/adapters/news/evidence.go 已实现 Importer/Authorizer；News Query Facade、PIT 单条/分页、当前授权复核及事务内锁定当前策略指针后复读 Observation/Version、校验并读取内容均存在。当前实现机制不重复开发。
+- Server：internal/server/bootstrap/research_news.go 装配组合存在；bootstrap.go 仅在 Cursor Key Ring 配置时创建，并明确没有真实 Stage/HTTP 消费者。该组合目前不是生产消费闭环。
+- News available_at 仍无合格来源证据，RSC-002/NEWS-BLK-07 保持 SHELVED；不以 published_at、fetched_at、observed_at 替代。
+- 本轮未发现能在不越过冻结/待决契约的前提下直接修复的代码缺陷；本卡点不代表代码端到端 PASS。生产真实数据验收为 NOT_COMPARABLE。

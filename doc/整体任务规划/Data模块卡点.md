@@ -97,3 +97,11 @@ Root Server 尚未实际构造并注册 Data Module，属于 Server SRV-009 的�
 - 最新代码 SHA：`02415a319fbe45921be2be469592d84043676626`；Integration CI [Run 44455503870](https://github.com/Kasign/stock_data_provider/actions/runs/44455503870) 全项 success。
 - API Bootstrap 集成测试先执行 Migration enabled，再模拟删除 `market_data_quotes.turnover_rate`，之后 Migration disabled 启动必须 fail-closed，且 information_schema 确认 Root 未自动补列。
 - 代码级 enabled/disabled 启动路径门禁均已覆盖；生产部署演练和真实 Provider 证据仍未完成。模块分支 `feat/data` 未同步。
+
+
+## RepairAll DATA-CTR-007 / Research 消费边界复核（2026-11-19）
+
+- internal/marketdata/app/port.go 已提供 MarketDataReader 与 DailyBarsSnapshot，但该快照当前不包含内容寻址 SnapshotRef、Manifest/Payload 绑定和 Data AuthorizationRef。
+- internal/research/ 当前没有 Data Adapter；不得将普通 DailyBarsSnapshot 或 Bundle.snapshot_id 推定为不可变 Evidence 引用。
+- 项目级 doc/contract/PLAT-002-项目级契约冻结登记簿.md 明确 DATA-CTR-007 为 deferred，解锁责任是 Data 定义不可变行情 Payload、内容寻址 SnapshotRef、Manifest/Payload 绑定及 Research Evidence source_ref/version/locator 映射。
+- 判定：Data→Research 生产消费 NOT_COMPARABLE / DEFERRED；本轮未发现可在当前契约边界内安全实现的局部代码修复。Data 继续负责 DATA-CTR-007 契约和数据事实，Research 不复制 Data 模型/存储/授权。

@@ -56,33 +56,31 @@ P0 原始问题及实施约束作为审计记录保留；当前状态以第 7、
 - Migration checksum 与物理 Schema 漂移分开判定；Data Ready 负责物理结构校验。
 - 代码层 MariaDB/Redis 集成与 Root Bootstrap 验收已通过；生产环境 Migration enabled/disabled 部署演练仍未执行，不能标记生产验收完成。
 
-## 5. 下一步任务
-
-1. 先完成 Data Migration 定义的重构设计，重点解决条件式兼容 DDL 如何纳入不可变版本与 Platform 锁/checksum 保护；不直接将当前 Go helper 粗暴搬成不具备幂等语义的 ALTER SQL。
-2. 扩展 Platform Migration 定义/执行能力，使条件式 Schema 操作可以在统一 namespace lock 下执行，且操作描述纳入 checksum；同时提供只读校验 API。
-3. Data 导出静态 definitions，Store.Migrate 仅作为兼容入口委托公共 Runner，不能保留锁外 DDL。
-4. Server 统一 Root Registry 注册 Data，移除 external namespace 和单独 Data Migration 调度。
-5. 补足 MariaDB 集成测试和 Root 启动模式测试。
-6. 再继续其他模块跨模块调用链 Review。
-
 ## 5. 当前执行任务与边界
 
 ### RA-CROSS-REVIEW-003：Data / News → Research 消费链路 Review
 
-- 状态：IN_PROGRESS（只读代码与契约核对阶段）。
-- 目标：逐项核对 Data、News 对 Research 暴露的公开 Application Port/DTO、Research Adapter/Importer 实际消费方式，以及 Server 当前装配事实。
-- 本轮边界：只审查 Data/News → Research，不扩展到 Quant、Researchflow、LLM、Notification 或 WebUI；不因契约登记为 frozen 就推定实现/生产消费已验收。
-- 首先核对：DATA-CTR-007、NEWS-CTR-001/002/003、RSC-CTR-001，以及 News-Research 只读证据查询契约。
-- 重点判定：字段来源与时间语义、PIT cutoff/system_as_of、available_at 可比较性、AuthorizationRef 当前策略复核、精确版本读取与 TOCTOU、分页/Cursor 稳定性、错误/降级状态传播、Server DI 是否真实接线。
-- 验收输出：每项记录 PASS / DEGRADED / FAIL / NOT_COMPARABLE，并给出代码路径、契约条款、测试/CI SHA；真实来源时间或生产消费者证据缺失时不得标记真实数据 PASS。
-- 修改门禁：发现明确可复现缺陷后，先确认现有能力与归属，再在 repair_all 修复；不新增无调用场景的 API/字段，不复制 Platform/模块能力。若无缺陷，仅更新 Review 记录和卡点，不做无意义代码提交。
+- 状态：REVIEW_DONE_WITH_BLOCKERS（2026-11-19，代码/契约/装配只读审查完成；未发现可据现有契约安全修复的生产代码缺陷）。
+- 范围：Data、News、Research、Server；本轮不扩展到 Quant、Researchflow、LLM、Notification 或 WebUI。
+- 核对内容：DATA-CTR-007、NEWS-CTR-001/002/003、RSC-CTR-001；Data Application Port、Research Adapter/Importer、News PIT/Authorization 实现、Server Composition Root。
+- 结论：
+  1. Data→Research：Data 已有 MarketDataReader 及 DailyBarsSnapshot，但 Research 代码树没有 Data Adapter；DATA-CTR-007 明确为 deferred，且缺不可变行情内容寻址 SnapshotRef、Manifest 与 Payload 绑定、Research Evidence source_ref/version/locator 映射。当前不是遗漏一段可直接接线的现成能力，不能自行发明映射或把普通 DailyBarsSnapshot 伪装成不可变 Evidence。保持 BLOCKED/DEFERRED。
+  2. News→Research：News ResearchEvidenceQuery、单条 PIT 查询、稳定 Cursor/Snapshot 分页、当前策略复核、精确版本内容原子读取及 Research Importer/Authorizer 均已存在。News 存储层通过当前策略指针行锁、Observation/Version 复读、授权回调、正文读取及事务提交构成 TOCTOU 门禁；当前代码不应重复实现。
+  3. Server：newResearchNewsComposition 已装配 News Query、Research Service、Importer、Authorizer，并复用共享 DB；但组合仅在 Cursor Key Ring 配置时构造，且当前没有 Stage/HTTP/Worker 业务调用者，Bootstrap 只记录等待业务消费端接入。因此只能判定为装配代码存在，生产消费链路 NOT_COMPARABLE，不能标记端到端 PASS。
+  4. News Evidence available_at 缺合格来源证据，News 卡点 NEWS-BLK-07 仍阻塞真实 Evidence 成功导入；不得以 published_at、fetched_at 或 observed_at 替代。
+- 诊断判定：
+  - Data→Research：DEFERRED / NOT_COMPARABLE（契约明确 deferred，缺 Manifest/内容定位和授权读取契约）。
+  - News→Research 代码机制：PASS（静态代码与已有测试所覆盖的机制）；真实来源数据：NOT_COMPARABLE。
+  - Server 生产消费：NOT_COMPARABLE（无真实调用者/运行证据）。
+- 证据路径：internal/marketdata/app/port.go、internal/research/adapters/news/evidence.go、internal/news/app/get_evidence.go、internal/news/app/list_evidence.go、internal/news/adapters/storage/evidence_authorization_read.go、internal/news/adapters/storage/authorization_policy_resolver.go、internal/server/bootstrap/research_news.go、internal/server/bootstrap/bootstrap.go；项目级登记见 doc/contract/PLAT-002-项目级契约冻结登记簿.md 的 DATA-CTR-007、NEWS-CTR-001/002/003、RSC-CTR-001。
+- 修复结论：本轮不修改业务代码。缺口属于尚未冻结的跨模块数据契约及缺少真实业务消费者，不是通过添加适配器即可安全修复的局部 Bug。
+- 后续进入条件：Data/项目治理先完成 DATA-CTR-007 的 Snapshot 内容寻址、Manifest/Payload 绑定、AuthorizationRef 与 Evidence 映射；Server/Researchflow 明确真实调用场景和可信 Principal 注入；News 提供可审计 available_at 来源证据。满足条件后再登记新任务并实施跨模块接线。
 
-### 独立外部任务（不阻塞本轮 Review）
+### 外部/依赖卡点（不阻塞其他独立 Review）
 
-- Data Migration enabled/disabled 的生产数据库启停演练：需要真实部署环境和运维窗口；当前代码/CI 通过不能替代该项。
-- News 合格 available_at 来源证据、Data 真实 Provider 证据：缺少来源/凭据/数据时保持 NOT_COMPARABLE 或 SHELVED，不制造样本。
-
-
+- Data Migration enabled/disabled 的生产数据库启停演练：需要真实部署环境和运维窗口。
+- News 合格 available_at 来源证据：保持 NEWS-BLK-07 / SHELVED，不制造样本。
+- Data Snapshot/Evidence 契约：DATA-CTR-007 保持 deferred，不在实现层自行冻结字段语义。
 
 ## 14. RA-CROSS-REVIEW-003 当前基线校准（2026-11-19）
 
@@ -92,3 +90,11 @@ P0 原始问题及实施约束作为审计记录保留；当前状态以第 7、
 - 当前唯一执行任务切换为 RA-CROSS-REVIEW-003：Data / News → Research 消费链路 Review。Research 模块现有 RSC-001/002/003/007/008 状态和项目级 DATA/NEWS 卡点作为输入，不重复其已通过的模块测试。
 - 本任务先只读核对契约、生产代码、Server 装配和现有测试；发现真实缺陷再进入修复。不得以模块单测或历史 SHA 推断当前聚合分支真实生产链路已验收。
 - 文档状态权威：本文件记录 repair_all 聚合任务；模块内部任务状态仍以各自模块总任务规划和唯一当前任务状态文档为准。
+
+## 14. RA-CROSS-REVIEW-003 基线与验收证据（2026-11-19）
+
+- 本轮开始时 repair_all HEAD：b3a5b03e126a5754128367f578ef9b14b4d0755a，提交为本轮总体计划校准文档。
+- 上一代码基线 5334043ea8e1abc2c4006c371a3f95b123098946 的完整 Integration CI Run [44456052937](https://github.com/Kasign/stock_data_provider/actions/runs/44456052937) 精确 SHA success；该 CI 早于本轮文档提交，不将其冒充为本轮 HEAD 的 CI。
+- Data/News→Research 审查结论如第 5 节；News 授权原子读取机制有现有实现，不重复建设；Data→Research 受 DATA-CTR-007 deferred 阻断；Server 组合装配存在但没有真实消费者。
+- 本轮未修改生产代码；当前完成的是契约/代码/装配 Review 和卡点同步。生产端到端验收仍未通过。
+- 本文件为 repair_all 聚合任务状态权威；模块职责与模块内部任务状态仍以各自模块总规划和唯一当前任务文档为准。

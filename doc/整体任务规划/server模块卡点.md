@@ -188,3 +188,12 @@
 - 最新代码 SHA：`02415a319fbe45921be2be469592d84043676626`；Integration CI [Run 44455503870](https://github.com/Kasign/stock_data_provider/actions/runs/44455503870) 全项 success。
 - 真实 API Bootstrap 集成测试覆盖 Migration disabled：Migration history/checksum 有效但 Data 物理列缺失时，Root 必须在 HTTP 启动前以 `market_data.schema_drift` 失败；数据库缺列保持原状，不自动执行 Migration DDL。
 - 代码层 Migration enabled/disabled 两种路径均通过；生产部署演练仍待执行，`feat/server` 未同步。
+
+
+## RepairAll News→Research 装配边界复核（2026-11-19）
+
+- internal/server/bootstrap/research_news.go 已创建 News Evidence Query Facade、Research Service、Importer、Authorizer，并共用 Server 持有的 MariaDB DB；不是缺少装配代码。
+- internal/server/bootstrap/bootstrap.go 仅在 Evidence Cursor Key Ring 已配置时构造该组合；当前无 Researchflow Stage、HTTP 或 Worker 业务用例调用该组合，启动日志明确为等待业务消费端接入。
+- 判定：装配构造 PASS（代码存在）；生产消费链路 NOT_COMPARABLE（无真实消费者/调用记录）。不得为了接上线创建无场景 Handler 或绕过 Researchflow Stage Provider。
+- 解锁条件：Researchflow/Server 明确实际消费场景、输入 DTO、可信 Principal/CallerRef 注入和执行上下文，再由组合根接线并做集成验收。
+- 本结论来自 repair_all 审查基线 5334043ea8e1abc2c4006c371a3f95b123098946；不代表 feat/server 分支已同步。
