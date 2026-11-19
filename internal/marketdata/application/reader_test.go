@@ -8,6 +8,7 @@ import (
 
 	"example.com/stock-analysis-flow/internal/marketdata/app"
 	"example.com/stock-analysis-flow/internal/marketdata/model"
+	"example.com/stock-analysis-flow/internal/marketdata/service"
 )
 
 type fakeDataService struct {
@@ -15,9 +16,11 @@ type fakeDataService struct {
 	quoteErr                 error
 	currentBars              []model.DailyBar
 	currentWarnings          []string
+	currentCoverage          service.DailyBarCoverageEvidence
 	currentErr               error
 	pitBars                  []model.DailyBar
 	pitWarnings              []string
+	pitCoverage              service.DailyBarCoverageEvidence
 	pitErr                   error
 	fundamentals             *model.FundamentalsSnapshot
 	fundamentalsErr          error
@@ -49,6 +52,16 @@ func (f *fakeDataService) DailyBarsAsOf(_ context.Context, _, _, _ string, _ int
 	return f.pitBars, f.pitWarnings, f.pitErr
 }
 
+func (f *fakeDataService) DailyBarsWithCoverageEvidence(ctx context.Context, symbol, start, end string, limit int, basis model.AdjustmentBasis) ([]model.DailyBar, bool, []string, service.DailyBarCoverageEvidence, error) {
+	bars, cacheHit, warnings, err := f.DailyBars(ctx, symbol, start, end, limit, basis)
+	return bars, cacheHit, warnings, f.currentCoverage, err
+}
+
+func (f *fakeDataService) DailyBarsAsOfWithCoverageEvidence(ctx context.Context, symbol, start, end string, limit int, basis model.AdjustmentBasis, asOf time.Time) ([]model.DailyBar, []string, service.DailyBarCoverageEvidence, error) {
+	bars, warnings, err := f.DailyBarsAsOf(ctx, symbol, start, end, limit, basis, asOf)
+	return bars, warnings, f.pitCoverage, err
+}
+
 func (f *fakeDataService) Fundamentals(context.Context, string, int, int) (*model.FundamentalsSnapshot, bool, error) {
 	f.currentFundamentalsCalls++
 	return f.fundamentals, false, f.fundamentalsErr
@@ -69,6 +82,68 @@ func (f *fakeDataService) ValuationsAsOf(_ context.Context, _ []string, asOf tim
 	f.pitValuationsCalls++
 	f.lastValuationsAsOf = asOf
 	return f.valuations, f.valuationsErr
+}
+
+func TestReaderGetDailyBarsV2PreservesSameEvaluationCalendarRef(t *testing.T) {
+	now := time.Date(2026, 11, 6, 8, 0, 0, 0, time.UTC)
+	observedAt := now.Add(time.Minute)
+	closeValue := 10.5
+	bar := model.DailyBar{
+		Symbol: "600000.SH", TradeDate: "2026-11-06", Period: "1d",
+		Open: 10, High: 11, Low: 9, Close: closeValue,
+		Source: "fixture", SourceVersion: "fixture-v1", FetchedAt: now,
+		NormalizedAt: now, SystemObservedAt: &observedAt,
+		QualityStatus: model.QualityValid, NormalizationVer: "norm-v1",
+	}
+	currentCoverage := service.DailyBarCoverageEvidence{
+		CalendarRef: "sha256:calendar-current", CalendarQualityStatus: model.QualityValid,
+		ExpectedTradingDays: 20, MinimumRequiredBars: 13, CoverageBasis: "exchange_calendar",
+		CoverageSufficient: true,
+	}
+	pitCoverage := service.DailyBarCoverageEvidence{
+		CalendarRef: "sha256:calendar-asof", CalendarQualityStatus: model.QualityDegraded,
+		ExpectedTradingDays: 18, MinimumRequiredBars: 12, CoverageBasis: "exchange_calendar",
+		CoverageSufficient: true, Warnings: []string{"daily_bar_coverage_uses_degraded_trading_calendar"},
+	}
+	backend := &fakeDataService{
+		currentBars: []model.DailyBar{bar}, pitBars: []model.DailyBar{bar},
+		currentCoverage: currentCoverage, pitCoverage: pitCoverage,
+	}
+	reader := &Reader{backend: backend}
+	current, err := reader.GetDailyBarsV2(context.Background(), app.DailyBarsQuery{
+		Symbol: "600000.SH", StartDate: "2026-10-01", EndDate: "2026-11-06", Limit: 20,
+		AdjustmentBasis: app.AdjustmentNone,
+	})
+	if err != nil {
+		t.Fatalf("GetDailyBarsV2(current) error = %v", err)
+	}
+	if current.Interval != "1d" || current.TradingCalendarRef == nil || *current.TradingCalendarRef != currentCoverage.CalendarRef ||
+		current.CoverageEvidence.ExpectedTradingDays != 20 || current.CoverageEvidence.MinimumRequiredBars != 13 ||
+		current.CoverageEvidence.CoverageBasis != "exchange_calendar" || !current.CoverageEvidence.CoverageSufficient {
+		t.Fatalf("current v2 snapshot did not preserve coverage calendar evidence: %+v", current)
+	}
+	cutoff := now.Add(2 * time.Hour)
+	pit, err := reader.GetDailyBarsV2(context.Background(), app.DailyBarsQuery{
+		Symbol: "600000.SH", StartDate: "2026-10-01", EndDate: "2026-11-06", Limit: 20,
+		AdjustmentBasis: app.AdjustmentNone, SystemObservedAtCutoff: &cutoff,
+	})
+	if err != nil {
+		t.Fatalf("GetDailyBarsV2(PIT) error = %v", err)
+	}
+	if pit.TradingCalendarRef == nil || *pit.TradingCalendarRef != pitCoverage.CalendarRef ||
+		pit.CoverageEvidence.CalendarQualityStatus != app.QualityDegraded ||
+		len(pit.CoverageEvidence.Warnings) != 1 ||
+		pit.Warnings[0] != "daily_bar_coverage_uses_degraded_trading_calendar" {
+		t.Fatalf("PIT v2 snapshot did not preserve as-of calendar evidence: %+v", pit)
+	}
+	if backend.currentCalls != 1 || backend.pitCalls != 1 || !backend.lastAsOf.Equal(cutoff) {
+		t.Fatalf("v2 current/PIT backend calls or cutoff mismatch: current=%d PIT=%d asOf=%s", backend.currentCalls, backend.pitCalls, backend.lastAsOf)
+	}
+	*pit.TradingCalendarRef = "mutated"
+	pit.CoverageEvidence.Warnings[0] = "mutated"
+	if backend.pitCoverage.CalendarRef == "mutated" || backend.pitCoverage.Warnings[0] == "mutated" {
+		t.Fatal("v2 snapshot must not alias backend calendar evidence")
+	}
 }
 
 func TestReaderGetQuotePreservesNullablePrecisionAndMetadata(t *testing.T) {
