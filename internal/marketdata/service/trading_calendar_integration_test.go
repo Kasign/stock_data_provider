@@ -59,6 +59,12 @@ func TestTradingCalendarPersistsImmutableSnapshotAcrossCacheHits(t *testing.T) {
 		!second.SystemObservedAt.Equal(*first.SystemObservedAt) || calendarProvider.calls != 1 {
 		t.Fatalf("cache hit must resolve the same immutable calendar without refetching: first=%+v second=%+v calls=%d", first, second, calendarProvider.calls)
 	}
+	coverageOK, coverageWarnings, coverageEvidence := svc.dailyBarCoverageEvidence(ctx, "2026-10-22", "2026-10-24", 2, 2)
+	if !coverageOK || coverageEvidence.CalendarRef != first.CalendarRef ||
+		coverageEvidence.CoverageBasis != "exchange_calendar" || coverageEvidence.ExpectedTradingDays != first.TradingDays ||
+		coverageEvidence.MinimumRequiredBars != 2 || len(coverageWarnings) != len(coverageEvidence.Warnings) {
+		t.Fatalf("coverage evidence must expose the exact calendar used for the denominator: ok=%v warnings=%v evidence=%+v calendar=%+v", coverageOK, coverageWarnings, coverageEvidence, first)
+	}
 }
 
 func TestTradingCalendarAsOfUsesObservedRepositoryVersionWithoutLiveProvider(t *testing.T) {
@@ -121,5 +127,15 @@ func TestTradingCalendarAsOfUsesObservedRepositoryVersionWithoutLiveProvider(t *
 	}
 	if liveProvider.calls != 0 {
 		t.Fatalf("TradingCalendarAsOf must not consult live Providers, calls=%d", liveProvider.calls)
+	}
+	coverageOK, coverageWarnings, coverageEvidence := svc.dailyBarCoverageEvidenceAsOf(ctx, first.StartDate, first.EndDate, 1, 1, asOf)
+	if !coverageOK || coverageEvidence.CalendarRef != firstRef ||
+		coverageEvidence.ExpectedTradingDays != first.TradingDays ||
+		coverageEvidence.CoverageBasis != "exchange_calendar" ||
+		len(coverageWarnings) != len(coverageEvidence.Warnings) {
+		t.Fatalf("PIT coverage evidence must preserve the exact calendar visible at as_of: ok=%v warnings=%v evidence=%+v expected_ref=%s", coverageOK, coverageWarnings, coverageEvidence, firstRef)
+	}
+	if liveProvider.calls != 0 {
+		t.Fatalf("PIT coverage evaluation must not consult live Providers, calls=%d", liveProvider.calls)
 	}
 }
