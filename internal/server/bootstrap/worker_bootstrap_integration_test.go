@@ -494,6 +494,17 @@ func TestAPIBootstrapMariaDBRedisIntegration(t *testing.T) {
 
 	child.stop(t)
 
+	// 健康 Schema 在 Migration disabled 下仍应正常启动；只读预检不能误拒绝合法数据库。
+	healthyDisabledValues := make(map[string]string, len(values))
+	for key, value := range values {
+		healthyDisabledValues[key] = value
+	}
+	healthyDisabledValues["MIGRATION_ENABLED"] = "false"
+	healthyDisabledValues["DB_AUTO_MIGRATE"] = "false"
+	healthyDisabledChild := startWorkerBootstrapChild(t, healthyDisabledValues)
+	healthyDisabledChild.waitAPIReady(t, baseURL, ownerToken)
+	healthyDisabledChild.stop(t)
+
 	// Migration disabled 必须先校验 history，再由 Data Ready 检查物理结构；
 	// 缺列时拒绝启动，且不得在 disabled 模式下自动修复数据库。
 	dbConfig := *adminConfig
