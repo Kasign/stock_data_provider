@@ -379,7 +379,7 @@ internal/
 
 - [x] Root 与 Data 间每个 Pool/Client/Worker 只有一个明确 owner，且实际注入与关闭顺序有集成证据。
 - [x] Migration 仅由组合根执行一次，失败阻止 readiness；disabled 模式执行只读校验。
-- [x] Data Repository 不会关闭 borrowed Pool（代码与单测覆盖）；Root 生命周期仍待集成验收。
+- [x] Data Repository 不会关闭 borrowed Pool（代码与单测覆盖）；Root Lifecycle 注册、逆序停止和共享资源关闭边界已有 Server 集成测试覆盖。
 - [x] Redis 共享或独立 Client 的连接参数、Cache key、TTL、错误和禁用语义在 Root 集成环境验证。
 - [x] Shutdown 顺序、超时和资源释放有集成测试。
 ### M5：部署与 WebUI 路由切换
