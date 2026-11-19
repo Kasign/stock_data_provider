@@ -349,6 +349,10 @@ func (p *Tushare) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 					return nil, fmt.Errorf("Tushare exact amount conversion on %s: %w", isoDate, scaleErr)
 				}
 				exactValues.AmountCNY = &amountCNY
+				exactValues.AmountCNYEvidence = cloneDailyBarDecimalEvidence(exactValues.RawAmountEvidence)
+				if exactValues.AmountCNYEvidence != nil {
+					exactValues.AmountCNYEvidence.UnitConversionFactor = "1000"
+				}
 			}
 		}
 		out = append(out, model.DailyBar{
