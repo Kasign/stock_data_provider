@@ -144,7 +144,7 @@ func (s *DataService) TradingCalendar(ctx context.Context, rawStartDate, rawEndD
 		best.QualityStatus = model.QualityDegraded
 		best.QualityReasons = appendTradingCalendarReason(best.QualityReasons, "provider_trading_calendar_sources_disagree")
 	}
-	s.persistTradingCalendarSnapshot(ctx, best, now)
+	s.persistTradingCalendarSnapshot(ctx, best, s.nowUTC())
 	if data, marshalErr := json.Marshal(best); marshalErr == nil {
 		if cacheErr := s.cache.Set(ctx, key, data, ttl); cacheErr != nil {
 			s.logger.Warn("trading-calendar cache write failed", "start_date", startDate, "end_date", endDate, "error", cacheErr)
@@ -204,7 +204,11 @@ func (s *DataService) persistTradingCalendarSnapshot(ctx context.Context, snapsh
 	}
 	calendarRef, systemObservedAt, err := s.store.SaveTradingCalendarSnapshot(ctx, snapshot, observedAt)
 	if err != nil {
-		s.logger.Warn("trading-calendar immutable snapshot persistence failed",
+		logger := s.logger
+		if logger == nil {
+			logger = slog.Default()
+		}
+		logger.Warn("trading-calendar immutable snapshot persistence failed",
 			"market", snapshot.Market, "start_date", snapshot.StartDate, "end_date", snapshot.EndDate,
 			"source", snapshot.Source, "error", err)
 		return

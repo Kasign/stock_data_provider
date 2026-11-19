@@ -66,4 +66,55 @@ func TestMariaDBTradingCalendarSnapshotImmutableAndReadable(t *testing.T) {
 	if _, err := store.GetTradingCalendarSnapshot(ctx, "data_calendar:sha256:invalid"); err == nil {
 		t.Fatal("malformed calendar ref must be rejected")
 	}
+
+	// Concurrent duplicate writes must converge on the same immutable resource.
+	const writers = 4
+	refs := make(chan string, writers)
+	errs := make(chan error, writers)
+	start := make(chan struct{})
+	for i := 0; i < writers; i++ {
+		go func() {
+			<-start
+			copy := validRepositoryTradingCalendar()
+			ref, _, saveErr := store.SaveTradingCalendarSnapshot(ctx, copy, observedAt.Add(2*time.Hour))
+			refs <- ref
+			errs <- saveErr
+		}()
+	}
+	close(start)
+	for i := 0; i < writers; i++ {
+		if err := <-errs; err != nil {
+			t.Fatalf("concurrent immutable calendar save failed: %v", err)
+		}
+		if got := <-refs; got != ref {
+			t.Fatalf("concurrent duplicate write returned a different ref: got=%s want=%s", got, ref)
+		}
+	}
+
+	// Physical schema drift must fail readiness; restore the index for shared test DBs.
+	if _, err := store.db.ExecContext(ctx, "DROP INDEX idx_market_calendar_identity_observed ON market_data_trading_calendar_snapshots"); err != nil {
+		t.Fatalf("drop calendar identity index for drift test: %v", err)
+	}
+	if err := store.ValidateCompatibilitySchema(ctx); err == nil {
+		_, _ = store.db.ExecContext(ctx, "CREATE INDEX idx_market_calendar_identity_observed ON market_data_trading_calendar_snapshots (market, start_date, end_date, observed_at)")
+		t.Fatal("physical calendar schema drift must fail compatibility validation")
+	}
+	if _, err := store.db.ExecContext(ctx, "CREATE INDEX idx_market_calendar_identity_observed ON market_data_trading_calendar_snapshots (market, start_date, end_date, observed_at)"); err != nil {
+		t.Fatalf("restore calendar identity index after drift test: %v", err)
+	}
+
+	// A payload changed without changing its content address must fail closed.
+	_, canonical, _, err := buildTradingCalendarSnapshotPayload(validRepositoryTradingCalendar())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.db.ExecContext(ctx, "UPDATE market_data_trading_calendar_snapshots SET payload_json='{}' WHERE calendar_ref=?", ref); err != nil {
+		t.Fatalf("tamper with calendar payload for integrity test: %v", err)
+	}
+	if _, err := store.GetTradingCalendarSnapshot(ctx, ref); err == nil {
+		t.Fatal("tampered calendar payload must fail content verification")
+	}
+	if _, err := store.db.ExecContext(ctx, "UPDATE market_data_trading_calendar_snapshots SET payload_json=? WHERE calendar_ref=?", string(canonical), ref); err != nil {
+		t.Fatalf("restore calendar payload after integrity test: %v", err)
+	}
 }

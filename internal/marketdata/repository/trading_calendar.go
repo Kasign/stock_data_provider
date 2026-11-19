@@ -115,6 +115,9 @@ FROM market_data_trading_calendar_snapshots WHERE calendar_ref=?`, calendarRef).
 	if storedFingerprint != fingerprint {
 		return nil, fmt.Errorf("trading-calendar snapshot %s fingerprint column mismatch", calendarRef)
 	}
+	if fetchedAt.IsZero() || observedAt.IsZero() {
+		return nil, fmt.Errorf("trading-calendar snapshot %s has missing observation metadata", calendarRef)
+	}
 	var payload tradingCalendarSnapshotPayload
 	if err := json.Unmarshal([]byte(canonical), &payload); err != nil {
 		return nil, fmt.Errorf("decode immutable trading-calendar snapshot %s: %w", calendarRef, err)
