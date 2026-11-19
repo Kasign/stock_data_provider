@@ -407,6 +407,14 @@ RA009 代码关闭条件已满足：Server 路由认证矩阵、CSRF、WebUI 请
 ### 28.12 Data 精确值 Application Port 映射缺口（2026-11-19）
 
 - 已确认默认 7 个 Provider 的 ExactValues 均在 Provider 层生成，Normalize 按值保留，Repository metadata 持久化并可由 current/PIT 读取恢复。
-- 原 `app.DailyBar` / `application.mapDailyBar` 未包含 ExactValues，导致精确值跨 Data Application Port 丢失。已在本轮补充同构 DTO、深拷贝映射和 Reader current/PIT 回归测试。
-- 该修复不修改旧 HTTP JSON，不改变现有 float64 字段或模块职责；待本轮精确 SHA Integration CI 验收。
-- D1 仍需核验 Hithink/Tushare/Yahoo 可配置来源精度覆盖、Amount 单位证据和 ProviderTime/逐行数据版本；D2 冻结 DailyBars v2 DTO/Schema/Golden 后再开放 DATA-CTR-005。
+- 原 `app.DailyBar` / `application.mapDailyBar` 未包含 ExactValues，导致精确值跨 Data Application Port 丢失。已补同构 DTO、深拷贝映射和 Reader current/PIT 回归测试；精确 SHA `a2bbfee6fd02f6c54242349419de7273b8fa4a76` 的 Integration CI Run `44501617234` 全项 success。
+- 该修复不修改旧 HTTP JSON，不改变现有 float64 字段或模块职责。
+- D1 剩余证据：sidecar canonicalization 丢弃 lexical scale；ChangePercent 没有精确值字段；Tushare/Yahoo QFQ/HFQ 未生成精确调整值；Hithink/Pytdx Amount 单位证据不足；ProviderTime/逐行数据版本仍缺。D2 先完成字段级 DTO/Schema/Golden 设计审查，不擅自把 DATA-CTR-005 从 deferred 改为 frozen。
+
+
+### 28.13 D1 精确值边界与下一阶段决议（2026-11-19）
+
+- 10 个 Provider 的部分或全部请求路径已有 ExactValues sidecar；Tushare/Yahoo QFQ/HFQ 仍缺精确调整结果，不能将其 v1 float64 调整值当作 Decimal v2。
+- ExactValues canonicalizer 会移除小数尾随零，当前保留的是精确数值而非原始 token scale；ChangePercent 尚无精确 sidecar 字段。
+- 精确值已穿过 Provider → Normalize → Repository revision metadata → current/PIT → Application Port；Application Port 丢失缺陷由 SHA `a2bbfee6fd02f6c54242349419de7273b8fa4a76` / Run `44501617234` 全项 CI 关闭。
+- 下一阶段进入 D2 设计审查：逐字段明确 canonical value、source scale evidence、单位、缺失、ChangePercent 来源、复权精确计算边界、interval/calendar ref 和 version 语义；DATA-CTR-005/007 继续 deferred，直到满足项目级重新进入条件。

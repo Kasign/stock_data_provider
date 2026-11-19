@@ -134,3 +134,10 @@ Root Server 的 Data Module 构造、共享资源注入、Migration Registry、I
 - 已确认默认 7 个 DailyBars Provider 均生成 ExactValues；Normalize 按值保留；Repository sidecar 持久化、Revision Hash 绑定、current/PIT 读取恢复均有实现和测试。Pytdx 兼容 Float64() 不是精确值唯一来源，ExactValues 使用 Price.Int64()；原“Pytdx 精度入口丢失”卡点撤销为误判。
 - 实际跨模块缺口是 `app.DailyBar` 未暴露 ExactValues，`application.mapDailyBar` 丢弃该字段。本轮增加 Application DTO、深拷贝映射及 Reader 回归测试，待精确 SHA CI 后关闭。
 - 仍开放：可配置 Hithink/Tushare/Yahoo 的 ExactValues 覆盖核验；Amount 单位证据；所有 Provider 的 ProviderTime/逐行数据版本；DailyBars v2 DTO/Schema/Golden；DATA-CTR-007 Payload/Manifest/AuthorizationRef。
+
+
+## RepairAll D1 精确值 Application Port 修复验收与剩余边界（2026-11-19）
+
+- `app.DailyBar` ExactValues 同构 DTO、深拷贝映射和 current/PIT Reader 测试已通过精确 SHA `a2bbfee6fd02f6c54242349419de7273b8fa4a76` 的完整 Integration CI Run `44501617234`；Application Port 丢失缺陷 CLOSED。
+- 默认 7 个 Provider 已生成 ExactValues；Hithink/Tushare/Yahoo 也在部分路径生成，但 Tushare/Yahoo QFQ/HFQ 缺精确调整值 sidecar。Canonicalizer 去除尾随零，不保留原始 token scale；ChangePercent 没有精确值字段。
+- 仍开放的 Data 卡点：字段 lexical scale/precision evidence、ChangePercent 精确来源、QFQ/HFQ 精确调整、Hithink/Pytdx Amount 单位证据、ProviderTime/逐行数据版本、DailyBars v2 DTO/Schema/Golden、DATA-CTR-007 Snapshot/Manifest/AuthorizationRef。

@@ -253,6 +253,10 @@ func TestReaderGetDailyBarsSelectsCurrentAndPITUseCases(t *testing.T) {
 	if pit.SystemObservedAtCutoff == nil || !pit.SystemObservedAtCutoff.Equal(cutoff) {
 		t.Fatalf("PIT cutoff was not echoed in the Application DTO: %+v", pit)
 	}
+	if len(pit.Bars) != 1 || pit.Bars[0].ExactValues == nil || pit.Bars[0].ExactValues.Close != "10.5004" ||
+		pit.Bars[0].ExactValues.RawAmount == nil || *pit.Bars[0].ExactValues.RawAmount != exactRawAmount {
+		t.Fatalf("PIT Application DTO lost exact decimal sidecar: %+v", pit.Bars)
+	}
 	if pit.QualityStatus != app.QualityDegraded {
 		t.Fatalf("PIT quality = %q, want degraded due to revision warning", pit.QualityStatus)
 	}
