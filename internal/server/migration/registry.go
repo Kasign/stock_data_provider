@@ -61,6 +61,7 @@ func (r *Registry) Register(namespace string, migrations []platformstorage.Migra
 		snapshot[i] = platformstorage.Migration{
 			Version: item.Version, Description: item.Description,
 			Statements: append([]string(nil), item.Statements...),
+			Operations: append([]platformstorage.MigrationOperation(nil), item.Operations...),
 		}
 	}
 	sort.Slice(snapshot, func(i, j int) bool {
@@ -211,6 +212,11 @@ func (r *Registry) ValidateApplied(ctx context.Context, db *sql.DB) error {
 	external := r.externalSnapshot()
 	if len(entries) == 0 && len(external) == 0 {
 		return errors.New("no module migrations are registered")
+	}
+	for namespace, migrations := range entries {
+		if err := platformstorage.ValidateAppliedMigrations(ctx, db, namespace, migrations); err != nil {
+			return fmt.Errorf("validate %s migration checksums: %w", namespace, err)
+		}
 	}
 
 	rows, err := db.QueryContext(ctx, "SELECT namespace, version, status FROM platform_schema_migrations")

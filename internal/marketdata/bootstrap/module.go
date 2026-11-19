@@ -21,6 +21,7 @@ import (
 	"example.com/stock-analysis-flow/internal/marketdata/repository"
 	"example.com/stock-analysis-flow/internal/marketdata/service"
 	"example.com/stock-analysis-flow/internal/marketdata/transport"
+	platformstorage "example.com/stock-analysis-flow/internal/platform/storage"
 )
 
 // Dependencies 是由调用方创建并拥有的基础设施依赖；Module 不负责关闭 Store/Cache。
@@ -58,6 +59,11 @@ type MigrationRunner interface {
 }
 
 var _ MigrationRunner = (*repository.Store)(nil)
+
+// MigrationDefinitions returns the immutable Data schema history for Root Server registration.
+func MigrationDefinitions() []platformstorage.Migration {
+	return repository.MigrationDefinitions()
+}
 
 type Diagnostics interface {
 	Ready(ctx context.Context) error
