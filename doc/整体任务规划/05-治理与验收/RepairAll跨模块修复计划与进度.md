@@ -373,3 +373,10 @@ RA009 代码关闭条件已满足：Server 路由认证矩阵、CSRF、WebUI 请
 - BaoStock 官方文档已核实成交量为股、成交额为人民币元及停牌日 OHLC/零成交量额语义；没有字段精度/scale 或逐行数据版本。
 - Hithink 尚无可核验官方字段单位/精度文档；现有代码将 turnover 映射 CNY，不能替代供应商证据。
 - 公开资料和代码确认 Provider 原始数字 token/字符串可在解析入口保留；不需要、也不允许从 float64 或 DECIMAL 固定 scale 反向推断原始精度。
+
+
+### 28.8 历史 Provider 精度证据去重
+
+- 继承 BaoStock amount 四位小数精度与 Artifact `13410429933` 的 18 个交易日真实样本离线对账（Data Runtime Acceptance Log 第 28 节）；不重复请求该样本。
+- 继承 Hithink backward 真实 Run `43214735212` 小数股数异常证据；继续拒绝非整数 shares，不放宽标准。
+- Go/Python 旧源码基线已固定，但双侧同输入原始输出仍缺；DATA-006 保持开放。
