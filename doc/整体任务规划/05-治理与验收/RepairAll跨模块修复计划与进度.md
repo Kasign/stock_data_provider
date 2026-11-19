@@ -358,3 +358,10 @@ RA009 代码关闭条件已满足：Server 路由认证矩阵、CSRF、WebUI 请
 - 当前 DailyBarsSnapshot 只是查询结果 DTO；未发现 Data-owned 不可变 Payload Repository、SnapshotRef 内容寻址和读取时 AuthorizationRef 复核实现。DATA-CTR-008 Manifest Schema/Golden 只描述元数据，不包含行情 Payload。
 - 已新增 Data 解阻方案 `doc/api/依赖/02-DATA-CTR-005与007解阻方案.md`，明确 D1-D7：字段证据盘点、DailyBars v2、交易日历/复权完整性、Snapshot 持久化、授权/Server 装配、Research Evidence 映射、Quant 消费验收。
 - 当前只进入 D1 证据盘点；不擅自修改冻结登记簿，不以文档方案代替实现验收。下一步从现有 Provider 代码、历史 Live Probe Artifact 和交易日历 Repository 继续收集证据，再决定可直接实施的代码项。
+
+
+### 28.6 D1 证据盘点补充
+
+- 已确认 DailyBars 的 SourceVersion（Tushare/BaoStock/Hithink）为适配器/接口版本常量；通用校验只要求非空且非 `unknown`，不能视为上游数据修订版本。
+- 已确认 TradingCalendar 目前只有 Provider 查询与 Redis 12 小时缓存，未发现不可变日历历史 Repository；SourceVersion 仍是 Provider/Adapter 版本。日历来源冲突或推断非交易日会标记 degraded。
+- 后续实现必须分离 adapter_version、normalization_version、provider_data_version 和 calendar content ref；缺少源端版本/可靠日历证据时显式缺失或降级，不伪造版本。
