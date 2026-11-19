@@ -6,7 +6,7 @@
 - SRV-004 已完成当前 Root 已注册检查集的 Health/Readiness/Diagnostics 验收；Data 最终 checksum/Schema 仍归 SRV-009。
 - SRV-015 已转 BLOCKED：当前可安全装配的 News 服务已完成；其他业务模块等待真实消费者、生产配置、持久化、Gateway 或渠道依赖。
 
-更新时间：2026-11-18
+更新时间：2026-11-19
 维护分支：feat/server
 代码验收基线：98bed9ac29260e5b4c48f4c80ee59c4da9df8682
 当前主线：SRV-009 Data/MarketData M3/M4 Root 生产装配
