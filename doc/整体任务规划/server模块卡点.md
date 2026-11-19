@@ -38,6 +38,13 @@
 状态：BLOCKED（等待 Data / Platform Owner 前置）
 
 已核实问题：
+
+跨分支复核基线（2026-11-19，只读检查，不修改其他分支）：
+- Data 分支 `feat/data` HEAD：`9f6adaf280a94bc60f993554473fd0adb70b07da`。其公开 `internal/marketdata/bootstrap.MigrationRunner` 仍只有 `Migrate(ctx)`，没有可供 Root Registry 注册的静态 Migration 定义。
+- 同一 Data SHA 的 `internal/marketdata/repository/mysql.go` 中，`Store.Migrate` 调用 Platform `ApplyMigrations` 后仍执行 `ensureNonUniqueHistoryIndex` 和 `ensureColumn`；兼容 DDL 仍在 namespace 锁/版本/checksum 保护范围之外。
+- Platform 分支 `feat/platform` HEAD：`308b0bfdf3eba6a83ac16f1eae1aec66518ebbcd`。公开 `internal/platform/storage/storage.go` 有 `ApplyMigrations`、checksum preparation 和 namespace advisory lock，但没有只读 `ValidateAppliedMigrations` API。
+- Data 分支旧迁移文档仍称 Root 未构造 Data Module/未挂载 Handler；这与当前 Server 分支实际代码及 Run 44314707349 不一致。该描述是 Data 文档未同步 Root 进展，不应据此重做 Server 已完成的 Bootstrap、HTTP Handler、Readiness 或 Lifecycle。
+
 - Data Store.Migrate 在 Platform ApplyMigrations 的 namespace 锁保护范围之外，仍执行兼容性 `ensureNonUniqueHistoryIndex`、`ensureColumn` DDL；多实例并发启动存在竞态。
 - Root 当前直接调用 Data Module 的 MigrationRunner，再运行 Server Registry；Data 尚未以完整静态 Migration 定义注册进统一 Registry。
 - `MIGRATION_ENABLED=false` 时当前只读校验不覆盖 Data checksum/物理 Schema 漂移；Data Diagnostics.Ready 的 DB/Redis Ping 不能替代 Schema 校验。
