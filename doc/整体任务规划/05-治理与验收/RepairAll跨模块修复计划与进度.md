@@ -2,7 +2,7 @@
 
 - 仓库：`Kasign/stock_data_provider`
 - 工作分支：`repair_all`
-- 当前记录基线：`aeed898da826f8952fb235ff57b0ef19042f8c64`
+- 当前代码验收基线：`5d97dc89acfd0493b8b7f4c316db6a5d5dc609e9`
 - 更新日期：2026-11-19
 
 ## 1. 分支用途与执行原则
@@ -22,8 +22,8 @@
 
 | 顺序 | 工作项 | 涉及模块 | 状态 |
 |---|---|---|---|
-| P0 | Data Migration 定义、Platform 只读校验、Server Root 统一注册与启动路径 | Data / Platform / Server | 已实施，待 repair_all CI |
-| P0 | News Search Candidates Validator 与冻结 Schema 一致性 | News / Researchflow | 已修复，待 CI |
+| P0 | Data Migration 定义、Platform 只读校验、Server Root 统一注册与启动路径 | Data / Platform / Server | 代码与完整 CI 验收通过；生产启停演练待完成 |
+| P0 | News Search Candidates Validator 与冻结 Schema 一致性 | News / Researchflow | 已修复，完整 Integration CI 已通过 |
 | P1 | Data、News 到 Research 的数据/时间/Evidence 契约和真实消费边界 | Data / News / Research | 待系统 Review |
 | P1 | Quant Application Port、结果 Envelope、Researchflow 消费接口 | Quant / Researchflow / Server | 待系统 Review |
 | P1 | Research Context/Evidence 与 Researchflow Run/Stage/Result 语义及唯一持久化 Owner | Research / Researchflow / Server | 待系统 Review |
@@ -132,8 +132,8 @@
 - 已新增单测：旧 statement-only checksum 稳定、operations 改动导致 checksum 改变、非法操作拒绝、Data V1-V3 不变、V4 仅含兼容操作、Registry 接受 operations-only migration。
 - 已新增真实 MariaDB 集成用例：先应用 Data V1-V3，再模拟旧库缺列/旧唯一索引，两个 Root Registry 并发执行完整定义，最后验证 V4 兼容结果和 history。
 - 已扩展 MariaDB Registry 集成用例：篡改已应用 checksum 后，`ValidateApplied` 必须拒绝。
-- 上述新测试尚未由最新 SHA 的 CI 证实；不能在 CI 完成前标记 PASS。
-- 最终完整 Integration CI：Run [44450277491](https://github.com/Kasign/stock_data_provider/actions/runs/44450277491)，HEAD `5b9ebe6a2b8103b4c63a48c3c0f0ddb004d583ec`，结论 success；gofmt、root vet/tests、News/Research/Researchflow cross-module tests、Worker MariaDB/Redis、go-core vet/tests、Compose、WebUI syntax/tests/build 均在成功汇总中。
+- 上述新测试已由后续精确 SHA `5d97dc89acfd0493b8b7f4c316db6a5d5dc609e9` 的完整 Integration CI 证实，Run [44452547201](https://github.com/Kasign/stock_data_provider/actions/runs/44452547201) success。
+- Migration 三方统一的早期完整基线为 Run [44450277491](https://github.com/Kasign/stock_data_provider/actions/runs/44450277491)，HEAD `5b9ebe6a2b8103b4c63a48c3c0f0ddb004d583ec`，success；物理 Schema 门禁与其后的测试修正由 Run [44452547201](https://github.com/Kasign/stock_data_provider/actions/runs/44452547201) 在精确 SHA `5d97dc89acfd0493b8b7f4c316db6a5d5dc609e9` 上完整验收。
 - 物理 Schema drift 仍不是 checksum 校验的职责；必须由 Data Schema Diagnostics 检测。本轮新增测试也不等于生产数据库部署演练。
 
 ### 7.4 下一步
@@ -158,7 +158,7 @@
 - Data Repository 新增 `Store.ValidateCompatibilitySchema`，只读检查 `market_data_quotes.volume_ratio`、`turnover_rate` 必须为 nullable `DECIMAL(16,8)`；检查 DailyBar/Fundamental revision 索引列序、非唯一属性和 legacy unique index 不存在。
 - Data `Ready` 将物理结构检查纳入 MariaDB readiness；Schema 漂移返回 `market_data.schema_drift`，不将 Migration checksum 当作物理结构证明。
 - Server Root 在 `MIGRATION_ENABLED=true/false` 两条路径完成各自 Migration 执行/只读校验后，都会在启动 Worker 或接受流量前执行 Data 依赖与物理 Schema 就绪检查。此前只在 disabled 路径调用 Ready 的不一致已收敛。
-- MariaDB 集成测试已增加：新迁移 Schema Ready、删除 `turnover_rate` 后 Ready fail-closed、恢复列后 Ready 通过。待最新 CI 验证。
+- MariaDB 集成测试已增加：先通过 Root Registry 执行 Data V1-V4，再验证新迁移 Schema Ready、删除兼容列/索引后 Ready fail-closed、恢复后 Ready 通过；Run [44452547201](https://github.com/Kasign/stock_data_provider/actions/runs/44452547201) success。
 
 
 ## 10. RA-DATA-SCHEMA-001 验收结果与测试修正（2026-11-19）
