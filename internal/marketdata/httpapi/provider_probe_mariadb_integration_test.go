@@ -79,7 +79,7 @@ func newHTTPProbeMariaDBHandler(store *repository.Store, providers ...provider.D
 	)
 	svc.SetTradingCalendarProviders([]provider.TradingCalendarProvider{httpProbeMariaDBTradingCalendar{}})
 	return NewWithCapabilityInterfaces(
-		"probe-mariadb-test-key", "none", svc,
+		"none", svc,
 		named, nil, providers, 2000, 110*time.Second,
 		slog.New(slog.NewTextHandler(io.Discard, nil)),
 	).InProcessHandler()
@@ -109,7 +109,6 @@ func TestProviderProbeHTTPMariaDBEndToEnd(t *testing.T) {
 	postHandler := newHTTPProbeMariaDBHandler(store, left, right)
 	body := `{"scope":"all","capabilities":["daily_bars"],"checks":["cross_provider","storage"],"symbols":["600036.SH"],"daily_bar_start_date":"2026-10-29","daily_bar_end_date":"2026-10-29","daily_bar_adjustments":["backward_adjusted"],"timeout_seconds":5}`
 	postRequest := httptest.NewRequest(http.MethodPost, "/api/v1/data-sources/probe", bytes.NewBufferString(body))
-	postRequest.Header.Set("X-API-Key", "probe-mariadb-test-key")
 	postResponse := httptest.NewRecorder()
 	postHandler.ServeHTTP(postResponse, postRequest)
 	if postResponse.Code != http.StatusOK {
@@ -173,7 +172,6 @@ func TestProviderProbeHTTPMariaDBEndToEnd(t *testing.T) {
 
 	historyHandler := newHTTPProbeMariaDBHandler(reopened)
 	getRequest := httptest.NewRequest(http.MethodGet, "/api/v1/data-sources/probe/history?limit=10", nil)
-	getRequest.Header.Set("X-API-Key", "probe-mariadb-test-key")
 	getResponse := httptest.NewRecorder()
 	historyHandler.ServeHTTP(getResponse, getRequest)
 	if getResponse.Code != http.StatusOK {

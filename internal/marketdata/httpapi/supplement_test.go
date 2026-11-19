@@ -59,7 +59,6 @@ func TestSupplementEndpointsAndDataSourceCapability(t *testing.T) {
 	}
 	for _, item := range cases {
 		req := httptest.NewRequest(http.MethodGet, item.path, nil)
-		req.Header.Set("X-API-Key", "test-secret")
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, req)
 		if w.Code != http.StatusOK {
@@ -69,19 +68,6 @@ func TestSupplementEndpointsAndDataSourceCapability(t *testing.T) {
 		if !strings.Contains(w.Body.String(), item.want) {
 			t.Errorf("%s missing %s: %s", item.path, item.want, w.Body.String())
 		}
-		if w.Header().Get("X-Request-ID") == "" {
-			t.Errorf("%s missing X-Request-ID", item.path)
-		}
-	}
-}
-
-func TestSupplementEndpointRequiresAuthentication(t *testing.T) {
-	h := testSupplementHandler()
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/stocks/600519.SH/chip-distribution", nil)
-	w := httptest.NewRecorder()
-	h.ServeHTTP(w, req)
-	if w.Code != http.StatusUnauthorized {
-		t.Fatalf("unauthenticated request returned %d: %s", w.Code, w.Body.String())
 	}
 }
 
