@@ -119,7 +119,7 @@ func dailyBarDecimalEvidenceFromJSON(raw json.RawMessage) *model.DailyBarDecimal
 	if value == "" || value == "null" {
 		return nil
 	}
-	if strings.HasPrefix(value, "\\\"") {
+	if strings.HasPrefix(value, string('"')) {
 		var decoded string
 		if err := json.Unmarshal(raw, &decoded); err != nil {
 			return nil
