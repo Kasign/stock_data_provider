@@ -263,52 +263,14 @@ func ApplyMigrations(ctx context.Context, db *sql.DB, namespace string, migratio
 		return fault.New(fault.ClassValidation, "platform.storage.invalid_migrations", "migration definitions are invalid", err)
 	}
 
-	conn, err := db.Conn(ctx)
+	conn, releaseMigrationLock, err := acquireMigrationLock(ctx, db, namespace)
 	if err != nil {
-		return dependencyFault("sql", "platform.storage.migration_connection_failed", "migration database connection failed", err)
+		return err
 	}
+	defer conn.Close()
 	defer func() {
-		_ = conn.Close()
-	}()
-
-	lockName := migrationLockName(namespace)
-	lockCtx, cancel := context.WithTimeout(ctx, defaultPingTimeout+5*time.Second)
-	defer cancel()
-	var acquired sql.NullInt64
-	if err := conn.QueryRowContext(lockCtx, "SELECT GET_LOCK(?, ?)", lockName, migrationLockWaitSeconds).Scan(&acquired); err != nil {
-		// The server may have acquired the advisory lock even if the response
-		// was lost or could not be decoded. Do not return an ambiguous session
-		// to the connection pool.
-		_ = conn.Raw(func(any) error { return driver.ErrBadConn })
-		return dependencyFault("sql", "platform.storage.migration_lock_failed", "could not acquire migration lock", err)
-	}
-	if !acquired.Valid {
-		// MariaDB returns NULL when GET_LOCK cannot determine a result. Treat
-		// ownership as ambiguous and discard the physical connection.
-		_ = conn.Raw(func(any) error { return driver.ErrBadConn })
-		return dependencyFault("sql", "platform.storage.migration_lock_failed", "could not confirm migration lock ownership", errors.New("migration lock result is NULL"))
-	}
-	if acquired.Int64 != 1 {
-		return &fault.Fault{Class: fault.ClassConflict, Code: "platform.storage.migration_lock_busy", SafeMessage: "another migration is running", Dependency: "sql", Cause: errMigrationLockUnavailable}
-	}
-
-	defer func() {
-		releaseCtx, releaseCancel := context.WithTimeout(context.Background(), defaultPingTimeout)
-		defer releaseCancel()
-		var released sql.NullInt64
-		releaseErr := conn.QueryRowContext(releaseCtx, "SELECT RELEASE_LOCK(?)", lockName).Scan(&released)
-		if releaseErr != nil || !released.Valid || released.Int64 != 1 {
-			// MariaDB advisory locks belong to the physical connection. If release
-			// cannot be confirmed, discard it instead of returning a locked
-			// connection to database/sql's pool.
-			_ = conn.Raw(func(any) error { return driver.ErrBadConn })
-			if resultErr == nil {
-				if releaseErr != nil {
-					resultErr = dependencyFault("sql", "platform.storage.migration_lock_release_failed", "migration lock release could not be confirmed", releaseErr)
-				} else {
-					resultErr = fault.New(fault.ClassInternal, "platform.storage.migration_lock_release_failed", "migration lock release could not be confirmed", nil)
-				}
-			}
+		if releaseErr := releaseMigrationLock(); releaseErr != nil && resultErr == nil {
+			resultErr = releaseErr
 		}
 	}()
 
@@ -457,6 +419,48 @@ func ApplyMigrations(ctx context.Context, db *sql.DB, namespace string, migratio
 // ValidateAppliedMigrations performs a read-only, namespace-locked verification of
 // the exact registered migration history and checksums. It never creates or
 // upgrades the migration history table and never executes schema DDL.
+// acquireMigrationLock pins the advisory lock to one physical connection and
+// provides the same lock lifecycle to migration execution and read-only checks.
+func acquireMigrationLock(ctx context.Context, db *sql.DB, namespace string) (*sql.Conn, func() error, error) {
+	conn, err := db.Conn(ctx)
+	if err != nil {
+		return nil, nil, dependencyFault("sql", "platform.storage.migration_connection_failed", "migration database connection failed", err)
+	}
+	lockName := migrationLockName(namespace)
+	lockCtx, cancel := context.WithTimeout(ctx, defaultPingTimeout+5*time.Second)
+	defer cancel()
+	var acquired sql.NullInt64
+	if err := conn.QueryRowContext(lockCtx, "SELECT GET_LOCK(?, ?)", lockName, migrationLockWaitSeconds).Scan(&acquired); err != nil {
+		_ = conn.Raw(func(any) error { return driver.ErrBadConn })
+		_ = conn.Close()
+		return nil, nil, dependencyFault("sql", "platform.storage.migration_lock_failed", "could not acquire migration lock", err)
+	}
+	if !acquired.Valid {
+		_ = conn.Raw(func(any) error { return driver.ErrBadConn })
+		_ = conn.Close()
+		return nil, nil, dependencyFault("sql", "platform.storage.migration_lock_failed", "could not confirm migration lock ownership", errors.New("migration lock result is NULL"))
+	}
+	if acquired.Int64 != 1 {
+		_ = conn.Close()
+		return nil, nil, &fault.Fault{Class: fault.ClassConflict, Code: "platform.storage.migration_lock_busy", SafeMessage: "another migration operation is running", Dependency: "sql", Cause: errMigrationLockUnavailable}
+	}
+	release := func() error {
+		releaseCtx, releaseCancel := context.WithTimeout(context.Background(), defaultPingTimeout)
+		defer releaseCancel()
+		var released sql.NullInt64
+		releaseErr := conn.QueryRowContext(releaseCtx, "SELECT RELEASE_LOCK(?)", lockName).Scan(&released)
+		if releaseErr != nil || !released.Valid || released.Int64 != 1 {
+			_ = conn.Raw(func(any) error { return driver.ErrBadConn })
+			if releaseErr != nil {
+				return dependencyFault("sql", "platform.storage.migration_lock_release_failed", "migration lock release could not be confirmed", releaseErr)
+			}
+			return fault.New(fault.ClassInternal, "platform.storage.migration_lock_release_failed", "migration lock release could not be confirmed", nil)
+		}
+		return nil
+	}
+	return conn, release, nil
+}
+
 func ValidateAppliedMigrations(ctx context.Context, db *sql.DB, namespace string, migrations []Migration) (resultErr error) {
 	if ctx == nil || db == nil {
 		return fault.New(fault.ClassValidation, "platform.storage.invalid_migration_target", "migration validation target is not configured", nil)
@@ -465,42 +469,17 @@ func ValidateAppliedMigrations(ctx context.Context, db *sql.DB, namespace string
 	if err != nil {
 		return fault.New(fault.ClassValidation, "platform.storage.invalid_migrations", "migration definitions are invalid", err)
 	}
-	conn, err := db.Conn(ctx)
+	conn, releaseMigrationLock, err := acquireMigrationLock(ctx, db, namespace)
 	if err != nil {
-		return dependencyFault("sql", "platform.storage.migration_connection_failed", "migration database connection failed", err)
+		return err
 	}
-	defer func() { _ = conn.Close() }()
-	lockName := migrationLockName(namespace)
-	lockCtx, cancel := context.WithTimeout(ctx, defaultPingTimeout+5*time.Second)
-	defer cancel()
-	var acquired sql.NullInt64
-	if err := conn.QueryRowContext(lockCtx, "SELECT GET_LOCK(?, ?)", lockName, migrationLockWaitSeconds).Scan(&acquired); err != nil {
-		_ = conn.Raw(func(any) error { return driver.ErrBadConn })
-		return dependencyFault("sql", "platform.storage.migration_lock_failed", "could not acquire migration validation lock", err)
-	}
-	if !acquired.Valid {
-		_ = conn.Raw(func(any) error { return driver.ErrBadConn })
-		return dependencyFault("sql", "platform.storage.migration_lock_failed", "could not confirm migration validation lock ownership", errors.New("migration lock result is NULL"))
-	}
-	if acquired.Int64 != 1 {
-		return &fault.Fault{Class: fault.ClassConflict, Code: "platform.storage.migration_lock_busy", SafeMessage: "another migration operation is running", Dependency: "sql", Cause: errMigrationLockUnavailable}
-	}
+	defer conn.Close()
 	defer func() {
-		releaseCtx, releaseCancel := context.WithTimeout(context.Background(), defaultPingTimeout)
-		defer releaseCancel()
-		var released sql.NullInt64
-		releaseErr := conn.QueryRowContext(releaseCtx, "SELECT RELEASE_LOCK(?)", lockName).Scan(&released)
-		if releaseErr != nil || !released.Valid || released.Int64 != 1 {
-			_ = conn.Raw(func(any) error { return driver.ErrBadConn })
-			if resultErr == nil {
-				if releaseErr != nil {
-					resultErr = dependencyFault("sql", "platform.storage.migration_lock_release_failed", "migration validation lock release could not be confirmed", releaseErr)
-				} else {
-					resultErr = fault.New(fault.ClassInternal, "platform.storage.migration_lock_release_failed", "migration validation lock release could not be confirmed", nil)
-				}
-			}
+		if releaseErr := releaseMigrationLock(); releaseErr != nil && resultErr == nil {
+			resultErr = releaseErr
 		}
 	}()
+
 	rows, err := conn.QueryContext(ctx, "SELECT version, checksum, status FROM platform_schema_migrations WHERE namespace = ?", namespace)
 	if err != nil {
 		return dependencyFault("sql", "platform.storage.migration_history_failed", "migration history could not be read", err)
