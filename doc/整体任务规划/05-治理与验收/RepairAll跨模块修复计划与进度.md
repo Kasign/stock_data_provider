@@ -279,3 +279,14 @@ RA009 代码关闭条件已满足：Server 路由认证矩阵、CSRF、WebUI 请
 - 文档发现并修正：PLAT-002 登记簿将 PLAT-CTR-004 标为 `frozen`，但契约正文仍写 `freeze-ready（待项目负责人确认冻结）`。这是权威状态冲突，已将契约正文状态对齐为 `frozen`；不改变契约字段、版本或代码。
 - 结论：REVIEW_DONE_WITH_INTEGRATION_BLOCKERS。当前可执行的 Platform/Server/Data/News Diagnostics 机制未发现需要立即改动的生产代码缺陷；其余模块检查必须等待真实生产消费者/Worker/授权证据，不能为追求“全模块都有 Check”而新增空实现。
 - 后续：转入 RA-CROSS-REVIEW-011，审查完整启动/迁移/Worker 生命周期与跨模块端到端故障恢复；并持续保留 M6 生产环境证据门禁。若 News Source/Policy 检查的真实 Resolver 已完成装配，再单独补齐 Root 注册与针对性验收。
+
+
+## 27. RA-CROSS-REVIEW-011：Server Lifecycle Shutdown 预算缺陷修复（2026-11-19）
+
+- 基线：`repair_all` HEAD `d58cb66f06bd348d408cb76f96e7a48e2210a2b5`。
+- 缺陷确认：`internal/server/runtime.Lifecycle.Stop(ctx)` 在并发启动期间使用无条件等待 `<-startDone`，没有监听 Shutdown Context。若组件 Start 忽略取消或无法及时退出，Root Bootstrap 的 shutdownTimeout 会被突破，`stopConsumersThenCloseResources` 无法及时返回。
+- 影响边界：Root 已有保护逻辑，消费者停止失败/超时会保留 MariaDB/Redis/HTTP 共享资源，不会冒险关闭仍被在途组件使用的连接池；但无条件等待导致该保护逻辑无法按时触发，进程退出也被拖延。
+- 修复：Lifecycle 等待启动阶段时同时监听 `startDone` 与 `ctx.Done()`。Shutdown 超时则记录并返回 Context 错误、完成本次 Stop 等待结果；不调用仍在 Start 中的组件 Stop。Root 收到错误后按既有策略保留共享资源并退出进程。
+- 回归测试：新增忽略 Start Context 的阻塞组件，验证 Stop 在预算内返回 DeadlineExceeded、不会与 Start 并发调用 Stop、后续 Start 退出后仍保留原始关闭超时结果。
+- 架构边界：不强杀 Go goroutine、不提前关闭共享资源、不新增 Lifecycle 平行实现、不改变正常逆序停止和启动失败回滚行为。
+- 验收状态：代码已修改，等待精确 SHA Integration CI；当前不可将测试视为已执行。
