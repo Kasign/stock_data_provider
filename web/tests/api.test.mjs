@@ -49,6 +49,25 @@ function jsonResponse(body, status = 200, headers = {}) {
   });
 }
 
+
+test("routes all Data and analysis calls through the single Root Server path", async () => {
+  const originalFetch = globalThis.fetch;
+  const requests = [];
+  globalThis.fetch = async (url, init) => {
+    requests.push({ url: String(url), ...init });
+    return jsonResponse({ status: "ok", sources: [] });
+  };
+  try {
+    const legacySettings = { marketBase: "/market-api", analysisBase: "/analysis-api", apiKey: "legacy-secret" };
+    await getDataSources(legacySettings);
+    await analysisHealth(legacySettings);
+    assert.deepEqual(requests.map(request => request.url), ["/api/v1/data-sources", "/healthz"]);
+    assert.ok(requests.every(request => request.headers["X-API-Key"] === undefined));
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("creates a Go analysis task with the current payload and optional idempotency key", async () => {
   const originalFetch = globalThis.fetch;
   let request;

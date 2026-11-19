@@ -2754,6 +2754,8 @@ test("Root Server 单入口、Owner Session 与 Data 内部 Handler 契约", asy
   const server = await readFile(new URL("../../internal/server/bootstrap/router.go", import.meta.url), "utf8");
   const dataConfig = await readFile(new URL("../../internal/marketdata/config/config.go", import.meta.url), "utf8");
   const dataModule = await readFile(new URL("../../internal/marketdata/bootstrap/module.go", import.meta.url), "utf8");
+  const compose = await readFile(new URL("../../docker-compose.yml", import.meta.url), "utf8");
+  const nginx = await readFile(new URL("../default.conf.template", import.meta.url), "utf8");
   assert.match(apiClient, /const prefix = normalizeBasePath\(base, "\/"\)/);
   assert.doesNotMatch(apiClient, /X-API-Key|apiKey/);
   assert.match(apiClient, /credentials: "same-origin"/);

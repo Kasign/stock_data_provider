@@ -248,3 +248,11 @@
 实现清单见《Market Data 模块化单体迁移与最终验收状态》。代码已实现并删除旧独立服务资产；未完成最新精确 SHA CI 和真实部署前，不得标记 M5/M6 生产验收完成。
 
 本节覆盖本文件第 6 节及历史快照中“独立 Data Service 必须保留”“不删除旧代理/部署资产”等旧结论；这些内容仅作为历史审查记录，不再是当前目标架构。
+
+
+## RA009 补充：旧 Analysis HTTP 认证边界（独立于 Data 迁移）
+
+- Data 业务路由已通过显式 Owner Session/Owner Bearer 分发器接入 Root；该身份策略不自动扩展到旧 Analysis Task/Run 路由。
+- 当前旧 Analysis 路由仍由 Platform Owner Bearer RoutePolicy 保护，而 WebUI 不持有 Owner Bearer。因此旧 WebUI Task/Run 请求仍无法凭 Owner Session 通过认证。
+- 不得把 Owner Session 伪装成 Owner Bearer，也不得为完成 Data 迁移而放宽旧 Analysis 路由。
+- 该问题属于 SRV-CTR-001 deferred / Researchflow 新 HTTP API 装配边界，单独作为 Server 与 Researchflow 联调卡点；在新 API 合同、Application、路由和端到端测试完成前，不宣称旧 Task/Run 浏览器链路可用。

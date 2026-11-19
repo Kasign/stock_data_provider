@@ -214,3 +214,10 @@ P0 原始问题及实施约束作为审计记录保留；当前状态以第 7、
 - 旧资产清理与新入口切换已在同一代码批次完成；不保留旧服务、旧 Key、双 upstream 或回滚部署资产。目标环境真实部署和数据验收仍未完成。
 
 RA009 关闭条件：Server 路由认证矩阵、CSRF、WebUI 请求和配置、Compose/Nginx 单入口、独立 Data 运行资产清理、部署验收、真实 Provider/数据证据及最新精确 SHA CI 全部完成。详细分步清单见 Data 迁移计划与 Server 卡点文档。
+
+
+### RA009 独立遗留边界：旧 Analysis Task/Run 浏览器认证
+
+- Root Data 入口统一不等于旧 Analysis Task/Run 已完成 Owner Session 接入。
+- 旧 Analysis 路由继续 Owner Bearer-only，WebUI 当前使用同源 Session Cookie，不会自动具备该权限；这是既有 SRV-CTR-001 deferred 边界，不是 Data 路由回归。
+- 后续由 Server/Researchflow 按新 API 契约完成 Application、HTTP/OpenAPI、Root DI、Owner Session/资源授权与端到端联调；不得通过身份映射或静态 Bearer 绕过权限边界。

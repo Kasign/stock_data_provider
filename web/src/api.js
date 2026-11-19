@@ -1,5 +1,3 @@
-import { normalizeBasePath } from "./format.js";
-
 export const SETTINGS_KEY = "stock-provider-webui.settings.v1";
 const DEFAULTS = Object.freeze({ marketBase: "/", analysisBase: "/" });
 
@@ -42,15 +40,14 @@ function isValidISODate(value) {
   return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
 }
 
-async function request(base, path, { method = "GET", body, signal, timeoutMs = 0, csrf = false, headers: extraHeaders = {} } = {}) {
-  const prefix = normalizeBasePath(base, "/");
+async function request(_base, path, { method = "GET", body, signal, timeoutMs = 0, csrf = false, headers: extraHeaders = {} } = {}) {
   const headers = { Accept: "application/json", ...extraHeaders };
   if (csrf) {
     if (!ownerCSRFToken) throw new Error("当前页面没有可用的 CSRF Token，请先恢复 Owner Session。");
     headers["X-CSRF-Token"] = ownerCSRFToken;
   }
   if (body !== undefined) headers["Content-Type"] = "application/json";
-  const requestPath = prefix === "/" ? path : `${prefix}${path}`;
+  const requestPath = path;
   let requestSignal = signal;
   let timeoutController = null;
   let timeoutId = null;
