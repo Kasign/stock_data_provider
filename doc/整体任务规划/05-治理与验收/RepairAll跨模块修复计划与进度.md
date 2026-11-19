@@ -433,3 +433,11 @@ RA009 代码关闭条件已满足：Server 路由认证矩阵、CSRF、WebUI 请
 - SHA dc866b3595fb49594446b15a9b8084c754c70a19 的根模块测试、跨模块测试、Worker MariaDB/Redis、go-core、Compose、WebUI 测试和镜像构建全部通过。
 - 首轮汇总唯一失败是 trading_calendar_integration_test.go 新增测试前多一个空行导致 gofmt 门禁失败；已修正，不调整门禁或测试标准。
 - 新 SHA 完整 Integration CI 待执行。
+
+
+### 28.17 PIT 交易日历修复完整验收（2026-11-19）
+
+- 精确 SHA 08684e8a9b50641b4d32c38ab6ac9a3c7dd808e0 的 Integration CI Run 44504593484 全项 success。
+- gofmt、根模块 vet/test、跨模块测试、Worker MariaDB/Redis、go-core vet/test、Compose、WebUI 语法/单测/镜像构建均通过。
+- DailyBarsAsOf 历史日历选择修复通过完整 CI；dc866b 首轮唯一 gofmt 格式问题已修正，没有修改门禁。
+- D2 下一步不是直接改旧 v1，而是完成 CalendarRef Snapshot 传播设计、ChangePercent/scale/amount 证据审查，再确定版本化 DTO 实现范围。

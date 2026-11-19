@@ -155,3 +155,10 @@ Root Server 的 Data Module 构造、共享资源注入、Migration Registry、I
 
 - SHA dc866b3595fb49594446b15a9b8084c754c70a19 的所有功能测试和构建步骤均通过，唯一失败为新增 MariaDB 集成测试前多一行空行触发 gofmt。
 - 已删除多余空行；新 SHA 需重新完整验收。
+
+
+## RepairAll PIT 日历修复验收结果（2026-11-19）
+
+- 修复 SHA 08684e8a9b50641b4d32c38ab6ac9a3c7dd808e0 的 Integration CI Run 44504593484 全项 success。
+- DailyBarsAsOf 使用历史 CalendarRef 的代码、MariaDB 多版本选择测试和禁止实时 Provider 调用测试均通过。
+- 当前 Data 卡点从“PIT 使用当前日历”转为“将实际使用的 CalendarRef 绑定到 DailyBars v2 Snapshot Header”；另有 ChangePercent 精度、lexical scale、部分 Provider 复权精度、Amount 单位和 ProviderTime/provider_data_version 等未决证据。
