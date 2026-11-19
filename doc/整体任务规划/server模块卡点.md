@@ -165,3 +165,11 @@
 - Root 在 Migration enabled/disabled 路径之后统一执行 Data Ready；启动 Worker 或 HTTP 流量前检查 MariaDB、Redis 和 V4 物理 Schema。
 - 代码级 SRV-009 Migration/Schema 门禁验收通过；生产环境 Migration enabled/disabled 演练、真实 Provider 出站矩阵仍未完成。其他模块生产装配卡点仍按本文件第 5/7 节的准入条件处理。
 - 本次仅更新 repair_all 聚合基线，`feat/server` 分支未同步。
+
+
+## RepairAll SRV-009 Checksum / 物理 Schema 分离验收（2026-11-19）
+
+- 最新 repair_all SHA：`ff9a98457220ae307b9dc4a62ce274849cd60f12`；Integration CI [Run 44453457919](https://github.com/Kasign/stock_data_provider/actions/runs/44453457919) 精确 SHA 全项 success。
+- MariaDB 集成测试确认：物理列/索引被删除时，Root Migration Registry checksum 预检不误报 Migration 定义被修改；Data Ready 以 `market_data.schema_drift` fail-closed。
+- 该行为在 Root Registry + Data Repository + MariaDB 的真实组合中验收，不是 Mock。
+- 生产数据库启停演练仍待执行；`feat/server` 分支未同步。

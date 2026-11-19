@@ -171,3 +171,13 @@
 - 结论：代码层面的 Data V4 物理 Schema 就绪门禁在当前聚合 SHA 上通过；生产数据库 Migration enabled/disabled 演练仍未执行，不能据 CI 关闭生产演练卡点。
 
 当前下一步：继续跨模块生产调用链 Review，优先检查 Server 真实装配边界和各模块公开 Application Port；外部来源、凭据、消费者契约缺失时继续保留 BLOCKED/NOT_COMPARABLE。
+
+
+## 11. RA-DATA-SCHEMA-001 物理漂移与 Migration Checksum 边界验收（2026-11-19）
+
+- 最新代码 SHA：`ff9a98457220ae307b9dc4a62ce274849cd60f12`。
+- 完整 Integration CI：[Run 44453457919](https://github.com/Kasign/stock_data_provider/actions/runs/44453457919)，精确 SHA 匹配，结论 `success`。
+- MariaDB 测试进一步证明：删除 V4 兼容列或 revision 索引后，Root Registry 的只读 Migration checksum 校验仍通过（迁移定义与 history 未变化），但 Data Ready 必须返回精确 Fault `market_data.schema_drift`。
+- 该断言明确区分“Migration 定义/执行历史完整性”和“数据库物理 Schema 完整性”，避免将其中一种检查误当作另一种检查。
+- 全量检查：gofmt、root vet/tests、News/Research/Researchflow 跨模块测试、Worker MariaDB/Redis、go-core vet/tests、Compose、WebUI syntax/tests/build 全部 success。
+- 结论：当前代码级漂移检测与 Fault 语义验收通过；生产环境启停演练仍未完成。

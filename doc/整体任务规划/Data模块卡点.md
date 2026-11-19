@@ -74,3 +74,11 @@ Root Server 尚未实际构造并注册 Data Module，属于 Server SRV-009 的�
 - MariaDB 测试先通过 Root Registry 执行 Data Migration V1-V4，再对 Ready 执行缺列/缺索引 fail-closed 检查和恢复检查；原测试缺少 Data Migration 装配，已修正，不曾通过放宽物理 Schema 校验绕过。
 - 当前结论：repair_all 代码层物理 Schema 门禁 PASS；生产环境 Migration 开启/关闭演练仍待执行。模块分支 `feat/data` 未同步。
 - DATA-003 的真实 AvailableAt 证据及 DATA-004～DATA-007 的外部字段、Freshness、Parity、Provider 真实请求证据仍未解除。
+
+
+## RepairAll Migration Checksum 与物理 Schema 漂移边界（2026-11-19）
+
+- 最新 repair_all 代码 SHA：`ff9a98457220ae307b9dc4a62ce274849cd60f12`；Integration CI [Run 44453457919](https://github.com/Kasign/stock_data_provider/actions/runs/44453457919) 全项 success。
+- 新增 MariaDB 断言：删除 V4 兼容列或 revision 索引后，Migration checksum 校验仍通过；Data Ready 返回 `market_data.schema_drift`。恢复结构后 Ready 恢复通过。
+- 这证明迁移 history checksum 与物理 Schema 漂移检查职责分离，防止未来把 checksum 成功当成数据库结构健康证明。
+- 生产环境 Migration enabled/disabled 演练仍待执行；真实 Provider 数据与时间证据卡点不变。模块分支 `feat/data` 未同步。
