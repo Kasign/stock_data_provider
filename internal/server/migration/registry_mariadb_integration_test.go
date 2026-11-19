@@ -14,6 +14,7 @@ import (
 
 	platformfault "example.com/stock-analysis-flow/internal/platform/fault"
 	platformstorage "example.com/stock-analysis-flow/internal/platform/storage"
+	marketdatabootstrap "example.com/stock-analysis-flow/internal/marketdata/bootstrap"
 )
 
 // TestRegistryMariaDBIntegration 验证 Server Registry 与 Platform Runner 的真实组合行为。
@@ -100,6 +101,12 @@ func TestRegistryMariaDBIntegration(t *testing.T) {
 	}
 	if value != "server-registry" {
 		t.Fatalf("MariaDB round trip = %q, want server-registry", value)
+	}
+	if _, err := db.ExecContext(ctx, "UPDATE platform_schema_migrations SET checksum = REPEAT('0', 64) WHERE namespace = ? AND version = 1", namespace); err != nil {
+		t.Fatalf("tamper migration checksum: %v", err)
+	}
+	if err := registry.ValidateApplied(ctx, db); err == nil {
+		t.Fatal("ValidateApplied() accepted a changed migration checksum")
 	}
 }
 
@@ -217,5 +224,115 @@ func TestRegistryMariaDBPartialDDLFailureRequiresRecovery(t *testing.T) {
 	var platformErr *platformfault.Fault
 	if !errors.As(retryErr, &platformErr) || platformErr.Code != "platform.storage.migration_requires_recovery" {
 		t.Fatalf("retry error = %v, want Platform migration_requires_recovery Fault", retryErr)
+	}
+}
+
+
+// TestMarketDataMigrationUpgradeAndConcurrentRootRegistration exercises the
+// published V1-V3 history, legacy compatibility DDL, and two Root instances.
+func TestMarketDataMigrationUpgradeAndConcurrentRootRegistration(t *testing.T) {
+	dsn := os.Getenv("SERVER_RELAY_TEST_MYSQL_DSN")
+	if dsn == "" {
+		t.Skip("set SERVER_RELAY_TEST_MYSQL_DSN to run the Data migration integration test")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+	defer cancel()
+	adminDB, err := sql.Open("mysql", dsn)
+	if err != nil {
+		t.Fatalf("open MariaDB admin connection: %v", err)
+	}
+	defer adminDB.Close()
+	if err := adminDB.PingContext(ctx); err != nil {
+		t.Fatalf("ping MariaDB: %v", err)
+	}
+	suffix := strconv.FormatInt(time.Now().UnixNano(), 36)
+	testDatabase := "market_data_it_" + suffix
+	if _, err := adminDB.ExecContext(ctx, fmt.Sprintf("CREATE DATABASE `%s`", testDatabase)); err != nil {
+		t.Fatalf("create isolated MariaDB database: %v", err)
+	}
+	t.Cleanup(func() {
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cleanupCancel()
+		_, _ = adminDB.ExecContext(cleanupCtx, fmt.Sprintf("DROP DATABASE IF EXISTS `%s`", testDatabase))
+	})
+	config, err := mysqlDriver.ParseDSN(dsn)
+	if err != nil {
+		t.Fatalf("parse MariaDB DSN: %v", err)
+	}
+	config.DBName = testDatabase
+	connector, err := mysqlDriver.NewConnector(config)
+	if err != nil {
+		t.Fatalf("create isolated MariaDB connector: %v", err)
+	}
+	db := sql.OpenDB(connector)
+	defer db.Close()
+	if err := db.PingContext(ctx); err != nil {
+		t.Fatalf("ping isolated MariaDB database: %v", err)
+	}
+	definitions := marketdatabootstrap.MigrationDefinitions()
+	if len(definitions) != 4 {
+		t.Fatalf("Data migration definition count = %d, want 4", len(definitions))
+	}
+	if err := platformstorage.ApplyMigrations(ctx, db, "market_data", definitions[:3]); err != nil {
+		t.Fatalf("apply published Data migrations V1-V3: %v", err)
+	}
+	// Recreate the deployed legacy state: two missing columns and old unique
+	// history indexes that must be replaced by non-unique temporal indexes.
+	for _, statement := range []string{
+		"ALTER TABLE market_data_quotes DROP COLUMN volume_ratio",
+		"ALTER TABLE market_data_quotes DROP COLUMN turnover_rate",
+		"CREATE UNIQUE INDEX uq_market_bar_revision_content ON market_data_daily_bar_versions (symbol, trade_date, period, adjustment_basis, source, revision_hash)",
+		"CREATE UNIQUE INDEX uq_market_fundamental_revision_content ON market_data_fundamental_versions (symbol, report_year, report_quarter, source, revision_hash)",
+	} {
+		if _, err := db.ExecContext(ctx, statement); err != nil {
+			t.Fatalf("prepare legacy Data schema (%s): %v", statement, err)
+		}
+	}
+	registries := []*Registry{NewRegistry(), NewRegistry()}
+	for _, registry := range registries {
+		if err := registry.Register("market_data", definitions); err != nil {
+			t.Fatalf("register complete Data migration history: %v", err)
+		}
+	}
+	start := make(chan struct{})
+	results := make(chan error, len(registries))
+	var workers sync.WaitGroup
+	for _, registry := range registries {
+		workers.Add(1)
+		go func(registry *Registry) {
+			defer workers.Done()
+			<-start
+			_, runErr := registry.RunWithReport(ctx, db)
+			results <- runErr
+		}(registry)
+	}
+	close(start)
+	workers.Wait()
+	close(results)
+	for runErr := range results {
+		if runErr != nil {
+			t.Fatalf("concurrent Root migration failed: %v", runErr)
+		}
+	}
+	if err := registries[0].ValidateApplied(ctx, db); err != nil {
+		t.Fatalf("read-only Data migration validation failed: %v", err)
+	}
+	for _, column := range []string{"volume_ratio", "turnover_rate"} {
+		var count int
+		if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='market_data_quotes' AND COLUMN_NAME=?", column).Scan(&count); err != nil || count != 1 {
+			t.Fatalf("compatibility column %s missing: count=%d err=%v", column, count, err)
+		}
+	}
+	for _, index := range []string{"uq_market_bar_revision_content", "uq_market_fundamental_revision_content"} {
+		var count int
+		if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND INDEX_NAME=?", index).Scan(&count); err != nil || count != 0 {
+			t.Fatalf("legacy unique index %s remains: count=%d err=%v", index, count, err)
+		}
+	}
+	for _, index := range []string{"idx_market_bar_revision_identity_asof", "idx_market_fundamental_identity_asof"} {
+		var nonUnique int
+		if err := db.QueryRowContext(ctx, "SELECT MAX(NON_UNIQUE) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND INDEX_NAME=?", index).Scan(&nonUnique); err != nil || nonUnique != 1 {
+			t.Fatalf("temporal history index %s is not non-unique: non_unique=%d err=%v", index, nonUnique, err)
+		}
 	}
 }
