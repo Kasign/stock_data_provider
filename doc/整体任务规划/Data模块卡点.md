@@ -179,3 +179,10 @@ Root Server 的 Data Module 构造、共享资源注入、Migration Registry、I
 - ChangePercent 的来源与计算方式并不统一：Tushare/BaoStock/Netease 有原始来源 token/string；TickFlow 有来源/派生混合；Pytdx/Yahoo 当前是 float64 派生。derived Decimal 需要明确精度与舍入规则，未冻结前必须 null。
 - v2 必须区分 canonical Decimal、原始 lexical scale、单位证据、adapter/normalization/provider data version 和 system observation time；不能把 float64 或 DB DECIMAL scale 反向包装为来源精度。
 - 版本化 Application/HTTP DTO 独立于 v1；不改变现有消费者契约。DATA-CTR-005/007 与 QNT-CTR-003 保持 deferred。
+
+
+## RepairAll Pytdx Amount 单位证据待核（2026-11-19）
+
+- 当前代码 `pytdxDailyBarExactValues` 将协议 `Kline.Amount` 按 CNY 传入 ExactValues helper，但所用依赖 v0.0.86 的 protocol 文档只注释为“成交额”，未给出该字段单位。
+- TDX 官方量化文档对 `get_market_data` 的 Amount 标注“万元”，公式 AMOUNT/AMO 指标则标注“元”；属于不同 API/字段语义，不能互相替代。现有 Adapter 的 CNY 映射需视为待核假设。
+- D2 v2 的 `amount_cny` 暂时不得沿用该假设；单位证据确认前为 null/degraded。待核对的是与 v0.0.86 标准 Kline.Amount 完全对应的协议单位，不是重新猜测 Price 类型的缩放。
