@@ -7,7 +7,7 @@ info:
     CNY/share. Provider event time, fetch time, normalization time, adjustment
     basis, source and quality metadata remain explicit.
 servers:
-  - url: /api
+  - url: /
 components:
   schemas:
     Error:
