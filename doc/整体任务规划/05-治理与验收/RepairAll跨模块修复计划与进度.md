@@ -418,3 +418,11 @@ RA009 代码关闭条件已满足：Server 路由认证矩阵、CSRF、WebUI 请
 - ExactValues canonicalizer 会移除小数尾随零，当前保留的是精确数值而非原始 token scale；ChangePercent 尚无精确 sidecar 字段。
 - 精确值已穿过 Provider → Normalize → Repository revision metadata → current/PIT → Application Port；Application Port 丢失缺陷由 SHA `a2bbfee6fd02f6c54242349419de7273b8fa4a76` / Run `44501617234` 全项 CI 关闭。
 - 下一阶段进入 D2 设计审查：逐字段明确 canonical value、source scale evidence、单位、缺失、ChangePercent 来源、复权精确计算边界、interval/calendar ref 和 version 语义；DATA-CTR-005/007 继续 deferred，直到满足项目级重新进入条件。
+
+
+### 28.14 D2 DailyBars v2 字段级设计审查启动（2026-11-19）
+
+- 已根据 DEC-PLAT-002-020、DEC-PLAT-002-047 和 GOV-CTR-001/002 整理 v2 Snapshot Header / Bar Record 草案；明确 OHLC/Amount/ChangePercent 的 Decimal 语义、原始来源值、precision evidence、interval、复权、CalendarRef、ProviderTime 和版本字段。
+- 设计审查识别到真实接线缺口：CalendarRef 已在 Data 内部独立持久化，但 DailyBars 质量评估使用的同一 CalendarRef 尚未随 DailyBars Application Snapshot 返回；不得通过第二次独立日历查询补造同一性。
+- 当前 v2 仍有 ChangePercent 精确值、lexical scale evidence、Tushare/Yahoo QFQ/HFQ 精确调整、ProviderTime/逐行数据版本及 Amount 单位证据等缺口。
+- 草案不等于冻结；不修改项目级登记簿，DATA-CTR-005/007 与 QNT-CTR-003 继续 deferred。

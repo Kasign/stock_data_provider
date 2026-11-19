@@ -141,3 +141,11 @@ Root Server 的 Data Module 构造、共享资源注入、Migration Registry、I
 - `app.DailyBar` ExactValues 同构 DTO、深拷贝映射和 current/PIT Reader 测试已通过精确 SHA `a2bbfee6fd02f6c54242349419de7273b8fa4a76` 的完整 Integration CI Run `44501617234`；Application Port 丢失缺陷 CLOSED。
 - 默认 7 个 Provider 已生成 ExactValues；Hithink/Tushare/Yahoo 也在部分路径生成，但 Tushare/Yahoo QFQ/HFQ 缺精确调整值 sidecar。Canonicalizer 去除尾随零，不保留原始 token scale；ChangePercent 没有精确值字段。
 - 仍开放的 Data 卡点：字段 lexical scale/precision evidence、ChangePercent 精确来源、QFQ/HFQ 精确调整、Hithink/Pytdx Amount 单位证据、ProviderTime/逐行数据版本、DailyBars v2 DTO/Schema/Golden、DATA-CTR-007 Snapshot/Manifest/AuthorizationRef。
+
+
+## RepairAll D2 DailyBars v2 设计审查卡点（2026-11-19）
+
+- 新增 Data 内部 D2 设计审查草案，尚未修改项目级契约状态。
+- 必须解决：CalendarRef 与实际 DailyBars 质量评估结果同一性传播；ChangePercent 精确来源；原始 token scale evidence；Tushare/Yahoo QFQ/HFQ 精确调整；Amount 单位证据；ProviderTime/provider_data_version 缺失语义。
+- DailyBars v2 必须同时覆盖 Application Port 与 HTTP Schema 的版本化 DTO，并通过 Research Evidence / Quant Consumer Contract Test；不得修改现有 v1 number/float64。
+- DATA-CTR-005/007 和 QNT-CTR-003 继续 deferred，直至项目级重新进入条件满足。
