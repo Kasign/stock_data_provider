@@ -2,8 +2,8 @@
 
 - 仓库：`Kasign/stock_data_provider`
 - 工作分支：`repair_all`
-- 当前工作分支 HEAD：`1ce641ff13a07e228784ef0c4041eded82e45621`（2026-11-19 文档更新后）
-- 本轮生产代码基线：`9ce0d0b536e2d9b37f0fb5ff4cc2ab8ae59c6ba4`；该 SHA 的完整 Integration CI 尚未取得成功证据
+- 当前工作分支 HEAD：以 GitHub `repair_all` 分支最新引用为准（避免在本文件提交后保留自引用 SHA）
+- 本轮 RA009 生产代码验收 SHA：`1e916220a8784ae840132ce0cec3b3654c6b9655`；完整 Integration CI [Run 44482650366](https://github.com/Kasign/stock_data_provider/actions/runs/44482650366) 全项 success
 - 更新日期：2026-11-19
 
 ## 1. 分支用途与执行原则
@@ -30,7 +30,7 @@
 | P1 | Research Context/Evidence 与 Researchflow Run/Stage/Result 语义及唯一持久化 Owner | Research / Researchflow / Server | Review 完成；Context 授权、PIT Mode 与生产 Stage 消费仍阻塞 |
 | P2 | LLM Gateway 生产 Provider、Secret、Capability Evidence 与真实调用 | LLM / Platform / Server / Researchflow | 待系统 Review |
 | P2 | Notification 事件、Recipient、Fanout/Delivery、Worker 和恢复链 | Notification / Platform / Server | Review 完成；Relay/Inbox/Fanout 机制通过，Server Delivery Worker/Recipient Directory 阻塞 |
-| P3 | Diagnostics 注册、身份/审计传播、Worker 恢复、WebUI Root API 对接 | Platform / Server / 各业务模块 / WebUI | Root/Data Owner Session 单入口代码已实现；旧 Data 服务/Key 资产已清理；精确 SHA CI 与生产环境验收待完成 |
+| P3 | Diagnostics 注册、身份/审计传播、Worker 恢复、WebUI Root API 对接 | Platform / Server / 各业务模块 / WebUI | Data Owner Session 单入口、旧资产清理及精确 SHA CI 已通过；M6 真实生产验收仍待外部证据 |
 | P3 | 完整启动、迁移、跨模块端到端和故障恢复验收 | 全模块 | 待实施 |
 
 ## 3. 本轮已完成的修复
@@ -57,18 +57,18 @@ P0 原始问题及实施约束作为审计记录保留；当前状态以第 7、
 - Migration checksum 与物理 Schema 漂移分开判定；Data Ready 负责物理结构校验。
 - 代码层 MariaDB/Redis 集成与 Root Bootstrap 验收已通过；生产环境 Migration enabled/disabled 部署演练仍未执行，不能标记生产验收完成。
 
-## 5. 当前执行任务与边界
+## 5. RA-CROSS-REVIEW-008 历史审查任务与 RA009 当前结论
 
-### RA-CROSS-REVIEW-008：WebUI ↔ Server 身份认证、API 契约与凭据暴露 Review
+### RA-CROSS-REVIEW-008：WebUI ↔ Server 身份认证、API 契约与凭据暴露 Review（已完成，历史阻塞由 RA009 决策解除）
 
-- 状态：REVIEW_DONE_WITH_BLOCKERS（已完成 WebUI 请求、Nginx、Compose、Root Server Data 路由和 Owner Session 契约审查；M5 代码/部署切换等待 Data 业务路由认证策略确认）。
+- 状态：REVIEW_DONE；其发现的 Owner Session 与 Data 认证不匹配问题已由用户决策和 RA009 实现解决。
 - 目标：核对 WebUI 实际请求与 Server 已发布路由/认证矩阵，检查 Owner Session/Owner Bearer 的边界、CSRF、Request ID、API Key/Secret 是否进入浏览器持久化、Data Provider Key 是否由 Server 侧注入。
 - 范围：WebUI、Server、Platform、Data；只审查当前真实 UI 调用和已冻结/已发布 API，不新增无业务场景接口。
 - 首要核对：SRV-CTR-002、SRV-CTR-001（若已冻结）、PLAT-CTR-001/002/003、Data OpenAPI/Root Adapter 契约、WebUI 当前任务验收清单与 API 接口协作清单。
 - 重点检查：WebUI 是否只用 HttpOnly Session Cookie；是否错误把 Owner Bearer/API Key 存 localStorage/sessionStorage/URL/日志；非安全请求是否携带 CSRF；UI 调用路径/方法/DTO 是否与 Server Router/OpenAPI 一致；Data Provider Key 是否只由 Server Data Adapter 注入；CORS/Origin/Host/Request ID 是否符合契约；未实现 API 是否被 UI 假调用或用 Mock 冒充真实。
 - 诊断判定：按每条 UI 请求记录 PASS / FAIL / NOT_COMPARABLE / DEFERRED，附 UI 调用位置、Server 路由、契约、测试和精确 SHA。
 - 修复门禁：UI 问题修 WebUI；路由/认证/请求上下文问题修 Server；公共安全原语修 Platform；Provider 凭据边界修 Data/Server。多模块改动同步 DTO、路由、UI 调用和测试。
-- 完成条件：浏览器无持久化高权限凭据；UI 请求均有真实 Server 端契约与认证策略；真实 Data Provider 调用不暴露 Key；针对性 UI/HTTP 测试及完整 CI 精确 SHA 验收。
+- 原审查完成条件：浏览器无持久化高权限凭据；UI 请求均有真实 Server 端契约与认证策略；真实 Data Provider 调用不暴露 Key；针对性 UI/HTTP 测试及完整 CI 精确 SHA 验收。RA009 已完成代码层条件；M6 真实 Provider 和目标环境验收仍单独阻塞。
 
 ## 14. RA-CROSS-REVIEW-003 基线与验收证据（2026-11-19）
 
