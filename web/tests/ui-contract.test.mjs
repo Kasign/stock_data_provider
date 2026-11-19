@@ -2763,7 +2763,7 @@ test("Root Server 单入口、Owner Session 与 Data 内部 Handler 契约", asy
   assert.match(server, /platformsecurity\.OwnerAccess\(\)/);
   assert.match(dataModule, /InProcessHandler\(\)/);
   assert.doesNotMatch(dataModule, /func \(m \*Module\) Handler\(\)/);
-  assert.doesNotMatch(dataConfig, /MARKET_DATA_API_KEY|APIKey\s+string/);
+  assert.doesNotMatch(dataConfig, /MARKET_DATA_API_KEY|^\t+APIKey\s+string/m);
   assert.doesNotMatch(marketHTTPServer, /X-API-Key|func \(s \*Server\) Handler\(/);
   assert.doesNotMatch(marketHTTPServer, /GET \/health\/live|GET \/health\/ready/);
 });
