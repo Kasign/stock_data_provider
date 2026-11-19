@@ -58,6 +58,15 @@ type Quote struct {
 	NormalizationVer   string          `json:"normalization_version"`
 }
 
+type DailyBarExactValues struct {
+	Open      string  `json:"open"`
+	High      string  `json:"high"`
+	Low       string  `json:"low"`
+	Close     string  `json:"close"`
+	RawVolume string  `json:"raw_volume"`
+	RawAmount *string `json:"raw_amount,omitempty"`
+}
+
 type DailyBar struct {
 	Symbol                                string          `json:"symbol"`
 	TradeDate                             string          `json:"trade_date"`
@@ -103,6 +112,8 @@ type DailyBar struct {
 	FallbackReason                        string          `json:"fallback_reason,omitempty"`
 	RequestID                             string          `json:"request_id,omitempty"`
 	NormalizationVer                      string          `json:"normalization_version"`
+	// ExactValues 保留 Provider/协议层的十进制值；只进入 Data revision metadata，不暴露到旧 HTTP JSON。
+	ExactValues                           *DailyBarExactValues `json:"-"`
 }
 
 type Bundle struct {

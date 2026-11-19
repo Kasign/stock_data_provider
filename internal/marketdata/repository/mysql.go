@@ -426,7 +426,7 @@ func (s *Store) UpsertBars(ctx context.Context, bars []model.DailyBar) error {
 	stmt := `INSERT INTO market_data_daily_bars (symbol,trade_date,period,adjustment_basis,source,open_price,high_price,low_price,close_price,volume_shares,amount_cny,change_percent,fetched_at,normalized_at,quality_status,metadata) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE open_price=VALUES(open_price),high_price=VALUES(high_price),low_price=VALUES(low_price),close_price=VALUES(close_price),volume_shares=VALUES(volume_shares),amount_cny=VALUES(amount_cny),change_percent=VALUES(change_percent),fetched_at=VALUES(fetched_at),normalized_at=VALUES(normalized_at),quality_status=VALUES(quality_status),metadata=VALUES(metadata)`
 	versionStmt := `INSERT INTO market_data_daily_bar_versions (symbol,trade_date,period,adjustment_basis,source,revision_hash,recorded_at,open_price,high_price,low_price,close_price,volume_shares,amount_cny,change_percent,fetched_at,normalized_at,quality_status,metadata) VALUES (?,?,?,?,?,?,UTC_TIMESTAMP(6),?,?,?,?,?,?,?,?,?,?,?)`
 	for _, bar := range bars {
-		metadata, e := json.Marshal(bar)
+		metadata, e := marshalDailyBarMetadata(bar)
 		if e != nil {
 			return e
 		}
@@ -466,7 +466,7 @@ func dailyBarRevisionHash(bar model.DailyBar) (string, error) {
 	fingerprint.FetchedAt = time.Time{}
 	fingerprint.NormalizedAt = time.Time{}
 	fingerprint.SystemObservedAt = nil
-	payload, err := json.Marshal(fingerprint)
+	payload, err := marshalDailyBarMetadata(fingerprint)
 	if err != nil {
 		return "", err
 	}
@@ -524,7 +524,7 @@ ORDER BY v.trade_date DESC, v.recorded_at DESC, v.source ASC`
 			return nil, err
 		}
 		var bar model.DailyBar
-		if err := json.Unmarshal(metadata, &bar); err != nil {
+		if err := unmarshalDailyBarMetadata(metadata, &bar); err != nil {
 			// Keep other source/date versions usable if one historic metadata blob is damaged.
 			continue
 		}

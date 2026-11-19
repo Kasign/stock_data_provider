@@ -411,6 +411,7 @@ func (p *Pytdx) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endDat
 			addPytdxValidationIssue(ctx, i, "change_percent", "Last", "previous_close_unavailable", "positive previous close", "number", fmt.Sprintf("%g", item.Last.Float64()), "Go 通达信协议未提供可用于计算涨跌幅的前收盘价", validation.SeverityWarning)
 		}
 		rawVolumeCopy := rawVolume
+		exactValues := pytdxDailyBarExactValues(item)
 		out = append(out, model.DailyBar{
 			Symbol:            symbol,
 			TradeDate:         tradeDate,
@@ -439,6 +440,7 @@ func (p *Pytdx) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endDat
 			QualityStatus:     quality,
 			QualityReasons:    reasons,
 			NormalizationVer:  normalize.Version,
+			ExactValues:        exactValues,
 		})
 	}
 	return normalizeProviderDailyBarsWithReport(ctx, symbol, start.Format("2006-01-02"), end.Format("2006-01-02"), limit, out, 0)
@@ -703,4 +705,16 @@ func pytdxPositiveFinite(value float64) bool {
 
 func pytdxNonNegativeFinite(value float64) bool {
 	return value >= 0 && !math.IsNaN(value) && !math.IsInf(value, 0)
+}
+
+
+func pytdxDailyBarExactValues(item *protocol.Kline) *model.DailyBarExactValues {
+	if item == nil {
+		return nil
+	}
+	rawAmount := item.Amount.String()
+	return &model.DailyBarExactValues{
+		Open: item.Open.String(), High: item.High.String(), Low: item.Low.String(), Close: item.Close.String(),
+		RawVolume: strconv.FormatInt(item.Volume, 10), RawAmount: &rawAmount,
+	}
 }
