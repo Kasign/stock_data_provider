@@ -165,3 +165,17 @@ Root Server 的 Data Module 构造、共享资源注入、Migration Registry、I
 
 
 - 新增 Service + MariaDB 集成测试，验证 asOf 选择正确历史 CalendarRef，且配置的实时 Provider 调用次数保持 0；新 SHA 待 CI。
+
+
+## RepairAll PIT Calendar AsOf Service 集成验收（2026-11-19）
+
+- Service + MariaDB 集成测试验证：当 asOf 前旧 CalendarRef 与 asOf 后新 CalendarRef 同时存在，且实时 Provider 返回新版本时，`TradingCalendarAsOf` 仍只返回旧版本，live Provider 调用数为 0。
+- 测试 fixture 使用独立 1990 日期区间，避免与同套件其他日历内容地址/观察时间共享造成顺序依赖。
+- 格式修复提交 `443e851b7bd48d98b537c467a9c1493bea751735`，Integration CI Run [44506607149](https://github.com/Kasign/stock_data_provider/actions/runs/44506607149) 全项 success；Run [44505628048](https://github.com/Kasign/stock_data_provider/actions/runs/44505628048) 唯一失败为该测试文件多余空行触发 gofmt，已修正。
+
+## RepairAll D2 字段级设计审查补充（2026-11-19）
+
+- DailyBars coverage 当前会读取真实 Calendar Snapshot，但 helper 丢弃 CalendarRef；这是 v2 Header 尚未能证明日历同一性的实际代码缺口。后续通过同次 coverage evidence 返回 ref，不再二次查询。
+- ChangePercent 的来源与计算方式并不统一：Tushare/BaoStock/Netease 有原始来源 token/string；TickFlow 有来源/派生混合；Pytdx/Yahoo 当前是 float64 派生。derived Decimal 需要明确精度与舍入规则，未冻结前必须 null。
+- v2 必须区分 canonical Decimal、原始 lexical scale、单位证据、adapter/normalization/provider data version 和 system observation time；不能把 float64 或 DB DECIMAL scale 反向包装为来源精度。
+- 版本化 Application/HTTP DTO 独立于 v1；不改变现有消费者契约。DATA-CTR-005/007 与 QNT-CTR-003 保持 deferred。
