@@ -3,6 +3,7 @@ package bootstrap
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -18,6 +19,8 @@ import (
 	"time"
 
 	mysql "github.com/go-sql-driver/mysql"
+
+	platformfault "example.com/stock-analysis-flow/internal/platform/fault"
 )
 
 const workerBootstrapHelperEnv = "SERVER_WORKER_BOOTSTRAP_HELPER"
@@ -57,6 +60,10 @@ func TestWorkerBootstrapHelperProcess(t *testing.T) {
 	ctx, stop := signalNotifyContext()
 	defer stop()
 	if err := Run(ctx); err != nil {
+		var platformErr *platformfault.Fault
+		if errors.As(err, &platformErr) && platformErr.Cause != nil {
+			t.Fatalf("Server Bootstrap Run() 失败: %v（内部原因：%v）", err, platformErr.Cause)
+		}
 		t.Fatalf("Server Bootstrap Run() 失败: %v", err)
 	}
 }
