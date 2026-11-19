@@ -94,3 +94,12 @@ LLM 模块的 Provider Port、Responses JSON/SSE Adapter、Structured Output Sch
 - [LLM 当前任务状态和进度](../llm/当前任务状态和进度.md)
 - [Server 模块总任务规划和进度](../server/模块总任务规划和进度.md)
 - [Researchflow 模块总任务规划和进度](../researchflow/模块总任务规划和进度.md)
+
+
+## RepairAll RA-CROSS-REVIEW-009 复核（2026-11-19）
+
+- 复核确认：`internal/llm` 已有 Provider Port、Responses JSON/SSE Adapter、Schema/Usage/错误处理和 CapabilityState 版本/有效期门禁；未发现需要立即修复的模块内代码缺陷。
+- Server 的 `internal/server/llmtransport/transport.go` 只是可复用的受控传输/Adapter 构造辅助函数；当前 Bootstrap 未调用，未形成 SecretRef、ProviderConfig、CapabilityState、Clock 的生产注入。
+- Researchflow 的 `toolpolicy/llm_adapter.go` 只做 Schema 校验和 Tool Call → 待授权 Intent 映射；Context Model Input 只做序列化/Token 计数；当前 Server Worker 只装配 News Search Stage，没有 LLM Provider 消费者。
+- 状态维持 BLOCKED：Server SRV-010、Researchflow 首个真实消费场景、Gateway/Model 版本与有效 Capability Evidence 是实际前置。不得新增占位 Stage 或虚构真实调用 PASS。
+- 审查基线 `0b21a3e61172ad751bc17bf17ed0c271ae25b5ec`；生产代码自已验收 SHA `1e916220a8784ae840132ce0cec3b3654c6b9655` 后未变化，其 Integration CI [Run 44482650366](https://github.com/Kasign/stock_data_provider/actions/runs/44482650366) 全项 success。

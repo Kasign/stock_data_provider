@@ -266,3 +266,12 @@
 - 精确代码 SHA `1e916220a8784ae840132ce0cec3b3654c6b9655` 的 Integration CI [Run 44482650366](https://github.com/Kasign/stock_data_provider/actions/runs/44482650366) 全项 success。
 - M5 代码和 CI 验收完成；M6 仍需目标环境真实 HTTPS/Session/CSRF、MariaDB/Redis Migration 启停、备份恢复及 Provider 真实数据证据。此类外部证据不能由 CI 替代。
 - 旧 Analysis Task/Run API 仍是独立的 SRV-CTR-001 deferred 边界，不属于 Data 路由迁移；不得把 Data 的 Owner Session 策略隐式扩展到旧 Analysis 路由。
+
+
+## RepairAll RA-CROSS-REVIEW-009：LLM 生产装配边界（2026-11-19）
+
+- `internal/server/llmtransport/transport.go` 已实现 Platform BoundDoer/OpenStream 薄包装与 ResponsesAdapter 构造辅助函数；固定 HTTPS host/port、禁止 redirect、禁止 transport retry 的策略检查已有单测。
+- 当前 `internal/server/bootstrap/**` 与 `internal/server/config/**` 未发现 LLM Provider 装配、Gateway SecretRef 解析、CapabilityState 加载或 `llmtransport.NewResponsesAdapter` 调用点；SRV-010 仍 BLOCKED。
+- Researchflow 当前 Server Runtime 只注入 News Search Stage Executor/Output Registry，没有实际 LLM Provider Stage 消费者；ToolPolicy Adapter 仅解析模型提出的工具调用意图，不执行模型调用。
+- 不在 Server 侧创建空 Provider、占位配置、假 Capability Evidence 或空 Stage。解除条件是 Gateway/Model/SecretRef/网络策略证据和 Researchflow 明确的首个真实调用场景。
+- 审查基线 `0b21a3e61172ad751bc17bf17ed0c271ae25b5ec`；当前生产代码沿用已验收 SHA `1e916220a8784ae840132ce0cec3b3654c6b9655`，Integration CI [Run 44482650366](https://github.com/Kasign/stock_data_provider/actions/runs/44482650366) 全项 success。

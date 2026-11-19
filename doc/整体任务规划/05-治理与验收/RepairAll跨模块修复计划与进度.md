@@ -28,7 +28,7 @@
 | P1 | Data、News 到 Research 的数据/时间/Evidence 契约和真实消费边界 | Data / News / Research / Server | Review 完成；DATA-CTR-007 deferred、NEWS available_at 与真实消费者仍阻塞 |
 | P1 | Quant Application Port、结果 Envelope、Researchflow 消费接口 | Quant / Researchflow / Server | Review 完成；QNT-014/QNT-013 与生产 Stage/Root 装配未闭环 |
 | P1 | Research Context/Evidence 与 Researchflow Run/Stage/Result 语义及唯一持久化 Owner | Research / Researchflow / Server | Review 完成；Context 授权、PIT Mode 与生产 Stage 消费仍阻塞 |
-| P2 | LLM Gateway 生产 Provider、Secret、Capability Evidence 与真实调用 | LLM / Platform / Server / Researchflow | 待系统 Review |
+| P2 | LLM Gateway 生产 Provider、Secret、Capability Evidence 与真实调用 | LLM / Platform / Server / Researchflow | Review 完成；模块协议/传输代码 PASS，Server 生产装配、Researchflow 消费者和真实 Gateway 证据 BLOCKED |
 | P2 | Notification 事件、Recipient、Fanout/Delivery、Worker 和恢复链 | Notification / Platform / Server | Review 完成；Relay/Inbox/Fanout 机制通过，Server Delivery Worker/Recipient Directory 阻塞 |
 | P3 | Diagnostics 注册、身份/审计传播、Worker 恢复、WebUI Root API 对接 | Platform / Server / 各业务模块 / WebUI | Data Owner Session 单入口、旧资产清理及精确 SHA CI 已通过；M6 真实生产验收仍待外部证据 |
 | P3 | 完整启动、迁移、跨模块端到端和故障恢复验收 | 全模块 | 待实施 |
@@ -234,8 +234,20 @@ RA009 代码关闭条件已满足：Server 路由认证矩阵、CSRF、WebUI 请
 ## 24. RA-CROSS-REVIEW-009 LLM Gateway 生产调用链审查（2026-11-19）
 
 - 前置：RA-CROSS-REVIEW-003～008 已完成；RA009 Data 单入口迁移代码与 CI 验收完成，M6 生产证据继续独立阻塞。
-- 当前状态：PLANNED。
+- 当前状态：REVIEW_DONE_WITH_BLOCKERS。
 - 审查目标：确认 LLM 模块是否具备真实可调用的 Application Port、Provider/Gateway Adapter、服务端 Secret 装配、受控 Platform Egress、调用超时/取消/错误归一化、能力与证据记录，以及 Researchflow/Server 的实际生产消费者。
 - 审查范围：`internal/llm/**`、`internal/platform/**` 中已存在的相关公共能力、`internal/researchflow/**` 的 LLM 调用方、`internal/server/**` 的组合根与 Worker 生命周期，以及对应 `doc/llm/**`、`doc/researchflow/**`、`doc/server/**`。
 - 执行原则：先沿真实调用链定位缺口；不复制 Gateway、不把用户本地 LLM 环境或独立 `Kasign/llm-gateway` 假定为已装配依赖；不新增没有实际消费者的接口/Worker；缺少外部 Secret 或 Endpoint 时判为 SKIPPED / NOT_COMPARABLE，不伪造真实调用成功。
 - 验收：区分代码机制 PASS、生产装配 PASS、真实模型调用 PASS、NOT_COMPARABLE 和 DEFERRED；任何修复均同步调用方、实现方、契约、测试和模块卡点，并执行完整 Integration CI。
+
+
+### RA-CROSS-REVIEW-009 审查结论（2026-11-19）
+
+- 审查基线：repair_all 文档/代码树 `0b21a3e61172ad751bc17bf17ed0c271ae25b5ec`；生产代码自上一个已验收代码 SHA `1e916220a8784ae840132ce0cec3b3654c6b9655` 后未变化。该代码 SHA 的完整 Integration CI [Run 44482650366](https://github.com/Kasign/stock_data_provider/actions/runs/44482650366) 全项 success，包含根模块、go-core、News/Research/Researchflow、MariaDB/Redis Worker 集成、WebUI 测试和镜像构建。
+- LLM 模块：`llm.Provider`、Responses Generate/Stream Adapter、JSON/SSE Parser、Schema 校验、Usage/错误归一化、CapabilityState 有效期与版本门禁均已实现。Adapter 使用显式 `config.Secret`、deadline、请求/响应字节限制、无透明重试；Stream Body 关闭和 callback 背压有本地测试。
+- Platform：已有 Secret、BoundDoer/OpenStream、Fault、Clock；LLM 没有自建 HTTP Client/SSRF/DestinationPolicy。当前没有发现应在 LLM/Platform 内立即修复的真实代码缺陷。
+- Server：`internal/server/llmtransport/transport.go` 提供固定 HTTPS host/port、禁止 HTTP/redirect/transport retry 的 BoundDoer 薄适配，并有 `NewResponsesAdapter` 辅助构造；但 Server Bootstrap/配置中没有调用它，没有 LLM Provider Config、SecretRef 解析、CapabilityState 生产注入或消费者关闭顺序接线。SRV-010 仍 BLOCKED。
+- Researchflow：`toolpolicy/llm_adapter.go` 仅复用 LLM Schema Validator、把 ModelToolCall 转成待授权 Intent；`contextassembly/model_input.go` 仅序列化授权上下文并统计 Token，不调用模型。通用 StageExecutor/Output Registry 当前只在 Server 装配 News Search Stage，没有 LLM Stage/Provider 消费者。
+- 判定：LLM 协议适配与本地安全门禁 PASS（代码机制）；Server transport wrapper PASS（代码机制）；Server 生产 Provider 装配 NOT_COMPARABLE；Researchflow 实际消费者 NOT_COMPARABLE；Gateway/Model 真实调用 NOT_RUN；Capability Evidence NOT_COMPARABLE。没有生产消费者与真实业务场景前，不新增占位 Stage/Worker/HTTP API。
+- 后续解除条件：Server 先完成 SRV-010 生产配置/SecretRef/BoundDoer/Capability Evidence/生命周期接线；Researchflow 明确第一个真实模型调用 Stage 的输入、输出、预算、重试和工具授权；再执行 Generate/Structured Output/SSE/Usage/取消/超时/超限/429/5xx 的真实上游验收。
+- 本轮没有生产代码修改；LLM 卡点已同步至 `doc/整体任务规划/LLM模块卡点.md`、Server 卡点和 LLM 当前任务记录。
