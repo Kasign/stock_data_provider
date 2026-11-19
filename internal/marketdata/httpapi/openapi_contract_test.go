@@ -91,8 +91,7 @@ func TestOpenAPIContainsOnlyDataRoutesAndNoRetiredDataAuthentication(t *testing.
 				t.Errorf("OpenAPI operation missing: %s %s", method, path)
 				continue
 			}
-			operation, ok := rawOperation.(map[string]any)
-			if !ok {
+			if _, ok := rawOperation.(map[string]any); !ok {
 				t.Errorf("OpenAPI operation %s %s is not an object", method, path)
 				continue
 			}

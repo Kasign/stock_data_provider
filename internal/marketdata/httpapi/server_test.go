@@ -503,7 +503,7 @@ func TestStockAnnouncementsRejectsInvalidPagination(t *testing.T) {
 func TestDataSourcesReportsQuoteOnlyProviderWithoutDailyBars(t *testing.T) {
 	p := quoteOnlyCapabilityFake{}
 	h := NewWithCapabilityInterfaces(
-		"secret", "forward_adjusted", nil,
+		"forward_adjusted", nil,
 		[]provider.NamedProvider{p},
 		[]provider.QuoteProvider{p},
 		nil, 2000, time.Second, nil,
