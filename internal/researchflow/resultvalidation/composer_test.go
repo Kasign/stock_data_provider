@@ -285,7 +285,6 @@ func TestComposeResultRejectsCyclicEvidenceDerivation(t *testing.T) {
 	}
 }
 
-
 func TestComposeResultRejectsInvalidUTF8AcrossNestedInputs(t *testing.T) {
 	invalid := string([]byte{0xff})
 	tests := []struct {
