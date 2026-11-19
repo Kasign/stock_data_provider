@@ -25,6 +25,7 @@ func newHTTPHandler(authenticator *platformsecurity.Authenticator, health, legac
 		"/api/v1/quotes/",
 		"/api/v1/bars/",
 		"/api/v1/bundles/",
+		"/api/v1/data-sources",
 		"/api/v1/data-sources/",
 		"/api/v1/market/",
 		"/api/v1/stocks/",
