@@ -73,3 +73,21 @@ Research Context 的持久化不是 Researchflow 缺失能力，Research 模块�
 GitHub Actions Run [44436587245](https://github.com/Kasign/stock_data_provider/actions/runs/44436587245)：Researchflow format/tests/race/vet、WorkerStore unit/race/vet、MariaDB lifecycle integration 均 success；根模块 Test/Race/Vet 在本记录更新时仍运行中。
 
 本修复属于 FLOW-005 本模块可独立输入边界，不代表已接入 LLM 生产 Tokenizer 或生产 Context Stage。
+
+
+## 2026-11-19 Tool Policy / LLM Tool Call UTF-8 输入边界补强
+
+继续审计 Tool Policy 安全边界，发现 Go JSON 校验器的 `json.Valid` 不能作为任意字符串字段的 UTF-8 有效性保证；无效字节可能在后续 JSON 解码/序列化时被替换，造成工具意图、参数或 Scope 文本与原始字节不一致。
+
+本轮修改：
+
+- Tool Registry 的 Name、Description、ParametersJSON、RequiredScopes 校验有效 UTF-8。
+- Authorize 的 CallID、Name、ArgumentsJSON、IdempotencyKey、GrantedScopes 校验有效 UTF-8；无效值在 Schema Validator 前拒绝。
+- LLM ModelToolCall 适配器对 CallID、Name、ArgumentsJSON 校验有效 UTF-8。
+- ToolDefinitionsFor 遇到无效 UTF-8 GrantedScopes 时不向模型暴露工具。
+- 新增 Registry 字段、授权意图/可信元数据和模型 Tool Call 的负向测试。
+
+最终代码 SHA：`ebf54dfae766e6c95d0470158f88fb570b1a1901`。
+Run [44437240026](https://github.com/Kasign/stock_data_provider/actions/runs/44437240026) 的 Researchflow format/tests/race/vet、WorkerStore 和 MariaDB lifecycle integration 均 success；根模块 Test/Race/Vet 在记录时仍在运行。
+
+本轮修复不代表工具已执行，也不改变 Scope 授权、调用预算、Run Deadline 或幂等策略。
