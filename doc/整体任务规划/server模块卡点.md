@@ -231,3 +231,11 @@
 - 两条 Relay 共用 Notification EventReceiver；Inbox Schema Registry、MySQL Inbox 与 Fanout WorkItem Repository 已装配，Inbox+Fanout WorkItem 使用同一 DB 事务。
 - Server 当前没有 Notification RecipientDirectory、Fanout Worker、Delivery Worker、Channel Registry/Secret、Template Renderer 的生产装配；模块服务和 Adapter 存在不等于 Server Delivery 闭环。
 - NTF-BLOCK-04/05/06/08/09 继续 BLOCKED。不得在没有 RecipientDirectory/业务模板/Worker 配置的情况下创建空壳投递服务。
+
+
+## RepairAll RA-CROSS-REVIEW-007 最终结论（2026-11-19）
+
+- Server Router 对所有路由显式声明 Platform RoutePolicy，拒绝 root catch-all；未登记路径保持 404。
+- 当前路由矩阵与 SRV-CTR-002 一致：healthz 匿名；readyz/diagnostics Owner Bearer；Owner Session 六个浏览器端点单独执行 Session Cookie、Origin/Host 和 CSRF；旧 Data/Analysis 业务路由不接受 Session，不把 Session 映射为 Owner Bearer。
+- Request ID、Fault 安全错误投影、请求体/并发限制、Readiness/Diagnostics 和消费者逆序停止后关闭共享资源均已接入。
+- 当前没有可复现的 Root HTTP/身份代码缺陷；未发布的 Research/Quant/Notification API 不提前创建。下一项转为 WebUI 实际调用与凭据暴露审查。

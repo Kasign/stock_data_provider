@@ -58,16 +58,16 @@ P0 原始问题及实施约束作为审计记录保留；当前状态以第 7、
 
 ## 5. 当前执行任务与边界
 
-### RA-CROSS-REVIEW-007：Server Root HTTP、身份认证、Diagnostics 与 Worker 角色装配 Review
+### RA-CROSS-REVIEW-008：WebUI ↔ Server 身份认证、API 契约与凭据暴露 Review
 
-- 状态：PLANNED（RA-CROSS-REVIEW-006 已完成 Outbox→Inbox→Fanout→Delivery 链路审查；生产 Worker/Recipient Directory 仍受外部依赖阻塞）。
-- 目标：核对 Server 作为唯一 Composition Root 的 HTTP 路由、可信身份注入、模块 Application Port、Fault/Diagnostics 映射、API/Worker/All 角色隔离、生命周期启停和依赖关闭顺序。
-- 范围：Server、Platform 及被 Server 装配的模块公开 Port；不进入各业务模块内部领域规则。
-- 首要核对：SRV-CTR-001/002、PLAT-CTR-001/002/003、GOV-CTR-002/006，以及 Server 总规划、Platform 契约、各模块 Root 接入卡点。
-- 重点检查：公开路由是否有明确调用场景；身份是否来自可信 Middleware/RequestIdentity 而非请求体；CallerRef 是否按模块职责映射；未配置授权是否 fail-closed；Fault/Diagnostics 是否泄露敏感信息；API/Worker 角色是否只启动对应消费者；Shutdown 是否先停消费者再关闭共享资源；是否存在重复装配/遗留旧 API。
-- 诊断判定：逐条记录 PASS / DEGRADED / FAIL / NOT_COMPARABLE / DEFERRED，附代码路径、契约、测试与精确 SHA。
-- 修复门禁：只修复可复现问题；公共能力归 Platform，业务语义归业务模块，组合/路由/生命周期归 Server；不复制模块能力，不为 WebUI 增加无真实数据支撑的 API。
-- 完成条件：接口、身份、实现、装配、诊断和测试一致；同步各模块卡点与整体计划；针对性测试及精确 SHA 完整 CI 验收。
+- 状态：PLANNED（RA-CROSS-REVIEW-007 已完成 Root HTTP/身份/Diagnostics/生命周期审查）。
+- 目标：核对 WebUI 实际请求与 Server 已发布路由/认证矩阵，检查 Owner Session/Owner Bearer 的边界、CSRF、Request ID、API Key/Secret 是否进入浏览器持久化、Data Provider Key 是否由 Server 侧注入。
+- 范围：WebUI、Server、Platform、Data；只审查当前真实 UI 调用和已冻结/已发布 API，不新增无业务场景接口。
+- 首要核对：SRV-CTR-002、SRV-CTR-001（若已冻结）、PLAT-CTR-001/002/003、Data OpenAPI/Root Adapter 契约、WebUI 当前任务验收清单与 API 接口协作清单。
+- 重点检查：WebUI 是否只用 HttpOnly Session Cookie；是否错误把 Owner Bearer/API Key 存 localStorage/sessionStorage/URL/日志；非安全请求是否携带 CSRF；UI 调用路径/方法/DTO 是否与 Server Router/OpenAPI 一致；Data Provider Key 是否只由 Server Data Adapter 注入；CORS/Origin/Host/Request ID 是否符合契约；未实现 API 是否被 UI 假调用或用 Mock 冒充真实。
+- 诊断判定：按每条 UI 请求记录 PASS / FAIL / NOT_COMPARABLE / DEFERRED，附 UI 调用位置、Server 路由、契约、测试和精确 SHA。
+- 修复门禁：UI 问题修 WebUI；路由/认证/请求上下文问题修 Server；公共安全原语修 Platform；Provider 凭据边界修 Data/Server。多模块改动同步 DTO、路由、UI 调用和测试。
+- 完成条件：浏览器无持久化高权限凭据；UI 请求均有真实 Server 端契约与认证策略；真实 Data Provider 调用不暴露 Key；针对性 UI/HTTP 测试及完整 CI 精确 SHA 验收。
 
 ## 14. RA-CROSS-REVIEW-003 基线与验收证据（2026-11-19）
 
@@ -155,8 +155,25 @@ P0 原始问题及实施约束作为审计记录保留；当前状态以第 7、
 - 修复结论：未发现可在当前模块边界和冻结策略内安全直接修复的生产代码缺陷；NTF-BLOCK-04/05/06/08/09 继续阻塞完整投递生产验收。
 - 文档已同步 Notification、Researchflow、Server 卡点和模块当前任务记录；本轮未改动模块分支。
 
-## 20. RA-CROSS-REVIEW-007 登记（2026-11-19）
+## 20. RA-CROSS-REVIEW-007 登记与状态（2026-11-19）
 
-- 前置 RA-CROSS-REVIEW-006 已完成 Outbox/Inbox/Fanout/Delivery 代码链路审查；真实 Delivery Worker 与 RecipientDirectory 保持 Notification/Server 卡点。
-- 新任务聚焦 Server Composition Root 的 HTTP、身份认证、公共 Fault/Diagnostics、角色隔离与生命周期；不重复各模块已完成的内部能力 Review。
+- 本任务聚焦 Server Root HTTP、身份认证、公共 Fault/Diagnostics、角色隔离与生命周期。
+- 状态：REVIEW_DONE；审查结论见第 21 节。
+
+## 21. RA-CROSS-REVIEW-007 Server Root HTTP / 身份 / Diagnostics 审查结论（2026-11-19）
+
+- 审查基线：repair_all SHA 0ae392c44b00f8002a31e4b8346522ac851b99a0；本轮未修改生产代码。
+- 路由矩阵与 SRV-CTR-002 一致：/healthz 匿名；/readyz、/diagnostics 使用 Owner Bearer；/api/v1/owner/* 六个 Session 端点独立使用 Session Cookie + Origin/Host/CSRF；旧 Data/Analysis 业务路由继续 Owner Bearer。Owner Session 不继承 platform:admin，也没有被隐式放宽到业务路由。
+- Platform Router 要求每条路由显式 RoutePolicy，拒绝 root catch-all；未登记路径保持 404。当前无 Research/Quant/Notification 业务 HTTP 路由，不因 WebUI 预期而提前增加 API。
+- Request ID Middleware 在入口重新生成可信 ID，不信任外部 X-Request-ID；请求体大小/并发上限、标准 Fault 安全投影、Cache-Control/no-store 均已接入。
+- Diagnostics/Readiness：Server 聚合 Shared Storage/Migration、Data、News 检查；Research 的 Context/Event/Claim/Evidence Diagnostics 是按具体引用构造的资源检查，不是通用依赖检查；Researchflow StageAssessment 是执行结果诊断投影；Notification Lease Recovery Diagnostics 依赖尚未装配的 Worker。当前未发现应无条件加入 Root readiness 的缺失模块检查。
+- Lifecycle：组件按注册顺序启动、逆序停止；HTTP 在消费者之前停止，消费者成功停止后才关闭共享 DB/Redis；Shutdown 失败时保留资源并向进程入口返回错误。当前注册组件的 Start 路径为快速启动或遵守进程 Context；未来新增阻塞式 Start 必须遵守 Context，避免 Lifecycle 等待启动结束时超过 Shutdown budget。
+- 判定：当前已实现路由/身份边界 PASS；未登记业务 API NOT_COMPARABLE/DEFERRED（等待 SRV-CTR-001 真实用例）；Notification Worker/Delivery 仍按 RA-CROSS-REVIEW-006 卡点。
+- 本轮未发现可复现且应在当前 Server/Platform 职责内立即修复的生产代码缺陷。Owner Session 路由认证行为与冻结候选契约一致。
+- 上一完整 Integration CI Run [44456052937](https://github.com/Kasign/stock_data_provider/actions/runs/44456052937) 在代码 SHA 5334043ea8e1abc2c4006c371a3f95b123098946 成功；其后本轮为文档审查提交，没有代码变更，不将该 CI 误标为本轮 HEAD 验收。
+
+## 22. RA-CROSS-REVIEW-008 登记（2026-11-19）
+
+- 前置 RA-CROSS-REVIEW-007 已完成 Server Root 路由、身份认证、Diagnostics、Fault、生命周期审查。
+- 新任务聚焦 WebUI 实际请求与 Server 已实现路由/Owner Session/Data 凭据边界；必须核对当前 WebUI 源码，不推断或模拟 UI 调用。
 - 当前状态 PLANNED；开始执行前重新核对 repair_all 最新 HEAD、Actions 和总览计划。
