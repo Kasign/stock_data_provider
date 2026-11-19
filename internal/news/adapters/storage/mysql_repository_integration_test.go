@@ -2413,7 +2413,7 @@ func TestResolveCurrentSourceCollectionPoliciesMariaDBIntegration(t *testing.T) 
 	if err != nil || source.Status != domain.AuthorizationRevoked || endpoint != nil {
 		t.Fatalf("resolve current revoked source policy: source=%+v endpoint=%+v err=%v", source, endpoint, err)
 	}
-	endpointPayload, err := json.Marshal(domain.EndpointPolicy{Status: domain.AuthorizationRevoked})
+	endpointPayload, err := json.Marshal(domain.EndpointPolicy{Status: domain.AuthorizationRevoked, EvidenceRef: "integration-endpoint-revocation"})
 	if err != nil {
 		t.Fatal(err)
 	}
