@@ -271,6 +271,15 @@ func TestReaderGetDailyBarsSelectsCurrentAndPITUseCases(t *testing.T) {
 	ma5, ma20, ma120, ma250 := 10.5, 10.2, 9.8, 8.7
 	rawVolume, rawAmount := 1234567.89, 987654.32
 	exactRawAmount, exactAmountCNY := "987654.321000", "987654.321000"
+	exactScale := 6
+	exactOpenEvidence := &model.DailyBarDecimalEvidence{
+		EvidenceKind: model.DailyBarPrecisionEvidenceObservedToken,
+		SourceToken: "10.500400", SourceFractionDigits: &exactScale,
+	}
+	exactRawAmountEvidence := &model.DailyBarDecimalEvidence{
+		EvidenceKind: model.DailyBarPrecisionEvidenceObservedToken,
+		SourceToken: exactRawAmount, SourceFractionDigits: &exactScale,
+	}
 	current := model.DailyBar{
 		Symbol:                                "600000.SH",
 		TradeDate:                             "2026-11-06",
@@ -319,6 +328,8 @@ func TestReaderGetDailyBarsSelectsCurrentAndPITUseCases(t *testing.T) {
 		ExactValues: &model.DailyBarExactValues{
 			Open: "10.0001", High: "11.0002", Low: "9.0003", Close: "10.5004",
 			RawVolume: "12345", RawAmount: &exactRawAmount, AmountCNY: &exactAmountCNY,
+			OpenEvidence: exactOpenEvidence, RawAmountEvidence: exactRawAmountEvidence,
+			AmountCNYEvidence: exactRawAmountEvidence,
 		},
 	}
 	backend := &fakeDataService{
@@ -366,7 +377,13 @@ func TestReaderGetDailyBarsSelectsCurrentAndPITUseCases(t *testing.T) {
 	if live.Bars[0].ExactValues == nil || live.Bars[0].ExactValues.Close != "10.5004" ||
 		live.Bars[0].ExactValues.RawVolume != "12345" || live.Bars[0].ExactValues.RawAmount == nil ||
 		*live.Bars[0].ExactValues.RawAmount != exactRawAmount || live.Bars[0].ExactValues.AmountCNY == nil ||
-		*live.Bars[0].ExactValues.AmountCNY != exactAmountCNY {
+		*live.Bars[0].ExactValues.AmountCNY != exactAmountCNY ||
+		live.Bars[0].ExactValues.OpenEvidence == nil ||
+		live.Bars[0].ExactValues.OpenEvidence.SourceToken != "10.500400" ||
+		live.Bars[0].ExactValues.OpenEvidence.SourceFractionDigits == nil ||
+		*live.Bars[0].ExactValues.OpenEvidence.SourceFractionDigits != exactScale ||
+		live.Bars[0].ExactValues.AmountCNYEvidence == nil ||
+		live.Bars[0].ExactValues.AmountCNYEvidence.SourceToken != exactRawAmount {
 		t.Fatalf("exact decimal sidecar was not preserved through Application Port: %+v", live.Bars[0].ExactValues)
 	}
 	if live.Bars[0].ProviderTime == nil || !live.Bars[0].ProviderTime.Equal(providerTime) ||
@@ -375,10 +392,15 @@ func TestReaderGetDailyBarsSelectsCurrentAndPITUseCases(t *testing.T) {
 	}
 	*live.Bars[0].Volume = 1
 	*live.Bars[0].ExactValues.RawAmount = "mutated"
+	live.Bars[0].ExactValues.OpenEvidence.SourceToken = "mutated"
+	*live.Bars[0].ExactValues.OpenEvidence.SourceFractionDigits = 1
 	live.Bars[0].QualityReasons[0] = "mutated"
 	live.Warnings[0] = "mutated"
 	if *current.Volume != volume || current.ExactValues == nil || *current.ExactValues.RawAmount != exactRawAmount ||
-		current.QualityReasons[0] != "source_contract_verified" || backend.currentWarnings[0] != "bars_truncated_to_limit" {
+		current.QualityReasons[0] != "source_contract_verified" ||
+		current.ExactValues.OpenEvidence.SourceToken != "10.500400" ||
+		*current.ExactValues.OpenEvidence.SourceFractionDigits != exactScale ||
+		backend.currentWarnings[0] != "bars_truncated_to_limit" {
 		t.Fatal("Application DTO must not alias DataService daily-bar pointers or slices")
 	}
 

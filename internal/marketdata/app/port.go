@@ -68,14 +68,29 @@ type QuoteSnapshot struct {
 
 // DailyBarExactValues 保留 Provider 入口解析出的精确十进制值，不从 float64 反向生成。
 // OHLC 是请求复权口径下的最终值；RawVolume/RawAmount 是单位归一化前的来源值。
+type DailyBarDecimalEvidence struct {
+	EvidenceKind          string
+	SourceToken           string
+	SourceFractionDigits  *int
+	ProtocolScale         *int
+	UnitConversionFactor string
+}
+
 type DailyBarExactValues struct {
-	Open      string
-	High      string
-	Low       string
-	Close     string
-	RawVolume string
-	RawAmount *string
-	AmountCNY *string
+	Open              string
+	High              string
+	Low               string
+	Close             string
+	RawVolume         string
+	RawAmount         *string
+	AmountCNY         *string
+	OpenEvidence      *DailyBarDecimalEvidence
+	HighEvidence      *DailyBarDecimalEvidence
+	LowEvidence       *DailyBarDecimalEvidence
+	CloseEvidence     *DailyBarDecimalEvidence
+	RawVolumeEvidence *DailyBarDecimalEvidence
+	RawAmountEvidence *DailyBarDecimalEvidence
+	AmountCNYEvidence *DailyBarDecimalEvidence
 }
 
 // DailyBar 是供下游分析使用的 Application DTO，字段来源与 model.DailyBar 一一对应。
