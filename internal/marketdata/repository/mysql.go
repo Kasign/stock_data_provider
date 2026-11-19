@@ -266,50 +266,6 @@ func (s *Store) Migrate(ctx context.Context) error {
 	return nil
 }
 
-func (s *Store) ensureNonUniqueHistoryIndex(ctx context.Context, table, legacyIndex, indexName, columns string) error {
-	// 所有标识符和列定义均为包内常量，不接受请求参数。
-	var legacyCount int
-	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM information_schema.STATISTICS
-WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND INDEX_NAME=?`, table, legacyIndex).Scan(&legacyCount); err != nil {
-		return err
-	}
-	if legacyCount > 0 && legacyIndex != indexName {
-		if _, err := s.db.ExecContext(ctx, fmt.Sprintf("ALTER TABLE `%s` DROP INDEX `%s`", table, legacyIndex)); err != nil {
-			return err
-		}
-	}
-	var count, nonUnique int
-	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*), COALESCE(MAX(NON_UNIQUE), 1)
-FROM information_schema.STATISTICS
-WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND INDEX_NAME=?`, table, indexName).Scan(&count, &nonUnique); err != nil {
-		return err
-	}
-	if count > 0 && nonUnique == 0 {
-		if _, err := s.db.ExecContext(ctx, fmt.Sprintf("ALTER TABLE `%s` DROP INDEX `%s`", table, indexName)); err != nil {
-			return err
-		}
-		count = 0
-	}
-	if count > 0 {
-		return nil
-	}
-	_, err := s.db.ExecContext(ctx, fmt.Sprintf("CREATE INDEX `%s` ON `%s` (%s)", indexName, table, columns))
-	return err
-}
-
-func (s *Store) ensureColumn(ctx context.Context, table, column, definition string) error {
-	var count int
-	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND COLUMN_NAME=?`, table, column).Scan(&count); err != nil {
-		return err
-	}
-	if count > 0 {
-		return nil
-	}
-	// table/column/definition are internal constants supplied by this package,
-	// never user input.
-	_, err := s.db.ExecContext(ctx, fmt.Sprintf("ALTER TABLE `%s` ADD COLUMN `%s` %s", table, column, definition))
-	return err
-}
 func (s *Store) SaveQuote(ctx context.Context, q *model.Quote) error {
 	if s == nil || s.db == nil {
 		return nil

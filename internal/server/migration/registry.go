@@ -51,7 +51,7 @@ func (r *Registry) Register(namespace string, migrations []platformstorage.Migra
 	snapshot := make([]platformstorage.Migration, len(migrations))
 	versions := make(map[uint64]struct{}, len(migrations))
 	for i, item := range migrations {
-		if item.Version == 0 || strings.TrimSpace(item.Description) == "" || len(item.Statements) == 0 {
+		if item.Version == 0 || strings.TrimSpace(item.Description) == "" || (len(item.Statements) == 0 && len(item.Operations) == 0) {
 			return fmt.Errorf("migration namespace %q contains an incomplete migration at index %d", namespace, i)
 		}
 		if _, exists := versions[item.Version]; exists {
