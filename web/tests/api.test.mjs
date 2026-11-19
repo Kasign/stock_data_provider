@@ -432,6 +432,7 @@ test("reads provider runtime diagnostics with the market API key and caller sign
     assert.equal(result.observed_from, "in_process_circuit_breaker");
     assert.equal(request.url, "/api/v1/data-sources/diagnostics");
     assert.equal(request.headers["X-API-Key"], undefined);
+    assert.equal(request.headers["X-CSRF-Token"], "probe-csrf-token");
     assert.equal(request.signal, controller.signal);
   } finally {
     globalThis.fetch = originalFetch;

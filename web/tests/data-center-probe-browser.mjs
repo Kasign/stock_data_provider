@@ -175,6 +175,8 @@ try {
   assert.equal(probeRequestHeaders["x-api-key"], undefined);
   assert.equal(probeRequestHeaders["x-csrf-token"], "browser-probe-csrf");
   assert.equal(probeRequestHeaders["x-api-key"], undefined);
+  assert.equal(probeRequestHeaders["x-csrf-token"], "browser-probe-csrf");
+  assert.equal(probeRequestHeaders["x-api-key"], undefined);
   assert.deepEqual(probeRequestBody, {
     scope: "core", timeout_seconds: 9,
     checks: ["connectivity", "contract", "quality", "freshness", "cross_provider", "storage"],
