@@ -176,7 +176,7 @@ func TestValidatePayloadJSONRejectsDuplicateMissingFields(t *testing.T) {
 	payload := SearchCandidatesOutput{
 		Status: domain.SearchPartial,
 		Candidates: []Candidate{{
-			ObservedAt: observed,
+			ObservedAt:    observed,
 			MissingFields: []string{"title", "publisher", "title"},
 		}},
 		Outcomes: []ProviderOutcome{},
