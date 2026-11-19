@@ -284,3 +284,38 @@ func TestComposeResultRejectsCyclicEvidenceDerivation(t *testing.T) {
 		t.Fatalf("cyclic Evidence derivation should fail, got %v", err)
 	}
 }
+
+
+func TestComposeResultRejectsInvalidUTF8AcrossNestedInputs(t *testing.T) {
+	invalid := string([]byte{0xff})
+	tests := []struct {
+		name   string
+		mutate func(*ResultCompositionInput)
+	}{
+		{name: "run id", mutate: func(input *ResultCompositionInput) { input.RunID = invalid }},
+		{name: "context section", mutate: func(input *ResultCompositionInput) { input.Context.SectionRefs[0].SectionID = invalid }},
+		{name: "evidence source", mutate: func(input *ResultCompositionInput) { input.Evidence[0].SourceRef = invalid }},
+		{name: "claim statement", mutate: func(input *ResultCompositionInput) { input.Claims[0].Statement = invalid }},
+		{name: "llm explanation", mutate: func(input *ResultCompositionInput) { input.LLMResponse.OutputText = invalid }},
+		{name: "limitation", mutate: func(input *ResultCompositionInput) { input.Limitations[0] = invalid }},
+		{name: "risk reason", mutate: func(input *ResultCompositionInput) {
+			risk := validRiskDecision()
+			risk.Reasons[0].SafeMessage = invalid
+			input.RiskDecision = &risk
+		}},
+		{name: "quant raw payload", mutate: func(input *ResultCompositionInput) {
+			quant := validQuantResult()
+			quant.Payload = []byte(`{"value":"` + invalid + `"}`)
+			input.QuantResults = []QuantResultEnvelope{quant}
+		}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			input := validCompositionInput()
+			test.mutate(&input)
+			if _, err := ComposeResult(input, nil); !errors.Is(err, ErrInvalidResultComposition) {
+				t.Fatalf("invalid UTF-8 must be rejected before composition/JSON cloning, got %v", err)
+			}
+		})
+	}
+}
