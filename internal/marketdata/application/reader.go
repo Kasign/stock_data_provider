@@ -224,7 +224,7 @@ func (r *Reader) GetDailyBarsV2(ctx context.Context, query app.DailyBarsQuery) (
 		SystemObservedAtCutoff: clonePointer(query.SystemObservedAtCutoff),
 		CoverageEvidence: app.DailyBarCoverageEvidence{
 			CalendarQualityStatus: app.QualityStatus(evidence.CalendarQualityStatus),
-			ExpectedTradingDays: evidence.ExpectedTradingDays, MinimumRequiredBars: evidence.MinimumRequiredBars,
+			ExpectedTradingDays:   evidence.ExpectedTradingDays, MinimumRequiredBars: evidence.MinimumRequiredBars,
 			CoverageBasis: evidence.CoverageBasis, CoverageSufficient: evidence.CoverageSufficient,
 			Warnings: cloneStrings(evidence.Warnings),
 		},
