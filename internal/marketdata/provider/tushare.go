@@ -335,6 +335,22 @@ func (p *Tushare) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 				reasons = append(reasons, "provider_change_percent_unavailable")
 			}
 		}
+		var exactValues *model.DailyBarExactValues
+		if adjustment == model.AdjustmentNone {
+			rawOpen, _ := get(row, "open", rowIndex)
+			rawHigh, _ := get(row, "high", rowIndex)
+			rawLow, _ := get(row, "low", rowIndex)
+			rawClose, _ := get(row, "close", rowIndex)
+			rawAmountValue, _ := get(row, "amount", rowIndex)
+			exactValues = dailyBarExactValuesFromJSON(rawOpen, rawHigh, rawLow, rawClose, func() json.RawMessage { v, _ := get(row, "vol", rowIndex); return v }(), rawAmountValue, "thousand_CNY", amountUnit)
+			if exactValues != nil && exactValues.RawAmount != nil {
+				amountCNY, scaleErr := canonicalDailyBarDecimal(*exactValues.RawAmount + "e3")
+				if scaleErr != nil {
+					return nil, fmt.Errorf("Tushare exact amount conversion on %s: %w", isoDate, scaleErr)
+				}
+				exactValues.AmountCNY = &amountCNY
+			}
+		}
 		out = append(out, model.DailyBar{
 			Symbol: symbol, TradeDate: isoDate, Period: "1d",
 			Open: open, High: high, Low: low, Close: closePrice,
@@ -343,6 +359,7 @@ func (p *Tushare) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 			Source: p.Name(), SourceVersion: tushareVersion, FetchedAt: fetchedAt, NormalizedAt: providerNowUTC(),
 			RawVolume: &rawVolumeCopy, RawVolumeUnit: "hands", RawAmount: rawAmount, RawAmountUnit: rawAmountUnit, RawAmountField: rawAmountField,
 			VolumeUnit: "shares", AmountUnit: amountUnit, QualityStatus: quality, QualityReasons: reasons, NormalizationVer: normalize.Version,
+			ExactValues: exactValues,
 		})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].TradeDate < out[j].TradeDate })

@@ -26,7 +26,7 @@ func TestTushareDailyBarsNormalizesHandsAndThousandCNY(t *testing.T) {
 			t.Errorf("unexpected Tushare request body: %s", string(rawBody))
 		}
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, `{"code":0,"msg":"","data":{"fields":["ts_code","trade_date","open","high","low","close","pct_chg","vol","amount"],"items":[["600519.SH","20261028",10,11,9,10,1.0,100,100]]}}`)
+		fmt.Fprint(w, `{"code":0,"msg":"","data":{"fields":["ts_code","trade_date","open","high","low","close","pct_chg","vol","amount"],"items":[["600519.SH","20261028",10.123456789,11.234567891,9.012345678,10.987654321,1.0,100,100.123456789]]}}`)
 	}))
 	defer server.Close()
 
@@ -53,6 +53,12 @@ func TestTushareDailyBarsNormalizesHandsAndThousandCNY(t *testing.T) {
 	}
 	if bar.QualityStatus != model.QualityValid {
 		t.Fatalf("quality status = %s, want valid", bar.QualityStatus)
+	}
+	if bar.ExactValues == nil || bar.ExactValues.Open != "10.123456789" || bar.ExactValues.High != "11.234567891" ||
+		bar.ExactValues.Low != "9.012345678" || bar.ExactValues.Close != "10.987654321" ||
+		bar.ExactValues.RawVolume != "100" || bar.ExactValues.RawAmount == nil || *bar.ExactValues.RawAmount != "100.123456789" ||
+		bar.ExactValues.AmountCNY == nil || *bar.ExactValues.AmountCNY != "100123.456789" {
+		t.Fatalf("Tushare exact source decimals or thousand-CNY conversion were not retained: %+v", bar.ExactValues)
 	}
 }
 

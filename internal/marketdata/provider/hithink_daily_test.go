@@ -219,3 +219,31 @@ func TestHithinkDailyRequestFailureIsReportedAtSnapshotLevel(t *testing.T) {
 		t.Fatalf("expected one snapshot-level request_error issue, got %+v", issues)
 	}
 }
+
+
+func TestHithinkDailyBarsRetainExactJSONDecimals(t *testing.T) {
+	loc := time.FixedZone("CST", 8*60*60)
+	dateMS := time.Date(2026, time.October, 7, 0, 0, 0, 0, loc).UnixMilli()
+	payload := fmt.Sprintf(`{"code":0,"data":{"item":[{"date_ms":%d,"open_price":"10.123456789","high_price":11.234567891,"low_price":9.012345678,"close_price":"10.987654321","volume":1000,"turnover":"10000.123456789"}]}}`, dateMS)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(payload))
+	}))
+	defer server.Close()
+
+	provider := NewHithinkConfigured(time.Second, server.URL, "test-key")
+	bars, err := provider.FetchDailyBars(context.Background(), "600036.SH", "2026-10-07", "2026-10-07", 10, model.AdjustmentNone)
+	if err != nil {
+		t.Fatalf("FetchDailyBars: %v", err)
+	}
+	if len(bars) != 1 {
+		t.Fatalf("bars count = %d, want 1", len(bars))
+	}
+	got := bars[0].ExactValues
+	if got == nil || got.Open != "10.123456789" || got.High != "11.234567891" ||
+		got.Low != "9.012345678" || got.Close != "10.987654321" ||
+		got.RawVolume != "1000" || got.RawAmount == nil || *got.RawAmount != "10000.123456789" ||
+		got.AmountCNY == nil || *got.AmountCNY != "10000.123456789" {
+		t.Fatalf("Hithink exact source decimals were not retained: %+v", got)
+	}
+}
