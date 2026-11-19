@@ -61,7 +61,6 @@
 
 - Data Handler 的 DATA-CTR-006 Root HTTP 入口行为已通过 Run 44314707349：Owner Bearer、无需 Data API Key、Request ID、Fault 投影、请求体限制和真实路由分发；未覆盖真实 Provider 上游连通性。
 - API/Worker/All 角色 Root Bootstrap、Readiness、SIGTERM、Lifecycle 回滚和多实例独立启停已通过 Run 44312706873；该项不再作为未完成卡点。
-- Root Data HTTP 路由、Owner 认证、Request ID 和超限请求体已通过 Run 44314707349；该项不再作为未完成卡点。
 - 启用 Provider 配置矩阵及 HTTP/TCP 受控出口注入；真实 Provider 连通性没有真实上游证据时标记 NOT_COMPARABLE。
 - Data Module Start/Stop/Close 与 Root 共享资源的关闭顺序由现有 Lifecycle/Bootstrap 测试覆盖；后续只在出现新的可复现缺陷时补充，不重复创建生命周期实现。
 
