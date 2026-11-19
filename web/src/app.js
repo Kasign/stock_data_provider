@@ -31,7 +31,7 @@ import {
   getQuote,
   searchStocks,
   loadSettings,
-  marketHealth,
+  analysisLiveness,
   saveSettings,
   SETTINGS_KEY
 } from "./api.js";
