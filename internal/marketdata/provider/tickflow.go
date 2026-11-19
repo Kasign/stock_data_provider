@@ -1388,7 +1388,7 @@ func (p *TickFlow) FetchDailyBars(ctx context.Context, rawSymbol, startDate, end
 			RawAmount: rawAmount, RawAmountUnit: rawAmountUnit, RawAmountField: rawAmountField,
 			VolumeUnit: "shares", AmountUnit: amountUnit, QualityStatus: quality, QualityReasons: reasons,
 			NormalizationVer: normalize.Version,
-			ExactValues: dailyBarExactValuesFromJSON(data.Open[i], data.High[i], data.Low[i], data.Close[i], data.Volume[i], data.Amount[i], rawAmountUnit, amountUnit),
+			ExactValues: dailyBarExactValuesFromJSON(data.Open[i], data.High[i], data.Low[i], data.Close[i], data.Volume[i], dailyBarJSONValueAt(data.Amount, i), rawAmountUnit, amountUnit),
 		})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].TradeDate < out[j].TradeDate })

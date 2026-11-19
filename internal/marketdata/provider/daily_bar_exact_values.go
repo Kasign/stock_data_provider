@@ -141,3 +141,11 @@ func scaledDecimalFromInt64(value int64, scale int) string {
 	}
 	return result
 }
+
+
+func dailyBarJSONValueAt(values []json.RawMessage, index int) json.RawMessage {
+	if index < 0 || index >= len(values) {
+		return nil
+	}
+	return values[index]
+}
