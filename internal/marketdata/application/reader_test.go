@@ -144,6 +144,29 @@ func TestReaderGetDailyBarsV2PreservesSameEvaluationCalendarRef(t *testing.T) {
 	if backend.pitCoverage.CalendarRef == "mutated" || backend.pitCoverage.Warnings[0] == "mutated" {
 		t.Fatal("v2 snapshot must not alias backend calendar evidence")
 	}
+
+	unreferencedBackend := &fakeDataService{
+		currentBars: []model.DailyBar{bar},
+		currentCoverage: service.DailyBarCoverageEvidence{
+			CalendarQualityStatus: model.QualityDegraded, ExpectedTradingDays: 20,
+			MinimumRequiredBars: 13, CoverageBasis: "exchange_calendar_unreferenced",
+			CoverageSufficient: true,
+		},
+	}
+	unreferencedReader := &Reader{backend: unreferencedBackend}
+	unreferenced, err := unreferencedReader.GetDailyBarsV2(context.Background(), app.DailyBarsQuery{
+		Symbol: "600000.SH", StartDate: "2026-10-01", EndDate: "2026-11-06", Limit: 20,
+		AdjustmentBasis: app.AdjustmentNone,
+	})
+	if err != nil {
+		t.Fatalf("GetDailyBarsV2(unreferenced calendar) error = %v", err)
+	}
+	if unreferenced.TradingCalendarRef != nil || unreferenced.QualityStatus != app.QualityDegraded ||
+		len(unreferenced.Warnings) != 1 ||
+		unreferenced.Warnings[0] != "daily_bar_coverage_calendar_reference_unavailable" ||
+		unreferenced.Bars[0].QualityStatus != app.QualityDegraded {
+		t.Fatalf("v2 must explicitly degrade a calendar without a durable ref: %+v", unreferenced)
+	}
 }
 
 func TestReaderGetQuotePreservesNullablePrecisionAndMetadata(t *testing.T) {
