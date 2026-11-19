@@ -110,7 +110,7 @@ func TestTradingCalendarAsOfUsesObservedRepositoryVersionWithoutLiveProvider(t *
 
 	liveProvider := &testTradingCalendarProvider{snapshot: second}
 	svc := NewWithCapabilities([]provider.NamedProvider{liveProvider}, nil, nil,
-		cache.NewDisabled(), store, time.Second, time.Second, 120, 2000, ResilienceConfig{}, nil)
+		&tradingCalendarTestCache{items: map[string][]byte{}}, store, time.Second, time.Second, 120, 2000, ResilienceConfig{}, nil)
 	svc.SetTradingCalendarProviders([]provider.TradingCalendarProvider{liveProvider})
 
 	got, err := svc.TradingCalendarAsOf(ctx, first.StartDate, first.EndDate, asOf)
