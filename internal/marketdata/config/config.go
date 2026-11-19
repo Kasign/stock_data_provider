@@ -44,7 +44,6 @@ type ProviderSettings struct {
 
 type Config struct {
 	HTTPAddr                  string
-	APIKey                    string
 	RequestTimeout            time.Duration
 	ProviderTimeout           time.Duration
 	ProviderRetries           int
@@ -229,7 +228,6 @@ func load(requireHTTPAPIKey, allowRootInjectedStorage bool) (Config, error) {
 	}
 	cfg := Config{
 		HTTPAddr:                  get("MARKET_DATA_HTTP_ADDR", ":8091"),
-		APIKey:                    strings.TrimSpace(os.Getenv("MARKET_DATA_API_KEY")),
 		RequestTimeout:            duration("MARKET_DATA_REQUEST_TIMEOUT", 5*time.Minute),
 		ProviderTimeout:           duration("MARKET_DATA_PROVIDER_TIMEOUT", 12*time.Second),
 		ProviderRetries:           integer("MARKET_DATA_PROVIDER_RETRIES", 1),

@@ -80,7 +80,6 @@ type ProviderSummary struct {
 
 // Module 封装 Data 应用、HTTP Handler、诊断能力及模块自有资源。
 type Module struct {
-	handler          http.Handler
 	inProcessHandler http.Handler
 	application      app.MarketDataReader
 	diagnostics      Diagnostics
@@ -136,13 +135,6 @@ func New(cfg config.Config, deps Dependencies) (*Module, error) {
 }
 
 // Handler 返回由 Module 组装的 HTTP Handler。
-func (m *Module) Handler() http.Handler {
-	if m == nil {
-		return nil
-	}
-	return m.handler
-}
-
 // Application 返回供模块内消费者调用的窄化 Application Port。
 // InProcessHandler 返回由 Root Server 负责外层认证和传输策略的业务路由。
 func (m *Module) InProcessHandler() http.Handler {
@@ -464,7 +456,7 @@ func (m *Module) build(cfg config.Config, deps Dependencies) error {
 		MarketCapitalFlow: marketCapitalFlowProviders, HotRankings: hotRankingProviders,
 		Supplements: supplementProviders,
 	})
-	handler := httpapi.NewWithApplication(cfg.APIKey, cfg.Adjustment, httpapi.ApplicationDependencies{
+	handler := httpapi.NewWithApplication(cfg.Adjustment, httpapi.ApplicationDependencies{
 		Quotes: ds, MarketOverview: ds, Securities: ds, Fundamentals: ds,
 		Index: ds, Trading: ds, Diagnostics: ds,
 	}, sourceStatuses, cfg.MaxDailyBars, cfg.RequestTimeout, logger)
@@ -474,7 +466,6 @@ func (m *Module) build(cfg config.Config, deps Dependencies) error {
 		return err
 	}
 	m.application = reader
-	m.handler = handler.Handler()
 	m.inProcessHandler = handler.InProcessHandler()
 	m.summary = ProviderSummary{
 		All:       providerNames(allProviders),
