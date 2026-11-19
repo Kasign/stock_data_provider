@@ -814,7 +814,7 @@ func (s *Store) ListBars(ctx context.Context, symbol, start, end string, adjust 
 			return nil, err
 		}
 		var b model.DailyBar
-		if err := json.Unmarshal(meta, &b); err != nil {
+		if err := unmarshalDailyBarMetadata(meta, &b); err != nil {
 			// A corrupt metadata row should not discard every other valid
 			// historical row. The query already selects the canonical typed
 			// columns; skip only the unreadable metadata payload and continue.

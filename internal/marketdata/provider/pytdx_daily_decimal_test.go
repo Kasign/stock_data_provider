@@ -3,7 +3,6 @@ package provider
 import (
 	"testing"
 
-	"example.com/stock-analysis-flow/internal/marketdata/model"
 	"github.com/injoyai/tdx/protocol"
 )
 
@@ -22,5 +21,4 @@ func TestPytdxDailyBarExactValuesPreserveProtocolPrice(t *testing.T) {
 		got.Close != "1234.5" || got.RawVolume != "12345" || got.RawAmount == nil || *got.RawAmount != amount.String() {
 		t.Fatalf("unexpected exact TDX values: %+v", got)
 	}
-	_ = model.DailyBarExactValues{} // compile-time contract check for the Data model sidecar.
 }
