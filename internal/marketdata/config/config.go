@@ -136,12 +136,17 @@ func defaultProviderFile() providerFile {
 	}
 }
 
-// LoadForRoot 加载由 Root Server 注入 DB/Redis 的 Data 配置。
-func LoadForRoot() (Config, error) {
-	return load(true)
+// Load 返回 Data Provider 配置；不再加载独立 HTTP API Key。
+func Load() (Config, error) {
+	return load(false, false)
 }
 
-func load(requireHTTPAPIKey, allowRootInjectedStorage bool) (Config, error) {
+// LoadForRoot 加载由 Root Server 注入 DB/Redis 的 Data 配置。
+func LoadForRoot() (Config, error) {
+	return load(false, true)
+}
+
+func load(_ bool, allowRootInjectedStorage bool) (Config, error) {
 	if err := validateEnvironment(); err != nil {
 		return Config{}, err
 	}
