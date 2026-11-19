@@ -109,3 +109,56 @@ func TestMariaDBTradingCalendarSnapshotImmutableAndReadable(t *testing.T) {
 		t.Fatalf("restore calendar payload after integrity test: %v", err)
 	}
 }
+
+
+func TestMariaDBTradingCalendarSnapshotAsOfNeverReturnsFutureCalendar(t *testing.T) {
+	dsn := os.Getenv("MARKET_DATA_TEST_MYSQL_DSN")
+	if dsn == "" {
+		dsn = os.Getenv("SERVER_RELAY_TEST_MYSQL_DSN")
+	}
+	if dsn == "" {
+		t.Skip("MARKET_DATA_TEST_MYSQL_DSN is not configured")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	store, err := OpenMySQL(ctx, dsn)
+	if err != nil {
+		t.Fatalf("open MariaDB: %v", err)
+	}
+	defer store.Close()
+	if err := store.Migrate(ctx); err != nil {
+		t.Fatalf("migrate Data schema: %v", err)
+	}
+
+	first := validRepositoryTradingCalendar()
+	firstObserved := time.Date(2026, 10, 25, 1, 0, 1, 123456000, time.UTC)
+	firstRef, _, err := store.SaveTradingCalendarSnapshot(ctx, first, firstObserved)
+	if err != nil {
+		t.Fatalf("save first calendar version: %v", err)
+	}
+	second := validRepositoryTradingCalendar()
+	second.Items[1].IsTradingDay = false
+	second.TradingDays = 1
+	second.QualityReasons = append(second.QualityReasons, "calendar_revision_v2")
+	secondObserved := firstObserved.Add(time.Hour)
+	secondRef, _, err := store.SaveTradingCalendarSnapshot(ctx, second, secondObserved)
+	if err != nil {
+		t.Fatalf("save second calendar version: %v", err)
+	}
+	if firstRef == secondRef {
+		t.Fatal("changed calendar facts must have different immutable references")
+	}
+
+	before, err := store.GetTradingCalendarSnapshotAsOf(ctx, "cn_a_share", first.StartDate, first.EndDate, firstObserved.Add(-time.Second))
+	if !errors.Is(err, ErrTradingCalendarSnapshotNotFound) || before != nil {
+		t.Fatalf("calendar not yet observed must be unavailable, snapshot=%+v err=%v", before, err)
+	}
+	between, err := store.GetTradingCalendarSnapshotAsOf(ctx, "cn_a_share", first.StartDate, first.EndDate, firstObserved.Add(time.Minute))
+	if err != nil || between.CalendarRef != firstRef || between.TradingDays != 2 {
+		t.Fatalf("as_of between revisions must return first version: snapshot=%+v err=%v", between, err)
+	}
+	after, err := store.GetTradingCalendarSnapshotAsOf(ctx, "cn_a_share", first.StartDate, first.EndDate, secondObserved.Add(time.Minute))
+	if err != nil || after.CalendarRef != secondRef || after.TradingDays != 1 {
+		t.Fatalf("as_of after second revision must return second version: snapshot=%+v err=%v", after, err)
+	}
+}

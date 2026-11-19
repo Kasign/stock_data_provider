@@ -154,6 +154,39 @@ func (s *DataService) TradingCalendar(ctx context.Context, rawStartDate, rawEndD
 	return best, false, nil
 }
 
+// TradingCalendarAsOf reads only an immutable calendar version already observed by asOf.
+// It deliberately does not consult cache or live Providers, preventing future calendar facts from leaking into PIT.
+func (s *DataService) TradingCalendarAsOf(ctx context.Context, rawStartDate, rawEndDate string, asOf time.Time) (*model.TradingCalendarSnapshot, error) {
+	if s == nil || s.store == nil || !s.store.Configured() {
+		return nil, errors.New("immutable trading-calendar storage is unavailable")
+	}
+	if ctx == nil {
+		return nil, errors.New("trading-calendar as_of context is required")
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if asOf.IsZero() || asOf.After(s.nowUTC()) {
+		return nil, errors.New("trading-calendar as_of must be a valid non-future timestamp")
+	}
+	start, end, _, err := parseTradingCalendarRange(rawStartDate, rawEndDate)
+	if err != nil {
+		return nil, err
+	}
+	startDate, endDate := start.Format("2006-01-02"), end.Format("2006-01-02")
+	snapshot, err := s.store.GetTradingCalendarSnapshotAsOf(ctx, "cn_a_share", startDate, endDate, asOf)
+	if err != nil {
+		return nil, err
+	}
+	if err := validateTradingCalendarSnapshotAt(snapshot, startDate, endDate, asOf); err != nil {
+		return nil, fmt.Errorf("historical trading-calendar snapshot is invalid: %w", err)
+	}
+	if snapshot.SystemObservedAt == nil || snapshot.SystemObservedAt.After(asOf.UTC()) || snapshot.FetchedAt.After(asOf.UTC()) {
+		return nil, errors.New("historical trading-calendar snapshot was not available by as_of")
+	}
+	return snapshot, nil
+}
+
 func tradingCalendarEvidenceScore(snapshot *model.TradingCalendarSnapshot) int {
 	if snapshot == nil {
 		return -1

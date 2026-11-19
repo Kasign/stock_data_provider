@@ -3612,6 +3612,25 @@ func preferPartialBars(candidate, current []model.DailyBar) bool {
 	return candidate[len(candidate)-1].TradeDate > current[len(current)-1].TradeDate
 }
 
+func (s *DataService) dailyBarCoverageSufficientAsOf(ctx context.Context, start, end string, requested, returned int, asOf time.Time) (bool, []string) {
+	if strings.TrimSpace(start) == "" {
+		return coverageSufficient(start, end, requested, returned), []string{"daily_bar_coverage_calendar_not_observed_by_as_of"}
+	}
+	calendar, err := s.TradingCalendarAsOf(ctx, start, end, asOf)
+	if err != nil || calendar == nil {
+		return coverageSufficient(start, end, requested, returned), []string{"daily_bar_coverage_calendar_not_observed_by_as_of"}
+	}
+	if calendar.TradingDays <= 0 {
+		return false, []string{"daily_bar_coverage_calendar_has_no_trading_days"}
+	}
+	minimum := minimumDailyBarCoverage(calendar.TradingDays, requested)
+	warnings := []string{}
+	if calendar.QualityStatus != model.QualityValid && !historicalCalendarTimestampOnlyDegradation(calendar) {
+		warnings = append(warnings, "daily_bar_coverage_uses_degraded_trading_calendar")
+	}
+	return returned >= minimum, warnings
+}
+
 func (s *DataService) dailyBarCoverageSufficient(ctx context.Context, start, end string, requested, returned int) (bool, []string) {
 	if strings.TrimSpace(start) == "" {
 		return coverageSufficient(start, end, requested, returned), nil
@@ -3640,6 +3659,7 @@ func applyDailyBarCoverageWarnings(bars []model.DailyBar, warnings []string) {
 	for _, warning := range warnings {
 		switch warning {
 		case "daily_bar_coverage_uses_weekday_estimate_calendar_unavailable",
+			"daily_bar_coverage_calendar_not_observed_by_as_of",
 			"daily_bar_coverage_uses_degraded_trading_calendar":
 			for index := range bars {
 				degradeQualityStatus(&bars[index].QualityStatus)
@@ -4192,8 +4212,13 @@ func (s *DataService) DailyBarsAsOf(ctx context.Context, rawSymbol, start, end s
 	if basis != model.AdjustmentNone {
 		warnings = append(warnings, "daily_bars_adjustment_rebuilt_from_point_in_time_factors")
 	}
-	coverageOK, coverageWarnings := s.dailyBarCoverageSufficient(ctx, start, end, limit, len(bars))
+	calendarStart := start
+	if calendarStart == "" {
+		calendarStart = bars[0].TradeDate
+	}
+	coverageOK, coverageWarnings := s.dailyBarCoverageSufficientAsOf(ctx, calendarStart, end, limit, len(bars), asOf)
 	warnings = append(warnings, coverageWarnings...)
+	applyDailyBarCoverageWarnings(bars, coverageWarnings)
 	if !coverageOK {
 		warnings = append(warnings, "point_in_time_daily_bar_coverage_below_requested_threshold")
 		for i := range bars {

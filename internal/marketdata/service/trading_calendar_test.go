@@ -79,6 +79,37 @@ func TestDailyBarCoverageHistoricalTimestampOnlyCalendarGapIsInformational(t *te
 	}
 }
 
+func TestDailyBarCoverageAsOfDoesNotConsultLiveCalendarProvider(t *testing.T) {
+	p := &testTradingCalendarProvider{snapshot: validTestTradingCalendar()}
+	svc := NewWithCapabilities([]provider.NamedProvider{p}, nil, nil, cache.NewDisabled(), nil,
+		time.Second, time.Second, 120, 2000, ResilienceConfig{}, nil)
+	svc.SetTradingCalendarProviders([]provider.TradingCalendarProvider{p})
+
+	asOf := time.Date(2026, 10, 28, 12, 0, 0, 0, time.UTC)
+	ok, warnings := svc.dailyBarCoverageSufficientAsOf(context.Background(), "2026-10-22", "2026-10-24", 2, 2, asOf)
+	if !ok {
+		t.Fatalf("weekday estimate should preserve the existing coverage calculation: warnings=%v", warnings)
+	}
+	if p.calls != 0 {
+		t.Fatalf("PIT coverage must not call current calendar Providers, calls=%d", p.calls)
+	}
+	found := false
+	for _, warning := range warnings {
+		if warning == "daily_bar_coverage_calendar_not_observed_by_as_of" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("missing explicit as-of calendar gap warning: %v", warnings)
+	}
+	bars := []model.DailyBar{{QualityStatus: model.QualityValid}}
+	applyDailyBarCoverageWarnings(bars, warnings)
+	if bars[0].QualityStatus != model.QualityDegraded ||
+		!dailyBarsPITContainsQualityReason(bars[0].QualityReasons, "daily_bar_coverage_calendar_not_observed_by_as_of") {
+		t.Fatalf("missing as-of calendar must degrade the PIT bar series: %+v", bars[0])
+	}
+}
+
 func TestTradingCalendarRejectsMissingSourceVersion(t *testing.T) {
 	snapshot := validTestTradingCalendar()
 	snapshot.SourceVersion = ""

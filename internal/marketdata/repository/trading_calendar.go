@@ -148,6 +148,44 @@ FROM market_data_trading_calendar_snapshots WHERE calendar_ref=?`, calendarRef).
 	return snapshot, nil
 }
 
+// GetTradingCalendarSnapshotAsOf returns the latest exact-range calendar version observed by asOf.
+// It never calls a Provider and never substitutes a newer current calendar.
+func (s *Store) GetTradingCalendarSnapshotAsOf(ctx context.Context, market, startDate, endDate string, asOf time.Time) (*model.TradingCalendarSnapshot, error) {
+	if s == nil || s.db == nil {
+		return nil, errors.New("MariaDB trading-calendar snapshot storage disabled")
+	}
+	if ctx == nil {
+		return nil, errors.New("trading-calendar snapshot context is required")
+	}
+	if strings.TrimSpace(market) == "" || strings.TrimSpace(startDate) == "" || strings.TrimSpace(endDate) == "" {
+		return nil, errors.New("trading-calendar market and exact date range are required")
+	}
+	if asOf.IsZero() {
+		return nil, errors.New("trading-calendar as_of timestamp is required")
+	}
+	asOfText := asOf.UTC().Format("2006-01-02 15:04:05.999999")
+	var calendarRef string
+	err := s.db.QueryRowContext(ctx, `SELECT calendar_ref
+FROM market_data_trading_calendar_snapshots
+WHERE market=? AND start_date=? AND end_date=? AND observed_at<=?
+ORDER BY observed_at DESC, calendar_ref ASC
+LIMIT 1`, market, startDate, endDate, asOfText).Scan(&calendarRef)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, fmt.Errorf("%w: no %s calendar for %s..%s was observed by %s", ErrTradingCalendarSnapshotNotFound, market, startDate, endDate, asOfText)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("select trading-calendar snapshot as of %s: %w", asOfText, err)
+	}
+	snapshot, err := s.GetTradingCalendarSnapshot(ctx, calendarRef)
+	if err != nil {
+		return nil, err
+	}
+	if snapshot.SystemObservedAt == nil || snapshot.SystemObservedAt.After(asOf.UTC()) || snapshot.FetchedAt.After(asOf.UTC()) {
+		return nil, fmt.Errorf("trading-calendar snapshot %s is newer than requested as_of", calendarRef)
+	}
+	return snapshot, nil
+}
+
 func parseTradingCalendarSnapshotRef(calendarRef string) (string, error) {
 	if !strings.HasPrefix(calendarRef, tradingCalendarSnapshotRefPrefix) {
 		return "", fmt.Errorf("invalid trading-calendar snapshot reference %q", calendarRef)
