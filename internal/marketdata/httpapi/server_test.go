@@ -643,8 +643,8 @@ func TestStockSearchEndpointReturnsCanonicalMatchesAndValidatesParameters(t *tes
 		[]provider.NamedProvider{p}, []provider.QuoteProvider{p}, []provider.DailyBarProvider{p}, 2000, time.Second, nil,
 	).InProcessHandler()
 
-	req = httptest.NewRequest(http.MethodGet, "/api/v1/stocks/search?q=%E8%B4%B5%E5%B7%9E%E8%8C%85%E5%8F%B0&limit=10", nil)
-	w = httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/stocks/search?q=%E8%B4%B5%E5%B7%9E%E8%8C%85%E5%8F%B0&limit=10", nil)
+	w := httptest.NewRecorder()
 	h.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
