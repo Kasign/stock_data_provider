@@ -126,3 +126,26 @@
 - `IN_PROGRESS`：正在按解除条件处理。
 - `RESOLVED`：有对应 SHA、测试或权威契约证据证明解除。
 - 卡点不等于整个模块停止；只暂停依赖该卡点的具体变更。
+
+## 5. 2026-11-19 最新分支复核与本模块独立修复
+
+### 跨模块分支最新状态
+
+| 分支 | 当前 HEAD | 对 Researchflow 的影响 |
+|---|---|---|
+| `feat/researchflow` | `555a16726bfa5e48968b7f23b08e1ba6de7706d9` | 本轮补齐 ComposeResult 嵌套输入 UTF-8 边界；专项 CI 已通过 |
+| `feat/server` | `c8a246505eefda0661a15d593def56ddbb5b0711` | Worker 生产 Executor 仍只装配 News Search；未发现 Research/Quant/LLM Stage/Adapter 注册 |
+| `feat/research` | `0d9dc0651a6e0bda3888d695f2ffec5545c248bd` | 本轮相对前次仅调整 Diagnostics 测试样本；Context/Evidence/Claim 生产消费仍需真实授权调用方 |
+| `feat/quant` | `992a10d1837dad8e695f9e9d7b6f459ebdcc3eb9` | 本轮增加 GetResult 主体解析后的 Context 取消检查；RiskDecision 契约未变化，RF-BLOCK-008 仍未解除 |
+| `feat/llm` | `77ef70568a0e76ab3092b25503c36ee2316990a3` | Provider Port 存在；生产装配/真实模型消费者和目标模型 Tokenizer 仍未闭环 |
+| `feat/data` | `9f6adaf280a94bc60f993554473fd0adb70b07da` | 尚无可注册的 Researchflow Data Stage 完整契约 |
+| `feat/news` | `cb4206e8e59ec7bcb27660d33e4cc28b1cd2a06d` | 现有 News Search 已装配；Payload Validator uniqueItems 缺口仍由 News Owner 负责 |
+
+### 本模块独立修复
+
+- `ComposeResult` 之前只对部分字段检查空白；多个嵌套字符串字段未验证 UTF-8，后续 `encoding/json` 深拷贝可能静默替换非法字节。
+- 已在组合入口递归校验全部输入字符串和 `json.RawMessage` 原始字节，并在任何投影/深拷贝前 fail-closed。
+- 新增测试覆盖 Run ID、Context、Evidence、Claim、LLM Response、Limitations、RiskDecision 和 Quant Payload。
+- 代码 SHA：`c7849cf5ad44dfa3a702844c14eb657f864d7512`；格式修正 SHA：`555a16726bfa5e48968b7f23b08e1ba6de7706d9`。
+- Run [44440261770](https://github.com/Kasign/stock_data_provider/actions/runs/44440261770)：Researchflow 专项 format/tests/race/vet、WorkerStore、MariaDB lifecycle integration 已通过；根模块 Test 当时仍在运行，不能将本 Run 标记为全量成功。
+- 本轮没有改动其他分支；没有新增占位 Stage/Adapter。Server 尚未装配 Research/Quant/LLM 的事实仍成立。
