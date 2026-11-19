@@ -7,7 +7,7 @@
 - SRV-004 已完成当前 Root 已注册检查集的 Health/Readiness/Diagnostics 验收；Data 最终 checksum/Schema 仍归 SRV-009。
 - SRV-015 已转 BLOCKED：当前可安全装配的 News 服务已完成；其他业务模块等待真实消费者、生产配置、持久化、Gateway 或渠道依赖。
 
-更新时间：2026-11-19
+更新时间：2026-11-19（追加跨模块最新基线复核）
 维护分支：feat/server
 代码验收基线：98bed9ac29260e5b4c48f4c80ee59c4da9df8682
 当前主线：SRV-009 Data/MarketData M3/M4 Root 生产装配
@@ -106,3 +106,35 @@
 - 本轮删除的只是 Server 内部 `internal/adapters/marketdata/**` 旧 HTTP Adapter。
 - 不删除 `cmd/market-data`、`services/market-data`、Nginx `/market-api/` 代理和独立 Data 部署资产。
 - 在 WebUI API 基路径、Owner Session/CSRF、Root 路由认证和 Nginx upstream 完成切换并通过真实浏览器/部署验收前，独立 Data Service 必须保留。
+
+
+## 7. 跨模块前置最新基线复核（2026-11-19）
+
+本轮仅只读检查其他分支，没有修改其他分支。Server 当前分支 HEAD 为 `33521adc5cff432f0efbcb6a6f090bb01e02ec10`。
+
+### 7.1 SRV-009 直接依赖
+
+| 责任模块 | 分支最新 HEAD | 本轮核对结果 | 对 SRV-009 的影响 |
+|---|---|---|---|
+| Data | `9f6adaf280a94bc60f993554473fd0adb70b07da` | 最新提交仍为文档汇总；`MigrationRunner` 仍只公开 `Migrate(ctx)`；`Store.Migrate` 仍在 Platform ApplyMigrations 锁范围外执行兼容索引/补列 DDL | 静态 Migration 定义和并发安全前置仍未满足 |
+| Platform | `308b0bfdf3eba6a83ac16f1eae1aec66518ebbcd` | 最新提交仍为文档整理；`storage.ApplyMigrations` 有统一 checksum preparation 和 namespace advisory lock，但没有可供 Root 使用的只读 checksum 校验入口 | Platform 只读校验前置仍未满足 |
+
+### 7.2 SRV-015 其他模块装配观察基线
+
+以下分支仅作为其他模块装配阻塞的观察基线，不改变 SRV-009 当前主线，也不代表 Server 已完成这些模块的生产验收。
+
+| 模块 | 分支最新 HEAD | Server 侧现有卡点 |
+|---|---|---|
+| News | `cb4206e8e59ec7bcb27660d33e4cc28b1cd2a06d` | RSS/Atom 生产 Source/Endpoint Catalog、授权策略和受控采集入口未满足 |
+| Research | `3f3be141c616e9b3beee33a78363132c49effece` | 尚无明确生产 Stage/HTTP 消费者；真实授权与来源证据仍需按调用场景验收 |
+| Researchflow | `e36d33ac334b5dbbebe39719ed26e09756da59dd` | 当前 Root 只装配 News Search Stage；其他 Stage 等提供方公开 Facade、Schema、授权和真实输入 |
+| Quant | `404f449fb5d0ad544a4ac106687200fef1e785f9` | 缺生产持久化 Repository、可注入 Application Facade 和 Researchflow 输入契约 |
+| LLM | `77ef70568a0e76ab3092b25503c36ee2316990a3` | 缺真实 Gateway 版本/Capability Evidence、SecretRef、生产目标策略和端到端调用证据 |
+| Notification | `b2116b9b180d2d2e14d47d93c6c16631e6ccb9ab` | WeCom Adapter 尚未进入 Server 共同集成基线；生产 Secret、Recipient Directory、Fanout/Delivery Worker 与 Unknown 对账仍未闭环 |
+
+### 7.3 本轮执行结论
+
+- Data/Platform 的最新基线未解除 SRV-009 前置；Server 不应自行复制 Migration 定义、SQL、checksum 算法或锁。
+- Server 已完成的 Data Module 构造、共享资源、受控 Egress、Readiness、Lifecycle 和 Root HTTP Handler 不重复开发。
+- SRV-015 继续保持阻塞观察，不在 SRV-009 未解除时创建占位 Worker/Handler 或切换当前任务。
+- 下一步触发条件：Data 和 Platform 对应能力进入共同集成基线后，再在 `feat/server` 注册 Data 静态 Migration、接入只读 checksum 校验并执行真实 MariaDB 并发/漂移验收。
