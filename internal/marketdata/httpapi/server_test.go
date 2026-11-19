@@ -161,7 +161,7 @@ func (httpMarketCapitalFlowFake) FetchMarketCapitalFlow(_ context.Context, start
 }
 
 func TestInProcessHandlerDelegatesTransportSecurityToRootServer(t *testing.T) {
-	server := NewWithApplication("", "forward_adjusted", ApplicationDependencies{}, nil, 0, 0, nil)
+	server := NewWithApplication("forward_adjusted", ApplicationDependencies{}, nil, 0, 0, nil)
 	handler := server.InProcessHandler()
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/data-sources", nil)
@@ -216,15 +216,14 @@ func TestBuildSourceStatusesUsesOnlyRegisteredProviderCapabilities(t *testing.T)
 func TestNewWithApplicationUsesInjectedUseCasesAndCopiesSourceSnapshot(t *testing.T) {
 	sources := []model.SourceStatus{{Name: "eastmoney", Enabled: true, QuoteCapable: true}}
 	server := NewWithApplication(
-		"secret", "forward_adjusted", ApplicationDependencies{},
+		"forward_adjusted", ApplicationDependencies{},
 		sources, 2000, time.Second, slog.New(slog.NewTextHandler(io.Discard, nil)),
 	)
 	sources[0].Name = "mutated-after-construction"
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/data-sources", nil)
-	req.Header.Set("X-API-Key", "secret")
 	rec := httptest.NewRecorder()
-	server.Handler().ServeHTTP(rec, req)
+	server.InProcessHandler().ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
@@ -239,7 +238,7 @@ func TestNewWithApplicationUsesInjectedUseCasesAndCopiesSourceSnapshot(t *testin
 	diagnosticsReq := httptest.NewRequest(http.MethodGet, "/api/v1/data-sources/diagnostics", nil)
 	diagnosticsReq.Header.Set("X-API-Key", "secret")
 	diagnosticsRec := httptest.NewRecorder()
-	server.Handler().ServeHTTP(diagnosticsRec, diagnosticsReq)
+	server.InProcessHandler().ServeHTTP(diagnosticsRec, diagnosticsReq)
 	if diagnosticsRec.Code != http.StatusOK || !strings.Contains(diagnosticsRec.Body.String(), `"items":[]`) {
 		t.Fatalf("missing diagnostics Application must return an empty diagnostic set: status=%d body=%s", diagnosticsRec.Code, diagnosticsRec.Body.String())
 	}
@@ -249,9 +248,8 @@ func TestMarketCapitalFlowRouteIsRegisteredAndReturnsHistory(t *testing.T) {
 	p := httpMarketCapitalFlowFake{}
 	svc := service.New([]provider.Provider{p}, cache.NewDisabled(), nil, time.Second, time.Minute, 120, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	svc.SetMarketCapitalFlowProviders([]provider.MarketCapitalFlowProvider{p})
-	h := New("secret", "forward_adjusted", svc, []provider.Provider{p}, nil).Handler()
+	h := New("forward_adjusted", svc, []provider.Provider{p}, nil).InProcessHandler()
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/market/capital-flow?start=2026-10-29&end=2026-10-29", nil)
-	req.Header.Set("X-API-Key", "secret")
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
@@ -262,23 +260,11 @@ func TestMarketCapitalFlowRouteIsRegisteredAndReturnsHistory(t *testing.T) {
 	}
 }
 
-func TestAuthIsRequiredForDataRoutes(t *testing.T) {
-	p := httpFakeProvider{}
-	svc := service.New([]provider.Provider{p}, cache.NewDisabled(), nil, time.Second, time.Minute, 120, slog.New(slog.NewTextHandler(io.Discard, nil)))
-	h := New("secret", "forward_adjusted", svc, []provider.Provider{p}, nil).Handler()
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/quotes/600519", nil)
-	w := httptest.NewRecorder()
-	h.ServeHTTP(w, req)
-	if w.Code != 401 {
-		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
-	}
-}
 func TestQuoteRouteReturnsNormalizedUnits(t *testing.T) {
 	p := httpFakeProvider{}
 	svc := service.New([]provider.Provider{p}, cache.NewDisabled(), nil, time.Second, time.Minute, 120, slog.New(slog.NewTextHandler(io.Discard, nil)))
-	h := New("secret", "forward_adjusted", svc, []provider.Provider{p}, nil).Handler()
+	h := New("forward_adjusted", svc, []provider.Provider{p}, nil).InProcessHandler()
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/quotes/600519", nil)
-	req.Header.Set("X-API-Key", "secret")
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, req)
 	if w.Code != 200 {
@@ -291,9 +277,8 @@ func TestQuoteRouteReturnsNormalizedUnits(t *testing.T) {
 func TestUnsupportedBShareReturnsValidationErrorNotProviderFailure(t *testing.T) {
 	p := httpFakeProvider{}
 	svc := service.New([]provider.Provider{p}, cache.NewDisabled(), nil, time.Second, time.Minute, 120, slog.New(slog.NewTextHandler(io.Discard, nil)))
-	h := New("secret", "forward_adjusted", svc, []provider.Provider{p}, nil).Handler()
+	h := New("forward_adjusted", svc, []provider.Provider{p}, nil).InProcessHandler()
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/quotes/900901", nil)
-	req.Header.Set("X-API-Key", "secret")
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, req)
 	if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), `"code":"VALIDATION_ERROR"`) {
@@ -304,9 +289,8 @@ func TestUnsupportedBShareReturnsValidationErrorNotProviderFailure(t *testing.T)
 func TestMismatchedExchangeSuffixReturnsValidationError(t *testing.T) {
 	p := httpFakeProvider{}
 	svc := service.New([]provider.Provider{p}, cache.NewDisabled(), nil, time.Second, time.Minute, 120, nil)
-	h := New("secret", "forward_adjusted", svc, []provider.Provider{p}, nil).Handler()
+	h := New("forward_adjusted", svc, []provider.Provider{p}, nil).InProcessHandler()
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/quotes/600519.SZ", nil)
-	req.Header.Set("X-API-Key", "secret")
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, req)
 	if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), `"code":"VALIDATION_ERROR"`) {
@@ -314,28 +298,16 @@ func TestMismatchedExchangeSuffixReturnsValidationError(t *testing.T) {
 	}
 }
 
-func TestLiveHealthDoesNotRequireAuth(t *testing.T) {
-	p := httpFakeProvider{}
-	svc := service.New([]provider.Provider{p}, cache.NewDisabled(), nil, time.Second, time.Minute, 120, nil)
-	h := New("secret", "forward_adjusted", svc, []provider.Provider{p}, nil).Handler()
-	w := httptest.NewRecorder()
-	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/health/live", nil))
-	if w.Code != 200 {
-		t.Fatalf("status=%d", w.Code)
-	}
-}
-
 func TestBundleAsOfRejectsEmptyOrRepeatedValues(t *testing.T) {
 	p := httpFakeProvider{}
 	svc := service.New([]provider.Provider{p}, cache.NewDisabled(), nil, time.Second, time.Minute, 120, slog.New(slog.NewTextHandler(io.Discard, nil)))
-	h := New("secret", "forward_adjusted", svc, []provider.Provider{p}, nil).Handler()
+	h := New("forward_adjusted", svc, []provider.Provider{p}, nil).InProcessHandler()
 	for _, path := range []string{
 		"/api/v1/bundles/600519?as_of=",
 		"/api/v1/bundles/600519?as_of=2026-11-12T10%3A00%3A00Z&as_of=2026-11-12T11%3A00%3A00Z",
 	} {
 		req := httptest.NewRequest(http.MethodGet, path, nil)
-		req.Header.Set("X-API-Key", "secret")
-		w := httptest.NewRecorder()
+			w := httptest.NewRecorder()
 		h.ServeHTTP(w, req)
 		if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), `"code":"VALIDATION_ERROR"`) {
 			t.Fatalf("path=%q status=%d body=%s; expected strict as_of validation", path, w.Code, w.Body.String())
@@ -346,10 +318,9 @@ func TestBundleAsOfRejectsEmptyOrRepeatedValues(t *testing.T) {
 func TestFutureAsOfIsValidationError(t *testing.T) {
 	p := httpFakeProvider{}
 	svc := service.New([]provider.Provider{p}, cache.NewDisabled(), nil, time.Second, time.Minute, 120, slog.New(slog.NewTextHandler(io.Discard, nil)))
-	h := New("secret", "forward_adjusted", svc, []provider.Provider{p}, nil).Handler()
+	h := New("forward_adjusted", svc, []provider.Provider{p}, nil).InProcessHandler()
 	future := time.Now().Add(5 * time.Minute).UTC().Format(time.RFC3339)
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/bundles/600519?as_of="+future, nil)
-	req.Header.Set("X-API-Key", "secret")
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, req)
 	if w.Code != http.StatusBadRequest {
@@ -376,11 +347,10 @@ func TestStockBasicProfileEndpointReturnsIndependentProviderData(t *testing.T) {
 	)
 	svc.SetStockBasicProviders([]provider.StockBasicProvider{p})
 	svc.SetStockSearchProviders([]provider.StockSearchProvider{p})
-	h := NewWithCapabilityInterfaces("secret", "forward_adjusted", svc,
+	h := NewWithCapabilityInterfaces("forward_adjusted", svc,
 		[]provider.NamedProvider{p}, []provider.QuoteProvider{p}, []provider.DailyBarProvider{p}, 2000, time.Second, nil,
-	).Handler()
+	).InProcessHandler()
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/stocks/600519.SH/profile", nil)
-	req.Header.Set("X-API-Key", "secret")
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
@@ -393,7 +363,6 @@ func TestStockBasicProfileEndpointReturnsIndependentProviderData(t *testing.T) {
 	}
 
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/data-sources", nil)
-	req.Header.Set("X-API-Key", "secret")
 	w = httptest.NewRecorder()
 	h.ServeHTTP(w, req)
 	if w.Code != http.StatusOK ||
@@ -408,30 +377,26 @@ func TestDomesticMarketBreadthAndLimitPoolRoutes(t *testing.T) {
 	svc := service.NewWithCapabilities([]provider.NamedProvider{p}, []provider.QuoteProvider{p}, []provider.DailyBarProvider{p}, cache.NewDisabled(), nil, time.Second, time.Second, 120, 2000, service.ResilienceConfig{Retries: 0, CircuitFailureThreshold: 3, CircuitCooldown: time.Second}, nil)
 	svc.SetMarketBreadthProviders([]provider.MarketBreadthProvider{p})
 	svc.SetLimitPoolProviders([]provider.LimitPoolProvider{p})
-	h := NewWithCapabilityInterfaces("secret", "forward_adjusted", svc, []provider.NamedProvider{p}, []provider.QuoteProvider{p}, []provider.DailyBarProvider{p}, 2000, time.Second, nil).Handler()
+	h := NewWithCapabilityInterfaces("forward_adjusted", svc, []provider.NamedProvider{p}, []provider.QuoteProvider{p}, []provider.DailyBarProvider{p}, 2000, time.Second, nil).InProcessHandler()
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/market/breadth", nil)
-	req.Header.Set("X-API-Key", "secret")
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, req)
 	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"advancing_count":1`) || !strings.Contains(w.Body.String(), `"covered_securities":3`) {
 		t.Fatalf("breadth route status=%d body=%s", w.Code, w.Body.String())
 	}
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/market/limit-pools?type=up&date=2026-10-23&limit=10", nil)
-	req.Header.Set("X-API-Key", "secret")
 	w = httptest.NewRecorder()
 	h.ServeHTTP(w, req)
 	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"type":"up"`) || !strings.Contains(w.Body.String(), `"trade_date":"2026-10-23"`) {
 		t.Fatalf("limit-pool route status=%d body=%s", w.Code, w.Body.String())
 	}
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/market/limit-pools?type=invalid", nil)
-	req.Header.Set("X-API-Key", "secret")
 	w = httptest.NewRecorder()
 	h.ServeHTTP(w, req)
 	if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), `"code":"VALIDATION_ERROR"`) {
 		t.Fatalf("invalid pool type status=%d body=%s", w.Code, w.Body.String())
 	}
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/data-sources", nil)
-	req.Header.Set("X-API-Key", "secret")
 	w = httptest.NewRecorder()
 	h.ServeHTTP(w, req)
 	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"market_breadth_capable":true`) || !strings.Contains(w.Body.String(), `"limit_pool_capable":true`) {
@@ -443,16 +408,14 @@ func TestStockBoardsRouteAndCapabilityAdvertisement(t *testing.T) {
 	p := httpFakeProvider{}
 	svc := service.NewWithCapabilities([]provider.NamedProvider{p}, []provider.QuoteProvider{p}, []provider.DailyBarProvider{p}, cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000, service.ResilienceConfig{Retries: 0, CircuitFailureThreshold: 3, CircuitCooldown: time.Second}, nil)
 	svc.SetStockBoardsProviders([]provider.StockBoardsProvider{p})
-	h := NewWithCapabilityInterfaces("secret", "forward_adjusted", svc, []provider.NamedProvider{p}, []provider.QuoteProvider{p}, []provider.DailyBarProvider{p}, 2000, time.Second, nil).Handler()
+	h := NewWithCapabilityInterfaces("forward_adjusted", svc, []provider.NamedProvider{p}, []provider.QuoteProvider{p}, []provider.DailyBarProvider{p}, 2000, time.Second, nil).InProcessHandler()
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/stocks/600519.SH/boards", nil)
-	req.Header.Set("X-API-Key", "secret")
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, req)
 	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"symbol":"600519.SH"`) || !strings.Contains(w.Body.String(), `"code":"BK0477"`) {
 		t.Fatalf("stock-boards route status=%d body=%s", w.Code, w.Body.String())
 	}
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/data-sources", nil)
-	req.Header.Set("X-API-Key", "secret")
 	w = httptest.NewRecorder()
 	h.ServeHTTP(w, req)
 	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"stock_boards_capable":true`) {
@@ -465,9 +428,8 @@ func TestDragonTigerEndpointUsesDedicatedCapabilityAndAdvertisesIt(t *testing.T)
 	svc := service.NewWithCapabilities([]provider.NamedProvider{p}, nil, nil, cache.NewDisabled(), nil, time.Second, time.Second, 120, 2000,
 		service.ResilienceConfig{Retries: 0, CircuitFailureThreshold: 3, CircuitCooldown: time.Second}, nil)
 	svc.SetDragonTigerProviders([]provider.DragonTigerProvider{p})
-	h := NewWithCapabilityInterfaces("secret", "forward_adjusted", svc, []provider.NamedProvider{p}, nil, nil, 2000, time.Second, nil).Handler()
+	h := NewWithCapabilityInterfaces("forward_adjusted", svc, []provider.NamedProvider{p}, nil, nil, 2000, time.Second, nil).InProcessHandler()
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/market/dragon-tiger?date=2026-10-22&page=1&page_size=50", nil)
-	req.Header.Set("X-API-Key", "secret")
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
@@ -479,7 +441,6 @@ func TestDragonTigerEndpointUsesDedicatedCapabilityAndAdvertisesIt(t *testing.T)
 		}
 	}
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/data-sources", nil)
-	req.Header.Set("X-API-Key", "secret")
 	w = httptest.NewRecorder()
 	h.ServeHTTP(w, req)
 	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"dragon_tiger_capable":true`) {
@@ -492,9 +453,8 @@ func TestDragonTigerRejectsInvalidPagination(t *testing.T) {
 	svc := service.NewWithCapabilities([]provider.NamedProvider{p}, nil, nil, cache.NewDisabled(), nil, time.Second, time.Second, 120, 2000,
 		service.ResilienceConfig{Retries: 0, CircuitFailureThreshold: 3, CircuitCooldown: time.Second}, nil)
 	svc.SetDragonTigerProviders([]provider.DragonTigerProvider{p})
-	h := NewWithCapabilityInterfaces("secret", "forward_adjusted", svc, []provider.NamedProvider{p}, nil, nil, 2000, time.Second, nil).Handler()
+	h := NewWithCapabilityInterfaces("forward_adjusted", svc, []provider.NamedProvider{p}, nil, nil, 2000, time.Second, nil).InProcessHandler()
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/market/dragon-tiger?page=0", nil)
-	req.Header.Set("X-API-Key", "secret")
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, req)
 	if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), `"code":"VALIDATION_ERROR"`) {
@@ -507,9 +467,8 @@ func TestStockAnnouncementsEndpointAndCapabilityAdvertisement(t *testing.T) {
 	svc := service.NewWithCapabilities([]provider.NamedProvider{p}, nil, nil, cache.NewDisabled(), nil, time.Second, time.Second, 120, 2000,
 		service.ResilienceConfig{Retries: 0, CircuitFailureThreshold: 3, CircuitCooldown: time.Second}, nil)
 	svc.SetAnnouncementProviders([]provider.AnnouncementProvider{p})
-	h := NewWithCapabilityInterfaces("secret", "forward_adjusted", svc, []provider.NamedProvider{p}, nil, nil, 2000, time.Second, nil).Handler()
+	h := NewWithCapabilityInterfaces("forward_adjusted", svc, []provider.NamedProvider{p}, nil, nil, 2000, time.Second, nil).InProcessHandler()
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/stocks/600036.SH/announcements?start_date=2026-10-20&end_date=2026-10-26", nil)
-	req.Header.Set("X-API-Key", "secret")
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
@@ -521,7 +480,6 @@ func TestStockAnnouncementsEndpointAndCapabilityAdvertisement(t *testing.T) {
 		}
 	}
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/data-sources", nil)
-	req.Header.Set("X-API-Key", "secret")
 	w = httptest.NewRecorder()
 	h.ServeHTTP(w, req)
 	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"announcements_capable":true`) {
@@ -534,9 +492,8 @@ func TestStockAnnouncementsRejectsInvalidPagination(t *testing.T) {
 	svc := service.NewWithCapabilities([]provider.NamedProvider{p}, nil, nil, cache.NewDisabled(), nil, time.Second, time.Second, 120, 2000,
 		service.ResilienceConfig{Retries: 0, CircuitFailureThreshold: 3, CircuitCooldown: time.Second}, nil)
 	svc.SetAnnouncementProviders([]provider.AnnouncementProvider{p})
-	h := NewWithCapabilityInterfaces("secret", "forward_adjusted", svc, []provider.NamedProvider{p}, nil, nil, 2000, time.Second, nil).Handler()
+	h := NewWithCapabilityInterfaces("forward_adjusted", svc, []provider.NamedProvider{p}, nil, nil, 2000, time.Second, nil).InProcessHandler()
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/stocks/600036/announcements?page_size=101", nil)
-	req.Header.Set("X-API-Key", "secret")
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, req)
 	if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), `"code":"VALIDATION_ERROR"`) {
@@ -551,10 +508,9 @@ func TestDataSourcesReportsQuoteOnlyProviderWithoutDailyBars(t *testing.T) {
 		[]provider.NamedProvider{p},
 		[]provider.QuoteProvider{p},
 		nil, 2000, time.Second, nil,
-	).Handler()
+	).InProcessHandler()
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/data-sources", nil)
-	req.Header.Set("X-API-Key", "secret")
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, req)
 
@@ -602,9 +558,8 @@ func TestSectorRankingEndpointAcceptsFiveDayMetric(t *testing.T) {
 	p := httpMetricSectorFake{}
 	svc := service.New([]provider.Provider{p}, cache.NewDisabled(), nil, time.Second, time.Minute, 120, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	svc.SetSectorRankingProviders([]provider.SectorRankingProvider{p})
-	h := New("secret", "forward_adjusted", svc, []provider.Provider{p}, nil).Handler()
+	h := New("forward_adjusted", svc, []provider.Provider{p}, nil).InProcessHandler()
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/market/sectors?type=industry&sort_by=change_5d", nil)
-	req.Header.Set("X-API-Key", "secret")
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
@@ -623,13 +578,12 @@ func TestSectorRankingEndpointSeparatesIndustryAndConcept(t *testing.T) {
 		service.ResilienceConfig{Retries: 0, CircuitFailureThreshold: 3, CircuitCooldown: time.Second}, nil,
 	)
 	svc.SetSectorRankingProviders([]provider.SectorRankingProvider{p})
-	h := NewWithCapabilityInterfaces("secret", "forward_adjusted", svc,
+	h := NewWithCapabilityInterfaces("forward_adjusted", svc,
 		[]provider.NamedProvider{p}, []provider.QuoteProvider{p}, []provider.DailyBarProvider{p}, 2000, time.Second, nil,
-	).Handler()
+	).InProcessHandler()
 	for _, category := range []string{"industry", "concept"} {
 		for _, direction := range []string{"up", "down"} {
 			req := httptest.NewRequest(http.MethodGet, "/api/v1/market/sectors?type="+category+"&direction="+direction+"&limit=5", nil)
-			req.Header.Set("X-API-Key", "secret")
 			w := httptest.NewRecorder()
 			h.ServeHTTP(w, req)
 			if w.Code != http.StatusOK {
@@ -643,14 +597,12 @@ func TestSectorRankingEndpointSeparatesIndustryAndConcept(t *testing.T) {
 		}
 	}
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/market/sectors?type=all", nil)
-	req.Header.Set("X-API-Key", "secret")
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, req)
 	if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), `"code":"VALIDATION_ERROR"`) {
 		t.Fatalf("invalid sector category should be rejected, got status=%d body=%s", w.Code, w.Body.String())
 	}
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/market/sectors?type=industry&direction=sideways", nil)
-	req.Header.Set("X-API-Key", "secret")
 	w = httptest.NewRecorder()
 	h.ServeHTTP(w, req)
 	if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), `"code":"VALIDATION_ERROR"`) {
@@ -662,9 +614,8 @@ func TestMarketIndicesEndpointUsesDedicatedIndexCapability(t *testing.T) {
 	p := httpFakeProvider{}
 	svc := service.NewWithCapabilities([]provider.NamedProvider{p}, []provider.QuoteProvider{p}, []provider.DailyBarProvider{p}, cache.NewDisabled(), nil, time.Second, time.Second, 120, 2000, service.ResilienceConfig{Retries: 0, CircuitFailureThreshold: 3, CircuitCooldown: time.Second}, nil)
 	svc.SetIndexQuoteProviders([]provider.IndexQuoteProvider{p})
-	h := NewWithCapabilityInterfaces("secret", "forward_adjusted", svc, []provider.NamedProvider{p}, []provider.QuoteProvider{p}, []provider.DailyBarProvider{p}, 2000, time.Second, nil).Handler()
+	h := NewWithCapabilityInterfaces("forward_adjusted", svc, []provider.NamedProvider{p}, []provider.QuoteProvider{p}, []provider.DailyBarProvider{p}, 2000, time.Second, nil).InProcessHandler()
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/market/indices", nil)
-	req.Header.Set("X-API-Key", "secret")
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
@@ -676,7 +627,6 @@ func TestMarketIndicesEndpointUsesDedicatedIndexCapability(t *testing.T) {
 		}
 	}
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/data-sources", nil)
-	req.Header.Set("X-API-Key", "secret")
 	w = httptest.NewRecorder()
 	h.ServeHTTP(w, req)
 	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"index_quote_capable":true`) {
@@ -690,9 +640,9 @@ func TestStockSearchEndpointReturnsCanonicalMatchesAndValidatesParameters(t *tes
 		cache.NewDisabled(), nil, time.Second, time.Second, 120, 2000,
 		service.ResilienceConfig{Retries: 0, CircuitFailureThreshold: 3, CircuitCooldown: time.Second}, nil)
 	svc.SetStockSearchProviders([]provider.StockSearchProvider{p})
-	h := NewWithCapabilityInterfaces("secret", "forward_adjusted", svc,
+	h := NewWithCapabilityInterfaces("forward_adjusted", svc,
 		[]provider.NamedProvider{p}, []provider.QuoteProvider{p}, []provider.DailyBarProvider{p}, 2000, time.Second, nil,
-	).Handler()
+	).InProcessHandler()
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/stocks/search?q=%E8%B4%B5%E5%B7%9E%E8%8C%85%E5%8F%B0", nil)
 	w := httptest.NewRecorder()
@@ -702,7 +652,6 @@ func TestStockSearchEndpointReturnsCanonicalMatchesAndValidatesParameters(t *tes
 	}
 
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/stocks/search?q=%E8%B4%B5%E5%B7%9E%E8%8C%85%E5%8F%B0&limit=10", nil)
-	req.Header.Set("X-API-Key", "secret")
 	w = httptest.NewRecorder()
 	h.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
@@ -718,7 +667,6 @@ func TestStockSearchEndpointReturnsCanonicalMatchesAndValidatesParameters(t *tes
 	}
 
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/stocks/search?q=", nil)
-	req.Header.Set("X-API-Key", "secret")
 	w = httptest.NewRecorder()
 	h.ServeHTTP(w, req)
 	if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), `"code":"VALIDATION_ERROR"`) {
@@ -726,7 +674,6 @@ func TestStockSearchEndpointReturnsCanonicalMatchesAndValidatesParameters(t *tes
 	}
 
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/stocks/search?q=%E8%B4%B5%E5%B7%9E%E8%8C%85%E5%8F%B0&limit=51", nil)
-	req.Header.Set("X-API-Key", "secret")
 	w = httptest.NewRecorder()
 	h.ServeHTTP(w, req)
 	if w.Code != http.StatusBadRequest {
@@ -773,11 +720,10 @@ func TestIndexConstituentsAsOfEndpointReturnsRequestedDateAndReportDate(t *testi
 	svc := service.NewWithCapabilities([]provider.NamedProvider{p}, nil, nil, cache.NewDisabled(), nil, time.Second, time.Second, 120, 2000,
 		service.ResilienceConfig{Retries: 0, CircuitFailureThreshold: 3, CircuitCooldown: time.Second}, nil)
 	svc.SetIndexCatalogProviders([]provider.IndexCatalogProvider{p})
-	h := NewWithCapabilityInterfaces("secret", "forward_adjusted", svc, []provider.NamedProvider{p}, nil, nil, 2000, time.Second, nil).Handler()
+	h := NewWithCapabilityInterfaces("forward_adjusted", svc, []provider.NamedProvider{p}, nil, nil, 2000, time.Second, nil).InProcessHandler()
 	location := marketLocationForHTTPTest()
 	asOfDate := time.Now().In(location).AddDate(0, 0, -4).Format("2006-01-02")
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/market/indices/000300.SH/constituents?as_of="+asOfDate+"&source=tushare", nil)
-	req.Header.Set("X-API-Key", "secret")
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
@@ -789,7 +735,6 @@ func TestIndexConstituentsAsOfEndpointReturnsRequestedDateAndReportDate(t *testi
 		}
 	}
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/data-sources", nil)
-	req.Header.Set("X-API-Key", "secret")
 	w = httptest.NewRecorder()
 	h.ServeHTTP(w, req)
 	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"historical_index_constituents_capable":true`) {
@@ -802,15 +747,14 @@ func TestIndexConstituentsRejectsInvalidAsOfQueryAndCurrentOnlySource(t *testing
 	svc := service.NewWithCapabilities([]provider.NamedProvider{p}, nil, nil, cache.NewDisabled(), nil, time.Second, time.Second, 120, 2000,
 		service.ResilienceConfig{Retries: 0, CircuitFailureThreshold: 3, CircuitCooldown: time.Second}, nil)
 	svc.SetIndexCatalogProviders([]provider.IndexCatalogProvider{p})
-	h := NewWithCapabilityInterfaces("secret", "forward_adjusted", svc, []provider.NamedProvider{p}, nil, nil, 2000, time.Second, nil).Handler()
+	h := NewWithCapabilityInterfaces("forward_adjusted", svc, []provider.NamedProvider{p}, nil, nil, 2000, time.Second, nil).InProcessHandler()
 	validPastDate := time.Now().In(marketLocationForHTTPTest()).AddDate(0, 0, -2).Format("2006-01-02")
 	for _, path := range []string{
 		"/api/v1/market/indices/000300.SH/constituents?as_of=2026-1-5",
 		"/api/v1/market/indices/000300.SH/constituents?as_of=" + validPastDate + "&source=hithink",
 	} {
 		req := httptest.NewRequest(http.MethodGet, path, nil)
-		req.Header.Set("X-API-Key", "secret")
-		w := httptest.NewRecorder()
+			w := httptest.NewRecorder()
 		h.ServeHTTP(w, req)
 		if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), `"code":"VALIDATION_ERROR"`) {
 			t.Fatalf("invalid historical query %q status=%d body=%s", path, w.Code, w.Body.String())
@@ -821,7 +765,7 @@ func TestIndexConstituentsRejectsInvalidAsOfQueryAndCurrentOnlySource(t *testing
 func TestHighRiskQueryParameterUpperAndLowerBounds(t *testing.T) {
 	p := httpFakeProvider{}
 	svc := service.New([]provider.Provider{p}, cache.NewDisabled(), nil, time.Second, time.Minute, 120, slog.New(slog.NewTextHandler(io.Discard, nil)))
-	h := New("secret", "forward_adjusted", svc, []provider.Provider{p}, nil).Handler()
+	h := New("forward_adjusted", svc, []provider.Provider{p}, nil).InProcessHandler()
 	tests := []struct {
 		name string
 		path string
@@ -845,7 +789,6 @@ func TestHighRiskQueryParameterUpperAndLowerBounds(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			req := httptest.NewRequest(http.MethodGet, tt.path, nil)
-			req.Header.Set("X-API-Key", "secret")
 			rec := httptest.NewRecorder()
 			h.ServeHTTP(rec, req)
 			if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), `"code":"VALIDATION_ERROR"`) {

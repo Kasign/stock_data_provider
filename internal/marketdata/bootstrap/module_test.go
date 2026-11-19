@@ -13,7 +13,6 @@ import (
 
 func testConfig() config.Config {
 	return config.Config{
-		APIKey:                  "test-market-data-api-key-at-least-32",
 		HTTPAddr:                "127.0.0.1:0",
 		RequestTimeout:          10 * time.Second,
 		ProviderTimeout:         5 * time.Second,
@@ -45,9 +44,6 @@ func TestNewExposesApplicationHTTPAndDiagnostics(t *testing.T) {
 	}
 	if module.InProcessHandler() == nil {
 		t.Fatal("InProcessHandler() returned nil")
-	}
-	if module.Handler() == nil {
-		t.Fatal("Handler() returned nil")
 	}
 	if module.Application() == nil {
 		t.Fatal("Application() returned nil")

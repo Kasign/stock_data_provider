@@ -136,19 +136,9 @@ func defaultProviderFile() providerFile {
 	}
 }
 
-// Load 加载独立 HTTP 部署配置，要求配置 Data API Key。
-func Load() (Config, error) {
-	return load(true, false)
-}
-
-// LoadForInProcess 加载同进程模块配置；外部入口认证由 Root Server 负责，因此不要求 Data API Key。
-func LoadForInProcess() (Config, error) {
-	return load(false, false)
-}
-
-// LoadForRoot 加载由 Root Server 注入 DB/Redis 的 Data 配置；不要求独立 Data 存储连接参数。
+// LoadForRoot 加载由 Root Server 注入 DB/Redis 的 Data 配置。
 func LoadForRoot() (Config, error) {
-	return load(false, true)
+	return load(true)
 }
 
 func load(requireHTTPAPIKey, allowRootInjectedStorage bool) (Config, error) {
@@ -227,7 +217,6 @@ func load(requireHTTPAPIKey, allowRootInjectedStorage bool) (Config, error) {
 		return Config{}, errors.New("BaoStock currently supports daily bars only; disable MARKET_DATA_BAOSTOCK_QUOTE_ENABLED")
 	}
 	cfg := Config{
-		HTTPAddr:                  get("MARKET_DATA_HTTP_ADDR", ":8091"),
 		RequestTimeout:            duration("MARKET_DATA_REQUEST_TIMEOUT", 5*time.Minute),
 		ProviderTimeout:           duration("MARKET_DATA_PROVIDER_TIMEOUT", 12*time.Second),
 		ProviderRetries:           integer("MARKET_DATA_PROVIDER_RETRIES", 1),
@@ -289,8 +278,6 @@ func load(requireHTTPAPIKey, allowRootInjectedStorage bool) (Config, error) {
 		RedisUsername:             strings.TrimSpace(os.Getenv("MARKET_DATA_REDIS_USERNAME")),
 		RedisPassword:             os.Getenv("MARKET_DATA_REDIS_PASSWORD"),
 		RedisDB:                   integer("MARKET_DATA_REDIS_DB", 0),
-		AutoMigrate:               boolEnv("MARKET_DATA_DB_AUTO_MIGRATE", true),
-		AllowNoStorage:            boolEnv("MARKET_DATA_ALLOW_NO_STORAGE", false),
 	}
 	var dsnErr error
 	cfg.MySQLDSN, dsnErr = resolveMySQLDSN(cfg.AllowNoStorage || allowRootInjectedStorage)
