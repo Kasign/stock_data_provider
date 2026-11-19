@@ -111,6 +111,10 @@ func TestRegistryMariaDBIntegration(t *testing.T) {
 		time.Minute, time.Minute, 1, 100, marketdataservice.ResilienceConfig{}, nil,
 	)
 	if err := dataService.Ready(ctx); err != nil {
+		var readinessFault *platformfault.Fault
+		if errors.As(err, &readinessFault) && readinessFault.Cause != nil {
+			t.Fatalf("Data readiness rejected the freshly migrated schema: %v (internal cause: %v)", err, readinessFault.Cause)
+		}
 		t.Fatalf("Data readiness rejected the freshly migrated schema: %v", err)
 	}
 	if _, err := db.ExecContext(ctx, "ALTER TABLE market_data_quotes DROP COLUMN turnover_rate"); err != nil {

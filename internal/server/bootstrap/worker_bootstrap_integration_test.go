@@ -3,8 +3,8 @@ package bootstrap
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"

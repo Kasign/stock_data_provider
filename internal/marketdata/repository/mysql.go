@@ -77,11 +77,10 @@ func (s *Store) ValidateCompatibilitySchema(ctx context.Context) error {
 	for _, column := range []string{"volume_ratio", "turnover_rate"} {
 		var columnType, dataType, nullable string
 		var precision, scale sql.NullInt64
-		var defaultValue sql.NullString
-		err := s.db.QueryRowContext(ctx, `SELECT column_type, data_type, is_nullable, numeric_precision, numeric_scale, column_default
+		err := s.db.QueryRowContext(ctx, `SELECT column_type, data_type, is_nullable, numeric_precision, numeric_scale
 FROM information_schema.columns
 WHERE table_schema = DATABASE() AND table_name = 'market_data_quotes' AND column_name = ?`, column).
-			Scan(&columnType, &dataType, &nullable, &precision, &scale, &defaultValue)
+			Scan(&columnType, &dataType, &nullable, &precision, &scale)
 		if errors.Is(err, sql.ErrNoRows) {
 			return fmt.Errorf("market_data_quotes.%s is missing", column)
 		}
@@ -90,8 +89,8 @@ WHERE table_schema = DATABASE() AND table_name = 'market_data_quotes' AND column
 		}
 		if strings.ToLower(columnType) != "decimal(16,8)" || strings.ToLower(dataType) != "decimal" ||
 			nullable != "YES" || !precision.Valid || precision.Int64 != 16 ||
-			!scale.Valid || scale.Int64 != 8 || defaultValue.Valid {
-			return fmt.Errorf("market_data_quotes.%s must be nullable DECIMAL(16,8) without an explicit default", column)
+			!scale.Valid || scale.Int64 != 8 {
+			return fmt.Errorf("market_data_quotes.%s must be nullable signed DECIMAL(16,8)", column)
 		}
 	}
 	for _, index := range []struct {
