@@ -2298,7 +2298,7 @@ async function refreshServices() {
 
   try {
     const checks = await Promise.all([
-      runHealthCheck(marketHealth, settings),
+      runHealthCheck(analysisLiveness, settings),
       runHealthCheck(analysisHealth, settings)
     ]);
     const marketState = serviceHealthState(checks[0]);
@@ -2496,7 +2496,7 @@ async function checkDraftConnectionFromSettings() {
     // 草稿检查只验证设置页中的未保存配置，不写入全局设置。
     settingsToCheck = mergeConnectionDraft(testedDraft, state.settings);
     const [marketResult, analysisResult] = await Promise.all([
-      runHealthCheck(marketHealth, settingsToCheck, 6000, controller.signal),
+      runHealthCheck(analysisLiveness, settingsToCheck, 6000, controller.signal),
       runHealthCheck(analysisHealth, settingsToCheck, 6000, controller.signal)
     ]);
     if (generation !== draftConnectionCheckGeneration) return;

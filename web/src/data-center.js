@@ -159,14 +159,14 @@ function renderDependency(selector, detailSelector, dependencies, name, analysis
   if (!analysisReady || !value) {
     setBadge(selector, "unknown", "未知");
     setText(detailSelector, analysisReady
-      ? "分析服务未返回此依赖的独立状态。"
-      : "分析服务就绪状态不可读取，当前无法确认依赖健康。");
+      ? "Root Server 未返回此依赖的独立状态。"
+      : "Root Server 就绪状态不可读取，当前无法确认依赖健康。");
     return "unknown";
   }
 
   if (["ok", "healthy", "ready", "connected"].includes(value)) {
     setBadge(selector, "healthy", "正常");
-    setText(detailSelector, "分析服务就绪接口报告：" + value);
+    setText(detailSelector, "Root Server 就绪接口报告：" + value);
     return "healthy";
   }
   if (["failed", "unhealthy", "error", "disconnected", "unavailable"].includes(value)) {
@@ -293,18 +293,13 @@ function renderProviderDiagnostics(payload) {
 
 function showProviderDiagnosticsFailure(result) {
   const root = $("#data-center-diagnostics-list");
-  setBadge("#data-center-diagnostics-status", result?.skipped ? "unknown" : "failed",
-    result?.skipped ? "需要行情服务 API Key" : "读取失败");
-  setText("#data-center-diagnostics-summary", result?.skipped
-    ? "配置 WebUI 访问行情服务所需的 API Key 后，仅读取服务端已有的进程内统计；不会测试同花顺 API Key 或请求上游。"
-    : "只读运行诊断接口读取失败：" + safeError(result?.error));
+  setBadge("#data-center-diagnostics-status", "failed", "读取失败");
+  setText("#data-center-diagnostics-summary", "只读运行诊断接口读取失败：" + safeError(result?.error));
   if (root) {
     root.replaceChildren();
     const empty = document.createElement("div");
     empty.className = "empty-row";
-    empty.textContent = result?.skipped
-      ? "未执行诊断请求，不代表 Provider 不可用。"
-      : "诊断记录暂不可读；不据此推断 Provider 当前健康状态。";
+    empty.textContent = "诊断记录暂不可读；不据此推断 Provider 当前健康状态。";
     root.append(empty);
   }
 }
@@ -699,23 +694,17 @@ function renderProviderProbeHistory(payload) {
   });
 }
 
-function showProviderProbeFailure(error, skipped = false) {
-  setBadge("#data-center-probe-status", skipped ? "unknown" : "failed",
-    "主动探测失败");
-  setText("#data-center-probe-summary", skipped
-    ? "未发起主动探测。请先配置行情服务 API Key；此凭据不是第三方 Provider API Key。"
-    : "主动探测请求失败：" + safeError(error));
+function showProviderProbeFailure(error) {
+  setBadge("#data-center-probe-status", "failed", "主动探测失败");
+  setText("#data-center-probe-summary", "主动探测请求失败：" + safeError(error));
   renderProbeCheckResults([], $("#data-center-probe-check-results"));
   renderProbeItems([], $("#data-center-probe-list"));
 }
 
-function showProviderProbeHistoryFailure(error, skipped = false) {
-  setBadge("#data-center-probe-history-status", skipped ? "unknown" : "failed",
-    "历史读取失败");
-  setText("#data-center-probe-history-summary", skipped
-    ? "配置行情服务 API Key 后才能读取探测历史。"
-    : "探测历史读取失败：" + safeError(error)
-      + "；当前探测结果仍可能已返回，历史存储不可用不会覆盖本次结果。");
+function showProviderProbeHistoryFailure(error) {
+  setBadge("#data-center-probe-history-status", "failed", "历史读取失败");
+  setText("#data-center-probe-history-summary", "探测历史读取失败：" + safeError(error)
+    + "；当前探测结果仍可能已返回，历史存储不可用不会覆盖本次结果。");
   const root = $("#data-center-probe-history-list");
   if (root) {
     root.replaceChildren();
@@ -746,10 +735,6 @@ export function bindDataCenter(getSettings) {
     let controller = null;
     try {
       const settings = settingsOverride || (typeof getSettings === "function" ? getSettings() : null);
-      if (!settings?.apiKey) {
-        showProviderProbeHistoryFailure(new Error("需先配置行情服务 API Key"), true);
-        return false;
-      }
       historyLoading = true;
       current = ++historyGeneration;
       historyController?.abort();
@@ -792,10 +777,6 @@ export function bindDataCenter(getSettings) {
     let controller = null;
     try {
       const settings = typeof getSettings === "function" ? getSettings() : null;
-      if (!settings?.apiKey) {
-        showProviderProbeFailure(new Error("需先配置行情服务 API Key"), true);
-        return false;
-      }
       const checks = Array.from(document.querySelectorAll('input[name="data-center-probe-check"]:checked'))
         .map((input) => input.value);
       if (!checks.length) {
@@ -904,12 +885,8 @@ export function bindDataCenter(getSettings) {
         runHealthCheck(marketHealth, settings, 6000, controller.signal),
         runHealthCheck(analysisLiveness, settings, 6000, controller.signal),
         runHealthCheck(analysisHealth, settings, 6000, controller.signal),
-        settings?.apiKey
-          ? runHealthCheck(getDataSources, settings, 6000, controller.signal)
-          : Promise.resolve({ ok: false, skipped: true, error: new Error("需先配置行情 API Key"), durationMs: 0 }),
-        settings?.apiKey
-          ? runHealthCheck(getDataSourceDiagnostics, settings, 6000, controller.signal)
-          : Promise.resolve({ ok: false, skipped: true, error: new Error("需先配置行情 API Key"), durationMs: 0 })
+        runHealthCheck(getDataSources, settings, 6000, controller.signal),
+        runHealthCheck(getDataSourceDiagnostics, settings, 6000, controller.signal)
       ]);
       if (current !== generation) return;
 
@@ -925,11 +902,6 @@ export function bindDataCenter(getSettings) {
       const analysisReadyState = showCheck("#data-service-analysis-ready", analysisReady, { ready: true });
       const timestamp = formatDateTime(new Date().toISOString());
 
-      setDetail("#data-service-market-detail", [
-        "检查时间 " + timestamp,
-        "存活 " + (marketLive.ok ? marketLive.durationMs + " ms" : safeError(marketLive.error)),
-        "就绪 " + (marketReady.ok ? marketReady.durationMs + " ms" : safeError(marketReady.error))
-      ]);
       setDetail("#data-service-analysis-detail", [
         "检查时间 " + timestamp,
         "存活 " + (analysisLive.ok ? analysisLive.durationMs + " ms" : safeError(analysisLive.error)),
@@ -943,15 +915,6 @@ export function bindDataCenter(getSettings) {
 
       if (sources.ok) {
         renderProviderCapabilities(sources.data);
-      } else if (sources.skipped) {
-        setBadge("#data-center-provider-status", "unknown", "需要 API Key");
-        setText("#data-center-provider-summary", "基础健康检查已执行；配置行情 API Key 后才能读取 Provider 能力清单。");
-        const root = $("#data-center-provider-list");
-        root.replaceChildren();
-        const empty = document.createElement("div");
-        empty.className = "empty-row";
-        empty.textContent = "未执行能力清单请求，不代表 Provider 不可用。";
-        root.append(empty);
       } else {
         setBadge("#data-center-provider-status", "failed", "读取失败");
         setText("#data-center-provider-summary", "Provider 能力清单读取失败：" + safeError(sources.error));
@@ -1071,7 +1034,7 @@ export function bindDataCenter(getSettings) {
       "#data-service-redis-status", "#data-center-provider-status"
     ].forEach((selector) => safeInvalidateStep(() => setBadge(selector, "unknown", "需重新检查")));
     [
-      "#data-service-webui-detail", "#data-service-market-detail", "#data-service-analysis-detail",
+      "#data-service-webui-detail", "#data-service-analysis-detail",
       "#data-service-mariadb-detail", "#data-service-redis-detail"
     ].forEach((selector) => safeInvalidateStep(() => setText(selector, "连接配置已变更，尚未重新检查。")));
     safeInvalidateStep(() => setText("#data-center-provider-summary", "连接配置已变更，尚未重新读取 Provider 能力清单。"));
