@@ -50,14 +50,13 @@ func marketSessionHTTPHandler() http.Handler {
 	svc := service.NewWithCapabilities(nil, nil, nil, cache.NewDisabled(), nil,
 		time.Second, time.Second, 120, 2000, service.ResilienceConfig{}, nil)
 	svc.SetTradingCalendarProviders([]provider.TradingCalendarProvider{marketSessionCalendarFixture{}})
-	return New("secret", "forward_adjusted", svc, nil, nil).Handler()
+	return New("forward_adjusted", svc, nil, nil).InProcessHandler()
 }
 
 func TestMarketSessionRouteReturnsScheduledPhase(t *testing.T) {
 	handler := marketSessionHTTPHandler()
 	path := "/api/v1/market/session?at=" + url.QueryEscape("2026-10-22T09:30:00+08:00")
 	req := httptest.NewRequest(http.MethodGet, path, nil)
-	req.Header.Set("X-API-Key", "secret")
 	recorder := httptest.NewRecorder()
 	handler.ServeHTTP(recorder, req)
 	if recorder.Code != http.StatusOK {
@@ -78,7 +77,6 @@ func TestMarketSessionRouteReturnsScheduledPhase(t *testing.T) {
 
 func TestMarketSessionRouteRejectsInvalidTimestamp(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/market/session?at=not-a-timestamp", nil)
-	req.Header.Set("X-API-Key", "secret")
 	recorder := httptest.NewRecorder()
 	marketSessionHTTPHandler().ServeHTTP(recorder, req)
 	if recorder.Code != http.StatusBadRequest {

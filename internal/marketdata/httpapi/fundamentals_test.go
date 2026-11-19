@@ -39,7 +39,7 @@ func TestFundamentalsRouteRequiresExplicitPeriod(t *testing.T) {
 	p := fundamentalsHTTPProvider{}
 	svc := service.New([]provider.Provider{p}, cache.NewDisabled(), nil, time.Second, time.Minute, 120, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	svc.SetFundamentalsProviders([]provider.FundamentalsProvider{p})
-	h := New("secret", "forward_adjusted", svc, []provider.Provider{p}, nil).Handler()
+	h := New("forward_adjusted", svc, []provider.Provider{p}, nil).InProcessHandler()
 	for _, tc := range []struct {
 		path         string
 		status       int
@@ -54,7 +54,6 @@ func TestFundamentalsRouteRequiresExplicitPeriod(t *testing.T) {
 		{"/api/v1/stocks/600519/fundamentals?year=2026&quarter=2&as_of=", http.StatusBadRequest, "as_of must be a single RFC3339 timestamp"},
 	} {
 		req := httptest.NewRequest(http.MethodGet, tc.path, nil)
-		req.Header.Set("X-API-Key", "secret")
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, req)
 		if w.Code != tc.status {
@@ -94,10 +93,9 @@ func TestFundamentalsRouteRejectsFutureReportPeriod(t *testing.T) {
 	p := fundamentalsHTTPProvider{}
 	svc := service.New([]provider.Provider{p}, cache.NewDisabled(), nil, time.Second, time.Minute, 120, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	svc.SetFundamentalsProviders([]provider.FundamentalsProvider{p})
-	h := New("secret", "forward_adjusted", svc, []provider.Provider{p}, nil).Handler()
+	h := New("forward_adjusted", svc, []provider.Provider{p}, nil).InProcessHandler()
 	path := fmt.Sprintf("/api/v1/stocks/600519/fundamentals?year=%d&quarter=%d", now.Year(), futureQuarter)
 	req := httptest.NewRequest(http.MethodGet, path, nil)
-	req.Header.Set("X-API-Key", "secret")
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, req)
 	if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), "fundamental report period must not be in the future") {
