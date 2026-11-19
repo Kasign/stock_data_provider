@@ -543,7 +543,6 @@ func TestYahooFinanceQuoteReportsUnavailableAmountAndMissingName(t *testing.T) {
 	}
 }
 
-
 func TestYahooFinanceRawDailyBarsRetainExactJSONDecimals(t *testing.T) {
 	loc := yahooChinaLocation()
 	timestamp := time.Date(2026, 10, 20, 0, 0, 0, 0, loc).Unix()
