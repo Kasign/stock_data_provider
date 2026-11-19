@@ -149,3 +149,9 @@ Root Server 的 Data Module 构造、共享资源注入、Migration Registry、I
 - 必须解决：CalendarRef 与实际 DailyBars 质量评估结果同一性传播；ChangePercent 精确来源；原始 token scale evidence；Tushare/Yahoo QFQ/HFQ 精确调整；Amount 单位证据；ProviderTime/provider_data_version 缺失语义。
 - DailyBars v2 必须同时覆盖 Application Port 与 HTTP Schema 的版本化 DTO，并通过 Research Evidence / Quant Consumer Contract Test；不得修改现有 v1 number/float64。
 - DATA-CTR-005/007 和 QNT-CTR-003 继续 deferred，直至项目级重新进入条件满足。
+
+
+## RepairAll PIT 日历首轮 CI 格式问题（2026-11-19）
+
+- SHA dc866b3595fb49594446b15a9b8084c754c70a19 的所有功能测试和构建步骤均通过，唯一失败为新增 MariaDB 集成测试前多一行空行触发 gofmt。
+- 已删除多余空行；新 SHA 需重新完整验收。

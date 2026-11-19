@@ -154,8 +154,8 @@ func (s *DataService) TradingCalendar(ctx context.Context, rawStartDate, rawEndD
 	return best, false, nil
 }
 
-// TradingCalendarAsOf reads only an immutable calendar version already observed by asOf.
-// It deliberately does not consult cache or live Providers, preventing future calendar facts from leaking into PIT.
+// TradingCalendarAsOf 只读取 asOf 时点前已观察到的不可变日历版本。
+// 不访问当前缓存或实时 Provider，避免未来日历事实泄漏到 PIT。
 func (s *DataService) TradingCalendarAsOf(ctx context.Context, rawStartDate, rawEndDate string, asOf time.Time) (*model.TradingCalendarSnapshot, error) {
 	if s == nil || s.store == nil || !s.store.Configured() {
 		return nil, errors.New("immutable trading-calendar storage is unavailable")

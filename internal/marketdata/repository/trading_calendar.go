@@ -148,8 +148,8 @@ FROM market_data_trading_calendar_snapshots WHERE calendar_ref=?`, calendarRef).
 	return snapshot, nil
 }
 
-// GetTradingCalendarSnapshotAsOf returns the latest exact-range calendar version observed by asOf.
-// It never calls a Provider and never substitutes a newer current calendar.
+// GetTradingCalendarSnapshotAsOf 按精确市场和日期区间读取 asOf 时点已观察到的最新不可变日历版本。
+// 只读取 Repository，不调用 Provider，也不使用更新的当前日历替代。
 func (s *Store) GetTradingCalendarSnapshotAsOf(ctx context.Context, market, startDate, endDate string, asOf time.Time) (*model.TradingCalendarSnapshot, error) {
 	if s == nil || s.db == nil {
 		return nil, errors.New("MariaDB trading-calendar snapshot storage disabled")

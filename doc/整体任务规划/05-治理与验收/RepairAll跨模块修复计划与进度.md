@@ -426,3 +426,10 @@ RA009 代码关闭条件已满足：Server 路由认证矩阵、CSRF、WebUI 请
 - 设计审查识别到真实接线缺口：CalendarRef 已在 Data 内部独立持久化，但 DailyBars 质量评估使用的同一 CalendarRef 尚未随 DailyBars Application Snapshot 返回；不得通过第二次独立日历查询补造同一性。
 - 当前 v2 仍有 ChangePercent 精确值、lexical scale evidence、Tushare/Yahoo QFQ/HFQ 精确调整、ProviderTime/逐行数据版本及 Amount 单位证据等缺口。
 - 草案不等于冻结；不修改项目级登记簿，DATA-CTR-005/007 与 QNT-CTR-003 继续 deferred。
+
+
+### 28.16 PIT 日历修复首轮 CI 与格式修正（2026-11-19）
+
+- SHA dc866b3595fb49594446b15a9b8084c754c70a19 的根模块测试、跨模块测试、Worker MariaDB/Redis、go-core、Compose、WebUI 测试和镜像构建全部通过。
+- 首轮汇总唯一失败是 trading_calendar_integration_test.go 新增测试前多一个空行导致 gofmt 门禁失败；已修正，不调整门禁或测试标准。
+- 新 SHA 完整 Integration CI 待执行。
