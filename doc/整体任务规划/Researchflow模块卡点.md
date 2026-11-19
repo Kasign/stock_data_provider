@@ -2,8 +2,8 @@
 
 更新时间：2026-11-19  
 对应分支：`feat/researchflow`  
-最近一次已通过代码验收 SHA：`ebf54dfae766e6c95d0470158f88fb570b1a1901`  
-最近一次代码变更 SHA：`ebf54dfae766e6c95d0470158f88fb570b1a1901`（Tokenizer / Tool Policy 输入 UTF-8 校验；Researchflow 专项 CI 通过）  
+最近一次已通过 Researchflow 专项验收 SHA：`555a16726bfa5e48968b7f23b08e1ba6de7706d9`  
+最近一次代码变更 SHA：`c7849cf5ad44dfa3a702844c14eb657f864d7512`（ComposeResult 嵌套输入 UTF-8 校验；Researchflow 专项 CI 通过）  
 维护范围：记录 Researchflow 推进所依赖的跨模块决策、契约同步和验收阻塞；不替代模块任务状态文档。
 
 ## 1. 当前卡点
@@ -133,7 +133,7 @@
 
 | 分支 | 当前 HEAD | 对 Researchflow 的影响 |
 |---|---|---|
-| `feat/researchflow` | `555a16726bfa5e48968b7f23b08e1ba6de7706d9` | 本轮补齐 ComposeResult 嵌套输入 UTF-8 边界；专项 CI 已通过 |
+| `feat/researchflow` | 代码验收 SHA `555a16726bfa5e48968b7f23b08e1ba6de7706d9`；当前分支 HEAD 为文档提交 `29dcec881ccedc0f6e3a34f6e3fc62d02b9c5f29` | 本轮补齐 ComposeResult 嵌套输入 UTF-8 边界；专项 CI 已通过 |
 | `feat/server` | `c8a246505eefda0661a15d593def56ddbb5b0711` | Worker 生产 Executor 仍只装配 News Search；未发现 Research/Quant/LLM Stage/Adapter 注册 |
 | `feat/research` | `0d9dc0651a6e0bda3888d695f2ffec5545c248bd` | 本轮相对前次仅调整 Diagnostics 测试样本；Context/Evidence/Claim 生产消费仍需真实授权调用方 |
 | `feat/quant` | `992a10d1837dad8e695f9e9d7b6f459ebdcc3eb9` | 本轮增加 GetResult 主体解析后的 Context 取消检查；RiskDecision 契约未变化，RF-BLOCK-008 仍未解除 |
