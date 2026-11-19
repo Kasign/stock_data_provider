@@ -430,8 +430,8 @@ func TestEventAndClaimChecksDoNotExposeDomainText(t *testing.T) {
 	}
 
 	checks := []struct {
-		name string
-		build func() (platformdiagnostics.Check, error)
+		name      string
+		build     func() (platformdiagnostics.Check, error)
 		forbidden []string
 	}{
 		{
