@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 var (
@@ -49,8 +50,9 @@ func NewRegistry(definitions []Definition, validator SchemaValidator) (*Registry
 	registry := &Registry{definitions: make(map[string]Definition, len(definitions)), validator: validator}
 	for _, definition := range definitions {
 		definition.Name = strings.TrimSpace(definition.Name)
-		if definition.Name == "" || len(definition.Name) > 128 || definition.Timeout <= 0 || definition.MaxCallsPerRun <= 0 ||
-			len(definition.ParametersJSON) == 0 || !json.Valid(definition.ParametersJSON) {
+		if definition.Name == "" || !utf8.ValidString(definition.Name) || len(definition.Name) > 128 ||
+			!utf8.ValidString(definition.Description) || definition.Timeout <= 0 || definition.MaxCallsPerRun <= 0 ||
+			len(definition.ParametersJSON) == 0 || !utf8.Valid(definition.ParametersJSON) || !json.Valid(definition.ParametersJSON) {
 			return nil, fmt.Errorf("%w: tool identity, schema, timeout and call limit are required", ErrInvalidPolicy)
 		}
 		if err := validator.ValidateSchema(definition.ParametersJSON); err != nil {
@@ -65,7 +67,7 @@ func NewRegistry(definitions []Definition, validator SchemaValidator) (*Registry
 		}
 		sort.Strings(scopes)
 		for i, scope := range scopes {
-			if strings.TrimSpace(scope) == "" || (i > 0 && scopes[i-1] == scope) {
+			if !utf8.ValidString(scope) || strings.TrimSpace(scope) == "" || (i > 0 && scopes[i-1] == scope) {
 				return nil, fmt.Errorf("%w: invalid or duplicate scope for tool %q", ErrInvalidPolicy, definition.Name)
 			}
 		}
@@ -116,9 +118,12 @@ func (r *Registry) Authorize(intent Intent, budget Budget) (AuthorizedCall, erro
 	intent.CallID = strings.TrimSpace(intent.CallID)
 	intent.Name = strings.TrimSpace(intent.Name)
 	budget.IdempotencyKey = strings.TrimSpace(budget.IdempotencyKey)
-	if intent.CallID == "" || len(intent.CallID) > 256 || intent.Name == "" ||
-		budget.IdempotencyKey == "" || len(budget.IdempotencyKey) > 256 ||
-		!validUTCTime(budget.Now) || !validUTCTime(budget.RunDeadline) || !budget.RunDeadline.After(budget.Now) {
+	if intent.CallID == "" || !utf8.ValidString(intent.CallID) || len(intent.CallID) > 256 ||
+		intent.Name == "" || !utf8.ValidString(intent.Name) ||
+		budget.IdempotencyKey == "" || !utf8.ValidString(budget.IdempotencyKey) || len(budget.IdempotencyKey) > 256 ||
+		!validUTF8Strings(budget.GrantedScopes) ||
+		!validUTCTime(budget.Now) || !validUTCTime(budget.RunDeadline) || !budget.RunDeadline.After(budget.Now) ||
+		!validUTF8Strings(budget.GrantedScopes) {
 		return AuthorizedCall{}, ErrInvalidToolIntent
 	}
 	definition, ok := r.definitions[intent.Name]
@@ -139,7 +144,7 @@ func (r *Registry) Authorize(intent Intent, budget Budget) (AuthorizedCall, erro
 		budget.TimeoutUsed < 0 || budget.TimeoutUsed >= budget.MaxTotalTimeout {
 		return AuthorizedCall{}, ErrCallBudgetExceeded
 	}
-	if len(intent.ArgumentsJSON) == 0 || !json.Valid([]byte(intent.ArgumentsJSON)) {
+	if len(intent.ArgumentsJSON) == 0 || !utf8.ValidString(intent.ArgumentsJSON) || !json.Valid([]byte(intent.ArgumentsJSON)) {
 		return AuthorizedCall{}, ErrInvalidToolIntent
 	}
 	if err := r.validator.Validate(definition.ParametersJSON, []byte(intent.ArgumentsJSON)); err != nil {
@@ -163,4 +168,13 @@ func (r *Registry) Authorize(intent Intent, budget Budget) (AuthorizedCall, erro
 		ArgumentsJSON:  append(json.RawMessage(nil), intent.ArgumentsJSON...),
 		IdempotencyKey: budget.IdempotencyKey, Timeout: timeout, Deadline: deadline,
 	}, nil
+}
+
+func validUTF8Strings(values []string) bool {
+	for _, value := range values {
+		if !utf8.ValidString(value) {
+			return false
+		}
+	}
+	return true
 }

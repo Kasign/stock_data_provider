@@ -160,3 +160,58 @@ func TestToolDefinitionsForOnlyAdvertisesScopedToolsWithinBudget(t *testing.T) {
 		t.Fatalf("tool advertised after global budget exhausted: %+v", got)
 	}
 }
+
+func TestNewRegistryRejectsInvalidUTF8DefinitionFields(t *testing.T) {
+	invalid := string([]byte{0xff})
+	base := Definition{
+		Name: "research.lookup", Description: "lookup",
+		ParametersJSON: []byte(`{"type":"object"}`),
+		RequiredScopes: []string{"research:read"},
+		Timeout: time.Second, MaxCallsPerRun: 1,
+	}
+	cases := []struct {
+		name string
+		edit func(*Definition)
+	}{
+		{name: "name", edit: func(v *Definition) { v.Name = invalid }},
+		{name: "description", edit: func(v *Definition) { v.Description = invalid }},
+		{name: "schema", edit: func(v *Definition) { v.ParametersJSON = []byte(`{"description":"` + invalid + `"}`) }},
+		{name: "scope", edit: func(v *Definition) { v.RequiredScopes = []string{invalid} }},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			definition := base
+			definition.RequiredScopes = append([]string{}, base.RequiredScopes...)
+			testCase.edit(&definition)
+			if _, err := NewRegistry([]Definition{definition}, schemaValidatorFunc(func(_, _ []byte) error { return nil })); !errors.Is(err, ErrInvalidPolicy) {
+				t.Fatalf("invalid UTF-8 definition should be rejected, got %v", err)
+			}
+		})
+	}
+}
+
+func TestAuthorizeRejectsInvalidUTF8IntentAndTrustedMetadata(t *testing.T) {
+	invalid := string([]byte{0xff})
+	now := time.Date(2026, 11, 9, 9, 0, 0, 0, time.UTC)
+	baseIntent := Intent{CallID: "call-1", Name: "research.lookup", ArgumentsJSON: `{"symbol":"600000.SH"}`}
+	cases := []struct {
+		name string
+		edit func(*Intent, *Budget)
+	}{
+		{name: "call id", edit: func(v *Intent, _ *Budget) { v.CallID = invalid }},
+		{name: "tool name", edit: func(v *Intent, _ *Budget) { v.Name = invalid }},
+		{name: "arguments", edit: func(v *Intent, _ *Budget) { v.ArgumentsJSON = `{"symbol":"` + invalid + `"}` }},
+		{name: "idempotency key", edit: func(_ *Intent, b *Budget) { b.IdempotencyKey = invalid }},
+		{name: "granted scope", edit: func(_ *Intent, b *Budget) { b.GrantedScopes = []string{invalid} }},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			intent := baseIntent
+			budget := validBudget(now)
+			testCase.edit(&intent, &budget)
+			if _, err := testRegistry(t).Authorize(intent, budget); !errors.Is(err, ErrInvalidToolIntent) {
+				t.Fatalf("invalid UTF-8 intent or metadata should be rejected, got %v", err)
+			}
+		})
+	}
+}
