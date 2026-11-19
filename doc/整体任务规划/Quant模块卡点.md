@@ -48,3 +48,12 @@ Quant 不在 `internal/quant/**` 实现 SQL/Redis、通用 Storage、认证、�
 - 外部依赖未满足时标记 blocked/deferred/not_comparable，不把 skipped 当 pass。
 - 责任方交付必须关联契约编号、文档或代码路径、精确 SHA 和验收证据。
 - Quant 不修改其他模块分支；跨模块实现由对应 Owner 完成，跨模块验收由 Integration/Server 组织。
+
+
+## RepairAll Quant→Researchflow→Server 结果链路审查（2026-11-19）
+
+- 审查基线：repair_all SHA b52c8afde2f2e32fca498a78987d34f96fba4335。
+- Quant application 当前仅提供 GetResult；未发现计算 Application Facade。QNT-014 保持未完成，不能把纯函数组合成生产计算入口。
+- Quant result 仅有 Save Repository Port 与 MemoryRepository；GetResult 所需 AuthorizedResultReader、PrincipalResolver、AccessAuditor 仍为注入端口，未发现生产 Storage/授权/审计 Adapter。QNT-013 生产闭环未完成。
+- Envelope 仅接受 trend/risk 1.0.0；IndicatorPayload 类型存在但未注册，Factor Payload 未注册。与当前正式 Registry/Schema/数据契约状态一致，保持 fail-closed，不放宽 DecodePayload。
+- 解锁责任：Quant 完成 QNT-001/002 正式 Registry/Payload 和 QNT-014 Facade；Server/Platform 完成生产 Repository、授权一致性、审计持久化与 Root 注入；Data 解锁 DATA-CTR-005/007 后才可推进相应输入链路。

@@ -197,3 +197,12 @@
 - 判定：装配构造 PASS（代码存在）；生产消费链路 NOT_COMPARABLE（无真实消费者/调用记录）。不得为了接上线创建无场景 Handler 或绕过 Researchflow Stage Provider。
 - 解锁条件：Researchflow/Server 明确实际消费场景、输入 DTO、可信 Principal/CallerRef 注入和执行上下文，再由组合根接线并做集成验收。
 - 本结论来自 repair_all 审查基线 5334043ea8e1abc2c4006c371a3f95b123098946；不代表 feat/server 分支已同步。
+
+
+## RepairAll Quant 生产消费链路复核（2026-11-19）
+
+- Quant GetResult 只定义授权读取用例及 PrincipalResolver、AuthorizedResultReader、AccessAuditor 端口；当前未发现 Server 对应生产实现和 Root 注入。
+- Quant 结果 Repository 当前只有 Save Port 和 MemoryRepository；不能将 MemoryRepository 作为生产持久化验收。
+- Server bootstrap 当前没有 Quant 相关调用；Researchflow Worker 仅注入 News Search Stage Executor/Output Registry。当前没有 Quant Stage 生产消费者。
+- 该缺口由 Quant QNT-013/QNT-014 的公开能力、生产 Adapter 和明确 Stage 场景共同决定；Server 不应提前创建空壳 Worker/Handler，也不复制 Quant 存储或授权规则。
+- 本结论只针对 repair_all 审查基线 b52c8afde2f2e32fca498a78987d34f96fba4335，不代表 feat/server 分支同步。

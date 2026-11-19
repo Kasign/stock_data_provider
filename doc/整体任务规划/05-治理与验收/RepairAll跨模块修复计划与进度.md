@@ -24,8 +24,8 @@
 |---|---|---|---|
 | P0 | Data Migration 定义、Platform 只读校验、Server Root 统一注册与启动路径 | Data / Platform / Server | 代码与完整 CI 验收通过；生产启停演练待完成 |
 | P0 | News Search Candidates Validator 与冻结 Schema 一致性 | News / Researchflow | 已修复，完整 Integration CI 已通过 |
-| P1 | Data、News 到 Research 的数据/时间/Evidence 契约和真实消费边界 | Data / News / Research | 待系统 Review |
-| P1 | Quant Application Port、结果 Envelope、Researchflow 消费接口 | Quant / Researchflow / Server | 待系统 Review |
+| P1 | Data、News 到 Research 的数据/时间/Evidence 契约和真实消费边界 | Data / News / Research / Server | Review 完成；DATA-CTR-007 deferred、NEWS available_at 与真实消费者仍阻塞 |
+| P1 | Quant Application Port、结果 Envelope、Researchflow 消费接口 | Quant / Researchflow / Server | Review 完成；QNT-014/QNT-013 与生产 Stage/Root 装配未闭环 |
 | P1 | Research Context/Evidence 与 Researchflow Run/Stage/Result 语义及唯一持久化 Owner | Research / Researchflow / Server | 待系统 Review |
 | P2 | LLM Gateway 生产 Provider、Secret、Capability Evidence 与真实调用 | LLM / Platform / Server / Researchflow | 待系统 Review |
 | P2 | Notification 事件、Recipient、Fanout/Delivery、Worker 和恢复链 | Notification / Platform / Server | 待系统 Review |
@@ -58,37 +58,16 @@ P0 原始问题及实施约束作为审计记录保留；当前状态以第 7、
 
 ## 5. 当前执行任务与边界
 
-### RA-CROSS-REVIEW-004：Quant → Researchflow → Server 结果生产与消费链路 Review
+### RA-CROSS-REVIEW-005：Research / Researchflow Context、Evidence 与 Run/Stage 生产语义 Review
 
-- 状态：IN_PROGRESS（已登记；先只读审查契约、生产代码、装配和测试）。
-- 目标：确认 Quant 已有计算/结果能力哪些可由 Researchflow 真实消费；核验公开 Application Port、结果 Envelope/Registry、Researchflow Stage Provider、Server Root DI、生产 Storage/Authorization/Idempotency 的真实连接状态。
-- 范围：Quant、Researchflow、Server、Platform（仅在确有公共能力归属问题时）；不扩展到 Research/Data/News/LLM/Notification/WebUI 的其他工作。
-- 首要核对：QNT-CTR-001/002/004/005、FLOW-CTR-001/003/004、GOV-CTR-002/006、PLAT-CTR-001/003，以及 Quant 模块总规划和 Researchflow 模块卡点。
-- 重点检查：
-  1. Quant 计算 Application Facade 是否存在，输入是否绑定 Run.system_as_of、可信 Principal、Data SnapshotRef 和质量门禁。
-  2. Indicator/Factor/Trend/Risk 的 Envelope 注册组合是否与 Registry、Schema、Golden 一致；未注册类型是否 fail closed。
-  3. Quant Save/GetResult、Manifest、Repository、授权读取与 AccessAudit 的生产实现是否存在；幂等/冲突是否有事务边界。
-  4. Researchflow 是否存在真正的 Quant Stage Provider/Adapter，而不只是 Quant Result Validator；Stage 输入输出、ResultSummary 与引用身份是否闭合。
-  5. Server 是否装配 Quant Application、生产 Repository/授权/审计 Adapter、Researchflow Stage，并在 Worker/API 角色正确注入。
-  6. 失败、降级、不可比较状态是否按领域语义传播；不把测试 Fixture、MemoryRepository 或 Schema 存在等同生产验收。
-- 诊断判定：每个链路分别记录 PASS / DEGRADED / FAIL / NOT_COMPARABLE / DEFERRED，并附代码路径、契约条款、测试/CI 精确 SHA。
-- 修复门禁：只有确认具体缺陷、责任模块和调用场景后才修改；多模块接口变更必须同步契约、提供方、消费方、Server 装配及测试。不得提前创建没有真实调用场景的 Facade/Stage/HTTP API。
-- 完成条件：产出链路矩阵和卡点责任表；能独立闭环的真实缺陷完成修复及针对性测试；剩余依赖进入对应模块卡点和本总规划。完整 CI 以变更后精确 SHA 验收。
-
-### 独立外部任务（不阻塞本轮 Review）
-
-- Data Migration enabled/disabled 的生产数据库启停演练：需要真实部署环境和运维窗口。
-- News 合格 available_at 来源证据：保持 NEWS-BLK-07 / SHELVED。
-- Data Snapshot/Evidence 契约：DATA-CTR-007 保持 deferred，不在实现层自行冻结字段语义。
-
-## 14. RA-CROSS-REVIEW-003 当前基线校准（2026-11-19）
-
-- repair_all 当前 HEAD：5334043ea8e1abc2c4006c371a3f95b123098946；最新提交为健康数据库 Migration disabled 启动路径回归测试。
-- 最新完整 Integration CI：Run [44456052937](https://github.com/Kasign/stock_data_provider/actions/runs/44456052937)，head SHA 与当前 HEAD 精确一致，结论 success。
-- 本轮新增测试证明健康物理 Schema 在 Migration disabled 时仍可正常启动；与此前缺列 fail-closed 测试互补，避免只验证拒绝路径而遗漏合法启动误拒绝。
-- 当前唯一执行任务切换为 RA-CROSS-REVIEW-003：Data / News → Research 消费链路 Review。Research 模块现有 RSC-001/002/003/007/008 状态和项目级 DATA/NEWS 卡点作为输入，不重复其已通过的模块测试。
-- 本任务先只读核对契约、生产代码、Server 装配和现有测试；发现真实缺陷再进入修复。不得以模块单测或历史 SHA 推断当前聚合分支真实生产链路已验收。
-- 文档状态权威：本文件记录 repair_all 聚合任务；模块内部任务状态仍以各自模块总任务规划和唯一当前任务状态文档为准。
+- 状态：PLANNED（前置任务 RA-CROSS-REVIEW-003/004 已完成审查；本任务尚未开始代码修改）。
+- 目标：核对 Research Context/Evidence/Event 与 Researchflow Run/Stage/Attempt/ResultSummary 的时间、身份、授权、引用、持久化和消费边界，确认唯一数据 Owner 与真实调用链。
+- 范围：Research、Researchflow、Server；仅在公共时间/身份/诊断原语确有归属问题时涉及 Platform。
+- 首要核对：RSC-CTR-001/002、FLOW-CTR-001/003/004、GOV-CTR-002/006、SRV-CTR-001；Research/Researchflow 当前任务文档及 Server Root 生产装配。
+- 重点检查：Run.system_as_of 是否贯穿 Context/Evidence/Stage/LLM；ResearchContext 创建/读取授权是否由 Owner 当前复核；Stage 输入输出引用是否与 ResultSummary/不可变 StageOutput 资源一致；Event/Claim 版本血缘是否真实可解析；Research/Researchflow 的持久化 Owner 是否唯一；Worker 重试/恢复是否保留身份、时间与引用一致性。
+- 验收标准：每条链路记录 PASS / DEGRADED / FAIL / NOT_COMPARABLE / DEFERRED，附代码路径、契约、测试和精确 SHA；无真实调用或来源证据不得标记生产 PASS。
+- 修复门禁：先核对上下游调用链，再在责任模块修复；不复制 Repository、授权、时钟、Worker、Diagnostics 或 Stage Provider；不新增无调用场景接口。
+- 完成条件：真实缺陷修复并通过针对性测试；跨模块契约、调用方、实现方、Server 装配与测试一致；对应模块卡点和总规划同步；变更后精确 SHA 完整 CI 验收。
 
 ## 14. RA-CROSS-REVIEW-003 基线与验收证据（2026-11-19）
 
@@ -99,10 +78,25 @@ P0 原始问题及实施约束作为审计记录保留；当前状态以第 7、
 - 本文件为 repair_all 聚合任务状态权威；模块职责与模块内部任务状态仍以各自模块总规划和唯一当前任务文档为准。
 
 
-## 15. RA-CROSS-REVIEW-004 登记（2026-11-19）
+## 15. RA-CROSS-REVIEW-004 结果生产与消费审查结论（2026-11-19）
 
-- 前置任务 RA-CROSS-REVIEW-003 已完成代码/契约/装配审查并同步 Data、Research、Server 卡点；其生产数据与消费闭环仍按 NOT_COMPARABLE/DEFERRED 记录。
-- 新任务只审查 Quant 结果生产到 Researchflow Stage 消费，再到 Server 组合根的链路；不因 resultvalidation/quant.go 存在就推定存在可执行 Quant Stage。
-- 本任务开始基线：repair_all HEAD 00017d36a9b6ed76d0f595eae1211aaba306e490。
-- 已初步确认代码树含 internal/quant/application/get_result.go、internal/quant/result/*、internal/researchflow/resultvalidation/quant.go，但尚未确认生产计算 Facade、Quant Stage Provider、Server Root Quant 装配及生产 Reader/Writer/Authorization/Audit Adapter；这些必须通过逐文件调用链核对后判定。
-- 本任务不新增接口、不修改生产代码，直至 Review 证明存在明确缺陷且确定责任归属。
+- 审查代码基线：repair_all HEAD b52c8afde2f2e32fca498a78987d34f96fba4335；本轮未修改生产代码。
+- Quant 计算入口：internal/quant/application/ 仅有 GetResult 授权读取用例，没有 Indicator/Factor/Trend/Risk 计算 Application Facade；QNT-014 未完成。
+- Quant 结果持久化：internal/quant/result/ 仅有 Repository Save Port 与 MemoryRepository；GetResult 依赖 AuthorizedResultReader、PrincipalResolver、AccessAuditor Port，repair_all 代码树未发现生产 SQL Repository、生产授权 Reader 或审计持久化 Adapter。QNT-013 生产装配待完成。
+- Quant Envelope：当前 DecodePayload/BuildEnvelope 仅注册 trend/1.0.0 与 risk/1.0.0。IndicatorPayload 类型虽存在，但没有进入受支持联合类型；Factor Payload 未注册。该 fail-closed 行为与未完成的 Indicator 正式 Registry Entry/Factor deferred 状态一致，不是应放宽的 Bug。
+- Researchflow：resultvalidation/quant.go 只负责对已授权取得的 Quant Envelope 做强类型校验/映射，NewQuantPayloadRegistry 当前仅支持 trend/risk；FromQuantEnvelope 明确不负责授权。它不是可执行 Quant Stage Provider。
+- Server：Researchflow Runtime 当前将唯一 StageExecutor/StageOutputRegistry 注入 Worker；researchflowComposition 仅包含 News Search Stage，Stage Output Registry 仅注册 news.search_candidates。bootstrap.go 无 Quant 装配调用。不存在 Quant Stage 的生产接线。
+- 判定：
+  - Quant 已有 Trend/Risk Envelope 类型与读取逻辑：代码机制 PASS；生产存储/授权/审计 NOT_COMPARABLE。
+  - Indicator：DEFERRED（正式 Registry/Envelope 注册前保持拒绝）。
+  - Factor：DEFERRED（QNT-CTR-003、DATA-CTR-005/007 未解锁）。
+  - Researchflow Quant Validator：代码机制 PASS；无 Quant Stage 的生产调用，NOT_COMPARABLE。
+  - Server Quant 组合装配：NOT_COMPARABLE（未实现；依赖 Quant Facade/生产 Adapter 和明确 Stage 场景）。
+- 本轮未发现可在现有契约和模块职责内安全修复的局部代码缺陷。不得把纯函数、Validator、MemoryRepository 或类型声明拼成伪生产链路。
+- 卡点已同步至 Quant、Researchflow、Server 项目级卡点和模块当前任务记录；模块分支未被单独推送。
+
+## 16. RA-CROSS-REVIEW-005 登记（2026-11-19）
+
+- 前置审查 RA-CROSS-REVIEW-003/004 均已完成；生产消费证据缺口继续保持 DEFERRED/NOT_COMPARABLE。
+- 本任务聚焦 Research 与 Researchflow 的 Context/Evidence/Run/Stage/Result 生产语义和唯一持久化 Owner，防止跨模块重复存储或时间/身份语义漂移。
+- 当前状态 PLANNED；开始执行前重新核对 repair_all 最新 HEAD、Actions 和总览计划。

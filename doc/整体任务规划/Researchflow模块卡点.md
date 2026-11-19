@@ -150,3 +150,13 @@
 - 代码 SHA：`c7849cf5ad44dfa3a702844c14eb657f864d7512`；格式修正 SHA：`555a16726bfa5e48968b7f23b08e1ba6de7706d9`。
 - Run [44440261770](https://github.com/Kasign/stock_data_provider/actions/runs/44440261770)：Researchflow 专项 format/tests/race/vet、WorkerStore、MariaDB lifecycle integration 已通过；Run 最终 completed/success：根模块 Test/Race/Vet、Researchflow format/tests/race/vet、WorkerStore unit/race/vet、Researchflow MariaDB lifecycle integration 均 success；News/Market Data/Compose 相关 Jobs 为 skipped，不代表这些领域的真实集成通过。
 - 本轮没有改动其他分支；没有新增占位 Stage/Adapter。Server 尚未装配 Research/Quant/LLM 的事实仍成立。
+
+
+## RepairAll Quant→Researchflow→Server 生产装配审查（2026-11-19）
+
+- 审查基线：repair_all SHA b52c8afde2f2e32fca498a78987d34f96fba4335。
+- Server bootstrap.go 当前无 Quant 相关装配调用；researchflowComposition 仅保存 newsStage，researchflowRuntime 将 newsStage.executor 与 newsStage.registry 注入 Worker。
+- news_search_stage.go 的 Stage Output Registry 仅注册 news.search_candidates；当前 StageExecutor 只处理 SearchCandidatesStageCode。
+- Researchflow resultvalidation/quant.go 是结果校验/映射能力，不是 StageExecutor，也不负责授权；不能据此认定 Quant Stage 已装配。
+- 判定：当前 Server/Researchflow 生产 Quant Stage 为 NOT_COMPARABLE（尚无生产 Stage 场景与提供方 Facade），不是 Root 装配漏接一段现成实现。
+- 解锁条件：Quant 提供正式计算 Facade、完整输入/输出契约与生产结果持久化/授权端口；明确 Researchflow Stage 输入参数、资源授权和结果引用；随后 Server 才能装配并进行 Worker 真实集成验收。
