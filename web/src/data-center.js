@@ -881,8 +881,6 @@ export function bindDataCenter(getSettings) {
 
       const checks = await Promise.all([
         runHealthCheck(checkWebUI, settings, 6000, controller.signal),
-        runHealthCheck(marketLiveness, settings, 6000, controller.signal),
-        runHealthCheck(marketHealth, settings, 6000, controller.signal),
         runHealthCheck(analysisLiveness, settings, 6000, controller.signal),
         runHealthCheck(analysisHealth, settings, 6000, controller.signal),
         runHealthCheck(getDataSources, settings, 6000, controller.signal),
@@ -896,8 +894,6 @@ export function bindDataCenter(getSettings) {
       setText("#data-service-webui-detail", webUi.ok
         ? "当前页面路径请求成功 · " + webUi.durationMs + " ms · " + formatDateTime(new Date().toISOString())
         : "当前页面路径检查失败 · " + safeError(webUi.error));
-      const marketLiveState = showCheck("#data-service-market-live", marketLive);
-      const marketReadyState = showCheck("#data-service-market-ready", marketReady, { ready: true });
       const analysisLiveState = showCheck("#data-service-analysis-live", analysisLive);
       const analysisReadyState = showCheck("#data-service-analysis-ready", analysisReady, { ready: true });
       const timestamp = formatDateTime(new Date().toISOString());
@@ -1029,7 +1025,6 @@ export function bindDataCenter(getSettings) {
     safeInvalidateStep(() => setBadge("#data-center-last-check", "unknown", "尚未检查"));
 
     [
-      "#data-service-webui-status", "#data-service-market-live", "#data-service-market-ready",
       "#data-service-analysis-live", "#data-service-analysis-ready", "#data-service-mariadb-status",
       "#data-service-redis-status", "#data-center-provider-status"
     ].forEach((selector) => safeInvalidateStep(() => setBadge(selector, "unknown", "需重新检查")));

@@ -108,12 +108,6 @@ async function request(base, path, { method = "GET", body, signal, timeoutMs = 0
   }
 }
 
-export function marketLiveness(settings, signal) {
-  return request(settings.analysisBase, "/healthz", { signal });
-}
-export function marketHealth(settings, signal) {
-  return request(settings.analysisBase, "/readyz", { signal });
-}
 export function analysisLiveness(settings, signal) {
   return request(settings.analysisBase, "/healthz", { signal });
 }
