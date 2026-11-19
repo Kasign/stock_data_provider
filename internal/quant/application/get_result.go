@@ -202,6 +202,9 @@ func (usecase *GetResult) Execute(ctx context.Context, resultID string) (result.
 		return result.Envelope{}, ErrResultUnavailable
 	}
 	now := usecase.now()
+	if err := ctx.Err(); err != nil {
+		return result.Envelope{}, err
+	}
 	if now.IsZero() || now.Location() != time.UTC {
 		return result.Envelope{}, ErrResultUnavailable
 	}
