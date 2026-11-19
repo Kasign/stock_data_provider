@@ -206,3 +206,12 @@
 - Server bootstrap 当前没有 Quant 相关调用；Researchflow Worker 仅注入 News Search Stage Executor/Output Registry。当前没有 Quant Stage 生产消费者。
 - 该缺口由 Quant QNT-013/QNT-014 的公开能力、生产 Adapter 和明确 Stage 场景共同决定；Server 不应提前创建空壳 Worker/Handler，也不复制 Quant 存储或授权规则。
 - 本结论只针对 repair_all 审查基线 b52c8afde2f2e32fca498a78987d34f96fba4335，不代表 feat/server 分支同步。
+
+
+## RepairAll RA-CROSS-REVIEW-005 Context Authorizer 装配复核（2026-11-19）
+
+- 审查基线：repair_all SHA 8afbba2a0a519f932063861085bbdc89f7e76fa8。
+- internal/server/bootstrap/research_news.go 创建 Research Application Service 时调用 NewService(contexts, evidence, authorizer, nil, nil)，未传可选 ContextAuthorizer。
+- Research Service 的 GetContext 对 ContextAuthorizer 缺失采取 fail-closed；当前没有真实 Context 消费者，因此该组合尚不能用于 Context 读取，但 News Evidence Importer 仍可使用其 Evidence 能力。
+- 不注入默认 Allow，不新增平行授权服务；先明确 Research Context 资源授权 Owner/策略和可信 CallerRef，再由 Server 装配真实 Authorizer。
+- 该状态属于待接入消费者和授权策略的组合根卡点，不把无调用场景的 Handler/Stage 当成修复。

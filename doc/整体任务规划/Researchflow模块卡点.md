@@ -160,3 +160,12 @@
 - Researchflow resultvalidation/quant.go 是结果校验/映射能力，不是 StageExecutor，也不负责授权；不能据此认定 Quant Stage 已装配。
 - 判定：当前 Server/Researchflow 生产 Quant Stage 为 NOT_COMPARABLE（尚无生产 Stage 场景与提供方 Facade），不是 Root 装配漏接一段现成实现。
 - 解锁条件：Quant 提供正式计算 Facade、完整输入/输出契约与生产结果持久化/授权端口；明确 Researchflow Stage 输入参数、资源授权和结果引用；随后 Server 才能装配并进行 Worker 真实集成验收。
+
+
+## RepairAll RA-CROSS-REVIEW-005 Context Assembly 边界复核（2026-11-19）
+
+- 审查基线：repair_all SHA 8afbba2a0a519f932063861085bbdc89f7e76fa8。
+- contextassembly 的 ToResearchCreateContextCommand 只接收 ResearchContextSnapshot，不接收 Researchflow Run；它只校验 SystemAsOf 非零 UTC，不负责 Run 绑定。这与 doc/researchflow/05-FLOW-005 上明确的边界一致，不是该纯函数自身缺陷。
+- FLOW-005 实施文档要求 Server/Worker 在 CreateContext 前校验 snapshot.SystemAsOf == Run.SystemAsOf，读取 Context 后再次校验；构造 LLM ModelRequest 时直接继承 Run.SystemAsOf/DeadlineAt。当前 Worker 请求包含 Run/SystemAsOf/DeadlineAt，但没有生产 Context Stage 调用该 Adapter。
+- 不能把 Context Snapshot 的 UTC 校验当作 Run PIT 绑定验收；也不能为了简化调用修改 Run 唯一时钟语义。
+- 解锁条件：Researchflow 定义真实 Context Stage 调用场景和参数；Server 装配 Research Context Owner Authorizer/适配器后，在同一 Run 上完成创建前、读取后、LLM 请求三处时间一致性测试。

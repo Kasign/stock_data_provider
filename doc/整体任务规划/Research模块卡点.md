@@ -73,3 +73,12 @@ Research 的领域基础能力、Repository/Outbox、Context 消费契约测试�
 - Server：internal/server/bootstrap/research_news.go 装配组合存在；bootstrap.go 仅在 Cursor Key Ring 配置时创建，并明确没有真实 Stage/HTTP 消费者。该组合目前不是生产消费闭环。
 - News available_at 仍无合格来源证据，RSC-002/NEWS-BLK-07 保持 SHELVED；不以 published_at、fetched_at、observed_at 替代。
 - 本轮未发现能在不越过冻结/待决契约的前提下直接修复的代码缺陷；本卡点不代表代码端到端 PASS。生产真实数据验收为 NOT_COMPARABLE。
+
+
+## 8. RepairAll RA-CROSS-REVIEW-005 首轮复核（2026-11-19）
+
+- 审查基线：repair_all SHA 8afbba2a0a519f932063861085bbdc89f7e76fa8。
+- Research Application 的 GetContext 在读取精确 Context 版本并验证后，必须调用 ContextAuthorizer；未注入时 fail-closed 返回 research_context_authorizer_not_configured。
+- 当前 Server News→Research 组合创建 Research Service 时未传 ContextAuthorizer；因此 Context 读取能力尚未形成可用的生产消费闭环。当前没有真实 Context Stage/HTTP 消费者，不能注入恒 Allow 的占位授权器。
+- 解锁条件：明确 Research Context 授权 Owner/Policy、可信 CallerRef 来源和真实消费者；再由 Server 在组合根注入真实 Authorizer，并验证授权撤销/不可用时 fail-closed。
+- 本轮只记录系统装配缺口，不在 Research 内复制 Server 身份或授权实现。
