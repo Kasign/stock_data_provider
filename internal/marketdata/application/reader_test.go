@@ -167,6 +167,28 @@ func TestReaderGetDailyBarsV2PreservesSameEvaluationCalendarRef(t *testing.T) {
 		unreferenced.Bars[0].QualityStatus != app.QualityDegraded {
 		t.Fatalf("v2 must explicitly degrade a calendar without a durable ref: %+v", unreferenced)
 	}
+
+	unboundedBackend := &fakeDataService{
+		currentBars: []model.DailyBar{bar},
+		currentCoverage: service.DailyBarCoverageEvidence{
+			CalendarRef: "sha256:calendar-not-accepted", CalendarQualityStatus: model.QualityValid,
+			ExpectedTradingDays: 20, MinimumRequiredBars: 13,
+			CoverageBasis: "exchange_calendar", CoverageSufficient: true,
+		},
+	}
+	unboundedReader := &Reader{backend: unboundedBackend}
+	unbounded, err := unboundedReader.GetDailyBarsV2(context.Background(), app.DailyBarsQuery{
+		Symbol: "600000.SH", Limit: 20, AdjustmentBasis: app.AdjustmentNone,
+	})
+	if err != nil {
+		t.Fatalf("GetDailyBarsV2(unbounded range) error = %v", err)
+	}
+	if unbounded.TradingCalendarRef != nil || unbounded.CoverageEvidence.CoverageBasis != "unbounded_range_estimate" ||
+		unbounded.QualityStatus != app.QualityDegraded ||
+		len(unbounded.Warnings) != 1 ||
+		unbounded.Warnings[0] != "daily_bar_coverage_explicit_range_required_for_calendar_ref" {
+		t.Fatalf("v2 must not expose a calendar ref for an unbounded query: %+v", unbounded)
+	}
 }
 
 func TestReaderGetQuotePreservesNullablePrecisionAndMetadata(t *testing.T) {
