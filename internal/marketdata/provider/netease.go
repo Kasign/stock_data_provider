@@ -549,6 +549,7 @@ func (p *Netease) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 			RawAmountField: "VATURNOVER", VolumeUnit: optionalVolumeUnit(shares, "shares"), AmountUnit: amountUnit,
 			QualityStatus: quality, QualityReasons: reasons,
 			NormalizationVer: normalize.Version,
+			ExactValues: dailyBarExactValuesFromStrings(openRaw, highRaw, lowRaw, closeRaw, volumeRaw, amountRaw, amountUnit, amountUnit),
 		}
 		if index, ok := columns["change_percent"]; ok && index >= 0 && index < len(record) {
 			rawChangePercent := strings.TrimSpace(record[index])

@@ -219,6 +219,7 @@ func (p *Baostock) FetchDailyBars(ctx context.Context, rawSymbol, startDate, end
 			RawAmount: rawAmount, RawAmountUnit: rawAmountUnit, RawAmountField: rawAmountField,
 			VolumeUnit: "shares", AmountUnit: amountUnit,
 			QualityStatus: quality, QualityReasons: reasons, NormalizationVer: normalize.Version,
+			ExactValues: dailyBarExactValuesFromStrings(row.Open, row.High, row.Low, row.Close, row.Volume, row.Amount, rawAmountUnit, amountUnit),
 		})
 	}
 	// 所有 Provider 都遵守 limit 上限；显式日期区间不能绕过返回条数限制。

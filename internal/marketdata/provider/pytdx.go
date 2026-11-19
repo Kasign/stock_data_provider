@@ -712,11 +712,7 @@ func pytdxDailyBarExactValues(item *protocol.Kline) *model.DailyBarExactValues {
 		return nil
 	}
 	rawAmount := pytdxPriceDecimal(item.Amount)
-	return &model.DailyBarExactValues{
-		Open: pytdxPriceDecimal(item.Open), High: pytdxPriceDecimal(item.High),
-		Low: pytdxPriceDecimal(item.Low), Close: pytdxPriceDecimal(item.Close),
-		RawVolume: strconv.FormatInt(item.Volume, 10), RawAmount: &rawAmount, AmountCNY: &rawAmount,
-	}
+	return dailyBarExactValuesFromStrings(pytdxPriceDecimal(item.Open), pytdxPriceDecimal(item.High), pytdxPriceDecimal(item.Low), pytdxPriceDecimal(item.Close), strconv.FormatInt(item.Volume, 10), rawAmount, "CNY", "CNY")
 }
 
 
