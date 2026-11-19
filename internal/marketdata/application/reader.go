@@ -30,6 +30,7 @@ type Reader struct {
 }
 
 var _ app.MarketDataReader = (*Reader)(nil)
+var _ app.DailyBarsV2Reader = (*Reader)(nil)
 
 // NewReader creates an Application Port adapter over the existing DataService.
 func NewReader(svc *service.DataService) (*Reader, error) {
