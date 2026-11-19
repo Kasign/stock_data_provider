@@ -238,8 +238,8 @@ type MigrationOperation struct {
 }
 
 const (
-	MigrationOperationEnsureColumn            = "ensure_column"
-	MigrationOperationEnsureNonUniqueIndex     = "ensure_non_unique_index"
+	MigrationOperationEnsureColumn         = "ensure_column"
+	MigrationOperationEnsureNonUniqueIndex = "ensure_non_unique_index"
 )
 
 // Migration is an immutable, ordered schema change. Statements are executed

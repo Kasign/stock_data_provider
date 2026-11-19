@@ -190,7 +190,6 @@ func TestFundamentalsRevisionHashNormalizesEquivalentOffsetInstants(t *testing.T
 	}
 }
 
-
 func TestMarketDataMigrationDefinitionsExposeImmutableVersionedHistory(t *testing.T) {
 	migrations := MigrationDefinitions()
 	if len(migrations) != 4 {

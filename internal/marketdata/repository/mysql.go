@@ -64,6 +64,7 @@ func (s *Store) Ping(ctx context.Context) error {
 	}
 	return s.db.PingContext(ctx)
 }
+
 // MigrationDefinitions returns the immutable Data schema history used by Root Server.
 // Versions 1-3 are published definitions and must not be changed.
 func MigrationDefinitions() []platformstorage.Migration {
