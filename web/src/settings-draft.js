@@ -1,5 +1,3 @@
-import { normalizeBasePath } from "./format.js";
-
 const DRAFT_FIELDS = Object.freeze(["marketBase", "analysisBase"]);
 
 export function connectionDraftChanged(initial, current) {

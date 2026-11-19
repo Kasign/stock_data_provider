@@ -1044,6 +1044,11 @@
                   <p class="settings-dirty-state" id="connection-dirty-state" role="status" aria-live="polite" hidden>服务入口由部署统一管理，不支持浏览器自定义。</p>
                   <div class="settings-connection-actions"><button class="button button-secondary" id="settings-check-connection" type="button">检查连接</button><span class="grow"></span><button class="button button-secondary" id="clear-settings" type="button">清除旧本地连接配置</button></div>
                   <p class="settings-feedback" id="settings-feedback" role="status" aria-live="polite">Root Server 单一 API 入口已启用。</p>
+                  <button id="save-settings" type="button" hidden></button>
+                  <button id="cancel-settings" type="button" hidden></button>
+                  <button id="settings-check-draft-connection" type="button" hidden></button>
+                  <p id="settings-draft-connection-check" hidden></p>
+                  <p id="connection-dirty-state" hidden></p>
                   <div class="settings-storage-boundary"><strong>连接配置的作用范围</strong><p>服务地址、认证策略、Nginx 上游与数据库配置均由服务端部署管理；浏览器只保存个人工作区偏好，不保存 Data API Key 或服务地址。</p></div>
                 </form>
               </section>

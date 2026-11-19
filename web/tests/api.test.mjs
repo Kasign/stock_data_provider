@@ -38,8 +38,7 @@ import {
   getMarketSectors,
   getMarketCapitalFlow,
   getQuote,
-  searchStocks,
-  analysisLiveness
+  searchStocks
 } from "../src/api.js";
 
 function jsonResponse(body, status = 200, headers = {}) {
@@ -60,7 +59,7 @@ test("creates a Go analysis task with the current payload and optional idempoten
     const payload = { task_type: "post_market_scan", symbols: ["600519"] };
     const result = await createAnalysisTask({ analysisBase: "/" }, payload, "webui-test-1");
     assert.equal(result.task.task_id, "task-1");
-    assert.equal(request.url, "//api/v1/analysis/tasks");
+    assert.equal(request.url, "/api/v1/analysis/tasks");
     assert.equal(request.method, "POST");
     assert.equal(request.headers["Content-Type"], "application/json");
     assert.equal(request.headers["Idempotency-Key"], "webui-test-1");
@@ -86,10 +85,10 @@ test("reads Data and analysis APIs through the same Root Server without client A
     await getQuote(settings, "600519.SH");
     await getAnalysisRun(settings, "run-1");
 
-    assert.equal(requests[0].url, "//api/v1/analysis/tasks/task%2Fwith%20space/events?after_sequence=17&limit=100");
-    assert.equal(requests[1].url, "//api/v1/quotes/600519.SH");
+    assert.equal(requests[0].url, "/api/v1/analysis/tasks/task%2Fwith%20space/events?after_sequence=17&limit=100");
+    assert.equal(requests[1].url, "/api/v1/quotes/600519.SH");
     assert.equal(requests[1].headers["X-API-Key"], undefined);
-    assert.equal(requests[2].url, "//api/v1/analysis/runs/run-1");
+    assert.equal(requests[2].url, "/api/v1/analysis/runs/run-1");
     assert.equal(Object.hasOwn(requests[0].headers, "X-API-Key"), false);
     assert.equal(Object.hasOwn(requests[2].headers, "X-API-Key"), false);
     assert.equal(Object.hasOwn(requests[0].headers, "Authorization"), false,
@@ -142,8 +141,8 @@ test("uses the Root Server health, provider and daily-bars routes without a brow
 
     assert.equal(requests[0].url, "//health/ready");
     assert.equal(requests[1].url, "//readyz");
-    assert.equal(requests[2].url, "//api/v1/data-sources");
-    assert.equal(requests[3].url, "//api/v1/bars/600519.SH/daily?limit=120&adjustment=forward_adjusted");
+    assert.equal(requests[2].url, "/api/v1/data-sources");
+    assert.equal(requests[3].url, "/api/v1/bars/600519.SH/daily?limit=120&adjustment=forward_adjusted");
     assert.equal(Object.hasOwn(requests[0].headers, "X-API-Key"), false);
     assert.equal(Object.hasOwn(requests[1].headers, "X-API-Key"), false);
     assert.equal(requests[2].headers["X-API-Key"], undefined);
@@ -154,7 +153,7 @@ test("uses the Root Server health, provider and daily-bars routes without a brow
     });
     assert.equal(
       requests[4].url,
-      "//api/v1/bars/600519.SH/daily?limit=60&adjustment=none&start=2026-10-01&end=2026-10-23"
+      "/api/v1/bars/600519.SH/daily?limit=60&adjustment=none&start=2026-10-01&end=2026-10-23"
     );
     assert.equal(requests[4].headers["X-API-Key"], undefined);
   } finally {
@@ -258,10 +257,10 @@ test("reads existing chip-distribution and capital-flow endpoints with the marke
     assert.equal(chip.average_cost, 1234.5);
     assert.equal(flow.main_net_inflow_yuan, 1500000);
     assert.deepEqual(requests.map((item) => item.url).sort(), [
-      "//api/v1/stocks/600519.SH/capital-flow",
-      "//api/v1/stocks/600519.SH/chip-distribution"
+      "/api/v1/stocks/600519.SH/capital-flow",
+      "/api/v1/stocks/600519.SH/chip-distribution"
     ]);
-    assert.ok(requests.every((item) => item.headers["X-API-Key"] === "market-secret"));
+    assert.ok(requests.every((item) => item.headers["X-API-Key"] === undefined));
     assert.ok(requests.every((item) => item.credentials === "same-origin"));
   } finally {
     globalThis.fetch = originalFetch;
@@ -287,8 +286,8 @@ test("searches stocks by Chinese name through the authenticated market API and f
       " 贵州茅台 ",
       { limit: 10, signal: controller.signal, timeoutMs: 0 }
     );
-    assert.equal(request.url, "//api/v1/stocks/search?q=%E8%B4%B5%E5%B7%9E%E8%8C%85%E5%8F%B0&limit=10");
-    assert.equal(request.headers["X-API-Key"], "market-secret");
+    assert.equal(request.url, "/api/v1/stocks/search?q=%E8%B4%B5%E5%B7%9E%E8%8C%85%E5%8F%B0&limit=10");
+    assert.equal(request.headers["X-API-Key"], undefined);
     assert.equal(request.signal, controller.signal);
     assert.equal(result.items[0].symbol, "600519.SH");
   } finally {
@@ -359,12 +358,12 @@ test("newly integrated market endpoints encode symbols, preserve explicit source
     await getStockPriceLimitRule(settings, "600519.SH", "2026-10-28");
     await getStockTradingStatus(settings, "600519.SH", "2026-10-28", { asOf: "2026-10-29T09:00:00+08:00" });
 
-    assert.equal(requests[0].url, "//api/v1/market/session");
-    assert.equal(requests[1].url, "//api/v1/market/index-catalog?tag=industry");
-    assert.equal(requests[2].url, "//api/v1/market/indices/IDX%2F000300/constituents?source=tushare&as_of=2026-10-28");
-    assert.equal(requests[3].url, "//api/v1/market/indices/IDX%2F000300/daily?start=2026-10-01&end=2026-10-28&source=hithink");
-    assert.equal(requests[4].url, "//api/v1/stocks/600519.SH/price-limit-rule?date=2026-10-28");
-    assert.equal(requests[5].url, "//api/v1/stocks/600519.SH/trading-status?date=2026-10-28&as_of=2026-10-29T09%3A00%3A00%2B08%3A00");
+    assert.equal(requests[0].url, "/api/v1/market/session");
+    assert.equal(requests[1].url, "/api/v1/market/index-catalog?tag=industry");
+    assert.equal(requests[2].url, "/api/v1/market/indices/IDX%2F000300/constituents?source=tushare&as_of=2026-10-28");
+    assert.equal(requests[3].url, "/api/v1/market/indices/IDX%2F000300/daily?start=2026-10-01&end=2026-10-28&source=hithink");
+    assert.equal(requests[4].url, "/api/v1/stocks/600519.SH/price-limit-rule?date=2026-10-28");
+    assert.equal(requests[5].url, "/api/v1/stocks/600519.SH/trading-status?date=2026-10-28&as_of=2026-10-29T09%3A00%3A00%2B08%3A00");
     assert.ok(requests.every(request => request.headers["X-API-Key"] === undefined));
   } finally {
     globalThis.fetch = originalFetch;
@@ -429,8 +428,8 @@ test("reads provider runtime diagnostics with the market API key and caller sign
   try {
     const result = await getDataSourceDiagnostics({ marketBase: "/" }, controller.signal);
     assert.equal(result.observed_from, "in_process_circuit_breaker");
-    assert.equal(request.url, "//api/v1/data-sources/diagnostics");
-    assert.equal(request.headers["X-API-Key"], "market-secret");
+    assert.equal(request.url, "/api/v1/data-sources/diagnostics");
+    assert.equal(request.headers["X-API-Key"], undefined);
     assert.equal(request.signal, controller.signal);
   } finally {
     globalThis.fetch = originalFetch;
@@ -458,8 +457,8 @@ test("requests the explicit watchlist symbols through the bounded batch-quote en
       marketBase: "/"
     }, ["600519.SH"], controller.signal, { timeoutMs: 0 });
     assert.equal(result.succeeded, 1);
-    assert.equal(request.url, "//api/v1/market/quotes?symbols=600519.SH");
-    assert.equal(request.headers["X-API-Key"], "market-secret");
+    assert.equal(request.url, "/api/v1/market/quotes?symbols=600519.SH");
+    assert.equal(request.headers["X-API-Key"], undefined);
     assert.equal(request.signal, controller.signal);
     await assert.rejects(getMarketQuotes({ marketBase: "/" }, ["600519.SH", "600519.SH"]), /不允许重复/);
     await assert.rejects(getMarketQuotes({ marketBase: "/" }, Array.from({ length: 51 }, (_, index) => String(600000 + index))), /1–50/);
@@ -486,8 +485,8 @@ test("queries market-wide capital-flow history with validated date range and aut
     const result = await getMarketCapitalFlow({ marketBase: "/" },
       { start: "2026-10-01", end: "2026-10-30", signal: controller.signal });
     assert.equal(result.items[0].net_amount_cny, 1500000000);
-    assert.equal(request.url, "//api/v1/market/capital-flow?start=2026-10-01&end=2026-10-30");
-    assert.equal(request.headers["X-API-Key"], "market-secret");
+    assert.equal(request.url, "/api/v1/market/capital-flow?start=2026-10-01&end=2026-10-30");
+    assert.equal(request.headers["X-API-Key"], undefined);
     assert.equal(request.signal, controller.signal);
     await assert.rejects(getMarketCapitalFlow({}, { start: "2026-02-30", end: "2026-10-30" }), /有效的开始和结束日期/);
     await assert.rejects(getMarketCapitalFlow({}, { start: "2026-10-02", end: "2026-10-01" }), /不能晚于/);
@@ -520,9 +519,9 @@ test("runs validated Provider probes with the Owner Session CSRF token", async (
       capabilities: ["quote", "daily_bars"]
     }, controller.signal);
     assert.equal(result.run_id, "probe-1");
-    assert.equal(request.url, "//api/v1/data-sources/probe");
+    assert.equal(request.url, "/api/v1/data-sources/probe");
     assert.equal(request.method, "POST");
-    assert.equal(request.headers["X-API-Key"], "market-secret");
+    assert.equal(request.headers["X-API-Key"], undefined);
     assert.equal(request.signal, controller.signal);
     assert.deepEqual(JSON.parse(request.body), {
       scope: "core", timeout_seconds: 8,
@@ -570,8 +569,8 @@ test("reads bounded persisted Provider probe history through the Root Server", a
       { limit: 20, signal: controller.signal }
     );
     assert.equal(result.items[0].run_id, "probe-history-1");
-    assert.equal(request.url, "//api/v1/data-sources/probe/history?limit=20");
-    assert.equal(request.headers["X-API-Key"], "market-secret");
+    assert.equal(request.url, "/api/v1/data-sources/probe/history?limit=20");
+    assert.equal(request.headers["X-API-Key"], undefined);
     assert.equal(request.signal, controller.signal);
     await assert.rejects(getDataSourceProbeHistory({ marketBase: "/" }, { limit: 0 }));
     await assert.rejects(getDataSourceProbeHistory({ marketBase: "/" }, { limit: 101 }));
@@ -676,8 +675,8 @@ test("板块排行请求透传排序维度、方向与行业/概念类别", asyn
       { type: "concept", limit: 20, direction: "down", sortBy: "change_5d" }
     );
     assert.equal(result.sort_by, "change_5d");
-    assert.equal(request.url, "//api/v1/market/sectors?type=concept&limit=20&direction=down&sort_by=change_5d");
-    assert.equal(request.headers["X-API-Key"], "market-secret");
+    assert.equal(request.url, "/api/v1/market/sectors?type=concept&limit=20&direction=down&sort_by=change_5d");
+    assert.equal(request.headers["X-API-Key"], undefined);
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -790,7 +789,7 @@ test("Owner Session uses same-origin cookies and keeps CSRF only in runtime memo
   const settings = { analysisBase: "/" };
   try {
     await loginOwnerSession(settings, "管理员密码");
-    assert.equal(requests[0].url, "//api/v1/owner/session");
+    assert.equal(requests[0].url, "/api/v1/owner/session");
     assert.equal(requests[0].method, "POST");
     assert.equal(requests[0].credentials, "same-origin");
     assert.equal(requests[0].headers["Content-Type"], "application/json");
@@ -842,7 +841,7 @@ test("Owner password change validates UTF-8 byte limits and clears runtime CSRF 
 
     await changeOwnerPassword(settings, "current-password", "new-password");
     assert.equal(requests[1].method, "PUT");
-    assert.equal(requests[1].url, "//api/v1/owner/password");
+    assert.equal(requests[1].url, "/api/v1/owner/password");
     assert.equal(requests[1].credentials, "same-origin");
     assert.equal(requests[1].headers["X-CSRF-Token"], "password-change-csrf");
     assert.equal(requests[1].headers["X-API-Key"], undefined);
