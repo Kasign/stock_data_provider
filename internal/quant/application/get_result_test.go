@@ -171,6 +171,32 @@ func TestGetResultRejectsTamperedRecord(t *testing.T) {
 	}
 }
 
+func TestGetResultStopsWhenPrincipalResolutionCancelsContext(t *testing.T) {
+	now := time.Date(2026, 11, 9, 2, 0, 0, 0, time.UTC)
+	reader := &fixedReader{value: getResultFixture(t, now)}
+	auditor := &fixedAuditor{}
+	ctx, cancel := context.WithCancel(context.Background())
+	principals := PrincipalResolverFunc(func(context.Context) (Principal, error) {
+		cancel()
+		return Principal{SubjectRef: "service:researchflow"}, nil
+	})
+	usecase, err := NewGetResult(reader, principals, auditor, func() time.Time { return now })
+	if err != nil {
+		t.Fatalf("NewGetResult() error = %v", err)
+	}
+
+	got, err := usecase.Execute(ctx, reader.value.Record.Manifest.ResultID)
+	if !errors.Is(err, context.Canceled) || got.ResultID != "" {
+		t.Fatalf("Execute() = (%+v, %v), want empty envelope and context.Canceled", got, err)
+	}
+	if reader.calls != 0 {
+		t.Fatalf("reader called after principal resolution cancelled context: %d", reader.calls)
+	}
+	if len(auditor.events) != 0 {
+		t.Fatalf("audit emitted after cancellation before a read decision: %+v", auditor.events)
+	}
+}
+
 func TestGetResultRejectsInvalidRequestAndDoesNotCallReader(t *testing.T) {
 	now := time.Date(2026, 11, 9, 2, 0, 0, 0, time.UTC)
 	reader := &fixedReader{value: getResultFixture(t, now)}
