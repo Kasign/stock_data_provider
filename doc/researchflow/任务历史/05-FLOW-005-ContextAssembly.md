@@ -56,3 +56,20 @@ Research Context 的持久化不是 Researchflow 缺失能力，Research 模块�
 新增负向测试覆盖候选字段、快照字段、Metadata 和 Section 内容。代码 SHA：`e6e941c71c9960b6675ce846df1b621a16064f06`；Run [44311895491](https://github.com/Kasign/stock_data_provider/actions/runs/44311895491) 最终结论 success：Researchflow format/tests/race/vet、WorkerStore unit/race/vet、MariaDB lifecycle integration、根模块 Test/Race/Vet、go-core、Research MariaDB 和 Notification MariaDB 均通过；Market Data、News 专项集成 Job skipped。
 
 该修复只负责输入编码完整性，不替代 Research Owner 授权、Run PIT/Deadline 绑定或 LLM 生产 Tokenizer。
+
+
+## 2026-11-19 Tokenizer 预算输入 UTF-8 边界补强
+
+复核 `MeasureBudgetReservations` 发现：System Prompt 和 Tool Schema 会直接传入目标模型 Tokenizer，但入口此前只校验非空/预算配置，没有先校验 UTF-8。无效字节可能被 Tokenizer 内部替换或以不一致方式计数，导致预算结果不可信。
+
+本轮修改：
+
+- System Prompt 必须是有效 UTF-8 且非空。
+- Tool Schema 即使是可选输入，也必须是有效 UTF-8；空字符串仍表示不启用 Tool Schema。
+- 无效 UTF-8 以 `ErrInvalidBudget` 拒绝，并保证在调用 Tokenizer 前失败。
+- 新增 System Prompt、Tool Schema 两组负向测试，并断言 Tokenizer 未被调用。
+
+代码提交：`cc31402165a35b23e8cce39e8d9e941d9653610f`。
+GitHub Actions Run [44436587245](https://github.com/Kasign/stock_data_provider/actions/runs/44436587245)：Researchflow format/tests/race/vet、WorkerStore unit/race/vet、MariaDB lifecycle integration 均 success；根模块 Test/Race/Vet 在本记录更新时仍运行中。
+
+本修复属于 FLOW-005 本模块可独立输入边界，不代表已接入 LLM 生产 Tokenizer 或生产 Context Stage。
