@@ -109,3 +109,12 @@ P0 原始问题及实施约束作为审计记录保留；当前状态以第 7、
 - Researchflow contextassembly 只做规划与 DTO 投影；ToResearchCreateContextCommand 接收 ResearchContextSnapshot，不接收 Run，无法独立证明 snapshot.SystemAsOf 等于 Run.SystemAsOf。其实施文档明确要求 Server/Worker 在 CreateContext 前校验，读取后再次校验；当前未发现生产 Stage/Worker 调用该 Adapter。
 - Researchflow Run 在 CreateRun 时由 DatabaseClock 生成唯一 SystemAsOf；Worker StageExecutionRequest 携带 Run/SystemAsOf/DeadlineAt。当前缺少 Context Stage 将这些字段绑定到 Research Adapter 的真实调用链。
 - 本轮暂未发现可在不新增无调用场景接口、不绕过 Owner 授权的前提下直接修复的局部代码缺陷；继续审查 Evidence/Claim/Event 引用和唯一持久化 Owner。
+
+
+### RA-CROSS-REVIEW-005 Evidence PIT 首轮结论（2026-11-19）
+
+- Research Evidence Domain 已有 ValidateForStrictPIT(runAsOf)，明确要求 available_at 非空且不晚于 Evidence.system_as_of，并要求 Evidence.system_as_of 不晚于 Run.system_as_of。
+- Researchflow ResultComposition 的 validateResearchEvidence 当前只检查 Evidence.system_as_of 不晚于 Run、system_observed_at 不晚于 Evidence.system_as_of 和授权引用非空；不检查 available_at 是否满足严格 PIT。
+- 项目级字段契约明确：available_at=null/unknown 时不得作为严格 PIT 可得事实；只有 Researchflow Template 显式声明非严格 PIT 模式及其风险时，才可使用仅满足“系统当时已观察”的 Evidence。
+- 当前 WorkflowTemplate 结构未定义显式 PIT Mode 字段；ResultCompositionInput/ValidationPolicy 也没有 PIT Mode。当前唯一生产模板是 News Search，不消费 Research Evidence，且没有生产 ResultComposition 调用者，因此这是未来 Research 消费链路的契约/实现阻塞，不是可在当前调用链中直接补一行校验的局部缺陷。
+- 不擅自增加 PIT Mode 枚举、默认值或模板字段；需要先由契约 Owner 明确严格模式默认值、非严格模式名称/风险字段及其参与 Template Fingerprint 的规则。未明确前，任何使用 Evidence 的研究结果都不得宣称严格 PIT 生产验收通过。

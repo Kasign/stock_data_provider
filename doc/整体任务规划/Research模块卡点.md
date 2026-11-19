@@ -82,3 +82,11 @@ Research 的领域基础能力、Repository/Outbox、Context 消费契约测试�
 - 当前 Server News→Research 组合创建 Research Service 时未传 ContextAuthorizer；因此 Context 读取能力尚未形成可用的生产消费闭环。当前没有真实 Context Stage/HTTP 消费者，不能注入恒 Allow 的占位授权器。
 - 解锁条件：明确 Research Context 授权 Owner/Policy、可信 CallerRef 来源和真实消费者；再由 Server 在组合根注入真实 Authorizer，并验证授权撤销/不可用时 fail-closed。
 - 本轮只记录系统装配缺口，不在 Research 内复制 Server 身份或授权实现。
+
+
+## RepairAll RA-CROSS-REVIEW-005 Evidence PIT 规则复核（2026-11-19）
+
+- Evidence Domain 的 ValidateForStrictPIT 已实现严格检查：available_at 必须存在且不晚于 Evidence.system_as_of；Evidence.system_as_of 不得晚于 Run.system_as_of；system_observed_at 不得晚于 Evidence.system_as_of。
+- Researchflow ResultComposition 的 validateResearchEvidence 当前没有执行 available_at 严格 PIT 检查。项目级契约允许 available_at 缺失的 Evidence 仅在 Template 明确声明非严格 PIT 模式及风险时使用。
+- Researchflow WorkflowTemplate / ResultCompositionInput 当前未提供可见的 PIT Mode 语义，且当前没有生产 Evidence 组合消费者。Research 不擅自定义 PIT 模式，也不把 null available_at 改造成伪造时间。
+- 解锁条件：项目契约 Owner 明确 PIT Mode 的枚举、默认严格策略、非严格风险声明及 Fingerprint 绑定；随后由 Researchflow 实现 Template/Run/ResultValidation 传播，Research 保持 ValidateForStrictPIT 领域规则。

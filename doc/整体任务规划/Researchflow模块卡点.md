@@ -169,3 +169,12 @@
 - FLOW-005 实施文档要求 Server/Worker 在 CreateContext 前校验 snapshot.SystemAsOf == Run.SystemAsOf，读取 Context 后再次校验；构造 LLM ModelRequest 时直接继承 Run.SystemAsOf/DeadlineAt。当前 Worker 请求包含 Run/SystemAsOf/DeadlineAt，但没有生产 Context Stage 调用该 Adapter。
 - 不能把 Context Snapshot 的 UTC 校验当作 Run PIT 绑定验收；也不能为了简化调用修改 Run 唯一时钟语义。
 - 解锁条件：Researchflow 定义真实 Context Stage 调用场景和参数；Server 装配 Research Context Owner Authorizer/适配器后，在同一 Run 上完成创建前、读取后、LLM 请求三处时间一致性测试。
+
+
+## RepairAll RA-CROSS-REVIEW-005 Evidence 严格 PIT 消费缺口（2026-11-19）
+
+- Researchflow ResultComposition 当前校验 Evidence.system_as_of <= Run.system_as_of、system_observed_at <= Evidence.system_as_of，但未校验 available_at 严格 PIT 条件。
+- Research Evidence Domain 已提供 ValidateForStrictPIT(runAsOf)，严格模式要求 available_at 非空且 <= Evidence.system_as_of，且 Evidence.system_as_of <= Run.system_as_of。
+- 项目级 Quant-Research DTO 契约明确：available_at 为 null/unknown 时不得进入严格 PIT；只有 Researchflow Template 显式声明非严格 PIT 模式和风险时才可按“系统当时已观察”语义使用。
+- 当前 WorkflowTemplate、ResultCompositionInput/ValidationPolicy 未建模 PIT Mode，且无生产 ResultComposition 调用者。不能在 validator 内一律强制严格或默认降级，因为两者都会猜测尚未冻结的模板语义。
+- 当前状态：BLOCKED（待项目契约决策）。不新增字段、不更改模板 Schema，直至明确默认值、非严格风险表达及 Fingerprint 绑定要求。
