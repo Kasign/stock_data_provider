@@ -387,5 +387,12 @@ RA009 代码关闭条件已满足：Server 路由认证矩阵、CSRF、WebUI 请
 - Data Migration V5 新增 `market_data_trading_calendar_snapshots`，Repository 实现 SHA-256 内容寻址、不可覆盖写入和精确读取完整性校验；Data Service 在 Provider 获取与 Redis Cache 命中路径持久化。
 - `ValidateCompatibilitySchema` 已检查 V5 物理表、主键和非唯一查询索引，避免仅凭 Migration checksum 判定结构完整。
 - 新增单元和 MariaDB 集成测试，覆盖相同内容幂等、内容/来源/质量变化、并发写入、精确读取、篡改拒绝和 Service Cache 命中。
-- 精确 SHA `dc8079bac92f19c2928219433f29480fb9d7d3ba` 对应 Integration CI Run `44492921617` 仍在运行；未确认成功前不关闭。
+- 最终精确 SHA `4aa468e4de6fc51a16068d43ab2229c5b0181ab9` 对应 Integration CI Run `44493758123` 全项 success。首轮 SHA `dc8079bac92f19c2928219433f29480fb9d7d3ba` 的 Run `44492921617` 因 gofmt/旧 Migration 数量断言失败，已修正并通过最终验收。
 - 该子项不替代 DATA-CTR-005/007：DailyBars Decimal v2、Manifest 1.1.0、Payload fingerprint、AuthorizationRef 和 Research/Quant 消费仍是后续工作。
+
+
+### 28.10 DailyBars Provider D1 全量范围盘点
+
+- 当前默认部署配置启用 Eastmoney、BaoStock、Tencent、Sina、Netease、TickFlow、Pytdx 七个 DailyBars Provider；Hithink、Tushare、Yahoo 为可配置来源。
+- 默认七个 Provider 均无 DailyBar.ProviderTime；SourceVersion 是 Adapter/API 版本常量；RawVolume/RawAmount 仍为 float64，不能保留原始十进制词法值。
+- Tencent/Sina 没有已验证 Amount 字段；Netease/Tencent 有单位判断逻辑；Pytdx 需要继续审查 TDX protocol Decimal 表示；这些均已登记到 DATA-CTR-005/007 解阻方案。

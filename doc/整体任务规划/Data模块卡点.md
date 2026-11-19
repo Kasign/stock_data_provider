@@ -126,4 +126,4 @@ Root Server 的 Data Module 构造、共享资源注入、Migration Registry、I
 ## RepairAll 阶段二：交易日历不可变版本实现（2026-11-19）
 
 - Data 已在 `repair_all` 增加 Migration V5 与内容寻址交易日历 Snapshot Repository；保存和精确读取按 SHA-256 校验，重复内容幂等，内容或质量变化生成新 Ref。
-- 该能力为 DATA-CTR-007 的日历版本前置子项；未完成 DailyBars v2、Manifest/Payload 绑定和 AuthorizationRef 前，DATA-CTR-007 仍 deferred。当前代码 SHA `dc8079bac92f19c2928219433f29480fb9d7d3ba` 的完整 Integration CI Run `44492921617` 尚未完成。
+- 该能力为 DATA-CTR-007 的日历版本前置子项；未完成 DailyBars v2、Manifest/Payload 绑定和 AuthorizationRef 前，DATA-CTR-007 仍 deferred。最终代码 SHA `4aa468e4de6fc51a16068d43ab2229c5b0181ab9` 的完整 Integration CI Run `44493758123` 已全项 success。
