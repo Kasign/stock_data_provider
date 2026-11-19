@@ -236,7 +236,6 @@ func TestNewWithApplicationUsesInjectedUseCasesAndCopiesSourceSnapshot(t *testin
 	}
 
 	diagnosticsReq := httptest.NewRequest(http.MethodGet, "/api/v1/data-sources/diagnostics", nil)
-	diagnosticsReq.Header.Set("X-API-Key", "secret")
 	diagnosticsRec := httptest.NewRecorder()
 	server.InProcessHandler().ServeHTTP(diagnosticsRec, diagnosticsReq)
 	if diagnosticsRec.Code != http.StatusOK || !strings.Contains(diagnosticsRec.Body.String(), `"items":[]`) {

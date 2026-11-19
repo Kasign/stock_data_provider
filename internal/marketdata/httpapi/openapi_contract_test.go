@@ -12,7 +12,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-func TestOpenAPISecurityMatchesDataHTTPAdapterRoutes(t *testing.T) {
+func TestOpenAPIContainsOnlyDataRoutesAndNoRetiredDataAuthentication(t *testing.T) {
 	spec, err := os.ReadFile("openapi.yaml")
 	if err != nil {
 		t.Fatalf("read OpenAPI specification: %v", err)
@@ -22,59 +22,17 @@ func TestOpenAPISecurityMatchesDataHTTPAdapterRoutes(t *testing.T) {
 		t.Fatalf("OpenAPI must be valid YAML: %v", err)
 	}
 
+	if _, exists := document["security"]; exists {
+		t.Fatal("Data OpenAPI must not define transport authentication; Root Server owns authentication")
+	}
 	components := document["components"].(map[string]any)
-	schemes := components["securitySchemes"].(map[string]any)
-	if _, ok := schemes["ApiKey"]; !ok {
-		t.Fatal("OpenAPI must define ApiKey for X-API-Key")
-	}
-	if _, ok := schemes["BearerAuth"]; ok {
-		t.Fatal("OpenAPI must not define BearerAuth for the Data HTTP Adapter")
+	if _, exists := components["securitySchemes"]; exists {
+		t.Fatal("Data OpenAPI must not define a standalone Data API Key scheme")
 	}
 
-	rootSecurity, ok := document["security"].([]any)
-	if !ok {
-		t.Fatal("OpenAPI root security must define the shared Data HTTP Adapter authentication")
-	}
-	assertSecurity := func(where string, value any, wantAnonymous bool) {
-		t.Helper()
-		requirements, ok := value.([]any)
-		if !ok {
-			t.Fatalf("%s security must be an array", where)
-		}
-		if wantAnonymous {
-			if len(requirements) != 0 {
-				t.Errorf("%s must be anonymous, got %#v", where, requirements)
-			}
-			return
-		}
-		got := map[string]bool{}
-		for _, raw := range requirements {
-			requirement, ok := raw.(map[string]any)
-			if !ok || len(requirement) != 1 {
-				t.Errorf("%s has invalid security requirement %#v", where, raw)
-				continue
-			}
-			for name, scopes := range requirement {
-				if name != "ApiKey" {
-					t.Errorf("%s declares unsupported security scheme %q", where, name)
-				}
-				if scopeList, ok := scopes.([]any); !ok || len(scopeList) != 0 {
-					t.Errorf("%s scheme %s must not declare OAuth scopes", where, name)
-				}
-				got[name] = true
-			}
-		}
-		if len(got) != 1 || !got["ApiKey"] {
-			t.Errorf("%s must require only X-API-Key, got %#v", where, got)
-		}
-	}
-	assertSecurity("root", rootSecurity, false)
-
-	// Keep this route inventory aligned with Server.Handler(). A mismatch means
+	// Keep this route inventory aligned with Data InProcessHandler(). A mismatch means
 	// either an HTTP route is undocumented or an OpenAPI operation is stale.
 	expected := map[string]map[string]bool{
-		"/health/live":                                 {"get": true},
-		"/health/ready":                                {"get": true},
 		"/api/v1/quotes/{symbol}":                      {"get": true},
 		"/api/v1/market/quotes":                        {"get": true},
 		"/api/v1/market/stocks":                        {"get": true},
@@ -114,7 +72,7 @@ func TestOpenAPISecurityMatchesDataHTTPAdapterRoutes(t *testing.T) {
 		t.Fatal("OpenAPI paths object missing")
 	}
 	if len(paths) != len(expected) {
-		t.Errorf("OpenAPI path count=%d, Server.Handler route count=%d", len(paths), len(expected))
+		t.Errorf("OpenAPI path count=%d, Data HTTP route count=%d", len(paths), len(expected))
 	}
 	for path, methods := range expected {
 		rawPath, exists := paths[path]
@@ -138,12 +96,6 @@ func TestOpenAPISecurityMatchesDataHTTPAdapterRoutes(t *testing.T) {
 				t.Errorf("OpenAPI operation %s %s is not an object", method, path)
 				continue
 			}
-			security := any(rootSecurity)
-			if override, exists := operation["security"]; exists {
-				security = override
-			}
-			anonymous := path == "/health/live" || path == "/health/ready"
-			assertSecurity(method+" "+path, security, anonymous)
 		}
 		for method := range pathItem {
 			if method == "parameters" || method == "summary" || method == "description" || method == "servers" {
