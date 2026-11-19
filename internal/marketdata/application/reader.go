@@ -215,8 +215,14 @@ func (r *Reader) GetDailyBarsV2(ctx context.Context, query app.DailyBarsQuery) (
 	if err != nil {
 		return app.DailyBarsV2Snapshot{}, err
 	}
-	calendarReferenceMissing := evidence.CoverageBasis == "exchange_calendar_unreferenced"
-	if calendarReferenceMissing {
+	calendarRangeExplicit := strings.TrimSpace(query.StartDate) != "" && strings.TrimSpace(query.EndDate) != ""
+	calendarReferenceMissing := evidence.CoverageBasis == "exchange_calendar_unreferenced" || !calendarRangeExplicit
+	if !calendarRangeExplicit {
+		evidence.CalendarRef = ""
+		evidence.CoverageBasis = "unbounded_range_estimate"
+		evidence.CalendarQualityStatus = model.QualityDegraded
+		evidence.Warnings = dedupeReaderStrings(append(evidence.Warnings, "daily_bar_coverage_explicit_range_required_for_calendar_ref"))
+	} else if calendarReferenceMissing {
 		evidence.Warnings = dedupeReaderStrings(append(evidence.Warnings, "daily_bar_coverage_calendar_reference_unavailable"))
 	}
 	warnings = dedupeReaderStrings(append(append([]string(nil), warnings...), evidence.Warnings...))
