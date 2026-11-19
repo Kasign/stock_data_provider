@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"example.com/stock-analysis-flow/internal/marketdata/app"
@@ -163,6 +164,90 @@ func (r *Reader) GetDailyBars(ctx context.Context, query app.DailyBarsQuery) (ap
 		result.Bars = append(result.Bars, mapDailyBar(bar))
 	}
 	return result, nil
+}
+
+type dailyBarsCoverageBackend interface {
+	DailyBarsWithCoverageEvidence(context.Context, string, string, string, int, model.AdjustmentBasis) ([]model.DailyBar, bool, []string, service.DailyBarCoverageEvidence, error)
+	DailyBarsAsOfWithCoverageEvidence(context.Context, string, string, string, int, model.AdjustmentBasis, time.Time) ([]model.DailyBar, []string, service.DailyBarCoverageEvidence, error)
+}
+
+// GetDailyBarsV2 returns a versioned snapshot whose CalendarRef is captured by
+// the same coverage evaluation that determined the returned series quality.
+func (r *Reader) GetDailyBarsV2(ctx context.Context, query app.DailyBarsQuery) (app.DailyBarsV2Snapshot, error) {
+	if r == nil || r.backend == nil {
+		return app.DailyBarsV2Snapshot{}, errReaderUnavailable
+	}
+	if ctx == nil {
+		return app.DailyBarsV2Snapshot{}, errors.New("context must not be nil")
+	}
+	if err := ctx.Err(); err != nil {
+		return app.DailyBarsV2Snapshot{}, err
+	}
+	backend, ok := r.backend.(dailyBarsCoverageBackend)
+	if !ok {
+		return app.DailyBarsV2Snapshot{}, errors.New("market-data backend does not expose daily-bar coverage evidence")
+	}
+	basis := model.AdjustmentBasis(query.AdjustmentBasis)
+	var (
+		bars     []model.DailyBar
+		warnings []string
+		evidence service.DailyBarCoverageEvidence
+		err      error
+	)
+	if query.SystemObservedAtCutoff != nil {
+		bars, warnings, evidence, err = backend.DailyBarsAsOfWithCoverageEvidence(
+			ctx, query.Symbol, query.StartDate, query.EndDate, query.Limit, basis, *query.SystemObservedAtCutoff,
+		)
+	} else {
+		bars, _, warnings, evidence, err = backend.DailyBarsWithCoverageEvidence(
+			ctx, query.Symbol, query.StartDate, query.EndDate, query.Limit, basis,
+		)
+	}
+	if err != nil {
+		return app.DailyBarsV2Snapshot{}, err
+	}
+	warnings = dedupeReaderStrings(append(append([]string(nil), warnings...), evidence.Warnings...))
+	result := app.DailyBarsV2Snapshot{
+		Symbol: query.Symbol, Interval: "1d", AdjustmentBasis: query.AdjustmentBasis,
+		QualityStatus: aggregateQuality(bars, warnings), Warnings: cloneStrings(warnings),
+		SystemObservedAtCutoff: clonePointer(query.SystemObservedAtCutoff),
+		CoverageEvidence: app.DailyBarCoverageEvidence{
+			CalendarQualityStatus: app.QualityStatus(evidence.CalendarQualityStatus),
+			ExpectedTradingDays: evidence.ExpectedTradingDays, MinimumRequiredBars: evidence.MinimumRequiredBars,
+			CoverageBasis: evidence.CoverageBasis, CoverageSufficient: evidence.CoverageSufficient,
+			Warnings: cloneStrings(evidence.Warnings),
+		},
+		Bars: make([]app.DailyBar, 0, len(bars)),
+	}
+	if strings.TrimSpace(evidence.CalendarRef) != "" {
+		calendarRef := evidence.CalendarRef
+		result.TradingCalendarRef = &calendarRef
+	}
+	if len(bars) > 0 {
+		if bars[0].Symbol != "" {
+			result.Symbol = bars[0].Symbol
+		}
+	}
+	for _, bar := range bars {
+		result.Bars = append(result.Bars, mapDailyBar(bar))
+	}
+	return result, nil
+}
+
+func dedupeReaderStrings(values []string) []string {
+	seen := make(map[string]struct{}, len(values))
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		if strings.TrimSpace(value) == "" {
+			continue
+		}
+		if _, exists := seen[value]; exists {
+			continue
+		}
+		seen[value] = struct{}{}
+		result = append(result, value)
+	}
+	return result
 }
 
 func mapFundamentals(source model.FundamentalsSnapshot) app.FundamentalsSnapshot {
