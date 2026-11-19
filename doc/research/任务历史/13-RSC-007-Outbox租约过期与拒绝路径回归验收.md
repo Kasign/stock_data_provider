@@ -5,7 +5,7 @@
 - 代码范围：`internal/research/storage/**`
 - 文档范围：`doc/research/**`
 - 首轮测试提交：`b7200f41eb4cc55459b8b8c87a4ac2cdb1909f31`
-- 修复提交：待本轮提交完成后填写
+- 修复提交：`b76754300f6a5159df3fdf210748661a2246507b`（`fix(research): 安全处理 Outbox 终态空租约`）
 - 任务性质：已完成 Outbox 能力的验收补充；不新增业务能力、状态、接口或数据库结构。
 
 ## 1. Review 结论
@@ -41,7 +41,8 @@
 ## 3. 验收证据与边界
 
 - 首轮 Workflow Run [44309799495](https://github.com/Kasign/stock_data_provider/actions/runs/44309799495)，HEAD `b7200f41eb4cc55459b8b8c87a4ac2cdb1909f31`。Research MariaDB 用例在新测试的“confirmation after rejection”断言处失败；其余既有 Outbox 原子性、重试、并发领取、存储集成测试通过。该 Run 明确为失败，不得作为验收通过证据。
-- 修复提交的 SHA/Workflow Run/Research MariaDB 逐用例结果待补。
+- 修复提交 SHA：`b76754300f6a5159df3fdf210748661a2246507b`。
+- 本轮可用的 Actions 查询仅返回 PR 触发的 Workflow；针对该 SHA 返回空列表，Combined Status 也未返回状态。因此不能认定修复 CI 已运行或通过，Research MariaDB、模块 race/vet 和根模块门禁仍待可验证的 Actions 证据。
 - 测试要求设置 `RESEARCH_TEST_MYSQL_DSN`，并沿用数据库名必须以 `_test` 结尾的安全限制。没有 DSN 时按现有集成测试约定 Skip，不得把 Skip 记为 Pass。
 - 不修改 Outbox Migration、Application Port 或 Notification Relay。
 - 不代表 Server Root Relay、Worker 生命周期或 Notification 生产回执闭环已完成。
