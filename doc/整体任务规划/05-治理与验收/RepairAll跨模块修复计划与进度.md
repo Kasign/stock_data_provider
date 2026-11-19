@@ -394,11 +394,19 @@ RA009 代码关闭条件已满足：Server 路由认证矩阵、CSRF、WebUI 请
 ### 28.10 DailyBars Provider D1 全量范围盘点
 
 - 当前默认部署配置启用 Eastmoney、BaoStock、Tencent、Sina、Netease、TickFlow、Pytdx 七个 DailyBars Provider；Hithink、Tushare、Yahoo 为可配置来源。
-- 默认七个 Provider 均无 DailyBar.ProviderTime；SourceVersion 是 Adapter/API 版本常量；RawVolume/RawAmount 仍为 float64，不能保留原始十进制词法值。
-- Tencent/Sina 没有已验证 Amount 字段；Netease/Tencent 有单位判断逻辑；Pytdx 需要继续审查 TDX protocol Decimal 表示；这些均已登记到 DATA-CTR-005/007 解阻方案。
+- 默认七个 Provider 均无 DailyBar.ProviderTime；SourceVersion 是 Adapter/API 版本常量；v1 RawVolume/RawAmount 仍为 float64，但默认七个 Provider 已额外提供 ExactValues sidecar。
+- Tencent/Sina 没有已验证 Amount 字段；Netease/Tencent 有单位判断逻辑；Pytdx ExactValues 已通过 TDX protocol Price.Int64() 保留定点值，不能再将其列为精度全丢失。
 
 
-### 28.11 Pytdx 协议精度缺口已定位
+### 28.11 Pytdx 协议精度路径已核实（2026-11-19）
 
-- `github.com/injoyai/tdx v0.0.86` 的 `protocol.Price` 为 int64 定点值，单位厘，并提供 `Int64()` / `String()`；当前 Data Adapter 走 `Float64()` 造成可避免的精度丢失。后续应在 Adapter 入口保留定点值/Decimal String，不 fork 第三方库。
-- Amount 的业务单位不因复用 Price 类型而自动成立，仍需单独核验证据。
+- `github.com/injoyai/tdx v0.0.86` 的 `protocol.Price` 为 int64 定点值、单位厘；`pytdx.go` 的 v1 float64 兼容字段仍使用 `Float64()`，但 `pytdxDailyBarExactValues` 使用 `Int64()` 生成精确 OHLC/Amount 十进制值，Volume 保留整数词法值。
+- `DailyBarExactValues` 的 OHLC 是请求复权后的最终值；RawVolume/RawAmount 是单位归一化前的来源值。QFQ/HFQ 由协议库调整后的 Kline 生成 ExactValues，因此该 sidecar 与返回的复权口径一致。
+- Repository sidecar 已持久化、参与 Revision Hash，current/PIT 读回测试已存在。Amount 的 CNY 业务单位不因复用 Price 类型自动成立，仍需独立核验证据。
+
+### 28.12 Data 精确值 Application Port 映射缺口（2026-11-19）
+
+- 已确认默认 7 个 Provider 的 ExactValues 均在 Provider 层生成，Normalize 按值保留，Repository metadata 持久化并可由 current/PIT 读取恢复。
+- 原 `app.DailyBar` / `application.mapDailyBar` 未包含 ExactValues，导致精确值跨 Data Application Port 丢失。已在本轮补充同构 DTO、深拷贝映射和 Reader current/PIT 回归测试。
+- 该修复不修改旧 HTTP JSON，不改变现有 float64 字段或模块职责；待本轮精确 SHA Integration CI 验收。
+- D1 仍需核验 Hithink/Tushare/Yahoo 可配置来源精度覆盖、Amount 单位证据和 ProviderTime/逐行数据版本；D2 冻结 DailyBars v2 DTO/Schema/Golden 后再开放 DATA-CTR-005。

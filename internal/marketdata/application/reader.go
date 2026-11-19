@@ -299,6 +299,17 @@ func mapDailyBar(source model.DailyBar) app.DailyBar {
 		FallbackReason:                        source.FallbackReason,
 		RequestID:                             source.RequestID,
 		NormalizationVersion:                  source.NormalizationVer,
+		ExactValues:                           mapDailyBarExactValues(source.ExactValues),
+	}
+}
+
+func mapDailyBarExactValues(source *model.DailyBarExactValues) *app.DailyBarExactValues {
+	if source == nil {
+		return nil
+	}
+	return &app.DailyBarExactValues{
+		Open: source.Open, High: source.High, Low: source.Low, Close: source.Close,
+		RawVolume: source.RawVolume, RawAmount: clonePointer(source.RawAmount), AmountCNY: clonePointer(source.AmountCNY),
 	}
 }
 

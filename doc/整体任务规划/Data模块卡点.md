@@ -127,3 +127,10 @@ Root Server 的 Data Module 构造、共享资源注入、Migration Registry、I
 
 - Data 已在 `repair_all` 增加 Migration V5 与内容寻址交易日历 Snapshot Repository；保存和精确读取按 SHA-256 校验，重复内容幂等，内容或质量变化生成新 Ref。
 - 该能力为 DATA-CTR-007 的日历版本前置子项；未完成 DailyBars v2、Manifest/Payload 绑定和 AuthorizationRef 前，DATA-CTR-007 仍 deferred。最终代码 SHA `4aa468e4de6fc51a16068d43ab2229c5b0181ab9` 的完整 Integration CI Run `44493758123` 已全项 success。
+
+
+## RepairAll D1 精确值链路复核（2026-11-19）
+
+- 已确认默认 7 个 DailyBars Provider 均生成 ExactValues；Normalize 按值保留；Repository sidecar 持久化、Revision Hash 绑定、current/PIT 读取恢复均有实现和测试。Pytdx 兼容 Float64() 不是精确值唯一来源，ExactValues 使用 Price.Int64()；原“Pytdx 精度入口丢失”卡点撤销为误判。
+- 实际跨模块缺口是 `app.DailyBar` 未暴露 ExactValues，`application.mapDailyBar` 丢弃该字段。本轮增加 Application DTO、深拷贝映射及 Reader 回归测试，待精确 SHA CI 后关闭。
+- 仍开放：可配置 Hithink/Tushare/Yahoo 的 ExactValues 覆盖核验；Amount 单位证据；所有 Provider 的 ProviderTime/逐行数据版本；DailyBars v2 DTO/Schema/Golden；DATA-CTR-007 Payload/Manifest/AuthorizationRef。
