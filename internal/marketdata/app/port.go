@@ -151,6 +151,36 @@ type DailyBarsSnapshot struct {
 	Bars                   []DailyBar
 }
 
+// DailyBarCoverageEvidence 是一次覆盖率评估实际使用的日历与阈值证据。
+type DailyBarCoverageEvidence struct {
+	CalendarQualityStatus QualityStatus
+	ExpectedTradingDays   int
+	MinimumRequiredBars   int
+	CoverageBasis         string
+	CoverageSufficient    bool
+	Warnings              []string
+}
+
+// DailyBarsV2Snapshot 是版本化日线 Snapshot。CalendarRef 必须来自同一次覆盖率评估，
+// 不允许在读取完成后再次查询交易日历补写。
+type DailyBarsV2Snapshot struct {
+	Symbol                 string
+	Interval               string
+	AdjustmentBasis        AdjustmentBasis
+	QualityStatus          QualityStatus
+	Warnings               []string
+	SystemObservedAtCutoff *time.Time
+	TradingCalendarRef     *string
+	CoverageEvidence       DailyBarCoverageEvidence
+	Bars                   []DailyBar
+}
+
+// DailyBarsV2Reader 提供带有日历版本证据的版本化日线读取用例。
+// 与 v1 DailyBarsReader 分离，避免改变既有消费者契约。
+type DailyBarsV2Reader interface {
+	GetDailyBarsV2(ctx context.Context, query DailyBarsQuery) (DailyBarsV2Snapshot, error)
+}
+
 // FundamentalsQuery 定义单证券、单报告期的财务数据读取请求。
 // SystemObservedAtCutoff 非 nil 时只读取该系统观察时点已持久化的历史修订。
 type FundamentalsQuery struct {
