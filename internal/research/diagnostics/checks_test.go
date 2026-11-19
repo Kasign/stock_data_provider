@@ -407,3 +407,72 @@ func TestEvidenceCheckRequiresComparableStrictPIT(t *testing.T) {
 		}
 	})
 }
+
+func TestEventAndClaimChecksDoNotExposeDomainText(t *testing.T) {
+	cutoff := time.Date(2026, 11, 6, 8, 0, 0, 0, time.UTC)
+	event := researchevent.ResearchEvent{
+		EventID: "event-private", EventVersion: 3, EventType: "fixture",
+		Title: "不得进入诊断输出的事件标题", Status: researchevent.StatusDetected,
+		SubjectRefs: []string{"security:600000"}, EvidenceRefs: []string{"evidence:private"},
+		SystemObservedAt: cutoff, SystemAsOf: cutoff,
+		ImpactHypothesisRefs: []string{}, InvalidationConditions: []string{},
+		Uncertainty: []string{}, TimeNormalizationRuleVersion: "1.0.0",
+		SourceTimes: []researchevent.EventSourceTime{}, DerivedFromRefs: []researchevent.ResearchEventRef{},
+	}
+	claim := researchclaim.Claim{
+		ClaimID: "claim-private", ClaimVersion: 4,
+		Statement: "不得进入诊断输出的研究判断",
+		EpistemicType: researchclaim.EpistemicReportedFact,
+		ScopeRefs: []string{"security:600000"}, SystemAsOf: cutoff,
+		SupportingEvidenceRefs: []string{"evidence:private"},
+		ContradictingEvidenceRefs: []string{}, RequiredDataRefs: []string{},
+		Status: researchclaim.StatusProposed, Limitations: []string{},
+	}
+
+	checks := []struct {
+		name string
+		build func() (platformdiagnostics.Check, error)
+		forbidden []string
+	}{
+		{
+			name: "event",
+			build: func() (platformdiagnostics.Check, error) {
+				return NewEventCheck("research.event.private", "Event 快照", true, event, cutoff)
+			},
+			forbidden: []string{event.Title, event.EventID, "security:600000", "evidence:private"},
+		},
+		{
+			name: "claim",
+			build: func() (platformdiagnostics.Check, error) {
+				return NewClaimCheck("research.claim.private", "Claim 快照", true, claim, cutoff)
+			},
+			forbidden: []string{claim.Statement, claim.ClaimID, "security:600000", "evidence:private"},
+		},
+	}
+
+	for _, item := range checks {
+		t.Run(item.name, func(t *testing.T) {
+			check, err := item.build()
+			if err != nil {
+				t.Fatalf("build check: %v", err)
+			}
+			result := runCheck(t, check)
+			if result.Observation.Status != platformdiagnostics.StatusHealthy {
+				t.Fatalf("status = %q, want healthy", result.Observation.Status)
+			}
+			if len(result.Observation.Attributes) != 1 {
+				t.Fatalf("attributes = %#v, want version-only metadata", result.Observation.Attributes)
+			}
+			for _, value := range item.forbidden {
+				if strings.Contains(result.Observation.SafeMessage, value) {
+					t.Errorf("safe_message exposes domain value %q", value)
+				}
+				for _, attribute := range result.Observation.Attributes {
+					if strings.Contains(attribute, value) {
+						t.Errorf("diagnostic attribute exposes domain value %q", value)
+					}
+				}
+			}
+		})
+	}
+}
