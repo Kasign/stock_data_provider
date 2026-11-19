@@ -2,7 +2,7 @@
 
 - 仓库：`Kasign/stock_data_provider`
 - 工作分支：`repair_all`
-- 当前基线：`a1d56c1f7034d2c77ecfee9bc6daf574237f9847`
+- 当前基线：`ef3fa3acca68dd108098f324e077d22732c58582`
 - 更新日期：2026-11-19
 
 ## 1. 分支用途与执行原则
@@ -86,5 +86,14 @@
 | SHA | 结果 | 说明 |
 |---|---|---|
 | `37d37f3107befbd42c98891917efc608c354330b` | 历史 CI success | Integration CI Run 44443549022；该 SHA 的全量检查通过 |
-| `a1d56c1f7034d2c77ecfee9bc6daf574237f9847` | 待验收 | RA-NEWS-001 提交后尚未观察到 repair_all 对应 Actions Run |
+| `a1d56c1f7034d2c77ecfee9bc6daf574237f9847` | 代码已纳入后续验收 | RA-NEWS-001 代码提交；由后续 repair_all CI 覆盖 |
+| `ef3fa3acca68dd108098f324e077d22732c58582` | CI 运行中 | 为 repair_all 增加 Integration CI push 触发；Run [44446102934](https://github.com/Kasign/stock_data_provider/actions/runs/44446102934) |
 
+
+
+### RA-CI-001：repair_all 完整集成 CI 触发
+
+- 原因：原 `.github/workflows/integration-ci.yml` 仅监听 `integration` 分支 push；repair_all 的代码提交不会自动触发全量验收。
+- 修改：将 `repair_all` 加入同一工作流 push 分支列表，复用现有全量检查，不复制 CI 工作流。
+- 提交：`ef3fa3acca68dd108098f324e077d22732c58582`。
+- Run：[44446102934](https://github.com/Kasign/stock_data_provider/actions/runs/44446102934)，当前查询为 in_progress；尚未得到最终结论。
