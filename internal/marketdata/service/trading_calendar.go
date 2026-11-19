@@ -95,6 +95,7 @@ func (s *DataService) TradingCalendar(ctx context.Context, rawStartDate, rawEndD
 		var cached model.TradingCalendarSnapshot
 		if json.Unmarshal(data, &cached) == nil && validateTradingCalendarSnapshotAt(&cached, startDate, endDate, now) == nil &&
 			!cached.FetchedAt.After(now) && now.Sub(cached.FetchedAt) < ttl {
+			s.persistTradingCalendarSnapshot(ctx, &cached, now)
 			return &cached, true, nil
 		}
 	} else if cacheErr != nil {
@@ -143,6 +144,7 @@ func (s *DataService) TradingCalendar(ctx context.Context, rawStartDate, rawEndD
 		best.QualityStatus = model.QualityDegraded
 		best.QualityReasons = appendTradingCalendarReason(best.QualityReasons, "provider_trading_calendar_sources_disagree")
 	}
+	s.persistTradingCalendarSnapshot(ctx, best, now)
 	if data, marshalErr := json.Marshal(best); marshalErr == nil {
 		if cacheErr := s.cache.Set(ctx, key, data, ttl); cacheErr != nil {
 			s.logger.Warn("trading-calendar cache write failed", "start_date", startDate, "end_date", endDate, "error", cacheErr)
@@ -190,4 +192,23 @@ func appendTradingCalendarReason(reasons []string, reason string) []string {
 		}
 	}
 	return append(reasons, reason)
+}
+
+
+// persistTradingCalendarSnapshot materializes the selected normalized calendar as
+// an immutable Data-owned resource. Legacy calendar reads remain available when
+// MariaDB is disabled; consumers requiring PIT must reject an empty CalendarRef.
+func (s *DataService) persistTradingCalendarSnapshot(ctx context.Context, snapshot *model.TradingCalendarSnapshot, observedAt time.Time) {
+	if s == nil || snapshot == nil || s.store == nil || !s.store.Configured() {
+		return
+	}
+	calendarRef, systemObservedAt, err := s.store.SaveTradingCalendarSnapshot(ctx, snapshot, observedAt)
+	if err != nil {
+		s.logger.Warn("trading-calendar immutable snapshot persistence failed",
+			"market", snapshot.Market, "start_date", snapshot.StartDate, "end_date", snapshot.EndDate,
+			"source", snapshot.Source, "error", err)
+		return
+	}
+	snapshot.CalendarRef = calendarRef
+	snapshot.SystemObservedAt = &systemObservedAt
 }

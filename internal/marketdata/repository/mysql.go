@@ -337,6 +337,27 @@ ON market_data_adjustment_factor_versions (symbol, trade_date, source, source_ve
 				{Kind: platformstorage.MigrationOperationEnsureColumn, Table: "market_data_quotes", Name: "turnover_rate", Definition: "DECIMAL(16,8) NULL"},
 			},
 		},
+		{
+			Version: 5, Description: "immutable trading-calendar content snapshots",
+			Statements: []string{
+				`CREATE TABLE IF NOT EXISTS market_data_trading_calendar_snapshots (
+ calendar_ref VARCHAR(96) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ content_fingerprint CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ market VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ start_date DATE NOT NULL,
+ end_date DATE NOT NULL,
+ source VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ adapter_version VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ schema_version VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ quality_status VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ fetched_at DATETIME(6) NOT NULL,
+ observed_at DATETIME(6) NOT NULL,
+ payload_json LONGTEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
+ PRIMARY KEY (calendar_ref),
+ KEY idx_market_calendar_identity_observed (market, start_date, end_date, observed_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+			},
+		},
 	}
 }
 
