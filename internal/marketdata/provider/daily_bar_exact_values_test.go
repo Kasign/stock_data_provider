@@ -35,4 +35,12 @@ func TestDailyBarExactValuesFromJSONPreservesNumericTokens(t *testing.T) {
 		got.RawAmount == nil || *got.RawAmount != "456.78" || got.AmountCNY == nil || *got.AmountCNY != "456.78" {
 		t.Fatalf("unexpected exact JSON values: %+v", got)
 	}
+	if got.OpenEvidence == nil || got.OpenEvidence.SourceToken != "001.2300" ||
+		got.OpenEvidence.SourceFractionDigits == nil || *got.OpenEvidence.SourceFractionDigits != 4 ||
+		got.HighEvidence == nil || got.HighEvidence.SourceToken != "1.25" ||
+		got.RawAmountEvidence == nil || got.RawAmountEvidence.SourceToken != "456.7800" ||
+		got.RawAmountEvidence.SourceFractionDigits == nil || *got.RawAmountEvidence.SourceFractionDigits != 4 ||
+		got.AmountCNYEvidence == nil || got.AmountCNYEvidence.SourceToken != "456.7800" {
+		t.Fatalf("original source lexical evidence was not preserved: %+v", got)
+	}
 }

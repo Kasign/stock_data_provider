@@ -59,14 +59,40 @@ type Quote struct {
 }
 
 // DailyBarExactValues keeps exact decimal values for Data v2. OHLC are the final values after the requested adjustment; RawVolume/RawAmount retain the source values before unit normalization.
+type DailyBarPrecisionEvidenceKind string
+
+const (
+	DailyBarPrecisionEvidenceProviderContract   DailyBarPrecisionEvidenceKind = "provider_contract"
+	DailyBarPrecisionEvidenceObservedToken      DailyBarPrecisionEvidenceKind = "observed_token"
+	DailyBarPrecisionEvidenceProtocolFixedScale DailyBarPrecisionEvidenceKind = "protocol_fixed_scale"
+	DailyBarPrecisionEvidenceUnknown            DailyBarPrecisionEvidenceKind = "unknown"
+)
+
+// DailyBarDecimalEvidence 保留精确数值对应的来源词法或协议固定 scale。
+// SourceToken 是供应商实际返回的数字文本；ProtocolScale 只用于协议明示的定点整数。
+type DailyBarDecimalEvidence struct {
+	EvidenceKind          DailyBarPrecisionEvidenceKind `json:"evidence_kind"`
+	SourceToken           string                        `json:"source_token,omitempty"`
+	SourceFractionDigits  *int                          `json:"source_fraction_digits,omitempty"`
+	ProtocolScale         *int                          `json:"protocol_scale,omitempty"`
+	UnitConversionFactor string                        `json:"unit_conversion_factor,omitempty"`
+}
+
 type DailyBarExactValues struct {
-	Open      string  `json:"open"`
-	High      string  `json:"high"`
-	Low       string  `json:"low"`
-	Close     string  `json:"close"`
-	RawVolume string  `json:"raw_volume"`
-	RawAmount *string `json:"raw_amount,omitempty"`
-	AmountCNY *string `json:"amount_cny,omitempty"`
+	Open              string                   `json:"open"`
+	High              string                   `json:"high"`
+	Low               string                   `json:"low"`
+	Close             string                   `json:"close"`
+	RawVolume         string                   `json:"raw_volume"`
+	RawAmount         *string                  `json:"raw_amount,omitempty"`
+	AmountCNY         *string                  `json:"amount_cny,omitempty"`
+	OpenEvidence      *DailyBarDecimalEvidence `json:"open_evidence,omitempty"`
+	HighEvidence      *DailyBarDecimalEvidence `json:"high_evidence,omitempty"`
+	LowEvidence       *DailyBarDecimalEvidence `json:"low_evidence,omitempty"`
+	CloseEvidence     *DailyBarDecimalEvidence `json:"close_evidence,omitempty"`
+	RawVolumeEvidence *DailyBarDecimalEvidence `json:"raw_volume_evidence,omitempty"`
+	RawAmountEvidence *DailyBarDecimalEvidence `json:"raw_amount_evidence,omitempty"`
+	AmountCNYEvidence *DailyBarDecimalEvidence `json:"amount_cny_evidence,omitempty"`
 }
 
 type DailyBar struct {

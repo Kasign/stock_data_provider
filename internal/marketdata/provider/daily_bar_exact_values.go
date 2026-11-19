@@ -33,6 +33,9 @@ func dailyBarExactValuesFromStrings(open, high, low, close, rawVolume, rawAmount
 
 	result := &model.DailyBarExactValues{
 		Open: openValue, High: highValue, Low: lowValue, Close: closeValue, RawVolume: volumeValue,
+		OpenEvidence: dailyBarDecimalEvidenceFromString(open), HighEvidence: dailyBarDecimalEvidenceFromString(high),
+		LowEvidence: dailyBarDecimalEvidenceFromString(low), CloseEvidence: dailyBarDecimalEvidenceFromString(close),
+		RawVolumeEvidence: dailyBarDecimalEvidenceFromString(rawVolume),
 	}
 	if strings.TrimSpace(rawAmount) == "" {
 		return result
@@ -42,8 +45,10 @@ func dailyBarExactValuesFromStrings(open, high, low, close, rawVolume, rawAmount
 		return nil
 	}
 	result.RawAmount = &amountValue
+	result.RawAmountEvidence = dailyBarDecimalEvidenceFromString(rawAmount)
 	if strings.EqualFold(strings.TrimSpace(rawAmountUnit), "cny") && strings.EqualFold(strings.TrimSpace(amountUnit), "cny") {
 		result.AmountCNY = &amountValue
+		result.AmountCNYEvidence = cloneDailyBarDecimalEvidence(result.RawAmountEvidence)
 	}
 	return result
 }
@@ -70,7 +75,74 @@ func dailyBarExactValuesFromJSON(open, high, low, close, rawVolume, rawAmount js
 		return nil
 	}
 	amountValue, _ := dailyBarDecimalFromJSON(rawAmount)
-	return dailyBarExactValuesFromStrings(openValue, highValue, lowValue, closeValue, volumeValue, amountValue, rawAmountUnit, amountUnit)
+	result := dailyBarExactValuesFromStrings(openValue, highValue, lowValue, closeValue, volumeValue, amountValue, rawAmountUnit, amountUnit)
+	if result == nil {
+		return nil
+	}
+	result.OpenEvidence = dailyBarDecimalEvidenceFromJSON(open)
+	result.HighEvidence = dailyBarDecimalEvidenceFromJSON(high)
+	result.LowEvidence = dailyBarDecimalEvidenceFromJSON(low)
+	result.CloseEvidence = dailyBarDecimalEvidenceFromJSON(close)
+	result.RawVolumeEvidence = dailyBarDecimalEvidenceFromJSON(rawVolume)
+	result.RawAmountEvidence = dailyBarDecimalEvidenceFromJSON(rawAmount)
+	if result.AmountCNY != nil {
+		result.AmountCNYEvidence = cloneDailyBarDecimalEvidence(result.RawAmountEvidence)
+	}
+	return result
+}
+
+func dailyBarDecimalEvidenceFromString(raw string) *model.DailyBarDecimalEvidence {
+	token := strings.TrimSpace(raw)
+	if token == "" {
+		return nil
+	}
+	if _, err := canonicalDailyBarDecimal(token); err != nil {
+		return nil
+	}
+	mantissa := token
+	if index := strings.IndexAny(mantissa, "eE"); index >= 0 {
+		mantissa = mantissa[:index]
+	}
+	fractionDigits := 0
+	if index := strings.IndexByte(mantissa, '.'); index >= 0 {
+		fractionDigits = len(mantissa) - index - 1
+	}
+	return &model.DailyBarDecimalEvidence{
+		EvidenceKind: model.DailyBarPrecisionEvidenceObservedToken,
+		SourceToken: token,
+		SourceFractionDigits: &fractionDigits,
+	}
+}
+
+func dailyBarDecimalEvidenceFromJSON(raw json.RawMessage) *model.DailyBarDecimalEvidence {
+	value := strings.TrimSpace(string(raw))
+	if value == "" || value == "null" {
+		return nil
+	}
+	if strings.HasPrefix(value, """) {
+		var decoded string
+		if err := json.Unmarshal(raw, &decoded); err != nil {
+			return nil
+		}
+		value = decoded
+	}
+	return dailyBarDecimalEvidenceFromString(value)
+}
+
+func cloneDailyBarDecimalEvidence(source *model.DailyBarDecimalEvidence) *model.DailyBarDecimalEvidence {
+	if source == nil {
+		return nil
+	}
+	result := *source
+	if source.SourceFractionDigits != nil {
+		value := *source.SourceFractionDigits
+		result.SourceFractionDigits = &value
+	}
+	if source.ProtocolScale != nil {
+		value := *source.ProtocolScale
+		result.ProtocolScale = &value
+	}
+	return &result
 }
 
 func dailyBarDecimalFromJSON(raw json.RawMessage) (string, bool) {
