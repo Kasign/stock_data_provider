@@ -297,3 +297,55 @@ RA009 代码关闭条件已满足：Server 路由认证矩阵、CSRF、WebUI 请
 - 首轮 Integration CI Run [44488570373](https://github.com/Kasign/stock_data_provider/actions/runs/44488570373) 对提交 `6a6fcbec7f88fb9a4832eeb10c7df3118c5044c4`：根模块测试、News/Research/Researchflow 跨模块逐用例门禁、Worker Bootstrap MariaDB/Redis 集成、go-core Vet/测试、Compose、WebUI 语法/单测/镜像构建均通过；最终汇总因新增 Go 测试文件多一个空行导致 gofmt 检查失败。
 - 未修改测试标准。已按 gofmt 修正空行，并清理 Worker/API Bootstrap 集成测试中已废弃且不再被 Data 配置读取的 `MARKET_DATA_BASE_URL`、`MARKET_DATA_API_KEY` 测试环境变量；这些是测试夹具残留，不是运行时配置或生产凭据问题。
 - 修正后提交需重新执行完整 Integration CI；在新 Run 结束前仍不标记本轮验收通过。
+
+
+## 28. 阶段二：跨模块卡点解阻总表（2026-11-19）
+
+### 28.1 当前基线与已关闭事项
+
+- 当前基线：`repair_all` HEAD `9a0680463f1ddea8f137e9009a6306f26e331ffd`。
+- RA-CROSS-REVIEW-011 Lifecycle Shutdown 预算缺陷已修复；完整 Integration CI [Run 44489065474](https://github.com/Kasign/stock_data_provider/actions/runs/44489065474) 对精确 SHA `9a0680463f1ddea8f137e9009a6306f26e331ffd` 全项 success。该项关闭，不再列为待办。
+- RA009 Data Root 单入口迁移代码验收已于 SHA `1e916220a8784ae840132ce0cec3b3654c6b9655` / Run 44482650366 通过。M6 真实部署验收仍单独开放。
+- RA-CROSS-REVIEW-010 Diagnostics 审查已完成；无真实消费者的 Check/Worker 不作为待开发事项，不重复审查。
+- 下表只列当前仍开放的跨模块解阻项。模块卡点文档保留具体证据、字段和恢复条件；本表负责唯一责任归属和推进顺序。
+
+### 28.2 统一卡点登记
+
+| 顺序 | 卡点/工作包 | 主责 Owner | 协作方 | 当前真实阻塞 | 下一项可执行交付 | 关闭条件 |
+|---|---|---|---|---|---|---|
+| 0 | 卡点治理与状态同步 | RepairAll | 全模块 | 历史文档存在过期状态，卡点分散 | 统一登记编号、主责、依赖、交付和验收；同步模块文档 | 无过期开放项、无重复责任、每项有明确解除条件 |
+| 1 | DATA-CTR-007 Snapshot/Evidence | Data | Research、Quant、Server | 当前 DailyBarsSnapshot 不具备内容寻址 SnapshotRef、Manifest/Payload 绑定和 AuthorizationRef | Data 提交 Snapshot 契约方案及兼容/迁移边界；同步 Research Evidence 映射 | 冻结契约、实现、Golden/Contract Test 和可验证样本齐备 |
+| 1 | DATA-003～DATA-007 外部数据证据 | Data | Provider/来源方、Server/运维 | PIT、估值公式/源端时间、Freshness、Go/Python 配对、Provider 请求证据不齐 | 逐字段列出已知/未知证据；先完成公开可查资料和现有样本核验，再登记真正外部缺口 | 每个子项具备指定证券/日期/Provider 的原始证据和独立复算/对账 |
+| 1 | NEWS-BLK-01/03/05 | News（配置契约）/Server（装配） | Researchflow、Platform | Source Catalog 权威来源、Feed 生产组合和真实 Diagnostics 注册未闭环 | 先确认现有配置/Resolver/Root 装配是否可复用；输出唯一配置 Owner 和接线清单 | 权威 Source 配置、真实 Resolver/HTTP 出口、Root 装配和集成测试通过 |
+| 1 | NEWS-BLK-02/04/07 | 实际业务来源 Owner | News、Researchflow、Server | Feed 无真实调用方；来源许可/网络证据和合格 available_at 来源缺失 | 从现有业务流程确认是否需要 Feed；公开核验来源时间语义与许可；无真实场景的项保持 deferred | 真实调用方、授权来源、available_at 原始证据和持久化版本链通过验收 |
+| 1 | NEWS-BLK-06 Cleaner 周期触发 | Server/运维 | News、业务 Owner | 周期触发 Owner、频率和运行策略未定 | 明确运行责任、周期、并发、超时、重叠和停机策略 | 真实周期运行记录、失败重试和优雅停止证据 |
+| 2 | Research Context 授权与 Run PIT | Research（授权策略） | Server、Researchflow | ContextAuthorizer 未有真实生产策略注入；没有真实 Context Stage 消费者 | Research 定义授权主体/资源策略；Researchflow 明确首个 Context Stage 输入输出；Server 实现真实注入 | 可信 CallerRef、授权撤销 fail-closed、创建前/读取后 SystemAsOf 一致性测试通过 |
+| 2 | Evidence PIT Mode | Researchflow（模板/结果契约） | Research、项目契约 Owner | Template/ResultComposition 缺 PIT Mode；不能猜默认严格/非严格语义 | 提交字段、默认值、风险声明、Fingerprint 绑定的契约决议草案 | 契约冻结、Validator 传播、严格/非严格 Golden 和回归测试通过 |
+| 2 | RSC-004 Data 主数据关联 | Data | Research | SecurityRef/IndustryRef 历史版本与知识时间来源未冻结，DATA-CTR-007 未解锁 | Data 提供正式主数据引用/版本契约；Research 不复制模型 | 权威引用契约和历史时点样本可验证 |
+| 3 | QNT-013 生产结果存储/授权/审计 | Server（生产 Adapter） | Quant、Platform | 当前只有 Save Port/MemoryRepository，生产 SQL、授权 Reader、审计 Adapter 未闭环 | Quant 固定公开 Port；Server 设计并实现 Repository、Principal/Authorization、Audit 生产注入 | Root Migration、事务/幂等、授权撤销、审计失败语义集成通过 |
+| 3 | QNT-014 计算 Facade | Quant | Data、Researchflow | 尚无正式计算 Application Facade，且输入精度/单位依赖 DATA-CTR-005/007 | 先完成不依赖未知输入的正式 Registry/DTO/Golden；输入依赖保持显式阻塞 | 正式计算 Facade、误差预算、Golden 和 Application 测试齐备 |
+| 3 | QNT-015 Snapshot Adapter | Quant | Data、Research | DATA-CTR-007 未解锁 | 等 Data Snapshot 契约冻结后实现消费 Adapter | Snapshot 授权、内容完整性和 PIT 质量门禁通过 |
+| 3 | FLOW-005 Context Assembly | Researchflow | Research、Server、LLM | 缺真实 Context Stage、Owner Authorizer、Run PIT 绑定和生产 Tokenizer 证据 | 明确首个真实 Stage；按已冻结接口接入，不创建空 Stage | 同一 Run 的 Context 创建/读取/ModelRequest 时间一致且授权通过 |
+| 3 | FLOW-006 Result Composer / RF-BLOCK-007/008 | Researchflow | Quant、Research、Server | 无生产 Composer Facade/唯一结果持久化 Owner；RiskDecision 契约未统一 | 确认结果资源唯一 Owner，冻结 Quant→Composer 字段映射与状态/Reason 规则 | 真实 Quant/Research 输入、风险 fail-closed、持久化及 ResultRef 授权读取通过 |
+| 3 | Researchflow Outbox 永久错误策略 | Researchflow | Notification、契约 Owner | 永久 Envelope 错误目前统一 Retry，Reject/DeadLetter 策略未决 | 形成保留现有状态模型前提下的告警/人工处置决策；若需改状态先走契约变更 | 永久/临时错误分类和可恢复处置策略经契约测试验证 |
+| 4 | SRV-010 / LLM-012 生产调用 | Server（装配） | LLM、Researchflow、部署 | 无 SecretRef、ProviderConfig、CapabilityState 生产装配及真实消费者/Gateway 证据 | Server 确认受控 Secret/目标策略；Researchflow 提供首个真实场景；LLM 提供能力验收矩阵 | 真实 Gateway/Model 版本绑定，调用/取消/超时/错误场景留存证据 |
+| 4 | NTF-BLOCK-01/02/03 事件/Filter/模板契约 | 各业务事件生产方 | Notification | 缺真实事件 Schema、Filter 语义和模板变量映射 | 先选定首个真实业务事件并由生产方提供 Schema/Golden/模板 | 正式契约冻结且 Notification Contract Test 通过 |
+| 4 | NTF-BLOCK-04/05/06/07 生产投递装配 | Server | Notification、Platform | RecipientDirectory、Fanout/Delivery Worker、依赖组合和根 Migration 未形成生产闭环 | 以首个真实事件和接收人完成最小完整组合，不先造通用空壳 | Root 装配、Worker 生命周期、真实接收人、Migration 和投递集成通过 |
+| 4 | NTF-BLOCK-08/09 恢复与 Secret 运维 | Server/部署运维 | Notification | 多实例故障恢复及生产 Webhook Secret 生命周期未验收 | 制定故障注入矩阵和 Secret 注入/轮换/撤销演练 | 租约恢复、Unknown 对账、停止及 Secret 轮换证据通过 |
+| 5 | M6 生产部署验收 | Server/部署运维 | Data、Platform、WebUI | 目标 HTTPS/Owner Session、MariaDB/Redis Migration 启停、备份恢复和 Provider 真实数据证据缺失 | 形成部署演练脚本、环境配置清单和证据归档路径 | 目标环境真实运行、备份恢复、浏览器与 Provider 验收完成 |
+
+### 28.3 执行约束与当前批次
+
+1. 当前先执行阶段 0 状态治理，并立即启动阶段 1 的 DATA-CTR-007 契约梳理；不等待所有外部证据齐备才开展可独立完成的工作。
+2. DATA-003～DATA-007、NEWS-BLK-04/07、LLM Gateway 和 M6 中真正依赖供应商/目标环境的证据，先完成公开资料、仓库资产和既有记录核查；确认无法从现有来源获得后，才保留为外部交付项。
+3. 任何跨模块卡点都必须先明确契约 Owner，再改代码；不得通过默认 Allow、假 Provider、空 Worker、Mock Stage 或虚构来源关闭。
+4. 已完成的机制审查不重复执行。新增工作必须产出契约决议、代码差异、可复现测试或外部证据之一。
+5. 每个功能批次按完整上下游提交；所有代码和文档只在 `repair_all` 修改，记录精确 SHA 与完整 CI 结果。
+6. 卡点状态采用 OPEN / IN_PROGRESS / BLOCKED_EXTERNAL / DEFERRED / CLOSED；未执行的真实验收不得标 PASS。
+
+### 28.4 阶段 0 状态校准
+
+- RA011 的 Lifecycle 修复和完整 CI 已通过；关闭 RA011 的 Lifecycle Shutdown 预算缺陷，不再列为未验收代码任务。
+- RA009 的代码与 CI 已通过；Data/Server 文档中早期“等待最新 CI”的文字属于历史快照，以 RA009 最终验收记录为准。M6 目标环境证据仍开放。
+- RA-CROSS-REVIEW-010 已完成，不重复执行 Diagnostics 全面审查；只在真实 Resolver/Worker/消费者接入后补充相应注册和测试。
+- Data、News、Research、Researchflow、Quant、LLM、Notification 的业务卡点仍开放，具体以本节统一登记和各模块卡点文档为准。

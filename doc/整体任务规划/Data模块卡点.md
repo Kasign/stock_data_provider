@@ -113,4 +113,11 @@ Root Server 的 Data Module 构造、共享资源注入、Migration Registry、I
 - Data HTTP Adapter 仅由 Root Server InProcessHandler 使用；Request ID 从 Platform observability Context 读取，不再复制独立 Data HTTP middleware。
 - Data Migration Definitions 仍由 Root Migration Registry 统一注册；已删除只服务独立 Data 命令的 Module.MigrationRunner 兼容入口。
 - DATA-CTR-006（Data X-API-Key HTTP 认证）已在项目契约目录标记 retired；外部路由认证以 SRV-CTR-002 为准，Data 领域授权仍以 DATA-CTR-008 为准。
-- 本次代码修改尚待最新精确 SHA Integration CI 与目标环境真实验收；DATA-003～DATA-007 的 Provider/时点/Freshness/Parity 证据卡点保持原状态，不因部署迁移自动关闭。
+- RA009 代码验收已由精确 SHA `1e916220a8784ae840132ce0cec3b3654c6b9655` 的 Integration CI Run [44482650366](https://github.com/Kasign/stock_data_provider/actions/runs/44482650366) 全项 success；不再等待该项 CI。目标环境 M6 真实验收仍开放。DATA-003～DATA-007 的 Provider/时点/Freshness/Parity 证据卡点保持原状态，不因部署迁移自动关闭。
+
+
+## RepairAll 阶段二卡点状态校准（2026-11-19）
+
+- RA009 Data Root 单入口代码与精确 SHA CI 已通过（Run 44482650366）；此前“等待最新 CI”的文字仅作为当时历史记录，不再是当前卡点。
+- 当前 Data 仍开放的实质卡点为 DATA-CTR-007、DATA-003～DATA-007 外部数据证据；M6 生产部署证据由 Server/部署运维负责，不重复归入 Data 代码待办。
+- 统一责任与解锁顺序见 `doc/整体任务规划/05-治理与验收/RepairAll跨模块修复计划与进度.md` 第 28 节。
