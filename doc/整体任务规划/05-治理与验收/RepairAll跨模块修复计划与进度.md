@@ -60,7 +60,7 @@ P0 原始问题及实施约束作为审计记录保留；当前状态以第 7、
 
 ### RA-CROSS-REVIEW-008：WebUI ↔ Server 身份认证、API 契约与凭据暴露 Review
 
-- 状态：IN_PROGRESS（已核对 WebUI 请求封装、Nginx、Compose、Root Server Data 路由和 Owner Session 契约；M5 部署切换仍需先明确 Data 业务路由认证策略）。
+- 状态：REVIEW_DONE_WITH_BLOCKERS（已完成 WebUI 请求、Nginx、Compose、Root Server Data 路由和 Owner Session 契约审查；M5 代码/部署切换等待 Data 业务路由认证策略确认）。
 - 目标：核对 WebUI 实际请求与 Server 已发布路由/认证矩阵，检查 Owner Session/Owner Bearer 的边界、CSRF、Request ID、API Key/Secret 是否进入浏览器持久化、Data Provider Key 是否由 Server 侧注入。
 - 范围：WebUI、Server、Platform、Data；只审查当前真实 UI 调用和已冻结/已发布 API，不新增无业务场景接口。
 - 首要核对：SRV-CTR-002、SRV-CTR-001（若已冻结）、PLAT-CTR-001/002/003、Data OpenAPI/Root Adapter 契约、WebUI 当前任务验收清单与 API 接口协作清单。
@@ -187,3 +187,15 @@ P0 原始问题及实施约束作为审计记录保留；当前状态以第 7、
 - 因此，不能只把 Nginx /market-api upstream 改为 Root Server：当前浏览器发出的 X-API-Key 会被 Root Router 忽略并返回未认证；也不能向浏览器下发 Owner Bearer 或用 Nginx 静态 Owner Bearer 伪装用户身份。
 - M5 目标“浏览器不持有 Data API Key、Root Server 单入口”与当前 Root 路由 Owner Bearer 策略之间存在认证契约缺口。需要明确 Data 业务路由是否允许 owner_session（含 POST 探测的 CSRF/资源授权），或由 Server/Platform 采用受控 Service Principal；本轮不擅自选择。
 - 文档迁移状态发现：MarketData 迁移计划顶部及第 3 节仍写 M3/M4 Root 装配未完成，与当前 Root 代码和 Server 模块进度冲突；本轮将校准为 M3/M4 代码级完成、M5 部署切换待决策，历史快照保留并标记过期。
+
+
+## 23. RA-CROSS-REVIEW-008 WebUI / Server / Data 认证与部署审查结论（2026-11-19）
+
+- 审查基线：repair_all HEAD f8af53bf3a57bf94a2e0f1f3bf5e35cca629680f；本轮未修改生产代码。
+- WebUI 当前行情请求通过 /market-api 访问独立 Data HTTP 服务，使用 X-API-Key；该 Data API Key 从 localStorage 读取并持久化。它不是第三方 Provider Key，也不是 Owner Bearer。
+- Compose 仍部署 stock-analysis-data（8091）、stock-analysis-server（8092）和 WebUI；Nginx 的 /market-api 指向独立 Data 容器，/analysis-api 指向 Root Server。M5 尚未完成。
+- Root Server 已具备同进程 Data Module/Application/InProcessHandler/Root Router；Data 路由使用 Owner Bearer，InProcessHandler 不识别 X-API-Key。Owner Session 仅挂载 SRV-CTR-002 六个 Session 路由，不自动授权 Data 业务路由；Cookie Path 当前只覆盖 /analysis-api/api。
+- 直接将 /market-api upstream 切换至 Root Server 会发生认证不匹配；静态注入 Owner Bearer 或让浏览器持有 Owner Bearer 均违反 SRV-CTR-002。不得仅修改 Nginx 或删除 API Key。
+- 文档已校准：MarketData M3/M4 代码级 Root 装配完成；M5 Compose/Nginx/WebUI 切换仍待完成，且受 Data 路由认证策略和 Cookie/API Prefix 约束。旧迁移文档中的 M3/M4 未完成状态已标记为过期历史快照。
+- 当前唯一需要用户决策的事项：Data 浏览器业务路由采用显式 Owner Session（POST probe 必须 CSRF，保留 Owner Bearer 给运维调用），还是采用受控 Service Principal 由可信反向代理注入。推荐前者，并统一 Root API Prefix/Cookie Path；但在确认前不修改认证契约。
+- 本轮未修改 WebUI、Server、Data 生产代码；没有执行新的代码测试。最近完整 Integration CI Run 44456052937 对代码 SHA 5334043ea8e1abc2c4006c371a3f95b123098946 成功；本轮提交仅为文档校准，不能称为当前 HEAD 的 CI 验收。

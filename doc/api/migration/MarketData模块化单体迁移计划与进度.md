@@ -337,54 +337,56 @@ internal/
 
 ### M3：Root Server 同进程装配
 
-状态：`in_progress`
+状态：`completed（代码级；M5 部署切换独立待完成）`
 
 工作项：
 
-- [ ] Root Server Bootstrap 创建并持有共享基础设施。
-- [ ] 构造 Market Data Module 并注入公开 Application Port。
-- [ ] 将 Analysis 当前 Remote HTTP Client 替换为 InProcess Adapter。
-- [ ] Data HTTP Handler 挂入 Root Server Router，兼容既有 `/market-api/` 路径。
-- [ ] Root Server 统一入口 Request Context、认证和路由中间件。
-- [ ] Data 领域授权仍由 Data 按契约执行；不因同进程取消 Scope、purpose 或审计。
-- [ ] 禁止同一调用路径隐式 fallback 到 Remote HTTP。
-- [ ] 明确 readiness 对 Data 模块初始化失败的反映规则。
+- [x] Root Server Bootstrap 创建并持有共享 MariaDB/Redis/Platform 出站资源。
+- [x] 构造 Market Data Module 并注入公开 Application Port。
+- [x] Analysis Collector 使用 Data Application Port，不再依赖旧 Remote HTTP Adapter。
+- [x] Data InProcessHandler 挂入 Root Server Router；Root API 路径已由 Root Router 注册，外部 `/market-api/` Nginx 兼容代理的 M5 切换仍待完成。
+- [x] Root Server 统一入口 Request Context、Owner Bearer 认证、Request ID 和 HTTP 限制中间件。
+- [x] Data 领域数据/质量语义仍归 Data；当前 DATA-CTR-006 由 Root 负责入口 Owner 认证，未定义独立 Data Scope/purpose，不自行增加。
+- [x] Analysis 调用路径使用 InProcess Application Port，无隐式 Remote HTTP fallback。
+- [x] Data Module 初始化失败会阻止 Bootstrap；Data Ready 已纳入 Root Readiness。
 
 验收：
 
-- [ ] Analysis 只依赖 Data Application Port。
-- [ ] 同进程调用结果与迁移前 Remote Adapter 的业务语义一致。
-- [ ] Request Context 可贯穿入口、Application、Repository 和诊断记录。
-- [ ] 外部 HTTP 路由仍执行正确的入口认证/授权。
-- [ ] 不存在 Data 对 Server 的反向依赖。
+- [x] Analysis 只依赖 Data Application Port。
+- [x] Root Data InProcessHandler 与 Data Module 共用相同 Application 用例/Repository；Root Server 专项集成 Run 44314707349 验证 API 路由、Owner Bearer 和无额外 Data API Key。
+- [x] Request ID/Context 由 Root 入口传播至 Data Handler/Application/Repository 调用链。
+- [x] 外部 HTTP 路由执行 Root Owner Bearer 入口认证；浏览器 Owner Session 访问策略属于 M5 的独立契约决策。
+- [x] Data 不依赖 Server 反向包。
 
 ### M4：共享资源与生命周期统一
 
-状态：`in_progress`
+状态：`completed（代码级；生产 DDL/真实 Provider 证据归 M6）`
 
 工作项：
 
-- [x] Data Repository 支持 borrowed `*sql.DB`；[ ] Root Server 创建共享 Pool 并注入 Data。
+- [x] Data Repository 支持 borrowed `*sql.DB`；[x] Root Server 创建共享 MariaDB Pool 并注入 Data。
 - [x] Repository 明确 borrowed/owned 语义，borrowed Pool 不由 Data 关闭；独立兼容入口保留自有 Pool 生命周期。
-- [x] Data 暴露显式 `MigrationRunner`，Module 构造不隐式执行 Schema Migration；[ ] Root Server 注册各模块 Runner 并统一调度。
-- [x] Data Cache 已适配共享 go-redis Client，`Module.Close` 不关闭注入 Cache；[ ] Root 创建、Ping 并注入共享 Redis Client，核对 Addr/Username/Password/DB 配置。
-- [x] 保留既有 Cache 接口、key namespace、TTL 和 Disabled Cache 入口；新增 typed nil 防御；[ ] integration 验证共享 Redis 下的完整行为。
-- [x] 已识别 Provider 的 HTTP 出口均有注入端口；严格校验按启用能力、实际 endpoint/origin 检查依赖完整性，并拒绝 typed nil；[ ] Root 按实际配置创建精确 Platform BoundDoer 并注入。
-- [ ] BaoStock/Pytdx TCP 受控出口：等待 Platform 提供 TCP BoundDialer；Root 注入前继续 fail-closed，禁止模块化生产路径使用标准 Dialer fallback。
-- [x] `LoadForInProcess` 不要求 Data API Key；[ ] Root 统一装载并校验服务 Config/Secret，区分独立 HTTP Adapter 凭据与进程内调用身份。
-- [x] Data Module 提供 Start/Stop/Wait/Close 生命周期入口；[ ] Root Server 统一调度 Worker、关闭顺序与 drain。
-- [ ] Logger/Diagnostics/Request Context 按冻结契约由组合根装配；Data 保留领域诊断语义。
+- [x] Data 暴露显式 `MigrationRunner`，Module 构造不隐式执行 Schema Migration；[x] Root Server 注册 Data 静态 Migration Definitions 并由 Root Registry 统一调度。
+- [x] Data Cache 已适配共享 go-redis Client，`Module.Close` 不关闭注入 Cache；[x] Root 创建、Ping 并注入共享 Redis Client，核对 Addr/Username/Password/DB 配置。
+- [x] 保留既有 Cache 接口、key namespace、TTL 和 Disabled Cache 入口；新增 typed nil 防御；[x] Integration 验证共享 Redis 下的完整行为。
+- [x] 已识别 Provider 的 HTTP 出口均有注入端口；严格校验按启用能力、实际 endpoint/origin 检查依赖完整性，并拒绝 typed nil；[x] Root 按实际配置创建精确 Platform BoundDoer 并注入。
+- [x] BaoStock/Pytdx TCP 受控出口由 Root 按配置 Host/IP/Port 白名单注入；该专用 TCP DialContext 只服务 Data Provider，不复制 Platform HTTP Client。
+- [x] `LoadForInProcess` 不要求 Data API Key；[x] Root 统一装载 Provider Config/Secret；LoadForRoot 不要求独立 Data API Key，进程内调用身份由 Root Router 负责。
+- [x] Data Module 提供 Start/Stop/Wait/Close 生命周期入口；[x] Root Server 统一调度 Data Module Worker、关闭顺序与 drain。
+- [x] Logger/Diagnostics/Request Context 按冻结契约由组合根装配；Data 保留领域诊断语义。
 
 验收：
 
-- [ ] Root 与 Data 间每个 Pool/Client/Worker 只有一个明确 owner，且实际注入与关闭顺序有集成证据。
-- [ ] Migration 仅由组合根执行一次，失败阻止 readiness。
+- [x] Root 与 Data 间每个 Pool/Client/Worker 只有一个明确 owner，且实际注入与关闭顺序有集成证据。
+- [x] Migration 仅由组合根执行一次，失败阻止 readiness；disabled 模式执行只读校验。
 - [x] Data Repository 不会关闭 borrowed Pool（代码与单测覆盖）；Root 生命周期仍待集成验收。
-- [ ] Redis 共享或独立 Client 的连接参数、Cache key、TTL、错误和禁用语义在 Root 集成环境验证。
-- [ ] Shutdown 顺序、超时和资源释放有集成测试。
+- [x] Redis 共享或独立 Client 的连接参数、Cache key、TTL、错误和禁用语义在 Root 集成环境验证。
+- [x] Shutdown 顺序、超时和资源释放有集成测试。
 ### M5：部署与 WebUI 路由切换
 
-状态：`pending`
+状态：`pending（认证契约阻塞）`
+
+> Root Data 路由要求 Owner Bearer，WebUI 当前仅持有 Owner Session；不得只切换 Nginx upstream。详见 2026-11-19 当前状态校准。
 
 工作项：
 
