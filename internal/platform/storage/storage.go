@@ -454,6 +454,114 @@ func ApplyMigrations(ctx context.Context, db *sql.DB, namespace string, migratio
 	return nil
 }
 
+// ValidateAppliedMigrations performs a read-only, namespace-locked verification of
+// the exact registered migration history and checksums. It never creates or
+// upgrades the migration history table and never executes schema DDL.
+func ValidateAppliedMigrations(ctx context.Context, db *sql.DB, namespace string, migrations []Migration) (resultErr error) {
+	if ctx == nil || db == nil {
+		return fault.New(fault.ClassValidation, "platform.storage.invalid_migration_target", "migration validation target is not configured", nil)
+	}
+	ordered, checksums, err := prepareMigrations(namespace, migrations)
+	if err != nil {
+		return fault.New(fault.ClassValidation, "platform.storage.invalid_migrations", "migration definitions are invalid", err)
+	}
+	conn, err := db.Conn(ctx)
+	if err != nil {
+		return dependencyFault("sql", "platform.storage.migration_connection_failed", "migration database connection failed", err)
+	}
+	defer func() { _ = conn.Close() }()
+	lockName := migrationLockName(namespace)
+	lockCtx, cancel := context.WithTimeout(ctx, defaultPingTimeout+5*time.Second)
+	defer cancel()
+	var acquired sql.NullInt64
+	if err := conn.QueryRowContext(lockCtx, "SELECT GET_LOCK(?, ?)", lockName, migrationLockWaitSeconds).Scan(&acquired); err != nil {
+		_ = conn.Raw(func(any) error { return driver.ErrBadConn })
+		return dependencyFault("sql", "platform.storage.migration_lock_failed", "could not acquire migration validation lock", err)
+	}
+	if !acquired.Valid {
+		_ = conn.Raw(func(any) error { return driver.ErrBadConn })
+		return dependencyFault("sql", "platform.storage.migration_lock_failed", "could not confirm migration validation lock ownership", errors.New("migration lock result is NULL"))
+	}
+	if acquired.Int64 != 1 {
+		return &fault.Fault{Class: fault.ClassConflict, Code: "platform.storage.migration_lock_busy", SafeMessage: "another migration operation is running", Dependency: "sql", Cause: errMigrationLockUnavailable}
+	}
+	defer func() {
+		releaseCtx, releaseCancel := context.WithTimeout(context.Background(), defaultPingTimeout)
+		defer releaseCancel()
+		var released sql.NullInt64
+		releaseErr := conn.QueryRowContext(releaseCtx, "SELECT RELEASE_LOCK(?)", lockName).Scan(&released)
+		if releaseErr != nil || !released.Valid || released.Int64 != 1 {
+			_ = conn.Raw(func(any) error { return driver.ErrBadConn })
+			if resultErr == nil {
+				if releaseErr != nil {
+					resultErr = dependencyFault("sql", "platform.storage.migration_lock_release_failed", "migration validation lock release could not be confirmed", releaseErr)
+				} else {
+					resultErr = fault.New(fault.ClassInternal, "platform.storage.migration_lock_release_failed", "migration validation lock release could not be confirmed", nil)
+				}
+			}
+		}
+	}()
+	rows, err := conn.QueryContext(ctx, "SELECT version, checksum, status FROM platform_schema_migrations WHERE namespace = ?", namespace)
+	if err != nil {
+		return dependencyFault("sql", "platform.storage.migration_history_failed", "migration history could not be read", err)
+	}
+	applied := make(map[uint64]string, len(ordered))
+	for rows.Next() {
+		var version uint64
+		var checksum, status string
+		if err := rows.Scan(&version, &checksum, &status); err != nil {
+			_ = rows.Close()
+			return dependencyFault("sql", "platform.storage.migration_history_failed", "migration history could not be read", err)
+		}
+		if status != "applied" {
+			_ = rows.Close()
+			return fault.New(fault.ClassConflict, "platform.storage.migration_requires_recovery", "migration history contains an incomplete migration; manual recovery is required", nil)
+		}
+		applied[version] = checksum
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return dependencyFault("sql", "platform.storage.migration_history_failed", "migration history could not be read", err)
+	}
+	if err := rows.Close(); err != nil {
+		return dependencyFault("sql", "platform.storage.migration_history_failed", "migration history could not be read", err)
+	}
+	lastAppliedIndex := -1
+	for version := range applied {
+		index := -1
+		for i, migration := range ordered {
+			if migration.Version == version {
+				index = i
+				break
+			}
+		}
+		if index < 0 {
+			return fmt.Errorf("%w: database contains unregistered version %d", errMigrationHistoryMismatch, version)
+		}
+		if index > lastAppliedIndex {
+			lastAppliedIndex = index
+		}
+	}
+	for index := 0; index <= lastAppliedIndex; index++ {
+		if _, exists := applied[ordered[index].Version]; !exists {
+			return fmt.Errorf("%w: migration version %d is missing before an applied version", errMigrationHistoryMismatch, ordered[index].Version)
+		}
+	}
+	if len(applied) != len(ordered) {
+		return fmt.Errorf("%w: expected %d applied versions, found %d", errMigrationHistoryMismatch, len(ordered), len(applied))
+	}
+	for _, migration := range ordered {
+		checksum, exists := applied[migration.Version]
+		if !exists {
+			return fmt.Errorf("%w: migration version %d is missing", errMigrationHistoryMismatch, migration.Version)
+		}
+		if checksum != checksums[migration.Version] {
+			return fmt.Errorf("%w: checksum changed for version %d", errMigrationHistoryMismatch, migration.Version)
+		}
+	}
+	return nil
+}
+
 func validateMigrationOperation(operation MigrationOperation) error {
 	validIdentifier := func(value string) bool {
 		if value == "" {
