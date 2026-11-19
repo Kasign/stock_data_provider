@@ -1075,8 +1075,8 @@ func TestOpenAPIParameterTypesAndFormatsMatchReviewedHandlerMatrix(t *testing.T)
 			"type": {"type": "string"}, "date": {"type": "string", "format": "date"}, "limit": {"type": "integer"},
 		},
 	}
-	if len(expected) != 35 {
-		t.Fatalf("reviewed parameter schema matrix has %d operations, want 35", len(expected))
+	if len(expected) != 33 {
+		t.Fatalf("reviewed parameter schema matrix has %d operations, want 33", len(expected))
 	}
 	for route, wantParameters := range expected {
 		parts := strings.SplitN(route, " ", 2)

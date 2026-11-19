@@ -1466,7 +1466,9 @@ test("旧 view hash 在应用启动时恢复原页面，未知 hash 回退首页
   assert.match(app, /const requestedInitialView = window\.location\.hash\.slice\(1\)/);
   assert.match(app, /Object\.hasOwn\(VIEW_META, requestedInitialView\)/);
   assert.match(app, /window\.history\.replaceState\(null, "", window\.location\.pathname \+ window\.location\.search \+ "#" \+ initialView\)/);
-  assert.match(app, /setView\(initialView, \{ updateHash: false, refreshData: true \}\)/);
+  assert.match(app, /setView\(initialView, \{ updateHash: false, refreshData: false \}\)/);
+  assert.match(app, /if \(!state\.ownerSessionAuthenticated\) return/);
+  assert.match(app, /void initializeOwnerSessionControls\(\)\.then\(\(authenticated\) => \{\s*if \(authenticated\) refreshAuthenticatedWorkspace\(\);\s*\}\)/);
 });
 test("深浅主题的辅助文字在常用背景上达到 WCAG AA 对比度", () => {
   const parseHex = (value) => {

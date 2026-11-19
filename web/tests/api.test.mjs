@@ -61,7 +61,7 @@ test("routes all Data and analysis calls through the single Root Server path", a
     const legacySettings = { marketBase: "/market-api", analysisBase: "/analysis-api", apiKey: "legacy-secret" };
     await getDataSources(legacySettings);
     await analysisHealth(legacySettings);
-    assert.deepEqual(requests.map(request => request.url), ["/api/v1/data-sources", "/healthz"]);
+    assert.deepEqual(requests.map(request => request.url), ["/api/v1/data-sources", "/api/readyz"]);
     assert.ok(requests.every(request => request.headers["X-API-Key"] === undefined));
   } finally {
     globalThis.fetch = originalFetch;
