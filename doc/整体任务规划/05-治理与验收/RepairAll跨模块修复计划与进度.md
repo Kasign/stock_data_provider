@@ -461,3 +461,11 @@ RA009 代码关闭条件已满足：Server 路由认证矩阵、CSRF、WebUI 请
 - D2 方案明确以内部 `DailyBarCoverageEvidence` 传递 calendar_ref、日历质量、交易日分母、coverage 阈值与 warnings；v1 方法保留兼容，v2 使用独立版本化 Application Snapshot Header。
 - ChangePercent 证据已按 Provider 分层：Tushare/BaoStock/Netease 可从原始 token/string 保留来源值；TickFlow 部分记录有来源值、缺失时现有 float64 派生；Pytdx/Yahoo 当前是 float64 派生；其余默认 Provider 未建立可核验来源链。没有冻结 Decimal 派生舍入规则前，derived 值在 v2 必须 null。
 - 当前仍开放 lexical scale evidence、Tushare/Yahoo QFQ/HFQ 精确调整、Amount 单位、ProviderTime/provider_data_version 证据；未修改项目契约登记簿，DATA-CTR-005/007 与 QNT-CTR-003 继续 deferred。
+
+
+### 28.21 Pytdx Amount 单位证据边界补充（2026-11-19）
+
+- 当前仓库使用的 `github.com/injoyai/tdx v0.0.86` protocol 文档将 `Kline.Amount` 定义为 `Price` 类型并注释“成交额”，但未明确该字段业务单位；现有 Adapter 将其按 CNY 传入 ExactValues helper 是实现映射，不是来源证明。
+- TDX 官方 `get_market_data` 文档将 Amount 单位标为万元；公式系统 AMOUNT/AMO 指标说明为元。两者是不同接口/语义，不能直接互相覆盖，也不能把较新版本依赖文档倒推到当前 v0.0.86 标准协议。
+- v2 的 `amount_cny` 在与当前 protocol Kline.Amount 对应的单位证据明确前保持 null/degraded。该项仍是 D2 的真实证据卡点，不以当前代码常量作为验收依据。
+- 证据来源见 `doc/api/依赖/02-DATA-CTR-005与007解阻方案.md` 第 2.4.10 节。
