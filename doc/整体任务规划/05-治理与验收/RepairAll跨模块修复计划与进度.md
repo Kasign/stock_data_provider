@@ -60,7 +60,7 @@ P0 原始问题及实施约束作为审计记录保留；当前状态以第 7、
 
 ### RA-CROSS-REVIEW-008：WebUI ↔ Server 身份认证、API 契约与凭据暴露 Review
 
-- 状态：PLANNED（RA-CROSS-REVIEW-007 已完成 Root HTTP/身份/Diagnostics/生命周期审查）。
+- 状态：IN_PROGRESS（已核对 WebUI 请求封装、Nginx、Compose、Root Server Data 路由和 Owner Session 契约；M5 部署切换仍需先明确 Data 业务路由认证策略）。
 - 目标：核对 WebUI 实际请求与 Server 已发布路由/认证矩阵，检查 Owner Session/Owner Bearer 的边界、CSRF、Request ID、API Key/Secret 是否进入浏览器持久化、Data Provider Key 是否由 Server 侧注入。
 - 范围：WebUI、Server、Platform、Data；只审查当前真实 UI 调用和已冻结/已发布 API，不新增无业务场景接口。
 - 首要核对：SRV-CTR-002、SRV-CTR-001（若已冻结）、PLAT-CTR-001/002/003、Data OpenAPI/Root Adapter 契约、WebUI 当前任务验收清单与 API 接口协作清单。
@@ -177,3 +177,13 @@ P0 原始问题及实施约束作为审计记录保留；当前状态以第 7、
 - 前置 RA-CROSS-REVIEW-007 已完成 Server Root 路由、身份认证、Diagnostics、Fault、生命周期审查。
 - 新任务聚焦 WebUI 实际请求与 Server 已实现路由/Owner Session/Data 凭据边界；必须核对当前 WebUI 源码，不推断或模拟 UI 调用。
 - 当前状态 PLANNED；开始执行前重新核对 repair_all 最新 HEAD、Actions 和总览计划。
+
+
+### RA-CROSS-REVIEW-008 首轮发现（2026-11-19）
+
+- WebUI 当前行情请求默认走 /market-api，使用 X-API-Key；api.js 从 localStorage 读取并持久化 Data API Key。该 Key 是独立 Data HTTP 服务访问凭据，不是第三方 Provider Key，也不是 Owner Bearer。
+- 当前 Compose 仍部署 stock-analysis-data（8091）和 stock-analysis-server（8092）两个服务；Nginx /market-api 指向独立 Data 容器，/analysis-api 指向 Root Server。此为 M5 迁移前兼容部署。
+- Root Server 已在同进程构造 Market Data Module，并挂载 InProcessHandler；Root Data 路由由 Platform Router 的 OwnerAccess（Owner Bearer）保护，不接受 X-API-Key，也不会自动接受 Owner Session。WebUI Owner Session Cookie 当前经 /analysis-api/api 路径使用，不覆盖 /market-api。
+- 因此，不能只把 Nginx /market-api upstream 改为 Root Server：当前浏览器发出的 X-API-Key 会被 Root Router 忽略并返回未认证；也不能向浏览器下发 Owner Bearer 或用 Nginx 静态 Owner Bearer 伪装用户身份。
+- M5 目标“浏览器不持有 Data API Key、Root Server 单入口”与当前 Root 路由 Owner Bearer 策略之间存在认证契约缺口。需要明确 Data 业务路由是否允许 owner_session（含 POST 探测的 CSRF/资源授权），或由 Server/Platform 采用受控 Service Principal；本轮不擅自选择。
+- 文档迁移状态发现：MarketData 迁移计划顶部及第 3 节仍写 M3/M4 Root 装配未完成，与当前 Root 代码和 Server 模块进度冲突；本轮将校准为 M3/M4 代码级完成、M5 部署切换待决策，历史快照保留并标记过期。

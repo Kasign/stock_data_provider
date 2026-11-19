@@ -239,3 +239,12 @@
 - 当前路由矩阵与 SRV-CTR-002 一致：healthz 匿名；readyz/diagnostics Owner Bearer；Owner Session 六个浏览器端点单独执行 Session Cookie、Origin/Host 和 CSRF；旧 Data/Analysis 业务路由不接受 Session，不把 Session 映射为 Owner Bearer。
 - Request ID、Fault 安全错误投影、请求体/并发限制、Readiness/Diagnostics 和消费者逆序停止后关闭共享资源均已接入。
 - 当前没有可复现的 Root HTTP/身份代码缺陷；未发布的 Research/Quant/Notification API 不提前创建。下一项转为 WebUI 实际调用与凭据暴露审查。
+
+
+## RepairAll RA-CROSS-REVIEW-008 M5 部署/认证阻塞（2026-11-19）
+
+- Root Server 的 Data InProcessHandler 已挂载，但路由策略仍为 Owner Bearer；WebUI 当前只持有 Owner Session Cookie，不持有 Owner Bearer。
+- 迁移期 WebUI 仍调用独立 Data 服务并持久化 Data API Key。Compose/Nginx 尚未切换为单 Root Server。
+- 单纯把 /market-api upstream 指向 Root Server 会因 X-API-Key 与 Owner Bearer 认证不匹配而失败；静态注入 Owner Bearer 会绕过 Owner Session/资源授权边界，禁止采用。
+- M5 解锁前置：明确 Data 路由是否允许 Owner Session（必须覆盖探测等写请求的 CSRF 与领域权限），或采用受控 Service Principal；同时决定统一 API Prefix/Cookie Path。由 Server/Platform/Data/WebUI 共同更新契约和验收。
+- 在认证策略冻结前，不删除独立 Data 服务、不删除浏览器 Key 兼容路径、不修改部署契约测试。

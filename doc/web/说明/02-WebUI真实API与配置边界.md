@@ -151,3 +151,11 @@ WebUI 只提交请求 Schema 版本、一次逻辑提交的幂等键、精确模
 同一幂等键重试必须复用原始请求意图。指纹包含 caller、操作、请求 Schema 版本、精确模板身份、规范化快照引用集合和 JCS 参数；排除服务端生成时间及追踪 ID。命中幂等记录必须先于时钟读取和模板解析，返回原 Run，不改变其 PIT/Deadline。
 
 首个 News Search 参数 Schema 的真实字段为 `query`（必填）、`limit`（必填，1–100）和 `query_dimension`（可选）；额外字段拒绝。此参数 Schema 不等于正式 Workflow Template 已发布，也不等于 HTTP API 已开放。
+
+## RepairAll RA-CROSS-REVIEW-008 当前部署/认证差异（2026-11-19）
+
+- 当前 WebUI 行情请求通过 /market-api/api/v1/... 发往独立 Data HTTP 服务，携带 X-API-Key；web/src/api.js 从 localStorage 持久化读取该 Key。
+- Root Server 已提供同路径 Data InProcessHandler，但由 Platform Router OwnerAccess（Owner Bearer）保护；它不读取 X-API-Key，也不接受 Owner Session Cookie。
+- Nginx 当前 /market-api upstream 指向 stock-analysis-data:8091，/analysis-api upstream 指向 stock-analysis-server:8092；Owner Session Cookie Path 经过代理重写为 /analysis-api/api，不能自然覆盖 /market-api。
+- 因此不能只改 Nginx upstream 或删除浏览器 Key；必须先决定 Data 业务路由的浏览器认证策略和 Cookie Path/统一 API Prefix，再同步 Server、WebUI、Compose、Nginx 与测试。
+- 该状态与本文件第 2 节迁移表一致：浏览器 Data API Key 属迁移期兼容实现，不是目标安全模型；M5 未完成前不得标记迁移完成。

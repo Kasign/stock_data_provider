@@ -3,14 +3,14 @@
 
 - 当前维护分支：`feat/data`；当前分支 HEAD（文档整理开始时）：`90871455b282d6124d3c25fb9189fbd274894e67`。
 - 迁移决策：Root Server 同进程模块化单体。
-- 当前阶段：M1 Go Module 归并 DONE；M2 Data Application Port/Bootstrap DONE（Data 侧）；M3 Root Server 实际装配仍由 Server SRV-009 负责，当前 Root Bootstrap 仍使用旧 MarketData Adapter/Runner；M4 共享资源、Migration 注册、Diagnostics/Readiness/Lifecycle 和受控 TCP 出站注入由 Server 负责，Platform Migration Lock/ApplyMigrations 已存在；M5 部署切换、M6 最终验收未关闭。
-- Integration 全量 CI 的成功只证明对应精确 SHA 的门禁通过，不代表 Data Module 已完成 Root Server 生产装配。Data 分支不重复实现 Server 组合根或 Platform 公共能力。
+- 当前阶段（2026-11-19 校准）：M1 Go Module 归并 DONE；M2 Data Application Port/Bootstrap DONE；M3 Root Server 同进程装配 DONE（Market Data Module、Application、InProcessHandler、Root Router、Analysis Collector 注入）；M4 共享 MariaDB/Redis、受控 HTTP/TCP 出站、Migration Definitions/Root Registry、Readiness/Lifecycle 代码级 DONE。M5 Compose/Nginx/WebUI 部署切换仍 PENDING；M6 生产 DDL、部署回滚和真实 Provider/数据验收仍 PENDING。
+- 当前 Root 代码级装配已由 Server 专项集成证据及后续 repair_all Integration CI 覆盖；CI 不替代 M5 Compose/Nginx 切换和 M6 生产验收。Data 不重复实现 Server 组合根或 Platform 公共能力。
 - 方案依据：`doc/整体任务规划/04-架构方案/Market Data并入Root Server模块化单体调整方案.md`。
 - 本文保留 M0～M6 迁移映射、历史提交和验收记录；旧 SHA/旧分支关系均按记录日期理解，当前阶段以本段和文末最新状态为准。
 
 > 本文记录 Data 从独立 Go Module/服务迁入 Root Server 根 Go Module、同进程运行的实施计划和进度。若本文与上述架构决策文档冲突，以架构决策文档为准；公共平台及 DATA 契约以冻结契约文档为准。本文不重新定义契约。
 
-## 历史迁移状态收敛复核（2026-11-10，代码验证基线：`d7ba8b127a997432e547ce5740057b6390bce21f`；修复提交：`960a51a1ffeb1cc56671457bb18a7883cf5cbaea`）
+## 历史迁移状态收敛复核（2026-11-10，已过期快照；代码验证基线：`d7ba8b127a997432e547ce5740057b6390bce21f`；修复提交：`960a51a1ffeb1cc56671457bb18a7883cf5cbaea`）
 
 本节覆盖当前分支最新可核验状态。历史日期记录只保留为历史证据，不覆盖本节结论。
 
@@ -1186,3 +1186,25 @@ Data 分支在代码 SHA `6d722802073ac2b0c587986d50ec56cf325f505a` 的 Go Test 
 - Data Owner 不再重复搬迁根 Go Module，也不在 Data 内复制 Server Bootstrap 或 Platform 公共原语。
 - 下一步由 Server Owner 完成 M3；Platform Owner 只补 M4 中确实缺失且可被多个模块复用的公共能力。
 - Data 领域 Provider 精度、PIT、Freshness 和 Python parity 按 Data 总规划继续推进，不因 Root M3/M4 阻塞而停摆。
+
+
+## 当前状态校准（2026-11-19，repair_all）
+
+### M3/M4 代码级完成证据
+
+- Root 构造：internal/server/bootstrap/marketdata_module.go 的 newMarketDataModule 使用 Root 借用 MariaDB、Redis Adapter 和 Platform 受控出站依赖创建 Market Data Module。
+- Root 消费：internal/server/bootstrap/bootstrap.go 从 marketDataModule.Application() 创建 AnalysisCollector，并把 marketDataModule.InProcessHandler() 挂载到 Root Router。
+- 路由：internal/server/bootstrap/router.go 注册 quotes/bars/bundles/data-sources/market/stocks 前缀，由 Platform OwnerAccess 保护；Root InProcessHandler 不要求独立 Data API Key。
+- Migration：Data MigrationDefinitions 已由 Root Migration Registry 统一注册；Migration enabled/disabled、物理 Schema 漂移拒绝/健康启动均有 MariaDB 集成覆盖。
+- Readiness/Lifecycle：marketDataReadinessChecks 纳入 Root Diagnostics；Data Module 作为 Lifecycle Component 注册，借用共享资源且不关闭 Root Pool。
+- 精确验收：Server 专项 Run 44314707349 覆盖 Root Data InProcessHandler/Owner Bearer/无需 Data API Key；repair_all 代码基线 5334043ea8e1abc2c4006c371a3f95b123098946 的 Integration CI Run 44456052937 success。
+
+### M5 当前阻塞事实
+
+- docker-compose.yml 仍部署 stock-analysis-data（8091）和 stock-analysis-server（8092）两个服务。
+- web/default.conf.template 的 /market-api/ 仍代理到独立 Data 服务；/analysis-api/ 代理到 Root Server。
+- web/src/api.js 仍从 localStorage 读取 Data API Key 并通过 X-API-Key 发送；该 Key 是 Data HTTP API 访问凭据。
+- Root Server Data InProcessHandler 由 Owner Bearer Router 保护；Owner Session 不自动授权 Data 路由。SRV-CTR-002 明确禁止把 owner_session 映射为 owner_bearer。
+- 所以 M5 不能仅切换 Nginx upstream。必须先冻结 Data 浏览器业务路由认证策略（Owner Session + CSRF/资源授权，或受控 Service Principal 等明确方案），再同步 Server Router、WebUI、Nginx、Compose 和集成测试。
+- 当前部署兼容模式仍可运行，但不能标记“浏览器不持有 Data API Key”或“单 Root Server 部署”已完成。
+
