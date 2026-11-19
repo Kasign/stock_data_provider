@@ -42,7 +42,6 @@ func TestPlatformFaultHTTPProjectionMapsClassAndDefaultsToNonRetryable(t *testin
 		}
 	}
 }
-
 func TestDomainErrorProjectionDoesNotExposeInternalCause(t *testing.T) {
 	rec := httptest.NewRecorder()
 	writeDomainErr(rec, errors.New("provider response included token=secret and raw payload"), "request-123")

@@ -15,8 +15,8 @@ import (
 	"example.com/stock-analysis-flow/internal/marketdata/normalize"
 	"example.com/stock-analysis-flow/internal/marketdata/provider"
 	"example.com/stock-analysis-flow/internal/marketdata/service"
-	platformtime "example.com/stock-analysis-flow/internal/platform/time"
 	platformobservability "example.com/stock-analysis-flow/internal/platform/observability"
+	platformtime "example.com/stock-analysis-flow/internal/platform/time"
 )
 
 var (
@@ -642,7 +642,9 @@ func (s *Server) timeoutContext(timeout time.Duration, next http.Handler) http.H
 }
 
 func requestID(r *http.Request) string {
-	if r == nil { return "" }
+	if r == nil {
+		return ""
+	}
 	return platformobservability.FromContext(r.Context())
 }
 

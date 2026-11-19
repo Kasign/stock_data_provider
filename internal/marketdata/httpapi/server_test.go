@@ -306,7 +306,7 @@ func TestBundleAsOfRejectsEmptyOrRepeatedValues(t *testing.T) {
 		"/api/v1/bundles/600519?as_of=2026-11-12T10%3A00%3A00Z&as_of=2026-11-12T11%3A00%3A00Z",
 	} {
 		req := httptest.NewRequest(http.MethodGet, path, nil)
-			w := httptest.NewRecorder()
+		w := httptest.NewRecorder()
 		h.ServeHTTP(w, req)
 		if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), `"code":"VALIDATION_ERROR"`) {
 			t.Fatalf("path=%q status=%d body=%s; expected strict as_of validation", path, w.Code, w.Body.String())

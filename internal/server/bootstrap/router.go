@@ -165,7 +165,6 @@ func ownerSessionCookie(composition *ownerSessionComposition) platformsecurity.S
 	return composition.cookie
 }
 
-
 // rewriteURLPath adapts the browser-visible /api/readyz alias to the existing
 // Root readiness handler without duplicating readiness logic or diagnostics.
 func rewriteURLPath(next http.Handler, path string) http.Handler {

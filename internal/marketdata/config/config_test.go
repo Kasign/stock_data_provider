@@ -843,7 +843,7 @@ func TestLoadRejectsProviderEndpointWithEmptyQueryOrFragment(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			setDefaultProviderConfig(t)
-					t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
+			t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
 			t.Setenv("MARKET_DATA_TENCENT_KLINE_URL", tc.url)
 			if _, err := Load(); err == nil {
 				t.Fatalf("endpoint %q must be rejected because it contains a query or fragment delimiter", tc.url)

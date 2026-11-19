@@ -140,8 +140,12 @@ func Load() (Config, error) {
 }
 
 // LoadForRoot 加载由 Root Server 注入 DB/Redis 的 Data 配置。
+func LoadForInProcess() (Config, error) {
+	return load(false, false)
+}
+
 func LoadForRoot() (Config, error) {
-	return load(true)
+	return load(false, true)
 }
 
 func load(allowRootInjectedStorage bool) (Config, error) {

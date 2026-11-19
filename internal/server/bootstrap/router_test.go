@@ -76,7 +76,6 @@ func TestHTTPHandlerEnforcesExplicitRoutePolicies(t *testing.T) {
 	}
 }
 
-
 type fakeSessionRequestAuthenticator struct {
 	cookie *http.Cookie
 	err    error
@@ -167,7 +166,6 @@ func TestOwnerSessionOrBearerDataHandlerUsesExplicitIdentityAndRejectsAmbiguousC
 		})
 	}
 }
-
 
 func TestReadinessAliasReusesRootReadinessHandler(t *testing.T) {
 	next := http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
