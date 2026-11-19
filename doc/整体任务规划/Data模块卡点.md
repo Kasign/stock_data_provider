@@ -50,3 +50,13 @@
 ## 非 Data Owner 卡点（仅供责任边界追踪）
 
 Root Server 尚未实际构造并注册 Data Module，属于 Server SRV-009 的装配责任，不是 Data 分支继续修改 `internal/server/**` 的授权。Data M1/M2 已完成；Data 不复制 Platform 公共能力，也不接管 Server 组合根。
+
+
+## RepairAll 聚合分支修复（2026-11-19）
+
+`repair_all` 已实施 Data Migration 统一，不代表 `feat/data` 已同步：
+
+- 静态定义现由 `internal/marketdata/repository.MigrationDefinitions()` 导出；V1-V3 保持不变，V4 负责旧索引和缺失列兼容。
+- 兼容 DDL 已从 Platform Apply Runner 锁外移入 MigrationOperation，在同一 namespace advisory lock 和 checksum 下执行。
+- MariaDB 旧库兼容和双实例并发测试已新增，等待 Run [44447674606](https://github.com/Kasign/stock_data_provider/actions/runs/44447674606)。
+- DATA-003 的 Provider AvailableAt 证据、DATA-004～007 的外部数据/字段/Parity 证据仍按原阻塞条件处理；本次迁移收口不改变其状态。

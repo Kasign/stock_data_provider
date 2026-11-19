@@ -138,3 +138,13 @@
 - Server 已完成的 Data Module 构造、共享资源、受控 Egress、Readiness、Lifecycle 和 Root HTTP Handler 不重复开发。
 - SRV-015 继续保持阻塞观察，不在 SRV-009 未解除时创建占位 Worker/Handler 或切换当前任务。
 - 下一步触发条件：Data 和 Platform 对应能力进入共同集成基线后，再在 `feat/server` 注册 Data 静态 Migration、接入只读 checksum 校验并执行真实 MariaDB 并发/漂移验收。
+
+
+## RepairAll 聚合分支收口进展（2026-11-19）
+
+`repair_all` 已完成 SRV-009 中 Data Migration 的代码装配部分：
+
+- Data 静态定义已加入 Root Registry，Root Migration enabled/disabled 路径统一；不再走外部 namespace 过渡机制。
+- Platform 提供只读 checksum 校验，Root disabled 路径能验证 Data 预期版本和 checksum。
+- 旧库 V1-V3 升级、兼容 DDL 和多实例并发 MariaDB 测试已新增；CI 等待 [44447674606](https://github.com/Kasign/stock_data_provider/actions/runs/44447674606)。
+- SRV-009 的生产环境启停演练、物理 Schema drift Diagnostics 验收仍未关闭；Server 模块分支未被本轮修改。

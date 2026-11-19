@@ -2,7 +2,7 @@
 
 - 仓库：`Kasign/stock_data_provider`
 - 工作分支：`repair_all`
-- 当前基线：`ef3fa3acca68dd108098f324e077d22732c58582`
+- 当前记录基线：`aeed898da826f8952fb235ff57b0ef19042f8c64`
 - 更新日期：2026-11-19
 
 ## 1. 分支用途与执行原则
@@ -22,7 +22,7 @@
 
 | 顺序 | 工作项 | 涉及模块 | 状态 |
 |---|---|---|---|
-| P0 | Data Migration 定义、Platform 只读校验、Server Root 统一注册与启动路径 | Data / Platform / Server | REVIEWED，待实施 |
+| P0 | Data Migration 定义、Platform 只读校验、Server Root 统一注册与启动路径 | Data / Platform / Server | 已实施，待 repair_all CI |
 | P0 | News Search Candidates Validator 与冻结 Schema 一致性 | News / Researchflow | 已修复，待 CI |
 | P1 | Data、News 到 Research 的数据/时间/Evidence 契约和真实消费边界 | Data / News / Research | 待系统 Review |
 | P1 | Quant Application Port、结果 Envelope、Researchflow 消费接口 | Quant / Researchflow / Server | 待系统 Review |
@@ -97,3 +97,47 @@
 - 修改：将 `repair_all` 加入同一工作流 push 分支列表，复用现有全量检查，不复制 CI 工作流。
 - 提交：`ef3fa3acca68dd108098f324e077d22732c58582`。
 - Run：[44446102934](https://github.com/Kasign/stock_data_provider/actions/runs/44446102934)，当前查询为 in_progress；尚未得到最终结论。
+
+
+## 7. RA-MIGRATION-001：Data Migration 三方统一（2026-11-19）
+
+<badge color="warning">代码已提交，完整 CI 待确认</badge>
+
+### 7.1 已实施内容
+
+- Platform `Migration` 增加可校验的 `MigrationOperation`，当前支持：
+  - `ensure_column`：在 namespace lock 内查询 information_schema，缺失时补列。
+  - `ensure_non_unique_index`：在 namespace lock 内清理旧唯一索引/错误唯一索引，并确保目标非唯一索引存在。
+- Migration operation 描述纳入 SHA-256 checksum。没有 operations 的旧迁移不增加任何 hash 字节，因此 Data 已发布 V1-V3 的 statement checksum 算法保持不变。
+- Apply 与只读校验共用 `acquireMigrationLock`，锁绑定单个物理连接；无法确认锁释放时丢弃连接，避免带锁连接回到连接池。
+- Platform 新增 `ValidateAppliedMigrations`：复用 `prepareMigrations`，只读检查 namespace 的版本集合、版本连续性、状态和 checksum；不创建 history 表、不执行 Schema DDL、不改 history。
+- Data `repository.MigrationDefinitions()` 导出静态 V1-V4 定义：V1-V3 SQL 保持原样；V4 将两组历史索引修复和 `market_data_quotes.volume_ratio` / `turnover_rate` 补列转为四个可校验操作。
+- `Store.Migrate` 仅作为兼容入口委托 Platform Runner，不再保留锁外兼容 DDL。
+- Data Bootstrap 暴露静态 Migration definitions；Server Root Registry 正式注册 `market_data`。
+- Root `MIGRATION_ENABLED=true` 统一由 Registry 执行所有已注册 namespace；关闭时 Registry 通过 Platform 只读校验覆盖 Data checksum，不再单独调用 Data MigrationRunner，也不再使用 `market_data` external namespace 过渡登记。
+
+### 7.2 主要提交
+
+| SHA | 提交 | 主要变更 |
+|---|---|---|
+| `172de9aded2a97097b665fdd1d93cae822e9fe28` | feat(platform): 支持可校验的幂等迁移操作 | MigrationOperation、checksum、锁内执行 |
+| `880166409194cacb417a9d359e127783efc6c6dd` | feat(platform): 增加只读迁移 checksum 校验 | Platform 只读校验入口 |
+| `fe050ac842dcbbb97c9d79b981e2c7fd869b4a01` | refactor(data): 导出静态 Schema 迁移定义 | Data 静态定义、V4 兼容操作 |
+| `1c303ecfeb0257205d2636f6b3959e8ddde9de21` | refactor(server): 统一注册并校验 Data Migration | Root Registry 统一执行/校验 |
+| `3f5e193b494df727b44035e1dc9f48591a63692e` | refactor(platform): 复用迁移命名空间锁生命周期 | Apply/Validate 共用锁 helper |
+| `aeed898da826f8952fb235ff57b0ef19042f8c64` | test(server): 验证 Data 旧库迁移与多实例并发 | 旧库兼容、双实例并发和 checksum 篡改集成测试 |
+
+### 7.3 验收边界
+
+- 已新增单测：旧 statement-only checksum 稳定、operations 改动导致 checksum 改变、非法操作拒绝、Data V1-V3 不变、V4 仅含兼容操作、Registry 接受 operations-only migration。
+- 已新增真实 MariaDB 集成用例：先应用 Data V1-V3，再模拟旧库缺列/旧唯一索引，两个 Root Registry 并发执行完整定义，最后验证 V4 兼容结果和 history。
+- 已扩展 MariaDB Registry 集成用例：篡改已应用 checksum 后，`ValidateApplied` 必须拒绝。
+- 上述新测试尚未由最新 SHA 的 CI 证实；不能在 CI 完成前标记 PASS。
+- CI Run [44447674606](https://github.com/Kasign/stock_data_provider/actions/runs/44447674606)，HEAD `aeed898da826f8952fb235ff57b0ef19042f8c64`，当前 in_progress。
+- 物理 Schema drift 仍不是 checksum 校验的职责；必须由 Data Schema Diagnostics 检测。本轮新增测试也不等于生产数据库部署演练。
+
+### 7.4 下一步
+
+1. 等待 Run 44447674606 完成；若失败，读取失败 Job 日志并在 repair_all 修复。
+2. CI 通过后继续检查 Root Migration enabled/disabled 的真实启动链和物理 Schema Diagnostics 是否完整注册。
+3. 然后按 Data/News→Research→Quant→Researchflow→LLM→Server→WebUI/Notification 顺序继续跨模块调用链 Review；真实外部凭据/Provider 证据缺失时保持 NOT_COMPARABLE，不造数据。
