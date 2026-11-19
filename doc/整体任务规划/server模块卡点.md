@@ -1,6 +1,7 @@
 # Server 模块卡点
 
-当前执行任务：SRV-009 Data/MarketData M3/M4 Root 生产装配最终收口（等待 Data/Platform 前置）。
+当前执行任务：SRV-009 Data/MarketData M3/M4 Root 生产装配最终收口。
+状态：BLOCKED（等待 Data/Platform Owner 前置；不在 Server 重复实现公共 Migration 能力）。
 - SRV-001 已完成：API/Worker/All 角色真实启动、Readiness、SIGTERM 和 Lifecycle 回滚/关闭顺序均有精确 SHA 验收证据。
 - SRV-003 已完成：Run 44314707349 对真实 API Root + Data InProcessHandler 的认证、Validation Fault、Request ID 和请求体限制验收通过。
 - SRV-004 已完成当前 Root 已注册检查集的 Health/Readiness/Diagnostics 验收；Data 最终 checksum/Schema 仍归 SRV-009。
