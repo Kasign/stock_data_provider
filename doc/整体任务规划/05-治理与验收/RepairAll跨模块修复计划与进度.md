@@ -251,3 +251,13 @@ RA009 代码关闭条件已满足：Server 路由认证矩阵、CSRF、WebUI 请
 - 判定：LLM 协议适配与本地安全门禁 PASS（代码机制）；Server transport wrapper PASS（代码机制）；Server 生产 Provider 装配 NOT_COMPARABLE；Researchflow 实际消费者 NOT_COMPARABLE；Gateway/Model 真实调用 NOT_RUN；Capability Evidence NOT_COMPARABLE。没有生产消费者与真实业务场景前，不新增占位 Stage/Worker/HTTP API。
 - 后续解除条件：Server 先完成 SRV-010 生产配置/SecretRef/BoundDoer/Capability Evidence/生命周期接线；Researchflow 明确第一个真实模型调用 Stage 的输入、输出、预算、重试和工具授权；再执行 Generate/Structured Output/SSE/Usage/取消/超时/超限/429/5xx 的真实上游验收。
 - 本轮没有生产代码修改；LLM 卡点已同步至 `doc/整体任务规划/LLM模块卡点.md`、Server 卡点和 LLM 当前任务记录。
+
+
+## 25. RA-CROSS-REVIEW-010 跨模块 Diagnostics 结果契约一致性审查（2026-11-19）
+
+- 前置：RA-CROSS-REVIEW-009 已完成；LLM 生产调用链因 Server/Researchflow/Gateway 外部前置继续 BLOCKED。
+- 当前状态：PLANNED。
+- 目标：核对 Platform Diagnostics 公共模型、Server 聚合/Readiness、Data/News/Research/Researchflow/Quant/Notification 的 Check 结果是否遵守统一状态语义，重点检查 reason_code、evidence_ref、dependency、retryable、required/optional、时间戳和 skipped/not_comparable 边界。
+- 范围：现有 Diagnostics 生产实现、Schema/Contract/Golden 测试、Root Runner 聚合和模块诊断文档；不新增平行诊断系统，不为无消费者模块创建空 Check。
+- 约束：先以 `doc/字段校验与诊断体系实施方案.md` 和 Platform 冻结契约为准；仅修复可复现的代码/契约不一致，不通过降低状态门槛或补造 evidence_ref 使测试通过。
+- 验收：逐模块标记 PASS/DEGRADED/FAIL/SKIPPED/NOT_COMPARABLE，记录具体 Check、状态字段、证据来源、聚合行为和精确 SHA；真实数据/Provider 缺失时保持 NOT_COMPARABLE。
