@@ -12,13 +12,14 @@ func TestPytdxDailyBarExactValuesPreserveProtocolPrice(t *testing.T) {
 		Open: protocol.Price(1234000),
 		High: protocol.Price(1235000),
 		Low: protocol.Price(1233000),
-		Close: protocol.Price(1234500),
+		Close:  protocol.Price(1234500),
 		Volume: 12345,
 		Amount: amount,
 	}
 	got := pytdxDailyBarExactValues(item)
 	if got == nil || got.Open != "1234" || got.High != "1235" || got.Low != "1233" ||
-		got.Close != "1234.5" || got.RawVolume != "12345" || got.RawAmount == nil || *got.RawAmount != amount.String() {
+		got.Close != "1234.5" || got.RawVolume != "12345" || got.RawAmount == nil || *got.RawAmount != "123456.789" ||
+		got.AmountCNY == nil || *got.AmountCNY != "123456.789" {
 		t.Fatalf("unexpected exact TDX values: %+v", got)
 	}
 }

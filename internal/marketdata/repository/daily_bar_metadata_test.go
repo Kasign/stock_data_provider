@@ -16,7 +16,7 @@ func TestDailyBarMetadataPreservesExactValuesAndLegacyShape(t *testing.T) {
 		Source: "pytdx", SourceVersion: "pytdx-adapter-v1",
 		ExactValues: &model.DailyBarExactValues{
 			Open: "1500.000", High: "1510.000", Low: "1490.000", Close: "1505.000",
-			RawVolume: "12345", RawAmount: &rawAmount,
+			RawVolume: "12345", RawAmount: &rawAmount, AmountCNY: &rawAmount,
 		},
 	}
 	publicJSON, err := json.Marshal(bar)
@@ -39,8 +39,8 @@ func TestDailyBarMetadataPreservesExactValuesAndLegacyShape(t *testing.T) {
 		t.Fatal(err)
 	}
 	if loaded.ExactValues == nil || loaded.ExactValues.Open != "1500.000" ||
-		loaded.ExactValues.RawVolume != "12345" || loaded.ExactValues.RawAmount == nil ||
-		*loaded.ExactValues.RawAmount != rawAmount {
+		loaded.ExactValues.RawVolume != "12345" || loaded.ExactValues.RawAmount == nil || loaded.ExactValues.AmountCNY == nil ||
+		*loaded.ExactValues.RawAmount != rawAmount || *loaded.ExactValues.AmountCNY != rawAmount {
 		t.Fatalf("exact sidecar did not round-trip: %+v", loaded.ExactValues)
 	}
 

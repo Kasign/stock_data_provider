@@ -45,7 +45,7 @@ func TestMariaDBDailyBarExactValuesPersistAcrossCurrentAndPITReads(t *testing.T)
 		NormalizationVer: "normalization-v1",
 		ExactValues: &model.DailyBarExactValues{
 			Open: "10.123", High: "10.456", Low: "10.001", Close: "10.321",
-			RawVolume: "12345", RawAmount: &rawAmount,
+			RawVolume: "12345", RawAmount: &rawAmount, AmountCNY: &rawAmount,
 		},
 	}
 	if err := store.UpsertBars(ctx, []model.DailyBar{bar}); err != nil {
@@ -56,8 +56,8 @@ func TestMariaDBDailyBarExactValuesPersistAcrossCurrentAndPITReads(t *testing.T)
 		t.Fatalf("read current daily bar: %v", err)
 	}
 	if len(current) != 1 || current[0].ExactValues == nil || current[0].ExactValues.Close != "10.321" ||
-		current[0].ExactValues.RawVolume != "12345" || current[0].ExactValues.RawAmount == nil ||
-		*current[0].ExactValues.RawAmount != rawAmount {
+		current[0].ExactValues.RawVolume != "12345" || current[0].ExactValues.RawAmount == nil || current[0].ExactValues.AmountCNY == nil ||
+		*current[0].ExactValues.RawAmount != rawAmount || *current[0].ExactValues.AmountCNY != rawAmount {
 		t.Fatalf("current daily bar lost exact values: %+v", current)
 	}
 	asOf := time.Now().UTC().Add(time.Second)

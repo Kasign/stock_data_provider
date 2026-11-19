@@ -66,6 +66,7 @@ type DailyBarExactValues struct {
 	Close     string  `json:"close"`
 	RawVolume string  `json:"raw_volume"`
 	RawAmount *string `json:"raw_amount,omitempty"`
+	AmountCNY *string `json:"amount_cny,omitempty"`
 }
 
 type DailyBar struct {
@@ -114,7 +115,7 @@ type DailyBar struct {
 	RequestID                             string          `json:"request_id,omitempty"`
 	NormalizationVer                      string          `json:"normalization_version"`
 	// ExactValues 保留 DailyBars v2 所需的精确值；只进入 Data revision metadata，不暴露到旧 HTTP JSON。
-	ExactValues                           *DailyBarExactValues `json:"-"`
+	ExactValues *DailyBarExactValues `json:"-"`
 }
 
 type Bundle struct {

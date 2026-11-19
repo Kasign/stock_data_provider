@@ -440,7 +440,7 @@ func (p *Pytdx) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endDat
 			QualityStatus:     quality,
 			QualityReasons:    reasons,
 			NormalizationVer:  normalize.Version,
-			ExactValues:        exactValues,
+			ExactValues:       exactValues,
 		})
 	}
 	return normalizeProviderDailyBarsWithReport(ctx, symbol, start.Format("2006-01-02"), end.Format("2006-01-02"), limit, out, 0)
@@ -707,14 +707,36 @@ func pytdxNonNegativeFinite(value float64) bool {
 	return value >= 0 && !math.IsNaN(value) && !math.IsInf(value, 0)
 }
 
-
 func pytdxDailyBarExactValues(item *protocol.Kline) *model.DailyBarExactValues {
 	if item == nil {
 		return nil
 	}
-	rawAmount := item.Amount.String()
+	rawAmount := pytdxPriceDecimal(item.Amount)
 	return &model.DailyBarExactValues{
-		Open: item.Open.String(), High: item.High.String(), Low: item.Low.String(), Close: item.Close.String(),
-		RawVolume: strconv.FormatInt(item.Volume, 10), RawAmount: &rawAmount,
+		Open: pytdxPriceDecimal(item.Open), High: pytdxPriceDecimal(item.High),
+		Low: pytdxPriceDecimal(item.Low), Close: pytdxPriceDecimal(item.Close),
+		RawVolume: strconv.FormatInt(item.Volume, 10), RawAmount: &rawAmount, AmountCNY: &rawAmount,
 	}
+}
+
+
+func pytdxPriceDecimal(value protocol.Price) string {
+	raw := strconv.FormatInt(value.Int64(), 10)
+	negative := strings.HasPrefix(raw, "-")
+	digits := strings.TrimPrefix(raw, "-")
+	if len(digits) <= 3 {
+		digits = strings.Repeat("0", 4-len(digits)) + digits
+	}
+	whole := strings.TrimLeft(digits[:len(digits)-3], "0")
+	if whole == "" {
+		whole = "0"
+	}
+	fraction := strings.TrimRight(digits[len(digits)-3:], "0")
+	if fraction == "" {
+		if negative && whole != "0" { return "-" + whole }
+		return whole
+	}
+	prefix := ""
+	if negative { prefix = "-" }
+	return prefix + whole + "." + fraction
 }
