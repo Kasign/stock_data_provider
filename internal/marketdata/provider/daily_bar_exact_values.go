@@ -98,7 +98,7 @@ func canonicalDailyBarDecimal(raw string) (string, error) {
 	if value[0] == '-' || value[0] == '+' {
 		if value[0] == '-' {
 			sign = "-"
-	}
+		}
 		value = value[1:]
 	}
 	exponent := 0

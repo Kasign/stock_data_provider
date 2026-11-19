@@ -48,7 +48,7 @@ func TestTushareDailyBarsNormalizesHandsAndThousandCNY(t *testing.T) {
 	if bar.Amount == nil || *bar.Amount != 100123.456789 || bar.AmountUnit != "CNY" {
 		t.Fatalf("Tushare amount is in thousand CNY and must normalize to CNY: %+v", bar)
 	}
-	if bar.RawAmount == nil || *bar.RawAmount != 100 || bar.RawAmountUnit != "thousand_CNY" || bar.RawAmountField != "amount" {
+	if bar.RawAmount == nil || *bar.RawAmount != 100.123456789 || bar.RawAmountUnit != "thousand_CNY" || bar.RawAmountField != "amount" {
 		t.Fatalf("raw amount provenance must be retained: %+v", bar)
 	}
 	if bar.QualityStatus != model.QualityValid {

@@ -223,7 +223,7 @@ func TestHithinkDailyRequestFailureIsReportedAtSnapshotLevel(t *testing.T) {
 func TestHithinkDailyBarsRetainExactJSONDecimals(t *testing.T) {
 	loc := time.FixedZone("CST", 8*60*60)
 	dateMS := time.Date(2026, time.October, 7, 0, 0, 0, 0, loc).UnixMilli()
-	payload := fmt.Sprintf(`{"code":0,"data":{"item":[{"date_ms":%d,"open_price":10.123456789,"high_price":11.234567891,"low_price":9.012345678,"close_price":10.987654321,"volume":1000,"turnover":"10000.123456789"}]}}`, dateMS)
+	payload := fmt.Sprintf(`{"code":0,"data":{"item":[{"date_ms":%d,"open_price":10.123456789,"high_price":11.234567891,"low_price":9.012345678,"close_price":10.987654321,"volume":1000,"turnover":10000.123456789}]}}`, dateMS)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(payload))
