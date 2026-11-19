@@ -717,22 +717,5 @@ func pytdxDailyBarExactValues(item *protocol.Kline) *model.DailyBarExactValues {
 
 
 func pytdxPriceDecimal(value protocol.Price) string {
-	raw := strconv.FormatInt(value.Int64(), 10)
-	negative := strings.HasPrefix(raw, "-")
-	digits := strings.TrimPrefix(raw, "-")
-	if len(digits) <= 3 {
-		digits = strings.Repeat("0", 4-len(digits)) + digits
-	}
-	whole := strings.TrimLeft(digits[:len(digits)-3], "0")
-	if whole == "" {
-		whole = "0"
-	}
-	fraction := strings.TrimRight(digits[len(digits)-3:], "0")
-	if fraction == "" {
-		if negative && whole != "0" { return "-" + whole }
-		return whole
-	}
-	prefix := ""
-	if negative { prefix = "-" }
-	return prefix + whole + "." + fraction
+	return scaledDecimalFromInt64(value.Int64(), 3)
 }

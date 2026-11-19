@@ -93,8 +93,11 @@ func canonicalDailyBarDecimal(raw string) (string, error) {
 	integerPart := parts[0]
 	fractionPart := ""
 	if len(parts) == 2 { fractionPart = parts[1] }
+	if integerPart == "" && fractionPart == "" {
+		return "", errors.New("decimal contains no digits")
+	}
 	if integerPart == "" { integerPart = "0" }
-	if !decimalDigitsOnly(integerPart) || !decimalDigitsOnly(fractionPart) || (integerPart == "0" && fractionPart == "") {
+	if !decimalDigitsOnly(integerPart) || !decimalDigitsOnly(fractionPart) {
 		return "", errors.New("decimal contains invalid digits")
 	}
 	digits := integerPart + fractionPart
@@ -125,6 +128,16 @@ func decimalDigitsOnly(value string) bool {
 	return true
 }
 
-func pytdxPriceDecimal(value int64) string {
-	return canonicalDailyBarDecimal(strconv.FormatInt(value, 10) + "e-3")
+func scaledDecimalFromInt64(value int64, scale int) string {
+	if scale < 0 || scale > 100 {
+		return ""
+	}
+	if scale == 0 {
+		return strconv.FormatInt(value, 10)
+	}
+	result, err := canonicalDailyBarDecimal(strconv.FormatInt(value, 10) + "e-" + strconv.Itoa(scale))
+	if err != nil {
+		return ""
+	}
+	return result
 }
