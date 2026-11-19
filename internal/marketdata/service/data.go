@@ -4177,15 +4177,26 @@ func wrapPITStorageFailure(err error) error {
 // DailyBarsAsOf reconstructs a single source-coherent bar series from locally recorded revisions.
 // It never calls a live Provider and never substitutes the current-value table.
 func (s *DataService) DailyBarsAsOf(ctx context.Context, rawSymbol, start, end string, limit int, basis model.AdjustmentBasis, asOf time.Time) ([]model.DailyBar, []string, error) {
+	bars, warnings, _, err := s.dailyBarsAsOfWithCoverageEvidence(ctx, rawSymbol, start, end, limit, basis, asOf)
+	return bars, warnings, err
+}
+
+// DailyBarsAsOfWithCoverageEvidence 返回 PIT 日线及同一历史日历版本的覆盖率证据。
+func (s *DataService) DailyBarsAsOfWithCoverageEvidence(ctx context.Context, rawSymbol, start, end string, limit int, basis model.AdjustmentBasis, asOf time.Time) ([]model.DailyBar, []string, DailyBarCoverageEvidence, error) {
+	return s.dailyBarsAsOfWithCoverageEvidence(ctx, rawSymbol, start, end, limit, basis, asOf)
+}
+
+func (s *DataService) dailyBarsAsOfWithCoverageEvidence(ctx context.Context, rawSymbol, start, end string, limit int, basis model.AdjustmentBasis, asOf time.Time) ([]model.DailyBar, []string, DailyBarCoverageEvidence, error) {
+	coverageEvidence := DailyBarCoverageEvidence{CoverageBasis: "not_evaluated", CalendarQualityStatus: model.QualityUnknown}
 	if s == nil {
-		return nil, nil, ErrDailyBarsAsOfUnavailable
+		return nil, nil, coverageEvidence, ErrDailyBarsAsOfUnavailable
 	}
 	symbol, err := normalize.NormalizeSymbol(rawSymbol)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, coverageEvidence, err
 	}
 	if asOf.IsZero() || asOf.After(s.nowUTC()) {
-		return nil, nil, errors.New("daily-bar as_of must be a valid non-future timestamp")
+		return nil, nil, coverageEvidence, errors.New("daily-bar as_of must be a valid non-future timestamp")
 	}
 	if limit <= 0 {
 		limit = s.defaultBars
@@ -4196,7 +4207,7 @@ func (s *DataService) DailyBarsAsOf(ctx context.Context, rawSymbol, start, end s
 	if start != "" {
 		parsed, parseErr := time.Parse("2006-01-02", start)
 		if parseErr != nil || parsed.Format("2006-01-02") != start {
-			return nil, nil, fmt.Errorf("invalid start date %q", start)
+			return nil, nil, coverageEvidence, fmt.Errorf("invalid start date %q", start)
 		}
 	}
 	asOfDate := asOf.In(marketLocation()).Format("2006-01-02")
@@ -4205,25 +4216,25 @@ func (s *DataService) DailyBarsAsOf(ctx context.Context, rawSymbol, start, end s
 	}
 	parsedEnd, err := time.Parse("2006-01-02", end)
 	if err != nil || parsedEnd.Format("2006-01-02") != end {
-		return nil, nil, fmt.Errorf("invalid end date %q", end)
+		return nil, nil, coverageEvidence, fmt.Errorf("invalid end date %q", end)
 	}
 	if end > asOfDate {
-		return nil, nil, errors.New("end date must not be after as_of date in Asia/Shanghai")
+		return nil, nil, coverageEvidence, errors.New("end date must not be after as_of date in Asia/Shanghai")
 	}
 	if start != "" && start > end {
-		return nil, nil, errors.New("start date must not be after end date")
+		return nil, nil, coverageEvidence, errors.New("start date must not be after end date")
 	}
 	if basis != model.AdjustmentNone && basis != model.AdjustmentForward && basis != model.AdjustmentBackward {
-		return nil, nil, fmt.Errorf("unsupported adjustment basis %q", basis)
+		return nil, nil, coverageEvidence, fmt.Errorf("unsupported adjustment basis %q", basis)
 	}
 	if s == nil || s.store == nil {
-		return nil, nil, ErrDailyBarsAsOfUnavailable
+		return nil, nil, coverageEvidence, ErrDailyBarsAsOfUnavailable
 	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	if err := ctx.Err(); err != nil {
-		return nil, nil, err
+		return nil, nil, coverageEvidence, err
 	}
 	storageBasis := basis
 	if basis != model.AdjustmentNone {
@@ -4231,7 +4242,7 @@ func (s *DataService) DailyBarsAsOf(ctx context.Context, rawSymbol, start, end s
 	}
 	revisions, err := s.store.ListBarsAsOf(ctx, symbol, start, end, storageBasis, asOf, limit)
 	if err != nil {
-		return nil, nil, wrapPITStorageFailure(err)
+		return nil, nil, coverageEvidence, wrapPITStorageFailure(err)
 	}
 	candidates := make([]model.DailyBar, 0, len(revisions))
 	for _, bar := range revisions {
@@ -4247,9 +4258,9 @@ func (s *DataService) DailyBarsAsOf(ctx context.Context, rawSymbol, start, end s
 	coherent, coherenceErr := coherentStoredSeries(candidates, storageBasis)
 	if len(coherent) == 0 {
 		if coherenceErr != "" {
-			return nil, nil, fmt.Errorf("%w: %s", ErrDailyBarsAsOfNotFound, coherenceErr)
+			return nil, nil, coverageEvidence, fmt.Errorf("%w: %s", ErrDailyBarsAsOfNotFound, coherenceErr)
 		}
-		return nil, nil, ErrDailyBarsAsOfNotFound
+		return nil, nil, coverageEvidence, ErrDailyBarsAsOfNotFound
 	}
 	bars, warnings := normalize.ValidateAndSortBars(symbol, coherent, start, end, limit)
 	if basis != model.AdjustmentNone {
@@ -4258,17 +4269,17 @@ func (s *DataService) DailyBarsAsOf(ctx context.Context, rawSymbol, start, end s
 		factors, factorErr := s.AdjustmentFactorsAsOf(ctx, symbol, "", end, asOf)
 		if factorErr != nil {
 			if errors.Is(factorErr, ErrPITStorageFailure) {
-				return nil, nil, factorErr
+				return nil, nil, coverageEvidence, factorErr
 			}
-			return nil, nil, fmt.Errorf("%w: cannot rebuild adjusted daily bars without point-in-time adjustment factors: %v", ErrDailyBarsAsOfNotFound, factorErr)
+			return nil, nil, coverageEvidence, fmt.Errorf("%w: cannot rebuild adjusted daily bars without point-in-time adjustment factors: %v", ErrDailyBarsAsOfNotFound, factorErr)
 		}
 		bars, factorErr = rebuildAdjustedDailyBarsWithModeAt(bars, factors, basis, end, adjustmentFactorRebuildPIT, s.nowUTC())
 		if factorErr != nil {
-			return nil, nil, fmt.Errorf("%w: %v", ErrDailyBarsAsOfNotFound, factorErr)
+			return nil, nil, coverageEvidence, fmt.Errorf("%w: %v", ErrDailyBarsAsOfNotFound, factorErr)
 		}
 	}
 	if len(bars) == 0 {
-		return nil, nil, ErrDailyBarsAsOfNotFound
+		return nil, nil, coverageEvidence, ErrDailyBarsAsOfNotFound
 	}
 	warnings = append(warnings, "daily_bars_reconstructed_from_recorded_revisions")
 	if basis != model.AdjustmentNone {
@@ -4278,7 +4289,7 @@ func (s *DataService) DailyBarsAsOf(ctx context.Context, rawSymbol, start, end s
 	if calendarStart == "" {
 		calendarStart = bars[0].TradeDate
 	}
-	coverageOK, coverageWarnings := s.dailyBarCoverageSufficientAsOf(ctx, calendarStart, end, limit, len(bars), asOf)
+	coverageOK, coverageWarnings, coverageEvidence := s.dailyBarCoverageEvidenceAsOf(ctx, calendarStart, end, limit, len(bars), asOf)
 	warnings = append(warnings, coverageWarnings...)
 	applyDailyBarCoverageWarnings(bars, coverageWarnings)
 	if !coverageOK {
@@ -4290,7 +4301,7 @@ func (s *DataService) DailyBarsAsOf(ctx context.Context, rawSymbol, start, end s
 			appendReasonOnce(&bars[i].QualityReasons, "point_in_time_daily_bar_coverage_below_requested_threshold")
 		}
 	}
-	return bars, dedupeStrings(warnings), nil
+	return bars, dedupeStrings(warnings), coverageEvidence, nil
 }
 
 func applyDailyBarAdjustmentMetadataQuality(bars []model.DailyBar, basis model.AdjustmentBasis) ([]string, error) {
