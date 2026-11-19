@@ -3672,7 +3672,6 @@ func (s *DataService) dailyBarCoverageEvidenceAsOf(ctx context.Context, start, e
 	if strings.TrimSpace(calendar.CalendarRef) == "" {
 		evidence.CoverageBasis = "exchange_calendar_unreferenced"
 		evidence.CalendarQualityStatus = model.QualityDegraded
-		evidence.Warnings = append(evidence.Warnings, "daily_bar_coverage_calendar_reference_unavailable")
 	}
 	evidence.Warnings = dedupeStrings(evidence.Warnings)
 	return evidence.CoverageSufficient, append([]string(nil), evidence.Warnings...), evidence
@@ -3716,13 +3715,24 @@ func (s *DataService) dailyBarCoverageEvidence(ctx context.Context, start, end s
 }
 
 
+// dailyBarCoverageSufficient 保留 v1 内部调用语义；v2 额外读取完整证据对象。
+func (s *DataService) dailyBarCoverageSufficient(ctx context.Context, start, end string, requested, returned int) (bool, []string) {
+	ok, warnings, _ := s.dailyBarCoverageEvidence(ctx, start, end, requested, returned)
+	return ok, warnings
+}
+
+// dailyBarCoverageSufficientAsOf 保留既有 PIT 测试与内部调用入口。
+func (s *DataService) dailyBarCoverageSufficientAsOf(ctx context.Context, start, end string, requested, returned int, asOf time.Time) (bool, []string) {
+	ok, warnings, _ := s.dailyBarCoverageEvidenceAsOf(ctx, start, end, requested, returned, asOf)
+	return ok, warnings
+}
+
 func applyDailyBarCoverageWarnings(bars []model.DailyBar, warnings []string) {
 	for _, warning := range warnings {
 		switch warning {
 		case "daily_bar_coverage_uses_weekday_estimate_calendar_unavailable",
 			"daily_bar_coverage_calendar_not_observed_by_as_of",
-			"daily_bar_coverage_uses_degraded_trading_calendar",
-			"daily_bar_coverage_calendar_reference_unavailable":
+			"daily_bar_coverage_uses_degraded_trading_calendar":
 			for index := range bars {
 				degradeQualityStatus(&bars[index].QualityStatus)
 				appendReasonOnce(&bars[index].QualityReasons, warning)
