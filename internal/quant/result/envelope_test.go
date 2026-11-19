@@ -451,7 +451,6 @@ func TestIndicatorPayloadRejectsPartialCompositeResult(t *testing.T) {
 	}
 }
 
-
 func TestEnvelopePreservesExplicitEmptySnapshotRefs(t *testing.T) {
 	payload := validTrendPayload(t)
 	payloadJSON, err := payload.marshalPayload()
