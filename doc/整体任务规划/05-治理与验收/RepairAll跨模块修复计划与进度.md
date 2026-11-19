@@ -488,3 +488,12 @@ RA009 代码关闭条件已满足：Server 路由认证矩阵、CSRF、WebUI 请
 - 精确 SHA `6d00369b6b9c66261eb47625e6bec7a2d80217e1` 对应 Integration CI Run [44510702240](https://github.com/Kasign/stock_data_provider/actions/runs/44510702240) 全项 success；gofmt、根模块 vet/test、跨模块测试、Worker MariaDB/Redis、go-core vet/test、Compose、WebUI 语法/单测/镜像构建全部通过。
 - 当前 Application `DailyBarsV2Snapshot` 仅关闭 CalendarRef / coverage Header 传播，不代表最终 DailyBarV2 Decimal body 已完成；Bars 仍暂时复用旧 Application DTO 的 float64 字段。
 - 后续先完成 Decimal canonical value、原始 token/scale evidence、ChangePercent 来源、Amount 单位、复权精确值和 nullable/version 语义，再建立最终 HTTP v2 Schema/Handler/Golden 和 Research/Quant Consumer Contract Test。DATA-CTR-005/007 与 QNT-CTR-003 继续 deferred。
+
+
+### 28.24 DailyBars v2 CalendarRef 质量 fail-closed 验收（2026-11-19）
+
+- v2 Reader 在同一次 coverage evidence 表明日历质量不可靠时，即使存在 CalendarRef 也不向 Header 暴露引用；使用 `degraded_exchange_calendar` 并降级 Snapshot/Bars。
+- 仅因历史 Provider 缺少 publication timestamp 的 timestamp-only degradation 不视为内容冲突；若日期覆盖和其他质量事实可靠，仍保留实际 CalendarRef。
+- Application 测试覆盖 PIT 有效日历 ref 保留、冲突/降级日历 ref 拒绝、无持久化 ref 降级及无界查询降级。
+- 精确 SHA `7c5f6e3c5c5b4bb146d46e60d1c723bd8fbce9c2` 对应 Integration CI Run [44511526743](https://github.com/Kasign/stock_data_provider/actions/runs/44511526743) 全项 success。
+- 该工作只关闭 CalendarRef / coverage Header 的同一性和质量门禁；最终 Decimal DailyBarV2 Body、HTTP v2 Schema/Handler/Golden、Research/Quant Consumer Contract Test 仍 OPEN。DATA-CTR-005/007、QNT-CTR-003 继续 deferred。

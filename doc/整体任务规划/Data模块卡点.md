@@ -202,3 +202,10 @@ Root Server 的 Data Module 构造、共享资源注入、Migration Registry、I
 - Application v2 对缺少 start/end 的查询增加门禁：即使内部结果携带 CalendarRef，也不对 Header 暴露，明确标记 `unbounded_range_estimate` 并降级。精确 SHA `6d00369b6b9c66261eb47625e6bec7a2d80217e1` 的 Integration CI Run [44510702240](https://github.com/Kasign/stock_data_provider/actions/runs/44510702240) 全项 success。
 - CalendarRef 同次评估传播到 Application v2 Header 已关闭；但当前 `DailyBarsV2Snapshot.Bars` 仍复用 float64 Application DailyBar DTO，只是 Header 阶段，不是最终 Decimal Payload，不可对外发布或冻结 DATA-CTR-005。
 - 下一步：完成 DailyBarV2 Decimal/lexical-scale evidence 字段设计和 Provider 映射；对没有可靠来源的 ChangePercent、AmountCNY、QFQ/HFQ 调整值保持 null/degraded；之后再接 HTTP v2 Schema/Handler/Golden 与 Research/Quant 消费契约。
+
+
+## RepairAll v2 日历质量 fail-closed 卡点关闭（2026-11-19）
+
+- 有 ref 但日历质量不可靠时，v2 Header 不暴露 CalendarRef，coverage basis 为 `degraded_exchange_calendar`，Snapshot/Bars 降级；仅 timestamp-only 历史降级保留可靠 CalendarRef。
+- 精确 SHA `7c5f6e3c5c5b4bb146d46e60d1c723bd8fbce9c2` 的 Integration CI Run [44511526743](https://github.com/Kasign/stock_data_provider/actions/runs/44511526743) 全项 success。
+- CalendarRef 同次评估、无界查询和质量 fail-closed 已覆盖；最终 Decimal Body 与 HTTP v2 仍是下一阶段工作。
