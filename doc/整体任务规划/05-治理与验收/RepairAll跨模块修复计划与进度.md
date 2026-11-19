@@ -229,3 +229,13 @@ RA009 代码关闭条件已满足：Server 路由认证矩阵、CSRF、WebUI 请
 - 已在 Server 统一注册精确路径与子树路径，并新增未认证拒绝、Owner Bearer 通过测试；Owner Session 与 Bearer 共用同一组注册模式。
 - 修复代码 SHA `1e916220a8784ae840132ce0cec3b3654c6b9655` 的完整 Integration CI [Run 44482650366](https://github.com/Kasign/stock_data_provider/actions/runs/44482650366) 全项 success。
 - 该问题属于实际路由覆盖缺陷，已修复；没有新增认证身份或放宽策略。
+
+
+## 24. RA-CROSS-REVIEW-009 LLM Gateway 生产调用链审查（2026-11-19）
+
+- 前置：RA-CROSS-REVIEW-003～008 已完成；RA009 Data 单入口迁移代码与 CI 验收完成，M6 生产证据继续独立阻塞。
+- 当前状态：PLANNED。
+- 审查目标：确认 LLM 模块是否具备真实可调用的 Application Port、Provider/Gateway Adapter、服务端 Secret 装配、受控 Platform Egress、调用超时/取消/错误归一化、能力与证据记录，以及 Researchflow/Server 的实际生产消费者。
+- 审查范围：`internal/llm/**`、`internal/platform/**` 中已存在的相关公共能力、`internal/researchflow/**` 的 LLM 调用方、`internal/server/**` 的组合根与 Worker 生命周期，以及对应 `doc/llm/**`、`doc/researchflow/**`、`doc/server/**`。
+- 执行原则：先沿真实调用链定位缺口；不复制 Gateway、不把用户本地 LLM 环境或独立 `Kasign/llm-gateway` 假定为已装配依赖；不新增没有实际消费者的接口/Worker；缺少外部 Secret 或 Endpoint 时判为 SKIPPED / NOT_COMPARABLE，不伪造真实调用成功。
+- 验收：区分代码机制 PASS、生产装配 PASS、真实模型调用 PASS、NOT_COMPARABLE 和 DEFERRED；任何修复均同步调用方、实现方、契约、测试和模块卡点，并执行完整 Integration CI。
