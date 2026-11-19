@@ -133,8 +133,9 @@ try {
     const json = (status, body) => route.fulfill({
       status, contentType: "application/json", body: JSON.stringify(body)
     });
-    if (pathname.endsWith("/api/v1/owner/session") && request.method() === "GET") return json(200, { authenticated: true, expires_at: "2026-11-19T10:00:00Z" });\n    if (pathname.endsWith("/api/v1/owner/session/csrf") && request.method() === "POST") return json(200, { authenticated: true, csrf_token: "browser-probe-csrf" });\n    if (pathname.endsWith("/healthz")) return json(200, { status: "ok" });
-    if (pathname.endsWith("/health/ready")) return json(200, { status: "ready" });
+    if (pathname.endsWith("/api/v1/owner/session") && request.method() === "GET") return json(200, { authenticated: true, expires_at: "2026-11-19T10:00:00Z" });
+    if (pathname.endsWith("/api/v1/owner/session/csrf") && request.method() === "POST") return json(200, { authenticated: true, csrf_token: "browser-probe-csrf" });
+    if (pathname.endsWith("/healthz")) return json(200, { status: "ok" });
     if (pathname.endsWith("/readyz")) return json(200, { status: "ready", dependencies: { mariadb: "ok", redis: "ok" } });
     if (pathname.endsWith("/api/v1/data-sources/probe/history")) {
       historyRequests += 1;
@@ -143,7 +144,8 @@ try {
     }
     if (pathname.endsWith("/api/v1/data-sources/probe") && request.method() === "POST") {
       probeRequests += 1;
-      probeRequestBody = request.postDataJSON();\n      probeRequestHeaders = request.headers();
+      probeRequestBody = request.postDataJSON();
+      probeRequestHeaders = request.headers();
       if (probeRequests > 1) return json(500, { error: { code: "probe_persist_failed", message: "探测结果持久化失败" } });
       return json(200, currentRun);
     }
@@ -170,6 +172,8 @@ try {
   await page.locator("#data-center-probe-run").click();
   await page.waitForFunction(() => document.querySelector("#data-center-probe-summary")?.textContent.includes("probe-current"));
   assert.equal(probeRequestHeaders["x-csrf-token"], "browser-probe-csrf");\n  assert.equal(probeRequestHeaders["x-api-key"], undefined);\n  assert.equal(probeRequestHeaders["x-csrf-token"], "browser-probe-csrf");
+  assert.equal(probeRequestHeaders["x-api-key"], undefined);
+  assert.equal(probeRequestHeaders["x-csrf-token"], "browser-probe-csrf");
   assert.equal(probeRequestHeaders["x-api-key"], undefined);
   assert.deepEqual(probeRequestBody, {
     scope: "core", timeout_seconds: 9,
@@ -220,11 +224,10 @@ try {
     path: path.join(screenshotDir, "1280x900-data-center-probe.png"),
     fullPage: false, animations: "disabled"
   });
-  await context.close();
-
   const migratedSettings = await page.evaluate(() => JSON.parse(localStorage.getItem("stock-provider-webui.settings.v1")));
   assert.deepEqual(migratedSettings, { marketBase: "/", analysisBase: "/" });
   assert.doesNotMatch(JSON.stringify(migratedSettings), /apiKey|legacy-browser-key|market-api|analysis-api/);
+  await context.close();
   console.log("PASS data center active Provider probe, CSRF enforcement and legacy settings cleanup");
 } finally {
   if (browser) await browser.close();

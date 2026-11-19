@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  analysisHealth,\n  analysisLiveness,
+  analysisHealth,
+  analysisLiveness,
   changeOwnerPassword,
   clearOwnerSessionMemory,
   createAnalysisTask,
@@ -288,6 +289,7 @@ test("searches stocks by Chinese name through the authenticated market API and f
     );
     assert.equal(request.url, "/api/v1/stocks/search?q=%E8%B4%B5%E5%B7%9E%E8%8C%85%E5%8F%B0&limit=10");
     assert.equal(request.headers["X-API-Key"], undefined);
+    assert.equal(request.headers["X-CSRF-Token"], "probe-csrf-token");
     assert.equal(request.signal, controller.signal);
     assert.equal(result.items[0].symbol, "600519.SH");
   } finally {
@@ -504,12 +506,16 @@ test("runs validated Provider probes with the Owner Session CSRF token", async (
   const originalFetch = globalThis.fetch;
   let request;
   globalThis.fetch = async (url, init) => {
+    if (String(url).endsWith("/api/v1/owner/session") && init.method === "POST") {
+      return jsonResponse({ csrf_token: "probe-csrf-token", authenticated: true });
+    }
     request = { url: String(url), ...init };
     return jsonResponse({ run_id: "probe-1", status: "degraded", items: [] });
   };
   try {
     const settings = { marketBase: "/" };
-    await loginOwnerSession(settings, "test-password");\n    const controller = new AbortController();
+    await loginOwnerSession(settings, "test-password");
+    const controller = new AbortController();
     const result = await runDataSourceProbe(settings, {
       scope: "core",
       timeoutSeconds: 8,

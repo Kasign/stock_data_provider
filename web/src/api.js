@@ -45,7 +45,10 @@ function isValidISODate(value) {
 async function request(base, path, { method = "GET", body, signal, timeoutMs = 0, csrf = false, headers: extraHeaders = {} } = {}) {
   const prefix = normalizeBasePath(base, "/");
   const headers = { Accept: "application/json", ...extraHeaders };
-  if (csrf) {\n    if (!ownerCSRFToken) throw new Error("当前页面没有可用的 CSRF Token，请先恢复 Owner Session。");\n    headers["X-CSRF-Token"] = ownerCSRFToken;\n  }
+  if (csrf) {
+    if (!ownerCSRFToken) throw new Error("当前页面没有可用的 CSRF Token，请先恢复 Owner Session。");
+    headers["X-CSRF-Token"] = ownerCSRFToken;
+  }
   if (body !== undefined) headers["Content-Type"] = "application/json";
   const requestPath = prefix === "/" ? path : `${prefix}${path}`;
   let requestSignal = signal;
