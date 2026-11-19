@@ -116,9 +116,10 @@ func TestRegistryMariaDBIntegration(t *testing.T) {
 	if _, err := db.ExecContext(ctx, "ALTER TABLE market_data_quotes DROP COLUMN turnover_rate"); err != nil {
 		t.Fatalf("simulate physical schema drift: %v", err)
 	}
-	if err := dataService.Ready(ctx); err == nil {
-		t.Fatal("Data readiness accepted a missing V4 compatibility column")
+	if err := registry.ValidateApplied(ctx, db); err != nil {
+		t.Fatalf("migration checksum validation should not treat physical column drift as a changed migration definition: %v", err)
 	}
+	requireMarketDataSchemaDrift(t, dataService.Ready(ctx), "missing V4 compatibility column")
 	if _, err := db.ExecContext(ctx, "ALTER TABLE market_data_quotes ADD COLUMN turnover_rate DECIMAL(16,8) NULL"); err != nil {
 		t.Fatalf("restore compatibility column: %v", err)
 	}
@@ -128,9 +129,10 @@ func TestRegistryMariaDBIntegration(t *testing.T) {
 	if _, err := db.ExecContext(ctx, "DROP INDEX idx_market_bar_revision_identity_asof ON market_data_daily_bar_versions"); err != nil {
 		t.Fatalf("simulate physical index drift: %v", err)
 	}
-	if err := dataService.Ready(ctx); err == nil {
-		t.Fatal("Data readiness accepted a missing V4 compatibility index")
+	if err := registry.ValidateApplied(ctx, db); err != nil {
+		t.Fatalf("migration checksum validation should not treat physical index drift as a changed migration definition: %v", err)
 	}
+	requireMarketDataSchemaDrift(t, dataService.Ready(ctx), "missing V4 compatibility index")
 	if _, err := db.ExecContext(ctx, "CREATE INDEX idx_market_bar_revision_identity_asof ON market_data_daily_bar_versions (symbol, trade_date, period, adjustment_basis, source, recorded_at, id)"); err != nil {
 		t.Fatalf("restore compatibility index: %v", err)
 	}
@@ -155,6 +157,14 @@ func TestRegistryMariaDBIntegration(t *testing.T) {
 	}
 	if err := registry.ValidateApplied(ctx, db); err == nil {
 		t.Fatal("ValidateApplied() accepted a changed migration checksum")
+	}
+}
+
+func requireMarketDataSchemaDrift(t *testing.T, err error, scenario string) {
+	t.Helper()
+	var readinessFault *platformfault.Fault
+	if !errors.As(err, &readinessFault) || readinessFault.Code != "market_data.schema_drift" {
+		t.Fatalf("Data readiness error for %s = %v, want market_data.schema_drift", scenario, err)
 	}
 }
 
