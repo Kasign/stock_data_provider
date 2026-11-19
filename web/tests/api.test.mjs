@@ -140,8 +140,8 @@ test("uses the Root Server health, provider and daily-bars routes without a brow
     await getDataSources(settings);
     await getDailyBars(settings, "600519.SH", { limit: 120, adjustment: "forward_adjusted" });
 
-    assert.equal(requests[0].url, "//health/ready");
-    assert.equal(requests[1].url, "//readyz");
+    assert.equal(requests[0].url, "/healthz");
+    assert.equal(requests[1].url, "/api/readyz");
     assert.equal(requests[2].url, "/api/v1/data-sources");
     assert.equal(requests[3].url, "/api/v1/bars/600519.SH/daily?limit=120&adjustment=forward_adjusted");
     assert.equal(Object.hasOwn(requests[0].headers, "X-API-Key"), false);
@@ -289,7 +289,6 @@ test("searches stocks by Chinese name through the authenticated market API and f
     );
     assert.equal(request.url, "/api/v1/stocks/search?q=%E8%B4%B5%E5%B7%9E%E8%8C%85%E5%8F%B0&limit=10");
     assert.equal(request.headers["X-API-Key"], undefined);
-    assert.equal(request.headers["X-CSRF-Token"], "probe-csrf-token");
     assert.equal(request.signal, controller.signal);
     assert.equal(result.items[0].symbol, "600519.SH");
   } finally {
@@ -432,7 +431,6 @@ test("reads provider runtime diagnostics with the market API key and caller sign
     assert.equal(result.observed_from, "in_process_circuit_breaker");
     assert.equal(request.url, "/api/v1/data-sources/diagnostics");
     assert.equal(request.headers["X-API-Key"], undefined);
-    assert.equal(request.headers["X-CSRF-Token"], "probe-csrf-token");
     assert.equal(request.signal, controller.signal);
   } finally {
     globalThis.fetch = originalFetch;
@@ -529,6 +527,7 @@ test("runs validated Provider probes with the Owner Session CSRF token", async (
     assert.equal(request.url, "/api/v1/data-sources/probe");
     assert.equal(request.method, "POST");
     assert.equal(request.headers["X-API-Key"], undefined);
+    assert.equal(request.headers["X-CSRF-Token"], "probe-csrf-token");
     assert.equal(request.signal, controller.signal);
     assert.deepEqual(JSON.parse(request.body), {
       scope: "core", timeout_seconds: 8,

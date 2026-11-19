@@ -105,7 +105,7 @@ test("自选股辅助字段顺序与工作区导入预览契约完整", () => {
   assert.match(app, /browser-data-import-merge/);
   assert.match(app, /const currentWatchlistItems = currentWatchlist\.storageReadable/);
   assert.match(app, /rollbackFailures/);
-  assert.match(app, /apiKey: state\.settings\.apiKey/);
+  assert.doesNotMatch(app, /apiKey: state\.settings\.apiKey|X-API-Key/);
   assert.doesNotMatch(app, /window\.prompt\(preview/);
 });
 

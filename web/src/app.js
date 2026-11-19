@@ -2338,8 +2338,6 @@ async function refreshServices() {
     const message = "服务健康检查流程异常：" + settingsCheckErrorMessage(error);
     // 即使健康请求或状态渲染意外失败，也将错误转换为结果，避免 void 调用产生未处理 rejection。
     try {
-    } catch {}
-    try {
       const connectionDot = $("#connection-dot");
       connectionDot.classList.remove("is-online", "is-offline");
       connectionDot.classList.add("is-unknown");
@@ -4374,7 +4372,8 @@ function applySettings(nextSettings, { persistPreviousActiveTask = true } = {}) 
   runSettingsApplyStep("重置连接配置表单失败：", () => {
     $("#market-base-input").value = state.settings.marketBase;
     $("#analysis-base-input").value = state.settings.analysisBase;
-  }
+  }, failures);
+}
 
 function clearLocalSettings() {
   if (!window.confirm("确定清除当前浏览器保存的旧连接配置？不会修改服务器配置。")) return;

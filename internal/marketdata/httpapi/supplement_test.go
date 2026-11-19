@@ -78,7 +78,6 @@ func TestDisabledSupplementReturnsProviderUnavailable(t *testing.T) {
 	h := NewWithCapabilityInterfaces("forward_adjusted", ds,
 		nil, nil, nil, 1000, time.Second, logger).InProcessHandler()
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/stocks/600519.SH/chip-distribution", nil)
-	req.Header.Set("X-API-Key", "test-secret")
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, req)
 	if w.Code != http.StatusServiceUnavailable {
