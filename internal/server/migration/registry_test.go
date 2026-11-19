@@ -401,7 +401,7 @@ func TestRegisterAcceptsAndCopiesOperationsOnlyMigration(t *testing.T) {
 	migrations := []platformstorage.Migration{{
 		Version: 4, Description: "compatibility",
 		Operations: []platformstorage.MigrationOperation{{
-			Kind: platformstorage.MigrationOperationEnsureColumn,
+			Kind:  platformstorage.MigrationOperationEnsureColumn,
 			Table: "sample", Name: "source_version", Definition: "VARCHAR(32) NOT NULL DEFAULT ''",
 		}},
 	}}

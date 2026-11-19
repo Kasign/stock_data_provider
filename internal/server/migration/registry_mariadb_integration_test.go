@@ -13,9 +13,9 @@ import (
 
 	mysqlDriver "github.com/go-sql-driver/mysql"
 
+	marketdatabootstrap "example.com/stock-analysis-flow/internal/marketdata/bootstrap"
 	platformfault "example.com/stock-analysis-flow/internal/platform/fault"
 	platformstorage "example.com/stock-analysis-flow/internal/platform/storage"
-	marketdatabootstrap "example.com/stock-analysis-flow/internal/marketdata/bootstrap"
 )
 
 // TestRegistryMariaDBIntegration 验证 Server Registry 与 Platform Runner 的真实组合行为。
@@ -32,7 +32,6 @@ func TestRegistryMariaDBIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open MariaDB admin connection: %v", err)
 	}
-	defer adminDB.Close()
 	if err := adminDB.PingContext(ctx); err != nil {
 		t.Fatalf("ping MariaDB: %v", err)
 	}
@@ -247,14 +246,19 @@ func TestMarketDataMigrationUpgradeAndConcurrentRootRegistration(t *testing.T) {
 	}
 	suffix := strconv.FormatInt(time.Now().UnixNano(), 36)
 	testDatabase := "market_data_it_" + suffix
-	if _, err := adminDB.ExecContext(ctx, fmt.Sprintf("CREATE DATABASE `%s`", testDatabase)); err != nil {
-		t.Fatalf("create isolated MariaDB database: %v", err)
-	}
+	databaseCreated := false
 	t.Cleanup(func() {
 		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cleanupCancel()
-		_, _ = adminDB.ExecContext(cleanupCtx, fmt.Sprintf("DROP DATABASE IF EXISTS `%s`", testDatabase))
+		if databaseCreated {
+			_, _ = adminDB.ExecContext(cleanupCtx, fmt.Sprintf("DROP DATABASE IF EXISTS `%s`", testDatabase))
+		}
+		_ = adminDB.Close()
 	})
+	if _, err := adminDB.ExecContext(ctx, fmt.Sprintf("CREATE DATABASE `%s`", testDatabase)); err != nil {
+		t.Fatalf("create isolated MariaDB database: %v", err)
+	}
+	databaseCreated = true
 	config, err := mysqlDriver.ParseDSN(dsn)
 	if err != nil {
 		t.Fatalf("parse MariaDB DSN: %v", err)
