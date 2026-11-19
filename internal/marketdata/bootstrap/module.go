@@ -71,7 +71,7 @@ type ProviderSummary struct {
 	DailyBars []string // 实际具备 DailyBars 能力的 Provider 名称。
 }
 
-// Module 封装 Data 应用、HTTP Handler、诊断能力及模块自有资源。
+// Module 封装 Data Application、Root 内部 HTTP Adapter、诊断能力及模块自有资源。
 type Module struct {
 	inProcessHandler http.Handler
 	application      app.MarketDataReader

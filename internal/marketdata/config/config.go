@@ -43,7 +43,6 @@ type ProviderSettings struct {
 }
 
 type Config struct {
-	HTTPAddr                  string
 	RequestTimeout            time.Duration
 	ProviderTimeout           time.Duration
 	ProviderRetries           int
@@ -106,7 +105,6 @@ type Config struct {
 	RedisPassword             string
 	RedisDB                   int
 	MySQLDSN                  string
-	AutoMigrate               bool
 	AllowNoStorage            bool
 }
 
@@ -138,15 +136,15 @@ func defaultProviderFile() providerFile {
 
 // Load 返回 Data Provider 配置；不再加载独立 HTTP API Key。
 func Load() (Config, error) {
-	return load(false, false)
+	return load(false)
 }
 
 // LoadForRoot 加载由 Root Server 注入 DB/Redis 的 Data 配置。
 func LoadForRoot() (Config, error) {
-	return load(false, true)
+	return load(true)
 }
 
-func load(_ bool, allowRootInjectedStorage bool) (Config, error) {
+func load(allowRootInjectedStorage bool) (Config, error) {
 	if err := validateEnvironment(); err != nil {
 		return Config{}, err
 	}
