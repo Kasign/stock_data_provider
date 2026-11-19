@@ -11,15 +11,25 @@ import (
 
 func dailyBarExactValuesFromStrings(open, high, low, close, rawVolume, rawAmount, rawAmountUnit, amountUnit string) *model.DailyBarExactValues {
 	openValue, err := canonicalDailyBarDecimal(open)
-	if err != nil { return nil }
+	if err != nil {
+		return nil
+	}
 	highValue, err := canonicalDailyBarDecimal(high)
-	if err != nil { return nil }
+	if err != nil {
+		return nil
+	}
 	lowValue, err := canonicalDailyBarDecimal(low)
-	if err != nil { return nil }
+	if err != nil {
+		return nil
+	}
 	closeValue, err := canonicalDailyBarDecimal(close)
-	if err != nil { return nil }
+	if err != nil {
+		return nil
+	}
 	volumeValue, err := canonicalDailyBarDecimal(rawVolume)
-	if err != nil { return nil }
+	if err != nil {
+		return nil
+	}
 
 	result := &model.DailyBarExactValues{
 		Open: openValue, High: highValue, Low: lowValue, Close: closeValue, RawVolume: volumeValue,
@@ -28,7 +38,9 @@ func dailyBarExactValuesFromStrings(open, high, low, close, rawVolume, rawAmount
 		return result
 	}
 	amountValue, err := canonicalDailyBarDecimal(rawAmount)
-	if err != nil { return nil }
+	if err != nil {
+		return nil
+	}
 	result.RawAmount = &amountValue
 	if strings.EqualFold(strings.TrimSpace(rawAmountUnit), "cny") && strings.EqualFold(strings.TrimSpace(amountUnit), "cny") {
 		result.AmountCNY = &amountValue
@@ -38,15 +50,25 @@ func dailyBarExactValuesFromStrings(open, high, low, close, rawVolume, rawAmount
 
 func dailyBarExactValuesFromJSON(open, high, low, close, rawVolume, rawAmount json.RawMessage, rawAmountUnit, amountUnit string) *model.DailyBarExactValues {
 	openValue, ok := dailyBarDecimalFromJSON(open)
-	if !ok { return nil }
+	if !ok {
+		return nil
+	}
 	highValue, ok := dailyBarDecimalFromJSON(high)
-	if !ok { return nil }
+	if !ok {
+		return nil
+	}
 	lowValue, ok := dailyBarDecimalFromJSON(low)
-	if !ok { return nil }
+	if !ok {
+		return nil
+	}
 	closeValue, ok := dailyBarDecimalFromJSON(close)
-	if !ok { return nil }
+	if !ok {
+		return nil
+	}
 	volumeValue, ok := dailyBarDecimalFromJSON(rawVolume)
-	if !ok { return nil }
+	if !ok {
+		return nil
+	}
 	amountValue, _ := dailyBarDecimalFromJSON(rawAmount)
 	return dailyBarExactValuesFromStrings(openValue, highValue, lowValue, closeValue, volumeValue, amountValue, rawAmountUnit, amountUnit)
 }
@@ -74,7 +96,9 @@ func canonicalDailyBarDecimal(raw string) (string, error) {
 	}
 	sign := ""
 	if value[0] == '-' || value[0] == '+' {
-		if value[0] == '-' { sign = "-" }
+		if value[0] == '-' {
+			sign = "-"
+	}
 		value = value[1:]
 	}
 	exponent := 0
@@ -92,11 +116,15 @@ func canonicalDailyBarDecimal(raw string) (string, error) {
 	parts := strings.SplitN(value, ".", 2)
 	integerPart := parts[0]
 	fractionPart := ""
-	if len(parts) == 2 { fractionPart = parts[1] }
+	if len(parts) == 2 {
+		fractionPart = parts[1]
+	}
 	if integerPart == "" && fractionPart == "" {
 		return "", errors.New("decimal contains no digits")
 	}
-	if integerPart == "" { integerPart = "0" }
+	if integerPart == "" {
+		integerPart = "0"
+	}
 	if !decimalDigitsOnly(integerPart) || !decimalDigitsOnly(fractionPart) {
 		return "", errors.New("decimal contains invalid digits")
 	}
@@ -114,16 +142,24 @@ func canonicalDailyBarDecimal(raw string) (string, error) {
 		fraction = digits[decimalPosition:]
 	}
 	whole = strings.TrimLeft(whole, "0")
-	if whole == "" { whole = "0" }
+	if whole == "" {
+		whole = "0"
+	}
 	fraction = strings.TrimRight(fraction, "0")
-	if whole == "0" && fraction == "" { return "0", nil }
-	if fraction == "" { return sign + whole, nil }
+	if whole == "0" && fraction == "" {
+		return "0", nil
+	}
+	if fraction == "" {
+		return sign + whole, nil
+	}
 	return sign + whole + "." + fraction, nil
 }
 
 func decimalDigitsOnly(value string) bool {
 	for _, char := range value {
-		if char < '0' || char > '9' { return false }
+		if char < '0' || char > '9' {
+			return false
+		}
 	}
 	return true
 }
@@ -141,7 +177,6 @@ func scaledDecimalFromInt64(value int64, scale int) string {
 	}
 	return result
 }
-
 
 func dailyBarJSONValueAt(values []json.RawMessage, index int) json.RawMessage {
 	if index < 0 || index >= len(values) {

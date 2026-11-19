@@ -71,5 +71,5 @@ func TestMariaDBDailyBarExactValuesPersistAcrossCurrentAndPITReads(t *testing.T)
 	}
 }
 
-func dailyBarExactInt64Ptr(value int64) *int64 { return &value }
+func dailyBarExactInt64Ptr(value int64) *int64       { return &value }
 func dailyBarExactFloat64Ptr(value float64) *float64 { return &value }

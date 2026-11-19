@@ -5,13 +5,13 @@ import "testing"
 func TestCanonicalDailyBarDecimal(t *testing.T) {
 	cases := map[string]string{
 		"001.2300": "1.23",
-		"0": "0",
-		"0.000": "0",
-		"1.23e-3": "0.00123",
-		".5": "0.5",
-		"1.": "1",
-		"-0.000": "0",
-		"1000e-3": "1",
+		"0":        "0",
+		"0.000":    "0",
+		"1.23e-3":  "0.00123",
+		".5":       "0.5",
+		"1.":       "1",
+		"-0.000":   "0",
+		"1000e-3":  "1",
 	}
 	for input, want := range cases {
 		got, err := canonicalDailyBarDecimal(input)

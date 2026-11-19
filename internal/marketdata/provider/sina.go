@@ -235,7 +235,7 @@ func (p *Sina) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endDate
 			VolumeUnit: "shares", AmountUnit: "unknown",
 			QualityStatus: model.QualityDegraded, QualityReasons: reasons,
 			NormalizationVer: normalize.Version,
-			ExactValues: dailyBarExactValuesFromJSON(item.row.Open, item.row.High, item.row.Low, item.row.Close, item.row.Volume, nil, "unknown", "unknown"),
+			ExactValues:      dailyBarExactValuesFromJSON(item.row.Open, item.row.High, item.row.Low, item.row.Close, item.row.Volume, nil, "unknown", "unknown"),
 		})
 	}
 	return normalizeProviderDailyBarsWithReport(ctx, symbol, startISO, endISO, limit, bars, rejectedRows)

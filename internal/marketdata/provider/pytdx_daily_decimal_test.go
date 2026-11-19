@@ -9,9 +9,9 @@ import (
 func TestPytdxDailyBarExactValuesPreserveProtocolPrice(t *testing.T) {
 	amount := protocol.Price(123456789)
 	item := &protocol.Kline{
-		Open: protocol.Price(1234000),
-		High: protocol.Price(1235000),
-		Low: protocol.Price(1233000),
+		Open:   protocol.Price(1234000),
+		High:   protocol.Price(1235000),
+		Low:    protocol.Price(1233000),
 		Close:  protocol.Price(1234500),
 		Volume: 12345,
 		Amount: amount,
