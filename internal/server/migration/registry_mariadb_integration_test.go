@@ -115,6 +115,18 @@ func TestRegistryMariaDBIntegration(t *testing.T) {
 	if err := dataService.Ready(ctx); err != nil {
 		t.Fatalf("Data readiness rejected restored schema: %v", err)
 	}
+	if _, err := db.ExecContext(ctx, "DROP INDEX idx_market_bar_revision_identity_asof ON market_data_daily_bar_versions"); err != nil {
+		t.Fatalf("simulate physical index drift: %v", err)
+	}
+	if err := dataService.Ready(ctx); err == nil {
+		t.Fatal("Data readiness accepted a missing V4 compatibility index")
+	}
+	if _, err := db.ExecContext(ctx, "CREATE INDEX idx_market_bar_revision_identity_asof ON market_data_daily_bar_versions (symbol, trade_date, period, adjustment_basis, source, recorded_at, id)"); err != nil {
+		t.Fatalf("restore compatibility index: %v", err)
+	}
+	if err := dataService.Ready(ctx); err != nil {
+		t.Fatalf("Data readiness rejected restored compatibility index: %v", err)
+	}
 
 	if _, err := db.ExecContext(ctx,
 		fmt.Sprintf("INSERT INTO %s (id, value) VALUES (?, ?)", table), 1, "server-registry"); err != nil {

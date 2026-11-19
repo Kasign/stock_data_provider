@@ -151,13 +151,15 @@ func Run(ctx context.Context) (runErr error) {
 		}
 		slog.Info("所有已注册模块 Schema 版本与 checksum 预检通过", "migration_enabled", false)
 	}
+	migrationCancel()
 	// Migration enabled/disabled 两种启动路径都必须在接受流量或启动 Worker 前
 	// 验证 Data 物理 Schema 与 Redis/MariaDB 依赖；Migration checksum 不证明物理结构完整。
-	if err := marketDataModule.Diagnostics().Ready(migrationCtx); err != nil {
-		migrationCancel()
+	readinessCtx, readinessCancel := context.WithTimeout(ctx, 10*time.Second)
+	if err := marketDataModule.Diagnostics().Ready(readinessCtx); err != nil {
+		readinessCancel()
 		return fmt.Errorf("Data Module 依赖与物理 Schema 就绪检查失败: %w", err)
 	}
-	migrationCancel()
+	readinessCancel()
 
 	newsRepository, err := newsstorage.NewMySQLRepository(storageResources.DB)
 	if err != nil {
