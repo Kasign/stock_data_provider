@@ -395,3 +395,22 @@ func TestRunWithReportDoesNotExecuteExternalNamespace(t *testing.T) {
 		t.Fatalf("Namespaces() = %v, want [market_data]", got)
 	}
 }
+
+
+func TestRegisterAcceptsAndCopiesOperationsOnlyMigration(t *testing.T) {
+	registry := NewRegistry()
+	migrations := []platformstorage.Migration{{
+		Version: 4, Description: "compatibility",
+		Operations: []platformstorage.MigrationOperation{{
+			Kind: platformstorage.MigrationOperationEnsureColumn,
+			Table: "sample", Name: "source_version", Definition: "VARCHAR(32) NOT NULL DEFAULT ''",
+		}},
+	}}
+	if err := registry.Register("market_data", migrations); err != nil {
+		t.Fatalf("Register() rejected operations-only migration: %v", err)
+	}
+	migrations[0].Operations[0].Name = "mutated"
+	if got := registry.entries["market_data"][0].Operations[0].Name; got != "source_version" {
+		t.Fatalf("registered operation changed with caller input: %q", got)
+	}
+}
