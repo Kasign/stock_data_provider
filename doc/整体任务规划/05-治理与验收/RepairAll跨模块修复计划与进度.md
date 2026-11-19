@@ -480,3 +480,11 @@ RA009 代码关闭条件已满足：Server 路由认证矩阵、CSRF、WebUI 请
 - Application current/PIT、无 ref/无界查询测试及 MariaDB 当前/PIT CalendarRef 同源集成测试均通过。
 - 精确 SHA `1c23678b5a80c07e5f31b3e5008d1e031cdd8048` 对应 Integration CI Run [44509890582](https://github.com/Kasign/stock_data_provider/actions/runs/44509890582) 全项 success。
 - CalendarRef Application 传播项 CLOSED；HTTP v2 Schema/Handler/Golden 和消费者契约测试仍 OPEN。Decimal lexical scale、ChangePercent、Tushare/Yahoo QFQ/HFQ、Amount 单位、ProviderTime/provider_data_version 及 DATA-CTR-007 Manifest/Payload/AuthorizationRef 仍未解除。
+
+
+### 28.23 DailyBars v2 无界查询门禁与 DTO 阶段边界（2026-11-19）
+
+- Application v2 新增无界查询回归测试：缺少 start/end 时，即使内部 Service 结果带有 CalendarRef，也必须在 v2 Header 清空 ref，标记 `unbounded_range_estimate` 并将 Snapshot/Bars 降级。
+- 精确 SHA `6d00369b6b9c66261eb47625e6bec7a2d80217e1` 对应 Integration CI Run [44510702240](https://github.com/Kasign/stock_data_provider/actions/runs/44510702240) 全项 success；gofmt、根模块 vet/test、跨模块测试、Worker MariaDB/Redis、go-core vet/test、Compose、WebUI 语法/单测/镜像构建全部通过。
+- 当前 Application `DailyBarsV2Snapshot` 仅关闭 CalendarRef / coverage Header 传播，不代表最终 DailyBarV2 Decimal body 已完成；Bars 仍暂时复用旧 Application DTO 的 float64 字段。
+- 后续先完成 Decimal canonical value、原始 token/scale evidence、ChangePercent 来源、Amount 单位、复权精确值和 nullable/version 语义，再建立最终 HTTP v2 Schema/Handler/Golden 和 Research/Quant Consumer Contract Test。DATA-CTR-005/007 与 QNT-CTR-003 继续 deferred。

@@ -195,3 +195,10 @@ Root Server 的 Data Module 构造、共享资源注入、Migration Registry、I
 - 无明确 start/end 或 CalendarRef 未持久化时 v2 显式降级；v1 既有质量语义保持兼容。
 - current/PIT 映射、缺失引用/无界范围降级、MariaDB 日历版本同源测试通过。精确 SHA `1c23678b5a80c07e5f31b3e5008d1e031cdd8048` 的 Integration CI Run [44509890582](https://github.com/Kasign/stock_data_provider/actions/runs/44509890582) 全项 success。
 - 本卡点仅关闭 Application Port 传播。HTTP v2 Schema/Handler/Golden、Research/Quant 消费者契约测试仍未完成；DATA-CTR-005/007 和 QNT-CTR-003 保持 deferred。
+
+
+## RepairAll v2 无界查询门禁与最终 Payload 卡点（2026-11-19）
+
+- Application v2 对缺少 start/end 的查询增加门禁：即使内部结果携带 CalendarRef，也不对 Header 暴露，明确标记 `unbounded_range_estimate` 并降级。精确 SHA `6d00369b6b9c66261eb47625e6bec7a2d80217e1` 的 Integration CI Run [44510702240](https://github.com/Kasign/stock_data_provider/actions/runs/44510702240) 全项 success。
+- CalendarRef 同次评估传播到 Application v2 Header 已关闭；但当前 `DailyBarsV2Snapshot.Bars` 仍复用 float64 Application DailyBar DTO，只是 Header 阶段，不是最终 Decimal Payload，不可对外发布或冻结 DATA-CTR-005。
+- 下一步：完成 DailyBarV2 Decimal/lexical-scale evidence 字段设计和 Provider 映射；对没有可靠来源的 ChangePercent、AmountCNY、QFQ/HFQ 调整值保持 null/degraded；之后再接 HTTP v2 Schema/Handler/Golden 与 Research/Quant 消费契约。
