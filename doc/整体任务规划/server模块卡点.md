@@ -226,7 +226,7 @@
 - 当前没有可复现的 Root HTTP/身份代码缺陷；未发布的 Research/Quant/Notification API 不提前创建。下一项转为 WebUI 实际调用与凭据暴露审查。
 
 
-## RepairAll RA-CROSS-REVIEW-008 M5 部署/认证阻塞（2026-11-19）
+## RepairAll RA-CROSS-REVIEW-008 M5 部署/认证阻塞（2026-11-19，历史快照；已由 RA009 解除代码层阻塞）
 
 - Root Server 的 Data InProcessHandler 已挂载，但路由策略仍为 Owner Bearer；WebUI 当前只持有 Owner Session Cookie，不持有 Owner Bearer。
 - 迁移期 WebUI 仍调用独立 Data 服务并持久化 Data API Key。Compose/Nginx 尚未切换为单 Root Server。
@@ -236,6 +236,8 @@
 
 
 ## RepairAll RA009：Data 入口统一 Owner Session（用户已确认，2026-11-19）
+
+当前状态：旧独立 Data 运行资产已删除，Root 单入口与 Owner Session 路由已实现；等待最新精确 SHA CI 和目标环境验收。
 
 状态：CODE_IMPLEMENTED_PENDING_CI_AND_PRODUCTION
 

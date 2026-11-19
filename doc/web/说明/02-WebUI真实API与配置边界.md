@@ -53,15 +53,15 @@ Root Server 使用 `/healthz` 提供匿名 Liveness，`/api/readyz` 提供 Owner
 
 字段契约以 doc/api/contracts/分析任务.openapi.yaml 为准。最近任务区只保存有限数量的浏览器任务引用，不是服务端完整历史。
 
-当前分析路由 Owner Bearer 与浏览器 Session 尚未形成可验收的认证闭环。服务端历史分页、模板、取消和综合结果接口未完成 Application API、Server 注册、认证和部署验证前，Web 不新增推测请求。
+当前旧 Analysis Task/Run 路由仍是 Owner Bearer-only，浏览器 Owner Session 不会自动获得访问权。服务端历史分页、模板、取消和综合结果接口未完成 Application API、Server 注册、认证和部署验证前，Web 不新增推测请求。
 
-### 4.1 旧分析 API 的认证差异（保持原有边界）
+### 4.1 旧 Analysis API 的认证差异（保持原有边界）
 
 旧 Analysis Task/Run 路由仍由 Root Server 的 Platform Bearer Router 保护，Owner Session 不会自动授权这些旧路由：
 
 - `web/src/api.js` 的通用 `request()` 使用 `credentials: "same-origin"`，但旧分析 API 函数没有发送 `Authorization: Bearer` 或 CSRF Header。
 - `internal/server/bootstrap/router.go` 仍将旧分析任务/Run、`/readyz` 和 `/diagnostics` 注册为 Owner Bearer 路由。
-- `web/default.conf.template` 的 `/analysis-api/` 代理不会注入长期 Owner Token；浏览器不得持有或保存 Owner Bearer。
+- Nginx 现已只有 `/api/` 一个 Root Server upstream，不再存在 `/analysis-api/` 独立代理；但统一入口不改变旧 Analysis 路由自身的 Owner Bearer 授权策略。
 
 因此，Owner Session 路由可用不代表旧 Analysis API 已可由浏览器访问。旧 Analysis API 的退役和 Researchflow 新 API 接入，仍按 SRV-CTR-001 的 deferred 边界推进；不得把 `owner_session` 映射为 `owner_bearer`，不得把旧 Analysis API 当作 Researchflow 新契约。
 
@@ -104,7 +104,7 @@ Root Server 在 `OWNER_SESSION_ENABLED=true` 时，按 `doc/server/contracts/SRV
 4. 验证 Owner Bearer 仍可供受控运维调用，双凭证请求拒绝，浏览器无 API Key/Owner Bearer。
 5. 确认可信代理链和来源 IP 解析配置；不能仅因 Nginx 传递了 `X-Forwarded-For` 就信任该头。
 
-当前结论：Owner Session WebUI 代码接入已完成，精确 SHA 的 Integration CI 已通过；目标环境 Nginx/Compose 端到端部署仍待验收。SRV-CTR-002 登记簿状态仍为 `freeze-ready`，不得写成已正式冻结。Researchflow 新业务 API 仍受 SRV-CTR-001 deferred 边界约束。
+当前结论：Owner Session WebUI 与 Root Data 路由代码已接入，单 `/api/` 部署配置已完成；本次迁移精确 SHA CI 尚在执行，目标环境 Nginx/Compose 端到端部署仍待验收。SRV-CTR-002 登记簿状态仍为 `freeze-ready`，不得写成已正式冻结。Researchflow 新业务 API 仍受 SRV-CTR-001 deferred 边界约束。
 ## 5. 跨模块目标能力与接入状态
 
 | 领域 | Web 目标场景 | 前置条件 | 当前处理 |

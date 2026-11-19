@@ -2,7 +2,7 @@
 
 更新时间：2026-11-19
 维护分支：repair_all
-代码基线（本次文档更新前）：9ce0d0b536e2d9b37f0fb5ff4cc2ab8ae59c6ba4
+代码基线（迁移实现审查基线）：9ce0d0b536e2d9b37f0fb5ff4cc2ab8ae59c6ba4；最新提交 SHA 以 RepairAll 总规划为准
 
 ## 1. 最终架构决策
 
@@ -57,7 +57,7 @@ Owner Bearer 不下发浏览器。浏览器不保存 Data API Key、Owner Bearer
 
 ## 4. 自动化验收与生产证据
 
-代码变更已提交，但本轮移除 Data 独立认证和独立服务资产后的完整 Integration CI 尚未取得精确 SHA 的成功证据。历史 CI 不可代替当前 SHA 验收。
+代码变更已提交；必须以本轮修复后最新 SHA 的完整 Integration CI 成功作为代码验收证据。此前 CI 中曾暴露 Go 测试调用签名和 WebUI 旧双入口测试断言问题，均已修正/替换为 Root 单入口契约测试；历史 CI 不可代替当前 SHA 验收。
 
 必须完成：
 
