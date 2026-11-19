@@ -162,7 +162,15 @@ func (r *Reader) GetDailyBars(ctx context.Context, query app.DailyBarsQuery) (ap
 		}
 	}
 	for _, bar := range bars {
-		result.Bars = append(result.Bars, mapDailyBar(bar))
+		mapped := mapDailyBar(bar)
+		if calendarReferenceMissing {
+			mapped.QualityStatus = app.QualityDegraded
+			mapped.QualityReasons = dedupeReaderStrings(append(mapped.QualityReasons, "daily_bar_coverage_calendar_reference_unavailable"))
+		}
+		result.Bars = append(result.Bars, mapped)
+	}
+	if calendarReferenceMissing && len(result.Bars) > 0 {
+		result.QualityStatus = app.QualityDegraded
 	}
 	return result, nil
 }
@@ -206,6 +214,10 @@ func (r *Reader) GetDailyBarsV2(ctx context.Context, query app.DailyBarsQuery) (
 	}
 	if err != nil {
 		return app.DailyBarsV2Snapshot{}, err
+	}
+	calendarReferenceMissing := evidence.CoverageBasis == "exchange_calendar_unreferenced"
+	if calendarReferenceMissing {
+		evidence.Warnings = dedupeReaderStrings(append(evidence.Warnings, "daily_bar_coverage_calendar_reference_unavailable"))
 	}
 	warnings = dedupeReaderStrings(append(append([]string(nil), warnings...), evidence.Warnings...))
 	result := app.DailyBarsV2Snapshot{
