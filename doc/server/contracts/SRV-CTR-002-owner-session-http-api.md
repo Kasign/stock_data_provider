@@ -129,6 +129,11 @@ Owner 初始化不提供 HTTP 路由。它只能通过受控本机/运维命令�
 ## 7. 路由认证矩阵
 
 - 本契约六个浏览器接口按表中身份执行；CSRF Token 恢复端点为 `POST /api/v1/owner/session/csrf`，身份为 owner_session，且是唯一不要求旧 CSRF Header 的状态端点。
+- Root Data 路由在启用 Owner Session 时显式接受两种身份：owner_session 或 owner_bearer；二者是互斥认证方式，单个请求同时携带 Session Cookie 与 Authorization Header 必须拒绝。
+- Data 路由范围：`/api/v1/quotes/{symbol}`、`/api/v1/bars/{symbol}/daily`、`/api/v1/bundles/{symbol}`、`/api/v1/data-sources/**`、`/api/v1/market/**`、`/api/v1/stocks/**`。
+- owner_session 请求必须由现有 SessionAuthenticator 校验 Cookie、Origin/Host；POST/PUT/PATCH/DELETE 等非安全方法还必须通过原子 CSRF 校验。Provider Probe POST 不例外。
+- owner_bearer 请求由 Platform OwnerAccess 策略校验，只供受控运维调用，不下发浏览器。
+- owner_session 只证明 Owner 浏览器会话，不自动授予 platform:admin、Service Scope 或任何 Data 领域资源授权；Data 领域授权继续按 DATA-CTR-008 执行。
 - `/healthz` 保持 anonymous；`/readyz`、`/diagnostics` 保持 owner_bearer，除非各自独立契约明确改变。
 - 现有旧 Analysis/兼容管理路由继续按当前 owner_bearer 策略，不因启用 Session 自动放宽。
 - Researchflow 新业务路由由 SRV-CTR-001 定义；需要 WebUI 浏览器访问的用户用例必须明确声明 owner_session，并由领域 Owner 继续执行资源级授权。Server 不得把 owner_session 映射成 owner_bearer。

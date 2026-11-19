@@ -1,7 +1,7 @@
 # Server 模块卡点
 
-当前执行任务：SRV-009 Data/MarketData M3/M4 Root 生产装配最终收口。
-状态：BLOCKED（等待 Data/Platform Owner 前置；不在 Server 重复实现公共 Migration 能力）。
+当前执行任务：RA009 Data Owner Session 路由与 Root 单入口迁移最终验收。
+状态：CODE_IMPLEMENTED_PENDING_CI_AND_PRODUCTION（Root Data 装配和路由认证已实现；最新精确 SHA CI 与真实生产部署待验收）。
 - SRV-001 已完成：API/Worker/All 角色真实启动、Readiness、SIGTERM 和 Lifecycle 回滚/关闭顺序均有精确 SHA 验收证据。
 - SRV-003 已完成：Run 44314707349 对真实 API Root + Data InProcessHandler 的认证、Validation Fault、Request ID 和请求体限制验收通过。
 - SRV-004 已完成当前 Root 已注册检查集的 Health/Readiness/Diagnostics 验收；Data 最终 checksum/Schema 仍归 SRV-009。
@@ -34,29 +34,17 @@
 - Data Store.Migrate 在 Platform ApplyMigrations 锁释放后仍执行兼容索引/补列 DDL，多实例竞态仍存在；最终 Migration 收口仍 BLOCKED。
 
 
-## 2. 跨模块前置：Data Migration 定义与并发安全
+## 2. Data Migration 与 Root 统一装配（代码级已完成）
 
-状态：BLOCKED（等待 Data / Platform Owner 前置）
+状态：DONE_CODE_LEVEL；生产环境验收仍待完成。
 
-已核实问题：
-
-跨分支复核基线（2026-11-19，只读检查，不修改其他分支）：
-- Data 分支 `feat/data` HEAD：`9f6adaf280a94bc60f993554473fd0adb70b07da`。其公开 `internal/marketdata/bootstrap.MigrationRunner` 仍只有 `Migrate(ctx)`，没有可供 Root Registry 注册的静态 Migration 定义。
-- 同一 Data SHA 的 `internal/marketdata/repository/mysql.go` 中，`Store.Migrate` 调用 Platform `ApplyMigrations` 后仍执行 `ensureNonUniqueHistoryIndex` 和 `ensureColumn`；兼容 DDL 仍在 namespace 锁/版本/checksum 保护范围之外。
-- Platform 分支 `feat/platform` HEAD：`308b0bfdf3eba6a83ac16f1eae1aec66518ebbcd`。公开 `internal/platform/storage/storage.go` 有 `ApplyMigrations`、checksum preparation 和 namespace advisory lock，但没有只读 `ValidateAppliedMigrations` API。
-- Data 分支旧迁移文档仍称 Root 未构造 Data Module/未挂载 Handler；这与当前 Server 分支实际代码及 Run 44314707349 不一致。该描述是 Data 文档未同步 Root 进展，不应据此重做 Server 已完成的 Bootstrap、HTTP Handler、Readiness 或 Lifecycle。
-
-- Data Store.Migrate 在 Platform ApplyMigrations 的 namespace 锁保护范围之外，仍执行兼容性 `ensureNonUniqueHistoryIndex`、`ensureColumn` DDL；多实例并发启动存在竞态。
-- Root 当前直接调用 Data Module 的 MigrationRunner，再运行 Server Registry；Data 尚未以完整静态 Migration 定义注册进统一 Registry。
-- `MIGRATION_ENABLED=false` 时当前只读校验不覆盖 Data checksum/物理 Schema 漂移；Data Diagnostics.Ready 的 DB/Redis Ping 不能替代 Schema 校验。
-
-期望前置：
-- Data 暴露完整、不可变的 Migration 定义，保留已发布版本 checksum，并将兼容 DDL 纳入后续版本。
-- Platform 提供与 Apply 共用 checksum preparation 的只读 ValidateAppliedMigrations 能力。
-- Server 仅负责注册、调度和真实启动验收，不复制 SQL、checksum 算法或 Migration Runner。
-
-解除条件：
-- Data/Platform 对应改动合入当前集成基线；Server 接入统一 Registry；验证迁移开启/关闭、多实例并发启动、checksum 不一致和 Schema 漂移行为。
+- Data 以静态 Migration Definitions 注册进 Root Migration Registry；Root 统一执行 Migration enabled/disabled 策略。
+- Platform 提供 namespace lock、checksum 和只读 ValidateAppliedMigrations；Data 物理 Schema 校验纳入 Data Readiness。
+- Root 通过共享 MariaDB/Redis 资源构造 Data Module；Data 不创建/关闭共享连接池。
+- Data InProcessHandler 已挂载到 Root Router；Analysis Collector 通过 Data Application Port 使用行情能力。
+- Data Readiness 纳入 Root Diagnostics；Data Module 生命周期纳入 Root Lifecycle。
+- 本节历史快照中关于 MigrationRunner 缺失、Root 未挂载 Data、Data 必须独立部署等描述均已被上述实现取代。
+- 剩余验收：真实生产 DDL 对照、Migration enabled/disabled 部署演练、真实备份恢复和生产启动/关闭证据。
 
 ## 3. 尚未闭环的 Server 自身验收
 
@@ -93,20 +81,17 @@
 
 原则：已具备生产条件的服务直接装配；缺真实数据源、调用者、持久化或外部依赖的服务保持 BLOCKED，不创建空 Worker、恒 true Check、Fake Provider 或虚构接收人。
 
-## 6. WebUI 尚未切换到 Root Data Handler
+## 6. WebUI / Data 单 Root API 接入（代码已实现）
 
-状态：BLOCKED（依赖 Web/Data/部署任务，不作为 Server Root 装配已完成的证据）
+状态：CODE_IMPLEMENTED_PENDING_CI_AND_PRODUCTION。
 
-当前代码事实：
-- `web/src/api.js` 行情基路径仍为 `/market-api`，行情请求仍发送 `X-API-Key`。
-- `web/default.conf.template` 的 `/market-api/` 仍代理到 `MARKET_DATA_SERVICE_NAME:8091`。
-- Root Data Handler 挂载在 `/api/v1/...`，由 Owner Bearer 保护；不接受旧的 Data API Key，也不自动把 Owner Session Cookie 转成 Owner Bearer。
-
-结论：
-- 本轮删除的只是 Server 内部 `internal/adapters/marketdata/**` 旧 HTTP Adapter。
-- 不删除 `cmd/market-data`、`services/market-data`、Nginx `/market-api/` 代理和独立 Data 部署资产。
-- 在 WebUI API 基路径、Owner Session/CSRF、Root 路由认证和 Nginx upstream 完成切换并通过真实浏览器/部署验收前，独立 Data Service 必须保留。
-
+- WebUI 的 Data 和 Analysis 请求统一使用同源 /api；运行时不再读取或发送 Data API Key / X-API-Key。
+- WebUI 使用 HttpOnly Owner Session Cookie；CSRF Token 只驻留 JS 内存，Provider Probe POST 发送 X-CSRF-Token。
+- Root Data 路由显式允许 Owner Session 或 Owner Bearer；同时提交两种凭据时拒绝；Session 请求由现有 SessionAuthenticator 校验 Origin/Host/CSRF。
+- Compose 只部署 stock-analysis-server 与 stock-analysis-web；Nginx 只保留 /api/ 到 Root Server 的业务 upstream。
+- 已删除 cmd/market-data、services/market-data 独立 Docker/配置/迁移资产、旧 go-migration Compose Profile 和旧 Data API Key 认证实现。
+- 不保留独立 Data 服务、双 upstream、Remote Adapter 或旧 Key 回滚路径。
+- 待完成：最新精确 SHA Integration CI、真实浏览器登录/刷新恢复/Probe/登出、目标 HTTPS Origin/Argon2 参数、真实 MariaDB/Redis 和 Provider 数据验收。
 
 ## 7. 跨模块前置最新基线复核（2026-11-19）
 
@@ -252,12 +237,12 @@
 
 ## RepairAll RA009：Data 入口统一 Owner Session（用户已确认，2026-11-19）
 
-状态：APPROVED / IN_PROGRESS（尚未完成代码与部署验收）
+状态：CODE_IMPLEMENTED_PENDING_CI_AND_PRODUCTION
 
 最终决策：WebUI 通过 HttpOnly Owner Session Cookie 访问 Root Server Data 路由；Data 路由显式允许 Owner Session，同时保留 Owner Bearer 运维调用。非安全方法必须由现有 SessionAuthenticator 执行 Origin/Host 与 CSRF 原子校验；Data 领域资源授权不得跳过。
 
 部署目标只有 Root Server 一个 API upstream，统一路径和 Cookie Path 为 `/api`。不保留独立 Data 服务、旧 `/market-api` / `/analysis-api` 双 upstream、浏览器 Data API Key、`X-API-Key` 兼容或回滚部署资产。切换与清理在同一迁移批次完成，避免先删除再导致生产不可用。
 
-执行任务 RA009-A～F 以《Market Data模块化单体迁移计划与进度》中的用户确认决策节为唯一实施清单。未完成真实部署和精确 SHA CI 前，不得标记 M5/M6 完成。
+实现清单见《Market Data 模块化单体迁移与最终验收状态》。代码已实现并删除旧独立服务资产；未完成最新精确 SHA CI 和真实部署前，不得标记 M5/M6 生产验收完成。
 
 本节覆盖本文件第 6 节及历史快照中“独立 Data Service 必须保留”“不删除旧代理/部署资产”等旧结论；这些内容仅作为历史审查记录，不再是当前目标架构。

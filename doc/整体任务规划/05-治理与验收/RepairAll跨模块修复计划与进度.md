@@ -2,7 +2,8 @@
 
 - 仓库：`Kasign/stock_data_provider`
 - 工作分支：`repair_all`
-- 当前代码验收基线：`5334043ea8e1abc2c4006c371a3f95b123098946`（2026-11-19 最新 HEAD）
+- 当前工作分支 HEAD：`1ce641ff13a07e228784ef0c4041eded82e45621`（2026-11-19 文档更新后）
+- 本轮生产代码基线：`9ce0d0b536e2d9b37f0fb5ff4cc2ab8ae59c6ba4`；该 SHA 的完整 Integration CI 尚未取得成功证据
 - 更新日期：2026-11-19
 
 ## 1. 分支用途与执行原则
@@ -29,7 +30,7 @@
 | P1 | Research Context/Evidence 与 Researchflow Run/Stage/Result 语义及唯一持久化 Owner | Research / Researchflow / Server | Review 完成；Context 授权、PIT Mode 与生产 Stage 消费仍阻塞 |
 | P2 | LLM Gateway 生产 Provider、Secret、Capability Evidence 与真实调用 | LLM / Platform / Server / Researchflow | 待系统 Review |
 | P2 | Notification 事件、Recipient、Fanout/Delivery、Worker 和恢复链 | Notification / Platform / Server | Review 完成；Relay/Inbox/Fanout 机制通过，Server Delivery Worker/Recipient Directory 阻塞 |
-| P3 | Diagnostics 注册、身份/审计传播、Worker 恢复、WebUI Root API 对接 | Platform / Server / 各业务模块 / WebUI | Server Root Review 完成；WebUI/Data M5 认证策略待决策 |
+| P3 | Diagnostics 注册、身份/审计传播、Worker 恢复、WebUI Root API 对接 | Platform / Server / 各业务模块 / WebUI | Root/Data Owner Session 单入口代码已实现；旧 Data 服务/Key 资产已清理；精确 SHA CI 与生产环境验收待完成 |
 | P3 | 完整启动、迁移、跨模块端到端和故障恢复验收 | 全模块 | 待实施 |
 
 ## 3. 本轮已完成的修复
@@ -203,13 +204,13 @@ P0 原始问题及实施约束作为审计记录保留；当前状态以第 7、
 
 ## RA009：Root Server Data Owner Session 与单入口迁移（2026-11-19）
 
-<escape>状态：APPROVED / IN_PROGRESS；决策已确认，代码与部署验收未完成。</escape>
+<escape>状态：CODE_IMPLEMENTED_PENDING_CI_AND_PRODUCTION；Owner Session 方案已实现，旧实现已清理，CI 与生产验收待完成。</escape>
 
 - 用户明确批准 Owner Session 方案，并明确旧实现不需要保留。
 - 唯一入口为 Root Server；WebUI 使用 HttpOnly Owner Session Cookie。Data 路由显式允许 Owner Session，保留 Owner Bearer 受控运维调用；Session 不继承 admin/service scope。
 - 所有非安全方法由现有 SessionAuthenticator 校验 Origin/Host 与 CSRF；特别覆盖 Provider Probe 写操作。Data 领域授权仍由 Data 负责。
 - 统一 API Prefix/Cookie Path 为 `/api`，取消独立 `/market-api` 和 `/analysis-api` upstream。
-- 删除浏览器 Data API Key、`X-API-Key` 注入、独立 Data 服务/容器/镜像、旧 Nginx 路由及相关兼容代码/配置/文档；不保留双轨或回滚部署。
+- 已删除浏览器 Data API Key 运行逻辑、Data HTTP Adapter 的 X-API-Key 认证、独立 Data 服务入口、独立容器/镜像资产、旧 Nginx 双 upstream、旧 Compose migration Profile 和旧 Data Key 配置设计文档；不保留双轨或回滚部署。
 - 旧资产清理与新入口切换同批实施；先确保新入口代码和测试通过，再完成单 Root 部署切换及真实验收，最后删除所有旧资产。
 
 RA009 关闭条件：Server 路由认证矩阵、CSRF、WebUI 请求和配置、Compose/Nginx 单入口、独立 Data 运行资产清理、部署验收、真实 Provider/数据证据及最新精确 SHA CI 全部完成。详细分步清单见 Data 迁移计划与 Server 卡点文档。

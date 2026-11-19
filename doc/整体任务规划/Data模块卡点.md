@@ -49,7 +49,7 @@
 
 ## 非 Data Owner 卡点（仅供责任边界追踪）
 
-Root Server 尚未实际构造并注册 Data Module，属于 Server SRV-009 的装配责任，不是 Data 分支继续修改 `internal/server/**` 的授权。Data M1/M2 已完成；Data 不复制 Platform 公共能力，也不接管 Server 组合根。
+Root Server 的 Data Module 构造、共享资源注入、Migration Registry、InProcessHandler、Analysis Application 注入、Readiness 和 Lifecycle 已在 repair_all 代码级完成。WebUI Data API 已切换 Owner Session / 单 /api 入口，Data 独立服务与 Data API Key 认证已退役。剩余工作归 Root 集成验收和真实生产部署，不要求 Data 模块重复装配或重建 HTTP API。
 
 
 ## RepairAll 聚合分支修复（2026-11-19）
@@ -105,3 +105,12 @@ Root Server 尚未实际构造并注册 Data Module，属于 Server SRV-009 的�
 - internal/research/ 当前没有 Data Adapter；不得将普通 DailyBarsSnapshot 或 Bundle.snapshot_id 推定为不可变 Evidence 引用。
 - 项目级 doc/contract/PLAT-002-项目级契约冻结登记簿.md 明确 DATA-CTR-007 为 deferred，解锁责任是 Data 定义不可变行情 Payload、内容寻址 SnapshotRef、Manifest/Payload 绑定及 Research Evidence source_ref/version/locator 映射。
 - 判定：Data→Research 生产消费 NOT_COMPARABLE / DEFERRED；本轮未发现可在当前契约边界内安全实现的局部代码修复。Data 继续负责 DATA-CTR-007 契约和数据事实，Research 不复制 Data 模型/存储/授权。
+
+
+## RepairAll RA009 Data 入口退役状态（2026-11-19）
+
+- Data 的独立 HTTP API Key 字段、配置读取、Handler 认证和独立服务命令已删除；Provider 自身 Hithink/TickFlow/Tushare/MiaoXiang 等凭据仍保留为服务端配置。
+- Data HTTP Adapter 仅由 Root Server InProcessHandler 使用；Request ID 从 Platform observability Context 读取，不再复制独立 Data HTTP middleware。
+- Data Migration Definitions 仍由 Root Migration Registry 统一注册；已删除只服务独立 Data 命令的 Module.MigrationRunner 兼容入口。
+- DATA-CTR-006（Data X-API-Key HTTP 认证）已在项目契约目录标记 retired；外部路由认证以 SRV-CTR-002 为准，Data 领域授权仍以 DATA-CTR-008 为准。
+- 本次代码修改尚待最新精确 SHA Integration CI 与目标环境真实验收；DATA-003～DATA-007 的 Provider/时点/Freshness/Parity 证据卡点保持原状态，不因部署迁移自动关闭。
