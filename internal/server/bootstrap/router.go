@@ -9,9 +9,9 @@ import (
 
 // newHTTPHandler registers every currently supported endpoint through the
 // Platform policy-enforcing Router. No legacy catch-all route is retained.
-func newHTTPHandler(authenticator *platformsecurity.Authenticator, health, legacy http.Handler, ownerSession *ownerSessionComposition) (http.Handler, error) {
-	if authenticator == nil || health == nil || legacy == nil {
-		return nil, errors.New("HTTP authenticator, health handler and legacy handler are required")
+func newHTTPHandler(authenticator *platformsecurity.Authenticator, health, legacy, marketData http.Handler, ownerSession *ownerSessionComposition) (http.Handler, error) {
+	if authenticator == nil || health == nil || legacy == nil || marketData == nil {
+		return nil, errors.New("HTTP authenticator, health, legacy and Market Data handlers are required")
 	}
 	router := platformsecurity.NewRouter()
 	routes := []struct {
@@ -26,6 +26,13 @@ func newHTTPHandler(authenticator *platformsecurity.Authenticator, health, legac
 		{pattern: "GET /diagnostics", policy: platformsecurity.OwnerAccess(), handler: health},
 		{pattern: "HEAD /diagnostics", policy: platformsecurity.OwnerAccess(), handler: health},
 		{pattern: "GET /{$}", policy: platformsecurity.OwnerAccess(), handler: legacy},
+		// 仅挂载 Data OpenAPI 定义的业务路径前缀；不把 /api/v1/owner/ 等其他模块路由交给 Data Handler。
+		{pattern: "/api/v1/quotes/", policy: platformsecurity.OwnerAccess(), handler: marketData},
+		{pattern: "/api/v1/bars/", policy: platformsecurity.OwnerAccess(), handler: marketData},
+		{pattern: "/api/v1/bundles/", policy: platformsecurity.OwnerAccess(), handler: marketData},
+		{pattern: "/api/v1/data-sources/", policy: platformsecurity.OwnerAccess(), handler: marketData},
+		{pattern: "/api/v1/market/", policy: platformsecurity.OwnerAccess(), handler: marketData},
+		{pattern: "/api/v1/stocks/", policy: platformsecurity.OwnerAccess(), handler: marketData},
 		{pattern: "POST /api/v1/analysis/runs", policy: platformsecurity.OwnerAccess(), handler: legacy},
 		{pattern: "GET /api/v1/analysis/runs/{run_id}", policy: platformsecurity.OwnerAccess(), handler: legacy},
 		{pattern: "GET /api/v1/analysis/runs/{run_id}/events", policy: platformsecurity.OwnerAccess(), handler: legacy},

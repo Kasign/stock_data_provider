@@ -18,7 +18,7 @@ func TestValidateAppliedNamespacesRequiresExactNamespaceSet(t *testing.T) {
 		"news":     map[uint64]string{1: "applied"},
 		"research": map[uint64]string{1: "applied", 2: "applied"},
 	}
-	if err := validateAppliedNamespaces(expected, valid); err != nil {
+	if err := validateAppliedNamespaces(expected, valid, nil); err != nil {
 		t.Fatalf("complete migration namespace set rejected: %v", err)
 	}
 
@@ -41,7 +41,7 @@ func TestValidateAppliedNamespacesRequiresExactNamespaceSet(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if err := validateAppliedNamespaces(expected, tc.applied); err == nil {
+			if err := validateAppliedNamespaces(expected, tc.applied, nil); err == nil {
 				t.Fatal("expected schema namespace validation error")
 			}
 		})

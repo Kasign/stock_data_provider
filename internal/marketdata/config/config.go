@@ -139,15 +139,20 @@ func defaultProviderFile() providerFile {
 
 // Load 加载独立 HTTP 部署配置，要求配置 Data API Key。
 func Load() (Config, error) {
-	return load(true)
+	return load(true, false)
 }
 
 // LoadForInProcess 加载同进程模块配置；外部入口认证由 Root Server 负责，因此不要求 Data API Key。
 func LoadForInProcess() (Config, error) {
-	return load(false)
+	return load(false, false)
 }
 
-func load(requireHTTPAPIKey bool) (Config, error) {
+// LoadForRoot 加载由 Root Server 注入 DB/Redis 的 Data 配置；不要求独立 Data 存储连接参数。
+func LoadForRoot() (Config, error) {
+	return load(false, true)
+}
+
+func load(requireHTTPAPIKey, allowRootInjectedStorage bool) (Config, error) {
 	if err := validateEnvironment(); err != nil {
 		return Config{}, err
 	}
@@ -290,7 +295,7 @@ func load(requireHTTPAPIKey bool) (Config, error) {
 		AllowNoStorage:            boolEnv("MARKET_DATA_ALLOW_NO_STORAGE", false),
 	}
 	var dsnErr error
-	cfg.MySQLDSN, dsnErr = resolveMySQLDSN(cfg.AllowNoStorage)
+	cfg.MySQLDSN, dsnErr = resolveMySQLDSN(cfg.AllowNoStorage || allowRootInjectedStorage)
 	if dsnErr != nil {
 		return cfg, dsnErr
 	}
@@ -346,7 +351,7 @@ func load(requireHTTPAPIKey bool) (Config, error) {
 	if cfg.MXEnabled && !validMiaoXiangKey(cfg.MXAPIKey) {
 		return cfg, errors.New("MARKET_DATA_MX_ENABLED=true requires a non-placeholder MARKET_DATA_MX_API_KEY or MX_APIKEY")
 	}
-	if !cfg.AllowNoStorage {
+	if !cfg.AllowNoStorage && !allowRootInjectedStorage {
 		if cfg.MySQLDSN == "" {
 			return cfg, errors.New("MARKET_DATA_DB_HOST, MARKET_DATA_DB_USER and MARKET_DATA_DB_NAME are required; the legacy MARKET_DATA_MYSQL_DSN is temporarily supported; set MARKET_DATA_ALLOW_NO_STORAGE=true only for local no-storage smoke tests")
 		}

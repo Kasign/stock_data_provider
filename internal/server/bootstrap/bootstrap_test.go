@@ -18,7 +18,7 @@ func TestNewMigrationRegistryRegistersAvailableModules(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newMigrationRegistry() error = %v", err)
 	}
-	want := []string{"news", "notification", "platform.security", "research", "researchflow", "server.security_audit"}
+	want := []string{"market_data", "news", "notification", "platform.security", "research", "researchflow", "server.security_audit"}
 	if got := registry.Namespaces(); !reflect.DeepEqual(got, want) {
 		t.Fatalf("registered namespaces = %v, want %v", got, want)
 	}
@@ -106,7 +106,7 @@ func TestNewDiagnosticsServiceRegistersNewsParserAndProviderConfigChecks(t *test
 	if err != nil {
 		t.Fatalf("newsconfig.Load() error = %v", err)
 	}
-	service, err := newDiagnosticsService(nil, servermigration.NewRegistry(), newsConfig)
+	service, err := newDiagnosticsService(nil, servermigration.NewRegistry(), newsConfig, nil, nil)
 	if err != nil {
 		t.Fatalf("newDiagnosticsService() error = %v", err)
 	}
@@ -117,6 +117,18 @@ func TestNewDiagnosticsServiceRegistersNewsParserAndProviderConfigChecks(t *test
 	got := make(map[string]platformdiagnostics.Status, len(report.Diagnostics.Results))
 	for _, result := range report.Diagnostics.Results {
 		got[result.CheckID] = result.Observation.Status
+	}
+	retentionBacklogFound := false
+	for _, result := range report.Diagnostics.Results {
+		if result.CheckID == "news.observation.retention_backlog" {
+			retentionBacklogFound = true
+			if result.Required {
+				t.Fatal("News retention backlog must be diagnostic-only and must not gate API readiness")
+			}
+		}
+	}
+	if !retentionBacklogFound {
+		t.Fatal("News retention backlog diagnostic is missing")
 	}
 	for _, id := range []string{"news.parser.rss", "news.parser.atom", "news.provider.bocha.configuration"} {
 		if status, exists := got[id]; !exists {
