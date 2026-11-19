@@ -90,3 +90,11 @@ Research 的领域基础能力、Repository/Outbox、Context 消费契约测试�
 - Researchflow ResultComposition 的 validateResearchEvidence 当前没有执行 available_at 严格 PIT 检查。项目级契约允许 available_at 缺失的 Evidence 仅在 Template 明确声明非严格 PIT 模式及风险时使用。
 - Researchflow WorkflowTemplate / ResultCompositionInput 当前未提供可见的 PIT Mode 语义，且当前没有生产 Evidence 组合消费者。Research 不擅自定义 PIT 模式，也不把 null available_at 改造成伪造时间。
 - 解锁条件：项目契约 Owner 明确 PIT Mode 的枚举、默认严格策略、非严格风险声明及 Fingerprint 绑定；随后由 Researchflow 实现 Template/Run/ResultValidation 传播，Research 保持 ValidateForStrictPIT 领域规则。
+
+
+## RepairAll RA-CROSS-REVIEW-005 最终结论（2026-11-19）
+
+- Research Context/Evidence/Event/Claim 的持久化归 Research Owner；Research Migrations 已由 Server Root 注册，未发现重复持久化实现。
+- Context 读取必须依赖真实 ContextAuthorizer；Server 当前 News→Research Composition 未注入该 Authorizer，且尚无真实 Context 消费者。保持 fail-closed，不提供默认 Allow。
+- Evidence 严格 PIT Domain 校验已存在；Researchflow ResultComposition 未校验 available_at 严格可得性，且 WorkflowTemplate/ResultCompositionInput 尚无 PIT Mode。需项目契约 Owner 决策非严格模式字段/风险/Fingerprint 语义后再实施。
+- Event/Claim 版本化与事务持久化已存在；当前缺 Researchflow 真实消费者，不代表领域存储实现缺失。

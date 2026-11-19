@@ -215,3 +215,11 @@
 - Research Service 的 GetContext 对 ContextAuthorizer 缺失采取 fail-closed；当前没有真实 Context 消费者，因此该组合尚不能用于 Context 读取，但 News Evidence Importer 仍可使用其 Evidence 能力。
 - 不注入默认 Allow，不新增平行授权服务；先明确 Research Context 资源授权 Owner/策略和可信 CallerRef，再由 Server 装配真实 Authorizer。
 - 该状态属于待接入消费者和授权策略的组合根卡点，不把无调用场景的 Handler/Stage 当成修复。
+
+
+## RepairAll RA-CROSS-REVIEW-005 最终结论（2026-11-19）
+
+- Server Root 已注册 Research Migration，Research Context/Evidence/Event/Claim 持久化归属明确。
+- Server News→Research composition 创建 Research Service 时未注入 ContextAuthorizer；当前无 Context 生产消费者，因此暂不补默认实现。未来接入必须提供真实 Research Owner 授权策略和可信 CallerRef。
+- 当前没有 Context Stage 调用 Researchflow Context Assembly，也没有 ResultComposition 的生产消费者；Run/SystemAsOf 绑定与 Evidence available_at 严格 PIT 尚无端到端验收。
+- Evidence PIT Mode 需要项目契约 Owner 决策，Server 不自行定义或注入策略字段。

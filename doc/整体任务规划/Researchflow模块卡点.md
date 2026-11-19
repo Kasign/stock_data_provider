@@ -178,3 +178,11 @@
 - 项目级 Quant-Research DTO 契约明确：available_at 为 null/unknown 时不得进入严格 PIT；只有 Researchflow Template 显式声明非严格 PIT 模式和风险时才可按“系统当时已观察”语义使用。
 - 当前 WorkflowTemplate、ResultCompositionInput/ValidationPolicy 未建模 PIT Mode，且无生产 ResultComposition 调用者。不能在 validator 内一律强制严格或默认降级，因为两者都会猜测尚未冻结的模板语义。
 - 当前状态：BLOCKED（待项目契约决策）。不新增字段、不更改模板 Schema，直至明确默认值、非严格风险表达及 Fingerprint 绑定要求。
+
+
+## RepairAll RA-CROSS-REVIEW-005 最终结论（2026-11-19）
+
+- FLOW-005 Context Assembly 目前是纯规划/DTO 投影；无 Server/Worker 生产 Context Stage。Run.SystemAsOf 与 Context 的创建前/读取后绑定仍未有真实调用者执行。
+- FLOW-006 ResultComposition 的 Evidence 检查未验证 available_at 严格 PIT；项目级契约要求严格模式排除 null/unknown，非严格模式必须由 Template 显式声明风险。当前 Template/ResultComposition 无 PIT Mode 语义，需项目契约 Owner 决策后实施。
+- Research ContextAuthorizer 未由 Server News→Research composition 注入；GetContext 缺少 Authorizer 会 fail-closed。不得创建占位 Allow。
+- 以上均为跨模块生产接入/契约阻塞，不是通过复制 Adapter 或放宽 Validator 可解决的问题。

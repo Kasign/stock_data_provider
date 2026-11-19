@@ -26,7 +26,7 @@
 | P0 | News Search Candidates Validator 与冻结 Schema 一致性 | News / Researchflow | 已修复，完整 Integration CI 已通过 |
 | P1 | Data、News 到 Research 的数据/时间/Evidence 契约和真实消费边界 | Data / News / Research / Server | Review 完成；DATA-CTR-007 deferred、NEWS available_at 与真实消费者仍阻塞 |
 | P1 | Quant Application Port、结果 Envelope、Researchflow 消费接口 | Quant / Researchflow / Server | Review 完成；QNT-014/QNT-013 与生产 Stage/Root 装配未闭环 |
-| P1 | Research Context/Evidence 与 Researchflow Run/Stage/Result 语义及唯一持久化 Owner | Research / Researchflow / Server | 待系统 Review |
+| P1 | Research Context/Evidence 与 Researchflow Run/Stage/Result 语义及唯一持久化 Owner | Research / Researchflow / Server | Review 完成；Context 授权、PIT Mode 与生产 Stage 消费仍阻塞 |
 | P2 | LLM Gateway 生产 Provider、Secret、Capability Evidence 与真实调用 | LLM / Platform / Server / Researchflow | 待系统 Review |
 | P2 | Notification 事件、Recipient、Fanout/Delivery、Worker 和恢复链 | Notification / Platform / Server | 待系统 Review |
 | P3 | Diagnostics 注册、身份/审计传播、Worker 恢复、WebUI Root API 对接 | Platform / Server / 各业务模块 / WebUI | 待系统 Review |
@@ -58,16 +58,16 @@ P0 原始问题及实施约束作为审计记录保留；当前状态以第 7、
 
 ## 5. 当前执行任务与边界
 
-### RA-CROSS-REVIEW-005：Research / Researchflow Context、Evidence 与 Run/Stage 生产语义 Review
+### RA-CROSS-REVIEW-006：Research / Researchflow → Notification 事件投递与恢复链路 Review
 
-- 状态：PLANNED（前置任务 RA-CROSS-REVIEW-003/004 已完成审查；本任务尚未开始代码修改）。
-- 目标：核对 Research Context/Evidence/Event 与 Researchflow Run/Stage/Attempt/ResultSummary 的时间、身份、授权、引用、持久化和消费边界，确认唯一数据 Owner 与真实调用链。
-- 范围：Research、Researchflow、Server；仅在公共时间/身份/诊断原语确有归属问题时涉及 Platform。
-- 首要核对：RSC-CTR-001/002、FLOW-CTR-001/003/004、GOV-CTR-002/006、SRV-CTR-001；Research/Researchflow 当前任务文档及 Server Root 生产装配。
-- 重点检查：Run.system_as_of 是否贯穿 Context/Evidence/Stage/LLM；ResearchContext 创建/读取授权是否由 Owner 当前复核；Stage 输入输出引用是否与 ResultSummary/不可变 StageOutput 资源一致；Event/Claim 版本血缘是否真实可解析；Research/Researchflow 的持久化 Owner 是否唯一；Worker 重试/恢复是否保留身份、时间与引用一致性。
-- 验收标准：每条链路记录 PASS / DEGRADED / FAIL / NOT_COMPARABLE / DEFERRED，附代码路径、契约、测试和精确 SHA；无真实调用或来源证据不得标记生产 PASS。
-- 修复门禁：先核对上下游调用链，再在责任模块修复；不复制 Repository、授权、时钟、Worker、Diagnostics 或 Stage Provider；不新增无调用场景接口。
-- 完成条件：真实缺陷修复并通过针对性测试；跨模块契约、调用方、实现方、Server 装配与测试一致；对应模块卡点和总规划同步；变更后精确 SHA 完整 CI 验收。
+- 状态：PLANNED（RA-CROSS-REVIEW-005 已完成审查并登记剩余卡点）。
+- 目标：核对 Research Event Lifecycle Outbox、Researchflow Run Terminal Outbox、Server Relay、Notification Inbox/Fanout/Delivery/Worker 的端到端身份、幂等、事务、重试、租约和恢复语义。
+- 范围：Research、Researchflow、Notification、Server、Platform（仅核对公共 Outbox/HTTP/Clock/Fault 能力）；不扩展到其他业务模块。
+- 首要核对：RSC-CTR-003、FLOW-CTR-007、NOT-CTR-001/002/003/004、GOV-CTR-002/006、PLAT-CTR-001/003；Research/Researchflow/Notification 模块卡点及 Server Relay 装配。
+- 重点检查：Outbox 事务提交与领域状态是否原子；事件 envelope/Schema/Fingerprint/Correlation/Idempotency 字段是否端到端一致；Inbox 去重与 Fanout WorkItem 生成是否原子；租约/FencingToken/重试/死信与取消是否闭环；Research Event 和 Researchflow Run 终态是否共用正确的 Notification Owner；API/Worker/All 角色装配是否正确。
+- 诊断判定：逐段标记 PASS / DEGRADED / FAIL / NOT_COMPARABLE / DEFERRED，引用代码路径、契约、集成测试和精确 SHA；没有真实 Provider/外部投递证据时不得标记 Delivery 真实成功。
+- 修复门禁：问题属于哪个 Owner 就在哪个模块修复；禁止在 Server 复制 Notification Inbox/Fanout/Delivery 业务逻辑，禁止绕过 Outbox/Worker 状态机。
+- 完成条件：可复现缺陷修复并通过模块与跨模块针对性测试；同步模块卡点和整体规划；完整 CI 精确 SHA 验收。
 
 ## 14. RA-CROSS-REVIEW-003 基线与验收证据（2026-11-19）
 
@@ -118,3 +118,22 @@ P0 原始问题及实施约束作为审计记录保留；当前状态以第 7、
 - 项目级字段契约明确：available_at=null/unknown 时不得作为严格 PIT 可得事实；只有 Researchflow Template 显式声明非严格 PIT 模式及其风险时，才可使用仅满足“系统当时已观察”的 Evidence。
 - 当前 WorkflowTemplate 结构未定义显式 PIT Mode 字段；ResultCompositionInput/ValidationPolicy 也没有 PIT Mode。当前唯一生产模板是 News Search，不消费 Research Evidence，且没有生产 ResultComposition 调用者，因此这是未来 Research 消费链路的契约/实现阻塞，不是可在当前调用链中直接补一行校验的局部缺陷。
 - 不擅自增加 PIT Mode 枚举、默认值或模板字段；需要先由契约 Owner 明确严格模式默认值、非严格模式名称/风险字段及其参与 Template Fingerprint 的规则。未明确前，任何使用 Evidence 的研究结果都不得宣称严格 PIT 生产验收通过。
+
+
+## 17. RA-CROSS-REVIEW-005 Context / Evidence / Run / Stage 审查结论（2026-11-19）
+
+- 审查代码基线：repair_all SHA 19ce60f35a47a08bf63b60e2f9f9ba2faf5a6155；本轮未修改生产代码。
+- Research Storage：Context、Evidence、Event、Claim 均有 Research-owned Repository 与 Migration；Server Root 的 Migration Registry 已注册 researchstorage.Migrations()。Event/Claim/Context 使用版本化 append；Event Lifecycle 与 Notification Outbox 在同一事务；Evidence 使用不可变 Payload/Fingerprint，重复 ID 必须完全相同。
+- Researchflow Run：CreateRun 由 DatabaseClock 生成唯一 system_as_of/deadline_at；Worker StageExecutionRequest 携带 Run、AuthenticatedCallerRef、SystemAsOf、DeadlineAt、InputSnapshotRefs，时间传播基础能力存在。
+- Context：Research GetContext 要求真实 ContextAuthorizer，缺失时 fail-closed；当前 Server News→Research composition 未注入 ContextAuthorizer。由于没有真实 Context 消费者，不能注入恒 Allow 占位授权器。
+- Context PIT：contextassembly DTO 投影不接收 Run，无法独立校验 snapshot.SystemAsOf；FLOW-005 文档明确要求 Server/Worker 在创建前和读取后校验与 Run.SystemAsOf 完全一致。当前没有生产 Context Stage 消费者。
+- Evidence PIT：Research Evidence ValidateForStrictPIT 已要求 available_at 非空且不晚于 Evidence.system_as_of。Researchflow ResultComposition.validateResearchEvidence 当前没有执行该检查；项目级契约要求只有 Template 显式声明非严格 PIT 模式及风险时才可使用 available_at=null 的 Evidence。当前 WorkflowTemplate/ResultCompositionInput 没有 PIT Mode，且无生产 ResultComposition 调用者。需契约 Owner 明确字段、默认值、风险声明和 Fingerprint 规则后再实现，当前不猜测。
+- Event/Claim：Domain 具备时间、版本递增、状态迁移和引用验证；MySQL Repository 以事务校验并追加版本。当前无真实 Researchflow Stage 生产消费者将 Event/Claim 纳入最终结果。
+- 判定：Research Persistence/版本机制代码 PASS；Researchflow Run 时钟传播代码 PASS；Context 授权生产装配 NOT_COMPARABLE；Context Run PIT 绑定 NOT_COMPARABLE；Evidence 严格 PIT 消费 DEFERRED；Event/Claim 生产消费 NOT_COMPARABLE。
+- 本轮未发现可在当前冻结契约和无真实调用者条件下安全修复的局部代码缺陷。所有阻塞已同步 Research、Researchflow、Server 卡点及当前任务记录。
+
+## 18. RA-CROSS-REVIEW-006 登记（2026-11-19）
+
+- 前置 RA-CROSS-REVIEW-005 已完成；剩余 Context 授权、PIT Mode、生产 Stage 消费问题分别保留在 Research/Researchflow/Server 卡点，不在 Notification Review 中重复处理。
+- 本任务聚焦 Research 与 Researchflow 两类 Outbox 到 Notification Inbox、Fanout、Delivery 和 Worker 恢复的完整链路。
+- 当前状态 PLANNED；开始执行前必须重新核对 repair_all 最新 HEAD、Actions 和总览计划。
