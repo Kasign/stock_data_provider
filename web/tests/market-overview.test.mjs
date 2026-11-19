@@ -21,7 +21,7 @@ test("market overview keeps authentication, permission, missing-route and provid
     assert.match(result, new RegExp("HTTP " + item.status));
     assert.match(result, new RegExp("code=" + item.code));
     assert.match(result, new RegExp("request_id=req-" + item.status));
-    if ([401, 403].includes(item.status)) assert.doesNotMatch(result, /行情服务 API Key 验证失败/);
+    if ([401, 403].includes(item.status)) assert.doesNotMatch(result, /Owner Session 未认证或无权访问/);
   }
 
   const networkMessage = describeMarketOverviewError(new TypeError("Failed to fetch"));

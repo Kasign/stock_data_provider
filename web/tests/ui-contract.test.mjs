@@ -713,13 +713,12 @@ test("stale stock research detail requests cannot unlock buttons for a different
   assert.match(stockResearch, /async function loadCapitalFlow\(\)\{[\s\S]*?runSupplementRequest\("#load-capital-flow"/);
 });
 
-test("stock research clears stale snapshots on reload, request errors, and missing API key", () => {
+test("stock research clears stale snapshots on reload and request errors without a browser API key gate", () => {
   assert.match(stockResearch, /function clearPanel\(/);
-  assert.match(stockResearch, /function markApiKeyRequired\(/);
   assert.match(stockResearch, /function invalidate\(/);
   assert.match(stockResearch, /clearPanel\(key,"正在读取本次请求，尚无新结果。"/);
   assert.match(stockResearch, /setQuality\(panel\.quality,"invalid","读取失败"\)/);
-  assert.match(stockResearch, /if\(!settings\?\.apiKey\)\{markApiKeyRequired\(\);return false;\}/);
+  assert.doesNotMatch(stockResearch, /apiKey|markApiKeyRequired/);
   assert.match(stockResearch, /clearPanel\("announcements","正在读取本次公告，尚无新结果。"/);
   assert.match(stockResearch, /valuations-reasons/);
   assert.match(app, /stockResearch\.invalidate\(/);
@@ -1000,10 +999,10 @@ test("dragon-tiger rows only render stock navigation when a usable code exists",
   assert.match(marketActivity, /button\[data-dragon-symbol\]/);
 });
 
-test("market activity clears stale calendar state for invalid input, missing key, loading, and failure", () => {
+test("market activity clears stale calendar state for invalid input, loading, and failure without a browser key gate", () => {
   assert.match(marketActivity, /function clearReasons\(id\)/);
   assert.match(marketActivity, /日期无效[\s\S]*?meta\("trading-calendar-meta",""\)[\s\S]*?clearReasons\("trading-calendar-reasons"\)/);
-  assert.match(marketActivity, /需配置 Key[\s\S]*?数据未读取 · 需要 API Key[\s\S]*?clearReasons\("trading-calendar-reasons"\)/);
+  assert.doesNotMatch(marketActivity, /apiKey|需配置 Key|行情 API Key/);
   assert.match(marketActivity, /badge\("trading-calendar-quality","加载中","unknown"\)/);
   assert.match(marketActivity, /正在读取交易日历…/);
   assert.match(marketActivity, /本次未返回数据[\s\S]*?clearReasons\("trading-calendar-reasons"\)/);
