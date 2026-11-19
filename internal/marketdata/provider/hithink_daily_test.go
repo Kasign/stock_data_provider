@@ -242,7 +242,9 @@ func TestHithinkDailyBarsRetainExactJSONDecimals(t *testing.T) {
 	if got == nil || got.Open != "10.123456789" || got.High != "11.234567891" ||
 		got.Low != "9.012345678" || got.Close != "10.987654321" ||
 		got.RawVolume != "1000" || got.RawAmount == nil || *got.RawAmount != "10000.123456789" ||
-		got.AmountCNY == nil || *got.AmountCNY != "10000.123456789" {
+		got.AmountCNY != nil || got.RawAmountEvidence == nil ||
+		got.RawAmountEvidence.EvidenceKind != model.DailyBarPrecisionEvidenceObservedToken ||
+		got.RawAmountEvidence.SourceToken != "10000.123456789" {
 		t.Fatalf("Hithink exact source decimals were not retained: %+v", got)
 	}
 }

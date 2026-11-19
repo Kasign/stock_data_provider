@@ -57,7 +57,10 @@ func TestTushareDailyBarsNormalizesHandsAndThousandCNY(t *testing.T) {
 	if bar.ExactValues == nil || bar.ExactValues.Open != "10.123456789" || bar.ExactValues.High != "11.234567891" ||
 		bar.ExactValues.Low != "9.012345678" || bar.ExactValues.Close != "10.987654321" ||
 		bar.ExactValues.RawVolume != "100" || bar.ExactValues.RawAmount == nil || *bar.ExactValues.RawAmount != "100.123456789" ||
-		bar.ExactValues.AmountCNY == nil || *bar.ExactValues.AmountCNY != "100123.456789" {
+		bar.ExactValues.AmountCNY == nil || *bar.ExactValues.AmountCNY != "100123.456789" ||
+		bar.ExactValues.AmountCNYEvidence == nil ||
+		bar.ExactValues.AmountCNYEvidence.SourceToken != "100.123456789" ||
+		bar.ExactValues.AmountCNYEvidence.UnitConversionFactor != "1000" {
 		t.Fatalf("Tushare exact source decimals or thousand-CNY conversion were not retained: %+v", bar.ExactValues)
 	}
 }
