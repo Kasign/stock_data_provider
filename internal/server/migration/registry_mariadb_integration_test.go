@@ -120,8 +120,15 @@ func TestRegistryMariaDBIntegration(t *testing.T) {
 		t.Fatalf("migration checksum validation should not treat physical column drift as a changed migration definition: %v", err)
 	}
 	requireMarketDataSchemaDrift(t, dataService.Ready(ctx), "missing V4 compatibility column")
-	if _, err := db.ExecContext(ctx, "ALTER TABLE market_data_quotes ADD COLUMN turnover_rate DECIMAL(16,8) NULL"); err != nil {
-		t.Fatalf("restore compatibility column: %v", err)
+	if _, err := db.ExecContext(ctx, "ALTER TABLE market_data_quotes ADD COLUMN turnover_rate DECIMAL(16,8) UNSIGNED NULL"); err != nil {
+		t.Fatalf("simulate incompatible unsigned compatibility column: %v", err)
+	}
+	if err := registry.ValidateApplied(ctx, db); err != nil {
+		t.Fatalf("migration checksum validation should not treat column type drift as a changed migration definition: %v", err)
+	}
+	requireMarketDataSchemaDrift(t, dataService.Ready(ctx), "unsigned V4 compatibility column")
+	if _, err := db.ExecContext(ctx, "ALTER TABLE market_data_quotes MODIFY COLUMN turnover_rate DECIMAL(16,8) NULL"); err != nil {
+		t.Fatalf("restore exact compatibility column definition: %v", err)
 	}
 	if err := dataService.Ready(ctx); err != nil {
 		t.Fatalf("Data readiness rejected restored schema: %v", err)
@@ -133,8 +140,18 @@ func TestRegistryMariaDBIntegration(t *testing.T) {
 		t.Fatalf("migration checksum validation should not treat physical index drift as a changed migration definition: %v", err)
 	}
 	requireMarketDataSchemaDrift(t, dataService.Ready(ctx), "missing V4 compatibility index")
+	if _, err := db.ExecContext(ctx, "CREATE INDEX idx_market_bar_revision_identity_asof ON market_data_daily_bar_versions (symbol(3), trade_date, period, adjustment_basis, source, recorded_at, id)"); err != nil {
+		t.Fatalf("simulate prefix compatibility index: %v", err)
+	}
+	if err := registry.ValidateApplied(ctx, db); err != nil {
+		t.Fatalf("migration checksum validation should not treat index prefix drift as a changed migration definition: %v", err)
+	}
+	requireMarketDataSchemaDrift(t, dataService.Ready(ctx), "prefix V4 compatibility index")
+	if _, err := db.ExecContext(ctx, "DROP INDEX idx_market_bar_revision_identity_asof ON market_data_daily_bar_versions"); err != nil {
+		t.Fatalf("remove prefix compatibility index: %v", err)
+	}
 	if _, err := db.ExecContext(ctx, "CREATE INDEX idx_market_bar_revision_identity_asof ON market_data_daily_bar_versions (symbol, trade_date, period, adjustment_basis, source, recorded_at, id)"); err != nil {
-		t.Fatalf("restore compatibility index: %v", err)
+		t.Fatalf("restore exact compatibility index: %v", err)
 	}
 	if err := dataService.Ready(ctx); err != nil {
 		t.Fatalf("Data readiness rejected restored compatibility index: %v", err)

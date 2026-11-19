@@ -75,21 +75,23 @@ func (s *Store) ValidateCompatibilitySchema(ctx context.Context) error {
 		return errors.New("schema validation context is required")
 	}
 	for _, column := range []string{"volume_ratio", "turnover_rate"} {
-		var dataType, nullable string
+		var columnType, dataType, nullable string
 		var precision, scale sql.NullInt64
-		err := s.db.QueryRowContext(ctx, `SELECT data_type, is_nullable, numeric_precision, numeric_scale
+		var defaultValue sql.NullString
+		err := s.db.QueryRowContext(ctx, `SELECT column_type, data_type, is_nullable, numeric_precision, numeric_scale, column_default
 FROM information_schema.columns
 WHERE table_schema = DATABASE() AND table_name = 'market_data_quotes' AND column_name = ?`, column).
-			Scan(&dataType, &nullable, &precision, &scale)
+			Scan(&columnType, &dataType, &nullable, &precision, &scale, &defaultValue)
 		if errors.Is(err, sql.ErrNoRows) {
 			return fmt.Errorf("market_data_quotes.%s is missing", column)
 		}
 		if err != nil {
 			return fmt.Errorf("inspect market_data_quotes.%s: %w", column, err)
 		}
-		if strings.ToLower(dataType) != "decimal" || nullable != "YES" ||
-			!precision.Valid || precision.Int64 != 16 || !scale.Valid || scale.Int64 != 8 {
-			return fmt.Errorf("market_data_quotes.%s must be nullable DECIMAL(16,8)", column)
+		if strings.ToLower(columnType) != "decimal(16,8)" || strings.ToLower(dataType) != "decimal" ||
+			nullable != "YES" || !precision.Valid || precision.Int64 != 16 ||
+			!scale.Valid || scale.Int64 != 8 || defaultValue.Valid {
+			return fmt.Errorf("market_data_quotes.%s must be nullable DECIMAL(16,8) without an explicit default", column)
 		}
 	}
 	for _, index := range []struct {
@@ -106,7 +108,7 @@ WHERE table_schema = DATABASE() AND table_name = ? AND index_name = ?`, index.ta
 		if legacyCount != 0 {
 			return fmt.Errorf("legacy index %s.%s must be removed", index.table, index.legacy)
 		}
-		rows, err := s.db.QueryContext(ctx, `SELECT non_unique, column_name FROM information_schema.statistics
+		rows, err := s.db.QueryContext(ctx, `SELECT non_unique, column_name, sub_part, index_type, collation FROM information_schema.statistics
 WHERE table_schema = DATABASE() AND table_name = ? AND index_name = ? ORDER BY seq_in_index`, index.table, index.name)
 		if err != nil {
 			return fmt.Errorf("inspect index %s.%s: %w", index.table, index.name, err)
@@ -115,10 +117,16 @@ WHERE table_schema = DATABASE() AND table_name = ? AND index_name = ? ORDER BY s
 		nonUnique := -1
 		for rows.Next() {
 			var currentNonUnique int
-			var column string
-			if err := rows.Scan(&currentNonUnique, &column); err != nil {
+			var column, indexType string
+			var subPart sql.NullInt64
+			var collation sql.NullString
+			if err := rows.Scan(&currentNonUnique, &column, &subPart, &indexType, &collation); err != nil {
 				_ = rows.Close()
 				return fmt.Errorf("read index %s.%s: %w", index.table, index.name, err)
+			}
+			if subPart.Valid || strings.ToUpper(indexType) != "BTREE" || !collation.Valid || collation.String != "A" {
+				_ = rows.Close()
+				return fmt.Errorf("index %s.%s must use full ascending BTREE columns", index.table, index.name)
 			}
 			if nonUnique != -1 && nonUnique != currentNonUnique {
 				_ = rows.Close()
