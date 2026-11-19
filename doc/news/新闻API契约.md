@@ -1,7 +1,7 @@
 # 新闻 API 契约
 
 > 版本：设计草案 v0.2  
-> 状态：当前不建设新闻独立对外 HTTP API；本文第 11 节是同进程 Application 契约实施入口，OpenAPI 仅保留为未来评估草案。Get/List Facade、PIT Repository、Snapshot/Cursor 已有首批实现，但 NEWS-CTR-001 尚未完整验收。DEC-PLAT-002-042 要求的 relation_status、UTC Z Schema 和版本观察时间映射已在 2026-11-11 同步；available_at 严格 PIT 与授权读取 TOCTOU 仍未闭环，详见《代码与文档Review报告》。
+> 状态（2026-11-18）：不建设新闻独立对外 HTTP API；第 11 节维护同进程 Application Query Facade 契约。NEWS-CTR-001/002/003 的项目级定义已在 PLAT-002 登记簿标记为 L1 frozen；这不等于 News 消费者 L2 实现符合性或真实来源 L3 验收全部完成。Evidence Query、授权复核、PIT Resolver、Snapshot/Cursor 已有实现；available_at 的生产可用性仍受合格来源证据和授权准入约束，当前状态以《模块总任务规划和进度.md》为准。OpenAPI 文件不代表当前开放独立 News HTTP 路由。
 
 ## 1. 基本原则
 
