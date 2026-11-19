@@ -156,3 +156,12 @@
 - 此前 Ready 仅位于 `MIGRATION_ENABLED=false` 分支，导致 enabled 路径和 Worker 启动路径的检查边界不一致；现已移出分支统一执行。
 - 物理 Schema 漂移由 Data `Store.ValidateCompatibilitySchema` 检查，不混同 Platform Migration checksum。MariaDB 集成测试验证缺失列会阻止 Ready。
 - 最新代码 SHA `b866188cf2b784a2e9c2d9a11ff002962a3453bd` 待 CI；模块分支 `feat/server` 未同步。
+
+
+## RepairAll SRV-009 Root Data 物理 Schema 就绪验收（2026-11-19）
+
+- 当前聚合基线：`5d97dc89acfd0493b8b7f4c316db6a5d5dc609e9`；Integration CI [Run 44452547201](https://github.com/Kasign/stock_data_provider/actions/runs/44452547201) 精确 SHA 全项 success。
+- Root Migration Registry 已同时注册 Server 测试 namespace 与 Data 静态 Migration definitions；集成测试在 Migration 执行后验证 Data Ready，再模拟缺列/缺索引，确认 Readiness fail-closed。
+- Root 在 Migration enabled/disabled 路径之后统一执行 Data Ready；启动 Worker 或 HTTP 流量前检查 MariaDB、Redis 和 V4 物理 Schema。
+- 代码级 SRV-009 Migration/Schema 门禁验收通过；生产环境 Migration enabled/disabled 演练、真实 Provider 出站矩阵仍未完成。其他模块生产装配卡点仍按本文件第 5/7 节的准入条件处理。
+- 本次仅更新 repair_all 聚合基线，`feat/server` 分支未同步。

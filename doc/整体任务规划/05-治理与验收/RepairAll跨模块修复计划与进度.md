@@ -159,3 +159,15 @@
 - Data `Ready` 将物理结构检查纳入 MariaDB readiness；Schema 漂移返回 `market_data.schema_drift`，不将 Migration checksum 当作物理结构证明。
 - Server Root 在 `MIGRATION_ENABLED=true/false` 两条路径完成各自 Migration 执行/只读校验后，都会在启动 Worker 或接受流量前执行 Data 依赖与物理 Schema 就绪检查。此前只在 disabled 路径调用 Ready 的不一致已收敛。
 - MariaDB 集成测试已增加：新迁移 Schema Ready、删除 `turnover_rate` 后 Ready fail-closed、恢复列后 Ready 通过。待最新 CI 验证。
+
+
+## 10. RA-DATA-SCHEMA-001 验收结果与测试修正（2026-11-19）
+
+- 最终代码基线：`5d97dc89acfd0493b8b7f4c316db6a5d5dc609e9`。
+- 完整 Integration CI：[Run 44452547201](https://github.com/Kasign/stock_data_provider/actions/runs/44452547201)，精确 SHA 匹配，结论 `success`。
+- 全部检查通过：Go 格式、根模块 vet/tests、News/Research/Researchflow 跨模块测试、Worker MariaDB/Redis 集成、go-core vet/tests、Compose、WebUI 语法/单测/Docker 构建。
+- 本轮修正了两处 CI 暴露的问题：`mysql.go` 注释格式；`TestRegistryMariaDBIntegration` 原先只执行测试专用 Migration，却在未创建 Data 表的数据库上断言 Data Ready。现测试将 Data 静态 Migration definitions 注册到同一 Root Registry，执行成功后再检查 Data Ready 和物理 Schema 漂移。
+- 新增测试没有放宽 Schema 规则。真实 MariaDB Worker Bootstrap 集成 Job 与根模块测试均通过。
+- 结论：代码层面的 Data V4 物理 Schema 就绪门禁在当前聚合 SHA 上通过；生产数据库 Migration enabled/disabled 演练仍未执行，不能据 CI 关闭生产演练卡点。
+
+当前下一步：继续跨模块生产调用链 Review，优先检查 Server 真实装配边界和各模块公开 Application Port；外部来源、凭据、消费者契约缺失时继续保留 BLOCKED/NOT_COMPARABLE。

@@ -65,3 +65,12 @@ Root Server 尚未实际构造并注册 Data Module，属于 Server SRV-009 的�
 ## RepairAll 物理 Schema 漂移检查（2026-11-19）
 
 `repair_all` 新增 `Store.ValidateCompatibilitySchema`，并接入 Data `Ready`：V4 两列必须是 nullable DECIMAL(16,8)，revision 索引必须列顺序正确且为非唯一，旧 unique index 必须不存在。该检查用于补足 Migration checksum 不等于物理 Schema 完整性的边界。MariaDB 集成测试模拟删列并验证 Ready 拒绝；最新代码 SHA `b866188cf2b784a2e9c2d9a11ff002962a3453bd` 的 CI 尚待确认。模块分支 `feat/data` 未同步。
+
+
+## RepairAll 物理 Schema 漂移门禁 CI 结果（2026-11-19）
+
+- 当前 repair_all 验收 SHA：`5d97dc89acfd0493b8b7f4c316db6a5d5dc609e9`。
+- Integration CI [Run 44452547201](https://github.com/Kasign/stock_data_provider/actions/runs/44452547201) 对该精确 SHA 全项 success。
+- MariaDB 测试先通过 Root Registry 执行 Data Migration V1-V4，再对 Ready 执行缺列/缺索引 fail-closed 检查和恢复检查；原测试缺少 Data Migration 装配，已修正，不曾通过放宽物理 Schema 校验绕过。
+- 当前结论：repair_all 代码层物理 Schema 门禁 PASS；生产环境 Migration 开启/关闭演练仍待执行。模块分支 `feat/data` 未同步。
+- DATA-003 的真实 AvailableAt 证据及 DATA-004～DATA-007 的外部字段、Freshness、Parity、Provider 真实请求证据仍未解除。
