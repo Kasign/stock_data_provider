@@ -78,6 +78,18 @@ func TestNewExposesApplicationHTTPAndDiagnostics(t *testing.T) {
 	}
 }
 
+func TestModuleMigrationRunnerIsNilWhenStorageDisabled(t *testing.T) {
+	module, err := New(testConfig(), testDependencies())
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	defer module.Close(context.Background())
+
+	if runner := module.MigrationRunner(); runner != nil {
+		t.Fatalf("MigrationRunner() = %T, want nil when storage is disabled", runner)
+	}
+}
+
 func TestMigrationDefinitionsAvailableWithoutStorage(t *testing.T) {
 	definitions := MigrationDefinitions()
 	if len(definitions) != 4 || definitions[0].Version != 1 || definitions[3].Version != 4 {

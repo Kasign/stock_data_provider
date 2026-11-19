@@ -21,9 +21,9 @@ var namespacePattern = regexp.MustCompile(`^[a-z0-9._-]{1,64}$`)
 // Registry stores immutable snapshots of module migration definitions.
 // Each namespace is applied independently in deterministic lexical order.
 type Registry struct {
-	mu                 sync.RWMutex
-	entries            map[string][]platformstorage.Migration
-	started            bool
+	mu      sync.RWMutex
+	entries map[string][]platformstorage.Migration
+	started bool
 }
 
 // NewRegistry creates an empty migration registry.
