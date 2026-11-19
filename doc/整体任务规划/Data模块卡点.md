@@ -186,3 +186,12 @@ Root Server 的 Data Module 构造、共享资源注入、Migration Registry、I
 - 当前代码 `pytdxDailyBarExactValues` 将协议 `Kline.Amount` 按 CNY 传入 ExactValues helper，但所用依赖 v0.0.86 的 protocol 文档只注释为“成交额”，未给出该字段单位。
 - TDX 官方量化文档对 `get_market_data` 的 Amount 标注“万元”，公式 AMOUNT/AMO 指标则标注“元”；属于不同 API/字段语义，不能互相替代。现有 Adapter 的 CNY 映射需视为待核假设。
 - D2 v2 的 `amount_cny` 暂时不得沿用该假设；单位证据确认前为 null/degraded。待核对的是与 v0.0.86 标准 Kline.Amount 完全对应的协议单位，不是重新猜测 Price 类型的缩放。
+
+
+## RepairAll DailyBars v2 CalendarRef Application Port 卡点关闭（2026-11-19）
+
+- Service coverage helper 已返回同一次日历评估使用的 CalendarRef 和 coverage evidence；PIT 只使用 asOf 可见日历版本，不触发 live Provider。
+- 新增独立 Application `DailyBarsV2Snapshot` / `DailyBarsV2Reader`，提供 `interval=1d`、可空 `trading_calendar_ref`、日历质量、交易日分母、阈值和 warnings；v1 Service/Application/HTTP 契约不变。
+- 无明确 start/end 或 CalendarRef 未持久化时 v2 显式降级；v1 既有质量语义保持兼容。
+- current/PIT 映射、缺失引用/无界范围降级、MariaDB 日历版本同源测试通过。精确 SHA `1c23678b5a80c07e5f31b3e5008d1e031cdd8048` 的 Integration CI Run [44509890582](https://github.com/Kasign/stock_data_provider/actions/runs/44509890582) 全项 success。
+- 本卡点仅关闭 Application Port 传播。HTTP v2 Schema/Handler/Golden、Research/Quant 消费者契约测试仍未完成；DATA-CTR-005/007 和 QNT-CTR-003 保持 deferred。

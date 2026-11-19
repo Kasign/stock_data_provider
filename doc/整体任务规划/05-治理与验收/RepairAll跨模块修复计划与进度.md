@@ -469,3 +469,14 @@ RA009 代码关闭条件已满足：Server 路由认证矩阵、CSRF、WebUI 请
 - TDX 官方 `get_market_data` 文档将 Amount 单位标为万元；公式系统 AMOUNT/AMO 指标说明为元。两者是不同接口/语义，不能直接互相覆盖，也不能把较新版本依赖文档倒推到当前 v0.0.86 标准协议。
 - v2 的 `amount_cny` 在与当前 protocol Kline.Amount 对应的单位证据明确前保持 null/degraded。该项仍是 D2 的真实证据卡点，不以当前代码常量作为验收依据。
 - 证据来源见 `doc/api/依赖/02-DATA-CTR-005与007解阻方案.md` 第 2.4.10 节。
+
+
+### 28.22 DailyBars v2 CalendarRef 同次评估传播实现验收（2026-11-19）
+
+- Data Service 新增 `DailyBarCoverageEvidence`，将覆盖率计算实际使用的 CalendarRef、Calendar Quality、ExpectedTradingDays、MinimumRequiredBars、CoverageBasis、CoverageSufficient 与 warnings 作为一个结果返回。
+- 当前视图由同一次 `TradingCalendar` 返回 CalendarRef；PIT 由同一次 `TradingCalendarAsOf` 返回历史 CalendarRef。缓存、Provider、MariaDB fallback 和 PIT 路径均传递实际使用的引用，禁止二次查询补造。
+- v1 `DailyBars` / `DailyBarsAsOf` 签名和旧 Application Snapshot 保持兼容；独立 Application `DailyBarsV2Snapshot` / `DailyBarsV2Reader` 暴露 `interval=1d`、nullable CalendarRef、coverage evidence 和 SystemObservedAtCutoff。
+- 无明确 start/end 或不可持久化日历 ref 时，v2 显式降级；v1 质量行为不因新增 ref 约束改变。
+- Application current/PIT、无 ref/无界查询测试及 MariaDB 当前/PIT CalendarRef 同源集成测试均通过。
+- 精确 SHA `1c23678b5a80c07e5f31b3e5008d1e031cdd8048` 对应 Integration CI Run [44509890582](https://github.com/Kasign/stock_data_provider/actions/runs/44509890582) 全项 success。
+- CalendarRef Application 传播项 CLOSED；HTTP v2 Schema/Handler/Golden 和消费者契约测试仍 OPEN。Decimal lexical scale、ChangePercent、Tushare/Yahoo QFQ/HFQ、Amount 单位、ProviderTime/provider_data_version 及 DATA-CTR-007 Manifest/Payload/AuthorizationRef 仍未解除。
