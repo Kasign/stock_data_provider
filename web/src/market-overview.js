@@ -62,7 +62,7 @@ function pending(key,msg,tone="pending") {
  const ids={indices:"market-indices-status",breadth:"market-breadth-status",sectors:"market-sector-status",pool:"market-pool-status",hot:"market-hot-stocks-status"};
  const mids={indices:"market-indices-meta",breadth:"market-breadth-meta",sectors:"market-sector-meta",pool:"market-pool-meta",hot:"market-hot-stocks-meta"};
  const rids={indices:"market-indices-reasons",breadth:"market-breadth-reasons",sectors:"market-sector-reasons",pool:"market-pool-reasons",hot:"market-hot-stocks-reasons"};
- const label=tone==="error"?"读取失败":tone==="warning"&&/API Key/.test(msg)?"需配置 Key":tone==="pending"?"加载中":"不可用";
+ const label=tone==="error"?"读取失败":tone==="pending"?"加载中":"不可用";
  badge(ids[key],label,tone);meta(mids[key],[]);if(rids[key])qualityReasons(rids[key],[]);
  if(key==="indices")empty($("#market-index-grid"),msg);
  if(key==="breadth"){
