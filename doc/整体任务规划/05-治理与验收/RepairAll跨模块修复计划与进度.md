@@ -199,3 +199,17 @@ P0 原始问题及实施约束作为审计记录保留；当前状态以第 7、
 - 文档已校准：MarketData M3/M4 代码级 Root 装配完成；M5 Compose/Nginx/WebUI 切换仍待完成，且受 Data 路由认证策略和 Cookie/API Prefix 约束。旧迁移文档中的 M3/M4 未完成状态已标记为过期历史快照。
 - 当前唯一需要用户决策的事项：Data 浏览器业务路由采用显式 Owner Session（POST probe 必须 CSRF，保留 Owner Bearer 给运维调用），还是采用受控 Service Principal 由可信反向代理注入。推荐前者，并统一 Root API Prefix/Cookie Path；但在确认前不修改认证契约。
 - 本轮未修改 WebUI、Server、Data 生产代码；没有执行新的代码测试。最近完整 Integration CI Run 44456052937 对代码 SHA 5334043ea8e1abc2c4006c371a3f95b123098946 成功；本轮提交仅为文档校准，不能称为当前 HEAD 的 CI 验收。
+
+
+## RA009：Root Server Data Owner Session 与单入口迁移（2026-11-19）
+
+<escape>状态：APPROVED / IN_PROGRESS；决策已确认，代码与部署验收未完成。</escape>
+
+- 用户明确批准 Owner Session 方案，并明确旧实现不需要保留。
+- 唯一入口为 Root Server；WebUI 使用 HttpOnly Owner Session Cookie。Data 路由显式允许 Owner Session，保留 Owner Bearer 受控运维调用；Session 不继承 admin/service scope。
+- 所有非安全方法由现有 SessionAuthenticator 校验 Origin/Host 与 CSRF；特别覆盖 Provider Probe 写操作。Data 领域授权仍由 Data 负责。
+- 统一 API Prefix/Cookie Path 为 `/api`，取消独立 `/market-api` 和 `/analysis-api` upstream。
+- 删除浏览器 Data API Key、`X-API-Key` 注入、独立 Data 服务/容器/镜像、旧 Nginx 路由及相关兼容代码/配置/文档；不保留双轨或回滚部署。
+- 旧资产清理与新入口切换同批实施；先确保新入口代码和测试通过，再完成单 Root 部署切换及真实验收，最后删除所有旧资产。
+
+RA009 关闭条件：Server 路由认证矩阵、CSRF、WebUI 请求和配置、Compose/Nginx 单入口、独立 Data 运行资产清理、部署验收、真实 Provider/数据证据及最新精确 SHA CI 全部完成。详细分步清单见 Data 迁移计划与 Server 卡点文档。

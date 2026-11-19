@@ -248,3 +248,16 @@
 - 单纯把 /market-api upstream 指向 Root Server 会因 X-API-Key 与 Owner Bearer 认证不匹配而失败；静态注入 Owner Bearer 会绕过 Owner Session/资源授权边界，禁止采用。
 - M5 解锁前置：明确 Data 路由是否允许 Owner Session（必须覆盖探测等写请求的 CSRF 与领域权限），或采用受控 Service Principal；同时决定统一 API Prefix/Cookie Path。由 Server/Platform/Data/WebUI 共同更新契约和验收。
 - 在认证策略冻结前，不删除独立 Data 服务、不删除浏览器 Key 兼容路径、不修改部署契约测试。
+
+
+## RepairAll RA009：Data 入口统一 Owner Session（用户已确认，2026-11-19）
+
+状态：APPROVED / IN_PROGRESS（尚未完成代码与部署验收）
+
+最终决策：WebUI 通过 HttpOnly Owner Session Cookie 访问 Root Server Data 路由；Data 路由显式允许 Owner Session，同时保留 Owner Bearer 运维调用。非安全方法必须由现有 SessionAuthenticator 执行 Origin/Host 与 CSRF 原子校验；Data 领域资源授权不得跳过。
+
+部署目标只有 Root Server 一个 API upstream，统一路径和 Cookie Path 为 `/api`。不保留独立 Data 服务、旧 `/market-api` / `/analysis-api` 双 upstream、浏览器 Data API Key、`X-API-Key` 兼容或回滚部署资产。切换与清理在同一迁移批次完成，避免先删除再导致生产不可用。
+
+执行任务 RA009-A～F 以《Market Data模块化单体迁移计划与进度》中的用户确认决策节为唯一实施清单。未完成真实部署和精确 SHA CI 前，不得标记 M5/M6 完成。
+
+本节覆盖本文件第 6 节及历史快照中“独立 Data Service 必须保留”“不删除旧代理/部署资产”等旧结论；这些内容仅作为历史审查记录，不再是当前目标架构。

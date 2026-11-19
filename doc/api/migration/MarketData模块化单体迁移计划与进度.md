@@ -10,6 +10,24 @@
 
 > 本文记录 Data 从独立 Go Module/服务迁入 Root Server 根 Go Module、同进程运行的实施计划和进度。若本文与上述架构决策文档冲突，以架构决策文档为准；公共平台及 DATA 契约以冻结契约文档为准。本文不重新定义契约。
 
+
+
+## RepairAll M5/M6 认证与部署最终决策（2026-11-19，用户已确认）
+
+**决策状态：APPROVED；执行状态：PENDING。** 本节覆盖本文历史快照中关于保留独立 Data 服务、浏览器 Data API Key、双路由兼容和回滚部署的旧描述。历史记录仅保留为审计事实，不再作为目标方案。
+
+- 唯一生产入口：Root Server；Data 作为同进程模块，不再部署独立 Data HTTP 服务。
+- WebUI：使用 Root Server 的 HttpOnly Owner Session Cookie；CSRF Token 仅驻留运行时内存。浏览器不再保存或发送 Data API Key，不发送 `X-API-Key`。
+- Root Server：Data 业务路由显式允许 `owner_session`；保留 Owner Bearer 作为受控运维认证方式，但不得把 Session 映射为 Bearer 或授予 `platform:admin`。
+- 所有 Session 非安全方法（包括 `POST /api/v1/data-sources/probe`）必须通过现有 SessionAuthenticator 的 Origin/Host 与原子 CSRF 校验；Data 领域授权继续执行，不得因 Owner Session 而跳过领域授权。
+- 统一浏览器 API 前缀和 Cookie Path 为 `/api`；WebUI 行情与分析 API 同源访问 Root Server，不再拆分 `/market-api`、`/analysis-api` 两个 upstream。
+- 部署切换通过后，删除独立 Data 服务入口、独立容器/镜像配置、Data API Key 配置、旧 Nginx upstream/路径、WebUI Key 设置及不再使用的兼容代码和文档。**不保留旧服务、旧 Key 兼容或双轨回滚路径。**
+- 清理旧实现与新入口切换必须作为同一迁移批次完成；先通过 Server/WebUI/Compose/Nginx 测试及真实部署验收，再执行清理，避免出现不可启动的中间提交。
+
+执行顺序：RA009-A 更新 SRV-CTR-002 与 DATA-CTR-006/项目契约登记；RA009-B Server 双认证路由策略和 CSRF 集成；RA009-C WebUI 移除 Key/旧 API Base 设置并统一请求路径；RA009-D Compose/Nginx 改为单 Root upstream；RA009-E 删除独立 Data 服务及残留配置/文档；RA009-F 针对性测试、真实部署/Provider 数据验收和精确 SHA 完整 CI。
+
+关闭条件：全仓不再存在浏览器 Data API Key / `X-API-Key` 注入和独立 Data 服务部署引用；所有 Data 业务路由的 Owner Session/Owner Bearer/未认证/CSRF 行为通过测试；真实 Root 部署和 Data Readiness/Provider 数据验收通过。生产 DDL 与 Provider 真实数据证据仍按 M6 原有门槛独立验收。
+
 ## 历史迁移状态收敛复核（2026-11-10，已过期快照；代码验证基线：`d7ba8b127a997432e547ce5740057b6390bce21f`；修复提交：`960a51a1ffeb1cc56671457bb18a7883cf5cbaea`）
 
 本节覆盖当前分支最新可核验状态。历史日期记录只保留为历史证据，不覆盖本节结论。
