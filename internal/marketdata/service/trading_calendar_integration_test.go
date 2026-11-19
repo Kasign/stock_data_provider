@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"example.com/stock-analysis-flow/internal/marketdata/model"
 	"example.com/stock-analysis-flow/internal/marketdata/provider"
 	"example.com/stock-analysis-flow/internal/marketdata/repository"
 )
