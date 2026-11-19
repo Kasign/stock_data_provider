@@ -2754,13 +2754,13 @@ test("Root Server 单入口、Owner Session 与 Data 内部 Handler 契约", asy
   const server = await readFile(new URL("../../internal/server/bootstrap/router.go", import.meta.url), "utf8");
   const dataConfig = await readFile(new URL("../../internal/marketdata/config/config.go", import.meta.url), "utf8");
   const dataModule = await readFile(new URL("../../internal/marketdata/bootstrap/module.go", import.meta.url), "utf8");
-  assert.match(apiClient, /const API_BASE_PATH = "\/api"/);
+  assert.match(apiClient, /const prefix = normalizeBasePath\(base, "\/"\)/);
   assert.doesNotMatch(apiClient, /X-API-Key|apiKey/);
   assert.match(apiClient, /credentials: "same-origin"/);
   assert.match(apiClient, /X-CSRF-Token/);
   assert.match(apiClient, /let ownerCSRFToken = ""/);
-  assert.match(server, /OwnerSession/);
-  assert.match(server, /OwnerAccess/);
+  assert.match(server, /newOwnerSessionOrBearerDataHandler/);
+  assert.match(server, /platformsecurity\.OwnerAccess\(\)/);
   assert.match(dataModule, /InProcessHandler\(\)/);
   assert.doesNotMatch(dataModule, /func \(m \*Module\) Handler\(\)/);
   assert.doesNotMatch(dataConfig, /MARKET_DATA_API_KEY|APIKey\s+string/);
@@ -2777,7 +2777,7 @@ test("WebUI 不再保存独立 Data API Key 或双服务地址", async () => {
   assert.match(html, /id="owner-login-form"/);
   assert.match(html, /id="owner-session-logout"/);
   assert.match(html, /Owner Session/);
-  assert.doesNotMatch(html, /管理员 Session 与行情服务 API Key 独立/);
+  assert.doesNotMatch(html, /Data API Key|行情服务 API Key|X-API-Key/);
 });
 
 test("Root Server 健康检查只访问统一入口，Data 诊断不隐式请求上游", () => {
