@@ -3714,7 +3714,6 @@ func (s *DataService) dailyBarCoverageEvidence(ctx context.Context, start, end s
 	return evidence.CoverageSufficient, append([]string(nil), evidence.Warnings...), evidence
 }
 
-
 // dailyBarCoverageSufficient 保留 v1 内部调用语义；v2 额外读取完整证据对象。
 func (s *DataService) dailyBarCoverageSufficient(ctx context.Context, start, end string, requested, returned int) (bool, []string) {
 	ok, warnings, _ := s.dailyBarCoverageEvidence(ctx, start, end, requested, returned)
