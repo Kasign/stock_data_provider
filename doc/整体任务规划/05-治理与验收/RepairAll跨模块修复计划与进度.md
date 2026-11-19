@@ -290,3 +290,10 @@ RA009 代码关闭条件已满足：Server 路由认证矩阵、CSRF、WebUI 请
 - 回归测试：新增忽略 Start Context 的阻塞组件，验证 Stop 在预算内返回 DeadlineExceeded、不会与 Start 并发调用 Stop、后续 Start 退出后仍保留原始关闭超时结果。
 - 架构边界：不强杀 Go goroutine、不提前关闭共享资源、不新增 Lifecycle 平行实现、不改变正常逆序停止和启动失败回滚行为。
 - 验收状态：代码已修改，等待精确 SHA Integration CI；当前不可将测试视为已执行。
+
+
+### RA-CROSS-REVIEW-011 CI 首轮结果与修正（2026-11-19）
+
+- 首轮 Integration CI Run [44488570373](https://github.com/Kasign/stock_data_provider/actions/runs/44488570373) 对提交 `6a6fcbec7f88fb9a4832eeb10c7df3118c5044c4`：根模块测试、News/Research/Researchflow 跨模块逐用例门禁、Worker Bootstrap MariaDB/Redis 集成、go-core Vet/测试、Compose、WebUI 语法/单测/镜像构建均通过；最终汇总因新增 Go 测试文件多一个空行导致 gofmt 检查失败。
+- 未修改测试标准。已按 gofmt 修正空行，并清理 Worker/API Bootstrap 集成测试中已废弃且不再被 Data 配置读取的 `MARKET_DATA_BASE_URL`、`MARKET_DATA_API_KEY` 测试环境变量；这些是测试夹具残留，不是运行时配置或生产凭据问题。
+- 修正后提交需重新执行完整 Integration CI；在新 Run 结束前仍不标记本轮验收通过。

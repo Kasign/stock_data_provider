@@ -445,7 +445,6 @@ func TestLifecycleConcurrentStopDuringSingleComponentStartupDoesNotReportSuccess
 	}
 }
 
-
 type contextIgnoringBlockingStartComponent struct {
 	entered chan struct{}
 	release chan struct{}
