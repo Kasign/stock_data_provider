@@ -365,3 +365,11 @@ RA009 代码关闭条件已满足：Server 路由认证矩阵、CSRF、WebUI 请
 - 已确认 DailyBars 的 SourceVersion（Tushare/BaoStock/Hithink）为适配器/接口版本常量；通用校验只要求非空且非 `unknown`，不能视为上游数据修订版本。
 - 已确认 TradingCalendar 目前只有 Provider 查询与 Redis 12 小时缓存，未发现不可变日历历史 Repository；SourceVersion 仍是 Provider/Adapter 版本。日历来源冲突或推断非交易日会标记 degraded。
 - 后续实现必须分离 adapter_version、normalization_version、provider_data_version 和 calendar content ref；缺少源端版本/可靠日历证据时显式缺失或降级，不伪造版本。
+
+
+### 28.7 D1 Provider 字段公开证据结果
+
+- Tushare 官方文档已核实 daily 的成交量为手、成交额为千元，日线通常 15:00～16:00 入库且停牌期间不提供；没有字段精度/scale、舍入规则或逐行数据版本。
+- BaoStock 官方文档已核实成交量为股、成交额为人民币元及停牌日 OHLC/零成交量额语义；没有字段精度/scale 或逐行数据版本。
+- Hithink 尚无可核验官方字段单位/精度文档；现有代码将 turnover 映射 CNY，不能替代供应商证据。
+- 公开资料和代码确认 Provider 原始数字 token/字符串可在解析入口保留；不需要、也不允许从 float64 或 DECIMAL 固定 scale 反向推断原始精度。
