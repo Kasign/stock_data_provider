@@ -226,6 +226,5 @@ export function bindExistingApiTools(getSettings) {
   $("#load-stock-trading-status")?.addEventListener("click", () => loadStockStatus("trading-status"));
   $("#load-stock-limit-rule")?.addEventListener("click", () => loadStockStatus("limit-rule"));
 
-  // 首页默认读取 Root Server 报告的交易时段；认证或 Provider 错误由请求结果展示。
-  $("#load-market-session")?.click();
+  
 }

@@ -117,6 +117,7 @@ let pendingBrowserImport = null;
 
 const state = {
   settings: loadSettings(),
+  ownerSessionAuthenticated: false,
   view: "market",
   quote: null,
   bundleSnapshot: null,
@@ -1832,7 +1833,7 @@ function setView(view, { updateHash = true, refreshData = true } = {}) {
   syncWatchlistGroupControls();
 syncRefreshButtonContext();
   if (nextView === "settings" && previousView !== nextView) openSettings();
-  if (refreshData && previousView !== nextView) {
+  if (refreshData && previousView !== nextView && state.ownerSessionAuthenticated) {
     if (nextView === "market") void refreshMarketWorkspace();
     else if (nextView === "stocks") void refreshSources();
     else if (nextView === "watchlist") renderWatchlist();
@@ -5469,13 +5470,30 @@ const initialView = requestedInitialView === "market-data"
 if (window.location.hash !== "#" + initialView) {
   window.history.replaceState(null, "", window.location.pathname + window.location.search + "#" + initialView);
 }
-setView(initialView, { updateHash: false, refreshData: true });
+setView(initialView, { updateHash: false, refreshData: false });
 syncSettingsThemeButtons(readTheme());
-void refreshServices();
-if (initialView === "market") void refreshMarketWorkspace();
+
 
 
 // Owner Session is scoped to its own protected APIs; it does not unlock legacy Bearer routes.
+function refreshAuthenticatedWorkspace() {
+  if (!state.ownerSessionAuthenticated) return;
+  void refreshServices();
+  if (state.view === "market") {
+    void refreshMarketWorkspace();
+    $("#load-market-session")?.click();
+  } else if (state.view === "stocks") {
+    void refreshSources();
+  } else if (state.view === "data") {
+    void dataCenter.refresh();
+  } else if (state.view === "watchlist") {
+    renderWatchlist();
+  } else if (state.view === "research") {
+    stockResearch.syncSymbol();
+    renderResearchStockList();
+  }
+}
+
 function renderOwnerSessionControls(mode, { expiresAt = "", message = "" } = {}) {
   const pill = $("#owner-session-status-pill");
   const expiry = $("#owner-session-expiry");
@@ -5527,8 +5545,11 @@ async function initializeOwnerSessionControls() {
   renderOwnerSessionControls("checking");
   try {
     const session = await restoreOwnerSession(state.settings);
+    state.ownerSessionAuthenticated = true;
     renderOwnerSessionControls("logged_in", { expiresAt: session.expires_at });
+    return true;
   } catch (error) {
+    state.ownerSessionAuthenticated = false;
     clearOwnerSessionMemory();
     if (error?.status === 401) {
       renderOwnerSessionControls("logged_out", { message: "当前浏览器没有有效的 Owner Session，请登录。" });
@@ -5537,6 +5558,7 @@ async function initializeOwnerSessionControls() {
     } else {
       renderOwnerSessionControls("unavailable", { message: ownerSessionErrorMessage(error) });
     }
+    return false;
   }
 }
 
@@ -5549,7 +5571,9 @@ $("#owner-login-form")?.addEventListener("submit", async (event) => {
   try {
     const session = await loginOwnerSession(state.settings, password);
     form.reset();
+    state.ownerSessionAuthenticated = true;
     renderOwnerSessionControls("logged_in", { expiresAt: session.expires_at, message: "登录成功。" });
+    refreshAuthenticatedWorkspace();
   } catch (error) {
     const mode = error?.status === 404 ? "disabled" : "logged_out";
     renderOwnerSessionControls(mode, { message: ownerSessionErrorMessage(error) });
@@ -5563,6 +5587,7 @@ $("#owner-session-logout")?.addEventListener("click", async () => {
   if (button) button.disabled = true;
   try {
     await logoutOwnerSession(state.settings);
+    state.ownerSessionAuthenticated = false;
     renderOwnerSessionControls("logged_out", { message: "已退出登录。" });
   } catch (error) {
     if (error?.code === "server.session_unauthenticated") {
@@ -5584,6 +5609,7 @@ $("#owner-password-change-form")?.addEventListener("submit", async (event) => {
   if (button) button.disabled = true;
   try {
     await changeOwnerPassword(state.settings, currentPassword, newPassword);
+    state.ownerSessionAuthenticated = false;
     form.reset();
     renderOwnerSessionControls("logged_out", { message: "密码已修改，当前会话已失效，请使用新密码重新登录。" });
   } catch (error) {
@@ -5597,4 +5623,6 @@ $("#owner-password-change-form")?.addEventListener("submit", async (event) => {
   }
 });
 
-void initializeOwnerSessionControls();
+void initializeOwnerSessionControls().then((authenticated) => {
+  if (authenticated) refreshAuthenticatedWorkspace();
+});
