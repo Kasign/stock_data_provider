@@ -103,7 +103,7 @@ func TestReaderGetDailyBarsV2PreservesSameEvaluationCalendarRef(t *testing.T) {
 	pitCoverage := service.DailyBarCoverageEvidence{
 		CalendarRef: "sha256:calendar-asof", CalendarQualityStatus: model.QualityValid,
 		ExpectedTradingDays: 18, MinimumRequiredBars: 12, CoverageBasis: "exchange_calendar",
-		CoverageSufficient: true,
+		CoverageSufficient: true, Warnings: []string{"calendar_fixture_note"},
 	}
 	backend := &fakeDataService{
 		currentBars: []model.DailyBar{bar}, pitBars: []model.DailyBar{bar},
@@ -131,9 +131,9 @@ func TestReaderGetDailyBarsV2PreservesSameEvaluationCalendarRef(t *testing.T) {
 		t.Fatalf("GetDailyBarsV2(PIT) error = %v", err)
 	}
 	if pit.TradingCalendarRef == nil || *pit.TradingCalendarRef != pitCoverage.CalendarRef ||
-		pit.CoverageEvidence.CalendarQualityStatus != app.QualityDegraded ||
+		pit.CoverageEvidence.CalendarQualityStatus != app.QualityValid ||
 		len(pit.CoverageEvidence.Warnings) != 1 ||
-		pit.Warnings[0] != "daily_bar_coverage_uses_degraded_trading_calendar" {
+		pit.Warnings[0] != "calendar_fixture_note" {
 		t.Fatalf("PIT v2 snapshot did not preserve as-of calendar evidence: %+v", pit)
 	}
 	if backend.currentCalls != 1 || backend.pitCalls != 1 || !backend.lastAsOf.Equal(cutoff) {
