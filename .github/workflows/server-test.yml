@@ -2,10 +2,13 @@ name: Server package validation
 
 on:
   push:
-    branches: [feat/server]
+    branches: [feat/server, feat/web]
     paths:
       - 'cmd/analysis-api/**'
       - 'internal/server/**'
+      - 'internal/platform/security/**'
+      - 'go.mod'
+      - 'go.sum'
       - 'doc/server/**'
       - '.github/workflows/server-test.yml'
 
@@ -80,6 +83,12 @@ jobs:
             ./internal/server/relay \
             ./internal/server/security \
             ./internal/server/llmtransport
+      - name: Verify Owner Session MariaDB/Redis lifecycle is not skipped
+        run: |
+          set -euo pipefail
+          output="$(go test ./internal/server/bootstrap -run TestOwnerSessionHTTPMariaDBRedisLifecycleIntegration -count=1 -v)"
+          printf '%s\n' "$output"
+          grep -Fq -- '--- PASS: TestOwnerSessionHTTPMariaDBRedisLifecycleIntegration' <<< "$output"
       - name: Run Server race tests
         run: |
           go test -race ./cmd/analysis-api \
