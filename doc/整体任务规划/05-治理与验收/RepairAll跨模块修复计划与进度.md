@@ -261,3 +261,21 @@ RA009 代码关闭条件已满足：Server 路由认证矩阵、CSRF、WebUI 请
 - 范围：现有 Diagnostics 生产实现、Schema/Contract/Golden 测试、Root Runner 聚合和模块诊断文档；不新增平行诊断系统，不为无消费者模块创建空 Check。
 - 约束：先以 `doc/字段校验与诊断体系实施方案.md` 和 Platform 冻结契约为准；仅修复可复现的代码/契约不一致，不通过降低状态门槛或补造 evidence_ref 使测试通过。
 - 验收：逐模块标记 PASS/DEGRADED/FAIL/SKIPPED/NOT_COMPARABLE，记录具体 Check、状态字段、证据来源、聚合行为和精确 SHA；真实数据/Provider 缺失时保持 NOT_COMPARABLE。
+
+
+## 26. RA-CROSS-REVIEW-010 Diagnostics 结果契约一致性审查（2026-11-19）
+
+- 审查基线：`repair_all` HEAD `4a31461b625369a22e1d7a263f5bbdb9f1c0f025`；对比上一生产代码验收 SHA `1e916220a8784ae840132ce0cec3b3654c6b9655`，其后 5 个提交均为文档变更，未发现生产代码差异。
+- 验收证据：生产代码精确 SHA `1e916220a8784ae840132ce0cec3b3654c6b9655` 的 Integration CI Run [44482650366](https://github.com/Kasign/stock_data_provider/actions/runs/44482650366) 全项 success。本次为文档审查/状态校准，不将该 CI 冒充为本次文档 HEAD 的新 CI。
+- Platform：Observation 五态、reason_code 格式、UTC/纳秒、属性长度、Runner 并发/超时、Required/Optional 聚合和 Fault 脱敏实现与 PLAT-CTR-004 当前机器契约一致；Runner 明确要求 Check 遵守 Context 取消，不具备强杀忽略 Context 的 Go 函数能力，这是契约边界而非缺陷。
+- Server：Root 只聚合 Shared MariaDB/Redis、Schema、Data 模块 Ready 和已接入的 News 检查；Readiness 仅在所有 Required Check 为 healthy 时返回 ready。Optional Provider 未配置为 skipped，不被误报为失败；Required skipped 会被 Runner 转为 failed。
+- Data：Root 通过 `marketDataReadinessChecks` 调用 Data 自有 `Diagnostics().Ready(ctx)`，没有复制 Provider 诊断规则。该检查只证明模块依赖 Ready，不等于所有 Provider 的实时质量/覆盖率验收。
+- News：Parser、ProviderConfig、Storage、Observation Retention 检查工厂存在；Root 已注册 Parser、ProviderConfig、Storage、Retention（Retention 明确为 Optional）。Source、BusinessQuality、Provider Output Policy 等检查工厂虽存在，但未全部进入当前 Root 检查集；需在真实依赖/授权 Resolver 装配完成后逐项注册，不能用占位 Resolver 或伪造来源证据。
+- Research：Context/Event/Claim/Evidence 检查按具体版本引用和 Run 截止时间构造，Evidence 读取经过当前授权复核；它们不是可无条件加入 Root Readiness 的全局检查。当前无适合的全局资源引用消费者，判为 NOT_COMPARABLE。
+- Researchflow：StageAssessment 是具体 Stage 执行结果的诊断投影，不是进程级依赖 Check；not_comparable 保留 assessment_status 并映射 degraded，避免伪装 healthy。当前没有 Quant/LLM 等生产 Stage 消费者，不创建占位检查。
+- Notification：Lease Recovery 诊断映射校验计数守恒、未知投递 ID 唯一性和时间；它依赖实际 Recovery Worker 批次报告。当前 Server Delivery/Fanout Worker 尚未装配，故生产注册 NOT_COMPARABLE，不得生成空批次冒充健康。
+- Quant：当前没有可接入 Root 的生产计算/结果服务链路；无消费者诊断检查不应提前注册，按 RA-CROSS-REVIEW-004 卡点继续阻塞。
+- reason_code/evidence_ref/dependency/retryable：Observation 对非 healthy 强制 reason_code；EvidenceRef 是领域授权引用，不允许 Platform 推断或合成。Fault 的 Dependency 为可选逻辑标识，Retryable 只允许用于 unavailable/timeout 且由具体错误可重试性决定；不应从 Check ID 或 Status 自动推断。当前审查样本未发现可复现的契约违反。
+- 文档发现并修正：PLAT-002 登记簿将 PLAT-CTR-004 标为 `frozen`，但契约正文仍写 `freeze-ready（待项目负责人确认冻结）`。这是权威状态冲突，已将契约正文状态对齐为 `frozen`；不改变契约字段、版本或代码。
+- 结论：REVIEW_DONE_WITH_INTEGRATION_BLOCKERS。当前可执行的 Platform/Server/Data/News Diagnostics 机制未发现需要立即改动的生产代码缺陷；其余模块检查必须等待真实生产消费者/Worker/授权证据，不能为追求“全模块都有 Check”而新增空实现。
+- 后续：转入 RA-CROSS-REVIEW-011，审查完整启动/迁移/Worker 生命周期与跨模块端到端故障恢复；并持续保留 M6 生产环境证据门禁。若 News Source/Policy 检查的真实 Resolver 已完成装配，再单独补齐 Root 注册与针对性验收。
