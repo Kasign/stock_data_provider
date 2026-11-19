@@ -26,6 +26,8 @@ type OutboxMessage struct {
 }
 
 type OutboxStore interface {
+	// Stores that schedule retries must also implement DatabaseClock so persisted
+	// retry timestamps share the database's cross-instance time authority.
 	ClaimOutbox(context.Context, string, string, int, time.Duration) ([]OutboxMessage, error)
 	AcknowledgeOutbox(context.Context, string, string, uint64) (bool, error)
 	RetryOutbox(context.Context, string, string, uint64, time.Time, string) (bool, error)
@@ -91,7 +93,6 @@ type OutboxDispatcher struct {
 	store     OutboxStore
 	publisher OutboxPublisher
 	config    OutboxDispatcherConfig
-	now       func() time.Time
 }
 
 func NewOutboxDispatcher(
@@ -110,7 +111,7 @@ func NewOutboxDispatcher(
 	if config.RetryPolicy == nil {
 		config.RetryPolicy = ExponentialOutboxRetryPolicy{}
 	}
-	return &OutboxDispatcher{store: store, publisher: publisher, config: config, now: time.Now}, nil
+	return &OutboxDispatcher{store: store, publisher: publisher, config: config}, nil
 }
 
 // DispatchBatch provides at-least-once delivery. Publishers must honor the
@@ -143,7 +144,21 @@ func (d *OutboxDispatcher) DispatchBatch(ctx context.Context) (OutboxDispatchRes
 
 			if publishErr != nil {
 				errorCode := outboxErrorCode(publishErr)
-				nextAttempt := d.config.RetryPolicy.NextAttemptAt(message.AttemptCount, d.now())
+				clock, ok := d.store.(DatabaseClock)
+				if !ok {
+					mu.Lock()
+					failures = append(failures, fmt.Errorf("schedule Outbox retry %q: Outbox store does not provide the database UTC clock", message.Ref))
+					mu.Unlock()
+					return
+				}
+				now, clockErr := clock.NowUTC(ctx)
+				if clockErr != nil {
+					mu.Lock()
+					failures = append(failures, fmt.Errorf("read database UTC clock for Outbox retry %q: %w", message.Ref, clockErr))
+					mu.Unlock()
+					return
+				}
+				nextAttempt := d.config.RetryPolicy.NextAttemptAt(message.AttemptCount, now.UTC())
 				retried, retryErr := d.store.RetryOutbox(ctx, message.Ref, d.config.WorkerID,
 					message.LeaseGeneration, nextAttempt, errorCode)
 				mu.Lock()

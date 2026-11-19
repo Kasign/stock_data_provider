@@ -9,6 +9,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	quantresult "example.com/stock-analysis-flow/internal/quant/result"
 )
 
 var (
@@ -20,16 +22,18 @@ var (
 )
 
 var schemaVersionRE = regexp.MustCompile(`^[0-9]+[.][0-9]+[.][0-9]+(-[0-9A-Za-z.-]+)?$`)
+var quantResultIDRE = regexp.MustCompile(`^quant_result:sha256:[0-9a-f]{64}$`)
 
+// Quant's frozen Envelope 1.0.0 currently supports only trend and risk payloads.
 var supportedResultTypes = map[string]struct{}{
-	"indicator": {}, "factor": {}, "trend": {}, "market": {}, "industry": {},
-	"stock": {}, "strategy": {}, "backtest": {}, "risk": {}, "evaluation": {},
+	"trend": {}, "risk": {},
 }
 
-// QuantResultEnvelope is the stable Quant Application envelope. Payload stays
-// raw until the exact result_type/schema_version validator accepts it.
+// QuantResultEnvelope mirrors the Quant-owned Envelope fields used by Researchflow.
+// Payload stays raw until the exact result_type/payload_schema_version validator accepts it.
 type QuantResultEnvelope struct {
 	SchemaVersion        string          `json:"schema_version"`
+	PayloadSchemaVersion string          `json:"payload_schema_version"`
 	ResultID             string          `json:"result_id"`
 	ResultType           string          `json:"result_type"`
 	Scope                string          `json:"scope"`
@@ -43,13 +47,11 @@ type QuantResultEnvelope struct {
 	QualityStatus        string          `json:"quality_status"`
 	ResultStatus         string          `json:"result_status"`
 	AuthorizationRef     string          `json:"authorization_ref"`
-	CreatedAt            time.Time       `json:"created_at"`
 	Payload              json.RawMessage `json:"payload"`
 }
 
-// PayloadValidator validates one exact result_type/schema_version payload
-// against its frozen strong schema. Implementations must not accept arbitrary
-// object properties or perform remote schema resolution.
+// PayloadValidator validates one exact result_type/payload_schema_version payload.
+// Implementations must not accept arbitrary object properties or perform remote schema resolution.
 type PayloadValidator interface {
 	ValidatePayload(payload json.RawMessage) error
 }
@@ -76,21 +78,74 @@ func NewRegistry() *Registry {
 	return &Registry{validators: make(map[schemaKey]PayloadValidator)}
 }
 
-func (r *Registry) Register(resultType, schemaVersion string, validator PayloadValidator) error {
+// NewQuantPayloadRegistry registers only the payload types currently supported
+// by Quant's frozen Envelope 1.0.0 union. Validation delegates to Quant's own
+// strict typed decoder so Researchflow does not maintain duplicate payload rules.
+func NewQuantPayloadRegistry() (*Registry, error) {
+	registry := NewRegistry()
+	for _, item := range []struct {
+		resultType string
+		version    string
+	}{
+		{resultType: "trend", version: "1.0.0"},
+		{resultType: "risk", version: "1.0.0"},
+	} {
+		resultType, version := item.resultType, item.version
+		validator := PayloadValidatorFunc(func(payload json.RawMessage) error {
+			_, err := quantresult.DecodePayload(resultType, version, payload)
+			return err
+		})
+		if err := registry.Register(resultType, version, validator); err != nil {
+			return nil, err
+		}
+	}
+	return registry, nil
+}
+
+// FromQuantEnvelope validates and adapts the Quant-owned typed Envelope into
+// Researchflow's composition input. Call it only after Quant Application GetResult,
+// which performs current authorization and Manifest binding; this mapper does not
+// authorize access. Envelope and payload schema versions stay separate; CreatedAt
+// belongs to QuantResultRef, not the Envelope.
+func FromQuantEnvelope(envelope quantresult.Envelope) (QuantResultEnvelope, error) {
+	if err := envelope.Validate(); err != nil {
+		return QuantResultEnvelope{}, fmt.Errorf("%w: Quant envelope: %v", ErrInvalidQuantResult, err)
+	}
+	systemAsOf, err := time.Parse(time.RFC3339Nano, envelope.SystemAsOf)
+	if err != nil {
+		return QuantResultEnvelope{}, fmt.Errorf("%w: invalid Quant system_as_of: %v", ErrInvalidQuantResult, err)
+	}
+	payload, err := json.Marshal(envelope.Payload)
+	if err != nil {
+		return QuantResultEnvelope{}, fmt.Errorf("%w: marshal Quant payload: %v", ErrInvalidQuantPayload, err)
+	}
+	return QuantResultEnvelope{
+		SchemaVersion: envelope.SchemaVersion, PayloadSchemaVersion: envelope.PayloadSchemaVersion,
+		ResultID: envelope.ResultID, ResultType: envelope.ResultType, Scope: envelope.Scope,
+		SecurityID: envelope.SecurityID, SystemAsOf: systemAsOf, TradeDate: envelope.TradeDate,
+		Period: envelope.Period, AlgorithmVersion: envelope.AlgorithmVersion,
+		ParameterFingerprint: envelope.ParameterFingerprint,
+		InputSnapshotRefs:    append([]string{}, envelope.InputSnapshotRefs...),
+		QualityStatus:        envelope.QualityStatus, ResultStatus: envelope.ResultStatus,
+		AuthorizationRef: envelope.AuthorizationRef, Payload: json.RawMessage(payload),
+	}, nil
+}
+
+func (r *Registry) Register(resultType, payloadSchemaVersion string, validator PayloadValidator) error {
 	if r == nil || validator == nil {
 		return ErrPayloadValidatorUnavailable
 	}
 	if _, ok := supportedResultTypes[resultType]; !ok {
 		return fmt.Errorf("%w: %q", ErrUnsupportedResultType, resultType)
 	}
-	if !schemaVersionRE.MatchString(schemaVersion) || schemaVersion != strings.TrimSpace(schemaVersion) {
-		return fmt.Errorf("%w: invalid schema version", ErrUnsupportedSchema)
+	if !schemaVersionRE.MatchString(payloadSchemaVersion) || payloadSchemaVersion != strings.TrimSpace(payloadSchemaVersion) {
+		return fmt.Errorf("%w: invalid payload schema version", ErrUnsupportedSchema)
 	}
-	key := schemaKey{resultType: resultType, version: schemaVersion}
+	key := schemaKey{resultType: resultType, version: payloadSchemaVersion}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if _, exists := r.validators[key]; exists {
-		return fmt.Errorf("%w: duplicate registration for %s/%s", ErrUnsupportedSchema, resultType, schemaVersion)
+		return fmt.Errorf("%w: duplicate registration for %s/%s", ErrUnsupportedSchema, resultType, payloadSchemaVersion)
 	}
 	r.validators[key] = validator
 	return nil
@@ -109,8 +164,8 @@ type QuantValidation struct {
 }
 
 // Validate checks common envelope semantics and delegates the discriminated
-// payload to the exact registered validator. Non-completed or non-usable
-// quality results are returned as non-usable facts, not promoted to errors.
+// payload to the exact registered payload schema validator. Non-completed or
+// non-usable quality results are returned as non-usable facts, not promoted to errors.
 func (r *Registry) Validate(result QuantResultEnvelope, policy ValidationPolicy) (QuantValidation, error) {
 	if r == nil {
 		return QuantValidation{}, ErrPayloadValidatorUnavailable
@@ -118,14 +173,17 @@ func (r *Registry) Validate(result QuantResultEnvelope, policy ValidationPolicy)
 	if _, ok := supportedResultTypes[result.ResultType]; !ok {
 		return QuantValidation{}, fmt.Errorf("%w: %q", ErrUnsupportedResultType, result.ResultType)
 	}
-	if !schemaVersionRE.MatchString(result.SchemaVersion) || result.SchemaVersion != strings.TrimSpace(result.SchemaVersion) {
-		return QuantValidation{}, fmt.Errorf("%w: %q", ErrUnsupportedSchema, result.SchemaVersion)
+	if result.SchemaVersion != quantresult.EnvelopeSchemaVersion {
+		return QuantValidation{}, fmt.Errorf("%w: envelope schema %q", ErrUnsupportedSchema, result.SchemaVersion)
+	}
+	if !schemaVersionRE.MatchString(result.PayloadSchemaVersion) || result.PayloadSchemaVersion != strings.TrimSpace(result.PayloadSchemaVersion) {
+		return QuantValidation{}, fmt.Errorf("%w: payload schema %q", ErrUnsupportedSchema, result.PayloadSchemaVersion)
 	}
 	r.mu.RLock()
-	validator, exists := r.validators[schemaKey{resultType: result.ResultType, version: result.SchemaVersion}]
+	validator, exists := r.validators[schemaKey{resultType: result.ResultType, version: result.PayloadSchemaVersion}]
 	r.mu.RUnlock()
 	if !exists {
-		return QuantValidation{}, fmt.Errorf("%w: %s/%s", ErrUnsupportedSchema, result.ResultType, result.SchemaVersion)
+		return QuantValidation{}, fmt.Errorf("%w: %s/%s", ErrUnsupportedSchema, result.ResultType, result.PayloadSchemaVersion)
 	}
 
 	if err := validateEnvelope(result, policy); err != nil {
@@ -155,10 +213,10 @@ func (r *Registry) Validate(result QuantResultEnvelope, policy ValidationPolicy)
 }
 
 func validateEnvelope(result QuantResultEnvelope, policy ValidationPolicy) error {
-	if strings.TrimSpace(result.ResultID) == "" || strings.TrimSpace(result.Scope) == "" ||
+	if !quantResultIDRE.MatchString(result.ResultID) || strings.TrimSpace(result.Scope) == "" ||
 		strings.TrimSpace(result.Period) == "" || strings.TrimSpace(result.AlgorithmVersion) == "" ||
 		strings.TrimSpace(result.ParameterFingerprint) == "" || strings.TrimSpace(result.AuthorizationRef) == "" {
-		return fmt.Errorf("%w: required envelope field is empty", ErrInvalidQuantResult)
+		return fmt.Errorf("%w: required envelope field is empty or invalid", ErrInvalidQuantResult)
 	}
 	if !validScope(result.Scope) {
 		return fmt.Errorf("%w: unsupported scope %q", ErrInvalidQuantResult, result.Scope)
@@ -179,9 +237,8 @@ func validateEnvelope(result QuantResultEnvelope, policy ValidationPolicy) error
 		hasDuplicateOrInvalidRefs(result.InputSnapshotRefs) || !sort.StringsAreSorted(result.InputSnapshotRefs) {
 		return fmt.Errorf("%w: input_snapshot_refs is missing, empty or invalid", ErrInvalidQuantResult)
 	}
-	if !isUTC(result.SystemAsOf) || !isUTC(result.CreatedAt) ||
-		policy.ExpectedSystemAsOf.IsZero() || !isUTC(policy.ExpectedSystemAsOf) ||
-		!result.SystemAsOf.Equal(policy.ExpectedSystemAsOf) {
+	if !isUTC(result.SystemAsOf) || policy.ExpectedSystemAsOf.IsZero() ||
+		!isUTC(policy.ExpectedSystemAsOf) || !result.SystemAsOf.Equal(policy.ExpectedSystemAsOf) {
 		return fmt.Errorf("%w: system_as_of must match the Run and timestamps must be UTC", ErrInvalidQuantResult)
 	}
 	if result.TradeDate != "" {
@@ -228,11 +285,7 @@ func validResultStatus(value string) bool {
 }
 
 func isUTC(value time.Time) bool {
-	if value.IsZero() {
-		return false
-	}
-	_, offset := value.Zone()
-	return offset == 0
+	return !value.IsZero() && value.Location() == time.UTC
 }
 
 func hasDuplicateOrInvalidRefs(values []string) bool {
