@@ -119,7 +119,7 @@ try {
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, reducedMotion: "reduce" });
   await context.addInitScript(() => {
     localStorage.setItem("stock-provider-webui.settings.v1", JSON.stringify({
-      marketBase: "/market-api", analysisBase: "/analysis-api", apiKey: "data-center-probe-key"
+      marketBase: "/market-api", analysisBase: "/analysis-api", apiKey: "legacy-browser-key"
     }));
   });
   const page = await context.newPage();
@@ -132,7 +132,7 @@ try {
     const json = (status, body) => route.fulfill({
       status, contentType: "application/json", body: JSON.stringify(body)
     });
-    if (pathname.endsWith("/health/live") || pathname.endsWith("/healthz")) return json(200, { status: "ok" });
+    if (pathname.endsWith("/api/v1/owner/session") && request.method() === "GET") return json(200, { authenticated: true, expires_at: "2026-11-19T10:00:00Z" });\n    if (pathname.endsWith("/api/v1/owner/session/csrf") && request.method() === "POST") return json(200, { authenticated: true, csrf_token: "browser-probe-csrf" });\n    if (pathname.endsWith("/healthz")) return json(200, { status: "ok" });
     if (pathname.endsWith("/health/ready")) return json(200, { status: "ready" });
     if (pathname.endsWith("/readyz")) return json(200, { status: "ready", dependencies: { mariadb: "ok", redis: "ok" } });
     if (pathname.endsWith("/api/v1/data-sources/probe/history")) {
@@ -142,7 +142,7 @@ try {
     }
     if (pathname.endsWith("/api/v1/data-sources/probe") && request.method() === "POST") {
       probeRequests += 1;
-      probeRequestBody = request.postDataJSON();
+      probeRequestBody = request.postDataJSON();\n      probeRequestHeaders = request.headers();
       if (probeRequests > 1) return json(500, { error: { code: "probe_persist_failed", message: "探测结果持久化失败" } });
       return json(200, currentRun);
     }
@@ -168,7 +168,7 @@ try {
   await page.locator("#data-center-probe-symbol").fill("600519.sh");
   await page.locator("#data-center-probe-run").click();
   await page.waitForFunction(() => document.querySelector("#data-center-probe-summary")?.textContent.includes("probe-current"));
-  assert.deepEqual(probeRequestBody, {
+  assert.equal(probeRequestHeaders["x-csrf-token"], "browser-probe-csrf");\n  assert.equal(probeRequestHeaders["x-api-key"], undefined);\n  assert.deepEqual(probeRequestBody, {
     scope: "core", timeout_seconds: 9,
     checks: ["connectivity", "contract", "quality", "freshness", "cross_provider", "storage"],
     markets: ["SH_MAIN"], symbols: ["600519.SH"]
@@ -222,7 +222,7 @@ try {
   const noKeyContext = await browser.newContext({ viewport: { width: 1280, height: 900 }, reducedMotion: "reduce" });
   await noKeyContext.addInitScript(() => {
     localStorage.setItem("stock-provider-webui.settings.v1", JSON.stringify({
-      marketBase: "/market-api", analysisBase: "/analysis-api", apiKey: ""
+      marketBase: "/", analysisBase: "/"
     }));
   });
   const noKeyPage = await noKeyContext.newPage();
