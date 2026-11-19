@@ -115,7 +115,7 @@ export function analysisLiveness(settings, signal) {
   return request(settings.analysisBase, "/healthz", { signal });
 }
 export function analysisHealth(settings, signal) {
-  return request(settings.analysisBase, "/readyz", { signal });
+  return request(settings.analysisBase, "/api/readyz", { signal });
 }
 export function getDataSources(settings, signal) {
   return request(settings.marketBase, "/api/v1/data-sources", { signal });

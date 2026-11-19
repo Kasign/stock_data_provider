@@ -167,3 +167,23 @@ func TestOwnerSessionOrBearerDataHandlerUsesExplicitIdentityAndRejectsAmbiguousC
 		})
 	}
 }
+
+
+func TestReadinessAliasReusesRootReadinessHandler(t *testing.T) {
+	next := http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		if request.URL.Path != "/readyz" {
+			t.Fatalf("rewritten path = %q, want /readyz", request.URL.Path)
+		}
+		w.WriteHeader(http.StatusOK)
+	})
+	handler := rewriteURLPath(next, "/readyz")
+	request := httptest.NewRequest(http.MethodGet, "/api/readyz", nil)
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusOK)
+	}
+	if request.URL.Path != "/api/readyz" {
+		t.Fatalf("rewrite must not mutate the caller request, got %q", request.URL.Path)
+	}
+}

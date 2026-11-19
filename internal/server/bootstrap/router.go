@@ -48,6 +48,15 @@ func newHTTPHandler(authenticator *platformsecurity.Authenticator, health, legac
 		{pattern: "GET /api/v1/analysis/tasks/{task_id}", policy: platformsecurity.OwnerAccess(), handler: legacy},
 		{pattern: "GET /api/v1/analysis/tasks/{task_id}/events", policy: platformsecurity.OwnerAccess(), handler: legacy},
 	}
+	// The browser-visible readiness alias stays under /api so the HttpOnly
+	// Owner Session cookie remains scoped to the API path.
+	if ownerSession == nil {
+		routes = append(routes, struct {
+			pattern string
+			policy  platformsecurity.RoutePolicy
+			handler http.Handler
+		}{pattern: "GET /api/readyz", policy: platformsecurity.OwnerAccess(), handler: rewriteURLPath(health, "/readyz")})
+	}
 	for _, route := range routes {
 		if err := router.Handle(route.pattern, authenticator, route.policy, route.handler); err != nil {
 			return nil, err
@@ -75,6 +84,11 @@ func newHTTPHandler(authenticator *platformsecurity.Authenticator, health, legac
 		for _, pattern := range dataPatterns {
 			mux.Handle(pattern, dataHandler)
 		}
+		readinessHandler := newOwnerSessionOrBearerDataHandler(
+			authenticator, ownerSession.authenticator, ownerSession.cookie.Name,
+			rewriteURLPath(health, "/readyz"),
+		)
+		mux.Handle("/api/readyz", readinessHandler)
 		mux.Handle("/api/v1/owner/", ownerHandler)
 	}
 	mux.Handle("/", legacyHandler)
@@ -149,4 +163,22 @@ func hasCookie(request *http.Request, name string) bool {
 
 func ownerSessionCookie(composition *ownerSessionComposition) platformsecurity.SessionCookieConfig {
 	return composition.cookie
+}
+
+
+// rewriteURLPath adapts the browser-visible /api/readyz alias to the existing
+// Root readiness handler without duplicating readiness logic or diagnostics.
+func rewriteURLPath(next http.Handler, path string) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		if next == nil {
+			http.NotFound(w, request)
+			return
+		}
+		clone := request.Clone(request.Context())
+		urlCopy := *request.URL
+		urlCopy.Path = path
+		urlCopy.RawPath = ""
+		clone.URL = &urlCopy
+		next.ServeHTTP(w, clone)
+	})
 }
