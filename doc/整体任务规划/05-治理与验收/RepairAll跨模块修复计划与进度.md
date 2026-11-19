@@ -396,3 +396,9 @@ RA009 代码关闭条件已满足：Server 路由认证矩阵、CSRF、WebUI 请
 - 当前默认部署配置启用 Eastmoney、BaoStock、Tencent、Sina、Netease、TickFlow、Pytdx 七个 DailyBars Provider；Hithink、Tushare、Yahoo 为可配置来源。
 - 默认七个 Provider 均无 DailyBar.ProviderTime；SourceVersion 是 Adapter/API 版本常量；RawVolume/RawAmount 仍为 float64，不能保留原始十进制词法值。
 - Tencent/Sina 没有已验证 Amount 字段；Netease/Tencent 有单位判断逻辑；Pytdx 需要继续审查 TDX protocol Decimal 表示；这些均已登记到 DATA-CTR-005/007 解阻方案。
+
+
+### 28.11 Pytdx 协议精度缺口已定位
+
+- `github.com/injoyai/tdx v0.0.86` 的 `protocol.Price` 为 int64 定点值，单位厘，并提供 `Int64()` / `String()`；当前 Data Adapter 走 `Float64()` 造成可避免的精度丢失。后续应在 Adapter 入口保留定点值/Decimal String，不 fork 第三方库。
+- Amount 的业务单位不因复用 Price 类型而自动成立，仍需单独核验证据。
