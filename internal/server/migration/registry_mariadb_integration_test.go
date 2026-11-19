@@ -14,6 +14,9 @@ import (
 	mysqlDriver "github.com/go-sql-driver/mysql"
 
 	marketdatabootstrap "example.com/stock-analysis-flow/internal/marketdata/bootstrap"
+	marketdatacache "example.com/stock-analysis-flow/internal/marketdata/cache"
+	marketdatarepository "example.com/stock-analysis-flow/internal/marketdata/repository"
+	marketdataservice "example.com/stock-analysis-flow/internal/marketdata/service"
 	platformfault "example.com/stock-analysis-flow/internal/platform/fault"
 	platformstorage "example.com/stock-analysis-flow/internal/platform/storage"
 )
@@ -88,6 +91,29 @@ func TestRegistryMariaDBIntegration(t *testing.T) {
 
 	if err := registry.ValidateApplied(ctx, db); err != nil {
 		t.Fatalf("ValidateApplied rejected the applied schema: %v", err)
+	}
+	dataStore, err := marketdatarepository.NewWithBorrowedDB(db)
+	if err != nil {
+		t.Fatalf("create Data Store for readiness check: %v", err)
+	}
+	dataService := marketdataservice.NewWithCapabilities(
+		nil, nil, nil, marketdatacache.NewDisabled(), dataStore,
+		time.Minute, time.Minute, 1, 100, marketdataservice.ResilienceConfig{}, nil,
+	)
+	if err := dataService.Ready(ctx); err != nil {
+		t.Fatalf("Data readiness rejected the freshly migrated schema: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, "ALTER TABLE market_data_quotes DROP COLUMN turnover_rate"); err != nil {
+		t.Fatalf("simulate physical schema drift: %v", err)
+	}
+	if err := dataService.Ready(ctx); err == nil {
+		t.Fatal("Data readiness accepted a missing V4 compatibility column")
+	}
+	if _, err := db.ExecContext(ctx, "ALTER TABLE market_data_quotes ADD COLUMN turnover_rate DECIMAL(16,8) NULL"); err != nil {
+		t.Fatalf("restore compatibility column: %v", err)
+	}
+	if err := dataService.Ready(ctx); err != nil {
+		t.Fatalf("Data readiness rejected restored schema: %v", err)
 	}
 
 	if _, err := db.ExecContext(ctx,
