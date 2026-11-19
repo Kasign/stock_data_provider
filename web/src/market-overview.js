@@ -2,12 +2,11 @@ import { getMarketBreadth, getMarketCapitalFlow, getMarketHotStocks, getMarketIn
 import { describeApiError, finiteNumberOrNull, formatCompact, formatDateTime, formatPercent, formatPrice, qualityLabel } from "./format.js";
 const $ = (s) => document.querySelector(s);
 const KEYS = ["indices", "breadth", "sectors", "pool", "hot"];
-const REFRESH_OUTCOMES = new Set(["received", "unsupported", "provider_unavailable", "auth_failed", "failed", "needs_key", "cancelled"]);
+const REFRESH_OUTCOMES = new Set(["received", "unsupported", "provider_unavailable", "auth_failed", "failed", "cancelled"]);
 export function isCurrentSentimentHistoryRequest(sequence, currentSequence, signal) {
  return sequence === currentSequence && signal?.aborted !== true;
 }
-export function summarizeMarketOverviewRefresh(outcomes, configured = true) {
- if (!configured) return "请先配置行情 API Key 后刷新市场概况";
+export function summarizeMarketOverviewRefresh(outcomes) {
  const normalized = (Array.isArray(outcomes) ? outcomes : []).map(value => REFRESH_OUTCOMES.has(value) ? value : "failed");
  if (!normalized.length) return "本次未执行市场模块请求";
  const count = value => normalized.filter(item => item === value).length;
@@ -16,7 +15,6 @@ export function summarizeMarketOverviewRefresh(outcomes, configured = true) {
  if (count("provider_unavailable")) parts.push(`Provider 不可用 ${count("provider_unavailable")} 个`);
  if (count("auth_failed")) parts.push(`鉴权失败 ${count("auth_failed")} 个`);
  if (count("failed")) parts.push(`读取失败 ${count("failed")} 个`);
- if (count("needs_key")) parts.push(`缺少 API Key、未请求 ${count("needs_key")} 个`);
  if (count("cancelled")) parts.push(`已取消 ${count("cancelled")} 个`);
  if (count("received") === normalized.length) parts.push("请查看各模块来源时间与质量状态");
  return parts.join("；");
@@ -212,7 +210,6 @@ export function bindMarketOverview(getSettings,onSelectStock) {
   try{
    cancel(key);seq=generation[key];settings=typeof getSettings==="function"?getSettings():null;
    if(key==="sectors"&&sectorMetric==="flow"){showSectorMetricUnavailable();return "unsupported";}
-   if(!settings?.apiKey){pending(key,"请先在连接与密钥设置中配置行情 API Key。","warning");return "needs_key";}
    ctl=new AbortController();controllers[key]=ctl;pending(key,"正在读取…","pending");
    let data;
    if(key==="indices")data=await getMarketIndices(settings,ctl.signal);
@@ -242,10 +239,10 @@ export function bindMarketOverview(getSettings,onSelectStock) {
   let status=null,settings=null;
   try{
    settings=typeof getSettings==="function"?getSettings():null;
-   safeOverviewUi(()=>{status=$(statusSelector);if(status)status.textContent=settings?.apiKey?"正在刷新市场模块…":"配置行情 API Key 后加载市场数据";});
+   safeOverviewUi(()=>{status=$(statusSelector);if(status)status.textContent="正在刷新市场模块…";});
    const outcomes=await Promise.all(requested.map(load));
    if(currentGeneration!==refreshGenerations[statusSelector])return outcomes;
-   safeOverviewUi(()=>{if(status)status.textContent=summarizeMarketOverviewRefresh(outcomes,Boolean(settings?.apiKey));});
+   safeOverviewUi(()=>{if(status)status.textContent=summarizeMarketOverviewRefresh(outcomes);});
    return outcomes;
   }catch(error){
    if(currentGeneration!==refreshGenerations[statusSelector])return [];
@@ -317,12 +314,6 @@ export function bindMarketOverview(getSettings,onSelectStock) {
    return;
   }
   const settings=typeof getSettings==="function"?getSettings():null;
-  if(!settings?.apiKey){
-   if(status){status.textContent="请先配置行情服务 API Key";status.className="availability-pill is-unavailable";}
-   if(body)tableMessage(body,"未配置行情服务 API Key，本次未发起请求。");
-   meta("market-capital-flow-meta",[]);qualityReasons("market-capital-flow-reasons",[]);
-   return;
-  }
   const sequence=++capitalFlowGeneration;
   try{capitalFlowController?.abort();}catch{}
   const controller=new AbortController();capitalFlowController=controller;
@@ -368,7 +359,6 @@ export function bindMarketOverview(getSettings,onSelectStock) {
    return;
   }
   const settings=typeof getSettings==="function"?getSettings():null;
-  if(!settings?.apiKey){if(status)status.textContent="请先配置行情 API Key";return;}
   const button=$("#load-market-sentiment-history");
   const sequence=++sentimentHistoryGeneration;
   try{sentimentHistoryController?.abort();}catch{}
