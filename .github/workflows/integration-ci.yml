@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - integration
+      - repair_all
     paths:
       - '*.go'
       - '**/*.go'
