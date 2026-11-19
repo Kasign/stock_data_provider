@@ -6,6 +6,7 @@
 - 文档范围：`doc/research/**`
 - 首轮测试提交：`b7200f41eb4cc55459b8b8c87a4ac2cdb1909f31`
 - 修复提交：`b76754300f6a5159df3fdf210748661a2246507b`（`fix(research): 安全处理 Outbox 终态空租约`）
+- 最终验收 HEAD：`0d9dc0651a6e0bda3888d695f2ffec5545c248bd`
 - 任务性质：已完成 Outbox 能力的验收补充；不新增业务能力、状态、接口或数据库结构。
 
 ## 1. Review 结论
@@ -42,7 +43,14 @@
 
 - 首轮 Workflow Run [44309799495](https://github.com/Kasign/stock_data_provider/actions/runs/44309799495)，HEAD `b7200f41eb4cc55459b8b8c87a4ac2cdb1909f31`。Research MariaDB 用例在新测试的“confirmation after rejection”断言处失败；其余既有 Outbox 原子性、重试、并发领取、存储集成测试通过。该 Run 明确为失败，不得作为验收通过证据。
 - 修复提交 SHA：`b76754300f6a5159df3fdf210748661a2246507b`。
-- 本轮可用的 Actions 查询仅返回 PR 触发的 Workflow；针对该 SHA 返回空列表，Combined Status 也未返回状态。因此不能认定修复 CI 已运行或通过，Research MariaDB、模块 race/vet 和根模块门禁仍待可验证的 Actions 证据。
+- 修复后最终 Workflow Run [44439983842](https://github.com/Kasign/stock_data_provider/actions/runs/44439983842)，HEAD `0d9dc0651a6e0bda3888d695f2ffec5545c248bd`，整体结论 `success`。
+- Research MariaDB migration/repository integration、Research module format/tests/race/vet、根模块 `Test .` 和 `Test go-core` 均为 success；本次实际执行的 Researchflow/Notification 相关 Jobs 也为 success。
+- Compose、Market Data、News 等 Job 为 skipped，不得解释为通过。本 Run 的成功结论只覆盖实际执行并成功的 Job。
 - 测试要求设置 `RESEARCH_TEST_MYSQL_DSN`，并沿用数据库名必须以 `_test` 结尾的安全限制。没有 DSN 时按现有集成测试约定 Skip，不得把 Skip 记为 Pass。
 - 不修改 Outbox Migration、Application Port 或 Notification Relay。
 - 不代表 Server Root Relay、Worker 生命周期或 Notification 生产回执闭环已完成。
+
+
+## 4. 最终验收结论（2026-11-19）
+
+RSC-007 本轮补充回归验收通过。自然过期租约重新领取、旧 Worker 过期 token 的确认/重试/拒绝 fencing、当前 Worker 拒绝、rejected 消息不可再次领取及租约字段清空，均由 Research MariaDB 集成 Job 实际执行验证。`MarkOutboxPublished` 对终态 SQL NULL 租约列的安全读取修复已通过同一验收链路。该结论不替代 Server Root Migration/Relay/Worker 的系统组合验收。

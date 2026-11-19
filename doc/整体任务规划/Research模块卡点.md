@@ -1,8 +1,8 @@
 # Research 模块卡点
 
-- 更新日期：2026-11-18
+- 更新日期：2026-11-19
 - 对应模块分支：`feat/research`
-- Research 代码与模块状态核对基线：`54df58e9ad6c201eb904b437f8cd67568433dfef`（本轮卡点复核前的最新模块提交）
+- Research 代码与模块状态核对基线：`0d9dc0651a6e0bda3888d695f2ffec5545c248bd`（Diagnostics 脱敏测试修复后的当前验收 HEAD）
 - 代码范围：`internal/research/**`
 - 模块文档：`doc/research/**`
 - 本文用途：记录 Research 当前无法独立闭环的外部依赖、责任方、影响和重新进入条件；不替代 Research 模块任务规划，也不冻结或修改跨模块契约。
@@ -11,7 +11,7 @@
 
 Research 的领域基础能力、Repository/Outbox、Context 消费契约测试及 Event 版本血缘规则级实现已经具备。当前剩余工作主要依赖上游真实证据、公开消费契约和 Server 生产装配。
 
-**当前 Research 没有可以安全继续扩展的独立业务代码任务。** 不应为了消除等待状态而猜测时间来源、证券/行业引用格式、诊断消费者或 Quant 结果结构。可以继续做证据核对和模块内 Review；外部条件未满足前，不新增替代接口、字段、表或解析规则。
+**当前 Research 没有可以安全继续扩展的独立业务代码任务。** 本轮 Diagnostics 脱敏测试和 Outbox 终态空租约修复已由 Run `44439983842` 在当前精确 SHA 上通过 Research 专项与 MariaDB 验收。剩余事项主要等待上游真实证据、消费者调用点和 Server 生产装配；不应猜测时间来源、证券/行业引用格式、诊断消费者或 Quant 结果结构。
 
 ## 2. 卡点清单
 
@@ -24,7 +24,7 @@ Research 的领域基础能力、Repository/Outbox、Context 消费契约测试�
 | RSC-006 Scenario/Quant Evaluation 消费 | WAITING_DEPENDENCY | Quant 尚无完整可注入的计算 Application Facade/Metric Registry 生产闭环；Researchflow 尚未提供对应真实消费者调用链；Factor 相关契约受 DATA-CTR-005/007 与 QNT-CTR-003 deferred 约束 | Quant、Researchflow、Data | 不预建 Scenario API/Repository，不在 Research 重算 Quant 指标，不接受未注册或不可验证的结果引用 |
 | RSC-008 Research Diagnostics 消费验收 | WAITING_DEPENDENCY | Research 的领域 Check/DiagnosticsPort 已存在，但 Researchflow 尚未提供真实 Facade/Check 消费点；Platform Runner 的通用执行能力由 Platform 提供 | Researchflow、Platform | 不虚构消费者、不复制 Diagnostics Runner；暂不能完成消费者状态映射和运行时装配验收 |
 | RSC-001 生产身份与授权装配 | Research 模块范围 DONE；系统验收待完成 | Research 消费契约测试已覆盖；Server 仍需从可信 Principal 注入 CallerRef 并装配真实 Context Owner Authorizer | Server | 不在 Research 内伪造生产 Principal 或重复实现授权装配 |
-| RSC-007 Root Migration/Relay/Worker 组合验收 | Research 模块范围 DONE；系统验收待完成 | Research 自有 Repository、Migration v1、事务 Outbox 已实现；根 Migration 注册、Relay/Worker 生命周期属于组合根职责 | Server、Integration | 不重复建设 Root Migration Runner、Relay 或 Worker 生命周期 |
+| RSC-007 Root Migration/Relay/Worker 组合验收 | Research 模块范围 DONE；本轮 Research MariaDB 回归验收通过；系统验收待完成 | Research 自有 Repository、Migration v1、事务 Outbox 及自然过期租约/旧 token fencing/拒绝终态回归已通过 Run `44439983842`；根 Migration 注册、Relay/Worker 生命周期属于组合根职责 | Server、Integration | 不重复建设 Root Migration Runner、Relay 或 Worker 生命周期 |
 
 ## 3. 上游当前状态核对依据
 
@@ -54,3 +54,12 @@ Research 的领域基础能力、Repository/Outbox、Context 消费契约测试�
 4. 不为等待中的任务创建空壳接口、默认注册项、假数据、临时表或 Mock 生产装配。
 5. 每次上游状态变化后只做定点复核：核验契约状态、公开 Port、真实样本和精确 SHA；满足重新进入条件再恢复对应 Research 任务。
 6. 本文记录的是 Research 当前卡点快照；模块内部任务状态仍以 `doc/research/当前任务状态和进度.md` 为准，项目级契约状态仍以 `doc/contract/PLAT-002-项目级契约冻结登记簿.md` 为准。
+
+
+## 6. 本轮模块内验收更新（2026-11-19）
+
+- 当前 Research HEAD：`0d9dc0651a6e0bda3888d695f2ffec5545c248bd`。
+- Workflow Run [44439983842](https://github.com/Kasign/stock_data_provider/actions/runs/44439983842) 整体结论为 `success`；Research module format/tests/race/vet、Research MariaDB migration/repository integration、根模块 `Test .`、`Test go-core` 均通过。
+- Research Diagnostics 脱敏测试使用符合 Event 版本血缘规则的 EventVersion=1 样本；不放宽生产版本校验。诊断结果语义、PIT 时间边界、Owner 授权复核、快照隔离和敏感信息不泄露的测试结论记录于 `doc/research/任务历史/14-RSC-008-Diagnostics脱敏边界与结果语义审查.md`。
+- 本次 Compose、Market Data、News 等 Job 为 skipped；它们不构成通过证据，也不改变相应模块卡点。
+- 跨模块卡点仍按本文表格执行：News/Data/Quant/Researchflow 提供重新进入证据，Server 负责生产身份、Migration/Relay/Worker 组合装配。
