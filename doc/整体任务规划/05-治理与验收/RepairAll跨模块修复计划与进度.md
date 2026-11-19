@@ -349,3 +349,12 @@ RA009 代码关闭条件已满足：Server 路由认证矩阵、CSRF、WebUI 请
 - RA009 的代码与 CI 已通过；Data/Server 文档中早期“等待最新 CI”的文字属于历史快照，以 RA009 最终验收记录为准。M6 目标环境证据仍开放。
 - RA-CROSS-REVIEW-010 已完成，不重复执行 Diagnostics 全面审查；只在真实 Resolver/Worker/消费者接入后补充相应注册和测试。
 - Data、News、Research、Researchflow、Quant、LLM、Notification 的业务卡点仍开放，具体以本节统一登记和各模块卡点文档为准。
+
+
+### 28.5 阶段 1 首个工作包：DATA-CTR-005 / DATA-CTR-007（已启动）
+
+- 已核对项目级冻结登记簿：DATA-CTR-005/007 均为 deferred；DEC-PLAT-002-020 已接受 Data Snapshot、Manifest、交易日历来源/版本和 Research Evidence 映射的责任决议；DEC-PLAT-002-047 已明确 Quant Factor 需要 interval=1d 与不可变交易日历版本。
+- 已核对真实代码：Data Model/Application Port 的 DailyBar 使用 float64；Tushare/BaoStock 在 Provider 入口 ParseFloat；Hithink 日线 JSON 解码为 float64；MariaDB 当前 OHLC DECIMAL(20,8)、Amount DECIMAL(24,2)、ChangePercent DECIMAL(16,8)。因此不能从现有 float64 反向恢复精度，也不能把 DB scale 作为源端精度契约。
+- 当前 DailyBarsSnapshot 只是查询结果 DTO；未发现 Data-owned 不可变 Payload Repository、SnapshotRef 内容寻址和读取时 AuthorizationRef 复核实现。DATA-CTR-008 Manifest Schema/Golden 只描述元数据，不包含行情 Payload。
+- 已新增 Data 解阻方案 `doc/api/依赖/02-DATA-CTR-005与007解阻方案.md`，明确 D1-D7：字段证据盘点、DailyBars v2、交易日历/复权完整性、Snapshot 持久化、授权/Server 装配、Research Evidence 映射、Quant 消费验收。
+- 当前只进入 D1 证据盘点；不擅自修改冻结登记簿，不以文档方案代替实现验收。下一步从现有 Provider 代码、历史 Live Probe Artifact 和交易日历 Repository 继续收集证据，再决定可直接实施的代码项。
