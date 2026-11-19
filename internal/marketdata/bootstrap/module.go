@@ -54,13 +54,6 @@ type Dependencies struct {
 
 const MigrationNamespace = "market_data"
 
-// MigrationRunner 是独立 Data 命令的兼容迁移入口；Root Server 必须注册静态定义并统一执行。
-type MigrationRunner interface {
-	Migrate(ctx context.Context) error
-}
-
-var _ MigrationRunner = (*repository.Store)(nil)
-
 // MigrationDefinitions 返回由 Root Server 统一执行的 Data Schema 迁移定义。
 func MigrationDefinitions() []platformstorage.Migration {
 	return repository.MigrationDefinitions()
@@ -134,7 +127,6 @@ func New(cfg config.Config, deps Dependencies) (*Module, error) {
 	return module, nil
 }
 
-// Handler 返回由 Module 组装的 HTTP Handler。
 // Application 返回供模块内消费者调用的窄化 Application Port。
 // InProcessHandler 返回由 Root Server 负责外层认证和传输策略的业务路由。
 func (m *Module) InProcessHandler() http.Handler {
@@ -157,14 +149,6 @@ func (m *Module) Diagnostics() Diagnostics {
 		return nil
 	}
 	return m.diagnostics
-}
-
-// MigrationRunner 返回独立 Data 命令使用的兼容迁移入口；Root Server 不调用该入口。
-func (m *Module) MigrationRunner() MigrationRunner {
-	if m == nil || m.store == nil {
-		return nil
-	}
-	return m.store
 }
 
 // ProviderSummary 返回启动日志使用的 Provider 名称快照。

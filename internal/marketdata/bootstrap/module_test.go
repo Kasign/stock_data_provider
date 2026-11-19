@@ -13,7 +13,6 @@ import (
 
 func testConfig() config.Config {
 	return config.Config{
-		HTTPAddr:                "127.0.0.1:0",
 		RequestTimeout:          10 * time.Second,
 		ProviderTimeout:         5 * time.Second,
 		CircuitFailureThreshold: 3,
@@ -71,18 +70,6 @@ func TestNewExposesApplicationHTTPAndDiagnostics(t *testing.T) {
 	}
 	if err := module.Close(context.Background()); err != nil {
 		t.Fatalf("second Close() error = %v", err)
-	}
-}
-
-func TestModuleMigrationRunnerIsNilWhenStorageDisabled(t *testing.T) {
-	module, err := New(testConfig(), testDependencies())
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
-	defer module.Close(context.Background())
-
-	if runner := module.MigrationRunner(); runner != nil {
-		t.Fatalf("MigrationRunner() = %T, want nil when storage is disabled", runner)
 	}
 }
 

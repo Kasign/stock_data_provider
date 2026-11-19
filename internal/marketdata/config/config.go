@@ -284,9 +284,6 @@ func load(requireHTTPAPIKey, allowRootInjectedStorage bool) (Config, error) {
 	if dsnErr != nil {
 		return cfg, dsnErr
 	}
-	if requireHTTPAPIKey && !validSecret(cfg.APIKey) {
-		return cfg, errors.New("MARKET_DATA_API_KEY must be a non-placeholder secret with at least 32 characters")
-	}
 	for name, endpoint := range map[string]string{
 		"MARKET_DATA_EASTMONEY_QUOTE_URL":           cfg.EastmoneyQuoteURL,
 		"MARKET_DATA_EASTMONEY_KLINE_URL":           cfg.EastmoneyKlineURL,
