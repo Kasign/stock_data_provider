@@ -58,6 +58,7 @@ type Quote struct {
 	NormalizationVer   string          `json:"normalization_version"`
 }
 
+// DailyBarExactValues keeps exact decimal values for Data v2. OHLC are the final values after the requested adjustment; RawVolume/RawAmount retain the source values before unit normalization.
 type DailyBarExactValues struct {
 	Open      string  `json:"open"`
 	High      string  `json:"high"`
@@ -112,7 +113,7 @@ type DailyBar struct {
 	FallbackReason                        string          `json:"fallback_reason,omitempty"`
 	RequestID                             string          `json:"request_id,omitempty"`
 	NormalizationVer                      string          `json:"normalization_version"`
-	// ExactValues 保留 Provider/协议层的十进制值；只进入 Data revision metadata，不暴露到旧 HTTP JSON。
+	// ExactValues 保留 DailyBars v2 所需的精确值；只进入 Data revision metadata，不暴露到旧 HTTP JSON。
 	ExactValues                           *DailyBarExactValues `json:"-"`
 }
 

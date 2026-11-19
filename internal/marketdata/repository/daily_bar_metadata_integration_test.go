@@ -36,11 +36,11 @@ func TestMariaDBDailyBarExactValuesPersistAcrossCurrentAndPITReads(t *testing.T)
 	bar := model.DailyBar{
 		Symbol: "999999.SH", TradeDate: "2026-11-18", Period: "1d",
 		Open: 10.123, High: 10.456, Low: 10.001, Close: 10.321,
-		Volume: ptrInt64(1234500), Amount: ptrFloat64(987654.321),
+		Volume: dailyBarExactInt64Ptr(1234500), Amount: dailyBarExactFloat64Ptr(987654.321),
 		AdjustmentBasis: model.AdjustmentNone, Source: "exact-values-integration",
 		SourceVersion: "adapter-v1", FetchedAt: fetchedAt, NormalizedAt: fetchedAt,
-		RawVolume: ptrFloat64(12345), RawVolumeUnit: "hands",
-		RawAmount: ptrFloat64(987654.321), RawAmountUnit: "CNY",
+		RawVolume: dailyBarExactFloat64Ptr(12345), RawVolumeUnit: "hands",
+		RawAmount: dailyBarExactFloat64Ptr(987654.321), RawAmountUnit: "CNY",
 		VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid,
 		NormalizationVer: "normalization-v1",
 		ExactValues: &model.DailyBarExactValues{
@@ -71,5 +71,5 @@ func TestMariaDBDailyBarExactValuesPersistAcrossCurrentAndPITReads(t *testing.T)
 	}
 }
 
-func ptrInt64(value int64) *int64 { return &value }
-func ptrFloat64(value float64) *float64 { return &value }
+func dailyBarExactInt64Ptr(value int64) *int64 { return &value }
+func dailyBarExactFloat64Ptr(value float64) *float64 { return &value }
