@@ -257,7 +257,7 @@ ON market_data_adjustment_factor_versions (symbol, trade_date, source, source_ve
 	}
 }
 
- // Migrate 保留给独立 Data 命令使用；Root Server 应注册 MigrationDefinitions 到统一 Registry。
+// Migrate 保留给独立 Data 命令使用；Root Server 应注册 MigrationDefinitions 到统一 Registry。
 func (s *Store) Migrate(ctx context.Context) error {
 	if s == nil || s.db == nil {
 		return nil
