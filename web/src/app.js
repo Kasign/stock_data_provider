@@ -695,12 +695,6 @@ async function refreshWatchlistQuotes() {
     renderWatchlist();
     return;
   }
-  if (!state.settings?.apiKey) {
-    state.watchlistQuoteStatus = "needs-key";
-    state.watchlistQuoteMessage = "请先在设置中心配置行情 API Key，再刷新批量行情。";
-    renderWatchlist();
-    return;
-  }
 
   try { state.watchlistQuoteController?.abort(); } catch {}
   const controller = new AbortController();
@@ -1211,10 +1205,6 @@ function scheduleStockSearch() {
   const query = $("#symbol-input").value.trim();
   if (!query) {
     setStockSearchMessage("", { show: false });
-    return;
-  }
-  if (!state.settings.apiKey) {
-    setStockSearchMessage("请先在连接与密钥设置中配置行情服务 API Key。", { show: true });
     return;
   }
   setStockSearchMessage("正在搜索证券目录…", { show: true });
@@ -1836,7 +1826,7 @@ function setView(view, { updateHash = true, refreshData = true } = {}) {
   const requestedView = legacyMarketView ? "market" : view;
   const nextView = Object.hasOwn(VIEW_META, requestedView) ? requestedView : "market";
   const previousView = state.view;
-  if (previousView === "settings" && nextView !== "settings") setMarketKeyVisibility(false);
+  if (previousView === "settings" && nextView !== "settings")
   state.view = nextView;
   if (legacyMarketView && window.location.hash === "#market-data") window.history.replaceState(null, "", "#market");
   syncWatchlistGroupControls();
@@ -2438,8 +2428,7 @@ async function checkConnectionFromSettings() {
     const currentSettings = state.settings;
     if (
       currentSettings.marketBase !== settingsToCheck.marketBase ||
-      currentSettings.analysisBase !== settingsToCheck.analysisBase ||
-      currentSettings.apiKey !== settingsToCheck.apiKey
+      currentSettings.analysisBase !== settingsToCheck.analysisBase
     ) {
       writeSettingsCheckOutputSafely(
         output,
@@ -2460,8 +2449,7 @@ async function checkConnectionFromSettings() {
     const currentSettings = state.settings;
     const configurationChanged = settingsToCheck && (
       currentSettings.marketBase !== settingsToCheck.marketBase ||
-      currentSettings.analysisBase !== settingsToCheck.analysisBase ||
-      currentSettings.apiKey !== settingsToCheck.apiKey
+      currentSettings.analysisBase !== settingsToCheck.analysisBase
     );
     let message = "连接检查失败：" + settingsCheckErrorMessage(error);
     if (!settingsToCheck) message = "连接检查未能启动：" + settingsCheckErrorMessage(error);
@@ -2517,8 +2505,7 @@ async function checkDraftConnectionFromSettings() {
     if (
       connectionDraftChanged(testedDraft, currentDraft) ||
       currentSettingsToCheck.marketBase !== settingsToCheck.marketBase ||
-      currentSettingsToCheck.analysisBase !== settingsToCheck.analysisBase ||
-      currentSettingsToCheck.apiKey !== settingsToCheck.apiKey
+      currentSettingsToCheck.analysisBase !== settingsToCheck.analysisBase
     ) {
       writeSettingsCheckOutputSafely(
         output,
@@ -2657,11 +2644,6 @@ async function refreshSources() {
       // 若按钮无法更新，仍继续执行能力读取。
     }
 
-    if (!settings.apiKey) {
-      if (generation !== sourceRefreshGeneration) return;
-      showMessage("尚未配置行情 API Key。密钥保存在当前浏览器本地。");
-      return;
-    }
 
     const payload = await getDataSources(settings, controller.signal);
     if (controller.signal.aborted || generation !== sourceRefreshGeneration) return;
@@ -2816,7 +2798,7 @@ async function runQuoteQuery(event) {
   let adjustment;
   try {
     symbol = getQuerySymbol();
-    state.settings.marketBase = normalizeBasePath(state.settings.marketBase, "/market-api");
+    state.settings.marketBase = normalizeBasePath(state.settings.marketBase, "/");
     startDate = $("#bar-start-date").value;
     endDate = $("#bar-end-date").value;
     limit = Number($("#bar-limit").value) || 120;
@@ -2833,12 +2815,6 @@ async function runQuoteQuery(event) {
   const requestKey = quoteQueryKey(symbol, startDate, endDate, limit, adjustment);
   if (state.isQuerying && state.quoteQueryKey === requestKey) return;
   if (state.isQuerying) cancelQuoteQuery();
-  if (!state.settings.apiKey) {
-    cancelQuoteQuery({ clearResults: true, symbol, message: "请先在连接与密钥设置中配置行情 API Key。" });
-    setNotice("请先打开“连接与密钥设置”，填写行情服务的 MARKET_DATA_API_KEY。", "warning");
-    setView("settings");
-    return;
-  }
 
   // 新的用户行情查询允许后续成功回包建立新的临时问股上下文。
   const generation = ++state.quoteQueryGeneration;
@@ -4163,19 +4139,10 @@ async function copyText(text) {
   if (!copied) throw new Error("浏览器未允许复制，请手动展开原始 JSON 后复制。");
 }
 
-function setMarketKeyVisibility(visible) {
-  const input = $("#market-key-input");
-  const button = $("#toggle-market-key-visibility");
-  input.type = visible ? "text" : "password";
-  button.textContent = visible ? "隐藏" : "显示";
-  button.setAttribute("aria-pressed", String(visible));
-}
-
 function readConnectionDraft() {
   return {
     marketBase: $("#market-base-input").value,
     analysisBase: $("#analysis-base-input").value,
-    apiKey: $("#market-key-input").value
   };
 }
 
@@ -4198,15 +4165,7 @@ function syncConnectionDraftState() {
 function openSettings() {
   $("#market-base-input").value = state.settings.marketBase;
   // Never echo the persisted API key into the input DOM, even though it is password-masked.
-  $("#market-key-input").value = "";
-  $("#market-key-input").placeholder = state.settings.apiKey
-    ? "已配置 Key；留空保留当前值"
-    : "填写 MARKET_DATA_API_KEY";
-  setMarketKeyVisibility(false);
   $("#analysis-base-input").value = state.settings.analysisBase;
-  $("#settings-feedback").textContent = state.settings.apiKey
-    ? "已保存的 Key 不会回显；留空会保留它。清除操作会删除当前浏览器保存的 Key。"
-    : "连接配置仅保存在当前浏览器。";
   initialConnectionDraft = readConnectionDraft();
   syncConnectionDraftState();
   $("#settings-check-draft-connection").disabled = false;
@@ -4350,8 +4309,7 @@ function runSettingsApplyStep(label, operation, failures) {
 function applySettings(nextSettings, { persistPreviousActiveTask = true } = {}) {
   const previousSettings = state.settings;
   const analysisBaseChanged = previousSettings.analysisBase !== nextSettings.analysisBase;
-  const marketConnectionChanged = previousSettings.apiKey !== nextSettings.apiKey ||
-    previousSettings.marketBase !== nextSettings.marketBase;
+  const marketConnectionChanged = previousSettings.marketBase !== nextSettings.marketBase;
   const failures = [];
 
   // 保存上一任务的引用属于辅助操作；存储异常不能阻止已持久化的新连接配置生效。
@@ -4416,61 +4374,7 @@ function applySettings(nextSettings, { persistPreviousActiveTask = true } = {}) 
   runSettingsApplyStep("重置连接配置表单失败：", () => {
     $("#market-base-input").value = state.settings.marketBase;
     $("#analysis-base-input").value = state.settings.analysisBase;
-    $("#market-key-input").value = "";
-    $("#market-key-input").placeholder = state.settings.apiKey ? "已配置 Key；留空保留当前值" : "填写 MARKET_DATA_API_KEY";
-    setMarketKeyVisibility(false);
-    $("#settings-feedback").textContent = state.settings.apiKey
-      ? "连接配置已保存。已保存的 Key 不会回显；留空会保留当前值。"
-      : "连接配置已保存到当前浏览器。";
-    initialConnectionDraft = readConnectionDraft();
-    syncConnectionDraftState();
-    $("#settings-draft-connection-check").textContent = "尚未检查未保存配置。";
-    $("#settings-draft-connection-check").className = "settings-inline-status";
-  }, failures);
-
-  // 网络刷新与当前设置应用解耦，并显式收敛 Promise rejection。
-  runSettingsApplyStep("刷新服务健康状态失败：", () => refreshServices(), failures);
-  if (state.view === "market") {
-    runSettingsApplyStep("刷新市场工作台失败：", () => refreshMarketWorkspace(), failures);
-  } else if (state.view === "stocks") {
-    runSettingsApplyStep("刷新数据源能力失败：", () => refreshSources(), failures);
-    if (state.settings.apiKey) {
-      runSettingsApplyStep("重新查询行情失败：", () => runQuoteQuery(), failures);
-    }
   }
-  reportSettingsApplyFailures(failures);
-}
-
-
-function saveSettingsFromForm() {
-  const form = $("#settings-form");
-  if (!form.reportValidity()) return;
-  if (!connectionDraftIsDirty()) {
-    $("#settings-feedback").textContent = "没有待保存的更改。";
-    return;
-  }
-  try {
-    const merged = mergeConnectionDraft(readConnectionDraft(), state.settings);
-    const next = saveSettings(merged);
-    applySettings(next);
-  } catch (error) {
-    $("#settings-feedback").textContent = error.message;
-  }
-}
-
-function discardConnectionDraft() {
-  $("#market-base-input").value = state.settings.marketBase;
-  $("#analysis-base-input").value = state.settings.analysisBase;
-  $("#market-key-input").value = "";
-  setMarketKeyVisibility(false);
-  initialConnectionDraft = readConnectionDraft();
-  syncConnectionDraftState();
-  $("#settings-draft-connection-check").textContent = "尚未检查未保存配置。";
-  $("#settings-draft-connection-check").className = "settings-inline-status";
-  $("#settings-feedback").textContent = state.settings.apiKey
-    ? "已放弃未保存的连接配置更改；已保存的 API Key 不会回显。"
-    : "已放弃未保存的连接配置更改。";
-}
 
 function clearLocalSettings() {
   if (!window.confirm("确定清除当前浏览器保存的旧连接配置？不会修改服务器配置。")) return;
@@ -4607,7 +4511,6 @@ function handleLocalStorageChange(event) {
       if (preserveDraft && draft) {
         $("#market-base-input").value = draft.marketBase;
         $("#analysis-base-input").value = draft.analysisBase;
-        $("#market-key-input").value = draft.apiKey;
         syncConnectionDraftState();
         $("#settings-feedback").textContent = "已同步其他标签页保存的连接配置；当前未保存草稿已保留，请核对后再保存。";
       } else {
@@ -4904,7 +4807,6 @@ async function applyBrowserDataImport(imported, currentWatchlist, currentRecentT
     nextSettings = saveSettings({
       marketBase: imported.marketBase,
       analysisBase: imported.analysisBase,
-      apiKey: state.settings.apiKey
     });
     localStorage.setItem(THEME_STORAGE_KEY, imported.theme);
     localStorage.setItem(PREFERENCES_KEY, JSON.stringify(imported.preferences));
@@ -5381,11 +5283,7 @@ $("#refresh-button").addEventListener("click", async () => {
 $("#open-settings").addEventListener("click", () => setView("settings"));
 $("#save-settings").addEventListener("click", saveSettingsFromForm);
 $("#cancel-settings").addEventListener("click", discardConnectionDraft);
-$("#settings-form").addEventListener("input", syncConnectionDraftState);
-$("#toggle-market-key-visibility").addEventListener("click", () => {
-  setMarketKeyVisibility($("#market-key-input").type === "password");
-});
-$("#clear-settings").addEventListener("click", clearLocalSettings);
+$("#settings-form").addEventListener("input", syncConnectionDraftState);$("#clear-settings").addEventListener("click", clearLocalSettings);
 $("#task-form").addEventListener("submit", createTask);
 $("#load-local-watchlist").addEventListener("click", fillTaskSymbolsFromWatchlist);
 $("#task-symbols").addEventListener("input", () => {
