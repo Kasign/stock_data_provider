@@ -59,3 +59,58 @@ func TestTradingCalendarPersistsImmutableSnapshotAcrossCacheHits(t *testing.T) {
 		t.Fatalf("cache hit must resolve the same immutable calendar without refetching: first=%+v second=%+v calls=%d", first, second, calendarProvider.calls)
 	}
 }
+
+
+func TestTradingCalendarAsOfUsesObservedRepositoryVersionWithoutLiveProvider(t *testing.T) {
+	dsn := os.Getenv("MARKET_DATA_TEST_MYSQL_DSN")
+	if dsn == "" {
+		dsn = os.Getenv("SERVER_RELAY_TEST_MYSQL_DSN")
+	}
+	if dsn == "" {
+		t.Skip("MARKET_DATA_TEST_MYSQL_DSN is not configured")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	store, err := repository.OpenMySQL(ctx, dsn)
+	if err != nil {
+		t.Fatalf("open MariaDB: %v", err)
+	}
+	defer store.Close()
+	if err := store.Migrate(ctx); err != nil {
+		t.Fatalf("migrate Data schema: %v", err)
+	}
+
+	asOf := time.Now().UTC().Truncate(time.Microsecond).Add(-time.Minute)
+	first := validTestTradingCalendar()
+	first.FetchedAt = asOf.Add(-2 * time.Minute)
+	firstObserved := asOf.Add(-time.Minute)
+	firstRef, _, err := store.SaveTradingCalendarSnapshot(ctx, first, firstObserved)
+	if err != nil {
+		t.Fatalf("save calendar visible at as_of: %v", err)
+	}
+	second := validTestTradingCalendar()
+	second.Items[1].IsTradingDay = false
+	second.TradingDays = 1
+	second.QualityReasons = append(second.QualityReasons, "future_calendar_revision")
+	second.FetchedAt = asOf.Add(-30 * time.Second)
+	secondObserved := asOf.Add(time.Second)
+	if _, _, err := store.SaveTradingCalendarSnapshot(ctx, second, secondObserved); err != nil {
+		t.Fatalf("save calendar newer than as_of: %v", err)
+	}
+
+	liveProvider := &testTradingCalendarProvider{snapshot: second}
+	svc := NewWithCapabilities([]provider.NamedProvider{liveProvider}, nil, nil,
+		cache.NewDisabled(), store, time.Second, time.Second, 120, 2000, ResilienceConfig{}, nil)
+	svc.SetTradingCalendarProviders([]provider.TradingCalendarProvider{liveProvider})
+
+	got, err := svc.TradingCalendarAsOf(ctx, first.StartDate, first.EndDate, asOf)
+	if err != nil {
+		t.Fatalf("read calendar as of historical cutoff: %v", err)
+	}
+	if got.CalendarRef != firstRef || got.TradingDays != 2 {
+		t.Fatalf("service must return the repository version visible at as_of: got=%+v want_ref=%s", got, firstRef)
+	}
+	if liveProvider.calls != 0 {
+		t.Fatalf("TradingCalendarAsOf must not consult live Providers, calls=%d", liveProvider.calls)
+	}
+}

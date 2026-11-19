@@ -441,3 +441,9 @@ RA009 代码关闭条件已满足：Server 路由认证矩阵、CSRF、WebUI 请
 - gofmt、根模块 vet/test、跨模块测试、Worker MariaDB/Redis、go-core vet/test、Compose、WebUI 语法/单测/镜像构建均通过。
 - DailyBarsAsOf 历史日历选择修复通过完整 CI；dc866b 首轮唯一 gofmt 格式问题已修正，没有修改门禁。
 - D2 下一步不是直接改旧 v1，而是完成 CalendarRef Snapshot 传播设计、ChangePercent/scale/amount 证据审查，再确定版本化 DTO 实现范围。
+
+
+### 28.18 PIT 日历 Service 入口集成测试补充（2026-11-19）
+
+- 增加 Service + MariaDB 集成测试，验证 TradingCalendarAsOf 只返回截止时点前已观察的 CalendarRef，不访问实时 Provider。
+- 用例覆盖“asOf 可见旧版本 + 数据库存在未来新版本 + 实时 Provider 返回未来版本”的组合，防止未来版本通过 Service 入口泄漏。
