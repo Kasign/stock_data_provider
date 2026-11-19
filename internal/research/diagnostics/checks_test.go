@@ -421,10 +421,10 @@ func TestEventAndClaimChecksDoNotExposeDomainText(t *testing.T) {
 	}
 	claim := researchclaim.Claim{
 		ClaimID: "claim-private", ClaimVersion: 4,
-		Statement: "不得进入诊断输出的研究判断",
+		Statement:     "不得进入诊断输出的研究判断",
 		EpistemicType: researchclaim.EpistemicReportedFact,
-		ScopeRefs: []string{"security:600000"}, SystemAsOf: cutoff,
-		SupportingEvidenceRefs: []string{"evidence:private"},
+		ScopeRefs:     []string{"security:600000"}, SystemAsOf: cutoff,
+		SupportingEvidenceRefs:    []string{"evidence:private"},
 		ContradictingEvidenceRefs: []string{}, RequiredDataRefs: []string{},
 		Status: researchclaim.StatusProposed, Limitations: []string{},
 	}
