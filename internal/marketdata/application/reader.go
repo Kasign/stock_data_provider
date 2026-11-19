@@ -208,14 +208,25 @@ func (r *Reader) GetDailyBarsV2(ctx context.Context, query app.DailyBarsQuery) (
 		return app.DailyBarsV2Snapshot{}, err
 	}
 	calendarRangeExplicit := strings.TrimSpace(query.StartDate) != "" && strings.TrimSpace(query.EndDate) != ""
-	calendarReferenceMissing := evidence.CoverageBasis == "exchange_calendar_unreferenced" || !calendarRangeExplicit
-	if !calendarRangeExplicit {
+	calendarQualityUnreliable := containsReaderString(evidence.Warnings, "daily_bar_coverage_uses_degraded_trading_calendar")
+	calendarReferenceMissing := evidence.CoverageBasis == "exchange_calendar_unreferenced" || !calendarRangeExplicit || calendarQualityUnreliable
+	calendarDegradationReason := ""
+	switch {
+	case !calendarRangeExplicit:
+		calendarDegradationReason = "daily_bar_coverage_explicit_range_required_for_calendar_ref"
 		evidence.CalendarRef = ""
 		evidence.CoverageBasis = "unbounded_range_estimate"
 		evidence.CalendarQualityStatus = model.QualityDegraded
-		evidence.Warnings = dedupeReaderStrings(append(evidence.Warnings, "daily_bar_coverage_explicit_range_required_for_calendar_ref"))
-	} else if calendarReferenceMissing {
-		evidence.Warnings = dedupeReaderStrings(append(evidence.Warnings, "daily_bar_coverage_calendar_reference_unavailable"))
+	case calendarQualityUnreliable:
+		calendarDegradationReason = "daily_bar_coverage_calendar_quality_unreliable"
+		evidence.CalendarRef = ""
+		evidence.CoverageBasis = "degraded_exchange_calendar"
+		evidence.CalendarQualityStatus = model.QualityDegraded
+	case calendarReferenceMissing:
+		calendarDegradationReason = "daily_bar_coverage_calendar_reference_unavailable"
+	}
+	if calendarDegradationReason != "" {
+		evidence.Warnings = dedupeReaderStrings(append(evidence.Warnings, calendarDegradationReason))
 	}
 	warnings = dedupeReaderStrings(append(append([]string(nil), warnings...), evidence.Warnings...))
 	result := app.DailyBarsV2Snapshot{
@@ -243,7 +254,7 @@ func (r *Reader) GetDailyBarsV2(ctx context.Context, query app.DailyBarsQuery) (
 		mapped := mapDailyBar(bar)
 		if calendarReferenceMissing {
 			mapped.QualityStatus = app.QualityDegraded
-			mapped.QualityReasons = dedupeReaderStrings(append(mapped.QualityReasons, "daily_bar_coverage_calendar_reference_unavailable"))
+			mapped.QualityReasons = dedupeReaderStrings(append(mapped.QualityReasons, calendarDegradationReason))
 		}
 		result.Bars = append(result.Bars, mapped)
 	}
@@ -251,6 +262,15 @@ func (r *Reader) GetDailyBarsV2(ctx context.Context, query app.DailyBarsQuery) (
 		result.QualityStatus = app.QualityDegraded
 	}
 	return result, nil
+}
+
+func containsReaderString(values []string, target string) bool {
+	for _, value := range values {
+		if value == target {
+			return true
+		}
+	}
+	return false
 }
 
 func dedupeReaderStrings(values []string) []string {

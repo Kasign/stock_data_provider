@@ -101,9 +101,9 @@ func TestReaderGetDailyBarsV2PreservesSameEvaluationCalendarRef(t *testing.T) {
 		CoverageSufficient: true,
 	}
 	pitCoverage := service.DailyBarCoverageEvidence{
-		CalendarRef: "sha256:calendar-asof", CalendarQualityStatus: model.QualityDegraded,
+		CalendarRef: "sha256:calendar-asof", CalendarQualityStatus: model.QualityValid,
 		ExpectedTradingDays: 18, MinimumRequiredBars: 12, CoverageBasis: "exchange_calendar",
-		CoverageSufficient: true, Warnings: []string{"daily_bar_coverage_uses_degraded_trading_calendar"},
+		CoverageSufficient: true,
 	}
 	backend := &fakeDataService{
 		currentBars: []model.DailyBar{bar}, pitBars: []model.DailyBar{bar},
@@ -138,6 +138,29 @@ func TestReaderGetDailyBarsV2PreservesSameEvaluationCalendarRef(t *testing.T) {
 	}
 	if backend.currentCalls != 1 || backend.pitCalls != 1 || !backend.lastAsOf.Equal(cutoff) {
 		t.Fatalf("v2 current/PIT backend calls or cutoff mismatch: current=%d PIT=%d asOf=%s", backend.currentCalls, backend.pitCalls, backend.lastAsOf)
+	}
+
+	degradedBackend := &fakeDataService{
+		currentBars: []model.DailyBar{bar},
+		currentCoverage: service.DailyBarCoverageEvidence{
+			CalendarRef: "sha256:calendar-conflicted", CalendarQualityStatus: model.QualityDegraded,
+			ExpectedTradingDays: 20, MinimumRequiredBars: 13, CoverageBasis: "exchange_calendar",
+			CoverageSufficient: true, Warnings: []string{"daily_bar_coverage_uses_degraded_trading_calendar"},
+		},
+	}
+	degradedReader := &Reader{backend: degradedBackend}
+	degraded, err := degradedReader.GetDailyBarsV2(context.Background(), app.DailyBarsQuery{
+		Symbol: "600000.SH", StartDate: "2026-10-01", EndDate: "2026-11-06", Limit: 20,
+		AdjustmentBasis: app.AdjustmentNone,
+	})
+	if err != nil {
+		t.Fatalf("GetDailyBarsV2(degraded calendar) error = %v", err)
+	}
+	if degraded.TradingCalendarRef != nil || degraded.CoverageEvidence.CoverageBasis != "degraded_exchange_calendar" ||
+		degraded.QualityStatus != app.QualityDegraded ||
+		!containsReaderString(degraded.Warnings, "daily_bar_coverage_calendar_quality_unreliable") ||
+		degraded.Bars[0].QualityStatus != app.QualityDegraded {
+		t.Fatalf("v2 must not claim a reliable CalendarRef for a conflicted calendar: %+v", degraded)
 	}
 	*pit.TradingCalendarRef = "mutated"
 	pit.CoverageEvidence.Warnings[0] = "mutated"
