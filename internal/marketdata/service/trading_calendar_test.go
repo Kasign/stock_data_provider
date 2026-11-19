@@ -68,9 +68,13 @@ func TestDailyBarCoverageHistoricalTimestampOnlyCalendarGapIsInformational(t *te
 		time.Second, time.Second, 120, 2000, ResilienceConfig{}, nil)
 	svc.SetTradingCalendarProviders([]provider.TradingCalendarProvider{p})
 
-	ok, warnings := svc.dailyBarCoverageSufficient(context.Background(), "2026-10-22", "2026-10-24", 2, 2)
+	ok, warnings, evidence := svc.dailyBarCoverageEvidence(context.Background(), "2026-10-22", "2026-10-24", 2, 2)
 	if !ok {
 		t.Fatalf("complete historical date coverage should pass: warnings=%v", warnings)
+	}
+	if evidence.CalendarRef != "" || evidence.CoverageBasis != "exchange_calendar_unreferenced" ||
+		evidence.CalendarQualityStatus != model.QualityDegraded {
+		t.Fatalf("calendar without durable reference must be represented as unreferenced evidence: %+v", evidence)
 	}
 	for _, warning := range warnings {
 		if warning == "daily_bar_coverage_uses_degraded_trading_calendar" {
