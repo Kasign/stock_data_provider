@@ -374,6 +374,24 @@ type FundamentalsSnapshot struct {
 	QualityReasons   []string             `json:"quality_reasons,omitempty"`
 }
 
+// NormalizeInstantsUTC 将财务快照中的绝对时间统一为 UTC；报告日期仍保持市场日历日期。
+func (s *FundamentalsSnapshot) NormalizeInstantsUTC() {
+	if s == nil {
+		return
+	}
+	s.FetchedAt = s.FetchedAt.UTC()
+	if s.SystemObservedAt != nil {
+		normalized := s.SystemObservedAt.UTC()
+		s.SystemObservedAt = &normalized
+	}
+	for index := range s.Sections {
+		if s.Sections[index].AvailableAt != nil {
+			normalized := s.Sections[index].AvailableAt.UTC()
+			s.Sections[index].AvailableAt = &normalized
+		}
+	}
+}
+
 // ValuationItem 为单只 A 股的最新估值快照。指标允许为 null 或负数，不将缺失值补零。
 type ValuationItem struct {
 	Symbol                   string        `json:"symbol"`
