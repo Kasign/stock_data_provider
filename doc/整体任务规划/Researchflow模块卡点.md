@@ -186,3 +186,11 @@
 - FLOW-006 ResultComposition 的 Evidence 检查未验证 available_at 严格 PIT；项目级契约要求严格模式排除 null/unknown，非严格模式必须由 Template 显式声明风险。当前 Template/ResultComposition 无 PIT Mode 语义，需项目契约 Owner 决策后实施。
 - Research ContextAuthorizer 未由 Server News→Research composition 注入；GetContext 缺少 Authorizer 会 fail-closed。不得创建占位 Allow。
 - 以上均为跨模块生产接入/契约阻塞，不是通过复制 Adapter 或放宽 Validator 可解决的问题。
+
+
+## RepairAll RA-CROSS-REVIEW-006 Researchflow Outbox 错误分类审查（2026-11-19）
+
+- Researchflow Server Publisher 将确定性 Envelope/Payload/Schema 问题编码为 notification_event_invalid，将 Notification 接收失败编码为 notification_receive_unavailable。
+- Researchflow OutboxDispatcher 当前对所有 Publish 错误统一调用 RetryOutbox；OutboxErrorCoder 仅用于持久化 last_error_code，不影响是否重试。
+- Researchflow OutboxStore 无 Reject/DeadLetter 能力；项目现有决议明确暂不设最大尝试次数/死信状态，后续由消费契约定义告警和死信处置。
+- 与 Research Relay 的永久错误 Reject 行为存在策略差异。当前不擅自扩展 Outbox 状态或吞掉事件；保留为需契约 Owner 决策的操作策略卡点。

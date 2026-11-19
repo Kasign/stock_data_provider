@@ -223,3 +223,11 @@
 - Server News→Research composition 创建 Research Service 时未注入 ContextAuthorizer；当前无 Context 生产消费者，因此暂不补默认实现。未来接入必须提供真实 Research Owner 授权策略和可信 CallerRef。
 - 当前没有 Context Stage 调用 Researchflow Context Assembly，也没有 ResultComposition 的生产消费者；Run/SystemAsOf 绑定与 Evidence available_at 严格 PIT 尚无端到端验收。
 - Evidence PIT Mode 需要项目契约 Owner 决策，Server 不自行定义或注入策略字段。
+
+
+## RepairAll RA-CROSS-REVIEW-006 Notification 生产装配复核（2026-11-19）
+
+- Server Bootstrap 已在 Worker/All 角色装配 Research→Notification Relay；Researchflow Capacity 配置后装配 Researchflow→Notification Relay；API 角色不启动这两个 Relay。
+- 两条 Relay 共用 Notification EventReceiver；Inbox Schema Registry、MySQL Inbox 与 Fanout WorkItem Repository 已装配，Inbox+Fanout WorkItem 使用同一 DB 事务。
+- Server 当前没有 Notification RecipientDirectory、Fanout Worker、Delivery Worker、Channel Registry/Secret、Template Renderer 的生产装配；模块服务和 Adapter 存在不等于 Server Delivery 闭环。
+- NTF-BLOCK-04/05/06/08/09 继续 BLOCKED。不得在没有 RecipientDirectory/业务模板/Worker 配置的情况下创建空壳投递服务。

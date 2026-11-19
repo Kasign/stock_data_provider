@@ -58,16 +58,16 @@ P0 原始问题及实施约束作为审计记录保留；当前状态以第 7、
 
 ## 5. 当前执行任务与边界
 
-### RA-CROSS-REVIEW-006：Research / Researchflow → Notification 事件投递与恢复链路 Review
+### RA-CROSS-REVIEW-007：Server Root HTTP、身份认证、Diagnostics 与 Worker 角色装配 Review
 
-- 状态：PLANNED（RA-CROSS-REVIEW-005 已完成审查并登记剩余卡点）。
-- 目标：核对 Research Event Lifecycle Outbox、Researchflow Run Terminal Outbox、Server Relay、Notification Inbox/Fanout/Delivery/Worker 的端到端身份、幂等、事务、重试、租约和恢复语义。
-- 范围：Research、Researchflow、Notification、Server、Platform（仅核对公共 Outbox/HTTP/Clock/Fault 能力）；不扩展到其他业务模块。
-- 首要核对：RSC-CTR-003、FLOW-CTR-007、NOT-CTR-001/002/003/004、GOV-CTR-002/006、PLAT-CTR-001/003；Research/Researchflow/Notification 模块卡点及 Server Relay 装配。
-- 重点检查：Outbox 事务提交与领域状态是否原子；事件 envelope/Schema/Fingerprint/Correlation/Idempotency 字段是否端到端一致；Inbox 去重与 Fanout WorkItem 生成是否原子；租约/FencingToken/重试/死信与取消是否闭环；Research Event 和 Researchflow Run 终态是否共用正确的 Notification Owner；API/Worker/All 角色装配是否正确。
-- 诊断判定：逐段标记 PASS / DEGRADED / FAIL / NOT_COMPARABLE / DEFERRED，引用代码路径、契约、集成测试和精确 SHA；没有真实 Provider/外部投递证据时不得标记 Delivery 真实成功。
-- 修复门禁：问题属于哪个 Owner 就在哪个模块修复；禁止在 Server 复制 Notification Inbox/Fanout/Delivery 业务逻辑，禁止绕过 Outbox/Worker 状态机。
-- 完成条件：可复现缺陷修复并通过模块与跨模块针对性测试；同步模块卡点和整体规划；完整 CI 精确 SHA 验收。
+- 状态：PLANNED（RA-CROSS-REVIEW-006 已完成 Outbox→Inbox→Fanout→Delivery 链路审查；生产 Worker/Recipient Directory 仍受外部依赖阻塞）。
+- 目标：核对 Server 作为唯一 Composition Root 的 HTTP 路由、可信身份注入、模块 Application Port、Fault/Diagnostics 映射、API/Worker/All 角色隔离、生命周期启停和依赖关闭顺序。
+- 范围：Server、Platform 及被 Server 装配的模块公开 Port；不进入各业务模块内部领域规则。
+- 首要核对：SRV-CTR-001/002、PLAT-CTR-001/002/003、GOV-CTR-002/006，以及 Server 总规划、Platform 契约、各模块 Root 接入卡点。
+- 重点检查：公开路由是否有明确调用场景；身份是否来自可信 Middleware/RequestIdentity 而非请求体；CallerRef 是否按模块职责映射；未配置授权是否 fail-closed；Fault/Diagnostics 是否泄露敏感信息；API/Worker 角色是否只启动对应消费者；Shutdown 是否先停消费者再关闭共享资源；是否存在重复装配/遗留旧 API。
+- 诊断判定：逐条记录 PASS / DEGRADED / FAIL / NOT_COMPARABLE / DEFERRED，附代码路径、契约、测试与精确 SHA。
+- 修复门禁：只修复可复现问题；公共能力归 Platform，业务语义归业务模块，组合/路由/生命周期归 Server；不复制模块能力，不为 WebUI 增加无真实数据支撑的 API。
+- 完成条件：接口、身份、实现、装配、诊断和测试一致；同步各模块卡点与整体计划；针对性测试及精确 SHA 完整 CI 验收。
 
 ## 14. RA-CROSS-REVIEW-003 基线与验收证据（2026-11-19）
 
@@ -132,8 +132,31 @@ P0 原始问题及实施约束作为审计记录保留；当前状态以第 7、
 - 判定：Research Persistence/版本机制代码 PASS；Researchflow Run 时钟传播代码 PASS；Context 授权生产装配 NOT_COMPARABLE；Context Run PIT 绑定 NOT_COMPARABLE；Evidence 严格 PIT 消费 DEFERRED；Event/Claim 生产消费 NOT_COMPARABLE。
 - 本轮未发现可在当前冻结契约和无真实调用者条件下安全修复的局部代码缺陷。所有阻塞已同步 Research、Researchflow、Server 卡点及当前任务记录。
 
-## 18. RA-CROSS-REVIEW-006 登记（2026-11-19）
+## 18. RA-CROSS-REVIEW-006 登记与状态（2026-11-19）
 
 - 前置 RA-CROSS-REVIEW-005 已完成；剩余 Context 授权、PIT Mode、生产 Stage 消费问题分别保留在 Research/Researchflow/Server 卡点，不在 Notification Review 中重复处理。
 - 本任务聚焦 Research 与 Researchflow 两类 Outbox 到 Notification Inbox、Fanout、Delivery 和 Worker 恢复的完整链路。
-- 当前状态 PLANNED；开始执行前必须重新核对 repair_all 最新 HEAD、Actions 和总览计划。
+- 状态：REVIEW_DONE_WITH_BLOCKERS；审查结论见第 19 节。
+
+## 19. RA-CROSS-REVIEW-006 Outbox→Inbox→Fanout→Delivery 审查结论（2026-11-19）
+
+- 审查基线：repair_all HEAD 69f4dfaa6c8677ddfdf719a8492c6c9514b8b9f8；本轮未修改生产代码。
+- Research：Event 状态版本与 Lifecycle Outbox 在同一 Research Storage 事务内提交；Outbox Envelope 使用 JCS Fingerprint、稳定 IdempotencyKey、CorrelationID；Relay 对永久 Schema/身份/指纹错误执行 Reject，对临时 Notification 接收失败执行 Retry。
+- Researchflow：Run Finalize 在一个 MariaDB 事务中提交 ResultSummary、Run 终态和 terminal Outbox；Server Publisher 对 Envelope/Payload/时间/终态字段做严格校验。OutboxDispatcher 对所有 Publish 错误统一 Retry，只记录 OutboxErrorCoder.Code；Researchflow Outbox Store 没有 Reject/DeadLetter 端口，当前契约明确没有最大尝试次数/死信状态。因此 notification_event_invalid 也会进入重试。该策略需后续明确永久错误处置/告警/死信决议，不在本轮擅自增加状态或丢弃事件。
+- Server：Worker/All 角色装配 Research Relay；Researchflow Capacity 配置后装配 Researchflow Relay；两者共用 Notification EventReceiver，API 角色不启动 Relay。Inbox Schema Validation、双唯一键幂等和 Inbox+FanoutWorkItem 同事务写入均已存在。
+- Notification：Fanout Dispatcher、Delivery Execution、Retry/Lease Recovery、WeCom Channel Adapter 与 MySQL Repository 均存在；WeCom 真实渠道连通性已有独立 Live Smoke 证据。但 Server 当前没有 RecipientDirectory、Fanout Worker、Delivery Worker、Channel Registry/Secret/Template Renderer 生产组合装配；没有 Server 运行时 Delivery 完整闭环。
+- 诊断判定：
+  - Research Event→Outbox：代码/事务机制 PASS。
+  - Researchflow Run Finalize→Outbox：代码/事务机制 PASS。
+  - 两类 Relay→Notification Inbox：代码与已有集成测试机制 PASS；本轮未执行新的测试。
+  - Inbox→Fanout WorkItem：同事务机制 PASS。
+  - Fanout→Delivery→真实 Channel：NOT_COMPARABLE（Server Worker/RecipientDirectory/模板/渠道生产组合未装配）。
+  - Researchflow 永久 Publish 错误处理：DEFERRED（Outbox 无 Reject/DeadLetter，需契约 Owner 决策）。
+- 修复结论：未发现可在当前模块边界和冻结策略内安全直接修复的生产代码缺陷；NTF-BLOCK-04/05/06/08/09 继续阻塞完整投递生产验收。
+- 文档已同步 Notification、Researchflow、Server 卡点和模块当前任务记录；本轮未改动模块分支。
+
+## 20. RA-CROSS-REVIEW-007 登记（2026-11-19）
+
+- 前置 RA-CROSS-REVIEW-006 已完成 Outbox/Inbox/Fanout/Delivery 代码链路审查；真实 Delivery Worker 与 RecipientDirectory 保持 Notification/Server 卡点。
+- 新任务聚焦 Server Composition Root 的 HTTP、身份认证、公共 Fault/Diagnostics、角色隔离与生命周期；不重复各模块已完成的内部能力 Review。
+- 当前状态 PLANNED；开始执行前重新核对 repair_all 最新 HEAD、Actions 和总览计划。
