@@ -62,7 +62,7 @@ func TestWorkerBootstrapHelperProcess(t *testing.T) {
 	if err := Run(ctx); err != nil {
 		var platformErr *platformfault.Fault
 		if errors.As(err, &platformErr) && platformErr.Cause != nil {
-			t.Fatalf("Server Bootstrap Run() 失败: %v（内部原因：%v）", err, platformErr.Cause)
+			t.Fatalf("Server Bootstrap Run() 失败: %v（Fault code：%s；内部原因：%v）", err, platformErr.Code, platformErr.Cause)
 		}
 		t.Fatalf("Server Bootstrap Run() 失败: %v", err)
 	}
@@ -493,4 +493,49 @@ func TestAPIBootstrapMariaDBRedisIntegration(t *testing.T) {
 	}
 
 	child.stop(t)
+
+	// Migration disabled 必须先校验 history，再由 Data Ready 检查物理结构；
+	// 缺列时拒绝启动，且不得在 disabled 模式下自动修复数据库。
+	dbConfig := *adminConfig
+	dbConfig.DBName = database
+	applicationDB, err := sql.Open("mysql", dbConfig.FormatDSN())
+	if err != nil {
+		t.Fatalf("打开隔离 API 数据库失败: %v", err)
+	}
+	defer applicationDB.Close()
+	if _, err := applicationDB.ExecContext(setupCtx, "ALTER TABLE market_data_quotes DROP COLUMN turnover_rate"); err != nil {
+		t.Fatalf("模拟 Migration disabled 下的物理 Schema 漂移失败: %v", err)
+	}
+
+	disabledValues := make(map[string]string, len(values))
+	for key, value := range values {
+		disabledValues[key] = value
+	}
+	disabledValues["MIGRATION_ENABLED"] = "false"
+	disabledValues["DB_AUTO_MIGRATE"] = "false"
+	disabledChild := startWorkerBootstrapChild(t, disabledValues)
+	defer disabledChild.killIfRunning()
+	select {
+	case childErr := <-disabledChild.waitDone:
+		disabledChild.finished = true
+		if childErr == nil {
+			t.Fatalf("Migration disabled 时物理 Schema 缺列，Server 仍然启动成功：%s", disabledChild.output.String())
+		}
+	case <-time.After(15 * time.Second):
+		disabledChild.killIfRunning()
+		t.Fatalf("Migration disabled 时物理 Schema 缺列，Server 未在 15 秒内 fail-closed：%s", disabledChild.output.String())
+	}
+	startupOutput := disabledChild.output.String()
+	if !strings.Contains(startupOutput, "market_data.schema_drift") ||
+		!strings.Contains(startupOutput, "market_data_quotes.turnover_rate is missing") {
+		t.Fatalf("Migration disabled 启动失败未返回预期 Schema drift 证据：%s", startupOutput)
+	}
+	var remainingColumns int
+	if err := applicationDB.QueryRowContext(setupCtx, `SELECT COUNT(*) FROM information_schema.columns
+WHERE table_schema = DATABASE() AND table_name = 'market_data_quotes' AND column_name = 'turnover_rate'`).Scan(&remainingColumns); err != nil {
+		t.Fatalf("检查 Migration disabled 是否改写物理 Schema 失败: %v", err)
+	}
+	if remainingColumns != 0 {
+		t.Fatalf("Migration disabled 自动修改了物理 Schema，turnover_rate column count = %d", remainingColumns)
+	}
 }
