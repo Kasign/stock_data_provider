@@ -75,18 +75,28 @@ func TestRegistryMariaDBIntegration(t *testing.T) {
 			fmt.Sprintf("CREATE TABLE %s (id BIGINT PRIMARY KEY, value VARCHAR(32) NOT NULL) ENGINE=InnoDB", table),
 		},
 	}}); err != nil {
-		t.Fatalf("register migration: %v", err)
+		t.Fatalf("register Server migration: %v", err)
+	}
+	if err := registry.Register(marketdatabootstrap.MigrationNamespace, marketdatabootstrap.MigrationDefinitions()); err != nil {
+		t.Fatalf("register Data migrations: %v", err)
 	}
 
 	report, err := registry.RunWithReport(ctx, db)
 	if err != nil {
 		t.Fatalf("RunWithReport: %v", err)
 	}
-	if report.Status != "succeeded" || len(report.Namespaces) != 1 {
+	if report.Status != "succeeded" || len(report.Namespaces) != 2 {
 		t.Fatalf("unexpected migration report: %+v", report)
 	}
-	if item := report.Namespaces[0]; item.Namespace != namespace || item.Status != "succeeded" {
-		t.Fatalf("unexpected namespace result: %+v", item)
+	completedNamespaces := make(map[string]bool, len(report.Namespaces))
+	for _, item := range report.Namespaces {
+		if item.Status != "succeeded" {
+			t.Fatalf("migration namespace did not succeed: %+v", item)
+		}
+		completedNamespaces[item.Namespace] = true
+	}
+	if !completedNamespaces[namespace] || !completedNamespaces[marketdatabootstrap.MigrationNamespace] {
+		t.Fatalf("migration report omitted a registered namespace: %+v", report.Namespaces)
 	}
 
 	if err := registry.ValidateApplied(ctx, db); err != nil {
