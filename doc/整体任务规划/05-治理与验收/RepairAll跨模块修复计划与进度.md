@@ -193,3 +193,13 @@
 - 为便于定位未来启动失败，Bootstrap 子进程集成测试在失败时额外输出内部 Fault Cause；不将内部原因暴露到 HTTP DTO。
 - 本次完整 CI：gofmt、root vet/tests、News/Research/Researchflow 跨模块测试、Worker MariaDB/Redis Bootstrap、go-core vet/tests、Compose、WebUI syntax/tests/build 全部 success。
 - 结论：当前聚合基线的物理 Schema 漂移校验和 Root Bootstrap 集成验收通过；生产环境 Migration enabled/disabled 演练仍未完成。
+
+
+## 13. RA-SRV-009 Migration disabled 启动门禁验收（2026-11-19）
+
+- 最新代码 SHA：`02415a319fbe45921be2be469592d84043676626`。
+- 完整 Integration CI：[Run 44455503870](https://github.com/Kasign/stock_data_provider/actions/runs/44455503870)，精确 SHA 匹配，结论 `success`。
+- 新增真实 MariaDB/Redis API Bootstrap 场景：先由 Migration enabled 启动完成全部 Root Migration 并通过 Readiness，再删除 Data 兼容列，随后以 `MIGRATION_ENABLED=false`、`DB_AUTO_MIGRATE=false` 重启。
+- 验收结果：Root 在 HTTP 服务启动前以 `market_data.schema_drift` fail-closed；测试随后查询 information_schema，确认缺失列仍不存在，证明 disabled 路径没有偷偷执行 DDL 修复。
+- 这补齐了代码层 Migration enabled/disabled 两种启动路径的差异验收。生产环境真实部署启停演练仍需单独执行。
+- 完整 CI 的 Go、跨模块、MariaDB/Redis、go-core、Compose、WebUI 全部检查 success。

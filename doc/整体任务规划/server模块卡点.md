@@ -181,3 +181,10 @@
 - Root Worker/API Bootstrap 在真实 MariaDB/Redis 集成环境重新通过。Schema 校验不再误用 MariaDB `COLUMN_DEFAULT` NULL 元数据；列和索引检查保留精确物理结构约束。
 - 启动失败测试现输出内部 Fault Cause，帮助定位 Schema 检查原因；该内部原因不暴露为 HTTP 公开字段。
 - 生产环境 Migration enabled/disabled 演练和其他模块外部依赖仍未完成；`feat/server` 未同步。
+
+
+## RepairAll SRV-009 Migration disabled 启动门禁（2026-11-19）
+
+- 最新代码 SHA：`02415a319fbe45921be2be469592d84043676626`；Integration CI [Run 44455503870](https://github.com/Kasign/stock_data_provider/actions/runs/44455503870) 全项 success。
+- 真实 API Bootstrap 集成测试覆盖 Migration disabled：Migration history/checksum 有效但 Data 物理列缺失时，Root 必须在 HTTP 启动前以 `market_data.schema_drift` 失败；数据库缺列保持原状，不自动执行 Migration DDL。
+- 代码层 Migration enabled/disabled 两种路径均通过；生产部署演练仍待执行，`feat/server` 未同步。
