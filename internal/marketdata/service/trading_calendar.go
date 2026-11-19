@@ -195,7 +195,6 @@ func appendTradingCalendarReason(reasons []string, reason string) []string {
 	return append(reasons, reason)
 }
 
-
 // persistTradingCalendarSnapshot materializes the selected normalized calendar as
 // an immutable Data-owned resource. Legacy calendar reads remain available when
 // MariaDB is disabled; consumers requiring PIT must reject an empty CalendarRef.

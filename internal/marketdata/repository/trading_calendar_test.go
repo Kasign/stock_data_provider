@@ -18,8 +18,8 @@ func validRepositoryTradingCalendar() *model.TradingCalendarSnapshot {
 			{Date: "2026-10-24", IsTradingDay: false},
 		},
 		Source: "calendar-test", SourceVersion: "adapter-v1",
-		FetchedAt: time.Date(2026, 10, 25, 1, 0, 0, 0, time.UTC),
-		QualityStatus: model.QualityDegraded,
+		FetchedAt:      time.Date(2026, 10, 25, 1, 0, 0, 0, time.UTC),
+		QualityStatus:  model.QualityDegraded,
 		QualityReasons: []string{"timestamp_missing", "calendar_inferred", "timestamp_missing"},
 	}
 }
@@ -83,7 +83,7 @@ func TestTradingCalendarSnapshotRejectsInvalidDateCoverage(t *testing.T) {
 }
 
 func TestTradingCalendarSnapshotRefRejectsMalformedReference(t *testing.T) {
-	for _, ref := range []string{"", "data_calendar:sha256:xyz", "data_calendar:sha256:"+strings.Repeat("A", 64)} {
+	for _, ref := range []string{"", "data_calendar:sha256:xyz", "data_calendar:sha256:" + strings.Repeat("A", 64)} {
 		if _, err := parseTradingCalendarSnapshotRef(ref); err == nil {
 			t.Fatalf("expected malformed reference to be rejected: %q", ref)
 		}

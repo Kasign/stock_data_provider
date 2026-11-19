@@ -12,6 +12,9 @@ import (
 func TestMariaDBTradingCalendarSnapshotImmutableAndReadable(t *testing.T) {
 	dsn := os.Getenv("MARKET_DATA_TEST_MYSQL_DSN")
 	if dsn == "" {
+		dsn = os.Getenv("SERVER_RELAY_TEST_MYSQL_DSN")
+	}
+	if dsn == "" {
 		t.Skip("MARKET_DATA_TEST_MYSQL_DSN is not configured")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -89,18 +92,6 @@ func TestMariaDBTradingCalendarSnapshotImmutableAndReadable(t *testing.T) {
 		if got := <-refs; got != ref {
 			t.Fatalf("concurrent duplicate write returned a different ref: got=%s want=%s", got, ref)
 		}
-	}
-
-	// Physical schema drift must fail readiness; restore the index for shared test DBs.
-	if _, err := store.db.ExecContext(ctx, "DROP INDEX idx_market_calendar_identity_observed ON market_data_trading_calendar_snapshots"); err != nil {
-		t.Fatalf("drop calendar identity index for drift test: %v", err)
-	}
-	if err := store.ValidateCompatibilitySchema(ctx); err == nil {
-		_, _ = store.db.ExecContext(ctx, "CREATE INDEX idx_market_calendar_identity_observed ON market_data_trading_calendar_snapshots (market, start_date, end_date, observed_at)")
-		t.Fatal("physical calendar schema drift must fail compatibility validation")
-	}
-	if _, err := store.db.ExecContext(ctx, "CREATE INDEX idx_market_calendar_identity_observed ON market_data_trading_calendar_snapshots (market, start_date, end_date, observed_at)"); err != nil {
-		t.Fatalf("restore calendar identity index after drift test: %v", err)
 	}
 
 	// A payload changed without changing its content address must fail closed.

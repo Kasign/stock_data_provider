@@ -353,8 +353,8 @@ func TestMarketDataMigrationUpgradeAndConcurrentRootRegistration(t *testing.T) {
 		t.Fatalf("ping isolated MariaDB database: %v", err)
 	}
 	definitions := marketdatabootstrap.MigrationDefinitions()
-	if len(definitions) != 4 {
-		t.Fatalf("Data migration definition count = %d, want 4", len(definitions))
+	if len(definitions) != 5 {
+		t.Fatalf("Data migration definition count = %d, want 5", len(definitions))
 	}
 	if err := platformstorage.ApplyMigrations(ctx, db, marketdatabootstrap.MigrationNamespace, definitions[:3]); err != nil {
 		t.Fatalf("apply published Data migrations V1-V3: %v", err)
@@ -417,5 +417,13 @@ func TestMarketDataMigrationUpgradeAndConcurrentRootRegistration(t *testing.T) {
 		if err := db.QueryRowContext(ctx, "SELECT MAX(NON_UNIQUE) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND INDEX_NAME=?", index).Scan(&nonUnique); err != nil || nonUnique != 1 {
 			t.Fatalf("temporal history index %s is not non-unique: non_unique=%d err=%v", index, nonUnique, err)
 		}
+	}
+	var calendarTableCount int
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='market_data_trading_calendar_snapshots'").Scan(&calendarTableCount); err != nil || calendarTableCount != 1 {
+		t.Fatalf("Data Migration V5 calendar snapshot table missing: count=%d err=%v", calendarTableCount, err)
+	}
+	var calendarIndexNonUnique int
+	if err := db.QueryRowContext(ctx, "SELECT MAX(NON_UNIQUE) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND INDEX_NAME='idx_market_calendar_identity_observed'").Scan(&calendarIndexNonUnique); err != nil || calendarIndexNonUnique != 1 {
+		t.Fatalf("Data Migration V5 calendar lookup index must be non-unique: non_unique=%d err=%v", calendarIndexNonUnique, err)
 	}
 }

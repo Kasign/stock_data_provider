@@ -24,17 +24,17 @@ const (
 var ErrTradingCalendarSnapshotNotFound = errors.New("trading-calendar snapshot not found")
 
 type tradingCalendarSnapshotPayload struct {
-	AdapterVersion string                    `json:"adapter_version"`
-	EndDate        string                    `json:"end_date"`
+	AdapterVersion string                     `json:"adapter_version"`
+	EndDate        string                     `json:"end_date"`
 	Items          []model.TradingCalendarDay `json:"items"`
-	Market         string                    `json:"market"`
-	QualityReasons []string                  `json:"quality_reasons"`
-	QualityStatus  model.QualityStatus       `json:"quality_status"`
-	SchemaVersion  string                    `json:"schema_version"`
-	Source         string                    `json:"source"`
-	StartDate      string                    `json:"start_date"`
-	TotalDays      int                       `json:"total_days"`
-	TradingDays    int                       `json:"trading_days"`
+	Market         string                     `json:"market"`
+	QualityReasons []string                   `json:"quality_reasons"`
+	QualityStatus  model.QualityStatus        `json:"quality_status"`
+	SchemaVersion  string                     `json:"schema_version"`
+	Source         string                     `json:"source"`
+	StartDate      string                     `json:"start_date"`
+	TotalDays      int                        `json:"total_days"`
+	TradingDays    int                        `json:"trading_days"`
 }
 
 // SaveTradingCalendarSnapshot stores one immutable normalized calendar content version.
@@ -131,7 +131,7 @@ FROM market_data_trading_calendar_snapshots WHERE calendar_ref=?`, calendarRef).
 		Items: payload.Items, Source: payload.Source, SourceVersion: payload.AdapterVersion,
 		FetchedAt: fetchedAt.UTC(), QualityStatus: payload.QualityStatus,
 		QualityReasons: append([]string(nil), payload.QualityReasons...),
-		CalendarRef: calendarRef,
+		CalendarRef:    calendarRef,
 	}
 	if err := validateTradingCalendarSnapshotPayload(snapshot); err != nil {
 		return nil, fmt.Errorf("stored trading-calendar snapshot %s is invalid: %w", calendarRef, err)
@@ -180,16 +180,16 @@ func buildTradingCalendarSnapshotPayload(snapshot *model.TradingCalendarSnapshot
 	items := append([]model.TradingCalendarDay(nil), snapshot.Items...)
 	payload := tradingCalendarSnapshotPayload{
 		AdapterVersion: strings.TrimSpace(snapshot.SourceVersion),
-		EndDate: snapshot.EndDate,
-		Items: items,
-		Market: snapshot.Market,
+		EndDate:        snapshot.EndDate,
+		Items:          items,
+		Market:         snapshot.Market,
 		QualityReasons: uniqueReasons,
-		QualityStatus: snapshot.QualityStatus,
-		SchemaVersion: tradingCalendarSnapshotSchemaVersion,
-		Source: strings.TrimSpace(snapshot.Source),
-		StartDate: snapshot.StartDate,
-		TotalDays: snapshot.TotalDays,
-		TradingDays: snapshot.TradingDays,
+		QualityStatus:  snapshot.QualityStatus,
+		SchemaVersion:  tradingCalendarSnapshotSchemaVersion,
+		Source:         strings.TrimSpace(snapshot.Source),
+		StartDate:      snapshot.StartDate,
+		TotalDays:      snapshot.TotalDays,
+		TradingDays:    snapshot.TradingDays,
 	}
 	canonical, err := json.Marshal(payload)
 	if err != nil {
@@ -239,7 +239,6 @@ func validateTradingCalendarSnapshotPayload(snapshot *model.TradingCalendarSnaps
 	}
 	return nil
 }
-
 
 // validateTradingCalendarSnapshotSchema verifies the immutable calendar table
 // independently of migration checksums, including its primary and lookup indexes.

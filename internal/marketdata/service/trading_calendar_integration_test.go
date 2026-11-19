@@ -6,13 +6,15 @@ import (
 	"testing"
 	"time"
 
-	"example.com/stock-analysis-flow/internal/marketdata/cache"
 	"example.com/stock-analysis-flow/internal/marketdata/provider"
 	"example.com/stock-analysis-flow/internal/marketdata/repository"
 )
 
 func TestTradingCalendarPersistsImmutableSnapshotAcrossCacheHits(t *testing.T) {
 	dsn := os.Getenv("MARKET_DATA_TEST_MYSQL_DSN")
+	if dsn == "" {
+		dsn = os.Getenv("SERVER_RELAY_TEST_MYSQL_DSN")
+	}
 	if dsn == "" {
 		t.Skip("MARKET_DATA_TEST_MYSQL_DSN is not configured")
 	}
