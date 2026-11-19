@@ -173,3 +173,11 @@
 - MariaDB 集成测试确认：物理列/索引被删除时，Root Migration Registry checksum 预检不误报 Migration 定义被修改；Data Ready 以 `market_data.schema_drift` fail-closed。
 - 该行为在 Root Registry + Data Repository + MariaDB 的真实组合中验收，不是 Mock。
 - 生产数据库启停演练仍待执行；`feat/server` 分支未同步。
+
+
+## RepairAll Root Data Ready 最终 MariaDB 验收（2026-11-19）
+
+- 最新聚合代码 SHA：`d386e097db64e6913290441ccc7bce0602358348`；Integration CI [Run 44454928267](https://github.com/Kasign/stock_data_provider/actions/runs/44454928267) 全项 success。
+- Root Worker/API Bootstrap 在真实 MariaDB/Redis 集成环境重新通过。Schema 校验不再误用 MariaDB `COLUMN_DEFAULT` NULL 元数据；列和索引检查保留精确物理结构约束。
+- 启动失败测试现输出内部 Fault Cause，帮助定位 Schema 检查原因；该内部原因不暴露为 HTTP 公开字段。
+- 生产环境 Migration enabled/disabled 演练和其他模块外部依赖仍未完成；`feat/server` 未同步。

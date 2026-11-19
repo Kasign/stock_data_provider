@@ -181,3 +181,15 @@
 - 该断言明确区分“Migration 定义/执行历史完整性”和“数据库物理 Schema 完整性”，避免将其中一种检查误当作另一种检查。
 - 全量检查：gofmt、root vet/tests、News/Research/Researchflow 跨模块测试、Worker MariaDB/Redis、go-core vet/tests、Compose、WebUI syntax/tests/build 全部 success。
 - 结论：当前代码级漂移检测与 Fault 语义验收通过；生产环境启停演练仍未完成。
+
+
+## 12. RA-DATA-SCHEMA-001 MariaDB 元数据兼容与最终 CI（2026-11-19）
+
+- 当前代码验收 SHA：`d386e097db64e6913290441ccc7bce0602358348`。
+- 完整 Integration CI：[Run 44454928267](https://github.com/Kasign/stock_data_provider/actions/runs/44454928267)，精确 SHA 匹配，结论 `success`。
+- Review 发现 MariaDB 对可空列的 `information_schema.columns.column_default` 返回语义不能可靠地区分本项目要判断的“显式默认值”与可空列的 NULL 默认行为。此前把 `column_default.Valid` 当作显式默认值会误拒绝合法的 `DECIMAL(16,8) NULL`。已移除这项不可靠判断，不再把数据库元数据的 NULL 表示方式误当成 Schema 漂移。
+- 当前列校验保留有明确依据的约束：完整 `column_type=decimal(16,8)`（拒绝 UNSIGNED）、data_type、precision=16、scale=8、`IS_NULLABLE=YES`。
+- 当前索引校验检查非唯一、完整列（拒绝前缀索引）、BTREE、升序和精确列顺序；MariaDB 集成测试覆盖 UNSIGNED 列和前缀索引被拒绝。
+- 为便于定位未来启动失败，Bootstrap 子进程集成测试在失败时额外输出内部 Fault Cause；不将内部原因暴露到 HTTP DTO。
+- 本次完整 CI：gofmt、root vet/tests、News/Research/Researchflow 跨模块测试、Worker MariaDB/Redis Bootstrap、go-core vet/tests、Compose、WebUI syntax/tests/build 全部 success。
+- 结论：当前聚合基线的物理 Schema 漂移校验和 Root Bootstrap 集成验收通过；生产环境 Migration enabled/disabled 演练仍未完成。

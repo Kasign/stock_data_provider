@@ -82,3 +82,11 @@ Root Server 尚未实际构造并注册 Data Module，属于 Server SRV-009 的�
 - 新增 MariaDB 断言：删除 V4 兼容列或 revision 索引后，Migration checksum 校验仍通过；Data Ready 返回 `market_data.schema_drift`。恢复结构后 Ready 恢复通过。
 - 这证明迁移 history checksum 与物理 Schema 漂移检查职责分离，防止未来把 checksum 成功当成数据库结构健康证明。
 - 生产环境 Migration enabled/disabled 演练仍待执行；真实 Provider 数据与时间证据卡点不变。模块分支 `feat/data` 未同步。
+
+
+## RepairAll 物理 Schema 校验最终 MariaDB 兼容结果（2026-11-19）
+
+- 最新代码 SHA：`d386e097db64e6913290441ccc7bce0602358348`；Integration CI [Run 44454928267](https://github.com/Kasign/stock_data_provider/actions/runs/44454928267) 精确 SHA 全项 success。
+- 修正了 `COLUMN_DEFAULT` 的 MariaDB 元数据误判：不再把可空列的 NULL 默认表示视为显式默认值；列校验改为完整 signed DECIMAL 类型、precision/scale 和 nullable。
+- 索引校验补充拒绝前缀索引、非 BTREE、非升序索引；MariaDB 集成测试覆盖 UNSIGNED 列和前缀索引漂移。
+- Root Worker/API Bootstrap 与 Data Repository Schema 漂移集成测试全部通过。生产环境 Migration enabled/disabled 演练仍待执行；`feat/data` 未同步。
