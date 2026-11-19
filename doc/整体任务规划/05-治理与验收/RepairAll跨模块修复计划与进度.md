@@ -447,3 +447,9 @@ RA009 代码关闭条件已满足：Server 路由认证矩阵、CSRF、WebUI 请
 
 - 增加 Service + MariaDB 集成测试，验证 TradingCalendarAsOf 只返回截止时点前已观察的 CalendarRef，不访问实时 Provider。
 - 用例覆盖“asOf 可见旧版本 + 数据库存在未来新版本 + 实时 Provider 返回未来版本”的组合，防止未来版本通过 Service 入口泄漏。
+
+
+### 28.19 PIT 日历集成测试数据隔离（2026-11-19）
+
+- Service as-of 集成测试使用独立历史日期区间，避免与其他测试的相同日历内容/观察时点产生共享内容地址，消除测试顺序耦合。
+- 生产实现未变；新 SHA 重新执行完整 CI。

@@ -82,6 +82,13 @@ func TestTradingCalendarAsOfUsesObservedRepositoryVersionWithoutLiveProvider(t *
 
 	asOf := time.Now().UTC().Truncate(time.Microsecond).Add(-time.Minute)
 	first := validTestTradingCalendar()
+	first.StartDate, first.EndDate = "1990-01-02", "1990-01-04"
+	first.Items = []model.TradingCalendarDay{
+		{Date: "1990-01-02", IsTradingDay: true},
+		{Date: "1990-01-03", IsTradingDay: true},
+		{Date: "1990-01-04", IsTradingDay: false},
+	}
+	first.TotalDays, first.TradingDays = 3, 2
 	first.FetchedAt = asOf.Add(-2 * time.Minute)
 	firstObserved := asOf.Add(-time.Minute)
 	firstRef, _, err := store.SaveTradingCalendarSnapshot(ctx, first, firstObserved)
@@ -89,6 +96,8 @@ func TestTradingCalendarAsOfUsesObservedRepositoryVersionWithoutLiveProvider(t *
 		t.Fatalf("save calendar visible at as_of: %v", err)
 	}
 	second := validTestTradingCalendar()
+	second.StartDate, second.EndDate = first.StartDate, first.EndDate
+	second.Items = append([]model.TradingCalendarDay(nil), first.Items...)
 	second.Items[1].IsTradingDay = false
 	second.TradingDays = 1
 	second.QualityReasons = append(second.QualityReasons, "future_calendar_revision")
