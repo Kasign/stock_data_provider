@@ -133,7 +133,7 @@
 
 | 分支 | 当前 HEAD | 对 Researchflow 的影响 |
 |---|---|---|
-| `feat/researchflow` | 代码验收 SHA `555a16726bfa5e48968b7f23b08e1ba6de7706d9`；当前分支 HEAD 为文档提交 `29dcec881ccedc0f6e3a34f6e3fc62d02b9c5f29` | 本轮补齐 ComposeResult 嵌套输入 UTF-8 边界；专项 CI 已通过 |
+| `feat/researchflow` | 代码验收 SHA `555a16726bfa5e48968b7f23b08e1ba6de7706d9`；当前分支 HEAD 为文档提交 `6a0df9ca6c24fb0006996ee0c8be82fbe5008670` | 本轮补齐 ComposeResult 嵌套输入 UTF-8 边界；专项 CI 已通过 |
 | `feat/server` | `c8a246505eefda0661a15d593def56ddbb5b0711` | Worker 生产 Executor 仍只装配 News Search；未发现 Research/Quant/LLM Stage/Adapter 注册 |
 | `feat/research` | `0d9dc0651a6e0bda3888d695f2ffec5545c248bd` | 本轮相对前次仅调整 Diagnostics 测试样本；Context/Evidence/Claim 生产消费仍需真实授权调用方 |
 | `feat/quant` | `992a10d1837dad8e695f9e9d7b6f459ebdcc3eb9` | 本轮增加 GetResult 主体解析后的 Context 取消检查；RiskDecision 契约未变化，RF-BLOCK-008 仍未解除 |
@@ -147,5 +147,5 @@
 - 已在组合入口递归校验全部输入字符串和 `json.RawMessage` 原始字节，并在任何投影/深拷贝前 fail-closed。
 - 新增测试覆盖 Run ID、Context、Evidence、Claim、LLM Response、Limitations、RiskDecision 和 Quant Payload。
 - 代码 SHA：`c7849cf5ad44dfa3a702844c14eb657f864d7512`；格式修正 SHA：`555a16726bfa5e48968b7f23b08e1ba6de7706d9`。
-- Run [44440261770](https://github.com/Kasign/stock_data_provider/actions/runs/44440261770)：Researchflow 专项 format/tests/race/vet、WorkerStore、MariaDB lifecycle integration 已通过；根模块 Test 当时仍在运行，不能将本 Run 标记为全量成功。
+- Run [44440261770](https://github.com/Kasign/stock_data_provider/actions/runs/44440261770)：Researchflow 专项 format/tests/race/vet、WorkerStore、MariaDB lifecycle integration 已通过；Run 最终 completed/success：根模块 Test/Race/Vet、Researchflow format/tests/race/vet、WorkerStore unit/race/vet、Researchflow MariaDB lifecycle integration 均 success；News/Market Data/Compose 相关 Jobs 为 skipped，不代表这些领域的真实集成通过。
 - 本轮没有改动其他分支；没有新增占位 Stage/Adapter。Server 尚未装配 Research/Quant/LLM 的事实仍成立。
