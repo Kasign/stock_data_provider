@@ -150,3 +150,12 @@
 - News Search Payload Validator 的 `uniqueItems` 缺口已在 repair_all 修复，Researchflow StageOutputRegistry 复用修复后的 Validator；RF-BLOCK-009 在 repair_all 基线解除。
 - 完整验收基线：`5b9ebe6a2b8103b4c63a48c3c0f0ddb004d583ec`，Run [44450277491](https://github.com/Kasign/stock_data_provider/actions/runs/44450277491) success。
 - 当前继续执行：Migration 生产启停演练/物理 Schema Diagnostics；再审 Research/Quant/Researchflow/LLM/Server/WebUI/Notification 的真实生产调用链。模块分支不因本次聚合分支修复而自动改变。
+
+
+## 9. RA-DATA-SCHEMA-001：Data 物理 Schema 漂移就绪门禁（2026-11-19）
+
+- Review 发现：Platform `ValidateAppliedMigrations` 只验证 migration history/checksum；Data 原 `Ready` 仅 Ping MariaDB/Redis，不检查 V4 引入的物理列/索引是否被人工删除或改型。
+- Data Repository 新增 `Store.ValidateCompatibilitySchema`，只读检查 `market_data_quotes.volume_ratio`、`turnover_rate` 必须为 nullable `DECIMAL(16,8)`；检查 DailyBar/Fundamental revision 索引列序、非唯一属性和 legacy unique index 不存在。
+- Data `Ready` 将物理结构检查纳入 MariaDB readiness；Schema 漂移返回 `market_data.schema_drift`，不将 Migration checksum 当作物理结构证明。
+- Server Root 在 `MIGRATION_ENABLED=true/false` 两条路径完成各自 Migration 执行/只读校验后，都会在启动 Worker 或接受流量前执行 Data 依赖与物理 Schema 就绪检查。此前只在 disabled 路径调用 Ready 的不一致已收敛。
+- MariaDB 集成测试已增加：新迁移 Schema Ready、删除 `turnover_rate` 后 Ready fail-closed、恢复列后 Ready 通过。待最新 CI 验证。

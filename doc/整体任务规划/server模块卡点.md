@@ -148,3 +148,11 @@
 - Platform 提供只读 checksum 校验，Root disabled 路径能验证 Data 预期版本和 checksum。
 - 旧库 V1-V3 升级、兼容 DDL 和多实例并发 MariaDB 测试已新增；CI 等待 [44447674606](https://github.com/Kasign/stock_data_provider/actions/runs/44447674606)。
 - SRV-009 的生产环境启停演练、物理 Schema drift Diagnostics 验收仍未关闭；Server 模块分支未被本轮修改。
+
+
+## RepairAll Root Data 启动就绪校验补充（2026-11-19）
+
+- Root Migration enabled 时执行统一 Registry 后，现也执行 `marketDataModule.Diagnostics().Ready`；disabled 时先 `ValidateApplied`，随后执行同一 Ready 检查。两条路径在启动 Worker/HTTP 前都会校验 Data 的 MariaDB、Redis 和 V4 物理 Schema。
+- 此前 Ready 仅位于 `MIGRATION_ENABLED=false` 分支，导致 enabled 路径和 Worker 启动路径的检查边界不一致；现已移出分支统一执行。
+- 物理 Schema 漂移由 Data `Store.ValidateCompatibilitySchema` 检查，不混同 Platform Migration checksum。MariaDB 集成测试验证缺失列会阻止 Ready。
+- 最新代码 SHA `b866188cf2b784a2e9c2d9a11ff002962a3453bd` 待 CI；模块分支 `feat/server` 未同步。

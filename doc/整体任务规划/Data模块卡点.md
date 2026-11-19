@@ -60,3 +60,8 @@ Root Server 尚未实际构造并注册 Data Module，属于 Server SRV-009 的�
 - 兼容 DDL 已从 Platform Apply Runner 锁外移入 MigrationOperation，在同一 namespace advisory lock 和 checksum 下执行。
 - MariaDB 旧库兼容和双实例并发测试已新增，等待 Run [44447674606](https://github.com/Kasign/stock_data_provider/actions/runs/44447674606)。
 - DATA-003 的 Provider AvailableAt 证据、DATA-004～007 的外部数据/字段/Parity 证据仍按原阻塞条件处理；本次迁移收口不改变其状态。
+
+
+## RepairAll 物理 Schema 漂移检查（2026-11-19）
+
+`repair_all` 新增 `Store.ValidateCompatibilitySchema`，并接入 Data `Ready`：V4 两列必须是 nullable DECIMAL(16,8)，revision 索引必须列顺序正确且为非唯一，旧 unique index 必须不存在。该检查用于补足 Migration checksum 不等于物理 Schema 完整性的边界。MariaDB 集成测试模拟删列并验证 Ready 拒绝；最新代码 SHA `b866188cf2b784a2e9c2d9a11ff002962a3453bd` 的 CI 尚待确认。模块分支 `feat/data` 未同步。
