@@ -713,7 +713,6 @@ func TestDependencyFaultRetryabilityIsConservative(t *testing.T) {
 	}
 }
 
-
 func TestPrepareMigrationsChecksumsOperationsAndPreservesLegacyChecksums(t *testing.T) {
 	legacy := []Migration{{Version: 1, Description: "legacy", Statements: []string{"CREATE TABLE sample (id BIGINT PRIMARY KEY)"}}}
 	_, legacyChecksum, err := prepareMigrations("market_data", legacy)

@@ -396,7 +396,6 @@ func TestRunWithReportDoesNotExecuteExternalNamespace(t *testing.T) {
 	}
 }
 
-
 func TestRegisterAcceptsAndCopiesOperationsOnlyMigration(t *testing.T) {
 	registry := NewRegistry()
 	migrations := []platformstorage.Migration{{

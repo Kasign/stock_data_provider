@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"sync"
 	"testing"
 	"time"
 
@@ -226,7 +227,6 @@ func TestRegistryMariaDBPartialDDLFailureRequiresRecovery(t *testing.T) {
 		t.Fatalf("retry error = %v, want Platform migration_requires_recovery Fault", retryErr)
 	}
 }
-
 
 // TestMarketDataMigrationUpgradeAndConcurrentRootRegistration exercises the
 // published V1-V3 history, legacy compatibility DDL, and two Root instances.
