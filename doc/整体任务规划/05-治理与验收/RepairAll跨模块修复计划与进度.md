@@ -101,7 +101,7 @@
 
 ## 7. RA-MIGRATION-001：Data Migration 三方统一（2026-11-19）
 
-<badge color="warning">代码已提交，完整 CI 待确认</badge>
+<badge color="success">完整 Integration CI 已通过</badge>
 
 ### 7.1 已实施内容
 
@@ -133,11 +133,20 @@
 - 已新增真实 MariaDB 集成用例：先应用 Data V1-V3，再模拟旧库缺列/旧唯一索引，两个 Root Registry 并发执行完整定义，最后验证 V4 兼容结果和 history。
 - 已扩展 MariaDB Registry 集成用例：篡改已应用 checksum 后，`ValidateApplied` 必须拒绝。
 - 上述新测试尚未由最新 SHA 的 CI 证实；不能在 CI 完成前标记 PASS。
-- CI Run [44447674606](https://github.com/Kasign/stock_data_provider/actions/runs/44447674606)，HEAD `aeed898da826f8952fb235ff57b0ef19042f8c64`，当前 in_progress。
+- 最终完整 Integration CI：Run [44450277491](https://github.com/Kasign/stock_data_provider/actions/runs/44450277491)，HEAD `5b9ebe6a2b8103b4c63a48c3c0f0ddb004d583ec`，结论 success；gofmt、root vet/tests、News/Research/Researchflow cross-module tests、Worker MariaDB/Redis、go-core vet/tests、Compose、WebUI syntax/tests/build 均在成功汇总中。
 - 物理 Schema drift 仍不是 checksum 校验的职责；必须由 Data Schema Diagnostics 检测。本轮新增测试也不等于生产数据库部署演练。
 
 ### 7.4 下一步
 
-1. 等待 Run 44447674606 完成；若失败，读取失败 Job 日志并在 repair_all 修复。
-2. CI 通过后继续检查 Root Migration enabled/disabled 的真实启动链和物理 Schema Diagnostics 是否完整注册。
-3. 然后按 Data/News→Research→Quant→Researchflow→LLM→Server→WebUI/Notification 顺序继续跨模块调用链 Review；真实外部凭据/Provider 证据缺失时保持 NOT_COMPARABLE，不造数据。
+1. Migration 代码和 CI 验收已完成；仍需独立完成生产环境 Migration enabled/disabled 演练及物理 Schema drift Diagnostics 注册验收。
+2. News Validator uniqueItems 缺口已修复并在完整 Integration CI 通过；Researchflow RF-BLOCK-009 在 repair_all 聚合基线解除。
+3. 继续按 Data/News→Research→Quant→Researchflow→LLM→Server→WebUI/Notification 调用链 Review；真实外部凭据/Provider 证据缺失时保持 NOT_COMPARABLE，不造数据。
+
+
+## 8. RA-CROSS-REVIEW-002：News / Researchflow 集成契约复核（2026-11-19）
+
+- 修正 `doc/news/新闻API契约.md` 第 11.5、11.9 节的过期状态：同进程 `EvidenceQueryFacade`、单条 GetEvidence、ListEvidence、固定 Snapshot、PIT Repository 与授权复核已有实现，且 Server 已装配给 Research Adapter；这不等于独立 HTTP API。
+- 严格 PIT 的合格 `available_at` 来源证据仍缺失。当前已接入来源不能提供合格首次公开可获取时间，News DTO 返回 null，News→Research B 组继续 SHELVED；没有将 published_at/fetched_at/observed_at 代替 available_at。
+- News Search Payload Validator 的 `uniqueItems` 缺口已在 repair_all 修复，Researchflow StageOutputRegistry 复用修复后的 Validator；RF-BLOCK-009 在 repair_all 基线解除。
+- 完整验收基线：`5b9ebe6a2b8103b4c63a48c3c0f0ddb004d583ec`，Run [44450277491](https://github.com/Kasign/stock_data_provider/actions/runs/44450277491) success。
+- 当前继续执行：Migration 生产启停演练/物理 Schema Diagnostics；再审 Research/Quant/Researchflow/LLM/Server/WebUI/Notification 的真实生产调用链。模块分支不因本次聚合分支修复而自动改变。

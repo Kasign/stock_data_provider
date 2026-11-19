@@ -114,11 +114,12 @@
 ### RF-BLOCK-009：News Search Payload Validator 未执行 Schema uniqueItems 约束
 
 - **现状**：News Payload Schema `doc/news/schema/NEWS-STAGE-search-candidates-payload-1.0.0.schema.json` 对 `candidate.missing_fields` 声明 `uniqueItems: true`。
-- **代码事实**：`internal/news/stage/search_candidates_validation.go::ValidatePayloadJSON` 只检查每个 missing field 是否属于允许枚举，没有检查重复值；因此重复项可通过 Validator，却不符合冻结 Schema。
+- **代码事实（修复前）**：`ValidatePayloadJSON` 只检查枚举，没有检查重复值。`repair_all` 已在 `internal/news/stage/search_candidates_validation.go` 增加重复项检测，并在 `search_candidates_test.go` 增加拒绝重复值的回归测试。
 - **影响**：Researchflow 的 `StageOutputRegistry` 复用 News 提供的 Validator，生产 Envelope/Payload 校验目前不能证明完全符合该 Schema。不能将当前 Validator 标记为完整 pass。
 - **责任边界**：由 News Owner 修复 News 自己的 Payload Validator 和测试；Researchflow 不复制 `internal/news/**` 的领域规则。
-- **解除条件**：News 增加重复 missing field 拒绝测试并通过 News 模块 CI；Researchflow 在集成基线上确认复用的新 Validator 后，重新验收 Stage Output Registry。
-- **当前状态**：OPEN；阻断 News Search Payload Schema 的完整一致性验收，不阻断 Researchflow 其他模块能力。
+- **解除条件**：已满足（repair_all 完整 CI 通过；Stage Output Registry 使用同一 News Validator）。
+- **验收证据**：完整 Integration CI Run [44450277491](https://github.com/Kasign/stock_data_provider/actions/runs/44450277491)，HEAD `5b9ebe6a2b8103b4c63a48c3c0f0ddb004d583ec`，结论 success。
+- **当前状态**：RESOLVED（仅限 repair_all 聚合基线）；`feat/news` 和 `feat/researchflow` 尚未同步，不得宣称模块分支已解除。
 
 ## 4. 状态定义
 
