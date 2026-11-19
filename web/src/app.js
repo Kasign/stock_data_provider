@@ -2767,7 +2767,7 @@ function cancelQuoteQuery({ clearResults = false, symbol = "", message = "当前
 }
 
 function quoteQueryKey(symbol, startDate, endDate, limit, adjustment) {
-  return JSON.stringify([symbol, startDate, endDate, limit, adjustment, normalizeBasePath(state.settings.marketBase, "/market-api")]);
+  return JSON.stringify([symbol, startDate, endDate, limit, adjustment, normalizeBasePath(state.settings.marketBase, "/")]);
 }
 
 function responseSymbolMismatch(payload, requestedSymbol, label) {
@@ -4593,7 +4593,7 @@ function handleLocalStorageChange(event) {
       draft = readConnectionDraft();
       preserveDraft = connectionDraftIsDirty();
     } catch {
-      // 设置表单尚不可用时仍同步已保存连接配置；不读取或回显 API Key。
+      // 设置表单尚不可用时仍同步固定的 Root Server API 入口。
     }
 
     const nextSettings = loadSettings();
@@ -4628,7 +4628,7 @@ function setBrowserDataFeedback(message, kind = "info") {
 }
 
 function buildBrowserDataPayload() {
-  // 仅导出明确允许的浏览器偏好与引用；绝不包含 API Key、行情缓存或完整报告。
+  // 仅导出明确允许的浏览器偏好与引用；不导出认证凭据、行情缓存或完整报告。
   return {
     format: BROWSER_DATA_FORMAT,
     version: BROWSER_DATA_VERSION,
@@ -4672,7 +4672,7 @@ function downloadBrowserData() {
     link.click();
     link.remove();
     window.setTimeout(() => URL.revokeObjectURL(url), 0);
-    setBrowserDataFeedback("本地工作区数据已导出，包含自选股分组与证券归属。文件不包含 API Key、行情快照或完整分析报告；任务引用可能包含标的与任务 ID。", "success");
+    setBrowserDataFeedback("本地工作区数据已导出，包含自选股分组与证券归属。文件不包含认证凭据、行情快照或完整分析报告；任务引用可能包含标的与任务 ID。", "success");
   } catch (error) {
     setBrowserDataFeedback("导出失败：" + (error?.message || "浏览器无法读取本地数据。"), "error");
   }
@@ -4745,8 +4745,8 @@ function validateBrowserDataPayload(payload) {
   const preferences = payload.version === 1 ? { ...DEFAULT_PREFERENCES } : normalizeImportedPreferences(data.preferences);
   if (!data.connection || typeof data.connection !== "object") throw new Error("缺少连接路径配置。");
   // 仅接受同源绝对路径，避免将导入文件变成任意外部请求目标。
-  const marketBase = normalizeBasePath(data.connection.marketBase, "/market-api");
-  const analysisBase = normalizeBasePath(data.connection.analysisBase, "/analysis-api");
+  const marketBase = normalizeBasePath(data.connection.marketBase, "/");
+  const analysisBase = normalizeBasePath(data.connection.analysisBase, "/");
 
   if (!Array.isArray(data.watchlist) || data.watchlist.length > MAX_WATCHLIST_ITEMS) {
     throw new Error("自选股必须是数组，且不能超过 " + MAX_WATCHLIST_ITEMS + " 条。");
@@ -4780,7 +4780,7 @@ function validateBrowserDataPayload(payload) {
       throw new Error("任务标的数量或格式无效。");
     }
     const analysisBase = typeof record.analysis_base === "string" && record.analysis_base.trim()
-      ? normalizeBasePath(record.analysis_base, "/analysis-api")
+      ? normalizeBasePath(record.analysis_base, "/")
       : "";
     // 同一 task_id 可能由不同分析服务分别生成，身份由 task_id + analysis_base 共同决定。
     const taskIdentity = JSON.stringify([taskId, analysisBase]);
