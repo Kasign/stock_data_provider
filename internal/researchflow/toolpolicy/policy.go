@@ -122,8 +122,7 @@ func (r *Registry) Authorize(intent Intent, budget Budget) (AuthorizedCall, erro
 		intent.Name == "" || !utf8.ValidString(intent.Name) ||
 		budget.IdempotencyKey == "" || !utf8.ValidString(budget.IdempotencyKey) || len(budget.IdempotencyKey) > 256 ||
 		!validUTF8Strings(budget.GrantedScopes) ||
-		!validUTCTime(budget.Now) || !validUTCTime(budget.RunDeadline) || !budget.RunDeadline.After(budget.Now) ||
-		!validUTF8Strings(budget.GrantedScopes) {
+		!validUTCTime(budget.Now) || !validUTCTime(budget.RunDeadline) || !budget.RunDeadline.After(budget.Now) {
 		return AuthorizedCall{}, ErrInvalidToolIntent
 	}
 	definition, ok := r.definitions[intent.Name]
