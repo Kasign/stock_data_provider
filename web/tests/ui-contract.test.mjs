@@ -2756,7 +2756,8 @@ test("Root Server 单入口、Owner Session 与 Data 内部 Handler 契约", asy
   const dataModule = await readFile(new URL("../../internal/marketdata/bootstrap/module.go", import.meta.url), "utf8");
   const compose = await readFile(new URL("../../docker-compose.yml", import.meta.url), "utf8");
   const nginx = await readFile(new URL("../default.conf.template", import.meta.url), "utf8");
-  assert.match(apiClient, /const prefix = normalizeBasePath\(base, "\/"\)/);
+  assert.match(apiClient, /const requestPath = path/);
+  assert.doesNotMatch(apiClient, /normalizeBasePath/);
   assert.doesNotMatch(apiClient, /X-API-Key|apiKey/);
   assert.match(apiClient, /credentials: "same-origin"/);
   assert.match(apiClient, /X-CSRF-Token/);
@@ -2768,6 +2769,11 @@ test("Root Server 单入口、Owner Session 与 Data 内部 Handler 契约", asy
   assert.doesNotMatch(dataConfig, /MARKET_DATA_API_KEY|^\t+APIKey\s+string/m);
   assert.doesNotMatch(marketHTTPServer, /X-API-Key|func \(s \*Server\) Handler\(/);
   assert.doesNotMatch(marketHTTPServer, /GET \/health\/live|GET \/health\/ready/);
+  assert.match(compose, /stock-analysis-server/);
+  assert.match(compose, /stock-analysis-web/);
+  assert.doesNotMatch(compose, /stock-analysis-data|services\/market-data/);
+  assert.match(nginx, /location \^~ \/api\//);
+  assert.doesNotMatch(nginx, /market-api|analysis-api/);
 });
 
 test("WebUI 不再保存独立 Data API Key 或双服务地址", async () => {
@@ -2779,7 +2785,8 @@ test("WebUI 不再保存独立 Data API Key 或双服务地址", async () => {
   assert.match(html, /id="owner-login-form"/);
   assert.match(html, /id="owner-session-logout"/);
   assert.match(html, /Owner Session/);
-  assert.doesNotMatch(html, /<input[^>]*(?:api.?key|service.?key)/i);\n  assert.doesNotMatch(html, /X-API-Key/);
+  assert.doesNotMatch(html, /<input[^>]*(?:api.?key|service.?key)/i);
+  assert.doesNotMatch(html, /X-API-Key/);
 });
 
 test("Root Server 健康检查只访问统一入口，Data 诊断不隐式请求上游", () => {
