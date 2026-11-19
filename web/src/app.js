@@ -2360,13 +2360,13 @@ function describeConnectionHealthResults(marketResult, analysisResult) {
   const marketState = serviceHealthState(marketResult);
   const analysisState = serviceHealthState(analysisResult);
   const describe = (name, result, status) => {
-    if (status === "healthy") return name + " API 就绪";
+    if (status === "healthy") return name + " 检查通过";
     if (status === "failed") return name + " API 不可用（" + errorMessage(result.error) + "）";
     if (status === "unknown") return name + " API 状态未知（回包未提供可识别的健康状态）";
     return name + " API 返回需关注的状态（" + String(result.data?.status || "未知") + "）";
   };
   return {
-    text: describe("行情", marketResult, marketState) + "；" + describe("分析", analysisResult, analysisState),
+    text: describe("Root Server 存活", marketResult, marketState) + "；" + describe("Root Server 就绪", analysisResult, analysisState),
     className: marketState === "healthy" && analysisState === "healthy"
       ? "settings-inline-status is-success"
       : "settings-inline-status is-warning"
@@ -2418,10 +2418,10 @@ async function checkConnectionFromSettings() {
     button.disabled = true;
     button.setAttribute("aria-busy", "true");
     button.textContent = "检查中…";
-    writeSettingsCheckOutputSafely(output, "正在检查当前已保存的行情与分析 API 地址…", "settings-inline-status");
+    writeSettingsCheckOutputSafely(output, "正在检查 Root Server 存活与就绪状态…", "settings-inline-status");
 
     const [marketResult, analysisResult] = await Promise.all([
-      runHealthCheck(marketHealth, settingsToCheck, 6000, controller.signal),
+      runHealthCheck(analysisLiveness, settingsToCheck, 6000, controller.signal),
       runHealthCheck(analysisHealth, settingsToCheck, 6000, controller.signal)
     ]);
     if (generation !== savedConnectionCheckGeneration) return;
@@ -2440,7 +2440,7 @@ async function checkConnectionFromSettings() {
     const summary = describeConnectionHealthResults(marketResult, analysisResult);
     writeSettingsCheckOutputSafely(
       output,
-      "已保存连接配置检查结果：" + summary.text +
+      "Root Server 检查结果：" + summary.text +
         "。健康检查不验证 Provider 的每次真实请求，也不会更改全局连接状态。",
       summary.className
     );
@@ -2517,7 +2517,7 @@ async function checkDraftConnectionFromSettings() {
     const summary = describeConnectionHealthResults(marketResult, analysisResult);
     writeSettingsCheckOutputSafely(
       output,
-      "表单地址检查结果（尚未保存）：" + summary.text +
+      "Root Server 检查结果：" + summary.text +
         "。健康检查不验证 Provider 的每次真实请求，也不会更改全局连接状态。",
       summary.className
     );
@@ -4164,7 +4164,7 @@ function syncConnectionDraftState() {
 
 function openSettings() {
   $("#market-base-input").value = state.settings.marketBase;
-  // Never echo the persisted API key into the input DOM, even though it is password-masked.
+  // API base inputs are hidden and fixed to the Root Server same-origin path.
   $("#analysis-base-input").value = state.settings.analysisBase;
   initialConnectionDraft = readConnectionDraft();
   syncConnectionDraftState();
