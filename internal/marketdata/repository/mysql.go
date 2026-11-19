@@ -65,6 +65,82 @@ func (s *Store) Ping(ctx context.Context) error {
 	return s.db.PingContext(ctx)
 }
 
+ // ValidateCompatibilitySchema verifies the physical schema invariants introduced
+ // by Data migration V4. Migration history checksums cannot detect manual schema drift.
+func (s *Store) ValidateCompatibilitySchema(ctx context.Context) error {
+	if s == nil || s.db == nil {
+		return nil
+	}
+	if ctx == nil {
+		return errors.New("schema validation context is required")
+	}
+	for _, column := range []string{"volume_ratio", "turnover_rate"} {
+		var dataType, nullable string
+		var precision, scale sql.NullInt64
+		err := s.db.QueryRowContext(ctx, `SELECT data_type, is_nullable, numeric_precision, numeric_scale
+FROM information_schema.columns
+WHERE table_schema = DATABASE() AND table_name = 'market_data_quotes' AND column_name = ?`, column).
+			Scan(&dataType, &nullable, &precision, &scale)
+		if errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("market_data_quotes.%s is missing", column)
+		}
+		if err != nil {
+			return fmt.Errorf("inspect market_data_quotes.%s: %w", column, err)
+		}
+		if strings.ToLower(dataType) != "decimal" || nullable != "YES" ||
+			!precision.Valid || precision.Int64 != 16 || !scale.Valid || scale.Int64 != 8 {
+			return fmt.Errorf("market_data_quotes.%s must be nullable DECIMAL(16,8)", column)
+		}
+	}
+	for _, index := range []struct {
+		table, name, legacy, columns string
+	}{
+		{"market_data_daily_bar_versions", "idx_market_bar_revision_identity_asof", "uq_market_bar_revision_content", "symbol,trade_date,period,adjustment_basis,source,recorded_at,id"},
+		{"market_data_fundamental_versions", "idx_market_fundamental_identity_asof", "uq_market_fundamental_revision_content", "symbol,report_year,report_quarter,source,recorded_at,id"},
+	} {
+		var legacyCount int
+		if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM information_schema.statistics
+WHERE table_schema = DATABASE() AND table_name = ? AND index_name = ?`, index.table, index.legacy).Scan(&legacyCount); err != nil {
+			return fmt.Errorf("inspect legacy index %s.%s: %w", index.table, index.legacy, err)
+		}
+		if legacyCount != 0 {
+			return fmt.Errorf("legacy index %s.%s must be removed", index.table, index.legacy)
+		}
+		rows, err := s.db.QueryContext(ctx, `SELECT non_unique, column_name FROM information_schema.statistics
+WHERE table_schema = DATABASE() AND table_name = ? AND index_name = ? ORDER BY seq_in_index`, index.table, index.name)
+		if err != nil {
+			return fmt.Errorf("inspect index %s.%s: %w", index.table, index.name, err)
+		}
+		var columns []string
+		nonUnique := -1
+		for rows.Next() {
+			var currentNonUnique int
+			var column string
+			if err := rows.Scan(&currentNonUnique, &column); err != nil {
+				_ = rows.Close()
+				return fmt.Errorf("read index %s.%s: %w", index.table, index.name, err)
+			}
+			if nonUnique != -1 && nonUnique != currentNonUnique {
+				_ = rows.Close()
+				return fmt.Errorf("index %s.%s has inconsistent uniqueness metadata", index.table, index.name)
+			}
+			nonUnique = currentNonUnique
+			columns = append(columns, column)
+		}
+		if err := rows.Err(); err != nil {
+			_ = rows.Close()
+			return fmt.Errorf("read index %s.%s: %w", index.table, index.name, err)
+		}
+		if err := rows.Close(); err != nil {
+			return fmt.Errorf("close index metadata for %s.%s: %w", index.table, index.name, err)
+		}
+		if nonUnique != 1 || strings.Join(columns, ",") != index.columns {
+			return fmt.Errorf("index %s.%s must be non-unique with columns %s", index.table, index.name, index.columns)
+		}
+	}
+	return nil
+}
+
 // MigrationDefinitions returns the immutable Data schema history used by Root Server.
 // Versions 1-3 are published definitions and must not be changed.
 func MigrationDefinitions() []platformstorage.Migration {

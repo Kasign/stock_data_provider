@@ -149,11 +149,13 @@ func Run(ctx context.Context) (runErr error) {
 			migrationCancel()
 			return fmt.Errorf("数据库 Schema 尚未满足当前已注册模块版本及 checksum 要求（MIGRATION_ENABLED=false）: %w", err)
 		}
-		if err := marketDataModule.Diagnostics().Ready(migrationCtx); err != nil {
-			migrationCancel()
-			return fmt.Errorf("Data Module 依赖就绪检查失败（MIGRATION_ENABLED=false）: %w", err)
-		}
-		slog.Info("所有已注册模块 Schema 版本与 checksum 预检通过；Data Module 依赖检查通过", "migration_enabled", false)
+		slog.Info("所有已注册模块 Schema 版本与 checksum 预检通过", "migration_enabled", false)
+	}
+	// Migration enabled/disabled 两种启动路径都必须在接受流量或启动 Worker 前
+	// 验证 Data 物理 Schema 与 Redis/MariaDB 依赖；Migration checksum 不证明物理结构完整。
+	if err := marketDataModule.Diagnostics().Ready(migrationCtx); err != nil {
+		migrationCancel()
+		return fmt.Errorf("Data Module 依赖与物理 Schema 就绪检查失败: %w", err)
 	}
 	migrationCancel()
 

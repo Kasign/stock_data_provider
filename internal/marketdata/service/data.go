@@ -2783,7 +2783,10 @@ func (s *DataService) Ready(ctx context.Context) error {
 				if err := s.store.Ping(checkCtx); err != nil {
 					return platformdiagnostics.Observation{}, readinessDependencyFault("sql", "market_data.mariadb_unavailable", "MariaDB is unavailable", err)
 				}
-				return platformdiagnostics.Observation{Status: platformdiagnostics.StatusHealthy, SafeMessage: "MariaDB is ready"}, nil
+				if err := s.store.ValidateCompatibilitySchema(checkCtx); err != nil {
+					return platformdiagnostics.Observation{}, fault.New(fault.ClassUnavailable, "market_data.schema_drift", "Market Data schema is not ready", err)
+				}
+				return platformdiagnostics.Observation{Status: platformdiagnostics.StatusHealthy, SafeMessage: "MariaDB and required compatibility schema are ready"}, nil
 			},
 		},
 	}
