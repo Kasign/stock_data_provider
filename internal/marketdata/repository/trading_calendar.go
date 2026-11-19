@@ -236,3 +236,107 @@ func validateTradingCalendarSnapshotPayload(snapshot *model.TradingCalendarSnaps
 	}
 	return nil
 }
+
+
+// validateTradingCalendarSnapshotSchema verifies the immutable calendar table
+// independently of migration checksums, including its primary and lookup indexes.
+func (s *Store) validateTradingCalendarSnapshotSchema(ctx context.Context) error {
+	table := "market_data_trading_calendar_snapshots"
+	columns := []struct {
+		name, columnType, dataType string
+	}{
+		{"calendar_ref", "varchar(96)", "varchar"},
+		{"content_fingerprint", "char(64)", "char"},
+		{"market", "varchar(32)", "varchar"},
+		{"start_date", "date", "date"},
+		{"end_date", "date", "date"},
+		{"source", "varchar(64)", "varchar"},
+		{"adapter_version", "varchar(128)", "varchar"},
+		{"schema_version", "varchar(16)", "varchar"},
+		{"quality_status", "varchar(16)", "varchar"},
+		{"fetched_at", "datetime(6)", "datetime"},
+		{"observed_at", "datetime(6)", "datetime"},
+		{"payload_json", "longtext", "longtext"},
+	}
+	for _, column := range columns {
+		var columnType, dataType, nullable string
+		err := s.db.QueryRowContext(ctx, `SELECT column_type, data_type, is_nullable
+FROM information_schema.columns
+WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?`, table, column.name).
+			Scan(&columnType, &dataType, &nullable)
+		if errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("%s.%s is missing", table, column.name)
+		}
+		if err != nil {
+			return fmt.Errorf("inspect %s.%s: %w", table, column.name, err)
+		}
+		if strings.ToLower(columnType) != column.columnType || strings.ToLower(dataType) != column.dataType || nullable != "NO" {
+			return fmt.Errorf("%s.%s must be NOT NULL %s", table, column.name, column.columnType)
+		}
+	}
+	primaryRows, err := s.db.QueryContext(ctx, `SELECT column_name FROM information_schema.statistics
+WHERE table_schema = DATABASE() AND table_name = ? AND index_name = 'PRIMARY' ORDER BY seq_in_index`, table)
+	if err != nil {
+		return fmt.Errorf("inspect %s primary key: %w", table, err)
+	}
+	var primaryColumns []string
+	for primaryRows.Next() {
+		var column string
+		if err := primaryRows.Scan(&column); err != nil {
+			_ = primaryRows.Close()
+			return fmt.Errorf("read %s primary key: %w", table, err)
+		}
+		primaryColumns = append(primaryColumns, column)
+	}
+	if err := primaryRows.Err(); err != nil {
+		_ = primaryRows.Close()
+		return fmt.Errorf("read %s primary key: %w", table, err)
+	}
+	if err := primaryRows.Close(); err != nil {
+		return fmt.Errorf("close %s primary key metadata: %w", table, err)
+	}
+	if strings.Join(primaryColumns, ",") != "calendar_ref" {
+		return fmt.Errorf("%s primary key must be calendar_ref", table)
+	}
+
+	indexRows, err := s.db.QueryContext(ctx, `SELECT non_unique, column_name, index_type, collation, sub_part
+FROM information_schema.statistics
+WHERE table_schema = DATABASE() AND table_name = ? AND index_name = 'idx_market_calendar_identity_observed'
+ORDER BY seq_in_index`, table)
+	if err != nil {
+		return fmt.Errorf("inspect %s identity index: %w", table, err)
+	}
+	var indexColumns []string
+	nonUnique := -1
+	for indexRows.Next() {
+		var currentNonUnique int
+		var column, indexType string
+		var collation sql.NullString
+		var subPart sql.NullInt64
+		if err := indexRows.Scan(&currentNonUnique, &column, &indexType, &collation, &subPart); err != nil {
+			_ = indexRows.Close()
+			return fmt.Errorf("read %s identity index: %w", table, err)
+		}
+		if nonUnique != -1 && nonUnique != currentNonUnique {
+			_ = indexRows.Close()
+			return fmt.Errorf("%s identity index has inconsistent uniqueness metadata", table)
+		}
+		if strings.ToUpper(indexType) != "BTREE" || !collation.Valid || collation.String != "A" || subPart.Valid {
+			_ = indexRows.Close()
+			return fmt.Errorf("%s identity index must use full ascending BTREE columns", table)
+		}
+		nonUnique = currentNonUnique
+		indexColumns = append(indexColumns, column)
+	}
+	if err := indexRows.Err(); err != nil {
+		_ = indexRows.Close()
+		return fmt.Errorf("read %s identity index: %w", table, err)
+	}
+	if err := indexRows.Close(); err != nil {
+		return fmt.Errorf("close %s identity index metadata: %w", table, err)
+	}
+	if nonUnique != 1 || strings.Join(indexColumns, ",") != "market,start_date,end_date,observed_at" {
+		return fmt.Errorf("%s identity index must be non-unique on market,start_date,end_date,observed_at", table)
+	}
+	return nil
+}

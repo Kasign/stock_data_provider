@@ -66,7 +66,7 @@ func (s *Store) Ping(ctx context.Context) error {
 }
 
 // ValidateCompatibilitySchema verifies the physical schema invariants introduced
-// by Data migration V4. Migration history checksums cannot detect manual schema drift.
+// by Data migrations V4-V5. Migration history checksums cannot detect manual schema drift.
 func (s *Store) ValidateCompatibilitySchema(ctx context.Context) error {
 	if s == nil || s.db == nil {
 		return nil
@@ -145,11 +145,14 @@ WHERE table_schema = DATABASE() AND table_name = ? AND index_name = ? ORDER BY s
 			return fmt.Errorf("index %s.%s must be non-unique with columns %s", index.table, index.name, index.columns)
 		}
 	}
+	if err := s.validateTradingCalendarSnapshotSchema(ctx); err != nil {
+		return err
+	}
 	return nil
 }
 
 // MigrationDefinitions returns the immutable Data schema history used by Root Server.
-// Versions 1-3 are published definitions and must not be changed.
+// Versions 1-4 are published definitions and must not be changed.
 func MigrationDefinitions() []platformstorage.Migration {
 	stmts := []string{
 		`CREATE TABLE IF NOT EXISTS market_data_provider_probe_runs (
