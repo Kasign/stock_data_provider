@@ -277,7 +277,7 @@ func TestMarketDataMigrationUpgradeAndConcurrentRootRegistration(t *testing.T) {
 	if len(definitions) != 4 {
 		t.Fatalf("Data migration definition count = %d, want 4", len(definitions))
 	}
-	if err := platformstorage.ApplyMigrations(ctx, db, "market_data", definitions[:3]); err != nil {
+	if err := platformstorage.ApplyMigrations(ctx, db, marketdatabootstrap.MigrationNamespace, definitions[:3]); err != nil {
 		t.Fatalf("apply published Data migrations V1-V3: %v", err)
 	}
 	// Recreate the deployed legacy state: two missing columns and old unique
@@ -294,7 +294,7 @@ func TestMarketDataMigrationUpgradeAndConcurrentRootRegistration(t *testing.T) {
 	}
 	registries := []*Registry{NewRegistry(), NewRegistry()}
 	for _, registry := range registries {
-		if err := registry.Register("market_data", definitions); err != nil {
+		if err := registry.Register(marketdatabootstrap.MigrationNamespace, definitions); err != nil {
 			t.Fatalf("register complete Data migration history: %v", err)
 		}
 	}

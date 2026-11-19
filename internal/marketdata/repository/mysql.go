@@ -257,16 +257,6 @@ ON market_data_adjustment_factor_versions (symbol, trade_date, source, source_ve
 	}
 }
 
-func (s *Store) Migrate(ctx context.Context) error {
-	if s == nil || s.db == nil {
-		return nil
-	}
-	if err := platformstorage.ApplyMigrations(ctx, s.db, "market_data", MigrationDefinitions()); err != nil {
-		return fmt.Errorf("market-data schema migration: %w", err)
-	}
-	return nil
-}
-
 func (s *Store) SaveQuote(ctx context.Context, q *model.Quote) error {
 	if s == nil || s.db == nil {
 		return nil

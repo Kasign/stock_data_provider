@@ -52,15 +52,9 @@ type Dependencies struct {
 	BaoStockDialContext           transport.DialContextFunc    // Root 注入 BaoStock TCP 受控连接函数；Module 不拥有、不关闭。
 }
 
-// Diagnostics 暴露模块就绪状态和 Provider 诊断，不暴露具体 DataService。
-// MigrationRunner 暴露 Data 自有 Schema 迁移能力，由 Root Server 组合根显式调度。
-type MigrationRunner interface {
-	Migrate(ctx context.Context) error
-}
+const MigrationNamespace = "market_data"
 
-var _ MigrationRunner = (*repository.Store)(nil)
-
-// MigrationDefinitions returns the immutable Data schema history for Root Server registration.
+// MigrationDefinitions 返回由 Root Server 统一执行的 Data Schema 迁移定义。
 func MigrationDefinitions() []platformstorage.Migration {
 	return repository.MigrationDefinitions()
 }
@@ -164,15 +158,6 @@ func (m *Module) Diagnostics() Diagnostics {
 		return nil
 	}
 	return m.diagnostics
-}
-
-// MigrationRunner 返回 Data 自有迁移执行器；未配置持久化时返回 nil。
-// 迁移由组合根显式执行，Module 构造和 Store 打开均不隐式修改 Schema。
-func (m *Module) MigrationRunner() MigrationRunner {
-	if m == nil || m.store == nil {
-		return nil
-	}
-	return m.store
 }
 
 // ProviderSummary 返回启动日志使用的 Provider 名称快照。

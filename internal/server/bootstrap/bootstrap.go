@@ -547,7 +547,7 @@ func newMigrationRegistry() (*servermigration.Registry, error) {
 		namespace  string
 		migrations []platformstorage.Migration
 	}{
-		{namespace: "market_data", migrations: marketdatabootstrap.MigrationDefinitions()},
+		{namespace: marketdatabootstrap.MigrationNamespace, migrations: marketdatabootstrap.MigrationDefinitions()},
 		{namespace: "news", migrations: newsstorage.Migrations()},
 		{namespace: platformsecurity.OwnerCredentialMigrationNamespace, migrations: platformsecurity.OwnerCredentialMigrations()},
 		{namespace: researchstorage.MigrationNamespace, migrations: researchstorage.Migrations()},
