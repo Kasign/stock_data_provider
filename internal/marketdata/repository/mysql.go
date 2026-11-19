@@ -64,10 +64,9 @@ func (s *Store) Ping(ctx context.Context) error {
 	}
 	return s.db.PingContext(ctx)
 }
-func (s *Store) Migrate(ctx context.Context) error {
-	if s == nil || s.db == nil {
-		return nil
-	}
+// MigrationDefinitions returns the immutable Data schema history used by Root Server.
+// Versions 1-3 are published definitions and must not be changed.
+func MigrationDefinitions() []platformstorage.Migration {
 	stmts := []string{
 		`CREATE TABLE IF NOT EXISTS market_data_provider_probe_runs (
  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -226,8 +225,7 @@ func (s *Store) Migrate(ctx context.Context) error {
  KEY idx_market_corporate_action_observed (recorded_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 	}
-	// Data Schema 由公共 Platform Migration Runner 执行；版本 1 发布后保持不可变，后续变更追加新版本。
-	if err := platformstorage.ApplyMigrations(ctx, s.db, "market_data", []platformstorage.Migration{
+	return []platformstorage.Migration{
 		{Version: 1, Description: "market data base schema", Statements: stmts},
 		{
 			Version: 2, Description: "adjustment factor source-version identity",
@@ -246,31 +244,24 @@ ON market_data_adjustment_factor_versions (symbol, trade_date, source, source_ve
 				"CREATE TABLE IF NOT EXISTS market_data_valuation_versions (id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT, request_fingerprint CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL, source VARCHAR(64) NOT NULL, revision_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL, recorded_at DATETIME(6) NOT NULL, fetched_at DATETIME(6) NOT NULL, quality_status VARCHAR(16) NOT NULL, metadata JSON NOT NULL, PRIMARY KEY (id), KEY idx_market_valuation_asof (request_fingerprint, recorded_at), KEY idx_market_valuation_identity_asof (request_fingerprint, source, recorded_at, id), KEY idx_market_valuation_observed (recorded_at)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
 			},
 		},
-	}); err != nil {
+		{
+			Version: 4, Description: "legacy market-data index and column compatibility",
+			Operations: []platformstorage.MigrationOperation{
+				{Kind: platformstorage.MigrationOperationEnsureNonUniqueIndex, Table: "market_data_daily_bar_versions", LegacyName: "uq_market_bar_revision_content", Name: "idx_market_bar_revision_identity_asof", Columns: "symbol, trade_date, period, adjustment_basis, source, recorded_at, id"},
+				{Kind: platformstorage.MigrationOperationEnsureNonUniqueIndex, Table: "market_data_fundamental_versions", LegacyName: "uq_market_fundamental_revision_content", Name: "idx_market_fundamental_identity_asof", Columns: "symbol, report_year, report_quarter, source, recorded_at, id"},
+				{Kind: platformstorage.MigrationOperationEnsureColumn, Table: "market_data_quotes", Name: "volume_ratio", Definition: "DECIMAL(16,8) NULL"},
+				{Kind: platformstorage.MigrationOperationEnsureColumn, Table: "market_data_quotes", Name: "turnover_rate", Definition: "DECIMAL(16,8) NULL"},
+			},
+		},
+	}
+}
+
+func (s *Store) Migrate(ctx context.Context) error {
+	if s == nil || s.db == nil {
+		return nil
+	}
+	if err := platformstorage.ApplyMigrations(ctx, s.db, "market_data", MigrationDefinitions()); err != nil {
 		return fmt.Errorf("market-data schema migration: %w", err)
-	}
-	// 旧版修订表曾对内容哈希建立全历史唯一约束，会错误阻止 A→B→A 的回归修订。
-	if err := s.ensureNonUniqueHistoryIndex(ctx, "market_data_daily_bar_versions",
-		"uq_market_bar_revision_content", "idx_market_bar_revision_identity_asof",
-		"symbol, trade_date, period, adjustment_basis, source, recorded_at, id"); err != nil {
-		return fmt.Errorf("migrate daily-bar revision index: %w", err)
-	}
-	if err := s.ensureNonUniqueHistoryIndex(ctx, "market_data_fundamental_versions",
-		"uq_market_fundamental_revision_content", "idx_market_fundamental_identity_asof",
-		"symbol, report_year, report_quarter, source, recorded_at, id"); err != nil {
-		return fmt.Errorf("migrate fundamentals revision index: %w", err)
-	}
-	// CREATE TABLE IF NOT EXISTS does not add new columns to an already existing
-	// deployment. Use information_schema checks so the migration works on both
-	// MySQL and MariaDB versions without relying on vendor-specific
-	// `ADD COLUMN IF NOT EXISTS` syntax.
-	for _, column := range []struct{ name, definition string }{
-		{name: "volume_ratio", definition: "DECIMAL(16,8) NULL"},
-		{name: "turnover_rate", definition: "DECIMAL(16,8) NULL"},
-	} {
-		if err := s.ensureColumn(ctx, "market_data_quotes", column.name, column.definition); err != nil {
-			return fmt.Errorf("migrate market_data_quotes.%s: %w", column.name, err)
-		}
 	}
 	return nil
 }
