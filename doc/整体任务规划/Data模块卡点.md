@@ -44,7 +44,7 @@
 - DATA-003 当前阶段记录已归档至 `doc/api/任务历史/03-DATA-003-Fundamentals-PIT完整性阶段记录.md`，真实 Provider 披露时点仍外部阻塞，不重复执行已有 PIT 机制验收。
 - DATA-009 已完成并归档：Fundamentals/Valuations 重复保存不新增修订、内容变化新增修订的 MariaDB 集成断言通过；Go Test Suite Run `44307383999` success。详见 `doc/api/任务历史/05-DATA-009-Fundamentals-Valuations修订写入幂等性验收完成状态.md`。
 - DATA-009 完成后已核对 DATA-003～DATA-007 的剩余缺口：DATA-003 缺披露时点证据；DATA-004 缺 PE_MRQ 公式/ProviderReportDate/逐字段源端更新时间证据；DATA-005 缺 DailyBar 发布宽限规则及财务/估值源端时间；DATA-006 缺固定 Python 运行环境下的双侧配对样本；DATA-007 缺专项 Provider 真实请求证据。以上均不能通过重复静态审查、合成数据或 Go-only CI 关闭。
-- 当前无可独立执行的已登记任务。恢复条件和禁止重复事项见 `doc/api/当前任务状态和进度.md`。DATA-008 继续 DEFERRED。
+- DATA-003～DATA-007 的真实 Provider/外部证据缺口没有可通过重复静态审查关闭的任务；但 `repair_all` 阶段二已新增 Data 内部可执行工作：不可变交易日历内容版本 Repository（Migration V5），具体实现与 CI 状态见 `doc/api/当前任务状态和进度.md`。这不代表 `feat/data` 已同步。DATA-008 继续 DEFERRED。
 - DATA-004～DATA-007 的历史证据已在总规划标记为部分进行；后续切换时必须先复用这些证据、只处理未关闭子项，并按总规划正式更新当前任务状态。
 
 ## 非 Data Owner 卡点（仅供责任边界追踪）
@@ -121,3 +121,9 @@ Root Server 的 Data Module 构造、共享资源注入、Migration Registry、I
 - RA009 Data Root 单入口代码与精确 SHA CI 已通过（Run 44482650366）；此前“等待最新 CI”的文字仅作为当时历史记录，不再是当前卡点。
 - 当前 Data 仍开放的实质卡点为 DATA-CTR-007、DATA-003～DATA-007 外部数据证据；M6 生产部署证据由 Server/部署运维负责，不重复归入 Data 代码待办。
 - 统一责任与解锁顺序见 `doc/整体任务规划/05-治理与验收/RepairAll跨模块修复计划与进度.md` 第 28 节。
+
+
+## RepairAll 阶段二：交易日历不可变版本实现（2026-11-19）
+
+- Data 已在 `repair_all` 增加 Migration V5 与内容寻址交易日历 Snapshot Repository；保存和精确读取按 SHA-256 校验，重复内容幂等，内容或质量变化生成新 Ref。
+- 该能力为 DATA-CTR-007 的日历版本前置子项；未完成 DailyBars v2、Manifest/Payload 绑定和 AuthorizationRef 前，DATA-CTR-007 仍 deferred。当前代码 SHA `dc8079bac92f19c2928219433f29480fb9d7d3ba` 的完整 Integration CI Run `44492921617` 尚未完成。
