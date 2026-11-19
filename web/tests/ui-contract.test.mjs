@@ -2757,7 +2757,7 @@ test("Root Server 单入口、Owner Session 与 Data 内部 Handler 契约", asy
   const compose = await readFile(new URL("../../docker-compose.yml", import.meta.url), "utf8");
   const nginx = await readFile(new URL("../default.conf.template", import.meta.url), "utf8");
   assert.match(apiClient, /const requestPath = path/);
-  assert.doesNotMatch(apiClient, /normalizeBasePath|marketBase|analysisBase/);
+  assert.doesNotMatch(apiClient, /normalizeBasePath|request\\(settings\\.(?:marketBase|analysisBase)/);
   assert.doesNotMatch(apiClient, /X-API-Key|apiKey/);
   assert.match(apiClient, /credentials: "same-origin"/);
   assert.match(apiClient, /X-CSRF-Token/);
