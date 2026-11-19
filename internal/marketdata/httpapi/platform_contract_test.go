@@ -7,59 +7,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"regexp"
 	"strings"
 	"testing"
 )
-
-func TestRequestIDMiddlewarePreservesSingleValidID(t *testing.T) {
-	const expected = "trusted-gateway-123"
-	var observed string
-	handler := (&Server{}).requestID(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
-		observed = requestID(r)
-	}))
-
-	req := httptest.NewRequest(http.MethodGet, "/health/live", nil)
-	req.Header.Set("X-Request-ID", expected)
-	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, req)
-
-	if observed != expected || rec.Header().Get("X-Request-ID") != expected {
-		t.Fatalf("request ID was not preserved: context=%q response=%q", observed, rec.Header().Get("X-Request-ID"))
-	}
-}
-
-func TestRequestIDMiddlewareRegeneratesInvalidOrRepeatedHeaders(t *testing.T) {
-	tests := []struct {
-		name   string
-		values []string
-	}{
-		{name: "invalid whitespace", values: []string{"not a valid id"}},
-		{name: "repeated header", values: []string{"first-id", "second-id"}},
-	}
-	pattern := regexp.MustCompile("^[0-9a-f]{32}$")
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			var observed string
-			handler := (&Server{}).requestID(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
-				observed = requestID(r)
-			}))
-			req := httptest.NewRequest(http.MethodGet, "/health/live", nil)
-			for _, value := range tt.values {
-				req.Header.Add("X-Request-ID", value)
-			}
-			rec := httptest.NewRecorder()
-			handler.ServeHTTP(rec, req)
-
-			if !pattern.MatchString(observed) {
-				t.Fatalf("expected a 16-byte lowercase hex request ID, got %q", observed)
-			}
-			if rec.Header().Get("X-Request-ID") != observed {
-				t.Fatalf("response header %q does not match context ID %q", rec.Header().Get("X-Request-ID"), observed)
-			}
-		})
-	}
-}
 
 func TestPlatformFaultHTTPProjectionMapsClassAndDefaultsToNonRetryable(t *testing.T) {
 	tests := []struct {

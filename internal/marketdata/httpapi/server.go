@@ -2,8 +2,6 @@ package httpapi
 
 import (
 	"context"
-	"crypto/rand"
-		"encoding/hex"
 	"encoding/json"
 	"errors"
 	"log/slog"
@@ -18,6 +16,7 @@ import (
 	"example.com/stock-analysis-flow/internal/marketdata/provider"
 	"example.com/stock-analysis-flow/internal/marketdata/service"
 	platformtime "example.com/stock-analysis-flow/internal/platform/time"
+	platformobservability "example.com/stock-analysis-flow/internal/platform/observability"
 )
 
 var (
@@ -165,7 +164,7 @@ func (s *Server) nowUTC() time.Time {
 // InProcessHandler 返回不包含认证和传输中间件的业务路由。
 // 仅允许挂载在 Root Server 已完成认证、授权、Request ID、超时和安全策略的可信进程内路由下。
 func (s *Server) InProcessHandler() http.Handler {
-	return s.routes()
+	return s.timeoutContext(s.requestTimeout, s.routes())
 }
 
 func (s *Server) routes() *http.ServeMux {
@@ -634,44 +633,6 @@ func setCacheHeader(w http.ResponseWriter, hit bool) {
 }
 
 // accessLog 只记录请求元数据和响应体字节数，不记录正文、查询参数或密钥。
-func (s *Server) accessLog(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		started := time.Now()
-		recorder := &statusRecorder{ResponseWriter: w}
-		next.ServeHTTP(recorder, r)
-		s.logger.Info("http request completed", "service", "market-data", "request_id", requestID(r),
-			"method", r.Method, "path", boundedLogPath(r.URL.Path), "status_code", recorder.status,
-			"duration_ms", time.Since(started).Milliseconds(), "response_bytes", recorder.bytes)
-	})
-}
-
-type statusRecorder struct {
-	http.ResponseWriter
-	status int
-	bytes  int
-}
-
-func (w *statusRecorder) WriteHeader(code int) {
-	if w.status != 0 {
-		return
-	}
-	w.status = code
-	w.ResponseWriter.WriteHeader(code)
-}
-func (w *statusRecorder) Write(data []byte) (int, error) {
-	if w.status == 0 {
-		w.WriteHeader(http.StatusOK)
-	}
-	n, err := w.ResponseWriter.Write(data)
-	w.bytes += n
-	return n, err
-}
-func boundedLogPath(path string) string {
-	if len(path) > 160 {
-		return path[:160]
-	}
-	return path
-}
 func (s *Server) timeoutContext(timeout time.Duration, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithTimeout(r.Context(), timeout)
@@ -680,49 +641,11 @@ func (s *Server) timeoutContext(timeout time.Duration, next http.Handler) http.H
 	})
 }
 
-func (s *Server) requestID(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		values := r.Header.Values("X-Request-ID")
-		id := ""
-		if len(values) == 1 {
-			id = strings.TrimSpace(values[0])
-		}
-		if !validRequestID(id) {
-			id = newRequestID()
-		}
-		w.Header().Set("X-Request-ID", id)
-		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), requestIDKey{}, id)))
-	})
+func requestID(r *http.Request) string {
+	if r == nil { return "" }
+	return platformobservability.FromContext(r.Context())
 }
 
-type requestIDKey struct{}
-
-func requestID(r *http.Request) string { v, _ := r.Context().Value(requestIDKey{}).(string); return v }
-func newRequestID() string {
-	var value [16]byte
-	if _, err := rand.Read(value[:]); err == nil {
-		return hex.EncodeToString(value[:])
-	}
-	return platformtime.SystemClock{}.Now().Format("20060102T150405.000000000Z")
-}
-func validRequestID(value string) bool {
-	if value == "" || len(value) > 128 {
-		return false
-	}
-	for _, r := range value {
-		if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' || r == '_' || r == '.' || r == ':') {
-			return false
-		}
-	}
-	return true
-}
-func securityHeaders(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("X-Content-Type-Options", "nosniff")
-		w.Header().Set("Cache-Control", "no-store")
-		next.ServeHTTP(w, r)
-	})
-}
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	body, err := json.Marshal(v)
 	if err != nil {
