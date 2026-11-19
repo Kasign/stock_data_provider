@@ -204,7 +204,7 @@ P0 原始问题及实施约束作为审计记录保留；当前状态以第 7、
 
 ## RA009：Root Server Data Owner Session 与单入口迁移（2026-11-19）
 
-<escape>状态：CODE_IMPLEMENTED_PENDING_CI_AND_PRODUCTION；Owner Session 方案已实现，旧实现已清理，CI 与生产验收待完成。</escape>
+<escape>状态：CODE_CI_PASS_PENDING_PRODUCTION；Owner Session 方案已实现，旧实现已清理，精确 SHA CI 通过，生产验收待外部证据。</escape>
 
 - 用户明确批准 Owner Session 方案，并明确旧实现不需要保留。
 - 唯一入口为 Root Server；WebUI 使用 HttpOnly Owner Session Cookie。Data 路由显式允许 Owner Session，保留 Owner Bearer 受控运维调用；Session 不继承 admin/service scope。
@@ -213,7 +213,7 @@ P0 原始问题及实施约束作为审计记录保留；当前状态以第 7、
 - 已删除浏览器 Data API Key 运行逻辑、Data HTTP Adapter 的 X-API-Key 认证、独立 Data 服务入口、独立容器/镜像资产、旧 Nginx 双 upstream、旧 Compose migration Profile 和旧 Data Key 配置设计文档；不保留双轨或回滚部署。
 - 旧资产清理与新入口切换已在同一代码批次完成；不保留旧服务、旧 Key、双 upstream 或回滚部署资产。目标环境真实部署和数据验收仍未完成。
 
-RA009 关闭条件：Server 路由认证矩阵、CSRF、WebUI 请求和配置、Compose/Nginx 单入口、独立 Data 运行资产清理、部署验收、真实 Provider/数据证据及最新精确 SHA CI 全部完成。详细分步清单见 Data 迁移计划与 Server 卡点文档。
+RA009 代码关闭条件已满足：Server 路由认证矩阵、CSRF、WebUI 请求和配置、Compose/Nginx 单入口、独立 Data 运行资产清理均已通过完整 Integration CI。精确代码 SHA `1e916220a8784ae840132ce0cec3b3654c6b9655` 对应 [Run 44482650366](https://github.com/Kasign/stock_data_provider/actions/runs/44482650366) 全项 success。M6 生产验收仍 BLOCKED_EXTERNAL_EVIDENCE：目标环境 HTTPS/Owner Session 浏览器验收、真实 MariaDB/Redis Migration 演练、备份恢复、真实 Provider 请求与数据质量证据尚未提供。详细清单见 Data 迁移计划与 Server 卡点文档。
 
 
 ### RA009 独立遗留边界：旧 Analysis Task/Run 浏览器认证
@@ -221,3 +221,11 @@ RA009 关闭条件：Server 路由认证矩阵、CSRF、WebUI 请求和配置、
 - Root Data 入口统一不等于旧 Analysis Task/Run 已完成 Owner Session 接入。
 - 旧 Analysis 路由继续 Owner Bearer-only，WebUI 当前使用同源 Session Cookie，不会自动具备该权限；这是既有 SRV-CTR-001 deferred 边界，不是 Data 路由回归。
 - 后续由 Server/Researchflow 按新 API 契约完成 Application、HTTP/OpenAPI、Root DI、Owner Session/资源授权与端到端联调；不得通过身份映射或静态 Bearer 绕过权限边界。
+
+
+### RA009 代码 CI 通过后的路由补充（2026-11-19）
+
+- 在统一入口复核中发现 Data Source 列表的精确路径 `GET /api/v1/data-sources` 未被原来的尾斜杠子树模式覆盖；这会使该路由落入 Root 的其他路由分发，而不是 Data Owner Session/Bearer 分发器。
+- 已在 Server 统一注册精确路径与子树路径，并新增未认证拒绝、Owner Bearer 通过测试；Owner Session 与 Bearer 共用同一组注册模式。
+- 修复代码 SHA `1e916220a8784ae840132ce0cec3b3654c6b9655` 的完整 Integration CI [Run 44482650366](https://github.com/Kasign/stock_data_provider/actions/runs/44482650366) 全项 success。
+- 该问题属于实际路由覆盖缺陷，已修复；没有新增认证身份或放宽策略。

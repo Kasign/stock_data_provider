@@ -27,7 +27,7 @@
 | M2 Application Port / Module | DONE | Data Module、Application Port、Provider 装配、生命周期和 Data InProcessHandler 已存在 |
 | M3 Root Server 装配 | DONE | Server 创建 Module、注入共享资源、挂载 Data 路由并向 Analysis 注入 Application |
 | M4 Platform / Migration / Readiness | DONE（代码级） | 共享 DB/Redis、受控出站、静态 Migration Definitions、Root Registry、Diagnostics/Readiness/Lifecycle 已装配 |
-| M5 Owner Session 与单入口切换 | IMPLEMENTED_PENDING_CI | WebUI 同源 /api；Root Data 路由 Owner Session/Owner Bearer；Compose 仅 Root Server + WebUI；Nginx 单 /api upstream；独立 Data 资产已删除 |
+| M5 Owner Session 与单入口切换 | DONE_CODE_CI | WebUI 同源 /api；Root Data 路由 Owner Session/Owner Bearer；Compose 仅 Root Server + WebUI；Nginx 单 /api upstream；独立 Data 资产已删除 |
 | M6 生产验收 | BLOCKED_EXTERNAL_EVIDENCE | 仍需目标环境真实 HTTPS、MariaDB/Redis、Migration 演练、Provider 数据与部署证据 |
 
 ### 本批明确删除的退役资产
@@ -57,7 +57,7 @@ Owner Bearer 不下发浏览器。浏览器不保存 Data API Key、Owner Bearer
 
 ## 4. 自动化验收与生产证据
 
-代码变更已提交；必须以本轮修复后最新 SHA 的完整 Integration CI 成功作为代码验收证据。此前 CI 中曾暴露 Go 测试调用签名和 WebUI 旧双入口测试断言问题，均已修正/替换为 Root 单入口契约测试；历史 CI 不可代替当前 SHA 验收。
+代码层验收已通过：精确代码 SHA `1e916220a8784ae840132ce0cec3b3654c6b9655` 的 Integration CI [Run 44482650366](https://github.com/Kasign/stock_data_provider/actions/runs/44482650366) 全项 success。此前 CI 暴露的 OpenAPI 操作矩阵常量、WebUI readiness 路径和 Owner Session 初始化时机断言已按实际契约修正；随后补齐 `/api/v1/data-sources` 精确根路由认证注册及 Owner Bearer/未认证回归。生产环境验收仍未执行，CI 不代表 M6 通过。
 
 必须完成：
 
@@ -65,7 +65,7 @@ Owner Bearer 不下发浏览器。浏览器不保存 Data API Key、Owner Bearer
 2. WebUI 测试：登录、刷新后 CSRF 恢复、Data GET、Provider Probe POST、登出、轮换；localStorage 不再保存旧 Key，所有请求不发送 X-API-Key。
 3. Data/OpenAPI 测试：仅保留 Data 业务操作，不再定义独立 Data HTTP API Key 或独立服务入口。
 4. Compose 配置校验、Nginx 路由检查、Root Server 镜像和 WebUI 镜像构建。
-5. 完整 Integration CI 在最新精确 SHA 全部通过；不得通过降低门禁或将失败步骤改为 skipped 规避。
+5. 完整 Integration CI 已在精确代码 SHA `1e916220a8784ae840132ce0cec3b3654c6b9655` 全部通过（Run 44482650366）；后续代码变更仍须重新验收，不得通过降低门禁或将失败步骤改为 skipped 规避。
 6. 目标环境真实 HTTPS Origin 与 Argon2id 参数基准测试；真实 Owner Session Cookie/CSRF 浏览器验收。
 7. Root 共享 MariaDB/Redis、Migration enabled/disabled、Schema 漂移、启动失败回滚、SIGTERM 优雅关闭验收。
 8. 真实 Provider 请求与数据质量验收。Provider 缺少凭据或权限时记为 skipped / not-comparable，不得伪造成功。
@@ -74,7 +74,7 @@ Owner Bearer 不下发浏览器。浏览器不保存 Data API Key、Owner Bearer
 ## 5. 当前执行结论
 
 - M1～M4 不再重复实施或重复审查。
-- M5 的代码和部署配置已按唯一 Root 入口实现；待最新 CI 证明代码通过。
+- M5 的代码、部署配置、旧独立 Data 资产清理及精确 SHA Integration CI 均已通过；不保留旧服务或回滚路径。
 - M6 需要真实部署环境和数据证据，不能由 Mock、CI 临时数据库、静态配置检查或 Provider 能力声明替代。
 - Data 的 DATA-003～DATA-007 真实披露时点、估值字段、Freshness、Go/Python parity 和 Provider 专项证据仍按 Data 总规划管理，不因本次部署迁移而关闭。
 - 不创建 Remote Adapter、双轨部署或旧服务回滚路径。

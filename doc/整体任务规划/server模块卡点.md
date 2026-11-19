@@ -256,3 +256,13 @@
 - 当前旧 Analysis 路由仍由 Platform Owner Bearer RoutePolicy 保护，而 WebUI 不持有 Owner Bearer。因此旧 WebUI Task/Run 请求仍无法凭 Owner Session 通过认证。
 - 不得把 Owner Session 伪装成 Owner Bearer，也不得为完成 Data 迁移而放宽旧 Analysis 路由。
 - 该问题属于 SRV-CTR-001 deferred / Researchflow 新 HTTP API 装配边界，单独作为 Server 与 Researchflow 联调卡点；在新 API 合同、Application、路由和端到端测试完成前，不宣称旧 Task/Run 浏览器链路可用。
+
+
+## RepairAll RA009 最终代码验收（2026-11-19）
+
+- 用户已确认采用 Owner Session + Root Server 单入口，并明确不保留旧独立 Data 服务、旧 Data API Key、双 upstream 或回滚部署。
+- Server 已移除旧 Data 服务入口与 Data API Key 认证；Data 路由显式接受 Owner Session / Owner Bearer，非安全 Session 请求由现有 SessionAuthenticator 校验 Origin/Host/CSRF。
+- 路由回归发现 `GET /api/v1/data-sources` 精确路径未覆盖于旧尾斜杠子树路由，已补精确路径注册，并新增 Owner Bearer / 未认证测试。没有更改认证标准。
+- 精确代码 SHA `1e916220a8784ae840132ce0cec3b3654c6b9655` 的 Integration CI [Run 44482650366](https://github.com/Kasign/stock_data_provider/actions/runs/44482650366) 全项 success。
+- M5 代码和 CI 验收完成；M6 仍需目标环境真实 HTTPS/Session/CSRF、MariaDB/Redis Migration 启停、备份恢复及 Provider 真实数据证据。此类外部证据不能由 CI 替代。
+- 旧 Analysis Task/Run API 仍是独立的 SRV-CTR-001 deferred 边界，不属于 Data 路由迁移；不得把 Data 的 Owner Session 策略隐式扩展到旧 Analysis 路由。
