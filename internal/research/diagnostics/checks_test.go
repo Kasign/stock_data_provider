@@ -411,7 +411,7 @@ func TestEvidenceCheckRequiresComparableStrictPIT(t *testing.T) {
 func TestEventAndClaimChecksDoNotExposeDomainText(t *testing.T) {
 	cutoff := time.Date(2026, 11, 6, 8, 0, 0, 0, time.UTC)
 	event := researchevent.ResearchEvent{
-		EventID: "event-private", EventVersion: 3, EventType: "fixture",
+		EventID: "event-private", EventVersion: 1, EventType: "fixture",
 		Title: "不得进入诊断输出的事件标题", Status: researchevent.StatusDetected,
 		SubjectRefs: []string{"security:600000"}, EvidenceRefs: []string{"evidence:private"},
 		SystemObservedAt: cutoff, SystemAsOf: cutoff,
