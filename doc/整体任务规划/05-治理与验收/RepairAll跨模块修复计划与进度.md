@@ -363,7 +363,7 @@ RA009 代码关闭条件已满足：Server 路由认证矩阵、CSRF、WebUI 请
 ### 28.6 D1 证据盘点补充
 
 - 已确认 DailyBars 的 SourceVersion（Tushare/BaoStock/Hithink）为适配器/接口版本常量；通用校验只要求非空且非 `unknown`，不能视为上游数据修订版本。
-- 已确认 TradingCalendar 目前只有 Provider 查询与 Redis 12 小时缓存，未发现不可变日历历史 Repository；SourceVersion 仍是 Provider/Adapter 版本。日历来源冲突或推断非交易日会标记 degraded。
+- 初始审计时 TradingCalendar 只有 Provider 查询与 Redis 12 小时缓存；后续 Migration V5 已补齐不可变 CalendarRef Repository、内容寻址和 PIT 读取，见 28.9 与 28.17。SourceVersion 仍是 Provider/Adapter 版本，与 CalendarRef 内容身份分离。
 - 后续实现必须分离 adapter_version、normalization_version、provider_data_version 和 calendar content ref；缺少源端版本/可靠日历证据时显式缺失或降级，不伪造版本。
 
 
@@ -453,3 +453,11 @@ RA009 代码关闭条件已满足：Server 路由认证矩阵、CSRF、WebUI 请
 
 - Service as-of 集成测试使用独立历史日期区间，避免与其他测试的相同日历内容/观察时点产生共享内容地址，消除测试顺序耦合。
 - 生产实现未变；新 SHA 重新执行完整 CI。
+
+
+### 28.20 D2 CalendarRef 与 ChangePercent 字段审查补充（2026-11-19）
+
+- 代码复核确认 coverage helper 当前只返回 bool/warnings，实际使用的 CalendarRef 被丢弃；正常读取与 PIT 读取必须分别从同一次 `TradingCalendar` / `TradingCalendarAsOf` 结果中捕获引用，不得二次查询。
+- D2 方案明确以内部 `DailyBarCoverageEvidence` 传递 calendar_ref、日历质量、交易日分母、coverage 阈值与 warnings；v1 方法保留兼容，v2 使用独立版本化 Application Snapshot Header。
+- ChangePercent 证据已按 Provider 分层：Tushare/BaoStock/Netease 可从原始 token/string 保留来源值；TickFlow 部分记录有来源值、缺失时现有 float64 派生；Pytdx/Yahoo 当前是 float64 派生；其余默认 Provider 未建立可核验来源链。没有冻结 Decimal 派生舍入规则前，derived 值在 v2 必须 null。
+- 当前仍开放 lexical scale evidence、Tushare/Yahoo QFQ/HFQ 精确调整、Amount 单位、ProviderTime/provider_data_version 证据；未修改项目契约登记簿，DATA-CTR-005/007 与 QNT-CTR-003 继续 deferred。
