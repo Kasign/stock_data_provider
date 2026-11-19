@@ -30,7 +30,7 @@ test("loadSettings removes legacy Data API Key and split upstream paths", () => 
     })
   }), () => {
     assert.deepEqual(loadSettings(), { marketBase: "/", analysisBase: "/" });
-    assert.equal(localStorage.getItem(SETTINGS_KEY), JSON.stringify({ marketBase: "/", analysisBase: "/" }));
+    assert.equal(localStorage.getItem(SETTINGS_KEY), "{}");
     assert.doesNotMatch(localStorage.getItem(SETTINGS_KEY), /legacy-secret|apiKey|market-api|analysis-api/);
   });
 });
@@ -41,7 +41,7 @@ test("saveSettings always persists the single Root Server API base", () => {
       marketBase: "/old-market", analysisBase: "/old-analysis", apiKey: "must-not-persist"
     });
     assert.deepEqual(settings, { marketBase: "/", analysisBase: "/" });
-    assert.equal(localStorage.getItem(SETTINGS_KEY), JSON.stringify(settings));
+    assert.equal(localStorage.getItem(SETTINGS_KEY), "{}");
     assert.deepEqual(loadSettings(), settings);
   });
 });

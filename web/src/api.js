@@ -1,14 +1,13 @@
 export const SETTINGS_KEY = "stock-provider-webui.settings.v1";
 const DEFAULTS = Object.freeze({ marketBase: "/", analysisBase: "/" });
+const PERSISTED_SETTINGS = "{}";
 
 export function loadSettings() {
   try {
     const raw = localStorage.getItem(SETTINGS_KEY);
     const value = { ...DEFAULTS };
-    const serialized = JSON.stringify(value);
-    // Remove legacy browser Data API Key and split upstream paths instead of
-    // migrating them into another client-side credential/configuration store.
-    if (raw !== null && raw !== serialized) localStorage.setItem(SETTINGS_KEY, serialized);
+    // Connection paths and credentials are deployment-owned; clear the old split-path/API-key payload.
+    if (raw !== null && raw !== PERSISTED_SETTINGS) localStorage.setItem(SETTINGS_KEY, PERSISTED_SETTINGS);
     return value;
   } catch {
     return { ...DEFAULTS };
@@ -17,9 +16,8 @@ export function loadSettings() {
 
 export function saveSettings() {
   const value = { ...DEFAULTS };
-  const serialized = JSON.stringify(value);
-  localStorage.setItem(SETTINGS_KEY, serialized);
-  if (localStorage.getItem(SETTINGS_KEY) !== serialized) {
+  localStorage.setItem(SETTINGS_KEY, PERSISTED_SETTINGS);
+  if (localStorage.getItem(SETTINGS_KEY) !== PERSISTED_SETTINGS) {
     throw new Error("Root Server API 配置未能保存，请检查浏览器存储权限或可用空间。");
   }
   return value;

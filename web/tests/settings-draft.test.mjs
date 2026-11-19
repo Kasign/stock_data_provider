@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { connectionDraftChanged, mergeConnectionDraft } from "../src/settings-draft.js";
 
-test("connection draft is fixed to the single Root Server API base", () => {
+test("legacy connection drafts cannot change the fixed Root Server API base", () => {
   const initial = { marketBase: "/", analysisBase: "/" };
   assert.equal(connectionDraftChanged(initial, { ...initial }), false);
   assert.equal(connectionDraftChanged(initial, { ...initial, marketBase: "/other" }), true);
