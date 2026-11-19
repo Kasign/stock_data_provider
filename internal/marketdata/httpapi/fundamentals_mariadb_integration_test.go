@@ -62,7 +62,7 @@ func TestFundamentalsHTTPToMariaDBPointInTime(t *testing.T) {
 		slog.New(slog.NewTextHandler(io.Discard, nil)),
 	)
 	svc.SetFundamentalsProviders([]provider.FundamentalsProvider{source})
-	handler := New("integration-secret", "forward_adjusted", svc, []provider.Provider{source}, nil).Handler()
+	handler := New("forward_adjusted", svc, []provider.Provider{source}, nil).InProcessHandler()
 
 	liveRequest := httptest.NewRequest(http.MethodGet,
 		"/api/v1/stocks/"+symbol+"/fundamentals?year=2026&quarter=2", nil)

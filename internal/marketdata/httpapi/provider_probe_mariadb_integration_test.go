@@ -82,7 +82,7 @@ func newHTTPProbeMariaDBHandler(store *repository.Store, providers ...provider.D
 		"probe-mariadb-test-key", "none", svc,
 		named, nil, providers, 2000, 110*time.Second,
 		slog.New(slog.NewTextHandler(io.Discard, nil)),
-	).Handler()
+	).InProcessHandler()
 }
 
 func TestProviderProbeHTTPMariaDBEndToEnd(t *testing.T) {

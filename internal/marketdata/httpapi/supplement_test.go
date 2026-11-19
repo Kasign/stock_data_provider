@@ -42,8 +42,8 @@ func testSupplementHandler() http.Handler {
 	ds := service.NewWithCapabilities(nil, nil, nil, cache.NewDisabled(), nil,
 		time.Second, time.Minute, 120, 1000, service.ResilienceConfig{}, logger)
 	ds.SetSupplementProviders([]provider.SupplementProvider{supplementHTTPFake{}})
-	return NewWithCapabilityInterfaces("test-secret", "forward_adjusted", ds,
-		nil, nil, nil, 1000, time.Second, logger).Handler()
+	return NewWithCapabilityInterfaces("forward_adjusted", ds,
+		nil, nil, nil, 1000, time.Second, logger).InProcessHandler()
 }
 
 func TestSupplementEndpointsAndDataSourceCapability(t *testing.T) {
@@ -89,8 +89,8 @@ func TestDisabledSupplementReturnsProviderUnavailable(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	ds := service.NewWithCapabilities(nil, nil, nil, cache.NewDisabled(), nil,
 		time.Second, time.Minute, 120, 1000, service.ResilienceConfig{}, logger)
-	h := NewWithCapabilityInterfaces("test-secret", "forward_adjusted", ds,
-		nil, nil, nil, 1000, time.Second, logger).Handler()
+	h := NewWithCapabilityInterfaces("forward_adjusted", ds,
+		nil, nil, nil, 1000, time.Second, logger).InProcessHandler()
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/stocks/600519.SH/chip-distribution", nil)
 	req.Header.Set("X-API-Key", "test-secret")
 	w := httptest.NewRecorder()
