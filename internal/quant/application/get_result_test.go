@@ -292,7 +292,7 @@ func TestValidateAuthorizationMatchesFrozenQuantGolden(t *testing.T) {
 		RunRef:       "run:researchflow:001",
 		SubjectRef:   golden.AuthorizationRef.SubjectRef,
 		ResourceRef:  golden.AuthorizationRef.ResourceRef,
-		PurposeCode: quantPurposeCode,
+		PurposeCode:  quantPurposeCode,
 		ContentLevel: quantContentLevel,
 		At:           time.Date(2026, 11, 12, 0, 0, 0, 0, time.UTC),
 	}
