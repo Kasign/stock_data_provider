@@ -307,9 +307,11 @@ func buildCorporateActionAdjustmentFactors(
 		out = append(out, model.AdjustmentFactor{
 			Symbol: symbol, TradeDate: bar.TradeDate, Factor: transform.PriceScale,
 			PriceOffsetCNY: corporateActionAffineFloatPointer(transform.PriceOffsetCNY),
-			Basis: model.AdjustmentFactorShared, Source: rawSource, SourceVersion: rawVersion,
-			Derivation: "corporate_action_" + string(policy) + "_affine_v1",
-			EvidenceSources: uniqueSortedCorporateActionStrings(sources),
+			Basis:                  model.AdjustmentFactorShared,
+			Source:                 rawSource,
+			SourceVersion:          rawVersion,
+			Derivation:             "corporate_action_" + string(policy) + "_affine_v1",
+			EvidenceSources:        uniqueSortedCorporateActionStrings(sources),
 			EvidenceRevisionHashes: hashes, AvailableAt: availableAt,
 			FetchedAt: coverageFetchedAt.UTC(), QualityStatus: quality, QualityReasons: reasons,
 		})
@@ -430,4 +432,3 @@ func combineCorporateActionAffineQuality(left, right model.QualityStatus) model.
 	}
 	return model.QualityValid
 }
-

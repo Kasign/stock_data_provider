@@ -239,4 +239,3 @@ func TestBuildCorporateActionAdjustmentFactorsComposesEventsChronologically(t *t
 		t.Fatalf("cumulative factor mismatch: %+v", factors[2])
 	}
 }
-
