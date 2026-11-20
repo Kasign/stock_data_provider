@@ -702,11 +702,11 @@ func TestLiveHithinkDailyBarsBackwardRaw(t *testing.T) {
 		Rows       []rawDailyRow `json:"rows"`
 	}
 	report := map[string]any{
-		"provider":    "hithink",
-		"endpoint":    "/api/a-share/prices/historical",
-		"symbol":      symbol,
-		"start":       startDate,
-		"end":         endDate,
+		"provider":     "hithink",
+		"endpoint":     "/api/a-share/prices/historical",
+		"symbol":       symbol,
+		"start":        startDate,
+		"end":          endDate,
 		"generated_at": time.Now().UTC().Format(time.RFC3339),
 	}
 	modes := make([]modeEvidence, 0, 3)
