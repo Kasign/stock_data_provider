@@ -125,9 +125,8 @@ func TestLivePytdxBaoStockCorporateActionConsistency(t *testing.T) {
 		}
 
 		type affineTerm struct {
-			date       time.Time
-			multiplier float64
-			offset     float64
+			date  time.Time
+			event pytdxBaoStockAffineEvent
 		}
 		terms := make([]affineTerm, 0, len(gbbq.List))
 		for _, rawEvent := range gbbq.List {
@@ -138,20 +137,32 @@ func TestLivePytdxBaoStockCorporateActionConsistency(t *testing.T) {
 			if event == nil {
 				continue
 			}
+			multiplier := (10 + event.Songzhuangu + event.Peigu) / 10
+			offset := (event.Fenhong - event.Peigu*event.Peigujia) / 10
 			terms = append(terms, affineTerm{
-				date:       event.Time,
-				multiplier: (10 + event.Songzhuangu + event.Peigu) / 10,
-				offset:     (event.Fenhong - event.Peigu*event.Peigujia) / 10,
+				date: event.Time,
+				event: pytdxBaoStockAffineEvent{
+					ExDate: event.Time.In(location).Format("2006-01-02"),
+					DividendPerShare: event.Fenhong / 10,
+					BonusPerShare: event.Songzhuangu / 10,
+					RightsPerShare: event.Peigu / 10,
+					RightsPrice: event.Peigujia,
+					Multiplier: multiplier,
+					Offset: offset,
+				},
 			})
 		}
 		sort.Slice(terms, func(i, j int) bool { return terms[i].date.After(terms[j].date) })
 		priceScale, priceOffset := 1.0, 0.0
+		eventTerms := make([]pytdxBaoStockAffineEvent, 0, len(terms))
 		for _, term := range terms {
-			priceScale = term.multiplier * priceScale
-			priceOffset = term.multiplier*priceOffset + term.offset
+			priceScale = term.event.Multiplier * priceScale
+			priceOffset = term.event.Multiplier*priceOffset + term.event.Offset
+			eventTerms = append(eventTerms, term.event)
 		}
 		transform := pytdxBaoStockAffineTransform{
 			Symbol: symbol, EventCount: len(terms), PriceScale: priceScale, PriceOffset: priceOffset,
+			Events: eventTerms,
 		}
 		if len(factors) > 0 {
 			transform.BaoStockLatestBackFactor = factors[len(factors)-1].BackwardFactor

@@ -1377,3 +1377,11 @@ Go suite 覆盖根模块、go-core、market-data 的格式/测试/race/vet、Mar
 - Pytdx GBBQ / BaoStock 2026-06-26 事件校验 matched：前收 1212.10，理论除权参考价 1184.076，BaoStock 1184.08；因子 delta 差约 3.52e-6。
 - 本提交将 Hithink affine 重建加入 live probe 断言，并将 Pytdx/BaoStock probe 输出所有事件的仿射 scale/offset 摘要，便于下一步比较两套事件流的累计结果。
 
+## 83. 2026-11-20 Hithink 与 Pytdx 累计仿射事件参数差异
+
+- Hithink 与 Pytdx GBBQ 对 600519.SH 都返回 30 条公司行动事件，累计 price_scale 完全一致：5.627766144000002。
+- Hithink price_offset=1803.7277332744059；Pytdx GBBQ price_offset=1798.1580188881926；差值为 5.5697143862133 元。该差值与 23 日窗口内 Hithink/Pytdx HFQ 价格差一致。
+- Pytdx/BaoStock 2026-06-26 单事件校验 matched；这证明该日现金分红、除权参考价和因子 delta 可互相解释，但尚不能解释全部 30 条事件累计 offset 的差异。
+- 本提交把 Pytdx GBBQ 全部事件的 ex-date、每股现金分红、送股比例、配股比例/价格及 affine multiplier/offset 写入 live report，下一步按 ex-date 与 Hithink 30 条事件逐项对齐，定位 5.5697143862 元偏移的来源。
+- 同时修正上一轮两处 Go struct gofmt 对齐；Go Test Suite 在 72d SHA 因格式检查失败，未进入 MarketData 单元测试。本次 SHA 将重新执行格式、单元、集成和 live probe。
+
