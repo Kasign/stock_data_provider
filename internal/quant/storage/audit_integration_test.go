@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -19,7 +20,7 @@ func TestMySQLAccessAuditorAppendsDecisionWithoutPayload(t *testing.T) {
 	}
 	event := application.AccessAuditEvent{
 		SubjectRef: "service:researchflow",
-		ResourceRef: "quant_result:sha256:" + stringsRepeat("a", 64),
+		ResourceRef: "quant_result:sha256:" + strings.Repeat("a", 64),
 		PurposeCode: "quant_analysis",
 		Decision: "allowed",
 		ReasonCode: "result_released",
@@ -53,7 +54,7 @@ func TestMySQLAccessAuditorRejectsInvalidEventAndCancellation(t *testing.T) {
 	}
 	valid := application.AccessAuditEvent{
 		SubjectRef: "service:researchflow",
-		ResourceRef: "quant_result:sha256:" + stringsRepeat("b", 64),
+		ResourceRef: "quant_result:sha256:" + strings.Repeat("b", 64),
 		PurposeCode: "quant_analysis",
 		Decision: "denied",
 		ReasonCode: "authorization_denied",
