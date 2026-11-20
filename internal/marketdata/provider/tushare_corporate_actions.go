@@ -52,7 +52,6 @@ func (p *Tushare) FetchCorporateActions(ctx context.Context, rawSymbol, startDat
 	const maxPages = 10
 	out := make([]model.CorporateAction, 0)
 	fetchedAt := providerNowUTC()
-	referencePriceIncluded := true
 	for page := 0; page < maxPages; page++ {
 		table, fetchErr := p.fetchCapabilityTable(ctx, "dividend", map[string]string{
 			"ts_code": symbol, "limit": fmt.Sprintf("%d", pageSize), "offset": fmt.Sprintf("%d", page*pageSize),
@@ -130,6 +129,13 @@ func (p *Tushare) FetchCorporateActions(ctx context.Context, rawSymbol, startDat
 			if rowErr != nil {
 				return nil, rowErr
 			}
+			var referencePriceIncluded *bool
+			holderScope := model.CorporateActionHolderScopeUnknown
+			if exDate != "" && strings.Contains(status, "实施") {
+				included := true
+				referencePriceIncluded = &included
+				holderScope = model.CorporateActionHolderScopeAllShareholders
+			}
 			eventID := strings.Join([]string{symbol, reportDate, announcementDate, implementationDate}, "|")
 			if reportDate == "" || announcementDate == "" {
 				return nil, fmt.Errorf("Tushare dividend row %d is missing stable event identity fields", rowIndex)
@@ -141,9 +147,9 @@ func (p *Tushare) FetchCorporateActions(ctx context.Context, rawSymbol, startDat
 				ExDate: exDate, PayDate: payDate,
 				CashDividendCNY: cashAfterTax, CashDividendBeforeTaxCNY: cashBeforeTax,
 				BonusShareRatio: bonus, TransferShareRatio: transfer,
-				HolderScope: model.CorporateActionHolderScopeAllShareholders,
-				ReferencePriceIncluded: &referencePriceIncluded,
-				Source: p.Name(), SourceVersion: tushareDividendVersion, FetchedAt: fetchedAt,
+				HolderScope:            holderScope,
+				ReferencePriceIncluded: referencePriceIncluded,
+				Source:                 p.Name(), SourceVersion: tushareDividendVersion, FetchedAt: fetchedAt,
 				QualityStatus:  model.QualityDegraded,
 				QualityReasons: []string{"provider_available_at_timestamp_not_exposed_by_dividend"},
 			})

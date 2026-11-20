@@ -45,7 +45,6 @@ func validCorporateActionHolderScope(value model.CorporateActionHolderScope) boo
 	}
 }
 
-
 func validateAdjustmentFactorRecord(value model.AdjustmentFactor) error {
 	if strings.TrimSpace(value.Symbol) == "" || !validISODate(value.TradeDate, false) ||
 		value.Factor <= 0 || math.IsNaN(value.Factor) || math.IsInf(value.Factor, 0) ||

@@ -38,8 +38,9 @@ func TestTushareFetchCorporateActionsKeepsAnnouncementAndEffectiveDatesSeparate(
 		t.Fatalf("daily announcement date must not be promoted to exact available_at: %+v", got)
 	}
 	proposal := items[1]
-	if proposal.ExDate != "" || proposal.EventStatus != "预案" || proposal.AnnouncementDate != "2026-04-01" {
-		t.Fatalf("unimplemented proposal must remain a dated announcement without invented ex-date: %+v", proposal)
+	if proposal.ExDate != "" || proposal.EventStatus != "预案" || proposal.AnnouncementDate != "2026-04-01" ||
+		proposal.HolderScope != model.CorporateActionHolderScopeUnknown || proposal.ReferencePriceIncluded != nil {
+		t.Fatalf("unimplemented proposal must remain a dated announcement without invented ex-date or reference-price treatment: %+v", proposal)
 	}
 }
 

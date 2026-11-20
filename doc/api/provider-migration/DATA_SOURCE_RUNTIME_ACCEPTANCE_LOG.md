@@ -1426,3 +1426,8 @@ Go suite 覆盖根模块、go-core、market-data 的格式/测试/race/vet、Mar
 - Tushare 普通分红记录标记为 all_shareholders / reference_price_included=true；不把未分类的股权分置改革对价伪装为普通分红。
 - 新增 2006 茅台官方事件 fixture：exchange_reference 结果 scale=2、offset=1.482；流通股股东 total-return 结果 scale=2.24、offset=4.432；Hithink composite provider-compatibility 结果与其报告一致。
 - 本阶段不改变生产数据流；仅为后续把 CorporateAction 事件转换为 AdjustmentFactor affine 序列建立明确模型和可测试纯函数。
+
+### 第 86 节 Tushare 事件分类边界补充
+
+- Tushare 只有在已返回 ex_date 且 div_proc 表示实施时，才标记 all_shareholders / reference_price_included=true。
+- 仅有预案公告、尚无 ex_date 的记录保留 holder_scope=unknown、reference_price_included=nil，不允许进入任何已生效复权计算。

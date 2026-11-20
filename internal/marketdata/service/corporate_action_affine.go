@@ -11,8 +11,8 @@ import (
 )
 
 type corporateActionAffineTransform struct {
-	PriceScale      float64
-	PriceOffsetCNY  float64
+	PriceScale     float64
+	PriceOffsetCNY float64
 }
 
 type corporateActionAffineDateTerms struct {
