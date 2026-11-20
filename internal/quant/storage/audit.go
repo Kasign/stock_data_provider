@@ -38,7 +38,7 @@ func (a *MySQLAccessAuditor) RecordResultAccess(ctx context.Context, event appli
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if !validAuditText(event.SubjectRef) || !validQuantResultRef(event.ResourceRef) ||
+	if !validAuditRunRef(event.RunRef) || !validAuditText(event.SubjectRef) || !validQuantResultRef(event.ResourceRef) ||
 		event.PurposeCode != "quant_analysis" || !validAuditText(event.ReasonCode) ||
 		!validAuditDecision(event.Decision) || (!validAuditText(event.AuthorizationRef) && event.AuthorizationRef != "") ||
 		event.OccurredAt.IsZero() || event.OccurredAt.Location() != time.UTC {
@@ -50,9 +50,9 @@ func (a *MySQLAccessAuditor) RecordResultAccess(ctx context.Context, event appli
 		authorizationRef = event.AuthorizationRef
 	}
 	_, err := a.db.ExecContext(ctx, `INSERT INTO quant_access_audit
-		(subject_ref, resource_ref, purpose_code, decision, reason_code, authorization_ref, occurred_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		event.SubjectRef, event.ResourceRef, event.PurposeCode, event.Decision,
+		(subject_ref, run_ref, resource_ref, purpose_code, decision, reason_code, authorization_ref, occurred_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		event.SubjectRef, event.RunRef, event.ResourceRef, event.PurposeCode, event.Decision,
 		event.ReasonCode, authorizationRef, event.OccurredAt.UTC().Format(time.RFC3339Nano),
 	)
 	if err != nil {
@@ -65,6 +65,20 @@ func (a *MySQLAccessAuditor) RecordResultAccess(ctx context.Context, event appli
 		return err
 	}
 	return nil
+}
+
+func validAuditRunRef(value string) bool {
+	if !validAuditText(value) || len(value) > 128 {
+		return false
+	}
+	for i := 0; i < len(value); i++ {
+		char := value[i]
+		if !((char >= 'a' && char <= 'z') || (char >= 'A' && char <= 'Z') ||
+			(char >= '0' && char <= '9') || char == '_' || char == '-' || char == ':') {
+			return false
+		}
+	}
+	return true
 }
 
 func validAuditText(value string) bool {

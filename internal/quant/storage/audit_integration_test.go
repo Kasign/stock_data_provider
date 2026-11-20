@@ -19,6 +19,7 @@ func TestMySQLAccessAuditorAppendsDecisionWithoutPayload(t *testing.T) {
 		t.Fatal(err)
 	}
 	event := application.AccessAuditEvent{
+		RunRef:           "run_0123456789abcdef0123456789abcdef",
 		SubjectRef:       "service:researchflow",
 		ResourceRef:      "quant_result:sha256:" + strings.Repeat("a", 64),
 		PurposeCode:      "quant_analysis",
@@ -33,13 +34,13 @@ func TestMySQLAccessAuditorAppendsDecisionWithoutPayload(t *testing.T) {
 	t.Cleanup(func() {
 		_, _ = db.ExecContext(context.Background(), "DELETE FROM quant_access_audit WHERE resource_ref = ?", event.ResourceRef)
 	})
-	var subject, resource, purpose, decision, reason, authorizationRef, occurredAt string
-	if err := db.QueryRowContext(ctx, `SELECT subject_ref, resource_ref, purpose_code, decision, reason_code,
+	var runRef, subject, resource, purpose, decision, reason, authorizationRef, occurredAt string
+	if err := db.QueryRowContext(ctx, `SELECT run_ref, subject_ref, resource_ref, purpose_code, decision, reason_code,
 		authorization_ref, occurred_at FROM quant_access_audit WHERE resource_ref = ?`, event.ResourceRef).
-		Scan(&subject, &resource, &purpose, &decision, &reason, &authorizationRef, &occurredAt); err != nil {
+		Scan(&runRef, &subject, &resource, &purpose, &decision, &reason, &authorizationRef, &occurredAt); err != nil {
 		t.Fatal(err)
 	}
-	if subject != event.SubjectRef || resource != event.ResourceRef || purpose != event.PurposeCode ||
+	if runRef != event.RunRef || subject != event.SubjectRef || resource != event.ResourceRef || purpose != event.PurposeCode ||
 		decision != event.Decision || reason != event.ReasonCode || authorizationRef != event.AuthorizationRef ||
 		occurredAt != event.OccurredAt.Format(time.RFC3339Nano) {
 		t.Fatalf("persisted audit event mismatch: %q %q %q %q %q %q %q", subject, resource, purpose, decision, reason, authorizationRef, occurredAt)
@@ -53,12 +54,18 @@ func TestMySQLAccessAuditorRejectsInvalidEventAndCancellation(t *testing.T) {
 		t.Fatal(err)
 	}
 	valid := application.AccessAuditEvent{
+		RunRef:      "run_abcdef0123456789abcdef0123456789",
 		SubjectRef:  "service:researchflow",
 		ResourceRef: "quant_result:sha256:" + strings.Repeat("b", 64),
 		PurposeCode: "quant_analysis",
 		Decision:    "denied",
 		ReasonCode:  "authorization_denied",
 		OccurredAt:  time.Date(2026, 11, 20, 3, 0, 0, 0, time.UTC),
+	}
+	missingRun := valid
+	missingRun.RunRef = ""
+	if err := auditor.RecordResultAccess(context.Background(), missingRun); !errors.Is(err, ErrInvalidAuditEvent) {
+		t.Fatalf("missing RunRef error = %v", err)
 	}
 	invalid := valid
 	invalid.Decision = "conditional"

@@ -101,7 +101,8 @@ func TestGetResultReturnsValidatedAuthorizedEnvelope(t *testing.T) {
 	if got.ResultID != reader.value.Record.Manifest.ResultID || got.AuthorizationRef != reader.value.AuthorizationRef.AuthorizationRef || got.ResultType != "risk" {
 		t.Fatalf("unexpected envelope: %+v", got)
 	}
-	if len(auditor.events) != 1 || auditor.events[0].Decision != "allowed" || auditor.events[0].ReasonCode != "result_released" {
+	if len(auditor.events) != 1 || auditor.events[0].RunRef != "run:researchflow:001" ||
+		auditor.events[0].Decision != "allowed" || auditor.events[0].ReasonCode != "result_released" {
 		t.Fatalf("successful result access was not audited: %+v", auditor.events)
 	}
 	if reader.calls != 1 || reader.request.RunRef != "run:researchflow:001" || reader.request.SubjectRef != "service:researchflow" ||

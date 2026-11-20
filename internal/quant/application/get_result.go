@@ -148,6 +148,7 @@ type AuthorizedRecord struct {
 
 // AccessAuditEvent 只记录授权读取元数据，不包含结果 Payload 或受限内容。
 type AccessAuditEvent struct {
+	RunRef           string
 	SubjectRef       string
 	ResourceRef      string
 	PurposeCode      string
@@ -278,7 +279,7 @@ func (usecase *GetResult) recordAudit(ctx context.Context, request ReadRequest, 
 		return err
 	}
 	event := AccessAuditEvent{
-		SubjectRef: request.SubjectRef, ResourceRef: request.ResourceRef,
+		RunRef: request.RunRef, SubjectRef: request.SubjectRef, ResourceRef: request.ResourceRef,
 		PurposeCode: request.PurposeCode, Decision: decision, ReasonCode: reasonCode,
 		AuthorizationRef: authorizationRef, OccurredAt: request.At,
 	}

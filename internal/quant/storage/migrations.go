@@ -36,5 +36,12 @@ func Migrations() []platformstorage.Migration {
 				PRIMARY KEY (audit_id)
 			) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin`},
 		},
+		{
+			Version:     3,
+			Description: "persist Researchflow Run scope on Quant access audit events",
+			Statements: []string{`ALTER TABLE quant_access_audit
+				ADD COLUMN run_ref VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NULL AFTER subject_ref,
+				ADD KEY idx_quant_access_audit_run_id (run_ref, audit_id)`},
+		},
 	}
 }
