@@ -506,3 +506,12 @@ RA009 代码关闭条件已满足：Server 路由认证矩阵、CSRF、WebUI 请
 - Application Port 深拷贝新增证据字段；Provider/Application 回归测试已覆盖。
 - 精确 SHA `baaa2a57051e064f4f91a54851443379636bb685` 的 Integration CI Run [44658725187](https://github.com/Kasign/stock_data_provider/actions/runs/44658725187) 全项 success。
 - 最终 DailyBarV2 Body、HTTP v2、Tushare/Yahoo QFQ/HFQ 精确调整、ProviderTime/provider_data_version 和 Research/Quant 消费者契约仍 OPEN；DATA-CTR-005/007、QNT-CTR-003 继续 deferred。
+
+
+### 28.26 Quant QNT-013 审计回调取消边界修复（2026-11-20）
+
+- 当前 repair_all HEAD：`0a10cb08daa7dcedc6707349ab96d576472bf7a0`。
+- 最近提交修复 `GetResult.Execute` 的取消传播缺口：Auditor 回调执行期间若请求 Context 被取消，Application 必须返回取消错误，不得继续释放已构造的结果 Envelope。
+- 新增回归测试验证审计事件已记录、请求取消后 Envelope 为空；未改变授权策略、审计事件字段或跨模块端口。
+- Integration CI Run [44661192496](https://github.com/Kasign/stock_data_provider/actions/runs/44661192496) 对精确 SHA 全项 success：格式、根模块 vet/test、跨模块测试、Worker MariaDB/Redis、go-core、Compose、WebUI 测试与镜像构建全部通过。
+- 结论：Quant Application 内部该取消传播子项 CLOSED；QNT-013 的生产 Storage/事务/Migration、授权 Reader 和审计持久化仍是 Server/Platform 装配卡点。不得将模块内回归通过等同于生产结果链路验收通过。
