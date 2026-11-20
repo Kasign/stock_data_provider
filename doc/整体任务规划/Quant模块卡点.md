@@ -74,3 +74,14 @@ Quant 不在 `internal/quant/**` 实现 SQL/Redis、通用 Storage、认证、�
 - 当前 `GetResult` 的用途为 `quant_analysis`、内容级别 `full`。但授权策略 Owner、subject_ref 可信映射、策略撤销的线性化边界、审计保留和失败处置尚无可据以实现的生产契约/决议。不得默认 Allow，不得把 Owner Session 身份直接当成 Quant 资源授权。
 - 解锁顺序：① Quant/项目契约 Owner 明确策略 Owner、策略快照读取/撤销一致性和审计语义；② Quant/Server/Platform 按现有 Port 与模块边界实现生产 Repository、Migration、Principal/Authorized Reader/Audit Adapter；③ Server Root 注入并做 MariaDB 并发/冲突/撤销竞态/审计失败集成验收；④ 具备明确真实消费场景后再接 Researchflow Quant Stage。
 - QNT-013 模块内取消传播子项已 CLOSED；生产闭环仍 OPEN。QNT-014 Facade 与 Researchflow Stage 不因本次复核提前开放。
+
+
+## RepairAll QNT-013 持久化结构审查补充（2026-11-20）
+
+- 已核对 Quant Manifest/Record/Save Port、Platform Storage/Migration Runner、Server Migration Registry 和 Research SQL Repository 范式。
+- 结果存储建议最小单表：result_id 唯一主键、manifest_fingerprint、result_fingerprint、manifest_json、payload_json、created_at；字段直接来源于现有 Manifest/Record/Repository 契约。该模型尚待 MariaDB 实现验证，不视为已冻结 Schema。
+- Save 必须依赖 DB 唯一约束原子仲裁；重复相同指纹幂等成功且不覆盖首次 created_at，异内容冲突 ErrResultConflict；禁止 REPLACE/覆盖 UPSERT/无锁先查后插。
+- Quant 拥有自己的 Storage Adapter/Migration；Server 只注册 Quant Migration 和注入；Platform 复用现有连接池/迁移能力。没有查询用例前不新增二级索引。
+- 授权读取和 Access Audit 不得并入 Save Repository。AuthorizedResultReader 需策略快照与结果读取一致性边界；AccessAuditor 写入失败必须拒绝释放结果。
+- 授权策略 Owner、撤销一致性、可信 subject_ref 映射、审计保留/失败处置仍未明确，生产授权 Reader 不得先行伪实现。
+- 当前结论：持久化设计审查完成；SQL Schema/Adapter/Migration 未实现；QNT-013 生产闭环继续 OPEN。下一步核对 GOV-CTR-006 和 Platform Authorization 已有能力，避免重复建设。
