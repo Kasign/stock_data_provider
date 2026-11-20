@@ -57,3 +57,10 @@ Quant 不在 `internal/quant/**` 实现 SQL/Redis、通用 Storage、认证、�
 - Quant result 仅有 Save Repository Port 与 MemoryRepository；GetResult 所需 AuthorizedResultReader、PrincipalResolver、AccessAuditor 仍为注入端口，未发现生产 Storage/授权/审计 Adapter。QNT-013 生产闭环未完成。
 - Envelope 仅接受 trend/risk 1.0.0；IndicatorPayload 类型存在但未注册，Factor Payload 未注册。与当前正式 Registry/Schema/数据契约状态一致，保持 fail-closed，不放宽 DecodePayload。
 - 解锁责任：Quant 完成 QNT-001/002 正式 Registry/Payload 和 QNT-014 Facade；Server/Platform 完成生产 Repository、授权一致性、审计持久化与 Root 注入；Data 解锁 DATA-CTR-005/007 后才可推进相应输入链路。
+
+
+## RepairAll QNT-013 模块内取消传播补充（2026-11-20）
+
+- `GetResult.Execute` 已覆盖 PrincipalResolver、可信 Clock、授权 Reader 返回后的取消检查；本轮补齐 Auditor 回调返回后的取消检查。
+- 精确 SHA `0a10cb08daa7dcedc6707349ab96d576472bf7a0` 的完整 Integration CI Run [44661192496](https://github.com/Kasign/stock_data_provider/actions/runs/44661192496) 全项 success。
+- 该取消传播子项 CLOSED，不改变跨模块责任：生产 Repository/事务/Migration、可信授权 Reader 和 AccessAuditor 持久化仍由 Server/Platform 装配与验收。
