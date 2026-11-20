@@ -15,10 +15,9 @@ import (
 )
 
 func TestDailyBarsAsOfReturnsUnavailableWhenRevisionStorageIsDisabled(t *testing.T) {
-	handler := New("secret", "none", &service.DataService{}, nil, nil).Handler()
+	handler := New("none", &service.DataService{}, nil, nil).InProcessHandler()
 	req := httptest.NewRequest(http.MethodGet,
 		"/api/v1/bars/600519.SH/daily?as_of=2026-10-01T00%3A00%3A00Z", nil)
-	req.Header.Set("X-API-Key", "secret")
 	recorder := httptest.NewRecorder()
 	handler.ServeHTTP(recorder, req)
 	if recorder.Code != http.StatusServiceUnavailable {
@@ -30,9 +29,8 @@ func TestDailyBarsAsOfReturnsUnavailableWhenRevisionStorageIsDisabled(t *testing
 }
 
 func TestDailyBarsAsOfRejectsInvalidTimestamp(t *testing.T) {
-	handler := New("secret", "none", &service.DataService{}, nil, nil).Handler()
+	handler := New("none", &service.DataService{}, nil, nil).InProcessHandler()
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/bars/600519.SH/daily?as_of=invalid", nil)
-	req.Header.Set("X-API-Key", "secret")
 	recorder := httptest.NewRecorder()
 	handler.ServeHTTP(recorder, req)
 	if recorder.Code != http.StatusBadRequest {
@@ -55,7 +53,7 @@ func TestPITDatabaseQueryFailureReturnsStorageUnavailable(t *testing.T) {
 	}
 
 	svc := service.New(nil, cache.NewDisabled(), store, time.Second, time.Minute, 120, nil)
-	handler := New("secret", "none", svc, nil, nil).Handler()
+	handler := New("none", svc, nil, nil).InProcessHandler()
 	asOf := url.QueryEscape(time.Now().UTC().Add(-time.Minute).Format(time.RFC3339Nano))
 	tradeDate := time.Now().In(time.FixedZone("Asia/Shanghai", 8*60*60)).AddDate(0, 0, -1).Format("2006-01-02")
 	paths := []string{
@@ -65,7 +63,6 @@ func TestPITDatabaseQueryFailureReturnsStorageUnavailable(t *testing.T) {
 	}
 	for _, path := range paths {
 		req := httptest.NewRequest(http.MethodGet, path, nil)
-		req.Header.Set("X-API-Key", "secret")
 		recorder := httptest.NewRecorder()
 		handler.ServeHTTP(recorder, req)
 		if recorder.Code != http.StatusServiceUnavailable {

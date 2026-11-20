@@ -5,6 +5,7 @@ import (
 	"errors"
 	"sort"
 	"strings"
+	"unicode/utf8"
 
 	"example.com/stock-analysis-flow/internal/llm"
 )
@@ -32,14 +33,15 @@ func NewLLMRegistry(definitions []Definition) (*Registry, error) {
 func IntentFromModelToolCall(call llm.ModelToolCall) (Intent, error) {
 	callID := strings.TrimSpace(call.CallID)
 	name := strings.TrimSpace(call.Name)
-	if callID == "" || len(callID) > 256 || name == "" || len(name) > 128 {
+	if callID == "" || !utf8.ValidString(callID) || len(callID) > 256 ||
+		name == "" || !utf8.ValidString(name) || len(name) > 128 {
 		return Intent{}, ErrInvalidModelToolCall
 	}
 	if call.Status != "" && call.Status != "completed" {
 		return Intent{}, ErrInvalidModelToolCall
 	}
 	if strings.TrimSpace(call.ArgumentsJSON) == "" || len(call.ArgumentsJSON) > llm.MaxPayloadBytes ||
-		!json.Valid([]byte(call.ArgumentsJSON)) {
+		!utf8.ValidString(call.ArgumentsJSON) || !json.Valid([]byte(call.ArgumentsJSON)) {
 		return Intent{}, ErrInvalidModelToolCall
 	}
 	return Intent{
@@ -76,7 +78,8 @@ func IntentsFromModelResponse(response llm.ModelResponse) ([]Intent, error) {
 func (r *Registry) ToolDefinitionsFor(budget Budget) []llm.ToolDefinition {
 	if r == nil || budget.MaxCalls <= 0 || budget.CallsUsed < 0 || budget.MaxCalls <= budget.CallsUsed ||
 		budget.MaxTotalTimeout <= 0 || budget.TimeoutUsed < 0 || budget.MaxTotalTimeout <= budget.TimeoutUsed ||
-		budget.Now.IsZero() || !budget.RunDeadline.After(budget.Now) {
+		!validUTCTime(budget.Now) || !validUTCTime(budget.RunDeadline) || !budget.RunDeadline.After(budget.Now) ||
+		!validUTF8Strings(budget.GrantedScopes) {
 		return nil
 	}
 	granted := make(map[string]struct{}, len(budget.GrantedScopes))

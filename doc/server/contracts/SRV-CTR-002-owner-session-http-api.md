@@ -1,7 +1,7 @@
 # SRV-CTR-002 Owner Session HTTP API 契约
 
 - 契约编号：SRV-CTR-002
-- 契约版本：1.0.0
+- 契约版本：1.1.0
 - 状态：freeze-ready（待项目负责人确认冻结）
 - 生产方：Root Server（HTTP Handler、Cookie、Session Middleware、路由认证矩阵）
 - 消费者：WebUI；运维初始化流程
@@ -101,7 +101,7 @@ Owner 初始化不提供 HTTP 路由。它只能通过受控本机/运维命令�
 
 ## 4. Cookie、CSRF 与 Origin/Host
 
-1. Session Cookie 固定 HttpOnly、SameSite=Lax、无 Domain、Path 使用 Server 配置的最小 API 路径；HTTPS 公网必须 Secure。
+1. Session Cookie 固定 HttpOnly、SameSite=Lax、无 Domain、Path 固定为 `/api`，覆盖 Owner Session 与所有 Root Data/业务 API；HTTPS 公网必须 Secure。
 2. Cookie Max-Age/Expires 不得超过 Session 剩余 idle/absolute TTL 中较早者。
 3. CSRF Header 固定为 `X-CSRF-Token`；必须恰好一个非空值。Token 由 Platform CSPRNG 生成并与 Session 绑定。
 4. 所有非安全方法必须由 Platform `CSRFSafeSessionStore` 在原子 Touch 操作中比较 CSRF Digest；错误/缺失 CSRF 不得刷新 idle TTL。
@@ -129,6 +129,11 @@ Owner 初始化不提供 HTTP 路由。它只能通过受控本机/运维命令�
 ## 7. 路由认证矩阵
 
 - 本契约六个浏览器接口按表中身份执行；CSRF Token 恢复端点为 `POST /api/v1/owner/session/csrf`，身份为 owner_session，且是唯一不要求旧 CSRF Header 的状态端点。
+- Root Data 路由在启用 Owner Session 时显式接受两种身份：owner_session 或 owner_bearer；二者是互斥认证方式，单个请求同时携带 Session Cookie 与 Authorization Header 必须拒绝。
+- Data 路由范围：`/api/v1/quotes/{symbol}`、`/api/v1/bars/{symbol}/daily`、`/api/v1/bundles/{symbol}`、`/api/v1/data-sources/**`、`/api/v1/market/**`、`/api/v1/stocks/**`。
+- owner_session 请求必须由现有 SessionAuthenticator 校验 Cookie、Origin/Host；POST/PUT/PATCH/DELETE 等非安全方法还必须通过原子 CSRF 校验。Provider Probe POST 不例外。
+- owner_bearer 请求由 Platform OwnerAccess 策略校验，只供受控运维调用，不下发浏览器。
+- owner_session 只证明 Owner 浏览器会话，不自动授予 platform:admin、Service Scope 或任何 Data 领域资源授权；Data 领域授权继续按 DATA-CTR-008 执行。
 - `/healthz` 保持 anonymous；`/readyz`、`/diagnostics` 保持 owner_bearer，除非各自独立契约明确改变。
 - 现有旧 Analysis/兼容管理路由继续按当前 owner_bearer 策略，不因启用 Session 自动放宽。
 - Researchflow 新业务路由由 SRV-CTR-001 定义；需要 WebUI 浏览器访问的用户用例必须明确声明 owner_session，并由领域 Owner 继续执行资源级授权。Server 不得把 owner_session 映射成 owner_bearer。
@@ -138,7 +143,7 @@ Owner 初始化不提供 HTTP 路由。它只能通过受控本机/运维命令�
 
 - 为每个 JSON 请求/响应建立独立 Schema/Golden，统一放在 `doc/server/schema/SRV-CTR-002/` 与 `doc/server/golden/SRV-CTR-002/`。
 - OpenAPI 权威文件为 `doc/server/openapi/owner-session.openapi.yaml`；它只描述本契约路由，不合并/复用已退役旧 Analysis API Schema。
-- DTO schema_version 固定 1.0.0；契约版本与 DTO Schema 版本独立。
+- DTO schema_version 固定 1.0.0；本次 1.1.0 仅扩展 Root Data 路由的认证矩阵和统一 Cookie/API Prefix，不改变既有 Owner Session DTO Schema。
 - 任何路径、方法、字段、认证矩阵、Cookie/CSRF/Origin 语义或错误语义的非兼容变化必须升级 SRV-CTR-002 主版本并评估 WebUI 迁移。
 - 当前定义不等于实现已完成；实现符合性必须通过 Schema/Golden、HTTP 集成测试、真实 MariaDB/Redis、Nginx 同源部署验收。
 

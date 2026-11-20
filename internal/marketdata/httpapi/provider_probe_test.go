@@ -23,28 +23,18 @@ func newProviderProbeHTTPTestHandler() http.Handler {
 		service.ResilienceConfig{}, slog.New(slog.NewTextHandler(io.Discard, nil)),
 	)
 	server := NewWithCapabilityInterfaces(
-		"probe-test-key", "forward_adjusted", svc,
+		"forward_adjusted", svc,
 		nil, nil, nil, 2000, 110*time.Second,
 		slog.New(slog.NewTextHandler(io.Discard, nil)),
 	)
-	return server.Handler()
+	return server.InProcessHandler()
 }
 
-func performProviderProbeRequest(handler http.Handler, body string, withAPIKey bool) *httptest.ResponseRecorder {
+func performProviderProbeRequest(handler http.Handler, body string, _ bool) *httptest.ResponseRecorder {
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/data-sources/probe", bytes.NewBufferString(body))
-	if withAPIKey {
-		req.Header.Set("X-API-Key", "probe-test-key")
-	}
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, req)
 	return response
-}
-
-func TestProviderProbeEndpointRequiresAuthentication(t *testing.T) {
-	response := performProviderProbeRequest(newProviderProbeHTTPTestHandler(), "", false)
-	if response.Code != http.StatusUnauthorized {
-		t.Fatalf("missing API key status=%d body=%s", response.Code, response.Body.String())
-	}
 }
 
 func TestProviderProbeEndpointKeepsEmptyBodyCompatibility(t *testing.T) {
@@ -230,11 +220,11 @@ func TestProviderProbeEndpointReportsStorageFailureAsUnavailable(t *testing.T) {
 		service.ResilienceConfig{}, slog.New(slog.NewTextHandler(io.Discard, nil)),
 	)
 	server := NewWithCapabilityInterfaces(
-		"probe-test-key", "forward_adjusted", svc,
+		"forward_adjusted", svc,
 		nil, nil, nil, 2000, 110*time.Second,
 		slog.New(slog.NewTextHandler(io.Discard, nil)),
 	)
-	response := performProviderProbeRequest(server.Handler(), "{\"capabilities\":[\"quote\"],\"checks\":[\"quality\"]}", true)
+	response := performProviderProbeRequest(server.InProcessHandler(), "{\"capabilities\":[\"quote\"],\"checks\":[\"quality\"]}", true)
 	if response.Code != http.StatusServiceUnavailable ||
 		!strings.Contains(response.Body.String(), "\"code\":\"STORAGE_UNAVAILABLE\"") {
 		t.Fatalf("storage persistence failure must return 503 STORAGE_UNAVAILABLE: status=%d body=%s", response.Code, response.Body.String())

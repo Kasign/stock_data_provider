@@ -308,6 +308,21 @@ func TestEvidenceSnapshotRetentionCleanerRejectsInvalidRequestsAndResults(t *tes
 	}
 }
 
+func TestEvidenceSnapshotRetentionCleanerPropagatesRepositoryError(t *testing.T) {
+	repositoryErr := errors.New("snapshot cleanup storage failed")
+	repository := &evidenceSnapshotRepositoryStub{deleteErr: repositoryErr}
+	cleaner, err := NewEvidenceSnapshotRetentionCleaner(repository)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cleaner.Execute(context.Background(), time.Now().UTC(), 10); !errors.Is(err, repositoryErr) {
+		t.Fatalf("Execute() error=%v, want repository error", err)
+	}
+	if repository.deleteCalls != 1 {
+		t.Fatalf("repository calls=%d, want 1", repository.deleteCalls)
+	}
+}
+
 func TestEvidenceSnapshotRetentionCleanerHonorsCancellation(t *testing.T) {
 	now := time.Date(2026, 11, 9, 10, 0, 0, 0, time.UTC)
 	t.Run("already canceled does not call repository", func(t *testing.T) {

@@ -71,3 +71,45 @@ func TestMeasureBudgetReservationsRejectsInvalidWindowAndExhaustedBudget(t *test
 		}
 	}
 }
+
+func TestMeasureBudgetReservationsRejectsInvalidUTF8PromptAndToolSchema(t *testing.T) {
+	invalid := string([]byte{0xff})
+	tokenizerCalled := false
+	tokenizer := testTokenizer{
+		modelID: "model-a", version: "v1",
+		count: func(string) (int, error) {
+			tokenizerCalled = true
+			return 100, nil
+		},
+	}
+	cases := []struct {
+		name  string
+		input BudgetReservationInput
+	}{
+		{
+			name: "system prompt",
+			input: BudgetReservationInput{
+				ModelContextTokens: 2048, SystemPrompt: invalid,
+				OutputReserve: 512, SafetyMargin: 64,
+			},
+		},
+		{
+			name: "tool schema",
+			input: BudgetReservationInput{
+				ModelContextTokens: 2048, SystemPrompt: "system prompt",
+				ToolSchema: invalid, OutputReserve: 512, SafetyMargin: 64,
+			},
+		},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			tokenizerCalled = false
+			if _, _, err := MeasureBudgetReservations(tokenizer, "model-a", testCase.input); !errors.Is(err, ErrInvalidBudget) {
+				t.Fatalf("invalid UTF-8 input should be rejected as invalid budget, got %v", err)
+			}
+			if tokenizerCalled {
+				t.Fatal("invalid UTF-8 input must be rejected before invoking tokenizer")
+			}
+		})
+	}
+}

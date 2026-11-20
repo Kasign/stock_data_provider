@@ -13,8 +13,10 @@ import (
 	"strings"
 	"time"
 
-	"example.com/stock-analysis-flow/internal/adapters/marketdata"
 	"example.com/stock-analysis-flow/internal/adapters/storage/mysqlredis"
+	marketdataapp "example.com/stock-analysis-flow/internal/marketdata/app"
+	marketdatabootstrap "example.com/stock-analysis-flow/internal/marketdata/bootstrap"
+	marketdataconfig "example.com/stock-analysis-flow/internal/marketdata/config"
 	newsstorage "example.com/stock-analysis-flow/internal/news/adapters/storage"
 	newsconfig "example.com/stock-analysis-flow/internal/news/config"
 	newsdiagnostics "example.com/stock-analysis-flow/internal/news/diagnostics"
@@ -22,17 +24,20 @@ import (
 	notificationschema "example.com/stock-analysis-flow/internal/notification/schema"
 	notificationstorage "example.com/stock-analysis-flow/internal/notification/storage"
 	"example.com/stock-analysis-flow/internal/platform/config"
+	platformdiagnostics "example.com/stock-analysis-flow/internal/platform/diagnostics"
 	"example.com/stock-analysis-flow/internal/platform/httpapi"
 	platformsecurity "example.com/stock-analysis-flow/internal/platform/security"
 	platformstorage "example.com/stock-analysis-flow/internal/platform/storage"
 	"example.com/stock-analysis-flow/internal/platform/taskqueue"
 	platformtime "example.com/stock-analysis-flow/internal/platform/time"
+	quantstorage "example.com/stock-analysis-flow/internal/quant/storage"
 	researchapplication "example.com/stock-analysis-flow/internal/research/application"
 	researchstorage "example.com/stock-analysis-flow/internal/research/storage"
 	researchflowstorage "example.com/stock-analysis-flow/internal/researchflow/storage"
 	serverconfig "example.com/stock-analysis-flow/internal/server/config"
 	serverdiagnostics "example.com/stock-analysis-flow/internal/server/diagnostics"
 	serverhealth "example.com/stock-analysis-flow/internal/server/health"
+	servermarketdata "example.com/stock-analysis-flow/internal/server/marketdata"
 	servermigration "example.com/stock-analysis-flow/internal/server/migration"
 	serverrelay "example.com/stock-analysis-flow/internal/server/relay"
 	serverresources "example.com/stock-analysis-flow/internal/server/resources"
@@ -59,14 +64,14 @@ func Run(ctx context.Context) (runErr error) {
 	}
 	slog.SetDefault(newJSONLogger(processConfig.LogLevel))
 
-	// 存储与行情配置仍由各自兼容 Adapter 负责解析；Server 不复制其领域配置 Schema。
+	// Server 只聚合进程级存储配置；行情 Provider 配置由 Data 模块自己的 Config Loader 解析。
 	storageCfg, err := mysqlredis.LoadConfig(env)
 	if err != nil {
 		return fmt.Errorf("存储配置无效: %w", err)
 	}
-	marketDataCfg, err := marketdata.LoadConfig(env)
+	marketDataCfg, err := marketdataconfig.LoadForRoot()
 	if err != nil {
-		return fmt.Errorf("Go 行情服务配置无效: %w", err)
+		return fmt.Errorf("Data 模块配置无效: %w", err)
 	}
 	newsConfig, err := newsconfig.Load(env)
 	if err != nil {
@@ -96,6 +101,11 @@ func Run(ctx context.Context) (runErr error) {
 	if err != nil {
 		return fmt.Errorf("连接 MariaDB/Redis 失败（检查 DB_HOST/DB_PASSWORD/REDIS_ADDR 和 DB_AUTO_MIGRATE）: %w", err)
 	}
+	marketDataModule, err := newMarketDataModule(storageResources, marketDataCfg)
+	if err != nil {
+		_ = storageResources.Close()
+		return fmt.Errorf("装配 Data Module 失败: %w", err)
+	}
 	var lifecycle *runtime.Lifecycle
 	defer func() {
 		stopCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
@@ -108,7 +118,14 @@ func Run(ctx context.Context) (runErr error) {
 				}
 				return lifecycle.Stop(ctx)
 			},
-			storageResources.Close,
+			func() error {
+				var closeErr error
+				if marketDataModule != nil {
+					closeErr = errors.Join(closeErr, marketDataModule.Close(stopCtx))
+				}
+				closeErr = errors.Join(closeErr, storageResources.Close())
+				return closeErr
+			},
 		); shutdownErr != nil {
 			slog.Error("停止 Server 并关闭共享资源失败", "error", shutdownErr.Error())
 			runErr = joinShutdownError(runErr, shutdownErr)
@@ -131,11 +148,24 @@ func Run(ctx context.Context) (runErr error) {
 	} else {
 		if err := migrationRegistry.ValidateApplied(migrationCtx, storageResources.DB); err != nil {
 			migrationCancel()
-			return fmt.Errorf("数据库 Schema 尚未满足当前模块版本要求（MIGRATION_ENABLED=false）: %w", err)
+			return fmt.Errorf("数据库 Schema 尚未满足当前已注册模块版本及 checksum 要求（MIGRATION_ENABLED=false）: %w", err)
 		}
-		slog.Info("模块 Schema 预检通过", "migration_enabled", false)
+		slog.Info("所有已注册模块 Schema 版本与 checksum 预检通过", "migration_enabled", false)
 	}
 	migrationCancel()
+	// Migration enabled/disabled 两种启动路径都必须在接受流量或启动 Worker 前
+	// 验证 Data 物理 Schema 与 Redis/MariaDB 依赖；Migration checksum 不证明物理结构完整。
+	readinessCtx, readinessCancel := context.WithTimeout(ctx, 10*time.Second)
+	if err := marketDataModule.Diagnostics().Ready(readinessCtx); err != nil {
+		readinessCancel()
+		return fmt.Errorf("Data Module 依赖与物理 Schema 就绪检查失败: %w", err)
+	}
+	readinessCancel()
+
+	newsRepository, err := newsstorage.NewMySQLRepository(storageResources.DB)
+	if err != nil {
+		return fmt.Errorf("创建 News Repository 失败: %w", err)
+	}
 
 	// Owner Session 只提供可信身份；Researchflow 执行依赖独立于 Owner Session 装配。
 	var ownerSession *ownerSessionComposition
@@ -184,7 +214,23 @@ func Run(ctx context.Context) (runErr error) {
 		}
 	}
 
-	runner, err := service.NewRunnerWithMarketDataStores(marketDataCfg, store, store)
+	// 旧 Analysis Collector 默认拉取 200 根日线；沿用该历史窗口，并受 Data MaxDailyBars 上限约束。
+	historyLimit := marketDataCfg.DefaultDailyBars
+	if historyLimit < 200 {
+		historyLimit = 200
+	}
+	if historyLimit > marketDataCfg.MaxDailyBars {
+		historyLimit = marketDataCfg.MaxDailyBars
+	}
+	indexSymbols := parseMarketDataIndexSymbols(os.Getenv("MARKET_DATA_INDEX_SYMBOLS"))
+	analysisCollector, err := servermarketdata.NewAnalysisCollector(
+		marketDataModule.Application(), historyLimit,
+		marketdataapp.AdjustmentBasis(marketDataCfg.Adjustment), indexSymbols,
+	)
+	if err != nil {
+		return fmt.Errorf("创建 Data Application Port 适配器失败: %w", err)
+	}
+	runner, err := service.NewRunnerWithDataCollector(analysisCollector, store, store)
 	if err != nil {
 		return fmt.Errorf("创建分析 Runner 失败: %w", err)
 	}
@@ -198,6 +244,18 @@ func Run(ctx context.Context) (runErr error) {
 	lifecycle, err = runtime.NewLifecycleWithRollbackTimeout(shutdownTimeout)
 	if err != nil {
 		return fmt.Errorf("创建 Server Lifecycle 失败: %w", err)
+	}
+	if err := lifecycle.Register(marketDataComponent{module: marketDataModule}); err != nil {
+		return fmt.Errorf("注册 Data Module 生命周期失败: %w", err)
+	}
+	if serverRole != serverconfig.RoleAPI {
+		newsRetention, retentionErr := newNewsRetentionComponent(newsRepository, processConfig.NewsRetention, slog.Default())
+		if retentionErr != nil {
+			return fmt.Errorf("创建 News 保留期清理 Worker 失败: %w", retentionErr)
+		}
+		if err := lifecycle.Register(newsRetention); err != nil {
+			return fmt.Errorf("注册 News 保留期清理 Worker 生命周期失败: %w", err)
+		}
 	}
 	if err := lifecycle.Register(legacyAnalysisWorker{name: "legacy-analysis-worker", queue: tasks, enabled: serverRole == serverconfig.RoleWorker || serverRole == serverconfig.RoleAll}); err != nil {
 		return fmt.Errorf("注册旧 Analysis Worker 生命周期失败: %w", err)
@@ -243,7 +301,7 @@ func Run(ctx context.Context) (runErr error) {
 		if err != nil {
 			return fmt.Errorf("创建旧 Analysis HTTP API 失败: %w", err)
 		}
-		diagnosticsService, err := newDiagnosticsService(storageResources, migrationRegistry, newsConfig)
+		diagnosticsService, err := newDiagnosticsService(storageResources, migrationRegistry, newsConfig, newsRepository, marketDataModule)
 		if err != nil {
 			return fmt.Errorf("创建 Server 诊断服务失败: %w", err)
 		}
@@ -251,7 +309,7 @@ func Run(ctx context.Context) (runErr error) {
 		if err != nil {
 			return fmt.Errorf("创建 Health/Readiness Handler 失败: %w", err)
 		}
-		handler, err := newHTTPHandler(authenticator, healthHandler, api.Handler(), ownerSession)
+		handler, err := newHTTPHandler(authenticator, healthHandler, api.Handler(), marketDataModule.InProcessHandler(), ownerSession)
 		if err != nil {
 			return fmt.Errorf("注册 HTTP 路由失败: %w", err)
 		}
@@ -397,11 +455,27 @@ func newResearchflowNotificationRelay(
 
 // newDiagnosticsService composes Server resource/schema checks with the
 // deterministic News parser self-checks. Domain checks remain owned by News.
-func newDiagnosticsService(shared *serverresources.Resources, registry *servermigration.Registry, newsConfig newsconfig.Config) (*serverdiagnostics.Service, error) {
+func newDiagnosticsService(
+	shared *serverresources.Resources,
+	registry *servermigration.Registry,
+	newsConfig newsconfig.Config,
+	newsRepository interface {
+		newsdiagnostics.StorageProbe
+		newsdiagnostics.ObservationRetentionProbe
+	},
+	marketDataModule *marketdatabootstrap.Module,
+) (*serverdiagnostics.Service, error) {
+	retentionBacklogCheck := newsdiagnostics.ObservationRetentionCheck(newsRepository)
+	// Retention backlog is an operational signal, not an API process dependency;
+	// it must be visible without taking the whole API process out of readiness.
+	retentionBacklogCheck.Required = false
 	return serverdiagnostics.NewServiceWithMigration(
 		shared, registry,
+		newsdiagnostics.StorageChecks(newsRepository),
 		newsdiagnostics.ParserChecks(),
 		newsdiagnostics.ProviderConfigChecks(newsConfig),
+		[]platformdiagnostics.Check{retentionBacklogCheck},
+		marketDataReadinessChecks(marketDataModule),
 	)
 }
 
@@ -478,10 +552,12 @@ func newMigrationRegistry() (*servermigration.Registry, error) {
 		namespace  string
 		migrations []platformstorage.Migration
 	}{
+		{namespace: marketdatabootstrap.MigrationNamespace, migrations: marketdatabootstrap.MigrationDefinitions()},
 		{namespace: "news", migrations: newsstorage.Migrations()},
 		{namespace: platformsecurity.OwnerCredentialMigrationNamespace, migrations: platformsecurity.OwnerCredentialMigrations()},
 		{namespace: researchstorage.MigrationNamespace, migrations: researchstorage.Migrations()},
 		{namespace: researchflowstorage.MigrationNamespace, migrations: researchflowstorage.Migrations()},
+		{namespace: quantstorage.MigrationNamespace, migrations: quantstorage.Migrations()},
 		{namespace: "notification", migrations: notificationstorage.Migrations()},
 		{namespace: serversecurity.SecurityAuditMigrationNamespace, migrations: serversecurity.SecurityAuditMigrations()},
 	}

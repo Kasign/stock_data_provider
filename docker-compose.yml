@@ -1,31 +1,5 @@
-# Unified deployment entry point for the Go APIs and WebUI.
+# Single deployment entry point: Root Server hosts Data and all application modules in-process.
 services:
-  stock-analysis-data:
-    build:
-      context: .
-      dockerfile: services/market-data/Dockerfile
-    container_name: stock-analysis-data
-    restart: unless-stopped
-    env_file:
-      - .env
-    environment:
-      MARKET_DATA_HTTP_ADDR: :8091
-      MARKET_DATA_API_KEY: ${MARKET_DATA_API_KEY:?Set MARKET_DATA_API_KEY in .env to a random secret of at least 32 characters}
-      MARKET_DATA_REDIS_ADDR: ${MARKET_DATA_REDIS_ADDR:?Set MARKET_DATA_REDIS_ADDR to the existing Redis service}
-      MARKET_DATA_REDIS_PASSWORD: ${MARKET_DATA_REDIS_PASSWORD:-}
-      MARKET_DATA_REDIS_DB: ${MARKET_DATA_REDIS_DB:-0}
-      MARKET_DATA_DB_AUTO_MIGRATE: ${MARKET_DATA_DB_AUTO_MIGRATE:-true}
-    expose:
-      - "8091"
-    networks:
-      - 1panel-network
-    healthcheck:
-      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:8091/health/ready >/dev/null || exit 1"]
-      interval: 20s
-      timeout: 5s
-      retries: 3
-      start_period: 20s
-
   stock-analysis-server:
     build:
       context: .
@@ -35,11 +9,15 @@ services:
     env_file:
       - .env
     environment:
-      MARKET_DATA_BASE_URL: http://stock-analysis-data:8091
-      MARKET_DATA_API_KEY: ${MARKET_DATA_API_KEY:?Set MARKET_DATA_API_KEY in .env to the same secret used by stock-analysis-data}
-    depends_on:
-      stock-analysis-data:
-        condition: service_healthy
+      OWNER_SESSION_ENABLED: "true"
+      OWNER_SESSION_PUBLIC_ORIGIN: ${OWNER_SESSION_PUBLIC_ORIGIN:?Set the exact public HTTPS origin used by the WebUI}
+      OWNER_SESSION_COOKIE_NAME: __Secure-owner_session
+      OWNER_SESSION_COOKIE_PATH: /api
+      OWNER_SESSION_COOKIE_SECURE: "true"
+      OWNER_SESSION_CSRF_HEADER: X-CSRF-Token
+      OWNER_SESSION_ARGON2_MEMORY_KIB: ${OWNER_SESSION_ARGON2_MEMORY_KIB:?Set benchmarked Argon2id memory cost}
+      OWNER_SESSION_ARGON2_ITERATIONS: ${OWNER_SESSION_ARGON2_ITERATIONS:?Set benchmarked Argon2id iteration cost}
+      OWNER_SESSION_ARGON2_PARALLELISM: ${OWNER_SESSION_ARGON2_PARALLELISM:?Set benchmarked Argon2id parallelism}
     ports:
       - "127.0.0.1:8092:8092"
     networks:
@@ -59,12 +37,7 @@ services:
     restart: unless-stopped
     ports:
       - "${WEBUI_BIND_ADDR:-127.0.0.1}:${WEBUI_PORT:-8093}:80"
-    environment:
-      MARKET_DATA_SERVICE_NAME: ${MARKET_DATA_SERVICE_NAME:-stock-analysis-data}
-      ANALYSIS_SERVICE_NAME: ${ANALYSIS_SERVICE_NAME:-stock-analysis-server}
     depends_on:
-      stock-analysis-data:
-        condition: service_healthy
       stock-analysis-server:
         condition: service_healthy
     networks:

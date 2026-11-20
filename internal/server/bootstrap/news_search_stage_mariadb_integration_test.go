@@ -119,6 +119,10 @@ func (s newsSearchIntegrationOutboxStore) RetryOutbox(
 	return s.repository.RetryOutbox(ctx, outboxRef, workerID, leaseGeneration, nextAttemptAt, errorCode)
 }
 
+func (s newsSearchIntegrationOutboxStore) NowUTC(ctx context.Context) (time.Time, error) {
+	return s.repository.NowUTC(ctx)
+}
+
 type newsSearchIntegrationNotificationReceiver struct {
 	failFirst atomic.Bool
 	mu        sync.Mutex

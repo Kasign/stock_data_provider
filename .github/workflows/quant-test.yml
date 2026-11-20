@@ -29,6 +29,21 @@ jobs:
   quant:
     name: Test Quant packages
     runs-on: ubuntu-latest
+    env:
+      QUANT_TEST_MYSQL_DSN: root:quant-test-root@tcp(127.0.0.1:3306)/quant_test?parseTime=true&multiStatements=true
+    services:
+      mariadb:
+        image: mariadb:11.4
+        env:
+          MARIADB_ROOT_PASSWORD: quant-test-root
+          MARIADB_DATABASE: quant_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
@@ -49,8 +64,10 @@ jobs:
           fi
       - name: 下载依赖
         run: go mod download
-      - name: 运行 Quant 单元测试
+      - name: 运行 Quant 单元与 MariaDB 集成测试
         run: go test ./internal/quant/...
+      - name: 验证不可变结果 MariaDB 用例未跳过
+        run: go test -v -run '^TestMySQL(Repository|AccessAuditor)' ./internal/quant/storage
       - name: 运行 Manifest 指纹随机 Fuzz
         run: go test -run=^$ -fuzz=FuzzFingerprintPayloadNoPanic -fuzztime=30s ./internal/quant/manifest
       - name: 运行 Quant 竞态检测

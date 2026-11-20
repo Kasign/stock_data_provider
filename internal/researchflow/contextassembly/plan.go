@@ -60,8 +60,8 @@ func BuildPlan(candidates []SectionCandidate, budgetTokens int) (Plan, error) {
 	seen := make(map[string]struct{}, len(ordered))
 	for i := range ordered {
 		candidate := &ordered[i]
-		if candidate.ID == "" || candidate.ID != strings.TrimSpace(candidate.ID) ||
-			candidate.SourceOwner == "" || candidate.SourceOwner != strings.TrimSpace(candidate.SourceOwner) {
+		if candidate.ID == "" || !validUTF8(candidate.ID) || candidate.ID != strings.TrimSpace(candidate.ID) ||
+			candidate.SourceOwner == "" || !validUTF8(candidate.SourceOwner) || candidate.SourceOwner != strings.TrimSpace(candidate.SourceOwner) {
 			return Plan{}, fmt.Errorf("%w: section id and source owner are required", ErrInvalidPlan)
 		}
 		if _, exists := seen[candidate.ID]; exists {
@@ -146,7 +146,7 @@ func BuildPlan(candidates []SectionCandidate, budgetTokens int) (Plan, error) {
 func validateUniqueRefs(refs []string, kind, sectionID string) error {
 	seen := make(map[string]struct{}, len(refs))
 	for _, ref := range refs {
-		if ref == "" || ref != strings.TrimSpace(ref) {
+		if ref == "" || !validUTF8(ref) || ref != strings.TrimSpace(ref) {
 			return fmt.Errorf("%w: section %s has empty %s reference", ErrInvalidPlan, sectionID, kind)
 		}
 		if _, exists := seen[ref]; exists {
