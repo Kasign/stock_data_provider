@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -75,8 +76,13 @@ func TestLiveTickFlowCapabilities(t *testing.T) {
 		item := result{Capability: name, Status: "passed", ElapsedMS: time.Since(started).Milliseconds(), Rows: rows, Quality: quality, QualityNotes: notes}
 		if err != nil {
 			_, safeMessage := liveProbeErrorSummary(err)
-			item.Status, item.Error = "failed", safeMessage
-			failures = append(failures, name+": "+safeMessage)
+			item.Error = safeMessage
+			if strings.Contains(err.Error(), "NO_UNIVERSE_PERMISSION") {
+				item.Status = "permission_required"
+			} else {
+				item.Status = "failed"
+				failures = append(failures, name+": "+safeMessage)
+			}
 		}
 		results = append(results, item)
 	}
