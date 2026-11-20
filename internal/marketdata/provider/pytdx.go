@@ -735,7 +735,6 @@ func pytdxProtocolDecimalEvidence(rawValue int64, scale int) *model.DailyBarDeci
 		ProtocolScale: &scale,
 	}
 }
-}
 
 func pytdxPriceDecimal(value protocol.Price) string {
 	return scaledDecimalFromInt64(value.Int64(), 3)
