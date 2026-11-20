@@ -1,6 +1,20 @@
 name: Integration CI
 
 on:
+  pull_request:
+    branches:
+      - integration
+    paths:
+      - '*.go'
+      - '**/*.go'
+      - 'go.mod'
+      - 'go.sum'
+      - 'go-core/go.mod'
+      - 'go-core/go.sum'
+      - 'web/**'
+      - 'docker-compose.yml'
+      - '.env.example'
+      - '.github/workflows/integration-ci.yml'
   push:
     branches:
       - integration
