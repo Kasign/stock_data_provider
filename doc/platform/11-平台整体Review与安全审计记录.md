@@ -292,3 +292,53 @@ Platform 自身可控的 L1 原语、输入边界和专项测试已完成阶段�
 | 历史目录边界 | `internal/platform/httpapi`、`internal/platform/taskqueue` 保留历史 Analysis 依赖，不作为新模块公共 API | Server / Analysis Owner |
 
 本节的“本地 Review 通过”只表示当前 Platform 分支自身可交付，不表示 PLAT-002、A2、A3 或项目整体完成。
+
+
+## 12. 2026-11-18 PLAT-012 当前分支静态代码复核
+
+### 12.1 复核基线与方法
+
+- 复核分支：`feat/platform`。
+- 当前分支 HEAD：`e2d3209c99825bf1613dc1587f95b8b896e79df3`。
+- 代码验收基线：`b2166838b51eb1ca051fb9f07fd068d2b31a751e`。
+- 通过 Git Trees 对比两个 SHA 的 `internal/platform/**` 文件路径与 Blob SHA：共 74 个文件，文件集合和内容 SHA 完全一致。
+- 当前 HEAD 在代码验收基线之后只有文档提交；因此下述 Platform Go checks 对当前 Platform 代码树仍具有精确适用性，不将其扩大解释为全仓或生产验收。
+- 本轮逐包复核 Config/Secret、Fault、Request ID、Diagnostics、HTTP Client/流式传输、Security、Session/CSRF、RateLimit、Audit、Storage/Migration、Time，以及历史 HTTP API/Task Queue 边界。
+
+### 12.2 复核结论
+
+**Platform 本地公共原语：未发现新的、具有明确代码证据且需要在本分支修复的 P0/P1/P2 缺陷。**
+
+| 能力 | 复核结论 | 证据/限制 |
+|---|---|---|
+| HTTP Client | DNS 结果逐地址校验；混合公私网答案整体拒绝；Dial 使用已校验 IP；重定向限制同源并逐跳重新校验；缓冲/流式响应有大小、时间和并发上限 | 现有 client/stream/contract 测试覆盖相应边界 |
+| Diagnostics | 并发、单项/总超时、取消、必需 Check 跳过、Fault 和 Observation 元数据校验已有实现 | Runner 测试覆盖状态聚合和时钟注入 |
+| Security | Bearer Token 长度/字符集、常量时间摘要比较、默认拒绝路由策略、Owner/Service Scope 分离已有实现 | security/password/session/csrf/rate_limit/audit 专项测试存在 |
+| Session | Token 只以摘要作为 Redis 键；Session 操作使用 Lua 原子更新；CSRF 错误不会触碰 Session | Redis 集成测试存在；生产 Redis 拓扑仍待 A3 |
+| Storage | SQL/Redis 连接池有上限；Migration 使用 MariaDB advisory lock；无法确认释放时丢弃物理连接 | Storage integration job 已通过；生产历史 Schema 升级仍待 A3 |
+| Time | UTC、IANA 时区、日历日运算和 MariaDB UTC 时钟适配已实现 | 单测存在；部署时钟同步仍归运维 |
+| Config/Secret 与 Fault | Secret 格式化/JSON/slog 脱敏；Fault 元数据校验和稳定分类已有实现 | 单测存在；真实日志链路和 HTTP 投影由消费者验收 |
+
+### 12.3 已知边界问题的归属确认
+
+1. `internal/platform/httpapi` 是历史 Analysis HTTP transport，依赖 Analysis Domain/Store；不是 Platform 公共 HTTP API。
+2. `internal/platform/taskqueue` 是历史 Analysis 专属任务队列，依赖 Analysis Domain 和 Analysis 表；不是通用 Platform Queue。
+3. 两项均已在《02-代码结构与模块详细设计》第 9、11 节记录。保持现状，不在 Platform 分支移动代码；由 Server/Analysis 集成责任方处理迁移和启动装配。
+4. 既有历史 HTTP transport 的 Request ID 信任、错误/日志脱敏风险已在本文件第 7 节记录，责任归 Server/Analysis，不作为本轮新发现，也不在本分支修复。
+
+### 12.4 精确 CI 证据
+
+- GitHub Actions：[Platform Go checks #705](https://github.com/Kasign/stock_data_provider/actions/runs/44263167831)。
+- CI SHA：`b2166838b51eb1ca051fb9f07fd068d2b31a751e`。
+- Job `Platform packages`：success。
+- Job `Storage integration`：success。
+- 当前 HEAD 与 CI SHA 的 `internal/platform/**` 文件集合及 Blob SHA 完全一致。
+- 本轮未修改 Go 代码；CI 不代表全仓、A2 或 A3 通过。
+
+### 12.5 PLAT-012 状态
+
+- Platform 本地静态代码复核：**PASS**，未发现新增本地修复项。
+- Server/消费者真实路由认证、Bootstrap、审计持久化、共享资源生命周期：**待 A2**。
+- 生产 Secret、DNS/egress、DB/Redis 拓扑与故障恢复：**NOT_COMPARABLE，待 A3**。
+- PLAT-012 总体仍为 IN_PROGRESS；不能因 Platform L1 复核通过而关闭整个安全审计任务。
+- 本轮不新增 API、不新增字段、不修改 Go 代码。

@@ -27,7 +27,7 @@ func NewEvidenceSnapshotRetentionCleaner(repository EvidenceSnapshotRetentionRep
 	return &EvidenceSnapshotRetentionCleaner{repository: repository}, nil
 }
 
-// Execute 删除 expires_at 不晚于 now 的 Snapshot；周期调度由 Server 组合根负责。
+// Execute 删除 expires_at 不晚于 now 的 Snapshot；调用方负责周期调度和运行诊断。
 func (u *EvidenceSnapshotRetentionCleaner) Execute(ctx context.Context, now time.Time, limit int) (int64, error) {
 	if u == nil || u.repository == nil || ctx == nil || now.IsZero() || limit < 1 || limit > 1000 {
 		return 0, ErrInvalidEvidenceSnapshot

@@ -44,10 +44,15 @@ func ValidatePayloadJSON(raw json.RawMessage) error {
 			(candidate.NormalizedAt != nil && candidate.NormalizedAt.IsZero()) {
 			return errors.New("news stage: candidate contains a zero optional timestamp")
 		}
+		seenMissingFields := make(map[string]struct{}, len(candidate.MissingFields))
 		for _, field := range candidate.MissingFields {
 			if !validMissingField(field) {
 				return fmt.Errorf("news stage: unsupported missing field %q", field)
 			}
+			if _, exists := seenMissingFields[field]; exists {
+				return fmt.Errorf("news stage: duplicate missing field %q", field)
+			}
+			seenMissingFields[field] = struct{}{}
 		}
 	}
 	for _, outcome := range output.Outcomes {

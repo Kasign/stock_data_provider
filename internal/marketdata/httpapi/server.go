@@ -2,9 +2,6 @@ package httpapi
 
 import (
 	"context"
-	"crypto/rand"
-	"crypto/subtle"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"log/slog"
@@ -18,6 +15,7 @@ import (
 	"example.com/stock-analysis-flow/internal/marketdata/normalize"
 	"example.com/stock-analysis-flow/internal/marketdata/provider"
 	"example.com/stock-analysis-flow/internal/marketdata/service"
+	platformobservability "example.com/stock-analysis-flow/internal/platform/observability"
 	platformtime "example.com/stock-analysis-flow/internal/platform/time"
 )
 
@@ -32,7 +30,6 @@ var (
 )
 
 type Server struct {
-	apiKey            string
 	defaultAdjustment string
 	maxBars           int
 	requestTimeout    time.Duration
@@ -57,17 +54,17 @@ type errorBody struct {
 	} `json:"error"`
 }
 
-func New(apiKey, defaultAdjustment string, svc *service.DataService, providers []provider.Provider, logger *slog.Logger) *Server {
-	return NewWithConfig(apiKey, defaultAdjustment, svc, providers, providers, providers, 2000, 110*time.Second, logger)
+func New(defaultAdjustment string, svc *service.DataService, providers []provider.Provider, logger *slog.Logger) *Server {
+	return NewWithConfig(defaultAdjustment, svc, providers, providers, providers, 2000, 110*time.Second, logger)
 }
 
 // NewWithCapabilities is kept for aggregate Provider callers. New deployments
 // should use NewWithCapabilityInterfaces to register independent capabilities.
-func NewWithCapabilities(apiKey, defaultAdjustment string, svc *service.DataService, allProviders, quoteProviders, barProviders []provider.Provider, maxBars int, logger *slog.Logger) *Server {
-	return NewWithConfig(apiKey, defaultAdjustment, svc, allProviders, quoteProviders, barProviders, maxBars, 110*time.Second, logger)
+func NewWithCapabilities(defaultAdjustment string, svc *service.DataService, allProviders, quoteProviders, barProviders []provider.Provider, maxBars int, logger *slog.Logger) *Server {
+	return NewWithConfig(defaultAdjustment, svc, allProviders, quoteProviders, barProviders, maxBars, 110*time.Second, logger)
 }
 
-func NewWithConfig(apiKey, defaultAdjustment string, svc *service.DataService, allProviders, quoteProviders, barProviders []provider.Provider, maxBars int, requestTimeout time.Duration, logger *slog.Logger) *Server {
+func NewWithConfig(defaultAdjustment string, svc *service.DataService, allProviders, quoteProviders, barProviders []provider.Provider, maxBars int, requestTimeout time.Duration, logger *slog.Logger) *Server {
 	all := make([]provider.NamedProvider, 0, len(allProviders))
 	quotes := make([]provider.QuoteProvider, 0, len(quoteProviders))
 	bars := make([]provider.DailyBarProvider, 0, len(barProviders))
@@ -80,10 +77,10 @@ func NewWithConfig(apiKey, defaultAdjustment string, svc *service.DataService, a
 	for _, p := range barProviders {
 		bars = append(bars, p)
 	}
-	return NewWithCapabilityInterfaces(apiKey, defaultAdjustment, svc, all, quotes, bars, maxBars, requestTimeout, logger)
+	return NewWithCapabilityInterfaces(defaultAdjustment, svc, all, quotes, bars, maxBars, requestTimeout, logger)
 }
 
-func NewWithCapabilityInterfaces(apiKey, defaultAdjustment string, svc *service.DataService, allProviders []provider.NamedProvider, quoteProviders []provider.QuoteProvider, barProviders []provider.DailyBarProvider, maxBars int, requestTimeout time.Duration, logger *slog.Logger) *Server {
+func NewWithCapabilityInterfaces(defaultAdjustment string, svc *service.DataService, allProviders []provider.NamedProvider, quoteProviders []provider.QuoteProvider, barProviders []provider.DailyBarProvider, maxBars int, requestTimeout time.Duration, logger *slog.Logger) *Server {
 	if svc != nil {
 		var priceLimitEventProviders []provider.PriceLimitEventProvider
 		for _, p := range allProviders {
@@ -126,17 +123,17 @@ func NewWithCapabilityInterfaces(apiKey, defaultAdjustment string, svc *service.
 		}
 	}
 	sources := BuildSourceStatuses(capabilities)
-	return NewWithApplication(apiKey, defaultAdjustment, apps, sources, maxBars, requestTimeout, logger)
+	return NewWithApplication(defaultAdjustment, apps, sources, maxBars, requestTimeout, logger)
 }
 
 // NewWithApplication 使用显式 Application 用例实现和来源能力快照构造 HTTP Adapter。
 // sources 由 Bootstrap 根据已启用的 Provider 能力生成；Server 不再查询 Provider 集合。
-func NewWithApplication(apiKey, defaultAdjustment string, apps ApplicationDependencies, sources []model.SourceStatus, maxBars int, requestTimeout time.Duration, logger *slog.Logger) *Server {
-	return NewWithApplicationAndClock(apiKey, defaultAdjustment, apps, sources, maxBars, requestTimeout, logger, platformtime.SystemClock{})
+func NewWithApplication(defaultAdjustment string, apps ApplicationDependencies, sources []model.SourceStatus, maxBars int, requestTimeout time.Duration, logger *slog.Logger) *Server {
+	return NewWithApplicationAndClock(defaultAdjustment, apps, sources, maxBars, requestTimeout, logger, platformtime.SystemClock{})
 }
 
 // NewWithApplicationAndClock 允许装配层注入统一时钟，供 API 时间校验和响应时间使用。
-func NewWithApplicationAndClock(apiKey, defaultAdjustment string, apps ApplicationDependencies, sources []model.SourceStatus, maxBars int, requestTimeout time.Duration, logger *slog.Logger, clock platformtime.Clock) *Server {
+func NewWithApplicationAndClock(defaultAdjustment string, apps ApplicationDependencies, sources []model.SourceStatus, maxBars int, requestTimeout time.Duration, logger *slog.Logger, clock platformtime.Clock) *Server {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -151,7 +148,7 @@ func NewWithApplicationAndClock(apiKey, defaultAdjustment string, apps Applicati
 	}
 	sourceSnapshot := append([]model.SourceStatus(nil), sources...)
 	return &Server{
-		apiKey: apiKey, defaultAdjustment: defaultAdjustment, maxBars: maxBars,
+		defaultAdjustment: defaultAdjustment, maxBars: maxBars,
 		requestTimeout: requestTimeout, quotes: apps.Quotes, marketOverview: apps.MarketOverview, securities: apps.Securities, fundamentalsApp: apps.Fundamentals, index: apps.Index, trading: apps.Trading, diagnostics: apps.Diagnostics, sources: sourceSnapshot, logger: logger, clock: clock,
 	}
 }
@@ -164,30 +161,15 @@ func (s *Server) nowUTC() time.Time {
 	return s.clock.Now().UTC()
 }
 
-func (s *Server) Handler() http.Handler {
-	routes := s.routes(true, true)
-	return securityHeaders(s.requestID(s.accessLog(s.timeoutContext(s.requestTimeout, routes))))
-}
-
 // InProcessHandler 返回不包含认证和传输中间件的业务路由。
 // 仅允许挂载在 Root Server 已完成认证、授权、Request ID、超时和安全策略的可信进程内路由下。
 func (s *Server) InProcessHandler() http.Handler {
-	return s.routes(false, false)
+	return s.timeoutContext(s.requestTimeout, s.routes())
 }
 
-func (s *Server) routes(requireAPIKey, includeHealth bool) *http.ServeMux {
+func (s *Server) routes() *http.ServeMux {
 	mux := http.NewServeMux()
-	if includeHealth {
-		mux.HandleFunc("GET /health/live", s.live)
-		mux.HandleFunc("GET /health/ready", s.ready)
-	}
-	register := func(pattern string, handler http.Handler) {
-		if requireAPIKey {
-			mux.Handle(pattern, s.auth(handler))
-			return
-		}
-		mux.Handle(pattern, handler)
-	}
+	register := func(pattern string, handler http.Handler) { mux.Handle(pattern, handler) }
 	register("GET /api/v1/quotes/{symbol}", http.HandlerFunc(s.quote))
 	register("GET /api/v1/market/quotes", http.HandlerFunc(s.batchQuotes))
 	register("GET /api/v1/market/stocks", http.HandlerFunc(s.marketStocks))
@@ -224,18 +206,6 @@ func (s *Server) routes(requireAPIKey, includeHealth bool) *http.ServeMux {
 	return mux
 }
 
-func (s *Server) live(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, 200, map[string]any{"status": "ok", "service": "market-data", "time": s.nowUTC()})
-}
-func (s *Server) ready(w http.ResponseWriter, r *http.Request) {
-	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
-	defer cancel()
-	if err := s.diagnostics.Ready(ctx); err != nil {
-		writeErr(w, 503, "DEPENDENCY_UNAVAILABLE", "market-data dependencies are not ready", requestID(r))
-		return
-	}
-	writeJSON(w, 200, map[string]any{"status": "ready", "service": "market-data"})
-}
 func (s *Server) quote(w http.ResponseWriter, r *http.Request) {
 	q, cacheHit, err := s.quotes.Quote(r.Context(), r.PathValue("symbol"))
 	if err != nil {
@@ -663,59 +633,6 @@ func setCacheHeader(w http.ResponseWriter, hit bool) {
 }
 
 // accessLog 只记录请求元数据和响应体字节数，不记录正文、查询参数或密钥。
-func (s *Server) accessLog(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		started := time.Now()
-		recorder := &statusRecorder{ResponseWriter: w}
-		next.ServeHTTP(recorder, r)
-		s.logger.Info("http request completed", "service", "market-data", "request_id", requestID(r),
-			"method", r.Method, "path", boundedLogPath(r.URL.Path), "status_code", recorder.status,
-			"duration_ms", time.Since(started).Milliseconds(), "response_bytes", recorder.bytes)
-	})
-}
-
-type statusRecorder struct {
-	http.ResponseWriter
-	status int
-	bytes  int
-}
-
-func (w *statusRecorder) WriteHeader(code int) {
-	if w.status != 0 {
-		return
-	}
-	w.status = code
-	w.ResponseWriter.WriteHeader(code)
-}
-func (w *statusRecorder) Write(data []byte) (int, error) {
-	if w.status == 0 {
-		w.WriteHeader(http.StatusOK)
-	}
-	n, err := w.ResponseWriter.Write(data)
-	w.bytes += n
-	return n, err
-}
-func boundedLogPath(path string) string {
-	if len(path) > 160 {
-		return path[:160]
-	}
-	return path
-}
-func (s *Server) auth(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// DATA-CTR-006：远程兼容模式只接受单个 X-API-Key，不接受 Bearer 别名。
-		values := r.Header.Values("X-API-Key")
-		token := ""
-		if len(values) == 1 {
-			token = strings.TrimSpace(values[0])
-		}
-		if token == "" || subtle.ConstantTimeCompare([]byte(token), []byte(s.apiKey)) != 1 {
-			writeErr(w, http.StatusUnauthorized, "AUTH_REQUIRED", "valid API key required", requestID(r))
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
-}
 func (s *Server) timeoutContext(timeout time.Duration, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithTimeout(r.Context(), timeout)
@@ -724,49 +641,13 @@ func (s *Server) timeoutContext(timeout time.Duration, next http.Handler) http.H
 	})
 }
 
-func (s *Server) requestID(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		values := r.Header.Values("X-Request-ID")
-		id := ""
-		if len(values) == 1 {
-			id = strings.TrimSpace(values[0])
-		}
-		if !validRequestID(id) {
-			id = newRequestID()
-		}
-		w.Header().Set("X-Request-ID", id)
-		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), requestIDKey{}, id)))
-	})
+func requestID(r *http.Request) string {
+	if r == nil {
+		return ""
+	}
+	return platformobservability.FromContext(r.Context())
 }
 
-type requestIDKey struct{}
-
-func requestID(r *http.Request) string { v, _ := r.Context().Value(requestIDKey{}).(string); return v }
-func newRequestID() string {
-	var value [16]byte
-	if _, err := rand.Read(value[:]); err == nil {
-		return hex.EncodeToString(value[:])
-	}
-	return platformtime.SystemClock{}.Now().Format("20060102T150405.000000000Z")
-}
-func validRequestID(value string) bool {
-	if value == "" || len(value) > 128 {
-		return false
-	}
-	for _, r := range value {
-		if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' || r == '_' || r == '.' || r == ':') {
-			return false
-		}
-	}
-	return true
-}
-func securityHeaders(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("X-Content-Type-Options", "nosniff")
-		w.Header().Set("Cache-Control", "no-store")
-		next.ServeHTTP(w, r)
-	})
-}
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	body, err := json.Marshal(v)
 	if err != nil {

@@ -25,12 +25,25 @@ import (
 const researchflowTimestampLayout = "2006-01-02T15:04:05.000000000Z"
 
 var _ application.RunRepository = (*MySQLRunRepository)(nil)
+var _ application.DatabaseClock = (*MySQLRunRepository)(nil)
 
 // MySQLRunRepository stores Researchflow runs in the module-owned MariaDB tables.
 // The caller owns db lifecycle and migration execution.
 type MySQLRunRepository struct {
 	db       *sql.DB
 	capacity CapacityLimits
+	clock    *MySQLDatabaseClock
+}
+
+// NowUTC exposes the same MariaDB clock used by Run/Outbox persistence.
+func (r *MySQLRunRepository) NowUTC(ctx context.Context) (time.Time, error) {
+	if r == nil || r.db == nil || ctx == nil {
+		return time.Time{}, errors.New("Researchflow Run Repository database clock is not configured")
+	}
+	if r.clock == nil {
+		return time.Time{}, errors.New("Researchflow Run Repository database clock is not configured")
+	}
+	return r.clock.NowUTC(ctx)
 }
 
 func NewMySQLRunRepository(db *sql.DB, capacity CapacityLimits) (*MySQLRunRepository, error) {
@@ -40,7 +53,11 @@ func NewMySQLRunRepository(db *sql.DB, capacity CapacityLimits) (*MySQLRunReposi
 	if err := capacity.Validate(); err != nil {
 		return nil, err
 	}
-	return &MySQLRunRepository{db: db, capacity: capacity}, nil
+	clock, err := NewMySQLDatabaseClock(db)
+	if err != nil {
+		return nil, err
+	}
+	return &MySQLRunRepository{db: db, capacity: capacity, clock: clock}, nil
 }
 
 func (r *MySQLRunRepository) FindIdempotentRun(

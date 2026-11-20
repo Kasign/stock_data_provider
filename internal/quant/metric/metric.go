@@ -13,6 +13,9 @@ import (
 	"unicode/utf8"
 )
 
+// MaxSafeJSONInteger 是 GOV-CTR-001 允许通过 JSON number 传输的最大整数绝对值。
+const MaxSafeJSONInteger int64 = 9007199254740991
+
 var (
 	ErrInvalidMetric = errors.New("invalid quant metric")
 	decimalStringRE  = regexp.MustCompile(`^[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?$`)
@@ -62,7 +65,7 @@ func (m Metric) Validate() error {
 		len(m.Value) == 0 || len(m.LowerBound) == 0 || len(m.UpperBound) == 0 {
 		return ErrInvalidMetric
 	}
-	if m.SampleCount != nil && *m.SampleCount < 0 {
+	if m.SampleCount != nil && (*m.SampleCount < 0 || int64(*m.SampleCount) > MaxSafeJSONInteger) {
 		return ErrInvalidMetric
 	}
 

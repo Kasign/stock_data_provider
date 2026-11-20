@@ -82,8 +82,8 @@ func ComposeModelInput(
 	}
 	contentByID := make(map[string]string, len(contents))
 	for _, content := range contents {
-		if content.SectionID == "" || content.SectionID != strings.TrimSpace(content.SectionID) ||
-			strings.TrimSpace(content.Text) == "" {
+		if content.SectionID == "" || !validUTF8(content.SectionID) || content.SectionID != strings.TrimSpace(content.SectionID) ||
+			!validUTF8(content.Text) || strings.TrimSpace(content.Text) == "" {
 			return ComposedModelInput{}, fmt.Errorf("%w: invalid section content", ErrInvalidModelInput)
 		}
 		if _, exists := contentByID[content.SectionID]; exists {
