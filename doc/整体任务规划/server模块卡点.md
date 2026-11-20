@@ -306,6 +306,6 @@
 ## RepairAll Quant Migration 注册进度（2026-11-20）
 
 - Server `newMigrationRegistry` 已注册 Quant 模块提供的 `quant` namespace Migration；Quant 表结构由 `internal/quant/storage` 拥有，Server 仅负责组合注册。
-- Bootstrap namespace 测试已加入 `quant`，Integration CI 会运行 Quant MariaDB 存储测试。
+- Bootstrap namespace 测试已加入 `quant`；Integration CI #551 [44664065668](https://github.com/Kasign/stock_data_provider/actions/runs/44664065668) 在精确代码 SHA `7f1162ba2b6472c4653b108232862f7e9d5af1cd` 上全项 success，Quant MariaDB 持久化测试逐项 PASS。
 - 当前 Server 尚未构造并注入 Quant MySQLRepository、AuthorizedResultReader、PrincipalResolver 或 AccessAuditor；因为尚无完整生产授权读取链路和 Quant Facade，不装配半成品读取服务。
 - 后续待 Quant 完成策略 Owner 当前版本读取/撤销门禁及审计 Adapter 后，再由 Server Root 组合注入并做并发竞态验收。
