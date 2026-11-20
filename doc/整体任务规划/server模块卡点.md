@@ -309,3 +309,12 @@
 - Bootstrap namespace 测试已加入 `quant`；Integration CI #551 [44664065668](https://github.com/Kasign/stock_data_provider/actions/runs/44664065668) 在精确代码 SHA `7f1162ba2b6472c4653b108232862f7e9d5af1cd` 上全项 success，Quant MariaDB 持久化测试逐项 PASS。
 - 当前 Server 尚未构造并注入 Quant MySQLRepository、AuthorizedResultReader、PrincipalResolver 或 AccessAuditor；因为尚无完整生产授权读取链路和 Quant Facade，不装配半成品读取服务。
 - 后续待 Quant 完成策略 Owner 当前版本读取/撤销门禁及审计 Adapter 后，再由 Server Root 组合注入并做并发竞态验收。
+
+
+## 2026-11-20 RepairAll SRV-009 当前聚合状态
+
+- 当前工作分支固定为 `repair_all`；本轮不在 `feat/server`、`feat/data` 或 `feat/platform` 切换/修改。
+- Root `newMigrationRegistry()` 已注册 Data `MigrationDefinitions()`；Migration enabled 使用 Root Registry 执行，disabled 使用 `Registry.ValidateApplied()` → Platform `ValidateAppliedMigrations()` 只读核验版本和 checksum。
+- 两种模式之后均执行 Data `Diagnostics().Ready`，独立验证 MariaDB/Redis 和物理 Schema。Root 不再通过外部 `market_data` namespace 过渡检查，也不重复调用 Data MigrationRunner。
+- 代码级 SRV-002 已完成；SRV-009 状态为 `CODE_LEVEL_DONE / PRODUCTION_PENDING`。剩余只包括目标环境 enabled/disabled 演练、备份恢复、生产启动/关闭及真实 Provider 出站验收。
+- 最近完整 Integration CI Run [44686840944](https://github.com/Kasign/stock_data_provider/actions/runs/44686840944) 对 SHA `5c89614bb87785b61b06d272880b5c0c8a7afe2f` success。之后 Data 源文件仅修正 V1-V5 Migration 注释；当前聚合 HEAD 的精确 CI 结果以本轮新 Run 为准。
