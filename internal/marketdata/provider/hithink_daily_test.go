@@ -238,6 +238,12 @@ func TestHithinkDailyBarsRetainExactJSONDecimals(t *testing.T) {
 	if len(bars) != 1 {
 		t.Fatalf("bars count = %d, want 1", len(bars))
 	}
+	if bars[0].Amount != nil || bars[0].AmountUnit != "unknown" ||
+		bars[0].RawAmountUnit != "" || bars[0].RawAmountField != "turnover" ||
+		bars[0].QualityStatus != model.QualityDegraded ||
+		!strings.Contains(strings.Join(bars[0].QualityReasons, ","), "amount_unit_unverified") {
+		t.Fatalf("unverified Hithink turnover must remain raw/degraded, got %+v", bars[0])
+	}
 	got := bars[0].ExactValues
 	if got == nil || got.Open != "10.123456789" || got.High != "11.234567891" ||
 		got.Low != "9.012345678" || got.Close != "10.987654321" ||
