@@ -219,3 +219,10 @@ Root Server 的 Data Module 构造、共享资源注入、Migration Registry、I
 - Application Port 映射及深拷贝测试覆盖新增字段。
 - 精确 SHA `baaa2a57051e064f4f91a54851443379636bb685` 的 Integration CI Run [44658725187](https://github.com/Kasign/stock_data_provider/actions/runs/44658725187) 全项 success。
 - 后续仍需完成 DailyBarV2 Decimal Body、Tushare/Yahoo QFQ/HFQ 精确调整、ProviderTime/provider_data_version、HTTP v2 与 Research/Quant 消费者契约；DATA-CTR-005/007 和 QNT-CTR-003 不变更为 frozen。
+
+
+## 2026-11-20 模块分支基线同步状态
+
+- feat/data 已选择性同步 repair_all 的 internal/marketdata/** 与 doc/api/**，代码同步 SHA 5b98ae1abbf0e04fa4c275b15f78087b0481c0f1；上述模块路径已逐文件 Blob SHA 对齐。
+- 根模块 Test . 和 Market-data MariaDB migration/PIT job 在 Run 44667706336 通过；整体 Run failure 来自共享 Workflow 仍引用已删除 cmd/market-data 的两个旧 Job，归 CI-01，不归 Data 业务代码。
+- Live Provider Probe Run 44667706203 的 11 个真实专项全部 skipped，DATA-003～DATA-007 的外部证据阻塞不变；DATA-008 继续 DEFERRED。
