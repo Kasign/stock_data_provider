@@ -1,7 +1,7 @@
 # WebUI 真实 API 与配置边界
 
-更新时间：2026-11-18  
-最近核对分支 HEAD：feat/web @ 53d838ebd00d9bafb3f0526f6e4d567cdc84e581  
+更新时间：2026-11-19  
+最近核对分支：repair_all（以当前分支 HEAD 和对应 CI 结果为准）  
 最近 Web 自动化验收 SHA：3e191543d372eae316e1416b0944a7647b713a87（不等于当前 HEAD）
 
 > 本文只记录当前请求封装、仓库可核对的路由事实和接入门禁。必须区分 OpenAPI 声明、Handler 注册、Root Server 挂载、部署可达和真实数据验收。
@@ -18,12 +18,12 @@
 
 | 配置 | 当前行为 | 迁移目标 | 限制 |
 |---|---|---|---|
-| 行情 API 基础路径 | 浏览器配置代理路径 | Root Server Market Data Adapter | 以 Server 路由和部署验证为准 |
-| 行情 API Key | 迁移期由浏览器配置并用于行情请求 | Server 注入 Data 服务凭据 | 当前兼容实现不是目标安全模型 |
-| 分析 API 基础路径 | 使用分析兼容代理路径 | Root Server 注册 Researchflow 路由 | 需统一 Server 入口 |
+| Data API 基础路径 | 固定同源 `/api` | Root Server 同进程 Market Data | 不支持浏览器自定义服务地址 |
+| Data API Key | 已退役；旧 localStorage 设置在启动时清理 | 不存在浏览器 Data API Key | 禁止 `X-API-Key` 发送/接收 |
+| 分析 API 基础路径 | 固定同源 `/api` | Root Server | 新旧 Analysis API 认证边界仍独立验收 |
 | 分析认证 | 当前分析路由使用 Owner Bearer；Web 不持有该凭据 | Web Session/Cookie + CSRF + 资源授权 | 不把 Owner Token 放入 localStorage，不匿名开放受保护接口 |
 
-行情健康检查使用 /health/live、/health/ready；分析服务使用 /healthz、/readyz。两组路径属于不同服务契约。
+Root Server 使用 `/healthz` 提供匿名 Liveness，`/api/readyz` 提供 Owner Session/Owner Bearer 只读 Readiness；原始 `/readyz` 和 `/diagnostics` 仍为 Owner Bearer 运维路由。
 
 ## 3. 当前 Web 已封装的行情 API
 
@@ -53,15 +53,15 @@
 
 字段契约以 doc/api/contracts/分析任务.openapi.yaml 为准。最近任务区只保存有限数量的浏览器任务引用，不是服务端完整历史。
 
-当前分析路由 Owner Bearer 与浏览器 Session 尚未形成可验收的认证闭环。服务端历史分页、模板、取消和综合结果接口未完成 Application API、Server 注册、认证和部署验证前，Web 不新增推测请求。
+当前旧 Analysis Task/Run 路由仍是 Owner Bearer-only，浏览器 Owner Session 不会自动获得访问权。服务端历史分页、模板、取消和综合结果接口未完成 Application API、Server 注册、认证和部署验证前，Web 不新增推测请求。
 
-### 4.1 旧分析 API 的认证差异（保持原有边界）
+### 4.1 旧 Analysis API 的认证差异（保持原有边界）
 
 旧 Analysis Task/Run 路由仍由 Root Server 的 Platform Bearer Router 保护，Owner Session 不会自动授权这些旧路由：
 
 - `web/src/api.js` 的通用 `request()` 使用 `credentials: "same-origin"`，但旧分析 API 函数没有发送 `Authorization: Bearer` 或 CSRF Header。
 - `internal/server/bootstrap/router.go` 仍将旧分析任务/Run、`/readyz` 和 `/diagnostics` 注册为 Owner Bearer 路由。
-- `web/default.conf.template` 的 `/analysis-api/` 代理不会注入长期 Owner Token；浏览器不得持有或保存 Owner Bearer。
+- Nginx 现已只有 `/api/` 一个 Root Server upstream，不再存在 `/analysis-api/` 独立代理；但统一入口不改变旧 Analysis 路由自身的 Owner Bearer 授权策略。
 
 因此，Owner Session 路由可用不代表旧 Analysis API 已可由浏览器访问。旧 Analysis API 的退役和 Researchflow 新 API 接入，仍按 SRV-CTR-001 的 deferred 边界推进；不得把 `owner_session` 映射为 `owner_bearer`，不得把旧 Analysis API 当作 Researchflow 新契约。
 
@@ -83,7 +83,7 @@ Root Server 在 `OWNER_SESSION_ENABLED=true` 时，按 `doc/server/contracts/SRV
 - `web/src/api.js` 已封装登录、当前 Session、刷新后 CSRF 恢复、登出、Session 轮换和密码修改。
 - 请求统一使用 `credentials: "same-origin"`；CSRF Header 为 `X-CSRF-Token`，Token 只保存在 JS 模块运行时变量，不写入 localStorage/sessionStorage。
 - 登录与轮换响应校验 CSRF Token；Session 失效时清理内存 Token；密码修改成功后清理 Token，要求重新登录。
-- 行情 API Key 仅由行情请求携带；Owner Session 请求不携带行情 API Key，也不发送 Owner Bearer。
+- Data 请求使用 Owner Session Cookie；CSRF Token 只保存在内存，探测 POST 请求发送 `X-CSRF-Token`。浏览器不保存 Data API Key，也不发送 Owner Bearer。
 - 设置中心已有登录、退出、密码修改界面；页面初始化时查询 Session 并通过专用 POST 接口恢复 CSRF。
 - 登录失败、Session 过期、服务端未启用、服务不可用和来源/CSRF 拒绝分别显示，不把未知状态报告为登录成功。
 - 旧 Analysis、`/readyz`、`/diagnostics` 仍保持 Owner Bearer 认证；Owner Session 不会自动解锁这些路由。
@@ -98,13 +98,13 @@ Root Server 在 `OWNER_SESSION_ENABLED=true` 时，按 `doc/server/contracts/SRV
 
 ### 部署验收仍未完成
 
-1. 在目标 Compose 部署中确认 Web 容器 Nginx 的 `/analysis-api/` 代理实际指向 Root Server。
-2. 确认 `proxy_cookie_path /api /analysis-api/api;` 对登录 Set-Cookie、Session 轮换和登出清除 Cookie 均生效。
-3. 在 HTTPS 入口检查 HttpOnly、Secure、SameSite、Path、无 Domain 等属性；确认 Server 的 Public Origin 与外部入口一致。
-4. 使用真实浏览器验证登录、刷新后 CSRF 恢复、登出、密码修改后旧 Session 失效及重新登录。
-5. 单独确认可信代理链和来源 IP 解析配置；不能仅因 Nginx 传递了 `X-Forwarded-For` 就信任该头。
+1. 目标部署需填入真实 HTTPS Public Origin 和经过目标主机基准测试的 Argon2id 参数。
+2. 验证 Nginx `/api/` 原样转发至 Root Server，Cookie Path `/api` 不再需要路径改写。
+3. 使用真实浏览器验证登录、刷新后 CSRF 恢复、Data GET、Provider Probe POST、登出和 Session 轮换。
+4. 验证 Owner Bearer 仍可供受控运维调用，双凭证请求拒绝，浏览器无 API Key/Owner Bearer。
+5. 确认可信代理链和来源 IP 解析配置；不能仅因 Nginx 传递了 `X-Forwarded-For` 就信任该头。
 
-当前结论：Owner Session WebUI 代码接入已完成，精确 SHA 的 Integration CI 已通过；目标环境 Nginx/Compose 端到端部署仍待验收。SRV-CTR-002 登记簿状态仍为 `freeze-ready`，不得写成已正式冻结。Researchflow 新业务 API 仍受 SRV-CTR-001 deferred 边界约束。
+当前结论：Owner Session WebUI 与 Root Data 路由代码已接入，单 `/api/` 部署配置已完成；本次迁移精确 SHA CI 尚在执行，目标环境 Nginx/Compose 端到端部署仍待验收。SRV-CTR-002 登记簿状态仍为 `freeze-ready`，不得写成已正式冻结。Researchflow 新业务 API 仍受 SRV-CTR-001 deferred 边界约束。
 ## 5. 跨模块目标能力与接入状态
 
 | 领域 | Web 目标场景 | 前置条件 | 当前处理 |
@@ -151,3 +151,12 @@ WebUI 只提交请求 Schema 版本、一次逻辑提交的幂等键、精确模
 同一幂等键重试必须复用原始请求意图。指纹包含 caller、操作、请求 Schema 版本、精确模板身份、规范化快照引用集合和 JCS 参数；排除服务端生成时间及追踪 ID。命中幂等记录必须先于时钟读取和模板解析，返回原 Run，不改变其 PIT/Deadline。
 
 首个 News Search 参数 Schema 的真实字段为 `query`（必填）、`limit`（必填，1–100）和 `query_dimension`（可选）；额外字段拒绝。此参数 Schema 不等于正式 Workflow Template 已发布，也不等于 HTTP API 已开放。
+
+## RepairAll RA009：Owner Session 单入口迁移（2026-11-19）
+
+- 用户已批准 Owner Session 方案，并明确不保留旧独立 Data 服务和旧 API Key。
+- WebUI Data 请求使用同源 `/api`，Owner Session Cookie Path 固定为 `/api`；探测等写操作发送内存中的 `X-CSRF-Token`。
+- Server Data 路由显式接受 Owner Session 和受控 Owner Bearer；Owner Session 不继承 admin/service scope，Data 领域授权继续执行。
+- 新增 `GET /api/readyz` 只读别名供 WebUI 在 Cookie Path 范围内查看 Root Readiness；原始 `/readyz`、`/diagnostics` 仍是 Owner Bearer 运维接口。
+- Compose 仅部署 Root Server 和 WebUI；Nginx 仅保留 Root Server 单一 `/api/` upstream。旧独立 Data 服务、Data API Key、`/market-api/` 和 `/analysis-api/` 双 upstream 不再保留。
+- 代码与自动化验收尚未等同于目标部署验收；真实 HTTPS Origin、Argon2id 基准参数、真实 MariaDB/Redis 和 Provider 数据仍需在目标环境验收。

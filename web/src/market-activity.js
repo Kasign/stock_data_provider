@@ -15,7 +15,7 @@ function messageRow(root,message,span){root.replaceChildren();const tr=document.
 function cell(row,value,cls=""){row.append(el("td",cls,value===null||value===undefined||value===""?"—":value));}
 function amount(v){const n=finiteNumberOrNull(v);if(n===null)return "—";return (n>0?"+":n<0?"−":"")+formatCompact(Math.abs(n))+" 元";}
 function direction(v){const n=finiteNumberOrNull(v);if(n===null)return "market-data-unknown";return n>0?"market-data-positive":n<0?"market-data-negative":"market-data-flat";}
-function errorMessage(e){if(Number(e?.status)===404)return "当前 market-data 版本尚未提供此接口，请更新数据服务后再刷新。";if(Number(e?.status)===503)return "对应 Provider 未启用或未配置，请检查 market-data 数据源设置。";if([401,403].includes(Number(e?.status)))return "API Key 验证失败，请检查连接与密钥设置。";return describeApiError(e,"读取数据失败。");}
+function errorMessage(e){if(Number(e?.status)===404)return "当前 Root Server 部署未提供此接口，请核对已发布的 API 契约。";if(Number(e?.status)===503)return "对应 Provider 未启用或未配置，请检查 Root Server 数据源设置。";if([401,403].includes(Number(e?.status)))return "当前 Owner Session 未认证或无权访问，请检查登录状态与服务端授权。";return describeApiError(e,"读取数据失败。");}
 export function activitySnapshotEvidence(data,{reportDate=false}={}) {
  const parts=["来源 "+(data?.source||"未报告")];
  if(reportDate)parts.push("源端报告日期 "+(data?.provider_report_date||"未提供"));
@@ -79,13 +79,6 @@ export function bindMarketActivity(getSettings,onSelectStock){
   let seq=null,cfg=null,ctl=null;
   try{
    abort("dragon");seq=generation.dragon;cfg=settings();
-   if(!cfg?.apiKey){
-    messageRow($("#dragon-tiger-body"),"请先配置行情 API Key。",6);
-    badge("dragon-tiger-quality","需配置 Key");
-    errorBox("dragon-tiger-error","");meta("dragon-tiger-meta","");clearReasons("dragon-tiger-reasons");
-    dragonHasMore=false;const next=$("#dragon-tiger-next");next.hidden=true;next.disabled=true;
-    return "needs_key";
-   }
    if(!append){
     dragonPage=1;dragonHasMore=false;dragonDate=$("#dragon-tiger-date").value;
     messageRow($("#dragon-tiger-body"),"正在读取龙虎榜…",6);
@@ -202,12 +195,6 @@ function renderCalendar(data){
     errorBox("trading-calendar-error",message);badge("trading-calendar-quality","日期范围无效","invalid");
     meta("trading-calendar-meta","");clearReasons("trading-calendar-reasons");
     $("#trading-calendar-grid").replaceChildren(el("p","market-empty-state",message));return "invalid";
-   }
-   if(!cfg?.apiKey){
-    const message="请先在连接与密钥设置中配置行情 API Key。";
-    errorBox("trading-calendar-error",message);badge("trading-calendar-quality","需配置 Key");
-    meta("trading-calendar-meta","数据未读取 · 需要 API Key");clearReasons("trading-calendar-reasons");
-    $("#trading-calendar-grid").replaceChildren(el("p","market-empty-state",message));return "needs_key";
    }
    errorBox("trading-calendar-error","");
    meta("calendar-month-label",start.slice(0,7)+(start.slice(0,7)===end.slice(0,7)?"":" — "+end.slice(0,7)));
