@@ -564,4 +564,4 @@ RA009 代码关闭条件已满足：Server 路由认证矩阵、CSRF、WebUI 请
 - Server Migration Registry 注册 Quant namespace；Bootstrap 单测同步更新。
 - Integration CI 增加 QUANT_TEST_MYSQL_DSN 和逐项 PASS 门禁，覆盖普通写入/重放/规范等价 JSON、created_at 稳定、16 并发写入、存储损坏拒绝和 Context 取消。
 - 结果写入层已实现，但授权读取、Owner PolicySnapshot 签发/当前策略复核/撤销线性化、AccessAuditor 和 Root 依赖注入仍未完成；QNT-013 保持 OPEN。
-- 代码验收 SHA：`05773845ae47ca0c61d182336890b547d5512432`；对应 Integration CI 需等待完整结果，不以旧 SHA 通过替代。
+- 代码验收 SHA：`7f1162ba2b6472c4653b108232862f7e9d5af1cd`；Integration CI #551 [44664065668](https://github.com/Kasign/stock_data_provider/actions/runs/44664065668) 对该精确 SHA 全项 success。Quant MariaDB 专项四项顶层用例逐项 PASS，根模块测试、vet、跨模块测试、Worker DB/Redis、go-core、Compose 与 WebUI 检查均通过。QNT-013 仍因生产授权读取/审计 Adapter 和 Root 注入未完成而保持 OPEN。
