@@ -84,7 +84,7 @@ func TestLiveReaderGetDailyBarsV2PreservesProviderDecimalEvidence(t *testing.T) 
 	if len(snapshot.Bars) == 0 {
 		t.Fatal("real BaoStock Application Port returned no daily bars")
 	}
-	if snapshot.TradingCalendarRef == nil || !strings.HasPrefix(*snapshot.TradingCalendarRef, "sha256:") {
+	if snapshot.TradingCalendarRef == nil || !strings.HasPrefix(*snapshot.TradingCalendarRef, "data_calendar:sha256:") {
 		t.Fatalf("real V2 snapshot must carry the persisted calendar reference: %+v", snapshot.CoverageEvidence)
 	}
 	if snapshot.CoverageEvidence.CoverageBasis != "exchange_calendar" {

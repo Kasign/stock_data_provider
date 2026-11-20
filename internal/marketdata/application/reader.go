@@ -209,7 +209,7 @@ func (r *Reader) GetDailyBarsV2(ctx context.Context, query app.DailyBarsQuery) (
 	}
 	calendarRangeExplicit := strings.TrimSpace(query.StartDate) != "" && strings.TrimSpace(query.EndDate) != ""
 	calendarQualityUnreliable := containsReaderString(evidence.Warnings, "daily_bar_coverage_uses_degraded_trading_calendar")
-	calendarReferenceMissing := evidence.CoverageBasis == "exchange_calendar_unreferenced" || !calendarRangeExplicit || calendarQualityUnreliable
+	calendarReferenceMissing := evidence.CoverageBasis != "exchange_calendar" || strings.TrimSpace(evidence.CalendarRef) == "" || !calendarRangeExplicit || calendarQualityUnreliable
 	calendarDegradationReason := ""
 	switch {
 	case !calendarRangeExplicit:
