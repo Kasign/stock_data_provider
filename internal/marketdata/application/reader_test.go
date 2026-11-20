@@ -226,7 +226,7 @@ func TestReaderGetDailyBarsV2DegradesBarsWhenCalendarIsOnlyWeekdayEstimate(t *te
 		currentBars: []model.DailyBar{bar},
 		currentCoverage: service.DailyBarCoverageEvidence{
 			CalendarQualityStatus: model.QualityDegraded,
-			CoverageBasis: "weekday_estimate", CoverageSufficient: true,
+			CoverageBasis:         "weekday_estimate", CoverageSufficient: true,
 			Warnings: []string{"daily_bar_coverage_calendar_not_observed_by_as_of"},
 		},
 	}
