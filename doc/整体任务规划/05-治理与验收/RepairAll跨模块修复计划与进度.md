@@ -497,3 +497,12 @@ RA009 代码关闭条件已满足：Server 路由认证矩阵、CSRF、WebUI 请
 - Application 测试覆盖 PIT 有效日历 ref 保留、冲突/降级日历 ref 拒绝、无持久化 ref 降级及无界查询降级。
 - 精确 SHA `7c5f6e3c5c5b4bb146d46e60d1c723bd8fbce9c2` 对应 Integration CI Run [44511526743](https://github.com/Kasign/stock_data_provider/actions/runs/44511526743) 全项 success。
 - 该工作只关闭 CalendarRef / coverage Header 的同一性和质量门禁；最终 Decimal DailyBarV2 Body、HTTP v2 Schema/Handler/Golden、Research/Quant Consumer Contract Test 仍 OPEN。DATA-CTR-005/007、QNT-CTR-003 继续 deferred。
+
+
+### 28.25 日线精度与 ChangePercent 来源证据实现（2026-11-20）
+
+- DailyBar ExactValues 新增原始 token、小数位、协议固定 scale 等 evidence；canonical Decimal 与 lexical evidence 分开。observed_token 不代表 Provider 合同精度。
+- ChangePercent 来源证据接入 Tushare/BaoStock/Netease；派生值不冒充 provider token。Tushare amount 记录 thousand_CNY→CNY 的 1000 因子；Pytdx/Hithink 未核实单位时不生成精确 amount_cny。
+- Application Port 深拷贝新增证据字段；Provider/Application 回归测试已覆盖。
+- 精确 SHA `baaa2a57051e064f4f91a54851443379636bb685` 的 Integration CI Run [44658725187](https://github.com/Kasign/stock_data_provider/actions/runs/44658725187) 全项 success。
+- 最终 DailyBarV2 Body、HTTP v2、Tushare/Yahoo QFQ/HFQ 精确调整、ProviderTime/provider_data_version 和 Research/Quant 消费者契约仍 OPEN；DATA-CTR-005/007、QNT-CTR-003 继续 deferred。

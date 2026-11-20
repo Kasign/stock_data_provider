@@ -209,3 +209,13 @@ Root Server 的 Data Module 构造、共享资源注入、Migration Registry、I
 - 有 ref 但日历质量不可靠时，v2 Header 不暴露 CalendarRef，coverage basis 为 `degraded_exchange_calendar`，Snapshot/Bars 降级；仅 timestamp-only 历史降级保留可靠 CalendarRef。
 - 精确 SHA `7c5f6e3c5c5b4bb146d46e60d1c723bd8fbce9c2` 的 Integration CI Run [44511526743](https://github.com/Kasign/stock_data_provider/actions/runs/44511526743) 全项 success。
 - CalendarRef 同次评估、无界查询和质量 fail-closed 已覆盖；最终 Decimal Body 与 HTTP v2 仍是下一阶段工作。
+
+
+## RepairAll 日线精确词法与涨跌幅来源证据实现（2026-11-20）
+
+- ExactValues 新增每个 Decimal 字段的 precision evidence：canonical value 独立于本次 Provider 原始 token/小数位；Pytdx 记录协议固定 scale。observed_token 仅代表单次响应，不推断 Provider 合同精度。
+- Tushare `pct_chg`、BaoStock `pctChg`、Netease CSV `change_percent` 已保留精确来源值、token、scale 和 source field；TickFlow 等派生值不写入 provider-source evidence。
+- Tushare amount 换算记录 1000 因子；Pytdx/Hithink 未证实的成交额单位不生成精确 `amount_cny`。v1 兼容字段不变。
+- Application Port 映射及深拷贝测试覆盖新增字段。
+- 精确 SHA `baaa2a57051e064f4f91a54851443379636bb685` 的 Integration CI Run [44658725187](https://github.com/Kasign/stock_data_provider/actions/runs/44658725187) 全项 success。
+- 后续仍需完成 DailyBarV2 Decimal Body、Tushare/Yahoo QFQ/HFQ 精确调整、ProviderTime/provider_data_version、HTTP v2 与 Research/Quant 消费者契约；DATA-CTR-005/007 和 QNT-CTR-003 不变更为 frozen。
