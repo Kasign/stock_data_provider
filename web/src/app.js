@@ -4376,6 +4376,33 @@ function applySettings(nextSettings, { persistPreviousActiveTask = true } = {}) 
   }, failures);
 }
 
+function saveSettingsFromForm() {
+  const form = $("#settings-form");
+  if (!form.reportValidity()) return;
+  if (!connectionDraftIsDirty()) {
+    $("#settings-feedback").textContent = "没有待保存的更改。";
+    return;
+  }
+  try {
+    const merged = mergeConnectionDraft(readConnectionDraft(), state.settings);
+    const next = saveSettings(merged);
+    applySettings(next);
+  } catch (error) {
+    $("#settings-feedback").textContent = error.message;
+  }
+}
+
+
+function discardConnectionDraft() {
+  $("#market-base-input").value = state.settings.marketBase;
+  $("#analysis-base-input").value = state.settings.analysisBase;
+  initialConnectionDraft = readConnectionDraft();
+  syncConnectionDraftState();
+  $("#settings-draft-connection-check").textContent = "尚未检查未保存配置。";
+  $("#settings-draft-connection-check").className = "settings-inline-status";
+  $("#settings-feedback").textContent = "已放弃未保存的连接配置更改。";
+}
+
 function clearLocalSettings() {
   if (!window.confirm("确定清除当前浏览器保存的旧连接配置？不会修改服务器配置。")) return;
   try {
