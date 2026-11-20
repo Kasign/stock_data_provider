@@ -33,6 +33,7 @@ import (
 	researchapplication "example.com/stock-analysis-flow/internal/research/application"
 	researchstorage "example.com/stock-analysis-flow/internal/research/storage"
 	researchflowstorage "example.com/stock-analysis-flow/internal/researchflow/storage"
+	quantstorage "example.com/stock-analysis-flow/internal/quant/storage"
 	serverconfig "example.com/stock-analysis-flow/internal/server/config"
 	serverdiagnostics "example.com/stock-analysis-flow/internal/server/diagnostics"
 	serverhealth "example.com/stock-analysis-flow/internal/server/health"
@@ -556,6 +557,7 @@ func newMigrationRegistry() (*servermigration.Registry, error) {
 		{namespace: platformsecurity.OwnerCredentialMigrationNamespace, migrations: platformsecurity.OwnerCredentialMigrations()},
 		{namespace: researchstorage.MigrationNamespace, migrations: researchstorage.Migrations()},
 		{namespace: researchflowstorage.MigrationNamespace, migrations: researchflowstorage.Migrations()},
+		{namespace: quantstorage.MigrationNamespace, migrations: quantstorage.Migrations()},
 		{namespace: "notification", migrations: notificationstorage.Migrations()},
 		{namespace: serversecurity.SecurityAuditMigrationNamespace, migrations: serversecurity.SecurityAuditMigrations()},
 	}
