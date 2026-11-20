@@ -608,3 +608,11 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - 精确提交 SHA：`f6386875d9f06c280d4b1e2f87d991998a5fc0ae`；Go Test Suite Run [44694709037](https://github.com/Kasign/stock_data_provider/actions/runs/44694709037) 已由该 SHA 的 push 触发，当前记录状态为 `in_progress`，最终结果待完成后回填。
 - 同时修正仓库根 README 的 Data OpenAPI 路径：旧路径 `services/market-data/openapi.yaml` 已迁移，当前权威文件为 `internal/marketdata/httpapi/openapi.yaml`。
 - 本组仅修改 CI 触发配置和 README/本计划文档；没有修改业务代码、模块边界或 API 契约。
+
+
+### 31.1 RepairAll 专项数据库 Job 触发条件补齐（2026-11-20）
+
+- 首轮 Go Test Suite Run [44694709037](https://github.com/Kasign/stock_data_provider/actions/runs/44694709037) 使用 SHA `f6386875d9f06c280d4b1e2f87d991998a5fc0ae`，确认根模块、go-core、Research、Researchflow 等 Job 已运行；但 Data 与 News 的 MariaDB Job 在 `repair_all` push 上被条件表达式跳过。
+- 该跳过不是测试通过。已将 Market Data 专项测试、Market Data MariaDB 集成、News MariaDB 集成的 push 条件纳入 `repair_all`，保持各原有测试命令和断言不变。
+- 修正提交 SHA：`cec698dc14187d2907f826ed114cb04d3ef64f93`；新 Go Test Suite Run [44694882303](https://github.com/Kasign/stock_data_provider/actions/runs/44694882303) 已由精确 SHA push 触发，当前状态 `pending`，等待全部 Job 完成。
+- 验收要求：新 Run 中 Market Data module tests、Market Data MariaDB integration、News MariaDB integration 必须实际执行并通过；其余必需 Job 通过；任何 skipped 项按真实条件解释，不记为 PASS。
