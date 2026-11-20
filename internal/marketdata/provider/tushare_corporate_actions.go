@@ -131,7 +131,15 @@ func (p *Tushare) FetchCorporateActions(ctx context.Context, rawSymbol, startDat
 			}
 			var referencePriceIncluded *bool
 			holderScope := model.CorporateActionHolderScopeUnknown
-			if exDate != "" && strings.Contains(status, "实施") {
+			normalizedStatus := "unknown"
+			if strings.Contains(status, "实施") {
+				normalizedStatus = "implemented"
+			} else if strings.Contains(status, "预案") || strings.Contains(status, "通过") {
+				normalizedStatus = "proposal"
+			}
+			termsComplete := exDate != "" && normalizedStatus == "implemented" &&
+				cashBeforeTax != nil && bonus != nil && transfer != nil
+			if exDate != "" && normalizedStatus == "implemented" {
 				included := true
 				referencePriceIncluded = &included
 				holderScope = model.CorporateActionHolderScopeAllShareholders
@@ -149,6 +157,8 @@ func (p *Tushare) FetchCorporateActions(ctx context.Context, rawSymbol, startDat
 				BonusShareRatio: bonus, TransferShareRatio: transfer,
 				HolderScope:            holderScope,
 				ReferencePriceIncluded: referencePriceIncluded,
+				NormalizedStatus:       normalizedStatus,
+				TermsComplete:          termsComplete,
 				Source:                 p.Name(), SourceVersion: tushareDividendVersion, FetchedAt: fetchedAt,
 				QualityStatus:  model.QualityDegraded,
 				QualityReasons: []string{"provider_available_at_timestamp_not_exposed_by_dividend"},

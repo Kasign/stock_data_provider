@@ -24,19 +24,22 @@ func NormalizeAdjustmentFactorBasis(value AdjustmentFactorBasis) AdjustmentFacto
 // PriceOffsetCNY=nil 表示来源只提供标量乘法因子，偏移量按 0 处理。
 // SystemObservedAt 由本系统写入历史版本时生成，不由 Provider 提供。
 type AdjustmentFactor struct {
-	Symbol           string                `json:"symbol"`
-	TradeDate        string                `json:"trade_date"`
-	Factor           float64               `json:"factor"`
-	PriceOffsetCNY   *float64              `json:"price_offset_cny,omitempty"`
-	Basis            AdjustmentFactorBasis `json:"basis"`
-	Source           string                `json:"source"`
-	SourceVersion    string                `json:"source_version,omitempty"`
-	ProviderTime     *time.Time            `json:"provider_time,omitempty"`
-	AvailableAt      *time.Time            `json:"available_at,omitempty"`
-	FetchedAt        time.Time             `json:"fetched_at"`
-	SystemObservedAt *time.Time            `json:"system_observed_at,omitempty"`
-	QualityStatus    QualityStatus         `json:"quality_status"`
-	QualityReasons   []string              `json:"quality_reasons,omitempty"`
+	Symbol                 string                `json:"symbol"`
+	TradeDate              string                `json:"trade_date"`
+	Factor                 float64               `json:"factor"`
+	PriceOffsetCNY         *float64              `json:"price_offset_cny,omitempty"`
+	Basis                  AdjustmentFactorBasis `json:"basis"`
+	Source                 string                `json:"source"`
+	SourceVersion          string                `json:"source_version,omitempty"`
+	Derivation             string                `json:"derivation,omitempty"`
+	EvidenceSources        []string              `json:"evidence_sources,omitempty"`
+	EvidenceRevisionHashes []string              `json:"evidence_revision_hashes,omitempty"`
+	ProviderTime           *time.Time            `json:"provider_time,omitempty"`
+	AvailableAt            *time.Time            `json:"available_at,omitempty"`
+	FetchedAt              time.Time             `json:"fetched_at"`
+	SystemObservedAt       *time.Time            `json:"system_observed_at,omitempty"`
+	QualityStatus          QualityStatus         `json:"quality_status"`
+	QualityReasons         []string              `json:"quality_reasons,omitempty"`
 }
 
 // CorporateActionHolderScope 表示公司行动实际适用的股东范围。
@@ -81,6 +84,8 @@ type CorporateAction struct {
 	ShareConsiderationRatio        *float64                   `json:"share_consideration_ratio,omitempty"`
 	HolderScope                    CorporateActionHolderScope `json:"holder_scope,omitempty"`
 	ReferencePriceIncluded         *bool                      `json:"reference_price_included,omitempty"`
+	NormalizedStatus               string                      `json:"normalized_status,omitempty"`
+	TermsComplete                  bool                        `json:"terms_complete,omitempty"`
 	Source                         string                     `json:"source"`
 	SourceVersion                  string                     `json:"source_version,omitempty"`
 	FetchedAt                      time.Time                  `json:"fetched_at"`

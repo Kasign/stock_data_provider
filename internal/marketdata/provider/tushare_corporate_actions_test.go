@@ -34,6 +34,12 @@ func TestTushareFetchCorporateActionsKeepsAnnouncementAndEffectiveDatesSeparate(
 	if got.HolderScope != model.CorporateActionHolderScopeAllShareholders || got.ReferencePriceIncluded == nil || !*got.ReferencePriceIncluded {
 		t.Fatalf("ordinary Tushare dividend must be classified as all-shareholder exchange-reference action: %+v", got)
 	}
+	if got.NormalizedStatus != "implemented" || !got.TermsComplete {
+		t.Fatalf("implemented Tushare dividend must expose normalized status and complete terms: %+v", got)
+	}
+	if items[1].NormalizedStatus != "proposal" || items[1].TermsComplete {
+		t.Fatalf("proposal must not be treated as an implemented adjustment event: %+v", items[1])
+	}
 	if got.AvailableAt != nil || got.QualityStatus != model.QualityDegraded {
 		t.Fatalf("daily announcement date must not be promoted to exact available_at: %+v", got)
 	}
