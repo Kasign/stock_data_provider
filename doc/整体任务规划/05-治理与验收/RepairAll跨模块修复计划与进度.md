@@ -522,3 +522,16 @@ RA009 代码关闭条件已满足：Server 路由认证矩阵、CSRF、WebUI 请
 - 复核发现整体任务规划 README 的模块卡点快照只链接 Research，遗漏 Data、LLM、News、Notification、Platform、Quant、Researchflow 和 Server 的现存卡点文档；阅读顺序编号也存在重复。
 - 已补齐九个模块卡点链接，并修正阅读顺序编号；没有新增卡点文档或改变任何模块责任/契约状态。
 - 已回读 README 确认链接路径与仓库现存文件名一致。
+
+
+### 28.28 Quant / Server QNT-013 生产结果链路复核（2026-11-20）
+
+- 复核基线：repair_all HEAD `487edf052b44721d5b8ba3c5429e5d200ec24772`；Quant 取消传播代码基线 `0a10cb08daa7dcedc6707349ab96d576472bf7a0` 的 Integration CI Run [44661192496](https://github.com/Kasign/stock_data_provider/actions/runs/44661192496) 全项 success。
+- 检查范围：`internal/quant/application`、`internal/quant/result`、`internal/server/bootstrap`、`internal/server/migration`、`internal/researchflow` Quant Validator、Researchflow Composition/Runtime。
+- 事实：Quant 只有 Save Port/MemoryRepository、GetResult 授权读取用例；无生产 SQL Repository、Quant Migration、PrincipalResolver/AuthorizedResultReader/AccessAuditor Adapter。Server Migration Registry 无 Quant namespace，Bootstrap 无 Quant 生产注入；Researchflow Worker 仅注册 News Search Stage。
+- 事实：Researchflow Quant Validator 只验证已取得的 Envelope，不承担 Quant 授权读取或计算；不得把 Validator 当 Stage Provider。
+- 授权阻断：用途 `quant_analysis`、级别 `full` 已在 Quant Application 固定，但生产策略 Owner、可信 subject_ref 映射、策略撤销线性化边界、审计保留/失败处置无可执行权威依据。禁止默认 Allow、伪造授权快照或把 Owner Session 等同 Quant 资源授权。
+- 责任划分：Quant 定义并拥有结果持久化模块接口/Schema 和 Application Port；Server 组合根负责注入、生命周期及 Root Migration Registry 协调；Platform 提供公共 Storage/事务基础原语；授权策略 Owner 与 GOV-CTR-006 语义必须由正式决策明确，不能由 Server 擅自推断。
+- 判定：QNT-013 模块内取消传播子项 CLOSED；QNT-013 生产结果链路 NOT_COMPARABLE/OPEN。QNT-014 计算 Facade、Researchflow Quant Stage 继续等待正式 Registry/Result DTO 与明确真实消费场景。
+- 本轮未发现可安全直接实现的生产代码缺陷；不创建空 Migration namespace、不把 SQL 表结构塞入 Server、不将 MemoryRepository 用作生产实现。卡点已同步至 Quant 当前任务、Quant 模块卡点和 Server 模块卡点。
+- 下一步：先由 Quant/项目契约 Owner 明确策略 Owner、撤销一致性和审计语义；同时可独立审查 Quant 结果持久化 Schema/幂等事务设计与 Platform Storage 接入边界。具备依据后再实现生产 Adapter、Root DI 和 MariaDB 并发/撤销竞态/审计失败集成测试。
