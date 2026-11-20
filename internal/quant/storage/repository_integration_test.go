@@ -63,10 +63,10 @@ func quantStorageRecord(t *testing.T, payload string) result.Record {
 		ResultType: "trend", Scope: "stock", SecurityID: "600000.SH",
 		Period: "1d", QualityStatus: "valid", ResultStatus: "completed",
 		SchemaVersion: "1.0.0", PayloadSchemaVersion: "1.0.0",
-		AlgorithmVersion: "trend.test.v1",
+		AlgorithmVersion:     "trend.test.v1",
 		ParameterFingerprint: strings.Repeat("a", 64),
-		SystemAsOf: time.Date(2026, 11, 20, 2, 0, 0, 0, time.UTC),
-		InputSnapshotRefs: []string{"data_snapshot:sha256:" + strings.Repeat("b", 64)},
+		SystemAsOf:           time.Date(2026, 11, 20, 2, 0, 0, 0, time.UTC),
+		InputSnapshotRefs:    []string{"data_snapshot:sha256:" + strings.Repeat("b", 64)},
 	}, raw)
 	if err != nil {
 		t.Fatalf("build Quant manifest: %v", err)
@@ -186,4 +186,3 @@ func TestMySQLRepositoryHonorsCancellation(t *testing.T) {
 		t.Fatalf("Save with cancelled context = %v, want context.Canceled", err)
 	}
 }
-
