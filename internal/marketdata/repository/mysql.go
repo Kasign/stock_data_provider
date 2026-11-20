@@ -152,7 +152,7 @@ WHERE table_schema = DATABASE() AND table_name = ? AND index_name = ? ORDER BY s
 }
 
 // MigrationDefinitions returns the immutable Data schema history used by Root Server.
-// Versions 1-4 are published definitions and must not be changed.
+// Versions 1-5 are published definitions and must not be changed.
 func MigrationDefinitions() []platformstorage.Migration {
 	stmts := []string{
 		`CREATE TABLE IF NOT EXISTS market_data_provider_probe_runs (
