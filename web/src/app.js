@@ -4376,6 +4376,23 @@ function applySettings(nextSettings, { persistPreviousActiveTask = true } = {}) 
   }, failures);
 }
 
+function saveSettingsFromForm() {
+  const form = $("#settings-form");
+  if (!form.reportValidity()) return;
+  if (!connectionDraftIsDirty()) {
+    $("#settings-feedback").textContent = "没有待保存的更改。";
+    return;
+  }
+  try {
+    const merged = mergeConnectionDraft(readConnectionDraft(), state.settings);
+    const next = saveSettings(merged);
+    applySettings(next);
+  } catch (error) {
+    $("#settings-feedback").textContent = error.message;
+  }
+}
+
+
 function clearLocalSettings() {
   if (!window.confirm("确定清除当前浏览器保存的旧连接配置？不会修改服务器配置。")) return;
   try {
