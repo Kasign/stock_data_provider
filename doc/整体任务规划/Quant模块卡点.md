@@ -71,8 +71,8 @@ Quant 不在 `internal/quant/**` 实现 SQL/Redis、通用 Storage、认证、�
 - 最新复核基线：repair_all HEAD `487edf052b44721d5b8ba3c5429e5d200ec24772`；代码验收基线 `0a10cb08daa7dcedc6707349ab96d576472bf7a0` 的 Integration CI Run [44661192496](https://github.com/Kasign/stock_data_provider/actions/runs/44661192496) 全项 success。
 - 已核查 `internal/quant/result`、`internal/quant/application`、Server Bootstrap、Migration Registry、Researchflow Composition/Runtime：目前仍只有 Save Port/MemoryRepository 和 GetResult 授权读取 Port；无生产 SQL Repository、Quant Migration、PrincipalResolver/AuthorizedResultReader/AccessAuditor Adapter，也无 Root DI。
 - Server Migration Registry 没有 Quant namespace；不能通过空注册或 Server 自建 SQL 表绕过模块存储归属。Quant 需要提供模块拥有的持久化定义/接口，Server 负责组合注入，Platform 提供公共事务/Storage 原语。
-- 当前 `GetResult` 的用途为 `quant_analysis`、内容级别 `full`。但授权策略 Owner、subject_ref 可信映射、策略撤销的线性化边界、审计保留和失败处置尚无可据以实现的生产契约/决议。不得默认 Allow，不得把 Owner Session 身份直接当成 Quant 资源授权。
-- 解锁顺序：① Quant/项目契约 Owner 明确策略 Owner、策略快照读取/撤销一致性和审计语义；② Quant/Server/Platform 按现有 Port 与模块边界实现生产 Repository、Migration、Principal/Authorized Reader/Audit Adapter；③ Server Root 注入并做 MariaDB 并发/冲突/撤销竞态/审计失败集成验收；④ 具备明确真实消费场景后再接 Researchflow Quant Stage。
+- 当前 `GetResult` 的用途为 `quant_analysis`、内容级别 `full`。GOV-CTR-006 已明确 policy_owner=quant、MVP subject_ref=Researchflow service principal、resource_ref=result_id。当前缺口是 Quant Owner 策略规则/存储/签发、策略更新与读取竞态实现，以及审计保留/失败处置；不得默认 Allow，不得把 Owner Session 身份直接当成 Quant 资源授权。
+- 解锁顺序：① Quant Owner 按 GOV-CTR-006 实现策略规则、不可变 PolicySnapshot 签发/读取、撤销与读取竞态门禁，并明确审计保留/失败处置实现；② Quant 实现生产 Repository/Migration，Server/Platform 复用现有 Storage 并完成 Root 注入；③ Quant/Server 完成 MariaDB 并发/冲突/撤销竞态/审计失败集成验收；④ 具备明确真实消费场景后再接 Researchflow Quant Stage。
 - QNT-013 模块内取消传播子项已 CLOSED；生产闭环仍 OPEN。QNT-014 Facade 与 Researchflow Stage 不因本次复核提前开放。
 
 
