@@ -17,9 +17,8 @@ import (
 func TestBatchQuotesRejectsDuplicateSymbols(t *testing.T) {
 	p := httpFakeProvider{}
 	svc := service.New([]provider.Provider{p}, cache.NewDisabled(), nil, time.Second, time.Minute, 120, slog.New(slog.NewTextHandler(io.Discard, nil)))
-	h := New("secret", "forward_adjusted", svc, []provider.Provider{p}, nil).Handler()
+	h := New("forward_adjusted", svc, []provider.Provider{p}, nil).InProcessHandler()
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/market/quotes?symbols=600519.SH,600519", nil)
-	req.Header.Set("X-API-Key", "secret")
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, req)
 	if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), "duplicates") {
@@ -30,14 +29,13 @@ func TestBatchQuotesRejectsDuplicateSymbols(t *testing.T) {
 func TestBatchQuotesRejectsMoreThanFiftySymbols(t *testing.T) {
 	p := httpFakeProvider{}
 	svc := service.New([]provider.Provider{p}, cache.NewDisabled(), nil, time.Second, time.Minute, 120, slog.New(slog.NewTextHandler(io.Discard, nil)))
-	h := New("secret", "forward_adjusted", svc, []provider.Provider{p}, nil).Handler()
+	h := New("forward_adjusted", svc, []provider.Provider{p}, nil).InProcessHandler()
 	symbols := make([]string, 51)
 	for i := range symbols {
 		symbols[i] = "600519.SH"
 	}
 	// 超限检查必须先于重复检查。
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/market/quotes?symbols="+strings.Join(symbols, ","), nil)
-	req.Header.Set("X-API-Key", "secret")
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, req)
 	if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), "no more than 50") {

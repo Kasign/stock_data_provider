@@ -89,3 +89,32 @@ func TestRecordValidatedSnapshotRejectsInvalidRecord(t *testing.T) {
 		t.Fatalf("ValidatedSnapshot() error = %v, want ErrInvalidPayload", err)
 	}
 }
+
+func TestRecordValidatedSnapshotPreservesExplicitEmptySnapshotRefs(t *testing.T) {
+	payload := json.RawMessage(`{"metric_code":"pure_metric","value":1}`)
+	value, err := manifest.BuildWithPayload(manifest.Input{
+		ResultType:           "factor",
+		Scope:                "stock",
+		SecurityID:           "600000.SH",
+		Period:               "1d",
+		QualityStatus:        "valid",
+		ResultStatus:         "completed",
+		SchemaVersion:        "1.0.0",
+		PayloadSchemaVersion: "1.0.0",
+		AlgorithmVersion:     "pure.v1",
+		ParameterFingerprint: "sha256:parameter-fingerprint",
+		SystemAsOf:           time.Date(2026, 11, 9, 0, 0, 0, 0, time.UTC),
+		InputSnapshotRefs:    []string{},
+	}, payload)
+	if err != nil {
+		t.Fatalf("BuildWithPayload() error = %v", err)
+	}
+
+	snapshot, err := (Record{Manifest: value, Payload: payload}).ValidatedSnapshot()
+	if err != nil {
+		t.Fatalf("ValidatedSnapshot() error = %v", err)
+	}
+	if snapshot.Manifest.InputSnapshotRefs == nil || len(snapshot.Manifest.InputSnapshotRefs) != 0 {
+		t.Fatalf("explicit empty snapshot refs were not preserved: %#v", snapshot.Manifest.InputSnapshotRefs)
+	}
+}

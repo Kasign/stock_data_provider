@@ -311,7 +311,7 @@ try {
         });
       }
       if (pathname.endsWith("/health/ready") || pathname.endsWith("/readyz")) {
-        if (viewport.width === 320 && healthScenario === "missing-status") {
+        if (healthScenario === "missing-status") {
           return json(200, { message: "HTTP success without an explicit health status" });
         }
         return json(503, { status: "unavailable", error: "browser test backend unavailable" });
@@ -736,66 +736,18 @@ try {
       assert.equal(sectorRequests.length, beforeUnsupported, "unsupported board capital flow must not issue a fake request");
       assert.match(await page.locator("#market-sector-body").textContent(), /不会用成交额替代资金净流入/);
 
-      // Start all historical market requests, then change the market API while every response is delayed.
-      marketLifecycleScenario = "delayed";
-      await page.evaluate(() => { window.__marketLifecycleStarted = []; });
-      await page.locator("#market-capital-flow-start").fill("2026-10-01");
-      await page.locator("#market-capital-flow-end").fill("2026-10-30");
-      await page.locator("#load-market-capital-flow").click();
-      await page.locator("#market-sentiment-history-start").fill("2026-10-01");
-      await page.locator("#market-sentiment-history-end").fill("2026-10-30");
-      await page.locator("#load-market-sentiment-history").click();
-      await page.locator("#load-dragon-tiger").click();
-      await page.locator("#load-trading-calendar").click();
-      await page.waitForFunction(() => (window.__marketLifecycleStarted || []).length === 4, null, { timeout: 5000 });
-      assert.equal(marketLifecycleRequests.length, 4, "capital flow, sentiment history, dragon-tiger and calendar should each start exactly once");
-      assert.deepEqual(
-        marketLifecycleRequests.map((value) => value.split("/api/v1/")[1]).sort(),
-        ["market/capital-flow", "market/dragon-tiger", "market/sentiment/history", "market/trading-calendar"].sort(),
-        "all four market observation endpoints must be in flight before connection changes"
-      );
-
+      // Root Server owns the same-origin API origin; browser settings cannot override deployment configuration.
+      marketLifecycleScenario = "default";
       await page.locator("#open-settings").click();
       await page.locator("#settings-view").waitFor({ state: "visible" });
-      await page.locator("#market-base-input").fill("/market-lifecycle-api");
-      await page.waitForFunction(() => !document.querySelector("#save-settings")?.disabled, null, { timeout: 3000 });
-      await page.locator("#save-settings").click();
-      await page.waitForFunction(() => {
-        const text = (selector) => document.querySelector(selector)?.textContent || "";
-        return text("#market-capital-flow-status").includes("连接已变更") &&
-          text("#market-sentiment-history-status").includes("行情连接配置已变更") &&
-          text("#dragon-tiger-meta").includes("连接配置已变更") &&
-          text("#trading-calendar-meta").includes("连接配置已变更");
-      }, null, { timeout: 5000 });
-      assert.equal(await page.locator("#load-market-capital-flow").isDisabled(), false, "capital-flow button must recover after cancellation");
-      assert.equal(await page.locator("#load-market-sentiment-history").isDisabled(), false, "sentiment-history button must recover after cancellation");
-      assert.equal(await page.locator("#dragon-tiger-next").isHidden(), true, "dragon-tiger pagination must reset after cancellation");
-
-      await page.waitForTimeout(2100);
-      const staleMarketContent = await page.evaluate(() => [
-        document.querySelector("#market-capital-flow-body")?.textContent || "",
-        document.querySelector("#market-sentiment-history-body")?.textContent || "",
-        document.querySelector("#dragon-tiger-body")?.textContent || "",
-        document.querySelector("#trading-calendar-grid")?.textContent || ""
-      ].join(" "));
-      assert.doesNotMatch(staleMarketContent, /2099-01-01|909090|过期龙虎榜数据|过期交易日历数据/,
-        "late responses from the old connection must never repopulate market observation views");
-      assert.deepEqual(
-        marketLifecycleRequests.map((value) => value.split("/api/v1/")[1]).sort(),
-        ["market/capital-flow", "market/dragon-tiger", "market/sentiment/history", "market/trading-calendar"].sort(),
-        "connection invalidation must not silently retry any cancelled market request"
-      );
-      const cancelledMarketPaths = abortedMarketRequests.map((value) => value.split("/api/v1/")[1]);
-      for (const suffix of ["market/capital-flow", "market/sentiment/history", "market/dragon-tiger", "market/trading-calendar"]) {
-        assert.ok(cancelledMarketPaths.includes(suffix), suffix + " should be aborted when market connection changes");
-      }
-
-      // Restore the original API base so later acceptance scenarios remain independent.
-      marketLifecycleScenario = "default";
-      await page.locator("#market-base-input").fill("/market-api");
-      await page.waitForFunction(() => !document.querySelector("#save-settings")?.disabled, null, { timeout: 3000 });
-      await page.locator("#save-settings").click();
-      await page.waitForFunction(() => (document.querySelector("#settings-feedback")?.textContent || "").includes("连接配置已保存"), null, { timeout: 5000 });
+      assert.equal(await page.locator("#market-base-input").isHidden(), true, "market API base must not be user-editable");
+      assert.equal(await page.locator("#analysis-base-input").isHidden(), true, "analysis API base must not be user-editable");
+      assert.equal(await page.locator("#save-settings").isHidden(), true, "browser must not expose a connection-save action");
+      assert.equal(await page.locator("#cancel-settings").isHidden(), true, "browser must not expose a connection-cancel action");
+      assert.match(await page.locator("#settings-view").textContent(), /服务地址、认证策略、Nginx 上游与数据库配置均由服务端部署管理/,
+        "Root Server API origin must remain deployment-managed");
+      assert.match(await page.locator("#settings-feedback").textContent(), /Root Server 单一 API 入口已启用/,
+        "settings must explain the single Root Server API entry");
       await clickNav(page, '.nav-link[data-view="market"]');
       await page.locator("#market-view").waitFor({ state: "visible" });
 
@@ -883,7 +835,8 @@ try {
         try { return JSON.parse(localStorage.getItem("stock-provider-webui.settings.v1") || "{}"); }
         catch { return {}; }
       });
-      assert.equal(savedSettings.apiKey, "browser-test-key", "the isolated API-error scenario must load its test API key");
+      assert.deepEqual(savedSettings, {},
+        "legacy browser API keys and custom origins must be stripped; Root Server paths are deployment-owned defaults");
 
       // Date range controls are intentionally hidden at narrow widths; set their values while submitting via the visible form button.
       await page.evaluate(() => {
@@ -1359,25 +1312,23 @@ try {
       healthScenario = "missing-status";
       await page.locator("#data-center-check").click();
       await page.waitForFunction(
-        () => document.querySelector("#data-service-market-ready")?.textContent.includes("状态未报告") &&
-          document.querySelector("#data-service-analysis-ready")?.textContent.includes("状态未报告"),
+        () => document.querySelector("#data-service-analysis-ready")?.textContent.includes("状态未报告"),
         null,
         { timeout: 10000 }
       );
       const missingHealthStatus = await page.evaluate(() => ({
-        marketText: document.querySelector("#data-service-market-ready")?.textContent.trim() || "",
-        marketClass: document.querySelector("#data-service-market-ready")?.className || "",
-        analysisText: document.querySelector("#data-service-analysis-ready")?.textContent.trim() || "",
-        analysisClass: document.querySelector("#data-service-analysis-ready")?.className || "",
+        analysisLiveText: document.querySelector("#data-service-analysis-live")?.textContent.trim() || "",
+        analysisLiveClass: document.querySelector("#data-service-analysis-live")?.className || "",
+        analysisReadyText: document.querySelector("#data-service-analysis-ready")?.textContent.trim() || "",
+        analysisReadyClass: document.querySelector("#data-service-analysis-ready")?.className || "",
         mariadb: document.querySelector("#data-service-mariadb-status")?.textContent.trim() || "",
         redis: document.querySelector("#data-service-redis-status")?.textContent.trim() || ""
       }));
-      assert.match(missingHealthStatus.marketText, /状态未报告/);
-      assert.match(missingHealthStatus.marketClass, /is-warning/);
-      assert.doesNotMatch(missingHealthStatus.marketClass, /is-local|is-success/);
-      assert.match(missingHealthStatus.analysisText, /状态未报告/);
-      assert.match(missingHealthStatus.analysisClass, /is-warning/);
-      assert.doesNotMatch(missingHealthStatus.analysisClass, /is-local|is-success/);
+      assert.match(missingHealthStatus.analysisLiveText, /异常/);
+      assert.match(missingHealthStatus.analysisLiveClass, /is-error/);
+      assert.match(missingHealthStatus.analysisReadyText, /状态未报告/);
+      assert.match(missingHealthStatus.analysisReadyClass, /is-warning/);
+      assert.doesNotMatch(missingHealthStatus.analysisReadyClass, /is-local|is-success/);
       assert.equal(missingHealthStatus.mariadb, "未知");
       assert.equal(missingHealthStatus.redis, "未知");
 

@@ -21,8 +21,9 @@ type fundamentalsHTTPProvider struct{ httpFakeProvider }
 
 func (fundamentalsHTTPProvider) FetchFundamentals(_ context.Context, symbol string, year, quarter int) (*model.FundamentalsSnapshot, error) {
 	now := time.Now().UTC()
+	availableAt := time.Date(2026, 8, 29, 10, 0, 0, 0, time.FixedZone("UTC+8", 8*60*60))
 	sections := []model.FundamentalSection{
-		{Category: "profitability", ReportDate: "2026-06-30", PublicationDate: "2026-08-29", HasData: true,
+		{Category: "profitability", ReportDate: "2026-06-30", PublicationDate: "2026-08-29", AvailableAt: &availableAt, HasData: true,
 			Metrics: []model.FundamentalMetric{{Key: "roe_avg", Name: "平均净资产收益率", Value: 0.074, Unit: "ratio", SourceField: "roeAvg"}}, QualityStatus: model.QualityValid},
 		{Category: "operating", Metrics: []model.FundamentalMetric{}, QualityStatus: model.QualityUnknown},
 		{Category: "growth", Metrics: []model.FundamentalMetric{}, QualityStatus: model.QualityUnknown},
@@ -38,7 +39,7 @@ func TestFundamentalsRouteRequiresExplicitPeriod(t *testing.T) {
 	p := fundamentalsHTTPProvider{}
 	svc := service.New([]provider.Provider{p}, cache.NewDisabled(), nil, time.Second, time.Minute, 120, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	svc.SetFundamentalsProviders([]provider.FundamentalsProvider{p})
-	h := New("secret", "forward_adjusted", svc, []provider.Provider{p}, nil).Handler()
+	h := New("forward_adjusted", svc, []provider.Provider{p}, nil).InProcessHandler()
 	for _, tc := range []struct {
 		path         string
 		status       int
@@ -48,10 +49,11 @@ func TestFundamentalsRouteRequiresExplicitPeriod(t *testing.T) {
 		{"/api/v1/stocks/600519/fundamentals?year=2026&quarter=5", http.StatusBadRequest, ""},
 		{"/api/v1/stocks/600519/fundamentals?year=2026&quarter=2", http.StatusOK, ""},
 		{"/api/v1/stocks/600519/fundamentals?year=2026&quarter=2&as_of=2026-07-01T00%3A00%3A00Z", http.StatusServiceUnavailable, "fundamentals point-in-time storage is not enabled"},
+		{"/api/v1/stocks/600519/fundamentals?year=2026&quarter=2&as_of=2026-07-01T08%3A00%3A00%2B08%3A00", http.StatusServiceUnavailable, "fundamentals point-in-time storage is not enabled"},
+		{"/api/v1/stocks/600519/fundamentals?year=2026&quarter=2&as_of=2026-07-01T00%3A00%3A00", http.StatusBadRequest, "as_of must be a valid non-future RFC3339 timestamp"},
 		{"/api/v1/stocks/600519/fundamentals?year=2026&quarter=2&as_of=", http.StatusBadRequest, "as_of must be a single RFC3339 timestamp"},
 	} {
 		req := httptest.NewRequest(http.MethodGet, tc.path, nil)
-		req.Header.Set("X-API-Key", "secret")
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, req)
 		if w.Code != tc.status {
@@ -62,6 +64,7 @@ func TestFundamentalsRouteRequiresExplicitPeriod(t *testing.T) {
 		}
 		if tc.status == http.StatusOK && (w.Header().Get("X-Cache") != "MISS" ||
 			!strings.Contains(w.Body.String(), "\"publication_date\":\"2026-08-29\"") ||
+			!strings.Contains(w.Body.String(), "\"available_at\":\"2026-08-29T02:00:00Z\"") ||
 			!strings.Contains(w.Body.String(), "\"source_field\":\"roeAvg\"")) {
 			t.Fatalf("fundamentals response contract incomplete: %s", w.Body.String())
 		}
@@ -90,10 +93,9 @@ func TestFundamentalsRouteRejectsFutureReportPeriod(t *testing.T) {
 	p := fundamentalsHTTPProvider{}
 	svc := service.New([]provider.Provider{p}, cache.NewDisabled(), nil, time.Second, time.Minute, 120, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	svc.SetFundamentalsProviders([]provider.FundamentalsProvider{p})
-	h := New("secret", "forward_adjusted", svc, []provider.Provider{p}, nil).Handler()
+	h := New("forward_adjusted", svc, []provider.Provider{p}, nil).InProcessHandler()
 	path := fmt.Sprintf("/api/v1/stocks/600519/fundamentals?year=%d&quarter=%d", now.Year(), futureQuarter)
 	req := httptest.NewRequest(http.MethodGet, path, nil)
-	req.Header.Set("X-API-Key", "secret")
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, req)
 	if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), "fundamental report period must not be in the future") {

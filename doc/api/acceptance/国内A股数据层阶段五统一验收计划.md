@@ -1,8 +1,8 @@
 # 国内 A 股数据层阶段五统一验收计划
 
-> 本文为阶段五的专项实施与验收历史记录，不再作为整体任务入口。本文当前记录到 2026-11-05 P0 批次 48；2026-11-12 的 P0-86～P0-89、Fundamentals Probe 边界修复及 `source_version` 校验收敛统一维护在 [数据侧整体规划](数据侧整体规划.md) 和 [Runtime Acceptance Log](../provider-migration/DATA_SOURCE_RUNTIME_ACCEPTANCE_LOG.md)。本文保留历史工作包和证据，不得从较早章节的旧待办重复派发任务。
+> 本文为阶段五的专项实施与验收历史记录，不再作为整体任务入口。本文当前记录到 2026-11-05 P0 批次 48；2026-11-12 的 P0-86～P0-89、Fundamentals Probe 边界修复及 `source_version` 校验收敛统一任务状态以 [模块总任务规划和进度](../模块总任务规划和进度.md) 为准；真实运行证据见 [Runtime Acceptance Log](../provider-migration/DATA_SOURCE_RUNTIME_ACCEPTANCE_LOG.md)。本文保留历史工作包和证据，不得从较早章节的旧待办重复派发任务。
 
-- 目标分支：`feat/full-go-data-providers-api-switch`
+- 历史实施分支：`feat/full-go-data-providers-api-switch`（现名 `feat/data`）
 - 阶段定位：阶段五统一验收，不以“代码已实现”替代真实数据验收。
 - 当前状态（2026-11-12，Data 代码验收基线 `9fe53c43c6c32408bbf59eb8c3c627b18a9bfe24`）：Go Test Suite Run `43231652148` success，MariaDB Job 已覆盖 Fundamentals/Valuations Repository 历史修订、as_of 和重启读回；Go-Python parity Run `43228986785`、BaoStock Live Provider Run `43228986723` 均 success。BaoStock 专项明确 PASS，详见数据侧整体规划 P0-89 和 Runtime Log 第 72 节。阶段 B 仍因 DailyBar 复权绝对参考基准缺证而 in_progress；较早章节的待办表属于历史快照，不得作为当前任务重复执行。
 - 原则：每项结论必须绑定代码 SHA、样本范围、原始响应证据和质量判定；凭据不得进入文档或日志。

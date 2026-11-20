@@ -37,8 +37,8 @@ func (v verifiedUnknownDeliveryEvidence) matches(
 	}
 	latest := attempts[len(attempts)-1]
 	return latest.AttemptID == v.attemptID &&
-		latest.Outcome != nil && *latest.Outcome == domain.DeliveryAttemptAmbiguous &&
-		latest.FinishedAt != nil
+		((latest.FinishedAt == nil && latest.Outcome == nil) ||
+			(latest.FinishedAt != nil && latest.Outcome != nil && *latest.Outcome == domain.DeliveryAttemptAmbiguous))
 }
 
 // UnknownDeliveryReconciliationService 将一致性读取、Registry 查询、规则评估和 CAS 收敛固定为单一入口。
