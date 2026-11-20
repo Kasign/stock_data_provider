@@ -83,5 +83,5 @@ Quant 不在 `internal/quant/**` 实现 SQL/Redis、通用 Storage、认证、�
 - Save 必须依赖 DB 唯一约束原子仲裁；重复相同指纹幂等成功且不覆盖首次 created_at，异内容冲突 ErrResultConflict；禁止 REPLACE/覆盖 UPSERT/无锁先查后插。
 - Quant 拥有自己的 Storage Adapter/Migration；Server 只注册 Quant Migration 和注入；Platform 复用现有连接池/迁移能力。没有查询用例前不新增二级索引。
 - 授权读取和 Access Audit 不得并入 Save Repository。AuthorizedResultReader 需策略快照与结果读取一致性边界；AccessAuditor 写入失败必须拒绝释放结果。
-- 授权策略 Owner、撤销一致性、可信 subject_ref 映射、审计保留/失败处置仍未明确，生产授权 Reader 不得先行伪实现。
+- GOV-CTR-006 已明确授权 Owner 和主体/资源/用途映射；尚缺 Quant Owner 策略规则/持久化/签发、当前策略复核与撤销竞态实现，以及审计保留/失败处置。生产授权 Reader 不得先行伪实现。
 - 当前结论：持久化设计审查完成；SQL Schema/Adapter/Migration 未实现；QNT-013 生产闭环继续 OPEN。下一步核对 GOV-CTR-006 和 Platform Authorization 已有能力，避免重复建设。
