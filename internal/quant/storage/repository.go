@@ -66,7 +66,13 @@ func (r *MySQLRepository) Save(ctx context.Context, record result.Record) error 
 		[]byte(snapshot.Payload),
 	)
 	if insertErr == nil {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		return nil
+	}
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 
 	// A failed INSERT is not automatically an idempotent replay. Read the row
@@ -81,7 +87,13 @@ func (r *MySQLRepository) Save(ctx context.Context, record result.Record) error 
 		return errors.Join(ErrStorageUnavailable, insertErr)
 	}
 	if queryErr != nil {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		return errors.Join(ErrStorageUnavailable, insertErr, queryErr)
+	}
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 
 	var storedRecord result.Record
