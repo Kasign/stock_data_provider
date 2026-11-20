@@ -91,6 +91,6 @@ Quant 不在 `internal/quant/**` 实现 SQL/Redis、通用 Storage、认证、�
 
 - Quant 已新增模块自有 `internal/quant/storage`：MariaDB `MySQLRepository.Save` 与 `quant` namespace Migration；Server 仅注册 Migration，Platform 复用现有连接池和 Migration Runner。
 - Save 已按不可变内容寻址语义实现：写入前验证 Manifest/Payload；DB 主键负责并发仲裁；重复写入验证存储记录完整性和两个指纹；同内容幂等，不覆盖首次创建时间；异内容冲突；损坏行拒绝。
-- MariaDB Integration 覆盖重放/等价 JSON/created_at、16 并发写入、损坏行、取消；Integration CI 对四项顶层用例增加逐项 PASS 门禁。
+- MariaDB Integration 覆盖重放/等价 JSON/created_at、16 并发写入、损坏行、取消；Integration CI #551 [44664065668](https://github.com/Kasign/stock_data_provider/actions/runs/44664065668) 在精确 SHA `7f1162ba2b6472c4653b108232862f7e9d5af1cd` 上全项 success，Quant MariaDB 四项逐例 PASS 门禁通过。
 - 当前仅结果写入持久化完成，AuthorizedResultReader、PolicySnapshot 当前策略复核/撤销一致性、AccessAuditor 仍未实现；不得把写入能力误报为 QNT-013 完成。
 - 授权语义依 GOV-CTR-006：policy_owner=quant、Researchflow service principal、resource_ref=result_id、purpose=quant_analysis、content_level=full；Quant Golden 进一步固定策略组合为 `policy_type=quant_result_access`、`policy_ref=quant-result-access`（示例版本 `1.0.0`）。仍需该策略的真实规则与可撤销当前版本存储/签发；Golden 示例不等于生产 Allow 规则。可借鉴 News 的不可变版本+当前指针+事务行锁模式，但不可复制 News 领域策略。
