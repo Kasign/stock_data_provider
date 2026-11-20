@@ -12,8 +12,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/gowebpki/jcs"
-
+	platformauthorization "example.com/stock-analysis-flow/internal/platform/authorization"
 	"example.com/stock-analysis-flow/internal/quant/manifest"
 	"example.com/stock-analysis-flow/internal/quant/result"
 )
@@ -290,21 +289,6 @@ func (usecase *GetResult) recordAudit(ctx context.Context, request ReadRequest, 
 	return nil
 }
 
-type authorizationFingerprintInput struct {
-	SchemaVersion           string          `json:"schema_version"`
-	PolicyOwner             string          `json:"policy_owner"`
-	PolicyVersion           string          `json:"policy_version"`
-	Decision                string          `json:"decision"`
-	PurposeCode             string          `json:"purpose_code"`
-	ContentLevel            string          `json:"content_level"`
-	SubjectRef              string          `json:"subject_ref"`
-	ResourceRef             string          `json:"resource_ref"`
-	DecidedAt               string          `json:"decided_at"`
-	ExpiresAt               *string         `json:"expires_at"`
-	Conditions              []string        `json:"conditions"`
-	EvaluatedPolicyVersions []PolicyVersion `json:"evaluated_policy_versions"`
-}
-
 func validateAuthorization(ref AuthorizationRef, snapshot PolicySnapshot, request ReadRequest) error {
 	if ref.SchemaVersion != "1.0.0" || !validText(ref.AuthorizationRef) ||
 		ref.PolicyOwner != "quant" || ref.Decision != "allowed" ||
@@ -336,25 +320,15 @@ func validateAuthorization(ref AuthorizationRef, snapshot PolicySnapshot, reques
 			return ErrInvalidAuthorization
 		}
 	}
-	input := authorizationFingerprintInput{
-		SchemaVersion: ref.SchemaVersion, PolicyOwner: ref.PolicyOwner,
-		PolicyVersion: ref.PolicyVersion, Decision: ref.Decision,
-		PurposeCode: ref.PurposeCode, ContentLevel: ref.ContentLevel,
-		SubjectRef: ref.SubjectRef, ResourceRef: ref.ResourceRef,
-		DecidedAt: ref.DecidedAt, ExpiresAt: ref.ExpiresAt,
-		Conditions:              append([]string{}, ref.Conditions...),
-		EvaluatedPolicyVersions: policies,
-	}
-	encoded, err := json.Marshal(input)
+
+	// GOV-CTR-006 fingerprinting is a shared Platform primitive. Quant keeps
+	// its domain checks above, while Platform owns the canonical JCS/SHA-256 algorithm.
+	refJSON, err := json.Marshal(ref)
 	if err != nil {
 		return ErrInvalidAuthorization
 	}
-	canonical, err := jcs.Transform(encoded)
-	if err != nil {
-		return ErrInvalidAuthorization
-	}
-	fingerprint, err := manifest.FingerprintPayload(canonical)
-	if err != nil || fingerprint != ref.DecisionFingerprint {
+	snapshotJSON, err := json.Marshal(snapshot)
+	if err != nil || platformauthorization.VerifyFingerprint(refJSON, snapshotJSON) != nil {
 		return ErrInvalidAuthorization
 	}
 	return nil
