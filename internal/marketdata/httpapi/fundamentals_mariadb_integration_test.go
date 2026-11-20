@@ -50,7 +50,7 @@ func TestFundamentalsHTTPToMariaDBPointInTime(t *testing.T) {
 		t.Fatalf("migrate MariaDB: %v", err)
 	}
 
-	symbol := fmt.Sprintf("%06d.SH", 900000+time.Now().UnixNano()%99999)
+	symbol := fmt.Sprintf("%06d.SH", 600000+time.Now().UnixNano()%1000)
 	source := &fundamentalsCountingHTTPProvider{}
 	svc := service.New(
 		[]provider.Provider{source},
