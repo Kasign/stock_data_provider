@@ -10,4 +10,4 @@
 - WebUI 提测与集中验收清单：doc/WebUI提测验收清单.md
 - 开发与部署说明：doc/开发部署说明.md
 
-行情服务机器可读接口契约位于 services/market-data/openapi.yaml。
+行情服务机器可读接口契约位于 internal/marketdata/httpapi/openapi.yaml。
