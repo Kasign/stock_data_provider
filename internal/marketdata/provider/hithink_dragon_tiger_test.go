@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -71,3 +72,36 @@ func containsHithinkDragonTigerReason(values []string, target string) bool {
 	}
 	return false
 }
+
+func TestHithinkDragonTigerRejectsCountMismatchAfterDeduplication(t *testing.T) {
+	today := providerNowUTC().In(providerMarketLocation()).Format("2006-01-02")
+	timestamp := providerNowUTC().UnixMilli()
+	payload := fmt.Sprintf(`{"code":0,"data":{"timestamp":%d,"trade_date":%q,"stock_count":3,"stock_items":[
+		{"thscode":"600036.SH","ticker":"600036","name":"招商银行","change":1.2},
+		{"thscode":"000001.SZ","ticker":"000001","name":"平安银行","change":-0.5},
+		{"thscode":"600036.SH","ticker":"600036","name":"招商银行","change":1.2}
+	]}}`, timestamp, today)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprint(w, payload)
+	}))
+	defer server.Close()
+
+	reporter := validation.NewReporter(10)
+	ctx := validation.WithReporter(context.Background(), reporter)
+	provider := NewHithinkConfigured(time.Second, server.URL, "test-key")
+	if _, err := provider.FetchDragonTiger(ctx, today, 1, 10); err == nil ||
+		!strings.Contains(err.Error(), "declared=3 unique=2 source_rows=3") {
+		t.Fatalf("declared unique count mismatch error = %v", err)
+	}
+	foundCountIssue := false
+	for _, issue := range reporter.Snapshot().Issues {
+		if issue.Code == "count_inconsistent" && issue.ProviderField == "stock_count/stock_items" {
+			foundCountIssue = true
+		}
+	}
+	if !foundCountIssue {
+		t.Fatalf("count mismatch must retain structured provider evidence: %+v", reporter.Snapshot())
+	}
+}
+
