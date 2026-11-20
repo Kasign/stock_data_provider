@@ -2504,10 +2504,20 @@ func (p *Hithink) fetchDailySegment(ctx context.Context, symbol string, start, e
 		v, volumeOK := hithinkNonNegativeInt64(volumeInput)
 		if !volumeOK {
 			quality = model.QualityDegraded
-			reasons = append(reasons, "volume_missing_or_invalid")
+			reason := "volume_missing_or_invalid"
 			if volumePresent {
-				addProviderParseIssue(ctx, absoluteRowIndex, "volume", "volume", "invalid_number", "finite non-negative integer", "number", providerJSONPreview(item.Volume), "同花顺成交量必须是非负整数")
+				issueCode := "invalid_number"
+				expected := "finite non-negative integer"
+				message := "同花顺成交量必须是非负整数"
+				if volumeValue >= 0 && math.Trunc(volumeValue) != volumeValue {
+					reason = "volume_not_integer_shares"
+					issueCode = "non_integer_share_volume"
+					expected = "integer number of shares"
+					message = "同花顺历史日 K 成交量返回小数股数，不能安全映射为整数 shares"
+				}
+				addProviderParseIssue(ctx, absoluteRowIndex, "volume", "volume", issueCode, expected, "number", providerJSONPreview(item.Volume), message)
 			}
+			reasons = append(reasons, reason)
 		} else {
 			volume = &v
 			raw := volumeValue

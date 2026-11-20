@@ -42,6 +42,34 @@ func TestHithinkDailyBarParseIssuesIncludeRowAndProviderField(t *testing.T) {
 	}
 }
 
+func TestHithinkDailyBarsRejectsFractionalShareVolumeWithSpecificEvidence(t *testing.T) {
+	loc := time.FixedZone("CST", 8*60*60)
+	dateMS := time.Date(2026, time.October, 7, 0, 0, 0, 0, loc).UnixMilli()
+	payload := fmt.Sprintf(`{"code":0,"data":{"item":[{"date_ms":%d,"open_price":10,"high_price":11,"low_price":9,"close_price":10,"volume":1000.25,"turnover":10000}]}}`, dateMS)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(payload))
+	}))
+	defer server.Close()
+
+	p := NewHithinkConfigured(time.Second, server.URL, "test-key")
+	reporter := validation.NewReporter(20)
+	ctx := validation.WithReporter(context.Background(), reporter)
+	if _, err := p.FetchDailyBars(ctx, "600036.SH", "2026-10-07", "2026-10-07", 10, model.AdjustmentBackward); err == nil {
+		t.Fatal("fractional volume must not be rounded into integer shares")
+	}
+	found := false
+	for _, issue := range reporter.Snapshot().Issues {
+		if issue.Field == "volume" && issue.ProviderField == "volume" &&
+			issue.Code == "non_integer_share_volume" && issue.RowIndex != nil && *issue.RowIndex == 0 {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected a row-scoped non_integer_share_volume issue, got %+v", reporter.Snapshot().Issues)
+	}
+}
+
 func TestHithinkDailyBarsFetchesSingleResponseWithoutOffset(t *testing.T) {
 	loc := time.FixedZone("CST", 8*60*60)
 	dateMS := func(day int) int64 {
