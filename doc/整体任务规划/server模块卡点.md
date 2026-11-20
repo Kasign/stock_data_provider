@@ -293,3 +293,11 @@
 - Quant 的 GetResult Port 已固定 `quant_analysis/full`，但没有可验证的授权策略 Owner、策略撤销一致性边界、可信 subject_ref 映射和审计保留/失败处置定义。Server 不得创建默认 Allow 或用 Owner Session 代替领域资源授权。
 - Server 当前可推进：确认共享 DB/Platform Storage 能力、Root 生命周期和 Migration Registry 的接入方式；等待 Quant/契约 Owner 提供正式策略语义后再实现 Adapter/注入与 MariaDB Integration。禁止先写空壳实现。
 - 该卡点与 RA009 Data 单入口迁移无关；不得回退已完成的 Data/Session 认证决策。
+
+
+## RepairAll Quant Storage 设计审查后的 Server 责任边界（2026-11-20）
+
+- Quant 结果持久化应由 Quant 模块提供 Repository SQL Adapter 与 Migration 定义；Server Migration Registry 只注册 Quant namespace，Root 只负责构造并注入依赖。Platform 继续提供公共 SQL pool/Migration Runner。
+- Server 不定义 Quant 领域表、不实现 Quant Repository，不将结果存储逻辑放入 Bootstrap。
+- AuthorizedResultReader 的策略判定/结果读取一致性和 AccessAuditor 持久化仍需按 GOV-CTR-006 正式语义装配；策略 Owner、撤销一致性和审计保留语义未明确前，不创建默认 Allow Adapter。
+- 当前无 Quant Storage Adapter/Migration，因此 Server 不应先注册空 namespace。待 Quant 提供完整 Migration 后再注册并由 Integration 验证精确 namespace/version/checksum。
