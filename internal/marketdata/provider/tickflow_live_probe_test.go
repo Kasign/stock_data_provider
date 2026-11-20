@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"strings"
 	"testing"
@@ -11,6 +12,22 @@ import (
 	"example.com/stock-analysis-flow/internal/marketdata/model"
 	"example.com/stock-analysis-flow/internal/marketdata/validation"
 )
+
+func isTickFlowPermissionRequired(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "NO_UNIVERSE_PERMISSION")
+}
+
+func TestIsTickFlowPermissionRequired(t *testing.T) {
+	if !isTickFlowPermissionRequired(errors.New(`HTTP status 403: {"code":"NO_UNIVERSE_PERMISSION","message":"无标的池查询权限"}`)) {
+		t.Fatal("known universe permission denial must be classified as permission_required")
+	}
+	if isTickFlowPermissionRequired(errors.New("TickFlow API key is invalid")) {
+		t.Fatal("invalid credentials must not be classified as an endpoint permission limitation")
+	}
+	if isTickFlowPermissionRequired(errors.New("connection timeout")) {
+		t.Fatal("network failures must not be classified as permission_required")
+	}
+}
 
 // 本测试支持 quote-only、daily-only、index-only 模式；线上复测通过 [include_tickflow] 加对应能力标记显式触发。 daily-only 仅请求一只股票的 8 条未复权日 K。
 // quote-only 会记录认证头是否存在及必要报价字段，不输出 API Key 值或完整响应体。
@@ -77,7 +94,7 @@ func TestLiveTickFlowCapabilities(t *testing.T) {
 		if err != nil {
 			_, safeMessage := liveProbeErrorSummary(err)
 			item.Error = safeMessage
-			if strings.Contains(err.Error(), "NO_UNIVERSE_PERMISSION") {
+			if isTickFlowPermissionRequired(err) {
 				item.Status = "permission_required"
 			} else {
 				item.Status = "failed"
