@@ -747,6 +747,12 @@ func TestLiveHithinkDailyBarsBackwardRaw(t *testing.T) {
 			if !dateOK || !dateValid {
 				t.Fatalf("Hithink %s-adjusted row %d has invalid date_ms: %s", adjustment, rowIndex, string(row["date_ms"]))
 			}
+			for _, field := range []string{"open_price", "high_price", "low_price", "close_price", "volume", "turnover"} {
+				rawValue := strings.TrimSpace(string(row[field]))
+				if rawValue == "" || rawValue == "null" {
+					t.Fatalf("Hithink %s-adjusted row %d is missing raw field %s", adjustment, rowIndex, field)
+				}
+			}
 			if _, duplicate := seen[tradeDate]; duplicate {
 				t.Fatalf("Hithink %s-adjusted response has duplicate trade date %s", adjustment, tradeDate)
 			}
@@ -770,6 +776,9 @@ func TestLiveHithinkDailyBarsBackwardRaw(t *testing.T) {
 			t.Fatalf("Hithink %s-adjusted date coverage differs from previous modes: got=%v want=%v", adjustment, dates, expectedDates)
 		}
 		modes = append(modes, evidence)
+	}
+	if len(expectedDates) != 23 {
+		t.Fatalf("Hithink adjustment window expected 23 trading dates, got %d: %v", len(expectedDates), expectedDates)
 	}
 	report["modes"] = modes
 	encoded, err := json.MarshalIndent(report, "", "  ")
