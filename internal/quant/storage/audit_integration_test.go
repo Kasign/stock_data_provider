@@ -19,13 +19,13 @@ func TestMySQLAccessAuditorAppendsDecisionWithoutPayload(t *testing.T) {
 		t.Fatal(err)
 	}
 	event := application.AccessAuditEvent{
-		SubjectRef: "service:researchflow",
+		SubjectRef:       "service:researchflow",
 		ResourceRef: "quant_result:sha256:" + strings.Repeat("a", 64),
-		PurposeCode: "quant_analysis",
-		Decision: "allowed",
-		ReasonCode: "result_released",
+		PurposeCode:      "quant_analysis",
+		Decision:         "allowed",
+		ReasonCode:       "result_released",
 		AuthorizationRef: "auth_quant_test",
-		OccurredAt: time.Date(2026, 11, 20, 3, 0, 0, 123456789, time.UTC),
+		OccurredAt:       time.Date(2026, 11, 20, 3, 0, 0, 123456789, time.UTC),
 	}
 	if err := auditor.RecordResultAccess(ctx, event); err != nil {
 		t.Fatalf("RecordResultAccess: %v", err)
@@ -56,9 +56,9 @@ func TestMySQLAccessAuditorRejectsInvalidEventAndCancellation(t *testing.T) {
 		SubjectRef: "service:researchflow",
 		ResourceRef: "quant_result:sha256:" + strings.Repeat("b", 64),
 		PurposeCode: "quant_analysis",
-		Decision: "denied",
-		ReasonCode: "authorization_denied",
-		OccurredAt: time.Date(2026, 11, 20, 3, 0, 0, 0, time.UTC),
+		Decision:    "denied",
+		ReasonCode:  "authorization_denied",
+		OccurredAt:  time.Date(2026, 11, 20, 3, 0, 0, 0, time.UTC),
 	}
 	invalid := valid
 	invalid.Decision = "conditional"
