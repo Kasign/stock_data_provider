@@ -49,7 +49,7 @@ func TestDeriveAdjustmentFactorsFromCorporateActionsIsProviderIndependent(t *tes
 			t.Fatalf("%s: pre-event factor mismatch: %+v", raw.source, factors[0])
 		}
 		for _, factor := range factors[1:] {
-			if factor.Factor != 1.15 || factor.PriceOffsetCNY == nil || *factor.PriceOffsetCNY != 0.60 {
+			if mathAbs(factor.Factor-1.15) > 1e-12 || factor.PriceOffsetCNY == nil || mathAbs(*factor.PriceOffsetCNY-0.60) > 1e-12 {
 				t.Fatalf("%s: affine factor mismatch: %+v", raw.source, factor)
 			}
 			if factor.Source != raw.source || factor.SourceVersion != raw.version ||
@@ -141,7 +141,7 @@ func TestDeriveAdjustmentFactorsFromCorporateActionsCombinesSameDateRightsAndDiv
 		t.Fatal(err)
 	}
 	// Same-date events combine: scale=1+0.10+0.05+0.20; offset=0.60-8.0*0.20.
-	if factors[0].Factor != 1.35 || factors[0].PriceOffsetCNY == nil || *factors[0].PriceOffsetCNY != -1 {
+	if mathAbs(factors[0].Factor-1.35) > 1e-12 || factors[0].PriceOffsetCNY == nil || mathAbs(*factors[0].PriceOffsetCNY+1) > 1e-12 {
 		t.Fatalf("combined terms mismatch: %+v", factors[0])
 	}
 }
