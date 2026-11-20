@@ -545,3 +545,12 @@ RA009 代码关闭条件已满足：Server 路由认证矩阵、CSRF、WebUI 请
 - Save 原子语义以数据库唯一键为最终仲裁：同内容幂等成功、不覆盖首次 created_at；异内容返回 ErrResultConflict；禁止 REPLACE、覆盖 UPSERT 和无锁先查后插。
 - Quant 拥有 SQL Adapter/Migration，Server 只注册 namespace/Root 注入，Platform 复用现有连接池与 Migration Runner。授权读取、审计持久化独立于 Save Repository，授权一致性和审计失败语义未决前不实现默认 Allow。
 - 本轮只完成设计审查和文档同步，没有生产代码变更；QNT-013 生产闭环保持 OPEN，QNT-014/Researchflow Quant Stage 不提前开放。
+
+
+### 28.30 Quant 复用 Platform GOV-CTR-006 Fingerprint Verifier（2026-11-20）
+
+- 复核发现 `internal/platform/authorization.VerifyFingerprint` 已是 GOV-CTR-006 唯一公共 JCS/SHA-256 指纹校验原语，但 Quant `application/get_result.go` 又实现了一套本地 fingerprint_input 组装和 JCS/SHA-256 计算，形成重复实现。
+- Quant 已改为保留领域字段校验（policy_owner、decision、purpose/content、subject/resource、expires_at、PolicySnapshot tuple 顺序等），将序列化后的 AuthorizationRef/PolicySnapshot 交给 Platform `VerifyFingerprint`；不复制或修改 Platform 算法。
+- GetResult 测试 Fixture 已改用 Platform `Fingerprint` 生成指纹，冻结 GOV-CTR-006 Quant Golden 测试继续作为跨实现一致性证据。
+- 权威契约核对修正此前卡点表述：GOV-CTR-006 已明确 policy_owner=quant、MVP subject_ref=Researchflow service principal、resource_ref=result_id、purpose=quant_analysis、content_level=full。待实现的是 Quant Owner 策略规则/存储/快照签发、当前策略复核与撤销竞态，不是 Owner/Principal 映射尚未定义。
+- 精确代码 SHA `b3530b0cce353462c30e5695143cbe0bbf6f7a54` 的 Integration CI Run [44662914467](https://github.com/Kasign/stock_data_provider/actions/runs/44662914467) 已触发，当前排队中；最终以该 SHA 的完整 CI 结果为准。后续文档修订不改变代码验收 SHA。
