@@ -1021,7 +1021,7 @@ func (p *Hithink) FetchDragonTiger(ctx context.Context, tradeDate string, page, 
 	}
 	if duplicateRows > 0 {
 		snapshot.QualityReasons = appendUniqueHithinkReason(snapshot.QualityReasons, "duplicate_dragon_tiger_symbol_dropped")
-}
+	}
 	if data.Timestamp == nil || *data.Timestamp <= 0 || time.UnixMilli(*data.Timestamp).After(now.Add(5*time.Minute)) {
 		snapshot.QualityReasons = appendUniqueHithinkReason(snapshot.QualityReasons, "provider_snapshot_timestamp_missing_or_invalid")
 	}
