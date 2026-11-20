@@ -1,7 +1,7 @@
 # Server 模块卡点
 
-当前执行任务：RA009 Data Owner Session 路由与 Root 单入口迁移最终验收。
-状态：CODE_IMPLEMENTED_PENDING_CI_AND_PRODUCTION（Root Data 装配和路由认证已实现；最新精确 SHA CI 与真实生产部署待验收）。
+当前执行任务：跨模块生产装配卡点治理（Quant、LLM、Notification、Research Context/Stage）及 M6 目标环境验收。
+状态：RA009/RA011 代码与 CI 已完成；生产链路按各模块真实消费者、策略和外部依赖证据分别验收。
 - SRV-001 已完成：API/Worker/All 角色真实启动、Readiness、SIGTERM 和 Lifecycle 回滚/关闭顺序均有精确 SHA 验收证据。
 - SRV-003 已完成：Run 44314707349 对真实 API Root + Data InProcessHandler 的认证、Validation Fault、Request ID 和请求体限制验收通过。
 - SRV-004 已完成当前 Root 已注册检查集的 Health/Readiness/Diagnostics 验收；Data 最终 checksum/Schema 仍归 SRV-009。
@@ -283,3 +283,13 @@
 - RA011 Lifecycle Shutdown 预算修复已由精确 SHA `9a0680463f1ddea8f137e9009a6306f26e331ffd` 的 Integration CI Run [44489065474](https://github.com/Kasign/stock_data_provider/actions/runs/44489065474) 全项 success。
 - Server 当前实质卡点转为其他模块生产组合装配（Quant、LLM、Notification、Research Context/Stage）及 M6 真实目标环境验收；不再将 RA009/RA011 代码验收列为开放任务。
 - 统一责任与解锁顺序见 `doc/整体任务规划/05-治理与验收/RepairAll跨模块修复计划与进度.md` 第 28 节。
+
+
+## RepairAll Quant 生产装配复核更新（2026-11-20）
+
+- 复核基线：repair_all HEAD `487edf052b44721d5b8ba3c5429e5d200ec24772`。
+- Server Bootstrap `newMigrationRegistry` 当前未注册 Quant namespace；Quant 也尚无模块 Migration 定义/生产结果 Repository。Server 不应自行定义 Quant 表结构或将结果存储业务逻辑写进组合根。
+- Bootstrap 未构造 Quant PrincipalResolver、AuthorizedResultReader、AccessAuditor，也没有 Quant 计算 Facade 或 Researchflow Quant Stage 装配。Researchflow Worker 当前注入 News Search Stage Executor/Output Registry。
+- Quant 的 GetResult Port 已固定 `quant_analysis/full`，但没有可验证的授权策略 Owner、策略撤销一致性边界、可信 subject_ref 映射和审计保留/失败处置定义。Server 不得创建默认 Allow 或用 Owner Session 代替领域资源授权。
+- Server 当前可推进：确认共享 DB/Platform Storage 能力、Root 生命周期和 Migration Registry 的接入方式；等待 Quant/契约 Owner 提供正式策略语义后再实现 Adapter/注入与 MariaDB Integration。禁止先写空壳实现。
+- 该卡点与 RA009 Data 单入口迁移无关；不得回退已完成的 Data/Session 认证决策。
