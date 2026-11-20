@@ -72,6 +72,7 @@ func (s *DataService) RefreshAdjustmentFactors(ctx context.Context, rawSymbol, s
 			if dateErr != nil || date.Format("2006-01-02") != value.TradeDate ||
 				(startDate != "" && value.TradeDate < startDate) || (endDate != "" && value.TradeDate > endDate) ||
 				value.Factor <= 0 || math.IsNaN(value.Factor) || math.IsInf(value.Factor, 0) ||
+				(value.PriceOffsetCNY != nil && (math.IsNaN(*value.PriceOffsetCNY) || math.IsInf(*value.PriceOffsetCNY, 0))) ||
 				!validAdjustmentFactorBasis(model.NormalizeAdjustmentFactorBasis(value.Basis)) ||
 				func() bool {
 					got, normalizeErr := normalize.NormalizeSymbol(value.Symbol)

@@ -19,12 +19,15 @@ func NormalizeAdjustmentFactorBasis(value AdjustmentFactorBasis) AdjustmentFacto
 	return value
 }
 
-// AdjustmentFactor 是某证券某交易日、某复权口径的源端累计复权因子观测。
+// AdjustmentFactor 是某证券某交易日、某复权口径的价格仿射变换观测。
+// 价格变换为 adjusted_price = Factor * raw_price + PriceOffsetCNY。
+// PriceOffsetCNY=nil 表示来源只提供标量乘法因子，偏移量按 0 处理。
 // SystemObservedAt 由本系统写入历史版本时生成，不由 Provider 提供。
 type AdjustmentFactor struct {
 	Symbol           string                `json:"symbol"`
 	TradeDate        string                `json:"trade_date"`
 	Factor           float64               `json:"factor"`
+	PriceOffsetCNY   *float64              `json:"price_offset_cny,omitempty"`
 	Basis            AdjustmentFactorBasis `json:"basis"`
 	Source           string                `json:"source"`
 	SourceVersion    string                `json:"source_version,omitempty"`

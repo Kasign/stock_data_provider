@@ -109,6 +109,7 @@ func rebuildAdjustedDailyBarsWithModeAt(raw []model.DailyBar, factors []model.Ad
 		factorDate, dateErr := time.Parse("2006-01-02", factor.TradeDate)
 		if dateErr != nil || factorDate.Format("2006-01-02") != factor.TradeDate ||
 			factor.Factor <= 0 || math.IsNaN(factor.Factor) || math.IsInf(factor.Factor, 0) ||
+			(factor.PriceOffsetCNY != nil && (math.IsNaN(*factor.PriceOffsetCNY) || math.IsInf(*factor.PriceOffsetCNY, 0))) ||
 			(factor.QualityStatus != model.QualityValid && factor.QualityStatus != model.QualityDegraded) ||
 			factor.FetchedAt.IsZero() || factor.FetchedAt.After(now) ||
 			factor.SystemObservedAt == nil || factor.SystemObservedAt.IsZero() ||
@@ -238,13 +239,18 @@ func rebuildAdjustedDailyBarsWithModeAt(raw []model.DailyBar, factors []model.Ad
 	for i, bar := range raw {
 		factor := selected[bar.TradeDate]
 		scale := factor.Factor
+		offset := adjustmentFactorPriceOffset(factor)
 		if basis == model.AdjustmentForward && selectedBasis == model.AdjustmentFactorShared {
+			referenceOffset := adjustmentFactorPriceOffset(reference)
+			offset = (offset - referenceOffset) / reference.Factor
 			scale /= reference.Factor
 		}
-		bar.Open *= scale
-		bar.High *= scale
-		bar.Low *= scale
-		bar.Close *= scale
+		bar.Open = bar.Open*scale + offset
+		bar.High = bar.High*scale + offset
+		bar.Low = bar.Low*scale + offset
+		bar.Close = bar.Close*scale + offset
+		bar.AdjustmentPriceScale = scale
+		bar.AdjustmentPriceOffsetCNY = offset
 		// 原始均线与涨跌幅不能直接复用到复权价格序列，避免混合口径。
 		bar.MA5 = nil
 		bar.MA20 = nil
@@ -252,7 +258,7 @@ func rebuildAdjustedDailyBarsWithModeAt(raw []model.DailyBar, factors []model.Ad
 		bar.MA250 = nil
 		bar.ChangePercent = nil
 		bar.AdjustmentBasis = basis
-		bar.AdjustmentMethod = "cumulative_adj_factor_v1"
+		bar.AdjustmentMethod = "cumulative_affine_adjustment_v2"
 		if basis == model.AdjustmentForward {
 			// AdjustmentRefDate 是价格序列的参考锚点；reference.TradeDate 是内部命中的最近因子事件日，两者不能混为一谈。
 			bar.AdjustmentRefDate = requestedReferenceDate
@@ -267,7 +273,7 @@ func rebuildAdjustedDailyBarsWithModeAt(raw []model.DailyBar, factors []model.Ad
 		}
 		bar.AdjustmentFactorSetHash = factorSetHash
 		bar.AdjustmentFactorReferenceRevisionHash = referenceRevisionHash
-		bar.AdjustmentAlgorithmVersion = "cumulative_adj_factor_v1"
+		bar.AdjustmentAlgorithmVersion = "cumulative_affine_adjustment_v2"
 		applyAdjustmentFactorQuality(&bar, factor, "bar")
 		observed := *factor.SystemObservedAt
 		if basis == model.AdjustmentForward && selectedBasis == model.AdjustmentFactorShared {
@@ -286,6 +292,13 @@ func rebuildAdjustedDailyBarsWithModeAt(raw []model.DailyBar, factors []model.Ad
 		}
 	}
 	return out, nil
+}
+
+func adjustmentFactorPriceOffset(value model.AdjustmentFactor) float64 {
+	if value.PriceOffsetCNY == nil {
+		return 0
+	}
+	return *value.PriceOffsetCNY
 }
 
 func adjustmentFactorFingerprint(value model.AdjustmentFactor) (string, error) {

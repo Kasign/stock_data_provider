@@ -1404,3 +1404,11 @@ Go suite 覆盖根模块、go-core、market-data 的格式/测试/race/vet、Mar
 - 结论：复权算法应当对所有 Provider 采用统一的仿射计算框架，但事件归一化必须保留 Provider 差异和事件范围。默认技术分析价格口径建议采用 exchange_reference；投资者实际获得的股权分置改革对价另做 total_return，不混入标准除权参考价。原始 Volume 始终保留实际 shares。
 - 下一阶段实施：扩展现有 AdjustmentFactor 以表达 PriceScale/PriceOffset；扩展 CorporateAction 以区分 share-reform consideration、holder scope 和是否进入 exchange reference；在现有 adjustment_rebuild 内增加 affine rebuild 与单元测试。先实现纯计算和 provenance，再接入 Provider；不新建平行模块。
 
+## 85. 2026-11-20 仿射 AdjustmentFactor 重建实现
+
+- 在现有 model.AdjustmentFactor 增加可选 PriceOffsetCNY；Factor 作为价格缩放系数，变换定义为 price = Factor * raw_price + PriceOffsetCNY。
+- 在现有 DailyBar 增加 applied scale/offset 元数据；调整重建不覆盖 Volume / Amount。
+- 扩展现有 rebuildAdjustedDailyBarsWithModeAt：直接 forward/backward 因子使用自身 offset；shared forward 因子按 reference affine transform 求逆归一化，offset'=(offset-referenceOffset)/referenceFactor。
+- 服务与 Repository 验证新增 offset 必须是有限数值，允许负 offset；revision fingerprint 自动纳入 offset，确保 offset 变化会产生新版本。
+- 新增 backward affine 和 shared-forward affine 单元测试，验证 OHLC、scale/offset provenance，以及 Volume/Amount 不变。
+- 本阶段不接入 Hithink/Pytdx corporate-action provider，也不改变现有 scalar provider 输出；下一阶段再把经过事件策略验证的公司行动事件转换为 affine factor 序列。

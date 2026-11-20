@@ -36,6 +36,7 @@ func validObservedQuality(value model.QualityStatus) bool {
 func validateAdjustmentFactorRecord(value model.AdjustmentFactor) error {
 	if strings.TrimSpace(value.Symbol) == "" || !validISODate(value.TradeDate, false) ||
 		value.Factor <= 0 || math.IsNaN(value.Factor) || math.IsInf(value.Factor, 0) ||
+		(value.PriceOffsetCNY != nil && (math.IsNaN(*value.PriceOffsetCNY) || math.IsInf(*value.PriceOffsetCNY, 0))) ||
 		!validAdjustmentFactorBasis(model.NormalizeAdjustmentFactorBasis(value.Basis)) ||
 		strings.TrimSpace(value.Source) == "" || strings.TrimSpace(value.SourceVersion) == "" ||
 		value.FetchedAt.IsZero() || !validObservedQuality(value.QualityStatus) {

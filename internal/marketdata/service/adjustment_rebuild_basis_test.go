@@ -53,6 +53,71 @@ func TestRebuildAdjustedDailyBarsPrefersMatchingFactorBasis(t *testing.T) {
 	}
 }
 
+func TestRebuildAdjustedDailyBarsAppliesBackwardAffineTransformAndPreservesVolumeAmount(t *testing.T) {
+	available := time.Date(2025, 7, 1, 0, 0, 0, 0, time.UTC)
+	observed := available.Add(time.Hour)
+	volume := int64(100)
+	amount := 1000.0
+	raw := []model.DailyBar{
+		{Symbol: "600519.SH", TradeDate: "2025-06-30", Period: "1d", Open: 9, High: 11, Low: 8, Close: 10, Volume: &volume, Amount: &amount, Source: "hithink", SourceVersion: "hithink-test-v1", AdjustmentBasis: model.AdjustmentNone, QualityStatus: model.QualityValid},
+		{Symbol: "600519.SH", TradeDate: "2025-07-01", Period: "1d", Open: 19, High: 21, Low: 18, Close: 20, Volume: &volume, Amount: &amount, Source: "hithink", SourceVersion: "hithink-test-v1", AdjustmentBasis: model.AdjustmentNone, QualityStatus: model.QualityValid},
+	}
+	offset := 5.0
+	factors := []model.AdjustmentFactor{
+		{Symbol: "600519.SH", TradeDate: "2025-06-30", Factor: 2, PriceOffsetCNY: &offset, Basis: model.AdjustmentFactorBackward, Source: "hithink", SourceVersion: "hithink-test-v1", FetchedAt: available, AvailableAt: &available, SystemObservedAt: &observed, QualityStatus: model.QualityValid},
+		{Symbol: "600519.SH", TradeDate: "2025-07-01", Factor: 2, PriceOffsetCNY: &offset, Basis: model.AdjustmentFactorBackward, Source: "hithink", SourceVersion: "hithink-test-v1", FetchedAt: available, AvailableAt: &available, SystemObservedAt: &observed, QualityStatus: model.QualityValid},
+	}
+	got, err := rebuildAdjustedDailyBarsPIT(raw, factors, model.AdjustmentBackward, "2025-07-01")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got[0].Open != 23 || got[0].High != 27 || got[0].Low != 21 || got[0].Close != 25 ||
+		got[1].Open != 43 || got[1].High != 47 || got[1].Low != 41 || got[1].Close != 45 {
+		t.Fatalf("backward affine transform mismatch: %+v", got)
+	}
+	for _, bar := range got {
+		if bar.Volume == nil || *bar.Volume != volume || bar.Amount == nil || *bar.Amount != amount {
+			t.Fatalf("affine price adjustment must preserve raw Volume and Amount: %+v", bar)
+		}
+		if bar.AdjustmentPriceScale != 2 || bar.AdjustmentPriceOffsetCNY != 5 ||
+			bar.AdjustmentAlgorithmVersion != "cumulative_affine_adjustment_v2" {
+			t.Fatalf("applied affine transform metadata missing: %+v", bar)
+		}
+	}
+}
+
+func TestRebuildAdjustedDailyBarsNormalizesSharedAffineForwardTransform(t *testing.T) {
+	available := time.Date(2025, 7, 1, 0, 0, 0, 0, time.UTC)
+	observed := available.Add(time.Hour)
+	volume := int64(100)
+	amount := 1000.0
+	raw := []model.DailyBar{
+		{Symbol: "600519.SH", TradeDate: "2025-07-01", Period: "1d", Open: 9, High: 11, Low: 8, Close: 10, Volume: &volume, Amount: &amount, Source: "tushare", SourceVersion: "tushare-test-v1", AdjustmentBasis: model.AdjustmentNone, QualityStatus: model.QualityValid},
+		{Symbol: "600519.SH", TradeDate: "2025-07-02", Period: "1d", Open: 19, High: 21, Low: 18, Close: 20, Volume: &volume, Amount: &amount, Source: "tushare", SourceVersion: "tushare-test-v1", AdjustmentBasis: model.AdjustmentNone, QualityStatus: model.QualityValid},
+	}
+	offsetA, offsetB := 5.0, 9.0
+	factors := []model.AdjustmentFactor{
+		{Symbol: "600519.SH", TradeDate: "2025-07-01", Factor: 2, PriceOffsetCNY: &offsetA, Basis: model.AdjustmentFactorShared, Source: "tushare", SourceVersion: "tushare-test-v1", FetchedAt: available, AvailableAt: &available, SystemObservedAt: &observed, QualityStatus: model.QualityValid},
+		{Symbol: "600519.SH", TradeDate: "2025-07-02", Factor: 4, PriceOffsetCNY: &offsetB, Basis: model.AdjustmentFactorShared, Source: "tushare", SourceVersion: "tushare-test-v1", FetchedAt: available, AvailableAt: &available, SystemObservedAt: &observed, QualityStatus: model.QualityValid},
+	}
+	got, err := rebuildAdjustedDailyBarsPIT(raw, factors, model.AdjustmentForward, "2025-07-02")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got[0].Close != 4 || got[1].Close != 20 {
+		t.Fatalf("shared affine forward transform mismatch: got closes %.4f, %.4f; want 4, 20", got[0].Close, got[1].Close)
+	}
+	if got[0].AdjustmentPriceScale != 0.5 || got[0].AdjustmentPriceOffsetCNY != -1 ||
+		got[1].AdjustmentPriceScale != 1 || got[1].AdjustmentPriceOffsetCNY != 0 {
+		t.Fatalf("shared affine forward transform metadata mismatch: %+v", got)
+	}
+	for _, bar := range got {
+		if bar.Volume == nil || *bar.Volume != volume || bar.Amount == nil || *bar.Amount != amount {
+			t.Fatalf("affine forward adjustment must preserve raw Volume and Amount: %+v", bar)
+		}
+	}
+}
+
 func TestRebuildAdjustedDailyBarsKeepsSharedFactorFallback(t *testing.T) {
 	available := time.Date(2025, 7, 1, 0, 0, 0, 0, time.UTC)
 	observed := available.Add(time.Hour)
@@ -209,7 +274,7 @@ func TestRebuildAdjustedDailyBarsEmitsDeterministicFactorProvenance(t *testing.T
 	}
 	for i := range first {
 		if first[i].AdjustmentFactorRevisionHash == "" || first[i].AdjustmentFactorSetHash == "" ||
-			first[i].AdjustmentFactorReferenceRevisionHash == "" || first[i].AdjustmentAlgorithmVersion != "cumulative_adj_factor_v1" {
+			first[i].AdjustmentFactorReferenceRevisionHash == "" || first[i].AdjustmentAlgorithmVersion != "cumulative_affine_adjustment_v2" {
 			t.Fatalf("bar %s missing factor provenance: %+v", first[i].TradeDate, first[i])
 		}
 		if first[i].AdjustmentFactorSetHash != second[i].AdjustmentFactorSetHash ||
