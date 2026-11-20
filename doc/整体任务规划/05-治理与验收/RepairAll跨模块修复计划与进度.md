@@ -640,3 +640,11 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - Data 代码/测试修复：`live_probe_test.go` 正确区分原始成交额保留与 normalized Amount；Hithink 调整方法断言按 Provider 实际方法名验证；TickFlow 使用 Universe ID 聚合，排除并计数不属于当前 A 股全集的陈旧退市成分。TickFlow 线上 Universe 读取仍受账号权限限制，当前仅单测覆盖修复逻辑。
 - Quant 代码：`ReadRequest.RunRef` 与 `GetResult.Execute(ctx, runRef, resultID)` 已落地；空白 RunRef fail-closed。Researchflow 当前仅装配 News Search Stage，没有 Quant Stage Provider，也没有已确认的 Quant result_id Stage Output 关联 Schema；下一步先完成 Quant Facade/结果发布和 Researchflow 强类型输出，再实现关联读取适配器与 AuthorizedResultReader。
 - 当前代码 SHA `fbfb525ca80092c36874a093b03cf8efd2958cbf`：Go Test Suite Run [44700201934](https://github.com/Kasign/stock_data_provider/actions/runs/44700201934) success；Full Integration Checks Run [44700201950](https://github.com/Kasign/stock_data_provider/actions/runs/44700201950) success。真实 Provider strict Run 失败不影响常规代码 CI 的通过结论，但其未通过的能力仍保持阻塞。
+
+### 31.5 DailyBars V2 日历证据门禁与真实应用层复验（2026-11-20）
+
+- 发现 V2 Reader 对 `CoverageBasis=weekday_estimate` 的处理不够严格：即使没有交易所日历快照，也可能将工作日估算的覆盖结果用于有效日线。现已要求 `exchange_calendar`、非空持久化 CalendarRef、显式日期范围及非降级日历质量同时成立；否则 Snapshot 与 Bar 降级。
+- 新增 weekday-estimate 回归测试；真实 BaoStock Application Port 测试同时校验 `data_calendar:sha256:` 持久化引用及 Decimal 证据。
+- Live Provider Run [44702141543](https://github.com/Kasign/stock_data_provider/actions/runs/44702141543)，Job `136172823901`，精确测试 SHA `77bff81d21a5e22d29177a36506192e31d77ba20`，结论 success。该轮公共 Provider 与 DailyBars V2 应用层专项通过；Hithink/MX/Tushare/TickFlow 专项未启用，不记为通过。
+- 真实样本仍显示 Sina/Tencent 日线 Amount 缺失、Tencent Volume 原始单位为 hands、Eastmoney/BaoStock 前复权参考日期缺证据；均保持 degraded/not_comparable，不通过补值或放宽门槛处理。
+- 本节记录后续将以全量 marker 重新执行 MX、Hithink、Tushare、TickFlow 和历史专项，以验证当前代码版本下的实际 Key/权限状态。

@@ -1276,3 +1276,11 @@ Go suite 覆盖根模块、go-core、market-data 的格式/测试/race/vet、Mar
 - 修复项：TickFlow 行业聚合改用 Universe ID，而不是可能重复的显示名称；对行业 Universe 中不属于当前 `CN_Equity_A` 的历史证券，排除并计入 `ExcludedNonAShareCount`，同时追加 degraded reason。真实样本 `600275.SH` 已被上交所于 2022-05-17 决定终止上市（[上交所公告](https://www.sse.com.cn/disclosure/announcement/listing/stock/c/c_20220518_85433083.shtml)），因此不能继续作为当前 A 股行业成分。对应单元测试覆盖重复名称与陈旧退市成分；由于 TickFlow 账号缺少 Universe 权限，线上该能力仍是 permission_required。
 - 本轮不解除 DATA-CTR-005/007：Decimal 原始精度、Amount/Volume 单位、复权 reference date、ProviderTime/version 和 Snapshot/Evidence Locator 仍未形成完整可验收证据。真实请求已跑通不等于所有字段已可信。
 
+## 74. 2026-11-20 DailyBars V2 日历证据门禁与真实应用层验收
+
+- 修复提交：`6c28b28905ccfda47ecdd8c8f3be4ed89283bb93`；真实验收对应 SHA：`77bff81d21a5e22d29177a36506192e31d77ba20`。
+- Live Provider Run [44702141543](https://github.com/Kasign/stock_data_provider/actions/runs/44702141543)，Job `136172823901`，结论 success。真实 BaoStock Application Port 的 DailyBars V2 decimal/evidence 专项通过，公共 Provider Probe 通过；本轮 Hithink、MX、Tushare、TickFlow 凭据专项因提交 marker 未启用而 skipped，不得计为本轮通过。
+- Reader 现在只有在 `CoverageBasis=exchange_calendar`、`CalendarRef` 非空、请求显式提供起止日期且日历质量没有降级警告时，才将日线覆盖证据视为可信；否则 V2 Snapshot 与其中每根 Bar 均降级，并附带 `daily_bar_coverage_calendar_reference_unavailable`。工作日估算可以帮助判断覆盖范围，但不能伪装成交易所观测日历。
+- 新增回归测试覆盖 weekday estimate：没有 CalendarRef 时，Reader 必须返回 degraded Snapshot/Bar；真实 BaoStock Application Port 测试要求返回持久化 `data_calendar:sha256:` 引用，并保留 Decimal 精度证据。
+- 真实公共 Provider 样本再次确认：Sina/Tencent 日线缺少可核实 Amount 字段，保持 degraded；Tencent 日线 Volume 原始单位为 hands，归一化 shares 仍带推断质量原因；Eastmoney/BaoStock Amount 可比较，但前复权 reference date 未验证的样本继续 degraded。没有通过补值、舍入或降低质量阈值消除这些问题。
+- 本次仅收紧 V2 日历证据判定，不修改 Provider 数据、交易日历估算逻辑或字段质量门槛。DATA-CTR-005/007 仍 deferred。
