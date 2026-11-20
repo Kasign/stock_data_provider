@@ -1320,3 +1320,14 @@ Go suite 覆盖根模块、go-core、market-data 的格式/测试/race/vet、Mar
 - 现新增明确诊断：QualityReason `volume_not_integer_shares`、FieldIssue Code `non_integer_share_volume`，保留原始 Provider 数值预览；仍 fail-closed，不舍入、不混用 none 口径 Volume。新增单测验证按行定位的结构化问题。
 - Go Test Suite [44710655574](https://github.com/Kasign/stock_data_provider/actions/runs/44710655574) 对 SHA `e48f74d20911adbedb1ffe4bcbb043563df07931` 全项 success，包括 Data Root tests/race/vet、根模块 tests/race/vet、MariaDB migrations/integration、Research/Researchflow/News/Notification、Compose/Docker builds。
 - Live Provider strict Run [44710655555](https://github.com/Kasign/stock_data_provider/actions/runs/44710655555) failure，Job `136201177250`。DailyBars V2 BaoStock Application Port PASS；Hithink none/forward 各 23 行；backward 仍因小数 Volume 无有效 Bar，raw probe PASS。该 Live failure 是保留的 Provider 数据契约问题，不影响 Go/集成 CI 通过。
+
+## 78. 2026-11-20 Hithink 三模式全量原始复权证据探针扩展
+
+- 代码变更 SHA：`0e318ecb40a3924f2a78147e6cf5ced00abbd83f`；当前文档更新提交后，最终分支 SHA 以 repair_all HEAD 为准。
+- 扩展既有 TestLiveHithinkDailyBarsBackwardRaw，不新增平行探针：同一证券 600519.SH、2026-10-13..2026-11-12，直接请求 Hithink historical endpoint 的 none / forward / backward 三种模式。
+- 每种模式记录全部逐日原始 open/high/low/close/volume/turnover token、date_ms、交易日期和响应 timestamp；不经过 DailyBar 标准化，因此不会因小数 Volume 被拒绝而丢失原始证据。
+- 增加三种模式交易日覆盖一致性与重复日期断言，并生成 live-historical-probe-report.json，复用现有 Live Provider artifact 上传路径。
+- 精确 SHA `0e318ecb40a3924f2a78147e6cf5ced00abbd83f` 已触发 Go Test Suite Run `44716571755`、Integration CI Run `44716571797`、Live Provider Probe Run `44716571798`；记录时三项仍在执行，尚未读取最终结果。
+- 本次只增强证据采集，不改变 Hithink 生产解析、整数 shares 硬契约或任何 Provider 的复权算法。此前 Run `44710655555` 的单窗口探针因 backward Volume 小数失败，独立 raw 探针只记录首尾两行，artifact 上传因目标文件不存在而未生成；本次专门补齐该缺口。
+- 本次真实数据对账、独立因子验证及公共复权计算能力设计仍未完成；不能把测试代码提交或 workflow 启动视为数据正确性验收。
+
