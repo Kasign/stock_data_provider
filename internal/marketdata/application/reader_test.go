@@ -171,7 +171,7 @@ func TestReaderGetDailyBarsV2PreservesSameEvaluationCalendarRef(t *testing.T) {
 	unreferencedBackend := &fakeDataService{
 		currentBars: []model.DailyBar{bar},
 		currentCoverage: service.DailyBarCoverageEvidence{
-			CalendarQualityStatus: model.QualityDegraded, ExpectedTradingDays: 20,
+			CalendarQualityStatus: model.QualityValid, ExpectedTradingDays: 20,
 			MinimumRequiredBars: 13, CoverageBasis: "exchange_calendar_unreferenced",
 			CoverageSufficient: true,
 		},
