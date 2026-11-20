@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"math"
 	"net/http"
-	"reflect"
 	"net/url"
 	"os"
+	"reflect"
 	"sort"
 	"strconv"
 	"strings"
@@ -697,6 +697,7 @@ func TestLiveHithinkDailyBarsBackwardRaw(t *testing.T) {
 	}
 	type modeEvidence struct {
 		Adjustment string        `json:"adjustment"`
+		Timestamp  *int64        `json:"timestamp,omitempty"`
 		RowCount   int           `json:"row_count"`
 		Rows       []rawDailyRow `json:"rows"`
 	}
@@ -737,7 +738,7 @@ func TestLiveHithinkDailyBarsBackwardRaw(t *testing.T) {
 		if len(data.Item) == 0 {
 			t.Fatalf("Hithink %s-adjusted response returned no rows", adjustment)
 		}
-		evidence := modeEvidence{Adjustment: adjustment, RowCount: len(data.Item), Rows: make([]rawDailyRow, 0, len(data.Item))}
+		evidence := modeEvidence{Adjustment: adjustment, Timestamp: data.Timestamp, RowCount: len(data.Item), Rows: make([]rawDailyRow, 0, len(data.Item))}
 		dates := make([]string, 0, len(data.Item))
 		seen := make(map[string]struct{}, len(data.Item))
 		for rowIndex, row := range data.Item {
