@@ -90,6 +90,9 @@ func TestLiveReaderGetDailyBarsV2PreservesProviderDecimalEvidence(t *testing.T) 
 	if snapshot.CoverageEvidence.CoverageBasis != "exchange_calendar" {
 		t.Fatalf("real V2 coverage basis = %q, want exchange_calendar", snapshot.CoverageEvidence.CoverageBasis)
 	}
+	if snapshot.CoverageEvidence.CalendarQualityStatus == app.QualityUnknown {
+		t.Fatalf("real V2 calendar quality must be explicit, got unknown: %+v", snapshot.CoverageEvidence)
+	}
 
 	var sample app.DailyBar
 	for _, bar := range snapshot.Bars {
@@ -100,6 +103,9 @@ func TestLiveReaderGetDailyBarsV2PreservesProviderDecimalEvidence(t *testing.T) 
 	}
 	if sample.ExactValues == nil {
 		t.Fatalf("real Provider raw decimal evidence did not reach the Application Port: %+v", snapshot.Bars[0])
+	}
+	if strings.TrimSpace(sample.SourceVersion) == "" || sample.FetchedAt.IsZero() {
+		t.Fatalf("real V2 bar must preserve source version and fetched_at: %+v", sample)
 	}
 	for name, value := range map[string]string{
 		"open": sample.ExactValues.Open, "high": sample.ExactValues.High,
