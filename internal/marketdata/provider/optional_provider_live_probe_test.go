@@ -782,6 +782,63 @@ func TestLiveHithinkDailyBarsBackwardRaw(t *testing.T) {
 	}
 	report["expected_trade_dates"] = expectedDates
 	report["modes"] = modes
+
+	actionQuery := url.Values{}
+	actionQuery.Set("thscode", symbol)
+	actionRaw, actionErr := client.get(ctx, "/api/a-share/corporate-actions/adjustment-factors", actionQuery)
+	if actionErr != nil {
+		t.Fatalf("request Hithink corporate-action adjustment factors: %v", actionErr)
+	}
+	actionDataRaw, actionErr := hithinkResponseData(actionRaw)
+	if actionErr != nil {
+		t.Fatalf("decode Hithink corporate-action response envelope: %v", actionErr)
+	}
+	var actionData struct {
+		THSCode string                       `json:"thscode"`
+		Ticker  string                       `json:"ticker"`
+		Item    []map[string]json.RawMessage `json:"item"`
+	}
+	if actionErr := json.Unmarshal(actionDataRaw, &actionData); actionErr != nil {
+		t.Fatalf("decode Hithink corporate-action rows: %v", actionErr)
+	}
+	if actionData.THSCode != symbol || actionData.Ticker != strings.Split(symbol, ".")[0] || len(actionData.Item) == 0 {
+		t.Fatalf("Hithink corporate-action identity or event coverage invalid: thscode=%q ticker=%q rows=%d", actionData.THSCode, actionData.Ticker, len(actionData.Item))
+	}
+	type rawCorporateAction struct {
+		ExDate            string `json:"ex_date"`
+		ExDateMS          string `json:"ex_date_ms_raw"`
+		DividendPerShare  string `json:"dividend_per_share_raw"`
+		PerShareBonus     string `json:"per_share_bonus_raw"`
+	}
+	actionRows := make([]rawCorporateAction, 0, len(actionData.Item))
+	previousEventDate := ""
+	for rowIndex, item := range actionData.Item {
+		eventMillis, millisOK := hithinkParseFundamentalValue(item["ex_date_ms"])
+		eventDate, dateOK := hithinkDateFromMillis(eventMillis, location)
+		if !millisOK || !dateOK {
+			t.Fatalf("Hithink corporate-action row %d has invalid ex_date_ms: %s", rowIndex, string(item["ex_date_ms"]))
+		}
+		if previousEventDate != "" && eventDate > previousEventDate {
+			t.Fatalf("Hithink corporate-action events are not in documented descending ex-date order: previous=%s current=%s", previousEventDate, eventDate)
+		}
+		dividend := strings.TrimSpace(string(item["dividend_per_share"]))
+		bonus := strings.TrimSpace(string(item["per_share_bonus"]))
+		if dividend == "" || dividend == "null" || bonus == "" || bonus == "null" {
+			t.Fatalf("Hithink corporate-action row %d is missing dividend_per_share or per_share_bonus", rowIndex)
+		}
+		actionRows = append(actionRows, rawCorporateAction{
+			ExDate: eventDate, ExDateMS: string(item["ex_date_ms"]),
+			DividendPerShare: string(item["dividend_per_share"]),
+			PerShareBonus: string(item["per_share_bonus"]),
+		})
+		previousEventDate = eventDate
+	}
+	report["corporate_actions"] = map[string]any{
+		"thscode": actionData.THSCode,
+		"ticker": actionData.Ticker,
+		"row_count": len(actionRows),
+		"rows": actionRows,
+	}
 	encoded, err := json.MarshalIndent(report, "", "  ")
 	if err != nil {
 		t.Fatalf("marshal Hithink adjustment evidence report: %v", err)

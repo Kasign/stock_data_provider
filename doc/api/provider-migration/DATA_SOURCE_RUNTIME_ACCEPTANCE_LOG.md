@@ -1347,3 +1347,10 @@ Go suite 覆盖根模块、go-core、market-data 的格式/测试/race/vet、Mar
 - 下一步复用既有 TestLivePytdxHistoricalDailyBars，增加 marker 控制的 600519.SH 同区间输入，取得 Pytdx none/qfq/hfq 与 BaoStock raw 对照；不新增第二套行情探针。Tushare adj_factor / corporate-actions 权限问题继续记为 permission_required，不用跳过状态冒充通过。
 - 该 SHA 的 Go Test Suite 与 Integration CI 在本记录生成时仍在执行；待最终结果回填。
 
+### 第 79 节执行结果补充与修正（2026-11-20）
+
+- Run `44717580577` 中 Hithink raw probe 成功，artifact `live-provider-reports` 已上传（Artifact ID `14620680612`），证明仓库根目录输出路径修复有效。
+- 同一 Run 的 Pytdx 步骤虽然成功，但复核报告发现该步骤自己的 env 仍硬编码为 2025-07-07..2025-07-17、600036.SH/002982.SZ；因此它没有完成与 Hithink 600519.SH 同窗口的直接对账。前一提交修改的是 public-provider 步骤 env，未修改 Pytdx 专项步骤 env，这是本轮配置疏漏。
+- 本提交修正 Pytdx 专项步骤 env，使 marker `[hithink_adjustment_reference]` 对应 600519.SH、2026-10-13..2026-11-12；同时在同一个 Hithink raw probe 中追加官方 corporate-actions adjustment-factors 原始事件流采集，记录 ex-date、现金分红和送股比例原始值。
+- 下一轮以同一证券、同一窗口的 Pytdx none/qfq/hfq 与 BaoStock raw 作为独立对照，并将 Hithink corporate-actions 事件与 Pytdx GBBQ/BaoStock 因子事件交叉核验。此前 2025 样本的 Pytdx/BaoStock raw 对账成功只证明该样本可用，不替代 600519.SH 的专项对账。
+
