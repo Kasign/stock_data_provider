@@ -329,7 +329,17 @@ func liveProbeDailyContractError(bars []model.DailyBar, providerLabel, sourceNam
 			return fmt.Sprintf("bar %s has no amount but quality is marked valid", bar.TradeDate)
 		}
 		if bar.Amount == nil && bar.RawAmountField != "" {
-			return fmt.Sprintf("bar %s has no amount but raw amount field metadata is present", bar.TradeDate)
+			hasUnverifiedAmountReason := false
+			for _, reason := range bar.QualityReasons {
+				if reason == "amount_unit_unverified" {
+					hasUnverifiedAmountReason = true
+					break
+				}
+			}
+			if bar.RawAmount == nil || bar.RawAmountUnit != "" || bar.AmountUnit != "unknown" ||
+				bar.QualityStatus != model.QualityDegraded || !hasUnverifiedAmountReason {
+				return fmt.Sprintf("bar %s has inconsistent unverified raw amount metadata", bar.TradeDate)
+			}
 		}
 	}
 	return ""
@@ -371,6 +381,43 @@ func TestLiveProbeDailyContractRejectsLimitAndUnsortedBars(t *testing.T) {
 	}
 	if got := liveProbeDailyContractError([]model.DailyBar{older, newer}, "eastmoney", "eastmoney", "600036.SH", model.AdjustmentForward, startDate, endDate, 8); got != "" {
 		t.Fatalf("valid ordered bars should pass the shared contract, got %q", got)
+	}
+}
+
+func TestLiveProbeDailyContractAcceptsUnverifiedRawAmountWithoutNormalizedAmount(t *testing.T) {
+	volume := int64(1000)
+	rawAmount := 123456.78
+	bar := model.DailyBar{
+		Symbol: "600519.SH", TradeDate: "2026-10-21", Period: "1d",
+		Open: 10, High: 11, Low: 9, Close: 10.5,
+		Volume: &volume, VolumeUnit: "shares",
+		RawAmount: &rawAmount, RawAmountField: "turnover",
+		RawAmountUnit: "", AmountUnit: "unknown",
+		AdjustmentBasis: model.AdjustmentNone, Source: "hithink",
+		QualityStatus: model.QualityDegraded,
+		QualityReasons: []string{"amount_unit_unverified"},
+	}
+	if got := liveProbeDailyContractError([]model.DailyBar{bar}, "hithink", "hithink", "600519.SH",
+		model.AdjustmentNone, "2026-10-20", "2026-10-22", 8); got != "" {
+		t.Fatalf("unverified raw amount must remain preserved without claiming normalized Amount: %q", got)
+	}
+}
+
+func TestLiveProbeDailyContractRejectsIncompleteUnverifiedRawAmountMetadata(t *testing.T) {
+	volume := int64(1000)
+	bar := model.DailyBar{
+		Symbol: "600519.SH", TradeDate: "2026-10-21", Period: "1d",
+		Open: 10, High: 11, Low: 9, Close: 10.5,
+		Volume: &volume, VolumeUnit: "shares",
+		RawAmountField: "turnover", AmountUnit: "unknown",
+		AdjustmentBasis: model.AdjustmentNone, Source: "hithink",
+		QualityStatus: model.QualityDegraded,
+		QualityReasons: []string{"amount_unit_unverified"},
+	}
+	got := liveProbeDailyContractError([]model.DailyBar{bar}, "hithink", "hithink", "600519.SH",
+		model.AdjustmentNone, "2026-10-20", "2026-10-22", 8)
+	if !strings.Contains(got, "inconsistent unverified raw amount metadata") {
+		t.Fatalf("missing raw amount value must be rejected, got %q", got)
 	}
 }
 
