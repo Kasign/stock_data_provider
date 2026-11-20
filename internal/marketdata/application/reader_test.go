@@ -246,6 +246,37 @@ func TestReaderGetDailyBarsV2DegradesBarsWhenCalendarIsOnlyWeekdayEstimate(t *te
 	}
 }
 
+func TestReaderGetDailyBarsV2DegradesBarsWhenExchangeCalendarReferenceIsMissing(t *testing.T) {
+	now := time.Date(2026, 11, 6, 8, 0, 0, 0, time.UTC)
+	bar := model.DailyBar{
+		Symbol: "600000.SH", TradeDate: "2026-11-06", Period: "1d",
+		Open: 10, High: 11, Low: 9, Close: 10.5,
+		Source: "fixture", SourceVersion: "fixture-v1", FetchedAt: now,
+		NormalizedAt: now, QualityStatus: model.QualityValid,
+	}
+	backend := &fakeDataService{
+		currentBars: []model.DailyBar{bar},
+		currentCoverage: service.DailyBarCoverageEvidence{
+			CalendarQualityStatus: model.QualityValid,
+			CoverageBasis:         "exchange_calendar",
+			CoverageSufficient:    true,
+		},
+	}
+	reader := &Reader{backend: backend}
+	got, err := reader.GetDailyBarsV2(context.Background(), app.DailyBarsQuery{
+		Symbol: "600000.SH", StartDate: "2026-10-01", EndDate: "2026-11-06",
+		Limit: 20, AdjustmentBasis: app.AdjustmentNone,
+	})
+	if err != nil {
+		t.Fatalf("GetDailyBarsV2(missing calendar ref) error = %v", err)
+	}
+	if got.TradingCalendarRef != nil || got.QualityStatus != app.QualityDegraded ||
+		len(got.Bars) != 1 || got.Bars[0].QualityStatus != app.QualityDegraded ||
+		!containsReaderString(got.Warnings, "daily_bar_coverage_calendar_reference_unavailable") {
+		t.Fatalf("V2 must not trust an exchange-calendar label without its persisted reference: %+v", got)
+	}
+}
+
 func TestReaderGetQuotePreservesNullablePrecisionAndMetadata(t *testing.T) {
 	price := 12.34
 	volume := int64(9007199254740993)
