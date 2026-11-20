@@ -515,3 +515,10 @@ RA009 代码关闭条件已满足：Server 路由认证矩阵、CSRF、WebUI 请
 - 新增回归测试验证审计事件已记录、请求取消后 Envelope 为空；未改变授权策略、审计事件字段或跨模块端口。
 - Integration CI Run [44661192496](https://github.com/Kasign/stock_data_provider/actions/runs/44661192496) 对精确 SHA 全项 success：格式、根模块 vet/test、跨模块测试、Worker MariaDB/Redis、go-core、Compose、WebUI 测试与镜像构建全部通过。
 - 结论：Quant Application 内部该取消传播子项 CLOSED；QNT-013 的生产 Storage/事务/Migration、授权 Reader 和审计持久化仍是 Server/Platform 装配卡点。不得将模块内回归通过等同于生产结果链路验收通过。
+
+
+### 28.27 模块卡点索引完整性修正（2026-11-20）
+
+- 复核发现整体任务规划 README 的模块卡点快照只链接 Research，遗漏 Data、LLM、News、Notification、Platform、Quant、Researchflow 和 Server 的现存卡点文档；阅读顺序编号也存在重复。
+- 已补齐九个模块卡点链接，并修正阅读顺序编号；没有新增卡点文档或改变任何模块责任/契约状态。
+- 已回读 README 确认链接路径与仓库现存文件名一致。
