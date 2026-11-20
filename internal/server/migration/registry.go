@@ -156,9 +156,6 @@ func (r *Registry) RunWithReport(ctx context.Context, db *sql.DB) (RunReport, er
 	return finish(nil)
 }
 
-// ValidateApplied performs a read-only check that every registered migration
-// version is present and marked applied. It never creates or changes history.
-// Checksum verification remains owned by Platform's migration runner.
 // ValidateApplied performs a read-only verification of every registered namespace.
 // Platform checks the exact version set, status and checksum under the namespace lock.
 func (r *Registry) ValidateApplied(ctx context.Context, db *sql.DB) error {
