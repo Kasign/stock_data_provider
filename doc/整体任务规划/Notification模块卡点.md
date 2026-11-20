@@ -71,3 +71,11 @@ Notification 模块的核心领域能力、存储、状态机、诊断和首个�
 - [业务事件与模板决议依赖](../notification/依赖/01-业务事件与模板决议依赖.md)
 - [Server Worker 与身份目录依赖](../notification/依赖/02-Server投递Worker与身份目录依赖.md)
 - [真实渠道与凭据依赖](../notification/依赖/03-真实渠道与凭据依赖.md)
+
+
+## RepairAll RA-CROSS-REVIEW-006 交叉审查（2026-11-19）
+
+- Research/Researchflow Outbox Relay 均已在 Server Worker/All 角色接入；Notification EventReceiver 使用 Schema Registry 校验事件后写 Inbox。
+- MySQL Inbox Repository 与 Fanout WorkItem Writer 共用一个事务；Inbox 双唯一身份冲突按 EventID/IdempotencyKey 回查并验证完整 Envelope，重放不会重复生成 Fanout WorkItem。
+- Notification Fanout Dispatcher、Delivery Execution、Retry/Lease Recovery、WeCom Adapter 和 MySQL Repository 代码已存在；Server 尚未装配 RecipientDirectory、Fanout Worker、Delivery Worker、Channel/Secret/Template Renderer 生产组合。NTF-BLOCK-04/05/06/08/09 继续 BLOCKED。
+- WeCom Live Smoke 的成功只证明 Webhook 连接能力，不代表 Server 生产 Delivery 闭环。

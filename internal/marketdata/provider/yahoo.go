@@ -374,6 +374,7 @@ func (p *YahooFinance) FetchDailyBars(ctx context.Context, rawSymbol, startDate,
 		open, high, low, close float64
 		volume                 int64
 		factor                 float64
+		exactValues            *model.DailyBarExactValues
 	}
 	rawBars := make([]rawYahooBar, 0, len(result.Timestamp))
 	rejectedRows := 0
@@ -397,11 +398,16 @@ func (p *YahooFinance) FetchDailyBars(ctx context.Context, rawSymbol, startDate,
 			addProviderParseIssue(ctx, index, "trade_date", "timestamp", "date_out_of_requested_range", "date within "+startISO+".."+endISO, "timestamp", date, "Yahoo Finance 日 K 日期超出请求区间")
 			continue
 		}
-		openV, openOK := parseYahooFloatField(ctx, index, "open", "indicators.quote[0].open", rawYahooArrayValue(quote.Open, index), "finite positive price")
-		highV, highOK := parseYahooFloatField(ctx, index, "high", "indicators.quote[0].high", rawYahooArrayValue(quote.High, index), "finite positive price")
-		lowV, lowOK := parseYahooFloatField(ctx, index, "low", "indicators.quote[0].low", rawYahooArrayValue(quote.Low, index), "finite positive price")
-		closeV, closeOK := parseYahooFloatField(ctx, index, "close", "indicators.quote[0].close", rawYahooArrayValue(quote.Close, index), "finite positive price")
-		volume, volumeOK := parseYahooInt64Field(ctx, index, "volume", "indicators.quote[0].volume", rawYahooArrayValue(quote.Volume, index), "non-negative integer shares")
+		openRaw := rawYahooArrayValue(quote.Open, index)
+		highRaw := rawYahooArrayValue(quote.High, index)
+		lowRaw := rawYahooArrayValue(quote.Low, index)
+		closeRaw := rawYahooArrayValue(quote.Close, index)
+		volumeRaw := rawYahooArrayValue(quote.Volume, index)
+		openV, openOK := parseYahooFloatField(ctx, index, "open", "indicators.quote[0].open", openRaw, "finite positive price")
+		highV, highOK := parseYahooFloatField(ctx, index, "high", "indicators.quote[0].high", highRaw, "finite positive price")
+		lowV, lowOK := parseYahooFloatField(ctx, index, "low", "indicators.quote[0].low", lowRaw, "finite positive price")
+		closeV, closeOK := parseYahooFloatField(ctx, index, "close", "indicators.quote[0].close", closeRaw, "finite positive price")
+		volume, volumeOK := parseYahooInt64Field(ctx, index, "volume", "indicators.quote[0].volume", volumeRaw, "non-negative integer shares")
 		if !openOK || !highOK || !lowOK || !closeOK || !volumeOK {
 			rejectedRows++
 			continue
@@ -436,9 +442,13 @@ func (p *YahooFinance) FetchDailyBars(ctx context.Context, rawSymbol, startDate,
 				return nil, fmt.Errorf("Yahoo Finance adjustment factor invalid at %s", date)
 			}
 		}
+		var exactValues *model.DailyBarExactValues
+		if adjustment == model.AdjustmentNone {
+			exactValues = dailyBarExactValuesFromJSON(openRaw, highRaw, lowRaw, closeRaw, volumeRaw, nil, "unknown", "unknown")
+		}
 		rawBars = append(rawBars, rawYahooBar{
 			date: date, open: openV, high: highV, low: lowV, close: closeV,
-			volume: volume, factor: factor,
+			volume: volume, factor: factor, exactValues: exactValues,
 		})
 	}
 	if len(rawBars) == 0 {
@@ -490,6 +500,7 @@ func (p *YahooFinance) FetchDailyBars(ctx context.Context, rawSymbol, startDate,
 			AmountUnit: "unknown", QualityStatus: model.QualityDegraded,
 			QualityReasons:   []string{"provider_amount_unavailable"},
 			NormalizationVer: normalize.Version,
+			ExactValues:      raw.exactValues,
 		}
 		if adjustment == model.AdjustmentNone {
 			bar.AdjustmentRefDate = ""

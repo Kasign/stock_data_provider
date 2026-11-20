@@ -70,3 +70,17 @@ func TestNewLLMRegistryUsesBoundedLocalSchemaValidation(t *testing.T) {
 		}
 	}
 }
+
+func TestIntentFromModelToolCallRejectsInvalidUTF8(t *testing.T) {
+	invalid := string([]byte{0xff})
+	cases := []llm.ModelToolCall{
+		{CallID: invalid, Name: "research.lookup", ArgumentsJSON: `{}`, Status: "completed"},
+		{CallID: "call-1", Name: invalid, ArgumentsJSON: `{}`, Status: "completed"},
+		{CallID: "call-1", Name: "research.lookup", ArgumentsJSON: `{"value":"` + invalid + `"}`, Status: "completed"},
+	}
+	for i, call := range cases {
+		if _, err := IntentFromModelToolCall(call); !errors.Is(err, ErrInvalidModelToolCall) {
+			t.Fatalf("case %d with invalid UTF-8 should be rejected, got %v", i, err)
+		}
+	}
+}

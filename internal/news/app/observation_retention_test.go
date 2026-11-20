@@ -62,6 +62,31 @@ func TestObservationRetentionCleanerRejectsInvalidRequestsAndResults(t *testing.
 	}
 }
 
+func TestObservationRetentionCleanerPropagatesRepositoryErrorAndRejectsEvidenceCounts(t *testing.T) {
+	repositoryErr := errors.New("storage transaction failed")
+	repository := &observationRetentionRepositoryStub{err: repositoryErr}
+	cleaner, err := NewObservationRetentionCleaner(repository)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cleaner.Execute(context.Background(), time.Now().UTC(), 10); !errors.Is(err, repositoryErr) {
+		t.Fatalf("Execute() error=%v, want repository error", err)
+	}
+
+	cases := []ObservationPayloadPurgeResult{
+		{EvidenceScanned: -1},
+		{EvidenceScanned: 1, EvidencePurged: 2},
+		{EvidenceScanned: 11, EvidencePurged: 11},
+	}
+	for _, result := range cases {
+		repository.err = nil
+		repository.result = result
+		if _, err := cleaner.Execute(context.Background(), time.Now().UTC(), 10); !errors.Is(err, ErrObservationRetentionResultInvalid) {
+			t.Errorf("result=%+v error=%v, want invalid result", result, err)
+		}
+	}
+}
+
 func TestObservationRetentionCleanerHonorsContextCancellation(t *testing.T) {
 	now := time.Date(2026, 11, 9, 10, 0, 0, 0, time.UTC)
 

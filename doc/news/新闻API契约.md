@@ -1,7 +1,7 @@
 # 新闻 API 契约
 
 > 版本：设计草案 v0.2  
-> 状态：当前不建设新闻独立对外 HTTP API；本文第 11 节是同进程 Application 契约实施入口，OpenAPI 仅保留为未来评估草案。Get/List Facade、PIT Repository、Snapshot/Cursor 已有首批实现，但 NEWS-CTR-001 尚未完整验收。DEC-PLAT-002-042 要求的 relation_status、UTC Z Schema 和版本观察时间映射已在 2026-11-11 同步；available_at 严格 PIT 与授权读取 TOCTOU 仍未闭环，详见《代码与文档Review报告》。
+> 状态（2026-11-18）：不建设新闻独立对外 HTTP API；第 11 节维护同进程 Application Query Facade 契约。NEWS-CTR-001/002/003 的项目级定义已在 PLAT-002 登记簿标记为 L1 frozen；这不等于 News 消费者 L2 实现符合性或真实来源 L3 验收全部完成。Evidence Query、授权复核、PIT Resolver、Snapshot/Cursor 已有实现；available_at 的生产可用性仍受合格来源证据和授权准入约束，当前状态以《模块总任务规划和进度.md》为准。OpenAPI 文件不代表当前开放独立 News HTTP 路由。
 
 ## 1. 基本原则
 
@@ -180,7 +180,7 @@ News 为 News 来源内容签发 AuthorizationRef。公开或无限制内容也�
 - `app.ResearchEvidenceQuery` 同进程只读 Port。
 - `doc/news/schema/NEWS-CTR-001-*.schema.json` 与 `doc/news/golden/NEWS-CTR-001-*.golden.json`。
 
-当前已完成 DTO、请求边界校验、Schema/Golden 和 HMAC Cursor Codec；仍未实现 Facade、PIT Repository、授权快照当前复核、固定 Snapshot，也没有对外 HTTP 路由。禁止将本阶段描述为 NEWS-CTR-001 已验收。
+DTO、请求边界校验、Schema/Golden、HMAC Cursor Codec、PIT Repository、单条 Evidence 查询、授权快照当前复核、固定 Snapshot、分页查询及 `EvidenceQueryFacade` 均已有实现。Server 已将该同进程 Query Port 装配给 Research Adapter；这不构成独立对外 HTTP API。严格 PIT 仍受合格 `available_at` 来源证据约束，当前来源没有合格字段，相关记录的 `available_at` 为 null 并被严格 PIT 排除。因此应区分“Query 机制实现”和“NEWS-CTR-001 全量生产验收”：前者已有代码，后者仍受来源证据与生产验收条件限制。
 
 
 ### 11.6 Cursor HMAC Claims
@@ -218,4 +218,9 @@ News Migration V3 新增 `news_evidence_snapshots`。Snapshot 只持久化 `news
 
 Repository 创建时校验排序键唯一且符合 `system_observed_at DESC, news_id ASC, version_id ASC`，并限制单个快照最多 5000 条；Application 的 `PageAfter` 使用精确排序键续页，不使用 OFFSET；相同快照引用的相同 payload 可幂等重放，不同 payload 返回冲突。读取时校验 payload_hash、item_count、caller 绑定和 TTL；过期快照必须失败，不得重新生成。
 
-该 Store 目前尚未接入 Query Facade。调用方必须在创建快照前完成严格 PIT 的 `available_at <= system_as_of` 证据过滤和当前授权检查；Snapshot Store 本身不代表数据可见或内容已授权。
+该 Store 已由 `CreateEvidenceSnapshotForQuery`、`EvidenceSnapshotPageReader` 和 `ListEvidence` 接入 Query Facade。首屏创建快照前由 PIT Repository 按 `system_as_of` 选择版本，Query 侧仍须执行严格 `available_at <= system_as_of` 过滤；分页阶段逐条调用 GetEvidence，在正文读取边界重新核验当前授权。Snapshot Store 本身只固定引用和排序键，不代表数据可见或内容已授权。
+
+
+### 11.10 RepairAll 集成基线复核（2026-11-19）
+
+在 `repair_all` 聚合基线中，`internal/news/app/evidence_query_facade.go` 已组合 `GetEvidence` 与 `ListEvidence`；`internal/news/app/get_evidence.go` 实现单条 PIT/授权读取，`list_evidence.go` 实现固定快照分页和逐条当前授权读取，Server 通过 Research News Composition 将 Query Port 注入 Research Adapter。此项为同进程内部接口，不增加独立 HTTP 路由。严格 PIT 的来源时间准入仍未解除：当前来源没有满足首次公开可获取时间要求的证据，`available_at` 仍为 null，News→Research B 组继续 SHELVED。完整聚合 CI Run [44450277491](https://github.com/Kasign/stock_data_provider/actions/runs/44450277491) success；CI 通过不等于真实来源时间证据验收。

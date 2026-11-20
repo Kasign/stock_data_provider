@@ -542,3 +542,29 @@ func TestYahooFinanceQuoteReportsUnavailableAmountAndMissingName(t *testing.T) {
 		}
 	}
 }
+
+func TestYahooFinanceRawDailyBarsRetainExactJSONDecimals(t *testing.T) {
+	loc := yahooChinaLocation()
+	timestamp := time.Date(2026, 10, 20, 0, 0, 0, 0, loc).Unix()
+	payload := fmt.Sprintf(`{"chart":{"result":[{"meta":{"symbol":"600036.SS","exchangeTimezoneName":"Asia/Shanghai"},"timestamp":[%d],"indicators":{"quote":[{"open":[10.123456789],"high":[11.234567891],"low":[9.012345678],"close":[10.987654321],"volume":[12345]}]}}],"error":null}}`, timestamp)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(payload))
+	}))
+	defer server.Close()
+
+	provider := NewYahooFinance(2*time.Second, server.URL+"/v8/finance/chart")
+	bars, err := provider.FetchDailyBars(context.Background(), "600036.SH", "2026-10-20", "2026-10-20", 10, model.AdjustmentNone)
+	if err != nil {
+		t.Fatalf("FetchDailyBars: %v", err)
+	}
+	if len(bars) != 1 {
+		t.Fatalf("bars count = %d, want 1", len(bars))
+	}
+	got := bars[0].ExactValues
+	if got == nil || got.Open != "10.123456789" || got.High != "11.234567891" ||
+		got.Low != "9.012345678" || got.Close != "10.987654321" || got.RawVolume != "12345" ||
+		got.RawAmount != nil || got.AmountCNY != nil {
+		t.Fatalf("Yahoo exact source decimals or unavailable amount semantics were not retained: %+v", got)
+	}
+}

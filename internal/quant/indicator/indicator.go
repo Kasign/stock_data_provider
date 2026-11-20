@@ -139,7 +139,10 @@ func Return(closes []float64, p ReturnParams) (Result, error) {
 		return Result{}, err
 	}
 	if len(closes) <= p.Window {
-		return Result{Status: StatusInsufficientData, SampleCount: len(closes)}, nil
+		return Result{
+			Status:      StatusInsufficientData,
+			SampleCount: max(0, len(closes)-1),
+		}, nil
 	}
 
 	start := closes[len(closes)-1-p.Window]

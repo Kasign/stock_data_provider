@@ -1627,3 +1627,48 @@ GetRun 与 CancelRun 的持久化创建者授权已在 Application/Storage 层�
 ### 收口决策
 
 本轮集中联调达到封板条件。后续任务不再重复 Provider/Tavily/Notification Relay 联调，转入整体规划中的下一模块/阶段任务；若未来发生代码变化，只针对变更范围重新执行相应门禁。
+
+
+## 29. 2026-11-19 Integration 当前基线跨模块缺口复核（Migration / News Stage）
+
+复核基线：`integration` HEAD `df8fde6b804ac8bbfb3a5762cdcff4bfa61f994b`。本节只记录当前聚合代码树的直接证据，不把模块文档中的历史 SHA 当作当前代码事实；本轮未修改领域实现。
+
+### 29.1 Data Migration：静态定义与锁外兼容 DDL 仍未收口
+
+源码证据：
+- `internal/marketdata/bootstrap/module.go` 的公开 `MigrationRunner` 仅定义 `Migrate(ctx)`；Module 只返回 Store，不暴露不可变 Migration 定义。
+- `internal/marketdata/repository/mysql.go` 的 `Store.Migrate` 内部调用 Platform `ApplyMigrations`，当前包含 V1～V3；随后仍调用 `ensureNonUniqueHistoryIndex` 两次，并对 `market_data_quotes.volume_ratio/turnover_rate` 执行 `ensureColumn`。这些兼容 DDL 位于 `ApplyMigrations` 返回之后，不受同一 namespace advisory lock、版本历史和 checksum 保护。
+- 因此 Root 不能把 Data 完整版本定义注册进统一 Registry；多实例启动时，锁外兼容 DDL 仍有并发竞态窗口。
+
+### 29.2 Platform / Server Migration：已有能力与缺口必须区分
+
+源码证据：
+- `internal/platform/storage/storage.go` 已有不可变 Migration 类型、统一 `prepareMigrations`/SHA-256 checksum、`ApplyMigrations` 和 namespace advisory lock；不需要另建 Runner 或锁。
+- 当前 Platform Storage 未提供与 Apply 共用 checksum preparation 的只读 `ValidateAppliedMigrations` API。
+- `internal/server/migration/registry.go` 的 `ValidateApplied` 读取 migration history 并校验已注册静态 namespace 的版本集合/状态；它本身不校验 checksum，也不验证物理 Schema。
+- Root 通过 `RegisterExternalNamespace("market_data")` 过渡登记 Data。外部 namespace 只检查至少存在 history 且状态 applied，不能替代 Data 静态版本/checksum 校验。
+- `internal/server/bootstrap/bootstrap.go` 在 Migration 开启时先执行 Data `MigrationRunner.Migrate` 再执行 Registry；关闭时只执行 Registry `ValidateApplied` 和 Data `Diagnostics.Ready`。日志已明确 Data Migration history 未由公开接口校验。
+
+责任边界与解除条件：
+1. Data Owner：导出完整、不可变的版本化 Migration 定义；将锁外兼容 DDL 纳入新版本，并保持已发布版本定义不可变。
+2. Platform Owner：提供复用同一 checksum preparation 的只读校验能力；不得复制第二套 checksum 算法。
+3. Server Owner：在上述能力进入共同代码基线后，移除 Data 外部 namespace 过渡登记，注册 Data 定义并完成启用/关闭、多实例、checksum 不一致和物理 Schema 漂移验收。
+4. Integration：负责共同基线上的跨模块验收与证据汇总；不在聚合分支复制 Data SQL、改写 Platform Runner 或接管 Server Bootstrap。
+
+### 29.3 News Search Stage：Schema 与运行时 Validator 存在可复现差异
+
+源码证据：
+- `doc/news/schema/NEWS-STAGE-search-candidates-payload-1.0.0.schema.json` 对 `candidates[].missing_fields` 声明了 `uniqueItems: true`。
+- `internal/news/stage/search_candidates_validation.go` 的 `ValidatePayloadJSON` 仅解码 DTO、检查字段枚举；没有检查 `missing_fields` 重复项。
+- Server `newNewsSearchStageComposition` 注册的是 News 提供的 `ValidatePayloadJSON`，并未在运行时额外执行 JSON Schema。因此重复的合法 missing_fields 值可能通过运行时 Validator，却违反冻结 Schema。
+
+责任与处理：
+- 这是 News Stage Validator 的模块内实现缺口，归 News Owner 修复并在 News 专项 CI 验收；Integration 不在聚合分支修改 `internal/news/**`。
+- 修复应增加重复项拒绝回归测试，保持 Schema 1.0.0 语义不变；不能通过删除 `uniqueItems` 放宽契约。
+
+### 29.4 本轮结论与后续工作
+
+- 本轮确认 Migration 主链仍有 Data/Platform/Server 三方前置，当前 integration 代码不能单方面安全闭环；不得把过渡性 Root 校验标记为最终通过。
+- News Stage 的 `uniqueItems` 差异是明确的模块内缺陷，需由 News Owner 修复后再合入共同基线。
+- 本节只完成代码证据核对和责任归属校准；未声称 Quant、Research、Researchflow、LLM、Notification 的全部卡点已在本轮重新验收。
+- 下一轮只继续核对当前 integration 树中其余模块的可复现差距，并优先寻找 integration 自身可承担的跨模块测试/CI 缺口；若没有独立安全工作项，则明确等待模块修复进入共同基线，不通过重复盘点制造进度。
