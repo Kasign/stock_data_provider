@@ -5,14 +5,13 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"os"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
-	_ "github.com/go-sql-driver/mysql"
+	mysql "github.com/go-sql-driver/mysql"
 
 	"example.com/stock-analysis-flow/internal/quant/manifest"
 	"example.com/stock-analysis-flow/internal/quant/result"
@@ -188,4 +187,3 @@ func TestMySQLRepositoryHonorsCancellation(t *testing.T) {
 	}
 }
 
-var _ = fmt.Sprintf
