@@ -13,9 +13,9 @@ import (
 
 	mysql "github.com/go-sql-driver/mysql"
 
+	platformstorage "example.com/stock-analysis-flow/internal/platform/storage"
 	"example.com/stock-analysis-flow/internal/quant/manifest"
 	"example.com/stock-analysis-flow/internal/quant/result"
-	platformstorage "example.com/stock-analysis-flow/internal/platform/storage"
 )
 
 func openQuantIntegrationDB(t *testing.T) *sql.DB {
