@@ -116,6 +116,11 @@ jobs:
           MARKET_DATA_MX_API_KEY: ${{ secrets.MX_APIKEY }}
           MARKET_DATA_MX_API_URL: https://mkapi2.dfcfs.com/finskillshub/api/claw/query
         run: go test -run '^TestLiveProviderProbe$|^TestLiveProviderProbeQuarterlyFundamentals$|^TestLiveHithinkCapabilities$|^TestLiveTushareCapabilities$|^TestLiveTickFlowCapabilities$' -count=1 -v ./internal/marketdata/provider
+      - name: Probe real DailyBars v2 Application Port and decimal evidence
+        if: always() && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && contains(github.event.head_commit.message, '[include_public]')))
+        env:
+          MARKET_DATA_LIVE_PROVIDER_TESTS: "1"
+        run: go test -run TestLiveReaderGetDailyBarsV2PreservesProviderDecimalEvidence -count=1 -v ./internal/marketdata/application
       - name: Probe Hithink 2025 annual balance-sheet publication-date raw fields
         if: always() && github.event_name == 'push' && contains(github.event.head_commit.message, '[hithink_balance_sheet_raw]')
         env:
