@@ -33,6 +33,19 @@ func validObservedQuality(value model.QualityStatus) bool {
 	return value == model.QualityValid || value == model.QualityDegraded || value == model.QualityUnknown
 }
 
+func validCorporateActionHolderScope(value model.CorporateActionHolderScope) bool {
+	switch value {
+	case "", model.CorporateActionHolderScopeUnknown,
+		model.CorporateActionHolderScopeAllShareholders,
+		model.CorporateActionHolderScopeTradableShareholders,
+		model.CorporateActionHolderScopeNonTradableShareholders:
+		return true
+	default:
+		return false
+	}
+}
+
+
 func validateAdjustmentFactorRecord(value model.AdjustmentFactor) error {
 	if strings.TrimSpace(value.Symbol) == "" || !validISODate(value.TradeDate, false) ||
 		value.Factor <= 0 || math.IsNaN(value.Factor) || math.IsInf(value.Factor, 0) ||
@@ -250,10 +263,11 @@ func (s *Store) SaveCorporateActions(ctx context.Context, values []model.Corpora
 			!validISODate(value.ExDate, true) || !validISODate(value.AnnouncementDate, true) ||
 			(value.ExDate == "" && value.AnnouncementDate == "") || !validISODate(value.ImplementationAnnouncementDate, true) ||
 			!validISODate(value.RecordDate, true) || !validISODate(value.PayDate, true) ||
-			value.FetchedAt.IsZero() || !validObservedQuality(value.QualityStatus) {
+			value.FetchedAt.IsZero() || !validObservedQuality(value.QualityStatus) ||
+			!validCorporateActionHolderScope(value.HolderScope) {
 			return fmt.Errorf("invalid corporate-action event %s for %s", value.ProviderEventID, value.Symbol)
 		}
-		for _, number := range []*float64{value.CashDividendCNY, value.CashDividendBeforeTaxCNY, value.BonusShareRatio, value.TransferShareRatio, value.RightsIssueRatio, value.RightsIssuePriceCNY} {
+		for _, number := range []*float64{value.CashDividendCNY, value.CashDividendBeforeTaxCNY, value.BonusShareRatio, value.TransferShareRatio, value.RightsIssueRatio, value.RightsIssuePriceCNY, value.CashConsiderationCNY, value.ShareConsiderationRatio} {
 			if number != nil && (math.IsNaN(*number) || math.IsInf(*number, 0) || *number < 0) {
 				return fmt.Errorf("corporate-action event %s has invalid numeric terms", value.ProviderEventID)
 			}

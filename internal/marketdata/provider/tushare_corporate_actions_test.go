@@ -31,6 +31,9 @@ func TestTushareFetchCorporateActionsKeepsAnnouncementAndEffectiveDatesSeparate(
 	if got.CashDividendCNY == nil || *got.CashDividendCNY != 0.5 || got.CashDividendBeforeTaxCNY == nil || *got.CashDividendBeforeTaxCNY != 0.6 {
 		t.Fatalf("cash dividend tax bases were not mapped correctly: %+v", got)
 	}
+	if got.HolderScope != model.CorporateActionHolderScopeAllShareholders || got.ReferencePriceIncluded == nil || !*got.ReferencePriceIncluded {
+		t.Fatalf("ordinary Tushare dividend must be classified as all-shareholder exchange-reference action: %+v", got)
+	}
 	if got.AvailableAt != nil || got.QualityStatus != model.QualityDegraded {
 		t.Fatalf("daily announcement date must not be promoted to exact available_at: %+v", got)
 	}

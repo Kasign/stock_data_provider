@@ -1418,3 +1418,11 @@ Go suite 覆盖根模块、go-core、market-data 的格式/测试/race/vet、Mar
 - DailyBar 新增 adjustment_price_scale / adjustment_price_offset_cny 两个可选诊断字段，已同步到 internal/marketdata/httpapi/openapi.yaml。
 - 两字段不进入 required；原始 DailyBar 不包含这两个值，复权 DailyBar 返回实际应用的变换参数。
 - 当前 Go Test Suite 的模型/OpenAPI 一致性测试曾因缺少这两个属性失败；本提交同步契约后重新验收。
+
+## 86. 2026-11-20 公司行动事件范围与仿射组合器
+
+- CorporateAction 模型增加现金对价、股份对价、适用股东范围和是否计入交易所除权参考价字段；未知值保持 nil/unknown。
+- 新增 exchange_reference、tradable_holder_total_return、provider_compatibility 三种计算策略。纯组合器按 ex-date 分组，先合并同日事件，再按日期降序组合 affine transform。
+- Tushare 普通分红记录标记为 all_shareholders / reference_price_included=true；不把未分类的股权分置改革对价伪装为普通分红。
+- 新增 2006 茅台官方事件 fixture：exchange_reference 结果 scale=2、offset=1.482；流通股股东 total-return 结果 scale=2.24、offset=4.432；Hithink composite provider-compatibility 结果与其报告一致。
+- 本阶段不改变生产数据流；仅为后续把 CorporateAction 事件转换为 AdjustmentFactor affine 序列建立明确模型和可测试纯函数。

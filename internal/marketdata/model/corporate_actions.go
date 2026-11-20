@@ -39,8 +39,27 @@ type AdjustmentFactor struct {
 	QualityReasons   []string              `json:"quality_reasons,omitempty"`
 }
 
+// CorporateActionHolderScope 表示公司行动实际适用的股东范围。
+type CorporateActionHolderScope string
+
+const (
+	CorporateActionHolderScopeUnknown             CorporateActionHolderScope = "unknown"
+	CorporateActionHolderScopeAllShareholders     CorporateActionHolderScope = "all_shareholders"
+	CorporateActionHolderScopeTradableShareholders CorporateActionHolderScope = "tradable_shareholders"
+	CorporateActionHolderScopeNonTradableShareholders CorporateActionHolderScope = "non_tradable_shareholders"
+)
+
+// CorporateActionAdjustmentPolicy 区分价格连续性调整与持有人总回报调整。
+type CorporateActionAdjustmentPolicy string
+
+const (
+	CorporateActionAdjustmentPolicyExchangeReference CorporateActionAdjustmentPolicy = "exchange_reference"
+	CorporateActionAdjustmentPolicyTradableHolderTotalReturn CorporateActionAdjustmentPolicy = "tradable_holder_total_return"
+	CorporateActionAdjustmentPolicyProviderCompatibility CorporateActionAdjustmentPolicy = "provider_compatibility"
+)
+
 // CorporateAction 是公司行动事件。金额单位为人民币元/股，比例为每股变动数量。
-// 未由 Provider 明确返回的字段保持 nil，不得用零代替未知。
+// 股东对价与公司分红分开保存；未知字段保持 nil，不得用零代替未知。
 type CorporateAction struct {
 	Symbol                         string        `json:"symbol"`
 	ProviderEventID                string        `json:"provider_event_id"`
@@ -56,9 +75,13 @@ type CorporateAction struct {
 	CashDividendBeforeTaxCNY       *float64      `json:"cash_dividend_before_tax_cny_per_share,omitempty"`
 	BonusShareRatio                *float64      `json:"bonus_share_ratio,omitempty"`
 	TransferShareRatio             *float64      `json:"transfer_share_ratio,omitempty"`
-	RightsIssueRatio               *float64      `json:"rights_issue_ratio,omitempty"`
-	RightsIssuePriceCNY            *float64      `json:"rights_issue_price_cny,omitempty"`
-	Source                         string        `json:"source"`
+	RightsIssueRatio               *float64                    `json:"rights_issue_ratio,omitempty"`
+	RightsIssuePriceCNY            *float64                    `json:"rights_issue_price_cny,omitempty"`
+	CashConsiderationCNY           *float64                    `json:"cash_consideration_cny_per_share,omitempty"`
+	ShareConsiderationRatio        *float64                    `json:"share_consideration_ratio,omitempty"`
+	HolderScope                    CorporateActionHolderScope `json:"holder_scope,omitempty"`
+	ReferencePriceIncluded         *bool                       `json:"reference_price_included,omitempty"`
+	Source                         string                      `json:"source"`
 	SourceVersion                  string        `json:"source_version,omitempty"`
 	FetchedAt                      time.Time     `json:"fetched_at"`
 	SystemObservedAt               *time.Time    `json:"system_observed_at,omitempty"`

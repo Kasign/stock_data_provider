@@ -78,6 +78,41 @@ func TestCorporateActionHashIgnoresObservationMetadata(t *testing.T) {
 	}
 }
 
+func TestCorporateActionHashIncludesHolderScopeAndConsiderationTerms(t *testing.T) {
+	cash := 1.475
+	shares := 0.12
+	included := false
+	value := model.CorporateAction{
+		Symbol: "600519.SH", ProviderEventID: "share-reform-2006", EventType: "share_reform_consideration",
+		ExDate: "2006-05-24", Source: "official-announcement", SourceVersion: "official-event-v1",
+		CashConsiderationCNY: &cash, ShareConsiderationRatio: &shares,
+		HolderScope: model.CorporateActionHolderScopeTradableShareholders, ReferencePriceIncluded: &included,
+	}
+	first, err := corporateActionHash(value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	changedCash := value
+	otherCash := 1.476
+	changedCash.CashConsiderationCNY = &otherCash
+	second, err := corporateActionHash(changedCash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first == second {
+		t.Fatal("cash consideration changes must create a new corporate-action revision")
+	}
+	changedScope := value
+	changedScope.HolderScope = model.CorporateActionHolderScopeAllShareholders
+	third, err := corporateActionHash(changedScope)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first == third {
+		t.Fatal("holder-scope changes must create a new corporate-action revision")
+	}
+}
+
 func TestAdjustmentFactorHashIncludesBasis(t *testing.T) {
 	value := model.AdjustmentFactor{Symbol: "600036.SH", TradeDate: "2025-06-30", Factor: 1.25, Source: "baostock", Basis: model.AdjustmentFactorForward}
 	forwardHash, err := adjustmentFactorHash(value)
