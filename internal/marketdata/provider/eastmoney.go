@@ -1580,6 +1580,7 @@ func (p *Eastmoney) FetchDailyBars(ctx context.Context, rawSymbol, startDate, en
 		if len(parts) > 8 && strings.TrimSpace(parts[8]) != "" && strings.TrimSpace(parts[8]) != "-" {
 			if pct, parseErr := strconv.ParseFloat(strings.TrimSpace(parts[8]), 64); parseErr == nil && finiteNumber(pct) {
 				bar.ChangePercent = &pct
+				setDailyBarExactChangePercentFromString(bar.ExactValues, parts[8], "f59")
 			} else {
 				addEastmoneyDailyBarParseIssue(ctx, rowIndex, symbol, tradeDate, "change_percent", "f59", "invalid_optional_number", "finite percentage number", "string", parts[8], validation.SeverityWarning, "Eastmoney optional daily-bar change percent is invalid and was omitted")
 			}

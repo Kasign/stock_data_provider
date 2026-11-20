@@ -2495,9 +2495,17 @@ func (p *Hithink) fetchDailySegment(ctx context.Context, symbol string, start, e
 				addProviderParseIssue(ctx, absoluteRowIndex, "amount", "turnover", "invalid_number", "finite non-negative numeric value", "number", providerJSONPreview(item.Turnover), "同花顺成交额必须是非负有限数值")
 			}
 		} else {
+			// Hithink's historical DailyBar turnover unit has not been verified
+			// against a provider field contract. Preserve the raw observation,
+			// but do not expose it as normalized CNY Amount or claim a unit.
 			v := turnoverValue
-			amount, rawAmount = &v, &v
-			amountUnit, rawAmountUnit, rawAmountField = "CNY", "CNY", "turnover"
+			rawAmount = &v
+			rawAmountField = "turnover"
+			quality = model.QualityDegraded
+			reasons = append(reasons, "amount_unit_unverified")
+			addProviderParseIssue(ctx, absoluteRowIndex, "amount", "turnover", "unit_not_verified",
+				"provider-confirmed currency unit", "number", providerJSONPreview(item.Turnover),
+				"同花顺历史日 K turnover 单位缺少可核验契约，保留原值但不映射为 CNY")
 		}
 		exactValues := dailyBarExactValuesFromJSON(item.OpenPrice, item.HighPrice, item.LowPrice, item.ClosePrice, item.Volume, item.Turnover, "unknown", "unknown")
 		out = append(out, model.DailyBar{

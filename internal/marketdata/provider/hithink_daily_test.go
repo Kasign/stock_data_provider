@@ -231,12 +231,30 @@ func TestHithinkDailyBarsRetainExactJSONDecimals(t *testing.T) {
 	defer server.Close()
 
 	provider := NewHithinkConfigured(time.Second, server.URL, "test-key")
-	bars, err := provider.FetchDailyBars(context.Background(), "600036.SH", "2026-10-07", "2026-10-07", 10, model.AdjustmentNone)
+	reporter := validation.NewReporter(20)
+	ctx := validation.WithReporter(context.Background(), reporter)
+	bars, err := provider.FetchDailyBars(ctx, "600036.SH", "2026-10-07", "2026-10-07", 10, model.AdjustmentNone)
 	if err != nil {
 		t.Fatalf("FetchDailyBars: %v", err)
 	}
 	if len(bars) != 1 {
 		t.Fatalf("bars count = %d, want 1", len(bars))
+	}
+	if bars[0].Amount != nil || bars[0].AmountUnit != "unknown" ||
+		bars[0].RawAmountUnit != "" || bars[0].RawAmountField != "turnover" ||
+		bars[0].QualityStatus != model.QualityDegraded ||
+		!strings.Contains(strings.Join(bars[0].QualityReasons, ","), "amount_unit_unverified") {
+		t.Fatalf("unverified Hithink turnover must remain raw/degraded, got %+v", bars[0])
+	}
+	foundUnitDiagnostic := false
+	for _, issue := range reporter.Snapshot().Issues {
+		if issue.Field == "amount" && issue.ProviderField == "turnover" && issue.Code == "unit_not_verified" {
+			foundUnitDiagnostic = true
+			break
+		}
+	}
+	if !foundUnitDiagnostic {
+		t.Fatalf("expected explicit unverified turnover-unit diagnostic, got %+v", reporter.Snapshot().Issues)
 	}
 	got := bars[0].ExactValues
 	if got == nil || got.Open != "10.123456789" || got.High != "11.234567891" ||
