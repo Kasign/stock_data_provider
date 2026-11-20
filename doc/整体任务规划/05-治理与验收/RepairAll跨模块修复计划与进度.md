@@ -565,3 +565,13 @@ RA009 代码关闭条件已满足：Server 路由认证矩阵、CSRF、WebUI 请
 - Integration CI 增加 QUANT_TEST_MYSQL_DSN 和逐项 PASS 门禁，覆盖普通写入/重放/规范等价 JSON、created_at 稳定、16 并发写入、存储损坏拒绝和 Context 取消。
 - 结果写入层已实现，但授权读取、Owner PolicySnapshot 签发/当前策略复核/撤销线性化、AccessAuditor 和 Root 依赖注入仍未完成；QNT-013 保持 OPEN。
 - 代码验收 SHA：`7f1162ba2b6472c4653b108232862f7e9d5af1cd`；Integration CI #551 [44664065668](https://github.com/Kasign/stock_data_provider/actions/runs/44664065668) 对该精确 SHA 全项 success。Quant MariaDB 专项四项顶层用例逐项 PASS，根模块测试、vet、跨模块测试、Worker DB/Redis、go-core、Compose 与 WebUI 检查均通过。QNT-013 仍因生产授权读取/审计 Adapter 和 Root 注入未完成而保持 OPEN。
+
+
+## 29. 模块卡点拆分与独立分支修复（2026-11-20）
+
+- 本轮以 repair_all 基线 `fb0266bbb34fd5484ddbc4c3228383f04ee00cc9` 复核九份模块卡点、模块文档目录和远端分支；所有模块分支均已存在，不需要新建。
+- 新增统一执行计划：`doc/整体任务规划/05-治理与验收/模块卡点拆分与分支修复执行计划.md`。其中记录各模块观察 HEAD、任务包编号、主责/协作边界、具体交付、依赖顺序和合并门禁。
+- 任务归属：Data 负责 DailyBars v2 与 DATA-CTR-007 证据/契约；Quant 负责 QNT-013 Policy Owner/授权读取/审计；Researchflow 负责 FLOW-005/006、RiskDecision 与 Outbox 决策；Server 负责 Root 装配和生命周期；News、Research、LLM、Notification、Platform、WebUI 仅在真实输入或可复现缺陷出现时推进，不制造空壳任务。
+- Platform 当前没有确认的本地 P0/P1/P2 代码任务；Research、LLM、Notification、WebUI 当前也没有可以无前置条件独立闭环的新业务代码任务。保持 NO_LOCAL_TASK / WAIT_DEPENDENCY 不等于模块完成生产验收。
+- 执行顺序：先模块分支基线差异复核，再生产者接口/实现，后消费者适配，再 Server Root 装配，最后 repair_all 跨模块集成。共享 Bootstrap、Migration Registry、go.mod/go.sum 和项目契约登记簿必须有唯一修改 Owner。
+- 本轮只修改治理文档，未修改生产代码、未切换分支、未对其他模块分支写入；模块分支修复从后续任务批次开始，不能把本次规划提交视为模块分支已同步。
