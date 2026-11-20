@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 
 	"example.com/stock-analysis-flow/internal/quant/result"
 )
@@ -17,8 +18,6 @@ var (
 	ErrCorruptRecord      = errors.New("quant stored result record is corrupt")
 	ErrStorageUnavailable = errors.New("quant result storage is unavailable")
 )
-
-const resultTable = "quant_results"
 
 // MySQLRepository implements the Quant result write port.
 // The database connection lifecycle is owned by Server/Platform.
@@ -85,19 +84,18 @@ func (r *MySQLRepository) Save(ctx context.Context, record result.Record) error 
 		return errors.Join(ErrStorageUnavailable, insertErr, queryErr)
 	}
 
-	var storedManifest struct {
-		ManifestFingerprint string `json:"manifest_fingerprint"`
-		ResultFingerprint   string `json:"result_fingerprint"`
-		ResultID            string `json:"result_id"`
-	}
-	if err := json.Unmarshal(storedManifestJSON, &storedManifest); err != nil ||
-		storedManifest.ResultID != snapshot.Manifest.ResultID ||
-		storedManifest.ManifestFingerprint != storedManifestFingerprint ||
-		storedManifest.ResultFingerprint != storedResultFingerprint {
+	var storedRecord result.Record
+	decoder := json.NewDecoder(bytes.NewReader(storedManifestJSON))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&storedRecord.Manifest); err != nil {
 		return ErrCorruptRecord
 	}
-	var storedRecord result.Record
-	if err := json.Unmarshal(storedManifestJSON, &storedRecord.Manifest); err != nil {
+	if err := decoder.Decode(new(any)); err != io.EOF {
+		return ErrCorruptRecord
+	}
+	if storedRecord.Manifest.ResultID != snapshot.Manifest.ResultID ||
+		storedRecord.Manifest.ManifestFingerprint != storedManifestFingerprint ||
+		storedRecord.Manifest.ResultFingerprint != storedResultFingerprint {
 		return ErrCorruptRecord
 	}
 	storedRecord.Payload = append(json.RawMessage(nil), storedPayload...)
