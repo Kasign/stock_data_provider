@@ -84,14 +84,15 @@ func TestLiveReaderGetDailyBarsV2PreservesProviderDecimalEvidence(t *testing.T) 
 	if len(snapshot.Bars) == 0 {
 		t.Fatal("real BaoStock Application Port returned no daily bars")
 	}
-	if snapshot.TradingCalendarRef == nil || !strings.HasPrefix(*snapshot.TradingCalendarRef, "data_calendar:sha256:") {
-		t.Fatalf("real V2 snapshot must carry the persisted calendar reference: %+v", snapshot.CoverageEvidence)
+	// BaoStock 当前返回交易日列表并推断非交易日，真实来源质量为 degraded。
+	// Reader 必须保留该来源质量，不得因 MariaDB 已持久化快照就把它提升为可信日历。
+	if snapshot.TradingCalendarRef != nil || snapshot.QualityStatus != app.QualityDegraded ||
+		snapshot.CoverageEvidence.CalendarQualityStatus != app.QualityDegraded ||
+		!containsReaderString(snapshot.Warnings, "daily_bar_coverage_calendar_quality_unreliable") {
+		t.Fatalf("real V2 snapshot must keep inferred BaoStock calendar degraded and untrusted: %+v", snapshot)
 	}
 	if snapshot.CoverageEvidence.CoverageBasis != "exchange_calendar" {
-		t.Fatalf("real V2 coverage basis = %q, want exchange_calendar", snapshot.CoverageEvidence.CoverageBasis)
-	}
-	if snapshot.CoverageEvidence.CalendarQualityStatus == app.QualityUnknown {
-		t.Fatalf("real V2 calendar quality must be explicit, got unknown: %+v", snapshot.CoverageEvidence)
+		t.Fatalf("real V2 coverage basis = %q, want original exchange_calendar source basis", snapshot.CoverageEvidence.CoverageBasis)
 	}
 
 	var sample app.DailyBar
@@ -130,7 +131,7 @@ func TestLiveReaderGetDailyBarsV2PreservesProviderDecimalEvidence(t *testing.T) 
 	report, err := json.Marshal(map[string]any{
 		"provider": "baostock", "symbol": snapshot.Symbol, "interval": snapshot.Interval,
 		"bar_count": len(snapshot.Bars), "quality_status": snapshot.QualityStatus,
-		"calendar_ref":            *snapshot.TradingCalendarRef,
+		"calendar_ref":            snapshot.TradingCalendarRef,
 		"calendar_quality_status": snapshot.CoverageEvidence.CalendarQualityStatus,
 		"coverage_sufficient":     snapshot.CoverageEvidence.CoverageSufficient,
 		"sample_trade_date":       sample.TradeDate,
