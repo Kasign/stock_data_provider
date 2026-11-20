@@ -336,7 +336,7 @@ func TestReaderGetDailyBarsSelectsCurrentAndPITUseCases(t *testing.T) {
 			OpenEvidence: exactOpenEvidence, RawAmountEvidence: exactRawAmountEvidence,
 			AmountCNYEvidence: exactRawAmountEvidence, ChangePercent: &exactChangePercent,
 			ChangePercentSourceField: "pct_chg",
-			ChangePercentEvidence: exactRawAmountEvidence,
+			ChangePercentEvidence: exactChangePercentEvidence,
 		},
 	}
 	backend := &fakeDataService{

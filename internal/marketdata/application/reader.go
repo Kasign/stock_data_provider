@@ -436,13 +436,13 @@ func mapDailyBarExactValues(source *model.DailyBarExactValues) *app.DailyBarExac
 		RawVolume: source.RawVolume, RawAmount: clonePointer(source.RawAmount), AmountCNY: clonePointer(source.AmountCNY),
 		ChangePercent: clonePointer(source.ChangePercent), ChangePercentSourceField: source.ChangePercentSourceField,
 		ChangePercentEvidence: mapDailyBarDecimalEvidence(source.ChangePercentEvidence),
-		OpenEvidence:             mapDailyBarDecimalEvidence(source.OpenEvidence),
-		HighEvidence:             mapDailyBarDecimalEvidence(source.HighEvidence),
-		LowEvidence:              mapDailyBarDecimalEvidence(source.LowEvidence),
-		CloseEvidence:            mapDailyBarDecimalEvidence(source.CloseEvidence),
-		RawVolumeEvidence:        mapDailyBarDecimalEvidence(source.RawVolumeEvidence),
-		RawAmountEvidence:        mapDailyBarDecimalEvidence(source.RawAmountEvidence),
-		AmountCNYEvidence:        mapDailyBarDecimalEvidence(source.AmountCNYEvidence),
+		OpenEvidence:          mapDailyBarDecimalEvidence(source.OpenEvidence),
+		HighEvidence:          mapDailyBarDecimalEvidence(source.HighEvidence),
+		LowEvidence:           mapDailyBarDecimalEvidence(source.LowEvidence),
+		CloseEvidence:         mapDailyBarDecimalEvidence(source.CloseEvidence),
+		RawVolumeEvidence:     mapDailyBarDecimalEvidence(source.RawVolumeEvidence),
+		RawAmountEvidence:     mapDailyBarDecimalEvidence(source.RawAmountEvidence),
+		AmountCNYEvidence:     mapDailyBarDecimalEvidence(source.AmountCNYEvidence),
 	}
 }
 
