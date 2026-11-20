@@ -311,7 +311,7 @@ try {
         });
       }
       if (pathname.endsWith("/health/ready") || pathname.endsWith("/readyz")) {
-        if (viewport.width === 320 && healthScenario === "missing-status") {
+        if (healthScenario === "missing-status") {
           return json(200, { message: "HTTP success without an explicit health status" });
         }
         return json(503, { status: "unavailable", error: "browser test backend unavailable" });
