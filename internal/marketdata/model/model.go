@@ -79,23 +79,23 @@ type DailyBarDecimalEvidence struct {
 }
 
 type DailyBarExactValues struct {
-	Open              string                   `json:"open"`
-	High              string                   `json:"high"`
-	Low               string                   `json:"low"`
-	Close             string                   `json:"close"`
-	RawVolume         string                   `json:"raw_volume"`
-	RawAmount         *string                  `json:"raw_amount,omitempty"`
-	AmountCNY               *string                  `json:"amount_cny,omitempty"`
-	ChangePercent           *string                  `json:"change_percent,omitempty"`
-	ChangePercentSourceField string                  `json:"change_percent_source_field,omitempty"`
-	ChangePercentEvidence   *DailyBarDecimalEvidence `json:"change_percent_evidence,omitempty"`
-	OpenEvidence            *DailyBarDecimalEvidence `json:"open_evidence,omitempty"`
-	HighEvidence      *DailyBarDecimalEvidence `json:"high_evidence,omitempty"`
-	LowEvidence       *DailyBarDecimalEvidence `json:"low_evidence,omitempty"`
-	CloseEvidence     *DailyBarDecimalEvidence `json:"close_evidence,omitempty"`
-	RawVolumeEvidence *DailyBarDecimalEvidence `json:"raw_volume_evidence,omitempty"`
-	RawAmountEvidence *DailyBarDecimalEvidence `json:"raw_amount_evidence,omitempty"`
-	AmountCNYEvidence *DailyBarDecimalEvidence `json:"amount_cny_evidence,omitempty"`
+	Open                     string                   `json:"open"`
+	High                     string                   `json:"high"`
+	Low                      string                   `json:"low"`
+	Close                    string                   `json:"close"`
+	RawVolume                string                   `json:"raw_volume"`
+	RawAmount                *string                  `json:"raw_amount,omitempty"`
+	AmountCNY                *string                  `json:"amount_cny,omitempty"`
+	ChangePercent            *string                  `json:"change_percent,omitempty"`
+	ChangePercentSourceField string                   `json:"change_percent_source_field,omitempty"`
+	ChangePercentEvidence    *DailyBarDecimalEvidence `json:"change_percent_evidence,omitempty"`
+	OpenEvidence             *DailyBarDecimalEvidence `json:"open_evidence,omitempty"`
+	HighEvidence             *DailyBarDecimalEvidence `json:"high_evidence,omitempty"`
+	LowEvidence              *DailyBarDecimalEvidence `json:"low_evidence,omitempty"`
+	CloseEvidence            *DailyBarDecimalEvidence `json:"close_evidence,omitempty"`
+	RawVolumeEvidence        *DailyBarDecimalEvidence `json:"raw_volume_evidence,omitempty"`
+	RawAmountEvidence        *DailyBarDecimalEvidence `json:"raw_amount_evidence,omitempty"`
+	AmountCNYEvidence        *DailyBarDecimalEvidence `json:"amount_cny_evidence,omitempty"`
 }
 
 type DailyBar struct {

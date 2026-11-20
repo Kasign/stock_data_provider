@@ -280,6 +280,11 @@ func TestReaderGetDailyBarsSelectsCurrentAndPITUseCases(t *testing.T) {
 		EvidenceKind: model.DailyBarPrecisionEvidenceObservedToken,
 		SourceToken:  exactRawAmount, SourceFractionDigits: &exactScale,
 	}
+	exactChangePercentScale := 4
+	exactChangePercentEvidence := &model.DailyBarDecimalEvidence{
+		EvidenceKind: model.DailyBarPrecisionEvidenceObservedToken,
+		SourceToken:  exactChangePercent, SourceFractionDigits: &exactChangePercentScale,
+	}
 	current := model.DailyBar{
 		Symbol:                                "600000.SH",
 		TradeDate:                             "2026-11-06",
@@ -389,7 +394,8 @@ func TestReaderGetDailyBarsSelectsCurrentAndPITUseCases(t *testing.T) {
 		live.Bars[0].ExactValues.ChangePercent == nil ||
 		*live.Bars[0].ExactValues.ChangePercent != exactChangePercent ||
 		live.Bars[0].ExactValues.ChangePercentSourceField != "pct_chg" ||
-		live.Bars[0].ExactValues.ChangePercentEvidence == nil {
+		live.Bars[0].ExactValues.ChangePercentEvidence == nil ||
+		live.Bars[0].ExactValues.ChangePercentEvidence.SourceToken != exactChangePercent {
 		t.Fatalf("exact decimal sidecar was not preserved through Application Port: %+v", live.Bars[0].ExactValues)
 	}
 	if live.Bars[0].ProviderTime == nil || !live.Bars[0].ProviderTime.Equal(providerTime) ||

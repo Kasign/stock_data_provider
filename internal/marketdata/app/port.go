@@ -77,23 +77,23 @@ type DailyBarDecimalEvidence struct {
 }
 
 type DailyBarExactValues struct {
-	Open              string
-	High              string
-	Low               string
-	Close             string
-	RawVolume         string
-	RawAmount         *string
-	AmountCNY               *string
-	ChangePercent           *string
+	Open                     string
+	High                     string
+	Low                      string
+	Close                    string
+	RawVolume                string
+	RawAmount                *string
+	AmountCNY                *string
+	ChangePercent            *string
 	ChangePercentSourceField string
-	ChangePercentEvidence   *DailyBarDecimalEvidence
-	OpenEvidence            *DailyBarDecimalEvidence
-	HighEvidence      *DailyBarDecimalEvidence
-	LowEvidence       *DailyBarDecimalEvidence
-	CloseEvidence     *DailyBarDecimalEvidence
-	RawVolumeEvidence *DailyBarDecimalEvidence
-	RawAmountEvidence *DailyBarDecimalEvidence
-	AmountCNYEvidence *DailyBarDecimalEvidence
+	ChangePercentEvidence    *DailyBarDecimalEvidence
+	OpenEvidence             *DailyBarDecimalEvidence
+	HighEvidence             *DailyBarDecimalEvidence
+	LowEvidence              *DailyBarDecimalEvidence
+	CloseEvidence            *DailyBarDecimalEvidence
+	RawVolumeEvidence        *DailyBarDecimalEvidence
+	RawAmountEvidence        *DailyBarDecimalEvidence
+	AmountCNYEvidence        *DailyBarDecimalEvidence
 }
 
 // DailyBar 是供下游分析使用的 Application DTO，字段来源与 model.DailyBar 一一对应。
