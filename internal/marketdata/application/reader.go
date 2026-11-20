@@ -434,6 +434,8 @@ func mapDailyBarExactValues(source *model.DailyBarExactValues) *app.DailyBarExac
 	return &app.DailyBarExactValues{
 		Open: source.Open, High: source.High, Low: source.Low, Close: source.Close,
 		RawVolume: source.RawVolume, RawAmount: clonePointer(source.RawAmount), AmountCNY: clonePointer(source.AmountCNY),
+		ChangePercent: clonePointer(source.ChangePercent), ChangePercentSourceField: source.ChangePercentSourceField,
+		ChangePercentEvidence: mapDailyBarDecimalEvidence(source.ChangePercentEvidence),
 		OpenEvidence:      mapDailyBarDecimalEvidence(source.OpenEvidence),
 		HighEvidence:      mapDailyBarDecimalEvidence(source.HighEvidence),
 		LowEvidence:       mapDailyBarDecimalEvidence(source.LowEvidence),

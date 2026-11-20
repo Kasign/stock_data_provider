@@ -343,6 +343,9 @@ func (p *Tushare) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 			rawClose, _ := get(row, "close", rowIndex)
 			rawAmountValue, _ := get(row, "amount", rowIndex)
 			exactValues = dailyBarExactValuesFromJSON(rawOpen, rawHigh, rawLow, rawClose, func() json.RawMessage { v, _ := get(row, "vol", rowIndex); return v }(), rawAmountValue, "thousand_CNY", amountUnit)
+			if exactValues != nil {
+				setDailyBarExactChangePercentFromJSON(exactValues, pctRaw, "pct_chg")
+			}
 			if exactValues != nil && exactValues.RawAmount != nil {
 				amountCNY, scaleErr := canonicalDailyBarDecimal(*exactValues.RawAmount + "e3")
 				if scaleErr != nil {

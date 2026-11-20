@@ -83,8 +83,11 @@ type DailyBarExactValues struct {
 	Close             string
 	RawVolume         string
 	RawAmount         *string
-	AmountCNY         *string
-	OpenEvidence      *DailyBarDecimalEvidence
+	AmountCNY               *string
+	ChangePercent           *string
+	ChangePercentSourceField string
+	ChangePercentEvidence   *DailyBarDecimalEvidence
+	OpenEvidence            *DailyBarDecimalEvidence
 	HighEvidence      *DailyBarDecimalEvidence
 	LowEvidence       *DailyBarDecimalEvidence
 	CloseEvidence     *DailyBarDecimalEvidence

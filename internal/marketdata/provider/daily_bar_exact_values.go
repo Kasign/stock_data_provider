@@ -91,6 +91,32 @@ func dailyBarExactValuesFromJSON(open, high, low, close, rawVolume, rawAmount js
 	return result
 }
 
+func setDailyBarExactChangePercentFromString(values *model.DailyBarExactValues, raw, sourceField string) {
+	if values == nil || strings.TrimSpace(raw) == "" {
+		return
+	}
+	value, err := canonicalDailyBarDecimal(raw)
+	if err != nil {
+		return
+	}
+	values.ChangePercent = &value
+	values.ChangePercentSourceField = sourceField
+	values.ChangePercentEvidence = dailyBarDecimalEvidenceFromString(raw)
+}
+
+func setDailyBarExactChangePercentFromJSON(values *model.DailyBarExactValues, raw json.RawMessage, sourceField string) {
+	if values == nil {
+		return
+	}
+	value, ok := dailyBarDecimalFromJSON(raw)
+	if !ok {
+		return
+	}
+	values.ChangePercent = &value
+	values.ChangePercentSourceField = sourceField
+	values.ChangePercentEvidence = dailyBarDecimalEvidenceFromJSON(raw)
+}
+
 func dailyBarDecimalEvidenceFromString(raw string) *model.DailyBarDecimalEvidence {
 	token := strings.TrimSpace(raw)
 	if token == "" {
