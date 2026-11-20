@@ -20,7 +20,7 @@ func TestMySQLAccessAuditorAppendsDecisionWithoutPayload(t *testing.T) {
 	}
 	event := application.AccessAuditEvent{
 		SubjectRef:       "service:researchflow",
-		ResourceRef: "quant_result:sha256:" + strings.Repeat("a", 64),
+		ResourceRef:      "quant_result:sha256:" + strings.Repeat("a", 64),
 		PurposeCode:      "quant_analysis",
 		Decision:         "allowed",
 		ReasonCode:       "result_released",
