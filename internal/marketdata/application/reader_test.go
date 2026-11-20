@@ -274,7 +274,7 @@ func TestReaderGetDailyBarsV2DegradesBarsWhenCalendarIsOnlyWeekdayEstimate(t *te
 	if got.TradingCalendarRef != nil || got.CoverageEvidence.CoverageBasis != "degraded_exchange_calendar" ||
 		got.QualityStatus != app.QualityDegraded || len(got.Bars) != 1 ||
 		got.Bars[0].QualityStatus != app.QualityDegraded ||
-		!containsReaderString(got.Warnings, "daily_bar_coverage_calendar_reference_unavailable") {
+		!containsReaderString(got.Warnings, "daily_bar_coverage_calendar_quality_unreliable") {
 		t.Fatalf("V2 must degrade each bar when no observed exchange-calendar reference exists: %+v", got)
 	}
 }
