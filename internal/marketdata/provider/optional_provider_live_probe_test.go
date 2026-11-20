@@ -834,10 +834,10 @@ func TestLiveHithinkDailyBarsBackwardRaw(t *testing.T) {
 		previousEventDate = eventDate
 	}
 	report["corporate_actions"] = map[string]any{
-		"thscode": actionData.THSCode,
-		"ticker": actionData.Ticker,
+		"thscode":   actionData.THSCode,
+		"ticker":    actionData.Ticker,
 		"row_count": len(actionRows),
-		"rows": actionRows,
+		"rows":      actionRows,
 	}
 	encoded, err := json.MarshalIndent(report, "", "  ")
 	if err != nil {

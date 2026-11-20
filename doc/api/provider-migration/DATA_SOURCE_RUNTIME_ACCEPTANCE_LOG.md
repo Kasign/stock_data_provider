@@ -1354,3 +1354,9 @@ Go suite 覆盖根模块、go-core、market-data 的格式/测试/race/vet、Mar
 - 本提交修正 Pytdx 专项步骤 env，使 marker `[hithink_adjustment_reference]` 对应 600519.SH、2026-10-13..2026-11-12；同时在同一个 Hithink raw probe 中追加官方 corporate-actions adjustment-factors 原始事件流采集，记录 ex-date、现金分红和送股比例原始值。
 - 下一轮以同一证券、同一窗口的 Pytdx none/qfq/hfq 与 BaoStock raw 作为独立对照，并将 Hithink corporate-actions 事件与 Pytdx GBBQ/BaoStock 因子事件交叉核验。此前 2025 样本的 Pytdx/BaoStock raw 对账成功只证明该样本可用，不替代 600519.SH 的专项对账。
 
+### 第 80 节 Pytdx 同窗口对照配置复核（2026-11-20）
+
+- Run `44717580577` 的 Pytdx 专项步骤成功，但实际报告仍为 2025-07-07..2025-07-17 的 600036.SH / 002982.SZ；原因是专项 step 自己的 env 仍是固定值，前一提交仅调整了工作流上游 env。该结果只作为既有 Pytdx/BaoStock 原始行情交叉样本，不能用作 600519.SH 对照。
+- 本提交将 marker 条件直接加到 Pytdx 专项 step 的 env，确保下一次 `[hithink_adjustment_reference]` 真正请求 600519.SH、2026-10-13..2026-11-12。
+- 同时已在 Hithink raw probe 中增加官方 adjustment-factors 事件流采集：GET /api/a-share/corporate-actions/adjustment-factors，保留 ex_date_ms、dividend_per_share、per_share_bonus 原始值。该事件接口文档没有提供现成 adj_factor，仍需客户端计算。
+
