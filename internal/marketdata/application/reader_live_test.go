@@ -13,6 +13,7 @@ import (
 	"example.com/stock-analysis-flow/internal/marketdata/app"
 	"example.com/stock-analysis-flow/internal/marketdata/baostock"
 	"example.com/stock-analysis-flow/internal/marketdata/cache"
+	"example.com/stock-analysis-flow/internal/marketdata/model"
 	"example.com/stock-analysis-flow/internal/marketdata/provider"
 	"example.com/stock-analysis-flow/internal/marketdata/repository"
 	"example.com/stock-analysis-flow/internal/marketdata/service"
