@@ -38,7 +38,7 @@ func (a *MySQLAccessAuditor) RecordResultAccess(ctx context.Context, event appli
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if !validAuditText(event.SubjectRef) || !validAuditText(event.ResourceRef) ||
+	if !validAuditText(event.SubjectRef) || !validQuantResultRef(event.ResourceRef) ||
 		event.PurposeCode != "quant_analysis" || !validAuditText(event.ReasonCode) ||
 		!validAuditDecision(event.Decision) || (!validAuditText(event.AuthorizationRef) && event.AuthorizationRef != "") ||
 		event.OccurredAt.IsZero() || event.OccurredAt.Location() != time.UTC {
@@ -78,4 +78,18 @@ func validAuditDecision(value string) bool {
 	default:
 		return false
 	}
+}
+
+func validQuantResultRef(value string) bool {
+	const prefix = "quant_result:sha256:"
+	digest := strings.TrimPrefix(value, prefix)
+	if digest == value || len(digest) != 64 {
+		return false
+	}
+	for _, r := range digest {
+		if !((r >= '0' && r <= '9') || (r >= 'a' && r <= 'f')) {
+			return false
+		}
+	}
+	return true
 }
