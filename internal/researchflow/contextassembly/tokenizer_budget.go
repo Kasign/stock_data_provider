@@ -27,8 +27,8 @@ func MeasureBudgetReservations(
 	if err != nil {
 		return BudgetInput{}, TokenizerProvenance{}, err
 	}
-	if input.ModelContextTokens <= 0 || strings.TrimSpace(input.SystemPrompt) == "" ||
-		input.OutputReserve <= 0 || input.SafetyMargin < 0 {
+	if input.ModelContextTokens <= 0 || !validUTF8(input.SystemPrompt) || strings.TrimSpace(input.SystemPrompt) == "" ||
+		!validUTF8(input.ToolSchema) || input.OutputReserve <= 0 || input.SafetyMargin < 0 {
 		return BudgetInput{}, TokenizerProvenance{}, ErrInvalidBudget
 	}
 	systemTokens, err := tokenizer.CountTokens(input.SystemPrompt)

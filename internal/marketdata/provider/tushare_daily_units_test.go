@@ -26,7 +26,7 @@ func TestTushareDailyBarsNormalizesHandsAndThousandCNY(t *testing.T) {
 			t.Errorf("unexpected Tushare request body: %s", string(rawBody))
 		}
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, `{"code":0,"msg":"","data":{"fields":["ts_code","trade_date","open","high","low","close","pct_chg","vol","amount"],"items":[["600519.SH","20261028",10,11,9,10,1.0,100,100]]}}`)
+		fmt.Fprint(w, `{"code":0,"msg":"","data":{"fields":["ts_code","trade_date","open","high","low","close","pct_chg","vol","amount"],"items":[["600519.SH","20261028",10.123456789,11.234567891,9.012345678,10.987654321,1.0,100,100.123456789]]}}`)
 	}))
 	defer server.Close()
 
@@ -45,14 +45,29 @@ func TestTushareDailyBarsNormalizesHandsAndThousandCNY(t *testing.T) {
 	if bar.RawVolume == nil || *bar.RawVolume != 100 || bar.RawVolumeUnit != "hands" {
 		t.Fatalf("raw volume provenance must be retained: %+v", bar)
 	}
-	if bar.Amount == nil || *bar.Amount != 100000 || bar.AmountUnit != "CNY" {
+	if bar.Amount == nil || *bar.Amount != 100123.456789 || bar.AmountUnit != "CNY" {
 		t.Fatalf("Tushare amount is in thousand CNY and must normalize to CNY: %+v", bar)
 	}
-	if bar.RawAmount == nil || *bar.RawAmount != 100 || bar.RawAmountUnit != "thousand_CNY" || bar.RawAmountField != "amount" {
+	if bar.RawAmount == nil || *bar.RawAmount != 100.123456789 || bar.RawAmountUnit != "thousand_CNY" || bar.RawAmountField != "amount" {
 		t.Fatalf("raw amount provenance must be retained: %+v", bar)
 	}
 	if bar.QualityStatus != model.QualityValid {
 		t.Fatalf("quality status = %s, want valid", bar.QualityStatus)
+	}
+	if bar.ExactValues == nil || bar.ExactValues.Open != "10.123456789" || bar.ExactValues.High != "11.234567891" ||
+		bar.ExactValues.Low != "9.012345678" || bar.ExactValues.Close != "10.987654321" ||
+		bar.ExactValues.RawVolume != "100" || bar.ExactValues.RawAmount == nil || *bar.ExactValues.RawAmount != "100.123456789" ||
+		bar.ExactValues.AmountCNY == nil || *bar.ExactValues.AmountCNY != "100123.456789" ||
+		bar.ExactValues.AmountCNYEvidence == nil ||
+		bar.ExactValues.AmountCNYEvidence.SourceToken != "100.123456789" ||
+		bar.ExactValues.AmountCNYEvidence.UnitConversionFactor != "1000" ||
+		bar.ExactValues.ChangePercent == nil || *bar.ExactValues.ChangePercent != "1" ||
+		bar.ExactValues.ChangePercentSourceField != "pct_chg" ||
+		bar.ExactValues.ChangePercentEvidence == nil ||
+		bar.ExactValues.ChangePercentEvidence.SourceToken != "1.0" ||
+		bar.ExactValues.ChangePercentEvidence.SourceFractionDigits == nil ||
+		*bar.ExactValues.ChangePercentEvidence.SourceFractionDigits != 1 {
+		t.Fatalf("Tushare exact source decimals or thousand-CNY conversion were not retained: %+v", bar.ExactValues)
 	}
 }
 

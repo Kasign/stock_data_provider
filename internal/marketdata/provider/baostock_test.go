@@ -60,6 +60,13 @@ func TestBaostockDailyBarsNormalizesAmountsAndAdjustmentMetadata(t *testing.T) {
 	if bar.ChangePercent == nil || *bar.ChangePercent != -1.66 || bar.QualityStatus != model.QualityDegraded {
 		t.Fatalf("forward-adjusted BaoStock bars without a reference date must be degraded: %+v", bar)
 	}
+	if bar.ExactValues == nil || bar.ExactValues.ChangePercent == nil ||
+		*bar.ExactValues.ChangePercent != "-1.66" ||
+		bar.ExactValues.ChangePercentSourceField != "pctChg" ||
+		bar.ExactValues.ChangePercentEvidence == nil ||
+		bar.ExactValues.ChangePercentEvidence.SourceToken != "-1.66" {
+		t.Fatalf("BaoStock source change-percent evidence was not retained: %+v", bar.ExactValues)
+	}
 	if !containsReason(bar.QualityReasons, "daily_bar_adjustment_reference_date_unverified") {
 		t.Fatalf("missing adjustment reference reason: %+v", bar.QualityReasons)
 	}

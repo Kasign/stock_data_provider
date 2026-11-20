@@ -21,4 +21,8 @@ type TradingCalendarSnapshot struct {
 	FetchedAt      time.Time            `json:"fetched_at"`
 	QualityStatus  QualityStatus        `json:"quality_status"`
 	QualityReasons []string             `json:"quality_reasons,omitempty"`
+
+	// CalendarRef 与 SystemObservedAt 是 Data 内部不可变内容引用元数据，不改变现有 HTTP DTO。
+	CalendarRef      string     `json:"-"`
+	SystemObservedAt *time.Time `json:"-"`
 }

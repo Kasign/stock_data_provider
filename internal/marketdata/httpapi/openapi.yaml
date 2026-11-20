@@ -1,19 +1,14 @@
 openapi: 3.0.3
 info:
-  title: Go Market Data Service
+  title: Root Server Market Data API
   version: 1.1.0
   description: >-
     A-share market-data API. Standard volume is shares; amount is CNY; prices are
     CNY/share. Provider event time, fetch time, normalization time, adjustment
     basis, source and quality metadata remain explicit.
 servers:
-  - url: http://market-data:8091
+  - url: /
 components:
-  securitySchemes:
-    ApiKey:
-      type: apiKey
-      in: header
-      name: X-API-Key
   schemas:
     Error:
       type: object
@@ -1180,25 +1175,7 @@ components:
       properties:
         sources: {type: array, items: {$ref: '#/components/schemas/SourceStatus'}}
         normalization_version: {type: string}
-security:
-  - ApiKey: []
 paths:
-  /health/live:
-    get:
-      security: []
-      responses:
-        '200': {description: Service process is live}
-  /health/ready:
-    get:
-      security: []
-      responses:
-        '200': {description: Configured dependencies are ready}
-        '503':
-          description: "Configured dependencies are not ready"
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
   /api/v1/market/quotes:
     get:
       summary: 批量获取指定 A 股证券的实时行情
