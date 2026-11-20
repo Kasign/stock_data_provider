@@ -686,14 +686,14 @@ func TestLiveHithinkDailyBarsBackwardRaw(t *testing.T) {
 	defer cancel()
 	location := time.FixedZone("Asia/Shanghai", 8*60*60)
 	type rawDailyRow struct {
-		TradeDate  string `json:"trade_date"`
-		DateMS     string `json:"date_ms_raw"`
-		Open       string `json:"open_price_raw"`
-		High       string `json:"high_price_raw"`
-		Low        string `json:"low_price_raw"`
-		Close      string `json:"close_price_raw"`
-		Volume     string `json:"volume_raw"`
-		Turnover   string `json:"turnover_raw"`
+		TradeDate string `json:"trade_date"`
+		DateMS    string `json:"date_ms_raw"`
+		Open      string `json:"open_price_raw"`
+		High      string `json:"high_price_raw"`
+		Low       string `json:"low_price_raw"`
+		Close     string `json:"close_price_raw"`
+		Volume    string `json:"volume_raw"`
+		Turnover  string `json:"turnover_raw"`
 	}
 	type modeEvidence struct {
 		Adjustment string        `json:"adjustment"`
@@ -702,11 +702,11 @@ func TestLiveHithinkDailyBarsBackwardRaw(t *testing.T) {
 		Rows       []rawDailyRow `json:"rows"`
 	}
 	report := map[string]any{
-		"provider": "hithink",
-		"endpoint": "/api/a-share/prices/historical",
-		"symbol": symbol,
-		"start": startDate,
-		"end": endDate,
+		"provider":    "hithink",
+		"endpoint":    "/api/a-share/prices/historical",
+		"symbol":      symbol,
+		"start":       startDate,
+		"end":         endDate,
 		"generated_at": time.Now().UTC().Format(time.RFC3339),
 	}
 	modes := make([]modeEvidence, 0, 3)
