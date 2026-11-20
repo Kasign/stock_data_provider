@@ -199,3 +199,69 @@ func TestTickFlowFetchSectorRankingsReportsOmittedIndustryWithoutValidChanges(t 
 		t.Fatalf("missing quality reason for an industry omitted due to invalid constituent quotes: %+v", got.QualityReasons)
 	}
 }
+
+func TestTickFlowFetchSectorRankingsPreservesDistinctUniverseIDsWithDuplicateNames(t *testing.T) {
+	const firstID = "CN_Equity_SW1_110101"
+	const secondID = "CN_Equity_SW1_110102"
+	const firstSymbol = "600000.SH"
+	const secondSymbol = "000001.SZ"
+	timestamp := time.Now().UTC().Add(-time.Minute).UnixMilli()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("x-api-key") != "test-api-key" {
+			t.Errorf("x-api-key header was not forwarded")
+		}
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/v1/universes":
+			_ = json.NewEncoder(w).Encode(map[string]any{"code": 0, "data": []map[string]any{
+				{"id": "CN_Equity_A", "name": "A股", "symbol_count": 2},
+				{"id": firstID, "name": "SW1农林牧渔", "symbol_count": 1},
+				{"id": secondID, "name": "SW1农林牧渔", "symbol_count": 1},
+			}})
+		case "/v1/universes/CN_Equity_A":
+			_ = json.NewEncoder(w).Encode(map[string]any{"code": 0, "data": map[string]any{
+				"id": "CN_Equity_A", "symbol_count": 2, "symbols": []string{firstSymbol, secondSymbol},
+			}})
+		case "/v1/universes/batch":
+			var request struct {
+				IDs []string `json:"ids"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+				t.Errorf("decode batch request: %v", err)
+			}
+			if len(request.IDs) != 2 || request.IDs[0] != firstID || request.IDs[1] != secondID {
+				t.Errorf("unexpected universe IDs: %+v", request.IDs)
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"code": 0, "data": map[string]any{
+				firstID:  map[string]any{"id": firstID, "symbol_count": 1, "symbols": []string{firstSymbol}},
+				secondID: map[string]any{"id": secondID, "symbol_count": 1, "symbols": []string{secondSymbol}},
+			}})
+		case "/v1/quotes":
+			if r.URL.Query().Get("universes") != "CN_Equity_A" {
+				t.Errorf("unexpected quotes universe: %q", r.URL.Query().Get("universes"))
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"code": 0, "data": []map[string]any{
+				{"symbol": firstSymbol, "last_price": 10.1, "prev_close": 10.0, "open": 10.0, "high": 10.1, "low": 10.0, "timestamp": timestamp},
+				{"symbol": secondSymbol, "last_price": 9.9, "prev_close": 10.0, "open": 10.0, "high": 10.0, "low": 9.9, "timestamp": timestamp},
+			}})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	provider := NewTickFlowConfigured(2*time.Second, server.URL, "", "test-api-key")
+	got, err := provider.FetchSectorRankings(context.Background(), "industry", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Total != 2 || len(got.Items) != 2 {
+		t.Fatalf("distinct universe IDs with duplicate display names must remain separate: %+v", got)
+	}
+	if got.Items[0].Code != firstID || got.Items[1].Code != secondID ||
+		got.Items[0].Name != "农林牧渔" || got.Items[1].Name != "农林牧渔" {
+		t.Fatalf("rankings must preserve stable universe IDs and duplicate display names: %+v", got.Items)
+	}
+}
+
