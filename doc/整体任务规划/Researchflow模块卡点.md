@@ -77,7 +77,7 @@
 
 ## 3. 下一步解除顺序
 
-1. FLOW-002：由 News Owner 修复 Payload Validator 的 uniqueItems 缺口；Researchflow 在集成基线复验。
+1. FLOW-002：News Payload Validator 的 uniqueItems 缺口已在 repair_all 修复并验收（RF-BLOCK-009 RESOLVED）；只在后续 Schema/Validator 变更时回归。
 2. FLOW-002：继续核对真实生产 Template、HardRiskGateRegistry 和 Stage Output Registry；不为缺失 Provider 注册占位项。
 3. FLOW-006：明确 RF-BLOCK-008 中 Composer RiskDecision 的唯一 Owner、来源和聚合语义。
 4. FLOW-006：确认 RunResult 唯一持久化 Owner，再接通 Quant/Research/LLM Owner Facade 与 Server/Worker。
@@ -140,7 +140,7 @@
 | `feat/quant` | `992a10d1837dad8e695f9e9d7b6f459ebdcc3eb9` | 本轮增加 GetResult 主体解析后的 Context 取消检查；RiskDecision 契约未变化，RF-BLOCK-008 仍未解除 |
 | `feat/llm` | `77ef70568a0e76ab3092b25503c36ee2316990a3` | Provider Port 存在；生产装配/真实模型消费者和目标模型 Tokenizer 仍未闭环 |
 | `feat/data` | `9f6adaf280a94bc60f993554473fd0adb70b07da` | 尚无可注册的 Researchflow Data Stage 完整契约 |
-| `feat/news` | `cb4206e8e59ec7bcb27660d33e4cc28b1cd2a06d` | 现有 News Search 已装配；Payload Validator uniqueItems 缺口仍由 News Owner 负责 |
+| `feat/news` | `cb4206e8e59ec7bcb27660d33e4cc28b1cd2a06d` | repair_all 已修复并验收 Payload Validator uniqueItems；feat/news 分支同步状态需单独核对 |
 
 ### 本模块独立修复
 
