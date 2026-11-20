@@ -13,8 +13,8 @@ import (
 )
 
 var (
-	ErrInvalidRepository = errors.New("quant storage repository is invalid")
-	ErrCorruptRecord     = errors.New("quant stored result record is corrupt")
+	ErrInvalidRepository  = errors.New("quant storage repository is invalid")
+	ErrCorruptRecord      = errors.New("quant stored result record is corrupt")
 	ErrStorageUnavailable = errors.New("quant result storage is unavailable")
 )
 
