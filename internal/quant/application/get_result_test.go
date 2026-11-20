@@ -67,7 +67,7 @@ func getResultFixture(t *testing.T, now time.Time) AuthorizedRecord {
 	}}
 	ref := AuthorizationRef{
 		SchemaVersion: "1.0.0", AuthorizationRef: "authz:quant:001", PolicyOwner: "quant",
-		PolicyVersion: policy.SnapshotRef, Decision: "allowed", PurposeCode: quantPurposeCode,
+		PolicyVersion: policy.SnapshotRef, Decision: "allowed", PurposeCode:  quantPurposeCode,
 		ContentLevel: quantContentLevel, SubjectRef: "service:researchflow", ResourceRef: stored.ResultID,
 		DecidedAt: now.Add(-time.Minute).Format(time.RFC3339Nano), ExpiresAtPresent: true, Conditions: []string{},
 	}
