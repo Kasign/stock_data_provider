@@ -667,3 +667,10 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - Go Test Suite [44709526616](https://github.com/Kasign/stock_data_provider/actions/runs/44709526616) 与 Full Integration Checks [44709526576](https://github.com/Kasign/stock_data_provider/actions/runs/44709526576) 在代码 SHA `f61d7d53ec1713d5afe74e69e522d8d3d6484759` 全项 success；后续提交只修改 Live Provider workflow 门禁与文档。
 - Quant 读取范围决议保持：`service:researchflow` 只能读取当前 Run 自己创建或明确关联的 Quant 结果。可信 RunRef 已进入 GetResult 内部请求与 Access Audit；但 Run→QuantResult 持久化关联、AuthorizedResultReader 和 Server Quant Stage Provider 仍未完成。没有强类型 Quant Stage 输出 Schema 前，不实现按主体全局放行或猜测 JSON 字段关联。
 - 下一步：保留 Hithink 两项 Provider 缺陷为阻塞证据；Data 继续围绕 DailyBars 精度/复权基准/成交额单位与 PIT 日历证据；Quant 仅在 QNT-014 Facade 和 Researchflow 强类型输出关联契约具备后继续授权读取闭环。
+
+### 31.8 Hithink 后复权成交量诊断细化与全量代码验收（2026-11-20）
+
+- Hithink 后复权 Volume 原始返回小数股数，与 Data 当前整数 shares 契约不兼容。新增 `volume_not_integer_shares` QualityReason 与 `non_integer_share_volume` FieldIssue，明确区别于字段缺失；保留原始值证据，不舍入、不拼接 none 口径成交量。单测通过。
+- Go Test Suite [44710655574](https://github.com/Kasign/stock_data_provider/actions/runs/44710655574) 对精确 SHA `e48f74d20911adbedb1ffe4bcbb043563df07931` 全部 success，覆盖 Root/Market Data race+vet、各模块测试、MariaDB 集成、Compose 和 Docker builds。
+- Live Provider strict Run [44710655555](https://github.com/Kasign/stock_data_provider/actions/runs/44710655555) failure：BaoStock V2 Decimal Application Port PASS；Hithink backward adjustment 仍无法满足整数 shares 契约。此失败作为真实 Provider 阻塞保留。
+- 当前 Quant 决议不变：只允许读取当前 Researchflow Run 自己创建或明确关联的 Quant 结果；RunRef 已传入内部 GetResult 请求并持久化到 Access Audit，但没有 Quant Stage Provider/强类型输出关联 Schema，AuthorizedResultReader 尚未完成。不得为关闭卡点而做主体级全局授权。

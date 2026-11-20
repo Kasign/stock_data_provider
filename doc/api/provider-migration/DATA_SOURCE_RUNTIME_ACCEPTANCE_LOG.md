@@ -1312,3 +1312,11 @@ Go suite 覆盖根模块、go-core、market-data 的格式/测试/race/vet、Mar
 - Hithink DailyBars 单窗口：`adjust=none` 和 `adjust=forward` 各返回 23 行（2026-10-13..2026-11-12）；`adjust=backward` 经现有整数 shares 契约校验后没有有效 Bar。独立 raw probe PASS，证实后复权成交量为小数（首行 `472172.42721306626`，末行 `575236.0558640865`）。不能四舍五入成 shares，也不能将 none 口径成交量拼入 backward 价格；后复权日线继续标记不可用/不可比较，等待 Provider 提供符合字段契约的数据。
 - Go Test Suite [44709526616](https://github.com/Kasign/stock_data_provider/actions/runs/44709526616) 与 Full Integration Checks [44709526576](https://github.com/Kasign/stock_data_provider/actions/runs/44709526576) 在 SHA `f61d7d53ec1713d5afe74e69e522d8d3d6484759` 全项 success；之后仅 Live Provider workflow 文件调整了严格门禁。
 - 本轮未重新启用 MX、Tushare、TickFlow、Eastmoney/Tencent、历史 Provider 全部 marker；其完整真实证据仍以第 75 节及 Run 44703026046 为准，不将 skipped 计入本轮通过。
+
+## 77. 2026-11-20 Hithink 后复权成交量诊断细化
+
+- 代码提交：`e48f74d20911adbedb1ffe4bcbb043563df07931`。
+- 真实 Hithink 后复权响应已证实 Volume 是非负小数（例如 `472172.42721306626`），与 Data 当前 `int64 shares` 规范化契约冲突。此前仅报告通用 `volume_missing_or_invalid` / `invalid_number`，不利于区分缺失值和小数股数。
+- 现新增明确诊断：QualityReason `volume_not_integer_shares`、FieldIssue Code `non_integer_share_volume`，保留原始 Provider 数值预览；仍 fail-closed，不舍入、不混用 none 口径 Volume。新增单测验证按行定位的结构化问题。
+- Go Test Suite [44710655574](https://github.com/Kasign/stock_data_provider/actions/runs/44710655574) 对 SHA `e48f74d20911adbedb1ffe4bcbb043563df07931` 全项 success，包括 Data Root tests/race/vet、根模块 tests/race/vet、MariaDB migrations/integration、Research/Researchflow/News/Notification、Compose/Docker builds。
+- Live Provider strict Run [44710655555](https://github.com/Kasign/stock_data_provider/actions/runs/44710655555) failure，Job `136201177250`。DailyBars V2 BaoStock Application Port PASS；Hithink none/forward 各 23 行；backward 仍因小数 Volume 无有效 Bar，raw probe PASS。该 Live failure 是保留的 Provider 数据契约问题，不影响 Go/集成 CI 通过。
