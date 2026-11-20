@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"testing"
@@ -15,9 +16,19 @@ import (
 )
 
 type pytdxBaoStockEventReport struct {
-	GeneratedAt string                   `json:"generated_at"`
-	Year        string                   `json:"year"`
-	Items       []pytdxBaoStockEventItem `json:"items"`
+	GeneratedAt      string                            `json:"generated_at"`
+	Year             string                            `json:"year"`
+	AffineTransforms []pytdxBaoStockAffineTransform    `json:"affine_transforms"`
+	Items            []pytdxBaoStockEventItem          `json:"items"`
+}
+
+type pytdxBaoStockAffineTransform struct {
+	Symbol                    string  `json:"symbol"`
+	EventCount                int     `json:"event_count"`
+	PriceScale                float64 `json:"price_scale"`
+	PriceOffset               float64 `json:"price_offset"`
+	BaoStockLatestBackFactor  float64 `json:"baostock_latest_backward_factor,omitempty"`
+	BaoStockLatestFwdFactor   float64 `json:"baostock_latest_forward_factor,omitempty"`
 }
 
 type pytdxBaoStockEventItem struct {
@@ -64,8 +75,9 @@ func TestLivePytdxBaoStockCorporateActionConsistency(t *testing.T) {
 	defer cancel()
 	report := pytdxBaoStockEventReport{
 		GeneratedAt: time.Now().UTC().Format(time.RFC3339),
-		Year:        year,
-		Items:       make([]pytdxBaoStockEventItem, 0, len(symbols)*4),
+		Year:             year,
+		AffineTransforms: make([]pytdxBaoStockAffineTransform, 0, len(symbols)),
+		Items:            make([]pytdxBaoStockEventItem, 0, len(symbols)*4),
 	}
 	var failures []string
 
@@ -111,6 +123,41 @@ func TestLivePytdxBaoStockCorporateActionConsistency(t *testing.T) {
 			failures = append(failures, symbol+": query BaoStock factors: "+factorErr.Error())
 			continue
 		}
+
+		type affineTerm struct {
+			date       time.Time
+			multiplier float64
+			offset     float64
+		}
+		terms := make([]affineTerm, 0, len(gbbq.List))
+		for _, rawEvent := range gbbq.List {
+			if rawEvent == nil || !rawEvent.IsXRXD() {
+				continue
+			}
+			event := rawEvent.XRXD()
+			if event == nil {
+				continue
+			}
+			terms = append(terms, affineTerm{
+				date:       event.Time,
+				multiplier: (10 + event.Songzhuangu + event.Peigu) / 10,
+				offset:     (event.Fenhong - event.Peigu*event.Peigujia) / 10,
+			})
+		}
+		sort.Slice(terms, func(i, j int) bool { return terms[i].date.After(terms[j].date) })
+		priceScale, priceOffset := 1.0, 0.0
+		for _, term := range terms {
+			priceScale = term.multiplier * priceScale
+			priceOffset = term.multiplier*priceOffset + term.offset
+		}
+		transform := pytdxBaoStockAffineTransform{
+			Symbol: symbol, EventCount: len(terms), PriceScale: priceScale, PriceOffset: priceOffset,
+		}
+		if len(factors) > 0 {
+			transform.BaoStockLatestBackFactor = factors[len(factors)-1].BackwardFactor
+			transform.BaoStockLatestFwdFactor = factors[len(factors)-1].ForwardFactor
+		}
+		report.AffineTransforms = append(report.AffineTransforms, transform)
 
 		matchedEvents := 0
 		for _, rawEvent := range gbbq.List {

@@ -827,17 +827,102 @@ func TestLiveHithinkDailyBarsBackwardRaw(t *testing.T) {
 			t.Fatalf("Hithink corporate-action row %d is missing dividend_per_share or per_share_bonus", rowIndex)
 		}
 		actionRows = append(actionRows, rawCorporateAction{
-			ExDate: eventDate, ExDateMS: string(item["ex_date_ms"]),
+			ExDate:           eventDate,
+			ExDateMS:         string(item["ex_date_ms"]),
 			DividendPerShare: string(item["dividend_per_share"]),
-			PerShareBonus: string(item["per_share_bonus"]),
+			PerShareBonus:    string(item["per_share_bonus"]),
 		})
 		previousEventDate = eventDate
+	}
+	priceScale, priceOffset, bonusScale := 1.0, 0.0, 1.0
+	for _, action := range actionRows {
+		dividend, parseErr := strconv.ParseFloat(action.DividendPerShare, 64)
+		if parseErr != nil {
+			t.Fatalf("parse Hithink dividend_per_share for %s: %v", action.ExDate, parseErr)
+		}
+		bonus, parseErr := strconv.ParseFloat(action.PerShareBonus, 64)
+		if parseErr != nil {
+			t.Fatalf("parse Hithink per_share_bonus for %s: %v", action.ExDate, parseErr)
+		}
+		multiplier := 1 + bonus
+		priceScale = multiplier * priceScale
+		priceOffset = multiplier*priceOffset + dividend
+		bonusScale *= multiplier
+	}
+
+	noneByDate := make(map[string]rawDailyRow, len(modes[0].Rows))
+	backwardByDate := make(map[string]rawDailyRow, len(modes[2].Rows))
+	for _, row := range modes[0].Rows {
+		noneByDate[row.TradeDate] = row
+	}
+	for _, row := range modes[2].Rows {
+		backwardByDate[row.TradeDate] = row
+	}
+	priceMaxAbsError, volumeMaxAbsError := 0.0, 0.0
+	turnoverUnchanged := true
+	for tradeDate, rawRow := range noneByDate {
+		adjustedRow, ok := backwardByDate[tradeDate]
+		if !ok {
+			t.Fatalf("Hithink backward response is missing raw trade date %s", tradeDate)
+		}
+		pricePairs := []struct {
+			field    string
+			raw      string
+			adjusted string
+		}{
+			{field: "open", raw: rawRow.Open, adjusted: adjustedRow.Open},
+			{field: "high", raw: rawRow.High, adjusted: adjustedRow.High},
+			{field: "low", raw: rawRow.Low, adjusted: adjustedRow.Low},
+			{field: "close", raw: rawRow.Close, adjusted: adjustedRow.Close},
+		}
+		for _, pair := range pricePairs {
+			rawPrice, parseErr := strconv.ParseFloat(pair.raw, 64)
+			if parseErr != nil {
+				t.Fatalf("parse raw %s on %s: %v", pair.field, tradeDate, parseErr)
+			}
+			adjustedPrice, parseErr := strconv.ParseFloat(pair.adjusted, 64)
+			if parseErr != nil {
+				t.Fatalf("parse backward %s on %s: %v", pair.field, tradeDate, parseErr)
+			}
+			absError := math.Abs(rawPrice*priceScale + priceOffset - adjustedPrice)
+			if absError > priceMaxAbsError {
+				priceMaxAbsError = absError
+			}
+		}
+		rawVolume, parseErr := strconv.ParseFloat(rawRow.Volume, 64)
+		if parseErr != nil {
+			t.Fatalf("parse raw volume on %s: %v", tradeDate, parseErr)
+		}
+		adjustedVolume, parseErr := strconv.ParseFloat(adjustedRow.Volume, 64)
+		if parseErr != nil {
+			t.Fatalf("parse backward volume on %s: %v", tradeDate, parseErr)
+		}
+		volumeError := math.Abs(rawVolume/bonusScale - adjustedVolume)
+		if volumeError > volumeMaxAbsError {
+			volumeMaxAbsError = volumeError
+		}
+		if rawRow.Turnover != adjustedRow.Turnover {
+			turnoverUnchanged = false
+		}
+	}
+	if priceMaxAbsError > 1e-6 || volumeMaxAbsError > 1e-6 || !turnoverUnchanged {
+		t.Fatalf("Hithink backward affine reconstruction failed: price_max_abs_error=%g volume_max_abs_error=%g turnover_unchanged=%t", priceMaxAbsError, volumeMaxAbsError, turnoverUnchanged)
 	}
 	report["corporate_actions"] = map[string]any{
 		"thscode":   actionData.THSCode,
 		"ticker":    actionData.Ticker,
 		"row_count": len(actionRows),
 		"rows":      actionRows,
+		"affine_transform": map[string]any{
+			"price_scale":       priceScale,
+			"price_offset":      priceOffset,
+			"bonus_share_scale": bonusScale,
+		},
+		"reconstruction": map[string]any{
+			"price_max_abs_error":  priceMaxAbsError,
+			"volume_max_abs_error": volumeMaxAbsError,
+			"turnover_unchanged":   turnoverUnchanged,
+		},
 	}
 	encoded, err := json.MarshalIndent(report, "", "  ")
 	if err != nil {

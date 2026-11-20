@@ -1367,3 +1367,13 @@ Go suite 覆盖根模块、go-core、market-data 的格式/测试/race/vet、Mar
 - 已将既有 Pytdx/BaoStock corporate-action consistency probe 参数化为可指定年份和证券。下一次 hithink_adjustment_reference 将验证 600519.SH 2026-06-26 现金分红事件，与 Pytdx GBBQ、BaoStock adjustment-factor delta 和除权日前收盘价对账。
 - 价格侧仍未形成最终算法结论；不能仅凭 Hithink 与 Pytdx HFQ 相差约 5.57 元就判定任一方错误。需先验证事件公式、参考日期与因子累计口径。
 
+## 82. 2026-11-20 Hithink 仿射复权公式重建与 Pytdx/BaoStock 交叉验证
+
+- Hithink 600519.SH 全部 30 条 corporate-actions 事件按 ex-date 降序组合，得到 price_scale=5.627766144000002、price_offset=1803.7277332744059。
+- 对 23 日 none/backward 原始记录执行仿射重建：backward OHLC 最大绝对误差约 3.7e-12；Volume 使用 raw_volume / 5.627766144 重建，最大误差低于 1e-10；Turnover 完全不变。
+- 因此前一轮用同日 OHLC adjusted/raw 比值不一致判定异常的结论已撤回：Hithink 采用仿射变换，含加法偏移项；比例不一致是数学上预期的结果。
+- Pytdx 600519.SH 同区间 none/qfq/hfq 均成功返回 23 条；none 与 BaoStock raw 交叉对照 matched。Hithink none OHLC 与 Pytdx raw 完全一致，Hithink forward 与 Pytdx qfq 完全一致。
+- Hithink backward 与 Pytdx hfq 的价格差约 5.57 元，最大相对差约 0.0624%；仍需对比双方完整事件序列、锚点和精度，不能把该差异直接定性为错误。
+- Pytdx GBBQ / BaoStock 2026-06-26 事件校验 matched：前收 1212.10，理论除权参考价 1184.076，BaoStock 1184.08；因子 delta 差约 3.52e-6。
+- 本提交将 Hithink affine 重建加入 live probe 断言，并将 Pytdx/BaoStock probe 输出所有事件的仿射 scale/offset 摘要，便于下一步比较两套事件流的累计结果。
+
