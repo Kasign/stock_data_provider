@@ -102,24 +102,24 @@ jobs:
         # 根模块的 MariaDB 集成测试共用 CI 数据库；串行执行包，避免跨包并发迁移/锁竞争导致伪超时。
         run: go test -p 1 ./...
 
-      - name: Run Quant MariaDB immutable-result persistence tests
+      - name: Run Quant MariaDB result and access-audit persistence tests
         id: test-quant-storage
         continue-on-error: true
         run: |
           set -o pipefail
-          go test ./internal/quant/storage -run '^TestMySQLRepository' -count=1 -v 2>&1 | tee /tmp/quant_storage_verbose.log
+          go test ./internal/quant/storage -run '^TestMySQL(Repository|AccessAuditor)' -count=1 -v 2>&1 | tee /tmp/quant_storage_verbose.log
           status=$?
           if [ "$status" -ne 0 ]; then
             echo "::error::Quant MariaDB 测试退出码 $status"
             exit 1
           fi
-          for test_name in TestMySQLRepositorySaveIsImmutableAndIdempotent TestMySQLRepositoryConcurrentIdempotentSave TestMySQLRepositoryRejectsCorruptExistingRow TestMySQLRepositoryHonorsCancellation; do
+          for test_name in TestMySQLRepositorySaveIsImmutableAndIdempotent TestMySQLRepositoryConcurrentIdempotentSave TestMySQLRepositoryRejectsCorruptExistingRow TestMySQLRepositoryHonorsCancellation TestMySQLAccessAuditorAppendsDecisionWithoutPayload TestMySQLAccessAuditorRejectsInvalidEventAndCancellation; do
             if ! grep -Eq "^[[:space:]]*--- PASS: ${test_name} \\(" /tmp/quant_storage_verbose.log; then
               echo "::error::Quant MariaDB 测试 ${test_name} 缺少精确 PASS 记录"
               exit 1
             fi
           done
-          echo "- Quant MariaDB 结果持久化：4/4 PASS" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Quant MariaDB Repository 4/4 + AccessAuditor 2/2 PASS" >> "$GITHUB_STEP_SUMMARY"
 
       # 跨模块 MariaDB 验收需要逐用例证据：仅包级 ok 无法区分 PASS 与 t.Skip。
       # -v 输出必须进入门禁，否则 B 组可以永久 SKIP 而 CI 仍全绿。
