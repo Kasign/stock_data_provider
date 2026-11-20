@@ -187,6 +187,8 @@ jobs:
           LIVE_PROBE_DAILY_START_DATE: ${{ (github.event_name == 'push' && contains(github.event.head_commit.message, '[hithink_adjustment_reference]')) && '2026-10-13' || '2025-07-07' }}
           LIVE_PROBE_DAILY_END_DATE: ${{ (github.event_name == 'push' && contains(github.event.head_commit.message, '[hithink_adjustment_reference]')) && '2026-11-12' || '2025-07-17' }}
           LIVE_PROBE_DAILY_SYMBOLS: ${{ (github.event_name == 'push' && contains(github.event.head_commit.message, '[hithink_adjustment_reference]')) && '600519.SH' || '600036.SH,002982.SZ' }}
+          LIVE_PROBE_CORPORATE_ACTION_YEAR: ${{ (github.event_name == 'push' && contains(github.event.head_commit.message, '[hithink_adjustment_reference]')) && '2026' || '2025' }}
+          LIVE_PROBE_CORPORATE_ACTION_SYMBOLS: ${{ (github.event_name == 'push' && contains(github.event.head_commit.message, '[hithink_adjustment_reference]')) && '600519.SH' || '600036.SH,002982.SZ' }}
           LIVE_PYTDX_HISTORICAL_REPORT_PATH: ${{ github.workspace }}/live-pytdx-historical-report.json
           LIVE_PYTDX_BAOSTOCK_EVENT_REPORT_PATH: ${{ github.workspace }}/live-pytdx-baostock-event-report.json
         run: go test -run 'TestLivePytdxHistoricalDailyBars|TestLivePytdxBaoStockCorporateActionConsistency' -count=1 -v ./internal/marketdata/provider

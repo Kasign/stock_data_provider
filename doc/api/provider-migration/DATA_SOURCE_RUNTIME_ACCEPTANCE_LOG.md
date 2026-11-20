@@ -1360,3 +1360,10 @@ Go suite 覆盖根模块、go-core、market-data 的格式/测试/race/vet、Mar
 - 本提交将 marker 条件直接加到 Pytdx 专项 step 的 env，确保下一次 `[hithink_adjustment_reference]` 真正请求 600519.SH、2026-10-13..2026-11-12。
 - 同时已在 Hithink raw probe 中增加官方 adjustment-factors 事件流采集：GET /api/a-share/corporate-actions/adjustment-factors，保留 ex_date_ms、dividend_per_share、per_share_bonus 原始值。该事件接口文档没有提供现成 adj_factor，仍需客户端计算。
 
+## 81. 2026-11-20 600519.SH 公司行动事件交叉核验配置
+
+- Hithink 官方 adjustment-factors 接口返回 30 条 600519.SH 公司行动事件，其中 8 条 per_share_bonus 非零；送转倍率连乘为 5.627766144000002，与 backward Volume/raw Volume 的倒数倍率 5.627766144000003 一致。
+- Hithink 事件流的字段是 ex_date_ms、dividend_per_share、per_share_bonus，不提供直接 adj_factor。该事件流是解释后复权成交量倍率的直接证据。
+- 已将既有 Pytdx/BaoStock corporate-action consistency probe 参数化为可指定年份和证券。下一次 hithink_adjustment_reference 将验证 600519.SH 2026-06-26 现金分红事件，与 Pytdx GBBQ、BaoStock adjustment-factor delta 和除权日前收盘价对账。
+- 价格侧仍未形成最终算法结论；不能仅凭 Hithink 与 Pytdx HFQ 相差约 5.57 元就判定任一方错误。需先验证事件公式、参考日期与因子累计口径。
+

@@ -48,7 +48,14 @@ func TestLivePytdxBaoStockCorporateActionConsistency(t *testing.T) {
 		t.Skip("set MARKET_DATA_LIVE_PYTDX_HISTORICAL_TESTS=1 to compare Pytdx and BaoStock corporate actions")
 	}
 
-	const year = "2025"
+	year := strings.TrimSpace(os.Getenv("LIVE_PROBE_CORPORATE_ACTION_YEAR"))
+	if year == "" {
+		year = "2025"
+	}
+	symbols := []string{"600036.SH", "002982.SZ"}
+	if configured := strings.TrimSpace(os.Getenv("LIVE_PROBE_CORPORATE_ACTION_SYMBOLS")); configured != "" {
+		symbols = strings.Split(configured, ",")
+	}
 	location, err := time.LoadLocation("Asia/Shanghai")
 	if err != nil {
 		location = time.FixedZone("CST", 8*60*60)
@@ -58,7 +65,7 @@ func TestLivePytdxBaoStockCorporateActionConsistency(t *testing.T) {
 	report := pytdxBaoStockEventReport{
 		GeneratedAt: time.Now().UTC().Format(time.RFC3339),
 		Year:        year,
-		Items:       make([]pytdxBaoStockEventItem, 0, 8),
+		Items:       make([]pytdxBaoStockEventItem, 0, len(symbols)*4),
 	}
 	var failures []string
 
@@ -69,7 +76,11 @@ func TestLivePytdxBaoStockCorporateActionConsistency(t *testing.T) {
 	})
 	defer func() { _ = baostockClient.Close() }()
 
-	for _, symbol := range []string{"600036.SH", "002982.SZ"} {
+	for _, rawSymbol := range symbols {
+		symbol := strings.ToUpper(strings.TrimSpace(rawSymbol))
+		if symbol == "" {
+			t.Fatalf("LIVE_PROBE_CORPORATE_ACTION_SYMBOLS contains an empty symbol")
+		}
 		if err := pytdxClient.waitForRateLimit(ctx); err != nil {
 			failures = append(failures, symbol+": rate limit: "+err.Error())
 			continue
@@ -228,7 +239,7 @@ func TestLivePytdxBaoStockCorporateActionConsistency(t *testing.T) {
 			report.Items = append(report.Items, item)
 		}
 		if matchedEvents == 0 {
-			failures = append(failures, symbol+": no 2025 Pytdx GBBQ ex-rights/ex-dividend events were returned")
+			failures = append(failures, symbol+": no "+year+" Pytdx GBBQ ex-rights/ex-dividend events were returned")
 		}
 	}
 
