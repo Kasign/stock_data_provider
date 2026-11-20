@@ -413,7 +413,7 @@ jobs:
         run: go test -race ./internal/researchflow/storage -run '^TestMariaDB' -count=1 -v
 
   container-build:
-    if: ${{ github.ref == 'refs/heads/integration' || (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'integration') }}
+    if: ${{ github.ref == 'refs/heads/integration' || github.ref == 'refs/heads/repair_all' || (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'integration') }}
     name: Validate Compose and build Docker images
     runs-on: ubuntu-latest
     timeout-minutes: 30
