@@ -2503,6 +2503,9 @@ func (p *Hithink) fetchDailySegment(ctx context.Context, symbol string, start, e
 			rawAmountField = "turnover"
 			quality = model.QualityDegraded
 			reasons = append(reasons, "amount_unit_unverified")
+			addProviderParseIssue(ctx, absoluteRowIndex, "amount", "turnover", "unit_not_verified",
+				"provider-confirmed currency unit", "number", providerJSONPreview(item.Turnover),
+				"同花顺历史日 K turnover 单位缺少可核验契约，保留原值但不映射为 CNY")
 		}
 		exactValues := dailyBarExactValuesFromJSON(item.OpenPrice, item.HighPrice, item.LowPrice, item.ClosePrice, item.Volume, item.Turnover, "unknown", "unknown")
 		out = append(out, model.DailyBar{
