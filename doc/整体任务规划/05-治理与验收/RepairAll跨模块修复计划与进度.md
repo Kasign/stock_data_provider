@@ -630,5 +630,13 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - 用户已明确选择：Researchflow 服务主体只能读取当前 Researchflow Run 自己创建或明确关联的 Quant 结果，不允许凭 service principal 全局读取。
 - 已将该决议写入 Quant 跨模块依赖文档。关联事实归 Researchflow；优先复用现有不可变 Stage Output Resource 的 run_ref/stage_ref/attempt_ref 与内容，不新增重复关联表。仍需核对当前 Quant Stage Output Schema/Registry 是否已经显式保存目标 Quant result_id。
 - Quant Policy Owner 负责最终授权判断；Researchflow 持有 Run/Stage/Attempt 与 Stage Output 关联事实；Server 负责组合根注入只读关联查询端口。Quant 不直接查询 Researchflow 私有 SQL。
-- 当前 GetResult.Execute 仍缺可信 Run 上下文，AuthorizedResultReader 尚未实现；缺少关联、Run 不匹配或上下文不可信必须 fail-closed。该决议明确了策略范围，不等于 QNT-013 生产授权读取已完成。
+- `GetResult.Execute(ctx, runRef, resultID)` 已要求非空 RunRef，并将其传入内部 `ReadRequest.RunRef`；缺失/空白 RunRef 在 Reader 和审计调用前 fail-closed，单元测试已覆盖。可信来源应是 Researchflow Worker 从 WorkerStore 加载并校验的 `StageExecutionRequest.Run.Ref`。但 AuthorizedResultReader 的持久化 Run→QuantResult 关联校验尚未实现，Server 尚无 Quant Stage Provider，QNT-013 仍未完成。
 - 文档提交：Quant 依赖决议 32fc6a4d7a88c9f425b269ead6ebcdb36e60b2aa；Data 真实 Probe 门禁记录 24972eab8c46e2512333e91f3588b0325e78a783。均只写入 repair_all。
+### 31.4 真实 Provider 证据与 Data/Quant 修复（2026-11-20）
+
+- Live Provider strict Run [44699296891](https://github.com/Kasign/stock_data_provider/actions/runs/44699296891) 已完成，结论 failure；失败是真实外部能力/数据证据：MX API Key 业务码 114；Hithink backward adjusted Volume 原始小数无法安全转成 int64 shares；Hithink 2025 年报披露日原始值 2026-10-31 与官方 2026-04-17 冲突。该失败必须保留，不得改成 skipped/pass。
+- Hithink none/forward 日线 23 条真实样本通过结构校验，仍因 Amount 缺失/单位未验证、forward reference date 未验证保持 degraded。Tushare Token 已注入但多个 API 返回 40203 permission_required；TickFlow Key 已注入，quote/index_quotes 通过，Universe 能力 403 permission_required。
+- 历史 Provider Probe 对 `600036.SH`、`002982.SZ` 均执行 15 项能力并持久化 MariaDB：4 returned、9 degraded、2 not_supported、0 failed。Eastmoney/BaoStock 未复权跨源字段 45/54 匹配，9 个 Amount 因精度/单位证据不足 not_comparable。BaoStock 官方停牌窗口、Pytdx 停牌日线及公司行动一致性专项复跑通过。
+- Data 代码/测试修复：`live_probe_test.go` 正确区分原始成交额保留与 normalized Amount；Hithink 调整方法断言按 Provider 实际方法名验证；TickFlow 使用 Universe ID 聚合，排除并计数不属于当前 A 股全集的陈旧退市成分。TickFlow 线上 Universe 读取仍受账号权限限制，当前仅单测覆盖修复逻辑。
+- Quant 代码：`ReadRequest.RunRef` 与 `GetResult.Execute(ctx, runRef, resultID)` 已落地；空白 RunRef fail-closed。Researchflow 当前仅装配 News Search Stage，没有 Quant Stage Provider，也没有已确认的 Quant result_id Stage Output 关联 Schema；下一步先完成 Quant Facade/结果发布和 Researchflow 强类型输出，再实现关联读取适配器与 AuthorizedResultReader。
+- 当前代码 SHA `fbfb525ca80092c36874a093b03cf8efd2958cbf`：Go Test Suite Run [44700201934](https://github.com/Kasign/stock_data_provider/actions/runs/44700201934) success；Full Integration Checks Run [44700201950](https://github.com/Kasign/stock_data_provider/actions/runs/44700201950) success。真实 Provider strict Run 失败不影响常规代码 CI 的通过结论，但其未通过的能力仍保持阻塞。

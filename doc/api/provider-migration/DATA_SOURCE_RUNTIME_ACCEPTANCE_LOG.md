@@ -1259,3 +1259,20 @@ Go suite 覆盖根模块、go-core、market-data 的格式/测试/race/vet、Mar
 - `603072.SH / 2025-01-03` 官方盘中临停样本：返回日 K，`TradeStatus=1`、`IsST=0`，成交量 50,782,036 股。日线状态不表达盘中暂停区间。
 - 原始脱敏报告位于 Job `131219214147` 日志 `LIVE_BAOSTOCK_TRADE_STATUS_REPORT` 行；该日志是本次真实字段证据。
 - 本项通过范围仅限上述证券/日期样本；不代表完整 `SecurityTradingStatusProvider` 已实现或所有证券历史状态均覆盖。Tushare 状态接口仍受 `40203 permission_required` 限制。
+## 73. 2026-11-20 RepairAll 多 Provider 真实数据与字段验收
+
+- 严格真实探针提交：`b7f2636ee898aff343a62c148896136455d9b3b9`；Live Provider Run [44699296891](https://github.com/Kasign/stock_data_provider/actions/runs/44699296891)，Job `136163491198`，最终结论 `failure`。失败是本轮发现的真实 Provider 凭据/权限/数据问题，不是常规单元测试失败。脱敏报告 Artifact：`live-provider-reports`（Artifact ID `14611734848`）。
+- 历史数据探针实际请求 `600036.SH`、`002982.SZ`，每只证券 15 项 Provider/能力：4 returned、9 degraded、2 not_supported、0 failed；两组报告均成功写入 MariaDB（`persisted=true`）。这证明真实数据链路已执行并持久化，但总体质量为 degraded，不得标为完整通过。
+- Eastmoney 与 BaoStock 未复权日线跨源比较：54 个可比较字段中 45 个匹配，9 个 Amount 字段因来源精度/单位证据不足标记 not_comparable；未将不可比较强行转成 pass。Eastmoney/BaoStock 前复权缺少可验证 reference date，Eastmoney/Tencent 前后复权参考日期探针也未取得可用日期证据。
+- 公共 Provider 实测：BaoStock、Eastmoney 的未复权/后复权样本可返回有效日线；Sina、Tencent、Yahoo 的部分日线缺 Amount 或单位证据，保持 degraded。Tencent 的 Volume 单位存在推断语义，不得当作已核实的原始单位。
+- Hithink Key 已实际请求成功：quote、index quotes、hot rankings、valuations、calendar、limit-up pool、dragon-tiger、industry catalog/constituents/index daily、fundamentals，以及 none/forward daily bars 均有真实响应。none/forward 日线各返回 23 条，但 Amount 缺失/单位未验证，前复权 reference date 未验证，仍为 degraded。
+- Hithink backward-adjusted 日线返回 23 条原始记录，但原始 Volume 出现 `472172.42721306626`、`575236.0558640865` 等小数；当前标准化 Volume 是 int64 shares，无法在缺少单位/调整语义证据时安全转换，故归一化后无有效日线。禁止四舍五入或伪造 shares；等待 Provider 明确该字段是否为复权量及其单位。
+- Hithink 2025 年报资产负债表原始响应：`period_end_date=2025-12-31`，`publication_date=2026-10-31`，`report_date_ms=1793376000000`；官方 2025 年报披露日为 2026-04-17（[上交所年报 PDF](https://static.sse.com.cn/disclosure/listedinfo/announcement/c/new/2026-04-17/600519_20260417_9QS4.pdf)）。同花顺 API 文档将 `report_date_ms` 定义为披露日；本次原始值与官方公告冲突，保留失败证据，不把该值当作可信 PIT available_at。
+- Tushare Token 已注入且请求真实发出，但 `stock_basic`、`trade_cal`、`daily`、`fina_indicator`、`index_basic`、`index_weight`、`index_daily` 等返回 `40203 permission_required`。这是接口权限不足，不是 Token 未配置，也不算真实数据通过。
+- TickFlow Key 已注入：quote、index_quotes 通过；market_breadth 和 sector_rankings_industry 均返回 `403 NO_UNIVERSE_PERMISSION`，因此行业排名修复尚不能用该账号做端到端真实验证。权限不足按 `permission_required` 记录，不计为 pass。
+- MX 请求头确认携带了 API Key，但接口返回业务码 `114`（密钥不存在或失效）；当前 `MX_APIKEY` Secret 值需要更新，不能将该能力记为通过。
+- BaoStock 官方停牌窗口样本通过：`002968.SZ` 2025-09-15 至 2025-09-28 共 10 个交易日，10/10 日 K `TradeStatus=0`；停牌前及复牌后为 `1`。盘中临停样本的日线 `TradeStatus=1`，不能用日线状态推断盘中停牌。Pytdx 官方停牌日线及 Pytdx/BaoStock 公司行动一致性专项在复跑中通过。
+- 修复项：Live Probe 日线断言现在允许保留 `RawAmount`、原始字段名和 `amount_unit_unverified`，同时要求不生成 normalized Amount；未降低质量门槛。Hithink 调整方式断言改为比较真实 Provider 方法名（`hithink_api_forward/backward`），none/forward 复跑通过。
+- 修复项：TickFlow 行业聚合改用 Universe ID，而不是可能重复的显示名称；对行业 Universe 中不属于当前 `CN_Equity_A` 的历史证券，排除并计入 `ExcludedNonAShareCount`，同时追加 degraded reason。真实样本 `600275.SH` 已被上交所于 2022-05-17 决定终止上市（[上交所公告](https://www.sse.com.cn/disclosure/announcement/listing/stock/c/c_20220518_85433083.shtml)），因此不能继续作为当前 A 股行业成分。对应单元测试覆盖重复名称与陈旧退市成分；由于 TickFlow 账号缺少 Universe 权限，线上该能力仍是 permission_required。
+- 本轮不解除 DATA-CTR-005/007：Decimal 原始精度、Amount/Volume 单位、复权 reference date、ProviderTime/version 和 Snapshot/Evidence Locator 仍未形成完整可验收证据。真实请求已跑通不等于所有字段已可信。
+
