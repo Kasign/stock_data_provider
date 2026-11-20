@@ -598,3 +598,13 @@ RA009 代码关闭条件已满足：Server 路由认证矩阵、CSRF、WebUI 请
 ### 新增跨模块卡点
 
 CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性迁移 Job 和 cmd/market-data 路径。唯一主责为 repair_all 集成/CI 治理；删除一次性迁移步骤、更新模块测试路径并在精确 SHA 上重跑 Go Test Suite。不得在 Data 分支绕过或局部伪造通过。
+
+
+## 31. RepairAll 单分支 CI 与文档路径修正（2026-11-20）
+
+- 当前唯一工作分支为 `repair_all`；本节及项目总览中的单分支强制规则优先于第 29、30 节的历史模块分支拆分/同步计划。第 29、30 节仅保留历史审计，不作为后续执行指令；本轮不切换分支、不向其他分支写入。
+- 复核 `.github/workflows/go-test.yml`：当前工作流已不存在历史 CI-01 所述的 `cmd/market-data` 一次性迁移 Job 和过时测试目录；Market Data 专项测试已指向 `internal/marketdata/**`。历史 CI-01 原描述不再代表当前工作流状态。
+- 发现当前工作流 `push.branches` 未包含 `repair_all`，直接提交无法自动触发 Go Test Suite。已在本轮修复，将 `repair_all` 加入触发分支；未修改测试命令、断言或门禁。
+- 精确提交 SHA：`f6386875d9f06c280d4b1e2f87d991998a5fc0ae`；Go Test Suite Run [44694709037](https://github.com/Kasign/stock_data_provider/actions/runs/44694709037) 已由该 SHA 的 push 触发，当前记录状态为 `in_progress`，最终结果待完成后回填。
+- 同时修正仓库根 README 的 Data OpenAPI 路径：旧路径 `services/market-data/openapi.yaml` 已迁移，当前权威文件为 `internal/marketdata/httpapi/openapi.yaml`。
+- 本组仅修改 CI 触发配置和 README/本计划文档；没有修改业务代码、模块边界或 API 契约。
