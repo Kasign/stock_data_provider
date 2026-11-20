@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -95,6 +96,7 @@ func (s *DataService) TradingCalendar(ctx context.Context, rawStartDate, rawEndD
 		var cached model.TradingCalendarSnapshot
 		if json.Unmarshal(data, &cached) == nil && validateTradingCalendarSnapshotAt(&cached, startDate, endDate, now) == nil &&
 			!cached.FetchedAt.After(now) && now.Sub(cached.FetchedAt) < ttl {
+			s.persistTradingCalendarSnapshot(ctx, &cached, now)
 			return &cached, true, nil
 		}
 	} else if cacheErr != nil {
@@ -143,12 +145,46 @@ func (s *DataService) TradingCalendar(ctx context.Context, rawStartDate, rawEndD
 		best.QualityStatus = model.QualityDegraded
 		best.QualityReasons = appendTradingCalendarReason(best.QualityReasons, "provider_trading_calendar_sources_disagree")
 	}
+	s.persistTradingCalendarSnapshot(ctx, best, s.nowUTC())
 	if data, marshalErr := json.Marshal(best); marshalErr == nil {
 		if cacheErr := s.cache.Set(ctx, key, data, ttl); cacheErr != nil {
 			s.logger.Warn("trading-calendar cache write failed", "start_date", startDate, "end_date", endDate, "error", cacheErr)
 		}
 	}
 	return best, false, nil
+}
+
+// TradingCalendarAsOf 只读取 asOf 时点前已观察到的不可变日历版本。
+// 不访问当前缓存或实时 Provider，避免未来日历事实泄漏到 PIT。
+func (s *DataService) TradingCalendarAsOf(ctx context.Context, rawStartDate, rawEndDate string, asOf time.Time) (*model.TradingCalendarSnapshot, error) {
+	if s == nil || s.store == nil || !s.store.Configured() {
+		return nil, errors.New("immutable trading-calendar storage is unavailable")
+	}
+	if ctx == nil {
+		return nil, errors.New("trading-calendar as_of context is required")
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if asOf.IsZero() || asOf.After(s.nowUTC()) {
+		return nil, errors.New("trading-calendar as_of must be a valid non-future timestamp")
+	}
+	start, end, _, err := parseTradingCalendarRange(rawStartDate, rawEndDate)
+	if err != nil {
+		return nil, err
+	}
+	startDate, endDate := start.Format("2006-01-02"), end.Format("2006-01-02")
+	snapshot, err := s.store.GetTradingCalendarSnapshotAsOf(ctx, "cn_a_share", startDate, endDate, asOf)
+	if err != nil {
+		return nil, err
+	}
+	if err := validateTradingCalendarSnapshotAt(snapshot, startDate, endDate, asOf); err != nil {
+		return nil, fmt.Errorf("historical trading-calendar snapshot is invalid: %w", err)
+	}
+	if snapshot.SystemObservedAt == nil || snapshot.SystemObservedAt.After(asOf.UTC()) || snapshot.FetchedAt.After(asOf.UTC()) {
+		return nil, errors.New("historical trading-calendar snapshot was not available by as_of")
+	}
+	return snapshot, nil
 }
 
 func tradingCalendarEvidenceScore(snapshot *model.TradingCalendarSnapshot) int {
@@ -190,4 +226,26 @@ func appendTradingCalendarReason(reasons []string, reason string) []string {
 		}
 	}
 	return append(reasons, reason)
+}
+
+// persistTradingCalendarSnapshot materializes the selected normalized calendar as
+// an immutable Data-owned resource. Legacy calendar reads remain available when
+// MariaDB is disabled; consumers requiring PIT must reject an empty CalendarRef.
+func (s *DataService) persistTradingCalendarSnapshot(ctx context.Context, snapshot *model.TradingCalendarSnapshot, observedAt time.Time) {
+	if s == nil || snapshot == nil || s.store == nil || !s.store.Configured() {
+		return
+	}
+	calendarRef, systemObservedAt, err := s.store.SaveTradingCalendarSnapshot(ctx, snapshot, observedAt)
+	if err != nil {
+		logger := s.logger
+		if logger == nil {
+			logger = slog.Default()
+		}
+		logger.Warn("trading-calendar immutable snapshot persistence failed",
+			"market", snapshot.Market, "start_date", snapshot.StartDate, "end_date", snapshot.EndDate,
+			"source", snapshot.Source, "error", err)
+		return
+	}
+	snapshot.CalendarRef = calendarRef
+	snapshot.SystemObservedAt = &systemObservedAt
 }

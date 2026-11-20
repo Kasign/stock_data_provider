@@ -42,8 +42,8 @@ func testSupplementHandler() http.Handler {
 	ds := service.NewWithCapabilities(nil, nil, nil, cache.NewDisabled(), nil,
 		time.Second, time.Minute, 120, 1000, service.ResilienceConfig{}, logger)
 	ds.SetSupplementProviders([]provider.SupplementProvider{supplementHTTPFake{}})
-	return NewWithCapabilityInterfaces("test-secret", "forward_adjusted", ds,
-		nil, nil, nil, 1000, time.Second, logger).Handler()
+	return NewWithCapabilityInterfaces("forward_adjusted", ds,
+		nil, nil, nil, 1000, time.Second, logger).InProcessHandler()
 }
 
 func TestSupplementEndpointsAndDataSourceCapability(t *testing.T) {
@@ -59,7 +59,6 @@ func TestSupplementEndpointsAndDataSourceCapability(t *testing.T) {
 	}
 	for _, item := range cases {
 		req := httptest.NewRequest(http.MethodGet, item.path, nil)
-		req.Header.Set("X-API-Key", "test-secret")
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, req)
 		if w.Code != http.StatusOK {
@@ -69,19 +68,6 @@ func TestSupplementEndpointsAndDataSourceCapability(t *testing.T) {
 		if !strings.Contains(w.Body.String(), item.want) {
 			t.Errorf("%s missing %s: %s", item.path, item.want, w.Body.String())
 		}
-		if w.Header().Get("X-Request-ID") == "" {
-			t.Errorf("%s missing X-Request-ID", item.path)
-		}
-	}
-}
-
-func TestSupplementEndpointRequiresAuthentication(t *testing.T) {
-	h := testSupplementHandler()
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/stocks/600519.SH/chip-distribution", nil)
-	w := httptest.NewRecorder()
-	h.ServeHTTP(w, req)
-	if w.Code != http.StatusUnauthorized {
-		t.Fatalf("unauthenticated request returned %d: %s", w.Code, w.Body.String())
 	}
 }
 
@@ -89,10 +75,9 @@ func TestDisabledSupplementReturnsProviderUnavailable(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	ds := service.NewWithCapabilities(nil, nil, nil, cache.NewDisabled(), nil,
 		time.Second, time.Minute, 120, 1000, service.ResilienceConfig{}, logger)
-	h := NewWithCapabilityInterfaces("test-secret", "forward_adjusted", ds,
-		nil, nil, nil, 1000, time.Second, logger).Handler()
+	h := NewWithCapabilityInterfaces("forward_adjusted", ds,
+		nil, nil, nil, 1000, time.Second, logger).InProcessHandler()
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/stocks/600519.SH/chip-distribution", nil)
-	req.Header.Set("X-API-Key", "test-secret")
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, req)
 	if w.Code != http.StatusServiceUnavailable {

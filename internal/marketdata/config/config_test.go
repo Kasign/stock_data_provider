@@ -20,20 +20,22 @@ func setDefaultProviderConfig(t *testing.T) {
 	t.Setenv("MARKET_DATA_PROVIDERS_CONFIG", file)
 }
 
-func TestLoadForInProcessDoesNotRequireDataAPIKey(t *testing.T) {
+func TestLoadForRootAllowsRootInjectedStorage(t *testing.T) {
 	setDefaultProviderConfig(t)
-	t.Setenv("MARKET_DATA_API_KEY", "")
-	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
+	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "false")
+	t.Setenv("MARKET_DATA_MYSQL_DSN", "")
+	t.Setenv("MARKET_DATA_DB_HOST", "")
+	t.Setenv("MARKET_DATA_DB_USER", "")
+	t.Setenv("MARKET_DATA_DB_PASSWORD", "")
+	t.Setenv("MARKET_DATA_DB_NAME", "")
+	t.Setenv("MARKET_DATA_REDIS_ADDR", "")
 
-	cfg, err := LoadForInProcess()
+	cfg, err := LoadForRoot()
 	if err != nil {
-		t.Fatalf("LoadForInProcess() error = %v", err)
+		t.Fatalf("LoadForRoot() error = %v", err)
 	}
-	if cfg.APIKey != "" {
-		t.Fatalf("in-process config APIKey = %q, want empty", cfg.APIKey)
-	}
-	if _, err := Load(); err == nil {
-		t.Fatal("Load() must continue requiring MARKET_DATA_API_KEY for standalone HTTP deployment")
+	if cfg.MySQLDSN != "" || cfg.RedisAddr != "" {
+		t.Fatalf("Root config must not create independent storage settings: MySQLDSN=%q RedisAddr=%q", cfg.MySQLDSN, cfg.RedisAddr)
 	}
 }
 
@@ -44,7 +46,6 @@ func TestLoadProviderConfigAndEnvironmentOverrides(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("MARKET_DATA_PROVIDERS_CONFIG", file)
-	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
 	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
 	t.Setenv("MARKET_DATA_DEFAULT_ADJUSTMENT", "")
 	t.Setenv("MARKET_DATA_ADJUSTMENT", "")
@@ -95,7 +96,6 @@ func TestDefaultProviderCapabilitiesMatchDomesticPolicy(t *testing.T) {
 
 func TestLoadStockSearchCapabilityEnvironmentOverrides(t *testing.T) {
 	setDefaultProviderConfig(t)
-	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
 	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
 	t.Setenv("MARKET_DATA_TENCENT_STOCK_SEARCH_ENABLED", "false")
 	t.Setenv("MARKET_DATA_TENCENT_STOCK_SEARCH_URL", "https://smartbox.example.test/s3/")
@@ -118,7 +118,6 @@ func TestLoadStockSearchCapabilityEnvironmentOverrides(t *testing.T) {
 
 func TestLoadEastmoneyHotRankingEndpointConfiguration(t *testing.T) {
 	setDefaultProviderConfig(t)
-	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
 	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
 	t.Setenv("MARKET_DATA_EASTMONEY_HOT_RANKINGS_URL", "https://rank.example.test/current")
 	t.Setenv("MARKET_DATA_EASTMONEY_HOT_SURGE_URL", "https://rank.example.test/surge")
@@ -142,7 +141,6 @@ func TestLoadEastmoneyHotRankingEndpointConfiguration(t *testing.T) {
 
 func TestLoadRejectsInvalidStockSearchBoolean(t *testing.T) {
 	setDefaultProviderConfig(t)
-	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
 	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
 	t.Setenv("MARKET_DATA_TENCENT_STOCK_SEARCH_ENABLED", "sometimes")
 	if _, err := Load(); err == nil {
@@ -152,7 +150,6 @@ func TestLoadRejectsInvalidStockSearchBoolean(t *testing.T) {
 
 func TestLoadRejectsInvalidDurationInsteadOfSilentlyDefaulting(t *testing.T) {
 	setDefaultProviderConfig(t)
-	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
 	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
 	t.Setenv("MARKET_DATA_REQUEST_TIMEOUT", "fast")
 	if _, err := Load(); err == nil {
@@ -162,7 +159,6 @@ func TestLoadRejectsInvalidDurationInsteadOfSilentlyDefaulting(t *testing.T) {
 
 func TestLoadRejectsInvalidBooleanForProviderCapability(t *testing.T) {
 	setDefaultProviderConfig(t)
-	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
 	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
 	t.Setenv("MARKET_DATA_BAOSTOCK_FUNDAMENTALS_ENABLED", "sometimes")
 
@@ -173,7 +169,6 @@ func TestLoadRejectsInvalidBooleanForProviderCapability(t *testing.T) {
 
 func TestLoadRejectsPlaceholderSecrets(t *testing.T) {
 	setDefaultProviderConfig(t)
-	t.Setenv("MARKET_DATA_API_KEY", "replace-with-a-long-random-secret")
 	if _, err := Load(); err == nil {
 		t.Fatal("placeholder API key must not be accepted")
 	}
@@ -181,7 +176,6 @@ func TestLoadRejectsPlaceholderSecrets(t *testing.T) {
 
 func TestLoadRequiresStorageUnlessExplicitlyDisabledForSmokeTest(t *testing.T) {
 	setDefaultProviderConfig(t)
-	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
 	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "false")
 	t.Setenv("MARKET_DATA_MYSQL_DSN", "")
 	t.Setenv("MARKET_DATA_REDIS_ADDR", "")
@@ -196,7 +190,6 @@ func TestLoadRejectsUnknownProviderConfigField(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("MARKET_DATA_PROVIDERS_CONFIG", file)
-	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
 	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
 	if _, err := Load(); err == nil {
 		t.Fatal("unknown provider config fields must fail instead of being silently ignored")
@@ -205,7 +198,6 @@ func TestLoadRejectsUnknownProviderConfigField(t *testing.T) {
 
 func TestLoadRejectsRetryValuesOutsideSupportedRange(t *testing.T) {
 	setDefaultProviderConfig(t)
-	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
 	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
 	t.Setenv("MARKET_DATA_PROVIDER_RETRIES", "6")
 	if _, err := Load(); err == nil {
@@ -215,7 +207,6 @@ func TestLoadRejectsRetryValuesOutsideSupportedRange(t *testing.T) {
 
 func TestLoadRejectsNonIntegerRetryConfiguration(t *testing.T) {
 	setDefaultProviderConfig(t)
-	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
 	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
 	t.Setenv("MARKET_DATA_PROVIDER_RETRIES", "twice")
 	if _, err := Load(); err == nil {
@@ -225,7 +216,6 @@ func TestLoadRejectsNonIntegerRetryConfiguration(t *testing.T) {
 
 func TestLoadRejectsRequestTimeoutTooShortForProviderRetriesAndFailover(t *testing.T) {
 	setDefaultProviderConfig(t)
-	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
 	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
 	t.Setenv("MARKET_DATA_REQUEST_TIMEOUT", "25s")
 	t.Setenv("MARKET_DATA_PROVIDER_TIMEOUT", "12s")
@@ -237,7 +227,6 @@ func TestLoadRejectsRequestTimeoutTooShortForProviderRetriesAndFailover(t *testi
 
 func TestLoadDefaultTimeoutCoversDefaultTwoProviderRetryBudget(t *testing.T) {
 	setDefaultProviderConfig(t)
-	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
 	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
 	t.Setenv("MARKET_DATA_REQUEST_TIMEOUT", "")
 	t.Setenv("MARKET_DATA_PROVIDER_TIMEOUT", "12s")
@@ -249,7 +238,6 @@ func TestLoadDefaultTimeoutCoversDefaultTwoProviderRetryBudget(t *testing.T) {
 
 func TestLoadDefaultTimeoutCoversFullDefaultProviderChain(t *testing.T) {
 	setDefaultProviderConfig(t)
-	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
 	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
 	t.Setenv("MARKET_DATA_REQUEST_TIMEOUT", "")
 	t.Setenv("MARKET_DATA_PROVIDER_TIMEOUT", "12s")
@@ -267,7 +255,6 @@ func TestLoadDefaultTimeoutCoversFullDefaultProviderChain(t *testing.T) {
 
 func TestLoadDefaultTimeoutCoversBaoStockFailoverBudget(t *testing.T) {
 	setDefaultProviderConfig(t)
-	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
 	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
 	t.Setenv("MARKET_DATA_REQUEST_TIMEOUT", "")
 	t.Setenv("MARKET_DATA_PROVIDER_TIMEOUT", "12s")
@@ -288,7 +275,6 @@ func TestLoadDefaultTimeoutCoversBaoStockFailoverBudget(t *testing.T) {
 
 func TestLoadRejectsExplicitMissingProviderConfig(t *testing.T) {
 	t.Setenv("MARKET_DATA_PROVIDERS_CONFIG", filepath.Join(t.TempDir(), "missing.json"))
-	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
 	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
 	if _, err := Load(); err == nil {
 		t.Fatal("explicitly configured missing provider file must fail closed")
@@ -297,7 +283,6 @@ func TestLoadRejectsExplicitMissingProviderConfig(t *testing.T) {
 
 func TestLoadDefaultTimeoutAccountsForSequentialBundleBudget(t *testing.T) {
 	setDefaultProviderConfig(t)
-	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
 	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
 	t.Setenv("MARKET_DATA_REQUEST_TIMEOUT", "60s")
 	t.Setenv("MARKET_DATA_PROVIDER_TIMEOUT", "12s")
@@ -309,7 +294,6 @@ func TestLoadDefaultTimeoutAccountsForSequentialBundleBudget(t *testing.T) {
 
 func TestLoadRejectsMalformedProviderEndpointURL(t *testing.T) {
 	setDefaultProviderConfig(t)
-	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
 	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
 	t.Setenv("MARKET_DATA_TENCENT_QUOTE_URL", "file:///tmp/quote")
 	if _, err := Load(); err == nil {
@@ -319,7 +303,6 @@ func TestLoadRejectsMalformedProviderEndpointURL(t *testing.T) {
 
 func TestLoadRejectsMalformedNeteaseQuoteEndpointURL(t *testing.T) {
 	setDefaultProviderConfig(t)
-	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
 	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
 	t.Setenv("MARKET_DATA_NETEASE_QUOTE_URL", "file:///tmp/netease-quote")
 
@@ -330,7 +313,6 @@ func TestLoadRejectsMalformedNeteaseQuoteEndpointURL(t *testing.T) {
 
 func TestLoadRejectsProviderEndpointWithInlineQuery(t *testing.T) {
 	setDefaultProviderConfig(t)
-	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
 	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
 	t.Setenv("MARKET_DATA_EASTMONEY_QUOTE_URL", "https://example.test/quote?token=secret")
 	if _, err := Load(); err == nil {
@@ -358,7 +340,6 @@ func TestLoadSinaQuoteOnlyProvider(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("MARKET_DATA_PROVIDERS_CONFIG", file)
-	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
 	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
 	t.Setenv("MARKET_DATA_REQUEST_TIMEOUT", "130s")
 	t.Setenv("MARKET_DATA_PROVIDER_TIMEOUT", "12s")
@@ -385,7 +366,6 @@ func TestLoadSinaQuoteOnlyProvider(t *testing.T) {
 
 func TestLoadMiaoXiangSupplementIsOptInAndKeyGuarded(t *testing.T) {
 	setDefaultProviderConfig(t)
-	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
 	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
 	t.Setenv("MARKET_DATA_MX_ENABLED", "")
 	t.Setenv("MARKET_DATA_MX_API_KEY", "")
@@ -419,7 +399,6 @@ func TestLoadMiaoXiangSupplementIsOptInAndKeyGuarded(t *testing.T) {
 
 func TestLoadBuildsMySQLDSNFromSeparateServiceSettings(t *testing.T) {
 	setDefaultProviderConfig(t)
-	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
 	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "false")
 	t.Setenv("MARKET_DATA_MYSQL_DSN", "")
 	t.Setenv("MARKET_DATA_DB_HOST", "Mariadb")
@@ -455,7 +434,6 @@ func TestLoadBuildsMySQLDSNFromSeparateServiceSettings(t *testing.T) {
 
 func TestLoadKeepsLegacyMySQLDSNAsTemporaryFallback(t *testing.T) {
 	setDefaultProviderConfig(t)
-	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
 	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "false")
 	t.Setenv("MARKET_DATA_DB_HOST", "")
 	t.Setenv("MARKET_DATA_DB_PORT", "")
@@ -479,7 +457,6 @@ func TestLoadKeepsLegacyMySQLDSNAsTemporaryFallback(t *testing.T) {
 
 func TestLoadRejectsInvalidMarketDataDBPort(t *testing.T) {
 	setDefaultProviderConfig(t)
-	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
 	t.Setenv("MARKET_DATA_DB_HOST", "Mariadb")
 	t.Setenv("MARKET_DATA_DB_PORT", "not-a-port")
 	t.Setenv("MARKET_DATA_DB_USER", "stock_analysis_server")
@@ -492,7 +469,6 @@ func TestLoadRejectsInvalidMarketDataDBPort(t *testing.T) {
 
 func TestLoadUsesSharedMarketDataAdjustmentWhenServiceOverrideIsUnset(t *testing.T) {
 	setDefaultProviderConfig(t)
-	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
 	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
 	t.Setenv("MARKET_DATA_DEFAULT_ADJUSTMENT", "")
 	t.Setenv("MARKET_DATA_ADJUSTMENT", "none")
@@ -508,7 +484,6 @@ func TestLoadUsesSharedMarketDataAdjustmentWhenServiceOverrideIsUnset(t *testing
 
 func TestLoadBaoStockEnabledByDefaultAndDailyBarsOnly(t *testing.T) {
 	setDefaultProviderConfig(t)
-	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
 	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
 	t.Setenv("MARKET_DATA_PROVIDER_PRIORITY", "eastmoney,baostock,tencent")
 	t.Setenv("MARKET_DATA_PROVIDER_TIMEOUT", "3s")
@@ -556,7 +531,6 @@ func TestLoadBaoStockEnabledByDefaultAndDailyBarsOnly(t *testing.T) {
 
 func TestLoadRejectsInvalidBaoStockPort(t *testing.T) {
 	setDefaultProviderConfig(t)
-	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
 	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
 	t.Setenv("MARKET_DATA_BAOSTOCK_PORT", "70000")
 	if _, err := Load(); err == nil {
@@ -566,7 +540,6 @@ func TestLoadRejectsInvalidBaoStockPort(t *testing.T) {
 
 func TestLoadYahooFinanceDailyBarsCanBeOptedIn(t *testing.T) {
 	setDefaultProviderConfig(t)
-	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
 	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
 	t.Setenv("MARKET_DATA_PROVIDER_PRIORITY", "eastmoney,baostock,yahoo,tencent,sina")
 	t.Setenv("MARKET_DATA_REQUEST_TIMEOUT", "4m")
@@ -592,7 +565,6 @@ func TestLoadYahooFinanceDailyBarsCanBeOptedIn(t *testing.T) {
 
 func TestLoadYahooQuoteCanBeOptedInAndDailyBarsCanBeDisabled(t *testing.T) {
 	setDefaultProviderConfig(t)
-	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
 	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
 	t.Setenv("MARKET_DATA_PROVIDER_PRIORITY", "eastmoney,baostock,yahoo,tencent,sina")
 	t.Setenv("MARKET_DATA_REQUEST_TIMEOUT", "5m")
@@ -614,7 +586,6 @@ func TestLoadYahooQuoteCanBeOptedInAndDailyBarsCanBeDisabled(t *testing.T) {
 
 func TestLoadSinaDailyBarsCanBeEnabled(t *testing.T) {
 	setDefaultProviderConfig(t)
-	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
 	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
 	t.Setenv("MARKET_DATA_PROVIDER_PRIORITY", "eastmoney,baostock,yahoo,tencent,sina")
 	t.Setenv("MARKET_DATA_REQUEST_TIMEOUT", "4m")
@@ -640,7 +611,6 @@ func TestLoadSinaDailyBarsCanBeEnabled(t *testing.T) {
 
 func TestLoadNeteaseDailyBarsIsOptInAndEndpointConfigurable(t *testing.T) {
 	setDefaultProviderConfig(t)
-	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
 	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
 	t.Setenv("MARKET_DATA_PROVIDER_PRIORITY", "eastmoney,baostock,yahoo,tencent,sina,netease")
 	t.Setenv("MARKET_DATA_REQUEST_TIMEOUT", "5m")
@@ -666,7 +636,6 @@ func TestLoadNeteaseDailyBarsIsOptInAndEndpointConfigurable(t *testing.T) {
 
 func TestLoadNeteaseQuoteCanBeEnabledAndEndpointConfigured(t *testing.T) {
 	setDefaultProviderConfig(t)
-	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
 	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
 	t.Setenv("MARKET_DATA_PROVIDER_PRIORITY", "eastmoney,baostock,yahoo,tencent,sina,netease")
 	t.Setenv("MARKET_DATA_REQUEST_TIMEOUT", "5m")
@@ -692,7 +661,6 @@ func TestLoadNeteaseQuoteCanBeEnabledAndEndpointConfigured(t *testing.T) {
 }
 
 func TestEastmoneyStockBasicURLAndCapabilityCanBeConfigured(t *testing.T) {
-	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
 	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
 	t.Setenv("MARKET_DATA_EASTMONEY_STOCK_BASIC_URL", "https://example.test/f10")
 	t.Setenv("MARKET_DATA_EASTMONEY_STOCK_BASIC_ENABLED", "false")
@@ -709,7 +677,6 @@ func TestEastmoneyStockBasicURLAndCapabilityCanBeConfigured(t *testing.T) {
 }
 
 func TestEastmoneyStockBoardsURLAndCapabilityAreConfigurable(t *testing.T) {
-	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
 	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
 	t.Setenv("MARKET_DATA_EASTMONEY_STOCK_BOARDS_URL", "https://example.test/slist")
 	t.Setenv("MARKET_DATA_EASTMONEY_STOCK_BOARDS_ENABLED", "true")
@@ -726,7 +693,6 @@ func TestEastmoneyStockBoardsURLAndCapabilityAreConfigurable(t *testing.T) {
 }
 
 func TestEastmoneySectorRankingURLAndCapabilityAreConfigurable(t *testing.T) {
-	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
 	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
 	t.Setenv("MARKET_DATA_EASTMONEY_SECTOR_RANKING_URL", "https://example.test/clist")
 	t.Setenv("MARKET_DATA_EASTMONEY_SECTOR_RANKINGS_ENABLED", "true")
@@ -743,7 +709,6 @@ func TestEastmoneySectorRankingURLAndCapabilityAreConfigurable(t *testing.T) {
 }
 
 func TestEastmoneyIndexEndpointAndCapabilityAreConfigurable(t *testing.T) {
-	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
 	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
 	t.Setenv("MARKET_DATA_EASTMONEY_INDEX_URL", "https://example.test/indices")
 	t.Setenv("MARKET_DATA_EASTMONEY_INDEX_QUOTES_ENABLED", "true")
@@ -760,7 +725,6 @@ func TestEastmoneyIndexEndpointAndCapabilityAreConfigurable(t *testing.T) {
 }
 
 func TestEastmoneyDragonTigerURLAndCapabilityAreConfigurable(t *testing.T) {
-	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
 	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
 	t.Setenv("MARKET_DATA_EASTMONEY_DRAGON_TIGER_URL", "https://example.test/api/data/v1/get")
 	t.Setenv("MARKET_DATA_EASTMONEY_DRAGON_TIGER_ENABLED", "true")
@@ -786,7 +750,6 @@ func TestEastmoneyDragonTigerURLAndCapabilityAreConfigurable(t *testing.T) {
 
 func TestEastmoneyAnnouncementsDefaultOffAndEndpointConfigurable(t *testing.T) {
 	setDefaultProviderConfig(t)
-	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
 	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
 	t.Setenv("MARKET_DATA_EASTMONEY_ANNOUNCEMENTS_ENABLED", "")
 	t.Setenv("MARKET_DATA_EASTMONEY_ANNOUNCEMENTS_URL", "https://example.test/api/security/ann")
@@ -822,7 +785,6 @@ func TestEastmoneyAnnouncementsDefaultOffAndEndpointConfigurable(t *testing.T) {
 
 func TestBaoStockFundamentalsDefaultAndEnvironmentOverrides(t *testing.T) {
 	setDefaultProviderConfig(t)
-	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
 	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
 	t.Setenv("MARKET_DATA_BAOSTOCK_FUNDAMENTALS_ENABLED", "")
 	cfg, err := Load()
@@ -858,7 +820,6 @@ func TestLoadAcceptsXueqiuInProviderPriority(t *testing.T) {
 	}
 	t.Setenv("MARKET_DATA_PROVIDERS_CONFIG", file)
 	t.Setenv("MARKET_DATA_PROVIDER_PRIORITY", "")
-	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
 	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
 	t.Setenv("MARKET_DATA_XUEQIU_ENABLED", "")
 	t.Setenv("MARKET_DATA_XUEQIU_HOT_RANKINGS_ENABLED", "")
@@ -882,7 +843,6 @@ func TestLoadRejectsProviderEndpointWithEmptyQueryOrFragment(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			setDefaultProviderConfig(t)
-			t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
 			t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
 			t.Setenv("MARKET_DATA_TENCENT_KLINE_URL", tc.url)
 			if _, err := Load(); err == nil {
@@ -899,7 +859,6 @@ func TestLoadTickFlowIndexQuotesRequiresAPIKey(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("MARKET_DATA_PROVIDERS_CONFIG", file)
-	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
 	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
 	t.Setenv("MARKET_DATA_TICKFLOW_API_KEY", "")
 	t.Setenv("TICKFLOW_API_KEY", "")
@@ -921,7 +880,6 @@ func TestLoadTickFlowMarketBreadthRequiresAPIKey(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("MARKET_DATA_PROVIDERS_CONFIG", file)
-	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
 	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
 	t.Setenv("MARKET_DATA_TICKFLOW_API_KEY", "")
 	t.Setenv("TICKFLOW_API_KEY", "")
@@ -944,7 +902,6 @@ func TestLoadTickFlowSectorRankingsRequiresAPIKey(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("MARKET_DATA_PROVIDERS_CONFIG", file)
-	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
 	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
 	t.Setenv("MARKET_DATA_TICKFLOW_API_KEY", "")
 	t.Setenv("TICKFLOW_API_KEY", "")
@@ -969,7 +926,6 @@ func TestLoadDisabledTickFlowDoesNotRequireAPIKeyForStaleCapabilities(t *testing
 	}
 	t.Setenv("MARKET_DATA_PROVIDERS_CONFIG", file)
 	t.Setenv("MARKET_DATA_PROVIDER_PRIORITY", "")
-	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
 	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
 	t.Setenv("MARKET_DATA_TICKFLOW_API_KEY", "")
 	t.Setenv("TICKFLOW_API_KEY", "")

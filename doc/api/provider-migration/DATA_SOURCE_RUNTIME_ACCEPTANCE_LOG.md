@@ -1,6 +1,6 @@
-> 当前状态核对（2026-11-12，Data 代码验收基线 `9fe53c43c6c32408bbf59eb8c3c627b18a9bfe24`）：最新 Go Test Suite Run `43231652148` success；其 MariaDB Job `131228387935` 已通过业务表 Repository revision/PIT/reopen 测试（含 Fundamentals、Valuations），以及 DailyBar fallback、AdjustmentFactors/CorporateActions PIT 和 Probe HTTP + MariaDB 集成。BaoStock 加强字段探针 Live Provider Run `43228986723` / Job `131219214147` 明确 PASS。本文是追加式真实 Provider 运行证据账本；MariaDB 代码集成结果不等同于 Provider 真实数据验收，P0-89 也不代表完整 SecurityTradingStatus Provider。当前任务顺序以 [数据侧整体规划](../数据侧整体规划.md) 为准。
+> 当前状态核对（2026-11-12，Data 代码验收基线 `9fe53c43c6c32408bbf59eb8c3c627b18a9bfe24`）：最新 Go Test Suite Run `43231652148` success；其 MariaDB Job `131228387935` 已通过业务表 Repository revision/PIT/reopen 测试（含 Fundamentals、Valuations），以及 DailyBar fallback、AdjustmentFactors/CorporateActions PIT 和 Probe HTTP + MariaDB 集成。BaoStock 加强字段探针 Live Provider Run `43228986723` / Job `131219214147` 明确 PASS。本文是追加式真实 Provider 运行证据账本；MariaDB 代码集成结果不等同于 Provider 真实数据验收，P0-89 也不代表完整 SecurityTradingStatus Provider。当前任务顺序以 [模块总任务规划和进度](../模块总任务规划和进度.md) 为准。
 
-- 适用分支：`feat/full-go-data-providers-api-switch`
+- 适用分支：`feat/data`（历史记录中的 `feat/full-go-data-providers-api-switch` 为旧名称）
 - 文档更新日期：2026-11-12
 - 最近代码验收基线：`9fe53c43c6c32408bbf59eb8c3c627b18a9bfe24`（Go Test Suite Run `43231652148` success）
 - 当前结论：各 Provider/能力状态必须按后续逐条记录判定；没有对应真实请求记录的能力仍为未执行，不能从其他 Provider 的结果外推。
@@ -22,17 +22,23 @@
 
 ## 2. Provider 验收矩阵
 
-| Provider | 在线入口覆盖 | 真实请求状态 | 凭据 |
-|---|---|---|---|
-| TickFlow | quote、核心指数、全市场广度、申万一级行业排行 | 未执行 | API Key |
-| Tushare | 证券资料、交易日历、日 K、历史交易状态、财务、估值、指数目录/成分/日 K | 未执行 | Token、对应积分/接口权限 |
-| 同花顺 Hithink | quote、日 K、核心指数、人气榜、估值、交易日历、涨停池、龙虎榜、行业目录/成分/日 K、财务 | 未执行 | API Key、对应接口权限 |
-| 雪球 | 人气榜、飙升榜 | 未执行 | Cookie 可选，视登录态/限流而定 |
-| 妙想 | 筹码分布、主力资金流 | 未执行 | API Key |
-| 东方财富、腾讯、新浪、网易、Pytdx、BaoStock | 当前主要默认数据链路，仍需按能力执行固定样本与质量对账 | 未执行 | 视接口而定；部分无需凭据 |
-| Yahoo Finance | 海外市场能力 | 暂缓 | 不属于当前国内 A 股阶段二范围 |
+下表汇总本账本截至 2026-11-12 的已有真实证据；每条结论只适用于注明的 Provider、能力和样本，不外推到整个数据域。
 
-本矩阵只描述自动化入口覆盖，不代表上游权限已开通，也不代表已通过真实数据验收。
+| Provider | 能力/样本证据 | 当前判定 | 未覆盖边界 |
+|---|---|---|---|
+| BaoStock | 复权因子与日 K 一致性样本；官方停牌窗口/复牌及 ST 字段样本（第 61、72 节） | 对应样本通过 | 不代表所有证券/日期的 SecurityTradingStatus 完整覆盖 |
+| Pytdx | GBBQ 公司行为事件对账、复权参考日、停牌/临停样本（第 62、64、71 节） | 对应样本通过 | 不代表与 BaoStock 原生复权算法完全等价；跨源比较仍需同口径 |
+| Hithink | 600519.SH 五项估值独立复算；年报披露日原始字段；日 K 分页/后复权成交量核验（第 66～69 节） | 五项估值样本通过；快照整体 degraded | ProviderReportDate、逐字段 Freshness、全市场数值复算仍未关闭 |
+| Eastmoney / Tencent | 复权 K 线请求与字段样本（第 70 节） | 参考基准缺少独立证据，not_comparable | 不得从请求 endDate 或返回末行推断绝对参考日 |
+| Tushare | 财务/估值等能力真实请求返回 40203 权限不足（第 65 节及相关记录） | permission_required / blocked | 未获得权限前不重复请求，不得记为字段通过 |
+| TickFlow | 日线成交量单位修复及线上复测（第 47～50 节） | 对应样本修复后通过 | 不外推到所有证券、时间窗口和其他能力 |
+| Sina / NetEase / Tencent / Eastmoney | 公共源历史日 K、未复权样本及跨源比较记录（第 41～57 节） | 按具体记录和字段判定 | 不得用某次请求成功推定所有字段/复权模式通过 |
+| Xueqiu | 人气榜在线探测入口 | 未执行/待凭据与请求证据 | 不代表 Provider 接口实现或配置存在即已验收 |
+| MiaoXiang | 补充数据在线探测入口 | 未执行/待凭据与请求证据 | 不代表筹码分布、资金流真实字段通过 |
+| Hithink / Tushare（其他能力） | 在线入口和契约盘点存在 | 未逐能力验收 | 不得把估值单样本或权限错误语义外推为其他能力通过 |
+| Yahoo Finance | 海外市场能力 | 暂缓 | 不属于当前国内 A 股优先验收范围 |
+
+配置启用、接口存在、请求成功和质量验收通过是不同状态。无凭据/无权限记为 skipped、not_configured 或 permission_required；缺少同口径/参考日期记为 not_comparable；真实数据违反契约才记为 failed。
 
 ## 3. 在线验收入口
 
@@ -85,53 +91,7 @@ go test ./internal/provider -run '^TestLiveXueqiuHotRankings$' -count=1 -v
 MARKET_DATA_LIVE_PROVIDER_TESTS=1 \
 MARKET_DATA_LIVE_MX_TESTS=1 \
 MARKET_DATA_MX_API_KEY="$MX_API_KEY" \
-go test ./internal/provider -run '^TestLiveProviderProbe
-
-## 4. 安全与执行约束
-
-- 凭据只从环境变量或 GitHub Actions Secrets 注入；禁止写入仓库、测试输出、文档或命令历史。
-- 测试日志只记录 Provider、能力、状态、耗时、记录数、质量状态/原因和脱敏错误摘要；不得输出 API Key、Token、Cookie 或完整请求 URL。
-- 真实请求测试默认跳过，不影响普通 CI。
-- 不因单次请求成功而打开 Provider 默认开关；必须先完成字段和质量核对。
-- 供应商空结果不能一概判为通过。需要区分真实无数据、非交易日、未发布、权限不足和接口异常。
-- 由成分股行情聚合得到的行业排行、无法确认金额单位的资金数据、缺少源端发布时间的数据，必须保留 degraded/unknown，不得伪装成 fully valid。
-- 对接口限流/配额敏感的来源按顺序串行验收，不并发轰击上游。
-
-## 5. 每次真实验收必须记录
-
-每个 Provider/capability 至少记录：
-
-1. 日期、环境、分支、代码提交 SHA。
-2. Provider、能力、脱敏证券代码、请求日期/区间。
-3. HTTP/业务状态、耗时、重试次数和错误分类。
-4. 返回行数、源端总数、覆盖率、分页终止证据、重复/排除数量。
-5. 关键字段存在率及 null/zero 分布。
-6. 价格、成交量、成交额单位和转换依据。
-7. adjustment_basis、adjustment_method。
-8. provider_time、report_date、announcement_time、fetched_at。
-9. quality_status、quality_reasons、fallback 来源。
-10. 验收结论、失败原因及后续处理。
-
-不得在本文件记录真实凭据或未经脱敏的个人数据。
-
-## 6. 固定样本范围
-
-- 沪市主板、深市主板、创业板、科创板、北交所。
-- 正常交易日、停牌日、非交易日。
-- 除权除息前后及不同复权基准。
-- 成交额缺失、成交量缺失、真实零值。
-- 上游空响应、分页截断、重复行、超时和限流。
-- 财务报告期与公告日不一致、财务修订。
-- 新股上市、ST/风险警示、退市和涨跌幅特殊阶段。
-
-## 7. 当前执行记录
-
-| 日期 | Provider | 能力 | 代码 SHA | 结果 | 说明 |
-|---|---|---|---|---|---|
-| — | — | — | — | 未执行 | 当前阶段尚未注入真实凭据，未发起可选 Provider 真实请求 |
-
-后续只追加有真实请求证据的记录。阶段二的代码入口和 CI 通过情况不得填入本表作为 Provider 在线验收通过证据。
- -count=1 -v
+go test ./internal/provider -run '^TestLiveProviderProbe' -count=1 -v
 ```
 
 可选 URL：`MARKET_DATA_MX_API_URL`；未设置时使用 Provider 内置默认 HTTPS endpoint。兼容 Key 环境变量：`MX_APIKEY`。筹码和资金流是补充数据，验收必须校验 FetchedAt/ProviderDate/观察数，并保留发布时间不可用导致的 degraded 状态。
@@ -177,11 +137,12 @@ go test ./internal/provider -run '^TestLiveProviderProbe
 
 | 日期 | Provider | 能力 | 代码 SHA | 结果 | 说明 |
 |---|---|---|---|---|---|
-| — | — | — | — | 未执行 | 当前阶段尚未注入真实凭据，未发起可选 Provider 真实请求 |
+| 2026-11-12 | BaoStock | 全天停牌/复牌、ST 字段 | `8b61eb39` / `e39c3d54` | 对应样本通过 | Live Run `43228986723`，详见第 72 节；范围不外推至全市场 |
+| 2026-11-12 | Hithink | 600519.SH 五项估值 | 历史代码基线见第 67 节 | 数值复算通过、快照 degraded | ProviderReportDate 缺失；只关闭单证券单日样本 |
+| 2026-11-12 | Tushare | 财务/估值权限语义 | 历史代码基线见第 65 节 | permission_required | 40203 权限阻塞，不是数据验收通过 |
+| 2026-11-12 | Eastmoney/Tencent | 复权参考基准 | 历史代码基线见第 70 节 | not_comparable | 缺少独立参考日期证据 |
 
 后续只追加有真实请求证据的记录。阶段二的代码入口和 CI 通过情况不得填入本表作为 Provider 在线验收通过证据。
-
-
 ## 8. 统一主动诊断接口开发记录（2026-10-30）
 
 目标分支：`feat/full-go-data-providers-api-switch`。

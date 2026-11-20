@@ -113,13 +113,14 @@ let probeRequests = 0;
 let historyRequests = 0;
 let historyUnavailable = false;
 let probeRequestBody = null;
+let probeRequestHeaders = null;
 let browser;
 try {
   browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, reducedMotion: "reduce" });
   await context.addInitScript(() => {
     localStorage.setItem("stock-provider-webui.settings.v1", JSON.stringify({
-      marketBase: "/market-api", analysisBase: "/analysis-api", apiKey: "data-center-probe-key"
+      marketBase: "/market-api", analysisBase: "/analysis-api", apiKey: "legacy-browser-key"
     }));
   });
   const page = await context.newPage();
@@ -132,8 +133,9 @@ try {
     const json = (status, body) => route.fulfill({
       status, contentType: "application/json", body: JSON.stringify(body)
     });
-    if (pathname.endsWith("/health/live") || pathname.endsWith("/healthz")) return json(200, { status: "ok" });
-    if (pathname.endsWith("/health/ready")) return json(200, { status: "ready" });
+    if (pathname.endsWith("/api/v1/owner/session") && request.method() === "GET") return json(200, { authenticated: true, expires_at: "2026-11-19T10:00:00Z" });
+    if (pathname.endsWith("/api/v1/owner/session/csrf") && request.method() === "POST") return json(200, { authenticated: true, csrf_token: "browser-probe-csrf" });
+    if (pathname.endsWith("/healthz")) return json(200, { status: "ok" });
     if (pathname.endsWith("/readyz")) return json(200, { status: "ready", dependencies: { mariadb: "ok", redis: "ok" } });
     if (pathname.endsWith("/api/v1/data-sources/probe/history")) {
       historyRequests += 1;
@@ -143,6 +145,7 @@ try {
     if (pathname.endsWith("/api/v1/data-sources/probe") && request.method() === "POST") {
       probeRequests += 1;
       probeRequestBody = request.postDataJSON();
+      probeRequestHeaders = request.headers();
       if (probeRequests > 1) return json(500, { error: { code: "probe_persist_failed", message: "探测结果持久化失败" } });
       return json(200, currentRun);
     }
@@ -168,6 +171,8 @@ try {
   await page.locator("#data-center-probe-symbol").fill("600519.sh");
   await page.locator("#data-center-probe-run").click();
   await page.waitForFunction(() => document.querySelector("#data-center-probe-summary")?.textContent.includes("probe-current"));
+  assert.equal(probeRequestHeaders["x-csrf-token"], "browser-probe-csrf");\n  assert.equal(probeRequestHeaders["x-api-key"], undefined);\n  assert.equal(probeRequestHeaders["x-csrf-token"], "browser-probe-csrf");
+  assert.equal(probeRequestHeaders["x-api-key"], undefined);
   assert.deepEqual(probeRequestBody, {
     scope: "core", timeout_seconds: 9,
     checks: ["connectivity", "contract", "quality", "freshness", "cross_provider", "storage"],
@@ -217,29 +222,11 @@ try {
     path: path.join(screenshotDir, "1280x900-data-center-probe.png"),
     fullPage: false, animations: "disabled"
   });
+  const migratedSettings = await page.evaluate(() => JSON.parse(localStorage.getItem("stock-provider-webui.settings.v1")));
+  assert.deepEqual(migratedSettings, { marketBase: "/", analysisBase: "/" });
+  assert.doesNotMatch(JSON.stringify(migratedSettings), /apiKey|legacy-browser-key|market-api|analysis-api/);
   await context.close();
-
-  const noKeyContext = await browser.newContext({ viewport: { width: 1280, height: 900 }, reducedMotion: "reduce" });
-  await noKeyContext.addInitScript(() => {
-    localStorage.setItem("stock-provider-webui.settings.v1", JSON.stringify({
-      marketBase: "/market-api", analysisBase: "/analysis-api", apiKey: ""
-    }));
-  });
-  const noKeyPage = await noKeyContext.newPage();
-  let noKeyRequests = 0;
-  await noKeyPage.route("**/api/v1/data-sources/probe**", async route => {
-    noKeyRequests += 1;
-    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ items: [], total: 0 }) });
-  });
-  await noKeyPage.goto(baseUrl, { waitUntil: "load", timeout: 30000 });
-  await noKeyPage.locator('.nav-link[data-view="data"]').click();
-  await noKeyPage.locator("#data-center-probe-run").click();
-  await noKeyPage.locator("#data-center-probe-history-refresh").click();
-  assert.equal(noKeyRequests, 0, "missing API Key must not issue probe or history requests");
-  assert.match(await noKeyPage.locator("#data-center-probe-summary").textContent(), /未发起主动探测/);
-  assert.equal(await noKeyPage.locator("#data-center-probe-run").isEnabled(), true);
-  await noKeyContext.close();
-  console.log("PASS data center active Provider probe, six diagnostic dimensions and history");
+  console.log("PASS data center active Provider probe, CSRF enforcement and legacy settings cleanup");
 } finally {
   if (browser) await browser.close();
   await new Promise(resolve => server.close(resolve));

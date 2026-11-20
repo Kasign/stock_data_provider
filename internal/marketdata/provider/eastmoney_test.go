@@ -258,6 +258,18 @@ func TestEastmoneyDailyBarsNormalizesHandToShare(t *testing.T) {
 	if *bars[0].Volume != 3413600 {
 		t.Fatalf("volume=%d", *bars[0].Volume)
 	}
+	if bars[0].ChangePercent == nil || *bars[0].ChangePercent != 0.81 {
+		t.Fatalf("change percent=%v, want 0.81", bars[0].ChangePercent)
+	}
+	if bars[0].ExactValues == nil || bars[0].ExactValues.ChangePercent == nil ||
+		*bars[0].ExactValues.ChangePercent != "0.81" ||
+		bars[0].ExactValues.ChangePercentSourceField != "f59" ||
+		bars[0].ExactValues.ChangePercentEvidence == nil ||
+		bars[0].ExactValues.ChangePercentEvidence.SourceToken != "0.81" ||
+		bars[0].ExactValues.ChangePercentEvidence.SourceFractionDigits == nil ||
+		*bars[0].ExactValues.ChangePercentEvidence.SourceFractionDigits != 2 {
+		t.Fatalf("Eastmoney exact change-percent evidence was not preserved: %+v", bars[0].ExactValues)
+	}
 	if *bars[0].Amount != 4525398959 {
 		t.Fatalf("amount=%v", *bars[0].Amount)
 	}
