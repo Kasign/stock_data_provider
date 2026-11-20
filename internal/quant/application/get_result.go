@@ -280,7 +280,11 @@ func (usecase *GetResult) recordAudit(ctx context.Context, request ReadRequest, 
 		PurposeCode: request.PurposeCode, Decision: decision, ReasonCode: reasonCode,
 		AuthorizationRef: authorizationRef, OccurredAt: request.At,
 	}
-	if err := usecase.auditor.RecordResultAccess(ctx, event); err != nil {
+	auditErr := usecase.auditor.RecordResultAccess(ctx, event)
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if auditErr != nil {
 		return ErrAuditUnavailable
 	}
 	return nil

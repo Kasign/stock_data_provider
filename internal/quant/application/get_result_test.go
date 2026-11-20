@@ -23,12 +23,16 @@ type fixedPrincipal struct {
 func (p fixedPrincipal) Resolve(context.Context) (Principal, error) { return p.principal, p.err }
 
 type fixedAuditor struct {
-	events []AccessAuditEvent
-	err    error
+	events  []AccessAuditEvent
+	err     error
+	onAudit func()
 }
 
 func (a *fixedAuditor) RecordResultAccess(_ context.Context, event AccessAuditEvent) error {
 	a.events = append(a.events, event)
+	if a.onAudit != nil {
+		a.onAudit()
+	}
 	return a.err
 }
 
@@ -279,6 +283,26 @@ func TestValidateAuthorizationMatchesFrozenQuantGolden(t *testing.T) {
 	}
 	if err := validateAuthorization(golden.AuthorizationRef, golden.PolicySnapshot, request); err != nil {
 		t.Fatalf("frozen GOV-CTR-006 Quant Golden rejected: %v", err)
+	}
+}
+
+func TestGetResultReturnsCanceledWhenAuditCancelsContext(t *testing.T) {
+	now := time.Date(2026, 11, 9, 2, 0, 0, 0, time.UTC)
+	reader := &fixedReader{value: getResultFixture(t, now)}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	auditor := &fixedAuditor{onAudit: cancel}
+	usecase, err := NewGetResult(reader, fixedPrincipal{principal: Principal{SubjectRef: "service:researchflow"}}, auditor, func() time.Time { return now })
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := usecase.Execute(ctx, reader.value.Record.Manifest.ResultID)
+	if !errors.Is(err, context.Canceled) || got.ResultID != "" || got.Payload != nil {
+		t.Fatalf("Execute() = (%+v, %v), want empty envelope and context.Canceled", got, err)
+	}
+	if len(auditor.events) != 1 || auditor.events[0].Decision != "allowed" {
+		t.Fatalf("expected one completed pre-release audit event: %+v", auditor.events)
 	}
 }
 
