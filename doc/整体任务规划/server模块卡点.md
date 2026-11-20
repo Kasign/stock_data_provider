@@ -317,4 +317,4 @@
 - Root `newMigrationRegistry()` 已注册 Data `MigrationDefinitions()`；Migration enabled 使用 Root Registry 执行，disabled 使用 `Registry.ValidateApplied()` → Platform `ValidateAppliedMigrations()` 只读核验版本和 checksum。
 - 两种模式之后均执行 Data `Diagnostics().Ready`，独立验证 MariaDB/Redis 和物理 Schema。Root 不再通过外部 `market_data` namespace 过渡检查，也不重复调用 Data MigrationRunner。
 - 代码级 SRV-002 已完成；SRV-009 状态为 `CODE_LEVEL_DONE / PRODUCTION_PENDING`。剩余只包括目标环境 enabled/disabled 演练、备份恢复、生产启动/关闭及真实 Provider 出站验收。
-- Integration CI Run [44690594635](https://github.com/Kasign/stock_data_provider/actions/runs/44690594635) 对当前代码 SHA `0ed75f9b510e092507ae590aa0cf432939fcc5af` 全项 success；覆盖 root gofmt/vet/tests、Quant MariaDB、News/Research/Researchflow、Worker MariaDB/Redis、go-core、Compose 和 WebUI 检查。当前 `repair_all` HEAD 为 `5a0c9641f48cd8da5a115b698341b8414412508f`，后续仅有文档更新。
+- Integration CI Run [44691336674](https://github.com/Kasign/stock_data_provider/actions/runs/44691336674) 对代码 SHA `92c7c4364ff1e54773ef8a422f4bf441dc13150f` 全项 success；覆盖 root gofmt/vet/tests、Quant MariaDB、News/Research/Researchflow、Worker MariaDB/Redis、go-core、Compose 和 WebUI 检查。
