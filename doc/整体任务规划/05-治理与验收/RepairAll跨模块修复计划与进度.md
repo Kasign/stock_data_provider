@@ -658,3 +658,12 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - Quant 结果读取继续要求可信 Researchflow RunRef；新增 Quant access audit Migration v3，将 RunRef 持久化到每条读取审计事件。历史审计无法反向推导 RunRef，迁移后旧记录保持 NULL；新审计写入缺失 RunRef 时拒绝。
 - Quant 的 AuthorizedResultReader 仍需在未来 Quant Stage Provider 接入时，按 RunRef + ResultID 查询 Researchflow 持久化的明确关联。当前尚无该 Stage Provider/关联资源契约，不得用主体级全局放行替代。
 - 新提交 `d1286b1` 触发 Hithink 与 DailyBars V2 定向真实复验；结果待 CI/Live Probe 完成后补记。
+
+### 31.7 DailyBars V2 真实应用层复验与 Live Provider 门禁修正（2026-11-20）
+
+- BaoStock 真实 Application Port 专项在 Live Run [44710110784](https://github.com/Kasign/stock_data_provider/actions/runs/44710110784) PASS：17 根日线，OHLC/成交量/成交额 Decimal Evidence 到达 Application Port。交易日历因非交易日推断保持 degraded，V2 返回无可信 CalendarRef 的 degraded Snapshot/Bar；已修正此前测试错误要求可信日历引用的断言。
+- Hithink 真实专项仍 FAIL：2025 年报报告期对应的 Provider `report_date_ms` 返回 2026-10-31，与官方披露日 2026-04-17 不一致；后复权 DailyBars 的 Volume 返回小数，不能安全归一化为整数 shares。none/forward 单窗口数据正常返回 23 行，backward 不生成有效 Bar。以上保留为真实数据/契约问题，不放宽校验、不舍入、不回退混合口径。
+- 修正 Live Provider workflow：repair_all 上所有启用的定向探针均为严格门禁（包含此前单独 continue-on-error 的 BaoStock 停牌探针）；Job failure 会使 Live Provider Run failure，避免探针步骤失败但整个 Run 显示 success。
+- Go Test Suite [44709526616](https://github.com/Kasign/stock_data_provider/actions/runs/44709526616) 与 Full Integration Checks [44709526576](https://github.com/Kasign/stock_data_provider/actions/runs/44709526576) 在代码 SHA `f61d7d53ec1713d5afe74e69e522d8d3d6484759` 全项 success；后续提交只修改 Live Provider workflow 门禁与文档。
+- Quant 读取范围决议保持：`service:researchflow` 只能读取当前 Run 自己创建或明确关联的 Quant 结果。可信 RunRef 已进入 GetResult 内部请求与 Access Audit；但 Run→QuantResult 持久化关联、AuthorizedResultReader 和 Server Quant Stage Provider 仍未完成。没有强类型 Quant Stage 输出 Schema 前，不实现按主体全局放行或猜测 JSON 字段关联。
+- 下一步：保留 Hithink 两项 Provider 缺陷为阻塞证据；Data 继续围绕 DailyBars 精度/复权基准/成交额单位与 PIT 日历证据；Quant 仅在 QNT-014 Facade 和 Researchflow 强类型输出关联契约具备后继续授权读取闭环。

@@ -1301,3 +1301,14 @@ Go suite 覆盖根模块、go-core、market-data 的格式/测试/race/vet、Mar
   - Data V2 日历质量状态检查不仅要求 CalendarRef，还要求 `CalendarQualityStatus=valid`；即使 warning 列表为空，只要日历状态 degraded，也清除可信引用并降级 Snapshot/Bar。
   - Hithink 龙虎榜先按 thscode 去重，再按唯一证券数分页；保留 `SourceReturned` 原始事件行数、重复行诊断，并继续严格校验声明唯一证券数。
   - Quant 读取审计事件持久化可信 Researchflow RunRef。Migration v3 对历史记录保留 NULL，新审计写入强制要求 RunRef。
+
+## 76. 2026-11-20 DailyBars V2 真实 Application Port 与 Hithink 定向复验
+
+- 当前分支代码基线：`f61d7d53ec1713d5afe74e69e522d8d3d6484759`；随后 `32524302247b421388cd81a2b9b63ae209cae4f8` 仅调整 Live Provider 工作流门禁。
+- Live Provider Run [44710110784](https://github.com/Kasign/stock_data_provider/actions/runs/44710110784)，Job `136199357313`，最终 failure。该次已将 repair_all 的定向真实探针改为严格门禁，Job failure 会反映为 Run failure，不再因 job-level `continue-on-error` 显示整体 success。
+- BaoStock 真实 Data Application Port 专项 PASS：600000.SH、2026-10-01..2026-10-30 返回 17 根日线；OHLC、Volume、Amount 的源 Token 与 Decimal Evidence 传到 Application Port。样本 close=`9.7000`、raw volume=`115026850`、raw amount=`1106982193.1500`。但 BaoStock 日历通过推断非交易日形成，日历质量为 degraded；V2 正确返回 `calendar_ref=null`、Snapshot degraded，不把已持久化但质量降级的日历伪装成可信引用。
+- **更正第 74 节的旧验收描述**：真实 BaoStock Application Port 不应要求 Reader 暴露可信 `data_calendar:sha256:` 引用；正确验收是保留真实 Decimal Evidence，同时将推断日历和日线结果维持 degraded。Unit tests 与 Live Application Port test 已统一这一语义。
+- Hithink 2025 年报原始字段专项 FAIL：600519.SH、period_end=2025-12-31 的 `report_date_ms` 原始值为 `1793376000000`，换算为 2026-10-31；官方年报披露日期为 2026-04-17。Provider 字段虽然格式有效，但事实日期不匹配，不能覆盖成官方日期，也不能用于声称 PIT 可用。
+- Hithink DailyBars 单窗口：`adjust=none` 和 `adjust=forward` 各返回 23 行（2026-10-13..2026-11-12）；`adjust=backward` 经现有整数 shares 契约校验后没有有效 Bar。独立 raw probe PASS，证实后复权成交量为小数（首行 `472172.42721306626`，末行 `575236.0558640865`）。不能四舍五入成 shares，也不能将 none 口径成交量拼入 backward 价格；后复权日线继续标记不可用/不可比较，等待 Provider 提供符合字段契约的数据。
+- Go Test Suite [44709526616](https://github.com/Kasign/stock_data_provider/actions/runs/44709526616) 与 Full Integration Checks [44709526576](https://github.com/Kasign/stock_data_provider/actions/runs/44709526576) 在 SHA `f61d7d53ec1713d5afe74e69e522d8d3d6484759` 全项 success；之后仅 Live Provider workflow 文件调整了严格门禁。
+- 本轮未重新启用 MX、Tushare、TickFlow、Eastmoney/Tencent、历史 Provider 全部 marker；其完整真实证据仍以第 75 节及 Run 44703026046 为准，不将 skipped 计入本轮通过。
