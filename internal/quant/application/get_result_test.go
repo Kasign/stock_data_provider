@@ -289,10 +289,12 @@ func TestValidateAuthorizationMatchesFrozenQuantGolden(t *testing.T) {
 		t.Fatal(err)
 	}
 	request := ReadRequest{
-		RunRef: "run:researchflow:001",
-		SubjectRef: golden.AuthorizationRef.SubjectRef, ResourceRef: golden.AuthorizationRef.ResourceRef,
-		PurposeCode: quantPurposeCode, ContentLevel: quantContentLevel,
-		At: time.Date(2026, 11, 12, 0, 0, 0, 0, time.UTC),
+		RunRef:      "run:researchflow:001",
+		SubjectRef:  golden.AuthorizationRef.SubjectRef,
+		ResourceRef: golden.AuthorizationRef.ResourceRef,
+		PurposeCode: quantPurposeCode,
+		ContentLevel: quantContentLevel,
+		At:          time.Date(2026, 11, 12, 0, 0, 0, 0, time.UTC),
 	}
 	if err := validateAuthorization(golden.AuthorizationRef, golden.PolicySnapshot, request); err != nil {
 		t.Fatalf("frozen GOV-CTR-006 Quant Golden rejected: %v", err)
