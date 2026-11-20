@@ -21,6 +21,7 @@ type Process struct {
 	OwnerSession              OwnerSession
 	HTTP                      HTTP
 	ResearchNotificationRelay ResearchNotificationRelay
+	NewsRetention             NewsRetention
 	ResearchflowCapacity      ResearchflowCapacity
 	ResearchflowRunDeadline   time.Duration
 	ResearchflowLocalWorkers  int
@@ -78,6 +79,9 @@ func LoadProcess(env platformconfig.Env) (Process, error) {
 	}
 	if cfg.Role != RoleAPI {
 		if cfg.ResearchNotificationRelay, err = LoadResearchNotificationRelay(env); err != nil {
+			return Process{}, err
+		}
+		if cfg.NewsRetention, err = LoadNewsRetention(env); err != nil {
 			return Process{}, err
 		}
 	}

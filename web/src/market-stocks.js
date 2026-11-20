@@ -17,7 +17,7 @@ function displayNumber(value, formatter) {
 }
 
 function responseError(error) {
-  if (Number(error?.status) === 401) return "行情 API Key 无效或未获授权，请检查连接与密钥设置。";
+  if (Number(error?.status) === 401) return "Owner Session 未认证或当前用户无权访问，请检查登录状态与服务端授权。";
   if (Number(error?.status) === 503) return "当前没有已配置完整 A 股证券目录能力的 Provider。";
   if (Number(error?.status) === 502) return "完整 A 股证券目录获取失败；请检查 Provider 状态与服务端错误信息。";
   return describeApiError(error, "全市场行情读取失败。");
@@ -140,13 +140,6 @@ export function bindMarketStocks(getSettings, onSelectStock) {
   async function loadPage(page = state.page) {
     if (state.busy) return;
     const settings = typeof getSettings === "function" ? getSettings() : null;
-    if (!settings?.apiKey) {
-      const status = $("#market-stocks-status"), summary = $("#market-stocks-summary");
-      if (status) status.textContent = "需配置 API Key";
-      if (summary) summary.textContent = "请先在连接与密钥设置中配置行情 API Key。";
-      renderEmpty("未发送请求：需要先配置行情 API Key。");
-      return;
-    }
     const size = Number($("#market-stocks-page-size")?.value || state.pageSize);
     state.pageSize = PAGE_SIZE_OPTIONS.has(size) ? size : 50;
     state.adjustment = $("#market-stocks-adjustment")?.value || "forward_adjusted";

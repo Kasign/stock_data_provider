@@ -77,7 +77,7 @@
 
 ## 3. 下一步解除顺序
 
-1. FLOW-002：由 News Owner 修复 Payload Validator 的 uniqueItems 缺口；Researchflow 在集成基线复验。
+1. FLOW-002：News Payload Validator 的 uniqueItems 缺口已在 repair_all 修复并验收（RF-BLOCK-009 RESOLVED）；只在后续 Schema/Validator 变更时回归。
 2. FLOW-002：继续核对真实生产 Template、HardRiskGateRegistry 和 Stage Output Registry；不为缺失 Provider 注册占位项。
 3. FLOW-006：明确 RF-BLOCK-008 中 Composer RiskDecision 的唯一 Owner、来源和聚合语义。
 4. FLOW-006：确认 RunResult 唯一持久化 Owner，再接通 Quant/Research/LLM Owner Facade 与 Server/Worker。
@@ -114,11 +114,12 @@
 ### RF-BLOCK-009：News Search Payload Validator 未执行 Schema uniqueItems 约束
 
 - **现状**：News Payload Schema `doc/news/schema/NEWS-STAGE-search-candidates-payload-1.0.0.schema.json` 对 `candidate.missing_fields` 声明 `uniqueItems: true`。
-- **代码事实**：`internal/news/stage/search_candidates_validation.go::ValidatePayloadJSON` 只检查每个 missing field 是否属于允许枚举，没有检查重复值；因此重复项可通过 Validator，却不符合冻结 Schema。
+- **代码事实（修复前）**：`ValidatePayloadJSON` 只检查枚举，没有检查重复值。`repair_all` 已在 `internal/news/stage/search_candidates_validation.go` 增加重复项检测，并在 `search_candidates_test.go` 增加拒绝重复值的回归测试。
 - **影响**：Researchflow 的 `StageOutputRegistry` 复用 News 提供的 Validator，生产 Envelope/Payload 校验目前不能证明完全符合该 Schema。不能将当前 Validator 标记为完整 pass。
 - **责任边界**：由 News Owner 修复 News 自己的 Payload Validator 和测试；Researchflow 不复制 `internal/news/**` 的领域规则。
-- **解除条件**：News 增加重复 missing field 拒绝测试并通过 News 模块 CI；Researchflow 在集成基线上确认复用的新 Validator 后，重新验收 Stage Output Registry。
-- **当前状态**：OPEN；阻断 News Search Payload Schema 的完整一致性验收，不阻断 Researchflow 其他模块能力。
+- **解除条件**：已满足（repair_all 完整 CI 通过；Stage Output Registry 使用同一 News Validator）。
+- **验收证据**：完整 Integration CI Run [44450277491](https://github.com/Kasign/stock_data_provider/actions/runs/44450277491)，HEAD `5b9ebe6a2b8103b4c63a48c3c0f0ddb004d583ec`，结论 success。
+- **当前状态**：RESOLVED（仅限 repair_all 聚合基线）；`feat/news` 和 `feat/researchflow` 尚未同步，不得宣称模块分支已解除。
 
 ## 4. 状态定义
 
@@ -139,7 +140,7 @@
 | `feat/quant` | `992a10d1837dad8e695f9e9d7b6f459ebdcc3eb9` | 本轮增加 GetResult 主体解析后的 Context 取消检查；RiskDecision 契约未变化，RF-BLOCK-008 仍未解除 |
 | `feat/llm` | `77ef70568a0e76ab3092b25503c36ee2316990a3` | Provider Port 存在；生产装配/真实模型消费者和目标模型 Tokenizer 仍未闭环 |
 | `feat/data` | `9f6adaf280a94bc60f993554473fd0adb70b07da` | 尚无可注册的 Researchflow Data Stage 完整契约 |
-| `feat/news` | `cb4206e8e59ec7bcb27660d33e4cc28b1cd2a06d` | 现有 News Search 已装配；Payload Validator uniqueItems 缺口仍由 News Owner 负责 |
+| `feat/news` | `cb4206e8e59ec7bcb27660d33e4cc28b1cd2a06d` | repair_all 已修复并验收 Payload Validator uniqueItems；feat/news 分支同步状态需单独核对 |
 
 ### 本模块独立修复
 
@@ -149,3 +150,47 @@
 - 代码 SHA：`c7849cf5ad44dfa3a702844c14eb657f864d7512`；格式修正 SHA：`555a16726bfa5e48968b7f23b08e1ba6de7706d9`。
 - Run [44440261770](https://github.com/Kasign/stock_data_provider/actions/runs/44440261770)：Researchflow 专项 format/tests/race/vet、WorkerStore、MariaDB lifecycle integration 已通过；Run 最终 completed/success：根模块 Test/Race/Vet、Researchflow format/tests/race/vet、WorkerStore unit/race/vet、Researchflow MariaDB lifecycle integration 均 success；News/Market Data/Compose 相关 Jobs 为 skipped，不代表这些领域的真实集成通过。
 - 本轮没有改动其他分支；没有新增占位 Stage/Adapter。Server 尚未装配 Research/Quant/LLM 的事实仍成立。
+
+
+## RepairAll Quant→Researchflow→Server 生产装配审查（2026-11-19）
+
+- 审查基线：repair_all SHA b52c8afde2f2e32fca498a78987d34f96fba4335。
+- Server bootstrap.go 当前无 Quant 相关装配调用；researchflowComposition 仅保存 newsStage，researchflowRuntime 将 newsStage.executor 与 newsStage.registry 注入 Worker。
+- news_search_stage.go 的 Stage Output Registry 仅注册 news.search_candidates；当前 StageExecutor 只处理 SearchCandidatesStageCode。
+- Researchflow resultvalidation/quant.go 是结果校验/映射能力，不是 StageExecutor，也不负责授权；不能据此认定 Quant Stage 已装配。
+- 判定：当前 Server/Researchflow 生产 Quant Stage 为 NOT_COMPARABLE（尚无生产 Stage 场景与提供方 Facade），不是 Root 装配漏接一段现成实现。
+- 解锁条件：Quant 提供正式计算 Facade、完整输入/输出契约与生产结果持久化/授权端口；明确 Researchflow Stage 输入参数、资源授权和结果引用；随后 Server 才能装配并进行 Worker 真实集成验收。
+
+
+## RepairAll RA-CROSS-REVIEW-005 Context Assembly 边界复核（2026-11-19）
+
+- 审查基线：repair_all SHA 8afbba2a0a519f932063861085bbdc89f7e76fa8。
+- contextassembly 的 ToResearchCreateContextCommand 只接收 ResearchContextSnapshot，不接收 Researchflow Run；它只校验 SystemAsOf 非零 UTC，不负责 Run 绑定。这与 doc/researchflow/05-FLOW-005 上明确的边界一致，不是该纯函数自身缺陷。
+- FLOW-005 实施文档要求 Server/Worker 在 CreateContext 前校验 snapshot.SystemAsOf == Run.SystemAsOf，读取 Context 后再次校验；构造 LLM ModelRequest 时直接继承 Run.SystemAsOf/DeadlineAt。当前 Worker 请求包含 Run/SystemAsOf/DeadlineAt，但没有生产 Context Stage 调用该 Adapter。
+- 不能把 Context Snapshot 的 UTC 校验当作 Run PIT 绑定验收；也不能为了简化调用修改 Run 唯一时钟语义。
+- 解锁条件：Researchflow 定义真实 Context Stage 调用场景和参数；Server 装配 Research Context Owner Authorizer/适配器后，在同一 Run 上完成创建前、读取后、LLM 请求三处时间一致性测试。
+
+
+## RepairAll RA-CROSS-REVIEW-005 Evidence 严格 PIT 消费缺口（2026-11-19）
+
+- Researchflow ResultComposition 当前校验 Evidence.system_as_of <= Run.system_as_of、system_observed_at <= Evidence.system_as_of，但未校验 available_at 严格 PIT 条件。
+- Research Evidence Domain 已提供 ValidateForStrictPIT(runAsOf)，严格模式要求 available_at 非空且 <= Evidence.system_as_of，且 Evidence.system_as_of <= Run.system_as_of。
+- 项目级 Quant-Research DTO 契约明确：available_at 为 null/unknown 时不得进入严格 PIT；只有 Researchflow Template 显式声明非严格 PIT 模式和风险时才可按“系统当时已观察”语义使用。
+- 当前 WorkflowTemplate、ResultCompositionInput/ValidationPolicy 未建模 PIT Mode，且无生产 ResultComposition 调用者。不能在 validator 内一律强制严格或默认降级，因为两者都会猜测尚未冻结的模板语义。
+- 当前状态：BLOCKED（待项目契约决策）。不新增字段、不更改模板 Schema，直至明确默认值、非严格风险表达及 Fingerprint 绑定要求。
+
+
+## RepairAll RA-CROSS-REVIEW-005 最终结论（2026-11-19）
+
+- FLOW-005 Context Assembly 目前是纯规划/DTO 投影；无 Server/Worker 生产 Context Stage。Run.SystemAsOf 与 Context 的创建前/读取后绑定仍未有真实调用者执行。
+- FLOW-006 ResultComposition 的 Evidence 检查未验证 available_at 严格 PIT；项目级契约要求严格模式排除 null/unknown，非严格模式必须由 Template 显式声明风险。当前 Template/ResultComposition 无 PIT Mode 语义，需项目契约 Owner 决策后实施。
+- Research ContextAuthorizer 未由 Server News→Research composition 注入；GetContext 缺少 Authorizer 会 fail-closed。不得创建占位 Allow。
+- 以上均为跨模块生产接入/契约阻塞，不是通过复制 Adapter 或放宽 Validator 可解决的问题。
+
+
+## RepairAll RA-CROSS-REVIEW-006 Researchflow Outbox 错误分类审查（2026-11-19）
+
+- Researchflow Server Publisher 将确定性 Envelope/Payload/Schema 问题编码为 notification_event_invalid，将 Notification 接收失败编码为 notification_receive_unavailable。
+- Researchflow OutboxDispatcher 当前对所有 Publish 错误统一调用 RetryOutbox；OutboxErrorCoder 仅用于持久化 last_error_code，不影响是否重试。
+- Researchflow OutboxStore 无 Reject/DeadLetter 能力；项目现有决议明确暂不设最大尝试次数/死信状态，后续由消费契约定义告警和死信处置。
+- 与 Research Relay 的永久错误 Reject 行为存在策略差异。当前不擅自扩展 Outbox 状态或吞掉事件；保留为需契约 Owner 决策的操作策略卡点。

@@ -30,6 +30,11 @@ jobs:
       - name: Prepare example environment file
         run: cp .env.example .env
       - name: Validate unified Compose configuration
+        env:
+          OWNER_SESSION_PUBLIC_ORIGIN: https://localhost
+          OWNER_SESSION_ARGON2_MEMORY_KIB: "65536"
+          OWNER_SESSION_ARGON2_ITERATIONS: "3"
+          OWNER_SESSION_ARGON2_PARALLELISM: "1"
         run: docker compose --env-file .env -f docker-compose.yml config --quiet
       - name: Set up Node.js
         uses: actions/setup-node@v4

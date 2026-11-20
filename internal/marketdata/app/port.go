@@ -66,6 +66,36 @@ type QuoteSnapshot struct {
 	NormalizationVersion string
 }
 
+// DailyBarExactValues 保留 Provider 入口解析出的精确十进制值，不从 float64 反向生成。
+// OHLC 是请求复权口径下的最终值；RawVolume/RawAmount 是单位归一化前的来源值。
+type DailyBarDecimalEvidence struct {
+	EvidenceKind         string
+	SourceToken          string
+	SourceFractionDigits *int
+	ProtocolScale        *int
+	UnitConversionFactor string
+}
+
+type DailyBarExactValues struct {
+	Open                     string
+	High                     string
+	Low                      string
+	Close                    string
+	RawVolume                string
+	RawAmount                *string
+	AmountCNY                *string
+	ChangePercent            *string
+	ChangePercentSourceField string
+	ChangePercentEvidence    *DailyBarDecimalEvidence
+	OpenEvidence             *DailyBarDecimalEvidence
+	HighEvidence             *DailyBarDecimalEvidence
+	LowEvidence              *DailyBarDecimalEvidence
+	CloseEvidence            *DailyBarDecimalEvidence
+	RawVolumeEvidence        *DailyBarDecimalEvidence
+	RawAmountEvidence        *DailyBarDecimalEvidence
+	AmountCNYEvidence        *DailyBarDecimalEvidence
+}
+
 // DailyBar 是供下游分析使用的 Application DTO，字段来源与 model.DailyBar 一一对应。
 // 保留来源和时点元数据；未知数值字段保持 nil，不使用零值代替未知。
 type DailyBar struct {
@@ -113,6 +143,7 @@ type DailyBar struct {
 	FallbackReason                        string
 	RequestID                             string
 	NormalizationVersion                  string
+	ExactValues                           *DailyBarExactValues
 }
 
 // DailyBarsQuery 定义当前视图或历史日线读取的显式参数。
@@ -136,6 +167,36 @@ type DailyBarsSnapshot struct {
 	Warnings               []string
 	SystemObservedAtCutoff *time.Time
 	Bars                   []DailyBar
+}
+
+// DailyBarCoverageEvidence 是一次覆盖率评估实际使用的日历与阈值证据。
+type DailyBarCoverageEvidence struct {
+	CalendarQualityStatus QualityStatus
+	ExpectedTradingDays   int
+	MinimumRequiredBars   int
+	CoverageBasis         string
+	CoverageSufficient    bool
+	Warnings              []string
+}
+
+// DailyBarsV2Snapshot 是版本化日线 Snapshot。CalendarRef 必须来自同一次覆盖率评估，
+// 不允许在读取完成后再次查询交易日历补写。
+type DailyBarsV2Snapshot struct {
+	Symbol                 string
+	Interval               string
+	AdjustmentBasis        AdjustmentBasis
+	QualityStatus          QualityStatus
+	Warnings               []string
+	SystemObservedAtCutoff *time.Time
+	TradingCalendarRef     *string
+	CoverageEvidence       DailyBarCoverageEvidence
+	Bars                   []DailyBar
+}
+
+// DailyBarsV2Reader 提供带有日历版本证据的版本化日线读取用例。
+// 与 v1 DailyBarsReader 分离，避免改变既有消费者契约。
+type DailyBarsV2Reader interface {
+	GetDailyBarsV2(ctx context.Context, query DailyBarsQuery) (DailyBarsV2Snapshot, error)
 }
 
 // FundamentalsQuery 定义单证券、单报告期的财务数据读取请求。

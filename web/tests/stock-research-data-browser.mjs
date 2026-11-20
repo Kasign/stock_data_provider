@@ -49,7 +49,7 @@ try {
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, reducedMotion: "reduce" });
   await context.addInitScript(() => {
     localStorage.setItem("stock-provider-webui.settings.v1", JSON.stringify({
-      marketBase: "/market-api", analysisBase: "/analysis-api", apiKey: "research-data-browser-key"
+      marketBase: "/", analysisBase: "/"
     }));
   });
   const page = await context.newPage();

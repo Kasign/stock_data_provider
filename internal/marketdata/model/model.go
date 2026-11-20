@@ -58,6 +58,46 @@ type Quote struct {
 	NormalizationVer   string          `json:"normalization_version"`
 }
 
+// DailyBarExactValues keeps exact decimal values for Data v2. OHLC are the final values after the requested adjustment; RawVolume/RawAmount retain the source values before unit normalization.
+type DailyBarPrecisionEvidenceKind string
+
+const (
+	DailyBarPrecisionEvidenceProviderContract   DailyBarPrecisionEvidenceKind = "provider_contract"
+	DailyBarPrecisionEvidenceObservedToken      DailyBarPrecisionEvidenceKind = "observed_token"
+	DailyBarPrecisionEvidenceProtocolFixedScale DailyBarPrecisionEvidenceKind = "protocol_fixed_scale"
+	DailyBarPrecisionEvidenceUnknown            DailyBarPrecisionEvidenceKind = "unknown"
+)
+
+// DailyBarDecimalEvidence 保留精确数值对应的来源词法或协议固定 scale。
+// SourceToken 是供应商实际返回的数字文本；ProtocolScale 只用于协议明示的定点整数。
+type DailyBarDecimalEvidence struct {
+	EvidenceKind         DailyBarPrecisionEvidenceKind `json:"evidence_kind"`
+	SourceToken          string                        `json:"source_token,omitempty"`
+	SourceFractionDigits *int                          `json:"source_fraction_digits,omitempty"`
+	ProtocolScale        *int                          `json:"protocol_scale,omitempty"`
+	UnitConversionFactor string                        `json:"unit_conversion_factor,omitempty"`
+}
+
+type DailyBarExactValues struct {
+	Open                     string                   `json:"open"`
+	High                     string                   `json:"high"`
+	Low                      string                   `json:"low"`
+	Close                    string                   `json:"close"`
+	RawVolume                string                   `json:"raw_volume"`
+	RawAmount                *string                  `json:"raw_amount,omitempty"`
+	AmountCNY                *string                  `json:"amount_cny,omitempty"`
+	ChangePercent            *string                  `json:"change_percent,omitempty"`
+	ChangePercentSourceField string                   `json:"change_percent_source_field,omitempty"`
+	ChangePercentEvidence    *DailyBarDecimalEvidence `json:"change_percent_evidence,omitempty"`
+	OpenEvidence             *DailyBarDecimalEvidence `json:"open_evidence,omitempty"`
+	HighEvidence             *DailyBarDecimalEvidence `json:"high_evidence,omitempty"`
+	LowEvidence              *DailyBarDecimalEvidence `json:"low_evidence,omitempty"`
+	CloseEvidence            *DailyBarDecimalEvidence `json:"close_evidence,omitempty"`
+	RawVolumeEvidence        *DailyBarDecimalEvidence `json:"raw_volume_evidence,omitempty"`
+	RawAmountEvidence        *DailyBarDecimalEvidence `json:"raw_amount_evidence,omitempty"`
+	AmountCNYEvidence        *DailyBarDecimalEvidence `json:"amount_cny_evidence,omitempty"`
+}
+
 type DailyBar struct {
 	Symbol                                string          `json:"symbol"`
 	TradeDate                             string          `json:"trade_date"`
@@ -103,6 +143,8 @@ type DailyBar struct {
 	FallbackReason                        string          `json:"fallback_reason,omitempty"`
 	RequestID                             string          `json:"request_id,omitempty"`
 	NormalizationVer                      string          `json:"normalization_version"`
+	// ExactValues 保留 DailyBars v2 所需的精确值；只进入 Data revision metadata，不暴露到旧 HTTP JSON。
+	ExactValues *DailyBarExactValues `json:"-"`
 }
 
 type Bundle struct {
@@ -372,6 +414,24 @@ type FundamentalsSnapshot struct {
 	SystemObservedAt *time.Time           `json:"system_observed_at,omitempty"`
 	QualityStatus    QualityStatus        `json:"quality_status"`
 	QualityReasons   []string             `json:"quality_reasons,omitempty"`
+}
+
+// NormalizeInstantsUTC 将财务快照中的绝对时间统一为 UTC；报告日期仍保持市场日历日期。
+func (s *FundamentalsSnapshot) NormalizeInstantsUTC() {
+	if s == nil {
+		return
+	}
+	s.FetchedAt = s.FetchedAt.UTC()
+	if s.SystemObservedAt != nil {
+		normalized := s.SystemObservedAt.UTC()
+		s.SystemObservedAt = &normalized
+	}
+	for index := range s.Sections {
+		if s.Sections[index].AvailableAt != nil {
+			normalized := s.Sections[index].AvailableAt.UTC()
+			s.Sections[index].AvailableAt = &normalized
+		}
+	}
 }
 
 // ValuationItem 为单只 A 股的最新估值快照。指标允许为 null 或负数，不将缺失值补零。

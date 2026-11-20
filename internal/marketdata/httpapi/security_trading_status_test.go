@@ -40,12 +40,11 @@ func securityStatusTestHandler() http.Handler {
 		time.Second, time.Second, 120, 2000, service.ResilienceConfig{}, nil,
 	)
 	svc.SetSecurityTradingStatusProviders([]provider.SecurityTradingStatusProvider{p})
-	return NewWithCapabilityInterfaces("secret", "forward_adjusted", svc, []provider.NamedProvider{p}, nil, nil, 2000, time.Second, nil).Handler()
+	return NewWithCapabilityInterfaces("forward_adjusted", svc, []provider.NamedProvider{p}, nil, nil, 2000, time.Second, nil).InProcessHandler()
 }
 
 func TestSecurityTradingStatusHTTPReturnsHistoricalEvidence(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/stocks/600519.SH/trading-status?date=2026-10-22", nil)
-	req.Header.Set("X-API-Key", "secret")
 	recorder := httptest.NewRecorder()
 	securityStatusTestHandler().ServeHTTP(recorder, req)
 	if recorder.Code != http.StatusOK {
@@ -71,7 +70,6 @@ func TestSecurityTradingStatusHTTPRequiresExactDate(t *testing.T) {
 		"/api/v1/stocks/600519.SH/trading-status?date=2027-01-01",
 	} {
 		req := httptest.NewRequest(http.MethodGet, path, nil)
-		req.Header.Set("X-API-Key", "secret")
 		recorder := httptest.NewRecorder()
 		securityStatusTestHandler().ServeHTTP(recorder, req)
 		if recorder.Code != http.StatusBadRequest {
@@ -83,7 +81,6 @@ func TestSecurityTradingStatusHTTPRequiresExactDate(t *testing.T) {
 func TestSecurityTradingStatusHTTPAsOfRequiresLocalStorage(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet,
 		"/api/v1/stocks/600519.SH/trading-status?date=2026-10-22&as_of=2026-10-23T00%3A00%3A00Z", nil)
-	req.Header.Set("X-API-Key", "secret")
 	recorder := httptest.NewRecorder()
 	securityStatusTestHandler().ServeHTTP(recorder, req)
 	if recorder.Code != http.StatusServiceUnavailable {

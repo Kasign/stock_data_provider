@@ -47,7 +47,7 @@ func (r *Registry) Register(namespace string, migrations []platformstorage.Migra
 	snapshot := make([]platformstorage.Migration, len(migrations))
 	versions := make(map[uint64]struct{}, len(migrations))
 	for i, item := range migrations {
-		if item.Version == 0 || strings.TrimSpace(item.Description) == "" || len(item.Statements) == 0 {
+		if item.Version == 0 || strings.TrimSpace(item.Description) == "" || (len(item.Statements) == 0 && len(item.Operations) == 0) {
 			return fmt.Errorf("migration namespace %q contains an incomplete migration at index %d", namespace, i)
 		}
 		if _, exists := versions[item.Version]; exists {
@@ -57,6 +57,7 @@ func (r *Registry) Register(namespace string, migrations []platformstorage.Migra
 		snapshot[i] = platformstorage.Migration{
 			Version: item.Version, Description: item.Description,
 			Statements: append([]string(nil), item.Statements...),
+			Operations: append([]platformstorage.MigrationOperation(nil), item.Operations...),
 		}
 	}
 	sort.Slice(snapshot, func(i, j int) bool {
@@ -158,6 +159,8 @@ func (r *Registry) RunWithReport(ctx context.Context, db *sql.DB) (RunReport, er
 // ValidateApplied performs a read-only check that every registered migration
 // version is present and marked applied. It never creates or changes history.
 // Checksum verification remains owned by Platform's migration runner.
+// ValidateApplied performs a read-only verification of every registered namespace.
+// Platform checks the exact version set, status and checksum under the namespace lock.
 func (r *Registry) ValidateApplied(ctx context.Context, db *sql.DB) error {
 	if r == nil {
 		return errors.New("migration registry is nil")
@@ -171,6 +174,16 @@ func (r *Registry) ValidateApplied(ctx context.Context, db *sql.DB) error {
 	entries := r.snapshot()
 	if len(entries) == 0 {
 		return errors.New("no module migrations are registered")
+	}
+	namespaces := make([]string, 0, len(entries))
+	for namespace := range entries {
+		namespaces = append(namespaces, namespace)
+	}
+	sort.Strings(namespaces)
+	for _, namespace := range namespaces {
+		if err := platformstorage.ValidateAppliedMigrations(ctx, db, namespace, entries[namespace]); err != nil {
+			return fmt.Errorf("validate %s migration checksums: %w", namespace, err)
+		}
 	}
 
 	rows, err := db.QueryContext(ctx, "SELECT namespace, version, status FROM platform_schema_migrations")
@@ -204,8 +217,7 @@ func (r *Registry) ValidateApplied(ctx context.Context, db *sql.DB) error {
 	return nil
 }
 
-// validateAppliedNamespaces requires the database history to contain exactly
-// the namespaces and versions registered by the current Server composition.
+// validateAppliedNamespaces requires exact namespace/version sets for every registered module.
 func validateAppliedNamespaces(
 	expected map[string][]platformstorage.Migration,
 	applied map[string]map[uint64]string,
@@ -213,16 +225,26 @@ func validateAppliedNamespaces(
 	if len(expected) == 0 {
 		return errors.New("no migration definitions are registered")
 	}
-	for namespace, migrations := range expected {
+	namespaces := make([]string, 0, len(expected))
+	for namespace := range expected {
+		namespaces = append(namespaces, namespace)
+	}
+	sort.Strings(namespaces)
+	for _, namespace := range namespaces {
 		namespaceApplied, exists := applied[namespace]
 		if !exists {
 			return fmt.Errorf("migration namespace %q is missing", namespace)
 		}
-		if err := validateAppliedVersions(migrations, namespaceApplied); err != nil {
+		if err := validateAppliedVersions(expected[namespace], namespaceApplied); err != nil {
 			return fmt.Errorf("migration namespace %q: %w", namespace, err)
 		}
 	}
+	appliedNamespaces := make([]string, 0, len(applied))
 	for namespace := range applied {
+		appliedNamespaces = append(appliedNamespaces, namespace)
+	}
+	sort.Strings(appliedNamespaces)
+	for _, namespace := range appliedNamespaces {
 		if _, exists := expected[namespace]; !exists {
 			return fmt.Errorf("database contains unregistered migration namespace %q", namespace)
 		}

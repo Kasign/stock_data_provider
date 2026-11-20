@@ -24,7 +24,7 @@ function formatNumber(value){const number=finiteNumberOrNull(value);return numbe
 function safeResearchButton(button,disabled,label,busy=false){try{if(!button)return false;button.disabled=Boolean(disabled);if(busy)button.setAttribute("aria-busy","true");else button.removeAttribute("aria-busy");if(label!==undefined)button.textContent=label;return true;}catch{return false;}}
 function safeResearchFeedback(message){try{setText("stock-research-feedback",message);}catch{}}
 function safeResearchError(error){try{return responseError(error);}catch{return "未知异常";}}
-function responseError(err){if(Number(err?.status)===404)return "当前部署的 market-data 尚未提供该接口，请更新数据服务版本。";if(Number(err?.status)===503)return "对应数据源未启用或未配置，请检查 market-data 的 Provider 配置。";return describeApiError(err,"请求失败。");}
+function responseError(err){if(Number(err?.status)===404)return "当前 Root Server 部署未提供该接口，请核对已发布的 API 契约。";if(Number(err?.status)===503)return "对应数据源未启用或未配置，请检查 Root Server 的 Provider 配置。";return describeApiError(err,"请求失败。");}
 function safeAnnouncementUrl(raw){try{const url=new URL(String(raw||""));return url.protocol==="https:"&&(url.hostname==="eastmoney.com"||url.hostname.endsWith(".eastmoney.com"))?url.href:"";}catch{return "";}}
 function currentYearAndQuarter(){const now=new Date();let year=now.getFullYear(),quarter=Math.floor(now.getMonth()/3);if(quarter===0){year-=1;quarter=4;}return {year,quarter};}
 function normalizeValuationSymbol(input) {
@@ -53,26 +53,6 @@ export function bindStockResearch(getSettings,getSymbol){
   const panel=PANEL_CONFIG[key];if(!panel)return;
   const root=$(panel.root);if(root)root.replaceChildren(el("p","stock-research-empty",placeholder));
   setText(panel.symbol,symbol||"尚未选择");setText(panel.meta,"");clearReasons(panel.reasons);setError(panel.error,"");
- }
- function markApiKeyRequired(){
-  Object.keys(state.generation).forEach(abort);
-  state.announcementPage=0;state.announcementHasMore=false;state.announcementLoading=false;
-  Object.keys(PANEL_CONFIG).forEach(key=>{
-   const panel=PANEL_CONFIG[key];
-   clearPanel(key,"需要配置行情 API Key 后才能读取。",state.symbol);
-   setQuality(panel.quality,"unknown","需配置 Key");
-   setError(panel.error,"请先在连接与密钥设置中配置行情 API Key。");
-  });
-  setText("stock-research-target",state.symbol?"当前标的："+state.symbol:"请先输入代码，或从中文名称搜索结果中选择股票");
-  setText("stock-research-feedback","请先在连接与密钥设置中配置行情 API Key。");
-  safeResearchButton($("#load-more-announcements"),true,"加载更多公告");
-  [
-   ["#load-stock-research", "加载公司资料"],
-   ["#load-fundamentals", "读取财务指标"],
-   ["#load-valuations", "读取估值指标"],
-   ["#load-chip-distribution", "读取筹码分布"],
-   ["#load-capital-flow", "读取资金流"]
-  ].forEach(([selector, label]) => safeResearchButton($(selector), false, label));
  }
  function reset(symbol){
   state.loadResearchGeneration+=1;
@@ -110,8 +90,6 @@ export function bindStockResearch(getSettings,getSymbol){
  }
  function invalidate(message="行情连接配置已变更，请重新加载个股研究资料。"){
   reset(resolvedSymbol());
-  const settings=typeof getSettings==="function"?getSettings():null;
-  if(!settings?.apiKey){markApiKeyRequired();return;}
   setText("stock-research-feedback",message);
  }
  async function fetchOne(key,request,render){
@@ -121,7 +99,6 @@ export function bindStockResearch(getSettings,getSymbol){
    if(!symbol)return false;
    settings=typeof getSettings==="function"?getSettings():null;
    panel=PANEL_CONFIG[key];if(!panel)return false;
-   if(!settings?.apiKey){markApiKeyRequired();return false;}
    state.requested.add(key);
    clearPanel(key,"正在读取本次请求，尚无新结果。",symbol);
    setQuality(panel.quality,"unknown","读取中…");
@@ -161,7 +138,6 @@ export function bindStockResearch(getSettings,getSymbol){
   try{
    symbol=syncSymbol();if(!symbol)return false;
    settings=typeof getSettings==="function"?getSettings():null;
-   if(!settings?.apiKey){markApiKeyRequired();return false;}
    if(!append)state.requested.add("announcements");
    const replacingInFlight=state.announcementLoading;
    if(replacingInFlight&&append)return false;
@@ -229,7 +205,6 @@ export function bindStockResearch(getSettings,getSymbol){
    symbol=syncSymbol();
    const settings=typeof getSettings==="function"?getSettings():null;
    if(!symbol){safeResearchFeedback("请先输入有效股票代码，或从中文名称搜索建议中选择股票。");return false;}
-   if(!settings?.apiKey){markApiKeyRequired();return false;}
    requestGeneration=++state.loadResearchGeneration;
    safeResearchFeedback("正在分别读取公司档案、所属板块和近期公告，各接口状态独立。");
    button=$("#load-stock-research");

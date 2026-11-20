@@ -64,10 +64,96 @@ func (s *Store) Ping(ctx context.Context) error {
 	}
 	return s.db.PingContext(ctx)
 }
-func (s *Store) Migrate(ctx context.Context) error {
+
+// ValidateCompatibilitySchema verifies the physical schema invariants introduced
+// by Data migrations V4-V5. Migration history checksums cannot detect manual schema drift.
+func (s *Store) ValidateCompatibilitySchema(ctx context.Context) error {
 	if s == nil || s.db == nil {
 		return nil
 	}
+	if ctx == nil {
+		return errors.New("schema validation context is required")
+	}
+	for _, column := range []string{"volume_ratio", "turnover_rate"} {
+		var columnType, dataType, nullable string
+		var precision, scale sql.NullInt64
+		err := s.db.QueryRowContext(ctx, `SELECT column_type, data_type, is_nullable, numeric_precision, numeric_scale
+FROM information_schema.columns
+WHERE table_schema = DATABASE() AND table_name = 'market_data_quotes' AND column_name = ?`, column).
+			Scan(&columnType, &dataType, &nullable, &precision, &scale)
+		if errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("market_data_quotes.%s is missing", column)
+		}
+		if err != nil {
+			return fmt.Errorf("inspect market_data_quotes.%s: %w", column, err)
+		}
+		if strings.ToLower(columnType) != "decimal(16,8)" || strings.ToLower(dataType) != "decimal" ||
+			nullable != "YES" || !precision.Valid || precision.Int64 != 16 ||
+			!scale.Valid || scale.Int64 != 8 {
+			return fmt.Errorf("market_data_quotes.%s must be nullable signed DECIMAL(16,8)", column)
+		}
+	}
+	for _, index := range []struct {
+		table, name, legacy, columns string
+	}{
+		{"market_data_daily_bar_versions", "idx_market_bar_revision_identity_asof", "uq_market_bar_revision_content", "symbol,trade_date,period,adjustment_basis,source,recorded_at,id"},
+		{"market_data_fundamental_versions", "idx_market_fundamental_identity_asof", "uq_market_fundamental_revision_content", "symbol,report_year,report_quarter,source,recorded_at,id"},
+	} {
+		var legacyCount int
+		if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM information_schema.statistics
+WHERE table_schema = DATABASE() AND table_name = ? AND index_name = ?`, index.table, index.legacy).Scan(&legacyCount); err != nil {
+			return fmt.Errorf("inspect legacy index %s.%s: %w", index.table, index.legacy, err)
+		}
+		if legacyCount != 0 {
+			return fmt.Errorf("legacy index %s.%s must be removed", index.table, index.legacy)
+		}
+		rows, err := s.db.QueryContext(ctx, `SELECT non_unique, column_name, sub_part, index_type, collation FROM information_schema.statistics
+WHERE table_schema = DATABASE() AND table_name = ? AND index_name = ? ORDER BY seq_in_index`, index.table, index.name)
+		if err != nil {
+			return fmt.Errorf("inspect index %s.%s: %w", index.table, index.name, err)
+		}
+		var columns []string
+		nonUnique := -1
+		for rows.Next() {
+			var currentNonUnique int
+			var column, indexType string
+			var subPart sql.NullInt64
+			var collation sql.NullString
+			if err := rows.Scan(&currentNonUnique, &column, &subPart, &indexType, &collation); err != nil {
+				_ = rows.Close()
+				return fmt.Errorf("read index %s.%s: %w", index.table, index.name, err)
+			}
+			if subPart.Valid || strings.ToUpper(indexType) != "BTREE" || !collation.Valid || collation.String != "A" {
+				_ = rows.Close()
+				return fmt.Errorf("index %s.%s must use full ascending BTREE columns", index.table, index.name)
+			}
+			if nonUnique != -1 && nonUnique != currentNonUnique {
+				_ = rows.Close()
+				return fmt.Errorf("index %s.%s has inconsistent uniqueness metadata", index.table, index.name)
+			}
+			nonUnique = currentNonUnique
+			columns = append(columns, column)
+		}
+		if err := rows.Err(); err != nil {
+			_ = rows.Close()
+			return fmt.Errorf("read index %s.%s: %w", index.table, index.name, err)
+		}
+		if err := rows.Close(); err != nil {
+			return fmt.Errorf("close index metadata for %s.%s: %w", index.table, index.name, err)
+		}
+		if nonUnique != 1 || strings.Join(columns, ",") != index.columns {
+			return fmt.Errorf("index %s.%s must be non-unique with columns %s", index.table, index.name, index.columns)
+		}
+	}
+	if err := s.validateTradingCalendarSnapshotSchema(ctx); err != nil {
+		return err
+	}
+	return nil
+}
+
+// MigrationDefinitions returns the immutable Data schema history used by Root Server.
+// Versions 1-4 are published definitions and must not be changed.
+func MigrationDefinitions() []platformstorage.Migration {
 	stmts := []string{
 		`CREATE TABLE IF NOT EXISTS market_data_provider_probe_runs (
  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -226,8 +312,7 @@ func (s *Store) Migrate(ctx context.Context) error {
  KEY idx_market_corporate_action_observed (recorded_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 	}
-	// Data Schema 由公共 Platform Migration Runner 执行；版本 1 发布后保持不可变，后续变更追加新版本。
-	if err := platformstorage.ApplyMigrations(ctx, s.db, "market_data", []platformstorage.Migration{
+	return []platformstorage.Migration{
 		{Version: 1, Description: "market data base schema", Statements: stmts},
 		{
 			Version: 2, Description: "adjustment factor source-version identity",
@@ -246,79 +331,47 @@ ON market_data_adjustment_factor_versions (symbol, trade_date, source, source_ve
 				"CREATE TABLE IF NOT EXISTS market_data_valuation_versions (id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT, request_fingerprint CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL, source VARCHAR(64) NOT NULL, revision_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL, recorded_at DATETIME(6) NOT NULL, fetched_at DATETIME(6) NOT NULL, quality_status VARCHAR(16) NOT NULL, metadata JSON NOT NULL, PRIMARY KEY (id), KEY idx_market_valuation_asof (request_fingerprint, recorded_at), KEY idx_market_valuation_identity_asof (request_fingerprint, source, recorded_at, id), KEY idx_market_valuation_observed (recorded_at)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
 			},
 		},
-	}); err != nil {
-		return fmt.Errorf("market-data schema migration: %w", err)
+		{
+			Version: 4, Description: "legacy market-data index and column compatibility",
+			Operations: []platformstorage.MigrationOperation{
+				{Kind: platformstorage.MigrationOperationEnsureNonUniqueIndex, Table: "market_data_daily_bar_versions", LegacyName: "uq_market_bar_revision_content", Name: "idx_market_bar_revision_identity_asof", Columns: "symbol, trade_date, period, adjustment_basis, source, recorded_at, id"},
+				{Kind: platformstorage.MigrationOperationEnsureNonUniqueIndex, Table: "market_data_fundamental_versions", LegacyName: "uq_market_fundamental_revision_content", Name: "idx_market_fundamental_identity_asof", Columns: "symbol, report_year, report_quarter, source, recorded_at, id"},
+				{Kind: platformstorage.MigrationOperationEnsureColumn, Table: "market_data_quotes", Name: "volume_ratio", Definition: "DECIMAL(16,8) NULL"},
+				{Kind: platformstorage.MigrationOperationEnsureColumn, Table: "market_data_quotes", Name: "turnover_rate", Definition: "DECIMAL(16,8) NULL"},
+			},
+		},
+		{
+			Version: 5, Description: "immutable trading-calendar content snapshots",
+			Statements: []string{
+				`CREATE TABLE IF NOT EXISTS market_data_trading_calendar_snapshots (
+ calendar_ref VARCHAR(96) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ content_fingerprint CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ market VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ start_date DATE NOT NULL,
+ end_date DATE NOT NULL,
+ source VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ adapter_version VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ schema_version VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ quality_status VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ fetched_at DATETIME(6) NOT NULL,
+ observed_at DATETIME(6) NOT NULL,
+ payload_json LONGTEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
+ PRIMARY KEY (calendar_ref),
+ KEY idx_market_calendar_identity_observed (market, start_date, end_date, observed_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+			},
+		},
 	}
-	// 旧版修订表曾对内容哈希建立全历史唯一约束，会错误阻止 A→B→A 的回归修订。
-	if err := s.ensureNonUniqueHistoryIndex(ctx, "market_data_daily_bar_versions",
-		"uq_market_bar_revision_content", "idx_market_bar_revision_identity_asof",
-		"symbol, trade_date, period, adjustment_basis, source, recorded_at, id"); err != nil {
-		return fmt.Errorf("migrate daily-bar revision index: %w", err)
-	}
-	if err := s.ensureNonUniqueHistoryIndex(ctx, "market_data_fundamental_versions",
-		"uq_market_fundamental_revision_content", "idx_market_fundamental_identity_asof",
-		"symbol, report_year, report_quarter, source, recorded_at, id"); err != nil {
-		return fmt.Errorf("migrate fundamentals revision index: %w", err)
-	}
-	// CREATE TABLE IF NOT EXISTS does not add new columns to an already existing
-	// deployment. Use information_schema checks so the migration works on both
-	// MySQL and MariaDB versions without relying on vendor-specific
-	// `ADD COLUMN IF NOT EXISTS` syntax.
-	for _, column := range []struct{ name, definition string }{
-		{name: "volume_ratio", definition: "DECIMAL(16,8) NULL"},
-		{name: "turnover_rate", definition: "DECIMAL(16,8) NULL"},
-	} {
-		if err := s.ensureColumn(ctx, "market_data_quotes", column.name, column.definition); err != nil {
-			return fmt.Errorf("migrate market_data_quotes.%s: %w", column.name, err)
-		}
-	}
-	return nil
 }
 
-func (s *Store) ensureNonUniqueHistoryIndex(ctx context.Context, table, legacyIndex, indexName, columns string) error {
-	// 所有标识符和列定义均为包内常量，不接受请求参数。
-	var legacyCount int
-	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM information_schema.STATISTICS
-WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND INDEX_NAME=?`, table, legacyIndex).Scan(&legacyCount); err != nil {
-		return err
-	}
-	if legacyCount > 0 && legacyIndex != indexName {
-		if _, err := s.db.ExecContext(ctx, fmt.Sprintf("ALTER TABLE `%s` DROP INDEX `%s`", table, legacyIndex)); err != nil {
-			return err
-		}
-	}
-	var count, nonUnique int
-	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*), COALESCE(MAX(NON_UNIQUE), 1)
-FROM information_schema.STATISTICS
-WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND INDEX_NAME=?`, table, indexName).Scan(&count, &nonUnique); err != nil {
-		return err
-	}
-	if count > 0 && nonUnique == 0 {
-		if _, err := s.db.ExecContext(ctx, fmt.Sprintf("ALTER TABLE `%s` DROP INDEX `%s`", table, indexName)); err != nil {
-			return err
-		}
-		count = 0
-	}
-	if count > 0 {
+// Migrate 保留给独立 Data 命令使用；Root Server 应注册 MigrationDefinitions 到统一 Registry。
+func (s *Store) Migrate(ctx context.Context) error {
+	if s == nil || s.db == nil {
 		return nil
 	}
-	_, err := s.db.ExecContext(ctx, fmt.Sprintf("CREATE INDEX `%s` ON `%s` (%s)", indexName, table, columns))
-	return err
+	return platformstorage.ApplyMigrations(ctx, s.db, "market_data", MigrationDefinitions())
 }
 
-func (s *Store) ensureColumn(ctx context.Context, table, column, definition string) error {
-	var count int
-	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND COLUMN_NAME=?`, table, column).Scan(&count); err != nil {
-		return err
-	}
-	if count > 0 {
-		return nil
-	}
-	// table/column/definition are internal constants supplied by this package,
-	// never user input.
-	_, err := s.db.ExecContext(ctx, fmt.Sprintf("ALTER TABLE `%s` ADD COLUMN `%s` %s", table, column, definition))
-	return err
-}
 func (s *Store) SaveQuote(ctx context.Context, q *model.Quote) error {
 	if s == nil || s.db == nil {
 		return nil
@@ -373,7 +426,7 @@ func (s *Store) UpsertBars(ctx context.Context, bars []model.DailyBar) error {
 	stmt := `INSERT INTO market_data_daily_bars (symbol,trade_date,period,adjustment_basis,source,open_price,high_price,low_price,close_price,volume_shares,amount_cny,change_percent,fetched_at,normalized_at,quality_status,metadata) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE open_price=VALUES(open_price),high_price=VALUES(high_price),low_price=VALUES(low_price),close_price=VALUES(close_price),volume_shares=VALUES(volume_shares),amount_cny=VALUES(amount_cny),change_percent=VALUES(change_percent),fetched_at=VALUES(fetched_at),normalized_at=VALUES(normalized_at),quality_status=VALUES(quality_status),metadata=VALUES(metadata)`
 	versionStmt := `INSERT INTO market_data_daily_bar_versions (symbol,trade_date,period,adjustment_basis,source,revision_hash,recorded_at,open_price,high_price,low_price,close_price,volume_shares,amount_cny,change_percent,fetched_at,normalized_at,quality_status,metadata) VALUES (?,?,?,?,?,?,UTC_TIMESTAMP(6),?,?,?,?,?,?,?,?,?,?,?)`
 	for _, bar := range bars {
-		metadata, e := json.Marshal(bar)
+		metadata, e := marshalDailyBarMetadata(bar)
 		if e != nil {
 			return e
 		}
@@ -413,7 +466,7 @@ func dailyBarRevisionHash(bar model.DailyBar) (string, error) {
 	fingerprint.FetchedAt = time.Time{}
 	fingerprint.NormalizedAt = time.Time{}
 	fingerprint.SystemObservedAt = nil
-	payload, err := json.Marshal(fingerprint)
+	payload, err := marshalDailyBarMetadata(fingerprint)
 	if err != nil {
 		return "", err
 	}
@@ -471,7 +524,7 @@ ORDER BY v.trade_date DESC, v.recorded_at DESC, v.source ASC`
 			return nil, err
 		}
 		var bar model.DailyBar
-		if err := json.Unmarshal(metadata, &bar); err != nil {
+		if err := unmarshalDailyBarMetadata(metadata, &bar); err != nil {
 			// Keep other source/date versions usable if one historic metadata blob is damaged.
 			continue
 		}
@@ -490,6 +543,7 @@ ORDER BY v.trade_date DESC, v.recorded_at DESC, v.source ASC`
 
 func fundamentalsRevisionHash(snapshot model.FundamentalsSnapshot) (string, error) {
 	fingerprint := snapshot
+	fingerprint.NormalizeInstantsUTC()
 	fingerprint.FetchedAt = time.Time{}
 	fingerprint.SystemObservedAt = nil
 	payload, err := json.Marshal(fingerprint)
@@ -513,6 +567,7 @@ func (s *Store) SaveFundamentals(ctx context.Context, snapshot *model.Fundamenta
 		return errors.New("fundamentals snapshot identity, period, source or fetched_at is invalid")
 	}
 	stored := *snapshot
+	stored.NormalizeInstantsUTC()
 	stored.SystemObservedAt = nil
 	metadata, err := json.Marshal(&stored)
 	if err != nil {
@@ -716,6 +771,7 @@ ORDER BY v.recorded_at DESC, v.source ASC`, symbol, year, quarter, asOfText, asO
 		if err := json.Unmarshal(metadata, &snapshot); err != nil {
 			return nil, fmt.Errorf("decode fundamentals revision metadata: %w", err)
 		}
+		snapshot.NormalizeInstantsUTC()
 		recordedAt, err := time.ParseInLocation("2006-01-02 15:04:05.000000", recordedAtText, time.UTC)
 		if err != nil {
 			return nil, fmt.Errorf("parse fundamentals record timestamp: %w", err)
@@ -758,7 +814,7 @@ func (s *Store) ListBars(ctx context.Context, symbol, start, end string, adjust 
 			return nil, err
 		}
 		var b model.DailyBar
-		if err := json.Unmarshal(meta, &b); err != nil {
+		if err := unmarshalDailyBarMetadata(meta, &b); err != nil {
 			// A corrupt metadata row should not discard every other valid
 			// historical row. The query already selects the canonical typed
 			// columns; skip only the unreadable metadata payload and continue.

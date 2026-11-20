@@ -49,6 +49,13 @@ func TestNeteaseFetchDailyBarsParsesCSVAndSortsByDate(t *testing.T) {
 	if bars[0].RawAmountField != "VATURNOVER" || bars[0].AdjustmentBasis != model.AdjustmentNone {
 		t.Fatalf("missing raw field/adjustment metadata: %+v", bars[0])
 	}
+	if bars[0].ExactValues == nil || bars[0].ExactValues.ChangePercent == nil ||
+		*bars[0].ExactValues.ChangePercent != "-1.23" ||
+		bars[0].ExactValues.ChangePercentSourceField != "change_percent" ||
+		bars[0].ExactValues.ChangePercentEvidence == nil ||
+		bars[0].ExactValues.ChangePercentEvidence.SourceToken != "-1.23" {
+		t.Fatalf("Netease source change-percent evidence was not retained: %+v", bars[0].ExactValues)
+	}
 }
 
 func TestNeteaseRejectsAdjustedRequestsAndUnsupportedExchange(t *testing.T) {
