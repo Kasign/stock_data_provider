@@ -264,4 +264,3 @@ func TestTickFlowFetchSectorRankingsPreservesDistinctUniverseIDsWithDuplicateNam
 		t.Fatalf("rankings must preserve stable universe IDs and duplicate display names: %+v", got.Items)
 	}
 }
-
