@@ -120,6 +120,7 @@ jobs:
         if: always() && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && contains(github.event.head_commit.message, '[include_public]')))
         env:
           MARKET_DATA_LIVE_PROVIDER_TESTS: "1"
+          MARKET_DATA_TEST_MYSQL_DSN: "root:market-data-ci@tcp(127.0.0.1:3306)/market_data_probe?parseTime=true&loc=UTC"
         run: go test -run TestLiveReaderGetDailyBarsV2PreservesProviderDecimalEvidence -count=1 -v ./internal/marketdata/application
       - name: Probe Hithink 2025 annual balance-sheet publication-date raw fields
         if: always() && github.event_name == 'push' && contains(github.event.head_commit.message, '[hithink_balance_sheet_raw]')
