@@ -108,8 +108,8 @@ func dailyBarDecimalEvidenceFromString(raw string) *model.DailyBarDecimalEvidenc
 		fractionDigits = len(mantissa) - index - 1
 	}
 	return &model.DailyBarDecimalEvidence{
-		EvidenceKind: model.DailyBarPrecisionEvidenceObservedToken,
-		SourceToken: token,
+		EvidenceKind:         model.DailyBarPrecisionEvidenceObservedToken,
+		SourceToken:          token,
 		SourceFractionDigits: &fractionDigits,
 	}
 }

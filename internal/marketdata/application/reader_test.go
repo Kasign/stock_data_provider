@@ -274,11 +274,11 @@ func TestReaderGetDailyBarsSelectsCurrentAndPITUseCases(t *testing.T) {
 	exactScale := 6
 	exactOpenEvidence := &model.DailyBarDecimalEvidence{
 		EvidenceKind: model.DailyBarPrecisionEvidenceObservedToken,
-		SourceToken: "10.500400", SourceFractionDigits: &exactScale,
+		SourceToken:  "10.500400", SourceFractionDigits: &exactScale,
 	}
 	exactRawAmountEvidence := &model.DailyBarDecimalEvidence{
 		EvidenceKind: model.DailyBarPrecisionEvidenceObservedToken,
-		SourceToken: exactRawAmount, SourceFractionDigits: &exactScale,
+		SourceToken:  exactRawAmount, SourceFractionDigits: &exactScale,
 	}
 	current := model.DailyBar{
 		Symbol:                                "600000.SH",

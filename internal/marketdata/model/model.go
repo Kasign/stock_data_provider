@@ -71,10 +71,10 @@ const (
 // DailyBarDecimalEvidence 保留精确数值对应的来源词法或协议固定 scale。
 // SourceToken 是供应商实际返回的数字文本；ProtocolScale 只用于协议明示的定点整数。
 type DailyBarDecimalEvidence struct {
-	EvidenceKind          DailyBarPrecisionEvidenceKind `json:"evidence_kind"`
-	SourceToken           string                        `json:"source_token,omitempty"`
-	SourceFractionDigits  *int                          `json:"source_fraction_digits,omitempty"`
-	ProtocolScale         *int                          `json:"protocol_scale,omitempty"`
+	EvidenceKind         DailyBarPrecisionEvidenceKind `json:"evidence_kind"`
+	SourceToken          string                        `json:"source_token,omitempty"`
+	SourceFractionDigits *int                          `json:"source_fraction_digits,omitempty"`
+	ProtocolScale        *int                          `json:"protocol_scale,omitempty"`
 	UnitConversionFactor string                        `json:"unit_conversion_factor,omitempty"`
 }
 

@@ -434,10 +434,10 @@ func mapDailyBarExactValues(source *model.DailyBarExactValues) *app.DailyBarExac
 	return &app.DailyBarExactValues{
 		Open: source.Open, High: source.High, Low: source.Low, Close: source.Close,
 		RawVolume: source.RawVolume, RawAmount: clonePointer(source.RawAmount), AmountCNY: clonePointer(source.AmountCNY),
-		OpenEvidence: mapDailyBarDecimalEvidence(source.OpenEvidence),
-		HighEvidence: mapDailyBarDecimalEvidence(source.HighEvidence),
-		LowEvidence: mapDailyBarDecimalEvidence(source.LowEvidence),
-		CloseEvidence: mapDailyBarDecimalEvidence(source.CloseEvidence),
+		OpenEvidence:      mapDailyBarDecimalEvidence(source.OpenEvidence),
+		HighEvidence:      mapDailyBarDecimalEvidence(source.HighEvidence),
+		LowEvidence:       mapDailyBarDecimalEvidence(source.LowEvidence),
+		CloseEvidence:     mapDailyBarDecimalEvidence(source.CloseEvidence),
 		RawVolumeEvidence: mapDailyBarDecimalEvidence(source.RawVolumeEvidence),
 		RawAmountEvidence: mapDailyBarDecimalEvidence(source.RawAmountEvidence),
 		AmountCNYEvidence: mapDailyBarDecimalEvidence(source.AmountCNYEvidence),
@@ -451,7 +451,7 @@ func mapDailyBarDecimalEvidence(source *model.DailyBarDecimalEvidence) *app.Dail
 	return &app.DailyBarDecimalEvidence{
 		EvidenceKind: string(source.EvidenceKind), SourceToken: source.SourceToken,
 		SourceFractionDigits: clonePointer(source.SourceFractionDigits),
-		ProtocolScale: clonePointer(source.ProtocolScale),
+		ProtocolScale:        clonePointer(source.ProtocolScale),
 		UnitConversionFactor: source.UnitConversionFactor,
 	}
 }

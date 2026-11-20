@@ -730,8 +730,8 @@ func pytdxDailyBarExactValues(item *protocol.Kline) *model.DailyBarExactValues {
 
 func pytdxProtocolDecimalEvidence(rawValue int64, scale int) *model.DailyBarDecimalEvidence {
 	return &model.DailyBarDecimalEvidence{
-		EvidenceKind: model.DailyBarPrecisionEvidenceProtocolFixedScale,
-		SourceToken: strconv.FormatInt(rawValue, 10),
+		EvidenceKind:  model.DailyBarPrecisionEvidenceProtocolFixedScale,
+		SourceToken:   strconv.FormatInt(rawValue, 10),
 		ProtocolScale: &scale,
 	}
 }
