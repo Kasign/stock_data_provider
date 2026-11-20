@@ -9,8 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gowebpki/jcs"
-
+	platformauthorization "example.com/stock-analysis-flow/internal/platform/authorization"
 	"example.com/stock-analysis-flow/internal/quant/manifest"
 	"example.com/stock-analysis-flow/internal/quant/result"
 )
@@ -72,21 +71,15 @@ func getResultFixture(t *testing.T, now time.Time) AuthorizedRecord {
 		ContentLevel: quantContentLevel, SubjectRef: "service:researchflow", ResourceRef: stored.ResultID,
 		DecidedAt: now.Add(-time.Minute).Format(time.RFC3339Nano), ExpiresAtPresent: true, Conditions: []string{},
 	}
-	input := authorizationFingerprintInput{
-		SchemaVersion: ref.SchemaVersion, PolicyOwner: ref.PolicyOwner, PolicyVersion: ref.PolicyVersion,
-		Decision: ref.Decision, PurposeCode: ref.PurposeCode, ContentLevel: ref.ContentLevel,
-		SubjectRef: ref.SubjectRef, ResourceRef: ref.ResourceRef, DecidedAt: ref.DecidedAt,
-		ExpiresAt: ref.ExpiresAt, Conditions: ref.Conditions, EvaluatedPolicyVersions: policy.Policies,
-	}
-	encoded, err := json.Marshal(input)
+	refJSON, err := json.Marshal(ref)
 	if err != nil {
 		t.Fatal(err)
 	}
-	canonical, err := jcs.Transform(encoded)
+	snapshotJSON, err := json.Marshal(policy)
 	if err != nil {
 		t.Fatal(err)
 	}
-	ref.DecisionFingerprint, err = manifest.FingerprintPayload(canonical)
+	ref.DecisionFingerprint, err = platformauthorization.Fingerprint(refJSON, snapshotJSON)
 	if err != nil {
 		t.Fatal(err)
 	}
