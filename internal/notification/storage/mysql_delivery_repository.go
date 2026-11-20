@@ -390,6 +390,15 @@ func (r *MySQLDeliveryRepository) UpdateWithLease(
 	if event.From != current.Status {
 		return domain.ErrInvalidDeliveryChange
 	}
+	// Delivery 身份、重试预算和生命周期边界在创建后不可变；
+	// 即使调用方绕过领域 Transition，也不能通过 Repository 更新改写投递目标。
+	if !sameDeliveryIdentity(current, next) ||
+		current.AttemptCount != next.AttemptCount ||
+		current.MaxAttempts != next.MaxAttempts ||
+		!current.DeadlineAt.Equal(next.DeadlineAt) ||
+		!current.CreatedAt.Equal(next.CreatedAt) {
+		return application.ErrDeliveryVersionConflict
+	}
 	if next.UpdatedAt.Before(current.UpdatedAt) || !next.UpdatedAt.Before(expiry) {
 		return application.ErrDeliveryLeaseConflict
 	}

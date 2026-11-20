@@ -163,3 +163,49 @@ func TestValuationRequestFingerprintValidatesAndPreservesRequestOrder(t *testing
 		t.Fatal("empty valuation request must be rejected")
 	}
 }
+
+func TestFundamentalsRevisionHashNormalizesEquivalentOffsetInstants(t *testing.T) {
+	availableAtOffset := time.Date(2026, 8, 29, 10, 0, 0, 123456789, time.FixedZone("UTC+8", 8*60*60))
+	snapshot := model.FundamentalsSnapshot{
+		Symbol: "600519.SH", Year: 2026, Quarter: 2, HasData: true,
+		Sections: []model.FundamentalSection{{
+			Category: "profitability", ReportDate: "2026-06-30", PublicationDate: "2026-08-29",
+			AvailableAt: &availableAtOffset, HasData: true, QualityStatus: model.QualityValid,
+			Metrics: []model.FundamentalMetric{{Key: "roe", Name: "净资产收益率", Value: 0.12, Unit: "ratio", SourceField: "roe"}},
+		}},
+		Source: "fixture", SourceVersion: "fixture-v1", FetchedAt: availableAtOffset, QualityStatus: model.QualityValid,
+	}
+	first, err := fundamentalsRevisionHash(snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	availableAtUTC := availableAtOffset.UTC()
+	snapshot.Sections[0].AvailableAt = &availableAtUTC
+	second, err := fundamentalsRevisionHash(snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first != second {
+		t.Fatal("equivalent instants with different offsets must produce the same fundamentals revision hash")
+	}
+}
+
+func TestMarketDataMigrationDefinitionsExposeImmutableVersionedHistory(t *testing.T) {
+	migrations := MigrationDefinitions()
+	if len(migrations) != 5 {
+		t.Fatalf("migration count = %d, want four published/compatibility versions plus calendar snapshot V5", len(migrations))
+	}
+	for index := 0; index < 3; index++ {
+		if migrations[index].Version != uint64(index+1) || len(migrations[index].Statements) == 0 || len(migrations[index].Operations) != 0 {
+			t.Fatalf("published migration %d changed unexpectedly: %+v", index+1, migrations[index])
+		}
+	}
+	compatibility := migrations[3]
+	if compatibility.Version != 4 || len(compatibility.Statements) != 0 || len(compatibility.Operations) != 4 {
+		t.Fatalf("compatibility migration must contain four idempotent operations only: %+v", compatibility)
+	}
+	calendar := migrations[4]
+	if calendar.Version != 5 || len(calendar.Statements) != 1 || len(calendar.Operations) != 0 {
+		t.Fatalf("calendar snapshot migration V5 must contain one additive table creation: %+v", calendar)
+	}
+}

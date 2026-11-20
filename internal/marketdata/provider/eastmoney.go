@@ -1576,10 +1576,11 @@ func (p *Eastmoney) FetchDailyBars(ctx context.Context, rawSymbol, startDate, en
 		amountValue := amount
 		rawVolume := rawVol
 		rawAmount := amount
-		bar := model.DailyBar{Symbol: symbol, TradeDate: tradeDate, Period: "1d", Open: open, High: high, Low: low, Close: closeV, Volume: &shares, Amount: &amountValue, AdjustmentBasis: basis, AdjustmentMethod: "eastmoney_fqt_" + fqt, Source: p.Name(), SourceVersion: eastmoneyVersion, FetchedAt: providerNowUTC(), NormalizedAt: providerNowUTC(), RawVolume: &rawVolume, RawVolumeUnit: "hands", RawAmount: &rawAmount, RawAmountUnit: "CNY", RawAmountField: "kline_field_6", VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid, NormalizationVer: normalize.Version}
+		bar := model.DailyBar{Symbol: symbol, TradeDate: tradeDate, Period: "1d", Open: open, High: high, Low: low, Close: closeV, Volume: &shares, Amount: &amountValue, AdjustmentBasis: basis, AdjustmentMethod: "eastmoney_fqt_" + fqt, Source: p.Name(), SourceVersion: eastmoneyVersion, FetchedAt: providerNowUTC(), NormalizedAt: providerNowUTC(), RawVolume: &rawVolume, RawVolumeUnit: "hands", RawAmount: &rawAmount, RawAmountUnit: "CNY", RawAmountField: "kline_field_6", VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid, NormalizationVer: normalize.Version, ExactValues: dailyBarExactValuesFromStrings(parts[1], parts[3], parts[4], parts[2], parts[5], parts[6], "CNY", "CNY")}
 		if len(parts) > 8 && strings.TrimSpace(parts[8]) != "" && strings.TrimSpace(parts[8]) != "-" {
 			if pct, parseErr := strconv.ParseFloat(strings.TrimSpace(parts[8]), 64); parseErr == nil && finiteNumber(pct) {
 				bar.ChangePercent = &pct
+				setDailyBarExactChangePercentFromString(bar.ExactValues, parts[8], "f59")
 			} else {
 				addEastmoneyDailyBarParseIssue(ctx, rowIndex, symbol, tradeDate, "change_percent", "f59", "invalid_optional_number", "finite percentage number", "string", parts[8], validation.SeverityWarning, "Eastmoney optional daily-bar change percent is invalid and was omitted")
 			}

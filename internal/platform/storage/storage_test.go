@@ -712,3 +712,51 @@ func TestDependencyFaultRetryabilityIsConservative(t *testing.T) {
 		})
 	}
 }
+
+func TestPrepareMigrationsChecksumsOperationsAndPreservesLegacyChecksums(t *testing.T) {
+	legacy := []Migration{{Version: 1, Description: "legacy", Statements: []string{"CREATE TABLE sample (id BIGINT PRIMARY KEY)"}}}
+	_, legacyChecksum, err := prepareMigrations("market_data", legacy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	withEmptyOperations := []Migration{{Version: 1, Description: "legacy", Statements: []string{"CREATE TABLE sample (id BIGINT PRIMARY KEY)"}, Operations: []MigrationOperation{}}}
+	_, emptyChecksum, err := prepareMigrations("market_data", withEmptyOperations)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if legacyChecksum[1] != emptyChecksum[1] {
+		t.Fatal("adding an empty operations list must not change a published statement-only checksum")
+	}
+	withOperation := []Migration{{Version: 1, Description: "legacy", Statements: []string{"CREATE TABLE sample (id BIGINT PRIMARY KEY)"}, Operations: []MigrationOperation{{
+		Kind: MigrationOperationEnsureColumn, Table: "sample", Name: "source_version", Definition: "VARCHAR(32) NOT NULL DEFAULT ''",
+	}}}}
+	_, operationChecksum, err := prepareMigrations("market_data", withOperation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if legacyChecksum[1] == operationChecksum[1] {
+		t.Fatal("changing migration operations must change the checksum")
+	}
+	withOperation[0].Operations[0].Name = "other_column"
+	_, changedChecksum, err := prepareMigrations("market_data", withOperation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if operationChecksum[1] == changedChecksum[1] {
+		t.Fatal("changing an operation definition must change the checksum")
+	}
+}
+
+func TestPrepareMigrationsRejectsUnsafeOperations(t *testing.T) {
+	cases := []MigrationOperation{
+		{Kind: MigrationOperationEnsureColumn, Table: "sample;DROP", Name: "column", Definition: "INT"},
+		{Kind: MigrationOperationEnsureColumn, Table: "sample", Name: "column", Definition: "INT; DROP TABLE sample"},
+		{Kind: MigrationOperationEnsureNonUniqueIndex, Table: "sample", Name: "idx_sample", Columns: "id); DROP TABLE sample"},
+		{Kind: "arbitrary_sql", Table: "sample", Name: "x"},
+	}
+	for _, operation := range cases {
+		if _, _, err := prepareMigrations("market_data", []Migration{{Version: 1, Description: "unsafe operation", Operations: []MigrationOperation{operation}}}); err == nil {
+			t.Fatalf("unsafe migration operation was accepted: %+v", operation)
+		}
+	}
+}

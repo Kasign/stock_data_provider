@@ -30,6 +30,7 @@ import (
 	platformstorage "example.com/stock-analysis-flow/internal/platform/storage"
 	"example.com/stock-analysis-flow/internal/platform/taskqueue"
 	platformtime "example.com/stock-analysis-flow/internal/platform/time"
+	quantstorage "example.com/stock-analysis-flow/internal/quant/storage"
 	researchapplication "example.com/stock-analysis-flow/internal/research/application"
 	researchstorage "example.com/stock-analysis-flow/internal/research/storage"
 	researchflowstorage "example.com/stock-analysis-flow/internal/researchflow/storage"
@@ -137,38 +138,29 @@ func Run(ctx context.Context) (runErr error) {
 	}
 	migrationCtx, migrationCancel := context.WithTimeout(ctx, migrationCfg.Timeout)
 	if migrationCfg.Enabled {
-		// Data 当前公开 MigrationRunner，由 Data Store 内部调用 Platform Migration Runner。
-		// Server 负责在模块启动前显式调度，不复制 Data SQL 或 Migration checksum 规则。
-		dataMigration := marketDataModule.MigrationRunner()
-		if dataMigration == nil {
-			migrationCancel()
-			return errors.New("Data Module 已配置共享存储，但未提供 MigrationRunner")
-		}
-		if err := dataMigration.Migrate(migrationCtx); err != nil {
-			migrationCancel()
-			return fmt.Errorf("执行 Data Module Migration 失败: %w", err)
-		}
 		migrationReport, migrationErr := migrationRegistry.RunWithReport(migrationCtx, storageResources.DB)
 		if migrationErr != nil {
 			migrationCancel()
 			slog.Error("模块 Migration 执行失败", "report", migrationReport, "error", migrationErr.Error())
 			return fmt.Errorf("执行模块 Migration 失败: %w", migrationErr)
 		}
-		slog.Info("Data Module Migration 执行完成", "namespace", "market_data")
 		slog.Info("模块 Migration 执行完成", "report", migrationReport)
 	} else {
 		if err := migrationRegistry.ValidateApplied(migrationCtx, storageResources.DB); err != nil {
 			migrationCancel()
-			return fmt.Errorf("数据库 Schema 尚未满足当前已注册模块版本要求（MIGRATION_ENABLED=false）: %w", err)
+			return fmt.Errorf("数据库 Schema 尚未满足当前已注册模块版本及 checksum 要求（MIGRATION_ENABLED=false）: %w", err)
 		}
-		// 当前 Data 公开 Diagnostics.Ready 只验证共享 DB/Redis 依赖，不校验 Migration checksum。
-		if err := marketDataModule.Diagnostics().Ready(migrationCtx); err != nil {
-			migrationCancel()
-			return fmt.Errorf("Data Module 依赖就绪检查失败（MIGRATION_ENABLED=false）: %w", err)
-		}
-		slog.Info("已注册模块 Schema 预检通过；Data Module 依赖检查通过，Data Migration history 未由当前公开接口校验", "migration_enabled", false)
+		slog.Info("所有已注册模块 Schema 版本与 checksum 预检通过", "migration_enabled", false)
 	}
 	migrationCancel()
+	// Migration enabled/disabled 两种启动路径都必须在接受流量或启动 Worker 前
+	// 验证 Data 物理 Schema 与 Redis/MariaDB 依赖；Migration checksum 不证明物理结构完整。
+	readinessCtx, readinessCancel := context.WithTimeout(ctx, 10*time.Second)
+	if err := marketDataModule.Diagnostics().Ready(readinessCtx); err != nil {
+		readinessCancel()
+		return fmt.Errorf("Data Module 依赖与物理 Schema 就绪检查失败: %w", err)
+	}
+	readinessCancel()
 
 	newsRepository, err := newsstorage.NewMySQLRepository(storageResources.DB)
 	if err != nil {
@@ -560,10 +552,12 @@ func newMigrationRegistry() (*servermigration.Registry, error) {
 		namespace  string
 		migrations []platformstorage.Migration
 	}{
+		{namespace: marketdatabootstrap.MigrationNamespace, migrations: marketdatabootstrap.MigrationDefinitions()},
 		{namespace: "news", migrations: newsstorage.Migrations()},
 		{namespace: platformsecurity.OwnerCredentialMigrationNamespace, migrations: platformsecurity.OwnerCredentialMigrations()},
 		{namespace: researchstorage.MigrationNamespace, migrations: researchstorage.Migrations()},
 		{namespace: researchflowstorage.MigrationNamespace, migrations: researchflowstorage.Migrations()},
+		{namespace: quantstorage.MigrationNamespace, migrations: quantstorage.Migrations()},
 		{namespace: "notification", migrations: notificationstorage.Migrations()},
 		{namespace: serversecurity.SecurityAuditMigrationNamespace, migrations: serversecurity.SecurityAuditMigrations()},
 	}
@@ -571,11 +565,6 @@ func newMigrationRegistry() (*servermigration.Registry, error) {
 		if err := registry.Register(registration.namespace, registration.migrations); err != nil {
 			return nil, fmt.Errorf("注册 %s Migration: %w", registration.namespace, err)
 		}
-	}
-	// Data 仍通过模块公开 MigrationRunner 自行调用 Platform Runner；
-	// 在 Data 暴露静态 Migration 定义前，显式登记其外部命名空间，避免被误判为未知 Schema。
-	if err := registry.RegisterExternalNamespace("market_data"); err != nil {
-		return nil, fmt.Errorf("登记外部 Data Migration 命名空间: %w", err)
 	}
 	return registry, nil
 }

@@ -63,6 +63,9 @@ type ComposedResearchResult struct {
 // The caller must fetch Research/Quant data through their public Facades and
 // complete current Owner authorization before passing protected content.
 func ComposeResult(input ResultCompositionInput, quantRegistry *Registry) (ComposedResearchResult, error) {
+	if err := validateUTF8Value(input); err != nil {
+		return ComposedResearchResult{}, fmt.Errorf("%w: invalid UTF-8 in composition input: %v", ErrInvalidResultComposition, err)
+	}
 	if strings.TrimSpace(input.RunID) == "" || input.SystemAsOf.IsZero() || !isUTC(input.SystemAsOf) {
 		return ComposedResearchResult{}, ErrInvalidResultComposition
 	}

@@ -66,6 +66,8 @@ func TestResearchEventRejectsInvalidStructureAndTimeEvidence(t *testing.T) {
 			})
 		}, "available_at must not be later than system_as_of"},
 		{"source time evidence missing", func(e *ResearchEvent) { e.SourceTimes[0].EvidenceRef = "evidence:missing" }, "must exist in evidence_refs"},
+		{"missing asserted_by", func(e *ResearchEvent) { e.SourceTimes[0].AssertedBy = "" }, "asserted_by is required without surrounding whitespace"},
+		{"padded asserted_by", func(e *ResearchEvent) { e.SourceTimes[0].AssertedBy = " news:source " }, "asserted_by is required without surrounding whitespace"},
 		{"invalid time type", func(e *ResearchEvent) { e.SourceTimes[0].TimeType = "received_at" }, "time_type"},
 		{"source time non UTC", func(e *ResearchEvent) {
 			e.SourceTimes[0].Value = time.Date(2026, 11, 5, 9, 0, 0, 0, time.FixedZone("CST", 8*60*60))
@@ -164,6 +166,7 @@ func TestResearchEventVersionMustAppendAndPreserveLifecycle(t *testing.T) {
 	next := previous
 	next.EventVersion = 2
 	next.SystemAsOf = previous.SystemAsOf.Add(time.Minute)
+	next.DerivedFromRefs = []ResearchEventRef{{EventID: previous.EventID, EventVersion: previous.EventVersion}}
 	if err := next.ValidateNextVersion(previous); err != nil {
 		t.Fatalf("same-status append should pass: %v", err)
 	}
@@ -177,8 +180,44 @@ func TestResearchEventVersionMustAppendAndPreserveLifecycle(t *testing.T) {
 	}
 	next = previous
 	next.EventVersion = 3
+	next.DerivedFromRefs = []ResearchEventRef{{EventID: previous.EventID, EventVersion: 2}}
 	if err := next.ValidateNextVersion(previous); err == nil || !strings.Contains(err.Error(), "increment by exactly one") {
 		t.Fatalf("version gap should fail, got %v", err)
+	}
+}
+
+func TestResearchEventRevisionRequiresImmediatePreviousVersion(t *testing.T) {
+	previous := validEvent(t)
+	previous.EventVersion = 2
+	previous.DerivedFromRefs = []ResearchEventRef{{EventID: previous.EventID, EventVersion: 1}}
+	if err := previous.Validate(); err != nil {
+		t.Fatalf("valid previous Event version rejected: %v", err)
+	}
+
+	next := previous
+	next.EventVersion = 3
+	next.SystemAsOf = previous.SystemAsOf.Add(time.Minute)
+	next.DerivedFromRefs = []ResearchEventRef{{EventID: previous.EventID, EventVersion: 1}}
+	if err := next.Validate(); err == nil || !strings.Contains(err.Error(), "immediately previous Event version") {
+		t.Fatalf("revision missing direct previous version should fail, got %v", err)
+	}
+
+	next.DerivedFromRefs = []ResearchEventRef{{EventID: previous.EventID, EventVersion: 2}}
+	if err := next.Validate(); err != nil {
+		t.Fatalf("revision with direct previous version rejected: %v", err)
+	}
+	next.DerivedFromRefs = append(next.DerivedFromRefs, ResearchEventRef{EventID: "event:merge-parent", EventVersion: 4})
+	if err := next.Validate(); err != nil {
+		t.Fatalf("revision with direct previous version and an additional merge parent rejected: %v", err)
+	}
+}
+
+func TestResearchEventRejectsDuplicateDerivedReferences(t *testing.T) {
+	value := validEvent(t)
+	parent := ResearchEventRef{EventID: "event:parent", EventVersion: 1}
+	value.DerivedFromRefs = []ResearchEventRef{parent, parent}
+	if err := value.Validate(); err == nil || !strings.Contains(err.Error(), "duplicate reference") {
+		t.Fatalf("duplicate derived reference should fail, got %v", err)
 	}
 }
 
@@ -213,6 +252,7 @@ func TestLifecycleTransitionOnlyEmitsForStatusChange(t *testing.T) {
 	next.EventVersion = 2
 	next.SystemAsOf = previous.SystemAsOf.Add(time.Minute)
 	next.Status = StatusConsolidating
+	next.DerivedFromRefs = []ResearchEventRef{{EventID: previous.EventID, EventVersion: previous.EventVersion}}
 	changedAt := eventTime(t, "2026-11-06T05:10:00Z")
 	transition, err := NewLifecycleTransition(previous, next, changedAt)
 	if err != nil {
@@ -231,6 +271,7 @@ func TestLifecycleTransitionOnlyEmitsForStatusChange(t *testing.T) {
 	noChange := next
 	noChange.EventVersion = 3
 	noChange.SystemAsOf = next.SystemAsOf.Add(time.Minute)
+	noChange.DerivedFromRefs = []ResearchEventRef{{EventID: next.EventID, EventVersion: next.EventVersion}}
 	noChange.Title = "修订标题但状态未变"
 	noTransition, err := NewLifecycleTransition(next, noChange, changedAt)
 	if err != nil {
@@ -247,6 +288,7 @@ func TestLifecycleTransitionRejectsNonUTCTime(t *testing.T) {
 	next.EventVersion = 2
 	next.SystemAsOf = previous.SystemAsOf.Add(time.Minute)
 	next.Status = StatusConsolidating
+	next.DerivedFromRefs = []ResearchEventRef{{EventID: previous.EventID, EventVersion: previous.EventVersion}}
 	changedAt := time.Date(2026, 11, 6, 13, 0, 0, 0, time.FixedZone("CST", 8*60*60))
 	if _, err := NewLifecycleTransition(previous, next, changedAt); err == nil || !strings.Contains(err.Error(), "must be UTC") {
 		t.Fatalf("non-UTC changed_at should fail, got %v", err)
@@ -256,8 +298,10 @@ func TestLifecycleTransitionRejectsNonUTCTime(t *testing.T) {
 func TestResearchEventValidateNextVersionRejectsIntegerOverflow(t *testing.T) {
 	previous := validEvent(t)
 	previous.EventVersion = int(^uint(0) >> 1)
+	previous.DerivedFromRefs = []ResearchEventRef{{EventID: previous.EventID, EventVersion: previous.EventVersion - 1}}
 	next := previous
 	next.EventVersion = 1
+	next.DerivedFromRefs = []ResearchEventRef{}
 	if err := next.ValidateNextVersion(previous); err == nil || !strings.Contains(err.Error(), "integer limit") {
 		t.Fatalf("ValidateNextVersion() error = %v, want integer limit rejection", err)
 	}
@@ -369,6 +413,7 @@ func TestLifecycleTransitionRejectsZeroOffsetNonUTCLocation(t *testing.T) {
 	next.EventVersion = 2
 	next.Status = StatusConsolidating
 	next.SystemAsOf = previous.SystemAsOf.Add(time.Minute)
+	next.DerivedFromRefs = []ResearchEventRef{{EventID: previous.EventID, EventVersion: previous.EventVersion}}
 	nonUTC := time.Date(2026, 11, 6, 5, 10, 0, 0, time.FixedZone("non-UTC", 0))
 	if _, err := NewLifecycleTransition(previous, next, nonUTC); err == nil || !strings.Contains(err.Error(), "must be UTC") {
 		t.Fatalf("NewLifecycleTransition() error = %v, want strict UTC Location rejection", err)

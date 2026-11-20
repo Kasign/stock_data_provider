@@ -21,18 +21,14 @@ var namespacePattern = regexp.MustCompile(`^[a-z0-9._-]{1,64}$`)
 // Registry stores immutable snapshots of module migration definitions.
 // Each namespace is applied independently in deterministic lexical order.
 type Registry struct {
-	mu                 sync.RWMutex
-	entries            map[string][]platformstorage.Migration
-	externalNamespaces map[string]struct{}
-	started            bool
+	mu      sync.RWMutex
+	entries map[string][]platformstorage.Migration
+	started bool
 }
 
 // NewRegistry creates an empty migration registry.
 func NewRegistry() *Registry {
-	return &Registry{
-		entries:            make(map[string][]platformstorage.Migration),
-		externalNamespaces: make(map[string]struct{}),
-	}
+	return &Registry{entries: make(map[string][]platformstorage.Migration)}
 }
 
 // Register adds one module's complete migration set. Module SQL remains owned
@@ -51,7 +47,7 @@ func (r *Registry) Register(namespace string, migrations []platformstorage.Migra
 	snapshot := make([]platformstorage.Migration, len(migrations))
 	versions := make(map[uint64]struct{}, len(migrations))
 	for i, item := range migrations {
-		if item.Version == 0 || strings.TrimSpace(item.Description) == "" || len(item.Statements) == 0 {
+		if item.Version == 0 || strings.TrimSpace(item.Description) == "" || (len(item.Statements) == 0 && len(item.Operations) == 0) {
 			return fmt.Errorf("migration namespace %q contains an incomplete migration at index %d", namespace, i)
 		}
 		if _, exists := versions[item.Version]; exists {
@@ -61,6 +57,7 @@ func (r *Registry) Register(namespace string, migrations []platformstorage.Migra
 		snapshot[i] = platformstorage.Migration{
 			Version: item.Version, Description: item.Description,
 			Statements: append([]string(nil), item.Statements...),
+			Operations: append([]platformstorage.MigrationOperation(nil), item.Operations...),
 		}
 	}
 	sort.Slice(snapshot, func(i, j int) bool {
@@ -78,42 +75,7 @@ func (r *Registry) Register(namespace string, migrations []platformstorage.Migra
 	if _, exists := r.entries[namespace]; exists {
 		return fmt.Errorf("migration namespace %q is already registered", namespace)
 	}
-	if _, exists := r.externalNamespaces[namespace]; exists {
-		return fmt.Errorf("migration namespace %q is already registered as external", namespace)
-	}
 	r.entries[namespace] = snapshot
-	return nil
-}
-
-// RegisterExternalNamespace declares a module namespace whose MigrationRunner
-// is intentionally owned and executed by that module rather than this Registry.
-// Read-only validation requires at least one history row and every recorded
-// version to be applied. Version definitions/checksums remain the module Runner's
-// responsibility; this is an explicit transitional contract, not equivalent to
-// registering static Migration definitions.
-func (r *Registry) RegisterExternalNamespace(namespace string) error {
-	if r == nil {
-		return errors.New("migration registry is nil")
-	}
-	namespace = strings.TrimSpace(namespace)
-	if !namespacePattern.MatchString(namespace) {
-		return fmt.Errorf("migration namespace %q is invalid", namespace)
-	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if r.started {
-		return errors.New("cannot register external migration namespace after execution has started")
-	}
-	if _, exists := r.entries[namespace]; exists {
-		return fmt.Errorf("migration namespace %q is already registered", namespace)
-	}
-	if _, exists := r.externalNamespaces[namespace]; exists {
-		return fmt.Errorf("external migration namespace %q is already registered", namespace)
-	}
-	if r.externalNamespaces == nil {
-		r.externalNamespaces = make(map[string]struct{})
-	}
-	r.externalNamespaces[namespace] = struct{}{}
 	return nil
 }
 
@@ -197,6 +159,8 @@ func (r *Registry) RunWithReport(ctx context.Context, db *sql.DB) (RunReport, er
 // ValidateApplied performs a read-only check that every registered migration
 // version is present and marked applied. It never creates or changes history.
 // Checksum verification remains owned by Platform's migration runner.
+// ValidateApplied performs a read-only verification of every registered namespace.
+// Platform checks the exact version set, status and checksum under the namespace lock.
 func (r *Registry) ValidateApplied(ctx context.Context, db *sql.DB) error {
 	if r == nil {
 		return errors.New("migration registry is nil")
@@ -208,9 +172,18 @@ func (r *Registry) ValidateApplied(ctx context.Context, db *sql.DB) error {
 		return errors.New("migration validation database is required")
 	}
 	entries := r.snapshot()
-	external := r.externalSnapshot()
-	if len(entries) == 0 && len(external) == 0 {
+	if len(entries) == 0 {
 		return errors.New("no module migrations are registered")
+	}
+	namespaces := make([]string, 0, len(entries))
+	for namespace := range entries {
+		namespaces = append(namespaces, namespace)
+	}
+	sort.Strings(namespaces)
+	for _, namespace := range namespaces {
+		if err := platformstorage.ValidateAppliedMigrations(ctx, db, namespace, entries[namespace]); err != nil {
+			return fmt.Errorf("validate %s migration checksums: %w", namespace, err)
+		}
 	}
 
 	rows, err := db.QueryContext(ctx, "SELECT namespace, version, status FROM platform_schema_migrations")
@@ -238,50 +211,43 @@ func (r *Registry) ValidateApplied(ctx context.Context, db *sql.DB) error {
 	if closeErr != nil {
 		return fmt.Errorf("close migration history: %w", closeErr)
 	}
-	if err := validateAppliedNamespaces(entries, applied, external); err != nil {
+	if err := validateAppliedNamespaces(entries, applied); err != nil {
 		return fmt.Errorf("migration schema is not ready: %w", err)
 	}
 	return nil
 }
 
-// validateAppliedNamespaces requires exact namespace/version sets for static
-// registrations and applied history for explicitly external module namespaces.
+// validateAppliedNamespaces requires exact namespace/version sets for every registered module.
 func validateAppliedNamespaces(
 	expected map[string][]platformstorage.Migration,
 	applied map[string]map[uint64]string,
-	external map[string]struct{},
 ) error {
-	if len(expected) == 0 && len(external) == 0 {
+	if len(expected) == 0 {
 		return errors.New("no migration definitions are registered")
 	}
-	for namespace, migrations := range expected {
+	namespaces := make([]string, 0, len(expected))
+	for namespace := range expected {
+		namespaces = append(namespaces, namespace)
+	}
+	sort.Strings(namespaces)
+	for _, namespace := range namespaces {
 		namespaceApplied, exists := applied[namespace]
 		if !exists {
 			return fmt.Errorf("migration namespace %q is missing", namespace)
 		}
-		if err := validateAppliedVersions(migrations, namespaceApplied); err != nil {
+		if err := validateAppliedVersions(expected[namespace], namespaceApplied); err != nil {
 			return fmt.Errorf("migration namespace %q: %w", namespace, err)
 		}
 	}
-	for namespace := range external {
-		versions, exists := applied[namespace]
-		if !exists || len(versions) == 0 {
-			return fmt.Errorf("externally managed migration namespace %q is missing", namespace)
-		}
-		for version, status := range versions {
-			if version == 0 || status != "applied" {
-				return fmt.Errorf("externally managed migration namespace %q has version %d with status %q", namespace, version, status)
-			}
-		}
-	}
+	appliedNamespaces := make([]string, 0, len(applied))
 	for namespace := range applied {
-		if _, exists := expected[namespace]; exists {
-			continue
+		appliedNamespaces = append(appliedNamespaces, namespace)
+	}
+	sort.Strings(appliedNamespaces)
+	for _, namespace := range appliedNamespaces {
+		if _, exists := expected[namespace]; !exists {
+			return fmt.Errorf("database contains unregistered migration namespace %q", namespace)
 		}
-		if _, exists := external[namespace]; exists {
-			continue
-		}
-		return fmt.Errorf("database contains unregistered migration namespace %q", namespace)
 	}
 	return nil
 }
@@ -349,29 +315,12 @@ func (r *Registry) Namespaces() []string {
 		return nil
 	}
 	entries := r.snapshot()
-	external := r.externalSnapshot()
-	namespaces := make([]string, 0, len(entries)+len(external))
+	namespaces := make([]string, 0, len(entries))
 	for namespace := range entries {
-		namespaces = append(namespaces, namespace)
-	}
-	for namespace := range external {
 		namespaces = append(namespaces, namespace)
 	}
 	sort.Strings(namespaces)
 	return namespaces
-}
-
-func (r *Registry) externalSnapshot() map[string]struct{} {
-	if r == nil {
-		return nil
-	}
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	external := make(map[string]struct{}, len(r.externalNamespaces))
-	for namespace := range r.externalNamespaces {
-		external[namespace] = struct{}{}
-	}
-	return external
 }
 
 // snapshot copies the registry map while holding a read lock. Registered

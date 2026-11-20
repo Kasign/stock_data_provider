@@ -2,7 +2,7 @@
 
 - 契约编号：PLAT-CTR-004
 - 契约版本：1.0.0
-- 状态：freeze-ready（待项目负责人确认冻结）
+- 状态：frozen（以 PLAT-002 项目级契约冻结登记簿为准）
 - 代码审计基线：`origin/integration @ b6dfc85ba214fe16268c8cba780641a8bfe15086`
 - 生产方：Platform Diagnostics Runner；各领域提供 Check 与领域 Observation 内容
 - 直接消费者：Root Server Diagnostics 聚合器、News/Research 等领域 Check Adapter

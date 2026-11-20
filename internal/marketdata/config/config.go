@@ -43,8 +43,6 @@ type ProviderSettings struct {
 }
 
 type Config struct {
-	HTTPAddr                  string
-	APIKey                    string
 	RequestTimeout            time.Duration
 	ProviderTimeout           time.Duration
 	ProviderRetries           int
@@ -107,7 +105,6 @@ type Config struct {
 	RedisPassword             string
 	RedisDB                   int
 	MySQLDSN                  string
-	AutoMigrate               bool
 	AllowNoStorage            bool
 }
 
@@ -137,22 +134,21 @@ func defaultProviderFile() providerFile {
 	}
 }
 
-// Load 加载独立 HTTP 部署配置，要求配置 Data API Key。
+// Load 返回 Data Provider 配置；不再加载独立 HTTP API Key。
 func Load() (Config, error) {
-	return load(true, false)
+	return load(false)
 }
 
-// LoadForInProcess 加载同进程模块配置；外部入口认证由 Root Server 负责，因此不要求 Data API Key。
+// LoadForRoot 加载由 Root Server 注入 DB/Redis 的 Data 配置。
 func LoadForInProcess() (Config, error) {
-	return load(false, false)
+	return load(false)
 }
 
-// LoadForRoot 加载由 Root Server 注入 DB/Redis 的 Data 配置；不要求独立 Data 存储连接参数。
 func LoadForRoot() (Config, error) {
-	return load(false, true)
+	return load(true)
 }
 
-func load(requireHTTPAPIKey, allowRootInjectedStorage bool) (Config, error) {
+func load(allowRootInjectedStorage bool) (Config, error) {
 	if err := validateEnvironment(); err != nil {
 		return Config{}, err
 	}
@@ -228,8 +224,6 @@ func load(requireHTTPAPIKey, allowRootInjectedStorage bool) (Config, error) {
 		return Config{}, errors.New("BaoStock currently supports daily bars only; disable MARKET_DATA_BAOSTOCK_QUOTE_ENABLED")
 	}
 	cfg := Config{
-		HTTPAddr:                  get("MARKET_DATA_HTTP_ADDR", ":8091"),
-		APIKey:                    strings.TrimSpace(os.Getenv("MARKET_DATA_API_KEY")),
 		RequestTimeout:            duration("MARKET_DATA_REQUEST_TIMEOUT", 5*time.Minute),
 		ProviderTimeout:           duration("MARKET_DATA_PROVIDER_TIMEOUT", 12*time.Second),
 		ProviderRetries:           integer("MARKET_DATA_PROVIDER_RETRIES", 1),
@@ -287,20 +281,16 @@ func load(requireHTTPAPIKey, allowRootInjectedStorage bool) (Config, error) {
 		MXAPIURL:                  get("MARKET_DATA_MX_API_URL", "https://mkapi2.dfcfs.com/finskillshub/api/claw/query"),
 		MXAPITimeout:              duration("MARKET_DATA_MX_API_TIMEOUT", 10*time.Second),
 		QuoteRetention:            duration("MARKET_DATA_QUOTE_RETENTION", 30*24*time.Hour),
+		AllowNoStorage:            boolEnv("MARKET_DATA_ALLOW_NO_STORAGE", false),
 		RedisAddr:                 strings.TrimSpace(os.Getenv("MARKET_DATA_REDIS_ADDR")),
 		RedisUsername:             strings.TrimSpace(os.Getenv("MARKET_DATA_REDIS_USERNAME")),
 		RedisPassword:             os.Getenv("MARKET_DATA_REDIS_PASSWORD"),
 		RedisDB:                   integer("MARKET_DATA_REDIS_DB", 0),
-		AutoMigrate:               boolEnv("MARKET_DATA_DB_AUTO_MIGRATE", true),
-		AllowNoStorage:            boolEnv("MARKET_DATA_ALLOW_NO_STORAGE", false),
 	}
 	var dsnErr error
 	cfg.MySQLDSN, dsnErr = resolveMySQLDSN(cfg.AllowNoStorage || allowRootInjectedStorage)
 	if dsnErr != nil {
 		return cfg, dsnErr
-	}
-	if requireHTTPAPIKey && !validSecret(cfg.APIKey) {
-		return cfg, errors.New("MARKET_DATA_API_KEY must be a non-placeholder secret with at least 32 characters")
 	}
 	for name, endpoint := range map[string]string{
 		"MARKET_DATA_EASTMONEY_QUOTE_URL":           cfg.EastmoneyQuoteURL,
@@ -677,7 +667,7 @@ func validateEnvironment() error {
 	}
 
 	for _, key := range []string{
-		"MARKET_DATA_DB_AUTO_MIGRATE", "MARKET_DATA_EASTMONEY_ENABLED",
+		"MARKET_DATA_EASTMONEY_ENABLED",
 		"MARKET_DATA_BAOSTOCK_ENABLED", "MARKET_DATA_BAOSTOCK_QUOTE_ENABLED", "MARKET_DATA_BAOSTOCK_DAILY_BARS_ENABLED",
 		"MARKET_DATA_EASTMONEY_QUOTE_ENABLED", "MARKET_DATA_EASTMONEY_DAILY_BARS_ENABLED",
 		"MARKET_DATA_EASTMONEY_STOCK_BASIC_ENABLED", "MARKET_DATA_EASTMONEY_SECTOR_RANKINGS_ENABLED",
