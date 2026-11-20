@@ -754,13 +754,13 @@ func TestLiveHithinkDailyBarsBackwardRaw(t *testing.T) {
 			dates = append(dates, tradeDate)
 			evidence.Rows = append(evidence.Rows, rawDailyRow{
 				TradeDate: tradeDate,
-				DateMS: string(row["date_ms"]),
-				Open: string(row["open_price"]),
-				High: string(row["high_price"]),
-				Low: string(row["low_price"]),
-				Close: string(row["close_price"]),
-				Volume: string(row["volume"]),
-				Turnover: string(row["turnover"]),
+				DateMS:    string(row["date_ms"]),
+				Open:      string(row["open_price"]),
+				High:      string(row["high_price"]),
+				Low:       string(row["low_price"]),
+				Close:     string(row["close_price"]),
+				Volume:    string(row["volume"]),
+				Turnover:  string(row["turnover"]),
 			})
 		}
 		sort.Strings(dates)
