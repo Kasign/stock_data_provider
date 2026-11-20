@@ -1391,3 +1391,16 @@ Go suite 覆盖根模块、go-core、market-data 的格式/测试/race/vet、Mar
 - 本提交补齐 Pytdx affine event report 类型及字段，保留 30 条事件的逐项现金分红、送股、配股比例/价格和仿射参数；同时按 gofmt 对齐。
 - 此前已通过的 Hithink affine 数值来自独立日志后处理：30 条事件组合结果与 23 日 backward OHLC 完全吻合。下一次 live run 将在 Go 编译通过后，把这项结果固化为测试断言。
 
+## 84. 2026-11-20 股权分置改革对价解释复权 offset 差异与本轮验收
+
+- 当前 repair_all HEAD：14743b6b32605f124cfe6e5670b3d8fc2ba1175a。
+- Go Test Suite Run 44719313134：success；Integration CI Run 44719313184：success。
+- Live Provider Probe Run 44719313133：workflow overall failure，失败点是原有 TestLiveHithinkDailyBarsSingleWindow 将 backward 小数 Volume 送入 shares 标准化契约后被拒绝；这是预期保护。独立 Hithink raw probe（含 affine 重建断言）、Pytdx historical、Pytdx/BaoStock 2026 corporate-action 对账均通过。
+- Artifact live-provider-reports ID 14620822513 已上传，包含 Hithink raw 三模式、公司行动事件和 Pytdx GBBQ/BaoStock 对照报告。
+- Hithink / Pytdx 600519.SH 均有 30 条公司行动事件，累计 price_scale 相同。逐事件对齐发现 2006 年股权分置改革事件口径差异：Hithink 将 2006-05-19 转增、2006-05-24/25 股权分置改革对价合并表达，并把 14.75 元/10 股现金对价纳入仿射 offset；Pytdx GBBQ 保留 1.2 股/10 股股份对价，但没有把 14.75 元现金对价计入现金分红。
+- 贵州茅台 2006-05-22 官方实施公告明确：每 10 股 5.91 元为公司现金股利，14.75 元为非流通股东对价安排，另有 1.2 股股份对价；并明确交易所不将该对价安排计入除权参考价。公告 URL：https://static.cninfo.com.cn/finalpage/2006-05-22/17136922.PDF
+- 2006-05-17 官方资本公积转增公告确认 2006-05-19 每 10 股转增 10 股。URL：https://static.cninfo.com.cn/finalpage/2006-05-17/17103260.PDF
+- 这解释了 Hithink / Pytdx 价格 offset 差 5.5697143862 元中的约 5.56942 元。它是事件口径差异，不是随机价格偏差。
+- 结论：复权算法应当对所有 Provider 采用统一的仿射计算框架，但事件归一化必须保留 Provider 差异和事件范围。默认技术分析价格口径建议采用 exchange_reference；投资者实际获得的股权分置改革对价另做 total_return，不混入标准除权参考价。原始 Volume 始终保留实际 shares。
+- 下一阶段实施：扩展现有 AdjustmentFactor 以表达 PriceScale/PriceOffset；扩展 CorporateAction 以区分 share-reform consideration、holder scope 和是否进入 exchange reference；在现有 adjustment_rebuild 内增加 affine rebuild 与单元测试。先实现纯计算和 provenance，再接入 Provider；不新建平行模块。
+
