@@ -1385,3 +1385,9 @@ Go suite 覆盖根模块、go-core、market-data 的格式/测试/race/vet、Mar
 - 本提交把 Pytdx GBBQ 全部事件的 ex-date、每股现金分红、送股比例、配股比例/价格及 affine multiplier/offset 写入 live report，下一步按 ex-date 与 Hithink 30 条事件逐项对齐，定位 5.5697143862 元偏移的来源。
 - 同时修正上一轮两处 Go struct gofmt 对齐；Go Test Suite 在 72d SHA 因格式检查失败，未进入 MarketData 单元测试。本次 SHA 将重新执行格式、单元、集成和 live probe。
 
+### 第 83 节实现检查补充（2026-11-20）
+
+- Run `44719128532` 的 live probe 因 Pytdx 事件报告新增类型未声明而编译失败，Hithink affine reconstruction 断言没有实际执行；不能将该 Run 视为公式验收。
+- 本提交补齐 Pytdx affine event report 类型及字段，保留 30 条事件的逐项现金分红、送股、配股比例/价格和仿射参数；同时按 gofmt 对齐。
+- 此前已通过的 Hithink affine 数值来自独立日志后处理：30 条事件组合结果与 23 日 backward OHLC 完全吻合。下一次 live run 将在 Go 编译通过后，把这项结果固化为测试断言。
+

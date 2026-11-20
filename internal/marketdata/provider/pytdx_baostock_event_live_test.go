@@ -23,12 +23,23 @@ type pytdxBaoStockEventReport struct {
 }
 
 type pytdxBaoStockAffineTransform struct {
-	Symbol                   string  `json:"symbol"`
-	EventCount               int     `json:"event_count"`
-	PriceScale               float64 `json:"price_scale"`
-	PriceOffset              float64 `json:"price_offset"`
-	BaoStockLatestBackFactor float64 `json:"baostock_latest_backward_factor,omitempty"`
-	BaoStockLatestFwdFactor  float64 `json:"baostock_latest_forward_factor,omitempty"`
+	Symbol                   string                     `json:"symbol"`
+	EventCount               int                        `json:"event_count"`
+	PriceScale               float64                    `json:"price_scale"`
+	PriceOffset              float64                    `json:"price_offset"`
+	BaoStockLatestBackFactor float64                    `json:"baostock_latest_backward_factor,omitempty"`
+	BaoStockLatestFwdFactor  float64                    `json:"baostock_latest_forward_factor,omitempty"`
+	Events                   []pytdxBaoStockAffineEvent `json:"events"`
+}
+
+type pytdxBaoStockAffineEvent struct {
+	ExDate           string  `json:"ex_date"`
+	DividendPerShare float64 `json:"dividend_per_share"`
+	BonusPerShare    float64 `json:"bonus_per_share"`
+	RightsPerShare   float64 `json:"rights_per_share"`
+	RightsPrice      float64 `json:"rights_price"`
+	Multiplier       float64 `json:"multiplier"`
+	Offset           float64 `json:"offset"`
 }
 
 type pytdxBaoStockEventItem struct {
@@ -142,13 +153,13 @@ func TestLivePytdxBaoStockCorporateActionConsistency(t *testing.T) {
 			terms = append(terms, affineTerm{
 				date: event.Time,
 				event: pytdxBaoStockAffineEvent{
-					ExDate: event.Time.In(location).Format("2006-01-02"),
+					ExDate:           event.Time.In(location).Format("2006-01-02"),
 					DividendPerShare: event.Fenhong / 10,
-					BonusPerShare: event.Songzhuangu / 10,
-					RightsPerShare: event.Peigu / 10,
-					RightsPrice: event.Peigujia,
-					Multiplier: multiplier,
-					Offset: offset,
+					BonusPerShare:    event.Songzhuangu / 10,
+					RightsPerShare:   event.Peigu / 10,
+					RightsPrice:      event.Peigujia,
+					Multiplier:       multiplier,
+					Offset:           offset,
 				},
 			})
 		}
