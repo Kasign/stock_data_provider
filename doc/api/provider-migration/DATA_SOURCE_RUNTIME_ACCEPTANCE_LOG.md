@@ -1331,3 +1331,9 @@ Go suite 覆盖根模块、go-core、market-data 的格式/测试/race/vet、Mar
 - 本次只增强证据采集，不改变 Hithink 生产解析、整数 shares 硬契约或任何 Provider 的复权算法。此前 Run `44710655555` 的单窗口探针因 backward Volume 小数失败，独立 raw 探针只记录首尾两行，artifact 上传因目标文件不存在而未生成；本次专门补齐该缺口。
 - 本次真实数据对账、独立因子验证及公共复权计算能力设计仍未完成；不能把测试代码提交或 workflow 启动视为数据正确性验收。
 
+### 第 78 节执行门禁更正（2026-11-20）
+
+- 对 Run `44716571798` 的复核发现：Live Provider workflow 中 Hithink 专项步骤本身使用 `if: always()`，不会因为前面的公共 Provider 探针失败而自动跳过。
+- 该 Run 的提交消息只有 `[include_public]`，没有包含 `[hithink_daily_bars_single_window]` 和 `[hithink_daily_bars_backward_raw]` 两个专项 marker，因此 Hithink 步骤按既有条件被跳过。前序公共探针的 Eastmoney 502、NetEase DNS/502 是独立失败，不是 Hithink 专项跳过的直接原因。
+- 不修改 workflow 的失败门禁或步骤依赖；下一次提交显式带上 Hithink 两个 marker，独立运行目标专项。
+
