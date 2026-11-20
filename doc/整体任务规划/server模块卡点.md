@@ -290,7 +290,7 @@
 - 复核基线：repair_all HEAD `487edf052b44721d5b8ba3c5429e5d200ec24772`。
 - Server Bootstrap `newMigrationRegistry` 当前未注册 Quant namespace；Quant 也尚无模块 Migration 定义/生产结果 Repository。Server 不应自行定义 Quant 表结构或将结果存储业务逻辑写进组合根。
 - Bootstrap 未构造 Quant PrincipalResolver、AuthorizedResultReader、AccessAuditor，也没有 Quant 计算 Facade 或 Researchflow Quant Stage 装配。Researchflow Worker 当前注入 News Search Stage Executor/Output Registry。
-- Quant 的 GetResult Port 已固定 `quant_analysis/full`，但没有可验证的授权策略 Owner、策略撤销一致性边界、可信 subject_ref 映射和审计保留/失败处置定义。Server 不得创建默认 Allow 或用 Owner Session 代替领域资源授权。
+- Quant 的 GetResult Port 已固定 `quant_analysis/full`；GOV-CTR-006 已明确 policy_owner=quant、MVP subject_ref=Researchflow service principal、resource_ref=result_id。当前缺口是 Quant Owner 策略规则/存储/签发和撤销竞态实现，以及审计保留/失败处置。Server 不得创建默认 Allow 或用 Owner Session 替代领域资源授权。
 - Server 当前可推进：确认共享 DB/Platform Storage 能力、Root 生命周期和 Migration Registry 的接入方式；按 GOV-CTR-006 现有语义由 Quant Owner 实现策略规则/快照/撤销门禁；Server 在 Quant 提供完整 Adapter/ Migration 后负责 Root 注入与 MariaDB Integration。禁止先写空壳实现。
 - 该卡点与 RA009 Data 单入口迁移无关；不得回退已完成的 Data/Session 认证决策。
 
@@ -299,5 +299,5 @@
 
 - Quant 结果持久化应由 Quant 模块提供 Repository SQL Adapter 与 Migration 定义；Server Migration Registry 只注册 Quant namespace，Root 只负责构造并注入依赖。Platform 继续提供公共 SQL pool/Migration Runner。
 - Server 不定义 Quant 领域表、不实现 Quant Repository，不将结果存储逻辑放入 Bootstrap。
-- AuthorizedResultReader 的策略判定/结果读取一致性和 AccessAuditor 持久化仍需按 GOV-CTR-006 正式语义装配；策略 Owner、撤销一致性和审计保留语义未明确前，不创建默认 Allow Adapter。
+- AuthorizedResultReader 的策略判定/结果读取一致性和 AccessAuditor 持久化仍需按 GOV-CTR-006 正式语义装配；GOV-CTR-006 已明确授权 Owner 和主体/资源/用途映射；Quant Owner 策略规则/持久化/签发及撤销竞态实现仍缺。Server 不创建默认 Allow Adapter，也不自行制定 Quant 领域策略；审计保留/失败处置需核实现有项目治理规则。
 - 当前无 Quant Storage Adapter/Migration，因此 Server 不应先注册空 namespace。待 Quant 提供完整 Migration 后再注册并由 Integration 验证精确 namespace/version/checksum。
