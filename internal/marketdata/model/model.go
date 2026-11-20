@@ -123,8 +123,8 @@ type DailyBar struct {
 	AdjustmentFactorSetHash               string          `json:"adjustment_factor_set_hash,omitempty"`
 	AdjustmentFactorReferenceRevisionHash string          `json:"adjustment_factor_reference_revision_hash,omitempty"`
 	AdjustmentAlgorithmVersion            string          `json:"adjustment_algorithm_version,omitempty"`
-	AdjustmentPriceScale                   float64         `json:"adjustment_price_scale,omitempty"`
-	AdjustmentPriceOffsetCNY               float64         `json:"adjustment_price_offset_cny,omitempty"`
+	AdjustmentPriceScale                  float64         `json:"adjustment_price_scale,omitempty"`
+	AdjustmentPriceOffsetCNY              float64         `json:"adjustment_price_offset_cny,omitempty"`
 	AdjustmentFactorSystemObservedAt      *time.Time      `json:"adjustment_factor_system_observed_at,omitempty"`
 	Source                                string          `json:"source"`
 	SourceVersion                         string          `json:"source_version,omitempty"`
