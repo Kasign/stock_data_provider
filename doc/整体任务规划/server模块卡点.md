@@ -301,3 +301,11 @@
 - Server 不定义 Quant 领域表、不实现 Quant Repository，不将结果存储逻辑放入 Bootstrap。
 - AuthorizedResultReader 的策略判定/结果读取一致性和 AccessAuditor 持久化仍需按 GOV-CTR-006 正式语义装配；GOV-CTR-006 已明确授权 Owner 和主体/资源/用途映射；Quant Owner 策略规则/持久化/签发及撤销竞态实现仍缺。Server 不创建默认 Allow Adapter，也不自行制定 Quant 领域策略；审计保留/失败处置需核实现有项目治理规则。
 - 当前无 Quant Storage Adapter/Migration，因此 Server 不应先注册空 namespace。待 Quant 提供完整 Migration 后再注册并由 Integration 验证精确 namespace/version/checksum。
+
+
+## RepairAll Quant Migration 注册进度（2026-11-20）
+
+- Server `newMigrationRegistry` 已注册 Quant 模块提供的 `quant` namespace Migration；Quant 表结构由 `internal/quant/storage` 拥有，Server 仅负责组合注册。
+- Bootstrap namespace 测试已加入 `quant`，Integration CI 会运行 Quant MariaDB 存储测试。
+- 当前 Server 尚未构造并注入 Quant MySQLRepository、AuthorizedResultReader、PrincipalResolver 或 AccessAuditor；因为尚无完整生产授权读取链路和 Quant Facade，不装配半成品读取服务。
+- 后续待 Quant 完成策略 Owner 当前版本读取/撤销门禁及审计 Adapter 后，再由 Server Root 组合注入并做并发竞态验收。
