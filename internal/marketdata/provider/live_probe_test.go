@@ -411,7 +411,7 @@ func TestLiveProbeDailyContractRejectsIncompleteUnverifiedRawAmountMetadata(t *t
 		Volume: &volume, VolumeUnit: "shares",
 		RawAmountField: "turnover", AmountUnit: "unknown",
 		AdjustmentBasis: model.AdjustmentNone, Source: "hithink",
-		QualityStatus: model.QualityDegraded,
+		QualityStatus:  model.QualityDegraded,
 		QualityReasons: []string{"amount_unit_unverified"},
 	}
 	got := liveProbeDailyContractError([]model.DailyBar{bar}, "hithink", "hithink", "600519.SH",
