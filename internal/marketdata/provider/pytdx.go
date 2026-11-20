@@ -411,6 +411,7 @@ func (p *Pytdx) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endDat
 			addPytdxValidationIssue(ctx, i, "change_percent", "Last", "previous_close_unavailable", "positive previous close", "number", fmt.Sprintf("%g", item.Last.Float64()), "Go 通达信协议未提供可用于计算涨跌幅的前收盘价", validation.SeverityWarning)
 		}
 		rawVolumeCopy := rawVolume
+		exactValues := pytdxDailyBarExactValues(item)
 		out = append(out, model.DailyBar{
 			Symbol:            symbol,
 			TradeDate:         tradeDate,
@@ -439,6 +440,7 @@ func (p *Pytdx) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endDat
 			QualityStatus:     quality,
 			QualityReasons:    reasons,
 			NormalizationVer:  normalize.Version,
+			ExactValues:       exactValues,
 		})
 	}
 	return normalizeProviderDailyBarsWithReport(ctx, symbol, start.Format("2006-01-02"), end.Format("2006-01-02"), limit, out, 0)
@@ -703,4 +705,37 @@ func pytdxPositiveFinite(value float64) bool {
 
 func pytdxNonNegativeFinite(value float64) bool {
 	return value >= 0 && !math.IsNaN(value) && !math.IsInf(value, 0)
+}
+
+func pytdxDailyBarExactValues(item *protocol.Kline) *model.DailyBarExactValues {
+	if item == nil {
+		return nil
+	}
+	rawAmount := pytdxPriceDecimal(item.Amount)
+	result := dailyBarExactValuesFromStrings(
+		pytdxPriceDecimal(item.Open), pytdxPriceDecimal(item.High), pytdxPriceDecimal(item.Low),
+		pytdxPriceDecimal(item.Close), strconv.FormatInt(item.Volume, 10), rawAmount, "unknown", "unknown",
+	)
+	if result == nil {
+		return nil
+	}
+	result.OpenEvidence = pytdxProtocolDecimalEvidence(item.Open.Int64(), 3)
+	result.HighEvidence = pytdxProtocolDecimalEvidence(item.High.Int64(), 3)
+	result.LowEvidence = pytdxProtocolDecimalEvidence(item.Low.Int64(), 3)
+	result.CloseEvidence = pytdxProtocolDecimalEvidence(item.Close.Int64(), 3)
+	result.RawVolumeEvidence = pytdxProtocolDecimalEvidence(item.Volume, 0)
+	result.RawAmountEvidence = pytdxProtocolDecimalEvidence(item.Amount.Int64(), 3)
+	return result
+}
+
+func pytdxProtocolDecimalEvidence(rawValue int64, scale int) *model.DailyBarDecimalEvidence {
+	return &model.DailyBarDecimalEvidence{
+		EvidenceKind:  model.DailyBarPrecisionEvidenceProtocolFixedScale,
+		SourceToken:   strconv.FormatInt(rawValue, 10),
+		ProtocolScale: &scale,
+	}
+}
+
+func pytdxPriceDecimal(value protocol.Price) string {
+	return scaledDecimalFromInt64(value.Int64(), 3)
 }

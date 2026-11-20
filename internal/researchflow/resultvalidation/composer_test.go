@@ -1,8 +1,8 @@
 package resultvalidation
 
 import (
-	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -61,8 +61,8 @@ func validCompositionInput() ResultCompositionInput {
 func TestComposeResultKeepsFactsEvidenceExplanationAndRiskSeparate(t *testing.T) {
 	input := validCompositionInput()
 	input.QuantResults = []QuantResultEnvelope{validQuantResult()}
-	registry := NewRegistry()
-	if err := registry.Register("indicator", "1.0.0", PayloadValidatorFunc(func(payload json.RawMessage) error { return nil })); err != nil {
+	registry, err := NewQuantPayloadRegistry()
+	if err != nil {
 		t.Fatal(err)
 	}
 	risk := validRiskDecision()
@@ -93,8 +93,8 @@ func TestComposeResultRetainsNonUsableQuantResultsWithoutPromotingThem(t *testin
 	quant := validQuantResult()
 	quant.QualityStatus = "unknown"
 	input.QuantResults = []QuantResultEnvelope{quant}
-	registry := NewRegistry()
-	if err := registry.Register("indicator", "1.0.0", PayloadValidatorFunc(func(json.RawMessage) error { return nil })); err != nil {
+	registry, err := NewQuantPayloadRegistry()
+	if err != nil {
 		t.Fatal(err)
 	}
 	result, err := ComposeResult(input, registry)
@@ -189,12 +189,12 @@ func TestComposeResultRejectsRiskPassUsingUnusableQuantResult(t *testing.T) {
 	quant := validQuantResult()
 	quant.QualityStatus = "unknown"
 	input.QuantResults = []QuantResultEnvelope{quant}
-	registry := NewRegistry()
-	if err := registry.Register("indicator", "1.0.0", PayloadValidatorFunc(func(json.RawMessage) error { return nil })); err != nil {
+	registry, err := NewQuantPayloadRegistry()
+	if err != nil {
 		t.Fatal(err)
 	}
 	risk := validRiskDecision()
-	risk.InputRefs = []string{"qres-1"}
+	risk.InputRefs = []string{validQuantResult().ResultID}
 	input.RiskDecision = &risk
 	if _, err := ComposeResult(input, registry); !errors.Is(err, ErrInvalidResultComposition) {
 		t.Fatalf("RiskDecision pass must not consume unusable Quant result, got %v", err)
@@ -209,12 +209,12 @@ func TestComposeResultRejectsRiskPassUsingUnusableQuantResult(t *testing.T) {
 func TestComposeResultAcceptsRiskReferencesResolvedByContextAndQuant(t *testing.T) {
 	input := validCompositionInput()
 	input.QuantResults = []QuantResultEnvelope{validQuantResult()}
-	registry := NewRegistry()
-	if err := registry.Register("indicator", "1.0.0", PayloadValidatorFunc(func(json.RawMessage) error { return nil })); err != nil {
+	registry, err := NewQuantPayloadRegistry()
+	if err != nil {
 		t.Fatal(err)
 	}
 	risk := validRiskDecision()
-	risk.InputRefs = []string{"qres-1", "snapshot-1"}
+	risk.InputRefs = []string{validQuantResult().ResultID, "snapshot-1"}
 	input.RiskDecision = &risk
 	result, err := ComposeResult(input, registry)
 	if err != nil {
@@ -225,7 +225,7 @@ func TestComposeResultAcceptsRiskReferencesResolvedByContextAndQuant(t *testing.
 	}
 
 	// 引用必须精确匹配已纳入的 Quant Result ID；相似但不存在的别名仍应拒绝。
-	risk.InputRefs = []string{"qres_1"}
+	risk.InputRefs = []string{"quant_result:sha256:" + strings.Repeat("b", 64)}
 	input.RiskDecision = &risk
 	if _, err := ComposeResult(input, registry); !errors.Is(err, ErrInvalidResultComposition) {
 		t.Fatalf("unknown near-match Quant result reference must fail closed, got %v", err)
@@ -234,10 +234,15 @@ func TestComposeResultAcceptsRiskReferencesResolvedByContextAndQuant(t *testing.
 
 func TestComposeResultRejectsRiskPassContradiction(t *testing.T) {
 	input := validCompositionInput()
+	input.QuantResults = []QuantResultEnvelope{validQuantResult()}
+	registry, err := NewQuantPayloadRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	risk := validRiskDecision()
 	risk.Reasons[0].Status = "triggered"
 	input.RiskDecision = &risk
-	if _, err := ComposeResult(input, nil); !errors.Is(err, ErrInvalidResultComposition) {
+	if _, err := ComposeResult(input, registry); !errors.Is(err, ErrInvalidResultComposition) {
 		t.Fatalf("blocking risk must prevent composition as pass, got %v", err)
 	}
 }
@@ -277,5 +282,39 @@ func TestComposeResultRejectsCyclicEvidenceDerivation(t *testing.T) {
 
 	if _, err := ComposeResult(input, nil); !errors.Is(err, ErrInvalidResultComposition) {
 		t.Fatalf("cyclic Evidence derivation should fail, got %v", err)
+	}
+}
+
+func TestComposeResultRejectsInvalidUTF8AcrossNestedInputs(t *testing.T) {
+	invalid := string([]byte{0xff})
+	tests := []struct {
+		name   string
+		mutate func(*ResultCompositionInput)
+	}{
+		{name: "run id", mutate: func(input *ResultCompositionInput) { input.RunID = invalid }},
+		{name: "context section", mutate: func(input *ResultCompositionInput) { input.Context.SectionRefs[0].SectionID = invalid }},
+		{name: "evidence source", mutate: func(input *ResultCompositionInput) { input.Evidence[0].SourceRef = invalid }},
+		{name: "claim statement", mutate: func(input *ResultCompositionInput) { input.Claims[0].Statement = invalid }},
+		{name: "llm explanation", mutate: func(input *ResultCompositionInput) { input.LLMResponse.OutputText = invalid }},
+		{name: "limitation", mutate: func(input *ResultCompositionInput) { input.Limitations[0] = invalid }},
+		{name: "risk reason", mutate: func(input *ResultCompositionInput) {
+			risk := validRiskDecision()
+			risk.Reasons[0].SafeMessage = invalid
+			input.RiskDecision = &risk
+		}},
+		{name: "quant raw payload", mutate: func(input *ResultCompositionInput) {
+			quant := validQuantResult()
+			quant.Payload = []byte(`{"value":"` + invalid + `"}`)
+			input.QuantResults = []QuantResultEnvelope{quant}
+		}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			input := validCompositionInput()
+			test.mutate(&input)
+			if _, err := ComposeResult(input, nil); !errors.Is(err, ErrInvalidResultComposition) {
+				t.Fatalf("invalid UTF-8 must be rejected before composition/JSON cloning, got %v", err)
+			}
+		})
 	}
 }

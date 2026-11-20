@@ -2033,6 +2033,113 @@ func TestObservationRetentionPurgeIntegration(t *testing.T) {
 	if totalPurged != len(concurrent) {
 		t.Fatalf("concurrent purged total=%d, want %d", totalPurged, len(concurrent))
 	}
+
+	// 精确到期边界应清理；独立 Evidence 的更短 Retention 不应等待父 Observation 到期。
+	boundary := now.Add(time.Minute).Truncate(time.Microsecond)
+	boundaryObservation := domain.Observation{
+		ID:             fmt.Sprintf("news-retention-boundary-%d", time.Now().UnixNano()),
+		IdempotencyKey: fmt.Sprintf("news-retention-boundary-key-%d", time.Now().UnixNano()),
+		SourceID:       "news-retention-boundary",
+		Candidate:      domain.Candidate{SourceItemID: "retention-boundary-item", Title: "boundary payload"},
+		ObservedAt:     boundary.Add(-time.Hour), RetentionUntil: boundary,
+		IdentityStatus: domain.ObservationUnidentified,
+	}
+	evidenceOnlyObservation := domain.Observation{
+		ID:             fmt.Sprintf("news-retention-evidence-only-%d", time.Now().UnixNano()),
+		IdempotencyKey: fmt.Sprintf("news-retention-evidence-only-key-%d", time.Now().UnixNano()),
+		SourceID:       "news-retention-boundary",
+		Candidate:      domain.Candidate{SourceItemID: "retention-evidence-only-item", Title: "parent still retained"},
+		ObservedAt:     boundary.Add(-time.Hour), RetentionUntil: boundary.Add(time.Hour),
+		IdentityStatus: domain.ObservationUnidentified,
+	}
+	boundaryNewsID := fmt.Sprintf("news-retention-boundary-news-%d", time.Now().UnixNano())
+	boundaryVersionID := fmt.Sprintf("news-retention-boundary-version-%d", time.Now().UnixNano())
+	boundaryEvidenceID := fmt.Sprintf("news-retention-boundary-evidence-%d", time.Now().UnixNano())
+	boundaryCandidateAvailableAt := evidenceOnlyObservation.ObservedAt.Add(-time.Minute)
+	defer func() {
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM news_version_availability_evidence WHERE evidence_id = ?", boundaryEvidenceID)
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM news_item_versions WHERE version_id = ?", boundaryVersionID)
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM news_observations WHERE observation_id IN (?, ?)", boundaryObservation.ID, evidenceOnlyObservation.ID)
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM news_items WHERE news_id = ?", boundaryNewsID)
+	}()
+	for _, observation := range []domain.Observation{boundaryObservation, evidenceOnlyObservation} {
+		if err := repository.WithinIdentityTransaction(ctx, func(tx app.IdentityTransaction) error {
+			_, err := tx.AppendObservation(ctx, observation)
+			return err
+		}); err != nil {
+			t.Fatalf("insert retention boundary observation %s: %v", observation.ID, err)
+		}
+	}
+	if _, err := db.ExecContext(ctx, "INSERT INTO news_items (news_id, origin_source_id) VALUES (?, ?)", boundaryNewsID, evidenceOnlyObservation.SourceID); err != nil {
+		t.Fatalf("insert retention boundary news item: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, "UPDATE news_observations SET news_id = ? WHERE observation_id = ?", boundaryNewsID, evidenceOnlyObservation.ID); err != nil {
+		t.Fatalf("bind evidence-only observation: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, `INSERT INTO news_item_versions
+		(version_id, news_id, version_no, fingerprint, title, content_json, observed_at, observation_id)
+		VALUES (?, ?, 1, ?, ?, JSON_OBJECT(), ?, ?)`,
+		boundaryVersionID, boundaryNewsID, strings.Repeat("c", 64), "retention boundary",
+		evidenceOnlyObservation.ObservedAt, evidenceOnlyObservation.ID); err != nil {
+		t.Fatalf("insert retention boundary version: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, `INSERT INTO news_version_availability_evidence
+		(evidence_id, news_id, version_id, observation_id, field_path, raw_value,
+		 source_timezone_or_offset, source_precision, parse_status, parse_reason_code,
+		 candidate_available_at_utc, parser_version, evidence_ref, evidence_hash,
+		 observed_at, recorded_at, retention_until)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '', ?, ?, ?, ?, ?, ?, ?)`,
+		boundaryEvidenceID, boundaryNewsID, boundaryVersionID, evidenceOnlyObservation.ID,
+		"payload.publishTime", boundaryCandidateAvailableAt.Format(time.RFC3339Nano), "UTC", "second", "parsed",
+		boundaryCandidateAvailableAt, "test-parser/1", "evidence://retention-boundary",
+		strings.Repeat("d", 64), evidenceOnlyObservation.ObservedAt,
+		evidenceOnlyObservation.ObservedAt.Add(time.Second), boundary); err != nil {
+		t.Fatalf("insert shorter-retention availability evidence: %v", err)
+	}
+
+	boundaryResult, err := repository.PurgeExpiredObservationPayloads(ctx, boundary, 10)
+	if err != nil || boundaryResult.Scanned != 1 || boundaryResult.Purged != 1 ||
+		boundaryResult.EvidenceScanned != 1 || boundaryResult.EvidencePurged != 1 {
+		t.Fatalf("boundary/independent evidence purge result=%+v err=%v", boundaryResult, err)
+	}
+	var boundaryPayload, retainedPayload []byte
+	var boundaryPurgedAt, retainedPurgedAt sql.NullTime
+	if err := db.QueryRowContext(ctx,
+		"SELECT candidate_json, payload_purged_at FROM news_observations WHERE observation_id = ?",
+		boundaryObservation.ID,
+	).Scan(&boundaryPayload, &boundaryPurgedAt); err != nil {
+		t.Fatalf("read boundary observation after purge: %v", err)
+	}
+	if err := db.QueryRowContext(ctx,
+		"SELECT candidate_json, payload_purged_at FROM news_observations WHERE observation_id = ?",
+		evidenceOnlyObservation.ID,
+	).Scan(&retainedPayload, &retainedPurgedAt); err != nil {
+		t.Fatalf("read retained parent observation after evidence purge: %v", err)
+	}
+	var boundaryCandidate, retainedCandidate domain.Candidate
+	if err := json.Unmarshal(boundaryPayload, &boundaryCandidate); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(retainedPayload, &retainedCandidate); err != nil {
+		t.Fatal(err)
+	}
+	if boundaryCandidate.Title != "" || !boundaryPurgedAt.Valid {
+		t.Fatalf("observation at exact expiry was not purged: candidate=%+v purged_at=%+v", boundaryCandidate, boundaryPurgedAt)
+	}
+	if retainedCandidate.Title != evidenceOnlyObservation.Candidate.Title || retainedPurgedAt.Valid {
+		t.Fatalf("parent Observation was purged before its own expiry: candidate=%+v purged_at=%+v", retainedCandidate, retainedPurgedAt)
+	}
+	var boundaryRawValue, boundaryEvidenceRef, boundaryEvidenceHash sql.NullString
+	var boundaryEvidencePurgedAt sql.NullTime
+	if err := db.QueryRowContext(ctx, `SELECT raw_value, evidence_ref, evidence_hash, payload_purged_at
+		FROM news_version_availability_evidence WHERE evidence_id = ?`, boundaryEvidenceID,
+	).Scan(&boundaryRawValue, &boundaryEvidenceRef, &boundaryEvidenceHash, &boundaryEvidencePurgedAt); err != nil {
+		t.Fatalf("read independently purged availability evidence: %v", err)
+	}
+	if boundaryRawValue.Valid || boundaryEvidenceRef.Valid || boundaryEvidenceHash.Valid || !boundaryEvidencePurgedAt.Valid {
+		t.Fatalf("shorter-retention Evidence payload remains: raw=%+v ref=%+v hash=%+v purged_at=%+v",
+			boundaryRawValue, boundaryEvidenceRef, boundaryEvidenceHash, boundaryEvidencePurgedAt)
+	}
 }
 
 type availabilityEvidenceSourceCatalogStub struct {
@@ -2233,5 +2340,91 @@ func TestAvailabilityEvidenceWriteRequiresCurrentFieldPolicyMariaDBIntegration(t
 	}
 	if deniedCount != 0 {
 		t.Fatalf("unauthorized field Evidence rows = %d, want 0", deniedCount)
+	}
+}
+
+func TestResolveCurrentSourceCollectionPoliciesMariaDBIntegration(t *testing.T) {
+	dsn := os.Getenv("NEWS_MARIADB_TEST_DSN")
+	if dsn == "" {
+		t.Skip("set NEWS_MARIADB_TEST_DSN to run News source collection policy integration")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	db, err := sql.Open("mysql", dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	db.SetMaxOpenConns(4)
+	defer db.Close()
+	if err := db.PingContext(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := platformstorage.ApplyMigrations(ctx, db, "news", Migrations()); err != nil {
+		t.Fatal(err)
+	}
+	repository, err := NewMySQLRepository(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	publisher, err := app.NewPublishNewsPolicyVersion(repository)
+	if err != nil {
+		t.Fatal(err)
+	}
+	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
+	sourceRef := "collect-policy-source-" + suffix
+	endpointRef := "collect-policy-endpoint-" + suffix
+	sourceV1, sourceV2 := "source-v1-"+suffix, "source-v2-"+suffix
+	endpointV1 := "endpoint-v1-" + suffix
+	defer func() {
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM news_current_policy_versions WHERE (policy_type = ? AND policy_ref = ?) OR (policy_type = ? AND policy_ref = ?)",
+			domain.NewsPolicyTypeSource, sourceRef, domain.NewsPolicyTypeEndpoint, endpointRef)
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM news_policy_versions WHERE (policy_type = ? AND policy_ref = ?) OR (policy_type = ? AND policy_ref = ?)",
+			domain.NewsPolicyTypeSource, sourceRef, domain.NewsPolicyTypeEndpoint, endpointRef)
+	}()
+	makeSourcePolicy := func(status domain.AuthorizationStatus) []byte {
+		payload, marshalErr := json.Marshal(domain.SourcePolicy{
+			Status:               status,
+			AllowedAccessMethods: []domain.AccessMethod{domain.AccessRSS},
+			AllowedPurposes:      []domain.Purpose{domain.PurposeInternalPersonalResearch},
+			AllowedContentKinds:  []domain.ContentKind{domain.ContentFullText},
+			AllowedStorageModes:  []domain.StorageMode{domain.StorageTransient},
+			MaxRetention:         time.Hour,
+			EvidenceRef:          "integration-source-license",
+		})
+		if marshalErr != nil {
+			t.Fatal(marshalErr)
+		}
+		return payload
+	}
+	if err := publisher.Execute(ctx, domain.NewsPolicyTypeSource, sourceRef, sourceV1, makeSourcePolicy(domain.AuthorizationApproved)); err != nil {
+		t.Fatalf("publish source policy v1: %v", err)
+	}
+	source, endpoint, err := repository.ResolveCurrentSourceCollectionPolicies(ctx, sourceRef, sourceV1, endpointRef, "")
+	if err != nil || source.Status != domain.AuthorizationApproved || endpoint != nil {
+		t.Fatalf("resolve source policy v1: source=%+v endpoint=%+v err=%v", source, endpoint, err)
+	}
+	if err := publisher.Execute(ctx, domain.NewsPolicyTypeSource, sourceRef, sourceV2, makeSourcePolicy(domain.AuthorizationRevoked)); err != nil {
+		t.Fatalf("publish source policy v2: %v", err)
+	}
+	if _, _, err := repository.ResolveCurrentSourceCollectionPolicies(ctx, sourceRef, sourceV1, endpointRef, ""); !errors.Is(err, app.ErrSourceCollectionPolicyUnavailable) {
+		t.Fatalf("stale source version error=%v, want unavailable", err)
+	}
+	source, endpoint, err = repository.ResolveCurrentSourceCollectionPolicies(ctx, sourceRef, sourceV2, endpointRef, "")
+	if err != nil || source.Status != domain.AuthorizationRevoked || endpoint != nil {
+		t.Fatalf("resolve current revoked source policy: source=%+v endpoint=%+v err=%v", source, endpoint, err)
+	}
+	endpointPayload, err := json.Marshal(domain.EndpointPolicy{Status: domain.AuthorizationRevoked, EvidenceRef: "integration-endpoint-revocation"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := publisher.Execute(ctx, domain.NewsPolicyTypeEndpoint, endpointRef, endpointV1, endpointPayload); err != nil {
+		t.Fatalf("publish endpoint policy: %v", err)
+	}
+	if _, _, err := repository.ResolveCurrentSourceCollectionPolicies(ctx, sourceRef, sourceV2, endpointRef, ""); !errors.Is(err, app.ErrSourceCollectionPolicyUnavailable) {
+		t.Fatalf("unexpected endpoint policy with empty catalog version error=%v, want unavailable", err)
+	}
+	source, endpoint, err = repository.ResolveCurrentSourceCollectionPolicies(ctx, sourceRef, sourceV2, endpointRef, endpointV1)
+	if err != nil || endpoint == nil || endpoint.Status != domain.AuthorizationRevoked || source.Status != domain.AuthorizationRevoked {
+		t.Fatalf("resolve current source+endpoint policies: source=%+v endpoint=%+v err=%v", source, endpoint, err)
 	}
 }

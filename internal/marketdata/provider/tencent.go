@@ -412,7 +412,7 @@ func (p *Tencent) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 		quality := model.QualityDegraded
 		reasons := []string{"tencent_daily_kline_has_no_verified_amount_field"}
 		amountUnit := "unknown"
-		b := model.DailyBar{Symbol: symbol, TradeDate: vals[0], Period: "1d", Open: open, High: high, Low: low, Close: closeV, Volume: &shares, Amount: amount, AdjustmentBasis: adjustment, AdjustmentMethod: "tencent_" + key, Source: p.Name(), SourceVersion: tencentVersion, FetchedAt: providerNowUTC(), NormalizedAt: providerNowUTC(), RawVolume: &rv, RawVolumeUnit: rawVolumeUnit, RawAmount: rawAmount, RawAmountUnit: optionalUnit(rawAmount, "CNY"), RawAmountField: optionalUnitName(rawAmount, "kline_field_6"), VolumeUnit: "shares", AmountUnit: amountUnit, QualityStatus: quality, QualityReasons: reasons, NormalizationVer: normalize.Version}
+		b := model.DailyBar{Symbol: symbol, TradeDate: vals[0], Period: "1d", Open: open, High: high, Low: low, Close: closeV, Volume: &shares, Amount: amount, AdjustmentBasis: adjustment, AdjustmentMethod: "tencent_" + key, Source: p.Name(), SourceVersion: tencentVersion, FetchedAt: providerNowUTC(), NormalizedAt: providerNowUTC(), RawVolume: &rv, RawVolumeUnit: rawVolumeUnit, RawAmount: rawAmount, RawAmountUnit: optionalUnit(rawAmount, "CNY"), RawAmountField: optionalUnitName(rawAmount, "kline_field_6"), VolumeUnit: "shares", AmountUnit: amountUnit, QualityStatus: quality, QualityReasons: reasons, NormalizationVer: normalize.Version, ExactValues: dailyBarExactValuesFromStrings(vals[1], vals[3], vals[4], vals[2], vals[5], "", "unknown", "unknown")}
 		out = append(out, b)
 	}
 

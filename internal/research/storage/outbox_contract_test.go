@@ -132,6 +132,7 @@ func TestResearchLifecycleProducerOutputSatisfiesNotificationContract(t *testing
 	next.EventVersion = 2
 	next.Status = researchevent.StatusConsolidating
 	next.SystemAsOf = now.Add(time.Second)
+	next.DerivedFromRefs = []researchevent.ResearchEventRef{{EventID: created.EventID, EventVersion: created.EventVersion}}
 	transition, err := researchevent.NewLifecycleTransition(created, next, now.Add(2*time.Second))
 	if err != nil {
 		t.Fatal(err)

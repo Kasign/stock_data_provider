@@ -444,3 +444,68 @@ func TestLifecycleConcurrentStopDuringSingleComponentStartupDoesNotReportSuccess
 		t.Fatalf("events = %v, want %v", events, want)
 	}
 }
+
+type contextIgnoringBlockingStartComponent struct {
+	entered chan struct{}
+	release chan struct{}
+	stopped chan struct{}
+}
+
+func (c contextIgnoringBlockingStartComponent) Name() string { return "context-ignoring-start" }
+func (c contextIgnoringBlockingStartComponent) Start(context.Context) error {
+	close(c.entered)
+	<-c.release
+	return nil
+}
+func (c contextIgnoringBlockingStartComponent) Stop(context.Context) error {
+	close(c.stopped)
+	return nil
+}
+
+func TestLifecycleStopHonorsDeadlineWhileStartupIsBlocked(t *testing.T) {
+	component := contextIgnoringBlockingStartComponent{
+		entered: make(chan struct{}), release: make(chan struct{}), stopped: make(chan struct{}),
+	}
+	lifecycle := NewLifecycle()
+	if err := lifecycle.Register(component); err != nil {
+		t.Fatal(err)
+	}
+
+	startDone := make(chan error, 1)
+	go func() { startDone <- lifecycle.Start(context.Background()) }()
+	select {
+	case <-component.entered:
+	case <-time.After(time.Second):
+		t.Fatal("component Start did not begin")
+	}
+
+	stopCtx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
+	defer cancel()
+	started := time.Now()
+	err := lifecycle.Stop(stopCtx)
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("Stop() error = %v, want context deadline", err)
+	}
+	if elapsed := time.Since(started); elapsed > time.Second {
+		t.Fatalf("Stop() took %v despite its deadline", elapsed)
+	}
+
+	select {
+	case <-component.stopped:
+		t.Fatal("component Stop ran while its Start was still blocked")
+	default:
+	}
+
+	close(component.release)
+	if err := <-startDone; err == nil {
+		t.Fatal("Start() must report interruption after shutdown deadline")
+	}
+	if err := lifecycle.Stop(context.Background()); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("subsequent Stop() error = %v, want original shutdown deadline", err)
+	}
+	select {
+	case <-component.stopped:
+		t.Fatal("component Stop must not run after shutdown timed out; process owner retains shared resources")
+	default:
+	}
+}

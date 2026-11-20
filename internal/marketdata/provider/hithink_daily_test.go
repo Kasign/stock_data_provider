@@ -219,3 +219,50 @@ func TestHithinkDailyRequestFailureIsReportedAtSnapshotLevel(t *testing.T) {
 		t.Fatalf("expected one snapshot-level request_error issue, got %+v", issues)
 	}
 }
+
+func TestHithinkDailyBarsRetainExactJSONDecimals(t *testing.T) {
+	loc := time.FixedZone("CST", 8*60*60)
+	dateMS := time.Date(2026, time.October, 7, 0, 0, 0, 0, loc).UnixMilli()
+	payload := fmt.Sprintf(`{"code":0,"data":{"item":[{"date_ms":%d,"open_price":10.123456789,"high_price":11.234567891,"low_price":9.012345678,"close_price":10.987654321,"volume":1000,"turnover":10000.123456789}]}}`, dateMS)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(payload))
+	}))
+	defer server.Close()
+
+	provider := NewHithinkConfigured(time.Second, server.URL, "test-key")
+	reporter := validation.NewReporter(20)
+	ctx := validation.WithReporter(context.Background(), reporter)
+	bars, err := provider.FetchDailyBars(ctx, "600036.SH", "2026-10-07", "2026-10-07", 10, model.AdjustmentNone)
+	if err != nil {
+		t.Fatalf("FetchDailyBars: %v", err)
+	}
+	if len(bars) != 1 {
+		t.Fatalf("bars count = %d, want 1", len(bars))
+	}
+	if bars[0].Amount != nil || bars[0].AmountUnit != "unknown" ||
+		bars[0].RawAmountUnit != "" || bars[0].RawAmountField != "turnover" ||
+		bars[0].QualityStatus != model.QualityDegraded ||
+		!strings.Contains(strings.Join(bars[0].QualityReasons, ","), "amount_unit_unverified") {
+		t.Fatalf("unverified Hithink turnover must remain raw/degraded, got %+v", bars[0])
+	}
+	foundUnitDiagnostic := false
+	for _, issue := range reporter.Snapshot().Issues {
+		if issue.Field == "amount" && issue.ProviderField == "turnover" && issue.Code == "unit_not_verified" {
+			foundUnitDiagnostic = true
+			break
+		}
+	}
+	if !foundUnitDiagnostic {
+		t.Fatalf("expected explicit unverified turnover-unit diagnostic, got %+v", reporter.Snapshot().Issues)
+	}
+	got := bars[0].ExactValues
+	if got == nil || got.Open != "10.123456789" || got.High != "11.234567891" ||
+		got.Low != "9.012345678" || got.Close != "10.987654321" ||
+		got.RawVolume != "1000" || got.RawAmount == nil || *got.RawAmount != "10000.123456789" ||
+		got.AmountCNY != nil || got.RawAmountEvidence == nil ||
+		got.RawAmountEvidence.EvidenceKind != model.DailyBarPrecisionEvidenceObservedToken ||
+		got.RawAmountEvidence.SourceToken != "10000.123456789" {
+		t.Fatalf("Hithink exact source decimals were not retained: %+v", got)
+	}
+}
