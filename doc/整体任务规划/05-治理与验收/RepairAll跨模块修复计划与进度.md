@@ -616,3 +616,19 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - 该跳过不是测试通过。已将 Market Data 专项测试、Market Data MariaDB 集成、News MariaDB 集成的 push 条件纳入 `repair_all`，保持各原有测试命令和断言不变。
 - 修正提交 SHA：`cec698dc14187d2907f826ed114cb04d3ef64f93`；新 Go Test Suite Run [44694882303](https://github.com/Kasign/stock_data_provider/actions/runs/44694882303) 已由精确 SHA push 触发，当前状态 `pending`，等待全部 Job 完成。
 - 验收要求：新 Run 中 Market Data module tests、Market Data MariaDB integration、News MariaDB integration 必须实际执行并通过；其余必需 Job 通过；任何 skipped 项按真实条件解释，不记为 PASS。
+### 31.2 真实 Provider Probe 接入 repair_all（2026-11-20）
+
+- 纠正此前“Data 等待真实 Provider 外部证据”的笼统描述：仓库已配置 Tushare、Hithink、TickFlow、MX 等 Secret 引用，真实 Probe 测试也已存在；实际遗漏是 Live Provider Workflow 的 push 分支只有 feat/data，repair_all 的常规 Go Test Suite 不会执行这些外部请求。
+- 修改 .github/workflows/live-provider-smoke.yml：增加 repair_all push 触发；当 repair_all 提交包含 [include_public] 时，将 Live Probe 设为严格门禁，不再通过 job-level continue-on-error 隐藏失败；其他既有分支/PR 行为保持不变。
+- 触发提交 SHA：402a7b106c936d26b046136bb6339c000104f6a0。提交信息包含 public、MX、Hithink、Tushare、TickFlow、历史日线、复权、停牌等专项 marker。
+- Live Provider Run [44697044524](https://github.com/Kasign/stock_data_provider/actions/runs/44697044524)，Job [136156175610](https://github.com/Kasign/stock_data_provider/actions/runs/44697044524/job/136156175610)。截至记录时公共 Provider Probe 仍在执行，不能提前写 PASS；后续专项步骤与脱敏报告待 Run 完成后逐项读取。
+- Secret 只由 GitHub Actions 注入进测试进程；日志和报告应继续只记录是否配置、请求元数据、脱敏响应摘要和能力结果，不得输出 Token/API Key。
+- 验收时必须区分 passed、permission_required、skipped、failed。Tushare 40203 属接口权限不足，不等同于 Token 无效或网络失败；skipped 不能算通过。仅有真实请求成功也不能自动解除 DATA-CTR-005/007，仍需逐项核验 Decimal 原始精度、Amount/Volume 单位、ProviderTime/version、复权基准和快照内容定位。
+
+### 31.3 Quant 当前 Run 结果访问范围决议（2026-11-20）
+
+- 用户已明确选择：Researchflow 服务主体只能读取当前 Researchflow Run 自己创建或明确关联的 Quant 结果，不允许凭 service principal 全局读取。
+- 已将该决议写入 Quant 跨模块依赖文档。关联事实归 Researchflow；优先复用现有不可变 Stage Output Resource 的 run_ref/stage_ref/attempt_ref 与内容，不新增重复关联表。仍需核对当前 Quant Stage Output Schema/Registry 是否已经显式保存目标 Quant result_id。
+- Quant Policy Owner 负责最终授权判断；Researchflow 持有 Run/Stage/Attempt 与 Stage Output 关联事实；Server 负责组合根注入只读关联查询端口。Quant 不直接查询 Researchflow 私有 SQL。
+- 当前 GetResult.Execute 仍缺可信 Run 上下文，AuthorizedResultReader 尚未实现；缺少关联、Run 不匹配或上下文不可信必须 fail-closed。该决议明确了策略范围，不等于 QNT-013 生产授权读取已完成。
+- 文档提交：Quant 依赖决议 32fc6a4d7a88c9f425b269ead6ebcdb36e60b2aa；Data 真实 Probe 门禁记录 24972eab8c46e2512333e91f3588b0325e78a783。均只写入 repair_all。
