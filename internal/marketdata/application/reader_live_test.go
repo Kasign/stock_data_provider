@@ -91,8 +91,8 @@ func TestLiveReaderGetDailyBarsV2PreservesProviderDecimalEvidence(t *testing.T) 
 		!containsReaderString(snapshot.Warnings, "daily_bar_coverage_calendar_quality_unreliable") {
 		t.Fatalf("real V2 snapshot must keep inferred BaoStock calendar degraded and untrusted: %+v", snapshot)
 	}
-	if snapshot.CoverageEvidence.CoverageBasis != "exchange_calendar" {
-		t.Fatalf("real V2 coverage basis = %q, want original exchange_calendar source basis", snapshot.CoverageEvidence.CoverageBasis)
+	if snapshot.CoverageEvidence.CoverageBasis != "degraded_exchange_calendar" {
+		t.Fatalf("real V2 coverage basis = %q, want degraded_exchange_calendar", snapshot.CoverageEvidence.CoverageBasis)
 	}
 
 	var sample app.DailyBar
