@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - feat/data
+      - repair_all
     paths:
       - ".github/workflows/live-provider-smoke.yml"
       - "internal/marketdata/**"
@@ -66,7 +67,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     # Provider networks may rate-limit or block hosted runners; live diagnostics do not gate regular CI.
-    continue-on-error: true
+    continue-on-error: ${{ !(github.event_name == 'push' && github.ref == 'refs/heads/repair_all' && contains(github.event.head_commit.message, '[include_public]')) }}
     services:
       mariadb:
         image: mariadb:11.4
