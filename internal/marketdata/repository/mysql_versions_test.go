@@ -189,3 +189,23 @@ func TestFundamentalsRevisionHashNormalizesEquivalentOffsetInstants(t *testing.T
 		t.Fatal("equivalent instants with different offsets must produce the same fundamentals revision hash")
 	}
 }
+
+func TestMarketDataMigrationDefinitionsExposeImmutableVersionedHistory(t *testing.T) {
+	migrations := MigrationDefinitions()
+	if len(migrations) != 5 {
+		t.Fatalf("migration count = %d, want four published/compatibility versions plus calendar snapshot V5", len(migrations))
+	}
+	for index := 0; index < 3; index++ {
+		if migrations[index].Version != uint64(index+1) || len(migrations[index].Statements) == 0 || len(migrations[index].Operations) != 0 {
+			t.Fatalf("published migration %d changed unexpectedly: %+v", index+1, migrations[index])
+		}
+	}
+	compatibility := migrations[3]
+	if compatibility.Version != 4 || len(compatibility.Statements) != 0 || len(compatibility.Operations) != 4 {
+		t.Fatalf("compatibility migration must contain four idempotent operations only: %+v", compatibility)
+	}
+	calendar := migrations[4]
+	if calendar.Version != 5 || len(calendar.Statements) != 1 || len(calendar.Operations) != 0 {
+		t.Fatalf("calendar snapshot migration V5 must contain one additive table creation: %+v", calendar)
+	}
+}

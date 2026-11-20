@@ -62,11 +62,10 @@ func TestFundamentalsHTTPToMariaDBPointInTime(t *testing.T) {
 		slog.New(slog.NewTextHandler(io.Discard, nil)),
 	)
 	svc.SetFundamentalsProviders([]provider.FundamentalsProvider{source})
-	handler := New("integration-secret", "forward_adjusted", svc, []provider.Provider{source}, nil).Handler()
+	handler := New("forward_adjusted", svc, []provider.Provider{source}, nil).InProcessHandler()
 
 	liveRequest := httptest.NewRequest(http.MethodGet,
 		"/api/v1/stocks/"+symbol+"/fundamentals?year=2026&quarter=2", nil)
-	liveRequest.Header.Set("X-API-Key", "integration-secret")
 	liveResponse := httptest.NewRecorder()
 	handler.ServeHTTP(liveResponse, liveRequest)
 	if liveResponse.Code != http.StatusOK {
@@ -86,7 +85,6 @@ func TestFundamentalsHTTPToMariaDBPointInTime(t *testing.T) {
 	asOf := time.Now().UTC()
 	pitRequest := httptest.NewRequest(http.MethodGet,
 		"/api/v1/stocks/"+symbol+"/fundamentals?year=2026&quarter=2&as_of="+url.QueryEscape(asOf.Format(time.RFC3339Nano)), nil)
-	pitRequest.Header.Set("X-API-Key", "integration-secret")
 	pitResponse := httptest.NewRecorder()
 	handler.ServeHTTP(pitResponse, pitRequest)
 	if pitResponse.Code != http.StatusOK {

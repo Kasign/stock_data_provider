@@ -208,6 +208,8 @@ func (p *Baostock) FetchDailyBars(ctx context.Context, rawSymbol, startDate, end
 			addProviderParseIssue(ctx, index, "change_percent", "pctChg", "invalid_number", "finite numeric value or missing", "string", row.PctChg, "BaoStock percentage change field is invalid")
 			return nil, err
 		}
+		exactValues := dailyBarExactValuesFromStrings(row.Open, row.High, row.Low, row.Close, row.Volume, row.Amount, rawAmountUnit, amountUnit)
+		setDailyBarExactChangePercentFromString(exactValues, row.PctChg, "pctChg")
 		out = append(out, model.DailyBar{
 			Symbol: symbol, TradeDate: tradeDate, Period: "1d",
 			Open: open, High: high, Low: low, Close: closePrice,
@@ -219,6 +221,7 @@ func (p *Baostock) FetchDailyBars(ctx context.Context, rawSymbol, startDate, end
 			RawAmount: rawAmount, RawAmountUnit: rawAmountUnit, RawAmountField: rawAmountField,
 			VolumeUnit: "shares", AmountUnit: amountUnit,
 			QualityStatus: quality, QualityReasons: reasons, NormalizationVer: normalize.Version,
+			ExactValues: exactValues,
 		})
 	}
 	// 所有 Provider 都遵守 limit 上限；显式日期区间不能绕过返回条数限制。

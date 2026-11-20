@@ -2499,6 +2499,7 @@ func (p *Hithink) fetchDailySegment(ctx context.Context, symbol string, start, e
 			amount, rawAmount = &v, &v
 			amountUnit, rawAmountUnit, rawAmountField = "CNY", "CNY", "turnover"
 		}
+		exactValues := dailyBarExactValuesFromJSON(item.OpenPrice, item.HighPrice, item.LowPrice, item.ClosePrice, item.Volume, item.Turnover, "unknown", "unknown")
 		out = append(out, model.DailyBar{
 			Symbol: symbol, TradeDate: tradeDate, Period: "1d",
 			Open: open, High: high, Low: low, Close: closePrice,
@@ -2511,6 +2512,7 @@ func (p *Hithink) fetchDailySegment(ctx context.Context, symbol string, start, e
 			RawAmount: rawAmount, RawAmountUnit: rawAmountUnit, RawAmountField: rawAmountField,
 			VolumeUnit: "shares", AmountUnit: amountUnit,
 			QualityStatus: quality, QualityReasons: reasons, NormalizationVer: normalize.Version,
+			ExactValues: exactValues,
 		})
 	}
 	return out, nil
