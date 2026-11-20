@@ -94,7 +94,7 @@ func TestGetResultReturnsValidatedAuthorizedEnvelope(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := usecase.Execute(context.Background(), reader.value.Record.Manifest.ResultID)
+	got, err := usecase.Execute(context.Background(), "run:researchflow:001", reader.value.Record.Manifest.ResultID)
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
@@ -104,7 +104,7 @@ func TestGetResultReturnsValidatedAuthorizedEnvelope(t *testing.T) {
 	if len(auditor.events) != 1 || auditor.events[0].Decision != "allowed" || auditor.events[0].ReasonCode != "result_released" {
 		t.Fatalf("successful result access was not audited: %+v", auditor.events)
 	}
-	if reader.calls != 1 || reader.request.SubjectRef != "service:researchflow" ||
+	if reader.calls != 1 || reader.request.RunRef != "run:researchflow:001" || reader.request.SubjectRef != "service:researchflow" ||
 		reader.request.ResourceRef != got.ResultID || reader.request.PurposeCode != quantPurposeCode ||
 		reader.request.ContentLevel != quantContentLevel || !reader.request.At.Equal(now) {
 		t.Fatalf("authorization read request mismatch: %+v", reader.request)
@@ -147,7 +147,7 @@ func TestGetResultFailsClosedForInvalidAuthorization(t *testing.T) {
 			reader := &fixedReader{value: value}
 			auditor := &fixedAuditor{}
 			usecase, _ := NewGetResult(reader, fixedPrincipal{principal: Principal{SubjectRef: "service:researchflow"}}, auditor, func() time.Time { return now })
-			got, err := usecase.Execute(context.Background(), value.Record.Manifest.ResultID)
+			got, err := usecase.Execute(context.Background(), "run:researchflow:001", value.Record.Manifest.ResultID)
 			if !errors.Is(err, ErrInvalidAuthorization) || got.ResultID != "" || got.Payload != nil || len(auditor.events) != 1 || auditor.events[0].Decision != "denied" {
 				t.Fatalf("expected fail-closed authorization error, got=%+v err=%v", got, err)
 			}
@@ -162,7 +162,7 @@ func TestGetResultRejectsTamperedRecord(t *testing.T) {
 	reader := &fixedReader{value: value}
 	auditor := &fixedAuditor{}
 	usecase, _ := NewGetResult(reader, fixedPrincipal{principal: Principal{SubjectRef: "service:researchflow"}}, auditor, func() time.Time { return now })
-	got, err := usecase.Execute(context.Background(), value.Record.Manifest.ResultID)
+	got, err := usecase.Execute(context.Background(), "run:researchflow:001", value.Record.Manifest.ResultID)
 	if !errors.Is(err, ErrInvalidStoredRecord) || got.ResultID != "" || len(auditor.events) != 1 || auditor.events[0].Decision != "unknown" {
 		t.Fatalf("tampered record should not escape: %+v %v", got, err)
 	}
@@ -182,7 +182,7 @@ func TestGetResultStopsWhenPrincipalResolutionCancelsContext(t *testing.T) {
 		t.Fatalf("NewGetResult() error = %v", err)
 	}
 
-	got, err := usecase.Execute(ctx, reader.value.Record.Manifest.ResultID)
+	got, err := usecase.Execute(ctx, "run:researchflow:001", reader.value.Record.Manifest.ResultID)
 	if !errors.Is(err, context.Canceled) || got.ResultID != "" {
 		t.Fatalf("Execute() = (%+v, %v), want empty envelope and context.Canceled", got, err)
 	}
@@ -212,7 +212,7 @@ func TestGetResultStopsWhenClockCancelsContext(t *testing.T) {
 		t.Fatalf("NewGetResult() error = %v", err)
 	}
 
-	got, err := usecase.Execute(ctx, reader.value.Record.Manifest.ResultID)
+	got, err := usecase.Execute(ctx, "run:researchflow:001", reader.value.Record.Manifest.ResultID)
 	if !errors.Is(err, context.Canceled) || got.ResultID != "" {
 		t.Fatalf("Execute() = (%+v, %v), want empty envelope and context.Canceled", got, err)
 	}
@@ -229,7 +229,7 @@ func TestGetResultRejectsInvalidRequestAndDoesNotCallReader(t *testing.T) {
 	reader := &fixedReader{value: getResultFixture(t, now)}
 	usecase, _ := NewGetResult(reader, fixedPrincipal{principal: Principal{SubjectRef: "service:researchflow"}}, &fixedAuditor{}, func() time.Time { return now })
 	for _, id := range []string{"", "result-1", "quant_result:sha256:ABC"} {
-		if got, err := usecase.Execute(context.Background(), id); !errors.Is(err, ErrInvalidGetResultRequest) || got.ResultID != "" {
+		if got, err := usecase.Execute(context.Background(), "run:researchflow:001", id); !errors.Is(err, ErrInvalidGetResultRequest) || got.ResultID != "" {
 			t.Fatalf("invalid result id accepted: %q", id)
 		}
 	}
@@ -238,12 +238,31 @@ func TestGetResultRejectsInvalidRequestAndDoesNotCallReader(t *testing.T) {
 	}
 }
 
+func TestGetResultRejectsMissingRunScopeBeforeReader(t *testing.T) {
+	now := time.Date(2026, 11, 9, 2, 0, 0, 0, time.UTC)
+	reader := &fixedReader{value: getResultFixture(t, now)}
+	auditor := &fixedAuditor{}
+	usecase, err := NewGetResult(reader, fixedPrincipal{principal: Principal{SubjectRef: "service:researchflow"}}, auditor, func() time.Time { return now })
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, runRef := range []string{"", " ", " run:researchflow:001"} {
+		got, executeErr := usecase.Execute(context.Background(), runRef, reader.value.Record.Manifest.ResultID)
+		if !errors.Is(executeErr, ErrInvalidGetResultRequest) || got.ResultID != "" {
+			t.Fatalf("untrusted/missing RunRef %q accepted: envelope=%+v err=%v", runRef, got, executeErr)
+		}
+	}
+	if reader.calls != 0 || len(auditor.events) != 0 {
+		t.Fatalf("reader/auditor called without a valid RunRef: reads=%d audits=%d", reader.calls, len(auditor.events))
+	}
+}
+
 func TestGetResultRejectsReaderFailureAndNonUTCClock(t *testing.T) {
 	now := time.Date(2026, 11, 9, 2, 0, 0, 0, time.UTC)
 	reader := &fixedReader{value: getResultFixture(t, now), err: errors.New("policy service unavailable")}
 	auditor := &fixedAuditor{}
 	usecase, _ := NewGetResult(reader, fixedPrincipal{principal: Principal{SubjectRef: "service:researchflow"}}, auditor, func() time.Time { return now })
-	got, err := usecase.Execute(context.Background(), reader.value.Record.Manifest.ResultID)
+	got, err := usecase.Execute(context.Background(), "run:researchflow:001", reader.value.Record.Manifest.ResultID)
 	if !errors.Is(err, ErrResultUnavailable) || got.ResultID != "" || len(auditor.events) != 1 || auditor.events[0].Decision != "unknown" {
 		t.Fatalf("reader failure leaked result: %+v %v", got, err)
 	}
@@ -251,7 +270,7 @@ func TestGetResultRejectsReaderFailureAndNonUTCClock(t *testing.T) {
 	usecase, _ = NewGetResult(reader, fixedPrincipal{principal: Principal{SubjectRef: "service:researchflow"}}, auditor, func() time.Time {
 		return now.In(time.FixedZone("UTC+8", 8*60*60))
 	})
-	got, err = usecase.Execute(context.Background(), reader.value.Record.Manifest.ResultID)
+	got, err = usecase.Execute(context.Background(), "run:researchflow:001", reader.value.Record.Manifest.ResultID)
 	if !errors.Is(err, ErrResultUnavailable) || got.ResultID != "" {
 		t.Fatalf("non-UTC trusted clock accepted: %+v %v", got, err)
 	}
@@ -270,6 +289,7 @@ func TestValidateAuthorizationMatchesFrozenQuantGolden(t *testing.T) {
 		t.Fatal(err)
 	}
 	request := ReadRequest{
+		RunRef: "run:researchflow:001",
 		SubjectRef: golden.AuthorizationRef.SubjectRef, ResourceRef: golden.AuthorizationRef.ResourceRef,
 		PurposeCode: quantPurposeCode, ContentLevel: quantContentLevel,
 		At: time.Date(2026, 11, 12, 0, 0, 0, 0, time.UTC),
@@ -290,7 +310,7 @@ func TestGetResultReturnsCanceledWhenAuditCancelsContext(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, err := usecase.Execute(ctx, reader.value.Record.Manifest.ResultID)
+	got, err := usecase.Execute(ctx, "run:researchflow:001", reader.value.Record.Manifest.ResultID)
 	if !errors.Is(err, context.Canceled) || got.ResultID != "" || got.Payload != nil {
 		t.Fatalf("Execute() = (%+v, %v), want empty envelope and context.Canceled", got, err)
 	}
@@ -307,7 +327,7 @@ func TestGetResultAuditFailurePreventsEnvelopeRelease(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := usecase.Execute(context.Background(), reader.value.Record.Manifest.ResultID)
+	got, err := usecase.Execute(context.Background(), "run:researchflow:001", reader.value.Record.Manifest.ResultID)
 	if !errors.Is(err, ErrAuditUnavailable) || got.ResultID != "" || got.Payload != nil {
 		t.Fatalf("audit failure must fail closed: envelope=%+v err=%v", got, err)
 	}
@@ -324,7 +344,7 @@ func TestGetResultReaderDenialIsAuditedAsDenied(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := usecase.Execute(context.Background(), "quant_result:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+	got, err := usecase.Execute(context.Background(), "run:researchflow:001", "quant_result:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
 	if !errors.Is(err, ErrResultUnavailable) || got.ResultID != "" {
 		t.Fatalf("denied read returned result: %+v %v", got, err)
 	}

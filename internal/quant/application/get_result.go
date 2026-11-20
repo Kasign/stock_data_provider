@@ -49,8 +49,9 @@ func (resolve PrincipalResolverFunc) Resolve(ctx context.Context) (Principal, er
 	return resolve(ctx)
 }
 
-// ReadRequest 是授权读取端口的内部命令，不是跨模块公开 DTO。
+// ReadRequest 是授权读取端口的内部命令，不是跨模块公开 DTO。RunRef 必须来自可信 Researchflow Worker 执行快照。
 type ReadRequest struct {
+	RunRef       string
 	SubjectRef   string
 	ResourceRef  string
 	PurposeCode  string
@@ -164,6 +165,7 @@ type AccessAuditor interface {
 // AuthorizedResultReader 负责当前授权复核和结果读取。
 // 实现必须在一个可证明的线性化/一致性边界内完成：读取当前策略快照、判断主体/资源/用途/级别、读取不可变记录。
 // 若授权策略在检查与读取间变化，或无法证明二者使用同一策略版本，必须拒绝且不得返回记录。
+// 实现还必须验证 request.RunRef 与目标 result_id 存在 Researchflow 持久化的明确关联；不得按 service principal 全局放行。
 // 该接口不得以历史 allowed 缓存、authorization_ref 字符串或 expires_at=null 代替当前授权判断。
 type AuthorizedResultReader interface {
 	ReadAuthorized(ctx context.Context, request ReadRequest) (AuthorizedRecord, error)
@@ -185,9 +187,10 @@ func NewGetResult(reader AuthorizedResultReader, principals PrincipalResolver, a
 	return &GetResult{reader: reader, principals: principals, auditor: auditor, now: now}, nil
 }
 
-// Execute 只有在记录指纹、当前授权证明和强类型 Payload 全部验证后才返回完整 Envelope。
-func (usecase *GetResult) Execute(ctx context.Context, resultID string) (result.Envelope, error) {
-	if usecase == nil || ctx == nil || !validResultID(resultID) {
+// Execute 只有在可信 Researchflow RunRef、当前授权证明、结果关联和强类型 Payload 全部验证后才返回完整 Envelope。
+// runRef 必须来自 Worker 加载的 StageExecutionSnapshot.Run.Ref，不得由 HTTP 请求体或普通 Header 提供。
+func (usecase *GetResult) Execute(ctx context.Context, runRef, resultID string) (result.Envelope, error) {
+	if usecase == nil || ctx == nil || !validText(runRef) || !validResultID(resultID) {
 		return result.Envelope{}, ErrInvalidGetResultRequest
 	}
 	if err := ctx.Err(); err != nil {
@@ -208,7 +211,7 @@ func (usecase *GetResult) Execute(ctx context.Context, resultID string) (result.
 		return result.Envelope{}, ErrResultUnavailable
 	}
 	request := ReadRequest{
-		SubjectRef: principal.SubjectRef, ResourceRef: resultID,
+		RunRef: runRef, SubjectRef: principal.SubjectRef, ResourceRef: resultID,
 		PurposeCode: quantPurposeCode, ContentLevel: quantContentLevel, At: now,
 	}
 	authorized, err := usecase.reader.ReadAuthorized(ctx, request)
