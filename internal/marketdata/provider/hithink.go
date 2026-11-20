@@ -987,7 +987,7 @@ func (p *Hithink) FetchDragonTiger(ctx context.Context, tradeDate string, page, 
 		if _, exists := seenSourceSymbols[symbol]; exists {
 			duplicateRows++
 			addHithinkFieldIssue(ctx, &rowIndex, "symbol", "thscode", "duplicate_identity",
-				"one stock row per unique security", rawSymbol, "同花顺龙虎榜同一证券因多个上榜原因返回重复事件行")
+				"one stock row per unique security", "string", rawSymbol, "同花顺龙虎榜同一证券因多个上榜原因返回重复事件行")
 			continue
 		}
 		seenSourceSymbols[symbol] = struct{}{}
