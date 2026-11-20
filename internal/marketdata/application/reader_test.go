@@ -271,7 +271,7 @@ func TestReaderGetDailyBarsV2DegradesBarsWhenCalendarIsOnlyWeekdayEstimate(t *te
 	if err != nil {
 		t.Fatalf("GetDailyBarsV2(weekday estimate) error = %v", err)
 	}
-	if got.TradingCalendarRef != nil || got.CoverageEvidence.CoverageBasis != "weekday_estimate" ||
+	if got.TradingCalendarRef != nil || got.CoverageEvidence.CoverageBasis != "degraded_exchange_calendar" ||
 		got.QualityStatus != app.QualityDegraded || len(got.Bars) != 1 ||
 		got.Bars[0].QualityStatus != app.QualityDegraded ||
 		!containsReaderString(got.Warnings, "daily_bar_coverage_calendar_reference_unavailable") {

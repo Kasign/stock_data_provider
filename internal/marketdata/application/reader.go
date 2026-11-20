@@ -221,6 +221,7 @@ func (r *Reader) GetDailyBarsV2(ctx context.Context, query app.DailyBarsQuery) (
 	case calendarQualityUnreliable:
 		calendarDegradationReason = "daily_bar_coverage_calendar_quality_unreliable"
 		evidence.CalendarRef = ""
+		evidence.CoverageBasis = "degraded_exchange_calendar"
 		evidence.CalendarQualityStatus = model.QualityDegraded
 	case calendarReferenceMissing:
 		calendarDegradationReason = "daily_bar_coverage_calendar_reference_unavailable"
