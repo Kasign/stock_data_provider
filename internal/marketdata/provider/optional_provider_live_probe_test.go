@@ -780,6 +780,7 @@ func TestLiveHithinkDailyBarsBackwardRaw(t *testing.T) {
 	if len(expectedDates) != 23 {
 		t.Fatalf("Hithink adjustment window expected 23 trading dates, got %d: %v", len(expectedDates), expectedDates)
 	}
+	report["expected_trade_dates"] = expectedDates
 	report["modes"] = modes
 	encoded, err := json.MarshalIndent(report, "", "  ")
 	if err != nil {
