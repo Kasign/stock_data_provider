@@ -535,3 +535,13 @@ RA009 代码关闭条件已满足：Server 路由认证矩阵、CSRF、WebUI 请
 - 判定：QNT-013 模块内取消传播子项 CLOSED；QNT-013 生产结果链路 NOT_COMPARABLE/OPEN。QNT-014 计算 Facade、Researchflow Quant Stage 继续等待正式 Registry/Result DTO 与明确真实消费场景。
 - 本轮未发现可安全直接实现的生产代码缺陷；不创建空 Migration namespace、不把 SQL 表结构塞入 Server、不将 MemoryRepository 用作生产实现。卡点已同步至 Quant 当前任务、Quant 模块卡点和 Server 模块卡点。
 - 下一步：先由 Quant/项目契约 Owner 明确策略 Owner、撤销一致性和审计语义；同时可独立审查 Quant 结果持久化 Schema/幂等事务设计与 Platform Storage 接入边界。具备依据后再实现生产 Adapter、Root DI 和 MariaDB 并发/撤销竞态/审计失败集成测试。
+
+
+### 28.29 QNT-013 结果持久化结构审查（2026-11-20）
+
+- 复核 Quant Manifest/Record/Save Port、Platform Storage/Migration Runner、Server Migration Registry、Research SQL Repository/Migration。
+- 确认 Quant Record 的 Manifest/Payload 已有 JCS/SHA-256 内容寻址与写入前验证；生产存储应保留完整 Manifest JSON 与原始 Payload JSON，不重塑业务 Payload。
+- 提出最小单表逻辑模型（result_id 主键、manifest_fingerprint、result_fingerprint、manifest_json、payload_json、created_at），明确这是实现前建议而非冻结 Schema；没有真实查询用例不增加二级索引。
+- Save 原子语义以数据库唯一键为最终仲裁：同内容幂等成功、不覆盖首次 created_at；异内容返回 ErrResultConflict；禁止 REPLACE、覆盖 UPSERT 和无锁先查后插。
+- Quant 拥有 SQL Adapter/Migration，Server 只注册 namespace/Root 注入，Platform 复用现有连接池与 Migration Runner。授权读取、审计持久化独立于 Save Repository，授权一致性和审计失败语义未决前不实现默认 Allow。
+- 本轮只完成设计审查和文档同步，没有生产代码变更；QNT-013 生产闭环保持 OPEN，QNT-014/Researchflow Quant Stage 不提前开放。
