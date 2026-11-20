@@ -117,7 +117,7 @@ jobs:
           MARKET_DATA_MX_API_URL: https://mkapi2.dfcfs.com/finskillshub/api/claw/query
         run: go test -run '^TestLiveProviderProbe$|^TestLiveProviderProbeQuarterlyFundamentals$|^TestLiveHithinkCapabilities$|^TestLiveTushareCapabilities$|^TestLiveTickFlowCapabilities$' -count=1 -v ./internal/marketdata/provider
       - name: Probe real DailyBars v2 Application Port and decimal evidence
-        if: always() && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && contains(github.event.head_commit.message, '[include_public]')))
+        if: always() && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && contains(github.event.head_commit.message, '[include_daily_bars_v2]')))
         env:
           MARKET_DATA_LIVE_PROVIDER_TESTS: "1"
           MARKET_DATA_TEST_MYSQL_DSN: "root:market-data-ci@tcp(127.0.0.1:3306)/market_data_probe?parseTime=true&loc=UTC"
