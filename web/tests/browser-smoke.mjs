@@ -744,7 +744,7 @@ try {
       assert.equal(await page.locator("#analysis-base-input").isHidden(), true, "analysis API base must not be user-editable");
       assert.equal(await page.locator("#save-settings").isHidden(), true, "browser must not expose a connection-save action");
       assert.equal(await page.locator("#cancel-settings").isHidden(), true, "browser must not expose a connection-cancel action");
-      assert.match(await page.locator("#connection-dirty-state").textContent(), /服务入口由部署统一管理/,
+      assert.match(await page.locator("#settings-view").textContent(), /服务地址、认证策略、Nginx 上游与数据库配置均由服务端部署管理/,
         "Root Server API origin must remain deployment-managed");
       assert.match(await page.locator("#settings-feedback").textContent(), /Root Server 单一 API 入口已启用/,
         "settings must explain the single Root Server API entry");
