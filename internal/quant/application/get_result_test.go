@@ -9,8 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gowebpki/jcs"
-
+	platformauthorization "example.com/stock-analysis-flow/internal/platform/authorization"
 	"example.com/stock-analysis-flow/internal/quant/manifest"
 	"example.com/stock-analysis-flow/internal/quant/result"
 )
@@ -23,12 +22,16 @@ type fixedPrincipal struct {
 func (p fixedPrincipal) Resolve(context.Context) (Principal, error) { return p.principal, p.err }
 
 type fixedAuditor struct {
-	events []AccessAuditEvent
-	err    error
+	events  []AccessAuditEvent
+	err     error
+	onAudit func()
 }
 
 func (a *fixedAuditor) RecordResultAccess(_ context.Context, event AccessAuditEvent) error {
 	a.events = append(a.events, event)
+	if a.onAudit != nil {
+		a.onAudit()
+	}
 	return a.err
 }
 
@@ -68,21 +71,15 @@ func getResultFixture(t *testing.T, now time.Time) AuthorizedRecord {
 		ContentLevel: quantContentLevel, SubjectRef: "service:researchflow", ResourceRef: stored.ResultID,
 		DecidedAt: now.Add(-time.Minute).Format(time.RFC3339Nano), ExpiresAtPresent: true, Conditions: []string{},
 	}
-	input := authorizationFingerprintInput{
-		SchemaVersion: ref.SchemaVersion, PolicyOwner: ref.PolicyOwner, PolicyVersion: ref.PolicyVersion,
-		Decision: ref.Decision, PurposeCode: ref.PurposeCode, ContentLevel: ref.ContentLevel,
-		SubjectRef: ref.SubjectRef, ResourceRef: ref.ResourceRef, DecidedAt: ref.DecidedAt,
-		ExpiresAt: ref.ExpiresAt, Conditions: ref.Conditions, EvaluatedPolicyVersions: policy.Policies,
-	}
-	encoded, err := json.Marshal(input)
+	refJSON, err := json.Marshal(ref)
 	if err != nil {
 		t.Fatal(err)
 	}
-	canonical, err := jcs.Transform(encoded)
+	snapshotJSON, err := json.Marshal(policy)
 	if err != nil {
 		t.Fatal(err)
 	}
-	ref.DecisionFingerprint, err = manifest.FingerprintPayload(canonical)
+	ref.DecisionFingerprint, err = platformauthorization.Fingerprint(refJSON, snapshotJSON)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -279,6 +276,26 @@ func TestValidateAuthorizationMatchesFrozenQuantGolden(t *testing.T) {
 	}
 	if err := validateAuthorization(golden.AuthorizationRef, golden.PolicySnapshot, request); err != nil {
 		t.Fatalf("frozen GOV-CTR-006 Quant Golden rejected: %v", err)
+	}
+}
+
+func TestGetResultReturnsCanceledWhenAuditCancelsContext(t *testing.T) {
+	now := time.Date(2026, 11, 9, 2, 0, 0, 0, time.UTC)
+	reader := &fixedReader{value: getResultFixture(t, now)}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	auditor := &fixedAuditor{onAudit: cancel}
+	usecase, err := NewGetResult(reader, fixedPrincipal{principal: Principal{SubjectRef: "service:researchflow"}}, auditor, func() time.Time { return now })
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := usecase.Execute(ctx, reader.value.Record.Manifest.ResultID)
+	if !errors.Is(err, context.Canceled) || got.ResultID != "" || got.Payload != nil {
+		t.Fatalf("Execute() = (%+v, %v), want empty envelope and context.Canceled", got, err)
+	}
+	if len(auditor.events) != 1 || auditor.events[0].Decision != "allowed" {
+		t.Fatalf("expected one completed pre-release audit event: %+v", auditor.events)
 	}
 }
 
