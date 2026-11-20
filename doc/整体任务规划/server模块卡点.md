@@ -291,7 +291,7 @@
 - Server Bootstrap `newMigrationRegistry` 当前未注册 Quant namespace；Quant 也尚无模块 Migration 定义/生产结果 Repository。Server 不应自行定义 Quant 表结构或将结果存储业务逻辑写进组合根。
 - Bootstrap 未构造 Quant PrincipalResolver、AuthorizedResultReader、AccessAuditor，也没有 Quant 计算 Facade 或 Researchflow Quant Stage 装配。Researchflow Worker 当前注入 News Search Stage Executor/Output Registry。
 - Quant 的 GetResult Port 已固定 `quant_analysis/full`，但没有可验证的授权策略 Owner、策略撤销一致性边界、可信 subject_ref 映射和审计保留/失败处置定义。Server 不得创建默认 Allow 或用 Owner Session 代替领域资源授权。
-- Server 当前可推进：确认共享 DB/Platform Storage 能力、Root 生命周期和 Migration Registry 的接入方式；等待 Quant/契约 Owner 提供正式策略语义后再实现 Adapter/注入与 MariaDB Integration。禁止先写空壳实现。
+- Server 当前可推进：确认共享 DB/Platform Storage 能力、Root 生命周期和 Migration Registry 的接入方式；按 GOV-CTR-006 现有语义由 Quant Owner 实现策略规则/快照/撤销门禁；Server 在 Quant 提供完整 Adapter/ Migration 后负责 Root 注入与 MariaDB Integration。禁止先写空壳实现。
 - 该卡点与 RA009 Data 单入口迁移无关；不得回退已完成的 Data/Session 认证决策。
 
 
