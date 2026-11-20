@@ -97,13 +97,15 @@ components:
         change_percent: {type: number, nullable: true, description: Percentage points}
         adjustment_basis: {$ref: '#/components/schemas/AdjustmentBasis'}
         adjustment_reference_date: {type: string, format: date, description: Reference date used by the PIT adjustment-factor reconstruction}
-        adjustment_method: {type: string, description: Adjustment algorithm identifier, for example cumulative_adj_factor_v1}
+        adjustment_method: {type: string, description: Adjustment algorithm identifier, for example cumulative_affine_adjustment_v2}
         adjustment_factor_source: {type: string, description: Provider used for the adjustment factor series}
         adjustment_factor_source_version: {type: string, description: Provider schema/data version used for the adjustment factor series}
         adjustment_factor_revision_hash: {type: string, description: Hash identifying the exact point-in-time adjustment-factor revision applied to this bar}
         adjustment_factor_set_hash: {type: string, description: Hash identifying the complete adjustment-factor set used for this bar}
         adjustment_factor_reference_revision_hash: {type: string, description: Hash identifying the reference-date adjustment-factor revision}
         adjustment_algorithm_version: {type: string, description: Version of the adjustment algorithm used to derive this bar}
+        adjustment_price_scale: {type: number, description: Price scale coefficient applied by the adjustment transform}
+        adjustment_price_offset_cny: {type: number, description: Additive CNY/share offset applied after price scaling; may be negative}
         adjustment_factor_system_observed_at: {type: string, format: date-time, nullable: true, description: System observation time of the factor revision applied to this bar}
         source: {type: string}
         source_version: {type: string}

@@ -1412,3 +1412,9 @@ Go suite 覆盖根模块、go-core、market-data 的格式/测试/race/vet、Mar
 - 服务与 Repository 验证新增 offset 必须是有限数值，允许负 offset；revision fingerprint 自动纳入 offset，确保 offset 变化会产生新版本。
 - 新增 backward affine 和 shared-forward affine 单元测试，验证 OHLC、scale/offset provenance，以及 Volume/Amount 不变。
 - 本阶段不接入 Hithink/Pytdx corporate-action provider，也不改变现有 scalar provider 输出；下一阶段再把经过事件策略验证的公司行动事件转换为 affine factor 序列。
+
+### 第 85 节 OpenAPI 契约同步
+
+- DailyBar 新增 adjustment_price_scale / adjustment_price_offset_cny 两个可选诊断字段，已同步到 internal/marketdata/httpapi/openapi.yaml。
+- 两字段不进入 required；原始 DailyBar 不包含这两个值，复权 DailyBar 返回实际应用的变换参数。
+- 当前 Go Test Suite 的模型/OpenAPI 一致性测试曾因缺少这两个属性失败；本提交同步契约后重新验收。
