@@ -67,3 +67,13 @@ Platform 代码树与已通过专项 CI 的代码基线 `b2166838b51eb1ca051fb9f
 - `doc/platform/模块总任务规划和进度.md`：Platform 模块总任务。
 - `doc/platform/12-PLAT-013领域接入差距矩阵.md`：领域接入差距的历史证据和责任边界。
 - `doc/整体任务规划/03-模块接口契约/Platform-五模块公共依赖与集成验收清单.md`：项目级跨模块公共依赖验收清单；其中历史状态需按 PLAT-BLK-08 校准。
+
+
+## RepairAll 聚合分支新增公共能力（2026-11-19）
+
+`repair_all` 已根据 Data/Server 的真实 Migration 消费缺口扩展 Platform Storage：
+
+- MigrationOperation 当前支持 EnsureColumn 与 EnsureNonUniqueIndex，操作定义纳入 checksum；旧 statement-only Migration 的 checksum 保持不变。
+- 新增只读 ValidateAppliedMigrations，校验精确版本集合、状态、版本空洞和 checksum；与 Apply 复用 namespace advisory lock 生命周期。
+- 不创建 history 表、不执行 DDL、不修改 history。
+- 变更仅存在于 `repair_all`，未修改 `feat/platform`；等待 Run [44447674606](https://github.com/Kasign/stock_data_provider/actions/runs/44447674606)。

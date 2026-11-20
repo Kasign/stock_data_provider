@@ -106,7 +106,7 @@ try {
         }) });
         return;
       }
-      if (url.pathname === "/market-api/api/v1/market/quotes") {
+      if (url.pathname === "/api/v1/market/quotes") {
         await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
           items: [{
             symbol: "000001.SZ",
@@ -199,7 +199,7 @@ try {
       const json = (status, body) => route.fulfill({
         status, contentType: "application/json", body: JSON.stringify(body)
       });
-      if (url.pathname === "/analysis-api/api/v1/analysis/tasks" && route.request().method() === "POST") {
+      if (url.pathname === "/api/v1/analysis/tasks" && route.request().method() === "POST") {
         const payload = route.request().postDataJSON();
         assert.deepEqual(payload.symbols, ["000001"], "研究页创建任务必须使用规范化后的当前标的");
         assert.equal(payload.task_type, "post_market_scan");
@@ -210,14 +210,14 @@ try {
         }, status_url: "/api/v1/analysis/tasks/task-research-archive",
         events_url: "/api/v1/analysis/tasks/task-research-archive/events" });
       }
-      if (url.pathname === "/analysis-api/api/v1/analysis/tasks/task-research-archive") {
+      if (url.pathname === "/api/v1/analysis/tasks/task-research-archive") {
         return json(200, { task: {
           task_id: "task-research-archive", run_id: "run-research-archive",
           status: "succeeded", task_type: "post_market_scan", symbols: ["000001"],
           created_at: "2026-11-03T03:00:00Z", completed_stages: 1
         } });
       }
-      if (url.pathname === "/analysis-api/api/v1/analysis/tasks/task-research-archive/events") {
+      if (url.pathname === "/api/v1/analysis/tasks/task-research-archive/events") {
         return json(200, { task_id: "task-research-archive", next_after_sequence: 1, events: [{
           sequence: 1, event: {
             run_id: "run-research-archive", stage: "研究任务完成", status: "completed",
@@ -225,7 +225,7 @@ try {
           }
         }] });
       }
-      if (url.pathname === "/analysis-api/api/v1/analysis/runs/run-research-archive") {
+      if (url.pathname === "/api/v1/analysis/runs/run-research-archive") {
         return json(200, {
           run_id: "run-research-archive", status: "completed",
           request: { symbols: ["000001"], task_type: "post_market_scan", as_of: "2026-11-03T03:00:00Z" },
@@ -414,7 +414,7 @@ try {
   assert.equal(archived.length, 1);
   assert.equal(archived[0].taskId, "task-research-archive");
   assert.equal(archived[0].runId, "run-research-archive");
-  assert.equal(archived[0].analysisBase, "/analysis-api");
+  assert.equal(archived[0].analysisBase, "/");
   assert.deepEqual(archived[0].symbols, ["000001"]);
   const notes = await page.evaluate(() => JSON.parse(localStorage.getItem("stock-provider-webui.research-notes.v1") || "[]"));
   assert.equal(notes.length, 1);
@@ -429,15 +429,15 @@ try {
   });
   await context.close();
 
-  // 缺少 API Key 时统一提示，但按钮保持可重试，配置完成后不会被永久禁用。
-  const noKeyContext = await browser.newContext({ viewport: { width: 1280, height: 900 }, reducedMotion: "reduce" });
-  await noKeyContext.addInitScript(() => {
+  // 不再要求浏览器 API Key；Provider 未配置时由真实 Root Server API 错误返回。
+  const noCredentialContext = await browser.newContext({ viewport: { width: 1280, height: 900 }, reducedMotion: "reduce" });
+  await noCredentialContext.addInitScript(() => {
     localStorage.setItem("stock-provider-webui.settings.v1", JSON.stringify({
       marketBase: "/market-api", analysisBase: "/analysis-api", apiKey: ""
     }));
   });
-  const noKeyPage = await noKeyContext.newPage();
-  await noKeyPage.route("**/api/**", route => route.fulfill({
+  const noCredentialPage = await noCredentialContext.newPage();
+  await noCredentialPage.route("**/api/**", route => route.fulfill({
     status: 503, contentType: "application/json",
     body: JSON.stringify({ error: { message: "not configured" } })
   }));
@@ -446,7 +446,7 @@ try {
   await noKeyPage.locator("#symbol-input").fill("600519.SH");
   await noKeyPage.locator('.nav-link[data-view="research"]').click();
   await noKeyPage.locator("#load-valuations").click();
-  await noKeyPage.waitForFunction(() => document.querySelector("#valuations-quality")?.textContent === "需配置 Key");
+  await noKeyPage.waitForFunction(() => document.querySelector("#valuations-error")?.textContent.includes("Root Server 的 Provider 配置"));
   for (const selector of [
     "#load-stock-research", "#load-fundamentals", "#load-valuations",
     "#load-chip-distribution", "#load-capital-flow"
@@ -454,7 +454,7 @@ try {
     assert.equal(await noKeyPage.locator(selector).isEnabled(), true, selector + " must remain retryable without API key");
     assert.equal(await noKeyPage.locator(selector).getAttribute("aria-busy"), null, selector + " must not remain busy without an active request");
   }
-  await noKeyContext.close();
+  await noCredentialContext.close();
   console.log("PASS stock research request cancellation and button recovery");
 } finally {
   if (releaseOldRequest) releaseOldRequest();

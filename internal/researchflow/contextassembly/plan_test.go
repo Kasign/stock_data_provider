@@ -95,3 +95,29 @@ func TestBuildPlanRejectsNonCanonicalIdentityAndReferences(t *testing.T) {
 		}
 	}
 }
+
+func TestBuildPlanRejectsInvalidUTF8CandidateFields(t *testing.T) {
+	invalid := string([]byte{0xff})
+	cases := []struct {
+		name string
+		edit func(*SectionCandidate)
+	}{
+		{name: "section id", edit: func(v *SectionCandidate) { v.ID = invalid }},
+		{name: "source owner", edit: func(v *SectionCandidate) { v.SourceOwner = invalid }},
+		{name: "source ref", edit: func(v *SectionCandidate) { v.SourceRefs = []string{invalid} }},
+		{name: "evidence ref", edit: func(v *SectionCandidate) { v.EvidenceRefs = []string{invalid} }},
+		{name: "protected evidence ref", edit: func(v *SectionCandidate) {
+			v.EvidenceRefs = []string{"ev-1"}
+			v.ProtectedEvidenceRefs = []string{invalid}
+		}},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			candidate := SectionCandidate{ID: "section", SourceOwner: "research", EstimatedTokens: 1}
+			testCase.edit(&candidate)
+			if _, err := BuildPlan([]SectionCandidate{candidate}, 10); !errors.Is(err, ErrInvalidPlan) {
+				t.Fatalf("invalid UTF-8 candidate should be rejected, got %v", err)
+			}
+		})
+	}
+}

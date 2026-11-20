@@ -44,9 +44,185 @@
 - DATA-003 当前阶段记录已归档至 `doc/api/任务历史/03-DATA-003-Fundamentals-PIT完整性阶段记录.md`，真实 Provider 披露时点仍外部阻塞，不重复执行已有 PIT 机制验收。
 - DATA-009 已完成并归档：Fundamentals/Valuations 重复保存不新增修订、内容变化新增修订的 MariaDB 集成断言通过；Go Test Suite Run `44307383999` success。详见 `doc/api/任务历史/05-DATA-009-Fundamentals-Valuations修订写入幂等性验收完成状态.md`。
 - DATA-009 完成后已核对 DATA-003～DATA-007 的剩余缺口：DATA-003 缺披露时点证据；DATA-004 缺 PE_MRQ 公式/ProviderReportDate/逐字段源端更新时间证据；DATA-005 缺 DailyBar 发布宽限规则及财务/估值源端时间；DATA-006 缺固定 Python 运行环境下的双侧配对样本；DATA-007 缺专项 Provider 真实请求证据。以上均不能通过重复静态审查、合成数据或 Go-only CI 关闭。
-- 当前无可独立执行的已登记任务。恢复条件和禁止重复事项见 `doc/api/当前任务状态和进度.md`。DATA-008 继续 DEFERRED。
+- DATA-003～DATA-007 的真实 Provider/外部证据缺口没有可通过重复静态审查关闭的任务；但 `repair_all` 阶段二已新增 Data 内部可执行工作：不可变交易日历内容版本 Repository（Migration V5），具体实现与 CI 状态见 `doc/api/当前任务状态和进度.md`。这不代表 `feat/data` 已同步。DATA-008 继续 DEFERRED。
 - DATA-004～DATA-007 的历史证据已在总规划标记为部分进行；后续切换时必须先复用这些证据、只处理未关闭子项，并按总规划正式更新当前任务状态。
 
 ## 非 Data Owner 卡点（仅供责任边界追踪）
 
-Root Server 尚未实际构造并注册 Data Module，属于 Server SRV-009 的装配责任，不是 Data 分支继续修改 `internal/server/**` 的授权。Data M1/M2 已完成；Data 不复制 Platform 公共能力，也不接管 Server 组合根。
+Root Server 的 Data Module 构造、共享资源注入、Migration Registry、InProcessHandler、Analysis Application 注入、Readiness 和 Lifecycle 已在 repair_all 代码级完成。WebUI Data API 已切换 Owner Session / 单 /api 入口，Data 独立服务与 Data API Key 认证已退役。剩余工作归 Root 集成验收和真实生产部署，不要求 Data 模块重复装配或重建 HTTP API。
+
+
+## RepairAll 聚合分支修复（2026-11-19）
+
+`repair_all` 已实施 Data Migration 统一，不代表 `feat/data` 已同步：
+
+- 静态定义现由 `internal/marketdata/repository.MigrationDefinitions()` 导出；V1-V3 保持不变，V4 负责旧索引和缺失列兼容。
+- 兼容 DDL 已从 Platform Apply Runner 锁外移入 MigrationOperation，在同一 namespace advisory lock 和 checksum 下执行。
+- MariaDB 旧库兼容和双实例并发测试已新增，等待 Run [44447674606](https://github.com/Kasign/stock_data_provider/actions/runs/44447674606)。
+- DATA-003 的 Provider AvailableAt 证据、DATA-004～007 的外部数据/字段/Parity 证据仍按原阻塞条件处理；本次迁移收口不改变其状态。
+
+
+## RepairAll 物理 Schema 漂移检查（2026-11-19）
+
+`repair_all` 新增 `Store.ValidateCompatibilitySchema`，并接入 Data `Ready`：V4 两列必须是 nullable DECIMAL(16,8)，revision 索引必须列顺序正确且为非唯一，旧 unique index 必须不存在。该检查用于补足 Migration checksum 不等于物理 Schema 完整性的边界。MariaDB 集成测试模拟删列并验证 Ready 拒绝；最新代码 SHA `b866188cf2b784a2e9c2d9a11ff002962a3453bd` 的 CI 尚待确认。模块分支 `feat/data` 未同步。
+
+
+## RepairAll 物理 Schema 漂移门禁 CI 结果（2026-11-19）
+
+- 当前 repair_all 验收 SHA：`5d97dc89acfd0493b8b7f4c316db6a5d5dc609e9`。
+- Integration CI [Run 44452547201](https://github.com/Kasign/stock_data_provider/actions/runs/44452547201) 对该精确 SHA 全项 success。
+- MariaDB 测试先通过 Root Registry 执行 Data Migration V1-V4，再对 Ready 执行缺列/缺索引 fail-closed 检查和恢复检查；原测试缺少 Data Migration 装配，已修正，不曾通过放宽物理 Schema 校验绕过。
+- 当前结论：repair_all 代码层物理 Schema 门禁 PASS；生产环境 Migration 开启/关闭演练仍待执行。模块分支 `feat/data` 未同步。
+- DATA-003 的真实 AvailableAt 证据及 DATA-004～DATA-007 的外部字段、Freshness、Parity、Provider 真实请求证据仍未解除。
+
+
+## RepairAll Migration Checksum 与物理 Schema 漂移边界（2026-11-19）
+
+- 最新 repair_all 代码 SHA：`ff9a98457220ae307b9dc4a62ce274849cd60f12`；Integration CI [Run 44453457919](https://github.com/Kasign/stock_data_provider/actions/runs/44453457919) 全项 success。
+- 新增 MariaDB 断言：删除 V4 兼容列或 revision 索引后，Migration checksum 校验仍通过；Data Ready 返回 `market_data.schema_drift`。恢复结构后 Ready 恢复通过。
+- 这证明迁移 history checksum 与物理 Schema 漂移检查职责分离，防止未来把 checksum 成功当成数据库结构健康证明。
+- 生产环境 Migration enabled/disabled 演练仍待执行；真实 Provider 数据与时间证据卡点不变。模块分支 `feat/data` 未同步。
+
+
+## RepairAll 物理 Schema 校验最终 MariaDB 兼容结果（2026-11-19）
+
+- 最新代码 SHA：`d386e097db64e6913290441ccc7bce0602358348`；Integration CI [Run 44454928267](https://github.com/Kasign/stock_data_provider/actions/runs/44454928267) 精确 SHA 全项 success。
+- 修正了 `COLUMN_DEFAULT` 的 MariaDB 元数据误判：不再把可空列的 NULL 默认表示视为显式默认值；列校验改为完整 signed DECIMAL 类型、precision/scale 和 nullable。
+- 索引校验补充拒绝前缀索引、非 BTREE、非升序索引；MariaDB 集成测试覆盖 UNSIGNED 列和前缀索引漂移。
+- Root Worker/API Bootstrap 与 Data Repository Schema 漂移集成测试全部通过。生产环境 Migration enabled/disabled 演练仍待执行；`feat/data` 未同步。
+
+
+## RepairAll Migration disabled 物理漂移门禁（2026-11-19）
+
+- 最新代码 SHA：`02415a319fbe45921be2be469592d84043676626`；Integration CI [Run 44455503870](https://github.com/Kasign/stock_data_provider/actions/runs/44455503870) 全项 success。
+- API Bootstrap 集成测试先执行 Migration enabled，再模拟删除 `market_data_quotes.turnover_rate`，之后 Migration disabled 启动必须 fail-closed，且 information_schema 确认 Root 未自动补列。
+- 代码级 enabled/disabled 启动路径门禁均已覆盖；生产部署演练和真实 Provider 证据仍未完成。模块分支 `feat/data` 未同步。
+
+
+## RepairAll DATA-CTR-007 / Research 消费边界复核（2026-11-19）
+
+- internal/marketdata/app/port.go 已提供 MarketDataReader 与 DailyBarsSnapshot，但该快照当前不包含内容寻址 SnapshotRef、Manifest/Payload 绑定和 Data AuthorizationRef。
+- internal/research/ 当前没有 Data Adapter；不得将普通 DailyBarsSnapshot 或 Bundle.snapshot_id 推定为不可变 Evidence 引用。
+- 项目级 doc/contract/PLAT-002-项目级契约冻结登记簿.md 明确 DATA-CTR-007 为 deferred，解锁责任是 Data 定义不可变行情 Payload、内容寻址 SnapshotRef、Manifest/Payload 绑定及 Research Evidence source_ref/version/locator 映射。
+- 判定：Data→Research 生产消费 NOT_COMPARABLE / DEFERRED；本轮未发现可在当前契约边界内安全实现的局部代码修复。Data 继续负责 DATA-CTR-007 契约和数据事实，Research 不复制 Data 模型/存储/授权。
+
+
+## RepairAll RA009 Data 入口退役状态（2026-11-19）
+
+- Data 的独立 HTTP API Key 字段、配置读取、Handler 认证和独立服务命令已删除；Provider 自身 Hithink/TickFlow/Tushare/MiaoXiang 等凭据仍保留为服务端配置。
+- Data HTTP Adapter 仅由 Root Server InProcessHandler 使用；Request ID 从 Platform observability Context 读取，不再复制独立 Data HTTP middleware。
+- Data Migration Definitions 仍由 Root Migration Registry 统一注册；已删除只服务独立 Data 命令的 Module.MigrationRunner 兼容入口。
+- DATA-CTR-006（Data X-API-Key HTTP 认证）已在项目契约目录标记 retired；外部路由认证以 SRV-CTR-002 为准，Data 领域授权仍以 DATA-CTR-008 为准。
+- RA009 代码验收已由精确 SHA `1e916220a8784ae840132ce0cec3b3654c6b9655` 的 Integration CI Run [44482650366](https://github.com/Kasign/stock_data_provider/actions/runs/44482650366) 全项 success；不再等待该项 CI。目标环境 M6 真实验收仍开放。DATA-003～DATA-007 的 Provider/时点/Freshness/Parity 证据卡点保持原状态，不因部署迁移自动关闭。
+
+
+## RepairAll 阶段二卡点状态校准（2026-11-19）
+
+- RA009 Data Root 单入口代码与精确 SHA CI 已通过（Run 44482650366）；此前“等待最新 CI”的文字仅作为当时历史记录，不再是当前卡点。
+- 当前 Data 仍开放的实质卡点为 DATA-CTR-007、DATA-003～DATA-007 外部数据证据；M6 生产部署证据由 Server/部署运维负责，不重复归入 Data 代码待办。
+- 统一责任与解锁顺序见 `doc/整体任务规划/05-治理与验收/RepairAll跨模块修复计划与进度.md` 第 28 节。
+
+
+## RepairAll 阶段二：交易日历不可变版本实现（2026-11-19）
+
+- Data 已在 `repair_all` 增加 Migration V5 与内容寻址交易日历 Snapshot Repository；保存和精确读取按 SHA-256 校验，重复内容幂等，内容或质量变化生成新 Ref。
+- 该能力为 DATA-CTR-007 的日历版本前置子项；未完成 DailyBars v2、Manifest/Payload 绑定和 AuthorizationRef 前，DATA-CTR-007 仍 deferred。最终代码 SHA `4aa468e4de6fc51a16068d43ab2229c5b0181ab9` 的完整 Integration CI Run `44493758123` 已全项 success。
+
+
+## RepairAll D1 精确值链路复核（2026-11-19）
+
+- 已确认默认 7 个 DailyBars Provider 均生成 ExactValues；Normalize 按值保留；Repository sidecar 持久化、Revision Hash 绑定、current/PIT 读取恢复均有实现和测试。Pytdx 兼容 Float64() 不是精确值唯一来源，ExactValues 使用 Price.Int64()；原“Pytdx 精度入口丢失”卡点撤销为误判。
+- 实际跨模块缺口是 `app.DailyBar` 未暴露 ExactValues，`application.mapDailyBar` 丢弃该字段。本轮增加 Application DTO、深拷贝映射及 Reader 回归测试，待精确 SHA CI 后关闭。
+- 仍开放：可配置 Hithink/Tushare/Yahoo 的 ExactValues 覆盖核验；Amount 单位证据；所有 Provider 的 ProviderTime/逐行数据版本；DailyBars v2 DTO/Schema/Golden；DATA-CTR-007 Payload/Manifest/AuthorizationRef。
+
+
+## RepairAll D1 精确值 Application Port 修复验收与剩余边界（2026-11-19）
+
+- `app.DailyBar` ExactValues 同构 DTO、深拷贝映射和 current/PIT Reader 测试已通过精确 SHA `a2bbfee6fd02f6c54242349419de7273b8fa4a76` 的完整 Integration CI Run `44501617234`；Application Port 丢失缺陷 CLOSED。
+- 默认 7 个 Provider 已生成 ExactValues；Hithink/Tushare/Yahoo 也在部分路径生成，但 Tushare/Yahoo QFQ/HFQ 缺精确调整值 sidecar。Canonicalizer 去除尾随零，不保留原始 token scale；ChangePercent 没有精确值字段。
+- 仍开放的 Data 卡点：字段 lexical scale/precision evidence、ChangePercent 精确来源、QFQ/HFQ 精确调整、Hithink/Pytdx Amount 单位证据、ProviderTime/逐行数据版本、DailyBars v2 DTO/Schema/Golden、DATA-CTR-007 Snapshot/Manifest/AuthorizationRef。
+
+
+## RepairAll D2 DailyBars v2 设计审查卡点（2026-11-19）
+
+- 新增 Data 内部 D2 设计审查草案，尚未修改项目级契约状态。
+- 必须解决：CalendarRef 与实际 DailyBars 质量评估结果同一性传播；ChangePercent 精确来源；原始 token scale evidence；Tushare/Yahoo QFQ/HFQ 精确调整；Amount 单位证据；ProviderTime/provider_data_version 缺失语义。
+- DailyBars v2 必须同时覆盖 Application Port 与 HTTP Schema 的版本化 DTO，并通过 Research Evidence / Quant Consumer Contract Test；不得修改现有 v1 number/float64。
+- DATA-CTR-005/007 和 QNT-CTR-003 继续 deferred，直至项目级重新进入条件满足。
+
+
+## RepairAll PIT 日历首轮 CI 格式问题（2026-11-19）
+
+- SHA dc866b3595fb49594446b15a9b8084c754c70a19 的所有功能测试和构建步骤均通过，唯一失败为新增 MariaDB 集成测试前多一行空行触发 gofmt。
+- 已删除多余空行；新 SHA 需重新完整验收。
+
+
+## RepairAll PIT 日历修复验收结果（2026-11-19）
+
+- 修复 SHA 08684e8a9b50641b4d32c38ab6ac9a3c7dd808e0 的 Integration CI Run 44504593484 全项 success。
+- DailyBarsAsOf 使用历史 CalendarRef 的代码、MariaDB 多版本选择测试和禁止实时 Provider 调用测试均通过。
+- 当前 Data 卡点从“PIT 使用当前日历”转为“将实际使用的 CalendarRef 绑定到 DailyBars v2 Snapshot Header”；另有 ChangePercent 精度、lexical scale、部分 Provider 复权精度、Amount 单位和 ProviderTime/provider_data_version 等未决证据。
+
+
+- 新增 Service + MariaDB 集成测试，验证 asOf 选择正确历史 CalendarRef，且配置的实时 Provider 调用次数保持 0；新 SHA 待 CI。
+
+
+## RepairAll PIT Calendar AsOf Service 集成验收（2026-11-19）
+
+- Service + MariaDB 集成测试验证：当 asOf 前旧 CalendarRef 与 asOf 后新 CalendarRef 同时存在，且实时 Provider 返回新版本时，`TradingCalendarAsOf` 仍只返回旧版本，live Provider 调用数为 0。
+- 测试 fixture 使用独立 1990 日期区间，避免与同套件其他日历内容地址/观察时间共享造成顺序依赖。
+- 格式修复提交 `443e851b7bd48d98b537c467a9c1493bea751735`，Integration CI Run [44506607149](https://github.com/Kasign/stock_data_provider/actions/runs/44506607149) 全项 success；Run [44505628048](https://github.com/Kasign/stock_data_provider/actions/runs/44505628048) 唯一失败为该测试文件多余空行触发 gofmt，已修正。
+
+## RepairAll D2 字段级设计审查补充（2026-11-19）
+
+- DailyBars coverage 当前会读取真实 Calendar Snapshot，但 helper 丢弃 CalendarRef；这是 v2 Header 尚未能证明日历同一性的实际代码缺口。后续通过同次 coverage evidence 返回 ref，不再二次查询。
+- ChangePercent 的来源与计算方式并不统一：Tushare/BaoStock/Netease 有原始来源 token/string；TickFlow 有来源/派生混合；Pytdx/Yahoo 当前是 float64 派生。derived Decimal 需要明确精度与舍入规则，未冻结前必须 null。
+- v2 必须区分 canonical Decimal、原始 lexical scale、单位证据、adapter/normalization/provider data version 和 system observation time；不能把 float64 或 DB DECIMAL scale 反向包装为来源精度。
+- 版本化 Application/HTTP DTO 独立于 v1；不改变现有消费者契约。DATA-CTR-005/007 与 QNT-CTR-003 保持 deferred。
+
+
+## RepairAll Pytdx Amount 单位证据待核（2026-11-19）
+
+- 当前代码 `pytdxDailyBarExactValues` 将协议 `Kline.Amount` 按 CNY 传入 ExactValues helper，但所用依赖 v0.0.86 的 protocol 文档只注释为“成交额”，未给出该字段单位。
+- TDX 官方量化文档对 `get_market_data` 的 Amount 标注“万元”，公式 AMOUNT/AMO 指标则标注“元”；属于不同 API/字段语义，不能互相替代。现有 Adapter 的 CNY 映射需视为待核假设。
+- D2 v2 的 `amount_cny` 暂时不得沿用该假设；单位证据确认前为 null/degraded。待核对的是与 v0.0.86 标准 Kline.Amount 完全对应的协议单位，不是重新猜测 Price 类型的缩放。
+
+
+## RepairAll DailyBars v2 CalendarRef Application Port 卡点关闭（2026-11-19）
+
+- Service coverage helper 已返回同一次日历评估使用的 CalendarRef 和 coverage evidence；PIT 只使用 asOf 可见日历版本，不触发 live Provider。
+- 新增独立 Application `DailyBarsV2Snapshot` / `DailyBarsV2Reader`，提供 `interval=1d`、可空 `trading_calendar_ref`、日历质量、交易日分母、阈值和 warnings；v1 Service/Application/HTTP 契约不变。
+- 无明确 start/end 或 CalendarRef 未持久化时 v2 显式降级；v1 既有质量语义保持兼容。
+- current/PIT 映射、缺失引用/无界范围降级、MariaDB 日历版本同源测试通过。精确 SHA `1c23678b5a80c07e5f31b3e5008d1e031cdd8048` 的 Integration CI Run [44509890582](https://github.com/Kasign/stock_data_provider/actions/runs/44509890582) 全项 success。
+- 本卡点仅关闭 Application Port 传播。HTTP v2 Schema/Handler/Golden、Research/Quant 消费者契约测试仍未完成；DATA-CTR-005/007 和 QNT-CTR-003 保持 deferred。
+
+
+## RepairAll v2 无界查询门禁与最终 Payload 卡点（2026-11-19）
+
+- Application v2 对缺少 start/end 的查询增加门禁：即使内部结果携带 CalendarRef，也不对 Header 暴露，明确标记 `unbounded_range_estimate` 并降级。精确 SHA `6d00369b6b9c66261eb47625e6bec7a2d80217e1` 的 Integration CI Run [44510702240](https://github.com/Kasign/stock_data_provider/actions/runs/44510702240) 全项 success。
+- CalendarRef 同次评估传播到 Application v2 Header 已关闭；但当前 `DailyBarsV2Snapshot.Bars` 仍复用 float64 Application DailyBar DTO，只是 Header 阶段，不是最终 Decimal Payload，不可对外发布或冻结 DATA-CTR-005。
+- 下一步：完成 DailyBarV2 Decimal/lexical-scale evidence 字段设计和 Provider 映射；对没有可靠来源的 ChangePercent、AmountCNY、QFQ/HFQ 调整值保持 null/degraded；之后再接 HTTP v2 Schema/Handler/Golden 与 Research/Quant 消费契约。
+
+
+## RepairAll v2 日历质量 fail-closed 卡点关闭（2026-11-19）
+
+- 有 ref 但日历质量不可靠时，v2 Header 不暴露 CalendarRef，coverage basis 为 `degraded_exchange_calendar`，Snapshot/Bars 降级；仅 timestamp-only 历史降级保留可靠 CalendarRef。
+- 精确 SHA `7c5f6e3c5c5b4bb146d46e60d1c723bd8fbce9c2` 的 Integration CI Run [44511526743](https://github.com/Kasign/stock_data_provider/actions/runs/44511526743) 全项 success。
+- CalendarRef 同次评估、无界查询和质量 fail-closed 已覆盖；最终 Decimal Body 与 HTTP v2 仍是下一阶段工作。
+
+
+## RepairAll 日线精确词法与涨跌幅来源证据实现（2026-11-20）
+
+- ExactValues 新增每个 Decimal 字段的 precision evidence：canonical value 独立于本次 Provider 原始 token/小数位；Pytdx 记录协议固定 scale。observed_token 仅代表单次响应，不推断 Provider 合同精度。
+- Tushare `pct_chg`、BaoStock `pctChg`、Netease CSV `change_percent` 已保留精确来源值、token、scale 和 source field；TickFlow 等派生值不写入 provider-source evidence。
+- Tushare amount 换算记录 1000 因子；Pytdx/Hithink 未证实的成交额单位不生成精确 `amount_cny`。v1 兼容字段不变。
+- Application Port 映射及深拷贝测试覆盖新增字段。
+- 精确 SHA `baaa2a57051e064f4f91a54851443379636bb685` 的 Integration CI Run [44658725187](https://github.com/Kasign/stock_data_provider/actions/runs/44658725187) 全项 success。
+- 后续仍需完成 DailyBarV2 Decimal Body、Tushare/Yahoo QFQ/HFQ 精确调整、ProviderTime/provider_data_version、HTTP v2 与 Research/Quant 消费者契约；DATA-CTR-005/007 和 QNT-CTR-003 不变更为 frozen。
+
+
+## 2026-11-20 模块分支基线同步状态
+
+- feat/data 已选择性同步 repair_all 的 internal/marketdata/** 与 doc/api/**，代码同步 SHA 5b98ae1abbf0e04fa4c275b15f78087b0481c0f1；上述模块路径已逐文件 Blob SHA 对齐。
+- 根模块 Test . 和 Market-data MariaDB migration/PIT job 在 Run 44667706336 通过；整体 Run failure 来自共享 Workflow 仍引用已删除 cmd/market-data 的两个旧 Job，归 CI-01，不归 Data 业务代码。
+- Live Provider Probe Run 44667706203 的 11 个真实专项全部 skipped，DATA-003～DATA-007 的外部证据阻塞不变；DATA-008 继续 DEFERRED。
