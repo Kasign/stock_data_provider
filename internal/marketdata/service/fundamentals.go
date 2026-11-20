@@ -213,24 +213,27 @@ func (s *DataService) Fundamentals(ctx context.Context, rawSymbol string, year, 
 	key := fmt.Sprintf("md:v1:fundamentals:%s:%d:%d", symbol, year, quarter)
 	if data, ok, cacheErr := s.cache.Get(ctx, key); cacheErr == nil && ok {
 		var cached model.FundamentalsSnapshot
-		if json.Unmarshal(data, &cached) == nil && validateFundamentalsSnapshotAt(symbol, year, quarter, &cached, s.nowUTC()) == nil && !cached.FetchedAt.After(s.nowUTC()) {
-			ttl := fundamentalsCacheTTL(&cached)
-			cacheEligible := cached.QualityStatus != model.QualityUnknown
-			if cached.QualityStatus == model.QualityUnknown {
-				fallbackExhausted := false
-				for _, reason := range cached.QualityReasons {
-					if reason == "fundamentals_fallback_exhausted_without_confirmed_data" ||
-						reason == "fundamentals_fallback_exhausted_without_usable_quality" {
-						fallbackExhausted = true
-						break
+		if json.Unmarshal(data, &cached) == nil {
+			cached.NormalizeInstantsUTC()
+			if validateFundamentalsSnapshotAt(symbol, year, quarter, &cached, s.nowUTC()) == nil && !cached.FetchedAt.After(s.nowUTC()) {
+				ttl := fundamentalsCacheTTL(&cached)
+				cacheEligible := cached.QualityStatus != model.QualityUnknown
+				if cached.QualityStatus == model.QualityUnknown {
+					fallbackExhausted := false
+					for _, reason := range cached.QualityReasons {
+						if reason == "fundamentals_fallback_exhausted_without_confirmed_data" ||
+							reason == "fundamentals_fallback_exhausted_without_usable_quality" {
+							fallbackExhausted = true
+							break
+						}
 					}
+					// 多 Provider 场景忽略未记录回退耗尽标记的 unknown 缓存，让更可靠来源有机会刷新结果。
+					cacheEligible = fallbackExhausted || len(s.fundamentalsProviders) <= 1
 				}
-				// 多 Provider 场景忽略未记录回退耗尽标记的 unknown 缓存，让更可靠来源有机会刷新结果。
-				cacheEligible = fallbackExhausted || len(s.fundamentalsProviders) <= 1
-			}
-			if cacheEligible && cacheEntryWithinTTL(cached.FetchedAt, ttl, s.nowUTC()) {
-				s.saveFundamentalsRevision(ctx, &cached)
-				return &cached, true, nil
+				if cacheEligible && cacheEntryWithinTTL(cached.FetchedAt, ttl, s.nowUTC()) {
+					s.saveFundamentalsRevision(ctx, &cached)
+					return &cached, true, nil
+				}
 			}
 		}
 	} else if cacheErr != nil {
@@ -258,6 +261,7 @@ func (s *DataService) Fundamentals(ctx context.Context, rawSymbol string, year, 
 		if snapshot != nil {
 			// fetched_at 是本服务收到 Provider 回包的时间，不能沿用上游传入值。
 			snapshot.FetchedAt = s.nowUTC()
+			snapshot.NormalizeInstantsUTC()
 		}
 		if err := validateFundamentalsSnapshotAt(symbol, year, quarter, snapshot, s.nowUTC()); err != nil {
 			failures = append(failures, p.Name()+": "+err.Error())
@@ -348,9 +352,10 @@ func (s *DataService) FundamentalsAsOf(ctx context.Context, rawSymbol string, ye
 	if year < 2007 || year > s.nowUTC().Year() || quarter < 1 || quarter > 4 {
 		return nil, errors.New("fundamental report year/quarter is invalid")
 	}
-	if asOf.IsZero() || asOf.After(time.Now().UTC()) {
+	if asOf.IsZero() || asOf.After(s.nowUTC()) {
 		return nil, errors.New("fundamentals as_of must be a valid non-future timestamp")
 	}
+	asOf = asOf.UTC()
 	if fundamentalPeriodEnd(year, quarter) > s.nowUTC().In(marketLocation()).Format("2006-01-02") {
 		return nil, errors.New("fundamental report period must not be in the future")
 	}
@@ -368,6 +373,7 @@ func (s *DataService) FundamentalsAsOf(ctx context.Context, rawSymbol string, ye
 	bestScore := -1
 	for index := range snapshots {
 		candidate := &snapshots[index]
+		candidate.NormalizeInstantsUTC()
 		if validateFundamentalsSnapshotAt(symbol, year, quarter, candidate, s.nowUTC()) != nil ||
 			candidate.FetchedAt.After(asOf) || candidate.SystemObservedAt == nil ||
 			candidate.SystemObservedAt.After(asOf) || !candidate.HasData ||

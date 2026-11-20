@@ -21,6 +21,7 @@ import (
 	"example.com/stock-analysis-flow/internal/marketdata/repository"
 	"example.com/stock-analysis-flow/internal/marketdata/service"
 	"example.com/stock-analysis-flow/internal/marketdata/transport"
+	platformstorage "example.com/stock-analysis-flow/internal/platform/storage"
 )
 
 // Dependencies 是由调用方创建并拥有的基础设施依赖；Module 不负责关闭 Store/Cache。
@@ -51,13 +52,12 @@ type Dependencies struct {
 	BaoStockDialContext           transport.DialContextFunc    // Root 注入 BaoStock TCP 受控连接函数；Module 不拥有、不关闭。
 }
 
-// Diagnostics 暴露模块就绪状态和 Provider 诊断，不暴露具体 DataService。
-// MigrationRunner 暴露 Data 自有 Schema 迁移能力，由 Root Server 组合根显式调度。
-type MigrationRunner interface {
-	Migrate(ctx context.Context) error
-}
+const MigrationNamespace = "market_data"
 
-var _ MigrationRunner = (*repository.Store)(nil)
+// MigrationDefinitions 返回由 Root Server 统一执行的 Data Schema 迁移定义。
+func MigrationDefinitions() []platformstorage.Migration {
+	return repository.MigrationDefinitions()
+}
 
 type Diagnostics interface {
 	Ready(ctx context.Context) error
@@ -71,9 +71,8 @@ type ProviderSummary struct {
 	DailyBars []string // 实际具备 DailyBars 能力的 Provider 名称。
 }
 
-// Module 封装 Data 应用、HTTP Handler、诊断能力及模块自有资源。
+// Module 封装 Data Application、Root 内部 HTTP Adapter、诊断能力及模块自有资源。
 type Module struct {
-	handler          http.Handler
 	inProcessHandler http.Handler
 	application      app.MarketDataReader
 	diagnostics      Diagnostics
@@ -128,14 +127,6 @@ func New(cfg config.Config, deps Dependencies) (*Module, error) {
 	return module, nil
 }
 
-// Handler 返回由 Module 组装的 HTTP Handler。
-func (m *Module) Handler() http.Handler {
-	if m == nil {
-		return nil
-	}
-	return m.handler
-}
-
 // Application 返回供模块内消费者调用的窄化 Application Port。
 // InProcessHandler 返回由 Root Server 负责外层认证和传输策略的业务路由。
 func (m *Module) InProcessHandler() http.Handler {
@@ -158,15 +149,6 @@ func (m *Module) Diagnostics() Diagnostics {
 		return nil
 	}
 	return m.diagnostics
-}
-
-// MigrationRunner 返回 Data 自有迁移执行器；未配置持久化时返回 nil。
-// 迁移由组合根显式执行，Module 构造和 Store 打开均不隐式修改 Schema。
-func (m *Module) MigrationRunner() MigrationRunner {
-	if m == nil || m.store == nil {
-		return nil
-	}
-	return m.store
 }
 
 // ProviderSummary 返回启动日志使用的 Provider 名称快照。
@@ -458,7 +440,7 @@ func (m *Module) build(cfg config.Config, deps Dependencies) error {
 		MarketCapitalFlow: marketCapitalFlowProviders, HotRankings: hotRankingProviders,
 		Supplements: supplementProviders,
 	})
-	handler := httpapi.NewWithApplication(cfg.APIKey, cfg.Adjustment, httpapi.ApplicationDependencies{
+	handler := httpapi.NewWithApplication(cfg.Adjustment, httpapi.ApplicationDependencies{
 		Quotes: ds, MarketOverview: ds, Securities: ds, Fundamentals: ds,
 		Index: ds, Trading: ds, Diagnostics: ds,
 	}, sourceStatuses, cfg.MaxDailyBars, cfg.RequestTimeout, logger)
@@ -468,7 +450,6 @@ func (m *Module) build(cfg config.Config, deps Dependencies) error {
 		return err
 	}
 	m.application = reader
-	m.handler = handler.Handler()
 	m.inProcessHandler = handler.InProcessHandler()
 	m.summary = ProviderSummary{
 		All:       providerNames(allProviders),

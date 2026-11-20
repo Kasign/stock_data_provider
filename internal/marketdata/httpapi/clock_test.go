@@ -1,7 +1,6 @@
 package httpapi
 
 import (
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -18,7 +17,7 @@ func (c httpAPIFixedClock) Now() time.Time {
 
 func TestServerUsesInjectedClock(t *testing.T) {
 	now := time.Date(2026, 11, 17, 16, 0, 0, 0, time.UTC)
-	server := NewWithApplicationAndClock("", "forward_adjusted", ApplicationDependencies{}, nil, 0, 0, nil, httpAPIFixedClock{now: now})
+	server := NewWithApplicationAndClock("forward_adjusted", ApplicationDependencies{}, nil, 0, 0, nil, httpAPIFixedClock{now: now})
 	if got := server.nowUTC(); !got.Equal(now) {
 		t.Fatalf("server clock = %s, want %s", got, now)
 	}
@@ -35,31 +34,12 @@ func TestValidateIndexConstituentsAsOfQueryAtUsesChinaMarketDate(t *testing.T) {
 	}
 }
 
-func TestHealthLiveUsesInjectedClock(t *testing.T) {
-	now := time.Date(2026, 11, 17, 16, 0, 0, 0, time.UTC)
-	server := NewWithApplicationAndClock("", "forward_adjusted", ApplicationDependencies{}, nil, 0, 0, nil, httpAPIFixedClock{now: now})
-	response := httptest.NewRecorder()
-	server.routes(false, true).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/health/live", nil))
-	if response.Code != http.StatusOK {
-		t.Fatalf("health status = %d, want %d", response.Code, http.StatusOK)
-	}
-	var body struct {
-		Time time.Time `json:"time"`
-	}
-	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
-		t.Fatalf("decode health response: %v", err)
-	}
-	if !body.Time.Equal(now) {
-		t.Fatalf("health response time = %s, want %s", body.Time, now)
-	}
-}
-
 func TestBarsRejectsFutureAsOfUsingInjectedClock(t *testing.T) {
 	now := time.Date(2026, 11, 17, 16, 0, 0, 0, time.UTC)
-	server := NewWithApplicationAndClock("", "forward_adjusted", ApplicationDependencies{}, nil, 0, 0, nil, httpAPIFixedClock{now: now})
+	server := NewWithApplicationAndClock("forward_adjusted", ApplicationDependencies{}, nil, 0, 0, nil, httpAPIFixedClock{now: now})
 	response := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/bars/600519.SH/daily?as_of=2026-11-17T16:00:01Z", nil)
-	server.routes(false, false).ServeHTTP(response, request)
+	server.routes().ServeHTTP(response, request)
 	if response.Code != http.StatusBadRequest {
 		t.Fatalf("future as_of status = %d, want %d; body=%s", response.Code, http.StatusBadRequest, response.Body.String())
 	}

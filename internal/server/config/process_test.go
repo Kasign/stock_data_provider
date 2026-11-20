@@ -30,7 +30,7 @@ func TestLoadProcessDefaults(t *testing.T) {
 	if cfg.LogLevel != "info" || cfg.AnalysisTimeout != 5*time.Minute ||
 		cfg.AnalysisWorkers != 2 || cfg.AnalysisMaxQueued != 100 ||
 		cfg.Role != RoleAll || cfg.HTTP.Address != ":8092" ||
-		cfg.ResearchNotificationRelay.BatchSize != 20 || cfg.ResearchNotificationRelay.EventLimits.MaxJSONDepth != 16 || cfg.ResearchflowCapacity.Configured {
+		cfg.ResearchNotificationRelay.BatchSize != 20 || cfg.ResearchNotificationRelay.EventLimits.MaxJSONDepth != 16 || cfg.NewsRetention.Interval != 5*time.Minute || cfg.NewsRetention.BatchSize != 100 || cfg.ResearchflowCapacity.Configured {
 		t.Fatalf("unexpected process defaults: %+v", cfg)
 	}
 }
@@ -49,7 +49,7 @@ func TestLoadProcessWorkerSkipsHTTPAndSecurity(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadProcess() error = %v", err)
 	}
-	if cfg.Role != RoleWorker || cfg.HTTP.Address != "" || cfg.Security.OwnerToken.Configured() {
+	if cfg.Role != RoleWorker || cfg.HTTP.Address != "" || cfg.Security.OwnerToken.Configured() || cfg.NewsRetention.Interval != 5*time.Minute || cfg.NewsRetention.BatchSize != 100 {
 		t.Fatalf("worker process unexpectedly loaded HTTP/security config: %+v", cfg)
 	}
 }
@@ -65,6 +65,8 @@ func TestLoadProcessRejectsInvalidProcessSettings(t *testing.T) {
 		{name: "workers", key: "ANALYSIS_WORKERS", raw: "0"},
 		{name: "queue smaller than workers", key: "ANALYSIS_MAX_QUEUED", raw: "1"},
 		{name: "migration timeout", key: "MIGRATION_TIMEOUT", raw: "0s"},
+		{name: "News retention interval too short", key: "NEWS_RETENTION_INTERVAL", raw: "500ms"},
+		{name: "News retention batch too large", key: "NEWS_RETENTION_BATCH_SIZE", raw: "1001"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

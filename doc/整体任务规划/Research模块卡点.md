@@ -63,3 +63,38 @@ Research 的领域基础能力、Repository/Outbox、Context 消费契约测试�
 - Research Diagnostics 脱敏测试使用符合 Event 版本血缘规则的 EventVersion=1 样本；不放宽生产版本校验。诊断结果语义、PIT 时间边界、Owner 授权复核、快照隔离和敏感信息不泄露的测试结论记录于 `doc/research/任务历史/14-RSC-008-Diagnostics脱敏边界与结果语义审查.md`。
 - 本次 Compose、Market Data、News 等 Job 为 skipped；它们不构成通过证据，也不改变相应模块卡点。
 - 跨模块卡点仍按本文表格执行：News/Data/Quant/Researchflow 提供重新进入证据，Server 负责生产身份、Migration/Relay/Worker 组合装配。
+
+
+## 7. RepairAll Data / News → Research 交叉审查更新（2026-11-19）
+
+- 审查基线：repair_all 代码树 5334043ea8e1abc2c4006c371a3f95b123098946；随后仅有总体计划文档校准提交。
+- Data→Research：当前 internal/research/ 仅有 News Adapter，没有 Data Adapter；internal/marketdata/app/port.go 虽提供 MarketDataReader/DailyBarsSnapshot，但 DATA-CTR-007 在项目级登记中为 deferred。缺少不可变内容寻址 SnapshotRef、Manifest/Payload 绑定、AuthorizationRef 及 Research Evidence source_ref/version/locator 映射。保持 RSC-004 BLOCKED，不新增猜测性 Adapter/DTO。
+- News→Research：internal/research/adapters/news/evidence.go 已实现 Importer/Authorizer；News Query Facade、PIT 单条/分页、当前授权复核及事务内锁定当前策略指针后复读 Observation/Version、校验并读取内容均存在。当前实现机制不重复开发。
+- Server：internal/server/bootstrap/research_news.go 装配组合存在；bootstrap.go 仅在 Cursor Key Ring 配置时创建，并明确没有真实 Stage/HTTP 消费者。该组合目前不是生产消费闭环。
+- News available_at 仍无合格来源证据，RSC-002/NEWS-BLK-07 保持 SHELVED；不以 published_at、fetched_at、observed_at 替代。
+- 本轮未发现能在不越过冻结/待决契约的前提下直接修复的代码缺陷；本卡点不代表代码端到端 PASS。生产真实数据验收为 NOT_COMPARABLE。
+
+
+## 8. RepairAll RA-CROSS-REVIEW-005 首轮复核（2026-11-19）
+
+- 审查基线：repair_all SHA 8afbba2a0a519f932063861085bbdc89f7e76fa8。
+- Research Application 的 GetContext 在读取精确 Context 版本并验证后，必须调用 ContextAuthorizer；未注入时 fail-closed 返回 research_context_authorizer_not_configured。
+- 当前 Server News→Research 组合创建 Research Service 时未传 ContextAuthorizer；因此 Context 读取能力尚未形成可用的生产消费闭环。当前没有真实 Context Stage/HTTP 消费者，不能注入恒 Allow 的占位授权器。
+- 解锁条件：明确 Research Context 授权 Owner/Policy、可信 CallerRef 来源和真实消费者；再由 Server 在组合根注入真实 Authorizer，并验证授权撤销/不可用时 fail-closed。
+- 本轮只记录系统装配缺口，不在 Research 内复制 Server 身份或授权实现。
+
+
+## RepairAll RA-CROSS-REVIEW-005 Evidence PIT 规则复核（2026-11-19）
+
+- Evidence Domain 的 ValidateForStrictPIT 已实现严格检查：available_at 必须存在且不晚于 Evidence.system_as_of；Evidence.system_as_of 不得晚于 Run.system_as_of；system_observed_at 不得晚于 Evidence.system_as_of。
+- Researchflow ResultComposition 的 validateResearchEvidence 当前没有执行 available_at 严格 PIT 检查。项目级契约允许 available_at 缺失的 Evidence 仅在 Template 明确声明非严格 PIT 模式及风险时使用。
+- Researchflow WorkflowTemplate / ResultCompositionInput 当前未提供可见的 PIT Mode 语义，且当前没有生产 Evidence 组合消费者。Research 不擅自定义 PIT 模式，也不把 null available_at 改造成伪造时间。
+- 解锁条件：项目契约 Owner 明确 PIT Mode 的枚举、默认严格策略、非严格风险声明及 Fingerprint 绑定；随后由 Researchflow 实现 Template/Run/ResultValidation 传播，Research 保持 ValidateForStrictPIT 领域规则。
+
+
+## RepairAll RA-CROSS-REVIEW-005 最终结论（2026-11-19）
+
+- Research Context/Evidence/Event/Claim 的持久化归 Research Owner；Research Migrations 已由 Server Root 注册，未发现重复持久化实现。
+- Context 读取必须依赖真实 ContextAuthorizer；Server 当前 News→Research Composition 未注入该 Authorizer，且尚无真实 Context 消费者。保持 fail-closed，不提供默认 Allow。
+- Evidence 严格 PIT Domain 校验已存在；Researchflow ResultComposition 未校验 available_at 严格可得性，且 WorkflowTemplate/ResultCompositionInput 尚无 PIT Mode。需项目契约 Owner 决策非严格模式字段/风险/Fingerprint 语义后再实施。
+- Event/Claim 版本化与事务持久化已存在；当前缺 Researchflow 真实消费者，不代表领域存储实现缺失。

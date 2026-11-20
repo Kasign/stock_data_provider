@@ -171,6 +171,25 @@ func TestValidatePayloadJSONRejectsInvalidCandidateAndProviderOutcome(t *testing
 	}
 }
 
+func TestValidatePayloadJSONRejectsDuplicateMissingFields(t *testing.T) {
+	observed := time.Date(2026, 11, 16, 1, 0, 0, 0, time.UTC)
+	payload := SearchCandidatesOutput{
+		Status: domain.SearchPartial,
+		Candidates: []Candidate{{
+			ObservedAt:    observed,
+			MissingFields: []string{"title", "publisher", "title"},
+		}},
+		Outcomes: []ProviderOutcome{},
+	}
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := ValidatePayloadJSON(raw); err == nil {
+		t.Fatal("duplicate missing_fields entries must be rejected to match the frozen JSON Schema")
+	}
+}
+
 func TestValidateQualitySummaryJSONEnforcesProviderCountReconciliation(t *testing.T) {
 	valid := json.RawMessage(`{"search_status":"partial","provider_count":2,"provider_success_count":1,"provider_empty_count":0,"provider_failed_count":1,"provider_skipped_count":0,"candidate_count":3,"candidate_missing_field_count":{"publisher":1}}`)
 	if err := ValidateQualitySummaryJSON(valid); err != nil {

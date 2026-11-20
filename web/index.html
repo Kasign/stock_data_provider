@@ -82,7 +82,7 @@
 
           <section class="panel market-overview-panel" id="market-overview-panel" aria-labelledby="market-overview-title">
             <div class="panel-heading market-overview-heading"><div><h2 id="market-overview-title">A 股市场概况</h2><p>核心指数与市场涨跌分布。数据及质量状态来自行情服务真实回包。</p></div><div class="market-overview-actions"><span class="market-overview-updated" id="market-overview-updated" role="status" aria-live="polite">等待加载</span><button class="button button-secondary" id="refresh-market-overview" type="button">刷新指数与广度 ↻</button></div></div>
-            <section class="market-overview-index-section" aria-labelledby="market-indices-title"><div class="market-overview-subheading"><h3 id="market-indices-title">核心指数</h3><span id="market-indices-status" class="availability-pill is-readonly">等待读取</span></div><div class="market-index-grid" id="market-index-grid"><p class="market-empty-state">配置行情 API Key 后加载核心指数。</p></div><p class="market-widget-meta" id="market-indices-meta"></p><details class="market-quality-reasons" id="market-indices-reasons" hidden><summary>数据质量说明</summary><ul></ul></details></section>
+            <section class="market-overview-index-section" aria-labelledby="market-indices-title"><div class="market-overview-subheading"><h3 id="market-indices-title">核心指数</h3><span id="market-indices-status" class="availability-pill is-readonly">等待读取</span></div><div class="market-index-grid" id="market-index-grid"><p class="market-empty-state">Owner 登录后读取核心指数。</p></div><p class="market-widget-meta" id="market-indices-meta"></p><details class="market-quality-reasons" id="market-indices-reasons" hidden><summary>数据质量说明</summary><ul></ul></details></section>
             <section class="market-breadth-strip" aria-labelledby="market-breadth-title"><div class="market-overview-subheading"><div><h3 id="market-breadth-title">市场涨跌分布</h3><p>样本来自后端分布桶，不代表已独立核验的全市场证券总数。</p></div><span id="market-breadth-status" class="availability-pill is-readonly">等待读取</span></div><div class="market-breadth-values" id="market-breadth-values"><p class="market-empty-state">等待市场广度数据。</p></div><p class="market-widget-meta" id="market-breadth-meta"></p><details class="market-quality-reasons" id="market-breadth-reasons" hidden><summary>数据质量说明</summary><ul></ul></details></section>
             
           </section>
@@ -225,7 +225,7 @@
               <button class="button button-primary query-button" type="submit"><span>⌕</span> 查询行情</button>
               <button class="button button-secondary query-watchlist-button" id="add-to-watchlist-button" type="button" title="将当前输入的股票代码加入本地自选">＋ 加入自选</button>
             </form>
-            <div class="query-hint" id="query-hint">需在“连接与密钥设置”中填写行情服务 API Key。</div>
+            <div class="query-hint" id="query-hint">行情与分析数据通过 Root Server 同源 API 提供；请先登录 Owner Session。</div>
             <section class="bundle-snapshot-strip" id="bundle-snapshot-strip" hidden aria-label="本次行情快照元数据" aria-live="polite">
               <div class="bundle-snapshot-heading">
                 <div><p class="panel-kicker">统一行情快照</p><p class="bundle-snapshot-description">实时行情与日 K 使用的服务端快照元数据，可复制用于问题定位。</p></div>
@@ -276,7 +276,7 @@
         <section class="view" id="watchlist-view" hidden>
           <div class="page-heading"><div><p class="eyebrow">WATCHLIST / 03</p><h1>自选股</h1><p class="page-subtitle">这是当前浏览器本地保存的股票列表，不会同步到服务器。可在个股查询页添加股票，或从列表直接查询、发起分析。</p></div><button class="button button-primary" type="button" data-open-view="stocks">搜索并添加自选 →</button></div>
           <section class="panel watchlist-panel" id="watchlist-panel" aria-labelledby="watchlist-title">
-            <div class="panel-heading"><div><h2 id="watchlist-title">本地自选股</h2><p>仅保存在当前浏览器；不上传服务器，也不保存 API Key 或分析报告。</p></div><span class="soft-badge" id="watchlist-count">0 / 50</span></div>
+            <div class="panel-heading"><div><h2 id="watchlist-title">本地自选股</h2><p>仅保存在当前浏览器；不上传服务器，也不保存登录凭据或分析报告。</p></div><span class="soft-badge" id="watchlist-count">0 / 50</span></div>
             <div class="watchlist-feedback" id="watchlist-feedback" role="status" aria-live="polite" hidden></div>
             <div class="watchlist-toolbar">
               <label class="field watchlist-search-field"><span>搜索自选</span><input id="watchlist-search" type="search" autocomplete="off" placeholder="输入股票代码或名称" aria-label="搜索本地自选股"></label>
@@ -917,16 +917,16 @@
         </section>
 
                 <section class="view feature-view data-center-view" id="data-view" hidden aria-labelledby="data-center-title">
-          <div class="page-heading"><div><p class="eyebrow">SERVICE HEALTH / 08</p><h1 id="data-center-title">数据中心</h1><p class="page-subtitle">查看 WebUI、行情服务、分析服务及可确认的数据库/缓存依赖状态。Provider 能力声明与实时健康检查分开显示。</p></div><div class="data-center-heading-actions"><span class="availability-pill is-readonly" id="data-center-last-check">尚未检查</span><button class="button button-primary" id="data-center-check" type="button">立即检查</button></div></div>
+          <div class="page-heading"><div><p class="eyebrow">SERVICE HEALTH / 08</p><h1 id="data-center-title">数据中心</h1><p class="page-subtitle">查看 WebUI、Root Server 及可确认的数据库/缓存依赖状态。Provider 能力声明与实时健康检查分开显示。</p></div><div class="data-center-heading-actions"><span class="availability-pill is-readonly" id="data-center-last-check">尚未检查</span><button class="button button-primary" id="data-center-check" type="button">立即检查</button></div></div>
           <section class="panel data-center-summary-panel" aria-labelledby="data-center-summary-title"><div class="panel-heading"><div><h2 id="data-center-summary-title">本次检查摘要</h2><p>每项检查独立完成；单项失败不会中断其他检查。</p></div><span class="availability-pill is-readonly" id="data-center-summary-status">等待检查</span></div><p class="data-center-summary-message" id="data-center-summary-message" role="status" aria-live="polite">点击“立即检查”读取当前服务状态。数据库或 Redis 缺少独立证据时会显示“未知”，不会猜测故障原因。</p><div class="data-center-summary-counts"><article><small>正常</small><strong id="data-center-count-healthy">—</strong></article><article><small>异常 / 降级</small><strong id="data-center-count-failed">—</strong></article><article><small>未知 / 未检查</small><strong id="data-center-count-unknown">—</strong></article></div></section>
           <section class="data-center-service-grid" aria-label="服务与依赖状态">
             <article class="panel data-center-service-card"><div class="data-center-service-heading"><span class="data-center-service-icon">UI</span><div><h2>WebUI / Nginx</h2><p>当前页面会话状态</p></div></div><span class="availability-pill is-local" id="data-service-webui-status">页面已加载</span><p class="data-center-service-detail" id="data-service-webui-detail">点击“立即检查”确认当前页面路径可响应。</p></article>
-            <article class="panel data-center-service-card"><div class="data-center-service-heading"><span class="data-center-service-icon">API</span><div><h2>行情服务</h2><p>stock-analysis-data</p></div></div><div class="data-center-check-row"><span>存活检查</span><strong id="data-service-market-live">尚未检查</strong></div><div class="data-center-check-row"><span>就绪检查</span><strong id="data-service-market-ready">尚未检查</strong></div><p class="data-center-service-detail" id="data-service-market-detail">检查时间与错误摘要将在检查后显示。</p></article>
-            <article class="panel data-center-service-card"><div class="data-center-service-heading"><span class="data-center-service-icon">API</span><div><h2>分析服务</h2><p>stock-analysis-server</p></div></div><div class="data-center-check-row"><span>存活检查</span><strong id="data-service-analysis-live">尚未检查</strong></div><div class="data-center-check-row"><span>就绪检查</span><strong id="data-service-analysis-ready">尚未检查</strong></div><p class="data-center-service-detail" id="data-service-analysis-detail">检查时间与错误摘要将在检查后显示。</p></article>
-            <article class="panel data-center-service-card"><div class="data-center-service-heading"><span class="data-center-service-icon">DB</span><div><h2>MariaDB</h2><p>由分析服务就绪结果报告</p></div></div><span class="availability-pill is-readonly" id="data-service-mariadb-status">未知</span><p class="data-center-service-detail" id="data-service-mariadb-detail">没有独立状态证据时不推断数据库故障。</p></article>
-            <article class="panel data-center-service-card"><div class="data-center-service-heading"><span class="data-center-service-icon">KV</span><div><h2>Redis</h2><p>由分析服务就绪结果报告</p></div></div><span class="availability-pill is-readonly" id="data-service-redis-status">未知</span><p class="data-center-service-detail" id="data-service-redis-detail">没有独立状态证据时不推断缓存故障。</p></article>
+            
+            <article class="panel data-center-service-card"><div class="data-center-service-heading"><span class="data-center-service-icon">API</span><div><h2>Root Server</h2><p>统一 API 宿主与模块组合根</p></div></div><div class="data-center-check-row"><span>存活检查</span><strong id="data-service-analysis-live">尚未检查</strong></div><div class="data-center-check-row"><span>就绪检查</span><strong id="data-service-analysis-ready">尚未检查</strong></div><p class="data-center-service-detail" id="data-service-analysis-detail">检查时间与错误摘要将在检查后显示。</p></article>
+            <article class="panel data-center-service-card"><div class="data-center-service-heading"><span class="data-center-service-icon">DB</span><div><h2>MariaDB</h2><p>由 Root Server 就绪结果报告</p></div></div><span class="availability-pill is-readonly" id="data-service-mariadb-status">未知</span><p class="data-center-service-detail" id="data-service-mariadb-detail">没有独立状态证据时不推断数据库故障。</p></article>
+            <article class="panel data-center-service-card"><div class="data-center-service-heading"><span class="data-center-service-icon">KV</span><div><h2>Redis</h2><p>由 Root Server 就绪结果报告</p></div></div><span class="availability-pill is-readonly" id="data-service-redis-status">未知</span><p class="data-center-service-detail" id="data-service-redis-detail">没有独立状态证据时不推断缓存故障。</p></article>
           </section>
-          <section class="panel data-center-providers-panel" aria-labelledby="data-center-providers-title"><div class="panel-heading"><div><h2 id="data-center-providers-title">Provider 与数据能力</h2><p>能力清单只表示配置/注册声明，不等于 Provider 当前实时可用。</p></div><span class="availability-pill is-readonly" id="data-center-provider-status">尚未读取</span></div><div class="data-center-provider-summary" id="data-center-provider-summary">配置行情 API Key 并执行检查后读取能力清单。</div><div class="data-center-provider-list" id="data-center-provider-list"><div class="empty-row">尚未检查数据源能力。</div></div><section class="data-center-hithink-card" aria-labelledby="data-center-hithink-title"><div class="panel-heading"><div><h3 id="data-center-hithink-title">同花顺 Provider</h3><p>仅展示服务端注册状态与静态能力声明；主动探测由下方独立操作触发。</p></div><span class="availability-pill is-readonly" id="data-center-hithink-status">尚未读取</span></div><p id="data-center-hithink-detail">执行数据中心检查后读取同花顺 Provider 注册信息。</p><dl><dt>启用配置</dt><dd><code>MARKET_DATA_HITHINK_ENABLED=true</code></dd><dt>API Key 环境变量</dt><dd><code>MARKET_DATA_HITHINK_API_KEY</code> 或 <code>HITHINK_FINANCE_API_KEY</code></dd></dl><p class="data-center-diagnostic-note">WebUI 不读取、不保存或回显第三方 API Key；当前没有 Provider 凭据修改及启停 API。可通过下方主动探测检查服务端已启用能力；未配置第三方凭据不作为故障判定依据。修改环境变量后需按部署方式重启服务。</p><a class="text-button" href="#data-center-diagnostics-title">查看 Provider 运行诊断</a></section><p class="data-center-diagnostic-note">能力声明不等于运行健康。下方诊断仅读取服务端已有真实业务请求形成的进程内熔断器记录，不会为了诊断而发起上游请求；服务重启后累计记录会重置。</p></section>
+          <section class="panel data-center-providers-panel" aria-labelledby="data-center-providers-title"><div class="panel-heading"><div><h2 id="data-center-providers-title">Provider 与数据能力</h2><p>能力清单只表示配置/注册声明，不等于 Provider 当前实时可用。</p></div><span class="availability-pill is-readonly" id="data-center-provider-status">尚未读取</span></div><div class="data-center-provider-summary" id="data-center-provider-summary">登录 Owner Session 并执行检查后读取能力清单。</div><div class="data-center-provider-list" id="data-center-provider-list"><div class="empty-row">尚未检查数据源能力。</div></div><section class="data-center-hithink-card" aria-labelledby="data-center-hithink-title"><div class="panel-heading"><div><h3 id="data-center-hithink-title">同花顺 Provider</h3><p>仅展示服务端注册状态与静态能力声明；主动探测由下方独立操作触发。</p></div><span class="availability-pill is-readonly" id="data-center-hithink-status">尚未读取</span></div><p id="data-center-hithink-detail">执行数据中心检查后读取同花顺 Provider 注册信息。</p><dl><dt>启用配置</dt><dd><code>MARKET_DATA_HITHINK_ENABLED=true</code></dd><dt>API Key 环境变量</dt><dd><code>MARKET_DATA_HITHINK_API_KEY</code> 或 <code>HITHINK_FINANCE_API_KEY</code></dd></dl><p class="data-center-diagnostic-note">WebUI 不读取、不保存或回显第三方 API Key；当前没有 Provider 凭据修改及启停 API。可通过下方主动探测检查服务端已启用能力；未配置第三方凭据不作为故障判定依据。修改环境变量后需按部署方式重启服务。</p><a class="text-button" href="#data-center-diagnostics-title">查看 Provider 运行诊断</a></section><p class="data-center-diagnostic-note">能力声明不等于运行健康。下方诊断仅读取服务端已有真实业务请求形成的进程内熔断器记录，不会为了诊断而发起上游请求；服务重启后累计记录会重置。</p></section>
           <section class="panel data-center-diagnostics-panel" aria-labelledby="data-center-diagnostics-title">
             <div class="panel-heading"><div><h2 id="data-center-diagnostics-title">Provider 运行诊断</h2><p>只读真实业务请求形成的熔断器记录，不执行主动探测或上游测试；未观测不代表健康。</p></div><span class="availability-pill is-readonly" id="data-center-diagnostics-status">尚未读取</span></div>
             <p class="data-center-diagnostics-summary" id="data-center-diagnostics-summary">执行数据中心检查后读取诊断记录；未观测不代表健康或故障。</p>
@@ -953,7 +953,7 @@
               <label><input type="checkbox" name="data-center-probe-check" value="cross_provider" checked /> 跨 Provider 对账</label>
               <label><input type="checkbox" name="data-center-probe-check" value="storage" checked /> 持久化存储</label>
             </fieldset>
-            <p class="data-center-probe-summary" id="data-center-probe-summary" role="status" aria-live="polite">需要行情服务 API Key。未配置凭据、不支持能力、跳过项和真实失败分别展示；覆盖率只有存在可验证分母时才显示。</p>
+            <p class="data-center-probe-summary" id="data-center-probe-summary" role="status" aria-live="polite">需要有效 Owner Session。未配置 Provider 凭据、不支持能力、跳过项和真实失败分别展示；覆盖率只有存在可验证分母时才显示。</p>
             <div class="data-center-probe-check-results" id="data-center-probe-check-results"><div class="empty-row">尚未执行诊断维度检查。</div></div>
             <div class="data-center-probe-list" id="data-center-probe-list"><div class="empty-row">尚未执行主动探测。</div></div>
             <div class="data-center-probe-history-heading">
@@ -966,7 +966,7 @@
           <section class="panel source-panel" id="source-panel">
               <div class="panel-heading"><div><h2>数据源能力</h2><p>后端注册的 Provider 与能力声明</p></div><button class="text-button" id="reload-sources" type="button">刷新 ↻</button></div>
               <div class="source-summary"><strong id="source-count">—</strong><span>个已注册来源</span><span class="source-version" id="normalization-version">归一化版本 —</span></div>
-              <div class="source-list" id="data-source-list"><div class="empty-row">填写 API Key 后加载数据源列表。</div></div>
+              <div class="source-list" id="data-source-list"><div class="empty-row">登录 Owner Session 后加载数据源列表。</div></div>
             </section>
         </section>
 <section class="view feature-view" id="settings-view" hidden aria-labelledby="settings-page-title">
@@ -1027,29 +1027,28 @@
                     <div class="watchlist-field-order-item" data-watchlist-field-order="result"><label><input type="checkbox" data-watchlist-display-field value="result" checked /><span>分析结果摘要</span></label><div><button type="button" data-watchlist-field-order-move="up" aria-label="分析结果摘要上移">上移</button><button type="button" data-watchlist-field-order-move="down" aria-label="分析结果摘要下移">下移</button></div></div>
                   </div>
                   <p class="settings-inline-status" id="local-preferences-feedback" role="status" aria-live="polite">自选股排序和信息显示偏好保存在当前浏览器。</p>
-                  <p class="field-hint">恢复默认值会重置本地行情颜色、数字精度、单位、自选股展示/排序和默认日 K 查询偏好；不会清除主题、API Key、连接路径、自选股或最近任务引用。</p>
+                  <p class="field-hint">恢复默认值会重置本地行情颜色、数字精度、单位、自选股展示/排序和默认日 K 查询偏好；不会清除主题、自选股或最近任务引用。</p>
                 </div>
               </section>
 
               <section class="settings-section" id="settings-connection-section" aria-labelledby="settings-connection-title">
-                <div class="settings-section-heading"><div><h2 id="settings-connection-title">连接与服务</h2><p>配置浏览器访问行情服务和分析服务的同源代理路径，并验证两项服务的健康端点。</p></div><span class="availability-pill is-local">浏览器连接配置</span></div>
+                <div class="settings-section-heading"><div><h2 id="settings-connection-title">连接与服务</h2><p>WebUI 仅通过 Root Server 的同源 API 访问 Data 与分析能力；不再配置独立服务地址或浏览器 API Key。</p></div><span class="availability-pill is-local">Root Server 单一入口</span></div>
                 <form id="settings-form" class="panel settings-connection-form">
-                  <div class="settings-group-heading"><div><strong>行情数据服务</strong><p>负责行情、日 K、证券资料和数据源能力查询。</p></div><span class="settings-config-scope">stock-analysis-data</span></div>
-                  <label class="field"><span>行情 API 基础路径</span><input id="market-base-input" value="/market-api" required autocomplete="url" placeholder="/market-api" /><small>同源反向代理路径，不填写 Docker 服务名、协议或端口。默认由 Nginx 将其转发到行情服务。</small></label>
-                  <div class="field"><label for="market-key-input">行情服务 API Key</label><div class="secret-input-row"><input id="market-key-input" type="password" autocomplete="new-password" aria-describedby="market-key-help" placeholder="填写新 Key；留空保留已配置值" /><button class="text-button secret-visibility-toggle" id="toggle-market-key-visibility" type="button" aria-controls="market-key-input" aria-pressed="false" aria-label="切换行情 API Key 明文显示">显示</button></div><p class="field-hint" id="market-key-help">这是部署管理员自行生成并配置的内部服务访问密钥，不是第三方 Provider 密钥。对应服务端环境变量为 MARKET_DATA_API_KEY。已保存的 Key 不回显；留空保留当前值，输入新值才会替换。需要删除时使用下方“清除本地连接设置”。服务器端可运行 <code>openssl rand -hex 32</code> 生成。</p></div>
-                  <div class="settings-inline-info"><strong>请求认证方式</strong><span>浏览器请求行情接口时通过 <code>X-API-Key</code> 请求头发送。密钥只保存在当前浏览器，不会写入 URL 或前端源码。</span></div>
-                  <div class="settings-divider"></div>
-                  <div class="settings-group-heading"><div><strong>分析任务服务</strong><p>负责分析任务创建、阶段事件、运行结果和任务状态查询。</p></div><span class="settings-config-scope">stock-analysis-server</span></div>
-                  <label class="field"><span>分析 API 基础路径</span><input id="analysis-base-input" value="/analysis-api" required autocomplete="url" placeholder="/analysis-api" /><small>同源反向代理路径。分析服务当前不复用行情 API Key；不要把两种服务认证混为一谈。</small></label>
+                  <input id="market-base-input" type="hidden" value="/" />
+                  <input id="analysis-base-input" type="hidden" value="/" />
+                  <div class="settings-group-heading"><div><strong>统一 API 入口</strong><p>Data、Owner Session 与分析 API 统一使用浏览器可见的 <code>/api</code> 前缀，由 Nginx 转发到 Root Server。</p></div><span class="settings-config-scope">stock-analysis-server</span></div>
+                  <div class="settings-inline-info"><strong>请求认证方式</strong><span>浏览器使用 HttpOnly Owner Session Cookie；CSRF Token 仅保存在页面运行时内存。受控运维调用仍可使用 Owner Bearer，浏览器不持有任何服务 API Key。</span></div>
                   <div class="settings-connection-status-grid">
-                    <div><span class="settings-status-label">已保存配置检查</span><p id="settings-connection-check" class="settings-inline-status" role="status" aria-live="polite">尚未执行连接检查。</p></div>
-                    <div><span class="settings-status-label">未保存草稿检查</span><p id="settings-draft-connection-check" class="settings-inline-status" role="status" aria-live="polite">尚未检查未保存配置。</p></div>
+                    <div><span class="settings-status-label">Root Server 健康检查</span><p id="settings-connection-check" class="settings-inline-status" role="status" aria-live="polite">尚未执行连接检查。</p></div>
                   </div>
-                  <p class="settings-dirty-state" id="connection-dirty-state" role="status" aria-live="polite" hidden>存在未保存的连接配置更改。</p>
-                  <div class="settings-connection-actions"><button class="button button-secondary" id="settings-check-connection" type="button">检查已保存配置</button><button class="button button-secondary" id="settings-check-draft-connection" type="button">检查当前草稿</button><span class="grow"></span><button class="button button-secondary" id="clear-settings" type="button">清除本地连接设置</button><button class="button button-secondary" id="cancel-settings" type="button" disabled>放弃更改</button><button class="button button-primary" id="save-settings" type="button">保存连接配置</button></div>
-                  <p class="settings-feedback" id="settings-feedback" role="status" aria-live="polite"></p>
-                  <div class="settings-storage-boundary"><strong>连接配置的作用范围</strong><p>保存只更新当前浏览器的连接路径和行情 API Key，不会修改服务器 .env、Docker 网络、Nginx 上游或数据库连接。服务状态与依赖健康请前往数据中心查看；健康检查成功不代表每个 Provider 的数据能力均可用。</p></div>
-                  <p class="security-note">安全提示：localStorage 不是密钥保险箱，同一浏览器来源下的脚本可读取其中内容。不要分享已配置密钥的浏览器会话；公网部署必须在反向代理或身份认证层限制访问。</p>
+                  <p class="settings-dirty-state" id="connection-dirty-state" role="status" aria-live="polite" hidden>服务入口由部署统一管理，不支持浏览器自定义。</p>
+                  <div class="settings-connection-actions"><button class="button button-secondary" id="settings-check-connection" type="button">检查连接</button><span class="grow"></span><button class="button button-secondary" id="clear-settings" type="button">清除旧本地连接配置</button></div>
+                  <p class="settings-feedback" id="settings-feedback" role="status" aria-live="polite">Root Server 单一 API 入口已启用。</p>
+                  <button id="save-settings" type="button" hidden></button>
+                  <button id="cancel-settings" type="button" hidden></button>
+                  <button id="settings-check-draft-connection" type="button" hidden></button>
+                  <p id="settings-draft-connection-check" hidden></p>
+                  <div class="settings-storage-boundary"><strong>连接配置的作用范围</strong><p>服务地址、认证策略、Nginx 上游与数据库配置均由服务端部署管理；浏览器只保存个人工作区偏好，不保存 Data API Key 或服务地址。</p></div>
                 </form>
               </section>
 
@@ -1058,8 +1057,8 @@
                 <div class="panel settings-config-panel">
                   <div class="settings-group-heading"><div><strong>工作区备份文件</strong><p>用于迁移浏览器或保存个人研究清单。</p></div><span class="settings-config-scope">JSON · 最大 1 MiB</span></div>
                   <div class="settings-local-data-grid">
-                    <article><strong>包含内容</strong><p>主题偏好、行情/分析 API 路径、自选股清单、最近任务引用。</p></article>
-                    <article><strong>排除内容</strong><p>API Key、行情缓存、完整分析报告、服务器 .env 和数据库数据。</p></article>
+                    <article><strong>包含内容</strong><p>主题偏好、自选股清单、最近任务引用。</p></article>
+                    <article><strong>排除内容</strong><p>登录凭据、服务 API Key、行情缓存、完整分析报告、服务器 .env 和数据库数据。</p></article>
                   </div>
                   <p class="field-hint"><strong id="storage-boundary-title">存储边界</strong>：仅保存在当前浏览器；不会连接数据库，也不会跨设备自动同步。</p>
                   <div class="settings-connection-actions settings-browser-data-actions"><button class="button button-secondary" id="export-browser-data" type="button">导出工作区 JSON</button><button class="button button-primary" id="import-browser-data" type="button">导入工作区 JSON</button><input id="browser-data-file" type="file" accept="application/json,.json" hidden />
@@ -1072,11 +1071,11 @@
                     </form>
                   </dialog></div>
                   <p class="settings-inline-status" id="browser-data-feedback" role="status" aria-live="polite">尚未导入或导出。</p>
-                  <p class="field-hint">导入前会校验文件格式、版本和条目；确认后替换对应本地数据并保留当前 API Key。任务引用可能包含股票代码、任务 ID 与分析服务路径，请妥善保管。</p>
+                  <p class="field-hint">导入前会校验文件格式、版本和条目；确认后替换对应本地数据；服务 API 入口固定为 Root Server。任务引用可能包含股票代码、任务 ID 与分析服务路径，请妥善保管。</p>
                 </div>
                 <div class="panel settings-config-panel settings-local-storage-panel">
                   <div class="settings-group-heading"><div><strong>本地存储说明</strong><p>以下项目由当前浏览器管理。</p></div><span class="settings-config-scope">非服务端数据</span></div>
-                  <dl class="settings-config-list"><dt>主题偏好</dt><dd>当前浏览器 localStorage</dd><dt>行情 API Key 与路径</dt><dd>当前浏览器 localStorage</dd><dt>自选股</dt><dd>当前浏览器 localStorage，最多 50 条</dd><dt>最近任务引用</dt><dd>当前浏览器 localStorage，最多 10 条引用</dd><dt>分析任务与完整结果</dt><dd>由分析服务持久化到服务端；浏览器仅保存引用</dd></dl>
+                  <dl class="settings-config-list"><dt>主题偏好</dt><dd>当前浏览器 localStorage</dd><dt>Root Server API 入口</dt><dd>由部署固定，不保存在浏览器</dd><dt>自选股</dt><dd>当前浏览器 localStorage，最多 50 条</dd><dt>最近任务引用</dt><dd>当前浏览器 localStorage，最多 10 条引用</dd><dt>分析任务与完整结果</dt><dd>由分析服务持久化到服务端；浏览器仅保存引用</dd></dl>
                 </div>
               </section>
 
@@ -1224,7 +1223,7 @@
               <section class="settings-section" id="settings-security-section" aria-labelledby="settings-security-title">
                 <div class="settings-section-heading"><div><h2 id="settings-security-title">安全与备份</h2><p>服务器身份认证、服务密钥、访问控制和配置备份必须由受保护的服务端接口管理。</p></div><span class="availability-pill is-unavailable">服务端配置待接入</span></div>
                 <div class="panel settings-config-panel">
-                  <div class="settings-group-heading"><div><strong>Owner 身份认证与访问控制</strong><p>管理员 Session 与行情服务 API Key 独立；Owner Session 不会继承旧 Owner Bearer 的管理权限。</p></div></div>
+                  <div class="settings-group-heading"><div><strong>Owner 身份认证与访问控制</strong><p>Owner Session 用于浏览器访问受保护业务路由；Owner Bearer 仅供受控运维调用，Session 不会继承 platform:admin 权限。</p></div></div>
                   <div class="owner-session-panel" id="owner-session-panel">
                     <div class="owner-session-status-row">
                       <span class="availability-pill is-readonly" id="owner-session-status-pill" role="status" aria-live="polite">正在检查登录态</span>
@@ -1242,13 +1241,7 @@
                         <div class="owner-session-actions"><button class="button button-secondary" id="owner-password-change-button" type="submit">修改密码</button></div>
                       </form>
                     </div>
-                    <p class="settings-boundary-note" id="owner-session-feedback" role="status" aria-live="polite">Owner Session 只证明登录身份；旧 Analysis/运维路由仍要求 Owner Bearer，不会因登录而放行。</p>
-                  </div>
-                  <div class="settings-divider"></div>
-                  <div class="settings-group-heading"><div><strong>服务密钥管理</strong><p>仅管理服务访问密钥，不用于表示用户登录身份。</p></div></div>
-                  <div class="settings-field-grid">
-                    <label class="field"><span>行情服务 API Key 轮换</span><input disabled placeholder="服务端密钥轮换与版本状态待接入" /></label>
-                    <label class="field"><span>密钥最近轮换时间</span><input disabled placeholder="服务端审计记录待接入" /></label>
+                    <p class="settings-boundary-note" id="owner-session-feedback" role="status" aria-live="polite">Owner Session 可访问明确授权的 Data 业务路由；Owner Bearer 仍用于受控运维路由。所有 Session 写操作均校验 CSRF。</p>
                   </div>
                   <div class="settings-divider"></div>
                   <div class="settings-group-heading"><div><strong>服务器配置备份与恢复</strong><p>浏览器工作区 JSON 不包含服务器配置，不可用于恢复部署环境。</p></div></div>

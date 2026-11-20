@@ -146,8 +146,17 @@ func (l *Lifecycle) Stop(ctx context.Context) error {
 
 	if startDone != nil {
 		// Start 使用进程 Context；必须等它退出后才能安全关闭共享资源。
-		// 否则 Bootstrap 可能在组件仍处于 Start 时继续关闭 DB/Redis。
-		<-startDone
+		// 等待必须受 Shutdown Context 约束，否则忽略取消的组件会耗尽关闭预算。
+		// 超时后 Bootstrap 会保留共享资源并让进程退出，不能继续关闭 DB/Redis。
+		select {
+		case <-startDone:
+		case <-ctx.Done():
+			l.mu.Lock()
+			l.stopErr = ctx.Err()
+			close(done)
+			l.mu.Unlock()
+			return ctx.Err()
+		}
 	}
 
 	l.mu.Lock()

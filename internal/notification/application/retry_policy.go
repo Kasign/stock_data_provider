@@ -67,8 +67,8 @@ func (p RetryPolicy) ScheduleRetry(
 	return p.scheduleRetry(delivery, attempts, now, randomUnit, domain.DeliverySending, domain.DeliveryAttemptRejected, false, time.Time{})
 }
 
-// ScheduleRetryAfterUnknownLookup evaluates a latest ambiguous Attempt only
-// after the channel's authoritative lookup confirmed non-acceptance.
+// ScheduleRetryAfterUnknownLookup evaluates a latest ambiguous or still-running
+// Attempt only after the channel's authoritative lookup confirmed non-acceptance.
 // The external evidence is validated here and remains separate from the
 // immutable Attempt history; no Attempt outcome is rewritten.
 func (p RetryPolicy) ScheduleRetryAfterUnknownLookup(
@@ -158,9 +158,15 @@ func (p RetryPolicy) scheduleRetry(
 		}
 		latest = attempt
 	}
-	if latest.FinishedAt == nil || latest.Outcome == nil ||
-		*latest.Outcome != requiredOutcome ||
-		(!evidenceConfirmed && !latest.Retryable) || now.Before(*latest.FinishedAt) ||
+	latestOutcomeMatches := latest.FinishedAt != nil && latest.Outcome != nil && *latest.Outcome == requiredOutcome
+	if evidenceConfirmed && latest.FinishedAt == nil && latest.Outcome == nil {
+		// 过期租约中的 Attempt 可能尚未持久化完成结果；只有 Provider 查询给出权威未接受证据，才允许评估重试。
+		latestOutcomeMatches = true
+	}
+	if !latestOutcomeMatches ||
+		(!evidenceConfirmed && !latest.Retryable) ||
+		(latest.FinishedAt != nil && now.Before(*latest.FinishedAt)) ||
+		(latest.FinishedAt == nil && now.Before(latest.StartedAt)) ||
 		(evidenceConfirmed && !evidenceObservedAfterAttempt(evidenceObservedAt, latest)) {
 		return RetryDecision{}, ErrRetryNotApplicable
 	}

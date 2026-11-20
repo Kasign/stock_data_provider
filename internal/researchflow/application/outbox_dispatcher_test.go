@@ -18,7 +18,11 @@ type fakeOutboxStore struct {
 	retryAt        map[string]time.Time
 	retryErrorCode map[string]string
 	claimErr       error
+	now            time.Time
+	clockErr       error
 }
+
+func (s *fakeOutboxStore) NowUTC(context.Context) (time.Time, error) { return s.now, s.clockErr }
 
 func (s *fakeOutboxStore) ClaimOutbox(_ context.Context, _, _ string, _ int, _ time.Duration) ([]OutboxMessage, error) {
 	s.mu.Lock()
@@ -73,7 +77,7 @@ func TestOutboxDispatcherPublishesAndSchedulesRetry(t *testing.T) {
 			{Ref: "event-ok", IdempotencyKey: "idem-ok", AttemptCount: 1, LeaseGeneration: 1},
 			{Ref: "event-fail", IdempotencyKey: "idem-fail", AttemptCount: 2, LeaseGeneration: 3},
 		},
-		retryAt: map[string]time.Time{}, retryErrorCode: map[string]string{},
+		retryAt: map[string]time.Time{}, retryErrorCode: map[string]string{}, now: now,
 		staleAck: map[string]bool{}, staleRetry: map[string]bool{},
 	}
 	publisher := &fakeOutboxPublisher{errors: map[string]error{
@@ -87,8 +91,6 @@ func TestOutboxDispatcherPublishesAndSchedulesRetry(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	dispatcher.now = func() time.Time { return now }
-
 	result, err := dispatcher.DispatchBatch(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -119,6 +121,30 @@ func TestOutboxDispatcherPublishesAndSchedulesRetry(t *testing.T) {
 	}
 	if !foundIdempotencyKey {
 		t.Fatalf("publisher did not receive stable idempotency metadata: %+v", publisher.seen)
+	}
+}
+
+func TestOutboxDispatcherDoesNotScheduleRetryWhenDatabaseClockFails(t *testing.T) {
+	store := &fakeOutboxStore{
+		messages: []OutboxMessage{{Ref: "event-fail", AttemptCount: 1, LeaseGeneration: 1}},
+		retryAt:  map[string]time.Time{}, retryErrorCode: map[string]string{},
+		clockErr: errors.New("database clock unavailable"),
+	}
+	publisher := &fakeOutboxPublisher{errors: map[string]error{
+		"event-fail": errors.New("broker unavailable"),
+	}}
+	dispatcher, err := NewOutboxDispatcher(store, publisher, OutboxDispatcherConfig{
+		WorkerID: "worker-1", BatchSize: 1, MaxConcurrency: 1,
+		LeaseDuration: 30 * time.Second, PublishTimeout: 10 * time.Second,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := dispatcher.DispatchBatch(context.Background()); err == nil {
+		t.Fatal("expected database clock failure to prevent retry scheduling")
+	}
+	if len(store.retried) != 0 {
+		t.Fatalf("retry was persisted without an authoritative database time: %v", store.retried)
 	}
 }
 

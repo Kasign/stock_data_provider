@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"example.com/stock-analysis-flow/internal/marketdata/app"
@@ -29,6 +30,7 @@ type Reader struct {
 }
 
 var _ app.MarketDataReader = (*Reader)(nil)
+var _ app.DailyBarsV2Reader = (*Reader)(nil)
 
 // NewReader creates an Application Port adapter over the existing DataService.
 func NewReader(svc *service.DataService) (*Reader, error) {
@@ -165,6 +167,128 @@ func (r *Reader) GetDailyBars(ctx context.Context, query app.DailyBarsQuery) (ap
 	return result, nil
 }
 
+type dailyBarsCoverageBackend interface {
+	DailyBarsWithCoverageEvidence(context.Context, string, string, string, int, model.AdjustmentBasis) ([]model.DailyBar, bool, []string, service.DailyBarCoverageEvidence, error)
+	DailyBarsAsOfWithCoverageEvidence(context.Context, string, string, string, int, model.AdjustmentBasis, time.Time) ([]model.DailyBar, []string, service.DailyBarCoverageEvidence, error)
+}
+
+// GetDailyBarsV2 returns a versioned snapshot whose CalendarRef is captured by
+// the same coverage evaluation that determined the returned series quality.
+func (r *Reader) GetDailyBarsV2(ctx context.Context, query app.DailyBarsQuery) (app.DailyBarsV2Snapshot, error) {
+	if r == nil || r.backend == nil {
+		return app.DailyBarsV2Snapshot{}, errReaderUnavailable
+	}
+	if ctx == nil {
+		return app.DailyBarsV2Snapshot{}, errors.New("context must not be nil")
+	}
+	if err := ctx.Err(); err != nil {
+		return app.DailyBarsV2Snapshot{}, err
+	}
+	backend, ok := r.backend.(dailyBarsCoverageBackend)
+	if !ok {
+		return app.DailyBarsV2Snapshot{}, errors.New("market-data backend does not expose daily-bar coverage evidence")
+	}
+	basis := model.AdjustmentBasis(query.AdjustmentBasis)
+	var (
+		bars     []model.DailyBar
+		warnings []string
+		evidence service.DailyBarCoverageEvidence
+		err      error
+	)
+	if query.SystemObservedAtCutoff != nil {
+		bars, warnings, evidence, err = backend.DailyBarsAsOfWithCoverageEvidence(
+			ctx, query.Symbol, query.StartDate, query.EndDate, query.Limit, basis, *query.SystemObservedAtCutoff,
+		)
+	} else {
+		bars, _, warnings, evidence, err = backend.DailyBarsWithCoverageEvidence(
+			ctx, query.Symbol, query.StartDate, query.EndDate, query.Limit, basis,
+		)
+	}
+	if err != nil {
+		return app.DailyBarsV2Snapshot{}, err
+	}
+	calendarRangeExplicit := strings.TrimSpace(query.StartDate) != "" && strings.TrimSpace(query.EndDate) != ""
+	calendarQualityUnreliable := containsReaderString(evidence.Warnings, "daily_bar_coverage_uses_degraded_trading_calendar")
+	calendarReferenceMissing := evidence.CoverageBasis == "exchange_calendar_unreferenced" || !calendarRangeExplicit || calendarQualityUnreliable
+	calendarDegradationReason := ""
+	switch {
+	case !calendarRangeExplicit:
+		calendarDegradationReason = "daily_bar_coverage_explicit_range_required_for_calendar_ref"
+		evidence.CalendarRef = ""
+		evidence.CoverageBasis = "unbounded_range_estimate"
+		evidence.CalendarQualityStatus = model.QualityDegraded
+	case calendarQualityUnreliable:
+		calendarDegradationReason = "daily_bar_coverage_calendar_quality_unreliable"
+		evidence.CalendarRef = ""
+		evidence.CoverageBasis = "degraded_exchange_calendar"
+		evidence.CalendarQualityStatus = model.QualityDegraded
+	case calendarReferenceMissing:
+		calendarDegradationReason = "daily_bar_coverage_calendar_reference_unavailable"
+	}
+	if calendarDegradationReason != "" {
+		evidence.Warnings = dedupeReaderStrings(append(evidence.Warnings, calendarDegradationReason))
+	}
+	warnings = dedupeReaderStrings(append(append([]string(nil), warnings...), evidence.Warnings...))
+	result := app.DailyBarsV2Snapshot{
+		Symbol: query.Symbol, Interval: "1d", AdjustmentBasis: query.AdjustmentBasis,
+		QualityStatus: aggregateQuality(bars, warnings), Warnings: cloneStrings(warnings),
+		SystemObservedAtCutoff: clonePointer(query.SystemObservedAtCutoff),
+		CoverageEvidence: app.DailyBarCoverageEvidence{
+			CalendarQualityStatus: app.QualityStatus(evidence.CalendarQualityStatus),
+			ExpectedTradingDays:   evidence.ExpectedTradingDays, MinimumRequiredBars: evidence.MinimumRequiredBars,
+			CoverageBasis: evidence.CoverageBasis, CoverageSufficient: evidence.CoverageSufficient,
+			Warnings: cloneStrings(evidence.Warnings),
+		},
+		Bars: make([]app.DailyBar, 0, len(bars)),
+	}
+	if strings.TrimSpace(evidence.CalendarRef) != "" {
+		calendarRef := evidence.CalendarRef
+		result.TradingCalendarRef = &calendarRef
+	}
+	if len(bars) > 0 {
+		if bars[0].Symbol != "" {
+			result.Symbol = bars[0].Symbol
+		}
+	}
+	for _, bar := range bars {
+		mapped := mapDailyBar(bar)
+		if calendarReferenceMissing {
+			mapped.QualityStatus = app.QualityDegraded
+			mapped.QualityReasons = dedupeReaderStrings(append(mapped.QualityReasons, calendarDegradationReason))
+		}
+		result.Bars = append(result.Bars, mapped)
+	}
+	if calendarReferenceMissing && len(result.Bars) > 0 {
+		result.QualityStatus = app.QualityDegraded
+	}
+	return result, nil
+}
+
+func containsReaderString(values []string, target string) bool {
+	for _, value := range values {
+		if value == target {
+			return true
+		}
+	}
+	return false
+}
+
+func dedupeReaderStrings(values []string) []string {
+	seen := make(map[string]struct{}, len(values))
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		if strings.TrimSpace(value) == "" {
+			continue
+		}
+		if _, exists := seen[value]; exists {
+			continue
+		}
+		seen[value] = struct{}{}
+		result = append(result, value)
+	}
+	return result
+}
+
 func mapFundamentals(source model.FundamentalsSnapshot) app.FundamentalsSnapshot {
 	result := app.FundamentalsSnapshot{
 		Symbol: source.Symbol, Year: source.Year, Quarter: source.Quarter, HasData: source.HasData,
@@ -299,6 +423,38 @@ func mapDailyBar(source model.DailyBar) app.DailyBar {
 		FallbackReason:                        source.FallbackReason,
 		RequestID:                             source.RequestID,
 		NormalizationVersion:                  source.NormalizationVer,
+		ExactValues:                           mapDailyBarExactValues(source.ExactValues),
+	}
+}
+
+func mapDailyBarExactValues(source *model.DailyBarExactValues) *app.DailyBarExactValues {
+	if source == nil {
+		return nil
+	}
+	return &app.DailyBarExactValues{
+		Open: source.Open, High: source.High, Low: source.Low, Close: source.Close,
+		RawVolume: source.RawVolume, RawAmount: clonePointer(source.RawAmount), AmountCNY: clonePointer(source.AmountCNY),
+		ChangePercent: clonePointer(source.ChangePercent), ChangePercentSourceField: source.ChangePercentSourceField,
+		ChangePercentEvidence: mapDailyBarDecimalEvidence(source.ChangePercentEvidence),
+		OpenEvidence:          mapDailyBarDecimalEvidence(source.OpenEvidence),
+		HighEvidence:          mapDailyBarDecimalEvidence(source.HighEvidence),
+		LowEvidence:           mapDailyBarDecimalEvidence(source.LowEvidence),
+		CloseEvidence:         mapDailyBarDecimalEvidence(source.CloseEvidence),
+		RawVolumeEvidence:     mapDailyBarDecimalEvidence(source.RawVolumeEvidence),
+		RawAmountEvidence:     mapDailyBarDecimalEvidence(source.RawAmountEvidence),
+		AmountCNYEvidence:     mapDailyBarDecimalEvidence(source.AmountCNYEvidence),
+	}
+}
+
+func mapDailyBarDecimalEvidence(source *model.DailyBarDecimalEvidence) *app.DailyBarDecimalEvidence {
+	if source == nil {
+		return nil
+	}
+	return &app.DailyBarDecimalEvidence{
+		EvidenceKind: string(source.EvidenceKind), SourceToken: source.SourceToken,
+		SourceFractionDigits: clonePointer(source.SourceFractionDigits),
+		ProtocolScale:        clonePointer(source.ProtocolScale),
+		UnitConversionFactor: source.UnitConversionFactor,
 	}
 }
 

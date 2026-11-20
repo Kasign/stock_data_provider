@@ -7,11 +7,16 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"sync"
 	"testing"
 	"time"
 
 	mysqlDriver "github.com/go-sql-driver/mysql"
 
+	marketdatabootstrap "example.com/stock-analysis-flow/internal/marketdata/bootstrap"
+	marketdatacache "example.com/stock-analysis-flow/internal/marketdata/cache"
+	marketdatarepository "example.com/stock-analysis-flow/internal/marketdata/repository"
+	marketdataservice "example.com/stock-analysis-flow/internal/marketdata/service"
 	platformfault "example.com/stock-analysis-flow/internal/platform/fault"
 	platformstorage "example.com/stock-analysis-flow/internal/platform/storage"
 )
@@ -30,7 +35,6 @@ func TestRegistryMariaDBIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open MariaDB admin connection: %v", err)
 	}
-	defer adminDB.Close()
 	if err := adminDB.PingContext(ctx); err != nil {
 		t.Fatalf("ping MariaDB: %v", err)
 	}
@@ -71,22 +75,90 @@ func TestRegistryMariaDBIntegration(t *testing.T) {
 			fmt.Sprintf("CREATE TABLE %s (id BIGINT PRIMARY KEY, value VARCHAR(32) NOT NULL) ENGINE=InnoDB", table),
 		},
 	}}); err != nil {
-		t.Fatalf("register migration: %v", err)
+		t.Fatalf("register Server migration: %v", err)
+	}
+	if err := registry.Register(marketdatabootstrap.MigrationNamespace, marketdatabootstrap.MigrationDefinitions()); err != nil {
+		t.Fatalf("register Data migrations: %v", err)
 	}
 
 	report, err := registry.RunWithReport(ctx, db)
 	if err != nil {
 		t.Fatalf("RunWithReport: %v", err)
 	}
-	if report.Status != "succeeded" || len(report.Namespaces) != 1 {
+	if report.Status != "succeeded" || len(report.Namespaces) != 2 {
 		t.Fatalf("unexpected migration report: %+v", report)
 	}
-	if item := report.Namespaces[0]; item.Namespace != namespace || item.Status != "succeeded" {
-		t.Fatalf("unexpected namespace result: %+v", item)
+	completedNamespaces := make(map[string]bool, len(report.Namespaces))
+	for _, item := range report.Namespaces {
+		if item.Status != "succeeded" {
+			t.Fatalf("migration namespace did not succeed: %+v", item)
+		}
+		completedNamespaces[item.Namespace] = true
+	}
+	if !completedNamespaces[namespace] || !completedNamespaces[marketdatabootstrap.MigrationNamespace] {
+		t.Fatalf("migration report omitted a registered namespace: %+v", report.Namespaces)
 	}
 
 	if err := registry.ValidateApplied(ctx, db); err != nil {
 		t.Fatalf("ValidateApplied rejected the applied schema: %v", err)
+	}
+	dataStore, err := marketdatarepository.NewWithBorrowedDB(db)
+	if err != nil {
+		t.Fatalf("create Data Store for readiness check: %v", err)
+	}
+	dataService := marketdataservice.NewWithCapabilities(
+		nil, nil, nil, marketdatacache.NewDisabled(), dataStore,
+		time.Minute, time.Minute, 1, 100, marketdataservice.ResilienceConfig{}, nil,
+	)
+	if err := dataService.Ready(ctx); err != nil {
+		var readinessFault *platformfault.Fault
+		if errors.As(err, &readinessFault) && readinessFault.Cause != nil {
+			t.Fatalf("Data readiness rejected the freshly migrated schema: %v (internal cause: %v)", err, readinessFault.Cause)
+		}
+		t.Fatalf("Data readiness rejected the freshly migrated schema: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, "ALTER TABLE market_data_quotes DROP COLUMN turnover_rate"); err != nil {
+		t.Fatalf("simulate physical schema drift: %v", err)
+	}
+	if err := registry.ValidateApplied(ctx, db); err != nil {
+		t.Fatalf("migration checksum validation should not treat physical column drift as a changed migration definition: %v", err)
+	}
+	requireMarketDataSchemaDrift(t, dataService.Ready(ctx), "missing V4 compatibility column")
+	if _, err := db.ExecContext(ctx, "ALTER TABLE market_data_quotes ADD COLUMN turnover_rate DECIMAL(16,8) UNSIGNED NULL"); err != nil {
+		t.Fatalf("simulate incompatible unsigned compatibility column: %v", err)
+	}
+	if err := registry.ValidateApplied(ctx, db); err != nil {
+		t.Fatalf("migration checksum validation should not treat column type drift as a changed migration definition: %v", err)
+	}
+	requireMarketDataSchemaDrift(t, dataService.Ready(ctx), "unsigned V4 compatibility column")
+	if _, err := db.ExecContext(ctx, "ALTER TABLE market_data_quotes MODIFY COLUMN turnover_rate DECIMAL(16,8) NULL"); err != nil {
+		t.Fatalf("restore exact compatibility column definition: %v", err)
+	}
+	if err := dataService.Ready(ctx); err != nil {
+		t.Fatalf("Data readiness rejected restored schema: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, "DROP INDEX idx_market_bar_revision_identity_asof ON market_data_daily_bar_versions"); err != nil {
+		t.Fatalf("simulate physical index drift: %v", err)
+	}
+	if err := registry.ValidateApplied(ctx, db); err != nil {
+		t.Fatalf("migration checksum validation should not treat physical index drift as a changed migration definition: %v", err)
+	}
+	requireMarketDataSchemaDrift(t, dataService.Ready(ctx), "missing V4 compatibility index")
+	if _, err := db.ExecContext(ctx, "CREATE INDEX idx_market_bar_revision_identity_asof ON market_data_daily_bar_versions (symbol(3), trade_date, period, adjustment_basis, source, recorded_at, id)"); err != nil {
+		t.Fatalf("simulate prefix compatibility index: %v", err)
+	}
+	if err := registry.ValidateApplied(ctx, db); err != nil {
+		t.Fatalf("migration checksum validation should not treat index prefix drift as a changed migration definition: %v", err)
+	}
+	requireMarketDataSchemaDrift(t, dataService.Ready(ctx), "prefix V4 compatibility index")
+	if _, err := db.ExecContext(ctx, "DROP INDEX idx_market_bar_revision_identity_asof ON market_data_daily_bar_versions"); err != nil {
+		t.Fatalf("remove prefix compatibility index: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, "CREATE INDEX idx_market_bar_revision_identity_asof ON market_data_daily_bar_versions (symbol, trade_date, period, adjustment_basis, source, recorded_at, id)"); err != nil {
+		t.Fatalf("restore exact compatibility index: %v", err)
+	}
+	if err := dataService.Ready(ctx); err != nil {
+		t.Fatalf("Data readiness rejected restored compatibility index: %v", err)
 	}
 
 	if _, err := db.ExecContext(ctx,
@@ -100,6 +172,20 @@ func TestRegistryMariaDBIntegration(t *testing.T) {
 	}
 	if value != "server-registry" {
 		t.Fatalf("MariaDB round trip = %q, want server-registry", value)
+	}
+	if _, err := db.ExecContext(ctx, "UPDATE platform_schema_migrations SET checksum = REPEAT('0', 64) WHERE namespace = ? AND version = 1", namespace); err != nil {
+		t.Fatalf("tamper migration checksum: %v", err)
+	}
+	if err := registry.ValidateApplied(ctx, db); err == nil {
+		t.Fatal("ValidateApplied() accepted a changed migration checksum")
+	}
+}
+
+func requireMarketDataSchemaDrift(t *testing.T, err error, scenario string) {
+	t.Helper()
+	var readinessFault *platformfault.Fault
+	if !errors.As(err, &readinessFault) || readinessFault.Code != "market_data.schema_drift" {
+		t.Fatalf("Data readiness error for %s = %v, want market_data.schema_drift", scenario, err)
 	}
 }
 
@@ -217,5 +303,127 @@ func TestRegistryMariaDBPartialDDLFailureRequiresRecovery(t *testing.T) {
 	var platformErr *platformfault.Fault
 	if !errors.As(retryErr, &platformErr) || platformErr.Code != "platform.storage.migration_requires_recovery" {
 		t.Fatalf("retry error = %v, want Platform migration_requires_recovery Fault", retryErr)
+	}
+}
+
+// TestMarketDataMigrationUpgradeAndConcurrentRootRegistration exercises the
+// published V1-V3 history, legacy compatibility DDL, and two Root instances.
+func TestMarketDataMigrationUpgradeAndConcurrentRootRegistration(t *testing.T) {
+	dsn := os.Getenv("SERVER_RELAY_TEST_MYSQL_DSN")
+	if dsn == "" {
+		t.Skip("set SERVER_RELAY_TEST_MYSQL_DSN to run the Data migration integration test")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+	defer cancel()
+	adminDB, err := sql.Open("mysql", dsn)
+	if err != nil {
+		t.Fatalf("open MariaDB admin connection: %v", err)
+	}
+	defer adminDB.Close()
+	if err := adminDB.PingContext(ctx); err != nil {
+		t.Fatalf("ping MariaDB: %v", err)
+	}
+	suffix := strconv.FormatInt(time.Now().UnixNano(), 36)
+	testDatabase := "market_data_it_" + suffix
+	databaseCreated := false
+	t.Cleanup(func() {
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cleanupCancel()
+		if databaseCreated {
+			_, _ = adminDB.ExecContext(cleanupCtx, fmt.Sprintf("DROP DATABASE IF EXISTS `%s`", testDatabase))
+		}
+		_ = adminDB.Close()
+	})
+	if _, err := adminDB.ExecContext(ctx, fmt.Sprintf("CREATE DATABASE `%s`", testDatabase)); err != nil {
+		t.Fatalf("create isolated MariaDB database: %v", err)
+	}
+	databaseCreated = true
+	config, err := mysqlDriver.ParseDSN(dsn)
+	if err != nil {
+		t.Fatalf("parse MariaDB DSN: %v", err)
+	}
+	config.DBName = testDatabase
+	connector, err := mysqlDriver.NewConnector(config)
+	if err != nil {
+		t.Fatalf("create isolated MariaDB connector: %v", err)
+	}
+	db := sql.OpenDB(connector)
+	defer db.Close()
+	if err := db.PingContext(ctx); err != nil {
+		t.Fatalf("ping isolated MariaDB database: %v", err)
+	}
+	definitions := marketdatabootstrap.MigrationDefinitions()
+	if len(definitions) != 5 {
+		t.Fatalf("Data migration definition count = %d, want 5", len(definitions))
+	}
+	if err := platformstorage.ApplyMigrations(ctx, db, marketdatabootstrap.MigrationNamespace, definitions[:3]); err != nil {
+		t.Fatalf("apply published Data migrations V1-V3: %v", err)
+	}
+	// Recreate the deployed legacy state: two missing columns and old unique
+	// history indexes that must be replaced by non-unique temporal indexes.
+	for _, statement := range []string{
+		"ALTER TABLE market_data_quotes DROP COLUMN volume_ratio",
+		"ALTER TABLE market_data_quotes DROP COLUMN turnover_rate",
+		"CREATE UNIQUE INDEX uq_market_bar_revision_content ON market_data_daily_bar_versions (symbol, trade_date, period, adjustment_basis, source, revision_hash)",
+		"CREATE UNIQUE INDEX uq_market_fundamental_revision_content ON market_data_fundamental_versions (symbol, report_year, report_quarter, source, revision_hash)",
+	} {
+		if _, err := db.ExecContext(ctx, statement); err != nil {
+			t.Fatalf("prepare legacy Data schema (%s): %v", statement, err)
+		}
+	}
+	registries := []*Registry{NewRegistry(), NewRegistry()}
+	for _, registry := range registries {
+		if err := registry.Register(marketdatabootstrap.MigrationNamespace, definitions); err != nil {
+			t.Fatalf("register complete Data migration history: %v", err)
+		}
+	}
+	start := make(chan struct{})
+	results := make(chan error, len(registries))
+	var workers sync.WaitGroup
+	for _, registry := range registries {
+		workers.Add(1)
+		go func(registry *Registry) {
+			defer workers.Done()
+			<-start
+			_, runErr := registry.RunWithReport(ctx, db)
+			results <- runErr
+		}(registry)
+	}
+	close(start)
+	workers.Wait()
+	close(results)
+	for runErr := range results {
+		if runErr != nil {
+			t.Fatalf("concurrent Root migration failed: %v", runErr)
+		}
+	}
+	if err := registries[0].ValidateApplied(ctx, db); err != nil {
+		t.Fatalf("read-only Data migration validation failed: %v", err)
+	}
+	for _, column := range []string{"volume_ratio", "turnover_rate"} {
+		var count int
+		if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='market_data_quotes' AND COLUMN_NAME=?", column).Scan(&count); err != nil || count != 1 {
+			t.Fatalf("compatibility column %s missing: count=%d err=%v", column, count, err)
+		}
+	}
+	for _, index := range []string{"uq_market_bar_revision_content", "uq_market_fundamental_revision_content"} {
+		var count int
+		if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND INDEX_NAME=?", index).Scan(&count); err != nil || count != 0 {
+			t.Fatalf("legacy unique index %s remains: count=%d err=%v", index, count, err)
+		}
+	}
+	for _, index := range []string{"idx_market_bar_revision_identity_asof", "idx_market_fundamental_identity_asof"} {
+		var nonUnique int
+		if err := db.QueryRowContext(ctx, "SELECT MAX(NON_UNIQUE) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND INDEX_NAME=?", index).Scan(&nonUnique); err != nil || nonUnique != 1 {
+			t.Fatalf("temporal history index %s is not non-unique: non_unique=%d err=%v", index, nonUnique, err)
+		}
+	}
+	var calendarTableCount int
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='market_data_trading_calendar_snapshots'").Scan(&calendarTableCount); err != nil || calendarTableCount != 1 {
+		t.Fatalf("Data Migration V5 calendar snapshot table missing: count=%d err=%v", calendarTableCount, err)
+	}
+	var calendarIndexNonUnique int
+	if err := db.QueryRowContext(ctx, "SELECT MAX(NON_UNIQUE) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND INDEX_NAME='idx_market_calendar_identity_observed'").Scan(&calendarIndexNonUnique); err != nil || calendarIndexNonUnique != 1 {
+		t.Fatalf("Data Migration V5 calendar lookup index must be non-unique: non_unique=%d err=%v", calendarIndexNonUnique, err)
 	}
 }

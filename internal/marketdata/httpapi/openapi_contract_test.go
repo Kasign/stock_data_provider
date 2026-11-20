@@ -12,7 +12,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-func TestOpenAPISecurityMatchesDataHTTPAdapterRoutes(t *testing.T) {
+func TestOpenAPIContainsOnlyDataRoutesAndNoRetiredDataAuthentication(t *testing.T) {
 	spec, err := os.ReadFile("openapi.yaml")
 	if err != nil {
 		t.Fatalf("read OpenAPI specification: %v", err)
@@ -22,59 +22,17 @@ func TestOpenAPISecurityMatchesDataHTTPAdapterRoutes(t *testing.T) {
 		t.Fatalf("OpenAPI must be valid YAML: %v", err)
 	}
 
+	if _, exists := document["security"]; exists {
+		t.Fatal("Data OpenAPI must not define transport authentication; Root Server owns authentication")
+	}
 	components := document["components"].(map[string]any)
-	schemes := components["securitySchemes"].(map[string]any)
-	if _, ok := schemes["ApiKey"]; !ok {
-		t.Fatal("OpenAPI must define ApiKey for X-API-Key")
-	}
-	if _, ok := schemes["BearerAuth"]; ok {
-		t.Fatal("OpenAPI must not define BearerAuth for the Data HTTP Adapter")
+	if _, exists := components["securitySchemes"]; exists {
+		t.Fatal("Data OpenAPI must not define a standalone Data API Key scheme")
 	}
 
-	rootSecurity, ok := document["security"].([]any)
-	if !ok {
-		t.Fatal("OpenAPI root security must define the shared Data HTTP Adapter authentication")
-	}
-	assertSecurity := func(where string, value any, wantAnonymous bool) {
-		t.Helper()
-		requirements, ok := value.([]any)
-		if !ok {
-			t.Fatalf("%s security must be an array", where)
-		}
-		if wantAnonymous {
-			if len(requirements) != 0 {
-				t.Errorf("%s must be anonymous, got %#v", where, requirements)
-			}
-			return
-		}
-		got := map[string]bool{}
-		for _, raw := range requirements {
-			requirement, ok := raw.(map[string]any)
-			if !ok || len(requirement) != 1 {
-				t.Errorf("%s has invalid security requirement %#v", where, raw)
-				continue
-			}
-			for name, scopes := range requirement {
-				if name != "ApiKey" {
-					t.Errorf("%s declares unsupported security scheme %q", where, name)
-				}
-				if scopeList, ok := scopes.([]any); !ok || len(scopeList) != 0 {
-					t.Errorf("%s scheme %s must not declare OAuth scopes", where, name)
-				}
-				got[name] = true
-			}
-		}
-		if len(got) != 1 || !got["ApiKey"] {
-			t.Errorf("%s must require only X-API-Key, got %#v", where, got)
-		}
-	}
-	assertSecurity("root", rootSecurity, false)
-
-	// Keep this route inventory aligned with Server.Handler(). A mismatch means
+	// Keep this route inventory aligned with Data InProcessHandler(). A mismatch means
 	// either an HTTP route is undocumented or an OpenAPI operation is stale.
 	expected := map[string]map[string]bool{
-		"/health/live":                                 {"get": true},
-		"/health/ready":                                {"get": true},
 		"/api/v1/quotes/{symbol}":                      {"get": true},
 		"/api/v1/market/quotes":                        {"get": true},
 		"/api/v1/market/stocks":                        {"get": true},
@@ -114,7 +72,7 @@ func TestOpenAPISecurityMatchesDataHTTPAdapterRoutes(t *testing.T) {
 		t.Fatal("OpenAPI paths object missing")
 	}
 	if len(paths) != len(expected) {
-		t.Errorf("OpenAPI path count=%d, Server.Handler route count=%d", len(paths), len(expected))
+		t.Errorf("OpenAPI path count=%d, Data HTTP route count=%d", len(paths), len(expected))
 	}
 	for path, methods := range expected {
 		rawPath, exists := paths[path]
@@ -133,17 +91,10 @@ func TestOpenAPISecurityMatchesDataHTTPAdapterRoutes(t *testing.T) {
 				t.Errorf("OpenAPI operation missing: %s %s", method, path)
 				continue
 			}
-			operation, ok := rawOperation.(map[string]any)
-			if !ok {
+			if _, ok := rawOperation.(map[string]any); !ok {
 				t.Errorf("OpenAPI operation %s %s is not an object", method, path)
 				continue
 			}
-			security := any(rootSecurity)
-			if override, exists := operation["security"]; exists {
-				security = override
-			}
-			anonymous := path == "/health/live" || path == "/health/ready"
-			assertSecurity(method+" "+path, security, anonymous)
 		}
 		for method := range pathItem {
 			if method == "parameters" || method == "summary" || method == "description" || method == "servers" {
@@ -199,10 +150,8 @@ func TestOpenAPIErrorResponsesReferenceRuntimeErrorEnvelope(t *testing.T) {
 			if !ok {
 				continue
 			}
-			if path != "/health/live" && path != "/health/ready" {
-				if _, exists := responses["401"]; !exists {
-					t.Errorf("%s %s is protected by Server.auth but does not declare 401", method, path)
-				}
+			if _, exists := responses["401"]; !exists {
+				t.Errorf("%s %s is protected by Root Server authentication but does not declare 401", method, path)
 			}
 			for status, rawResponse := range responses {
 				code, parseErr := strconv.Atoi(status)
@@ -690,8 +639,6 @@ func TestOpenAPIParameterInventoryMatchesReviewedHandlerMatrix(t *testing.T) {
 		t.Fatal("OpenAPI paths object missing")
 	}
 	expected := map[string][]string{
-		"GET /health/live":                                 {},
-		"GET /health/ready":                                {},
 		"GET /api/v1/market/quotes":                        {"symbols@query!required"},
 		"GET /api/v1/quotes/{symbol}":                      {"symbol@path!required"},
 		"GET /api/v1/bars/{symbol}/daily":                  {"symbol@path!required", "start@query!optional", "end@query!optional", "limit@query!optional", "adjustment@query!optional", "as_of@query!optional"},
@@ -726,8 +673,8 @@ func TestOpenAPIParameterInventoryMatchesReviewedHandlerMatrix(t *testing.T) {
 		"GET /api/v1/market/dragon-tiger":                  {"date@query!optional", "page@query!optional", "page_size@query!optional"},
 		"GET /api/v1/market/limit-pools":                   {"type@query!optional", "date@query!optional", "limit@query!optional"},
 	}
-	if len(expected) != 35 {
-		t.Fatalf("reviewed parameter matrix has %d operations, want 35", len(expected))
+	if len(expected) != 33 {
+		t.Fatalf("reviewed parameter matrix has %d operations, want 33", len(expected))
 	}
 	for route, want := range expected {
 		parts := strings.SplitN(route, " ", 2)
@@ -1064,8 +1011,6 @@ func TestOpenAPIParameterTypesAndFormatsMatchReviewedHandlerMatrix(t *testing.T)
 	}
 	paths := document["paths"].(map[string]any)
 	expected := map[string]map[string]map[string]any{
-		"GET /health/live":                     {},
-		"GET /health/ready":                    {},
 		"POST /api/v1/data-sources/probe":      {},
 		"GET /api/v1/data-sources/diagnostics": {},
 		"GET /api/v1/data-sources":             {},
@@ -1130,8 +1075,8 @@ func TestOpenAPIParameterTypesAndFormatsMatchReviewedHandlerMatrix(t *testing.T)
 			"type": {"type": "string"}, "date": {"type": "string", "format": "date"}, "limit": {"type": "integer"},
 		},
 	}
-	if len(expected) != 35 {
-		t.Fatalf("reviewed parameter schema matrix has %d operations, want 35", len(expected))
+	if len(expected) != 33 {
+		t.Fatalf("reviewed parameter schema matrix has %d operations, want 33", len(expected))
 	}
 	for route, wantParameters := range expected {
 		parts := strings.SplitN(route, " ", 2)
