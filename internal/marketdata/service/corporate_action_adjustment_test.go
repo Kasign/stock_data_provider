@@ -240,7 +240,7 @@ func TestDeriveAdjustmentFactorsFromCorporateActionsMarksIncompleteCoverageDegra
 		t.Fatal(err)
 	}
 	if factors[0].QualityStatus != model.QualityDegraded ||
-		!containsString(factors[0].QualityReasons, "corporate_action_history_coverage_unverified") {
+		!containsCorporateActionReason(factors[0].QualityReasons, "corporate_action_history_coverage_unverified") {
 		t.Fatalf("coverage degradation missing: %+v", factors[0])
 	}
 }
@@ -250,4 +250,13 @@ func mathAbs(value float64) float64 {
 		return -value
 	}
 	return value
+}
+
+func containsCorporateActionReason(reasons []string, expected string) bool {
+	for _, reason := range reasons {
+		if reason == expected {
+			return true
+		}
+	}
+	return false
 }

@@ -132,9 +132,9 @@ func (p *Tushare) FetchCorporateActions(ctx context.Context, rawSymbol, startDat
 			var referencePriceIncluded *bool
 			holderScope := model.CorporateActionHolderScopeUnknown
 			normalizedStatus := "unknown"
-			if strings.Contains(status, "实施") {
+			if status == "实施" || status == "已实施" {
 				normalizedStatus = "implemented"
-			} else if strings.Contains(status, "预案") || strings.Contains(status, "通过") {
+			} else if status == "预案" || status == "董事会预案" || status == "股东大会通过" {
 				normalizedStatus = "proposal"
 			}
 			termsComplete := exDate != "" && normalizedStatus == "implemented" &&

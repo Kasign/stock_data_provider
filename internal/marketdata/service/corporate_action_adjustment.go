@@ -62,10 +62,13 @@ func deriveAdjustmentFactorsFromCorporateActions(raw []model.DailyBar, actions [
 		if strings.TrimSpace(action.Symbol) != symbol {
 			return nil, fmt.Errorf("corporate action %s belongs to %s, want %s", action.ProviderEventID, action.Symbol, symbol)
 		}
-		if action.ExDate == "" && action.NormalizedStatus == "proposal" {
+		if action.ExDate == "" {
+			if action.NormalizedStatus == "implemented" {
+				return nil, fmt.Errorf("implemented corporate action %s has no ex-date", action.ProviderEventID)
+			}
 			continue
 		}
-		if action.ExDate == "" || !validServiceDateRange(action.ExDate, action.ExDate) {
+		if !validServiceDateRange(action.ExDate, action.ExDate) {
 			return nil, fmt.Errorf("corporate action %s has no valid ex-date", action.ProviderEventID)
 		}
 		if action.ExDate > raw[len(raw)-1].TradeDate {
@@ -94,9 +97,9 @@ func deriveAdjustmentFactorsFromCorporateActions(raw []model.DailyBar, actions [
 		if !*action.ReferencePriceIncluded {
 			continue
 		}
-		if action.HolderScope == model.CorporateActionHolderScopeUnknown ||
-			action.HolderScope == model.CorporateActionHolderScopeNonTradableShareholders {
-			return nil, fmt.Errorf("corporate action %s has incompatible holder scope %q", identity, action.HolderScope)
+		if action.HolderScope != model.CorporateActionHolderScopeAllShareholders &&
+			action.HolderScope != model.CorporateActionHolderScopeTradableShareholders {
+			return nil, fmt.Errorf("corporate action %s has unsupported holder scope %q", identity, action.HolderScope)
 		}
 		if !action.TermsComplete {
 			return nil, fmt.Errorf("corporate action %s has incomplete economic terms", identity)
@@ -278,7 +281,7 @@ func combineCorporateActionQuality(left, right model.QualityStatus) model.Qualit
 	if left == model.QualityDegraded || right == model.QualityDegraded {
 		return model.QualityDegraded
 	}
-	if left == model.QualityUnknown || right == model.QualityUnknown {
+	if left != model.QualityValid || right != model.QualityValid {
 		return model.QualityUnknown
 	}
 	return model.QualityValid
