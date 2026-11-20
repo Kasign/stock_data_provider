@@ -130,12 +130,12 @@ func TestLiveReaderGetDailyBarsV2PreservesProviderDecimalEvidence(t *testing.T) 
 	report, err := json.Marshal(map[string]any{
 		"provider": "baostock", "symbol": snapshot.Symbol, "interval": snapshot.Interval,
 		"bar_count": len(snapshot.Bars), "quality_status": snapshot.QualityStatus,
-		"calendar_ref": *snapshot.TradingCalendarRef,
+		"calendar_ref":            *snapshot.TradingCalendarRef,
 		"calendar_quality_status": snapshot.CoverageEvidence.CalendarQualityStatus,
-		"coverage_sufficient": snapshot.CoverageEvidence.CoverageSufficient,
-		"sample_trade_date": sample.TradeDate,
-		"exact_values": sample.ExactValues,
-		"source_version": sample.SourceVersion,
+		"coverage_sufficient":     snapshot.CoverageEvidence.CoverageSufficient,
+		"sample_trade_date":       sample.TradeDate,
+		"exact_values":            sample.ExactValues,
+		"source_version":          sample.SourceVersion,
 	})
 	if err != nil {
 		t.Fatalf("marshal V2 evidence report: %v", err)
