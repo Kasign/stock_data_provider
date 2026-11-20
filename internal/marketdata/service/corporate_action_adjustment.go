@@ -18,10 +18,10 @@ const corporateActionExchangeReferenceDerivation = "corporate_action_exchange_re
 
 type corporateActionAffineTerm struct {
 	exDate string
-	scale float64
+	scale  float64
 	offset float64
 	source string
-	hash string
+	hash   string
 	action model.CorporateAction
 }
 
@@ -106,7 +106,9 @@ func deriveAdjustmentFactorsFromCorporateActions(raw []model.DailyBar, actions [
 			return nil, fmt.Errorf("corporate action %s: %w", identity, err)
 		}
 		hash, err := corporateActionEvidenceFingerprint(action)
-		if err != nil { return nil, err }
+		if err != nil {
+			return nil, err
+		}
 		terms = append(terms, corporateActionAffineTerm{exDate: action.ExDate, scale: multiplier, offset: offset,
 			source: action.Source + "@" + action.SourceVersion, hash: hash, action: action})
 	}
@@ -114,8 +116,12 @@ func deriveAdjustmentFactorsFromCorporateActions(raw []model.DailyBar, actions [
 		return nil, errors.New("no exchange-reference-eligible implemented corporate actions")
 	}
 	sort.Slice(terms, func(i, j int) bool {
-		if terms[i].exDate != terms[j].exDate { return terms[i].exDate < terms[j].exDate }
-		if terms[i].source != terms[j].source { return terms[i].source < terms[j].source }
+		if terms[i].exDate != terms[j].exDate {
+			return terms[i].exDate < terms[j].exDate
+		}
+		if terms[i].source != terms[j].source {
+			return terms[i].source < terms[j].source
+		}
 		return terms[i].action.ProviderEventID < terms[j].action.ProviderEventID
 	})
 	aggregated := make([]corporateActionAffineTerm, 0, len(terms))
@@ -131,9 +137,11 @@ func deriveAdjustmentFactorsFromCorporateActions(raw []model.DailyBar, actions [
 		last.hash += "," + term.hash
 		last.action.QualityStatus = combineCorporateActionQuality(last.action.QualityStatus, term.action.QualityStatus)
 		last.action.QualityReasons = append(last.action.QualityReasons, term.action.QualityReasons...)
-		if term.action.AvailableAt == nil { last.action.AvailableAt = nil
+		if term.action.AvailableAt == nil {
+			last.action.AvailableAt = nil
 		} else if last.action.AvailableAt != nil && term.action.AvailableAt.After(*last.action.AvailableAt) {
-			value := term.action.AvailableAt.UTC(); last.action.AvailableAt = &value
+			value := term.action.AvailableAt.UTC()
+			last.action.AvailableAt = &value
 		}
 	}
 	out := make([]model.AdjustmentFactor, 0, len(raw))
@@ -147,7 +155,10 @@ func deriveAdjustmentFactorsFromCorporateActions(raw []model.DailyBar, actions [
 		}
 		quality := model.QualityValid
 		reasons := []string{}
-		if !coverageComplete { degradeQualityStatus(&quality); appendReasonOnce(&reasons, "corporate_action_history_coverage_unverified") }
+		if !coverageComplete {
+			degradeQualityStatus(&quality)
+			appendReasonOnce(&reasons, "corporate_action_history_coverage_unverified")
+		}
 		availableAt := cloneCorporateActionTime(coverageAvailableAt)
 		hashes, sources := []string{}, []string{}
 		for i := 0; i < nextTerm; i++ {
@@ -155,18 +166,27 @@ func deriveAdjustmentFactorsFromCorporateActions(raw []model.DailyBar, actions [
 			hashes = append(hashes, strings.Split(term.hash, ",")...)
 			sources = append(sources, strings.Split(term.source, ",")...)
 			quality = combineCorporateActionQuality(quality, term.action.QualityStatus)
-			for _, reason := range term.action.QualityReasons { appendReasonOnce(&reasons, "corporate_action:"+reason) }
-			if term.action.AvailableAt == nil { availableAt = nil; degradeQualityStatus(&quality); appendReasonOnce(&reasons, "corporate_action_available_at_unknown")
+			for _, reason := range term.action.QualityReasons {
+				appendReasonOnce(&reasons, "corporate_action:"+reason)
+			}
+			if term.action.AvailableAt == nil {
+				availableAt = nil
+				degradeQualityStatus(&quality)
+				appendReasonOnce(&reasons, "corporate_action_available_at_unknown")
 			} else if availableAt != nil && term.action.AvailableAt.After(*availableAt) {
-				value := term.action.AvailableAt.UTC(); availableAt = &value
+				value := term.action.AvailableAt.UTC()
+				availableAt = &value
 			}
 		}
-		if availableAt == nil { degradeQualityStatus(&quality); appendReasonOnce(&reasons, "corporate_action_factor_available_at_unknown") }
+		if availableAt == nil {
+			degradeQualityStatus(&quality)
+			appendReasonOnce(&reasons, "corporate_action_factor_available_at_unknown")
+		}
 		sort.Strings(hashes)
 		out = append(out, model.AdjustmentFactor{
-			Symbol: symbol, TradeDate: bar.TradeDate, Factor: scale, PriceOffsetCNY: floatPointer(offset),
+			Symbol: symbol, TradeDate: bar.TradeDate, Factor: scale, PriceOffsetCNY: corporateActionFloatPointer(offset),
 			Basis: model.AdjustmentFactorShared, Source: rawSource, SourceVersion: rawVersion,
-			Derivation: corporateActionExchangeReferenceDerivation,
+			Derivation:      corporateActionExchangeReferenceDerivation,
 			EvidenceSources: uniqueSortedStrings(sources), EvidenceRevisionHashes: hashes,
 			AvailableAt: availableAt, FetchedAt: coverageFetchedAt.UTC(), QualityStatus: quality, QualityReasons: reasons,
 		})
@@ -181,19 +201,38 @@ func corporateActionExchangeReferenceTerm(action model.CorporateAction) (float64
 	rights, rightsPrice := action.RightsIssueRatio, action.RightsIssuePriceCNY
 	switch strings.ToLower(strings.TrimSpace(action.EventType)) {
 	case "dividend", "standard_distribution":
-		if bonus == nil || transfer == nil || cash == nil { return 0, 0, errors.New("distribution requires explicit bonus, transfer and gross cash terms") }
+		if bonus == nil || transfer == nil || cash == nil {
+			return 0, 0, errors.New("distribution requires explicit bonus, transfer and gross cash terms")
+		}
 	case "rights_issue":
-		if bonus == nil { bonus = &zero }; if transfer == nil { transfer = &zero }; if cash == nil { cash = &zero }
-		if rights == nil || rightsPrice == nil { return 0, 0, errors.New("rights issue requires explicit ratio and subscription price") }
+		if bonus == nil {
+			bonus = &zero
+		}
+		if transfer == nil {
+			transfer = &zero
+		}
+		if cash == nil {
+			cash = &zero
+		}
+		if rights == nil || rightsPrice == nil {
+			return 0, 0, errors.New("rights issue requires explicit ratio and subscription price")
+		}
 	case "share_reform_consideration":
 		return 0, 0, errors.New("share-reform consideration cannot enter exchange-reference adjustment")
 	default:
 		return 0, 0, fmt.Errorf("unsupported event type %q", action.EventType)
 	}
-	if rights == nil { rights = &zero }; if rightsPrice == nil { rightsPrice = &zero }
+	if rights == nil {
+		rights = &zero
+	}
+	if rightsPrice == nil {
+		rightsPrice = &zero
+	}
 	for name, value := range map[string]*float64{"bonus_share_ratio": bonus, "transfer_share_ratio": transfer,
 		"cash_dividend_before_tax": cash, "rights_issue_ratio": rights, "rights_issue_price": rightsPrice} {
-		if value == nil || math.IsNaN(*value) || math.IsInf(*value, 0) || *value < 0 { return 0, 0, fmt.Errorf("%s is missing or invalid", name) }
+		if value == nil || math.IsNaN(*value) || math.IsInf(*value, 0) || *value < 0 {
+			return 0, 0, fmt.Errorf("%s is missing or invalid", name)
+		}
 	}
 	multiplier := 1 + *bonus + *transfer + *rights
 	offset := *cash - *rightsPrice**rights
@@ -204,20 +243,43 @@ func corporateActionExchangeReferenceTerm(action model.CorporateAction) (float64
 }
 
 func corporateActionEvidenceFingerprint(action model.CorporateAction) (string, error) {
-	action.FetchedAt = time.Time{}; action.SystemObservedAt = nil
-	payload, err := json.Marshal(action); if err != nil { return "", err }
-	sum := sha256.Sum256(payload); return hex.EncodeToString(sum[:]), nil
+	action.FetchedAt = time.Time{}
+	action.SystemObservedAt = nil
+	payload, err := json.Marshal(action)
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(payload)
+	return hex.EncodeToString(sum[:]), nil
 }
-func floatPointer(value float64) *float64 { return &value }
+func corporateActionFloatPointer(value float64) *float64 { return &value }
 func cloneCorporateActionTime(value *time.Time) *time.Time {
-	if value == nil { return nil }; copy := value.UTC(); return &copy
+	if value == nil {
+		return nil
+	}
+	copy := value.UTC()
+	return &copy
 }
 func uniqueSortedStrings(values []string) []string {
-	set := make(map[string]struct{}, len(values)); for _, value := range values { if value != "" { set[value] = struct{}{} } }
-	out := make([]string, 0, len(set)); for value := range set { out = append(out, value) }; sort.Strings(out); return out
+	set := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		if value != "" {
+			set[value] = struct{}{}
+		}
+	}
+	out := make([]string, 0, len(set))
+	for value := range set {
+		out = append(out, value)
+	}
+	sort.Strings(out)
+	return out
 }
 func combineCorporateActionQuality(left, right model.QualityStatus) model.QualityStatus {
-	if left == model.QualityDegraded || right == model.QualityDegraded { return model.QualityDegraded }
-	if left == model.QualityUnknown || right == model.QualityUnknown { return model.QualityUnknown }
+	if left == model.QualityDegraded || right == model.QualityDegraded {
+		return model.QualityDegraded
+	}
+	if left == model.QualityUnknown || right == model.QualityUnknown {
+		return model.QualityUnknown
+	}
 	return model.QualityValid
 }

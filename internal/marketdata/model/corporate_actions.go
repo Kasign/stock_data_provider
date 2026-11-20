@@ -84,8 +84,8 @@ type CorporateAction struct {
 	ShareConsiderationRatio        *float64                   `json:"share_consideration_ratio,omitempty"`
 	HolderScope                    CorporateActionHolderScope `json:"holder_scope,omitempty"`
 	ReferencePriceIncluded         *bool                      `json:"reference_price_included,omitempty"`
-	NormalizedStatus               string                      `json:"normalized_status,omitempty"`
-	TermsComplete                  bool                        `json:"terms_complete,omitempty"`
+	NormalizedStatus               string                     `json:"normalized_status,omitempty"`
+	TermsComplete                  bool                       `json:"terms_complete,omitempty"`
 	Source                         string                     `json:"source"`
 	SourceVersion                  string                     `json:"source_version,omitempty"`
 	FetchedAt                      time.Time                  `json:"fetched_at"`

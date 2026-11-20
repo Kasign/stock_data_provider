@@ -63,7 +63,7 @@ func TestDeriveAdjustmentFactorsFromCorporateActionsExcludesShareReformConsidera
 		CashDividendBeforeTaxCNY:&cash,BonusShareRatio:&zero,TransferShareRatio:&zero,Source:"tushare",SourceVersion:"v1",FetchedAt:fetched,QualityStatus:model.QualityValid}
 	consideration:=model.CorporateAction{Symbol:"600519.SH",ProviderEventID:"reform",EventType:"share_reform_consideration",NormalizedStatus:"implemented",
 		HolderScope:model.CorporateActionHolderScopeTradableShareholders,ReferencePriceIncluded:&no,TermsComplete:true,ExDate:"2026-01-05",
-		CashConsiderationCNY:floatPointer(1.475),ShareConsiderationRatio:floatPointer(0.12),Source:"pytdx",SourceVersion:"v1",FetchedAt:fetched,QualityStatus:model.QualityValid}
+		CashConsiderationCNY:corporateActionFloatPointer(1.475),ShareConsiderationRatio:corporateActionFloatPointer(0.12),Source:"pytdx",SourceVersion:"v1",FetchedAt:fetched,QualityStatus:model.QualityValid}
 	factors,err:=deriveAdjustmentFactorsFromCorporateActions([]model.DailyBar{{Symbol:"600519.SH",TradeDate:"2026-01-05",Source:"raw",SourceVersion:"raw-v1",AdjustmentBasis:model.AdjustmentNone}},
 		[]model.CorporateAction{distribution,consideration},model.CorporateActionAdjustmentPolicyExchangeReference,true,fetched,nil)
 	if err!=nil { t.Fatal(err) }
