@@ -554,3 +554,14 @@ RA009 代码关闭条件已满足：Server 路由认证矩阵、CSRF、WebUI 请
 - GetResult 测试 Fixture 已改用 Platform `Fingerprint` 生成指纹，冻结 GOV-CTR-006 Quant Golden 测试继续作为跨实现一致性证据。
 - 权威契约核对修正此前卡点表述：GOV-CTR-006 已明确 policy_owner=quant、MVP subject_ref=Researchflow service principal、resource_ref=result_id、purpose=quant_analysis、content_level=full。待实现的是 Quant Owner 策略规则/存储/快照签发、当前策略复核与撤销竞态，不是 Owner/Principal 映射尚未定义。
 - 精确代码 SHA `b3530b0cce353462c30e5695143cbe0bbf6f7a54` 的 Integration CI Run [44662914467](https://github.com/Kasign/stock_data_provider/actions/runs/44662914467) 已触发，当前排队中；最终以该 SHA 的完整 CI 结果为准。后续文档修订不改变代码验收 SHA。
+
+
+### 28.31 Quant 结果 MariaDB 持久化首版（2026-11-20）
+
+- 新增 Quant 自有 `internal/quant/storage/repository.go`、`migrations.go`、`repository_integration_test.go`；不复制 Research/News Repository，只复用 Platform Storage/Migration 原语。
+- 首版 `quant_results` 表仅保留内容寻址身份、Manifest/Payload 指纹、完整 Manifest JSON、原始 Payload JSON 和首次创建时间，不增加无查询用例支撑的二级索引。
+- Save 写入前验证 Record；依赖数据库主键进行原子并发仲裁；重复路径重新验证存储 Manifest/Payload，拒绝未知 Manifest 字段/尾随 JSON；同内容幂等且不覆盖首次 created_at，异指纹返回冲突，存储损坏返回 ErrCorruptRecord。
+- Server Migration Registry 注册 Quant namespace；Bootstrap 单测同步更新。
+- Integration CI 增加 QUANT_TEST_MYSQL_DSN 和逐项 PASS 门禁，覆盖普通写入/重放/规范等价 JSON、created_at 稳定、16 并发写入、存储损坏拒绝和 Context 取消。
+- 结果写入层已实现，但授权读取、Owner PolicySnapshot 签发/当前策略复核/撤销线性化、AccessAuditor 和 Root 依赖注入仍未完成；QNT-013 保持 OPEN。
+- 代码验收 SHA：`05773845ae47ca0c61d182336890b547d5512432`；对应 Integration CI 需等待完整结果，不以旧 SHA 通过替代。
