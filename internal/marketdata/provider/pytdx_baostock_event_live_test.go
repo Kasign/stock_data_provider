@@ -16,19 +16,19 @@ import (
 )
 
 type pytdxBaoStockEventReport struct {
-	GeneratedAt      string                            `json:"generated_at"`
-	Year             string                            `json:"year"`
-	AffineTransforms []pytdxBaoStockAffineTransform    `json:"affine_transforms"`
-	Items            []pytdxBaoStockEventItem          `json:"items"`
+	GeneratedAt      string                         `json:"generated_at"`
+	Year             string                         `json:"year"`
+	AffineTransforms []pytdxBaoStockAffineTransform `json:"affine_transforms"`
+	Items            []pytdxBaoStockEventItem       `json:"items"`
 }
 
 type pytdxBaoStockAffineTransform struct {
-	Symbol                    string  `json:"symbol"`
-	EventCount                int     `json:"event_count"`
-	PriceScale                float64 `json:"price_scale"`
-	PriceOffset               float64 `json:"price_offset"`
-	BaoStockLatestBackFactor  float64 `json:"baostock_latest_backward_factor,omitempty"`
-	BaoStockLatestFwdFactor   float64 `json:"baostock_latest_forward_factor,omitempty"`
+	Symbol                   string  `json:"symbol"`
+	EventCount               int     `json:"event_count"`
+	PriceScale               float64 `json:"price_scale"`
+	PriceOffset              float64 `json:"price_offset"`
+	BaoStockLatestBackFactor float64 `json:"baostock_latest_backward_factor,omitempty"`
+	BaoStockLatestFwdFactor  float64 `json:"baostock_latest_forward_factor,omitempty"`
 }
 
 type pytdxBaoStockEventItem struct {
@@ -74,7 +74,7 @@ func TestLivePytdxBaoStockCorporateActionConsistency(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 	report := pytdxBaoStockEventReport{
-		GeneratedAt: time.Now().UTC().Format(time.RFC3339),
+		GeneratedAt:      time.Now().UTC().Format(time.RFC3339),
 		Year:             year,
 		AffineTransforms: make([]pytdxBaoStockAffineTransform, 0, len(symbols)),
 		Items:            make([]pytdxBaoStockEventItem, 0, len(symbols)*4),

@@ -805,10 +805,10 @@ func TestLiveHithinkDailyBarsBackwardRaw(t *testing.T) {
 		t.Fatalf("Hithink corporate-action identity or event coverage invalid: thscode=%q ticker=%q rows=%d", actionData.THSCode, actionData.Ticker, len(actionData.Item))
 	}
 	type rawCorporateAction struct {
-		ExDate            string `json:"ex_date"`
-		ExDateMS          string `json:"ex_date_ms_raw"`
-		DividendPerShare  string `json:"dividend_per_share_raw"`
-		PerShareBonus     string `json:"per_share_bonus_raw"`
+		ExDate           string `json:"ex_date"`
+		ExDateMS         string `json:"ex_date_ms_raw"`
+		DividendPerShare string `json:"dividend_per_share_raw"`
+		PerShareBonus    string `json:"per_share_bonus_raw"`
 	}
 	actionRows := make([]rawCorporateAction, 0, len(actionData.Item))
 	previousEventDate := ""
