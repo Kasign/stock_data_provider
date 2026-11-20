@@ -61,30 +61,30 @@ const (
 // CorporateAction 是公司行动事件。金额单位为人民币元/股，比例为每股变动数量。
 // 股东对价与公司分红分开保存；未知字段保持 nil，不得用零代替未知。
 type CorporateAction struct {
-	Symbol                         string                      `json:"symbol"`
-	ProviderEventID                string                      `json:"provider_event_id"`
-	EventType                      string                      `json:"event_type"`
-	EventStatus                    string                      `json:"event_status,omitempty"`
-	AnnouncementDate               string                      `json:"announcement_date,omitempty"`
-	ImplementationAnnouncementDate string                      `json:"implementation_announcement_date,omitempty"`
-	AvailableAt                    *time.Time                  `json:"available_at,omitempty"`
-	RecordDate                     string                      `json:"record_date,omitempty"`
-	ExDate                         string                      `json:"ex_date"`
-	PayDate                        string                      `json:"pay_date,omitempty"`
-	CashDividendCNY                *float64                    `json:"cash_dividend_after_tax_cny_per_share,omitempty"`
-	CashDividendBeforeTaxCNY       *float64                    `json:"cash_dividend_before_tax_cny_per_share,omitempty"`
-	BonusShareRatio                *float64                    `json:"bonus_share_ratio,omitempty"`
-	TransferShareRatio             *float64                    `json:"transfer_share_ratio,omitempty"`
-	RightsIssueRatio               *float64                    `json:"rights_issue_ratio,omitempty"`
-	RightsIssuePriceCNY            *float64                    `json:"rights_issue_price_cny,omitempty"`
-	CashConsiderationCNY           *float64                    `json:"cash_consideration_cny_per_share,omitempty"`
-	ShareConsiderationRatio        *float64                    `json:"share_consideration_ratio,omitempty"`
+	Symbol                         string                     `json:"symbol"`
+	ProviderEventID                string                     `json:"provider_event_id"`
+	EventType                      string                     `json:"event_type"`
+	EventStatus                    string                     `json:"event_status,omitempty"`
+	AnnouncementDate               string                     `json:"announcement_date,omitempty"`
+	ImplementationAnnouncementDate string                     `json:"implementation_announcement_date,omitempty"`
+	AvailableAt                    *time.Time                 `json:"available_at,omitempty"`
+	RecordDate                     string                     `json:"record_date,omitempty"`
+	ExDate                         string                     `json:"ex_date"`
+	PayDate                        string                     `json:"pay_date,omitempty"`
+	CashDividendCNY                *float64                   `json:"cash_dividend_after_tax_cny_per_share,omitempty"`
+	CashDividendBeforeTaxCNY       *float64                   `json:"cash_dividend_before_tax_cny_per_share,omitempty"`
+	BonusShareRatio                *float64                   `json:"bonus_share_ratio,omitempty"`
+	TransferShareRatio             *float64                   `json:"transfer_share_ratio,omitempty"`
+	RightsIssueRatio               *float64                   `json:"rights_issue_ratio,omitempty"`
+	RightsIssuePriceCNY            *float64                   `json:"rights_issue_price_cny,omitempty"`
+	CashConsiderationCNY           *float64                   `json:"cash_consideration_cny_per_share,omitempty"`
+	ShareConsiderationRatio        *float64                   `json:"share_consideration_ratio,omitempty"`
 	HolderScope                    CorporateActionHolderScope `json:"holder_scope,omitempty"`
-	ReferencePriceIncluded         *bool                       `json:"reference_price_included,omitempty"`
-	Source                         string                      `json:"source"`
-	SourceVersion                  string                      `json:"source_version,omitempty"`
-	FetchedAt                      time.Time                   `json:"fetched_at"`
-	SystemObservedAt               *time.Time                  `json:"system_observed_at,omitempty"`
-	QualityStatus                  QualityStatus               `json:"quality_status"`
-	QualityReasons                 []string                    `json:"quality_reasons,omitempty"`
+	ReferencePriceIncluded         *bool                      `json:"reference_price_included,omitempty"`
+	Source                         string                     `json:"source"`
+	SourceVersion                  string                     `json:"source_version,omitempty"`
+	FetchedAt                      time.Time                  `json:"fetched_at"`
+	SystemObservedAt               *time.Time                 `json:"system_observed_at,omitempty"`
+	QualityStatus                  QualityStatus              `json:"quality_status"`
+	QualityReasons                 []string                   `json:"quality_reasons,omitempty"`
 }
