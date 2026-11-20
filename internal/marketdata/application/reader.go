@@ -208,7 +208,8 @@ func (r *Reader) GetDailyBarsV2(ctx context.Context, query app.DailyBarsQuery) (
 		return app.DailyBarsV2Snapshot{}, err
 	}
 	calendarRangeExplicit := strings.TrimSpace(query.StartDate) != "" && strings.TrimSpace(query.EndDate) != ""
-	calendarQualityUnreliable := containsReaderString(evidence.Warnings, "daily_bar_coverage_uses_degraded_trading_calendar")
+	calendarQualityUnreliable := evidence.CalendarQualityStatus != model.QualityValid ||
+		containsReaderString(evidence.Warnings, "daily_bar_coverage_uses_degraded_trading_calendar")
 	calendarReferenceMissing := evidence.CoverageBasis != "exchange_calendar" || strings.TrimSpace(evidence.CalendarRef) == "" || !calendarRangeExplicit || calendarQualityUnreliable
 	calendarDegradationReason := ""
 	switch {
@@ -224,6 +225,7 @@ func (r *Reader) GetDailyBarsV2(ctx context.Context, query app.DailyBarsQuery) (
 		evidence.CalendarQualityStatus = model.QualityDegraded
 	case calendarReferenceMissing:
 		calendarDegradationReason = "daily_bar_coverage_calendar_reference_unavailable"
+		evidence.CalendarQualityStatus = model.QualityDegraded
 	}
 	if calendarDegradationReason != "" {
 		evidence.Warnings = dedupeReaderStrings(append(evidence.Warnings, calendarDegradationReason))

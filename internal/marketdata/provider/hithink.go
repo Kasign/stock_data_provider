@@ -972,11 +972,36 @@ func (p *Hithink) FetchDragonTiger(ctx context.Context, tradeDate string, page, 
 		addHithinkFieldIssue(ctx, nil, "trade_date", "trade_date", "date_mismatch", "returned date equals requested date", "string", responseDate, "同花顺龙虎榜返回交易日与请求日期不一致")
 		return nil, fmt.Errorf("同花顺龙虎榜交易日不匹配: requested=%s returned=%s", rawDate, responseDate)
 	}
-	total := len(data.StockItems)
+	// stock_items 是榜单事件行，单只证券可能因多个上榜原因出现多行；
+	// stock_count 表示证券数。先按 thscode 去重，再按证券数分页。
+	uniqueStockItems := make([]map[string]json.RawMessage, 0, len(data.StockItems))
+	seenSourceSymbols := make(map[string]struct{}, len(data.StockItems))
+	duplicateRows := 0
+	for rowIndex, row := range data.StockItems {
+		rawSymbol := hithinkFieldString(row, "thscode")
+		symbol, symbolErr := hithinkDomesticSymbol(rawSymbol)
+		if symbolErr != nil {
+			uniqueStockItems = append(uniqueStockItems, row)
+			continue
+		}
+		if _, exists := seenSourceSymbols[symbol]; exists {
+			duplicateRows++
+			addHithinkFieldIssue(ctx, &rowIndex, "symbol", "thscode", "duplicate_identity",
+				"one stock row per unique security", rawSymbol, "同花顺龙虎榜同一证券因多个上榜原因返回重复事件行")
+			continue
+		}
+		seenSourceSymbols[symbol] = struct{}{}
+		uniqueStockItems = append(uniqueStockItems, row)
+	}
+	total := len(uniqueStockItems)
 	if data.StockCount != nil {
-		if *data.StockCount < 0 || *data.StockCount != len(data.StockItems) {
-			addHithinkFieldIssue(ctx, nil, "row_count", "stock_count/stock_items", "count_inconsistent", "stock_count equals stock_items length", "inconsistent", fmt.Sprintf("declared=%d items=%d", *data.StockCount, len(data.StockItems)), "同花顺龙虎榜声明股票数与返回股票行数不一致")
-			return nil, fmt.Errorf("同花顺龙虎榜 stock_count 与 stock_items 不一致: declared=%d items=%d", *data.StockCount, len(data.StockItems))
+		if *data.StockCount < 0 || *data.StockCount != total {
+			addHithinkFieldIssue(ctx, nil, "row_count", "stock_count/stock_items", "count_inconsistent",
+				"stock_count equals unique thscode count", "inconsistent",
+				fmt.Sprintf("declared=%d unique=%d source_rows=%d", *data.StockCount, total, len(data.StockItems)),
+				"同花顺龙虎榜声明证券数与去重后的证券数不一致")
+			return nil, fmt.Errorf("同花顺龙虎榜 stock_count 与去重证券数不一致: declared=%d unique=%d source_rows=%d",
+				*data.StockCount, total, len(data.StockItems))
 		}
 		total = *data.StockCount
 	}
@@ -994,6 +1019,9 @@ func (p *Hithink) FetchDragonTiger(ctx context.Context, tradeDate string, page, 
 		QualityStatus:  model.QualityDegraded,
 		QualityReasons: []string{"provider_amount_units_not_explicitly_documented", "hot_money_detail_not_represented_in_shared_stock_pagination"},
 	}
+	if duplicateRows > 0 {
+		snapshot.QualityReasons = appendUniqueHithinkReason(snapshot.QualityReasons, "duplicate_dragon_tiger_symbol_dropped")
+}
 	if data.Timestamp == nil || *data.Timestamp <= 0 || time.UnixMilli(*data.Timestamp).After(now.Add(5*time.Minute)) {
 		snapshot.QualityReasons = appendUniqueHithinkReason(snapshot.QualityReasons, "provider_snapshot_timestamp_missing_or_invalid")
 	}
@@ -1011,14 +1039,14 @@ func (p *Hithink) FetchDragonTiger(ctx context.Context, tradeDate string, page, 
 	}
 	startIndex := (page - 1) * pageSize
 	endIndex := min(startIndex+pageSize, total)
-	if startIndex >= len(data.StockItems) {
-		addHithinkFieldIssue(ctx, nil, "pagination", "stock_items", "page_rows_missing", "rows available for requested page", "missing", fmt.Sprintf("start=%d returned=%d", startIndex, len(data.StockItems)), "同花顺龙虎榜请求页没有对应返回行")
+	if startIndex >= len(uniqueStockItems) {
+		addHithinkFieldIssue(ctx, nil, "pagination", "stock_items", "page_rows_missing", "rows available for requested page", "missing", fmt.Sprintf("start=%d returned=%d", startIndex, len(uniqueStockItems)), "同花顺龙虎榜请求页没有对应返回行")
 		return nil, fmt.Errorf("同花顺龙虎榜请求页 %d 超出了当前返回数据", page)
 	}
 	snapshot.HasMore = page < pages
 	snapshot.HasData = true
 	seenDragonTigerSymbols := make(map[string]struct{}, endIndex-startIndex)
-	for index, row := range data.StockItems[startIndex:endIndex] {
+	for index, row := range uniqueStockItems[startIndex:endIndex] {
 		rowIndex := startIndex + index
 		rawSymbol := hithinkFieldString(row, "thscode")
 		symbol, symbolErr := hithinkDomesticSymbol(rawSymbol)
