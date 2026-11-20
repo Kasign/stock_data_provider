@@ -787,7 +787,11 @@ func TestLiveHithinkDailyBarsBackwardRaw(t *testing.T) {
 		t.Fatalf("marshal Hithink adjustment evidence report: %v", err)
 	}
 	t.Logf("LIVE_HITHINK_ADJUSTMENT_REPORT_BEGIN\n%s\nLIVE_HITHINK_ADJUSTMENT_REPORT_END", encoded)
-	if writeErr := os.WriteFile("live-historical-probe-report.json", append(encoded, '\n'), 0o644); writeErr != nil {
+	outputPath := strings.TrimSpace(os.Getenv("LIVE_HITHINK_ADJUSTMENT_REPORT_PATH"))
+	if outputPath == "" {
+		outputPath = "../../../live-historical-probe-report.json"
+	}
+	if writeErr := os.WriteFile(outputPath, append(encoded, '\n'), 0o644); writeErr != nil {
 		t.Errorf("write Hithink adjustment evidence report: %v", writeErr)
 	}
 }

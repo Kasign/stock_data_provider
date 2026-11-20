@@ -1337,3 +1337,13 @@ Go suite 覆盖根模块、go-core、market-data 的格式/测试/race/vet、Mar
 - 该 Run 的提交消息只有 `[include_public]`，没有包含 `[hithink_daily_bars_single_window]` 和 `[hithink_daily_bars_backward_raw]` 两个专项 marker，因此 Hithink 步骤按既有条件被跳过。前序公共探针的 Eastmoney 502、NetEase DNS/502 是独立失败，不是 Hithink 专项跳过的直接原因。
 - 不修改 workflow 的失败门禁或步骤依赖；下一次提交显式带上 Hithink 两个 marker，独立运行目标专项。
 
+## 79. 2026-11-20 Hithink 三模式实测结果与独立 Provider 对账准备
+
+- Hithink Live Provider Run `44717136289`（代码 SHA `d22181f60f9752663fe70d991cea9c2014a56a86`）的 raw probe 成功，取得 600519.SH 在 2026-10-13..2026-11-12 的 none / forward / backward 各 23 条原始记录。
+- none 与 forward 逐字段相同；backward Volume/raw Volume 在 23 天恒为约 0.177690396937716（反向倍率 5.627766144）；backward Turnover 与 raw 完全相同。
+- backward OHLC 同日四字段倍率不一致，最大相对离散度约 0.6736%，与 Issue #76 已确认的问题形态相符。Volume 倍率也不是当天价格倍率的倒数。
+- Hithink 单窗口标准化测试因 backward fractional Volume 失败；raw probe 成功。未修改生产适配器或整数 shares 契约。
+- 报告 JSON 已在 workflow 日志完整输出，但第一次 artifact 上传未找到文件；原因是相对路径写入 provider 包工作目录，而上传步骤从仓库根目录查找。下一提交将显式注入仓库根目录输出路径。
+- 下一步复用既有 TestLivePytdxHistoricalDailyBars，增加 marker 控制的 600519.SH 同区间输入，取得 Pytdx none/qfq/hfq 与 BaoStock raw 对照；不新增第二套行情探针。Tushare adj_factor / corporate-actions 权限问题继续记为 permission_required，不用跳过状态冒充通过。
+- 该 SHA 的 Go Test Suite 与 Integration CI 在本记录生成时仍在执行；待最终结果回填。
+
