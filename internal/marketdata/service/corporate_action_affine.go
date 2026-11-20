@@ -306,7 +306,7 @@ func buildCorporateActionAdjustmentFactors(
 		sort.Strings(hashes)
 		out = append(out, model.AdjustmentFactor{
 			Symbol: symbol, TradeDate: bar.TradeDate, Factor: transform.PriceScale,
-			PriceOffsetCNY: corporateActionAffineFloatPointer(transform.PriceOffsetCNY),
+			PriceOffsetCNY:         corporateActionAffineFloatPointer(transform.PriceOffsetCNY),
 			Basis:                  model.AdjustmentFactorShared,
 			Source:                 rawSource,
 			SourceVersion:          rawVersion,
