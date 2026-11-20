@@ -64,3 +64,13 @@ Quant 不在 `internal/quant/**` 实现 SQL/Redis、通用 Storage、认证、�
 - `GetResult.Execute` 已覆盖 PrincipalResolver、可信 Clock、授权 Reader 返回后的取消检查；本轮补齐 Auditor 回调返回后的取消检查。
 - 精确 SHA `0a10cb08daa7dcedc6707349ab96d576472bf7a0` 的完整 Integration CI Run [44661192496](https://github.com/Kasign/stock_data_provider/actions/runs/44661192496) 全项 success。
 - 该取消传播子项 CLOSED，不改变跨模块责任：生产 Repository/事务/Migration、可信授权 Reader 和 AccessAuditor 持久化仍由 Server/Platform 装配与验收。
+
+
+## RepairAll QNT-013 生产链路复核更新（2026-11-20）
+
+- 最新复核基线：repair_all HEAD `487edf052b44721d5b8ba3c5429e5d200ec24772`；代码验收基线 `0a10cb08daa7dcedc6707349ab96d576472bf7a0` 的 Integration CI Run [44661192496](https://github.com/Kasign/stock_data_provider/actions/runs/44661192496) 全项 success。
+- 已核查 `internal/quant/result`、`internal/quant/application`、Server Bootstrap、Migration Registry、Researchflow Composition/Runtime：目前仍只有 Save Port/MemoryRepository 和 GetResult 授权读取 Port；无生产 SQL Repository、Quant Migration、PrincipalResolver/AuthorizedResultReader/AccessAuditor Adapter，也无 Root DI。
+- Server Migration Registry 没有 Quant namespace；不能通过空注册或 Server 自建 SQL 表绕过模块存储归属。Quant 需要提供模块拥有的持久化定义/接口，Server 负责组合注入，Platform 提供公共事务/Storage 原语。
+- 当前 `GetResult` 的用途为 `quant_analysis`、内容级别 `full`。但授权策略 Owner、subject_ref 可信映射、策略撤销的线性化边界、审计保留和失败处置尚无可据以实现的生产契约/决议。不得默认 Allow，不得把 Owner Session 身份直接当成 Quant 资源授权。
+- 解锁顺序：① Quant/项目契约 Owner 明确策略 Owner、策略快照读取/撤销一致性和审计语义；② Quant/Server/Platform 按现有 Port 与模块边界实现生产 Repository、Migration、Principal/Authorized Reader/Audit Adapter；③ Server Root 注入并做 MariaDB 并发/冲突/撤销竞态/审计失败集成验收；④ 具备明确真实消费场景后再接 Researchflow Quant Stage。
+- QNT-013 模块内取消传播子项已 CLOSED；生产闭环仍 OPEN。QNT-014 Facade 与 Researchflow Stage 不因本次复核提前开放。
