@@ -906,8 +906,10 @@ func (p *TickFlow) FetchSectorRankings(ctx context.Context, rawCategory string, 
 		return nil, fmt.Errorf("TickFlow SW1 detail coverage mismatch: returned=%d requested=%d", len(details), len(sw1IDs))
 	}
 
+	// Universe ID is the stable identity. Display names are not guaranteed unique
+	// in the upstream catalog and must never be used as a grouping key.
 	industrySymbols := make(map[string]map[string]struct{}, len(sw1IDs))
-	industryIDs := make(map[string]string, len(sw1IDs))
+	industryNames := make(map[string]string, len(sw1IDs))
 	symbolIndustry := make(map[string]string, shareUniverse.SymbolCount)
 	for _, id := range sw1IDs {
 		summary := summaries[id]
@@ -930,12 +932,12 @@ func (p *TickFlow) FetchSectorRankings(ctx context.Context, rawCategory string, 
 		if name == "" {
 			return nil, fmt.Errorf("TickFlow SW1 universe %s has no industry name", id)
 		}
-		if existingID, exists := industryIDs[name]; exists && existingID != id {
-			return nil, fmt.Errorf("TickFlow SW1 universe IDs %s and %s share the same industry name %q", existingID, id, name)
+		if existingName, exists := industryNames[id]; exists && existingName != name {
+			return nil, fmt.Errorf("TickFlow SW1 universe %s changed industry name within one snapshot: %q != %q", id, existingName, name)
 		}
-		if _, exists := industrySymbols[name]; !exists {
-			industrySymbols[name] = make(map[string]struct{}, len(detail.Symbols))
-			industryIDs[name] = id
+		if _, exists := industrySymbols[id]; !exists {
+			industrySymbols[id] = make(map[string]struct{}, len(detail.Symbols))
+			industryNames[id] = name
 		}
 		seenIndustrySymbols := make(map[string]struct{}, len(detail.Symbols))
 		for _, rawSymbol := range detail.Symbols {
@@ -956,12 +958,12 @@ func (p *TickFlow) FetchSectorRankings(ctx context.Context, rawCategory string, 
 			if _, allowed := expectedSymbols[symbol]; !allowed {
 				return nil, fmt.Errorf("TickFlow SW1 universe %s includes symbol %s outside CN_Equity_A", id, symbol)
 			}
-			if previousIndustry, exists := symbolIndustry[symbol]; exists && previousIndustry != name {
+			if previousIndustryID, exists := symbolIndustry[symbol]; exists && previousIndustryID != id {
 				return nil, fmt.Errorf("TickFlow A-share %s belongs to multiple SW1 universes (%s, %s)",
-					symbol, previousIndustry, name)
+					symbol, previousIndustryID, id)
 			}
-			symbolIndustry[symbol] = name
-			industrySymbols[name][symbol] = struct{}{}
+			symbolIndustry[symbol] = id
+			industrySymbols[id][symbol] = struct{}{}
 		}
 	}
 	if len(industrySymbols) == 0 {
@@ -1044,8 +1046,9 @@ func (p *TickFlow) FetchSectorRankings(ctx context.Context, rawCategory string, 
 	}
 	industries := make([]industryValue, 0, len(industrySymbols))
 	industriesWithoutUsableChanges := 0
-	for name, symbols := range industrySymbols {
-		value := industryValue{id: industryIDs[name], name: name}
+	for id, symbols := range industrySymbols {
+		name := industryNames[id]
+		value := industryValue{id: id, name: name}
 		for symbol := range symbols {
 			quote := quotesBySymbol[symbol]
 			last, prev := quote.LastPrice, quote.PrevClose
@@ -1091,6 +1094,9 @@ func (p *TickFlow) FetchSectorRankings(ctx context.Context, rawCategory string, 
 		left := industries[i].changeTotal / float64(industries[i].changeCount)
 		right := industries[j].changeTotal / float64(industries[j].changeCount)
 		if left == right {
+			if industries[i].name == industries[j].name {
+				return industries[i].id < industries[j].id
+			}
 			return industries[i].name < industries[j].name
 		}
 		return left > right
