@@ -102,7 +102,7 @@ jobs:
 
   market-data-module-test:
     timeout-minutes: 20
-    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'feat/data') || (github.event_name == 'push' && github.ref == 'refs/heads/feat/data') }}
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'feat/data') || (github.event_name == 'push' && (github.ref == 'refs/heads/feat/data' || github.ref == 'refs/heads/repair_all')) }}
     name: Test Market Data in root module
     runs-on: ubuntu-latest
     steps:
@@ -128,7 +128,7 @@ jobs:
         run: go vet ./internal/marketdata/...
 
   market-data-mariadb-integration:
-    if: ${{ github.event_name != 'push' || github.ref == 'refs/heads/feat/data' }}
+    if: ${{ github.event_name != 'push' || github.ref == 'refs/heads/feat/data' || github.ref == 'refs/heads/repair_all' }}
     name: Market-data MariaDB migration and PIT persistence
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -187,7 +187,7 @@ jobs:
         run: go test ./internal/marketdata/httpapi -run TestProviderProbeHTTPMariaDBEndToEnd -count=1 -v
 
   news-mariadb-integration:
-    if: ${{ github.event_name != 'push' || github.ref == 'refs/heads/feat/news' }}
+    if: ${{ github.event_name != 'push' || github.ref == 'refs/heads/feat/news' || github.ref == 'refs/heads/repair_all' }}
     name: News MariaDB Repository and Migration integration
     runs-on: ubuntu-latest
     timeout-minutes: 15
