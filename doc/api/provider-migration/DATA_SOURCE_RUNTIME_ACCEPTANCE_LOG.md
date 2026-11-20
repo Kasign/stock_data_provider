@@ -1284,3 +1284,20 @@ Go suite 覆盖根模块、go-core、market-data 的格式/测试/race/vet、Mar
 - 新增回归测试覆盖 weekday estimate：没有 CalendarRef 时，Reader 必须返回 degraded Snapshot/Bar；真实 BaoStock Application Port 测试要求返回持久化 `data_calendar:sha256:` 引用，并保留 Decimal 精度证据。
 - 真实公共 Provider 样本再次确认：Sina/Tencent 日线缺少可核实 Amount 字段，保持 degraded；Tencent 日线 Volume 原始单位为 hands，归一化 shares 仍带推断质量原因；Eastmoney/BaoStock Amount 可比较，但前复权 reference date 未验证的样本继续 degraded。没有通过补值、舍入或降低质量阈值消除这些问题。
 - 本次仅收紧 V2 日历证据判定，不修改 Provider 数据、交易日历估算逻辑或字段质量门槛。DATA-CTR-005/007 仍 deferred。
+
+## 75. 2026-11-20 全量真实 Provider 复验（Run 44703026046）
+
+- 验收 SHA：`d4806fa18f3e5178507694c02aa708992cc196f9`；[Live Provider Run 44703026046](https://github.com/Kasign/stock_data_provider/actions/runs/44703026046)，最终结论 failure（严格真实探针，不代表 Go/集成 CI 失败）。[Go Test Suite 44703026082](https://github.com/Kasign/stock_data_provider/actions/runs/44703026082) 与 [Full Integration Checks 44703026242](https://github.com/Kasign/stock_data_provider/actions/runs/44703026242) 均 success。
+- Key/权限结论：
+  - MX 请求已带 API Key Header，服务端返回业务码 114「API 密钥不存在或已失效」；当前 Actions 注入的值无效或与 MX 当前密钥不匹配。
+  - Tushare 请求到达服务端，但 `stock_basic`、`trade_cal`、`daily`、`fina_indicator`、`adj_factor`、`dividend`、`suspend_d` 等接口返回 40203 权限不足。Token 已被请求使用，但不能据此认为这些接口已授权。探针正确标记 `permission_required`，不是凭据缺失。
+  - TickFlow Quote 与 Index Quotes 通过；Market Breadth、Sector Rankings 返回 403 `NO_UNIVERSE_PERMISSION`，分类为 `permission_required`。
+  - Hithink Key 可用；Quote、指数、目录、成分、估值、交易日历、涨停池及部分日线/财务能力均有真实响应。Backward-adjusted DailyBars 因成交量小数无法满足当前整数 shares 契约而没有有效 Bar；龙虎榜出现 `stock_count=36`、`stock_items=40`，后续修复为先按证券代码去重，再按唯一证券数校验和分页。2025 年报原始资产负债表披露日期返回 2026-10-31，与官方 2026-04-17 不符，保持质量降级，不覆盖为官方日期。
+  - BaoStock 本轮 600036.SH 历史探针遇到 TCP 超时；002982.SZ 历史探针已持久化，状态 degraded。独立的官方停牌日和复权因子一致性测试通过，说明 BaoStock 是间歇网络失败，不能概括为 Key 或 Provider 全面不可用。
+  - Pytdx 历史日线、与 BaoStock 公司行为一致性、官方盘中停牌日期日线测试均通过。Eastmoney/Tencent 复权参考证据专项通过，但部分前复权参考日期缺失仍降级。
+  - Netease 行情域名 DNS 解析失败，历史接口返回 HTTP 502；Sina/Tencent/Yahoo 等能返回真实日线，但缺少可核实 Amount 的样本保持 degraded，不用于成交额分析。
+- 历史 Provider Probe 对 600036.SH 为 failed（BaoStock 连接超时，3 项失败、10 项降级、2 项不支持）；002982.SZ 为 degraded（已持久化，4 项 returned、9 项 degraded、2 项不支持）。不能把跨 Provider 不可比较样本当成价格/复权不一致结论。
+- 后续代码修复：
+  - Data V2 日历质量状态检查不仅要求 CalendarRef，还要求 `CalendarQualityStatus=valid`；即使 warning 列表为空，只要日历状态 degraded，也清除可信引用并降级 Snapshot/Bar。
+  - Hithink 龙虎榜先按 thscode 去重，再按唯一证券数分页；保留 `SourceReturned` 原始事件行数、重复行诊断，并继续严格校验声明唯一证券数。
+  - Quant 读取审计事件持久化可信 Researchflow RunRef。Migration v3 对历史记录保留 NULL，新审计写入强制要求 RunRef。

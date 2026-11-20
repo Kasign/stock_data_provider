@@ -648,3 +648,13 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - Live Provider Run [44702141543](https://github.com/Kasign/stock_data_provider/actions/runs/44702141543)，Job `136172823901`，精确测试 SHA `77bff81d21a5e22d29177a36506192e31d77ba20`，结论 success。该轮公共 Provider 与 DailyBars V2 应用层专项通过；Hithink/MX/Tushare/TickFlow 专项未启用，不记为通过。
 - 真实样本仍显示 Sina/Tencent 日线 Amount 缺失、Tencent Volume 原始单位为 hands、Eastmoney/BaoStock 前复权参考日期缺证据；均保持 degraded/not_comparable，不通过补值或放宽门槛处理。
 - 本节记录后续将以全量 marker 重新执行 MX、Hithink、Tushare、TickFlow 和历史专项，以验证当前代码版本下的实际 Key/权限状态。
+
+### 31.6 全量真实 Provider 复验、Data 证据修正与 Quant Run 审计（2026-11-20）
+
+- SHA `d4806fa18f3e5178507694c02aa708992cc196f9` 的 Go Test Suite 与 Full Integration Checks 均成功；Live Provider Run [44703026046](https://github.com/Kasign/stock_data_provider/actions/runs/44703026046) 严格失败，详细证据已记录在 `doc/api/provider-migration/DATA_SOURCE_RUNTIME_ACCEPTANCE_LOG.md`。
+- 真实 Key 状态已区分：MX Header 已带 Key 但业务码 114 表示 Key 无效；Tushare 多接口 40203 表示接口未授权；TickFlow 行情/指数可用但 Universe 权限不足；Hithink 多能力可用；BaoStock 存在间歇 TCP 超时；Pytdx 历史及停牌样本通过。
+- Data V2 同时验证日历引用和 `CalendarQualityStatus`，无引用或日历状态 degraded 均 fail-closed；新增 warning 缺失场景回归测试。
+- Hithink 龙虎榜源端 `stock_count` 是唯一证券数，`stock_items` 是事件行，重复证券可能因多个上榜原因重复出现。现按 thscode 去重后再分页，保留原始行数和重复诊断；新增唯一证券数不一致时仍拒绝的回归测试。
+- Quant 结果读取继续要求可信 Researchflow RunRef；新增 Quant access audit Migration v3，将 RunRef 持久化到每条读取审计事件。历史审计无法反向推导 RunRef，迁移后旧记录保持 NULL；新审计写入缺失 RunRef 时拒绝。
+- Quant 的 AuthorizedResultReader 仍需在未来 Quant Stage Provider 接入时，按 RunRef + ResultID 查询 Researchflow 持久化的明确关联。当前尚无该 Stage Provider/关联资源契约，不得用主体级全局放行替代。
+- 新提交 `d1286b1` 触发 Hithink 与 DailyBars V2 定向真实复验；结果待 CI/Live Probe 完成后补记。
