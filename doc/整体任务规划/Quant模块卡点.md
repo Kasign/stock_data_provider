@@ -94,3 +94,12 @@ Quant 不在 `internal/quant/**` 实现 SQL/Redis、通用 Storage、认证、�
 - MariaDB Integration 覆盖重放/等价 JSON/created_at、16 并发写入、损坏行、取消；Integration CI #551 [44664065668](https://github.com/Kasign/stock_data_provider/actions/runs/44664065668) 在精确 SHA `7f1162ba2b6472c4653b108232862f7e9d5af1cd` 上全项 success，Quant MariaDB 四项逐例 PASS 门禁通过。
 - 当前仅结果写入持久化完成，AuthorizedResultReader、PolicySnapshot 当前策略复核/撤销一致性、AccessAuditor 仍未实现；不得把写入能力误报为 QNT-013 完成。
 - 授权语义依 GOV-CTR-006：policy_owner=quant、Researchflow service principal、resource_ref=result_id、purpose=quant_analysis、content_level=full；Quant Golden 进一步固定策略组合为 `policy_type=quant_result_access`、`policy_ref=quant-result-access`（示例版本 `1.0.0`）。仍需该策略的真实规则与可撤销当前版本存储/签发；Golden 示例不等于生产 Allow 规则。可借鉴 News 的不可变版本+当前指针+事务行锁模式，但不可复制 News 领域策略。
+
+
+## 2026-11-20 Quant 模块分支 QNT-013 更新（尚未合并到 repair_all）
+
+- feat/quant 已同步 Quant 自有 MySQLRepository 和 quant namespace Migration v1；后续新增 MySQLAccessAuditor 与 quant_access_audit Migration v2，审计表只追加决策元数据，不保存结果 Payload。
+- Quant module validation Run 44666849911 对精确代码 SHA 160541a316e3c9c621451d0c82b6cd5dfbd1327e 全项 success；Go Test Suite Run 44666849903 同 SHA success。
+- 该实现目前在 feat/quant 分支，未合并到 repair_all；不得据此宣称聚合分支或 Server Root 已具备完整生产链路。
+- QNT-013 仍 OPEN：Policy Payload Schema/真实 Allow-Deny 规则/策略发布权限/版本指针和撤销线性化语义缺失；AuthorizedResultReader 未实现；Server Root 的 Repository/Reader/PrincipalResolver/Auditor 注入未完成。GOV-CTR-006 Golden 不是生产 Allow 规则。
+- Access Audit 保留、查询、归档、删除授权和生产访问控制没有契约/运维决议；当前只完成追加写入，不自行增加清理策略。
