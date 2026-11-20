@@ -911,6 +911,7 @@ func (p *TickFlow) FetchSectorRankings(ctx context.Context, rawCategory string, 
 	industrySymbols := make(map[string]map[string]struct{}, len(sw1IDs))
 	industryNames := make(map[string]string, len(sw1IDs))
 	symbolIndustry := make(map[string]string, shareUniverse.SymbolCount)
+	outsideCurrentAShareSymbols := make(map[string]struct{})
 	for _, id := range sw1IDs {
 		summary := summaries[id]
 		detail, ok := details[id]
@@ -955,14 +956,18 @@ func (p *TickFlow) FetchSectorRankings(ctx context.Context, rawCategory string, 
 				return nil, fmt.Errorf("TickFlow SW1 universe %s contains duplicate constituent %s", id, symbol)
 			}
 			seenIndustrySymbols[symbol] = struct{}{}
-			if _, allowed := expectedSymbols[symbol]; !allowed {
-				return nil, fmt.Errorf("TickFlow SW1 universe %s includes symbol %s outside CN_Equity_A", id, symbol)
-			}
 			if previousIndustryID, exists := symbolIndustry[symbol]; exists && previousIndustryID != id {
 				return nil, fmt.Errorf("TickFlow A-share %s belongs to multiple SW1 universes (%s, %s)",
 					symbol, previousIndustryID, id)
 			}
 			symbolIndustry[symbol] = id
+			if _, allowed := expectedSymbols[symbol]; !allowed {
+				// SW1 memberships can retain delisted securities after the current
+				// A-share universe has removed them. Exclude, count and degrade rather
+				// than aborting the entire current-sector snapshot.
+				outsideCurrentAShareSymbols[symbol] = struct{}{}
+				continue
+			}
 			industrySymbols[id][symbol] = struct{}{}
 		}
 	}
@@ -1104,7 +1109,7 @@ func (p *TickFlow) FetchSectorRankings(ctx context.Context, rawCategory string, 
 	snapshot := &model.SectorRankingSnapshot{
 		Category: category, Total: len(industrySymbols),
 		ProviderReturned: len(industrySymbols), ExcludedRows: industriesWithoutUsableChanges,
-		ExcludedNonAShareCount: len(excludedSymbols),
+		ExcludedNonAShareCount: len(excludedSymbols) + len(outsideCurrentAShareSymbols),
 		Source:                 p.Name(), SourceVersion: tickflowVersion + "-sw1-sector-rankings-v1", FetchedAt: fetchedAt,
 		QualityStatus: model.QualityDegraded,
 		QualityReasons: []string{
@@ -1116,6 +1121,9 @@ func (p *TickFlow) FetchSectorRankings(ctx context.Context, rawCategory string, 
 	}
 	if len(excludedSymbols) > 0 {
 		snapshot.QualityReasons = appendTickflowUniqueReason(snapshot.QualityReasons, "provider_universe_contains_non_common_equities_excluded")
+	}
+	if len(outsideCurrentAShareSymbols) > 0 {
+		snapshot.QualityReasons = appendTickflowUniqueReason(snapshot.QualityReasons, "provider_sw1_constituents_outside_current_a_share_universe_excluded")
 	}
 	if timestampIncomplete {
 		snapshot.QualityReasons = appendTickflowUniqueReason(snapshot.QualityReasons, "one_or_more_quote_timestamps_missing_or_invalid")

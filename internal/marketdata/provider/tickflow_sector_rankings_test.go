@@ -216,7 +216,7 @@ func TestTickFlowFetchSectorRankingsPreservesDistinctUniverseIDsWithDuplicateNam
 		case "/v1/universes":
 			_ = json.NewEncoder(w).Encode(map[string]any{"code": 0, "data": []map[string]any{
 				{"id": "CN_Equity_A", "name": "A股", "symbol_count": 2},
-				{"id": firstID, "name": "SW1农林牧渔", "symbol_count": 1},
+				{"id": firstID, "name": "SW1农林牧渔", "symbol_count": 2},
 				{"id": secondID, "name": "SW1农林牧渔", "symbol_count": 1},
 			}})
 		case "/v1/universes/CN_Equity_A":
@@ -234,7 +234,7 @@ func TestTickFlowFetchSectorRankingsPreservesDistinctUniverseIDsWithDuplicateNam
 				t.Errorf("unexpected universe IDs: %+v", request.IDs)
 			}
 			_ = json.NewEncoder(w).Encode(map[string]any{"code": 0, "data": map[string]any{
-				firstID:  map[string]any{"id": firstID, "symbol_count": 1, "symbols": []string{firstSymbol}},
+				firstID:  map[string]any{"id": firstID, "symbol_count": 2, "symbols": []string{firstSymbol, "600275.SH"}},
 				secondID: map[string]any{"id": secondID, "symbol_count": 1, "symbols": []string{secondSymbol}},
 			}})
 		case "/v1/quotes":
@@ -256,8 +256,9 @@ func TestTickFlowFetchSectorRankingsPreservesDistinctUniverseIDsWithDuplicateNam
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Total != 2 || len(got.Items) != 2 {
-		t.Fatalf("distinct universe IDs with duplicate display names must remain separate: %+v", got)
+	if got.Total != 2 || len(got.Items) != 2 || got.ExcludedNonAShareCount != 1 ||
+		!containsTickFlowReason(got.QualityReasons, "provider_sw1_constituents_outside_current_a_share_universe_excluded") {
+		t.Fatalf("duplicate display names must remain separate and stale delisted constituents must be excluded with evidence: %+v", got)
 	}
 	if got.Items[0].Code != firstID || got.Items[1].Code != secondID ||
 		got.Items[0].Name != "农林牧渔" || got.Items[1].Name != "农林牧渔" {

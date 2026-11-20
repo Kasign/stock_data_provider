@@ -949,9 +949,16 @@ func TestLiveHithinkCapabilities(t *testing.T) {
 			if message := liveProbeDailyContractError(bars, "hithink", "hithink", symbol, adjustment, startDate, endDate, 40); message != "" {
 				return len(bars), "", nil, errLiveProbeContract(message)
 			}
-			if adjustment != model.AdjustmentNone {
+			expectedAdjustmentMethod := ""
+			switch adjustment {
+			case model.AdjustmentForward:
+				expectedAdjustmentMethod = "hithink_api_forward"
+			case model.AdjustmentBackward:
+				expectedAdjustmentMethod = "hithink_api_backward"
+			}
+			if expectedAdjustmentMethod != "" {
 				for _, bar := range bars {
-					if bar.AdjustmentMethod != "hithink_api_"+string(adjustment) {
+					if bar.AdjustmentMethod != expectedAdjustmentMethod {
 						return len(bars), "", nil, errLiveProbeContract(capability + " adjustment method metadata mismatch")
 					}
 				}
