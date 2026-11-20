@@ -85,3 +85,12 @@ Quant 不在 `internal/quant/**` 实现 SQL/Redis、通用 Storage、认证、�
 - 授权读取和 Access Audit 不得并入 Save Repository。AuthorizedResultReader 需策略快照与结果读取一致性边界；AccessAuditor 写入失败必须拒绝释放结果。
 - GOV-CTR-006 已明确授权 Owner 和主体/资源/用途映射；尚缺 Quant Owner 策略规则/持久化/签发、当前策略复核与撤销竞态实现，以及审计保留/失败处置。生产授权 Reader 不得先行伪实现。
 - 当前结论：持久化设计审查完成；SQL Schema/Adapter/Migration 未实现；QNT-013 生产闭环继续 OPEN。下一步核对 GOV-CTR-006 和 Platform Authorization 已有能力，避免重复建设。
+
+
+## RepairAll QNT-013 结果存储实现更新（2026-11-20）
+
+- Quant 已新增模块自有 `internal/quant/storage`：MariaDB `MySQLRepository.Save` 与 `quant` namespace Migration；Server 仅注册 Migration，Platform 复用现有连接池和 Migration Runner。
+- Save 已按不可变内容寻址语义实现：写入前验证 Manifest/Payload；DB 主键负责并发仲裁；重复写入验证存储记录完整性和两个指纹；同内容幂等，不覆盖首次创建时间；异内容冲突；损坏行拒绝。
+- MariaDB Integration 覆盖重放/等价 JSON/created_at、16 并发写入、损坏行、取消；Integration CI 对四项顶层用例增加逐项 PASS 门禁。
+- 当前仅结果写入持久化完成，AuthorizedResultReader、PolicySnapshot 当前策略复核/撤销一致性、AccessAuditor 仍未实现；不得把写入能力误报为 QNT-013 完成。
+- 授权语义依 GOV-CTR-006：policy_owner=quant、Researchflow service principal、resource_ref=result_id、purpose=quant_analysis、content_level=full。仍需 Quant Owner 具体策略规则与可撤销当前版本存储/签发；可借鉴 News 的不可变版本+当前指针+事务行锁模式，但不可复制 News 领域策略。
