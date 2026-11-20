@@ -162,7 +162,7 @@ jobs:
         env:
           MARKET_DATA_LIVE_BAOSTOCK_TRADE_STATUS_TESTS: "1"
         continue-on-error: ${{ !(github.event_name == 'push' && github.ref == 'refs/heads/repair_all') }}
-        run: go test -run '^TestLiveBaoStockTradeStatusOnOfficialSuspensionWindow
+        run: go test -run '^TestLiveBaoStockTradeStatusOnOfficialSuspensionWindow$' -count=1 -v ./internal/marketdata/provider
       - name: Probe BaoStock historical adjustment-factor consistency
         if: always() && github.event_name == 'push' && contains(github.event.head_commit.message, '[historical_baostock_factors]')
         env:
