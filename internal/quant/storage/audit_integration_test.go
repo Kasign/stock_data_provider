@@ -53,7 +53,7 @@ func TestMySQLAccessAuditorRejectsInvalidEventAndCancellation(t *testing.T) {
 		t.Fatal(err)
 	}
 	valid := application.AccessAuditEvent{
-		SubjectRef: "service:researchflow",
+		SubjectRef:  "service:researchflow",
 		ResourceRef: "quant_result:sha256:" + strings.Repeat("b", 64),
 		PurposeCode: "quant_analysis",
 		Decision:    "denied",
