@@ -575,3 +575,26 @@ RA009 代码关闭条件已满足：Server 路由认证矩阵、CSRF、WebUI 请
 - Platform 当前没有确认的本地 P0/P1/P2 代码任务；Research、LLM、Notification、WebUI 当前也没有可以无前置条件独立闭环的新业务代码任务。保持 NO_LOCAL_TASK / WAIT_DEPENDENCY 不等于模块完成生产验收。
 - 执行顺序：先模块分支基线差异复核，再生产者接口/实现，后消费者适配，再 Server Root 装配，最后 repair_all 跨模块集成。共享 Bootstrap、Migration Registry、go.mod/go.sum 和项目契约登记簿必须有唯一修改 Owner。
 - 本轮只修改治理文档，未修改生产代码、未切换分支、未对其他模块分支写入；模块分支修复从后续任务批次开始，不能把本次规划提交视为模块分支已同步。
+
+
+## 30. 模块分支独立修复启动与首批基线同步（2026-11-20）
+
+### 已完成的分支工作
+
+- Platform：将 repair_all 已有的 Storage MigrationOperation、ValidateAppliedMigrations 公共能力同步到 feat/platform。精确代码 SHA b7c8bc6cb014cc7fba0393195dbb0a79eb9677a2，Platform Go checks Run 44667242918 的 Platform packages/Storage integration 均 success。随后更新 Platform 文档。
+- Platform → Data 依赖同步：PR #91 已合并，合并提交 753d6af6a1a3aa2bd7cef2addc672e0510c73ee2；Data 分支获得 Platform 公共 Migration 能力，不复制第二套实现。
+- Data：将 repair_all 中 Data 自有目录 internal/marketdata/**、doc/api/** 选择性同步到 feat/data，共 65 个文件变更；两分支这些路径的 Blob SHA 已逐项核对一致。同步提交 5b98ae1abbf0e04fa4c275b15f78087b0481c0f1；删除已迁入根 Go Module 的 cmd/market-data 和 services/market-data 旧独立服务文件。文档随后更新到 feat/data。
+- Data 精确 SHA 5b98ae1abbf0e04fa4c275b15f78087b0481c0f1：根模块 Test . success，Market-data MariaDB migration/PIT persistence success；Data quality contract regression Run 44667706278 success。Live Provider Probe Run 44667706203 虽 workflow success，但 11 个真实 Provider 专项全部 skipped，不能解除 DATA-003～DATA-007 外部证据阻塞。
+- Data Go Test Suite Run 44667706336 最终 failure 的两个 Job 均为过时共享 Workflow：一次性迁移 Job 仍引用已删除 cmd/market-data；Market Data 模块测试的 gofmt/test 路径也仍包含该目录。根模块测试本身通过。该问题登记为 CI-01，由 repair_all 集成/CI 治理负责，不归 Data 模块自行修改共享 Workflow。
+- Quant：将 Quant 自有 MySQLRepository、quant namespace Migration v1、MySQLAccessAuditor、quant_access_audit Migration v2 和 MariaDB 集成测试同步到 feat/quant；Quant CI 增加 MariaDB 服务和显式未跳过测试步骤。精确代码 SHA 160541a316e3c9c621451d0c82b6cd5dfbd1327e 的 Quant module validation Run 44666849911 全项 success；Go Test Suite Run 44666849903 同 SHA success。
+
+### 当前模块状态
+
+- Platform：公共 Storage 能力已回到模块分支，当前没有新的本地 P0/P1/P2 功能任务。
+- Data：模块代码/文档基线已同步；DATA-003～DATA-007 仍等待真实 Provider、业务时效规则或 Go/Python 双侧样本；DATA-008 继续 deferred。
+- Quant：结果不可变写入和 AccessAuditor 首版已在 feat/quant 通过 CI；QNT-013 仍缺 Policy Owner 生产规则/版本签发/撤销一致性、AuthorizedResultReader 和 Server Root 注入。GOV-CTR-006 Golden 不能当生产 Allow 规则；具体缺失输入已写入 Quant 模块依赖文档。
+- Researchflow、Server、News、Research、LLM、Notification、WebUI 尚未开始本轮模块代码回迁/修复，按模块任务拆分计划继续。
+
+### 新增跨模块卡点
+
+CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性迁移 Job 和 cmd/market-data 路径。唯一主责为 repair_all 集成/CI 治理；删除一次性迁移步骤、更新模块测试路径并在精确 SHA 上重跑 Go Test Suite。不得在 Data 分支绕过或局部伪造通过。
