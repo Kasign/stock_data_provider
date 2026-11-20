@@ -835,7 +835,8 @@ try {
         try { return JSON.parse(localStorage.getItem("stock-provider-webui.settings.v1") || "{}"); }
         catch { return {}; }
       });
-      assert.equal(savedSettings.apiKey, "browser-test-key", "the isolated API-error scenario must load its test API key");
+      assert.deepEqual(savedSettings, { marketBase: "/api", analysisBase: "/api" },
+        "legacy browser API keys and custom origins must be stripped in favor of the fixed Root Server API path");
 
       // Date range controls are intentionally hidden at narrow widths; set their values while submitting via the visible form button.
       await page.evaluate(() => {
