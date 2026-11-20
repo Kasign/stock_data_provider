@@ -12,7 +12,7 @@ import (
 )
 
 var (
-	ErrInvalidAuditEvent = errors.New("quant access audit event is invalid")
+	ErrInvalidAuditEvent     = errors.New("quant access audit event is invalid")
 	ErrAuditStoreUnavailable = errors.New("quant access audit storage is unavailable")
 )
 
