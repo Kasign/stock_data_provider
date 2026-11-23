@@ -409,6 +409,37 @@ ON market_data_adjustment_factor_versions (symbol, trade_date, source, source_ve
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 			},
 		},
+		{
+			Version: 8, Description: "immutable Data authorization decisions and append-only revocations",
+			Statements: []string{
+				`CREATE TABLE IF NOT EXISTS market_data_authorization_decisions (
+ authorization_ref VARCHAR(256) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
+ subject_ref VARCHAR(256) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
+ resource_ref VARCHAR(256) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
+ purpose_code VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ policy_version VARCHAR(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
+ decided_at DATETIME(6) NOT NULL,
+ expires_at DATETIME(6) NULL,
+ decision_fingerprint CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ authorization_json LONGTEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
+ policy_snapshot_json LONGTEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
+ record_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ PRIMARY KEY (authorization_ref),
+ KEY idx_market_data_auth_subject_resource (subject_ref, resource_ref, purpose_code),
+ KEY idx_market_data_auth_expiry (expires_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+				`CREATE TABLE IF NOT EXISTS market_data_authorization_revocations (
+ authorization_ref VARCHAR(256) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
+ revoked_at DATETIME(6) NOT NULL,
+ revoked_by VARCHAR(256) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
+ reason_code VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ PRIMARY KEY (authorization_ref),
+ KEY idx_market_data_auth_revoked_at (revoked_at),
+ CONSTRAINT fk_market_data_auth_revocation_decision
+ FOREIGN KEY (authorization_ref) REFERENCES market_data_authorization_decisions (authorization_ref)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+			},
+		},
 	}
 }
 

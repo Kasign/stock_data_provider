@@ -409,3 +409,11 @@ Root Server 的 Data Module 构造、共享资源注入、Migration Registry、I
 - 新增 Data Owner 专属授权策略模型，固定首批策略身份 `data_access / dailybars-v2-access`，策略状态支持 approved/restricted/pending/revoked；策略必须显式列出允许主体、用途和所需 Scope，空集合拒绝，不存在默认 allow。
 - 新增 Migration V7：不可变 `market_data_authorization_policy_versions` 与 `market_data_current_authorization_policy_versions`。策略版本写入与当前指针切换在同一 MariaDB 事务内完成；相同版本不同载荷冲突拒绝；当前版本读取会复算 payload SHA-256 并重新校验策略内容。
 - 当前没有自动写入任何默认策略。生产授权在显式发布符合策略的版本前保持 fail closed。授权快照签发、撤销引用和原子读取门禁仍待后续阶段。
+## 2026-11-23 Data AuthorizationRef 不可变记录与撤销存储
+
+- 新增 Migration V8：`market_data_authorization_decisions` 保存完整 GOV-CTR-006 AuthorizationRef 与对应 Policy Snapshot；`market_data_authorization_revocations` 独立追加撤销状态，通过外键绑定原授权记录，不修改历史授权原件。
+- 新增 Repository 操作：`AppendDataAuthorizationDecision`、`GetDataAuthorizationDecision`、`RevokeDataAuthorizationDecision`。授权写入幂等且内容冲突拒绝；读取时重新验证 GOV-CTR-006 决策指纹、规范 JSON、记录哈希及撤销状态；撤销写入幂等，重复撤销内容不一致时拒绝。
+- 决策持久化仅接受 Data Owner、allowed、full、首批三种用途、明确主体和 `data_snapshot:sha256:` 资源引用；不接收 denied/conditional 作为可消费授权。
+- V8 表结构已加入 Data 物理 Schema 检查。新增负向单测覆盖空授权、非 allowed 决策和不允许用途。
+- 这一步只完成授权记录与撤销的持久化边界，不代表授权签发器或生产读取入口已完成。调用方仍必须先执行当前策略评估；读取时还需检查当前策略版本、有效期、主体/资源/用途匹配，并在同一授权边界内读取 Snapshot Payload。
+- 当前 Root Server 尚未启用 Service Credentials；不能将 `researchflow` / `quant` 字符串直接作为可信 Principal。服务身份注入需待真实配置完成，Owner Session 的策略映射也必须以实际 Principal Scope 语义为依据。
