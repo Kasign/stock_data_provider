@@ -250,7 +250,7 @@ func TestQuantResultEnvelopeSchemaAcceptsIndicatorPayload(t *testing.T) {
 		"input_snapshot_refs":    []string{"data_snapshot:sha256:" + strings.Repeat("b", 64)},
 		"quality_status":         "valid",
 		"result_status":          "completed",
-		"authorization_ref":       "authorization-ref:current",
+		"authorization_ref":      "authorization-ref:current",
 		"payload_schema_version": "1.0.0",
 		"payload": map[string]any{
 			"indicator_code": "sma",
@@ -264,7 +264,9 @@ func TestQuantResultEnvelopeSchemaAcceptsIndicatorPayload(t *testing.T) {
 		},
 	}
 	encoded, err := json.Marshal(instance)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := validateJSONSchemaInstance(schema, encoded); err != nil {
 		t.Fatalf("Indicator Envelope rejected by QNT-CTR-004 Schema: %v", err)
 	}

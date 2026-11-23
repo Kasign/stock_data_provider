@@ -498,7 +498,7 @@ func TestEnvelopePreservesExplicitEmptySnapshotRefs(t *testing.T) {
 		t.Fatalf("round-tripped Envelope does not match Manifest: %v", err)
 	}
 }
- 
+
 func TestIndicatorPayloadBuildsImmutableRecordAndEnvelope(t *testing.T) {
 	count := 5
 	payload, err := NewIndicatorPayload("sma", []metric.Metric{{
