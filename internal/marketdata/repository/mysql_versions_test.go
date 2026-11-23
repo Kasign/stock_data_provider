@@ -193,8 +193,8 @@ func TestFundamentalsRevisionHashNormalizesEquivalentOffsetInstants(t *testing.T
 
 func TestMarketDataMigrationDefinitionsExposeImmutableVersionedHistory(t *testing.T) {
 	migrations := MigrationDefinitions()
-	if len(migrations) != 8 {
-		t.Fatalf("migration count = %d, want V1-V6, immutable authorization policy V7 and decisions/revocations V8", len(migrations))
+	if len(migrations) != 9 {
+		t.Fatalf("migration count = %d, want V1-V6, authorization policy V7, decisions/revocations V8 and publication audit V9", len(migrations))
 	}
 	for index := 0; index < 3; index++ {
 		if migrations[index].Version != uint64(index+1) || len(migrations[index].Statements) == 0 || len(migrations[index].Operations) != 0 {
