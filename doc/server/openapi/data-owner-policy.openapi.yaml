@@ -1,0 +1,118 @@
+openapi: 3.1.0
+info:
+  title: SRV-CTR-003 Data Owner Policy Management API
+  version: 1.0.0
+  description: Owner Session only management API for immutable DailyBars v2 access policy versions.
+servers:
+  - url: /
+security: []
+paths:
+  /api/v1/owner/data/daily-bars-access-policy:
+    get:
+      operationId: getDailyBarsAccessPolicy
+      summary: Read current DailyBars v2 access policy
+      security:
+        - OwnerSessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+      responses:
+        '200':
+          description: Current immutable policy version.
+          headers:
+            Cache-Control: { schema: { type: string, const: no-store } }
+            X-Content-Type-Options: { schema: { type: string, const: nosniff } }
+          content:
+            application/json:
+              schema:
+                $ref: '../schema/SRV-CTR-003/data-policy-current-response-1.0.0.schema.json'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotPublished' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /api/v1/owner/data/daily-bars-access-policy/versions:
+    post:
+      operationId: publishDailyBarsAccessPolicyVersion
+      summary: Create and publish a new immutable policy version
+      description: Uses expected_current_version CAS. A successful request creates a new version; historical version IDs cannot be reused.
+      security:
+        - OwnerSessionCookie: []
+          OwnerSessionCSRF: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+        - $ref: '#/components/parameters/CSRFToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '../schema/SRV-CTR-003/data-policy-publish-request-1.0.0.schema.json'
+      responses:
+        '201':
+          description: New immutable policy version published.
+          headers:
+            Cache-Control: { schema: { type: string, const: no-store } }
+            X-Content-Type-Options: { schema: { type: string, const: nosniff } }
+          content:
+            application/json:
+              schema:
+                $ref: '../schema/SRV-CTR-003/data-policy-current-response-1.0.0.schema.json'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+components:
+  securitySchemes:
+    OwnerSessionCookie:
+      type: apiKey
+      in: cookie
+      name: __Secure-owner_session
+      description: SRV-CTR-002 HttpOnly Owner Session cookie. Owner Bearer and Service Bearer are not accepted.
+    OwnerSessionCSRF:
+      type: apiKey
+      in: header
+      name: X-CSRF-Token
+  parameters:
+    Origin:
+      name: Origin
+      in: header
+      required: true
+      schema: { type: string, format: uri }
+      description: Must exactly match configured PublicOrigin.
+    CSRFToken:
+      name: X-CSRF-Token
+      in: header
+      required: true
+      schema: { type: string, minLength: 1 }
+      description: Checked atomically by SRV-CTR-002 SessionAuthenticator.
+  responses:
+    BadRequest:
+      description: Invalid JSON or policy.
+      content:
+        application/json:
+          schema: { $ref: './owner-session.openapi.yaml#/components/schemas/ErrorEnvelope' }
+    Unauthorized:
+      description: Owner Session is missing, invalid or expired.
+      content:
+        application/json:
+          schema: { $ref: './owner-session.openapi.yaml#/components/schemas/ErrorEnvelope' }
+    Forbidden:
+      description: Origin, Host or CSRF validation failed, or Owner Session principal is not valid.
+      content:
+        application/json:
+          schema: { $ref: './owner-session.openapi.yaml#/components/schemas/ErrorEnvelope' }
+    NotPublished:
+      description: No current Data authorization policy has been published.
+      content:
+        application/json:
+          schema: { $ref: './owner-session.openapi.yaml#/components/schemas/ErrorEnvelope' }
+    Conflict:
+      description: Expected current version changed or policy version ID was already used.
+      content:
+        application/json:
+          schema: { $ref: './owner-session.openapi.yaml#/components/schemas/ErrorEnvelope' }
+    Unavailable:
+      description: MariaDB or policy storage is unavailable or stored policy failed integrity verification.
+      content:
+        application/json:
+          schema: { $ref: './owner-session.openapi.yaml#/components/schemas/ErrorEnvelope' }

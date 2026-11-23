@@ -1,0 +1,17 @@
+{
+  "schema_version": "1.0.0",
+  "policy_type": "data_access",
+  "policy_ref": "dailybars-v2-access",
+  "policy_version": "policy-v1",
+  "payload_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "created_at": "2026-11-23T12:00:00Z",
+  "policy": {
+    "schema_version": "1.0.0",
+    "status": "approved",
+    "allowed_subjects": ["principal:service:quant"],
+    "allowed_purposes": ["quant_analysis"],
+    "required_scopes": ["data:read"],
+    "effective_at": "2026-11-23T11:59:00Z",
+    "expires_at": null
+  }
+}

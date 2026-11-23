@@ -1,0 +1,14 @@
+{
+  "schema_version": "1.0.0",
+  "expected_current_version": "policy-v1",
+  "policy_version": "policy-v2",
+  "policy": {
+    "schema_version": "1.0.0",
+    "status": "approved",
+    "allowed_subjects": ["principal:service:quant"],
+    "allowed_purposes": ["quant_analysis"],
+    "required_scopes": ["data:read"],
+    "effective_at": "2026-11-23T12:00:00Z",
+    "expires_at": null
+  }
+}
