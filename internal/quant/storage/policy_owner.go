@@ -185,3 +185,42 @@ func loadPolicyVersion(ctx context.Context, queryer policyQueryer, version uint6
 	}
 	return application.ResultAccessPolicyState{Version: version, Enabled: enabled, Snapshot: &snapshot}, nil
 }
+
+
+// WithCurrentResultAccessPolicy keeps the shared policy-head row lock alive
+// for the entire read callback. Publish and revoke use the same row lock, so
+// they cannot linearize between the current-policy check and result lookup.
+func (store *MySQLResultAccessPolicyStore) WithCurrentResultAccessPolicy(
+	ctx context.Context,
+	read func(application.ResultAccessPolicyState) error,
+) error {
+	if store == nil || store.db == nil || ctx == nil || read == nil {
+		return ErrInvalidPolicyStore
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	tx, err := store.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
+	if err != nil {
+		return errors.Join(ErrPolicyStoreUnavailable, err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	state, err := loadCurrentResultAccessPolicy(ctx, tx)
+	if err != nil {
+		return errors.Join(ErrPolicyStoreUnavailable, err)
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := read(state); err != nil {
+		return err
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return errors.Join(ErrPolicyStoreUnavailable, err)
+	}
+	return nil
+}

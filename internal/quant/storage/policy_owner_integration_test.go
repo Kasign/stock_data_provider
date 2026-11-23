@@ -187,3 +187,81 @@ func TestMySQLResultAccessPolicyRejectsNonOwnerActor(t *testing.T) {
 		t.Fatalf("non-owner actor error = %v", err)
 	}
 }
+
+
+func TestMySQLResultAccessPolicyReadGuardSerializesRevoke(t *testing.T) {
+	db := openQuantIntegrationDB(t)
+	db.SetMaxOpenConns(4)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	store, err := NewMySQLResultAccessPolicyStore(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	manager, err := application.NewResultAccessPolicyManager(store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	current, err := manager.Current(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if current.Enabled {
+		current, err = manager.Revoke(ctx, "owner", current.Version)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	published, err := manager.Publish(ctx, "owner", current.Version)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	guard := application.ResultAccessPolicyReadGuard(store)
+	locked := make(chan struct{})
+	release := make(chan struct{})
+	readDone := make(chan error, 1)
+	go func() {
+		readDone <- guard.WithCurrentResultAccessPolicy(ctx, func(state application.ResultAccessPolicyState) error {
+			if !state.Enabled || state.Version != published.Version {
+				return errors.New("read guard did not load the published current policy")
+			}
+			close(locked)
+			<-release
+			return nil
+		})
+	}()
+	<-locked
+
+	revokeStarted := make(chan struct{})
+	revokeDone := make(chan error, 1)
+	go func() {
+		close(revokeStarted)
+		_, revokeErr := manager.Revoke(ctx, "owner", published.Version)
+		revokeDone <- revokeErr
+	}()
+	<-revokeStarted
+
+	select {
+	case revokeErr := <-revokeDone:
+		close(release)
+		t.Fatalf("revoke passed the active read guard before its callback completed: %v", revokeErr)
+	case <-time.After(150 * time.Millisecond):
+	}
+
+	close(release)
+	if err := <-readDone; err != nil {
+		t.Fatalf("read guard: %v", err)
+	}
+	if err := <-revokeDone; err != nil {
+		t.Fatalf("revoke after read guard: %v", err)
+	}
+	revoked, err := manager.Current(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if revoked.Enabled || revoked.Version != published.Version+1 {
+		t.Fatalf("revoke did not advance policy after guarded read: %+v", revoked)
+	}
+}
