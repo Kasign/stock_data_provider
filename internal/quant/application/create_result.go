@@ -9,29 +9,29 @@ import (
 )
 
 var (
-	ErrInvalidCreateResultRequest = errors.New("invalid Quant result creation request")
+	ErrInvalidresultPersisterRequest = errors.New("invalid Quant result creation request")
 	ErrResultPersistenceFailed    = errors.New("Quant result persistence failed")
 )
 
-// CreateResult 是 Quant 结果生产的持久化用例。
+// resultPersister 是 Quant 结果生产的持久化用例。
 // 领域计算由调用方完成；本用例负责将 Quant 强类型 Payload、Manifest 和不可变存储连接起来。
 // 不接受任意 JSON，也不签发访问授权或 Researchflow Run 关联。
-type CreateResult struct {
+type resultPersister struct {
 	repository result.Repository
 }
 
-func NewCreateResult(repository result.Repository) (*CreateResult, error) {
+func NewresultPersister(repository result.Repository) (*resultPersister, error) {
 	if repository == nil {
-		return nil, ErrInvalidCreateResultRequest
+		return nil, ErrInvalidresultPersisterRequest
 	}
-	return &CreateResult{repository: repository}, nil
+	return &resultPersister{repository: repository}, nil
 }
 
-// Execute 持久化一个已完成领域计算的 Quant 结果，并返回内容寻址 Manifest。
+// persist 持久化一个已完成领域计算的 Quant 结果，并返回内容寻址 Manifest。
 // Run→QuantResult 关联由 Researchflow 在提交 Stage Output 时建立，不属于本用例职责。
-func (usecase *CreateResult) Execute(ctx context.Context, input manifest.Input, payload result.Payload) (manifest.Manifest, error) {
+func (usecase *resultPersister) persist(ctx context.Context, input manifest.Input, payload result.Payload) (manifest.Manifest, error) {
 	if usecase == nil || usecase.repository == nil || ctx == nil {
-		return manifest.Manifest{}, ErrInvalidCreateResultRequest
+		return manifest.Manifest{}, ErrInvalidresultPersisterRequest
 	}
 	if err := ctx.Err(); err != nil {
 		return manifest.Manifest{}, err
