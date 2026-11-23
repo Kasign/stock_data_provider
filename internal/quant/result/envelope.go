@@ -573,7 +573,6 @@ func canonicalEnvelopeTime(value string) bool {
 		strings.HasSuffix(value, "Z") && parsed.UTC().Format(time.RFC3339Nano) == value
 }
 
-
 // validateIndicatorManifestMetadata binds every Indicator Metric to the immutable Manifest.
 // Result lifecycle status is derived from the common metric status; it is not inferred from
 // the numeric value or from the algorithm's domain-specific meaning.

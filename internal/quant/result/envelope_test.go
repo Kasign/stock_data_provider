@@ -558,7 +558,9 @@ func TestIndicatorPayloadRejectsManifestContextDrift(t *testing.T) {
 		CalculationVersion: "sma.v1", SampleCount: &count,
 		LowerBound: json.RawMessage("null"), UpperBound: json.RawMessage("null"),
 	}})
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	input := manifest.Input{
 		ResultType: "indicator", Scope: "stock", SecurityID: "600000.SH",
 		Period: "10d", QualityStatus: "valid", ResultStatus: "completed",
