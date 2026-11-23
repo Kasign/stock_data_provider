@@ -27,14 +27,14 @@ func (repository *captureResultRepository) Save(_ context.Context, record result
 func validTrendCreationInput() (manifest.Input, result.TrendPayload) {
 	asOf := "2026-11-23T00:00:00Z"
 	payload, err := result.NewTrendPayload(trend.Result{
-		TrendCode: "trend.daily",
-		Direction: trend.DirectionBullish,
-		Phase: trend.PhaseEmerging,
-		Period: "1d",
-		EvidenceMetrics: []metric.Metric{},
-		ConflictRefs: []string{},
-		QualityStatus: trend.QualityValid,
-		SystemAsOf: asOf,
+		TrendCode:        "trend.daily",
+		Direction:        trend.DirectionBullish,
+		Phase:            trend.PhaseEmerging,
+		Period:           "1d",
+		EvidenceMetrics:  []metric.Metric{},
+		ConflictRefs:     []string{},
+		QualityStatus:    trend.QualityValid,
+		SystemAsOf:       asOf,
 		AlgorithmVersion: "trend.v1",
 	})
 	if err != nil {
@@ -45,7 +45,7 @@ func validTrendCreationInput() (manifest.Input, result.TrendPayload) {
 		Period: "1d", QualityStatus: "valid", ResultStatus: "completed",
 		SchemaVersion: result.EnvelopeSchemaVersion, PayloadSchemaVersion: "1.0.0",
 		AlgorithmVersion: "trend.v1", ParameterFingerprint: "sha256:parameters",
-		SystemAsOf: time.Date(2026, 11, 23, 0, 0, 0, 0, time.UTC),
+		SystemAsOf:        time.Date(2026, 11, 23, 0, 0, 0, 0, time.UTC),
 		InputSnapshotRefs: []string{"snapshot:daily:600000.SH:2026-11-23"},
 	}, payload
 }
