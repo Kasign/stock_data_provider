@@ -179,7 +179,7 @@ func repositoryCloseSeriesBar(tradeDate, closeValue, sourceToken string, fractio
 func repositoryStringPointer(value string) *string { return &value }
 
 func TestDataAuthorizationPolicyStorageDisabledFailsClosed(t *testing.T) {
-	if err := (*Store)(nil).PublishDataAuthorizationPolicyVersion(context.Background(), authorization.PolicyVersion{}); err == nil {
+	if err := (*Store)(nil).PublishDataAuthorizationPolicyVersion(context.Background(), "", authorization.PolicyVersion{}); err == nil {
 		t.Fatal("publishing policy without storage must fail")
 	}
 	if _, err := (*Store)(nil).ResolveCurrentDataAuthorizationPolicy(context.Background()); err == nil {
@@ -232,7 +232,7 @@ func TestMariaDBDataAuthorizationPolicyVersionsAreImmutableAndCurrent(t *testing
 		PayloadHash:   hex.EncodeToString(sum[:]),
 		CreatedAt:     now,
 	}
-	if err := store.PublishDataAuthorizationPolicyVersion(ctx, value); err != nil {
+	if err := store.PublishDataAuthorizationPolicyVersion(ctx, "", value); err != nil {
 		t.Fatalf("publish policy version: %v", err)
 	}
 	current, err := store.ResolveCurrentDataAuthorizationPolicy(ctx)
@@ -252,7 +252,7 @@ func TestMariaDBDataAuthorizationPolicyVersionsAreImmutableAndCurrent(t *testing
 	}
 	changedSum := sha256.Sum256(changed.Payload)
 	changed.PayloadHash = hex.EncodeToString(changedSum[:])
-	if err := store.PublishDataAuthorizationPolicyVersion(ctx, changed); !errors.Is(err, ErrDataAuthorizationPolicyConflict) {
+	if err := store.PublishDataAuthorizationPolicyVersion(ctx, version, changed); !errors.Is(err, ErrDataAuthorizationPolicyConflict) {
 		t.Fatalf("same policy version with different content must conflict, got %v", err)
 	}
 	current, err = store.ResolveCurrentDataAuthorizationPolicy(ctx)
@@ -272,7 +272,7 @@ func TestMariaDBDataAuthorizationPolicyVersionsAreImmutableAndCurrent(t *testing
 	revokedVersion.Payload = revokedPayload
 	revokedVersion.PayloadHash = hex.EncodeToString(revokedSum[:])
 	revokedVersion.CreatedAt = now.Add(time.Second)
-	if err := store.PublishDataAuthorizationPolicyVersion(ctx, revokedVersion); err != nil {
+	if err := store.PublishDataAuthorizationPolicyVersion(ctx, version, revokedVersion); err != nil {
 		t.Fatalf("publish revoked policy: %v", err)
 	}
 	current, err = store.ResolveCurrentDataAuthorizationPolicy(ctx)
