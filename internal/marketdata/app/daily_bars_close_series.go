@@ -33,7 +33,7 @@ type DailyBarsCloseSeriesPayload struct {
 	EndDate            string                               `json:"end_date"`
 	AdjustmentBasis    AdjustmentBasis                      `json:"adjustment_basis"`
 	TradingCalendarRef string                               `json:"trading_calendar_ref"`
-	QualityStatus      QualityStatus                       `json:"quality_status"`
+	QualityStatus      QualityStatus                        `json:"quality_status"`
 	Warnings           []string                             `json:"warnings"`
 	CoverageEvidence   DailyBarsCloseSeriesCoverageEvidence `json:"coverage_evidence"`
 	Bars               []DailyBarsCloseSeriesBar            `json:"bars"`

@@ -107,7 +107,7 @@ func BuildDailyBarsCloseSeriesSnapshot(input DailyBarsCloseSeriesInput, callerRe
 	manifest.SnapshotRef = snapshotRef
 	result := DailyBarsCloseSeriesSnapshot{
 		Manifest:           manifest,
-		PayloadFingerprint:  payloadFingerprint,
+		PayloadFingerprint: payloadFingerprint,
 		Payload:            cloneDailyBarsCloseSeriesPayload(input.Payload),
 	}
 	if err := result.Verify(); err != nil {
