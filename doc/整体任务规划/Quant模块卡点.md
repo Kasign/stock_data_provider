@@ -146,3 +146,16 @@ Quant 不在 `internal/quant/**` 实现 SQL/Redis、通用 Storage、认证、�
 
 - 本轮代码验收通过：`ccf3a04dc1ea1161b3fdf3991e1b9918ede6e679` 的 Quant module validation（Run `45110456094`）、Go test suite（Run `45110456110`）、Integration CI（Run `45110456093`）均 success；文档 SHA `aedc2844395422126288ceb791f1a99da20d3229` 的 Quant validation（Run `45110645391`）亦 success。
 - MariaDB 实测 `TestMySQLResultAccessPolicyReadGuardSerializesRevoke` PASS，证明策略撤销会等待受保护读取回调结束。该结果仅验收锁保护机制，不代表生产 Reader、Run-result 关联和授权规则已完成；Q-01 仍 BLOCKED。
+
+
+## 2026-11-23 Researchflow StageOutput 与 Quant 关联链路复核
+
+- 复核基线：`repair_all` HEAD `9386366c71976e282a249d76c86ab7cc723d0689`。
+- Researchflow 已有 StageOutput 不可变资源表（Migration v6）：每条资源记录包含 `run_ref`、`stage_ref`、`attempt_ref`、`resource_kind`、`stage_code`、`output_type`、`schema_version`、`schema_ref` 和原始内容；Stage/Run 通过复合外键约束归属，资源按 Attempt/resource_kind 唯一。Worker 在同一事务写入 Payload、QualitySummary 并更新 Attempt/Stage 引用。
+- `GetStageOutputResource(ref)` 仅按不透明 ref 精确读取资源，不负责证明 Quant result_id 关联；不得扫描任意 JSON 或把通用 resource_ref 当作 Quant result_id。
+- Server 当前正式装配的 Stage 仍只有 News Search。Researchflow Output Registry 的通用框架允许精确注册，但没有 Quant 的正式 StageCode、OutputType、SchemaVersion、Payload/QualitySummary Schema、Provider 和 Registry Entry。
+- Researchflow 的 `resultvalidation.NewQuantPayloadRegistry` 已复用 Quant 自有解码器校验 trend/risk 1.0.0；`FromQuantEnvelope` 只负责验证和映射，不签发授权，也不建立 Run 关联。它不是 Quant Stage Provider。
+- GOV-CTR-006 已冻结 Quant 映射：可信主体为 Researchflow service principal，资源为精确 Quant result_id，用途 `quant_analysis`，级别 `full`。Golden 只用于契约测试，不构成生产放行规则。
+- 最新文档提交 `9386366c71976e282a249d76c86ab7cc723d0689` 的 Quant module validation Run `45110894577` 已 completed/success；全部步骤（gofmt、Quant 单元/MariaDB 集成、不可变结果用例未跳过、Manifest Fuzz、Race、Vet）通过。
+- 当前可执行结论：Researchflow Storage 已有可复用的 Run/Stage/Attempt 归属载体，但缺少能把 Quant result_id 写入该载体的正式业务 Stage 契约与 Provider。现在新增关联 Port 会被迫猜测 Stage discriminator 或扫描任意 JSON，因此暂不实现。Q-01 继续 BLOCKED，Data D2 不启动。
+- 下一步：继续核实 Quant 已冻结的输入/结果契约与真实可用算法用例，确认是否存在可落地的真实 Trend/Risk 生产 Facade；只有形成真实 Facade 与 Stage 输出 Schema 后，才实现 Researchflow 强类型关联 Port、Quant AuthorizedResultReader 和 Server 装配。
