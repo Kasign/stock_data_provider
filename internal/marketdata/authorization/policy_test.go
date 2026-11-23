@@ -15,6 +15,7 @@ func TestEvaluateRequiresExplicitSubjectPurposeAndScope(t *testing.T) {
 		AllowedPurposes: []string{"research_analysis"},
 		RequiredScopes: []string{"data:read"},
 		EffectiveAt: now.Add(-time.Hour),
+		ExpiresAt: func() *time.Time { value := now.Add(time.Hour); return &value }(),
 	}
 	request := AccessRequest{SubjectRef:"principal:service:researchflow",PurposeCode:"research_analysis",Scopes:[]string{"data:read"},Now:now}
 	if err := Evaluate(policy,request); err != nil { t.Fatalf("Evaluate() error = %v",err) }

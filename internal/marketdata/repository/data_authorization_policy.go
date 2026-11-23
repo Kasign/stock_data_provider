@@ -6,7 +6,6 @@ import (
 	"crypto/subtle"
 	"database/sql"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -113,4 +112,3 @@ WHERE table_schema=DATABASE() AND table_name=? AND column_name=?`, table, column
 	return nil
 }
 
-var _ = json.Valid

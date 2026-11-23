@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"io"
 	"sort"
 	"strings"
 	"time"
@@ -74,7 +75,8 @@ func DecodePolicyVersion(value PolicyVersion) (DataAccessPolicy, error) {
 	if err := decoder.Decode(&policy); err != nil {
 		return DataAccessPolicy{}, ErrPolicyInvalid
 	}
-	if decoder.More() || ValidatePolicy(policy) != nil {
+	var trailing any
+	if err := decoder.Decode(&trailing); err != io.EOF || ValidatePolicy(policy) != nil {
 		return DataAccessPolicy{}, ErrPolicyInvalid
 	}
 	return policy, nil
@@ -91,7 +93,7 @@ func ValidatePolicy(policy DataAccessPolicy) error {
 	}
 	if !sortedUniqueNonEmpty(policy.AllowedSubjects, validPrincipalRef) ||
 		!sortedUniqueNonEmpty(policy.AllowedPurposes, validPurpose) ||
-		!sortedUniqueNonEmpty(policy.RequiredScopes, validScope) {
+		!sortedUnique(policy.RequiredScopes, validScope) {
 		return ErrPolicyInvalid
 	}
 	return nil
@@ -100,7 +102,7 @@ func ValidatePolicy(policy DataAccessPolicy) error {
 func Evaluate(policy DataAccessPolicy, request AccessRequest) error {
 	if ValidatePolicy(policy) != nil || !validPrincipalRef(request.SubjectRef) ||
 		!validPurpose(request.PurposeCode) || request.Now.IsZero() || request.Now.Location() != time.UTC ||
-		!sortedUniqueNonEmpty(request.Scopes, validScope) {
+		!sortedUnique(request.Scopes, validScope) {
 		return ErrPolicyInvalid
 	}
 	if policy.Status != PolicyApproved && policy.Status != PolicyRestricted {
@@ -161,9 +163,10 @@ func validOpaque(value string) bool {
 }
 
 func sortedUniqueNonEmpty(values []string, valid func(string) bool) bool {
-	if len(values) == 0 {
-		return false
-	}
+	return len(values) > 0 && sortedUnique(values, valid)
+}
+
+func sortedUnique(values []string, valid func(string) bool) bool {
 	copyValues := append([]string(nil), values...)
 	if !sort.StringsAreSorted(copyValues) {
 		return false
