@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	platformconfig "example.com/stock-analysis-flow/internal/platform/config"
-	marketdataauthorization "example.com/stock-analysis-flow/internal/marketdata/authorization"
 	marketdataapplication "example.com/stock-analysis-flow/internal/marketdata/application"
+	marketdataauthorization "example.com/stock-analysis-flow/internal/marketdata/authorization"
+	platformconfig "example.com/stock-analysis-flow/internal/platform/config"
 	platformsecurity "example.com/stock-analysis-flow/internal/platform/security"
 	quantapplication "example.com/stock-analysis-flow/internal/quant/application"
 	serversecurity "example.com/stock-analysis-flow/internal/server/security"
