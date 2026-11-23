@@ -9,7 +9,6 @@ import (
 	marketdataauthorization "example.com/stock-analysis-flow/internal/marketdata/authorization"
 	marketdataapplication "example.com/stock-analysis-flow/internal/marketdata/application"
 	platformsecurity "example.com/stock-analysis-flow/internal/platform/security"
-	serversecurity "example.com/stock-analysis-flow/internal/server/security"
 )
 
 type dataPolicyHTTPHandler struct {
@@ -201,4 +200,3 @@ func (h *dataPolicyHTTPHandler) writePolicy(w http.ResponseWriter, status int, c
 	_ = json.NewEncoder(w).Encode(response)
 }
 
-var _ = serversecurity.ErrSessionUnauthenticated
