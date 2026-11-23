@@ -14,7 +14,6 @@ type DataAuthorizationPolicyRepository interface {
 	ResolveCurrentDataAuthorizationPolicy(context.Context) (authorization.CurrentPolicy, error)
 }
 
-
 // DataAuthorizationDecision 是 Data Owner 授权决策的不可变持久化对象。
 type DataAuthorizationDecision struct {
 	AuthorizationRef json.RawMessage

@@ -58,12 +58,12 @@ func (f *dataAuthorizationDecisionStoreFake) GetDataAuthorizationDecision(_ cont
 func newDataAuthorizationTestOwner(t *testing.T, now time.Time) (*DataAuthorizationOwner, *dataAuthorizationPolicyStoreFake, *dataAuthorizationDecisionStoreFake) {
 	t.Helper()
 	policy := authorization.DataAccessPolicy{
-		SchemaVersion: authorization.DataAccessPolicySchemaVersion,
-		Status: authorization.PolicyApproved,
+		SchemaVersion:   authorization.DataAccessPolicySchemaVersion,
+		Status:          authorization.PolicyApproved,
 		AllowedSubjects: []string{"principal:service:quant"},
 		AllowedPurposes: []string{"quant_analysis"},
-		RequiredScopes: []string{"data:read"},
-		EffectiveAt: now.Add(-time.Minute).UTC(),
+		RequiredScopes:  []string{"data:read"},
+		EffectiveAt:     now.Add(-time.Minute).UTC(),
 	}
 	payload, err := json.Marshal(policy)
 	if err != nil {
@@ -71,12 +71,12 @@ func newDataAuthorizationTestOwner(t *testing.T, now time.Time) (*DataAuthorizat
 	}
 	sum := sha256.Sum256(payload)
 	version := authorization.PolicyVersion{
-		PolicyType: authorization.DataAccessPolicyType,
-		PolicyRef: authorization.DailyBarsV2PolicyRef,
+		PolicyType:    authorization.DataAccessPolicyType,
+		PolicyRef:     authorization.DailyBarsV2PolicyRef,
 		PolicyVersion: "policy-v1",
-		Payload: payload,
-		PayloadHash: hex.EncodeToString(sum[:]),
-		CreatedAt: now.Add(-time.Minute).UTC(),
+		Payload:       payload,
+		PayloadHash:   hex.EncodeToString(sum[:]),
+		CreatedAt:     now.Add(-time.Minute).UTC(),
 	}
 	policyStore := &dataAuthorizationPolicyStoreFake{current: authorization.CurrentPolicy{Version: version, Policy: policy}}
 	decisionStore := &dataAuthorizationDecisionStoreFake{decisions: map[string]app.DataAuthorizationDecision{}, revoked: map[string]bool{}}
