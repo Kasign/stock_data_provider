@@ -14,14 +14,14 @@ import (
 
 // Security contains credentials required by the Root Server HTTP boundary.
 type Security struct {
-	OwnerToken platformconfig.Secret
+	OwnerToken         platformconfig.Secret
 	ServiceCredentials []platformsecurity.ServiceCredential
 }
 
 type serviceCredentialConfig struct {
-	Name string `json:"name"`
-	TokenEnv string `json:"token_env"`
-	Scopes []string `json:"scopes"`
+	Name     string   `json:"name"`
+	TokenEnv string   `json:"token_env"`
+	Scopes   []string `json:"scopes"`
 }
 
 // LoadSecurity requires an explicit owner credential. Service credentials are
