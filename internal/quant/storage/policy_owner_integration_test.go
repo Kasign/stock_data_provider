@@ -22,6 +22,10 @@ func TestMySQLResultAccessPolicyPublishesImmutableVersionsAndRevokes(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
+	var auditBefore uint64
+	if err := db.QueryRowContext(ctx, "SELECT COALESCE(MAX(audit_id), 0) FROM quant_policy_admin_audit").Scan(&auditBefore); err != nil {
+		t.Fatal(err)
+	}
 	current, err := manager.Current(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -66,6 +70,46 @@ func TestMySQLResultAccessPolicyPublishesImmutableVersionsAndRevokes(t *testing.
 	}
 	if reloaded.Version != revoked.Version || reloaded.Enabled {
 		t.Fatalf("current policy pointer mismatch: %+v", reloaded)
+	}
+
+	rows, err := db.QueryContext(ctx, "SELECT actor_ref, action, previous_version, new_version FROM quant_policy_admin_audit WHERE audit_id > ? ORDER BY audit_id", auditBefore)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	type auditRecord struct {
+		actor string
+		action string
+		previous uint64
+		next uint64
+	}
+	var auditRecords []auditRecord
+	for rows.Next() {
+		var item auditRecord
+		if err := rows.Scan(&item.actor, &item.action, &item.previous, &item.next); err != nil {
+			t.Fatal(err)
+		}
+		auditRecords = append(auditRecords, item)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	expectedAuditCount := 2
+	if current.Enabled {
+		expectedAuditCount++
+	}
+	if len(auditRecords) != expectedAuditCount {
+		t.Fatalf("policy administration audit records=%d want=%d: %+v", len(auditRecords), expectedAuditCount, auditRecords)
+	}
+	publishRecord := auditRecords[len(auditRecords)-2]
+	revokeRecord := auditRecords[len(auditRecords)-1]
+	if publishRecord.actor != "owner" || publishRecord.action != "publish" ||
+		publishRecord.previous != before || publishRecord.next != published.Version {
+		t.Fatalf("publish audit record mismatch: %+v", publishRecord)
+	}
+	if revokeRecord.actor != "owner" || revokeRecord.action != "revoke" ||
+		revokeRecord.previous != published.Version || revokeRecord.next != revoked.Version {
+		t.Fatalf("revoke audit record mismatch: %+v", revokeRecord)
 	}
 }
 
