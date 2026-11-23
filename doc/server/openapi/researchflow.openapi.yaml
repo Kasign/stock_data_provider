@@ -67,13 +67,6 @@ paths:
           schema: { type: string, minLength: 1, maxLength: 255 }
         - $ref: '#/components/parameters/Origin'
         - $ref: '#/components/parameters/CSRFToken'
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema:
-              type: object
-              maxProperties: 0
       responses:
         '200':
           description: Latest Run aggregate after cancellation intent persistence

@@ -12,7 +12,6 @@ import (
 	platformsecurity "example.com/stock-analysis-flow/internal/platform/security"
 	researchflowapplication "example.com/stock-analysis-flow/internal/researchflow/application"
 	researchflowdomain "example.com/stock-analysis-flow/internal/researchflow/domain"
-	serversecurity "example.com/stock-analysis-flow/internal/server/security"
 )
 
 type researchflowHTTPHandler struct {
@@ -42,30 +41,30 @@ type researchflowRunResponse struct {
 }
 
 type researchflowStageResponse struct {
-	SchemaVersion    string                          `json:"schema_version"`
-	StageRef         string                          `json:"stage_ref"`
-	RunRef           string                          `json:"run_ref"`
-	StageCode        string                          `json:"stage_code"`
-	Status           researchflowdomain.StageStatus  `json:"status"`
-	Version          uint64                          `json:"version"`
-	Required         bool                            `json:"required"`
-	Dependencies     []string                        `json:"dependency_stage_refs"`
-	RetryPolicyRef   string                          `json:"retry_policy_ref"`
-	RetryAt          *time.Time                      `json:"retry_at"`
-	OutputRef        *string                         `json:"output_ref"`
-	ReasonCodes      []string                        `json:"reason_codes"`
-	CreatedAt        time.Time                       `json:"created_at"`
-	StartedAt        *time.Time                     `json:"started_at"`
-	FinishedAt       *time.Time                     `json:"finished_at"`
-	QualitySummaryRef *string                       `json:"quality_summary_ref"`
-	DiagnosticRefs   []string                       `json:"diagnostic_refs"`
+	SchemaVersion     string                         `json:"schema_version"`
+	StageRef          string                         `json:"stage_ref"`
+	RunRef            string                         `json:"run_ref"`
+	StageCode         string                         `json:"stage_code"`
+	Status            researchflowdomain.StageStatus `json:"status"`
+	Version           uint64                         `json:"version"`
+	Required          bool                           `json:"required"`
+	Dependencies      []string                       `json:"dependency_stage_refs"`
+	RetryPolicyRef    string                         `json:"retry_policy_ref"`
+	RetryAt           *time.Time                     `json:"retry_at"`
+	OutputRef         *string                        `json:"output_ref"`
+	ReasonCodes       []string                       `json:"reason_codes"`
+	CreatedAt         time.Time                      `json:"created_at"`
+	StartedAt         *time.Time                     `json:"started_at"`
+	FinishedAt        *time.Time                     `json:"finished_at"`
+	QualitySummaryRef *string                        `json:"quality_summary_ref"`
+	DiagnosticRefs    []string                       `json:"diagnostic_refs"`
 }
 
 type researchflowAggregateResponse struct {
-	SchemaVersion string                              `json:"schema_version"`
-	Run           researchflowRunResponse             `json:"run"`
-	Stages        []researchflowStageResponse         `json:"stages"`
-	ResultSummary *researchflowdomain.ResultSummary   `json:"result_summary"`
+	SchemaVersion string                            `json:"schema_version"`
+	Run           researchflowRunResponse           `json:"run"`
+	Stages        []researchflowStageResponse       `json:"stages"`
+	ResultSummary *researchflowdomain.ResultSummary `json:"result_summary"`
 }
 
 func newResearchflowHTTPHandler(owner *ownerSessionComposition) (http.Handler, error) {
@@ -75,7 +74,7 @@ func newResearchflowHTTPHandler(owner *ownerSessionComposition) (http.Handler, e
 	}
 	handler := &researchflowHTTPHandler{
 		authenticator: owner.authenticator,
-		cookieName: owner.cookie.Name,
+		cookieName:  owner.cookie.Name,
 		composition: owner.researchflow,
 	}
 	mux := http.NewServeMux()
@@ -236,46 +235,46 @@ func (h *researchflowHTTPHandler) writeAggregate(
 	response := researchflowAggregateResponse{
 		SchemaVersion: "1.0.0",
 		Run: researchflowRunResponse{
-			SchemaVersion: run.SchemaVersion,
-			RunRef: run.Ref,
-			Status: run.Status,
-			Version: run.Version,
-			SystemAsOf: run.SystemAsOf,
-			DeadlineAt: run.DeadlineAt,
-			TemplateRef: run.TemplateRef,
-			TemplateVersion: run.TemplateVersion,
-			TemplateFingerprint: run.TemplateFingerprint,
-			InputSnapshotRefs: append([]string{}, run.InputSnapshotRefs...),
-			ResultSummaryRef: cloneResearchflowString(run.ResultSummaryRef),
+			SchemaVersion:        run.SchemaVersion,
+			RunRef:               run.Ref,
+			Status:               run.Status,
+			Version:              run.Version,
+			SystemAsOf:           run.SystemAsOf,
+			DeadlineAt:           run.DeadlineAt,
+			TemplateRef:          run.TemplateRef,
+			TemplateVersion:      run.TemplateVersion,
+			TemplateFingerprint:  run.TemplateFingerprint,
+			InputSnapshotRefs:    append([]string{}, run.InputSnapshotRefs...),
+			ResultSummaryRef:     cloneResearchflowString(run.ResultSummaryRef),
 			OriginatingRequestID: cloneResearchflowString(run.OriginatingRequestID),
-			CorrelationID: run.CorrelationID,
-			TerminationReason: nonEmptyResearchflowString(run.TerminationReason),
-			CreatedAt: run.CreatedAt,
-			StartedAt: run.StartedAt,
-			FinishedAt: run.FinishedAt,
+			CorrelationID:        run.CorrelationID,
+			TerminationReason:    nonEmptyResearchflowString(run.TerminationReason),
+			CreatedAt:            run.CreatedAt,
+			StartedAt:            run.StartedAt,
+			FinishedAt:           run.FinishedAt,
 		},
-		Stages: make([]researchflowStageResponse, 0, len(stages)),
+		Stages:        make([]researchflowStageResponse, 0, len(stages)),
 		ResultSummary: run.ResultSummary,
 	}
 	for _, stage := range stages {
 		response.Stages = append(response.Stages, researchflowStageResponse{
-			SchemaVersion: "1.0.0",
-			StageRef: stage.Ref,
-			RunRef: stage.RunRef,
-			StageCode: stage.Code,
-			Status: stage.Status,
-			Version: stage.Version,
-			Required: stage.Required,
-			Dependencies: append([]string{}, stage.Dependencies...),
-			RetryPolicyRef: stage.RetryPolicyRef,
-			RetryAt: stage.RetryAt,
-			OutputRef: cloneResearchflowString(stage.OutputRef),
-			ReasonCodes: append([]string{}, stage.ReasonCodes...),
-			CreatedAt: stage.CreatedAt,
-			StartedAt: stage.StartedAt,
-			FinishedAt: stage.FinishedAt,
+			SchemaVersion:     "1.0.0",
+			StageRef:          stage.Ref,
+			RunRef:            stage.RunRef,
+			StageCode:         stage.Code,
+			Status:            stage.Status,
+			Version:           stage.Version,
+			Required:          stage.Required,
+			Dependencies:      append([]string{}, stage.Dependencies...),
+			RetryPolicyRef:    stage.RetryPolicyRef,
+			RetryAt:           stage.RetryAt,
+			OutputRef:         cloneResearchflowString(stage.OutputRef),
+			ReasonCodes:       append([]string{}, stage.ReasonCodes...),
+			CreatedAt:         stage.CreatedAt,
+			StartedAt:         stage.StartedAt,
+			FinishedAt:        stage.FinishedAt,
 			QualitySummaryRef: cloneResearchflowString(stage.QualitySummaryRef),
-			DiagnosticRefs: append([]string{}, stage.DiagnosticRefs...),
+			DiagnosticRefs:    append([]string{}, stage.DiagnosticRefs...),
 		})
 	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
@@ -301,5 +300,3 @@ func nonEmptyResearchflowString(value string) *string {
 	return &copy
 }
 
-// Keep the concrete SessionAuthenticator dependency explicit at the composition boundary.
-var _ = (*serversecurity.SessionAuthenticator)(nil)
