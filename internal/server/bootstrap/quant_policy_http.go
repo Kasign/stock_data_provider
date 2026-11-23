@@ -5,8 +5,8 @@ import (
 	"errors"
 	"net/http"
 
-	quantapplication "example.com/stock-analysis-flow/internal/quant/application"
 	platformsecurity "example.com/stock-analysis-flow/internal/platform/security"
+	quantapplication "example.com/stock-analysis-flow/internal/quant/application"
 	serversecurity "example.com/stock-analysis-flow/internal/server/security"
 )
 
@@ -33,8 +33,8 @@ func newQuantPolicyHTTPHandler(composition *ownerSessionComposition) (http.Handl
 	}
 	handler := &quantPolicyHTTPHandler{
 		authenticator: composition.authenticator,
-		cookieName: composition.cookie.Name,
-		manager: composition.policyManager,
+		cookieName:    composition.cookie.Name,
+		manager:       composition.policyManager,
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/v1/owner/quant/result-access-policy", handler.current)

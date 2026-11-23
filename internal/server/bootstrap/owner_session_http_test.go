@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	quantapplication "example.com/stock-analysis-flow/internal/quant/application"
 	platformconfig "example.com/stock-analysis-flow/internal/platform/config"
 	platformsecurity "example.com/stock-analysis-flow/internal/platform/security"
+	quantapplication "example.com/stock-analysis-flow/internal/quant/application"
 	serversecurity "example.com/stock-analysis-flow/internal/server/security"
 )
 

@@ -5,9 +5,9 @@ import (
 	"errors"
 	"fmt"
 
+	platformsecurity "example.com/stock-analysis-flow/internal/platform/security"
 	quantapplication "example.com/stock-analysis-flow/internal/quant/application"
 	quantstorage "example.com/stock-analysis-flow/internal/quant/storage"
-	platformsecurity "example.com/stock-analysis-flow/internal/platform/security"
 	serverconfig "example.com/stock-analysis-flow/internal/server/config"
 	serverresources "example.com/stock-analysis-flow/internal/server/resources"
 	serversecurity "example.com/stock-analysis-flow/internal/server/security"
