@@ -437,3 +437,14 @@ Root Server 的 Data Module 构造、共享资源注入、Migration Registry、I
 2. 实现 Snapshot Creator 与 Authorized Snapshot Reader；授权检查和 Snapshot Payload 读取必须在同一事务内完成，确保撤销与读取之间没有竞态。
 3. 在 Root Server composition root 装配策略 Repository、决策 Repository、可信 Principal resolver 和 Snapshot Application；当前无服务凭据时保持拒绝，不注入默认服务主体。
 4. 再接 Quant 首批 SMA Reader，不提前引入多指标或策略扩展。
+
+
+## 2026-11-23 Snapshot 生产与授权读取链路接入
+
+- 新增 `DailyBarsCloseSeriesSnapshotCreator`：可信 Principal → PIT `DailyBarsV2Reader` → Close Series Builder → Manifest/Payload 双指纹 Snapshot → V6 Repository → Data Owner Issue。
+- Snapshot 创建接口只返回 `SnapshotRef + AuthorizationRef`，不返回 Payload。授权签发失败时 Snapshot 可以作为不可变历史记录保留，但不会返回可消费引用。
+- 新增 `AuthorizedDailyBarsCloseSeriesSnapshotReader`：只有 Repository 返回授权决策、撤销状态、当前策略和 Snapshot 后，Application 才会检查主体、资源、用途、content_level、授权期限、当前策略版本及 RequiredScopes；通过后才返回 Payload。
+- 新增 Repository `ReadDataAuthorizedDailyBarsCloseSeriesSnapshot`，将授权记录、撤销状态、当前策略版本/内容、Snapshot Manifest/Payload 的读取放在同一 MariaDB Repeatable Read 只读事务内。避免先单独检查撤销、再单独读取 Payload 所产生的竞态；撤销/策略更新与读取按数据库事务快照确定先后。
+- Data Module 新增 `CreateDailyBarsCloseSeriesSnapshot` 和 `ReadAuthorizedDailyBarsCloseSeriesSnapshot` 模块入口，复用 Root 注入的同一个 Store，不创建平行 Repository 或独立连接池。
+- 目前该模块入口已具备调用路径，但 Root Server 尚未将它注入 Quant/Researchflow 的生产消费者；服务凭据配置也尚未完成。没有真实 service Principal 时仍 fail closed。
+- CI 当前针对前序提交有过取消/格式门禁失败；格式修正后最新提交的 Go Test Suite、Integration CI 尚待完成。不得将尚未通过的提交描述为验收通过。
