@@ -838,3 +838,14 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 1. 继续 Q-01：先在 Researchflow 既有 StageOutput/ResultValidation 职责内核对并定义强类型 Quant Result 关联只读 Port；只有存在正式生产写入契约后，Quant 才实现 Reader，Server 再组合注入。
 2. 增加 MariaDB 集成与并发验收：同 Run 关联允许、跨 Run 拒绝、无关联拒绝、策略撤销与读取竞态拒绝旧授权、审计失败不释放结果。
 3. 完成 QNT-013/Q-01 并更新 Quant、Researchflow、Server 与总计划精确 SHA 证据后，才进入第二批 Data D2；不因策略管理子项通过提前切换主线。
+
+
+## 41. 2026-11-23 最新 SHA 全量 CI 与 Q-01 关联边界复核
+
+- 代码验收基线：`9a84615ae0dc611b35681eadd6cfde70dd867703`。
+- Quant 专项验收 [45105490677](https://github.com/Kasign/stock_data_provider/actions/runs/45105490677)、Go test suite [45105490653](https://github.com/Kasign/stock_data_provider/actions/runs/45105490653)、Integration CI [45105490843](https://github.com/Kasign/stock_data_provider/actions/runs/45105490843) 均 completed / success。
+- 策略管理审计集成测试已验证发布、撤销的 actor/action/前后版本记录；gofmt 首次失败已修正，最新 SHA 全部通过。
+- 沿 Worker → StageExecutionResult → StageOutputCommit → CommitAttemptResult → StageOutputResource 核查：Stage Output 资源在 Attempt/Stage 结果事务中持久化，且携带 Run/Stage/Attempt 元数据；但没有 Quant Result ID 的强类型字段或独立关联记录。
+- 当前生产 Researchflow composition 只装配 News Search Stage，没有 Quant Stage Provider；因此不能以通用 output_ref、resource_ref 或 JSON 猜测构造 Run→QuantResult 授权关联。
+- 下一步 Q-01 必须先明确 Quant Stage 的强类型输出契约：Provider 成功返回的 Quant Result ID 必须与已验证的 Quant Result Envelope 一致，并在 Researchflow 完成 Attempt/Stage 的同一事务中写入不可变 Run→QuantResult 关联；之后 Quant Reader 才能在策略 head 行锁定的一致性事务中校验该关联、读取不可变结果并签发 GOV-CTR-006 授权证据。
+- Q-01 未完成前不进入 Data D2。
