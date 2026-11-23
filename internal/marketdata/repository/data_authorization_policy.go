@@ -21,7 +21,7 @@ var (
 	ErrDataAuthorizationPolicyConflict    = errors.New("market-data authorization policy version conflict")
 )
 
-func (s *Store) PublishDataAuthorizationPolicyVersion(ctx context.Context, value authorization.PolicyVersion) error {
+func (s *Store) PublishDataAuthorizationPolicyVersion(ctx context.Context, expectedCurrentVersion string, value authorization.PolicyVersion) error {
 	if s == nil || s.db == nil || ctx == nil {
 		return ErrDataAuthorizationPolicyUnavailable
 	}
@@ -64,13 +64,35 @@ WHERE policy_type=? AND policy_ref=? AND policy_version=? FOR UPDATE`,
 		return ErrDataAuthorizationPolicyConflict
 	}
 
-	_, err = tx.ExecContext(ctx, `INSERT INTO market_data_current_authorization_policy_versions
+	if expectedCurrentVersion == "" {
+		_, err = tx.ExecContext(ctx, `INSERT INTO market_data_current_authorization_policy_versions
 (policy_type, policy_ref, policy_version, updated_at)
-VALUES (?, ?, ?, ?)
-ON DUPLICATE KEY UPDATE policy_version=VALUES(policy_version), updated_at=VALUES(updated_at)`,
-		value.PolicyType, value.PolicyRef, value.PolicyVersion, time.Now().UTC())
-	if err != nil {
-		return fmt.Errorf("%w: %v", ErrDataAuthorizationPolicyUnavailable, err)
+VALUES (?, ?, ?, ?)`,
+			value.PolicyType, value.PolicyRef, value.PolicyVersion, time.Now().UTC())
+		if err != nil {
+			var currentVersion string
+			lookupErr := tx.QueryRowContext(ctx, `SELECT policy_version FROM market_data_current_authorization_policy_versions
+WHERE policy_type=? AND policy_ref=? FOR UPDATE`, value.PolicyType, value.PolicyRef).Scan(&currentVersion)
+			if lookupErr == nil {
+				return ErrDataAuthorizationPolicyConflict
+			}
+			return fmt.Errorf("%w: %v", ErrDataAuthorizationPolicyUnavailable, err)
+		}
+	} else {
+		result, updateErr := tx.ExecContext(ctx, `UPDATE market_data_current_authorization_policy_versions
+SET policy_version=?, updated_at=?
+WHERE policy_type=? AND policy_ref=? AND policy_version=?`,
+			value.PolicyVersion, time.Now().UTC(), value.PolicyType, value.PolicyRef, expectedCurrentVersion)
+		if updateErr != nil {
+			return fmt.Errorf("%w: %v", ErrDataAuthorizationPolicyUnavailable, updateErr)
+		}
+		affected, rowsErr := result.RowsAffected()
+		if rowsErr != nil {
+			return fmt.Errorf("%w: %v", ErrDataAuthorizationPolicyUnavailable, rowsErr)
+		}
+		if affected != 1 {
+			return ErrDataAuthorizationPolicyConflict
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("%w: %v", ErrDataAuthorizationPolicyUnavailable, err)

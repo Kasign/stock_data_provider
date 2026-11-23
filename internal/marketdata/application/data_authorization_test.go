@@ -19,7 +19,7 @@ type dataAuthorizationPolicyStoreFake struct {
 	err     error
 }
 
-func (f *dataAuthorizationPolicyStoreFake) PublishDataAuthorizationPolicyVersion(context.Context, authorization.PolicyVersion) error {
+func (f *dataAuthorizationPolicyStoreFake) PublishDataAuthorizationPolicyVersion(context.Context, string, authorization.PolicyVersion) error {
 	return errors.New("not used")
 }
 func (f *dataAuthorizationPolicyStoreFake) ResolveCurrentDataAuthorizationPolicy(context.Context) (authorization.CurrentPolicy, error) {
