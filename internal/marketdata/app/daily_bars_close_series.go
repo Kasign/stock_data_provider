@@ -18,92 +18,54 @@ const (
 )
 
 var (
-	dailyBarsCloseSeriesDecimalRE = regexp.MustCompile(`^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?package app
-
-import (
-	"errors"
-	"fmt"
-	"math/big"
-	"regexp"
-	"sort"
-	"strings"
-	"time"
-)
-
-const (
-	DailyBarsCloseSeriesPayloadSchemaVersion = "1.0.0"
-	DailyBarsCloseSeriesPayloadKind           = "daily_bars_close_series"
-	dailyBarsCloseSeriesSourceEastmoney       = "eastmoney"
-	dailyBarsCloseSeriesEastmoneyAPIVersion   = "eastmoney-stock-api-v1"
-)
-
-)
-	dailyBarsCloseSeriesSourceTokenRE = regexp.MustCompile(`^-?[0-9]+(?:\\.[0-9]+)?package app
-
-import (
-	"errors"
-	"fmt"
-	"math/big"
-	"regexp"
-	"sort"
-	"strings"
-	"time"
-)
-
-const (
-	DailyBarsCloseSeriesPayloadSchemaVersion = "1.0.0"
-	DailyBarsCloseSeriesPayloadKind           = "daily_bars_close_series"
-	dailyBarsCloseSeriesSourceEastmoney       = "eastmoney"
-	dailyBarsCloseSeriesEastmoneyAPIVersion   = "eastmoney-stock-api-v1"
-)
-
-)
+	dailyBarsCloseSeriesDecimalRE     = regexp.MustCompile("^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$")
+	dailyBarsCloseSeriesSourceTokenRE = regexp.MustCompile("^-?[0-9]+(?:\\.[0-9]+)?$")
 )
 
 // DailyBarsCloseSeriesPayload 是首批 SMA 使用的窄化、可内容寻址输入。
 // 只接收未复权日线的精确 Close，不从 float64 反向生成 Decimal。
 type DailyBarsCloseSeriesPayload struct {
-	SchemaVersion    string                       `json:"schema_version"`
-	PayloadKind      string                       `json:"payload_kind"`
-	Symbol           string                       `json:"symbol"`
-	Interval         string                       `json:"interval"`
-	StartDate        string                       `json:"start_date"`
-	EndDate          string                       `json:"end_date"`
-	AdjustmentBasis  AdjustmentBasis              `json:"adjustment_basis"`
-	TradingCalendarRef string                     `json:"trading_calendar_ref"`
-	QualityStatus    QualityStatus                `json:"quality_status"`
-	Warnings         []string                     `json:"warnings"`
-	CoverageEvidence DailyBarCoverageEvidence     `json:"coverage_evidence"`
-	Bars             []DailyBarsCloseSeriesBar    `json:"bars"`
+	SchemaVersion     string                   `json:"schema_version"`
+	PayloadKind       string                   `json:"payload_kind"`
+	Symbol            string                   `json:"symbol"`
+	Interval          string                   `json:"interval"`
+	StartDate         string                   `json:"start_date"`
+	EndDate           string                   `json:"end_date"`
+	AdjustmentBasis   AdjustmentBasis          `json:"adjustment_basis"`
+	TradingCalendarRef string                  `json:"trading_calendar_ref"`
+	QualityStatus     QualityStatus            `json:"quality_status"`
+	Warnings          []string                 `json:"warnings"`
+	CoverageEvidence  DailyBarCoverageEvidence `json:"coverage_evidence"`
+	Bars              []DailyBarsCloseSeriesBar `json:"bars"`
 }
 
 // DailyBarsCloseSeriesBar 保留计算所需的精确收盘价及逐条来源/时点证据。
 type DailyBarsCloseSeriesBar struct {
-	TradeDate           string                  `json:"trade_date"`
-	Close               string                  `json:"close"`
-	CloseEvidence       DailyBarDecimalEvidence `json:"close_evidence"`
-	SourceRef           string                  `json:"source_ref"`
-	NormalizationVersion string                 `json:"normalization_version"`
-	FetchedAt           string                  `json:"fetched_at"`
-	NormalizedAt        string                  `json:"normalized_at"`
-	ProviderTime        *string                 `json:"provider_time"`
-	SystemObservedAt    *string                 `json:"system_observed_at"`
-	QualityStatus       QualityStatus           `json:"quality_status"`
-	QualityReasons      []string                `json:"quality_reasons"`
+	TradeDate            string                  `json:"trade_date"`
+	Close                string                  `json:"close"`
+	CloseEvidence        DailyBarDecimalEvidence `json:"close_evidence"`
+	SourceRef            string                  `json:"source_ref"`
+	NormalizationVersion string                  `json:"normalization_version"`
+	FetchedAt            string                  `json:"fetched_at"`
+	NormalizedAt         string                  `json:"normalized_at"`
+	ProviderTime         *string                 `json:"provider_time"`
+	SystemObservedAt     *string                 `json:"system_observed_at"`
+	QualityStatus        QualityStatus           `json:"quality_status"`
+	QualityReasons       []string                `json:"quality_reasons"`
 }
 
 // DailyBarsCloseSeriesSource 是 Manifest 中的来源条目。
 // SourceVersion 只表示 Provider 数据版本；当前 Eastmoney 不提供逐条数据版本，因此保持 nil。
 type DailyBarsCloseSeriesSource struct {
-	SourceRef               string  `json:"source_ref"`
-	SourceVersion           *string `json:"source_version"`
-	ProviderInterfaceVersion string `json:"provider_interface_version,omitempty"`
+	SourceRef                string  `json:"source_ref"`
+	SourceVersion            *string `json:"source_version"`
+	ProviderInterfaceVersion string  `json:"provider_interface_version,omitempty"`
 }
 
 // DailyBarsCloseSeriesInput 是后续 Manifest Builder 的唯一输入，SystemAsOf 来自可信 PIT 截止时间。
 type DailyBarsCloseSeriesInput struct {
-	Payload   DailyBarsCloseSeriesPayload
-	Sources   []DailyBarsCloseSeriesSource
+	Payload    DailyBarsCloseSeriesPayload
+	Sources    []DailyBarsCloseSeriesSource
 	SystemAsOf time.Time
 }
 
@@ -143,7 +105,9 @@ func BuildDailyBarsCloseSeriesInput(query DailyBarsQuery, snapshot DailyBarsV2Sn
 	if len(snapshot.Bars) < coverage.MinimumRequiredBars {
 		return DailyBarsCloseSeriesInput{}, fmt.Errorf("daily-bars close snapshot has %d bars; coverage requires at least %d", len(snapshot.Bars), coverage.MinimumRequiredBars)
 	}
-
+	if !validDailyBarsCloseSeriesQualityStatus(snapshot.QualityStatus) {
+		return DailyBarsCloseSeriesInput{}, errors.New("daily-bars snapshot quality status is invalid")
+	}
 	payloadWarnings, err := canonicalDailyBarsCloseSeriesStringSet(snapshot.Warnings)
 	if err != nil {
 		return DailyBarsCloseSeriesInput{}, fmt.Errorf("snapshot warnings: %w", err)
@@ -152,31 +116,28 @@ func BuildDailyBarsCloseSeriesInput(query DailyBarsQuery, snapshot DailyBarsV2Sn
 	if err != nil {
 		return DailyBarsCloseSeriesInput{}, fmt.Errorf("coverage warnings: %w", err)
 	}
-	if !validDailyBarsCloseSeriesQualityStatus(snapshot.QualityStatus) {
-		return DailyBarsCloseSeriesInput{}, errors.New("daily-bars snapshot quality status is invalid")
-	}
+
 	payload := DailyBarsCloseSeriesPayload{
-		SchemaVersion: DailyBarsCloseSeriesPayloadSchemaVersion,
-		PayloadKind: DailyBarsCloseSeriesPayloadKind,
-		Symbol: snapshot.Symbol,
-		Interval: snapshot.Interval,
-		StartDate: query.StartDate,
-		EndDate: query.EndDate,
-		AdjustmentBasis: AdjustmentNone,
+		SchemaVersion:      DailyBarsCloseSeriesPayloadSchemaVersion,
+		PayloadKind:        DailyBarsCloseSeriesPayloadKind,
+		Symbol:             snapshot.Symbol,
+		Interval:           snapshot.Interval,
+		StartDate:          query.StartDate,
+		EndDate:            query.EndDate,
+		AdjustmentBasis:    AdjustmentNone,
 		TradingCalendarRef: strings.TrimSpace(*snapshot.TradingCalendarRef),
-		QualityStatus: snapshot.QualityStatus,
-		Warnings: payloadWarnings,
+		QualityStatus:      snapshot.QualityStatus,
+		Warnings:           payloadWarnings,
 		CoverageEvidence: DailyBarCoverageEvidence{
 			CalendarQualityStatus: coverage.CalendarQualityStatus,
-			ExpectedTradingDays: coverage.ExpectedTradingDays,
-			MinimumRequiredBars: coverage.MinimumRequiredBars,
-			CoverageBasis: coverage.CoverageBasis,
-			CoverageSufficient: coverage.CoverageSufficient,
-			Warnings: coverageWarnings,
+			ExpectedTradingDays:   coverage.ExpectedTradingDays,
+			MinimumRequiredBars:   coverage.MinimumRequiredBars,
+			CoverageBasis:         coverage.CoverageBasis,
+			CoverageSufficient:    coverage.CoverageSufficient,
+			Warnings:              coverageWarnings,
 		},
 		Bars: make([]DailyBarsCloseSeriesBar, 0, len(snapshot.Bars)),
 	}
-	var source DailyBarsCloseSeriesSource
 	previousDate := ""
 	for index, bar := range snapshot.Bars {
 		if !validCloseSeriesDate(bar.TradeDate) || bar.TradeDate < query.StartDate || bar.TradeDate > query.EndDate {
@@ -211,32 +172,32 @@ func BuildDailyBarsCloseSeriesInput(query DailyBarsQuery, snapshot DailyBarsV2Sn
 		if err != nil {
 			return DailyBarsCloseSeriesInput{}, fmt.Errorf("daily-bars close snapshot bar %d: %w", index, err)
 		}
-		qualityReasons, reasonErr := canonicalDailyBarsCloseSeriesStringSet(bar.QualityReasons)
-		if reasonErr != nil {
-			return DailyBarsCloseSeriesInput{}, fmt.Errorf("daily-bars close snapshot bar %d quality reasons: %w", index, reasonErr)
+		qualityReasons, err := canonicalDailyBarsCloseSeriesStringSet(bar.QualityReasons)
+		if err != nil {
+			return DailyBarsCloseSeriesInput{}, fmt.Errorf("daily-bars close snapshot bar %d quality reasons: %w", index, err)
 		}
 		payload.Bars = append(payload.Bars, DailyBarsCloseSeriesBar{
-			TradeDate: bar.TradeDate,
-			Close: bar.ExactValues.Close,
-			CloseEvidence: evidence,
-			SourceRef: bar.Source,
+			TradeDate:            bar.TradeDate,
+			Close:                bar.ExactValues.Close,
+			CloseEvidence:        evidence,
+			SourceRef:            bar.Source,
 			NormalizationVersion: bar.NormalizationVersion,
-			FetchedAt: canonicalCloseSeriesTime(bar.FetchedAt),
-			NormalizedAt: canonicalCloseSeriesTime(bar.NormalizedAt),
-			ProviderTime: optionalCloseSeriesTime(bar.ProviderTime),
-			SystemObservedAt: optionalCloseSeriesTime(bar.SystemObservedAt),
-			QualityStatus: bar.QualityStatus,
-			QualityReasons: qualityReasons,
+			FetchedAt:            canonicalCloseSeriesTime(bar.FetchedAt),
+			NormalizedAt:         canonicalCloseSeriesTime(bar.NormalizedAt),
+			ProviderTime:         optionalCloseSeriesTime(bar.ProviderTime),
+			SystemObservedAt:     optionalCloseSeriesTime(bar.SystemObservedAt),
+			QualityStatus:        bar.QualityStatus,
+			QualityReasons:       qualityReasons,
 		})
 	}
-	source = DailyBarsCloseSeriesSource{
-		SourceRef: dailyBarsCloseSeriesSourceEastmoney,
-		SourceVersion: nil,
+	source := DailyBarsCloseSeriesSource{
+		SourceRef:                dailyBarsCloseSeriesSourceEastmoney,
+		SourceVersion:            nil,
 		ProviderInterfaceVersion: dailyBarsCloseSeriesEastmoneyAPIVersion,
 	}
 	return DailyBarsCloseSeriesInput{
-		Payload: payload,
-		Sources: []DailyBarsCloseSeriesSource{source},
+		Payload:    payload,
+		Sources:    []DailyBarsCloseSeriesSource{source},
 		SystemAsOf: cutoff,
 	}, nil
 }
@@ -270,10 +231,10 @@ func validateEastmoneyCloseEvidence(closeValue string, evidence *DailyBarDecimal
 		return DailyBarDecimalEvidence{}, errors.New("Eastmoney price Close must not apply a unit conversion factor")
 	}
 	return DailyBarDecimalEvidence{
-		EvidenceKind: evidence.EvidenceKind,
-		SourceToken: evidence.SourceToken,
+		EvidenceKind:         evidence.EvidenceKind,
+		SourceToken:          evidence.SourceToken,
 		SourceFractionDigits: cloneDailyBarsCloseSeriesInt(evidence.SourceFractionDigits),
-		ProtocolScale: nil,
+		ProtocolScale:        nil,
 		UnitConversionFactor: evidence.UnitConversionFactor,
 	}, nil
 }

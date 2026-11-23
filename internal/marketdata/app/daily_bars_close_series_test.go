@@ -9,8 +9,6 @@ import (
 func TestBuildDailyBarsCloseSeriesInputPreservesExactCloseAndPITEvidence(t *testing.T) {
 	cutoff := time.Date(2026, 11, 20, 8, 0, 0, 0, time.UTC)
 	observed := cutoff.Add(-time.Minute)
-	fractionDigits := 4
-	sourceToken := "43.4900"
 	query := DailyBarsQuery{
 		Symbol: "600036.SH", StartDate: "2026-11-17", EndDate: "2026-11-18",
 		Limit: 2, AdjustmentBasis: AdjustmentNone, SystemObservedAtCutoff: &cutoff,
@@ -18,13 +16,13 @@ func TestBuildDailyBarsCloseSeriesInputPreservesExactCloseAndPITEvidence(t *test
 	snapshot := DailyBarsV2Snapshot{
 		Symbol: "600036.SH", Interval: "1d", AdjustmentBasis: AdjustmentNone,
 		QualityStatus: QualityValid, SystemObservedAtCutoff: &cutoff,
-		TradingCalendarRef: stringPointer("data_calendar:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+		TradingCalendarRef: closeSeriesStringPointer("data_calendar:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
 		CoverageEvidence: DailyBarCoverageEvidence{
 			CalendarQualityStatus: QualityValid, ExpectedTradingDays: 2, MinimumRequiredBars: 2,
 			CoverageBasis: "exchange_calendar", CoverageSufficient: true,
 		},
 		Bars: []DailyBar{
-			closeSeriesTestBar("2026-11-17", "43.49", sourceToken, fractionDigits, cutoff, observed),
+			closeSeriesTestBar("2026-11-17", "43.49", "43.4900", 4, cutoff, observed),
 			closeSeriesTestBar("2026-11-18", "43.12", "43.120", 3, cutoff, observed),
 		},
 	}
@@ -57,7 +55,6 @@ func TestBuildDailyBarsCloseSeriesInputPreservesExactCloseAndPITEvidence(t *test
 func TestBuildDailyBarsCloseSeriesInputRejectsUntrustedInputs(t *testing.T) {
 	cutoff := time.Date(2026, 11, 20, 8, 0, 0, 0, time.UTC)
 	observed := cutoff.Add(-time.Minute)
-	fractionDigits := 2
 	baseQuery := DailyBarsQuery{
 		Symbol: "600036.SH", StartDate: "2026-11-17", EndDate: "2026-11-17",
 		Limit: 1, AdjustmentBasis: AdjustmentNone, SystemObservedAtCutoff: &cutoff,
@@ -65,12 +62,12 @@ func TestBuildDailyBarsCloseSeriesInputRejectsUntrustedInputs(t *testing.T) {
 	baseSnapshot := DailyBarsV2Snapshot{
 		Symbol: "600036.SH", Interval: "1d", AdjustmentBasis: AdjustmentNone,
 		QualityStatus: QualityValid, SystemObservedAtCutoff: &cutoff,
-		TradingCalendarRef: stringPointer("data_calendar:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+		TradingCalendarRef: closeSeriesStringPointer("data_calendar:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
 		CoverageEvidence: DailyBarCoverageEvidence{
 			CalendarQualityStatus: QualityValid, ExpectedTradingDays: 1, MinimumRequiredBars: 1,
 			CoverageBasis: "exchange_calendar", CoverageSufficient: true,
 		},
-		Bars: []DailyBar{closeSeriesTestBar("2026-11-17", "43.49", "43.49", fractionDigits, cutoff, observed)},
+		Bars: []DailyBar{closeSeriesTestBar("2026-11-17", "43.49", "43.49", 2, cutoff, observed)},
 	}
 	tests := []struct {
 		name   string
@@ -91,6 +88,14 @@ func TestBuildDailyBarsCloseSeriesInputRejectsUntrustedInputs(t *testing.T) {
 			query := baseQuery
 			snapshot := baseSnapshot
 			snapshot.Bars = append([]DailyBar(nil), baseSnapshot.Bars...)
+			if snapshot.Bars[0].ExactValues != nil {
+				exact := *snapshot.Bars[0].ExactValues
+				if exact.CloseEvidence != nil {
+					evidence := *exact.CloseEvidence
+					exact.CloseEvidence = &evidence
+				}
+				snapshot.Bars[0].ExactValues = &exact
+			}
 			test.mutate(&snapshot, &query)
 			if _, err := BuildDailyBarsCloseSeriesInput(query, snapshot); err == nil {
 				t.Fatal("BuildDailyBarsCloseSeriesInput() error = nil, want rejection")
@@ -117,7 +122,7 @@ func closeSeriesTestBar(tradeDate, closeValue, sourceToken string, fractionDigit
 	}
 }
 
-func stringPointer(value string) *string { return &value }
+func closeSeriesStringPointer(value string) *string { return &value }
 
 func TestBuildDailyBarsCloseSeriesInputRejectsMalformedDecimalEvidence(t *testing.T) {
 	cutoff := time.Date(2026, 11, 20, 8, 0, 0, 0, time.UTC)
@@ -129,15 +134,15 @@ func TestBuildDailyBarsCloseSeriesInputRejectsMalformedDecimalEvidence(t *testin
 	snapshot := DailyBarsV2Snapshot{
 		Symbol: "600036.SH", Interval: "1d", AdjustmentBasis: AdjustmentNone,
 		QualityStatus: QualityValid, SystemObservedAtCutoff: &cutoff,
-		TradingCalendarRef: stringPointer("calendar-ref"),
+		TradingCalendarRef: closeSeriesStringPointer("calendar-ref"),
 		CoverageEvidence: DailyBarCoverageEvidence{
 			CalendarQualityStatus: QualityValid, ExpectedTradingDays: 1, MinimumRequiredBars: 1,
 			CoverageBasis: "exchange_calendar", CoverageSufficient: true,
 		},
-		Bars: []DailyBar{closeSeriesTestBar("2026-11-17", "43.49", "043.4900", 4, cutoff, observed)},
+		Bars: []DailyBar{closeSeriesTestBar("2026-11-17", "43.49", "43.490", 4, cutoff, observed)},
 	}
 	_, err := BuildDailyBarsCloseSeriesInput(query, snapshot)
-	if err == nil || !strings.Contains(err.Error(), "decimal") && !strings.Contains(err.Error(), "source fraction digits") {
+	if err == nil || !strings.Contains(err.Error(), "source fraction digits") {
 		t.Fatalf("error = %v, want malformed source decimal rejection", err)
 	}
 }
