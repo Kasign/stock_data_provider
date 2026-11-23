@@ -120,3 +120,14 @@ Quant 不在 `internal/quant/**` 实现 SQL/Redis、通用 Storage、认证、�
 - Go Test Suite [45102027281](https://github.com/Kasign/stock_data_provider/actions/runs/45102027281)、Integration CI [45102027283](https://github.com/Kasign/stock_data_provider/actions/runs/45102027283)、Quant module validation [45102582473](https://github.com/Kasign/stock_data_provider/actions/runs/45102582473) 均通过。
 - Platform 已有 Owner Bearer + `platform:admin` 的 `OwnerAccess()` 管理认证路径；Owner Session 不具备该管理权限。是否将其正式绑定为 Quant Policy 发布/撤销权限，仍需治理决议。
 - Q-01 仍 BLOCKED：Policy Owner 规则/版本/current pointer/发布撤销、生产 AuthorizedResultReader、Researchflow 强类型 Run→QuantResult 关联和 Server Root 完整注入尚未完成。
+
+
+## RepairAll 2026-11-23 QNT-013 写入基础能力与 QNT-014 真实 Facade 边界
+
+- 复核基线：`repair_all` SHA `ceb26596fd365e6c49aa0767de9e8d9f76850d5c`。
+- 新增的 `result.BuildRecord` 和 `application.CreateResult` 仅持久化已经完成计算的 Trend/Risk 强类型 Payload；不执行计算、不负责活动算法版本选择、可信输入 Snapshot 校验、Caller/Use Case 幂等作用域或 Run 关联。该能力归入 QNT-013 结果写入基础，不代表 QNT-014 Facade 完成。
+- Trend 目录目前是 DTO/结构校验，没有生产趋势推断算法；Risk 目录目前是规则执行/聚合框架，RuleEvaluator 由上层注入，缺少权威生产规则目录、真实事实读取和完整规则覆盖。不可把现有纯 DTO/框架包装为生产计算结果。
+- Researchflow StageOutput 已有精确 Registry、Envelope 校验、StageOutput Resource 持久化及 Attempt/Stage 原子提交；但无 Quant Stage 的正式业务类型、Schema、Provider、Registry Entry。无真实 Stage 合同前，不得发明 StageCode 或把通用 resource_ref 解释成 Quant result_id。
+- GOV-CTR-006 对 Quant 的固定映射为可信 Researchflow service principal、精确 result_id、purpose=quant_analysis、content_level=full；每次读取必须按 Owner 当前策略复核。现有 Enabled 只是策略总开关，不是主体/资源授权。
+- 当前 Q-01 仍 BLOCKED，QNT-014 仍 NOT_STARTED。解锁依赖：①明确真实计算用例与输入事实来源；②有可验证的 Quant 结果生产 Facade；③Researchflow 定义并注册该真实 Stage 的强类型输出，提交事务中保存 result_id 与 Run/Stage/Attempt 关联；④Quant Reader 经公开关联 Port 验证当前 Run 关联，并在策略撤销线性化边界内读取；⑤Server 完成可信依赖装配和 MariaDB 同 Run/跨 Run/无关联/撤销竞态/审计失败验收。
+- 不进入 Data D2；QNT-015 所需 DATA-CTR-005/007 输入质量门禁仍按原计划等待 Data 契约解锁。
