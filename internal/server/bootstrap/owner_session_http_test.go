@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	quantapplication "example.com/stock-analysis-flow/internal/quant/application"
 	platformconfig "example.com/stock-analysis-flow/internal/platform/config"
 	platformsecurity "example.com/stock-analysis-flow/internal/platform/security"
 	serversecurity "example.com/stock-analysis-flow/internal/server/security"
@@ -131,7 +132,7 @@ func minOwnerHTTPTime(a, b time.Time) time.Time {
 	return a
 }
 
-func newOwnerHTTPTestHandler(t *testing.T, sessions *ownerHTTPTestSessions, credentials *ownerHTTPTestCredentials) http.Handler {
+func newOwnerHTTPTestHandler(t *testing.T, sessions *ownerHTTPTestSessions, credentials *ownerHTTPTestCredentials, policyManagers ...quantResultAccessPolicyManager) http.Handler {
 	t.Helper()
 	cookie := platformsecurity.SessionCookieConfig{
 		Name: "__Secure-owner_session", Path: "/api", Secure: true, SameSite: http.SameSiteLaxMode,
@@ -157,6 +158,9 @@ func newOwnerHTTPTestHandler(t *testing.T, sessions *ownerHTTPTestSessions, cred
 		t.Fatal(err)
 	}
 	composition := &ownerSessionComposition{lifecycle: lifecycle, authenticator: authenticator, cookie: cookie}
+	if len(policyManagers) > 0 {
+		composition.policyManager = policyManagers[0]
+	}
 	ownerToken := strings.Repeat("a", 43)
 	env := platformconfigForOwnerHTTP(ownerToken)
 	bearer, err := platformsecurity.NewAuthenticator(env, nil)
@@ -175,6 +179,125 @@ func newOwnerHTTPTestHandler(t *testing.T, sessions *ownerHTTPTestSessions, cred
 		t.Fatal(err)
 	}
 	return handler
+}
+
+
+type ownerHTTPTestQuantPolicyManager struct {
+	state          quantapplication.ResultAccessPolicyState
+	actors         []string
+	publishCalls   int
+	revokeCalls    int
+}
+
+func (m *ownerHTTPTestQuantPolicyManager) Current(context.Context) (quantapplication.ResultAccessPolicyState, error) {
+	return m.state, nil
+}
+
+func (m *ownerHTTPTestQuantPolicyManager) Publish(_ context.Context, actor string, expected uint64) (quantapplication.ResultAccessPolicyState, error) {
+	m.actors = append(m.actors, actor)
+	m.publishCalls++
+	if expected != m.state.Version {
+		return quantapplication.ResultAccessPolicyState{}, quantapplication.ErrPolicyVersionConflict
+	}
+	m.state.Version++
+	m.state.Enabled = true
+	m.state.Snapshot = &quantapplication.PolicySnapshot{
+		SchemaVersion: "1.0.0", SnapshotRef: "policy-snapshot:quant:result-access:test",
+		Policies: []quantapplication.PolicyVersion{{PolicyType: "quant_result_access", PolicyRef: "quant-result-access", PolicyVersion: "test"}},
+	}
+	return m.state, nil
+}
+
+func (m *ownerHTTPTestQuantPolicyManager) Revoke(_ context.Context, actor string, expected uint64) (quantapplication.ResultAccessPolicyState, error) {
+	m.actors = append(m.actors, actor)
+	m.revokeCalls++
+	if expected != m.state.Version {
+		return quantapplication.ResultAccessPolicyState{}, quantapplication.ErrPolicyVersionConflict
+	}
+	m.state.Version++
+	m.state.Enabled = false
+	m.state.Snapshot = &quantapplication.PolicySnapshot{
+		SchemaVersion: "1.0.0", SnapshotRef: "policy-snapshot:quant:result-access:revoked",
+		Policies: []quantapplication.PolicyVersion{{PolicyType: "quant_result_access", PolicyRef: "quant-result-access", PolicyVersion: "revoked"}},
+	}
+	return m.state, nil
+}
+
+func TestQuantResultAccessPolicyManagementRequiresOwnerSessionAndCSRF(t *testing.T) {
+	credentials := &ownerHTTPTestCredentials{credential: platformsecurity.OwnerCredential{
+		Subject: "owner", PasswordHash: "hash:correct", CredentialVersion: 1,
+	}}
+	sessions := &ownerHTTPTestSessions{records: make(map[string]platformsecurity.SessionRecord)}
+	manager := &ownerHTTPTestQuantPolicyManager{}
+	handler := newOwnerHTTPTestHandler(t, sessions, credentials, manager)
+
+	login := httptest.NewRequest(http.MethodPost, "https://stocks.example.com/api/v1/owner/session", strings.NewReader(`{"password":"correct"}`))
+	login.Header.Set("Content-Type", "application/json")
+	login.Header.Set("Origin", "https://stocks.example.com")
+	login.RemoteAddr = "192.0.2.10:4321"
+	loginResponse := httptest.NewRecorder()
+	handler.ServeHTTP(loginResponse, login)
+	if loginResponse.Code != http.StatusOK {
+		t.Fatalf("login status=%d body=%s", loginResponse.Code, loginResponse.Body.String())
+	}
+	cookies := loginResponse.Result().Cookies()
+	var loginBody ownerSessionResponse
+	if len(cookies) != 1 || json.Unmarshal(loginResponse.Body.Bytes(), &loginBody) != nil || loginBody.CSRFToken == "" {
+		t.Fatalf("Owner Session login did not provide Cookie and CSRF token: %s", loginResponse.Body.String())
+	}
+
+	bearerOnly := httptest.NewRequest(http.MethodGet, "https://stocks.example.com/api/v1/owner/quant/result-access-policy", nil)
+	bearerOnly.Header.Set("Authorization", "Bearer "+strings.Repeat("a", 43))
+	bearerOnlyResponse := httptest.NewRecorder()
+	handler.ServeHTTP(bearerOnlyResponse, bearerOnly)
+	if bearerOnlyResponse.Code != http.StatusUnauthorized {
+		t.Fatalf("Owner Bearer unexpectedly authorized Quant policy management: status=%d body=%s", bearerOnlyResponse.Code, bearerOnlyResponse.Body.String())
+	}
+
+	missingCSRF := httptest.NewRequest(http.MethodPut, "https://stocks.example.com/api/v1/owner/quant/result-access-policy", strings.NewReader(`{"expected_version":0}`))
+	missingCSRF.AddCookie(cookies[0])
+	missingCSRF.Header.Set("Content-Type", "application/json")
+	missingCSRF.Header.Set("Origin", "https://stocks.example.com")
+	missingCSRFResponse := httptest.NewRecorder()
+	handler.ServeHTTP(missingCSRFResponse, missingCSRF)
+	if missingCSRFResponse.Code != http.StatusForbidden || manager.publishCalls != 0 {
+		t.Fatalf("policy publish without CSRF was not rejected: status=%d calls=%d body=%s", missingCSRFResponse.Code, manager.publishCalls, missingCSRFResponse.Body.String())
+	}
+
+	publish := httptest.NewRequest(http.MethodPut, "https://stocks.example.com/api/v1/owner/quant/result-access-policy", strings.NewReader(`{"expected_version":0}`))
+	publish.AddCookie(cookies[0])
+	publish.Header.Set("Content-Type", "application/json")
+	publish.Header.Set("Origin", "https://stocks.example.com")
+	publish.Header.Set("X-CSRF-Token", loginBody.CSRFToken)
+	publishResponse := httptest.NewRecorder()
+	handler.ServeHTTP(publishResponse, publish)
+	if publishResponse.Code != http.StatusOK || manager.publishCalls != 1 {
+		t.Fatalf("policy publish status=%d calls=%d body=%s", publishResponse.Code, manager.publishCalls, publishResponse.Body.String())
+	}
+	var published quantPolicyResponse
+	if err := json.Unmarshal(publishResponse.Body.Bytes(), &published); err != nil ||
+		!published.Enabled || published.Version != 1 || published.SnapshotRef == "" {
+		t.Fatalf("published policy response mismatch: %v body=%s", err, publishResponse.Body.String())
+	}
+
+	revoke := httptest.NewRequest(http.MethodPost, "https://stocks.example.com/api/v1/owner/quant/result-access-policy/revoke", strings.NewReader(`{"expected_version":1}`))
+	revoke.AddCookie(cookies[0])
+	revoke.Header.Set("Content-Type", "application/json")
+	revoke.Header.Set("Origin", "https://stocks.example.com")
+	revoke.Header.Set("X-CSRF-Token", loginBody.CSRFToken)
+	revokeResponse := httptest.NewRecorder()
+	handler.ServeHTTP(revokeResponse, revoke)
+	if revokeResponse.Code != http.StatusOK || manager.revokeCalls != 1 {
+		t.Fatalf("policy revoke status=%d calls=%d body=%s", revokeResponse.Code, manager.revokeCalls, revokeResponse.Body.String())
+	}
+	var revoked quantPolicyResponse
+	if err := json.Unmarshal(revokeResponse.Body.Bytes(), &revoked); err != nil ||
+		revoked.Enabled || revoked.Version != 2 {
+		t.Fatalf("revoked policy response mismatch: %v body=%s", err, revokeResponse.Body.String())
+	}
+	if len(manager.actors) != 2 || manager.actors[0] != "owner" || manager.actors[1] != "owner" {
+		t.Fatalf("policy actor was not derived from Owner Session: %+v", manager.actors)
+	}
 }
 
 func platformconfigForOwnerHTTP(token string) platformconfig.Secret {

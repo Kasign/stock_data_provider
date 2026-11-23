@@ -90,6 +90,14 @@ func newHTTPHandler(authenticator *platformsecurity.Authenticator, health, legac
 			rewriteURLPath(health, "/readyz"),
 		)
 		mux.Handle("/api/readyz", readinessHandler)
+		if ownerSession.policyManager != nil {
+			policyHandler, policyErr := newQuantPolicyHTTPHandler(ownerSession)
+			if policyErr != nil {
+				return nil, policyErr
+			}
+			mux.Handle("/api/v1/owner/quant/result-access-policy", policyHandler)
+			mux.Handle("/api/v1/owner/quant/result-access-policy/", policyHandler)
+		}
 		mux.Handle("/api/v1/owner/", ownerHandler)
 	}
 	mux.Handle("/", legacyHandler)

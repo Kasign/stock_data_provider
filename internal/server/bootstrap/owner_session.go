@@ -1,20 +1,31 @@
 package bootstrap
 
 import (
+	"context"
 	"errors"
 	"fmt"
 
+	quantapplication "example.com/stock-analysis-flow/internal/quant/application"
+	quantstorage "example.com/stock-analysis-flow/internal/quant/storage"
 	platformsecurity "example.com/stock-analysis-flow/internal/platform/security"
 	serverconfig "example.com/stock-analysis-flow/internal/server/config"
 	serverresources "example.com/stock-analysis-flow/internal/server/resources"
 	serversecurity "example.com/stock-analysis-flow/internal/server/security"
 )
 
+// quantResultAccessPolicyManager is the Server-facing Owner management port.
+type quantResultAccessPolicyManager interface {
+	Current(context.Context) (quantapplication.ResultAccessPolicyState, error)
+	Publish(context.Context, string, uint64) (quantapplication.ResultAccessPolicyState, error)
+	Revoke(context.Context, string, uint64) (quantapplication.ResultAccessPolicyState, error)
+}
+
 // ownerSessionComposition 仅组合依赖，不拥有共享 DB/Redis 的生命周期。
 type ownerSessionComposition struct {
 	lifecycle     *serversecurity.SessionLifecycleService
 	researchflow  *researchflowOwnerComposition
 	authenticator *serversecurity.SessionAuthenticator
+	policyManager quantResultAccessPolicyManager
 	cookie        platformsecurity.SessionCookieConfig
 }
 
@@ -80,5 +91,16 @@ func newOwnerSessionComposition(
 	if err != nil {
 		return nil, fmt.Errorf("创建 Owner Session Authenticator 失败: %w", err)
 	}
-	return &ownerSessionComposition{lifecycle: lifecycle, authenticator: authenticator, cookie: cfg.Cookie}, nil
+	policyStore, err := quantstorage.NewMySQLResultAccessPolicyStore(shared.DB)
+	if err != nil {
+		return nil, fmt.Errorf("创建 Quant Result Access Policy Store 失败: %w", err)
+	}
+	policyManager, err := quantapplication.NewResultAccessPolicyManager(policyStore)
+	if err != nil {
+		return nil, fmt.Errorf("创建 Quant Result Access Policy Manager 失败: %w", err)
+	}
+	return &ownerSessionComposition{
+		lifecycle: lifecycle, authenticator: authenticator,
+		policyManager: policyManager, cookie: cfg.Cookie,
+	}, nil
 }
