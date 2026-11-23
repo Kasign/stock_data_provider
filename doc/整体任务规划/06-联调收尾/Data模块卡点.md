@@ -392,3 +392,13 @@ Root Server 的 Data Module 构造、共享资源注入、Migration Registry、I
 - 新增 Data Application 层契约测试：使用现有 Builder 构造的结构样例，分别编译 DATA-CTR-007 Payload 1.0.0 与 DATA-CTR-008 Manifest 2.0.0 Schema，验证 Go 输出符合 Schema。
 - 增加 Schema 负向断言：聚合质量与逐 Bar 质量为 degraded/stale/invalid/unknown 时均不能通过 DATA-CTR-007 Schema。
 - 该测试只证明 Go DTO 与 Schema 的结构一致性，不是生产数据 Golden；真实 Golden 仍必须由 MariaDB PIT V2 Reader 的实际历史数据生成，不能用单元测试样例代替。
+
+
+## 2026-11-23 Snapshot V6 不可变 Repository
+
+- 新增 Data Application Repository Port：`DailyBarsCloseSeriesSnapshotRepository`，仅定义按 SnapshotRef 保存和精确读取，不向其他模块暴露底层 SQL Store。
+- 新增 Migration V6：`market_data_daily_bars_close_series_snapshots`，以 `snapshot_ref` 为唯一主键，保存 Manifest/Payload 的规范化 JSON、两份独立指纹、各自 Schema 版本和持久化时间；不复制逐 Bar 历史数据。
+- 新增 MariaDB Repository：写入前执行 Snapshot Verify；按 SnapshotRef 幂等写入，不覆盖既有记录；重复写入后读取回验；读取时重新解析 JSON、验证双指纹和组合 SnapshotRef，并要求存储 JSON 为 JCS 规范形式。
+- 未配置 MariaDB 时 Save/Get 明确返回错误，不允许空操作成功；新增 V6 物理 Schema 检查。
+- 增加单元/集成测试覆盖存储未配置、引用格式、幂等、并发重复写、损坏数据拒绝和 Migration V6 结构。真实 MariaDB 集成测试由 CI 的 Data MariaDB job 执行。
+- 当前只完成不可变 Snapshot 存储，不代表授权生产链路已完成；Data Owner 授权、撤销/过期读取复核、Server Principal 注入及 Snapshot Application 生产入口仍未接入。

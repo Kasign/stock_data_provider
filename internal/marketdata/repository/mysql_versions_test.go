@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -192,8 +193,8 @@ func TestFundamentalsRevisionHashNormalizesEquivalentOffsetInstants(t *testing.T
 
 func TestMarketDataMigrationDefinitionsExposeImmutableVersionedHistory(t *testing.T) {
 	migrations := MigrationDefinitions()
-	if len(migrations) != 5 {
-		t.Fatalf("migration count = %d, want four published/compatibility versions plus calendar snapshot V5", len(migrations))
+	if len(migrations) != 6 {
+		t.Fatalf("migration count = %d, want V1-V5 plus immutable daily-bars Snapshot V6", len(migrations))
 	}
 	for index := 0; index < 3; index++ {
 		if migrations[index].Version != uint64(index+1) || len(migrations[index].Statements) == 0 || len(migrations[index].Operations) != 0 {
@@ -207,5 +208,11 @@ func TestMarketDataMigrationDefinitionsExposeImmutableVersionedHistory(t *testin
 	calendar := migrations[4]
 	if calendar.Version != 5 || len(calendar.Statements) != 1 || len(calendar.Operations) != 0 {
 		t.Fatalf("calendar snapshot migration V5 must contain one additive table creation: %+v", calendar)
+	}
+	dailyBarsSnapshot := migrations[5]
+	if dailyBarsSnapshot.Version != 6 || len(dailyBarsSnapshot.Statements) != 1 || len(dailyBarsSnapshot.Operations) != 0 ||
+		!strings.Contains(dailyBarsSnapshot.Statements[0], "market_data_daily_bars_close_series_snapshots") ||
+		!strings.Contains(dailyBarsSnapshot.Statements[0], "PRIMARY KEY (snapshot_ref)") {
+		t.Fatalf("daily-bars Snapshot migration V6 must add one immutable query-level Snapshot table: %+v", dailyBarsSnapshot)
 	}
 }

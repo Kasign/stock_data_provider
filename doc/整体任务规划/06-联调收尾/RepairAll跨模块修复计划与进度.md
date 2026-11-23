@@ -1030,3 +1030,10 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 
 - 已增加 DATA-CTR-007 与 DATA-CTR-008 2.0.0 Schema 编译及 Builder 输出一致性测试，并覆盖非 valid 质量状态的 Schema 拒绝。
 - 当前仍缺真实历史 Payload/Manifest Golden 与 DATA-CTR-007/008 消费者 Contract Test；Schema 文件存在不等于契约已冻结。Repository V6 写入与跨模块生产消费仍以契约治理状态为准。
+
+
+## 2026-11-23 Snapshot V6 Repository 实施
+
+- 已实现 Data 内部 Snapshot Repository Port、Migration V6 和 MariaDB 不可变 Repository。保存/读取以 SnapshotRef 精确定位，保存幂等且不覆盖，读取重新 Verify Manifest/Payload 双指纹及组合引用；数据库未配置时 fail closed。
+- V6 仅增加查询级 Snapshot 表，不复制 `market_data_daily_bar_versions` 的逐 Bar 历史数据。物理 Schema 校验纳入 Data Store Compatibility Check。
+- 测试覆盖 V6 Migration 定义、MariaDB 幂等/并发/篡改拒绝和存储未配置。下一步为 Snapshot Application 创建/读取用例，并接入 Data Owner 授权；跨模块公开消费仍需完成真实数据 Golden 与契约测试。
