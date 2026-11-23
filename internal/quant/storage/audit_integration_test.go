@@ -76,7 +76,7 @@ func TestMySQLAccessAuditorRejectsInvalidEventAndCancellation(t *testing.T) {
 		PurposeCode: "quant_analysis",
 		ContentLevel: "full",
 		Decision:    "denied",
-		ReasonCode:  "authorization_denied",
+		ReasonCode:   "authorization_denied",
 		OccurredAt:  time.Date(2026, 11, 20, 3, 0, 0, 0, time.UTC),
 	}
 	missingRun := valid
