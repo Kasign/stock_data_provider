@@ -27,23 +27,23 @@ const maxDataAuthorizationObjectBytes = 64 * 1024
 
 type DataAuthorizationDecision struct {
 	AuthorizationRef json.RawMessage
-	PolicySnapshot json.RawMessage
+	PolicySnapshot     json.RawMessage
 }
 
 type storedDataAuthorizationRef struct {
-	AuthorizationRef string `json:"authorization_ref"`
-	PolicyOwner string `json:"policy_owner"`
-	PolicyVersion string `json:"policy_version"`
-	Decision string `json:"decision"`
-	PurposeCode string `json:"purpose_code"`
-	ContentLevel string `json:"content_level"`
-	SubjectRef string `json:"subject_ref"`
-	ResourceRef string `json:"resource_ref"`
-	DecidedAt string `json:"decided_at"`
-	ExpiresAt *string `json:"expires_at"`
-	Conditions []string `json:"conditions"`
-	DecisionFingerprint string `json:"decision_fingerprint"`
-	SchemaVersion string `json:"schema_version"`
+	AuthorizationRef     string   `json:"authorization_ref"`
+	PolicyOwner          string   `json:"policy_owner"`
+	PolicyVersion        string   `json:"policy_version"`
+	Decision             string   `json:"decision"`
+	PurposeCode          string   `json:"purpose_code"`
+	ContentLevel         string   `json:"content_level"`
+	SubjectRef           string   `json:"subject_ref"`
+	ResourceRef          string   `json:"resource_ref"`
+	DecidedAt            string   `json:"decided_at"`
+	ExpiresAt            *string  `json:"expires_at"`
+	Conditions           []string `json:"conditions"`
+	DecisionFingerprint  string   `json:"decision_fingerprint"`
+	SchemaVersion        string   `json:"schema_version"`
 }
 
 // AppendDataAuthorizationDecision 保存完整 GOV-CTR-006 决策对象；重复写入必须逐字节等价。
@@ -53,7 +53,9 @@ func (s *Store) AppendDataAuthorizationDecision(ctx context.Context, decision Da
 		return ErrDataAuthorizationDecisionUnavailable
 	}
 	ref, decidedAt, expiresAt, authJSON, policyJSON, recordHash, err := validateDataAuthorizationDecision(decision)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	_, err = s.db.ExecContext(ctx, `INSERT INTO market_data_authorization_decisions
 (authorization_ref, subject_ref, resource_ref, purpose_code, policy_version, decided_at, expires_at,
  decision_fingerprint, authorization_json, policy_snapshot_json, record_hash)
@@ -61,7 +63,9 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON DUPLICATE KEY UPDATE authorization_ref=VALUES(authorization_ref)`,
 		ref.AuthorizationRef, ref.SubjectRef, ref.ResourceRef, ref.PurposeCode, ref.PolicyVersion,
 		decidedAt, expiresAt, ref.DecisionFingerprint, authJSON, policyJSON, recordHash)
-	if err != nil { return fmt.Errorf("%w: %v", ErrDataAuthorizationDecisionUnavailable, err) }
+	if err != nil {
+		return fmt.Errorf("%w: %v", ErrDataAuthorizationDecisionUnavailable, err)
+	}
 	var storedHash string
 	if err := s.db.QueryRowContext(ctx, `SELECT record_hash FROM market_data_authorization_decisions WHERE authorization_ref=?`, ref.AuthorizationRef).Scan(&storedHash); err != nil {
 		return fmt.Errorf("%w: %v", ErrDataAuthorizationDecisionUnavailable, err)
@@ -109,7 +113,9 @@ func (s *Store) GetDataAuthorizationDecision(ctx context.Context, authorizationR
 	var storedHash string
 	err := s.db.QueryRowContext(ctx, `SELECT authorization_json, policy_snapshot_json, record_hash
 FROM market_data_authorization_decisions WHERE authorization_ref=?`, authorizationRef).Scan(&authJSON, &policyJSON, &storedHash)
-	if errors.Is(err, sql.ErrNoRows) { return DataAuthorizationDecision{}, ErrDataAuthorizationDecisionInvalid }
+	if errors.Is(err, sql.ErrNoRows) {
+		return DataAuthorizationDecision{}, ErrDataAuthorizationDecisionInvalid
+	}
 	if err != nil { return DataAuthorizationDecision{}, fmt.Errorf("%w: %v", ErrDataAuthorizationDecisionUnavailable, err) }
 	decision := DataAuthorizationDecision{AuthorizationRef: authJSON, PolicySnapshot: policyJSON}
 	ref, _, _, canonicalAuth, canonicalPolicy, recordHash, err := validateDataAuthorizationDecision(decision)
@@ -157,17 +163,25 @@ func validateDataAuthorizationDecision(value DataAuthorizationDecision) (storedD
 		expiresAt = parsed
 	}
 	authJSON, err := json.Marshal(ref)
-	if err != nil { return ref, time.Time{}, nil, nil, nil, "", ErrDataAuthorizationDecisionInvalid }
+	if err != nil {
+		return ref, time.Time{}, nil, nil, nil, "", ErrDataAuthorizationDecisionInvalid
+	}
 	var policy any
-	if err := json.Unmarshal(value.PolicySnapshot, &policy); err != nil { return ref, time.Time{}, nil, nil, nil, "", ErrDataAuthorizationDecisionInvalid }
+	if err := json.Unmarshal(value.PolicySnapshot, &policy); err != nil {
+		return ref, time.Time{}, nil, nil, nil, "", ErrDataAuthorizationDecisionInvalid
+	}
 	policyJSON, err := json.Marshal(policy)
-	if err != nil { return ref, time.Time{}, nil, nil, nil, "", ErrDataAuthorizationDecisionInvalid }
+	if err != nil {
+		return ref, time.Time{}, nil, nil, nil, "", ErrDataAuthorizationDecisionInvalid
+	}
 	// Require canonical JSON bytes so duplicate keys, alternate encodings and unknown shape drift cannot be silently normalized.
 	if !bytes.Equal(bytes.TrimSpace(value.AuthorizationRef), authJSON) || !bytes.Equal(bytes.TrimSpace(value.PolicySnapshot), policyJSON) {
 		return ref, time.Time{}, nil, nil, nil, "", ErrDataAuthorizationDecisionInvalid
 	}
 	hash := sha256.New()
-	hash.Write(authJSON); hash.Write([]byte{0}); hash.Write(policyJSON)
+	hash.Write(authJSON)
+	hash.Write([]byte{0})
+	hash.Write(policyJSON)
 	recordHash := hex.EncodeToString(hash.Sum(nil))
 	return ref, decidedAt.UTC(), expiresAt, authJSON, policyJSON, recordHash, nil
 }
@@ -182,7 +196,9 @@ func validDataAuthorizationReason(value string) bool {
 	return value != "" && len(value) <= 128 && strings.TrimSpace(value) == value && !strings.ContainsAny(value, " \r\n\t")
 }
 func validDataAuthorizationFingerprint(value string) bool {
-	if len(value) != 64 { return false }
+	if len(value) != 64 {
+		return false
+	}
 	_, err := hex.DecodeString(value)
 	return err == nil && strings.ToLower(value) == value
 }
