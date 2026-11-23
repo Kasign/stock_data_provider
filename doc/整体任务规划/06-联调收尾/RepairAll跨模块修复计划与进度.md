@@ -873,3 +873,36 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - 本次顺序调整不代表 DATA-CTR-005/007 已冻结或已解锁；项目登记簿仍按 deferred 处理。只允许先完成契约证据盘点/设计与正式重新进入审查，未取得契约 Owner 的冻结/重新进入依据前，不发布对外 DTO/HTTP 契约或伪称生产可用。
 - FLOW-005/FLOW-006、LLM/Notification 空壳接入、广泛 Provider 精度/Amount/HFQ 扩展均不在本切片内；待真实调用链形成后按主线推进。
 - 本次只校准任务状态与依赖顺序，不修改生产代码，不改变测试标准，不创建分支，不切换分支。
+
+
+## 2026-11-23 装配优先执行口径校准（以 HEAD ca79ef0 为基线）
+
+本轮按用户确认的执行原则收敛范围：**Server 装配不再等待所有上游模块业务能力完善；先接入当前已有且具备生产条件的能力，再以真实业务流程暴露具体缺口。** 数据质量、算法覆盖和领域规则缺陷由对应模块独立负责，不作为 Server 初始化的笼统前置条件。
+
+### 当前代码事实（已核对 repair_all）
+
+| 能力 | 当前状态 | 结论 |
+|---|---|---|
+| Root 共享 MariaDB/Redis、Platform HTTP Client、Migration Registry | 已有 | 不重做；按现有 Root 资源所有权继续复用 |
+| Data Module 构造、Root Handler、Readiness、Lifecycle | 已有 | 不重做；真实 Provider 数据质量另由 Data 验收 |
+| News Search Stage、Researchflow Run/Template/Worker Runtime | 已有 | 当前正式执行 Stage 只有 News Search；不把它误报为完整研究链路 |
+| Research News Evidence Query/Importer 组合 | 已有，按 Cursor Key Ring 配置启用 | 尚无真实 Researchflow 消费 Stage；不创建占位消费者 |
+| Research/Researchflow Outbox 到 Notification Inbox Relay | 已有 | 不等于 Notification Delivery；后者不是首条研究报告链路的阻塞项 |
+| Quant Result Repository、审计和策略存储基础 | 模块实现已有部分，Root 仅装配策略管理入口 | 生产 AuthorizedResultReader、真实计算 Facade、Quant Stage Provider/关联契约未形成；不能由 Server 伪造 |
+| LLM Transport Adapter | 已有薄适配器 | 缺真实 Gateway 配置/Secret/Capability 与实际消费者；不创建空 Provider |
+| Research Context | Repository/Service 组合部分存在 | Context Owner Authorizer 和真实消费者未形成；不注入默认 Allow |
+| Researchflow 新 HTTP API | Application Create/Get/Cancel 用例及 Owner composition 存在 | Root Router 未挂载 Researchflow Run HTTP Handler；SRV-CTR-001 仍 deferred，不能沿用已退役旧 Analysis DTO 或自行猜测公开契约 |
+
+### 本轮执行顺序
+
+1. **Server 已有能力装配核验**：逐项确认构造、配置、注入、Migration、Readiness、Lifecycle、HTTP 注册及 Worker 注册；已通过的项目不重复建设。
+2. **Server 真正缺失的装配补齐**：仅对已存在且契约明确的生产 Adapter/Use Case 补 Root 注入和测试；缺少领域实现或正式契约的项目登记为上游/契约阻断，不由 Server 造假补齐。
+3. **Researchflow 对外 HTTP 契约**：基于现有 CreateRun/GetRun/CancelRun Application、WebUI 当前页面场景和 Owner Session 认证边界，先形成 SRV-CTR-001 最小提案；契约未确认前不挂载猜测性路由。
+4. **最小真实流程**：先以现有 News Search Workflow 验证 WebUI→Root→Researchflow Run→Worker→Stage Output→Run 查询；再逐项接入 Quant/Research/LLM，不能把 News Search 的成功冒充完整 A 股研究报告成功。
+5. **定点完善**：数据质量、算法规则、PIT/证据、通知投递等只在真实消费者需要时进入当前主线；非首条闭环必需能力后置。
+
+### 当前判断
+
+当前 Server 并非“完全没有生产装配”。Root 的基础设施、Data、News Search、Researchflow Runtime、部分 Research/Notification Relay 已有真实组合代码。当前最明确的 Server/API 缺口是 **Researchflow CreateRun/GetRun/CancelRun 尚未形成 Root 对外 HTTP 接口**；而 Quant 真实计算/授权读取、Research Context 授权消费、LLM 真实调用分别仍缺领域 Owner 交付，不能算作单纯 Server 装配遗漏。
+
+本轮文档校准不代表代码验收完成。后续代码变更必须附精确 SHA 与针对性测试/Integration CI 证据。
