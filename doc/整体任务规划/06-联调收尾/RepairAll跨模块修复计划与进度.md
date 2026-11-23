@@ -1066,3 +1066,15 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - 精确 SHA 的 Go Test Suite [45176291646](https://github.com/Kasign/stock_data_provider/actions/runs/45176291646) 与 Integration CI [45176291723](https://github.com/Kasign/stock_data_provider/actions/runs/45176291723) 均 completed / success；gofmt、常规测试、Race、Vet、Data MariaDB、模块集成和 Docker 构建通过。
 - Live Provider Probe Run [45176291862](https://github.com/Kasign/stock_data_provider/actions/runs/45176291862) 的真实 Provider 探测步骤均 skipped，不作为真实数据验证。
 - Data Owner 策略管理 HTTP 提案已补齐未发布状态语义，但仍是 DRAFT；公开路由必须等待契约确认和冻结。
+
+
+## 2026-11-23 Data Owner 策略管理方案复审与领域审计补齐
+
+- 当前代码基线：repair_all @ 9615e8ab70df106856e74551353b48f52e331316。
+- API 评审结论：保留现有 /api/v1/owner/** 管理控制面命名空间；owner 表示 Owner 管理入口，不表示 Data 资源归属，也不授予 Owner Data 读取权限。
+- 发布操作从 PUT 当前资源改为 POST /api/v1/owner/data/daily-bars-access-policy/versions：语义为创建不可变版本并 CAS 推进 current pointer，避免把非幂等的版本发布伪装为 PUT 替换。
+- Data Policy 首版状态收敛为 approved / revoked。删除当前没有独立授权行为的 restricted 与没有审批状态机支撑的 pending；Evaluator 对 approved 按明确 allow-list 判定，对 revoked 一律拒绝。
+- 现有 Server SecurityAuditEvent 不包含策略前后版本和 Payload Hash，不足以作为领域发布审计。新增 Data Migration V9 market_data_authorization_policy_publications，记录前后版本、Payload Hash、可信 actor_ref、Platform Request ID 和发生时间；与策略版本插入、current pointer CAS 同一事务提交。
+- Data Owner Application 现在要求有效 Platform Request ID；缺失时 fail closed。策略审计写入失败时发布事务回滚，不留下已生效但不可追溯的策略。
+- 接口文档已改为评审后 DRAFT，建议编号 SRV-CTR-003；项目级登记簿维护分支仍为 feat/design_doc，未在 repair_all 擅自改动登记簿或宣称契约已冻结。
+- 本轮 CI 首次发现 Go 格式问题和集成测试结构问题，已根据精确 job log 修正；后续 SHA 的 Go Test Suite 与 Integration CI 尚待最终结果。

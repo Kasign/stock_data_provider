@@ -470,3 +470,12 @@ Root Server 的 Data Module 构造、共享资源注入、Migration Registry、I
 - `Current()` 现在能区分“尚无已发布策略”与“数据库/存储不可用”：Repository 的 `sql.ErrNoRows` 映射为 `app.ErrDataAuthorizationPolicyNotPublished`，Application 映射为 `ErrDataPolicyNotPublished`。未发布仍不生成默认策略，存储故障仍 fail closed。
 - 新增 Application 未发布状态测试与 MariaDB 首次发布前的查询断言；精确 SHA `50b6eba3e3c2f85cad593a9680f6424b536a4054` 的 Go Test Suite [45176291646](https://github.com/Kasign/stock_data_provider/actions/runs/45176291646)、Integration CI [45176291723](https://github.com/Kasign/stock_data_provider/actions/runs/45176291723) 均 success。
 - 下一步仍是确认并冻结 `doc/server/contracts/Data-Owner策略管理HTTP接口提案.md`，之后再接 Server Owner Session composition/Handler/Root Router；未冻结前不创建公开路由。
+
+
+## 2026-11-23 Data Owner 策略发布审计与状态模型收敛
+
+- Data Policy 首版只保留 approved / revoked。此前 restricted 与 approved 在授权 Evaluator 中没有不同的判定行为，pending 没有审批状态机；继续保留会误导策略操作人员。未来若需要审批或细粒度限制，必须有独立行为定义并升级 Policy Schema。
+- Data Migration V9 新增 market_data_authorization_policy_publications，记录策略资源、前后版本、Payload Hash、可信 Owner Principal、Platform Request ID、发生时间。
+- 发布审计与 immutable version insert、current pointer CAS 同一 MariaDB 事务提交；审计写入失败时策略发布整体回滚。未发布仍不生成默认策略。
+- Data Owner Application 从已验证的 Owner Session Principal 取得 actor_ref，从 Platform observability Context 取得 Request ID；缺失 Request ID 时 fail closed。
+- 接口评审文档为 doc/server/contracts/Data-Owner策略管理HTTP接口提案.md，推荐 POST /versions 创建不可变版本。文档仍 DRAFT，待项目级契约登记与冻结；Server Handler 尚未开始实现。
