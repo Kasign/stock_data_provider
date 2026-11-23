@@ -989,3 +989,20 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - Live Provider Run 44699296891 / Job 136163491198 的日志确实包含 Eastmoney DailyBars 样本，但只有 forward_adjusted 与 backward_adjusted 两组；没有 none 未复权样本。
 - 日志中的 sample_bars 是 float64 投影，虽然 HTTP body_sample 含部分原始 CSV 行，但响应采样被截断，且这些请求为复权口径；不具备本次首批 none SMA Payload 所需的完整 ExactValues + 原始 Close token + 同次 CalendarRef/CoverageEvidence。
 - 因此该日志可证明 Eastmoney 对应复权请求曾真实返回，但不能作为本次 Snapshot Golden。不要从这些浮点样本反推 Decimal，也不要把复权样本改写为 none。
+
+
+## 2026-11-23 Data Close Series Snapshot Builder 实现进度
+
+- 新增 internal/marketdata/app/daily_bars_close_series.go：BuildDailyBarsCloseSeriesInput 将同一次 DailyBarsV2Reader PIT 结果映射为 DATA-CTR-007 首批 Payload，并同时产出 Manifest sources 输入和 SystemAsOf。
+- 首批实现明确只支持 Eastmoney 未复权 1d：必须有显式日期范围、正数 Limit、显式 SystemObservedAtCutoff、同次 CalendarRef、valid Exchange Calendar、coverage_sufficient=true；不允许用 float64 回填 ExactValues。
+- 每条 Bar 必须有精确 Close、observed-token Evidence、SourceFractionDigits、NormalizationVersion、FetchedAt/NormalizedAt/SystemObservedAt；Close 与原始 SourceToken 用精确有理数比较，SourceFractionDigits 必须与 token 小数位一致。
+- 当前 Eastmoney SourceVersion 已核实为 eastmoney-stock-api-v1，映射到 provider_interface_version；Manifest source_version 明确为 nil，不伪造 Provider 数据版本。normalization_version 从 Data DTO 读取，当前 normalize.Version 为 4。
+- 新增 daily_bars_close_series_test.go，覆盖正确映射、JSON 字段名、缺 CalendarRef、日历降级、覆盖不足、float-only、来源版本不匹配、token 不一致、非 PIT、重复交易日和空诊断字段拒绝。测试代码已写入，但最新 Go Test Suite 在 gofmt 门禁处提前失败，未执行该测试；本轮最后的格式修正提交使用 skip-ci，故最终 HEAD 尚无通过 CI 的证据，不能宣称测试通过。
+- 本轮 push 触发的 Live provider probe workflow 中，实际 Provider 探测步骤全部 skipped（没有包含 [include_public] 标记，也未手动 dispatch），未重新请求 Provider。
+- 当前尚未实现 Manifest/Payload JCS 指纹、SnapshotRef、Migration V6、不可变 Snapshot Repository、Data Owner 授权签发/撤销复核；Builder 只是输入构建层，不对外开放 Snapshot 读取。
+
+### 下一步
+
+1. 先通过真实 Data PIT V2 Reader 获取一份既有 MariaDB 历史日线的完整输出（不访问 Provider），确认 Builder 能从真实 Eastmoney ExactValues/CalendarRef/CoverageEvidence 生成 Payload。
+2. 使用项目 JCS 库分别计算 PayloadFingerprint、ManifestFingerprint，再按 DEC-PLAT-002-055 对两者规范化组合计算 SnapshotRef；补 Golden 和契约校验。
+3. 再新增 Migration V6 和不可变 Snapshot Repository，随后接 Data Owner 授权和 Quant Consumer。
