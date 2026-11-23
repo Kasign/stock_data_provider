@@ -916,10 +916,12 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - 下一步：确认提案后实现正式 OpenAPI/Schema、Handler、Root Router、CSRF/资源授权测试和 WebUI 调用；再执行真实 MariaDB/Redis Worker 集成验收。
 
 
-## 40. 2026-11-23 SRV-CTR-001 Researchflow HTTP API 契约冻结
+## 40. 2026-11-23 SRV-CTR-001 Researchflow HTTP API 冻结与实现
 
-- 用户确认按三个接口和 Owner Session 认证方案执行：POST `/api/v1/researchflow/runs`、GET `/api/v1/researchflow/runs/{run_ref}`、POST `/api/v1/researchflow/runs/{run_ref}/cancel`。
-- 正式契约 `doc/server/contracts/SRV-CTR-001-researchflow-http-api.md` 已冻结为 1.0.0；Owner Session Cookie only，两个 POST 必须校验 Origin/Host 与 X-CSRF-Token；CallerRef 从可信 Principal 派生；Run 资源级授权仍由 Researchflow Application 执行。
-- OpenAPI、CreateRun Request Schema、Run Aggregate Response Schema 和 Golden 已纳入 `doc/server/openapi/`、`doc/server/schema/SRV-CTR-001/`、`doc/server/golden/SRV-CTR-001/`。
-- 已确认现有 CreateRun/GetRun/CancelRun Application、Owner Session Researchflow Identity Adapter 和 Root Owner composition 均存在；当前代码缺口是 Researchflow HTTP Handler/DTO 投影、Root Router 接线、HTTP/CSRF/授权测试及 WebUI API 封装。
-- **状态：契约 FROZEN；代码实现与生产验收仍 IN_PROGRESS，不能将契约冻结等同于接口已上线。** 后续仅按冻结契约实现，不重新扩大 API 范围。
+- 用户确认按三个接口和 Owner Session 认证方式执行：POST `/api/v1/researchflow/runs`、GET `/api/v1/researchflow/runs/{run_ref}`、POST `/api/v1/researchflow/runs/{run_ref}/cancel`。
+- 正式契约 `doc/server/contracts/SRV-CTR-001-researchflow-http-api.md` 已冻结为 1.0.0；项目级登记簿 `doc/contract/PLAT-002-项目级契约冻结登记簿.md` 已将 SRV-CTR-001 从 `deferred` 更新为 `frozen`，登记簿版本 0.2.63-frozen。
+- OpenAPI、CreateRun Request Schema、Run Aggregate Response Schema 和 Golden 已发布；旧提案文件已标记为历史归档并指向正式契约。
+- Root 已接入 Owner Session HTTP Handler、三个路由、显式 Run/Stage/ResultSummary DTO 投影和 WebUI API 封装。复用现有 CreateRun/GetRun/CancelRun Application、Owner Session Identity Adapter、SessionAuthenticator 和 Researchflow Run 资源级授权；没有重写业务逻辑、创建平行认证体系或新增 ID 体系。
+- 新增测试覆盖 Owner Bearer 拒绝、Session 与 Bearer 混合凭据拒绝，以及响应 Schema 字段投影和内部字段隔离。
+- 精确代码 SHA `ab6225a5d936375ebacf6bd57c609502d8a7f75e`：Go Test Suite [Run 45132439066](https://github.com/Kasign/stock_data_provider/actions/runs/45132439066) 与 Integration CI [Run 45132439148](https://github.com/Kasign/stock_data_provider/actions/runs/45132439148) 全项 success。覆盖 gofmt、root Go tests/race/vet、Researchflow/Research、MariaDB/Redis Worker Bootstrap、WebUI syntax/unit/build。
+- **当前状态：契约 FROZEN；代码 CODE_CI_PASS；目标环境 L3 验收 PENDING。** 剩余工作仅为真实 HTTPS 浏览器 Owner Session 登录/CSRF 恢复后执行 CreateRun、GET 轮询、CancelRun，并核验真实 MariaDB 持久化、Worker 执行和最终状态回读。不能把 CI 成功描述为生产端到端验收完成。
