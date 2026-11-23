@@ -53,11 +53,11 @@ func validTrendCreationInput() (manifest.Input, result.TrendPayload) {
 func TestCreateResultPersistsTypedPayloadAndReturnsManifest(t *testing.T) {
 	input, payload := validTrendCreationInput()
 	repository := &captureResultRepository{}
-	usecase, err := NewCreateResult(repository)
+	usecase, err := newResultPersister(repository)
 	if err != nil {
 		t.Fatal(err)
 	}
-	created, err := usecase.Execute(context.Background(), input, payload)
+	created, err := usecase.persist(context.Background(), input, payload)
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
@@ -76,11 +76,11 @@ func TestCreateResultRejectsPayloadDiscriminatorMismatchBeforeSave(t *testing.T)
 	input, payload := validTrendCreationInput()
 	input.ResultType = "risk"
 	repository := &captureResultRepository{}
-	usecase, err := NewCreateResult(repository)
+	usecase, err := newResultPersister(repository)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := usecase.Execute(context.Background(), input, payload); !errors.Is(err, result.ErrInvalidEnvelope) {
+	if _, err := usecase.persist(context.Background(), input, payload); !errors.Is(err, result.ErrInvalidEnvelope) {
 		t.Fatalf("Execute() error = %v, want ErrInvalidEnvelope", err)
 	}
 	if repository.calls != 0 {
@@ -92,11 +92,11 @@ func TestCreateResultRejectsPayloadMetadataMismatchBeforeSave(t *testing.T) {
 	input, payload := validTrendCreationInput()
 	input.Period = "5d"
 	repository := &captureResultRepository{}
-	usecase, err := NewCreateResult(repository)
+	usecase, err := newResultPersister(repository)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := usecase.Execute(context.Background(), input, payload); !errors.Is(err, result.ErrInvalidEnvelope) {
+	if _, err := usecase.persist(context.Background(), input, payload); !errors.Is(err, result.ErrInvalidEnvelope) {
 		t.Fatalf("Execute() error = %v, want ErrInvalidEnvelope", err)
 	}
 	if repository.calls != 0 {
@@ -107,13 +107,13 @@ func TestCreateResultRejectsPayloadMetadataMismatchBeforeSave(t *testing.T) {
 func TestCreateResultDoesNotSaveWhenContextCancelled(t *testing.T) {
 	input, payload := validTrendCreationInput()
 	repository := &captureResultRepository{}
-	usecase, err := NewCreateResult(repository)
+	usecase, err := newResultPersister(repository)
 	if err != nil {
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if _, err := usecase.Execute(ctx, input, payload); !errors.Is(err, context.Canceled) {
+	if _, err := usecase.persist(ctx, input, payload); !errors.Is(err, context.Canceled) {
 		t.Fatalf("Execute() error = %v, want context.Canceled", err)
 	}
 	if repository.calls != 0 {
@@ -124,11 +124,11 @@ func TestCreateResultDoesNotSaveWhenContextCancelled(t *testing.T) {
 func TestCreateResultWrapsPersistenceFailure(t *testing.T) {
 	input, payload := validTrendCreationInput()
 	repository := &captureResultRepository{err: errors.New("database unavailable")}
-	usecase, err := NewCreateResult(repository)
+	usecase, err := newResultPersister(repository)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := usecase.Execute(context.Background(), input, payload); !errors.Is(err, ErrResultPersistenceFailed) {
+	if _, err := usecase.persist(context.Background(), input, payload); !errors.Is(err, ErrResultPersistenceFailed) {
 		t.Fatalf("Execute() error = %v, want ErrResultPersistenceFailed", err)
 	}
 }
