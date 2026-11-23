@@ -498,3 +498,75 @@ func TestEnvelopePreservesExplicitEmptySnapshotRefs(t *testing.T) {
 		t.Fatalf("round-tripped Envelope does not match Manifest: %v", err)
 	}
 }
+ 
+func TestIndicatorPayloadBuildsImmutableRecordAndEnvelope(t *testing.T) {
+	count := 5
+	payload, err := NewIndicatorPayload("sma", []metric.Metric{{
+		MetricCode: "sma", Value: json.RawMessage("10.5"), Unit: "CNY",
+		Period: "5d", SystemAsOf: "2026-11-23T00:00:00Z",
+		QualityStatus: metric.QualityValid, MetricStatus: metric.StatusAvailable,
+		CalculationVersion: "sma.v1", SampleCount: &count,
+		LowerBound: json.RawMessage("null"), UpperBound: json.RawMessage("null"),
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	input := manifest.Input{
+		ResultType: "indicator", Scope: "stock", SecurityID: "600000.SH",
+		Period: "5d", QualityStatus: "valid", ResultStatus: "completed",
+		SchemaVersion: EnvelopeSchemaVersion, PayloadSchemaVersion: "1.0.0",
+		AlgorithmVersion: "sma.v1", ParameterFingerprint: "sha256:sma-parameters",
+		SystemAsOf: envelopeTestTime(t), InputSnapshotRefs: []string{"data_snapshot:sha256:" + strings.Repeat("a", 64)},
+	}
+	record, err := BuildRecord(input, payload)
+	if err != nil {
+		t.Fatalf("BuildRecord() error = %v", err)
+	}
+	if err := record.Validate(); err != nil {
+		t.Fatalf("record validation error = %v", err)
+	}
+	decoded, err := DecodePayload(record.Manifest.ResultType, record.Manifest.PayloadSchemaVersion, record.Payload)
+	if err != nil {
+		t.Fatalf("DecodePayload() error = %v", err)
+	}
+	if !supportedPayloadValue(decoded) {
+		t.Fatal("decoded Indicator payload is not registered in the result union")
+	}
+	envelope, err := BuildEnvelope(record.Manifest, "authorization-ref:current", payload)
+	if err != nil {
+		t.Fatalf("BuildEnvelope() error = %v", err)
+	}
+	encoded, err := json.Marshal(envelope)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var roundTrip Envelope
+	if err := json.Unmarshal(encoded, &roundTrip); err != nil {
+		t.Fatalf("Envelope round-trip failed: %v", err)
+	}
+	if err := roundTrip.ValidateAgainstManifest(record.Manifest); err != nil {
+		t.Fatalf("round-trip Manifest binding failed: %v", err)
+	}
+}
+
+func TestIndicatorPayloadRejectsManifestContextDrift(t *testing.T) {
+	count := 5
+	payload, err := NewIndicatorPayload("sma", []metric.Metric{{
+		MetricCode: "sma", Value: json.RawMessage("10.5"), Unit: "CNY",
+		Period: "5d", SystemAsOf: "2026-11-23T00:00:00Z",
+		QualityStatus: metric.QualityValid, MetricStatus: metric.StatusAvailable,
+		CalculationVersion: "sma.v1", SampleCount: &count,
+		LowerBound: json.RawMessage("null"), UpperBound: json.RawMessage("null"),
+	}})
+	if err != nil { t.Fatal(err) }
+	input := manifest.Input{
+		ResultType: "indicator", Scope: "stock", SecurityID: "600000.SH",
+		Period: "10d", QualityStatus: "valid", ResultStatus: "completed",
+		SchemaVersion: EnvelopeSchemaVersion, PayloadSchemaVersion: "1.0.0",
+		AlgorithmVersion: "sma.v1", ParameterFingerprint: "sha256:sma-parameters",
+		SystemAsOf: envelopeTestTime(t), InputSnapshotRefs: []string{"snapshot:sma"},
+	}
+	if _, err := BuildRecord(input, payload); !errors.Is(err, ErrInvalidEnvelope) {
+		t.Fatalf("BuildRecord() error = %v, want ErrInvalidEnvelope", err)
+	}
+}

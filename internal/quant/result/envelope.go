@@ -203,6 +203,8 @@ func DecodePayload(resultType, schemaVersion string, raw json.RawMessage) (Paylo
 		return nil, fmt.Errorf("%w: payload JSON is invalid: %v", ErrInvalidEnvelope, err)
 	}
 	switch {
+	case resultType == "indicator" && schemaVersion == "1.0.0":
+		return DecodeIndicatorPayload(raw)
 	case resultType == "trend" && schemaVersion == "1.0.0":
 		var value trend.Result
 		if err := decodeStrictPayload(raw, &value); err != nil {
@@ -324,6 +326,10 @@ func (envelope Envelope) Validate() error {
 		if payload.value.SystemAsOf != envelope.SystemAsOf {
 			return ErrInvalidEnvelope
 		}
+	case IndicatorPayload:
+		if err := validateIndicatorManifestMetadata(payload.value, envelope.Period, envelope.SystemAsOf, envelope.AlgorithmVersion, envelope.QualityStatus, envelope.ResultStatus); err != nil {
+			return err
+		}
 	default:
 		return ErrUnsupportedPayload
 	}
@@ -441,7 +447,7 @@ func (envelope *Envelope) UnmarshalJSON(data []byte) error {
 
 func supportedPayloadValue(payload Payload) bool {
 	switch payload.(type) {
-	case TrendPayload, RiskPayload:
+	case TrendPayload, RiskPayload, IndicatorPayload:
 		return true
 	default:
 		return false
@@ -565,4 +571,46 @@ func canonicalEnvelopeTime(value string) bool {
 	parsed, err := time.Parse(time.RFC3339Nano, value)
 	return err == nil && parsed.Location() == time.UTC &&
 		strings.HasSuffix(value, "Z") && parsed.UTC().Format(time.RFC3339Nano) == value
+}
+
+
+// validateIndicatorManifestMetadata binds every Indicator Metric to the immutable Manifest.
+// Result lifecycle status is derived from the common metric status; it is not inferred from
+// the numeric value or from the algorithm's domain-specific meaning.
+func validateIndicatorManifestMetadata(value indicatorPayloadValue, period, systemAsOf, algorithmVersion, qualityStatus, resultStatus string) error {
+	if len(value.Metrics) == 0 {
+		return ErrInvalidEnvelope
+	}
+	first := value.Metrics[0]
+	expectedResultStatus, ok := indicatorResultStatus(first.MetricStatus)
+	if !ok || expectedResultStatus != resultStatus {
+		return ErrInvalidEnvelope
+	}
+	for _, item := range value.Metrics {
+		if item.Period != period ||
+			item.SystemAsOf != systemAsOf ||
+			item.CalculationVersion != algorithmVersion ||
+			string(item.QualityStatus) != qualityStatus ||
+			item.MetricStatus != first.MetricStatus {
+			return ErrInvalidEnvelope
+		}
+	}
+	return nil
+}
+
+func indicatorResultStatus(status metric.Status) (string, bool) {
+	switch status {
+	case metric.StatusAvailable:
+		return "completed", true
+	case metric.StatusInsufficientData:
+		return "insufficient_data", true
+	case metric.StatusInsufficientSample:
+		return "insufficient_sample", true
+	case metric.StatusNotApplicable:
+		return "rejected", true
+	case metric.StatusUnknown:
+		return "failed", true
+	default:
+		return "", false
+	}
 }

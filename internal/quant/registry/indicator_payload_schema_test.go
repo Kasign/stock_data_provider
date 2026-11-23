@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"example.com/stock-analysis-flow/internal/quant/result"
@@ -230,5 +231,41 @@ func TestIndicatorPayloadGoValidatorRejectsWrongMetricMappingForAllIndicators(t 
 				t.Fatalf("Go Validator accepted wrong metric mapping for %s", indicatorCode)
 			}
 		})
+	}
+}
+
+func TestQuantResultEnvelopeSchemaAcceptsIndicatorPayload(t *testing.T) {
+	schema := compileQuantSchemaFile(t, "QNT-CTR-004-quant-result-envelope-1.0.0.schema.json")
+	count := 5
+	instance := map[string]any{
+		"schema_version": "1.0.0",
+		"result_id": "quant_result:sha256:" + strings.Repeat("a", 64),
+		"result_type": "indicator",
+		"scope": "stock",
+		"security_id": "600000.SH",
+		"system_as_of": "2026-11-23T00:00:00Z",
+		"period": "5d",
+		"algorithm_version": "sma.v1",
+		"parameter_fingerprint": "sha256:sma-parameters",
+		"input_snapshot_refs": []string{"data_snapshot:sha256:" + strings.Repeat("b", 64)},
+		"quality_status": "valid",
+		"result_status": "completed",
+		"authorization_ref": "authorization-ref:current",
+		"payload_schema_version": "1.0.0",
+		"payload": map[string]any{
+			"indicator_code": "sma",
+			"metrics": []any{map[string]any{
+				"metric_code": "sma", "value": "10.5", "unit": "CNY",
+				"period": "5d", "system_as_of": "2026-11-23T00:00:00Z",
+				"quality_status": "valid", "metric_status": "available",
+				"calculation_version": "sma.v1", "sample_count": count,
+				"lower_bound": nil, "upper_bound": nil,
+			}},
+		},
+	}
+	encoded, err := json.Marshal(instance)
+	if err != nil { t.Fatal(err) }
+	if err := validateJSONSchemaInstance(schema, encoded); err != nil {
+		t.Fatalf("Indicator Envelope rejected by QNT-CTR-004 Schema: %v", err)
 	}
 }

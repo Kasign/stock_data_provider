@@ -925,3 +925,13 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - 新增测试覆盖 Owner Bearer 拒绝、Session 与 Bearer 混合凭据拒绝，以及响应 Schema 字段投影和内部字段隔离。
 - 精确代码 SHA `ab6225a5d936375ebacf6bd57c609502d8a7f75e`：Go Test Suite [Run 45132439066](https://github.com/Kasign/stock_data_provider/actions/runs/45132439066) 与 Integration CI [Run 45132439148](https://github.com/Kasign/stock_data_provider/actions/runs/45132439148) 全项 success。覆盖 gofmt、root Go tests/race/vet、Researchflow/Research、MariaDB/Redis Worker Bootstrap、WebUI syntax/unit/build。
 - **当前状态：契约 FROZEN；代码 CODE_CI_PASS；目标环境 L3 验收 PENDING。** 剩余工作仅为真实 HTTPS 浏览器 Owner Session 登录/CSRF 恢复后执行 CreateRun、GET 轮询、CancelRun，并核验真实 MariaDB 持久化、Worker 执行和最终状态回读。不能把 CI 成功描述为生产端到端验收完成。
+
+
+## 2026-11-23 Indicator Payload 进入 QuantResult 正式类型联合
+
+- 在既有 QNT-CTR-004 1.0.0 冻结语义内补齐 L2 实现，不新增公开 DTO 或新版本契约。
+- IndicatorPayload 原有构造器、指标映射和字段一致性校验保留；现已加入 Quant Result Payload 正式联合，支持 Envelope 解码、不可变 Record 构造与 Manifest 绑定。
+- Envelope 与 Record 均校验所有 Metric 的 period、system_as_of、calculation_version、quality_status、metric_status 与 Manifest 一致；ResultStatus 由 MetricStatus 按固定映射校验，禁止元数据漂移。
+- Envelope Schema 的 result_type 增加 indicator 分支，并复用现有 IndicatorResultPayload 1.0.0 结构定义；没有复制第二份参数或指标语义。
+- 新增 SMA Indicator Payload 从 Record 构造、Envelope 编解码到 Manifest 校验的测试，以及 Manifest 上下文漂移拒绝测试和 Envelope Schema 正向测试。
+- 本项只打通 Indicator 结果载荷的生产/持久化/回读基础，不代表真实 SMA/EMA 生产计算 Facade、Registry 活动版本、Data 快照输入或 Researchflow Stage 已完成。
