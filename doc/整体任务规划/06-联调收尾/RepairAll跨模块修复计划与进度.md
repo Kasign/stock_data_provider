@@ -1037,3 +1037,10 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - 已实现 Data 内部 Snapshot Repository Port、Migration V6 和 MariaDB 不可变 Repository。保存/读取以 SnapshotRef 精确定位，保存幂等且不覆盖，读取重新 Verify Manifest/Payload 双指纹及组合引用；数据库未配置时 fail closed。
 - V6 仅增加查询级 Snapshot 表，不复制 `market_data_daily_bar_versions` 的逐 Bar 历史数据。物理 Schema 校验纳入 Data Store Compatibility Check。
 - 测试覆盖 V6 Migration 定义、MariaDB 幂等/并发/篡改拒绝和存储未配置。下一步为 Snapshot Application 创建/读取用例，并接入 Data Owner 授权；跨模块公开消费仍需完成真实数据 Golden 与契约测试。
+
+
+## 2026-11-23 Data Owner 策略持久化阶段
+
+- Data Owner 已开始独立实现：新增 Data Access Policy 类型与最小策略评估规则，要求显式 subject/purpose/scope allow-list，且策略有效期/状态必须通过校验。
+- Data Migration V7 增加不可变策略版本表与当前策略指针表，版本保存与指针切换事务化；不写默认允许策略，未发布策略时保持拒绝。
+- 下一步完成策略读取原子性、Data AuthorizationRef/PolicySnapshot 签发与不可变授权记录，再接 Snapshot Application。

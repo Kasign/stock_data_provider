@@ -193,8 +193,8 @@ func TestFundamentalsRevisionHashNormalizesEquivalentOffsetInstants(t *testing.T
 
 func TestMarketDataMigrationDefinitionsExposeImmutableVersionedHistory(t *testing.T) {
 	migrations := MigrationDefinitions()
-	if len(migrations) != 6 {
-		t.Fatalf("migration count = %d, want V1-V5 plus immutable daily-bars Snapshot V6", len(migrations))
+	if len(migrations) != 7 {
+		t.Fatalf("migration count = %d, want V1-V6 plus immutable Data authorization policy V7", len(migrations))
 	}
 	for index := 0; index < 3; index++ {
 		if migrations[index].Version != uint64(index+1) || len(migrations[index].Statements) == 0 || len(migrations[index].Operations) != 0 {
@@ -214,5 +214,11 @@ func TestMarketDataMigrationDefinitionsExposeImmutableVersionedHistory(t *testin
 		!strings.Contains(dailyBarsSnapshot.Statements[0], "market_data_daily_bars_close_series_snapshots") ||
 		!strings.Contains(dailyBarsSnapshot.Statements[0], "PRIMARY KEY (snapshot_ref)") {
 		t.Fatalf("daily-bars Snapshot migration V6 must add one immutable query-level Snapshot table: %+v", dailyBarsSnapshot)
+	}
+	policy := migrations[6]
+	if policy.Version != 7 || len(policy.Statements) != 2 || len(policy.Operations) != 0 ||
+		!strings.Contains(policy.Statements[0], "market_data_authorization_policy_versions") ||
+		!strings.Contains(policy.Statements[1], "market_data_current_authorization_policy_versions") {
+		t.Fatalf("Data authorization policy migration V7 must add immutable versions and a current pointer: %+v", policy)
 	}
 }

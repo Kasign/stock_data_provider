@@ -402,3 +402,10 @@ Root Server 的 Data Module 构造、共享资源注入、Migration Registry、I
 - 未配置 MariaDB 时 Save/Get 明确返回错误，不允许空操作成功；新增 V6 物理 Schema 检查。
 - 增加单元/集成测试覆盖存储未配置、引用格式、幂等、并发重复写、损坏数据拒绝和 Migration V6 结构。真实 MariaDB 集成测试由 CI 的 Data MariaDB job 执行。
 - 当前只完成不可变 Snapshot 存储，不代表授权生产链路已完成；Data Owner 授权、撤销/过期读取复核、Server Principal 注入及 Snapshot Application 生产入口仍未接入。
+
+
+## 2026-11-23 Data Owner 策略版本存储
+
+- 新增 Data Owner 专属授权策略模型，固定首批策略身份 `data_access / dailybars-v2-access`，策略状态支持 approved/restricted/pending/revoked；策略必须显式列出允许主体、用途和所需 Scope，空集合拒绝，不存在默认 allow。
+- 新增 Migration V7：不可变 `market_data_authorization_policy_versions` 与 `market_data_current_authorization_policy_versions`。策略版本写入与当前指针切换在同一 MariaDB 事务内完成；相同版本不同载荷冲突拒绝；当前版本读取会复算 payload SHA-256 并重新校验策略内容。
+- 当前没有自动写入任何默认策略。生产授权在显式发布符合策略的版本前保持 fail closed。授权快照签发、撤销引用和原子读取门禁仍待后续阶段。

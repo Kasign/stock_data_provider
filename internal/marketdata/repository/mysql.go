@@ -151,11 +151,14 @@ WHERE table_schema = DATABASE() AND table_name = ? AND index_name = ? ORDER BY s
 	if err := s.validateDailyBarsCloseSeriesSnapshotSchema(ctx); err != nil {
 		return err
 	}
+	if err := s.validateDataAuthorizationPolicySchema(ctx); err != nil {
+		return err
+	}
 	return nil
 }
 
 // MigrationDefinitions returns the immutable Data schema history used by Root Server.
-// Versions 1-5 are published definitions and must not be changed.
+// Versions 1-6 are published definitions and must not be changed.
 func MigrationDefinitions() []platformstorage.Migration {
 	stmts := []string{
 		`CREATE TABLE IF NOT EXISTS market_data_provider_probe_runs (
@@ -361,6 +364,32 @@ ON market_data_adjustment_factor_versions (symbol, trade_date, source, source_ve
  payload_json LONGTEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
  PRIMARY KEY (calendar_ref),
  KEY idx_market_calendar_identity_observed (market, start_date, end_date, observed_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+			},
+		},
+		{
+			Version: 7, Description: "immutable Data authorization policy versions and current pointers",
+			Statements: []string{
+				`CREATE TABLE IF NOT EXISTS market_data_authorization_policy_versions (
+ policy_type VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ policy_ref VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ policy_version VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ payload_json LONGTEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
+ payload_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ created_at DATETIME(6) NOT NULL,
+ PRIMARY KEY (policy_type, policy_ref, policy_version),
+ KEY idx_market_data_policy_versions_created (policy_type, policy_ref, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+				`CREATE TABLE IF NOT EXISTS market_data_current_authorization_policy_versions (
+ policy_type VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ policy_ref VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ policy_version VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ updated_at DATETIME(6) NOT NULL,
+ PRIMARY KEY (policy_type, policy_ref),
+ KEY idx_market_data_current_policy_version (policy_type, policy_ref, policy_version),
+ CONSTRAINT fk_market_data_current_policy_version
+ FOREIGN KEY (policy_type, policy_ref, policy_version)
+ REFERENCES market_data_authorization_policy_versions (policy_type, policy_ref, policy_version)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 			},
 		},
