@@ -13,6 +13,8 @@
 
 ## 设计与契约
 
+- [Researchflow Run HTTP API 契约（SRV-CTR-001）](./contracts/SRV-CTR-001-researchflow-http-api.md)
+- [Researchflow OpenAPI](./openapi/researchflow.openapi.yaml)
 - [Owner Session HTTP API 契约](./contracts/SRV-CTR-002-owner-session-http-api.md)
 - [SRV-008 Owner Session 接入与验收历史](./任务历史/SRV-008-Owner-Session接入与验收记录.md)
 - [历史架构、Bootstrap、Migration 与 Integration 决议](./任务历史/各个子任务完成状态.md)

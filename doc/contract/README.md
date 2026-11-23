@@ -1,9 +1,9 @@
 # 项目级契约入口
 
 - 当前阶段：`L1_contracts_frozen`
-- 当前状态：43 项正式 CTR；37 项 `frozen`、4 项 `deferred`、2 项 `not_applicable`；无 `pending_evidence` 或 `pending_decision`。
+- 当前状态：44 项正式 CTR；38 项 `frozen`、3 项 `deferred`、2 项 `not_applicable`；无 `pending_evidence` 或 `pending_decision`。
 - 冻结基线：`origin/integration @ b6dfc85ba214fe16268c8cba780641a8bfe15086`。
-- 登记簿版本：`0.2.61-frozen`。
+- 登记簿版本：`0.2.63-frozen`。
 
 ## 权威来源
 

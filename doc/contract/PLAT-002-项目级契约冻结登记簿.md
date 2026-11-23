@@ -1,12 +1,12 @@
 # PLAT-002 项目级契约冻结登记簿
 
 - 仓库：`Kasign/stock_data_provider`
-- 登记簿版本：`0.2.62-frozen`
+- 登记簿版本：`0.2.63-frozen`
 - 当前阶段：`L1_contracts_frozen`
 - 固定代码审计基线（L1 冻结审计时点，非当前分支 HEAD）：`origin/integration @ b6dfc85ba214fe16268c8cba780641a8bfe15086`
 - 当前 Integration 分支 HEAD（2026-11-18）：`422543e2a1bf40a2582f7eff3cb35e2b2d8fddde`；该值仅用于定位当前聚合代码，不替代固定的 L1 契约冻结审计基线。
 - 冻结登记维护分支：`feat/design_doc`
-- 正式 CTR：43 项；`frozen` 37 项、`deferred` 4 项、`not_applicable` 2 项；`pending_evidence` 和 `pending_decision` 均为 0。
+- 正式 CTR：44 项；`frozen` 38 项、`deferred` 3 项、`not_applicable` 2 项；`pending_evidence` 和 `pending_decision` 均为 0。
 
 > 本登记簿是项目级跨模块契约当前状态的唯一权威来源。本文只记录最终有效状态，不保留阶段性审查统计、过程快照或旧任务计划。L1 冻结只代表公开契约定义已冻结，不代表模块实现、测试、CI、部署或真实依赖验收通过。
 
@@ -64,7 +64,7 @@
 | NTF-CTR-002 | Inbox、Subscription、Delivery、Attempt、幂等和状态机 | Notification | Server；Quant/Research/Researchflow 仅发布事件 | doc/notification/03 第2～7/9节、06；Notification Application Port 与 Domain 类型 | 1.0.0（Event Schema 已有；Subscription/Delivery/Attempt Schema 未登记） | `frozen` | Event 接收/Inbox 双唯一键、Delivery 唯一键和状态机语义已有；Subscription、DeliveryPlan、DeliveryRecord、DeliveryAttempt、DeliveryStateEvent 的完整跨模块 DTO/Port 权威定义与版本/错误语义未形成可核对的机器 Schema/等价 Application Port 契约 |
 | NTF-CTR-003 | Notification 内部 Channel Adapter SPI 与 ChannelConfigSnapshot | Notification 内部扩展点 | Notification 内部 Channel Adapter/Resolver | doc/notification/03 第8.4节；internal/notification/application/channel_ports.go；internal/notification/domain/channel.go | 内部 Port，不属于跨模块公开契约版本 | `not_applicable` | ChannelConfigSnapshot、ChannelAdapter、ChannelResolver、RecipientResolver、ChannelSendRequest/Result 仅由 Notification 内部组件消费；不作为 PLAT-002 跨模块冻结门禁。Delivery 的 retry/unknown 对外语义归 NTF-CTR-002，不重复登记 |
 | SRV-CTR-002 | Owner Session 与 Root Data 路由认证 HTTP 契约 | Server | WebUI、受控运维流程、Data HTTP Adapter（Root 内部） | doc/server/contracts/SRV-CTR-002-owner-session-http-api.md；doc/server/openapi/owner-session.openapi.yaml；doc/server/schema/SRV-CTR-002/**；doc/server/golden/SRV-CTR-002/**；DEC-PLAT-002-054 | 1.1.0（Owner Session DTO 1.0.0；Data 路由 AuthMethod 矩阵与统一 /api Cookie Path） | `freeze-ready` | 定义单 Owner Cookie Session、CSRF、Origin/Host、登录/登出/轮换/密码修改、Root Data 路由 Owner Session/Owner Bearer 双入口策略和统一 /api 前缀；Data 资源授权仍归 DATA-CTR-008；代码与部署符合性由 RA009 验收 |
-| SRV-CTR-001 | Root Server 组合根、统一 HTTP 宿主与 Researchflow 对外 API | Server | WebUI、Researchflow、所有服务端模块 | doc/server/README.md；doc/web/API_CONTRACT.md（旧 Analysis 路径）；doc/api/contracts/分析任务.openapi.yaml（已退役旧 API） | 新 Researchflow HTTP Schema/版本未定义 | `deferred` | 组合根/唯一 HTTP 宿主职责已有定义；新 API 路径/方法、CreateRun/Run/Stage/Event HTTP DTO、错误投影、认证授权、分页/Cursor 与 WebUI 消费映射均无唯一权威定义。旧 Analysis API 按 DEC-018/019 退出活动范围，不得复用其 DTO/约束 |
+| SRV-CTR-001 | Root Server 组合根、统一 HTTP 宿主与 Researchflow Run HTTP API | Server | WebUI、Researchflow | doc/server/contracts/SRV-CTR-001-researchflow-http-api.md；doc/server/openapi/researchflow.openapi.yaml；doc/server/schema/SRV-CTR-001/**；doc/server/golden/SRV-CTR-001/** | 1.0.0（CreateRun Request、Run Aggregate Response Schema/Golden、三路由 OpenAPI） | `frozen` | 三个 Run 操作、Owner Session only、Origin/Host/CSRF、可信 CallerRef、Run 资源级授权、幂等、错误状态与聚合响应已冻结；Handler/Router/WebUI API 代码已接入并通过 CI。真实 HTTPS 浏览器登录后 Create/Get/Cancel 与 MariaDB/Redis Worker 闭环仍属于 L3 目标环境验收 |
 | INT-CTR-001 | Quant 风险决策、Research 事件生命周期、Researchflow Run 终态到 NotificationEvent 显式映射 | Quant/Research/Researchflow 产生业务事实；Notification 接收事件 | Notification、事件消费者 | doc/notification/05；doc/notification/03；3 类 Payload Schema/6 Golden | 1.0.0（3 Event Payload Schema；6 Golden） | `frozen` | 触发时点、subject_ref、source_event_ref、幂等键和 JCS fingerprint 已定义；事件/业务时间 UTC 约束、subject_ref 与 payload 主体一致性、changed_block_reason_codes 排序和来源时间字段绑定尚未完整机器化 |
 
 
@@ -77,7 +77,6 @@
 | DATA-CTR-005 | `deferred` | DailyBars Decimal v2 尚无足够真实字段/精度依据；保留现有 v1 number/float64，不静默改类型 | Data v2 的字段、Decimal scale/舍入、单位/缺失语义、interval 和交易日历版本引用形成完整权威定义 |
 | DATA-CTR-007 | `deferred` | Snapshot Manifest 当前只定义快照范围/来源元数据，不能代替行情 Payload 内容寻址引用 | Data 定义不可变行情 Payload、内容寻址 SnapshotRef、Manifest 与 Payload 绑定，以及 Research Evidence source_ref/version/locator 映射 |
 | QNT-CTR-003 | `deferred` | 首批 Factor 依赖完整日线 Snapshot、interval 和不可变交易日历版本；输入证据不足时冻结会制造虚假可比性 | DATA-CTR-005/007 达到可冻结条件，Quant Factor 输入/结果定义与引用关系完成定点复核 |
-| SRV-CTR-001 | `deferred` | 新 Researchflow HTTP API 尚无正式活动路由/消费者范围；旧 Analysis API 已退役，不得复用旧 DTO | 确定 WebUI 与 Server 的新 HTTP 用例、路由/方法、请求响应 DTO、认证矩阵、错误投影、分页/Cursor 和事件读取，并形成唯一 OpenAPI |
 
 ## 4. 不适用契约
 
