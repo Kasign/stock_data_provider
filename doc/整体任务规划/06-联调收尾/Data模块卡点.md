@@ -448,3 +448,17 @@ Root Server 的 Data Module 构造、共享资源注入、Migration Registry、I
 - Data Module 新增 `CreateDailyBarsCloseSeriesSnapshot` 和 `ReadAuthorizedDailyBarsCloseSeriesSnapshot` 模块入口，复用 Root 注入的同一个 Store，不创建平行 Repository 或独立连接池。
 - 目前该模块入口已具备调用路径，但 Root Server 尚未将它注入 Quant/Researchflow 的生产消费者；服务凭据配置也尚未完成。没有真实 service Principal 时仍 fail closed。
 - CI 当前针对前序提交有过取消/格式门禁失败；格式修正后最新提交的 Go Test Suite、Integration CI 尚待完成。不得将尚未通过的提交描述为验收通过。
+
+
+## 2026-11-23 Data Snapshot 与 Owner 策略发布阶段收口
+
+- 最新代码基线：`repair_all` SHA `cdcd5f905de1103e49e1b79686f00882e2ea405d`。
+- Snapshot 生产路径已具备：PIT DailyBarsV2 Reader → Close Series Builder → Manifest/Payload 双指纹 → V6 不可变 MariaDB Repository → Data Owner 授权签发；读取路径在同一 MariaDB Repeatable Read 事务内校验授权记录、撤销、当前策略和 Snapshot Payload。
+- Data Owner 策略发布 Application 已完成：仅接受可信 Owner Session Principal；策略版本不可变；current pointer 采用 expected-current-version CAS；首次发布必须明确 expected 为空；不创建默认 allow；历史策略版本 ID 禁止再次激活。
+- 本轮修复 Publish 成功后重新读取 current pointer 的并发误报问题：现在直接返回本次已持久化的不可变版本，并通过 current pointer 并发前移回归测试。
+- 精确 SHA 的 Go Test Suite [45174381526](https://github.com/Kasign/stock_data_provider/actions/runs/45174381526) 与 Integration CI [45174381536](https://github.com/Kasign/stock_data_provider/actions/runs/45174381536) 均 success；Data MariaDB Migration/PIT/Snapshot/授权存储集成和完整跨模块集成均通过。
+- `PLATFORM_SERVICE_CREDENTIALS` 已进入 Root Server 配置并传给 Platform Authenticator；这只完成 Service Bearer 身份认证配置入口，不代表 Server 已为 Quant 生产调用注入内部可信 Principal，也不代表 Quant 已消费 Data Snapshot。
+- 尚未完成：Data Owner Policy 管理 HTTP API 契约/Handler/Root 注册；Root → Quant 的可信 Service Principal 与 Data Snapshot Reader 注入；Quant SMA 正式计算 Facade/结果生产；Researchflow Quant Stage 与 Run→QuantResult 精确关联。
+- DATA-CTR-007 仍按项目登记簿保持 deferred：当前实现与 Schema 已有代码基础，但真实 MariaDB 历史数据 Golden、消费者版本/引用映射及契约重新进入冻结条件尚未完成。不得把 CI 的结构集成测试冒充真实数据 Golden。
+- 本轮 Live Provider Probe Run [45174381495](https://github.com/Kasign/stock_data_provider/actions/runs/45174381495) 中全部真实 Provider 请求步骤均 skipped；真实行情数据准确性留待部署后按用户安排验证。
+- 下一步先定义最小 Data Owner 策略管理 HTTP 契约（Owner Session only、读取当前策略、基于 expected_current_version 发布不可变版本；撤销通过发布 revoked 状态的新版本，不提供删除/回滚旧版本），再由 Server 组合 Data Owner Application。契约未冻结前不增加公开路由。
