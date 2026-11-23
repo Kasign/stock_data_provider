@@ -18,8 +18,10 @@ import (
 )
 
 const (
-	quantPurposeCode  = "quant_analysis"
-	quantContentLevel = "full"
+	quantPurposeCode              = "quant_analysis"
+	quantContentLevel             = "full"
+	quantResultAccessPolicyType   = "quant_result_access"
+	quantResultAccessPolicyRef    = "quant-result-access"
 )
 
 var (
@@ -316,6 +318,7 @@ func validateAuthorization(ref AuthorizationRef, snapshot PolicySnapshot, reques
 		return ErrInvalidAuthorization
 	}
 	policies := append([]PolicyVersion{}, snapshot.Policies...)
+	hasQuantResultAccessPolicy := false
 	for i, policy := range policies {
 		if !validText(policy.PolicyType) || !validText(policy.PolicyRef) || !validText(policy.PolicyVersion) {
 			return ErrInvalidAuthorization
@@ -323,6 +326,14 @@ func validateAuthorization(ref AuthorizationRef, snapshot PolicySnapshot, reques
 		if i > 0 && comparePolicyVersion(policies[i-1], policy) >= 0 {
 			return ErrInvalidAuthorization
 		}
+		if policy.PolicyType == quantResultAccessPolicyType && policy.PolicyRef == quantResultAccessPolicyRef {
+			hasQuantResultAccessPolicy = true
+		}
+	}
+	// GOV-CTR-006 Quant Golden fixes the domain policy identity. Its version is
+	// Owner-managed and must not be hardcoded here; additional effective policies remain allowed.
+	if !hasQuantResultAccessPolicy {
+		return ErrInvalidAuthorization
 	}
 
 	// GOV-CTR-006 fingerprinting is a shared Platform primitive. Quant keeps
