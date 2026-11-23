@@ -74,7 +74,11 @@ func newDataPolicyHTTPTestHandler(t *testing.T, auth *dataPolicyHTTPAuthenticato
 }
 
 func dataPolicyHTTPTestPrincipal(method platformsecurity.AuthMethod) platformsecurity.Principal {
-	return platformsecurity.Principal{Kind: platformsecurity.IdentityOwner, AuthMethod: method, Subject: "owner"}
+	principal := platformsecurity.Principal{Kind: platformsecurity.IdentityOwner, AuthMethod: method, Subject: "owner"}
+	if method == platformsecurity.AuthMethodOwnerBearer {
+		principal.Scopes = []string{platformsecurity.ScopePlatformAdmin}
+	}
+	return principal
 }
 
 func dataPolicyHTTPTestCurrent() marketdataauthorization.CurrentPolicy {

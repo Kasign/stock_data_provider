@@ -11,6 +11,8 @@ import (
 	"time"
 
 	platformconfig "example.com/stock-analysis-flow/internal/platform/config"
+	marketdataauthorization "example.com/stock-analysis-flow/internal/marketdata/authorization"
+	marketdataapplication "example.com/stock-analysis-flow/internal/marketdata/application"
 	platformsecurity "example.com/stock-analysis-flow/internal/platform/security"
 	quantapplication "example.com/stock-analysis-flow/internal/quant/application"
 	serversecurity "example.com/stock-analysis-flow/internal/server/security"
@@ -157,7 +159,10 @@ func newOwnerHTTPTestHandler(t *testing.T, sessions *ownerHTTPTestSessions, cred
 	if err != nil {
 		t.Fatal(err)
 	}
-	composition := &ownerSessionComposition{lifecycle: lifecycle, authenticator: authenticator, cookie: cookie}
+	composition := &ownerSessionComposition{
+		lifecycle: lifecycle, authenticator: authenticator, cookie: cookie,
+		dataPolicyManager: &ownerHTTPTestDataPolicyManager{},
+	}
 	if len(policyManagers) > 0 {
 		composition.policyManager = policyManagers[0]
 	}
@@ -220,6 +225,16 @@ func (m *ownerHTTPTestQuantPolicyManager) Revoke(_ context.Context, actor string
 		Policies: []quantapplication.PolicyVersion{{PolicyType: "quant_result_access", PolicyRef: "quant-result-access", PolicyVersion: "revoked"}},
 	}
 	return m.state, nil
+}
+
+type ownerHTTPTestDataPolicyManager struct{}
+
+func (ownerHTTPTestDataPolicyManager) Current(context.Context) (marketdataauthorization.CurrentPolicy, error) {
+	return marketdataauthorization.CurrentPolicy{}, marketdataapplication.ErrDataPolicyNotPublished
+}
+
+func (ownerHTTPTestDataPolicyManager) Publish(context.Context, string, string, marketdataauthorization.DataAccessPolicy) (marketdataauthorization.CurrentPolicy, error) {
+	return marketdataauthorization.CurrentPolicy{}, marketdataapplication.ErrDataPolicyInvalidChange
 }
 
 func TestQuantResultAccessPolicyManagementRequiresOwnerSessionAndCSRF(t *testing.T) {
