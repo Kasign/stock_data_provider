@@ -344,7 +344,7 @@ func calculateDailyBarsCloseSeriesSnapshotRef(manifestFingerprint, payloadFinger
 	}
 	encoded, err := json.Marshal(dailyBarsCloseSeriesSnapshotRefInput{
 		ManifestFingerprint: manifestFingerprint,
-		PayloadFingerprint: payloadFingerprint,
+		PayloadFingerprint:  payloadFingerprint,
 	})
 	if err != nil {
 		return "", fmt.Errorf("encode daily-bars snapshot reference input: %w", err)
