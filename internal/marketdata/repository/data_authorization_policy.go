@@ -122,6 +122,9 @@ ON v.policy_type=c.policy_type AND v.policy_ref=c.policy_ref AND v.policy_versio
 WHERE c.policy_type=? AND c.policy_ref=?`,
 		authorization.DataAccessPolicyType, authorization.DailyBarsV2PolicyRef).
 		Scan(&value.PolicyType, &value.PolicyRef, &value.PolicyVersion, &value.Payload, &value.PayloadHash, &createdAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return authorization.CurrentPolicy{}, app.ErrDataAuthorizationPolicyNotPublished
+	}
 	if err != nil {
 		return authorization.CurrentPolicy{}, fmt.Errorf("%w: %v", ErrDataAuthorizationPolicyUnavailable, err)
 	}

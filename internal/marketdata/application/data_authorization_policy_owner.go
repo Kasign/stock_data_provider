@@ -16,6 +16,7 @@ import (
 
 var (
 	ErrDataPolicyOwnerUnavailable = errors.New("data authorization policy owner unavailable")
+	ErrDataPolicyNotPublished    = errors.New("data authorization policy not published")
 	ErrDataPolicyOwnerDenied      = errors.New("data authorization policy owner denied")
 	ErrDataPolicyVersionConflict  = errors.New("data authorization policy version conflict")
 	ErrDataPolicyInvalidChange    = errors.New("data authorization policy change invalid")
@@ -50,6 +51,9 @@ func (owner *DataAuthorizationPolicyOwner) Current(ctx context.Context) (authori
 	if err != nil {
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return authorization.CurrentPolicy{}, ctxErr
+		}
+		if errors.Is(err, app.ErrDataAuthorizationPolicyNotPublished) {
+			return authorization.CurrentPolicy{}, ErrDataPolicyNotPublished
 		}
 		return authorization.CurrentPolicy{}, ErrDataPolicyOwnerUnavailable
 	}

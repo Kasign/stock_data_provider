@@ -8,7 +8,10 @@ import (
 	"example.com/stock-analysis-flow/internal/marketdata/authorization"
 )
 
-var ErrDataAuthorizationPolicyVersionConflict = errors.New("market-data authorization policy version conflict")
+var (
+	ErrDataAuthorizationPolicyVersionConflict = errors.New("market-data authorization policy version conflict")
+	ErrDataAuthorizationPolicyNotPublished    = errors.New("market-data authorization policy not published")
+)
 
 // DataAuthorizationPolicyRepository 仅供 Data Owner Application 使用；
 // 策略版本不可变，当前指针按 expectedCurrentVersion 做原子推进。

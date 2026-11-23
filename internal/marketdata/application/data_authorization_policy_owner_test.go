@@ -19,6 +19,7 @@ type dataPolicyOwnerRepositoryFake struct {
 	err          error
 	afterPublish func(*dataPolicyOwnerRepositoryFake)
 	resolveCalls int
+	resolveErr   error
 }
 
 func (fake *dataPolicyOwnerRepositoryFake) PublishDataAuthorizationPolicyVersion(
@@ -44,6 +45,9 @@ func (fake *dataPolicyOwnerRepositoryFake) PublishDataAuthorizationPolicyVersion
 
 func (fake *dataPolicyOwnerRepositoryFake) ResolveCurrentDataAuthorizationPolicy(context.Context) (authorization.CurrentPolicy, error) {
 	fake.resolveCalls++
+	if fake.resolveErr != nil {
+		return authorization.CurrentPolicy{}, fake.resolveErr
+	}
 	if fake.err != nil {
 		return authorization.CurrentPolicy{}, fake.err
 	}
@@ -138,6 +142,20 @@ func TestDataAuthorizationPolicyOwnerReturnsPublishedVersionWhenCurrentPointerAd
 	}
 	if repository.resolveCalls != 0 {
 		t.Fatalf("Publish() re-read current pointer %d times, want 0", repository.resolveCalls)
+	}
+}
+
+func TestDataAuthorizationPolicyOwnerDistinguishesUnpublishedPolicy(t *testing.T) {
+	repository := &dataPolicyOwnerRepositoryFake{
+		resolveErr: app.ErrDataAuthorizationPolicyNotPublished,
+	}
+	owner, err := NewDataAuthorizationPolicyOwner(repository)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = owner.Current(dataPolicyOwnerContext(t, security.AuthMethodOwnerSession))
+	if !errors.Is(err, ErrDataPolicyNotPublished) {
+		t.Fatalf("Current() error = %v, want policy-not-published", err)
 	}
 }
 
