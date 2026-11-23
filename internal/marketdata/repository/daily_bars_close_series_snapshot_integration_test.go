@@ -243,6 +243,22 @@ func TestMariaDBDataAuthorizationPolicyVersionsAreImmutableAndCurrent(t *testing
 		t.Fatalf("current policy mismatch: %+v", current)
 	}
 
+	stale := value
+	stale.PolicyVersion = version + "-stale"
+	if err := store.PublishDataAuthorizationPolicyVersion(ctx, "stale-current-version", stale); !errors.Is(err, ErrDataAuthorizationPolicyConflict) {
+		t.Fatalf("stale expected current version must conflict, got %v", err)
+	}
+	current, err = store.ResolveCurrentDataAuthorizationPolicy(ctx)
+	if err != nil || current.Version.PolicyVersion != version {
+		t.Fatalf("stale policy publication changed current pointer: current=%+v err=%v", current, err)
+	}
+	var staleVersionCount int
+	if err := store.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM market_data_authorization_policy_versions
+WHERE policy_type=? AND policy_ref=? AND policy_version=?`,
+		authorization.DataAccessPolicyType, authorization.DailyBarsV2PolicyRef, stale.PolicyVersion).Scan(&staleVersionCount); err != nil || staleVersionCount != 0 {
+		t.Fatalf("stale publication must roll back its immutable version row: count=%d err=%v", staleVersionCount, err)
+	}
+
 	changed := value
 	changedPolicy := policy
 	changedPolicy.Status = authorization.PolicyRevoked
