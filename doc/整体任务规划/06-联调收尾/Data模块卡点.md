@@ -417,3 +417,23 @@ Root Server 的 Data Module 构造、共享资源注入、Migration Registry、I
 - V8 表结构已加入 Data 物理 Schema 检查。新增负向单测覆盖空授权、非 allowed 决策和不允许用途。
 - 这一步只完成授权记录与撤销的持久化边界，不代表授权签发器或生产读取入口已完成。调用方仍必须先执行当前策略评估；读取时还需检查当前策略版本、有效期、主体/资源/用途匹配，并在同一授权边界内读取 Snapshot Payload。
 - 当前 Root Server 尚未启用 Service Credentials；不能将 `researchflow` / `quant` 字符串直接作为可信 Principal。服务身份注入需待真实配置完成，Owner Session 的策略映射也必须以实际 Principal Scope 语义为依据。
+
+
+## 2026-11-23 Data Owner 授权 Application 首版实现
+
+- 新增 `internal/marketdata/application/data_authorization.go`，形成 Data Owner 单一授权签发/读取判定边界；策略存储与授权决策存储通过 Data Application Port 注入。
+- Principal 仅从 `security.PrincipalFromContextValue` 获取，不接收 HTTP 参数、caller_ref 或调用方自报 scopes。主体映射固定由可信 Principal 生成：Owner → `principal:owner`；Service → `principal:service:<credential subject>`。匿名主体、未知身份和缺失 Principal 一律拒绝。
+- 签发时读取当前 Data Owner 策略，执行状态、有效期、允许主体、允许用途和 RequiredScopes 检查；策略缺失、存储异常、权限不满足均 fail closed。
+- AuthorizationRef 按 GOV-CTR-006 1.0.0 结构生成；Policy Snapshot 绑定当前策略版本；使用 Platform `authorization.Fingerprint` 计算决策指纹；再写入 V8 不可变决策存储。
+- 读取判定先由 V8 Repository 校验决策指纹、记录哈希和撤销状态，再校验当前 Principal、资源 SnapshotRef、purpose、full content level、有效期及当前策略版本，并重新执行策略评估。
+- 新增 Application 单测覆盖正常签发/读取、purpose 不匹配、缺失 Principal、策略存储不可用、策略版本变化和撤销拒绝。
+- 为统一 Application Port，授权决策 DTO 与 Store 接口放在 `internal/marketdata/app`，Repository 类型使用该 DTO；没有把 SQL Repository 暴露给跨模块消费者。
+- 当前实现仍不是完整生产 Snapshot 闭环：Snapshot Creator 尚未把 PIT V2 Reader → Builder → V6 Repository → Issue 串起来；Authorized Snapshot Reader 尚未把授权检查与 Payload 读取放在同一数据库事务/一致性边界；Server 尚未注入该 Owner Application。Service Credentials 仍须使用真实配置和真实 Principal，不得伪造服务身份。
+- V8 当前策略变更采用严格拒绝旧授权（授权策略版本必须等于当前版本）；这是 fail-closed 行为。若未来需要策略版本兼容或授权续期，必须作为明确策略语义单独设计，不能静默放宽。
+
+### 下一步执行
+
+1. 完成授权 Application 单测和 Go/Integration CI。
+2. 实现 Snapshot Creator 与 Authorized Snapshot Reader；授权检查和 Snapshot Payload 读取必须在同一事务内完成，确保撤销与读取之间没有竞态。
+3. 在 Root Server composition root 装配策略 Repository、决策 Repository、可信 Principal resolver 和 Snapshot Application；当前无服务凭据时保持拒绝，不注入默认服务主体。
+4. 再接 Quant 首批 SMA Reader，不提前引入多指标或策略扩展。
