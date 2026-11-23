@@ -674,3 +674,57 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - Go Test Suite [44710655574](https://github.com/Kasign/stock_data_provider/actions/runs/44710655574) 对精确 SHA `e48f74d20911adbedb1ffe4bcbb043563df07931` 全部 success，覆盖 Root/Market Data race+vet、各模块测试、MariaDB 集成、Compose 和 Docker builds。
 - Live Provider strict Run [44710655555](https://github.com/Kasign/stock_data_provider/actions/runs/44710655555) failure：BaoStock V2 Decimal Application Port PASS；Hithink backward adjustment 仍无法满足整数 shares 契约。此失败作为真实 Provider 阻塞保留。
 - 当前 Quant 决议不变：只允许读取当前 Researchflow Run 自己创建或明确关联的 Quant 结果；RunRef 已传入内部 GetResult 请求并持久化到 Access Audit，但没有 Quant Stage Provider/强类型输出关联 Schema，AuthorizedResultReader 尚未完成。不得为关闭卡点而做主体级全局授权。
+
+
+
+## 32. RepairAll 两日主线收口计划（2026-11-23）
+
+### 32.1 执行目标与范围
+
+- 唯一工作分支：`repair_all`；计划基线 SHA：`3597a9fead7a5bb7c0bd208209590aa438b2c6b8`。
+- 目标窗口：2026-11-23 至 2026-11-24。优先关闭当前主线中可由现有代码、冻结契约和真实测试证据解决的缺陷；外部 Provider 权限、供应商语义、目标生产环境和缺失的项目级契约决策不得伪装成代码完成。
+- 不切换分支、不向其他分支写入、不创建新分支、不绕过 integration 合并规则；本阶段只在 repair_all 内按授权修复，若需跨分支集成，必须单独经过 integration。
+- 不重复实现已存在的 Data Root Migration/Readiness、Quant Result 不可变写入、Quant Access Audit、Researchflow Stage Output Resource、Platform Fingerprint 等能力。
+- Hithink 后复权 Volume/公司行动仿射因子仅作为 Data 数据质量专项证据，不再单独扩展为主线；不舍入小数股数、不放宽 DailyBar shares 契约。
+
+### 32.2 当前精确 SHA 验收基线
+
+在代码 SHA `3597a9fead7a5bb7c0bd208209590aa438b2c6b8` 上复核：
+- Integration CI Run `44723943926`：success，Full integration checks 完成。
+- Live provider probe Run `44723943852`：success，Probe real public provider responses Job 完成。该 Job 成功只代表本次实际启用的探针通过；没有启用或被跳过的专项仍不得记为真实 Provider PASS。
+- Go Test Suite Run `44723943844`：success；根模块 Test、Market Data MariaDB、Research/Researchflow/News/Notification MariaDB、go-core、Compose/Docker 等实际 Job 均完成并成功。
+- 上述为当前代码 SHA 的 CI 基线，不代表 Data 全部外部数据证据、Quant 授权生产闭环、Researchflow Quant Stage 或目标生产环境验收完成。
+
+### 32.3 主线任务包与顺序
+
+| 顺序 | 任务包 | 唯一主责 | 本阶段交付 | 关闭条件 |
+|---|---|---|---|---|
+| P0-1 | Q-01 / QNT-013：Quant Policy Owner 与授权读取 | Quant 领域实现；Server 负责 Root 注入；Researchflow 提供 Run 关联只读事实 | 核对 GOV-CTR-006 和当前 GetResult/SQL Repository/Audit；补齐最小策略规则与不可变版本快照、签发/撤销、当前策略复核、RunRef+ResultID 关联读取和并发一致性测试；明确授权失败/审计失败行为 | 同 Run 明确关联可读；跨 Run、无关联、伪造 RunRef、撤销竞态、Owner 不可用、审计失败均 fail-closed；MariaDB 并发集成通过；Root 注入完成。若缺少已冻结的策略治理授权或真实关联 Port，则只关闭可独立验收子项并明确阻塞 |
+| P0-2 | Data D2：DailyBars v2 与 DATA-CTR-005/007 解阻 | Data | 对照当前代码核查 Decimal 原始值/scale 证据、ChangePercent 来源、Amount/Volume 单位、ProviderTime/source data version、Adjustment basis/reference date、CalendarRef、Manifest/Payload/AuthorizationRef；补齐有来源证据的 DTO/Schema/Golden/Validator/HTTP 与 Application Consumer Contract | 每字段有真实来源、单位、时间/版本语义；未知字段保持 null/degraded；Schema/Golden/Validator/实现一致；消费者契约测试通过。项目登记簿的 deferred 状态只能按正式重新进入/冻结流程变更 |
+| P0-3 | FLOW-005：Research Context 生产上下文一致性 | Researchflow + Research；Server 装配 | 核对 Context Port、CallerRef 授权、Run.SystemAsOf、Deadline、PIT/available_at 和 Context Snapshot；只修真实调用链上的时间/授权/证据错配 | 同一 Run 的可信 CallerRef、SystemAsOf、Deadline 贯穿 Research 读取和 LLM 输入；来源授权重新校验；无真实消费者时保持 NOT_COMPARABLE，不创建空 Stage |
+| P0-4 | FLOW-006：Quant/Research 结果综合与风险语义 | Researchflow + Quant | 明确 Composer 的 RiskDecision 唯一来源；优先复用 Quant 已注册 risk Payload，避免第二份无来源绑定的 RiskDecision；核对 Result 唯一持久化 Owner、PIT 与来源授权传播 | Quant RiskPayload 到 Composer 的精确映射、状态/Reason/时间规则有契约测试；block/unknown/缺失/撤销均 fail-closed；结果资源唯一 Owner 与授权读取明确 |
+| P0-5 | Server Root 生产装配 | Server | 仅在提供方公开 Port、Schema、授权和生产依赖满足后接线 Quant/Research/LLM；复核已有 Data Root 单入口、Migration/Readiness，不重复开发 | API/Worker 启动角色、Root DI、Migration、生命周期和真实 MariaDB/Redis 集成通过；没有真实消费者/Secret/Gateway/Recipient 时保持 BLOCKED |
+| P1 | M6 目标环境验收 | Server/部署运维 | HTTPS Owner Session 浏览器验收、Migration enabled/disabled 演练、备份恢复、真实 Provider 出站矩阵 | 目标环境原始证据、运行日志和恢复结果归档；无法由 GitHub CI 代替 |
+
+### 32.4 两日执行节奏
+
+**第一天（11-23）：先解除生产结果链路与数据契约阻塞**
+1. 对 QNT-013 做端到端代码审计：Policy Owner 是否缺实现、Quant Migration/Repository/Audit 当前版本、Researchflow Stage Output 关联事实、Server Root 注入现状；形成单一缺口清单。
+2. 在 GOV-CTR-006 已冻结语义和用户已确认的 Run-scoped 规则范围内实施 Q-01；任何策略发布权限、审计保留或撤销事务边界若缺权威依据，先明确决策点，不写默认 Allow。
+3. 对 Data DailyBars v2 做字段级实现审查，核对现有 ExactValues、CalendarRef、Snapshot/Manifest 能力与 DTO/HTTP Schema 的实际差异；只实现有源证据和契约依据的字段，不把 float64 格式化成 Decimal。
+4. 当天结束前更新 Quant/Data 当前任务和卡点记录，执行针对性单测、Race、MariaDB 集成及全量 Go Test/Integration CI。
+
+**第二天（11-24）：完成消费者链路、组合装配与收口**
+1. 基于第一天确认的正式 Port/Schema，推进 FLOW-005 的 Run 时间与 Research 授权上下文一致性。
+2. 推进 FLOW-006 的 Quant RiskDecision 来源统一、ResultRef/持久化 Owner 与 PIT/授权验证；只接入具备正式 Facade 和明确 Stage 场景的能力。
+3. 将可生产装配的能力接入 Root Server；补齐 API/Worker 角色、依赖注入、Migration、生命周期和 MariaDB/Redis 组合测试。
+4. 复核 Data/Quant/Researchflow/Server 四个模块的任务状态、卡点、文档索引和精确 SHA；执行完整 Go Test Suite、Integration CI、适用的 Live Provider Probe。
+5. 输出主线验收表：每项标记 PASS / DEGRADED / FAIL / SKIPPED / NOT_COMPARABLE / BLOCKED_EXTERNAL，并列明精确 SHA、Actions Run、真实输入及未覆盖范围。
+
+### 32.5 严格范围与退出条件
+
+- 本轮不启动 QNT-003 Factor 生产发布、Trend/Market/Industry/Stock/Strategy/Backtest、LLM/Notification 空壳接入；这些任务受 Data 输入、算法决议、真实调用者或外部依赖约束。
+- 不把 CI success 等同于 Live Provider 全部通过；不把 Provider workflow 的 skipped 等同于 pass；不把合成 Golden 等同于真实行情验证。
+- 不修改项目级冻结契约以绕开实现缺口；需要变更时先记录差异、影响模块和重新进入条件。
+- 每个代码逻辑组完成后审查 diff、更新模块当前任务/卡点、运行针对性测试和完整 CI，再按完整逻辑组提交并核对 SHA。
+- 两日结束时，所有可在当前约束下安全完成的 P0 代码项应有验收证据；外部条件未满足的项必须有唯一 Owner、可执行解锁条件和明确下一步，不得用“基本完成”掩盖阻塞。
