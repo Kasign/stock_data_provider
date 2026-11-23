@@ -1023,4 +1023,4 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 
 - 已从 `repair_all` 最新基线启动 Data Snapshot 生产服务修复。首个实际缺陷为 Close Series Payload 质量准入过宽：现已要求首批 SMA Snapshot 的聚合质量和每条 Bar 质量必须为 `valid`，并同步 DATA-CTR-007 Schema 与拒绝测试。
 - 当前仅完成质量门禁子项，未宣称 Snapshot 生产服务完成。后续按真实依赖顺序处理 Payload/Manifest Golden 与 Validator、Migration V6 不可变 Repository、Data Owner 授权和 Server 装配，再接 Quant。
-- 本轮不触发 Live Provider Probe；真实历史数据 Golden 仍需从现有 MariaDB PIT Reader 物化，不能使用合成样本冒充。
+- 本轮 push 自动触发 Live Provider Probe 工作流；提交未包含 `[include_public]`、`[include_daily_bars_v2]` 等探测标记，真实 Provider 请求步骤按工作流条件跳过，且未手动 dispatch。真实历史数据 Golden 仍需从现有 MariaDB PIT Reader 物化，不能使用合成样本冒充。

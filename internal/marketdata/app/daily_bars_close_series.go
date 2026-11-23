@@ -126,7 +126,7 @@ func BuildDailyBarsCloseSeriesInput(query DailyBarsQuery, snapshot DailyBarsV2Sn
 	}
 	if snapshot.QualityStatus != QualityValid {
 		return DailyBarsCloseSeriesInput{}, fmt.Errorf("daily-bars snapshot quality %q is not admissible for the first SMA input; valid is required", snapshot.QualityStatus)
-}
+	}
 	payloadWarnings, err := canonicalDailyBarsCloseSeriesStringSet(snapshot.Warnings)
 	if err != nil {
 		return DailyBarsCloseSeriesInput{}, fmt.Errorf("snapshot warnings: %w", err)
