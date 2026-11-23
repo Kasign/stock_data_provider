@@ -98,6 +98,15 @@ func newHTTPHandler(authenticator *platformsecurity.Authenticator, health, legac
 			mux.Handle("/api/v1/owner/quant/result-access-policy", policyHandler)
 			mux.Handle("/api/v1/owner/quant/result-access-policy/", policyHandler)
 		}
+		if ownerSession.dataPolicyManager == nil {
+			return nil, errors.New("Owner Session is enabled but Data authorization policy Application is not assembled")
+		}
+		dataPolicyHandler, dataPolicyErr := newDataPolicyHTTPHandler(ownerSession)
+		if dataPolicyErr != nil {
+			return nil, dataPolicyErr
+		}
+		mux.Handle("/api/v1/owner/data/daily-bars-access-policy", dataPolicyHandler)
+		mux.Handle("/api/v1/owner/data/daily-bars-access-policy/", dataPolicyHandler)
 		mux.Handle("/api/v1/owner/", ownerHandler)
 		if ownerSession.researchflow != nil {
 			researchflowHandler, handlerErr := newResearchflowHTTPHandler(ownerSession)

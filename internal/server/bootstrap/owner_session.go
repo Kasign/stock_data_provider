@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	marketdataauthorization "example.com/stock-analysis-flow/internal/marketdata/authorization"
 	platformsecurity "example.com/stock-analysis-flow/internal/platform/security"
 	quantapplication "example.com/stock-analysis-flow/internal/quant/application"
 	quantstorage "example.com/stock-analysis-flow/internal/quant/storage"
@@ -21,11 +22,17 @@ type quantResultAccessPolicyManager interface {
 }
 
 // ownerSessionComposition 仅组合依赖，不拥有共享 DB/Redis 的生命周期。
+type dataAuthorizationPolicyManager interface {
+	Current(context.Context) (marketdataauthorization.CurrentPolicy, error)
+	Publish(context.Context, string, string, marketdataauthorization.DataAccessPolicy) (marketdataauthorization.CurrentPolicy, error)
+}
+
 type ownerSessionComposition struct {
 	lifecycle     *serversecurity.SessionLifecycleService
 	researchflow  *researchflowOwnerComposition
 	authenticator *serversecurity.SessionAuthenticator
-	policyManager quantResultAccessPolicyManager
+	policyManager     quantResultAccessPolicyManager
+	dataPolicyManager dataAuthorizationPolicyManager
 	cookie        platformsecurity.SessionCookieConfig
 }
 

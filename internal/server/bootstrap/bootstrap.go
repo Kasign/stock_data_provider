@@ -174,6 +174,10 @@ func Run(ctx context.Context) (runErr error) {
 		if err != nil {
 			return fmt.Errorf("装配 Owner Session 依赖失败: %w", err)
 		}
+		ownerSession.dataPolicyManager, err = marketDataModule.DataAuthorizationPolicyOwner()
+		if err != nil {
+			return fmt.Errorf("装配 Data Owner Policy Application 失败: %w", err)
+		}
 	}
 	var researchflowExecution *researchflowComposition
 	if processConfig.ResearchflowCapacity.Configured &&
