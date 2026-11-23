@@ -43,5 +43,15 @@ func Migrations() []platformstorage.Migration {
 				ADD COLUMN run_ref VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NULL AFTER subject_ref,
 				ADD KEY idx_quant_access_audit_run_id (run_ref, audit_id)`},
 		},
+		{
+			Version:     4,
+			Description: "补充 Quant 授权审计的完整决策证据",
+			Statements: []string{`ALTER TABLE quant_access_audit
+				ADD COLUMN content_level VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT 'full' AFTER purpose_code,
+				ADD COLUMN authorization_snapshot_json LONGTEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NULL AFTER authorization_ref,
+				ADD COLUMN policy_snapshot_ref VARCHAR(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NULL AFTER authorization_snapshot_json,
+				ADD COLUMN policy_snapshot_json LONGTEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NULL AFTER policy_snapshot_ref,
+				ADD COLUMN decision_fingerprint VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NULL AFTER policy_snapshot_json`},
+		},
 	}
 }

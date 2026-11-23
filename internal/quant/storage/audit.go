@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"strings"
 	"time"
@@ -39,21 +40,41 @@ func (a *MySQLAccessAuditor) RecordResultAccess(ctx context.Context, event appli
 		return err
 	}
 	if !validAuditRunRef(event.RunRef) || !validAuditText(event.SubjectRef) || !validQuantResultRef(event.ResourceRef) ||
-		event.PurposeCode != "quant_analysis" || !validAuditText(event.ReasonCode) ||
-		!validAuditDecision(event.Decision) || (!validAuditText(event.AuthorizationRef) && event.AuthorizationRef != "") ||
+		event.PurposeCode != "quant_analysis" || event.ContentLevel != "full" ||
+		!validAuditText(event.ReasonCode) || !validAuditDecision(event.Decision) ||
+		(!validAuditText(event.AuthorizationRef) && event.AuthorizationRef != "") ||
+		(!validAuditText(event.PolicySnapshotRef) && event.PolicySnapshotRef != "") ||
+		(!validAuditText(event.DecisionFingerprint) && event.DecisionFingerprint != "") ||
+		!validOptionalAuditJSON(event.AuthorizationSnapshotJSON) ||
+		!validOptionalAuditJSON(event.PolicySnapshotJSON) ||
 		event.OccurredAt.IsZero() || event.OccurredAt.Location() != time.UTC {
 		return ErrInvalidAuditEvent
 	}
 
-	var authorizationRef any
+	var authorizationRef, authorizationSnapshot, policySnapshotRef, policySnapshot, decisionFingerprint any
 	if event.AuthorizationRef != "" {
 		authorizationRef = event.AuthorizationRef
 	}
+	if len(event.AuthorizationSnapshotJSON) > 0 {
+		authorizationSnapshot = string(event.AuthorizationSnapshotJSON)
+	}
+	if event.PolicySnapshotRef != "" {
+		policySnapshotRef = event.PolicySnapshotRef
+	}
+	if len(event.PolicySnapshotJSON) > 0 {
+		policySnapshot = string(event.PolicySnapshotJSON)
+	}
+	if event.DecisionFingerprint != "" {
+		decisionFingerprint = event.DecisionFingerprint
+	}
 	_, err := a.db.ExecContext(ctx, `INSERT INTO quant_access_audit
-		(subject_ref, run_ref, resource_ref, purpose_code, decision, reason_code, authorization_ref, occurred_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		event.SubjectRef, event.RunRef, event.ResourceRef, event.PurposeCode, event.Decision,
-		event.ReasonCode, authorizationRef, event.OccurredAt.UTC().Format(time.RFC3339Nano),
+		(subject_ref, run_ref, resource_ref, purpose_code, content_level, decision, reason_code,
+		 authorization_ref, authorization_snapshot_json, policy_snapshot_ref, policy_snapshot_json,
+		 decision_fingerprint, occurred_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		event.SubjectRef, event.RunRef, event.ResourceRef, event.PurposeCode, event.ContentLevel,
+		event.Decision, event.ReasonCode, authorizationRef, authorizationSnapshot, policySnapshotRef,
+		policySnapshot, decisionFingerprint, event.OccurredAt.UTC().Format(time.RFC3339Nano),
 	)
 	if err != nil {
 		if ctxErr := ctx.Err(); ctxErr != nil {
@@ -83,6 +104,10 @@ func validAuditRunRef(value string) bool {
 
 func validAuditText(value string) bool {
 	return utf8.ValidString(value) && strings.TrimSpace(value) != "" && strings.TrimSpace(value) == value
+}
+
+func validOptionalAuditJSON(value json.RawMessage) bool {
+	return len(value) == 0 || (len(value) <= 64*1024 && json.Valid(value))
 }
 
 func validAuditDecision(value string) bool {

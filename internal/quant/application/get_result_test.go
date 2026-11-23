@@ -102,8 +102,14 @@ func TestGetResultReturnsValidatedAuthorizedEnvelope(t *testing.T) {
 		t.Fatalf("unexpected envelope: %+v", got)
 	}
 	if len(auditor.events) != 1 || auditor.events[0].RunRef != "run:researchflow:001" ||
-		auditor.events[0].Decision != "allowed" || auditor.events[0].ReasonCode != "result_released" {
-		t.Fatalf("successful result access was not audited: %+v", auditor.events)
+		auditor.events[0].Decision != "allowed" || auditor.events[0].ReasonCode != "result_released" ||
+		auditor.events[0].ContentLevel != quantContentLevel ||
+		auditor.events[0].AuthorizationRef != reader.value.AuthorizationRef.AuthorizationRef ||
+		auditor.events[0].PolicySnapshotRef != reader.value.PolicySnapshot.SnapshotRef ||
+		auditor.events[0].DecisionFingerprint != reader.value.AuthorizationRef.DecisionFingerprint ||
+		!json.Valid(auditor.events[0].AuthorizationSnapshotJSON) ||
+		!json.Valid(auditor.events[0].PolicySnapshotJSON) {
+		t.Fatalf("successful result access audit lacks authorization evidence: %+v", auditor.events)
 	}
 	if reader.calls != 1 || reader.request.RunRef != "run:researchflow:001" || reader.request.SubjectRef != "service:researchflow" ||
 		reader.request.ResourceRef != got.ResultID || reader.request.PurposeCode != quantPurposeCode ||
@@ -366,8 +372,10 @@ func TestGetResultReaderDenialIsAuditedAsDenied(t *testing.T) {
 	if !errors.Is(err, ErrResultUnavailable) || got.ResultID != "" {
 		t.Fatalf("denied read returned result: %+v %v", got, err)
 	}
-	if len(auditor.events) != 1 || auditor.events[0].Decision != "denied" || auditor.events[0].ReasonCode != "authorization_denied" {
-		t.Fatalf("explicit denial was not audited as denied: %+v", auditor.events)
+	if len(auditor.events) != 1 || auditor.events[0].Decision != "denied" ||
+		auditor.events[0].ReasonCode != "authorization_denied" ||
+		auditor.events[0].ContentLevel != quantContentLevel {
+		t.Fatalf("explicit denial was not audited with the requested scope: %+v", auditor.events)
 	}
 }
 

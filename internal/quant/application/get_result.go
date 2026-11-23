@@ -150,14 +150,19 @@ type AuthorizedRecord struct {
 
 // AccessAuditEvent 只记录授权读取元数据，不包含结果 Payload 或受限内容。
 type AccessAuditEvent struct {
-	RunRef           string
-	SubjectRef       string
-	ResourceRef      string
-	PurposeCode      string
-	Decision         string
-	ReasonCode       string
-	AuthorizationRef string
-	OccurredAt       time.Time
+	RunRef                    string
+	SubjectRef                string
+	ResourceRef               string
+	PurposeCode               string
+	ContentLevel              string
+	Decision                  string
+	ReasonCode                string
+	AuthorizationRef          string
+	AuthorizationSnapshotJSON json.RawMessage
+	PolicySnapshotRef         string
+	PolicySnapshotJSON        json.RawMessage
+	DecisionFingerprint       string
+	OccurredAt                time.Time
 }
 
 // AccessAuditor 持久化每次已识别主体的结果读取决策；写入失败时 Application 必须拒绝释放结果。
@@ -226,7 +231,7 @@ func (usecase *GetResult) Execute(ctx context.Context, runRef, resultID string) 
 		if errors.Is(err, ErrAccessDenied) {
 			decision, reasonCode = "denied", "authorization_denied"
 		}
-		if auditErr := usecase.recordAudit(ctx, request, decision, reasonCode, ""); auditErr != nil {
+		if auditErr := usecase.recordAudit(ctx, request, decision, reasonCode, nil, nil); auditErr != nil {
 			return result.Envelope{}, auditErr
 		}
 		return result.Envelope{}, ErrResultUnavailable
@@ -236,33 +241,33 @@ func (usecase *GetResult) Execute(ctx context.Context, runRef, resultID string) 
 	}
 	record, err := authorized.Record.ValidatedSnapshot()
 	if err != nil || record.Manifest.ResultID != resultID {
-		if auditErr := usecase.recordAudit(ctx, request, "unknown", "stored_record_invalid", ""); auditErr != nil {
+		if auditErr := usecase.recordAudit(ctx, request, "unknown", "stored_record_invalid", &authorized.AuthorizationRef, &authorized.PolicySnapshot); auditErr != nil {
 			return result.Envelope{}, auditErr
 		}
 		return result.Envelope{}, ErrInvalidStoredRecord
 	}
 	if err := validateAuthorization(authorized.AuthorizationRef, authorized.PolicySnapshot, request); err != nil {
-		if auditErr := usecase.recordAudit(ctx, request, "denied", "authorization_proof_invalid", authorized.AuthorizationRef.AuthorizationRef); auditErr != nil {
+		if auditErr := usecase.recordAudit(ctx, request, "denied", "authorization_proof_invalid", &authorized.AuthorizationRef, &authorized.PolicySnapshot); auditErr != nil {
 			return result.Envelope{}, auditErr
 		}
 		return result.Envelope{}, err
 	}
 	payload, err := result.DecodePayload(record.Manifest.ResultType, record.Manifest.PayloadSchemaVersion, record.Payload)
 	if err != nil {
-		if auditErr := usecase.recordAudit(ctx, request, "unknown", "payload_type_unsupported", authorized.AuthorizationRef.AuthorizationRef); auditErr != nil {
+		if auditErr := usecase.recordAudit(ctx, request, "unknown", "payload_type_unsupported", &authorized.AuthorizationRef, &authorized.PolicySnapshot); auditErr != nil {
 			return result.Envelope{}, auditErr
 		}
 		return result.Envelope{}, result.ErrUnsupportedPayload
 	}
 	envelope, err := result.BuildEnvelope(record.Manifest, authorized.AuthorizationRef.AuthorizationRef, payload)
 	if err != nil {
-		if auditErr := usecase.recordAudit(ctx, request, "unknown", "envelope_invalid", authorized.AuthorizationRef.AuthorizationRef); auditErr != nil {
+		if auditErr := usecase.recordAudit(ctx, request, "unknown", "envelope_invalid", &authorized.AuthorizationRef, &authorized.PolicySnapshot); auditErr != nil {
 			return result.Envelope{}, auditErr
 		}
 		return result.Envelope{}, ErrInvalidStoredRecord
 	}
 	if err := envelope.ValidateAgainstManifest(record.Manifest); err != nil {
-		if auditErr := usecase.recordAudit(ctx, request, "unknown", "manifest_mismatch", authorized.AuthorizationRef.AuthorizationRef); auditErr != nil {
+		if auditErr := usecase.recordAudit(ctx, request, "unknown", "manifest_mismatch", &authorized.AuthorizationRef, &authorized.PolicySnapshot); auditErr != nil {
 			return result.Envelope{}, auditErr
 		}
 		return result.Envelope{}, ErrInvalidStoredRecord
@@ -270,20 +275,43 @@ func (usecase *GetResult) Execute(ctx context.Context, runRef, resultID string) 
 	if err := ctx.Err(); err != nil {
 		return result.Envelope{}, err
 	}
-	if err := usecase.recordAudit(ctx, request, "allowed", "result_released", authorized.AuthorizationRef.AuthorizationRef); err != nil {
+	if err := usecase.recordAudit(ctx, request, "allowed", "result_released", &authorized.AuthorizationRef, &authorized.PolicySnapshot); err != nil {
 		return result.Envelope{}, err
 	}
 	return envelope, nil
 }
 
-func (usecase *GetResult) recordAudit(ctx context.Context, request ReadRequest, decision, reasonCode, authorizationRef string) error {
+func (usecase *GetResult) recordAudit(
+	ctx context.Context,
+	request ReadRequest,
+	decision, reasonCode string,
+	authorization *AuthorizationRef,
+	policySnapshot *PolicySnapshot,
+) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 	event := AccessAuditEvent{
 		RunRef: request.RunRef, SubjectRef: request.SubjectRef, ResourceRef: request.ResourceRef,
-		PurposeCode: request.PurposeCode, Decision: decision, ReasonCode: reasonCode,
-		AuthorizationRef: authorizationRef, OccurredAt: request.At,
+		PurposeCode: request.PurposeCode, ContentLevel: request.ContentLevel,
+		Decision: decision, ReasonCode: reasonCode, OccurredAt: request.At,
+	}
+	if authorization != nil {
+		event.AuthorizationRef = authorization.AuthorizationRef
+		event.DecisionFingerprint = authorization.DecisionFingerprint
+		snapshotJSON, err := json.Marshal(authorization)
+		if err != nil {
+			return ErrAuditUnavailable
+		}
+		event.AuthorizationSnapshotJSON = snapshotJSON
+	}
+	if policySnapshot != nil {
+		event.PolicySnapshotRef = policySnapshot.SnapshotRef
+		snapshotJSON, err := json.Marshal(policySnapshot)
+		if err != nil {
+			return ErrAuditUnavailable
+		}
+		event.PolicySnapshotJSON = snapshotJSON
 	}
 	auditErr := usecase.auditor.RecordResultAccess(ctx, event)
 	if err := ctx.Err(); err != nil {
