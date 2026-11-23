@@ -318,3 +318,40 @@
 - 两种模式之后均执行 Data `Diagnostics().Ready`，独立验证 MariaDB/Redis 和物理 Schema。Root 不再通过外部 `market_data` namespace 过渡检查，也不重复调用 Data MigrationRunner。
 - 代码级 SRV-002 已完成；SRV-009 状态为 `CODE_LEVEL_DONE / PRODUCTION_PENDING`。剩余只包括目标环境 enabled/disabled 演练、备份恢复、生产启动/关闭及真实 Provider 出站验收。
 - Integration CI Run [44691336674](https://github.com/Kasign/stock_data_provider/actions/runs/44691336674) 对代码 SHA `92c7c4364ff1e54773ef8a422f4bf441dc13150f` 全项 success；覆盖 root gofmt/vet/tests、Quant MariaDB、News/Research/Researchflow、Worker MariaDB/Redis、go-core、Compose 和 WebUI 检查。
+
+## 2026-11-23 repair_all 生产装配复核（HEAD ca79ef0）
+
+本节为当前聚合分支最新复核，覆盖前文历史快照；历史记录保留审计用途，不再把已完成的 Root 基础装配重复列为开放任务。
+
+### 已有且不应重做的 Root 装配
+
+- bootstrap.Run 已加载 Server/Data/News 配置，构造共享 MariaDB/Redis、Data Module，并使用 Root Migration Registry 统一执行或只读校验 Migration。
+- Data Readiness 在 API/Worker 启动前执行；Data Handler 已挂载 Root Router；Data Module 生命周期纳入 Root Lifecycle。
+- News Search Stage 已构造 ProviderSet、参数 Schema Validator、Applicability Evaluator、Stage Output Registry 和 Executor。
+- Researchflow 已构造 MySQL Run Repository、Template Registry、数据库 UTC Clock、ID Generator、ResourcePolicy Resolver；正式 News Search Template 发布到 Registry。
+- Worker/All 角色已构造 Researchflow Worker、WorkerPool、Scheduler、Deadline/Cancellation/ExpiredAttempt Recovery、Run Finalizer，并注册 Root Lifecycle。
+- Research→Notification 与 Researchflow→Notification Outbox Relay 已按角色和配置注册；它们只负责事件接收，不代表 Delivery 投递闭环。
+- Owner Session 已构造 Quant Result Access Policy Store/Manager，并在 Router 注册现有策略管理端点；这不是 Quant 结果读取授权 Reader。
+- Research News 组合已具备 News Evidence Query、Research Service、Importer、News Authorizer；依 Cursor Key Ring 配置启用。Context Authorizer 未注入，且没有真实 Context 消费者，不能默认放行。
+
+### 真实缺口分类
+
+| 缺口 | 归属 | 当前处理 |
+|---|---|---|
+| Researchflow CreateRun/GetRun/CancelRun 没有 Root HTTP Handler/路由 | Server + SRV-CTR-001 契约 | 当前 Application Owner Use Case 已构造，但没有对外 HTTP 接口；先基于 WebUI 场景形成最小契约提案，确认后实现 |
+| Quant 生产计算 Facade、正式计算算法/Registry、Quant Stage Provider | Quant / Researchflow | 不属于 Server 可凭装配补齐的能力；只在上游公开可调用能力和正式 Stage 契约形成后注入 |
+| Quant AuthorizedResultReader、Run→result_id 强类型关联 | Quant / Researchflow | 现有策略存储/管理基础不等于生产读取闭环；不做主体级全局放行，不扫描任意 JSON |
+| Research Context Owner Authorizer 与真实 Context Stage 消费 | Research / Researchflow / Server | 当前无真实消费者和授权策略交付，不注入恒 Allow，不创建空 Handler |
+| LLM Gateway Secret/Capability/Provider 及真实消费者 | LLM / Server / Researchflow | 无真实 Gateway 配置与调用场景，不创建空 Provider |
+| Notification Recipient/Fanout/Delivery/Channel 生产链 | Notification / Server | 不是首条研究报告链路的必要条件，后置 |
+| Data Provider 准确性、DailyBars v2、Snapshot/Evidence 质量 | Data | 由 Data 独立负责，不阻塞 Root 初始化；真实消费者需要时再进入链路验收 |
+
+### 本轮结论与下一项执行
+
+- Root 基础设施、Data、News Search、Researchflow Worker Runtime 的现有装配不重做。
+- 当前最明确、属于 Server 入口层的缺口是 Researchflow 新 HTTP API 尚未注册。项目登记 SRV-CTR-001=deferred，原因是新 API 路径/方法、DTO、错误投影、认证授权和分页语义尚无唯一权威定义；旧 Analysis API 已退役，不能复用。
+- 下一项先形成 SRV-CTR-001 最小 API 提案，范围仅覆盖首条真实 News Search Workflow 的创建、查询和取消，以及 Run/Stage/Attempt/ResultSummary 的必要读取；不扩展模板管理、历史搜索、通知、Quant/Research 业务接口。
+- 提案以现有 Researchflow Application DTO/方法、WebUI 实际任务页面和 Owner Session Principal 为依据。字段必须能映射到现有 Application/Domain，禁止为 API 方便新增重复 ID 或业务状态。
+- 用户确认契约后，再实现 HTTP Handler、OpenAPI/Schema、Router 注册、认证/授权与 WebUI 调用；在契约确认前不提交猜测性路由。
+
+代码复核基线：ca79ef0de11a861bdf9c412eedc42f935a82336d。本节只记录代码事实和执行边界；本次没有修改 Server 生产代码，也没有把模块专项测试或历史 CI 冒充为当前 HEAD 验收。
