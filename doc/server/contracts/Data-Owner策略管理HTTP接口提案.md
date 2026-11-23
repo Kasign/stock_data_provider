@@ -56,7 +56,7 @@ Owner Session 仅证明浏览器 Owner 身份；Data Application 仍负责验证
 
 - 尚无已发布策略时返回 404，稳定错误码建议为 `server.data_policy_not_published`；不得生成默认策略。
 - 存储不可用、策略记录损坏或指纹不匹配返回 503/内部安全错误，不得误报为“尚未发布”。
-- 当前 Repository 目前将“无当前指针”和存储故障统一映射为 unavailable；实现前需增加明确的 not-published sentinel，不能在 Handler 中解析 SQL 错误文本。
+- 已实现明确的 not-published sentinel：Repository 将 SQL `sql.ErrNoRows` 映射为 `app.ErrDataAuthorizationPolicyNotPublished`，Application 再映射为 `ErrDataPolicyNotPublished`；存储故障仍映射为 unavailable。MariaDB 集成测试已覆盖首次发布前的 not-published 结果。
 
 ## 4. PUT 发布策略
 

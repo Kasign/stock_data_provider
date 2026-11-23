@@ -1056,3 +1056,13 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - 最终代码 SHA：`cdcd5f905de1103e49e1b79686f00882e2ea405d`；Go Test Suite [45174381526](https://github.com/Kasign/stock_data_provider/actions/runs/45174381526) 与 Integration CI [45174381536](https://github.com/Kasign/stock_data_provider/actions/runs/45174381536) 均 completed / success，覆盖 gofmt、单测、Race、Vet、Data MariaDB、模块集成与 Docker 构建。
 - 同 SHA 的 Live Provider Probe 工作流虽 completed / success，但所有真实 Provider 探测步骤均 skipped，不计为真实行情源验证。
 - 下一步：冻结 Data Owner 策略管理的最小 Server HTTP 契约前，继续核对 Data 策略对象的管理动作边界和现有 Owner Session 安全约束；不直接复制 Quant 策略路由，也不提前暴露未经契约定义的管理 API。
+
+
+## 2026-11-23 Data Owner 策略管理接口前置语义补齐
+
+- 代码基线：`repair_all` SHA `50b6eba3e3c2f85cad593a9680f6424b536a4054`。
+- 新增 `app.ErrDataAuthorizationPolicyNotPublished`，MariaDB Repository 将当前策略指针查询的 `sql.ErrNoRows` 映射为该明确状态；Data Owner Application 将其映射为 `ErrDataPolicyNotPublished`。数据库连接/查询故障仍保持 unavailable，不会被伪装成“尚未发布”。
+- Application 单测覆盖未发布状态映射；MariaDB 集成测试覆盖尚无策略版本时的查询结果，之后继续验证首次发布、CAS 冲突、撤销和历史版本不可重激活。
+- 精确 SHA 的 Go Test Suite [45176291646](https://github.com/Kasign/stock_data_provider/actions/runs/45176291646) 与 Integration CI [45176291723](https://github.com/Kasign/stock_data_provider/actions/runs/45176291723) 均 completed / success；gofmt、常规测试、Race、Vet、Data MariaDB、模块集成和 Docker 构建通过。
+- Live Provider Probe Run [45176291862](https://github.com/Kasign/stock_data_provider/actions/runs/45176291862) 的真实 Provider 探测步骤均 skipped，不作为真实数据验证。
+- Data Owner 策略管理 HTTP 提案已补齐未发布状态语义，但仍是 DRAFT；公开路由必须等待契约确认和冻结。

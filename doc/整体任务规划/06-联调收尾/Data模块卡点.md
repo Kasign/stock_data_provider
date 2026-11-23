@@ -462,3 +462,11 @@ Root Server 的 Data Module 构造、共享资源注入、Migration Registry、I
 - DATA-CTR-007 仍按项目登记簿保持 deferred：当前实现与 Schema 已有代码基础，但真实 MariaDB 历史数据 Golden、消费者版本/引用映射及契约重新进入冻结条件尚未完成。不得把 CI 的结构集成测试冒充真实数据 Golden。
 - 本轮 Live Provider Probe Run [45174381495](https://github.com/Kasign/stock_data_provider/actions/runs/45174381495) 中全部真实 Provider 请求步骤均 skipped；真实行情数据准确性留待部署后按用户安排验证。
 - 下一步先定义最小 Data Owner 策略管理 HTTP 契约（Owner Session only、读取当前策略、基于 expected_current_version 发布不可变版本；撤销通过发布 revoked 状态的新版本，不提供删除/回滚旧版本），再由 Server 组合 Data Owner Application。契约未冻结前不增加公开路由。
+
+
+## 2026-11-23 Data Owner 策略发布与未发布状态语义补齐
+
+- Data Owner Policy Publisher 已完成 Owner Session Principal 校验、策略内容校验、不可变版本发布、expected-current-version CAS、历史版本 ID 永不复用，以及发布后直接返回本次版本的并发一致性修复。
+- `Current()` 现在能区分“尚无已发布策略”与“数据库/存储不可用”：Repository 的 `sql.ErrNoRows` 映射为 `app.ErrDataAuthorizationPolicyNotPublished`，Application 映射为 `ErrDataPolicyNotPublished`。未发布仍不生成默认策略，存储故障仍 fail closed。
+- 新增 Application 未发布状态测试与 MariaDB 首次发布前的查询断言；精确 SHA `50b6eba3e3c2f85cad593a9680f6424b536a4054` 的 Go Test Suite [45176291646](https://github.com/Kasign/stock_data_provider/actions/runs/45176291646)、Integration CI [45176291723](https://github.com/Kasign/stock_data_provider/actions/runs/45176291723) 均 success。
+- 下一步仍是确认并冻结 `doc/server/contracts/Data-Owner策略管理HTTP接口提案.md`，之后再接 Server Owner Session composition/Handler/Root Router；未冻结前不创建公开路由。
