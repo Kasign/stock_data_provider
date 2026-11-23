@@ -6,7 +6,6 @@ import (
 
 	"example.com/stock-analysis-flow/internal/marketdata/app"
 	"example.com/stock-analysis-flow/internal/marketdata/application"
-	"example.com/stock-analysis-flow/internal/marketdata/snapshotport"
 )
 
 // CreateDailyBarsCloseSeriesSnapshot 创建并授权一个不可变的首批 SMA 输入 Snapshot。
@@ -26,7 +25,7 @@ func (m *Module) CreateDailyBarsCloseSeriesSnapshot(
 		return application.DailyBarsCloseSeriesSnapshotReferences{}, err
 	}
 	creator, err := application.NewDailyBarsCloseSeriesSnapshotCreator(
-		reader, m.store.(snapshotport.DailyBarsCloseSeriesSnapshotRepository), owner,
+		reader, m.store, owner,
 	)
 	if err != nil {
 		return application.DailyBarsCloseSeriesSnapshotReferences{}, err
