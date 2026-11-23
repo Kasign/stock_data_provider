@@ -353,8 +353,8 @@ func TestMarketDataMigrationUpgradeAndConcurrentRootRegistration(t *testing.T) {
 		t.Fatalf("ping isolated MariaDB database: %v", err)
 	}
 	definitions := marketdatabootstrap.MigrationDefinitions()
-	if len(definitions) != 7 {
-		t.Fatalf("Data migration definition count = %d, want V1-V6 plus authorization policy V7 (7 total)", len(definitions))
+	if len(definitions) != 8 {
+		t.Fatalf("Data migration definition count = %d, want V1-V6, authorization policy V7 and decision/revocation V8 (8 total)", len(definitions))
 	}
 	if err := platformstorage.ApplyMigrations(ctx, db, marketdatabootstrap.MigrationNamespace, definitions[:3]); err != nil {
 		t.Fatalf("apply published Data migrations V1-V3: %v", err)

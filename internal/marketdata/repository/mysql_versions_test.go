@@ -193,8 +193,8 @@ func TestFundamentalsRevisionHashNormalizesEquivalentOffsetInstants(t *testing.T
 
 func TestMarketDataMigrationDefinitionsExposeImmutableVersionedHistory(t *testing.T) {
 	migrations := MigrationDefinitions()
-	if len(migrations) != 7 {
-		t.Fatalf("migration count = %d, want V1-V6 plus immutable Data authorization policy V7", len(migrations))
+	if len(migrations) != 8 {
+		t.Fatalf("migration count = %d, want V1-V6, immutable authorization policy V7 and decisions/revocations V8", len(migrations))
 	}
 	for index := 0; index < 3; index++ {
 		if migrations[index].Version != uint64(index+1) || len(migrations[index].Statements) == 0 || len(migrations[index].Operations) != 0 {
@@ -220,5 +220,12 @@ func TestMarketDataMigrationDefinitionsExposeImmutableVersionedHistory(t *testin
 		!strings.Contains(policy.Statements[0], "market_data_authorization_policy_versions") ||
 		!strings.Contains(policy.Statements[1], "market_data_current_authorization_policy_versions") {
 		t.Fatalf("Data authorization policy migration V7 must add immutable versions and a current pointer: %+v", policy)
+	}
+	decisions := migrations[7]
+	if decisions.Version != 8 || len(decisions.Statements) != 2 || len(decisions.Operations) != 0 ||
+		!strings.Contains(decisions.Statements[0], "market_data_authorization_decisions") ||
+		!strings.Contains(decisions.Statements[1], "market_data_authorization_revocations") ||
+		!strings.Contains(decisions.Statements[1], "FOREIGN KEY (authorization_ref)") {
+		t.Fatalf("Data authorization decision migration V8 must add immutable decisions and append-only revocations: %+v", decisions)
 	}
 }
