@@ -54,6 +54,38 @@ func TestDailyBarsCloseSeriesSnapshotRejectsTampering(t *testing.T) {
 	}
 }
 
+func TestDailyBarsCloseSeriesSnapshotFingerprintsBindManifestAndPayload(t *testing.T) {
+	input := closeSeriesSnapshotTestInput(t)
+	first, err := BuildDailyBarsCloseSeriesSnapshot(input, "principal:test-user", "quant_analysis")
+	if err != nil {
+		t.Fatalf("BuildDailyBarsCloseSeriesSnapshot() error = %v", err)
+	}
+
+	callerChanged, err := BuildDailyBarsCloseSeriesSnapshot(input, "principal:other-user", "quant_analysis")
+	if err != nil {
+		t.Fatalf("BuildDailyBarsCloseSeriesSnapshot() with changed caller error = %v", err)
+	}
+	if callerChanged.PayloadFingerprint != first.PayloadFingerprint ||
+		callerChanged.Manifest.ManifestFingerprint == first.Manifest.ManifestFingerprint ||
+		callerChanged.Manifest.SnapshotRef == first.Manifest.SnapshotRef {
+		t.Fatal("SnapshotRef must change when Manifest changes while PayloadFingerprint remains stable")
+	}
+
+	payloadChangedInput := input
+	payloadChangedInput.Payload = cloneDailyBarsCloseSeriesPayload(input.Payload)
+	payloadChangedInput.Payload.Bars[0].Close = "43.50"
+	payloadChangedInput.Payload.Bars[0].CloseEvidence.SourceToken = "43.5000"
+	payloadChanged, err := BuildDailyBarsCloseSeriesSnapshot(payloadChangedInput, "principal:test-user", "quant_analysis")
+	if err != nil {
+		t.Fatalf("BuildDailyBarsCloseSeriesSnapshot() with changed payload error = %v", err)
+	}
+	if payloadChanged.Manifest.ManifestFingerprint != first.Manifest.ManifestFingerprint ||
+		payloadChanged.PayloadFingerprint == first.PayloadFingerprint ||
+		payloadChanged.Manifest.SnapshotRef == first.Manifest.SnapshotRef {
+		t.Fatal("SnapshotRef must change when Payload changes while ManifestFingerprint remains stable")
+	}
+}
+
 func TestBuildDailyBarsCloseSeriesSnapshotRejectsUntrustedCallerAndPurpose(t *testing.T) {
 	input := closeSeriesSnapshotTestInput(t)
 	if _, err := BuildDailyBarsCloseSeriesSnapshot(input, " ", "quant_analysis"); err == nil {

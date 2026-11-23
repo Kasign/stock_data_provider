@@ -1006,3 +1006,14 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 1. 先通过真实 Data PIT V2 Reader 获取一份既有 MariaDB 历史日线的完整输出（不访问 Provider），确认 Builder 能从真实 Eastmoney ExactValues/CalendarRef/CoverageEvidence 生成 Payload。
 2. 使用项目 JCS 库分别计算 PayloadFingerprint、ManifestFingerprint，再按 DEC-PLAT-002-055 对两者规范化组合计算 SnapshotRef；补 Golden 和契约校验。
 3. 再新增 Migration V6 和不可变 Snapshot Repository，随后接 Data Owner 授权和 Quant Consumer。
+
+
+## 2026-11-23 Snapshot 双指纹构建与校验实现
+
+- 新增 internal/marketdata/app/daily_bars_close_series_manifest.go。
+- PayloadFingerprint：对 Payload JSON 执行 RFC 8785 JCS 后 SHA-256。
+- ManifestFingerprint：对 DATA-CTR-008 2.0.0 Manifest 指纹输入（不含 snapshot_ref / manifest_fingerprint）执行 JCS + SHA-256。
+- SnapshotRef：对规范化对象 {manifest_fingerprint, payload_fingerprint} 执行 JCS + SHA-256，并加 data_snapshot:sha256: 前缀；不将两份指纹简单拼接，也不将 ManifestFingerprint 单独作为 SnapshotRef。
+- Build/Verify 同时检查 schema 版本、purpose、caller_ref、来源绑定、PIT 时间边界、Calendar/coverage、Exact Close Evidence 和三份指纹；返回值对 Payload/来源指针做深拷贝，避免调用方修改原输入后改变已构建 Snapshot。
+- 新增 Manifest 指纹测试：Manifest 改变时 PayloadFingerprint 保持不变但 SnapshotRef 改变；Payload 改变时 ManifestFingerprint 保持不变但 SnapshotRef 改变；同时覆盖篡改、PIT as_of、调用主体和用途拒绝。
+- 当前仍未实现 Migration V6、不可变 Snapshot Repository、Data Owner 授权签发/撤销复核、Server 注入和 Quant 消费者；真实 MariaDB PIT Payload Golden 也未生成。因此此阶段只是 Snapshot 计算/校验层，不宣称生产闭环完成。
