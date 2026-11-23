@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:kasign:server:srv-ctr-001:create-run-request:1.0.0",
+  "title": "SRV-CTR-001 CreateRun Request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "idempotency_key",
+    "template_ref",
+    "template_version",
+    "input_snapshot_refs",
+    "parameters"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0.0"
+    },
+    "idempotency_key": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "template_ref": {
+      "const": "news.search"
+    },
+    "template_version": {
+      "const": "1.0.0"
+    },
+    "input_snapshot_refs": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "pattern": "^\\\\S(?:.*\\\\S)?$"
+      },
+      "uniqueItems": true
+    },
+    "parameters": {
+      "$ref": "../../../researchflow/schema/news-search-parameters-1.0.0.schema.json"
+    }
+  }
+}

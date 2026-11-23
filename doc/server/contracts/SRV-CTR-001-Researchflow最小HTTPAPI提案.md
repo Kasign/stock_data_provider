@@ -1,6 +1,6 @@
-# SRV-CTR-001 Researchflow 最小 HTTP API 提案
+# SRV-CTR-001 Researchflow 最小 HTTP API 提案（已冻结，历史文件名保留）
 
-- 状态：DRAFT，未冻结、未实现
+- 状态：已被正式契约取代
 - 适用分支：repair_all
 - 提案基线：ca79ef0de11a861bdf9c412eedc42f935a82336d（代码复核基线）
 - 目标：仅为首个可运行的 Researchflow Workflow 提供 Root Server HTTP 入口，不扩展成完整业务 API 平台。
@@ -126,4 +126,4 @@ HTTP Handler 只负责将 Application/Domain 错误映射为现有 Platform Faul
 
 正式实施前需确认本提案的路由、Owner Session 认证、请求字段和首期不覆盖范围。确认后再补正式 OpenAPI、请求/响应 Schema、Golden、HTTP Handler、Root Router 注册、CSRF/授权测试、WebUI API 封装和真实 MariaDB/Redis Worker 集成验收。
 
-本文件在确认前仅为讨论提案，不构成 SRV-CTR-001 冻结契约。
+本文件为历史提案归档。2026-11-23 用户确认接口范围与 Owner Session 认证后，正式契约已冻结。权威定义见 [SRV-CTR-001 Researchflow HTTP API 契约](./SRV-CTR-001-researchflow-http-api.md)。本文件不再作为当前契约依据。

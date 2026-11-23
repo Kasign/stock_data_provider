@@ -1,0 +1,44 @@
+{
+  "schema_version": "1.0.0",
+  "run": {
+    "schema_version": "1.0.0",
+    "run_ref": "run_0123456789abcdef0123456789abcdef",
+    "status": "created",
+    "version": 1,
+    "system_as_of": "2026-11-23T07:00:00Z",
+    "deadline_at": "2026-11-23T07:30:00Z",
+    "template_ref": "news.search",
+    "template_version": "1.0.0",
+    "template_fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "input_snapshot_refs": [],
+    "result_summary_ref": null,
+    "originating_request_id": "req_0123456789abcdef",
+    "correlation_id": "cor_0123456789abcdef",
+    "termination_reason": null,
+    "created_at": "2026-11-23T07:00:00Z",
+    "started_at": null,
+    "finished_at": null
+  },
+  "stages": [
+    {
+      "schema_version": "1.0.0",
+      "stage_ref": "stage_0123456789abcdef0123456789abcdef",
+      "run_ref": "run_0123456789abcdef0123456789abcdef",
+      "stage_code": "news.search",
+      "status": "pending",
+      "version": 1,
+      "required": true,
+      "dependency_stage_refs": [],
+      "retry_policy_ref": "retry.news-search.v1",
+      "retry_at": null,
+      "output_ref": null,
+      "reason_codes": [],
+      "created_at": "2026-11-23T07:00:00Z",
+      "started_at": null,
+      "finished_at": null,
+      "quality_summary_ref": null,
+      "diagnostic_refs": []
+    }
+  ],
+  "result_summary": null
+}

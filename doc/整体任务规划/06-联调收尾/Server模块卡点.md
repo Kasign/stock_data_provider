@@ -362,3 +362,17 @@
 - 草案仅覆盖 CreateRun、GetRun、CancelRun 三个入口，复用现有 Application Use Case、Owner Session 和 Run/Stage Schema；采用 Run 聚合轮询，不扩展列表、事件流、Attempt 明细或 Stage Output 内容读取。
 - 草案明确首期 News Search 仅用于验证 Researchflow 创建/执行/查询链路，不代表完整 A 股研究报告已经可用。
 - 当前状态仍为 DRAFT。未冻结 SRV-CTR-001，未添加 HTTP Handler/路由，等待用户确认 API 范围与认证边界后实施。
+
+
+## SRV-CTR-001 正式契约冻结与实现任务（2026-11-23）
+
+**契约状态：FROZEN 1.0.0；HTTP 实现状态：NOT_IMPLEMENTED。**
+
+- 正式契约：`doc/server/contracts/SRV-CTR-001-researchflow-http-api.md`。
+- OpenAPI：`doc/server/openapi/researchflow.openapi.yaml`。
+- Schema：`doc/server/schema/SRV-CTR-001/`；Golden：`doc/server/golden/SRV-CTR-001/`。
+- 三个入口固定为 CreateRun、GetRun、CancelRun；仅接受 SRV-CTR-002 Owner Session Cookie。POST 必须通过现有 SessionAuthenticator 的 Origin/Host/CSRF 校验；不接受 Owner Bearer/Service Token；CallerRef 从可信 Principal 解析。
+- 已有 Application Use Cases、Owner Session Identity Adapter 和 Root Owner composition，不重写业务逻辑。下一步实现显式 Run/Stage/ResultSummary DTO、Owner Session HTTP Handler、Root Router 注册、错误映射、CSRF/资源授权测试、WebUI API 封装。
+- 取消成功只代表取消意图持久化；GET 返回 Run/Stage 聚合轮询；不增加列表、事件流、Attempt 明细或 Stage Output API。
+- 首期 News Search 只验收 Researchflow 基础执行链，不得描述为完整 A 股研究报告链路。
+- 本次只冻结契约和接口 Schema；尚未修改生产 Handler/Router/WebUI，也未运行代码测试。代码完成必须附精确 SHA 和 Integration CI。

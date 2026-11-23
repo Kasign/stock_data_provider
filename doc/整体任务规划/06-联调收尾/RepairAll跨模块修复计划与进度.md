@@ -914,3 +914,12 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - 已形成最小 API 草案：`doc/server/contracts/SRV-CTR-001-Researchflow最小HTTPAPI提案.md`，只覆盖 CreateRun/GetRun/CancelRun，复用现有 Application/Owner Session，不新增平行 ID 或业务状态。
 - 当前仍为 DRAFT，尚未修改生产 Handler/Router。原因是项目级登记中的 SRV-CTR-001 仍为 deferred；必须先确认正式公开接口范围，避免沿用已退役旧 Analysis DTO 或猜测接口。
 - 下一步：确认提案后实现正式 OpenAPI/Schema、Handler、Root Router、CSRF/资源授权测试和 WebUI 调用；再执行真实 MariaDB/Redis Worker 集成验收。
+
+
+## 40. 2026-11-23 SRV-CTR-001 Researchflow HTTP API 契约冻结
+
+- 用户确认按三个接口和 Owner Session 认证方案执行：POST `/api/v1/researchflow/runs`、GET `/api/v1/researchflow/runs/{run_ref}`、POST `/api/v1/researchflow/runs/{run_ref}/cancel`。
+- 正式契约 `doc/server/contracts/SRV-CTR-001-researchflow-http-api.md` 已冻结为 1.0.0；Owner Session Cookie only，两个 POST 必须校验 Origin/Host 与 X-CSRF-Token；CallerRef 从可信 Principal 派生；Run 资源级授权仍由 Researchflow Application 执行。
+- OpenAPI、CreateRun Request Schema、Run Aggregate Response Schema 和 Golden 已纳入 `doc/server/openapi/`、`doc/server/schema/SRV-CTR-001/`、`doc/server/golden/SRV-CTR-001/`。
+- 已确认现有 CreateRun/GetRun/CancelRun Application、Owner Session Researchflow Identity Adapter 和 Root Owner composition 均存在；当前代码缺口是 Researchflow HTTP Handler/DTO 投影、Root Router 接线、HTTP/CSRF/授权测试及 WebUI API 封装。
+- **状态：契约 FROZEN；代码实现与生产验收仍 IN_PROGRESS，不能将契约冻结等同于接口已上线。** 后续仅按冻结契约实现，不重新扩大 API 范围。

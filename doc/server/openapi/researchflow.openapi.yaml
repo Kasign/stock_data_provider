@@ -1,0 +1,118 @@
+openapi: 3.1.0
+info:
+  title: SRV-CTR-001 Researchflow HTTP API
+  version: 1.0.0
+  description: Frozen Root Server API for creating, reading and cancelling Researchflow Runs. Owner Session only.
+servers:
+  - url: /
+security:
+  - ownerSession: []
+paths:
+  /api/v1/researchflow/runs:
+    post:
+      operationId: createResearchflowRun
+      summary: Create or idempotently replay a Researchflow Run
+      security:
+        - ownerSession: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+        - $ref: '#/components/parameters/CSRFToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '../schema/SRV-CTR-001/create-run-request-1.0.0.schema.json'
+      responses:
+        '200':
+          description: Run created or existing idempotent Run replayed
+          content:
+            application/json:
+              schema:
+                $ref: '../schema/SRV-CTR-001/run-aggregate-response-1.0.0.schema.json'
+        '400': { $ref: '#/components/responses/PublicError' }
+        '401': { $ref: '#/components/responses/PublicError' }
+        '403': { $ref: '#/components/responses/PublicError' }
+        '409': { $ref: '#/components/responses/PublicError' }
+        '413': { $ref: '#/components/responses/PublicError' }
+        '5XX': { $ref: '#/components/responses/PublicError' }
+  /api/v1/researchflow/runs/{run_ref}:
+    get:
+      operationId: getResearchflowRun
+      summary: Read an authorized Researchflow Run and its Stages
+      parameters:
+        - name: run_ref
+          in: path
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 255 }
+      responses:
+        '200':
+          description: Run aggregate
+          content:
+            application/json:
+              schema:
+                $ref: '../schema/SRV-CTR-001/run-aggregate-response-1.0.0.schema.json'
+        '401': { $ref: '#/components/responses/PublicError' }
+        '403': { $ref: '#/components/responses/PublicError' }
+        '404': { $ref: '#/components/responses/PublicError' }
+        '5XX': { $ref: '#/components/responses/PublicError' }
+  /api/v1/researchflow/runs/{run_ref}/cancel:
+    post:
+      operationId: cancelResearchflowRun
+      summary: Persist a cancellation intent for an authorized Run
+      parameters:
+        - name: run_ref
+          in: path
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 255 }
+        - $ref: '#/components/parameters/Origin'
+        - $ref: '#/components/parameters/CSRFToken'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              maxProperties: 0
+      responses:
+        '200':
+          description: Latest Run aggregate after cancellation intent persistence
+          content:
+            application/json:
+              schema:
+                $ref: '../schema/SRV-CTR-001/run-aggregate-response-1.0.0.schema.json'
+        '400': { $ref: '#/components/responses/PublicError' }
+        '401': { $ref: '#/components/responses/PublicError' }
+        '403': { $ref: '#/components/responses/PublicError' }
+        '404': { $ref: '#/components/responses/PublicError' }
+        '409': { $ref: '#/components/responses/PublicError' }
+        '413': { $ref: '#/components/responses/PublicError' }
+        '5XX': { $ref: '#/components/responses/PublicError' }
+components:
+  securitySchemes:
+    ownerSession:
+      type: apiKey
+      in: cookie
+      name: __Secure-owner_session
+      description: SRV-CTR-002 HttpOnly Owner Session cookie. Owner Bearer and Service Token are not accepted.
+  parameters:
+    Origin:
+      name: Origin
+      in: header
+      required: true
+      schema: { type: string, format: uri }
+      description: Must match configured PublicOrigin exactly.
+    CSRFToken:
+      name: X-CSRF-Token
+      in: header
+      required: true
+      schema: { type: string, minLength: 1 }
+      description: Required for all POST requests; validated atomically by SessionAuthenticator.
+  responses:
+    PublicError:
+      description: Existing Platform/Server Public Error Envelope; internal Fault details are never exposed.
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: true

@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:kasign:server:srv-ctr-001:run-aggregate-response:1.0.0",
+  "title": "SRV-CTR-001 Run Aggregate Response",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "run",
+    "stages",
+    "result_summary"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0.0"
+    },
+    "run": {
+      "$ref": "../../../researchflow/schema/run-1.0.0.schema.json"
+    },
+    "stages": {
+      "type": "array",
+      "items": {
+        "$ref": "../../../researchflow/schema/stage-1.0.0.schema.json"
+      }
+    },
+    "result_summary": {
+      "oneOf": [
+        {
+          "$ref": "../../../researchflow/schema/result-summary-1.0.0.schema.json"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "run": {
+            "properties": {
+              "status": {
+                "enum": [
+                  "succeeded",
+                  "partial",
+                  "failed",
+                  "cancelled"
+                ]
+              }
+            }
+          }
+        },
+        "required": [
+          "run"
+        ]
+      },
+      "then": {
+        "properties": {
+          "result_summary": {
+            "$ref": "../../../researchflow/schema/result-summary-1.0.0.schema.json"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "run": {
+            "properties": {
+              "status": {
+                "enum": [
+                  "created",
+                  "queued",
+                  "running",
+                  "cancelling"
+                ]
+              }
+            }
+          }
+        },
+        "required": [
+          "run"
+        ]
+      },
+      "then": {
+        "properties": {
+          "result_summary": {
+            "type": "null"
+          }
+        }
+      }
+    }
+  ]
+}
