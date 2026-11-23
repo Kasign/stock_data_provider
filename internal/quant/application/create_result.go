@@ -10,7 +10,7 @@ import (
 
 var (
 	errInvalidResultPersisterRequest = errors.New("invalid Quant result creation request")
-	ErrResultPersistenceFailed    = errors.New("Quant result persistence failed")
+	ErrResultPersistenceFailed       = errors.New("Quant result persistence failed")
 )
 
 // resultPersister 是 QNT-014 Facade 内部使用的低层持久化步骤，不是对 Server/Researchflow 暴露的公开用例。
