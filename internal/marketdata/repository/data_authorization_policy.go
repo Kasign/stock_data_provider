@@ -18,7 +18,7 @@ var _ app.DataAuthorizationPolicyRepository = (*Store)(nil)
 
 var (
 	ErrDataAuthorizationPolicyUnavailable = errors.New("market-data authorization policy unavailable")
-	ErrDataAuthorizationPolicyConflict    = errors.New("market-data authorization policy version conflict")
+	ErrDataAuthorizationPolicyConflict    = app.ErrDataAuthorizationPolicyVersionConflict
 )
 
 func (s *Store) PublishDataAuthorizationPolicyVersion(ctx context.Context, expectedCurrentVersion string, value authorization.PolicyVersion) error {
