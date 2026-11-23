@@ -949,3 +949,12 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - DATA-CTR-008 Manifest 1.0.0 的 `sources[].source_version` 却是必填非空字符串，旧 Golden 又以时间戳填充该字段。这与当前 Provider 缺少逐条数据版本的事实存在输入兼容缺口；不能用 Adapter 常量或 FetchedAt 填平，也不能擅改冻结的 1.0.0。需要在契约治理中明确 Manifest 来源版本语义/兼容路径后，才可签发这类来源的正式 Manifest。
 - Snapshot 身份必须绑定 Manifest 与 Payload：分别计算 `manifest_fingerprint` 和 `payload_fingerprint`，再对二者的规范化组合计算 `snapshot_ref`。不得把 SnapshotRef 简化为 PayloadFingerprint，也不得把旧 Golden 中两个值相等当作 Payload 已绑定的证据。
 - 当前决策：无需新增逐 Bar 版本存储；未来 Snapshot Repository 只保存整次规范化 Payload、Manifest 和内容指纹。首个 SMA 可限定精确 Close、`adjustment_basis=none` 和同次 CalendarRef，但在 Manifest 来源版本缺口解决前，不得将它接成正式 Quant 生产输入。DATA-CTR-005/007 仍 deferred，不据此宣称跨模块契约已冻结。
+
+
+## 2026-11-23 Data Snapshot 审计结论固化与下一任务
+
+- 已把 Data 日线版本、精确 Close 来源、交易日历 V5、Provider SourceVersion 语义、Manifest 冲突和 SnapshotRef 指纹边界同步到 Data 依赖方案、Data 当前任务入口及 Data 卡点文档，避免后续每轮重复代码审计。
+- 审计事实：单 Bar ExactValues 已在 revision metadata 持久化，revision hash 覆盖；V5 Calendar Snapshot 可复用；Eastmoney 原始 CSV Close 可作为首个未复权 SMA 输入；当前 SourceVersion 是 Adapter/API/协议版本而非 Provider 数据修订版本。
+- 真实契约问题：DEC-PLAT-002-020 要求 Provider 数据版本缺失时显式缺失；DATA-CTR-008 1.0.0 Schema 却要求 sources.source_version 为非空字符串。冻结 1.0.0 不得原地改写，也不得用 Adapter/FetchedAt 伪造。
+- SnapshotRef 必须绑定独立 ManifestFingerprint 与 PayloadFingerprint；实际组合公式、Payload Schema、来源版本表达及 GOV-CTR-006 resource_ref 关联由 DATA-CTR-007 新版契约/Golden 定义。
+- 当前下一任务：做 DATA-CTR-008 版本演进与 DATA-CTR-007 新版契约的定点设计/影响分析，先确认字段版本语义和消费者兼容策略，再进入 Data Snapshot Repository、Owner 授权及 Quant SMA 生产链路。DATA-CTR-005/007 未达到重新进入条件前仍按登记簿状态管理。

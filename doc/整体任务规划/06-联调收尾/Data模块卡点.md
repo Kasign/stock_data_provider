@@ -301,3 +301,17 @@ Root Server 的 Data Module 构造、共享资源注入、Migration Registry、I
 - **来源版本边界**：当前 Provider SourceVersion 是 Adapter/API 版本常量，不是逐 Bar 上游数据版本；默认 Eastmoney 日线没有逐 Bar ProviderTime/provider_data_version。既有解阻方案明确 Research Evidence 的 `source_version` 只填可证明的 Provider 数据版本，缺失时显式缺失，不能用 Adapter 常量或 FetchedAt 替代。DATA-CTR-008 Manifest 1.0.0 的 `sources[].source_version` 却要求非空字符串，旧 Golden 又使用时间戳；这是当前来源数据无法满足的契约输入缺口。不能伪造填充，也不能修改冻结的 1.0.0，需经契约治理明确兼容路径后才能签发正式 Manifest。
 - **SnapshotRef 计算边界**：PayloadFingerprint = SHA-256(JCS(canonical Payload))；ManifestFingerprint 独立计算；SnapshotRef 必须绑定两者，对 `manifest_fingerprint + payload_fingerprint` 的规范化组合计算 SHA-256。旧 Golden 中两个 fingerprint 相等不能作为 Payload 已绑定的证据；具体新语义应由 DATA-CTR-007 新版契约与 Golden 定义，不修改冻结的 DATA-CTR-008 1.0.0。
 - 当前下一步：明确来源版本缺口的契约治理路径；Snapshot Payload 只包含首个指标必需的精确 Close/OHLC、交易日/周期/复权、Adapter/Normalization 版本、可选 Provider 数据版本、采集/系统观察时点、质量及同次 CalendarRef/CoverageEvidence。之后复用 V5 Repository 模式实现整次 Snapshot 存储、Manifest 绑定和 GOV-CTR-006 Owner 授权。DATA-CTR-005/007 继续 deferred，不提前发布正式跨模块契约。
+
+
+## 2026-11-23：DailyBars 精确存储、来源版本与 Snapshot 的权威审计结论
+
+本节与本文件此前 D1/D2 记录合并阅读；若旧段落将当前 ExactValues 描述为缺失，以本节最新代码审计为准。
+
+- **精确日线版本**：Repository 将 `DailyBarExactValues` 保存在 `market_data_daily_bar_versions.metadata`；`dailyBarRevisionHash` 纳入 ExactValues、来源、复权和质量等元数据，current/PIT 读回可恢复。无需新增逐 Bar 历史表。
+- **查询级 Snapshot 仍缺失**：当前表与 PIT 读取只能重建单 Bar 历史序列，不会固定一次查询的完整 Bars + CoverageEvidence + 同次 CalendarRef + Manifest。不能把单 Bar revision_hash 当 SnapshotRef。
+- **日历能力已存在**：Migration V5 的不可变 Calendar Snapshot Repository 已完成内容寻址、幂等保存、精确读取和摘要校验；DailyBars Snapshot 复用，不再重建日历。
+- **首个 SMA 精确输入**：Eastmoney 默认优先级第一，Close ExactValues 保留原始 CSV token 和 source fraction digits。首个输入限定 `adjustment_basis=none`，消费精确 Close，不允许 float64 回转 Decimal。Pytdx 的整数/ProtocolScale 是协议定点表示，不能与原始 token precision 混为一谈。
+- **来源版本冲突**：DEC-PLAT-002-020 要求 Evidence version 是可获得的 Provider 数据版本；缺失则显式缺失。当前 Provider SourceVersion 实际为 Adapter/API/协议版本，Eastmoney 无逐 Bar ProviderTime/provider_data_version。DATA-CTR-008 1.0.0 却要求 `sources[].source_version` 非空字符串，Golden 还用时间戳填充。此处是冻结契约与真实来源能力的冲突，不是 Data 内部缺一个 fallback。不得伪造值，不得原地改 1.0.0。
+- **Snapshot 指纹**：PayloadFingerprint 和 ManifestFingerprint 独立计算；SnapshotRef 必须绑定二者规范化组合。旧 Golden 中相等的两项指纹不能证明 Payload 被哈希。
+- **不再复查的代码范围**：后续执行可直接复用上述结论；只有相关代码、Schema、Migration 或 Provider 版本语义发生变化时才重新核对。
+- **下一步**：正式确定 DATA-CTR-008 新版本如何表达缺失 Provider 数据版本，并与 DATA-CTR-007 SnapshotRef/Manifest/Payload 新版定义一起做消费者影响评估；契约版本未明确前不进入正式 Snapshot 写入和 Quant 生产读取。
