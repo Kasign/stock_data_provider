@@ -28,12 +28,12 @@ type dataAuthorizationPolicyManager interface {
 }
 
 type ownerSessionComposition struct {
-	lifecycle     *serversecurity.SessionLifecycleService
-	researchflow  *researchflowOwnerComposition
-	authenticator *serversecurity.SessionAuthenticator
+	lifecycle         *serversecurity.SessionLifecycleService
+	researchflow      *researchflowOwnerComposition
+	authenticator     *serversecurity.SessionAuthenticator
 	policyManager     quantResultAccessPolicyManager
 	dataPolicyManager dataAuthorizationPolicyManager
-	cookie        platformsecurity.SessionCookieConfig
+	cookie            platformsecurity.SessionCookieConfig
 }
 
 // newOwnerSessionComposition 将 Platform 安全存储和 Server 审计适配器组合为 Owner Session 用例。

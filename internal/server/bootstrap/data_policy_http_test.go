@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	marketdataauthorization "example.com/stock-analysis-flow/internal/marketdata/authorization"
 	marketdataapplication "example.com/stock-analysis-flow/internal/marketdata/application"
+	marketdataauthorization "example.com/stock-analysis-flow/internal/marketdata/authorization"
 	platformsecurity "example.com/stock-analysis-flow/internal/platform/security"
 )
 
@@ -36,9 +36,9 @@ func (fake *dataPolicyHTTPAuthenticatorFake) Authenticate(request *http.Request)
 }
 
 type dataPolicyHTTPManagerFake struct {
-	current          marketdataauthorization.CurrentPolicy
-	currentErr       error
-	publishErr       error
+	current           marketdataauthorization.CurrentPolicy
+	currentErr        error
+	publishErr        error
 	publishedExpected string
 	publishedVersion  string
 	publishedPolicy   marketdataauthorization.DataAccessPolicy
@@ -80,20 +80,20 @@ func dataPolicyHTTPTestPrincipal(method platformsecurity.AuthMethod) platformsec
 func dataPolicyHTTPTestCurrent() marketdataauthorization.CurrentPolicy {
 	now := time.Date(2026, 11, 23, 12, 0, 0, 0, time.UTC)
 	policy := marketdataauthorization.DataAccessPolicy{
-		SchemaVersion: marketdataauthorization.DataAccessPolicySchemaVersion,
-		Status: marketdataauthorization.PolicyApproved,
+		SchemaVersion:   marketdataauthorization.DataAccessPolicySchemaVersion,
+		Status:          marketdataauthorization.PolicyApproved,
 		AllowedSubjects: []string{"principal:service:quant"},
 		AllowedPurposes: []string{"quant_analysis"},
-		RequiredScopes: []string{"data:read"},
-		EffectiveAt: now.Add(-time.Minute),
+		RequiredScopes:  []string{"data:read"},
+		EffectiveAt:     now.Add(-time.Minute),
 	}
 	return marketdataauthorization.CurrentPolicy{
 		Version: marketdataauthorization.PolicyVersion{
-			PolicyType: marketdataauthorization.DataAccessPolicyType,
-			PolicyRef: marketdataauthorization.DailyBarsV2PolicyRef,
+			PolicyType:    marketdataauthorization.DataAccessPolicyType,
+			PolicyRef:     marketdataauthorization.DailyBarsV2PolicyRef,
 			PolicyVersion: "policy-v1",
-			PayloadHash: strings.Repeat("a", 64),
-			CreatedAt: now,
+			PayloadHash:   strings.Repeat("a", 64),
+			CreatedAt:     now,
 		},
 		Policy: policy,
 	}
@@ -198,26 +198,34 @@ func TestDataPolicyHTTPPostRequiresExpectedVersionAndMapsConflict(t *testing.T) 
 func TestDataPolicyHTTPRejectsBearerAndMixedCredentials(t *testing.T) {
 	manager := &dataPolicyHTTPManagerFake{current: dataPolicyHTTPTestCurrent()}
 	for _, test := range []struct {
-		name string
-		principal platformsecurity.Principal
+		name          string
+		principal     platformsecurity.Principal
 		authorization string
-		cookie string
-		want int
+		cookie        string
+		want          int
 	}{
-		{name:"Owner Bearer", principal:dataPolicyHTTPTestPrincipal(platformsecurity.AuthMethodOwnerBearer), want:http.StatusForbidden},
-		{name:"Authorization without Session", authorization:"Bearer token", want:http.StatusUnauthorized},
-		{name:"mixed Session and Authorization", authorization:"Bearer token", cookie:"owner_session=session", want:http.StatusBadRequest},
+		{name: "Owner Bearer", principal: dataPolicyHTTPTestPrincipal(platformsecurity.AuthMethodOwnerBearer), want: http.StatusForbidden},
+		{name: "Authorization without Session", authorization: "Bearer token", want: http.StatusUnauthorized},
+		{name: "mixed Session and Authorization", authorization: "Bearer token", cookie: "owner_session=session", want: http.StatusBadRequest},
 	} {
-		t.Run(test.name,func(t *testing.T){
-			auth:=&dataPolicyHTTPAuthenticatorFake{principal:test.principal}
-			handler:=newDataPolicyHTTPTestHandler(t,auth,manager)
-			request:=httptest.NewRequest(http.MethodGet,"/api/v1/owner/data/daily-bars-access-policy",nil)
-			if test.authorization!="" { request.Header.Set("Authorization",test.authorization) }
-			if test.cookie!="" { request.Header.Set("Cookie",test.cookie) }
-			response:=httptest.NewRecorder()
-			handler.ServeHTTP(response,request)
-			if response.Code!=test.want { t.Fatalf("status=%d want=%d body=%s",response.Code,test.want,response.Body.String()) }
-			if test.authorization!="" && auth.calls!=0 { t.Fatalf("ambiguous/bearer request reached Session authenticator %d times",auth.calls) }
+		t.Run(test.name, func(t *testing.T) {
+			auth := &dataPolicyHTTPAuthenticatorFake{principal: test.principal}
+			handler := newDataPolicyHTTPTestHandler(t, auth, manager)
+			request := httptest.NewRequest(http.MethodGet, "/api/v1/owner/data/daily-bars-access-policy", nil)
+			if test.authorization != "" {
+				request.Header.Set("Authorization", test.authorization)
+			}
+			if test.cookie != "" {
+				request.Header.Set("Cookie", test.cookie)
+			}
+			response := httptest.NewRecorder()
+			handler.ServeHTTP(response, request)
+			if response.Code != test.want {
+				t.Fatalf("status=%d want=%d body=%s", response.Code, test.want, response.Body.String())
+			}
+			if test.authorization != "" && auth.calls != 0 {
+				t.Fatalf("ambiguous/bearer request reached Session authenticator %d times", auth.calls)
+			}
 		})
 	}
 }

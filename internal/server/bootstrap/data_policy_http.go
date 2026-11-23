@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"time"
 
-	marketdataauthorization "example.com/stock-analysis-flow/internal/marketdata/authorization"
 	marketdataapplication "example.com/stock-analysis-flow/internal/marketdata/application"
+	marketdataauthorization "example.com/stock-analysis-flow/internal/marketdata/authorization"
 	platformsecurity "example.com/stock-analysis-flow/internal/platform/security"
 )
 
@@ -18,20 +18,20 @@ type dataPolicyHTTPHandler struct {
 }
 
 type dataPolicyPublishRequest struct {
-	SchemaVersion          string          `json:"schema_version"`
-	ExpectedCurrentVersion json.RawMessage `json:"expected_current_version"`
-	PolicyVersion          string          `json:"policy_version"`
+	SchemaVersion          string                                   `json:"schema_version"`
+	ExpectedCurrentVersion json.RawMessage                          `json:"expected_current_version"`
+	PolicyVersion          string                                   `json:"policy_version"`
 	Policy                 marketdataauthorization.DataAccessPolicy `json:"policy"`
 }
 
 type dataPolicyResponse struct {
-	SchemaVersion string                                      `json:"schema_version"`
-	PolicyType    string                                      `json:"policy_type"`
-	PolicyRef     string                                      `json:"policy_ref"`
-	PolicyVersion string                                      `json:"policy_version"`
-	PayloadHash   string                                      `json:"payload_hash"`
-	CreatedAt     string                                      `json:"created_at"`
-	Policy        marketdataauthorization.DataAccessPolicy   `json:"policy"`
+	SchemaVersion string                                   `json:"schema_version"`
+	PolicyType    string                                   `json:"policy_type"`
+	PolicyRef     string                                   `json:"policy_ref"`
+	PolicyVersion string                                   `json:"policy_version"`
+	PayloadHash   string                                   `json:"payload_hash"`
+	CreatedAt     string                                   `json:"created_at"`
+	Policy        marketdataauthorization.DataAccessPolicy `json:"policy"`
 }
 
 func newDataPolicyHTTPHandler(composition *ownerSessionComposition) (http.Handler, error) {
@@ -199,12 +199,12 @@ func (h *dataPolicyHTTPHandler) writePolicyError(w http.ResponseWriter, r *http.
 func (h *dataPolicyHTTPHandler) writePolicy(w http.ResponseWriter, status int, current marketdataauthorization.CurrentPolicy) {
 	response := dataPolicyResponse{
 		SchemaVersion: "1.0.0",
-		PolicyType: current.Version.PolicyType,
-		PolicyRef: current.Version.PolicyRef,
+		PolicyType:    current.Version.PolicyType,
+		PolicyRef:     current.Version.PolicyRef,
 		PolicyVersion: current.Version.PolicyVersion,
-		PayloadHash: current.Version.PayloadHash,
-		CreatedAt: current.Version.CreatedAt.UTC().Format(time.RFC3339Nano),
-		Policy: current.Policy,
+		PayloadHash:   current.Version.PayloadHash,
+		CreatedAt:     current.Version.CreatedAt.UTC().Format(time.RFC3339Nano),
+		Policy:        current.Policy,
 	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")

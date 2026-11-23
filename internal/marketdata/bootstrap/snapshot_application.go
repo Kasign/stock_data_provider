@@ -48,7 +48,6 @@ func (m *Module) ReadAuthorizedDailyBarsCloseSeriesSnapshot(
 	return reader.Read(ctx, snapshotRef, authorizationRef, purpose)
 }
 
-
 // DataAuthorizationPolicyOwner 返回 Data 自有的 Owner 策略管理 Application。
 // Root Server 只持有该 Application Port，不直接操作策略表或复制授权规则。
 func (m *Module) DataAuthorizationPolicyOwner() (*application.DataAuthorizationPolicyOwner, error) {
