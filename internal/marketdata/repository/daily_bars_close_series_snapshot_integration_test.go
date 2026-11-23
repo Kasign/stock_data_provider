@@ -315,7 +315,6 @@ WHERE policy_type=? AND policy_ref=?`, authorization.DataAccessPolicyType, autho
 		t.Fatalf("successful publications should have exactly two audit rows, got %d", publicationAuditCount)
 	}
 
-
 }
 
 func policyPublicationAudit(at time.Time, suffix string) app.DataAuthorizationPolicyPublicationAudit {

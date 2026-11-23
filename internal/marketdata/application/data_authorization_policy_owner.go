@@ -11,8 +11,8 @@ import (
 
 	"example.com/stock-analysis-flow/internal/marketdata/app"
 	"example.com/stock-analysis-flow/internal/marketdata/authorization"
-	"example.com/stock-analysis-flow/internal/platform/security"
 	"example.com/stock-analysis-flow/internal/platform/observability"
+	"example.com/stock-analysis-flow/internal/platform/security"
 )
 
 var (
