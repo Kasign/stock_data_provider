@@ -212,4 +212,3 @@ func (h *dataPolicyHTTPHandler) writePolicy(w http.ResponseWriter, status int, c
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(response)
 }
-
