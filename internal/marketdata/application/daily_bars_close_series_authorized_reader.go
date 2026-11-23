@@ -15,7 +15,7 @@ var ErrAuthorizedDailyBarsCloseSeriesSnapshotUnavailable = errors.New("authorize
 type authorizedDataPolicySnapshot struct {
 	SnapshotRef   string                        `json:"snapshot_ref"`
 	Policies      []authorizedDataPolicyVersion `json:"policies"`
-	SchemaVersion string                            `json:"schema_version"`
+	SchemaVersion string                        `json:"schema_version"`
 }
 
 type authorizedDataPolicyVersion struct {
