@@ -1,0 +1,281 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:kasign:stock_data_provider:data:daily-bars-close-series-payload:1.0.0",
+  "title": "DATA-CTR-007 DailyBars Close Series Snapshot Payload",
+  "description": "首批 SMA 使用的窄化不可变输入 Payload。只允许未复权日线；不将 float64 投影为精确 Decimal。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "payload_kind",
+    "symbol",
+    "interval",
+    "start_date",
+    "end_date",
+    "adjustment_basis",
+    "trading_calendar_ref",
+    "quality_status",
+    "warnings",
+    "coverage_evidence",
+    "bars"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0.0"
+    },
+    "payload_kind": {
+      "const": "daily_bars_close_series"
+    },
+    "symbol": {
+      "type": "string",
+      "minLength": 1
+    },
+    "interval": {
+      "const": "1d"
+    },
+    "start_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "end_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "adjustment_basis": {
+      "const": "none"
+    },
+    "trading_calendar_ref": {
+      "type": "string",
+      "minLength": 1
+    },
+    "quality_status": {
+      "$ref": "#/$defs/quality_status"
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "coverage_evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "calendar_quality_status",
+        "expected_trading_days",
+        "minimum_required_bars",
+        "coverage_basis",
+        "coverage_sufficient",
+        "warnings"
+      ],
+      "properties": {
+        "calendar_quality_status": {
+          "const": "valid"
+        },
+        "expected_trading_days": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "minimum_required_bars": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "coverage_basis": {
+          "const": "exchange_calendar"
+        },
+        "coverage_sufficient": {
+          "const": true
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "bars": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/bar"
+      }
+    }
+  },
+  "$defs": {
+    "quality_status": {
+      "type": "string",
+      "enum": [
+        "valid",
+        "degraded",
+        "stale",
+        "invalid",
+        "unknown"
+      ]
+    },
+    "decimal": {
+      "type": "string",
+      "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$",
+      "not": {
+        "pattern": "^-0(?:\\.0+)?$"
+      }
+    },
+    "date_time_utc": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "Z$"
+    },
+    "close_evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "evidence_kind"
+      ],
+      "properties": {
+        "evidence_kind": {
+          "type": "string",
+          "enum": [
+            "provider_contract",
+            "observed_token",
+            "protocol_fixed_scale"
+          ]
+        },
+        "source_token": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_fraction_digits": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "protocol_scale": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "unit_conversion_factor": {
+          "$ref": "#/$defs/decimal"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "evidence_kind": {
+                "const": "observed_token"
+              }
+            },
+            "required": [
+              "evidence_kind"
+            ]
+          },
+          "then": {
+            "required": [
+              "source_token",
+              "source_fraction_digits"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "evidence_kind": {
+                "const": "protocol_fixed_scale"
+              }
+            },
+            "required": [
+              "evidence_kind"
+            ]
+          },
+          "then": {
+            "required": [
+              "protocol_scale"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "evidence_kind": {
+                "const": "provider_contract"
+              }
+            },
+            "required": [
+              "evidence_kind"
+            ]
+          },
+          "then": {
+            "required": [
+              "source_fraction_digits"
+            ]
+          }
+        }
+      ]
+    },
+    "bar": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "trade_date",
+        "close",
+        "close_evidence",
+        "source_ref",
+        "normalization_version",
+        "fetched_at",
+        "normalized_at",
+        "provider_time",
+        "system_observed_at",
+        "quality_status",
+        "quality_reasons"
+      ],
+      "properties": {
+        "trade_date": {
+          "type": "string",
+          "format": "date"
+        },
+        "close": {
+          "$ref": "#/$defs/decimal"
+        },
+        "close_evidence": {
+          "$ref": "#/$defs/close_evidence"
+        },
+        "source_ref": {
+          "type": "string",
+          "minLength": 1
+        },
+        "normalization_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "fetched_at": {
+          "$ref": "#/$defs/date_time_utc"
+        },
+        "normalized_at": {
+          "$ref": "#/$defs/date_time_utc"
+        },
+        "provider_time": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "system_observed_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "quality_status": {
+          "$ref": "#/$defs/quality_status"
+        },
+        "quality_reasons": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}
