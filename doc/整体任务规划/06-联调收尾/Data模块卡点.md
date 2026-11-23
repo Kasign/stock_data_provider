@@ -341,3 +341,10 @@ Root Server 的 Data Module 构造、共享资源注入、Migration Registry、I
 - 同一函数随后调用 dailyBarCoverageEvidenceAsOf，在同一 as_of 下读取已持久化 Calendar Snapshot，返回 CalendarRef 与 CoverageEvidence。Application Reader.GetDailyBarsV2 会原样映射该次评估结果和 ExactValues。
 - 若现有 MariaDB 有完整历史记录，可直接通过 PIT V2 Reader 生成真实 Payload Golden，不消耗 Provider 配额，也不重复 Live Probe。当前可访问的 Artifact 14611734848 只有聚合摘要，没有完整 Bar/Calendar 数据。
 - 当前助手执行环境无法直接访问用户部署的 MariaDB；下一步应在现有 Server/应用调用路径暴露一次受控的历史 Snapshot 物化任务，或使用已连接的数据库运行环境，不能用 synthetic CI fixture 伪装真实 Golden。
+
+
+### 2026-11-20 历史 Workflow 日志原始样本核对（不触发新请求）
+
+- Live Provider Run 44699296891 / Job 136163491198 的日志确实包含 Eastmoney DailyBars 样本，但只有 forward_adjusted 与 backward_adjusted 两组；没有 none 未复权样本。
+- 日志中的 sample_bars 是 float64 投影，虽然 HTTP body_sample 含部分原始 CSV 行，但响应采样被截断，且这些请求为复权口径；不具备本次首批 none SMA Payload 所需的完整 ExactValues + 原始 Close token + 同次 CalendarRef/CoverageEvidence。
+- 因此该日志可证明 Eastmoney 对应复权请求曾真实返回，但不能作为本次 Snapshot Golden。不要从这些浮点样本反推 Decimal，也不要把复权样本改写为 none。

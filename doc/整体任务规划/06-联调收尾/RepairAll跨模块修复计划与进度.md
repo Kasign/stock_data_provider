@@ -982,3 +982,10 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - Application Reader.GetDailyBarsV2 在显式 SystemObservedAtCutoff 下使用上述路径，并保留 ExactValues。
 - 因此真实 Golden 可从既有 MariaDB 历史修订通过 PIT V2 Reader 生成，无需重新请求 Provider。当前 GitHub 历史 Artifact 仅有聚合统计，不足以构建 Golden；助手当前也没有用户运行中 MariaDB 的直接连接。
 - 下一步应先通过现有 Server/应用入口对已有历史数据执行一次受控 PIT Snapshot 读取，保存真实输出作为 Golden 输入；若数据不完整再记录具体缺项。
+
+
+### 2026-11-20 历史 Workflow 日志原始样本核对（不触发新请求）
+
+- Live Provider Run 44699296891 / Job 136163491198 的日志确实包含 Eastmoney DailyBars 样本，但只有 forward_adjusted 与 backward_adjusted 两组；没有 none 未复权样本。
+- 日志中的 sample_bars 是 float64 投影，虽然 HTTP body_sample 含部分原始 CSV 行，但响应采样被截断，且这些请求为复权口径；不具备本次首批 none SMA Payload 所需的完整 ExactValues + 原始 Close token + 同次 CalendarRef/CoverageEvidence。
+- 因此该日志可证明 Eastmoney 对应复权请求曾真实返回，但不能作为本次 Snapshot Golden。不要从这些浮点样本反推 Decimal，也不要把复权样本改写为 none。
