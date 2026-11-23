@@ -790,3 +790,11 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - Run 范围关联缺口：Researchflow 已持久化不可变 Stage Output 及 Run/Stage/Attempt 归属，但当前没有 Quant Stage Provider，也没有已注册的强类型 Quant result_id 输出契约；因此尚无可验证的 Run→QuantResult 关联事实。关联事实归 Researchflow，Quant 只通过公开只读端口消费，Server 负责组合注入；不得由 Quant 读取 Researchflow 私有 SQL，也不得按 service principal 全局放行。
 - 本批实施门禁：先实现可由 Quant 自身职责完成且有冻结契约依据的 Policy Owner/策略版本/撤销一致性；对缺失的 Run 关联生产者契约和发布权限治理，不虚构字段、策略或调用者。能独立验收的子项分别关闭；未具备真实关联事实前，生产读取链路保持 BLOCKED。
 - 当前阶段：`IN_PROGRESS`；本次只校准执行入口和记录基线，尚未将 Q-01 任何生产子项标记为 PASS。
+
+## 38. 2026-11-23 Data D2 已完成子项记录（不改变 Q-01 优先级）
+
+- 后复权无 reference date 的质量判断已从“所有 backward 都放行”收紧为方法级证据规则；仅 Tushare/BaoStock 的固定锚点方法放行，其他未知方法降级。实时返回和缓存读取测试均覆盖。
+- Go Test Suite 与 Integration CI 在代码 SHA `e8d1c5464bd78dc83d6a9f51df41ea2d86a7fbba` 最终通过；MariaDB job 首次容器初始化失败后单 job rerun 成功。Tagged Live Provider Probe 部分通过，Tushare 权限与 Eastmoney 网络仍阻塞。
+- Hithink live raw probe 证明当前样本可用公司行为仿射公式重建 OHLC，但 Provider adjusted volume 为小数，旧 DailyBar.Volume int64 导致 v1 Normalizer 丢弃。v2 建议 volume_shares 继续表示实际未复权整数成交量，复权只改 OHLC。
+- 当前 Decimal 重建仍被 AdjustmentFactor/CorporateAction float64 源字段和 float64 仿射算法阻塞；Hithink 公司行为接口尚未接入生产 Provider，adjustment reference anchor 也需通过不同 end date 对照确认。
+- 以上仅记录已完成的 Data 子项；执行顺序仍以第 37 节为准，下一主线先完成 Q-01，不在本轮继续扩展 Data Provider。

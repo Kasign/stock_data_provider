@@ -261,3 +261,12 @@ Root Server 的 Data Module 构造、共享资源注入、Migration Registry、I
 - 已核验 BaoStock 官方知识库：复权因子只在除权日记录；backAdjustFactor 的固定锚点是上市首日（首日因子 1），foreAdjustFactor 的锚点是最近一次除权除息日后的交易日。BaoStock HFQ 无显式 reference_date 有官方依据；QFQ 需按其 latest-ex-date 语义描述，不得用 end_date 代替。
 - Hithink 默认 endpoint 文档只列 none/forward/backward，未说明 anchor；返回顶层 timestamp 是数据就绪时间，不是逐 Bar 时间。TickFlow 官方 SDK 暴露 ex_factors endpoint，但公开说明未定义 factor baseline。Eastmoney 未找到可审计官方复权公式。
 - 因此将“仅 Tushare 有证据”的旧结论修正为 Tushare + BaoStock；Hithink/TickFlow/Eastmoney 保持 anchor unknown。当前仍不改 v1 质量门禁，待真实样本复算后再决定方法级规则。
+
+
+## RepairAll D2 当前阻塞更新（2026-11-23）
+
+1. **复权锚点门禁已修复**：只允许有来源依据的 Tushare/BaoStock 后复权无日期锚点；其他未知方法降级。代码和缓存测试通过。
+2. **Hithink 后复权不是可直接消费的 v1 日线**：真实 API 返回小数成交量，Provider 适配器不将其伪装为整数，Normalizer 按旧契约丢弃。应使用同源未复权日线 + Data 自有复权因子重建 OHLC，volume_shares 保留真实整数成交量；当前 Hithink 公司行为接口尚未接入生产 Provider。
+3. **Decimal 复权仍未完成**：AdjustmentFactor/CorporateAction 输入字段为 float64，复权重建使用 float64；需要在现有模型/Repository 上补 exact source token/evidence，再实现 Decimal 仿射计算。
+4. **真实 Provider 阻塞**：Tushare adj_factor/dividend 权限码 40203；Eastmoney 本轮 EOF/502；Hithink 两个不同 end date 的锚点对照未执行。不得把这些标为代码 PASS。
+5. **验收**：代码 SHA `e8d1c5464bd78dc83d6a9f51df41ea2d86a7fbba` 的 Go Test Suite 与 Integration CI 均通过；Tagged Live Provider Probe 仅部分通过。
