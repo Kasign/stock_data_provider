@@ -606,10 +606,6 @@ func indicatorResultStatus(status metric.Status) (string, bool) {
 		return "insufficient_data", true
 	case metric.StatusInsufficientSample:
 		return "insufficient_sample", true
-	case metric.StatusNotApplicable:
-		return "rejected", true
-	case metric.StatusUnknown:
-		return "failed", true
 	default:
 		return "", false
 	}
