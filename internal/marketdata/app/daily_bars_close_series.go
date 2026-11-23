@@ -17,7 +17,48 @@ const (
 	dailyBarsCloseSeriesEastmoneyAPIVersion   = "eastmoney-stock-api-v1"
 )
 
-var dailyBarsCloseSeriesDecimalRE = regexp.MustCompile(`^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$`)
+var (
+	dailyBarsCloseSeriesDecimalRE = regexp.MustCompile(`^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?package app
+
+import (
+	"errors"
+	"fmt"
+	"math/big"
+	"regexp"
+	"sort"
+	"strings"
+	"time"
+)
+
+const (
+	DailyBarsCloseSeriesPayloadSchemaVersion = "1.0.0"
+	DailyBarsCloseSeriesPayloadKind           = "daily_bars_close_series"
+	dailyBarsCloseSeriesSourceEastmoney       = "eastmoney"
+	dailyBarsCloseSeriesEastmoneyAPIVersion   = "eastmoney-stock-api-v1"
+)
+
+)
+	dailyBarsCloseSeriesSourceTokenRE = regexp.MustCompile(`^-?[0-9]+(?:\\.[0-9]+)?package app
+
+import (
+	"errors"
+	"fmt"
+	"math/big"
+	"regexp"
+	"sort"
+	"strings"
+	"time"
+)
+
+const (
+	DailyBarsCloseSeriesPayloadSchemaVersion = "1.0.0"
+	DailyBarsCloseSeriesPayloadKind           = "daily_bars_close_series"
+	dailyBarsCloseSeriesSourceEastmoney       = "eastmoney"
+	dailyBarsCloseSeriesEastmoneyAPIVersion   = "eastmoney-stock-api-v1"
+)
+
+)
+)
 
 // DailyBarsCloseSeriesPayload 是首批 SMA 使用的窄化、可内容寻址输入。
 // 只接收未复权日线的精确 Close，不从 float64 反向生成 Decimal。
@@ -103,6 +144,17 @@ func BuildDailyBarsCloseSeriesInput(query DailyBarsQuery, snapshot DailyBarsV2Sn
 		return DailyBarsCloseSeriesInput{}, fmt.Errorf("daily-bars close snapshot has %d bars; coverage requires at least %d", len(snapshot.Bars), coverage.MinimumRequiredBars)
 	}
 
+	payloadWarnings, err := canonicalDailyBarsCloseSeriesStringSet(snapshot.Warnings)
+	if err != nil {
+		return DailyBarsCloseSeriesInput{}, fmt.Errorf("snapshot warnings: %w", err)
+	}
+	coverageWarnings, err := canonicalDailyBarsCloseSeriesStringSet(coverage.Warnings)
+	if err != nil {
+		return DailyBarsCloseSeriesInput{}, fmt.Errorf("coverage warnings: %w", err)
+	}
+	if !validDailyBarsCloseSeriesQualityStatus(snapshot.QualityStatus) {
+		return DailyBarsCloseSeriesInput{}, errors.New("daily-bars snapshot quality status is invalid")
+	}
 	payload := DailyBarsCloseSeriesPayload{
 		SchemaVersion: DailyBarsCloseSeriesPayloadSchemaVersion,
 		PayloadKind: DailyBarsCloseSeriesPayloadKind,
@@ -113,14 +165,14 @@ func BuildDailyBarsCloseSeriesInput(query DailyBarsQuery, snapshot DailyBarsV2Sn
 		AdjustmentBasis: AdjustmentNone,
 		TradingCalendarRef: strings.TrimSpace(*snapshot.TradingCalendarRef),
 		QualityStatus: snapshot.QualityStatus,
-		Warnings: canonicalStringSet(snapshot.Warnings),
+		Warnings: payloadWarnings,
 		CoverageEvidence: DailyBarCoverageEvidence{
 			CalendarQualityStatus: coverage.CalendarQualityStatus,
 			ExpectedTradingDays: coverage.ExpectedTradingDays,
 			MinimumRequiredBars: coverage.MinimumRequiredBars,
 			CoverageBasis: coverage.CoverageBasis,
 			CoverageSufficient: coverage.CoverageSufficient,
-			Warnings: canonicalStringSet(coverage.Warnings),
+			Warnings: coverageWarnings,
 		},
 		Bars: make([]DailyBarsCloseSeriesBar, 0, len(snapshot.Bars)),
 	}
@@ -140,6 +192,9 @@ func BuildDailyBarsCloseSeriesInput(query DailyBarsQuery, snapshot DailyBarsV2Sn
 		if bar.Source != dailyBarsCloseSeriesSourceEastmoney || bar.SourceVersion != dailyBarsCloseSeriesEastmoneyAPIVersion {
 			return DailyBarsCloseSeriesInput{}, fmt.Errorf("daily-bars close snapshot source %q/version %q is not an explicitly supported source interface", bar.Source, bar.SourceVersion)
 		}
+		if !validDailyBarsCloseSeriesQualityStatus(bar.QualityStatus) {
+			return DailyBarsCloseSeriesInput{}, fmt.Errorf("daily-bars close snapshot bar %d has an invalid quality status", index)
+		}
 		if strings.TrimSpace(bar.NormalizationVersion) == "" {
 			return DailyBarsCloseSeriesInput{}, fmt.Errorf("daily-bars close snapshot bar %d has no normalization version", index)
 		}
@@ -156,6 +211,10 @@ func BuildDailyBarsCloseSeriesInput(query DailyBarsQuery, snapshot DailyBarsV2Sn
 		if err != nil {
 			return DailyBarsCloseSeriesInput{}, fmt.Errorf("daily-bars close snapshot bar %d: %w", index, err)
 		}
+		qualityReasons, reasonErr := canonicalDailyBarsCloseSeriesStringSet(bar.QualityReasons)
+		if reasonErr != nil {
+			return DailyBarsCloseSeriesInput{}, fmt.Errorf("daily-bars close snapshot bar %d quality reasons: %w", index, reasonErr)
+		}
 		payload.Bars = append(payload.Bars, DailyBarsCloseSeriesBar{
 			TradeDate: bar.TradeDate,
 			Close: bar.ExactValues.Close,
@@ -167,7 +226,7 @@ func BuildDailyBarsCloseSeriesInput(query DailyBarsQuery, snapshot DailyBarsV2Sn
 			ProviderTime: optionalCloseSeriesTime(bar.ProviderTime),
 			SystemObservedAt: optionalCloseSeriesTime(bar.SystemObservedAt),
 			QualityStatus: bar.QualityStatus,
-			QualityReasons: canonicalStringSet(bar.QualityReasons),
+			QualityReasons: qualityReasons,
 		})
 	}
 	source = DailyBarsCloseSeriesSource{
@@ -183,7 +242,7 @@ func BuildDailyBarsCloseSeriesInput(query DailyBarsQuery, snapshot DailyBarsV2Sn
 }
 
 func validateEastmoneyCloseEvidence(closeValue string, evidence *DailyBarDecimalEvidence) (DailyBarDecimalEvidence, error) {
-	if !dailyBarsCloseSeriesDecimalRE.MatchString(closeValue) || !dailyBarsCloseSeriesDecimalRE.MatchString(evidence.SourceToken) {
+	if !dailyBarsCloseSeriesDecimalRE.MatchString(closeValue) || !dailyBarsCloseSeriesSourceTokenRE.MatchString(evidence.SourceToken) {
 		return DailyBarDecimalEvidence{}, errors.New("exact Close and observed source token must be decimal strings")
 	}
 	if evidence.EvidenceKind != "observed_token" || evidence.SourceFractionDigits == nil || *evidence.SourceFractionDigits < 0 {
@@ -213,7 +272,7 @@ func validateEastmoneyCloseEvidence(closeValue string, evidence *DailyBarDecimal
 	return DailyBarDecimalEvidence{
 		EvidenceKind: evidence.EvidenceKind,
 		SourceToken: evidence.SourceToken,
-		SourceFractionDigits: cloneInt(evidence.SourceFractionDigits),
+		SourceFractionDigits: cloneDailyBarsCloseSeriesInt(evidence.SourceFractionDigits),
 		ProtocolScale: nil,
 		UnitConversionFactor: evidence.UnitConversionFactor,
 	}, nil
@@ -236,14 +295,11 @@ func optionalCloseSeriesTime(value *time.Time) *string {
 	return &formatted
 }
 
-func canonicalStringSet(values []string) []string {
-	if len(values) == 0 {
-		return []string{}
-	}
+func canonicalDailyBarsCloseSeriesStringSet(values []string) ([]string, error) {
 	result := append([]string(nil), values...)
 	for _, value := range result {
 		if strings.TrimSpace(value) == "" {
-			return []string{}
+			return nil, errors.New("string set contains an empty value")
 		}
 	}
 	sort.Strings(result)
@@ -253,10 +309,22 @@ func canonicalStringSet(values []string) []string {
 			unique = append(unique, value)
 		}
 	}
-	return unique
+	if unique == nil {
+		return []string{}, nil
+	}
+	return unique, nil
 }
 
-func cloneInt(value *int) *int {
+func validDailyBarsCloseSeriesQualityStatus(value QualityStatus) bool {
+	switch value {
+	case QualityValid, QualityDegraded, QualityStale, QualityInvalid, QualityUnknown:
+		return true
+	default:
+		return false
+	}
+}
+
+func cloneDailyBarsCloseSeriesInt(value *int) *int {
 	if value == nil {
 		return nil
 	}
