@@ -333,3 +333,11 @@ Root Server 的 Data Module 构造、共享资源注入、Migration Registry、I
 - Data normalize.Version 当前为 4，由 DailyBar/Application DTO 传递；Payload 必须保留该版本并纳入内容指纹。
 - 两份 Schema 目前只完成 JSON 语法解析，尚无 Golden、Schema Validator、消费者 Contract Test；DATA-CTR-005/007 仍 deferred，DATA-CTR-008 现行 1.0.0 仍 frozen，2.0.0 不得标记 frozen。
 - 历史 Live Provider Artifact 14611734848 仅有汇总结果，不含精确日线 token 和同次日历证据，不能作为 Snapshot Golden。当前不重新触发 Provider 探测；先检查 MariaDB 历史修订/已有 Artifact 能否恢复同一查询批次的全部字段。
+
+
+## 2026-11-23：Golden 生成不需要重新探测 Provider
+
+- 已确认 DailyBarsAsOfWithCoverageEvidence 先从 Repository ListBarsAsOf 读取历史修订；未复权 none 路径不会调用 AdjustmentFactorsAsOf/外部 Provider。
+- 同一函数随后调用 dailyBarCoverageEvidenceAsOf，在同一 as_of 下读取已持久化 Calendar Snapshot，返回 CalendarRef 与 CoverageEvidence。Application Reader.GetDailyBarsV2 会原样映射该次评估结果和 ExactValues。
+- 若现有 MariaDB 有完整历史记录，可直接通过 PIT V2 Reader 生成真实 Payload Golden，不消耗 Provider 配额，也不重复 Live Probe。当前可访问的 Artifact 14611734848 只有聚合摘要，没有完整 Bar/Calendar 数据。
+- 当前助手执行环境无法直接访问用户部署的 MariaDB；下一步应在现有 Server/应用调用路径暴露一次受控的历史 Snapshot 物化任务，或使用已连接的数据库运行环境，不能用 synthetic CI fixture 伪装真实 Golden。

@@ -974,3 +974,11 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - Payload 首批范围：单证券、1d、未复权、精确 Close、有效同次 CalendarRef 和 CoverageEvidence；逐 Bar 保留当前 Data normalization_version（normalize.Version 当前为 4）。
 - 历史 Live Provider Artifact 14611734848 不包含逐 Bar 原始 token/ExactValues/CalendarRef/CoverageEvidence，因此不能构造真实 Golden；本轮没有重新发起 Provider 请求。
 - 下一步先检查 MariaDB revision metadata 能否恢复同一批次完整 Golden 输入；若不能，才安排受控真实读取。Golden、Validator、Research/Quant 消费者适配未完成前不实现 Snapshot Repository 的正式写入入口。
+
+
+## 2026-11-23 Data Snapshot Golden 的 PIT 读取路径确认
+
+- DailyBarsAsOfWithCoverageEvidence 已存在：从 MariaDB ListBarsAsOf 读取历史日线版本，none 复权路径不访问外部 Provider；随后按同一 as_of 读取 Calendar Snapshot，计算并返回 CalendarRef/CoverageEvidence。
+- Application Reader.GetDailyBarsV2 在显式 SystemObservedAtCutoff 下使用上述路径，并保留 ExactValues。
+- 因此真实 Golden 可从既有 MariaDB 历史修订通过 PIT V2 Reader 生成，无需重新请求 Provider。当前 GitHub 历史 Artifact 仅有聚合统计，不足以构建 Golden；助手当前也没有用户运行中 MariaDB 的直接连接。
+- 下一步应先通过现有 Server/应用入口对已有历史数据执行一次受控 PIT Snapshot 读取，保存真实输出作为 Golden 输入；若数据不完整再记录具体缺项。
