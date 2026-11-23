@@ -228,4 +228,12 @@ func TestMarketDataMigrationDefinitionsExposeImmutableVersionedHistory(t *testin
 		!strings.Contains(decisions.Statements[1], "FOREIGN KEY (authorization_ref)") {
 		t.Fatalf("Data authorization decision migration V8 must add immutable decisions and append-only revocations: %+v", decisions)
 	}
+	publicationAudit := migrations[8]
+	if publicationAudit.Version != 9 || len(publicationAudit.Statements) != 1 || len(publicationAudit.Operations) != 0 ||
+		!strings.Contains(publicationAudit.Statements[0], "market_data_authorization_policy_publications") ||
+		!strings.Contains(publicationAudit.Statements[0], "previous_policy_version") ||
+		!strings.Contains(publicationAudit.Statements[0], "payload_hash") ||
+		!strings.Contains(publicationAudit.Statements[0], "request_id") {
+		t.Fatalf("Data policy publication audit migration V9 must add append-only policy change evidence: %+v", publicationAudit)
+	}
 }
