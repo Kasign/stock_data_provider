@@ -12,6 +12,7 @@ import (
 	"example.com/stock-analysis-flow/internal/marketdata/app"
 	"example.com/stock-analysis-flow/internal/marketdata/authorization"
 	"example.com/stock-analysis-flow/internal/platform/security"
+	"example.com/stock-analysis-flow/internal/platform/observability"
 )
 
 var (
@@ -109,7 +110,16 @@ func (owner *DataAuthorizationPolicyOwner) Publish(
 	if err != nil {
 		return authorization.CurrentPolicy{}, ErrDataPolicyInvalidChange
 	}
-	if err := owner.repository.PublishDataAuthorizationPolicyVersion(ctx, expectedCurrentVersion, version); err != nil {
+	requestID := observability.FromContext(ctx)
+	if !observability.ValidRequestID(requestID) {
+		return authorization.CurrentPolicy{}, ErrDataPolicyOwnerUnavailable
+	}
+	audit := app.DataAuthorizationPolicyPublicationAudit{
+		ActorRef:   "principal:" + principal.Subject,
+		RequestID:  requestID,
+		OccurredAt: createdAt,
+	}
+	if err := owner.repository.PublishDataAuthorizationPolicyVersion(ctx, expectedCurrentVersion, version, audit); err != nil {
 		if errors.Is(err, app.ErrDataAuthorizationPolicyVersionConflict) {
 			return authorization.CurrentPolicy{}, ErrDataPolicyVersionConflict
 		}
@@ -126,13 +136,13 @@ func (owner *DataAuthorizationPolicyOwner) Publish(
 	}), nil
 }
 
-func requireDataPolicyOwnerSession(ctx context.Context) error {
+func requireDataPolicyOwnerSession(ctx context.Context) (security.Principal, error) {
 	principal, ok := security.PrincipalFromContextValue(ctx)
 	if !ok || principal.Kind != security.IdentityOwner ||
 		principal.AuthMethod != security.AuthMethodOwnerSession || principal.Subject != "owner" {
-		return ErrDataPolicyOwnerDenied
+		return security.Principal{}, ErrDataPolicyOwnerDenied
 	}
-	return nil
+	return principal, nil
 }
 
 func validDataPolicyVersion(value string) bool {

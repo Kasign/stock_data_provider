@@ -19,10 +19,8 @@ const (
 type PolicyStatus string
 
 const (
-	PolicyApproved   PolicyStatus = "approved"
-	PolicyRestricted PolicyStatus = "restricted"
-	PolicyPending    PolicyStatus = "pending"
-	PolicyRevoked    PolicyStatus = "revoked"
+	PolicyApproved PolicyStatus = "approved"
+	PolicyRevoked  PolicyStatus = "revoked"
 )
 
 var (
@@ -84,8 +82,7 @@ func DecodePolicyVersion(value PolicyVersion) (DataAccessPolicy, error) {
 
 func ValidatePolicy(policy DataAccessPolicy) error {
 	if policy.SchemaVersion != DataAccessPolicySchemaVersion ||
-		(policy.Status != PolicyApproved && policy.Status != PolicyRestricted &&
-			policy.Status != PolicyPending && policy.Status != PolicyRevoked) ||
+		(policy.Status != PolicyApproved && policy.Status != PolicyRevoked) ||
 		policy.EffectiveAt.IsZero() || policy.EffectiveAt.Location() != time.UTC {
 		return ErrPolicyInvalid
 	}
@@ -108,7 +105,7 @@ func Evaluate(policy DataAccessPolicy, request AccessRequest) error {
 		!sortedUnique(request.Scopes, validScope) {
 		return ErrPolicyInvalid
 	}
-	if policy.Status != PolicyApproved && policy.Status != PolicyRestricted {
+	if policy.Status != PolicyApproved {
 		return ErrPolicyDenied
 	}
 	if request.Now.Before(policy.EffectiveAt) ||

@@ -11,6 +11,7 @@ import (
 	"example.com/stock-analysis-flow/internal/marketdata/app"
 	"example.com/stock-analysis-flow/internal/marketdata/authorization"
 	"example.com/stock-analysis-flow/internal/platform/security"
+	"example.com/stock-analysis-flow/internal/platform/observability"
 )
 
 type dataPolicyOwnerRepositoryFake struct {
@@ -20,10 +21,11 @@ type dataPolicyOwnerRepositoryFake struct {
 	afterPublish func(*dataPolicyOwnerRepositoryFake)
 	resolveCalls int
 	resolveErr   error
+	audits       []app.DataAuthorizationPolicyPublicationAudit
 }
 
 func (fake *dataPolicyOwnerRepositoryFake) PublishDataAuthorizationPolicyVersion(
-	_ context.Context, expected string, version authorization.PolicyVersion,
+	_ context.Context, expected string, version authorization.PolicyVersion, audit app.DataAuthorizationPolicyPublicationAudit,
 ) error {
 	if fake.err != nil {
 		return fake.err
@@ -32,6 +34,7 @@ func (fake *dataPolicyOwnerRepositoryFake) PublishDataAuthorizationPolicyVersion
 		return app.ErrDataAuthorizationPolicyVersionConflict
 	}
 	fake.published = append(fake.published, version)
+	fake.audits = append(fake.audits, audit)
 	policy, err := authorization.DecodePolicyVersion(version)
 	if err != nil {
 		return err
@@ -66,7 +69,7 @@ func dataPolicyOwnerContext(t *testing.T, method security.AuthMethod) context.Co
 	if err != nil {
 		t.Fatal(err)
 	}
-	return ctx
+	return observability.WithRequestID(ctx, "data-policy-owner-test")
 }
 
 func validDataAccessPolicy(now time.Time) authorization.DataAccessPolicy {
@@ -103,12 +106,12 @@ func TestDataAuthorizationPolicyOwnerPublishesWithExpectedVersion(t *testing.T) 
 	}
 
 	nextPolicy := validDataAccessPolicy(now)
-	nextPolicy.Status = authorization.PolicyRestricted
+	nextPolicy.AllowedSubjects = []string{"principal:service:researchflow"}
 	current, err = owner.Publish(ctx, "policy-v1", "policy-v2", nextPolicy)
 	if err != nil {
 		t.Fatalf("Publish() second version error = %v", err)
 	}
-	if current.Version.PolicyVersion != "policy-v2" || current.Policy.Status != authorization.PolicyRestricted {
+	if current.Version.PolicyVersion != "policy-v2" || current.Policy.Status != authorization.PolicyApproved {
 		t.Fatalf("unexpected second policy: %+v", current)
 	}
 }
@@ -119,7 +122,7 @@ func TestDataAuthorizationPolicyOwnerReturnsPublishedVersionWhenCurrentPointerAd
 	repository.afterPublish = func(fake *dataPolicyOwnerRepositoryFake) {
 		// 模拟本次 CAS 提交后，另一个 Owner 紧接着推进 current pointer。
 		fake.current.Version.PolicyVersion = "policy-v2"
-		fake.current.Policy.Status = authorization.PolicyRestricted
+		fake.current.Policy.Status = authorization.PolicyApproved
 	}
 	owner, err := NewDataAuthorizationPolicyOwner(repository)
 	if err != nil {

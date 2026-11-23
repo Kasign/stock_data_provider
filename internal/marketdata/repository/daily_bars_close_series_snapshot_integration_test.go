@@ -179,7 +179,7 @@ func repositoryCloseSeriesBar(tradeDate, closeValue, sourceToken string, fractio
 func repositoryStringPointer(value string) *string { return &value }
 
 func TestDataAuthorizationPolicyStorageDisabledFailsClosed(t *testing.T) {
-	if err := (*Store)(nil).PublishDataAuthorizationPolicyVersion(context.Background(), "", authorization.PolicyVersion{}); err == nil {
+	if err := (*Store)(nil).PublishDataAuthorizationPolicyVersion(context.Background(), "", authorization.PolicyVersion{}, app.DataAuthorizationPolicyPublicationAudit{}); err == nil {
 		t.Fatal("publishing policy without storage must fail")
 	}
 	if _, err := (*Store)(nil).ResolveCurrentDataAuthorizationPolicy(context.Background()); err == nil {
@@ -236,7 +236,7 @@ func TestMariaDBDataAuthorizationPolicyVersionsAreImmutableAndCurrent(t *testing
 		PayloadHash:   hex.EncodeToString(sum[:]),
 		CreatedAt:     now,
 	}
-	if err := store.PublishDataAuthorizationPolicyVersion(ctx, "", value); err != nil {
+	if err := store.PublishDataAuthorizationPolicyVersion(ctx, "", value, policyPublicationAudit(now, version)); err != nil {
 		t.Fatalf("publish policy version: %v", err)
 	}
 	current, err := store.ResolveCurrentDataAuthorizationPolicy(ctx)
@@ -249,7 +249,7 @@ func TestMariaDBDataAuthorizationPolicyVersionsAreImmutableAndCurrent(t *testing
 
 	stale := value
 	stale.PolicyVersion = version + "-stale"
-	if err := store.PublishDataAuthorizationPolicyVersion(ctx, "stale-current-version", stale); !errors.Is(err, ErrDataAuthorizationPolicyConflict) {
+	if err := store.PublishDataAuthorizationPolicyVersion(ctx, "stale-current-version", stale, policyPublicationAudit(now.Add(time.Second), stale.PolicyVersion)); !errors.Is(err, ErrDataAuthorizationPolicyConflict) {
 		t.Fatalf("stale expected current version must conflict, got %v", err)
 	}
 	current, err = store.ResolveCurrentDataAuthorizationPolicy(ctx)
@@ -272,7 +272,7 @@ WHERE policy_type=? AND policy_ref=? AND policy_version=?`,
 	}
 	changedSum := sha256.Sum256(changed.Payload)
 	changed.PayloadHash = hex.EncodeToString(changedSum[:])
-	if err := store.PublishDataAuthorizationPolicyVersion(ctx, version, changed); !errors.Is(err, ErrDataAuthorizationPolicyConflict) {
+	if err := store.PublishDataAuthorizationPolicyVersion(ctx, version, changed, policyPublicationAudit(now.Add(2*time.Second), changed.PolicyVersion)); !errors.Is(err, ErrDataAuthorizationPolicyConflict) {
 		t.Fatalf("same policy version with different content must conflict, got %v", err)
 	}
 	current, err = store.ResolveCurrentDataAuthorizationPolicy(ctx)
@@ -292,18 +292,33 @@ WHERE policy_type=? AND policy_ref=? AND policy_version=?`,
 	revokedVersion.Payload = revokedPayload
 	revokedVersion.PayloadHash = hex.EncodeToString(revokedSum[:])
 	revokedVersion.CreatedAt = now.Add(time.Second)
-	if err := store.PublishDataAuthorizationPolicyVersion(ctx, version, revokedVersion); err != nil {
+	if err := store.PublishDataAuthorizationPolicyVersion(ctx, version, revokedVersion, policyPublicationAudit(now.Add(3*time.Second), revokedVersion.PolicyVersion)); err != nil {
 		t.Fatalf("publish revoked policy: %v", err)
 	}
 	current, err = store.ResolveCurrentDataAuthorizationPolicy(ctx)
 	if err != nil || current.Policy.Status != authorization.PolicyRevoked || current.Version.PolicyVersion != revokedVersion.PolicyVersion {
 		t.Fatalf("revoked policy did not become current: current=%+v err=%v", current, err)
 	}
-	if err := store.PublishDataAuthorizationPolicyVersion(ctx, revokedVersion.PolicyVersion, value); !errors.Is(err, ErrDataAuthorizationPolicyConflict) {
+	if err := store.PublishDataAuthorizationPolicyVersion(ctx, revokedVersion.PolicyVersion, value, policyPublicationAudit(now.Add(4*time.Second), value.PolicyVersion)); !errors.Is(err, ErrDataAuthorizationPolicyConflict) {
 		t.Fatalf("historical policy version must not be reactivated, got %v", err)
 	}
 	current, err = store.ResolveCurrentDataAuthorizationPolicy(ctx)
 	if err != nil || current.Version.PolicyVersion != revokedVersion.PolicyVersion || current.Policy.Status != authorization.PolicyRevoked {
 		t.Fatalf("historical policy reactivation changed current pointer: current=%+v err=%v", current, err)
+	}
+}
+	var publicationAuditCount int
+	if err := store.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM market_data_authorization_policy_publications
+WHERE policy_type=? AND policy_ref=?`, authorization.DataAccessPolicyType, authorization.DailyBarsV2PolicyRef).Scan(&publicationAuditCount); err != nil {
+		t.Fatalf("count policy publication audit: %v", err)
+	}
+	if publicationAuditCount != 2 {
+		t.Fatalf("successful publications should have exactly two audit rows, got %d", publicationAuditCount)
+	}
+
+
+func policyPublicationAudit(at time.Time, suffix string) app.DataAuthorizationPolicyPublicationAudit {
+	return app.DataAuthorizationPolicyPublicationAudit{
+		ActorRef: "principal:owner", RequestID: "data-policy-it-" + suffix, OccurredAt: at.UTC(),
 	}
 }

@@ -440,6 +440,26 @@ ON market_data_adjustment_factor_versions (symbol, trade_date, source, source_ve
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 			},
 		},
+		{
+			Version: 9, Description: "append-only Data authorization policy publication audit",
+			Statements: []string{
+				`CREATE TABLE IF NOT EXISTS market_data_authorization_policy_publications (
+ id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+ policy_type VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ policy_ref VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ previous_policy_version VARCHAR(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NULL,
+ new_policy_version VARCHAR(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
+ payload_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ actor_ref VARCHAR(256) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
+ request_id VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ occurred_at DATETIME(6) NOT NULL,
+ PRIMARY KEY (id),
+ KEY idx_market_data_policy_publication_time (occurred_at, id),
+ KEY idx_market_data_policy_publication_request (request_id),
+ KEY idx_market_data_policy_publication_version (policy_type, policy_ref, new_policy_version)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+			},
+		},
 	}
 }
 

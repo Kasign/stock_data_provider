@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"time"
 
 	"example.com/stock-analysis-flow/internal/marketdata/authorization"
 )
@@ -15,8 +16,14 @@ var (
 
 // DataAuthorizationPolicyRepository 仅供 Data Owner Application 使用；
 // 策略版本不可变，当前指针按 expectedCurrentVersion 做原子推进。
+type DataAuthorizationPolicyPublicationAudit struct {
+	ActorRef   string
+	RequestID  string
+	OccurredAt time.Time
+}
+
 type DataAuthorizationPolicyRepository interface {
-	PublishDataAuthorizationPolicyVersion(context.Context, string, authorization.PolicyVersion) error
+	PublishDataAuthorizationPolicyVersion(context.Context, string, authorization.PolicyVersion, DataAuthorizationPolicyPublicationAudit) error
 	ResolveCurrentDataAuthorizationPolicy(context.Context) (authorization.CurrentPolicy, error)
 }
 
