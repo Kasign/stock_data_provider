@@ -191,7 +191,6 @@ func (s *Store) validateDataAuthorizationPolicySchema(ctx context.Context) error
 		"market_data_authorization_decisions":               {"authorization_ref", "subject_ref", "resource_ref", "purpose_code", "policy_version", "decided_at", "expires_at", "decision_fingerprint", "authorization_json", "policy_snapshot_json", "record_hash"},
 		"market_data_authorization_revocations":             {"authorization_ref", "revoked_at", "revoked_by", "reason_code"},
 		"market_data_authorization_policy_publications": {"policy_type", "policy_ref", "previous_policy_version", "new_policy_version", "payload_hash", "actor_ref", "request_id", "occurred_at"},
-		"market_data_authorization_policy_publications": {"policy_type", "policy_ref", "previous_policy_version", "new_policy_version", "payload_hash", "actor_ref", "request_id", "occurred_at"},
 	} {
 		for _, column := range columns {
 			var count int
