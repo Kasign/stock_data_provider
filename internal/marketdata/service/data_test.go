@@ -3462,6 +3462,18 @@ func TestDailyBarAdjustmentMetadataDegradesUnknownBackwardAnchorsWithoutReferenc
 	}
 }
 
+func TestDailyBarAdjustmentMetadataAcceptsUnknownBackwardMethodWithExplicitReferenceDate(t *testing.T) {
+	bar := model.DailyBar{
+		TradeDate: "2026-10-20", AdjustmentBasis: model.AdjustmentBackward,
+		AdjustmentMethod: "hithink_api_backward", AdjustmentRefDate: "2026-10-20",
+		QualityStatus: model.QualityValid,
+	}
+	warnings, err := applyDailyBarAdjustmentMetadataQuality([]model.DailyBar{bar}, model.AdjustmentBackward)
+	if err != nil || len(warnings) != 0 || bar.QualityStatus != model.QualityValid {
+		t.Fatalf("an explicit backward reference date should verify an otherwise unknown method: bar=%+v warnings=%v err=%v", bar, warnings, err)
+	}
+}
+
 func TestDailyBarsCacheDegradesBackwardSeriesWithoutVerifiedAnchor(t *testing.T) {
 	mem := newMemoryCache()
 	volume := int64(1000)

@@ -4358,6 +4358,22 @@ func applyDailyBarAdjustmentMetadataQualityAt(bars []model.DailyBar, basis model
 			appendReasonOnce(&bars[index].QualityReasons, "daily_bar_adjustment_reference_date_unverified")
 			warnings = append(warnings, "daily_bar_adjustment_reference_date_unverified")
 		}
+		if basis == model.AdjustmentBackward && referenceDate == "" && !hasVerifiedProviderBackwardAnchor(method) {
+			degradeQualityStatus(&bars[index].QualityStatus)
+			appendReasonOnce(&bars[index].QualityReasons, "daily_bar_adjustment_reference_anchor_unverified")
+			warnings = append(warnings, "daily_bar_adjustment_reference_anchor_unverified")
+		}
 	}
 	return dedupeStrings(warnings), nil
+}
+
+// hasVerifiedProviderBackwardAnchor 只允许已由 Provider 官方复权公式确认的固定后复权锚点。
+// 未列入的 method 必须提供明确 reference date；不能把未知锚点当作通用 HFQ 累积因子。
+func hasVerifiedProviderBackwardAnchor(method string) bool {
+	switch strings.TrimSpace(method) {
+	case "tushare_adj_factor_hfq_v1", "baostock_pct_change":
+		return true
+	default:
+		return false
+	}
 }
