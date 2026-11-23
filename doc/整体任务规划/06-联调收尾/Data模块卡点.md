@@ -289,3 +289,14 @@ Root Server 的 Data Module 构造、共享资源注入、Migration Registry、I
 - 这不是启动完整 Provider D2，也不要求本轮完成 Amount/Volume 单位、所有 Provider 的 QFQ/HFQ、Factor 或所有 DailyBars 字段。没有权威来源的字段继续 null/degraded/not_comparable，不格式化 float64 冒充 Decimal。
 - DATA-CTR-008 Snapshot Manifest 1.0.0 Schema/Golden 已存在，必须复用；尚缺 Data 生产侧把 DailyBars Payload 内容、Manifest 身份、可信 caller/purpose 和 GOV-CTR-006 AuthorizationRef 绑定的实现/消费者验收。DATA-CTR-005/007 仍按项目登记簿 deferred，未获正式重新进入/冻结前不发布正式跨模块契约。
 - 本轮仅校准卡点与范围，不改生产代码、不调整验收标准。后续先审查真实 Provider 的 raw Close 来源和精度证据，确定首个指标可用输入路径，再实施有证据支持的最小 DTO/Manifest 生产链。
+
+
+## 2026-11-23 D2：DailyBars Snapshot 存储审计与首个 OHLC 输入证据
+
+- 本轮基线：repair_all `2dc294d48dc57ba186997ea8452c0202a08eaad8`。只读检查现有 Provider、Service、Application Reader、Repository、Migration 和 DATA-CTR-008/GOV-CTR-006 文件；未修改生产代码或冻结契约。
+- **单 Bar 精确版本已存在**：`market_data_daily_bar_versions.metadata` 通过 `marshalDailyBarMetadata` 保存 ExactValues；`dailyBarRevisionHash` 将 ExactValues、来源、复权、质量和其他日线元数据纳入修订哈希，仅排除 fetched_at、normalized_at、system_observed_at。current/PIT 读取可恢复 sidecar。
+- **单 Bar 版本不等于查询 Snapshot**：current 表可更新；PIT 表按每个来源/日期读取最新修订，再由 Service 选择来源一致序列。它们没有一次完整查询结果的内容寻址入口，也没有绑定该次 CalendarRef、CoverageEvidence 与 Manifest。因此不能直接把某个 Bar revision_hash 当作 SnapshotRef。
+- **已有可复用实现**：Migration V5 的交易日历 Snapshot Repository 已实现内容寻址、幂等保存、精确引用读取、重新计算摘要和内容篡改拒绝。日线 Snapshot 应沿用该模式，只新增整次查询结果级的不可变存储，不复制逐 Bar 历史数据。
+- **首个 SMA 输入可收窄**：默认 Provider Priority 首位 Eastmoney；其 OHLC ExactValues 从原始 CSV 字段字符串构造，CloseEvidence 保留 observed token 与 source fraction digits。首个指标限定 `adjustment_basis=none`，仅使用精确 Close 字符串；float64 字段不参与 Snapshot 内容数值来源。BaoStock、Tushare、Netease、TickFlow 也存在原始字符串/JSON token 的精确值路径；Pytdx 使用协议整数与 ProtocolScale，必须保留其协议定点语义。
+- **不可冒充的来源信息**：当前 Provider SourceVersion 为 Adapter/API 版本常量，不是逐 Bar 上游数据版本；默认 Eastmoney 日线没有逐 Bar ProviderTime/provider_data_version。DATA-CTR-008 Schema 只约束 `sources[].source_version` 为非空字符串，Golden 示例使用时间戳，但目前没有找到单独的规范说明其语义。编码前必须查清并遵守现有约定；不得直接把 Adapter 版本或 FetchedAt 伪装成上游数据版本。
+- 当前下一步：确认 DATA-CTR-008 `source_version` 语义；明确首个 Snapshot Payload 只包含指标必需的精确 OHLC、交易日/周期/复权、来源与采集时点、质量及同次 CalendarRef/CoverageEvidence；随后复用 V5 Repository 模式实现整次 Snapshot 存储、Manifest 绑定和 GOV-CTR-006 Owner 授权。DATA-CTR-005/007 继续 deferred，不提前发布正式跨模块契约。

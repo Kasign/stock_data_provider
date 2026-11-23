@@ -935,3 +935,15 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - Envelope Schema 的 result_type 增加 indicator 分支，并复用现有 IndicatorResultPayload 1.0.0 结构定义；没有复制第二份参数或指标语义。
 - 新增 SMA Indicator Payload 从 Record 构造、Envelope 编解码到 Manifest 校验的测试，以及 Manifest 上下文漂移拒绝测试和 Envelope Schema 正向测试。
 - 本项只打通 Indicator 结果载荷的生产/持久化/回读基础，不代表真实 SMA/EMA 生产计算 Facade、Registry 活动版本、Data 快照输入或 Researchflow Stage 已完成。
+
+
+## 2026-11-23 Data DailyBars Snapshot 存储与 OHLC Decimal 输入审计
+
+- 审计基线：repair_all `2dc294d48dc57ba186997ea8452c0202a08eaad8`；本轮只读审计，未修改生产代码或冻结契约。
+- 现有 `market_data_daily_bar_versions.metadata` 已保存 `DailyBarExactValues` sidecar；`dailyBarRevisionHash` 基于完整 `dailyBarMetadata` 计算，包含 exact_values、来源和质量等字段，仅排除 fetched_at、normalized_at、system_observed_at。现有单 Bar 版本历史不需要复制或另建一套。
+- `market_data_daily_bars` 是可更新当前视图；`ListBarsAsOf` 负责读取单 Bar 历史修订并由 Service 选择来源一致的序列。两者都不能仅凭 SnapshotRef 精确寻址一次完整查询结果，也不保存该次查询的覆盖率证据与 Manifest 绑定。
+- Migration V5 的 `market_data_trading_calendar_snapshots` 已有内容寻址、不可覆盖写入、读取时重算摘要及篡改拒绝实现。日线 Snapshot 若进入实现阶段，应复用同类 Repository 模式，只新增“整次查询结果”的不可变记录，不重复逐 Bar 版本数据。
+- 默认 Provider 优先级首位为 Eastmoney；其日线 OHLC ExactValues 从原始 CSV 字段字符串构造，CloseEvidence 保存 observed token 和 source fraction digits。对首个 SMA 输入可以限定 `adjustment_basis=none`，直接使用精确 Close 字符串；不得从 float64 反向格式化。
+- BaoStock 原始字符串、Tushare JSON RawMessage、Netease CSV 字段、TickFlow JSON RawMessage 也有对应精确值路径；Pytdx 使用协议 Price.Int64 与 ProtocolScale，属于协议定点表示证据，不应混称原始小数位。Hithink 当前默认关闭，且其 Amount 单位未知与首个 OHLC 输入无关。
+- 当前 DailyBars Provider 的 `SourceVersion` 是 Adapter/API 版本常量，不是逐条 Provider 数据版本；Eastmoney 未暴露逐 Bar ProviderTime/provider_data_version。DATA-CTR-008 Manifest 的 `sources[].source_version` 目前只有结构 Schema 与 Golden，缺少足以判定它应表示 Adapter 版本还是上游数据版本的独立语义说明。不得把 Adapter 常量伪装成上游数据修订版本，也不得用 FetchedAt 冒充 ProviderTime。
+- 当前决策：无需新增逐 Bar 版本存储；未来 Snapshot Repository 仅存整次规范化 Payload、Manifest 和内容指纹。正式编码前必须先明确 `sources[].source_version` 的现有契约含义，并为首个 SMA 明确只消费精确 Close、未复权日线和同次 CalendarRef 的输入范围。DATA-CTR-005/007 仍 deferred，不据此宣称跨模块契约已冻结。
