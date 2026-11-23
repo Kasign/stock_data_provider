@@ -234,3 +234,14 @@ Root Server 的 Data Module 构造、共享资源注入、Migration Registry、I
 - 当前 `DailyBarsV2Snapshot.Bars` 仍复用 float64 `DailyBar`；最终 Decimal Body、HTTP v2 Schema/Handler/Golden、Research/Quant 消费契约均未完成。此状态不得描述为 DailyBars v2 已完成。
 - Tushare/Yahoo QFQ/HFQ 精确调整值、部分 Provider Amount 单位、逐条 ProviderTime/provider_data_version 仍缺证据；未知值保持 null/unknown/degraded，不用 float64 格式化、FetchedAt 或 Adapter SourceVersion 伪造。
 - 不可变交易日历和 CalendarRef 传播已完成，不重复开发；DATA-CTR-005/007 仍 deferred。
+
+
+## 2026-11-23 D2：Pytdx QFQ/HFQ 精度与算法来源复核
+
+- 当前 `go.mod` 固定 `github.com/injoyai/tdx v0.0.86`；`internal/marketdata/provider/pytdx.go` 的 Provider SourceVersion 为 `pytdx-injoyai-v0.0.86`。
+- 调用链确认：`FetchDailyBars` 在 QFQ/HFQ 时先调用 `protocol.ApplyQFQ/ApplyHFQ`，再对调整后的 `protocol.Kline` 调用 `pytdxDailyBarExactValues`。因此 ExactValues.Open/High/Low/Close 对应的是库输出的调整后价格，不是原始 Kline 词法值。
+- 精确版本 `v0.0.86` 的 `protocol/model_gbbq.go` 中，`Factor.QFQPrice/HFQPrice` 使用 float64 仿射因子；`roundHalfUpYuan` 先执行 `math.Round(yuan*100)`，再乘 10 写入 `Price`，即算法结果按分（2 位小数）舍入，随后存入厘单位（ProtocolScale=3）的 Price 整数。
+- 当前 `pytdxDailyBarExactValues` 对调整后 Price 的 Int64 记录 `protocol_fixed_scale=3`。该字段只能说明 Price 的协议整数表示单位为厘，不能被解释为 QFQ/HFQ 算法输出保留了 3 位有效小数，也不能当作供应商原始 token 精度。v2 必须把协议表示 scale 与调整算法输出 scale/舍入规则分开表达。
+- 当前 Pytdx DailyBar 已写入 `AdjustmentMethod=pytdx_qfq/pytdx_hfq` 和 reference date；但没有显式填充 `AdjustmentAlgorithmVersion`。SourceVersion 包含依赖版本，但不能在 v2 DTO 中默认为它等价于完整算法版本/舍入契约。
+- 现有 `pytdx_daily_decimal_test.go` 只直接测试 Price 定点值转换；`daily_bar_adjustment_contract_test.go` 验证 QFQ/HFQ 结果数值，但未覆盖调整后 ExactValues 的证据语义、算法输出 scale 和舍入方式。
+- 本轮没有修改代码或测试标准。下一步在 DailyBarV2 DTO 字段语义明确后，增加调整后 Price 的回归用例，验证 raw 与 adjusted 两条路径的来源/scale/algorithm provenance 不混淆；在此之前不把 protocol_scale=3 作为复权结果精度承诺。

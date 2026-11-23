@@ -759,3 +759,8 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 2. 形成最终 DailyBarV2 内部 DTO 的字段映射与负例 Golden 草案；未达到 DATA-CTR-005 重新进入条件前，不接 HTTP v2、不改项目登记簿、不开放 Quant 消费。
 3. Q-01 保持 BLOCKED，待策略发布治理和 Quant Stage 关联契约具备后再实现；期间不做空壳 Reader 或虚构 Stage。
 4. 本轮文档提交后对新精确 SHA 检查 Go Test Suite、Full Integration Checks；若文档改动不触发工作流，明确记录未执行，不把旧 CI 复用为新 SHA 验收。
+
+
+## 34. 2026-11-23 D2 Pytdx 复权精度证据补充
+
+本次对 `github.com/injoyai/tdx@v0.0.86` 做了精确版本源码复核：Pytdx QFQ/HFQ 的仿射因子计算使用 float64，输出由 `roundHalfUpYuan` 按分舍入，再写入 Price 的厘定点表示。当前 ExactValues 从调整后的 Price.Int64() 记录 ProtocolScale=3；它是协议存储 scale，不是算法输出精度或原始 Provider token scale。DailyBarV2 必须区分这三者，并记录明确的算法版本/舍入语义。当前未改代码，等待字段契约定义后补针对性测试。
