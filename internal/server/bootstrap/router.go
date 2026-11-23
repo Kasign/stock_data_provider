@@ -99,6 +99,14 @@ func newHTTPHandler(authenticator *platformsecurity.Authenticator, health, legac
 			mux.Handle("/api/v1/owner/quant/result-access-policy/", policyHandler)
 		}
 		mux.Handle("/api/v1/owner/", ownerHandler)
+		if ownerSession.researchflow != nil {
+			researchflowHandler, handlerErr := newResearchflowHTTPHandler(ownerSession)
+			if handlerErr != nil {
+				return nil, handlerErr
+			}
+			mux.Handle("/api/v1/researchflow/runs", researchflowHandler)
+			mux.Handle("/api/v1/researchflow/runs/", researchflowHandler)
+		}
 	}
 	mux.Handle("/", legacyHandler)
 	return mux, nil

@@ -510,3 +510,33 @@ export async function changeOwnerPassword(settings, currentPassword, newPassword
   ownerCSRFToken = "";
   return result;
 }
+
+
+// Researchflow Run API — SRV-CTR-001. Browser requests use the existing
+// HttpOnly Owner Session cookie; mutating calls require the in-memory CSRF token.
+export function createResearchflowRun(settings, command, signal) {
+  if (!command || typeof command !== "object" || Array.isArray(command)) {
+    return Promise.reject(new Error("Researchflow 创建请求必须是对象。"));
+  }
+  return request("/api/v1/researchflow/runs", {
+    method: "POST", body: command, signal, csrf: true
+  });
+}
+
+export function getResearchflowRun(settings, runRef, signal) {
+  const value = String(runRef ?? "").trim();
+  if (!value || value !== String(runRef) || value.length > 255) {
+    return Promise.reject(new Error("Researchflow Run 引用无效。"));
+  }
+  return request("/api/v1/researchflow/runs/" + encodeURIComponent(value), { signal });
+}
+
+export function cancelResearchflowRun(settings, runRef, signal) {
+  const value = String(runRef ?? "").trim();
+  if (!value || value !== String(runRef) || value.length > 255) {
+    return Promise.reject(new Error("Researchflow Run 引用无效。"));
+  }
+  return request("/api/v1/researchflow/runs/" + encodeURIComponent(value) + "/cancel", {
+    method: "POST", signal, csrf: true
+  });
+}
