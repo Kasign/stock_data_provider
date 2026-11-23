@@ -1,8 +1,8 @@
 package repository
 
 import (
-	"testing"
 	"strings"
+	"testing"
 	"time"
 
 	"example.com/stock-analysis-flow/internal/marketdata/model"
