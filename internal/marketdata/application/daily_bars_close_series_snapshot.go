@@ -12,7 +12,7 @@ import (
 var ErrDailyBarsCloseSeriesSnapshotCreationUnavailable = errors.New("daily-bars close-series snapshot creator unavailable")
 
 type DailyBarsCloseSeriesSnapshotReferences struct {
-	SnapshotRef     string
+	SnapshotRef      string
 	AuthorizationRef string
 }
 

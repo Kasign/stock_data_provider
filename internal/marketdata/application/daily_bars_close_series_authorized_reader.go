@@ -13,8 +13,8 @@ import (
 var ErrAuthorizedDailyBarsCloseSeriesSnapshotUnavailable = errors.New("authorized daily-bars close-series Snapshot reader unavailable")
 
 type authorizedDataPolicySnapshot struct {
-	SnapshotRef   string                            `json:"snapshot_ref"`
-	Policies      []authorizedDataPolicyVersion     `json:"policies"`
+	SnapshotRef   string                        `json:"snapshot_ref"`
+	Policies      []authorizedDataPolicyVersion `json:"policies"`
 	SchemaVersion string                            `json:"schema_version"`
 }
 
