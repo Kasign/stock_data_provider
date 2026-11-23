@@ -728,3 +728,34 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - 不修改项目级冻结契约以绕开实现缺口；需要变更时先记录差异、影响模块和重新进入条件。
 - 每个代码逻辑组完成后审查 diff、更新模块当前任务/卡点、运行针对性测试和完整 CI，再按完整逻辑组提交并核对 SHA。
 - 两日结束时，所有可在当前约束下安全完成的 P0 代码项应有验收证据；外部条件未满足的项必须有唯一 Owner、可执行解锁条件和明确下一步，不得用“基本完成”掩盖阻塞。
+
+
+## 33. 2026-11-23 首轮主线代码审计与状态校准
+
+### 33.1 本轮基线与验收状态
+
+- 本轮开始前确认 `repair_all` HEAD：`6139bcbe7b40bc82564783ffb4af41710be32b09`；最新提交为两日收口计划文档提交。计划第 32 节记录的 `3597a9f...` 是计划起点，不是本轮实际 HEAD。
+- `integration` HEAD：`5c89614bb87785b61b06d272880b5c0c8a7afe2f`；本轮未修改。
+- 精确 SHA `6139bcbe7b40bc82564783ffb4af41710be32b09` 的 Actions workflow runs、check-runs 均为 0；commit status 为 pending 且无 status 项。此前 SHA `3597a9f...` 的 CI 不替代当前 HEAD 验收。
+- 本轮完成代码/契约只读审计及对应文档校准，未修改生产代码；因此没有将任何生产代码项标记为本轮 PASS，也没有把文档审计冒充完整 CI。
+
+### 33.2 Q-01 / QNT-013 审计结论
+
+- Quant 结果 MySQLRepository、AccessAuditor、Migration v1-v3 已在 repair_all 代码中存在；Server Root 已注册 Quant Migration namespace。
+- Policy Owner 的生产策略存储/签发/撤销、当前策略线性化读取及 AuthorizedResultReader 仍缺失；Server 尚无完整依赖注入。
+- Researchflow StageOutputResource 虽有 Run/Stage/Attempt 归属，但没有 Quant Stage Provider 和显式 Quant result_id 输出关联契约。故当前 Run-scoped 授权读取没有可供生产 Reader 验证的关联事实。
+- Q-01 维持 BLOCKED。不得默认 Allow、不得由 Quant 查询 Researchflow 私有 SQL、不得凭 Golden 示例或 service principal 身份推断资源关联。具体证据和重新进入条件见 Quant 当前任务/卡点记录。
+
+### 33.3 Data D2 审计结论
+
+- DailyBars v2 目前只完成 Application Header/CalendarRef/coverage evidence；Bars 仍复用 float64 DailyBar DTO，尚无最终 Decimal Body 和 HTTP v2 Schema/Handler/Golden。
+- ExactValues 与部分 ChangePercent 来源证据已存在；Tushare/Yahoo 复权精度、部分 Amount 单位、逐条 ProviderTime/provider_data_version 仍缺证据。
+- CalendarRef 同次评估和不可变交易日历已完成，不重复开发。DATA-CTR-005/007 保持 deferred，不用 float64 格式化或虚构单位/时间/版本推进。
+- 具体字段矩阵和下一步见 Data 当前任务与解阻方案。
+
+### 33.4 下一执行切片
+
+1. 先完成 Data D2 的字段级证据矩阵：按 Provider × none/forward/backward × OHLC/Volume/Amount/ChangePercent，区分 source token、protocol scale、unit conversion、adjustment evidence 和 unknown；只补真实证据缺口，不重复历史已验收样本。
+2. 形成最终 DailyBarV2 内部 DTO 的字段映射与负例 Golden 草案；未达到 DATA-CTR-005 重新进入条件前，不接 HTTP v2、不改项目登记簿、不开放 Quant 消费。
+3. Q-01 保持 BLOCKED，待策略发布治理和 Quant Stage 关联契约具备后再实现；期间不做空壳 Reader 或虚构 Stage。
+4. 本轮文档提交后对新精确 SHA 检查 Go Test Suite、Full Integration Checks；若文档改动不触发工作流，明确记录未执行，不把旧 CI 复用为新 SHA 验收。

@@ -226,3 +226,11 @@ Root Server 的 Data Module 构造、共享资源注入、Migration Registry、I
 - feat/data 已选择性同步 repair_all 的 internal/marketdata/** 与 doc/api/**，代码同步 SHA 5b98ae1abbf0e04fa4c275b15f78087b0481c0f1；上述模块路径已逐文件 Blob SHA 对齐。
 - 根模块 Test . 和 Market-data MariaDB migration/PIT job 在 Run 44667706336 通过；整体 Run failure 来自共享 Workflow 仍引用已删除 cmd/market-data 的两个旧 Job，归 CI-01，不归 Data 业务代码。
 - Live Provider Probe Run 44667706203 的 11 个真实专项全部 skipped，DATA-003～DATA-007 的外部证据阻塞不变；DATA-008 继续 DEFERRED。
+
+
+## RepairAll D2 DailyBars v2 现状校准（2026-11-23）
+
+- 当前 `repair_all` SHA `6139bcbe7b40bc82564783ffb4af41710be32b09` 已有 DailyBarsV2Reader/Application Header、CalendarRef 同次覆盖率证据、不可变交易日历 Repository，以及 DailyBar ExactValues sidecar 的 Repository/Application 传递。
+- 当前 `DailyBarsV2Snapshot.Bars` 仍复用 float64 `DailyBar`；最终 Decimal Body、HTTP v2 Schema/Handler/Golden、Research/Quant 消费契约均未完成。此状态不得描述为 DailyBars v2 已完成。
+- Tushare/Yahoo QFQ/HFQ 精确调整值、部分 Provider Amount 单位、逐条 ProviderTime/provider_data_version 仍缺证据；未知值保持 null/unknown/degraded，不用 float64 格式化、FetchedAt 或 Adapter SourceVersion 伪造。
+- 不可变交易日历和 CalendarRef 传播已完成，不重复开发；DATA-CTR-005/007 仍 deferred。

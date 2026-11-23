@@ -19,9 +19,9 @@ Data v1 DailyBar OHLC/Amount/ChangePercent 为 float64，不能通过格式化�
 
 | 卡点 | 当前 Quant 端口/能力 | 责任方 | 解锁条件/交付 | 后续动作 |
 |---|---|---|---|---|
-| 生产 Storage、事务、Migration | Save Port、MemoryRepository | Server 装配，Platform 提供公共基础能力 | 生产 Repository Adapter、数据库唯一约束/事务、根 Migration 和连接生命周期注入 | Integration 验证幂等、冲突、并发与持久化 |
+| 生产 Storage、事务、Migration | Quant 自有 MySQLRepository、Migration v1；Server 已注册 quant namespace | Quant 维护结果存储；Server 注入共享 DB/生命周期；Platform 提供 Migration Runner | 已有不可变 Save、幂等/冲突/并发 MariaDB 测试；Root 注册已存在 | 继续验证 Root 生产启动与实际依赖注入；不得重复建设结果 Repository |
 | 可信 Principal 与授权撤销一致性 | PrincipalResolver Port、GetResult 授权用例 | Server/Platform | 从可信认证上下文注入 Principal；提供策略快照、撤销复核及一致性边界 | Integration 验证授权读取和撤销竞态 |
-| Access Audit 持久化 | AccessAuditor Port | Server/Platform | 审计持久化 Adapter、保留策略和故障处理 | Integration 验证审计落库及失败语义 |
+| Access Audit 持久化 | AccessAuditor Port、MySQLAccessAuditor、Migration v2/v3（含 RunRef） | Quant 实现追加审计；Server 注入 DB/Clock | 写入与 MariaDB 集成测试已存在；审计失败由 GetResult fail-closed | 审计保留/归档/删除授权仍待治理决议；补 Root 生产注入验收 |
 | Clock / Diagnostics / Fault | Quant 复用 Platform 公共语义 | Server 注入 Clock；Platform 维护通用能力 | 提供可信 UTC Clock 和统一公共诊断/故障能力 | Quant 只消费，不复制通用框架 |
 
 Quant 不在 `internal/quant/**` 实现 SQL/Redis、通用 Storage、认证、授权、审计持久化或通用诊断框架。Server 是唯一组合根。
@@ -103,3 +103,11 @@ Quant 不在 `internal/quant/**` 实现 SQL/Redis、通用 Storage、认证、�
 - 该实现目前在 feat/quant 分支，未合并到 repair_all；不得据此宣称聚合分支或 Server Root 已具备完整生产链路。
 - QNT-013 仍 OPEN：Policy Payload Schema/真实 Allow-Deny 规则/策略发布权限/版本指针和撤销线性化语义缺失；AuthorizedResultReader 未实现；Server Root 的 Repository/Reader/PrincipalResolver/Auditor 注入未完成。GOV-CTR-006 Golden 不是生产 Allow 规则。
 - Access Audit 保留、查询、归档、删除授权和生产访问控制没有契约/运维决议；当前只完成追加写入，不自行增加清理策略。
+
+
+## RepairAll QNT-013 当前代码状态校准（2026-11-23）
+
+- 当前 `repair_all` SHA `6139bcbe7b40bc82564783ffb4af41710be32b09` 已有 Quant 自有 MySQLRepository、MySQLAccessAuditor、Migration v1-v3；v3 将 RunRef 写入审计记录。Server Root 已注册 Quant Migration namespace。
+- 仍缺 Quant Policy Owner 的规则/策略版本持久化/签发撤销、AuthorizedResultReader 生产实现和 Root 可信 Principal/Reader/Auditor/Clock 完整注入。
+- Researchflow StageOutputResource 只证明 Stage Output 属于某 Run/Stage/Attempt；没有 Quant Stage Provider 和显式 Quant result_id 输出契约，不能证明 Run→QuantResult 关联存在。
+- Q-01 继续 BLOCKED；GOV-CTR-006 Golden 不是生产 Allow 规则。只有在策略治理权限和关联契约明确后，才进入策略存储、撤销线性化和 MariaDB 并发验收。
