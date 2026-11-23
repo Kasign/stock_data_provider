@@ -170,3 +170,16 @@ Quant 不在 `internal/quant/**` 实现 SQL/Redis、通用 Storage、认证、�
 - Quant module validation Run `45115231452`（SHA `5b8aba15a3148ca36c818ffc2b05ee609f5a62ae`）已 success，包含 gofmt、Quant 单元/MariaDB 集成、不可变结果用例未跳过、Manifest Fuzz、Race、Vet。
 - 同一 SHA 的 Go test suite Run `45115231420` 与 Integration CI Run `45115231437` 当时仍在运行；不得把 Quant 专项通过等同于全仓验收通过。
 - 此修复只收紧 Quant Application 的调用主体，不代表生产 AuthorizedResultReader 已实现；当前仍缺 Researchflow 正式 Quant Stage 输出 Schema/Provider/Registry Entry、强类型 Run→result_id 关联查询、策略锁内的关联验证与结果读取，以及 Server 完整装配。Q-01 继续 BLOCKED，Data D2 不启动。
+
+
+## 2026-11-23 QNT-014 生产输入与 Indicator Registry 复核
+
+- 复核基线：`repair_all` SHA `c9e25e18732674eb766699776b3190513993cabb`。
+- Quant 侧：`internal/quant/indicator/indicator.go` 仍是 float64 纯计算；`indicator/context.go` 只校验 CalculationContext 后调用纯函数，不加载输入快照、不执行 Data 质量过滤、不生成 QuantMetric。
+- Registry 侧：`internal/quant/registry/entry.go` 提供 Entry/Registry 的通用注册、版本选择、冻结和校验框架；当前代码树没有首批 Indicator 正式 Entry 清单或生产注册装配。现有参数 Schema、Payload Schema、synthetic Golden 和样本数测试不等于生产 Registry 元数据。逐 metric_code 的 unit/value_type/precision/rounding/range/quality_policy/sample_count 仍不能从测试 Fixture 推导。
+- Data 侧：`internal/marketdata/app/port.go` 的 `DailyBarsV2Snapshot` 暴露 interval、adjustment_basis、质量、覆盖率和 TradingCalendarRef；`DailyBar` 可携带 ExactValues。Data Application `mapDailyBar` 会把 `model.DailyBar.ExactValues` 及其 Provider 精度证据传到 Application DTO，说明内部精度侧车不是完全缺失。
+- 但当前该内部 Snapshot DTO 没有 DATA-CTR-005 所要求的内容寻址 `snapshot_ref`、GOV-CTR-006 所要求的 `authorization_ref`，也没有可供 Quant 直接验证的完整 Snapshot Manifest。ExactValues 还允许为空；覆盖率/日历证据不能替代快照身份与访问授权。不得在 Quant 侧自行生成 Data SnapshotRef 或将 float64 格式化为 Decimal。
+- 因此当前没有满足 QNT-001/002 生产元数据、可信 Snapshot 身份/授权和质量门禁的 Indicator 用例；QNT-014 不能安全落地。也不能只挑 SMA/EMA 等简单算法绕过共同输入契约，因为它们同样依赖真实交易日序列、复权口径、有效样本和可追溯输入快照。
+- 本轮没有修改 Data 或 Quant 生产代码，没有新增 Facade/Registry Entry，也没有启动 Data D2。QNT-014 继续 NOT_STARTED；DATA-CTR-005/007 继续按契约状态阻断真实计算输入。
+- 下一步由 Data Owner 按 DATA-CTR-005/007 完成 Snapshot Manifest、snapshot_ref/authorization_ref 与 Decimal/PIT DTO 的正式 Application Port；Quant 收到正式契约后，先选取可完整证明输入与数值语义的首个指标，完成正式 Registry Entry、生产 Metric 构造、Payload 注册和 Facade，再由 Researchflow 接入真实 Stage。
+- 当前 SHA `c9e25e18732674eb766699776b3190513993cabb` 的 GitHub Commit Status 返回 `pending`、`total_count=0`、无已报告 Status；这不是 CI 通过证据。父提交的历史 CI 不作为当前 SHA 的验收结论。
