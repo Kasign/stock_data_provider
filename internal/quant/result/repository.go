@@ -31,6 +31,22 @@ func BuildRecord(input manifest.Input, payload Payload) (Record, error) {
 	if err != nil {
 		return Record{}, fmt.Errorf("%w: build manifest: %v", ErrInvalidEnvelope, err)
 	}
+	switch value := payload.(type) {
+	case TrendPayload:
+		trendResult := value.Result()
+		if trendResult.Period != source.Period ||
+			trendResult.SystemAsOf != source.SystemAsOf ||
+			trendResult.AlgorithmVersion != source.AlgorithmVersion ||
+			string(trendResult.QualityStatus) != source.QualityStatus {
+			return Record{}, fmt.Errorf("%w: trend payload metadata differs from manifest", ErrInvalidEnvelope)
+		}
+	case RiskPayload:
+		if value.Decision().SystemAsOf != source.SystemAsOf {
+			return Record{}, fmt.Errorf("%w: risk payload timestamp differs from manifest", ErrInvalidEnvelope)
+		}
+	default:
+		return Record{}, ErrUnsupportedPayload
+	}
 	record := Record{Manifest: source, Payload: append(json.RawMessage(nil), raw...)}
 	if err := record.Validate(); err != nil {
 		return Record{}, fmt.Errorf("%w: validate record: %v", ErrInvalidEnvelope, err)
