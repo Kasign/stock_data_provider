@@ -4,11 +4,11 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"testing"
 	"time"
 
+	"example.com/stock-analysis-flow/internal/marketdata/app"
 	"example.com/stock-analysis-flow/internal/marketdata/authorization"
 	"example.com/stock-analysis-flow/internal/platform/security"
 )
@@ -26,7 +26,7 @@ func (fake *dataPolicyOwnerRepositoryFake) PublishDataAuthorizationPolicyVersion
 		return fake.err
 	}
 	if fake.current.Version.PolicyVersion != expected {
-		return ErrDataAuthorizationPolicyConflict
+		return app.ErrDataAuthorizationPolicyVersionConflict
 	}
 	fake.published = append(fake.published, version)
 	policy, err := authorization.DecodePolicyVersion(version)
@@ -147,4 +147,3 @@ func TestDataAuthorizationPolicyOwnerReturnsUnavailableWhenStoreFails(t *testing
 	}
 }
 
-var _ = json.Valid

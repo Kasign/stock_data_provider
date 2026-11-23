@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"strings"
 	"time"
 
@@ -106,7 +105,7 @@ func (owner *DataAuthorizationPolicyOwner) Publish(
 		return authorization.CurrentPolicy{}, ErrDataPolicyInvalidChange
 	}
 	if err := owner.repository.PublishDataAuthorizationPolicyVersion(ctx, expectedCurrentVersion, version); err != nil {
-		if errors.Is(err, ErrDataAuthorizationPolicyConflict) {
+		if errors.Is(err, app.ErrDataAuthorizationPolicyVersionConflict) {
 			return authorization.CurrentPolicy{}, ErrDataPolicyVersionConflict
 		}
 		if ctxErr := ctx.Err(); ctxErr != nil {
@@ -147,4 +146,3 @@ func cloneCurrentDataPolicy(value authorization.CurrentPolicy) authorization.Cur
 	return value
 }
 
-var _ = fmt.Sprintf
