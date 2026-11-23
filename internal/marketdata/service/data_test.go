@@ -3421,6 +3421,78 @@ func TestDailyBarAdjustmentMetadataAllowsCumulativeHFQWithoutReferenceDate(t *te
 	}
 }
 
+func TestDailyBarAdjustmentMetadataAllowsKnownBackwardAnchorsWithoutReferenceDate(t *testing.T) {
+	for _, method := range []string{"tushare_adj_factor_hfq_v1", "baostock_pct_change"} {
+		t.Run(method, func(t *testing.T) {
+			bar := model.DailyBar{
+				TradeDate: "2026-10-20", AdjustmentBasis: model.AdjustmentBackward,
+				AdjustmentMethod: method, QualityStatus: model.QualityValid,
+			}
+			warnings, err := applyDailyBarAdjustmentMetadataQuality([]model.DailyBar{bar}, model.AdjustmentBackward)
+			if err != nil || len(warnings) != 0 || bar.QualityStatus != model.QualityValid {
+				t.Fatalf("verified provider-defined backward anchor should remain valid without a date: bar=%+v warnings=%v err=%v", bar, warnings, err)
+			}
+		})
+	}
+}
+
+func TestDailyBarAdjustmentMetadataDegradesUnknownBackwardAnchorsWithoutReferenceDate(t *testing.T) {
+	methods := []string{
+		"eastmoney_fqt_2",
+		"hithink_api_backward",
+		"tickflow_api_backward",
+		"tencent_hfqday",
+	}
+	for _, method := range methods {
+		t.Run(method, func(t *testing.T) {
+			bar := model.DailyBar{
+				TradeDate: "2026-10-20", AdjustmentBasis: model.AdjustmentBackward,
+				AdjustmentMethod: method, QualityStatus: model.QualityValid,
+			}
+			warnings, err := applyDailyBarAdjustmentMetadataQuality([]model.DailyBar{bar}, model.AdjustmentBackward)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if bar.QualityStatus != model.QualityDegraded ||
+				!containsTestWarning(bar.QualityReasons, "daily_bar_adjustment_reference_anchor_unverified") ||
+				!containsTestWarning(warnings, "daily_bar_adjustment_reference_anchor_unverified") {
+				t.Fatalf("backward adjustment with unknown anchor must be degraded: bar=%+v warnings=%v", bar, warnings)
+			}
+		})
+	}
+}
+
+func TestDailyBarsCacheDegradesBackwardSeriesWithoutVerifiedAnchor(t *testing.T) {
+	mem := newMemoryCache()
+	volume := int64(1000)
+	amount := 10500.0
+	now := time.Now().UTC()
+	bar := model.DailyBar{
+		SourceVersion: "test-v1", Symbol: "600519.SH", TradeDate: "2026-10-20", Period: "1d",
+		Open: 10, High: 11, Low: 9, Close: 10.5, Volume: &volume, Amount: &amount,
+		AdjustmentBasis: model.AdjustmentBackward, AdjustmentMethod: "hithink_api_backward", Source: "hithink",
+		VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid,
+		NormalizationVer: normalize.Version, FetchedAt: now, NormalizedAt: now,
+	}
+	payload, err := json.Marshal(map[string]any{"bars": []model.DailyBar{bar}, "warnings": []string{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	end := time.Now().In(marketLocation()).Format("2006-01-02")
+	cacheKey := "md:v5:bars:600519.SH::" + end + ":backward_adjusted:1"
+	mem.values[cacheKey] = payload
+	s := New(nil, mem, nil, time.Second, time.Minute, 1, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	bars, hit, warnings, err := s.DailyBars(context.Background(), "600519.SH", "", end, 1, model.AdjustmentBackward)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hit || len(bars) != 1 || bars[0].QualityStatus != model.QualityDegraded ||
+		!containsTestWarning(bars[0].QualityReasons, "daily_bar_adjustment_reference_anchor_unverified") ||
+		!containsTestWarning(warnings, "daily_bar_adjustment_reference_anchor_unverified") {
+		t.Fatalf("cached backward bars without a verified anchor must be degraded: hit=%t bars=%+v warnings=%v", hit, bars, warnings)
+	}
+}
+
 func TestDailyBarsCacheDegradesForwardSeriesWithoutReferenceDate(t *testing.T) {
 	mem := newMemoryCache()
 	volume := int64(1000)
