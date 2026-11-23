@@ -12,9 +12,9 @@ import (
 
 const (
 	DailyBarsCloseSeriesPayloadSchemaVersion = "1.0.0"
-	DailyBarsCloseSeriesPayloadKind         = "daily_bars_close_series"
-	dailyBarsCloseSeriesSourceEastmoney     = "eastmoney"
-	dailyBarsCloseSeriesEastmoneyAPIVersion = "eastmoney-stock-api-v1"
+	DailyBarsCloseSeriesPayloadKind          = "daily_bars_close_series"
+	dailyBarsCloseSeriesSourceEastmoney      = "eastmoney"
+	dailyBarsCloseSeriesEastmoneyAPIVersion  = "eastmoney-stock-api-v1"
 )
 
 var (
@@ -25,18 +25,18 @@ var (
 // DailyBarsCloseSeriesPayload 是首批 SMA 使用的窄化、可内容寻址输入。
 // 只接收未复权日线的精确 Close，不从 float64 反向生成 Decimal。
 type DailyBarsCloseSeriesPayload struct {
-	SchemaVersion      string                                `json:"schema_version"`
-	PayloadKind        string                                `json:"payload_kind"`
-	Symbol             string                                `json:"symbol"`
-	Interval           string                                `json:"interval"`
-	StartDate          string                                `json:"start_date"`
-	EndDate            string                                `json:"end_date"`
-	AdjustmentBasis    AdjustmentBasis                       `json:"adjustment_basis"`
-	TradingCalendarRef string                                `json:"trading_calendar_ref"`
-	QualityStatus      QualityStatus                         `json:"quality_status"`
-	Warnings           []string                              `json:"warnings"`
-	CoverageEvidence   DailyBarsCloseSeriesCoverageEvidence  `json:"coverage_evidence"`
-	Bars               []DailyBarsCloseSeriesBar             `json:"bars"`
+	SchemaVersion      string                               `json:"schema_version"`
+	PayloadKind        string                               `json:"payload_kind"`
+	Symbol             string                               `json:"symbol"`
+	Interval           string                               `json:"interval"`
+	StartDate          string                               `json:"start_date"`
+	EndDate            string                               `json:"end_date"`
+	AdjustmentBasis    AdjustmentBasis                      `json:"adjustment_basis"`
+	TradingCalendarRef string                               `json:"trading_calendar_ref"`
+	QualityStatus        QualityStatus                       `json:"quality_status"`
+	Warnings           []string                             `json:"warnings"`
+	CoverageEvidence   DailyBarsCloseSeriesCoverageEvidence `json:"coverage_evidence"`
+	Bars               []DailyBarsCloseSeriesBar            `json:"bars"`
 }
 
 // DailyBarsCloseSeriesDecimalEvidence 是 Snapshot Payload 的稳定 JSON Decimal Evidence 结构。
