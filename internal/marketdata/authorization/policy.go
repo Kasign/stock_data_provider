@@ -11,56 +11,56 @@ import (
 )
 
 const (
-	DataAccessPolicyType = "data_access"
-	DailyBarsV2PolicyRef = "dailybars-v2-access"
+	DataAccessPolicyType        = "data_access"
+	DailyBarsV2PolicyRef        = "dailybars-v2-access"
 	DataAccessPolicySchemaVersion = "1.0.0"
 )
 
 type PolicyStatus string
 
 const (
-	PolicyApproved PolicyStatus = "approved"
+	PolicyApproved   PolicyStatus = "approved"
 	PolicyRestricted PolicyStatus = "restricted"
-	PolicyPending PolicyStatus = "pending"
-	PolicyRevoked PolicyStatus = "revoked"
+	PolicyPending    PolicyStatus = "pending"
+	PolicyRevoked    PolicyStatus = "revoked"
 )
 
 var (
 	ErrPolicyInvalid = errors.New("market-data authorization policy invalid")
-	ErrPolicyDenied = errors.New("market-data authorization policy denied")
+	ErrPolicyDenied  = errors.New("market-data authorization policy denied")
 )
 
 // DataAccessPolicy 是 Data Owner 对日线 Snapshot 访问的最小策略对象。
 // 空 AllowedSubjects 或 AllowedPurposes 均不授予访问权限；不存在默认允许。
 type DataAccessPolicy struct {
-	SchemaVersion string       `json:"schema_version"`
-	Status        PolicyStatus `json:"status"`
-	AllowedSubjects []string   `json:"allowed_subjects"`
-	AllowedPurposes []string   `json:"allowed_purposes"`
-	RequiredScopes []string    `json:"required_scopes"`
-	EffectiveAt   time.Time    `json:"effective_at"`
-	ExpiresAt     *time.Time   `json:"expires_at"`
+	SchemaVersion   string       `json:"schema_version"`
+	Status          PolicyStatus `json:"status"`
+	AllowedSubjects []string     `json:"allowed_subjects"`
+	AllowedPurposes []string     `json:"allowed_purposes"`
+	RequiredScopes  []string     `json:"required_scopes"`
+	EffectiveAt     time.Time    `json:"effective_at"`
+	ExpiresAt       *time.Time   `json:"expires_at"`
 }
 
 type PolicyVersion struct {
-	PolicyType string
-	PolicyRef string
+	PolicyType    string
+	PolicyRef     string
 	PolicyVersion string
-	Payload []byte
-	PayloadHash string
-	CreatedAt time.Time
+	Payload       []byte
+	PayloadHash   string
+	CreatedAt     time.Time
 }
 
 type CurrentPolicy struct {
 	Version PolicyVersion
-	Policy DataAccessPolicy
+	Policy  DataAccessPolicy
 }
 
 type AccessRequest struct {
-	SubjectRef string
+	SubjectRef  string
 	PurposeCode string
-	Scopes []string
-	Now time.Time
+	Scopes      []string
+	Now         time.Time
 }
 
 func DecodePolicyVersion(value PolicyVersion) (DataAccessPolicy, error) {
@@ -84,11 +84,14 @@ func DecodePolicyVersion(value PolicyVersion) (DataAccessPolicy, error) {
 
 func ValidatePolicy(policy DataAccessPolicy) error {
 	if policy.SchemaVersion != DataAccessPolicySchemaVersion ||
-		(policy.Status != PolicyApproved && policy.Status != PolicyRestricted && policy.Status != PolicyPending && policy.Status != PolicyRevoked) ||
+		(policy.Status != PolicyApproved && policy.Status != PolicyRestricted &&
+			policy.Status != PolicyPending && policy.Status != PolicyRevoked) ||
 		policy.EffectiveAt.IsZero() || policy.EffectiveAt.Location() != time.UTC {
 		return ErrPolicyInvalid
 	}
-	if policy.ExpiresAt != nil && (policy.ExpiresAt.IsZero() || policy.ExpiresAt.Location() != time.UTC || !policy.ExpiresAt.After(policy.EffectiveAt)) {
+	if policy.ExpiresAt != nil &&
+		(policy.ExpiresAt.IsZero() || policy.ExpiresAt.Location() != time.UTC ||
+			!policy.ExpiresAt.After(policy.EffectiveAt)) {
 		return ErrPolicyInvalid
 	}
 	if !sortedUniqueNonEmpty(policy.AllowedSubjects, validPrincipalRef) ||
@@ -108,10 +111,12 @@ func Evaluate(policy DataAccessPolicy, request AccessRequest) error {
 	if policy.Status != PolicyApproved && policy.Status != PolicyRestricted {
 		return ErrPolicyDenied
 	}
-	if request.Now.Before(policy.EffectiveAt) || (policy.ExpiresAt != nil && !request.Now.Before(*policy.ExpiresAt)) {
+	if request.Now.Before(policy.EffectiveAt) ||
+		(policy.ExpiresAt != nil && !request.Now.Before(*policy.ExpiresAt)) {
 		return ErrPolicyDenied
 	}
-	if !contains(policy.AllowedSubjects, request.SubjectRef) || !contains(policy.AllowedPurposes, request.PurposeCode) {
+	if !contains(policy.AllowedSubjects, request.SubjectRef) ||
+		!contains(policy.AllowedPurposes, request.PurposeCode) {
 		return ErrPolicyDenied
 	}
 	for _, required := range policy.RequiredScopes {
@@ -132,7 +137,8 @@ func validPurpose(value string) bool {
 }
 
 func validPrincipalRef(value string) bool {
-	if !strings.HasPrefix(value, "principal:") || len(value) > 256 || strings.TrimSpace(value) != value {
+	if !strings.HasPrefix(value, "principal:") || len(value) > 256 ||
+		strings.TrimSpace(value) != value {
 		return false
 	}
 	return validOpaque(value)
@@ -143,7 +149,8 @@ func validScope(value string) bool {
 		return false
 	}
 	for _, r := range value {
-		if !(r >= 'a' && r <= 'z') && !(r >= '0' && r <= '9') && r != ':' && r != '-' && r != '_' && r != '.' {
+		if !(r >= 'a' && r <= 'z') && !(r >= '0' && r <= '9') &&
+			r != ':' && r != '-' && r != '_' && r != '.' {
 			return false
 		}
 	}
