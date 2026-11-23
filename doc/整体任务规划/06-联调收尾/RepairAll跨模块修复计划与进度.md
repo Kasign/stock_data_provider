@@ -906,3 +906,11 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 当前 Server 并非“完全没有生产装配”。Root 的基础设施、Data、News Search、Researchflow Runtime、部分 Research/Notification Relay 已有真实组合代码。当前最明确的 Server/API 缺口是 **Researchflow CreateRun/GetRun/CancelRun 尚未形成 Root 对外 HTTP 接口**；而 Quant 真实计算/授权读取、Research Context 授权消费、LLM 真实调用分别仍缺领域 Owner 交付，不能算作单纯 Server 装配遗漏。
 
 本轮文档校准不代表代码验收完成。后续代码变更必须附精确 SHA 与针对性测试/Integration CI 证据。
+
+
+### SRV-CTR-001 当前进度
+
+- 已完成现有 Root 装配代码复核，并将“上游业务完善”与“Server 组合装配”分开登记。
+- 已形成最小 API 草案：`doc/server/contracts/SRV-CTR-001-Researchflow最小HTTPAPI提案.md`，只覆盖 CreateRun/GetRun/CancelRun，复用现有 Application/Owner Session，不新增平行 ID 或业务状态。
+- 当前仍为 DRAFT，尚未修改生产 Handler/Router。原因是项目级登记中的 SRV-CTR-001 仍为 deferred；必须先确认正式公开接口范围，避免沿用已退役旧 Analysis DTO 或猜测接口。
+- 下一步：确认提案后实现正式 OpenAPI/Schema、Handler、Root Router、CSRF/资源授权测试和 WebUI 调用；再执行真实 MariaDB/Redis Worker 集成验收。
