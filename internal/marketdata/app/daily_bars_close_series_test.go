@@ -99,11 +99,15 @@ func TestBuildDailyBarsCloseSeriesInputRejectsUntrustedInputs(t *testing.T) {
 		mutate func(*DailyBarsV2Snapshot, *DailyBarsQuery)
 	}{
 		{name: "missing calendar ref", mutate: func(s *DailyBarsV2Snapshot, _ *DailyBarsQuery) { s.TradingCalendarRef = nil }},
-		{name: "degraded calendar", mutate: func(s *DailyBarsV2Snapshot, _ *DailyBarsQuery) { s.CoverageEvidence.CalendarQualityStatus = QualityDegraded }},
+		{name: "degraded calendar", mutate: func(s *DailyBarsV2Snapshot, _ *DailyBarsQuery) {
+			s.CoverageEvidence.CalendarQualityStatus = QualityDegraded
+		}},
 		{name: "insufficient coverage", mutate: func(s *DailyBarsV2Snapshot, _ *DailyBarsQuery) { s.CoverageEvidence.CoverageSufficient = false }},
 		{name: "float-only close", mutate: func(s *DailyBarsV2Snapshot, _ *DailyBarsQuery) { s.Bars[0].ExactValues = nil }},
 		{name: "source version is not mapped", mutate: func(s *DailyBarsV2Snapshot, _ *DailyBarsQuery) { s.Bars[0].SourceVersion = "eastmoney-stock-api-v2" }},
-		{name: "source token differs from exact close", mutate: func(s *DailyBarsV2Snapshot, _ *DailyBarsQuery) { s.Bars[0].ExactValues.CloseEvidence.SourceToken = "43.50" }},
+		{name: "source token differs from exact close", mutate: func(s *DailyBarsV2Snapshot, _ *DailyBarsQuery) {
+			s.Bars[0].ExactValues.CloseEvidence.SourceToken = "43.50"
+		}},
 		{name: "query is not PIT", mutate: func(_ *DailyBarsV2Snapshot, q *DailyBarsQuery) { q.SystemObservedAtCutoff = nil }},
 		{name: "duplicate trade date", mutate: func(s *DailyBarsV2Snapshot, _ *DailyBarsQuery) { s.Bars = append(s.Bars, s.Bars[0]) }},
 		{name: "empty warning is rejected", mutate: func(s *DailyBarsV2Snapshot, _ *DailyBarsQuery) { s.Warnings = []string{"valid", " "} }},
@@ -134,7 +138,7 @@ func closeSeriesTestBar(tradeDate, closeValue, sourceToken string, fractionDigit
 	return DailyBar{
 		Symbol: "600036.SH", TradeDate: tradeDate, Period: "1d",
 		AdjustmentBasis: AdjustmentNone,
-		Source: dailyBarsCloseSeriesSourceEastmoney, SourceVersion: dailyBarsCloseSeriesEastmoneyAPIVersion,
+		Source:          dailyBarsCloseSeriesSourceEastmoney, SourceVersion: dailyBarsCloseSeriesEastmoneyAPIVersion,
 		FetchedAt: cutoff.Add(-2 * time.Minute), NormalizedAt: cutoff.Add(-time.Minute),
 		SystemObservedAt: &observed, NormalizationVersion: "4",
 		QualityStatus: QualityValid,
