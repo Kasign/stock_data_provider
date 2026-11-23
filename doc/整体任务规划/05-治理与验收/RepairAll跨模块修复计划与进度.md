@@ -860,3 +860,15 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - 代码提交：`4efce013`（BuildRecord）、`2c36b51d`（CreateResult）、`50a1ad2c`（测试）、`978b5b88`（格式修正）、`9ee20f0f`（载荷与 Manifest 元数据一致性）、`c1f1b294`（一致性测试）。
 - 该基础用例尚无真实 Trend/Risk 生产算法调用；Researchflow 尚无 Quant Stage Provider/Registry Entry，故 Run→QuantResult 关联和生产授权读取仍未完成。
 - 后续顺序：先核实 Quant 现有领域算法是否具备可调用的正式生产入口；只在有真实算法调用的前提下接入 CreateResult 与 Quant Stage Provider；Researchflow 用精确 Stage Output Registry 校验并在现有 Attempt 事务中持久化 result_id；随后接通关联只读 Port、Quant AuthorizedResultReader、策略撤销一致性和 Server 装配。所有步骤仍受同 Run/跨 Run/无关联/撤销竞态/审计失败测试约束。
+
+
+## 43. 2026-11-23 Q-01 / QNT-014 依赖顺序校准
+
+- 最新复核基线：`repair_all` HEAD `689c0b83c8508872236564283552815ca5c66945`；最近生产代码 SHA `5b8aba15a3148ca36c818ffc2b05ee609f5a62ae` 的 Quant module validation（Run `45115231452`）、Go Test Suite（Run `45115231420`）、Integration CI（Run `45115231437`）均 success。HEAD 是文档提交，无独立 Actions Run。
+- 对照最新代码修正历史状态：Quant 策略版本/current pointer、Owner Session 发布撤销管理、策略 Head 共享读取锁均已实现并有 MariaDB/专项测试；此前“Policy Owner 管理/撤销一致性尚未实现”的历史描述已过期。它们是 QNT-013 已完成子项，不得重复建设。
+- Q-01 仍 BLOCKED 的原因不是策略开关/版本存储缺失，而是完整生产数据链不存在：没有真实 Quant 结果生产 Facade；Researchflow 没有 Quant Stage Provider/强类型 result_id 输出；没有生产 AuthorizedResultReader；Server 没有完整读取依赖装配。
+- 依赖顺序存在真实循环：Quant Stage 只有在真实计算 Facade 能创建不可变结果后才能产出 result_id；Run→result_id 关联建立后 Reader 才能授权读取；但 QNT-014 Facade 又需要 DATA-CTR-005/007 的精确输入、Snapshot 身份和授权证据。因此“Q-01 完整关闭后才开始 Data D2”在当前代码事实下不可执行。
+- 执行顺序据此校准为：①只推进首个生产指标必需的 Data D2 最小契约切片（Decimal close、来源/scale 证据、交易日/interval/复权语义、CalendarRef、Snapshot Manifest/Payload fingerprint、AuthorizationRef；无证据字段继续 null/degraded；不扩展为全 Provider/Amount/Factor 的完整 D2）；②Quant 基于该可信输入完成首个正式 Registry Entry、Payload、Metric 构造和生产 Facade；③Researchflow 注册真实 Quant Stage/Output Schema/Provider，并在现有 Attempt/Stage 原子事务中持久化精确 result_id 关联；④Quant 在策略 Head 锁内通过 Researchflow 公开只读 Port 校验 Run-result 关联、读取不可变结果并写 AccessAudit；⑤Server 完成可信依赖注入及同 Run/跨 Run/无关联/伪造 RunRef/撤销竞态/审计失败 MariaDB 验收。
+- 本次顺序调整不代表 DATA-CTR-005/007 已冻结或已解锁；项目登记簿仍按 deferred 处理。只允许先完成契约证据盘点/设计与正式重新进入审查，未取得契约 Owner 的冻结/重新进入依据前，不发布对外 DTO/HTTP 契约或伪称生产可用。
+- FLOW-005/FLOW-006、LLM/Notification 空壳接入、广泛 Provider 精度/Amount/HFQ 扩展均不在本切片内；待真实调用链形成后按主线推进。
+- 本次只校准任务状态与依赖顺序，不修改生产代码，不改变测试标准，不创建分支，不切换分支。
