@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	platformsecurity "example.com/stock-analysis-flow/internal/platform/security"
 	researchflowdomain "example.com/stock-analysis-flow/internal/researchflow/domain"
 )
 
