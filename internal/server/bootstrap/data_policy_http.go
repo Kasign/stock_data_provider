@@ -35,13 +35,26 @@ type dataPolicyResponse struct {
 }
 
 func newDataPolicyHTTPHandler(composition *ownerSessionComposition) (http.Handler, error) {
-	if composition == nil || composition.authenticator == nil || composition.dataPolicyManager == nil {
-		return nil, errors.New("Owner Session and Data authorization policy Application are required")
+	if composition == nil {
+		return nil, errors.New("Owner Session composition is required")
+	}
+	return newDataPolicyHTTPHandlerWithDependencies(
+		composition.authenticator, composition.cookie.Name, composition.dataPolicyManager,
+	)
+}
+
+func newDataPolicyHTTPHandlerWithDependencies(
+	authenticator ownerSessionRequestAuthenticator,
+	cookieName string,
+	manager dataAuthorizationPolicyManager,
+) (http.Handler, error) {
+	if authenticator == nil || cookieName == "" || manager == nil {
+		return nil, errors.New("Owner Session authenticator and Data authorization policy Application are required")
 	}
 	handler := &dataPolicyHTTPHandler{
-		authenticator: composition.authenticator,
-		cookieName:    composition.cookie.Name,
-		manager:       composition.dataPolicyManager,
+		authenticator: authenticator,
+		cookieName:    cookieName,
+		manager:       manager,
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/v1/owner/data/daily-bars-access-policy", handler.current)
