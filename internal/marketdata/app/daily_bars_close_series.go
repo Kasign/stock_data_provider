@@ -12,9 +12,9 @@ import (
 
 const (
 	DailyBarsCloseSeriesPayloadSchemaVersion = "1.0.0"
-	DailyBarsCloseSeriesPayloadKind          = "daily_bars_close_series"
-	dailyBarsCloseSeriesSourceEastmoney      = "eastmoney"
-	dailyBarsCloseSeriesEastmoneyAPIVersion  = "eastmoney-stock-api-v1"
+	DailyBarsCloseSeriesPayloadKind         = "daily_bars_close_series"
+	dailyBarsCloseSeriesSourceEastmoney     = "eastmoney"
+	dailyBarsCloseSeriesEastmoneyAPIVersion = "eastmoney-stock-api-v1"
 )
 
 var (
@@ -25,21 +25,21 @@ var (
 // DailyBarsCloseSeriesPayload 是首批 SMA 使用的窄化、可内容寻址输入。
 // 只接收未复权日线的精确 Close，不从 float64 反向生成 Decimal。
 type DailyBarsCloseSeriesPayload struct {
-	SchemaVersion      string                              `json:"schema_version"`
-	PayloadKind        string                              `json:"payload_kind"`
-	Symbol             string                              `json:"symbol"`
-	Interval           string                              `json:"interval"`
-	StartDate          string                              `json:"start_date"`
-	EndDate            string                              `json:"end_date"`
-	AdjustmentBasis    AdjustmentBasis                     `json:"adjustment_basis"`
-	TradingCalendarRef string                              `json:"trading_calendar_ref"`
-	QualityStatus      QualityStatus                       `json:"quality_status"`
-	Warnings           []string                            `json:"warnings"`
-	CoverageEvidence  DailyBarsCloseSeriesCoverageEvidence `json:"coverage_evidence"`
-	Bars              []DailyBarsCloseSeriesBar `json:"bars"`
+	SchemaVersion      string                                `json:"schema_version"`
+	PayloadKind        string                                `json:"payload_kind"`
+	Symbol             string                                `json:"symbol"`
+	Interval           string                                `json:"interval"`
+	StartDate          string                                `json:"start_date"`
+	EndDate            string                                `json:"end_date"`
+	AdjustmentBasis    AdjustmentBasis                       `json:"adjustment_basis"`
+	TradingCalendarRef string                                `json:"trading_calendar_ref"`
+	QualityStatus      QualityStatus                         `json:"quality_status"`
+	Warnings           []string                              `json:"warnings"`
+	CoverageEvidence   DailyBarsCloseSeriesCoverageEvidence  `json:"coverage_evidence"`
+	Bars               []DailyBarsCloseSeriesBar             `json:"bars"`
 }
 
-// DailyBarsCloseSeriesBar 保留计算所需的精确收盘价及逐条来源/时点证据。
+// DailyBarsCloseSeriesDecimalEvidence 是 Snapshot Payload 的稳定 JSON Decimal Evidence 结构。
 type DailyBarsCloseSeriesDecimalEvidence struct {
 	EvidenceKind         string `json:"evidence_kind"`
 	SourceToken          string `json:"source_token,omitempty"`
@@ -48,6 +48,7 @@ type DailyBarsCloseSeriesDecimalEvidence struct {
 	UnitConversionFactor string `json:"unit_conversion_factor,omitempty"`
 }
 
+// DailyBarsCloseSeriesCoverageEvidence 是 Snapshot Payload 的稳定 JSON 覆盖证据结构。
 type DailyBarsCloseSeriesCoverageEvidence struct {
 	CalendarQualityStatus QualityStatus `json:"calendar_quality_status"`
 	ExpectedTradingDays   int           `json:"expected_trading_days"`
@@ -57,18 +58,19 @@ type DailyBarsCloseSeriesCoverageEvidence struct {
 	Warnings              []string      `json:"warnings"`
 }
 
+// DailyBarsCloseSeriesBar 保留计算所需的精确收盘价及逐条来源/时点证据。
 type DailyBarsCloseSeriesBar struct {
 	TradeDate            string                              `json:"trade_date"`
 	Close                string                              `json:"close"`
 	CloseEvidence        DailyBarsCloseSeriesDecimalEvidence `json:"close_evidence"`
-	SourceRef            string                  `json:"source_ref"`
-	NormalizationVersion string                  `json:"normalization_version"`
-	FetchedAt            string                  `json:"fetched_at"`
-	NormalizedAt         string                  `json:"normalized_at"`
-	ProviderTime         *string                 `json:"provider_time"`
-	SystemObservedAt     *string                 `json:"system_observed_at"`
-	QualityStatus        QualityStatus           `json:"quality_status"`
-	QualityReasons       []string                `json:"quality_reasons"`
+	SourceRef            string                              `json:"source_ref"`
+	NormalizationVersion string                              `json:"normalization_version"`
+	FetchedAt            string                              `json:"fetched_at"`
+	NormalizedAt         string                              `json:"normalized_at"`
+	ProviderTime         *string                             `json:"provider_time"`
+	SystemObservedAt     *string                             `json:"system_observed_at"`
+	QualityStatus        QualityStatus                       `json:"quality_status"`
+	QualityReasons       []string                            `json:"quality_reasons"`
 }
 
 // DailyBarsCloseSeriesSource 是 Manifest 中的来源条目。
