@@ -10,7 +10,7 @@ on:
       - 'go.mod'
       - 'go.sum'
   push:
-    branches: [feat/quant]
+    branches: [feat/quant, repair_all]
     paths:
       - 'internal/quant/**'
       - 'doc/quant/**'
