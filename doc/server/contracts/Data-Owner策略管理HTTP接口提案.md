@@ -36,8 +36,8 @@ URL 中的 owner 表示管理控制面资源，不表示策略资源归 Owner �
 
 - 只允许 Owner Session；Owner Bearer、Service Bearer、匿名请求一律拒绝。
 - 同时携带 Owner Session Cookie 与 Authorization Header 必须拒绝，不得选择其一继续处理。
-- GET 执行 Owner Session、Host、Origin 校验；不执行业务状态变更。
-- POST 执行 Owner Session、Host、Origin 和 Platform 原子 CSRF 校验。
+- GET 执行 Owner Session 和 Host 校验；若请求携带 Origin 则必须匹配配置 PublicOrigin。GET 不要求 Origin Header，也不执行业务状态变更，遵循 SRV-CTR-002 安全方法规则。
+- POST 必须执行 Owner Session、Host、匹配的 Origin 和 Platform 原子 CSRF 校验。
 - Cookie 及 CSRF 语义完全复用 SRV-CTR-002；Handler 不得自行解析或验证 Session。
 - 所有响应设置 Cache-Control: no-store、X-Content-Type-Options: nosniff。
 - 所有错误按 PLAT-CTR-001 投影，不回显 SQL 错误、内部栈、Cookie、CSRF Token、Authorization Header 或请求凭据。

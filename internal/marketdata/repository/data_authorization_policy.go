@@ -8,11 +8,11 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"example.com/stock-analysis-flow/internal/marketdata/app"
 	"example.com/stock-analysis-flow/internal/marketdata/authorization"
+	"example.com/stock-analysis-flow/internal/platform/observability"
 )
 
 var _ app.DataAuthorizationPolicyRepository = (*Store)(nil)
@@ -34,7 +34,7 @@ func (s *Store) PublishDataAuthorizationPolicyVersion(
 	if _, err := authorization.DecodePolicyVersion(value); err != nil {
 		return err
 	}
-	if audit.ActorRef != "principal:owner" || !validDataPolicyAuditRequestID(audit.RequestID) ||
+	if audit.ActorRef != "principal:owner" || !observability.ValidRequestID(audit.RequestID) ||
 		audit.OccurredAt.IsZero() || audit.OccurredAt.Location() != time.UTC {
 		return authorization.ErrPolicyInvalid
 	}
@@ -125,20 +125,6 @@ func nullablePolicyVersion(value string) any {
 		return nil
 	}
 	return value
-}
-
-func validDataPolicyAuditRequestID(value string) bool {
-	if value == "" || len(value) > 128 {
-		return false
-	}
-	for _, char := range value {
-		if (char >= 'a' && char <= 'z') || (char >= 'A' && char <= 'Z') ||
-			(char >= '0' && char <= '9') || strings.ContainsRune("._:-", char) {
-			continue
-		}
-		return false
-	}
-	return true
 }
 
 func (s *Store) ResolveCurrentDataAuthorizationPolicy(ctx context.Context) (authorization.CurrentPolicy, error) {
