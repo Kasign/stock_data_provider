@@ -134,3 +134,11 @@ Quant 不在 `internal/quant/**` 实现 SQL/Redis、通用 Storage、认证、�
 
 
 - 补充边界：结果持久化步骤已收敛为 Quant Application 包内私有 `resultPersister`，不向 Server/Researchflow 暴露为独立业务用例；未来必须由具备可信 Caller、正式 Registry、真实输入门禁和幂等语义的 QNT-014 Facade 调用。
+
+
+## 2026-11-23 QNT-013 授权撤销一致性推进
+
+- 已建立 `ResultAccessPolicyReadGuard`，通过 Quant Policy Head 行锁把当前策略读取与授权读取回调绑定在同一线性化区间。
+- Publish/Revoke 和受保护读取争用同一 Head 行锁；撤销在读取回调结束前不能提交。MariaDB 集成测试覆盖“读持锁期间撤销等待、读完成后撤销推进版本”。
+- 该 Guard 是生产 Reader 的基础构件，不是 Reader 本身。当前仍缺 Researchflow 对外 Run-result 强类型关联 Port 和不可变关联约束，不能用跨模块任意 SQL 或主体级 Allow 替代。
+- 后续：先完成当前 SHA 的 Quant Fuzz/Race/Vet 与全仓 Go/Integration CI；然后基于 Researchflow 正式关联 Port 实现 AuthorizedResultReader，并确保策略锁覆盖关联检查与结果读取；再补审计失败、跨 Run、无关联、撤销竞态和 Server 装配验收。Q-01 未完成前不进入 Data D2。
