@@ -104,14 +104,7 @@
   },
   "$defs": {
     "quality_status": {
-      "type": "string",
-      "enum": [
-        "valid",
-        "degraded",
-        "stale",
-        "invalid",
-        "unknown"
-      ]
+      "const": "valid"
     },
     "decimal": {
       "type": "string",

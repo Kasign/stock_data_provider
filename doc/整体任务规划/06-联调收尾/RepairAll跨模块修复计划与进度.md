@@ -1017,3 +1017,10 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - Build/Verify 同时检查 schema 版本、purpose、caller_ref、来源绑定、PIT 时间边界、Calendar/coverage、Exact Close Evidence 和三份指纹；返回值对 Payload/来源指针做深拷贝，避免调用方修改原输入后改变已构建 Snapshot。
 - 新增 Manifest 指纹测试：Manifest 改变时 PayloadFingerprint 保持不变但 SnapshotRef 改变；Payload 改变时 ManifestFingerprint 保持不变但 SnapshotRef 改变；同时覆盖篡改、PIT as_of、调用主体和用途拒绝。
 - 当前仍未实现 Migration V6、不可变 Snapshot Repository、Data Owner 授权签发/撤销复核、Server 注入和 Quant 消费者；真实 MariaDB PIT Payload Golden 也未生成。因此此阶段只是 Snapshot 计算/校验层，不宣称生产闭环完成。
+
+
+## 2026-11-23 Snapshot 生产服务实施进度
+
+- 已从 `repair_all` 最新基线启动 Data Snapshot 生产服务修复。首个实际缺陷为 Close Series Payload 质量准入过宽：现已要求首批 SMA Snapshot 的聚合质量和每条 Bar 质量必须为 `valid`，并同步 DATA-CTR-007 Schema 与拒绝测试。
+- 当前仅完成质量门禁子项，未宣称 Snapshot 生产服务完成。后续按真实依赖顺序处理 Payload/Manifest Golden 与 Validator、Migration V6 不可变 Repository、Data Owner 授权和 Server 装配，再接 Quant。
+- 本轮不触发 Live Provider Probe；真实历史数据 Golden 仍需从现有 MariaDB PIT Reader 物化，不能使用合成样本冒充。

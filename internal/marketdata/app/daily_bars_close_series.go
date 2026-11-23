@@ -124,9 +124,9 @@ func BuildDailyBarsCloseSeriesInput(query DailyBarsQuery, snapshot DailyBarsV2Sn
 	if len(snapshot.Bars) < coverage.MinimumRequiredBars {
 		return DailyBarsCloseSeriesInput{}, fmt.Errorf("daily-bars close snapshot has %d bars; coverage requires at least %d", len(snapshot.Bars), coverage.MinimumRequiredBars)
 	}
-	if !validDailyBarsCloseSeriesQualityStatus(snapshot.QualityStatus) {
-		return DailyBarsCloseSeriesInput{}, errors.New("daily-bars snapshot quality status is invalid")
-	}
+	if snapshot.QualityStatus != QualityValid {
+		return DailyBarsCloseSeriesInput{}, fmt.Errorf("daily-bars snapshot quality %q is not admissible for the first SMA input; valid is required", snapshot.QualityStatus)
+}
 	payloadWarnings, err := canonicalDailyBarsCloseSeriesStringSet(snapshot.Warnings)
 	if err != nil {
 		return DailyBarsCloseSeriesInput{}, fmt.Errorf("snapshot warnings: %w", err)
@@ -172,8 +172,8 @@ func BuildDailyBarsCloseSeriesInput(query DailyBarsQuery, snapshot DailyBarsV2Sn
 		if bar.Source != dailyBarsCloseSeriesSourceEastmoney || bar.SourceVersion != dailyBarsCloseSeriesEastmoneyAPIVersion {
 			return DailyBarsCloseSeriesInput{}, fmt.Errorf("daily-bars close snapshot source %q/version %q is not an explicitly supported source interface", bar.Source, bar.SourceVersion)
 		}
-		if !validDailyBarsCloseSeriesQualityStatus(bar.QualityStatus) {
-			return DailyBarsCloseSeriesInput{}, fmt.Errorf("daily-bars close snapshot bar %d has an invalid quality status", index)
+		if bar.QualityStatus != QualityValid {
+			return DailyBarsCloseSeriesInput{}, fmt.Errorf("daily-bars close snapshot bar %d quality %q is not admissible for the first SMA input; valid is required", index, bar.QualityStatus)
 		}
 		if strings.TrimSpace(bar.NormalizationVersion) == "" {
 			return DailyBarsCloseSeriesInput{}, fmt.Errorf("daily-bars close snapshot bar %d has no normalization version", index)
@@ -293,15 +293,6 @@ func canonicalDailyBarsCloseSeriesStringSet(values []string) ([]string, error) {
 		return []string{}, nil
 	}
 	return unique, nil
-}
-
-func validDailyBarsCloseSeriesQualityStatus(value QualityStatus) bool {
-	switch value {
-	case QualityValid, QualityDegraded, QualityStale, QualityInvalid, QualityUnknown:
-		return true
-	default:
-		return false
-	}
 }
 
 func cloneDailyBarsCloseSeriesInt(value *int) *int {

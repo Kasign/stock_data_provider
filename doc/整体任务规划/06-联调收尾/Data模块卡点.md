@@ -376,3 +376,12 @@ Root Server 的 Data Module 构造、共享资源注入、Migration Registry、I
 - Build/Verify 同时检查 schema 版本、purpose、caller_ref、来源绑定、PIT 时间边界、Calendar/coverage、Exact Close Evidence 和三份指纹；返回值对 Payload/来源指针做深拷贝，避免调用方修改原输入后改变已构建 Snapshot。
 - 新增 Manifest 指纹测试：Manifest 改变时 PayloadFingerprint 保持不变但 SnapshotRef 改变；Payload 改变时 ManifestFingerprint 保持不变但 SnapshotRef 改变；同时覆盖篡改、PIT as_of、调用主体和用途拒绝。
 - 当前仍未实现 Migration V6、不可变 Snapshot Repository、Data Owner 授权签发/撤销复核、Server 注入和 Quant 消费者；真实 MariaDB PIT Payload Golden 也未生成。因此此阶段只是 Snapshot 计算/校验层，不宣称生产闭环完成。
+
+
+## 2026-11-23 Snapshot 生产服务启动：首批 SMA 质量准入门禁
+
+- 在 `repair_all` HEAD `958f595254baafb04602336464cdc6e1a73e0a06` 上确认：Close Series Builder 原先只校验 QualityStatus 是否属于合法枚举，未限制正式 SMA 输入必须达到 `valid`；Payload Verify 存在同样宽松边界。
+- 已将首批 `daily_bars_close_series` Payload 的聚合质量和逐 Bar 质量统一收紧为 `valid`。`degraded`、`stale`、`invalid`、`unknown` 均拒绝进入首批正式 SMA Snapshot；不改变 Data 通用日线读取对降级数据的既有处理。
+- DATA-CTR-007 Payload Schema 同步收紧为 `quality_status: const valid`，使 Builder、Verify 和机器契约一致。
+- 增加 Builder 对聚合及逐 Bar 四类非 valid 状态的拒绝测试，并增加已构建 Snapshot 被改成 degraded 后 Verify 拒绝的测试。
+- 本项是 Snapshot 生产服务的第一项代码修复；尚未实现 Snapshot Repository、Migration V6、Data Owner 授权或 Server Snapshot Port。Schema/Golden 的真实数据一致性与消费者契约验收仍待完成，不将现有草案视为冻结契约。

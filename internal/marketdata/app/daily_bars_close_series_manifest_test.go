@@ -52,6 +52,19 @@ func TestDailyBarsCloseSeriesSnapshotRejectsTampering(t *testing.T) {
 	if err := asOfTampered.Verify(); err == nil {
 		t.Fatal("Verify() accepted bars observed after system_as_of")
 	}
+
+	degradedSnapshot := snapshot
+	degradedSnapshot.Payload.QualityStatus = QualityDegraded
+	if err := degradedSnapshot.Verify(); err == nil {
+		t.Fatal("Verify() accepted a degraded aggregate quality status")
+	}
+
+	degradedBarSnapshot := snapshot
+	degradedBarSnapshot.Payload.Bars = append([]DailyBarsCloseSeriesBar(nil), snapshot.Payload.Bars...)
+	degradedBarSnapshot.Payload.Bars[0].QualityStatus = QualityDegraded
+	if err := degradedBarSnapshot.Verify(); err == nil {
+		t.Fatal("Verify() accepted a degraded bar quality status")
+	}
 }
 
 func TestDailyBarsCloseSeriesSnapshotFingerprintsBindManifestAndPayload(t *testing.T) {

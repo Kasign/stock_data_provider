@@ -200,8 +200,8 @@ func validateDailyBarsCloseSeriesPayload(payload DailyBarsCloseSeriesPayload) er
 		len(payload.Bars) < payload.CoverageEvidence.MinimumRequiredBars {
 		return errors.New("daily-bars close series payload lacks valid calendar coverage")
 	}
-	if !validDailyBarsCloseSeriesQualityStatus(payload.QualityStatus) {
-		return errors.New("daily-bars close series payload quality status is invalid")
+	if payload.QualityStatus != QualityValid {
+		return fmt.Errorf("daily-bars close series payload quality %q is not admissible for the first SMA input; valid is required", payload.QualityStatus)
 	}
 	if _, err := canonicalDailyBarsCloseSeriesStringSet(payload.Warnings); err != nil {
 		return fmt.Errorf("daily-bars close series payload warnings: %w", err)
@@ -219,7 +219,7 @@ func validateDailyBarsCloseSeriesPayload(payload DailyBarsCloseSeriesPayload) er
 		if bar.SourceRef != dailyBarsCloseSeriesSourceEastmoney || !validDailyBarsCloseSeriesNonBlank(bar.NormalizationVersion) {
 			return fmt.Errorf("daily-bars close series payload bar %d source or normalization version is invalid", index)
 		}
-		if !validDailyBarsCloseSeriesQualityStatus(bar.QualityStatus) ||
+		if bar.QualityStatus != QualityValid ||
 			!validCanonicalCloseSeriesUTC(bar.FetchedAt) || !validCanonicalCloseSeriesUTC(bar.NormalizedAt) ||
 			bar.SystemObservedAt == nil || !validCanonicalCloseSeriesUTC(*bar.SystemObservedAt) {
 			return fmt.Errorf("daily-bars close series payload bar %d quality or PIT timestamp is invalid", index)

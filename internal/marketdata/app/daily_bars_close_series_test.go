@@ -102,6 +102,14 @@ func TestBuildDailyBarsCloseSeriesInputRejectsUntrustedInputs(t *testing.T) {
 		{name: "degraded calendar", mutate: func(s *DailyBarsV2Snapshot, _ *DailyBarsQuery) {
 			s.CoverageEvidence.CalendarQualityStatus = QualityDegraded
 		}},
+		{name: "degraded aggregate quality", mutate: func(s *DailyBarsV2Snapshot, _ *DailyBarsQuery) { s.QualityStatus = QualityDegraded }},
+		{name: "stale aggregate quality", mutate: func(s *DailyBarsV2Snapshot, _ *DailyBarsQuery) { s.QualityStatus = QualityStale }},
+		{name: "invalid aggregate quality", mutate: func(s *DailyBarsV2Snapshot, _ *DailyBarsQuery) { s.QualityStatus = QualityInvalid }},
+		{name: "unknown aggregate quality", mutate: func(s *DailyBarsV2Snapshot, _ *DailyBarsQuery) { s.QualityStatus = QualityUnknown }},
+		{name: "degraded bar quality", mutate: func(s *DailyBarsV2Snapshot, _ *DailyBarsQuery) { s.Bars[0].QualityStatus = QualityDegraded }},
+		{name: "stale bar quality", mutate: func(s *DailyBarsV2Snapshot, _ *DailyBarsQuery) { s.Bars[0].QualityStatus = QualityStale }},
+		{name: "invalid bar quality", mutate: func(s *DailyBarsV2Snapshot, _ *DailyBarsQuery) { s.Bars[0].QualityStatus = QualityInvalid }},
+		{name: "unknown bar quality", mutate: func(s *DailyBarsV2Snapshot, _ *DailyBarsQuery) { s.Bars[0].QualityStatus = QualityUnknown }},
 		{name: "insufficient coverage", mutate: func(s *DailyBarsV2Snapshot, _ *DailyBarsQuery) { s.CoverageEvidence.CoverageSufficient = false }},
 		{name: "float-only close", mutate: func(s *DailyBarsV2Snapshot, _ *DailyBarsQuery) { s.Bars[0].ExactValues = nil }},
 		{name: "source version is not mapped", mutate: func(s *DailyBarsV2Snapshot, _ *DailyBarsQuery) { s.Bars[0].SourceVersion = "eastmoney-stock-api-v2" }},
