@@ -14,9 +14,9 @@ import (
 )
 
 type dataPolicyOwnerRepositoryFake struct {
-	current   authorization.CurrentPolicy
-	published []authorization.PolicyVersion
-	err       error
+	current      authorization.CurrentPolicy
+	published    []authorization.PolicyVersion
+	err          error
 	afterPublish func(*dataPolicyOwnerRepositoryFake)
 	resolveCalls int
 }
@@ -108,7 +108,6 @@ func TestDataAuthorizationPolicyOwnerPublishesWithExpectedVersion(t *testing.T) 
 		t.Fatalf("unexpected second policy: %+v", current)
 	}
 }
-
 
 func TestDataAuthorizationPolicyOwnerReturnsPublishedVersionWhenCurrentPointerAdvances(t *testing.T) {
 	now := time.Date(2026, 11, 23, 10, 0, 0, 0, time.UTC)
