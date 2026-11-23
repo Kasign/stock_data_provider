@@ -1044,3 +1044,13 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - Data Owner 已开始独立实现：新增 Data Access Policy 类型与最小策略评估规则，要求显式 subject/purpose/scope allow-list，且策略有效期/状态必须通过校验。
 - Data Migration V7 增加不可变策略版本表与当前策略指针表，版本保存与指针切换事务化；不写默认允许策略，未发布策略时保持拒绝。
 - 下一步完成策略读取原子性、Data AuthorizationRef/PolicySnapshot 签发与不可变授权记录，再接 Snapshot Application。
+
+
+## 2026-11-23 Data Owner 策略发布并发返回语义修复
+
+- 最新基线：`repair_all` SHA `766bb0292d2daba2d70876b632803db69a554b7b`；Go Test Suite [45172688942](https://github.com/Kasign/stock_data_provider/actions/runs/45172688942) 与 Integration CI [45172688886](https://github.com/Kasign/stock_data_provider/actions/runs/45172688886) 均 completed / success。
+- Review 发现 DataAuthorizationPolicyOwner.Publish 在 CAS 发布成功后重新读取 current pointer 作为返回值。若另一发布者在其后立即推进指针，本次发布已成功却会因当前版本不再等于本次版本而错误返回 unavailable。
+- 修复为直接返回本次已通过 DecodePolicyVersion 校验并成功持久化的不可变 PolicyVersion/Policy；不再进行发布后的 current pointer 查询。Current() 仍负责读取真正的当前版本。
+- 增加并发回归测试，模拟 CAS 成功后 current pointer 被下一发布者推进，验证本次 Publish 仍返回本次版本，且不二次读取 current pointer。
+- 本修复只调整发布返回语义，不改变 CAS、策略授权、版本不可复用或默认拒绝规则。新 SHA 的 CI 尚待运行。
+- 下一步：冻结 Data Owner 策略管理的最小 Server HTTP 契约前，继续核对 Data 策略对象的管理动作边界和现有 Owner Session 安全约束；不直接复制 Quant 策略路由，也不提前暴露未经契约定义的管理 API。

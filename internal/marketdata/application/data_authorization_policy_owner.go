@@ -101,7 +101,8 @@ func (owner *DataAuthorizationPolicyOwner) Publish(
 		PayloadHash:   hex.EncodeToString(sum[:]),
 		CreatedAt:     createdAt,
 	}
-	if _, err := authorization.DecodePolicyVersion(version); err != nil {
+	publishedPolicy, err := authorization.DecodePolicyVersion(version)
+	if err != nil {
 		return authorization.CurrentPolicy{}, ErrDataPolicyInvalidChange
 	}
 	if err := owner.repository.PublishDataAuthorizationPolicyVersion(ctx, expectedCurrentVersion, version); err != nil {
@@ -113,12 +114,12 @@ func (owner *DataAuthorizationPolicyOwner) Publish(
 		}
 		return authorization.CurrentPolicy{}, ErrDataPolicyOwnerUnavailable
 	}
-	current, err := owner.repository.ResolveCurrentDataAuthorizationPolicy(ctx)
-	if err != nil || current.Version.PolicyVersion != newVersion ||
-		current.Version.PayloadHash != version.PayloadHash {
-		return authorization.CurrentPolicy{}, ErrDataPolicyOwnerUnavailable
-	}
-	return cloneCurrentDataPolicy(current), nil
+	// 返回本次 CAS 实际发布的不可变版本；不能重新读取 current pointer，
+	// 否则并发发布下一版本时会把已成功的本次发布误报为失败。
+	return cloneCurrentDataPolicy(authorization.CurrentPolicy{
+		Version: version,
+		Policy:  publishedPolicy,
+	}), nil
 }
 
 func requireDataPolicyOwnerSession(ctx context.Context) error {

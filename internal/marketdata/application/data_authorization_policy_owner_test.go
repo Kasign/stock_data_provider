@@ -17,6 +17,8 @@ type dataPolicyOwnerRepositoryFake struct {
 	current   authorization.CurrentPolicy
 	published []authorization.PolicyVersion
 	err       error
+	afterPublish func(*dataPolicyOwnerRepositoryFake)
+	resolveCalls int
 }
 
 func (fake *dataPolicyOwnerRepositoryFake) PublishDataAuthorizationPolicyVersion(
@@ -34,10 +36,14 @@ func (fake *dataPolicyOwnerRepositoryFake) PublishDataAuthorizationPolicyVersion
 		return err
 	}
 	fake.current = authorization.CurrentPolicy{Version: version, Policy: policy}
+	if fake.afterPublish != nil {
+		fake.afterPublish(fake)
+	}
 	return nil
 }
 
 func (fake *dataPolicyOwnerRepositoryFake) ResolveCurrentDataAuthorizationPolicy(context.Context) (authorization.CurrentPolicy, error) {
+	fake.resolveCalls++
 	if fake.err != nil {
 		return authorization.CurrentPolicy{}, fake.err
 	}
@@ -100,6 +106,39 @@ func TestDataAuthorizationPolicyOwnerPublishesWithExpectedVersion(t *testing.T) 
 	}
 	if current.Version.PolicyVersion != "policy-v2" || current.Policy.Status != authorization.PolicyRestricted {
 		t.Fatalf("unexpected second policy: %+v", current)
+	}
+}
+
+
+func TestDataAuthorizationPolicyOwnerReturnsPublishedVersionWhenCurrentPointerAdvances(t *testing.T) {
+	now := time.Date(2026, 11, 23, 10, 0, 0, 0, time.UTC)
+	repository := &dataPolicyOwnerRepositoryFake{}
+	repository.afterPublish = func(fake *dataPolicyOwnerRepositoryFake) {
+		// 模拟本次 CAS 提交后，另一个 Owner 紧接着推进 current pointer。
+		fake.current.Version.PolicyVersion = "policy-v2"
+		fake.current.Policy.Status = authorization.PolicyRestricted
+	}
+	owner, err := NewDataAuthorizationPolicyOwner(repository)
+	if err != nil {
+		t.Fatal(err)
+	}
+	owner.now = func() time.Time { return now }
+
+	published, err := owner.Publish(
+		dataPolicyOwnerContext(t, security.AuthMethodOwnerSession),
+		"", "policy-v1", validDataAccessPolicy(now),
+	)
+	if err != nil {
+		t.Fatalf("Publish() returned error after a concurrent pointer advance: %v", err)
+	}
+	if published.Version.PolicyVersion != "policy-v1" || published.Policy.Status != authorization.PolicyApproved {
+		t.Fatalf("Publish() returned a later current policy instead of its own version: %+v", published)
+	}
+	if repository.current.Version.PolicyVersion != "policy-v2" {
+		t.Fatalf("fake current pointer = %q, want policy-v2", repository.current.Version.PolicyVersion)
+	}
+	if repository.resolveCalls != 0 {
+		t.Fatalf("Publish() re-read current pointer %d times, want 0", repository.resolveCalls)
 	}
 }
 
