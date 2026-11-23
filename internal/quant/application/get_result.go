@@ -18,10 +18,10 @@ import (
 )
 
 const (
-	quantPurposeCode              = "quant_analysis"
-	quantContentLevel             = "full"
-	quantResultAccessPolicyType   = "quant_result_access"
-	quantResultAccessPolicyRef    = "quant-result-access"
+	quantPurposeCode            = "quant_analysis"
+	quantContentLevel           = "full"
+	quantResultAccessPolicyType = "quant_result_access"
+	quantResultAccessPolicyRef  = "quant-result-access"
 )
 
 var (
