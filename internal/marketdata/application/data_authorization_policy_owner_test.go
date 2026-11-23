@@ -46,9 +46,13 @@ func (fake *dataPolicyOwnerRepositoryFake) ResolveCurrentDataAuthorizationPolicy
 
 func dataPolicyOwnerContext(t *testing.T, method security.AuthMethod) context.Context {
 	t.Helper()
-	ctx, err := security.WithPrincipal(context.Background(), security.Principal{
+	principal := security.Principal{
 		Kind: security.IdentityOwner, AuthMethod: method, Subject: "owner",
-	})
+	}
+	if method == security.AuthMethodOwnerBearer {
+		principal.Scopes = []string{security.ScopePlatformAdmin}
+	}
+	ctx, err := security.WithPrincipal(context.Background(), principal)
 	if err != nil {
 		t.Fatal(err)
 	}
