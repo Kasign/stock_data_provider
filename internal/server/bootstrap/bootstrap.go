@@ -89,7 +89,7 @@ func Run(ctx context.Context) (runErr error) {
 
 	var authenticator *platformsecurity.Authenticator
 	if serverRole != serverconfig.RoleWorker {
-		authenticator, err = platformsecurity.NewAuthenticator(processConfig.Security.OwnerToken, nil)
+		authenticator, err = platformsecurity.NewAuthenticator(processConfig.Security.OwnerToken, processConfig.Security.ServiceCredentials)
 		if err != nil {
 			return fmt.Errorf("创建 HTTP 认证器失败: %w", err)
 		}
