@@ -209,6 +209,10 @@ func TestMariaDBDataAuthorizationPolicyVersionsAreImmutableAndCurrent(t *testing
 		t.Fatalf("validate Data schema: %v", err)
 	}
 
+	if _, err := store.ResolveCurrentDataAuthorizationPolicy(ctx); !errors.Is(err, app.ErrDataAuthorizationPolicyNotPublished) {
+		t.Fatalf("missing current policy must be reported as not-published, got %v", err)
+	}
+
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	version := fmt.Sprintf("integration-%d", now.UnixNano())
 	policy := authorization.DataAccessPolicy{
