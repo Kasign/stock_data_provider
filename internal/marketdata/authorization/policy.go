@@ -11,8 +11,8 @@ import (
 )
 
 const (
-	DataAccessPolicyType        = "data_access"
-	DailyBarsV2PolicyRef        = "dailybars-v2-access"
+	DataAccessPolicyType          = "data_access"
+	DailyBarsV2PolicyRef          = "dailybars-v2-access"
 	DataAccessPolicySchemaVersion = "1.0.0"
 )
 
