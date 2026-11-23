@@ -21,23 +21,23 @@ type researchflowHTTPHandler struct {
 }
 
 type researchflowRunResponse struct {
-	SchemaVersion        string                         `json:"schema_version"`
-	RunRef               string                         `json:"run_ref"`
-	Status               researchflowdomain.RunStatus   `json:"status"`
-	Version              uint64                         `json:"version"`
-	SystemAsOf           time.Time                      `json:"system_as_of"`
-	DeadlineAt           time.Time                      `json:"deadline_at"`
-	TemplateRef          string                         `json:"template_ref"`
-	TemplateVersion      string                         `json:"template_version"`
-	TemplateFingerprint  string                         `json:"template_fingerprint"`
-	InputSnapshotRefs    []string                       `json:"input_snapshot_refs"`
-	ResultSummaryRef     *string                        `json:"result_summary_ref"`
-	OriginatingRequestID *string                        `json:"originating_request_id"`
-	CorrelationID        string                         `json:"correlation_id"`
-	TerminationReason    *string                        `json:"termination_reason"`
-	CreatedAt            time.Time                      `json:"created_at"`
-	StartedAt            *time.Time                     `json:"started_at"`
-	FinishedAt           *time.Time                     `json:"finished_at"`
+	SchemaVersion        string                       `json:"schema_version"`
+	RunRef               string                       `json:"run_ref"`
+	Status               researchflowdomain.RunStatus `json:"status"`
+	Version              uint64                       `json:"version"`
+	SystemAsOf           time.Time                    `json:"system_as_of"`
+	DeadlineAt           time.Time                    `json:"deadline_at"`
+	TemplateRef          string                       `json:"template_ref"`
+	TemplateVersion      string                       `json:"template_version"`
+	TemplateFingerprint  string                       `json:"template_fingerprint"`
+	InputSnapshotRefs    []string                     `json:"input_snapshot_refs"`
+	ResultSummaryRef     *string                      `json:"result_summary_ref"`
+	OriginatingRequestID *string                      `json:"originating_request_id"`
+	CorrelationID        string                       `json:"correlation_id"`
+	TerminationReason    *string                      `json:"termination_reason"`
+	CreatedAt            time.Time                    `json:"created_at"`
+	StartedAt            *time.Time                   `json:"started_at"`
+	FinishedAt           *time.Time                   `json:"finished_at"`
 }
 
 type researchflowStageResponse struct {
@@ -74,8 +74,8 @@ func newResearchflowHTTPHandler(owner *ownerSessionComposition) (http.Handler, e
 	}
 	handler := &researchflowHTTPHandler{
 		authenticator: owner.authenticator,
-		cookieName:  owner.cookie.Name,
-		composition: owner.researchflow,
+		cookieName:    owner.cookie.Name,
+		composition:   owner.researchflow,
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /api/v1/researchflow/runs", handler.create)
@@ -299,4 +299,3 @@ func nonEmptyResearchflowString(value string) *string {
 	copy := value
 	return &copy
 }
-
