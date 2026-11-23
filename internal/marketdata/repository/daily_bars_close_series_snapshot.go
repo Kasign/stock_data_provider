@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"example.com/stock-analysis-flow/internal/marketdata/app"
+	"example.com/stock-analysis-flow/internal/marketdata/application"
 	"github.com/gowebpki/jcs"
 )
 
@@ -21,7 +22,7 @@ var (
 	ErrDailyBarsCloseSeriesSnapshotConflict = errors.New("market-data close-series snapshot content conflict")
 )
 
-var _ app.DailyBarsCloseSeriesSnapshotRepository = (*Store)(nil)
+var _ application.DailyBarsCloseSeriesSnapshotRepository = (*Store)(nil)
 
 // SaveDailyBarsCloseSeriesSnapshot 以 SnapshotRef 为主键保存完整查询结果。
 // 重复写入保持幂等；已存在记录不会被覆盖，内容不一致时返回冲突。
