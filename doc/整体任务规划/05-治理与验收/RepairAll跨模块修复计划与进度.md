@@ -849,3 +849,14 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - 当前生产 Researchflow composition 只装配 News Search Stage，没有 Quant Stage Provider；因此不能以通用 output_ref、resource_ref 或 JSON 猜测构造 Run→QuantResult 授权关联。
 - 下一步 Q-01 必须先明确 Quant Stage 的强类型输出契约：Provider 成功返回的 Quant Result ID 必须与已验证的 Quant Result Envelope 一致，并在 Researchflow 完成 Attempt/Stage 的同一事务中写入不可变 Run→QuantResult 关联；之后 Quant Reader 才能在策略 head 行锁定的一致性事务中校验该关联、读取不可变结果并签发 GOV-CTR-006 授权证据。
 - Q-01 未完成前不进入 Data D2。
+
+
+## 42. 2026-11-23 QNT-013 / Q-01 结果生产入口基础能力
+
+- 本轮只推进第一批 QNT-013 / Q-01，没有进入 Data D2。
+- 新增 Quant 强类型结果记录构造与 Application CreateResult，用现有不可变 Quant Repository 持久化，不增加平行存储。
+- 对 Trend/Risk Payload 与 Manifest 的关键元数据一致性增加 fail-closed 校验，并覆盖无效 discriminator、元数据不一致、取消、存储失败测试。
+- 代码验收 SHA：`c1f1b294a0d5e41756d058bf4910464e8eefaffd`。Quant 专项验收 [45107613322](https://github.com/Kasign/stock_data_provider/actions/runs/45107613322)、Go test suite [45107613321](https://github.com/Kasign/stock_data_provider/actions/runs/45107613321)、Integration CI [45107613334](https://github.com/Kasign/stock_data_provider/actions/runs/45107613334) 均 success。
+- 代码提交：`4efce013`（BuildRecord）、`2c36b51d`（CreateResult）、`50a1ad2c`（测试）、`978b5b88`（格式修正）、`9ee20f0f`（载荷与 Manifest 元数据一致性）、`c1f1b294`（一致性测试）。
+- 该基础用例尚无真实 Trend/Risk 生产算法调用；Researchflow 尚无 Quant Stage Provider/Registry Entry，故 Run→QuantResult 关联和生产授权读取仍未完成。
+- 后续顺序：先核实 Quant 现有领域算法是否具备可调用的正式生产入口；只在有真实算法调用的前提下接入 CreateResult 与 Quant Stage Provider；Researchflow 用精确 Stage Output Registry 校验并在现有 Attempt 事务中持久化 result_id；随后接通关联只读 Port、Quant AuthorizedResultReader、策略撤销一致性和 Server 装配。所有步骤仍受同 Run/跨 Run/无关联/撤销竞态/审计失败测试约束。
