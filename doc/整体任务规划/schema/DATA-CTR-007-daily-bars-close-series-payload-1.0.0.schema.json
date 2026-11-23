@@ -253,18 +253,24 @@
           "$ref": "#/$defs/date_time_utc"
         },
         "provider_time": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "format": "date-time"
+          "oneOf": [
+            {
+              "$ref": "#/$defs/date_time_utc"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "system_observed_at": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "format": "date-time"
+          "oneOf": [
+            {
+              "$ref": "#/$defs/date_time_utc"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "quality_status": {
           "$ref": "#/$defs/quality_status"
