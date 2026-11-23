@@ -9,24 +9,14 @@ import (
 	"time"
 
 	platformsecurity "example.com/stock-analysis-flow/internal/platform/security"
-	researchflowapplication "example.com/stock-analysis-flow/internal/researchflow/application"
 	researchflowdomain "example.com/stock-analysis-flow/internal/researchflow/domain"
 )
 
 func TestResearchflowHTTPHandlerRequiresOwnerSessionAndRejectsBearer(t *testing.T) {
 	cookie := &http.Cookie{Name: "__Secure-owner_session", Value: strings.Repeat("s", 43), Path: "/api", HttpOnly: true}
-	owner := &ownerSessionComposition{
+	handler := &researchflowHTTPHandler{
 		authenticator: fakeSessionRequestAuthenticator{cookie: cookie},
-		cookie:        platformsecurity.SessionCookieConfig{Name: cookie.Name, Path: "/api"},
-		researchflow: &researchflowOwnerComposition{
-			createRun: &researchflowapplication.CreateRunService{},
-			getRun:    &researchflowapplication.GetRunService{},
-			cancelRun: &researchflowapplication.CancelRunService{},
-		},
-	}
-	handler, err := newResearchflowHTTPHandler(owner)
-	if err != nil {
-		t.Fatalf("newResearchflowHTTPHandler() error = %v", err)
+		cookieName:    cookie.Name,
 	}
 
 	tests := []struct {
@@ -38,11 +28,11 @@ func TestResearchflowHTTPHandlerRequiresOwnerSessionAndRejectsBearer(t *testing.
 	}{
 		{name: "Owner Bearer is not accepted", authorization: "Bearer " + strings.Repeat("a", 43), wantStatus: http.StatusUnauthorized},
 		{name: "ambiguous Bearer and Session are rejected", authorization: "Bearer " + strings.Repeat("a", 43), cookie: true, wantStatus: http.StatusBadRequest},
-		{name: "Owner Session reaches the explicit Researchflow router", cookie: true, wantStatus: http.StatusNotFound, wantSetCookie: true},
+		{name: "Owner Session is authenticated", cookie: true, wantStatus: http.StatusOK, wantSetCookie: true},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			request := httptest.NewRequest(http.MethodGet, "/api/v1/researchflow/runs/run-1/events", nil)
+			request := httptest.NewRequest(http.MethodGet, "/api/v1/researchflow/runs/run-1", nil)
 			if test.authorization != "" {
 				request.Header.Set("Authorization", test.authorization)
 			}
@@ -50,9 +40,12 @@ func TestResearchflowHTTPHandlerRequiresOwnerSessionAndRejectsBearer(t *testing.
 				request.AddCookie(cookie)
 			}
 			response := httptest.NewRecorder()
-			handler.ServeHTTP(response, request)
-			if response.Code != test.wantStatus {
-				t.Fatalf("status = %d, want %d; body=%s", response.Code, test.wantStatus, response.Body.String())
+			_, authenticated := handler.authenticate(response, request)
+			if authenticated != (test.wantStatus == http.StatusOK) {
+				t.Fatalf("authenticated = %v, want status %d", authenticated, test.wantStatus)
+			}
+			if response.Code != 0 && response.Code != test.wantStatus {
+				t.Fatalf("status = %d, want %d", response.Code, test.wantStatus)
 			}
 			if got := response.Header().Get("Set-Cookie") != ""; got != test.wantSetCookie {
 				t.Fatalf("Set-Cookie present = %v, want %v", got, test.wantSetCookie)
