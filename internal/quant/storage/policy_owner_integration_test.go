@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
-	"strings"
 
 	"example.com/stock-analysis-flow/internal/quant/application"
 )
