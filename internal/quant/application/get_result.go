@@ -20,6 +20,7 @@ import (
 const (
 	quantPurposeCode            = "quant_analysis"
 	quantContentLevel           = "full"
+	quantResearchflowPrincipal  = "service:researchflow"
 	quantResultAccessPolicyType = "quant_result_access"
 	quantResultAccessPolicyRef  = "quant-result-access"
 )
@@ -221,6 +222,12 @@ func (usecase *GetResult) Execute(ctx context.Context, runRef, resultID string) 
 	request := ReadRequest{
 		RunRef: runRef, SubjectRef: principal.SubjectRef, ResourceRef: resultID,
 		PurposeCode: quantPurposeCode, ContentLevel: quantContentLevel, At: now,
+	}
+	if request.SubjectRef != quantResearchflowPrincipal {
+		if auditErr := usecase.recordAudit(ctx, request, "denied", "principal_not_authorized", nil, nil); auditErr != nil {
+			return result.Envelope{}, auditErr
+		}
+		return result.Envelope{}, ErrResultUnavailable
 	}
 	authorized, err := usecase.reader.ReadAuthorized(ctx, request)
 	if err != nil {

@@ -118,6 +118,31 @@ func TestGetResultReturnsValidatedAuthorizedEnvelope(t *testing.T) {
 	}
 }
 
+func TestGetResultRejectsNonResearchflowPrincipalBeforeReading(t *testing.T) {
+	now := time.Date(2026, 11, 9, 2, 0, 0, 0, time.UTC)
+	value := getResultFixture(t, now)
+	reader := &fixedReader{value: value}
+	auditor := &fixedAuditor{}
+	usecase, err := NewGetResult(reader, fixedPrincipal{principal: Principal{SubjectRef: "service:other"}}, auditor, func() time.Time { return now })
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := usecase.Execute(context.Background(), "run:researchflow:001", value.Record.Manifest.ResultID)
+	if !errors.Is(err, ErrResultUnavailable) || got.ResultID != "" || got.Payload != nil {
+		t.Fatalf("non-Researchflow principal must not receive a result: got=%+v err=%v", got, err)
+	}
+	if reader.calls != 0 {
+		t.Fatalf("authorized reader called for non-Researchflow principal: %d", reader.calls)
+	}
+	if len(auditor.events) != 1 || auditor.events[0].Decision != "denied" ||
+		auditor.events[0].ReasonCode != "principal_not_authorized" ||
+		auditor.events[0].SubjectRef != "service:other" ||
+		auditor.events[0].ResourceRef != value.Record.Manifest.ResultID {
+		t.Fatalf("principal denial audit mismatch: %+v", auditor.events)
+	}
+}
+
 func TestGetResultFailsClosedForInvalidAuthorization(t *testing.T) {
 	now := time.Date(2026, 11, 9, 2, 0, 0, 0, time.UTC)
 	tests := []struct {
