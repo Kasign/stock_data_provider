@@ -17,9 +17,9 @@ import (
 )
 
 var (
-	ErrDataAuthorizationDecisionInvalid = errors.New("market-data authorization decision invalid")
-	ErrDataAuthorizationDecisionConflict = errors.New("market-data authorization decision conflict")
-	ErrDataAuthorizationDecisionRevoked = errors.New("market-data authorization decision revoked")
+	ErrDataAuthorizationDecisionInvalid     = errors.New("market-data authorization decision invalid")
+	ErrDataAuthorizationDecisionConflict    = errors.New("market-data authorization decision conflict")
+	ErrDataAuthorizationDecisionRevoked     = errors.New("market-data authorization decision revoked")
 	ErrDataAuthorizationDecisionUnavailable = errors.New("market-data authorization decision unavailable")
 )
 
@@ -116,7 +116,9 @@ FROM market_data_authorization_decisions WHERE authorization_ref=?`, authorizati
 	if errors.Is(err, sql.ErrNoRows) {
 		return DataAuthorizationDecision{}, ErrDataAuthorizationDecisionInvalid
 	}
-	if err != nil { return DataAuthorizationDecision{}, fmt.Errorf("%w: %v", ErrDataAuthorizationDecisionUnavailable, err) }
+	if err != nil {
+		return DataAuthorizationDecision{}, fmt.Errorf("%w: %v", ErrDataAuthorizationDecisionUnavailable, err)
+	}
 	decision := DataAuthorizationDecision{AuthorizationRef: authJSON, PolicySnapshot: policyJSON}
 	ref, _, _, canonicalAuth, canonicalPolicy, recordHash, err := validateDataAuthorizationDecision(decision)
 	if err != nil || ref.AuthorizationRef != authorizationRef ||
@@ -128,7 +130,9 @@ FROM market_data_authorization_decisions WHERE authorization_ref=?`, authorizati
 	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM market_data_authorization_revocations WHERE authorization_ref=?`, authorizationRef).Scan(&revoked); err != nil {
 		return DataAuthorizationDecision{}, fmt.Errorf("%w: %v", ErrDataAuthorizationDecisionUnavailable, err)
 	}
-	if revoked != 0 { return DataAuthorizationDecision{}, ErrDataAuthorizationDecisionRevoked }
+	if revoked != 0 {
+		return DataAuthorizationDecision{}, ErrDataAuthorizationDecisionRevoked
+	}
 	return decision, nil
 }
 
