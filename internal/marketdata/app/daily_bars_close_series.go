@@ -35,15 +35,32 @@ type DailyBarsCloseSeriesPayload struct {
 	TradingCalendarRef string                  `json:"trading_calendar_ref"`
 	QualityStatus     QualityStatus            `json:"quality_status"`
 	Warnings          []string                 `json:"warnings"`
-	CoverageEvidence  DailyBarCoverageEvidence `json:"coverage_evidence"`
+	CoverageEvidence  DailyBarsCloseSeriesCoverageEvidence `json:"coverage_evidence"`
 	Bars              []DailyBarsCloseSeriesBar `json:"bars"`
 }
 
 // DailyBarsCloseSeriesBar 保留计算所需的精确收盘价及逐条来源/时点证据。
+type DailyBarsCloseSeriesDecimalEvidence struct {
+	EvidenceKind         string `json:"evidence_kind"`
+	SourceToken          string `json:"source_token,omitempty"`
+	SourceFractionDigits *int   `json:"source_fraction_digits,omitempty"`
+	ProtocolScale        *int   `json:"protocol_scale,omitempty"`
+	UnitConversionFactor string `json:"unit_conversion_factor,omitempty"`
+}
+
+type DailyBarsCloseSeriesCoverageEvidence struct {
+	CalendarQualityStatus QualityStatus `json:"calendar_quality_status"`
+	ExpectedTradingDays   int           `json:"expected_trading_days"`
+	MinimumRequiredBars   int           `json:"minimum_required_bars"`
+	CoverageBasis         string        `json:"coverage_basis"`
+	CoverageSufficient    bool          `json:"coverage_sufficient"`
+	Warnings              []string      `json:"warnings"`
+}
+
 type DailyBarsCloseSeriesBar struct {
 	TradeDate            string                  `json:"trade_date"`
 	Close                string                  `json:"close"`
-	CloseEvidence        DailyBarDecimalEvidence `json:"close_evidence"`
+	CloseEvidence        DailyBarsCloseSeriesDecimalEvidence `json:"close_evidence"`
 	SourceRef            string                  `json:"source_ref"`
 	NormalizationVersion string                  `json:"normalization_version"`
 	FetchedAt            string                  `json:"fetched_at"`
@@ -128,7 +145,7 @@ func BuildDailyBarsCloseSeriesInput(query DailyBarsQuery, snapshot DailyBarsV2Sn
 		TradingCalendarRef: strings.TrimSpace(*snapshot.TradingCalendarRef),
 		QualityStatus:      snapshot.QualityStatus,
 		Warnings:           payloadWarnings,
-		CoverageEvidence: DailyBarCoverageEvidence{
+		CoverageEvidence: DailyBarsCloseSeriesCoverageEvidence{
 			CalendarQualityStatus: coverage.CalendarQualityStatus,
 			ExpectedTradingDays:   coverage.ExpectedTradingDays,
 			MinimumRequiredBars:   coverage.MinimumRequiredBars,
@@ -202,35 +219,35 @@ func BuildDailyBarsCloseSeriesInput(query DailyBarsQuery, snapshot DailyBarsV2Sn
 	}, nil
 }
 
-func validateEastmoneyCloseEvidence(closeValue string, evidence *DailyBarDecimalEvidence) (DailyBarDecimalEvidence, error) {
+func validateEastmoneyCloseEvidence(closeValue string, evidence *DailyBarDecimalEvidence) (DailyBarsCloseSeriesDecimalEvidence, error) {
 	if !dailyBarsCloseSeriesDecimalRE.MatchString(closeValue) || !dailyBarsCloseSeriesSourceTokenRE.MatchString(evidence.SourceToken) {
-		return DailyBarDecimalEvidence{}, errors.New("exact Close and observed source token must be decimal strings")
+		return DailyBarsCloseSeriesDecimalEvidence{}, errors.New("exact Close and observed source token must be decimal strings")
 	}
 	if evidence.EvidenceKind != "observed_token" || evidence.SourceFractionDigits == nil || *evidence.SourceFractionDigits < 0 {
-		return DailyBarDecimalEvidence{}, errors.New("Eastmoney Close requires observed-token precision evidence")
+		return DailyBarsCloseSeriesDecimalEvidence{}, errors.New("Eastmoney Close requires observed-token precision evidence")
 	}
 	fractionDigits := 0
 	if dot := strings.IndexByte(evidence.SourceToken, '.'); dot >= 0 {
 		fractionDigits = len(evidence.SourceToken) - dot - 1
 	}
 	if fractionDigits != *evidence.SourceFractionDigits {
-		return DailyBarDecimalEvidence{}, errors.New("Close source fraction digits do not match the observed token")
+		return DailyBarsCloseSeriesDecimalEvidence{}, errors.New("Close source fraction digits do not match the observed token")
 	}
 	closeRat, ok := new(big.Rat).SetString(closeValue)
 	if !ok || closeRat.Sign() <= 0 {
-		return DailyBarDecimalEvidence{}, errors.New("exact Close must be a positive decimal")
+		return DailyBarsCloseSeriesDecimalEvidence{}, errors.New("exact Close must be a positive decimal")
 	}
 	sourceRat, ok := new(big.Rat).SetString(evidence.SourceToken)
 	if !ok || sourceRat.Cmp(closeRat) != 0 {
-		return DailyBarDecimalEvidence{}, errors.New("exact Close does not equal its original source token")
+		return DailyBarsCloseSeriesDecimalEvidence{}, errors.New("exact Close does not equal its original source token")
 	}
 	if evidence.ProtocolScale != nil {
-		return DailyBarDecimalEvidence{}, errors.New("observed-token Close must not also claim protocol fixed scale")
+		return DailyBarsCloseSeriesDecimalEvidence{}, errors.New("observed-token Close must not also claim protocol fixed scale")
 	}
 	if strings.TrimSpace(evidence.UnitConversionFactor) != "" && evidence.UnitConversionFactor != "1" {
-		return DailyBarDecimalEvidence{}, errors.New("Eastmoney price Close must not apply a unit conversion factor")
+		return DailyBarsCloseSeriesDecimalEvidence{}, errors.New("Eastmoney price Close must not apply a unit conversion factor")
 	}
-	return DailyBarDecimalEvidence{
+	return DailyBarsCloseSeriesDecimalEvidence{
 		EvidenceKind:         evidence.EvidenceKind,
 		SourceToken:          evidence.SourceToken,
 		SourceFractionDigits: cloneDailyBarsCloseSeriesInt(evidence.SourceFractionDigits),
