@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"example.com/stock-analysis-flow/internal/quant/application"
 )
