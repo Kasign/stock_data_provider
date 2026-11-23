@@ -1,7 +1,7 @@
 # Quant 模块卡点
 
-更新时间：2026-11-19  
-维护分支：`feat/quant`  
+更新时间：2026-11-23  
+维护分支：`repair_all`（聚合验收）  
 责任模块：Quant  
 说明：本文件登记需要其他模块或项目级决策方提供输入、装配或验收的事项。模块内详细依赖见 `doc/quant/依赖/01-跨模块依赖与解锁条件.md`。
 
@@ -21,7 +21,7 @@ Data v1 DailyBar OHLC/Amount/ChangePercent 为 float64，不能通过格式化�
 |---|---|---|---|---|
 | 生产 Storage、事务、Migration | Quant 自有 MySQLRepository、Migration v1；Server 已注册 quant namespace | Quant 维护结果存储；Server 注入共享 DB/生命周期；Platform 提供 Migration Runner | 已有不可变 Save、幂等/冲突/并发 MariaDB 测试；Root 注册已存在 | 继续验证 Root 生产启动与实际依赖注入；不得重复建设结果 Repository |
 | 可信 Principal 与授权撤销一致性 | PrincipalResolver Port、GetResult 授权用例 | Server/Platform | 从可信认证上下文注入 Principal；提供策略快照、撤销复核及一致性边界 | Integration 验证授权读取和撤销竞态 |
-| Access Audit 持久化 | AccessAuditor Port、MySQLAccessAuditor、Migration v2/v3（含 RunRef） | Quant 实现追加审计；Server 注入 DB/Clock | 写入与 MariaDB 集成测试已存在；审计失败由 GetResult fail-closed | 审计保留/归档/删除授权仍待治理决议；补 Root 生产注入验收 |
+| Access Audit 持久化 | AccessAuditor Port、MySQLAccessAuditor、Migration v2-v4（含 RunRef、content_level、授权/策略快照 JSON、decision_fingerprint） | Quant 实现追加审计；Server 注入 DB/Clock | Go Test Suite、Integration CI 与 Quant 专项 CI 已验证 MariaDB 持久化；审计失败由 GetResult fail-closed | 审计保留/归档/删除授权仍待治理决议；补 Root 生产注入验收 |
 | Clock / Diagnostics / Fault | Quant 复用 Platform 公共语义 | Server 注入 Clock；Platform 维护通用能力 | 提供可信 UTC Clock 和统一公共诊断/故障能力 | Quant 只消费，不复制通用框架 |
 
 Quant 不在 `internal/quant/**` 实现 SQL/Redis、通用 Storage、认证、授权、审计持久化或通用诊断框架。Server 是唯一组合根。
@@ -111,3 +111,12 @@ Quant 不在 `internal/quant/**` 实现 SQL/Redis、通用 Storage、认证、�
 - 仍缺 Quant Policy Owner 的规则/策略版本持久化/签发撤销、AuthorizedResultReader 生产实现和 Root 可信 Principal/Reader/Auditor/Clock 完整注入。
 - Researchflow StageOutputResource 只证明 Stage Output 属于某 Run/Stage/Attempt；没有 Quant Stage Provider 和显式 Quant result_id 输出契约，不能证明 Run→QuantResult 关联存在。
 - Q-01 继续 BLOCKED；GOV-CTR-006 Golden 不是生产 Allow 规则。只有在策略治理权限和关联契约明确后，才进入策略存储、撤销线性化和 MariaDB 并发验收。
+
+
+## RepairAll QNT-013 授权与审计证据更新（2026-11-23）
+
+- 结果访问授权校验现在要求 PolicySnapshot 包含固定领域身份 `quant_result_access / quant-result-access`；policy_version 仍由 Owner 管理，不硬编码 Golden 的示例版本。
+- AccessAudit Migration v4 已持久化完整 AuthorizationRef/PolicySnapshot JSON、PolicySnapshotRef、DecisionFingerprint 和 content_level；不保存结果 Payload。MariaDB 集成测试明确执行且未跳过。
+- Go Test Suite [45102027281](https://github.com/Kasign/stock_data_provider/actions/runs/45102027281)、Integration CI [45102027283](https://github.com/Kasign/stock_data_provider/actions/runs/45102027283)、Quant module validation [45102352607](https://github.com/Kasign/stock_data_provider/actions/runs/45102352607) 均通过。
+- Platform 已有 Owner Bearer + `platform:admin` 的 `OwnerAccess()` 管理认证路径；Owner Session 不具备该管理权限。是否将其正式绑定为 Quant Policy 发布/撤销权限，仍需治理决议。
+- Q-01 仍 BLOCKED：Policy Owner 规则/版本/current pointer/发布撤销、生产 AuthorizedResultReader、Researchflow 强类型 Run→QuantResult 关联和 Server Root 完整注入尚未完成。
