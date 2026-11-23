@@ -30,6 +30,7 @@ func TestMySQLResultAccessPolicyPublishesImmutableVersionsAndRevokes(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
+	normalizedEnabled := current.Enabled
 	if current.Enabled {
 		current, err = manager.Revoke(ctx, "owner", current.Version)
 		if err != nil {
@@ -95,7 +96,7 @@ func TestMySQLResultAccessPolicyPublishesImmutableVersionsAndRevokes(t *testing.
 		t.Fatal(err)
 	}
 	expectedAuditCount := 2
-	if current.Enabled {
+	if normalizedEnabled {
 		expectedAuditCount++
 	}
 	if len(auditRecords) != expectedAuditCount {
