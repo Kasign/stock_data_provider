@@ -306,7 +306,6 @@ WHERE policy_type=? AND policy_ref=? AND policy_version=?`,
 	if err != nil || current.Version.PolicyVersion != revokedVersion.PolicyVersion || current.Policy.Status != authorization.PolicyRevoked {
 		t.Fatalf("historical policy reactivation changed current pointer: current=%+v err=%v", current, err)
 	}
-}
 	var publicationAuditCount int
 	if err := store.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM market_data_authorization_policy_publications
 WHERE policy_type=? AND policy_ref=?`, authorization.DataAccessPolicyType, authorization.DailyBarsV2PolicyRef).Scan(&publicationAuditCount); err != nil {
@@ -316,6 +315,8 @@ WHERE policy_type=? AND policy_ref=?`, authorization.DataAccessPolicyType, autho
 		t.Fatalf("successful publications should have exactly two audit rows, got %d", publicationAuditCount)
 	}
 
+
+}
 
 func policyPublicationAudit(at time.Time, suffix string) app.DataAuthorizationPolicyPublicationAudit {
 	return app.DataAuthorizationPolicyPublicationAudit{
