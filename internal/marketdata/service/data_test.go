@@ -3445,18 +3445,18 @@ func TestDailyBarAdjustmentMetadataDegradesUnknownBackwardAnchorsWithoutReferenc
 	}
 	for _, method := range methods {
 		t.Run(method, func(t *testing.T) {
-			bar := model.DailyBar{
+			bars := []model.DailyBar{{
 				TradeDate: "2026-10-20", AdjustmentBasis: model.AdjustmentBackward,
 				AdjustmentMethod: method, QualityStatus: model.QualityValid,
-			}
-			warnings, err := applyDailyBarAdjustmentMetadataQuality([]model.DailyBar{bar}, model.AdjustmentBackward)
+			}}
+			warnings, err := applyDailyBarAdjustmentMetadataQuality(bars, model.AdjustmentBackward)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if bar.QualityStatus != model.QualityDegraded ||
-				!containsTestWarning(bar.QualityReasons, "daily_bar_adjustment_reference_anchor_unverified") ||
+			if bars[0].QualityStatus != model.QualityDegraded ||
+				!containsTestWarning(bars[0].QualityReasons, "daily_bar_adjustment_reference_anchor_unverified") ||
 				!containsTestWarning(warnings, "daily_bar_adjustment_reference_anchor_unverified") {
-				t.Fatalf("backward adjustment with unknown anchor must be degraded: bar=%+v warnings=%v", bar, warnings)
+				t.Fatalf("backward adjustment with unknown anchor must be degraded: bar=%+v warnings=%v", bars[0], warnings)
 			}
 		})
 	}
