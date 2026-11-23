@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"example.com/stock-analysis-flow/internal/marketdata/app"
 	platformauthorization "example.com/stock-analysis-flow/internal/platform/authorization"
 )
 
@@ -25,10 +26,7 @@ var (
 
 const maxDataAuthorizationObjectBytes = 64 * 1024
 
-type DataAuthorizationDecision struct {
-	AuthorizationRef json.RawMessage
-	PolicySnapshot   json.RawMessage
-}
+type DataAuthorizationDecision = app.DataAuthorizationDecision
 
 type storedDataAuthorizationRef struct {
 	AuthorizationRef    string   `json:"authorization_ref"`

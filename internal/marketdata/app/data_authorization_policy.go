@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 
 	"example.com/stock-analysis-flow/internal/marketdata/authorization"
 )
@@ -11,4 +12,17 @@ import (
 type DataAuthorizationPolicyRepository interface {
 	PublishDataAuthorizationPolicyVersion(context.Context, authorization.PolicyVersion) error
 	ResolveCurrentDataAuthorizationPolicy(context.Context) (authorization.CurrentPolicy, error)
+}
+
+
+// DataAuthorizationDecision 是 Data Owner 授权决策的不可变持久化对象。
+type DataAuthorizationDecision struct {
+	AuthorizationRef json.RawMessage
+	PolicySnapshot   json.RawMessage
+}
+
+// DataAuthorizationDecisionStore 持久化授权决策，并在读取时检查撤销状态。
+type DataAuthorizationDecisionStore interface {
+	AppendDataAuthorizationDecision(context.Context, DataAuthorizationDecision) error
+	GetDataAuthorizationDecision(context.Context, string) (DataAuthorizationDecision, error)
 }
