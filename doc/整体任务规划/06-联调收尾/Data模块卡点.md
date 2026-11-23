@@ -320,7 +320,7 @@ Root Server 的 Data Module 构造、共享资源注入、Migration Registry、I
 ## 2026-11-23 来源版本契约冲突裁决（DEC-PLAT-002-055）
 
 - 正式语义：Manifest `sources[].source_version` 只表示可验证的 Provider 上游数据版本；不存在时显式 null，不得以 Adapter/API/协议版本、FetchedAt、SystemObservedAt、revision hash 或 sentinel 填充。
-- DATA-CTR-008 1.0.0 冻结不变；新生产链路采用 2.0.0，显式 `schema_version="2.0.0"`，`source_version` required+nullable，`adapter_version` 为独立可选字段。现有 `NormalizationVersion`（当前值 `4`）必须保留在每条 Bar Payload 并参与指纹。
+- DATA-CTR-008 1.0.0 冻结不变；新生产链路采用 2.0.0，显式 `schema_version="2.0.0"`，`source_version` required+nullable，`provider_interface_version` 为独立可选字段。现有 `NormalizationVersion`（当前值 `4`）必须保留在每条 Bar Payload 并参与指纹。
 - ManifestFingerprint 覆盖 Schema 版本和来源字段；SnapshotRef 必须由 DATA-CTR-007 定义为 ManifestFingerprint 与 PayloadFingerprint 的绑定引用。
 - GOV-CTR-006 resource_ref 继续绑定最终 SnapshotRef；授权主体和读取时当前策略复核不变。
 - 本决议只确定语义，不代表新 Schema/Golden、Data Owner 实现或消费者支持已完成。下一步发布 DATA-CTR-008 2.0.0 与 DATA-CTR-007 机器契约及 Golden，然后实现 Snapshot Repository。

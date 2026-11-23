@@ -364,7 +364,7 @@ RA009 代码关闭条件已满足：Server 路由认证矩阵、CSRF、WebUI 请
 
 - 已确认 DailyBars 的 SourceVersion（Tushare/BaoStock/Hithink）为适配器/接口版本常量；通用校验只要求非空且非 `unknown`，不能视为上游数据修订版本。
 - 初始审计时 TradingCalendar 只有 Provider 查询与 Redis 12 小时缓存；后续 Migration V5 已补齐不可变 CalendarRef Repository、内容寻址和 PIT 读取，见 28.9 与 28.17。SourceVersion 仍是 Provider/Adapter 版本，与 CalendarRef 内容身份分离。
-- 后续实现必须分离 adapter_version、normalization_version、provider_data_version 和 calendar content ref；缺少源端版本/可靠日历证据时显式缺失或降级，不伪造版本。
+- 后续实现必须分离 provider_interface_version、normalization_version、provider_data_version 和 calendar content ref；缺少源端版本/可靠日历证据时显式缺失或降级，不伪造版本。
 
 
 ### 28.7 D1 Provider 字段公开证据结果
@@ -963,6 +963,6 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 ## 2026-11-23 Data Snapshot 来源版本契约裁决与下一阶段
 
 - Data 审计基线已固化到 Data 依赖方案、当前任务入口和卡点文档；单 Bar ExactValues/Revision Hash、V5 Calendar Snapshot、Eastmoney 原始 Close 输入边界不再重复审计。
-- DEC-PLAT-002-055 已裁决 Provider 数据版本缺失表达：DATA-CTR-008 1.0.0 不改；2.0.0 显式 schema_version，source_version required+nullable，adapter_version 独立可选，不允许伪造 Provider 数据版本。
+- DEC-PLAT-002-055 已裁决 Provider 数据版本缺失表达：DATA-CTR-008 1.0.0 不改；2.0.0 显式 schema_version，source_version required+nullable，provider_interface_version 独立可选，不允许伪造 Provider 数据版本。
 - DATA-CTR-007 负责定义 Payload Schema、PayloadFingerprint 和同时绑定 Manifest/Payload 的 SnapshotRef；GOV-CTR-006 resource_ref 绑定最终 SnapshotRef。
 - 下一阶段：发布 DATA-CTR-008 2.0.0 与 DATA-CTR-007 Schema/Golden，完成 Research/Quant 消费者版本选择与兼容性测试；完成前不进入正式 Snapshot Repository/Quant SMA 生产读取。
