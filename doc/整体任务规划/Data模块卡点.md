@@ -4,7 +4,7 @@
 维护分支：`repair_all`（聚合验收）  
 模块范围：`internal/marketdata/**`；`doc/api/**`
 
-## 当前卡点：DATA D2 后复权链路（全局顺序在 Quant Q-01 之后）
+## 当前卡点：DATA D2 精度与 Snapshot 链路（先完成 Quant 首个真实指标所需的最小输入切片）
 
 **状态：IN_PROGRESS；本轮仅关闭锚点质量门禁子项，Provider/Decimal 主体尚未关闭。**
 
@@ -280,3 +280,12 @@ Root Server 的 Data Module 构造、共享资源注入、Migration Registry、I
 3. **Decimal 复权仍未完成**：AdjustmentFactor/CorporateAction 输入字段为 float64，复权重建使用 float64；需要在现有模型/Repository 上补 exact source token/evidence，再实现 Decimal 仿射计算。
 4. **真实 Provider 阻塞**：Tushare adj_factor/dividend 权限码 40203；Eastmoney 本轮 EOF/502；Hithink 两个不同 end date 的锚点对照未执行。不得把这些标为代码 PASS。
 5. **验收**：代码 SHA `e8d1c5464bd78dc83d6a9f51df41ea2d86a7fbba` 的 Go Test Suite 与 Integration CI 均通过；Tagged Live Provider Probe 仅部分通过。
+
+
+## 2026-11-23 DATA D2 与 QNT-014 依赖顺序校准
+
+- 最新执行顺序已在 RepairAll 主计划第 43 节校准：QNT-013 的策略管理/撤销锁等独立子项已完成，但 Q-01 完整闭环需要真实 Quant 结果生产者；QNT-014 又依赖 Data 精确日线与 Snapshot/Authorization 输入。不能继续坚持“Q-01 全部关闭后才允许任何 Data D2 工作”，否则形成生产依赖循环。
+- Data 当前先负责首个 Quant 指标必需的最小输入切片：优先审查可验证的日线 OHLC Decimal 原始来源/scale、trade_date、interval、adjustment_basis（首个用例可限定 none，前提是调用契约明确）、同次质量评估的 CalendarRef、Payload 内容指纹及 SnapshotRef/Manifest/AuthorizationRef 绑定。
+- 这不是启动完整 Provider D2，也不要求本轮完成 Amount/Volume 单位、所有 Provider 的 QFQ/HFQ、Factor 或所有 DailyBars 字段。没有权威来源的字段继续 null/degraded/not_comparable，不格式化 float64 冒充 Decimal。
+- DATA-CTR-008 Snapshot Manifest 1.0.0 Schema/Golden 已存在，必须复用；尚缺 Data 生产侧把 DailyBars Payload 内容、Manifest 身份、可信 caller/purpose 和 GOV-CTR-006 AuthorizationRef 绑定的实现/消费者验收。DATA-CTR-005/007 仍按项目登记簿 deferred，未获正式重新进入/冻结前不发布正式跨模块契约。
+- 本轮仅校准卡点与范围，不改生产代码、不调整验收标准。后续先审查真实 Provider 的 raw Close 来源和精度证据，确定首个指标可用输入路径，再实施有证据支持的最小 DTO/Manifest 生产链。
