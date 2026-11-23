@@ -159,3 +159,14 @@ Quant 不在 `internal/quant/**` 实现 SQL/Redis、通用 Storage、认证、�
 - 最新文档提交 `9386366c71976e282a249d76c86ab7cc723d0689` 的 Quant module validation Run `45110894577` 已 completed/success；全部步骤（gofmt、Quant 单元/MariaDB 集成、不可变结果用例未跳过、Manifest Fuzz、Race、Vet）通过。
 - 当前可执行结论：Researchflow Storage 已有可复用的 Run/Stage/Attempt 归属载体，但缺少能把 Quant result_id 写入该载体的正式业务 Stage 契约与 Provider。现在新增关联 Port 会被迫猜测 Stage discriminator 或扫描任意 JSON，因此暂不实现。Q-01 继续 BLOCKED，Data D2 不启动。
 - 下一步：继续核实 Quant 已冻结的输入/结果契约与真实可用算法用例，确认是否存在可落地的真实 Trend/Risk 生产 Facade；只有形成真实 Facade 与 Stage 输出 Schema 后，才实现 Researchflow 强类型关联 Port、Quant AuthorizedResultReader 和 Server 装配。
+
+
+## 2026-11-23 Quant 结果读取主体门禁补齐
+
+- 代码基线：`repair_all` SHA `5b8aba15a3148ca36c818ffc2b05ee609f5a62ae`。
+- GOV-CTR-006 对 Quant 的 MVP 主体映射为可信 Researchflow service principal（`service:researchflow`）。此前 `GetResult.Execute` 只依赖注入的 PrincipalResolver 返回非空主体，再把主体传给 Reader；Application 本身没有强制该固定 MVP 主体。
+- 已在 Quant Application 增加精确主体门禁：主体不是 `service:researchflow` 时，在调用 AuthorizedResultReader 前拒绝；记录 `denied / principal_not_authorized` 审计事件；审计写入失败仍 fail-closed，不返回结果内容。
+- 新增单测 `TestGetResultRejectsNonResearchflowPrincipalBeforeReading`，验证非 Researchflow 主体不会调用 Reader、不会获得 Envelope，并写入包含主体和目标 result_id 的拒绝审计。
+- Quant module validation Run `45115231452`（SHA `5b8aba15a3148ca36c818ffc2b05ee609f5a62ae`）已 success，包含 gofmt、Quant 单元/MariaDB 集成、不可变结果用例未跳过、Manifest Fuzz、Race、Vet。
+- 同一 SHA 的 Go test suite Run `45115231420` 与 Integration CI Run `45115231437` 当时仍在运行；不得把 Quant 专项通过等同于全仓验收通过。
+- 此修复只收紧 Quant Application 的调用主体，不代表生产 AuthorizedResultReader 已实现；当前仍缺 Researchflow 正式 Quant Stage 输出 Schema/Provider/Registry Entry、强类型 Run→result_id 关联查询、策略锁内的关联验证与结果读取，以及 Server 完整装配。Q-01 继续 BLOCKED，Data D2 不启动。
