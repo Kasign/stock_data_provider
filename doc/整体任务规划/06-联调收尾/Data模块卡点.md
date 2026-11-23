@@ -324,3 +324,12 @@ Root Server 的 Data Module 构造、共享资源注入、Migration Registry、I
 - ManifestFingerprint 覆盖 Schema 版本和来源字段；SnapshotRef 必须由 DATA-CTR-007 定义为 ManifestFingerprint 与 PayloadFingerprint 的绑定引用。
 - GOV-CTR-006 resource_ref 继续绑定最终 SnapshotRef；授权主体和读取时当前策略复核不变。
 - 本决议只确定语义，不代表新 Schema/Golden、Data Owner 实现或消费者支持已完成。下一步发布 DATA-CTR-008 2.0.0 与 DATA-CTR-007 机器契约及 Golden，然后实现 Snapshot Repository。
+
+
+## 2026-11-23 DATA-CTR-007/008 Schema 草案与 Golden 缺口
+
+- 新增 DATA-CTR-008 Manifest 2.0.0 Schema 草案：schema_version 必需；sources[].source_version required+nullable；provider_interface_version 可选并与 Provider 数据版本分离。
+- 新增 DATA-CTR-007 daily_bars_close_series Payload 1.0.0 Schema 草案：仅覆盖首批 SMA 需要的未复权日线精确 Close；包含同次 CalendarRef、CoverageEvidence、逐 Bar Decimal Evidence 和 normalization_version。
+- Data normalize.Version 当前为 4，由 DailyBar/Application DTO 传递；Payload 必须保留该版本并纳入内容指纹。
+- 两份 Schema 目前只完成 JSON 语法解析，尚无 Golden、Schema Validator、消费者 Contract Test；DATA-CTR-005/007 仍 deferred，DATA-CTR-008 现行 1.0.0 仍 frozen，2.0.0 不得标记 frozen。
+- 历史 Live Provider Artifact 14611734848 仅有汇总结果，不含精确日线 token 和同次日历证据，不能作为 Snapshot Golden。当前不重新触发 Provider 探测；先检查 MariaDB 历史修订/已有 Artifact 能否恢复同一查询批次的全部字段。

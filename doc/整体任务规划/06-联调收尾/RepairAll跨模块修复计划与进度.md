@@ -966,3 +966,11 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - DEC-PLAT-002-055 已裁决 Provider 数据版本缺失表达：DATA-CTR-008 1.0.0 不改；2.0.0 显式 schema_version，source_version required+nullable，provider_interface_version 独立可选，不允许伪造 Provider 数据版本。
 - DATA-CTR-007 负责定义 Payload Schema、PayloadFingerprint 和同时绑定 Manifest/Payload 的 SnapshotRef；GOV-CTR-006 resource_ref 绑定最终 SnapshotRef。
 - 下一阶段：发布 DATA-CTR-008 2.0.0 与 DATA-CTR-007 Schema/Golden，完成 Research/Quant 消费者版本选择与兼容性测试；完成前不进入正式 Snapshot Repository/Quant SMA 生产读取。
+
+
+## 2026-11-23 Data Snapshot Schema 草案进度
+
+- 已新增 DATA-CTR-008 2.0.0 Manifest Schema 与 DATA-CTR-007 Close Series Payload 1.0.0 Schema 草案，均通过 JSON 语法解析。
+- Payload 首批范围：单证券、1d、未复权、精确 Close、有效同次 CalendarRef 和 CoverageEvidence；逐 Bar 保留当前 Data normalization_version（normalize.Version 当前为 4）。
+- 历史 Live Provider Artifact 14611734848 不包含逐 Bar 原始 token/ExactValues/CalendarRef/CoverageEvidence，因此不能构造真实 Golden；本轮没有重新发起 Provider 请求。
+- 下一步先检查 MariaDB revision metadata 能否恢复同一批次完整 Golden 输入；若不能，才安排受控真实读取。Golden、Validator、Research/Quant 消费者适配未完成前不实现 Snapshot Repository 的正式写入入口。
