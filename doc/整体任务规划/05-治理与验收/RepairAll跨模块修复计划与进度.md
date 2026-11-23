@@ -4,7 +4,7 @@
 - 工作分支：`repair_all`
 - 当前工作分支 HEAD：以 GitHub `repair_all` 分支最新引用为准（避免在本文件提交后保留自引用 SHA）
 - 本轮 RA009 生产代码验收 SHA：`1e916220a8784ae840132ce0cec3b3654c6b9655`；完整 Integration CI [Run 44482650366](https://github.com/Kasign/stock_data_provider/actions/runs/44482650366) 全项 success
-- 更新日期：2026-11-19
+- 更新日期：2026-11-23
 
 ## 1. 分支用途与执行原则
 

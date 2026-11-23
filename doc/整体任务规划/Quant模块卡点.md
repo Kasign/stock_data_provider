@@ -117,6 +117,6 @@ Quant 不在 `internal/quant/**` 实现 SQL/Redis、通用 Storage、认证、�
 
 - 结果访问授权校验现在要求 PolicySnapshot 包含固定领域身份 `quant_result_access / quant-result-access`；policy_version 仍由 Owner 管理，不硬编码 Golden 的示例版本。
 - AccessAudit Migration v4 已持久化完整 AuthorizationRef/PolicySnapshot JSON、PolicySnapshotRef、DecisionFingerprint 和 content_level；不保存结果 Payload。MariaDB 集成测试明确执行且未跳过。
-- Go Test Suite [45102027281](https://github.com/Kasign/stock_data_provider/actions/runs/45102027281)、Integration CI [45102027283](https://github.com/Kasign/stock_data_provider/actions/runs/45102027283)、Quant module validation [45102352607](https://github.com/Kasign/stock_data_provider/actions/runs/45102352607) 均通过。
+- Go Test Suite [45102027281](https://github.com/Kasign/stock_data_provider/actions/runs/45102027281)、Integration CI [45102027283](https://github.com/Kasign/stock_data_provider/actions/runs/45102027283)、Quant module validation [45102582473](https://github.com/Kasign/stock_data_provider/actions/runs/45102582473) 均通过。
 - Platform 已有 Owner Bearer + `platform:admin` 的 `OwnerAccess()` 管理认证路径；Owner Session 不具备该管理权限。是否将其正式绑定为 Quant Policy 发布/撤销权限，仍需治理决议。
 - Q-01 仍 BLOCKED：Policy Owner 规则/版本/current pointer/发布撤销、生产 AuthorizedResultReader、Researchflow 强类型 Run→QuantResult 关联和 Server Root 完整注入尚未完成。
