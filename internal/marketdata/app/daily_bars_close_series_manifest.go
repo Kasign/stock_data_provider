@@ -108,7 +108,7 @@ func BuildDailyBarsCloseSeriesSnapshot(input DailyBarsCloseSeriesInput, callerRe
 	result := DailyBarsCloseSeriesSnapshot{
 		Manifest:           manifest,
 		PayloadFingerprint:  payloadFingerprint,
-		Payload:            input.Payload,
+		Payload:            cloneDailyBarsCloseSeriesPayload(input.Payload),
 	}
 	if err := result.Verify(); err != nil {
 		return DailyBarsCloseSeriesSnapshot{}, err
@@ -142,6 +142,13 @@ func (snapshot DailyBarsCloseSeriesSnapshot) Verify() error {
 		return errors.New("daily-bars snapshot manifest and payload query identity mismatch")
 	}
 	if err := validateDailyBarsCloseSeriesSourceBinding(snapshot.Payload, manifest.Sources); err != nil {
+		return err
+	}
+	parsedAsOf, err := time.Parse(time.RFC3339Nano, manifest.SystemAsOf)
+	if err != nil {
+		return errors.New("daily-bars snapshot manifest system_as_of is invalid")
+	}
+	if err := validateDailyBarsCloseSeriesAsOf(snapshot.Payload, parsedAsOf); err != nil {
 		return err
 	}
 	canonicalSources, err := canonicalDailyBarsCloseSeriesSources(manifest.Sources)
@@ -348,6 +355,56 @@ func calculateDailyBarsCloseSeriesSnapshotRef(manifestFingerprint, payloadFinger
 	}
 	sum := sha256.Sum256(canonical)
 	return dailyBarsCloseSeriesSnapshotRefPrefix + hex.EncodeToString(sum[:]), nil
+}
+
+func validateDailyBarsCloseSeriesAsOf(payload DailyBarsCloseSeriesPayload, asOf time.Time) error {
+	for index, bar := range payload.Bars {
+		for _, value := range []string{bar.FetchedAt, bar.NormalizedAt, *bar.SystemObservedAt} {
+			observedAt, err := time.Parse(time.RFC3339Nano, value)
+			if err != nil || observedAt.After(asOf) {
+				return fmt.Errorf("daily-bars snapshot payload bar %d contains data newer than system_as_of", index)
+			}
+		}
+	}
+	return nil
+}
+
+func cloneDailyBarsCloseSeriesPayload(payload DailyBarsCloseSeriesPayload) DailyBarsCloseSeriesPayload {
+	cloned := payload
+	cloned.Warnings = append([]string{}, payload.Warnings...)
+	cloned.CoverageEvidence.Warnings = append([]string{}, payload.CoverageEvidence.Warnings...)
+	cloned.Bars = make([]DailyBarsCloseSeriesBar, len(payload.Bars))
+	for index, bar := range payload.Bars {
+		cloned.Bars[index] = bar
+		cloned.Bars[index].CloseEvidence.SourceFractionDigits = cloneDailyBarsCloseSeriesInt(bar.CloseEvidence.SourceFractionDigits)
+		cloned.Bars[index].CloseEvidence.ProtocolScale = cloneDailyBarsCloseSeriesInt(bar.CloseEvidence.ProtocolScale)
+		cloned.Bars[index].ProviderTime = cloneDailyBarsCloseSeriesString(bar.ProviderTime)
+		cloned.Bars[index].SystemObservedAt = cloneDailyBarsCloseSeriesString(bar.SystemObservedAt)
+		cloned.Bars[index].QualityReasons = append([]string{}, bar.QualityReasons...)
+	}
+	return cloned
+}
+
+func equalDailyBarsCloseSeriesSources(left, right []DailyBarsCloseSeriesSource) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for index := range left {
+		if left[index].SourceRef != right[index].SourceRef ||
+			left[index].ProviderInterfaceVersion != right[index].ProviderInterfaceVersion {
+			return false
+		}
+		if left[index].SourceVersion == nil || right[index].SourceVersion == nil {
+			if left[index].SourceVersion != nil || right[index].SourceVersion != nil {
+				return false
+			}
+			continue
+		}
+		if *left[index].SourceVersion != *right[index].SourceVersion {
+			return false
+		}
+	}
+	return true
 }
 
 func validDailyBarsCloseSeriesPurpose(value string) bool {

@@ -21,6 +21,10 @@ func TestBuildAndVerifyDailyBarsCloseSeriesSnapshot(t *testing.T) {
 	if got.Manifest.Sources[0].SourceVersion != nil {
 		t.Fatalf("missing Provider data version must remain null: %+v", got.Manifest.Sources[0])
 	}
+	input.Payload.Bars[0].Close = "99.99"
+	if got.Payload.Bars[0].Close != "43.49" {
+		t.Fatal("snapshot payload aliases the caller's mutable input")
+	}
 }
 
 func TestDailyBarsCloseSeriesSnapshotRejectsTampering(t *testing.T) {
@@ -41,6 +45,12 @@ func TestDailyBarsCloseSeriesSnapshotRejectsTampering(t *testing.T) {
 	manifestTampered.Manifest.CallerRef = "principal:other-user"
 	if err := manifestTampered.Verify(); err == nil {
 		t.Fatal("Verify() accepted a tampered manifest")
+	}
+
+	asOfTampered := snapshot
+	asOfTampered.Manifest.SystemAsOf = "2026-11-20T07:58:00Z"
+	if err := asOfTampered.Verify(); err == nil {
+		t.Fatal("Verify() accepted bars observed after system_as_of")
 	}
 }
 
