@@ -199,6 +199,13 @@ type DailyBarsV2Reader interface {
 	GetDailyBarsV2(ctx context.Context, query DailyBarsQuery) (DailyBarsV2Snapshot, error)
 }
 
+// DailyBarsCloseSeriesSnapshotRepository 保存并精确读取不可变的首批 SMA 输入 Snapshot。
+// Repository 只负责持久化和内容完整性；质量准入、身份和授权由 Data Application 负责。
+type DailyBarsCloseSeriesSnapshotRepository interface {
+	SaveDailyBarsCloseSeriesSnapshot(ctx context.Context, snapshot DailyBarsCloseSeriesSnapshot) error
+	GetDailyBarsCloseSeriesSnapshot(ctx context.Context, snapshotRef string) (DailyBarsCloseSeriesSnapshot, error)
+}
+
 // FundamentalsQuery 定义单证券、单报告期的财务数据读取请求。
 // SystemObservedAtCutoff 非 nil 时只读取该系统观察时点已持久化的历史修订。
 type FundamentalsQuery struct {

@@ -66,7 +66,7 @@ func (s *Store) Ping(ctx context.Context) error {
 }
 
 // ValidateCompatibilitySchema verifies the physical schema invariants introduced
-// by Data migrations V4-V5. Migration history checksums cannot detect manual schema drift.
+// by Data migrations V4-V6. Migration history checksums cannot detect manual schema drift.
 func (s *Store) ValidateCompatibilitySchema(ctx context.Context) error {
 	if s == nil || s.db == nil {
 		return nil
@@ -146,6 +146,9 @@ WHERE table_schema = DATABASE() AND table_name = ? AND index_name = ? ORDER BY s
 		}
 	}
 	if err := s.validateTradingCalendarSnapshotSchema(ctx); err != nil {
+		return err
+	}
+	if err := s.validateDailyBarsCloseSeriesSnapshotSchema(ctx); err != nil {
 		return err
 	}
 	return nil
@@ -358,6 +361,22 @@ ON market_data_adjustment_factor_versions (symbol, trade_date, source, source_ve
  payload_json LONGTEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
  PRIMARY KEY (calendar_ref),
  KEY idx_market_calendar_identity_observed (market, start_date, end_date, observed_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+			},
+		},
+		{
+			Version: 6, Description: "immutable daily-bars close-series content snapshots",
+			Statements: []string{
+				`CREATE TABLE IF NOT EXISTS market_data_daily_bars_close_series_snapshots (
+ snapshot_ref VARCHAR(96) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ manifest_fingerprint CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ payload_fingerprint CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ manifest_schema_version VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ payload_schema_version VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ manifest_json LONGTEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
+ payload_json LONGTEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
+ created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+ PRIMARY KEY (snapshot_ref)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 			},
 		},
