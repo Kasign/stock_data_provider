@@ -755,10 +755,11 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 
 ### 33.4 下一执行切片
 
-1. 先完成 Data D2 的字段级证据矩阵：按 Provider × none/forward/backward × OHLC/Volume/Amount/ChangePercent，区分 source token、protocol scale、unit conversion、adjustment evidence 和 unknown；只补真实证据缺口，不重复历史已验收样本。
-2. 形成最终 DailyBarV2 内部 DTO 的字段映射与负例 Golden 草案；未达到 DATA-CTR-005 重新进入条件前，不接 HTTP v2、不改项目登记簿、不开放 Quant 消费。
-3. Q-01 保持 BLOCKED，待策略发布治理和 Quant Stage 关联契约具备后再实现；期间不做空壳 Reader 或虚构 Stage。
-4. 本轮文档提交后对新精确 SHA 检查 Go Test Suite、Full Integration Checks；若文档改动不触发工作流，明确记录未执行，不把旧 CI 复用为新 SHA 验收。
+1. **先执行第一批 Q-01 / QNT-013**：审计并实现 Quant Policy Owner 的最小授权规则、不可变策略版本、签发/撤销和当前策略复核；完成 RunRef + result_id 的明确关联读取与 fail-closed 门禁。没有真实 Researchflow 关联事实时，不得以主体级全局放行替代。
+2. **第二批执行 Data D2**：按 Provider × none/forward/backward × OHLC/Volume/Amount/ChangePercent 建立字段证据矩阵，区分 source token、protocol scale、unit conversion、adjustment evidence 和 unknown；完成有证据字段的 DTO、Schema、Golden、Validator、HTTP 与 Application Reader。DATA-CTR-005/007 只能按正式重新进入条件变更状态。
+3. **第三批执行 FLOW-005 / FLOW-006**：完成 Research Context 的 PIT/身份传播，统一 Quant RiskDecision 来源和结果综合规则；缺少真实消费者或冻结决策时保留阻塞。
+4. **第四批执行 Server Root 装配**：只接入已经具备正式 Port、Schema、授权和生产依赖的能力，完成 Root DI、Migration、Worker 生命周期及跨模块 MariaDB 验收。
+5. **最后完整验收**：Go Test、Race、Vet、Integration CI 和适用的 Live Provider Probe；每项结果绑定精确 SHA，外部权限、真实披露时点、未冻结决策和目标生产演练不得伪装成代码完成。
 
 
 ## 34. 2026-11-23 D2 Pytdx 复权精度证据补充
@@ -778,3 +779,14 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - Tushare 官方文档确认 QFQ 使用 end_date 最新因子归一化，HFQ 直接使用当日因子；BaoStock 官方文档确认 HFQ 以上市首日为固定锚点、QFQ 因子以最近除权日后交易日为锚点。二者的无显式 HFQ reference_date 有来源依据。
 - Hithink/TickFlow/Eastmoney 目前没有足以确认具体端点锚点公式的资料；Hithink 的顶层 timestamp 是数据就绪时间，不得写成每根 Bar 的 ProviderTime。保持 unknown，不猜公式、不新增平行因子实现。
 - 下一步集中处理 Hithink/TickFlow/Eastmoney 的真实样本/因子对照；如不能取得可复核证据，则保留 degraded/not_comparable。
+
+
+## 37. 2026-11-23 按五批主线顺序启动 Q-01
+
+- 执行顺序以第 32.3 节五批任务包为准：第一批 Q-01 / QNT-013；第二批 Data D2；第三批 FLOW-005 / FLOW-006；第四批 Server；最后完整验收。第 33.4 节旧的“Data D2 优先、Q-01 保持 BLOCKED”描述已按此顺序校准，不再作为当前执行入口。
+- 本轮开始前 GitHub `repair_all` HEAD：`e8d1c5464bd78dc83d6a9f51df41ea2d86a7fbba`；前一 HEAD `0beb795c55cdd1a4a28f234672223228dca62193` 的后续提交为 `test(data): 修正后复权质量测试断言对象`。本节后续代码和 CI 证据必须使用新的精确 SHA。
+- Q-01 现有能力：`GetResult` 已要求可信 Principal、非空 RunRef、result_id，并调用 `AuthorizedResultReader`；AuthorizationRef/PolicySnapshot 结构校验和 Platform GOV-CTR-006 指纹校验已存在；Quant 结果不可变 MySQL Repository、AccessAuditor、Migration v1-v3 已存在。
+- Q-01 真实缺口：当前 `internal/quant/**` 没有生产 Policy Owner 规则/策略版本存储与签发/撤销实现，也没有生产 `AuthorizedResultReader`；Server Bootstrap 尚未完整装配 Quant Repository、PrincipalResolver、Reader、Auditor 和可信 UTC Clock。
+- Run 范围关联缺口：Researchflow 已持久化不可变 Stage Output 及 Run/Stage/Attempt 归属，但当前没有 Quant Stage Provider，也没有已注册的强类型 Quant result_id 输出契约；因此尚无可验证的 Run→QuantResult 关联事实。关联事实归 Researchflow，Quant 只通过公开只读端口消费，Server 负责组合注入；不得由 Quant 读取 Researchflow 私有 SQL，也不得按 service principal 全局放行。
+- 本批实施门禁：先实现可由 Quant 自身职责完成且有冻结契约依据的 Policy Owner/策略版本/撤销一致性；对缺失的 Run 关联生产者契约和发布权限治理，不虚构字段、策略或调用者。能独立验收的子项分别关闭；未具备真实关联事实前，生产读取链路保持 BLOCKED。
+- 当前阶段：`IN_PROGRESS`；本次只校准执行入口和记录基线，尚未将 Q-01 任何生产子项标记为 PASS。
