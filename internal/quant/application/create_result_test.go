@@ -88,6 +88,22 @@ func TestCreateResultRejectsPayloadDiscriminatorMismatchBeforeSave(t *testing.T)
 	}
 }
 
+func TestCreateResultRejectsPayloadMetadataMismatchBeforeSave(t *testing.T) {
+	input, payload := validTrendCreationInput()
+	input.Period = "5d"
+	repository := &captureResultRepository{}
+	usecase, err := NewCreateResult(repository)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := usecase.Execute(context.Background(), input, payload); !errors.Is(err, result.ErrInvalidEnvelope) {
+		t.Fatalf("Execute() error = %v, want ErrInvalidEnvelope", err)
+	}
+	if repository.calls != 0 {
+		t.Fatalf("Save called %d times for mismatched payload metadata", repository.calls)
+	}
+}
+
 func TestCreateResultDoesNotSaveWhenContextCancelled(t *testing.T) {
 	input, payload := validTrendCreationInput()
 	repository := &captureResultRepository{}
