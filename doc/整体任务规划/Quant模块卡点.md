@@ -142,3 +142,7 @@ Quant 不在 `internal/quant/**` 实现 SQL/Redis、通用 Storage、认证、�
 - Publish/Revoke 和受保护读取争用同一 Head 行锁；撤销在读取回调结束前不能提交。MariaDB 集成测试覆盖“读持锁期间撤销等待、读完成后撤销推进版本”。
 - 该 Guard 是生产 Reader 的基础构件，不是 Reader 本身。当前仍缺 Researchflow 对外 Run-result 强类型关联 Port 和不可变关联约束，不能用跨模块任意 SQL 或主体级 Allow 替代。
 - 后续：先完成当前 SHA 的 Quant Fuzz/Race/Vet 与全仓 Go/Integration CI；然后基于 Researchflow 正式关联 Port 实现 AuthorizedResultReader，并确保策略锁覆盖关联检查与结果读取；再补审计失败、跨 Run、无关联、撤销竞态和 Server 装配验收。Q-01 未完成前不进入 Data D2。
+
+
+- 本轮代码验收通过：`ccf3a04dc1ea1161b3fdf3991e1b9918ede6e679` 的 Quant module validation（Run `45110456094`）、Go test suite（Run `45110456110`）、Integration CI（Run `45110456093`）均 success；文档 SHA `aedc2844395422126288ceb791f1a99da20d3229` 的 Quant validation（Run `45110645391`）亦 success。
+- MariaDB 实测 `TestMySQLResultAccessPolicyReadGuardSerializesRevoke` PASS，证明策略撤销会等待受保护读取回调结束。该结果仅验收锁保护机制，不代表生产 Reader、Run-result 关联和授权规则已完成；Q-01 仍 BLOCKED。
