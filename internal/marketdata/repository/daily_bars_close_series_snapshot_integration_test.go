@@ -5,8 +5,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"errors"
+	"fmt"
 	"os"
 	"strings"
 	"sync"
@@ -177,7 +177,7 @@ func repositoryCloseSeriesBar(tradeDate, closeValue, sourceToken string, fractio
 }
 
 func repositoryStringPointer(value string) *string { return &value }
- 
+
 func TestDataAuthorizationPolicyStorageDisabledFailsClosed(t *testing.T) {
 	if err := (*Store)(nil).PublishDataAuthorizationPolicyVersion(context.Background(), authorization.PolicyVersion{}); err == nil {
 		t.Fatal("publishing policy without storage must fail")
