@@ -124,6 +124,21 @@ func TestGetResultFailsClosedForInvalidAuthorization(t *testing.T) {
 		{"denied", func(v *AuthorizedRecord) { v.AuthorizationRef.Decision = "denied" }},
 		{"policy snapshot mismatch", func(v *AuthorizedRecord) { v.PolicySnapshot.SnapshotRef = "policy-snapshot:other" }},
 		{"empty policy snapshot", func(v *AuthorizedRecord) { v.PolicySnapshot.Policies = []PolicyVersion{} }},
+		{"wrong quant policy identity with valid fingerprint", func(v *AuthorizedRecord) {
+			v.PolicySnapshot.Policies = []PolicyVersion{{PolicyType: "other_access", PolicyRef: "other-resource", PolicyVersion: "1.0.0"}}
+			refJSON, err := json.Marshal(v.AuthorizationRef)
+			if err != nil {
+				t.Fatal(err)
+			}
+			snapshotJSON, err := json.Marshal(v.PolicySnapshot)
+			if err != nil {
+				t.Fatal(err)
+			}
+			v.AuthorizationRef.DecisionFingerprint, err = platformauthorization.Fingerprint(refJSON, snapshotJSON)
+			if err != nil {
+				t.Fatal(err)
+			}
+		}},
 		{"duplicate policy tuple", func(v *AuthorizedRecord) {
 			v.PolicySnapshot.Policies = append(v.PolicySnapshot.Policies, v.PolicySnapshot.Policies[0])
 		}},
