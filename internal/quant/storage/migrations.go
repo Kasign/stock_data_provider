@@ -53,5 +53,45 @@ func Migrations() []platformstorage.Migration {
 				ADD COLUMN policy_snapshot_json LONGTEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NULL AFTER policy_snapshot_ref,
 				ADD COLUMN decision_fingerprint VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NULL AFTER policy_snapshot_json`},
 		},
+
+		{
+			Version:     5,
+			Description: "persist immutable Quant result-access policy versions and Owner administration audit",
+			Statements: []string{
+				`CREATE TABLE quant_result_access_policy_versions (
+					policy_version BIGINT UNSIGNED NOT NULL,
+					enabled TINYINT(1) NOT NULL,
+					snapshot_ref VARCHAR(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
+					policy_snapshot_json LONGTEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
+					created_at CHAR(30) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					PRIMARY KEY (policy_version),
+					UNIQUE KEY uq_quant_result_access_policy_snapshot (snapshot_ref),
+					CONSTRAINT chk_quant_result_access_policy_enabled CHECK (enabled IN (0, 1))
+				) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin`,
+				`CREATE TABLE quant_result_access_policy_head (
+					policy_type VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					policy_ref VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					current_version BIGINT UNSIGNED NOT NULL,
+					updated_at CHAR(30) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					PRIMARY KEY (policy_type, policy_ref)
+				) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin`,
+				`INSERT INTO quant_result_access_policy_head
+					(policy_type, policy_ref, current_version, updated_at)
+					VALUES ('quant_result_access', 'quant-result-access', 0, '1970-01-01T00:00:00.000000000Z')`,
+				`CREATE TABLE quant_policy_admin_audit (
+					audit_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+					actor_ref VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					policy_type VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					policy_ref VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					action VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					previous_version BIGINT UNSIGNED NOT NULL,
+					new_version BIGINT UNSIGNED NOT NULL,
+					occurred_at CHAR(30) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					PRIMARY KEY (audit_id),
+					KEY idx_quant_policy_admin_audit_policy (policy_type, policy_ref, audit_id),
+					CONSTRAINT chk_quant_policy_admin_action CHECK (action IN ('publish', 'revoke'))
+				) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin`,
+			},
+		},
 	}
 }

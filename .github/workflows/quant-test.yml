@@ -67,7 +67,7 @@ jobs:
       - name: 运行 Quant 单元与 MariaDB 集成测试
         run: go test ./internal/quant/...
       - name: 验证不可变结果 MariaDB 用例未跳过
-        run: go test -v -run '^TestMySQL(Repository|AccessAuditor)' ./internal/quant/storage
+        run: go test -v -run '^TestMySQL(Repository|AccessAuditor|ResultAccessPolicy)' ./internal/quant/storage
       - name: 运行 Manifest 指纹随机 Fuzz
         run: go test -run=^$ -fuzz=FuzzFingerprintPayloadNoPanic -fuzztime=30s ./internal/quant/manifest
       - name: 运行 Quant 竞态检测
