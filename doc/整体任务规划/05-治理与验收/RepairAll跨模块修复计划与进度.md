@@ -809,3 +809,32 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - 已将 Quant 专项 CI 的 push 分支加入 repair_all，保证后续聚合分支变更不会漏掉 Quant 专项验收。
 - Platform OwnerAccess 可复用 Owner Bearer + platform:admin 管理认证；Owner Session 不具备该权限。将其绑定为 Quant Policy 发布/撤销权限仍需明确治理映射，不把通用认证能力等同于已批准的领域权限。
 - Q-01 仍 BLOCKED：Policy Owner 规则/不可变版本/current pointer/签发撤销、生产 AuthorizedResultReader、Researchflow 强类型 Run→QuantResult 输出关联、Server Root 完整注入均未完成。用户已确认的“仅读取当前 Run 自己创建或明确关联的结果”约束继续生效；不得默认 Allow、跨 Run 读取或由 Quant 访问 Researchflow 私有 SQL。
+
+
+## 40. 2026-11-23 Q-01 策略管理提交复核与下一步
+
+### 40.1 本轮精确基线与 CI
+
+- 代码复核基线：`repair_all` SHA `c27cba069506187eb072dac1616babdf5d7aa282`。
+- Quant 策略管理实现提交：`15f882fa6d13ac1fac040170b49646c30b13200e`、`dd828baf4dba2e7d697ca260b941cd9dccb404a7`；Cookie 配置修正：`6c0c12fc4e8b8b4f3cb19e06e569a922cdc71730`；后续两次提交仅修正格式。
+- 精确 SHA `c27cba069506187eb072dac1616babdf5d7aa282` 的 Go Test Suite [45104096706](https://github.com/Kasign/stock_data_provider/actions/runs/45104096706)、Integration CI [45104096674](https://github.com/Kasign/stock_data_provider/actions/runs/45104096674) 均 success；Quant module validation [45103489316](https://github.com/Kasign/stock_data_provider/actions/runs/45103489316) success。
+- 本轮没有切换分支、合并、rebase 或重写历史。
+
+### 40.2 已完成的策略管理子项
+
+- Quant 新增策略不可变版本表、current pointer 和 Owner 管理审计表；发布/撤销在 MariaDB 事务中推进版本，行锁与 expected_version 阻止并发旧版本覆盖。
+- Server 将管理路由绑定 Owner Session；使用真实 Cookie 配置和 Session Authenticator，覆盖 Owner 身份、Origin/CSRF、Bearer 不得替代 Owner Session 等测试。
+- 以上只完成 Policy Owner 管理/版本生命周期子项。当前快照是固定策略身份及版本号，Enabled 是策略总开关，不构成对任意 subject/resource 的 Allow。
+
+### 40.3 Q-01 仍未完成的硬门槛
+
+- Quant 生产 `AuthorizedResultReader` 尚不存在，`GetResult` 仍只有 Application Port 和单测替身；Server 未装配完整 PrincipalResolver/Reader/Auditor/UTC Clock 读取组合。
+- Researchflow 当前生产 Stage Output Registry 只有 News Search Entry；没有 Quant Stage Provider，也没有已注册的强类型 `quant_result_id` 输出关联。通用 StageOutput 的 resource_ref/run_ref 不足以推导 Quant result_id 关联。
+- 读取必须同时验证 GOV-CTR-006 的可信 Researchflow principal、精确 result_id、purpose=quant_analysis、content_level=full、当前策略状态，以及当前 Run 自己创建或明确关联该结果。策略撤销与授权读取必须共享可证明的一致性边界；否则 fail-closed。
+- 不允许 Quant 直接查询 Researchflow 私有 SQL，不允许按主体全局放行，不允许通过 JSON 字段猜测、通用 resource_ref 或 Golden 示例补造关联事实。
+
+### 40.4 下一执行切片与顺序
+
+1. 继续 Q-01：先在 Researchflow 既有 StageOutput/ResultValidation 职责内核对并定义强类型 Quant Result 关联只读 Port；只有存在正式生产写入契约后，Quant 才实现 Reader，Server 再组合注入。
+2. 增加 MariaDB 集成与并发验收：同 Run 关联允许、跨 Run 拒绝、无关联拒绝、策略撤销与读取竞态拒绝旧授权、审计失败不释放结果。
+3. 完成 QNT-013/Q-01 并更新 Quant、Researchflow、Server 与总计划精确 SHA 证据后，才进入第二批 Data D2；不因策略管理子项通过提前切换主线。
