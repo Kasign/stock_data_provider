@@ -21,9 +21,9 @@ func TestMySQLAccessAuditorAppendsDecisionWithoutPayload(t *testing.T) {
 		t.Fatal(err)
 	}
 	event := application.AccessAuditEvent{
-		RunRef:           "run_0123456789abcdef0123456789abcdef",
-		SubjectRef:       "service:researchflow",
-		ResourceRef:      "quant_result:sha256:" + strings.Repeat("a", 64),
+		RunRef:                    "run_0123456789abcdef0123456789abcdef",
+		SubjectRef:                "service:researchflow",
+		ResourceRef:               "quant_result:sha256:" + strings.Repeat("a", 64),
 		PurposeCode:               "quant_analysis",
 		ContentLevel:              "full",
 		Decision:                  "allowed",
@@ -70,14 +70,14 @@ func TestMySQLAccessAuditorRejectsInvalidEventAndCancellation(t *testing.T) {
 		t.Fatal(err)
 	}
 	valid := application.AccessAuditEvent{
-		RunRef:      "run_abcdef0123456789abcdef0123456789",
-		SubjectRef:  "service:researchflow",
-		ResourceRef: "quant_result:sha256:" + strings.Repeat("b", 64),
-		PurposeCode: "quant_analysis",
+		RunRef:       "run_abcdef0123456789abcdef0123456789",
+		SubjectRef:   "service:researchflow",
+		ResourceRef:  "quant_result:sha256:" + strings.Repeat("b", 64),
+		PurposeCode:  "quant_analysis",
 		ContentLevel: "full",
-		Decision:    "denied",
+		Decision:     "denied",
 		ReasonCode:   "authorization_denied",
-		OccurredAt:  time.Date(2026, 11, 20, 3, 0, 0, 0, time.UTC),
+		OccurredAt:   time.Date(2026, 11, 20, 3, 0, 0, 0, time.UTC),
 	}
 	missingRun := valid
 	missingRun.RunRef = ""
