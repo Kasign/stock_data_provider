@@ -355,3 +355,10 @@
 - 用户确认契约后，再实现 HTTP Handler、OpenAPI/Schema、Router 注册、认证/授权与 WebUI 调用；在契约确认前不提交猜测性路由。
 
 代码复核基线：ca79ef0de11a861bdf9c412eedc42f935a82336d。本节只记录代码事实和执行边界；本次没有修改 Server 生产代码，也没有把模块专项测试或历史 CI 冒充为当前 HEAD 验收。
+
+### SRV-CTR-001 提案已形成（2026-11-23）
+
+- 已新增草案：`doc/server/contracts/SRV-CTR-001-Researchflow最小HTTPAPI提案.md`。
+- 草案仅覆盖 CreateRun、GetRun、CancelRun 三个入口，复用现有 Application Use Case、Owner Session 和 Run/Stage Schema；采用 Run 聚合轮询，不扩展列表、事件流、Attempt 明细或 Stage Output 内容读取。
+- 草案明确首期 News Search 仅用于验证 Researchflow 创建/执行/查询链路，不代表完整 A 股研究报告已经可用。
+- 当前状态仍为 DRAFT。未冻结 SRV-CTR-001，未添加 HTTP Handler/路由，等待用户确认 API 范围与认证边界后实施。
