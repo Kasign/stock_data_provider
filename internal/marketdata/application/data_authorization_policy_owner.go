@@ -45,7 +45,7 @@ func (owner *DataAuthorizationPolicyOwner) Current(ctx context.Context) (authori
 	if owner == nil || owner.repository == nil || ctx == nil {
 		return authorization.CurrentPolicy{}, ErrDataPolicyOwnerUnavailable
 	}
-	if err := requireDataPolicyOwnerSession(ctx); err != nil {
+	if _, err := requireDataPolicyOwnerSession(ctx); err != nil {
 		return authorization.CurrentPolicy{}, err
 	}
 	current, err := owner.repository.ResolveCurrentDataAuthorizationPolicy(ctx)
@@ -80,7 +80,8 @@ func (owner *DataAuthorizationPolicyOwner) Publish(
 		newVersion == expectedCurrentVersion {
 		return authorization.CurrentPolicy{}, ErrDataPolicyInvalidChange
 	}
-	if err := requireDataPolicyOwnerSession(ctx); err != nil {
+	principal, err := requireDataPolicyOwnerSession(ctx)
+	if err != nil {
 		return authorization.CurrentPolicy{}, err
 	}
 	if err := ctx.Err(); err != nil {

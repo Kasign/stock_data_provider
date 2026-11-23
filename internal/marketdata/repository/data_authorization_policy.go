@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"example.com/stock-analysis-flow/internal/marketdata/app"
@@ -21,12 +22,21 @@ var (
 	ErrDataAuthorizationPolicyConflict    = app.ErrDataAuthorizationPolicyVersionConflict
 )
 
-func (s *Store) PublishDataAuthorizationPolicyVersion(ctx context.Context, expectedCurrentVersion string, value authorization.PolicyVersion) error {
+func (s *Store) PublishDataAuthorizationPolicyVersion(
+	ctx context.Context,
+	expectedCurrentVersion string,
+	value authorization.PolicyVersion,
+	audit app.DataAuthorizationPolicyPublicationAudit,
+) error {
 	if s == nil || s.db == nil || ctx == nil {
 		return ErrDataAuthorizationPolicyUnavailable
 	}
 	if _, err := authorization.DecodePolicyVersion(value); err != nil {
 		return err
+	}
+	if audit.ActorRef != "principal:owner" || !validDataPolicyAuditRequestID(audit.RequestID) ||
+		audit.OccurredAt.IsZero() || audit.OccurredAt.Location() != time.UTC {
+		return authorization.ErrPolicyInvalid
 	}
 	if expectedCurrentVersion == value.PolicyVersion {
 		return ErrDataAuthorizationPolicyConflict
@@ -95,11 +105,40 @@ WHERE policy_type=? AND policy_ref=? AND policy_version=?`,
 			return ErrDataAuthorizationPolicyConflict
 		}
 	}
+	_, err = tx.ExecContext(ctx, `INSERT INTO market_data_authorization_policy_publications
+(policy_type, policy_ref, previous_policy_version, new_policy_version, payload_hash, actor_ref, request_id, occurred_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		value.PolicyType, value.PolicyRef, nullablePolicyVersion(expectedCurrentVersion),
+		value.PolicyVersion, value.PayloadHash, audit.ActorRef, audit.RequestID, audit.OccurredAt.UTC())
+	if err != nil {
+		return fmt.Errorf("%w: record policy publication audit: %v", ErrDataAuthorizationPolicyUnavailable, err)
+	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("%w: %v", ErrDataAuthorizationPolicyUnavailable, err)
 	}
 	committed = true
 	return nil
+}
+
+func nullablePolicyVersion(value string) any {
+	if value == "" {
+		return nil
+	}
+	return value
+}
+
+func validDataPolicyAuditRequestID(value string) bool {
+	if value == "" || len(value) > 128 {
+		return false
+	}
+	for _, char := range value {
+		if (char >= 'a' && char <= 'z') || (char >= 'A' && char <= 'Z') ||
+			(char >= '0' && char <= '9') || strings.ContainsRune("._:-", char) {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 func (s *Store) ResolveCurrentDataAuthorizationPolicy(ctx context.Context) (authorization.CurrentPolicy, error) {
@@ -151,6 +190,7 @@ func (s *Store) validateDataAuthorizationPolicySchema(ctx context.Context) error
 		"market_data_current_authorization_policy_versions": {"policy_type", "policy_ref", "policy_version", "updated_at"},
 		"market_data_authorization_decisions":               {"authorization_ref", "subject_ref", "resource_ref", "purpose_code", "policy_version", "decided_at", "expires_at", "decision_fingerprint", "authorization_json", "policy_snapshot_json", "record_hash"},
 		"market_data_authorization_revocations":             {"authorization_ref", "revoked_at", "revoked_by", "reason_code"},
+		"market_data_authorization_policy_publications": {"policy_type", "policy_ref", "previous_policy_version", "new_policy_version", "payload_hash", "actor_ref", "request_id", "occurred_at"},
 		"market_data_authorization_policy_publications": {"policy_type", "policy_ref", "previous_policy_version", "new_policy_version", "payload_hash", "actor_ref", "request_id", "occurred_at"},
 	} {
 		for _, column := range columns {
