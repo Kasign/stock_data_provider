@@ -1,6 +1,7 @@
 package app
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -42,6 +43,30 @@ func TestBuildDailyBarsCloseSeriesInputPreservesExactCloseAndPITEvidence(t *test
 	}
 	if got.Payload.Bars[0].FetchedAt[len(got.Payload.Bars[0].FetchedAt)-1:] != "Z" {
 		t.Fatalf("fetched_at is not canonical UTC: %q", got.Payload.Bars[0].FetchedAt)
+	}
+	encoded, err := json.Marshal(got.Payload)
+	if err != nil {
+		t.Fatalf("json.Marshal(payload) error = %v", err)
+	}
+	var document map[string]any
+	if err := json.Unmarshal(encoded, &document); err != nil {
+		t.Fatalf("json.Unmarshal(payload) error = %v", err)
+	}
+	coverage, ok := document["coverage_evidence"].(map[string]any)
+	if !ok || coverage["calendar_quality_status"] != "valid" {
+		t.Fatalf("coverage evidence JSON keys do not match the contract: %s", encoded)
+	}
+	bars, ok := document["bars"].([]any)
+	if !ok || len(bars) == 0 {
+		t.Fatalf("bars JSON array missing: %s", encoded)
+	}
+	firstBar, ok := bars[0].(map[string]any)
+	if !ok {
+		t.Fatalf("first bar JSON object missing: %s", encoded)
+	}
+	closeEvidence, ok := firstBar["close_evidence"].(map[string]any)
+	if !ok || closeEvidence["source_fraction_digits"] != float64(4) {
+		t.Fatalf("Close evidence JSON keys do not match the contract: %s", encoded)
 	}
 	if len(got.Sources) != 1 || got.Sources[0].SourceVersion != nil ||
 		got.Sources[0].ProviderInterfaceVersion != dailyBarsCloseSeriesEastmoneyAPIVersion {
