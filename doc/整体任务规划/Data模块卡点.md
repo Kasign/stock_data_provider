@@ -245,3 +245,11 @@ Root Server 的 Data Module 构造、共享资源注入、Migration Registry、I
 - 当前 Pytdx DailyBar 已写入 `AdjustmentMethod=pytdx_qfq/pytdx_hfq` 和 reference date；但没有显式填充 `AdjustmentAlgorithmVersion`。SourceVersion 包含依赖版本，但不能在 v2 DTO 中默认为它等价于完整算法版本/舍入契约。
 - 现有 `pytdx_daily_decimal_test.go` 只直接测试 Price 定点值转换；`daily_bar_adjustment_contract_test.go` 验证 QFQ/HFQ 结果数值，但未覆盖调整后 ExactValues 的证据语义、算法输出 scale 和舍入方式。
 - 本轮没有修改代码或测试标准。下一步在 DailyBarV2 DTO 字段语义明确后，增加调整后 Price 的回归用例，验证 raw 与 adjusted 两条路径的来源/scale/algorithm provenance 不混淆；在此之前不把 protocol_scale=3 作为复权结果精度承诺。
+
+
+## 2026-11-23 D2：HFQ reference date 语义差异审查
+
+- 当前服务门禁 `applyDailyBarAdjustmentMetadataQualityAt` 仅要求 forward series 有 reference date；backward 缺失时不自动降级。
+- 该例外目前有明确代码/测试依据的只有 Tushare `tushare_adj_factor_hfq_v1`：HFQ 使用绝对累计 adj_factor，QFQ 才需要最新日期归一化参考；对应单测明确允许 HFQ 无日期。
+- BaoStock、Hithink、TickFlow 的 backward Provider Method 也未填 reference date，但没有取得这些具体端点的固定锚点语义证据。不能把 Tushare 的例外推广到所有 Provider；当前 v1 行为暂不改动。
+- D2 DTO/Schema 需要区分日期锚定、Provider 累积锚点和未知锚点；未知必须 degraded/not_comparable。下一步逐个核验缺 reference date 的端点和真实响应，再确定是否需要方法级质量门禁。

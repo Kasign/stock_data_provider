@@ -764,3 +764,10 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 ## 34. 2026-11-23 D2 Pytdx 复权精度证据补充
 
 本次对 `github.com/injoyai/tdx@v0.0.86` 做了精确版本源码复核：Pytdx QFQ/HFQ 的仿射因子计算使用 float64，输出由 `roundHalfUpYuan` 按分舍入，再写入 Price 的厘定点表示。当前 ExactValues 从调整后的 Price.Int64() 记录 ProtocolScale=3；它是协议存储 scale，不是算法输出精度或原始 Provider token scale。DailyBarV2 必须区分这三者，并记录明确的算法版本/舍入语义。当前未改代码，等待字段契约定义后补针对性测试。
+
+
+## 35. 2026-11-23 D2 复权锚点语义审查
+
+- 当前服务对 forward 缺失 reference date 会降级；backward 缺失不会由通用门禁降级。Tushare 的 HFQ 累积因子例外有实现和单测依据，但不能据此推断 BaoStock/Hithink/TickFlow 的 backward API 也具有相同锚点语义。
+- D2 设计已修正为方法级 reference semantics：日期锚定需明确日期；Provider 累积锚点可空但必须有端点契约/真实样本依据；未知锚点保持 degraded/not_comparable。当前不改 v1 质量门禁、不改变测试标准。
+- 下一步核验缺日期的各 Provider 后复权端点；证据不足时保留降级，不补造参考日期。
