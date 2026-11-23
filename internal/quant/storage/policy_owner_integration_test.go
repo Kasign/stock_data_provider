@@ -79,10 +79,10 @@ func TestMySQLResultAccessPolicyPublishesImmutableVersionsAndRevokes(t *testing.
 	}
 	defer rows.Close()
 	type auditRecord struct {
-		actor string
-		action string
+		actor    string
+		action   string
 		previous uint64
-		next uint64
+		next     uint64
 	}
 	var auditRecords []auditRecord
 	for rows.Next() {
