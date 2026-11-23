@@ -315,3 +315,12 @@ Root Server 的 Data Module 构造、共享资源注入、Migration Registry、I
 - **Snapshot 指纹**：PayloadFingerprint 和 ManifestFingerprint 独立计算；SnapshotRef 必须绑定二者规范化组合。旧 Golden 中相等的两项指纹不能证明 Payload 被哈希。
 - **不再复查的代码范围**：后续执行可直接复用上述结论；只有相关代码、Schema、Migration 或 Provider 版本语义发生变化时才重新核对。
 - **下一步**：正式确定 DATA-CTR-008 新版本如何表达缺失 Provider 数据版本，并与 DATA-CTR-007 SnapshotRef/Manifest/Payload 新版定义一起做消费者影响评估；契约版本未明确前不进入正式 Snapshot 写入和 Quant 生产读取。
+
+
+## 2026-11-23 来源版本契约冲突裁决（DEC-PLAT-002-055）
+
+- 正式语义：Manifest `sources[].source_version` 只表示可验证的 Provider 上游数据版本；不存在时显式 null，不得以 Adapter/API/协议版本、FetchedAt、SystemObservedAt、revision hash 或 sentinel 填充。
+- DATA-CTR-008 1.0.0 冻结不变；新生产链路采用 2.0.0，显式 `schema_version="2.0.0"`，`source_version` required+nullable，`adapter_version` 为独立可选字段。未建立稳定机制的 normalization_version 不新增。
+- ManifestFingerprint 覆盖 Schema 版本和来源字段；SnapshotRef 必须由 DATA-CTR-007 定义为 ManifestFingerprint 与 PayloadFingerprint 的绑定引用。
+- GOV-CTR-006 resource_ref 继续绑定最终 SnapshotRef；授权主体和读取时当前策略复核不变。
+- 本决议只确定语义，不代表新 Schema/Golden、Data Owner 实现或消费者支持已完成。下一步发布 DATA-CTR-008 2.0.0 与 DATA-CTR-007 机器契约及 Golden，然后实现 Snapshot Repository。

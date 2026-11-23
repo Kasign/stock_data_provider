@@ -958,3 +958,11 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - 真实契约问题：DEC-PLAT-002-020 要求 Provider 数据版本缺失时显式缺失；DATA-CTR-008 1.0.0 Schema 却要求 sources.source_version 为非空字符串。冻结 1.0.0 不得原地改写，也不得用 Adapter/FetchedAt 伪造。
 - SnapshotRef 必须绑定独立 ManifestFingerprint 与 PayloadFingerprint；实际组合公式、Payload Schema、来源版本表达及 GOV-CTR-006 resource_ref 关联由 DATA-CTR-007 新版契约/Golden 定义。
 - 当前下一任务：做 DATA-CTR-008 版本演进与 DATA-CTR-007 新版契约的定点设计/影响分析，先确认字段版本语义和消费者兼容策略，再进入 Data Snapshot Repository、Owner 授权及 Quant SMA 生产链路。DATA-CTR-005/007 未达到重新进入条件前仍按登记簿状态管理。
+
+
+## 2026-11-23 Data Snapshot 来源版本契约裁决与下一阶段
+
+- Data 审计基线已固化到 Data 依赖方案、当前任务入口和卡点文档；单 Bar ExactValues/Revision Hash、V5 Calendar Snapshot、Eastmoney 原始 Close 输入边界不再重复审计。
+- DEC-PLAT-002-055 已裁决 Provider 数据版本缺失表达：DATA-CTR-008 1.0.0 不改；2.0.0 显式 schema_version，source_version required+nullable，adapter_version 独立可选，不允许伪造 Provider 数据版本。
+- DATA-CTR-007 负责定义 Payload Schema、PayloadFingerprint 和同时绑定 Manifest/Payload 的 SnapshotRef；GOV-CTR-006 resource_ref 绑定最终 SnapshotRef。
+- 下一阶段：发布 DATA-CTR-008 2.0.0 与 DATA-CTR-007 Schema/Golden，完成 Research/Quant 消费者版本选择与兼容性测试；完成前不进入正式 Snapshot Repository/Quant SMA 生产读取。
