@@ -121,8 +121,8 @@ WHERE c.policy_type=? AND c.policy_ref=?`,
 // validateDataAuthorizationPolicySchema verifies both immutable history and current-pointer tables.
 func (s *Store) validateDataAuthorizationPolicySchema(ctx context.Context) error {
 	for table, columns := range map[string][]string{
-		"market_data_authorization_policy_versions":          {"policy_type", "policy_ref", "policy_version", "payload_json", "payload_hash", "created_at"},
-		"market_data_current_authorization_policy_versions":  {"policy_type", "policy_ref", "policy_version", "updated_at"},
+		"market_data_authorization_policy_versions":         {"policy_type", "policy_ref", "policy_version", "payload_json", "payload_hash", "created_at"},
+		"market_data_current_authorization_policy_versions": {"policy_type", "policy_ref", "policy_version", "updated_at"},
 		"market_data_authorization_decisions":               {"authorization_ref", "subject_ref", "resource_ref", "purpose_code", "policy_version", "decided_at", "expires_at", "decision_fingerprint", "authorization_json", "policy_snapshot_json", "record_hash"},
 		"market_data_authorization_revocations":             {"authorization_ref", "revoked_at", "revoked_by", "reason_code"},
 	} {

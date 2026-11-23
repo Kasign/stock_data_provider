@@ -27,23 +27,23 @@ const maxDataAuthorizationObjectBytes = 64 * 1024
 
 type DataAuthorizationDecision struct {
 	AuthorizationRef json.RawMessage
-	PolicySnapshot     json.RawMessage
+	PolicySnapshot   json.RawMessage
 }
 
 type storedDataAuthorizationRef struct {
-	AuthorizationRef     string   `json:"authorization_ref"`
-	PolicyOwner          string   `json:"policy_owner"`
-	PolicyVersion        string   `json:"policy_version"`
-	Decision             string   `json:"decision"`
-	PurposeCode          string   `json:"purpose_code"`
-	ContentLevel         string   `json:"content_level"`
-	SubjectRef           string   `json:"subject_ref"`
-	ResourceRef          string   `json:"resource_ref"`
-	DecidedAt            string   `json:"decided_at"`
-	ExpiresAt            *string  `json:"expires_at"`
-	Conditions           []string `json:"conditions"`
-	DecisionFingerprint  string   `json:"decision_fingerprint"`
-	SchemaVersion        string   `json:"schema_version"`
+	AuthorizationRef    string   `json:"authorization_ref"`
+	PolicyOwner         string   `json:"policy_owner"`
+	PolicyVersion       string   `json:"policy_version"`
+	Decision            string   `json:"decision"`
+	PurposeCode         string   `json:"purpose_code"`
+	ContentLevel        string   `json:"content_level"`
+	SubjectRef          string   `json:"subject_ref"`
+	ResourceRef         string   `json:"resource_ref"`
+	DecidedAt           string   `json:"decided_at"`
+	ExpiresAt           *string  `json:"expires_at"`
+	Conditions          []string `json:"conditions"`
+	DecisionFingerprint string   `json:"decision_fingerprint"`
+	SchemaVersion       string   `json:"schema_version"`
 }
 
 // AppendDataAuthorizationDecision 保存完整 GOV-CTR-006 决策对象；重复写入必须逐字节等价。
