@@ -244,7 +244,12 @@ func TestMariaDBDataAuthorizationPolicyVersionsAreImmutableAndCurrent(t *testing
 	}
 
 	changed := value
-	changed.Payload = []byte(`{"schema_version":"1.0.0","status":"revoked"}`)
+	changedPolicy := policy
+	changedPolicy.Status = authorization.PolicyRevoked
+	changed.Payload, err = json.Marshal(changedPolicy)
+	if err != nil {
+		t.Fatal(err)
+	}
 	changedSum := sha256.Sum256(changed.Payload)
 	changed.PayloadHash = hex.EncodeToString(changedSum[:])
 	if err := store.PublishDataAuthorizationPolicyVersion(ctx, changed); !errors.Is(err, ErrDataAuthorizationPolicyConflict) {
