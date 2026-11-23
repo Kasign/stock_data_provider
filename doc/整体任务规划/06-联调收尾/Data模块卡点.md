@@ -385,3 +385,10 @@ Root Server 的 Data Module 构造、共享资源注入、Migration Registry、I
 - DATA-CTR-007 Payload Schema 同步收紧为 `quality_status: const valid`，使 Builder、Verify 和机器契约一致。
 - 增加 Builder 对聚合及逐 Bar 四类非 valid 状态的拒绝测试，并增加已构建 Snapshot 被改成 degraded 后 Verify 拒绝的测试。
 - 本项是 Snapshot 生产服务的第一项代码修复；尚未实现 Snapshot Repository、Migration V6、Data Owner 授权或 Server Snapshot Port。Schema/Golden 的真实数据一致性与消费者契约验收仍待完成，不将现有草案视为冻结契约。
+
+
+## 2026-11-23 Snapshot Schema 自动一致性测试
+
+- 新增 Data Application 层契约测试：使用现有 Builder 构造的结构样例，分别编译 DATA-CTR-007 Payload 1.0.0 与 DATA-CTR-008 Manifest 2.0.0 Schema，验证 Go 输出符合 Schema。
+- 增加 Schema 负向断言：聚合质量与逐 Bar 质量为 degraded/stale/invalid/unknown 时均不能通过 DATA-CTR-007 Schema。
+- 该测试只证明 Go DTO 与 Schema 的结构一致性，不是生产数据 Golden；真实 Golden 仍必须由 MariaDB PIT V2 Reader 的实际历史数据生成，不能用单元测试样例代替。
