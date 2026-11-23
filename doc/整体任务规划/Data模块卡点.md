@@ -253,3 +253,11 @@ Root Server 的 Data Module 构造、共享资源注入、Migration Registry、I
 - 该例外目前有明确代码/测试依据的只有 Tushare `tushare_adj_factor_hfq_v1`：HFQ 使用绝对累计 adj_factor，QFQ 才需要最新日期归一化参考；对应单测明确允许 HFQ 无日期。
 - BaoStock、Hithink、TickFlow 的 backward Provider Method 也未填 reference date，但没有取得这些具体端点的固定锚点语义证据。不能把 Tushare 的例外推广到所有 Provider；当前 v1 行为暂不改动。
 - D2 DTO/Schema 需要区分日期锚定、Provider 累积锚点和未知锚点；未知必须 degraded/not_comparable。下一步逐个核验缺 reference date 的端点和真实响应，再确定是否需要方法级质量门禁。
+
+
+## 2026-11-23 D2：Tushare/BaoStock 复权锚点官方资料核验
+
+- 已核验 Tushare 官方 `pro_bar` 说明：QFQ = close × 当日 adj_factor / end_date 最新 adj_factor；HFQ = close × 当日 adj_factor。当前 `applyTushareAdjustment` 的 forward/referenceDate 与 backward/无 referenceDate 逻辑和该公式一致。Tushare `adj_factor` 文档仅给出盘前入库时间窗口 9:15–9:20，不足以生成精确 AvailableAt。
+- 已核验 BaoStock 官方知识库：复权因子只在除权日记录；backAdjustFactor 的固定锚点是上市首日（首日因子 1），foreAdjustFactor 的锚点是最近一次除权除息日后的交易日。BaoStock HFQ 无显式 reference_date 有官方依据；QFQ 需按其 latest-ex-date 语义描述，不得用 end_date 代替。
+- Hithink 默认 endpoint 文档只列 none/forward/backward，未说明 anchor；返回顶层 timestamp 是数据就绪时间，不是逐 Bar 时间。TickFlow 官方 SDK 暴露 ex_factors endpoint，但公开说明未定义 factor baseline。Eastmoney 未找到可审计官方复权公式。
+- 因此将“仅 Tushare 有证据”的旧结论修正为 Tushare + BaoStock；Hithink/TickFlow/Eastmoney 保持 anchor unknown。当前仍不改 v1 质量门禁，待真实样本复算后再决定方法级规则。

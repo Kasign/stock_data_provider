@@ -771,3 +771,10 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - 当前服务对 forward 缺失 reference date 会降级；backward 缺失不会由通用门禁降级。Tushare 的 HFQ 累积因子例外有实现和单测依据，但不能据此推断 BaoStock/Hithink/TickFlow 的 backward API 也具有相同锚点语义。
 - D2 设计已修正为方法级 reference semantics：日期锚定需明确日期；Provider 累积锚点可空但必须有端点契约/真实样本依据；未知锚点保持 degraded/not_comparable。当前不改 v1 质量门禁、不改变测试标准。
 - 下一步核验缺日期的各 Provider 后复权端点；证据不足时保留降级，不补造参考日期。
+
+
+## 36. 2026-11-23 D2 Provider 锚点证据更新
+
+- Tushare 官方文档确认 QFQ 使用 end_date 最新因子归一化，HFQ 直接使用当日因子；BaoStock 官方文档确认 HFQ 以上市首日为固定锚点、QFQ 因子以最近除权日后交易日为锚点。二者的无显式 HFQ reference_date 有来源依据。
+- Hithink/TickFlow/Eastmoney 目前没有足以确认具体端点锚点公式的资料；Hithink 的顶层 timestamp 是数据就绪时间，不得写成每根 Bar 的 ProviderTime。保持 unknown，不猜公式、不新增平行因子实现。
+- 下一步集中处理 Hithink/TickFlow/Eastmoney 的真实样本/因子对照；如不能取得可复核证据，则保留 degraded/not_comparable。
