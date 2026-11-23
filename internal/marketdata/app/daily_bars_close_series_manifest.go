@@ -16,27 +16,27 @@ import (
 
 const (
 	DailyBarsCloseSeriesManifestSchemaVersion = "2.0.0"
-	dailyBarsCloseSeriesSnapshotRefPrefix      = "data_snapshot:sha256:"
+	dailyBarsCloseSeriesSnapshotRefPrefix     = "data_snapshot:sha256:"
 )
 
 // DailyBarsCloseSeriesManifest 是 DATA-CTR-008 2.0.0 Manifest。
 type DailyBarsCloseSeriesManifest struct {
-	SchemaVersion        string                       `json:"schema_version"`
-	SnapshotRef          string                       `json:"snapshot_ref"`
-	ManifestFingerprint  string                       `json:"manifest_fingerprint"`
-	CallerRef            string                       `json:"caller_ref"`
-	PurposeCode          string                       `json:"purpose_code"`
-	Symbol               string                       `json:"symbol"`
-	StartDate            string                       `json:"start_date"`
-	EndDate              string                       `json:"end_date"`
-	AdjustmentBasis      AdjustmentBasis              `json:"adjustment_basis"`
-	SystemAsOf           string                       `json:"system_as_of"`
-	Sources              []DailyBarsCloseSeriesSource `json:"sources"`
+	SchemaVersion       string                       `json:"schema_version"`
+	SnapshotRef         string                       `json:"snapshot_ref"`
+	ManifestFingerprint string                       `json:"manifest_fingerprint"`
+	CallerRef           string                       `json:"caller_ref"`
+	PurposeCode         string                       `json:"purpose_code"`
+	Symbol              string                       `json:"symbol"`
+	StartDate           string                       `json:"start_date"`
+	EndDate             string                       `json:"end_date"`
+	AdjustmentBasis     AdjustmentBasis              `json:"adjustment_basis"`
+	SystemAsOf          string                       `json:"system_as_of"`
+	Sources             []DailyBarsCloseSeriesSource `json:"sources"`
 }
 
 // DailyBarsCloseSeriesSnapshot 将 Manifest、Payload 和两者的独立指纹绑定为一个不可变输入。
 type DailyBarsCloseSeriesSnapshot struct {
-	Manifest          DailyBarsCloseSeriesManifest
+	Manifest           DailyBarsCloseSeriesManifest
 	PayloadFingerprint string
 	Payload            DailyBarsCloseSeriesPayload
 }
@@ -107,7 +107,7 @@ func BuildDailyBarsCloseSeriesSnapshot(input DailyBarsCloseSeriesInput, callerRe
 	manifest.SnapshotRef = snapshotRef
 	result := DailyBarsCloseSeriesSnapshot{
 		Manifest:           manifest,
-		PayloadFingerprint: payloadFingerprint,
+		PayloadFingerprint:  payloadFingerprint,
 		Payload:            input.Payload,
 	}
 	if err := result.Verify(); err != nil {
@@ -253,8 +253,8 @@ func canonicalDailyBarsCloseSeriesSources(values []DailyBarsCloseSeriesSource) (
 			return nil, fmt.Errorf("daily-bars snapshot source %d has an invalid provider_interface_version", i)
 		}
 		sources[i] = DailyBarsCloseSeriesSource{
-			SourceRef: source.SourceRef,
-			SourceVersion: cloneDailyBarsCloseSeriesString(source.SourceVersion),
+			SourceRef:                source.SourceRef,
+			SourceVersion:            cloneDailyBarsCloseSeriesString(source.SourceVersion),
 			ProviderInterfaceVersion: source.ProviderInterfaceVersion,
 		}
 	}
@@ -296,15 +296,15 @@ func validateDailyBarsCloseSeriesSourceBinding(payload DailyBarsCloseSeriesPaylo
 
 func calculateDailyBarsCloseSeriesManifestFingerprint(manifest DailyBarsCloseSeriesManifest) (string, error) {
 	input := dailyBarsCloseSeriesManifestFingerprintInput{
-		SchemaVersion: manifest.SchemaVersion,
-		CallerRef: manifest.CallerRef,
-		PurposeCode: manifest.PurposeCode,
-		Symbol: manifest.Symbol,
-		StartDate: manifest.StartDate,
-		EndDate: manifest.EndDate,
+		SchemaVersion:   manifest.SchemaVersion,
+		CallerRef:       manifest.CallerRef,
+		PurposeCode:     manifest.PurposeCode,
+		Symbol:          manifest.Symbol,
+		StartDate:       manifest.StartDate,
+		EndDate:         manifest.EndDate,
 		AdjustmentBasis: manifest.AdjustmentBasis,
-		SystemAsOf: manifest.SystemAsOf,
-		Sources: manifest.Sources,
+		SystemAsOf:      manifest.SystemAsOf,
+		Sources:         manifest.Sources,
 	}
 	encoded, err := json.Marshal(input)
 	if err != nil {
