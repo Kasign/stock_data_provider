@@ -1,10 +1,20 @@
 # Data 模块卡点
 
-更新时间：2026-11-18  
-维护分支：`feat/data`  
+更新时间：2026-11-23  
+维护分支：`repair_all`（聚合验收）  
 模块范围：`internal/marketdata/**`；`doc/api/**`
 
-## 当前卡点：DATA-003 Fundamentals PIT 真实披露时点证据
+## 当前卡点：DATA D2 后复权链路（全局顺序在 Quant Q-01 之后）
+
+**状态：IN_PROGRESS；本轮仅关闭锚点质量门禁子项，Provider/Decimal 主体尚未关闭。**
+
+- 已完成：无 reference date 时按 Provider method 做后复权锚点门禁；未知方法降级；实时与缓存路径测试覆盖。
+- 真实样本：Hithink 23 bars/30 corporate actions 可用仿射公式复算 OHLC，但 adjusted volume 为小数，旧 DailyBar.Volume int64 归一化丢弃，禁止四舍五入。
+- 未完成：Hithink 不同 end date 的 anchor 对照；Hithink CorporateActionProvider 生产接入；AdjustmentFactor/CorporateAction exact source token；Decimal 仿射重建及 current rebuild 调用路径。
+- 外部阻塞：Tushare adj_factor/dividend 返回 40203；Eastmoney 本轮 EOF/502。不得将 live probe 标记为全 Provider 通过。
+- 代码 SHA `e8d1c5464bd78dc83d6a9f51df41ea2d86a7fbba` 的 Go Test Suite 与 Integration CI 通过。完整证据见 `doc/api/依赖/02-DATA-CTR-005与007解阻方案.md`。
+
+## 其他历史卡点：DATA-003 Fundamentals PIT 真实披露时点证据
 
 **状态：BLOCKED（外部真实数据证据不足；任务总体仍为 IN_PROGRESS）**
 

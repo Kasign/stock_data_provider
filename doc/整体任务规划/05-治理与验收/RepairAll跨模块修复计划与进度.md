@@ -802,10 +802,10 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 
 ## 39. 2026-11-23 QNT-013 授权证明与审计证据子项验收
 
-- 当前聚合分支 HEAD：`7bf2c47edb394a22de1d3e72a23911708e6c0962`；Quant 代码 SHA：`d72ac3e933f57f86147fad0b5f05c2d9fbd5999a`。
+- 本节 Quant 代码 SHA：`d72ac3e933f57f86147fad0b5f05c2d9fbd5999a`；当前 repair_all HEAD 以 GitHub 分支引用为准。
 - GetResult 新增领域策略身份校验：PolicySnapshot 必须包含 `quant_result_access / quant-result-access`；策略版本不硬编码，其他有效策略仍可并存。负向测试使用正确 Fingerprint 证明错误策略身份仍被拒绝。
 - Quant AccessAudit Migration v4 持久化 content_level、完整 AuthorizationRef/PolicySnapshot JSON、PolicySnapshotRef、DecisionFingerprint；不存结果 Payload。
-- Go Test Suite [45102027281](https://github.com/Kasign/stock_data_provider/actions/runs/45102027281) success；Integration CI [45102027283](https://github.com/Kasign/stock_data_provider/actions/runs/45102027283) success（含 Quant MariaDB audit/result 持久化测试）；Quant module validation [45102352607](https://github.com/Kasign/stock_data_provider/actions/runs/45102352607) success（gofmt、单测、MariaDB no-skip、Manifest Fuzz、Race、Vet）。
+- Go Test Suite [45102027281](https://github.com/Kasign/stock_data_provider/actions/runs/45102027281) success；Integration CI [45102027283](https://github.com/Kasign/stock_data_provider/actions/runs/45102027283) success（含 Quant MariaDB audit/result 持久化测试）；Quant module validation [45102582473](https://github.com/Kasign/stock_data_provider/actions/runs/45102582473) success（gofmt、单测、MariaDB no-skip、Manifest Fuzz、Race、Vet）。
 - 已将 Quant 专项 CI 的 push 分支加入 repair_all，保证后续聚合分支变更不会漏掉 Quant 专项验收。
 - Platform OwnerAccess 可复用 Owner Bearer + platform:admin 管理认证；Owner Session 不具备该权限。将其绑定为 Quant Policy 发布/撤销权限仍需明确治理映射，不把通用认证能力等同于已批准的领域权限。
 - Q-01 仍 BLOCKED：Policy Owner 规则/不可变版本/current pointer/签发撤销、生产 AuthorizedResultReader、Researchflow 强类型 Run→QuantResult 输出关联、Server Root 完整注入均未完成。用户已确认的“仅读取当前 Run 自己创建或明确关联的结果”约束继续生效；不得默认 Allow、跨 Run 读取或由 Quant 访问 Researchflow 私有 SQL。
