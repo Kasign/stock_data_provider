@@ -9,6 +9,38 @@ import (
 	"example.com/stock-analysis-flow/internal/quant/manifest"
 )
 
+// BuildRecord 从 Quant 已注册的强类型 Payload 构造不可变结果记录。
+// 只有 Envelope 当前支持的 result_type/schema 组合可以进入持久化写入端口。
+func BuildRecord(input manifest.Input, payload Payload) (Record, error) {
+	if !supportedPayloadValue(payload) {
+		return Record{}, ErrUnsupportedPayload
+	}
+	if input.SchemaVersion != EnvelopeSchemaVersion ||
+		input.ResultType != payload.resultType() ||
+		input.PayloadSchemaVersion != payload.payloadSchemaVersion() {
+		return Record{}, ErrInvalidEnvelope
+	}
+	if err := payload.validate(); err != nil {
+		return Record{}, fmt.Errorf("%w: payload validation: %v", ErrInvalidEnvelope, err)
+	}
+	raw, err := payload.marshalPayload()
+	if err != nil {
+		return Record{}, fmt.Errorf("%w: marshal payload: %v", ErrInvalidEnvelope, err)
+	}
+	source, err := manifest.BuildWithPayload(input, raw)
+	if err != nil {
+		return Record{}, fmt.Errorf("%w: build manifest: %v", ErrInvalidEnvelope, err)
+	}
+	record := Record{Manifest: source, Payload: append(json.RawMessage(nil), raw...)}
+	if err := record.Validate(); err != nil {
+		return Record{}, fmt.Errorf("%w: validate record: %v", ErrInvalidEnvelope, err)
+	}
+	if _, err := DecodePayload(source.ResultType, source.PayloadSchemaVersion, record.Payload); err != nil {
+		return Record{}, err
+	}
+	return record, nil
+}
+
 var ErrResultConflict = errors.New("quant result identity conflict")
 
 // Record 是持久化边界中的不可变结果载荷。
