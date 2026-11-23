@@ -1,7 +1,6 @@
 package bootstrap
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -13,6 +12,7 @@ import (
 
 type quantPolicyHTTPHandler struct {
 	authenticator *serversecurity.SessionAuthenticator
+	cookieName    string
 	manager       quantResultAccessPolicyManager
 }
 
@@ -33,6 +33,7 @@ func newQuantPolicyHTTPHandler(composition *ownerSessionComposition) (http.Handl
 	}
 	handler := &quantPolicyHTTPHandler{
 		authenticator: composition.authenticator,
+		cookieName: composition.cookie.Name,
 		manager: composition.policyManager,
 	}
 	mux := http.NewServeMux()
@@ -102,7 +103,7 @@ func (h *quantPolicyHTTPHandler) authenticate(w http.ResponseWriter, r *http.Req
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	if len(r.Header.Values("Authorization")) > 0 {
 		status, code, message := http.StatusUnauthorized, "server.session_unauthenticated", "Owner Session authentication is required"
-		if hasCookie(r, h.authenticatorCookieName()) {
+		if hasCookie(r, h.cookieName) {
 			status, code, message = http.StatusBadRequest, "server.ambiguous_authentication", "provide Owner Session only"
 		}
 		writePublicError(w, r, status, publicError{Class: "unauthenticated", Code: code, Message: message})
@@ -138,12 +139,6 @@ func (h *quantPolicyHTTPHandler) authenticate(w http.ResponseWriter, r *http.Req
 		return "", false
 	}
 	return principal.Subject, true
-}
-
-func (h *quantPolicyHTTPHandler) authenticatorCookieName() string {
-	// The authenticator validates the configured cookie; the composition root
-	// passes the same cookie name through the existing Owner Session handler.
-	return "__Secure-owner_session"
 }
 
 func (h *quantPolicyHTTPHandler) writePolicyError(w http.ResponseWriter, r *http.Request, err error) {
