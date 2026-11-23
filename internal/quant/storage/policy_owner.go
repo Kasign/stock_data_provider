@@ -13,13 +13,13 @@ import (
 )
 
 var (
-	ErrInvalidPolicyStore = errors.New("Quant result access policy store is invalid")
+	ErrInvalidPolicyStore     = errors.New("Quant result access policy store is invalid")
 	ErrPolicyStoreUnavailable = errors.New("Quant result access policy storage is unavailable")
 )
 
 const (
-	resultAccessPolicyType = "quant_result_access"
-	resultAccessPolicyRef = "quant-result-access"
+	resultAccessPolicyType           = "quant_result_access"
+	resultAccessPolicyRef            = "quant-result-access"
 	resultAccessPolicySnapshotPrefix = "policy-snapshot:quant:result-access:"
 )
 
@@ -102,10 +102,10 @@ func (store *MySQLResultAccessPolicyStore) SetResultAccessPolicyEnabled(
 	snapshotRef := resultAccessPolicySnapshotPrefix + strconv.FormatUint(nextVersion, 10)
 	snapshot := application.PolicySnapshot{
 		SchemaVersion: "1.0.0",
-		SnapshotRef: snapshotRef,
+		SnapshotRef:   snapshotRef,
 		Policies: []application.PolicyVersion{{
-			PolicyType: resultAccessPolicyType,
-			PolicyRef: resultAccessPolicyRef,
+			PolicyType:    resultAccessPolicyType,
+			PolicyRef:     resultAccessPolicyRef,
 			PolicyVersion: strconv.FormatUint(nextVersion, 10),
 		}},
 	}

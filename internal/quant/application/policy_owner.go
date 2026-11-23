@@ -8,8 +8,8 @@ import (
 )
 
 var (
-	ErrInvalidPolicyChange = errors.New("invalid Quant result access policy change")
-	ErrPolicyVersionConflict = errors.New("Quant result access policy version conflict")
+	ErrInvalidPolicyChange    = errors.New("invalid Quant result access policy change")
+	ErrPolicyVersionConflict  = errors.New("Quant result access policy version conflict")
 	ErrPolicyOwnerUnavailable = errors.New("Quant result access policy owner unavailable")
 )
 
