@@ -181,12 +181,11 @@ func newOwnerHTTPTestHandler(t *testing.T, sessions *ownerHTTPTestSessions, cred
 	return handler
 }
 
-
 type ownerHTTPTestQuantPolicyManager struct {
-	state          quantapplication.ResultAccessPolicyState
-	actors         []string
-	publishCalls   int
-	revokeCalls    int
+	state        quantapplication.ResultAccessPolicyState
+	actors       []string
+	publishCalls int
+	revokeCalls  int
 }
 
 func (m *ownerHTTPTestQuantPolicyManager) Current(context.Context) (quantapplication.ResultAccessPolicyState, error) {
