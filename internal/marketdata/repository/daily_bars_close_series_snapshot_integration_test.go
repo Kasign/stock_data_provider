@@ -2,6 +2,10 @@ package repository
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
 	"errors"
 	"os"
 	"strings"
@@ -10,6 +14,7 @@ import (
 	"time"
 
 	"example.com/stock-analysis-flow/internal/marketdata/app"
+	"example.com/stock-analysis-flow/internal/marketdata/authorization"
 )
 
 func TestDailyBarsCloseSeriesSnapshotStorageDisabledFailsClosed(t *testing.T) {
@@ -172,3 +177,80 @@ func repositoryCloseSeriesBar(tradeDate, closeValue, sourceToken string, fractio
 }
 
 func repositoryStringPointer(value string) *string { return &value }
+
+func TestDataAuthorizationPolicyStorageDisabledFailsClosed(t *testing.T) {
+	if err := (*Store)(nil).PublishDataAuthorizationPolicyVersion(context.Background(), authorization.PolicyVersion{}); err == nil {
+		t.Fatal("publishing policy without storage must fail")
+	}
+	if _, err := (*Store)(nil).ResolveCurrentDataAuthorizationPolicy(context.Background()); err == nil {
+		t.Fatal("resolving current policy without storage must fail")
+	}
+}
+
+func TestMariaDBDataAuthorizationPolicyVersionsAreImmutableAndCurrent(t *testing.T) {
+	dsn := os.Getenv("MARKET_DATA_TEST_MYSQL_DSN")
+	if dsn == "" { dsn = os.Getenv("SERVER_RELAY_TEST_MYSQL_DSN") }
+	if dsn == "" { t.Skip("MariaDB integration DSN is not configured") }
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	store, err := OpenMySQL(ctx, dsn)
+	if err != nil { t.Fatalf("open MariaDB: %v", err) }
+	defer store.Close()
+	if err := store.Migrate(ctx); err != nil { t.Fatalf("migrate Data schema: %v", err) }
+	if err := store.ValidateCompatibilitySchema(ctx); err != nil { t.Fatalf("validate Data schema: %v", err) }
+
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	version := fmt.Sprintf("integration-%d", now.UnixNano())
+	policy := authorization.DataAccessPolicy{
+		SchemaVersion: authorization.DataAccessPolicySchemaVersion,
+		Status: authorization.PolicyApproved,
+		AllowedSubjects: []string{"principal:service:market-data-it"},
+		AllowedPurposes: []string{"research_analysis"},
+		RequiredScopes: []string{"data:read"},
+		EffectiveAt: now.Add(-time.Minute),
+	}
+	payload, err := json.Marshal(policy)
+	if err != nil { t.Fatal(err) }
+	sum := sha256.Sum256(payload)
+	value := authorization.PolicyVersion{
+		PolicyType: authorization.DataAccessPolicyType,
+		PolicyRef: authorization.DailyBarsV2PolicyRef,
+		PolicyVersion: version,
+		Payload: payload,
+		PayloadHash: hex.EncodeToString(sum[:]),
+		CreatedAt: now,
+	}
+	if err := store.PublishDataAuthorizationPolicyVersion(ctx, value); err != nil { t.Fatalf("publish policy version: %v", err) }
+	current, err := store.ResolveCurrentDataAuthorizationPolicy(ctx)
+	if err != nil { t.Fatalf("resolve current policy: %v", err) }
+	if current.Version.PolicyVersion != version || current.Policy.Status != authorization.PolicyApproved {
+		t.Fatalf("current policy mismatch: %+v", current)
+	}
+	changed := value
+	changed.Payload = []byte(`{"schema_version":"1.0.0","status":"revoked"}`)
+	changedSum := sha256.Sum256(changed.Payload)
+	changed.PayloadHash = hex.EncodeToString(changedSum[:])
+	if err := store.PublishDataAuthorizationPolicyVersion(ctx, changed); !errors.Is(err, ErrDataAuthorizationPolicyConflict) {
+		t.Fatalf("same policy version with different content must conflict, got %v", err)
+	}
+	current, err = store.ResolveCurrentDataAuthorizationPolicy(ctx)
+	if err != nil || current.Version.PolicyVersion != version || current.Policy.Status != authorization.PolicyApproved {
+		t.Fatalf("conflicting immutable write changed current policy: current=%+v err=%v", current, err)
+	}
+
+	revoked := policy
+	revoked.Status = authorization.PolicyRevoked
+	revokedPayload, err := json.Marshal(revoked)
+	if err != nil { t.Fatal(err) }
+	revokedSum := sha256.Sum256(revokedPayload)
+	revokedVersion := value
+	revokedVersion.PolicyVersion = version + "-revoked"
+	revokedVersion.Payload = revokedPayload
+	revokedVersion.PayloadHash = hex.EncodeToString(revokedSum[:])
+	revokedVersion.CreatedAt = now.Add(time.Second)
+	if err := store.PublishDataAuthorizationPolicyVersion(ctx, revokedVersion); err != nil { t.Fatalf("publish revoked policy: %v", err) }
+	current, err = store.ResolveCurrentDataAuthorizationPolicy(ctx)
+	if err != nil || current.Policy.Status != authorization.PolicyRevoked || current.Version.PolicyVersion != revokedVersion.PolicyVersion {
+		t.Fatalf("revoked policy did not become current: current=%+v err=%v", current, err)
+	}
+}

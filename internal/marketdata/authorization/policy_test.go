@@ -23,7 +23,7 @@ func TestEvaluateRequiresExplicitSubjectPurposeAndScope(t *testing.T) {
 	if !errors.Is(Evaluate(policy,request),ErrPolicyDenied) { t.Fatal("different subject must be denied") }
 	request.SubjectRef = "principal:service:researchflow"
 	request.Scopes = nil
-	if !errors.Is(Evaluate(policy,request),ErrPolicyInvalid) { t.Fatal("missing trusted scopes must be rejected") }
+	if !errors.Is(Evaluate(policy,request),ErrPolicyDenied) { t.Fatal("missing required scope must be denied") }
 	request.Scopes = []string{"data:read"}
 	request.Now = *policy.ExpiresAt
 	if !errors.Is(Evaluate(policy,request),ErrPolicyDenied) { t.Fatal("now == expires_at must be denied") }

@@ -25,11 +25,9 @@ func (s *Store) PublishDataAuthorizationPolicyVersion(ctx context.Context, value
 	if s == nil || s.db == nil || ctx == nil {
 		return ErrDataAuthorizationPolicyUnavailable
 	}
-	policy, err := authorization.DecodePolicyVersion(value)
-	if err != nil {
+	if _, err := authorization.DecodePolicyVersion(value); err != nil {
 		return err
 	}
-	_ = policy
 	sum := sha256.Sum256(value.Payload)
 	actualHash := hex.EncodeToString(sum[:])
 	if subtle.ConstantTimeCompare([]byte(actualHash), []byte(value.PayloadHash)) != 1 {
