@@ -186,7 +186,6 @@ func loadPolicyVersion(ctx context.Context, queryer policyQueryer, version uint6
 	return application.ResultAccessPolicyState{Version: version, Enabled: enabled, Snapshot: &snapshot}, nil
 }
 
-
 // WithCurrentResultAccessPolicy keeps the shared policy-head row lock alive
 // for the entire read callback. Publish and revoke use the same row lock, so
 // they cannot linearize between the current-policy check and result lookup.

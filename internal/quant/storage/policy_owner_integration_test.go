@@ -189,7 +189,6 @@ func TestMySQLResultAccessPolicyRejectsNonOwnerActor(t *testing.T) {
 	}
 }
 
-
 func TestMySQLResultAccessPolicyReadGuardSerializesRevoke(t *testing.T) {
 	db := openQuantIntegrationDB(t)
 	db.SetMaxOpenConns(4)

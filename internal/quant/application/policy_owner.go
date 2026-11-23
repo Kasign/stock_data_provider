@@ -125,7 +125,6 @@ func cloneResultAccessPolicyState(state ResultAccessPolicyState) ResultAccessPol
 	return state
 }
 
-
 // ResultAccessPolicyReadGuard holds the current policy head lock while the
 // caller performs the complete authorization decision and immutable result
 // lookup. Implementations must release the lock only after callback returns.
