@@ -295,4 +295,11 @@ WHERE policy_type=? AND policy_ref=? AND policy_version=?`,
 	if err != nil || current.Policy.Status != authorization.PolicyRevoked || current.Version.PolicyVersion != revokedVersion.PolicyVersion {
 		t.Fatalf("revoked policy did not become current: current=%+v err=%v", current, err)
 	}
+	if err := store.PublishDataAuthorizationPolicyVersion(ctx, revokedVersion.PolicyVersion, value); !errors.Is(err, ErrDataAuthorizationPolicyConflict) {
+		t.Fatalf("historical policy version must not be reactivated, got %v", err)
+	}
+	current, err = store.ResolveCurrentDataAuthorizationPolicy(ctx)
+	if err != nil || current.Version.PolicyVersion != revokedVersion.PolicyVersion || current.Policy.Status != authorization.PolicyRevoked {
+		t.Fatalf("historical policy reactivation changed current pointer: current=%+v err=%v", current, err)
+	}
 }

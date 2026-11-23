@@ -28,6 +28,9 @@ func (s *Store) PublishDataAuthorizationPolicyVersion(ctx context.Context, expec
 	if _, err := authorization.DecodePolicyVersion(value); err != nil {
 		return err
 	}
+	if expectedCurrentVersion == value.PolicyVersion {
+		return ErrDataAuthorizationPolicyConflict
+	}
 	sum := sha256.Sum256(value.Payload)
 	actualHash := hex.EncodeToString(sum[:])
 	if subtle.ConstantTimeCompare([]byte(actualHash), []byte(value.PayloadHash)) != 1 {
@@ -47,21 +50,19 @@ func (s *Store) PublishDataAuthorizationPolicyVersion(ctx context.Context, expec
 
 	_, err = tx.ExecContext(ctx, `INSERT INTO market_data_authorization_policy_versions
 (policy_type, policy_ref, policy_version, payload_json, payload_hash, created_at)
-VALUES (?, ?, ?, ?, ?, ?)
-ON DUPLICATE KEY UPDATE policy_version=VALUES(policy_version)`,
+VALUES (?, ?, ?, ?, ?, ?)`,
 		value.PolicyType, value.PolicyRef, value.PolicyVersion, string(value.Payload), value.PayloadHash, value.CreatedAt.UTC())
 	if err != nil {
-		return fmt.Errorf("%w: %v", ErrDataAuthorizationPolicyUnavailable, err)
-	}
-
-	var storedHash string
-	if err := tx.QueryRowContext(ctx, `SELECT payload_hash FROM market_data_authorization_policy_versions
+		var existingVersion string
+		lookupErr := tx.QueryRowContext(ctx, `SELECT policy_version FROM market_data_authorization_policy_versions
 WHERE policy_type=? AND policy_ref=? AND policy_version=? FOR UPDATE`,
-		value.PolicyType, value.PolicyRef, value.PolicyVersion).Scan(&storedHash); err != nil {
+			value.PolicyType, value.PolicyRef, value.PolicyVersion).Scan(&existingVersion)
+		if lookupErr == nil {
+			// A historical version ID is never reusable, even with identical bytes.
+			// Otherwise an old AuthorizationRef could become current again after rollback.
+			return ErrDataAuthorizationPolicyConflict
+		}
 		return fmt.Errorf("%w: %v", ErrDataAuthorizationPolicyUnavailable, err)
-	}
-	if subtle.ConstantTimeCompare([]byte(storedHash), []byte(value.PayloadHash)) != 1 {
-		return ErrDataAuthorizationPolicyConflict
 	}
 
 	if expectedCurrentVersion == "" {
