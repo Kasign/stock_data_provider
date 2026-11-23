@@ -516,7 +516,7 @@ func TestIndicatorPayloadBuildsImmutableRecordAndEnvelope(t *testing.T) {
 		Period: "5d", QualityStatus: "valid", ResultStatus: "completed",
 		SchemaVersion: EnvelopeSchemaVersion, PayloadSchemaVersion: "1.0.0",
 		AlgorithmVersion: "sma.v1", ParameterFingerprint: "sha256:sma-parameters",
-		SystemAsOf: envelopeTestTime(t), InputSnapshotRefs: []string{"data_snapshot:sha256:" + strings.Repeat("a", 64)},
+		SystemAsOf: time.Date(2026, 11, 23, 0, 0, 0, 0, time.UTC), InputSnapshotRefs: []string{"data_snapshot:sha256:" + strings.Repeat("a", 64)},
 	}
 	record, err := BuildRecord(input, payload)
 	if err != nil {
@@ -566,7 +566,7 @@ func TestIndicatorPayloadRejectsManifestContextDrift(t *testing.T) {
 		Period: "10d", QualityStatus: "valid", ResultStatus: "completed",
 		SchemaVersion: EnvelopeSchemaVersion, PayloadSchemaVersion: "1.0.0",
 		AlgorithmVersion: "sma.v1", ParameterFingerprint: "sha256:sma-parameters",
-		SystemAsOf: envelopeTestTime(t), InputSnapshotRefs: []string{"snapshot:sma"},
+		SystemAsOf: time.Date(2026, 11, 23, 0, 0, 0, 0, time.UTC), InputSnapshotRefs: []string{"snapshot:sma"},
 	}
 	if _, err := BuildRecord(input, payload); !errors.Is(err, ErrInvalidEnvelope) {
 		t.Fatalf("BuildRecord() error = %v, want ErrInvalidEnvelope", err)
