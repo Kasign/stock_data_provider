@@ -14,9 +14,9 @@ import (
 )
 
 type dataPolicyOwnerRepositoryFake struct {
-	current authorization.CurrentPolicy
+	current   authorization.CurrentPolicy
 	published []authorization.PolicyVersion
-	err error
+	err       error
 }
 
 func (fake *dataPolicyOwnerRepositoryFake) PublishDataAuthorizationPolicyVersion(
@@ -57,12 +57,12 @@ func dataPolicyOwnerContext(t *testing.T, method security.AuthMethod) context.Co
 
 func validDataAccessPolicy(now time.Time) authorization.DataAccessPolicy {
 	return authorization.DataAccessPolicy{
-		SchemaVersion: authorization.DataAccessPolicySchemaVersion,
-		Status: authorization.PolicyApproved,
+		SchemaVersion:   authorization.DataAccessPolicySchemaVersion,
+		Status:          authorization.PolicyApproved,
 		AllowedSubjects: []string{"principal:service:quant"},
 		AllowedPurposes: []string{"quant_analysis"},
-		RequiredScopes: []string{"data:read"},
-		EffectiveAt: now.Add(-time.Minute).UTC(),
+		RequiredScopes:  []string{"data:read"},
+		EffectiveAt:     now.Add(-time.Minute).UTC(),
 	}
 }
 
@@ -146,4 +146,3 @@ func TestDataAuthorizationPolicyOwnerReturnsUnavailableWhenStoreFails(t *testing
 		t.Fatalf("Publish() store error = %v, want unavailable", err)
 	}
 }
-

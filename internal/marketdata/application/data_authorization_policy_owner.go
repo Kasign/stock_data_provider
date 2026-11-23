@@ -94,12 +94,12 @@ func (owner *DataAuthorizationPolicyOwner) Publish(
 	}
 	sum := sha256.Sum256(payload)
 	version := authorization.PolicyVersion{
-		PolicyType: authorization.DataAccessPolicyType,
-		PolicyRef: authorization.DailyBarsV2PolicyRef,
+		PolicyType:    authorization.DataAccessPolicyType,
+		PolicyRef:     authorization.DailyBarsV2PolicyRef,
 		PolicyVersion: newVersion,
-		Payload: payload,
-		PayloadHash: hex.EncodeToString(sum[:]),
-		CreatedAt: createdAt,
+		Payload:       payload,
+		PayloadHash:   hex.EncodeToString(sum[:]),
+		CreatedAt:     createdAt,
 	}
 	if _, err := authorization.DecodePolicyVersion(version); err != nil {
 		return authorization.CurrentPolicy{}, ErrDataPolicyInvalidChange
@@ -145,4 +145,3 @@ func cloneCurrentDataPolicy(value authorization.CurrentPolicy) authorization.Cur
 	}
 	return value
 }
-
