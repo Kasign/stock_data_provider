@@ -259,3 +259,25 @@ Server/部署集成验收：
 - 直接访问 Server 端口与经 Nginx 访问的认证结果一致；除明确白名单外，不存在绕过认证的路由。
 - Redis 不可用时已登录请求和登录请求均拒绝；MariaDB credential_version 不匹配时所有旧 Session 失效。
 - 验收分别记录 Platform L1、Server A2、部署 A3，不以包级测试替代端到端验收。
+
+
+
+## 12. Researchflow 进程内服务身份（2026-11-24）
+
+Researchflow Worker 不运行 HTTP Owner 认证，但其 Stage 会调用 Data 授权 Snapshot Creator/Reader，因此必须拥有独立、可审计的服务 Principal。身份规则：
+
+- Worker 使用 `PLATFORM_SERVICE_CREDENTIALS` 中显式配置的 `researchflow-worker` 凭据；Secret 通过独立环境变量引用，必须是 32～256 字节 URL-safe 高熵 Token。
+- 该服务至少配置 `data:read` Scope；不得获得 `platform:admin`。不从 `AuthenticatedCallerRef`、Run 参数、HTTP 请求体或 Owner Session 推导服务身份。
+- Server 在可信组合根从已加载的 ServiceCredential 配置构造 Platform Principal，并在每次 Stage 执行入口通过 `WithPrincipal` 注入 Context。Researchflow Worker 的普通执行、重试和过期 Attempt 恢复均经过相同 Executor 包装边界。
+- Worker 角色只加载服务凭据，不要求 `PLATFORM_ADMIN_TOKEN`；API/All 角色仍分别加载 Owner HTTP 凭据和服务凭据。Owner Session、Owner Bearer、Service Bearer 不互相转换。
+- Data Policy 必须显式允许主体 `principal:service:researchflow-worker`、用途 `quant_analysis`，并要求 `data:read` Scope（如策略还有其他 Scope 要求，服务凭据必须同时显式具备）。Data 不提供默认授权，不因 Worker 接入而放宽策略。
+- 服务身份缺失、凭据无效或 Scope 不足时，Worker 启动 fail closed。不得生成默认身份、默认 Scope 或临时使用 Owner 身份。
+
+示例配置（Token 值必须由部署 Secret 管理器生成，不要提交到仓库）：
+
+```dotenv
+PLATFORM_SERVICE_CREDENTIALS='[{"name":"researchflow-worker","token_env":"RESEARCHFLOW_WORKER_TOKEN","scopes":["data:read"]}]'
+RESEARCHFLOW_WORKER_TOKEN=<32-256-byte-url-safe-random-token>
+```
+
+此机制是进程内执行身份，不创建 HTTP 监听、动态 Service Key CRUD、凭证数据库或第二套认证系统。Platform 提供 Principal 校验，Server 负责配置与注入，Data 负责最终授权判定。
