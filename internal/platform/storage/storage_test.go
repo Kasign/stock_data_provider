@@ -411,7 +411,6 @@ func (r *migrationTestRows) Next(destination []driver.Value) error {
 	return nil
 }
 
-
 func TestApplyMigrationsRejectsLegacyHistorySchema(t *testing.T) {
 	state := &migrationTestState{
 		applied: make(map[uint64]string), pending: make(map[uint64]string),
