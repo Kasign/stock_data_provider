@@ -8,7 +8,7 @@ const MigrationNamespace = "quant"
 // 新数据库只执行一个 V1；后续正式发布的 Schema 变更从 V2 开始。
 func Migrations() []platformstorage.Migration {
 	return []platformstorage.Migration{{
-		Version: 1,
+		Version:     1,
 		Description: "create complete Quant schema baseline",
 		Statements: []string{
 			"CREATE TABLE quant_results (\n\t\t\t\tresult_id VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n\t\t\t\tmanifest_fingerprint CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n\t\t\t\tresult_fingerprint CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n\t\t\t\tmanifest_json LONGTEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,\n\t\t\t\tpayload_json LONGTEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,\n\t\t\t\tcreated_at DATETIME(6) NOT NULL,\n\t\t\t\tPRIMARY KEY (result_id)\n\t\t\t) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin",
