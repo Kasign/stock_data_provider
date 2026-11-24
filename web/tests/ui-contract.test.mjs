@@ -863,6 +863,7 @@ test("light/dark theme is accessible, persisted locally, and independent of back
 test("mobile navigation drawer restores readable labels and can close via overlay or Escape", () => {
   const drawer = app.match(/function setMobileNavigationOpen\(open, \{ restoreFocus = false \} = \{\}\) \{[\s\S]*?\n\}/)?.[0] || "";
   assert.match(drawer, /aria-expanded/);
+  assert.match(drawer, /window\.innerWidth <= 700/, "drawer behavior and its CSS breakpoint must stay aligned");
   assert.match(drawer, /isOpen \? "关闭导航" : "打开导航"/);
   assert.match(drawer, /if \(wasOpen && !isOpen && restoreFocus\) \$\("#mobile-menu-toggle"\)\.focus\(\)/);
   assert.match(app, /event\.key === "Escape"[\s\S]*?setMobileNavigationOpen\(false, \{ restoreFocus: true \}\)/);
