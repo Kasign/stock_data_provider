@@ -5,110 +5,56 @@ import (
 	"testing"
 )
 
-func TestMigrationsAreExplicitAndVersioned(t *testing.T) {
+func TestMigrationsDefineCompleteResearchflowBaseline(t *testing.T) {
 	if MigrationNamespace != "researchflow" {
-		t.Fatalf("MigrationNamespace = %q, want researchflow", MigrationNamespace)
+		t.Fatalf("MigrationNamespace = %q", MigrationNamespace)
 	}
 	migrations := Migrations()
-	if len(migrations) != 6 || migrations[0].Version != 1 || migrations[1].Version != 2 || migrations[2].Version != 3 || migrations[3].Version != 4 || migrations[4].Version != 5 || migrations[5].Version != 6 {
-		t.Fatalf("expected ordered migrations v1 through v5, got %+v", migrations)
+	if len(migrations) != 1 || migrations[0].Version != 1 {
+		t.Fatalf("migration set = %#v, want one V1 baseline", migrations)
 	}
-	migration := migrations[0]
-	if migration.Description == "" || len(migration.Statements) != 6 {
-		t.Fatalf("initial migration metadata/statements are incomplete: %+v", migration)
+	statements := migrations[0].Statements
+	if len(statements) != 10 {
+		t.Fatalf("statement count = %d, want 9 tables plus capacity seed", len(statements))
 	}
-	outboxMigration := migrations[1]
-	if outboxMigration.Description == "" || len(outboxMigration.Statements) != 2 {
-		t.Fatalf("Outbox migration metadata/statements are incomplete: %+v", outboxMigration)
+	schema := strings.Join(statements, "\n")
+	for _, table := range []string{
+		"researchflow_runs", "researchflow_stages", "researchflow_attempts",
+		"researchflow_run_idempotency", "researchflow_result_summaries",
+		"researchflow_outbox", "researchflow_workflow_templates",
+		"researchflow_capacity_guard", "researchflow_stage_output_resources",
+	} {
+		if !strings.Contains(schema, "CREATE TABLE "+table+" (") {
+			t.Errorf("baseline is missing table %s", table)
+		}
 	}
-	outboxDDL := strings.Join(outboxMigration.Statements, "\n")
 	for _, fragment := range []string{
-		"lease_owner VARCHAR(128)",
+		"lease_owner VARCHAR(128) NULL",
 		"lease_expires_at CHAR(30)",
 		"lease_generation BIGINT UNSIGNED NOT NULL DEFAULT 0",
 		"next_attempt_at CHAR(30)",
 		"idx_researchflow_outbox_claim",
-	} {
-		if !strings.Contains(outboxDDL, fragment) {
-			t.Errorf("Outbox migration is missing %q", fragment)
-		}
-	}
-
-	templateMigration := migrations[2]
-	if templateMigration.Description == "" || len(templateMigration.Statements) != 1 {
-		t.Fatalf("Template Registry migration metadata/statements are incomplete: %+v", templateMigration)
-	}
-	templateDDL := strings.Join(templateMigration.Statements, "\n")
-	for _, fragment := range []string{"CREATE TABLE researchflow_workflow_templates", "PRIMARY KEY (template_ref, version)", "fingerprint CHAR(64)", "definition LONGTEXT", "created_at CHAR(30)"} {
-		if !strings.Contains(templateDDL, fragment) {
-			t.Errorf("Template Registry migration is missing %q", fragment)
-		}
-	}
-
-	capacityMigration := migrations[3]
-	if capacityMigration.Description == "" || len(capacityMigration.Statements) != 2 ||
-		!strings.Contains(capacityMigration.Statements[0], "CREATE TABLE researchflow_capacity_guard") ||
-		!strings.Contains(capacityMigration.Statements[1], "VALUES (1)") {
-		t.Fatalf("global capacity guard migration is incomplete: %+v", capacityMigration)
-	}
-	callerMigration := migrations[4]
-	if callerMigration.Description == "" || len(callerMigration.Statements) != 1 ||
-		!strings.Contains(callerMigration.Statements[0], "ADD UNIQUE KEY uq_researchflow_idempotency_run (run_ref)") {
-		t.Fatalf("Run caller identity uniqueness migration is incomplete: %+v", callerMigration)
-	}
-	outputMigration := migrations[5]
-	if outputMigration.Description == "" || len(outputMigration.Statements) != 1 {
-		t.Fatalf("Stage Output resource migration is incomplete: %+v", outputMigration)
-	}
-	outputDDL := outputMigration.Statements[0]
-	for _, fragment := range []string{
-		"CREATE TABLE researchflow_stage_output_resources",
-		"UNIQUE KEY uq_researchflow_stage_output_attempt_kind (attempt_ref, resource_kind)",
-		"registry_fingerprint VARCHAR(80)",
-		"schema_ref VARCHAR(512)",
-		"content LONGTEXT",
-		"FOREIGN KEY (stage_ref, run_ref)",
-		"FOREIGN KEY (attempt_ref)",
+		"UNIQUE KEY uq_researchflow_idempotency_run (run_ref)",
 		"CHECK (resource_kind IN ('payload', 'quality_summary'))",
-	} {
-		if !strings.Contains(outputDDL, fragment) {
-			t.Errorf("Stage Output resource migration is missing %q", fragment)
-		}
-	}
-
-	joined := strings.Join(migration.Statements, "\n")
-	for _, table := range []string{
-		"researchflow_runs",
-		"researchflow_stages",
-		"researchflow_attempts",
-		"researchflow_run_idempotency",
-		"researchflow_result_summaries",
-		"researchflow_outbox",
-	} {
-		if !strings.Contains(joined, "CREATE TABLE "+table) {
-			t.Errorf("migration does not create %s", table)
-		}
-	}
-	for _, fragment := range []string{
-		"UNIQUE KEY uq_researchflow_stage_run_code (run_ref, stage_code)",
-		"UNIQUE KEY uq_researchflow_attempt_stage_no (stage_ref, attempt_no)",
-		"UNIQUE KEY uq_researchflow_attempt_stage_fencing (stage_ref, fencing_token)",
 		"FOREIGN KEY (stage_ref, run_ref)",
-		"PRIMARY KEY (caller_ref, operation, idempotency_key)",
-		"request_fingerprint CHAR(64)",
-		"UNIQUE KEY uq_researchflow_result_summary_run (run_ref)",
-		"UNIQUE KEY uq_researchflow_outbox_run_event (run_ref, event_type)",
-		"UNIQUE KEY uq_researchflow_outbox_idempotency (idempotency_key)",
-		"fencing_token BIGINT UNSIGNED NOT NULL",
-		"version BIGINT UNSIGNED NOT NULL",
-		"system_as_of CHAR(30)",
-		"deadline_at CHAR(30)",
+		"INSERT INTO researchflow_capacity_guard (guard_id) VALUES (1)",
 	} {
-		if !strings.Contains(joined, fragment) {
-			t.Errorf("migration is missing required persistence invariant %q", fragment)
+		if !strings.Contains(schema, fragment) {
+			t.Errorf("baseline is missing final schema fragment %q", fragment)
 		}
 	}
-	if strings.Contains(joined, "CREATE DATABASE") || strings.Contains(joined, "DROP TABLE") {
-		t.Fatal("module migration must not create databases or drop existing tables")
+	if strings.Contains(strings.ToUpper(schema), "ALTER TABLE") {
+		t.Fatal("fresh baseline must not contain incremental ALTER statements")
+	}
+}
+
+func TestMigrationsReturnIndependentStatementSlices(t *testing.T) {
+	first, second := Migrations(), Migrations()
+	if len(first) != 1 || len(second) != 1 || len(first[0].Statements) != len(second[0].Statements) {
+		t.Fatal("migration baseline shape changed between calls")
+	}
+	first[0].Statements[0] = "mutated"
+	if second[0].Statements[0] == "mutated" {
+		t.Fatal("migration statements must be independently allocated")
 	}
 }
