@@ -1,11 +1,11 @@
 # PLAT-CTR-006 Storage Connection 与 Migration Runner 契约
 
 - 契约编号：`PLAT-CTR-006`
-- 契约版本：`1.0.0`
+- 契约版本：`2.0.0`
 - 状态：`freeze-ready`
 - Platform 责任：SQL/Redis 连接创建、连接池参数校验、Ping、连接生命周期辅助、namespace-scoped SQL Migration Runner
 - 领域责任：Repository、领域 Schema、Migration SQL 内容、Migration 版本定义和领域数据保留策略
-- Server 责任：共享资源构造与关闭、领域 Migration 注册、启动阶段显式执行和应用 Ready 判定
+- Server 责任：先创建 SQL-only Migration 连接并执行全部领域 Migration，校验完成后再创建 Redis/Repository/Worker/HTTP 资源，并负责 Ready 判定和资源关闭
 - 唯一权威 API：`internal/platform/storage`
 - 设计依据：`doc/platform/05-HTTP存储与异步任务设计.md` 第2～4节、`doc/platform/08-公共平台契约规范.md` 第9节、`doc/platform/16-公共平台剩余开发任务与跨模块接入责任清单.md`
 - 代码核对基线：`origin/integration @ b6dfc85ba214fe16268c8cba780641a8bfe15086`
@@ -116,8 +116,8 @@ func ApplyMigrations(ctx context.Context, db *sql.DB, namespace string, migratio
 - Migration 必须由 Server 启动/部署流程显式调用；OpenSQL 不自动执行 Migration。
 - Runner 对单一 namespace 串行执行；通过 MariaDB advisory lock 互斥，锁等待上限 10 秒。
 - advisory lock、Migration SQL 和 RELEASE_LOCK 必须使用同一专用 SQL Conn，确保锁绑定同一物理连接。
-- Migration History 使用共享表 `platform_schema_migrations`，以 namespace/version 唯一标识，记录 description、SQL checksum、status、failure_statement、started_at、finished_at、failure_code；保留历史 applied_at 字段用于兼容，不把它解释为当前执行完成时间。
-- Runner 可为旧 History 表补充 started_at、finished_at、failure_code 列；不得伪造旧记录的 finished_at。
+- Migration History 使用共享表 `platform_schema_migrations`，以 namespace/version 唯一标识，记录 description、SQL checksum、status、failure_statement、started_at、finished_at、failure_code；新结构不包含旧 `applied_at` 字段。
+- History 表只在不存在时按完整结构创建；不对已存在的 History 表自动补列或转换旧结构。
 - 每个 Migration 先写入 running 与 started_at，再按 Statements 顺序逐条执行；全部成功后写入 applied 与 finished_at。
 - DDL 可能隐式提交；不得假设整个 Migration 可事务回滚，也不得在失败后自动重跑。
 - 失败时尽最大努力记录 failed、失败语句序号、固定 failure_code 和 finished_at；不持久化原始 SQL 错误文本。
@@ -160,7 +160,7 @@ GET_LOCK 报错、返回 NULL 或无法确认锁归属时，必须丢弃该物�
 
 - `OpenSQL`/`OpenRedis` 只有在初始 Ping 成功后才返回资源；这不是进程整体 Ready。
 - `ApplyMigrations` 是同步显式步骤；返回 nil 表示本次 namespace 的登记 Migration 均已确认 applied，不代表其他 namespace、Worker、HTTP Handler 或外部 Provider 已 Ready。
-- Server 负责先构造共享资源，再注册并执行各领域 Migration，随后装配 Handler/Worker 并决定对外 Ready。
+- Server 必须先创建仅用于 Migration 的 MariaDB SQL 连接，注册并执行所有领域 Migration，完成 History/namespace/version/checksum 校验和领域物理 Schema 校验后，再创建 Redis、HTTP Client、Repository、Handler 和 Worker。
 - Shutdown 时 Server 先停止接收新请求/任务，再停止并等待 Worker 和正在使用资源的请求，最后关闭共享 Redis/SQL 资源。
 - Platform Migration Runner 只对单次执行负责，不持有跨调用的后台 goroutine，也不管理服务全局生命周期。
 
@@ -175,7 +175,8 @@ GET_LOCK 报错、返回 NULL 或无法确认锁归属时，必须丢弃该物�
 
 ## 9. 版本与兼容
 
-- 契约版本：1.0.0。
+- 契约版本：2.0.0。
+- 2.0.0 破坏性变更：Migration 输入模型仅保留有序 Statements，删除 EnsureColumn/EnsureNonUniqueIndex 等 Schema 兼容 Operation；History 不再保留 applied_at 或自动补列；Server 启动顺序改为 SQL Migration 优先、其他应用资源后置。旧数据库不提供自动兼容迁移，切换新基线前必须由部署者准备空数据库。
 - 本契约为纯 InProcess Go API；JSON Schema 不适用，强类型 Go API 与本规则文件为唯一权威定义。
 - 新增可选连接配置或不改变执行语义的能力可按 GOV-CTR-004 递增 MINOR。
 - 改变连接池默认值/上限、Redis 故障边界、Migration checksum、History 状态机、锁语义、失败恢复或资源所有权属于破坏性变更，必须递增 MAJOR 并先完成项目级变更审批。
