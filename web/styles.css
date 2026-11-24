@@ -454,9 +454,8 @@ tbody tr:hover { background: rgba(79, 112, 135, .06); }
 .grow { flex: 1; }
 .settings-feedback { min-height: 1.5em; margin: 9px 0 0; overflow-wrap: anywhere; color: #f0a2a9; font-size: 12px; }
 @media (max-width: 1200px) {
-  .app-shell { --layout-sidebar-width: 205px; }
+  .app-shell { --layout-sidebar-width: 205px; --space-page: 22px; }
   .sidebar { width: var(--layout-sidebar-width); }
-  .app-shell { --space-page: 22px; }
   .main-area { margin-left: var(--layout-sidebar-width); }
   .metric-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } .metric-card { min-height: 105px; }
   .content-grid { grid-template-columns: minmax(0, 1.3fr) minmax(250px, 1fr); } .query-hint { padding-left: 0; }
