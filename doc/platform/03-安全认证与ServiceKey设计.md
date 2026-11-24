@@ -262,22 +262,22 @@ Server/部署集成验收：
 
 
 
-## 12. Researchflow 进程内服务身份（2026-11-24）
+## 12. Quant Data 消费的进程内服务身份（2026-11-24）
 
-Researchflow Worker 不运行 HTTP Owner 认证，但其 Stage 会调用 Data 授权 Snapshot Creator/Reader，因此必须拥有独立、可审计的服务 Principal。身份规则：
+Quant 的 SMA20 Stage 需要调用 Data 授权 Snapshot Creator/Reader。该身份属于 Data 的领域消费者 Quant，而不是整个 Researchflow Worker：
 
-- Worker 使用 `PLATFORM_SERVICE_CREDENTIALS` 中显式配置的 `quant` 凭据；Secret 通过独立环境变量引用，必须是 32～256 字节 URL-safe 高熵 Token。
-- 该服务至少配置 `data:read` Scope；不得获得 `platform:admin`。不从 `AuthenticatedCallerRef`、Run 参数、HTTP 请求体或 Owner Session 推导服务身份。
-- Server 在可信组合根从已加载的 ServiceCredential 配置构造 Platform Principal，并在每次 Stage 执行入口通过 `WithPrincipal` 注入 Context。Researchflow Worker 的普通执行、重试和过期 Attempt 恢复均经过相同 Executor 包装边界。
+- `PLATFORM_SERVICE_CREDENTIALS` 中显式配置 `quant` 凭据；Secret 通过独立环境变量引用，必须是 32～256 字节 URL-safe 高熵 Token。
+- Quant 凭据至少配置 `data:read` Scope；不得获得 `platform:admin`。不从 `AuthenticatedCallerRef`、Run 参数、HTTP 请求体或 Owner Session 推导服务身份。
+- Server 只在 `quant.sma20` Stage 执行边界通过 `WithPrincipal` 注入 Quant Principal。News 等不消费 Data 的 Stage 不继承 `data:read`，避免把领域数据权限扩大为整个 Worker 的通用权限。
 - Worker 角色只加载服务凭据，不要求 `PLATFORM_ADMIN_TOKEN`；API/All 角色仍分别加载 Owner HTTP 凭据和服务凭据。Owner Session、Owner Bearer、Service Bearer 不互相转换。
-- Data Policy 必须显式允许主体 `principal:service:quant`、用途 `quant_analysis`，并要求 `data:read` Scope（如策略还有其他 Scope 要求，服务凭据必须同时显式具备）。Data 不提供默认授权，不因 Worker 接入而放宽策略。
-- 服务身份缺失、凭据无效或 Scope 不足时，Worker 启动 fail closed。不得生成默认身份、默认 Scope 或临时使用 Owner 身份。
+- Data Policy 必须显式允许主体 `principal:service:quant`、用途 `quant_analysis`，并要求 `data:read` Scope（如策略还有其他 Scope 要求，Quant 凭据必须同时显式具备）。Data 不提供默认授权，不因 Quant 接入而放宽策略。
+- 当前未注册 Quant Stage 时，Quant 凭据可以不配置；一旦 Server 将 Quant Stage 纳入生产 Template/Executor，Server 组合根必须在启动时要求有效 Quant 凭据和匹配的 Data Policy。Stage 执行时仍由 Data 再次检查当前策略、撤销状态和用途。
 
 示例配置（Token 值必须由部署 Secret 管理器生成，不要提交到仓库）：
 
 ```dotenv
-PLATFORM_SERVICE_CREDENTIALS='[{"name":"researchflow-worker","token_env":"RESEARCHFLOW_WORKER_TOKEN","scopes":["data:read"]}]'
-RESEARCHFLOW_WORKER_TOKEN=<32-256-byte-url-safe-random-token>
+PLATFORM_SERVICE_CREDENTIALS='[{"name":"quant","token_env":"QUANT_SERVICE_TOKEN","scopes":["data:read"]}]'
+QUANT_SERVICE_TOKEN=<32-256-byte-url-safe-random-token>
 ```
 
-此机制是进程内执行身份，不创建 HTTP 监听、动态 Service Key CRUD、凭证数据库或第二套认证系统。Platform 提供 Principal 校验，Server 负责配置与注入，Data 负责最终授权判定。
+此机制是进程内执行身份，不创建 HTTP 监听、动态 Service Key CRUD、凭证数据库或第二套认证系统。Platform 提供 Principal 校验，Server 负责按 Stage 注入，Data 负责最终授权判定。
