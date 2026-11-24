@@ -21,15 +21,12 @@ func TestTradingCalendarPersistsImmutableSnapshotAcrossCacheHits(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	store, err := repository.OpenMySQL(ctx, dsn)
+	store, closeStore, err := openMigratedMarketDataTestStore(ctx, dsn)
 	if err != nil {
-		t.Fatalf("open MariaDB: %v", err)
+		t.Fatalf("open and migrate MariaDB: %v", err)
 	}
-	defer store.Close()
-	if err := store.Migrate(ctx); err != nil {
-		t.Fatalf("migrate Data schema: %v", err)
-	}
-	if err := store.ValidateCompatibilitySchema(ctx); err != nil {
+	defer closeStore()
+	if err := store.ValidateSchema(ctx); err != nil {
 		t.Fatalf("validate Data schema: %v", err)
 	}
 
@@ -77,14 +74,11 @@ func TestTradingCalendarAsOfUsesObservedRepositoryVersionWithoutLiveProvider(t *
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	store, err := repository.OpenMySQL(ctx, dsn)
+	store, closeStore, err := openMigratedMarketDataTestStore(ctx, dsn)
 	if err != nil {
-		t.Fatalf("open MariaDB: %v", err)
+		t.Fatalf("open and migrate MariaDB: %v", err)
 	}
-	defer store.Close()
-	if err := store.Migrate(ctx); err != nil {
-		t.Fatalf("migrate Data schema: %v", err)
-	}
+	defer closeStore()
 
 	asOf := time.Now().UTC().Truncate(time.Microsecond).Add(-time.Minute)
 	first := validTestTradingCalendar()
