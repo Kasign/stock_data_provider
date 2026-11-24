@@ -172,8 +172,13 @@ func Run(ctx context.Context) (runErr error) {
 			return fmt.Errorf("发布 Researchflow 正式 Workflow Template 失败: %w", publishErr)
 		}
 		slog.Info("Researchflow 执行依赖及正式 Workflow Template 已装配",
-			"template_ref", newsSearchWorkflowTemplateRef,
-			"template_version", newsSearchWorkflowTemplateVersion)
+			"template_count", len(researchflowExecution.workflowTemplates))
+		for _, workflowTemplate := range researchflowExecution.workflowTemplates {
+			slog.Info("Researchflow Workflow Template 已注册",
+				"template_ref", workflowTemplate.Ref, "template_version", workflowTemplate.Version,
+				"output_registry_version", workflowTemplate.OutputRegistryVersion,
+				"resource_policy_ref", workflowTemplate.ResourcePolicyRef)
+		}
 	}
 	if ownerSession != nil && researchflowExecution != nil {
 		ownerSession.researchflow, err = newResearchflowOwnerCompositionFromExecution(
