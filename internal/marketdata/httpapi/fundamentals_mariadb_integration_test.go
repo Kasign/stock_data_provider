@@ -17,6 +17,7 @@ import (
 	"example.com/stock-analysis-flow/internal/marketdata/model"
 	"example.com/stock-analysis-flow/internal/marketdata/provider"
 	"example.com/stock-analysis-flow/internal/marketdata/repository"
+	marketdatatestutil "example.com/stock-analysis-flow/internal/marketdata/testutil"
 	"example.com/stock-analysis-flow/internal/marketdata/service"
 )
 
@@ -41,15 +42,12 @@ func TestFundamentalsHTTPToMariaDBPointInTime(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	store, err := repository.OpenMySQL(ctx, dsn)
+	store, db, err := marketdatatestutil.OpenMariaDBStore(ctx, dsn)
 	if err != nil {
 		t.Fatalf("open MariaDB: %v", err)
 	}
-	defer store.Close()
-	if err := store.Migrate(ctx); err != nil {
-		t.Fatalf("migrate MariaDB: %v", err)
-	}
-
+	defer db.Close()
+	
 	symbol := fmt.Sprintf("%06d.SH", 600000+time.Now().UnixNano()%1000)
 	source := &fundamentalsCountingHTTPProvider{}
 	svc := service.New(
