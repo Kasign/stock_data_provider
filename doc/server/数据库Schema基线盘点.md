@@ -188,3 +188,55 @@
 5. 全部字段级审计完成后，才生成新 V1 DDL 和统一启动实现。
 
 本阶段不修改业务 Migration、不删除兼容代码、不执行真实数据库操作。
+
+## 6. Data / MarketData 字段级审计（第一轮完成）
+
+审计来源：`internal/marketdata/repository/mysql.go` 的 V1–V9 Migration DDL、`internal/marketdata/repository/*.go` 的实际 SQL、以及 Data Repository 的物理 Schema 校验。当前 Data 结构已确认 17 张表；以下列出最终字段和关键索引。类型、NULL、默认值以源 DDL 为准。
+
+| 表 | 最终字段 | 主键 / 唯一约束 | 关键索引 / 外键 |
+|---|---|---|---|
+| `market_data_provider_probe_runs` | `id BIGINT UNSIGNED AUTO_INCREMENT`、`run_id VARCHAR(64)`、`started_at/finished_at DATETIME(6)`、`status VARCHAR(32)`、`metadata JSON` | PK id；UK run_id | started_at |
+| `market_data_sentiment_snapshots` | `id BIGINT UNSIGNED AUTO_INCREMENT`、`market VARCHAR(32)`、`trade_date DATE`、`fetched_at DATETIME(6)`、`source VARCHAR(128)`、`quality_status VARCHAR(16)`、`metadata JSON` | PK id | (market,trade_date,id)、fetched_at |
+| `market_data_quotes` | `id BIGINT UNSIGNED AUTO_INCREMENT`、`symbol VARCHAR(16)`、`quote_time DATETIME(6) NULL`、`fetched_at/normalized_at DATETIME(6)`、`source VARCHAR(64)`、价格列 current_price/change_value/open_price/high_price/low_price/prev_close 为 `DECIMAL(20,8) NULL`、`change_percent DECIMAL(16,8) NULL`、`volume_shares BIGINT NULL`、`amount_cny DECIMAL(24,2) NULL`、`volume_ratio/turnover_rate DECIMAL(16,8) NULL`、`quality_status VARCHAR(16)`、`metadata JSON` | PK id | (symbol,quote_time)、fetched_at |
+| `market_data_daily_bars` | `id BIGINT UNSIGNED AUTO_INCREMENT`、`symbol VARCHAR(16)`、`trade_date DATE`、`period VARCHAR(8) DEFAULT '1d'`、`adjustment_basis VARCHAR(24)`、`source VARCHAR(64)`、OHLC `DECIMAL(20,8)`、`volume_shares BIGINT NULL`、`amount_cny DECIMAL(24,2) NULL`、`change_percent DECIMAL(16,8) NULL`、`fetched_at/normalized_at DATETIME(6)`、`quality_status VARCHAR(16)`、`metadata JSON` | PK id；UK (symbol,trade_date,period,adjustment_basis,source) | (symbol,trade_date,adjustment_basis) |
+| `market_data_daily_bar_versions` | `id BIGINT UNSIGNED AUTO_INCREMENT`、`symbol VARCHAR(16)`、`trade_date DATE`、`period VARCHAR(8) DEFAULT '1d'`、`adjustment_basis VARCHAR(24)`、`source VARCHAR(64)`、`revision_hash CHAR(64) ascii_bin`、`recorded_at DATETIME(6)`、OHLC `DECIMAL(20,8)`、`volume_shares BIGINT NULL`、`amount_cny DECIMAL(24,2) NULL`、`change_percent DECIMAL(16,8) NULL`、`fetched_at/normalized_at DATETIME(6)`、`quality_status VARCHAR(16)`、`metadata JSON` | PK id；无内容唯一约束 | (symbol,trade_date,period,adjustment_basis,source,recorded_at,id)、(symbol,trade_date,adjustment_basis,recorded_at)、recorded_at |
+| `market_data_fundamental_versions` | `id BIGINT UNSIGNED AUTO_INCREMENT`、`symbol VARCHAR(16)`、`report_year SMALLINT`、`report_quarter TINYINT`、`source VARCHAR(64)`、`revision_hash CHAR(64) ascii_bin`、`recorded_at/fetched_at DATETIME(6)`、`quality_status VARCHAR(16)`、`metadata JSON` | PK id；无内容唯一约束 | (symbol,report_year,report_quarter,recorded_at)、recorded_at、(symbol,report_year,report_quarter,source,recorded_at,id) |
+| `market_data_security_trading_status_versions` | `id BIGINT UNSIGNED AUTO_INCREMENT`、`symbol VARCHAR(16)`、`trade_date DATE`、`source VARCHAR(64)`、`revision_hash CHAR(64) ascii_bin`、`recorded_at/fetched_at DATETIME(6)`、`quality_status VARCHAR(16)`、`metadata JSON` | PK id | (symbol,trade_date,source,recorded_at,id)、(symbol,trade_date,recorded_at)、recorded_at |
+| `market_data_adjustment_factor_versions` | `id BIGINT UNSIGNED AUTO_INCREMENT`、`symbol VARCHAR(16)`、`trade_date DATE`、`source VARCHAR(64)`、**`source_version VARCHAR(128) NOT NULL DEFAULT ''`**、`factor_basis VARCHAR(16)`、`revision_hash CHAR(64) ascii_bin`、`recorded_at/fetched_at DATETIME(6)`、`available_at DATETIME(6) NULL`、`quality_status VARCHAR(16)`、`metadata JSON` | PK id | (symbol,trade_date,source,factor_basis,recorded_at,id)、(symbol,trade_date,source,source_version,factor_basis,recorded_at,id)、recorded_at |
+| `market_data_corporate_action_versions` | `id BIGINT UNSIGNED AUTO_INCREMENT`、`symbol VARCHAR(16)`、`provider_event_id VARCHAR(128)`、`source VARCHAR(64)`、`ex_date/announcement_date DATE NULL`、`revision_hash CHAR(64) ascii_bin`、`recorded_at/fetched_at DATETIME(6)`、`available_at DATETIME(6) NULL`、`quality_status VARCHAR(16)`、`metadata JSON` | PK id | (symbol,ex_date,source,recorded_at,id)、(symbol,provider_event_id,source,recorded_at,id)、(symbol,announcement_date)、recorded_at |
+| `market_data_valuation_versions` | `id BIGINT UNSIGNED AUTO_INCREMENT`、`request_fingerprint CHAR(64) ascii_bin`、`source VARCHAR(64)`、`revision_hash CHAR(64) ascii_bin`、`recorded_at/fetched_at DATETIME(6)`、`quality_status VARCHAR(16)`、`metadata JSON` | PK id | (request_fingerprint,recorded_at)、(request_fingerprint,source,recorded_at,id)、recorded_at |
+| `market_data_trading_calendar_snapshots` | `calendar_ref VARCHAR(96) ascii_bin`、`content_fingerprint CHAR(64) ascii_bin`、`market VARCHAR(32) ascii_bin`、`start_date/end_date DATE`、`source VARCHAR(64) ascii_bin`、`adapter_version VARCHAR(128) ascii_bin`、`schema_version VARCHAR(16) ascii_bin`、`quality_status VARCHAR(16) ascii_bin`、`fetched_at/observed_at DATETIME(6)`、`payload_json LONGTEXT utf8mb4_bin` | PK calendar_ref | (market,start_date,end_date,observed_at) |
+| `market_data_daily_bars_close_series_snapshots` | `snapshot_ref VARCHAR(96) ascii_bin`、`manifest_fingerprint/payload_fingerprint CHAR(64) ascii_bin`、`manifest_schema_version/payload_schema_version VARCHAR(16) ascii_bin`、`manifest_json/payload_json LONGTEXT utf8mb4_bin`、`created_at DATETIME(6) DEFAULT CURRENT_TIMESTAMP(6)` | PK snapshot_ref | 无额外索引 |
+| `market_data_authorization_policy_versions` | `policy_type VARCHAR(32) ascii_bin`、`policy_ref VARCHAR(128) ascii_bin`、`policy_version VARCHAR(128) ascii_bin`、`payload_json LONGTEXT utf8mb4_bin`、`payload_hash CHAR(64) ascii_bin`、`created_at DATETIME(6)` | 复合 PK (policy_type,policy_ref,policy_version) | (policy_type,policy_ref,created_at) |
+| `market_data_current_authorization_policy_versions` | `policy_type VARCHAR(32) ascii_bin`、`policy_ref VARCHAR(128) ascii_bin`、`policy_version VARCHAR(128) ascii_bin`、`updated_at DATETIME(6)` | 复合 PK (policy_type,policy_ref) | (policy_type,policy_ref,policy_version)；复合 FK 指向策略版本表相同三列 |
+| `market_data_authorization_decisions` | `authorization_ref/subject_ref/resource_ref VARCHAR(256) utf8mb4_bin`、`purpose_code VARCHAR(32) ascii_bin`、`policy_version VARCHAR(128) utf8mb4_bin`、`decided_at DATETIME(6)`、`expires_at DATETIME(6) NULL`、`decision_fingerprint/record_hash CHAR(64) ascii_bin`、`authorization_json/policy_snapshot_json LONGTEXT utf8mb4_bin` | PK authorization_ref | (subject_ref,resource_ref,purpose_code)、expires_at |
+| `market_data_authorization_revocations` | `authorization_ref VARCHAR(256) utf8mb4_bin`、`revoked_at DATETIME(6)`、`revoked_by VARCHAR(256) utf8mb4_bin`、`reason_code VARCHAR(128) ascii_bin` | PK authorization_ref | revoked_at；FK authorization_ref 指向授权决策表 |
+| `market_data_authorization_policy_publications` | `id BIGINT UNSIGNED AUTO_INCREMENT`、`policy_type VARCHAR(32) ascii_bin`、`policy_ref VARCHAR(128) ascii_bin`、`previous_policy_version VARCHAR(128) utf8mb4_bin NULL`、`new_policy_version VARCHAR(128) utf8mb4_bin`、`payload_hash CHAR(64) ascii_bin`、`actor_ref VARCHAR(256) utf8mb4_bin`、`request_id VARCHAR(128) ascii_bin`、`occurred_at DATETIME(6)` | PK id | (occurred_at,id)、request_id、(policy_type,policy_ref,new_policy_version) |
+
+### Data Repository SQL 对照
+
+| Repository 文件 | 实际 SQL 依赖 |
+|---|---|
+| `mysql.go` | Quotes 全部行情列；Daily Bars 的 symbol/date/period/adjustment/source/OHLC/volume/amount/change/fetch/normalize/quality/metadata；Daily Bar 与 Fundamental revision 的身份列、revision_hash、recorded_at；Quotes 清理依赖 fetched_at |
+| `corporate_actions.go` | Adjustment Factor 的 source_version、factor_basis、available_at、revision_hash、recorded_at、fetched_at；Corporate Action 的 provider_event_id、ex_date、announcement_date、available_at 等 |
+| `security_trading_status.go` | symbol/trade_date/source/revision_hash/recorded_at/fetched_at/quality_status/metadata |
+| `trading_calendar.go` | 日历 Snapshot 全部身份、版本、质量、时间和 payload 列；并验证 PK 与 identity lookup index |
+| `daily_bars_close_series_snapshot.go` | Snapshot Ref、两个 fingerprint、两个 schema version、manifest/payload JSON、created_at；并验证字段类型及主键 |
+| `market_sentiment.go` | market/trade_date/fetched_at/source/quality_status/metadata；按 market/date 取最新 id |
+| `provider_probe.go` | run_id/started_at/finished_at/status/metadata；依赖 run_id 唯一键和 started_at 排序 |
+| `data_authorization_policy.go` | 策略版本表、当前指针表、发布审计表的写入与查询字段；当前指针通过复合 FK 锚定版本 |
+| `data_authorization_decision.go` | 授权决策记录及撤销记录的全部写入/读取字段 |
+| `data_authorization_snapshot.go` | 授权决策 JSON、撤销状态、当前策略版本和 Close Series Snapshot 读取 |
+
+### Data 新基线必须保留的最终结构规则
+
+1. `market_data_quotes.volume_ratio` 和 `turnover_rate` 均为可空、有符号 `DECIMAL(16,8)`。当前 V1 DDL 已有这两列；V4 EnsureColumn 是旧结构补齐，不代表新基线要再执行 ALTER。
+2. `market_data_adjustment_factor_versions.source_version` 是 V2 后的正式身份维度，最终列为 `VARCHAR(128) NOT NULL DEFAULT ''`；必须保留 V2 对应的复合索引。V2 中从 JSON metadata 回填旧记录的 UPDATE 属于历史数据迁移，新空库基线不执行。
+3. Daily Bar 与 Fundamental revision 表的内容唯一约束已被当前模型移除；新基线应使用当前 DDL 的非唯一身份/时间索引，不能重新加入旧的 `uq_market_bar_revision_content` 或 `uq_market_fundamental_revision_content`。V4 的 LegacyName 删除行为不进入新基线。
+4. V4 其余 EnsureColumn / EnsureNonUniqueIndex 操作也不进入新基线；最终列和目标索引直接体现在 V1 DDL。
+5. Trading Calendar、Close Series Snapshot、授权策略版本/当前指针、授权决策/撤销、策略发布审计是 V5–V9 的正式业务结构，必须全部纳入 Data 新 V1。
+6. 当前 `ValidateCompatibilitySchema` 不只是历史兼容代码：它还校验 Quotes 列精度/可空性、两个 revision 索引的非唯一性及列顺序、Calendar/Close Series 主键和列类型、授权策略 Schema。后续应改为面向最终基线的 `ValidateSchema`（或等价名称），保留有效物理结构校验并更新注释。
+7. `Store.Migrate()` 仍直接调用 Platform Migration Runner，是 Data 的独立迁移入口。统一 Root Bootstrap 完成后，应移除该入口及调用方，避免 Registry 外再次运行 Data Migration。
+8. 当前 DDL 使用 `CREATE TABLE IF NOT EXISTS`。新空库基线应使用明确的 `CREATE TABLE`，让意外存在的同名旧表立即报错，而不是悄悄接纳未经确认的结构。
+
+Data 字段级审计状态：**通过第一轮**。尚未对所有字段逐个与上层 DTO/Provider 映射做语义验证；该项属于数据契约/业务字段审计，不阻塞本轮 Schema 重建，但不得借 Schema 基线改动字段语义或删字段。
