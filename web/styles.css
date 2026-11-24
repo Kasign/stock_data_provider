@@ -2669,6 +2669,15 @@ button:disabled, input:disabled, select:disabled, textarea:disabled { cursor: no
   .page-heading { flex-direction: column; align-items: flex-start; gap: 12px; }
   .last-updated { white-space: normal; overflow-wrap: anywhere; }
 }
+@media (max-width: 800px) {
+  .recent-analysis-tools { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: end; gap: 10px; }
+  .recent-analysis-search, .recent-analysis-clear { grid-column: 1 / -1; min-width: 0; }
+  .recent-analysis-filter { min-width: 0; }
+  .recent-analysis-clear { width: 100%; }
+}
+@media (max-width: 600px) {
+  .recent-analysis-tools { grid-template-columns: minmax(0, 1fr); }
+}
 @media (max-width: 600px) {
   .view { padding-top: 20px; padding-bottom: 16px; }
   .page-heading > div:first-child { width: 100%; }
