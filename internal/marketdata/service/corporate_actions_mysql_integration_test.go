@@ -21,14 +21,11 @@ func TestAdjustmentFactorsAsOfFallsBackToLatestProviderVisibleRevision(t *testin
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	store, err := repository.OpenMySQL(ctx, dsn)
+	store, closeStore, err := openMigratedMarketDataTestStore(ctx, dsn)
 	if err != nil {
-		t.Fatalf("open MariaDB: %v", err)
+		t.Fatalf("open and migrate MariaDB: %v", err)
 	}
-	defer store.Close()
-	if err := store.Migrate(ctx); err != nil {
-		t.Fatalf("migrate MariaDB: %v", err)
-	}
+	defer closeStore()
 
 	symbol := "600519.SH"
 	fetchedV1 := time.Now().UTC()
@@ -74,14 +71,11 @@ func TestDailyBarsAsOfIncludesCarryInAdjustmentFactorBeforeRequestedStart(t *tes
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	store, err := repository.OpenMySQL(ctx, dsn)
+	store, closeStore, err := openMigratedMarketDataTestStore(ctx, dsn)
 	if err != nil {
-		t.Fatalf("open MariaDB: %v", err)
+		t.Fatalf("open and migrate MariaDB: %v", err)
 	}
-	defer store.Close()
-	if err := store.Migrate(ctx); err != nil {
-		t.Fatalf("migrate MariaDB: %v", err)
-	}
+	defer closeStore()
 
 	const symbol = "600519.SH"
 	const source = "daily-bars-asof-carry-in-test"
@@ -129,14 +123,11 @@ func TestCorporateActionsAsOfFallsBackToLatestProviderVisibleRevision(t *testing
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	store, err := repository.OpenMySQL(ctx, dsn)
+	store, closeStore, err := openMigratedMarketDataTestStore(ctx, dsn)
 	if err != nil {
-		t.Fatalf("open MariaDB: %v", err)
+		t.Fatalf("open and migrate MariaDB: %v", err)
 	}
-	defer store.Close()
-	if err := store.Migrate(ctx); err != nil {
-		t.Fatalf("migrate MariaDB: %v", err)
-	}
+	defer closeStore()
 
 	symbol := "600519.SH"
 	fetchedV1 := time.Now().UTC()
@@ -181,14 +172,11 @@ func TestSaveAdjustmentFactorsRejectsDuplicateIdentityInBatch(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	store, err := repository.OpenMySQL(ctx, dsn)
+	store, closeStore, err := openMigratedMarketDataTestStore(ctx, dsn)
 	if err != nil {
-		t.Fatalf("open MariaDB: %v", err)
+		t.Fatalf("open and migrate MariaDB: %v", err)
 	}
-	defer store.Close()
-	if err := store.Migrate(ctx); err != nil {
-		t.Fatalf("migrate MariaDB: %v", err)
-	}
+	defer closeStore()
 
 	now := time.Now().UTC()
 	available := now.Add(-time.Minute)
@@ -235,14 +223,11 @@ func TestRefreshAdjustmentFactorsFallsBackFromEmptyAndInvalidProviderBatch(t *te
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	store, err := repository.OpenMySQL(ctx, dsn)
+	store, closeStore, err := openMigratedMarketDataTestStore(ctx, dsn)
 	if err != nil {
-		t.Fatalf("open MariaDB: %v", err)
+		t.Fatalf("open and migrate MariaDB: %v", err)
 	}
-	defer store.Close()
-	if err := store.Migrate(ctx); err != nil {
-		t.Fatalf("migrate MariaDB: %v", err)
-	}
+	defer closeStore()
 
 	now := time.Now().UTC()
 	valid := model.AdjustmentFactor{
@@ -290,14 +275,11 @@ func TestRefreshAdjustmentFactorsStopsOnPersistenceFailure(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	store, err := repository.OpenMySQL(ctx, dsn)
+	store, closeStore, err := openMigratedMarketDataTestStore(ctx, dsn)
 	if err != nil {
-		t.Fatalf("open MariaDB: %v", err)
+		t.Fatalf("open and migrate MariaDB: %v", err)
 	}
-	defer store.Close()
-	if err := store.Migrate(ctx); err != nil {
-		t.Fatalf("migrate MariaDB: %v", err)
-	}
+	defer closeStore()
 
 	now := time.Now().UTC()
 	valid := model.AdjustmentFactor{
@@ -336,14 +318,11 @@ func TestSaveCorporateActionsRejectsMissingSourceVersion(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	store, err := repository.OpenMySQL(ctx, dsn)
+	store, closeStore, err := openMigratedMarketDataTestStore(ctx, dsn)
 	if err != nil {
-		t.Fatalf("open MariaDB: %v", err)
+		t.Fatalf("open and migrate MariaDB: %v", err)
 	}
-	defer store.Close()
-	if err := store.Migrate(ctx); err != nil {
-		t.Fatalf("migrate MariaDB: %v", err)
-	}
+	defer closeStore()
 
 	action := model.CorporateAction{
 		Symbol: "600519.SH", ProviderEventID: "missing-source-version",
