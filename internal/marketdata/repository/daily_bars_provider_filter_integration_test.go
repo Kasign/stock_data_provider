@@ -36,7 +36,7 @@ func TestMariaDBPITDailyBarsProviderAllowlistFiltersSourcesBeforeCoverageSelecti
 			bars = append(bars, model.DailyBar{
 				Symbol: symbol, TradeDate: tradeDate, Period: "1d",
 				AdjustmentBasis: model.AdjustmentNone,
-				Open: 10, High: 11, Low: 9, Close: 10.5,
+				Open:            10, High: 11, Low: 9, Close: 10.5,
 				Source: source, SourceVersion: source + "-v1",
 				FetchedAt: fetchedAt, NormalizedAt: fetchedAt,
 				QualityStatus: model.QualityValid,

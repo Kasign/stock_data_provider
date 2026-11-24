@@ -4244,7 +4244,6 @@ func validDailyBarSourceAllowlist(values []string) bool {
 	return true
 }
 
-
 func (s *DataService) dailyBarsAsOfWithCoverageEvidence(ctx context.Context, rawSymbol, start, end string, limit int, basis model.AdjustmentBasis, asOf time.Time, allowedSources []string) ([]model.DailyBar, []string, DailyBarCoverageEvidence, error) {
 	coverageEvidence := DailyBarCoverageEvidence{CoverageBasis: "not_evaluated", CalendarQualityStatus: model.QualityUnknown}
 	if s == nil {

@@ -508,7 +508,6 @@ func cloneStrings(source []string) []string {
 	return append([]string(nil), source...)
 }
 
-
 func validDailyBarsProviderCodeSet(values []string) bool {
 	if len(values) == 0 {
 		return false
