@@ -73,8 +73,8 @@ func TestCreateSMAServicePersistsExactSnapshotBoundResult(t *testing.T) {
 		t.Fatalf("persisted SMA manifest is not bound to the source Snapshot: %+v", first)
 	}
 	var payload struct {
-		IndicatorCode string          \`json:"indicator_code"\`
-		Metrics       []metric.Metric \`json:"metrics"\`
+		IndicatorCode string          `json:"indicator_code"`
+		Metrics       []metric.Metric `json:"metrics"`
 	}
 	if err := json.Unmarshal(repository.records[0].Payload, &payload); err != nil {
 		t.Fatalf("decode persisted Indicator payload: %v", err)
