@@ -459,3 +459,50 @@ func TestPrincipalContextReturnsIsolatedScopeSnapshots(t *testing.T) {
 		t.Fatalf("context principal changed through returned slice: %+v, ok=%v", second, ok)
 	}
 }
+
+
+func TestNewServicePrincipalAuthenticatesConfiguredWorkerCredential(t *testing.T) {
+	credential := ServiceCredential{
+		Name: "researchflow-worker",
+		Secret: config.NewSecret("0123456789abcdef0123456789abcdef"),
+		Scopes: []string{ScopeDataRead, ScopeResearchRun},
+	}
+	principal, err := NewServicePrincipal(credential)
+	if err != nil {
+		t.Fatalf("NewServicePrincipal() error = %v", err)
+	}
+	if principal.Kind != IdentityService || principal.AuthMethod != AuthMethodServiceBearer ||
+		principal.Subject != "researchflow-worker" || len(principal.Scopes) != 2 {
+		t.Fatalf("unexpected service principal: %+v", principal)
+	}
+	principal.Scopes[0] = ScopePlatformAdmin
+	if got, ok := func() (Principal, bool) {
+		ctx, ctxErr := WithPrincipal(context.Background(), principal)
+		if ctxErr != nil {
+			return Principal{}, false
+		}
+		return PrincipalFromContextValue(ctx)
+	}(); ok && contains(got.Scopes, ScopePlatformAdmin) {
+		t.Fatal("mutated caller scopes leaked into trusted principal")
+	}
+}
+
+func TestNewServicePrincipalRejectsInvalidCredential(t *testing.T) {
+	tests := []struct {
+		name string
+		credential ServiceCredential
+	}{
+		{name: "missing secret", credential: ServiceCredential{Name: "researchflow-worker", Scopes: []string{ScopeDataRead}}},
+		{name: "short secret", credential: ServiceCredential{Name: "researchflow-worker", Secret: config.NewSecret("short"), Scopes: []string{ScopeDataRead}}},
+		{name: "admin scope", credential: ServiceCredential{Name: "researchflow-worker", Secret: config.NewSecret("0123456789abcdef0123456789abcdef"), Scopes: []string{ScopePlatformAdmin}}},
+		{name: "unknown scope", credential: ServiceCredential{Name: "researchflow-worker", Secret: config.NewSecret("0123456789abcdef0123456789abcdef"), Scopes: []string{"data:write"}}},
+		{name: "invalid subject", credential: ServiceCredential{Name: "Researchflow Worker", Secret: config.NewSecret("0123456789abcdef0123456789abcdef"), Scopes: []string{ScopeDataRead}}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if _, err := NewServicePrincipal(tt.credential); err == nil {
+				t.Fatal("NewServicePrincipal() error = nil, want rejection")
+			}
+		})
+	}
+}
