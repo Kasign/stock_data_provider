@@ -21,7 +21,6 @@
   --ma20: #7db8fa;
   --ma60: #c79bff;
   --radius: 12px;
-  --radius-lg: 18px;
   --space-page: clamp(16px, 2.1vw, 30px);
   --surface-soft: rgba(130, 153, 174, .07);
   --surface-sidebar: #0c1219;
@@ -41,9 +40,7 @@
   --space-4: 16px;
   --space-5: 20px;
   --space-6: 24px;
-  --space-8: 32px;
   --layout-sidebar-width: 238px;
-  --layout-content-gutter: 30px;
   --layout-page-top: 29px;
   --layout-page-bottom: 10px;
   --layout-page-heading-gap: 22px;
