@@ -77,9 +77,13 @@ func LoadServiceCredentials(env platformconfig.Env) ([]platformsecurity.ServiceC
 		if !secret.Configured() {
 			return nil, fmt.Errorf("安全配置无效: 服务凭据环境变量 %s 未配置", tokenEnv)
 		}
-		credentials = append(credentials, platformsecurity.ServiceCredential{
+		credential := platformsecurity.ServiceCredential{
 			Name: name, Secret: secret, Scopes: append([]string(nil), entry.Scopes...),
-		})
+		}
+		if _, err := platformsecurity.PrincipalFromServiceCredential(credential); err != nil {
+			return nil, fmt.Errorf("安全配置无效: 服务凭据 %s 的主体、Token 或 Scope 无效", name)
+		}
+		credentials = append(credentials, credential)
 	}
 	return credentials, nil
 }
