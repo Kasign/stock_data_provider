@@ -19,6 +19,14 @@ func SMAWithContext(ctx domain.CalculationContext, trustedNow time.Time, closes 
 	return SMA(closes, p)
 }
 
+// DecimalSMAWithContext 在消费精确 Decimal Close 前校验共享计算上下文。
+func DecimalSMAWithContext(ctx domain.CalculationContext, trustedNow time.Time, closes []string, p SMAParams) (DecimalResult, error) {
+	if err := validateCalculationContext(ctx, trustedNow); err != nil {
+		return DecimalResult{}, err
+	}
+	return DecimalSMA(closes, p)
+}
+
 // EMAWithContext 在计算 EMA 前校验共享计算上下文。
 func EMAWithContext(ctx domain.CalculationContext, trustedNow time.Time, closes []float64, p EMAParams) (Result, error) {
 	if err := validateCalculationContext(ctx, trustedNow); err != nil {
