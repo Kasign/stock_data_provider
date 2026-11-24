@@ -24,6 +24,12 @@ const (
 	smaPurposeCode         = "quant_analysis"
 	smaSampleCountUnit     = "bar"
 	smaSampleCountRule     = "window_bars"
+	smaAlgorithmVersion    = "sma20-decimal-exact-v1"
+	smaUnit                = "CNY/share"
+	smaWindow              = 20
+	smaMaximumDigits       = 128
+	smaSourceRef           = "eastmoney"
+	smaProviderAPIVersion  = "eastmoney-stock-api-v1"
 )
 
 var (
@@ -37,6 +43,12 @@ type CloseSeriesBar struct {
 	TradeDate     string
 	Close         string
 	QualityStatus string
+}
+
+type CloseSeriesSource struct {
+	SourceRef                string
+	SourceVersion            *string
+	ProviderInterfaceVersion string
 }
 
 type CloseSeriesCoverageEvidence struct {
@@ -55,6 +67,7 @@ type CloseSeriesSnapshot struct {
 	PayloadKind           string
 	CallerRef             string
 	PurposeCode           string
+	Sources               []CloseSeriesSource
 	Symbol                string
 	StartDate             string
 	EndDate               string
@@ -77,7 +90,8 @@ type CreateSMARequest struct {
 	SnapshotRef      string
 	AuthorizationRef string
 	SystemAsOf       time.Time
-	Parameters       json.RawMessage
+	Parameters           json.RawMessage
+	AllowedProviderCodes []string
 }
 
 // CreateSMAService 将 Data 的精确 Close Snapshot 转换为不可变 Quant Indicator Result。
@@ -111,7 +125,8 @@ func (service *CreateSMAService) Execute(ctx context.Context, request CreateSMAR
 	if service == nil || service.snapshots == nil || service.registry == nil || service.persister == nil ||
 		ctx == nil || strings.TrimSpace(request.SnapshotRef) == "" ||
 		strings.TrimSpace(request.AuthorizationRef) == "" || request.SystemAsOf.IsZero() ||
-		request.SystemAsOf.Location() != time.UTC || len(request.Parameters) == 0 || !json.Valid(request.Parameters) {
+		request.SystemAsOf.Location() != time.UTC || len(request.Parameters) == 0 || !json.Valid(request.Parameters) ||
+		!containsSortedUnique(request.AllowedProviderCodes, smaSourceRef) {
 		return manifest.Manifest{}, ErrInvalidCreateSMARequest
 	}
 	if err := ctx.Err(); err != nil {
@@ -132,7 +147,7 @@ func (service *CreateSMAService) Execute(ctx context.Context, request CreateSMAR
 	}
 	decoder := json.NewDecoder(bytes.NewReader(request.Parameters))
 	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&parameters); err != nil || parameters.Window < 1 || parameters.Window > 1000 {
+	if err := decoder.Decode(&parameters); err != nil || parameters.Window != smaWindow {
 		return manifest.Manifest{}, ErrInvalidCreateSMARequest
 	}
 
@@ -210,7 +225,9 @@ func (service *CreateSMAService) Execute(ctx context.Context, request CreateSMAR
 
 func validateExactSMRegistryEntry(entry registry.Entry) error {
 	if entry.Code != smaMetricCode || entry.SchemaVersion != smaMetricSchemaVersion ||
-		entry.ValueType != registry.ValueTypeDecimalString || entry.Precision.RoundingMode != "exact" ||
+		entry.ValueType != registry.ValueTypeDecimalString || entry.Unit != smaUnit ||
+		entry.AlgorithmVersion != smaAlgorithmVersion || entry.Precision.MaxIntegerDigits != smaMaximumDigits ||
+		entry.Precision.MaxFractionDigits != smaMaximumDigits || entry.Precision.RoundingMode != "exact" ||
 		!bytes.Equal(bytes.TrimSpace(entry.Precision.Tolerance), []byte("\"0\"")) ||
 		!entry.SampleCount.RequiredInMetric || entry.SampleCount.Unit != smaSampleCountUnit ||
 		entry.SampleCount.CountingRule != smaSampleCountRule || len(entry.InputRequirements) != 1 {
@@ -231,7 +248,7 @@ func validateExactSMASnapshot(snapshot CloseSeriesSnapshot, request CreateSMAReq
 	if snapshot.SnapshotRef != request.SnapshotRef ||
 		snapshot.ManifestSchemaVersion != "2.0.0" || snapshot.PayloadSchemaVersion != "1.0.0" ||
 		snapshot.PayloadKind != "daily_bars_close_series" || strings.TrimSpace(snapshot.CallerRef) == "" ||
-		snapshot.PurposeCode != smaPurposeCode || strings.TrimSpace(snapshot.Symbol) == "" ||
+		snapshot.PurposeCode != smaPurposeCode || !validSMAProviderSources(snapshot.Sources, request.AllowedProviderCodes) || strings.TrimSpace(snapshot.Symbol) == "" ||
 		!validSMAISODate(snapshot.StartDate) || !validSMAISODate(snapshot.EndDate) || snapshot.StartDate > snapshot.EndDate ||
 		snapshot.AdjustmentBasis != "none" || snapshot.Interval != "1d" ||
 		strings.TrimSpace(snapshot.TradingCalendarRef) == "" || snapshot.QualityStatus != "valid" ||
@@ -281,6 +298,31 @@ func parseCanonicalSMAUTC(value string) (time.Time, error) {
 func validSMAISODate(value string) bool {
 	parsed, err := time.Parse("2006-01-02", value)
 	return err == nil && parsed.Format("2006-01-02") == value
+}
+
+func containsSortedUnique(values []string, expected string) bool {
+	if len(values) == 0 {
+		return false
+	}
+	found := false
+	for index, value := range values {
+		if strings.TrimSpace(value) == "" || value != strings.TrimSpace(value) || (index > 0 && values[index-1] >= value) {
+			return false
+		}
+		if value == expected {
+			found = true
+		}
+	}
+	return found
+}
+
+func validSMAProviderSources(sources []CloseSeriesSource, allowedProviderCodes []string) bool {
+	if len(sources) != 1 || !containsSortedUnique(allowedProviderCodes, smaSourceRef) {
+		return false
+	}
+	source := sources[0]
+	return source.SourceRef == smaSourceRef && source.SourceVersion == nil &&
+		source.ProviderInterfaceVersion == smaProviderAPIVersion
 }
 
 func containsString(values []string, expected string) bool {

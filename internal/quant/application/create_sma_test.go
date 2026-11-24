@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"example.com/stock-analysis-flow/internal/quant/indicator"
 	"example.com/stock-analysis-flow/internal/quant/metric"
 	"example.com/stock-analysis-flow/internal/quant/registry"
 	"example.com/stock-analysis-flow/internal/quant/result"
@@ -134,41 +133,26 @@ func TestCreateSMAServiceRejectsDegradedAndIncompleteSnapshot(t *testing.T) {
 	}
 }
 
-func TestCreateSMAServiceRejectsNonTerminatingExactResult(t *testing.T) {
+func TestCreateSMAServiceRejectsNonSMA20Parameters(t *testing.T) {
 	now := time.Date(2026, 11, 24, 8, 0, 0, 0, time.UTC)
-	snapshot := validCreateSMASnapshot()
-	snapshot.Bars = snapshot.Bars[:3]
-	snapshot.Coverage.ExpectedTradingDays = 3
-	snapshot.Coverage.MinimumRequiredBars = 3
-	snapshot.EndDate = snapshot.Bars[2].TradeDate
-	for index, closeValue := range []string{"1", "1", "2"} {
-		snapshot.Bars[index].Close = closeValue
-	}
-	reader := &createSMASnapshotReader{snapshot: snapshot}
+	reader := &createSMASnapshotReader{snapshot: validCreateSMASnapshot()}
 	repository := &createSMARecordingRepository{inner: result.NewMemoryRepository()}
-	quantRegistry := registry.New()
-	if err := quantRegistry.Register(testCreateSMAEntry(3), true); err != nil {
-		t.Fatalf("register test entry: %v", err)
-	}
-	service, err := NewCreateSMAService(reader, quantRegistry, repository, func() time.Time { return now })
-	if err != nil {
-		t.Fatalf("NewCreateSMAService() error = %v", err)
-	}
+	service := newTestCreateSMAService(t, reader, repository, now)
 	request := validCreateSMARequest()
-	request.Parameters = json.RawMessage("{\"window\":3}")
-	if _, err := service.Execute(context.Background(), request); !errors.Is(err, indicator.ErrNonTerminatingDecimal) {
-		t.Fatalf("Execute() error = %v, want ErrNonTerminatingDecimal", err)
+	request.Parameters = json.RawMessage("{\\"window\\":3}")
+	if _, err := service.Execute(context.Background(), request); !errors.Is(err, ErrInvalidCreateSMARequest) {
+		t.Fatalf("Execute() error = %v, want ErrInvalidCreateSMARequest", err)
 	}
 	if len(repository.records) != 0 {
-		t.Fatalf("non-terminating SMA must not persist a rounded result; writes=%d", len(repository.records))
+		t.Fatalf("non-SMA20 parameters must not persist a result; writes=%d", len(repository.records))
 	}
 }
 
 func newTestCreateSMAService(t *testing.T, reader CloseSeriesSnapshotReader, repository result.Repository, now time.Time) *CreateSMAService {
 	t.Helper()
-	quantRegistry := registry.New()
-	if err := quantRegistry.Register(testCreateSMAEntry(20), true); err != nil {
-		t.Fatalf("register test SMA entry: %v", err)
+	quantRegistry, err := registry.NewProductionRegistry()
+	if err != nil {
+		t.Fatalf("create production Quant Registry: %v", err)
 	}
 	service, err := NewCreateSMAService(reader, quantRegistry, repository, func() time.Time { return now })
 	if err != nil {
@@ -177,28 +161,6 @@ func newTestCreateSMAService(t *testing.T, reader CloseSeriesSnapshotReader, rep
 	return service
 }
 
-func testCreateSMAEntry(window int) registry.Entry {
-	schema := fmt.Sprintf("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"window\"],\"properties\":{\"window\":{\"type\":\"integer\",\"const\":%d}}}", window)
-	return registry.Entry{
-		Code: "sma", SchemaVersion: "1.0.0", ValueType: registry.ValueTypeDecimalString, Unit: "test-unit",
-		Precision: registry.Precision{
-			MaxIntegerDigits: 18, MaxFractionDigits: 18, RoundingMode: "exact",
-			Tolerance: json.RawMessage("\"0\""),
-		},
-		Range: registry.NumericRange{Unbounded: true}, AlgorithmVersion: "1.0.0",
-		InputRequirements: []registry.InputRequirement{{
-			Fields: []string{"close"}, Interval: "1d", Adjustment: "none",
-			PIT: true, Quality: []string{"valid"}, RequiresSnapshot: true,
-		}},
-		ParametersSchema: json.RawMessage(schema),
-		QualityPolicy: registry.QualityPolicy{
-			MinimumCoverage: 1, MissingHandling: "reject_missing",
-			QualityStates: []string{"valid"}, UnavailableConditions: []string{"insufficient_data"},
-		},
-		SampleCount:      registry.SampleCountPolicy{RequiredInMetric: true, Unit: "bar", CountingRule: "window_bars"},
-		SupportsInterval: false,
-	}
-}
 
 func validCreateSMASnapshot() CloseSeriesSnapshot {
 	bars := make([]CloseSeriesBar, 20)
@@ -212,6 +174,7 @@ func validCreateSMASnapshot() CloseSeriesSnapshot {
 		SnapshotRef:           "data_snapshot:sha256:" + strings.Repeat("a", 64),
 		ManifestSchemaVersion: "2.0.0", PayloadSchemaVersion: "1.0.0", PayloadKind: "daily_bars_close_series",
 		CallerRef: "principal:service:researchflow", PurposeCode: "quant_analysis",
+		Sources: []CloseSeriesSource{{SourceRef: "eastmoney", ProviderInterfaceVersion: "eastmoney-stock-api-v1"}},
 		Symbol: "600000.SH", StartDate: "2026-10-01", EndDate: "2026-10-20",
 		AdjustmentBasis: "none", SystemAsOf: "2026-11-23T00:00:00Z", Interval: "1d",
 		TradingCalendarRef: "trading_calendar:sha256:" + strings.Repeat("b", 64),
@@ -230,5 +193,6 @@ func validCreateSMARequest() CreateSMARequest {
 		AuthorizationRef: "data_authorization:sha256:" + strings.Repeat("c", 64),
 		SystemAsOf:       time.Date(2026, 11, 23, 0, 0, 0, 0, time.UTC),
 		Parameters:       json.RawMessage("{\"window\":20}"),
+		AllowedProviderCodes: []string{"eastmoney"},
 	}
 }
