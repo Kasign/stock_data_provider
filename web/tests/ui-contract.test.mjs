@@ -2375,6 +2375,7 @@ test("UIR-2 shared page frame rules merge only redundant global overrides", () =
   assert.match(stylesheet, /@media \(max-width: 700px\) \{\s*\.mobile-menu-toggle/);
   assert.match(stylesheet, /@media \(max-width: 380px\) \{\s*\.app-shell \{ --space-page: 9px; \}/);
   assert.match(stylesheet, /@media \(max-width: 800px\) \{\s*\.page-heading \{ flex-direction: column; align-items: flex-start; gap: 12px; \}/);
+  assert.match(stylesheet, /@media \(max-width: 800px\) \{\s*\.recent-analysis-tools \{ display: grid; grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
   assert.equal((stylesheet.match(/\.main-area\s*\{[^}]*padding:/g) || []).length, 1,
     "page gutters must be controlled by one shared main-area padding declaration");
   assert.ok(stylesheet.includes("transition: border-color .16s ease, box-shadow .16s ease;"));
