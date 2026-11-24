@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:kasign:researchflow:quant-sma20-parameters:1.0.0",
+  "title": "Quant SMA20 Parameters",
+  "type": "object",
+  "properties": {
+    "symbol": {"type": "string", "pattern": "^[0-9]{6}\\.(SH|SZ|BJ)$"},
+    "start_date": {"type": "string", "format": "date"},
+    "end_date": {"type": "string", "format": "date"},
+    "limit": {"type": "integer", "minimum": 20, "maximum": 1000}
+  },
+  "required": ["symbol", "start_date", "end_date", "limit"],
+  "additionalProperties": false
+}
