@@ -8,7 +8,7 @@ const MigrationNamespace = "analysis"
 // Analysis 的持久化结构由 Root Server Migration Registry 统一创建。
 func Migrations() []platformstorage.Migration {
 	return []platformstorage.Migration{{
-		Version: 1,
+		Version:     1,
 		Description: "create complete Analysis schema baseline",
 		Statements: []string{
 			"CREATE TABLE analysis_runs (run_id VARCHAR(64) NOT NULL, status VARCHAR(32) NOT NULL, task_type VARCHAR(64) NOT NULL, as_of DATETIME(6) NOT NULL, started_at DATETIME(6) NOT NULL, finished_at DATETIME(6) NULL, request_json LONGTEXT NOT NULL, result_json LONGTEXT NULL, created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6), updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6), PRIMARY KEY (run_id), KEY idx_runs_asof (as_of), KEY idx_runs_status (status)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
