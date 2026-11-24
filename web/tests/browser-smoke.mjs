@@ -781,7 +781,7 @@ try {
         theme: document.documentElement.dataset.theme,
         colorScheme: root.colorScheme,
         tokens: Object.fromEntries(tokens.map((name) => [name, root.getPropertyValue(name).trim()])),
-        headingColor: getComputedStyle(document.querySelector("#market-view h1")).color,
+        headingColor: getComputedStyle(document.querySelector("#market-overview-title")).color,
         panelBackground: getComputedStyle(document.querySelector("#market-overview-panel")).backgroundImage
       };
     });
@@ -803,7 +803,7 @@ try {
         sidebar: root.getPropertyValue("--surface-sidebar").trim(),
         panel: root.getPropertyValue("--surface-panel-start").trim(),
         heading: root.getPropertyValue("--text-heading").trim(),
-        headingColor: getComputedStyle(document.querySelector("#market-view h1")).color
+        headingColor: getComputedStyle(document.querySelector("#market-overview-title")).color
       };
     });
     assert.equal(lightTheme.theme, "light", "theme toggle should apply light theme");
