@@ -1539,7 +1539,7 @@ try {
     }
 
     const menu = page.locator("#mobile-menu-toggle");
-    if (viewport.width <= 600 && await menu.isVisible()) {
+    if (viewport.width <= 700 && await menu.isVisible()) {
       await menu.click();
       await page.waitForFunction(() => document.querySelector("#mobile-menu-toggle")?.getAttribute("aria-expanded") === "true");
       await page.screenshot({
