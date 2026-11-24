@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	marketdataapp "example.com/stock-analysis-flow/internal/marketdata/app"
 	"example.com/stock-analysis-flow/internal/marketdata/model"
 	"example.com/stock-analysis-flow/internal/marketdata/service"
 )
@@ -56,9 +57,9 @@ func TestReaderPassesCanonicalProviderAllowlistToPITBackend(t *testing.T) {
 	backend := &providerFilteredReaderBackend{}
 	reader := &Reader{backend: backend}
 	cutoff := time.Date(2026, 11, 20, 8, 0, 0, 0, time.UTC)
-	_, err := reader.GetDailyBarsV2(context.Background(), DailyBarsQuery{
+	_, err := reader.GetDailyBarsV2(context.Background(), marketdataapp.DailyBarsQuery{
 		Symbol: "600036.SH", StartDate: "2026-10-01", EndDate: "2026-10-30",
-		Limit: 20, AdjustmentBasis: AdjustmentNone, SystemObservedAtCutoff: &cutoff,
+		Limit: 20, AdjustmentBasis: marketdataapp.AdjustmentNone, SystemObservedAtCutoff: &cutoff,
 		AllowedProviderCodes: []string{"eastmoney"},
 	})
 	if err != nil {
