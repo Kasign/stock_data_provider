@@ -73,6 +73,10 @@ type StageOutputRegistry interface {
 	Entry(string, string, string) (stageoutput.Entry, bool)
 }
 
+type StageOutputRegistryResolver interface {
+	Resolve(version string) (StageOutputRegistry, error)
+}
+
 type WorkerStore interface {
 	ClaimAttempt(context.Context, string, string, string, string, time.Duration, int, int) (domain.Attempt, bool, error)
 	LoadStageExecutionSnapshot(context.Context, string, string) (StageExecutionSnapshot, error)
@@ -102,7 +106,8 @@ type Worker struct {
 	now             func() time.Time
 	cancellations   *workerCancellationRegistry
 	faultNormalizer ExecutionFaultNormalizer
-	outputRegistry  StageOutputRegistry
+	outputRegistry         StageOutputRegistry
+	outputRegistryResolver StageOutputRegistryResolver
 }
 
 func NewWorker(store WorkerStore, executor StageExecutor, clock DatabaseClock, config WorkerConfig) (*Worker, error) {
@@ -115,16 +120,30 @@ func NewWorker(store WorkerStore, executor StageExecutor, clock DatabaseClock, c
 	return &Worker{store: store, executor: executor, clock: clock, config: config, now: time.Now, cancellations: newWorkerCancellationRegistry()}, nil
 }
 
-// NewWorkerWithStageOutputRegistry enables fail-closed Provider output validation.
+// NewWorkerWithStageOutputRegistry enables fail-closed Provider output validation for one immutable Registry version.
 func NewWorkerWithStageOutputRegistry(store WorkerStore, executor StageExecutor, clock DatabaseClock, config WorkerConfig, registry StageOutputRegistry) (*Worker, error) {
-	if registry == nil || strings.TrimSpace(registry.Version()) == "" || strings.TrimSpace(registry.Fingerprint()) == "" {
-		return nil, errors.New("Researchflow Stage Output Registry is required")
+	resolver, err := NewStageOutputRegistrySet(registry)
+	if err != nil {
+		return nil, err
+	}
+	worker, err := NewWorkerWithStageOutputRegistryResolver(store, executor, clock, config, resolver)
+	if err != nil {
+		return nil, err
+	}
+	worker.outputRegistry = registry
+	return worker, nil
+}
+
+// NewWorkerWithStageOutputRegistryResolver resolves the exact immutable Registry version persisted by each Run.
+func NewWorkerWithStageOutputRegistryResolver(store WorkerStore, executor StageExecutor, clock DatabaseClock, config WorkerConfig, resolver StageOutputRegistryResolver) (*Worker, error) {
+	if resolver == nil {
+		return nil, errors.New("Researchflow Stage Output Registry resolver is required")
 	}
 	worker, err := NewWorker(store, executor, clock, config)
 	if err != nil {
 		return nil, err
 	}
-	worker.outputRegistry = registry
+	worker.outputRegistryResolver = resolver
 	return worker, nil
 }
 
@@ -314,7 +333,14 @@ func (w *Worker) Execute(ctx context.Context, runRef, stageRef, attemptRef strin
 	var stageOutput *StageOutputCommit
 	if result.StageStatus == domain.StageSucceeded || result.StageStatus == domain.StageDegraded ||
 		((result.StageStatus == domain.StageFailed || result.StageStatus == domain.StageRetryWait) && result.ProviderResult != nil) {
-		if w.outputRegistry == nil || w.outputRegistry.Version() != snapshot.OutputRegistryVersion {
+		outputRegistry := w.outputRegistry
+		if w.outputRegistryResolver != nil {
+			outputRegistry, err = w.outputRegistryResolver.Resolve(snapshot.OutputRegistryVersion)
+			if err != nil {
+				return WorkerExecution{Attempt: attempt}, fmt.Errorf("resolve Researchflow Stage Output Registry %q: %w", snapshot.OutputRegistryVersion, err)
+			}
+		}
+		if outputRegistry == nil || outputRegistry.Version() != snapshot.OutputRegistryVersion || strings.TrimSpace(outputRegistry.Fingerprint()) == "" {
 			return WorkerExecution{Attempt: attempt}, errors.New("Researchflow Stage Output Registry is missing or differs from the persisted template")
 		}
 		providerResult := *result.ProviderResult
@@ -328,17 +354,17 @@ func (w *Worker) Execute(ctx context.Context, runRef, stageRef, attemptRef strin
 			return WorkerExecution{Attempt: attempt}, fmt.Errorf("build Researchflow Stage Provider Envelope: %w", buildErr)
 		}
 		validationContext := stageoutput.ValidationContext{Identity: identity}
-		if validateErr := w.outputRegistry.Validate(envelope, validationContext); validateErr != nil {
+		if validateErr := outputRegistry.Validate(envelope, validationContext); validateErr != nil {
 			return WorkerExecution{Attempt: attempt}, fmt.Errorf("validate Researchflow Stage Provider Envelope: %w", validateErr)
 		}
-		entry, ok := w.outputRegistry.Entry(envelope.StageCode, envelope.OutputType, envelope.SchemaVersion)
+		entry, ok := outputRegistry.Entry(envelope.StageCode, envelope.OutputType, envelope.SchemaVersion)
 		if !ok {
 			return WorkerExecution{Attempt: attempt}, errors.New("validated Researchflow Stage Output Registry entry disappeared")
 		}
 		result.DiagnosticRefs = append([]string(nil), envelope.DiagnosticRefs...)
 		stageOutput = &StageOutputCommit{
-			Envelope: envelope, RegistryVersion: w.outputRegistry.Version(),
-			RegistryFingerprint: w.outputRegistry.Fingerprint(),
+			Envelope: envelope, RegistryVersion: outputRegistry.Version(),
+			RegistryFingerprint: outputRegistry.Fingerprint(),
 			PayloadSchemaRef:    entry.PayloadSchemaRef, QualitySummarySchemaRef: entry.QualitySummarySchemaRef,
 		}
 	}
