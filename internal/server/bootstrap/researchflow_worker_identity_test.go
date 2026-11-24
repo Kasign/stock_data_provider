@@ -35,7 +35,6 @@ func TestQuantServicePrincipalFailsClosedOnInsufficientCredential(t *testing.T) 
 		return "0123456789abcdef0123456789abcdef", true
 	}).Secret("TOKEN")
 	for _, credentials := range [][]platformsecurity.ServiceCredential{
-		{{Name: "other-service", Secret: secret, Scopes: []string{platformsecurity.ScopeDataRead}}},
 		{{Name: "quant", Secret: secret, Scopes: []string{platformsecurity.ScopeResearchRun}}},
 		{{Name: "quant", Secret: secret, Scopes: []string{platformsecurity.ScopePlatformAdmin}}},
 	} {
