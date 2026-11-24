@@ -7,20 +7,15 @@ import (
 	platformconfig "example.com/stock-analysis-flow/internal/platform/config"
 )
 
-// Migration controls the explicit schema migration step during bootstrap.
+// Migration 配置只保留执行超时；Schema 迁移由 Server 启动统一自动执行。
 type Migration struct {
-	Enabled bool
 	Timeout time.Duration
 }
 
-// LoadMigration reads the opt-in migration policy. Production startup does not
-// mutate schema unless MIGRATION_ENABLED is explicitly enabled.
+// LoadMigration 读取统一数据库迁移的执行超时。
 func LoadMigration(env platformconfig.Env) (Migration, error) {
 	cfg := Migration{Timeout: 2 * time.Minute}
 	var err error
-	if cfg.Enabled, err = env.Bool("MIGRATION_ENABLED", false); err != nil {
-		return Migration{}, err
-	}
 	if cfg.Timeout, err = env.Duration("MIGRATION_TIMEOUT", cfg.Timeout); err != nil {
 		return Migration{}, err
 	}
