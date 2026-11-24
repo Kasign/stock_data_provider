@@ -228,28 +228,10 @@ func dependencyFault(dependency, code, message string, cause error) *fault.Fault
 
 // Migration is an immutable, ordered schema change. Statements are executed
 // individually because MariaDB DDL may implicitly commit.
-type MigrationOperation struct {
-	Kind       string
-	Table      string
-	Name       string
-	Definition string
-	LegacyName string
-	Columns    string
-}
-
-const (
-	MigrationOperationEnsureColumn         = "ensure_column"
-	MigrationOperationEnsureNonUniqueIndex = "ensure_non_unique_index"
-)
-
-// Migration is an immutable, ordered schema change. Statements are executed
-// individually because MariaDB DDL may implicitly commit. Operations express
-// idempotent schema transitions that require information_schema inspection.
 type Migration struct {
 	Version     uint64
 	Description string
 	Statements  []string
-	Operations  []MigrationOperation
 }
 
 // ApplyMigrations applies the complete immutable migration set for one namespace.
@@ -390,11 +372,6 @@ func ApplyMigrations(ctx context.Context, db *sql.DB, namespace string, migratio
 		for index, statement := range migration.Statements {
 			if _, err := conn.ExecContext(ctx, statement); err != nil {
 				return applyFailure(index+1, err)
-			}
-		}
-		for index, operation := range migration.Operations {
-			if err := applyMigrationOperation(ctx, conn, operation); err != nil {
-				return applyFailure(len(migration.Statements)+index+1, err)
 			}
 		}
 		result, err := conn.ExecContext(ctx, `UPDATE platform_schema_migrations
@@ -541,99 +518,6 @@ func ValidateAppliedMigrations(ctx context.Context, db *sql.DB, namespace string
 	return nil
 }
 
-func validateMigrationOperation(operation MigrationOperation) error {
-	validIdentifier := func(value string) bool {
-		if value == "" {
-			return false
-		}
-		for _, char := range value {
-			if (char >= 'a' && char <= 'z') || (char >= 'A' && char <= 'Z') ||
-				(char >= '0' && char <= '9') || char == '_' {
-				continue
-			}
-			return false
-		}
-		return true
-	}
-	switch operation.Kind {
-	case MigrationOperationEnsureColumn:
-		if !validIdentifier(operation.Table) || !validIdentifier(operation.Name) ||
-			strings.TrimSpace(operation.Definition) == "" || strings.ContainsAny(operation.Definition, "`;") ||
-			operation.LegacyName != "" || operation.Columns != "" {
-			return errors.New("ensure-column migration operation is invalid")
-		}
-	case MigrationOperationEnsureNonUniqueIndex:
-		if !validIdentifier(operation.Table) || !validIdentifier(operation.Name) ||
-			operation.Definition != "" || (operation.LegacyName != "" && !validIdentifier(operation.LegacyName)) {
-			return errors.New("ensure-non-unique-index migration operation is invalid")
-		}
-		columns := strings.Split(operation.Columns, ",")
-		if len(columns) == 0 {
-			return errors.New("index migration operation requires columns")
-		}
-		for _, column := range columns {
-			if !validIdentifier(strings.TrimSpace(column)) {
-				return errors.New("index migration operation contains an invalid column")
-			}
-		}
-	default:
-		return fmt.Errorf("unsupported migration operation kind %q", operation.Kind)
-	}
-	return nil
-}
-
-func applyMigrationOperation(ctx context.Context, conn *sql.Conn, operation MigrationOperation) error {
-	if err := validateMigrationOperation(operation); err != nil {
-		return err
-	}
-	switch operation.Kind {
-	case MigrationOperationEnsureColumn:
-		var count int
-		if err := conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM information_schema.COLUMNS
-WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND COLUMN_NAME=?`, operation.Table, operation.Name).Scan(&count); err != nil {
-			return err
-		}
-		if count > 0 {
-			return nil
-		}
-		_, err := conn.ExecContext(ctx, fmt.Sprintf("ALTER TABLE `%s` ADD COLUMN `%s` %s",
-			operation.Table, operation.Name, operation.Definition))
-		return err
-	case MigrationOperationEnsureNonUniqueIndex:
-		if operation.LegacyName != "" && operation.LegacyName != operation.Name {
-			var legacyCount int
-			if err := conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM information_schema.STATISTICS
-WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND INDEX_NAME=?`, operation.Table, operation.LegacyName).Scan(&legacyCount); err != nil {
-				return err
-			}
-			if legacyCount > 0 {
-				if _, err := conn.ExecContext(ctx, fmt.Sprintf("ALTER TABLE `%s` DROP INDEX `%s`", operation.Table, operation.LegacyName)); err != nil {
-					return err
-				}
-			}
-		}
-		var count, nonUnique int
-		if err := conn.QueryRowContext(ctx, `SELECT COUNT(*), COALESCE(MAX(NON_UNIQUE), 1)
-FROM information_schema.STATISTICS
-WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND INDEX_NAME=?`, operation.Table, operation.Name).Scan(&count, &nonUnique); err != nil {
-			return err
-		}
-		if count > 0 && nonUnique == 0 {
-			if _, err := conn.ExecContext(ctx, fmt.Sprintf("ALTER TABLE `%s` DROP INDEX `%s`", operation.Table, operation.Name)); err != nil {
-				return err
-			}
-			count = 0
-		}
-		if count > 0 {
-			return nil
-		}
-		_, err := conn.ExecContext(ctx, fmt.Sprintf("CREATE INDEX `%s` ON `%s` (%s)",
-			operation.Name, operation.Table, operation.Columns))
-		return err
-	default:
-		return fmt.Errorf("unsupported migration operation kind %q", operation.Kind)
-	}
-}
 
 func requireSingleRowAffected(result sql.Result) error {
 	if result == nil {
@@ -657,7 +541,6 @@ func prepareMigrations(namespace string, migrations []Migration) ([]Migration, m
 	copy(ordered, migrations)
 	for index := range ordered {
 		ordered[index].Statements = append([]string(nil), ordered[index].Statements...)
-		ordered[index].Operations = append([]MigrationOperation(nil), ordered[index].Operations...)
 	}
 	sortMigrations(ordered)
 
@@ -665,8 +548,8 @@ func prepareMigrations(namespace string, migrations []Migration) ([]Migration, m
 	for _, migration := range ordered {
 		if migration.Version == 0 || strings.TrimSpace(migration.Description) == "" ||
 			utf8.RuneCountInString(migration.Description) > 255 ||
-			(len(migration.Statements) == 0 && len(migration.Operations) == 0) {
-			return nil, nil, errors.New("migration version, description and statements or operations are required")
+			len(migration.Statements) == 0 {
+			return nil, nil, errors.New("migration version, description and statements are required")
 		}
 		if _, exists := checksums[migration.Version]; exists {
 			return nil, nil, errors.New("migration versions must be unique")
@@ -678,21 +561,6 @@ func prepareMigrations(namespace string, migrations []Migration) ([]Migration, m
 			}
 			_, _ = hash.Write([]byte(statement))
 			_, _ = hash.Write([]byte{0})
-		}
-		// Empty Operations intentionally add no bytes: checksums for published
-		// statement-only migrations remain byte-for-byte stable.
-		if len(migration.Operations) > 0 {
-			_, _ = hash.Write([]byte("platform-migration-operations-v1"))
-			_, _ = hash.Write([]byte{0})
-			for _, operation := range migration.Operations {
-				if err := validateMigrationOperation(operation); err != nil {
-					return nil, nil, err
-				}
-				for _, value := range []string{operation.Kind, operation.Table, operation.Name, operation.Definition, operation.LegacyName, operation.Columns} {
-					_, _ = hash.Write([]byte(value))
-					_, _ = hash.Write([]byte{0})
-				}
-			}
 		}
 		checksums[migration.Version] = hex.EncodeToString(hash.Sum(nil))
 	}
