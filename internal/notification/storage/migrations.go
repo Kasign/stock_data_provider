@@ -2,239 +2,26 @@ package storage
 
 import platformstorage "example.com/stock-analysis-flow/internal/platform/storage"
 
-// Migrations 返回 Notification 自有持久化结构；Inbox/Fanout 与订阅修订快照均由本模块拥有。
+const MigrationNamespace = "notification"
+
+// Migrations 返回 Notification 当前完整 Schema 基线。
+// 新数据库只执行一个 V1；后续正式发布的 Schema 变更从 V2 开始。
 func Migrations() []platformstorage.Migration {
-	return []platformstorage.Migration{
-		{
-			Version:     1,
-			Description: "create notification subscription delivery plan and delivery execution tables",
-			Statements: []string{
-				`CREATE TABLE notification_subscriptions (
-					subscription_id VARCHAR(256) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-					version BIGINT UNSIGNED NOT NULL,
-					owner_ref VARCHAR(256) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-					status VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-					event_type VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-					filter_schema_version VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT '',
-					filters JSON NULL,
-					recipient_scope VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-					recipient_ref VARCHAR(256) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT '',
-					channel_ref VARCHAR(256) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-					template_id VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-					created_at DATETIME(6) NOT NULL,
-					updated_at DATETIME(6) NOT NULL,
-					effective_at DATETIME(6) NOT NULL,
-					PRIMARY KEY (subscription_id, version),
-					KEY idx_notification_subscriptions_event_status (event_type, status, subscription_id, version)
-				) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
-				`CREATE TABLE notification_delivery_plans (
-					delivery_id VARCHAR(256) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-					source_module VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-					event_id VARCHAR(256) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-					subscription_id VARCHAR(256) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-					subscription_version BIGINT UNSIGNED NOT NULL,
-					channel_ref VARCHAR(256) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-					channel_config_version BIGINT UNSIGNED NOT NULL,
-					template_id VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-					template_version BIGINT UNSIGNED NOT NULL,
-					recipient_ref VARCHAR(256) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-					payload_fingerprint CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-					authorization_policy_versions JSON NOT NULL,
-					authorization_refs JSON NOT NULL,
-					plan_fingerprint CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-					delivery_idempotency_key VARCHAR(256) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-					plan_json JSON NOT NULL,
-					created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
-					PRIMARY KEY (delivery_id),
-					UNIQUE KEY uk_notification_delivery_plan_identity (
-						source_module, event_id, subscription_id, subscription_version,
-						channel_ref, channel_config_version, template_id, template_version, recipient_ref
-					),
-					KEY idx_notification_delivery_plans_event (source_module, event_id),
-					KEY idx_notification_delivery_plans_fingerprint (plan_fingerprint)
-				) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
-				`CREATE TABLE notification_deliveries (
-					delivery_id VARCHAR(256) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-					source_module VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-					event_id VARCHAR(256) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-					subscription_id VARCHAR(256) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-					subscription_version BIGINT UNSIGNED NOT NULL,
-					channel_ref VARCHAR(256) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-					channel_config_version BIGINT UNSIGNED NOT NULL,
-					template_id VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-					template_version BIGINT UNSIGNED NOT NULL,
-					recipient_ref VARCHAR(256) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-					payload_fingerprint CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-					plan_fingerprint CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-					delivery_idempotency_key VARCHAR(256) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-					status VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-					version BIGINT UNSIGNED NOT NULL,
-					attempt_count INT UNSIGNED NOT NULL DEFAULT 0,
-					max_attempts INT UNSIGNED NOT NULL,
-					lease_worker_id VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NULL,
-					lease_expires_at DATETIME(6) NULL,
-					fencing_token BIGINT UNSIGNED NOT NULL DEFAULT 0,
-					next_attempt_at DATETIME(6) NULL,
-					deadline_at DATETIME(6) NOT NULL,
-					reason_code VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NULL,
-					last_error_code VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NULL,
-					provider_message_ref VARCHAR(256) CHARACTER SET ascii COLLATE ascii_bin NULL,
-					created_at DATETIME(6) NOT NULL,
-					updated_at DATETIME(6) NOT NULL,
-					PRIMARY KEY (delivery_id),
-					UNIQUE KEY uk_notification_delivery_identity (
-						source_module, event_id, subscription_id, subscription_version,
-						channel_ref, channel_config_version, template_id, template_version, recipient_ref
-					),
-					UNIQUE KEY uk_notification_delivery_idempotency (channel_ref, recipient_ref, delivery_idempotency_key),
-					KEY idx_notification_deliveries_due (status, next_attempt_at, deadline_at, created_at),
-					KEY idx_notification_deliveries_lease (status, lease_expires_at),
-					KEY idx_notification_deliveries_subscription (subscription_id, created_at),
-					CONSTRAINT fk_notification_delivery_plan FOREIGN KEY (delivery_id) REFERENCES notification_delivery_plans (delivery_id)
-				) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
-				`CREATE TABLE notification_delivery_attempts (
-					attempt_id VARCHAR(256) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-					delivery_id VARCHAR(256) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-					attempt_no INT UNSIGNED NOT NULL,
-					worker_id VARCHAR(256) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-					fencing_token BIGINT UNSIGNED NOT NULL,
-					lease_expires_at DATETIME(6) NOT NULL,
-					started_at DATETIME(6) NOT NULL,
-					finished_at DATETIME(6) NULL,
-					outcome VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NULL,
-					provider_message_ref VARCHAR(256) CHARACTER SET ascii COLLATE ascii_bin NULL,
-					error_code VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NULL,
-					retryable TINYINT(1) NOT NULL DEFAULT 0,
-					retry_after_at DATETIME(6) NULL,
-					duration_ms BIGINT NULL,
-					evidence_ref VARCHAR(256) CHARACTER SET ascii COLLATE ascii_bin NULL,
-					PRIMARY KEY (attempt_id),
-					UNIQUE KEY uk_notification_attempt_number (delivery_id, attempt_no),
-					UNIQUE KEY uk_notification_attempt_fencing_token (delivery_id, fencing_token),
-					KEY idx_notification_attempts_started (delivery_id, started_at),
-					CONSTRAINT fk_notification_attempt_delivery FOREIGN KEY (delivery_id) REFERENCES notification_deliveries (delivery_id)
-				) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
-				`CREATE TABLE notification_delivery_state_events (
-					delivery_id VARCHAR(256) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-					version BIGINT UNSIGNED NOT NULL,
-					from_status VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-					to_status VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-					changed_at DATETIME(6) NOT NULL,
-					reason_code VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NULL,
-					evidence_ref VARCHAR(256) CHARACTER SET ascii COLLATE ascii_bin NULL,
-					actor_ref VARCHAR(256) CHARACTER SET ascii COLLATE ascii_bin NULL,
-					request_id VARCHAR(256) CHARACTER SET ascii COLLATE ascii_bin NULL,
-					actor_reason VARCHAR(512) NULL,
-					PRIMARY KEY (delivery_id, version),
-					KEY idx_notification_delivery_events_time (delivery_id, changed_at),
-					CONSTRAINT fk_notification_delivery_event FOREIGN KEY (delivery_id) REFERENCES notification_deliveries (delivery_id)
-				) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
-			},
+	return []platformstorage.Migration{{
+		Version: 1,
+		Description: "create complete Notification schema baseline",
+		Statements: []string{
+			"CREATE TABLE notification_subscriptions (\n\t\t\t\t\tsubscription_id VARCHAR(256) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n\t\t\t\t\tversion BIGINT UNSIGNED NOT NULL,\n\trevision_id BIGINT UNSIGNED NOT NULL DEFAULT 0,\n\t\t\t\t\towner_ref VARCHAR(256) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n\t\t\t\t\tstatus VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n\t\t\t\t\tevent_type VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n\t\t\t\t\tfilter_schema_version VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT '',\n\t\t\t\t\tfilters JSON NULL,\n\t\t\t\t\trecipient_scope VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n\t\t\t\t\trecipient_ref VARCHAR(256) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT '',\n\t\t\t\t\tchannel_ref VARCHAR(256) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n\t\t\t\t\ttemplate_id VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n\t\t\t\t\tcreated_at DATETIME(6) NOT NULL,\n\t\t\t\t\tupdated_at DATETIME(6) NOT NULL,\n\t\t\t\t\teffective_at DATETIME(6) NOT NULL,\n\t\t\t\t\tPRIMARY KEY (subscription_id, version),\n\t\t\t\t\tKEY idx_notification_subscriptions_event_status (event_type, status, subscription_id, version),\n\tKEY idx_notification_subscriptions_revision (subscription_id, revision_id, version)\n\t\t\t\t) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+			"CREATE TABLE notification_delivery_plans (\n\t\t\t\t\tdelivery_id VARCHAR(256) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n\t\t\t\t\tsource_module VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n\t\t\t\t\tevent_id VARCHAR(256) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n\t\t\t\t\tsubscription_id VARCHAR(256) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n\t\t\t\t\tsubscription_version BIGINT UNSIGNED NOT NULL,\n\t\t\t\t\tchannel_ref VARCHAR(256) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n\t\t\t\t\tchannel_config_version BIGINT UNSIGNED NOT NULL,\n\t\t\t\t\ttemplate_id VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n\t\t\t\t\ttemplate_version BIGINT UNSIGNED NOT NULL,\n\t\t\t\t\trecipient_ref VARCHAR(256) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n\t\t\t\t\tpayload_fingerprint CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n\t\t\t\t\tauthorization_policy_versions JSON NOT NULL,\n\t\t\t\t\tauthorization_refs JSON NOT NULL,\n\t\t\t\t\tplan_fingerprint CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n\t\t\t\t\tdelivery_idempotency_key VARCHAR(256) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n\t\t\t\t\tplan_json JSON NOT NULL,\n\t\t\t\t\tcreated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),\n\t\t\t\t\tPRIMARY KEY (delivery_id),\n\t\t\t\t\tUNIQUE KEY uk_notification_delivery_plan_identity (\n\t\t\t\t\t\tsource_module, event_id, subscription_id, subscription_version,\n\t\t\t\t\t\tchannel_ref, channel_config_version, template_id, template_version, recipient_ref\n\t\t\t\t\t),\n\t\t\t\t\tKEY idx_notification_delivery_plans_event (source_module, event_id),\n\t\t\t\t\tKEY idx_notification_delivery_plans_fingerprint (plan_fingerprint)\n\t\t\t\t) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+			"CREATE TABLE notification_deliveries (\n\t\t\t\t\tdelivery_id VARCHAR(256) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n\t\t\t\t\tsource_module VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n\t\t\t\t\tevent_id VARCHAR(256) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n\t\t\t\t\tsubscription_id VARCHAR(256) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n\t\t\t\t\tsubscription_version BIGINT UNSIGNED NOT NULL,\n\t\t\t\t\tchannel_ref VARCHAR(256) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n\t\t\t\t\tchannel_config_version BIGINT UNSIGNED NOT NULL,\n\t\t\t\t\ttemplate_id VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n\t\t\t\t\ttemplate_version BIGINT UNSIGNED NOT NULL,\n\t\t\t\t\trecipient_ref VARCHAR(256) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n\t\t\t\t\tpayload_fingerprint CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n\t\t\t\t\tplan_fingerprint CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n\t\t\t\t\tdelivery_idempotency_key VARCHAR(256) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n\t\t\t\t\tstatus VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n\t\t\t\t\tversion BIGINT UNSIGNED NOT NULL,\n\t\t\t\t\tattempt_count INT UNSIGNED NOT NULL DEFAULT 0,\n\t\t\t\t\tmax_attempts INT UNSIGNED NOT NULL,\n\t\t\t\t\tlease_worker_id VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NULL,\n\t\t\t\t\tlease_expires_at DATETIME(6) NULL,\n\t\t\t\t\tfencing_token BIGINT UNSIGNED NOT NULL DEFAULT 0,\n\t\t\t\t\tnext_attempt_at DATETIME(6) NULL,\n\t\t\t\t\tdeadline_at DATETIME(6) NOT NULL,\n\t\t\t\t\treason_code VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NULL,\n\t\t\t\t\tlast_error_code VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NULL,\n\t\t\t\t\tprovider_message_ref VARCHAR(256) CHARACTER SET ascii COLLATE ascii_bin NULL,\n\t\t\t\t\tcreated_at DATETIME(6) NOT NULL,\n\t\t\t\t\tupdated_at DATETIME(6) NOT NULL,\n\t\t\t\t\tPRIMARY KEY (delivery_id),\n\t\t\t\t\tUNIQUE KEY uk_notification_delivery_identity (\n\t\t\t\t\t\tsource_module, event_id, subscription_id, subscription_version,\n\t\t\t\t\t\tchannel_ref, channel_config_version, template_id, template_version, recipient_ref\n\t\t\t\t\t),\n\t\t\t\t\tUNIQUE KEY uk_notification_delivery_idempotency (channel_ref, recipient_ref, delivery_idempotency_key),\n\t\t\t\t\tKEY idx_notification_deliveries_due (status, next_attempt_at, deadline_at, created_at),\n\t\t\t\t\tKEY idx_notification_deliveries_lease (status, lease_expires_at),\n\t\t\t\t\tKEY idx_notification_deliveries_subscription (subscription_id, created_at),\n\t\t\t\t\tCONSTRAINT fk_notification_delivery_plan FOREIGN KEY (delivery_id) REFERENCES notification_delivery_plans (delivery_id)\n\t\t\t\t) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+			"CREATE TABLE notification_delivery_attempts (\n\t\t\t\t\tattempt_id VARCHAR(256) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n\t\t\t\t\tdelivery_id VARCHAR(256) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n\t\t\t\t\tattempt_no INT UNSIGNED NOT NULL,\n\t\t\t\t\tworker_id VARCHAR(256) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n\t\t\t\t\tfencing_token BIGINT UNSIGNED NOT NULL,\n\t\t\t\t\tlease_expires_at DATETIME(6) NOT NULL,\n\t\t\t\t\tstarted_at DATETIME(6) NOT NULL,\n\t\t\t\t\tfinished_at DATETIME(6) NULL,\n\t\t\t\t\toutcome VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NULL,\n\t\t\t\t\tprovider_message_ref VARCHAR(256) CHARACTER SET ascii COLLATE ascii_bin NULL,\n\t\t\t\t\terror_code VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NULL,\n\t\t\t\t\tretryable TINYINT(1) NOT NULL DEFAULT 0,\n\t\t\t\t\tretry_after_at DATETIME(6) NULL,\n\t\t\t\t\tduration_ms BIGINT NULL,\n\t\t\t\t\tevidence_ref VARCHAR(256) CHARACTER SET ascii COLLATE ascii_bin NULL,\n\t\t\t\t\tPRIMARY KEY (attempt_id),\n\t\t\t\t\tUNIQUE KEY uk_notification_attempt_number (delivery_id, attempt_no),\n\t\t\t\t\tUNIQUE KEY uk_notification_attempt_fencing_token (delivery_id, fencing_token),\n\t\t\t\t\tKEY idx_notification_attempts_started (delivery_id, started_at),\n\t\t\t\t\tCONSTRAINT fk_notification_attempt_delivery FOREIGN KEY (delivery_id) REFERENCES notification_deliveries (delivery_id)\n\t\t\t\t) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+			"CREATE TABLE notification_delivery_state_events (\n\t\t\t\t\tdelivery_id VARCHAR(256) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n\t\t\t\t\tversion BIGINT UNSIGNED NOT NULL,\n\t\t\t\t\tfrom_status VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n\t\t\t\t\tto_status VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n\t\t\t\t\tchanged_at DATETIME(6) NOT NULL,\n\t\t\t\t\treason_code VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NULL,\n\t\t\t\t\tevidence_ref VARCHAR(256) CHARACTER SET ascii COLLATE ascii_bin NULL,\n\t\t\t\t\tactor_ref VARCHAR(256) CHARACTER SET ascii COLLATE ascii_bin NULL,\n\t\t\t\t\trequest_id VARCHAR(256) CHARACTER SET ascii COLLATE ascii_bin NULL,\n\t\t\t\t\tactor_reason VARCHAR(512) NULL,\n\t\t\t\t\tPRIMARY KEY (delivery_id, version),\n\t\t\t\t\tKEY idx_notification_delivery_events_time (delivery_id, changed_at),\n\t\t\t\t\tCONSTRAINT fk_notification_delivery_event FOREIGN KEY (delivery_id) REFERENCES notification_deliveries (delivery_id)\n\t\t\t\t) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+			"CREATE TABLE notification_inbox (\n\t\t\t\t\tsource_module VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n\t\t\t\t\tevent_id VARCHAR(256) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n\t\t\t\t\tidempotency_key VARCHAR(256) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n\t\t\t\t\tevent_type VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n\t\t\t\t\tschema_version VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n\t\t\t\t\tsubject_ref VARCHAR(256) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n\t\t\t\t\toccurred_at VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n\t\t\t\t\tpublished_at VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n\t\t\t\t\tcorrelation_id VARCHAR(256) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n\t\t\t\t\tpayload_fingerprint CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n\t\t\t\t\tpayload JSON NOT NULL,\n\t\t\t\t\treceived_at DATETIME(6) NOT NULL,\n\t\t\t\t\tPRIMARY KEY (source_module, event_id),\n\t\t\t\t\tUNIQUE KEY uk_notification_inbox_idempotency (source_module, idempotency_key),\n\t\t\t\t\tKEY idx_notification_inbox_received_at (received_at)\n\t\t\t\t) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+			"CREATE TABLE notification_template_versions (\n\t\t\t\t\ttemplate_id VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n\t\t\t\t\tversion BIGINT UNSIGNED NOT NULL,\n\t\t\t\t\tevent_type VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n\t\t\t\t\tschema_version VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n\t\t\t\t\tformat VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n\t\t\t\t\tsubject_template MEDIUMTEXT NOT NULL,\n\t\t\t\t\tbody_template MEDIUMTEXT NOT NULL,\n\t\t\t\t\tvariable_bindings JSON NOT NULL,\n\t\t\t\t\tdigest CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n\t\t\t\t\tcreated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),\n\t\t\t\t\tPRIMARY KEY (template_id, version),\n\t\t\t\t\tKEY idx_notification_template_event (event_type, schema_version, template_id, version)\n\t\t\t\t) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+			"CREATE TABLE notification_channel_config_versions (\n\t\t\t\t\tchannel_ref VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n\t\t\t\t\tconfig_version BIGINT UNSIGNED NOT NULL,\n\t\t\t\t\tsnapshot_json JSON NOT NULL,\n\t\t\t\t\tdigest CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n\t\t\t\t\tcreated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),\n\t\t\t\t\tPRIMARY KEY (channel_ref, config_version),\n\t\t\t\t\tKEY idx_notification_channel_config_kind (channel_ref, config_version)\n\t\t\t\t) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+			"CREATE TABLE notification_subscription_revision (\n\t\t\t\t\tsingleton_id TINYINT UNSIGNED NOT NULL,\n\t\t\t\t\tcurrent_revision BIGINT UNSIGNED NOT NULL,\n\t\t\t\t\tPRIMARY KEY (singleton_id)\n\t\t\t\t) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+			"CREATE TABLE notification_fanout_work_items (\n\t\t\t\t\twork_item_id VARCHAR(80) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n\t\t\t\t\tsource_module VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n\t\t\t\t\tevent_id VARCHAR(256) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n\t\t\t\t\tevent_type VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n\t\t\t\t\tpayload_fingerprint CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n\t\t\t\t\tsnapshot_revision BIGINT UNSIGNED NULL,\n\t\t\t\t\tcursor_subscription_id VARCHAR(256) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT '',\n\t\t\t\t\tstatus VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT 'pending',\n\t\t\t\t\tattempt_count INT UNSIGNED NOT NULL DEFAULT 0,\n\t\t\t\t\tlease_worker_id VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NULL,\n\t\t\t\t\tlease_expires_at DATETIME(6) NULL,\n\t\t\t\t\tfencing_token BIGINT UNSIGNED NOT NULL DEFAULT 0,\n\t\t\t\t\tnext_attempt_at DATETIME(6) NULL,\n\t\t\t\t\tlast_error_code VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NULL,\n\t\t\t\t\tcreated_at DATETIME(6) NOT NULL,\n\t\t\t\t\tupdated_at DATETIME(6) NOT NULL,\n\t\t\t\t\tPRIMARY KEY (work_item_id),\n\t\t\t\t\tUNIQUE KEY uk_notification_fanout_event (source_module, event_id),\n\t\t\t\t\tKEY idx_notification_fanout_due (status, next_attempt_at, created_at, work_item_id),\n\t\t\t\t\tKEY idx_notification_fanout_lease (status, lease_expires_at),\n\t\t\t\t\tCONSTRAINT fk_notification_fanout_inbox\n\t\t\t\t\t\tFOREIGN KEY (source_module, event_id)\n\t\t\t\t\t\tREFERENCES notification_inbox (source_module, event_id)\n\t\t\t\t) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+			"INSERT INTO notification_subscription_revision (singleton_id, current_revision) VALUES (1, 0)",
 		},
-		{
-			Version:     2,
-			Description: "create notification event inbox with dual idempotency constraints",
-			Statements: []string{
-				`CREATE TABLE notification_inbox (
-					source_module VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-					event_id VARCHAR(256) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-					idempotency_key VARCHAR(256) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-					event_type VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-					schema_version VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-					subject_ref VARCHAR(256) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-					occurred_at VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-					published_at VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-					correlation_id VARCHAR(256) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-					payload_fingerprint CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-					payload JSON NOT NULL,
-					received_at DATETIME(6) NOT NULL,
-					PRIMARY KEY (source_module, event_id),
-					UNIQUE KEY uk_notification_inbox_idempotency (source_module, idempotency_key),
-					KEY idx_notification_inbox_received_at (received_at)
-				) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
-			},
-		},
-		{
-			Version:     3,
-			Description: "create immutable notification template versions",
-			Statements: []string{
-				`CREATE TABLE notification_template_versions (
-					template_id VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-					version BIGINT UNSIGNED NOT NULL,
-					event_type VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-					schema_version VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-					format VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-					subject_template MEDIUMTEXT NOT NULL,
-					body_template MEDIUMTEXT NOT NULL,
-					variable_bindings JSON NOT NULL,
-					digest CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-					created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
-					PRIMARY KEY (template_id, version),
-					KEY idx_notification_template_event (event_type, schema_version, template_id, version)
-				) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
-			},
-		},
-		{
-			Version:     4,
-			Description: "create immutable notification channel config versions",
-			Statements: []string{
-				`CREATE TABLE notification_channel_config_versions (
-					channel_ref VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-					config_version BIGINT UNSIGNED NOT NULL,
-					snapshot_json JSON NOT NULL,
-					digest CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-					created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
-					PRIMARY KEY (channel_ref, config_version),
-					KEY idx_notification_channel_config_kind (channel_ref, config_version)
-				) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
-			},
-		},
-		{
-			Version:     5,
-			Description: "remove redundant channel config primary-key index",
-			Statements: []string{
-				`ALTER TABLE notification_channel_config_versions DROP INDEX idx_notification_channel_config_kind`,
-			},
-		},
-		{
-			Version:     6,
-			Description: "add stable subscription revision snapshots and transactional fanout work items",
-			Statements: []string{
-				`CREATE TABLE notification_subscription_revision (
-					singleton_id TINYINT UNSIGNED NOT NULL,
-					current_revision BIGINT UNSIGNED NOT NULL,
-					PRIMARY KEY (singleton_id)
-				) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
-				`INSERT INTO notification_subscription_revision (singleton_id, current_revision) VALUES (1, 0)`,
-				`ALTER TABLE notification_subscriptions
-					ADD COLUMN revision_id BIGINT UNSIGNED NOT NULL DEFAULT 0 AFTER version,
-					ADD KEY idx_notification_subscriptions_revision (subscription_id, revision_id, version)`,
-				`CREATE TABLE notification_fanout_work_items (
-					work_item_id VARCHAR(80) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-					source_module VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-					event_id VARCHAR(256) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-					event_type VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-					payload_fingerprint CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-					snapshot_revision BIGINT UNSIGNED NULL,
-					cursor_subscription_id VARCHAR(256) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT '',
-					status VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT 'pending',
-					attempt_count INT UNSIGNED NOT NULL DEFAULT 0,
-					lease_worker_id VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NULL,
-					lease_expires_at DATETIME(6) NULL,
-					fencing_token BIGINT UNSIGNED NOT NULL DEFAULT 0,
-					next_attempt_at DATETIME(6) NULL,
-					last_error_code VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NULL,
-					created_at DATETIME(6) NOT NULL,
-					updated_at DATETIME(6) NOT NULL,
-					PRIMARY KEY (work_item_id),
-					UNIQUE KEY uk_notification_fanout_event (source_module, event_id),
-					KEY idx_notification_fanout_due (status, next_attempt_at, created_at, work_item_id),
-					KEY idx_notification_fanout_lease (status, lease_expires_at),
-					CONSTRAINT fk_notification_fanout_inbox
-						FOREIGN KEY (source_module, event_id)
-						REFERENCES notification_inbox (source_module, event_id)
-				) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
-			},
-		},
-	}
+	}}
 }
