@@ -6,7 +6,6 @@ cd "$ROOT_DIR"
 
 COMPOSE_FILE="docker-compose.yml"
 ANALYSIS_CONTAINER="stock-analysis-server"
-MARKET_DATA_CONTAINER="stock-analysis-data"
 WEB_CONTAINER="stock-analysis-web"
 
 fail() {
@@ -45,10 +44,14 @@ printf '[1/4] 检查统一 Docker Compose 配置……\n'
 # --quiet prevents the expanded configuration, including credentials, from being printed.
 docker compose --env-file .env -f "$COMPOSE_FILE" config --quiet
 
-printf '[2/4] 构建行情、分析与 WebUI 三个镜像……\n'
-docker compose --env-file .env -f "$COMPOSE_FILE" build stock-analysis-data stock-analysis-server stock-analysis-web
+if ! grep -Eq '^[[:space:]]*MIGRATION_ENABLED[[:space:]]*=' .env; then
+  fail ".env 未显式设置 MIGRATION_ENABLED。首次部署/升级请设为 true；Schema 已迁移后设为 false。"
+fi
 
-printf '[3/4] 启动三个服务并清理当前 Compose 项目中的孤儿服务……\n'
+printf '[2/4] 构建 Root Server 与 WebUI 两个镜像……\n'
+docker compose --env-file .env -f "$COMPOSE_FILE" build stock-analysis-server stock-analysis-web
+
+printf '[3/4] 启动 Root Server 与 WebUI，并清理当前 Compose 项目中的孤儿服务……\n'
 docker compose --env-file .env -f "$COMPOSE_FILE" up -d --remove-orphans
 
 container_state() {
@@ -56,23 +59,20 @@ container_state() {
 }
 
 print_logs() {
-  printf '\n===== stock-analysis-data 最近日志 =====\n'
-  docker compose --env-file .env -f "$COMPOSE_FILE" logs --tail=80 stock-analysis-data || true
   printf '\n===== stock-analysis-server 最近日志 =====\n'
   docker compose --env-file .env -f "$COMPOSE_FILE" logs --tail=80 stock-analysis-server || true
   printf '\n===== stock-analysis-web 最近日志 =====\n'
   docker compose --env-file .env -f "$COMPOSE_FILE" logs --tail=80 stock-analysis-web || true
 }
 
-printf '[4/4] 等待三个容器通过健康检查（最长 180 秒）……\n'
+printf '[4/4] 等待 Root Server 与 WebUI 通过健康检查（最长 180 秒）……\n'
 healthy=0
 for ((attempt = 1; attempt <= 90; attempt++)); do
-  market_state="$(container_state "$MARKET_DATA_CONTAINER")"
   analysis_state="$(container_state "$ANALYSIS_CONTAINER")"
   web_state="$(container_state "$WEB_CONTAINER")"
-  if [[ "$market_state" == "healthy" && "$analysis_state" == "healthy" && "$web_state" == "healthy" ]]; then healthy=1; break; fi
-  if [[ "$market_state" == "unhealthy" || "$market_state" == "exited" || "$market_state" == "dead" || "$analysis_state" == "unhealthy" || "$analysis_state" == "exited" || "$analysis_state" == "dead" || "$web_state" == "unhealthy" || "$web_state" == "exited" || "$web_state" == "dead" ]]; then
-    printf '[状态] stock-analysis-data=%s，stock-analysis-server=%s，stock-analysis-web=%s\n' "$market_state" "$analysis_state" "$web_state" >&2
+  if [[ "$analysis_state" == "healthy" && "$web_state" == "healthy" ]]; then healthy=1; break; fi
+  if [[ "$analysis_state" == "unhealthy" || "$analysis_state" == "exited" || "$analysis_state" == "dead" || "$web_state" == "unhealthy" || "$web_state" == "exited" || "$web_state" == "dead" ]]; then
+    printf '[状态] stock-analysis-server=%s，stock-analysis-web=%s\n' "$analysis_state" "$web_state" >&2
     print_logs
     fail "至少一个容器未能进入健康状态。请根据上方日志检查密钥、数据库权限、Redis 配置、Nginx 上游服务名和网络。"
   fi
@@ -80,16 +80,19 @@ for ((attempt = 1; attempt <= 90; attempt++)); do
 done
 
 if [[ "$healthy" -ne 1 ]]; then
-  printf '[状态] stock-analysis-data=%s，stock-analysis-server=%s，stock-analysis-web=%s\n' "$(container_state "$MARKET_DATA_CONTAINER")" "$(container_state "$ANALYSIS_CONTAINER")" "$(container_state "$WEB_CONTAINER")" >&2
+  printf '[状态] stock-analysis-server=%s，stock-analysis-web=%s\n' "$(container_state "$ANALYSIS_CONTAINER")" "$(container_state "$WEB_CONTAINER")" >&2
   print_logs
   fail "等待健康检查超时。"
 fi
 if ! curl -fsS http://127.0.0.1:8092/healthz >/dev/null; then print_logs; fail "容器健康检查通过，但宿主机无法访问 127.0.0.1:8092/healthz。"; fi
-if ! curl -fsS http://127.0.0.1:8092/readyz >/dev/null; then print_logs; fail "分析 API 已启动，但 /readyz 未通过；请检查 MariaDB 表结构和 Redis 连接。"; fi
+if [[ -z "${PLATFORM_ADMIN_TOKEN:-}" ]]; then
+  fail ".env 必须配置 PLATFORM_ADMIN_TOKEN，Root /readyz 需要 Owner Bearer 运维认证。"
+fi
+if ! curl -fsS -H "Authorization: Bearer ${PLATFORM_ADMIN_TOKEN}" http://127.0.0.1:8092/readyz >/dev/null; then print_logs; fail "分析 API 已启动，但认证后的 /readyz 未通过；请检查 MariaDB Migration/checksum、Data 物理 Schema 和 Redis 连接。"; fi
 printf '\n统一部署启动成功。容器状态：\n'
 docker compose --env-file .env -f "$COMPOSE_FILE" ps
 printf '\n分析 API 健康检查：\n'
 curl -fsS http://127.0.0.1:8092/healthz
-curl -fsS http://127.0.0.1:8092/readyz
+curl -fsS -H "Authorization: Bearer ${PLATFORM_ADMIN_TOKEN}" http://127.0.0.1:8092/readyz
 printf '\nWebUI 默认访问地址为 http://127.0.0.1:8093/（若修改了 WEBUI_PORT，请使用实际端口）。\n'
-printf '后续可查看日志：docker compose --env-file .env -f %s logs -f stock-analysis-data stock-analysis-server stock-analysis-web\n' "$COMPOSE_FILE"
+printf '后续可查看日志：docker compose --env-file .env -f %s logs -f stock-analysis-server stock-analysis-web\n' "$COMPOSE_FILE"
