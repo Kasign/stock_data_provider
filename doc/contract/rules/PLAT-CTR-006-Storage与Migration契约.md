@@ -2,7 +2,7 @@
 
 - 契约编号：`PLAT-CTR-006`
 - 契约版本：`2.0.0`
-- 状态：`freeze-ready`
+- 状态：`frozen`
 - Platform 责任：SQL/Redis 连接创建、连接池参数校验、Ping、连接生命周期辅助、namespace-scoped SQL Migration Runner
 - 领域责任：Repository、领域 Schema、Migration SQL 内容、Migration 版本定义和领域数据保留策略
 - Server 责任：先创建 SQL-only Migration 连接并执行全部领域 Migration，校验完成后再创建 Redis/Repository/Worker/HTTP 资源，并负责 Ready 判定和资源关闭
