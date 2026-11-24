@@ -84,14 +84,11 @@ func TestFundamentalsAsOfReadsHistoricalRevisionFromMariaDB(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	store, err := repository.OpenMySQL(ctx, dsn)
+	store, closeStore, err := openMigratedMarketDataTestStore(ctx, dsn)
 	if err != nil {
-		t.Fatalf("open MariaDB: %v", err)
+		t.Fatalf("open and migrate MariaDB: %v", err)
 	}
-	defer store.Close()
-	if err := store.Migrate(ctx); err != nil {
-		t.Fatalf("migrate MariaDB: %v", err)
-	}
+	defer closeStore()
 
 	const symbol = "600519.SH"
 	const year, quarter = 2025, 4
