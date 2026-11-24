@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"example.com/stock-analysis-flow/internal/marketdata/model"
+	marketdatatestutil "example.com/stock-analysis-flow/internal/marketdata/testutil"
 
 )
 
@@ -84,11 +85,11 @@ func TestFundamentalsAsOfReadsHistoricalRevisionFromMariaDB(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	store, closeStore, err := openMigratedMarketDataTestStore(ctx, dsn)
+	store, db, err := marketdatatestutil.OpenMariaDBStore(ctx, dsn)
 	if err != nil {
 		t.Fatalf("open and migrate MariaDB: %v", err)
 	}
-	defer closeStore()
+	defer db.Close()
 
 	const symbol = "600519.SH"
 	const year, quarter = 2025, 4
