@@ -2665,6 +2665,10 @@ button:disabled, input:disabled, select:disabled, textarea:disabled { cursor: no
   .chat-sessions-panel { position: static; order: 2; }
   .chat-conversation-panel { order: 1; }
 }
+@media (max-width: 800px) {
+  .page-heading { flex-direction: column; align-items: flex-start; gap: 12px; }
+  .last-updated { white-space: normal; overflow-wrap: anywhere; }
+}
 @media (max-width: 600px) {
   .view { padding-top: 20px; padding-bottom: 16px; }
   .page-heading > div:first-child { width: 100%; }
