@@ -256,7 +256,7 @@ func validateExactSMASnapshot(snapshot CloseSeriesSnapshot, request CreateSMAReq
 		}
 		previousDate = bar.TradeDate
 	}
-	if len(snapshot.Bars) == 0 || snapshot.Bars[len(snapshot.Bars)-1].TradeDate != snapshot.EndDate {
+	if len(snapshot.Bars) == 0 {
 		return time.Time{}, ErrInvalidSMASnapshot
 	}
 	systemAsOf, err := parseCanonicalSMAUTC(snapshot.SystemAsOf)
