@@ -1,14 +1,9 @@
 package service
 
 import (
-	"context"
-	"os"
-	"testing"
-	"time"
-
 	"example.com/stock-analysis-flow/internal/marketdata/model"
-	marketdatatestutil "example.com/stock-analysis-flow/internal/marketdata/testutil"
 	"example.com/stock-analysis-flow/internal/marketdata/provider"
+	marketdatatestutil "example.com/stock-analysis-flow/internal/marketdata/testutil"
 
 )
 
