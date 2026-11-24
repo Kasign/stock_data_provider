@@ -241,6 +241,27 @@ function assertNormalDeclaration(selector, property, value) {
 for (const [selector, value] of [[".positive", "var(--positive)"], [".negative", "var(--negative)"]]) {
   assertNormalDeclaration(selector, "color", value);
 }
+const rootRules = selectorRules.get(":root") || [];
+if (rootRules.length !== 1) {
+  throw new Error(`Expected one canonical :root token block, found ${rootRules.length}`);
+}
+const rootTokenDeclarations = rootRules.flatMap((rule) => rule.declarations)
+  .filter((item) => item.property.startsWith("--"));
+const rootTokenNames = rootTokenDeclarations.map((item) => item.property);
+const duplicateRootTokens = [...new Set(rootTokenNames.filter((name, index) =>
+  rootTokenNames.indexOf(name) !== index))];
+if (duplicateRootTokens.length) {
+  throw new Error(`Duplicate canonical root tokens: ${duplicateRootTokens.join(", ")}`);
+}
+const requiredVisualTokens = [
+  "--radius", "--radius-lg", "--space-page", "--surface-sidebar", "--surface-topbar",
+  "--surface-panel-start", "--surface-panel-end", "--surface-input", "--surface-control",
+  "--surface-hover", "--text-heading", "--text-nav", "--focus-ring"
+];
+const missingVisualTokens = requiredVisualTokens.filter((name) => !rootTokenNames.includes(name));
+if (missingVisualTokens.length) {
+  throw new Error(`Missing canonical visual tokens: ${missingVisualTokens.join(", ")}`);
+}
 const missing = sharedSelectors.filter((selector) => !selectorRules.has(selector));
 if (missing.length) throw new Error(`Missing shared shell selectors: ${missing.join(", ")}`);
 if (rules.length < 1000 || declarations.length < 2000) {
@@ -255,6 +276,7 @@ console.log(JSON.stringify({
   declarations: declarations.length,
   atRules: atRuleCount,
   uniqueSelectors: selectorRules.size,
+  canonicalRootVisualTokens: requiredVisualTokens.length,
   repeatedSelectors: [...selectorRules.values()].filter((entries) => entries.length > 1).length,
   exactDuplicateGroups: exactDuplicates.length,
   declarationOverrideAnalysisScope: "Same normalized selector and identical at-rule context only; candidates are not a full cross-selector cascade proof.",
