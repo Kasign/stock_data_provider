@@ -24,10 +24,10 @@ func TestMariaDBDailyBarExactValuesPersistAcrossCurrentAndPITReads(t *testing.T)
 		t.Fatalf("open MariaDB: %v", err)
 	}
 	defer store.Close()
-	if err := store.Migrate(ctx); err != nil {
+	if err := applyMigrationsForTest(ctx, store); err != nil {
 		t.Fatalf("migrate Data schema: %v", err)
 	}
-	if err := store.ValidateCompatibilitySchema(ctx); err != nil {
+	if err := store.ValidateSchema(ctx); err != nil {
 		t.Fatalf("validate Data schema: %v", err)
 	}
 
