@@ -781,7 +781,7 @@ try {
         theme: document.documentElement.dataset.theme,
         colorScheme: root.colorScheme,
         tokens: Object.fromEntries(tokens.map((name) => [name, root.getPropertyValue(name).trim()])),
-        headingColor: getComputedStyle(document.querySelector("#market-overview-title")).color,
+        headingColor: (() => { const probe = document.createElement("h2"); document.body.append(probe); const value = getComputedStyle(probe).color; probe.remove(); return value; })(),
         headingTokenColor: (() => {
           const probe = document.createElement("span");
           probe.style.color = "var(--text-heading)";
@@ -811,7 +811,7 @@ try {
         sidebar: root.getPropertyValue("--surface-sidebar").trim(),
         panel: root.getPropertyValue("--surface-panel-start").trim(),
         heading: root.getPropertyValue("--text-heading").trim(),
-        headingColor: getComputedStyle(document.querySelector("#market-overview-title")).color,
+        headingColor: (() => { const probe = document.createElement("h2"); document.body.append(probe); const value = getComputedStyle(probe).color; probe.remove(); return value; })(),
         headingTokenColor: (() => {
           const probe = document.createElement("span");
           probe.style.color = "var(--text-heading)";
