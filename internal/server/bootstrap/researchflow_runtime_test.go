@@ -77,3 +77,61 @@ func TestResearchflowRuntimeLaunchTaskRejectsCancelledContext(t *testing.T) {
 	}
 }
 
+
+type runtimeStageExecutorFunc func(context.Context, researchflowapplication.StageExecutionRequest) (researchflowapplication.StageExecutionResult, error)
+
+func (f runtimeStageExecutorFunc) ExecuteStage(ctx context.Context, request researchflowapplication.StageExecutionRequest) (researchflowapplication.StageExecutionResult, error) {
+	return f(ctx, request)
+}
+
+func TestPrincipalStageExecutorInjectsQuantIdentityOnlyForQuantStage(t *testing.T) {
+	secret := platformconfig.NewEnvWithLookup(func(string) (string, bool) {
+		return "0123456789abcdef0123456789abcdef", true
+	}).Secret("TOKEN")
+	principal, err := platformsecurity.PrincipalFromServiceCredential(platformsecurity.ServiceCredential{
+		Name: "quant", Secret: secret, Scopes: []string{platformsecurity.ScopeDataRead},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	calls := 0
+	executor := principalStageExecutor{
+		quantPrincipal: &principal,
+		next: runtimeStageExecutorFunc(func(ctx context.Context, request researchflowapplication.StageExecutionRequest) (researchflowapplication.StageExecutionResult, error) {
+			calls++
+			got, ok := platformsecurity.PrincipalFromContextValue(ctx)
+			if request.Stage.Code == quantstage.SMA20StageCode {
+				if !ok || got.Subject != "quant" || !containsServiceScope(got.Scopes, platformsecurity.ScopeDataRead) {
+					t.Fatalf("Quant Stage missing its Data-scoped Principal: %+v, ok=%t", got, ok)
+				}
+			} else if ok {
+				t.Fatalf("non-Quant Stage unexpectedly inherited service Principal: %+v", got)
+			}
+			return researchflowapplication.StageExecutionResult{}, nil
+		}),
+	}
+	for _, code := range []string{ "news.search_candidates", quantstage.SMA20StageCode } {
+		if _, err := executor.ExecuteStage(context.Background(), researchflowapplication.StageExecutionRequest{
+			Stage: researchflowdomain.Stage{Code: code},
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if calls != 2 {
+		t.Fatalf("Stage Executor calls = %d, want 2", calls)
+	}
+}
+
+func TestPrincipalStageExecutorFailsClosedWhenQuantIdentityMissing(t *testing.T) {
+	executor := principalStageExecutor{
+		next: runtimeStageExecutorFunc(func(context.Context, researchflowapplication.StageExecutionRequest) (researchflowapplication.StageExecutionResult, error) {
+			t.Fatal("Quant Stage must not execute without its Data service identity")
+			return researchflowapplication.StageExecutionResult{}, nil
+		}),
+	}
+	if _, err := executor.ExecuteStage(context.Background(), researchflowapplication.StageExecutionRequest{
+		Stage: researchflowdomain.Stage{Code: quantstage.SMA20StageCode},
+	}); err == nil {
+		t.Fatal("Quant Stage executed without a Quant service Principal")
+	}
+}
