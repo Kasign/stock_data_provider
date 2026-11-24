@@ -82,7 +82,6 @@ func TestResearchflowRuntimeLaunchTaskRejectsCancelledContext(t *testing.T) {
 	}
 }
 
-
 type runtimeStageExecutorFunc func(context.Context, researchflowapplication.StageExecutionRequest) (researchflowapplication.StageExecutionResult, error)
 
 func (f runtimeStageExecutorFunc) ExecuteStage(ctx context.Context, request researchflowapplication.StageExecutionRequest) (researchflowapplication.StageExecutionResult, error) {
