@@ -207,6 +207,8 @@ func TestWorkerBootstrapMariaDBRedisIntegration(t *testing.T) {
 		"RESEARCHFLOW_MAX_WORKERS":              "8",
 		"RESEARCHFLOW_RUN_DEADLINE":             "45m",
 		"RESEARCHFLOW_LOCAL_WORKERS":            "2",
+		"PLATFORM_SERVICE_CREDENTIALS":           `[{"name":"quant","token_env":"QUANT_SERVICE_TOKEN","scopes":["data:read"]}]`,
+		"QUANT_SERVICE_TOKEN":                    "quant-worker-integration-token-0123456789abcdef",
 		"NOTIFICATION_EVENT_MAX_ENVELOPE_BYTES": "65536",
 		"NOTIFICATION_EVENT_MAX_PAYLOAD_BYTES":  "32768",
 		"NOTIFICATION_EVENT_MAX_JSON_DEPTH":     "32",

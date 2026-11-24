@@ -416,10 +416,15 @@ func TestNewsSearchStageResearchflowMariaDBIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("创建 Researchflow MariaDB UTC Clock 失败: %v", err)
 	}
+	outputRegistries, err := researchflowapplication.NewStageOutputRegistrySet(composition.registry)
+	if err != nil {
+		t.Fatalf("创建 News Stage Output Registry Set 失败: %v", err)
+	}
 	runtimeComponent, err := newResearchflowRuntimeComponent(
 		&researchflowComposition{
 			newsStage: composition, runRepository: repository,
 			clock: runtimeClock, ids: ids,
+			stageExecutor: composition.executor, outputRegistries: outputRegistries,
 		},
 		serverconfig.ResearchflowCapacity{
 			Configured: true, MaxQueuedRuns: capacity.MaxQueuedRuns, MaxWorkers: capacity.MaxWorkers,
