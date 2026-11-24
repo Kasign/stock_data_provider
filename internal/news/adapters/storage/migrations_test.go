@@ -40,6 +40,9 @@ func TestMigrationsDefineCompleteNewsBaseline(t *testing.T) {
 			t.Errorf("baseline is missing final schema fragment %q", fragment)
 		}
 	}
+	if strings.Contains(schema, "idx_news_relations_supersedes") || strings.Contains(schema, "idx_news_item_relations_parent") {
+		t.Fatal("redundant non-unique supersedes indexes must not be recreated")
+	}
 	if strings.Contains(strings.ToUpper(schema), "ALTER TABLE") || strings.Contains(strings.ToUpper(schema), "INSERT INTO NEWS_IDENTIFIER_STATUS_HISTORY") {
 		t.Fatal("fresh baseline must not contain incremental ALTER or historical backfill")
 	}
