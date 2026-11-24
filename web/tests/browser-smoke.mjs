@@ -1507,12 +1507,30 @@ try {
     const assertNoHorizontalOverflow = async (stage) => {
       const dimensions = await page.evaluate(() => ({
         viewport: window.innerWidth,
-        document: document.documentElement.scrollWidth
+        document: document.documentElement.scrollWidth,
+        overflowingElements: [...document.querySelectorAll("body *")]
+          .map((element) => {
+            const rect = element.getBoundingClientRect();
+            const style = getComputedStyle(element);
+            return {
+              tag: element.tagName.toLowerCase(),
+              id: element.id || "",
+              className: typeof element.className === "string" ? element.className : "",
+              left: Math.round(rect.left * 10) / 10,
+              right: Math.round(rect.right * 10) / 10,
+              width: Math.round(rect.width * 10) / 10,
+              overflowX: style.overflowX
+            };
+          })
+          .filter((item) => item.right > window.innerWidth + 1 || item.left < -1)
+          .sort((left, right) => right.right - left.right)
+          .slice(0, 12)
       }));
       assert.ok(
         dimensions.document <= dimensions.viewport + 1,
         stage + " has horizontal page overflow at " + viewport.width + "px: " +
-          dimensions.document + "px document for " + dimensions.viewport + "px viewport"
+          dimensions.document + "px document for " + dimensions.viewport + "px viewport; " +
+          JSON.stringify(dimensions.overflowingElements)
       );
     };
 
