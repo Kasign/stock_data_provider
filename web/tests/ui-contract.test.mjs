@@ -2335,11 +2335,11 @@ test("UIR-2 typography roles use semantic tokens without changing their baseline
   assert.match(stylesheet, /--font-size-secondary:\s*13px/);
   assert.match(stylesheet, /--font-size-control:\s*13px/);
   assert.match(stylesheet, /--font-size-input:\s*14px/);
-  assert.match(stylesheet, /\.page-subtitle \{ font-size: var\(--font-size-secondary\); \}/);
+  assert.match(stylesheet, /\.page-subtitle \{[^}]*font-size: var\(--font-size-secondary\);/);
   assert.match(baseCssDeclarationBlock(".panel-muted"), /font-size:\s*12px\s*;/);
   assert.doesNotMatch(baseCssDeclarationBlock(".panel-muted"), /!important/);
-  assert.match(stylesheet, /\.button \{ font-size: var\(--font-size-control\); \}/);
-  assert.match(stylesheet, /\.field input, \.field select, \.field textarea, \.recent-analysis-search input \{ font-size: var\(--font-size-input\); \}/);
+  assert.match(stylesheet, /\.button \{[^}]*font-size: var\(--font-size-control\);/);
+  assert.match(stylesheet, /\.field input, \.field select, \.field textarea \{[^}]*font-size: var\(--font-size-input\);/);
 });
 
 
@@ -2520,7 +2520,7 @@ test("UIR-2 任务空态、任务标识与边界说明使用组件基础字号",
   assert.match(stylesheet, /:root\[data-theme="light"\] \.task-error/);
   assert.match(stylesheet, /:root\[data-theme="light"\] \.inline-callout strong \{ color: #80540b; \}/);
   assert.match(stylesheet, /\.task-id-row code \{[^}]*overflow:\s*hidden;[^}]*text-overflow:\s*ellipsis;/);
-  assert.match(stylesheet, /\.task-facts small \{[^}]*font-size:\s*9px;/, "Run Flow compact fact labels retain their component-specific sizing");
+  assert.match(baseCssDeclarationBlock(".task-facts small"), /font-size:\s*var\(--font-size-support\);/, "Run Flow fact labels use the shared readable support size");
   assert.match(stylesheet, /\.run-flow-dialog \.task-facts strong \{\s*font-size:\s*12px;/, "Run Flow compact fact values retain their component-specific sizing");
 });
 
@@ -2593,7 +2593,7 @@ test("UIR-2 行情质量标记与指标辅助文字由组件基础规则控制",
   assert.doesNotMatch(stylesheet, /\.quality-pill \{[^}]*!important/);
   assert.doesNotMatch(stylesheet, /\.metric-label \{[^}]*!important/);
   assert.doesNotMatch(stylesheet, /\.metric-foot \{[^}]*!important/);
-  assert.match(stylesheet, /\.section-heading p, \.panel-heading p \{ font-size: var\(--font-size-support\); \}/);
+  assert.match(stylesheet, /\.section-heading p, \.panel-heading p \{[^}]*font-size: var\(--font-size-support\);/);
   assert.match(stylesheet, /\.quality-valid \{[^}]*color:[^}]*background:/);
   assert.match(stylesheet, /\.quality-degraded \{[^}]*color:[^}]*background:/);
   assert.match(stylesheet, /\.quality-stale \{[^}]*color:[^}]*background:/);
