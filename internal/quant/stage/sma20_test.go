@@ -153,7 +153,7 @@ func TestSMA20AdapterPropagatesDataSnapshotCreationFailure(t *testing.T) {
 
 func validSMA20Request(systemAsOf time.Time) SMA20Request {
 	return SMA20Request{
-		Symbol:  "600000.SH", StartDate: "2026-10-01", EndDate: "2026-10-20",
+		Symbol: "600000.SH", StartDate: "2026-10-01", EndDate: "2026-10-20",
 		Limit: 20, SystemAsOf: systemAsOf, AllowedProviderCodes: []string{"eastmoney"},
 	}
 }
@@ -167,12 +167,12 @@ func validSMA20Snapshot(snapshotRef string) application.CloseSeriesSnapshot {
 		}
 	}
 	return application.CloseSeriesSnapshot{
-		SnapshotRef: snapshotRef,
+		SnapshotRef:           snapshotRef,
 		ManifestSchemaVersion: "2.0.0", PayloadSchemaVersion: "1.0.0",
 		PayloadKind: "daily_bars_close_series",
 		CallerRef:   "principal:service:researchflow", PurposeCode: SMA20PurposeCode,
 		Sources: []application.CloseSeriesSource{{SourceRef: "eastmoney", ProviderInterfaceVersion: "eastmoney-stock-api-v1"}},
-		Symbol: "600000.SH", StartDate: "2026-10-01", EndDate: "2026-10-20",
+		Symbol:  "600000.SH", StartDate: "2026-10-01", EndDate: "2026-10-20",
 		AdjustmentBasis: "none", SystemAsOf: "2026-11-23T00:00:00Z", Interval: "1d",
 		TradingCalendarRef: "trading_calendar:sha256:" + strings.Repeat("c", 64),
 		QualityStatus:      "valid",

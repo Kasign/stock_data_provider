@@ -147,8 +147,8 @@ func (adapter *SMA20Adapter) Execute(ctx context.Context, request SMA20Request) 
 		ResultStatus:  execution.Manifest.ResultStatus,
 	}
 	quality := SMA20QualitySummary{
-		SchemaVersion: SMA20QualitySchema,
-		QualityStatus: execution.Manifest.QualityStatus,
+		SchemaVersion:         SMA20QualitySchema,
+		QualityStatus:         execution.Manifest.QualityStatus,
 		CalendarQualityStatus: execution.Coverage.CalendarQualityStatus,
 		ExpectedTradingDays:   execution.Coverage.ExpectedTradingDays,
 		ObservedBars:          execution.ObservedBars,
