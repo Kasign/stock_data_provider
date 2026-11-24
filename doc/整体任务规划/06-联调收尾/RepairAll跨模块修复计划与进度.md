@@ -1138,3 +1138,17 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - 先评估能否在 Platform Storage 提供一个小型、只读的 Schema 元数据检查原语，模块只声明自己的关键结构；不做运行时自动修复，不在 Validator 中执行 DDL。
 - 第一批优先 News、Notification、Researchflow、Quant；随后补 Owner Credential 与 Server Security Audit。Analysis 现有检查也要评估是否需要补关键列。Market Data 保留已有专用校验，不重写。
 - Validator 只用于启动前 fail-fast；Migration 仍然是 Schema 的唯一写入来源。每个新增检查都必须有对应的缺失/漂移测试，避免只测正常建库。
+
+## 26. RA-WEB-API-001 旧 Analysis API → Researchflow 迁移盘点（2026-11-24）
+
+- 核对基线：`repair_all` SHA `8be3b57306fad9df39a923945f3df6f11790f683`。
+- 盘点文档：[WebUI旧Analysis到Researchflow迁移盘点](./WebUI旧Analysis到Researchflow迁移盘点.md)。
+- 当前状态：**调用链盘点完成；业务模板、完整结果读取和 WebUI 切换均未完成**。
+- 已确认：`web/src/api.js` 已有 SRV-CTR-001 helper，但 `web/src/app.js` 仍通过旧 Task/Run/Event API 完成创建、轮询和结果读取。
+- 已确认：Root Server 仍装配旧 `internal/analysis` Runner、MariaDB `platform/taskqueue`、`legacyAnalysisWorker` 和 `platform/httpapi.NewWithTasks`；旧路由仍按 Owner Bearer 注册。
+- 已确认：Researchflow 生产 Template/Executor/Output Registry 目前只有 News Search；不能把股票分析请求映射成 News Search。
+- 新发现的关键阻塞：旧页面结果视图依赖完整 RunResult（Quality、MarketState、Factors、Signals、Risk、Plans、Execution、Events 等）；SRV-CTR-001 首期只返回 Run/Stage/ResultSummary 聚合，不提供 Stage Output 内容。完整报告/结果资源的唯一 Owner、授权读取 Port 和 WebUI 正式读取契约尚未确定。
+- 旧任务类型审计：当前 UI 开放盘后扫描/自选股扫描，持仓复核禁用，历史回放未出现在当前表单；盘后扫描与自选股扫描目前共用同一 Runner 主流程，没有独立计算阶段分叉。需先确认产品语义，再决定模板数量。
+- 认证边界：Researchflow 路由只允许 Owner Session；不为旧 Analysis API 添加 Session 兼容，不保留新旧双认证。
+- 本轮只提交迁移盘点文档，没有修改生产代码或删除旧接口。后续依次完成业务语义确认、领域 Owner Facade/生产 Stage、结果读取契约、WebUI Run/Stage 页面迁移、旧调用方清零和旧路由退役。
+- 当前 HEAD 和 Actions 以 GitHub 实时状态为准；本轮文档提交不冒充代码验收或完整 CI 通过。
