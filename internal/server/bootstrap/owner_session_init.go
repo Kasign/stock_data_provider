@@ -39,33 +39,42 @@ func InitializeOwner(ctx context.Context, initialSecret []byte) (runErr error) {
 	if err != nil {
 		return fmt.Errorf("存储配置无效: %w", err)
 	}
+	registry, err := newMigrationRegistry()
+	if err != nil {
+		return fmt.Errorf("注册模块 Migration 失败: %w", err)
+	}
 	startupCtx, startupCancel := context.WithTimeout(ctx, 15*time.Second)
-	shared, _, err := serverresources.OpenLegacyAnalysisResources(startupCtx, storageCfg)
+	migrationDB, err := serverresources.OpenSQL(startupCtx, storageCfg)
 	startupCancel()
 	if err != nil {
-		return fmt.Errorf("连接 MariaDB/Redis 失败: %w", err)
+		return fmt.Errorf("连接 MariaDB 失败: %w", err)
+	}
+	migrationCtx, migrationCancel := context.WithTimeout(ctx, processConfig.Migration.Timeout)
+	migrationReport, migrationErr := registry.RunWithReport(migrationCtx, migrationDB)
+	if migrationErr != nil {
+		migrationCancel()
+		_ = migrationDB.Close()
+		return fmt.Errorf("执行模块 Migration 失败（report=%+v）: %w", migrationReport, migrationErr)
+	}
+	if err := registry.ValidateApplied(migrationCtx, migrationDB); err != nil {
+		migrationCancel()
+		_ = migrationDB.Close()
+		return fmt.Errorf("数据库 Schema 版本与 checksum 校验失败: %w", err)
+	}
+	migrationCancel()
+
+	resourceCtx, resourceCancel := context.WithTimeout(ctx, 15*time.Second)
+	shared, _, err := serverresources.OpenApplicationResources(resourceCtx, storageCfg, migrationDB)
+	resourceCancel()
+	if err != nil {
+		_ = migrationDB.Close()
+		return fmt.Errorf("初始化 MariaDB/Redis 应用资源失败: %w", err)
 	}
 	defer func() {
 		if closeErr := shared.Close(); closeErr != nil {
 			runErr = errors.Join(runErr, fmt.Errorf("关闭 Owner 初始化共享资源失败: %w", closeErr))
 		}
 	}()
-
-	registry, err := newMigrationRegistry()
-	if err != nil {
-		return fmt.Errorf("注册模块 Migration 失败: %w", err)
-	}
-	migrationCtx, migrationCancel := context.WithTimeout(ctx, processConfig.Migration.Timeout)
-	if processConfig.Migration.Enabled {
-		if _, err := registry.RunWithReport(migrationCtx, shared.DB); err != nil {
-			migrationCancel()
-			return fmt.Errorf("执行模块 Migration 失败: %w", err)
-		}
-	} else if err := registry.ValidateApplied(migrationCtx, shared.DB); err != nil {
-		migrationCancel()
-		return fmt.Errorf("数据库 Schema 尚未满足当前模块版本要求: %w", err)
-	}
-	migrationCancel()
 
 	composition, err := newOwnerSessionComposition(shared, processConfig.OwnerSession)
 	if err != nil {
