@@ -41,8 +41,8 @@ func TestLoadProcessWorkerSkipsHTTPAndSecurity(t *testing.T) {
 		case "SERVER_ROLE":
 			return "worker", true
 		case "PLATFORM_SERVICE_CREDENTIALS":
-			return `[{"name":"researchflow-worker","token_env":"RESEARCHFLOW_WORKER_TOKEN","scopes":["data:read"]}]`, true
-		case "RESEARCHFLOW_WORKER_TOKEN":
+			return `[{"name":"quant","token_env":"QUANT_SERVICE_TOKEN","scopes":["data:read"]}]`, true
+		case "QUANT_SERVICE_TOKEN":
 			return "0123456789abcdef0123456789abcdef", true
 		}
 		if value, ok := relayRequiredTestValues[key]; ok {
@@ -55,7 +55,7 @@ func TestLoadProcessWorkerSkipsHTTPAndSecurity(t *testing.T) {
 		t.Fatalf("LoadProcess() error = %v", err)
 	}
 	if cfg.Role != RoleWorker || cfg.HTTP.Address != "" || cfg.Security.OwnerToken.Configured() ||
-		len(cfg.Security.ServiceCredentials) != 1 || cfg.Security.ServiceCredentials[0].Name != "researchflow-worker" ||
+		len(cfg.Security.ServiceCredentials) != 1 || cfg.Security.ServiceCredentials[0].Name != "quant" ||
 		cfg.NewsRetention.Interval != 5*time.Minute || cfg.NewsRetention.BatchSize != 100 {
 		t.Fatalf("worker process unexpectedly loaded HTTP/security config: %+v", cfg)
 	}
