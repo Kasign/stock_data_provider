@@ -25,7 +25,7 @@ func Migrations() []platformstorage.Migration {
 	}}
 }
 
- 
+
 // ValidateSchema verifies that all Analysis tables from the current baseline
 // exist before Server creates Redis and application repositories.
 func ValidateSchema(ctx context.Context, db *sql.DB) error {
