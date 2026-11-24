@@ -99,7 +99,7 @@ func ownerCredentialMigrations(tableName string) []storage.Migration {
 	if !validCredentialTableName(tableName) {
 		return nil
 	}
-	statement := fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s (
+	statement := fmt.Sprintf(`CREATE TABLE %s (
 		owner_id TINYINT UNSIGNED NOT NULL PRIMARY KEY,
 		password_hash VARCHAR(512) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
 		credential_version BIGINT UNSIGNED NOT NULL,
