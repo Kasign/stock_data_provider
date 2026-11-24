@@ -31,7 +31,7 @@ func researchflowWorkerPrincipal(credentials []platformsecurity.ServiceCredentia
 	if !containsServiceScope(principal.Scopes, platformsecurity.ScopeDataRead) {
 		return platformsecurity.Principal{}, errResearchflowWorkerCredentialUnavailable
 	}
-	return principal, nil
+	return &principal, nil
 }
 
 func containsServiceScope(scopes []string, expected string) bool {
