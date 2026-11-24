@@ -157,312 +157,38 @@ WHERE table_schema = DATABASE() AND table_name = ? AND index_name = ? ORDER BY s
 	return nil
 }
 
-// MigrationDefinitions returns the immutable Data schema history used by Root Server.
-// Versions 1-6 are published definitions and must not be changed.
-func MigrationDefinitions() []platformstorage.Migration {
-	stmts := []string{
-		`CREATE TABLE IF NOT EXISTS market_data_provider_probe_runs (
- id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
- run_id VARCHAR(64) NOT NULL,
- started_at DATETIME(6) NOT NULL,
- finished_at DATETIME(6) NOT NULL,
- status VARCHAR(32) NOT NULL,
- metadata JSON NOT NULL,
- PRIMARY KEY (id),
- UNIQUE KEY uk_provider_probe_run_id (run_id),
- KEY idx_provider_probe_started_at (started_at)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
-		`CREATE TABLE IF NOT EXISTS market_data_sentiment_snapshots (
- id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
- market VARCHAR(32) NOT NULL,
- trade_date DATE NOT NULL,
- fetched_at DATETIME(6) NOT NULL,
- source VARCHAR(128) NOT NULL,
- quality_status VARCHAR(16) NOT NULL,
- metadata JSON NOT NULL,
- PRIMARY KEY (id),
- KEY idx_market_sentiment_day (market, trade_date, id),
- KEY idx_market_sentiment_fetched (fetched_at)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
-		`CREATE TABLE IF NOT EXISTS market_data_quotes (
- id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
- symbol VARCHAR(16) NOT NULL,
- quote_time DATETIME(6) NULL,
- fetched_at DATETIME(6) NOT NULL,
- normalized_at DATETIME(6) NOT NULL,
- source VARCHAR(64) NOT NULL,
- current_price DECIMAL(20,8) NULL,
- change_value DECIMAL(20,8) NULL,
- change_percent DECIMAL(16,8) NULL,
- open_price DECIMAL(20,8) NULL,
- high_price DECIMAL(20,8) NULL,
- low_price DECIMAL(20,8) NULL,
- prev_close DECIMAL(20,8) NULL,
- volume_shares BIGINT NULL,
- amount_cny DECIMAL(24,2) NULL,
- volume_ratio DECIMAL(16,8) NULL,
- turnover_rate DECIMAL(16,8) NULL,
- quality_status VARCHAR(16) NOT NULL,
- metadata JSON NOT NULL,
- PRIMARY KEY (id), KEY idx_market_quote_symbol_time (symbol, quote_time), KEY idx_market_quote_fetched (fetched_at)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
-		`CREATE TABLE IF NOT EXISTS market_data_daily_bars (
- id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
- symbol VARCHAR(16) NOT NULL,
- trade_date DATE NOT NULL,
- period VARCHAR(8) NOT NULL DEFAULT '1d',
- adjustment_basis VARCHAR(24) NOT NULL,
- source VARCHAR(64) NOT NULL,
- open_price DECIMAL(20,8) NOT NULL,
- high_price DECIMAL(20,8) NOT NULL,
- low_price DECIMAL(20,8) NOT NULL,
- close_price DECIMAL(20,8) NOT NULL,
- volume_shares BIGINT NULL,
- amount_cny DECIMAL(24,2) NULL,
- change_percent DECIMAL(16,8) NULL,
- fetched_at DATETIME(6) NOT NULL,
- normalized_at DATETIME(6) NOT NULL,
- quality_status VARCHAR(16) NOT NULL,
- metadata JSON NOT NULL,
- PRIMARY KEY (id), UNIQUE KEY uq_market_bar_source_basis (symbol, trade_date, period, adjustment_basis, source), KEY idx_market_bar_lookup (symbol, trade_date, adjustment_basis)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
-		`CREATE TABLE IF NOT EXISTS market_data_daily_bar_versions (
- id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
- symbol VARCHAR(16) NOT NULL,
- trade_date DATE NOT NULL,
- period VARCHAR(8) NOT NULL DEFAULT '1d',
- adjustment_basis VARCHAR(24) NOT NULL,
- source VARCHAR(64) NOT NULL,
- revision_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
- recorded_at DATETIME(6) NOT NULL,
- open_price DECIMAL(20,8) NOT NULL,
- high_price DECIMAL(20,8) NOT NULL,
- low_price DECIMAL(20,8) NOT NULL,
- close_price DECIMAL(20,8) NOT NULL,
- volume_shares BIGINT NULL,
- amount_cny DECIMAL(24,2) NULL,
- change_percent DECIMAL(16,8) NULL,
- fetched_at DATETIME(6) NOT NULL,
- normalized_at DATETIME(6) NOT NULL,
- quality_status VARCHAR(16) NOT NULL,
- metadata JSON NOT NULL,
- PRIMARY KEY (id),
- KEY idx_market_bar_revision_identity_asof (symbol, trade_date, period, adjustment_basis, source, recorded_at, id),
- KEY idx_market_bar_revision_asof (symbol, trade_date, adjustment_basis, recorded_at),
- KEY idx_market_bar_revision_observed (recorded_at)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
-		`CREATE TABLE IF NOT EXISTS market_data_fundamental_versions (
- id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
- symbol VARCHAR(16) NOT NULL,
- report_year SMALLINT NOT NULL,
- report_quarter TINYINT NOT NULL,
- source VARCHAR(64) NOT NULL,
- revision_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
- recorded_at DATETIME(6) NOT NULL,
- fetched_at DATETIME(6) NOT NULL,
- quality_status VARCHAR(16) NOT NULL,
- metadata JSON NOT NULL,
- PRIMARY KEY (id),
- KEY idx_market_fundamental_asof (symbol, report_year, report_quarter, recorded_at),
- KEY idx_market_fundamental_observed (recorded_at),
- KEY idx_market_fundamental_identity_asof (symbol, report_year, report_quarter, source, recorded_at, id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
-		`CREATE TABLE IF NOT EXISTS market_data_security_trading_status_versions (
- id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
- symbol VARCHAR(16) NOT NULL,
- trade_date DATE NOT NULL,
- source VARCHAR(64) NOT NULL,
- revision_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
- recorded_at DATETIME(6) NOT NULL,
- fetched_at DATETIME(6) NOT NULL,
- quality_status VARCHAR(16) NOT NULL,
- metadata JSON NOT NULL,
- PRIMARY KEY (id),
- KEY idx_market_security_status_identity_asof (symbol, trade_date, source, recorded_at, id),
- KEY idx_market_security_status_date_asof (symbol, trade_date, recorded_at),
- KEY idx_market_security_status_observed (recorded_at)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
-		`CREATE TABLE IF NOT EXISTS market_data_adjustment_factor_versions (
- id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
- symbol VARCHAR(16) NOT NULL,
- trade_date DATE NOT NULL,
- source VARCHAR(64) NOT NULL,
- factor_basis VARCHAR(16) NOT NULL,
- revision_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
- recorded_at DATETIME(6) NOT NULL,
- fetched_at DATETIME(6) NOT NULL,
- available_at DATETIME(6) NULL,
- quality_status VARCHAR(16) NOT NULL,
- metadata JSON NOT NULL,
- PRIMARY KEY (id),
- KEY idx_market_adjustment_factor_asof (symbol, trade_date, source, factor_basis, recorded_at, id),
- KEY idx_market_adjustment_factor_observed (recorded_at)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
-		`CREATE TABLE IF NOT EXISTS market_data_corporate_action_versions (
- id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
- symbol VARCHAR(16) NOT NULL,
- provider_event_id VARCHAR(128) NOT NULL,
- source VARCHAR(64) NOT NULL,
- ex_date DATE NULL,
- announcement_date DATE NULL,
- revision_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
- recorded_at DATETIME(6) NOT NULL,
- fetched_at DATETIME(6) NOT NULL,
- available_at DATETIME(6) NULL,
- quality_status VARCHAR(16) NOT NULL,
- metadata JSON NOT NULL,
- PRIMARY KEY (id),
- KEY idx_market_corporate_action_asof (symbol, ex_date, source, recorded_at, id),
- KEY idx_market_corporate_action_event_asof (symbol, provider_event_id, source, recorded_at, id),
- KEY idx_market_corporate_action_announcement (symbol, announcement_date),
- KEY idx_market_corporate_action_observed (recorded_at)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
-	}
-	return []platformstorage.Migration{
-		{Version: 1, Description: "market data base schema", Statements: stmts},
-		{
-			Version: 2, Description: "adjustment factor source-version identity",
-			Statements: []string{
-				`ALTER TABLE market_data_adjustment_factor_versions ADD COLUMN source_version VARCHAR(128) NOT NULL DEFAULT '' AFTER source`,
-				`UPDATE market_data_adjustment_factor_versions
-SET source_version=COALESCE(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(metadata,'$.source_version')),''),'')
-WHERE source_version=''`,
-				`CREATE INDEX idx_market_adjustment_factor_version_asof
-ON market_data_adjustment_factor_versions (symbol, trade_date, source, source_version, factor_basis, recorded_at, id)`,
-			},
-		},
-		{
-			Version: 3, Description: "valuation snapshot revision history",
-			Statements: []string{
-				"CREATE TABLE IF NOT EXISTS market_data_valuation_versions (id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT, request_fingerprint CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL, source VARCHAR(64) NOT NULL, revision_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL, recorded_at DATETIME(6) NOT NULL, fetched_at DATETIME(6) NOT NULL, quality_status VARCHAR(16) NOT NULL, metadata JSON NOT NULL, PRIMARY KEY (id), KEY idx_market_valuation_asof (request_fingerprint, recorded_at), KEY idx_market_valuation_identity_asof (request_fingerprint, source, recorded_at, id), KEY idx_market_valuation_observed (recorded_at)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
-			},
-		},
-		{
-			Version: 4, Description: "legacy market-data index and column compatibility",
-			Operations: []platformstorage.MigrationOperation{
-				{Kind: platformstorage.MigrationOperationEnsureNonUniqueIndex, Table: "market_data_daily_bar_versions", LegacyName: "uq_market_bar_revision_content", Name: "idx_market_bar_revision_identity_asof", Columns: "symbol, trade_date, period, adjustment_basis, source, recorded_at, id"},
-				{Kind: platformstorage.MigrationOperationEnsureNonUniqueIndex, Table: "market_data_fundamental_versions", LegacyName: "uq_market_fundamental_revision_content", Name: "idx_market_fundamental_identity_asof", Columns: "symbol, report_year, report_quarter, source, recorded_at, id"},
-				{Kind: platformstorage.MigrationOperationEnsureColumn, Table: "market_data_quotes", Name: "volume_ratio", Definition: "DECIMAL(16,8) NULL"},
-				{Kind: platformstorage.MigrationOperationEnsureColumn, Table: "market_data_quotes", Name: "turnover_rate", Definition: "DECIMAL(16,8) NULL"},
-			},
-		},
-		{
-			Version: 5, Description: "immutable trading-calendar content snapshots",
-			Statements: []string{
-				`CREATE TABLE IF NOT EXISTS market_data_trading_calendar_snapshots (
- calendar_ref VARCHAR(96) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
- content_fingerprint CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
- market VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
- start_date DATE NOT NULL,
- end_date DATE NOT NULL,
- source VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
- adapter_version VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
- schema_version VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
- quality_status VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
- fetched_at DATETIME(6) NOT NULL,
- observed_at DATETIME(6) NOT NULL,
- payload_json LONGTEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
- PRIMARY KEY (calendar_ref),
- KEY idx_market_calendar_identity_observed (market, start_date, end_date, observed_at)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
-			},
-		},
-		{
-			Version: 6, Description: "immutable daily-bars close-series content snapshots",
-			Statements: []string{
-				`CREATE TABLE IF NOT EXISTS market_data_daily_bars_close_series_snapshots (
- snapshot_ref VARCHAR(96) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
- manifest_fingerprint CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
- payload_fingerprint CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
- manifest_schema_version VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
- payload_schema_version VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
- manifest_json LONGTEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
- payload_json LONGTEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
- created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
- PRIMARY KEY (snapshot_ref)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
-			},
-		},
-		{
-			Version: 7, Description: "immutable Data authorization policy versions and current pointers",
-			Statements: []string{
-				`CREATE TABLE IF NOT EXISTS market_data_authorization_policy_versions (
- policy_type VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
- policy_ref VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
- policy_version VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
- payload_json LONGTEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
- payload_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
- created_at DATETIME(6) NOT NULL,
- PRIMARY KEY (policy_type, policy_ref, policy_version),
- KEY idx_market_data_policy_versions_created (policy_type, policy_ref, created_at)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
-				`CREATE TABLE IF NOT EXISTS market_data_current_authorization_policy_versions (
- policy_type VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
- policy_ref VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
- policy_version VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
- updated_at DATETIME(6) NOT NULL,
- PRIMARY KEY (policy_type, policy_ref),
- KEY idx_market_data_current_policy_version (policy_type, policy_ref, policy_version),
- CONSTRAINT fk_market_data_current_policy_version
- FOREIGN KEY (policy_type, policy_ref, policy_version)
- REFERENCES market_data_authorization_policy_versions (policy_type, policy_ref, policy_version)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
-			},
-		},
-		{
-			Version: 8, Description: "immutable Data authorization decisions and append-only revocations",
-			Statements: []string{
-				`CREATE TABLE IF NOT EXISTS market_data_authorization_decisions (
- authorization_ref VARCHAR(256) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
- subject_ref VARCHAR(256) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
- resource_ref VARCHAR(256) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
- purpose_code VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
- policy_version VARCHAR(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
- decided_at DATETIME(6) NOT NULL,
- expires_at DATETIME(6) NULL,
- decision_fingerprint CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
- authorization_json LONGTEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
- policy_snapshot_json LONGTEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
- record_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
- PRIMARY KEY (authorization_ref),
- KEY idx_market_data_auth_subject_resource (subject_ref, resource_ref, purpose_code),
- KEY idx_market_data_auth_expiry (expires_at)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
-				`CREATE TABLE IF NOT EXISTS market_data_authorization_revocations (
- authorization_ref VARCHAR(256) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
- revoked_at DATETIME(6) NOT NULL,
- revoked_by VARCHAR(256) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
- reason_code VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
- PRIMARY KEY (authorization_ref),
- KEY idx_market_data_auth_revoked_at (revoked_at),
- CONSTRAINT fk_market_data_auth_revocation_decision
- FOREIGN KEY (authorization_ref) REFERENCES market_data_authorization_decisions (authorization_ref)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
-			},
-		},
-		{
-			Version: 9, Description: "append-only Data authorization policy publication audit",
-			Statements: []string{
-				`CREATE TABLE IF NOT EXISTS market_data_authorization_policy_publications (
- id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
- policy_type VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
- policy_ref VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
- previous_policy_version VARCHAR(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NULL,
- new_policy_version VARCHAR(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
- payload_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
- actor_ref VARCHAR(256) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
- request_id VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
- occurred_at DATETIME(6) NOT NULL,
- PRIMARY KEY (id),
- KEY idx_market_data_policy_publication_time (occurred_at, id),
- KEY idx_market_data_policy_publication_request (request_id),
- KEY idx_market_data_policy_publication_version (policy_type, policy_ref, new_policy_version)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
-			},
-		},
-	}
-}
+// Package repository owns the MarketData MariaDB persistence schema.
+package repository
 
+import platformstorage "example.com/stock-analysis-flow/internal/platform/storage"
+
+// MigrationDefinitions returns the complete MarketData schema baseline.
+// Fresh databases apply one V1. Future published schema changes start at V2.
+func MigrationDefinitions() []platformstorage.Migration {
+	return []platformstorage.Migration{{
+		Version: 1,
+		Description: "create complete MarketData schema baseline",
+		Statements: []string{
+			"CREATE TABLE market_data_provider_probe_runs (\n id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,\n run_id VARCHAR(64) NOT NULL,\n started_at DATETIME(6) NOT NULL,\n finished_at DATETIME(6) NOT NULL,\n status VARCHAR(32) NOT NULL,\n metadata JSON NOT NULL,\n PRIMARY KEY (id),\n UNIQUE KEY uk_provider_probe_run_id (run_id),\n KEY idx_provider_probe_started_at (started_at)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+			"CREATE TABLE market_data_sentiment_snapshots (\n id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,\n market VARCHAR(32) NOT NULL,\n trade_date DATE NOT NULL,\n fetched_at DATETIME(6) NOT NULL,\n source VARCHAR(128) NOT NULL,\n quality_status VARCHAR(16) NOT NULL,\n metadata JSON NOT NULL,\n PRIMARY KEY (id),\n KEY idx_market_sentiment_day (market, trade_date, id),\n KEY idx_market_sentiment_fetched (fetched_at)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+			"CREATE TABLE market_data_quotes (\n id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,\n symbol VARCHAR(16) NOT NULL,\n quote_time DATETIME(6) NULL,\n fetched_at DATETIME(6) NOT NULL,\n normalized_at DATETIME(6) NOT NULL,\n source VARCHAR(64) NOT NULL,\n current_price DECIMAL(20,8) NULL,\n change_value DECIMAL(20,8) NULL,\n change_percent DECIMAL(16,8) NULL,\n open_price DECIMAL(20,8) NULL,\n high_price DECIMAL(20,8) NULL,\n low_price DECIMAL(20,8) NULL,\n prev_close DECIMAL(20,8) NULL,\n volume_shares BIGINT NULL,\n amount_cny DECIMAL(24,2) NULL,\n volume_ratio DECIMAL(16,8) NULL,\n turnover_rate DECIMAL(16,8) NULL,\n quality_status VARCHAR(16) NOT NULL,\n metadata JSON NOT NULL,\n PRIMARY KEY (id), KEY idx_market_quote_symbol_time (symbol, quote_time), KEY idx_market_quote_fetched (fetched_at)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+			"CREATE TABLE market_data_daily_bars (\n id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,\n symbol VARCHAR(16) NOT NULL,\n trade_date DATE NOT NULL,\n period VARCHAR(8) NOT NULL DEFAULT '1d',\n adjustment_basis VARCHAR(24) NOT NULL,\n source VARCHAR(64) NOT NULL,\n open_price DECIMAL(20,8) NOT NULL,\n high_price DECIMAL(20,8) NOT NULL,\n low_price DECIMAL(20,8) NOT NULL,\n close_price DECIMAL(20,8) NOT NULL,\n volume_shares BIGINT NULL,\n amount_cny DECIMAL(24,2) NULL,\n change_percent DECIMAL(16,8) NULL,\n fetched_at DATETIME(6) NOT NULL,\n normalized_at DATETIME(6) NOT NULL,\n quality_status VARCHAR(16) NOT NULL,\n metadata JSON NOT NULL,\n PRIMARY KEY (id), UNIQUE KEY uq_market_bar_source_basis (symbol, trade_date, period, adjustment_basis, source), KEY idx_market_bar_lookup (symbol, trade_date, adjustment_basis)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+			"CREATE TABLE market_data_daily_bar_versions (\n id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,\n symbol VARCHAR(16) NOT NULL,\n trade_date DATE NOT NULL,\n period VARCHAR(8) NOT NULL DEFAULT '1d',\n adjustment_basis VARCHAR(24) NOT NULL,\n source VARCHAR(64) NOT NULL,\n revision_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n recorded_at DATETIME(6) NOT NULL,\n open_price DECIMAL(20,8) NOT NULL,\n high_price DECIMAL(20,8) NOT NULL,\n low_price DECIMAL(20,8) NOT NULL,\n close_price DECIMAL(20,8) NOT NULL,\n volume_shares BIGINT NULL,\n amount_cny DECIMAL(24,2) NULL,\n change_percent DECIMAL(16,8) NULL,\n fetched_at DATETIME(6) NOT NULL,\n normalized_at DATETIME(6) NOT NULL,\n quality_status VARCHAR(16) NOT NULL,\n metadata JSON NOT NULL,\n PRIMARY KEY (id),\n KEY idx_market_bar_revision_identity_asof (symbol, trade_date, period, adjustment_basis, source, recorded_at, id),\n KEY idx_market_bar_revision_asof (symbol, trade_date, adjustment_basis, recorded_at),\n KEY idx_market_bar_revision_observed (recorded_at)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+			"CREATE TABLE market_data_fundamental_versions (\n id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,\n symbol VARCHAR(16) NOT NULL,\n report_year SMALLINT NOT NULL,\n report_quarter TINYINT NOT NULL,\n source VARCHAR(64) NOT NULL,\n revision_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n recorded_at DATETIME(6) NOT NULL,\n fetched_at DATETIME(6) NOT NULL,\n quality_status VARCHAR(16) NOT NULL,\n metadata JSON NOT NULL,\n PRIMARY KEY (id),\n KEY idx_market_fundamental_asof (symbol, report_year, report_quarter, recorded_at),\n KEY idx_market_fundamental_observed (recorded_at),\n KEY idx_market_fundamental_identity_asof (symbol, report_year, report_quarter, source, recorded_at, id)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+			"CREATE TABLE market_data_security_trading_status_versions (\n id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,\n symbol VARCHAR(16) NOT NULL,\n trade_date DATE NOT NULL,\n source VARCHAR(64) NOT NULL,\n revision_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n recorded_at DATETIME(6) NOT NULL,\n fetched_at DATETIME(6) NOT NULL,\n quality_status VARCHAR(16) NOT NULL,\n metadata JSON NOT NULL,\n PRIMARY KEY (id),\n KEY idx_market_security_status_identity_asof (symbol, trade_date, source, recorded_at, id),\n KEY idx_market_security_status_date_asof (symbol, trade_date, recorded_at),\n KEY idx_market_security_status_observed (recorded_at)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+			"CREATE TABLE market_data_adjustment_factor_versions (\n id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,\n symbol VARCHAR(16) NOT NULL,\n trade_date DATE NOT NULL,\n source VARCHAR(64) NOT NULL,\n source_version VARCHAR(128) NOT NULL DEFAULT '',\n factor_basis VARCHAR(16) NOT NULL,\n revision_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n recorded_at DATETIME(6) NOT NULL,\n fetched_at DATETIME(6) NOT NULL,\n available_at DATETIME(6) NULL,\n quality_status VARCHAR(16) NOT NULL,\n metadata JSON NOT NULL,\n PRIMARY KEY (id),\n KEY idx_market_adjustment_factor_asof (symbol, trade_date, source, factor_basis, recorded_at, id),\n KEY idx_market_adjustment_factor_version_asof (symbol, trade_date, source, source_version, factor_basis, recorded_at, id),\n KEY idx_market_adjustment_factor_observed (recorded_at)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+			"CREATE TABLE market_data_corporate_action_versions (\n id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,\n symbol VARCHAR(16) NOT NULL,\n provider_event_id VARCHAR(128) NOT NULL,\n source VARCHAR(64) NOT NULL,\n ex_date DATE NULL,\n announcement_date DATE NULL,\n revision_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n recorded_at DATETIME(6) NOT NULL,\n fetched_at DATETIME(6) NOT NULL,\n available_at DATETIME(6) NULL,\n quality_status VARCHAR(16) NOT NULL,\n metadata JSON NOT NULL,\n PRIMARY KEY (id),\n KEY idx_market_corporate_action_asof (symbol, ex_date, source, recorded_at, id),\n KEY idx_market_corporate_action_event_asof (symbol, provider_event_id, source, recorded_at, id),\n KEY idx_market_corporate_action_announcement (symbol, announcement_date),\n KEY idx_market_corporate_action_observed (recorded_at)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+			"CREATE TABLE market_data_trading_calendar_snapshots (\n calendar_ref VARCHAR(96) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n content_fingerprint CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n market VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n start_date DATE NOT NULL,\n end_date DATE NOT NULL,\n source VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n adapter_version VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n schema_version VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n quality_status VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n fetched_at DATETIME(6) NOT NULL,\n observed_at DATETIME(6) NOT NULL,\n payload_json LONGTEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,\n PRIMARY KEY (calendar_ref),\n KEY idx_market_calendar_identity_observed (market, start_date, end_date, observed_at)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+			"CREATE TABLE market_data_daily_bars_close_series_snapshots (\n snapshot_ref VARCHAR(96) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n manifest_fingerprint CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n payload_fingerprint CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n manifest_schema_version VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n payload_schema_version VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n manifest_json LONGTEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,\n payload_json LONGTEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,\n created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),\n PRIMARY KEY (snapshot_ref)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+			"CREATE TABLE market_data_authorization_policy_versions (\n policy_type VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n policy_ref VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n policy_version VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n payload_json LONGTEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,\n payload_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n created_at DATETIME(6) NOT NULL,\n PRIMARY KEY (policy_type, policy_ref, policy_version),\n KEY idx_market_data_policy_versions_created (policy_type, policy_ref, created_at)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+			"CREATE TABLE market_data_current_authorization_policy_versions (\n policy_type VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n policy_ref VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n policy_version VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n updated_at DATETIME(6) NOT NULL,\n PRIMARY KEY (policy_type, policy_ref),\n KEY idx_market_data_current_policy_version (policy_type, policy_ref, policy_version),\n CONSTRAINT fk_market_data_current_policy_version\n FOREIGN KEY (policy_type, policy_ref, policy_version)\n REFERENCES market_data_authorization_policy_versions (policy_type, policy_ref, policy_version)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+			"CREATE TABLE market_data_authorization_decisions (\n authorization_ref VARCHAR(256) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,\n subject_ref VARCHAR(256) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,\n resource_ref VARCHAR(256) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,\n purpose_code VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n policy_version VARCHAR(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,\n decided_at DATETIME(6) NOT NULL,\n expires_at DATETIME(6) NULL,\n decision_fingerprint CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n authorization_json LONGTEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,\n policy_snapshot_json LONGTEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,\n record_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n PRIMARY KEY (authorization_ref),\n KEY idx_market_data_auth_subject_resource (subject_ref, resource_ref, purpose_code),\n KEY idx_market_data_auth_expiry (expires_at)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+			"CREATE TABLE market_data_authorization_revocations (\n authorization_ref VARCHAR(256) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,\n revoked_at DATETIME(6) NOT NULL,\n revoked_by VARCHAR(256) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,\n reason_code VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n PRIMARY KEY (authorization_ref),\n KEY idx_market_data_auth_revoked_at (revoked_at),\n CONSTRAINT fk_market_data_auth_revocation_decision\n FOREIGN KEY (authorization_ref) REFERENCES market_data_authorization_decisions (authorization_ref)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+			"CREATE TABLE market_data_authorization_policy_publications (\n id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,\n policy_type VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n policy_ref VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n previous_policy_version VARCHAR(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NULL,\n new_policy_version VARCHAR(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,\n payload_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n actor_ref VARCHAR(256) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,\n request_id VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n occurred_at DATETIME(6) NOT NULL,\n PRIMARY KEY (id),\n KEY idx_market_data_policy_publication_time (occurred_at, id),\n KEY idx_market_data_policy_publication_request (request_id),\n KEY idx_market_data_policy_publication_version (policy_type, policy_ref, new_policy_version)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+			"CREATE TABLE market_data_valuation_versions (id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT, request_fingerprint CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL, source VARCHAR(64) NOT NULL, revision_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL, recorded_at DATETIME(6) NOT NULL, fetched_at DATETIME(6) NOT NULL, quality_status VARCHAR(16) NOT NULL, metadata JSON NOT NULL, PRIMARY KEY (id), KEY idx_market_valuation_asof (request_fingerprint, recorded_at), KEY idx_market_valuation_identity_asof (request_fingerprint, source, recorded_at, id), KEY idx_market_valuation_observed (recorded_at)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+		},
+	}}
+}
 // Migrate 保留给独立 Data 命令使用；Root Server 应注册 MigrationDefinitions 到统一 Registry。
 func (s *Store) Migrate(ctx context.Context) error {
 	if s == nil || s.db == nil {
