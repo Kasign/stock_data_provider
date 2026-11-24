@@ -75,8 +75,8 @@ func TestNewExposesApplicationHTTPAndDiagnostics(t *testing.T) {
 
 func TestMigrationDefinitionsAvailableWithoutStorage(t *testing.T) {
 	definitions := MigrationDefinitions()
-	if len(definitions) != 9 || definitions[0].Version != 1 || definitions[8].Version != 9 {
-		t.Fatalf("MigrationDefinitions() = %+v, want immutable Data versions 1 through 9", definitions)
+	if len(definitions) != 1 || definitions[0].Version != 1 || len(definitions[0].Statements) != 17 {
+		t.Fatalf("MigrationDefinitions() = %+v, want one complete V1 with 17 statements", definitions)
 	}
 }
 

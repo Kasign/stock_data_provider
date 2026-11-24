@@ -2,7 +2,6 @@ package application
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"log/slog"
 	"os"
@@ -15,8 +14,8 @@ import (
 	"example.com/stock-analysis-flow/internal/marketdata/cache"
 	"example.com/stock-analysis-flow/internal/marketdata/model"
 	"example.com/stock-analysis-flow/internal/marketdata/provider"
-	"example.com/stock-analysis-flow/internal/marketdata/repository"
 	"example.com/stock-analysis-flow/internal/marketdata/service"
+	marketdatatestutil "example.com/stock-analysis-flow/internal/marketdata/testutil"
 	"github.com/go-sql-driver/mysql"
 )
 
@@ -36,23 +35,13 @@ func TestLiveReaderGetDailyBarsV2PreservesProviderDecimalEvidence(t *testing.T) 
 		t.Fatalf("unsafe live-probe database %q; expected market_data_probe or a dedicated _test database", parsed.DBName)
 	}
 
-	db, err := sql.Open("mysql", dsn)
-	if err != nil {
-		t.Fatalf("open MariaDB: %v", err)
-	}
-	defer db.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
-	if err := db.PingContext(ctx); err != nil {
-		t.Fatalf("ping MariaDB: %v", err)
-	}
-	store, err := repository.NewWithBorrowedDB(db)
+	store, db, err := marketdatatestutil.OpenMariaDBStore(ctx, dsn)
 	if err != nil {
-		t.Fatalf("create Data repository store: %v", err)
+		t.Fatalf("open and migrate MariaDB for Data reader: %v", err)
 	}
-	if err := store.Migrate(ctx); err != nil {
-		t.Fatalf("apply Data migrations: %v", err)
-	}
+	defer db.Close()
 
 	baostockProvider := provider.NewBaostock(baostock.NewClient(baostock.Config{}))
 	backend := service.NewWithCapabilities(
