@@ -1837,7 +1837,7 @@ function setView(view, { updateHash = true, refreshData = true } = {}) {
   document.querySelectorAll(".view").forEach((section) => {
     section.hidden = section.id !== nextView + "-view";
   });
-  document.querySelectorAll(".nav-link, .workspace-tab").forEach((button) => {
+  document.querySelectorAll(".nav-link").forEach((button) => {
     const active = button.dataset.view === nextView;
     button.classList.toggle("active", active);
     if (active) button.setAttribute("aria-current", "page");
@@ -5049,10 +5049,10 @@ document.querySelectorAll("[data-theme-value]").forEach((button) => {
       : "主题已在当前页面切换，但未能确认保存；重新载入后可能恢复旧主题。";
   });
 });
-document.querySelectorAll(".nav-link, .workspace-tab").forEach((button) => {
+document.querySelectorAll(".nav-link").forEach((button) => {
   button.addEventListener("click", () => {
-    setView(button.dataset.view || button.dataset.navDefaultView);
-    // 移动端选择一级或二级入口后统一关闭抽屉；重新打开时保留当前分组展开状态。
+    setView(button.dataset.view);
+    // 移动端选择页面入口后关闭导航抽屉。
     setMobileNavigationOpen(false, { restoreFocus: true });
   });
 });
