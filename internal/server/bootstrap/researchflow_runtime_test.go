@@ -5,6 +5,11 @@ import (
 	"testing"
 	"time"
 
+	platformconfig "example.com/stock-analysis-flow/internal/platform/config"
+	platformsecurity "example.com/stock-analysis-flow/internal/platform/security"
+	quantstage "example.com/stock-analysis-flow/internal/quant/stage"
+	researchflowapplication "example.com/stock-analysis-flow/internal/researchflow/application"
+	researchflowdomain "example.com/stock-analysis-flow/internal/researchflow/domain"
 )
 
 func TestResearchflowRuntimeLaunchTaskBoundsAndDeduplicatesWork(t *testing.T) {
@@ -110,7 +115,7 @@ func TestPrincipalStageExecutorInjectsQuantIdentityOnlyForQuantStage(t *testing.
 			return researchflowapplication.StageExecutionResult{}, nil
 		}),
 	}
-	for _, code := range []string{ "news.search_candidates", quantstage.SMA20StageCode } {
+	for _, code := range []string{"news.search_candidates", quantstage.SMA20StageCode} {
 		if _, err := executor.ExecuteStage(context.Background(), researchflowapplication.StageExecutionRequest{
 			Stage: researchflowdomain.Stage{Code: code},
 		}); err != nil {
