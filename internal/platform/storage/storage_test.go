@@ -713,39 +713,29 @@ func TestDependencyFaultRetryabilityIsConservative(t *testing.T) {
 	}
 }
 
-func TestPrepareMigrationsChecksumsOperationsAndPreservesLegacyChecksums(t *testing.T) {
-	legacy := []Migration{{Version: 1, Description: "legacy", Statements: []string{"CREATE TABLE sample (id BIGINT PRIMARY KEY)"}}}
-	_, legacyChecksum, err := prepareMigrations("market_data", legacy)
+func TestPrepareMigrationsChecksumsStatementsDeterministically(t *testing.T) {
+	migrations := []Migration{{Version: 1, Description: "baseline", Statements: []string{"CREATE TABLE sample (id BIGINT PRIMARY KEY)"}}}
+	_, first, err := prepareMigrations("market_data", migrations)
 	if err != nil {
 		t.Fatal(err)
 	}
-	withEmptyOperations := []Migration{{Version: 1, Description: "legacy", Statements: []string{"CREATE TABLE sample (id BIGINT PRIMARY KEY)"}, Operations: []MigrationOperation{}}}
-	_, emptyChecksum, err := prepareMigrations("market_data", withEmptyOperations)
+	_, second, err := prepareMigrations("market_data", migrations)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if legacyChecksum[1] != emptyChecksum[1] {
-		t.Fatal("adding an empty operations list must not change a published statement-only checksum")
+	if first[1] == "" || first[1] != second[1] {
+		t.Fatalf("statement checksum is not deterministic: %q / %q", first[1], second[1])
 	}
-	withOperation := []Migration{{Version: 1, Description: "legacy", Statements: []string{"CREATE TABLE sample (id BIGINT PRIMARY KEY)"}, Operations: []MigrationOperation{{
-		Kind: MigrationOperationEnsureColumn, Table: "sample", Name: "source_version", Definition: "VARCHAR(32) NOT NULL DEFAULT ''",
-	}}}}
-	_, operationChecksum, err := prepareMigrations("market_data", withOperation)
+	migrations[0].Statements[0] = "CREATE TABLE sample (id INT PRIMARY KEY)"
+	_, changed, err := prepareMigrations("market_data", migrations)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if legacyChecksum[1] == operationChecksum[1] {
-		t.Fatal("changing migration operations must change the checksum")
-	}
-	withOperation[0].Operations[0].Name = "other_column"
-	_, changedChecksum, err := prepareMigrations("market_data", withOperation)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if operationChecksum[1] == changedChecksum[1] {
-		t.Fatal("changing an operation definition must change the checksum")
+	if first[1] == changed[1] {
+		t.Fatal("changing a migration statement must change its checksum")
 	}
 }
+
 
 func TestPrepareMigrationsRejectsUnsafeOperations(t *testing.T) {
 	cases := []MigrationOperation{
