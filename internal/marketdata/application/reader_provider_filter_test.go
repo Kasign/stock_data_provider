@@ -74,7 +74,7 @@ func TestReaderRejectsProviderAllowlistWithoutPITOrCanonicalOrder(t *testing.T) 
 	backend := &providerFilteredReaderBackend{}
 	reader := &Reader{backend: backend}
 	cutoff := time.Date(2026, 11, 20, 8, 0, 0, 0, time.UTC)
-	tests := []DailyBarsQuery{
+	tests := []marketdataapp.DailyBarsQuery{
 		{Symbol: "600036.SH", AllowedProviderCodes: []string{"eastmoney"}},
 		{Symbol: "600036.SH", SystemObservedAtCutoff: &cutoff, AllowedProviderCodes: []string{"tavily", "eastmoney"}},
 		{Symbol: "600036.SH", SystemObservedAtCutoff: &cutoff, AllowedProviderCodes: []string{"Eastmoney"}},
@@ -96,9 +96,9 @@ func TestReaderRejectsProviderOutsidePITAllowlistEvenIfBackendReturnsIt(t *testi
 	}
 	reader := &Reader{backend: backend}
 	cutoff := time.Date(2026, 11, 20, 8, 0, 0, 0, time.UTC)
-	_, err := reader.GetDailyBarsV2(context.Background(), DailyBarsQuery{
+	_, err := reader.GetDailyBarsV2(context.Background(), marketdataapp.DailyBarsQuery{
 		Symbol: "600036.SH", StartDate: "2026-10-01", EndDate: "2026-10-30",
-		Limit: 20, AdjustmentBasis: AdjustmentNone, SystemObservedAtCutoff: &cutoff,
+		Limit: 20, AdjustmentBasis: marketdataapp.AdjustmentNone, SystemObservedAtCutoff: &cutoff,
 		AllowedProviderCodes: []string{"eastmoney"},
 	})
 	if err == nil {
