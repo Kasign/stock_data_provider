@@ -102,6 +102,7 @@ func TestProviderProbeHTTPMariaDBEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open MariaDB: %v", err)
 	}
+	defer db.Close()
 	
 	postHandler := newHTTPProbeMariaDBHandler(store, left, right)
 	body := `{"scope":"all","capabilities":["daily_bars"],"checks":["cross_provider","storage"],"symbols":["600036.SH"],"daily_bar_start_date":"2026-10-29","daily_bar_end_date":"2026-10-29","daily_bar_adjustments":["backward_adjusted"],"timeout_seconds":5}`
@@ -109,17 +110,17 @@ func TestProviderProbeHTTPMariaDBEndToEnd(t *testing.T) {
 	postResponse := httptest.NewRecorder()
 	postHandler.ServeHTTP(postResponse, postRequest)
 	if postResponse.Code != http.StatusOK {
-		store.Close()
+		db.Close()
 		t.Fatalf("POST probe status=%d body=%s", postResponse.Code, postResponse.Body.String())
 	}
 
 	var created model.ProviderProbeRun
 	if err := json.Unmarshal(postResponse.Body.Bytes(), &created); err != nil {
-		store.Close()
+		db.Close()
 		t.Fatalf("decode POST probe response: %v", err)
 	}
 	if created.RunID == "" || !created.Persisted {
-		store.Close()
+		db.Close()
 		t.Fatalf("POST probe response must include a persisted run identity: %+v", created)
 	}
 	assertAdjustmentEvidence := func(run model.ProviderProbeRun) {
@@ -157,7 +158,7 @@ func TestProviderProbeHTTPMariaDBEndToEnd(t *testing.T) {
 	}
 	assertStorageEvidence(created)
 
-	if err := store.Close(); err != nil {
+	if err := db.Close(); err != nil {
 		t.Fatalf("close MariaDB after POST probe: %v", err)
 	}
 
