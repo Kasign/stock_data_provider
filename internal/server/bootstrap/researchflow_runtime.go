@@ -10,6 +10,7 @@ import (
 	"time"
 
 	researchflowapplication "example.com/stock-analysis-flow/internal/researchflow/application"
+	platformsecurity "example.com/stock-analysis-flow/internal/platform/security"
 	serverconfig "example.com/stock-analysis-flow/internal/server/config"
 )
 
@@ -47,10 +48,14 @@ func newResearchflowRuntimeComponent(
 	composition *researchflowComposition,
 	capacity serverconfig.ResearchflowCapacity,
 	localWorkers int,
+	workerPrincipal platformsecurity.Principal,
 ) (*researchflowRuntimeComponent, error) {
 	if composition == nil || composition.runRepository == nil || composition.newsStage == nil ||
 		composition.clock == nil || composition.ids == nil || !capacity.Configured ||
-		capacity.MaxWorkers <= 0 || localWorkers <= 0 {
+		capacity.MaxWorkers <= 0 || localWorkers <= 0 ||
+		workerPrincipal.Kind != platformsecurity.IdentityService ||
+		workerPrincipal.AuthMethod != platformsecurity.AuthMethodServiceBearer ||
+		workerPrincipal.Subject != "researchflow-worker" {
 		return nil, errors.New("Researchflow Runtime composition or capacity is invalid")
 	}
 
@@ -58,9 +63,10 @@ func newResearchflowRuntimeComponent(
 	if err != nil {
 		return nil, fmt.Errorf("generate process-unique Researchflow Worker ID: %w", err)
 	}
+	stageExecutor := principalStageExecutor{principal: workerPrincipal, next: composition.newsStage.executor}
 	worker, err := researchflowapplication.NewWorkerWithStageOutputRegistry(
 		composition.runRepository,
-		composition.newsStage.executor,
+		stageExecutor,
 		composition.clock,
 		researchflowapplication.WorkerConfig{
 			WorkerID: workerID, LeaseDuration: 30 * time.Second,
@@ -350,3 +356,22 @@ func (c *researchflowRuntimeComponent) scanFinalizableRuns(ctx context.Context) 
 		c.finalizerCursor = page.NextCursor
 	}
 }
+
+type principalStageExecutor struct {
+	principal platformsecurity.Principal
+	next      researchflowapplication.StageExecutor
+}
+
+func (e principalStageExecutor) ExecuteStage(ctx context.Context, request researchflowapplication.StageExecutionRequest) (researchflowapplication.StageExecutionResult, error) {
+	if e.next == nil || e.principal.Kind != platformsecurity.IdentityService ||
+		e.principal.AuthMethod != platformsecurity.AuthMethodServiceBearer ||
+		e.principal.Subject != "researchflow-worker" {
+		return researchflowapplication.StageExecutionResult{}, errors.New("Researchflow Worker service identity is unavailable")
+	}
+	trustedContext, err := platformsecurity.WithPrincipal(ctx, e.principal)
+	if err != nil {
+		return researchflowapplication.StageExecutionResult{}, fmt.Errorf("attach trusted Researchflow Worker identity: %w", err)
+	}
+	return e.next.ExecuteStage(trustedContext, request)
+}
+
