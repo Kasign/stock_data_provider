@@ -68,7 +68,7 @@ func TestCreateSMAServicePersistsExactSnapshotBoundResult(t *testing.T) {
 		t.Fatalf("repeated Execute() result IDs or writes differ: first=%+v second=%+v writes=%d", first, second, len(repository.records))
 	}
 	if first.ResultType != "indicator" || first.Scope != "stock" || first.SecurityID != snapshot.Symbol ||
-		first.TradeDate != snapshot.EndDate || first.SystemAsOf != snapshot.SystemAsOf ||
+		first.TradeDate != snapshot.Bars[len(snapshot.Bars)-1].TradeDate || first.SystemAsOf != snapshot.SystemAsOf ||
 		len(first.InputSnapshotRefs) != 1 || first.InputSnapshotRefs[0] != snapshot.SnapshotRef {
 		t.Fatalf("persisted SMA manifest is not bound to the source Snapshot: %+v", first)
 	}
@@ -84,6 +84,22 @@ func TestCreateSMAServicePersistsExactSnapshotBoundResult(t *testing.T) {
 		payload.Metrics[0].MetricStatus != metric.StatusAvailable ||
 		payload.Metrics[0].SampleCount == nil || *payload.Metrics[0].SampleCount != 20 {
 		t.Fatalf("persisted SMA Metric = %+v, want exact 0.105 with 20 bars", payload)
+	}
+}
+
+func TestCreateSMAServiceUsesLastObservedTradingDateWhenQueryEndsOnNonTradingDay(t *testing.T) {
+	now := time.Date(2026, 11, 24, 8, 0, 0, 0, time.UTC)
+	snapshot := validCreateSMASnapshot()
+	snapshot.EndDate = "2026-10-21"
+	reader := &createSMASnapshotReader{snapshot: snapshot}
+	repository := &createSMARecordingRepository{inner: result.NewMemoryRepository()}
+	service := newTestCreateSMAService(t, reader, repository, now)
+	manifest, err := service.Execute(context.Background(), validCreateSMARequest())
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if manifest.TradeDate != "2026-10-20" {
+		t.Fatalf("TradeDate = %q, want last observed trading date 2026-10-20", manifest.TradeDate)
 	}
 }
 

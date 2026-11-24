@@ -154,8 +154,9 @@ func (service *CreateSMAService) Execute(ctx context.Context, request CreateSMAR
 	for index := range snapshot.Bars {
 		closes[index] = snapshot.Bars[index].Close
 	}
+	tradeDate := snapshot.Bars[len(snapshot.Bars)-1].TradeDate
 	calculationContext := domain.CalculationContext{
-		SystemAsOf: systemAsOf, TradeDate: snapshot.EndDate,
+		SystemAsOf: systemAsOf, TradeDate: tradeDate,
 		InputSnapshotRefs: []string{snapshot.SnapshotRef},
 		AdjustmentBasis:   domain.AdjustmentBasisNone,
 		QualityPolicy:     domain.QualityPolicyStrict,
@@ -198,7 +199,7 @@ func (service *CreateSMAService) Execute(ctx context.Context, request CreateSMAR
 
 	input := manifest.Input{
 		ResultType: "indicator", Scope: "stock", SecurityID: snapshot.Symbol,
-		TradeDate: snapshot.EndDate, Period: fmt.Sprintf("%dd", parameters.Window),
+		TradeDate: tradeDate, Period: fmt.Sprintf("%dd", parameters.Window),
 		QualityStatus: snapshot.QualityStatus, ResultStatus: resultStatus,
 		SchemaVersion: result.EnvelopeSchemaVersion, PayloadSchemaVersion: "1.0.0",
 		AlgorithmVersion: entry.AlgorithmVersion, ParameterFingerprint: parameterFingerprint,
