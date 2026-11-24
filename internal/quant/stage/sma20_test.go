@@ -80,7 +80,8 @@ func TestSMA20AdapterCreatesDataSnapshotThenPersistsQuantResult(t *testing.T) {
 	}
 	if creator.calls != 1 || creator.request.Symbol != "600000.SH" ||
 		creator.request.StartDate != "2026-10-01" || creator.request.EndDate != "2026-10-20" ||
-		creator.request.Limit != 20 || !creator.request.SystemAsOf.Equal(systemAsOf) {
+		creator.request.Limit != 20 || !creator.request.SystemAsOf.Equal(systemAsOf) ||
+		len(creator.request.AllowedProviderCodes) != 1 || creator.request.AllowedProviderCodes[0] != SMA20ProviderCode {
 		t.Fatalf("Data Snapshot create request = %+v, calls=%d", creator.request, creator.calls)
 	}
 	if reader.requestedSnapshotRef != refs.SnapshotRef || reader.requestedAuthorizationRef != refs.AuthorizationRef ||
