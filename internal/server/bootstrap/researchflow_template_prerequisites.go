@@ -176,3 +176,8 @@ func (researchflowApplicabilityEvaluator) Evaluate(
 		return false, "", fmt.Errorf("unsupported Researchflow applicability rule: %s@%s", rule.RuleRef, rule.RuleVersion)
 	}
 }
+
+
+func newQuantSMA20ParameterSchemaValidator() (*parameterschema.Validator, error) {
+	return parameterschema.NewValidator(researchflowParameterSchemaRegistry{})
+}
