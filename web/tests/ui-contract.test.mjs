@@ -1446,6 +1446,7 @@ test("侧边栏将全部工作区作为平级一级 Tab 展示", () => {
   }
   assert.doesNotMatch(html, /data-nav-primary=|class="nav-group"|class="nav-subnav"|class="primary-nav-link"/);
   assert.doesNotMatch(app, /VIEW_NAV_GROUP|PRIMARY_NAV_META|primary-nav-link/);
+  assert.doesNotMatch(app, /workspace-tab|navDefaultView/);
   assert.doesNotMatch(html, /id="quick-locate"|class="quick-locate"|data-view="quick-locate"/);
   assert.match(html, /market-sector-body/);
 });
