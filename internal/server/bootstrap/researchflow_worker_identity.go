@@ -6,14 +6,14 @@ import (
 	platformsecurity "example.com/stock-analysis-flow/internal/platform/security"
 )
 
-var errResearchflowWorkerCredentialUnavailable = errors.New("Researchflow Worker service credential is unavailable")
+var errResearchflowWorkerCredentialUnavailable = errors.New("Quant service credential is unavailable")
 
-// researchflowWorkerPrincipal resolves one explicitly configured service credential.
+// quantServicePrincipal resolves one explicitly configured service credential.
 // The credential name is a stable identity contract consumed by Data authorization policy.
 func researchflowWorkerPrincipal(credentials []platformsecurity.ServiceCredential) (platformsecurity.Principal, error) {
 	var selected *platformsecurity.ServiceCredential
 	for index := range credentials {
-		if credentials[index].Name != "researchflow-worker" {
+		if credentials[index].Name != "quant" {
 			continue
 		}
 		if selected != nil {
