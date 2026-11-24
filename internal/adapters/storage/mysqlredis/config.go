@@ -57,9 +57,6 @@ func LoadConfig(env platformconfig.Env) (Config, error) {
 	if c.RedisDB, err = env.Int("REDIS_DB", 0); err != nil {
 		return c, err
 	}
-	if c.DBAutoMigrate, err = env.Bool("DB_AUTO_MIGRATE", false); err != nil {
-		return c, err
-	}
 	if c.DBConnMaxLifetime, err = env.Duration("DB_CONN_MAX_LIFETIME", 30*time.Minute); err != nil {
 		return c, err
 	}
