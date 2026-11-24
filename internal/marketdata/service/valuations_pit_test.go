@@ -9,6 +9,7 @@ import (
 
 	"example.com/stock-analysis-flow/internal/marketdata/cache"
 	"example.com/stock-analysis-flow/internal/marketdata/model"
+	marketdatatestutil "example.com/stock-analysis-flow/internal/marketdata/testutil"
 	"example.com/stock-analysis-flow/internal/marketdata/provider"
 
 )
@@ -89,11 +90,11 @@ func TestValuationsAsOfReadsHistoricalRevisionFromMariaDBWithoutProviderFallback
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	store, closeStore, err := openMigratedMarketDataTestStore(ctx, dsn)
+	store, db, err := marketdatatestutil.OpenMariaDBStore(ctx, dsn)
 	if err != nil {
 		t.Fatalf("open and migrate MariaDB: %v", err)
 	}
-	defer closeStore()
+	defer db.Close()
 
 	source := &valuationFallbackTestProvider{
 		name: "eastmoney", snapshot: validValuationsForFallbackTest("eastmoney"),
