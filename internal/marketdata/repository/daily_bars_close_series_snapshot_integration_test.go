@@ -254,6 +254,11 @@ SET policy_version=? WHERE policy_type=? AND policy_ref=?`,
 		missingVersion, authorization.DataAccessPolicyType, authorization.DailyBarsV2PolicyRef); err != nil {
 		t.Fatalf("point current policy at missing version for integrity test: %v", err)
 	}
+	defer func() {
+		_, _ = store.db.ExecContext(context.Background(), `UPDATE market_data_current_authorization_policy_versions
+SET policy_version=? WHERE policy_type=? AND policy_ref=?`,
+			version, authorization.DataAccessPolicyType, authorization.DailyBarsV2PolicyRef)
+	}()
 	if _, err := store.ResolveCurrentDataAuthorizationPolicy(ctx); !errors.Is(err, ErrDataAuthorizationPolicyUnavailable) {
 		t.Fatalf("dangling current policy pointer must be unavailable, got %v", err)
 	}
