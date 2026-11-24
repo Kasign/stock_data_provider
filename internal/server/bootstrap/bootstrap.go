@@ -96,11 +96,41 @@ func Run(ctx context.Context) (runErr error) {
 		}
 	}
 
+	migrationRegistry, err := newMigrationRegistry()
+	if err != nil {
+		return fmt.Errorf("注册模块 Migration 失败: %w", err)
+	}
+	migrationCtx, migrationCancel := context.WithTimeout(ctx, migrationCfg.Timeout)
+	migrationDB, err := serverresources.OpenSQL(migrationCtx, storageCfg)
+	if err != nil {
+		migrationCancel()
+		return fmt.Errorf("连接 MariaDB 失败（检查 DB_HOST/DB_PASSWORD）: %w", err)
+	}
+	migrationReport, migrationErr := migrationRegistry.RunWithReport(migrationCtx, migrationDB)
+	if migrationErr != nil {
+		migrationCancel()
+		_ = migrationDB.Close()
+		slog.Error("模块 Migration 执行失败", "report", migrationReport, "error", migrationErr.Error())
+		return fmt.Errorf("执行模块 Migration 失败: %w", migrationErr)
+	}
+	slog.Info("模块 Migration 执行完成", "report", migrationReport)
+	if err := migrationRegistry.ValidateApplied(migrationCtx, migrationDB); err != nil {
+		migrationCancel()
+		_ = migrationDB.Close()
+		return fmt.Errorf("数据库 Schema 版本与 checksum 校验失败: %w", err)
+	}
+	migrationCancel()
+
 	startupCtx, startupCancel := context.WithTimeout(ctx, 15*time.Second)
-	storageResources, store, err := serverresources.OpenLegacyAnalysisResources(startupCtx, storageCfg)
+	storageResources, store, err := serverresources.OpenApplicationResources(startupCtx, storageCfg, migrationDB)
 	startupCancel()
 	if err != nil {
-		return fmt.Errorf("连接 MariaDB/Redis 失败（检查 DB_HOST/DB_PASSWORD/REDIS_ADDR 和 DB_AUTO_MIGRATE）: %w", err)
+		_ = migrationDB.Close()
+		return fmt.Errorf("初始化 MariaDB/Redis 应用资源失败: %w", err)
+	}
+	if err := store.CheckSchema(ctx); err != nil {
+		_ = storageResources.Close()
+		return fmt.Errorf("Analysis Schema 就绪检查失败: %w", err)
 	}
 	marketDataModule, err := newMarketDataModule(storageResources, marketDataCfg)
 	if err != nil {
@@ -132,36 +162,6 @@ func Run(ctx context.Context) (runErr error) {
 			runErr = joinShutdownError(runErr, shutdownErr)
 		}
 	}()
-
-	migrationRegistry, err := newMigrationRegistry()
-	if err != nil {
-		return fmt.Errorf("注册模块 Migration 失败: %w", err)
-	}
-	migrationCtx, migrationCancel := context.WithTimeout(ctx, migrationCfg.Timeout)
-	if migrationCfg.Enabled {
-		migrationReport, migrationErr := migrationRegistry.RunWithReport(migrationCtx, storageResources.DB)
-		if migrationErr != nil {
-			migrationCancel()
-			slog.Error("模块 Migration 执行失败", "report", migrationReport, "error", migrationErr.Error())
-			return fmt.Errorf("执行模块 Migration 失败: %w", migrationErr)
-		}
-		slog.Info("模块 Migration 执行完成", "report", migrationReport)
-	} else {
-		if err := migrationRegistry.ValidateApplied(migrationCtx, storageResources.DB); err != nil {
-			migrationCancel()
-			return fmt.Errorf("数据库 Schema 尚未满足当前已注册模块版本及 checksum 要求（MIGRATION_ENABLED=false）: %w", err)
-		}
-		slog.Info("所有已注册模块 Schema 版本与 checksum 预检通过", "migration_enabled", false)
-	}
-	migrationCancel()
-	// Migration enabled/disabled 两种启动路径都必须在接受流量或启动 Worker 前
-	// 验证 Data 物理 Schema 与 Redis/MariaDB 依赖；Migration checksum 不证明物理结构完整。
-	readinessCtx, readinessCancel := context.WithTimeout(ctx, 10*time.Second)
-	if err := marketDataModule.Diagnostics().Ready(readinessCtx); err != nil {
-		readinessCancel()
-		return fmt.Errorf("Data Module 依赖与物理 Schema 就绪检查失败: %w", err)
-	}
-	readinessCancel()
 
 	newsRepository, err := newsstorage.NewMySQLRepository(storageResources.DB)
 	if err != nil {
