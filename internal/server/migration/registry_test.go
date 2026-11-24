@@ -325,4 +325,3 @@ func TestValidateAppliedVersionsRequiresExactAppliedSet(t *testing.T) {
 		})
 	}
 }
-
