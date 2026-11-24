@@ -44,11 +44,6 @@ printf '[1/4] 检查统一 Docker Compose 配置……\n'
 # --quiet prevents the expanded configuration, including credentials, from being printed.
 docker compose --env-file .env -f "$COMPOSE_FILE" config --quiet
 
-for migration_key in DB_AUTO_MIGRATE MIGRATION_ENABLED; do
-  if ! grep -Eq "^[[:space:]]*${migration_key}[[:space:]]*=" .env; then
-    fail ".env 未显式设置 ${migration_key}。请按 doc/开发部署说明.md 区分旧 Analysis 基础表迁移与 Root 模块 Migration。"
-  fi
-done
 
 printf '[2/4] 构建 Root Server 与 WebUI 两个镜像……\n'
 docker compose --env-file .env -f "$COMPOSE_FILE" build stock-analysis-server stock-analysis-web
