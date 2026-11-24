@@ -134,7 +134,6 @@ func TestLoadServiceCredentialsDoesNotRequireOwnerToken(t *testing.T) {
 	}
 }
 
-
 func TestLoadServiceCredentialsRejectsUnsupportedScope(t *testing.T) {
 	env := platformconfig.NewEnvWithLookup(func(key string) (string, bool) {
 		switch key {
