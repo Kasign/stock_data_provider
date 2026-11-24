@@ -2358,7 +2358,7 @@ test("UIR-2 正文与常规控件使用统一的最终计算基线", () => {
 
 test("UIR-2 shared page frame rules merge only redundant global overrides", () => {
   const newline = String.fromCharCode(10);
-  assert.ok(stylesheet.includes(".main-area { min-height: 100vh; margin-left: var(--layout-sidebar-width); padding: 0 var(--space-page); }"));
+  assert.ok(stylesheet.includes(".main-area { min-width: 0; min-height: 100vh; margin-left: var(--layout-sidebar-width); padding: 0 var(--space-page); }"));
   assert.ok(stylesheet.includes(".view { width: 100%; max-width: 1680px; min-width: 0; margin-inline: auto; padding-top: var(--layout-page-top); padding-bottom: var(--layout-page-bottom); }"));
   assert.ok(stylesheet.includes([".panel {", "   min-width: 0;", "   border: 1px solid var(--border);"].join(newline)));
   assert.ok(!stylesheet.includes([".main-area {", "  padding-left: var(--space-page);"].join(newline)));
