@@ -95,7 +95,15 @@ type CreateSMARequest struct {
 }
 
 // CreateSMAService 将 Data 的精确 Close Snapshot 转换为不可变 Quant Indicator Result。
-type CreateSMAService struct {
+type SMAExecutionResult struct {
+	Manifest     manifest.Manifest
+	Metric       metric.Metric
+	SnapshotRef  string
+	Coverage     CloseSeriesCoverageEvidence
+	ObservedBars int
+}
+
+// CreateSMAService
 	snapshots CloseSeriesSnapshotReader
 	registry  *registry.Registry
 	persister *resultPersister
@@ -121,13 +129,13 @@ func NewCreateSMAService(
 
 // Execute 读取已授权 Snapshot，按活动 Registry Entry 校验参数与精度，精确计算并持久化结果。
 // Facade 不创建 Snapshot、不签发 Data 授权、不绕过 Registry，也不建立 Run 关联。
-func (service *CreateSMAService) Execute(ctx context.Context, request CreateSMARequest) (manifest.Manifest, error) {
+func (service *CreateSMAService) Execute(ctx context.Context, request CreateSMARequest) (SMAExecutionResult, error) {
 	if service == nil || service.snapshots == nil || service.registry == nil || service.persister == nil ||
 		ctx == nil || strings.TrimSpace(request.SnapshotRef) == "" ||
 		strings.TrimSpace(request.AuthorizationRef) == "" || request.SystemAsOf.IsZero() ||
 		request.SystemAsOf.Location() != time.UTC || len(request.Parameters) == 0 || !json.Valid(request.Parameters) ||
 		!containsSortedUnique(request.AllowedProviderCodes, smaSourceRef) {
-		return manifest.Manifest{}, ErrInvalidCreateSMARequest
+		return SMAExecutionResult{}, ErrInvalidCreateSMARequest
 	}
 	if err := ctx.Err(); err != nil {
 		return manifest.Manifest{}, err
@@ -220,7 +228,17 @@ func (service *CreateSMAService) Execute(ctx context.Context, request CreateSMAR
 		AlgorithmVersion: entry.AlgorithmVersion, ParameterFingerprint: parameterFingerprint,
 		SystemAsOf: systemAsOf, InputSnapshotRefs: []string{snapshot.SnapshotRef},
 	}
-	return service.persister.persist(ctx, input, payload)
+	persisted, err := service.persister.persist(ctx, input, payload)
+	if err != nil {
+		return SMAExecutionResult{}, err
+	}
+	return SMAExecutionResult{
+		Manifest: persisted,
+		Metric: item,
+		SnapshotRef: snapshot.SnapshotRef,
+		Coverage: snapshot.Coverage,
+		ObservedBars: len(snapshot.Bars),
+	}, nil
 }
 
 func validateExactSMRegistryEntry(entry registry.Entry) error {
