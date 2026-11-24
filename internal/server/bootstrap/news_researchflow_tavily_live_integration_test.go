@@ -105,7 +105,7 @@ func TestNewsResearchflowTavilyMariaDBLive(t *testing.T) {
 		t.Fatalf("通过内部 Owner Session CreateRun 创建真实 Tavily Run 失败: %v", err)
 	}
 
-	runtimeComponent, err := newResearchflowRuntimeComponent(owner.execution, capacity, 1)
+	runtimeComponent, err := newResearchflowRuntimeComponent(owner.execution, capacity, 1, testResearchflowWorkerPrincipal(t))
 	if err != nil {
 		t.Fatalf("创建 Server Researchflow Runtime 失败: %v", err)
 	}
