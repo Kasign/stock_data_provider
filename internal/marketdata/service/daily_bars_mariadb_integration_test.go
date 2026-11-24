@@ -23,14 +23,11 @@ func TestDailyBarsMariaDBFallbackPreservesNormalizationWarnings(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	store, err := repository.OpenMySQL(ctx, dsn)
+	store, closeStore, err := openMigratedMarketDataTestStore(ctx, dsn)
 	if err != nil {
-		t.Fatalf("open MariaDB: %v", err)
+		t.Fatalf("open and migrate MariaDB: %v", err)
 	}
-	defer store.Close()
-	if err := store.Migrate(ctx); err != nil {
-		t.Fatalf("migrate MariaDB: %v", err)
-	}
+	defer closeStore()
 
 	// 600519.SH 上市前的日期窗口，避免与真实历史行情冲突；重复运行会幂等覆盖同一来源记录。
 	fetchedAt := time.Now().UTC()
@@ -102,14 +99,11 @@ func TestDailyBarsMariaDBStaleFallbackDoesNotOverrideDegradedProvider(t *testing
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	store, err := repository.OpenMySQL(ctx, dsn)
+	store, closeStore, err := openMigratedMarketDataTestStore(ctx, dsn)
 	if err != nil {
-		t.Fatalf("open MariaDB: %v", err)
+		t.Fatalf("open and migrate MariaDB: %v", err)
 	}
-	defer store.Close()
-	if err := store.Migrate(ctx); err != nil {
-		t.Fatalf("migrate MariaDB: %v", err)
-	}
+	defer closeStore()
 
 	fetchedAt := time.Now().UTC()
 	volume := int64(1000)
