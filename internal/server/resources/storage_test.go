@@ -11,9 +11,9 @@ import (
 	"example.com/stock-analysis-flow/internal/adapters/storage/mysqlredis"
 )
 
-func TestOpenLegacyAnalysisStorageRequiresContext(t *testing.T) {
-	if _, _, err := OpenLegacyAnalysisStorage(nil, mysqlredis.Config{}); err == nil {
-		t.Fatal("OpenLegacyAnalysisStorage() error = nil, want context error")
+func TestOpenSQLRequiresContext(t *testing.T) {
+	if _, err := OpenSQL(nil, mysqlredis.Config{}); err == nil {
+		t.Fatal("OpenSQL() error = nil, want context error")
 	}
 }
 
