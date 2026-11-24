@@ -475,14 +475,13 @@ func TestNewServicePrincipalAuthenticatesConfiguredWorkerCredential(t *testing.T
 		principal.Subject != "researchflow-worker" || len(principal.Scopes) != 2 {
 		t.Fatalf("unexpected service principal: %+v", principal)
 	}
+	ctx, err := WithPrincipal(context.Background(), principal)
+	if err != nil {
+		t.Fatal(err)
+	}
 	principal.Scopes[0] = ScopePlatformAdmin
-	if got, ok := func() (Principal, bool) {
-		ctx, ctxErr := WithPrincipal(context.Background(), principal)
-		if ctxErr != nil {
-			return Principal{}, false
-		}
-		return PrincipalFromContextValue(ctx)
-	}(); ok && contains(got.Scopes, ScopePlatformAdmin) {
+	got, ok := PrincipalFromContextValue(ctx)
+	if !ok || contains(got.Scopes, ScopePlatformAdmin) {
 		t.Fatal("mutated caller scopes leaked into trusted principal")
 	}
 }
