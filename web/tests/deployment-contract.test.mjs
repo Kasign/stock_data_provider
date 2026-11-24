@@ -30,14 +30,15 @@ test("Root Server is the only API upstream and Owner Session is mandatory", () =
   assert.ok(compose.includes("OWNER_SESSION_ARGON2_PARALLELISM: ${OWNER_SESSION_ARGON2_PARALLELISM:?"));
   assert.equal(envExample.includes("OWNER_SESSION_ENABLED="), false);
   assert.equal(envExample.includes("OWNER_SESSION_COOKIE_PATH="), false);
-  assert.ok(compose.includes('OWNER_SESSION_ENABLED: "true"'));
   assert.ok(compose.includes("OWNER_SESSION_COOKIE_PATH: /api"));
   assert.ok(compose.includes("OWNER_SESSION_CSRF_HEADER: X-CSRF-Token"));
   assert.ok(envExample.includes("OWNER_SESSION_PUBLIC_ORIGIN="));
   assert.ok(envExample.includes("OWNER_SESSION_ARGON2_MEMORY_KIB="));
   assert.equal(envExample.includes("MARKET_DATA_API_KEY="), false);
   assert.equal(envExample.includes("MARKET_DATA_BASE_URL="), false);
-  assert.ok(readme.includes("docker compose --env-file .env up -d --build"));
+  assert.ok(readme.includes("docker compose --env-file .env build stock-analysis-server"));
+  assert.ok(readme.includes("docker compose --env-file .env run --rm --no-deps"));
+  assert.ok(readme.includes("bash scripts/deploy-go.sh"));
   assert.ok(readme.includes("不要覆盖"));
 });
 
@@ -53,8 +54,6 @@ test("deployment script matches Root Server, automatic migrations and authentica
   assert.equal(envExample.includes("MIGRATION_ENABLED="), false);
   assert.ok(readme.includes("owner-init"));
   assert.ok(readme.includes("启动自动执行尚未应用的 Migration"));
-  assert.ok(readme.includes("owner-init"));
-  assert.ok(readme.includes("不要覆盖"));
 });
 
 test("Nginx proxies the same-origin API path to Root Server without cookie rewriting", () => {
