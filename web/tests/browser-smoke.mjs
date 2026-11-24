@@ -782,6 +782,14 @@ try {
         colorScheme: root.colorScheme,
         tokens: Object.fromEntries(tokens.map((name) => [name, root.getPropertyValue(name).trim()])),
         headingColor: getComputedStyle(document.querySelector("#market-overview-title")).color,
+        headingTokenColor: (() => {
+          const probe = document.createElement("span");
+          probe.style.color = "var(--text-heading)";
+          document.body.append(probe);
+          const value = getComputedStyle(probe).color;
+          probe.remove();
+          return value;
+        })(),
         panelBackground: getComputedStyle(document.querySelector("#market-overview-panel")).backgroundImage
       };
     });
@@ -790,7 +798,7 @@ try {
     for (const [name, value] of Object.entries(initialTheme.tokens)) {
       assert.notEqual(value, "", "dark theme token must resolve: " + name);
     }
-    assert.equal(initialTheme.headingColor, initialTheme.tokens["--text-heading"], "dark page heading must use the semantic heading token");
+    assert.equal(initialTheme.headingColor, initialTheme.headingTokenColor, "dark page heading must use the semantic heading token");
     assert.notEqual(initialTheme.panelBackground, "none", "dark panels must render a surface background");
     assert.equal(await themeToggle.getAttribute("aria-pressed"), "false", "dark theme toggle should report not pressed");
 
@@ -803,14 +811,22 @@ try {
         sidebar: root.getPropertyValue("--surface-sidebar").trim(),
         panel: root.getPropertyValue("--surface-panel-start").trim(),
         heading: root.getPropertyValue("--text-heading").trim(),
-        headingColor: getComputedStyle(document.querySelector("#market-overview-title")).color
+        headingColor: getComputedStyle(document.querySelector("#market-overview-title")).color,
+        headingTokenColor: (() => {
+          const probe = document.createElement("span");
+          probe.style.color = "var(--text-heading)";
+          document.body.append(probe);
+          const value = getComputedStyle(probe).color;
+          probe.remove();
+          return value;
+        })()
       };
     });
     assert.equal(lightTheme.theme, "light", "theme toggle should apply light theme");
     assert.equal(lightTheme.colorScheme, "light", "light theme should set the browser color scheme");
     assert.notEqual(lightTheme.sidebar, initialTheme.tokens["--surface-sidebar"], "sidebar surface must adapt to light theme");
     assert.notEqual(lightTheme.panel, initialTheme.tokens["--surface-panel-start"], "panel surface must adapt to light theme");
-    assert.equal(lightTheme.headingColor, lightTheme.heading, "light page heading must use the semantic heading token");
+    assert.equal(lightTheme.headingColor, lightTheme.headingTokenColor, "light page heading must use the semantic heading token");
     assert.equal(await themeToggle.getAttribute("aria-pressed"), "true", "light theme toggle should report pressed");
     assert.equal((await page.locator("#theme-toggle-label").textContent()).trim(), "深色", "light theme toggle should offer the dark theme");
 
