@@ -177,7 +177,6 @@ func (researchflowApplicabilityEvaluator) Evaluate(
 	}
 }
 
-
 func newQuantSMA20ParameterSchemaValidator() (*parameterschema.Validator, error) {
 	return parameterschema.NewValidator(researchflowParameterSchemaRegistry{})
 }
