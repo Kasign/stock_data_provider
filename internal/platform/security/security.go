@@ -133,10 +133,10 @@ func (r *Router) Handler() http.Handler {
 	return r.mux
 }
 
-// NewServicePrincipal authenticates a configured in-process worker credential and
+// PrincipalFromServiceCredential creates an in-process identity from an explicitly configured service credential and
 // returns its immutable service identity. Call only from a trusted composition
 // root; request data and domain code must never choose the credential or subject.
-func NewServicePrincipal(credential ServiceCredential) (Principal, error) {
+func PrincipalFromServiceCredential(credential ServiceCredential) (Principal, error) {
 	name := strings.TrimSpace(credential.Name)
 	if !validServiceName(name) || name != credential.Name || !credential.Secret.Configured() ||
 		!validToken(credential.Secret.Value()) || len(credential.Scopes) == 0 {
