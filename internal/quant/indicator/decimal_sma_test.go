@@ -79,8 +79,8 @@ func TestDecimalSMAWithContextRequiresTrustedSnapshotContext(t *testing.T) {
 	calculation := domain.CalculationContext{
 		SystemAsOf: now.Add(-time.Hour), TradeDate: "2026-11-23",
 		InputSnapshotRefs: []string{"data_snapshot:sha256:" + strings.Repeat("a", 64)},
-		AdjustmentBasis: domain.AdjustmentBasisNone,
-		QualityPolicy: domain.QualityPolicyStrict,
+		AdjustmentBasis:   domain.AdjustmentBasisNone,
+		QualityPolicy:     domain.QualityPolicyStrict,
 	}
 	got, err := DecimalSMAWithContext(calculation, now, []string{"1.01", "1.02", "1.03"}, SMAParams{Window: 3})
 	if err != nil {
