@@ -1447,7 +1447,11 @@ try {
 
       await page.locator("#open-settings").click();
       await page.locator("#settings-view").waitFor({ state: "visible" });
-      await page.locator("#market-base-input").fill("/market-api-v2");
+      await page.locator("#market-base-input").evaluate((input) => {
+        input.value = "/market-api-v2";
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+      });
       await page.waitForFunction(() => !document.querySelector("#save-settings")?.disabled, null, { timeout: 3000 });
       await page.locator("#save-settings").click();
       await page.waitForFunction(() => {
