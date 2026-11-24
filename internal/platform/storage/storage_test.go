@@ -732,5 +732,3 @@ func TestPrepareMigrationsChecksumsStatementsDeterministically(t *testing.T) {
 		t.Fatal("changing a migration statement must change its checksum")
 	}
 }
-
-
