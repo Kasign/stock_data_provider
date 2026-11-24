@@ -79,13 +79,13 @@ func TestResearchflowRuntimeLaunchTaskRejectsCancelledContext(t *testing.T) {
 	}
 }
 
-func testResearchflowWorkerPrincipal(t *testing.T) platformsecurity.Principal {
+func testQuantServicePrincipal(t *testing.T) *platformsecurity.Principal {
 	t.Helper()
 	secret := platformconfig.NewEnvWithLookup(func(string) (string, bool) {
 		return "0123456789abcdef0123456789abcdef", true
 	}).Secret("TOKEN")
-	principal, err := researchflowWorkerPrincipal([]platformsecurity.ServiceCredential{{
-		Name: "researchflow-worker", Secret: secret, Scopes: []string{platformsecurity.ScopeDataRead},
+	principal, err := quantServicePrincipal([]platformsecurity.ServiceCredential{{
+		Name: "quant", Secret: secret, Scopes: []string{platformsecurity.ScopeDataRead},
 	}})
 	if err != nil {
 		t.Fatalf("构造 Researchflow Worker 测试服务身份失败: %v", err)
