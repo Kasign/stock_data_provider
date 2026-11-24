@@ -1106,3 +1106,35 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - Root `bootstrapDatabase` 当前对所有已注册 namespace 执行 Migration 和 History/Checksum 验证，但显式最终物理 Schema Validator 目前只调用 Market Data 与 Analysis。
 - 下一步逐个审计 9 个 namespace：基线定义、实际 Repository 所需表/列/索引、Migration History 覆盖范围、是否已有最终 Schema Validator，以及缺失校验是否会导致启动后才暴露错误。只补有明确必要性的 Validator，不为追求数量给每个模块机械新增重复校验。
 - 此阶段先完成清单和差异结论，再按真实风险补齐；不改变业务表结构、不引入兼容迁移、不把 Migration History 成功等同于物理 Schema 完整。
+
+
+### 2026-11-24 Schema 审计第一轮结论（基于当前代码）
+
+本轮检查了 Root Migration Registry、各模块 Migration 定义、现有物理 Schema 检查及 MariaDB 集成测试。结论如下：
+
+| Namespace | 基线表规模 | 启动时物理 Schema 检查 | 现有集成测试检查重点 |
+|---|---:|---|---|
+| Market Data | 17 张表 | 有专用 Validator | 特殊列类型、索引、日历/收盘序列/授权结构 |
+| Analysis | 4 张表 | 有 Validator，但目前只检查 4 张表是否存在 | Migration 单元测试检查基线 SQL |
+| News | 14 张表 | 无 | MariaDB 集成测试检查 observations 的 5 个关键列；Repository 场景覆盖较多 |
+| Owner Credential（Platform） | 1 张表 | 无 | Credential Store 集成测试实际应用 Migration 并验证存取流程 |
+| Research | 6 张表 | 无 | 集成测试检查 event/claim 两个版本列的数据类型，并覆盖 Repository 流程 |
+| Researchflow | 9 张表 | 无 | 有基线 SQL 单元测试及大量存储行为测试；未发现启动级物理 Schema Validator |
+| Quant | 5 张表 | 无 | Repository 集成测试应用 Migration 后覆盖存取行为；未发现完整物理 Schema 清单检查 |
+| Notification | 10 张表（另有 1 条种子数据语句） | 无 | 集成测试检查 Migration History、revision 种子值和一个冗余索引 |
+| Server Security Audit | 1 张表 | 无 | 当前主要是 Migration 定义单元测试；Writer 本身有写入实现 |
+
+审计确认的实际缺口：
+
+1. Migration History 的 checksum 只证明已登记 Migration 定义没有变化，不能证明物理表、列、索引仍然存在。
+2. 当前只有 Market Data 和 Analysis 在启动阶段执行最终 Schema Validator；Analysis Validator 也只检查表存在，不检查列和索引。
+3. 其他模块的集成测试分别检查部分关键结构或通过 Repository 行为间接覆盖，但这些测试不等价于每次进程启动时检查当前数据库结构。
+4. 因此目前不能声称 9 个 namespace 的物理 Schema 都已完成启动前验证。
+
+处理原则：
+
+- 不把所有 Migration SQL 再复制一份到 Validator 中，也不为每个表重复维护完整 DDL。
+- 下一步按 Repository 实际 SQL 访问路径识别每个模块的启动关键结构：至少确认核心表存在，并为曾出现过结构漂移、或缺失后会导致核心读写立即失败的关键列/索引补充精确检查。
+- 先评估能否在 Platform Storage 提供一个小型、只读的 Schema 元数据检查原语，模块只声明自己的关键结构；不做运行时自动修复，不在 Validator 中执行 DDL。
+- 第一批优先 News、Notification、Researchflow、Quant；随后补 Owner Credential 与 Server Security Audit。Analysis 现有检查也要评估是否需要补关键列。Market Data 保留已有专用校验，不重写。
+- Validator 只用于启动前 fail-fast；Migration 仍然是 Schema 的唯一写入来源。每个新增检查都必须有对应的缺失/漂移测试，避免只测正常建库。
