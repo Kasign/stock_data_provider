@@ -2,13 +2,13 @@ package storage
 
 import (
 	"context"
+	"database/sql"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
-	"database/sql"
 	"time"
 
 	"example.com/stock-analysis-flow/internal/researchflow/application"
@@ -46,7 +46,7 @@ func (r *MySQLRunRepository) GetStageOutputResource(ctx context.Context, ref str
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return StageOutputResource{}, errors.New("Researchflow Stage Output resource not found")
+			return application.StageOutputResource{}, errors.New("Researchflow Stage Output resource not found")
 		}
 		return StageOutputResource{}, fmt.Errorf("read Researchflow Stage Output resource: %w", err)
 	}
