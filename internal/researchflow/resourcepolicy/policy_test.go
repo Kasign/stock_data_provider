@@ -68,7 +68,6 @@ func TestValidateSnapshotRejectsNonCanonicalMutation(t *testing.T) {
 	}
 }
 
-
 func TestQuantDailyBarsPolicySnapshotsOnlyConfiguredDataProviders(t *testing.T) {
 	registry, err := NewRegistry()
 	if err != nil {
