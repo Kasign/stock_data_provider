@@ -13,6 +13,8 @@ import (
 	researchflowapplication "example.com/stock-analysis-flow/internal/researchflow/application"
 	researchflowdomain "example.com/stock-analysis-flow/internal/researchflow/domain"
 	"example.com/stock-analysis-flow/internal/researchflow/resourcepolicy"
+	"example.com/stock-analysis-flow/internal/researchflow/stageoutput"
+	"example.com/stock-analysis-flow/internal/researchflow/template"
 )
 
 type quantSMA20StageAdapterStub struct {
@@ -158,5 +160,49 @@ func TestQuantSMA20StageExecutorRejectsUnknownParameters(t *testing.T) {
 	if adapter.calls != 0 || result.StageStatus != researchflowdomain.StageFailed ||
 		!reflect.DeepEqual(result.ReasonCodes, []string{"quant_sma20_invalid_parameters"}) {
 		t.Fatalf("unknown Stage parameter was accepted: adapter=%+v result=%+v", adapter, result)
+	}
+}
+
+
+func TestBuildQuantSMA20WorkflowTemplateFreezesParametersResourcePolicyAndOutputRegistry(t *testing.T) {
+	registry, err := stageoutput.NewRegistry(quantSMA20StageOutputRegistryVersion, []stageoutput.Entry{{
+		StageCode: quantstage.SMA20StageCode,
+		OutputType: quantstage.SMA20OutputType,
+		SchemaVersion: quantstage.SMA20SchemaVersion,
+		PayloadSchemaRef: quantSMA20PayloadSchemaRef,
+		QualitySummarySchemaRef: quantSMA20QualitySchemaRef,
+		PayloadValidator: stageoutput.ValidatorFunc(quantstage.ValidateSMA20OutputJSON),
+		QualitySummaryValidator: stageoutput.ValidatorFunc(quantstage.ValidateSMA20QualitySummaryJSON),
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	schemas, err := newQuantSMA20ParameterSchemaValidator()
+	if err != nil {
+		t.Fatal(err)
+	}
+	stage := &quantSMA20StageComposition{
+		registry: registry, parameterSchemas: schemas,
+		applicability: quantSMA20ApplicabilityEvaluator{},
+		providerCodes: []string{"eastmoney"},
+	}
+	policies, err := resourcepolicy.NewRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	workflow, err := buildQuantSMA20WorkflowTemplate(stage, policies)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if workflow.Ref != quantSMA20WorkflowTemplateRef ||
+		workflow.Version != quantSMA20WorkflowTemplateVersion ||
+		workflow.OutputRegistryVersion != quantSMA20StageOutputRegistryVersion ||
+		workflow.ResourcePolicyRef != resourcepolicy.QuantDailyBarsProvidersRef ||
+		len(workflow.Stages) != 1 || workflow.Stages[0].Code != quantstage.SMA20StageCode ||
+		workflow.RequiresHardRiskGate {
+		t.Fatalf("unexpected Quant SMA20 workflow template: %+v", workflow)
+	}
+	if err := template.Validate(workflow, nil); err != nil {
+		t.Fatalf("frozen Quant SMA20 workflow template is invalid: %v", err)
 	}
 }
