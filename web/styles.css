@@ -217,6 +217,7 @@ h1 { margin: 0; color: var(--text-heading); font-size: clamp(24px, 2.4vw, 31px);
    border-radius: 8px;
    color: var(--text);
    background: var(--surface-input);
+   font-size: var(--font-size-input);
    transition: border-color .15s;
 }
 .field textarea { min-height: 80px; padding: 10px 11px; resize: vertical; line-height: 1.6; }
