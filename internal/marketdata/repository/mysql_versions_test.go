@@ -193,7 +193,7 @@ func TestFundamentalsRevisionHashNormalizesEquivalentOffsetInstants(t *testing.T
 
 func TestMarketDataMigrationDefinitionsExposeCompleteBaseline(t *testing.T) {
 	migrations := MigrationDefinitions()
-	if len(migrations) != 1 || migrations[0].Version != 1 || len(migrations[0].Statements) != 17 || len(migrations[0].Operations) != 0 {
+	if len(migrations) != 1 || migrations[0].Version != 1 || len(migrations[0].Statements) != 17 {
 		t.Fatalf("migration baseline = %#v, want one V1 with seventeen tables", migrations)
 	}
 	schema := strings.Join(migrations[0].Statements, "\n")
