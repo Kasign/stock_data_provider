@@ -57,6 +57,9 @@ func newResearchflowRuntimeComponent(
 		capacity.MaxWorkers <= 0 || localWorkers <= 0 {
 		return nil, errors.New("Researchflow Runtime composition or capacity is invalid")
 	}
+	if composition.quantStage != nil && !containsQuantProviderCode(composition.quantStage.providerCodes, quantstage.SMA20ProviderCode) {
+		return nil, errors.New("Researchflow Runtime cannot register Quant SMA20 Stage without an active Eastmoney DailyBars Provider")
+	}
 	if composition.quantStage != nil && (quantPrincipal == nil ||
 		quantPrincipal.Kind != platformsecurity.IdentityService ||
 		quantPrincipal.AuthMethod != platformsecurity.AuthMethodServiceBearer ||
