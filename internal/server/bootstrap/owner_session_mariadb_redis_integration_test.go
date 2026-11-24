@@ -17,6 +17,7 @@ import (
 
 	platformconfig "example.com/stock-analysis-flow/internal/platform/config"
 	platformsecurity "example.com/stock-analysis-flow/internal/platform/security"
+	marketdataauthorization "example.com/stock-analysis-flow/internal/marketdata/authorization"
 	"example.com/stock-analysis-flow/internal/server/resources"
 )
 
@@ -102,6 +103,10 @@ func TestOwnerSessionHTTPMariaDBRedisLifecycleIntegration(t *testing.T) {
 	if err := composition.lifecycle.InitializeOwner(ctx, []byte("initial-owner-password"), "req-owner-init-it"); err != nil {
 		t.Fatalf("initialize Owner Credential: %v", err)
 	}
+
+	// 本测试只覆盖 Owner Session 生命周期；策略管理行为由 Data Owner 专项测试覆盖。
+	// 路由装配需要非空管理 Port，因此在此注入最小测试替身。
+	composition.dataPolicyManager = ownerSessionDataPolicyManagerStub{}
 
 	bearerToken := strings.Repeat("b", 43)
 	bearerSecret := platformconfig.NewEnvWithLookup(func(key string) (string, bool) {
@@ -236,4 +241,16 @@ func TestOwnerSessionHTTPMariaDBRedisLifecycleIntegration(t *testing.T) {
 	if auditCount < 8 {
 		t.Fatalf("security audit events=%d, want at least 8 lifecycle events", auditCount)
 	}
+}
+
+
+// ownerSessionDataPolicyManagerStub 仅用于 Owner Session 生命周期集成测试的路由装配。
+type ownerSessionDataPolicyManagerStub struct{}
+
+func (ownerSessionDataPolicyManagerStub) Current(context.Context) (marketdataauthorization.CurrentPolicy, error) {
+	return marketdataauthorization.CurrentPolicy{}, nil
+}
+
+func (ownerSessionDataPolicyManagerStub) Publish(context.Context, string, string, marketdataauthorization.DataAccessPolicy) (marketdataauthorization.CurrentPolicy, error) {
+	return marketdataauthorization.CurrentPolicy{}, nil
 }
