@@ -133,6 +133,31 @@ func (r *Router) Handler() http.Handler {
 	return r.mux
 }
 
+// NewServicePrincipal authenticates a configured in-process worker credential and
+// returns its immutable service identity. Call only from a trusted composition
+// root; request data and domain code must never choose the credential or subject.
+func NewServicePrincipal(credential ServiceCredential) (Principal, error) {
+	name := strings.TrimSpace(credential.Name)
+	if !validServiceName(name) || name != credential.Name || !credential.Secret.Configured() ||
+		!validToken(credential.Secret.Value()) || len(credential.Scopes) == 0 {
+		return Principal{}, errors.New("service credential is invalid")
+	}
+	scopes, err := normalizeScopes(credential.Scopes)
+	if err != nil || len(scopes) != len(credential.Scopes) {
+		return Principal{}, errors.New("service credential scopes are invalid")
+	}
+	for index, scope := range scopes {
+		if scope == ScopePlatformAdmin || scope != credential.Scopes[index] {
+			return Principal{}, errors.New("service credential scopes are invalid")
+		}
+	}
+	principal := Principal{Kind: IdentityService, AuthMethod: AuthMethodServiceBearer, Subject: name, Scopes: scopes}
+	if err := validatePrincipal(principal); err != nil {
+		return Principal{}, err
+	}
+	return clonePrincipal(principal), nil
+}
+
 func NewAuthenticator(ownerToken config.Secret, services []ServiceCredential) (*Authenticator, error) {
 	if len(services) > maximumServiceCredentials {
 		return nil, errors.New("too many service credentials")
