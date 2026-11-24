@@ -2461,7 +2461,7 @@ test("UIR-2 侧栏品牌、导航标签与服务状态文字使用组件基础�
   assert.match(stylesheet, /:root\[data-theme="light"\] \.sidebar-footnote \{ color: var\(--text-dim\); \}/);
   assert.match(stylesheet, /@media \(max-width: 700px\) \{[\s\S]*?\.mobile-menu-toggle \{ display: inline-grid; flex: 0 0 34px; \}/);
   assert.match(stylesheet, /@media \(max-width: 700px\) \{[\s\S]*?\.sidebar \.side-label, \.sidebar \.sidebar-footnote \{ display: block; \}/);
-  assert.doesNotMatch(stylesheet, /@media \(max-width: 900px\) \{[\s\S]*?\.nav-link > span:not\(\.nav-icon\)[\s\S]*?display: none/);
+  assert.doesNotMatch(stylesheet, /@media \(max-width: 900px\) \{\s*\.sidebar \{ width: 67px/);
   assert.doesNotMatch(stylesheet, /\.nav-link-state\s*\{\s*display: none;/);
 });
 
