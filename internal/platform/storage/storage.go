@@ -263,25 +263,14 @@ func ApplyMigrations(ctx context.Context, db *sql.DB, namespace string, migratio
 		checksum CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
 		status VARCHAR(16) NOT NULL DEFAULT 'applied',
 		failure_statement INT UNSIGNED NOT NULL DEFAULT 0,
-		applied_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
-		started_at DATETIME(6) NULL,
+		started_at DATETIME(6) NOT NULL,
 		finished_at DATETIME(6) NULL,
 		failure_code VARCHAR(64) NOT NULL DEFAULT '',
-		PRIMARY KEY (namespace, version)
+		PRIMARY KEY (namespace, version),
+		CONSTRAINT chk_platform_schema_migration_status CHECK (status IN ('running', 'applied', 'failed'))
 	) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`
 	if _, err := conn.ExecContext(ctx, createHistory); err != nil {
 		return dependencyFault("sql", "platform.storage.migration_history_failed", "migration history storage is unavailable", err)
-	}
-	// Upgrade history tables created by earlier platform versions without changing
-	// the meaning of the legacy applied_at column.
-	for _, statement := range []string{
-		"ALTER TABLE platform_schema_migrations ADD COLUMN IF NOT EXISTS started_at DATETIME(6) NULL",
-		"ALTER TABLE platform_schema_migrations ADD COLUMN IF NOT EXISTS finished_at DATETIME(6) NULL",
-		"ALTER TABLE platform_schema_migrations ADD COLUMN IF NOT EXISTS failure_code VARCHAR(64) NOT NULL DEFAULT ''",
-	} {
-		if _, err := conn.ExecContext(ctx, statement); err != nil {
-			return dependencyFault("sql", "platform.storage.migration_history_failed", "migration history schema could not be upgraded", err)
-		}
 	}
 
 	applied := make(map[uint64]string)
