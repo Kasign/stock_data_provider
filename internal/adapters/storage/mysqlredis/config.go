@@ -25,7 +25,6 @@ type Config struct {
 	DBMaxOpenConns    int
 	DBMaxIdleConns    int
 	DBConnMaxLifetime time.Duration
-	DBAutoMigrate     bool
 	RedisAddr         string
 	RedisPassword     string
 	RedisDB           int
