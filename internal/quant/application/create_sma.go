@@ -103,7 +103,8 @@ type SMAExecutionResult struct {
 	ObservedBars int
 }
 
-// CreateSMAService
+// CreateSMAService 将 Data 的精确 Close Snapshot 转换为不可变 Quant Indicator Result。
+type CreateSMAService struct {
 	snapshots CloseSeriesSnapshotReader
 	registry  *registry.Registry
 	persister *resultPersister
