@@ -39,29 +39,10 @@ func InitializeOwner(ctx context.Context, initialSecret []byte) (runErr error) {
 	if err != nil {
 		return fmt.Errorf("存储配置无效: %w", err)
 	}
-	registry, err := newMigrationRegistry()
+	migrationDB, _, err := bootstrapDatabase(ctx, storageCfg, processConfig.Migration.Timeout)
 	if err != nil {
-		return fmt.Errorf("注册模块 Migration 失败: %w", err)
+		return fmt.Errorf("数据库初始化失败: %w", err)
 	}
-	startupCtx, startupCancel := context.WithTimeout(ctx, 15*time.Second)
-	migrationDB, err := serverresources.OpenSQL(startupCtx, storageCfg)
-	startupCancel()
-	if err != nil {
-		return fmt.Errorf("连接 MariaDB 失败: %w", err)
-	}
-	migrationCtx, migrationCancel := context.WithTimeout(ctx, processConfig.Migration.Timeout)
-	migrationReport, migrationErr := registry.RunWithReport(migrationCtx, migrationDB)
-	if migrationErr != nil {
-		migrationCancel()
-		_ = migrationDB.Close()
-		return fmt.Errorf("执行模块 Migration 失败（report=%+v）: %w", migrationReport, migrationErr)
-	}
-	if err := registry.ValidateApplied(migrationCtx, migrationDB); err != nil {
-		migrationCancel()
-		_ = migrationDB.Close()
-		return fmt.Errorf("数据库 Schema 版本与 checksum 校验失败: %w", err)
-	}
-	migrationCancel()
 
 	resourceCtx, resourceCancel := context.WithTimeout(ctx, 15*time.Second)
 	shared, _, err := serverresources.OpenApplicationResources(resourceCtx, storageCfg, migrationDB)
