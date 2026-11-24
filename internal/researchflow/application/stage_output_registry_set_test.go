@@ -8,13 +8,15 @@ import (
 )
 
 type registryResolverTestRegistry struct {
-	version string
+	version     string
 	fingerprint string
 }
 
-func (registry registryResolverTestRegistry) Version() string { return registry.version }
+func (registry registryResolverTestRegistry) Version() string     { return registry.version }
 func (registry registryResolverTestRegistry) Fingerprint() string { return registry.fingerprint }
-func (registry registryResolverTestRegistry) Validate(stageoutput.Envelope, stageoutput.ValidationContext) error { return nil }
+func (registry registryResolverTestRegistry) Validate(stageoutput.Envelope, stageoutput.ValidationContext) error {
+	return nil
+}
 func (registry registryResolverTestRegistry) Entry(string, string, string) (stageoutput.Entry, bool) {
 	return stageoutput.Entry{}, false
 }
