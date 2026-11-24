@@ -11,8 +11,19 @@ import (
 
 func TestLoadOwnerSessionDisabledByDefault(t *testing.T) {
 	cfg, err := LoadOwnerSession(platformconfig.NewEnvWithLookup(func(string) (string, bool) { return "", false }))
-	if err != nil || cfg.Enabled {
+	if err != nil || cfg.Enabled || cfg.ResetRequired {
 		t.Fatalf("LoadOwnerSession() = %+v, %v; want disabled", cfg, err)
+	}
+}
+
+func TestLoadOwnerSessionRejectsResetWhenDisabled(t *testing.T) {
+	values := map[string]string{"OWNER_SESSION_RESET_REQUIRED": "true"}
+	_, err := LoadOwnerSession(platformconfig.NewEnvWithLookup(func(key string) (string, bool) {
+		value, ok := values[key]
+		return value, ok
+	}))
+	if err == nil || !strings.Contains(err.Error(), "OWNER_SESSION_ENABLED") {
+		t.Fatalf("LoadOwnerSession() error = %v, want reset/disabled rejection", err)
 	}
 }
 
@@ -33,6 +44,7 @@ func TestLoadOwnerSessionRequiresExplicitArgonCosts(t *testing.T) {
 func TestLoadOwnerSessionLoadsExplicitConfiguration(t *testing.T) {
 	values := map[string]string{
 		"OWNER_SESSION_ENABLED":            "true",
+		"OWNER_SESSION_RESET_REQUIRED":     "true",
 		"OWNER_SESSION_PUBLIC_ORIGIN":      "https://stocks.example.com",
 		"OWNER_SESSION_ARGON2_MEMORY_KIB":  "65536",
 		"OWNER_SESSION_ARGON2_ITERATIONS":  "3",
@@ -45,7 +57,7 @@ func TestLoadOwnerSessionLoadsExplicitConfiguration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadOwnerSession() error = %v", err)
 	}
-	if !cfg.Enabled || !cfg.Cookie.Secure || cfg.Cookie.SameSite != http.SameSiteLaxMode ||
+	if !cfg.Enabled || !cfg.ResetRequired || !cfg.Cookie.Secure || cfg.Cookie.SameSite != http.SameSiteLaxMode ||
 		cfg.IdleTTL != 12*time.Hour || cfg.AbsoluteTTL != 7*24*time.Hour ||
 		cfg.Argon2id.Memory != 65536 || cfg.Argon2id.Iterations != 3 ||
 		cfg.Argon2id.Parallelism != 2 {

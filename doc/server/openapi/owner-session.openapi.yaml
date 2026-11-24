@@ -7,6 +7,39 @@ servers:
   - url: /
 security: []
 paths:
+  /api/v1/owner/setup:
+    get:
+      operationId: getOwnerSetupStatus
+      summary: Read whether first setup, forced reset or login is required
+      responses:
+        '200':
+          description: Current Owner setup mode.
+          content:
+            application/json:
+              schema: { $ref: '../schema/SRV-CTR-002/owner-setup-status-response-1.0.0.schema.json' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+    post:
+      operationId: setupOwnerPassword
+      summary: Initialize or reset Owner password and create a session
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '../schema/SRV-CTR-002/owner-password-setup-request-1.0.0.schema.json' }
+      responses:
+        '200':
+          description: Password stored; new session cookie and CSRF token issued.
+          headers:
+            Set-Cookie: { $ref: '#/components/headers/SessionCookie' }
+          content:
+            application/json:
+              schema: { $ref: '../schema/SRV-CTR-002/session-issued-response-1.0.0.schema.json' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503': { $ref: '#/components/responses/Unavailable' }
   /api/v1/owner/session:
     post:
       operationId: ownerLogin

@@ -1231,6 +1231,7 @@
                     </div>
                     <form class="settings-field-grid owner-session-form" id="owner-login-form" hidden>
                       <label class="field"><span>Owner 密码</span><input id="owner-login-password" type="password" autocomplete="current-password" maxlength="1024" required /></label>
+                      <label class="field" id="owner-setup-confirm-field" hidden><span>确认新密码</span><input id="owner-setup-confirm-password" type="password" autocomplete="new-password" maxlength="1024" /></label>
                       <div class="owner-session-actions"><button class="button button-primary" id="owner-login-button" type="submit">登录</button></div>
                     </form>
                     <div id="owner-session-authenticated" hidden>
@@ -1251,7 +1252,7 @@
                     <label class="field"><span>备份内容范围</span><select disabled><option>应用配置 / 数据库 / 配置与数据库</option></select></label>
                     <label class="field"><span>最近备份状态</span><input disabled placeholder="需要服务端备份任务与审计 API" /></label>
                   </div>
-                  <p class="settings-boundary-note">Owner Session 登录、退出与密码修改已接入。服务密钥轮换、管理 API 访问范围、审计记录查询和服务器备份恢复尚无可用接口，相关控件继续保持禁用；浏览器不会读取服务器文件或保存管理员密码。</p>
+                  <p class="settings-boundary-note">Owner Session 首次设置、强制重设、登录、退出与登录后修改密码已接入。服务密钥轮换、管理 API 访问范围、审计记录查询和服务器备份恢复尚无可用接口，相关控件继续保持禁用；浏览器不会读取服务器文件或保存管理员密码。</p>
                 </div>
               </section>
             </div>

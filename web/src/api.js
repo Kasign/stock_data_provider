@@ -461,6 +461,23 @@ export async function loginOwnerSession(settings, password, signal) {
   return result;
 }
 
+export function getOwnerSetupStatus(settings, signal) {
+  return ownerRequest(settings, "/api/v1/owner/setup", { signal });
+}
+
+export async function setupOwnerPassword(settings, newPassword, signal) {
+  validateOwnerPassword(newPassword, "新管理员密码");
+  const result = await ownerRequest(settings, "/api/v1/owner/setup", {
+    method: "POST", body: { new_password: newPassword }, signal
+  });
+  if (typeof result?.csrf_token !== "string" || !result.csrf_token) {
+    ownerCSRFToken = "";
+    throw new Error("密码设置响应缺少 CSRF Token，无法建立安全会话。");
+  }
+  ownerCSRFToken = result.csrf_token;
+  return result;
+}
+
 export function getOwnerSession(settings, signal) {
   return ownerRequest(settings, "/api/v1/owner/session", { signal });
 }

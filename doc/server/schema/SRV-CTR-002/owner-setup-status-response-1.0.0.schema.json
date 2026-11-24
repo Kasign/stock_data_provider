@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:kasign:server:srv-ctr-002:owner-setup-status-response:1.0.0",
+  "title": "Owner Setup Status Response",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "mode"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0.0"
+    },
+    "mode": {
+      "type": "string",
+      "enum": [
+        "login",
+        "setup_required",
+        "reset_required"
+      ]
+    }
+  }
+}

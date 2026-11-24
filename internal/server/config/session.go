@@ -15,6 +15,7 @@ import (
 // OwnerSession 配置浏览器 Owner Session；默认关闭以保持现有 Bearer 路径兼容。
 type OwnerSession struct {
 	Enabled         bool
+	ResetRequired   bool
 	PublicOrigin    string
 	Cookie          platformsecurity.SessionCookieConfig
 	CSRFHeader      string
@@ -31,12 +32,20 @@ func LoadOwnerSession(env platformconfig.Env) (OwnerSession, error) {
 	if err != nil {
 		return OwnerSession{}, err
 	}
+	resetRequired, err := env.Bool("OWNER_SESSION_RESET_REQUIRED", false)
+	if err != nil {
+		return OwnerSession{}, err
+	}
+	if resetRequired && !enabled {
+		return OwnerSession{}, fmt.Errorf("OWNER_SESSION_RESET_REQUIRED=true requires OWNER_SESSION_ENABLED=true")
+	}
 	if !enabled {
 		return OwnerSession{}, nil
 	}
 	cfg := OwnerSession{
-		Enabled:      true,
-		PublicOrigin: strings.TrimSpace(env.String("OWNER_SESSION_PUBLIC_ORIGIN", "")),
+		Enabled:       true,
+		ResetRequired: resetRequired,
+		PublicOrigin:  strings.TrimSpace(env.String("OWNER_SESSION_PUBLIC_ORIGIN", "")),
 		Cookie: platformsecurity.SessionCookieConfig{
 			Name:     strings.TrimSpace(env.String("OWNER_SESSION_COOKIE_NAME", "__Secure-owner_session")),
 			Path:     strings.TrimSpace(env.String("OWNER_SESSION_COOKIE_PATH", "/api")),

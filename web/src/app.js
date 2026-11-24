@@ -18,7 +18,9 @@ import {
   clearOwnerSessionMemory,
   changeOwnerPassword,
   createAnalysisTask,
+  getOwnerSetupStatus,
   loginOwnerSession,
+  setupOwnerPassword,
   logoutOwnerSession,
   restoreOwnerSession,
   getAnalysisRun,
@@ -5521,16 +5523,22 @@ function refreshAuthenticatedWorkspace() {
   }
 }
 
+let ownerSessionSetupMode = "login";
+
 function renderOwnerSessionControls(mode, { expiresAt = "", message = "" } = {}) {
   const pill = $("#owner-session-status-pill");
   const expiry = $("#owner-session-expiry");
   const loginForm = $("#owner-login-form");
+  const confirmField = $("#owner-setup-confirm-field");
+  const loginButton = $("#owner-login-button");
   const authenticated = $("#owner-session-authenticated");
   const feedback = $("#owner-session-feedback");
   if (!pill || !expiry || !loginForm || !authenticated || !feedback) return;
   const states = {
     checking: ["正在检查登录态", "is-readonly"],
     logged_out: ["未登录", "is-warning"],
+    setup_required: ["首次设置密码", "is-warning"],
+    reset_required: ["需要重设密码", "is-warning"],
     logged_in: ["已登录", "is-local"],
     disabled: ["服务端未启用", "is-unavailable"],
     unavailable: ["服务端不可用", "is-error"]
@@ -5538,7 +5546,14 @@ function renderOwnerSessionControls(mode, { expiresAt = "", message = "" } = {})
   const [label, tone] = states[mode] || states.unavailable;
   pill.textContent = label;
   pill.className = `availability-pill ${tone}`;
-  loginForm.hidden = mode !== "logged_out" && mode !== "unavailable";
+  const setupMode = mode === "setup_required" || mode === "reset_required";
+  loginForm.hidden = mode !== "logged_out" && mode !== "unavailable" && !setupMode;
+  if (confirmField) confirmField.hidden = !setupMode;
+  if (loginButton) loginButton.textContent = setupMode ? "设置密码" : "登录";
+  const passwordLabel = loginForm.querySelector("label.field > span");
+  if (passwordLabel) passwordLabel.textContent = setupMode ? "新 Owner 密码" : "Owner 密码";
+  const passwordInput = $("#owner-login-password");
+  if (passwordInput) passwordInput.autocomplete = setupMode ? "new-password" : "current-password";
   authenticated.hidden = mode !== "logged_in";
   expiry.textContent = mode === "logged_in"
     ? `会话有效至 ${formatDateTime(expiresAt)}`
@@ -5551,7 +5566,11 @@ function renderOwnerSessionControls(mode, { expiresAt = "", message = "" } = {})
     ? "登录成功。CSRF Token 仅保存在当前页面运行时内存。"
     : mode === "logged_out"
       ? "请使用 Owner 密码登录。"
-      : mode === "disabled"
+      : mode === "setup_required"
+        ? "首次部署尚未设置 Owner 密码，请设置后继续。"
+        : mode === "reset_required"
+          ? "服务端已启用密码重设开关，请设置新的 Owner 密码。"
+          : mode === "disabled"
         ? "当前服务端未挂载 Owner Session 接口。"
         : mode === "unavailable"
           ? "无法确认服务端登录状态，请检查连接后重试。"
@@ -5571,6 +5590,15 @@ function ownerSessionErrorMessage(error) {
 async function initializeOwnerSessionControls() {
   renderOwnerSessionControls("checking");
   try {
+    const setup = await getOwnerSetupStatus(state.settings);
+    if (setup?.mode === "setup_required" || setup?.mode === "reset_required") {
+      state.ownerSessionAuthenticated = false;
+      ownerSessionSetupMode = setup.mode;
+      clearOwnerSessionMemory();
+      renderOwnerSessionControls(setup.mode);
+      return false;
+    }
+    ownerSessionSetupMode = "login";
     const session = await restoreOwnerSession(state.settings);
     state.ownerSessionAuthenticated = true;
     renderOwnerSessionControls("logged_in", { expiresAt: session.expires_at });
@@ -5594,15 +5622,24 @@ $("#owner-login-form")?.addEventListener("submit", async (event) => {
   const form = event.currentTarget;
   const button = $("#owner-login-button");
   const password = $("#owner-login-password")?.value ?? "";
+  const confirmation = $("#owner-setup-confirm-password")?.value ?? "";
   if (button) button.disabled = true;
   try {
-    const session = await loginOwnerSession(state.settings, password);
+    let session;
+    const setupMode = ownerSessionSetupMode === "setup_required" || ownerSessionSetupMode === "reset_required";
+    if (setupMode) {
+      if (password !== confirmation) throw new Error("两次输入的密码不一致。");
+      session = await setupOwnerPassword(state.settings, password);
+      ownerSessionSetupMode = "login";
+    } else {
+      session = await loginOwnerSession(state.settings, password);
+    }
     form.reset();
     state.ownerSessionAuthenticated = true;
-    renderOwnerSessionControls("logged_in", { expiresAt: session.expires_at, message: "登录成功。" });
+    renderOwnerSessionControls("logged_in", { expiresAt: session.expires_at, message: setupMode ? "密码设置成功，已自动登录。" : "登录成功。" });
     refreshAuthenticatedWorkspace();
   } catch (error) {
-    const mode = error?.status === 404 ? "disabled" : "logged_out";
+    const mode = error?.status === 404 ? "disabled" : (ownerSessionSetupMode === "setup_required" || ownerSessionSetupMode === "reset_required" ? ownerSessionSetupMode : "logged_out");
     renderOwnerSessionControls(mode, { message: ownerSessionErrorMessage(error) });
   } finally {
     if (button) button.disabled = false;

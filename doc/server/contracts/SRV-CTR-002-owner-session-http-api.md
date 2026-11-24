@@ -1,10 +1,10 @@
 # SRV-CTR-002 Owner Session HTTP API 契约
 
 - 契约编号：SRV-CTR-002
-- 契约版本：1.1.0
+- 契约版本：1.2.0
 - 状态：freeze-ready（待项目负责人确认冻结）
 - 生产方：Root Server（HTTP Handler、Cookie、Session Middleware、路由认证矩阵）
-- 消费者：WebUI；运维初始化流程
+- 消费者：WebUI；部署者
 - 依赖：PLAT-CTR-001、PLAT-CTR-002、PLAT-CTR-003 1.1.0、GOV-CTR-004
 - 范围：单一 Owner 的浏览器登录态，不定义 Researchflow 业务 API，也不定义领域资源授权策略。
 
@@ -14,9 +14,9 @@
 2. Owner Bearer 仅供受控运维/管理调用，不下发浏览器；Owner Session 不继承 `platform:admin` 或 Service Scope。
 3. 所有 Session 请求必须经 Server Session Middleware；不得伪造 Authorization Header 复用 Platform Bearer Router。
 4. 每条路由必须显式声明允许的 AuthMethod。未明确允许 `owner_session` 的业务路由不得接受 Session。
-5. 登录、登出、轮换、密码修改均受 Origin/Host 校验；状态变更请求还必须校验 CSRF。
+5. 登录、首次设置、强制重设、登出、轮换、密码修改均受 Origin/Host 校验；已登录状态变更请求还必须校验 CSRF。
 6. GET/HEAD/OPTIONS 不得产生业务状态变更。认证读取可更新 Session idle TTL，但仅在身份/CSRF 检查成功后更新。
-7. 本契约不增加注册、多用户、匿名密码重置、OAuth/OIDC 或独立认证服务。
+7. 本契约不增加注册、多用户、通用匿名密码恢复、OAuth/OIDC 或独立认证服务；首次设置与强制重设仅按 `OWNER_SESSION_RESET_REQUIRED` 的明确配置状态开放。
 
 ## 2. 公共路径与方法
 
@@ -24,6 +24,8 @@ Root Server 同源 API 前缀固定为 `/api/v1/owner`：
 
 | 方法 | 路径 | 用途 | 允许身份 |
 |---|---|---|---|
+| GET | `/api/v1/owner/setup` | 查询当前应显示首次设置、强制重设或正常登录 | anonymous |
+| POST | `/api/v1/owner/setup` | 首次设置或按启动配置强制重设密码，并建立 Session | anonymous（Origin/Host 必须匹配） |
 | POST | `/api/v1/owner/session` | 使用 Owner 密码登录并创建 Session | anonymous |
 | GET | `/api/v1/owner/session` | 查询当前 Session 状态 | owner_session |
 | POST | `/api/v1/owner/session/csrf` | 页面刷新后原子轮换并恢复 CSRF Token | owner_session（Origin/Host 必须匹配；不要求旧 CSRF） |
@@ -31,9 +33,36 @@ Root Server 同源 API 前缀固定为 `/api/v1/owner`：
 | POST | `/api/v1/owner/session/rotate` | 轮换当前 Session Token 与 CSRF Token | owner_session |
 | PUT | `/api/v1/owner/password` | 修改 Owner 密码并递增 CredentialVersion | owner_session |
 
-Owner 初始化不提供 HTTP 路由。它只能通过受控本机/运维命令消费一次性部署 Secret 完成；不得暴露匿名初始化、重置或恢复 HTTP 接口。
+首次设置与强制重设通过本契约的同源 HTTP 路由完成；不再提供 `owner-init` 命令、初始化 Secret 文件或手工挂载流程。是否允许设置由数据库 Credential 状态和 `OWNER_SESSION_RESET_REQUIRED` 启动配置共同决定。
 
 ## 3. 请求与响应 DTO
+
+### 3.0 首次设置、重设状态与密码设置
+
+`GET /api/v1/owner/setup`
+
+- anonymous，只读返回当前 WebUI 应展示的认证模式；响应不包含 Credential、密码哈希或 Session 材料。
+- 数据库尚无 Owner Credential 时返回 `{"schema_version":"1.0.0","mode":"setup_required"}`。
+- 已有 Credential 且启动配置 `OWNER_SESSION_RESET_REQUIRED=true` 时返回 `{"schema_version":"1.0.0","mode":"reset_required"}`。
+- 已有 Credential 且启动配置为 false 时返回 `{"schema_version":"1.0.0","mode":"login"}`。
+- 必须设置 `Cache-Control: no-store`。
+
+`POST /api/v1/owner/setup`
+
+请求：
+
+```json
+{"new_password":"<new-owner-password>"}
+```
+
+- anonymous；必须校验 Host 与 Origin，Origin 必须恰好一个且与配置的 PublicOrigin 完全匹配。
+- 仅当数据库尚无 Owner Credential，或本次 Server 进程以 `OWNER_SESSION_RESET_REQUIRED=true` 启动时允许执行。
+- 已有 Credential 且当前进程未启用重设时返回 409，不得覆盖现有密码。
+- new_password 必须为字符串，UTF-8 编码后长度 1～1024 字节；不得 Trim 或静默改写。
+- 首次设置通过 CredentialStore 的一次性初始化操作写入；重设通过 CredentialVersion CAS 更新。重设成功后 CredentialVersion 递增，所有旧 Session 立即失效。
+- 成功返回 HTTP 200，建立 HttpOnly Session Cookie，并返回与登录成功相同的 SessionIssuedResponse（含新的 CSRF Token）。
+- 设置成功后，当前进程不再要求重设；若环境变量仍为 true，下一次 Server 启动仍会再次要求重设。部署者可在成功后将环境变量改回 false，避免下次重启再次进入重设流程。
+- 此首次设置/重设路由不要求旧 CSRF Token，因为该流程本身用于尚未登录或旧 Session 已失效的状态；必须执行精确 Origin/Host 校验。
 
 所有 JSON 请求必须设置 `Content-Type: application/json`；拒绝未知字段和尾随第二个 JSON 值和超出 Server 请求体上限的输入。所有响应使用 UTF-8 JSON，并遵循 PLAT-CTR-001 错误投影。Cookie 通过 Set-Cookie Header 发放/更新/清除，不在 JSON 中返回 Session Token。
 
@@ -104,7 +133,7 @@ Owner 初始化不提供 HTTP 路由。它只能通过受控本机/运维命令�
 1. Session Cookie 固定 HttpOnly、SameSite=Lax、无 Domain、Path 固定为 `/api`，覆盖 Owner Session 与所有 Root Data/业务 API；HTTPS 公网必须 Secure。
 2. Cookie Max-Age/Expires 不得超过 Session 剩余 idle/absolute TTL 中较早者。
 3. CSRF Header 固定为 `X-CSRF-Token`；必须恰好一个非空值。Token 由 Platform CSPRNG 生成并与 Session 绑定。
-4. 所有非安全方法必须由 Platform `CSRFSafeSessionStore` 在原子 Touch 操作中比较 CSRF Digest；错误/缺失 CSRF 不得刷新 idle TTL。
+4. 已登录 Session 的所有非安全方法必须由 Platform `CSRFSafeSessionStore` 在原子 Touch 操作中比较 CSRF Digest；错误/缺失 CSRF 不得刷新 idle TTL。首次设置/强制重设是尚未建立新 Session 的例外，只要求精确 Origin/Host 校验。
 5. Session 请求必须校验 Host 与配置 PublicOrigin；非安全方法必须有恰好一个匹配 Origin。登录也执行同等 Origin/Host 校验以防 Login CSRF。
 6. GET/HEAD/OPTIONS 不得执行任何业务状态变更。CSRF Token 恢复属于凭证状态变更，必须使用专用 POST 端点，不得借 GET 执行。
 7. `POST /api/v1/owner/session/csrf` 是唯一 CSRF 恢复例外：只接受有效 owner_session Cookie，必须严格校验恰好一个匹配的 Origin 和 Host，并通过 Platform 原子操作确认 Session 有效、替换 CSRF Digest。该端点不要求旧 CSRF Header（因为页面刷新后 Token 已丢失），但不得执行其他业务状态变更；其防跨站依据是强制 Origin/Host 校验与同源部署。返回 `{"schema_version":"1.0.0","csrf_token":"<csrf-token>"}`。新登录和 Session 轮换响应直接返回新 CSRF Token；页面刷新后 WebUI 使用此端点恢复内存 Token。该端点不得 Touch 后才验证 CSRF。
@@ -114,21 +143,22 @@ Owner 初始化不提供 HTTP 路由。它只能通过受控本机/运维命令�
 - 所有错误使用 PLAT-CTR-001 ErrorEnvelope，不序列化内部 Fault。
 - 401：缺失/无效/过期 Session 或密码验证失败；403：Origin/Host/CSRF 拒绝；409：Credential CAS/Session 轮换冲突；413：请求体超限；429：登录限流；503：必要安全依赖不可用。
 - 登录失败不得区分账号不存在与密码错误。
-- 安全审计覆盖登录成功/失败/限流、Session 创建/轮换/撤销、退出、密码修改和初始化。
+- 安全审计覆盖登录成功/失败/限流、Session 创建/轮换/撤销、退出、密码修改、首次设置和强制重设。
 - 日志、错误和审计不得包含密码、密码哈希、Session/CSRF Token、摘要、Cookie、Authorization Header、原始 IP 或完整请求体。
 - 安全审计 Writer 失败按 SessionLifecycleService 已定义策略 fail closed；撤销已经发生时不得回滚撤销。
 
-## 6. 初始化与运维
+## 6. 首次设置与重设运维
 
-1. 一次性初始密码由部署系统通过专用 Secret 文件/受控 Secret 注入，不放入普通环境变量、镜像、Compose 明文或 WebUI。
-2. 初始化命令仅允许本机受控运维执行；读取 Secret 后在内存中消费，命令退出时清零缓冲区，并要求部署侧删除/卸载 Secret。
-3. MariaDB CredentialStore 的一次性初始化 CAS 是最终防重放门禁；重复执行不得覆盖现有凭证。
-4. 初始化完成后，Server Diagnostics/运维命令只报告 initialized/not_initialized，不回显 Secret、哈希或账户材料。
-5. 密码恢复仅允许受控本机运维流程，不提供匿名 HTTP reset；恢复必须递增 CredentialVersion 并撤销既有 Session。
+1. 首次部署时将 `OWNER_SESSION_RESET_REQUIRED=false`。当数据库尚无 Owner Credential，WebUI 自动显示首次设置密码页面。
+2. 部署者在 WebUI 输入并确认密码；Root Server 使用配置的 Argon2id Hasher 保存密码并自动建立 Owner Session。
+3. 忘记密码时，将 `OWNER_SESSION_RESET_REQUIRED=true` 并重启 Server；WebUI 自动进入重设流程。重设成功后当前进程恢复正常登录。
+4. 如果不希望下一次重启再次重设，部署者在重设成功后将环境变量改回 false，并按部署流程重启。
+5. 首次设置和重设都使用同一 Owner Credential Store、Argon2id Hasher、审计与 Session 实现；不创建新表，不使用默认密码，不需要生成或挂载初始化 Secret 文件。
+6. `OWNER_SESSION_RESET_REQUIRED=true` 时，Server 必须拒绝旧密码登录，并拒绝旧 Session 访问受保护接口；不能只依赖 WebUI 隐藏登录表单。
 
 ## 7. 路由认证矩阵
 
-- 本契约六个浏览器接口按表中身份执行；CSRF Token 恢复端点为 `POST /api/v1/owner/session/csrf`，身份为 owner_session，且是唯一不要求旧 CSRF Header 的状态端点。
+- 本契约八个浏览器接口按表中身份执行；CSRF Token 恢复端点为 `POST /api/v1/owner/session/csrf`，身份为 owner_session，且是唯一不要求旧 CSRF Header 的状态端点。
 - Root Data 路由在启用 Owner Session 时显式接受两种身份：owner_session 或 owner_bearer；二者是互斥认证方式，单个请求同时携带 Session Cookie 与 Authorization Header 必须拒绝。
 - Data 路由范围：`/api/v1/quotes/{symbol}`、`/api/v1/bars/{symbol}/daily`、`/api/v1/bundles/{symbol}`、`/api/v1/data-sources/**`、`/api/v1/market/**`、`/api/v1/stocks/**`。
 - owner_session 请求必须由现有 SessionAuthenticator 校验 Cookie、Origin/Host；POST/PUT/PATCH/DELETE 等非安全方法还必须通过原子 CSRF 校验。Provider Probe POST 不例外。
@@ -143,7 +173,7 @@ Owner 初始化不提供 HTTP 路由。它只能通过受控本机/运维命令�
 
 - 为每个 JSON 请求/响应建立独立 Schema/Golden，统一放在 `doc/server/schema/SRV-CTR-002/` 与 `doc/server/golden/SRV-CTR-002/`。
 - OpenAPI 权威文件为 `doc/server/openapi/owner-session.openapi.yaml`；它只描述本契约路由，不合并/复用已退役旧 Analysis API Schema。
-- DTO schema_version 固定 1.0.0；本次 1.1.0 仅扩展 Root Data 路由的认证矩阵和统一 Cookie/API Prefix，不改变既有 Owner Session DTO Schema。
+- DTO schema_version 固定 1.0.0；本次 1.2.0 新增 setup 状态与密码设置 DTO，不改变既有 Session DTO Schema。
 - 任何路径、方法、字段、认证矩阵、Cookie/CSRF/Origin 语义或错误语义的非兼容变化必须升级 SRV-CTR-002 主版本并评估 WebUI 迁移。
 - 当前定义不等于实现已完成；实现符合性必须通过 Schema/Golden、HTTP 集成测试、真实 MariaDB/Redis、Nginx 同源部署验收。
 
@@ -151,5 +181,5 @@ Owner 初始化不提供 HTTP 路由。它只能通过受控本机/运维命令�
 
 - Researchflow CreateRun/Run/Stage/Event、分页、Cursor、取消和事件流；归 SRV-CTR-001。
 - Data、News、Research、Quant 的资源授权规则；归各领域 Owner 与 GOV-CTR-006。
-- 多用户、注册、邮箱验证、OAuth/OIDC、匿名密码重置。
+- 多用户、注册、邮箱验证、OAuth/OIDC、未受启动配置约束的通用匿名密码恢复。
 - Owner Bearer 的运维凭证轮换策略；继续遵循 PLAT-CTR-003。

@@ -32,12 +32,16 @@ test("Root Server is the only API upstream and Owner Session is mandatory", () =
   assert.equal(envExample.includes("OWNER_SESSION_COOKIE_PATH="), false);
   assert.ok(compose.includes("OWNER_SESSION_COOKIE_PATH: /api"));
   assert.ok(compose.includes("OWNER_SESSION_CSRF_HEADER: X-CSRF-Token"));
+  assert.ok(compose.includes("OWNER_SESSION_RESET_REQUIRED: ${OWNER_SESSION_RESET_REQUIRED:-false}"));
   assert.ok(envExample.includes("OWNER_SESSION_PUBLIC_ORIGIN="));
   assert.ok(envExample.includes("OWNER_SESSION_ARGON2_MEMORY_KIB="));
   assert.equal(envExample.includes("MARKET_DATA_API_KEY="), false);
   assert.equal(envExample.includes("MARKET_DATA_BASE_URL="), false);
-  assert.ok(readme.includes("docker compose --env-file .env build stock-analysis-server"));
-  assert.ok(readme.includes("docker compose --env-file .env run --rm --no-deps"));
+  assert.ok(readme.includes("OWNER_SESSION_RESET_REQUIRED=false"));
+  assert.ok(readme.includes("首次设置密码"));
+  assert.ok(readme.includes("强制重设"));
+  assert.equal(readme.includes("owner-init"), false);
+  assert.equal(readme.includes("OWNER_SESSION_INITIAL_SECRET_FILE"), false);
   assert.ok(readme.includes("bash scripts/deploy-go.sh"));
   assert.ok(readme.includes("不要覆盖"));
 });
@@ -52,7 +56,9 @@ test("deployment script matches Root Server, automatic migrations and authentica
   assert.ok(envExample.includes("MIGRATION_TIMEOUT=2m"));
   assert.equal(envExample.includes("DB_AUTO_MIGRATE="), false);
   assert.equal(envExample.includes("MIGRATION_ENABLED="), false);
-  assert.ok(readme.includes("owner-init"));
+  assert.ok(readme.includes("首次设置密码"));
+  assert.ok(readme.includes("OWNER_SESSION_RESET_REQUIRED"));
+  assert.equal(readme.includes("owner-init"), false);
   assert.ok(readme.includes("启动自动执行尚未应用的 Migration"));
 });
 

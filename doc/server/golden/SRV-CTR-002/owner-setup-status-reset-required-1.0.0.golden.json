@@ -1,0 +1,17 @@
+{
+  "name": "owner_reset_required",
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/owner/setup"
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Cache-Control": "no-store"
+    },
+    "body": {
+      "schema_version": "1.0.0",
+      "mode": "reset_required"
+    }
+  }
+}

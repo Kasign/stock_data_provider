@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	platformfault "example.com/stock-analysis-flow/internal/platform/fault"
@@ -19,8 +20,11 @@ import (
 
 type ownerSessionHTTPHandler struct {
 	lifecycle     *serversecurity.SessionLifecycleService
+	credentials   platformsecurity.CredentialStore
 	authenticator *serversecurity.SessionAuthenticator
 	cookie        platformsecurity.SessionCookieConfig
+	resetState    *ownerSessionResetState
+	setupMu       sync.Mutex
 }
 
 type ownerSessionResponse struct {
@@ -39,14 +43,26 @@ type ownerPasswordChangeRequest struct {
 	NewPassword     string `json:"new_password"`
 }
 
+type ownerPasswordSetupRequest struct {
+	NewPassword string `json:"new_password"`
+}
+
+type ownerSetupStatusResponse struct {
+	SchemaVersion string `json:"schema_version"`
+	Mode          string `json:"mode"`
+}
+
 func newOwnerSessionHTTPHandler(composition *ownerSessionComposition, cookie platformsecurity.SessionCookieConfig) (http.Handler, error) {
-	if composition == nil || composition.lifecycle == nil || composition.authenticator == nil {
+	if composition == nil || composition.lifecycle == nil || composition.credentials == nil || composition.resetState == nil || composition.authenticator == nil {
 		return nil, errors.New("Owner Session composition is required")
 	}
 	h := &ownerSessionHTTPHandler{
-		lifecycle: composition.lifecycle, authenticator: composition.authenticator, cookie: cookie,
+		lifecycle: composition.lifecycle, credentials: composition.credentials,
+		authenticator: composition.authenticator, cookie: cookie, resetState: composition.resetState,
 	}
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/v1/owner/setup", h.setupStatus)
+	mux.HandleFunc("POST /api/v1/owner/setup", h.setupPassword)
 	mux.HandleFunc("POST /api/v1/owner/session", h.login)
 	mux.HandleFunc("GET /api/v1/owner/session", h.current)
 	mux.HandleFunc("DELETE /api/v1/owner/session", h.logout)
@@ -56,10 +72,80 @@ func newOwnerSessionHTTPHandler(composition *ownerSessionComposition, cookie pla
 	return mux, nil
 }
 
+func (h *ownerSessionHTTPHandler) setupStatus(w http.ResponseWriter, r *http.Request) {
+	h.noStore(w)
+	resetRequired := h.resetState.Required()
+	_, err := h.credentials.GetOwnerCredential(r.Context())
+	mode := "login"
+	if isOwnerCredentialMissing(err) {
+		mode = "setup_required"
+	} else if err != nil {
+		h.writeError(w, r, err)
+		return
+	} else if resetRequired {
+		mode = "reset_required"
+	}
+	h.writeJSON(w, http.StatusOK, ownerSetupStatusResponse{SchemaVersion: "1.0.0", Mode: mode})
+}
+
+func (h *ownerSessionHTTPHandler) setupPassword(w http.ResponseWriter, r *http.Request) {
+	h.noStore(w)
+	if err := h.authenticator.ValidateLoginOrigin(r); err != nil {
+		h.writeError(w, r, err)
+		return
+	}
+	var input ownerPasswordSetupRequest
+	if err := decodeOwnerJSON(r, &input); err != nil {
+		h.writeError(w, r, platformfault.New(platformfault.ClassValidation, "server.invalid_owner_password_setup", "Owner password setup request is invalid", err))
+		return
+	}
+	h.setupMu.Lock()
+	defer h.setupMu.Unlock()
+	_, err := h.credentials.GetOwnerCredential(r.Context())
+	if err != nil && !isOwnerCredentialMissing(err) {
+		h.writeError(w, r, err)
+		return
+	}
+	allowReset := h.resetState.Required()
+	if err == nil && !allowReset {
+		h.writeError(w, r, platformfault.New(platformfault.ClassConflict, "server.owner_password_setup_not_required", "Owner password setup is not required", nil))
+		return
+	}
+	issue, err := h.lifecycle.SetOwnerPassword(r.Context(), []byte(input.NewPassword), allowReset, observability.FromContext(r.Context()))
+	if err != nil {
+		h.writeError(w, r, err)
+		return
+	}
+	h.resetState.Complete()
+	http.SetCookie(w, issue.Cookie)
+	h.writeJSON(w, http.StatusOK, ownerSessionResponse{
+		SchemaVersion: "1.0.0", Authenticated: true, CSRFToken: issue.CSRFToken,
+		ExpiresAt: issue.Cookie.Expires.UTC().Format(time.RFC3339Nano),
+	})
+}
+
+func isOwnerCredentialMissing(err error) bool {
+	if err == nil {
+		return false
+	}
+	var value *platformfault.Fault
+	return errors.As(err, &value) && value.Class == platformfault.ClassNotFound
+}
+
 func (h *ownerSessionHTTPHandler) login(w http.ResponseWriter, r *http.Request) {
 	h.noStore(w)
 	if err := h.authenticator.ValidateLoginOrigin(r); err != nil {
 		h.writeError(w, r, err)
+		return
+	}
+	resetRequired := h.resetState.Required()
+	_, credentialErr := h.credentials.GetOwnerCredential(r.Context())
+	if resetRequired || isOwnerCredentialMissing(credentialErr) {
+		h.writeError(w, r, platformfault.New(platformfault.ClassConflict, "server.owner_password_setup_required", "Owner password setup must be completed before login", nil))
+		return
+	}
+	if credentialErr != nil {
+		h.writeError(w, r, credentialErr)
 		return
 	}
 	var input ownerLoginRequest

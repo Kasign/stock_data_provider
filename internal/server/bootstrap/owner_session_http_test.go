@@ -13,6 +13,7 @@ import (
 	marketdataapplication "example.com/stock-analysis-flow/internal/marketdata/application"
 	marketdataauthorization "example.com/stock-analysis-flow/internal/marketdata/authorization"
 	platformconfig "example.com/stock-analysis-flow/internal/platform/config"
+	platformfault "example.com/stock-analysis-flow/internal/platform/fault"
 	platformsecurity "example.com/stock-analysis-flow/internal/platform/security"
 	quantapplication "example.com/stock-analysis-flow/internal/quant/application"
 	serversecurity "example.com/stock-analysis-flow/internal/server/security"
@@ -23,10 +24,17 @@ type ownerHTTPTestCredentials struct {
 }
 
 func (s *ownerHTTPTestCredentials) GetOwnerCredential(context.Context) (platformsecurity.OwnerCredential, error) {
+	if s.credential.Subject == "" {
+		return platformsecurity.OwnerCredential{}, platformfault.New(platformfault.ClassNotFound, "platform.owner_credential_not_found", "Owner credential not found", nil)
+	}
 	return s.credential, nil
 }
-func (s *ownerHTTPTestCredentials) InitializeOwnerCredential(context.Context, string) (platformsecurity.OwnerCredential, error) {
-	return platformsecurity.OwnerCredential{}, errors.New("not implemented")
+func (s *ownerHTTPTestCredentials) InitializeOwnerCredential(_ context.Context, hash string) (platformsecurity.OwnerCredential, error) {
+	if s.credential.Subject != "" {
+		return platformsecurity.OwnerCredential{}, errors.New("credential already exists")
+	}
+	s.credential = platformsecurity.OwnerCredential{Subject: "owner", CredentialVersion: 1, PasswordHash: hash}
+	return s.credential, nil
 }
 func (s *ownerHTTPTestCredentials) UpdateOwnerPassword(_ context.Context, version uint64, hash string) (platformsecurity.OwnerCredential, error) {
 	if version != s.credential.CredentialVersion {
@@ -135,6 +143,10 @@ func minOwnerHTTPTime(a, b time.Time) time.Time {
 }
 
 func newOwnerHTTPTestHandler(t *testing.T, sessions *ownerHTTPTestSessions, credentials *ownerHTTPTestCredentials, policyManagers ...quantResultAccessPolicyManager) http.Handler {
+	return newOwnerHTTPTestHandlerWithReset(t, sessions, credentials, false, policyManagers...)
+}
+
+func newOwnerHTTPTestHandlerWithReset(t *testing.T, sessions *ownerHTTPTestSessions, credentials *ownerHTTPTestCredentials, resetRequired bool, policyManagers ...quantResultAccessPolicyManager) http.Handler {
 	t.Helper()
 	cookie := platformsecurity.SessionCookieConfig{
 		Name: "__Secure-owner_session", Path: "/api", Secure: true, SameSite: http.SameSiteLaxMode,
@@ -153,14 +165,17 @@ func newOwnerHTTPTestHandler(t *testing.T, sessions *ownerHTTPTestSessions, cred
 	if err != nil {
 		t.Fatal(err)
 	}
-	authenticator, err := serversecurity.NewSessionAuthenticator(sessions, credentials, serversecurity.SessionAuthenticatorConfig{
+	resetState := &ownerSessionResetState{required: resetRequired}
+	sessionCredentials := ownerSessionCredentialGate{credentials: credentials, resetState: resetState}
+	authenticator, err := serversecurity.NewSessionAuthenticator(sessions, sessionCredentials, serversecurity.SessionAuthenticatorConfig{
 		Cookie: cookie, PublicOrigin: "https://stocks.example.com", CSRFHeader: "X-CSRF-Token", IdleTTL: time.Hour,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	composition := &ownerSessionComposition{
-		lifecycle: lifecycle, authenticator: authenticator, cookie: cookie,
+		lifecycle: lifecycle, credentials: credentials, authenticator: authenticator,
+		cookie: cookie, resetState: resetState,
 		dataPolicyManager: &ownerHTTPTestDataPolicyManager{},
 	}
 	if len(policyManagers) > 0 {
@@ -321,6 +336,89 @@ func platformconfigForOwnerHTTP(token string) platformconfig.Secret {
 		}
 		return "", false
 	}).Secret("PLATFORM_ADMIN_TOKEN")
+}
+
+func TestOwnerSessionFirstSetupAndForcedReset(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		credential  platformsecurity.OwnerCredential
+		reset       bool
+		wantMode    string
+		wantVersion uint64
+	}{
+		{name: "first setup", wantMode: "setup_required", wantVersion: 1},
+		{name: "forced reset", credential: platformsecurity.OwnerCredential{Subject: "owner", CredentialVersion: 3, PasswordHash: "hash:old"}, reset: true, wantMode: "reset_required", wantVersion: 4},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			credentials := &ownerHTTPTestCredentials{credential: tc.credential}
+			handler := newOwnerHTTPTestHandlerWithReset(t, &ownerHTTPTestSessions{records: make(map[string]platformsecurity.SessionRecord)}, credentials, tc.reset)
+			status := httptest.NewRequest(http.MethodGet, "https://stocks.example.com/api/v1/owner/setup", nil)
+			statusRecorder := httptest.NewRecorder()
+			handler.ServeHTTP(statusRecorder, status)
+			if statusRecorder.Code != http.StatusOK || !strings.Contains(statusRecorder.Body.String(), tc.wantMode) {
+				t.Fatalf("setup status = %d %s, want %s", statusRecorder.Code, statusRecorder.Body.String(), tc.wantMode)
+			}
+			if tc.reset {
+				rawToken, digest, tokenErr := platformsecurity.NewSessionToken()
+				if tokenErr != nil {
+					t.Fatal(tokenErr)
+				}
+				_, csrfDigest, csrfErr := platformsecurity.NewCSRFToken()
+				if csrfErr != nil {
+					t.Fatal(csrfErr)
+				}
+				now := time.Now().UTC()
+				sessions := &ownerHTTPTestSessions{records: map[string]platformsecurity.SessionRecord{
+					digest: {Subject: "owner", CreatedAt: now, LastSeenAt: now, IdleExpiresAt: now.Add(time.Hour), AbsoluteExpiresAt: now.Add(24 * time.Hour), CredentialVersion: tc.credential.CredentialVersion, CSRFTokenDigest: csrfDigest},
+				}}
+				handler = newOwnerHTTPTestHandlerWithReset(t, sessions, credentials, tc.reset)
+				oldSession := httptest.NewRequest(http.MethodGet, "https://stocks.example.com/api/v1/owner/session", nil)
+				oldSession.Header.Set("Origin", "https://stocks.example.com")
+				oldSession.AddCookie(&http.Cookie{Name: "__Secure-owner_session", Value: rawToken, Path: "/api", Secure: true})
+				oldSessionRecorder := httptest.NewRecorder()
+				handler.ServeHTTP(oldSessionRecorder, oldSession)
+				if oldSessionRecorder.Code != http.StatusUnauthorized {
+					t.Fatalf("old Session during forced reset = %d %s, want 401", oldSessionRecorder.Code, oldSessionRecorder.Body.String())
+				}
+			}
+			login := httptest.NewRequest(http.MethodPost, "https://stocks.example.com/api/v1/owner/session", strings.NewReader(`{"password":"old"}`))
+			login.Header.Set("Content-Type", "application/json")
+			login.Header.Set("Origin", "https://stocks.example.com")
+			loginRecorder := httptest.NewRecorder()
+			handler.ServeHTTP(loginRecorder, login)
+			if loginRecorder.Code != http.StatusConflict || !strings.Contains(loginRecorder.Body.String(), "server.owner_password_setup_required") {
+				t.Fatalf("login during setup mode = %d %s, want forced setup rejection", loginRecorder.Code, loginRecorder.Body.String())
+			}
+			request := httptest.NewRequest(http.MethodPost, "https://stocks.example.com/api/v1/owner/setup", strings.NewReader(`{"new_password":"new-owner-password"}`))
+			request.Header.Set("Content-Type", "application/json")
+			request.Header.Set("Origin", "https://stocks.example.com")
+			recorder := httptest.NewRecorder()
+			handler.ServeHTTP(recorder, request)
+			if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), `"authenticated":true`) {
+				t.Fatalf("password setup = %d %s", recorder.Code, recorder.Body.String())
+			}
+			if credentials.credential.CredentialVersion != tc.wantVersion || credentials.credential.PasswordHash != "hash:new-owner-password" {
+				t.Fatalf("credential after setup = %+v", credentials.credential)
+			}
+			cookies := recorder.Result().Cookies()
+			if len(cookies) != 1 {
+				t.Fatalf("setup should establish a Session cookie")
+			}
+			current := httptest.NewRequest(http.MethodGet, "https://stocks.example.com/api/v1/owner/session", nil)
+			current.Header.Set("Origin", "https://stocks.example.com")
+			current.AddCookie(cookies[0])
+			currentRecorder := httptest.NewRecorder()
+			handler.ServeHTTP(currentRecorder, current)
+			if currentRecorder.Code != http.StatusOK {
+				t.Fatalf("new Session after setup = %d %s", currentRecorder.Code, currentRecorder.Body.String())
+			}
+			statusRecorder = httptest.NewRecorder()
+			handler.ServeHTTP(statusRecorder, httptest.NewRequest(http.MethodGet, "https://stocks.example.com/api/v1/owner/setup", nil))
+			if !strings.Contains(statusRecorder.Body.String(), `"mode":"login"`) {
+				t.Fatalf("setup mode should return to login after success: %s", statusRecorder.Body.String())
+			}
+		})
+	}
 }
 
 func TestOwnerSessionHTTPLoginRefreshCSRFAndLogout(t *testing.T) {

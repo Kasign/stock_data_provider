@@ -286,6 +286,57 @@ func (s *SessionLifecycleService) RotateSession(ctx context.Context, rawToken, r
 	return SessionIssue{Cookie: cookie, CSRFToken: csrf}, nil
 }
 
+// SetOwnerPassword initializes the first Owner credential or resets an existing
+// credential when the process was explicitly started with reset mode enabled.
+// Updating the credential version invalidates every previously issued Session.
+func (s *SessionLifecycleService) SetOwnerPassword(ctx context.Context, newPassword []byte, allowReset bool, requestID string) (SessionIssue, error) {
+	defer clear(newPassword)
+	if err := s.validateOperation(ctx, requestID); err != nil {
+		return SessionIssue{}, err
+	}
+	if len(newPassword) == 0 || len(newPassword) > 1024 {
+		return SessionIssue{}, platformfault.New(platformfault.ClassValidation, "server.invalid_owner_password", "new Owner password is invalid", nil)
+	}
+	hash, err := s.hasher.Hash(newPassword)
+	if err != nil {
+		return SessionIssue{}, platformfault.New(platformfault.ClassValidation, "server.owner_password_hash_failed", "Owner password could not be saved", err)
+	}
+	credential, err := s.credentials.GetOwnerCredential(ctx)
+	auditReason := "owner_credential_initialized"
+	auditEventType := platformsecurity.AuditSensitiveAction
+	if isCredentialNotFound(err) {
+		credential, err = s.credentials.InitializeOwnerCredential(ctx, hash)
+	} else if err == nil {
+		if !allowReset {
+			return SessionIssue{}, platformfault.New(platformfault.ClassConflict, "server.owner_password_setup_not_required", "Owner password setup is not required", nil)
+		}
+		credential, err = s.credentials.UpdateOwnerPassword(ctx, credential.CredentialVersion, hash)
+		auditReason = "owner_password_reset"
+		auditEventType = platformsecurity.AuditPasswordRecovered
+	}
+	if err != nil {
+		return SessionIssue{}, err
+	}
+	if credential.Subject != "owner" || credential.CredentialVersion == 0 || credential.PasswordHash == "" {
+		return SessionIssue{}, platformfault.New(platformfault.ClassInternal, "server.invalid_owner_credential", "Owner credential update returned invalid state", nil)
+	}
+	issue, digest, err := s.createSession(ctx, credential.CredentialVersion)
+	if err != nil {
+		return SessionIssue{}, err
+	}
+	if err := s.writeAudit(ctx, requestID, platformsecurity.AuditSessionCreated,
+		"owner", platformsecurity.AuditResultSuccess, platformsecurity.AuditSourceAnonymous, "owner_setup_session_created"); err != nil {
+		_ = s.sessions.Revoke(ctx, digest)
+		return SessionIssue{}, err
+	}
+	if err := s.writeAudit(ctx, requestID, auditEventType,
+		"owner", platformsecurity.AuditResultSuccess, platformsecurity.AuditSourceInternal, auditReason); err != nil {
+		_ = s.sessions.Revoke(ctx, digest)
+		return SessionIssue{}, err
+	}
+	return issue, nil
+}
+
 func (s *SessionLifecycleService) ChangePassword(ctx context.Context, currentPassword, newPassword []byte, requestID string) error {
 	defer clear(currentPassword)
 	defer clear(newPassword)

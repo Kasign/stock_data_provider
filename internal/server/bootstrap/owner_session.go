@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 
 	marketdataauthorization "example.com/stock-analysis-flow/internal/marketdata/authorization"
+	platformfault "example.com/stock-analysis-flow/internal/platform/fault"
 	platformsecurity "example.com/stock-analysis-flow/internal/platform/security"
 	quantapplication "example.com/stock-analysis-flow/internal/quant/application"
 	quantstorage "example.com/stock-analysis-flow/internal/quant/storage"
@@ -27,8 +29,55 @@ type dataAuthorizationPolicyManager interface {
 	Publish(context.Context, string, string, marketdataauthorization.DataAccessPolicy) (marketdataauthorization.CurrentPolicy, error)
 }
 
+type ownerSessionResetState struct {
+	mu       sync.RWMutex
+	required bool
+}
+
+func (s *ownerSessionResetState) Required() bool {
+	if s == nil {
+		return false
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.required
+}
+
+func (s *ownerSessionResetState) Complete() {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	s.required = false
+	s.mu.Unlock()
+}
+
+// ownerSessionCredentialGate prevents previously issued Sessions from being
+// accepted while this process is waiting for a configured password reset.
+type ownerSessionCredentialGate struct {
+	credentials platformsecurity.CredentialStore
+	resetState  *ownerSessionResetState
+}
+
+func (g ownerSessionCredentialGate) GetOwnerCredential(ctx context.Context) (platformsecurity.OwnerCredential, error) {
+	if g.resetState.Required() {
+		return platformsecurity.OwnerCredential{}, platformfault.New(platformfault.ClassUnauthenticated, "server.owner_password_reset_required", "Owner password reset is required", nil)
+	}
+	return g.credentials.GetOwnerCredential(ctx)
+}
+
+func (g ownerSessionCredentialGate) InitializeOwnerCredential(ctx context.Context, hash string) (platformsecurity.OwnerCredential, error) {
+	return g.credentials.InitializeOwnerCredential(ctx, hash)
+}
+
+func (g ownerSessionCredentialGate) UpdateOwnerPassword(ctx context.Context, version uint64, hash string) (platformsecurity.OwnerCredential, error) {
+	return g.credentials.UpdateOwnerPassword(ctx, version, hash)
+}
+
 type ownerSessionComposition struct {
 	lifecycle         *serversecurity.SessionLifecycleService
+	credentials       platformsecurity.CredentialStore
+	resetState        *ownerSessionResetState
 	researchflow      *researchflowOwnerComposition
 	authenticator     *serversecurity.SessionAuthenticator
 	policyManager     quantResultAccessPolicyManager
@@ -87,8 +136,10 @@ func newOwnerSessionComposition(
 	if err != nil {
 		return nil, fmt.Errorf("创建 Owner Session Lifecycle Service 失败: %w", err)
 	}
+	resetState := &ownerSessionResetState{required: cfg.ResetRequired}
+	sessionCredentials := ownerSessionCredentialGate{credentials: credentials, resetState: resetState}
 	authenticator, err := serversecurity.NewSessionAuthenticator(
-		sessions, credentials, serversecurity.SessionAuthenticatorConfig{
+		sessions, sessionCredentials, serversecurity.SessionAuthenticatorConfig{
 			Cookie:       cfg.Cookie,
 			PublicOrigin: cfg.PublicOrigin,
 			CSRFHeader:   cfg.CSRFHeader,
@@ -107,7 +158,7 @@ func newOwnerSessionComposition(
 		return nil, fmt.Errorf("创建 Quant Result Access Policy Manager 失败: %w", err)
 	}
 	return &ownerSessionComposition{
-		lifecycle: lifecycle, authenticator: authenticator,
-		policyManager: policyManager, cookie: cfg.Cookie,
+		lifecycle: lifecycle, credentials: credentials, resetState: resetState,
+		authenticator: authenticator, policyManager: policyManager, cookie: cfg.Cookie,
 	}, nil
 }
