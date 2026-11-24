@@ -454,3 +454,71 @@ Analysis 需要新增 namespace §analysis§，定义完整 V1。现有 Store �
 - Server Security Audit：1 张，V1。
 
 当前共 67 张业务表。模块 Schema 的第一轮最终结构盘点已完成。接下来进入实现前的收口审查：核对 Migration Runner 的 History 表定义、namespace 注册集合、各模块 seed 语句恢复语义、Data 物理校验调用位置、所有独立 Migration 入口及其调用方；审查通过后再开始生成各模块新 V1。字段语义/Provider 映射正确性不属于本次数据库 Schema 基线重建范围。
+
+## 11. Platform Migration Runner 与 Root Bootstrap 收口审查
+
+审计来源：§internal/platform/storage/storage.go§、§internal/server/migration/registry.go§、§internal/server/bootstrap/bootstrap.go§、§internal/server/bootstrap/owner_session_init.go§、§internal/server/resources/storage.go§。
+
+### 11.1 Migration History 当前行为
+
+当前 §platform_schema_migrations§ 字段：
+- namespace VARCHAR(64) ascii_bin
+- version BIGINT UNSIGNED
+- description VARCHAR(255)
+- checksum CHAR(64) ascii_bin
+- status VARCHAR(16)
+- failure_statement INT UNSIGNED
+- applied_at DATETIME(6) DEFAULT CURRENT_TIMESTAMP(6)
+- started_at DATETIME(6) NULL
+- finished_at DATETIME(6) NULL
+- failure_code VARCHAR(64) DEFAULT ''
+
+主键：(namespace,version)。
+
+当前执行时每个 namespace 都会尝试 CREATE TABLE IF NOT EXISTS，然后执行三条 ADD COLUMN IF NOT EXISTS 补齐 started_at、finished_at、failure_code。后面三条是旧 History 表兼容逻辑，应删除。§applied_at§ 在当前 Runner 的写入/读取路径中没有实际用途，属于旧记录时间字段；新 History 基线不再保留该字段，统一使用 started_at/finished_at 表示迁移执行时间。
+
+新 History 表应一次定义完整字段：namespace、version、description、checksum、status、failure_statement、started_at、finished_at、failure_code。保留 CREATE TABLE IF NOT EXISTS 用于首次建账本；这不是旧结构兼容。不要自动 ALTER 既有 History 表。
+
+### 11.2 Runner 的执行和失败语义
+
+1. §ApplyMigrations§ 为每个 namespace 获取独立 MariaDB advisory lock，并在专用物理连接上执行 SQL。
+2. 新版本执行前写入 running 记录；语句失败写入 failed、failure_statement、failure_code、finished_at；成功后改为 applied。
+3. 已存在 running/failed 状态时直接要求人工恢复，不会自动重跑。
+4. 已登记版本 checksum 改变、存在未知版本或中间版本缺失时拒绝执行。
+5. MariaDB DDL 可能隐式提交，不能依赖事务回滚；某个 namespace 中途失败时，需要人工检查该 namespace 已落地的对象。
+6. Registry 按 namespace 字典序逐个执行，遇首个失败停止；已成功的前序 namespace 保留。不存在跨 namespace 原子事务。
+7. §ValidateAppliedMigrations§ 是只读校验，不创建 History 表；Registry 的 §ValidateApplied§ 还会核对 namespace 和 version 集合必须精确匹配。因此当前 MIGRATION_ENABLED=false 且数据库没有 History 表时，报 “migration history could not be read” 是当前代码行为，不代表业务表一定不存在。
+8. Registry 当前只注册 8 个 namespace；新增 Analysis 后必须是 9 个。新部署第一次运行时，ApplyMigrations 自动创建 History 表并执行所有模块 V1。
+
+### 11.3 必须移除的旧入口
+
+- Data：§internal/marketdata/repository/mysql.go§ 的 §Store.Migrate()§ 直接调用 Platform Runner。统一 Registry 接管后删除此独立入口，并调整只为其服务的测试 setup。
+- Analysis：§internal/adapters/storage/mysqlredis/store.go§ 的 §initializeSchema()§ / §Migrate()§ 自动建表入口必须删除；Repository 构造函数不得隐式改 Schema。
+- Root：§bootstrap.Run()§ 现在先调用 §OpenLegacyAnalysisResources()§，其中先打开 SQL、Redis、HTTP Client 并创建 Analysis Store，之后才注册/执行 Migration。必须拆成 SQL-only migration connection 和完整应用资源构造两步。
+- Owner Init：§InitializeOwner()§ 现在也调用 §OpenLegacyAnalysisResources()§，并根据 MIGRATION_ENABLED 分支执行或只读校验。必须复用同一个 Database Bootstrap，先迁移再创建 Owner Credential。
+- §MIGRATION_ENABLED§ 和 §DB_AUTO_MIGRATE§ 从配置结构、加载器、错误信息、环境模板、部署脚本检查、部署说明中全部删除；§MIGRATION_TIMEOUT§ 保留。
+- Data 的 §ValidateCompatibilitySchema§ 改为最终物理 Schema 校验，Migration 完成后、Repository/Worker/HTTP 装配前执行。
+
+### 11.4 统一启动目标顺序
+
+1. 加载 Server/Data 配置。
+2. 只打开 MariaDB SQL 连接（不打开 Redis，不构造任何 Repository）。
+3. 注册所有模块 Migration（Data、News、Owner Credential、Research、Researchflow、Quant、Notification、Server Security Audit、Analysis）。
+4. 执行 Registry.RunWithReport，应用所有尚未应用的 V1；已 applied 的 V1 校验 checksum 并跳过。
+5. 对 Migration History、namespace/version/checksum 做精确校验。
+6. 执行 Data 最终物理 Schema 校验。
+7. 关闭 migration-only SQL 连接，或将其安全转交给完整 Resources；不能重复创建不同配置的连接池。
+8. 创建 Redis、共享 HTTP Client、Analysis Store 和其他模块 Repository。
+9. 装配 Application、Worker、Diagnostics、HTTP，最后启动服务。
+
+Owner Init 使用相同步骤 1–6；如果 Owner Credential 初始化本身只依赖 SQL，则无需创建 Redis/HTTP/Analysis Store。需在实现前检查 Owner Session Composition 的实际依赖，避免为了初始化一个凭据而启动完整 Server 资源。
+
+### 11.5 M1 完成结论
+
+- 全部 67 张业务表的模块归属和当前版本范围已盘点。
+- 多版本模块的最终字段/索引/约束和关键 Repository SQL 依赖已完成第一轮对照。
+- 三条必要的初始运行记录已确认：Researchflow Capacity Guard、Quant 初始禁用策略 Head、Notification Subscription Revision。
+- Migration History 的旧字段补齐逻辑和旧 applied_at 字段已定位。
+- Root/Owner Init 资源创建顺序和 Analysis/Data 独立迁移入口已定位。
+
+**M1 第一轮盘点完成。下一阶段 M2：将 Data、News、Researchflow、Quant、Notification 各自重建为完整单一 V1；Research、Owner Credential、Server Security Audit 保持现有 V1；新增 Analysis V1。** 生成后再统一调整 Migration Runner 和 Root Bootstrap，不在 Schema 基线尚未齐备时提前删除旧入口。
