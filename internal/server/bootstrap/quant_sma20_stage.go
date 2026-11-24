@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"sort"
 	"time"
 
 	marketdataapplication "example.com/stock-analysis-flow/internal/marketdata/application"
