@@ -112,7 +112,6 @@ func TestLoadSecurityRejectsMissingServiceSecret(t *testing.T) {
 	}
 }
 
-
 func TestLoadServiceCredentialsDoesNotRequireOwnerToken(t *testing.T) {
 	env := platformconfig.NewEnvWithLookup(func(key string) (string, bool) {
 		switch key {
