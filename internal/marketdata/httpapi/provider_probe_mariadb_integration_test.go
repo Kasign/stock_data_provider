@@ -18,8 +18,8 @@ import (
 	"example.com/stock-analysis-flow/internal/marketdata/normalize"
 	"example.com/stock-analysis-flow/internal/marketdata/provider"
 	"example.com/stock-analysis-flow/internal/marketdata/repository"
-	marketdatatestutil "example.com/stock-analysis-flow/internal/marketdata/testutil"
 	"example.com/stock-analysis-flow/internal/marketdata/service"
+	marketdatatestutil "example.com/stock-analysis-flow/internal/marketdata/testutil"
 )
 
 type httpProbeMariaDBDailyBarProvider struct {
@@ -103,7 +103,7 @@ func TestProviderProbeHTTPMariaDBEndToEnd(t *testing.T) {
 		t.Fatalf("open MariaDB: %v", err)
 	}
 	defer db.Close()
-	
+
 	postHandler := newHTTPProbeMariaDBHandler(store, left, right)
 	body := `{"scope":"all","capabilities":["daily_bars"],"checks":["cross_provider","storage"],"symbols":["600036.SH"],"daily_bar_start_date":"2026-10-29","daily_bar_end_date":"2026-10-29","daily_bar_adjustments":["backward_adjusted"],"timeout_seconds":5}`
 	postRequest := httptest.NewRequest(http.MethodPost, "/api/v1/data-sources/probe", bytes.NewBufferString(body))
