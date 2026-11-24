@@ -1175,3 +1175,14 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - `eb6c3d5e647d16a7bd21584a6a5d83ca683698f0` 的 Go Test Suite 与 Integration CI 均通过：Go Test `45389404306`，Integration `45389404103`。通过范围包含 root tests/race/vet、模块专项测试、Researchflow/Market Data/Research/Notification MariaDB 集成、Compose 校验和 Docker build。
 - 该结果只验收当前身份边界工作，不代表 SMA20 Stage 已生产注册或旧 Analysis 已退役。
 - 本阶段只完成服务身份前置边界，不代表 SMA20 生产 Stage 已接入，也不代表旧 Analysis 可以删除。后续继续 Data Snapshot 适配器、Quant Reader/Facade 装配、Stage Executor 多路分发、Output Registry 与正式 Template。
+
+
+## 2026-11-24 RA-02B Data → Quant SMA20 → Researchflow 首条生产 Stage 链
+
+- 当前实现已从身份准备推进到首个 Stage 注册：Server 组合根按 Data Provider inventory 装配 Quant SMA20 Stage、Stage Executor Dispatcher、合并 Output Registry 和 quant.sma20@1.0.0 Template。
+- Data Snapshot Adapter 使用 Run SystemAsOf 作为 PIT cutoff，并把 ResourcePolicy Provider allowlist 传入 Data；Data 查询/Repository 按 allowlist 过滤来源。Quant 只消费 Data Snapshot Creator/Authorized Reader，不访问 Data Repository。
+- principal:service:quant 仅注入 quant.sma20 Stage；data:read 缺失时 Worker Runtime fail closed。Data Owner Policy 仍是独立授权事实，不因凭据存在而自动 Allow。
+- 已有 Stage Executor 单测覆盖 Provider Policy、Data 授权拒绝、参数 Schema 和 Template 合同；Data Provider Filter 有对应单测/MariaDB测试。当前尚无完整 Worker→Data Snapshot→Quant Repository→Stage Output 的真实跨模块 MariaDB E2E。
+- 本阶段状态：生产装配代码已接入，尚未完成完整验收。当前 SHA 的 Go Test Suite / Integration CI 尚无可确认的 completed/success 结果；不得用前序 SHA 的 CI 通过记录替代。
+- 下一步优先完成 Run→Quant result_id 关联只读 Port 和 Quant AuthorizedResultReader，在同一可证明一致性边界内校验关联、当前策略版本并读取不可变结果；随后接 Research Context/Evidence、LLM、RiskDecision、完整报告结果和 WebUI。
+- 旧 Analysis Runner/Task Queue/API、Python Bridge、Python API Client、go-core 继续保留到新模板和 WebUI 全部接通后，再按 RA-08/RA-09 一次性删除。

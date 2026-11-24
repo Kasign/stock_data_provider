@@ -180,13 +180,13 @@ Server 生产组合根：
 |---|---|---|
 | News | 真实 News Search Provider、Stage Adapter、Validator、Template/Executor/Output Registry | 已装配；只覆盖候选新闻检索，不代表完整股票分析 |
 | Research | Context Application 的 CreateContext/GetContext、Context Schema/Storage；Researchflow 有 DTO 映射和 Context Assembly | 缺可信 CallerRef/当前授权 Adapter、Run.SystemAsOf 一致性校验、Server/Worker Stage 接线 |
-| Quant | GetResult 授权读取 Application、Trend/Risk Envelope；SMA20 CreateSMAService 精确 Decimal 计算/持久化；SMA20Adapter 已有 Stage 输入输出校验 | Facade/Adapter 已存在，但尚未进入 Server 生产 Stage Dispatcher、合并 Output Registry、参数 Schema 和正式 Template；Data Snapshot Creator/Authorized Reader Server Adapter、Quant Repository/Registry 装配、Run→result_id 结果关联与真实 MariaDB 端到端测试仍未闭环。不得把 Adapter 单测当作生产接入；读取必须走 Quant Application 授权和审计，不能访问 Repository 旁路 |
+| Quant | GetResult 授权读取 Application、Trend/Risk Envelope；SMA20 CreateSMAService 精确 Decimal 计算/持久化；SMA20Adapter 已进入 Server Stage Dispatcher、合并 Output Registry、参数 Schema 和 quant.sma20@1.0.0 Template；Data Snapshot Creator/Authorized Reader Adapter、Quant Repository/Registry 已装配 | 目前只有 SMA20 单指标生产 Stage 切片；缺完整 Worker→Data→Quant→StageOutput MariaDB E2E、Researchflow Run→result_id 强类型关联只读 Port、生产 AuthorizedResultReader、策略撤销一致性读取和 AccessAudit Server 装配。Trend/Risk/Factor 完整生产计算和完整股票研究 Template 仍未闭环。不得把 Stage 单测或模板注册当作端到端验收；结果读取必须走 Quant Application 授权和审计，不能访问 Repository 旁路 |
 | LLM | Provider.Generate/Stream、ModelRequest、Researchflow 预算/Tool Policy/结果映射 | 缺 Server 生产 Provider 注入、真实调用链和目标模型 Tokenizer；不能把估算器冒充生产 Tokenizer |
 | RiskDecision | Quant 的 `risk.Decision` 是 Quant 领域结果 | Researchflow Composer 仍接收独立 RiskDecision；唯一来源、字段映射、多结果聚合和关联身份未解决（RF-BLOCK-008） |
 | Data | 已有 DailyBars Close Series Snapshot Creator、Manifest/Payload 双指纹、授权签发和同一 MariaDB 事务内 Authorized Snapshot Reader | 代码能力已有，但 Root 尚未注入 Researchflow 消费者；服务 Principal/Owner Policy 管理入口与 Stage 输入/输出契约未闭环；DATA-CTR-007 仍 deferred。旧 AnalysisCollector 不使用该 Snapshot 链路且丢失关键 PIT/来源元数据 |
 | Notification | 已有 Run 终态 Outbox/Relay 相关能力 | 终态通知不应塞入同步 DAG；按独立事件消费链路接入 |
 
-Researchflow 的 Context Assembly、Quant Envelope Validator、Result Composer、Diagnostics Adapter 等内部构件，不等于真实生产 Stage。只有 Owner Facade、授权、输入输出 Schema/Golden、真实 Provider、Stage Executor、Registry 和 Server Worker 注入全部齐备，才能注册生产模板。
+Researchflow 的 Context Assembly、Quant Envelope Validator、Result Composer、Diagnostics Adapter 等内部构件，不等于完整股票研究能力。当前 quant.sma20 是首个已注册的 Quant 生产 Stage 切片；只有完整 Owner Facade、授权、输入输出 Schema/Golden、真实 Provider、Stage Executor、Registry、结果关联和 Server Worker 注入全部齐备，才能将其视为可交付的完整研究模板。
 
 ## 5.3 当前 WebUI 结果页依赖的完整报告字段
 
