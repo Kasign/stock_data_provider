@@ -52,17 +52,25 @@ func newResearchflowRuntimeComponent(
 	quantPrincipal *platformsecurity.Principal,
 ) (*researchflowRuntimeComponent, error) {
 	if composition == nil || composition.runRepository == nil || composition.newsStage == nil ||
-		composition.clock == nil || composition.ids == nil || !capacity.Configured ||
+		composition.clock == nil || composition.ids == nil || composition.stageExecutor == nil ||
+		composition.outputRegistries == nil || !capacity.Configured ||
 		capacity.MaxWorkers <= 0 || localWorkers <= 0 {
 		return nil, errors.New("Researchflow Runtime composition or capacity is invalid")
+	}
+	if composition.quantStage != nil && (quantPrincipal == nil ||
+		quantPrincipal.Kind != platformsecurity.IdentityService ||
+		quantPrincipal.AuthMethod != platformsecurity.AuthMethodServiceBearer ||
+		quantPrincipal.Subject != "quant" ||
+		!containsServiceScope(quantPrincipal.Scopes, platformsecurity.ScopeDataRead)) {
+		return nil, errors.New("Researchflow Runtime requires an explicit Quant service credential with data:read Scope when the Quant Stage is registered")
 	}
 
 	workerID, err := composition.ids.NewRef(context.Background(), "worker")
 	if err != nil {
 		return nil, fmt.Errorf("generate process-unique Researchflow Worker ID: %w", err)
 	}
-	stageExecutor := principalStageExecutor{quantPrincipal: quantPrincipal, next: composition.newsStage.executor}
-	worker, err := researchflowapplication.NewWorkerWithStageOutputRegistry(
+	stageExecutor := principalStageExecutor{quantPrincipal: quantPrincipal, next: composition.stageExecutor}
+	worker, err := researchflowapplication.NewWorkerWithStageOutputRegistryResolver(
 		composition.runRepository,
 		stageExecutor,
 		composition.clock,
@@ -70,7 +78,7 @@ func newResearchflowRuntimeComponent(
 			WorkerID: workerID, LeaseDuration: 30 * time.Second,
 			HeartbeatInterval: 10 * time.Second, MaxParallel: capacity.MaxWorkers,
 		},
-		composition.newsStage.registry,
+		composition.outputRegistries,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create Researchflow Worker: %w", err)
