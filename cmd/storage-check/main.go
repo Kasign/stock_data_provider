@@ -25,11 +25,7 @@ func main() {
 		fail(err)
 	}
 	defer store.Close()
-	if cfg.DBAutoMigrate {
-		fmt.Println("MariaDB/Redis 连接成功；DB_AUTO_MIGRATE=true，已执行数据库迁移（幂等）。")
-	} else {
-		fmt.Println("MariaDB/Redis 连接成功；DB_AUTO_MIGRATE=false，未执行数据库迁移。")
-	}
+	fmt.Println("MariaDB/Redis 连接成功；此检查命令不执行数据库迁移，Schema 由 Root Server 启动流程统一管理。")
 	if err := store.SelfTest(ctx); err != nil {
 		fail(err)
 	}
