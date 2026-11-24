@@ -2,7 +2,7 @@
 
 - 仓库：`Kasign/stock_data_provider`
 - 核对分支：`repair_all`
-- 核对基线：`8be3b57306fad9df39a923945f3df6f11790f683`
+- 核对基线：`dfaad086d992ed7bfaefde17ff5745e7c48ab78c`
 - 核对日期：2026-11-24
 - 状态：**盘点完成；业务生产链路未就绪；尚未切换、尚未删除旧接口**
 - 目标：WebUI 业务任务统一使用 SRV-CTR-001 Researchflow API 和 Owner Session；不保留旧 Analysis API 的浏览器兼容入口，不增加 Bearer/Session 双认证。
@@ -109,6 +109,21 @@ SRV-CTR-001 v1.0.0（FROZEN）定义的唯一 WebUI 业务执行 API：
 ### 独立 Go Core 的边界
 
 `go-core/cmd/analysisd` 与 `go-core/internal/transport/http/server.go` 还暴露 `/internal/v1/analysis/stock`、`stocks`、`market-review` 三类内部工作流端点；它们由独立的 StockFlow/MarketReviewFlow 组合，并依赖 Python Bridge 和独立配置。当前 Root Server 的 `/api/v1/analysis/tasks` 并不直接调用这组 go-core HTTP 端点，而是走本节上述 `internal/analysis` + `platform/taskqueue`。后续盘点或迁移不得把两套旧实现混为同一个当前生产调用链。
+### 独立 Python API Adapter 的边界
+
+这条链与 Go Core 使用的 Python Bridge 不同，不能合并统计：
+
+- `internal/adapters/pythonapi` 中的 `Client` 访问独立旧 Python API，支持 Quote、History、Profile 和 DataOverview。
+- `internal/adapters/pythonapi.Collector` 实现旧 `internal/analysis/app.DataCollector`，但当前 Root Server Bootstrap 没有构造它；Root 旧 Analysis 实际使用 `servermarketdata.NewAnalysisCollector(marketDataModule.Application(), ...)`。
+- 当前确认的直接命令调用点是 `cmd/pythonapi-smoke`，用于人工连通性/响应契约检查，不运行生产分析 Runner。
+- 因此，源码中存在 Python API Adapter 不等于 Root Server 生产链依赖它；也不能据此断言外部脚本或目标环境没有调用者。退役前仍需完成全仓库调用点复核和目标环境只读核验。
+
+### 当前标准部署与源码保留状态
+
+- 根 `docker-compose.yml` 只定义 `stock-analysis-server` 和 `stock-analysis-web`；`scripts/deploy-go.sh` 也只构建、启动这两个服务。
+- `go-core/Dockerfile` 与 `python_bridge/Dockerfile` 是独立构建入口；`go-core/go.mod` 是嵌套独立 Go Module，不属于 Root Server 的 Go 包依赖。
+- 标准部署脚本会在部署前阻断仍运行的 `stock-analysis-go`、`stock-market-data`、`stock-analysis-data` 旧容器；但根 Compose 未定义 Go Core/Python Bridge 服务，脚本也不能证明目标主机上不存在手工部署的 `analysisd` 或 `python-bridge`。
+- 目标环境是否仍有旧容器、systemd 进程、外部调用方或流量，必须在可访问部署主机时只读核验；本次源码检查不把“未出现在标准 Compose”误判为“生产已无调用”。
 
 ## 4. Root Server 路由盘点
 
@@ -229,19 +244,26 @@ Researchflow 的 Context Assembly、Quant Envelope Validator、Result Composer�
 
 ## 9. 本轮验证与未完成事项
 
-- 分支/HEAD：`repair_all` / `8be3b57306fad9df39a923945f3df6f11790f683`。
+- 分支/HEAD：`repair_all` / `dfaad086d992ed7bfaefde17ff5745e7c48ab78c`。本轮相对用户提供的 `f2d210c515df7cb60cec7b28d1ba582033b54dff` 基线前进 13 个提交；其中 12 个提交仅新增/修正 Quant SMA 能力，最新 1 个提交增加 Researchflow 按 Run 版本解析 Stage Output Registry 的能力。
 - SRV-CTR-001 文档状态 FROZEN；SRV-CTR-002 当前文档标记 freeze-ready。
 - 生产模板盘点：仅 News Search 一项。
 - 页面主流程：仍调用旧 Analysis API。
 - 新 Researchflow helper：已存在但未被 app 主流程使用。
 - 旧 Root 路由：仍存在，Owner Bearer 认证。
-- 本次只完成代码/契约盘点，未修改生产代码，未切换页面，未删除旧路由。
+- 当前 HEAD 的代码核查确认：Root Server 仍装配旧 Analysis Runner/Task Queue/Worker/HTTP API；WebUI 主流程仍调用旧 Analysis API；Researchflow helper 尚未接入页面；Root Server Researchflow Worker 当前仍只装配 News Search Stage/Template。Data Module 与 Data Owner Policy 已进入 Root Server，但 Data Authorized Snapshot Reader 尚未接入 Researchflow Worker；Research News 组合依赖 Key Ring 装配，但当前没有 Stage/HTTP 用例消费；Quant Policy 管理已装配，SMA 生产 Facade 尚未进入 Server/Researchflow 组合；LLM 未见生产 Provider 注入；Notification 通过终态 Outbox/Relay 接入，不应作为同步 DAG Stage。
 
-### 独立 CI 观察（该 SHA）
+### 历史 CI 观察（8be3b57306fad9df39a923945f3df6f11790f683）
 
 - WebUI checks 失败：519 个测试中 1 个失败，测试为 `UIR-2 typography roles use semantic tokens without changing their baseline values`，断言仍要求旧 CSS 规则选择器/声明形式；需核对当前 CSS 与测试契约后修复，不能简单放宽断言。
 - WebUI browser smoke 失败：Screening CSSOM baseline 发生真实计算样式差异；例如 320/768/1280/1600 视口下 `select-all` 宽度由基线 90px 变为 111px，`selected-count` 57.58px 变为 71.58px，`add-watchlist-button` 84px 变为 102px。需判断这是预期文案/布局变化还是回归，不能直接刷新 Golden 掩盖变化。
 - Integration CI 的 Go format/vet/test、Quant MariaDB、News/Research/Researchflow 集成、Worker Bootstrap、go-core tests、Compose、WebUI image build 等前置步骤均通过；最终 Summary 因 WebUI 检查失败而失败。该结论不等于完整 Integration CI 通过。
+
+### 当前 HEAD CI 状态（dfaad086d992ed7bfaefde17ff5745e7c48ab78c）
+
+- Go test suite：Run `45379809366`，当前 `in_progress`。
+- Integration CI：Run `45379809512`，当前 `in_progress`。
+- 前一 HEAD `65fc6a3ff2ebbf6fde8b464a2018fa38fa17f6fd` 的 Quant module validation 与 Go test suite 均 `success`；Integration CI Run `45379025719` 为 `failure`。不能将前一 SHA 的通过结果视为当前 HEAD 的完整验收。
+- 本轮未连接部署主机；容器/进程/外部调用者状态仍未核实。
 
 ## 10. 当前执行结论
 
