@@ -113,15 +113,21 @@ func buildQuantSMA20WorkflowTemplate(stage *quantSMA20StageComposition, policies
 	}
 	parameters := json.RawMessage(`{"symbol":"600036.SH","start_date":"2026-10-01","end_date":"2026-10-30","limit":20}`)
 	schemaSnapshot, err := stage.parameterSchemas.Validate(context.Background(), quantSMA20ParameterSchemaRef, parameters)
-	if err != nil || schemaSnapshot.Ref != quantSMA20ParameterSchemaRef ||
-		schemaSnapshot.Version != quantSMA20ParameterSchemaVersion || len(schemaSnapshot.Fingerprint) != 64 {
+	if err != nil {
 		return template.WorkflowTemplate{}, fmt.Errorf("validate Quant SMA20 parameter Schema: %w", err)
+	}
+	if schemaSnapshot.Ref != quantSMA20ParameterSchemaRef ||
+		schemaSnapshot.Version != quantSMA20ParameterSchemaVersion || len(schemaSnapshot.Fingerprint) != 64 {
+		return template.WorkflowTemplate{}, errors.New("Quant SMA20 parameter Schema returned an inconsistent immutable snapshot")
 	}
 	applicable, reason, err := stage.applicability.Evaluate(context.Background(), template.ApplicabilityRule{
 		RuleRef: quantSMA20ApplicabilityRuleRef, RuleVersion: quantSMA20ApplicabilityVersion,
 	}, parameters)
-	if err != nil || !applicable || reason != "" {
+	if err != nil {
 		return template.WorkflowTemplate{}, fmt.Errorf("evaluate Quant SMA20 applicability rule: %w", err)
+	}
+	if !applicable || reason != "" {
+		return template.WorkflowTemplate{}, errors.New("Quant SMA20 applicability preflight did not accept the validated parameters")
 	}
 	entry, ok := stage.registry.Entry(quantstage.SMA20StageCode, quantstage.SMA20OutputType, quantstage.SMA20SchemaVersion)
 	if !ok || entry.PayloadSchemaRef != quantSMA20PayloadSchemaRef ||
@@ -214,6 +220,10 @@ func (executor quantSMA20StageExecutor) ExecuteStage(ctx context.Context, reques
 			}, nil
 		case errors.Is(err, marketdataapplication.ErrDataAuthorizationDenied):
 			return failedQuantSMA20Stage("data_authorization_denied"), nil
+		case errors.Is(err, marketdataapplication.ErrDataAuthorizationUnavailable):
+			return failedQuantSMA20Stage("data_authorization_unavailable"), nil
+		case errors.Is(err, marketdataapplication.ErrDataAuthorizationInvalid):
+			return failedQuantSMA20Stage("data_authorization_reference_invalid"), nil
 		default:
 			return failedQuantSMA20Stage("quant_sma20_execution_failed"), nil
 		}
@@ -263,8 +273,8 @@ func resolveQuantDailyBarsProviders(snapshot resourcepolicy.Snapshot) ([]string,
 	if err := registry.ValidateSnapshot(snapshot); err != nil {
 		return nil, err
 	}
-	if !containsQuantProviderCode(snapshot.AllowedProviderCodes, quantstage.SMA20ProviderCode) {
-		return nil, resourcepolicy.ErrNoProviders
+	if len(snapshot.AllowedProviderCodes) != 1 || snapshot.AllowedProviderCodes[0] != quantstage.SMA20ProviderCode {
+		return nil, resourcepolicy.ErrInvalidInventory
 	}
 	return append([]string(nil), snapshot.AllowedProviderCodes...), nil
 }
