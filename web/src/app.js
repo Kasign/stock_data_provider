@@ -249,7 +249,7 @@ function syncThemeControl(theme, persistenceWarning = false) {
 
 function setMobileNavigationOpen(open, { restoreFocus = false } = {}) {
   const wasOpen = $(".sidebar").classList.contains("is-open");
-  const isOpen = Boolean(open) && window.innerWidth <= 600;
+  const isOpen = Boolean(open) && window.innerWidth <= 700;
   $(".sidebar").classList.toggle("is-open", isOpen);
   $("#mobile-nav-overlay").hidden = !isOpen;
   document.body.classList.toggle("mobile-nav-open", isOpen);
@@ -4940,7 +4940,7 @@ document.addEventListener("keydown", (event) => {
     return;
   }
 
-  if (window.innerWidth > 600) return;
+  if (window.innerWidth > 700) return;
   const sidebar = $(".sidebar");
   if (!sidebar.classList.contains("is-open")) return;
   const focusable = [...sidebar.querySelectorAll(
@@ -4961,7 +4961,7 @@ document.addEventListener("keydown", (event) => {
   }
 });
 window.addEventListener("resize", () => {
-  if (window.innerWidth > 600) setMobileNavigationOpen(false);
+  if (window.innerWidth > 700) setMobileNavigationOpen(false);
 });
 window.addEventListener("hashchange", () => {
   const requestedView = window.location.hash.slice(1);
