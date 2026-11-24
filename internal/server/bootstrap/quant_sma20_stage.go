@@ -55,6 +55,9 @@ func newQuantSMA20StageComposition(
 	if containsQuantProviderCode(providers, quantstage.SMA20ProviderCode) {
 		allowedProviderCodes = []string{quantstage.SMA20ProviderCode}
 	}
+	if len(allowedProviderCodes) == 0 {
+		return nil, nil
+	}
 	dataAdapter, err := newQuantDataSnapshotAdapter(dataModule)
 	if err != nil {
 		return nil, fmt.Errorf("create Quant Data Snapshot adapter: %w", err)
@@ -99,7 +102,7 @@ func newQuantSMA20StageComposition(
 		registry:         registry,
 		parameterSchemas: parameterSchemas,
 		applicability:    quantSMA20ApplicabilityEvaluator{},
-		providerCodes:    []string{quantstage.SMA20ProviderCode},
+		providerCodes:    append([]string(nil), allowedProviderCodes...),
 	}, nil
 }
 

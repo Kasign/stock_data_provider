@@ -17,10 +17,10 @@ import (
 
 type quantSMA20StageAdapterStub struct {
 	request quantstage.SMA20Request
-	output quantstage.SMA20Output
+	output  quantstage.SMA20Output
 	quality quantstage.SMA20QualitySummary
-	err error
-	calls int
+	err     error
+	calls   int
 }
 
 func (stub *quantSMA20StageAdapterStub) Execute(_ context.Context, request quantstage.SMA20Request) (quantstage.SMA20Output, quantstage.SMA20QualitySummary, error) {
@@ -41,9 +41,9 @@ func TestQuantSMA20StageExecutorUsesImmutableProviderPolicyAndPersistsOutputCont
 	adapter := &quantSMA20StageAdapterStub{
 		output: quantstage.SMA20Output{
 			SchemaVersion: quantstage.SMA20SchemaVersion,
-			ResultID: "quant_result:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-			SnapshotRef: "data_snapshot:sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-			MetricCode: "sma", Value: json.RawMessage(`"43.1200"`), Unit: "CNY/share", Period: "20d",
+			ResultID:      "quant_result:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			SnapshotRef:   "data_snapshot:sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+			MetricCode:    "sma", Value: json.RawMessage(`"43.1200"`), Unit: "CNY/share", Period: "20d",
 			MetricStatus: "available", SampleCount: 20, TradeDate: "2026-10-30",
 			SystemAsOf: "2026-11-20T08:00:00Z", QualityStatus: "valid", ResultStatus: "completed",
 		},
@@ -55,9 +55,9 @@ func TestQuantSMA20StageExecutorUsesImmutableProviderPolicyAndPersistsOutputCont
 	}
 	executor := quantSMA20StageExecutor{adapter: adapter}
 	result, err := executor.ExecuteStage(context.Background(), researchflowapplication.StageExecutionRequest{
-		Stage: researchflowdomain.Stage{Code: quantstage.SMA20StageCode},
-		Parameters: json.RawMessage(`{"symbol":"600036.SH","start_date":"2026-10-01","end_date":"2026-10-30","limit":20}`),
-		SystemAsOf: time.Date(2026, 11, 20, 8, 0, 0, 0, time.UTC),
+		Stage:          researchflowdomain.Stage{Code: quantstage.SMA20StageCode},
+		Parameters:     json.RawMessage(`{"symbol":"600036.SH","start_date":"2026-10-01","end_date":"2026-10-30","limit":20}`),
+		SystemAsOf:     time.Date(2026, 11, 20, 8, 0, 0, 0, time.UTC),
 		ResourcePolicy: policy,
 	})
 	if err != nil {
@@ -91,9 +91,9 @@ func TestQuantSMA20StageExecutorRejectsWrongProviderPolicyBeforeCallingAdapter(t
 	adapter := &quantSMA20StageAdapterStub{}
 	result, err := (quantSMA20StageExecutor{adapter: adapter}).ExecuteStage(
 		context.Background(), researchflowapplication.StageExecutionRequest{
-			Stage: researchflowdomain.Stage{Code: quantstage.SMA20StageCode},
-			Parameters: json.RawMessage(`{"symbol":"600036.SH","start_date":"2026-10-01","end_date":"2026-10-30","limit":20}`),
-			SystemAsOf: time.Date(2026, 11, 20, 8, 0, 0, 0, time.UTC),
+			Stage:          researchflowdomain.Stage{Code: quantstage.SMA20StageCode},
+			Parameters:     json.RawMessage(`{"symbol":"600036.SH","start_date":"2026-10-01","end_date":"2026-10-30","limit":20}`),
+			SystemAsOf:     time.Date(2026, 11, 20, 8, 0, 0, 0, time.UTC),
 			ResourcePolicy: policy,
 		},
 	)
@@ -118,9 +118,9 @@ func TestQuantSMA20StageExecutorMapsDataAuthorizationDenialToNonRetryableFailure
 	adapter := &quantSMA20StageAdapterStub{err: marketdataapplication.ErrDataAuthorizationDenied}
 	result, err := (quantSMA20StageExecutor{adapter: adapter}).ExecuteStage(
 		context.Background(), researchflowapplication.StageExecutionRequest{
-			Stage: researchflowdomain.Stage{Code: quantstage.SMA20StageCode},
-			Parameters: json.RawMessage(`{"symbol":"600036.SH","start_date":"2026-10-01","end_date":"2026-10-30","limit":20}`),
-			SystemAsOf: time.Date(2026, 11, 20, 8, 0, 0, 0, time.UTC),
+			Stage:          researchflowdomain.Stage{Code: quantstage.SMA20StageCode},
+			Parameters:     json.RawMessage(`{"symbol":"600036.SH","start_date":"2026-10-01","end_date":"2026-10-30","limit":20}`),
+			SystemAsOf:     time.Date(2026, 11, 20, 8, 0, 0, 0, time.UTC),
 			ResourcePolicy: policy,
 		},
 	)
@@ -146,9 +146,9 @@ func TestQuantSMA20StageExecutorRejectsUnknownParameters(t *testing.T) {
 	adapter := &quantSMA20StageAdapterStub{}
 	result, err := (quantSMA20StageExecutor{adapter: adapter}).ExecuteStage(
 		context.Background(), researchflowapplication.StageExecutionRequest{
-			Stage: researchflowdomain.Stage{Code: quantstage.SMA20StageCode},
-			Parameters: json.RawMessage(`{"symbol":"600036.SH","start_date":"2026-10-01","end_date":"2026-10-30","limit":20,"unexpected":true}`),
-			SystemAsOf: time.Date(2026, 11, 20, 8, 0, 0, 0, time.UTC),
+			Stage:          researchflowdomain.Stage{Code: quantstage.SMA20StageCode},
+			Parameters:     json.RawMessage(`{"symbol":"600036.SH","start_date":"2026-10-01","end_date":"2026-10-30","limit":20,"unexpected":true}`),
+			SystemAsOf:     time.Date(2026, 11, 20, 8, 0, 0, 0, time.UTC),
 			ResourcePolicy: policy,
 		},
 	)
