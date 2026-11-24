@@ -12,7 +12,7 @@ import (
 	"example.com/stock-analysis-flow/internal/marketdata/cache"
 	"example.com/stock-analysis-flow/internal/marketdata/model"
 	"example.com/stock-analysis-flow/internal/marketdata/provider"
-	"example.com/stock-analysis-flow/internal/marketdata/repository"
+	marketdatatestutil "example.com/stock-analysis-flow/internal/marketdata/testutil"
 )
 
 // TestLiveHistoricalProviderProbe repeats the production Probe service path
@@ -51,14 +51,11 @@ func TestLiveHistoricalProviderProbe(t *testing.T) {
 	if mysqlDSN == "" {
 		t.Fatal("MARKET_DATA_TEST_MYSQL_DSN is required for production Probe persistence validation")
 	}
-	store, err := repository.OpenMySQL(context.Background(), mysqlDSN)
+	store, db, err := marketdatatestutil.OpenMariaDBStore(context.Background(), mysqlDSN)
 	if err != nil {
-		t.Fatalf("open MariaDB for production Probe: %v", err)
+		t.Fatalf("open and migrate MariaDB for production Probe: %v", err)
 	}
-	defer func() { _ = store.Close() }()
-	if err := store.Migrate(context.Background()); err != nil {
-		t.Fatalf("migrate MariaDB for production Probe: %v", err)
-	}
+	defer db.Close()
 
 	ds := NewWithCapabilities(
 		all, nil, bars, cache.NewDisabled(), store,
