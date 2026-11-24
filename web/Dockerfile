@@ -4,6 +4,7 @@ COPY nginx.conf /etc/nginx/nginx.conf
 COPY default.conf.template /etc/nginx/templates/default.conf.template
 COPY index.html /usr/share/nginx/html/index.html
 COPY styles.css /usr/share/nginx/html/styles.css
+COPY screening-local-batch.css /usr/share/nginx/html/screening-local-batch.css
 COPY src/ /usr/share/nginx/html/src/
 
 # The Root Server Docker service name is fixed by the single Compose deployment.
