@@ -8,7 +8,7 @@ const MigrationNamespace = "news"
 // 新数据库只执行一个 V1；后续正式发布的 Schema 变更从 V2 开始。
 func Migrations() []platformstorage.Migration {
 	return []platformstorage.Migration{{
-		Version: 1,
+		Version:     1,
 		Description: "create complete News schema baseline",
 		Statements: []string{
 			"CREATE TABLE news_items (\n\t\t\t\t\tnews_id VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n\t\t\t\t\torigin_source_id VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n\t\t\t\t\tcreated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),\n\t\t\t\t\tPRIMARY KEY (news_id),\n\t\t\t\t\tKEY idx_news_items_source_created (origin_source_id, created_at)\n\t\t\t\t) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
