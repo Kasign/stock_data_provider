@@ -291,6 +291,19 @@ func dailyBarRevisionHash(bar model.DailyBar) (string, error) {
 // already observed by the service at asOf. It deliberately returns different
 // providers independently; provider-priority resolution remains a service concern.
 func (s *Store) ListBarsAsOf(ctx context.Context, symbol, start, end string, adjust model.AdjustmentBasis, asOf time.Time, limit int) ([]model.DailyBar, error) {
+	return s.listBarsAsOf(ctx, symbol, start, end, adjust, asOf, limit, nil)
+}
+
+// ListBarsAsOfFromSources restricts PIT reconstruction to the exact source allowlist
+// captured by the caller's immutable ResourcePolicy snapshot.
+func (s *Store) ListBarsAsOfFromSources(ctx context.Context, symbol, start, end string, adjust model.AdjustmentBasis, asOf time.Time, limit int, sources []string) ([]model.DailyBar, error) {
+	if !validDailyBarSourceAllowlist(sources) {
+		return nil, errors.New("daily-bar source allowlist must be canonical, sorted and unique")
+	}
+	return s.listBarsAsOf(ctx, symbol, start, end, adjust, asOf, limit, sources)
+}
+
+func (s *Store) listBarsAsOf(ctx context.Context, symbol, start, end string, adjust model.AdjustmentBasis, asOf time.Time, limit int, allowedSources []string) ([]model.DailyBar, error) {
 	if s == nil || s.db == nil {
 		return nil, errors.New("MariaDB store disabled")
 	}
@@ -314,7 +327,15 @@ WHERE v.symbol=? AND v.adjustment_basis=?
       AND (newer.recorded_at>v.recorded_at OR (newer.recorded_at=v.recorded_at AND newer.id>v.id))
   )
 ORDER BY v.trade_date DESC, v.recorded_at DESC, v.source ASC`
-	args := []any{symbol, string(adjust), start, start, end, end, asOfText, asOfText}
+	args := []any{symbol, string(adjust), start, start, end, end, asOfText}
+	if len(allowedSources) > 0 {
+		placeholders := strings.TrimRight(strings.Repeat("?,", len(allowedSources)), ",")
+		query = strings.Replace(query, "  AND NOT EXISTS (", "  AND v.source IN ("+placeholders+")\n  AND NOT EXISTS (", 1)
+		for _, source := range allowedSources {
+			args = append(args, source)
+		}
+	}
+	args = append(args, asOfText)
 	if limit > 0 {
 		// PIT 查询需要比较多个来源的同日修订后再择取一致的来源序列。
 		// 为多个 Provider 预留行数，避免 LIMIT 先截断低优先级来源而误判覆盖不足。
