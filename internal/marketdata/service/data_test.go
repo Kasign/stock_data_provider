@@ -4015,3 +4015,16 @@ func TestMarketDateNormalizationUsesInjectedClock(t *testing.T) {
 		})
 	}
 }
+
+
+func TestDailyBarsAsOfWithCoverageEvidenceFromSourcesRejectsInactiveProvider(t *testing.T) {
+	service := &DataService{}
+	_, _, _, err := service.DailyBarsAsOfWithCoverageEvidenceFromSources(
+		context.Background(), "600036.SH", "2026-10-01", "2026-10-30", 20,
+		model.AdjustmentNone, time.Date(2026, 11, 20, 8, 0, 0, 0, time.UTC),
+		[]string{"eastmoney"},
+	)
+	if err == nil || !strings.Contains(err.Error(), "not an active Data Provider") {
+		t.Fatalf("inactive Data Provider must be rejected, got %v", err)
+	}
+}
