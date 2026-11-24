@@ -31,6 +31,7 @@ func TestResearchflowOwnerCompositionBuildsInternalOwnerServices(t *testing.T) {
 		newsCfg,
 		serverconfig.ResearchflowCapacity{Configured: true, MaxQueuedRuns: 10, MaxWorkers: 2},
 		30*time.Minute,
+		nil,
 	)
 	if err != nil {
 		t.Fatal(err)
