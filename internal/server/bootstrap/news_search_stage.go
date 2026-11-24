@@ -131,6 +131,9 @@ func resolveNewsExecutionProviders(inventory newsapp.ProviderSet, snapshot resou
 	if err != nil {
 		return nil, err
 	}
+	if snapshot.PolicyRef != resourcepolicy.NewsSearchConfiguredProvidersRef {
+		return nil, fmt.Errorf("News ResourcePolicy snapshot has unexpected policy ref %q", snapshot.PolicyRef)
+	}
 	if err := registry.ValidateSnapshot(snapshot); err != nil {
 		return nil, fmt.Errorf("News ResourcePolicy snapshot is invalid: %w", err)
 	}
