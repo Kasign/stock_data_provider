@@ -103,7 +103,7 @@ const quantSMA20ParameterSchemaDocument = `{
   "title": "Quant SMA20 Parameters",
   "type": "object",
   "properties": {
-    "symbol": {"type": "string", "pattern": "^[0-9]{6}\\\\.(SH|SZ|BJ)$"},
+    "symbol": {"type": "string", "pattern": "^[0-9]{6}\\.(SH|SZ|BJ)$"},
     "start_date": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"},
     "end_date": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"},
     "limit": {"type": "integer", "minimum": 20, "maximum": 1000}
