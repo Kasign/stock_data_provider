@@ -16,6 +16,8 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 )
 
+const MigrationNamespace = "market_data"
+
 type Store struct {
 	db     *sql.DB
 	ownsDB bool
@@ -189,14 +191,6 @@ func MigrationDefinitions() []platformstorage.Migration {
 		},
 	}}
 }
-// Migrate 保留给独立 Data 命令使用；Root Server 应注册 MigrationDefinitions 到统一 Registry。
-func (s *Store) Migrate(ctx context.Context) error {
-	if s == nil || s.db == nil {
-		return nil
-	}
-	return platformstorage.ApplyMigrations(ctx, s.db, "market_data", MigrationDefinitions())
-}
-
 func (s *Store) SaveQuote(ctx context.Context, q *model.Quote) error {
 	if s == nil || s.db == nil {
 		return nil
