@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"example.com/stock-analysis-flow/internal/marketdata/model"
+	marketdatatestutil "example.com/stock-analysis-flow/internal/marketdata/testutil"
 	"example.com/stock-analysis-flow/internal/marketdata/normalize"
 	"example.com/stock-analysis-flow/internal/marketdata/provider"
 
@@ -21,11 +22,11 @@ func TestAdjustmentFactorsAsOfFallsBackToLatestProviderVisibleRevision(t *testin
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	store, closeStore, err := openMigratedMarketDataTestStore(ctx, dsn)
+	store, db, err := marketdatatestutil.OpenMariaDBStore(ctx, dsn)
 	if err != nil {
 		t.Fatalf("open and migrate MariaDB: %v", err)
 	}
-	defer closeStore()
+	defer db.Close()
 
 	symbol := "600519.SH"
 	fetchedV1 := time.Now().UTC()
@@ -71,11 +72,11 @@ func TestDailyBarsAsOfIncludesCarryInAdjustmentFactorBeforeRequestedStart(t *tes
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	store, closeStore, err := openMigratedMarketDataTestStore(ctx, dsn)
+	store, db, err := marketdatatestutil.OpenMariaDBStore(ctx, dsn)
 	if err != nil {
 		t.Fatalf("open and migrate MariaDB: %v", err)
 	}
-	defer closeStore()
+	defer db.Close()
 
 	const symbol = "600519.SH"
 	const source = "daily-bars-asof-carry-in-test"
@@ -123,11 +124,11 @@ func TestCorporateActionsAsOfFallsBackToLatestProviderVisibleRevision(t *testing
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	store, closeStore, err := openMigratedMarketDataTestStore(ctx, dsn)
+	store, db, err := marketdatatestutil.OpenMariaDBStore(ctx, dsn)
 	if err != nil {
 		t.Fatalf("open and migrate MariaDB: %v", err)
 	}
-	defer closeStore()
+	defer db.Close()
 
 	symbol := "600519.SH"
 	fetchedV1 := time.Now().UTC()
@@ -172,11 +173,11 @@ func TestSaveAdjustmentFactorsRejectsDuplicateIdentityInBatch(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	store, closeStore, err := openMigratedMarketDataTestStore(ctx, dsn)
+	store, db, err := marketdatatestutil.OpenMariaDBStore(ctx, dsn)
 	if err != nil {
 		t.Fatalf("open and migrate MariaDB: %v", err)
 	}
-	defer closeStore()
+	defer db.Close()
 
 	now := time.Now().UTC()
 	available := now.Add(-time.Minute)
@@ -223,11 +224,11 @@ func TestRefreshAdjustmentFactorsFallsBackFromEmptyAndInvalidProviderBatch(t *te
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	store, closeStore, err := openMigratedMarketDataTestStore(ctx, dsn)
+	store, db, err := marketdatatestutil.OpenMariaDBStore(ctx, dsn)
 	if err != nil {
 		t.Fatalf("open and migrate MariaDB: %v", err)
 	}
-	defer closeStore()
+	defer db.Close()
 
 	now := time.Now().UTC()
 	valid := model.AdjustmentFactor{
@@ -275,11 +276,11 @@ func TestRefreshAdjustmentFactorsStopsOnPersistenceFailure(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	store, closeStore, err := openMigratedMarketDataTestStore(ctx, dsn)
+	store, db, err := marketdatatestutil.OpenMariaDBStore(ctx, dsn)
 	if err != nil {
 		t.Fatalf("open and migrate MariaDB: %v", err)
 	}
-	defer closeStore()
+	defer db.Close()
 
 	now := time.Now().UTC()
 	valid := model.AdjustmentFactor{
@@ -318,11 +319,11 @@ func TestSaveCorporateActionsRejectsMissingSourceVersion(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	store, closeStore, err := openMigratedMarketDataTestStore(ctx, dsn)
+	store, db, err := marketdatatestutil.OpenMariaDBStore(ctx, dsn)
 	if err != nil {
 		t.Fatalf("open and migrate MariaDB: %v", err)
 	}
-	defer closeStore()
+	defer db.Close()
 
 	action := model.CorporateAction{
 		Symbol: "600519.SH", ProviderEventID: "missing-source-version",
