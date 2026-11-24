@@ -559,12 +559,12 @@ func newMigrationRegistry() (*servermigration.Registry, error) {
 	}{
 		{namespace: marketdatabootstrap.MigrationNamespace, migrations: marketdatabootstrap.MigrationDefinitions()},
 		{namespace: analysisstorage.MigrationNamespace, migrations: analysisstorage.Migrations()},
-		{namespace: "news", migrations: newsstorage.Migrations()},
+		{namespace: newsstorage.MigrationNamespace, migrations: newsstorage.Migrations()},
 		{namespace: platformsecurity.OwnerCredentialMigrationNamespace, migrations: platformsecurity.OwnerCredentialMigrations()},
 		{namespace: researchstorage.MigrationNamespace, migrations: researchstorage.Migrations()},
 		{namespace: researchflowstorage.MigrationNamespace, migrations: researchflowstorage.Migrations()},
 		{namespace: quantstorage.MigrationNamespace, migrations: quantstorage.Migrations()},
-		{namespace: "notification", migrations: notificationstorage.Migrations()},
+		{namespace: notificationstorage.MigrationNamespace, migrations: notificationstorage.Migrations()},
 		{namespace: serversecurity.SecurityAuditMigrationNamespace, migrations: serversecurity.SecurityAuditMigrations()},
 	}
 	for _, registration := range registrations {
