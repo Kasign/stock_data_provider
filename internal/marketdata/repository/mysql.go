@@ -162,7 +162,7 @@ WHERE table_schema = DATABASE() AND table_name = ? AND index_name = ? ORDER BY s
 // Fresh databases apply one V1. Future published schema changes start at V2.
 func MigrationDefinitions() []platformstorage.Migration {
 	return []platformstorage.Migration{{
-		Version: 1,
+		Version:     1,
 		Description: "create complete MarketData schema baseline",
 		Statements: []string{
 			"CREATE TABLE market_data_provider_probe_runs (\n id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,\n run_id VARCHAR(64) NOT NULL,\n started_at DATETIME(6) NOT NULL,\n finished_at DATETIME(6) NOT NULL,\n status VARCHAR(32) NOT NULL,\n metadata JSON NOT NULL,\n PRIMARY KEY (id),\n UNIQUE KEY uk_provider_probe_run_id (run_id),\n KEY idx_provider_probe_started_at (started_at)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
