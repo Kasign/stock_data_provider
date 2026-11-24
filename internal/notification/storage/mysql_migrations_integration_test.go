@@ -23,14 +23,8 @@ func TestNotificationMariaDBMigrationOrderAndIdempotencyIntegration(t *testing.T
 	defer db.Close()
 
 	migrations := Migrations()
-	if len(migrations) != 6 {
-		t.Fatalf("expected six immutable Notification migrations, got %d", len(migrations))
-	}
-	for index, migration := range migrations {
-		expected := uint64(index + 1)
-		if migration.Version != expected {
-			t.Fatalf("migration order is not contiguous: index=%d version=%d expected=%d", index, migration.Version, expected)
-		}
+	if len(migrations) != 1 || migrations[0].Version != 1 {
+		t.Fatalf("expected one complete Notification V1 baseline, got %#v", migrations)
 	}
 	if err := platformstorage.ApplyMigrations(ctx, db, "notification", migrations); err != nil {
 		t.Fatalf("first migration application failed: %v", err)
@@ -59,7 +53,23 @@ func TestNotificationMariaDBMigrationOrderAndIdempotencyIntegration(t *testing.T
 	if err := rows.Err(); err != nil {
 		t.Fatal(err)
 	}
-	if count != len(migrations) {
-		t.Fatalf("expected %d applied migrations, got %d", len(migrations), count)
+	if count != 1 {
+		t.Fatalf("expected one applied baseline migration, got %d", count)
+	}
+	var currentRevision uint64
+	if err := db.QueryRowContext(ctx, "SELECT current_revision FROM notification_subscription_revision WHERE singleton_id = 1").Scan(&currentRevision); err != nil {
+		t.Fatalf("read Notification revision seed: %v", err)
+	}
+	if currentRevision != 0 {
+		t.Fatalf("initial subscription revision = %d, want 0", currentRevision)
+	}
+	var redundantIndexCount int
+	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM information_schema.statistics
+		WHERE table_schema = DATABASE() AND table_name = 'notification_channel_config_versions'
+		AND index_name = 'idx_notification_channel_config_kind'`).Scan(&redundantIndexCount); err != nil {
+		t.Fatalf("inspect removed Notification index: %v", err)
+	}
+	if redundantIndexCount != 0 {
+		t.Fatal("redundant Notification channel config index was recreated")
 	}
 }
