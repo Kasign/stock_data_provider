@@ -389,3 +389,68 @@ Repository 对照：
 5. Notification V5 删除的冗余索引不得重新出现。Researchflow V2/V5 和 Quant V3/V4 的后续字段/索引必须并入各自完整 V1。
 
 本轮三个模块完成第一轮字段级盘点；尚需进一步审计每个模块全部 Repository 文件与查询参数/扫描列的逐一对应，并审查初始 seed 语句是否具备幂等/失败恢复语义。
+
+## 9. Research、Analysis、Owner Credential、Server Security Audit 字段级审计（第一轮完成）
+
+### 9.1 Research（6 张）
+
+来源：§internal/research/storage/migrations.go§，当前单一 V1；Repository 分布于 claim/context/event/evidence/outbox/repository 文件。
+
+| 表 | 字段 | 主键 / 索引 |
+|---|---|---|
+| §research_aggregate_heads§ | aggregate_type VARCHAR(32)、aggregate_id VARCHAR(255)、latest_version BIGINT UNSIGNED、created_at/updated_at DATETIME(6) | PK (aggregate_type,aggregate_id) |
+| §research_context_versions§ | context_id VARCHAR(255)、context_version BIGINT UNSIGNED、system_as_of CHAR(30) ascii_bin、payload_sha256 CHAR(64)、payload LONGTEXT、created_at DATETIME(6) | PK (context_id,context_version)；(context_id,system_as_of) |
+| §research_evidence_records§ | evidence_id VARCHAR(255)、source_owner VARCHAR(16)、source_ref VARCHAR(512)、source_version VARCHAR(191) NULL、available_at CHAR(30) NULL、system_observed_at/system_as_of CHAR(30) ascii_bin、quality_status/content_level VARCHAR(16)、authorization_ref VARCHAR(255)、content_fingerprint/payload_sha256 CHAR(64)、payload LONGTEXT、created_at DATETIME(6) | PK evidence_id；(source_owner,source_ref(191),source_version)；(system_as_of,available_at) |
+| §research_event_versions§ | event_id VARCHAR(255)、event_version BIGINT UNSIGNED、status VARCHAR(24)、system_as_of CHAR(30) ascii_bin、payload_sha256 CHAR(64)、payload LONGTEXT、created_at DATETIME(6) | PK (event_id,event_version)；(status,system_as_of) |
+| §research_claim_versions§ | claim_id VARCHAR(255)、claim_version BIGINT UNSIGNED、epistemic_type/status VARCHAR(24)、system_as_of CHAR(30) ascii_bin、payload_sha256 CHAR(64)、payload LONGTEXT、created_at DATETIME(6) | PK (claim_id,claim_version)；(status,system_as_of) |
+| §research_notification_outbox§ | event_id VARCHAR(255)、event_type VARCHAR(128)、schema_version/source_module VARCHAR(32)、occurred_at/published_at CHAR(30) ascii_bin、subject_ref/idempotency_key VARCHAR(512)、correlation_id VARCHAR(128)、payload_fingerprint CHAR(64) ascii_bin、payload LONGTEXT、delivery_status VARCHAR(16) DEFAULT pending、available_at CHAR(30) ascii_bin、lease_owner VARCHAR(128) NULL、lease_token CHAR(32) ascii_bin NULL、lease_until CHAR(30) ascii_bin NULL、attempt_count INT UNSIGNED DEFAULT 0、last_error_code VARCHAR(128) NULL、delivered_at CHAR(30) ascii_bin NULL、created_at/updated_at DATETIME(6) | PK event_id；UK (source_module,idempotency_key)；created_at；(delivery_status,available_at,created_at) |
+
+本模块目前只有 V1，没有后续 Migration 合并。Outbox 是模块内持久化事件交付状态，lease、attempt_count、delivery_status 等均属于当前完整 Schema，不应在基线重建时遗漏。未发现需要在 Schema Migration 阶段预置的业务记录。
+
+### 9.2 Analysis（4 张，新增 Registry namespace）
+
+来源：§internal/adapters/storage/mysqlredis/store.go§ 的旧 §Migrate()§。
+
+| 表 | 字段 | 主键 / 索引 / 外键 |
+|---|---|---|
+| §analysis_runs§ | run_id VARCHAR(64)、status VARCHAR(32)、task_type VARCHAR(64)、as_of/started_at DATETIME(6)、finished_at DATETIME(6) NULL、request_json LONGTEXT、result_json LONGTEXT NULL、created_at/updated_at DATETIME(6) | PK run_id；as_of；status |
+| §analysis_stage_events§ | id BIGINT UNSIGNED AUTO_INCREMENT、run_id VARCHAR(64)、stage VARCHAR(100)、status VARCHAR(32)、event_at DATETIME(6)、duration_ms BIGINT DEFAULT 0、event_json LONGTEXT、created_at DATETIME(6) | PK id；run_id；(run_id,stage)；FK run_id → analysis_runs，ON DELETE CASCADE |
+| §analysis_snapshots§ | snapshot_id VARCHAR(96)、run_id VARCHAR(64)、snapshot_type VARCHAR(32)、as_of DATETIME(6)、payload_json LONGTEXT、created_at DATETIME(6) | PK snapshot_id；run_id；(snapshot_type,as_of)；FK run_id → analysis_runs，ON DELETE CASCADE |
+| §analysis_tasks§ | task_id VARCHAR(64)、run_id VARCHAR(64)、status VARCHAR(24)、task_type VARCHAR(64)、request_json LONGTEXT、idempotency_key VARCHAR(128) NULL、current_stage VARCHAR(100) NULL、failure_code VARCHAR(100) NULL、error_message VARCHAR(300) NULL、created_at/updated_at DATETIME(6)、started_at/finished_at DATETIME(6) NULL | PK task_id；UK run_id；UK idempotency_key（可空）；(status,created_at) |
+
+Analysis 需要新增 namespace §analysis§，定义完整 V1。现有 Store 构造路径会调用 §initializeSchema()§，而 §Migrate()§ 独立创建上述表；统一 Registry 接入后必须删除这条隐式 Schema 路径。Analysis Store 仅在 Migration 成功后创建。
+
+### 9.3 Platform Owner Credential（1 张）
+
+来源：§internal/platform/security/credential_store.go§，namespace §platform.security§ V1。
+
+§platform_owner_credentials§：
+- 字段：§owner_id TINYINT UNSIGNED§、§password_hash VARCHAR(512) CHARACTER SET ascii COLLATE ascii_bin§、§credential_version BIGINT UNSIGNED§、§created_at/updated_at DATETIME(6)§。
+- PK owner_id；CHECK owner_id=1。
+- Repository 实际读写 password_hash 和 credential_version；初始化是单条 Owner Credential，密码采用 Argon2id PHC 编码。
+- 新基线应保留 CHECK 和字段字符集。不得把 password_hash 写入日志、诊断、普通 API 输出。
+
+### 9.4 Server Security Audit（1 张）
+
+来源：§internal/server/security/audit_writer.go§，namespace §server.security_audit§ V1。
+
+§server_security_audit_events§：
+- 字段：audit_id BIGINT UNSIGNED AUTO_INCREMENT、event_type VARCHAR(64) ascii_bin、subject VARCHAR(16) ascii_bin、result VARCHAR(16) ascii_bin、occurred_at DATETIME(6)、request_id VARCHAR(128) ascii_bin、source VARCHAR(16) ascii_bin、reason_code VARCHAR(128) ascii_bin。
+- PK audit_id。
+- 索引：(occurred_at,audit_id)、(subject,occurred_at,audit_id)、request_id。
+- Writer 只写入经过 Platform Security Audit Event.Validate() 校验的白名单字段。
+- 保留/归档策略尚未定义；本次不增加 TTL、自动删除或清理 Job。
+
+## 10. 全模块第一轮盘点汇总
+
+- Data / MarketData：17 张，V1–V9，已核对最终列、索引、关键外键、Repository SQL 依赖及 Schema 校验。
+- News：14 张，V1–V10，已核对最终字段演进、关键复合约束和 Repository SQL 依赖。
+- Researchflow：9 张，V1–V6，已核对最终字段、索引、外键及 Capacity Guard 初始记录。
+- Quant：5 张，V1–V5，已核对授权审计字段、策略 Head 和初始禁用状态。
+- Notification：10 张，V1–V6，已核对最终订阅 revision、fanout 工作项、冗余索引删除和单例初始记录。
+- Research：6 张，V1，已核对 Migration 最终定义。
+- Analysis：4 张，当前独立建表，已核对旧 DDL，待纳入新 namespace。
+- Platform Owner Credential：1 张，V1。
+- Server Security Audit：1 张，V1。
+
+当前共 67 张业务表。模块 Schema 的第一轮最终结构盘点已完成。接下来进入实现前的收口审查：核对 Migration Runner 的 History 表定义、namespace 注册集合、各模块 seed 语句恢复语义、Data 物理校验调用位置、所有独立 Migration 入口及其调用方；审查通过后再开始生成各模块新 V1。字段语义/Provider 映射正确性不属于本次数据库 Schema 基线重建范围。
