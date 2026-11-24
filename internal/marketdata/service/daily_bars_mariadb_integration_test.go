@@ -11,7 +11,7 @@ import (
 	"example.com/stock-analysis-flow/internal/marketdata/model"
 	"example.com/stock-analysis-flow/internal/marketdata/normalize"
 	"example.com/stock-analysis-flow/internal/marketdata/provider"
-	"example.com/stock-analysis-flow/internal/marketdata/repository"
+
 )
 
 func TestDailyBarsMariaDBFallbackPreservesNormalizationWarnings(t *testing.T) {
