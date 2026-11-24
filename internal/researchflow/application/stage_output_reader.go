@@ -35,32 +35,43 @@ type StageOutputResourceReader interface {
 	GetStageOutputResource(ctx context.Context, ref string) (StageOutputResource, error)
 }
 
+// AttemptReader reads an immutable execution attempt by its opaque reference.
+type AttemptReader interface {
+	GetAttempt(ctx context.Context, attemptRef string) (domain.Attempt, error)
+}
+
 var (
 	ErrStageOutputUnavailable = errors.New("Researchflow Stage Output is unavailable")
 	ErrStageOutputIntegrity   = errors.New("Researchflow Stage Output integrity check failed")
 	ErrInvalidStageOutputRead = errors.New("invalid Researchflow Stage Output read request")
 )
 
-// StageOutputExpectation pins the Stage and output contract expected by a trusted internal consumer.
+// StageOutputExpectation pins the Stage and both payload/quality output schemas expected by a trusted consumer.
 type StageOutputExpectation struct {
-	StageCode     string
-	OutputType    string
-	SchemaVersion string
-	SchemaRef     string
+	StageCode                string
+	OutputType               string
+	SchemaVersion            string
+	SchemaRef                string
+	QualitySummarySchemaRef  string
 }
 
-// GetStageOutputForRunStage resolves a successful Stage's persisted payload through the Run aggregate.
-// It never accepts a caller-supplied resource reference; the reference must come from the persisted Stage.
+// GetStageOutputForRunStage resolves a successful Stage's persisted payload through the Run, Attempt and resource records.
+// It never accepts a caller-supplied resource reference; both references must come from the persisted Stage.
 type GetStageOutputForRunStage struct {
-	runs    RunReader
-	outputs StageOutputResourceReader
+	runs     RunReader
+	attempts AttemptReader
+	outputs  StageOutputResourceReader
 }
 
-func NewGetStageOutputForRunStage(runs RunReader, outputs StageOutputResourceReader) (*GetStageOutputForRunStage, error) {
-	if runs == nil || outputs == nil {
+func NewGetStageOutputForRunStage(
+	runs RunReader,
+	attempts AttemptReader,
+	outputs StageOutputResourceReader,
+) (*GetStageOutputForRunStage, error) {
+	if runs == nil || attempts == nil || outputs == nil {
 		return nil, ErrInvalidStageOutputRead
 	}
-	return &GetStageOutputForRunStage{runs: runs, outputs: outputs}, nil
+	return &GetStageOutputForRunStage{runs: runs, attempts: attempts, outputs: outputs}, nil
 }
 
 func (reader *GetStageOutputForRunStage) Read(
@@ -68,10 +79,10 @@ func (reader *GetStageOutputForRunStage) Read(
 	runRef string,
 	expectation StageOutputExpectation,
 ) (StageOutputResource, error) {
-	if reader == nil || reader.runs == nil || reader.outputs == nil || ctx == nil ||
+	if reader == nil || reader.runs == nil || reader.attempts == nil || reader.outputs == nil || ctx == nil ||
 		!validStageOutputText(runRef) || !validStageOutputText(expectation.StageCode) ||
 		!validStageOutputText(expectation.OutputType) || !validStageOutputText(expectation.SchemaVersion) ||
-		!validStageOutputText(expectation.SchemaRef) {
+		!validStageOutputText(expectation.SchemaRef) || !validStageOutputText(expectation.QualitySummarySchemaRef) {
 		return StageOutputResource{}, ErrInvalidStageOutputRead
 	}
 	if err := ctx.Err(); err != nil {
@@ -95,8 +106,7 @@ func (reader *GetStageOutputForRunStage) Read(
 		}
 		selected = stage
 	}
-	if selected == nil || selected.RunRef != runRef || !validStageOutputText(selected.Ref) ||
-		selected.AttemptNo <= 0 {
+	if selected == nil || selected.RunRef != runRef || !validStageOutputText(selected.Ref) || selected.AttemptNo <= 0 {
 		return StageOutputResource{}, ErrStageOutputUnavailable
 	}
 	if selected.Status != domain.StageSucceeded && selected.Status != domain.StageDegraded {
@@ -106,7 +116,7 @@ func (reader *GetStageOutputForRunStage) Read(
 		selected.QualitySummaryRef == nil || !validStageOutputText(*selected.QualitySummaryRef) {
 		return StageOutputResource{}, ErrStageOutputUnavailable
 	}
-	resource, err := reader.outputs.GetStageOutputResource(ctx, *selected.OutputRef)
+	payload, err := reader.outputs.GetStageOutputResource(ctx, *selected.OutputRef)
 	if err != nil {
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return StageOutputResource{}, ctxErr
@@ -116,20 +126,60 @@ func (reader *GetStageOutputForRunStage) Read(
 	if err := ctx.Err(); err != nil {
 		return StageOutputResource{}, err
 	}
-	if resource.Ref != *selected.OutputRef || resource.RunRef != runRef ||
-		resource.StageRef != selected.Ref || resource.AttemptRef == "" ||
-		resource.Kind != "payload" || resource.StageCode != expectation.StageCode ||
-		resource.TemplateVersion != aggregate.Run.TemplateVersion ||
-		resource.RegistryVersion == "" || !validStageOutputFingerprint(resource.RegistryFingerprint) ||
-		resource.OutputType != expectation.OutputType ||
-		resource.SchemaVersion != expectation.SchemaVersion ||
-		resource.SchemaRef != expectation.SchemaRef ||
-		!validStageOutputCreatedAt(resource.CreatedAt) ||
-		len(resource.Content) == 0 || !json.Valid(resource.Content) {
+	if !validStageOutputResource(payload, *selected.OutputRef, "payload", expectation.SchemaRef,
+		runRef, aggregate.Run.TemplateVersion, selected.Ref, expectation) {
 		return StageOutputResource{}, ErrStageOutputIntegrity
 	}
-	resource.Content = append([]byte(nil), resource.Content...)
-	return resource, nil
+	attempt, err := reader.attempts.GetAttempt(ctx, payload.AttemptRef)
+	if err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return StageOutputResource{}, ctxErr
+		}
+		return StageOutputResource{}, fmt.Errorf("%w: linked Attempt is unavailable: %v", ErrStageOutputIntegrity, err)
+	}
+	expectedAttemptStatus := domain.AttemptSucceeded
+	if selected.Status == domain.StageDegraded {
+		expectedAttemptStatus = domain.AttemptDegraded
+	}
+	if attempt.Ref != payload.AttemptRef || attempt.StageRef != selected.Ref ||
+		attempt.Number != selected.AttemptNo || attempt.FencingToken == 0 ||
+		attempt.Status != expectedAttemptStatus || attempt.OutputRef == nil || *attempt.OutputRef != payload.Ref {
+		return StageOutputResource{}, ErrStageOutputIntegrity
+	}
+	quality, err := reader.outputs.GetStageOutputResource(ctx, *selected.QualitySummaryRef)
+	if err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return StageOutputResource{}, ctxErr
+		}
+		return StageOutputResource{}, fmt.Errorf("%w: linked quality summary is unavailable: %v", ErrStageOutputIntegrity, err)
+	}
+	if err := ctx.Err(); err != nil {
+		return StageOutputResource{}, err
+	}
+	if !validStageOutputResource(quality, *selected.QualitySummaryRef, "quality_summary",
+		expectation.QualitySummarySchemaRef, runRef, aggregate.Run.TemplateVersion, selected.Ref, expectation) ||
+		quality.AttemptRef != attempt.Ref || quality.RegistryVersion != payload.RegistryVersion ||
+		quality.RegistryFingerprint != payload.RegistryFingerprint || quality.CreatedAt != payload.CreatedAt {
+		return StageOutputResource{}, ErrStageOutputIntegrity
+	}
+	payload.Content = append([]byte(nil), payload.Content...)
+	return payload, nil
+}
+
+func validStageOutputResource(
+	resource StageOutputResource,
+	expectedRef, kind, schemaRef, runRef, templateVersion, stageRef string,
+	expectation StageOutputExpectation,
+) bool {
+	return resource.Ref == expectedRef && resource.RunRef == runRef &&
+		resource.StageRef == stageRef && validStageOutputText(resource.AttemptRef) &&
+		resource.Kind == kind && resource.StageCode == expectation.StageCode &&
+		resource.TemplateVersion == templateVersion &&
+		validStageOutputText(resource.RegistryVersion) && validStageOutputFingerprint(resource.RegistryFingerprint) &&
+		resource.OutputType == expectation.OutputType &&
+		resource.SchemaVersion == expectation.SchemaVersion && resource.SchemaRef == schemaRef &&
+		validStageOutputCreatedAt(resource.CreatedAt) &&
+		len(resource.Content) > 0 && json.Valid(resource.Content)
 }
 
 func validStageOutputText(value string) bool {
@@ -137,10 +187,12 @@ func validStageOutputText(value string) bool {
 }
 
 func validStageOutputFingerprint(value string) bool {
-	if len(value) != 64 || strings.ToLower(value) != value {
+	const prefix = "sha256:"
+	digest := strings.TrimPrefix(value, prefix)
+	if digest == value || len(digest) != 64 || strings.ToLower(digest) != digest {
 		return false
 	}
-	decoded, err := hex.DecodeString(value)
+	decoded, err := hex.DecodeString(digest)
 	return err == nil && len(decoded) == 32
 }
 

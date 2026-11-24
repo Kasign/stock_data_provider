@@ -54,7 +54,10 @@ func (r *MySQLRunRepository) GetStageOutputResource(ctx context.Context, ref str
 	return resource, nil
 }
 
-var _ application.StageOutputResourceReader = (*MySQLRunRepository)(nil)
+var (
+	_ application.StageOutputResourceReader = (*MySQLRunRepository)(nil)
+	_ application.AttemptReader             = (*MySQLRunRepository)(nil)
+)
 
 type StageOutputCommit struct {
 	Envelope                stageoutput.Envelope
