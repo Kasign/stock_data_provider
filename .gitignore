@@ -5,6 +5,7 @@
 *.test
 
 # Local configuration and secrets
+/secrets/
 .env
 .env.*
 !.env.example
