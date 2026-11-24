@@ -161,7 +161,6 @@ func newTestCreateSMAService(t *testing.T, reader CloseSeriesSnapshotReader, rep
 	return service
 }
 
-
 func validCreateSMASnapshot() CloseSeriesSnapshot {
 	bars := make([]CloseSeriesBar, 20)
 	for index := range bars {
@@ -175,7 +174,7 @@ func validCreateSMASnapshot() CloseSeriesSnapshot {
 		ManifestSchemaVersion: "2.0.0", PayloadSchemaVersion: "1.0.0", PayloadKind: "daily_bars_close_series",
 		CallerRef: "principal:service:researchflow", PurposeCode: "quant_analysis",
 		Sources: []CloseSeriesSource{{SourceRef: "eastmoney", ProviderInterfaceVersion: "eastmoney-stock-api-v1"}},
-		Symbol: "600000.SH", StartDate: "2026-10-01", EndDate: "2026-10-20",
+		Symbol:  "600000.SH", StartDate: "2026-10-01", EndDate: "2026-10-20",
 		AdjustmentBasis: "none", SystemAsOf: "2026-11-23T00:00:00Z", Interval: "1d",
 		TradingCalendarRef: "trading_calendar:sha256:" + strings.Repeat("b", 64),
 		QualityStatus:      "valid",
@@ -189,10 +188,10 @@ func validCreateSMASnapshot() CloseSeriesSnapshot {
 
 func validCreateSMARequest() CreateSMARequest {
 	return CreateSMARequest{
-		SnapshotRef:      "data_snapshot:sha256:" + strings.Repeat("a", 64),
-		AuthorizationRef: "data_authorization:sha256:" + strings.Repeat("c", 64),
-		SystemAsOf:       time.Date(2026, 11, 23, 0, 0, 0, 0, time.UTC),
-		Parameters:       json.RawMessage("{\"window\":20}"),
+		SnapshotRef:          "data_snapshot:sha256:" + strings.Repeat("a", 64),
+		AuthorizationRef:     "data_authorization:sha256:" + strings.Repeat("c", 64),
+		SystemAsOf:           time.Date(2026, 11, 23, 0, 0, 0, 0, time.UTC),
+		Parameters:           json.RawMessage("{\"window\":20}"),
 		AllowedProviderCodes: []string{"eastmoney"},
 	}
 }

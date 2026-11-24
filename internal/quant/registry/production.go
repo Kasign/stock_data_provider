@@ -3,10 +3,10 @@ package registry
 import "encoding/json"
 
 const (
-	ProductionSMA20Code = "sma"
-	ProductionSMA20SchemaVersion = "1.0.0"
+	ProductionSMA20Code             = "sma"
+	ProductionSMA20SchemaVersion    = "1.0.0"
 	ProductionSMA20AlgorithmVersion = "sma20-decimal-exact-v1"
-	ProductionSMA20Unit = "CNY/share"
+	ProductionSMA20Unit             = "CNY/share"
 )
 
 const productionSMA20ParametersSchema = "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"$id\":\"urn:kasign:quant:sma:1.0.0\",\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"window\"],\"properties\":{\"window\":{\"type\":\"integer\",\"const\":20}}}"
@@ -29,24 +29,24 @@ func NewProductionRegistry() (*Registry, error) {
 		Range: NumericRange{Unbounded: true},
 		AlgorithmVersion: ProductionSMA20AlgorithmVersion,
 		InputRequirements: []InputRequirement{{
-			Fields: []string{"close"},
-			Interval: "1d",
-			Adjustment: "none",
-			PIT: true,
-			Quality: []string{"valid"},
+			Fields:           []string{"close"},
+			Interval:         "1d",
+			Adjustment:       "none",
+			PIT:              true,
+			Quality:          []string{"valid"},
 			RequiresSnapshot: true,
 		}},
 		ParametersSchema: json.RawMessage(productionSMA20ParametersSchema),
 		QualityPolicy: QualityPolicy{
-			MinimumCoverage: 1,
-			MissingHandling: "reject",
-			QualityStates: []string{"valid"},
+			MinimumCoverage:       1,
+			MissingHandling:       "reject",
+			QualityStates:         []string{"valid"},
 			UnavailableConditions: []string{"insufficient_data"},
 		},
 		SampleCount: SampleCountPolicy{
 			RequiredInMetric: true,
-			Unit: "bar",
-			CountingRule: "window_bars",
+			Unit:             "bar",
+			CountingRule:     "window_bars",
 		},
 		SupportsInterval: false,
 	}
