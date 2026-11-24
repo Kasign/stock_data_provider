@@ -48,7 +48,7 @@ func (r *MySQLRunRepository) GetStageOutputResource(ctx context.Context, ref str
 		if errors.Is(err, sql.ErrNoRows) {
 			return application.StageOutputResource{}, errors.New("Researchflow Stage Output resource not found")
 		}
-		return StageOutputResource{}, fmt.Errorf("read Researchflow Stage Output resource: %w", err)
+		return application.StageOutputResource{}, fmt.Errorf("read Researchflow Stage Output resource: %w", err)
 	}
 	resource.Content = append([]byte(nil), resource.Content...)
 	return resource, nil
