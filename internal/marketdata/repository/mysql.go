@@ -67,9 +67,8 @@ func (s *Store) Ping(ctx context.Context) error {
 	return s.db.PingContext(ctx)
 }
 
-// ValidateCompatibilitySchema verifies the physical schema invariants introduced
-// by Data migrations V4-V6. Migration history checksums cannot detect manual schema drift.
-func (s *Store) ValidateCompatibilitySchema(ctx context.Context) error {
+// ValidateSchema verifies the final physical Data schema. Migration history checksums cannot detect manual schema drift.
+func (s *Store) ValidateSchema(ctx context.Context) error {
 	if s == nil || s.db == nil {
 		return nil
 	}
