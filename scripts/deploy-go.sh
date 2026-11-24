@@ -24,7 +24,7 @@ for legacy_container in stock-analysis-go stock-market-data; do
   if docker inspect "$legacy_container" >/dev/null 2>&1; then
     legacy_running="$(docker inspect --format='{{.State.Running}}' "$legacy_container" 2>/dev/null || printf 'false')"
     if [[ "$legacy_running" == "true" ]]; then
-      fail "检测到旧版容器 $legacy_container 仍在运行。请先按 README 的一次性迁移步骤停止并移除旧 Go 容器，再重试；外部 MariaDB/Redis 不受影响。"
+      fail "检测到旧版容器 $legacy_container 仍在运行。请先按 doc/开发部署说明.md 的旧容器迁移步骤停止并移除旧 Go 容器，再重试；外部 MariaDB/Redis 不受影响。"
     fi
   fi
 done
@@ -85,10 +85,26 @@ if [[ "$healthy" -ne 1 ]]; then
   fail "等待健康检查超时。"
 fi
 if ! curl -fsS http://127.0.0.1:8092/healthz >/dev/null; then print_logs; fail "容器健康检查通过，但宿主机无法访问 127.0.0.1:8092/healthz。"; fi
-if [[ -z "${PLATFORM_ADMIN_TOKEN:-}" ]]; then
-  fail ".env 必须配置 PLATFORM_ADMIN_TOKEN，Root /readyz 需要 Owner Bearer 运维认证。"
+# 从 .env 读取运维凭据，但不 source 整个文件，也不把 Token 放进 curl 命令行参数。
+PLATFORM_ADMIN_TOKEN="$(sed -n 's/^PLATFORM_ADMIN_TOKEN=//p' .env | tail -n 1)"
+PLATFORM_ADMIN_TOKEN="${PLATFORM_ADMIN_TOKEN%
+printf '\n统一部署启动成功。容器状态：\n'
+docker compose --env-file .env -f "$COMPOSE_FILE" ps
+printf '\n分析 API 健康检查：\n'
+curl -fsS http://127.0.0.1:8092/healthz
+curl_ready http://127.0.0.1:8092/readyz
+printf '\nWebUI 默认访问地址为 http://127.0.0.1:8093/（若修改了 WEBUI_PORT，请使用实际端口）。\n'
+printf '后续可查看日志：docker compose --env-file .env -f %s logs -f stock-analysis-server stock-analysis-web\n' "$COMPOSE_FILE"
+\\r'}"
+PLATFORM_ADMIN_TOKEN="${PLATFORM_ADMIN_TOKEN#\"}"
+PLATFORM_ADMIN_TOKEN="${PLATFORM_ADMIN_TOKEN%\"}"
+if [[ -z "$PLATFORM_ADMIN_TOKEN" ]]; then
+  fail ".env 必须配置未加引号的 PLATFORM_ADMIN_TOKEN，Root /readyz 需要 Owner Bearer 运维认证。"
 fi
-if ! curl -fsS -H "Authorization: Bearer ${PLATFORM_ADMIN_TOKEN}" http://127.0.0.1:8092/readyz >/dev/null; then print_logs; fail "分析 API 已启动，但认证后的 /readyz 未通过；请检查 MariaDB Migration/checksum、Data 物理 Schema 和 Redis 连接。"; fi
+curl_ready() {
+  printf 'header = "Authorization: Bearer %s"\\n' "$PLATFORM_ADMIN_TOKEN" | curl --config - -fsS "$1"
+}
+if ! curl_ready http://127.0.0.1:8092/readyz >/dev/null; then print_logs; fail "分析 API 已启动，但认证后的 /readyz 未通过；请检查 MariaDB Migration/checksum、Data 物理 Schema 和 Redis 连接。"; fi
 printf '\n统一部署启动成功。容器状态：\n'
 docker compose --env-file .env -f "$COMPOSE_FILE" ps
 printf '\n分析 API 健康检查：\n'
