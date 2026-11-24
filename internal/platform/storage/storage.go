@@ -261,7 +261,7 @@ func ApplyMigrations(ctx context.Context, db *sql.DB, namespace string, migratio
 		version BIGINT UNSIGNED NOT NULL,
 		description VARCHAR(255) NOT NULL,
 		checksum CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-		status VARCHAR(16) NOT NULL DEFAULT 'applied',
+		status VARCHAR(16) NOT NULL,
 		failure_statement INT UNSIGNED NOT NULL DEFAULT 0,
 		started_at DATETIME(6) NOT NULL,
 		finished_at DATETIME(6) NULL,
