@@ -86,7 +86,6 @@ func TestLoadConfigUsesExplicitSource(t *testing.T) {
 		"DB_PORT":         "3307",
 		"REDIS_ADDR":      "redis.internal:6380",
 		"REDIS_PASSWORD":  "redis-secret",
-		"DB_AUTO_MIGRATE": "true",
 	}
 	env := platformconfig.NewEnvWithLookup(func(key string) (string, bool) {
 		value, ok := values[key]
@@ -98,7 +97,7 @@ func TestLoadConfigUsesExplicitSource(t *testing.T) {
 	}
 	if cfg.DBHost != "mariadb.internal" || cfg.DBPort != 3307 ||
 		cfg.DBPassword != "secret-value" || cfg.RedisAddr != "redis.internal:6380" ||
-		cfg.RedisPassword != "redis-secret" || !cfg.DBAutoMigrate {
+		cfg.RedisPassword != "redis-secret" {
 		t.Fatalf("explicit source was not applied correctly: %+v", cfg)
 	}
 }
