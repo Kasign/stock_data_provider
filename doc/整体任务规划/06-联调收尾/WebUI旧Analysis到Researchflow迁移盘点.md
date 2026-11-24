@@ -96,6 +96,17 @@ SRV-CTR-001 v1.0.0（FROZEN）定义的唯一 WebUI 业务执行 API：
 
 **迁移含义：** 旧 Runner/TaskQueue 是现存业务链，不应因新 API helper 已存在就删除；但也不能把它直接包装成一个“通用 Researchflow Stage”来掩盖旧模块职责。迁移前必须逐项核对上述四类 Task 的输入默认值、实际计算阶段、输出字段、硬风险规则和数据时间语义，并决定哪些领域能力应迁入 Data/Quant/Research Owner Facade，哪些旧逻辑应淘汰。特别是不能把旧默认值（如 `paper-unconfigured`、`not-configured-v1`）直接当作新生产模板参数。
 
+### 旧 Task 类型的实际差异
+
+- WebUI 当前只开放 `post_market_scan` 和 `watchlist_scan`；`position_review` 在表单中 disabled；`historical_replay` 没有出现在当前创建表单中。
+- 旧 Runner 对四种类型均接受，但在当前 `internal/analysis/app/runner.go` 与 `internal/service/wiring.go` 中，只有 `historical_replay` 触发专门的 PIT 阻断分支。
+- `post_market_scan` 与 `watchlist_scan` 当前都使用同一个 Universe Resolver、DataCollector、Quality、Market、Factor、Strategy、Risk、Planner 流程；没有发现按这两个 TaskType 分叉的专属业务阶段。它们目前主要是请求元数据/产品命名差异，不能在迁移时直接假定为两个不同的计算引擎。
+- 因此阶段 A 的首要工作不是立即创建两个模板，而是确认这两个页面选项是否本来就应合并为一个“指定标的研究”任务，以及盘后市场复盘是否需要独立市场广度/指数/全市场输入链。只有真实输入与输出不同，才定义不同 Template。
+
+### 独立 Go Core 的边界
+
+`go-core/cmd/analysisd` 与 `go-core/internal/transport/http/server.go` 还暴露 `/internal/v1/analysis/stock`、`stocks`、`market-review` 三类内部工作流端点；它们由独立的 StockFlow/MarketReviewFlow 组合，并依赖 Python Bridge 和独立配置。当前 Root Server 的 `/api/v1/analysis/tasks` 并不直接调用这组 go-core HTTP 端点，而是走本节上述 `internal/analysis` + `platform/taskqueue`。后续盘点或迁移不得把两套旧实现混为同一个当前生产调用链。
+
 ## 4. Root Server 路由盘点
 
 文件：`internal/server/bootstrap/router.go`
