@@ -9,8 +9,8 @@ import (
 	"sync"
 	"time"
 
-	researchflowapplication "example.com/stock-analysis-flow/internal/researchflow/application"
 	platformsecurity "example.com/stock-analysis-flow/internal/platform/security"
+	researchflowapplication "example.com/stock-analysis-flow/internal/researchflow/application"
 	serverconfig "example.com/stock-analysis-flow/internal/server/config"
 )
 
@@ -374,4 +374,3 @@ func (e principalStageExecutor) ExecuteStage(ctx context.Context, request resear
 	}
 	return e.next.ExecuteStage(trustedContext, request)
 }
-
