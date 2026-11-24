@@ -87,9 +87,9 @@ type CloseSeriesSnapshotReader interface {
 }
 
 type CreateSMARequest struct {
-	SnapshotRef      string
-	AuthorizationRef string
-	SystemAsOf       time.Time
+	SnapshotRef          string
+	AuthorizationRef     string
+	SystemAsOf           time.Time
 	Parameters           json.RawMessage
 	AllowedProviderCodes []string
 }

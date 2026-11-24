@@ -16,17 +16,17 @@ const productionSMA20ParametersSchema = "{\"$schema\":\"https://json-schema.org/
 func NewProductionRegistry() (*Registry, error) {
 	registry := New()
 	entry := Entry{
-		Code: ProductionSMA20Code,
+		Code:          ProductionSMA20Code,
 		SchemaVersion: ProductionSMA20SchemaVersion,
-		ValueType: ValueTypeDecimalString,
-		Unit: ProductionSMA20Unit,
+		ValueType:     ValueTypeDecimalString,
+		Unit:          ProductionSMA20Unit,
 		Precision: Precision{
-			MaxIntegerDigits: 128,
+			MaxIntegerDigits:  128,
 			MaxFractionDigits: 128,
-			RoundingMode: "exact",
-			Tolerance: json.RawMessage("\"0\""),
+			RoundingMode:      "exact",
+			Tolerance:         json.RawMessage("\"0\""),
 		},
-		Range: NumericRange{Unbounded: true},
+		Range:            NumericRange{Unbounded: true},
 		AlgorithmVersion: ProductionSMA20AlgorithmVersion,
 		InputRequirements: []InputRequirement{{
 			Fields:           []string{"close"},
