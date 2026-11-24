@@ -133,3 +133,20 @@ func TestLoadServiceCredentialsDoesNotRequireOwnerToken(t *testing.T) {
 		t.Fatalf("unexpected service credentials: %#v", credentials)
 	}
 }
+
+
+func TestLoadServiceCredentialsRejectsUnsupportedScope(t *testing.T) {
+	env := platformconfig.NewEnvWithLookup(func(key string) (string, bool) {
+		switch key {
+		case "PLATFORM_SERVICE_CREDENTIALS":
+			return `[{"name":"quant","token_env":"QUANT_SERVICE_TOKEN","scopes":["data:write"]}]`, true
+		case "QUANT_SERVICE_TOKEN":
+			return strings.Repeat("q", 43), true
+		default:
+			return "", false
+		}
+	})
+	if _, err := LoadServiceCredentials(env); err == nil {
+		t.Fatal("unsupported service Scope must be rejected during Worker configuration loading")
+	}
+}
