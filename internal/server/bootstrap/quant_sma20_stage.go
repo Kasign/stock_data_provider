@@ -15,7 +15,7 @@ import (
 	marketdatabootstrap "example.com/stock-analysis-flow/internal/marketdata/bootstrap"
 	quantapplication "example.com/stock-analysis-flow/internal/quant/application"
 	quantregistry "example.com/stock-analysis-flow/internal/quant/registry"
-	quantresult "example.com/stock-analysis-flow/internal/quant/result"
+	quantstorage "example.com/stock-analysis-flow/internal/quant/storage"
 	quantstage "example.com/stock-analysis-flow/internal/quant/stage"
 	researchflowapplication "example.com/stock-analysis-flow/internal/researchflow/application"
 	researchflowdomain "example.com/stock-analysis-flow/internal/researchflow/domain"
@@ -64,7 +64,7 @@ func newQuantSMA20StageComposition(
 	if err != nil {
 		return nil, fmt.Errorf("create Quant production Registry: %w", err)
 	}
-	quantRepository, err := quantresult.NewMySQLRepository(shared.DB)
+	quantRepository, err := quantstorage.NewMySQLRepository(shared.DB)
 	if err != nil {
 		return nil, fmt.Errorf("create Quant result Repository: %w", err)
 	}
@@ -266,7 +266,7 @@ func resolveQuantDailyBarsProviders(snapshot resourcepolicy.Snapshot) ([]string,
 	if err := registry.ValidateSnapshot(snapshot); err != nil {
 		return nil, err
 	}
-	if !containsString(snapshot.AllowedProviderCodes, quantstage.SMA20ProviderCode) {
+	if !containsQuantProviderCode(snapshot.AllowedProviderCodes, quantstage.SMA20ProviderCode) {
 		return nil, resourcepolicy.ErrNoProviders
 	}
 	return append([]string(nil), snapshot.AllowedProviderCodes...), nil
@@ -288,7 +288,7 @@ func ensureQuantJSONEOF(decoder *json.Decoder) error {
 	return nil
 }
 
-func containsString(values []string, expected string) bool {
+func containsQuantProviderCode(values []string, expected string) bool {
 	for _, value := range values {
 		if value == expected {
 			return true
