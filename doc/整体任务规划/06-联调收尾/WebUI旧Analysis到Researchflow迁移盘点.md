@@ -76,6 +76,26 @@ SRV-CTR-001 v1.0.0（FROZEN）定义的唯一 WebUI 业务执行 API：
 
 三个 helper 已指向 SRV-CTR-001，并在 POST 使用当前内存 CSRF Token。当前 `app.js` 未导入/调用这些 helper。**Helper 存在不代表页面已迁移或端到端已接通。**
 
+## 3.4 旧 Task API 的实际后端执行链
+
+旧 Task API 不是单纯的 HTTP 转发。Root Server 当前仍直接装配一套旧 Analysis Runner 和异步队列：
+
+- `internal/server/bootstrap/bootstrap.go`：通过 Data Application 创建 `servermarketdata.NewAnalysisCollector`，然后调用 `service.NewRunnerWithDataCollector`。
+- 同一 Bootstrap 创建 `platform/taskqueue.New(store.DB, runner, ...)`，并注册 `legacyAnalysisWorker` 生命周期。
+- API 侧通过 `platform/httpapi.NewWithTasks(runner, store, analysisTimeout, tasks)` 提供旧同步 Run、Task 创建、Task 状态、Run 结果和事件读取。
+- Worker 直接执行同一旧 Analysis Runner；Task Queue 在 MariaDB 持久化 Task/Run/事件，并在启动时恢复/终结中断任务。
+
+旧 `RunRequest` 的业务类型包括：
+
+- `post_market_scan`
+- `watchlist_scan`
+- `position_review`
+- `historical_replay`
+
+页面当前 `createTask` 只提交 `task_type` 和 `symbols`，其余领域参数由旧 API 的 `fillDefaults` 填充。旧 Runner 当前的默认策略为 `trend-following`，包含 MA20 距离、5/20 日收益等因子；旧硬风险规则 `unverified-tradability-block` 会因 ST/停牌/涨跌停、可成交量、组合仓位与账户权益尚未验证而阻断交易计划。历史回放也会因上游缺少逐条 available_at、Provider 和复权口径而 fail-closed。
+
+**迁移含义：** 旧 Runner/TaskQueue 是现存业务链，不应因新 API helper 已存在就删除；但也不能把它直接包装成一个“通用 Researchflow Stage”来掩盖旧模块职责。迁移前必须逐项核对上述四类 Task 的输入默认值、实际计算阶段、输出字段、硬风险规则和数据时间语义，并决定哪些领域能力应迁入 Data/Quant/Research Owner Facade，哪些旧逻辑应淘汰。特别是不能把旧默认值（如 `paper-unconfigured`、`not-configured-v1`）直接当作新生产模板参数。
+
 ## 4. Root Server 路由盘点
 
 文件：`internal/server/bootstrap/router.go`
