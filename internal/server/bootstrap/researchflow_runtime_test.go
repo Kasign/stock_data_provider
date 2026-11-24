@@ -4,6 +4,9 @@ import (
 	"context"
 	"testing"
 	"time"
+
+	platformconfig "example.com/stock-analysis-flow/internal/platform/config"
+	platformsecurity "example.com/stock-analysis-flow/internal/platform/security"
 )
 
 func TestResearchflowRuntimeLaunchTaskBoundsAndDeduplicatesWork(t *testing.T) {
@@ -74,4 +77,18 @@ func TestResearchflowRuntimeLaunchTaskRejectsCancelledContext(t *testing.T) {
 	if len(component.taskSlots) != 0 {
 		t.Fatal("cancelled task consumed a local worker slot")
 	}
+}
+
+func testResearchflowWorkerPrincipal(t *testing.T) platformsecurity.Principal {
+	t.Helper()
+	secret := platformconfig.NewEnvWithLookup(func(string) (string, bool) {
+		return "0123456789abcdef0123456789abcdef", true
+	}).Secret("TOKEN")
+	principal, err := researchflowWorkerPrincipal([]platformsecurity.ServiceCredential{{
+		Name: "researchflow-worker", Secret: secret, Scopes: []string{platformsecurity.ScopeDataRead},
+	}})
+	if err != nil {
+		t.Fatalf("构造 Researchflow Worker 测试服务身份失败: %v", err)
+	}
+	return principal
 }
