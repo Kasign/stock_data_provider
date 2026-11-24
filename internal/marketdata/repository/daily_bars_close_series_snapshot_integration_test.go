@@ -247,6 +247,22 @@ func TestMariaDBDataAuthorizationPolicyVersionsAreImmutableAndCurrent(t *testing
 		t.Fatalf("current policy mismatch: %+v", current)
 	}
 
+	// current pointer 指向不存在的版本属于存储完整性故障，不能误报为未发布。
+	missingVersion := version + "-missing-target"
+	if _, err := store.db.ExecContext(ctx, `UPDATE market_data_current_authorization_policy_versions
+SET policy_version=? WHERE policy_type=? AND policy_ref=?`,
+		missingVersion, authorization.DataAccessPolicyType, authorization.DailyBarsV2PolicyRef); err != nil {
+		t.Fatalf("point current policy at missing version for integrity test: %v", err)
+	}
+	if _, err := store.ResolveCurrentDataAuthorizationPolicy(ctx); !errors.Is(err, ErrDataAuthorizationPolicyUnavailable) {
+		t.Fatalf("dangling current policy pointer must be unavailable, got %v", err)
+	}
+	if _, err := store.db.ExecContext(ctx, `UPDATE market_data_current_authorization_policy_versions
+SET policy_version=? WHERE policy_type=? AND policy_ref=?`,
+		version, authorization.DataAccessPolicyType, authorization.DailyBarsV2PolicyRef); err != nil {
+		t.Fatalf("restore current policy pointer after integrity test: %v", err)
+	}
+
 	stale := value
 	stale.PolicyVersion = version + "-stale"
 	if err := store.PublishDataAuthorizationPolicyVersion(ctx, "stale-current-version", stale, policyPublicationAudit(now.Add(time.Second), stale.PolicyVersion)); !errors.Is(err, ErrDataAuthorizationPolicyConflict) {
