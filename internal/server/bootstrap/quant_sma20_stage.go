@@ -118,7 +118,7 @@ func buildQuantSMA20WorkflowTemplate(stage *quantSMA20StageComposition, policies
 		return template.WorkflowTemplate{}, fmt.Errorf("validate Quant SMA20 parameter Schema: %w", err)
 	}
 	applicable, reason, err := stage.applicability.Evaluate(context.Background(), template.ApplicabilityRule{
-		RuleRef:     quantSMA20ApplicabilityRuleRef, RuleVersion: quantSMA20ApplicabilityVersion,
+		RuleRef: quantSMA20ApplicabilityRuleRef, RuleVersion: quantSMA20ApplicabilityVersion,
 	}, parameters)
 	if err != nil || !applicable || reason != "" {
 		return template.WorkflowTemplate{}, fmt.Errorf("evaluate Quant SMA20 applicability rule: %w", err)
@@ -150,7 +150,7 @@ func buildQuantSMA20WorkflowTemplate(stage *quantSMA20StageComposition, policies
 			Dependencies: []string{},
 			Priority:     0,
 			Applicability: template.ApplicabilityRule{
-				RuleRef: quantSMA20ApplicabilityRuleRef,
+				RuleRef:     quantSMA20ApplicabilityRuleRef,
 				RuleVersion: quantSMA20ApplicabilityVersion,
 			},
 			Retry: template.RetryPolicy{
