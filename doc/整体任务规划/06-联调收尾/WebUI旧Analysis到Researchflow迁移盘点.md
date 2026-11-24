@@ -2,7 +2,7 @@
 
 - 仓库：`Kasign/stock_data_provider`
 - 核对分支：`repair_all`
-- 核对基线：`dfaad086d992ed7bfaefde17ff5745e7c48ab78c`
+- 核对基线：`aa13059e25e866f3cc33f7d2a5ba728875692eb9`
 - 核对日期：2026-11-24
 - 状态：**盘点完成；业务生产链路未就绪；尚未切换、尚未删除旧接口**
 - 目标：WebUI 业务任务统一使用 SRV-CTR-001 Researchflow API 和 Owner Session；不保留旧 Analysis API 的浏览器兼容入口，不增加 Bearer/Session 双认证。
@@ -180,7 +180,7 @@ Server 生产组合根：
 |---|---|---|
 | News | 真实 News Search Provider、Stage Adapter、Validator、Template/Executor/Output Registry | 已装配；只覆盖候选新闻检索，不代表完整股票分析 |
 | Research | Context Application 的 CreateContext/GetContext、Context Schema/Storage；Researchflow 有 DTO 映射和 Context Assembly | 缺可信 CallerRef/当前授权 Adapter、Run.SystemAsOf 一致性校验、Server/Worker Stage 接线 |
-| Quant | GetResult 授权读取 Application、Trend/Risk Envelope；QNT-013 已有强类型结果写入基础和策略读取锁基础；Researchflow 有 Envelope 校验/映射 | QNT-014 生产计算 Facade 尚未启动；生产 AuthorizedResultReader、策略/审计持久化、Run→result_id 强类型关联、Stage Provider/Registry 与 Root 注入未闭环。现有写入基础不等于计算 Facade；读取必须走 Quant Application 授权和审计，不能访问 Repository 旁路 |
+| Quant | GetResult 授权读取 Application、Trend/Risk Envelope；SMA20 CreateSMAService 精确 Decimal 计算/持久化；SMA20Adapter 已有 Stage 输入输出校验 | Facade/Adapter 已存在，但尚未进入 Server 生产 Stage Dispatcher、合并 Output Registry、参数 Schema 和正式 Template；Data Snapshot Creator/Authorized Reader Server Adapter、Quant Repository/Registry 装配、Run→result_id 结果关联与真实 MariaDB 端到端测试仍未闭环。不得把 Adapter 单测当作生产接入；读取必须走 Quant Application 授权和审计，不能访问 Repository 旁路 |
 | LLM | Provider.Generate/Stream、ModelRequest、Researchflow 预算/Tool Policy/结果映射 | 缺 Server 生产 Provider 注入、真实调用链和目标模型 Tokenizer；不能把估算器冒充生产 Tokenizer |
 | RiskDecision | Quant 的 `risk.Decision` 是 Quant 领域结果 | Researchflow Composer 仍接收独立 RiskDecision；唯一来源、字段映射、多结果聚合和关联身份未解决（RF-BLOCK-008） |
 | Data | 已有 DailyBars Close Series Snapshot Creator、Manifest/Payload 双指纹、授权签发和同一 MariaDB 事务内 Authorized Snapshot Reader | 代码能力已有，但 Root 尚未注入 Researchflow 消费者；服务 Principal/Owner Policy 管理入口与 Stage 输入/输出契约未闭环；DATA-CTR-007 仍 deferred。旧 AnalysisCollector 不使用该 Snapshot 链路且丢失关键 PIT/来源元数据 |
@@ -268,3 +268,74 @@ Researchflow 的 Context Assembly、Quant Envelope Validator、Result Composer�
 ## 10. 当前执行结论
 
 当前主线先解决真实业务链路与接口调用关系，不先清理旧接口。下一步先把单股分析、批量分析、市场复盘分别拆成真实业务流程，逐项核对各领域 Owner Facade 与生产能力；优先解除 Quant/Research/Research/LLM/风险语义阻塞。生产模板未就绪前，旧 API 暂时保留为待退役资产，不添加兼容认证，不让新旧 API 同时承载同一业务。
+
+## 8. 旧 Analysis / Python Bridge / Python API Client 退役映射（RA-01）
+
+本节区分三套互不等价的旧链，防止把“源码里有 Python Client”误说成 Root Server 当前生产依赖。
+
+### 8.1 Root Server 旧 Analysis（当前真实生产链）
+
+cmd/analysis-api → internal/server/bootstrap → marketDataModule.Application() → internal/server/marketdata.NewAnalysisCollector → service.NewRunnerWithDataCollector → internal/analysis/app.Runner → internal/platform/taskqueue → internal/platform/httpapi → /api/v1/analysis/**
+
+Bootstrap 当前仍构造旧 Runner、MariaDB Task Queue 和 legacyAnalysisWorker；router.go 仍注册旧 Runs/Tasks/Events 路由。此链没有通过 internal/adapters/pythonapi.Collector 读取数据，Root Server 使用 servermarketdata.NewAnalysisCollector(marketDataModule.Application(), ...)。
+
+旧 Runner 的业务阶段及目标 Owner：
+
+| 旧阶段/能力 | 当前实际职责与限制 | 新归属/处置 |
+|---|---|---|
+| Universe Resolver | 将请求 symbols 转成证券范围；旧版本直接按请求证券列表，不是全市场 Universe | Researchflow Template/Run 参数和 Research Context 的范围解析；不得将旧请求 Resolver 原样移入 Data |
+| Requirement Catalog | 汇总因子/策略需要的数据字段 | Quant/Research 的声明式输入需求，最终由 Researchflow Template 固化依赖 |
+| DataCollector | 按证券读取行情/日线；旧 analysis_collector.go 丢失多项来源、PIT、复权和 ExactValues 证据 | Data Owner Snapshot Creator/Authorized Reader；新 Stage 必须消费 Data Snapshot/Authorization，不复用旧 Collector |
+| Normalizer | 将旧 RawSnapshot 转成 MarketSnapshot，部分字段校验/排序 | 数据标准化和字段证据由 Data Owner 负责；业务上下文组装由 Research 负责 |
+| Quality Gate | 检查历史条数、SourceNotes、策略可运行性；旧规则只验证旧 Runner 的简化模型 | Data 负责字段/来源/覆盖质量事实，Researchflow 负责 Stage 传播，Quant/Risk 负责各自输入可用性；不能把旧 corePass 规则当作新全局门禁 |
+| Market Analyzer | 计算 watchlist_above_ma20_pct、指数 20 日收益；代码明确它是自选股横截面，不是完整市场广度 | 需要的市场/横截面指标由 Quant 提供；市场背景与证据汇总由 Research 组织。全市场指标未有数据证据前不得复用旧名称或宣称全市场 |
+| FactorEngine | 执行 MA20 距离、5/20 日收益等注册因子 | Quant；逐项核对算法、输入口径、版本、样本数和缺失状态，不把旧 float 结果直接迁入 |
+| StrategyEngine | 按显式 strategy_ids 运行策略，检查信号归属/时间等 | Quant；旧 trend-following 只是 MVP 基线，需重新核对策略合同和真实证据，不默认迁移 |
+| Tradability | 旧风险链中的可交易性判定 | Data 提供停牌、ST、涨跌停等有来源和时点证据的事实；Quant RiskDecision 做独立硬门禁。任何缺证据情况继续 fail-closed |
+| Portfolio | 旧默认实现返回 unconfigured-no-paper-ledger-v1、权益/现金均为 0 | 旧占位实现直接淘汰；未来若需要真实组合分析，先由明确的 Portfolio Owner/账本能力提供正式输入，不伪造持仓 |
+| RiskEngine | 对候选信号执行规则并产出阻断原因 | Quant RiskDecision；硬 Gate 独立于评分和 LLM，不能被综合分覆盖 |
+| Planner / ExecutionAssessment | 旧 Planner 不生成真实可执行计划；Execution 只是评估，不是券商下单 | 当前不接券商订单；旧占位 Planner/Execution 逻辑不迁移。未来若需要模拟计划，另行定义明确业务合同 |
+| Snapshots / Store | 旧 Analysis Run/Raw/Market Snapshot 和历史结果持久化 | Data 负责输入 Snapshot；Quant/Research 各自持久化领域结果；Researchflow 负责 Run/Stage/Attempt/Output，不再保留旧 Analysis Store |
+| Events / Task Queue | 旧 Task、Run、事件序列和恢复逻辑 | Researchflow Run/Stage/Attempt/Finalization/Outbox；WebUI 不再依赖旧 Task Event Cursor，不伪造 Attempt 明细 |
+
+### 8.2 独立 Go Core + Python Bridge（与 Root Analysis 不是同一链）
+
+真实入口为 go-core/cmd/analysisd → go-core/internal/application.StockFlow / MarketReviewFlow → go-core/internal/adapters → python_bridge/capability_app.py → python_bridge/capabilities/{market_data,search,llm,persistence,notification}.py。
+
+analysisd 当前明确要求 GO_CORE_TOKEN、PYTHON_BRIDGE_TOKEN、PYTHON_BRIDGE_BASE_URL 和 MARKET_DATA_BASE_URL；ReadyCheck 同时检查 Python Bridge 与 Go Market Data。虽然行情主链已要求 Go Market Data，MarketDataAdapter 仍保留 Python stock-bundle fallback；StockFlow/MarketReviewFlow 还直接注入 Python Bridge 的 Search、Analyzer、Persistence、Notification Adapter。它不是 Root Server 的 /api/v1/analysis/tasks 后端。
+
+| go-core / Bridge 能力 | 当前旧实现 | 新 Owner / 退役方式 |
+|---|---|---|
+| Market Data | marketdatahttp + pythonbridge.MarketDataAdapter，含 Python auxiliary/fallback | Root Data Module；旧独立 HTTP Client 和 Python fallback 随 go-core 一起退役 |
+| News Search | go-core/internal/adapters/newssearch，同时使用 native Provider 与 Python Search Adapter | News Module 的 ProviderSet/News Stage；不得保留第二套 News 聚合器 |
+| LLM Stock Analyzer / Market Review | pythonbridge.AnalyzerAdapter 调 Python llm.py | LLM Gateway/LLM Module 提供模型调用，Research 负责 Context/Evidence/Claim 和报告编排 |
+| Persistence | Python persistence.py 保存 DailyBars、StockAnalysis、MarketReview | 分别由 Data、Quant、Research 的 Repository/Application 持有；禁止继续用 Python 通用持久化旁路 |
+| Notification | Python notification.py 发送股票分析/市场复盘通知 | Notification Outbox/Relay 异步消费 Researchflow 终态事件，不作为同步 Stage |
+| Go Core HTTP API | /internal/v1/analysis/stock、stocks、market-review | 由 Root Server Researchflow Run API + Template 取代；新 WebUI 不再访问 go-core |
+
+### 8.3 独立 Python API Client（不属于上述 Bridge）
+
+- internal/adapters/pythonapi.Client 调用独立旧 daily_stock_analysis API，支持 Quote、History、Profile、DataOverview。
+- internal/adapters/pythonapi.Collector 实现旧 internal/analysis/app.DataCollector，但当前 Root Server Bootstrap 没有构造它。
+- 当前确认的直接命令入口只有 cmd/pythonapi-smoke；其用途是连通性/响应契约检查，不是 Root Server 生产分析链。
+- 退役目标：删除 internal/adapters/pythonapi/** 和 cmd/pythonapi-smoke/**，并清理 PYTHON_API_* 配置、测试、文档和 CI 引用。删除前仍需全仓库精确引用搜索，不能仅凭 Bootstrap 未使用就断言不存在外部脚本调用者。
+
+### 8.4 一次性删除清单（必须在新链路和调用方迁移完成后执行）
+
+1. Root Analysis：internal/analysis/**、internal/service/** 中仅供旧 Runner 的 wiring、internal/server/marketdata/analysis_collector.go、internal/server/bootstrap 的旧 Runner/Task Queue/Worker 装配、internal/platform/httpapi 旧 handler、internal/platform/taskqueue（仅在确认无其他消费者后）、旧 Analysis Migration 和 /api/v1/analysis/** 路由。
+2. WebUI：旧 Analysis API helper、Task/Event Cursor 状态、旧 RunResult 字段消费和旧结果导出依赖；迁移后移除旧 Task/Run 双 ID 状态，统一使用 Researchflow Run Ref 和正式结果资源读取契约。
+3. Python API Client：internal/adapters/pythonapi/**、cmd/pythonapi-smoke/**、对应配置和 CI。
+4. Python Bridge：整个 python_bridge/**，包括 FastAPI app、capabilities、schemas、tests、Dockerfile；以及 go-core/internal/adapters/pythonbridge/**。
+5. 独立 Go Core：整个 go-core/**（含嵌套 go.mod、analysisd、StockFlow/MarketReviewFlow、native News/MarketData adapters、HTTP transport、Dockerfile），前提是确认无其他仓库/部署调用方。
+6. 部署/CI/配置：清理 Python Bridge/Go Core 的 Docker build、Python tests、PYTHON_BRIDGE_*、GO_CORE_*、MARKET_DATA_BASE_URL 等只属于旧入口的配置；清理旧容器阻断逻辑前先完成目标环境只读核验。
+7. 文档：删除旧服务部署、API、配置和排障说明；保留一份最终迁移记录，记录删除范围、无调用方证据和 CI 验收。
+
+### 8.5 删除门禁
+
+- 新 Researchflow Template 已覆盖需要保留的业务输入/计算/风险/结果/通知语义；明确废弃的旧占位能力有书面结论。
+- Data、Quant、Research、LLM、Notification 的真实 Stage/Facade、Schema、Output Registry、模板和 Server DI 已闭环；Data 授权主体与策略验证通过。
+- Run/Stage/Attempt 状态、取消、Deadline、重试、失败诊断、结果摘要和 Outbox 有真实 MariaDB 集成验收。
+- 完整报告/结果正文由唯一 Owner 持久化，并通过正式授权读取 API 供 WebUI 使用；不让 UI 访问 Repository。
+- WebUI 创建、幂等重放、未知提交结果、轮询、取消、历史、结果读取和导出全部迁移，旧 /api/v1/analysis/**、Python API、go-core、Python Bridge 调用点归零。
+- 对 repair_all 全仓执行旧路径/环境变量/容器名/工作流引用搜索，逐项清理；旧目标环境的外部进程/调用者已核验或明确不在范围。
+- 以上全部通过后，才允许在一个完整逻辑工作组中删除旧入口、配置、Migration、容器、CI 和文档；不保留双链路兼容期。
