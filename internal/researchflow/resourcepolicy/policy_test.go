@@ -67,3 +67,22 @@ func TestValidateSnapshotRejectsNonCanonicalMutation(t *testing.T) {
 		t.Fatalf("mutated snapshot accepted: %v", err)
 	}
 }
+
+
+func TestQuantDailyBarsPolicySnapshotsOnlyConfiguredDataProviders(t *testing.T) {
+	registry, err := NewRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := registry.Resolve(QuantDailyBarsProvidersRef, []string{"eastmoney", "baostock"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snapshot.PolicyRef != QuantDailyBarsProvidersRef ||
+		!reflect.DeepEqual(snapshot.AllowedProviderCodes, []string{"baostock", "eastmoney"}) {
+		t.Fatalf("unexpected Quant Data Provider snapshot: %+v", snapshot)
+	}
+	if err := registry.ValidateSnapshot(snapshot); err != nil {
+		t.Fatalf("valid Quant Data Provider snapshot rejected: %v", err)
+	}
+}
