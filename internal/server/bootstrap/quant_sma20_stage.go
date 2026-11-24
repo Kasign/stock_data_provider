@@ -50,8 +50,10 @@ func newQuantSMA20StageComposition(
 		return nil, errors.New("Quant SMA20 Stage requires the Data Module and shared MariaDB")
 	}
 	providers := dataModule.ProviderSummary().DailyBars
-	if !containsQuantProviderCode(providers, quantstage.SMA20ProviderCode) {
-		return nil, nil
+	sort.Strings(providers)
+	allowedProviderCodes := []string{}
+	if containsQuantProviderCode(providers, quantstage.SMA20ProviderCode) {
+		allowedProviderCodes = []string{quantstage.SMA20ProviderCode}
 	}
 	dataAdapter, err := newQuantDataSnapshotAdapter(dataModule)
 	if err != nil {
@@ -108,7 +110,7 @@ func buildQuantSMA20WorkflowTemplate(stage *quantSMA20StageComposition, policies
 	if stage.registry.Version() != quantSMA20StageOutputRegistryVersion {
 		return template.WorkflowTemplate{}, fmt.Errorf("Quant SMA20 Output Registry version mismatch: %q", stage.registry.Version())
 	}
-	if _, err := policies.Resolve(resourcepolicy.QuantDailyBarsProvidersRef, append([]string(nil), stage.providerCodes...)); err != nil {
+	if _, err := policies.Resolve(resourcepolicy.QuantDailyBarsProvidersRef, []string{quantstage.SMA20ProviderCode}); err != nil {
 		return template.WorkflowTemplate{}, fmt.Errorf("resolve Quant Data Provider ResourcePolicy: %w", err)
 	}
 	parameters := json.RawMessage(`{"symbol":"600036.SH","start_date":"2026-10-01","end_date":"2026-10-30","limit":20}`)
