@@ -76,6 +76,10 @@ func LoadProcess(env platformconfig.Env) (Process, error) {
 		if cfg.HTTP, err = LoadHTTP(env, cfg.AnalysisTimeout); err != nil {
 			return Process{}, err
 		}
+	} else {
+		if cfg.Security.ServiceCredentials, err = LoadServiceCredentials(env); err != nil {
+			return Process{}, err
+		}
 	}
 	if cfg.Role != RoleAPI {
 		if cfg.ResearchNotificationRelay, err = LoadResearchNotificationRelay(env); err != nil {
