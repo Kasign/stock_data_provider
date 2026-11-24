@@ -79,13 +79,13 @@ func TestMySQLDriverConfigRejectsInvalidLocation(t *testing.T) {
 
 func TestLoadConfigUsesExplicitSource(t *testing.T) {
 	values := map[string]string{
-		"DB_HOST":         "mariadb.internal",
-		"DB_USER":         "service-user",
-		"DB_PASSWORD":     "secret-value",
-		"DB_NAME":         "research",
-		"DB_PORT":         "3307",
-		"REDIS_ADDR":      "redis.internal:6380",
-		"REDIS_PASSWORD":  "redis-secret",
+		"DB_HOST":        "mariadb.internal",
+		"DB_USER":        "service-user",
+		"DB_PASSWORD":    "secret-value",
+		"DB_NAME":        "research",
+		"DB_PORT":        "3307",
+		"REDIS_ADDR":     "redis.internal:6380",
+		"REDIS_PASSWORD": "redis-secret",
 	}
 	env := platformconfig.NewEnvWithLookup(func(key string) (string, bool) {
 		value, ok := values[key]
