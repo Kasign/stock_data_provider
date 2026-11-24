@@ -1186,3 +1186,11 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - 本阶段状态：生产装配代码已接入，尚未完成完整验收。当前 SHA 的 Go Test Suite / Integration CI 尚无可确认的 completed/success 结果；不得用前序 SHA 的 CI 通过记录替代。
 - 下一步优先完成 Run→Quant result_id 关联只读 Port 和 Quant AuthorizedResultReader，在同一可证明一致性边界内校验关联、当前策略版本并读取不可变结果；随后接 Research Context/Evidence、LLM、RiskDecision、完整报告结果和 WebUI。
 - 旧 Analysis Runner/Task Queue/API、Python Bridge、Python API Client、go-core 继续保留到新模板和 WebUI 全部接通后，再按 RA-08/RA-09 一次性删除。
+
+
+## RA-02B 后续：Worker 服务凭据与 Runtime 装配测试
+
+- Quant Stage 已注册后，Worker/All 且实际装配 Eastmoney DailyBars Provider 时，必须显式提供 `quant` ServiceCredential 与 `data:read` Scope；不提供凭据时保持 fail closed。Data Owner Policy 的 Allow 仍是单独前置条件。
+- Worker MariaDB/Redis Bootstrap 集成测试现在显式配置独立 Quant Token；News Search Runtime 集成测试现在通过生产所需的 Stage Executor 与 Output Registry Set 装配运行。
+- `.env.example` 已记录该配置方式。此配置不意味着生产部署已自动获得 Data 授权。
+- 本工作组只修复服务身份和测试组合完整性，不宣称 Quant 结果读取闭环或 RA-02 完成。下一步继续 Researchflow Run→Quant result_id 关联只读 Port 与 Quant AuthorizedResultReader。
