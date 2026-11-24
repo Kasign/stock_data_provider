@@ -108,10 +108,6 @@ func Run(ctx context.Context) (runErr error) {
 		_ = migrationDB.Close()
 		return fmt.Errorf("初始化 MariaDB/Redis 应用资源失败: %w", err)
 	}
-	if err := store.CheckSchema(ctx); err != nil {
-		_ = storageResources.Close()
-		return fmt.Errorf("Analysis Schema 就绪检查失败: %w", err)
-	}
 	marketDataModule, err := newMarketDataModule(storageResources, marketDataCfg)
 	if err != nil {
 		_ = storageResources.Close()
