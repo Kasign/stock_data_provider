@@ -774,21 +774,43 @@ try {
 
     // Each browser context starts with isolated storage; verify both theme directions and their accessible state.
     const themeToggle = page.locator("#theme-toggle");
-    const initialTheme = await page.evaluate(() => ({
-      theme: document.documentElement.dataset.theme,
-      colorScheme: getComputedStyle(document.documentElement).colorScheme
-    }));
+    const initialTheme = await page.evaluate(() => {
+      const root = getComputedStyle(document.documentElement);
+      const tokens = ["--surface-sidebar", "--surface-topbar", "--surface-panel-start", "--surface-input", "--text-heading", "--text-nav", "--focus-ring", "--space-page", "--radius"];
+      return {
+        theme: document.documentElement.dataset.theme,
+        colorScheme: root.colorScheme,
+        tokens: Object.fromEntries(tokens.map((name) => [name, root.getPropertyValue(name).trim()])),
+        headingColor: getComputedStyle(document.querySelector("#market-view h1")).color,
+        panelBackground: getComputedStyle(document.querySelector("#market-overview-panel")).backgroundImage
+      };
+    });
     assert.equal(initialTheme.theme, "dark", "a fresh browser context should start in the default dark theme");
     assert.equal(initialTheme.colorScheme, "dark", "dark theme should set the browser color scheme");
+    for (const [name, value] of Object.entries(initialTheme.tokens)) {
+      assert.notEqual(value, "", "dark theme token must resolve: " + name);
+    }
+    assert.equal(initialTheme.headingColor, initialTheme.tokens["--text-heading"], "dark page heading must use the semantic heading token");
+    assert.notEqual(initialTheme.panelBackground, "none", "dark panels must render a surface background");
     assert.equal(await themeToggle.getAttribute("aria-pressed"), "false", "dark theme toggle should report not pressed");
 
     await themeToggle.click();
-    const lightTheme = await page.evaluate(() => ({
-      theme: document.documentElement.dataset.theme,
-      colorScheme: getComputedStyle(document.documentElement).colorScheme
-    }));
+    const lightTheme = await page.evaluate(() => {
+      const root = getComputedStyle(document.documentElement);
+      return {
+        theme: document.documentElement.dataset.theme,
+        colorScheme: root.colorScheme,
+        sidebar: root.getPropertyValue("--surface-sidebar").trim(),
+        panel: root.getPropertyValue("--surface-panel-start").trim(),
+        heading: root.getPropertyValue("--text-heading").trim(),
+        headingColor: getComputedStyle(document.querySelector("#market-view h1")).color
+      };
+    });
     assert.equal(lightTheme.theme, "light", "theme toggle should apply light theme");
     assert.equal(lightTheme.colorScheme, "light", "light theme should set the browser color scheme");
+    assert.notEqual(lightTheme.sidebar, initialTheme.tokens["--surface-sidebar"], "sidebar surface must adapt to light theme");
+    assert.notEqual(lightTheme.panel, initialTheme.tokens["--surface-panel-start"], "panel surface must adapt to light theme");
+    assert.equal(lightTheme.headingColor, lightTheme.heading, "light page heading must use the semantic heading token");
     assert.equal(await themeToggle.getAttribute("aria-pressed"), "true", "light theme toggle should report pressed");
     assert.equal((await page.locator("#theme-toggle-label").textContent()).trim(), "深色", "light theme toggle should offer the dark theme");
 
