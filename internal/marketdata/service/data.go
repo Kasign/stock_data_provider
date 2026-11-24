@@ -4186,16 +4186,66 @@ func wrapPITStorageFailure(err error) error {
 // DailyBarsAsOf reconstructs a single source-coherent bar series from locally recorded revisions.
 // It never calls a live Provider and never substitutes the current-value table.
 func (s *DataService) DailyBarsAsOf(ctx context.Context, rawSymbol, start, end string, limit int, basis model.AdjustmentBasis, asOf time.Time) ([]model.DailyBar, []string, error) {
-	bars, warnings, _, err := s.dailyBarsAsOfWithCoverageEvidence(ctx, rawSymbol, start, end, limit, basis, asOf)
+	bars, warnings, _, err := s.dailyBarsAsOfWithCoverageEvidence(ctx, rawSymbol, start, end, limit, basis, asOf, nil)
 	return bars, warnings, err
 }
 
 // DailyBarsAsOfWithCoverageEvidence 返回 PIT 日线及同一历史日历版本的覆盖率证据。
 func (s *DataService) DailyBarsAsOfWithCoverageEvidence(ctx context.Context, rawSymbol, start, end string, limit int, basis model.AdjustmentBasis, asOf time.Time) ([]model.DailyBar, []string, DailyBarCoverageEvidence, error) {
-	return s.dailyBarsAsOfWithCoverageEvidence(ctx, rawSymbol, start, end, limit, basis, asOf)
+	return s.dailyBarsAsOfWithCoverageEvidence(ctx, rawSymbol, start, end, limit, basis, asOf, nil)
 }
 
-func (s *DataService) dailyBarsAsOfWithCoverageEvidence(ctx context.Context, rawSymbol, start, end string, limit int, basis model.AdjustmentBasis, asOf time.Time) ([]model.DailyBar, []string, DailyBarCoverageEvidence, error) {
+// DailyBarsAsOfWithCoverageEvidenceFromSources reconstructs PIT bars only from the
+// explicit, canonical provider allowlist captured by the calling ResourcePolicy.
+func (s *DataService) DailyBarsAsOfWithCoverageEvidenceFromSources(
+	ctx context.Context, rawSymbol, start, end string, limit int, basis model.AdjustmentBasis,
+	asOf time.Time, allowedSources []string,
+) ([]model.DailyBar, []string, DailyBarCoverageEvidence, error) {
+	if !validDailyBarSourceAllowlist(allowedSources) {
+		return nil, nil, DailyBarCoverageEvidence{CoverageBasis: "not_evaluated", CalendarQualityStatus: model.QualityUnknown},
+			errors.New("provider-constrained PIT daily bars require a canonical source allowlist")
+	}
+	if s == nil {
+		return nil, nil, DailyBarCoverageEvidence{CoverageBasis: "not_evaluated", CalendarQualityStatus: model.QualityUnknown},
+			ErrDailyBarsAsOfUnavailable
+	}
+	available := make(map[string]struct{}, len(s.barProviders))
+	for _, provider := range s.barProviders {
+		if provider != nil {
+			available[provider.Name()] = struct{}{}
+		}
+	}
+	for _, source := range allowedSources {
+		if _, exists := available[source]; !exists {
+			return nil, nil, DailyBarCoverageEvidence{CoverageBasis: "not_evaluated", CalendarQualityStatus: model.QualityUnknown},
+				fmt.Errorf("requested daily-bar source %q is not an active Data Provider", source)
+		}
+	}
+	return s.dailyBarsAsOfWithCoverageEvidence(ctx, rawSymbol, start, end, limit, basis, asOf, append([]string(nil), allowedSources...))
+}
+
+func validDailyBarSourceAllowlist(values []string) bool {
+	if len(values) == 0 {
+		return false
+	}
+	for index, value := range values {
+		if value == "" || strings.TrimSpace(value) != value {
+			return false
+		}
+		for _, char := range value {
+			if !(char >= 'a' && char <= 'z') && !(char >= '0' && char <= '9') && char != '-' && char != '_' {
+				return false
+			}
+		}
+		if index > 0 && values[index-1] >= value {
+			return false
+		}
+	}
+	return true
+}
+
+
+func (s *DataService) dailyBarsAsOfWithCoverageEvidence(ctx context.Context, rawSymbol, start, end string, limit int, basis model.AdjustmentBasis, asOf time.Time, allowedSources []string) ([]model.DailyBar, []string, DailyBarCoverageEvidence, error) {
 	coverageEvidence := DailyBarCoverageEvidence{CoverageBasis: "not_evaluated", CalendarQualityStatus: model.QualityUnknown}
 	if s == nil {
 		return nil, nil, coverageEvidence, ErrDailyBarsAsOfUnavailable
@@ -4249,7 +4299,12 @@ func (s *DataService) dailyBarsAsOfWithCoverageEvidence(ctx context.Context, raw
 	if basis != model.AdjustmentNone {
 		storageBasis = model.AdjustmentNone
 	}
-	revisions, err := s.store.ListBarsAsOf(ctx, symbol, start, end, storageBasis, asOf, limit)
+	var revisions []model.DailyBar
+	if len(allowedSources) > 0 {
+		revisions, err = s.store.ListBarsAsOfFromSources(ctx, symbol, start, end, storageBasis, asOf, limit, allowedSources)
+	} else {
+		revisions, err = s.store.ListBarsAsOf(ctx, symbol, start, end, storageBasis, asOf, limit)
+	}
 	if err != nil {
 		return nil, nil, coverageEvidence, wrapPITStorageFailure(err)
 	}
