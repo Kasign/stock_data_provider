@@ -157,8 +157,8 @@ func (service *CreateSMAService) Execute(ctx context.Context, request CreateSMAR
 	calculationContext := domain.CalculationContext{
 		SystemAsOf: systemAsOf, TradeDate: snapshot.EndDate,
 		InputSnapshotRefs: []string{snapshot.SnapshotRef},
-		AdjustmentBasis: domain.AdjustmentBasisNone,
-		QualityPolicy: domain.QualityPolicyStrict,
+		AdjustmentBasis:   domain.AdjustmentBasisNone,
+		QualityPolicy:     domain.QualityPolicyStrict,
 	}
 	calculated, err := indicator.DecimalSMAWithContext(calculationContext, trustedNow, closes, indicator.SMAParams{Window: parameters.Window})
 	if err != nil {

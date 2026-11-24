@@ -179,7 +179,7 @@ func testCreateSMAEntry(window int) registry.Entry {
 			MinimumCoverage: 1, MissingHandling: "reject_missing",
 			QualityStates: []string{"valid"}, UnavailableConditions: []string{"insufficient_data"},
 		},
-		SampleCount: registry.SampleCountPolicy{RequiredInMetric: true, Unit: "bar", CountingRule: "window_bars"},
+		SampleCount:      registry.SampleCountPolicy{RequiredInMetric: true, Unit: "bar", CountingRule: "window_bars"},
 		SupportsInterval: false,
 	}
 }
@@ -189,17 +189,17 @@ func validCreateSMASnapshot() CloseSeriesSnapshot {
 	for index := range bars {
 		bars[index] = CloseSeriesBar{
 			TradeDate: time.Date(2026, 10, 1+index, 0, 0, 0, 0, time.UTC).Format("2006-01-02"),
-			Close: fmt.Sprintf("0.%02d", index+1), QualityStatus: "valid",
+			Close:     fmt.Sprintf("0.%02d", index+1), QualityStatus: "valid",
 		}
 	}
 	return CloseSeriesSnapshot{
-		SnapshotRef: "data_snapshot:sha256:" + strings.Repeat("a", 64),
+		SnapshotRef:           "data_snapshot:sha256:" + strings.Repeat("a", 64),
 		ManifestSchemaVersion: "2.0.0", PayloadSchemaVersion: "1.0.0", PayloadKind: "daily_bars_close_series",
 		CallerRef: "principal:service:researchflow", PurposeCode: "quant_analysis",
 		Symbol: "600000.SH", StartDate: "2026-10-01", EndDate: "2026-10-20",
 		AdjustmentBasis: "none", SystemAsOf: "2026-11-23T00:00:00Z", Interval: "1d",
 		TradingCalendarRef: "trading_calendar:sha256:" + strings.Repeat("b", 64),
-		QualityStatus: "valid",
+		QualityStatus:      "valid",
 		Coverage: CloseSeriesCoverageEvidence{
 			CalendarQualityStatus: "valid", ExpectedTradingDays: 20,
 			MinimumRequiredBars: 20, CoverageSufficient: true,
@@ -210,9 +210,9 @@ func validCreateSMASnapshot() CloseSeriesSnapshot {
 
 func validCreateSMARequest() CreateSMARequest {
 	return CreateSMARequest{
-		SnapshotRef: "data_snapshot:sha256:" + strings.Repeat("a", 64),
+		SnapshotRef:      "data_snapshot:sha256:" + strings.Repeat("a", 64),
 		AuthorizationRef: "data_authorization:sha256:" + strings.Repeat("c", 64),
-		SystemAsOf: time.Date(2026, 11, 23, 0, 0, 0, 0, time.UTC),
-		Parameters: json.RawMessage("{\"window\":20}"),
+		SystemAsOf:       time.Date(2026, 11, 23, 0, 0, 0, 0, time.UTC),
+		Parameters:       json.RawMessage("{\"window\":20}"),
 	}
 }
