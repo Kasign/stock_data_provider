@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	marketdatabootstrap "example.com/stock-analysis-flow/internal/marketdata/bootstrap"
 	newsconfig "example.com/stock-analysis-flow/internal/news/config"
 	researchflowapplication "example.com/stock-analysis-flow/internal/researchflow/application"
 	serverconfig "example.com/stock-analysis-flow/internal/server/config"
@@ -28,8 +29,9 @@ func newResearchflowOwnerComposition(
 	newsConfig newsconfig.Config,
 	capacity serverconfig.ResearchflowCapacity,
 	runDeadline time.Duration,
+	dataModule *marketdatabootstrap.Module,
 ) (*researchflowOwnerComposition, error) {
-	execution, err := newResearchflowComposition(shared, newsConfig, capacity)
+	execution, err := newResearchflowComposition(shared, newsConfig, capacity, dataModule)
 	if err != nil {
 		return nil, err
 	}
@@ -46,7 +48,7 @@ func newResearchflowOwnerCompositionFromExecution(
 	identity := ownerSessionResearchflowIdentity{}
 	createRun, err := researchflowapplication.NewCreateRunService(
 		identity, execution.clock, runDeadline, execution.ids, execution.templateRegistry,
-		execution.newsStage.parameterSchemas, execution.newsStage.applicability, nil,
+		execution.parameterSchemas, execution.applicability, nil,
 		execution.resourcePolicies, execution.runRepository,
 	)
 	if err != nil {
