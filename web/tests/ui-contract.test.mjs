@@ -1899,7 +1899,7 @@ test("分析任务、阶段事件与 Run 响应必须匹配当前请求标识", 
 
 test("mobile navigation drawer moves focus inside and traps Tab navigation", () => {
   assert.match(app, /if \(!wasOpen && isOpen\) \$\("\.sidebar"\)\.querySelector\("\.nav-link:not\(\[disabled\]\)"\)\?\.focus\(\)/);
-  assert.match(app, /if \(event\.key !== "Tab"\) return;[\s\S]*?if \(window\.innerWidth > 600\) return;[\s\S]*?const firstFocusable = focusable\[0\];[\s\S]*?const lastFocusable = focusable\[focusable\.length - 1\]/);
+  assert.match(app, /if \(event\.key !== "Tab"\) return;[\s\S]*?if \(window\.innerWidth > 700\) return;[\s\S]*?const firstFocusable = focusable\[0\];[\s\S]*?const lastFocusable = focusable\[focusable\.length - 1\]/);
   assert.match(app, /event\.shiftKey[\s\S]*?lastFocusable\.focus\(\)[\s\S]*?firstFocusable\.focus\(\)/);
 });
 test("移动侧栏打开连接设置时关闭抽屉并进入设置中心", () => {
