@@ -14,6 +14,7 @@ func TestMigrationsDefineCompleteNotificationBaseline(t *testing.T) {
 		t.Fatalf("migration baseline = %#v, want one V1 with ten tables and one seed", migrations)
 	}
 	schema := strings.Join(migrations[0].Statements, "\n")
+	schema = strings.Join(strings.Fields(schema), " ")
 	for _, table := range []string{
 		"notification_subscriptions", "notification_delivery_plans", "notification_deliveries",
 		"notification_delivery_attempts", "notification_delivery_state_events",
@@ -31,7 +32,8 @@ func TestMigrationsDefineCompleteNotificationBaseline(t *testing.T) {
 		"FOREIGN KEY (source_module, event_id) REFERENCES notification_inbox (source_module, event_id)",
 		"INSERT INTO notification_subscription_revision (singleton_id, current_revision) VALUES (1, 0)",
 	} {
-		if !strings.Contains(schema, fragment) {
+		normalizedFragment := strings.Join(strings.Fields(fragment), " ")
+		if !strings.Contains(schema, normalizedFragment) {
 			t.Errorf("baseline is missing final schema fragment %q", fragment)
 		}
 	}
