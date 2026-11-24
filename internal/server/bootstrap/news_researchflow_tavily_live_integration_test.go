@@ -68,7 +68,7 @@ func TestNewsResearchflowTavilyMariaDBLive(t *testing.T) {
 	capacity := serverconfig.ResearchflowCapacity{
 		Configured: true, MaxQueuedRuns: 5, MaxWorkers: 1,
 	}
-	owner, err := newResearchflowOwnerComposition(shared, newsCfg, capacity, 90*time.Second)
+	owner, err := newResearchflowOwnerComposition(shared, newsCfg, capacity, 90*time.Second, nil)
 	if err != nil {
 		t.Fatalf("创建 Server 生产 Researchflow Owner 组合失败: %v", err)
 	}
