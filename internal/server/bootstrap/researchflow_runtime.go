@@ -10,8 +10,8 @@ import (
 	"time"
 
 	platformsecurity "example.com/stock-analysis-flow/internal/platform/security"
-	researchflowapplication "example.com/stock-analysis-flow/internal/researchflow/application"
 	quantstage "example.com/stock-analysis-flow/internal/quant/stage"
+	researchflowapplication "example.com/stock-analysis-flow/internal/researchflow/application"
 	serverconfig "example.com/stock-analysis-flow/internal/server/config"
 )
 
