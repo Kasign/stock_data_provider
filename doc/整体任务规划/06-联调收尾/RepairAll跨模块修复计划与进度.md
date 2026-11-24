@@ -1152,3 +1152,13 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - 认证边界：Researchflow 路由只允许 Owner Session；不为旧 Analysis API 添加 Session 兼容，不保留新旧双认证。
 - 本轮只提交迁移盘点文档，没有修改生产代码或删除旧接口。后续依次完成业务语义确认、领域 Owner Facade/生产 Stage、结果读取契约、WebUI Run/Stage 页面迁移、旧调用方清零和旧路由退役。
 - 当前 HEAD 和 Actions 以 GitHub 实时状态为准；本轮文档提交不冒充代码验收或完整 CI 通过。
+
+
+## 2026-11-24 RA-02 SMA20 生产接入现状复核
+
+- 复核起点：`repair_all` SHA `25f66ae30470a76a734afffe974247f0401fd4ba`；本记录只描述该代码基线的事实，不代表已完成生产接入。
+- 代码已具备 Data Close Series Snapshot 创建/授权读取、Quant `CreateSMAService` 精确 SMA20 计算与持久化、Quant `SMA20Adapter` Stage 级输入输出封装。旧文档中“没有计算 Facade”的结论已过时，详见 `Quant模块卡点.md` 的 SMA20 状态校准。
+- 仍未闭环的生产路径是：Server 可信 Worker Principal → Data Snapshot Creator（按当前 Data Policy 签发授权）→ Quant CreateSMAService（活动 Registry + MariaDB Repository + Clock）→ SMA20 Stage Adapter → Researchflow Executor/Output Registry/Template → Worker Attempt 原子提交。
+- 当前 Server Composition/Runtime 仍仅装配 News Search。未核实并完成可信 Principal 与 Data 策略主体映射前，不注入 SMA20；未定义正式 Stage Payload/QualitySummary Schema、参数 Schema、Template 和结果关联契约前，不注册占位 Stage。
+- 下一步按真实依赖推进：先核对 Data/Platform Service Principal 解析与 Data Policy 当前允许主体；再核对 Quant 生产 Registry/Repository/Clock 的实际装配条件及 Researchflow Executor 的多 Stage 分发机制；据此一次性完成 Server 组合、Stage 注册、MariaDB 端到端测试和模块文档。若身份/策略或 Run→result_id 关联契约仍缺失，记录为明确阻塞，不绕过授权或临时扩展公共契约。
+- 当前 SHA 的 Combined Status 返回空状态集合，按 SHA 查询的 PR workflow runs 也未返回记录；因此本次不标记 CI 通过。后续必须对实际代码提交 SHA 核实 Go Test Suite、Integration CI 和相关 Quant/Data/Server 专项工作流。
