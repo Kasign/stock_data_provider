@@ -214,16 +214,16 @@ h1 { margin: 0; color: var(--text-heading); font-size: clamp(24px, 2.4vw, 31px);
    width: 100%;
    min-height: var(--control-height-base);
    padding: 0 11px;
-   border: 1px solid #2a3a49;
+   border: 1px solid var(--border);
    border-radius: 8px;
-   color: #e2ebf1;
+   color: var(--text);
    background: var(--surface-input);
    transition: border-color .15s;
 }
 .field textarea { min-height: 80px; padding: 10px 11px; resize: vertical; line-height: 1.6; }
 .field input::placeholder, .field textarea::placeholder,
 .recent-analysis-search input::placeholder, .watchlist-name-input::placeholder { color: var(--text-dim); }
-.field input:focus, .field select:focus, .field textarea:focus { border-color: #479d8a; }
+.field input:focus, .field select:focus, .field textarea:focus { border-color: var(--accent); }
 .field select { appearance: auto; cursor: pointer; }
 .symbol-field { flex: 1 1 175px; }
 .query-form .field:not(.symbol-field) { flex: 0 0 120px; }
@@ -891,7 +891,9 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus-ring); ou
 :root[data-theme="light"] .field input, :root[data-theme="light"] .field select,
 :root[data-theme="light"] .field textarea, :root[data-theme="light"] .recent-analysis-search input,
 :root[data-theme="light"] .watchlist-name-input {
-  color: #1c2d3b; background: #ffffff; border-color: #cbd8e1;
+  color: var(--text);
+  background: var(--surface-input);
+  border-color: var(--border);
 }
 :root[data-theme="light"] .field input::placeholder, :root[data-theme="light"] .field textarea::placeholder,
 :root[data-theme="light"] .recent-analysis-search input::placeholder, :root[data-theme="light"] .watchlist-name-input::placeholder { color: var(--text-dim); }
