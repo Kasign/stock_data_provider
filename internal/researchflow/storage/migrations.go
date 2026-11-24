@@ -8,7 +8,7 @@ const MigrationNamespace = "researchflow"
 // 新数据库只执行一个 V1；未来正式发布后新增 Schema 变更从 V2 开始。
 func Migrations() []platformstorage.Migration {
 	return []platformstorage.Migration{{
-		Version: 1,
+		Version:     1,
 		Description: "create complete Researchflow schema baseline",
 		Statements: []string{
 			"CREATE TABLE researchflow_runs (\n\t\t\t\t\trun_ref VARCHAR(255) NOT NULL,\n\t\t\t\t\tschema_version VARCHAR(32) NOT NULL,\n\t\t\t\t\tstatus VARCHAR(16) NOT NULL,\n\t\t\t\t\tversion BIGINT UNSIGNED NOT NULL,\n\t\t\t\t\tsystem_as_of CHAR(30) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n\t\t\t\t\tdeadline_at CHAR(30) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n\t\t\t\t\ttemplate_ref VARCHAR(255) NOT NULL,\n\t\t\t\t\ttemplate_version VARCHAR(64) NOT NULL,\n\t\t\t\t\ttemplate_fingerprint CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n\t\t\t\t\tinput_snapshot_refs LONGTEXT NOT NULL,\n\t\t\t\t\tresolved_template_snapshot LONGTEXT NOT NULL,\n\t\t\t\t\tparameters_snapshot LONGTEXT NOT NULL,\n\t\t\t\t\toriginating_request_id VARCHAR(128) NULL,\n\t\t\t\t\tcorrelation_id VARCHAR(128) NOT NULL,\n\t\t\t\t\tresult_summary_ref VARCHAR(255) NULL,\n\t\t\t\t\ttermination_reason VARCHAR(64) NULL,\n\t\t\t\t\tcreated_at CHAR(30) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n\t\t\t\t\tstarted_at CHAR(30) CHARACTER SET ascii COLLATE ascii_bin NULL,\n\t\t\t\t\tfinished_at CHAR(30) CHARACTER SET ascii COLLATE ascii_bin NULL,\n\t\t\t\t\tPRIMARY KEY (run_ref),\n\t\t\t\t\tKEY idx_researchflow_runs_status_deadline (status, deadline_at),\n\t\t\t\t\tKEY idx_researchflow_runs_correlation (correlation_id)\n\t\t\t\t) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin",
