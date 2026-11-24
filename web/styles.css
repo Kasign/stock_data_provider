@@ -145,21 +145,6 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .status-dot.is-online { background: var(--accent); box-shadow: 0 0 0 3px rgba(71, 214, 173, .12); }
 .status-dot.is-offline { background: var(--danger); box-shadow: 0 0 0 3px rgba(240, 129, 138, .1); }
 .status-dot.is-unknown { background: var(--text-dim); box-shadow: 0 0 0 3px color-mix(in srgb, var(--text-dim) 14%, transparent); }
-.settings-link {
-   display: flex;
-   align-items: center;
-   gap: 10px;
-   width: 100%;
-   margin-top: 14px;
-   padding: 13px 10px;
-   border: 0;
-   border-top: 1px solid var(--border-soft);
-   text-align: left;
-   color: #9aabbd;
-   background: transparent;
-   cursor: pointer;
-}
-.settings-link:hover { color: var(--accent); }
 .sidebar-footnote { margin: 16px 10px 0; color: var(--text-dim); font-size: 12px; }
 .main-area { min-height: 100vh; margin-left: var(--layout-sidebar-width); padding: 0 var(--space-page); }
 .topbar { display: flex; align-items: center; justify-content: space-between; height: 67px; border-bottom: 1px solid var(--border-soft); }
@@ -461,9 +446,9 @@ tbody tr:hover { background: rgba(79, 112, 135, .06); }
 }
 @media (max-width: 900px) {
   .sidebar { width: 67px; padding: 19px 8px; } .brand { justify-content: center; padding: 0 0 28px; }
-  .brand-copy, .side-label, .nav-link > span:not(.nav-icon), .sidebar-bottom .mini-service > span:last-child, .settings-link span, .sidebar-footnote { display: none; }
+  .brand-copy, .side-label, .nav-link > span:not(.nav-icon), .sidebar-bottom .mini-service > span:last-child, .sidebar-footnote { display: none; }
   .nav-link { justify-content: center; padding: 0; } .nav-icon { font-size: 20px; }
-  .mini-service { justify-content: center; padding: 9px 0; } .settings-link { justify-content: center; padding: 14px 0; }
+  .mini-service { justify-content: center; padding: 9px 0; }
   .main-area { margin-left: 67px; padding: 0 18px; } .content-grid { grid-template-columns: 1fr; }
   .source-list { display: grid; grid-template-columns: 1fr 1fr; column-gap: 18px; }
 }
@@ -820,10 +805,9 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus-ring); ou
   .sidebar .brand { justify-content: flex-start; padding: 0 8px 25px; }
   .sidebar .brand-copy, .sidebar .sidebar-bottom .mini-service > span:last-child { display: flex; }
   .sidebar .side-label, .sidebar .sidebar-footnote { display: block; }
-  .sidebar .nav-link > span:not(.nav-icon), .sidebar .settings-link span { display: inline; }
+  .sidebar .nav-link > span:not(.nav-icon) { display: inline; }
   .sidebar .nav-link { justify-content: flex-start; padding: 0 12px; }
   .sidebar .mini-service { justify-content: flex-start; padding: 10px; }
-  .sidebar .settings-link { justify-content: flex-start; padding: 13px 10px; }
   .main-area { margin-left: 0; padding: 0 12px; }
   .mobile-nav-overlay:not([hidden]) {
     display: block;
@@ -878,7 +862,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus-ring); ou
 :root[data-theme="light"] body { background: var(--bg); color: var(--text); }
 :root[data-theme="light"] .sidebar { background: #ffffff; border-color: var(--border); box-shadow: 2px 0 20px rgba(31, 49, 65, .035); }
 :root[data-theme="light"] .side-label { color: var(--text-dim); }
-:root[data-theme="light"] .nav-link, :root[data-theme="light"] .settings-link { color: #526575; }
+:root[data-theme="light"] .nav-link { color: #526575; }
 :root[data-theme="light"] .nav-link:hover { background: #f2f6f8; }
 
 :root[data-theme="light"] .sidebar-footnote { color: var(--text-dim); }
@@ -4478,8 +4462,6 @@ body {
   border-radius: 3px;
 }
 
-/* 左侧导航分组：核心行情、研究任务与系统配置分层展示。 */
-.side-nav-section-label { padding-top: 16px; padding-bottom: 4px; }
 
 /* 已声明后端 API 的可操作查询区，保持结果来源与质量信息可见。 */
 .existing-api-panel { margin-top: 18px; padding: 18px; }
@@ -4524,11 +4506,6 @@ body {
 }
 .nav-link.active {
   box-shadow: inset 3px 0 0 var(--accent);
-}
-.side-nav-section-label {
-  margin-top: 8px;
-  padding-top: 14px;
-  border-top: 1px solid var(--border-soft);
 }
 .button, .text-button, .nav-link, .icon-button, .avatar-button {
   transition: color .15s ease, background .15s ease, border-color .15s ease, box-shadow .15s ease;
