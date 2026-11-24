@@ -1171,5 +1171,7 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - 复核后修正权限范围：Data 访问身份属于 Quant，不是整个 Researchflow Worker。Server 只在 `quant.sma20` Stage 执行边界注入 `quant` Principal；News 等非 Data Stage 不继承 `data:read`。
 - Quant 凭据至少具备 `data:read`。Data Policy 必须显式允许 `principal:service:quant`、用途 `quant_analysis` 和所需 Scope；无策略授权时 Snapshot 创建/读取仍拒绝。
 - 当前 Quant Stage 尚未注册，因此 Quant 凭据可选；Quant Stage 加入生产 Template 时，Server 组合根必须校验凭据存在、Principal 有效且策略授权配置可用，再允许启动。
-- CI 首轮暴露 Go 格式问题、SMA20 SampleCount 类型错误及两个集成测试调用签名过时，均已按真实失败日志修正。最新代码 SHA 的 Go Test Suite/Integration CI 仍在运行，不能标记通过。
+- CI 首轮暴露 Go 格式问题、SMA20 SampleCount 类型错误、Runtime 测试调用签名未更新和身份测试错误断言，均已根据真实失败日志修正。
+- `eb6c3d5e647d16a7bd21584a6a5d83ca683698f0` 的 Go Test Suite 与 Integration CI 均通过：Go Test `45389404306`，Integration `45389404103`。通过范围包含 root tests/race/vet、模块专项测试、Researchflow/Market Data/Research/Notification MariaDB 集成、Compose 校验和 Docker build。
+- 该结果只验收当前身份边界工作，不代表 SMA20 Stage 已生产注册或旧 Analysis 已退役。
 - 本阶段只完成服务身份前置边界，不代表 SMA20 生产 Stage 已接入，也不代表旧 Analysis 可以删除。后续继续 Data Snapshot 适配器、Quant Reader/Facade 装配、Stage Executor 多路分发、Output Registry 与正式 Template。
