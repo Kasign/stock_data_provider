@@ -14,7 +14,9 @@ import (
 
 const (
 	NewsSearchConfiguredProvidersRef = "news.search.configured-providers@1.0.0"
+	QuantDailyBarsProvidersRef       = "quant.daily-bars.configured-providers@1.0.0"
 	newsSearchPolicyVersion          = "1.0.0"
+	quantDailyBarsPolicyVersion      = "1.0.0"
 )
 
 var (
@@ -46,11 +48,18 @@ type Registry struct {
 }
 
 func NewRegistry() (*Registry, error) {
-	definitions := []definition{{
-		Ref: NewsSearchConfiguredProvidersRef, Version: newsSearchPolicyVersion,
-		ResourceType: "news.provider",
-		Selection:    "server_successfully_assembled_provider_set_at_run_creation",
-	}}
+	definitions := []definition{
+		{
+			Ref: NewsSearchConfiguredProvidersRef, Version: newsSearchPolicyVersion,
+			ResourceType: "news.provider",
+			Selection:    "server_successfully_assembled_provider_set_at_run_creation",
+		},
+		{
+			Ref: QuantDailyBarsProvidersRef, Version: quantDailyBarsPolicyVersion,
+			ResourceType: "marketdata.daily_bars_provider",
+			Selection:    "server_successfully_assembled_daily_bars_provider_set_at_run_creation",
+		},
+	}
 	registry := &Registry{
 		definitions:  make(map[string]definition, len(definitions)),
 		fingerprints: make(map[string]string, len(definitions)),
