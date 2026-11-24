@@ -137,18 +137,31 @@ func (s *Store) ResolveCurrentDataAuthorizationPolicy(ctx context.Context) (auth
 	}
 	defer tx.Rollback()
 
-	var value authorization.PolicyVersion
-	var createdAt time.Time
-	err = tx.QueryRowContext(ctx, `SELECT v.policy_type, v.policy_ref, v.policy_version,
-v.payload_json, v.payload_hash, v.created_at
-FROM market_data_current_authorization_policy_versions c
-JOIN market_data_authorization_policy_versions v
-ON v.policy_type=c.policy_type AND v.policy_ref=c.policy_ref AND v.policy_version=c.policy_version
-WHERE c.policy_type=? AND c.policy_ref=?`,
+	// 先读取 current pointer，再读取不可变版本。分开查询才能区分
+	// “尚未发布”与“指针存在但目标版本缺失”的数据完整性故障。
+	var currentVersion string
+	err = tx.QueryRowContext(ctx, `SELECT policy_version
+FROM market_data_current_authorization_policy_versions
+WHERE policy_type=? AND policy_ref=?`,
 		authorization.DataAccessPolicyType, authorization.DailyBarsV2PolicyRef).
-		Scan(&value.PolicyType, &value.PolicyRef, &value.PolicyVersion, &value.Payload, &value.PayloadHash, &createdAt)
+		Scan(&currentVersion)
 	if errors.Is(err, sql.ErrNoRows) {
 		return authorization.CurrentPolicy{}, app.ErrDataAuthorizationPolicyNotPublished
+	}
+	if err != nil {
+		return authorization.CurrentPolicy{}, fmt.Errorf("%w: %v", ErrDataAuthorizationPolicyUnavailable, err)
+	}
+
+	var value authorization.PolicyVersion
+	var createdAt time.Time
+	err = tx.QueryRowContext(ctx, `SELECT policy_type, policy_ref, policy_version,
+payload_json, payload_hash, created_at
+FROM market_data_authorization_policy_versions
+WHERE policy_type=? AND policy_ref=? AND policy_version=?`,
+		authorization.DataAccessPolicyType, authorization.DailyBarsV2PolicyRef, currentVersion).
+		Scan(&value.PolicyType, &value.PolicyRef, &value.PolicyVersion, &value.Payload, &value.PayloadHash, &createdAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return authorization.CurrentPolicy{}, ErrDataAuthorizationPolicyUnavailable
 	}
 	if err != nil {
 		return authorization.CurrentPolicy{}, fmt.Errorf("%w: %v", ErrDataAuthorizationPolicyUnavailable, err)
