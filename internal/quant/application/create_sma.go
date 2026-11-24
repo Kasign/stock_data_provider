@@ -128,7 +128,7 @@ func (service *CreateSMAService) Execute(ctx context.Context, request CreateSMAR
 		return manifest.Manifest{}, fmt.Errorf("%w: parameters: %v", ErrInvalidCreateSMARequest, err)
 	}
 	var parameters struct {
-		Window int \`json:"window"\`
+		Window int `json:"window"`
 	}
 	decoder := json.NewDecoder(bytes.NewReader(request.Parameters))
 	decoder.DisallowUnknownFields()
