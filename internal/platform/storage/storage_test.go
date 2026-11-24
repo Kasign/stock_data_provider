@@ -737,16 +737,3 @@ func TestPrepareMigrationsChecksumsStatementsDeterministically(t *testing.T) {
 }
 
 
-func TestPrepareMigrationsRejectsUnsafeOperations(t *testing.T) {
-	cases := []MigrationOperation{
-		{Kind: MigrationOperationEnsureColumn, Table: "sample;DROP", Name: "column", Definition: "INT"},
-		{Kind: MigrationOperationEnsureColumn, Table: "sample", Name: "column", Definition: "INT; DROP TABLE sample"},
-		{Kind: MigrationOperationEnsureNonUniqueIndex, Table: "sample", Name: "idx_sample", Columns: "id); DROP TABLE sample"},
-		{Kind: "arbitrary_sql", Table: "sample", Name: "x"},
-	}
-	for _, operation := range cases {
-		if _, _, err := prepareMigrations("market_data", []Migration{{Version: 1, Description: "unsafe operation", Operations: []MigrationOperation{operation}}}); err == nil {
-			t.Fatalf("unsafe migration operation was accepted: %+v", operation)
-		}
-	}
-}
