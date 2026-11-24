@@ -46,7 +46,7 @@ func TestMariaDBPITDailyBarsProviderAllowlistFiltersSourcesBeforeCoverageSelecti
 	if err := store.UpsertBars(ctx, bars); err != nil {
 		t.Fatalf("persist multi-source PIT bars: %v", err)
 	}
-	asOf := time.Now().UTC().Add(time.Second)
+	asOf := time.Now().UTC().Add(time.Minute)
 	filtered, err := store.ListBarsAsOfFromSources(ctx, symbol, "", "", model.AdjustmentNone, asOf, 20, []string{"eastmoney"})
 	if err != nil {
 		t.Fatalf("ListBarsAsOfFromSources() error = %v", err)
