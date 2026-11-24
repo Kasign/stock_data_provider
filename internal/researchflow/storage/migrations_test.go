@@ -43,6 +43,9 @@ func TestMigrationsDefineCompleteResearchflowBaseline(t *testing.T) {
 			t.Errorf("baseline is missing final schema fragment %q", fragment)
 		}
 	}
+	if strings.Contains(schema, "idx_researchflow_idempotency_run") {
+		t.Fatal("redundant non-unique Run index must not be recreated")
+	}
 	if strings.Contains(strings.ToUpper(schema), "ALTER TABLE") {
 		t.Fatal("fresh baseline must not contain incremental ALTER statements")
 	}
