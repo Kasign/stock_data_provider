@@ -12,6 +12,7 @@ on:
     branches:
       - feat/web
       - feat/data
+      - repair_all
     paths:
       - "web/**"
       - ".github/workflows/webui-browser-smoke.yml"
