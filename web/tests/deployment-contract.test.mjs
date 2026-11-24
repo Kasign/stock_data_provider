@@ -2,13 +2,14 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-const [compose, envExample, dockerfile, nginxConfig, nginxTemplate, readme] = await Promise.all([
+const [compose, envExample, dockerfile, nginxConfig, nginxTemplate, readme, deployScript] = await Promise.all([
   readFile(new URL("../../docker-compose.yml", import.meta.url), "utf8"),
   readFile(new URL("../../.env.example", import.meta.url), "utf8"),
   readFile(new URL("../Dockerfile", import.meta.url), "utf8"),
   readFile(new URL("../nginx.conf", import.meta.url), "utf8"),
   readFile(new URL("../default.conf.template", import.meta.url), "utf8"),
-  readFile(new URL("../../doc/开发部署说明.md", import.meta.url), "utf8")
+  readFile(new URL("../../doc/开发部署说明.md", import.meta.url), "utf8"),
+  readFile(new URL("../../scripts/deploy-go.sh", import.meta.url), "utf8")
 ]);
 
 test("the root Compose deployment contains only Root Server and WebUI", () => {
@@ -34,6 +35,20 @@ test("Root Server is the only API upstream and Owner Session is mandatory", () =
   assert.equal(envExample.includes("MARKET_DATA_API_KEY="), false);
   assert.equal(envExample.includes("MARKET_DATA_BASE_URL="), false);
   assert.ok(readme.includes("docker compose --env-file .env up -d --build"));
+  assert.ok(readme.includes("不要覆盖"));
+});
+
+test("deployment script matches Root Server, explicit migrations and authenticated readiness", () => {
+  assert.ok(deployScript.includes("build stock-analysis-server stock-analysis-web"));
+  assert.equal(deployScript.includes("build stock-analysis-data"), false);
+  assert.ok(deployScript.includes("for migration_key in DB_AUTO_MIGRATE MIGRATION_ENABLED"));
+  assert.ok(deployScript.includes("curl_ready http://127.0.0.1:8092/readyz"));
+  assert.ok(deployScript.includes("PLATFORM_ADMIN_TOKEN"));
+  assert.ok(envExample.includes("DB_AUTO_MIGRATE=false"));
+  assert.ok(envExample.includes("MIGRATION_ENABLED=false"));
+  assert.ok(readme.includes("owner-init"));
+  assert.ok(readme.includes("DB_AUTO_MIGRATE=true"));
+  assert.ok(readme.includes("MIGRATION_ENABLED=true"));
   assert.ok(readme.includes("不要覆盖"));
 });
 
