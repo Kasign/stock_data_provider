@@ -303,6 +303,26 @@ func (s *Store) ListBarsAsOfFromSources(ctx context.Context, symbol, start, end 
 	return s.listBarsAsOf(ctx, symbol, start, end, adjust, asOf, limit, sources)
 }
 
+func validDailyBarSourceAllowlist(values []string) bool {
+	if len(values) == 0 {
+		return false
+	}
+	for index, value := range values {
+		if value == "" || strings.TrimSpace(value) != value {
+			return false
+		}
+		for _, char := range value {
+			if !(char >= 'a' && char <= 'z') && !(char >= '0' && char <= '9') && char != '-' && char != '_' {
+				return false
+			}
+		}
+		if index > 0 && values[index-1] >= value {
+			return false
+		}
+	}
+	return true
+}
+
 func (s *Store) listBarsAsOf(ctx context.Context, symbol, start, end string, adjust model.AdjustmentBasis, asOf time.Time, limit int, allowedSources []string) ([]model.DailyBar, error) {
 	if s == nil || s.db == nil {
 		return nil, errors.New("MariaDB store disabled")
