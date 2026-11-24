@@ -191,49 +191,43 @@ func TestFundamentalsRevisionHashNormalizesEquivalentOffsetInstants(t *testing.T
 	}
 }
 
-func TestMarketDataMigrationDefinitionsExposeImmutableVersionedHistory(t *testing.T) {
+func TestMarketDataMigrationDefinitionsExposeCompleteBaseline(t *testing.T) {
 	migrations := MigrationDefinitions()
-	if len(migrations) != 9 {
-		t.Fatalf("migration count = %d, want V1-V6, authorization policy V7, decisions/revocations V8 and publication audit V9", len(migrations))
+	if len(migrations) != 1 || migrations[0].Version != 1 || len(migrations[0].Statements) != 17 || len(migrations[0].Operations) != 0 {
+		t.Fatalf("migration baseline = %#v, want one V1 with seventeen tables", migrations)
 	}
-	for index := 0; index < 3; index++ {
-		if migrations[index].Version != uint64(index+1) || len(migrations[index].Statements) == 0 || len(migrations[index].Operations) != 0 {
-			t.Fatalf("published migration %d changed unexpectedly: %+v", index+1, migrations[index])
+	schema := strings.Join(migrations[0].Statements, "\n")
+	for _, table := range []string{
+		"market_data_provider_probe_runs", "market_data_sentiment_snapshots", "market_data_quotes",
+		"market_data_daily_bars", "market_data_daily_bar_versions", "market_data_fundamental_versions",
+		"market_data_security_trading_status_versions", "market_data_adjustment_factor_versions",
+		"market_data_corporate_action_versions", "market_data_valuation_versions",
+		"market_data_trading_calendar_snapshots", "market_data_daily_bars_close_series_snapshots",
+		"market_data_authorization_policy_versions", "market_data_current_authorization_policy_versions",
+		"market_data_authorization_decisions", "market_data_authorization_revocations",
+		"market_data_authorization_policy_publications",
+	} {
+		if !strings.Contains(schema, "CREATE TABLE "+table+" (") {
+			t.Errorf("baseline is missing table %s", table)
 		}
 	}
-	compatibility := migrations[3]
-	if compatibility.Version != 4 || len(compatibility.Statements) != 0 || len(compatibility.Operations) != 4 {
-		t.Fatalf("compatibility migration must contain four idempotent operations only: %+v", compatibility)
+	for _, fragment := range []string{
+		"source_version VARCHAR(128) NOT NULL DEFAULT ''",
+		"idx_market_adjustment_factor_version_asof",
+		"volume_ratio DECIMAL(16,8) NULL",
+		"turnover_rate DECIMAL(16,8) NULL",
+		"idx_market_bar_revision_identity_asof",
+		"idx_market_fundamental_identity_asof",
+		"FOREIGN KEY (policy_type, policy_ref, policy_version)",
+		"FOREIGN KEY (authorization_ref) REFERENCES market_data_authorization_decisions",
+	} {
+		if !strings.Contains(schema, fragment) {
+			t.Errorf("baseline is missing final schema fragment %q", fragment)
+		}
 	}
-	calendar := migrations[4]
-	if calendar.Version != 5 || len(calendar.Statements) != 1 || len(calendar.Operations) != 0 {
-		t.Fatalf("calendar snapshot migration V5 must contain one additive table creation: %+v", calendar)
-	}
-	dailyBarsSnapshot := migrations[5]
-	if dailyBarsSnapshot.Version != 6 || len(dailyBarsSnapshot.Statements) != 1 || len(dailyBarsSnapshot.Operations) != 0 ||
-		!strings.Contains(dailyBarsSnapshot.Statements[0], "market_data_daily_bars_close_series_snapshots") ||
-		!strings.Contains(dailyBarsSnapshot.Statements[0], "PRIMARY KEY (snapshot_ref)") {
-		t.Fatalf("daily-bars Snapshot migration V6 must add one immutable query-level Snapshot table: %+v", dailyBarsSnapshot)
-	}
-	policy := migrations[6]
-	if policy.Version != 7 || len(policy.Statements) != 2 || len(policy.Operations) != 0 ||
-		!strings.Contains(policy.Statements[0], "market_data_authorization_policy_versions") ||
-		!strings.Contains(policy.Statements[1], "market_data_current_authorization_policy_versions") {
-		t.Fatalf("Data authorization policy migration V7 must add immutable versions and a current pointer: %+v", policy)
-	}
-	decisions := migrations[7]
-	if decisions.Version != 8 || len(decisions.Statements) != 2 || len(decisions.Operations) != 0 ||
-		!strings.Contains(decisions.Statements[0], "market_data_authorization_decisions") ||
-		!strings.Contains(decisions.Statements[1], "market_data_authorization_revocations") ||
-		!strings.Contains(decisions.Statements[1], "FOREIGN KEY (authorization_ref)") {
-		t.Fatalf("Data authorization decision migration V8 must add immutable decisions and append-only revocations: %+v", decisions)
-	}
-	publicationAudit := migrations[8]
-	if publicationAudit.Version != 9 || len(publicationAudit.Statements) != 1 || len(publicationAudit.Operations) != 0 ||
-		!strings.Contains(publicationAudit.Statements[0], "market_data_authorization_policy_publications") ||
-		!strings.Contains(publicationAudit.Statements[0], "previous_policy_version") ||
-		!strings.Contains(publicationAudit.Statements[0], "payload_hash") ||
-		!strings.Contains(publicationAudit.Statements[0], "request_id") {
-		t.Fatalf("Data policy publication audit migration V9 must add append-only policy change evidence: %+v", publicationAudit)
+	for _, forbidden := range []string{"IF NOT EXISTS", "ALTER TABLE", "UPDATE market_data_", "uq_market_bar_revision_content", "uq_market_fundamental_revision_content"} {
+		if strings.Contains(strings.ToUpper(schema), strings.ToUpper(forbidden)) {
+			t.Errorf("fresh baseline contains obsolete migration fragment %q", forbidden)
+		}
 	}
 }
