@@ -3,6 +3,7 @@ package bootstrap
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -57,6 +58,16 @@ const MigrationNamespace = repository.MigrationNamespace
 // MigrationDefinitions 返回由 Root Server 统一执行的 Data Schema 迁移定义。
 func MigrationDefinitions() []platformstorage.Migration {
 	return repository.MigrationDefinitions()
+}
+
+// ValidateSchema checks the final physical MarketData schema before the Root
+// Server creates Redis and application repositories.
+func ValidateSchema(ctx context.Context, db *sql.DB) error {
+	store, err := repository.NewWithBorrowedDB(db)
+	if err != nil {
+		return fmt.Errorf("create borrowed MarketData schema validator: %w", err)
+	}
+	return store.ValidateSchema(ctx)
 }
 
 type Diagnostics interface {
