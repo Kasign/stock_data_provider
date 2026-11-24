@@ -2623,7 +2623,6 @@ button:disabled, input:disabled, select:disabled, textarea:disabled { cursor: no
 
 
 /* Consistent page frame and final responsive layout normalization. */
-.main-area { min-width: 0; }
 .view > *, .page-heading > div, .panel-heading > div { min-width: 0; }
 .page-heading > .last-updated,
 .page-heading > .feature-status {
@@ -4498,9 +4497,6 @@ button:disabled {
 }
 :root[data-theme="light"] .panel {
   box-shadow: 0 6px 22px rgba(34, 57, 74, .045);
-}
-:root[data-theme="light"] .nav-link.active {
-  box-shadow: inset 3px 0 0 var(--accent);
 }
 @media (min-width: 1500px) {
   .main-area { padding-left: 34px; padding-right: 34px; }
