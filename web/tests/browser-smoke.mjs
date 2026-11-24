@@ -23,26 +23,17 @@ const viewNavigation = [
   { name: "watchlist", selector: '.nav-link[data-view="watchlist"]' },
   { name: "research", selector: '.nav-link[data-view="research"]' },
   { name: "tasks", selector: '.nav-link[data-view="tasks"]' },
-  { name: "data", selector: '.nav-link[data-view="data"]' },
-  { name: "notifications", selector: '.nav-link[data-view="notifications"]' },
-  { name: "chat", selector: '.nav-link[data-view="chat"]' },
   { name: "screening", selector: '.nav-link[data-view="screening"]' },
   { name: "alerts", selector: '.nav-link[data-view="alerts"]' },
+  { name: "chat", selector: '.nav-link[data-view="chat"]' },
+  { name: "notifications", selector: '.nav-link[data-view="notifications"]' },
+  { name: "data", selector: '.nav-link[data-view="data"]' },
   { name: "settings", selector: '.nav-link[data-view="settings"]' }
 ];
 const clickNav = async (targetPage, selector) => {
   const menu = targetPage.locator("#mobile-menu-toggle");
   if (await menu.isVisible() && (await menu.getAttribute("aria-expanded")) !== "true") await menu.click();
-  const target = targetPage.locator(selector);
-  if (!(await target.isVisible())) {
-    const group = target.locator("xpath=ancestor::div[contains(@class, 'nav-group')]");
-    const primary = group.locator(".primary-nav-link");
-    if (await primary.count()) {
-      await primary.click();
-      if (await menu.isVisible() && (await menu.getAttribute("aria-expanded")) !== "true") await menu.click();
-    }
-  }
-  await target.click();
+  await targetPage.locator(selector).click();
 };
 
 const contentTypes = {
@@ -602,6 +593,8 @@ try {
       { timeout: 10000 }
     );
     assert.equal(await page.locator("#market-view").isVisible(), true, "market overview must be the initial view");
+    assert.equal(await page.locator("#primary-sidebar .side-nav > .nav-link").count(), 11, "all workspace views must be exposed as flat first-level navigation tabs");
+    assert.equal(await page.locator("#primary-sidebar .side-nav .nav-group, #primary-sidebar .side-nav .nav-subnav").count(), 0, "sidebar navigation must not contain nested groups or sub-navigation");
 
     // Verify legacy view hashes survive direct navigation and refresh; the old market-data alias is normalized.
     if (viewport.width === 320) {
