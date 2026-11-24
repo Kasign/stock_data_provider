@@ -206,7 +206,11 @@ func TestRegistryMariaDBPartialDDLFailureRequiresRecovery(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open MariaDB admin connection: %v", err)
 	}
-	defer adminDB.Close()
+	t.Cleanup(func() {
+		if err := adminDB.Close(); err != nil {
+			t.Errorf("close MariaDB admin connection: %v", err)
+		}
+	})
 	if err := adminDB.PingContext(ctx); err != nil {
 		t.Fatalf("ping MariaDB: %v", err)
 	}
