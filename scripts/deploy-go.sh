@@ -36,7 +36,7 @@ if docker inspect "$WEB_CONTAINER" >/dev/null 2>&1; then
   canonical_compose_file="$ROOT_DIR/$COMPOSE_FILE"
   if [[ "$web_compose_files" != *"$canonical_compose_file"* ]]; then
     [[ "$web_compose_files" == "<no value>" ]] && web_compose_files="缺少 Compose 文件标签"
-    fail "检测到已有容器 $WEB_CONTAINER 不属于当前根目录 $COMPOSE_FILE（Compose 文件标签：$web_compose_files），可能是旧版 WebUI 容器占用固定容器名。请先确认该容器用途，再按 README 的一次性迁移步骤移除旧应用容器；脚本不会自动删除它。移除容器不会删除外部 MariaDB/Redis 数据。"
+    fail "检测到已有容器 $WEB_CONTAINER 不属于当前根目录 $COMPOSE_FILE（Compose 文件标签：$web_compose_files），可能是旧版 WebUI 容器占用固定容器名。请先确认该容器用途，再按 doc/开发部署说明.md 的旧容器迁移步骤移除旧应用容器；脚本不会自动删除它。移除容器不会删除外部 MariaDB/Redis 数据。"
   fi
 fi
 
