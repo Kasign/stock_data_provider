@@ -1437,29 +1437,29 @@ test("market overview and activity use readable secondary text and touch-sized c
 });
 
 
-test("primary navigation groups preserve market views and the seven-entry information architecture", () => {
-  for (const view of ["market", "stocks", "watchlist"]) {
-    assert.match(html, new RegExp('class="nav-link(?: [^"]*)?"[^>]*data-view="' + view + '"'));
+test("侧边栏将全部工作区作为平级一级 Tab 展示", () => {
+  const views = ["market", "stocks", "watchlist", "research", "tasks", "screening", "alerts", "chat", "notifications", "data", "settings"];
+  assert.equal((html.match(/class="nav-link"/g) || []).length, views.length);
+  for (const view of views) {
+    assert.match(html, new RegExp('class="nav-link"[^>]*data-view="' + view + '"'));
+    assert.match(html, new RegExp('id="' + view + '-view"'));
   }
-  assert.equal((html.match(/data-nav-primary=/g) || []).length, 7);
-  assert.equal((html.match(/class="nav-group"/g) || []).length, 7);
-  assert.match(html, /data-nav-primary="market"/);
-  assert.match(html, /data-nav-primary="research"/);
-  assert.match(html, /data-nav-primary="quant"/);
-  assert.match(html, /data-nav-primary="tasks"/);
-  assert.match(html, /data-nav-primary="tracking"/);
-  assert.match(html, /data-nav-primary="data"/);
-  assert.match(html, /data-nav-primary="settings"/);
-  assert.match(html, /id="market-view"/);
-  assert.match(html, /id="stocks-view"/);
-  assert.match(html, /id="watchlist-view"/);
+  assert.doesNotMatch(html, /data-nav-primary=|class="nav-group"|class="nav-subnav"|class="primary-nav-link"/);
+  assert.doesNotMatch(app, /VIEW_NAV_GROUP|PRIMARY_NAV_META|primary-nav-link/);
   assert.doesNotMatch(html, /id="quick-locate"|class="quick-locate"|data-view="quick-locate"/);
   assert.match(html, /market-sector-body/);
 });
-test("collapsed sidebar navigation remains accessible and unavailable modules disclose their status", () => {
-  assert.match(html, /class="nav-link(?: [^"]*)?"[^>]*data-view="screening"[^>]*aria-label="量化研究"/);
-  assert.match(html, /class="nav-link(?: [^"]*)?"[^>]*data-view="alerts"[^>]*aria-label="告警（待接入）"/);
+test("平级导航的无障碍名称与未接入能力状态清晰", () => {
+  for (const [view, label] of [
+    ["market", "市场总览"], ["stocks", "个股行情"], ["watchlist", "自选与观察"],
+    ["research", "个股深度研究"], ["tasks", "分析任务"], ["screening", "条件选股"],
+    ["alerts", "告警（待接入）"], ["chat", "问股（待接入）"],
+    ["notifications", "通知中心（待接入）"], ["data", "数据中心"], ["settings", "设置中心"]
+  ]) {
+    assert.match(html, new RegExp('data-view="' + view + '"[^>]*aria-label="' + label + '"'));
+  }
   assert.match(html, /class="nav-link-state" title="[^"]*待接入[^"]*">待接入/);
+  assert.match(html, /nav-link-state/);
   assert.match(stylesheet, /nav-link-state/);
 });
 test("旧 view hash 在应用启动时恢复原页面，未知 hash 回退首页", () => {
