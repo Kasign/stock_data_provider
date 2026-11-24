@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"example.com/stock-analysis-flow/internal/marketdata/model"
+	platformstorage "example.com/stock-analysis-flow/internal/platform/storage"
 )
 
 func TestMariaDBRevisionPersistenceAndPointInTimeQueries(t *testing.T) {
@@ -23,11 +24,11 @@ func TestMariaDBRevisionPersistenceAndPointInTimeQueries(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open MariaDB: %v", err)
 	}
-	if err := store.Migrate(ctx); err != nil {
+	if err := platformstorage.ApplyMigrations(ctx, store.db, MigrationNamespace, MigrationDefinitions()); err != nil {
 		store.Close()
 		t.Fatalf("first migration: %v", err)
 	}
-	if err := store.Migrate(ctx); err != nil {
+	if err := platformstorage.ApplyMigrations(ctx, store.db, MigrationNamespace, MigrationDefinitions()); err != nil {
 		store.Close()
 		t.Fatalf("idempotent migration: %v", err)
 	}
