@@ -33,11 +33,12 @@ var sma20SymbolPattern = regexp.MustCompile(`^[0-9]{6}\.(SH|SZ|BJ)$`)
 var sma20DecimalPattern = regexp.MustCompile(`^(0|[1-9][0-9]*)(\.[0-9]+)?$`)
 
 type SnapshotCreateRequest struct {
-	Symbol     string
-	StartDate  string
-	EndDate    string
-	Limit      int
-	SystemAsOf time.Time
+	Symbol               string
+	StartDate            string
+	EndDate              string
+	Limit                int
+	SystemAsOf           time.Time
+	AllowedProviderCodes []string
 }
 
 type SnapshotReferences struct {
@@ -112,6 +113,7 @@ func (adapter *SMA20Adapter) Execute(ctx context.Context, request SMA20Request) 
 	refs, err := adapter.snapshots.CreateDailyBarsCloseSeriesSnapshot(ctx, SnapshotCreateRequest{
 		Symbol: request.Symbol, StartDate: request.StartDate, EndDate: request.EndDate,
 		Limit: request.Limit, SystemAsOf: request.SystemAsOf,
+		AllowedProviderCodes: append([]string(nil), request.AllowedProviderCodes...),
 	})
 	if err != nil {
 		return SMA20Output{}, SMA20QualitySummary{}, fmt.Errorf("create authorized Data Snapshot for SMA20: %w", err)
