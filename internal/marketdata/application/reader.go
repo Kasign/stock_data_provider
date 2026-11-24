@@ -535,7 +535,6 @@ func validDailyBarsProviderCodeSet(values []string) bool {
 	return true
 }
 
-
 func containsDailyBarsProvider(values []string, expected string) bool {
 	for _, value := range values {
 		if value == expected {

@@ -4016,7 +4016,6 @@ func TestMarketDateNormalizationUsesInjectedClock(t *testing.T) {
 	}
 }
 
-
 func TestDailyBarsAsOfWithCoverageEvidenceFromSourcesRejectsInactiveProvider(t *testing.T) {
 	service := &DataService{}
 	_, _, _, err := service.DailyBarsAsOfWithCoverageEvidenceFromSources(

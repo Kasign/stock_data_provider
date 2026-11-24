@@ -89,7 +89,6 @@ func TestReaderRejectsProviderAllowlistWithoutPITOrCanonicalOrder(t *testing.T) 
 	}
 }
 
-
 func TestReaderRejectsProviderOutsidePITAllowlistEvenIfBackendReturnsIt(t *testing.T) {
 	backend := &providerFilteredReaderBackend{
 		bars: []model.DailyBar{{Symbol: "600036.SH", Source: "baostock"}},
