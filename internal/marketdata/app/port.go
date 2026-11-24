@@ -156,6 +156,7 @@ type DailyBarsQuery struct {
 	Limit                  int    // 请求日线条数；非正数和上限由 DataService 现有配置规则处理。
 	AdjustmentBasis        AdjustmentBasis
 	SystemObservedAtCutoff *time.Time
+	AllowedProviderCodes   []string // 可选的来源约束；非空时必须为规范排序集合，且只允许用于 PIT 读取。
 }
 
 // DailyBarsSnapshot 保留逐条日线元数据和 Data 汇总质量判定。
