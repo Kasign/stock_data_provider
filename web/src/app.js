@@ -4823,8 +4823,12 @@ async function applyBrowserDataImport(imported, currentWatchlist, currentRecentT
     localStorage.removeItem(TASK_REFERENCE_KEY);
 
     // 浏览器存储适配层可能静默忽略写入；应用内存状态切换前必须逐项回读确认。
+    const persistedSettings = localStorage.getItem(SETTINGS_KEY);
+    if (persistedSettings === null) {
+      throw new Error("Root Server API 配置未能确认持久化。");
+    }
     const expectedStorage = new Map([
-      [SETTINGS_KEY, JSON.stringify(nextSettings)],
+      [SETTINGS_KEY, persistedSettings],
       [THEME_STORAGE_KEY, imported.theme],
       [PREFERENCES_KEY, JSON.stringify(imported.preferences)],
       [WATCHLIST_KEY, JSON.stringify(imported.watchlist)],
