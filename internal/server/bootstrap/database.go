@@ -17,7 +17,7 @@ import (
 
 // bootstrapDatabase is the single database initialization path shared by the
 // normal Root Server and owner-init. It opens SQL only, applies and verifies
-// every registered module migration, and validates Data's physical schema.
+// every registered module migration, and validates the final Data and Analysis schemas.
 // Redis, HTTP clients and repositories must be created only after it succeeds.
 func bootstrapDatabase(ctx context.Context, cfg mysqlredis.Config, timeout time.Duration) (*sql.DB, *servermigration.Registry, error) {
 	if ctx == nil || timeout <= 0 {
