@@ -425,7 +425,7 @@ func TestNewsSearchStageResearchflowMariaDBIntegration(t *testing.T) {
 			Configured: true, MaxQueuedRuns: capacity.MaxQueuedRuns, MaxWorkers: capacity.MaxWorkers,
 		},
 		1,
-		testQuantServicePrincipal(t),
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("创建 Researchflow 生产 Runtime 失败: %v", err)
