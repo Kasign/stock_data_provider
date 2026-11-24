@@ -8,7 +8,7 @@ const MigrationNamespace = "notification"
 // 新数据库只执行一个 V1；后续正式发布的 Schema 变更从 V2 开始。
 func Migrations() []platformstorage.Migration {
 	return []platformstorage.Migration{{
-		Version: 1,
+		Version:     1,
 		Description: "create complete Notification schema baseline",
 		Statements: []string{
 			"CREATE TABLE notification_subscriptions (\n\t\t\t\t\tsubscription_id VARCHAR(256) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n\t\t\t\t\tversion BIGINT UNSIGNED NOT NULL,\n\trevision_id BIGINT UNSIGNED NOT NULL DEFAULT 0,\n\t\t\t\t\towner_ref VARCHAR(256) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n\t\t\t\t\tstatus VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n\t\t\t\t\tevent_type VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n\t\t\t\t\tfilter_schema_version VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT '',\n\t\t\t\t\tfilters JSON NULL,\n\t\t\t\t\trecipient_scope VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n\t\t\t\t\trecipient_ref VARCHAR(256) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT '',\n\t\t\t\t\tchannel_ref VARCHAR(256) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n\t\t\t\t\ttemplate_id VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n\t\t\t\t\tcreated_at DATETIME(6) NOT NULL,\n\t\t\t\t\tupdated_at DATETIME(6) NOT NULL,\n\t\t\t\t\teffective_at DATETIME(6) NOT NULL,\n\t\t\t\t\tPRIMARY KEY (subscription_id, version),\n\t\t\t\t\tKEY idx_notification_subscriptions_event_status (event_type, status, subscription_id, version),\n\tKEY idx_notification_subscriptions_revision (subscription_id, revision_id, version)\n\t\t\t\t) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
