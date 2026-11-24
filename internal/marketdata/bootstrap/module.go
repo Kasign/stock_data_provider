@@ -52,7 +52,7 @@ type Dependencies struct {
 	BaoStockDialContext           transport.DialContextFunc    // Root 注入 BaoStock TCP 受控连接函数；Module 不拥有、不关闭。
 }
 
-const MigrationNamespace = "market_data"
+const MigrationNamespace = repository.MigrationNamespace
 
 // MigrationDefinitions 返回由 Root Server 统一执行的 Data Schema 迁移定义。
 func MigrationDefinitions() []platformstorage.Migration {
