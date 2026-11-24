@@ -12,8 +12,10 @@ const viewports = [
   { width: 320, height: 800 },
   { width: 375, height: 812 },
   { width: 600, height: 900 },
+  { width: 700, height: 900 },
   { width: 768, height: 1024 },
   { width: 900, height: 900 },
+  { width: 1200, height: 900 },
   { width: 1280, height: 900 },
   { width: 1600, height: 1000 }
 ];
@@ -69,7 +71,7 @@ const server = createServer(async (request, response) => {
 await mkdir(screenshotDir, { recursive: true });
 const uiReviewScreenshotDir = path.join(screenshotDir, "ui-review");
 await mkdir(uiReviewScreenshotDir, { recursive: true });
-const uiReviewScreenshotWidths = new Set([320, 600, 768, 900, 1280, 1600]);
+const uiReviewScreenshotWidths = new Set([320, 600, 700, 768, 900, 1200, 1280, 1600]);
 await new Promise((resolve, reject) => {
   server.once("error", reject);
   server.listen(0, "127.0.0.1", resolve);
@@ -595,6 +597,14 @@ try {
     assert.equal(await page.locator("#market-view").isVisible(), true, "market overview must be the initial view");
     assert.equal(await page.locator("#primary-sidebar .side-nav > .nav-link").count(), 11, "all workspace views must be exposed as flat first-level navigation tabs");
     assert.equal(await page.locator("#primary-sidebar .side-nav .nav-group, #primary-sidebar .side-nav .nav-subnav").count(), 0, "sidebar navigation must not contain nested groups or sub-navigation");
+    if (viewport.width > 700) {
+      const sidebarWidth = await page.locator("#primary-sidebar").evaluate((element) => element.getBoundingClientRect().width);
+      const navLabelDisplay = await page.locator('.nav-link[data-view="market"] > span:nth-child(2)').evaluate((element) => getComputedStyle(element).display);
+      assert.ok(sidebarWidth >= 200, "tablet and desktop layouts must retain a readable full-width sidebar");
+      assert.notEqual(navLabelDisplay, "none", "tablet and desktop first-level tabs must keep their text labels visible");
+    } else {
+      assert.equal(await page.locator("#mobile-menu-toggle").isVisible(), true, "compact layouts must expose the mobile navigation drawer trigger");
+    }
 
     // Verify legacy view hashes survive direct navigation and refresh; the old market-data alias is normalized.
     if (viewport.width === 320) {
