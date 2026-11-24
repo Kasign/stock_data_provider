@@ -140,7 +140,7 @@ func (adapter *SMA20Adapter) Execute(ctx context.Context, request SMA20Request) 
 		Unit:          execution.Metric.Unit,
 		Period:        execution.Metric.Period,
 		MetricStatus:  string(execution.Metric.MetricStatus),
-		SampleCount:   *execution.Metric.SampleCount,
+		SampleCount:   int64(*execution.Metric.SampleCount),
 		TradeDate:     execution.Manifest.TradeDate,
 		SystemAsOf:    execution.Manifest.SystemAsOf,
 		QualityStatus: execution.Manifest.QualityStatus,
