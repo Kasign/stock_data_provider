@@ -15,13 +15,13 @@ import (
 )
 
 const (
-	SMA20StageCode       = "quant.sma20"
-	SMA20OutputType      = "quant.sma20_result"
-	SMA20SchemaVersion   = "1.0.0"
-	SMA20QualitySchema   = "1.0.0"
-	SMA20PurposeCode     = "quant_analysis"
-	SMA20Window          = 20
-	SMA20ProviderCode    = "eastmoney"
+	SMA20StageCode     = "quant.sma20"
+	SMA20OutputType    = "quant.sma20_result"
+	SMA20SchemaVersion = "1.0.0"
+	SMA20QualitySchema = "1.0.0"
+	SMA20PurposeCode   = "quant_analysis"
+	SMA20Window        = 20
+	SMA20ProviderCode  = "eastmoney"
 )
 
 var (
@@ -33,10 +33,10 @@ var sma20SymbolPattern = regexp.MustCompile(`^[0-9]{6}\.(SH|SZ|BJ)$`)
 var sma20DecimalPattern = regexp.MustCompile(`^(0|[1-9][0-9]*)(\.[0-9]+)?$`)
 
 type SnapshotCreateRequest struct {
-	Symbol    string
-	StartDate string
-	EndDate   string
-	Limit     int
+	Symbol     string
+	StartDate  string
+	EndDate    string
+	Limit      int
 	SystemAsOf time.Time
 }
 
@@ -121,8 +121,8 @@ func (adapter *SMA20Adapter) Execute(ctx context.Context, request SMA20Request) 
 	}
 	execution, err := adapter.service.Execute(ctx, application.CreateSMARequest{
 		SnapshotRef: refs.SnapshotRef, AuthorizationRef: refs.AuthorizationRef,
-		SystemAsOf: request.SystemAsOf,
-		Parameters: json.RawMessage("{\"window\":20}"),
+		SystemAsOf:           request.SystemAsOf,
+		Parameters:           json.RawMessage("{\"window\":20}"),
 		AllowedProviderCodes: request.AllowedProviderCodes,
 	})
 	if err != nil {
@@ -133,27 +133,27 @@ func (adapter *SMA20Adapter) Execute(ctx context.Context, request SMA20Request) 
 	}
 	output := SMA20Output{
 		SchemaVersion: SMA20SchemaVersion,
-		ResultID: execution.Manifest.ResultID,
-		SnapshotRef: execution.SnapshotRef,
-		MetricCode: "sma",
-		Value: append(json.RawMessage(nil), execution.Metric.Value...),
-		Unit: execution.Metric.Unit,
-		Period: execution.Metric.Period,
-		MetricStatus: string(execution.Metric.MetricStatus),
-		SampleCount: *execution.Metric.SampleCount,
-		TradeDate: execution.Manifest.TradeDate,
-		SystemAsOf: execution.Manifest.SystemAsOf,
+		ResultID:      execution.Manifest.ResultID,
+		SnapshotRef:   execution.SnapshotRef,
+		MetricCode:    "sma",
+		Value:         append(json.RawMessage(nil), execution.Metric.Value...),
+		Unit:          execution.Metric.Unit,
+		Period:        execution.Metric.Period,
+		MetricStatus:  string(execution.Metric.MetricStatus),
+		SampleCount:   *execution.Metric.SampleCount,
+		TradeDate:     execution.Manifest.TradeDate,
+		SystemAsOf:    execution.Manifest.SystemAsOf,
 		QualityStatus: execution.Manifest.QualityStatus,
-		ResultStatus: execution.Manifest.ResultStatus,
+		ResultStatus:  execution.Manifest.ResultStatus,
 	}
 	quality := SMA20QualitySummary{
 		SchemaVersion: SMA20QualitySchema,
 		QualityStatus: execution.Manifest.QualityStatus,
 		CalendarQualityStatus: execution.Coverage.CalendarQualityStatus,
-		ExpectedTradingDays: execution.Coverage.ExpectedTradingDays,
-		ObservedBars: execution.ObservedBars,
-		MinimumRequiredBars: execution.Coverage.MinimumRequiredBars,
-		CoverageSufficient: execution.Coverage.CoverageSufficient,
+		ExpectedTradingDays:   execution.Coverage.ExpectedTradingDays,
+		ObservedBars:          execution.ObservedBars,
+		MinimumRequiredBars:   execution.Coverage.MinimumRequiredBars,
+		CoverageSufficient:    execution.Coverage.CoverageSufficient,
 	}
 	payload, err := json.Marshal(output)
 	if err != nil {

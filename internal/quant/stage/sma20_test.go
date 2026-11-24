@@ -14,10 +14,10 @@ import (
 )
 
 type sma20SnapshotCreatorStub struct {
-	refs SnapshotReferences
+	refs    SnapshotReferences
 	request SnapshotCreateRequest
-	err error
-	calls int
+	err     error
+	calls   int
 }
 
 func (creator *sma20SnapshotCreatorStub) CreateDailyBarsCloseSeriesSnapshot(ctx context.Context, request SnapshotCreateRequest) (SnapshotReferences, error) {
@@ -33,11 +33,11 @@ func (creator *sma20SnapshotCreatorStub) CreateDailyBarsCloseSeriesSnapshot(ctx 
 }
 
 type sma20SnapshotReaderStub struct {
-	snapshot application.CloseSeriesSnapshot
-	err error
-	requestedSnapshotRef string
+	snapshot                  application.CloseSeriesSnapshot
+	err                       error
+	requestedSnapshotRef      string
 	requestedAuthorizationRef string
-	requestedPurpose string
+	requestedPurpose          string
 }
 
 func (reader *sma20SnapshotReaderStub) ReadAuthorizedCloseSeriesSnapshot(ctx context.Context, snapshotRef, authorizationRef, purposeCode string) (application.CloseSeriesSnapshot, error) {
@@ -57,7 +57,7 @@ func TestSMA20AdapterCreatesDataSnapshotThenPersistsQuantResult(t *testing.T) {
 	now := time.Date(2026, 11, 24, 8, 0, 0, 0, time.UTC)
 	systemAsOf := time.Date(2026, 11, 23, 0, 0, 0, 0, time.UTC)
 	refs := SnapshotReferences{
-		SnapshotRef: "data_snapshot:sha256:" + strings.Repeat("a", 64),
+		SnapshotRef:      "data_snapshot:sha256:" + strings.Repeat("a", 64),
 		AuthorizationRef: "data_authorization:sha256:" + strings.Repeat("b", 64),
 	}
 	creator := &sma20SnapshotCreatorStub{refs: refs}
@@ -153,7 +153,7 @@ func TestSMA20AdapterPropagatesDataSnapshotCreationFailure(t *testing.T) {
 
 func validSMA20Request(systemAsOf time.Time) SMA20Request {
 	return SMA20Request{
-		Symbol: "600000.SH", StartDate: "2026-10-01", EndDate: "2026-10-20",
+		Symbol:  "600000.SH", StartDate: "2026-10-01", EndDate: "2026-10-20",
 		Limit: 20, SystemAsOf: systemAsOf, AllowedProviderCodes: []string{"eastmoney"},
 	}
 }
@@ -163,19 +163,19 @@ func validSMA20Snapshot(snapshotRef string) application.CloseSeriesSnapshot {
 	for index := range bars {
 		bars[index] = application.CloseSeriesBar{
 			TradeDate: time.Date(2026, 10, 1+index, 0, 0, 0, 0, time.UTC).Format("2006-01-02"),
-			Close: fmt.Sprintf("0.%02d", index+1), QualityStatus: "valid",
+			Close:     fmt.Sprintf("0.%02d", index+1), QualityStatus: "valid",
 		}
 	}
 	return application.CloseSeriesSnapshot{
 		SnapshotRef: snapshotRef,
 		ManifestSchemaVersion: "2.0.0", PayloadSchemaVersion: "1.0.0",
 		PayloadKind: "daily_bars_close_series",
-		CallerRef: "principal:service:researchflow", PurposeCode: SMA20PurposeCode,
+		CallerRef:   "principal:service:researchflow", PurposeCode: SMA20PurposeCode,
 		Sources: []application.CloseSeriesSource{{SourceRef: "eastmoney", ProviderInterfaceVersion: "eastmoney-stock-api-v1"}},
 		Symbol: "600000.SH", StartDate: "2026-10-01", EndDate: "2026-10-20",
 		AdjustmentBasis: "none", SystemAsOf: "2026-11-23T00:00:00Z", Interval: "1d",
 		TradingCalendarRef: "trading_calendar:sha256:" + strings.Repeat("c", 64),
-		QualityStatus: "valid",
+		QualityStatus:      "valid",
 		Coverage: application.CloseSeriesCoverageEvidence{
 			CalendarQualityStatus: "valid", ExpectedTradingDays: 20,
 			MinimumRequiredBars: 20, CoverageSufficient: true,

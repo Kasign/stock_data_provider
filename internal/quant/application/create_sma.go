@@ -234,10 +234,10 @@ func (service *CreateSMAService) Execute(ctx context.Context, request CreateSMAR
 		return SMAExecutionResult{}, err
 	}
 	return SMAExecutionResult{
-		Manifest: persisted,
-		Metric: item,
-		SnapshotRef: snapshot.SnapshotRef,
-		Coverage: snapshot.Coverage,
+		Manifest:     persisted,
+		Metric:       item,
+		SnapshotRef:  snapshot.SnapshotRef,
+		Coverage:     snapshot.Coverage,
 		ObservedBars: len(snapshot.Bars),
 	}, nil
 }
