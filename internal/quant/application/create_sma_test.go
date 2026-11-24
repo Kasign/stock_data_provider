@@ -139,7 +139,7 @@ func TestCreateSMAServiceRejectsNonSMA20Parameters(t *testing.T) {
 	repository := &createSMARecordingRepository{inner: result.NewMemoryRepository()}
 	service := newTestCreateSMAService(t, reader, repository, now)
 	request := validCreateSMARequest()
-	request.Parameters = json.RawMessage("{\\"window\\":3}")
+	request.Parameters = json.RawMessage("{\"window\":3}")
 	if _, err := service.Execute(context.Background(), request); !errors.Is(err, ErrInvalidCreateSMARequest) {
 		t.Fatalf("Execute() error = %v, want ErrInvalidCreateSMARequest", err)
 	}
