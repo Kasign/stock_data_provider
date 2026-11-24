@@ -24,7 +24,7 @@ func researchflowWorkerPrincipal(credentials []platformsecurity.ServiceCredentia
 	if selected == nil {
 		return platformsecurity.Principal{}, errResearchflowWorkerCredentialUnavailable
 	}
-	principal, err := platformsecurity.NewServicePrincipal(*selected)
+	principal, err := platformsecurity.PrincipalFromServiceCredential(*selected)
 	if err != nil {
 		return platformsecurity.Principal{}, errResearchflowWorkerCredentialUnavailable
 	}
