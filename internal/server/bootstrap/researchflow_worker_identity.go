@@ -6,30 +6,30 @@ import (
 	platformsecurity "example.com/stock-analysis-flow/internal/platform/security"
 )
 
-var errResearchflowWorkerCredentialUnavailable = errors.New("Quant service credential is unavailable")
+var errQuantServiceCredentialUnavailable = errors.New("Quant service credential is unavailable")
 
-// quantServicePrincipal resolves one explicitly configured service credential.
-// The credential name is a stable identity contract consumed by Data authorization policy.
-func researchflowWorkerPrincipal(credentials []platformsecurity.ServiceCredential) (platformsecurity.Principal, error) {
+// quantServicePrincipal resolves the explicitly configured Quant service credential.
+// The resulting identity is used only by Quant stages that access Data-authorized inputs.
+func quantServicePrincipal(credentials []platformsecurity.ServiceCredential) (*platformsecurity.Principal, error) {
 	var selected *platformsecurity.ServiceCredential
 	for index := range credentials {
 		if credentials[index].Name != "quant" {
 			continue
 		}
 		if selected != nil {
-			return platformsecurity.Principal{}, errResearchflowWorkerCredentialUnavailable
+			return nil, errQuantServiceCredentialUnavailable
 		}
 		selected = &credentials[index]
 	}
 	if selected == nil {
-		return platformsecurity.Principal{}, errResearchflowWorkerCredentialUnavailable
+		return nil, nil
 	}
 	principal, err := platformsecurity.PrincipalFromServiceCredential(*selected)
 	if err != nil {
-		return platformsecurity.Principal{}, errResearchflowWorkerCredentialUnavailable
+		return nil, errQuantServiceCredentialUnavailable
 	}
 	if !containsServiceScope(principal.Scopes, platformsecurity.ScopeDataRead) {
-		return platformsecurity.Principal{}, errResearchflowWorkerCredentialUnavailable
+		return nil, errQuantServiceCredentialUnavailable
 	}
 	return &principal, nil
 }
