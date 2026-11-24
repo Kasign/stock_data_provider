@@ -1836,7 +1836,7 @@ try {
           const preview = await page.locator("#browser-data-import-summary").textContent();
           assert.match(preview, /冲突 1 条/, "preview must report the duplicate stock and task conflicts");
           assert.match(await page.locator("#browser-data-import-current").textContent(), /1 条自选股，1 条最近任务/);
-          assert.match(await page.locator("#browser-data-import-settings").textContent(), /当前行情 API Key 保留/);
+          assert.match(await page.locator("#browser-data-import-settings").textContent(), /服务 API 入口固定为 Root Server 的同源 \/api/);
           await page.locator("#browser-data-import-dialog button[value='cancel']").last().click();
           await page.waitForFunction(() => document.querySelector("#browser-data-import-dialog")?.open === false);
           assert.deepEqual(await page.evaluate((key) => JSON.parse(localStorage.getItem(key)), keys.watchlist), [
