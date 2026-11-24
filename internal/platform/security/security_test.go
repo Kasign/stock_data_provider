@@ -460,9 +460,9 @@ func TestPrincipalContextReturnsIsolatedScopeSnapshots(t *testing.T) {
 	}
 }
 
-func TestPrincipalFromServiceCredentialBuildsConfiguredWorkerIdentity(t *testing.T) {
+func TestPrincipalFromServiceCredentialBuildsConfiguredQuantIdentity(t *testing.T) {
 	credential := ServiceCredential{
-		Name:   "researchflow-worker",
+		Name:   "quant",
 		Secret: testServiceSecret("0123456789abcdef0123456789abcdef"),
 		Scopes: []string{ScopeDataRead, ScopeResearchRun},
 	}
@@ -471,7 +471,7 @@ func TestPrincipalFromServiceCredentialBuildsConfiguredWorkerIdentity(t *testing
 		t.Fatalf("PrincipalFromServiceCredential() error = %v", err)
 	}
 	if principal.Kind != IdentityService || principal.AuthMethod != AuthMethodServiceBearer ||
-		principal.Subject != "researchflow-worker" || len(principal.Scopes) != 2 {
+		principal.Subject != "quant" || len(principal.Scopes) != 2 {
 		t.Fatalf("unexpected service principal: %+v", principal)
 	}
 	ctx, err := WithPrincipal(context.Background(), principal)
@@ -490,10 +490,10 @@ func TestPrincipalFromServiceCredentialRejectsInvalidCredential(t *testing.T) {
 		name       string
 		credential ServiceCredential
 	}{
-		{name: "missing secret", credential: ServiceCredential{Name: "researchflow-worker", Scopes: []string{ScopeDataRead}}},
-		{name: "short secret", credential: ServiceCredential{Name: "researchflow-worker", Secret: testServiceSecret("short"), Scopes: []string{ScopeDataRead}}},
-		{name: "admin scope", credential: ServiceCredential{Name: "researchflow-worker", Secret: testServiceSecret("0123456789abcdef0123456789abcdef"), Scopes: []string{ScopePlatformAdmin}}},
-		{name: "unknown scope", credential: ServiceCredential{Name: "researchflow-worker", Secret: testServiceSecret("0123456789abcdef0123456789abcdef"), Scopes: []string{"data:write"}}},
+		{name: "missing secret", credential: ServiceCredential{Name: "quant", Scopes: []string{ScopeDataRead}}},
+		{name: "short secret", credential: ServiceCredential{Name: "quant", Secret: testServiceSecret("short"), Scopes: []string{ScopeDataRead}}},
+		{name: "admin scope", credential: ServiceCredential{Name: "quant", Secret: testServiceSecret("0123456789abcdef0123456789abcdef"), Scopes: []string{ScopePlatformAdmin}}},
+		{name: "unknown scope", credential: ServiceCredential{Name: "quant", Secret: testServiceSecret("0123456789abcdef0123456789abcdef"), Scopes: []string{"data:write"}}},
 		{name: "invalid subject", credential: ServiceCredential{Name: "Researchflow Worker", Secret: testServiceSecret("0123456789abcdef0123456789abcdef"), Scopes: []string{ScopeDataRead}}},
 	}
 	for _, tt := range tests {
