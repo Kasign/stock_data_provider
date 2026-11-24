@@ -184,8 +184,12 @@ type quantSMA20StageParameters struct {
 	Limit     int    `json:"limit"`
 }
 
+type quantSMA20StageAdapter interface {
+	Execute(context.Context, quantstage.SMA20Request) (quantstage.SMA20Output, quantstage.SMA20QualitySummary, error)
+}
+
 type quantSMA20StageExecutor struct {
-	adapter *quantstage.SMA20Adapter
+	adapter quantSMA20StageAdapter
 }
 
 func (executor quantSMA20StageExecutor) ExecuteStage(ctx context.Context, request researchflowapplication.StageExecutionRequest) (researchflowapplication.StageExecutionResult, error) {
