@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"example.com/stock-analysis-flow/internal/adapters/storage/mysqlredis"
+	analysisstorage "example.com/stock-analysis-flow/internal/analysis/storage"
 	marketdataapp "example.com/stock-analysis-flow/internal/marketdata/app"
 	marketdatabootstrap "example.com/stock-analysis-flow/internal/marketdata/bootstrap"
 	marketdataconfig "example.com/stock-analysis-flow/internal/marketdata/config"
@@ -557,6 +558,7 @@ func newMigrationRegistry() (*servermigration.Registry, error) {
 		migrations []platformstorage.Migration
 	}{
 		{namespace: marketdatabootstrap.MigrationNamespace, migrations: marketdatabootstrap.MigrationDefinitions()},
+		{namespace: analysisstorage.MigrationNamespace, migrations: analysisstorage.Migrations()},
 		{namespace: "news", migrations: newsstorage.Migrations()},
 		{namespace: platformsecurity.OwnerCredentialMigrationNamespace, migrations: platformsecurity.OwnerCredentialMigrations()},
 		{namespace: researchstorage.MigrationNamespace, migrations: researchstorage.Migrations()},
