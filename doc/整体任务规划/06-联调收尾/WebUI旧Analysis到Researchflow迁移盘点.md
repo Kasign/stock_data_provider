@@ -133,6 +133,18 @@ Researchflow Handler 在 `internal/server/bootstrap/researchflow_http.go`。当�
 
 旧 API 路由必须在真实业务迁移、调用方清零和测试迁移完成后整体删除；不得只隐藏 UI 菜单而保留旧接口，也不得为迁移期间新增双认证。
 
+## 4.1 旧 Analysis DataCollector 不能直接充当新 Data Stage
+
+文件：`internal/server/marketdata/analysis_collector.go`
+
+旧 Runner 通过 `servermarketdata.NewAnalysisCollector(marketDataModule.Application(), ...)` 调用 Data 的 `MarketDataReader`，按证券分别读取日线/行情，并读取配置的指数日线。该适配器是旧 Analysis 的 `DataCollector`，不是 Data Snapshot Manifest/授权读取链路。
+
+对照 `internal/marketdata/app/port.go` 的 `DailyBar`，旧 Collector 当前只映射 Symbol、TradeDate、OHLC、Volume、Amount、Source、FetchedAt、AdjustmentBasis；未传播 SourceVersion、ProviderTime、NormalizedAt、SystemObservedAt、AdjustmentFactorRevisionHash/SetHash、NormalizationVersion 和 ExactValues 等已有元数据。旧 `RawBar` 也没有从 Data DTO 映射可用于 PIT 的逐条时间/来源修订证据。
+
+同时它对每个证券独立调用 `GetDailyBars`，没有建立可传入 Researchflow `input_snapshot_refs` 的统一不可变 SnapshotRef，也没有把 Data 授权引用带入 Run。
+
+**结论：** 旧 Collector 可以服务当前旧 Runner，但不能直接复用为 Researchflow 股票研究的生产 Data Stage。新 Stage 必须消费 Data Owner 正式的 Snapshot/Manifest 与授权读取 Port，保留来源版本、系统观察时间、复权证据和逐条可用性语义；不能从旧 RawBar 或 FetchedAt 猜造 PIT。
+
 ## 5. Researchflow 生产能力现状
 
 ### 5.1 当前生产注册
