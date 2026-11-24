@@ -158,11 +158,6 @@ WHERE table_schema = DATABASE() AND table_name = ? AND index_name = ? ORDER BY s
 	return nil
 }
 
-// Package repository owns the MarketData MariaDB persistence schema.
-package repository
-
-import platformstorage "example.com/stock-analysis-flow/internal/platform/storage"
-
 // MigrationDefinitions returns the complete MarketData schema baseline.
 // Fresh databases apply one V1. Future published schema changes start at V2.
 func MigrationDefinitions() []platformstorage.Migration {
