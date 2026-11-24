@@ -464,7 +464,7 @@ func TestPrincipalContextReturnsIsolatedScopeSnapshots(t *testing.T) {
 func TestNewServicePrincipalAuthenticatesConfiguredWorkerCredential(t *testing.T) {
 	credential := ServiceCredential{
 		Name: "researchflow-worker",
-		Secret: config.NewSecret("0123456789abcdef0123456789abcdef"),
+		Secret: testServiceSecret("0123456789abcdef0123456789abcdef"),
 		Scopes: []string{ScopeDataRead, ScopeResearchRun},
 	}
 	principal, err := NewServicePrincipal(credential)
@@ -493,7 +493,7 @@ func TestNewServicePrincipalRejectsInvalidCredential(t *testing.T) {
 		credential ServiceCredential
 	}{
 		{name: "missing secret", credential: ServiceCredential{Name: "researchflow-worker", Scopes: []string{ScopeDataRead}}},
-		{name: "short secret", credential: ServiceCredential{Name: "researchflow-worker", Secret: config.NewSecret("short"), Scopes: []string{ScopeDataRead}}},
+		{name: "short secret", credential: ServiceCredential{Name: "researchflow-worker", Secret: testServiceSecret("short"), Scopes: []string{ScopeDataRead}}},
 		{name: "admin scope", credential: ServiceCredential{Name: "researchflow-worker", Secret: config.NewSecret("0123456789abcdef0123456789abcdef"), Scopes: []string{ScopePlatformAdmin}}},
 		{name: "unknown scope", credential: ServiceCredential{Name: "researchflow-worker", Secret: config.NewSecret("0123456789abcdef0123456789abcdef"), Scopes: []string{"data:write"}}},
 		{name: "invalid subject", credential: ServiceCredential{Name: "Researchflow Worker", Secret: config.NewSecret("0123456789abcdef0123456789abcdef"), Scopes: []string{ScopeDataRead}}},
@@ -505,4 +505,8 @@ func TestNewServicePrincipalRejectsInvalidCredential(t *testing.T) {
 			}
 		})
 	}
+}
+
+func testServiceSecret(value string) config.Secret {
+	return config.NewEnvWithLookup(func(string) (string, bool) { return value, true }).Secret("TOKEN")
 }
