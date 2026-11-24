@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"example.com/stock-analysis-flow/internal/marketdata/model"
+	marketdatatestutil "example.com/stock-analysis-flow/internal/marketdata/testutil"
 	"example.com/stock-analysis-flow/internal/marketdata/provider"
 
 )
@@ -21,11 +22,11 @@ func TestTradingCalendarPersistsImmutableSnapshotAcrossCacheHits(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	store, closeStore, err := openMigratedMarketDataTestStore(ctx, dsn)
+	store, db, err := marketdatatestutil.OpenMariaDBStore(ctx, dsn)
 	if err != nil {
 		t.Fatalf("open and migrate MariaDB: %v", err)
 	}
-	defer closeStore()
+	defer db.Close()
 	if err := store.ValidateSchema(ctx); err != nil {
 		t.Fatalf("validate Data schema: %v", err)
 	}
@@ -74,11 +75,11 @@ func TestTradingCalendarAsOfUsesObservedRepositoryVersionWithoutLiveProvider(t *
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	store, closeStore, err := openMigratedMarketDataTestStore(ctx, dsn)
+	store, db, err := marketdatatestutil.OpenMariaDBStore(ctx, dsn)
 	if err != nil {
 		t.Fatalf("open and migrate MariaDB: %v", err)
 	}
-	defer closeStore()
+	defer db.Close()
 
 	asOf := time.Now().UTC().Truncate(time.Microsecond).Add(-time.Minute)
 	first := validTestTradingCalendar()
