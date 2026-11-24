@@ -29,8 +29,8 @@ var (
 	ErrInvalidSMA20StageOutput  = errors.New("invalid Quant SMA20 stage output")
 )
 
-var sma20SymbolPattern = regexp.MustCompile(\`^[0-9]{6}\\.(SH|SZ|BJ)$\`)
-var sma20DecimalPattern = regexp.MustCompile(\`^(0|[1-9][0-9]*)(\\.[0-9]+)?$\`)
+var sma20SymbolPattern = regexp.MustCompile(`^[0-9]{6}\.(SH|SZ|BJ)$`)
+var sma20DecimalPattern = regexp.MustCompile(`^(0|[1-9][0-9]*)(\.[0-9]+)?$`)
 
 type SnapshotCreateRequest struct {
 	Symbol    string
@@ -59,29 +59,29 @@ type SMA20Request struct {
 }
 
 type SMA20Output struct {
-	SchemaVersion string          \`json:"schema_version"\`
-	ResultID      string          \`json:"result_id"\`
-	SnapshotRef   string          \`json:"snapshot_ref"\`
-	MetricCode    string          \`json:"metric_code"\`
-	Value         json.RawMessage \`json:"value"\`
-	Unit          string          \`json:"unit"\`
-	Period        string          \`json:"period"\`
-	MetricStatus  string          \`json:"metric_status"\`
-	SampleCount   int64           \`json:"sample_count"\`
-	TradeDate     string          \`json:"trade_date"\`
-	SystemAsOf    string          \`json:"system_as_of"\`
-	QualityStatus string          \`json:"quality_status"\`
-	ResultStatus  string          \`json:"result_status"\`
+	SchemaVersion string          `json:"schema_version"`
+	ResultID      string          `json:"result_id"`
+	SnapshotRef   string          `json:"snapshot_ref"`
+	MetricCode    string          `json:"metric_code"`
+	Value         json.RawMessage `json:"value"`
+	Unit          string          `json:"unit"`
+	Period        string          `json:"period"`
+	MetricStatus  string          `json:"metric_status"`
+	SampleCount   int64           `json:"sample_count"`
+	TradeDate     string          `json:"trade_date"`
+	SystemAsOf    string          `json:"system_as_of"`
+	QualityStatus string          `json:"quality_status"`
+	ResultStatus  string          `json:"result_status"`
 }
 
 type SMA20QualitySummary struct {
-	SchemaVersion         string \`json:"schema_version"\`
-	QualityStatus         string \`json:"quality_status"\`
-	CalendarQualityStatus string \`json:"calendar_quality_status"\`
-	ExpectedTradingDays   int    \`json:"expected_trading_days"\`
-	ObservedBars          int    \`json:"observed_bars"\`
-	MinimumRequiredBars   int    \`json:"minimum_required_bars"\`
-	CoverageSufficient    bool   \`json:"coverage_sufficient"\`
+	SchemaVersion         string `json:"schema_version"`
+	QualityStatus         string `json:"quality_status"`
+	CalendarQualityStatus string `json:"calendar_quality_status"`
+	ExpectedTradingDays   int    `json:"expected_trading_days"`
+	ObservedBars          int    `json:"observed_bars"`
+	MinimumRequiredBars   int    `json:"minimum_required_bars"`
+	CoverageSufficient    bool   `json:"coverage_sufficient"`
 }
 
 type SMA20Adapter struct {

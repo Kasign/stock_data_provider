@@ -94,7 +94,7 @@ type CreateSMARequest struct {
 	AllowedProviderCodes []string
 }
 
-// CreateSMAService 将 Data 的精确 Close Snapshot 转换为不可变 Quant Indicator Result。
+// SMAExecutionResult 是一次 SMA20 生产计算的持久化结果和输入质量摘要。
 type SMAExecutionResult struct {
 	Manifest     manifest.Manifest
 	Metric       metric.Metric
@@ -138,17 +138,17 @@ func (service *CreateSMAService) Execute(ctx context.Context, request CreateSMAR
 		return SMAExecutionResult{}, ErrInvalidCreateSMARequest
 	}
 	if err := ctx.Err(); err != nil {
-		return manifest.Manifest{}, err
+		return SMAExecutionResult{}, err
 	}
 	entry, err := service.registry.LookupActive(smaMetricCode, smaMetricSchemaVersion)
 	if err != nil {
-		return manifest.Manifest{}, fmt.Errorf("lookup active SMA registry entry: %w", err)
+		return SMAExecutionResult{}, fmt.Errorf("lookup active SMA registry entry: %w", err)
 	}
 	if err := validateExactSMRegistryEntry(entry); err != nil {
-		return manifest.Manifest{}, err
+		return SMAExecutionResult{}, err
 	}
 	if err := service.registry.ValidateParameters(entry.Code, entry.SchemaVersion, entry.AlgorithmVersion, request.Parameters); err != nil {
-		return manifest.Manifest{}, fmt.Errorf("%w: parameters: %v", ErrInvalidCreateSMARequest, err)
+		return SMAExecutionResult{}, fmt.Errorf("%w: parameters: %v", ErrInvalidCreateSMARequest, err)
 	}
 	var parameters struct {
 		Window int `json:"window"`
@@ -156,21 +156,21 @@ func (service *CreateSMAService) Execute(ctx context.Context, request CreateSMAR
 	decoder := json.NewDecoder(bytes.NewReader(request.Parameters))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&parameters); err != nil || parameters.Window != smaWindow {
-		return manifest.Manifest{}, ErrInvalidCreateSMARequest
+		return SMAExecutionResult{}, ErrInvalidCreateSMARequest
 	}
 
 	parameterFingerprint, err := manifest.FingerprintPayload(request.Parameters)
 	if err != nil {
-		return manifest.Manifest{}, fmt.Errorf("%w: parameter fingerprint: %v", ErrInvalidCreateSMARequest, err)
+		return SMAExecutionResult{}, fmt.Errorf("%w: parameter fingerprint: %v", ErrInvalidCreateSMARequest, err)
 	}
 	snapshot, err := service.snapshots.ReadAuthorizedCloseSeriesSnapshot(ctx, request.SnapshotRef, request.AuthorizationRef, smaPurposeCode)
 	if err != nil {
-		return manifest.Manifest{}, fmt.Errorf("read authorized Data Snapshot: %w", err)
+		return SMAExecutionResult{}, fmt.Errorf("read authorized Data Snapshot: %w", err)
 	}
 	trustedNow := service.now()
 	systemAsOf, err := validateExactSMASnapshot(snapshot, request, entry, trustedNow)
 	if err != nil {
-		return manifest.Manifest{}, err
+		return SMAExecutionResult{}, err
 	}
 
 	closes := make([]string, len(snapshot.Bars))
@@ -186,7 +186,7 @@ func (service *CreateSMAService) Execute(ctx context.Context, request CreateSMAR
 	}
 	calculated, err := indicator.DecimalSMAWithContext(calculationContext, trustedNow, closes, indicator.SMAParams{Window: parameters.Window})
 	if err != nil {
-		return manifest.Manifest{}, fmt.Errorf("calculate exact SMA: %w", err)
+		return SMAExecutionResult{}, fmt.Errorf("calculate exact SMA: %w", err)
 	}
 
 	metricValue := json.RawMessage("null")
@@ -195,7 +195,7 @@ func (service *CreateSMAService) Execute(ctx context.Context, request CreateSMAR
 	if calculated.Status == indicator.StatusAvailable {
 		metricValue, err = json.Marshal(calculated.Value)
 		if err != nil {
-			return manifest.Manifest{}, fmt.Errorf("encode exact SMA value: %w", err)
+			return SMAExecutionResult{}, fmt.Errorf("encode exact SMA value: %w", err)
 		}
 		metricStatus = metric.StatusAvailable
 		resultStatus = "completed"
@@ -210,14 +210,14 @@ func (service *CreateSMAService) Execute(ctx context.Context, request CreateSMAR
 	}
 	metricJSON, err := json.Marshal(item)
 	if err != nil {
-		return manifest.Manifest{}, fmt.Errorf("encode SMA QuantMetric: %w", err)
+		return SMAExecutionResult{}, fmt.Errorf("encode SMA QuantMetric: %w", err)
 	}
 	if err := service.registry.ValidateMetric(entry.Code, entry.SchemaVersion, entry.AlgorithmVersion, metricJSON); err != nil {
-		return manifest.Manifest{}, fmt.Errorf("validate SMA QuantMetric against active Registry Entry: %w", err)
+		return SMAExecutionResult{}, fmt.Errorf("validate SMA QuantMetric against active Registry Entry: %w", err)
 	}
 	payload, err := result.NewIndicatorPayload(smaMetricCode, []metric.Metric{item})
 	if err != nil {
-		return manifest.Manifest{}, err
+		return SMAExecutionResult{}, err
 	}
 
 	input := manifest.Input{
