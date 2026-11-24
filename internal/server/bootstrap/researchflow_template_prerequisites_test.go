@@ -95,7 +95,6 @@ func TestNewsSearchApplicabilityRuleRequiresExactVersion(t *testing.T) {
 	}
 }
 
-
 func TestQuantSMA20ParameterSchemaIsStrictImmutableAndDocumented(t *testing.T) {
 	validator, err := newQuantSMA20ParameterSchemaValidator()
 	if err != nil {
