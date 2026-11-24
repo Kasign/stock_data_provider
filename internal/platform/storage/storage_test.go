@@ -258,6 +258,7 @@ type migrationTestState struct {
 	skipAppliedHistoryUpdate bool
 	physicalConnClosed       bool
 	historyCreated           bool
+	historyColumnCount       int
 }
 
 type migrationTestConnector struct {
@@ -299,6 +300,12 @@ func (c migrationTestConn) Begin() (driver.Tx, error) {
 
 func (c migrationTestConn) QueryContext(_ context.Context, query string, _ []driver.NamedValue) (driver.Rows, error) {
 	switch {
+	case strings.Contains(query, "information_schema.columns") && strings.Contains(query, "platform_schema_migrations"):
+		total := c.state.historyColumnCount
+		if total == 0 {
+			total = 9
+		}
+		return &migrationTestRows{columns: []string{"total_columns", "expected_columns"}, values: [][]driver.Value{{int64(total), int64(9)}}}, nil
 	case strings.Contains(query, "GET_LOCK"):
 		if c.state.failLockAcquire {
 			return nil, errors.New("private lock acquisition detail")
@@ -402,6 +409,26 @@ func (r *migrationTestRows) Next(destination []driver.Value) error {
 	copy(destination, r.values[r.index])
 	r.index++
 	return nil
+}
+
+
+func TestApplyMigrationsRejectsLegacyHistorySchema(t *testing.T) {
+	state := &migrationTestState{
+		applied: make(map[uint64]string), pending: make(map[uint64]string),
+		failed: make(map[uint64]int), lockAcquired: true, historyColumnCount: 10,
+	}
+	db := sql.OpenDB(migrationTestConnector{state: state})
+	defer db.Close()
+	err := ApplyMigrations(context.Background(), db, "analysis", []Migration{{
+		Version: 1, Description: "create table",
+		Statements: []string{"CREATE TABLE sample (id BIGINT PRIMARY KEY)"},
+	}})
+	if err == nil || !strings.Contains(err.Error(), "current baseline") {
+		t.Fatalf("ApplyMigrations() error = %v, want strict legacy History rejection", err)
+	}
+	if len(state.statements) != 0 {
+		t.Fatalf("legacy History schema must be rejected before applying module DDL: %v", state.statements)
+	}
 }
 
 func TestApplyMigrationsAppliesInOrderAndIsIdempotent(t *testing.T) {
