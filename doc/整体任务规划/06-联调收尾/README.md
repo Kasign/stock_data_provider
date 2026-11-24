@@ -10,6 +10,7 @@
 - [Quant模块卡点](./Quant模块卡点.md)
 - [Research模块卡点](./Research模块卡点.md)
 - [Researchflow模块卡点](./Researchflow模块卡点.md)
+- [WebUI旧Analysis到Researchflow迁移盘点](./WebUI旧Analysis到Researchflow迁移盘点.md)：旧 Task/Event API、新 Run/Stage API、认证边界、生产模板缺口和退役条件。
 - [LLM模块卡点](./LLM模块卡点.md)
 - [Platform模块卡点](./Platform模块卡点.md)
 - [Server模块卡点](./Server模块卡点.md)
