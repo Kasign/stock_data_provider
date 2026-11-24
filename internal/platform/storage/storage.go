@@ -386,7 +386,6 @@ func ApplyMigrations(ctx context.Context, db *sql.DB, namespace string, migratio
 	return nil
 }
 
-
 func validateMigrationHistorySchema(ctx context.Context, conn *sql.Conn) error {
 	var totalColumns, expectedColumns int
 	err := conn.QueryRowContext(ctx, `SELECT COUNT(*),
