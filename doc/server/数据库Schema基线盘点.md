@@ -240,3 +240,52 @@
 8. 当前 DDL 使用 `CREATE TABLE IF NOT EXISTS`。新空库基线应使用明确的 `CREATE TABLE`，让意外存在的同名旧表立即报错，而不是悄悄接纳未经确认的结构。
 
 Data 字段级审计状态：**通过第一轮**。尚未对所有字段逐个与上层 DTO/Provider 映射做语义验证；该项属于数据契约/业务字段审计，不阻塞本轮 Schema 重建，但不得借 Schema 基线改动字段语义或删字段。
+
+## 7. News 字段级审计（第一轮完成）
+
+审计来源：`internal/news/adapters/storage/migrations.go` V1–V10，以及 `internal/news/adapters/storage/mysql_repository.go`、`authorization_policy_resolver.go`、`authorization_snapshot.go`、`evidence_authorization_read.go`、`evidence_query.go`、`evidence_snapshot.go`、`identity_history.go`、`news_item_relation_query.go`、`policy_version.go` 的实际 SQL。
+
+### News 最终表字段与约束
+
+| 表 | 最终字段 | 主键 / 唯一约束 | 关键索引 / 外键 |
+|---|---|---|---|
+| `news_items` | `news_id VARCHAR(128) ascii_bin`、`origin_source_id VARCHAR(128) ascii_bin`、`created_at DATETIME(6) DEFAULT CURRENT_TIMESTAMP(6)` | PK news_id | (origin_source_id,created_at) |
+| `news_identifiers` | `source_id VARCHAR(128) ascii_bin`、`identifier_type VARCHAR(32) ascii_bin`、`identifier_hash CHAR(64) ascii_bin`、`identifier_value MEDIUMTEXT`、`identifier_status VARCHAR(16) ascii_bin`、`news_id VARCHAR(128) ascii_bin`、`created_at DATETIME(6) DEFAULT CURRENT_TIMESTAMP(6)` | 复合 PK (source_id,identifier_type,identifier_hash) | news_id；FK news_id → news_items |
+| `news_observations` | `observation_id VARCHAR(128) ascii_bin`、`idempotency_key VARCHAR(191) ascii_bin`、`source_id VARCHAR(128) ascii_bin`、`provider_code VARCHAR(64) ascii_bin`、`query_dimension VARCHAR(128) DEFAULT ''`、`endpoint_id VARCHAR(128) DEFAULT ''`、`source_policy_version_id VARCHAR(128) DEFAULT ''`、`endpoint_policy_version_id VARCHAR(128) DEFAULT ''`、`provider_output_policy_ref VARCHAR(128) DEFAULT ''`、`provider_output_policy_version_id VARCHAR(128) DEFAULT ''`、`policy_evaluated_at DATETIME(6) NULL`、`candidate_json JSON`、`observed_at DATETIME(6)`、`retention_until DATETIME(6) NULL`、`payload_purged_at DATETIME(6) NULL`、`identity_status VARCHAR(16) ascii_bin`、`news_id VARCHAR(128) ascii_bin NULL`、`reason_code VARCHAR(128) DEFAULT ''` | PK observation_id；UK idempotency_key；UK (observation_id,news_id) | (source_id,observed_at)、(news_id,observed_at)；FK news_id → news_items |
+| `news_item_versions` | `version_id VARCHAR(128) ascii_bin`、`news_id VARCHAR(128) ascii_bin`、`version_no BIGINT UNSIGNED`、`fingerprint CHAR(64) ascii_bin`、`title TEXT`、`publisher_name VARCHAR(512) DEFAULT ''`、`publisher_domain VARCHAR(253) ascii_bin DEFAULT ''`、`author VARCHAR(512) DEFAULT ''`、`published_at DATETIME(6) NULL`、`content_json JSON`、`observed_at DATETIME(6)`、`observation_id VARCHAR(128) ascii_bin` | PK version_id；UK (news_id,version_no)；UK (version_id,news_id) | (news_id,fingerprint)、(news_id,observed_at,version_no)；FK news_id → items；FK observation_id → observations |
+| `news_relation_assertions` | `relation_id VARCHAR(128) ascii_bin`、`news_id VARCHAR(128) ascii_bin`、`subject_type VARCHAR(16) ascii_bin`、`subject_json JSON`、`relation_kind VARCHAR(32) ascii_bin`、`method VARCHAR(32) ascii_bin`、`status VARCHAR(16) ascii_bin`、`supersedes_relation_id VARCHAR(128) ascii_bin NULL`、`valid_from/valid_to DATETIME(6) NULL`、`observed_at DATETIME(6)` | PK relation_id；UK supersedes_relation_id | (news_id,status,observed_at)；FK news_id → items；自引用 FK supersedes_relation_id |
+| `news_relation_evidence` | `evidence_id VARCHAR(128) ascii_bin`、`relation_id VARCHAR(128) ascii_bin`、`evidence_type VARCHAR(32) ascii_bin`、`source_version_id/observation_id VARCHAR(128) ascii_bin NULL`、`rule_version/model_version VARCHAR(128) DEFAULT ''`、`field_path VARCHAR(255) DEFAULT ''`、`evidence_hash CHAR(64) DEFAULT ''` | PK evidence_id | relation_id；FK relation_id → assertions；source_version_id → item_versions；observation_id → observations |
+| `news_item_relations` | `item_relation_id VARCHAR(128) ascii_bin`、`from_news_id/from_source_id/to_news_id/to_source_id`、`relation_kind VARCHAR(32) ascii_bin`、`status VARCHAR(16) ascii_bin`、`supersedes_relation_id/evidence_observation_id/from_version_id/to_version_id VARCHAR(128) ascii_bin NULL`、`asserted_at/observed_at DATETIME(6)` | PK item_relation_id；UK supersedes_relation_id | (from_news_id,status,observed_at)、(to_news_id,status,observed_at)、supersedes_relation_id；FK from/to items、self supersedes、observation、from/to versions |
+| `news_authorization_snapshots` | `authorization_ref/subject_ref/resource_ref VARCHAR(256) utf8mb4_bin`、`decision VARCHAR(16) ascii_bin`、`purpose_code VARCHAR(32) ascii_bin`、`content_level VARCHAR(16) ascii_bin`、`decided_at DATETIME(6)`、`expires_at DATETIME(6) NULL`、`decision_fingerprint CHAR(64) ascii_bin`、`payload_json JSON`、`payload_hash CHAR(64) ascii_bin` | PK authorization_ref | (subject_ref,decided_at)、(resource_ref,decided_at)、expires_at |
+| `news_evidence_snapshots` | `snapshot_ref/caller_ref VARCHAR(256) utf8mb4_bin`、`filters_fingerprint CHAR(64) ascii_bin`、`page_size SMALLINT UNSIGNED`、`system_as_of DATETIME(6)`、`sort_version VARCHAR(64) ascii_bin`、`created_at/expires_at DATETIME(6)`、`item_count INT UNSIGNED`、`payload_json JSON`、`payload_hash CHAR(64) ascii_bin` | PK snapshot_ref | (caller_ref,expires_at)、expires_at |
+| `news_identifier_status_history` | `history_id BIGINT UNSIGNED AUTO_INCREMENT`、`source_id VARCHAR(128) ascii_bin`、`identifier_type VARCHAR(32) ascii_bin`、`identifier_hash CHAR(64) ascii_bin`、`identifier_status VARCHAR(16) ascii_bin`、`observed_at DATETIME(6)` | PK history_id | (source_id,identifier_type,identifier_hash,observed_at,history_id)；复合 FK → news_identifiers |
+| `news_policy_versions` | `policy_type VARCHAR(32) ascii_bin`、`policy_ref VARCHAR(256) utf8mb4_bin`、`policy_version VARCHAR(128) utf8mb4_bin`、`payload_json JSON`、`payload_hash CHAR(64) ascii_bin`、`created_at DATETIME(6)` | 复合 PK (policy_type,policy_ref,policy_version) | (policy_type,policy_ref,created_at) |
+| `news_current_policy_versions` | `policy_type VARCHAR(32) ascii_bin`、`policy_ref VARCHAR(256) utf8mb4_bin`、`policy_version VARCHAR(128) utf8mb4_bin`、`updated_at DATETIME(6)` | 复合 PK (policy_type,policy_ref) | (policy_type,policy_ref,policy_version)；复合 FK → news_policy_versions |
+| `news_version_availability_evidence` | `evidence_id/news_id/version_id/observation_id`、`field_path VARCHAR(255)`、`raw_value MEDIUMTEXT NULL`、`source_timezone_or_offset VARCHAR(64) NULL`、`source_precision VARCHAR(16)`、`parse_status VARCHAR(32)`、`parse_reason_code VARCHAR(128) DEFAULT ''`、`candidate_available_at_utc DATETIME(0) NULL`、`parser_version VARCHAR(128)`、`evidence_ref VARCHAR(512) NULL`、`evidence_hash CHAR(64) NULL`、`observed_at/recorded_at/retention_until DATETIME(6)`、`payload_purged_at DATETIME(6) NULL` | PK evidence_id；UK (version_id,evidence_id) | (version_id,observed_at,recorded_at)、observation_id；复合 FK version_id+news_id → item_versions；observation_id+news_id → observations；news_id → items |
+| `news_version_availability_decisions` | `decision_id VARCHAR(128) ascii_bin`、`version_id VARCHAR(128) ascii_bin`、`decision_seq BIGINT UNSIGNED`、`status VARCHAR(24) ascii_bin`、`selected_evidence_id VARCHAR(128) ascii_bin NULL`、`considered_evidence_ids JSON`、`reason_code/review_rule_version VARCHAR(128) ascii_bin`、`supersedes_decision_id VARCHAR(128) ascii_bin NULL`、`recorded_at DATETIME(6)` | PK decision_id；UK (version_id,decision_seq)、(version_id,decision_id)、supersedes_decision_id | (version_id,recorded_at,decision_seq)；FK version_id → item_versions；复合 FK (version_id,selected_evidence_id) → availability_evidence；复合自引用 FK (version_id,supersedes_decision_id) |
+
+### Migration 历史变化与空库基线处理
+
+1. V1 创建基础新闻实体、标识、观察记录、内容版本、关系断言/证据/关系、授权快照和证据快照。
+2. V4 增加 `news_identifier_status_history`，并执行从 `news_identifiers` 的历史状态回填。新空库基线只建表，不执行回填 INSERT；后续新标识状态由 Repository 同事务写入 history。
+3. V5 在 observations 增加 Provider Output Policy Version 字段。
+4. V6 在 observations 增加 endpoint_id、provider_output_policy_ref，并为 relation assertions / item relations 增加 supersedes 唯一约束。
+5. V7 增加 observations 的 retention_until、payload_purged_at 和 retention 索引。数据保留/清除是业务行为，不应从 Schema 初始化自动执行。
+6. V8 增加 news_policy_versions 与 news_current_policy_versions，后者通过复合 FK 锚定不可变策略版本。
+7. V9 增加 observations 与 item_versions 的 (id,news_id) 复合唯一键，为跨实体一致性外键提供引用目标。
+8. V10 增加 Availability Evidence / Decision 两张表，含 PIT 索引、复合外键和决策 supersedes 唯一约束。
+
+### News SQL 对照与结构注意事项
+
+- `mysql_repository.go` 实际读写 observations 全部最终策略绑定与 retention 列；读写 identifiers/status history；读写 item versions；写 availability evidence/decision；并按 retention_until/payload_purged_at 进行有界清理。新基线不能漏掉 V5–V7 列。
+- `identity_history.go` 使用复合标识键和 history_id 排序，依赖 status history 的复合 FK 和组合索引。
+- `authorization_policy_resolver.go` / `source_collection_policy_resolver.go` 通过 current pointer 读取不可变 policy version。
+- `news_item_relation_query.go` 使用递归 CTE 遍历 supersedes 链，两个关系表的 supersedes 唯一约束必须保留。
+- `evidence_query.go` 以 observed_at / version_no / version_id 做 PIT 读取，依赖版本与观察记录的双向关联及对应索引。
+- `evidence_snapshot.go` 依赖 caller_ref + expires_at 和 expires_at 索引执行授权读取、过期清理。
+- `evidence_authorization_read.go` 使用 item_versions 与 observations 的 news_id 关联，并按 system_as_of 双重约束。
+- `authorization_snapshot.go` 依赖 authorization_ref 主键和 payload hash 验证。
+- V4 回填历史状态的 INSERT 不进入新基线；新基线也不执行 retention 清理。V1–V10 里已有的最终列、索引、唯一约束、复合外键必须合并为一个完整 V1。
+- 新基线 DDL 应按外键依赖排序：news_items → identifiers/observations → item_versions → relation evidence/relations；policy_versions → current_policy_versions；item_versions + observations → availability_evidence → availability_decisions。每张表使用明确 CREATE TABLE，不能用 IF NOT EXISTS 掩盖旧结构。
+ 
+News 字段级审计状态：**第一轮通过**。下一步仍需对照迁移文件完整 DDL 和全部 SQL 查询逐个核对列的大小写/字符集/NULL 语义；当前确认的版本演进与 Repository 读写字段已覆盖全部 14 张表。
