@@ -225,6 +225,13 @@ func (r *Reader) GetDailyBarsV2(ctx context.Context, query app.DailyBarsQuery) (
 	if err != nil {
 		return app.DailyBarsV2Snapshot{}, err
 	}
+	if len(query.AllowedProviderCodes) > 0 {
+		for _, bar := range bars {
+			if !containsDailyBarsProvider(query.AllowedProviderCodes, bar.Source) {
+				return app.DailyBarsV2Snapshot{}, fmt.Errorf("Data backend returned source %q outside the PIT provider allowlist", bar.Source)
+			}
+		}
+	}
 	calendarRangeExplicit := strings.TrimSpace(query.StartDate) != "" && strings.TrimSpace(query.EndDate) != ""
 	calendarQualityUnreliable := evidence.CalendarQualityStatus != model.QualityValid ||
 		containsReaderString(evidence.Warnings, "daily_bar_coverage_uses_degraded_trading_calendar")
@@ -526,4 +533,14 @@ func validDailyBarsProviderCodeSet(values []string) bool {
 		}
 	}
 	return true
+}
+
+
+func containsDailyBarsProvider(values []string, expected string) bool {
+	for _, value := range values {
+		if value == expected {
+			return true
+		}
+	}
+	return false
 }
