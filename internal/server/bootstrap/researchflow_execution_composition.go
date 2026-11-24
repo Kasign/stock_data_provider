@@ -5,23 +5,31 @@ import (
 	"errors"
 	"fmt"
 
+	marketdatabootstrap "example.com/stock-analysis-flow/internal/marketdata/bootstrap"
 	newsconfig "example.com/stock-analysis-flow/internal/news/config"
 	researchflowapplication "example.com/stock-analysis-flow/internal/researchflow/application"
+	"example.com/stock-analysis-flow/internal/researchflow/parameterschema"
 	"example.com/stock-analysis-flow/internal/researchflow/resourcepolicy"
+	"example.com/stock-analysis-flow/internal/researchflow/stageoutput"
 	researchflowstorage "example.com/stock-analysis-flow/internal/researchflow/storage"
 	"example.com/stock-analysis-flow/internal/researchflow/template"
 	serverconfig "example.com/stock-analysis-flow/internal/server/config"
 	serverresources "example.com/stock-analysis-flow/internal/server/resources"
 )
 
-// researchflowComposition contains the shared execution dependencies. It has no
-// Owner Session identity and can therefore be assembled by Worker-only processes.
+// researchflowComposition contains shared execution dependencies. Owner Session
+// identity remains outside this composition so Worker-only processes can assemble it.
 type researchflowComposition struct {
 	newsStage        *newsSearchStageComposition
+	quantStage       *quantSMA20StageComposition
 	runRepository    *researchflowstorage.MySQLRunRepository
 	templateRegistry *researchflowstorage.MySQLTemplateRegistry
-	workflowTemplate template.WorkflowTemplate
+	workflowTemplates []template.WorkflowTemplate
 	resourcePolicies researchflowapplication.ResourcePolicyResolver
+	parameterSchemas *parameterschema.Validator
+	applicability    template.ApplicabilityEvaluator
+	outputRegistries researchflowapplication.StageOutputRegistryResolver
+	stageExecutor    researchflowapplication.StageExecutor
 	clock            *researchflowstorage.MySQLDatabaseClock
 	ids              researchflowapplication.IDGenerator
 }
@@ -30,6 +38,7 @@ func newResearchflowComposition(
 	shared *serverresources.Resources,
 	newsConfig newsconfig.Config,
 	capacity serverconfig.ResearchflowCapacity,
+	dataModule *marketdatabootstrap.Module,
 ) (*researchflowComposition, error) {
 	if shared == nil || shared.DB == nil || shared.HTTPClient == nil {
 		return nil, errors.New("Researchflow composition requires shared MariaDB and Platform HTTP Client resources")
@@ -42,7 +51,7 @@ func newResearchflowComposition(
 	if err != nil {
 		return nil, fmt.Errorf("compose News Search Stage: %w", err)
 	}
-	providerCodes, err := newsStage.providerCodes()
+	newsProviderCodes, err := newsStage.providerCodes()
 	if err != nil {
 		return nil, fmt.Errorf("read assembled News Provider inventory: %w", err)
 	}
@@ -50,13 +59,61 @@ func newResearchflowComposition(
 	if err != nil {
 		return nil, fmt.Errorf("create Researchflow ResourcePolicy Registry: %w", err)
 	}
-	if len(providerCodes) > 0 {
-		if _, err := policyRegistry.Resolve(resourcepolicy.NewsSearchConfiguredProvidersRef, providerCodes); err != nil {
+	providerInventories := map[string][]string{
+		resourcepolicy.NewsSearchConfiguredProvidersRef: append([]string(nil), newsProviderCodes...),
+		resourcepolicy.QuantDailyBarsProvidersRef:       {},
+	}
+	if len(newsProviderCodes) > 0 {
+		if _, err := policyRegistry.Resolve(resourcepolicy.NewsSearchConfiguredProvidersRef, newsProviderCodes); err != nil {
 			return nil, fmt.Errorf("validate assembled News Provider inventory: %w", err)
 		}
 	}
-	policyResolver := configuredNewsResourcePolicyResolver{
-		registry: policyRegistry, providerCodes: append([]string(nil), providerCodes...),
+
+	var quantStage *quantSMA20StageComposition
+	if dataModule != nil {
+		quantStage, err = newQuantSMA20StageComposition(dataModule, shared)
+		if err != nil {
+			return nil, fmt.Errorf("compose Quant SMA20 Stage: %w", err)
+		}
+	}
+	if quantStage != nil {
+		providerInventories[resourcepolicy.QuantDailyBarsProvidersRef] = append([]string(nil), quantStage.providerCodes...)
+	}
+
+	workflowTemplates := make([]template.WorkflowTemplate, 0, 2)
+	newsTemplate, err := buildNewsSearchWorkflowTemplate(newsStage, policyRegistry)
+	if err != nil {
+		return nil, fmt.Errorf("preflight News Search workflow template: %w", err)
+	}
+	workflowTemplates = append(workflowTemplates, newsTemplate)
+	if quantStage != nil {
+		quantTemplate, templateErr := buildQuantSMA20WorkflowTemplate(quantStage, policyRegistry)
+		if templateErr != nil {
+			return nil, fmt.Errorf("preflight Quant SMA20 workflow template: %w", templateErr)
+		}
+		workflowTemplates = append(workflowTemplates, quantTemplate)
+	}
+
+	policyResolver := configuredResourcePolicyResolver{
+		registry: policyRegistry, providerCodesByRef: providerInventories,
+	}
+	parameterSchemas, err := newResearchflowParameterSchemaValidator()
+	if err != nil {
+		return nil, fmt.Errorf("create Researchflow parameter Schema Validator: %w", err)
+	}
+	outputRegistriesList := []researchflowapplication.StageOutputRegistry{newsStage.registry}
+	quantExecutor := researchflowapplication.StageExecutor(nil)
+	if quantStage != nil {
+		outputRegistriesList = append(outputRegistriesList, quantStage.registry)
+		quantExecutor = quantStage.executor
+	}
+	outputRegistries, err := researchflowapplication.NewStageOutputRegistrySet(outputRegistriesList...)
+	if err != nil {
+		return nil, fmt.Errorf("create immutable Researchflow Stage Output Registry set: %w", err)
+	}
+	stageExecutor := researchflowStageDispatcher{
+		news: newsStage.executor,
+		quant: quantExecutor,
 	}
 
 	runRepository, err := researchflowstorage.NewMySQLRunRepository(shared.DB, researchflowstorage.CapacityLimits{
@@ -69,53 +126,54 @@ func newResearchflowComposition(
 	if err != nil {
 		return nil, fmt.Errorf("create Researchflow Template Registry: %w", err)
 	}
-	workflowTemplate, err := buildNewsSearchWorkflowTemplate(newsStage, policyRegistry)
-	if err != nil {
-		return nil, fmt.Errorf("preflight News Search workflow template: %w", err)
-	}
 	clock, err := researchflowstorage.NewMySQLDatabaseClock(shared.DB)
 	if err != nil {
 		return nil, fmt.Errorf("create Researchflow database clock: %w", err)
 	}
 
 	return &researchflowComposition{
-		newsStage: newsStage, runRepository: runRepository,
-		templateRegistry: templateRegistry, workflowTemplate: workflowTemplate,
-		resourcePolicies: policyResolver, clock: clock,
-		ids: researchflowIDGenerator{},
+		newsStage: newsStage, quantStage: quantStage,
+		runRepository: runRepository, templateRegistry: templateRegistry,
+		workflowTemplates: workflowTemplates, resourcePolicies: policyResolver,
+		parameterSchemas: parameterSchemas, applicability: researchflowApplicabilityEvaluator{},
+		outputRegistries: outputRegistries, stageExecutor: stageExecutor,
+		clock: clock, ids: researchflowIDGenerator{},
 	}, nil
 }
 
-// publishWorkflowTemplate publishes the preflighted immutable definition. Existing
-// identical versions are idempotent; conflicting content aborts Server startup.
+// publishWorkflowTemplate publishes each preflighted immutable definition.
+// Existing identical versions are idempotent; conflicting content aborts Server startup.
 func (c *researchflowComposition) publishWorkflowTemplate(ctx context.Context) error {
-	if c == nil || c.templateRegistry == nil {
+	if c == nil || c.templateRegistry == nil || len(c.workflowTemplates) == 0 {
 		return errors.New("Researchflow workflow template registry is not configured")
 	}
 	if ctx == nil {
 		return errors.New("Researchflow workflow template publication context is required")
 	}
-	if err := c.templateRegistry.Publish(ctx, c.workflowTemplate); err != nil {
-		return fmt.Errorf("publish Researchflow workflow template %s@%s: %w", c.workflowTemplate.Ref, c.workflowTemplate.Version, err)
+	for _, workflowTemplate := range c.workflowTemplates {
+		if err := c.templateRegistry.Publish(ctx, workflowTemplate); err != nil {
+			return fmt.Errorf("publish Researchflow workflow template %s@%s: %w", workflowTemplate.Ref, workflowTemplate.Version, err)
+		}
 	}
 	return nil
 }
 
-// configuredNewsResourcePolicyResolver snapshots only the Provider instances
-// successfully constructed by the Server composition root.
-type configuredNewsResourcePolicyResolver struct {
-	registry      *resourcepolicy.Registry
-	providerCodes []string
+// configuredResourcePolicyResolver snapshots only provider instances assembled by Server.
+type configuredResourcePolicyResolver struct {
+	registry            *resourcepolicy.Registry
+	providerCodesByRef map[string][]string
 }
 
-func (r configuredNewsResourcePolicyResolver) Resolve(ctx context.Context, ref string) (resourcepolicy.Snapshot, error) {
+func (r configuredResourcePolicyResolver) Resolve(ctx context.Context, ref string) (resourcepolicy.Snapshot, error) {
 	if ctx == nil || r.registry == nil {
 		return resourcepolicy.Snapshot{}, errors.New("Researchflow ResourcePolicy resolver is not configured")
 	}
 	if err := ctx.Err(); err != nil {
 		return resourcepolicy.Snapshot{}, err
 	}
-	return r.registry.Resolve(ref, append([]string(nil), r.providerCodes...))
+	codes, exists := r.providerCodesByRef[ref]
+	if !exists {
+		return resourcepolicy.Snapshot{}, fmt.Errorf("%w: %s", resourcepolicy.ErrPolicyNotFound, ref)
+	}
+	return r.registry.Resolve(ref, append([]string(nil), codes...))
 }
-
-var _ researchflowapplication.ResourcePolicyResolver = configuredNewsResourcePolicyResolver{}
