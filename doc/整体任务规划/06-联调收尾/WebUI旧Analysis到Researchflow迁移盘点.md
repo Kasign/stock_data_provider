@@ -102,6 +102,9 @@ SRV-CTR-001 v1.0.0（FROZEN）定义的唯一 WebUI 业务执行 API：
 - 旧 Runner 对四种类型均接受，但在当前 `internal/analysis/app/runner.go` 与 `internal/service/wiring.go` 中，只有 `historical_replay` 触发专门的 PIT 阻断分支。
 - `post_market_scan` 与 `watchlist_scan` 当前都使用同一个 Universe Resolver、DataCollector、Quality、Market、Factor、Strategy、Risk、Planner 流程；没有发现按这两个 TaskType 分叉的专属业务阶段。它们目前主要是请求元数据/产品命名差异，不能在迁移时直接假定为两个不同的计算引擎。
 - 因此阶段 A 的首要工作不是立即创建两个模板，而是确认这两个页面选项是否本来就应合并为一个“指定标的研究”任务，以及盘后市场复盘是否需要独立市场广度/指数/全市场输入链。只有真实输入与输出不同，才定义不同 Template。
+- 旧 Runner 的 Universe Resolver 直接以请求中的 `symbols` 形成研究范围；Market Analyzer 的核心广度指标命名为 `watchlist_above_ma20_pct`，并明确证据描述为“自选股”横截面。因此当前 `post_market_scan` 也不是全市场扫描，不能仅凭页面标签认定它已经覆盖全市场盘后复盘。
+- 旧 `portfolioProvider` 返回 `unconfigured-no-paper-ledger-v1`、现金和权益均为 0；`positionPlanner` 对每个信号都返回“不生成仓位/执行计划”的拒绝；`hardRiskRule` 对所有候选信号 fail-closed 阻断。它不是已具备真实持仓账本、仓位计算和交易计划的生产能力。
+- 所以旧结果页中的 Factors/Signals 可以作为旧 MVP 研究结果；Plans/Execution 目前不能当作真实可执行交易计划。新模板必须保持硬风险门禁独立，不得因综合评分或 LLM 结论覆盖阻断。
 
 ### 独立 Go Core 的边界
 
