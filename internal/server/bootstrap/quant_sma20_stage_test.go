@@ -15,8 +15,6 @@ import (
 	"example.com/stock-analysis-flow/internal/researchflow/resourcepolicy"
 	"example.com/stock-analysis-flow/internal/researchflow/stageoutput"
 	"example.com/stock-analysis-flow/internal/researchflow/template"
-	"example.com/stock-analysis-flow/internal/researchflow/stageoutput"
-	"example.com/stock-analysis-flow/internal/researchflow/template"
 )
 
 type quantSMA20StageAdapterStub struct {
@@ -44,7 +42,7 @@ func TestQuantSMA20StageExecutorUsesImmutableProviderPolicyAndPersistsOutputCont
 	}
 	adapter := &quantSMA20StageAdapterStub{
 		output: quantstage.SMA20Output{
-			SchemaVersion:           quantstage.SMA20SchemaVersion,
+			SchemaVersion: quantstage.SMA20SchemaVersion,
 			ResultID:      "quant_result:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 			SnapshotRef:   "data_snapshot:sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
 			MetricCode:    "sma", Value: json.RawMessage(`"43.1200"`), Unit: "CNY/share", Period: "20d",
@@ -169,7 +167,7 @@ func TestBuildQuantSMA20WorkflowTemplateFreezesParametersResourcePolicyAndOutput
 	registry, err := stageoutput.NewRegistry(quantSMA20StageOutputRegistryVersion, []stageoutput.Entry{{
 		StageCode:               quantstage.SMA20StageCode,
 		OutputType:              quantstage.SMA20OutputType,
-		SchemaVersion: quantstage.SMA20SchemaVersion,
+		SchemaVersion:           quantstage.SMA20SchemaVersion,
 		PayloadSchemaRef:        quantSMA20PayloadSchemaRef,
 		QualitySummarySchemaRef: quantSMA20QualitySchemaRef,
 		PayloadValidator:        stageoutput.ValidatorFunc(quantstage.ValidateSMA20OutputJSON),
