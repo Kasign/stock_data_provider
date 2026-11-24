@@ -11,6 +11,7 @@ import (
 
 	platformsecurity "example.com/stock-analysis-flow/internal/platform/security"
 	researchflowapplication "example.com/stock-analysis-flow/internal/researchflow/application"
+	quantstage "example.com/stock-analysis-flow/internal/quant/stage"
 	serverconfig "example.com/stock-analysis-flow/internal/server/config"
 )
 
@@ -48,14 +49,11 @@ func newResearchflowRuntimeComponent(
 	composition *researchflowComposition,
 	capacity serverconfig.ResearchflowCapacity,
 	localWorkers int,
-	workerPrincipal platformsecurity.Principal,
+	quantPrincipal *platformsecurity.Principal,
 ) (*researchflowRuntimeComponent, error) {
 	if composition == nil || composition.runRepository == nil || composition.newsStage == nil ||
 		composition.clock == nil || composition.ids == nil || !capacity.Configured ||
-		capacity.MaxWorkers <= 0 || localWorkers <= 0 ||
-		workerPrincipal.Kind != platformsecurity.IdentityService ||
-		workerPrincipal.AuthMethod != platformsecurity.AuthMethodServiceBearer ||
-		workerPrincipal.Subject != "researchflow-worker" {
+		capacity.MaxWorkers <= 0 || localWorkers <= 0 {
 		return nil, errors.New("Researchflow Runtime composition or capacity is invalid")
 	}
 
@@ -63,7 +61,7 @@ func newResearchflowRuntimeComponent(
 	if err != nil {
 		return nil, fmt.Errorf("generate process-unique Researchflow Worker ID: %w", err)
 	}
-	stageExecutor := principalStageExecutor{principal: workerPrincipal, next: composition.newsStage.executor}
+	stageExecutor := principalStageExecutor{quantPrincipal: quantPrincipal, next: composition.newsStage.executor}
 	worker, err := researchflowapplication.NewWorkerWithStageOutputRegistry(
 		composition.runRepository,
 		stageExecutor,
@@ -358,19 +356,26 @@ func (c *researchflowRuntimeComponent) scanFinalizableRuns(ctx context.Context) 
 }
 
 type principalStageExecutor struct {
-	principal platformsecurity.Principal
-	next      researchflowapplication.StageExecutor
+	quantPrincipal *platformsecurity.Principal
+	next           researchflowapplication.StageExecutor
 }
 
 func (e principalStageExecutor) ExecuteStage(ctx context.Context, request researchflowapplication.StageExecutionRequest) (researchflowapplication.StageExecutionResult, error) {
-	if e.next == nil || e.principal.Kind != platformsecurity.IdentityService ||
-		e.principal.AuthMethod != platformsecurity.AuthMethodServiceBearer ||
-		e.principal.Subject != "researchflow-worker" {
-		return researchflowapplication.StageExecutionResult{}, errors.New("Researchflow Worker service identity is unavailable")
+	if e.next == nil {
+		return researchflowapplication.StageExecutionResult{}, errors.New("Researchflow Stage Executor is unavailable")
 	}
-	trustedContext, err := platformsecurity.WithPrincipal(ctx, e.principal)
-	if err != nil {
-		return researchflowapplication.StageExecutionResult{}, fmt.Errorf("attach trusted Researchflow Worker identity: %w", err)
+	if request.Stage.Code == quantstage.SMA20StageCode {
+		if e.quantPrincipal == nil ||
+			e.quantPrincipal.Kind != platformsecurity.IdentityService ||
+			e.quantPrincipal.AuthMethod != platformsecurity.AuthMethodServiceBearer ||
+			e.quantPrincipal.Subject != "quant" {
+			return researchflowapplication.StageExecutionResult{}, errors.New("Quant service identity is unavailable for SMA20 Stage")
+		}
+		trustedContext, err := platformsecurity.WithPrincipal(ctx, *e.quantPrincipal)
+		if err != nil {
+			return researchflowapplication.StageExecutionResult{}, fmt.Errorf("attach trusted Quant service identity: %w", err)
+		}
+		ctx = trustedContext
 	}
-	return e.next.ExecuteStage(trustedContext, request)
+	return e.next.ExecuteStage(ctx, request)
 }
