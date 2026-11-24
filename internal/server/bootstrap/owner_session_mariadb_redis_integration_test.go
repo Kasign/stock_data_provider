@@ -15,9 +15,9 @@ import (
 	mysql "github.com/go-sql-driver/mysql"
 	"github.com/redis/go-redis/v9"
 
+	marketdataauthorization "example.com/stock-analysis-flow/internal/marketdata/authorization"
 	platformconfig "example.com/stock-analysis-flow/internal/platform/config"
 	platformsecurity "example.com/stock-analysis-flow/internal/platform/security"
-	marketdataauthorization "example.com/stock-analysis-flow/internal/marketdata/authorization"
 	"example.com/stock-analysis-flow/internal/server/resources"
 )
 
@@ -242,7 +242,6 @@ func TestOwnerSessionHTTPMariaDBRedisLifecycleIntegration(t *testing.T) {
 		t.Fatalf("security audit events=%d, want at least 8 lifecycle events", auditCount)
 	}
 }
-
 
 // ownerSessionDataPolicyManagerStub 仅用于 Owner Session 生命周期集成测试的路由装配。
 type ownerSessionDataPolicyManagerStub struct{}
