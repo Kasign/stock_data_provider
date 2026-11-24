@@ -461,15 +461,15 @@ func TestPrincipalContextReturnsIsolatedScopeSnapshots(t *testing.T) {
 }
 
 
-func TestNewServicePrincipalBuildsConfiguredWorkerIdentity(t *testing.T) {
+func TestPrincipalFromServiceCredentialBuildsConfiguredWorkerIdentity(t *testing.T) {
 	credential := ServiceCredential{
 		Name: "researchflow-worker",
 		Secret: testServiceSecret("0123456789abcdef0123456789abcdef"),
 		Scopes: []string{ScopeDataRead, ScopeResearchRun},
 	}
-	principal, err := NewServicePrincipal(credential)
+	principal, err := PrincipalFromServiceCredential(credential)
 	if err != nil {
-		t.Fatalf("NewServicePrincipal() error = %v", err)
+		t.Fatalf("PrincipalFromServiceCredential() error = %v", err)
 	}
 	if principal.Kind != IdentityService || principal.AuthMethod != AuthMethodServiceBearer ||
 		principal.Subject != "researchflow-worker" || len(principal.Scopes) != 2 {
@@ -486,7 +486,7 @@ func TestNewServicePrincipalBuildsConfiguredWorkerIdentity(t *testing.T) {
 	}
 }
 
-func TestNewServicePrincipalRejectsInvalidCredential(t *testing.T) {
+func TestPrincipalFromServiceCredentialRejectsInvalidCredential(t *testing.T) {
 	tests := []struct {
 		name string
 		credential ServiceCredential
@@ -499,8 +499,8 @@ func TestNewServicePrincipalRejectsInvalidCredential(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if _, err := NewServicePrincipal(tt.credential); err == nil {
-				t.Fatal("NewServicePrincipal() error = nil, want rejection")
+			if _, err := PrincipalFromServiceCredential(tt.credential); err == nil {
+				t.Fatal("PrincipalFromServiceCredential() error = nil, want rejection")
 			}
 		})
 	}
