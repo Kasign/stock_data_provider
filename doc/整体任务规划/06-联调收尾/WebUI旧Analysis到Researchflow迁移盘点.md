@@ -147,6 +147,22 @@ Server 生产组合根：
 
 Researchflow 的 Context Assembly、Quant Envelope Validator、Result Composer、Diagnostics Adapter 等内部构件，不等于真实生产 Stage。只有 Owner Facade、授权、输入输出 Schema/Golden、真实 Provider、Stage Executor、Registry 和 Server Worker 注入全部齐备，才能注册生产模板。
 
+## 5.3 当前 WebUI 结果页依赖的完整报告字段
+
+文件：`web/src/task-result-view.js`、`web/src/report.js`
+
+旧页面不是只显示 Run 状态。结果页会直接读取旧 `RunResult` 的：
+
+- Request：symbols、task_type、market_id、as_of、as_of_mode、strategy_ids、策略/风险配置版本。
+- 快照与运行元数据：universe、raw_snapshot_id、market_snapshot_id、started_at、finished_at。
+- 数据质量：quality.core_pass、partial、issues、strategy_eligible、strategy_blockers、policy_version。
+- 分析结果：market_state、factors、signals、tradability、risk、plans、planning_rejections、execution_assessment。
+- 执行过程和结论：events、failure、warnings。
+
+导出 Markdown/JSON 也以完整旧 RunResult 为数据源。SRV-CTR-001 的 Run/Stage 聚合 DTO 不包含上述完整报告正文；契约明确首期不返回 Stage Output 内容和 Attempt 明细。当前 `ResultSummary` 也不能被假定为完整研究报告。
+
+**这是独立于 Stage 生产链路的结果读取阻塞：** 在切换 WebUI 结果页前，必须明确完整报告/结果资源的唯一持久化 Owner、资源 ID 与授权读取 Application Port，并定义 WebUI 可用的正式读取契约。不能让页面直接访问 Quant/Research/Storage Repository，也不能在 Run 聚合 DTO 中随意塞入各模块完整结果。
+
 ## 6. 旧 Task 模型与新 Run 模型的语义差异
 
 | 旧页面概念 | SRV-CTR-001 当前能力 | 迁移处理 |
