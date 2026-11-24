@@ -1078,3 +1078,13 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - Data Owner Application 现在要求有效 Platform Request ID；缺失时 fail closed。策略审计写入失败时发布事务回滚，不留下已生效但不可追溯的策略。
 - 接口文档已改为评审后 DRAFT，建议编号 SRV-CTR-003；项目级登记簿维护分支仍为 feat/design_doc，未在 repair_all 擅自改动登记簿或宣称契约已冻结。
 - 本轮 CI 首次发现 Go 格式问题和集成测试结构问题，已根据精确 job log 修正；后续 SHA 的 Go Test Suite 与 Integration CI 尚待最终结果。
+
+
+## 2026-11-24 统一数据库基线集成测试修正
+
+- 基线：repair_all `f1f05a0ede014c197b0a1201377acc4921e719f5`。
+- 最新 Integration CI 的两个根模块失败均来自测试仍断言旧契约：Worker Bootstrap 测试继续模拟 `MIGRATION_ENABLED=false` / `DB_AUTO_MIGRATE=false`；Data Migration 测试仍要求 V1-V9 九个历史版本并预先构造旧版 Schema。
+- 当前生产实现已经由 Data 模块提供一个完整 Schema 基线（version 1），由 Server Registry 统一执行；启动后另行执行 Migration History 和 Data/Analysis 最终物理 Schema 校验。
+- Worker 集成测试改为验证已初始化数据库的重复启动幂等，以及人工删除必需列后 Root Server 在最终 Schema 校验阶段 fail-closed；同时确认启动失败没有自动改写损坏结构。测试不再设置或断言已废弃的 Migration 开关，也不再依赖旧的 `market_data.schema_drift` 文本标签。
+- Data Migration 集成测试改为从真正空库开始，由两个 Root Registry 并发执行同一完整基线，验证 Migration History 只有一个已应用的 version 1，并检查当前 Data 表、关键列和非唯一时态索引均真实存在。
+- 本项仅修正测试契约，不改变生产 Migration 定义、模块职责或历史兼容行为。待精确 SHA 的根模块测试与完整 Integration CI 通过后，再记录阶段验收结论。

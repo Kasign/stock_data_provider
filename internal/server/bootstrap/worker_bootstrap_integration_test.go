@@ -199,7 +199,6 @@ func TestWorkerBootstrapMariaDBRedisIntegration(t *testing.T) {
 		"DB_USER":                               adminConfig.User,
 		"DB_PASSWORD":                           adminConfig.Passwd,
 		"DB_NAME":                               database,
-		"DB_AUTO_MIGRATE":                       "true",
 		"DB_PARAMS":                             "charset=utf8mb4&parseTime=true&loc=UTC",
 		"REDIS_ADDR":                            redisAddr,
 		"REDIS_PASSWORD":                        os.Getenv("REDIS_PASSWORD"),
@@ -208,7 +207,6 @@ func TestWorkerBootstrapMariaDBRedisIntegration(t *testing.T) {
 		"RESEARCHFLOW_MAX_WORKERS":              "8",
 		"RESEARCHFLOW_RUN_DEADLINE":             "45m",
 		"RESEARCHFLOW_LOCAL_WORKERS":            "2",
-		"MIGRATION_ENABLED":                     "true",
 		"NOTIFICATION_EVENT_MAX_ENVELOPE_BYTES": "65536",
 		"NOTIFICATION_EVENT_MAX_PAYLOAD_BYTES":  "32768",
 		"NOTIFICATION_EVENT_MAX_JSON_DEPTH":     "32",
@@ -358,13 +356,11 @@ func TestAPIBootstrapMariaDBRedisIntegration(t *testing.T) {
 		"DB_USER":                               adminConfig.User,
 		"DB_PASSWORD":                           adminConfig.Passwd,
 		"DB_NAME":                               database,
-		"DB_AUTO_MIGRATE":                       "true",
 		"DB_PARAMS":                             "charset=utf8mb4&parseTime=true&loc=UTC",
 		"REDIS_ADDR":                            redisAddr,
 		"REDIS_PASSWORD":                        os.Getenv("REDIS_PASSWORD"),
 		"REDIS_DB":                              os.Getenv("REDIS_DB"),
 		"MARKET_DATA_BASE_URL":                  "http://127.0.0.1:8091",
-		"MIGRATION_ENABLED":                     "true",
 		"PLATFORM_ADMIN_TOKEN":                  ownerToken,
 		"HTTP_ADDR":                             httpAddress,
 		"HTTP_SHUTDOWN_TIMEOUT":                 "10s",
@@ -491,19 +487,13 @@ func TestAPIBootstrapMariaDBRedisIntegration(t *testing.T) {
 
 	child.stop(t)
 
-	// 健康 Schema 在 Migration disabled 下仍应正常启动；只读预检不能误拒绝合法数据库。
-	healthyDisabledValues := make(map[string]string, len(values))
-	for key, value := range values {
-		healthyDisabledValues[key] = value
-	}
-	healthyDisabledValues["MIGRATION_ENABLED"] = "false"
-	healthyDisabledValues["DB_AUTO_MIGRATE"] = "false"
-	healthyDisabledChild := startWorkerBootstrapChild(t, healthyDisabledValues)
-	healthyDisabledChild.waitAPIReady(t, baseURL, ownerToken)
-	healthyDisabledChild.stop(t)
+	// 已初始化的数据库再次启动必须保持幂等，不依赖 Migration 开关。
+	healthyRestartChild := startWorkerBootstrapChild(t, values)
+	healthyRestartChild.waitAPIReady(t, baseURL, ownerToken)
+	healthyRestartChild.stop(t)
 
-	// Migration disabled 必须先校验 history，再由 Data Ready 检查物理结构；
-	// 缺列时拒绝启动，且不得在 disabled 模式下自动修复数据库。
+	// Migration 已登记的基线不会把人工删除的列当作新版本迁移；
+	// 最终物理 Schema 校验必须拒绝漂移，且启动过程不得静默修复该结构。
 	dbConfig := *adminConfig
 	dbConfig.DBName = database
 	applicationDB, err := sql.Open("mysql", dbConfig.FormatDSN())
@@ -511,39 +501,35 @@ func TestAPIBootstrapMariaDBRedisIntegration(t *testing.T) {
 		t.Fatalf("打开隔离 API 数据库失败: %v", err)
 	}
 	defer applicationDB.Close()
-	if _, err := applicationDB.ExecContext(setupCtx, "ALTER TABLE market_data_quotes DROP COLUMN turnover_rate"); err != nil {
-		t.Fatalf("模拟 Migration disabled 下的物理 Schema 漂移失败: %v", err)
+	if _, err := applicationDB.ExecContext(context.Background(), "ALTER TABLE market_data_quotes DROP COLUMN turnover_rate"); err != nil {
+		t.Fatalf("模拟已登记基线下的物理 Schema 漂移失败: %v", err)
 	}
 
-	disabledValues := make(map[string]string, len(values))
-	for key, value := range values {
-		disabledValues[key] = value
-	}
-	disabledValues["MIGRATION_ENABLED"] = "false"
-	disabledValues["DB_AUTO_MIGRATE"] = "false"
-	disabledChild := startWorkerBootstrapChild(t, disabledValues)
-	defer disabledChild.killIfRunning()
+	driftChild := startWorkerBootstrapChild(t, values)
+	defer driftChild.killIfRunning()
 	select {
-	case childErr := <-disabledChild.waitDone:
-		disabledChild.finished = true
+	case childErr := <-driftChild.waitDone:
+		driftChild.finished = true
 		if childErr == nil {
-			t.Fatalf("Migration disabled 时物理 Schema 缺列，Server 仍然启动成功：%s", disabledChild.output.String())
+			t.Fatalf("物理 Schema 缺列时 Server 仍然启动成功：%s", driftChild.output.String())
 		}
 	case <-time.After(15 * time.Second):
-		disabledChild.killIfRunning()
-		t.Fatalf("Migration disabled 时物理 Schema 缺列，Server 未在 15 秒内 fail-closed：%s", disabledChild.output.String())
+		driftChild.killIfRunning()
+		t.Fatalf("物理 Schema 缺列时 Server 未在 15 秒内 fail-closed：%s", driftChild.output.String())
 	}
-	startupOutput := disabledChild.output.String()
-	if !strings.Contains(startupOutput, "market_data.schema_drift") ||
+	startupOutput := driftChild.output.String()
+	if !strings.Contains(startupOutput, "validate final MarketData schema") ||
 		!strings.Contains(startupOutput, "market_data_quotes.turnover_rate is missing") {
-		t.Fatalf("Migration disabled 启动失败未返回预期 Schema drift 证据：%s", startupOutput)
+		t.Fatalf("启动失败未返回最终 Schema 校验的具体缺列证据：%s", startupOutput)
 	}
+	verifyCtx, verifyCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer verifyCancel()
 	var remainingColumns int
-	if err := applicationDB.QueryRowContext(setupCtx, `SELECT COUNT(*) FROM information_schema.columns
+	if err := applicationDB.QueryRowContext(verifyCtx, `SELECT COUNT(*) FROM information_schema.columns
 WHERE table_schema = DATABASE() AND table_name = 'market_data_quotes' AND column_name = 'turnover_rate'`).Scan(&remainingColumns); err != nil {
-		t.Fatalf("检查 Migration disabled 是否改写物理 Schema 失败: %v", err)
+		t.Fatalf("检查启动失败后物理 Schema 是否被改写失败: %v", err)
 	}
 	if remainingColumns != 0 {
-		t.Fatalf("Migration disabled 自动修改了物理 Schema，turnover_rate column count = %d", remainingColumns)
+		t.Fatalf("启动过程意外修改物理 Schema，turnover_rate column count = %d", remainingColumns)
 	}
 }

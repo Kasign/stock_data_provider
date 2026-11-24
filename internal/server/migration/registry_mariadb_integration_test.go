@@ -306,15 +306,17 @@ func TestRegistryMariaDBPartialDDLFailureRequiresRecovery(t *testing.T) {
 	}
 }
 
-// TestMarketDataMigrationUpgradeAndConcurrentRootRegistration exercises the
-// published V1-V3 history, legacy compatibility DDL, and two Root instances.
-func TestMarketDataMigrationUpgradeAndConcurrentRootRegistration(t *testing.T) {
+// TestMarketDataBaselineMigrationAndConcurrentRootRegistration verifies that
+// a completely empty database receives the complete Data schema baseline once,
+// even when two Root registries start concurrently.
+func TestMarketDataBaselineMigrationAndConcurrentRootRegistration(t *testing.T) {
 	dsn := os.Getenv("SERVER_RELAY_TEST_MYSQL_DSN")
 	if dsn == "" {
-		t.Skip("set SERVER_RELAY_TEST_MYSQL_DSN to run the Data migration integration test")
+		t.Skip("set SERVER_RELAY_TEST_MYSQL_DSN to run the Data baseline migration integration test")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
+
 	adminDB, err := sql.Open("mysql", dsn)
 	if err != nil {
 		t.Fatalf("open MariaDB admin connection: %v", err)
@@ -324,20 +326,18 @@ func TestMarketDataMigrationUpgradeAndConcurrentRootRegistration(t *testing.T) {
 		t.Fatalf("ping MariaDB: %v", err)
 	}
 	suffix := strconv.FormatInt(time.Now().UnixNano(), 36)
-	testDatabase := "market_data_it_" + suffix
-	databaseCreated := false
-	t.Cleanup(func() {
-		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cleanupCancel()
-		if databaseCreated {
-			_, _ = adminDB.ExecContext(cleanupCtx, fmt.Sprintf("DROP DATABASE IF EXISTS `%s`", testDatabase))
-		}
-		_ = adminDB.Close()
-	})
-	if _, err := adminDB.ExecContext(ctx, fmt.Sprintf("CREATE DATABASE `%s`", testDatabase)); err != nil {
-		t.Fatalf("create isolated MariaDB database: %v", err)
+	testDatabase := "market_data_baseline_it_" + suffix
+	if _, err := adminDB.ExecContext(ctx, fmt.Sprintf("CREATE DATABASE `%s` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci", testDatabase)); err != nil {
+		t.Fatalf("create isolated empty MariaDB database: %v", err)
 	}
-	databaseCreated = true
+	t.Cleanup(func() {
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cleanupCancel()
+		if _, err := adminDB.ExecContext(cleanupCtx, fmt.Sprintf("DROP DATABASE IF EXISTS `%s`", testDatabase)); err != nil {
+			t.Errorf("drop isolated MariaDB database: %v", err)
+		}
+	})
+
 	config, err := mysqlDriver.ParseDSN(dsn)
 	if err != nil {
 		t.Fatalf("parse MariaDB DSN: %v", err)
@@ -350,33 +350,20 @@ func TestMarketDataMigrationUpgradeAndConcurrentRootRegistration(t *testing.T) {
 	db := sql.OpenDB(connector)
 	defer db.Close()
 	if err := db.PingContext(ctx); err != nil {
-		t.Fatalf("ping isolated MariaDB database: %v", err)
+		t.Fatalf("ping isolated empty MariaDB database: %v", err)
 	}
+
 	definitions := marketdatabootstrap.MigrationDefinitions()
-	if len(definitions) != 9 {
-		t.Fatalf("Data migration definition count = %d, want V1-V6, authorization policy V7, decision/revocation V8 and publication audit V9 (9 total)", len(definitions))
-	}
-	if err := platformstorage.ApplyMigrations(ctx, db, marketdatabootstrap.MigrationNamespace, definitions[:3]); err != nil {
-		t.Fatalf("apply published Data migrations V1-V3: %v", err)
-	}
-	// Recreate the deployed legacy state: two missing columns and old unique
-	// history indexes that must be replaced by non-unique temporal indexes.
-	for _, statement := range []string{
-		"ALTER TABLE market_data_quotes DROP COLUMN volume_ratio",
-		"ALTER TABLE market_data_quotes DROP COLUMN turnover_rate",
-		"CREATE UNIQUE INDEX uq_market_bar_revision_content ON market_data_daily_bar_versions (symbol, trade_date, period, adjustment_basis, source, revision_hash)",
-		"CREATE UNIQUE INDEX uq_market_fundamental_revision_content ON market_data_fundamental_versions (symbol, report_year, report_quarter, source, revision_hash)",
-	} {
-		if _, err := db.ExecContext(ctx, statement); err != nil {
-			t.Fatalf("prepare legacy Data schema (%s): %v", statement, err)
-		}
+	if len(definitions) != 1 || definitions[0].Version != 1 {
+		t.Fatalf("Data baseline migration definitions = %+v, want exactly one complete baseline at version 1", definitions)
 	}
 	registries := []*Registry{NewRegistry(), NewRegistry()}
 	for _, registry := range registries {
 		if err := registry.Register(marketdatabootstrap.MigrationNamespace, definitions); err != nil {
-			t.Fatalf("register complete Data migration history: %v", err)
+			t.Fatalf("register complete Data baseline: %v", err)
 		}
 	}
+
 	start := make(chan struct{})
 	results := make(chan error, len(registries))
 	var workers sync.WaitGroup
@@ -394,36 +381,65 @@ func TestMarketDataMigrationUpgradeAndConcurrentRootRegistration(t *testing.T) {
 	close(results)
 	for runErr := range results {
 		if runErr != nil {
-			t.Fatalf("concurrent Root migration failed: %v", runErr)
+			t.Fatalf("concurrent Root baseline migration failed: %v", runErr)
 		}
 	}
 	if err := registries[0].ValidateApplied(ctx, db); err != nil {
-		t.Fatalf("read-only Data migration validation failed: %v", err)
+		t.Fatalf("read-only Data baseline validation failed: %v", err)
 	}
-	for _, column := range []string{"volume_ratio", "turnover_rate"} {
+
+	// 检查基线一次性创建全部当前模块表，而不是只检查 Migration History。
+	requiredTables := []string{
+		"market_data_provider_probe_runs",
+		"market_data_sentiment_snapshots",
+		"market_data_quotes",
+		"market_data_daily_bars",
+		"market_data_daily_bar_versions",
+		"market_data_fundamental_versions",
+		"market_data_security_trading_status_versions",
+		"market_data_adjustment_factor_versions",
+		"market_data_corporate_action_versions",
+		"market_data_trading_calendar_snapshots",
+		"market_data_daily_bars_close_series_snapshots",
+		"market_data_authorization_policy_versions",
+		"market_data_current_authorization_policy_versions",
+		"market_data_authorization_decisions",
+		"market_data_authorization_revocations",
+		"market_data_authorization_policy_publications",
+		"market_data_valuation_versions",
+	}
+	for _, table := range requiredTables {
 		var count int
-		if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='market_data_quotes' AND COLUMN_NAME=?", column).Scan(&count); err != nil || count != 1 {
-			t.Fatalf("compatibility column %s missing: count=%d err=%v", column, count, err)
+		if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=?", table).Scan(&count); err != nil || count != 1 {
+			t.Fatalf("baseline table %s missing: count=%d err=%v", table, count, err)
 		}
 	}
-	for _, index := range []string{"uq_market_bar_revision_content", "uq_market_fundamental_revision_content"} {
+	for _, item := range []struct{ table, column string }{
+		{"market_data_quotes", "volume_ratio"},
+		{"market_data_quotes", "turnover_rate"},
+		{"market_data_daily_bars_close_series_snapshots", "snapshot_ref"},
+		{"market_data_authorization_decisions", "authorization_ref"},
+		{"market_data_authorization_revocations", "authorization_ref"},
+		{"market_data_authorization_policy_publications", "request_id"},
+	} {
 		var count int
-		if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND INDEX_NAME=?", index).Scan(&count); err != nil || count != 0 {
-			t.Fatalf("legacy unique index %s remains: count=%d err=%v", index, count, err)
+		if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND COLUMN_NAME=?", item.table, item.column).Scan(&count); err != nil || count != 1 {
+			t.Fatalf("baseline column %s.%s missing: count=%d err=%v", item.table, item.column, count, err)
 		}
 	}
-	for _, index := range []string{"idx_market_bar_revision_identity_asof", "idx_market_fundamental_identity_asof"} {
+	for _, index := range []string{"idx_market_bar_revision_identity_asof", "idx_market_fundamental_identity_asof", "idx_market_calendar_identity_observed"} {
 		var nonUnique int
 		if err := db.QueryRowContext(ctx, "SELECT MAX(NON_UNIQUE) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND INDEX_NAME=?", index).Scan(&nonUnique); err != nil || nonUnique != 1 {
-			t.Fatalf("temporal history index %s is not non-unique: non_unique=%d err=%v", index, nonUnique, err)
+			t.Fatalf("baseline lookup index %s must be present and non-unique: non_unique=%d err=%v", index, nonUnique, err)
 		}
 	}
-	var calendarTableCount int
-	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='market_data_trading_calendar_snapshots'").Scan(&calendarTableCount); err != nil || calendarTableCount != 1 {
-		t.Fatalf("Data Migration V5 calendar snapshot table missing: count=%d err=%v", calendarTableCount, err)
+
+	var historyCount, historyVersion int
+	var historyStatus string
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*), COALESCE(MAX(version), 0), COALESCE(MAX(status), '') FROM platform_schema_migrations WHERE namespace=?", marketdatabootstrap.MigrationNamespace).Scan(&historyCount, &historyVersion, &historyStatus); err != nil {
+		t.Fatalf("read Data baseline migration history: %v", err)
 	}
-	var calendarIndexNonUnique int
-	if err := db.QueryRowContext(ctx, "SELECT MAX(NON_UNIQUE) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND INDEX_NAME='idx_market_calendar_identity_observed'").Scan(&calendarIndexNonUnique); err != nil || calendarIndexNonUnique != 1 {
-		t.Fatalf("Data Migration V5 calendar lookup index must be non-unique: non_unique=%d err=%v", calendarIndexNonUnique, err)
+	if historyCount != 1 || historyVersion != 1 || historyStatus != "applied" {
+		t.Fatalf("Data baseline history = count:%d version:%d status:%q, want one applied version 1", historyCount, historyVersion, historyStatus)
 	}
 }
