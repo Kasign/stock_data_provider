@@ -96,30 +96,10 @@ func Run(ctx context.Context) (runErr error) {
 		}
 	}
 
-	migrationRegistry, err := newMigrationRegistry()
+	migrationDB, migrationRegistry, err := bootstrapDatabase(ctx, storageCfg, migrationCfg.Timeout)
 	if err != nil {
-		return fmt.Errorf("注册模块 Migration 失败: %w", err)
+		return fmt.Errorf("数据库初始化失败: %w", err)
 	}
-	migrationCtx, migrationCancel := context.WithTimeout(ctx, migrationCfg.Timeout)
-	migrationDB, err := serverresources.OpenSQL(migrationCtx, storageCfg)
-	if err != nil {
-		migrationCancel()
-		return fmt.Errorf("连接 MariaDB 失败（检查 DB_HOST/DB_PASSWORD）: %w", err)
-	}
-	migrationReport, migrationErr := migrationRegistry.RunWithReport(migrationCtx, migrationDB)
-	if migrationErr != nil {
-		migrationCancel()
-		_ = migrationDB.Close()
-		slog.Error("模块 Migration 执行失败", "report", migrationReport, "error", migrationErr.Error())
-		return fmt.Errorf("执行模块 Migration 失败: %w", migrationErr)
-	}
-	slog.Info("模块 Migration 执行完成", "report", migrationReport)
-	if err := migrationRegistry.ValidateApplied(migrationCtx, migrationDB); err != nil {
-		migrationCancel()
-		_ = migrationDB.Close()
-		return fmt.Errorf("数据库 Schema 版本与 checksum 校验失败: %w", err)
-	}
-	migrationCancel()
 
 	startupCtx, startupCancel := context.WithTimeout(ctx, 15*time.Second)
 	storageResources, store, err := serverresources.OpenApplicationResources(startupCtx, storageCfg, migrationDB)
