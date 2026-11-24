@@ -266,8 +266,13 @@ func Run(ctx context.Context) (runErr error) {
 		if researchflowExecution == nil {
 			return errors.New("Researchflow Worker Runtime requires an execution composition")
 		}
+		workerPrincipal, identityErr := researchflowWorkerPrincipal(processConfig.Security.ServiceCredentials)
+		if identityErr != nil {
+			return fmt.Errorf("解析 Researchflow Worker 服务身份失败: %w", identityErr)
+		}
 		researchflowRuntime, runtimeErr := newResearchflowRuntimeComponent(
 			researchflowExecution, processConfig.ResearchflowCapacity, processConfig.ResearchflowLocalWorkers,
+			workerPrincipal,
 		)
 		if runtimeErr != nil {
 			return fmt.Errorf("创建 Researchflow Worker Runtime 失败: %w", runtimeErr)
