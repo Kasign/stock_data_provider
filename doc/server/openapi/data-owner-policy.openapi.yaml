@@ -14,7 +14,7 @@ paths:
       security:
         - OwnerSessionCookie: []
       parameters:
-        - $ref: '#/components/parameters/Origin'
+        - $ref: '#/components/parameters/OriginOptional'
       responses:
         '200':
           description: Current immutable policy version.
@@ -73,12 +73,18 @@ components:
       in: header
       name: X-CSRF-Token
   parameters:
+    OriginOptional:
+      name: Origin
+      in: header
+      required: false
+      schema: { type: string, format: uri }
+      description: Optional for safe GET requests; when present, must exactly match configured PublicOrigin.
     Origin:
       name: Origin
       in: header
       required: true
       schema: { type: string, format: uri }
-      description: Must exactly match configured PublicOrigin.
+      description: Required for state-changing POST requests and must exactly match configured PublicOrigin.
     CSRFToken:
       name: X-CSRF-Token
       in: header
