@@ -92,8 +92,8 @@ PLATFORM_ADMIN_TOKEN="$(sed -n 's/^PLATFORM_ADMIN_TOKEN=//p' .env | tail -n 1)"
 PLATFORM_ADMIN_TOKEN="${PLATFORM_ADMIN_TOKEN%$'\r'}"
 PLATFORM_ADMIN_TOKEN="${PLATFORM_ADMIN_TOKEN#\"}"
 PLATFORM_ADMIN_TOKEN="${PLATFORM_ADMIN_TOKEN%\"}"
-if [[ -z "$PLATFORM_ADMIN_TOKEN" ]]; then
-  fail ".env 必须配置未加引号的 PLATFORM_ADMIN_TOKEN，Root /readyz 需要 Owner Bearer 运维认证。"
+if [[ ! "$PLATFORM_ADMIN_TOKEN" =~ ^[A-Za-z0-9_-]{32,256}$ ]]; then
+  fail ".env 的 PLATFORM_ADMIN_TOKEN 必须是 32～256 字符的未加引号 URL-safe Token。"
 fi
 curl_ready() {
   printf 'header = "Authorization: Bearer %s"\n' "$PLATFORM_ADMIN_TOKEN" | curl --config - -fsS "$1"
