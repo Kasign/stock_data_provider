@@ -1,6 +1,12 @@
 package storage
 
-import platformstorage "example.com/stock-analysis-flow/internal/platform/storage"
+import (
+	"context"
+	"database/sql"
+	"fmt"
+
+	platformstorage "example.com/stock-analysis-flow/internal/platform/storage"
+)
 
 const MigrationNamespace = "analysis"
 
@@ -17,4 +23,24 @@ func Migrations() []platformstorage.Migration {
 			"CREATE TABLE analysis_tasks (task_id VARCHAR(64) NOT NULL, run_id VARCHAR(64) NOT NULL, status VARCHAR(24) NOT NULL, task_type VARCHAR(64) NOT NULL, request_json LONGTEXT NOT NULL, idempotency_key VARCHAR(128) NULL, current_stage VARCHAR(100) NULL, failure_code VARCHAR(100) NULL, error_message VARCHAR(300) NULL, created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6), started_at DATETIME(6) NULL, finished_at DATETIME(6) NULL, updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6), PRIMARY KEY (task_id), UNIQUE KEY uq_analysis_tasks_run (run_id), UNIQUE KEY uq_analysis_tasks_idempotency (idempotency_key), KEY idx_tasks_status_created (status, created_at)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
 		},
 	}}
+}
+
+ 
+// ValidateSchema verifies that all Analysis tables from the current baseline
+// exist before Server creates Redis and application repositories.
+func ValidateSchema(ctx context.Context, db *sql.DB) error {
+	if ctx == nil || db == nil {
+		return fmt.Errorf("Analysis schema validation requires context and MariaDB")
+	}
+	const requiredTables = 4
+	var found int
+	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM information_schema.tables
+		WHERE table_schema = DATABASE()
+		AND table_name IN ('analysis_runs', 'analysis_stage_events', 'analysis_snapshots', 'analysis_tasks')`).Scan(&found); err != nil {
+		return fmt.Errorf("check Analysis schema: %w", err)
+	}
+	if found != requiredTables {
+		return fmt.Errorf("Analysis schema is incomplete: found %d of %d required tables", found, requiredTables)
+	}
+	return nil
 }
