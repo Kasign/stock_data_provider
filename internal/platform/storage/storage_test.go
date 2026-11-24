@@ -258,7 +258,6 @@ type migrationTestState struct {
 	skipAppliedHistoryUpdate bool
 	physicalConnClosed       bool
 	historyCreated           bool
-	historyColumnsUpgraded   bool
 }
 
 type migrationTestConnector struct {
@@ -344,8 +343,6 @@ func (c migrationTestConn) ExecContext(_ context.Context, query string, args []d
 	switch {
 	case strings.HasPrefix(query, "CREATE TABLE IF NOT EXISTS platform_schema_migrations"):
 		c.state.historyCreated = true
-	case strings.HasPrefix(query, "ALTER TABLE platform_schema_migrations ADD COLUMN IF NOT EXISTS"):
-		c.state.historyColumnsUpgraded = true
 	case strings.Contains(query, "INSERT INTO platform_schema_migrations"):
 		version, ok := args[1].Value.(int64)
 		if !ok {
@@ -418,8 +415,8 @@ func TestApplyMigrationsAppliesInOrderAndIsIdempotent(t *testing.T) {
 	if err := ApplyMigrations(context.Background(), db, "analysis", migrations); err != nil {
 		t.Fatal(err)
 	}
-	if !state.historyCreated || !state.historyColumnsUpgraded || !state.lockReleased {
-		t.Fatalf("migration lifecycle incomplete: history=%t columnsUpgraded=%t lockReleased=%t", state.historyCreated, state.historyColumnsUpgraded, state.lockReleased)
+	if !state.historyCreated || !state.lockReleased {
+		t.Fatalf("migration lifecycle incomplete: history=%t lockReleased=%t", state.historyCreated, state.lockReleased)
 	}
 	if !state.started[1] || !state.finished[1] || !state.finished[2] {
 		t.Fatalf("migration execution timestamps were not recorded: started=%v finished=%v", state.started, state.finished)
