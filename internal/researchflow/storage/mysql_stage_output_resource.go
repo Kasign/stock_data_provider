@@ -8,9 +8,8 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
-
 	"database/sql"
+	"time"
 
 	"example.com/stock-analysis-flow/internal/researchflow/application"
 	"example.com/stock-analysis-flow/internal/researchflow/stageoutput"
@@ -27,11 +26,11 @@ func newStageOutputResourceRef() (string, error) {
 // GetStageOutputResource retrieves one immutable result by its opaque reference.
 // Callers must still enforce the resource kind expected by their own contract.
 func (r *MySQLRunRepository) GetStageOutputResource(ctx context.Context, ref string) (application.StageOutputResource, error) {
-	if r == nil || r.db == nil {
+	if r == nil || r.db == nil || ctx == nil {
 		return application.StageOutputResource{}, errors.New("researchflow SQL database is not configured")
 	}
 	if strings.TrimSpace(ref) == "" || ref != strings.TrimSpace(ref) {
-		return StageOutputResource{}, errors.New("Researchflow Stage Output resource reference is required")
+		return application.StageOutputResource{}, errors.New("Researchflow Stage Output resource reference is required")
 	}
 	var resource application.StageOutputResource
 	err := r.db.QueryRowContext(ctx, `SELECT

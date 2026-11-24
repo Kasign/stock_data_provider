@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"testing"
-	"time"
 
 	"example.com/stock-analysis-flow/internal/researchflow/domain"
 )
@@ -120,7 +119,7 @@ func TestGetStageOutputForRunStageRejectsResourceMetadataMismatch(t *testing.T) 
 		"wrong schema": func(value *StageOutputResource) { value.SchemaVersion = "2.0.0" },
 		"wrong schema ref": func(value *StageOutputResource) { value.SchemaRef = "other" },
 		"bad registry fingerprint": func(value *StageOutputResource) { value.RegistryFingerprint = "not-a-fingerprint" },
-		"bad created at": func(value *StageOutputResource) { value.CreatedAt = time.Now().Format(time.RFC3339Nano) },
+		"bad created at": func(value *StageOutputResource) { value.CreatedAt = "2026-11-24T10:11:12Z" },
 		"invalid JSON": func(value *StageOutputResource) { value.Content = []byte("{") },
 	} {
 		t.Run(name, func(t *testing.T) {
