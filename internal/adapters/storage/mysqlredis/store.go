@@ -53,12 +53,7 @@ func Open(ctx context.Context, cfg Config) (*Store, error) {
 		rdb.Close()
 		return nil, fmt.Errorf("ping Redis: %w", err)
 	}
-	s := &Store{DB: db, Redis: rdb, Config: cfg, ownsResources: true}
-	if err := s.initializeSchema(ctx); err != nil {
-		s.Close()
-		return nil, err
-	}
-	return s, nil
+	return &Store{DB: db, Redis: rdb, Config: cfg, ownsResources: true}, nil
 }
 
 // NewWithResources adapts Server-owned connections to the legacy Analysis Store.
@@ -67,20 +62,7 @@ func NewWithResources(ctx context.Context, cfg Config, db *sql.DB, redisClient *
 	if ctx == nil || db == nil || redisClient == nil {
 		return nil, errors.New("analysis storage resources are required")
 	}
-	s := &Store{DB: db, Redis: redisClient, Config: cfg}
-	if err := s.initializeSchema(ctx); err != nil {
-		return nil, err
-	}
-	return s, nil
-}
-
-func (s *Store) initializeSchema(ctx context.Context) error {
-	if s.Config.DBAutoMigrate {
-		if err := s.Migrate(ctx); err != nil {
-			return err
-		}
-	}
-	return s.CheckSchema(ctx)
+	return &Store{DB: db, Redis: redisClient, Config: cfg}, nil
 }
 
 func (s *Store) Close() error {
@@ -123,7 +105,7 @@ func (s *Store) CheckSchema(ctx context.Context) error {
 		return fmt.Errorf("check MariaDB schema: %w", err)
 	}
 	if found != requiredTables {
-		return fmt.Errorf("MariaDB schema is incomplete: found %d of %d required tables (set DB_AUTO_MIGRATE=true once or run the migration)", found, requiredTables)
+		return fmt.Errorf("MariaDB schema is incomplete: found %d of %d required tables (the Root Server database bootstrap must complete first)", found, requiredTables)
 	}
 	return nil
 }
@@ -177,21 +159,6 @@ func (s *Store) SelfTest(ctx context.Context) error {
 	}
 	if err := s.Redis.Del(ctx, key).Err(); err != nil {
 		return fmt.Errorf("Redis DEL self-test: %w", err)
-	}
-	return nil
-}
-
-func (s *Store) Migrate(ctx context.Context) error {
-	statements := []string{
-		`CREATE TABLE IF NOT EXISTS analysis_runs (run_id VARCHAR(64) PRIMARY KEY, status VARCHAR(32) NOT NULL, task_type VARCHAR(64) NOT NULL, as_of DATETIME(6) NOT NULL, started_at DATETIME(6) NOT NULL, finished_at DATETIME(6) NULL, request_json LONGTEXT NOT NULL, result_json LONGTEXT NULL, created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6), updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6), KEY idx_runs_asof (as_of), KEY idx_runs_status (status)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
-		`CREATE TABLE IF NOT EXISTS analysis_stage_events (id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY, run_id VARCHAR(64) NOT NULL, stage VARCHAR(100) NOT NULL, status VARCHAR(32) NOT NULL, event_at DATETIME(6) NOT NULL, duration_ms BIGINT NOT NULL DEFAULT 0, event_json LONGTEXT NOT NULL, created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6), KEY idx_events_run (run_id), KEY idx_events_run_stage (run_id, stage), CONSTRAINT fk_events_run FOREIGN KEY (run_id) REFERENCES analysis_runs(run_id) ON DELETE CASCADE) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
-		`CREATE TABLE IF NOT EXISTS analysis_snapshots (snapshot_id VARCHAR(96) PRIMARY KEY, run_id VARCHAR(64) NOT NULL, snapshot_type VARCHAR(32) NOT NULL, as_of DATETIME(6) NOT NULL, payload_json LONGTEXT NOT NULL, created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6), KEY idx_snapshots_run (run_id), KEY idx_snapshots_type_time (snapshot_type, as_of), CONSTRAINT fk_snapshots_run FOREIGN KEY (run_id) REFERENCES analysis_runs(run_id) ON DELETE CASCADE) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
-		`CREATE TABLE IF NOT EXISTS analysis_tasks (task_id VARCHAR(64) PRIMARY KEY, run_id VARCHAR(64) NOT NULL UNIQUE, status VARCHAR(24) NOT NULL, task_type VARCHAR(64) NOT NULL, request_json LONGTEXT NOT NULL, idempotency_key VARCHAR(128) NULL UNIQUE, current_stage VARCHAR(100) NULL, failure_code VARCHAR(100) NULL, error_message VARCHAR(300) NULL, created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6), started_at DATETIME(6) NULL, finished_at DATETIME(6) NULL, updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6), KEY idx_tasks_status_created (status, created_at)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
-	}
-	for _, stmt := range statements {
-		if _, err := s.DB.ExecContext(ctx, stmt); err != nil {
-			return fmt.Errorf("migrate schema: %w", err)
-		}
 	}
 	return nil
 }
