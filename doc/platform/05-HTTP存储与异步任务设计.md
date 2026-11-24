@@ -43,7 +43,7 @@ Redis 仅承担缓存和可丢失的短期辅助状态。所有缓存有 TTL 和
 - Migration 使用唯一 namespace/version。
 - 执行入口由服务端集成分支装配，生产环境显式执行。
 - 执行记录包含版本、开始时间、结束时间和安全失败摘要。
-- 考虑 MariaDB DDL 的隐式提交，Migration 必须可检测当前状态、可重入或提供前向修复。
+- 考虑 MariaDB DDL 的隐式提交，Runner 只对无历史记录的版本执行一次；running/failed 状态拒绝自动重跑。新空库基线使用严格 CREATE TABLE，不要求 DDL 可重入；失败后必须人工核对实际 Schema，再选择人工恢复或新增前向修复。
 - 首期按单实例/单执行者设计，不建设多集群迁移编排。
 - 不允许平台分支与集成分支同时修改总注册入口。
 
@@ -177,8 +177,8 @@ HTTP Client 必须区分固定 Provider API Endpoint 与不可信来源 URL。�
 - `ApplyMigrations(ctx, db, namespace, migrations)` 必须由服务启动/部署的显式迁移步骤调用；OpenSQL 不自动执行 Migration。
 - namespace 限制为小写字母、数字、点、下划线和连字符，最多 64 字符。
 - 通过同一专用 SQL Conn 执行 MariaDB/MySQL `GET_LOCK`、Migration 和 `RELEASE_LOCK`，避免数据库连接池切换会话导致 advisory lock 失效。
-- 历史表 `platform_schema_migrations` 按 namespace/version 唯一记录 description、SQL SHA-256 checksum、status、失败语句序号、started_at、finished_at 和固定 failure_code。保留旧 applied_at 字段以兼容既有表结构，不再将其作为迁移完成时间。
-- Runner 启动时通过 MariaDB `ADD COLUMN IF NOT EXISTS` 补齐新增元数据列，兼容此前创建的历史表；旧记录不伪造 finished_at，只有本次执行的迁移写入准确开始/结束时间。
+- 历史表 `platform_schema_migrations` 按 namespace/version 唯一记录 description、SQL SHA-256 checksum、status、失败语句序号、started_at、finished_at 和固定 failure_code；不包含旧 applied_at 字段。
+- History 表只在不存在时按完整结构创建，不对既有 History 表自动补列或转换；发现旧结构不匹配时直接失败，由部署者准备新的空数据库。
 - Migration 先写入 running 和 started_at，再逐条执行 SQL；成功后更新 applied、finished_at；SQL 失败时尽最大努力写入 failed、failure_statement、finished_at 和固定 failure_code。不得持久化原始 SQL 错误文本。历史中存在 running/failed 时拒绝自动重跑，必须先人工检查部分 DDL 结果并恢复。
 - Migration 状态转换必须校验 SQL `RowsAffected()` 恰好为 1。若 SQL 已执行但 `running → applied` 未实际更新一行，返回 `platform.storage.migration_record_failed`，保留人工检查入口，不得报告迁移成功；失败状态记录也必须核实更新行数。
 - MariaDB advisory lock 绑定物理连接。`GET_LOCK` 请求报错时，即使客户端无法确认服务端是否已加锁，也必须将连接标记为坏连接并丢弃；`RELEASE_LOCK` 失败或无法确认释放时同样丢弃物理连接，不能仅调用 `sql.Conn.Close()` 将其归还连接池。
@@ -189,7 +189,7 @@ HTTP Client 必须区分固定 Provider API Endpoint 与不可信来源 URL。�
 
 最终验证提交 `86429e008d53f3208e0a414583cbcfe9c5635f8d` 对应 Platform Go checks 已通过 gofmt、平台包单测、race test 和 vet，CI：[42002814937](https://github.com/Kasign/stock_data_provider/actions/runs/42002814937)。
 
-测试使用 fake SQL Connector/Driver 和注入 Redis Dialer，不依赖外部数据库服务。真实 MariaDB/Redis 集成、故障恢复和现有分析 Store 的平台化接入尚未验收；服务入口和领域 Migration 总注册仍由集成分支负责。
+单元测试使用 fake SQL Connector/Driver 和注入 Redis Dialer，不依赖外部数据库服务。Analysis 四张表已纳入 Root Migration Registry，Store 构造不再隐式建表；新空数据库的真实 MariaDB/Redis 部署验收仍需由部署者执行。
 
 
 ### 9.5 Migration 顺序保护补充
@@ -364,3 +364,12 @@ Migration 状态为 `running` 或 `failed` 时，Runner 不会自动重跑。处
 - 未覆盖且仍待 A3：目标生产拓扑与网络访问控制、生产 Secret 注入、服务 Bootstrap 的共享连接池创建/关闭顺序、生产连接池压力、生产故障恢复及目标环境旧历史表升级演练。
 
 因此，“真实服务容器集成”已 PASS；“生产部署验收”仍未完成，二者不得混为一谈。
+
+
+### 9.8 PLAT-CTR-006 2.0.0：完整基线与SQL优先启动（2026-11-24）
+
+- 各模块当前最终 Schema 合并为单一 V1；未来正式发布后的结构变化从 V2 开始。新基线不执行旧数据回填，也不保留旧版本历史序列。
+- Migration 输入仅保留有序 SQL Statements；EnsureColumn/EnsureNonUniqueIndex 操作及其兼容执行器已删除。
+- History 仅按完整新结构创建，字段为 namespace、version、description、checksum、status、failure_statement、started_at、finished_at、failure_code；删除 applied_at 和自动补列逻辑。
+- Root Server 与 owner-init 共用 Database Bootstrap：先 SQL-only 连接、执行全部模块 Migration、校验 History/namespace/version/checksum 和 Data 最终物理 Schema，再创建 Redis、HTTP Client、Repository 和 Worker。
+- 本次切换使用部署者显式准备的空数据库；不提供旧 Schema/History 自动转换，不在正常启动时 DROP DATABASE 或清空表。
