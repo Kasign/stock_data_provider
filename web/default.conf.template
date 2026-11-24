@@ -65,7 +65,7 @@ server {
         proxy_read_timeout 210s;
     }
 
-    location ~* \\.(?:css|js)$ {
+    location ~* \.(?:css|js)$ {
         try_files $uri =404;
         expires 1h;
     }
