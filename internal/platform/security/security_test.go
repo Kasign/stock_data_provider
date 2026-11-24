@@ -460,10 +460,9 @@ func TestPrincipalContextReturnsIsolatedScopeSnapshots(t *testing.T) {
 	}
 }
 
-
 func TestPrincipalFromServiceCredentialBuildsConfiguredWorkerIdentity(t *testing.T) {
 	credential := ServiceCredential{
-		Name: "researchflow-worker",
+		Name:   "researchflow-worker",
 		Secret: testServiceSecret("0123456789abcdef0123456789abcdef"),
 		Scopes: []string{ScopeDataRead, ScopeResearchRun},
 	}
@@ -488,7 +487,7 @@ func TestPrincipalFromServiceCredentialBuildsConfiguredWorkerIdentity(t *testing
 
 func TestPrincipalFromServiceCredentialRejectsInvalidCredential(t *testing.T) {
 	tests := []struct {
-		name string
+		name       string
 		credential ServiceCredential
 	}{
 		{name: "missing secret", credential: ServiceCredential{Name: "researchflow-worker", Scopes: []string{ScopeDataRead}}},
