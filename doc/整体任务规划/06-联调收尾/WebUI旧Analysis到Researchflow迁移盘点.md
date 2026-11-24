@@ -165,10 +165,10 @@ Server 生产组合根：
 |---|---|---|
 | News | 真实 News Search Provider、Stage Adapter、Validator、Template/Executor/Output Registry | 已装配；只覆盖候选新闻检索，不代表完整股票分析 |
 | Research | Context Application 的 CreateContext/GetContext、Context Schema/Storage；Researchflow 有 DTO 映射和 Context Assembly | 缺可信 CallerRef/当前授权 Adapter、Run.SystemAsOf 一致性校验、Server/Worker Stage 接线 |
-| Quant | Quant GetResult Application、Trend/Risk Envelope；Researchflow 有 Envelope 校验/映射 | 缺完整生产计算 Facade/Stage Provider/结果生产与持久化接线；读取必须走 Quant Application 授权和审计，不能访问 Repository 旁路 |
+| Quant | GetResult 授权读取 Application、Trend/Risk Envelope；QNT-013 已有强类型结果写入基础和策略读取锁基础；Researchflow 有 Envelope 校验/映射 | QNT-014 生产计算 Facade 尚未启动；生产 AuthorizedResultReader、策略/审计持久化、Run→result_id 强类型关联、Stage Provider/Registry 与 Root 注入未闭环。现有写入基础不等于计算 Facade；读取必须走 Quant Application 授权和审计，不能访问 Repository 旁路 |
 | LLM | Provider.Generate/Stream、ModelRequest、Researchflow 预算/Tool Policy/结果映射 | 缺 Server 生产 Provider 注入、真实调用链和目标模型 Tokenizer；不能把估算器冒充生产 Tokenizer |
 | RiskDecision | Quant 的 `risk.Decision` 是 Quant 领域结果 | Researchflow Composer 仍接收独立 RiskDecision；唯一来源、字段映射、多结果聚合和关联身份未解决（RF-BLOCK-008） |
-| Data | 现有 Data API/数据服务 | 尚无满足 Researchflow Stage 输入、快照、来源、时间与质量契约的可注册 Data Stage |
+| Data | 已有 DailyBars Close Series Snapshot Creator、Manifest/Payload 双指纹、授权签发和同一 MariaDB 事务内 Authorized Snapshot Reader | 代码能力已有，但 Root 尚未注入 Researchflow 消费者；服务 Principal/Owner Policy 管理入口与 Stage 输入/输出契约未闭环；DATA-CTR-007 仍 deferred。旧 AnalysisCollector 不使用该 Snapshot 链路且丢失关键 PIT/来源元数据 |
 | Notification | 已有 Run 终态 Outbox/Relay 相关能力 | 终态通知不应塞入同步 DAG；按独立事件消费链路接入 |
 
 Researchflow 的 Context Assembly、Quant Envelope Validator、Result Composer、Diagnostics Adapter 等内部构件，不等于真实生产 Stage。只有 Owner Facade、授权、输入输出 Schema/Golden、真实 Provider、Stage Executor、Registry 和 Server Worker 注入全部齐备，才能注册生产模板。
