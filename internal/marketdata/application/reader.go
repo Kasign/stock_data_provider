@@ -172,6 +172,10 @@ type dailyBarsCoverageBackend interface {
 	DailyBarsAsOfWithCoverageEvidence(context.Context, string, string, string, int, model.AdjustmentBasis, time.Time) ([]model.DailyBar, []string, service.DailyBarCoverageEvidence, error)
 }
 
+type dailyBarsProviderFilteredBackend interface {
+	DailyBarsAsOfWithCoverageEvidenceFromSources(context.Context, string, string, string, int, model.AdjustmentBasis, time.Time, []string) ([]model.DailyBar, []string, service.DailyBarCoverageEvidence, error)
+}
+
 // GetDailyBarsV2 returns a versioned snapshot whose CalendarRef is captured by
 // the same coverage evaluation that determined the returned series quality.
 func (r *Reader) GetDailyBarsV2(ctx context.Context, query app.DailyBarsQuery) (app.DailyBarsV2Snapshot, error) {
@@ -184,6 +188,11 @@ func (r *Reader) GetDailyBarsV2(ctx context.Context, query app.DailyBarsQuery) (
 	if err := ctx.Err(); err != nil {
 		return app.DailyBarsV2Snapshot{}, err
 	}
+	if len(query.AllowedProviderCodes) > 0 {
+		if query.SystemObservedAtCutoff == nil || !validDailyBarsProviderCodeSet(query.AllowedProviderCodes) {
+			return app.DailyBarsV2Snapshot{}, errors.New("provider-constrained daily-bars reads require a PIT cutoff and canonical provider codes")
+		}
+	}
 	backend, ok := r.backend.(dailyBarsCoverageBackend)
 	if !ok {
 		return app.DailyBarsV2Snapshot{}, errors.New("market-data backend does not expose daily-bar coverage evidence")
@@ -195,7 +204,16 @@ func (r *Reader) GetDailyBarsV2(ctx context.Context, query app.DailyBarsQuery) (
 		evidence service.DailyBarCoverageEvidence
 		err      error
 	)
-	if query.SystemObservedAtCutoff != nil {
+	if query.SystemObservedAtCutoff != nil && len(query.AllowedProviderCodes) > 0 {
+		filteredBackend, supported := r.backend.(dailyBarsProviderFilteredBackend)
+		if !supported {
+			return app.DailyBarsV2Snapshot{}, errors.New("market-data backend does not support provider-constrained PIT daily bars")
+		}
+		bars, warnings, evidence, err = filteredBackend.DailyBarsAsOfWithCoverageEvidenceFromSources(
+			ctx, query.Symbol, query.StartDate, query.EndDate, query.Limit, basis,
+			*query.SystemObservedAtCutoff, append([]string(nil), query.AllowedProviderCodes...),
+		)
+	} else if query.SystemObservedAtCutoff != nil {
 		bars, warnings, evidence, err = backend.DailyBarsAsOfWithCoverageEvidence(
 			ctx, query.Symbol, query.StartDate, query.EndDate, query.Limit, basis, *query.SystemObservedAtCutoff,
 		)
@@ -488,4 +506,25 @@ func cloneStrings(source []string) []string {
 		return nil
 	}
 	return append([]string(nil), source...)
+}
+
+
+func validDailyBarsProviderCodeSet(values []string) bool {
+	if len(values) == 0 {
+		return false
+	}
+	for index, value := range values {
+		if value == "" || value != strings.TrimSpace(value) {
+			return false
+		}
+		for _, char := range value {
+			if !(char >= 'a' && char <= 'z') && !(char >= '0' && char <= '9') && char != '-' && char != '_' {
+				return false
+			}
+		}
+		if index > 0 && values[index-1] >= value {
+			return false
+		}
+	}
+	return true
 }
