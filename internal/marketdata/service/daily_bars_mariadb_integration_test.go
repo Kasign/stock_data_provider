@@ -9,6 +9,7 @@ import (
 
 	"example.com/stock-analysis-flow/internal/marketdata/cache"
 	"example.com/stock-analysis-flow/internal/marketdata/model"
+	marketdatatestutil "example.com/stock-analysis-flow/internal/marketdata/testutil"
 	"example.com/stock-analysis-flow/internal/marketdata/normalize"
 	"example.com/stock-analysis-flow/internal/marketdata/provider"
 
@@ -23,11 +24,11 @@ func TestDailyBarsMariaDBFallbackPreservesNormalizationWarnings(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	store, closeStore, err := openMigratedMarketDataTestStore(ctx, dsn)
+	store, db, err := marketdatatestutil.OpenMariaDBStore(ctx, dsn)
 	if err != nil {
 		t.Fatalf("open and migrate MariaDB: %v", err)
 	}
-	defer closeStore()
+	defer db.Close()
 
 	// 600519.SH 上市前的日期窗口，避免与真实历史行情冲突；重复运行会幂等覆盖同一来源记录。
 	fetchedAt := time.Now().UTC()
@@ -99,11 +100,11 @@ func TestDailyBarsMariaDBStaleFallbackDoesNotOverrideDegradedProvider(t *testing
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	store, closeStore, err := openMigratedMarketDataTestStore(ctx, dsn)
+	store, db, err := marketdatatestutil.OpenMariaDBStore(ctx, dsn)
 	if err != nil {
 		t.Fatalf("open and migrate MariaDB: %v", err)
 	}
-	defer closeStore()
+	defer db.Close()
 
 	fetchedAt := time.Now().UTC()
 	volume := int64(1000)
