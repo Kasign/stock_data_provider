@@ -1752,16 +1752,6 @@ const VIEW_META = Object.freeze({
   notifications: { title: "通知中心" }, chat: { title: "问股" },
   screening: { title: "条件选股" }, alerts: { title: "告警" }, settings: { title: "设置中心" }
 });
-const VIEW_NAV_GROUP = Object.freeze({
-  market: "market", stocks: "market", research: "research", chat: "research",
-  screening: "quant", tasks: "tasks", watchlist: "tracking", alerts: "tracking",
-  notifications: "tracking", data: "data", settings: "settings"
-});
-const PRIMARY_NAV_META = Object.freeze({
-  market: "市场观察", research: "研究中心", quant: "量化研究",
-  tasks: "研究任务", tracking: "跟踪中心", data: "数据中心", settings: "系统设置"
-});
-
 const REFRESH_BUTTON_CONTEXT = Object.freeze({
   market: { label: "刷新首页数据", title: "刷新核心指数、市场涨跌分布、行业/概念排行、涨跌停池、人气/飙升榜、龙虎榜与交易日历。" },
   stocks: { label: "重新查询个股行情", title: "使用当前输入的股票代码、日 K 数量、复权口径和日期范围重新查询。" },
@@ -1829,11 +1819,10 @@ function setView(view, { updateHash = true, refreshData = true } = {}) {
   const requestedView = legacyMarketView ? "market" : view;
   const nextView = Object.hasOwn(VIEW_META, requestedView) ? requestedView : "market";
   const previousView = state.view;
-  if (previousView === "settings" && nextView !== "settings")
   state.view = nextView;
   if (legacyMarketView && window.location.hash === "#market-data") window.history.replaceState(null, "", "#market");
   syncWatchlistGroupControls();
-syncRefreshButtonContext();
+  syncRefreshButtonContext();
   if (nextView === "settings" && previousView !== nextView) openSettings();
   if (refreshData && previousView !== nextView && state.ownerSessionAuthenticated) {
     if (nextView === "market") void refreshMarketWorkspace();
@@ -1848,24 +1837,14 @@ syncRefreshButtonContext();
   document.querySelectorAll(".view").forEach((section) => {
     section.hidden = section.id !== nextView + "-view";
   });
-  const activeGroup = VIEW_NAV_GROUP[nextView] || "market";
-  document.querySelectorAll(".nav-link:not(.primary-nav-link), .workspace-tab").forEach((button) => {
+  document.querySelectorAll(".nav-link, .workspace-tab").forEach((button) => {
     const active = button.dataset.view === nextView;
     button.classList.toggle("active", active);
     if (active) button.setAttribute("aria-current", "page");
     else button.removeAttribute("aria-current");
   });
-  document.querySelectorAll(".primary-nav-link").forEach((button) => {
-    const active = button.dataset.navPrimary === activeGroup;
-    button.classList.toggle("active", active);
-    const group = button.closest(".nav-group");
-    group?.classList.toggle("is-active", active);
-    if (active) button.setAttribute("aria-current", button.dataset.view === nextView ? "page" : "location");
-    else button.removeAttribute("aria-current");
-  });
   const title = VIEW_META[nextView].title;
-  const primaryTitle = PRIMARY_NAV_META[activeGroup] || PRIMARY_NAV_META.market;
-  setText("#breadcrumb-current", primaryTitle === title ? title : primaryTitle + " / " + title);
+  setText("#breadcrumb-current", title);
   setText("#view-title", title);
   document.title = title + " · Stock Data Console";
   if (previousView !== nextView) {
