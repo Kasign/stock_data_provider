@@ -19,12 +19,12 @@ if ! command -v curl >/dev/null 2>&1; then fail "未找到 curl 命令；请先�
 if [[ ! -f .env ]]; then fail "根目录缺少 .env。仅第一次配置时执行 cp .env.example .env，然后填写真实密钥、数据库和 Redis 配置；已有 .env 不要覆盖。"; fi
 if ! docker network inspect 1panel-network >/dev/null 2>&1; then fail "Docker 网络 1panel-network 不存在。请先在 1Panel 创建/确认该网络，并确保现有 MariaDB/Redis 已接入。"; fi
 
-# Prevent old Go containers from keeping the legacy 8092 port mapping or aliases alive.
-for legacy_container in stock-analysis-go stock-market-data; do
+# Prevent retired application containers from keeping old API ports or aliases alive.
+for legacy_container in stock-analysis-go stock-market-data stock-analysis-data; do
   if docker inspect "$legacy_container" >/dev/null 2>&1; then
     legacy_running="$(docker inspect --format='{{.State.Running}}' "$legacy_container" 2>/dev/null || printf 'false')"
     if [[ "$legacy_running" == "true" ]]; then
-      fail "检测到旧版容器 $legacy_container 仍在运行。请先按 doc/开发部署说明.md 的旧容器迁移步骤停止并移除旧 Go 容器，再重试；外部 MariaDB/Redis 不受影响。"
+      fail "检测到旧版容器 $legacy_container 仍在运行。请先按 doc/开发部署说明.md 的旧容器迁移步骤停止并移除旧应用容器，再重试；外部 MariaDB/Redis 不受影响。"
     fi
   fi
 done
