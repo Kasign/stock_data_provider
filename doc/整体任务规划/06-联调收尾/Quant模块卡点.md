@@ -183,3 +183,15 @@ Quant 不在 `internal/quant/**` 实现 SQL/Redis、通用 Storage、认证、�
 - 本轮没有修改 Data 或 Quant 生产代码，没有新增 Facade/Registry Entry，也没有启动 Data D2。QNT-014 继续 NOT_STARTED；DATA-CTR-005/007 继续按契约状态阻断真实计算输入。
 - 下一步由 Data Owner 按 DATA-CTR-005/007 完成 Snapshot Manifest、snapshot_ref/authorization_ref 与 Decimal/PIT DTO 的正式 Application Port；Quant 收到正式契约后，先选取可完整证明输入与数值语义的首个指标，完成正式 Registry Entry、生产 Metric 构造、Payload 注册和 Facade，再由 Researchflow 接入真实 Stage。
 - 当前 SHA `c9e25e18732674eb766699776b3190513993cabb` 的 GitHub Commit Status 返回 `pending`、`total_count=0`、无已报告 Status；这不是 CI 通过证据。父提交的历史 CI 不作为当前 SHA 的验收结论。
+
+
+## 2026-11-24 SMA20 Facade / Stage 代码状态校准
+
+- 核对基线：`repair_all` SHA `25f66ae30470a76a734afffe974247f0401fd4ba`。
+- 此前文档中“QNT-014 NOT_STARTED / 没有 Indicator 计算 Facade”的表述已被当前代码推进覆盖，不能继续作为现状：`internal/quant/application/create_sma.go` 已实现 `CreateSMAService`，通过 Data 的 `CloseSeriesSnapshotReader` 读取授权 Snapshot，按活动 Quant Registry Entry 校验 SMA20 参数、精度、质量和 PIT 时间，再执行精确十进制计算并通过 Quant 私有 `resultPersister` 持久化不可变 Indicator Result。
+- `internal/quant/stage/sma20.go` 已实现 `SMA20Adapter`：在同一 UTC `SystemAsOf` 下调用 Data Snapshot Creator，再调用 Quant Application；输出携带明确 `result_id`、`snapshot_ref`、指标值/状态和 Coverage QualitySummary，并执行严格 JSON/Schema 语义校验。
+- Data 侧已具备 `DailyBarsCloseSeriesSnapshotCreator`、MariaDB Snapshot Repository、授权签发和 Authorized Reader；`internal/marketdata/bootstrap.Module` 提供创建/授权读取入口。Snapshot Creator 从可信 Security Principal 上下文解析 caller，不接受调用方自报 CallerRef。
+- 上述能力仍不是 Researchflow 生产 Stage：当前 `internal/server/bootstrap/researchflow_execution_composition.go` 只创建 News Search Stage/Template/Output Registry；`researchflow_runtime.go` 的 Worker 仍只注入 News Search Executor/Registry。没有 SMA20 的生产 Template、Executor 路由、Output Registry Entry、Server DI 和 Worker 集成验收。
+- Server 生产接入的必要条件：①从 Researchflow Worker 的可信执行身份构造受限 Service Principal，并保证 Data Snapshot Creator 识别到的 CallerRef 与 Data 当前授权策略主体完全一致；②注入 Data Snapshot Creator/Authorized Reader；③注入 Quant 活动 Registry、MariaDB Repository 和可信 UTC Clock，构造 `CreateSMAService`；④将 Stage Adapter 注册到 Researchflow Executor 与精确 Output Registry，并定义正式参数 Schema、Payload/QualitySummary Schema、Golden 和 Template DAG；⑤通过真实 MariaDB 集成测试验证 Data 授权、Quant 持久化、Run/Stage/Attempt 关联和失败回滚/重试语义。
+- Quant 的 `CreateSMAService` 当前不建立 Run 关联，也不提供完整结果授权读取。不得把 Stage Output 的通用资源引用直接当成 Quant `result_id`；Run→QuantResult 的正式强类型关联与策略撤销线性化读取仍须完成。
+- 本次仅校准状态与执行门槛，不把 Adapter 单测等同生产接入，不把旧历史记录中的 CI 结果外推到当前 SHA。
