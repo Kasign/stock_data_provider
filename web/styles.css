@@ -998,7 +998,6 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus-ring); ou
 
 
 /* Shared shell primitives for product pages that are awaiting their backend contracts. */
-:root { --surface-soft: rgba(130, 153, 174, .07); --radius-lg: 18px; }
 .nav-link > span:not(.nav-icon) { overflow-wrap: anywhere; }
 button:disabled, input:disabled, select:disabled, textarea:disabled { cursor: not-allowed; opacity: .62; }
 .topbar-notifications {
