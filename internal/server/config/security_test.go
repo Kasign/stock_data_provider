@@ -116,8 +116,8 @@ func TestLoadServiceCredentialsDoesNotRequireOwnerToken(t *testing.T) {
 	env := platformconfig.NewEnvWithLookup(func(key string) (string, bool) {
 		switch key {
 		case "PLATFORM_SERVICE_CREDENTIALS":
-			return `[{"name":"researchflow-worker","token_env":"RESEARCHFLOW_WORKER_TOKEN","scopes":["data:read"]}]`, true
-		case "RESEARCHFLOW_WORKER_TOKEN":
+			return `[{"name":"quant","token_env":"QUANT_SERVICE_TOKEN","scopes":["data:read"]}]`, true
+		case "QUANT_SERVICE_TOKEN":
 			return strings.Repeat("w", 43), true
 		default:
 			return "", false
@@ -127,7 +127,7 @@ func TestLoadServiceCredentialsDoesNotRequireOwnerToken(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(credentials) != 1 || credentials[0].Name != "researchflow-worker" ||
+	if len(credentials) != 1 || credentials[0].Name != "quant" ||
 		!credentials[0].Secret.Configured() || len(credentials[0].Scopes) != 1 ||
 		credentials[0].Scopes[0] != "data:read" {
 		t.Fatalf("unexpected service credentials: %#v", credentials)
