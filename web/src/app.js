@@ -1845,7 +1845,6 @@ function setView(view, { updateHash = true, refreshData = true } = {}) {
   });
   const title = VIEW_META[nextView].title;
   setText("#breadcrumb-current", title);
-  setText("#view-title", title);
   document.title = title + " · Stock Data Console";
   if (previousView !== nextView) {
     window.scrollTo(0, 0);
