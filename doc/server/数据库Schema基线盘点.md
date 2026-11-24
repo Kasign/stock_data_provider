@@ -289,3 +289,103 @@ Data 字段级审计状态：**通过第一轮**。尚未对所有字段逐个�
 - 新基线 DDL 应按外键依赖排序：news_items → identifiers/observations → item_versions → relation evidence/relations；policy_versions → current_policy_versions；item_versions + observations → availability_evidence → availability_decisions。每张表使用明确 CREATE TABLE，不能用 IF NOT EXISTS 掩盖旧结构。
  
 News 字段级审计状态：**第一轮通过**。下一步仍需对照迁移文件完整 DDL 和全部 SQL 查询逐个核对列的大小写/字符集/NULL 语义；当前确认的版本演进与 Repository 读写字段已覆盖全部 14 张表。
+
+## 8. Researchflow、Quant、Notification 字段级审计（第一轮完成）
+
+审计来源为三个模块的 Migration DDL 与主要 Repository SQL。此处特别区分 **Schema** 和 **必须存在的初始运行记录**：初始记录不能遗漏，也不能错误地当作业务表结构。
+
+### 8.1 Researchflow（9 张）
+
+Migration：§internal/researchflow/storage/migrations.go§，V1–V6。
+
+| 表 | 最终字段 | 主键 / 唯一约束 / 索引 |
+|---|---|---|
+| §researchflow_runs§ | run_ref、schema_version、status、version、system_as_of、deadline_at、template_ref/version/fingerprint、input_snapshot_refs、resolved_template_snapshot、parameters_snapshot、originating_request_id、correlation_id、result_summary_ref、termination_reason、created_at/started_at/finished_at | PK run_ref；(status,deadline_at)、correlation_id |
+| §researchflow_stages§ | stage_ref、run_ref、stage_code、status、version、required、dependency_stage_refs、retry_policy_ref、attempt_no、retry_at、output_ref、quality_summary_ref、diagnostic_refs、quality_status、reason_codes、risk_decision、created_at/started_at/finished_at | PK stage_ref；UK (run_ref,stage_code)、UK (stage_ref,run_ref)；(run_ref,status)；FK run_ref → runs |
+| §researchflow_attempts§ | attempt_ref、run_ref、stage_ref、attempt_no、status、lease_owner、lease_expires_at、fencing_token、started_at/finished_at、fault_ref、output_ref | PK attempt_ref；UK (stage_ref,attempt_no)、UK (stage_ref,fencing_token)；(run_ref,status)、(status,lease_expires_at)；FK run_ref → runs、(stage_ref,run_ref) → stages |
+| §researchflow_run_idempotency§ | caller_ref、operation、idempotency_key、request_fingerprint、run_ref、created_at | PK (caller_ref,operation,idempotency_key)；V5 UK run_ref；run_ref 索引；FK → runs |
+| §researchflow_result_summaries§ | result_summary_ref、run_ref、schema_version、payload、created_at | PK result_summary_ref；UK run_ref；FK → runs |
+| §researchflow_outbox§ | outbox_ref、run_ref、event_type、schema_version、idempotency_key、correlation_id、payload_fingerprint、payload、created_at、published_at、attempt_count、last_error_code、lease_owner、lease_expires_at、lease_generation、next_attempt_at | PK outbox_ref；UK (run_ref,event_type)、UK idempotency_key；pending 与 claim 索引；FK → runs |
+| §researchflow_workflow_templates§ | template_ref、version、fingerprint、definition、created_at | PK (template_ref,version)；fingerprint 索引 |
+| §researchflow_capacity_guard§ | guard_id TINYINT UNSIGNED | PK guard_id |
+| §researchflow_stage_output_resources§ | resource_ref、run_ref、stage_ref、attempt_ref、resource_kind、stage_code、template_version、registry_version、registry_fingerprint、output_type、schema_version、schema_ref、content、created_at | PK resource_ref；UK (attempt_ref,resource_kind)；(run_ref,stage_ref)；resource_kind CHECK；FK run_ref → runs、(stage_ref,run_ref) → stages、attempt_ref → attempts |
+
+关键迁移合并：
+- V2 Outbox 增加 lease_owner、lease_expires_at、lease_generation、next_attempt_at 和 claim 复合索引。
+- V3 增加不可变 workflow template 表。
+- V4 增加 capacity guard 表，并插入 guard_id=1。
+- V5 为 run_idempotency.run_ref 增加唯一约束，确保一个 Run 只能对应一条 CreateRun 身份记录。
+- V6 增加 Stage Output Resource 表、attempt/resource_kind 唯一约束、复合外键和 CHECK 约束。
+
+Repository 对照：
+- §mysql_run_repository.go§ 实际读写 runs、stages、attempts、run_idempotency、result_summaries 的上述列。
+- §mysql_outbox.go§ 读写 Outbox 租约、fencing_token、重试时间和错误码。
+- §mysql_capacity.go§ 在事务中执行 §SELECT guard_id ... WHERE guard_id=1 FOR UPDATE§，因此 guard_id=1 是运行必需的初始记录，不能只建空表。
+- §mysql_template_registry.go§ 读写 template_ref/version/fingerprint/definition。
+- §mysql_stage_output_resource.go§ 读写 Stage Output Resource 全部列。
+
+### 8.2 Quant（5 张）
+
+Migration：§internal/quant/storage/migrations.go§，V1–V5。
+
+| 表 | 最终字段 | 主键 / 唯一约束 / 索引 |
+|---|---|---|
+| §quant_results§ | result_id、manifest_fingerprint、result_fingerprint、manifest_json、payload_json、created_at | PK result_id |
+| §quant_access_audit§ | audit_id、subject_ref、run_ref、resource_ref、purpose_code、content_level、decision、reason_code、authorization_ref、authorization_snapshot_json、policy_snapshot_ref、policy_snapshot_json、decision_fingerprint、occurred_at | PK audit_id；V3 增加 run_ref 索引 |
+| §quant_result_access_policy_versions§ | policy_version、enabled、snapshot_ref、policy_snapshot_json、created_at | PK policy_version；UK snapshot_ref；enabled CHECK (0,1) |
+| §quant_result_access_policy_head§ | policy_type、policy_ref、current_version、updated_at | PK (policy_type,policy_ref) |
+| §quant_policy_admin_audit§ | audit_id、actor_ref、policy_type、policy_ref、action、previous_version、new_version、occurred_at | PK audit_id；(policy_type,policy_ref,audit_id)；action CHECK ('publish','revoke') |
+
+关键迁移合并：
+- V3 在 access audit 增加 run_ref 和对应索引。
+- V4 增加 content_level、authorization_snapshot_json、policy_snapshot_ref、policy_snapshot_json、decision_fingerprint；其中 content_level 默认 full。
+- V5 增加策略版本表、Head 表、Owner 管理审计表及 CHECK 约束。
+
+Repository 对照：
+- §repository.go§ 写入/读取 Quant Result 的 fingerprints 和 JSON payload。
+- §audit.go§ 写入授权审计全部最终字段。
+- §policy_owner.go§ 锁定并更新 Head，写入不可变策略版本和 Owner 管理审计；current_version=0 表示尚未发布策略，读取时返回 disabled 状态。
+
+V5 的初始 Head 记录必须保留：§(policy_type='quant_result_access', policy_ref='quant-result-access', current_version=0, updated_at='1970-01-01T00:00:00.000000000Z')§。它是系统初始状态，不是用户策略，也不应被误删或改成默认放行。
+
+### 8.3 Notification（10 张）
+
+Migration：§internal/notification/storage/migrations.go§，V1–V6。
+
+| 表 | 最终字段 | 主键 / 唯一约束 / 索引 |
+|---|---|---|
+| §notification_subscriptions§ | subscription_id、version、revision_id、owner_ref、status、event_type、filter_schema_version、filters、recipient_scope、recipient_ref、channel_ref、template_id、created_at、updated_at、effective_at | PK (subscription_id,version)；(event_type,status,subscription_id,version)、(subscription_id,revision_id,version) |
+| §notification_delivery_plans§ | delivery_id、source_module、event_id、subscription_id/version、channel_ref/config_version、template_id/version、recipient_ref、payload_fingerprint、authorization_policy_versions、authorization_refs、plan_fingerprint、delivery_idempotency_key、plan_json、created_at | PK delivery_id；UK 完整计划身份组合；(source_module,event_id)、plan_fingerprint |
+| §notification_deliveries§ | delivery_id、source_module、event_id、subscription_id/version、channel_ref/config_version、template_id/version、recipient_ref、payload_fingerprint、plan_fingerprint、delivery_idempotency_key、status、version、attempt_count、max_attempts、lease_worker_id、lease_expires_at、fencing_token、next_attempt_at、deadline_at、reason_code、last_error_code、provider_message_ref、created_at、updated_at | PK delivery_id；UK 计划身份组合；UK (channel_ref,recipient_ref,delivery_idempotency_key)；due/lease/subscription 索引；FK → delivery_plans |
+| §notification_delivery_attempts§ | attempt_id、delivery_id、attempt_no、worker_id、fencing_token、lease_expires_at、started_at、finished_at、outcome、provider_message_ref、error_code、retryable、retry_after_at、duration_ms、evidence_ref | PK attempt_id；UK (delivery_id,attempt_no)、UK (delivery_id,fencing_token)；(delivery_id,started_at)；FK → deliveries |
+| §notification_delivery_state_events§ | delivery_id、version、from_status、to_status、changed_at、reason_code、evidence_ref、actor_ref、request_id、actor_reason | PK (delivery_id,version)；(delivery_id,changed_at)；FK → deliveries |
+| §notification_inbox§ | source_module、event_id、idempotency_key、event_type、schema_version、subject_ref、occurred_at、published_at、correlation_id、payload_fingerprint、payload、received_at | PK (source_module,event_id)；UK (source_module,idempotency_key)；received_at |
+| §notification_template_versions§ | template_id、version、event_type、schema_version、format、subject_template、body_template、variable_bindings、digest、created_at | PK (template_id,version)；(event_type,schema_version,template_id,version) |
+| §notification_channel_config_versions§ | channel_ref、config_version、snapshot_json、digest、created_at | PK (channel_ref,config_version)；V5 删除与主键重复的 idx_notification_channel_config_kind，不应在新基线中重建 |
+| §notification_subscription_revision§ | singleton_id、current_revision | PK singleton_id |
+| §notification_fanout_work_items§ | work_item_id、source_module、event_id、event_type、payload_fingerprint、snapshot_revision、cursor_subscription_id、status、attempt_count、lease_worker_id、lease_expires_at、fencing_token、next_attempt_at、last_error_code、created_at、updated_at | PK work_item_id；UK (source_module,event_id)；due/lease 索引；复合 FK (source_module,event_id) → inbox |
+
+关键迁移合并：
+- V5 删除 §notification_channel_config_versions§ 上与主键重复的 §idx_notification_channel_config_kind§；新基线必须省略它。
+- V6 给 subscriptions 增加 revision_id 及 (subscription_id,revision_id,version) 索引。
+- V6 增加 subscription_revision 单例表，并插入 (singleton_id=1,current_revision=0)。
+- V6 增加 fanout_work_items，使用 inbox 复合外键，保证工作项引用已接收事件。
+
+Repository 对照：
+- §mysql_subscription_repository.go§ 写入 subscription revision，并以 singleton_id=1 锁定/递增/读取 current_revision；按 revision_id 读取订阅快照。
+- §mysql_fanout_work_item_repository.go§ 读写 fanout 工作项、租约/fencing 状态，并联接 inbox 事件。
+- §mysql_delivery_repository.go§ 读写 deliveries、plans、state_events 的执行状态、租约、重试和审计字段。
+- §mysql_delivery_attempt_repository.go§ 读写 attempt 的 fencing、lease、outcome、retryable、evidence_ref 等字段。
+- §mysql_delivery_plan_repository.go§ 写入/读取完整计划身份、授权引用和 fingerprint。
+- §mysql_inbox_repository.go§ 写入事件信封及双幂等身份。
+- §mysql_template_repository.go§ / §mysql_channel_config_repository.go§ 读写不可变模板和渠道配置版本。
+
+### 三个模块的初始记录与 DDL 的边界
+
+1. Researchflow：必须在 Schema 创建后插入 §researchflow_capacity_guard(guard_id=1)§，否则 Capacity Guard 事务锁查询无法工作。
+2. Quant：必须初始化唯一的 Result Access Policy Head，初始 current_version=0，表示尚未发布策略；不能将它解释为允许访问。
+3. Notification：必须初始化 §notification_subscription_revision(singleton_id=1,current_revision=0)§，否则订阅版本追加与 fanout revision 读取无法正常工作。
+4. 上述记录应由明确的模块初始化定义负责，随该模块基线在 Migration 内执行一次，或由统一的模块 seed 接口执行一次；如果放在 Migration 中，需保证 checksum 覆盖该语句。不得放入 Repository 构造函数中隐式补数据。
+5. Notification V5 删除的冗余索引不得重新出现。Researchflow V2/V5 和 Quant V3/V4 的后续字段/索引必须并入各自完整 V1。
+
+本轮三个模块完成第一轮字段级盘点；尚需进一步审计每个模块全部 Repository 文件与查询参数/扫描列的逐一对应，并审查初始 seed 语句是否具备幂等/失败恢复语义。
