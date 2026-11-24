@@ -1901,7 +1901,7 @@ test("mobile navigation drawer moves focus inside and traps Tab navigation", () 
 test("移动侧栏打开连接设置时关闭抽屉并进入设置中心", () => {
   assert.match(html, /class="nav-link(?: [^"]*)?"[^>]*data-view="settings"/);
   assert.match(app, /if \(nextView === "settings" && previousView !== nextView\) openSettings\(\)/);
-  assert.match(app, /setView\(button\.dataset\.view \|\| button\.dataset\.navDefaultView\);\s*\/\/ 移动端选择一级或二级入口后统一关闭抽屉[\s\S]*?setMobileNavigationOpen\(false, \{ restoreFocus: true \}\);/);
+  assert.match(app, /setView\(button\.dataset\.view\);\s*\/\/ 移动端选择页面入口后关闭导航抽屉。\s*setMobileNavigationOpen\(false, \{ restoreFocus: true \}\);/);
   assert.doesNotMatch(app, /settings-dialog/);
 });
 test("numeric UI presentation rejects boolean or structured market fields", () => {
@@ -2442,7 +2442,7 @@ test("UIR-2 图表 HTML 与 SVG 文字字号归并到组件基础规则", () => 
 });
 
 
-test("UIR-2 侧栏品牌、分组标签与服务状态文字使用组件基础字号", () => {
+test("UIR-2 侧栏品牌、导航标签与服务状态文字使用组件基础字号", () => {
   const expectedSizes = [
     [".brand-copy small", /font-size:\s*12px\s*;/],
     [".side-label", /font-size:\s*12px\s*;/],
@@ -2458,8 +2458,10 @@ test("UIR-2 侧栏品牌、分组标签与服务状态文字使用组件基础�
   assert.doesNotMatch(stylesheet, /:root\[data-theme="light"\] \.brand-copy small \{[^}]*font-size/);
   assert.match(stylesheet, /:root\[data-theme="light"\] \.side-label \{ color: var\(--text-dim\); \}/);
   assert.match(stylesheet, /:root\[data-theme="light"\] \.sidebar-footnote \{ color: var\(--text-dim\); \}/);
-  assert.match(stylesheet, /@media \(max-width: 900px\) \{[\s\S]*?\.brand-copy, \.side-label[\s\S]*?\.sidebar-footnote \{ display: none; \}/);
-  assert.match(stylesheet, /@media \(max-width: 600px\) \{[\s\S]*?\.sidebar \.side-label, \.sidebar \.sidebar-footnote \{ display: block; \}/);
+  assert.match(stylesheet, /@media \(max-width: 700px\) \{[\s\S]*?\.mobile-menu-toggle \{ display: inline-grid; flex: 0 0 34px; \}/);
+  assert.match(stylesheet, /@media \(max-width: 700px\) \{[\s\S]*?\.sidebar \.side-label, \.sidebar \.sidebar-footnote \{ display: block; \}/);
+  assert.doesNotMatch(stylesheet, /@media \(max-width: 900px\) \{[\s\S]*?\.nav-link > span:not\(\.nav-icon\)[\s\S]*?display: none/);
+  assert.doesNotMatch(stylesheet, /\.nav-link-state\s*\{\s*display: none;/);
 });
 
 
