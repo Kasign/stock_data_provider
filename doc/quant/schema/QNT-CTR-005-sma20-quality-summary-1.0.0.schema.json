@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:kasign:quant:stage:sma20-quality-summary:1.0.0",
+  "title": "Quant SMA20 Quality Summary",
+  "type": "object",
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "quality_status": {"const": "valid"},
+    "calendar_quality_status": {"const": "valid"},
+    "expected_trading_days": {"type": "integer", "minimum": 1},
+    "observed_bars": {"type": "integer", "minimum": 1},
+    "minimum_required_bars": {"type": "integer", "minimum": 1},
+    "coverage_sufficient": {"const": true}
+  },
+  "required": ["schema_version", "quality_status", "calendar_quality_status", "expected_trading_days", "observed_bars", "minimum_required_bars", "coverage_sufficient"],
+  "additionalProperties": false
+}
