@@ -1088,3 +1088,21 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - Worker 集成测试改为验证已初始化数据库的重复启动幂等，以及人工删除必需列后 Root Server 在最终 Schema 校验阶段 fail-closed；同时确认启动失败没有自动改写损坏结构。测试不再设置或断言已废弃的 Migration 开关，也不再依赖旧的 `market_data.schema_drift` 文本标签。
 - Data Migration 集成测试改为从真正空库开始，由两个 Root Registry 并发执行同一完整基线，验证 Migration History 只有一个已应用的 version 1，并检查当前 Data 表、关键列和非唯一时态索引均真实存在。
 - 本项仅修正测试契约，不改变生产 Migration 定义、模块职责或历史兼容行为。待精确 SHA 的根模块测试与完整 Integration CI 通过后，再记录阶段验收结论。
+
+
+
+## 2026-11-24 统一数据库基线 CI 验收通过与模块 Schema 清单阶段启动
+
+- 验收代码基线：`repair_all` SHA `657da77140a20d6ed6bcd138f6f008ce1de408c9`。
+- Go Test Suite [Run 45343484485](https://github.com/Kasign/stock_data_provider/actions/runs/45343484485) 与 Integration CI [Run 45343484473](https://github.com/Kasign/stock_data_provider/actions/runs/45343484473) 均 completed / success，且两者 head_sha 与当前分支 HEAD 一致。
+- Go Test Suite 覆盖根模块、Market Data、Research、Researchflow、Notification MariaDB 集成，另有 Data Migration/并发初始化、Docker Compose 校验和镜像构建；Integration CI 全项通过。
+- 此轮 Data 基线迁移测试清理问题已修复：管理连接的关闭纳入测试 Cleanup，使隔离库 DROP 在连接关闭前执行。没有修改生产 Migration SQL、Schema 或运行规则。
+- 当前统一初始化阶段的 CI 门禁通过；这只证明当前代码及 CI 环境下的测试通过，不等于所有模块的最终物理 Schema 均已具备独立完整校验，也不等于真实部署环境验收完成。
+
+### 下一阶段：模块 Schema 清单与最终物理结构校验审计
+
+- Root Migration Registry 当前注册 9 个 namespace：Market Data、Analysis、News、Owner Credential、Research、Researchflow、Quant、Notification、Server Security。
+- 已抽查 Analysis、News、Research、Researchflow、Quant、Notification 的 Migration 定义，当前均以单个 version 1 完整基线创建各自模块表；各模块 SQL 仍由模块存储层持有。
+- Root `bootstrapDatabase` 当前对所有已注册 namespace 执行 Migration 和 History/Checksum 验证，但显式最终物理 Schema Validator 目前只调用 Market Data 与 Analysis。
+- 下一步逐个审计 9 个 namespace：基线定义、实际 Repository 所需表/列/索引、Migration History 覆盖范围、是否已有最终 Schema Validator，以及缺失校验是否会导致启动后才暴露错误。只补有明确必要性的 Validator，不为追求数量给每个模块机械新增重复校验。
+- 此阶段先完成清单和差异结论，再按真实风险补齐；不改变业务表结构、不引入兼容迁移、不把 Migration History 成功等同于物理 Schema 完整。
