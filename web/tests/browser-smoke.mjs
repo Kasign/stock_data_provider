@@ -1587,7 +1587,7 @@ try {
         await page.waitForFunction(() => document.querySelector("#market-capital-flow-body")?.textContent.includes("2026-10-30"));
         assert.equal(new URL(capitalFlowRequest.url).searchParams.get("start"), "2026-10-01");
         assert.equal(new URL(capitalFlowRequest.url).searchParams.get("end"), "2026-10-30");
-        assert.equal(capitalFlowRequest.headers["x-api-key"], "browser-test-key");
+        assert.equal(capitalFlowRequest.headers["x-api-key"], undefined, "Root Server session authentication must not expose a browser API Key");
         assert.equal(await page.locator("#market-capital-flow-body tr").count(), 2);
         assert.match(await page.locator("#market-capital-flow-body tr").nth(0).textContent(), /\+1500 元/);
         assert.match(await page.locator("#market-capital-flow-body tr").nth(1).textContent(), /—/);
@@ -1685,18 +1685,10 @@ try {
         if (viewport.width === 320) {
           const settingsKey = "stock-provider-webui.settings.v1";
           await clickNav(page, '.nav-link[data-view="settings"]');
-          const marketKeyInput = page.locator("#market-key-input");
-          assert.equal(await marketKeyInput.getAttribute("type"), "password", "saved market API Key must remain masked");
-          assert.equal(await marketKeyInput.inputValue(), "", "saved API Key must never be echoed into the settings form");
-          const keyVisibility = page.locator("#toggle-market-key-visibility");
-          await keyVisibility.click();
-          assert.equal(await marketKeyInput.getAttribute("type"), "text", "explicit visibility toggle reveals only the current input value");
-          assert.equal(await keyVisibility.getAttribute("aria-pressed"), "true");
-          await keyVisibility.click();
-          assert.equal(await marketKeyInput.getAttribute("type"), "password");
-          assert.deepEqual(await page.evaluate((key) => JSON.parse(localStorage.getItem(key)), settingsKey), {
-            marketBase: "/market-api", analysisBase: "/analysis-api", apiKey: "browser-test-key"
-          }, "visibility toggle must not alter persisted credentials");
+          assert.equal(await page.locator("#market-key-input").count(), 0, "settings must not expose a browser API Key input");
+          assert.equal(await page.locator("#toggle-market-key-visibility").count(), 0, "settings must not expose API Key visibility controls");
+          assert.deepEqual(await page.evaluate((key) => JSON.parse(localStorage.getItem(key) || "{}"), settingsKey), {},
+            "legacy browser API credentials must be removed during settings migration");
 
           const settingsSearch = page.locator("#settings-section-search");
           await settingsSearch.fill("安全与备份");
@@ -1715,16 +1707,6 @@ try {
             assert.equal(await link.getAttribute("aria-current"), "location", "keyboard section navigation must update the active link");
             assert.equal(await page.evaluate(() => document.activeElement?.closest(".settings-section")?.id), target, "keyboard section navigation must move focus to the target section heading");
           }
-          const keyInput = page.locator("#market-key-input");
-          assert.equal(await keyInput.getAttribute("type"), "password", "saved API Key input must default to masked");
-          assert.equal(await keyInput.inputValue(), "", "saved API Key must never be echoed into the input");
-          assert.match(await keyInput.getAttribute("placeholder"), /已配置 Key/);
-          await page.locator("#toggle-market-key-visibility").click();
-          assert.equal(await keyInput.getAttribute("type"), "text");
-          assert.equal(await keyInput.inputValue(), "", "showing the key must not reveal the saved value");
-          await page.locator("#toggle-market-key-visibility").click();
-          assert.equal(await keyInput.getAttribute("type"), "password");
-
           await page.locator("#settings-market-color-scheme").selectOption("reverse");
           await page.locator("#settings-price-digits").selectOption("3");
           await page.locator("#settings-percent-digits").selectOption("3");
@@ -1899,7 +1881,7 @@ try {
             preferences: JSON.parse(localStorage.getItem(keys.preferences)),
             researchNotes: JSON.parse(localStorage.getItem(keys.researchNotes))
           }), keys);
-          assert.equal(merged.settings.apiKey, "browser-test-key", "merge must preserve the current API Key");
+          assert.equal(merged.settings.apiKey, undefined, "workspace merge must not reintroduce a browser API Key");
           assert.equal(merged.watchlist.length, 3, "merge must retain records added after the stale preview was rejected");
           assert.ok(merged.watchlist.some((item) => item.symbol === "000002.SZ"), "merge must preserve the post-preview local addition");
           assert.equal(merged.watchlist.find((item) => item.symbol.replace(/\\.(SH|SZ|BJ)$/, "") === "600519")?.name, "导入名称");
@@ -1945,7 +1927,7 @@ try {
             tasks: JSON.parse(localStorage.getItem(keys.tasks)),
             researchNotes: JSON.parse(localStorage.getItem(keys.researchNotes))
           }), keys);
-          assert.equal(replaced.settings.apiKey, "browser-test-key", "replace must preserve the current API Key");
+          assert.equal(replaced.settings.apiKey, undefined, "workspace replacement must not reintroduce a browser API Key");
           assert.deepEqual(replaced.watchlist.map((item) => item.symbol), ["300750.SZ"]);
           assert.deepEqual(replaced.tasks.map((item) => item.task_id), ["task-3"]);
           assert.equal(replaced.researchNotes.length, 1, "workspace replacement must preserve research notes outside the backup format");
@@ -2047,15 +2029,11 @@ try {
           page.once("dialog", dialog => dialog.accept());
           await page.locator("#clear-settings").click();
           await page.waitForFunction(key => localStorage.getItem(key) === null, keys.settings);
-          assert.equal(await page.locator("#market-key-input").inputValue(), "", "clearing local connection settings must clear the current key input");
-          assert.equal(await page.locator("#market-base-input").inputValue(), "/market-api");
-          assert.equal(await page.locator("#analysis-base-input").inputValue(), "/analysis-api");
-          await page.locator("#market-base-input").fill("/market-api");
-          await page.locator("#analysis-base-input").fill("/analysis-api");
-          await page.locator("#market-key-input").fill("browser-test-key");
-          await page.waitForFunction(() => !document.querySelector("#save-settings")?.disabled);
-          await page.locator("#save-settings").click();
-          await page.waitForFunction(key => JSON.parse(localStorage.getItem(key) || "{}").apiKey === "browser-test-key", keys.settings);
+          assert.equal(await page.locator("#market-key-input").count(), 0, "clearing local settings must not reveal or create an API Key input");
+          assert.equal(await page.locator("#market-base-input").inputValue(), "/", "API base remains deployment-owned after clearing local preferences");
+          assert.equal(await page.locator("#analysis-base-input").inputValue(), "/", "analysis API base remains deployment-owned after clearing local preferences");
+          assert.equal(await page.locator("#market-base-input").isHidden(), true);
+          assert.equal(await page.locator("#analysis-base-input").isHidden(), true);
         }
       }
     }
