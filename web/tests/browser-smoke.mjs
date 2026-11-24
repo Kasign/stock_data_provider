@@ -1365,8 +1365,8 @@ try {
         mariadb: document.querySelector("#data-service-mariadb-status")?.textContent.trim() || "",
         redis: document.querySelector("#data-service-redis-status")?.textContent.trim() || ""
       }));
-      assert.match(missingHealthStatus.analysisLiveText, /异常/);
-      assert.match(missingHealthStatus.analysisLiveClass, /is-error/);
+      assert.match(missingHealthStatus.analysisLiveText, /状态未报告/);
+      assert.match(missingHealthStatus.analysisLiveClass, /is-warning/);
       assert.match(missingHealthStatus.analysisReadyText, /状态未报告/);
       assert.match(missingHealthStatus.analysisReadyClass, /is-warning/);
       assert.doesNotMatch(missingHealthStatus.analysisReadyClass, /is-local|is-success/);
