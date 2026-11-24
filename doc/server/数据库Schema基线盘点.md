@@ -11,17 +11,17 @@
 
 本轮确认必须统一处理的持久化范围：
 
-| 模块 | Namespace | 当前版本 | 表数量 | Migration 定义来源 |
+| 模块 | Namespace | 重建前历史版本范围 | 新基线版本 | 表数量 | Migration 定义来源 |
 |---|---|---:|---:|---|
-| Data / MarketData | `market_data` | V1–V9 | 17 | `internal/marketdata/repository/mysql.go` |
-| News | `news` | V1–V10 | 14 | `internal/news/adapters/storage/migrations.go` |
-| Platform Owner Credential | `platform.security` | V1 | 1 | `internal/platform/security/credential_store.go` |
-| Research | `research` | V1 | 6 | `internal/research/storage/migrations.go` |
-| Researchflow | `researchflow` | V1–V6 | 9 | `internal/researchflow/storage/migrations.go` |
-| Quant | `quant` | V1–V5 | 5 | `internal/quant/storage/migrations.go` |
-| Notification | `notification` | V1–V6 | 10 | `internal/notification/storage/migrations.go` |
-| Server Security Audit | `server.security_audit` | V1 | 1 | `internal/server/security/audit_writer.go` |
-| Analysis（待纳入） | 建议新增 `analysis` | 独立初始化 | 4 | `internal/adapters/storage/mysqlredis/store.go` |
+| Data / MarketData | `market_data` | V1–V9 | V1 | 17 | `internal/marketdata/repository/mysql.go` |
+| News | `news` | V1–V10 | V1 | 14 | `internal/news/adapters/storage/migrations.go` |
+| Platform Owner Credential | `platform.security` | V1 | V1（保持） | 1 | `internal/platform/security/credential_store.go` |
+| Research | `research` | V1 | V1（保持） | 6 | `internal/research/storage/migrations.go` |
+| Researchflow | `researchflow` | V1–V6 | V1 | 9 | `internal/researchflow/storage/migrations.go` |
+| Quant | `quant` | V1–V5 | V1 | 5 | `internal/quant/storage/migrations.go` |
+| Notification | `notification` | V1–V6 | V1 | 10 | `internal/notification/storage/migrations.go` |
+| Server Security Audit | `server.security_audit` | V1 | V1（保持） | 1 | `internal/server/security/audit_writer.go` |
+| Analysis | `analysis` | 独立初始化 | V1（新增） | 4 | `internal/adapters/storage/mysqlredis/store.go` |
 
 表数量按当前 Migration DDL 中的业务表统计，不含共享 Migration History 表 `platform_schema_migrations`。总计 67 张业务表；其中 Analysis 的 4 张表尚未进入统一 Registry。
 
@@ -453,7 +453,7 @@ Analysis 需要新增 namespace §analysis§，定义完整 V1。现有 Store �
 - Platform Owner Credential：1 张，V1。
 - Server Security Audit：1 张，V1。
 
-当前共 67 张业务表。模块 Schema 的第一轮最终结构盘点已完成。接下来进入实现前的收口审查：核对 Migration Runner 的 History 表定义、namespace 注册集合、各模块 seed 语句恢复语义、Data 物理校验调用位置、所有独立 Migration 入口及其调用方；审查通过后再开始生成各模块新 V1。字段语义/Provider 映射正确性不属于本次数据库 Schema 基线重建范围。
+当前共 67 张业务表。模块 Schema 的第一轮最终结构盘点已完成；M2/M3 实施状态见第 12 节。字段语义/Provider 映射正确性不属于本次数据库 Schema 基线重建范围。
 
 ## 11. Platform Migration Runner 与 Root Bootstrap 收口审查
 
@@ -521,4 +521,51 @@ Owner Init 使用相同步骤 1–6；如果 Owner Credential 初始化本身只
 - Migration History 的旧字段补齐逻辑和旧 applied_at 字段已定位。
 - Root/Owner Init 资源创建顺序和 Analysis/Data 独立迁移入口已定位。
 
-**M1 第一轮盘点完成。下一阶段 M2：将 Data、News、Researchflow、Quant、Notification 各自重建为完整单一 V1；Research、Owner Credential、Server Security Audit 保持现有 V1；新增 Analysis V1。** 生成后再统一调整 Migration Runner 和 Root Bootstrap，不在 Schema 基线尚未齐备时提前删除旧入口。
+**M1 第一轮盘点完成。M2 已将所有模块收敛为单一 V1；M3 已开始统一 Migration History 与 Root Bootstrap。** 当前实现进度和剩余项见第 12 节。
+
+
+## 12. 基线重建与统一启动实施进度
+
+### 12.1 已完成的模块 V1 基线
+
+| 模块 | 新 Migration | 基线语句数 | 处理内容 |
+|---|---:|---:|---|
+| Data / MarketData | V1 | 17 | 17 张表合并；纳入 source_version 与索引；删除历史回填/Ensure 操作；删除独立 Store.Migrate 入口 |
+| News | V1 | 14 | 14 张表合并；不执行 Identifier Status History 历史回填；合并 V5–V10 字段/索引/复合外键；移除被唯一索引覆盖的冗余 supersedes 索引 |
+| Researchflow | V1 | 10 | 9 张表 + Capacity Guard 初始行；合并 Outbox Lease、Run 幂等唯一约束、Stage Output Resource；移除被唯一索引覆盖的冗余普通索引 |
+| Quant | V1 | 6 | 5 张表 + 初始禁用 Policy Head；合并授权审计字段和策略版本结构 |
+| Notification | V1 | 11 | 10 张表 + Subscription Revision 初始行；合并 revision/fanout；不重建 V5 已删除的冗余索引 |
+| Analysis | V1 | 4 | 新增 analysis namespace；将旧 Store 建表 DDL 纳入 Registry；删除 Store 隐式 initializeSchema/Migrate |
+| Research | V1 | 保持 | 已有完整 V1，不改动 |
+| Platform Owner Credential | V1 | 保持 | 已有 V1，改为严格 CREATE TABLE |
+| Server Security Audit | V1 | 保持 | 已有 V1，不改动 |
+
+基线 SQL 使用严格 CREATE TABLE，不用 IF NOT EXISTS 掩盖旧业务表结构。唯一保留 CREATE TABLE IF NOT EXISTS 的是共享 Migration History 表首次建账本入口；不对旧 History 表自动补列。
+
+### 12.2 Platform Migration Runner 已调整
+
+- 删除 MigrationOperation、EnsureColumn、EnsureNonUniqueIndex 和相应 checksum/执行逻辑；Migration 仅保留有序 Statements。
+- History 表改为完整结构：namespace、version、description、checksum、status、failure_statement、started_at、finished_at、failure_code；删除 applied_at。
+- 删除旧 History 的 ADD COLUMN IF NOT EXISTS 自动补列逻辑。
+- status 不设默认值，必须由 Runner 显式写入 running/applied/failed，并增加状态 CHECK。
+- 保留 namespace 级 advisory lock、checksum、失败记录、人工恢复和 fail-closed 语义；不承诺跨 namespace 原子事务。
+
+### 12.3 Root Server 与 Owner Init 启动路径已调整
+
+- 新增 `internal/server/bootstrap/database.go` 的共享 `bootstrapDatabase()`，由正常 Server 与 owner-init 共用。
+- 新路径先打开 SQL-only MariaDB 连接，执行全部 9 个 namespace Migration，校验精确 History/namespace/version/checksum，并在创建 Redis 前执行 Data 最终物理 Schema 校验。
+- Migration 成功后才打开 Redis、创建 HTTP Client、Analysis Store 和其他 Repository。
+- `OpenLegacyAnalysisResources` 已替换为 `OpenSQL` + `OpenApplicationResources` 两阶段资源 API。
+- 删除 `DB_AUTO_MIGRATE`、`MIGRATION_ENABLED` 配置项；保留 `MIGRATION_TIMEOUT`。
+- `.env.example`、`scripts/deploy-go.sh`、`doc/开发部署说明.md` 已同步改为自动迁移和空数据库切换流程。
+- PLAT-CTR-006 已升级到 2.0.0，项目级登记簿和 DEC-PLAT-002-056 已记录破坏性变更。
+
+### 12.4 当前尚未完成
+
+1. 对生成的全部 V1 DDL 做最终静态审查，重点检查外键引用列/索引顺序、列字符集、可空性、默认值与 Repository SQL 的一致性；不要把字段业务语义验证混入本任务。
+2. 更新/补齐剩余模块 Migration 测试，确认所有单一 V1 的语句数量、必要 seed 和已删除冗余索引。
+3. 全仓搜索确认 `DB_AUTO_MIGRATE`、`MIGRATION_ENABLED`、`MigrationOperation`、`OpenLegacyAnalysisResources`、`Store.Migrate()`、`initializeSchema()` 没有残留运行时代码或旧部署指引。
+4. 检查 Root/Owner Init 资源所有权和失败清理路径，确保 SQL Migration 失败时 DB 关闭，Redis 不会提前打开。
+5. 获取 CI/Actions 结果；CI 未通过前不宣称完成。真实数据库部署和 Provider 准确性验收留到用户准备空数据库后执行。
+
+本阶段没有连接或修改用户真实数据库，也没有修改服务器 .env。
