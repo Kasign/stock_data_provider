@@ -17,8 +17,8 @@ import (
 	"example.com/stock-analysis-flow/internal/marketdata/model"
 	"example.com/stock-analysis-flow/internal/marketdata/provider"
 	"example.com/stock-analysis-flow/internal/marketdata/repository"
-	marketdatatestutil "example.com/stock-analysis-flow/internal/marketdata/testutil"
 	"example.com/stock-analysis-flow/internal/marketdata/service"
+	marketdatatestutil "example.com/stock-analysis-flow/internal/marketdata/testutil"
 )
 
 type fundamentalsCountingHTTPProvider struct {
@@ -47,7 +47,7 @@ func TestFundamentalsHTTPToMariaDBPointInTime(t *testing.T) {
 		t.Fatalf("open MariaDB: %v", err)
 	}
 	defer db.Close()
-	
+
 	symbol := fmt.Sprintf("%06d.SH", 600000+time.Now().UnixNano()%1000)
 	source := &fundamentalsCountingHTTPProvider{}
 	svc := service.New(
