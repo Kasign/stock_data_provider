@@ -462,7 +462,7 @@ tbody tr:hover { background: rgba(79, 112, 135, .06); }
   .source-list { display: grid; grid-template-columns: 1fr 1fr; column-gap: 18px; }
 }
 @media (max-width: 600px) {
-.topbar { height: 58px; } .breadcrumb { gap: 6px; font-size: 10px; }
+.breadcrumb { gap: 6px; font-size: 10px; }
   .environment-chip { max-width: 112px; overflow: hidden; font-size: 9px; white-space: nowrap; } .topbar-actions { gap: 6px; }
   
   h1 { font-size: 25px; } .last-updated { padding: 0; }
@@ -4450,7 +4450,6 @@ button:disabled {
   .topbar-actions { gap: 6px; }
   .environment-chip { max-width: 112px; padding: 6px 8px; overflow: hidden; }
   .environment-chip > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .view { padding-top: 20px; }
 }
 
 
