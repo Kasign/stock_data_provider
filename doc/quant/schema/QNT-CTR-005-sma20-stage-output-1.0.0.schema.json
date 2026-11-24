@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:kasign:quant:stage:sma20-output:1.0.0",
+  "title": "Quant SMA20 Stage Output",
+  "type": "object",
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "result_id": {"type": "string", "minLength": 1},
+    "snapshot_ref": {"type": "string", "minLength": 1},
+    "metric_code": {"const": "sma"},
+    "value": {"type": ["string", "null"], "pattern": "^[0-9]+(\\.[0-9]+)?$"},
+    "unit": {"const": "CNY/share"},
+    "period": {"const": "20d"},
+    "metric_status": {"enum": ["available", "insufficient_data"]},
+    "sample_count": {"type": "integer", "minimum": 1, "maximum": 20},
+    "trade_date": {"type": "string", "format": "date"},
+    "system_as_of": {"type": "string", "format": "date-time"},
+    "quality_status": {"const": "valid"},
+    "result_status": {"enum": ["completed", "insufficient_data"]}
+  },
+  "required": ["schema_version", "result_id", "snapshot_ref", "metric_code", "value", "unit", "period", "metric_status", "sample_count", "trade_date", "system_as_of", "quality_status", "result_status"],
+  "allOf": [
+    {
+      "if": {"properties": {"metric_status": {"const": "available"}}},
+      "then": {
+        "properties": {
+          "value": {"type": "string", "pattern": "^[0-9]+(\\.[0-9]+)?$"},
+          "sample_count": {"const": 20},
+          "result_status": {"const": "completed"}
+        }
+      }
+    },
+    {
+      "if": {"properties": {"metric_status": {"const": "insufficient_data"}}},
+      "then": {
+        "properties": {
+          "value": {"type": "null"},
+          "sample_count": {"type": "integer", "minimum": 1, "maximum": 19},
+          "result_status": {"const": "insufficient_data"}
+        }
+      }
+    }
+  ],
+  "additionalProperties": false
+}
