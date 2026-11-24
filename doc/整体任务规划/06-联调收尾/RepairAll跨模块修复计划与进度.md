@@ -1169,7 +1169,7 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 
 - 代码基线：`repair_all` 当前正在验证的服务身份接入提交；精确 SHA 以分支实时 HEAD 为准。
 - 修正方案：Platform Security 提供由显式 ServiceCredential 配置构造受限 Principal 的能力；Server 将 Worker 服务凭据加载与 Owner HTTP Token 分离，并在 Stage Executor 统一注入 Principal；Data 不接受调用方自报 Subject/Scope，仍按当前策略校验。
-- 服务身份固定为 `researchflow-worker`，最低需要 `data:read`。Data Policy 的 AllowedSubjects 必须包含 `principal:service:researchflow-worker`，AllowedPurposes 必须包含 `quant_analysis`，RequiredScopes 必须与凭据 Scope 对齐。没有策略授权时仍应拒绝 Snapshot 创建/读取。
-- 普通执行与恢复执行都由同一个 Worker StageExecutor 包装注入身份，避免只修复首轮执行而遗漏 Retry/Expired Attempt。
+- 服务身份固定为 `quant`，最低需要 `data:read`。Data Policy 的 AllowedSubjects 必须包含 `principal:service:quant`，AllowedPurposes 必须包含 `quant_analysis`，RequiredScopes 必须与凭据 Scope 对齐。没有策略授权时仍应拒绝 Snapshot 创建/读取。
+- 只有 Quant 数据消费 Stage 通过专属 Executor 注入 Quant 身份；News 等不消费 Data 的 Stage 不获得 Data Scope，避免只修复首轮执行而遗漏 Retry/Expired Attempt。
 - 第一轮 Go Test Suite 在 gofmt 检查发现 `security_test.go`、`researchflow_runtime.go`、`config/security_test.go` 格式问题，已修复并触发新 SHA CI。当前最新 CI 结果仍待确认。
 - 本阶段只打通可信身份前置条件，不代表 SMA20 生产 Stage 已接入，也不代表旧 Analysis 可以删除。下一步在 CI 通过后继续构建 Data Snapshot 适配器、Quant Reader/Facade 装配、Stage Executor 多路分发、Output Registry 与正式 Template。
