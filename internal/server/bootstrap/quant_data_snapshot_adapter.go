@@ -41,6 +41,7 @@ func (adapter *quantDataSnapshotAdapter) CreateDailyBarsCloseSeriesSnapshot(
 		Symbol: request.Symbol, StartDate: request.StartDate, EndDate: request.EndDate,
 		Limit: request.Limit, AdjustmentBasis: marketdataapp.AdjustmentNone,
 		SystemObservedAtCutoff: &cutoff,
+		AllowedProviderCodes: append([]string(nil), request.AllowedProviderCodes...),
 	}, quantstage.SMA20PurposeCode)
 	if err != nil {
 		return quantstage.SnapshotReferences{}, fmt.Errorf("Data CreateDailyBarsCloseSeriesSnapshot: %w", err)
