@@ -288,7 +288,7 @@ try {
 
       // Settings tests intentionally change API prefixes; saved and unsaved probes share this deterministic error matrix.
       if (viewport.width === 320 && settingsConnectionScenario !== "default" &&
-          (pathname.endsWith("/health/ready") || pathname.endsWith("/readyz"))) {
+          (pathname === "/healthz" || pathname === "/api/readyz" || pathname.endsWith("/health/ready") || pathname.endsWith("/readyz"))) {
         const scenario = settingsConnectionScenario;
         settingsConnectionRequestCount += 1;
         if (scenario === "network") return route.abort("failed");
@@ -303,7 +303,7 @@ try {
           }
         });
       }
-      if (pathname.endsWith("/health/ready") || pathname.endsWith("/readyz")) {
+      if (pathname === "/healthz" || pathname === "/api/readyz" || pathname.endsWith("/health/ready") || pathname.endsWith("/readyz")) {
         if (healthScenario === "missing-status") {
           return json(200, { message: "HTTP success without an explicit health status" });
         }
@@ -1432,75 +1432,26 @@ try {
       await page.waitForTimeout(250);
       assert.equal(dataSourcesRequestCount, recoveryRequestCount + 1, "successful retry should not trigger a hidden duplicate request");
 
-      // Changing the market connection while the Provider read is in flight must invalidate its late response.
-      dataSourceScenario = "delayed-success";
-      const inFlightRequestCount = dataSourcesRequestCount;
-      await page.locator("#data-center-check").click();
-      await page.waitForFunction(() => {
-        const summary = document.querySelector("#data-center-provider-summary")?.textContent || "";
-        const list = document.querySelector("#data-center-provider-list")?.textContent || "";
-        return summary.includes("旧清单暂不展示") &&
-          list.includes("正在读取 Provider 能力清单") &&
-          !list.includes("测试 Provider");
-      }, null, { timeout: 5000 });
-      assert.equal(dataSourcesRequestCount, inFlightRequestCount + 1, "in-flight Provider check should issue one request");
-
-      await page.locator("#open-settings").click();
-      await page.locator("#settings-view").waitFor({ state: "visible" });
-      await page.locator("#market-base-input").evaluate((input) => {
-        input.value = "/market-api-v2";
-        input.dispatchEvent(new Event("input", { bubbles: true }));
-        input.dispatchEvent(new Event("change", { bubbles: true }));
-      });
-      await page.waitForFunction(() => !document.querySelector("#save-settings")?.disabled, null, { timeout: 3000 });
-      await page.locator("#save-settings").click();
-      await page.waitForFunction(() => {
-        const summary = document.querySelector("#data-center-summary-message")?.textContent || "";
-        const list = document.querySelector("#data-center-provider-list")?.textContent || "";
-        return !document.querySelector("#settings-view")?.hidden &&
-          summary.includes("连接配置已变更") &&
-          !list.includes("测试 Provider");
-      }, null, { timeout: 5000 });
-
-      // Allow the old request to resolve; its older generation still must not repopulate Provider state.
-      await page.waitForTimeout(1800);
-      const staleProviderState = await page.evaluate(() => ({
-        summary: document.querySelector("#data-center-provider-summary")?.textContent || "",
-        list: document.querySelector("#data-center-provider-list")?.textContent || "",
-        status: document.querySelector("#data-center-provider-status")?.textContent.trim() || "",
-        buttonText: document.querySelector("#data-center-check")?.textContent.trim() || "",
-        buttonDisabled: document.querySelector("#data-center-check")?.disabled
-      }));
-      assert.match(staleProviderState.summary, /连接配置已变更/);
-      assert.doesNotMatch(staleProviderState.list, /测试 Provider/, "late old-connection response must not repopulate Provider list");
-      assert.equal(staleProviderState.status, "需重新检查");
-      assert.equal(staleProviderState.buttonText, "立即检查");
-      assert.equal(staleProviderState.buttonDisabled, false);
-      assert.equal(dataSourcesRequestCount, inFlightRequestCount + 1, "invalidated old request must not cause a hidden follow-up request");
-
+      // 服务入口由部署统一管理；浏览器只保留 Root Server 的固定同源入口。
       dataSourceScenario = "success";
-
-      // 设置中心现在是一级页面，不再使用旧的连接设置弹窗。
-      await page.locator("#open-settings").click();
-      await page.locator("#settings-view").waitFor({ state: "visible" });
-      assert.equal(await page.locator("#settings-view").isVisible(), true);
-      await clickNav(page, '.nav-link[data-view="market"]');
-      await page.locator("#market-view").waitFor({ state: "visible" });
-
-      // Saved connection and unsaved draft checks must preserve error distinctions and remain isolated.
-      const settingsMenu = page.locator("#mobile-menu-toggle");
-      if (await settingsMenu.isVisible() && (await settingsMenu.getAttribute("aria-expanded")) !== "true") {
-        await settingsMenu.click();
-      }
       await clickNav(page, '.nav-link[data-view="settings"]');
       await page.locator("#settings-view").waitFor({ state: "visible" });
-
-      const savedSettingsBeforeChecks = await page.evaluate(() => localStorage.getItem("stock-provider-webui.settings.v1"));
-      assert.ok(savedSettingsBeforeChecks, "connection checks require persisted local settings");
-      const parsedSavedSettings = JSON.parse(savedSettingsBeforeChecks);
-      assert.match(parsedSavedSettings.marketBase, /^\/[a-z0-9-]+$/);
-      assert.match(parsedSavedSettings.analysisBase, /^\/[a-z0-9-]+$/);
-      assert.equal(parsedSavedSettings.apiKey, "browser-test-key");
+      const fixedConnection = await page.evaluate(() => ({
+        marketBase: document.querySelector("#market-base-input")?.value || "",
+        analysisBase: document.querySelector("#analysis-base-input")?.value || "",
+        marketBaseHidden: document.querySelector("#market-base-input")?.type === "hidden",
+        analysisBaseHidden: document.querySelector("#analysis-base-input")?.type === "hidden",
+        saveHidden: document.querySelector("#save-settings")?.hidden === true,
+        draftCheckHidden: document.querySelector("#settings-check-draft-connection")?.hidden === true,
+        stored: localStorage.getItem("stock-provider-webui.settings.v1")
+      }));
+      assert.equal(fixedConnection.marketBase, "/");
+      assert.equal(fixedConnection.analysisBase, "/");
+      assert.equal(fixedConnection.marketBaseHidden, true);
+      assert.equal(fixedConnection.analysisBaseHidden, true);
+      assert.equal(fixedConnection.saveHidden, true, "service API paths are not editable from the browser");
+      assert.equal(fixedConnection.draftCheckHidden, true, "unsaved API path checks are not exposed");
+      assert.equal(fixedConnection.stored, "{}", "legacy browser API paths and API keys must be cleared during settings migration");
 
       for (const scenario of ["401", "403", "404", "503", "network"]) {
         const expected = settingsConnectionErrors[scenario];
@@ -1513,157 +1464,22 @@ try {
           { timeout: 10000 }
         );
         assert.equal(settingsConnectionRequestCount, requestsBefore + 2,
-          "saved connection " + scenario + " should check market and analysis endpoints once each");
+          "Root Server connection check " + scenario + " must probe liveness and readiness exactly once");
         await page.waitForTimeout(250);
         assert.equal(settingsConnectionRequestCount, requestsBefore + 2,
-          "saved connection " + scenario + " must not retry silently");
-        assert.match(await page.locator("#settings-connection-check").textContent(), /已保存连接配置检查结果：/);
+          "Root Server connection check " + scenario + " must not retry silently");
+        assert.match(await page.locator("#settings-connection-check").textContent(), /Root Server 检查结果：|连接检查失败：/);
         assert.match(await page.locator("#settings-connection-check").getAttribute("class"), /is-warning/);
-        assert.equal(await page.evaluate(() => localStorage.getItem("stock-provider-webui.settings.v1")), savedSettingsBeforeChecks,
-          "saved connection check " + scenario + " must not mutate local settings");
+        assert.equal(await page.evaluate(() => localStorage.getItem("stock-provider-webui.settings.v1")), "{}",
+          "health checks must not persist service paths or credentials");
         await page.waitForFunction(
           () => !document.querySelector("#settings-check-connection")?.disabled,
           null,
           { timeout: 3000 }
         );
       }
-      const savedCheckTextBeforeDraft = await page.locator("#settings-connection-check").textContent();
-      const savedSettingsBeforeDraft = await page.evaluate(() => localStorage.getItem("stock-provider-webui.settings.v1"));
-
-      await page.locator("#open-settings").click();
-      await page.locator("#settings-view").waitFor({ state: "visible" });
-      await page.locator("#market-base-input").fill("/draft-market-api");
-      await page.locator("#analysis-base-input").fill("/draft-analysis-api");
-      assert.equal(await page.locator("#save-settings").isDisabled(), false,
-        "changing API paths should mark settings as an unsaved draft");
-
-      for (const scenario of ["401", "403", "404", "503", "network"]) {
-        const expected = settingsConnectionErrors[scenario];
-        const requestsBefore = settingsConnectionRequestCount;
-        settingsConnectionScenario = scenario;
-        await page.locator("#settings-check-draft-connection").click();
-        await page.waitForFunction(
-          (expectedMessage) => document.querySelector("#settings-draft-connection-check")?.textContent.includes(expectedMessage),
-          expected.expected,
-          { timeout: 10000 }
-        );
-        assert.equal(settingsConnectionRequestCount, requestsBefore + 2,
-          "draft connection " + scenario + " should check its two unsaved paths once each");
-        await page.waitForTimeout(250);
-        assert.equal(settingsConnectionRequestCount, requestsBefore + 2,
-          "draft connection " + scenario + " must not retry silently");
-        const draftText = await page.locator("#settings-draft-connection-check").textContent();
-        assert.match(draftText, /表单地址检查结果（尚未保存）：/);
-        assert.match(draftText, new RegExp(expected.expected));
-        assert.match(await page.locator("#settings-draft-connection-check").getAttribute("class"), /is-warning/);
-        assert.equal(await page.locator("#settings-connection-check").textContent(), savedCheckTextBeforeDraft,
-          "draft connection " + scenario + " must not overwrite saved-check feedback");
-        assert.equal(await page.evaluate(() => localStorage.getItem("stock-provider-webui.settings.v1")), savedSettingsBeforeDraft,
-          "draft connection " + scenario + " must not persist unsaved API paths");
-        await page.waitForFunction(
-          () => !document.querySelector("#settings-check-draft-connection")?.disabled,
-          null,
-          { timeout: 3000 }
-        );
-      }
 
       settingsConnectionScenario = "default";
-      await clickNav(page, '.nav-link[data-view="market"]');
-      await page.locator("#market-view").waitFor({ state: "visible" });
-      await clickNav(page, '.nav-link[data-view="settings"]');
-      await page.locator("#settings-view").waitFor({ state: "visible" });
-      assert.equal(await page.evaluate(() => localStorage.getItem("stock-provider-webui.settings.v1")), savedSettingsBeforeChecks,
-        "discarding an unsaved draft must preserve the saved local settings");
-
-      // A health check started on the previous connection must not overwrite the invalidation message after saving new paths.
-      const requestsBeforeStaleHealth = settingsConnectionRequestCount;
-      settingsConnectionScenario = "delayed";
-      await page.locator("#settings-check-connection").click();
-      await page.waitForFunction(() => document.querySelector("#settings-check-connection")?.disabled === true, null, { timeout: 3000 });
-      await page.waitForTimeout(120);
-      assert.equal(settingsConnectionRequestCount, requestsBeforeStaleHealth + 2,
-        "the stale-health race must have both old endpoint requests in flight");
-
-      settingsConnectionScenario = "default";
-      await page.locator("#open-settings").click();
-      await page.locator("#settings-view").waitFor({ state: "visible" });
-      await page.locator("#market-base-input").fill("/race-market-api");
-      await page.locator("#analysis-base-input").fill("/race-analysis-api");
-      await page.locator("#save-settings").click();
-      await page.locator("#settings-view").waitFor({ state: "visible" });
-      await page.waitForFunction(() => {
-        try {
-          const settings = JSON.parse(localStorage.getItem("stock-provider-webui.settings.v1") || "{}");
-          return settings.marketBase === "/race-market-api" && settings.analysisBase === "/race-analysis-api";
-        } catch {
-          return false;
-        }
-      }, null, { timeout: 5000 });
-      await page.waitForFunction(
-        () => document.querySelector("#settings-connection-check")?.textContent === "连接配置已变化，请重新检查当前已保存的配置。",
-        null,
-        { timeout: 5000 }
-      );
-
-      await page.waitForTimeout(1700);
-      assert.equal(settingsConnectionRequestCount, requestsBeforeStaleHealth + 2,
-        "late old health responses must not initiate hidden requests");
-      assert.equal(
-        await page.locator("#settings-connection-check").textContent(),
-        "连接配置已变化，请重新检查当前已保存的配置。",
-        "late responses from the old API paths must not overwrite the new-configuration warning"
-      );
-      assert.doesNotMatch(await page.locator("#settings-connection-check").textContent(), /健康探针服务暂不可用|HTTP 503/);
-      assert.equal(await page.locator("#settings-check-connection").isDisabled(), false,
-        "saving new connection paths must release the saved-check button even while old requests are pending");
-
-      // A draft check whose endpoints change while in flight must report the old result as stale.
-      const savedSettingsBeforeDraftRace = await page.evaluate(() => localStorage.getItem("stock-provider-webui.settings.v1"));
-      const savedFeedbackBeforeDraftRace = await page.locator("#settings-connection-check").textContent();
-      await page.locator("#open-settings").click();
-      await page.locator("#settings-view").waitFor({ state: "visible" });
-      await page.locator("#market-base-input").fill("/draft-race-market");
-      await page.locator("#analysis-base-input").fill("/draft-race-analysis");
-
-      const requestsBeforeDraftRace = settingsConnectionRequestCount;
-      settingsConnectionScenario = "delayed";
-      await page.locator("#settings-check-draft-connection").click();
-      await page.waitForFunction(
-        () => document.querySelector("#settings-check-draft-connection")?.disabled === true,
-        null,
-        { timeout: 3000 }
-      );
-      await page.waitForTimeout(120);
-      assert.equal(settingsConnectionRequestCount, requestsBeforeDraftRace + 2,
-        "draft race should have both old draft health probes in flight");
-
-      settingsConnectionScenario = "default";
-      await page.locator("#market-base-input").fill("/edited-market-draft");
-      await page.locator("#analysis-base-input").fill("/edited-analysis-draft");
-      await page.waitForFunction(
-        () => document.querySelector("#settings-draft-connection-check")?.textContent.includes("检查期间连接草稿或已保存配置发生变化，已忽略旧结果"),
-        null,
-        { timeout: 5000 }
-      );
-
-      const staleDraftFeedback = await page.locator("#settings-draft-connection-check").textContent();
-      assert.doesNotMatch(staleDraftFeedback, /健康探针服务暂不可用|HTTP 503/,
-        "old delayed draft responses must not overwrite the stale-result warning");
-      assert.equal(settingsConnectionRequestCount, requestsBeforeDraftRace + 2,
-        "stale draft results must not trigger any extra requests");
-      assert.equal(await page.locator("#settings-connection-check").textContent(), savedFeedbackBeforeDraftRace,
-        "draft edits/results must not change saved-check feedback");
-      assert.equal(await page.evaluate(() => localStorage.getItem("stock-provider-webui.settings.v1")), savedSettingsBeforeDraftRace,
-        "editing a draft while its check is in flight must not persist the new draft paths");
-
-      settingsConnectionScenario = "default";
-      await clickNav(page, '.nav-link[data-view="market"]');
-      await page.locator("#market-view").waitFor({ state: "visible" });
-      await clickNav(page, '.nav-link[data-view="settings"]');
-      await page.locator("#settings-view").waitFor({ state: "visible" });
-      assert.equal(await page.evaluate(() => localStorage.getItem("stock-provider-webui.settings.v1")), savedSettingsBeforeDraftRace,
-        "discarding the raced draft must preserve the existing saved endpoints");
-
       await clickNav(page, '.nav-link[data-view="market"]');
       await page.locator("#market-view").waitFor({ state: "visible" });
 
