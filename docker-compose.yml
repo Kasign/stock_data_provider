@@ -10,10 +10,10 @@ services:
       - .env
     environment:
       OWNER_SESSION_ENABLED: "true"
-      OWNER_SESSION_PUBLIC_ORIGIN: ${OWNER_SESSION_PUBLIC_ORIGIN:?Set the exact public HTTPS origin used by the WebUI}
-      OWNER_SESSION_COOKIE_NAME: __Secure-owner_session
+      OWNER_SESSION_PUBLIC_ORIGIN: ${OWNER_SESSION_PUBLIC_ORIGIN:?Set the exact browser Origin used by the WebUI}
+      OWNER_SESSION_COOKIE_NAME: ${OWNER_SESSION_COOKIE_NAME:-__Secure-owner_session}
       OWNER_SESSION_COOKIE_PATH: /api
-      OWNER_SESSION_COOKIE_SECURE: "true"
+      OWNER_SESSION_COOKIE_SECURE: ${OWNER_SESSION_COOKIE_SECURE:-true}
       OWNER_SESSION_CSRF_HEADER: X-CSRF-Token
       OWNER_SESSION_ARGON2_MEMORY_KIB: ${OWNER_SESSION_ARGON2_MEMORY_KIB:?Set benchmarked Argon2id memory cost}
       OWNER_SESSION_ARGON2_ITERATIONS: ${OWNER_SESSION_ARGON2_ITERATIONS:?Set benchmarked Argon2id iteration cost}
