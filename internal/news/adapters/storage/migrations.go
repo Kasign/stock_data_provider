@@ -2,6 +2,8 @@ package storage
 
 import platformstorage "example.com/stock-analysis-flow/internal/platform/storage"
 
+const MigrationNamespace = "news"
+
 // Migrations 返回 News 当前完整 Schema 基线。
 // 新数据库只执行一个 V1；后续正式发布的 Schema 变更从 V2 开始。
 func Migrations() []platformstorage.Migration {
