@@ -4,212 +4,23 @@ import platformstorage "example.com/stock-analysis-flow/internal/platform/storag
 
 const MigrationNamespace = "researchflow"
 
-// Migrations returns Researchflow-owned tables. The Server composition root
-// registers these migrations with Platform storage; importing this package
-// never executes DDL.
+// Migrations 返回 Researchflow 当前完整 Schema 基线。
+// 新数据库只执行一个 V1；未来正式发布后新增 Schema 变更从 V2 开始。
 func Migrations() []platformstorage.Migration {
-	return []platformstorage.Migration{
-		{
-			Version:     1,
-			Description: "create transactional Researchflow run, stage, attempt, result and outbox storage",
-			Statements: []string{
-				`CREATE TABLE researchflow_runs (
-					run_ref VARCHAR(255) NOT NULL,
-					schema_version VARCHAR(32) NOT NULL,
-					status VARCHAR(16) NOT NULL,
-					version BIGINT UNSIGNED NOT NULL,
-					system_as_of CHAR(30) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-					deadline_at CHAR(30) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-					template_ref VARCHAR(255) NOT NULL,
-					template_version VARCHAR(64) NOT NULL,
-					template_fingerprint CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-					input_snapshot_refs LONGTEXT NOT NULL,
-					resolved_template_snapshot LONGTEXT NOT NULL,
-					parameters_snapshot LONGTEXT NOT NULL,
-					originating_request_id VARCHAR(128) NULL,
-					correlation_id VARCHAR(128) NOT NULL,
-					result_summary_ref VARCHAR(255) NULL,
-					termination_reason VARCHAR(64) NULL,
-					created_at CHAR(30) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-					started_at CHAR(30) CHARACTER SET ascii COLLATE ascii_bin NULL,
-					finished_at CHAR(30) CHARACTER SET ascii COLLATE ascii_bin NULL,
-					PRIMARY KEY (run_ref),
-					KEY idx_researchflow_runs_status_deadline (status, deadline_at),
-					KEY idx_researchflow_runs_correlation (correlation_id)
-				) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin`,
-				`CREATE TABLE researchflow_stages (
-					stage_ref VARCHAR(255) NOT NULL,
-					run_ref VARCHAR(255) NOT NULL,
-					stage_code VARCHAR(128) NOT NULL,
-					status VARCHAR(16) NOT NULL,
-					version BIGINT UNSIGNED NOT NULL,
-					required TINYINT(1) NOT NULL,
-					dependency_stage_refs LONGTEXT NOT NULL,
-					retry_policy_ref VARCHAR(255) NOT NULL,
-					attempt_no INT UNSIGNED NOT NULL DEFAULT 0,
-					retry_at CHAR(30) CHARACTER SET ascii COLLATE ascii_bin NULL,
-					output_ref VARCHAR(255) NULL,
-					quality_summary_ref VARCHAR(255) NULL,
-					diagnostic_refs LONGTEXT NOT NULL,
-					quality_status VARCHAR(16) NULL,
-					reason_codes LONGTEXT NOT NULL,
-					risk_decision VARCHAR(16) NULL,
-					created_at CHAR(30) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-					started_at CHAR(30) CHARACTER SET ascii COLLATE ascii_bin NULL,
-					finished_at CHAR(30) CHARACTER SET ascii COLLATE ascii_bin NULL,
-					PRIMARY KEY (stage_ref),
-					UNIQUE KEY uq_researchflow_stage_run_code (run_ref, stage_code),
-					UNIQUE KEY uq_researchflow_stage_ref_run (stage_ref, run_ref),
-					KEY idx_researchflow_stages_run_status (run_ref, status),
-					CONSTRAINT fk_researchflow_stages_run FOREIGN KEY (run_ref)
-						REFERENCES researchflow_runs (run_ref)
-				) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin`,
-				`CREATE TABLE researchflow_attempts (
-					attempt_ref VARCHAR(255) NOT NULL,
-					run_ref VARCHAR(255) NOT NULL,
-					stage_ref VARCHAR(255) NOT NULL,
-					attempt_no INT UNSIGNED NOT NULL,
-					status VARCHAR(16) NOT NULL,
-					lease_owner VARCHAR(128) NULL,
-					lease_expires_at CHAR(30) CHARACTER SET ascii COLLATE ascii_bin NULL,
-					fencing_token BIGINT UNSIGNED NOT NULL,
-					started_at CHAR(30) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-					finished_at CHAR(30) CHARACTER SET ascii COLLATE ascii_bin NULL,
-					fault_ref VARCHAR(255) NULL,
-					output_ref VARCHAR(255) NULL,
-					PRIMARY KEY (attempt_ref),
-					UNIQUE KEY uq_researchflow_attempt_stage_no (stage_ref, attempt_no),
-					UNIQUE KEY uq_researchflow_attempt_stage_fencing (stage_ref, fencing_token),
-					KEY idx_researchflow_attempts_run_status (run_ref, status),
-					KEY idx_researchflow_attempts_lease (status, lease_expires_at),
-					CONSTRAINT fk_researchflow_attempts_run FOREIGN KEY (run_ref)
-						REFERENCES researchflow_runs (run_ref),
-					CONSTRAINT fk_researchflow_attempts_stage FOREIGN KEY (stage_ref, run_ref)
-						REFERENCES researchflow_stages (stage_ref, run_ref)
-				) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin`,
-				`CREATE TABLE researchflow_run_idempotency (
-					caller_ref VARCHAR(255) NOT NULL,
-					operation VARCHAR(64) NOT NULL,
-					idempotency_key VARCHAR(128) NOT NULL,
-					request_fingerprint CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-					run_ref VARCHAR(255) NOT NULL,
-					created_at CHAR(30) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-					PRIMARY KEY (caller_ref, operation, idempotency_key),
-					KEY idx_researchflow_idempotency_run (run_ref),
-					CONSTRAINT fk_researchflow_idempotency_run FOREIGN KEY (run_ref)
-						REFERENCES researchflow_runs (run_ref)
-				) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin`,
-				`CREATE TABLE researchflow_result_summaries (
-					result_summary_ref VARCHAR(255) NOT NULL,
-					run_ref VARCHAR(255) NOT NULL,
-					schema_version VARCHAR(32) NOT NULL,
-					payload LONGTEXT NOT NULL,
-					created_at CHAR(30) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-					PRIMARY KEY (result_summary_ref),
-					UNIQUE KEY uq_researchflow_result_summary_run (run_ref),
-					CONSTRAINT fk_researchflow_result_summaries_run FOREIGN KEY (run_ref)
-						REFERENCES researchflow_runs (run_ref)
-				) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin`,
-				`CREATE TABLE researchflow_outbox (
-					outbox_ref VARCHAR(255) NOT NULL,
-					run_ref VARCHAR(255) NOT NULL,
-					event_type VARCHAR(128) NOT NULL,
-					schema_version VARCHAR(32) NOT NULL,
-					idempotency_key VARCHAR(255) NOT NULL,
-					correlation_id VARCHAR(128) NOT NULL,
-					payload_fingerprint CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-					payload LONGTEXT NOT NULL,
-					created_at CHAR(30) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-					published_at CHAR(30) CHARACTER SET ascii COLLATE ascii_bin NULL,
-					attempt_count INT UNSIGNED NOT NULL DEFAULT 0,
-					last_error_code VARCHAR(128) NULL,
-					PRIMARY KEY (outbox_ref),
-					UNIQUE KEY uq_researchflow_outbox_run_event (run_ref, event_type),
-					UNIQUE KEY uq_researchflow_outbox_idempotency (idempotency_key),
-					KEY idx_researchflow_outbox_pending (published_at, created_at),
-					CONSTRAINT fk_researchflow_outbox_run FOREIGN KEY (run_ref)
-						REFERENCES researchflow_runs (run_ref)
-				) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin`,
-			},
+	return []platformstorage.Migration{{
+		Version: 1,
+		Description: "create complete Researchflow schema baseline",
+		Statements: []string{
+			"CREATE TABLE researchflow_runs (\n\t\t\t\t\trun_ref VARCHAR(255) NOT NULL,\n\t\t\t\t\tschema_version VARCHAR(32) NOT NULL,\n\t\t\t\t\tstatus VARCHAR(16) NOT NULL,\n\t\t\t\t\tversion BIGINT UNSIGNED NOT NULL,\n\t\t\t\t\tsystem_as_of CHAR(30) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n\t\t\t\t\tdeadline_at CHAR(30) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n\t\t\t\t\ttemplate_ref VARCHAR(255) NOT NULL,\n\t\t\t\t\ttemplate_version VARCHAR(64) NOT NULL,\n\t\t\t\t\ttemplate_fingerprint CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n\t\t\t\t\tinput_snapshot_refs LONGTEXT NOT NULL,\n\t\t\t\t\tresolved_template_snapshot LONGTEXT NOT NULL,\n\t\t\t\t\tparameters_snapshot LONGTEXT NOT NULL,\n\t\t\t\t\toriginating_request_id VARCHAR(128) NULL,\n\t\t\t\t\tcorrelation_id VARCHAR(128) NOT NULL,\n\t\t\t\t\tresult_summary_ref VARCHAR(255) NULL,\n\t\t\t\t\ttermination_reason VARCHAR(64) NULL,\n\t\t\t\t\tcreated_at CHAR(30) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n\t\t\t\t\tstarted_at CHAR(30) CHARACTER SET ascii COLLATE ascii_bin NULL,\n\t\t\t\t\tfinished_at CHAR(30) CHARACTER SET ascii COLLATE ascii_bin NULL,\n\t\t\t\t\tPRIMARY KEY (run_ref),\n\t\t\t\t\tKEY idx_researchflow_runs_status_deadline (status, deadline_at),\n\t\t\t\t\tKEY idx_researchflow_runs_correlation (correlation_id)\n\t\t\t\t) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin",
+			"CREATE TABLE researchflow_stages (\n\t\t\t\t\tstage_ref VARCHAR(255) NOT NULL,\n\t\t\t\t\trun_ref VARCHAR(255) NOT NULL,\n\t\t\t\t\tstage_code VARCHAR(128) NOT NULL,\n\t\t\t\t\tstatus VARCHAR(16) NOT NULL,\n\t\t\t\t\tversion BIGINT UNSIGNED NOT NULL,\n\t\t\t\t\trequired TINYINT(1) NOT NULL,\n\t\t\t\t\tdependency_stage_refs LONGTEXT NOT NULL,\n\t\t\t\t\tretry_policy_ref VARCHAR(255) NOT NULL,\n\t\t\t\t\tattempt_no INT UNSIGNED NOT NULL DEFAULT 0,\n\t\t\t\t\tretry_at CHAR(30) CHARACTER SET ascii COLLATE ascii_bin NULL,\n\t\t\t\t\toutput_ref VARCHAR(255) NULL,\n\t\t\t\t\tquality_summary_ref VARCHAR(255) NULL,\n\t\t\t\t\tdiagnostic_refs LONGTEXT NOT NULL,\n\t\t\t\t\tquality_status VARCHAR(16) NULL,\n\t\t\t\t\treason_codes LONGTEXT NOT NULL,\n\t\t\t\t\trisk_decision VARCHAR(16) NULL,\n\t\t\t\t\tcreated_at CHAR(30) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n\t\t\t\t\tstarted_at CHAR(30) CHARACTER SET ascii COLLATE ascii_bin NULL,\n\t\t\t\t\tfinished_at CHAR(30) CHARACTER SET ascii COLLATE ascii_bin NULL,\n\t\t\t\t\tPRIMARY KEY (stage_ref),\n\t\t\t\t\tUNIQUE KEY uq_researchflow_stage_run_code (run_ref, stage_code),\n\t\t\t\t\tUNIQUE KEY uq_researchflow_stage_ref_run (stage_ref, run_ref),\n\t\t\t\t\tKEY idx_researchflow_stages_run_status (run_ref, status),\n\t\t\t\t\tCONSTRAINT fk_researchflow_stages_run FOREIGN KEY (run_ref)\n\t\t\t\t\t\tREFERENCES researchflow_runs (run_ref)\n\t\t\t\t) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin",
+			"CREATE TABLE researchflow_attempts (\n\t\t\t\t\tattempt_ref VARCHAR(255) NOT NULL,\n\t\t\t\t\trun_ref VARCHAR(255) NOT NULL,\n\t\t\t\t\tstage_ref VARCHAR(255) NOT NULL,\n\t\t\t\t\tattempt_no INT UNSIGNED NOT NULL,\n\t\t\t\t\tstatus VARCHAR(16) NOT NULL,\n\t\t\t\t\tlease_owner VARCHAR(128) NULL,\n\t\t\t\t\tlease_expires_at CHAR(30) CHARACTER SET ascii COLLATE ascii_bin NULL,\n\t\t\t\t\tfencing_token BIGINT UNSIGNED NOT NULL,\n\t\t\t\t\tstarted_at CHAR(30) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n\t\t\t\t\tfinished_at CHAR(30) CHARACTER SET ascii COLLATE ascii_bin NULL,\n\t\t\t\t\tfault_ref VARCHAR(255) NULL,\n\t\t\t\t\toutput_ref VARCHAR(255) NULL,\n\t\t\t\t\tPRIMARY KEY (attempt_ref),\n\t\t\t\t\tUNIQUE KEY uq_researchflow_attempt_stage_no (stage_ref, attempt_no),\n\t\t\t\t\tUNIQUE KEY uq_researchflow_attempt_stage_fencing (stage_ref, fencing_token),\n\t\t\t\t\tKEY idx_researchflow_attempts_run_status (run_ref, status),\n\t\t\t\t\tKEY idx_researchflow_attempts_lease (status, lease_expires_at),\n\t\t\t\t\tCONSTRAINT fk_researchflow_attempts_run FOREIGN KEY (run_ref)\n\t\t\t\t\t\tREFERENCES researchflow_runs (run_ref),\n\t\t\t\t\tCONSTRAINT fk_researchflow_attempts_stage FOREIGN KEY (stage_ref, run_ref)\n\t\t\t\t\t\tREFERENCES researchflow_stages (stage_ref, run_ref)\n\t\t\t\t) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin",
+			"CREATE TABLE researchflow_run_idempotency (\n\t\t\t\t\tcaller_ref VARCHAR(255) NOT NULL,\n\t\t\t\t\toperation VARCHAR(64) NOT NULL,\n\t\t\t\t\tidempotency_key VARCHAR(128) NOT NULL,\n\t\t\t\t\trequest_fingerprint CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n\t\t\t\t\trun_ref VARCHAR(255) NOT NULL,\n\t\t\t\t\tcreated_at CHAR(30) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n\t\t\t\t\tPRIMARY KEY (caller_ref, operation, idempotency_key),\n\t\t\t\t\tKEY idx_researchflow_idempotency_run (run_ref),\n\tUNIQUE KEY uq_researchflow_idempotency_run (run_ref),\n\t\t\t\t\tCONSTRAINT fk_researchflow_idempotency_run FOREIGN KEY (run_ref)\n\t\t\t\t\t\tREFERENCES researchflow_runs (run_ref)\n\t\t\t\t) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin",
+			"CREATE TABLE researchflow_result_summaries (\n\t\t\t\t\tresult_summary_ref VARCHAR(255) NOT NULL,\n\t\t\t\t\trun_ref VARCHAR(255) NOT NULL,\n\t\t\t\t\tschema_version VARCHAR(32) NOT NULL,\n\t\t\t\t\tpayload LONGTEXT NOT NULL,\n\t\t\t\t\tcreated_at CHAR(30) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n\t\t\t\t\tPRIMARY KEY (result_summary_ref),\n\t\t\t\t\tUNIQUE KEY uq_researchflow_result_summary_run (run_ref),\n\t\t\t\t\tCONSTRAINT fk_researchflow_result_summaries_run FOREIGN KEY (run_ref)\n\t\t\t\t\t\tREFERENCES researchflow_runs (run_ref)\n\t\t\t\t) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin",
+			"CREATE TABLE researchflow_outbox (\n\t\t\t\t\toutbox_ref VARCHAR(255) NOT NULL,\n\t\t\t\t\trun_ref VARCHAR(255) NOT NULL,\n\t\t\t\t\tevent_type VARCHAR(128) NOT NULL,\n\t\t\t\t\tschema_version VARCHAR(32) NOT NULL,\n\t\t\t\t\tidempotency_key VARCHAR(255) NOT NULL,\n\t\t\t\t\tcorrelation_id VARCHAR(128) NOT NULL,\n\t\t\t\t\tpayload_fingerprint CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n\t\t\t\t\tpayload LONGTEXT NOT NULL,\n\t\t\t\t\tcreated_at CHAR(30) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n\t\t\t\t\tpublished_at CHAR(30) CHARACTER SET ascii COLLATE ascii_bin NULL,\n\tlease_owner VARCHAR(128) NULL,\n\tlease_expires_at CHAR(30) CHARACTER SET ascii COLLATE ascii_bin NULL,\n\tlease_generation BIGINT UNSIGNED NOT NULL DEFAULT 0,\n\tnext_attempt_at CHAR(30) CHARACTER SET ascii COLLATE ascii_bin NULL,\n\t\t\t\t\tattempt_count INT UNSIGNED NOT NULL DEFAULT 0,\n\t\t\t\t\tlast_error_code VARCHAR(128) NULL,\n\t\t\t\t\tPRIMARY KEY (outbox_ref),\n\t\t\t\t\tUNIQUE KEY uq_researchflow_outbox_run_event (run_ref, event_type),\n\t\t\t\t\tUNIQUE KEY uq_researchflow_outbox_idempotency (idempotency_key),\n\t\t\t\t\tKEY idx_researchflow_outbox_pending (published_at, created_at),\n\tKEY idx_researchflow_outbox_claim (published_at, next_attempt_at, lease_expires_at, created_at),\n\t\t\t\t\tCONSTRAINT fk_researchflow_outbox_run FOREIGN KEY (run_ref)\n\t\t\t\t\t\tREFERENCES researchflow_runs (run_ref)\n\t\t\t\t) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin",
+			"CREATE TABLE researchflow_workflow_templates (\n\t\t\t\t\ttemplate_ref VARCHAR(255) NOT NULL,\n\t\t\t\t\tversion VARCHAR(64) NOT NULL,\n\t\t\t\t\tfingerprint CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n\t\t\t\t\tdefinition LONGTEXT NOT NULL,\n\t\t\t\t\tcreated_at CHAR(30) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n\t\t\t\t\tPRIMARY KEY (template_ref, version),\n\t\t\t\t\tKEY idx_researchflow_templates_fingerprint (fingerprint)\n\t\t\t\t) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin",
+			"CREATE TABLE researchflow_capacity_guard (\n\t\t\t\t\tguard_id TINYINT UNSIGNED NOT NULL,\n\t\t\t\t\tPRIMARY KEY (guard_id)\n\t\t\t\t) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin",
+			"CREATE TABLE researchflow_stage_output_resources (\n\t\t\t\t\tresource_ref VARCHAR(255) NOT NULL,\n\t\t\t\t\trun_ref VARCHAR(255) NOT NULL,\n\t\t\t\t\tstage_ref VARCHAR(255) NOT NULL,\n\t\t\t\t\tattempt_ref VARCHAR(255) NOT NULL,\n\t\t\t\t\tresource_kind VARCHAR(24) NOT NULL,\n\t\t\t\t\tstage_code VARCHAR(128) NOT NULL,\n\t\t\t\t\ttemplate_version VARCHAR(64) NOT NULL,\n\t\t\t\t\tregistry_version VARCHAR(64) NOT NULL,\n\t\t\t\t\tregistry_fingerprint VARCHAR(80) NOT NULL,\n\t\t\t\t\toutput_type VARCHAR(128) NOT NULL,\n\t\t\t\t\tschema_version VARCHAR(64) NOT NULL,\n\t\t\t\t\tschema_ref VARCHAR(512) NOT NULL,\n\t\t\t\t\tcontent LONGTEXT NOT NULL,\n\t\t\t\t\tcreated_at CHAR(30) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n\t\t\t\t\tPRIMARY KEY (resource_ref),\n\t\t\t\t\tUNIQUE KEY uq_researchflow_stage_output_attempt_kind (attempt_ref, resource_kind),\n\t\t\t\t\tKEY idx_researchflow_stage_output_run_stage (run_ref, stage_ref),\n\t\t\t\tCONSTRAINT chk_researchflow_stage_output_kind CHECK (resource_kind IN ('payload', 'quality_summary')),\n\t\t\t\tCONSTRAINT fk_researchflow_stage_output_run FOREIGN KEY (run_ref)\n\t\t\t\t\t\tREFERENCES researchflow_runs (run_ref),\n\t\t\t\tCONSTRAINT fk_researchflow_stage_output_stage FOREIGN KEY (stage_ref, run_ref)\n\t\t\t\t\t\tREFERENCES researchflow_stages (stage_ref, run_ref),\n\t\t\t\tCONSTRAINT fk_researchflow_stage_output_attempt FOREIGN KEY (attempt_ref)\n\t\t\t\t\t\tREFERENCES researchflow_attempts (attempt_ref)\n\t\t\t\t) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin",
+			"INSERT INTO researchflow_capacity_guard (guard_id) VALUES (1)",
 		},
-		{
-			Version:     2,
-			Description: "add fenced Researchflow Outbox delivery leases and retry scheduling",
-			Statements: []string{
-				`ALTER TABLE researchflow_outbox
-					ADD COLUMN lease_owner VARCHAR(128) NULL AFTER published_at,
-					ADD COLUMN lease_expires_at CHAR(30) CHARACTER SET ascii COLLATE ascii_bin NULL AFTER lease_owner,
-					ADD COLUMN lease_generation BIGINT UNSIGNED NOT NULL DEFAULT 0 AFTER lease_expires_at,
-					ADD COLUMN next_attempt_at CHAR(30) CHARACTER SET ascii COLLATE ascii_bin NULL AFTER lease_generation`,
-				`ALTER TABLE researchflow_outbox
-					ADD KEY idx_researchflow_outbox_claim (published_at, next_attempt_at, lease_expires_at, created_at)`,
-			},
-		},
-		{
-			Version:     3,
-			Description: "add immutable, fingerprinted Researchflow workflow template versions",
-			Statements: []string{
-				`CREATE TABLE researchflow_workflow_templates (
-					template_ref VARCHAR(255) NOT NULL,
-					version VARCHAR(64) NOT NULL,
-					fingerprint CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-					definition LONGTEXT NOT NULL,
-					created_at CHAR(30) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-					PRIMARY KEY (template_ref, version),
-					KEY idx_researchflow_templates_fingerprint (fingerprint)
-				) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin`,
-			},
-		},
-		{
-			Version:     4,
-			Description: "add transactional Researchflow global capacity guard",
-			Statements: []string{
-				`CREATE TABLE researchflow_capacity_guard (
-					guard_id TINYINT UNSIGNED NOT NULL,
-					PRIMARY KEY (guard_id)
-				) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin`,
-				`INSERT INTO researchflow_capacity_guard (guard_id) VALUES (1)`,
-			},
-		},
-		{
-			Version:     5,
-			Description: "enforce one CreateRun identity record per Run",
-			Statements: []string{
-				`ALTER TABLE researchflow_run_idempotency
-					ADD UNIQUE KEY uq_researchflow_idempotency_run (run_ref)`,
-			},
-		},
-		{
-			Version:     6,
-			Description: "persist immutable, versioned Stage Provider output resources",
-			Statements: []string{
-				`CREATE TABLE researchflow_stage_output_resources (
-					resource_ref VARCHAR(255) NOT NULL,
-					run_ref VARCHAR(255) NOT NULL,
-					stage_ref VARCHAR(255) NOT NULL,
-					attempt_ref VARCHAR(255) NOT NULL,
-					resource_kind VARCHAR(24) NOT NULL,
-					stage_code VARCHAR(128) NOT NULL,
-					template_version VARCHAR(64) NOT NULL,
-					registry_version VARCHAR(64) NOT NULL,
-					registry_fingerprint VARCHAR(80) NOT NULL,
-					output_type VARCHAR(128) NOT NULL,
-					schema_version VARCHAR(64) NOT NULL,
-					schema_ref VARCHAR(512) NOT NULL,
-					content LONGTEXT NOT NULL,
-					created_at CHAR(30) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-					PRIMARY KEY (resource_ref),
-					UNIQUE KEY uq_researchflow_stage_output_attempt_kind (attempt_ref, resource_kind),
-					KEY idx_researchflow_stage_output_run_stage (run_ref, stage_ref),
-				CONSTRAINT chk_researchflow_stage_output_kind CHECK (resource_kind IN ('payload', 'quality_summary')),
-				CONSTRAINT fk_researchflow_stage_output_run FOREIGN KEY (run_ref)
-						REFERENCES researchflow_runs (run_ref),
-				CONSTRAINT fk_researchflow_stage_output_stage FOREIGN KEY (stage_ref, run_ref)
-						REFERENCES researchflow_stages (stage_ref, run_ref),
-				CONSTRAINT fk_researchflow_stage_output_attempt FOREIGN KEY (attempt_ref)
-						REFERENCES researchflow_attempts (attempt_ref)
-				) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin`,
-			},
-		},
-	}
+	}}
 }
