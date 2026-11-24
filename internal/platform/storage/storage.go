@@ -507,7 +507,6 @@ func ValidateAppliedMigrations(ctx context.Context, db *sql.DB, namespace string
 	return nil
 }
 
-
 func requireSingleRowAffected(result sql.Result) error {
 	if result == nil {
 		return errors.New("migration history update returned no result")
