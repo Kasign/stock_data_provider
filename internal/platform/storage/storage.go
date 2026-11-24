@@ -273,6 +273,10 @@ func ApplyMigrations(ctx context.Context, db *sql.DB, namespace string, migratio
 		return dependencyFault("sql", "platform.storage.migration_history_failed", "migration history storage is unavailable", err)
 	}
 
+	if err := validateMigrationHistorySchema(ctx, conn); err != nil {
+		return err
+	}
+
 	applied := make(map[uint64]string)
 	rows, err := conn.QueryContext(ctx, "SELECT version, checksum, status, failure_statement FROM platform_schema_migrations WHERE namespace = ?", namespace)
 	if err != nil {
@@ -382,6 +386,27 @@ func ApplyMigrations(ctx context.Context, db *sql.DB, namespace string, migratio
 	return nil
 }
 
+
+func validateMigrationHistorySchema(ctx context.Context, conn *sql.Conn) error {
+	var totalColumns, expectedColumns int
+	err := conn.QueryRowContext(ctx, `SELECT COUNT(*),
+		COALESCE(SUM(column_name IN (
+			'namespace', 'version', 'description', 'checksum', 'status',
+			'failure_statement', 'started_at', 'finished_at', 'failure_code'
+		)), 0)
+		FROM information_schema.columns
+		WHERE table_schema = DATABASE() AND table_name = 'platform_schema_migrations'`).Scan(&totalColumns, &expectedColumns)
+	if err != nil {
+		return dependencyFault("sql", "platform.storage.migration_history_schema_invalid", "migration history schema could not be inspected", err)
+	}
+	if totalColumns != 9 || expectedColumns != 9 {
+		return fault.New(fault.ClassConflict, "platform.storage.migration_history_schema_invalid",
+			"migration history schema does not match the current baseline; use a new empty database",
+			fmt.Errorf("found %d columns and %d expected columns; want exactly 9", totalColumns, expectedColumns))
+	}
+	return nil
+}
+
 // ValidateAppliedMigrations performs a read-only, namespace-locked verification of
 // the exact registered migration history and checksums. It never creates or
 // upgrades the migration history table and never executes schema DDL.
@@ -446,6 +471,9 @@ func ValidateAppliedMigrations(ctx context.Context, db *sql.DB, namespace string
 		}
 	}()
 
+	if err := validateMigrationHistorySchema(ctx, conn); err != nil {
+		return err
+	}
 	rows, err := conn.QueryContext(ctx, "SELECT version, checksum, status FROM platform_schema_migrations WHERE namespace = ?", namespace)
 	if err != nil {
 		return dependencyFault("sql", "platform.storage.migration_history_failed", "migration history could not be read", err)
