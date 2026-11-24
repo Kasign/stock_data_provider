@@ -254,13 +254,17 @@ if (duplicateRootTokens.length) {
   throw new Error(`Duplicate canonical root tokens: ${duplicateRootTokens.join(", ")}`);
 }
 const requiredVisualTokens = [
-  "--radius", "--radius-lg", "--space-page", "--surface-sidebar", "--surface-topbar",
+  "--radius", "--space-page", "--surface-sidebar", "--surface-topbar",
   "--surface-panel-start", "--surface-panel-end", "--surface-input", "--surface-control",
   "--surface-hover", "--text-heading", "--text-nav", "--focus-ring"
 ];
 const missingVisualTokens = requiredVisualTokens.filter((name) => !rootTokenNames.includes(name));
 if (missingVisualTokens.length) {
   throw new Error(`Missing canonical visual tokens: ${missingVisualTokens.join(", ")}`);
+}
+const unusedRootTokens = rootTokenNames.filter((name) => !css.includes(`var(${name})`));
+if (unusedRootTokens.length) {
+  throw new Error(`Unused canonical root tokens: ${unusedRootTokens.join(", ")}`);
 }
 const missing = sharedSelectors.filter((selector) => !selectorRules.has(selector));
 if (missing.length) throw new Error(`Missing shared shell selectors: ${missing.join(", ")}`);
