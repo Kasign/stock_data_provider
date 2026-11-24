@@ -54,7 +54,7 @@ func TestQuantDataSnapshotAdapterCreatesPITUnadjustedSnapshotForQuantPurpose(t *
 	}
 	got, err := adapter.CreateDailyBarsCloseSeriesSnapshot(context.Background(), quantstage.SnapshotCreateRequest{
 		Symbol: "600036.SH", StartDate: "2026-10-01", EndDate: "2026-10-30",
-		Limit: 20, SystemAsOf: cutoff,
+		Limit: 20, SystemAsOf: cutoff, AllowedProviderCodes: []string{"eastmoney"},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -63,7 +63,8 @@ func TestQuantDataSnapshotAdapterCreatesPITUnadjustedSnapshotForQuantPurpose(t *
 		stub.createQuery.Symbol != "600036.SH" || stub.createQuery.StartDate != "2026-10-01" ||
 		stub.createQuery.EndDate != "2026-10-30" || stub.createQuery.Limit != 20 ||
 		stub.createQuery.AdjustmentBasis != marketdataapp.AdjustmentNone ||
-		stub.createQuery.SystemObservedAtCutoff == nil || !stub.createQuery.SystemObservedAtCutoff.Equal(cutoff) {
+		stub.createQuery.SystemObservedAtCutoff == nil || !stub.createQuery.SystemObservedAtCutoff.Equal(cutoff) ||
+		len(stub.createQuery.AllowedProviderCodes) != 1 || stub.createQuery.AllowedProviderCodes[0] != "eastmoney" {
 		t.Fatalf("Data Snapshot query/purpose mismatch: %+v purpose=%q", stub.createQuery, stub.createPurpose)
 	}
 	if got.SnapshotRef != stub.createRefs.SnapshotRef || got.AuthorizationRef != stub.createRefs.AuthorizationRef {
