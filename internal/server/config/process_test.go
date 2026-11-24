@@ -37,8 +37,13 @@ func TestLoadProcessDefaults(t *testing.T) {
 
 func TestLoadProcessWorkerSkipsHTTPAndSecurity(t *testing.T) {
 	env := platformconfig.NewEnvWithLookup(func(key string) (string, bool) {
-		if key == "SERVER_ROLE" {
+		switch key {
+		case "SERVER_ROLE":
 			return "worker", true
+		case "PLATFORM_SERVICE_CREDENTIALS":
+			return `[{"name":"researchflow-worker","token_env":"RESEARCHFLOW_WORKER_TOKEN","scopes":["data:read"]}]`, true
+		case "RESEARCHFLOW_WORKER_TOKEN":
+			return "0123456789abcdef0123456789abcdef", true
 		}
 		if value, ok := relayRequiredTestValues[key]; ok {
 			return value, true
@@ -49,7 +54,9 @@ func TestLoadProcessWorkerSkipsHTTPAndSecurity(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadProcess() error = %v", err)
 	}
-	if cfg.Role != RoleWorker || cfg.HTTP.Address != "" || cfg.Security.OwnerToken.Configured() || cfg.NewsRetention.Interval != 5*time.Minute || cfg.NewsRetention.BatchSize != 100 {
+	if cfg.Role != RoleWorker || cfg.HTTP.Address != "" || cfg.Security.OwnerToken.Configured() ||
+		len(cfg.Security.ServiceCredentials) != 1 || cfg.Security.ServiceCredentials[0].Name != "researchflow-worker" ||
+		cfg.NewsRetention.Interval != 5*time.Minute || cfg.NewsRetention.BatchSize != 100 {
 		t.Fatalf("worker process unexpectedly loaded HTTP/security config: %+v", cfg)
 	}
 }
