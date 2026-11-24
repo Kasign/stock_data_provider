@@ -7,8 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"sort"
-	"strings"
 	"time"
 
 	marketdataapplication "example.com/stock-analysis-flow/internal/marketdata/application"
@@ -52,8 +50,7 @@ func newQuantSMA20StageComposition(
 		return nil, errors.New("Quant SMA20 Stage requires the Data Module and shared MariaDB")
 	}
 	providers := dataModule.ProviderSummary().DailyBars
-	sort.Strings(providers)
-	if !containsString(providers, quantstage.SMA20ProviderCode) {
+	if !containsQuantProviderCode(providers, quantstage.SMA20ProviderCode) {
 		return nil, nil
 	}
 	dataAdapter, err := newQuantDataSnapshotAdapter(dataModule)
@@ -84,13 +81,13 @@ func newQuantSMA20StageComposition(
 		SchemaVersion: quantstage.SMA20SchemaVersion,
 		PayloadSchemaRef: quantSMA20PayloadSchemaRef,
 		QualitySummarySchemaRef: quantSMA20QualitySchemaRef,
-		PayloadValidator: stageoutput.ValidatorFunc(quantstage.ValidateSMA20OutputJSON),
-		QualitySummaryValidator: stageoutput.ValidatorFunc(quantstage.ValidateSMA20QualitySummaryJSON),
+		PayloadValidator: stageoutput.ValidatorFunc(func(value json.RawMessage) error { return quantstage.ValidateSMA20OutputJSON(value) }),
+		QualitySummaryValidator: stageoutput.ValidatorFunc(func(value json.RawMessage) error { return quantstage.ValidateSMA20QualitySummaryJSON(value) }),
 	}})
 	if err != nil {
 		return nil, fmt.Errorf("create Quant SMA20 Output Registry: %w", err)
 	}
-	parameterSchemas, err := newQuantSMA20ParameterSchemaValidator()
+	parameterSchemas, err := newResearchflowParameterSchemaValidator()
 	if err != nil {
 		return nil, fmt.Errorf("create Quant SMA20 parameter Schema Validator: %w", err)
 	}
