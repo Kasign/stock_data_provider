@@ -170,7 +170,7 @@ func TestBuildQuantSMA20WorkflowTemplateFreezesParametersResourcePolicyAndOutput
 		SchemaVersion:           quantstage.SMA20SchemaVersion,
 		PayloadSchemaRef:        quantSMA20PayloadSchemaRef,
 		QualitySummarySchemaRef: quantSMA20QualitySchemaRef,
-		PayloadValidator:        stageoutput.ValidatorFunc(quantstage.ValidateSMA20OutputJSON),
+		PayloadValidator:        stageoutput.ValidatorFunc(func(value json.RawMessage) error { return quantstage.ValidateSMA20OutputJSON(value) }),
 		QualitySummaryValidator: stageoutput.ValidatorFunc(func(value json.RawMessage) error { return quantstage.ValidateSMA20QualitySummaryJSON(value) }),
 	}})
 	if err != nil {
