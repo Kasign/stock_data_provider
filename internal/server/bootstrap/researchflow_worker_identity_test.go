@@ -47,7 +47,7 @@ func (f stageExecutorFunc) ExecuteStage(ctx context.Context, request researchflo
 }
 
 func TestPrincipalStageExecutorInjectsTrustedServiceIdentity(t *testing.T) {
-	principal, err := platformsecurity.NewServicePrincipal(platformsecurity.ServiceCredential{
+	principal, err := platformsecurity.PrincipalFromServiceCredential(platformsecurity.ServiceCredential{
 		Name: "researchflow-worker",
 		Secret: platformconfig.NewEnvWithLookup(func(string) (string, bool) {
 			return "0123456789abcdef0123456789abcdef", true
