@@ -12,15 +12,15 @@ import (
 )
 
 type quantDataSnapshotPortStub struct {
-	createRefs   marketdataapplication.DailyBarsCloseSeriesSnapshotReferences
-	createQuery  marketdataapp.DailyBarsQuery
+	createRefs    marketdataapplication.DailyBarsCloseSeriesSnapshotReferences
+	createQuery   marketdataapp.DailyBarsQuery
 	createPurpose string
-	createErr    error
-	readSnapshot marketdataapp.DailyBarsCloseSeriesSnapshot
-	readRef      string
-	readAuthRef  string
-	readPurpose  string
-	readErr      error
+	createErr     error
+	readSnapshot  marketdataapp.DailyBarsCloseSeriesSnapshot
+	readRef       string
+	readAuthRef   string
+	readPurpose   string
+	readErr       error
 }
 
 func (stub *quantDataSnapshotPortStub) CreateDailyBarsCloseSeriesSnapshot(_ context.Context, query marketdataapp.DailyBarsQuery, purpose string) (marketdataapplication.DailyBarsCloseSeriesSnapshotReferences, error) {
@@ -44,7 +44,7 @@ func TestQuantDataSnapshotAdapterCreatesPITUnadjustedSnapshotForQuantPurpose(t *
 	cutoff := time.Date(2026, 11, 20, 8, 0, 0, 0, time.UTC)
 	stub := &quantDataSnapshotPortStub{
 		createRefs: marketdataapplication.DailyBarsCloseSeriesSnapshotReferences{
-			SnapshotRef: "data_snapshot:sha256:" + strings.Repeat("a", 64),
+			SnapshotRef:      "data_snapshot:sha256:" + strings.Repeat("a", 64),
 			AuthorizationRef: "data_authorization:sha256:" + strings.Repeat("b", 64),
 		},
 	}
@@ -131,7 +131,7 @@ func validQuantDataCloseSeriesSnapshot(t *testing.T) marketdataapp.DailyBarsClos
 		bars[index] = marketdataapp.DailyBar{
 			Symbol: query.Symbol, TradeDate: date, Period: "1d",
 			AdjustmentBasis: marketdataapp.AdjustmentNone,
-			Source: "eastmoney", SourceVersion: "eastmoney-stock-api-v1",
+			Source:          "eastmoney", SourceVersion: "eastmoney-stock-api-v1",
 			FetchedAt: cutoff.Add(-2 * time.Minute), NormalizedAt: observed,
 			SystemObservedAt: &observed, NormalizationVersion: "4",
 			QualityStatus: marketdataapp.QualityValid,

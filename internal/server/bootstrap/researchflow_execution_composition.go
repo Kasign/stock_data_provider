@@ -19,18 +19,18 @@ import (
 // researchflowComposition contains shared execution dependencies. Owner Session
 // identity remains outside this composition so Worker-only processes can assemble it.
 type researchflowComposition struct {
-	newsStage        *newsSearchStageComposition
-	quantStage       *quantSMA20StageComposition
-	runRepository    *researchflowstorage.MySQLRunRepository
-	templateRegistry *researchflowstorage.MySQLTemplateRegistry
+	newsStage         *newsSearchStageComposition
+	quantStage        *quantSMA20StageComposition
+	runRepository     *researchflowstorage.MySQLRunRepository
+	templateRegistry  *researchflowstorage.MySQLTemplateRegistry
 	workflowTemplates []template.WorkflowTemplate
-	resourcePolicies researchflowapplication.ResourcePolicyResolver
-	parameterSchemas *parameterschema.Validator
-	applicability    template.ApplicabilityEvaluator
-	outputRegistries researchflowapplication.StageOutputRegistryResolver
-	stageExecutor    researchflowapplication.StageExecutor
-	clock            *researchflowstorage.MySQLDatabaseClock
-	ids              researchflowapplication.IDGenerator
+	resourcePolicies  researchflowapplication.ResourcePolicyResolver
+	parameterSchemas  *parameterschema.Validator
+	applicability     template.ApplicabilityEvaluator
+	outputRegistries  researchflowapplication.StageOutputRegistryResolver
+	stageExecutor     researchflowapplication.StageExecutor
+	clock             *researchflowstorage.MySQLDatabaseClock
+	ids               researchflowapplication.IDGenerator
 }
 
 func newResearchflowComposition(
@@ -111,7 +111,7 @@ func newResearchflowComposition(
 		return nil, fmt.Errorf("create immutable Researchflow Stage Output Registry set: %w", err)
 	}
 	stageExecutor := researchflowStageDispatcher{
-		news: newsStage.executor,
+		news:  newsStage.executor,
 		quant: quantExecutor,
 	}
 
@@ -159,7 +159,7 @@ func (c *researchflowComposition) publishWorkflowTemplate(ctx context.Context) e
 
 // configuredResourcePolicyResolver snapshots only provider instances assembled by Server.
 type configuredResourcePolicyResolver struct {
-	registry            *resourcepolicy.Registry
+	registry           *resourcepolicy.Registry
 	providerCodesByRef map[string][]string
 }
 

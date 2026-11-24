@@ -15,10 +15,10 @@ const (
 	newsSearchParameterSchemaVersion = "1.0.0"
 	newsSearchApplicabilityRuleRef   = "news.search_candidates.always"
 	newsSearchApplicabilityVersion   = "1.0.0"
-	quantSMA20ParameterSchemaRef = "doc/researchflow/schema/quant-sma20-parameters-1.0.0.schema.json"
+	quantSMA20ParameterSchemaRef     = "doc/researchflow/schema/quant-sma20-parameters-1.0.0.schema.json"
 	quantSMA20ParameterSchemaVersion = "1.0.0"
-	quantSMA20ApplicabilityRuleRef = "quant.sma20.always"
-	quantSMA20ApplicabilityVersion = "1.0.0"
+	quantSMA20ApplicabilityRuleRef   = "quant.sma20.always"
+	quantSMA20ApplicabilityVersion   = "1.0.0"
 )
 
 var ErrUnsupportedNewsSearchApplicabilityRule = errors.New("unsupported News Search applicability rule")
@@ -95,7 +95,6 @@ func (newsSearchApplicabilityEvaluator) Evaluate(
 	}
 	return true, "", nil
 }
-
 
 const quantSMA20ParameterSchemaDocument = `{
   "$schema": "https://json-schema.org/draft/2020-12/schema",

@@ -41,7 +41,7 @@ func (adapter *quantDataSnapshotAdapter) CreateDailyBarsCloseSeriesSnapshot(
 		Symbol: request.Symbol, StartDate: request.StartDate, EndDate: request.EndDate,
 		Limit: request.Limit, AdjustmentBasis: marketdataapp.AdjustmentNone,
 		SystemObservedAtCutoff: &cutoff,
-		AllowedProviderCodes: append([]string(nil), request.AllowedProviderCodes...),
+		AllowedProviderCodes:   append([]string(nil), request.AllowedProviderCodes...),
 	}, quantstage.SMA20PurposeCode)
 	if err != nil {
 		return quantstage.SnapshotReferences{}, fmt.Errorf("Data CreateDailyBarsCloseSeriesSnapshot: %w", err)
@@ -91,26 +91,26 @@ func (adapter *quantDataSnapshotAdapter) ReadAuthorizedCloseSeriesSnapshot(
 		}
 	}
 	return quantapplication.CloseSeriesSnapshot{
-		SnapshotRef: manifest.SnapshotRef,
+		SnapshotRef:           manifest.SnapshotRef,
 		ManifestSchemaVersion: manifest.SchemaVersion,
-		PayloadSchemaVersion: payload.SchemaVersion,
-		PayloadKind: payload.PayloadKind,
-		CallerRef: manifest.CallerRef,
-		PurposeCode: manifest.PurposeCode,
-		Sources: sources,
-		Symbol: manifest.Symbol,
-		StartDate: manifest.StartDate,
-		EndDate: manifest.EndDate,
-		AdjustmentBasis: string(manifest.AdjustmentBasis),
-		SystemAsOf: manifest.SystemAsOf,
-		Interval: payload.Interval,
-		TradingCalendarRef: payload.TradingCalendarRef,
-		QualityStatus: string(payload.QualityStatus),
+		PayloadSchemaVersion:  payload.SchemaVersion,
+		PayloadKind:           payload.PayloadKind,
+		CallerRef:             manifest.CallerRef,
+		PurposeCode:           manifest.PurposeCode,
+		Sources:               sources,
+		Symbol:                manifest.Symbol,
+		StartDate:             manifest.StartDate,
+		EndDate:               manifest.EndDate,
+		AdjustmentBasis:       string(manifest.AdjustmentBasis),
+		SystemAsOf:            manifest.SystemAsOf,
+		Interval:              payload.Interval,
+		TradingCalendarRef:    payload.TradingCalendarRef,
+		QualityStatus:         string(payload.QualityStatus),
 		Coverage: quantapplication.CloseSeriesCoverageEvidence{
 			CalendarQualityStatus: string(payload.CoverageEvidence.CalendarQualityStatus),
-			ExpectedTradingDays: payload.CoverageEvidence.ExpectedTradingDays,
-			MinimumRequiredBars: payload.CoverageEvidence.MinimumRequiredBars,
-			CoverageSufficient: payload.CoverageEvidence.CoverageSufficient,
+			ExpectedTradingDays:   payload.CoverageEvidence.ExpectedTradingDays,
+			MinimumRequiredBars:   payload.CoverageEvidence.MinimumRequiredBars,
+			CoverageSufficient:    payload.CoverageEvidence.CoverageSufficient,
 		},
 		Bars: bars,
 	}, nil

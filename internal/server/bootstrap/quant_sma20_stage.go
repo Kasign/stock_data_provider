@@ -13,8 +13,8 @@ import (
 	marketdatabootstrap "example.com/stock-analysis-flow/internal/marketdata/bootstrap"
 	quantapplication "example.com/stock-analysis-flow/internal/quant/application"
 	quantregistry "example.com/stock-analysis-flow/internal/quant/registry"
-	quantstorage "example.com/stock-analysis-flow/internal/quant/storage"
 	quantstage "example.com/stock-analysis-flow/internal/quant/stage"
+	quantstorage "example.com/stock-analysis-flow/internal/quant/storage"
 	researchflowapplication "example.com/stock-analysis-flow/internal/researchflow/application"
 	researchflowdomain "example.com/stock-analysis-flow/internal/researchflow/domain"
 	"example.com/stock-analysis-flow/internal/researchflow/parameterschema"
@@ -26,20 +26,20 @@ import (
 
 const (
 	quantSMA20StageOutputRegistryVersion = "1.1.0"
-	quantSMA20PayloadSchemaRef = "doc/quant/schema/QNT-CTR-005-sma20-stage-output-1.0.0.schema.json"
-	quantSMA20QualitySchemaRef = "doc/quant/schema/QNT-CTR-005-sma20-quality-summary-1.0.0.schema.json"
-	quantSMA20WorkflowTemplateRef = "quant.sma20"
-	quantSMA20WorkflowTemplateVersion = "1.0.0"
-	quantSMA20RetryPolicyRef = "quant.sma20.retry@1.0.0"
+	quantSMA20PayloadSchemaRef           = "doc/quant/schema/QNT-CTR-005-sma20-stage-output-1.0.0.schema.json"
+	quantSMA20QualitySchemaRef           = "doc/quant/schema/QNT-CTR-005-sma20-quality-summary-1.0.0.schema.json"
+	quantSMA20WorkflowTemplateRef        = "quant.sma20"
+	quantSMA20WorkflowTemplateVersion    = "1.0.0"
+	quantSMA20RetryPolicyRef             = "quant.sma20.retry@1.0.0"
 )
 
 type quantSMA20StageComposition struct {
-	adapter *quantstage.SMA20Adapter
-	executor researchflowapplication.StageExecutor
-	registry *stageoutput.Registry
+	adapter          *quantstage.SMA20Adapter
+	executor         researchflowapplication.StageExecutor
+	registry         *stageoutput.Registry
 	parameterSchemas *parameterschema.Validator
-	applicability template.ApplicabilityEvaluator
-	providerCodes []string
+	applicability    template.ApplicabilityEvaluator
+	providerCodes    []string
 }
 
 func newQuantSMA20StageComposition(
@@ -76,12 +76,12 @@ func newQuantSMA20StageComposition(
 		return nil, fmt.Errorf("create Quant SMA20 Stage Adapter: %w", err)
 	}
 	registry, err := stageoutput.NewRegistry(quantSMA20StageOutputRegistryVersion, []stageoutput.Entry{{
-		StageCode: quantstage.SMA20StageCode,
-		OutputType: quantstage.SMA20OutputType,
-		SchemaVersion: quantstage.SMA20SchemaVersion,
-		PayloadSchemaRef: quantSMA20PayloadSchemaRef,
+		StageCode:               quantstage.SMA20StageCode,
+		OutputType:              quantstage.SMA20OutputType,
+		SchemaVersion:           quantstage.SMA20SchemaVersion,
+		PayloadSchemaRef:        quantSMA20PayloadSchemaRef,
 		QualitySummarySchemaRef: quantSMA20QualitySchemaRef,
-		PayloadValidator: stageoutput.ValidatorFunc(func(value json.RawMessage) error { return quantstage.ValidateSMA20OutputJSON(value) }),
+		PayloadValidator:        stageoutput.ValidatorFunc(func(value json.RawMessage) error { return quantstage.ValidateSMA20OutputJSON(value) }),
 		QualitySummaryValidator: stageoutput.ValidatorFunc(func(value json.RawMessage) error { return quantstage.ValidateSMA20QualitySummaryJSON(value) }),
 	}})
 	if err != nil {
@@ -92,12 +92,12 @@ func newQuantSMA20StageComposition(
 		return nil, fmt.Errorf("create Quant SMA20 parameter Schema Validator: %w", err)
 	}
 	return &quantSMA20StageComposition{
-		adapter: adapter,
-		executor: quantSMA20StageExecutor{adapter: adapter},
-		registry: registry,
+		adapter:          adapter,
+		executor:         quantSMA20StageExecutor{adapter: adapter},
+		registry:         registry,
 		parameterSchemas: parameterSchemas,
-		applicability: quantSMA20ApplicabilityEvaluator{},
-		providerCodes: []string{quantstage.SMA20ProviderCode},
+		applicability:    quantSMA20ApplicabilityEvaluator{},
+		providerCodes:    []string{quantstage.SMA20ProviderCode},
 	}, nil
 }
 
@@ -118,7 +118,7 @@ func buildQuantSMA20WorkflowTemplate(stage *quantSMA20StageComposition, policies
 		return template.WorkflowTemplate{}, fmt.Errorf("validate Quant SMA20 parameter Schema: %w", err)
 	}
 	applicable, reason, err := stage.applicability.Evaluate(context.Background(), template.ApplicabilityRule{
-		RuleRef: quantSMA20ApplicabilityRuleRef, RuleVersion: quantSMA20ApplicabilityVersion,
+		RuleRef:     quantSMA20ApplicabilityRuleRef, RuleVersion: quantSMA20ApplicabilityVersion,
 	}, parameters)
 	if err != nil || !applicable || reason != "" {
 		return template.WorkflowTemplate{}, fmt.Errorf("evaluate Quant SMA20 applicability rule: %w", err)
@@ -131,34 +131,34 @@ func buildQuantSMA20WorkflowTemplate(stage *quantSMA20StageComposition, policies
 	}
 	propagation := template.PropagationPolicy{
 		OnDegraded: researchflowdomain.PropagateAccept,
-		OnSkipped: researchflowdomain.PropagateFail,
-		OnFailed: researchflowdomain.PropagateFail,
+		OnSkipped:  researchflowdomain.PropagateFail,
+		OnFailed:   researchflowdomain.PropagateFail,
 		OnTimedOut: researchflowdomain.PropagateFail,
-		OnBlocked: researchflowdomain.PropagateFail,
+		OnBlocked:  researchflowdomain.PropagateFail,
 	}
 	value := template.WorkflowTemplate{
-		Ref: quantSMA20WorkflowTemplateRef,
-		Version: quantSMA20WorkflowTemplateVersion,
-		RequiresHardRiskGate: false,
-		AllowEmptyInputs: true,
-		ParameterSchemaRef: quantSMA20ParameterSchemaRef,
+		Ref:                   quantSMA20WorkflowTemplateRef,
+		Version:               quantSMA20WorkflowTemplateVersion,
+		RequiresHardRiskGate:  false,
+		AllowEmptyInputs:      true,
+		ParameterSchemaRef:    quantSMA20ParameterSchemaRef,
 		OutputRegistryVersion: stage.registry.Version(),
-		ResourcePolicyRef: resourcepolicy.QuantDailyBarsProvidersRef,
+		ResourcePolicyRef:     resourcepolicy.QuantDailyBarsProvidersRef,
 		Stages: []template.StageDefinition{{
-			Code: quantstage.SMA20StageCode,
-			Required: true,
+			Code:         quantstage.SMA20StageCode,
+			Required:     true,
 			Dependencies: []string{},
-			Priority: 0,
+			Priority:     0,
 			Applicability: template.ApplicabilityRule{
 				RuleRef: quantSMA20ApplicabilityRuleRef,
 				RuleVersion: quantSMA20ApplicabilityVersion,
 			},
 			Retry: template.RetryPolicy{
-				Ref: quantSMA20RetryPolicyRef,
-				MaxAttempts: 1,
+				Ref:                  quantSMA20RetryPolicyRef,
+				MaxAttempts:          1,
 				RetryableReasonCodes: []string{},
-				Backoff: template.BackoffPolicy{Algorithm: "exponential_full_jitter_v1", BaseDelayMS: 100, MaxDelayMS: 1000},
-				AttemptTimeoutMS: 120000,
+				Backoff:              template.BackoffPolicy{Algorithm: "exponential_full_jitter_v1", BaseDelayMS: 100, MaxDelayMS: 1000},
+				AttemptTimeoutMS:     120000,
 			},
 			Propagation: propagation,
 		}},
@@ -170,10 +170,10 @@ func buildQuantSMA20WorkflowTemplate(stage *quantSMA20StageComposition, policies
 }
 
 type quantSMA20StageParameters struct {
-	Symbol string `json:"symbol"`
+	Symbol    string `json:"symbol"`
 	StartDate string `json:"start_date"`
-	EndDate string `json:"end_date"`
-	Limit int `json:"limit"`
+	EndDate   string `json:"end_date"`
+	Limit     int    `json:"limit"`
 }
 
 type quantSMA20StageExecutor struct {
@@ -203,14 +203,14 @@ func (executor quantSMA20StageExecutor) ExecuteStage(ctx context.Context, reques
 		case errors.Is(err, context.DeadlineExceeded):
 			return researchflowapplication.StageExecutionResult{
 				AttemptStatus: researchflowdomain.AttemptTimedOut,
-				StageStatus: researchflowdomain.StageTimedOut,
-				ReasonCodes: []string{"quant_sma20_deadline_exceeded"},
+				StageStatus:   researchflowdomain.StageTimedOut,
+				ReasonCodes:   []string{"quant_sma20_deadline_exceeded"},
 			}, nil
 		case errors.Is(err, context.Canceled):
 			return researchflowapplication.StageExecutionResult{
 				AttemptStatus: researchflowdomain.AttemptCancelled,
-				StageStatus: researchflowdomain.StageCancelled,
-				ReasonCodes: []string{"quant_sma20_cancelled"},
+				StageStatus:   researchflowdomain.StageCancelled,
+				ReasonCodes:   []string{"quant_sma20_cancelled"},
 			}, nil
 		case errors.Is(err, marketdataapplication.ErrDataAuthorizationDenied):
 			return failedQuantSMA20Stage("data_authorization_denied"), nil
@@ -227,25 +227,25 @@ func (executor quantSMA20StageExecutor) ExecuteStage(ctx context.Context, reques
 		return failedQuantSMA20Stage("quant_sma20_quality_encoding_failed"), nil
 	}
 	providerResult := &stageoutput.ProviderResult{
-		OutputType: quantstage.SMA20OutputType,
-		SchemaVersion: quantstage.SMA20SchemaVersion,
-		Payload: payload,
+		OutputType:     quantstage.SMA20OutputType,
+		SchemaVersion:  quantstage.SMA20SchemaVersion,
+		Payload:        payload,
 		QualitySummary: qualityJSON,
 		DiagnosticRefs: []string{},
 	}
 	switch output.MetricStatus {
 	case "available":
 		return researchflowapplication.StageExecutionResult{
-			AttemptStatus: researchflowdomain.AttemptSucceeded,
-			StageStatus: researchflowdomain.StageSucceeded,
+			AttemptStatus:  researchflowdomain.AttemptSucceeded,
+			StageStatus:    researchflowdomain.StageSucceeded,
 			ProviderResult: providerResult,
 		}, nil
 	case "insufficient_data":
 		return researchflowapplication.StageExecutionResult{
-			AttemptStatus: researchflowdomain.AttemptDegraded,
-			StageStatus: researchflowdomain.StageDegraded,
+			AttemptStatus:  researchflowdomain.AttemptDegraded,
+			StageStatus:    researchflowdomain.StageDegraded,
 			ProviderResult: providerResult,
-			ReasonCodes: []string{"quant_sma20_insufficient_data"},
+			ReasonCodes:    []string{"quant_sma20_insufficient_data"},
 		}, nil
 	default:
 		return failedQuantSMA20Stage("quant_sma20_result_status_invalid"), nil
@@ -272,8 +272,8 @@ func resolveQuantDailyBarsProviders(snapshot resourcepolicy.Snapshot) ([]string,
 func failedQuantSMA20Stage(reasonCode string) researchflowapplication.StageExecutionResult {
 	return researchflowapplication.StageExecutionResult{
 		AttemptStatus: researchflowdomain.AttemptFailed,
-		StageStatus: researchflowdomain.StageFailed,
-		ReasonCodes: []string{reasonCode},
+		StageStatus:   researchflowdomain.StageFailed,
+		ReasonCodes:   []string{reasonCode},
 	}
 }
 
