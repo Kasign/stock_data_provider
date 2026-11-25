@@ -345,7 +345,7 @@ func TestIngestCandidateReportsCanonicalURLHashCollision(t *testing.T) {
 	repository := &memoryIdentityRepository{
 		newsItems: []domain.NewsItem{{
 			ID: "existing-news", CanonicalURL: "https://news.example/different",
-			CanonicalURLHash: canonicalHashForTest(candidateURL),
+			CanonicalURLHash:   canonicalHashForTest(candidateURL),
 			ContentFingerprint: strings.Repeat("0", 64),
 		}},
 	}
