@@ -1264,4 +1264,5 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - Python Bridge 的内部调用方只有该 Go Core 运行链；反向 `python_bridge/go_core_client.py` 在仓库内无业务调用方且默认关闭。Bridge Dockerfile 还引用当前仓库不存在的根 `requirements.txt`。
 - 本组删除 Go Core、Python Bridge、专属内部 OpenAPI 契约及失效的专用迁移验证脚本；同步清理 Go Test Suite / Integration CI 中 go-core 专项矩阵、测试、vet 和汇总项。根模块及其他模块验收保持原标准。
 - 明确不处理 `internal/adapters/pythonapi/**`：它是独立 Python API 链路，旧 Analysis 代码仍有构造入口；也不处理 Root Server 旧 Analysis API/Task Queue/Worker 和 WebUI 旧 API 调用。
-- 当前状态：本组代码与 CI 配置已整理为单一提交候选；提交后必须对精确 SHA 执行 Go Test Suite 与 Integration CI。CI 未完成前不标记完整验收。
+- 文档补充：已从 `doc/api/contracts/数据层API清单.md` 移除已退役的 Python Bridge OpenAPI 权威契约引用，明确该内部契约不属于当前 API。Go Test Suite 与 Integration CI 的路径过滤增加 `doc/api/contracts/**`，使后续契约文档变更触发完整验收。
+- 代码验收：Go Test Suite Run [45535407664](https://github.com/Kasign/stock_data_provider/actions/runs/45535407664) 与 Integration CI Run [45535407708](https://github.com/Kasign/stock_data_provider/actions/runs/45535407708) 均对精确 SHA `1d82626c1501858736b98cc1525dfb29cccd5f03` completed/success。下一提交包含文档与 CI 路径触发调整，仍需在最终 SHA 上复验。

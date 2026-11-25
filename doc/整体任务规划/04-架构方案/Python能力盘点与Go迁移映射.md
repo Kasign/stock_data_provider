@@ -428,7 +428,7 @@ Go/Python 对照不是要求逐字节或所有数值完全一致。每项差异�
 ### 退役范围
 
 - 删除 `go-core/**` 和 `python_bridge/**`，不保留 Bridge Client、Fallback、业务 Adapter 或兼容服务。
-- 删除仅描述这条内部网络的 `doc/api/contracts/Python桥接.openapi.yaml`。
+- 删除仅描述这条内部网络的 `doc/api/contracts/Python桥接.openapi.yaml`；同时清理 Data API 清单中的失效契约引用。
 - 删除已失去目标模块且还引用不存在的历史 `services/market-data` 路径的 `scripts/verify-go-migration.sh`。
 - 从 Go Test Suite / Integration CI 移除 go-core 路径触发、模块矩阵、专属测试与汇总项；不降低根模块及其他现存模块的测试标准。
 

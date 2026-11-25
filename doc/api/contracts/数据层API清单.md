@@ -120,7 +120,7 @@
 
 - 行情服务 OpenAPI：internal/marketdata/httpapi/openapi.yaml（代码内权威协议，不迁移到文档目录）。
 - 分析任务 OpenAPI：doc/api/contracts/分析任务.openapi.yaml。
-- Python 桥接 OpenAPI：doc/api/contracts/Python桥接.openapi.yaml。
+- Python Bridge 内部契约已于 2026-11-25 随独立 Go Core / Python Bridge 旧运行链退役，不再属于当前 API 契约。
 - WebUI 实际请求实现：web/src/api.js。
 - 行情服务路由注册：internal/marketdata/httpapi/server.go。
 
