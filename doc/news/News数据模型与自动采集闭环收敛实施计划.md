@@ -212,3 +212,64 @@
 5. 每个功能组完成测试、更新文档后再提交；只操作 `repair_all`。
 
 当前进度：P0-1 已完成核心 Schema/Repository/Research/PIT/关系表/Server Source 生产装配的定点核查；Diagnostics 和 Schema 测试清单收尾后进入 P0-2。
+
+
+## 9. P0-1 第二轮依赖审计记录（2026-11-25）
+
+### 9.1 表级消费者审计
+
+当前 News Migration V1 一次创建 14 张表（不是历史文档中出现的 V1-V10 多版本迁移）。按现有 SQL、Repository 和 Application 生产组合核对：
+
+| 表 | 已确认用途 | 当前处理决定 |
+|---|---|---|
+| `news_items` | Identity 创建主体；Version/PIT 查询通过 news_id 定位 | 保留并扩展为完整新闻主体；删除仅表达首次来源的 origin_source_id |
+| `news_identifiers` | 来源身份解析、身份写入 | 保留，只存 source-native-id；规范 URL 移到 news_items 全局唯一字段 |
+| `news_observations` | 发现记录、版本来源、PIT 时间可见性、Retention | 保留并精简候选载荷，不存长期完整正文副本 |
+| `news_item_versions` | Research Evidence Query、PIT、Availability Evidence/Decision 均引用 version_id | 保留为不可变内容历史快照；主体当前内容同时写入 news_items |
+| `news_relation_assertions` | 只由 ApplyResearchUpdate 的新闻-证券/行业关系职责读写 | 从 News 移除；News 不负责证券/行业关联 |
+| `news_relation_evidence` | 只服务上述关系断言 | 随关系断言一起移除 |
+| `news_item_relations` | News 内转载关系 Application/Repository/查询实现；Server/Research/Researchflow/Quant 当前组合未发现消费者 | 不做自动转载识别；删除该表及未接入生产的关系用例 |
+| `news_identifier_status_history` | 只供 ResolveIdentityAt 历史身份查询；Server 当前无生产装配/调用 | 删除；本任务不保留历史身份兼容 |
+| `news_authorization_snapshots` | 当前授权复核与历史授权快照读取 | 保留 |
+| `news_evidence_snapshots` | Research Evidence 分页快照和过期清理 | 保留 |
+| `news_policy_versions` | Source/Endpoint/Provider 策略不可变版本 | 保留 |
+| `news_current_policy_versions` | 当前策略指针和采集前/写入时策略复核 | 保留 |
+| `news_version_availability_evidence` | PIT 首次可获得时间证据 | 保留 |
+| `news_version_availability_decisions` | PIT 可用时间决策历史 | 保留 |
+
+### 9.2 已确认调用边界
+
+- Research 的 `internal/research/adapters/news/evidence.go` 通过 News `ResearchEvidenceQuery` 读取指定 `NewsID + VersionID`，将版本内容作为 Research Evidence。Research 不直接读写 News 表。
+- PIT SQL 从 `news_item_versions` 与 `news_observations` 读取版本及其 Observation，并关联 Availability Evidence/Decision；版本和 Observation 的身份及时间语义必须保留。
+- `ApplyResearchUpdate` 把版本追加和证券/行业关系断言写入同一用例，但当前 Server 组合根没有构造该用例；关系断言不是 News 当前生产采集链路的一部分。
+- `ApplyNewsItemRelation`、转载关系历史查询及对应 Repository 当前只在 News 自身实现中存在，Server/Research/Researchflow/Quant 没有生产装配点。
+- `ResolveIdentityAt` 与 `news_identifier_status_history` 只形成 News 内部历史查询能力，当前 Server 没有生产装配点；本次允许移除。
+- Server 已装配 Provider SearchCandidates Stage，但该 Stage 只产出 Researchflow StageOutput，不自动创建正式 News。
+- Server 当前没有装配 `StaticSourceCatalog`、`NewPlatformEndpointTransport`、`CollectSource`、`IngestCollectedSource`。Feed 采集不存在生产调用路径。
+
+### 9.3 来源配置和策略装配缺口
+
+- `internal/news/config.Config` 当前只有 Bocha/Tavily/Brave/SearXNG Provider 配置及 Evidence Cursor Key Ring，没有 Source/Endpoint 注册配置。
+- `StaticSourceCatalog` 已存在，但要求启动时提供非空、可信的 Source/Endpoint 注册快照。
+- Source Endpoint Transport 已能基于 Platform HTTP Client 创建逐 Endpoint 传输器；当前 Server 没有构造/注入。
+- Source Collection 依赖数据库当前 Source/Endpoint Policy 版本；Storage Resolver 已存在。
+- `PublishNewsPolicyVersion` Application 和 Storage Writer 已存在，但当前 Server 没有生产启动装配；策略目录也没有实际配置来源。
+- Provider Output Policy 静态目录和 Provider Candidate Ingest 用例存在，但当前 Server 没有生产装配；Provider Search Stage 仍只产出候选。
+
+因此 P0-4 不能只把 CollectSource 构造器接到 Server。必须同时解决最小可信 Source/Endpoint 配置和策略版本初始化。当前不新增来源管理数据库、管理 API 或动态配置中心；优先采用启动配置形成不可变目录快照，并在启动时校验/发布对应不可变策略版本。配置字段以实际 Source/Endpoint 结构为准，避免引入重复策略字段。
+
+### 9.4 数据模型进一步收敛决定
+
+- `news_items.origin_source_id` 当前只在 CreateNewsItem 写入，并用于来源创建时间索引；跨来源 URL 合并后它不能表达完整来源集合，真实来源已由 `news_identifiers` 和 `news_observations` 表达，因此删除该字段及索引。
+- `news_identifiers` 不再保留 normalized-url 类型、identifier_status 和身份状态历史。只保存来源原生文章 ID 与 news_id 的当前映射，来源范围内唯一。
+- 全局规范 URL 放在 `news_items`，唯一索引允许 NULL。不同来源命中相同规范 URL 时映射到同一 news_id，并各自保存来源原生 ID。
+- URL 和来源原生 ID 分别命中不同主体时，返回明确身份冲突，不自动合并两个既有主体。
+- 不同 URL 不做转载自动识别。NewsItemRelation 全部移除。
+
+### 9.5 P0-1 状态
+
+已完成：核心表结构、Migration 版本、Repository 锁机制、Identity/Version/Observation 写入路径、Research/PIT 版本依赖、关系表职责、Server News 生产装配和 Source/Endpoint 配置缺口的定点核查。
+
+仍需完成：核对 News Diagnostics Check 工厂是否依赖将删除的关系/身份历史能力；核对 Schema Validator 与 Migration 测试的完整表清单；确认 StageOutput 生命周期由 Researchflow 管理，不由 News Cleaner 管理。
+
+完成上述核对后关闭 P0-1，进入 P0-2 最终 Schema 定稿。当前不提前写 Migration。
