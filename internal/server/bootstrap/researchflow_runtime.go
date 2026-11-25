@@ -375,7 +375,6 @@ func (e principalStageExecutor) ExecuteStage(ctx context.Context, request resear
 	if e.next == nil {
 		return researchflowapplication.StageExecutionResult{}, errors.New("Researchflow Stage Executor is unavailable")
 	}
-	ctx = withResearchflowWorkerPrincipal(ctx)
 	if request.Stage.Code == quantstage.SMA20StageCode {
 		if e.quantPrincipal == nil ||
 			e.quantPrincipal.Kind != platformsecurity.IdentityService ||

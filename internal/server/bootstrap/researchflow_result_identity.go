@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	quantapplication "example.com/stock-analysis-flow/internal/quant/application"
+	quantresult "example.com/stock-analysis-flow/internal/quant/result"
 )
 
 var errResearchflowWorkerPrincipalUnavailable = errors.New("Researchflow Worker identity is unavailable")
@@ -29,4 +30,20 @@ func (researchflowWorkerPrincipalResolver) Resolve(ctx context.Context) (quantap
 		return quantapplication.Principal{}, errResearchflowWorkerPrincipalUnavailable
 	}
 	return quantapplication.Principal{SubjectRef: "service:researchflow"}, nil
+}
+
+type researchflowQuantResultReader struct {
+	getResult *quantapplication.GetResult
+}
+
+// Read adds the internal Researchflow Worker identity only for this explicit
+// downstream result-read operation; unrelated Stages do not inherit it.
+func (reader *researchflowQuantResultReader) Read(
+	ctx context.Context,
+	runRef, resultID string,
+) (quantresult.Envelope, error) {
+	if reader == nil || reader.getResult == nil || ctx == nil {
+		return quantresult.Envelope{}, errResearchflowWorkerPrincipalUnavailable
+	}
+	return reader.getResult.Execute(withResearchflowWorkerPrincipal(ctx), runRef, resultID)
 }

@@ -1194,3 +1194,13 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - Worker MariaDB/Redis Bootstrap 集成测试现在显式配置独立 Quant Token；News Search Runtime 集成测试现在通过生产所需的 Stage Executor 与 Output Registry Set 装配运行。
 - `.env.example` 已记录该配置方式。此配置不意味着生产部署已自动获得 Data 授权。
 - 本工作组只修复服务身份和测试组合完整性，不宣称 Quant 结果读取闭环或 RA-02 完成。下一步继续 Researchflow Run→Quant result_id 关联只读 Port 与 Quant AuthorizedResultReader。
+
+
+## 2026-11-25 RA-02C：Quant 授权结果读取闭环基础
+
+- Researchflow GetStageOutputForRunStage 已提供只读关联事实；Server 固定读取 quant.sma20 Stage，并要求 Payload/QualitySummary 两份实际内容通过 Quant Schema Validator，校验 Run/Stage/Attempt 与 result_id 的精确关系。
+- Quant MySQLAuthorizedResultReader 在当前策略 Head 读取锁内验证策略启用状态/版本、Run 关联和不可变结果记录；随后生成 GOV-CTR-006 AuthorizationRef + PolicySnapshot 指纹。读取失败、撤销或关联缺失不释放结果。
+- Server 组合根构造 Quant GetResult 与 AccessAuditor，并通过仅在显式读取时附加 Worker 身份的内部 Facade 提供给后续 Research Stage。
+- 已新增 Reader 单测、关联适配器测试、双 Schema 内容校验测试和 MariaDB GetRecord/授权读取集成测试。当前 SHA 的完整 CI 仍需等待本提交结果。
+- RA-02 尚未最终完成：Research Context/Evidence Stage 还未消费该 Facade；必须继续完成 Research Stage 接入和真实 Worker→Data→Quant→StageOutput→GetResult→AccessAudit 跨模块 E2E。
+- 当前没有删除旧 Analysis/Python Bridge/Python API Client；继续按 RA-08/RA-09 门禁，等新模板、结果消费和 WebUI 全面迁移完成后统一删除。

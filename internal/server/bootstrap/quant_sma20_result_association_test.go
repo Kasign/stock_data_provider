@@ -12,11 +12,11 @@ import (
 )
 
 type quantSMA20StageOutputReaderStub struct {
-	resource researchflowapplication.StageOutputResource
+	resource    researchflowapplication.StageOutputResource
 	expectation researchflowapplication.StageOutputExpectation
-	runRef string
-	err error
-	calls int
+	runRef      string
+	err         error
+	calls       int
 }
 
 func (stub *quantSMA20StageOutputReaderStub) Read(
@@ -32,7 +32,7 @@ func (stub *quantSMA20StageOutputReaderStub) Read(
 
 func TestQuantSMA20ResultAssociationVerifierUsesFrozenOutputContract(t *testing.T) {
 	resource := researchflowapplication.StageOutputResource{
-		Content: json.RawMessage(`{"result_id":"quant_result:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}`),
+		Content: json.RawMessage(`{"schema_version":"1.0.0","result_id":"quant_result:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","snapshot_ref":"data_snapshot:sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","metric_code":"sma","value":"43.1200","unit":"CNY/share","period":"20d","metric_status":"available","sample_count":20,"trade_date":"2026-10-30","system_as_of":"2026-11-20T08:00:00Z","quality_status":"valid","result_status":"completed"}`),
 	}
 	reader := &quantSMA20StageOutputReaderStub{resource: resource}
 	verifier := quantSMA20ResultAssociationVerifier{reader: reader}
@@ -51,14 +51,18 @@ func TestQuantSMA20ResultAssociationVerifierUsesFrozenOutputContract(t *testing.
 	if err := reader.expectation.PayloadValidator(resource.Content); err != nil {
 		t.Fatalf("SMA20 Payload validator rejected valid association fixture: %v", err)
 	}
+	quality := json.RawMessage(`{"schema_version":"1.0.0","quality_status":"valid","calendar_quality_status":"valid","expected_trading_days":20,"observed_bars":20,"minimum_required_bars":20,"coverage_sufficient":true}`)
+	if err := reader.expectation.QualitySummaryValidator(quality); err != nil {
+		t.Fatalf("SMA20 QualitySummary validator rejected valid association fixture: %v", err)
+	}
 }
 
 func TestQuantSMA20ResultAssociationVerifierRejectsMissingOrMismatchedOutput(t *testing.T) {
 	for _, test := range []struct {
-		name string
+		name     string
 		resource researchflowapplication.StageOutputResource
-		err error
-		want error
+		err      error
+		want     error
 	}{
 		{name: "missing Stage output", err: researchflowapplication.ErrStageOutputUnavailable, want: quantapplication.ErrResultAssociationNotFound},
 		{

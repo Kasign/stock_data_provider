@@ -23,7 +23,7 @@ import (
 // identity remains outside this composition so Worker-only processes can assemble it.
 type researchflowComposition struct {
 	newsStage         *newsSearchStageComposition
-	quantResultReader *quantapplication.GetResult
+	quantResultReader *researchflowQuantResultReader
 	quantStage        *quantSMA20StageComposition
 	runRepository     *researchflowstorage.MySQLRunRepository
 	templateRegistry  *researchflowstorage.MySQLTemplateRegistry
@@ -134,7 +134,7 @@ func newResearchflowComposition(
 		return nil, fmt.Errorf("create Researchflow database clock: %w", err)
 	}
 
-	var quantResultReader *quantapplication.GetResult
+	var quantResultReader *researchflowQuantResultReader
 	if quantStage != nil {
 		policyStore, storeErr := quantstorage.NewMySQLResultAccessPolicyStore(shared.DB)
 		if storeErr != nil {
@@ -157,13 +157,14 @@ func newResearchflowComposition(
 		if authorizedErr != nil {
 			return nil, fmt.Errorf("create Quant authorized result reader: %w", authorizedErr)
 		}
-		quantResultReader, authorizedErr = quantapplication.NewGetResult(
+		getQuantResult, getResultErr := quantapplication.NewGetResult(
 			authorizedReader, researchflowWorkerPrincipalResolver{}, auditor,
 			func() time.Time { return time.Now().UTC() },
 		)
-		if authorizedErr != nil {
-			return nil, fmt.Errorf("create Quant GetResult Application Service: %w", authorizedErr)
+		if getResultErr != nil {
+			return nil, fmt.Errorf("create Quant GetResult Application Service: %w", getResultErr)
 		}
+		quantResultReader = &researchflowQuantResultReader{getResult: getQuantResult}
 	}
 
 	return &researchflowComposition{

@@ -112,6 +112,37 @@ func TestMySQLRepositorySaveIsImmutableAndIdempotent(t *testing.T) {
 	}
 }
 
+func TestMySQLRepositoryGetRecordVerifiesImmutableStoredPayload(t *testing.T) {
+	db := openQuantIntegrationDB(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	repository, err := NewMySQLRepository(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	record := quantStorageRecord(t, `{"direction":"up","strength":0.7}`)
+	t.Cleanup(func() {
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM quant_results WHERE result_id = ?", record.Manifest.ResultID)
+	})
+	if err := repository.Save(ctx, record); err != nil {
+		t.Fatal(err)
+	}
+	got, err := repository.GetRecord(ctx, record.Manifest.ResultID)
+	if err != nil {
+		t.Fatalf("GetRecord() error = %v", err)
+	}
+	if got.Manifest.ResultID != record.Manifest.ResultID || string(got.Payload) != string(record.Payload) {
+		t.Fatalf("GetRecord() returned a different immutable record: %+v", got.Manifest)
+	}
+	if _, err := db.ExecContext(ctx, "UPDATE quant_results SET payload_json = ? WHERE result_id = ?",
+		[]byte(`{"direction":"down","strength":0.7}`), record.Manifest.ResultID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repository.GetRecord(ctx, record.Manifest.ResultID); !errors.Is(err, ErrCorruptRecord) {
+		t.Fatalf("GetRecord() after stored payload tampering = %v, want ErrCorruptRecord", err)
+	}
+}
+
 func TestMySQLRepositoryConcurrentIdempotentSave(t *testing.T) {
 	db := openQuantIntegrationDB(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)

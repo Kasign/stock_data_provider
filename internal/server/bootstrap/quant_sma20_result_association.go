@@ -31,10 +31,10 @@ func (verifier quantSMA20ResultAssociationVerifier) VerifyResultAssociation(
 		return quantapplication.ErrAuthorizationUnavailable
 	}
 	resource, err := verifier.reader.Read(ctx, runRef, researchflowapplication.StageOutputExpectation{
-		StageCode: quantstage.SMA20StageCode,
-		OutputType: quantstage.SMA20OutputType,
-		SchemaVersion: quantstage.SMA20SchemaVersion,
-		SchemaRef: quantSMA20PayloadSchemaRef,
+		StageCode:               quantstage.SMA20StageCode,
+		OutputType:              quantstage.SMA20OutputType,
+		SchemaVersion:           quantstage.SMA20SchemaVersion,
+		SchemaRef:               quantSMA20PayloadSchemaRef,
 		QualitySummarySchemaRef: quantSMA20QualitySchemaRef,
 		PayloadValidator: func(value json.RawMessage) error {
 			return quantstage.ValidateSMA20OutputJSON(value)
