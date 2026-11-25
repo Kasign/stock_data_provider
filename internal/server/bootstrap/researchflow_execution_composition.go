@@ -66,6 +66,14 @@ func newResearchflowComposition(
 	if err != nil {
 		return nil, fmt.Errorf("compose News Feed Collection Stage: %w", err)
 	}
+	if newsFeedStage != nil {
+		combinedRegistry, registryErr := newNewsStageOutputRegistry(newsFeedStageOutputRegistryVersion, true)
+		if registryErr != nil {
+			return nil, fmt.Errorf("compose combined News Stage Output Registry: %w", registryErr)
+		}
+		newsStage.registry = combinedRegistry
+		newsFeedStage.registry = combinedRegistry
+	}
 	policyRegistry, err := resourcepolicy.NewRegistry()
 	if err != nil {
 		return nil, fmt.Errorf("create Researchflow ResourcePolicy Registry: %w", err)
@@ -130,7 +138,6 @@ func newResearchflowComposition(
 	outputRegistriesList := []researchflowapplication.StageOutputRegistry{newsStage.registry}
 	feedExecutor := researchflowapplication.StageExecutor(nil)
 	if newsFeedStage != nil {
-		outputRegistriesList = append(outputRegistriesList, newsFeedStage.registry)
 		feedExecutor = newsFeedStage.executor
 	}
 	quantExecutor := researchflowapplication.StageExecutor(nil)
