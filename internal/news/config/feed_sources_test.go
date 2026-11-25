@@ -156,3 +156,25 @@ func TestLoadFeedSourcesRejectsTrailingJSON(t *testing.T) {
 		t.Fatal("Load() accepted trailing JSON")
 	}
 }
+
+
+func TestLoadFeedSourcesRejectsConflictingExpectedCurrentPolicyAcrossEndpoints(t *testing.T) {
+	var entries []map[string]any
+	if err := json.Unmarshal([]byte(validFeedSourceJSON()), &entries); err != nil {
+		t.Fatal(err)
+	}
+	second := map[string]any{}
+	for key, value := range entries[0] {
+		second[key] = value
+	}
+	second["endpoint_id"] = "secondary"
+	second["expected_current_source_policy_version_id"] = "source-policy-v0"
+	entries = append(entries, second)
+	raw, err := json.Marshal(entries)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(env(map[string]string{FeedSourcesEnv: string(raw)})); err == nil {
+		t.Fatal("Load() accepted inconsistent expected current policy versions for one Source")
+	}
+}
