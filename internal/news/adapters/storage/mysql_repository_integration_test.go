@@ -841,6 +841,21 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 		t.Fatalf("global URL deduplication produced items=%d source identities=%d, want 1 and 2",
 			globalURLItemCount, globalURLIdentityCount)
 	}
+	conflictObservation, err := ingest.Execute(
+		ctx, fmt.Sprintf("%s-url-source-%d", sourceID, 0), "url-native-id-conflict",
+		domain.Candidate{
+			SourceItemID: "same-native-id", RawURL: "https://news.example/different-story",
+			Title: "Different URL",
+		}, urlPolicy,
+	)
+	if err != nil {
+		t.Fatalf("same-source native ID / different URL conflict: %v", err)
+	}
+	if conflictObservation.IdentityStatus != domain.ObservationConflict ||
+		conflictObservation.ReasonCode != "news.identity.canonical_url_mismatch" ||
+		conflictObservation.NewsID != "" {
+		t.Fatalf("same-source native ID was incorrectly merged across different URLs: %+v", conflictObservation)
+	}
 
 	traceSourceID := sourceID + "-provider-trace"
 	traceCandidate := domain.Candidate{SourceItemID: "provider-trace-item", ProviderCode: "tavily", Title: "trace test"}

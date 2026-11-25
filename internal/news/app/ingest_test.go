@@ -19,6 +19,7 @@ type memoryIdentityRepository struct {
 	newsItems                     []domain.NewsItem
 	versions                      []domain.NewsItemVersion
 	failAppend                    bool
+	failAppendVersion             bool
 	sourcePolicy                  domain.SourcePolicy
 	sourcePolicyVersionID         string
 	endpointPolicy                *domain.EndpointPolicy
@@ -151,6 +152,9 @@ func (tx memoryIdentityTransaction) LatestNewsItemVersion(_ context.Context, new
 }
 
 func (tx memoryIdentityTransaction) AppendNewsItemVersion(_ context.Context, version domain.NewsItemVersion) error {
+	if tx.repository.failAppendVersion {
+		return errors.New("append version failed")
+	}
 	tx.repository.versions = append(tx.repository.versions, version)
 	return nil
 }
@@ -316,6 +320,46 @@ func TestIngestCandidateRollsBackWhenObservationAppendFails(t *testing.T) {
 	}
 	if len(repository.newsItems) != 0 || len(repository.credentials) != 0 || len(repository.observations) != 0 || len(repository.versions) != 0 {
 		t.Fatalf("transaction was not rolled back: %+v", repository)
+	}
+}
+
+func TestIngestCandidateRollsBackWhenVersionAppendFails(t *testing.T) {
+	repository := &memoryIdentityRepository{failAppendVersion: true}
+	_, err := newCandidateIngest(repository, func() string { return "version-rollback" }).executeWithPolicyTrace(
+		context.Background(), "source-1", "version-rollback-key",
+		domain.Candidate{SourceItemID: "item-1", Title: "headline"},
+		domain.SourceURLPolicy{}, identityTrace(),
+	)
+	if !errors.Is(err, ErrIdentityTransaction) {
+		t.Fatalf("err=%v", err)
+	}
+	if len(repository.newsItems) != 0 || len(repository.credentials) != 0 ||
+		len(repository.observations) != 0 || len(repository.versions) != 0 {
+		t.Fatalf("version append failure did not roll back complete ingest: %+v", repository)
+	}
+}
+
+func TestIngestCandidateReportsCanonicalURLHashCollision(t *testing.T) {
+	candidateURL := "https://news.example/target"
+	repository := &memoryIdentityRepository{
+		newsItems: []domain.NewsItem{{
+			ID: "existing-news", CanonicalURL: "https://news.example/different",
+			CanonicalURLHash: canonicalHashForTest(candidateURL),
+			ContentFingerprint: strings.Repeat("0", 64),
+		}},
+	}
+	observation, err := newCandidateIngest(repository, func() string { return "url-hash-collision" }).executeWithPolicyTrace(
+		context.Background(), "source-1", "url-hash-collision-key",
+		domain.Candidate{RawURL: candidateURL, Title: "target"},
+		identityURLPolicy(), identityTrace(),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if observation.IdentityStatus != domain.ObservationConflict ||
+		observation.ReasonCode != "news.identity.canonical_url_hash_collision" ||
+		observation.NewsID != "" || len(repository.newsItems) != 1 {
+		t.Fatalf("hash collision was not rejected: observation=%+v repo=%+v", observation, repository)
 	}
 }
 
