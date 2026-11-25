@@ -331,7 +331,6 @@ func identityAdvisoryLockName(sourceID string) string {
 	return "news_identity_" + hex.EncodeToString(sum[:])[:48]
 }
 
-
 func canonicalURLAdvisoryLockName(hash string) string {
 	sum := sha256.Sum256([]byte(hash))
 	return "news_url_" + hex.EncodeToString(sum[:])[:48]

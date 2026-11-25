@@ -339,9 +339,13 @@ func TestIngestCollectedSourceContentChangeCreatesNewObservationAndVersion(t *te
 		}
 	}
 	first, err := usecase.Execute(context.Background(), makeRequest("summary A"))
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	second, err := usecase.Execute(context.Background(), makeRequest("summary B"))
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(first) != 1 || len(second) != 1 || first[0].ID == second[0].ID ||
 		first[0].NewsID != second[0].NewsID || len(repository.newsItems) != 1 ||
 		len(repository.observations) != 2 || len(repository.versions) != 2 {
