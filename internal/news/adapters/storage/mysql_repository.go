@@ -525,9 +525,10 @@ func (t *mysqlNewsTransaction) SaveIdentityCredentials(ctx context.Context, cred
 	}
 	for _, credential := range credentials {
 		_, observedOffset := credential.ObservedAt.Zone()
+		sum := sha256.Sum256([]byte(credential.Value))
 		if credential.ObservedAt.IsZero() || observedOffset != 0 ||
 			credential.SourceID == "" || credential.Value == "" ||
-			credential.Hash != hex.EncodeToString(sha256.Sum256([]byte(credential.Value))[:]) || credential.NewsID == "" {
+			credential.Hash != hex.EncodeToString(sum[:]) || credential.NewsID == "" {
 			return app.ErrInvalidRequest
 		}
 		if _, err := t.tx.ExecContext(ctx, `INSERT INTO news_identifiers

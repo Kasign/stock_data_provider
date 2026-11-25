@@ -2,6 +2,8 @@ package app
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"testing"
 	"time"
@@ -219,12 +221,6 @@ func TestIngestCandidateRejectsURLAndNativeIDPointingToDifferentItems(t *testing
 	if err != nil { t.Fatal(err) }
 	if first.NewsID == second.NewsID { t.Fatalf("test setup must create distinct news IDs: %+v %+v", first, second) }
 
-	repository.newsItems[1].CanonicalURL = "https://news.example/other"
-	repository.newsItems[1].CanonicalURLHash = func() string {
-		c := domain.Candidate{RawURL:"https://news.example/two"}
-		_ = c
-		return repository.newsItems[1].CanonicalURLHash
-	}()
 	// 将来源原生 ID 指向第一篇、URL 指向第二篇，验证身份冲突不会自动合并。
 	credential, _ := domain.BuildIdentityCredentials("source-1", "native-1")
 	repository.newsItems[1].CanonicalURL = "https://news.example/two"
