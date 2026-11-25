@@ -76,7 +76,7 @@ func validStageOutputReadFixture() (
 		RegistryVersion: "1.1.0", RegistryFingerprint: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 		OutputType: "quant.sma20_result", SchemaVersion: "1.0.0",
 		SchemaRef: "doc/quant/schema/QNT-CTR-005-sma20-stage-output-1.0.0.schema.json",
-		Content: []byte(`{"result_id":"quant_result:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}`),
+		Content:   []byte(`{"result_id":"quant_result:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}`),
 		CreatedAt: "2026-11-24T10:11:12.123456789Z",
 	}
 	quality := payload
