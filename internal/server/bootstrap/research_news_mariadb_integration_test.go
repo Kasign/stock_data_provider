@@ -17,6 +17,7 @@ import (
 
 	mysql "github.com/go-sql-driver/mysql"
 
+	newsplatform "example.com/stock-analysis-flow/internal/news/adapters/platform"
 	newsstorage "example.com/stock-analysis-flow/internal/news/adapters/storage"
 	newsapp "example.com/stock-analysis-flow/internal/news/app"
 	newsconfig "example.com/stock-analysis-flow/internal/news/config"
@@ -680,9 +681,61 @@ func TestNewsResearchMariaDBIntegration(t *testing.T) {
 		})
 	})
 
-	// Fingerprint tampering and current-policy changes are covered by
-	// internal/news/app/authorization_read_test.go. This real-DB integration fixture
-	// intentionally has no verified available_at, so Query must stop at the strict PIT
-	// gate before reaching authorization evaluation.
+	// Fingerprint verification is independent from PIT selection and is exercised
+	// against the real Platform verifier with the same version-bound authorization data.
+	t.Run("fingerprint_tamper_rejected", func(t *testing.T) {
+		f := newNewsResearchFixture(t, ctx)
+		tampered := f.binding
+		tampered.AuthorizationRef.AuthorizationRef += "-tampered"
+		tampered.AuthorizationRef.DecidedAt = time.Now().UTC().Format(time.RFC3339Nano)
+		expiry := time.Now().UTC().Add(time.Hour).Format(time.RFC3339Nano)
+		tampered.AuthorizationRef.ExpiresAt = newsdomain.NullableDateTime{Present: true, Value: &expiry}
+		tampered.AuthorizationRef.DecisionFingerprint = strings.Repeat("0", 64)
 
+		authorization, err := newsapp.NewEvaluateNewsEvidenceReadAuthorization(
+			newsplatform.NewAuthorizationFingerprintVerifier(), f.repo,
+		)
+		if err != nil {
+			t.Fatalf("construct authorization evaluator: %v", err)
+		}
+		err = authorization.Execute(ctx, tampered, f.observation, f.version,
+			f.binding.CallerRef, string(f.binding.PurposeCode), f.binding.RequestedContentLevel)
+		if !errors.Is(err, newsapp.ErrNewsAuthorizationFingerprintInvalid) {
+			t.Fatalf("tampered fingerprint error = %v, want ErrNewsAuthorizationFingerprintInvalid", err)
+		}
+	})
+
+	// Current-policy resolution is also tested against the real MariaDB repository,
+	// without requiring an available_at record to pass the earlier strict PIT gate.
+	t.Run("current_policy_version_change_rejected", func(t *testing.T) {
+		f := newNewsResearchFixture(t, ctx)
+		publisher, err := newsapp.NewPublishNewsPolicyVersion(f.repo)
+		if err != nil {
+			t.Fatalf("construct policy publisher: %v", err)
+		}
+		payload, err := json.Marshal(newsdomain.SourcePolicy{
+			Status:              newsdomain.AuthorizationApproved,
+			AllowedPurposes:     []newsdomain.Purpose{newsdomain.PurposeInternalPersonalResearch},
+			AllowedContentKinds: []newsdomain.ContentKind{newsdomain.ContentSnippet},
+			EvidenceRef:         "integration-source-evidence",
+		})
+		if err != nil {
+			t.Fatalf("marshal replacement source policy: %v", err)
+		}
+		if err := publisher.Execute(ctx, newsdomain.NewsPolicyTypeSource, "sec-edgar", "2.2.0", payload); err != nil {
+			t.Fatalf("publish replacement current source policy: %v", err)
+		}
+
+		authorization, err := newsapp.NewEvaluateNewsEvidenceReadAuthorization(
+			newsplatform.NewAuthorizationFingerprintVerifier(), f.repo,
+		)
+		if err != nil {
+			t.Fatalf("construct authorization evaluator: %v", err)
+		}
+		err = authorization.Execute(ctx, f.binding, f.observation, f.version,
+			f.binding.CallerRef, string(f.binding.PurposeCode), f.binding.RequestedContentLevel)
+		if !errors.Is(err, newsapp.ErrNewsCurrentPolicyUnavailable) {
+			t.Fatalf("changed current policy version error = %v, want ErrNewsCurrentPolicyUnavailable", err)
+		}
+	})
 }
