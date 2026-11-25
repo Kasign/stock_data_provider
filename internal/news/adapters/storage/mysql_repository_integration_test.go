@@ -6,6 +6,9 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"html"
+	"io"
+	"net/http"
 	"errors"
 	"fmt"
 	"os"
@@ -21,6 +24,7 @@ import (
 
 	"example.com/stock-analysis-flow/internal/news/app"
 	"example.com/stock-analysis-flow/internal/news/domain"
+	sourceadapter "example.com/stock-analysis-flow/internal/news/adapters/source"
 	platformstorage "example.com/stock-analysis-flow/internal/platform/storage"
 )
 
@@ -31,210 +35,138 @@ func insertIntegrationNewsItem(ctx context.Context, db *sql.DB, newsID string) e
 	return err
 }
 
-// repositoryIngestHarness 在 MariaDB 集成测试中调用与正式入库一致的事务端口。
-type repositoryIngestHarness struct {
-	repository app.IdentityRepository
-	newID      func() string
+// integrationFeedTransport 只替代外部网络；采集、授权复核和正式入库仍走真实 Application 用例。
+type integrationFeedTransport struct {
+	body string
 }
 
-func (h repositoryIngestHarness) Execute(
-	ctx context.Context, sourceID, idempotencyKey string, candidate domain.Candidate,
-	policy domain.SourceURLPolicy, contentLayers ...domain.ContentLayers,
-) (domain.Observation, error) {
-	if h.repository == nil || h.newID == nil || ctx == nil || strings.TrimSpace(sourceID) == "" ||
-		strings.TrimSpace(idempotencyKey) == "" || strings.TrimSpace(candidate.ProviderCode) != "" {
-		if strings.TrimSpace(candidate.ProviderCode) != "" {
-			return domain.Observation{}, app.ErrProviderOutputPolicyRequired
-		}
-		return domain.Observation{}, app.ErrInvalidRequest
+func (t integrationFeedTransport) Do(_ context.Context, _ string, _ string, request *http.Request) (*http.Response, error) {
+	if request == nil || request.URL == nil || request.URL.Host != "feed.example" {
+		return nil, errors.New("unexpected integration feed request")
 	}
-	observedAt := time.Now().UTC()
-	candidate = domain.NormalizeCandidate(candidate, observedAt, candidate.QueryDimension)
-	candidate.CanonicalURL = ""
+	return &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": []string{"application/rss+xml; charset=utf-8"}},
+		Body:       io.NopCloser(strings.NewReader(t.body)),
+		Request:    request,
+	}, nil
+}
+
+func integrationFeedPayload(candidate domain.Candidate, content domain.ContentLayers) string {
+	description := content.SourceSummary
+	if description == "" {
+		description = candidate.ProviderSummary
+	}
+	publishedAt := candidate.PublishedAtRaw
+	if publishedAt == "" && candidate.PublishedAt != nil {
+		publishedAt = candidate.PublishedAt.UTC().Format(time.RFC3339)
+	}
+	item := "<item>"
+	if candidate.SourceItemID != "" {
+		item += "<guid isPermaLink=\"false\">" + html.EscapeString(candidate.SourceItemID) + "</guid>"
+	}
+	if candidate.Title != "" {
+		item += "<title>" + html.EscapeString(candidate.Title) + "</title>"
+	}
 	if candidate.RawURL != "" {
-		if decision := domain.EvaluateSourceURL(candidate.RawURL, policy); decision.Allowed {
-			candidate.CanonicalURL = decision.CanonicalURL
-		}
+		item += "<link>" + html.EscapeString(candidate.RawURL) + "</link>"
 	}
-	content := domain.ContentLayersFromCandidate(candidate)
-	if len(contentLayers) > 0 {
-		content = domain.NormalizeContentLayers(contentLayers[0])
+	if description != "" {
+		item += "<description>" + html.EscapeString(description) + "</description>"
 	}
-	fingerprint := domain.BuildVersionFingerprint(candidate, content)
-	canonicalHash := ""
-	if candidate.CanonicalURL != "" {
-		canonicalHash = canonicalHashForIntegration(candidate.CanonicalURL)
+	if publishedAt != "" {
+		item += "<pubDate>" + html.EscapeString(publishedAt) + "</pubDate>"
 	}
-	credentials, err := domain.BuildIdentityCredentials(sourceID, candidate.SourceItemID)
+	item += "</item>"
+	return "<?xml version=\"1.0\"?><rss version=\"2.0\"><channel><title>Integration Feed</title>" + item + "</channel></rss>"
+}
+
+// ingestIntegrationFeed 通过真实 CollectSource 和 IngestCollectedSource 驱动 MariaDB。
+// 只有 HTTP 传输被替换为固定 RSS 响应；身份解析、事务、策略校验和版本写入均为生产实现。
+func ingestIntegrationFeed(
+	ctx context.Context,
+	repository *MySQLRepository,
+	publisher *app.PublishNewsPolicyVersion,
+	newID func() string,
+	sourceID, idempotencyPrefix string,
+	candidate domain.Candidate,
+	urlPolicy domain.SourceURLPolicy,
+	contentLayers ...domain.ContentLayers,
+) (domain.Observation, error) {
+	const retention = 24 * time.Hour
+	sourcePolicy := domain.SourcePolicy{
+		Status: domain.AuthorizationApproved,
+		AllowedAccessMethods: []domain.AccessMethod{domain.AccessRSS},
+		AllowedPurposes: []domain.Purpose{domain.PurposeInternalPersonalResearch},
+		AllowedContentKinds: []domain.ContentKind{domain.ContentAbstract},
+		AllowedStorageModes: []domain.StorageMode{domain.StorageTransient, domain.StoragePersistentExcerpt},
+		MaxRetention: retention,
+		EvidenceRef: "integration-source-evidence",
+	}
+	policyPayload, err := json.Marshal(sourcePolicy)
 	if err != nil {
 		return domain.Observation{}, err
 	}
-	observation := domain.Observation{
-		ID: h.newID(), IdempotencyKey: idempotencyKey, SourceID: sourceID,
-		ProviderCode: candidate.ProviderCode, QueryDimension: candidate.QueryDimension,
-		Candidate: candidate, ObservedAt: observedAt,
+	if err := publisher.Execute(ctx, domain.NewsPolicyTypeSource, sourceID, "integration-source-v1", policyPayload); err != nil {
+		return domain.Observation{}, fmt.Errorf("publish integration source policy: %w", err)
 	}
-	if observation.ID == "" {
-		return domain.Observation{}, app.ErrInvalidRequest
+
+	allowedSchemes := append([]string(nil), urlPolicy.AllowedSchemes...)
+	if len(allowedSchemes) == 0 {
+		allowedSchemes = []string{"https"}
 	}
-	if candidate.CanonicalURL == "" && len(credentials) == 0 {
-		if candidate.RawURL != "" {
-			observation.IdentityStatus = domain.ObservationConflict
-			observation.ReasonCode = "news.identity.url_rejected"
-		} else {
-			observation.IdentityStatus = domain.ObservationUnidentified
-			observation.ReasonCode = "news.identity.credential_required"
-		}
+	allowedHosts := append([]string(nil), urlPolicy.AllowedHosts...)
+	allowedHosts = append(allowedHosts, "feed.example")
+	registration := app.SourceEndpointRegistration{
+		SourceID: sourceID, EndpointID: "rss-main", Enabled: true,
+		URL: "https://feed.example/rss", PublisherName: candidate.PublisherName,
+		PublisherDomain: candidate.PublisherDomain, AccessMethod: domain.AccessRSS,
+		SourcePolicy: sourcePolicy, SourcePolicyVersionID: "integration-source-v1",
+		URLPolicy: domain.SourceURLPolicy{AllowedSchemes: allowedSchemes, AllowedHosts: allowedHosts},
 	}
-	var persisted domain.Observation
-	err = h.repository.WithinIdentityTransaction(ctx, func(tx app.IdentityTransaction) error {
-		if candidate.CanonicalURL == "" && len(credentials) == 0 {
-			var appendErr error
-			persisted, appendErr = tx.AppendObservation(ctx, observation)
-			return appendErr
-		}
-		var urlItem domain.NewsItem
-		urlMatched := false
-		if candidate.CanonicalURL != "" {
-			var findErr error
-			urlItem, urlMatched, findErr = tx.FindNewsItemByCanonicalURL(ctx, candidate.CanonicalURL, canonicalHash)
-			if errors.Is(findErr, app.ErrCanonicalURLHashCollision) {
-				observation.IdentityStatus = domain.ObservationConflict
-				observation.ReasonCode = "news.identity.canonical_url_hash_collision"
-				persisted, findErr = tx.AppendObservation(ctx, observation)
-				return findErr
-			}
-			if findErr != nil {
-				return findErr
-			}
-		}
-		var existing []domain.IdentityCredential
-		resolution := domain.IdentityResolution{Status: domain.IdentityNew}
-		if len(credentials) > 0 {
-			existing, err = tx.FindIdentityCredentials(ctx, sourceID, credentials)
-			if err != nil {
-				return err
-			}
-			resolution = domain.ResolveIdentity(sourceID, credentials, existing)
-		}
-		if resolution.Status == domain.IdentityConflict {
-			observation.IdentityStatus = domain.ObservationConflict
-			observation.ReasonCode = resolution.Reason
-			persisted, err = tx.AppendObservation(ctx, observation)
-			return err
-		}
-		if urlMatched && resolution.Status == domain.IdentityMatched && urlItem.ID != resolution.NewsID {
-			observation.IdentityStatus = domain.ObservationConflict
-			observation.ReasonCode = "news.identity.multiple_items"
-			persisted, err = tx.AppendObservation(ctx, observation)
-			return err
-		}
-		var item domain.NewsItem
-		newItem := false
-		switch {
-		case urlMatched:
-			item = urlItem
-		case resolution.Status == domain.IdentityMatched:
-			var found bool
-			var findErr error
-			item, found, findErr = tx.FindNewsItemByID(ctx, resolution.NewsID)
-			if findErr != nil {
-				return findErr
-			}
-			if !found {
-				return errors.New("news.identity.native_item_missing")
-			}
-		default:
-			item = domain.NewsItem{ID: h.newID() + "-news"}
-			newItem = true
-		}
-		if candidate.CanonicalURL != "" {
-			if item.CanonicalURL != "" && item.CanonicalURL != candidate.CanonicalURL {
-				observation.IdentityStatus = domain.ObservationConflict
-				observation.ReasonCode = "news.identity.canonical_url_mismatch"
-				persisted, err = tx.AppendObservation(ctx, observation)
-				return err
-			}
-			item.CanonicalURL, item.CanonicalURLHash = candidate.CanonicalURL, canonicalHash
-		}
-		if newItem {
-			observation.IdentityStatus = domain.ObservationNew
-		} else {
-			observation.IdentityStatus = domain.ObservationMatched
-		}
-		observation.NewsID = item.ID
-		item.Title, item.PublisherName, item.PublisherDomain, item.Author = candidate.Title, candidate.PublisherName, candidate.PublisherDomain, candidate.Author
-		item.PublishedAt, item.Content, item.ContentFingerprint = candidate.PublishedAt, content, fingerprint
-		item.UpdatedAt = observedAt
-		if newItem {
-			item.CreatedAt = observedAt
-			if err := tx.CreateNewsItem(ctx, item); err != nil {
-				return err
-			}
-		}
-		toSave := credentialsNotYetStoredForIntegration(credentials, existing)
-		for i := range toSave {
-			toSave[i].NewsID, toSave[i].ObservedAt = item.ID, observedAt
-		}
-		if len(toSave) > 0 {
-			if err := tx.SaveIdentityCredentials(ctx, toSave); err != nil {
-				return err
-			}
-		}
-		persisted, err = tx.AppendObservation(ctx, observation)
-		if err != nil {
-			return err
-		}
-		if persisted.ID != observation.ID {
-			return nil
-		}
-		latest, exists, err := tx.LatestNewsItemVersion(ctx, item.ID)
-		if err != nil {
-			return err
-		}
-		if !exists || latest.Fingerprint != fingerprint {
-			versionNo := 1
-			if exists {
-				versionNo = latest.VersionNo + 1
-			}
-			version := domain.NewsItemVersion{
-				ID: h.newID() + "-version", NewsID: item.ID, VersionNo: versionNo, Fingerprint: fingerprint,
-				Title: candidate.Title, PublisherName: candidate.PublisherName, PublisherDomain: candidate.PublisherDomain,
-				Author: candidate.Author, PublishedAt: candidate.PublishedAt, Content: content,
-				ObservedAt: observedAt, ObservationID: observation.ID,
-			}
-			if err := tx.AppendNewsItemVersion(ctx, version); err != nil {
-				return err
-			}
-			if !newItem {
-				if err := tx.UpdateNewsItem(ctx, item); err != nil {
-					return err
-				}
-			}
-		}
-		return nil
+	if registration.PublisherName == "" {
+		registration.PublisherName = "Integration Publisher"
+	}
+	if registration.PublisherDomain == "" {
+		registration.PublisherDomain = "integration.example"
+	}
+	catalog, err := sourceadapter.NewStaticSourceCatalog([]app.SourceEndpointRegistration{registration})
+	if err != nil {
+		return domain.Observation{}, fmt.Errorf("create integration source catalog: %w", err)
+	}
+	content := domain.ContentLayers{}
+	if len(contentLayers) > 0 {
+		content = domain.NormalizeContentLayers(contentLayers[0])
+	}
+	collector, err := app.NewCollectSourceWithPolicyResolver(
+		catalog, integrationFeedTransport{body: integrationFeedPayload(candidate, content)}, repository,
+	)
+	if err != nil {
+		return domain.Observation{}, err
+	}
+	collection, err := collector.Execute(ctx, app.CollectSourceRequest{
+		SourceID: sourceID, EndpointID: "rss-main",
+		Purpose: domain.PurposeInternalPersonalResearch, ContentKind: domain.ContentAbstract,
+		StorageMode: domain.StorageTransient, Retention: retention, MaxEntries: 10,
+	})
+	if err != nil {
+		return domain.Observation{}, fmt.Errorf("collect integration RSS: %w", err)
+	}
+	ingester, err := app.NewIngestCollectedSource(repository, newID, catalog)
+	if err != nil {
+		return domain.Observation{}, err
+	}
+	observations, err := ingester.Execute(ctx, app.IngestCollectedSourceRequest{
+		Collection: collection, IdempotencyPrefix: idempotencyPrefix,
+		Purpose: domain.PurposeInternalPersonalResearch, Retention: retention,
 	})
 	if err != nil {
 		return domain.Observation{}, err
 	}
-	return persisted, nil
-}
-
-func credentialsNotYetStoredForIntegration(candidates, existing []domain.IdentityCredential) []domain.IdentityCredential {
-	result := make([]domain.IdentityCredential, 0, len(candidates))
-	for _, candidate := range candidates {
-		found := false
-		for _, stored := range existing {
-			if stored.SourceID == candidate.SourceID && stored.Hash == candidate.Hash && stored.Value == candidate.Value {
-				found = true
-				break
-			}
-		}
-		if !found {
-			result = append(result, candidate)
-		}
+	if len(observations) != 1 {
+		return domain.Observation{}, fmt.Errorf("formal feed ingest returned %d observations, want 1", len(observations))
 	}
-	return result
+	return observations[0], nil
 }
 
 func canonicalHashForIntegration(value string) string {
@@ -747,7 +679,6 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	}
 	var idSequence atomic.Uint64
 	newID := func() string { return fmt.Sprintf("news-it-%d", idSequence.Add(1)) }
-	ingest := repositoryIngestHarness{repository: repository, newID: newID}
 	sourceID := fmt.Sprintf("news-it-source-%d", time.Now().UnixNano())
 	const workers = 6
 
@@ -765,7 +696,7 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 		wait.Add(1)
 		go func() {
 			defer wait.Done()
-			observation, err := ingest.Execute(ctx, sourceID, fmt.Sprintf("news-it-key-%d", index), candidate, domain.SourceURLPolicy{})
+			observation, err := ingestIntegrationFeed(ctx, repository, publisher, newID, sourceID, fmt.Sprintf("news-it-key-%d", index), candidate, domain.SourceURLPolicy{})
 			if err != nil {
 				errs <- err
 				return
@@ -812,7 +743,7 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 		go func() {
 			defer urlWait.Done()
 			source := fmt.Sprintf("%s-url-source-%d", sourceID, index)
-			observation, ingestErr := ingest.Execute(ctx, source, fmt.Sprintf("url-global-key-%d", index), urlCandidate, urlPolicy)
+			observation, ingestErr := ingestIntegrationFeed(ctx, repository, publisher, newID, source, fmt.Sprintf("url-global-key-%d", index), urlCandidate, urlPolicy)
 			if ingestErr != nil {
 				urlErrors <- ingestErr
 				return
@@ -844,8 +775,8 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 		t.Fatalf("global URL deduplication produced items=%d source identities=%d, want 1 and 2",
 			globalURLItemCount, globalURLIdentityCount)
 	}
-	conflictObservation, err := ingest.Execute(
-		ctx, fmt.Sprintf("%s-url-source-%d", sourceID, 0), "url-native-id-conflict",
+	conflictObservation, err := ingestIntegrationFeed(
+		ctx, repository, publisher, newID, fmt.Sprintf("%s-url-source-%d", sourceID, 0), "url-native-id-conflict",
 		domain.Candidate{
 			SourceItemID: "same-native-id", RawURL: "https://news.example/different-story",
 			Title: "Different URL",
@@ -860,21 +791,7 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 		t.Fatalf("same-source native ID was incorrectly merged across different URLs: %+v", conflictObservation)
 	}
 
-	traceSourceID := sourceID + "-provider-trace"
-	traceCandidate := domain.Candidate{SourceItemID: "provider-trace-item", ProviderCode: "tavily", Title: "trace test"}
-	if _, err := ingest.Execute(ctx, traceSourceID, "provider-trace-key", traceCandidate, domain.SourceURLPolicy{}); !errors.Is(err, app.ErrProviderOutputPolicyRequired) {
-		t.Fatalf("self-declared provider policy error = %v, want fail-closed rejection", err)
-	}
-	if err := db.QueryRowContext(ctx,
-		"SELECT COUNT(DISTINCT news_id) FROM news_observations WHERE source_id = ? AND news_id IS NOT NULL", traceSourceID,
-	).Scan(&itemCount); err != nil {
-		t.Fatal(err)
-	}
-	if itemCount != 0 {
-		t.Fatalf("provider policy rejection created %d News items, want 0", itemCount)
-	}
-
-	replayed, err := ingest.Execute(ctx, sourceID, "news-it-key-0", candidate, domain.SourceURLPolicy{})
+	replayed, err := ingestIntegrationFeed(ctx, repository, publisher, newID, sourceID, "news-it-key-0", candidate, domain.SourceURLPolicy{})
 	if err != nil {
 		t.Fatalf("same-payload idempotency replay failed: %v", err)
 	}
@@ -884,7 +801,7 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 
 	changed := candidate
 	changed.Title = "changed payload must conflict"
-	if _, err := ingest.Execute(ctx, sourceID, "news-it-key-0", changed, domain.SourceURLPolicy{}); !errors.Is(err, app.ErrObservationIdempotencyConflict) {
+	if _, err := ingestIntegrationFeed(ctx, repository, publisher, newID, sourceID, "news-it-key-0", changed, domain.SourceURLPolicy{}); !errors.Is(err, app.ErrObservationIdempotencyConflict) {
 		t.Fatalf("same key with different payload error = %v, want idempotency conflict", err)
 	}
 
@@ -923,7 +840,7 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 				SourceSummary:       fmt.Sprintf("summary revision %d", index),
 				SourceSummaryOrigin: domain.ContentOriginFeedSummary,
 			}
-			observation, err := ingest.Execute(ctx, sourceID, fmt.Sprintf("news-it-revision-%d", index),
+			observation, err := ingestIntegrationFeed(ctx, repository, publisher, newID, sourceID, fmt.Sprintf("news-it-revision-%d", index),
 				candidate, domain.SourceURLPolicy{}, content)
 			if err != nil {
 				updateErrors <- err
@@ -964,7 +881,7 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 		SourceItemID: "native-item-002",
 		Title:        "Second news item", PublisherName: "Second Publisher",
 	}
-	secondObservation, err := ingest.Execute(ctx, secondSourceID, "news-it-second-key", secondCandidate,
+	secondObservation, err := ingestIntegrationFeed(ctx, repository, publisher, newID, secondSourceID, "news-it-second-key", secondCandidate,
 		domain.SourceURLPolicy{}, domain.ContentLayers{
 			SourceSummary: "second source summary", SourceSummaryOrigin: domain.ContentOriginFeedSummary,
 		})
@@ -1706,8 +1623,8 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	time.Sleep(10 * time.Millisecond)
 	revisedCandidate := secondCandidate
 	revisedCandidate.Title = "Second news item revised"
-	revisedObservation, err := ingest.Execute(
-		ctx, secondSourceID, "news-it-second-revision-key", revisedCandidate, domain.SourceURLPolicy{},
+	revisedObservation, err := ingestIntegrationFeed(
+		ctx, repository, publisher, newID, secondSourceID, "news-it-second-revision-key", revisedCandidate, domain.SourceURLPolicy{},
 	)
 	if err != nil {
 		t.Fatalf("ingest second news revision: %v", err)
