@@ -12,6 +12,7 @@ import (
 	analysisstorage "example.com/stock-analysis-flow/internal/analysis/storage"
 	marketdatabootstrap "example.com/stock-analysis-flow/internal/marketdata/bootstrap"
 	quantstorage "example.com/stock-analysis-flow/internal/quant/storage"
+	researchflowstorage "example.com/stock-analysis-flow/internal/researchflow/storage"
 	servermigration "example.com/stock-analysis-flow/internal/server/migration"
 	serverresources "example.com/stock-analysis-flow/internal/server/resources"
 )
@@ -53,6 +54,9 @@ func bootstrapDatabase(ctx context.Context, cfg mysqlredis.Config, timeout time.
 	}
 	if err := quantstorage.ValidateSchema(migrationCtx, db); err != nil {
 		return nil, nil, errors.Join(fmt.Errorf("validate final Quant schema: %w", err), db.Close())
+	}
+	if err := researchflowstorage.ValidateSchema(migrationCtx, db); err != nil {
+		return nil, nil, errors.Join(fmt.Errorf("validate final Researchflow schema: %w", err), db.Close())
 	}
 	return db, registry, nil
 }

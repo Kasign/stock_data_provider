@@ -1360,3 +1360,12 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - News 已有只读 MissingSchemaTables 探测，并由 news.storage.schema 诊断项调用；此前 Schema 审计记录的“无检查”应精确理解为“没有 Root 启动级完整物理 Schema Validator”，不能忽略现存 readiness probe。
 - 复核发现该诊断把 required_tables 固定写成 10，而 News Migration 与 requiredNewsSchemaTables 实际均定义 14 张表，导致健康诊断报告与真实检查范围不一致。
 - 本轮将被检查表数量改为由 News Storage Probe 从同一张 required table 清单返回，避免再维护第二份硬编码数字；保持现有 MissingSchemaTables 的只读语义和 degraded readiness 行为，不新增平行 Schema 检查。
+
+
+## 2026-11-25 Researchflow 物理 Schema 启动校验补齐
+
+- 复核发现 Root 已在 Migration History/Checksum 校验后执行 MarketData、Analysis、Quant 的只读物理 Schema 校验，但 Researchflow Worker 核心持久化结构没有对应校验。Researchflow Migration 已应用并不代表人工 DDL 漂移可被发现。
+- 新增 Researchflow Storage 自有 `ValidateSchema`，检查 9 张核心表的完整必需列，以及 Run/Stage/Attempt 唯一约束、Claim/Lease 扫描索引、Outbox Claim 索引和 Stage Output 关联索引；不复制 Migration DDL、不执行自动修复。
+- Root `bootstrapDatabase` 在 Redis、HTTP Client 和 Repository 装配前执行该校验；缺表、缺列、索引缺失、唯一性变化或索引列顺序漂移均 fail-closed。
+- 新增结构快照单测覆盖缺表、缺列、缺索引、唯一性和索引列顺序漂移；新增真实 MariaDB Migration 基线集成测试。
+- 该校验只确认 Researchflow 物理结构符合当前 Worker/Run/Stage/Attempt/Outbox 访问契约，不代表 News 来源证据链、Research Stage 消费链或真实 Provider 数据质量验收完成。
