@@ -127,7 +127,7 @@ P0-1 全量依赖审计已完成；本计划后续只对具体字段、SQL 和�
 
 ### P0-2：最终数据模型与 Migration
 
-状态：IN_PROGRESS
+状态：DONE
 
 1. 逐字段对齐 Domain、Repository、PIT SQL 和 Research Evidence DTO。
 2. 修改单一 V1 Migration，直接创建最终 10 张表。
@@ -135,11 +135,11 @@ P0-1 全量依赖审计已完成；本计划后续只对具体字段、SQL 和�
 4. 删除 4 张表及其专属索引、外键、Repository 和失效用例。
 5. 通过空库 Migration 和真实 MariaDB Schema 验证。
 
-完成门槛：Migration 从空库直接创建最终 Schema；Validator 与真实 MariaDB 表/索引/外键一致。无需兼容旧 V1。
+完成门槛：Migration 从空库直接创建最终 Schema；Validator 与真实 MariaDB 表/索引/外键一致。无需兼容旧 V1。已在 Go test suite Run `45595639304` 的 News MariaDB Job 中使用 MariaDB 11.4 实际通过物理 Schema 基线和 ValidateSchema 校验。
 
 ### P0-3：统一正式入库与全局 URL 去重
 
-状态：IN_PROGRESS（实现已开始，验收未完成）
+状态：DONE
 
 1. 建立唯一正式入库 Application 用例。
 2. RSS/Atom 和被选中的 Provider 候选复用该用例。
@@ -155,16 +155,18 @@ P0-1 全量依赖审计已完成；本计划后续只对具体字段、SQL 和�
 - 不同来源并发采集相同规范 URL，全局只创建一个主体并保留两条来源身份；
 - 同一来源原生 ID 后补充规范 URL，主体身份更新但内容版本数不增加；
 - 同一来源原生 ID 对应不同 URL 时返回身份冲突；
-- 同一幂等键相同载荷重放、不同载荷冲突；
+- 同一最终幂等键相同载荷重放；最终幂等键载荷冲突由 Application 单元测试 `TestIngestCandidateRejectsIdempotencyKeyPayloadReuse` 覆盖。`IdempotencyPrefix` 是批次前缀，不是最终幂等键；内容变化会生成新的最终幂等键，不应错误地期待冲突；
 - 并发内容变化追加版本；
 - RSS description 经真实 Parser 和授权层级过滤后，同时持久化到 `news_items.content_json` 与最新 `news_item_versions.content_json`，且两者内容一致；
 - 通过制造版本主键冲突，验证正式 Application 在主体、身份、Observation 已写入后失败时整笔事务回滚。
 
-该测试实现已提交，但尚未执行真实 MariaDB。专用 CI Job 已修正为匹配 `TestNewsMariaDBApplicationIntegration`，并对 7 个 MariaDB 用例逐个要求精确 PASS；旧测试名已从该门禁移除。只有实际 Workflow 全部通过、且测试未 SKIP 后，P0-3 才能验收 DONE。当前尚无本轮修复提交对应的可核验 CI 结果，因此 P0-3 仍为 IN_PROGRESS。
+真实 MariaDB 11.4 验收已通过：Go test suite Run `45595639304` 的 News MariaDB Job `139140906585` 执行 `TestNewsMariaDBApplicationIntegration`、物理 Schema、Retention、Availability PIT、并发决策和策略版本相关用例，全部 PASS。该测试由正式 `StaticSourceCatalog`、`CollectSource.Execute`、`IngestCollectedSource.Execute` 和真实 MySQL Repository 驱动，不复制业务算法。
+
+完整验证也已通过：Go test suite Run `45595639304`（根模块 go test、Race、Vet、News MariaDB 和其他模块测试全部成功）；Integration CI Run `45595639470`（News/Research/Researchflow 跨模块、Worker Bootstrap MariaDB/Redis、Compose、WebUI 检查全部成功）。验收代码 SHA：`c44a262db5544961b35cf910c22ecbac823f735c`。P0-3 达到完成门槛，标记 DONE。
 
 ### P0-4：Feed 生产自动采集闭环
 
-状态：NOT_STARTED（调用链审计已完成，尚未修改生产装配）
+状态：NEXT（P0-2/P0-3 已完成；调用链审计和实施方案已完成，尚未修改生产装配）
 
 #### 已核实的现状
 
@@ -201,6 +203,8 @@ P0-1 全量依赖审计已完成；本计划后续只对具体字段、SQL 和�
 
 ### P1-2：全量回归与验收
 
+阶段性状态：P0-2/P0-3 对应的 News MariaDB、根模块 Go Test/Race/Vet 和 Integration CI 已全部通过；P0-4 完成后必须重新执行最终全量回归。
+
 1. News 全量测试、Race Detector、Vet。
 2. MariaDB Migration、Schema、唯一约束、事务、并发和回滚测试。
 3. Research/PIT/Researchflow/Quant 消费者回归。
@@ -221,4 +225,4 @@ P0-1 全量依赖审计已完成；本计划后续只对具体字段、SQL 和�
 
 ## 7. 会话恢复
 
-继续任务时先核对 `repair_all` 最新 HEAD，再直接从当前未完成阶段继续。P0-1 已关闭，不得重复审计。当前从 P0-3 正式 Application + MariaDB 测试的真实执行与修复开始；通过后继续 P0-4 Feed Server 生产装配。只操作 `repair_all`，按功能组提交，中文文档/注释/提交信息。
+继续任务时先核对 `repair_all` 最新 HEAD，再直接从当前未完成阶段继续。P0-1 已关闭，不得重复审计。当前从 P0-4 Feed Server 生产装配开始。P0-2/P0-3 已完成，不得重复 Schema 审计或统一入库测试方案；只在 P0-4 新增真实生产装配与 Researchflow 调用路径。只操作 `repair_all`，按功能组提交，中文文档/注释/提交信息。
