@@ -867,6 +867,9 @@ func TestNewsMariaDBApplicationIntegration(t *testing.T) {
 	if rollbackErr == nil {
 		t.Fatal("formal Application ingest unexpectedly succeeded despite duplicate version ID")
 	}
+	if !errors.Is(rollbackErr, app.ErrIdentityTransaction) || rollbackIDCalls != 3 {
+		t.Fatalf("rollback error=%v ID calls=%d, want transaction failure after version ID allocation", rollbackErr, rollbackIDCalls)
+	}
 	for _, check := range []struct {
 		name  string
 		query string
