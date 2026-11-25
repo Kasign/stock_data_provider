@@ -795,6 +795,53 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 		t.Fatalf("concurrent repository transactions created %d News items, want 1", itemCount)
 	}
 
+	// 不同来源并发发现同一规范 URL，必须全局复用同一个新闻主体。
+	urlPolicy := domain.SourceURLPolicy{AllowedSchemes: []string{"https"}, AllowedHosts: []string{"news.example"}}
+	urlCandidate := domain.Candidate{
+		SourceItemID: "same-native-id", RawURL: "https://news.example/global-story", Title: "Global URL identity",
+	}
+	urlObservations := make([]domain.Observation, 2)
+	urlErrors := make(chan error, 2)
+	var urlWait sync.WaitGroup
+	for index := 0; index < 2; index++ {
+		index := index
+		urlWait.Add(1)
+		go func() {
+			defer urlWait.Done()
+			source := fmt.Sprintf("%s-url-source-%d", sourceID, index)
+			observation, ingestErr := ingest.Execute(ctx, source, fmt.Sprintf("url-global-key-%d", index), urlCandidate, urlPolicy)
+			if ingestErr != nil {
+				urlErrors <- ingestErr
+				return
+			}
+			urlObservations[index] = observation
+		}()
+	}
+	urlWait.Wait()
+	close(urlErrors)
+	for ingestErr := range urlErrors {
+		t.Fatalf("cross-source canonical URL ingest failed: %v", ingestErr)
+	}
+	if urlObservations[0].NewsID == "" || urlObservations[0].NewsID != urlObservations[1].NewsID {
+		t.Fatalf("cross-source URL did not resolve to one NewsID: %+v", urlObservations)
+	}
+	var globalURLItemCount, globalURLIdentityCount int
+	if err := db.QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM news_items WHERE canonical_url_hash = ?",
+		canonicalHashForIntegration("https://news.example/global-story"),
+	).Scan(&globalURLItemCount); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM news_identifiers WHERE news_id = ?", urlObservations[0].NewsID,
+	).Scan(&globalURLIdentityCount); err != nil {
+		t.Fatal(err)
+	}
+	if globalURLItemCount != 1 || globalURLIdentityCount != 2 {
+		t.Fatalf("global URL deduplication produced items=%d source identities=%d, want 1 and 2",
+			globalURLItemCount, globalURLIdentityCount)
+	}
+
 	traceSourceID := sourceID + "-provider-trace"
 	traceCandidate := domain.Candidate{SourceItemID: "provider-trace-item", ProviderCode: "tavily", Title: "trace test"}
 	if _, err := ingest.Execute(ctx, traceSourceID, "provider-trace-key", traceCandidate, domain.SourceURLPolicy{}); !errors.Is(err, app.ErrProviderOutputPolicyRequired) {
