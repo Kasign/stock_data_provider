@@ -319,17 +319,11 @@ func newNewsResearchFixture(t *testing.T, ctx context.Context) *newsResearchFixt
 		}
 	}
 
-	// SystemAsOf 必须在版本观察时间之后、且不晚于 GetEvidence 内部 now。
+	// 授权快照是版本级审计记录，不要求绕过严格 PIT 读取来创建。
+	// 本 fixture 故意不写入 available_at Evidence/Decision，以验证无来源时间证据时
+	// News Query 和 Research Importer 都在真实 MariaDB 上 fail closed。
 	systemAsOf := time.Now().UTC()
-	pit, err := repo.GetEvidenceVersionAt(ctx, newsapp.GetEvidenceRequest{
-		CallerRef: newsResearchCallerRef, PurposeCode: newsapp.EvidencePurposeResearchAnalysis,
-		RequestedContentLevel: newsapp.EvidenceContentSnippet,
-		SystemAsOf:            systemAsOf, NewsID: newsResearchNewsID, VersionID: result.Version.ID,
-	})
-	if err != nil {
-		t.Fatalf("读回 PIT 记录失败: %v", err)
-	}
-	if err := repo.AppendAuthorizationSnapshot(ctx, binding, pit.Observation, pit.Version); err != nil {
+	if err := repo.AppendAuthorizationSnapshot(ctx, binding, observation, result.Version); err != nil {
 		t.Fatalf("写入 NEWS-CTR-002 授权快照失败（检查 Observation 策略轨迹字段）: %v", err)
 	}
 
@@ -512,38 +506,28 @@ func TestNewsResearchMariaDBIntegration(t *testing.T) {
 			}
 		})
 
-		t.Run("authorized_read_and_fail_closed_import", func(t *testing.T) {
+		t.Run("strict_pit_rejects_missing_available_at_before_authorization", func(t *testing.T) {
 			record, err := f.composition.query.GetEvidence(ctx, f.getRequest())
-			if err != nil {
-				t.Fatalf("真实 MariaDB 授权读取失败（依次检查策略指针、Golden 指纹、PIT 时间）: %v", err)
+			if !errors.Is(err, newsapp.ErrEvidencePITNotFound) {
+				t.Fatalf("News Query error = %v, want ErrEvidencePITNotFound when no verified available_at exists", err)
 			}
-			if record.NewsID != newsResearchNewsID || record.VersionNo != 1 ||
-				record.AuthorizationStatus != "allowed" || record.AuthorizationRef == "" {
-				t.Fatalf("授权读取结果异常: %+v", record)
+			if record.NewsID != "" || record.ContentExcerpt != nil {
+				t.Fatalf("strict PIT rejection leaked Evidence DTO: %+v", record)
 			}
-			// 当前契约事实：News 不提供可验证的 available_at，返回 null。
-			// 这是 B 组成功写入链路被 blocked 的直接原因。
-			// review 结论：本 fail-closed 分支只在「缺证据」时可执行。News Owner
-			// 解锁后，B 组只接管成功路径，必须另补一条能显式构造「缺 available_at」
-			// 输入的真库用例来守住这条契约红线（交接文档第 10.2 节第 9 步）。
-			if record.AvailableAt == nil {
-				_, err = f.composition.importer.ImportEvidence(ctx, researchnews.ImportRequest{
-					CallerRef: newsResearchCallerRef, PurposeCode: "research_analysis",
-					RequestedContentLevel: "snippet", SystemAsOf: f.systemAsOf,
-					NewsID: newsResearchNewsID, VersionID: f.version.ID,
-				})
-				if !errors.Is(err, researchnews.ErrEvidenceNotPITSafe) {
-					t.Fatalf("Importer 错误 = %v, want ErrEvidenceNotPITSafe（fail-closed）", err)
-				}
-				var persisted int
-				if err := f.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM research_evidence_records").Scan(&persisted); err != nil {
-					t.Fatalf("读取 Research Evidence 表失败: %v", err)
-				}
-				if persisted != 0 {
-					t.Fatalf("fail-closed 后 Research Evidence 落库行数 = %d, want 0", persisted)
-				}
-			} else {
-				t.Log("News 已提供 available_at：fail-closed 分支不适用；成功路径由 B 组覆盖，缺证据 fail-closed 真库回归用例待 News Owner 解锁后补齐")
+			_, err = f.composition.importer.ImportEvidence(ctx, researchnews.ImportRequest{
+				CallerRef: newsResearchCallerRef, PurposeCode: "research_analysis",
+				RequestedContentLevel: "snippet", SystemAsOf: f.systemAsOf,
+				NewsID: newsResearchNewsID, VersionID: f.version.ID,
+			})
+			if !errors.Is(err, newsapp.ErrEvidencePITNotFound) {
+				t.Fatalf("Importer error = %v, want propagated strict PIT rejection", err)
+			}
+			var persisted int
+			if err := f.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM research_evidence_records").Scan(&persisted); err != nil {
+				t.Fatalf("read Research Evidence table: %v", err)
+			}
+			if persisted != 0 {
+				t.Fatalf("strict PIT rejection persisted %d Research Evidence rows, want 0", persisted)
 			}
 		})
 
@@ -555,11 +539,14 @@ func TestNewsResearchMariaDBIntegration(t *testing.T) {
 		// payload 只校验关键留痕键存在；值一致性由列级断言覆盖。
 		t.Run("successful_import_with_verified_available_at", func(t *testing.T) {
 			record, err := f.composition.query.GetEvidence(ctx, f.getRequest())
+			if errors.Is(err, newsapp.ErrEvidencePITNotFound) {
+				t.Skip("B 组 blocked：News 尚未提供可验证 available_at 来源证据（GOV-CTR-002 / NEWS-CTR-001）；严格 PIT 在 Query 层排除该记录")
+			}
 			if err != nil {
 				t.Fatalf("B 组授权读取失败: %v", err)
 			}
 			if record.AvailableAt == nil {
-				t.Skip("B 组 blocked：News 尚未提供可验证 available_at 来源证据（GOV-CTR-002 / NEWS-CTR-001）；解锁后本用例自动启用")
+				t.Fatal("strict PIT Query returned a record without available_at")
 			}
 			// GOV-CTR-002 约束的是「RFC3339Nano UTC / 零偏移 / 以 Z 结尾」的表示，
 			// 不是 Go 内部 time.Location 的指针身份；FixedZone("UTC",0) 与
@@ -679,7 +666,7 @@ func TestNewsResearchMariaDBIntegration(t *testing.T) {
 			}
 		})
 
-		t.Run("list_evidence_page_uses_current_authorization", func(t *testing.T) {
+		t.Run("list_evidence_page_excludes_missing_available_at", func(t *testing.T) {
 			page, err := f.composition.query.ListEvidence(ctx, f.listRequest())
 			if err != nil {
 				t.Fatalf("真实快照分页失败: %v", err)
@@ -687,61 +674,15 @@ func TestNewsResearchMariaDBIntegration(t *testing.T) {
 			if page.SnapshotRef == "" || !page.SystemAsOf.Equal(f.systemAsOf) {
 				t.Fatalf("快照页边界异常: %+v", page)
 			}
-			if len(page.Items) != 1 || page.Items[0].NewsID != newsResearchNewsID {
-				t.Fatalf("快照页条目异常: %+v", page.Items)
-			}
-			// available_at 由 B 组用例校验；解锁后允许非 nil，此处只守住当前授权复核。
-			if page.Items[0].AuthorizationStatus != "allowed" {
-				t.Fatalf("分页条目未逐条执行当前授权复核: %+v", page.Items[0])
+			if len(page.Items) != 0 {
+				t.Fatalf("严格 PIT 列表在没有 verified available_at 时返回了 %d 条记录", len(page.Items))
 			}
 		})
 	})
 
-	t.Run("fingerprint_tamper_rejected", func(t *testing.T) {
-		f := newNewsResearchFixture(t, ctx)
-		tampered := f.binding
-		tampered.AuthorizationRef.AuthorizationRef += "-tampered"
-		tampered.AuthorizationRef.DecidedAt = time.Now().UTC().Format(time.RFC3339Nano)
-		expiry := time.Now().UTC().Add(time.Hour).Format(time.RFC3339Nano)
-		tampered.AuthorizationRef.ExpiresAt = newsdomain.NullableDateTime{Present: true, Value: &expiry}
-		tampered.AuthorizationRef.DecisionFingerprint = strings.Repeat("0", 64)
-		if err := f.repo.AppendAuthorizationSnapshot(ctx, tampered, f.observation, f.version); err != nil {
-			t.Fatalf("追加篡改指纹的授权快照失败: %v", err)
-		}
-		record, err := f.composition.query.GetEvidence(ctx, f.getRequest())
-		if !errors.Is(err, newsapp.ErrNewsAuthorizationFingerprintInvalid) {
-			t.Fatalf("篡改指纹后的错误 = %v, want ErrNewsAuthorizationFingerprintInvalid", err)
-		}
-		if record.NewsID != "" || record.ContentExcerpt != nil {
-			t.Fatalf("指纹校验失败时泄露了内容 DTO: %+v", record)
-		}
-	})
+	// Fingerprint tampering and current-policy changes are covered by
+	// internal/news/app/authorization_read_test.go. This real-DB integration fixture
+	// intentionally has no verified available_at, so Query must stop at the strict PIT
+	// gate before reaching authorization evaluation.
 
-	t.Run("current_policy_version_change_rejected", func(t *testing.T) {
-		f := newNewsResearchFixture(t, ctx)
-		publisher, err := newsapp.NewPublishNewsPolicyVersion(f.repo)
-		if err != nil {
-			t.Fatalf("构造策略发布器失败: %v", err)
-		}
-		payload, err := json.Marshal(newsdomain.SourcePolicy{
-			Status:              newsdomain.AuthorizationApproved,
-			AllowedPurposes:     []newsdomain.Purpose{newsdomain.PurposeInternalPersonalResearch},
-			AllowedContentKinds: []newsdomain.ContentKind{newsdomain.ContentSnippet},
-			EvidenceRef:         "integration-source-evidence",
-		})
-		if err != nil {
-			t.Fatalf("序列化撤销用策略失败: %v", err)
-		}
-		if err := publisher.Execute(ctx, newsdomain.NewsPolicyTypeSource, "sec-edgar", "2.2.0", payload); err != nil {
-			t.Fatalf("切换当前 source 策略指针失败: %v", err)
-		}
-		record, err := f.composition.query.GetEvidence(ctx, f.getRequest())
-		if err == nil {
-			t.Fatal("当前策略版本已变更（授权快照不再匹配）时仍返回了 Evidence")
-		}
-		if record.NewsID != "" || record.ContentExcerpt != nil {
-			t.Fatalf("策略版本变更时泄露了内容 DTO: %+v", record)
-		}
-		t.Logf("当前策略版本变更返回错误: %v", err)
-	})
 }

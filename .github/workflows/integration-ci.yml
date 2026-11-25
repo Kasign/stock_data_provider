@@ -166,19 +166,13 @@ jobs:
             fi
           done
           # read_chain_and_fail_closed_import 内的五个子测试逐一要求 PASS。
-          for case_name in composition_and_schema authorized_read_and_fail_closed_import pit_invisible context_cancelled list_evidence_page_uses_current_authorization; do
+          for case_name in composition_and_schema strict_pit_rejects_missing_available_at_before_authorization pit_invisible context_cancelled list_evidence_page_excludes_missing_available_at; do
             if ! grep -Eq "^[[:space:]]*--- PASS: TestNewsResearchMariaDBIntegration/read_chain_and_fail_closed_import/${case_name} \\(" /tmp/news_research_verbose.log; then
               echo "::error::A 组子测试 ${case_name} 缺少精确 PASS 记录"
               exit 1
             fi
           done
-          # 指纹篡改与策略版本变化是 MariaDB 集成测试的根级子测试，不属于 read_chain 分组。
-          for case_name in fingerprint_tamper_rejected current_policy_version_change_rejected; do
-            if ! grep -Eq "^[[:space:]]*--- PASS: TestNewsResearchMariaDBIntegration/${case_name} \\(" /tmp/news_research_verbose.log; then
-              echo "::error::A 组子测试 ${case_name} 缺少精确 PASS 记录"
-              exit 1
-            fi
-          done
+          # Fingerprint/current-policy checks run in the News application authorization unit suite.
           # B 组只能是明确 PASS 或按当前搁置决议明确 SKIP；缺少结果一律失败。
           b_case='TestNewsResearchMariaDBIntegration/read_chain_and_fail_closed_import/successful_import_with_verified_available_at'
           if grep -Eq "^[[:space:]]*--- PASS: ${b_case} \\(" /tmp/news_research_verbose.log; then
