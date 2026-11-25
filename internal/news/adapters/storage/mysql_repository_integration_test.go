@@ -95,13 +95,13 @@ func ingestIntegrationFeed(
 ) (domain.Observation, error) {
 	const retention = 24 * time.Hour
 	sourcePolicy := domain.SourcePolicy{
-		Status: domain.AuthorizationApproved,
+		Status:               domain.AuthorizationApproved,
 		AllowedAccessMethods: []domain.AccessMethod{domain.AccessRSS},
-		AllowedPurposes: []domain.Purpose{domain.PurposeInternalPersonalResearch},
-		AllowedContentKinds: []domain.ContentKind{domain.ContentAbstract},
-		AllowedStorageModes: []domain.StorageMode{domain.StorageTransient, domain.StoragePersistentExcerpt},
-		MaxRetention: retention,
-		EvidenceRef: "integration-source-evidence",
+		AllowedPurposes:      []domain.Purpose{domain.PurposeInternalPersonalResearch},
+		AllowedContentKinds:  []domain.ContentKind{domain.ContentAbstract},
+		AllowedStorageModes:  []domain.StorageMode{domain.StorageTransient, domain.StoragePersistentExcerpt},
+		MaxRetention:         retention,
+		EvidenceRef:          "integration-source-evidence",
 	}
 	policyPayload, err := json.Marshal(sourcePolicy)
 	if err != nil {
