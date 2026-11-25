@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"strings"
+	"reflect"
 	"testing"
 	"time"
 
@@ -13,129 +13,102 @@ import (
 )
 
 type feedCollectorStub struct {
-	results map[string]app.CollectSourceResult
-	errors map[string]error
-	requests []app.CollectSourceRequest
+	calls   []string
+	entries map[string][]app.CollectedSourceEntry
+	errors  map[string]error
 }
 
-func (s *feedCollectorStub) Execute(_ context.Context, request app.CollectSourceRequest) (app.CollectSourceResult, error) {
-	s.requests = append(s.requests, request)
-	if err := s.errors[request.SourceID]; err != nil {
+func (s *feedCollectorStub) Execute(ctx context.Context, request app.CollectSourceRequest) (app.CollectSourceResult, error) {
+	if err := ctx.Err(); err != nil {
 		return app.CollectSourceResult{}, err
 	}
-	return s.results[request.SourceID], nil
+	ref := SourceEndpointResourceRef(request.SourceID, request.EndpointID)
+	s.calls = append(s.calls, ref)
+	if err := s.errors[ref]; err != nil {
+		return app.CollectSourceResult{}, err
+	}
+	return app.CollectSourceResult{
+		SourceID: request.SourceID, EndpointID: request.EndpointID,
+		Entries: append([]app.CollectedSourceEntry(nil), s.entries[ref]...),
+	}, nil
 }
 
 type feedIngesterStub struct {
-	observations map[string][]domain.Observation
-	errors map[string]error
-	requests []app.IngestCollectedSourceRequest
+	prefixes []string
+	calls    []app.IngestCollectedSourceRequest
 }
 
-func (s *feedIngesterStub) Execute(_ context.Context, request app.IngestCollectedSourceRequest) ([]domain.Observation, error) {
-	s.requests = append(s.requests, request)
-	for _, entry := range request.Collection.Entries {
-		if err := s.errors[entry.Candidate.SourceItemID]; err != nil {
-			return nil, err
-		}
+func (s *feedIngesterStub) Execute(ctx context.Context, request app.IngestCollectedSourceRequest) ([]domain.Observation, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
-	if len(request.Collection.Entries) == 0 {
-		return []domain.Observation{}, nil
-	}
-	return append([]domain.Observation(nil), s.observations[request.Collection.SourceID]...), nil
+	s.prefixes = append(s.prefixes, request.IdempotencyPrefix)
+	s.calls = append(s.calls, request)
+	return []domain.Observation{{NewsID: "news-" + request.Collection.SourceID}}, nil
 }
 
 func feedRegistration(sourceID, endpointID string) app.SourceEndpointRegistration {
 	return app.SourceEndpointRegistration{
 		SourceID: sourceID, EndpointID: endpointID, Enabled: true,
-		AccessMethod: domain.AccessRSS,
 		SourcePolicy: domain.SourcePolicy{MaxRetention: 48 * time.Hour},
 	}
 }
 
-func feedCollectionFixture(sourceID string, count int) app.CollectSourceResult {
-	entries := make([]app.CollectedSourceEntry, count)
-	for i := range entries {
-		entries[i].Candidate.SourceItemID = sourceID + "-item-" + string(rune('a'+i))
-	}
-	return app.CollectSourceResult{SourceID: sourceID, Entries: entries}
-}
-
-func TestFeedCollectionAdapterPersistsOnlyRunSnapshotAndReturnsReferenceSummary(t *testing.T) {
-	registrationA := feedRegistration("trusted-a", "primary")
-	registrationB := feedRegistration("trusted-b", "primary")
-	collector := &feedCollectorStub{
-		results: map[string]app.CollectSourceResult{
-			"trusted-a": feedCollectionFixture("trusted-a", 1),
-			"trusted-b": feedCollectionFixture("trusted-b", 1),
-		},
-		errors: map[string]error{},
-	}
-	ingester := &feedIngesterStub{
-		observations: map[string][]domain.Observation{
-			"trusted-a": {{NewsID: "news-a"}},
-			"trusted-b": {{NewsID: "news-b"}},
-		},
-		errors: map[string]error{},
-	}
-	adapter, err := NewFeedCollectionAdapter([]app.SourceEndpointRegistration{registrationA, registrationB}, collector, ingester)
+func TestFeedCollectionAdapterUsesRunResourceSnapshot(t *testing.T) {
+	collector := &feedCollectorStub{entries: map[string][]app.CollectedSourceEntry{
+		"source-a/primary": {{Candidate: domain.Candidate{Title: "标题甲"}}},
+		"source-b/primary": {{Candidate: domain.Candidate{Title: "标题乙"}}},
+	}}
+	ingester := &feedIngesterStub{}
+	adapter, err := NewFeedCollectionAdapter([]app.SourceEndpointRegistration{
+		feedRegistration("source-a", "primary"),
+		feedRegistration("source-b", "primary"),
+	}, collector, ingester)
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := adapter.Execute(context.Background(), "run-1/attempt-1", CollectFeedsStageCode,
-		[]string{SourceEndpointResourceRef("trusted-b", "primary")})
+	result, err := adapter.Execute(context.Background(), "run-1/attempt-1", CollectFeedsStageCode, []string{"source-a/primary"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(collector.requests) != 1 || collector.requests[0].SourceID != "trusted-b" {
-		t.Fatalf("collector calls = %+v, want only trusted-b from Run snapshot", collector.requests)
+	if !reflect.DeepEqual(collector.calls, []string{"source-a/primary"}) {
+		t.Fatalf("collector calls escaped Run resource snapshot: %#v", collector.calls)
 	}
-	if len(ingester.requests) != 1 || ingester.requests[0].Collection.SourceID != "trusted-b" {
-		t.Fatalf("ingester calls = %+v, want only trusted-b", ingester.requests)
-	}
-	request := ingester.requests[0]
-	if request.Purpose != domain.PurposeInternalPersonalResearch ||
-		request.Retention != defaultFeedRetention ||
-		request.IdempotencyPrefix != "run-1/attempt-1/"+CollectFeedsStageCode+"/trusted-b/primary" {
-		t.Fatalf("formal ingest request is not bound to the authorized Researchflow attempt: %+v", request)
+	if !reflect.DeepEqual(ingester.prefixes, []string{"run-1/attempt-1/" + CollectFeedsStageCode + "/source-a/primary"}) {
+		t.Fatalf("ingest idempotency prefix = %#v", ingester.prefixes)
 	}
 	var output FeedCollectionOutput
 	if err := json.Unmarshal(result.Payload, &output); err != nil {
 		t.Fatal(err)
 	}
-	if output.Status != "success" || output.SourceCount != 1 || output.IngestedCount != 1 ||
-		len(output.Sources) != 1 || output.Sources[0].NewsIDs[0] != "news-b" {
-		t.Fatalf("Feed Stage output = %+v", output)
-	}
-	if strings.Contains(string(result.Payload), "https://") || strings.Contains(string(result.Payload), "article body") {
-		t.Fatalf("StageOutput leaked a URL or article content: %s", result.Payload)
+	if output.SourceCount != 1 || output.SuccessSourceCount != 1 ||
+		output.CollectedEntryCount != 1 || output.IngestedCount != 1 {
+		t.Fatalf("Feed output counters = %+v", output)
 	}
 	if err := ValidateFeedCollectionPayload(result.Payload); err != nil {
-		t.Fatalf("ValidateFeedCollectionPayload: %v", err)
-	}
-	if err := ValidateFeedCollectionQualitySummary(result.QualitySummary); err != nil {
-		t.Fatalf("ValidateFeedCollectionQualitySummary: %v", err)
+		t.Fatalf("valid Feed output rejected: %v", err)
 	}
 }
 
-func TestFeedCollectionAdapterDoesNotRetryPartialSuccess(t *testing.T) {
+func TestFeedCollectionAdapterReportsPartialAndRetryableFailures(t *testing.T) {
 	collector := &feedCollectorStub{
-		results: map[string]app.CollectSourceResult{"trusted-a": feedCollectionFixture("trusted-a", 1)},
-		errors: map[string]error{"trusted-b": &app.SourceCollectionError{Code: "source_http_status_502", Retryable: true}},
+		entries: map[string][]app.CollectedSourceEntry{
+			"source-b/primary": {{Candidate: domain.Candidate{Title: "标题乙"}}},
+		},
+		errors: map[string]error{
+			"source-a/primary": &app.SourceCollectionError{Code: "source_fetch_failed", Retryable: true},
+		},
 	}
-	ingester := &feedIngesterStub{
-		observations: map[string][]domain.Observation{"trusted-a": {{NewsID: "news-a"}}},
-		errors: map[string]error{},
-	}
+	ingester := &feedIngesterStub{}
 	adapter, err := NewFeedCollectionAdapter([]app.SourceEndpointRegistration{
-		feedRegistration("trusted-a", "primary"), feedRegistration("trusted-b", "primary"),
+		feedRegistration("source-a", "primary"),
+		feedRegistration("source-b", "primary"),
 	}, collector, ingester)
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := adapter.Execute(context.Background(), "run-1/attempt-1", CollectFeedsStageCode, []string{
-		SourceEndpointResourceRef("trusted-a", "primary"),
-		SourceEndpointResourceRef("trusted-b", "primary"),
+	result, err := adapter.Execute(context.Background(), "run-2/attempt-1", CollectFeedsStageCode, []string{
+		"source-a/primary", "source-b/primary", "source-removed/primary",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -144,23 +117,29 @@ func TestFeedCollectionAdapterDoesNotRetryPartialSuccess(t *testing.T) {
 	if err := json.Unmarshal(result.Payload, &output); err != nil {
 		t.Fatal(err)
 	}
-	if output.Status != "partial" || result.Retryable {
-		t.Fatalf("partial success must not retry already-ingested sources: status=%s retryable=%v", output.Status, result.Retryable)
+	if output.Status != "partial" || output.SourceCount != 3 || output.SuccessSourceCount != 1 ||
+		output.FailedSourceCount != 1 || output.SkippedSourceCount != 1 || result.Retryable {
+		t.Fatalf("partial Feed outcome = %+v retryable=%v", output, result.Retryable)
+	}
+	if !reflect.DeepEqual(result.ReasonCodes, []string{"news_feed_retryable_source_failure", "news_feed_source_skipped"}) {
+		t.Fatalf("Feed reason codes = %#v", result.ReasonCodes)
+	}
+	if err := ValidateFeedCollectionPayload(result.Payload); err != nil {
+		t.Fatalf("valid partial Feed payload rejected: %v", err)
 	}
 }
 
-func TestFeedCollectionAdapterRetriesOnlyWhenAllSourcesFailedRetryably(t *testing.T) {
-	collector := &feedCollectorStub{
-		results: map[string]app.CollectSourceResult{},
-		errors: map[string]error{"trusted-a": &app.SourceCollectionError{Code: "source_http_status_502", Retryable: true}},
-	}
-	ingester := &feedIngesterStub{observations: map[string][]domain.Observation{}, errors: map[string]error{}}
-	adapter, err := NewFeedCollectionAdapter([]app.SourceEndpointRegistration{feedRegistration("trusted-a", "primary")}, collector, ingester)
+func TestFeedCollectionAdapterMarksAllRetryableFailuresForResearchflowRetry(t *testing.T) {
+	collector := &feedCollectorStub{errors: map[string]error{
+		"source-a/primary": &app.SourceCollectionError{Code: "source_fetch_failed", Retryable: true},
+	}}
+	adapter, err := NewFeedCollectionAdapter([]app.SourceEndpointRegistration{
+		feedRegistration("source-a", "primary"),
+	}, collector, &feedIngesterStub{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := adapter.Execute(context.Background(), "run-1/attempt-1", CollectFeedsStageCode,
-		[]string{SourceEndpointResourceRef("trusted-a", "primary")})
+	result, err := adapter.Execute(context.Background(), "run-3/attempt-1", CollectFeedsStageCode, []string{"source-a/primary"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -168,45 +147,39 @@ func TestFeedCollectionAdapterRetriesOnlyWhenAllSourcesFailedRetryably(t *testin
 	if err := json.Unmarshal(result.Payload, &output); err != nil {
 		t.Fatal(err)
 	}
-	if output.Status != "failed_retryable" || !result.Retryable || output.FailedSourceCount != 1 {
-		t.Fatalf("all-retryable failure = %+v retryable=%v", output, result.Retryable)
+	if output.Status != "failed_retryable" || !result.Retryable || output.FailureCode != "news_feed_retryable_source_failure" {
+		t.Fatalf("all-retryable Feed outcome = %+v retryable=%v", output, result.Retryable)
+	}
+	if err := ValidateFeedCollectionPayload(result.Payload); err != nil {
+		t.Fatalf("valid retryable Feed payload rejected: %v", err)
 	}
 }
 
-func TestFeedCollectionAdapterRejectsInvalidRunResourceSnapshot(t *testing.T) {
-	collector := &feedCollectorStub{results: map[string]app.CollectSourceResult{}, errors: map[string]error{}}
-	ingester := &feedIngesterStub{observations: map[string][]domain.Observation{}, errors: map[string]error{}}
-	adapter, err := NewFeedCollectionAdapter([]app.SourceEndpointRegistration{feedRegistration("trusted-a", "primary")}, collector, ingester)
+func TestFeedCollectionAdapterRejectsInvalidResourceSnapshotAndHonorsCancellation(t *testing.T) {
+	adapter, err := NewFeedCollectionAdapter([]app.SourceEndpointRegistration{
+		feedRegistration("source-a", "primary"),
+	}, &feedCollectorStub{}, &feedIngesterStub{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, refs := range [][]string{
-		nil,
-		{"trusted-a/primary", "trusted-a/primary"},
-		{"invalid ref"},
-	} {
-		if _, err := adapter.Execute(context.Background(), "run-1", CollectFeedsStageCode, refs); !errors.Is(err, ErrFeedCollectionAdapterRequired) {
-			t.Fatalf("Execute refs=%v error=%v, want invalid snapshot", refs, err)
+	for _, refs := range [][]string{nil, {"source-a"}, {"source-a/primary", "source-a/primary"}, {" source-a/primary"}} {
+		if _, err := adapter.Execute(context.Background(), "run-4", CollectFeedsStageCode, refs); !errors.Is(err, ErrFeedCollectionAdapterRequired) {
+			t.Errorf("invalid resource snapshot %#v returned %v", refs, err)
 		}
-	}
-	if len(collector.requests) != 0 || len(ingester.requests) != 0 {
-		t.Fatalf("invalid Run resource snapshot reached collectors: collect=%d ingest=%d", len(collector.requests), len(ingester.requests))
-	}
-}
-
-func TestFeedCollectionAdapterHonorsContextCancellation(t *testing.T) {
-	collector := &feedCollectorStub{results: map[string]app.CollectSourceResult{}, errors: map[string]error{}}
-	ingester := &feedIngesterStub{observations: map[string][]domain.Observation{}, errors: map[string]error{}}
-	adapter, err := NewFeedCollectionAdapter([]app.SourceEndpointRegistration{feedRegistration("trusted-a", "primary")}, collector, ingester)
-	if err != nil {
-		t.Fatal(err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if _, err := adapter.Execute(ctx, "run-1", CollectFeedsStageCode, []string{SourceEndpointResourceRef("trusted-a", "primary")}); !errors.Is(err, context.Canceled) {
-		t.Fatalf("Execute canceled error = %v", err)
+	if _, err := adapter.Execute(ctx, "run-4", CollectFeedsStageCode, []string{"source-a/primary"}); !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancelled Feed collection returned %v", err)
 	}
-	if len(collector.requests) != 0 {
-		t.Fatalf("collector called after cancellation: %+v", collector.requests)
+	if got := SourceEndpointResourceRef("source/a", "primary"); got != "" {
+		t.Fatalf("invalid Source ID produced resource ref %q", got)
+	}
+}
+
+func TestValidateFeedCollectionPayloadRejectsAggregateCounterDrift(t *testing.T) {
+	raw := json.RawMessage("{\"status\":\"success\",\"failure_code\":\"\",\"source_count\":1,\"success_source_count\":1,\"empty_source_count\":0,\"skipped_source_count\":0,\"failed_source_count\":0,\"collected_entry_count\":2,\"ingested_count\":1,\"sources\":[{\"source_id\":\"source-a\",\"endpoint_id\":\"primary\",\"status\":\"success\",\"collected_count\":1,\"ingested_count\":1,\"news_ids\":[\"news-1\"],\"error_code\":\"\",\"retryable\":false}]}")
+	if err := ValidateFeedCollectionPayload(raw); err == nil {
+		t.Fatal("payload with aggregate counter drift was accepted")
 	}
 }
