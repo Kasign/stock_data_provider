@@ -8,6 +8,7 @@ import (
 
 	marketdatabootstrap "example.com/stock-analysis-flow/internal/marketdata/bootstrap"
 	newsconfig "example.com/stock-analysis-flow/internal/news/config"
+	newsstorage "example.com/stock-analysis-flow/internal/news/adapters/storage"
 	quantapplication "example.com/stock-analysis-flow/internal/quant/application"
 	quantstorage "example.com/stock-analysis-flow/internal/quant/storage"
 	researchflowapplication "example.com/stock-analysis-flow/internal/researchflow/application"
@@ -23,6 +24,7 @@ import (
 // identity remains outside this composition so Worker-only processes can assemble it.
 type researchflowComposition struct {
 	newsStage         *newsSearchStageComposition
+	newsFeedStage     *newsFeedStageComposition
 	quantResultReader *researchflowQuantResultReader
 	quantStage        *quantSMA20StageComposition
 	runRepository     *researchflowstorage.MySQLRunRepository
@@ -38,12 +40,14 @@ type researchflowComposition struct {
 }
 
 func newResearchflowComposition(
+	ctx context.Context,
 	shared *serverresources.Resources,
+	newsRepository *newsstorage.MySQLRepository,
 	newsConfig newsconfig.Config,
 	capacity serverconfig.ResearchflowCapacity,
 	dataModule *marketdatabootstrap.Module,
 ) (*researchflowComposition, error) {
-	if shared == nil || shared.DB == nil || shared.HTTPClient == nil {
+	if ctx == nil || shared == nil || shared.DB == nil || shared.HTTPClient == nil || newsRepository == nil {
 		return nil, errors.New("Researchflow composition requires shared MariaDB and Platform HTTP Client resources")
 	}
 	if !capacity.Configured {
@@ -58,6 +62,10 @@ func newResearchflowComposition(
 	if err != nil {
 		return nil, fmt.Errorf("read assembled News Provider inventory: %w", err)
 	}
+	newsFeedStage, err := newNewsFeedStageComposition(ctx, newsConfig, shared.HTTPClient, newsRepository)
+	if err != nil {
+		return nil, fmt.Errorf("compose News Feed Collection Stage: %w", err)
+	}
 	policyRegistry, err := resourcepolicy.NewRegistry()
 	if err != nil {
 		return nil, fmt.Errorf("create Researchflow ResourcePolicy Registry: %w", err)
@@ -65,6 +73,12 @@ func newResearchflowComposition(
 	providerInventories := map[string][]string{
 		resourcepolicy.NewsSearchConfiguredProvidersRef: append([]string(nil), newsProviderCodes...),
 		resourcepolicy.QuantDailyBarsProvidersRef:       {},
+	}
+	if newsFeedStage != nil {
+		providerInventories[resourcepolicy.NewsFeedConfiguredSourcesRef] = append([]string(nil), newsFeedStage.resourceCodes...)
+		if _, err := policyRegistry.Resolve(resourcepolicy.NewsFeedConfiguredSourcesRef, newsFeedStage.resourceCodes); err != nil {
+			return nil, fmt.Errorf("validate assembled News Feed source catalog inventory: %w", err)
+		}
 	}
 	if len(newsProviderCodes) > 0 {
 		if _, err := policyRegistry.Resolve(resourcepolicy.NewsSearchConfiguredProvidersRef, newsProviderCodes); err != nil {
@@ -83,12 +97,19 @@ func newResearchflowComposition(
 		providerInventories[resourcepolicy.QuantDailyBarsProvidersRef] = append([]string(nil), quantStage.providerCodes...)
 	}
 
-	workflowTemplates := make([]template.WorkflowTemplate, 0, 2)
+	workflowTemplates := make([]template.WorkflowTemplate, 0, 3)
 	newsTemplate, err := buildNewsSearchWorkflowTemplate(newsStage, policyRegistry)
 	if err != nil {
 		return nil, fmt.Errorf("preflight News Search workflow template: %w", err)
 	}
 	workflowTemplates = append(workflowTemplates, newsTemplate)
+	if newsFeedStage != nil {
+		feedTemplate, templateErr := buildNewsFeedWorkflowTemplate(newsFeedStage, policyRegistry)
+		if templateErr != nil {
+			return nil, fmt.Errorf("preflight News Feed workflow template: %w", templateErr)
+		}
+		workflowTemplates = append(workflowTemplates, feedTemplate)
+	}
 	if quantStage != nil {
 		quantTemplate, templateErr := buildQuantSMA20WorkflowTemplate(quantStage, policyRegistry)
 		if templateErr != nil {
@@ -105,6 +126,11 @@ func newResearchflowComposition(
 		return nil, fmt.Errorf("create Researchflow parameter Schema Validator: %w", err)
 	}
 	outputRegistriesList := []researchflowapplication.StageOutputRegistry{newsStage.registry}
+	feedExecutor := researchflowapplication.StageExecutor(nil)
+	if newsFeedStage != nil {
+		outputRegistriesList = append(outputRegistriesList, newsFeedStage.registry)
+		feedExecutor = newsFeedStage.executor
+	}
 	quantExecutor := researchflowapplication.StageExecutor(nil)
 	if quantStage != nil {
 		outputRegistriesList = append(outputRegistriesList, quantStage.registry)
@@ -115,8 +141,9 @@ func newResearchflowComposition(
 		return nil, fmt.Errorf("create immutable Researchflow Stage Output Registry set: %w", err)
 	}
 	stageExecutor := researchflowStageDispatcher{
-		news:  newsStage.executor,
-		quant: quantExecutor,
+		news:     newsStage.executor,
+		newsFeed: feedExecutor,
+		quant:    quantExecutor,
 	}
 
 	runRepository, err := researchflowstorage.NewMySQLRunRepository(shared.DB, researchflowstorage.CapacityLimits{
@@ -168,7 +195,7 @@ func newResearchflowComposition(
 	}
 
 	return &researchflowComposition{
-		newsStage: newsStage, quantStage: quantStage, quantResultReader: quantResultReader,
+		newsStage: newsStage, newsFeedStage: newsFeedStage, quantStage: quantStage, quantResultReader: quantResultReader,
 		runRepository: runRepository, templateRegistry: templateRegistry,
 		workflowTemplates: workflowTemplates, resourcePolicies: policyResolver,
 		parameterSchemas: parameterSchemas, applicability: researchflowApplicabilityEvaluator{},
