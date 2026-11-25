@@ -51,6 +51,15 @@ const newsSearchParameterSchemaDocument = `{
   "additionalProperties": false
 }`
 
+const newsFeedParameterSchemaDocument = `{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:kasign:researchflow:news-feed-collection-parameters:1.0.0",
+  "title": "News Feed Collection Parameters",
+  "type": "object",
+  "properties": {},
+  "additionalProperties": false
+}`
+
 type newsSearchParameterSchemaRegistry struct{}
 
 func (newsSearchParameterSchemaRegistry) Get(ctx context.Context, ref string) (parameterschema.Definition, error) {
