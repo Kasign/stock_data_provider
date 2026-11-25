@@ -110,19 +110,19 @@ func TestBuildVersionFingerprintChangesWithAuthor(t *testing.T) {
 	}
 }
 
-func TestBuildVersionFingerprintChangesWithCanonicalURL(t *testing.T) {
+func TestBuildVersionFingerprintIgnoresURLIdentityFields(t *testing.T) {
 	first := Candidate{Title: "标题", CanonicalURL: "https://news.example/article"}
 	second := Candidate{Title: "标题", CanonicalURL: "https://news.example/article-revised"}
-	if BuildVersionFingerprint(first, ContentLayers{}) == BuildVersionFingerprint(second, ContentLayers{}) {
-		t.Fatal("canonical URL change must produce a new content version")
+	if BuildVersionFingerprint(first, ContentLayers{}) != BuildVersionFingerprint(second, ContentLayers{}) {
+		t.Fatal("canonical URL identity changes must not create content versions")
 	}
 }
 
-func TestBuildVersionFingerprintUsesCanonicalURLInsteadOfRawURL(t *testing.T) {
+func TestBuildVersionFingerprintIgnoresRawURLWhenContentIsUnchanged(t *testing.T) {
 	first := Candidate{Title: "标题", RawURL: "https://NEWS.example:443/article#section-a", CanonicalURL: "https://news.example/article"}
 	second := Candidate{Title: "标题", RawURL: "https://news.example/article?tracking=1", CanonicalURL: "https://news.example/article"}
 	if BuildVersionFingerprint(first, ContentLayers{}) != BuildVersionFingerprint(second, ContentLayers{}) {
-		t.Fatal("equivalent policy-canonical URLs must share a content fingerprint")
+		t.Fatal("URL identity fields must not affect content fingerprint")
 	}
 }
 

@@ -157,7 +157,16 @@ func (u *IngestCollectedSource) Execute(ctx context.Context, request IngestColle
 		candidate.ProviderSummary = ""
 		content := domain.RestrictContentLayers(entry.Content, policyRequest.ContentKind)
 		contentFingerprint := domain.BuildVersionFingerprint(candidate, content)
-		identityDigest := sha256.Sum256([]byte(sourceID + "\x00" + candidate.SourceItemID + "\x00" + contentFingerprint))
+		canonicalURL := ""
+		if candidate.RawURL != "" {
+			if decision := domain.EvaluateSourceURL(candidate.RawURL, registration.URLPolicy); decision.Allowed {
+				canonicalURL = decision.CanonicalURL
+			}
+		}
+		identityDigest := sha256.Sum256([]byte(
+			sourceID + "\x00" + candidate.SourceItemID + "\x00" + candidate.RawURL + "\x00" +
+				canonicalURL + "\x00" + contentFingerprint,
+		))
 		idempotencyKey := prefix + "/" + hex.EncodeToString(identityDigest[:])
 		observation, ingestErr := u.ingest.executeWithPolicyTraceAndCheckAndContent(
 			ctx, sourceID, idempotencyKey, candidate, content,

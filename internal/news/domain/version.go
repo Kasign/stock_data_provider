@@ -14,18 +14,12 @@ import (
 // 仅纳入来源侧可形成版本的元数据与内容；Provider 摘要、采集时间和查询上下文不参与。
 func BuildVersionFingerprint(candidate Candidate, content ContentLayers) string {
 	digest := sha256.New()
-	writeFingerprintField(digest, "news-version-v2")
+	writeFingerprintField(digest, "news-content-v1")
 	writeFingerprintField(digest, normalizeCandidateText(candidate.Title))
 	writeFingerprintField(digest, strings.TrimSpace(candidate.PublisherName))
 	writeFingerprintField(digest, strings.ToLower(strings.TrimSpace(candidate.PublisherDomain)))
 	writeFingerprintField(digest, normalizeCandidateText(candidate.Author))
-	// CanonicalURL 必须来自已通过 Source URL Policy 的上游决策；缺失时保留原始 URL 语义，不自行推导。
-	versionURL := candidate.CanonicalURL
-	if versionURL == "" {
-		versionURL = candidate.RawURL
-	}
-	// ProviderItemID / SourceItemID 属于身份凭据，不参与内容指纹。
-	writeFingerprintField(digest, normalizeCandidateURL(versionURL))
+	// URL、ProviderItemID 和 SourceItemID 都是身份信息，不属于内容版本。
 	writeFingerprintField(digest, publishedTimeFingerprint(candidate))
 	writeFingerprintField(digest, normalizeCandidateText(content.SourceSummary))
 	writeFingerprintField(digest, string(content.SourceSummaryOrigin))
