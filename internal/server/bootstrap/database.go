@@ -10,8 +10,8 @@ import (
 
 	"example.com/stock-analysis-flow/internal/adapters/storage/mysqlredis"
 	analysisstorage "example.com/stock-analysis-flow/internal/analysis/storage"
-	quantstorage "example.com/stock-analysis-flow/internal/quant/storage"
 	marketdatabootstrap "example.com/stock-analysis-flow/internal/marketdata/bootstrap"
+	quantstorage "example.com/stock-analysis-flow/internal/quant/storage"
 	servermigration "example.com/stock-analysis-flow/internal/server/migration"
 	serverresources "example.com/stock-analysis-flow/internal/server/resources"
 )
