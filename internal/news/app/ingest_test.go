@@ -347,6 +347,36 @@ func TestIngestCandidateIdempotencyAndContentVersioning(t *testing.T) {
 	}
 }
 
+func TestIngestCandidatePersistsCanonicalURLWhenNativeIdentityAlreadyExists(t *testing.T) {
+	repository := &memoryIdentityRepository{}
+	first, err := newCandidateIngest(repository, func() string { return "native-first" }).executeWithPolicyTrace(
+		context.Background(), "source-1", "native-first-key",
+		domain.Candidate{SourceItemID: "native-1", Title: "same headline"},
+		domain.SourceURLPolicy{}, identityTrace())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	second, err := newCandidateIngest(repository, func() string { return "native-second" }).executeWithPolicyTrace(
+		context.Background(), "source-1", "native-second-key",
+		domain.Candidate{SourceItemID: "native-1", RawURL: "https://news.example/story", Title: "same headline"},
+		identityURLPolicy(), identityTrace())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.NewsID != first.NewsID {
+		t.Fatalf("native identity should retain the same news item: first=%+v second=%+v", first, second)
+	}
+	item := repository.newsItems[0]
+	if item.CanonicalURL != "https://news.example/story" ||
+		item.CanonicalURLHash != canonicalHashForTest("https://news.example/story") {
+		t.Fatalf("new canonical URL was not persisted: %+v", item)
+	}
+	if len(repository.versions) != 1 {
+		t.Fatalf("URL identity enrichment must not create a content version: %+v", repository.versions)
+	}
+}
+
 func TestIngestCandidateRejectsChangedRetentionForSameIdempotencyKey(t *testing.T) {
 	repository := &memoryIdentityRepository{}
 	usecase := newCandidateIngest(repository, func() string { return "retention" })
