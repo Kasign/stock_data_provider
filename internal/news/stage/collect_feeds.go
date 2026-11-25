@@ -320,7 +320,7 @@ func (a *FeedCollectionAdapter) Execute(
 	}
 	return FeedCollectionResult{
 		OutputType: CollectFeedsOutputType, SchemaVersion: CollectFeedsSchemaVersion,
-		Payload: payload, QualitySummary: quality, Retryable: retryableFailureCount > 0,
+		Payload: payload, QualitySummary: quality, Retryable: output.Status == "failed_retryable",
 		ReasonCodes: reasons,
 	}, nil
 }
