@@ -8,6 +8,7 @@ import (
 
 	marketdatabootstrap "example.com/stock-analysis-flow/internal/marketdata/bootstrap"
 	newsconfig "example.com/stock-analysis-flow/internal/news/config"
+	newsstorage "example.com/stock-analysis-flow/internal/news/adapters/storage"
 	researchflowapplication "example.com/stock-analysis-flow/internal/researchflow/application"
 	serverconfig "example.com/stock-analysis-flow/internal/server/config"
 	serverresources "example.com/stock-analysis-flow/internal/server/resources"
@@ -25,13 +26,15 @@ type researchflowOwnerComposition struct {
 }
 
 func newResearchflowOwnerComposition(
+	ctx context.Context,
 	shared *serverresources.Resources,
+	newsRepository *newsstorage.MySQLRepository,
 	newsConfig newsconfig.Config,
 	capacity serverconfig.ResearchflowCapacity,
 	runDeadline time.Duration,
 	dataModule *marketdatabootstrap.Module,
 ) (*researchflowOwnerComposition, error) {
-	execution, err := newResearchflowComposition(shared, newsConfig, capacity, dataModule)
+	execution, err := newResearchflowComposition(ctx, shared, newsRepository, newsConfig, capacity, dataModule)
 	if err != nil {
 		return nil, err
 	}
