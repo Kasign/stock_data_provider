@@ -935,6 +935,22 @@ func TestNewsMariaDBApplicationIntegration(t *testing.T) {
 	if latest.VersionNo != workers+1 {
 		t.Fatalf("latest VersionNo = %d, want %d (initial plus concurrent content revisions)", latest.VersionNo, workers+1)
 	}
+	// Feed 描述必须经过真实 RSS 解析、授权层级过滤和正式入库后，
+	// 同时落入当前主体与不可变版本，不能只存在于测试构造的内存对象中。
+	if latest.Content.SourceSummary == "" || latest.Content.SourceSummaryOrigin != domain.ContentOriginFeedSummary {
+		t.Fatalf("latest Feed version content was not persisted: %+v", latest.Content)
+	}
+	var currentContentJSON []byte
+	if err := db.QueryRowContext(ctx, "SELECT content_json FROM news_items WHERE news_id = ?", newsID).Scan(&currentContentJSON); err != nil {
+		t.Fatalf("read current News Item content: %v", err)
+	}
+	var currentContent domain.ContentLayers
+	if err := json.Unmarshal(currentContentJSON, &currentContent); err != nil {
+		t.Fatalf("decode current News Item content: %v", err)
+	}
+	if currentContent.SourceSummary != latest.Content.SourceSummary || currentContent.SourceSummaryOrigin != domain.ContentOriginFeedSummary {
+		t.Fatalf("current News Item content does not match latest Feed version: current=%+v latest=%+v", currentContent, latest.Content)
+	}
 
 	secondSourceID := sourceID + "-second"
 	secondCandidate := domain.Candidate{
