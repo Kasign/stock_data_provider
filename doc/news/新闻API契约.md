@@ -106,7 +106,7 @@ News 为 News 来源内容签发 AuthorizationRef。公开或无限制内容也�
 
 
 
-### 4.5 Go Application DTO 与 JSON Schema 落地状态（2026-11-06）
+### 4.5 Go Application DTO 与 JSON Schema 实现状态
 
 跨模块语义以 `doc/整体任务规划/跨模块契约目录与冻结状态.md` 的 NEWS-CTR-001 为准。本分支已新增：
 
@@ -139,7 +139,7 @@ Evidence DTO 的 `fetched_at` 和 `normalized_at` 来自 Observation 中的 Cand
 
 ### 4.8 NEWS-CTR-002 授权快照持久化边界
 
-News V2 Migration 新增 `news_authorization_snapshots`，Application 提供 append-only `AuthorizationSnapshotRepository`。相同 AuthorizationRef 的相同 binding 可幂等重放；相同引用绑定不同 payload 时返回冲突。读取时重新校验原始 JSON payload SHA-256 和 binding 结构。
+最终 News V1 基线包含 `news_authorization_snapshots`，Application 提供 append-only `AuthorizationSnapshotRepository`。旧 V2/V3 Migration 版本不再存在；数据库必须按最终 V1 基线重建。相同 AuthorizationRef 的相同 binding 可幂等重放；相同引用绑定不同 payload 时返回冲突。读取时重新校验原始 JSON payload SHA-256 和 binding 结构。
 
 这里的 `payload_hash` 是数据库存储完整性校验，不等于 `decision_fingerprint` 的 GOV-CTR-006 JCS 验证。当前分支尚未接入公共 JCS Runtime Verifier，不能把结构校验或 SHA-256 原文哈希描述为 JCS 验收。
 
@@ -148,14 +148,17 @@ News V2 Migration 新增 `news_authorization_snapshots`，Application 提供 app
 
 ### 4.9 固定分页 Snapshot Store
 
-News Migration V3 新增 `news_evidence_snapshots`。Snapshot 只持久化 `news_id`、`version_id`、`observation_id` 和 `system_observed_at` 排序键，不复制新闻标题、摘要、正文或内容片段。快照固定绑定 caller、filters fingerprint、page size、system_as_of、排序版本及 15 分钟 TTL。
+最终 News V1 基线包含 `news_evidence_snapshots`。Snapshot 只持久化 `news_id`、`version_id`、`observation_id` 和 `system_observed_at` 排序键，不复制新闻标题、摘要、正文或内容片段。快照固定绑定 caller、filters fingerprint、page size、system_as_of、排序版本及 15 分钟 TTL。
 
 Repository 创建时校验排序键唯一且符合 `system_observed_at DESC, news_id ASC, version_id ASC`，并限制单个快照最多 5000 条；Application 的 `PageAfter` 使用精确排序键续页，不使用 OFFSET；相同快照引用的相同 payload 可幂等重放，不同 payload 返回冲突。读取时校验 payload_hash、item_count、caller 绑定和 TTL；过期快照必须失败，不得重新生成。
 
 该 Store 已由 `CreateEvidenceSnapshotForQuery`、`EvidenceSnapshotPageReader` 和 `ListEvidence` 接入 Query Facade。首屏创建快照前由 PIT Repository 按 `system_as_of` 选择版本，Query 侧仍须执行严格 `available_at <= system_as_of` 过滤；分页阶段逐条调用 GetEvidence，在正文读取边界重新核验当前授权。Snapshot Store 本身只固定引用和排序键，不代表数据可见或内容已授权。
 
 
-### 4.10 RepairAll 集成基线复核（2026-11-19）
+### 4.10 当前 Query 与 PIT 边界
 
-在 `repair_all` 聚合基线中，`internal/news/app/evidence_query_facade.go` 已组合 `GetEvidence` 与 `ListEvidence`；`internal/news/app/get_evidence.go` 实现单条 PIT/授权读取，`list_evidence.go` 实现固定快照分页和逐条当前授权读取，Server 通过 Research News Composition 将 Query Port 注入 Research Adapter。此项为同进程内部接口，不增加独立 HTTP 路由。严格 PIT 的来源时间准入仍未解除：当前来源没有满足首次公开可获取时间要求的证据，`available_at` 仍为 null，News→Research B 组继续 SHELVED。完整聚合 CI Run [44450277491](https://github.com/Kasign/stock_data_provider/actions/runs/44450277491) success；CI 通过不等于真实来源时间证据验收。
+- `EvidenceQueryFacade` 组合单条 GetEvidence 与固定快照 ListEvidence；Server 将同进程 Query Port 注入 Research Adapter，不注册独立 HTTP 路由。
+- GetEvidence/ListEvidence 负责版本选择、稳定排序、Snapshot/Cursor 和当前授权复核。
+- 严格 PIT 仍要求合格的 available_at 来源证据；缺少证据时保持 NULL 并排除严格 PIT，不从采集时间或普通发布时间推导。
+- 当前实现状态以最新代码和 CI 为准；本节不保留历史 CI Run 作为当前验收证明。
 
