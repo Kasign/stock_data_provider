@@ -47,7 +47,7 @@ type FeedSourceOutcome struct {
 	CollectedCount int `json:"collected_count"`
 	IngestedCount int `json:"ingested_count"`
 	NewsIDs []string `json:"news_ids"`
-	ErrorCode  string `json:"error_code"`
+	ErrorCode      string `json:"error_code"`
 	Retryable bool `json:"retryable"`
 }
 
