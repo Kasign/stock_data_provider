@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"time"
 
-	quantapplication "example.com/stock-analysis-flow/internal/quant/application"
-	quantstorage "example.com/stock-analysis-flow/internal/quant/storage"
 	marketdatabootstrap "example.com/stock-analysis-flow/internal/marketdata/bootstrap"
 	newsconfig "example.com/stock-analysis-flow/internal/news/config"
+	quantapplication "example.com/stock-analysis-flow/internal/quant/application"
+	quantstorage "example.com/stock-analysis-flow/internal/quant/storage"
 	researchflowapplication "example.com/stock-analysis-flow/internal/researchflow/application"
 	"example.com/stock-analysis-flow/internal/researchflow/parameterschema"
 	"example.com/stock-analysis-flow/internal/researchflow/resourcepolicy"

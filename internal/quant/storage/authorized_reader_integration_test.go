@@ -59,12 +59,12 @@ func TestMySQLAuthorizedResultReaderUsesCurrentPolicyAndStoredRunAssociation(t *
 		t.Fatal(err)
 	}
 	request := quantapplication.ReadRequest{
-		RunRef: "run:researchflow:quant-result-reader-test",
-		SubjectRef: "service:researchflow",
-		ResourceRef: record.Manifest.ResultID,
-		PurposeCode: "quant_analysis",
+		RunRef:       "run:researchflow:quant-result-reader-test",
+		SubjectRef:   "service:researchflow",
+		ResourceRef:  record.Manifest.ResultID,
+		PurposeCode:  "quant_analysis",
 		ContentLevel: "full",
-		At: time.Date(2026, 11, 25, 2, 0, 0, 0, time.UTC),
+		At:           time.Date(2026, 11, 25, 2, 0, 0, 0, time.UTC),
 	}
 	got, err := reader.ReadAuthorized(ctx, request)
 	if err != nil {
