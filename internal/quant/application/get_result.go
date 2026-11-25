@@ -33,6 +33,7 @@ var (
 	ErrAuditUnavailable         = errors.New("quant result access audit unavailable")
 	ErrAccessDenied             = errors.New("quant result access denied")
 	ErrAuthorizationUnavailable = errors.New("quant authorization unavailable")
+	ErrResultAssociationNotFound = errors.New("quant result is not associated with the requested Researchflow Run")
 )
 
 // Principal 由 Server 的认证上下文解析器产生；不得从 GetResult 请求体或普通 Header 构造。
@@ -169,6 +170,12 @@ type AccessAuditEvent struct {
 // AccessAuditor 持久化每次已识别主体的结果读取决策；写入失败时 Application 必须拒绝释放结果。
 type AccessAuditor interface {
 	RecordResultAccess(ctx context.Context, event AccessAuditEvent) error
+}
+
+// ResultAssociationVerifier 由 Server 组合根适配 Researchflow 的不可变 Stage Output 读取能力。
+// VerifyResultAssociation 必须校验 Run、Stage、Attempt、Payload/Quality Schema 和 result_id 的精确关联。
+type ResultAssociationVerifier interface {
+	VerifyResultAssociation(ctx context.Context, runRef, resultID string) error
 }
 
 // AuthorizedResultReader 负责当前授权复核和结果读取。
