@@ -365,10 +365,87 @@ func newStorageID() (string, error) {
 	return hex.EncodeToString(raw[:]), nil
 }
 
-// FindIdentityCredentials serializes identity resolution per source across
-// service instances, then compares the original identifier value after hash lookup.
+func canonicalURLAdvisoryLockName(hash string) string {
+	sum := sha256.Sum256([]byte(hash))
+	return "news_url_" + hex.EncodeToString(sum[:])[:48]
+}
+
+// FindNewsItemByCanonicalURL 先取得跨实例 URL 锁，再按全局唯一 Hash 查询并比较 URL 原文。
+func (t *mysqlNewsTransaction) FindNewsItemByCanonicalURL(ctx context.Context, canonicalURL, canonicalURLHash string) (domain.NewsItem, bool, error) {
+	if t == nil || t.tx == nil || t.acquire == nil || strings.TrimSpace(canonicalURL) == "" || strings.TrimSpace(canonicalURLHash) == "" {
+		return domain.NewsItem{}, false, app.ErrInvalidRequest
+	}
+	if err := t.acquire(canonicalURLAdvisoryLockName(canonicalURLHash)); err != nil {
+		return domain.NewsItem{}, false, err
+	}
+	item, err := scanNewsItem(t.tx.QueryRowContext(ctx, newsItemSelect+" WHERE canonical_url_hash = ? FOR UPDATE", canonicalURLHash))
+	if errors.Is(err, sql.ErrNoRows) {
+		return domain.NewsItem{}, false, nil
+	}
+	if err != nil {
+		return domain.NewsItem{}, false, err
+	}
+	if item.CanonicalURL != canonicalURL || item.CanonicalURLHash != canonicalURLHash {
+		return domain.NewsItem{}, false, app.ErrCanonicalURLHashCollision
+	}
+	return item, true, nil
+}
+
+func (t *mysqlNewsTransaction) FindNewsItemByID(ctx context.Context, newsID string) (domain.NewsItem, bool, error) {
+	if t == nil || t.tx == nil || strings.TrimSpace(newsID) == "" {
+		return domain.NewsItem{}, false, app.ErrInvalidRequest
+	}
+	item, err := scanNewsItem(t.tx.QueryRowContext(ctx, newsItemSelect+" WHERE news_id = ? FOR UPDATE", newsID))
+	if errors.Is(err, sql.ErrNoRows) {
+		return domain.NewsItem{}, false, nil
+	}
+	return item, err == nil, err
+}
+
+const newsItemSelect = `SELECT news_id, canonical_url, canonical_url_hash, title, publisher_name,
+	publisher_domain, author, published_at, content_json, content_fingerprint, created_at, updated_at
+	FROM news_items`
+
+func scanNewsItem(row rowScanner) (domain.NewsItem, error) {
+	var item domain.NewsItem
+	var canonicalURL, canonicalURLHash sql.NullString
+	var publishedAt sql.NullTime
+	var contentJSON []byte
+	err := row.Scan(
+		&item.ID, &canonicalURL, &canonicalURLHash, &item.Title, &item.PublisherName,
+		&item.PublisherDomain, &item.Author, &publishedAt, &contentJSON,
+		&item.ContentFingerprint, &item.CreatedAt, &item.UpdatedAt,
+	)
+	if err != nil {
+		return domain.NewsItem{}, err
+	}
+	if canonicalURL.Valid {
+		item.CanonicalURL = canonicalURL.String
+	}
+	if canonicalURLHash.Valid {
+		item.CanonicalURLHash = canonicalURLHash.String
+	}
+	if publishedAt.Valid {
+		value := publishedAt.Time.UTC()
+		item.PublishedAt = &value
+	}
+	if err := json.Unmarshal(contentJSON, &item.Content); err != nil {
+		return domain.NewsItem{}, err
+	}
+	item.CreatedAt = item.CreatedAt.UTC()
+	item.UpdatedAt = item.UpdatedAt.UTC()
+	return item, nil
+}
+
+// FindIdentityCredentials serializes only source-native identity within its source.
 func (t *mysqlNewsTransaction) FindIdentityCredentials(ctx context.Context, sourceID string, candidates []domain.IdentityCredential) ([]domain.IdentityCredential, error) {
-	if t == nil || t.tx == nil || t.acquire == nil || strings.TrimSpace(sourceID) == "" {
+	if t == nil || t.tx == nil || strings.TrimSpace(sourceID) == "" {
+		return nil, app.ErrInvalidRequest
+	}
+	if len(candidates) == 0 {
+		return []domain.IdentityCredential{}, nil
+	}
+	if t.acquire == nil {
 		return nil, app.ErrInvalidRequest
 	}
 	if err := t.acquire(identityAdvisoryLockName(sourceID)); err != nil {
@@ -377,43 +454,69 @@ func (t *mysqlNewsTransaction) FindIdentityCredentials(ctx context.Context, sour
 	result := make([]domain.IdentityCredential, 0, len(candidates))
 	for _, candidate := range candidates {
 		var stored domain.IdentityCredential
-		var identifierType, identifierStatus string
-		err := t.tx.QueryRowContext(ctx, `SELECT source_id, identifier_type, identifier_value,
-			identifier_hash, identifier_status, news_id
+		err := t.tx.QueryRowContext(ctx, `SELECT source_id, identifier_value, identifier_hash, news_id
 			FROM news_identifiers
-			WHERE source_id = ? AND identifier_type = ? AND identifier_hash = ?
-			FOR UPDATE`,
-			sourceID, string(candidate.Type), candidate.Hash,
-		).Scan(&stored.SourceID, &identifierType, &stored.Value, &stored.Hash, &identifierStatus, &stored.NewsID)
+			WHERE source_id = ? AND identifier_hash = ?
+			FOR UPDATE`, sourceID, candidate.Hash,
+		).Scan(&stored.SourceID, &stored.Value, &stored.Hash, &stored.NewsID)
 		if errors.Is(err, sql.ErrNoRows) {
 			continue
 		}
 		if err != nil {
 			return nil, err
 		}
-		stored.Status = domain.IdentifierStatus(identifierStatus)
-		stored.Type = domain.IdentifierType(identifierType)
 		result = append(result, stored)
 	}
 	return result, nil
 }
 
-func (t *mysqlNewsTransaction) CreateNewsItem(ctx context.Context, sourceID string) (string, error) {
-	if t == nil || t.tx == nil || strings.TrimSpace(sourceID) == "" {
-		return "", app.ErrInvalidRequest
+func (t *mysqlNewsTransaction) CreateNewsItem(ctx context.Context, item domain.NewsItem) error {
+	if t == nil || t.tx == nil || strings.TrimSpace(item.ID) == "" || strings.TrimSpace(item.ContentFingerprint) == "" {
+		return app.ErrInvalidRequest
 	}
-	newsID, err := newStorageID()
+	contentJSON, err := json.Marshal(item.Content)
 	if err != nil {
-		return "", err
+		return err
 	}
-	_, err = t.tx.ExecContext(ctx,
-		"INSERT INTO news_items (news_id, origin_source_id) VALUES (?, ?)",
-		newsID, sourceID,
+	_, err = t.tx.ExecContext(ctx, `INSERT INTO news_items
+		(news_id, canonical_url, canonical_url_hash, title, publisher_name, publisher_domain,
+		 author, published_at, content_json, content_fingerprint, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		item.ID, nullableString(item.CanonicalURL), nullableString(item.CanonicalURLHash),
+		item.Title, item.PublisherName, item.PublisherDomain, item.Author, item.PublishedAt,
+		contentJSON, item.ContentFingerprint, item.CreatedAt.UTC(), item.UpdatedAt.UTC(),
+	)
+	return err
+}
+
+func (t *mysqlNewsTransaction) UpdateNewsItem(ctx context.Context, item domain.NewsItem) error {
+	if t == nil || t.tx == nil || strings.TrimSpace(item.ID) == "" || strings.TrimSpace(item.ContentFingerprint) == "" {
+		return app.ErrInvalidRequest
+	}
+	contentJSON, err := json.Marshal(item.Content)
+	if err != nil {
+		return err
+	}
+	result, err := t.tx.ExecContext(ctx, `UPDATE news_items SET
+		canonical_url = ?, canonical_url_hash = ?, title = ?, publisher_name = ?,
+		publisher_domain = ?, author = ?, published_at = ?, content_json = ?,
+		content_fingerprint = ?, updated_at = ?
+		WHERE news_id = ?`,
+		nullableString(item.CanonicalURL), nullableString(item.CanonicalURLHash),
+		item.Title, item.PublisherName, item.PublisherDomain, item.Author, item.PublishedAt,
+		contentJSON, item.ContentFingerprint, item.UpdatedAt.UTC(), item.ID,
 	)
 	if err != nil {
-		return "", err
+		return err
 	}
-	return newsID, nil
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected != 1 {
+		return fmt.Errorf("news storage: update current item %q affected %d rows", item.ID, affected)
+	}
+	return nil
 }
 
 func (t *mysqlNewsTransaction) SaveIdentityCredentials(ctx context.Context, credentials []domain.IdentityCredential) error {
@@ -422,22 +525,15 @@ func (t *mysqlNewsTransaction) SaveIdentityCredentials(ctx context.Context, cred
 	}
 	for _, credential := range credentials {
 		_, observedOffset := credential.ObservedAt.Zone()
-		if credential.ObservedAt.IsZero() || observedOffset != 0 {
-			return app.ErrIdentityHistoryInvalid
+		if credential.ObservedAt.IsZero() || observedOffset != 0 ||
+			credential.SourceID == "" || credential.Value == "" ||
+			credential.Hash != hex.EncodeToString(sha256.Sum256([]byte(credential.Value))[:]) || credential.NewsID == "" {
+			return app.ErrInvalidRequest
 		}
 		if _, err := t.tx.ExecContext(ctx, `INSERT INTO news_identifiers
-			(source_id, identifier_type, identifier_hash, identifier_value, identifier_status, news_id, created_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?)`,
-			credential.SourceID, string(credential.Type), credential.Hash,
-			credential.Value, string(credential.Status), credential.NewsID, credential.ObservedAt.UTC(),
-		); err != nil {
-			return err
-		}
-		if _, err := t.tx.ExecContext(ctx, `INSERT INTO news_identifier_status_history
-			(source_id, identifier_type, identifier_hash, identifier_status, observed_at)
+			(source_id, identifier_hash, identifier_value, news_id, created_at)
 			VALUES (?, ?, ?, ?, ?)`,
-			credential.SourceID, string(credential.Type), credential.Hash,
-			string(credential.Status), credential.ObservedAt.UTC(),
+			credential.SourceID, credential.Hash, credential.Value, credential.NewsID, credential.ObservedAt.UTC(),
 		); err != nil {
 			return err
 		}
