@@ -26,7 +26,7 @@
 
 ## 2. 当前代码事实与边界
 
-- News V1 Migration 当前定义最终 10 张表；Schema Validator 和 Migration 测试按精确表集合、字段、索引和外键校验。
+- News V1 Migration 当前定义最终 10 张表；Schema Validator 运行时检查精确表集合、必需字段、索引和全部外键定义，Migration 测试同步核对外键契约。
 - news_items 保存当前新闻主体和当前可持久化内容；news_item_versions 保存不可变历史内容版本。
 - news_identifiers 只保存 source_id 范围内的来源原生文章 ID；规范 URL 通过 news_items.canonical_url_hash 全局唯一匹配。
 - 内容指纹只反映来源侧新闻内容和元数据，不包含规范 URL、来源原生 ID、Provider 摘要或采集时间。
@@ -131,7 +131,7 @@ P0-1 全量依赖审计已完成；本计划后续只对具体字段、SQL 和�
 
 1. 逐字段对齐 Domain、Repository、PIT SQL 和 Research Evidence DTO。
 2. 修改单一 V1 Migration，直接创建最终 10 张表。
-3. 同步修改 Schema Validator、Schema 测试、Migration 测试和 Server Migration Registry 相关清单。
+3. 同步修改 Schema Validator、Schema 测试、Migration 测试和 Server Migration Registry 相关清单；运行时校验必须覆盖外键名称、所属表、引用表及有序列。
 4. 删除 4 张表及其专属索引、外键、Repository 和失效用例。
 5. 通过空库 Migration 和真实 MariaDB Schema 验证。
 
