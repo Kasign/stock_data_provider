@@ -29,13 +29,9 @@ type MySQLRepository struct {
 }
 
 var _ app.IdentityRepository = (*MySQLRepository)(nil)
-var _ app.ResearchUpdateRepository = (*MySQLRepository)(nil)
-var _ app.NewsItemRelationRepository = (*MySQLRepository)(nil)
 var _ app.EvidencePITRepository = (*MySQLRepository)(nil)
 
 var _ app.IdentityTransaction = (*mysqlNewsTransaction)(nil)
-var _ app.ResearchUpdateTransaction = (*mysqlNewsTransaction)(nil)
-var _ app.NewsItemRelationTransaction = (*mysqlNewsTransaction)(nil)
 
 // NewMySQLRepository wraps the Server-owned MariaDB connection pool.
 func NewMySQLRepository(db *sql.DB) (*MySQLRepository, error) {
@@ -236,26 +232,7 @@ func (r *MySQLRepository) WithinIdentityTransaction(ctx context.Context, fn func
 	})
 }
 
-func (r *MySQLRepository) WithinResearchUpdateTransaction(ctx context.Context, fn func(app.ResearchUpdateTransaction) error) error {
-	if r == nil || r.db == nil || ctx == nil || fn == nil {
-		return app.ErrInvalidRequest
-	}
-	return r.withTransaction(ctx, "", nil, func(tx *sql.Tx, acquire func(string) error) error {
-		return fn(&mysqlNewsTransaction{tx: tx, acquire: acquire})
-	})
-}
 
-func (r *MySQLRepository) WithinNewsItemRelationTransaction(ctx context.Context, fn func(app.NewsItemRelationTransaction) error) error {
-	if r == nil || r.db == nil || ctx == nil || fn == nil {
-		return app.ErrInvalidRequest
-	}
-	// The relation graph is cross-news and the current Application port reads
-	// the complete graph. A single advisory lock prevents concurrent writers
-	// from validating against stale graph snapshots.
-	return r.withTransaction(ctx, "news_item_relation_graph", nil, func(tx *sql.Tx, acquire func(string) error) error {
-		return fn(&mysqlNewsTransaction{tx: tx, acquire: acquire})
-	})
-}
 
 type mysqlNewsTransaction struct {
 	tx      *sql.Tx
@@ -792,184 +769,6 @@ func (t *mysqlNewsTransaction) AppendAvailabilityEvidence(
 	return err
 }
 
-func (t *mysqlNewsTransaction) ListRelationAssertions(ctx context.Context, newsID string) ([]domain.RelationAssertion, error) {
-	if t == nil || t.tx == nil || strings.TrimSpace(newsID) == "" {
-		return nil, app.ErrInvalidRequest
-	}
-	rows, err := t.tx.QueryContext(ctx, `SELECT relation_id, news_id, subject_type, subject_json,
-		relation_kind, method, status, supersedes_relation_id, valid_from, valid_to, observed_at
-		FROM news_relation_assertions WHERE news_id = ? ORDER BY observed_at, relation_id FOR UPDATE`, newsID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	result := make([]domain.RelationAssertion, 0)
-	for rows.Next() {
-		assertion, err := scanRelationAssertion(rows)
-		if err != nil {
-			return nil, err
-		}
-		result = append(result, assertion)
-	}
-	return result, rows.Err()
-}
-
-func scanRelationAssertion(row rowScanner) (domain.RelationAssertion, error) {
-	var result domain.RelationAssertion
-	var subjectType, kind, method, status string
-	var subjectJSON []byte
-	var supersedes sql.NullString
-	var validFrom, validTo sql.NullTime
-	err := row.Scan(
-		&result.ID, &result.NewsID, &subjectType, &subjectJSON,
-		&kind, &method, &status, &supersedes, &validFrom, &validTo, &result.ObservedAt,
-	)
-	if err != nil {
-		return domain.RelationAssertion{}, err
-	}
-	result.SubjectType = domain.RelationSubjectType(subjectType)
-	result.Kind = domain.RelationKind(kind)
-	result.Method = domain.RelationMethod(method)
-	result.Status = domain.RelationStatus(status)
-	if supersedes.Valid {
-		result.SupersedesRelationID = supersedes.String
-	}
-	if validFrom.Valid {
-		value := validFrom.Time.UTC()
-		result.ValidFrom = &value
-	}
-	if validTo.Valid {
-		value := validTo.Time.UTC()
-		result.ValidTo = &value
-	}
-	switch result.SubjectType {
-	case domain.RelationSubjectSecurity:
-		var subject domain.SecurityRelationSubject
-		if err := json.Unmarshal(subjectJSON, &subject); err != nil {
-			return domain.RelationAssertion{}, err
-		}
-		result.Security = &subject
-	case domain.RelationSubjectIndustry:
-		var subject domain.IndustryRelationSubject
-		if err := json.Unmarshal(subjectJSON, &subject); err != nil {
-			return domain.RelationAssertion{}, err
-		}
-		result.Industry = &subject
-	default:
-		return domain.RelationAssertion{}, domain.ErrRelationInvalid
-	}
-	result.ObservedAt = result.ObservedAt.UTC()
-	return result, nil
-}
-
-func (t *mysqlNewsTransaction) AppendRelationAssertion(ctx context.Context, assertion domain.RelationAssertion, evidence []domain.RelationEvidence) error {
-	if t == nil || t.tx == nil {
-		return app.ErrInvalidRequest
-	}
-	var subject any
-	if assertion.SubjectType == domain.RelationSubjectSecurity {
-		subject = assertion.Security
-	} else {
-		subject = assertion.Industry
-	}
-	subjectJSON, err := json.Marshal(subject)
-	if err != nil {
-		return err
-	}
-	_, err = t.tx.ExecContext(ctx, `INSERT INTO news_relation_assertions
-		(relation_id, news_id, subject_type, subject_json, relation_kind, method, status,
-		 supersedes_relation_id, valid_from, valid_to, observed_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		assertion.ID, assertion.NewsID, string(assertion.SubjectType), subjectJSON,
-		string(assertion.Kind), string(assertion.Method), string(assertion.Status),
-		nullableString(assertion.SupersedesRelationID), assertion.ValidFrom, assertion.ValidTo, assertion.ObservedAt.UTC(),
-	)
-	if err != nil {
-		return err
-	}
-	for _, item := range evidence {
-		evidenceID, err := newStorageID()
-		if err != nil {
-			return err
-		}
-		_, err = t.tx.ExecContext(ctx, `INSERT INTO news_relation_evidence
-			(evidence_id, relation_id, evidence_type, source_version_id, observation_id,
-			 rule_version, model_version, field_path, evidence_hash)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			evidenceID, assertion.ID, string(item.Type), nullableString(item.SourceVersionID),
-			nullableString(item.ObservationID), item.RuleVersion, item.ModelVersion,
-			item.FieldPath, item.EvidenceHash,
-		)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (t *mysqlNewsTransaction) ListAllNewsItemRelations(ctx context.Context) ([]domain.NewsItemRelation, error) {
-	if t == nil || t.tx == nil {
-		return nil, app.ErrInvalidRequest
-	}
-	rows, err := t.tx.QueryContext(ctx, `SELECT item_relation_id, from_news_id, from_source_id,
-		to_news_id, to_source_id, relation_kind, status, supersedes_relation_id,
-		evidence_observation_id, from_version_id, to_version_id, asserted_at, observed_at
-		FROM news_item_relations ORDER BY observed_at, item_relation_id FOR UPDATE`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	result := make([]domain.NewsItemRelation, 0)
-	for rows.Next() {
-		var relation domain.NewsItemRelation
-		var kind, status string
-		var supersedes, evidenceObservation, fromVersion, toVersion sql.NullString
-		if err := rows.Scan(
-			&relation.ID, &relation.FromNewsID, &relation.FromSourceID, &relation.ToNewsID,
-			&relation.ToSourceID, &kind, &status, &supersedes, &evidenceObservation,
-			&fromVersion, &toVersion, &relation.AssertedAt, &relation.ObservedAt,
-		); err != nil {
-			return nil, err
-		}
-		relation.Kind = domain.NewsItemRelationKind(kind)
-		relation.Status = domain.NewsItemRelationStatus(status)
-		if supersedes.Valid {
-			relation.SupersedesRelationID = supersedes.String
-		}
-		if evidenceObservation.Valid {
-			relation.EvidenceObservation = evidenceObservation.String
-		}
-		if fromVersion.Valid {
-			relation.FromVersionID = fromVersion.String
-		}
-		if toVersion.Valid {
-			relation.ToVersionID = toVersion.String
-		}
-		relation.AssertedAt = relation.AssertedAt.UTC()
-		relation.ObservedAt = relation.ObservedAt.UTC()
-		result = append(result, relation)
-	}
-	return result, rows.Err()
-}
-
-func (t *mysqlNewsTransaction) AppendNewsItemRelation(ctx context.Context, relation domain.NewsItemRelation) error {
-	if t == nil || t.tx == nil {
-		return app.ErrInvalidRequest
-	}
-	_, err := t.tx.ExecContext(ctx, `INSERT INTO news_item_relations
-		(item_relation_id, from_news_id, from_source_id, to_news_id, to_source_id,
-		 relation_kind, status, supersedes_relation_id, evidence_observation_id,
-		 from_version_id, to_version_id, asserted_at, observed_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		relation.ID, relation.FromNewsID, relation.FromSourceID, relation.ToNewsID, relation.ToSourceID,
-		string(relation.Kind), string(relation.Status), nullableString(relation.SupersedesRelationID),
-		nullableString(relation.EvidenceObservation), nullableString(relation.FromVersionID),
-		nullableString(relation.ToVersionID), relation.AssertedAt.UTC(), relation.ObservedAt.UTC(),
-	)
-	return err
-}
-
-// ObservationRetentionBacklog 返回当前已到期但尚未清除的 Observation 数量及最早到期时间。
 func (r *MySQLRepository) ObservationRetentionBacklog(ctx context.Context, now time.Time) (int, *time.Time, error) {
 	if r == nil || r.db == nil || ctx == nil || now.IsZero() {
 		return 0, nil, app.ErrInvalidRequest

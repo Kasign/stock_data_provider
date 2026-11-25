@@ -21,6 +21,13 @@ import (
 	"example.com/stock-analysis-flow/internal/news/domain"
 	platformstorage "example.com/stock-analysis-flow/internal/platform/storage"
 )
+func insertIntegrationNewsItem(ctx context.Context, db *sql.DB, newsID string) error {
+	_, err := db.ExecContext(ctx, `INSERT INTO news_items
+		(news_id, title, content_json, content_fingerprint)
+		VALUES (?, 'integration fixture', JSON_OBJECT(), REPEAT('0', 64))`, newsID)
+	return err
+}
+
 
 // repositoryIngestHarness 仅供 Storage 集成测试直接验证 Repository 的身份事务、
 // 幂等键和历史查询；它不替代生产 Application 的 Source/Provider 授权入口。
@@ -662,7 +669,7 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	}
 	var itemCount int
 	if err := db.QueryRowContext(ctx,
-		"SELECT COUNT(*) FROM news_items WHERE origin_source_id = ?", sourceID,
+		"SELECT COUNT(DISTINCT news_id) FROM news_observations WHERE source_id = ? AND news_id IS NOT NULL", sourceID,
 	).Scan(&itemCount); err != nil {
 		t.Fatal(err)
 	}
@@ -699,7 +706,7 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 		t.Fatalf("self-declared provider policy error = %v, want fail-closed rejection", err)
 	}
 	if err := db.QueryRowContext(ctx,
-		"SELECT COUNT(*) FROM news_items WHERE origin_source_id = ?", traceSourceID,
+		"SELECT COUNT(DISTINCT news_id) FROM news_observations WHERE source_id = ? AND news_id IS NOT NULL", traceSourceID,
 	).Scan(&itemCount); err != nil {
 		t.Fatal(err)
 	}
@@ -733,7 +740,7 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 		t.Fatalf("rollback transaction error = %v, want injected error", err)
 	}
 	if err := db.QueryRowContext(ctx,
-		"SELECT COUNT(*) FROM news_items WHERE origin_source_id = ?", rollbackSource,
+		"SELECT COUNT(DISTINCT news_id) FROM news_observations WHERE source_id = ? AND news_id IS NOT NULL", rollbackSource,
 	).Scan(&itemCount); err != nil {
 		t.Fatal(err)
 	}
@@ -1610,153 +1617,6 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 		t.Fatalf("latest PIT version = %+v, want revised version %q", listed, revisedVersion.Version.ID)
 	}
 
-	relationService := app.NewApplyNewsItemRelation(repository, newID)
-	relation, err := relationService.Execute(ctx, app.NewsItemRelationRequest{
-		Relation: domain.NewsItemRelation{
-			FromNewsID: newsID, FromSourceID: sourceID,
-			ToNewsID: secondObservation.NewsID, ToSourceID: secondSourceID,
-			Kind: domain.NewsItemRelationRepostOf, Status: domain.NewsItemRelationConfirmed,
-			EvidenceObservation: observations[0].ID,
-			FromVersionID:       latest.ID, ToVersionID: revisedVersion.Version.ID,
-		},
-	})
-	if err != nil {
-		t.Fatalf("append cross-news relation: %v", err)
-	}
-	if relation.ID == "" {
-		t.Fatal("persisted relation ID is empty")
-	}
-
-	err = repository.WithinNewsItemRelationTransaction(ctx, func(tx app.NewsItemRelationTransaction) error {
-		relations, err := tx.ListAllNewsItemRelations(ctx)
-		if err != nil {
-			return err
-		}
-		if len(relations) != 1 || relations[0].ID != relation.ID {
-			return fmt.Errorf("persisted relation history = %#v", relations)
-		}
-		return nil
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Knowledge-time reads retain old assertions but hide assertions not yet observed.
-	beforeRelation := relation.ObservedAt.Add(-time.Microsecond)
-	history, err := repository.ListNewsItemRelationsAt(ctx, app.NewsItemRelationHistoryRequest{
-		NewsID: newsID, SystemAsOf: beforeRelation,
-	})
-	if err != nil {
-		t.Fatalf("read relation history before assertion: %v", err)
-	}
-	if len(history) != 0 {
-		t.Fatalf("relation history before assertion = %#v, want empty", history)
-	}
-	afterRelation := time.Now().UTC()
-	history, err = repository.ListNewsItemRelationsAt(ctx, app.NewsItemRelationHistoryRequest{
-		NewsID: newsID, SystemAsOf: afterRelation,
-	})
-	if err != nil {
-		t.Fatalf("read relation history from source item: %v", err)
-	}
-	if len(history) != 1 || history[0].ID != relation.ID {
-		t.Fatalf("source-side relation history = %#v, want relation %q", history, relation.ID)
-	}
-	history, err = repository.ListNewsItemRelationsAt(ctx, app.NewsItemRelationHistoryRequest{
-		NewsID: secondObservation.NewsID, SystemAsOf: afterRelation,
-	})
-	if err != nil {
-		t.Fatalf("read relation history from target item: %v", err)
-	}
-	if len(history) != 1 || history[0].ID != relation.ID {
-		t.Fatalf("target-side relation history = %#v, want relation %q", history, relation.ID)
-	}
-
-	// A replacement may change the target item. Both old and new target queries
-	// must retain the complete supersedes chain.
-	var changedTargetNewsID string
-	if err := repository.WithinIdentityTransaction(ctx, func(tx app.IdentityTransaction) error {
-		var err error
-		changedTargetNewsID, err = tx.CreateNewsItem(ctx, "news-it-relation-new-source")
-		return err
-	}); err != nil {
-		t.Fatalf("create changed relation target item: %v", err)
-	}
-	changedTarget, err := relationService.Execute(ctx, app.NewsItemRelationRequest{
-		Relation: domain.NewsItemRelation{
-			FromNewsID: newsID, FromSourceID: sourceID,
-			ToNewsID: changedTargetNewsID, ToSourceID: "news-it-relation-new-source",
-			Kind: domain.NewsItemRelationRepostOf, Status: domain.NewsItemRelationConfirmed,
-			SupersedesRelationID: relation.ID, EvidenceObservation: observations[0].ID,
-		},
-	})
-	if err != nil {
-		t.Fatalf("append changed-target relation replacement: %v", err)
-	}
-	for _, targetID := range []string{relation.ToNewsID, changedTarget.ToNewsID} {
-		chain, err := repository.ListNewsItemRelationsAt(ctx, app.NewsItemRelationHistoryRequest{
-			NewsID: targetID, SystemAsOf: time.Now().UTC(),
-		})
-		if err != nil {
-			t.Fatalf("read target-side relation chain for %s: %v", targetID, err)
-		}
-		if len(chain) != 2 || chain[0].ID != relation.ID || chain[1].ID != changedTarget.ID {
-			t.Fatalf("target-side relation chain for %s = %#v, want original and replacement", targetID, chain)
-		}
-	}
-
-	proposal, err := relationService.Execute(ctx, app.NewsItemRelationRequest{
-		Relation: domain.NewsItemRelation{
-			FromNewsID: newsID, FromSourceID: sourceID,
-			ToNewsID: secondObservation.NewsID, ToSourceID: secondSourceID,
-			Kind: domain.NewsItemRelationRepostOf, Status: domain.NewsItemRelationProposed,
-			SupersedesRelationID: changedTarget.ID,
-			EvidenceObservation:  observations[0].ID,
-			FromVersionID:        latest.ID, ToVersionID: revisedVersion.Version.ID,
-		},
-	})
-	if err != nil {
-		t.Fatalf("append proposed relation replacement: %v", err)
-	}
-	afterProposal := time.Now().UTC()
-	history, err = repository.ListNewsItemRelationsAt(ctx, app.NewsItemRelationHistoryRequest{
-		NewsID: secondObservation.NewsID, SystemAsOf: afterProposal,
-	})
-	if err != nil {
-		t.Fatalf("read relation history after proposal: %v", err)
-	}
-	if len(history) != 3 || history[0].ID != relation.ID || history[1].ID != changedTarget.ID || history[2].ID != proposal.ID {
-		t.Fatalf("history after proposal = %#v, want original then proposal", history)
-	}
-	// 提议状态不改变当前关系图；原确认断言仍保留在历史中。
-
-	retraction, err := relationService.Execute(ctx, app.NewsItemRelationRequest{
-		Relation: domain.NewsItemRelation{
-			FromNewsID: newsID, FromSourceID: sourceID,
-			ToNewsID: secondObservation.NewsID, ToSourceID: secondSourceID,
-			Kind: domain.NewsItemRelationRepostOf, Status: domain.NewsItemRelationRetracted,
-			SupersedesRelationID: proposal.ID,
-			EvidenceObservation:  observations[0].ID,
-			FromVersionID:        latest.ID, ToVersionID: revisedVersion.Version.ID,
-		},
-	})
-	if err != nil {
-		t.Fatalf("append proposal retraction: %v", err)
-	}
-	afterRetraction := time.Now().UTC()
-	history, err = repository.ListNewsItemRelationsAt(ctx, app.NewsItemRelationHistoryRequest{
-		NewsID: secondObservation.NewsID, SystemAsOf: afterRetraction,
-	})
-	if err != nil {
-		t.Fatalf("read relation history after retraction: %v", err)
-	}
-	if len(history) != 4 ||
-		history[0].ID != relation.ID ||
-		history[1].ID != changedTarget.ID ||
-		history[2].ID != proposal.ID ||
-		history[3].ID != retraction.ID {
-		t.Fatalf("history after retraction = %#v, want complete append-only chain", history)
-	}
 }
 
 func loadIntegrationAuthorizationBinding(t *testing.T) domain.NewsAuthorizationBinding {
@@ -1850,7 +1710,7 @@ func TestObservationRetentionPurgeIntegration(t *testing.T) {
 	}
 
 	// 让一条 Observation 被版本事实外键引用，确认载荷清理不会破坏历史引用。
-	if _, err := db.ExecContext(ctx, "INSERT INTO news_items (news_id, origin_source_id) VALUES (?, ?)", referenceNewsID, "news-retention-integration"); err != nil {
+	if err := insertIntegrationNewsItem(ctx, db, referenceNewsID); err != nil {
 		t.Fatalf("insert referenced news item: %v", err)
 	}
 	if _, err := db.ExecContext(ctx, "UPDATE news_observations SET news_id = ? WHERE observation_id = ?", referenceNewsID, observations[0].ID); err != nil {
@@ -2102,7 +1962,7 @@ func TestObservationRetentionPurgeIntegration(t *testing.T) {
 			t.Fatalf("insert retention boundary observation %s: %v", observation.ID, err)
 		}
 	}
-	if _, err := db.ExecContext(ctx, "INSERT INTO news_items (news_id, origin_source_id) VALUES (?, ?)", boundaryNewsID, evidenceOnlyObservation.SourceID); err != nil {
+	if err := insertIntegrationNewsItem(ctx, db, boundaryNewsID); err != nil {
 		t.Fatalf("insert retention boundary news item: %v", err)
 	}
 	if _, err := db.ExecContext(ctx, "UPDATE news_observations SET news_id = ? WHERE observation_id = ?", boundaryNewsID, evidenceOnlyObservation.ID); err != nil {
@@ -2259,7 +2119,7 @@ func TestAvailabilityEvidenceWriteRequiresCurrentFieldPolicyMariaDBIntegration(t
 		t.Helper()
 		observedAt := now.Add(-time.Minute)
 		retentionUntil := now.Add(10 * time.Minute)
-		if _, execErr := db.ExecContext(ctx, "INSERT INTO news_items (news_id, origin_source_id) VALUES (?, ?)", newsIDs[index], sourceID); execErr != nil {
+		if execErr := insertIntegrationNewsItem(ctx, db, newsIDs[index]); execErr != nil {
 			t.Fatalf("insert news item: %v", execErr)
 		}
 		observation := domain.Observation{

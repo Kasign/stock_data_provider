@@ -58,8 +58,7 @@ func TestNewsAvailabilityPITResolverMariaDBIntegration(t *testing.T) {
 	retentionUntil := now.Add(time.Hour)
 	candidateAvailableAt := observedAt.Truncate(time.Second).Add(-time.Second)
 
-	if _, err := db.ExecContext(ctx, `INSERT INTO news_items (news_id, origin_source_id)
-		VALUES (?, ?)`, newsID, sourceID); err != nil {
+	if err := insertIntegrationNewsItem(ctx, db, newsID); err != nil {
 		t.Fatalf("insert News item: %v", err)
 	}
 	if _, err := db.ExecContext(ctx, `INSERT INTO news_observations
@@ -248,7 +247,7 @@ func TestAppendAvailabilityDecisionSerializesConcurrentWritersMariaDBIntegration
 	sourceID := "availability-decision-source-" + suffix
 	observationID := "availability-decision-observation-" + suffix
 	versionID := "availability-decision-version-" + suffix
-	if _, err := db.ExecContext(ctx, `INSERT INTO news_items (news_id, origin_source_id) VALUES (?, ?)`, newsID, sourceID); err != nil {
+	if err := insertIntegrationNewsItem(ctx, db, newsID); err != nil {
 		t.Fatalf("insert News item: %v", err)
 	}
 	now := time.Now().UTC().Truncate(time.Microsecond)
