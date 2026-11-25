@@ -218,7 +218,6 @@ func TestMySQLRepositoryHonorsCancellation(t *testing.T) {
 	}
 }
 
-
 func TestMySQLSchemaValidatorAcceptsCompleteQuantBaseline(t *testing.T) {
 	db := openQuantIntegrationDB(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

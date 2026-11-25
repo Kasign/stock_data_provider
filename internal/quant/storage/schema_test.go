@@ -23,7 +23,7 @@ func completeQuantSchemaIndexes() map[string]map[string]quantSchemaIndexState {
 			actual[expected.table] = make(map[string]quantSchemaIndexState)
 		}
 		actual[expected.table][expected.name] = quantSchemaIndexState{
-			unique: expected.unique,
+			unique:  expected.unique,
 			columns: append([]string(nil), expected.columns...),
 		}
 	}
