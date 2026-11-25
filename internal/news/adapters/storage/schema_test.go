@@ -116,13 +116,12 @@ func TestValidateNewsSchemaIndexesAcceptsMigrationBaseline(t *testing.T) {
 	}
 }
 
-
 func completeNewsSchemaForeignKeys() map[string]newsSchemaForeignKeyState {
 	actual := make(map[string]newsSchemaForeignKeyState, len(requiredNewsSchemaForeignKeys))
 	for _, expected := range requiredNewsSchemaForeignKeys {
 		actual[expected.name] = newsSchemaForeignKeyState{
 			table: expected.table, columns: append([]string(nil), expected.columns...),
-			referencedTable: expected.referencedTable,
+			referencedTable:   expected.referencedTable,
 			referencedColumns: append([]string(nil), expected.referencedColumns...),
 		}
 	}
