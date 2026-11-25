@@ -341,7 +341,7 @@ func newNewsResearchFixture(t *testing.T, ctx context.Context) *newsResearchFixt
 
 	return &newsResearchFixture{
 		db: db, repo: repo, composition: composition, binding: binding,
-		observation: observation, version: result.Version, systemAsOf: systemAsOf,
+		observation: observation, version: version, systemAsOf: systemAsOf,
 	}
 }
 
