@@ -837,7 +837,7 @@ func TestNewsMariaDBApplicationIntegration(t *testing.T) {
 	// 验证这些写入与版本写入确实处于同一 MariaDB 事务。
 	rollbackSource := sourceID + "-application-rollback"
 	var existingVersionID string
-	if err := db.QueryRowContext(ctx, "SELECT version_id FROM news_item_versions ORDER BY version_no LIMIT 1").Scan(&existingVersionID); err != nil {
+	if err := db.QueryRowContext(ctx, "SELECT version_id FROM news_item_versions WHERE version_id LIKE '%-version' ORDER BY version_id LIMIT 1").Scan(&existingVersionID); err != nil {
 		t.Fatalf("select existing version ID for rollback fixture: %v", err)
 	}
 	collisionBase := strings.TrimSuffix(existingVersionID, "-version")
