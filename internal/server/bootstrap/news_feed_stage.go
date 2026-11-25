@@ -14,6 +14,7 @@ import (
 	newsstorage "example.com/stock-analysis-flow/internal/news/adapters/storage"
 	platformhttpclient "example.com/stock-analysis-flow/internal/platform/httpclient"
 	researchflowapplication "example.com/stock-analysis-flow/internal/researchflow/application"
+	researchflowdomain "example.com/stock-analysis-flow/internal/researchflow/domain"
 	"example.com/stock-analysis-flow/internal/researchflow/stageoutput"
 )
 
@@ -146,7 +147,7 @@ func (e newsFeedStageExecutor) ExecuteStage(
 		request.ResourcePolicy.AllowedProviderCodes[0] != "news_feed_catalog" {
 		return failedNewsFeedStage("news_feed_resource_policy_invalid"), nil
 	}
-	output, err := e.adapter.Execute(ctx, request.Run.ID, request.Stage.Code)
+	output, err := e.adapter.Execute(ctx, request.Run.ID+"/"+request.Attempt.ID, request.Stage.Code)
 	if err != nil {
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return researchflowapplication.StageExecutionResult{}, ctxErr
