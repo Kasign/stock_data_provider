@@ -1369,3 +1369,12 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - Root `bootstrapDatabase` 在 Redis、HTTP Client 和 Repository 装配前执行该校验；缺表、缺列、索引缺失、唯一性变化或索引列顺序漂移均 fail-closed。
 - 新增结构快照单测覆盖缺表、缺列、缺索引、唯一性和索引列顺序漂移；新增真实 MariaDB Migration 基线集成测试。
 - 该校验只确认 Researchflow 物理结构符合当前 Worker/Run/Stage/Attempt/Outbox 访问契约，不代表 News 来源证据链、Research Stage 消费链或真实 Provider 数据质量验收完成。
+
+
+## 2026-11-25 Research 物理 Schema 启动校验补齐
+
+- Root 的 News→Research 组合在启动时创建 Research Context/Evidence MySQL Repository，但 Migration History/Checksum 通过后没有验证 Research 六张表的物理列和关键索引；人工 DDL 漂移可能在实际请求到达后才暴露。
+- 新增 Research Storage 自有只读 `ValidateSchema`，覆盖 Aggregate Head、Context Version、Evidence Record、Event Version、Claim Version、Notification Outbox 六张表及其全部必需列和 PIT/幂等/状态扫描索引。
+- Root `bootstrapDatabase` 在 Redis、HTTP Client 和 Repository 装配前执行 Research Schema 校验；缺表、缺列或关键索引漂移均 fail-closed，不执行自动修复。
+- 新增结构快照单测覆盖缺表、缺 PIT 字段、缺 PIT 索引、唯一性和索引列顺序漂移；新增 MariaDB Migration 基线集成测试。
+- 此校验确认 Research 存储契约结构，不解除 News 来源授权、available_at 生产证据和 Research 实际消费链的外部/跨模块阻塞。
