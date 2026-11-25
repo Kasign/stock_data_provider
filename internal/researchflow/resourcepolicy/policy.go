@@ -14,7 +14,7 @@ import (
 
 const (
 	NewsSearchConfiguredProvidersRef = "news.search.configured-providers@1.0.0"
-	NewsFeedConfiguredSourcesRef    = "news.feed.configured-sources@1.0.0"
+	NewsFeedConfiguredSourcesRef     = "news.feed.configured-sources@1.0.0"
 	QuantDailyBarsProvidersRef       = "quant.daily-bars.configured-providers@1.0.0"
 	newsSearchPolicyVersion          = "1.0.0"
 	newsFeedPolicyVersion            = "1.0.0"
