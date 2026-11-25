@@ -20,6 +20,8 @@ import (
 	marketdataconfig "example.com/stock-analysis-flow/internal/marketdata/config"
 	newsstorage "example.com/stock-analysis-flow/internal/news/adapters/storage"
 	newsconfig "example.com/stock-analysis-flow/internal/news/config"
+	newsapp "example.com/stock-analysis-flow/internal/news/app"
+	newssource "example.com/stock-analysis-flow/internal/news/adapters/source"
 	newsdiagnostics "example.com/stock-analysis-flow/internal/news/diagnostics"
 	notificationapplication "example.com/stock-analysis-flow/internal/notification/application"
 	notificationschema "example.com/stock-analysis-flow/internal/notification/schema"
@@ -460,12 +462,31 @@ func newDiagnosticsService(
 	// Retention backlog is an operational signal, not an API process dependency;
 	// it must be visible without taking the whole API process out of readiness.
 	retentionBacklogCheck.Required = false
+	newsChecks := []platformdiagnostics.Check{retentionBacklogCheck}
+	feedSources := newsConfig.FeedSources()
+	if len(feedSources) > 0 {
+		registrations := newsFeedRegistrations(feedSources)
+		catalog, err := newssource.NewStaticSourceCatalog(registrations)
+		if err != nil {
+			return nil, fmt.Errorf("创建 News Feed 诊断来源目录失败: %w", err)
+		}
+		policyResolver, ok := newsRepository.(newsapp.CurrentSourceCollectionPolicyResolver)
+		if !ok {
+			return nil, errors.New("News Feed 已配置但当前 Source Policy 诊断依赖不可用")
+		}
+		for _, registration := range registrations {
+			newsChecks = append(newsChecks,
+				newsdiagnostics.SourceEndpointCheck(catalog, registration.SourceID, registration.EndpointID, true),
+				newsdiagnostics.SourceCollectionPolicyCheck(catalog, policyResolver, registration.SourceID, registration.EndpointID, true),
+			)
+		}
+	}
 	return serverdiagnostics.NewServiceWithMigration(
 		shared, registry,
 		newsdiagnostics.StorageChecks(newsRepository),
 		newsdiagnostics.ParserChecks(),
 		newsdiagnostics.ProviderConfigChecks(newsConfig),
-		[]platformdiagnostics.Check{retentionBacklogCheck},
+		newsChecks,
 		marketDataReadinessChecks(marketDataModule),
 	)
 }
