@@ -37,6 +37,16 @@ func TestMigrationsDefineFinalNewsBaseline(t *testing.T) {
 			t.Errorf("baseline is missing final schema fragment %q", fragment)
 		}
 	}
+	for _, expected := range requiredNewsSchemaForeignKeys {
+		if !strings.Contains(schema, "CONSTRAINT "+expected.name) {
+			t.Errorf("baseline is missing foreign key %s", expected.name)
+		}
+		foreignKey := "FOREIGN KEY (" + strings.Join(expected.columns, ", ") + ")"
+		reference := "REFERENCES " + expected.referencedTable + " (" + strings.Join(expected.referencedColumns, ", ") + ")"
+		if !strings.Contains(schema, foreignKey) || !strings.Contains(schema, reference) {
+			t.Errorf("baseline foreign key %s does not match declared columns and target", expected.name)
+		}
+	}
 	for _, obsolete := range []string{
 		"news_relation_assertions", "news_relation_evidence",
 		"news_item_relations", "news_identifier_status_history",
