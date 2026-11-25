@@ -168,31 +168,31 @@ func TestGetStageOutputForRunStageRejectsPayloadAttemptAndQualityMismatch(t *tes
 			other := "stage-output:other"
 			value.OutputRef = &other
 		},
-		"wrong payload run": func(_ *CreateRunResult, _, _ *domain.Attempt, value *StageOutputResource) { value.RunRef = "run:other" },
-		"wrong payload stage": func(_ *CreateRunResult, _, _ *domain.Attempt, value *StageOutputResource) {
+		"wrong payload run": func(_ *CreateRunResult, _ *domain.Attempt, value *StageOutputResource, _ *StageOutputResource) { value.RunRef = "run:other" },
+		"wrong payload stage": func(_ *CreateRunResult, _ *domain.Attempt, value *StageOutputResource, _ *StageOutputResource) {
 			value.StageRef = "stage:other"
 		},
-		"wrong payload kind": func(_ *CreateRunResult, _, _ *domain.Attempt, value *StageOutputResource) {
+		"wrong payload kind": func(_ *CreateRunResult, _ *domain.Attempt, value *StageOutputResource, _ *StageOutputResource) {
 			value.Kind = "quality_summary"
 		},
-		"wrong template": func(_ *CreateRunResult, _, _ *domain.Attempt, value *StageOutputResource) {
+		"wrong template": func(_ *CreateRunResult, _ *domain.Attempt, value *StageOutputResource, _ *StageOutputResource) {
 			value.TemplateVersion = "2.0.0"
 		},
-		"wrong output type": func(_ *CreateRunResult, _, _ *domain.Attempt, value *StageOutputResource) { value.OutputType = "other" },
-		"wrong schema": func(_ *CreateRunResult, _, _ *domain.Attempt, value *StageOutputResource) {
+		"wrong output type": func(_ *CreateRunResult, _ *domain.Attempt, value *StageOutputResource, _ *StageOutputResource) { value.OutputType = "other" },
+		"wrong schema": func(_ *CreateRunResult, _ *domain.Attempt, value *StageOutputResource, _ *StageOutputResource) {
 			value.SchemaVersion = "2.0.0"
 		},
-		"wrong schema ref": func(_ *CreateRunResult, _, _ *domain.Attempt, value *StageOutputResource) { value.SchemaRef = "other" },
-		"bad registry fingerprint": func(_ *CreateRunResult, _, _ *domain.Attempt, value *StageOutputResource) {
+		"wrong schema ref": func(_ *CreateRunResult, _ *domain.Attempt, value *StageOutputResource, _ *StageOutputResource) { value.SchemaRef = "other" },
+		"bad registry fingerprint": func(_ *CreateRunResult, _ *domain.Attempt, value *StageOutputResource, _ *StageOutputResource) {
 			value.RegistryFingerprint = "not-a-fingerprint"
 		},
-		"bad created at": func(_ *CreateRunResult, _, _ *domain.Attempt, value *StageOutputResource) {
+		"bad created at": func(_ *CreateRunResult, _ *domain.Attempt, value *StageOutputResource, _ *StageOutputResource) {
 			value.CreatedAt = "2026-11-24T10:11:12Z"
 		},
-		"invalid JSON": func(_ *CreateRunResult, _, _ *domain.Attempt, value *StageOutputResource) {
+		"invalid JSON": func(_ *CreateRunResult, _ *domain.Attempt, value *StageOutputResource, _ *StageOutputResource) {
 			value.Content = []byte("{")
 		},
-		"wrong quality ref": func(value *CreateRunResult, _, _ *domain.Attempt, _ *StageOutputResource) {
+		"wrong quality ref": func(value *CreateRunResult, _ *domain.Attempt, _, _ *StageOutputResource) {
 			other := "stage-output:other"
 			value.Stages[0].QualitySummaryRef = &other
 		},
