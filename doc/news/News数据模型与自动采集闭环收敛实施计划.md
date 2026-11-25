@@ -146,9 +146,20 @@ P0-1 全量依赖审计已完成；本计划后续只对具体字段、SQL 和�
 3. 合并主体、身份、Observation、版本写入事务。
 4. 移除独立的双阶段版本更新入口。
 5. 增加真实 MariaDB 测试：跨来源相同 URL、重复采集、内容变化、身份冲突、事务回滚、并发写入；必须调用正式 Application 用例，不得在测试中复制身份解析/版本写入流程。
-6. 当前 `mysql_repository_integration_test.go` 的 `repositoryIngestHarness.Execute` 复制了正式入库算法，只能作为 Repository 事务测试，不能作为 Application + MariaDB 端到端验收；需改为真实 `CollectSource` + `IngestCollectedSource`（或真实 Provider 入库公开用例）调用。
+6. MariaDB 集成测试必须调用正式 Application 用例，不得在测试中复制身份解析/版本写入流程。此项已实施：移除 `repositoryIngestHarness`，改为通过真实 `StaticSourceCatalog`、`CollectSource.Execute` 和 `IngestCollectedSource.Execute` 驱动 MariaDB；仅用固定 RSS 响应替代外部网络。
 
 完成门槛：由正式 Application 用例驱动 MariaDB；跨来源相同 URL 并发只产生一个主体；主体/身份/Observation/版本要么全部提交，要么全部回滚。
+
+当前 MariaDB Application 测试覆盖：
+- 同一来源并发采集与身份复用；
+- 不同来源并发采集相同规范 URL，全局只创建一个主体并保留两条来源身份；
+- 同一来源原生 ID 后补充规范 URL，主体身份更新但内容版本数不增加；
+- 同一来源原生 ID 对应不同 URL 时返回身份冲突；
+- 同一幂等键相同载荷重放、不同载荷冲突；
+- 并发内容变化追加版本；
+- 通过制造版本主键冲突，验证正式 Application 在主体、身份、Observation 已写入后失败时整笔事务回滚。
+
+该测试实现已提交，但尚未执行真实 MariaDB；`NEWS_MARIADB_TEST_DSN` 未验证，CI 也尚无可核验结果。因此 P0-3 仍为 IN_PROGRESS，不能验收 DONE。
 
 ### P0-4：Feed 生产自动采集闭环
 
@@ -194,4 +205,4 @@ P0-1 全量依赖审计已完成；本计划后续只对具体字段、SQL 和�
 
 ## 7. 会话恢复
 
-继续任务时先核对 `repair_all` 最新 HEAD，再直接从当前未完成阶段继续。P0-1 已关闭，不得重复审计。当前从 P0-2 逐字段对齐和 Migration 重建开始。只操作 `repair_all`，按功能组提交，中文文档/注释/提交信息。
+继续任务时先核对 `repair_all` 最新 HEAD，再直接从当前未完成阶段继续。P0-1 已关闭，不得重复审计。当前从 P0-3 正式 Application + MariaDB 测试的真实执行与修复开始；通过后继续 P0-4 Feed Server 生产装配。只操作 `repair_all`，按功能组提交，中文文档/注释/提交信息。
