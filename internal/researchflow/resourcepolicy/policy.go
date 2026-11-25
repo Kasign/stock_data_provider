@@ -14,8 +14,10 @@ import (
 
 const (
 	NewsSearchConfiguredProvidersRef = "news.search.configured-providers@1.0.0"
+	NewsFeedConfiguredSourcesRef    = "news.feed.configured-sources@1.0.0"
 	QuantDailyBarsProvidersRef       = "quant.daily-bars.configured-providers@1.0.0"
 	newsSearchPolicyVersion          = "1.0.0"
+	newsFeedPolicyVersion            = "1.0.0"
 	quantDailyBarsPolicyVersion      = "1.0.0"
 )
 
@@ -53,6 +55,11 @@ func NewRegistry() (*Registry, error) {
 			Ref: NewsSearchConfiguredProvidersRef, Version: newsSearchPolicyVersion,
 			ResourceType: "news.provider",
 			Selection:    "server_successfully_assembled_provider_set_at_run_creation",
+		},
+		{
+			Ref: NewsFeedConfiguredSourcesRef, Version: newsFeedPolicyVersion,
+			ResourceType: "news.feed_catalog",
+			Selection:    "server_successfully_assembled_trusted_feed_source_catalog_at_run_creation",
 		},
 		{
 			Ref: QuantDailyBarsProvidersRef, Version: quantDailyBarsPolicyVersion,
