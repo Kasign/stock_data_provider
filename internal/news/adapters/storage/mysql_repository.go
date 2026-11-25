@@ -232,8 +232,6 @@ func (r *MySQLRepository) WithinIdentityTransaction(ctx context.Context, fn func
 	})
 }
 
-
-
 type mysqlNewsTransaction struct {
 	tx      *sql.Tx
 	acquire func(string) error

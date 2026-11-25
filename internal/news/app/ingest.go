@@ -152,10 +152,10 @@ func (u *candidateIngest) executeCore(
 		ID: strings.TrimSpace(u.newID()), IdempotencyKey: idempotencyKey,
 		SourceID: sourceID, ProviderCode: candidate.ProviderCode, QueryDimension: candidate.QueryDimension,
 		EndpointID: trace.EndpointID, SourcePolicyVersionID: trace.SourcePolicyVersionID,
-		EndpointPolicyVersionID: trace.EndpointPolicyVersionID,
-		ProviderOutputPolicyRef: trace.ProviderOutputPolicyRef,
+		EndpointPolicyVersionID:       trace.EndpointPolicyVersionID,
+		ProviderOutputPolicyRef:       trace.ProviderOutputPolicyRef,
 		ProviderOutputPolicyVersionID: trace.ProviderOutputPolicyVersionID,
-		PolicyEvaluatedAt: trace.PolicyEvaluatedAt, Candidate: candidate, ObservedAt: observedAt,
+		PolicyEvaluatedAt:             trace.PolicyEvaluatedAt, Candidate: candidate, ObservedAt: observedAt,
 	}
 	if trace.Retention > 0 {
 		observation.RetentionUntil = observedAt.Add(trace.Retention).UTC()

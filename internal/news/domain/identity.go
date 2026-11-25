@@ -47,8 +47,8 @@ func BuildIdentityCredentials(sourceID, sourceNativeID string) ([]IdentityCreden
 func newIdentityCredential(sourceID, value string) IdentityCredential {
 	return IdentityCredential{
 		SourceID: sourceID,
-		Value: value,
-		Hash: identityValueHash(value),
+		Value:    value,
+		Hash:     identityValueHash(value),
 	}
 }
 

@@ -3,8 +3,8 @@ package storage
 import (
 	"context"
 	"crypto/sha256"
-	"encoding/hex"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -23,6 +23,7 @@ import (
 	"example.com/stock-analysis-flow/internal/news/domain"
 	platformstorage "example.com/stock-analysis-flow/internal/platform/storage"
 )
+
 func insertIntegrationNewsItem(ctx context.Context, db *sql.DB, newsID string) error {
 	_, err := db.ExecContext(ctx, `INSERT INTO news_items
 		(news_id, title, content_json, content_fingerprint)
@@ -30,11 +31,10 @@ func insertIntegrationNewsItem(ctx context.Context, db *sql.DB, newsID string) e
 	return err
 }
 
-
 // repositoryIngestHarness 在 MariaDB 集成测试中调用与正式入库一致的事务端口。
 type repositoryIngestHarness struct {
 	repository app.IdentityRepository
-	newID func() string
+	newID      func() string
 }
 
 func (h repositoryIngestHarness) Execute(
@@ -43,28 +43,40 @@ func (h repositoryIngestHarness) Execute(
 ) (domain.Observation, error) {
 	if h.repository == nil || h.newID == nil || ctx == nil || strings.TrimSpace(sourceID) == "" ||
 		strings.TrimSpace(idempotencyKey) == "" || strings.TrimSpace(candidate.ProviderCode) != "" {
-		if strings.TrimSpace(candidate.ProviderCode) != "" { return domain.Observation{}, app.ErrProviderOutputPolicyRequired }
+		if strings.TrimSpace(candidate.ProviderCode) != "" {
+			return domain.Observation{}, app.ErrProviderOutputPolicyRequired
+		}
 		return domain.Observation{}, app.ErrInvalidRequest
 	}
 	observedAt := time.Now().UTC()
 	candidate = domain.NormalizeCandidate(candidate, observedAt, candidate.QueryDimension)
 	candidate.CanonicalURL = ""
 	if candidate.RawURL != "" {
-		if decision := domain.EvaluateSourceURL(candidate.RawURL, policy); decision.Allowed { candidate.CanonicalURL = decision.CanonicalURL }
+		if decision := domain.EvaluateSourceURL(candidate.RawURL, policy); decision.Allowed {
+			candidate.CanonicalURL = decision.CanonicalURL
+		}
 	}
 	content := domain.ContentLayersFromCandidate(candidate)
-	if len(contentLayers) > 0 { content = domain.NormalizeContentLayers(contentLayers[0]) }
+	if len(contentLayers) > 0 {
+		content = domain.NormalizeContentLayers(contentLayers[0])
+	}
 	fingerprint := domain.BuildVersionFingerprint(candidate, content)
 	canonicalHash := ""
-	if candidate.CanonicalURL != "" { canonicalHash = canonicalHashForIntegration(candidate.CanonicalURL) }
+	if candidate.CanonicalURL != "" {
+		canonicalHash = canonicalHashForIntegration(candidate.CanonicalURL)
+	}
 	credentials, err := domain.BuildIdentityCredentials(sourceID, candidate.SourceItemID)
-	if err != nil { return domain.Observation{}, err }
+	if err != nil {
+		return domain.Observation{}, err
+	}
 	observation := domain.Observation{
 		ID: h.newID(), IdempotencyKey: idempotencyKey, SourceID: sourceID,
 		ProviderCode: candidate.ProviderCode, QueryDimension: candidate.QueryDimension,
 		Candidate: candidate, ObservedAt: observedAt,
 	}
-	if observation.ID == "" { return domain.Observation{}, app.ErrInvalidRequest }
+	if observation.ID == "" {
+		return domain.Observation{}, app.ErrInvalidRequest
+	}
 	if candidate.CanonicalURL == "" && len(credentials) == 0 {
 		if candidate.RawURL != "" {
 			observation.IdentityStatus = domain.ObservationConflict
@@ -92,13 +104,17 @@ func (h repositoryIngestHarness) Execute(
 				persisted, findErr = tx.AppendObservation(ctx, observation)
 				return findErr
 			}
-			if findErr != nil { return findErr }
+			if findErr != nil {
+				return findErr
+			}
 		}
 		var existing []domain.IdentityCredential
 		resolution := domain.IdentityResolution{Status: domain.IdentityNew}
 		if len(credentials) > 0 {
 			existing, err = tx.FindIdentityCredentials(ctx, sourceID, credentials)
-			if err != nil { return err }
+			if err != nil {
+				return err
+			}
 			resolution = domain.ResolveIdentity(sourceID, credentials, existing)
 		}
 		if resolution.Status == domain.IdentityConflict {
@@ -122,10 +138,14 @@ func (h repositoryIngestHarness) Execute(
 			var found bool
 			var findErr error
 			item, found, findErr = tx.FindNewsItemByID(ctx, resolution.NewsID)
-			if findErr != nil { return findErr }
-			if !found { return errors.New("news.identity.native_item_missing") }
+			if findErr != nil {
+				return findErr
+			}
+			if !found {
+				return errors.New("news.identity.native_item_missing")
+			}
 		default:
-			item = domain.NewsItem{ID: h.newID()+"-news"}
+			item = domain.NewsItem{ID: h.newID() + "-news"}
 			newItem = true
 		}
 		if candidate.CanonicalURL != "" {
@@ -137,38 +157,66 @@ func (h repositoryIngestHarness) Execute(
 			}
 			item.CanonicalURL, item.CanonicalURLHash = candidate.CanonicalURL, canonicalHash
 		}
-		if newItem { observation.IdentityStatus = domain.ObservationNew } else { observation.IdentityStatus = domain.ObservationMatched }
+		if newItem {
+			observation.IdentityStatus = domain.ObservationNew
+		} else {
+			observation.IdentityStatus = domain.ObservationMatched
+		}
 		observation.NewsID = item.ID
 		item.Title, item.PublisherName, item.PublisherDomain, item.Author = candidate.Title, candidate.PublisherName, candidate.PublisherDomain, candidate.Author
 		item.PublishedAt, item.Content, item.ContentFingerprint = candidate.PublishedAt, content, fingerprint
 		item.UpdatedAt = observedAt
 		if newItem {
 			item.CreatedAt = observedAt
-			if err := tx.CreateNewsItem(ctx, item); err != nil { return err }
+			if err := tx.CreateNewsItem(ctx, item); err != nil {
+				return err
+			}
 		}
 		toSave := credentialsNotYetStoredForIntegration(credentials, existing)
-		for i := range toSave { toSave[i].NewsID, toSave[i].ObservedAt = item.ID, observedAt }
-		if len(toSave) > 0 { if err := tx.SaveIdentityCredentials(ctx, toSave); err != nil { return err } }
+		for i := range toSave {
+			toSave[i].NewsID, toSave[i].ObservedAt = item.ID, observedAt
+		}
+		if len(toSave) > 0 {
+			if err := tx.SaveIdentityCredentials(ctx, toSave); err != nil {
+				return err
+			}
+		}
 		persisted, err = tx.AppendObservation(ctx, observation)
-		if err != nil { return err }
-		if persisted.ID != observation.ID { return nil }
+		if err != nil {
+			return err
+		}
+		if persisted.ID != observation.ID {
+			return nil
+		}
 		latest, exists, err := tx.LatestNewsItemVersion(ctx, item.ID)
-		if err != nil { return err }
+		if err != nil {
+			return err
+		}
 		if !exists || latest.Fingerprint != fingerprint {
 			versionNo := 1
-			if exists { versionNo = latest.VersionNo+1 }
-			version := domain.NewsItemVersion{
-				ID: h.newID()+"-version", NewsID:item.ID, VersionNo:versionNo, Fingerprint:fingerprint,
-				Title:candidate.Title, PublisherName:candidate.PublisherName, PublisherDomain:candidate.PublisherDomain,
-				Author:candidate.Author, PublishedAt:candidate.PublishedAt, Content:content,
-				ObservedAt:observedAt, ObservationID:observation.ID,
+			if exists {
+				versionNo = latest.VersionNo + 1
 			}
-			if err := tx.AppendNewsItemVersion(ctx, version); err != nil { return err }
-			if !newItem { if err := tx.UpdateNewsItem(ctx, item); err != nil { return err } }
+			version := domain.NewsItemVersion{
+				ID: h.newID() + "-version", NewsID: item.ID, VersionNo: versionNo, Fingerprint: fingerprint,
+				Title: candidate.Title, PublisherName: candidate.PublisherName, PublisherDomain: candidate.PublisherDomain,
+				Author: candidate.Author, PublishedAt: candidate.PublishedAt, Content: content,
+				ObservedAt: observedAt, ObservationID: observation.ID,
+			}
+			if err := tx.AppendNewsItemVersion(ctx, version); err != nil {
+				return err
+			}
+			if !newItem {
+				if err := tx.UpdateNewsItem(ctx, item); err != nil {
+					return err
+				}
+			}
 		}
 		return nil
 	})
-	if err != nil { return domain.Observation{}, err }
+	if err != nil {
+		return domain.Observation{}, err
+	}
 	return persisted, nil
 }
 
@@ -177,9 +225,14 @@ func credentialsNotYetStoredForIntegration(candidates, existing []domain.Identit
 	for _, candidate := range candidates {
 		found := false
 		for _, stored := range existing {
-			if stored.SourceID == candidate.SourceID && stored.Hash == candidate.Hash && stored.Value == candidate.Value { found = true; break }
+			if stored.SourceID == candidate.SourceID && stored.Hash == candidate.Hash && stored.Value == candidate.Value {
+				found = true
+				break
+			}
 		}
-		if !found { result = append(result, candidate) }
+		if !found {
+			result = append(result, candidate)
+		}
 	}
 	return result
 }
@@ -744,7 +797,9 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 			ID: "news-" + rollbackSource, Title: "rollback fixture",
 			ContentFingerprint: strings.Repeat("0", 64), CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC(),
 		}
-		if err := tx.CreateNewsItem(ctx, rollbackItem); err != nil { return err }
+		if err := tx.CreateNewsItem(ctx, rollbackItem); err != nil {
+			return err
+		}
 		return rollbackErr
 	})
 	if !errors.Is(err, rollbackErr) {
@@ -767,28 +822,41 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 		go func() {
 			defer updateWait.Done()
 			content := domain.ContentLayers{
-				SourceSummary: fmt.Sprintf("summary revision %d", index),
+				SourceSummary:       fmt.Sprintf("summary revision %d", index),
 				SourceSummaryOrigin: domain.ContentOriginFeedSummary,
 			}
 			observation, err := ingest.Execute(ctx, sourceID, fmt.Sprintf("news-it-revision-%d", index),
 				candidate, domain.SourceURLPolicy{}, content)
-			if err != nil { updateErrors <- err; return }
-			if observation.NewsID != newsID { updateErrors <- fmt.Errorf("revision %d changed news ID to %s", index, observation.NewsID) }
+			if err != nil {
+				updateErrors <- err
+				return
+			}
+			if observation.NewsID != newsID {
+				updateErrors <- fmt.Errorf("revision %d changed news ID to %s", index, observation.NewsID)
+			}
 		}()
 	}
 	updateWait.Wait()
 	close(updateErrors)
-	for err := range updateErrors { t.Fatalf("concurrent formal ingest version append failed: %v", err) }
+	for err := range updateErrors {
+		t.Fatalf("concurrent formal ingest version append failed: %v", err)
+	}
 
 	var latest domain.NewsItemVersion
 	err = repository.WithinIdentityTransaction(ctx, func(tx app.IdentityTransaction) error {
 		version, exists, err := tx.LatestNewsItemVersion(ctx, newsID)
-		if err != nil { return err }
-		if !exists { return errors.New("latest version missing") }
+		if err != nil {
+			return err
+		}
+		if !exists {
+			return errors.New("latest version missing")
+		}
 		latest = version
 		return nil
 	})
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	if latest.VersionNo != workers+1 {
 		t.Fatalf("latest VersionNo = %d, want %d (initial plus concurrent content revisions)", latest.VersionNo, workers+1)
 	}
@@ -796,22 +864,30 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	secondSourceID := sourceID + "-second"
 	secondCandidate := domain.Candidate{
 		SourceItemID: "native-item-002",
-		Title: "Second news item", PublisherName: "Second Publisher",
+		Title:        "Second news item", PublisherName: "Second Publisher",
 	}
 	secondObservation, err := ingest.Execute(ctx, secondSourceID, "news-it-second-key", secondCandidate,
 		domain.SourceURLPolicy{}, domain.ContentLayers{
 			SourceSummary: "second source summary", SourceSummaryOrigin: domain.ContentOriginFeedSummary,
 		})
-	if err != nil { t.Fatalf("create second news item and version: %v", err) }
-	var secondVersion struct { Version domain.NewsItemVersion }
+	if err != nil {
+		t.Fatalf("create second news item and version: %v", err)
+	}
+	var secondVersion struct{ Version domain.NewsItemVersion }
 	err = repository.WithinIdentityTransaction(ctx, func(tx app.IdentityTransaction) error {
 		version, exists, err := tx.LatestNewsItemVersion(ctx, secondObservation.NewsID)
-		if err != nil { return err }
-		if !exists { return errors.New("second news version missing") }
+		if err != nil {
+			return err
+		}
+		if !exists {
+			return errors.New("second news version missing")
+		}
 		secondVersion.Version = version
 		return nil
 	})
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// Strict PIT fixtures require a traceable, version-bound verified available_at decision.
 	observationRetention := secondObservation.ObservedAt.Add(24 * time.Hour)
