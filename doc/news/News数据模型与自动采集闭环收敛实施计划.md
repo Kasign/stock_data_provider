@@ -145,9 +145,10 @@ P0-1 全量依赖审计已完成；本计划后续只对具体字段、SQL 和�
 2. RSS/Atom 和被选中的 Provider 候选复用该用例。
 3. 合并主体、身份、Observation、版本写入事务。
 4. 移除独立的双阶段版本更新入口。
-5. 增加真实 MariaDB 测试：跨来源相同 URL、重复采集、内容变化、身份冲突、事务回滚、并发写入。
+5. 增加真实 MariaDB 测试：跨来源相同 URL、重复采集、内容变化、身份冲突、事务回滚、并发写入；必须调用正式 Application 用例，不得在测试中复制身份解析/版本写入流程。
+6. 当前 `mysql_repository_integration_test.go` 的 `repositoryIngestHarness.Execute` 复制了正式入库算法，只能作为 Repository 事务测试，不能作为 Application + MariaDB 端到端验收；需改为真实 `CollectSource` + `IngestCollectedSource`（或真实 Provider 入库公开用例）调用。
 
-完成门槛：跨来源相同 URL 并发只产生一个主体；主体/身份/Observation/版本要么全部提交，要么全部回滚。
+完成门槛：由正式 Application 用例驱动 MariaDB；跨来源相同 URL 并发只产生一个主体；主体/身份/Observation/版本要么全部提交，要么全部回滚。
 
 ### P0-4：Feed 生产自动采集闭环
 
