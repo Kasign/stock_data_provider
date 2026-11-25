@@ -9,7 +9,7 @@
 
 > 本文是基于 GitHub 固定代码基线的静态盘点，不是生产运行时清点，也不代表任何 Python 能力已经迁移完成。进程、容器、真实环境变量、生产调用量、实际数据库和 Redis Key 等仍需在目标环境只读补证。本文中的“存在/已实现”默认仅说明源码证据，不自动代表生产已部署或正在使用。
 
-> **当前状态校准（2026-11-25，repair_all）：** 本文第 2、3、6、7 节原始表格记录的是 2026-11-04 历史快照，不再代表当前仓库状态。2026-11-25 已复核并退役独立的 `go-core/**` 与 `python_bridge/**` 运行链：Root Server 标准 Compose/部署不装配它们，仓库内 Go Core 仅由其自身启动入口消费 Python Bridge，Python Bridge 也没有其他仓库内运行时消费者。旧 Bridge OpenAPI、专用迁移验证脚本及 CI 中 go-core 专项测试随之移除。此操作不代表旧 Analysis API、Python API Adapter 或旧 WebUI 调用链已退役；这些是独立链路，仍需按其真实调用方另行处理。
+> **当前状态校准（2026-11-25，repair_all）：** 本文第 2、3、6、7 节原始表格记录的是 2026-11-04 历史快照，不再代表当前仓库状态。独立 `go-core/**` 与 `python_bridge/**` 已于 RA-04 退役；随后 MIG-014 又删除 `internal/adapters/pythonapi/**`、`cmd/pythonapi-smoke/**` 及其未使用的构造入口。Root Server 仍保留旧 Analysis Runner/Task Queue/Worker/HTTP API 和 WebUI 旧调用链，必须等待 Researchflow 完整业务链与 WebUI 迁移后再按 RA-08/RA-09 统一处理。
 
 ---
 
@@ -129,7 +129,7 @@ python_bridge/go_core_client.py 是供旧 Python API/CLI/Bot/Scheduler 使用的
 | Python 能力 / 函数 | 当前调用方 | Go 已有能力 | 主要缺口 | 目标模块 |
 |---|---|---|---|---|
 | get_daily_data 日 K | Go Core MarketDataAdapter、旧 Python 主项目 | services/market-data 多 Provider、复权、单位统一、质量校验和存储 | 旧 API Adapter 和所有调用方尚未清零；字段级差分未完成 | Market Data / Provider |
-| get_realtime_quote | Go Core MarketDataAdapter、旧 Python 主项目 | Go 多 Provider Quote | Go Core 主链已切 Go；旧 pythonapi Adapter 仍存在 | Market Data |
+| get_realtime_quote | Go Core MarketDataAdapter、旧 Python 主项目 | Go 多 Provider Quote | Go Core 已退役；旧 Python API Adapter 已由 MIG-014 删除 | Market Data |
 | get_stock_name | Python 行情 Bridge | Go Security Master、证券搜索和基础资料 | 别名、改名、退市、历史身份需对账 | Security / Market |
 | get_chip_distribution | Go Core stock-auxiliary | Go 东方财富筹码、妙想可选能力 | 仍由 Bridge 提供；计算口径、源时间、估算标识、PIT 未对齐 | Market Data / Quality |
 | get_fundamental_context | Go Core stock-auxiliary | Go BaoStock/Tushare/同花顺等 Provider 能力 | 仍由 Bridge 提供辅助上下文；报告期、公告时间、修订和 PIT 未证明等价 | Fundamentals / Valuation |
