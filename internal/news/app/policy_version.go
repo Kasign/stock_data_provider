@@ -62,8 +62,11 @@ func (u *PublishNewsPolicyVersion) ExecuteIfCurrent(
 	policyType, policyRef, policyVersion, expectedCurrentVersion string,
 	payload []byte,
 ) error {
+	if u == nil || u.writer == nil || ctx == nil {
+		return ErrNewsPolicyVersionStore
+	}
 	writer, ok := u.writer.(ConditionalNewsPolicyVersionWriter)
-	if u == nil || !ok || ctx == nil {
+	if !ok {
 		return ErrNewsPolicyVersionStore
 	}
 	value, err := u.buildVersion(ctx, policyType, policyRef, policyVersion, payload)
