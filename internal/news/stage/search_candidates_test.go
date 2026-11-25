@@ -28,8 +28,8 @@ func TestSearchCandidatesAdapterBuildsPayloadAndMeasuredQualitySummary(t *testin
 	published := time.Date(2026, 11, 16, 1, 2, 3, 0, time.UTC)
 	search := app.NewSearchCandidates(app.StaticProviderSet{Providers: []app.Provider{
 		testProvider{code: "provider_a", items: []domain.Candidate{{
-			Title: "headline", RawURL: "https://publisher.example/item",
-			PublishedAt: &published,
+			Title: "headline", ProviderSummary: "provider supplied summary",
+			RawURL: "https://publisher.example/item", PublishedAt: &published,
 		}}},
 		testProvider{code: "provider_b", err: &app.ProviderError{Code: app.ProviderErrorTimeout, Retryable: true}},
 	}})
@@ -53,6 +53,9 @@ func TestSearchCandidatesAdapterBuildsPayloadAndMeasuredQualitySummary(t *testin
 	}
 	if payload.Candidates[0].ProviderCode != "provider_a" || payload.Candidates[0].ObservedAt.IsZero() {
 		t.Fatalf("candidate attribution/observation missing: %+v", payload.Candidates[0])
+	}
+	if payload.Candidates[0].ProviderSummary != "provider supplied summary" {
+		t.Fatalf("Provider summary must remain part of the versioned StageOutput payload: %+v", payload.Candidates[0])
 	}
 	if payload.Outcomes[1].Status != domain.ProviderFailed || !payload.Outcomes[1].Retryable {
 		t.Fatalf("provider outcome was not preserved: %+v", payload.Outcomes[1])
