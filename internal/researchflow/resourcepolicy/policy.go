@@ -14,96 +14,38 @@ import (
 
 const (
 	NewsSearchConfiguredProvidersRef = "news.search.configured-providers@1.0.0"
-	NewsFeedConfiguredSourcesRef     = "news.feed.configured-sources@1.0.0"
-	QuantDailyBarsProvidersRef       = "quant.daily-bars.configured-providers@1.0.0"
-	newsSearchPolicyVersion          = "1.0.0"
-	newsFeedPolicyVersion            = "1.0.0"
-	quantDailyBarsPolicyVersion      = "1.0.0"
+	NewsFeedConfiguredSourcesRef    = "news.feed.configured-sources@1.0.0"
+	QuantDailyBarsProvidersRef      = "quant.daily-bars.configured-providers@1.0.0"
+	newsSearchPolicyVersion         = "1.0.0"
+	newsFeedPolicyVersion           = "1.0.0"
+	quantDailyBarsPolicyVersion     = "1.0.0"
 )
 
 var (
 	ErrPolicyNotFound   = errors.New("Researchflow resource policy not found")
 	ErrNoProviders      = errors.New("Researchflow resource policy has no configured providers")
-	ErrInvalidInventory = errors.New("Researchflow provider inventory is invalid")
+	ErrInvalidInventory = errors.New("Researchflow resource policy inventory is invalid")
 )
 
 var (
-	providerCodePattern = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}// Package resourcepolicy resolves immutable Researchflow resource authorization snapshots.
-package resourcepolicy
-
-import (
-	"crypto/sha256"
-	"encoding/hex"
-	"encoding/json"
-	"errors"
-	"fmt"
-	"regexp"
-	"sort"
-	"strings"
-)
-
-const (
-	NewsSearchConfiguredProvidersRef = "news.search.configured-providers@1.0.0"
-	NewsFeedConfiguredSourcesRef     = "news.feed.configured-sources@1.0.0"
-	QuantDailyBarsProvidersRef       = "quant.daily-bars.configured-providers@1.0.0"
-	newsSearchPolicyVersion          = "1.0.0"
-	newsFeedPolicyVersion            = "1.0.0"
-	quantDailyBarsPolicyVersion      = "1.0.0"
-)
-
-var (
-	ErrPolicyNotFound   = errors.New("Researchflow resource policy not found")
-	ErrNoProviders      = errors.New("Researchflow resource policy has no configured providers")
-	ErrInvalidInventory = errors.New("Researchflow provider inventory is invalid")
-)
-
-)
-	sourceEndpointRefPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}/[A-Za-z0-9][A-Za-z0-9._-]{0,127}// Package resourcepolicy resolves immutable Researchflow resource authorization snapshots.
-package resourcepolicy
-
-import (
-	"crypto/sha256"
-	"encoding/hex"
-	"encoding/json"
-	"errors"
-	"fmt"
-	"regexp"
-	"sort"
-	"strings"
-)
-
-const (
-	NewsSearchConfiguredProvidersRef = "news.search.configured-providers@1.0.0"
-	NewsFeedConfiguredSourcesRef     = "news.feed.configured-sources@1.0.0"
-	QuantDailyBarsProvidersRef       = "quant.daily-bars.configured-providers@1.0.0"
-	newsSearchPolicyVersion          = "1.0.0"
-	newsFeedPolicyVersion            = "1.0.0"
-	quantDailyBarsPolicyVersion      = "1.0.0"
-)
-
-var (
-	ErrPolicyNotFound   = errors.New("Researchflow resource policy not found")
-	ErrNoProviders      = errors.New("Researchflow resource policy has no configured providers")
-	ErrInvalidInventory = errors.New("Researchflow provider inventory is invalid")
-)
-
-)
+	providerCodePattern       = regexp.MustCompile(\`^[a-z][a-z0-9_]{0,63}$\`)
+	sourceEndpointRefPattern = regexp.MustCompile(\`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}/[A-Za-z0-9][A-Za-z0-9._-]{0,127}$\`)
 )
 
 // Snapshot is the immutable resource authorization decision made when a Run is created.
 // Provider and Source/Endpoint identities are stored separately; credentials and URLs are never included.
 type Snapshot struct {
-	PolicyRef                 string   `json:"policy_ref"`
-	PolicyFingerprint         string   `json:"policy_fingerprint"`
-	AllowedProviderCodes      []string `json:"allowed_provider_codes,omitempty"`
-	AllowedSourceEndpointRefs []string `json:"allowed_source_endpoint_refs,omitempty"`
+	PolicyRef                 string   \`json:"policy_ref"\`
+	PolicyFingerprint         string   \`json:"policy_fingerprint"\`
+	AllowedProviderCodes      []string \`json:"allowed_provider_codes,omitempty"\`
+	AllowedSourceEndpointRefs []string \`json:"allowed_source_endpoint_refs,omitempty"\`
 }
 
 type definition struct {
-	Ref          string `json:"ref"`
-	Version      string `json:"version"`
-	ResourceType string `json:"resource_type"`
-	Selection    string `json:"selection"`
+	Ref          string \`json:"ref"\`
+	Version      string \`json:"version"\`
+	ResourceType string \`json:"resource_type"\`
+	Selection    string \`json:"selection"\`
 }
 
 type Registry struct {
@@ -150,7 +92,7 @@ func (r *Registry) Resolve(ref string, providerCodes []string) (Snapshot, error)
 		return Snapshot{}, ErrPolicyNotFound
 	}
 	item, ok := r.definitions[ref]
-	if !ok {
+	if !ok || ref == NewsFeedConfiguredSourcesRef {
 		return Snapshot{}, fmt.Errorf("%w: %q", ErrPolicyNotFound, ref)
 	}
 	if len(providerCodes) == 0 {
@@ -168,7 +110,10 @@ func (r *Registry) Resolve(ref string, providerCodes []string) (Snapshot, error)
 			return Snapshot{}, fmt.Errorf("%w: duplicate Provider Code %q", ErrInvalidInventory, codes[i])
 		}
 	}
-	return Snapshot{PolicyRef: item.Ref, PolicyFingerprint: r.fingerprints[item.Ref], AllowedProviderCodes: codes}, nil
+	return Snapshot{
+		PolicyRef: item.Ref, PolicyFingerprint: r.fingerprints[item.Ref],
+		AllowedProviderCodes: codes,
+	}, nil
 }
 
 // ResolveSourceEndpoints snapshots the exact trusted Feed endpoints assembled by Server.
@@ -195,7 +140,10 @@ func (r *Registry) ResolveSourceEndpoints(ref string, sourceEndpointRefs []strin
 			return Snapshot{}, fmt.Errorf("%w: duplicate Source/Endpoint reference %q", ErrInvalidInventory, refs[i])
 		}
 	}
-	return Snapshot{PolicyRef: item.Ref, PolicyFingerprint: r.fingerprints[item.Ref], AllowedSourceEndpointRefs: refs}, nil
+	return Snapshot{
+		PolicyRef: item.Ref, PolicyFingerprint: r.fingerprints[item.Ref],
+		AllowedSourceEndpointRefs: refs,
+	}, nil
 }
 
 // ValidateSnapshotInventory validates the type-specific dynamic inventory without
