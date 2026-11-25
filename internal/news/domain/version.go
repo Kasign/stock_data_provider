@@ -56,10 +56,6 @@ func BuildVersionFingerprint(candidate Candidate, content ContentLayers) string 
 	return hex.EncodeToString(digest.Sum(nil))
 }
 
-func normalizeCandidateURL(raw string) string {
-	return strings.TrimSpace(raw)
-}
-
 func publishedTimeFingerprint(candidate Candidate) string {
 	if candidate.PublishedAt != nil {
 		return candidate.PublishedAt.UTC().Format(time.RFC3339Nano)
