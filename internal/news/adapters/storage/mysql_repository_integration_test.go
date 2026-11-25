@@ -6,11 +6,11 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"html"
 	"io"
 	"net/http"
-	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -22,9 +22,9 @@ import (
 
 	_ "github.com/go-sql-driver/mysql"
 
+	sourceadapter "example.com/stock-analysis-flow/internal/news/adapters/source"
 	"example.com/stock-analysis-flow/internal/news/app"
 	"example.com/stock-analysis-flow/internal/news/domain"
-	sourceadapter "example.com/stock-analysis-flow/internal/news/adapters/source"
 	platformstorage "example.com/stock-analysis-flow/internal/platform/storage"
 )
 
@@ -210,7 +210,7 @@ func applyNewsBaselineAndVerifySchema(t *testing.T, ctx context.Context, db *sql
 	}
 }
 
-func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
+func TestNewsMariaDBApplicationIntegration(t *testing.T) {
 	dsn := os.Getenv("NEWS_MARIADB_TEST_DSN")
 	if dsn == "" {
 		t.Skip("set NEWS_MARIADB_TEST_DSN to run News MariaDB integration")
@@ -707,7 +707,7 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	wait.Wait()
 	close(errs)
 	for err := range errs {
-		t.Fatalf("concurrent repository identity transaction failed: %v", err)
+		t.Fatalf("concurrent formal Application ingest failed: %v", err)
 	}
 
 	newsID := observations[0].NewsID
@@ -726,7 +726,7 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 		t.Fatal(err)
 	}
 	if itemCount != 1 {
-		t.Fatalf("concurrent repository transactions created %d News items, want 1", itemCount)
+		t.Fatalf("concurrent Application ingests created %d News items, want 1", itemCount)
 	}
 
 	// 不同来源并发发现同一规范 URL，必须全局复用同一个新闻主体。
