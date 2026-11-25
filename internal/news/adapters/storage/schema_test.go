@@ -115,3 +115,53 @@ func TestValidateNewsSchemaIndexesAcceptsMigrationBaseline(t *testing.T) {
 		t.Fatalf("complete News indexes rejected: %v", err)
 	}
 }
+
+
+func completeNewsSchemaForeignKeys() map[string]newsSchemaForeignKeyState {
+	actual := make(map[string]newsSchemaForeignKeyState, len(requiredNewsSchemaForeignKeys))
+	for _, expected := range requiredNewsSchemaForeignKeys {
+		actual[expected.name] = newsSchemaForeignKeyState{
+			table: expected.table, columns: append([]string(nil), expected.columns...),
+			referencedTable: expected.referencedTable,
+			referencedColumns: append([]string(nil), expected.referencedColumns...),
+		}
+	}
+	return actual
+}
+
+func TestValidateNewsSchemaForeignKeysRejectsMissingAndDriftedConstraints(t *testing.T) {
+	t.Run("missing constraint", func(t *testing.T) {
+		actual := completeNewsSchemaForeignKeys()
+		delete(actual, "fk_news_availability_evidence_version")
+		err := validateNewsSchemaForeignKeys(actual)
+		if err == nil || !strings.Contains(err.Error(), "fk_news_availability_evidence_version") {
+			t.Fatalf("missing foreign key error = %v", err)
+		}
+	})
+	t.Run("wrong referenced table", func(t *testing.T) {
+		actual := completeNewsSchemaForeignKeys()
+		state := actual["fk_news_identifiers_item"]
+		state.referencedTable = "news_item_versions"
+		actual["fk_news_identifiers_item"] = state
+		err := validateNewsSchemaForeignKeys(actual)
+		if err == nil || !strings.Contains(err.Error(), "fk_news_identifiers_item") {
+			t.Fatalf("drifted foreign key error = %v", err)
+		}
+	})
+	t.Run("wrong column order", func(t *testing.T) {
+		actual := completeNewsSchemaForeignKeys()
+		state := actual["fk_news_availability_decision_evidence"]
+		state.columns = []string{"selected_evidence_id", "version_id"}
+		actual["fk_news_availability_decision_evidence"] = state
+		err := validateNewsSchemaForeignKeys(actual)
+		if err == nil || !strings.Contains(err.Error(), "fk_news_availability_decision_evidence") {
+			t.Fatalf("wrong foreign key column order error = %v", err)
+		}
+	})
+}
+
+func TestValidateNewsSchemaForeignKeysAcceptsMigrationBaseline(t *testing.T) {
+	if err := validateNewsSchemaForeignKeys(completeNewsSchemaForeignKeys()); err != nil {
+		t.Fatalf("complete News foreign keys rejected: %v", err)
+	}
+}
