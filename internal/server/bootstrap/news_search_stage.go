@@ -51,14 +51,7 @@ func newNewsSearchStageCompositionWithProviders(providers newsapp.ProviderSet) (
 		return nil, fmt.Errorf("News ProviderSet 不可用")
 	}
 
-	registry, err := stageoutput.NewRegistry(newsSearchStageOutputRegistryVersion, []stageoutput.Entry{{
-		StageCode: newsstage.SearchCandidatesStageCode, OutputType: newsstage.SearchCandidatesOutputType,
-		SchemaVersion:           newsstage.SearchCandidatesSchemaVersion,
-		PayloadSchemaRef:        newsstage.SearchCandidatesPayloadSchemaRef,
-		QualitySummarySchemaRef: newsstage.SearchCandidatesQualitySummarySchemaRef,
-		PayloadValidator:        stageoutput.ValidatorFunc(newsstage.ValidatePayloadJSON),
-		QualitySummaryValidator: stageoutput.ValidatorFunc(newsstage.ValidateQualitySummaryJSON),
-	}})
+	registry, err := newNewsStageOutputRegistry(newsSearchStageOutputRegistryVersion, false)
 	if err != nil {
 		return nil, fmt.Errorf("创建 News Stage Output Registry 失败: %w", err)
 	}
@@ -265,4 +258,26 @@ func newsSkippedReasonCode(failureCode string) string {
 	default:
 		return "news_search_skipped"
 	}
+}
+
+func newNewsStageOutputRegistry(version string, includeFeed bool) (*stageoutput.Registry, error) {
+	entries := []stageoutput.Entry{{
+		StageCode: newsstage.SearchCandidatesStageCode, OutputType: newsstage.SearchCandidatesOutputType,
+		SchemaVersion: newsstage.SearchCandidatesSchemaVersion,
+		PayloadSchemaRef: newsstage.SearchCandidatesPayloadSchemaRef,
+		QualitySummarySchemaRef: newsstage.SearchCandidatesQualitySummarySchemaRef,
+		PayloadValidator: stageoutput.ValidatorFunc(newsstage.ValidatePayloadJSON),
+		QualitySummaryValidator: stageoutput.ValidatorFunc(newsstage.ValidateQualitySummaryJSON),
+	}}
+	if includeFeed {
+		entries = append(entries, stageoutput.Entry{
+			StageCode: newsstage.CollectFeedsStageCode, OutputType: newsstage.CollectFeedsOutputType,
+			SchemaVersion: newsstage.CollectFeedsSchemaVersion,
+			PayloadSchemaRef: newsstage.CollectFeedsPayloadSchemaRef,
+			QualitySummarySchemaRef: newsstage.CollectFeedsQualitySummarySchemaRef,
+			PayloadValidator: stageoutput.ValidatorFunc(newsstage.ValidateFeedCollectionPayload),
+			QualitySummaryValidator: stageoutput.ValidatorFunc(newsstage.ValidateFeedCollectionQualitySummary),
+		})
+	}
+	return stageoutput.NewRegistry(version, entries)
 }
