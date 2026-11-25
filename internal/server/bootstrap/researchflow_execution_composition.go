@@ -4,7 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
+	quantapplication "example.com/stock-analysis-flow/internal/quant/application"
+	quantstorage "example.com/stock-analysis-flow/internal/quant/storage"
 	marketdatabootstrap "example.com/stock-analysis-flow/internal/marketdata/bootstrap"
 	newsconfig "example.com/stock-analysis-flow/internal/news/config"
 	researchflowapplication "example.com/stock-analysis-flow/internal/researchflow/application"
@@ -20,6 +23,7 @@ import (
 // identity remains outside this composition so Worker-only processes can assemble it.
 type researchflowComposition struct {
 	newsStage         *newsSearchStageComposition
+	quantResultReader *quantapplication.GetResult
 	quantStage        *quantSMA20StageComposition
 	runRepository     *researchflowstorage.MySQLRunRepository
 	templateRegistry  *researchflowstorage.MySQLTemplateRegistry
@@ -130,8 +134,40 @@ func newResearchflowComposition(
 		return nil, fmt.Errorf("create Researchflow database clock: %w", err)
 	}
 
+	var quantResultReader *quantapplication.GetResult
+	if quantStage != nil {
+		policyStore, storeErr := quantstorage.NewMySQLResultAccessPolicyStore(shared.DB)
+		if storeErr != nil {
+			return nil, fmt.Errorf("create Quant result access policy reader: %w", storeErr)
+		}
+		auditor, auditErr := quantstorage.NewMySQLAccessAuditor(shared.DB)
+		if auditErr != nil {
+			return nil, fmt.Errorf("create Quant result access auditor: %w", auditErr)
+		}
+		stageOutputReader, readerErr := researchflowapplication.NewGetStageOutputForRunStage(
+			runRepository, runRepository, runRepository,
+		)
+		if readerErr != nil {
+			return nil, fmt.Errorf("create Researchflow Stage Output association reader: %w", readerErr)
+		}
+		associationVerifier := quantSMA20ResultAssociationVerifier{reader: stageOutputReader}
+		authorizedReader, authorizedErr := quantstorage.NewMySQLAuthorizedResultReader(
+			policyStore, quantStage.repository, associationVerifier,
+		)
+		if authorizedErr != nil {
+			return nil, fmt.Errorf("create Quant authorized result reader: %w", authorizedErr)
+		}
+		quantResultReader, authorizedErr = quantapplication.NewGetResult(
+			authorizedReader, researchflowWorkerPrincipalResolver{}, auditor,
+			func() time.Time { return time.Now().UTC() },
+		)
+		if authorizedErr != nil {
+			return nil, fmt.Errorf("create Quant GetResult Application Service: %w", authorizedErr)
+		}
+	}
+
 	return &researchflowComposition{
-		newsStage: newsStage, quantStage: quantStage,
+		newsStage: newsStage, quantStage: quantStage, quantResultReader: quantResultReader,
 		runRepository: runRepository, templateRegistry: templateRegistry,
 		workflowTemplates: workflowTemplates, resourcePolicies: policyResolver,
 		parameterSchemas: parameterSchemas, applicability: researchflowApplicabilityEvaluator{},

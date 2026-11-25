@@ -36,6 +36,7 @@ const (
 
 type quantSMA20StageComposition struct {
 	adapter          *quantstage.SMA20Adapter
+	repository       *quantstorage.MySQLRepository
 	executor         researchflowapplication.StageExecutor
 	registry         *stageoutput.Registry
 	parameterSchemas *parameterschema.Validator
@@ -99,6 +100,7 @@ func newQuantSMA20StageComposition(
 	}
 	return &quantSMA20StageComposition{
 		adapter:          adapter,
+		repository:       quantRepository,
 		executor:         quantSMA20StageExecutor{adapter: adapter},
 		registry:         registry,
 		parameterSchemas: parameterSchemas,
