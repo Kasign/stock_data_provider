@@ -40,9 +40,7 @@ func (m *memoryStore) SavePortfolio(_ context.Context, runID string, s domain.Po
 	return runID + "-portfolio", nil
 }
 
-func TestRunnerWithStoresRunsRealAdapterFlowAndFailsClosed(t *testing.T) {
-	loc, err := time.LoadLocation("Asia/Shanghai")
-	func TestRunnerWithInjectedDataCollectorRunsFlowAndFailsClosed(t *testing.T) {
+func TestRunnerWithInjectedDataCollectorRunsFlowAndFailsClosed(t *testing.T) {
 	loc, err := time.LoadLocation("Asia/Shanghai")
 	if err != nil {
 		t.Fatal(err)
@@ -110,7 +108,19 @@ func TestRunnerWithStoresRunsRealAdapterFlowAndFailsClosed(t *testing.T) {
 		t.Fatalf("expected key stages, got %v", stages)
 	}
 }
-kground(), domain.RunRequest{AsOf: time.Now(), UniverseID: "u", Symbols: []string{"600519.SH"}})
+
+func containsStage(stages []string, want string) bool {
+	for _, s := range stages {
+		if s == want {
+			return true
+		}
+	}
+	return false
+}
+
+func TestUniverseResolverRejectsNonSixDigitSymbols(t *testing.T) {
+	r := universeResolver{}
+	_, err := r.Resolve(context.Background(), domain.RunRequest{AsOf: time.Now(), UniverseID: "u", Symbols: []string{"600519.SH"}})
 	if err == nil {
 		t.Fatal("expected suffixed symbol to be rejected; this adapter expects six digit A-share codes")
 	}
