@@ -269,6 +269,7 @@ func (u *candidateIngest) executeCore(
 		if item.ID == "" {
 			return errors.New("news.identity.resolved_item_id_missing")
 		}
+		identityChanged := false
 		if candidate.CanonicalURL != "" {
 			if item.CanonicalURL != "" && item.CanonicalURL != candidate.CanonicalURL {
 				observation.IdentityStatus = domain.ObservationConflict
@@ -276,6 +277,7 @@ func (u *candidateIngest) executeCore(
 				persisted, err = tx.AppendObservation(ctx, observation)
 				return err
 			}
+			identityChanged = item.CanonicalURL != candidate.CanonicalURL || item.CanonicalURLHash != canonicalURLHash
 			item.CanonicalURL = candidate.CanonicalURL
 			item.CanonicalURLHash = canonicalURLHash
 		}
@@ -330,7 +332,8 @@ func (u *candidateIngest) executeCore(
 		if err != nil {
 			return err
 		}
-		if !exists || current.Fingerprint != fingerprint {
+		contentChanged := !exists || current.Fingerprint != fingerprint
+		if contentChanged {
 			versionID := strings.TrimSpace(u.newID()) + "-version"
 			if versionID == "-version" {
 				return ErrInvalidRequest
@@ -349,10 +352,11 @@ func (u *candidateIngest) executeCore(
 			if err := tx.AppendNewsItemVersion(ctx, version); err != nil {
 				return err
 			}
-			if !newItem {
-				if err := tx.UpdateNewsItem(ctx, item); err != nil {
-					return err
-				}
+		}
+		// 内容变化或身份信息补全都必须更新当前主体；仅身份补全不创建内容版本。
+		if !newItem && (contentChanged || identityChanged) {
+			if err := tx.UpdateNewsItem(ctx, item); err != nil {
+				return err
 			}
 		}
 		return nil
