@@ -1792,7 +1792,7 @@ func integrationAuthorizationEvidence() (domain.Observation, domain.NewsItemVers
 	return observation, version
 }
 
-// TestObservationRetentionPurgeIntegration covers MariaDB V8 retention writes,
+// TestObservationRetentionPurgeIntegration covers MariaDB retention writes,
 // idempotent purge, and the no-resurrection rule for an expired payload.
 // TestNewsCurrentPolicyResolverMariaDBIntegration verifies that the existing
 // authorization resolver port reads the exact current immutable policy versions.
