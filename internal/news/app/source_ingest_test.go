@@ -307,6 +307,7 @@ func TestIngestCollectedSourcePartialCommitCanBeSafelyRetried(t *testing.T) {
 	if retried[0].ID != repository.observations[0].ID {
 		t.Fatalf("retry did not reuse the first committed observation: returned=%+v persisted=%+v", retried, repository.observations)
 	}
+}
 
 func TestIngestCollectedSourceContentChangeCreatesNewObservationAndVersion(t *testing.T) {
 	registration := sourcePersistenceRegistration()
@@ -346,6 +347,4 @@ func TestIngestCollectedSourceContentChangeCreatesNewObservationAndVersion(t *te
 		repository.versions[1].VersionNo != 2 || repository.versions[1].Content.SourceSummary != "summary B" {
 		t.Fatalf("current content/version did not advance: items=%+v versions=%+v", repository.newsItems, repository.versions)
 	}
-}
-
 }
