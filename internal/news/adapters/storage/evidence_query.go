@@ -174,7 +174,9 @@ const evidencePITSelect = `SELECT
 				NULLIF(TRIM(availability_evidence.evidence_ref), '') IS NOT NULL OR
 				(CHAR_LENGTH(availability_evidence.evidence_hash) = 64 AND
 				 availability_evidence.evidence_hash = LOWER(availability_evidence.evidence_hash) AND
-				 availability_evidence.evidence_hash REGEXP '^[0-9a-f]+ > UTC_TIMESTAMP(6)
+				 availability_evidence.evidence_hash REGEXP '^[0-9a-f]+$')
+			)
+			AND o.retention_until > UTC_TIMESTAMP(6)
 			AND availability_evidence.candidate_available_at_utc IS NOT NULL
 			AND availability_evidence.candidate_available_at_utc <= availability_evidence.observed_at
 			AND availability_evidence.candidate_available_at_utc <= o.observed_at
