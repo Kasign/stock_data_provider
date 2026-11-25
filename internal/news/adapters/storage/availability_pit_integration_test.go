@@ -145,6 +145,22 @@ func TestNewsAvailabilityPITResolverMariaDBIntegration(t *testing.T) {
 		SET evidence_ref = ? WHERE evidence_id = ?`, "https://source.example/evidence/1", evidenceID); err != nil {
 		t.Fatalf("add availability evidence provenance: %v", err)
 	}
+	if _, err := db.ExecContext(ctx, `UPDATE news_version_availability_evidence
+		SET source_precision = 'year' WHERE evidence_id = ?`, evidenceID); err != nil {
+		t.Fatalf("set invalid source precision: %v", err)
+	}
+	assertAvailableAt(secondDecisionAt.Add(-time.Microsecond), nil)
+	assertListCount(secondDecisionAt.Add(-time.Microsecond), 0)
+	if _, err := db.ExecContext(ctx, `UPDATE news_version_availability_evidence
+		SET source_precision = 'second', source_timezone_or_offset = '' WHERE evidence_id = ?`, evidenceID); err != nil {
+		t.Fatalf("clear source timezone: %v", err)
+	}
+	assertAvailableAt(secondDecisionAt.Add(-time.Microsecond), nil)
+	assertListCount(secondDecisionAt.Add(-time.Microsecond), 0)
+	if _, err := db.ExecContext(ctx, `UPDATE news_version_availability_evidence
+		SET source_timezone_or_offset = 'Z' WHERE evidence_id = ?`, evidenceID); err != nil {
+		t.Fatalf("restore source timezone: %v", err)
+	}
 	assertAvailableAt(secondDecisionAt.Add(-time.Microsecond), &candidateAvailableAt)
 	assertListCount(secondDecisionAt.Add(-time.Microsecond), 1)
 
@@ -367,6 +383,24 @@ func TestAppendAvailabilityDecisionSerializesConcurrentWritersMariaDBIntegration
 	if _, err := db.ExecContext(ctx, `UPDATE news_version_availability_evidence
 		SET evidence_ref = ? WHERE evidence_id = ?`, "https://source.example/evidence/1", evidenceID); err != nil {
 		t.Fatalf("add selected Evidence provenance: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, `UPDATE news_version_availability_evidence
+		SET source_precision = 'year' WHERE evidence_id = ?`, evidenceID); err != nil {
+		t.Fatalf("set invalid source precision: %v", err)
+	}
+	if err := repository.AppendAvailabilityDecision(ctx, verified); err == nil {
+		t.Fatal("verified Decision with unsupported source precision must be rejected")
+	}
+	if _, err := db.ExecContext(ctx, `UPDATE news_version_availability_evidence
+		SET source_precision = 'second', source_timezone_or_offset = '' WHERE evidence_id = ?`, evidenceID); err != nil {
+		t.Fatalf("clear source timezone: %v", err)
+	}
+	if err := repository.AppendAvailabilityDecision(ctx, verified); err == nil {
+		t.Fatal("verified Decision without source timezone must be rejected")
+	}
+	if _, err := db.ExecContext(ctx, `UPDATE news_version_availability_evidence
+		SET source_timezone_or_offset = 'Z' WHERE evidence_id = ?`, evidenceID); err != nil {
+		t.Fatalf("restore source timezone: %v", err)
 	}
 	if err := repository.AppendAvailabilityDecision(ctx, verified); err != nil {
 		t.Fatalf("append verified Decision with eligible and traceable Evidence: %v", err)

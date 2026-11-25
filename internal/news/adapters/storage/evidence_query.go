@@ -169,18 +169,41 @@ const evidencePITSelect = `SELECT
 			AND JSON_CONTAINS(availability_decision.considered_evidence_ids,
 				JSON_QUOTE(availability_decision.selected_evidence_id)) = 1
 			AND availability_evidence.parse_status = 'parsed'
+			AND availability_evidence.parse_reason_code = ''
+			AND availability_evidence.source_precision IN ('second', 'minute')
+			AND NULLIF(TRIM(availability_evidence.source_timezone_or_offset), '') IS NOT NULL
+			AND NULLIF(TRIM(availability_evidence.field_path), '') IS NOT NULL
+			AND availability_evidence.field_path = TRIM(availability_evidence.field_path)
+			AND NULLIF(TRIM(availability_evidence.parser_version), '') IS NOT NULL
+			AND availability_evidence.parser_version = TRIM(availability_evidence.parser_version)
+			AND availability_evidence.recorded_at >= availability_evidence.observed_at
 			AND availability_evidence.recorded_at <= availability_decision.recorded_at
+			AND availability_evidence.observed_at <= availability_decision.recorded_at
 			AND availability_evidence.recorded_at <= ?
 			AND availability_evidence.observed_at <= ?
+			AND availability_evidence.retention_until > availability_evidence.recorded_at
+			AND availability_evidence.retention_until > availability_decision.recorded_at
 			AND availability_evidence.retention_until > UTC_TIMESTAMP(6)
 			AND availability_evidence.retention_until <= o.retention_until
 			AND availability_evidence.payload_purged_at IS NULL
 			AND availability_evidence.raw_value IS NOT NULL
+			AND availability_evidence.raw_value <> ''
+			AND availability_evidence.candidate_available_at_utc IS NOT NULL
+			AND MICROSECOND(availability_evidence.candidate_available_at_utc) = 0
 			AND (
-				NULLIF(TRIM(availability_evidence.evidence_ref), '') IS NOT NULL OR
+				availability_evidence.evidence_ref IS NULL OR
+				(availability_evidence.evidence_ref <> '' AND
+				 availability_evidence.evidence_ref = TRIM(availability_evidence.evidence_ref))
+			)
+			AND (
+				availability_evidence.evidence_hash IS NULL OR
 				(CHAR_LENGTH(availability_evidence.evidence_hash) = 64 AND
 				 availability_evidence.evidence_hash = LOWER(availability_evidence.evidence_hash) AND
 				 availability_evidence.evidence_hash REGEXP '^[0-9a-f]+$')
+			)
+			AND (
+				(availability_evidence.evidence_ref IS NOT NULL AND availability_evidence.evidence_ref <> '') OR
+				(availability_evidence.evidence_hash IS NOT NULL AND availability_evidence.evidence_hash <> '')
 			)
 			AND o.payload_purged_at IS NULL
 			AND o.retention_until > UTC_TIMESTAMP(6)

@@ -69,11 +69,11 @@ func (r *MySQLRepository) AppendAvailabilityDecision(ctx context.Context, decisi
 	}()
 
 	// 锁定稳定存在的 Version 行，覆盖“尚无 Decision 行”的首写竞争。
-	var lockedVersionID string
+	var lockedVersionID, lockedNewsID, lockedObservationID string
 	if err := tx.QueryRowContext(ctx,
-		"SELECT version_id FROM news_item_versions WHERE version_id = ? FOR UPDATE",
+		"SELECT version_id, news_id, observation_id FROM news_item_versions WHERE version_id = ? FOR UPDATE",
 		decision.VersionID,
-	).Scan(&lockedVersionID); err != nil {
+	).Scan(&lockedVersionID, &lockedNewsID, &lockedObservationID); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return fmt.Errorf("news storage: availability decision version %q not found", decision.VersionID)
 		}
@@ -108,8 +108,10 @@ func (r *MySQLRepository) AppendAvailabilityDecision(ctx context.Context, decisi
 	// 所有被审阅的 Evidence 都必须属于同一 Version；锁住证据行，
 	// 防止写入期间并发清理选中 Evidence 的受限载荷。
 	if len(decision.ConsideredEvidenceIDs) > 0 {
-		query := `SELECT evidence_id, parse_status, candidate_available_at_utc,
-			raw_value, evidence_ref, evidence_hash, payload_purged_at, observed_at, recorded_at, retention_until
+		query := `SELECT evidence_id, news_id, version_id, observation_id, field_path,
+			raw_value, source_timezone_or_offset, source_precision, parse_status, parse_reason_code,
+			candidate_available_at_utc, parser_version, evidence_ref, evidence_hash,
+			payload_purged_at, observed_at, recorded_at, retention_until
 			FROM news_version_availability_evidence
 			WHERE version_id = ? AND evidence_id IN (` +
 			evidencePlaceholders(len(decision.ConsideredEvidenceIDs)) + `) FOR UPDATE`
@@ -124,31 +126,58 @@ func (r *MySQLRepository) AppendAvailabilityDecision(ctx context.Context, decisi
 		}
 		found := make(map[string]struct{}, len(decision.ConsideredEvidenceIDs))
 		for rows.Next() {
-			var evidenceID, parseStatus string
-			var candidateAvailableAt, payloadPurgedAt sql.NullTime
+			var evidence domain.AvailabilityEvidence
 			var rawValue, evidenceRef, evidenceHash sql.NullString
+			var candidateAvailableAt, payloadPurgedAt sql.NullTime
+			var sourcePrecision, parseStatus string
 			var observedAt, recordedAt, retentionUntil time.Time
-			if scanErr := rows.Scan(&evidenceID, &parseStatus, &candidateAvailableAt,
-				&rawValue, &evidenceRef, &evidenceHash, &payloadPurgedAt, &observedAt, &recordedAt, &retentionUntil); scanErr != nil {
+			if scanErr := rows.Scan(
+				&evidence.ID, &evidence.NewsID, &evidence.VersionID, &evidence.ObservationID,
+				&evidence.FieldPath, &rawValue, &evidence.SourceTimezoneOrOffset,
+				&sourcePrecision, &parseStatus, &evidence.ParseReasonCode,
+				&candidateAvailableAt, &evidence.ParserVersion, &evidenceRef, &evidenceHash,
+				&payloadPurgedAt, &observedAt, &recordedAt, &retentionUntil,
+			); scanErr != nil {
 				_ = rows.Close()
 				return scanErr
 			}
-			found[evidenceID] = struct{}{}
-			if decision.SelectedEvidenceID != nil && evidenceID == *decision.SelectedEvidenceID {
-				hasEvidenceRef := evidenceRef.Valid && strings.TrimSpace(evidenceRef.String) != ""
-				hasEvidenceHash := false
-				if evidenceHash.Valid && len(evidenceHash.String) == 64 &&
-					evidenceHash.String == strings.ToLower(evidenceHash.String) {
-					_, hashErr := hex.DecodeString(evidenceHash.String)
-					hasEvidenceHash = hashErr == nil
-				}
-				if parseStatus != string(domain.AvailabilityTimeParsed) ||
-					!candidateAvailableAt.Valid || !rawValue.Valid || rawValue.String == "" ||
-					(!hasEvidenceRef && !hasEvidenceHash) ||
-					payloadPurgedAt.Valid || recordedAt.After(decision.RecordedAt) ||
-					observedAt.After(decision.RecordedAt) ||
-					!retentionUntil.After(decision.RecordedAt) ||
-					candidateAvailableAt.Time.After(observedAt) {
+			evidence.Precision = domain.AvailabilityTimePrecision(sourcePrecision)
+			evidence.ParseStatus = domain.AvailabilityTimeParseStatus(parseStatus)
+			if rawValue.Valid {
+				evidence.RawValue = rawValue.String
+			}
+			if candidateAvailableAt.Valid {
+				value := candidateAvailableAt.Time.UTC()
+				evidence.CandidateAvailableAt = &value
+			}
+			if evidenceRef.Valid {
+				value := evidenceRef.String
+				evidence.EvidenceRef = &value
+			}
+			if evidenceHash.Valid {
+				value := evidenceHash.String
+				evidence.EvidenceHash = &value
+			}
+			if payloadPurgedAt.Valid {
+				value := payloadPurgedAt.Time.UTC()
+				evidence.PayloadPurgedAt = &value
+			}
+			evidence.ObservedAt = observedAt.UTC()
+			evidence.RecordedAt = recordedAt.UTC()
+			evidence.RetentionUntil = retentionUntil.UTC()
+
+			found[evidence.ID] = struct{}{}
+			if decision.SelectedEvidenceID != nil && evidence.ID == *decision.SelectedEvidenceID {
+				if evidence.NewsID != lockedNewsID || evidence.VersionID != lockedVersionID ||
+					evidence.ObservationID != lockedObservationID ||
+					evidence.ParseStatus != domain.AvailabilityTimeParsed ||
+					evidence.PayloadPurgedAt != nil ||
+					evidence.CandidateAvailableAt == nil ||
+					evidence.Validate() != nil ||
+					(evidence.EvidenceRef == nil && evidence.EvidenceHash == nil) ||
+					evidence.RecordedAt.After(decision.RecordedAt) ||
+					evidence.ObservedAt.After(decision.RecordedAt) ||
+					!evidence.RetentionUntil.After(decision.RecordedAt) {
 					_ = rows.Close()
 					return fmt.Errorf("news storage: selected availability evidence is not eligible")
 				}
