@@ -1378,3 +1378,12 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - Root `bootstrapDatabase` 在 Redis、HTTP Client 和 Repository 装配前执行 Research Schema 校验；缺表、缺列或关键索引漂移均 fail-closed，不执行自动修复。
 - 新增结构快照单测覆盖缺表、缺 PIT 字段、缺 PIT 索引、唯一性和索引列顺序漂移；新增 MariaDB Migration 基线集成测试。
 - 此校验确认 Research 存储契约结构，不解除 News 来源授权、available_at 生产证据和 Research 实际消费链的外部/跨模块阻塞。
+
+
+## 2026-11-25 News Root 物理 Schema 启动校验补齐
+
+- News Migration V1 定义 14 张表；现有 `MissingSchemaTables` 只检查表是否存在，属于 readiness probe，不能发现列缺失或索引漂移。
+- 新增 News Storage 只读 `ValidateSchema`，检查全部 14 张表的必需列和 Migration V1 声明的全部索引（含主键、唯一键、普通索引的唯一性与列顺序）。
+- Root `bootstrapDatabase` 在 Migration History/Checksum 校验后、其他业务 Repository/Redis/HTTP Client 装配前调用 News 校验；失败即停止启动，不自动修复、不兼容旧 Schema。
+- 新增 News Schema 单测和真实 MariaDB Migration 基线集成测试；Go Test Suite 的 News MariaDB Job 显式运行该测试。
+- 本工作组只确认 News 当前物理 Schema 符合 V1，不代表 RA-03 真实来源授权、来源字段语义审核或 verified `available_at` 生产链已完成。
