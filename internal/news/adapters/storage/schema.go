@@ -94,7 +94,38 @@ var requiredNewsSchemaIndexes = []newsSchemaIndexDefinition{
 	{table: "news_version_availability_decisions", name: "idx_news_availability_decision_pit", unique: false, columns: []string{"version_id", "recorded_at", "decision_seq"}},
 }
 
-// ValidateSchema 只读检查 News 物理表、必需列和 Migration V1 索引。
+
+type newsSchemaForeignKeyDefinition struct {
+	table             string
+	name              string
+	columns           []string
+	referencedTable   string
+	referencedColumns []string
+}
+
+type newsSchemaForeignKeyState struct {
+	table             string
+	columns           []string
+	referencedTable   string
+	referencedColumns []string
+}
+
+// requiredNewsSchemaForeignKeys 覆盖 Migration V1 的全部外键及列顺序。
+var requiredNewsSchemaForeignKeys = []newsSchemaForeignKeyDefinition{
+	{table: "news_identifiers", name: "fk_news_identifiers_item", columns: []string{"news_id"}, referencedTable: "news_items", referencedColumns: []string{"news_id"}},
+	{table: "news_observations", name: "fk_news_observations_item", columns: []string{"news_id"}, referencedTable: "news_items", referencedColumns: []string{"news_id"}},
+	{table: "news_item_versions", name: "fk_news_versions_item", columns: []string{"news_id"}, referencedTable: "news_items", referencedColumns: []string{"news_id"}},
+	{table: "news_item_versions", name: "fk_news_versions_observation", columns: []string{"observation_id"}, referencedTable: "news_observations", referencedColumns: []string{"observation_id"}},
+	{table: "news_current_policy_versions", name: "fk_news_current_policy_version", columns: []string{"policy_type", "policy_ref", "policy_version"}, referencedTable: "news_policy_versions", referencedColumns: []string{"policy_type", "policy_ref", "policy_version"}},
+	{table: "news_version_availability_evidence", name: "fk_news_availability_evidence_item", columns: []string{"news_id"}, referencedTable: "news_items", referencedColumns: []string{"news_id"}},
+	{table: "news_version_availability_evidence", name: "fk_news_availability_evidence_version", columns: []string{"version_id", "news_id"}, referencedTable: "news_item_versions", referencedColumns: []string{"version_id", "news_id"}},
+	{table: "news_version_availability_evidence", name: "fk_news_availability_evidence_observation", columns: []string{"observation_id", "news_id"}, referencedTable: "news_observations", referencedColumns: []string{"observation_id", "news_id"}},
+	{table: "news_version_availability_decisions", name: "fk_news_availability_decision_version", columns: []string{"version_id"}, referencedTable: "news_item_versions", referencedColumns: []string{"version_id"}},
+	{table: "news_version_availability_decisions", name: "fk_news_availability_decision_evidence", columns: []string{"version_id", "selected_evidence_id"}, referencedTable: "news_version_availability_evidence", referencedColumns: []string{"version_id", "evidence_id"}},
+	{table: "news_version_availability_decisions", name: "fk_news_availability_decision_parent", columns: []string{"version_id", "supersedes_decision_id"}, referencedTable: "news_version_availability_decisions", referencedColumns: []string{"version_id", "decision_id"}},
+}
+
+// ValidateSchema 只读检查 News 物理表、必需列、Migration V1 索引及外键。
 // Migration History/Checksum 无法发现迁移完成后的人工 DDL 漂移；
 // 因此 Root Server 必须在创建业务 Repository 前执行本检查。
 func ValidateSchema(ctx context.Context, db *sql.DB) error {
@@ -186,7 +217,44 @@ func ValidateSchema(ctx context.Context, db *sql.DB) error {
 	if err := indexRows.Close(); err != nil {
 		return fmt.Errorf("close News schema index inspection: %w", err)
 	}
-	return validateNewsSchemaIndexes(indexes)
+	if err := validateNewsSchemaIndexes(indexes); err != nil {
+		return err
+	}
+
+	foreignKeyRows, err := db.QueryContext(ctx, "SELECT constraint_name, table_name, column_name, referenced_table_name, referenced_column_name, ordinal_position\\n"+
+		"FROM information_schema.key_column_usage\\n"+
+		"WHERE table_schema = DATABASE() AND table_name IN ("+tableNames+") AND referenced_table_name IS NOT NULL\\n"+
+		"ORDER BY constraint_name, ordinal_position")
+	if err != nil {
+		return fmt.Errorf("inspect News schema foreign keys: %w", err)
+	}
+	foreignKeys := make(map[string]newsSchemaForeignKeyState, len(requiredNewsSchemaForeignKeys))
+	for foreignKeyRows.Next() {
+		var name, table, column, referencedTable, referencedColumn string
+		var sequence int
+		if err := foreignKeyRows.Scan(&name, &table, &column, &referencedTable, &referencedColumn, &sequence); err != nil {
+			_ = foreignKeyRows.Close()
+			return fmt.Errorf("read News schema foreign keys: %w", err)
+		}
+		state := foreignKeys[name]
+		if state.table != "" && (state.table != table || state.referencedTable != referencedTable) {
+			_ = foreignKeyRows.Close()
+			return fmt.Errorf("News schema foreign key %s spans inconsistent tables", name)
+		}
+		state.table = table
+		state.referencedTable = referencedTable
+		state.columns = append(state.columns, column)
+		state.referencedColumns = append(state.referencedColumns, referencedColumn)
+		foreignKeys[name] = state
+	}
+	if err := foreignKeyRows.Err(); err != nil {
+		_ = foreignKeyRows.Close()
+		return fmt.Errorf("read News schema foreign keys: %w", err)
+	}
+	if err := foreignKeyRows.Close(); err != nil {
+		return fmt.Errorf("close News schema foreign key inspection: %w", err)
+	}
+	return validateNewsSchemaForeignKeys(foreignKeys)
 }
 
 func validateNewsSchemaTableSet(actual []string) error {
@@ -259,4 +327,28 @@ func equalNewsSchemaColumns(left, right []string) bool {
 		}
 	}
 	return true
+}
+
+
+func validateNewsSchemaForeignKeys(actual map[string]newsSchemaForeignKeyState) error {
+	for _, expected := range requiredNewsSchemaForeignKeys {
+		found, exists := actual[expected.name]
+		if !exists {
+			return fmt.Errorf("News schema is incomplete: table %s is missing foreign key %s", expected.table, expected.name)
+		}
+		if found.table != expected.table ||
+			found.referencedTable != expected.referencedTable ||
+			!equalNewsSchemaColumns(found.columns, expected.columns) ||
+			!equalNewsSchemaColumns(found.referencedColumns, expected.referencedColumns) {
+			return fmt.Errorf(
+				"News schema foreign key mismatch: %s has table=%s columns=%v references=%s%v; want table=%s columns=%v references=%s%v",
+				expected.name, found.table, found.columns, found.referencedTable, found.referencedColumns,
+				expected.table, expected.columns, expected.referencedTable, expected.referencedColumns,
+			)
+		}
+	}
+	if len(actual) != len(requiredNewsSchemaForeignKeys) {
+		return fmt.Errorf("News schema foreign key set mismatch: found %d constraints; want %d", len(actual), len(requiredNewsSchemaForeignKeys))
+	}
+	return nil
 }
