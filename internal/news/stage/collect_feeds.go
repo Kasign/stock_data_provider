@@ -28,38 +28,38 @@ const (
 var ErrFeedCollectionAdapterRequired = errors.New("news stage: Feed collection use cases and registrations are required")
 
 type FeedCollectionOutput struct {
-	Status string \`json:"status"\`
-	FailureCode string \`json:"failure_code"\`
-	SourceCount int \`json:"source_count"\`
-	SuccessSourceCount int \`json:"success_source_count"\`
-	EmptySourceCount int \`json:"empty_source_count"\`
-	SkippedSourceCount int \`json:"skipped_source_count"\`
-	FailedSourceCount int \`json:"failed_source_count"\`
-	CollectedEntryCount int \`json:"collected_entry_count"\`
-	IngestedCount int \`json:"ingested_count"\`
-	Sources []FeedSourceOutcome \`json:"sources"\`
+	Status string `json:"status"`
+	FailureCode string `json:"failure_code"`
+	SourceCount int `json:"source_count"`
+	SuccessSourceCount int `json:"success_source_count"`
+	EmptySourceCount int `json:"empty_source_count"`
+	SkippedSourceCount int `json:"skipped_source_count"`
+	FailedSourceCount int `json:"failed_source_count"`
+	CollectedEntryCount int `json:"collected_entry_count"`
+	IngestedCount int `json:"ingested_count"`
+	Sources []FeedSourceOutcome `json:"sources"`
 }
 
 type FeedSourceOutcome struct {
-	SourceID string \`json:"source_id"\`
-	EndpointID string \`json:"endpoint_id"\`
-	Status string \`json:"status"\`
-	CollectedCount int \`json:"collected_count"\`
-	IngestedCount int \`json:"ingested_count"\`
-	NewsIDs []string \`json:"news_ids"\`
-	ErrorCode string \`json:"error_code"\`
-	Retryable bool \`json:"retryable"\`
+	SourceID string `json:"source_id"`
+	EndpointID string `json:"endpoint_id"`
+	Status string `json:"status"`
+	CollectedCount int `json:"collected_count"`
+	IngestedCount int `json:"ingested_count"`
+	NewsIDs []string `json:"news_ids"`
+	ErrorCode string `json:"error_code"`
+	Retryable bool `json:"retryable"`
 }
 
 type FeedCollectionQualitySummary struct {
-	Status string \`json:"status"\`
-	SourceCount int \`json:"source_count"\`
-	SuccessSourceCount int \`json:"success_source_count"\`
-	EmptySourceCount int \`json:"empty_source_count"\`
-	SkippedSourceCount int \`json:"skipped_source_count"\`
-	FailedSourceCount int \`json:"failed_source_count"\`
-	CollectedEntryCount int \`json:"collected_entry_count"\`
-	IngestedCount int \`json:"ingested_count"\`
+	Status string `json:"status"`
+	SourceCount int `json:"source_count"`
+	SuccessSourceCount int `json:"success_source_count"`
+	EmptySourceCount int `json:"empty_source_count"`
+	SkippedSourceCount int `json:"skipped_source_count"`
+	FailedSourceCount int `json:"failed_source_count"`
+	CollectedEntryCount int `json:"collected_entry_count"`
+	IngestedCount int `json:"ingested_count"`
 }
 
 type FeedCollectionResult struct {
