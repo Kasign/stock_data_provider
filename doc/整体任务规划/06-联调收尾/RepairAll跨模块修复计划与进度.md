@@ -1227,3 +1227,15 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - 因此 RA-03 的正确先后顺序修正为：①在 Server 组合根装配可信 SourceCatalog 与 Provider Output Policy Catalog；②新增 News Owner 的持久化 Ingest Stage（消费 SearchCandidates，按策略写 Observation/News identity，输出持久化 NewsID/VersionID）；③Research Stage 通过 News Evidence Importer 重新读取和授权 Evidence，并消费 Quant AuthorizedResultReader；④持久化 Research Context/Evidence/Claim，完成同库 MariaDB Worker E2E。
 - 不得把 Provider Summary 直接当来源正文，不得用 Search Candidate 的 provider_item_id 冒充 NewsID，不得在 Research 中复制 News Repository 或 Ingest 策略。没有合法 Source/Endpoint/Provider Policy 的候选必须 skipped/denied 并保留诊断，不能为了跑通流程写入。
 - 现有 `researchNewsComposition` 在 Bootstrap 中晚于 Researchflow Execution Composition 创建，后续装配时需调整依赖构造顺序或采用明确的依赖结构，避免循环依赖；Server 仍是唯一组合根。
+
+
+## 2026-11-25 RA-02C Quant 授权结果读取阶段验收
+
+- 验收代码基线：`repair_all` SHA `b99eec279ae95f59a806d90d95baed81c2ff1601`。
+- 已完成 Quant MySQL AuthorizedResultReader、Researchflow Run/Stage/Attempt → SMA20 result_id 精确关联校验、Payload 与 QualitySummary 双 Schema 内容校验、当前 ResultAccessPolicy Head 锁内授权复核、不可变结果读取和 AccessAudit 持久化。
+- Server 已装配 Quant GetResult、Researchflow StageOutputReader、SMA20 ResultAssociationVerifier 和内部 Worker 读取 Facade；Worker 身份只在显式 Quant 结果读取时附加。
+- Go Test Suite Run [45532181367](https://github.com/Kasign/stock_data_provider/actions/runs/45532181367)：Researchflow/Research/Market Data 模块格式、测试、Race、Vet，Research/Market Data/News/Notification/Researchflow MariaDB 集成、根模块 Test、go-core Test、Compose 校验和 Docker build 均 success。
+- Integration CI Run [45532181223](https://github.com/Kasign/stock_data_provider/actions/runs/45532181223)：Full integration checks success。以上两个 Run 的 head SHA 均与本节验收 SHA 一致。
+- **阶段结论：RA-02C 授权结果读取能力已接入并通过当前 SHA CI；RA-02 整条研究消费链仍未完成。** Research Stage 尚未实际调用该 Facade，也没有 Worker→Data Snapshot→Quant Result→StageOutput→Research GetResult→AccessAudit 的完整业务 E2E。
+- RA-03 不得直接把 News Search Candidates 当作 Research Evidence：`internal/news/app/search.go` 明确 SearchCandidates 不持久化；Research Evidence Importer 依赖 News 已持久化的精确版本、available_at 和当前授权复核。Research 模块当前将真实 Evidence 导入标记为 SHELVED，原因是 available_at 来源证据及授权/精确版本读取一致性尚未满足。下一步先补齐 News 受控 Provider Candidate Ingest 的真实生产接入与 PIT 可得性证据，再接 Research Evidence/Context Stage；不伪造时间或把候选直接升格为 Evidence。
+- 旧 Analysis、Python Bridge、Python API Client、go-core 仍保留；本阶段不提前删除。继续完成 Research/LLM/Risk/结果聚合与 WebUI 迁移后，按 RA-08/RA-09 一次性退役。
