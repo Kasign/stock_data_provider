@@ -7,8 +7,8 @@ import (
 	"time"
 
 	marketdatabootstrap "example.com/stock-analysis-flow/internal/marketdata/bootstrap"
-	newsconfig "example.com/stock-analysis-flow/internal/news/config"
 	newsstorage "example.com/stock-analysis-flow/internal/news/adapters/storage"
+	newsconfig "example.com/stock-analysis-flow/internal/news/config"
 	researchflowapplication "example.com/stock-analysis-flow/internal/researchflow/application"
 	serverconfig "example.com/stock-analysis-flow/internal/server/config"
 	serverresources "example.com/stock-analysis-flow/internal/server/resources"
