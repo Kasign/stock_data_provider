@@ -314,6 +314,15 @@ func validateResearchEvidence(values []researchapp.EvidenceRecord, expectedSyste
 			(draft.ClaimRef != nil && (strings.TrimSpace(*draft.ClaimRef) == "" || *draft.ClaimRef != strings.TrimSpace(*draft.ClaimRef))) {
 			return nil, fmt.Errorf("%w: invalid Research Evidence %q", ErrInvalidResultComposition, value.EvidenceID)
 		}
+		// ResultComposition has no non-strict PIT mode: every Evidence entering
+		// a composed research result must have a source-proven available_at at
+		// its own knowledge cutoff. An unknown value is not inferred from
+		// system_observed_at and cannot be silently downgraded.
+		if draft.AvailableAt == nil || draft.AvailableAt.IsZero() ||
+			!isUTC(*draft.AvailableAt) || draft.AvailableAt.After(draft.SystemAsOf) {
+			return nil, fmt.Errorf("%w: Evidence %q is not strict-PIT eligible (available_at must be known by evidence system_as_of)",
+				ErrInvalidResultComposition, value.EvidenceID)
+		}
 		if _, exists := ids[value.EvidenceID]; exists {
 			return nil, fmt.Errorf("%w: duplicate Research Evidence %q", ErrInvalidResultComposition, value.EvidenceID)
 		}

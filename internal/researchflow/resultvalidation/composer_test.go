@@ -31,7 +31,7 @@ func validCompositionInput() ResultCompositionInput {
 			EvidenceDraft: researchapp.EvidenceDraft{
 				EvidenceType: "fact", SourceOwner: "data", SourceRef: "snapshot-1",
 				SourceVersion: nil, SourceLocator: nil, DerivedFromRefs: []string{},
-				SubjectRefs: []string{"600000.SH"}, PublishedAt: nil, AvailableAt: nil,
+				SubjectRefs: []string{"600000.SH"}, PublishedAt: nil, AvailableAt: timePointer(now.Add(-time.Minute)),
 				SystemObservedAt: now, ValidTimeStart: nil, ValidTimeEnd: nil, SystemAsOf: now,
 				Stance: "supports", QualityStatus: "valid", ContentLevel: "summary",
 				AuthorizationRef: "auth-ev-1", Limitations: []string{},
@@ -251,9 +251,51 @@ func TestComposeResultAllowsEvidenceKnowledgeCutoffEarlierThanRun(t *testing.T) 
 	input := validCompositionInput()
 	input.Evidence[0].EvidenceDraft.SystemAsOf = input.SystemAsOf.Add(-time.Hour)
 	input.Evidence[0].EvidenceDraft.SystemObservedAt = input.SystemAsOf.Add(-2 * time.Hour)
+	input.Evidence[0].EvidenceDraft.AvailableAt = timePointer(input.SystemAsOf.Add(-90 * time.Minute))
 	if _, err := ComposeResult(input, nil); err != nil {
 		t.Fatalf("older Evidence system_as_of should remain valid: %v", err)
 	}
+}
+
+func TestComposeResultRejectsEvidenceOutsideStrictPIT(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(*researchapp.EvidenceDraft, time.Time)
+	}{
+		{
+			name: "available_at unknown",
+			mutate: func(draft *researchapp.EvidenceDraft, _ time.Time) {
+				draft.AvailableAt = nil
+			},
+		},
+		{
+			name: "available_at after evidence cutoff",
+			mutate: func(draft *researchapp.EvidenceDraft, cutoff time.Time) {
+				value := cutoff.Add(time.Second)
+				draft.AvailableAt = &value
+			},
+			},
+		{
+			name: "available_at not UTC",
+			mutate: func(draft *researchapp.EvidenceDraft, cutoff time.Time) {
+				value := cutoff.Add(-time.Minute).In(time.FixedZone("offset", 8*60*60))
+				draft.AvailableAt = &value
+			},
+			},
+		}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			input := validCompositionInput()
+			test.mutate(&input.Evidence[0].EvidenceDraft, input.Evidence[0].EvidenceDraft.SystemAsOf)
+			if _, err := ComposeResult(input, nil); !errors.Is(err, ErrInvalidResultComposition) {
+				t.Fatalf("non-strict-PIT Evidence must be rejected, got %v", err)
+			}
+		})
+	}
+}
+
+func timePointer(value time.Time) *time.Time {
+	return &value
 }
 
 func TestComposeResultRejectsUnknownEvidenceSourceOwner(t *testing.T) {

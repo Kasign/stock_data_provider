@@ -1335,3 +1335,12 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - A 组现在验证：无 verified available_at 时，News Query 在授权前拒绝、Research Importer 传播 PIT 不可见错误、Research Evidence 不落库、List Evidence Snapshot 不包含该记录。
 - B 组成功导入仍明确 Skip，继续等待真实来源授权、来源字段语义和 verified available_at 生产链；未制造测试时间值冒充生产来源证据。
 - Fingerprint 与当前策略版本变更的授权拒绝已有 `internal/news/app/authorization_read_test.go` 专项覆盖；本真库 fixture 没有合格 available_at，不再让 PIT 之前置门禁掩盖后置授权测试。
+
+
+### 2026-11-25：Research strict PIT 消费门禁与机器契约同步
+
+- Researchflow `resultvalidation.validateResearchEvidence` 之前允许 `available_at=null` 的 Evidence 进入最终组合；这与 Research Domain 已有的 `ValidateForStrictPIT` 语义及项目级严格 PIT 要求不一致。
+- 当前不存在已冻结、已实现的非严格 PIT Template Mode，因此不新增模式字段或默认降级；ResultComposition 对所有 Evidence 一律执行 strict PIT：available_at 必须存在、为 UTC，且不晚于该 Evidence 自身的 system_as_of。Evidence 的 system_as_of 可以早于 Run，但不得晚于 Run。
+- 新增缺失 available_at、available_at 晚于 Evidence cutoff、非 UTC available_at 的回归用例；有效测试数据显式提供可证明的时间。
+- RSC-CTR-001 Schema 增加 RFC3339Nano UTC Z pattern，以及 source_owner=news 时 source_version 必填约束；nullable available_at 仍保留在 Research 存储 DTO 层，严格结果消费由 ResultComposition 门禁执行。
+- NEWS-CTR-001 Page Schema 将已存在于 DTO/Golden 的 relation_status 加入 required；NEWS-CTR-001/002/003 与 RSC-CTR-001 登记簿说明同步修正；旧 News-Research 设计文档明确降为历史参考。

@@ -1,9 +1,13 @@
-# News → Research 只读证据查询契约
+# News → Research 只读证据查询契约（历史设计记录）
 
-- 所属治理任务：GOV-004
-- 状态：目标契约设计，尚未实现、尚未冻结。
-- 规划归属：`feat/design_doc`；News 业务实现归 `feat/news`，Research 消费侧归未来 `feat/research`。
-- 设计原则：News 是来源、采集、身份、版本、授权和内容的权威所有者；Research 只接收被授权的稳定 DTO，不访问 News Repository、SQL 或私有 Domain。
+> **历史参考，已被正式契约取代。** 本文保留早期 GOV-004 设计过程，不再作为实施依据，也不与当前冻结契约平权。
+> 当前唯一权威定义为 `doc/news/新闻API契约.md` 第 11 节及 `doc/contract/PLAT-002-项目级契约冻结登记簿.md` 中的 NEWS-CTR-001/002/003。当前 DTO、Schema、Golden 和代码实现以这些正式契约为准。
+> 本文中出现的旧时间参数可选规则、旧内容级别枚举、未冻结/未实现状态和旧字段命名均为历史内容，不得据此修改当前实现。
+
+- 原所属治理任务：GOV-004
+- 原状态：目标契约设计（已被后续冻结契约替代）。
+- 原规划归属：`feat/design_doc`；News 业务实现归 `feat/news`，Research 消费侧归未来 `feat/research`。
+- 持续有效的边界原则：News 是来源、采集、身份、版本、授权和内容的权威所有者；Research 只接收被授权的稳定 DTO，不访问 News Repository、SQL 或私有 Domain。
 
 ## 1. 当前实现核查与边界
 
