@@ -15,7 +15,7 @@ import (
 
 type authorizedPolicyGuardStub struct {
 	state quantapplication.ResultAccessPolicyState
-	err error
+	err   error
 	calls int
 }
 
@@ -32,8 +32,8 @@ func (stub *authorizedPolicyGuardStub) WithCurrentResultAccessPolicy(
 
 type authorizedRecordReaderStub struct {
 	record result.Record
-	err error
-	calls int
+	err    error
+	calls  int
 }
 
 func (stub *authorizedRecordReaderStub) GetRecord(_ context.Context, _ string) (result.Record, error) {
@@ -42,9 +42,9 @@ func (stub *authorizedRecordReaderStub) GetRecord(_ context.Context, _ string) (
 }
 
 type resultAssociationVerifierStub struct {
-	err error
-	calls int
-	runRef string
+	err      error
+	calls    int
+	runRef   string
 	resultID string
 }
 
@@ -120,8 +120,8 @@ func TestMySQLAuthorizedResultReaderReturnsCurrentRunBoundAuthorization(t *testi
 func TestMySQLAuthorizedResultReaderRejectsDisabledPolicyAndMissingRunAssociation(t *testing.T) {
 	record, policy, request := authorizedResultFixture(t)
 	for _, test := range []struct {
-		name string
-		state quantapplication.ResultAccessPolicyState
+		name           string
+		state          quantapplication.ResultAccessPolicyState
 		associationErr error
 	}{
 		{name: "disabled", state: quantapplication.ResultAccessPolicyState{Version: 1, Enabled: false, Snapshot: &policy}},
@@ -148,10 +148,10 @@ func TestMySQLAuthorizedResultReaderRejectsDisabledPolicyAndMissingRunAssociatio
 func TestMySQLAuthorizedResultReaderFailsClosedForInvalidAssociationAndRecord(t *testing.T) {
 	record, policy, request := authorizedResultFixture(t)
 	for _, test := range []struct {
-		name string
+		name           string
 		associationErr error
-		mutateRecord bool
-		want error
+		mutateRecord   bool
+		want           error
 	}{
 		{name: "association backend unavailable", associationErr: errors.New("Researchflow storage unavailable"), want: quantapplication.ErrAuthorizationUnavailable},
 		{name: "corrupt stored record", mutateRecord: true, want: quantapplication.ErrInvalidStoredRecord},

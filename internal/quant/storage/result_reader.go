@@ -125,9 +125,9 @@ func newQuantAuthorizationRef(
 		return quantapplication.AuthorizationRef{}, fmt.Errorf("generate Quant authorization reference: %w", err)
 	}
 	ref := quantapplication.AuthorizationRef{
-		SchemaVersion: "1.0.0",
+		SchemaVersion:    "1.0.0",
 		AuthorizationRef: "authorization:quant:" + base64.RawURLEncoding.EncodeToString(randomValue),
-		PolicyOwner: "quant", PolicyVersion: snapshot.SnapshotRef, Decision: "allowed",
+		PolicyOwner:      "quant", PolicyVersion: snapshot.SnapshotRef, Decision: "allowed",
 		PurposeCode: request.PurposeCode, ContentLevel: request.ContentLevel,
 		SubjectRef: request.SubjectRef, ResourceRef: request.ResourceRef,
 		DecidedAt: request.At.UTC().Format(time.RFC3339Nano),

@@ -53,6 +53,8 @@ type StageOutputExpectation struct {
 	SchemaVersion           string
 	SchemaRef               string
 	QualitySummarySchemaRef string
+	PayloadValidator        func(json.RawMessage) error
+	QualitySummaryValidator func(json.RawMessage) error
 }
 
 // GetStageOutputForRunStage resolves a successful Stage's persisted payload through the Run, Attempt and resource records.
@@ -82,7 +84,8 @@ func (reader *GetStageOutputForRunStage) Read(
 	if reader == nil || reader.runs == nil || reader.attempts == nil || reader.outputs == nil || ctx == nil ||
 		!validStageOutputText(runRef) || !validStageOutputText(expectation.StageCode) ||
 		!validStageOutputText(expectation.OutputType) || !validStageOutputText(expectation.SchemaVersion) ||
-		!validStageOutputText(expectation.SchemaRef) || !validStageOutputText(expectation.QualitySummarySchemaRef) {
+		!validStageOutputText(expectation.SchemaRef) || !validStageOutputText(expectation.QualitySummarySchemaRef) ||
+		expectation.PayloadValidator == nil || expectation.QualitySummaryValidator == nil {
 		return StageOutputResource{}, ErrInvalidStageOutputRead
 	}
 	if err := ctx.Err(); err != nil {
@@ -127,7 +130,8 @@ func (reader *GetStageOutputForRunStage) Read(
 		return StageOutputResource{}, err
 	}
 	if !validStageOutputResource(payload, *selected.OutputRef, "payload", expectation.SchemaRef,
-		runRef, aggregate.Run.TemplateVersion, selected.Ref, expectation) {
+		runRef, aggregate.Run.TemplateVersion, selected.Ref, expectation) ||
+		expectation.PayloadValidator(json.RawMessage(payload.Content)) != nil {
 		return StageOutputResource{}, ErrStageOutputIntegrity
 	}
 	attempt, err := reader.attempts.GetAttempt(ctx, payload.AttemptRef)
@@ -159,7 +163,8 @@ func (reader *GetStageOutputForRunStage) Read(
 	if !validStageOutputResource(quality, *selected.QualitySummaryRef, "quality_summary",
 		expectation.QualitySummarySchemaRef, runRef, aggregate.Run.TemplateVersion, selected.Ref, expectation) ||
 		quality.AttemptRef != attempt.Ref || quality.RegistryVersion != payload.RegistryVersion ||
-		quality.RegistryFingerprint != payload.RegistryFingerprint || quality.CreatedAt != payload.CreatedAt {
+		quality.RegistryFingerprint != payload.RegistryFingerprint || quality.CreatedAt != payload.CreatedAt ||
+		expectation.QualitySummaryValidator(json.RawMessage(quality.Content)) != nil {
 		return StageOutputResource{}, ErrStageOutputIntegrity
 	}
 	payload.Content = append([]byte(nil), payload.Content...)

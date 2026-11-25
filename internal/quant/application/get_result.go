@@ -26,13 +26,13 @@ const (
 )
 
 var (
-	ErrInvalidGetResultRequest  = errors.New("invalid quant get-result request")
-	ErrResultUnavailable        = errors.New("quant result unavailable")
-	ErrInvalidAuthorization     = errors.New("quant authorization proof is invalid")
-	ErrInvalidStoredRecord      = errors.New("quant stored result is invalid")
-	ErrAuditUnavailable         = errors.New("quant result access audit unavailable")
-	ErrAccessDenied             = errors.New("quant result access denied")
-	ErrAuthorizationUnavailable = errors.New("quant authorization unavailable")
+	ErrInvalidGetResultRequest   = errors.New("invalid quant get-result request")
+	ErrResultUnavailable         = errors.New("quant result unavailable")
+	ErrInvalidAuthorization      = errors.New("quant authorization proof is invalid")
+	ErrInvalidStoredRecord       = errors.New("quant stored result is invalid")
+	ErrAuditUnavailable          = errors.New("quant result access audit unavailable")
+	ErrAccessDenied              = errors.New("quant result access denied")
+	ErrAuthorizationUnavailable  = errors.New("quant authorization unavailable")
 	ErrResultAssociationNotFound = errors.New("quant result is not associated with the requested Researchflow Run")
 )
 

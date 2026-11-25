@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 
@@ -88,6 +89,18 @@ func validStageOutputReadFixture() (
 		StageCode: stage.Code, OutputType: payload.OutputType,
 		SchemaVersion: payload.SchemaVersion, SchemaRef: payload.SchemaRef,
 		QualitySummarySchemaRef: quality.SchemaRef,
+		PayloadValidator: func(raw json.RawMessage) error {
+			if !json.Valid(raw) {
+				return errors.New("payload schema validation failed")
+			}
+			return nil
+		},
+		QualitySummaryValidator: func(raw json.RawMessage) error {
+			if !json.Valid(raw) {
+				return errors.New("quality schema validation failed")
+			}
+			return nil
+		},
 	}
 	return aggregate, attempt, payload, quality, expectation
 }
@@ -206,6 +219,29 @@ func TestGetStageOutputForRunStageRejectsPayloadAttemptAndQualityMismatch(t *tes
 		t.Run(name, func(t *testing.T) {
 			aggregate, attempt, payload, quality, expectation := validStageOutputReadFixture()
 			mutate(&aggregate, &attempt, &payload, &quality)
+			reader, _, _, err := newStageOutputReadService(aggregate, attempt, payload, quality)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := reader.Read(context.Background(), aggregate.Run.Ref, expectation); !errors.Is(err, ErrStageOutputIntegrity) {
+				t.Fatalf("Read() error = %v, want ErrStageOutputIntegrity", err)
+			}
+		})
+	}
+}
+
+func TestGetStageOutputForRunStageEnforcesBothSchemaValidators(t *testing.T) {
+	for name, configure := range map[string]func(*StageOutputExpectation){
+		"payload schema": func(value *StageOutputExpectation) {
+			value.PayloadValidator = func(json.RawMessage) error { return errors.New("payload rejected") }
+		},
+		"quality summary schema": func(value *StageOutputExpectation) {
+			value.QualitySummaryValidator = func(json.RawMessage) error { return errors.New("quality rejected") }
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			aggregate, attempt, payload, quality, expectation := validStageOutputReadFixture()
+			configure(&expectation)
 			reader, _, _, err := newStageOutputReadService(aggregate, attempt, payload, quality)
 			if err != nil {
 				t.Fatal(err)
