@@ -1,293 +1,47 @@
 # News 数据模型与自动采集闭环收敛实施计划
 
 更新时间：2026-11-25  
-仓库：`Kasign/stock_data_provider`  
 执行分支：`repair_all`  
-计划基线：`8e8a926ff92e0136acfe9b0859ab6f64528ddf76`  
 任务编号：`NEWS-POST-08`  
 状态：`IN_PROGRESS`
 
-## 1. 目标与范围
+本文是本任务唯一实施方案。当前数据规则以 [新闻数据模型与质量契约](./新闻数据模型与质量契约.md) 为准。旧版 News 数据模型、身份、转载关系和证券/行业关系规则不再适用；冲突文档已直接替换或删除，不保留兼容要求。
 
-一次性收敛 News 新闻主体、URL 去重、来源身份、内容版本、正式入库事务和自动采集生产闭环。以个人研究系统的实际需要为准，不建设商业新闻平台能力，不为假设性场景增加抽象层。
+## 1. 目标
 
-允许清理 News 旧表和旧数据；不做旧数据迁移、旧逻辑兼容或双写。数据库清理由用户在最终 Schema 确认后手动执行，本任务不远程删除数据库数据。
+一次性收敛新闻主体、全局 URL 去重、来源身份、Observation、内容版本、统一入库事务和 Feed 自动采集生产闭环。
 
-最终要求：
+最终结果：
 
-1. `news_items` 保存当前可直接读取的完整新闻，不再是只有 ID 的空壳。
-2. 完全相同的规范 URL 全局只对应一条新闻，不受来源 ID 不同影响。
-3. 不同 URL 默认是不同文章，不按标题相似、事件相同自动合并。
-4. 来源文章 ID 只在来源范围内识别身份；多个来源身份可以指向同一新闻主体。
-5. 普通采集只走一个正式入库用例，主体、来源身份、Observation 和必要版本在一个 MariaDB 事务中完成。
-6. 同一内容重复采集不重复创建新闻或版本；内容实质变化才追加历史版本。
-7. RSS/Atom 有真实生产装配和调用路径；Provider 搜索候选只有被研究流程选中后才正式入库。
-8. News 不负责新闻与证券/行业的关联。
-9. 不增加复杂转载识别、重定向追踪、标题相似度合并、News 专属 Scheduler/Queue/Worker/Orchestrator。
-10. Research/PIT 仍能按版本读取历史内容和可用时间证据。
+1. `news_items` 保存当前完整新闻内容。
+2. 完全相同的规范 URL 全局只对应一个新闻主体。
+3. 来源原生文章 ID 只在来源范围内唯一；多个来源身份可以指向同一主体。
+4. RSS/Atom 和被研究流程选中的 Provider 候选共用一个正式入库用例。
+5. 主体、来源身份、Observation 和必要版本在一个 MariaDB 事务中完成。
+6. 内容未变化不增加版本；内容变化才追加不可变历史版本。
+7. Server 真实装配 Feed 采集路径，执行机制复用 Researchflow。
+8. 删除不再需要的关系/身份历史表、双阶段写入路径和相关文档。
 
-## 2. 最终领域规则
+不做旧数据迁移、旧逻辑兼容、双写或兼容视图。用户在最终 Schema 验收后手动清理旧 News 数据；本任务不远程清库。
 
-### 2.1 新闻主体与来源身份
+## 2. 已确认的代码依赖事实
 
-- 一条新闻表示一篇独立发布的文章，不表示一个新闻事件。
-- 同一篇文章从多个来源入口被发现，只保留一个新闻主体，保留多个来源身份和采集记录。
-- 同一新闻事件被不同媒体分别撰写，属于不同新闻。
-- 不同网站以不同 URL 转载同一内容，默认作为不同文章保存；暂不自动合并或自动建立转载关系。
-- 完全相同的规范 URL 是全局去重依据，不允许被 `source_id` 限定。
-- 不同 URL 默认不合并；不做重定向链追踪、跟踪参数语义分析或跨站转载推断。
-- 来源文章 ID 作为来源内身份，唯一范围为 `source_id + source_native_id`。
-- URL 缺失时，允许凭可信来源文章 ID 入库；URL 和来源文章 ID 都缺失时不创建正式新闻主体。
+- 当前 News V1 是单个完整基线，创建 14 张表；Schema Validator 和 Migration 测试显式校验表、索引、外键清单。
+- 当前 `news_items` 只有主体 ID、首次来源 ID 和创建时间；当前内容存放在 `news_item_versions`。
+- 当前 `news_identifiers` 将 normalized-url 与来源原生 ID 一起按来源范围匹配，无法实现跨来源 URL 全局去重。
+- Feed Parser 已能生成 ProviderSummary、SourceSummary、Body 和附件元数据；当前 Feed Ingest 未将完整 ContentLayers 写入正式新闻版本。
+- Provider SearchCandidates Stage 当前输出 Researchflow StageOutput，不自动创建正式 News。
+- 当前身份写入和 ResearchUpdate 版本写入分属不同事务；`ApplyResearchUpdate` 还混有证券/行业关系断言职责。
+- Research 通过 News Evidence Query 使用 NewsID + VersionID；PIT 依赖 Version、Observation、Availability Evidence/Decision。
+- Server 当前已有 Provider Search Stage 和 Research Evidence Query 装配，但没有完整 Feed SourceCatalog/Transport/Collect/Ingest 生产组合。
+- StaticSourceCatalog、Platform Endpoint Transport、CollectSource、Source Policy Resolver、Policy Version Publisher 已存在，应优先复用。
+- StageOutput 生命周期属于 Researchflow，不由 News Cleaner 管理。
 
-### 2.2 URL
+以上是本任务已完成的 P0-1 审计结论，不再重复审计；实现时只对具体字段/SQL/调用点做定点核对。
 
-- URL 是新闻文章网络地址。
-- 复用现有 Source URL Policy 对输入 URL 做安全校验和既有规范化，不另造 URL 归一化体系。
-- 去重只比较最终保存的规范 URL 完全相同，不额外追踪重定向。
-- 全局唯一约束放在 `news_items.canonical_url`；允许 NULL，以支持来源只提供文章 ID 的情况。
-- `news_identifiers` 不承担全局 URL 唯一职责，只保存来源原生文章 ID。
-- Hash 命中后仍需比较原始值，不能把 Hash 相等直接当作 URL/ID 原文相等。
-- URL 与来源原生 ID 分别命中不同主体时，返回明确身份冲突，不自动合并两个既有主体。
+## 3. 最终 Schema
 
-### 2.3 当前内容与版本
-
-- `news_items` 保存当前标题、摘要/正文内容层、发布者、作者、发布时间、规范 URL、内容指纹及创建/更新时间。
-- 当前新闻查询不需要先关联版本表才能取得标题和内容。
-- `news_item_versions` 作为历史快照保留，供 PIT/Research 历史回溯；不是当前新闻内容的唯一存储入口。
-- 首次入库创建初始版本；指纹与当前版本相同不增加版本；内容实质变化时更新主体并追加版本。
-- 采集时间、观察时间、Provider 变化本身不构成内容版本变化。
-- 正文和摘要允许为空；有效元数据不能因正文为空而丢弃。
-- 时间统一按 UTC 存储，保留真实来源精度，不伪造时分秒。
-- 不新增独立正文清理系统。通过单条新闻去重、Observation 候选 TTL 和现有响应大小限制控制数据量；不先增加一组没有真实调用方的保留配置。
-
-### 2.4 Observation 与采集入口
-
-- Observation 表示一次发现/采集记录，不长期保存完整新闻正文副本。
-- Observation 只保留身份、来源、采集时间、策略决策、必要质量/诊断字段和短期候选载荷。
-- 候选载荷复用现有 Observation Retention 清理；必要追溯元数据保留。
-- RSS/Atom 采集成功后直接走正式入库。
-- Provider SearchCandidates 结果继续保留在 Researchflow StageOutput；只有研究流程选中/确认的候选才进入正式 News 入库。
-- 不开发人工导入功能。
-
-## 3. 数据模型调整范围
-
-| 表 | 目标职责 | 处理原则 |
-|---|---|---|
-| `news_items` | 新闻主体及当前完整内容 | 扩展为当前新闻内容唯一读取入口；规范 URL 全局唯一 |
-| `news_identifiers` | 来源原生文章 ID | 来源内唯一；多个来源身份可指向同一新闻 |
-| `news_observations` | 发现/采集记录 | 保留必要诊断与幂等信息；不长期复制完整正文 |
-| `news_item_versions` | 历史内容快照 | 保留 PIT/Research 版本语义；内容变化才追加 |
-
-不新增 NewsContent、NewsDiscovery 等平行表。
-
-关系和附属表处理：
-
-- `news_relation_assertions` / `news_relation_evidence`：当前表达新闻与证券/行业的关系断言，不属于 News 采集职责。移除 News 内写入用例、Repository、表和 DTO；Research 自己负责关系分析。
-- `news_item_relations`：当前表达新闻与新闻之间的转载关系。新方案不做自动转载识别；若全仓审计确认没有生产消费者，删除 Domain/Application/Repository/表。
-- `news_identifier_status_history`：历史身份状态查询当前没有生产装配；本任务不保留历史身份兼容，审计确认后删除。
-- Authorization Snapshot、Evidence Snapshot、Policy Version、Availability Evidence/Decision 等 PIT/授权表不因本次简化而批量删除，按真实生产调用者保留。
-
-## 4. 实施阶段与步骤
-
-### P0-1：全量依赖审计（当前阶段）
-
-1. 核对 Schema、Migration、索引、外键完整清单。
-2. 全仓核对每张 News 表的 SQL 读写者、Repository Port、Domain/Application 用例和生产装配点。
-3. 核对 `ApplyResearchUpdate`、`IngestCollectedSource`、`IngestProviderCandidate`、`CollectSource` 的所有调用者。
-4. 核对 Research、Researchflow、Quant、Server 对 News 当前内容、Version ID、Observation ID、Evidence Ref 的依赖。
-5. 核对 PIT Evidence/Decision/Snapshot 是否引用 `news_item_versions`，明确历史版本最小保留字段。
-6. 核对新闻-证券/行业关系与新闻-新闻关系的生产消费者。
-7. 核对 SourceCatalog、SourceTransport、SourcePolicy Resolver、Server Lifecycle 和可信来源配置现状。
-8. 输出表级依赖矩阵、调用链、待删除清单和最终字段来源清单。
-
-完成门槛：所有 News 表和生产入口均有明确保留/删除决定；无基于文档猜测的调用关系。
-
-### P0-2：最终数据模型与 Migration 重建
-
-1. 根据 P0-1 结果定稿字段、唯一索引、外键、空值规则和内容指纹语义。
-2. `news_items` 增加当前新闻内容字段及全局规范 URL 唯一约束。
-3. `news_identifiers` 收敛为来源原生身份，唯一键不承担跨来源 URL 去重。
-4. 保留必要 Observation、Version 和 PIT 表，删除确认无消费者的关系/历史表。
-5. 同步更新 Migration、Schema Validator、Schema 测试和 Server Migration Registry 清单。
-6. 不增加旧版 Schema 检测/升级兼容逻辑；最终使用空 News 库建表。
-
-完成门槛：Migration 从空库创建最终 Schema；Schema Validator 与真实 MariaDB 表/索引/外键一致。
-
-### P0-3：统一正式入库与全局 URL 去重
-
-1. 建立唯一正式入库 Application 用例，RSS/Atom 与被选中的 Provider 候选共用。
-2. 事务内校验可信 Source/Endpoint 和当前策略。
-3. 先按规范 URL 全局查找主体；命中则复用 news_id，并追加来源身份/Observation。
-4. URL 未命中时，按来源原生文章 ID 查找；命中则复用主体。
-5. 两种身份分别命中不同主体时返回 identity_conflict，不自动合并。
-6. 新主体写入当前完整内容、来源身份、Observation 和初始版本。
-7. 已有主体内容未变时不新增版本；内容变化时更新主体并追加历史版本。
-8. 所有写入在一个 MariaDB 事务中完成。
-9. 定义固定锁顺序和跨实例并发策略；唯一索引作为最终防线。
-10. 增加真实 MariaDB 测试：相同 URL 跨来源、重复采集、内容变化、身份冲突、事务回滚、并发写入。
-
-完成门槛：相同 URL 跨来源并发只产生一条主体；主体/身份/Observation/版本要么全部提交要么全部回滚。
-
-### P0-4：生产自动采集闭环
-
-1. 复用现有 `StaticSourceCatalog` 和 Source/Endpoint Policy，不先建设数据库目录管理系统。
-2. 明确可信 Source/Endpoint 配置来源；优先使用现有配置结构，只有真实缺口才增加必要配置。
-3. Server 组合根装配 SourceCatalog、逐 Endpoint Platform Transport、CollectSource 和统一入库用例。
-4. 将 Feed 采集接入现有 Researchflow Run/Stage/Worker 执行体系；不另建 News Scheduler/Worker/Queue。
-5. RSS/Atom 采集结果直接走正式入库事务。
-6. Provider 搜索结果仍作为 StageOutput 候选；被研究流程选中后调用同一正式入库用例。若审计发现当前没有真实候选选择调用点，不虚构调用者或自动将全部搜索结果入库。
-7. 补 Diagnostics 注册、启动失败处理、Context 取消、网络超时和重试测试。
-8. 在真实配置/网络可用时完成 Feed→Parser→统一入库→MariaDB 查询端到端验收；没有配置的来源标记 skipped/not_comparable，不伪造通过。
-
-完成门槛：Server 真正构造并调用 Feed 生产链路，不是仅有 Adapter/单元测试。
-
-### P1-1：职责清理与生命周期
-
-1. 移除 News 内新闻-证券/行业关联断言职责。
-2. 删除确认无生产消费者的转载关系模型及存储。
-3. 删除失效的双阶段写入 API、Port、DTO 和测试。
-4. Observation 仅保留短期候选载荷，复用现有 Cleaner。
-5. Researchflow StageOutput 生命周期由 Researchflow 自身管理，不由 News Cleaner 处理。
-6. 不新增正文 TTL、独立归档系统或复杂内容生命周期工作流；通过去重和有界采集控制数据量。
-
-### P1-2：全量回归、文档与验收
-
-1. 更新 News Domain/Application/Storage/Server 单元和集成测试。
-2. 执行 News 全量测试、Race Detector、Vet。
-3. 执行 MariaDB Migration、Schema、事务、并发和回滚集成测试。
-4. 执行 Research/Researchflow/Quant 对 News 的消费者回归。
-5. 执行 Server 启动装配和 Feed 端到端测试。
-6. 更新本计划、当前任务状态、模块总规划、数据模型契约和任务历史。
-7. 记录精确提交 SHA、CI Run 和验收结果；CI 未完成不得标记 DONE。
-
-## 5. 当前代码基线与已确认事实
-
-计划基线：`8e8a926ff92e0136acfe9b0859ab6f64528ddf76`。
-
-| 位置 | 当前代码事实 | 影响 |
-|---|---|---|
-| Schema/Migration | 当前只有一个 V1 完整基线；`news_items` 只有 news_id、origin_source_id、created_at | 需要重建最终主体字段和唯一约束 |
-| Identity | `news_identifiers` 当前按 source/type/hash 唯一；Domain 仅在同一 source 内匹配，包括 normalized-url | 必须将 URL 去重提升为全局主体规则 |
-| Version | 标题、发布者、作者、发布时间、content_json、fingerprint 在 `news_item_versions` | 版本表保留为历史快照；主体增加当前内容 |
-| Feed | CollectSource 已解析 ContentLayers；IngestCollectedSource 只写 Observation 元数据并清空 ProviderSummary | 正式入库缺少内容写入 |
-| Provider | SearchCandidates Stage 只产生 Researchflow StageOutput；IngestProviderCandidate 是独立用例 | 不能把所有搜索候选自动写入正式库 |
-| Update | ApplyResearchUpdate 在独立事务写版本，同时处理证券/行业关系断言 | 需要拆分职责并统一事务 |
-| Storage | IdentityTransaction 与 ResearchUpdateTransaction 分离；LatestNewsItemVersion 锁定 news_items 和最新版本 | 需要统一事务与固定锁顺序 |
-| PIT | Availability Evidence/Decision 以 version_id 绑定；Research Evidence Query 读取 Version + Observation | 必须保留版本和 Observation 的证据链 |
-| Server | 已装配 Search Stage、Research News Evidence Query、Retention；没有装配 Feed Source 链路 | 需要完成生产组合 |
-| Source | StaticSourceCatalog、Platform Endpoint Transport、CollectSource、策略 Resolver 已存在 | 复用现有能力，不重复造 Adapter |
-
-## 6. 审计期间需要特别确认的事项
-
-1. `news_items.origin_source_id` 在多来源同 URL 后是否应删除；来源集合应由来源身份和 Observation 表达。
-2. 规范 URL 的现有生成规则、URL Policy 输出和身份解析调用链。
-3. `news_item_versions.content_json` 的结构及 PIT 读取依赖；主体当前内容与历史快照复用同一结构。
-4. 来源原生 ID 的字段约束；移除 normalized-url identifier 后的冲突规则。
-5. 关系表和身份状态历史表的全仓生产消费者。
-6. Researchflow 是否已有可承载 Feed Collection 的真实 Stage/触发场景；若无，增加最小 Stage 但复用现有 Run/Worker。
-7. Source/Endpoint 启动配置及策略版本初始化方式。
-
-## 7. 明确不做
-
-- 不兼容旧 News Schema、旧数据或旧写入路径。
-- 不做旧数据迁移、双写或兼容视图。
-- 不自动合并不同 URL 的跨站转载。
-- 不做标题相似度或事件相似度合并。
-- 不追踪复杂重定向链，不分析跟踪参数语义。
-- 不新增 NewsContent/NewsDiscovery 等表。
-- 不新增 News 专属 Scheduler、Queue、Worker、Orchestrator。
-- 不开发人工导入。
-- 不由 News 负责证券/行业关联。
-- 不顺手重构 Platform、Researchflow 或其他无关模块。
-
-## 8. 后续会话恢复说明
-
-后续会话必须先读取本文件、`当前任务状态和进度.md`、`模块总任务规划和进度.md`，然后核对 `repair_all` 当前 HEAD。不得从旧聊天摘要推断任务状态。
-
-继续顺序：
-1. 从 P0-1 尚未完成的表级依赖审计继续。
-2. 每完成一组审计，在当前任务文档更新证据和下一步。
-3. P0-1 完成后，更新本文件中的最终字段/删除清单。
-4. Schema 决策未完成前不得提前写 Migration。
-5. 每个功能组完成测试、更新文档后再提交；只操作 `repair_all`。
-
-当前进度：P0-1 已完成核心 Schema/Repository/Research/PIT/关系表/Server Source 生产装配的定点核查；Diagnostics 和 Schema 测试清单收尾后进入 P0-2。
-
-
-## 9. P0-1 第二轮依赖审计记录（2026-11-25）
-
-### 9.1 表级消费者审计
-
-当前 News Migration V1 一次创建 14 张表（不是历史文档中出现的 V1-V10 多版本迁移）。按现有 SQL、Repository 和 Application 生产组合核对：
-
-| 表 | 已确认用途 | 当前处理决定 |
-|---|---|---|
-| `news_items` | Identity 创建主体；Version/PIT 查询通过 news_id 定位 | 保留并扩展为完整新闻主体；删除仅表达首次来源的 origin_source_id |
-| `news_identifiers` | 来源身份解析、身份写入 | 保留，只存 source-native-id；规范 URL 移到 news_items 全局唯一字段 |
-| `news_observations` | 发现记录、版本来源、PIT 时间可见性、Retention | 保留并精简候选载荷，不存长期完整正文副本 |
-| `news_item_versions` | Research Evidence Query、PIT、Availability Evidence/Decision 均引用 version_id | 保留为不可变内容历史快照；主体当前内容同时写入 news_items |
-| `news_relation_assertions` | 只由 ApplyResearchUpdate 的新闻-证券/行业关系职责读写 | 从 News 移除；News 不负责证券/行业关联 |
-| `news_relation_evidence` | 只服务上述关系断言 | 随关系断言一起移除 |
-| `news_item_relations` | News 内转载关系 Application/Repository/查询实现；Server/Research/Researchflow/Quant 当前组合未发现消费者 | 不做自动转载识别；删除该表及未接入生产的关系用例 |
-| `news_identifier_status_history` | 只供 ResolveIdentityAt 历史身份查询；Server 当前无生产装配/调用 | 删除；本任务不保留历史身份兼容 |
-| `news_authorization_snapshots` | 当前授权复核与历史授权快照读取 | 保留 |
-| `news_evidence_snapshots` | Research Evidence 分页快照和过期清理 | 保留 |
-| `news_policy_versions` | Source/Endpoint/Provider 策略不可变版本 | 保留 |
-| `news_current_policy_versions` | 当前策略指针和采集前/写入时策略复核 | 保留 |
-| `news_version_availability_evidence` | PIT 首次可获得时间证据 | 保留 |
-| `news_version_availability_decisions` | PIT 可用时间决策历史 | 保留 |
-
-### 9.2 已确认调用边界
-
-- Research 的 `internal/research/adapters/news/evidence.go` 通过 News `ResearchEvidenceQuery` 读取指定 `NewsID + VersionID`，将版本内容作为 Research Evidence。Research 不直接读写 News 表。
-- PIT SQL 从 `news_item_versions` 与 `news_observations` 读取版本及其 Observation，并关联 Availability Evidence/Decision；版本和 Observation 的身份及时间语义必须保留。
-- `ApplyResearchUpdate` 把版本追加和证券/行业关系断言写入同一用例，但当前 Server 组合根没有构造该用例；关系断言不是 News 当前生产采集链路的一部分。
-- `ApplyNewsItemRelation`、转载关系历史查询及对应 Repository 当前只在 News 自身实现中存在，Server/Research/Researchflow/Quant 没有生产装配点。
-- `ResolveIdentityAt` 与 `news_identifier_status_history` 只形成 News 内部历史查询能力，当前 Server 没有生产装配点；本次允许移除。
-- Server 已装配 Provider SearchCandidates Stage，但该 Stage 只产出 Researchflow StageOutput，不自动创建正式 News。
-- Server 当前没有装配 `StaticSourceCatalog`、`NewPlatformEndpointTransport`、`CollectSource`、`IngestCollectedSource`。Feed 采集不存在生产调用路径。
-
-### 9.3 来源配置和策略装配缺口
-
-- `internal/news/config.Config` 当前只有 Bocha/Tavily/Brave/SearXNG Provider 配置及 Evidence Cursor Key Ring，没有 Source/Endpoint 注册配置。
-- `StaticSourceCatalog` 已存在，但要求启动时提供非空、可信的 Source/Endpoint 注册快照。
-- Source Endpoint Transport 已能基于 Platform HTTP Client 创建逐 Endpoint 传输器；当前 Server 没有构造/注入。
-- Source Collection 依赖数据库当前 Source/Endpoint Policy 版本；Storage Resolver 已存在。
-- `PublishNewsPolicyVersion` Application 和 Storage Writer 已存在，但当前 Server 没有生产启动装配；策略目录也没有实际配置来源。
-- Provider Output Policy 静态目录和 Provider Candidate Ingest 用例存在，但当前 Server 没有生产装配；Provider Search Stage 仍只产出候选。
-
-因此 P0-4 不能只把 CollectSource 构造器接到 Server。必须同时解决最小可信 Source/Endpoint 配置和策略版本初始化。当前不新增来源管理数据库、管理 API 或动态配置中心；优先采用启动配置形成不可变目录快照，并在启动时校验/发布对应不可变策略版本。配置字段以实际 Source/Endpoint 结构为准，避免引入重复策略字段。
-
-### 9.4 数据模型进一步收敛决定
-
-- `news_items.origin_source_id` 当前只在 CreateNewsItem 写入，并用于来源创建时间索引；跨来源 URL 合并后它不能表达完整来源集合，真实来源已由 `news_identifiers` 和 `news_observations` 表达，因此删除该字段及索引。
-- `news_identifiers` 不再保留 normalized-url 类型、identifier_status 和身份状态历史。只保存来源原生文章 ID 与 news_id 的当前映射，来源范围内唯一。
-- 全局规范 URL 放在 `news_items`，唯一索引允许 NULL。不同来源命中相同规范 URL 时映射到同一 news_id，并各自保存来源原生 ID。
-- URL 和来源原生 ID 分别命中不同主体时，返回明确身份冲突，不自动合并两个既有主体。
-- 不同 URL 不做转载自动识别。NewsItemRelation 全部移除。
-
-### 9.5 P0-1 状态
-
-已完成：核心表结构、Migration 版本、Repository 锁机制、Identity/Version/Observation 写入路径、Research/PIT 版本依赖、关系表职责、Server News 生产装配和 Source/Endpoint 配置缺口的定点核查。
-
-仍需完成：核对 News Diagnostics Check 工厂是否依赖将删除的关系/身份历史能力；核对 Schema Validator 与 Migration 测试的完整表清单；确认 StageOutput 生命周期由 Researchflow 管理，不由 News Cleaner 管理。
-
-P0-1 已完成。Diagnostics Check 工厂没有关系断言或身份历史表依赖；News Schema Validator 和 Migration 测试显式列出 14 张 V1 表，后续需同步收敛为最终表清单。Researchflow StageOutput 资源表没有 TTL/retention 字段或 News Cleaner 调用；其生命周期归 Researchflow，不由 News 管理。当前进入 P0-2 最终 Schema 定稿。
-
-
-## 10. P0-1 关闭与 P0-2 最终 Schema 决议（2026-11-25）
-
-### 10.1 P0-1 关闭证据
-
-- News Diagnostics Check 工厂只检查 Parser、Provider Config、Source/Endpoint Policy、Storage、Observation Retention 和单条 Evidence 质量；未发现关系断言或身份历史表依赖。
-- `schema.go`、`schema_test.go`、`migrations_test.go` 将 14 张表作为当前完整 V1 基线校验；删除表时必须同步修改所有表数量、表清单、索引和外键断言。
-- Researchflow `researchflow_stage_output_resources` 保存不可变 Stage Output，当前结构没有 expires_at/retention 字段，也没有 News Cleaner 调用。其生命周期归 Researchflow 自身；本任务不把 StageOutput 塞入 News Retention。
-- Research 只通过 News Evidence Query 使用 NewsID/VersionID；PIT 查询依赖 Version、Observation、Availability Evidence/Decision。
-- P0-1 完成门槛已满足，进入 P0-2。
-
-### 10.2 最终保留表清单
-
-最终 News V1 只保留以下 10 张表：
+### 3.1 保留表（10 张）
 
 1. `news_items`
 2. `news_identifiers`
@@ -300,69 +54,137 @@ P0-1 已完成。Diagnostics Check 工厂没有关系断言或身份历史表依
 9. `news_version_availability_evidence`
 10. `news_version_availability_decisions`
 
-从 News V1 移除：
+### 3.2 删除表（4 张）
 
 - `news_relation_assertions`
 - `news_relation_evidence`
 - `news_item_relations`
 - `news_identifier_status_history`
 
-### 10.3 核心表字段草案
+同步删除这些表专属的 Domain、Application、Repository、DTO、测试和注册代码。不得只删 DDL 而留下失效业务入口。
 
-#### news_items
+### 3.3 核心字段
+
+`news_items`：
 
 - `news_id`：主键。
-- `canonical_url`：经过现有 Source URL Policy 规范化的完整 URL，可空。
-- `canonical_url_hash`：canonical_url 的 SHA-256；非空 URL 必须有 Hash，建立全局唯一索引；命中后必须比较 URL 原文，Hash 相同但 URL 不同返回冲突。
-- `title`：当前标题。
-- `publisher_name` / `publisher_domain`：发布来源信息。
-- `author`：作者。
-- `published_at`：来源发布时间，可空。
-- `content_json`：当前 SourceSummary、Body、附件元数据等分层内容。
-- `content_fingerprint`：当前完整内容指纹。
-- `created_at` / `updated_at`：主体创建和内容更新时间。
+- `canonical_url`：规范 URL，可空。
+- `canonical_url_hash`：规范 URL 的 SHA-256；非空 URL 必须有值并建立全局唯一索引。
+- `title`、`publisher_name`、`publisher_domain`、`author`、`published_at`：当前新闻元数据。
+- `content_json`：当前完整内容层。
+- `content_fingerprint`：当前内容指纹。
+- `created_at`、`updated_at`：记录创建/更新时间。
 
-删除 `origin_source_id`。一个主体可能有多个来源身份，首次来源字段会产生误导；来源归属由 `news_identifiers` 和 `news_observations` 表达。
+删除 `origin_source_id`。来源身份由 `news_identifiers` 和 `news_observations` 表达。
 
-#### news_identifiers
+`news_identifiers`：
 
-- `source_id`
-- `identifier_hash`
-- `identifier_value`
-- `news_id`
-- `created_at`
+- `source_id`、`identifier_hash`、`identifier_value`、`news_id`、`created_at`。
+- 唯一键为 `(source_id, identifier_hash)`；Hash 命中后必须比较原始 ID。
+- 删除 `identifier_type`、`identifier_status`；不保存 URL 身份和历史身份状态。
 
-唯一键为 `(source_id, identifier_hash)`，Hash 命中后比较原始 ID。移除 `identifier_type`、`identifier_status`；本任务只保留来源原生文章 ID，不再把 URL 作为来源内身份，也不保留身份状态历史。
+`news_observations`：保留来源/Provider、策略版本、候选元数据、观察时间、Retention、身份处理结果、news_id 和稳定原因码；不长期复制完整正文。
 
-#### news_observations
+`news_item_versions`：保留版本号、指纹、标题、发布者、作者、发布时间、content_json、observed_at、observation_id，供 Research/PIT 历史回溯。
 
-保留当前策略版本、Provider/Source 来源、候选元数据、observed_at、Retention、identity_status、news_id 和 reason_code。候选 JSON 不包含完整正文副本；正文/摘要进入 news_items 和 news_item_versions。
+其余 6 张授权、Evidence Snapshot、策略版本和 Availability Evidence/Decision 表按现有消费者保留，不因本次简化删除。
 
-#### news_item_versions
+## 4. 统一正式入库规则
 
-保留版本号、指纹、标题、发布者、作者、发布时间、content_json、observed_at 和 observation_id。版本是 PIT/Research 的不可变历史快照。当前主体内容和版本快照在同一事务内写入。
+- RSS/Atom 采集结果直接进入正式入库。
+- Provider SearchCandidates 默认留在 Researchflow StageOutput；只有研究流程明确选中/确认后才进入正式 News。
+- URL 存在时先按规范 URL 全局查找；命中则复用 news_id。
+- URL 未命中时按 source_id + source_native_id 查找；命中则复用主体。
+- URL 与来源原生 ID 分别命中不同主体时返回 identity_conflict，不自动合并。
+- URL 和来源原生 ID 都缺失时拒绝创建正式主体。
+- 同一 URL 被不同来源发现时，每个来源保留自己的来源原生身份和 Observation。
+- 新主体写入当前内容并创建初始版本。
+- 已有主体内容指纹不变时不新增版本；内容变化时更新主体并追加版本。
+- 主体、身份、Observation、版本在同一事务中提交或回滚。
 
-### 10.4 事务锁顺序
+### 4.1 固定事务锁顺序
 
-统一入库在同一个 MariaDB 事务中完成。当前策略校验必须与写入共享事务，因此固定顺序为：
-
-1. 锁定并读取当前 Source/Endpoint/Provider 策略指针（按固定策略类型顺序）。
-2. 若 URL 存在，按 canonical_url_hash 获取跨实例 URL 命名锁。
-3. 获取来源原生 ID 的 source_id 命名锁。
-4. 按 URL 全局查询主体，并按 source-native-id 查询来源身份；两者命中不同 news_id 时冲突。
-5. 锁定/创建 news_items 主体。
-6. 锁定最新 news_item_versions，比较指纹并决定是否追加版本。
+1. 按固定策略类型顺序锁定并读取 Source/Endpoint/Provider 当前策略指针。
+2. URL 存在时，按 canonical_url_hash 获取跨实例 URL 命名锁。
+3. 获取来源原生身份的 source_id 命名锁。
+4. 全局解析 URL 与来源原生 ID；命中不同主体则冲突。
+5. 锁定或创建 news_items。
+6. 锁定最新版本并比较指纹。
 7. 写入来源身份和 Observation。
 8. 提交事务后释放命名锁。
 
-唯一索引是最终防线；不能只依赖进程内 Mutex。URL Hash 命中必须核对原文。没有 URL 时跳过 URL 锁，只获取来源身份锁。所有调用路径必须遵守同一顺序。
+唯一索引是最终并发防线，进程内 Mutex 不能替代跨实例协调。所有正式写入路径遵守同一锁顺序。URL Hash 命中必须比较原文。
 
-### 10.5 P0-2 当前状态
+## 5. 阶段执行顺序
 
-- [x] 明确最终保留/删除表清单。
-- [x] 明确新闻主体、来源身份、Observation、Version 的职责。
-- [x] 明确全局 URL 去重和来源原生 ID 规则。
-- [x] 明确统一事务锁顺序。
-- [ ] 将字段草案与现有 Domain/Repository/PIT 查询逐字段对齐。
-- [ ] 完成 Migration V1、Schema Validator、测试的最终 DDL。
-- [ ] Review 最终 Schema 后再开始 P0-3。
+### P0-1：全量依赖审计
+
+<badge>DONE</badge>
+
+已完成现有表、读写者、Repository、Research/PIT 消费者、关系职责、Server 装配和 Diagnostics/Schema 测试依赖核查。
+
+### P0-2：最终数据模型与 Migration
+
+<badge color="warning">IN_PROGRESS</badge>
+
+1. 逐字段对齐 Domain、Repository、PIT SQL 和 Research Evidence DTO。
+2. 修改单一 V1 Migration，直接创建最终 10 张表。
+3. 同步修改 Schema Validator、Schema 测试、Migration 测试和 Server Migration Registry 相关清单。
+4. 删除 4 张表及其专属索引、外键、Repository 和失效用例。
+5. 通过空库 Migration 和真实 MariaDB Schema 验证。
+
+完成门槛：Migration 从空库直接创建最终 Schema；Validator 与真实 MariaDB 表/索引/外键一致。无需兼容旧 V1。
+
+### P0-3：统一正式入库与全局 URL 去重
+
+1. 建立唯一正式入库 Application 用例。
+2. RSS/Atom 和被选中的 Provider 候选复用该用例。
+3. 合并主体、身份、Observation、版本写入事务。
+4. 移除独立的双阶段版本更新入口。
+5. 增加真实 MariaDB 测试：跨来源相同 URL、重复采集、内容变化、身份冲突、事务回滚、并发写入。
+
+完成门槛：跨来源相同 URL 并发只产生一个主体；主体/身份/Observation/版本要么全部提交，要么全部回滚。
+
+### P0-4：Feed 生产自动采集闭环
+
+1. 复用 StaticSourceCatalog 和逐 Endpoint Platform Transport。
+2. 确定最小可信 Source/Endpoint 启动配置及策略版本初始化。
+3. Server 组合根装配 SourceCatalog、Transport、CollectSource 和统一入库用例。
+4. 采集触发与执行复用 Researchflow Run/Stage/Worker，不新增 News Scheduler/Queue/Worker。
+5. RSS/Atom 结果直接正式入库；Provider 候选仍须经研究流程选中。
+6. 注册真实依赖对应的 News Diagnostics。
+7. 补启动失败、Context 取消、网络超时、重试和真实 MariaDB 端到端测试。
+
+完成门槛：Server 存在真实 Feed 生产调用路径，不以构造器存在或单元测试代替生产装配。
+
+### P1-1：职责清理
+
+1. 移除 News 证券/行业关系断言职责。
+2. 删除转载关系 Domain/Application/Repository/表。
+3. 删除身份状态历史能力。
+4. 删除双阶段写入 API、Port、DTO 和测试。
+5. 确保 Observation Retention 不处理 Researchflow StageOutput。
+
+### P1-2：全量回归与验收
+
+1. News 全量测试、Race Detector、Vet。
+2. MariaDB Migration、Schema、唯一约束、事务、并发和回滚测试。
+3. Research/PIT/Researchflow/Quant 消费者回归。
+4. Server 启动装配和 Feed 端到端验收。
+5. 更新当前状态和任务历史，记录精确 SHA 与 CI Run。
+6. CI 未完成不得标记 DONE。
+
+## 6. 不实施的能力
+
+- 不兼容旧 News Schema、旧数据或旧写入路径。
+- 不迁移旧数据、不双写、不建兼容视图。
+- 不按标题/正文相似度或事件相似度合并。
+- 不做跨站转载自动识别或复杂重定向追踪。
+- 不建设 News 专属 Scheduler、Queue、Worker、Orchestrator。
+- 不开发人工导入。
+- 不由 News 负责证券/行业关系。
+- 不新增没有真实调用方的管理 API、目录数据库或生命周期子系统。
+
+## 7. 会话恢复
+
+继续任务时先核对 `repair_all` 最新 HEAD，再直接从当前未完成阶段继续。P0-1 已关闭，不得重复审计。当前从 P0-2 逐字段对齐和 Migration 重建开始。只操作 `repair_all`，按功能组提交，中文文档/注释/提交信息。
