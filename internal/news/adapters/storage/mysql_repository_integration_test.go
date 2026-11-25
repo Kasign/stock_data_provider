@@ -1774,7 +1774,9 @@ func TestNewsMariaDBApplicationIntegration(t *testing.T) {
 		t.Fatalf("insert revised available_at decision: %v", err)
 	}
 	listRequest.Filters.CanonicalSymbols = nil
-	listRequest.SystemAsOf = secondVersion.Version.ObservedAt
+	// 历史 PIT 时间点必须晚于该版本的 available_at 决策记录时间，
+	// 但早于后续内容修订的 Observation 时间。
+	listRequest.SystemAsOf = availabilityDecisionAt.Add(time.Microsecond)
 	listed, err = repository.ListEvidenceVersionsAt(ctx, listRequest)
 	if err != nil {
 		t.Fatalf("list evidence before later revision: %v", err)
