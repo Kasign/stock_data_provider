@@ -156,22 +156,46 @@ func TestGetStageOutputForRunStageRejectsUnfinishedOrUnlinkedStage(t *testing.T)
 
 func TestGetStageOutputForRunStageRejectsPayloadAttemptAndQualityMismatch(t *testing.T) {
 	for name, mutate := range map[string]func(*CreateRunResult, *domain.Attempt, *StageOutputResource, *StageOutputResource){
-		"wrong attempt stage": func(_ *CreateRunResult, value *domain.Attempt, _, _ *StageOutputResource) { value.StageRef = "stage:other" },
+		"wrong attempt stage": func(_ *CreateRunResult, value *domain.Attempt, _, _ *StageOutputResource) {
+			value.StageRef = "stage:other"
+		},
 		"wrong attempt number": func(_ *CreateRunResult, value *domain.Attempt, _, _ *StageOutputResource) { value.Number = 2 },
-		"wrong attempt status": func(_ *CreateRunResult, value *domain.Attempt, _, _ *StageOutputResource) { value.Status = domain.AttemptDegraded },
+		"wrong attempt status": func(_ *CreateRunResult, value *domain.Attempt, _, _ *StageOutputResource) {
+			value.Status = domain.AttemptDegraded
+		},
 		"missing fencing token": func(_ *CreateRunResult, value *domain.Attempt, _, _ *StageOutputResource) { value.FencingToken = 0 },
-		"attempt output mismatch": func(_ *CreateRunResult, value *domain.Attempt, _, _ *StageOutputResource) { other := "stage-output:other"; value.OutputRef = &other },
+		"attempt output mismatch": func(_ *CreateRunResult, value *domain.Attempt, _, _ *StageOutputResource) {
+			other := "stage-output:other"
+			value.OutputRef = &other
+		},
 		"wrong payload run": func(_ *CreateRunResult, _, _ *domain.Attempt, value *StageOutputResource) { value.RunRef = "run:other" },
-		"wrong payload stage": func(_ *CreateRunResult, _, _ *domain.Attempt, value *StageOutputResource) { value.StageRef = "stage:other" },
-		"wrong payload kind": func(_ *CreateRunResult, _, _ *domain.Attempt, value *StageOutputResource) { value.Kind = "quality_summary" },
-		"wrong template": func(_ *CreateRunResult, _, _ *domain.Attempt, value *StageOutputResource) { value.TemplateVersion = "2.0.0" },
+		"wrong payload stage": func(_ *CreateRunResult, _, _ *domain.Attempt, value *StageOutputResource) {
+			value.StageRef = "stage:other"
+		},
+		"wrong payload kind": func(_ *CreateRunResult, _, _ *domain.Attempt, value *StageOutputResource) {
+			value.Kind = "quality_summary"
+		},
+		"wrong template": func(_ *CreateRunResult, _, _ *domain.Attempt, value *StageOutputResource) {
+			value.TemplateVersion = "2.0.0"
+		},
 		"wrong output type": func(_ *CreateRunResult, _, _ *domain.Attempt, value *StageOutputResource) { value.OutputType = "other" },
-		"wrong schema": func(_ *CreateRunResult, _, _ *domain.Attempt, value *StageOutputResource) { value.SchemaVersion = "2.0.0" },
+		"wrong schema": func(_ *CreateRunResult, _, _ *domain.Attempt, value *StageOutputResource) {
+			value.SchemaVersion = "2.0.0"
+		},
 		"wrong schema ref": func(_ *CreateRunResult, _, _ *domain.Attempt, value *StageOutputResource) { value.SchemaRef = "other" },
-		"bad registry fingerprint": func(_ *CreateRunResult, _, _ *domain.Attempt, value *StageOutputResource) { value.RegistryFingerprint = "not-a-fingerprint" },
-		"bad created at": func(_ *CreateRunResult, _, _ *domain.Attempt, value *StageOutputResource) { value.CreatedAt = "2026-11-24T10:11:12Z" },
-		"invalid JSON": func(_ *CreateRunResult, _, _ *domain.Attempt, value *StageOutputResource) { value.Content = []byte("{") },
-		"wrong quality ref": func(value *CreateRunResult, _, _ *domain.Attempt, _ *StageOutputResource) { other := "stage-output:other"; value.Stages[0].QualitySummaryRef = &other },
+		"bad registry fingerprint": func(_ *CreateRunResult, _, _ *domain.Attempt, value *StageOutputResource) {
+			value.RegistryFingerprint = "not-a-fingerprint"
+		},
+		"bad created at": func(_ *CreateRunResult, _, _ *domain.Attempt, value *StageOutputResource) {
+			value.CreatedAt = "2026-11-24T10:11:12Z"
+		},
+		"invalid JSON": func(_ *CreateRunResult, _, _ *domain.Attempt, value *StageOutputResource) {
+			value.Content = []byte("{")
+		},
+		"wrong quality ref": func(value *CreateRunResult, _, _ *domain.Attempt, _ *StageOutputResource) {
+			other := "stage-output:other"
+			value.Stages[0].QualitySummaryRef = &other
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			aggregate, attempt, payload, quality, expectation := validStageOutputReadFixture()

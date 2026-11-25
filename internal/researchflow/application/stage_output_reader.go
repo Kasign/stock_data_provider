@@ -48,11 +48,11 @@ var (
 
 // StageOutputExpectation pins the Stage and both payload/quality output schemas expected by a trusted consumer.
 type StageOutputExpectation struct {
-	StageCode                string
-	OutputType               string
-	SchemaVersion            string
-	SchemaRef                string
-	QualitySummarySchemaRef  string
+	StageCode               string
+	OutputType              string
+	SchemaVersion           string
+	SchemaRef               string
+	QualitySummarySchemaRef string
 }
 
 // GetStageOutputForRunStage resolves a successful Stage's persisted payload through the Run, Attempt and resource records.
