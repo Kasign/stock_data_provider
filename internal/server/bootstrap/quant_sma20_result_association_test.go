@@ -72,7 +72,7 @@ func TestQuantSMA20ResultAssociationVerifierRejectsMissingOrMismatchedOutput(t *
 			},
 			want: quantapplication.ErrResultAssociationNotFound,
 		},
-		{name: "integrity failure", err: researchflowapplication.ErrStageOutputIntegrity, want: quantapplication.ErrAuthorizationUnavailable},
+		{name: "integrity failure", err: researchflowapplication.ErrStageOutputIntegrity, want: researchflowapplication.ErrStageOutputIntegrity},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			reader := &quantSMA20StageOutputReaderStub{resource: test.resource, err: test.err}
