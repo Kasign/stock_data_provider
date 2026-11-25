@@ -1,6 +1,6 @@
 package storage
 
-import (
+import (\n\t\"strings\"
 	"context"
 	"crypto/sha256"
 	"crypto/subtle"
@@ -54,6 +54,105 @@ func (r *MySQLRepository) PublishNewsPolicyVersion(ctx context.Context, value do
 		FROM news_policy_versions
 		WHERE policy_type = ? AND policy_ref = ? AND policy_version = ?
 		FOR UPDATE`,
+		value.PolicyType, value.PolicyRef, value.PolicyVersion,
+	).Scan(&storedHash); err != nil {
+		return errors.Join(app.ErrNewsPolicyVersionStore, err)
+	}
+	if subtle.ConstantTimeCompare([]byte(storedHash), []byte(value.PayloadHash)) != 1 {
+		return app.ErrNewsPolicyVersionConflict
+	}
+
+	_, err = tx.ExecContext(ctx, `INSERT INTO news_current_policy_versions
+		(policy_type, policy_ref, policy_version, updated_at)
+		VALUES (?, ?, ?, ?)
+		ON DUPLICATE KEY UPDATE
+			policy_version = VALUES(policy_version),
+			updated_at = VALUES(updated_at)`,
+		value.PolicyType, value.PolicyRef, value.PolicyVersion, time.Now().UTC())
+	if err != nil {
+		return errors.Join(app.ErrNewsPolicyVersionStore, err)
+	}
+	if err := tx.Commit(); err != nil {
+		return errors.Join(app.ErrNewsPolicyVersionStore, err)
+	}
+	committed = true
+	return nil
+}
+
+
+var _ app.ConditionalNewsPolicyVersionWriter = (*MySQLRepository)(nil)
+
+// PublishNewsPolicyVersionIfCurrent 在事务内比较当前指针并执行显式版本切换。
+// 只有当前指针等于 expectedCurrentVersion 时才允许前进；相同目标版本/相同载荷幂等成功。
+func (r *MySQLRepository) PublishNewsPolicyVersionIfCurrent(
+	ctx context.Context,
+	value domain.NewsPolicyVersion,
+	expectedCurrentVersion string,
+) error {
+	if r == nil || r.db == nil || ctx == nil ||
+		(expectedCurrentVersion != "" && (expectedCurrentVersion != strings.TrimSpace(expectedCurrentVersion) || len(expectedCurrentVersion) > 128)) ||
+		domain.ValidateNewsPolicyVersion(value) != nil {
+		return app.ErrNewsPolicyVersionStore
+	}
+	sum := sha256.Sum256(value.Payload)
+	actualHash := hex.EncodeToString(sum[:])
+	if subtle.ConstantTimeCompare([]byte(actualHash), []byte(value.PayloadHash)) != 1 {
+		return app.ErrNewsPolicyVersionStore
+	}
+
+	tx, err := r.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead})
+	if err != nil {
+		return errors.Join(app.ErrNewsPolicyVersionStore, err)
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tx.Rollback()
+		}
+	}()
+
+	currentVersion := ""
+	err = tx.QueryRowContext(ctx, `SELECT policy_version FROM news_current_policy_versions
+		WHERE policy_type = ? AND policy_ref = ? FOR UPDATE`,
+		value.PolicyType, value.PolicyRef,
+	).Scan(&currentVersion)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return errors.Join(app.ErrNewsPolicyVersionStore, err)
+	}
+
+	if currentVersion == value.PolicyVersion {
+		var storedHash string
+		if err := tx.QueryRowContext(ctx, `SELECT payload_hash FROM news_policy_versions
+			WHERE policy_type = ? AND policy_ref = ? AND policy_version = ? FOR UPDATE`,
+			value.PolicyType, value.PolicyRef, value.PolicyVersion,
+		).Scan(&storedHash); err != nil {
+			return errors.Join(app.ErrNewsPolicyVersionStore, err)
+		}
+		if subtle.ConstantTimeCompare([]byte(storedHash), []byte(value.PayloadHash)) != 1 {
+			return app.ErrNewsPolicyVersionConflict
+		}
+		if err := tx.Commit(); err != nil {
+			return errors.Join(app.ErrNewsPolicyVersionStore, err)
+		}
+		committed = true
+		return nil
+	}
+	if currentVersion != expectedCurrentVersion {
+		return app.ErrNewsPolicyVersionConflict
+	}
+
+	_, err = tx.ExecContext(ctx, `INSERT INTO news_policy_versions
+		(policy_type, policy_ref, policy_version, payload_json, payload_hash, created_at)
+		VALUES (?, ?, ?, ?, ?, ?)
+		ON DUPLICATE KEY UPDATE policy_version = VALUES(policy_version)`,
+		value.PolicyType, value.PolicyRef, value.PolicyVersion, value.Payload,
+		value.PayloadHash, value.CreatedAt.UTC())
+	if err != nil {
+		return errors.Join(app.ErrNewsPolicyVersionStore, err)
+	}
+	var storedHash string
+	if err := tx.QueryRowContext(ctx, `SELECT payload_hash FROM news_policy_versions
+		WHERE policy_type = ? AND policy_ref = ? AND policy_version = ? FOR UPDATE`,
 		value.PolicyType, value.PolicyRef, value.PolicyVersion,
 	).Scan(&storedHash); err != nil {
 		return errors.Join(app.ErrNewsPolicyVersionStore, err)
