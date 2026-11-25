@@ -1216,3 +1216,14 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - Root Server 仍装配旧 Analysis Runner/Task Queue/Worker/HTTP Handler 和旧路由；Python API Client、Python Bridge、go-core 也仍在仓库。它们不能一起直接删除，否则当前旧业务入口和部分 UI 会失效。
 - 距离一次性删除旧代码，必须先完成：①完整股票研究 Template 与领域 Stage；②Research/LLM/Risk/结果持久化和授权读取闭环；③Researchflow 取消/轮询/历史/结果正文/导出 API；④WebUI 全面迁移并清零旧 API 调用；⑤旧 Analysis 业务语义迁移/明确废弃清单；⑥全仓配置、Migration、Docker、CI、文档及外部调用方核查。之后再在一个逻辑工作组删除旧入口及全部专属资产，不保留兼容链。
 - 下一工作组继续 RA-03：Research Context/Evidence 生产 Stage，消费 Server 注入的 News Evidence Importer 与 Quant Authorized GetResult；不在 Researchflow 复制领域规则，不让 Stage 访问 Repository，不绕过来源授权和 PIT 校验。
+
+
+## RA-03 启动前代码级依赖复核：News 持久化是 Research Evidence 的前置条件
+
+- 复核基线：`repair_all` SHA `7ff603232cdc2a47ce5a9c5d8ff5914ce34a37d6`。
+- 当前 `news.search_candidates` 只调用 `news/app.SearchCandidates` 并返回 Provider 候选；该用例明确不持久化、不缓存。Stage Payload 的候选字段是 Provider/Source Item ID、标题、URL 和时间，不包含已持久化的 NewsID/VersionID。
+- Research News Importer 的输入却要求可信 Caller、Purpose、SystemAsOf、NewsID 和 VersionID；它通过 News Evidence Query 读取并重新校验当前授权。因此不能把 SearchCandidates 的 Provider 候选直接映射成 Research Evidence，也不能跳过 News 授权/持久化。
+- News 已有 `IngestProviderCandidate` Application Use Case，但它要求可信 SourceCatalog、ProviderOutputPolicyResolver、Source/Endpoint/Provider 策略版本及事务内复核。当前 Server 的 `newResearchNewsComposition` 只装配 Evidence Query/Importer/Authorizer 与 Research Repository，没有装配 Provider Candidate Ingest；Researchflow Composition 也没有 Research Stage 消费者。
+- 因此 RA-03 的正确先后顺序修正为：①在 Server 组合根装配可信 SourceCatalog 与 Provider Output Policy Catalog；②新增 News Owner 的持久化 Ingest Stage（消费 SearchCandidates，按策略写 Observation/News identity，输出持久化 NewsID/VersionID）；③Research Stage 通过 News Evidence Importer 重新读取和授权 Evidence，并消费 Quant AuthorizedResultReader；④持久化 Research Context/Evidence/Claim，完成同库 MariaDB Worker E2E。
+- 不得把 Provider Summary 直接当来源正文，不得用 Search Candidate 的 provider_item_id 冒充 NewsID，不得在 Research 中复制 News Repository 或 Ingest 策略。没有合法 Source/Endpoint/Provider Policy 的候选必须 skipped/denied 并保留诊断，不能为了跑通流程写入。
+- 现有 `researchNewsComposition` 在 Bootstrap 中晚于 Researchflow Execution Composition 创建，后续装配时需调整依赖构造顺序或采用明确的依赖结构，避免循环依赖；Server 仍是唯一组合根。
