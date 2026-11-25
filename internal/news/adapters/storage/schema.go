@@ -94,7 +94,6 @@ var requiredNewsSchemaIndexes = []newsSchemaIndexDefinition{
 	{table: "news_version_availability_decisions", name: "idx_news_availability_decision_pit", unique: false, columns: []string{"version_id", "recorded_at", "decision_seq"}},
 }
 
-
 type newsSchemaForeignKeyDefinition struct {
 	table             string
 	name              string
@@ -328,7 +327,6 @@ func equalNewsSchemaColumns(left, right []string) bool {
 	}
 	return true
 }
-
 
 func validateNewsSchemaForeignKeys(actual map[string]newsSchemaForeignKeyState) error {
 	for _, expected := range requiredNewsSchemaForeignKeys {
