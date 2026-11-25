@@ -1047,6 +1047,11 @@ func (r *MySQLRepository) Ping(ctx context.Context) error {
 
 // MissingSchemaTables returns only the names of News-owned tables that are absent.
 // It is read-only and does not attempt to apply migrations.
+// RequiredSchemaTableCount reports the number of News-owned tables checked by MissingSchemaTables.
+func (r *MySQLRepository) RequiredSchemaTableCount() int {
+	return len(requiredNewsSchemaTables)
+}
+
 func (r *MySQLRepository) MissingSchemaTables(ctx context.Context) ([]string, error) {
 	if r == nil || r.db == nil || ctx == nil {
 		return nil, app.ErrInvalidRequest

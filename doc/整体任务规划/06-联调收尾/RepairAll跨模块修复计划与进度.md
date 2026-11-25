@@ -1353,3 +1353,10 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - Root bootstrapDatabase 在 Migration History 校验后、Redis/Repository 装配前执行 Quant Schema 校验；缺表、缺列或关键索引漂移均 fail-closed，并返回具体表/列/索引诊断。
 - 新增结构快照单测覆盖缺表、缺列、缺索引及索引列顺序漂移；新增 MariaDB 基线集成测试验证当前真实 Migration 结构符合 Validator。
 - 本工作组只补齐 Quant 启动前物理结构校验，不代表 RA-02 Research 消费链完成。Research Stage 尚未调用 Quant GetResult；News available_at 真实证据链仍按外部阻塞处理。
+
+
+## 2026-11-25 News Schema readiness probe 复核
+
+- News 已有只读 MissingSchemaTables 探测，并由 news.storage.schema 诊断项调用；此前 Schema 审计记录的“无检查”应精确理解为“没有 Root 启动级完整物理 Schema Validator”，不能忽略现存 readiness probe。
+- 复核发现该诊断把 required_tables 固定写成 10，而 News Migration 与 requiredNewsSchemaTables 实际均定义 14 张表，导致健康诊断报告与真实检查范围不一致。
+- 本轮将被检查表数量改为由 News Storage Probe 从同一张 required table 清单返回，避免再维护第二份硬编码数字；保持现有 MissingSchemaTables 的只读语义和 degraded readiness 行为，不新增平行 Schema 检查。

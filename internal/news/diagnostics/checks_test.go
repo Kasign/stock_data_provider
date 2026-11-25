@@ -32,6 +32,7 @@ type storageProbeStub struct {
 }
 
 func (s storageProbeStub) Ping(context.Context) error { return s.pingErr }
+func (s storageProbeStub) RequiredSchemaTableCount() int { return 14 }
 func (s storageProbeStub) MissingSchemaTables(context.Context) ([]string, error) {
 	return append([]string(nil), s.missing...), s.schemaErr
 }
@@ -158,7 +159,7 @@ func TestStorageChecksReportHealthyAndIncompleteSchema(t *testing.T) {
 	}
 	healthySchema := healthyReport.Results[1].Observation
 	if healthySchema.Status != platformdiag.StatusHealthy ||
-		healthySchema.Attributes["required_tables"] != "10" {
+		healthySchema.Attributes["required_tables"] != "14" {
 		t.Fatalf("healthy schema=%+v, want all 10 News tables", healthySchema)
 	}
 
@@ -662,6 +663,8 @@ func (p cancellationStorageProbe) Ping(context.Context) error {
 	return context.Canceled
 }
 
+func (p cancellationStorageProbe) RequiredSchemaTableCount() int { return 14 }
+
 func (p cancellationStorageProbe) MissingSchemaTables(context.Context) ([]string, error) {
 	p.cancel()
 	return nil, context.Canceled
@@ -744,6 +747,8 @@ func (p *countingStorageProbe) Ping(context.Context) error {
 	p.pingCalls++
 	return nil
 }
+
+func (p *countingStorageProbe) RequiredSchemaTableCount() int { return 14 }
 
 func (p *countingStorageProbe) MissingSchemaTables(context.Context) ([]string, error) {
 	p.schemaCalls++

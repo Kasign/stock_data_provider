@@ -22,6 +22,7 @@ import (
 // the shared SQL pool; this package never owns a DB client or diagnostics runner.
 type StorageProbe interface {
 	Ping(context.Context) error
+	RequiredSchemaTableCount() int
 	MissingSchemaTables(context.Context) ([]string, error)
 }
 
@@ -482,7 +483,7 @@ func StorageChecks(probe StorageProbe) []platformdiag.Check {
 				}
 				return platformdiag.Observation{
 					Status: platformdiag.StatusHealthy, SafeMessage: "News storage schema is ready",
-					CheckedAt: time.Now().UTC(), Attributes: map[string]string{"required_tables": "10"},
+					CheckedAt: time.Now().UTC(), Attributes: map[string]string{"required_tables": strconv.Itoa(probe.RequiredSchemaTableCount())},
 				}, nil
 			},
 		},
