@@ -12,10 +12,10 @@ import (
 // Migration 仍是唯一 DDL 来源；这里仅声明启动校验需要的列名。
 var requiredNewsSchemaColumns = map[string][]string{
 	"news_items": {
-		"news_id", "origin_source_id", "created_at",
+		"news_id", "canonical_url", "canonical_url_hash", "title", "publisher_name", "publisher_domain", "author", "published_at", "content_json", "content_fingerprint", "created_at", "updated_at",
 	},
 	"news_identifiers": {
-		"source_id", "identifier_type", "identifier_hash", "identifier_value", "identifier_status", "news_id", "created_at",
+		"source_id", "identifier_hash", "identifier_value", "news_id", "created_at",
 	},
 	"news_observations": {
 		"observation_id", "idempotency_key", "source_id", "provider_code", "query_dimension", "endpoint_id", "source_policy_version_id", "endpoint_policy_version_id", "provider_output_policy_ref", "provider_output_policy_version_id", "policy_evaluated_at", "candidate_json", "observed_at", "retention_until", "payload_purged_at", "identity_status", "news_id", "reason_code",
@@ -23,23 +23,11 @@ var requiredNewsSchemaColumns = map[string][]string{
 	"news_item_versions": {
 		"version_id", "news_id", "version_no", "fingerprint", "title", "publisher_name", "publisher_domain", "author", "published_at", "content_json", "observed_at", "observation_id",
 	},
-	"news_relation_assertions": {
-		"relation_id", "news_id", "subject_type", "subject_json", "relation_kind", "method", "status", "supersedes_relation_id", "valid_from", "valid_to", "observed_at",
-	},
-	"news_relation_evidence": {
-		"evidence_id", "relation_id", "evidence_type", "source_version_id", "observation_id", "rule_version", "model_version", "field_path", "evidence_hash",
-	},
-	"news_item_relations": {
-		"item_relation_id", "from_news_id", "from_source_id", "to_news_id", "to_source_id", "relation_kind", "status", "supersedes_relation_id", "evidence_observation_id", "from_version_id", "to_version_id", "asserted_at", "observed_at",
-	},
 	"news_authorization_snapshots": {
 		"authorization_ref", "subject_ref", "resource_ref", "decision", "purpose_code", "content_level", "decided_at", "expires_at", "decision_fingerprint", "payload_json", "payload_hash",
 	},
 	"news_evidence_snapshots": {
 		"snapshot_ref", "caller_ref", "filters_fingerprint", "page_size", "system_as_of", "sort_version", "created_at", "expires_at", "item_count", "payload_json", "payload_hash",
-	},
-	"news_identifier_status_history": {
-		"history_id", "source_id", "identifier_type", "identifier_hash", "identifier_status", "observed_at",
 	},
 	"news_policy_versions": {
 		"policy_type", "policy_ref", "policy_version", "payload_json", "payload_hash", "created_at",
@@ -70,8 +58,8 @@ type newsSchemaIndexState struct {
 // requiredNewsSchemaIndexes 覆盖 Migration V1 声明的全部主键、唯一键和普通索引。
 var requiredNewsSchemaIndexes = []newsSchemaIndexDefinition{
 	{table: "news_items", name: "PRIMARY", unique: true, columns: []string{"news_id"}},
-	{table: "news_items", name: "idx_news_items_source_created", unique: false, columns: []string{"origin_source_id", "created_at"}},
-	{table: "news_identifiers", name: "PRIMARY", unique: true, columns: []string{"source_id", "identifier_type", "identifier_hash"}},
+	{table: "news_items", name: "uk_news_items_canonical_url_hash", unique: true, columns: []string{"canonical_url_hash"}},
+	{table: "news_identifiers", name: "PRIMARY", unique: true, columns: []string{"source_id", "identifier_hash"}},
 	{table: "news_identifiers", name: "idx_news_identifiers_news", unique: false, columns: []string{"news_id"}},
 	{table: "news_observations", name: "PRIMARY", unique: true, columns: []string{"observation_id"}},
 	{table: "news_observations", name: "uk_news_observations_idempotency", unique: true, columns: []string{"idempotency_key"}},
@@ -84,15 +72,6 @@ var requiredNewsSchemaIndexes = []newsSchemaIndexDefinition{
 	{table: "news_item_versions", name: "uk_news_versions_id_news", unique: true, columns: []string{"version_id", "news_id"}},
 	{table: "news_item_versions", name: "idx_news_versions_fingerprint", unique: false, columns: []string{"news_id", "fingerprint"}},
 	{table: "news_item_versions", name: "idx_news_versions_observed", unique: false, columns: []string{"news_id", "observed_at", "version_no"}},
-	{table: "news_relation_assertions", name: "PRIMARY", unique: true, columns: []string{"relation_id"}},
-	{table: "news_relation_assertions", name: "uk_news_relation_assertions_supersedes", unique: true, columns: []string{"supersedes_relation_id"}},
-	{table: "news_relation_assertions", name: "idx_news_relations_current", unique: false, columns: []string{"news_id", "status", "observed_at"}},
-	{table: "news_relation_evidence", name: "PRIMARY", unique: true, columns: []string{"evidence_id"}},
-	{table: "news_relation_evidence", name: "idx_news_relation_evidence_relation", unique: false, columns: []string{"relation_id"}},
-	{table: "news_item_relations", name: "PRIMARY", unique: true, columns: []string{"item_relation_id"}},
-	{table: "news_item_relations", name: "uk_news_item_relations_supersedes", unique: true, columns: []string{"supersedes_relation_id"}},
-	{table: "news_item_relations", name: "idx_news_item_relations_from", unique: false, columns: []string{"from_news_id", "status", "observed_at"}},
-	{table: "news_item_relations", name: "idx_news_item_relations_to", unique: false, columns: []string{"to_news_id", "status", "observed_at"}},
 	{table: "news_authorization_snapshots", name: "PRIMARY", unique: true, columns: []string{"authorization_ref"}},
 	{table: "news_authorization_snapshots", name: "idx_news_auth_subject_time", unique: false, columns: []string{"subject_ref", "decided_at"}},
 	{table: "news_authorization_snapshots", name: "idx_news_auth_resource_time", unique: false, columns: []string{"resource_ref", "decided_at"}},
@@ -100,8 +79,6 @@ var requiredNewsSchemaIndexes = []newsSchemaIndexDefinition{
 	{table: "news_evidence_snapshots", name: "PRIMARY", unique: true, columns: []string{"snapshot_ref"}},
 	{table: "news_evidence_snapshots", name: "idx_news_snapshot_caller_expiry", unique: false, columns: []string{"caller_ref", "expires_at"}},
 	{table: "news_evidence_snapshots", name: "idx_news_snapshot_expiry", unique: false, columns: []string{"expires_at"}},
-	{table: "news_identifier_status_history", name: "PRIMARY", unique: true, columns: []string{"history_id"}},
-	{table: "news_identifier_status_history", name: "idx_news_identifier_history_at", unique: false, columns: []string{"source_id", "identifier_type", "identifier_hash", "observed_at", "history_id"}},
 	{table: "news_policy_versions", name: "PRIMARY", unique: true, columns: []string{"policy_type", "policy_ref", "policy_version"}},
 	{table: "news_policy_versions", name: "idx_news_policy_versions_created", unique: false, columns: []string{"policy_type", "policy_ref", "created_at"}},
 	{table: "news_current_policy_versions", name: "PRIMARY", unique: true, columns: []string{"policy_type", "policy_ref"}},
@@ -125,7 +102,30 @@ func ValidateSchema(ctx context.Context, db *sql.DB) error {
 		return fmt.Errorf("News schema validation requires context and MariaDB")
 	}
 
-	const tableNames = "'news_items', 'news_identifiers', 'news_observations', 'news_item_versions', 'news_relation_assertions', 'news_relation_evidence', 'news_item_relations', 'news_authorization_snapshots', 'news_evidence_snapshots', 'news_identifier_status_history', 'news_policy_versions', 'news_current_policy_versions', 'news_version_availability_evidence', 'news_version_availability_decisions'"
+	const tableNames = "'news_items', 'news_identifiers', 'news_observations', 'news_item_versions', 'news_authorization_snapshots', 'news_evidence_snapshots', 'news_policy_versions', 'news_current_policy_versions', 'news_version_availability_evidence', 'news_version_availability_decisions'"
+	tableRows, err := db.QueryContext(ctx, "SELECT table_name FROM information_schema.tables WHERE table_schema = DATABASE() AND LEFT(table_name, 5) = 'news_' ORDER BY table_name")
+	if err != nil {
+		return fmt.Errorf("inspect News schema tables: %w", err)
+	}
+	actualTables := make([]string, 0, len(requiredNewsSchemaColumns))
+	for tableRows.Next() {
+		var table string
+		if err := tableRows.Scan(&table); err != nil {
+			_ = tableRows.Close()
+			return fmt.Errorf("read News schema tables: %w", err)
+		}
+		actualTables = append(actualTables, table)
+	}
+	if err := tableRows.Err(); err != nil {
+		_ = tableRows.Close()
+		return fmt.Errorf("read News schema tables: %w", err)
+	}
+	if err := tableRows.Close(); err != nil {
+		return fmt.Errorf("close News schema table inspection: %w", err)
+	}
+	if err := validateNewsSchemaTableSet(actualTables); err != nil {
+		return err
+	}
 	rows, err := db.QueryContext(ctx, "SELECT table_name, column_name\n"+
 		"FROM information_schema.columns\n"+
 		"WHERE table_schema = DATABASE() AND table_name IN ("+tableNames+")\n"+
@@ -187,6 +187,25 @@ func ValidateSchema(ctx context.Context, db *sql.DB) error {
 		return fmt.Errorf("close News schema index inspection: %w", err)
 	}
 	return validateNewsSchemaIndexes(indexes)
+}
+
+func validateNewsSchemaTableSet(actual []string) error {
+	expected := make([]string, 0, len(requiredNewsSchemaColumns))
+	for table := range requiredNewsSchemaColumns {
+		expected = append(expected, table)
+	}
+	sort.Strings(expected)
+	actual = append([]string(nil), actual...)
+	sort.Strings(actual)
+	if len(actual) != len(expected) {
+		return fmt.Errorf("News schema table set mismatch: found %v; want %v", actual, expected)
+	}
+	for i := range expected {
+		if actual[i] != expected[i] {
+			return fmt.Errorf("News schema table set mismatch: found %v; want %v", actual, expected)
+		}
+	}
+	return nil
 }
 
 func validateNewsSchemaColumns(actual map[string]map[string]struct{}) error {

@@ -1023,12 +1023,8 @@ func nullableString(value string) any {
 var requiredNewsSchemaTables = []string{
 	"news_items",
 	"news_identifiers",
-	"news_identifier_status_history",
 	"news_observations",
 	"news_item_versions",
-	"news_relation_assertions",
-	"news_relation_evidence",
-	"news_item_relations",
 	"news_authorization_snapshots",
 	"news_evidence_snapshots",
 	"news_policy_versions",

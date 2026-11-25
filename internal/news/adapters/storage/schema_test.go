@@ -29,9 +29,31 @@ func completeNewsSchemaIndexes() map[string]map[string]newsSchemaIndexState {
 	return actual
 }
 
+func completeNewsSchemaTables() []string {
+	tables := make([]string, 0, len(requiredNewsSchemaColumns))
+	for table := range requiredNewsSchemaColumns {
+		tables = append(tables, table)
+	}
+	return tables
+}
+
+func TestValidateNewsSchemaTableSetAcceptsFinalBaseline(t *testing.T) {
+	if err := validateNewsSchemaTableSet(completeNewsSchemaTables()); err != nil {
+		t.Fatalf("complete News table set rejected: %v", err)
+	}
+}
+
+func TestValidateNewsSchemaTableSetRejectsObsoleteTables(t *testing.T) {
+	actual := append(completeNewsSchemaTables(), "news_item_relations")
+	err := validateNewsSchemaTableSet(actual)
+	if err == nil || !strings.Contains(err.Error(), "table set mismatch") {
+		t.Fatalf("obsolete table error = %v", err)
+	}
+}
+
 func TestValidateNewsSchemaColumnsAcceptsMigrationBaseline(t *testing.T) {
-	if len(requiredNewsSchemaColumns) != 14 {
-		t.Fatalf("News schema table count = %d, want 14", len(requiredNewsSchemaColumns))
+	if len(requiredNewsSchemaColumns) != 10 {
+		t.Fatalf("News schema table count = %d, want 10", len(requiredNewsSchemaColumns))
 	}
 	if err := validateNewsSchemaColumns(completeNewsSchemaColumns()); err != nil {
 		t.Fatalf("complete News schema rejected: %v", err)
@@ -74,6 +96,16 @@ func TestValidateNewsSchemaIndexesRejectsMissingAndDriftedIndexes(t *testing.T) 
 		err := validateNewsSchemaIndexes(actual)
 		if err == nil || !strings.Contains(err.Error(), "idx_news_availability_decision_pit") {
 			t.Fatalf("drifted PIT index error = %v", err)
+		}
+	})
+	t.Run("canonical URL is globally unique", func(t *testing.T) {
+		actual := completeNewsSchemaIndexes()
+		actual["news_items"]["uk_news_items_canonical_url_hash"] = newsSchemaIndexState{
+			unique: false, columns: []string{"canonical_url_hash"},
+		}
+		err := validateNewsSchemaIndexes(actual)
+		if err == nil || !strings.Contains(err.Error(), "uk_news_items_canonical_url_hash") {
+			t.Fatalf("non-unique canonical URL index error = %v", err)
 		}
 	})
 }
