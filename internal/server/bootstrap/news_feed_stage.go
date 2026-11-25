@@ -15,6 +15,7 @@ import (
 	platformhttpclient "example.com/stock-analysis-flow/internal/platform/httpclient"
 	researchflowapplication "example.com/stock-analysis-flow/internal/researchflow/application"
 	researchflowdomain "example.com/stock-analysis-flow/internal/researchflow/domain"
+	"example.com/stock-analysis-flow/internal/researchflow/resourcepolicy"
 	"example.com/stock-analysis-flow/internal/researchflow/stageoutput"
 )
 
@@ -134,10 +135,12 @@ func (e newsFeedStageExecutor) ExecuteStage(
 	if request.Stage.Code != newsstage.CollectFeedsStageCode {
 		return researchflowapplication.StageExecutionResult{}, fmt.Errorf("News Feed Stage Executor does not support stage code %q", request.Stage.Code)
 	}
-	if e.adapter == nil || request.ResourcePolicy.PolicyRef != "news.feed.configured-sources@1.0.0" ||
-		request.ResourcePolicy.AllowedProviderCodes == nil ||
+	policyRegistry, policyErr := resourcepolicy.NewRegistry()
+	if policyErr != nil || e.adapter == nil ||
+		request.ResourcePolicy.PolicyRef != resourcepolicy.NewsFeedConfiguredSourcesRef ||
 		len(request.ResourcePolicy.AllowedProviderCodes) != 1 ||
-		request.ResourcePolicy.AllowedProviderCodes[0] != "news_feed_catalog" {
+		request.ResourcePolicy.AllowedProviderCodes[0] != "news_feed_catalog" ||
+		policyRegistry.ValidateSnapshot(request.ResourcePolicy) != nil {
 		return failedNewsFeedStage("news_feed_resource_policy_invalid"), nil
 	}
 	output, err := e.adapter.Execute(ctx, request.Run.Ref+"/"+request.Attempt.Ref, request.Stage.Code)
