@@ -974,6 +974,14 @@ func TestNewsMariaDBApplicationIntegration(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Repository writes DATETIME(6); compare the Version against the persisted Observation
+	// timestamp rather than the pre-persistence nanosecond value returned by Application.
+	var persistedObservationAt time.Time
+	if err := db.QueryRowContext(ctx, "SELECT observed_at FROM news_observations WHERE observation_id = ?", secondObservation.ID).Scan(&persistedObservationAt); err != nil {
+		t.Fatalf("read persisted source Observation timestamp: %v", err)
+	}
+	secondObservation.ObservedAt = persistedObservationAt
+
 	// Strict PIT fixtures require a traceable, version-bound verified available_at decision.
 	observationRetention := secondObservation.ObservedAt.Add(24 * time.Hour)
 	if _, err := db.ExecContext(ctx,
