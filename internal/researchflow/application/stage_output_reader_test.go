@@ -168,7 +168,9 @@ func TestGetStageOutputForRunStageRejectsPayloadAttemptAndQualityMismatch(t *tes
 			other := "stage-output:other"
 			value.OutputRef = &other
 		},
-		"wrong payload run": func(_ *CreateRunResult, _ *domain.Attempt, value *StageOutputResource, _ *StageOutputResource) { value.RunRef = "run:other" },
+		"wrong payload run": func(_ *CreateRunResult, _ *domain.Attempt, value *StageOutputResource, _ *StageOutputResource) {
+			value.RunRef = "run:other"
+		},
 		"wrong payload stage": func(_ *CreateRunResult, _ *domain.Attempt, value *StageOutputResource, _ *StageOutputResource) {
 			value.StageRef = "stage:other"
 		},
@@ -178,11 +180,15 @@ func TestGetStageOutputForRunStageRejectsPayloadAttemptAndQualityMismatch(t *tes
 		"wrong template": func(_ *CreateRunResult, _ *domain.Attempt, value *StageOutputResource, _ *StageOutputResource) {
 			value.TemplateVersion = "2.0.0"
 		},
-		"wrong output type": func(_ *CreateRunResult, _ *domain.Attempt, value *StageOutputResource, _ *StageOutputResource) { value.OutputType = "other" },
+		"wrong output type": func(_ *CreateRunResult, _ *domain.Attempt, value *StageOutputResource, _ *StageOutputResource) {
+			value.OutputType = "other"
+		},
 		"wrong schema": func(_ *CreateRunResult, _ *domain.Attempt, value *StageOutputResource, _ *StageOutputResource) {
 			value.SchemaVersion = "2.0.0"
 		},
-		"wrong schema ref": func(_ *CreateRunResult, _ *domain.Attempt, value *StageOutputResource, _ *StageOutputResource) { value.SchemaRef = "other" },
+		"wrong schema ref": func(_ *CreateRunResult, _ *domain.Attempt, value *StageOutputResource, _ *StageOutputResource) {
+			value.SchemaRef = "other"
+		},
 		"bad registry fingerprint": func(_ *CreateRunResult, _ *domain.Attempt, value *StageOutputResource, _ *StageOutputResource) {
 			value.RegistryFingerprint = "not-a-fingerprint"
 		},
