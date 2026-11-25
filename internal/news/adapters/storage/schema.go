@@ -221,9 +221,9 @@ func ValidateSchema(ctx context.Context, db *sql.DB) error {
 		return err
 	}
 
-	foreignKeyRows, err := db.QueryContext(ctx, "SELECT constraint_name, table_name, column_name, referenced_table_name, referenced_column_name, ordinal_position\\n"+
-		"FROM information_schema.key_column_usage\\n"+
-		"WHERE table_schema = DATABASE() AND table_name IN ("+tableNames+") AND referenced_table_name IS NOT NULL\\n"+
+	foreignKeyRows, err := db.QueryContext(ctx, "SELECT constraint_name, table_name, column_name, referenced_table_name, referenced_column_name, ordinal_position\n"+
+		"FROM information_schema.key_column_usage\n"+
+		"WHERE table_schema = DATABASE() AND table_name IN ("+tableNames+") AND referenced_table_name IS NOT NULL\n"+
 		"ORDER BY constraint_name, ordinal_position")
 	if err != nil {
 		return fmt.Errorf("inspect News schema foreign keys: %w", err)
