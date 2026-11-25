@@ -245,7 +245,9 @@ func canonicalHashForIntegration(value string) string {
 func mustMarshalAuthorizationBinding(t *testing.T, binding domain.NewsAuthorizationBinding) []byte {
 	t.Helper()
 	payload, err := json.Marshal(binding)
-	if err != nil { t.Fatalf("marshal authorization binding: %v", err) }
+	if err != nil {
+		t.Fatalf("marshal authorization binding: %v", err)
+	}
 	return payload
 }
 
@@ -264,8 +266,12 @@ func applyNewsBaselineAndVerifySchema(t *testing.T, ctx context.Context, db *sql
 		var count int
 		if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM information_schema.columns
 			WHERE table_schema = DATABASE() AND table_name = 'news_items' AND column_name = ?`, column,
-		).Scan(&count); err != nil { t.Fatalf("inspect News baseline column %s: %v", column, err) }
-		if count != 1 { t.Fatalf("News baseline is missing news_items.%s", column) }
+		).Scan(&count); err != nil {
+			t.Fatalf("inspect News baseline column %s: %v", column, err)
+		}
+		if count != 1 {
+			t.Fatalf("News baseline is missing news_items.%s", column)
+		}
 	}
 }
 
@@ -1644,15 +1650,21 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	if revisedObservation.NewsID != secondObservation.NewsID {
 		t.Fatalf("revision NewsID = %q, want %q", revisedObservation.NewsID, secondObservation.NewsID)
 	}
-	var revisedVersion struct { Version domain.NewsItemVersion }
+	var revisedVersion struct{ Version domain.NewsItemVersion }
 	err = repository.WithinIdentityTransaction(ctx, func(tx app.IdentityTransaction) error {
 		version, exists, err := tx.LatestNewsItemVersion(ctx, revisedObservation.NewsID)
-		if err != nil { return err }
-		if !exists { return errors.New("revised News version missing") }
+		if err != nil {
+			return err
+		}
+		if !exists {
+			return errors.New("revised News version missing")
+		}
 		revisedVersion.Version = version
 		return nil
 	})
-	if err != nil { t.Fatalf("load second news revision: %v", err) }
+	if err != nil {
+		t.Fatalf("load second news revision: %v", err)
+	}
 
 	// 每个版本独立绑定自己的 available_at 决策；旧版本的时间证据不能
 	// 自动继承到内容已变化的新版本。
