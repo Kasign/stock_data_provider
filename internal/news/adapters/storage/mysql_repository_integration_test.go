@@ -1550,6 +1550,48 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("append second news revision: %v", err)
 	}
+
+	// 每个版本独立绑定自己的 available_at 决策；旧版本的时间证据不能
+	// 自动继承到内容已变化的新版本。
+	revisedObservationRetention := revisedObservation.ObservedAt.Add(24 * time.Hour)
+	if _, err := db.ExecContext(ctx,
+		"UPDATE news_observations SET retention_until = ? WHERE observation_id = ?",
+		revisedObservationRetention, revisedObservation.ID,
+	); err != nil {
+		t.Fatalf("set revised Observation retention: %v", err)
+	}
+	if !revisedVersion.Version.ObservedAt.After(revisedObservation.ObservedAt.Add(2 * time.Microsecond)) {
+		t.Fatalf("revised Version time %s must follow revised Observation time %s",
+			revisedVersion.Version.ObservedAt, revisedObservation.ObservedAt)
+	}
+	revisedAvailabilityEvidenceID := revisedVersion.Version.ID + "-availability-evidence"
+	revisedAvailableAt := revisedObservation.ObservedAt.Add(-time.Minute).Truncate(time.Second)
+	revisedAvailabilityRecordedAt := revisedObservation.ObservedAt.Add(time.Microsecond)
+	revisedAvailabilityDecisionAt := revisedVersion.Version.ObservedAt.Add(-time.Microsecond)
+	if _, err := db.ExecContext(ctx, `INSERT INTO news_version_availability_evidence
+		(evidence_id, news_id, version_id, observation_id, field_path, raw_value,
+		 source_timezone_or_offset, source_precision, parse_status, parse_reason_code,
+		 candidate_available_at_utc, parser_version, evidence_ref, observed_at, recorded_at,
+		 retention_until)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'parsed', '', ?, ?, ?, ?, ?, ?)`,
+		revisedAvailabilityEvidenceID, revisedObservation.NewsID, revisedVersion.Version.ID,
+		revisedObservation.ID, "publisher.first_available_at", revisedAvailableAt.Format(time.RFC3339),
+		"Z", "second", revisedAvailableAt, "integration-parser/1",
+		"evidence://news-integration/revised-available-at", revisedObservation.ObservedAt,
+		revisedAvailabilityRecordedAt, revisedObservationRetention,
+	); err != nil {
+		t.Fatalf("insert revised available_at evidence: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, `INSERT INTO news_version_availability_decisions
+		(decision_id, version_id, decision_seq, status, selected_evidence_id,
+		 considered_evidence_ids, reason_code, review_rule_version, recorded_at)
+		VALUES (?, ?, 1, 'verified', ?, JSON_ARRAY(?), ?, ?, ?)`,
+		revisedAvailabilityEvidenceID+"-decision", revisedVersion.Version.ID,
+		revisedAvailabilityEvidenceID, revisedAvailabilityEvidenceID,
+		"availability.source_verified", "integration-review/1", revisedAvailabilityDecisionAt,
+	); err != nil {
+		t.Fatalf("insert revised available_at decision: %v", err)
+	}
 	listRequest.Filters.CanonicalSymbols = nil
 	listRequest.SystemAsOf = secondVersion.Version.ObservedAt
 	listed, err = repository.ListEvidenceVersionsAt(ctx, listRequest)
