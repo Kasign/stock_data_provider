@@ -128,7 +128,7 @@ P0 原始问题及实施约束作为审计记录保留；当前状态以第 7、
 - Researchflow Run：CreateRun 由 DatabaseClock 生成唯一 system_as_of/deadline_at；Worker StageExecutionRequest 携带 Run、AuthenticatedCallerRef、SystemAsOf、DeadlineAt、InputSnapshotRefs，时间传播基础能力存在。
 - Context：Research GetContext 要求真实 ContextAuthorizer，缺失时 fail-closed；当前 Server News→Research composition 未注入 ContextAuthorizer。由于没有真实 Context 消费者，不能注入恒 Allow 占位授权器。
 - Context PIT：contextassembly DTO 投影不接收 Run，无法独立校验 snapshot.SystemAsOf；FLOW-005 文档明确要求 Server/Worker 在创建前和读取后校验与 Run.SystemAsOf 完全一致。当前没有生产 Context Stage 消费者。
-- Evidence PIT：Research Evidence ValidateForStrictPIT 已要求 available_at 非空且不晚于 Evidence.system_as_of。Researchflow ResultComposition.validateResearchEvidence 当前没有执行该检查；项目级契约要求只有 Template 显式声明非严格 PIT 模式及风险时才可使用 available_at=null 的 Evidence。当前 WorkflowTemplate/ResultCompositionInput 没有 PIT Mode，且无生产 ResultComposition 调用者。需契约 Owner 明确字段、默认值、风险声明和 Fingerprint 规则后再实现，当前不猜测。
+- Evidence PIT（2026-11-19 首轮历史结论，后续已完成修正）：当时 ResultComposition.validateResearchEvidence 尚未拒绝 available_at=null，且对是否引入非严格 PIT Mode 暂缓决策。2026-11-25 已确认当前不存在非严格 PIT 业务场景，因此不增加 PIT Mode；ResultComposition 对所有进入最终研究结果的 Evidence 一律执行 strict PIT，要求 available_at 非空且不晚于 Evidence.system_as_of。实现及回归测试见本文件第 20 节/2026-11-25 记录。
 - Event/Claim：Domain 具备时间、版本递增、状态迁移和引用验证；MySQL Repository 以事务校验并追加版本。当前无真实 Researchflow Stage 生产消费者将 Event/Claim 纳入最终结果。
 - 判定：Research Persistence/版本机制代码 PASS；Researchflow Run 时钟传播代码 PASS；Context 授权生产装配 NOT_COMPARABLE；Context Run PIT 绑定 NOT_COMPARABLE；Evidence 严格 PIT 消费 DEFERRED；Event/Claim 生产消费 NOT_COMPARABLE。
 - 本轮未发现可在当前冻结契约和无真实调用者条件下安全修复的局部代码缺陷。所有阻塞已同步 Research、Researchflow、Server 卡点及当前任务记录。
