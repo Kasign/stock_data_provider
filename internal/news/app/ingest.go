@@ -65,7 +65,7 @@ func (u *candidateIngest) executeUnscoped(ctx context.Context, sourceID, idempot
 	if strings.TrimSpace(candidate.ProviderCode) != "" {
 		return domain.Observation{}, ErrProviderOutputPolicyRequired
 	}
-	return u.executeCore(ctx, sourceID, idempotencyKey, candidate, domain.ContentLayersFromCandidate(candidate), policy, ObservationPolicyTrace{}, nil)
+	return u.executeCore(ctx, sourceID, idempotencyKey, candidate, domain.ContentLayers{}, policy, ObservationPolicyTrace{}, nil)
 }
 
 func (u *candidateIngest) executeWithPolicyTrace(ctx context.Context, sourceID, idempotencyKey string, candidate domain.Candidate, policy domain.SourceURLPolicy, trace ObservationPolicyTrace) (domain.Observation, error) {
@@ -81,7 +81,7 @@ func (u *candidateIngest) executeWithPolicyTraceAndCheck(
 	beforePersist func(IdentityTransaction) error,
 ) (domain.Observation, error) {
 	return u.executeWithPolicyTraceAndCheckAndContent(
-		ctx, sourceID, idempotencyKey, candidate, domain.ContentLayersFromCandidate(candidate),
+		ctx, sourceID, idempotencyKey, candidate, domain.ContentLayers{},
 		policy, trace, beforePersist,
 	)
 }

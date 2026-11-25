@@ -97,8 +97,8 @@ func (u *IngestCollectedSource) Execute(ctx context.Context, request IngestColle
 	policyRequest := domain.CollectionPolicyRequest{
 		AccessMethod: registration.AccessMethod,
 		Purpose:      request.Purpose,
-		ContentKind:  domain.ContentMetadata,
-		StorageMode:  domain.StoragePersistentMetadata,
+		ContentKind:  domain.ContentAbstract,
+		StorageMode:  domain.StoragePersistentExcerpt,
 		Retention:    request.Retention,
 	}
 
@@ -153,7 +153,7 @@ func (u *IngestCollectedSource) Execute(ctx context.Context, request IngestColle
 			return nil, err
 		}
 		candidate := entry.Candidate
-		// Observation 当前只持久化元数据；不得将 Provider 摘要作为来源摘要保存。
+		// Observation 只保存候选元数据；来源摘要按授权层级保存，未识别正文不升级为全文。
 		candidate.ProviderSummary = ""
 		fingerprint := sha256.Sum256([]byte(
 			candidate.SourceItemID + "\x00" + candidate.RawURL + "\x00" +
@@ -161,7 +161,7 @@ func (u *IngestCollectedSource) Execute(ctx context.Context, request IngestColle
 		))
 		idempotencyKey := prefix + "/" + hex.EncodeToString(fingerprint[:])
 		observation, ingestErr := u.ingest.executeWithPolicyTraceAndCheckAndContent(
-			ctx, sourceID, idempotencyKey, candidate, entry.Content,
+			ctx, sourceID, idempotencyKey, candidate, domain.RestrictContentLayers(entry.Content, policyRequest.ContentKind),
 			registration.URLPolicy, trace, checkPersistencePolicy,
 		)
 		if ingestErr != nil {

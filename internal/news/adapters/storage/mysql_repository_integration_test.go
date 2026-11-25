@@ -926,12 +926,12 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	}
 	availabilityEvidenceID := secondVersion.Version.ID + "-availability-evidence"
 	candidateAvailableAt := secondObservation.ObservedAt.Add(-time.Minute).Truncate(time.Second)
-	if !secondVersion.Version.ObservedAt.After(secondObservation.ObservedAt.Add(2 * time.Microsecond)) {
-		t.Fatalf("test fixture version time %s must follow observation time %s with room for availability review",
+	if !secondVersion.Version.ObservedAt.Equal(secondObservation.ObservedAt) {
+		t.Fatalf("version observed_at %s must equal its source Observation time %s",
 			secondVersion.Version.ObservedAt, secondObservation.ObservedAt)
 	}
 	availabilityRecordedAt := secondObservation.ObservedAt.Add(time.Microsecond)
-	availabilityDecisionAt := secondVersion.Version.ObservedAt.Add(-time.Microsecond)
+	availabilityDecisionAt := secondVersion.Version.ObservedAt.Add(2 * time.Microsecond)
 	if _, err := db.ExecContext(ctx, `INSERT INTO news_version_availability_evidence
 		(evidence_id, news_id, version_id, observation_id, field_path, raw_value,
 		 source_timezone_or_offset, source_precision, parse_status, parse_reason_code,
@@ -1663,14 +1663,14 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	); err != nil {
 		t.Fatalf("set revised Observation retention: %v", err)
 	}
-	if !revisedVersion.Version.ObservedAt.After(revisedObservation.ObservedAt.Add(2 * time.Microsecond)) {
-		t.Fatalf("revised Version time %s must follow revised Observation time %s",
+	if !revisedVersion.Version.ObservedAt.Equal(revisedObservation.ObservedAt) {
+		t.Fatalf("revised Version observed_at %s must equal Observation time %s",
 			revisedVersion.Version.ObservedAt, revisedObservation.ObservedAt)
 	}
 	revisedAvailabilityEvidenceID := revisedVersion.Version.ID + "-availability-evidence"
 	revisedAvailableAt := revisedObservation.ObservedAt.Add(-time.Minute).Truncate(time.Second)
 	revisedAvailabilityRecordedAt := revisedObservation.ObservedAt.Add(time.Microsecond)
-	revisedAvailabilityDecisionAt := revisedVersion.Version.ObservedAt.Add(-time.Microsecond)
+	revisedAvailabilityDecisionAt := revisedVersion.Version.ObservedAt.Add(2 * time.Microsecond)
 	if _, err := db.ExecContext(ctx, `INSERT INTO news_version_availability_evidence
 		(evidence_id, news_id, version_id, observation_id, field_path, raw_value,
 		 source_timezone_or_offset, source_precision, parse_status, parse_reason_code,
