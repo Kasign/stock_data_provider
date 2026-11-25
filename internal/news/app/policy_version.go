@@ -20,6 +20,12 @@ type NewsPolicyVersionWriter interface {
 	PublishNewsPolicyVersion(context.Context, domain.NewsPolicyVersion) error
 }
 
+// ConditionalNewsPolicyVersionWriter atomically publishes a new current pointer
+// only when the persisted pointer equals the caller's explicit expectation.
+type ConditionalNewsPolicyVersionWriter interface {
+	PublishNewsPolicyVersionIfCurrent(context.Context, domain.NewsPolicyVersion, string) error
+}
+
 type PublishNewsPolicyVersion struct {
 	writer NewsPolicyVersionWriter
 	now    func() time.Time
@@ -38,11 +44,48 @@ func (u *PublishNewsPolicyVersion) Execute(
 	policyType, policyRef, policyVersion string,
 	payload []byte,
 ) error {
-	if u == nil || u.writer == nil || u.now == nil || ctx == nil {
+	value, err := u.buildVersion(ctx, policyType, policyRef, policyVersion, payload)
+	if err != nil {
+		return err
+	}
+	if err := u.writer.PublishNewsPolicyVersion(ctx, value); err != nil {
+		return err
+	}
+	return ctx.Err()
+}
+
+// ExecuteIfCurrent is the startup-safe variant. It allows first publication or
+// an explicitly expected forward transition, and rejects stale configuration
+// that would move the current pointer back to an older version.
+func (u *PublishNewsPolicyVersion) ExecuteIfCurrent(
+	ctx context.Context,
+	policyType, policyRef, policyVersion, expectedCurrentVersion string,
+	payload []byte,
+) error {
+	writer, ok := u.writer.(ConditionalNewsPolicyVersionWriter)
+	if u == nil || !ok || ctx == nil {
 		return ErrNewsPolicyVersionStore
 	}
-	if err := ctx.Err(); err != nil {
+	value, err := u.buildVersion(ctx, policyType, policyRef, policyVersion, payload)
+	if err != nil {
 		return err
+	}
+	if err := writer.PublishNewsPolicyVersionIfCurrent(ctx, value, expectedCurrentVersion); err != nil {
+		return err
+	}
+	return ctx.Err()
+}
+
+func (u *PublishNewsPolicyVersion) buildVersion(
+	ctx context.Context,
+	policyType, policyRef, policyVersion string,
+	payload []byte,
+) (domain.NewsPolicyVersion, error) {
+	if u == nil || u.writer == nil || u.now == nil || ctx == nil {
+		return domain.NewsPolicyVersion{}, ErrNewsPolicyVersionStore
+	}
+	if err := ctx.Err(); err != nil {
+		return domain.NewsPolicyVersion{}, err
 	}
 	sum := sha256.Sum256(payload)
 	value := domain.NewsPolicyVersion{
@@ -51,10 +94,7 @@ func (u *PublishNewsPolicyVersion) Execute(
 		CreatedAt: u.now().UTC(),
 	}
 	if err := domain.ValidateNewsPolicyVersion(value); err != nil {
-		return errors.Join(ErrNewsPolicyVersionStore, err)
+		return domain.NewsPolicyVersion{}, errors.Join(ErrNewsPolicyVersionStore, err)
 	}
-	if err := u.writer.PublishNewsPolicyVersion(ctx, value); err != nil {
-		return err
-	}
-	return ctx.Err()
+	return value, nil
 }
