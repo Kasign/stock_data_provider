@@ -242,6 +242,33 @@ func canonicalHashForIntegration(value string) string {
 	return hex.EncodeToString(sum[:])
 }
 
+func mustMarshalAuthorizationBinding(t *testing.T, binding domain.NewsAuthorizationBinding) []byte {
+	t.Helper()
+	payload, err := json.Marshal(binding)
+	if err != nil { t.Fatalf("marshal authorization binding: %v", err) }
+	return payload
+}
+
+func applyNewsBaselineAndVerifySchema(t *testing.T, ctx context.Context, db *sql.DB) {
+	t.Helper()
+	migrations := Migrations()
+	if len(migrations) != 1 || migrations[0].Version != 1 || len(migrations[0].Statements) != 10 {
+		t.Fatalf("News migration baseline = %#v, want one V1 with ten tables", migrations)
+	}
+	if err := platformstorage.ApplyMigrations(ctx, db, MigrationNamespace, migrations); err != nil {
+		t.Fatalf("apply News baseline: %v", err)
+	}
+	for _, column := range []string{
+		"canonical_url", "canonical_url_hash", "title", "content_json", "content_fingerprint",
+	} {
+		var count int
+		if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM information_schema.columns
+			WHERE table_schema = DATABASE() AND table_name = 'news_items' AND column_name = ?`, column,
+		).Scan(&count); err != nil { t.Fatalf("inspect News baseline column %s: %v", column, err) }
+		if count != 1 { t.Fatalf("News baseline is missing news_items.%s", column) }
+	}
+}
+
 func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	dsn := os.Getenv("NEWS_MARIADB_TEST_DSN")
 	if dsn == "" {
@@ -1617,16 +1644,15 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	if revisedObservation.NewsID != secondObservation.NewsID {
 		t.Fatalf("revision NewsID = %q, want %q", revisedObservation.NewsID, secondObservation.NewsID)
 	}
-	revisedVersion, err := updater.Execute(ctx, app.ResearchUpdateRequest{
-		NewsID: revisedObservation.NewsID, Candidate: revisedCandidate,
-		ObservationID: revisedObservation.ID,
-		Content: domain.ContentLayers{
-			SourceSummary: "revised source summary", SourceSummaryOrigin: domain.ContentOriginFeedSummary,
-		},
+	var revisedVersion struct { Version domain.NewsItemVersion }
+	err = repository.WithinIdentityTransaction(ctx, func(tx app.IdentityTransaction) error {
+		version, exists, err := tx.LatestNewsItemVersion(ctx, revisedObservation.NewsID)
+		if err != nil { return err }
+		if !exists { return errors.New("revised News version missing") }
+		revisedVersion.Version = version
+		return nil
 	})
-	if err != nil {
-		t.Fatalf("append second news revision: %v", err)
-	}
+	if err != nil { t.Fatalf("load second news revision: %v", err) }
 
 	// 每个版本独立绑定自己的 available_at 决策；旧版本的时间证据不能
 	// 自动继承到内容已变化的新版本。
