@@ -2,7 +2,6 @@ package storage
 
 import (
 	"context"
-	"crypto/rand"
 	"crypto/sha256"
 	"database/sql"
 	"database/sql/driver"
@@ -332,13 +331,6 @@ func identityAdvisoryLockName(sourceID string) string {
 	return "news_identity_" + hex.EncodeToString(sum[:])[:48]
 }
 
-func newStorageID() (string, error) {
-	var raw [16]byte
-	if _, err := rand.Read(raw[:]); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(raw[:]), nil
-}
 
 func canonicalURLAdvisoryLockName(hash string) string {
 	sum := sha256.Sum256([]byte(hash))
