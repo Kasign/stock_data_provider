@@ -55,6 +55,7 @@ type Config struct {
 	searxng                   ProviderConfig
 	evidenceCursorActiveKeyID string
 	evidenceCursorKeys        map[string]platformconfig.Secret
+	feedSources               []FeedSource
 }
 
 func (c Config) Bocha() ProviderConfig {
@@ -115,11 +116,16 @@ func Load(env platformconfig.Env) (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	feedSources, err := loadFeedSources(env)
+	if err != nil {
+		return Config{}, err
+	}
 
 	return Config{
 		bocha: bocha, tavily: tavily, brave: brave, searxng: searxng,
 		evidenceCursorActiveKeyID: activeCursorKeyID,
 		evidenceCursorKeys:        cursorKeys,
+		feedSources:               feedSources,
 	}, nil
 }
 
