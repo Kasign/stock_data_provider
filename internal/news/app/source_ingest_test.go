@@ -60,8 +60,8 @@ func TestIngestCollectedSourceRechecksVersionAndMetadataPersistencePolicy(t *tes
 	result.Entries = []CollectedSourceEntry{{
 		Candidate: domain.Candidate{SourceItemID: "item-1", Title: "title", ProviderSummary: "must-not-persist"},
 		Content: domain.ContentLayers{
-			ProviderSummary: "must-not-persist",
-			SourceSummary: "source summary",
+			ProviderSummary:     "must-not-persist",
+			SourceSummary:       "source summary",
 			SourceSummaryOrigin: domain.ContentOriginFeedSummary,
 		},
 	}}
@@ -319,16 +319,20 @@ func TestIngestCollectedSourceContentChangeCreatesNewObservationAndVersion(t *te
 	}
 	ingest := newCandidateIngest(repository, newID)
 	usecase, err := NewIngestCollectedSource(ingest.repository, ingest.newID, providerIngestCatalogStub{registration: registration})
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	now := time.Date(2026, 11, 9, 10, 0, 0, 0, time.UTC)
 	usecase.now = func() time.Time { return now }
 	makeRequest := func(summary string) IngestCollectedSourceRequest {
 		result := sealedCollectedSourceResult()
 		result.Entries = []CollectedSourceEntry{{
 			Candidate: domain.Candidate{SourceItemID: "item-1", Title: "same title"},
-			Content: domain.ContentLayers{SourceSummary: summary, SourceSummaryOrigin: domain.ContentOriginFeedSummary},
+			Content:   domain.ContentLayers{SourceSummary: summary, SourceSummaryOrigin: domain.ContentOriginFeedSummary},
 		}}
-		if err := sealCollectSourceResult(&result); err != nil { t.Fatal(err) }
+		if err := sealCollectSourceResult(&result); err != nil {
+			t.Fatal(err)
+		}
 		return IngestCollectedSourceRequest{
 			Collection: result, IdempotencyPrefix: "same-collection-prefix",
 			Purpose: domain.PurposeInternalPersonalResearch, Retention: time.Hour,

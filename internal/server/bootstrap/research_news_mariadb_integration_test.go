@@ -315,7 +315,6 @@ func newNewsResearchFixture(t *testing.T, ctx context.Context) *newsResearchFixt
 		t.Fatalf("在同一事务播种 News 主体/身份/Observation/版本失败: %v", err)
 	}
 
-
 	// 当前策略指针必须与 Golden PolicySnapshot 的 (type, ref, version) 完全一致。
 	publisher, err := newsapp.NewPublishNewsPolicyVersion(repo)
 	if err != nil {
