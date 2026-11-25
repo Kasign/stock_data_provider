@@ -272,4 +272,97 @@
 
 仍需完成：核对 News Diagnostics Check 工厂是否依赖将删除的关系/身份历史能力；核对 Schema Validator 与 Migration 测试的完整表清单；确认 StageOutput 生命周期由 Researchflow 管理，不由 News Cleaner 管理。
 
-完成上述核对后关闭 P0-1，进入 P0-2 最终 Schema 定稿。当前不提前写 Migration。
+P0-1 已完成。Diagnostics Check 工厂没有关系断言或身份历史表依赖；News Schema Validator 和 Migration 测试显式列出 14 张 V1 表，后续需同步收敛为最终表清单。Researchflow StageOutput 资源表没有 TTL/retention 字段或 News Cleaner 调用；其生命周期归 Researchflow，不由 News 管理。当前进入 P0-2 最终 Schema 定稿。
+
+
+## 10. P0-1 关闭与 P0-2 最终 Schema 决议（2026-11-25）
+
+### 10.1 P0-1 关闭证据
+
+- News Diagnostics Check 工厂只检查 Parser、Provider Config、Source/Endpoint Policy、Storage、Observation Retention 和单条 Evidence 质量；未发现关系断言或身份历史表依赖。
+- `schema.go`、`schema_test.go`、`migrations_test.go` 将 14 张表作为当前完整 V1 基线校验；删除表时必须同步修改所有表数量、表清单、索引和外键断言。
+- Researchflow `researchflow_stage_output_resources` 保存不可变 Stage Output，当前结构没有 expires_at/retention 字段，也没有 News Cleaner 调用。其生命周期归 Researchflow 自身；本任务不把 StageOutput 塞入 News Retention。
+- Research 只通过 News Evidence Query 使用 NewsID/VersionID；PIT 查询依赖 Version、Observation、Availability Evidence/Decision。
+- P0-1 完成门槛已满足，进入 P0-2。
+
+### 10.2 最终保留表清单
+
+最终 News V1 只保留以下 10 张表：
+
+1. `news_items`
+2. `news_identifiers`
+3. `news_observations`
+4. `news_item_versions`
+5. `news_authorization_snapshots`
+6. `news_evidence_snapshots`
+7. `news_policy_versions`
+8. `news_current_policy_versions`
+9. `news_version_availability_evidence`
+10. `news_version_availability_decisions`
+
+从 News V1 移除：
+
+- `news_relation_assertions`
+- `news_relation_evidence`
+- `news_item_relations`
+- `news_identifier_status_history`
+
+### 10.3 核心表字段草案
+
+#### news_items
+
+- `news_id`：主键。
+- `canonical_url`：经过现有 Source URL Policy 规范化的完整 URL，可空。
+- `canonical_url_hash`：canonical_url 的 SHA-256；非空 URL 必须有 Hash，建立全局唯一索引；命中后必须比较 URL 原文，Hash 相同但 URL 不同返回冲突。
+- `title`：当前标题。
+- `publisher_name` / `publisher_domain`：发布来源信息。
+- `author`：作者。
+- `published_at`：来源发布时间，可空。
+- `content_json`：当前 SourceSummary、Body、附件元数据等分层内容。
+- `content_fingerprint`：当前完整内容指纹。
+- `created_at` / `updated_at`：主体创建和内容更新时间。
+
+删除 `origin_source_id`。一个主体可能有多个来源身份，首次来源字段会产生误导；来源归属由 `news_identifiers` 和 `news_observations` 表达。
+
+#### news_identifiers
+
+- `source_id`
+- `identifier_hash`
+- `identifier_value`
+- `news_id`
+- `created_at`
+
+唯一键为 `(source_id, identifier_hash)`，Hash 命中后比较原始 ID。移除 `identifier_type`、`identifier_status`；本任务只保留来源原生文章 ID，不再把 URL 作为来源内身份，也不保留身份状态历史。
+
+#### news_observations
+
+保留当前策略版本、Provider/Source 来源、候选元数据、observed_at、Retention、identity_status、news_id 和 reason_code。候选 JSON 不包含完整正文副本；正文/摘要进入 news_items 和 news_item_versions。
+
+#### news_item_versions
+
+保留版本号、指纹、标题、发布者、作者、发布时间、content_json、observed_at 和 observation_id。版本是 PIT/Research 的不可变历史快照。当前主体内容和版本快照在同一事务内写入。
+
+### 10.4 事务锁顺序
+
+统一入库在同一个 MariaDB 事务中完成。当前策略校验必须与写入共享事务，因此固定顺序为：
+
+1. 锁定并读取当前 Source/Endpoint/Provider 策略指针（按固定策略类型顺序）。
+2. 若 URL 存在，按 canonical_url_hash 获取跨实例 URL 命名锁。
+3. 获取来源原生 ID 的 source_id 命名锁。
+4. 按 URL 全局查询主体，并按 source-native-id 查询来源身份；两者命中不同 news_id 时冲突。
+5. 锁定/创建 news_items 主体。
+6. 锁定最新 news_item_versions，比较指纹并决定是否追加版本。
+7. 写入来源身份和 Observation。
+8. 提交事务后释放命名锁。
+
+唯一索引是最终防线；不能只依赖进程内 Mutex。URL Hash 命中必须核对原文。没有 URL 时跳过 URL 锁，只获取来源身份锁。所有调用路径必须遵守同一顺序。
+
+### 10.5 P0-2 当前状态
+
+- [x] 明确最终保留/删除表清单。
+- [x] 明确新闻主体、来源身份、Observation、Version 的职责。
+- [x] 明确全局 URL 去重和来源原生 ID 规则。
+- [x] 明确统一事务锁顺序。
+- [ ] 将字段草案与现有 Domain/Repository/PIT 查询逐字段对齐。
+- [ ] 完成 Migration V1、Schema Validator、测试的最终 DDL。
+- [ ] Review 最终 Schema 后再开始 P0-3。
