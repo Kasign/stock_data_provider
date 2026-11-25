@@ -799,34 +799,90 @@ func TestNewsMariaDBApplicationIntegration(t *testing.T) {
 		t.Fatalf("idempotency replay returned a different Observation: %#v", replayed)
 	}
 
+	// 已有来源原生身份后补充规范 URL：更新主体身份，但不得制造内容版本。
+	backfilledCandidate := candidate
+	backfilledCandidate.RawURL = "https://news.example/native-url-backfill"
+	backfilledObservation, err := ingestIntegrationFeed(
+		ctx, repository, publisher, newID, sourceID, "news-it-url-backfill",
+		backfilledCandidate, urlPolicy,
+	)
+	if err != nil {
+		t.Fatalf("persist canonical URL for existing native identity: %v", err)
+	}
+	if backfilledObservation.NewsID != newsID || backfilledObservation.IdentityStatus != domain.ObservationMatched {
+		t.Fatalf("URL backfill changed native identity: %+v", backfilledObservation)
+	}
+	var backfilledURL string
+	if err := db.QueryRowContext(ctx, "SELECT canonical_url FROM news_items WHERE news_id = ?", newsID).Scan(&backfilledURL); err != nil {
+		t.Fatalf("read backfilled canonical URL: %v", err)
+	}
+	if backfilledURL != backfilledCandidate.RawURL {
+		t.Fatalf("canonical URL after identity backfill = %q, want %q", backfilledURL, backfilledCandidate.RawURL)
+	}
+	var versionsAfterBackfill int
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM news_item_versions WHERE news_id = ?", newsID).Scan(&versionsAfterBackfill); err != nil {
+		t.Fatalf("count versions after identity backfill: %v", err)
+	}
+	if versionsAfterBackfill != 1 {
+		t.Fatalf("identity-only backfill created %d versions, want 1", versionsAfterBackfill)
+	}
+
 	changed := candidate
 	changed.Title = "changed payload must conflict"
 	if _, err := ingestIntegrationFeed(ctx, repository, publisher, newID, sourceID, "news-it-key-0", changed, domain.SourceURLPolicy{}); !errors.Is(err, app.ErrObservationIdempotencyConflict) {
 		t.Fatalf("same key with different payload error = %v, want idempotency conflict", err)
 	}
 
-	rollbackSource := sourceID + "-rollback"
-	rollbackErr := errors.New("force transaction rollback")
-	err = repository.WithinIdentityTransaction(ctx, func(tx app.IdentityTransaction) error {
-		rollbackItem := domain.NewsItem{
-			ID: "news-" + rollbackSource, Title: "rollback fixture",
-			ContentFingerprint: strings.Repeat("0", 64), CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC(),
-		}
-		if err := tx.CreateNewsItem(ctx, rollbackItem); err != nil {
-			return err
-		}
-		return rollbackErr
-	})
-	if !errors.Is(err, rollbackErr) {
-		t.Fatalf("rollback transaction error = %v, want injected error", err)
+	// 让正式 Application 在写完主体、身份和 Observation 后因版本主键冲突失败，
+	// 验证这些写入与版本写入确实处于同一 MariaDB 事务。
+	rollbackSource := sourceID + "-application-rollback"
+	var existingVersionID string
+	if err := db.QueryRowContext(ctx, "SELECT version_id FROM news_item_versions ORDER BY version_no LIMIT 1").Scan(&existingVersionID); err != nil {
+		t.Fatalf("select existing version ID for rollback fixture: %v", err)
 	}
-	if err := db.QueryRowContext(ctx,
-		"SELECT COUNT(DISTINCT news_id) FROM news_observations WHERE source_id = ? AND news_id IS NOT NULL", rollbackSource,
-	).Scan(&itemCount); err != nil {
-		t.Fatal(err)
+	collisionBase := strings.TrimSuffix(existingVersionID, "-version")
+	if collisionBase == existingVersionID {
+		t.Fatalf("unexpected version ID shape for rollback fixture: %q", existingVersionID)
 	}
-	if itemCount != 0 {
-		t.Fatalf("rolled-back News Item count = %d, want 0", itemCount)
+	rollbackIDCalls := 0
+	rollbackNewID := func() string {
+		rollbackIDCalls++
+		switch rollbackIDCalls {
+		case 1:
+			return "news-it-rollback-observation"
+		case 2:
+			return "news-it-rollback-item"
+		default:
+			return collisionBase
+		}
+	}
+	rollbackCandidate := domain.Candidate{
+		SourceItemID: "rollback-native-id", RawURL: "https://news.example/rollback",
+		Title: "Application transaction rollback",
+	}
+	_, rollbackErr := ingestIntegrationFeed(
+		ctx, repository, publisher, rollbackNewID, rollbackSource, "rollback-application-key",
+		rollbackCandidate, urlPolicy,
+	)
+	if rollbackErr == nil {
+		t.Fatal("formal Application ingest unexpectedly succeeded despite duplicate version ID")
+	}
+	for _, check := range []struct {
+		name  string
+		query string
+		args  []any
+	}{
+		{name: "news item", query: "SELECT COUNT(*) FROM news_items WHERE canonical_url = ?", args: []any{rollbackCandidate.RawURL}},
+		{name: "source identity", query: "SELECT COUNT(*) FROM news_identifiers WHERE source_id = ?", args: []any{rollbackSource}},
+		{name: "observation", query: "SELECT COUNT(*) FROM news_observations WHERE source_id = ?", args: []any{rollbackSource}},
+	} {
+		var count int
+		if err := db.QueryRowContext(ctx, check.query, check.args...).Scan(&count); err != nil {
+			t.Fatalf("count rolled-back %s: %v", check.name, err)
+		}
+		if count != 0 {
+			t.Fatalf("formal Application rollback left %d %s rows", count, check.name)
+		}
 	}
 
 	var updateWait sync.WaitGroup
