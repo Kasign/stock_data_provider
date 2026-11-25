@@ -2,6 +2,8 @@ package app
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"reflect"
 	"strings"
@@ -11,45 +13,44 @@ import (
 )
 
 var (
-	ErrIdentityTransaction               = errors.New("news: identity transaction failed")
+	ErrIdentityTransaction               = errors.New("news: formal ingest transaction failed")
 	ErrObservationIdempotencyConflict    = errors.New("news: observation idempotency key reused with different payload")
 	ErrObservationPayloadPurged          = errors.New("news: observation payload has been purged")
 	ErrObservationRetentionResultInvalid = errors.New("news: invalid observation retention purge result")
 	ErrProviderOutputPolicyRequired      = errors.New("news: provider output policy evaluation required")
+	ErrNewsIdentityConflict              = errors.New("news: URL and source-native identity conflict")
+	ErrCanonicalURLHashCollision         = errors.New("news: canonical URL hash collision")
 )
 
-// IdentityRepository 要求在单一事务中读取身份、创建主体/凭据并追加 Observation。
-// 生产实现必须在解析身份前取得按 SourceID 协调的跨实例写锁，并持有至事务提交；
-// 否则两个事务可能同时查无凭据并创建重复主体。数据库还必须约束
-// (source_id, identifier_type, identifier_hash) 唯一、observation.id 唯一，
-// 并对全局 idempotency_key 建立唯一约束。唯一约束冲突后需重跑完整事务并重新解析身份。
+// IdentityRepository 在一个 MariaDB 事务中完成身份解析、新闻主体、来源身份、Observation 和内容版本写入。
 type IdentityRepository interface {
 	WithinIdentityTransaction(context.Context, func(IdentityTransaction) error) error
 }
 
-// IdentityTransaction 是一次身份处理事务中的最小持久化端口。
+// IdentityTransaction 的调用顺序固定为：策略锁、全局 URL 锁、来源原生 ID 锁、主体/版本/Observation 写入。
 type IdentityTransaction interface {
+	FindNewsItemByCanonicalURL(context.Context, string, string) (domain.NewsItem, bool, error)
+	FindNewsItemByID(context.Context, string) (domain.NewsItem, bool, error)
 	FindIdentityCredentials(context.Context, string, []domain.IdentityCredential) ([]domain.IdentityCredential, error)
-	CreateNewsItem(context.Context, string) (string, error)
+	CreateNewsItem(context.Context, domain.NewsItem) error
+	UpdateNewsItem(context.Context, domain.NewsItem) error
 	SaveIdentityCredentials(context.Context, []domain.IdentityCredential) error
-	// AppendObservation 对全局唯一的 IdempotencyKey：相同候选载荷返回既有记录，载荷不同返回冲突。
 	AppendObservation(context.Context, domain.Observation) (domain.Observation, error)
+	LatestNewsItemVersion(context.Context, string) (domain.NewsItemVersion, bool, error)
+	AppendNewsItemVersion(context.Context, domain.NewsItemVersion) error
 }
 
-// candidateIngest 负责将一个已发现候选写入身份处理流程；不负责真实抓取或跨来源去重。
+// candidateIngest 是正式新闻入库的唯一底层用例。
 type candidateIngest struct {
 	repository IdentityRepository
 	now        func() time.Time
 	newID      func() string
 }
 
-// newCandidateIngest 创建仅供 News Application 包内使用的候选身份处理器。
 func newCandidateIngest(repository IdentityRepository, newID func() string) *candidateIngest {
 	return &candidateIngest{repository: repository, now: time.Now, newID: newID}
 }
 
-// candidateIngest 是 News Application 包内的底层身份处理器，不作为跨模块入口。
-// 生产调用必须经 IngestCollectedSource 或 IngestProviderCandidate 完成可信授权与保留期评估。
 type ObservationPolicyTrace struct {
 	SourcePolicyVersionID         string
 	EndpointID                    string
@@ -60,26 +61,36 @@ type ObservationPolicyTrace struct {
 	Retention                     time.Duration
 }
 
-// executeUnscoped 仅供包内底层测试使用；生产调用不得绕过受控 Ingest 用例。
 func (u *candidateIngest) executeUnscoped(ctx context.Context, sourceID, idempotencyKey string, candidate domain.Candidate, policy domain.SourceURLPolicy) (domain.Observation, error) {
 	if strings.TrimSpace(candidate.ProviderCode) != "" {
 		return domain.Observation{}, ErrProviderOutputPolicyRequired
 	}
-	return u.executeCore(ctx, sourceID, idempotencyKey, candidate, policy, ObservationPolicyTrace{}, nil)
+	return u.executeCore(ctx, sourceID, idempotencyKey, candidate, domain.ContentLayersFromCandidate(candidate), policy, ObservationPolicyTrace{}, nil)
 }
 
-// executeWithPolicyTrace 接收 Source/Endpoint 可信授权结果，并要求实际保留期限为正数。
-// Provider 候选必须经 IngestProviderCandidate 的独立策略 Resolver 评估。
 func (u *candidateIngest) executeWithPolicyTrace(ctx context.Context, sourceID, idempotencyKey string, candidate domain.Candidate, policy domain.SourceURLPolicy, trace ObservationPolicyTrace) (domain.Observation, error) {
 	return u.executeWithPolicyTraceAndCheck(ctx, sourceID, idempotencyKey, candidate, policy, trace, nil)
 }
 
-// executeWithPolicyTraceAndCheck 在身份写入事务内执行额外的授权校验。
-// 校验回调与 Observation/Identity 写入共享同一个数据库事务。
 func (u *candidateIngest) executeWithPolicyTraceAndCheck(
 	ctx context.Context,
 	sourceID, idempotencyKey string,
 	candidate domain.Candidate,
+	policy domain.SourceURLPolicy,
+	trace ObservationPolicyTrace,
+	beforePersist func(IdentityTransaction) error,
+) (domain.Observation, error) {
+	return u.executeWithPolicyTraceAndCheckAndContent(
+		ctx, sourceID, idempotencyKey, candidate, domain.ContentLayersFromCandidate(candidate),
+		policy, trace, beforePersist,
+	)
+}
+
+func (u *candidateIngest) executeWithPolicyTraceAndCheckAndContent(
+	ctx context.Context,
+	sourceID, idempotencyKey string,
+	candidate domain.Candidate,
+	content domain.ContentLayers,
 	policy domain.SourceURLPolicy,
 	trace ObservationPolicyTrace,
 	beforePersist func(IdentityTransaction) error,
@@ -97,10 +108,18 @@ func (u *candidateIngest) executeWithPolicyTraceAndCheck(
 		return domain.Observation{}, ErrProviderOutputPolicyRequired
 	}
 	trace.PolicyEvaluatedAt = trace.PolicyEvaluatedAt.UTC()
-	return u.executeCore(ctx, sourceID, idempotencyKey, candidate, policy, trace, beforePersist)
+	return u.executeCore(ctx, sourceID, idempotencyKey, candidate, content, policy, trace, beforePersist)
 }
 
-func (u *candidateIngest) executeCore(ctx context.Context, sourceID, idempotencyKey string, candidate domain.Candidate, policy domain.SourceURLPolicy, trace ObservationPolicyTrace, beforePersist func(IdentityTransaction) error) (domain.Observation, error) {
+func (u *candidateIngest) executeCore(
+	ctx context.Context,
+	sourceID, idempotencyKey string,
+	candidate domain.Candidate,
+	content domain.ContentLayers,
+	policy domain.SourceURLPolicy,
+	trace ObservationPolicyTrace,
+	beforePersist func(IdentityTransaction) error,
+) (domain.Observation, error) {
 	if u == nil || u.repository == nil || u.newID == nil || ctx == nil {
 		return domain.Observation{}, ErrInvalidRequest
 	}
@@ -115,7 +134,7 @@ func (u *candidateIngest) executeCore(ctx context.Context, sourceID, idempotency
 
 	observedAt := u.now().UTC()
 	candidate = domain.NormalizeCandidate(candidate, observedAt, candidate.QueryDimension)
-	// CanonicalURL 是策略决策产物，不能信任调用方预填值。
+	content = domain.NormalizeContentLayers(content)
 	candidate.CanonicalURL = ""
 	if candidate.RawURL != "" {
 		decision := domain.EvaluateSourceURL(candidate.RawURL, policy)
@@ -123,20 +142,20 @@ func (u *candidateIngest) executeCore(ctx context.Context, sourceID, idempotency
 			candidate.CanonicalURL = decision.CanonicalURL
 		}
 	}
+	canonicalURLHash := ""
+	if candidate.CanonicalURL != "" {
+		sum := sha256.Sum256([]byte(candidate.CanonicalURL))
+		canonicalURLHash = hex.EncodeToString(sum[:])
+	}
+	fingerprint := domain.BuildVersionFingerprint(candidate, content)
 	observation := domain.Observation{
-		ID:                            strings.TrimSpace(u.newID()),
-		IdempotencyKey:                idempotencyKey,
-		SourceID:                      sourceID,
-		ProviderCode:                  candidate.ProviderCode,
-		QueryDimension:                candidate.QueryDimension,
-		EndpointID:                    trace.EndpointID,
-		SourcePolicyVersionID:         trace.SourcePolicyVersionID,
-		EndpointPolicyVersionID:       trace.EndpointPolicyVersionID,
-		ProviderOutputPolicyRef:       trace.ProviderOutputPolicyRef,
+		ID: strings.TrimSpace(u.newID()), IdempotencyKey: idempotencyKey,
+		SourceID: sourceID, ProviderCode: candidate.ProviderCode, QueryDimension: candidate.QueryDimension,
+		EndpointID: trace.EndpointID, SourcePolicyVersionID: trace.SourcePolicyVersionID,
+		EndpointPolicyVersionID: trace.EndpointPolicyVersionID,
+		ProviderOutputPolicyRef: trace.ProviderOutputPolicyRef,
 		ProviderOutputPolicyVersionID: trace.ProviderOutputPolicyVersionID,
-		PolicyEvaluatedAt:             trace.PolicyEvaluatedAt,
-		Candidate:                     candidate,
-		ObservedAt:                    observedAt,
+		PolicyEvaluatedAt: trace.PolicyEvaluatedAt, Candidate: candidate, ObservedAt: observedAt,
 	}
 	if trace.Retention > 0 {
 		observation.RetentionUntil = observedAt.Add(trace.Retention).UTC()
@@ -145,25 +164,25 @@ func (u *candidateIngest) executeCore(ctx context.Context, sourceID, idempotency
 		return domain.Observation{}, ErrInvalidRequest
 	}
 
-	credentials := []domain.IdentityCredential(nil)
-	if strings.TrimSpace(candidate.SourceItemID) == "" && strings.TrimSpace(candidate.RawURL) == "" {
-		observation.IdentityStatus = domain.ObservationUnidentified
-		observation.ReasonCode = "news.identity.credential_required"
-	} else {
-		built, err := domain.BuildIdentityCredentials(sourceID, candidate.SourceItemID, candidate.RawURL, policy)
-		if err != nil {
+	credentials, err := domain.BuildIdentityCredentials(sourceID, candidate.SourceItemID)
+	if err != nil {
+		return domain.Observation{}, err
+	}
+	for i := range credentials {
+		credentials[i].ObservedAt = observedAt
+	}
+	if candidate.CanonicalURL == "" && len(credentials) == 0 {
+		if candidate.RawURL != "" {
 			observation.IdentityStatus = domain.ObservationConflict
-			observation.ReasonCode = "news.identity.credential_rejected"
+			observation.ReasonCode = "news.identity.url_rejected"
 		} else {
-			credentials = built
-			for i := range credentials {
-				credentials[i].ObservedAt = observedAt
-			}
+			observation.IdentityStatus = domain.ObservationUnidentified
+			observation.ReasonCode = "news.identity.credential_required"
 		}
 	}
 
 	var persisted domain.Observation
-	err := u.repository.WithinIdentityTransaction(ctx, func(tx IdentityTransaction) error {
+	err = u.repository.WithinIdentityTransaction(ctx, func(tx IdentityTransaction) error {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
@@ -172,42 +191,119 @@ func (u *candidateIngest) executeCore(ctx context.Context, sourceID, idempotency
 				return err
 			}
 		}
-		if len(credentials) == 0 {
-			var appendErr error
-			persisted, appendErr = tx.AppendObservation(ctx, observation)
-			return appendErr
+
+		var urlItem domain.NewsItem
+		urlMatched := false
+		if candidate.CanonicalURL != "" {
+			var findErr error
+			urlItem, urlMatched, findErr = tx.FindNewsItemByCanonicalURL(ctx, candidate.CanonicalURL, canonicalURLHash)
+			if errors.Is(findErr, ErrCanonicalURLHashCollision) {
+				observation.IdentityStatus = domain.ObservationConflict
+				observation.ReasonCode = "news.identity.canonical_url_hash_collision"
+				observation.NewsID = ""
+				persisted, findErr = tx.AppendObservation(ctx, observation)
+				return findErr
+			}
+			if findErr != nil {
+				return findErr
+			}
 		}
 
-		existing, err := tx.FindIdentityCredentials(ctx, sourceID, credentials)
-		if err != nil {
+		var nativeResolution domain.IdentityResolution
+		var existingCredentials []domain.IdentityCredential
+		if len(credentials) > 0 {
+			existingCredentials, err = tx.FindIdentityCredentials(ctx, sourceID, credentials)
+			if err != nil {
+				return err
+			}
+			nativeResolution = domain.ResolveIdentity(sourceID, credentials, existingCredentials)
+		} else {
+			nativeResolution = domain.IdentityResolution{Status: domain.IdentityNew}
+		}
+
+		if nativeResolution.Status == domain.IdentityConflict {
+			observation.IdentityStatus = domain.ObservationConflict
+			observation.ReasonCode = nativeResolution.Reason
+			persisted, err = tx.AppendObservation(ctx, observation)
 			return err
 		}
-		resolution := domain.ResolveIdentity(sourceID, credentials, existing)
-		switch resolution.Status {
-		case domain.IdentityConflict:
+		if urlMatched && nativeResolution.Status == domain.IdentityMatched && urlItem.ID != nativeResolution.NewsID {
 			observation.IdentityStatus = domain.ObservationConflict
-			observation.ReasonCode = resolution.Reason
-		case domain.IdentityMatched:
-			observation.IdentityStatus = domain.ObservationMatched
-			observation.NewsID = resolution.NewsID
-		case domain.IdentityNew:
-			newsID, createErr := tx.CreateNewsItem(ctx, sourceID)
-			if createErr != nil {
-				return createErr
-			}
-			if strings.TrimSpace(newsID) == "" {
-				return errors.New("news.identity.created_item_id_missing")
-			}
-			observation.IdentityStatus = domain.ObservationNew
-			observation.NewsID = newsID
-		default:
-			return errors.New("news.identity.resolution_unknown")
+			observation.ReasonCode = "news.identity.multiple_items"
+			persisted, err = tx.AppendObservation(ctx, observation)
+			return err
 		}
 
-		if observation.IdentityStatus == domain.ObservationNew || observation.IdentityStatus == domain.ObservationMatched {
-			toSave := credentialsNotYetStored(credentials, existing)
+		newItem := false
+		var item domain.NewsItem
+		switch {
+		case urlMatched:
+			item = urlItem
+		case nativeResolution.Status == domain.IdentityMatched:
+			item, urlErr := tx.FindNewsItemByID(ctx, nativeResolution.NewsID)
+			if urlErr != nil {
+				return urlErr
+			}
+			if item.ID == "" {
+				return errors.New("news.identity.native_item_missing")
+			}
+			if candidate.CanonicalURL != "" && item.CanonicalURL != "" && item.CanonicalURL != candidate.CanonicalURL {
+				observation.IdentityStatus = domain.ObservationConflict
+				observation.ReasonCode = "news.identity.canonical_url_mismatch"
+				persisted, err = tx.AppendObservation(ctx, observation)
+				return err
+			}
+		default:
+			item = domain.NewsItem{ID: strings.TrimSpace(u.newID()) + "-news"}
+			if item.ID == "-news" {
+				return ErrInvalidRequest
+			}
+			newItem = true
+		}
+
+		if item.ID == "" {
+			return errors.New("news.identity.resolved_item_id_missing")
+		}
+		if candidate.CanonicalURL != "" {
+			if item.CanonicalURL != "" && item.CanonicalURL != candidate.CanonicalURL {
+				observation.IdentityStatus = domain.ObservationConflict
+				observation.ReasonCode = "news.identity.canonical_url_mismatch"
+				persisted, err = tx.AppendObservation(ctx, observation)
+				return err
+			}
+			item.CanonicalURL = candidate.CanonicalURL
+			item.CanonicalURLHash = canonicalURLHash
+		}
+
+		if newItem {
+			observation.IdentityStatus = domain.ObservationNew
+		} else {
+			observation.IdentityStatus = domain.ObservationMatched
+		}
+		observation.NewsID = item.ID
+
+		// 首次主体创建必须先于 Observation，以满足 Observation.news_id 外键。
+		if newItem {
+			item.CreatedAt = observedAt
+		}
+		item.Title = candidate.Title
+		item.PublisherName = candidate.PublisherName
+		item.PublisherDomain = candidate.PublisherDomain
+		item.Author = candidate.Author
+		item.PublishedAt = candidate.PublishedAt
+		item.Content = content
+		item.ContentFingerprint = fingerprint
+		item.UpdatedAt = observedAt
+		if newItem {
+			if err := tx.CreateNewsItem(ctx, item); err != nil {
+				return err
+			}
+		}
+
+		if len(credentials) > 0 {
+			toSave := credentialsNotYetStored(credentials, existingCredentials)
 			for i := range toSave {
-				toSave[i].NewsID = observation.NewsID
+				toSave[i].NewsID = item.ID
 			}
 			if len(toSave) > 0 {
 				if err := tx.SaveIdentityCredentials(ctx, toSave); err != nil {
@@ -215,12 +311,47 @@ func (u *candidateIngest) executeCore(ctx context.Context, sourceID, idempotency
 				}
 			}
 		}
-		var appendErr error
-		persisted, appendErr = tx.AppendObservation(ctx, observation)
-		return appendErr
+
+		persisted, err = tx.AppendObservation(ctx, observation)
+		if err != nil {
+			return err
+		}
+		// 幂等重放只返回第一次提交的 Observation，不重复改写主体或追加版本。
+		if persisted.ID != observation.ID {
+			return nil
+		}
+
+		current, exists, err := tx.LatestNewsItemVersion(ctx, item.ID)
+		if err != nil {
+			return err
+		}
+		if !exists || current.Fingerprint != fingerprint {
+			versionID := strings.TrimSpace(u.newID()) + "-version"
+			if versionID == "-version" {
+				return ErrInvalidRequest
+			}
+			versionNo := 1
+			if exists {
+				versionNo = current.VersionNo + 1
+			}
+			version := domain.NewsItemVersion{
+				ID: versionID, NewsID: item.ID, VersionNo: versionNo,
+				Fingerprint: fingerprint, Title: candidate.Title,
+				PublisherName: candidate.PublisherName, PublisherDomain: candidate.PublisherDomain,
+				Author: candidate.Author, PublishedAt: candidate.PublishedAt,
+				Content: content, ObservedAt: observedAt, ObservationID: observation.ID,
+			}
+			if err := tx.AppendNewsItemVersion(ctx, version); err != nil {
+				return err
+			}
+			if !newItem {
+				if err := tx.UpdateNewsItem(ctx, item); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
 	})
-	// Repository 可能在事务提交后才观察到取消，或其实现未在返回前传播取消。
-	// 此處只保證呼叫方不會收到成功結果；若提交已完成，不代表資料庫寫入已回滾。
 	if ctxErr := ctx.Err(); ctxErr != nil {
 		return domain.Observation{}, ctxErr
 	}
@@ -235,9 +366,7 @@ func credentialsNotYetStored(candidates, existing []domain.IdentityCredential) [
 	for _, candidate := range candidates {
 		found := false
 		for _, stored := range existing {
-			if stored.SourceID == candidate.SourceID && stored.Type == candidate.Type &&
-				stored.Hash == candidate.Hash && stored.Value == candidate.Value &&
-				(stored.Status == domain.IdentifierActive || stored.Status == domain.IdentifierHistorical) {
+			if stored.SourceID == candidate.SourceID && stored.Hash == candidate.Hash && stored.Value == candidate.Value {
 				found = true
 				break
 			}
@@ -249,7 +378,6 @@ func credentialsNotYetStored(candidates, existing []domain.IdentityCredential) [
 	return result
 }
 
-// effectiveObservationRetention 以实际保留时长比较，避免重试时间变化导致相同授权期限冲突。
 func effectiveObservationRetention(observation domain.Observation) time.Duration {
 	if observation.RetentionUntil.IsZero() || observation.ObservedAt.IsZero() || observation.RetentionUntil.Before(observation.ObservedAt) {
 		return 0
@@ -257,7 +385,6 @@ func effectiveObservationRetention(observation domain.Observation) time.Duration
 	return observation.RetentionUntil.Sub(observation.ObservedAt)
 }
 
-// SameObservationPayload 判断同一幂等键的候选载荷是否一致；不比较生成 ID、采集时间和解析结果。
 func SameObservationPayload(a, b domain.Observation) bool {
 	aCandidate, bCandidate := a.Candidate, b.Candidate
 	aCandidate.ObservedAt = time.Time{}
