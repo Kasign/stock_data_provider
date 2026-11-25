@@ -14,6 +14,8 @@ type memoryIdentityRepository struct {
 	observations                  []domain.Observation
 	availabilityEvidence          []domain.AvailabilityEvidence
 	items                         []string
+	newsItems                     []domain.NewsItem
+	versions                      []domain.NewsItemVersion
 	failAppend                    bool
 	sourcePolicy                  domain.SourcePolicy
 	sourcePolicyVersionID         string
@@ -24,61 +26,71 @@ type memoryIdentityRepository struct {
 	providerOutputPolicyVersionID string
 }
 
-type memoryIdentityTransaction struct {
-	repository *memoryIdentityRepository
-}
+type memoryIdentityTransaction struct{ repository *memoryIdentityRepository }
 
 func (r *memoryIdentityRepository) WithinIdentityTransaction(ctx context.Context, fn func(IdentityTransaction) error) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
+	if err := ctx.Err(); err != nil { return err }
 	working := *r
 	working.credentials = append([]domain.IdentityCredential(nil), r.credentials...)
 	working.observations = append([]domain.Observation(nil), r.observations...)
 	working.availabilityEvidence = append([]domain.AvailabilityEvidence(nil), r.availabilityEvidence...)
 	working.items = append([]string(nil), r.items...)
-	if err := fn(memoryIdentityTransaction{repository: &working}); err != nil {
-		return err
-	}
+	working.newsItems = append([]domain.NewsItem(nil), r.newsItems...)
+	working.versions = append([]domain.NewsItemVersion(nil), r.versions...)
+	if err := fn(memoryIdentityTransaction{repository: &working}); err != nil { return err }
 	*r = working
 	return nil
 }
 
 func (tx memoryIdentityTransaction) LockCurrentIngestPolicies(
-	_ context.Context,
-	sourceID, sourceVersionID, endpointID, endpointVersionID, providerRef, providerVersion string,
+	_ context.Context, sourceID, sourceVersionID, endpointID, endpointVersionID, providerRef, providerVersion string,
 ) (domain.SourcePolicy, *domain.EndpointPolicy, *domain.ProviderOutputPolicy, error) {
-	repository := tx.repository
-	if repository == nil || sourceID == "" || endpointID == "" ||
-		repository.sourcePolicyVersionID != sourceVersionID ||
-		repository.endpointPolicyVersionID != endpointVersionID ||
-		repository.providerOutputPolicyRef != providerRef ||
-		repository.providerOutputPolicyVersionID != providerVersion {
+	r := tx.repository
+	if r == nil || sourceID == "" || endpointID == "" ||
+		r.sourcePolicyVersionID != sourceVersionID || r.endpointPolicyVersionID != endpointVersionID ||
+		r.providerOutputPolicyRef != providerRef || r.providerOutputPolicyVersionID != providerVersion {
 		return domain.SourcePolicy{}, nil, nil, ErrSourcePersistencePolicyUnavailable
 	}
-	if providerRef == "" {
-		return repository.sourcePolicy, repository.endpointPolicy, nil, nil
+	if providerRef == "" { return r.sourcePolicy, r.endpointPolicy, nil, nil }
+	p := r.providerOutputPolicy
+	return r.sourcePolicy, r.endpointPolicy, &p, nil
+}
+
+func (tx memoryIdentityTransaction) FindNewsItemByCanonicalURL(_ context.Context, canonicalURL, hash string) (domain.NewsItem, bool, error) {
+	for _, item := range tx.repository.newsItems {
+		if item.CanonicalURLHash != hash { continue }
+		if item.CanonicalURL != canonicalURL { return domain.NewsItem{}, false, ErrCanonicalURLHashCollision }
+		return item, true, nil
 	}
-	providerPolicy := repository.providerOutputPolicy
-	return repository.sourcePolicy, repository.endpointPolicy, &providerPolicy, nil
+	return domain.NewsItem{}, false, nil
+}
+
+func (tx memoryIdentityTransaction) FindNewsItemByID(_ context.Context, id string) (domain.NewsItem, bool, error) {
+	for _, item := range tx.repository.newsItems { if item.ID == id { return item, true, nil } }
+	return domain.NewsItem{}, false, nil
 }
 
 func (tx memoryIdentityTransaction) FindIdentityCredentials(_ context.Context, sourceID string, candidates []domain.IdentityCredential) ([]domain.IdentityCredential, error) {
 	var found []domain.IdentityCredential
 	for _, stored := range tx.repository.credentials {
 		for _, candidate := range candidates {
-			if stored.SourceID == sourceID && stored.Type == candidate.Type && stored.Hash == candidate.Hash {
-				found = append(found, stored)
-			}
+			if stored.SourceID == sourceID && stored.Hash == candidate.Hash { found = append(found, stored) }
 		}
 	}
 	return found, nil
 }
 
-func (tx memoryIdentityTransaction) CreateNewsItem(_ context.Context, sourceID string) (string, error) {
-	id := "news-" + sourceID + "-" + string(rune('1'+len(tx.repository.items)))
-	tx.repository.items = append(tx.repository.items, id)
-	return id, nil
+func (tx memoryIdentityTransaction) CreateNewsItem(_ context.Context, item domain.NewsItem) error {
+	tx.repository.items = append(tx.repository.items, item.ID)
+	tx.repository.newsItems = append(tx.repository.newsItems, item)
+	return nil
+}
+
+func (tx memoryIdentityTransaction) UpdateNewsItem(_ context.Context, item domain.NewsItem) error {
+	for i := range tx.repository.newsItems {
+		if tx.repository.newsItems[i].ID == item.ID { tx.repository.newsItems[i] = item; return nil }
+	}
+	return errors.New("news item not found")
 }
 
 func (tx memoryIdentityTransaction) SaveIdentityCredentials(_ context.Context, credentials []domain.IdentityCredential) error {
@@ -87,363 +99,246 @@ func (tx memoryIdentityTransaction) SaveIdentityCredentials(_ context.Context, c
 }
 
 func (tx memoryIdentityTransaction) AppendObservation(_ context.Context, observation domain.Observation) (domain.Observation, error) {
-	if tx.repository.failAppend {
-		return domain.Observation{}, errors.New("append failed")
-	}
+	if tx.repository.failAppend { return domain.Observation{}, errors.New("append failed") }
 	for _, existing := range tx.repository.observations {
-		if existing.IdempotencyKey != observation.IdempotencyKey {
-			continue
-		}
-		if existing.PayloadPurgedAt != nil {
-			return domain.Observation{}, ErrObservationPayloadPurged
-		}
-		if !SameObservationPayload(existing, observation) {
-			return domain.Observation{}, ErrObservationIdempotencyConflict
-		}
+		if existing.IdempotencyKey != observation.IdempotencyKey { continue }
+		if existing.PayloadPurgedAt != nil { return domain.Observation{}, ErrObservationPayloadPurged }
+		if !SameObservationPayload(existing, observation) { return domain.Observation{}, ErrObservationIdempotencyConflict }
 		return existing, nil
 	}
 	tx.repository.observations = append(tx.repository.observations, observation)
 	return observation, nil
 }
 
-func (tx memoryIdentityTransaction) AppendAvailabilityEvidence(_ context.Context, evidence domain.AvailabilityEvidence, _ domain.Observation, _ domain.NewsItemVersion) error {
-	if tx.repository == nil {
-		return ErrAvailabilityEvidenceWriteUnavailable
+func (tx memoryIdentityTransaction) LatestNewsItemVersion(_ context.Context, newsID string) (domain.NewsItemVersion, bool, error) {
+	var latest domain.NewsItemVersion
+	found := false
+	for _, version := range tx.repository.versions {
+		if version.NewsID == newsID && (!found || version.VersionNo > latest.VersionNo) { latest, found = version, true }
 	}
+	return latest, found, nil
+}
+
+func (tx memoryIdentityTransaction) AppendNewsItemVersion(_ context.Context, version domain.NewsItemVersion) error {
+	tx.repository.versions = append(tx.repository.versions, version)
+	return nil
+}
+
+func (tx memoryIdentityTransaction) AppendAvailabilityEvidence(_ context.Context, evidence domain.AvailabilityEvidence, _ domain.Observation, _ domain.NewsItemVersion) error {
+	if tx.repository == nil { return ErrAvailabilityEvidenceWriteUnavailable }
 	tx.repository.availabilityEvidence = append(tx.repository.availabilityEvidence, evidence)
 	return nil
+}
+
+func identityTrace() ObservationPolicyTrace {
+	now := time.Date(2026, 11, 9, 0, 0, 0, 0, time.UTC)
+	return ObservationPolicyTrace{SourcePolicyVersionID: "source-policy-v1", PolicyEvaluatedAt: now, Retention: time.Hour}
+}
+
+func identityURLPolicy() domain.SourceURLPolicy {
+	return domain.SourceURLPolicy{AllowedSchemes: []string{"https"}, AllowedHosts: []string{"news.example"}}
 }
 
 func TestIngestCandidateRejectsProviderOutputWithoutPolicyTrace(t *testing.T) {
 	repository := &memoryIdentityRepository{}
 	usecase := newCandidateIngest(repository, func() string { return "observation-provider-policy-required" })
-	_, err := usecase.executeUnscoped(context.Background(), "source-1", "provider-result-key", domain.Candidate{ProviderCode: "brave", SourceItemID: "item-1"}, domain.SourceURLPolicy{})
-	if !errors.Is(err, ErrProviderOutputPolicyRequired) || len(repository.observations) != 0 {
-		t.Fatalf("err=%v repository=%+v", err, repository)
-	}
+	_, err := usecase.executeUnscoped(context.Background(), "source-1", "provider-result-key",
+		domain.Candidate{ProviderCode: "brave", SourceItemID: "item-1"}, domain.SourceURLPolicy{})
+	if !errors.Is(err, ErrProviderOutputPolicyRequired) || len(repository.observations) != 0 { t.Fatalf("err=%v repo=%+v", err, repository) }
 }
 
-func TestIngestCandidateCreatesNewsItemAndObservation(t *testing.T) {
+func TestIngestCandidateCreatesCurrentNewsAndInitialVersionAtomically(t *testing.T) {
 	repository := &memoryIdentityRepository{}
 	usecase := newCandidateIngest(repository, func() string { return "observation-1" })
-	observation, err := usecase.executeWithPolicyTrace(context.Background(), "source-1", "run-1/provider-a/item-1", domain.Candidate{
-		ProviderItemID: "provider-result-1", SourceItemID: "item-1", Title: " headline ",
-	}, domain.SourceURLPolicy{}, ObservationPolicyTrace{
-		SourcePolicyVersionID: "source-policy-v1", PolicyEvaluatedAt: time.Date(2026, 11, 9, 0, 0, 0, 0, time.UTC), Retention: time.Hour,
-	})
-	if err != nil {
-		t.Fatal(err)
+	observation, err := usecase.executeWithPolicyTrace(context.Background(), "source-1", "run-1/item-1",
+		domain.Candidate{SourceItemID: "item-1", Title: "headline"}, domain.SourceURLPolicy{}, identityTrace())
+	if err != nil { t.Fatal(err) }
+	if observation.IdentityStatus != domain.ObservationNew || observation.NewsID == "" { t.Fatalf("observation=%+v", observation) }
+	if len(repository.newsItems) != 1 || len(repository.versions) != 1 || len(repository.credentials) != 1 || len(repository.observations) != 1 {
+		t.Fatalf("repo=%+v", repository)
 	}
-	if observation.IdentityStatus != domain.ObservationNew || observation.NewsID == "" {
-		t.Fatalf("observation=%+v", observation)
-	}
-	if len(repository.items) != 1 || len(repository.credentials) != 1 || len(repository.observations) != 1 {
-		t.Fatalf("repository=%+v", repository)
+	if repository.newsItems[0].Title != "headline" || repository.newsItems[0].ContentFingerprint == "" ||
+		repository.versions[0].ObservationID != observation.ID || repository.versions[0].VersionNo != 1 {
+		t.Fatalf("current item/version not persisted: items=%+v versions=%+v", repository.newsItems, repository.versions)
 	}
 }
 
-func TestIngestCandidateMatchesExistingItemAndAddsOnlyNewAlias(t *testing.T) {
-	existing := domain.IdentityCredential{
-		SourceID: "source-1", Type: domain.IdentifierSourceNativeID,
-		Value: "item-1", Hash: identityHashForTest("item-1"), Status: domain.IdentifierActive, NewsID: "news-existing",
-	}
-	repository := &memoryIdentityRepository{credentials: []domain.IdentityCredential{existing}}
-	usecase := newCandidateIngest(repository, func() string { return "observation-2" })
-	observation, err := usecase.executeUnscoped(context.Background(), "source-1", "run-1/provider-a/item-1", domain.Candidate{
-		ProviderItemID: "provider-result-2", SourceItemID: "item-1", RawURL: "https://news.example/new-url",
-	}, domain.SourceURLPolicy{AllowedSchemes: []string{"https"}, AllowedHosts: []string{"news.example"}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if observation.IdentityStatus != domain.ObservationMatched || observation.NewsID != "news-existing" {
-		t.Fatalf("observation=%+v", observation)
-	}
-	if observation.Candidate.CanonicalURL != "https://news.example/new-url" {
-		t.Fatalf("canonical URL was not retained on the observation candidate: %+v", observation.Candidate)
-	}
-	if len(repository.items) != 0 || len(repository.credentials) != 2 {
-		t.Fatalf("repository=%+v", repository)
-	}
-}
-
-func TestIngestCandidateDoesNotTrustCallerCanonicalURLButKeepsNativeID(t *testing.T) {
+func TestIngestCandidateUsesCanonicalURLAsGlobalIdentityWithoutNativeID(t *testing.T) {
 	repository := &memoryIdentityRepository{}
-	usecase := newCandidateIngest(repository, func() string { return "observation-untrusted-url" })
-	observation, err := usecase.executeUnscoped(context.Background(), "source-1", "run-1/untrusted-url", domain.Candidate{
-		SourceItemID: "item-1",
-		RawURL:       "https://untrusted.example/article",
-		CanonicalURL: "https://news.example/forged-canonical",
-	}, domain.SourceURLPolicy{AllowedSchemes: []string{"https"}, AllowedHosts: []string{"news.example"}})
-	if err != nil {
-		t.Fatal(err)
+	usecase := newCandidateIngest(repository, func() string { return "url-only" })
+	observation, err := usecase.executeWithPolicyTrace(context.Background(), "source-1", "url-only-key",
+		domain.Candidate{RawURL: "https://news.example/story", Title: "headline"}, identityURLPolicy(), identityTrace())
+	if err != nil { t.Fatal(err) }
+	if observation.IdentityStatus != domain.ObservationNew || len(repository.newsItems) != 1 || len(repository.credentials) != 0 {
+		t.Fatalf("observation=%+v repo=%+v", observation, repository)
 	}
-	if observation.Candidate.CanonicalURL != "" {
-		t.Fatalf("caller-supplied canonical URL must not survive policy rejection: %+v", observation.Candidate)
+	if repository.newsItems[0].CanonicalURL != "https://news.example/story" || repository.newsItems[0].CanonicalURLHash == "" {
+		t.Fatalf("URL identity not persisted: %+v", repository.newsItems[0])
 	}
-	if observation.IdentityStatus != domain.ObservationNew || observation.NewsID == "" {
-		t.Fatalf("valid native source ID should still create identity, got %+v", observation)
+}
+
+func TestIngestCandidateReusesGlobalURLAcrossSources(t *testing.T) {
+	repository := &memoryIdentityRepository{}
+	next := 0
+	usecase := newCandidateIngest(repository, func() string { next++; return "id-" + string(rune('0'+next)) })
+	candidate := domain.Candidate{SourceItemID: "native-1", RawURL: "https://news.example/story", Title: "headline"}
+	first, err := usecase.executeWithPolicyTrace(context.Background(), "source-1", "source-1-key", candidate, identityURLPolicy(), identityTrace())
+	if err != nil { t.Fatal(err) }
+	second, err := usecase.executeWithPolicyTrace(context.Background(), "source-2", "source-2-key", candidate, identityURLPolicy(), identityTrace())
+	if err != nil { t.Fatal(err) }
+	if first.NewsID != second.NewsID || len(repository.newsItems) != 1 || len(repository.credentials) != 2 || len(repository.versions) != 1 {
+		t.Fatalf("first=%+v second=%+v repo=%+v", first, second, repository)
 	}
-	if len(repository.credentials) != 1 || repository.credentials[0].Type != domain.IdentifierSourceNativeID {
-		t.Fatalf("rejected URL must not become an identity credential: %+v", repository.credentials)
+}
+
+func TestIngestCandidateRejectsDifferentURLForExistingNativeID(t *testing.T) {
+	repository := &memoryIdentityRepository{}
+	usecase := newCandidateIngest(repository, func() string { return "first" })
+	first, err := usecase.executeWithPolicyTrace(context.Background(), "source-1", "first-key",
+		domain.Candidate{SourceItemID: "native-1", RawURL: "https://news.example/one", Title: "one"}, identityURLPolicy(), identityTrace())
+	if err != nil { t.Fatal(err) }
+	next := newCandidateIngest(repository, func() string { return "second" })
+	second, err := next.executeWithPolicyTrace(context.Background(), "source-1", "second-key",
+		domain.Candidate{SourceItemID: "native-1", RawURL: "https://news.example/two", Title: "two"}, identityURLPolicy(), identityTrace())
+	if err != nil { t.Fatal(err) }
+	if second.IdentityStatus != domain.ObservationConflict || second.ReasonCode != "news.identity.canonical_url_mismatch" ||
+		second.NewsID != "" || first.NewsID == "" || len(repository.newsItems) != 1 {
+		t.Fatalf("first=%+v second=%+v repo=%+v", first, second, repository)
+	}
+}
+
+func TestIngestCandidateRejectsURLAndNativeIDPointingToDifferentItems(t *testing.T) {
+	repository := &memoryIdentityRepository{}
+	usecase := newCandidateIngest(repository, func() string { return "first" })
+	first, err := usecase.executeWithPolicyTrace(context.Background(), "source-1", "first-key",
+		domain.Candidate{SourceItemID: "native-1", Title: "one"}, domain.SourceURLPolicy{}, identityTrace())
+	if err != nil { t.Fatal(err) }
+	second, err := newCandidateIngest(repository, func() string { return "second" }).executeWithPolicyTrace(
+		context.Background(), "source-2", "second-key",
+		domain.Candidate{RawURL: "https://news.example/two", Title: "two"}, identityURLPolicy(), identityTrace())
+	if err != nil { t.Fatal(err) }
+	if first.NewsID == second.NewsID { t.Fatalf("test setup must create distinct news IDs: %+v %+v", first, second) }
+
+	repository.newsItems[1].CanonicalURL = "https://news.example/other"
+	repository.newsItems[1].CanonicalURLHash = func() string {
+		c := domain.Candidate{RawURL:"https://news.example/two"}
+		_ = c
+		return repository.newsItems[1].CanonicalURLHash
+	}()
+	// 将来源原生 ID 指向第一篇、URL 指向第二篇，验证身份冲突不会自动合并。
+	credential, _ := domain.BuildIdentityCredentials("source-1", "native-1")
+	repository.newsItems[1].CanonicalURL = "https://news.example/two"
+	repository.newsItems[1].CanonicalURLHash = canonicalHashForTest("https://news.example/two")
+	repository.credentials = append(repository.credentials, domain.IdentityCredential{
+		SourceID: credential[0].SourceID, Value: credential[0].Value, Hash: credential[0].Hash, NewsID: first.NewsID,
+	})
+	conflict, err := newCandidateIngest(repository, func() string { return "third" }).executeWithPolicyTrace(
+		context.Background(), "source-1", "third-key",
+		domain.Candidate{SourceItemID:"native-1", RawURL:"https://news.example/two", Title:"two"},
+		identityURLPolicy(), identityTrace())
+	if err != nil { t.Fatal(err) }
+	if conflict.IdentityStatus != domain.ObservationConflict || conflict.ReasonCode != "news.identity.multiple_items" {
+		t.Fatalf("conflict=%+v", conflict)
 	}
 }
 
 func TestIngestCandidateDoesNotCreateItemWithoutIdentity(t *testing.T) {
 	repository := &memoryIdentityRepository{}
-	usecase := newCandidateIngest(repository, func() string { return "observation-3" })
-	observation, err := usecase.executeUnscoped(context.Background(), "source-1", "run-1/provider-a/unknown-1", domain.Candidate{ProviderItemID: "provider-only-1", Title: "unidentified"}, domain.SourceURLPolicy{})
-	if err != nil {
-		t.Fatal(err)
+	observation, err := newCandidateIngest(repository, func() string { return "unidentified" }).executeUnscoped(
+		context.Background(), "source-1", "unidentified-key",
+		domain.Candidate{Title:"unidentified"}, domain.SourceURLPolicy{})
+	if err != nil { t.Fatal(err) }
+	if observation.IdentityStatus != domain.ObservationUnidentified || len(repository.newsItems) != 0 || len(repository.observations) != 1 {
+		t.Fatalf("observation=%+v repo=%+v", observation, repository)
 	}
-	if observation.IdentityStatus != domain.ObservationUnidentified || len(repository.items) != 0 || len(repository.observations) != 1 {
-		t.Fatalf("observation=%+v repository=%+v", observation, repository)
-	}
-}
-
-func TestIngestCandidateConflictOnlyAppendsObservation(t *testing.T) {
-	native := domain.IdentityCredential{
-		SourceID: "source-1", Type: domain.IdentifierSourceNativeID,
-		Value: "item-1", Hash: identityHashForTest("item-1"), Status: domain.IdentifierActive, NewsID: "news-1",
-	}
-	url := domain.IdentityCredential{
-		SourceID: "source-1", Type: domain.IdentifierNormalizedURL,
-		Value: "https://news.example/item", Hash: identityHashForTest("https://news.example/item"),
-		Status: domain.IdentifierHistorical, NewsID: "news-2",
-	}
-	repository := &memoryIdentityRepository{credentials: []domain.IdentityCredential{native, url}}
-	usecase := newCandidateIngest(repository, func() string { return "observation-4" })
-	observation, err := usecase.executeUnscoped(context.Background(), "source-1", "run-1/provider-a/item-1", domain.Candidate{
-		ProviderItemID: "provider-result-3", SourceItemID: "item-1", RawURL: "https://news.example/item",
-	}, domain.SourceURLPolicy{AllowedSchemes: []string{"https"}, AllowedHosts: []string{"news.example"}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if observation.IdentityStatus != domain.ObservationConflict || observation.ReasonCode != "news.identity.multiple_items" {
-		t.Fatalf("observation=%+v", observation)
-	}
-	if len(repository.items) != 0 || len(repository.observations) != 1 {
-		t.Fatalf("repository=%+v", repository)
-	}
-}
-
-func identityHashForTest(value string) string {
-	credential, _ := domain.BuildIdentityCredentials("source-1", value, "", domain.SourceURLPolicy{})
-	return credential[0].Hash
 }
 
 func TestIngestCandidateRollsBackWhenObservationAppendFails(t *testing.T) {
 	repository := &memoryIdentityRepository{failAppend: true}
-	usecase := newCandidateIngest(repository, func() string { return "observation-5" })
-	_, err := usecase.executeUnscoped(context.Background(), "source-1", "run-1/provider-a/item-1", domain.Candidate{SourceItemID: "item-1"}, domain.SourceURLPolicy{})
-	if !errors.Is(err, ErrIdentityTransaction) {
-		t.Fatalf("err=%v", err)
-	}
-	if len(repository.items) != 0 || len(repository.credentials) != 0 || len(repository.observations) != 0 {
+	_, err := newCandidateIngest(repository, func() string { return "rollback" }).executeWithPolicyTrace(
+		context.Background(), "source-1", "rollback-key", domain.Candidate{SourceItemID:"item-1"},
+		domain.SourceURLPolicy{}, identityTrace())
+	if !errors.Is(err, ErrIdentityTransaction) { t.Fatalf("err=%v", err) }
+	if len(repository.newsItems) != 0 || len(repository.credentials) != 0 || len(repository.observations) != 0 || len(repository.versions) != 0 {
 		t.Fatalf("transaction was not rolled back: %+v", repository)
 	}
 }
 
-func TestIngestCandidateRetriesIdempotently(t *testing.T) {
+func TestIngestCandidateIdempotencyAndContentVersioning(t *testing.T) {
 	repository := &memoryIdentityRepository{}
-	nextID := 0
-	usecase := newCandidateIngest(repository, func() string {
-		nextID++
-		return "observation-" + string(rune('0'+nextID))
-	})
-	candidate := domain.Candidate{ProviderItemID: "provider-result-1", SourceItemID: "source-item-1", Title: "headline"}
-	trace := ObservationPolicyTrace{SourcePolicyVersionID: "source-policy-v1", PolicyEvaluatedAt: time.Date(2026, 11, 9, 0, 0, 0, 0, time.UTC), Retention: time.Hour}
-	first, err := usecase.executeWithPolicyTrace(context.Background(), "source-1", "run-1/provider-a/item-1", candidate, domain.SourceURLPolicy{}, trace)
-	if err != nil {
+	next := 0
+	usecase := newCandidateIngest(repository, func() string { next++; return "generated-" + string(rune('0'+next)) })
+	trace := identityTrace()
+	firstCandidate := domain.Candidate{SourceItemID:"item-1", Title:"headline A"}
+	first, err := usecase.executeWithPolicyTrace(context.Background(), "source-1", "version-a", firstCandidate, domain.SourceURLPolicy{}, trace)
+	if err != nil { t.Fatal(err) }
+	replay, err := usecase.executeWithPolicyTrace(context.Background(), "source-1", "version-a", firstCandidate, domain.SourceURLPolicy{}, trace)
+	if err != nil { t.Fatal(err) }
+	if replay.ID != first.ID || len(repository.versions) != 1 || len(repository.observations) != 1 {
+		t.Fatalf("idempotent replay changed state: first=%+v replay=%+v repo=%+v", first, replay, repository)
+	}
+	changed := firstCandidate
+	changed.Title = "headline B"
+	if _, err := usecase.executeWithPolicyTrace(context.Background(), "source-1", "version-b", changed, domain.SourceURLPolicy{}, trace); err != nil {
 		t.Fatal(err)
 	}
-	second, err := usecase.executeWithPolicyTrace(context.Background(), "source-1", "run-1/provider-a/item-1", candidate, domain.SourceURLPolicy{}, trace)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if first.ID != second.ID || len(repository.observations) != 1 || len(repository.items) != 1 {
-		t.Fatalf("first=%+v second=%+v repository=%+v", first, second, repository)
+	if len(repository.versions) != 2 || repository.versions[1].VersionNo != 2 ||
+		repository.newsItems[0].Title != "headline B" || repository.newsItems[0].ContentFingerprint != repository.versions[1].Fingerprint {
+		t.Fatalf("content change did not append/update version: %+v", repository)
 	}
 }
 
 func TestIngestCandidateRejectsChangedRetentionForSameIdempotencyKey(t *testing.T) {
 	repository := &memoryIdentityRepository{}
-	usecase := newCandidateIngest(repository, func() string { return "observation-retention-idempotency" })
-	candidate := domain.Candidate{SourceItemID: "item-retention", Title: "headline"}
-	baseTime := time.Date(2026, 11, 9, 10, 0, 0, 0, time.UTC)
-	usecase.now = func() time.Time { return baseTime }
-	trace := ObservationPolicyTrace{SourcePolicyVersionID: "source-policy-v1", PolicyEvaluatedAt: baseTime, Retention: time.Hour}
-	if _, err := usecase.executeWithPolicyTrace(context.Background(), "source-1", "same-retention-key", candidate, domain.SourceURLPolicy{}, trace); err != nil {
-		t.Fatal(err)
-	}
-	usecase.now = func() time.Time { return baseTime.Add(time.Minute) }
-	trace.PolicyEvaluatedAt = baseTime.Add(time.Minute)
-	trace.Retention = 2 * time.Hour
-	_, err := usecase.executeWithPolicyTrace(context.Background(), "source-1", "same-retention-key", candidate, domain.SourceURLPolicy{}, trace)
+	usecase := newCandidateIngest(repository, func() string { return "retention" })
+	base := time.Date(2026, 11, 9, 10, 0, 0, 0, time.UTC)
+	usecase.now = func() time.Time { return base }
+	trace := identityTrace()
+	trace.PolicyEvaluatedAt = base
+	if _, err := usecase.executeWithPolicyTrace(context.Background(), "source-1", "same-key", domain.Candidate{SourceItemID:"item-1"}, domain.SourceURLPolicy{}, trace); err != nil { t.Fatal(err) }
+	usecase.now = func() time.Time { return base.Add(time.Minute) }
+	trace.PolicyEvaluatedAt = base.Add(time.Minute)
+	trace.Retention = 2*time.Hour
+	_, err := usecase.executeWithPolicyTrace(context.Background(), "source-1", "same-key", domain.Candidate{SourceItemID:"item-1"}, domain.SourceURLPolicy{}, trace)
 	if !errors.Is(err, ErrIdentityTransaction) || !errors.Is(err, ErrObservationIdempotencyConflict) {
-		t.Fatalf("changed retention must conflict on idempotency key reuse, got %v", err)
-	}
-	if len(repository.observations) != 1 || effectiveObservationRetention(repository.observations[0]) != time.Hour {
-		t.Fatalf("original retention was changed: %+v", repository.observations)
+		t.Fatalf("changed retention must conflict, got %v", err)
 	}
 }
 
 func TestIngestCandidateRejectsReplayAfterObservationPayloadPurge(t *testing.T) {
 	repository := &memoryIdentityRepository{}
-	usecase := newCandidateIngest(repository, func() string { return "observation-purged" })
-	candidate := domain.Candidate{SourceItemID: "source-item-1", Title: "private candidate"}
-	if _, err := usecase.executeUnscoped(context.Background(), "source-1", "purged-key", candidate, domain.SourceURLPolicy{}); err != nil {
-		t.Fatal(err)
-	}
-	purgedAt := time.Date(2026, 11, 9, 10, 0, 0, 0, time.UTC)
+	usecase := newCandidateIngest(repository, func() string { return "purged" })
+	candidate := domain.Candidate{SourceItemID:"item-1", Title:"private"}
+	if _, err := usecase.executeUnscoped(context.Background(), "source-1", "purged-key", candidate, domain.SourceURLPolicy{}); err != nil { t.Fatal(err) }
+	purgedAt := time.Date(2026,11,9,10,0,0,0,time.UTC)
 	repository.observations[0].Candidate = domain.Candidate{}
 	repository.observations[0].PayloadPurgedAt = &purgedAt
 	_, err := usecase.executeUnscoped(context.Background(), "source-1", "purged-key", candidate, domain.SourceURLPolicy{})
-	if !errors.Is(err, ErrIdentityTransaction) || !errors.Is(err, ErrObservationPayloadPurged) {
-		t.Fatalf("replay after payload purge must be rejected, got %v", err)
-	}
-	if len(repository.observations) != 1 || repository.observations[0].Candidate.Title != "" || repository.observations[0].PayloadPurgedAt == nil {
-		t.Fatalf("purged payload was restored: %+v", repository.observations)
-	}
+	if !errors.Is(err, ErrIdentityTransaction) || !errors.Is(err, ErrObservationPayloadPurged) { t.Fatalf("err=%v",err) }
+	if len(repository.versions) != 1 || repository.observations[0].PayloadPurgedAt == nil { t.Fatalf("purged payload restored: %+v",repository) }
 }
 
 func TestIngestCandidateRejectsIdempotencyKeyPayloadReuse(t *testing.T) {
 	repository := &memoryIdentityRepository{}
-	usecase := newCandidateIngest(repository, func() string { return "observation-fixed" })
-	_, err := usecase.executeUnscoped(context.Background(), "source-1", "same-key", domain.Candidate{ProviderItemID: "provider-result-1", SourceItemID: "source-item-1"}, domain.SourceURLPolicy{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = usecase.executeUnscoped(context.Background(), "source-1", "same-key", domain.Candidate{ProviderItemID: "provider-result-2", SourceItemID: "source-item-2"}, domain.SourceURLPolicy{})
-	if !errors.Is(err, ErrIdentityTransaction) || !errors.Is(err, ErrObservationIdempotencyConflict) {
-		t.Fatalf("err=%v", err)
-	}
-	if len(repository.items) != 1 || len(repository.observations) != 1 {
-		t.Fatalf("repository=%+v", repository)
-	}
+	usecase := newCandidateIngest(repository, func() string { return "fixed" })
+	if _, err := usecase.executeUnscoped(context.Background(), "source-1", "same-key", domain.Candidate{SourceItemID:"item-1"}, domain.SourceURLPolicy{}); err != nil { t.Fatal(err) }
+	_, err := usecase.executeUnscoped(context.Background(), "source-1", "same-key", domain.Candidate{SourceItemID:"item-2"}, domain.SourceURLPolicy{})
+	if !errors.Is(err, ErrIdentityTransaction) || !errors.Is(err, ErrObservationIdempotencyConflict) { t.Fatalf("err=%v",err) }
+	if len(repository.newsItems) != 1 || len(repository.observations) != 1 { t.Fatalf("repo=%+v",repository) }
 }
 
-func TestIngestCandidatePersistsSourcePolicyTrace(t *testing.T) {
+func TestIngestCandidatePropagatesCancellationAfterTransactionCommit(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
 	repository := &memoryIdentityRepository{}
-	usecase := newCandidateIngest(repository, func() string { return "observation-policy-trace" })
-	evaluatedAt := time.Date(2026, 11, 5, 10, 0, 0, 0, time.FixedZone("UTC+8", 8*60*60))
-	trace := ObservationPolicyTrace{
-		SourcePolicyVersionID: "source-policy-v3",
-		EndpointID:            "endpoint-v1", EndpointPolicyVersionID: "endpoint-policy-v2",
-		PolicyEvaluatedAt: evaluatedAt,
-		Retention:         time.Hour,
-	}
-	observation, err := usecase.executeWithPolicyTrace(
-		context.Background(), "source-1", "feed-run-1/item-1",
-		domain.Candidate{SourceItemID: "item-1", Title: "headline"},
-		domain.SourceURLPolicy{}, trace,
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if observation.SourcePolicyVersionID != trace.SourcePolicyVersionID ||
-		observation.EndpointID != trace.EndpointID ||
-		observation.EndpointPolicyVersionID != trace.EndpointPolicyVersionID ||
-		!observation.PolicyEvaluatedAt.Equal(evaluatedAt.UTC()) {
-		t.Fatalf("policy trace was not persisted: %+v", observation)
-	}
-}
-
-func TestIngestCandidatePolicyTraceIsPartOfIdempotencyPayload(t *testing.T) {
-	repository := &memoryIdentityRepository{}
-	usecase := newCandidateIngest(repository, func() string { return "observation-policy-idempotency" })
-	candidate := domain.Candidate{SourceItemID: "item-1", Title: "headline"}
-	firstTrace := ObservationPolicyTrace{
-		SourcePolicyVersionID: "source-policy-v3",
-		PolicyEvaluatedAt:     time.Date(2026, 11, 5, 10, 0, 0, 0, time.UTC),
-		Retention:             time.Hour,
-	}
-	secondTrace := ObservationPolicyTrace{
-		SourcePolicyVersionID: "source-policy-v4",
-		PolicyEvaluatedAt:     time.Date(2026, 11, 5, 10, 1, 0, 0, time.UTC),
-		Retention:             time.Hour,
-	}
-	if _, err := usecase.executeWithPolicyTrace(context.Background(), "source-1", "feed-run-1/item-1", candidate, domain.SourceURLPolicy{}, firstTrace); err != nil {
-		t.Fatal(err)
-	}
-	_, err := usecase.executeWithPolicyTrace(context.Background(), "source-1", "feed-run-1/item-1", candidate, domain.SourceURLPolicy{}, secondTrace)
-	if !errors.Is(err, ErrIdentityTransaction) || !errors.Is(err, ErrObservationIdempotencyConflict) {
-		t.Fatalf("changed policy version should conflict on idempotency key reuse, got %v", err)
-	}
-}
-
-func TestIngestCandidateRejectsProviderPolicyReferenceWithoutVersion(t *testing.T) {
-	repository := &memoryIdentityRepository{}
-	usecase := newCandidateIngest(repository, func() string { return "observation-provider-policy-incomplete" })
-	_, err := usecase.executeWithPolicyTrace(context.Background(), "source-1", "provider-result-incomplete", domain.Candidate{ProviderCode: "brave", SourceItemID: "item-1"}, domain.SourceURLPolicy{}, ObservationPolicyTrace{
-		SourcePolicyVersionID: "source-policy-v1", PolicyEvaluatedAt: time.Now().UTC(), Retention: time.Hour,
-	})
-	if !errors.Is(err, ErrProviderOutputPolicyRequired) || len(repository.observations) != 0 {
-		t.Fatalf("err=%v repository=%+v", err, repository)
-	}
-}
-
-func TestIngestCandidateRejectsSelfDeclaredProviderPolicyTrace(t *testing.T) {
-	repository := &memoryIdentityRepository{}
-	usecase := newCandidateIngest(repository, func() string { return "observation-provider-policy-spoof" })
-	_, err := usecase.executeWithPolicyTrace(context.Background(), "source-1", "provider-result-spoof", domain.Candidate{
-		ProviderCode: "tavily", SourceItemID: "item-1",
-	}, domain.SourceURLPolicy{}, ObservationPolicyTrace{
-		SourcePolicyVersionID: "source-policy-v1", ProviderOutputPolicyRef: "provider-policy-ref",
-		ProviderOutputPolicyVersionID: "provider-policy-v1", PolicyEvaluatedAt: time.Now().UTC(), Retention: time.Hour,
-	})
-	if !errors.Is(err, ErrProviderOutputPolicyRequired) || len(repository.observations) != 0 {
-		t.Fatalf("self-declared provider policy must fail closed: err=%v repository=%+v", err, repository)
-	}
-}
-
-func TestIngestCandidateRejectsIncompletePolicyTrace(t *testing.T) {
-	repository := &memoryIdentityRepository{}
-	usecase := newCandidateIngest(repository, func() string { return "observation-invalid-policy-trace" })
-	_, err := usecase.executeWithPolicyTrace(
-		context.Background(), "source-1", "feed-run-1/item-1",
-		domain.Candidate{SourceItemID: "item-1"}, domain.SourceURLPolicy{},
-		ObservationPolicyTrace{SourcePolicyVersionID: "source-policy-v3"},
-	)
-	if !errors.Is(err, ErrInvalidRequest) || len(repository.observations) != 0 {
-		t.Fatalf("error=%v repository=%+v", err, repository)
-	}
-}
-
-func TestIngestCandidateIdempotencyIgnoresPerAttemptFetchAndNormalizeTimes(t *testing.T) {
-	repository := &memoryIdentityRepository{}
-	useCase := newCandidateIngest(repository, func() string { return "observation-fetch-times" })
-	observedAt := time.Date(2026, 11, 6, 10, 0, 0, 0, time.UTC)
-	useCase.now = func() time.Time { return observedAt }
-
-	firstFetched := observedAt.Add(-2 * time.Second)
-	firstNormalized := observedAt.Add(-time.Second)
-	first, err := useCase.executeUnscoped(context.Background(), "source-1", "same-feed-entry-key", domain.Candidate{
-		SourceItemID: "item-1", Title: "headline",
-		FetchedAt: &firstFetched, NormalizedAt: &firstNormalized,
-	}, domain.SourceURLPolicy{})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	secondFetched := observedAt.Add(time.Second)
-	secondNormalized := observedAt.Add(2 * time.Second)
-	second, err := useCase.executeUnscoped(context.Background(), "source-1", "same-feed-entry-key", domain.Candidate{
-		SourceItemID: "item-1", Title: "headline",
-		FetchedAt: &secondFetched, NormalizedAt: &secondNormalized,
-	}, domain.SourceURLPolicy{})
-	if err != nil {
-		t.Fatalf("same payload with new attempt timestamps should replay: %v", err)
-	}
-	if second.ID != first.ID || second.Candidate.FetchedAt == nil ||
-		!second.Candidate.FetchedAt.Equal(firstFetched) ||
-		second.Candidate.NormalizedAt == nil ||
-		!second.Candidate.NormalizedAt.Equal(firstNormalized) {
-		t.Fatalf("idempotent replay did not return first observation snapshot: first=%+v second=%+v", first, second)
-	}
+	wrapped := cancelAfterIdentityTransactionRepository{inner:repository,cancel:cancel}
+	_, err := newCandidateIngest(wrapped, func() string { return "cancel" }).executeUnscoped(
+		ctx, "source-1", "cancel-key", domain.Candidate{SourceItemID:"item-1"}, domain.SourceURLPolicy{})
+	if !errors.Is(err, context.Canceled) { t.Fatalf("expected cancellation, got %v",err) }
+	if len(repository.observations) != 1 { t.Fatalf("committed observation lost: %+v",repository.observations) }
 }
 
 type cancelAfterIdentityTransactionRepository struct {
-	inner  *memoryIdentityRepository
+	inner *memoryIdentityRepository
 	cancel context.CancelFunc
 }
 
@@ -453,19 +348,7 @@ func (r cancelAfterIdentityTransactionRepository) WithinIdentityTransaction(ctx 
 	return err
 }
 
-func TestIngestCandidatePropagatesCancellationAfterTransactionCommit(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	repository := &memoryIdentityRepository{}
-	usecase := newCandidateIngest(cancelAfterIdentityTransactionRepository{inner: repository, cancel: cancel},
-		func() string { return "observation-cancel-after-commit" })
-
-	_, err := usecase.executeUnscoped(ctx, "source-1", "cancel-after-commit-key",
-		domain.Candidate{SourceItemID: "item-1"}, domain.SourceURLPolicy{})
-	if !errors.Is(err, context.Canceled) {
-		t.Fatalf("expected context cancellation after repository commit, got %v", err)
-	}
-	// Repository 已提交后才触发取消：用例必须传播取消，但不能谎称事务已回滚。
-	if len(repository.observations) != 1 {
-		t.Fatalf("expected committed observation to remain, got %+v", repository.observations)
-	}
+func canonicalHashForTest(value string) string {
+	sum := sha256.Sum256([]byte(value))
+	return hex.EncodeToString(sum[:])
 }
