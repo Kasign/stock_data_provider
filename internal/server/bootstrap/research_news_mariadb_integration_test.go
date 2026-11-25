@@ -270,39 +270,51 @@ func newNewsResearchFixture(t *testing.T, ctx context.Context) *newsResearchFixt
 	}
 	binding := makeAllowedBinding(t, loadNewsResearchGoldenBinding(t))
 
-	// 公开 Ingest 入口的 NewsID 由存储随机生成，无法对齐冻结 Golden 的
-	// resource_ref=news_evidence_version:news_001:v1。测试自建库中补一行
-	// news_items 以满足外键与 LatestNewsItemVersion 的 FOR UPDATE 语义。
-	if _, err := db.ExecContext(ctx,
-		"INSERT INTO news_items (news_id, origin_source_id) VALUES (?, ?)",
-		newsResearchNewsID, "sec-edgar",
-	); err != nil {
-		t.Fatalf("播种 news_items 失败: %v", err)
-	}
-
+	// 在一个统一事务中播种主体、来源身份、Observation 和初始内容版本。
 	observedAt := time.Now().UTC().Add(-time.Hour)
 	retentionUntil := time.Now().UTC().Add(24 * time.Hour)
 	observation := newsResearchSeedObservation(observedAt, retentionUntil)
 	candidate := observation.Candidate
+	content := newsResearchSeedContent()
+	fingerprint := newsdomain.BuildVersionFingerprint(candidate, content)
+	item := newsdomain.NewsItem{
+		ID: newsResearchNewsID, Title: candidate.Title, PublisherName: candidate.PublisherName,
+		PublisherDomain: candidate.PublisherDomain, Author: candidate.Author,
+		PublishedAt: candidate.PublishedAt, Content: content, ContentFingerprint: fingerprint,
+		CreatedAt: observedAt, UpdatedAt: observedAt,
+	}
+	version := newsdomain.NewsItemVersion{
+		ID: "news-it-auth-version", NewsID: newsResearchNewsID, VersionNo: 1,
+		Fingerprint: fingerprint, Title: candidate.Title, PublisherName: candidate.PublisherName,
+		PublisherDomain: candidate.PublisherDomain, Author: candidate.Author,
+		PublishedAt: candidate.PublishedAt, Content: content, ObservedAt: observedAt,
+		ObservationID: observation.ID,
+	}
+	credentials, err := newsdomain.BuildIdentityCredentials(observation.SourceID, candidate.SourceItemID)
+	if err != nil {
+		t.Fatalf("构造来源原生身份失败: %v", err)
+	}
+	for index := range credentials {
+		credentials[index].NewsID = newsResearchNewsID
+		credentials[index].ObservedAt = observedAt
+	}
 	if err := repo.WithinIdentityTransaction(ctx, func(tx newsapp.IdentityTransaction) error {
-		_, appendErr := tx.AppendObservation(ctx, observation)
-		return appendErr
+		if err := tx.CreateNewsItem(ctx, item); err != nil {
+			return err
+		}
+		if len(credentials) > 0 {
+			if err := tx.SaveIdentityCredentials(ctx, credentials); err != nil {
+				return err
+			}
+		}
+		if _, err := tx.AppendObservation(ctx, observation); err != nil {
+			return err
+		}
+		return tx.AppendNewsItemVersion(ctx, version)
 	}); err != nil {
-		t.Fatalf("播种 Observation 失败（检查 news_items 外键与 NOT NULL 列）: %v", err)
+		t.Fatalf("在同一事务播种 News 主体/身份/Observation/版本失败: %v", err)
 	}
 
-	updater := newsapp.NewApplyResearchUpdate(repo, func() string { return "news-it-auth-version" })
-	result, err := updater.Execute(ctx, newsapp.ResearchUpdateRequest{
-		NewsID: newsResearchNewsID, ObservationID: observation.ID,
-		Candidate: candidate,
-		Content:   newsResearchSeedContent(),
-	})
-	if err != nil {
-		t.Fatalf("播种 NewsItemVersion 失败: %v", err)
-	}
-	if !result.VersionCreated || result.Version.VersionNo != 1 {
-		t.Fatalf("播种版本结果异常: created=%v version_no=%d", result.VersionCreated, result.Version.VersionNo)
-	}
 
 	// 当前策略指针必须与 Golden PolicySnapshot 的 (type, ref, version) 完全一致。
 	publisher, err := newsapp.NewPublishNewsPolicyVersion(repo)
@@ -324,7 +336,7 @@ func newNewsResearchFixture(t *testing.T, ctx context.Context) *newsResearchFixt
 	// 本 fixture 故意不写入 available_at Evidence/Decision，以验证无来源时间证据时
 	// News Query 和 Research Importer 都在真实 MariaDB 上 fail closed。
 	systemAsOf := time.Now().UTC()
-	if err := repo.AppendAuthorizationSnapshot(ctx, binding, observation, result.Version); err != nil {
+	if err := repo.AppendAuthorizationSnapshot(ctx, binding, observation, version); err != nil {
 		t.Fatalf("写入 NEWS-CTR-002 授权快照失败（检查 Observation 策略轨迹字段）: %v", err)
 	}
 
