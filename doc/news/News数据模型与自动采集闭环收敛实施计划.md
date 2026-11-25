@@ -146,7 +146,7 @@ P0-1 全量依赖审计已完成；本计划后续只对具体字段、SQL 和�
 3. 合并主体、身份、Observation、版本写入事务。
 4. 移除独立的双阶段版本更新入口。
 5. 增加真实 MariaDB 测试：跨来源相同 URL、重复采集、内容变化、身份冲突、事务回滚、并发写入；必须调用正式 Application 用例，不得在测试中复制身份解析/版本写入流程。
-6. MariaDB 集成测试必须调用正式 Application 用例，不得在测试中复制身份解析/版本写入流程。此项已实施：移除 `repositoryIngestHarness`，改为通过真实 `StaticSourceCatalog`、`CollectSource.Execute` 和 `IngestCollectedSource.Execute` 驱动 MariaDB；仅用固定 RSS 响应替代外部网络。
+6. 此项已实施：移除 `repositoryIngestHarness`，通过真实 `StaticSourceCatalog`、`CollectSource.Execute` 和 `IngestCollectedSource.Execute` 驱动 MariaDB；仅用固定 RSS 响应替代外部网络。
 
 完成门槛：由正式 Application 用例驱动 MariaDB；跨来源相同 URL 并发只产生一个主体；主体/身份/Observation/版本要么全部提交，要么全部回滚。
 
@@ -157,9 +157,10 @@ P0-1 全量依赖审计已完成；本计划后续只对具体字段、SQL 和�
 - 同一来源原生 ID 对应不同 URL 时返回身份冲突；
 - 同一幂等键相同载荷重放、不同载荷冲突；
 - 并发内容变化追加版本；
+- RSS description 经真实 Parser 和授权层级过滤后，同时持久化到 `news_items.content_json` 与最新 `news_item_versions.content_json`，且两者内容一致；
 - 通过制造版本主键冲突，验证正式 Application 在主体、身份、Observation 已写入后失败时整笔事务回滚。
 
-该测试实现已提交，但尚未执行真实 MariaDB；`NEWS_MARIADB_TEST_DSN` 未验证，CI 也尚无可核验结果。因此 P0-3 仍为 IN_PROGRESS，不能验收 DONE。
+该测试实现已提交，但尚未执行真实 MariaDB。专用 CI Job 已修正为匹配 `TestNewsMariaDBApplicationIntegration`，并对 7 个 MariaDB 用例逐个要求精确 PASS；旧测试名已从该门禁移除。只有实际 Workflow 全部通过、且测试未 SKIP 后，P0-3 才能验收 DONE。当前尚无本轮修复提交对应的可核验 CI 结果，因此 P0-3 仍为 IN_PROGRESS。
 
 ### P0-4：Feed 生产自动采集闭环
 
