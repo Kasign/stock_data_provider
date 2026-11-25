@@ -9,6 +9,8 @@
 
 > 本文是基于 GitHub 固定代码基线的静态盘点，不是生产运行时清点，也不代表任何 Python 能力已经迁移完成。进程、容器、真实环境变量、生产调用量、实际数据库和 Redis Key 等仍需在目标环境只读补证。本文中的“存在/已实现”默认仅说明源码证据，不自动代表生产已部署或正在使用。
 
+> **当前状态校准（2026-11-25，repair_all）：** 本文第 2、3、6、7 节原始表格记录的是 2026-11-04 历史快照，不再代表当前仓库状态。2026-11-25 已复核并退役独立的 `go-core/**` 与 `python_bridge/**` 运行链：Root Server 标准 Compose/部署不装配它们，仓库内 Go Core 仅由其自身启动入口消费 Python Bridge，Python Bridge 也没有其他仓库内运行时消费者。旧 Bridge OpenAPI、专用迁移验证脚本及 CI 中 go-core 专项测试随之移除。此操作不代表旧 Analysis API、Python API Adapter 或旧 WebUI 调用链已退役；这些是独立链路，仍需按其真实调用方另行处理。
+
 ---
 
 ## 1. 核验基线与范围
@@ -189,7 +191,8 @@ python_bridge/go_core_client.py 是供旧 Python API/CLI/Bot/Scheduler 使用的
 | 筛选器、因子、策略、回测与评估 | src/core/market_strategy.py、src/services/screening/**、src/core/backtest_engine.py、src/services/backtest_service.py | MIG-011 |
 | REST API、Bot、SSE、任务队列、调度和后台 Worker | api/v1/**、bot/**、src/services/task_queue.py、src/services/runtime_scheduler.py、src/scheduler.py、src/services/alert_worker.py | MIG-012 |
 | 固定样本、差异分类和行为验收 | 迁移对象的冻结输入/输出及 Go 测试样例 | MIG-013 |
-| Bridge、旧 Python API Adapter 和兼容入口删除 | python_bridge/**、internal/adapters/pythonapi/**、go-core/internal/adapters/pythonbridge/** | MIG-014 |
+| 独立 Go Core / Python Bridge 运行链退役 | go-core/**、python_bridge/**、Bridge 专属契约与 CI | RA-04 | 已退役（2026-11-25） |
+| 旧 Python API Adapter 和 Root Server 旧入口处理 | internal/adapters/pythonapi/**、cmd/pythonapi-smoke/**、旧 Analysis API/Worker | MIG-014 | 保留；仍需单独核实消费者与替代链路 |
 | Python 容器、运行时、依赖和 CI 残留退役 | Dockerfile、Compose、requirements、CI、迁移脚本 | MIG-015 |
 
 ## 5. Python 数据持久化
@@ -408,3 +411,33 @@ Go/Python 对照不是要求逐字节或所有数值完全一致。每项差异�
 
 - 2026-11-04：首次静态盘点；核对固定代码基线、Go/Python Bridge 调用拓扑、旧上游业务模块、SQLite ORM 表、依赖、部署和 CI；MIG-001 保持未完成，等待目标运行环境补证。
 - 2026-11-04：按总规划 v1.2 修订；新增证据等级、明确 MIG-001/002 边界、补齐组合持仓/筛选回测/旧入口迁移对象，增加 MIG-013 差分分类原则；依据固定上游 storage.py 重新核验为 32 张 ORM 表。
+
+
+## 2026-11-25 repair_all：Go Core / Python Bridge 独立旧运行链退役
+
+### 复核证据
+
+- 当前基线：`79c1620469579ecb0fbdb9a75a637eb907a08394`。
+- Root Server 组合根 `internal/server/bootstrap/bootstrap.go` 未导入 `go-core` 或 `pythonbridge`；Root Router 也没有注册 Bridge 路由。
+- 根 `docker-compose.yml` 只装配标准 Server/Web 运行服务；`scripts/deploy-go.sh` 只构建和启动 `stock-analysis-server`、`stock-analysis-web`。两者均无 Python Bridge/Go Core 服务。
+- `go-core/cmd/analysisd/main.go` 是仓库内唯一 Go Core 运行入口，直接构造 `pythonbridge.NewClient`，并注入 MarketData、Search、Analyzer、Persistence、Notification 适配器；`python_bridge/capability_app.py` 提供这些对应内部路由。
+- `python_bridge/go_core_client.py` 只有自身模块内测试，没有仓库内 Python API/CLI/Bot/Scheduler 生产调用方；`GO_CORE_ENABLED` 默认关闭。
+- Python Bridge Dockerfile 执行 `COPY requirements.txt`，但当前仓库 Tree 没有根目录 `requirements.txt`，旧 Bridge 镜像构建上下文不完整。
+- CI 曾独立运行 go-core 测试/vet；这是对孤立模块的 CI 编译覆盖，不是标准部署依赖。退役后删除对应 CI job 和模块测试目标，根模块、Data、News、Research、Researchflow、Notification、Compose、WebUI 验收保持不变。
+
+### 退役范围
+
+- 删除 `go-core/**` 和 `python_bridge/**`，不保留 Bridge Client、Fallback、业务 Adapter 或兼容服务。
+- 删除仅描述这条内部网络的 `doc/api/contracts/Python桥接.openapi.yaml`。
+- 删除已失去目标模块且还引用不存在的历史 `services/market-data` 路径的 `scripts/verify-go-migration.sh`。
+- 从 Go Test Suite / Integration CI 移除 go-core 路径触发、模块矩阵、专属测试与汇总项；不降低根模块及其他现存模块的测试标准。
+
+### 明确保留的独立链路
+
+- `internal/adapters/pythonapi/**`、`cmd/pythonapi-smoke/**` 和 `internal/service/wiring.go` 的 Python API 引用不属于 Python Bridge。当前旧 Analysis 代码仍有该适配器的构造入口，因此本次不删除、不改写。
+- Root Server 旧 Analysis Runner、Task Queue、Worker、HTTP Handler、`/api/v1/analysis/**` 路由及 WebUI 旧 API 调用不属于 Go Core/Python Bridge，保持不变。
+- 不据此宣称整个仓库已完成 Python 运行时清零；本次只完成独立 Go Core/Python Bridge 运行链退役。
+
+### 验收状态
+
+- 本组代码与 CI 配置修改提交后，必须对该提交 SHA 执行 Go Test Suite 与 Integration CI；CI 未完成前不标记为完整验收。

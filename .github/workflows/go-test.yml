@@ -12,7 +12,6 @@ on:
       - 'doc/notification/**'
       - 'doc/research/**'
       - 'doc/researchflow/**'
-      - 'go-core/**'
       - '.github/workflows/go-test.yml'
       - '.env.example'
       - '.dockerignore'
@@ -29,7 +28,6 @@ on:
       - 'doc/news/**'
       - 'doc/notification/**'
       - 'doc/research/**'
-      - 'go-core/**'
       - '.github/workflows/go-test.yml'
       - '.env.example'
       - '.dockerignore'
@@ -46,33 +44,19 @@ concurrency:
 
 jobs:
   test:
-    name: Test ${{ matrix.module }}
+    name: Test root Go module
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        module:
-          - .
-          - go-core
     defaults:
       run:
         shell: bash
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
-      - name: Verify legacy Go module paths in source and build configuration
-        run: |
-          if grep -R -nE 'github\.com/ZhuLinsen/daily_stock_analysis/(go-core|services/market-data)' --include='*.go' --include='go.mod' --include='Dockerfile' --include='*.yml' --include='*.yaml' --include='*.sh' --include='Makefile' .; then
-            echo "::error::发现旧 Go 模块路径残留"
-            exit 1
-          fi
-          grep -Fxq 'module github.com/Kasign/stock_data_provider/go-core' go-core/go.mod
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
           go-version: '1.23.x'
       - name: Check gofmt
-        working-directory: ${{ matrix.module }}
         run: |
           if [[ "$GITHUB_REF" == "refs/heads/feat/server" && "$PWD" == "$GITHUB_WORKSPACE" ]]; then
             files="$(gofmt -l ./cmd/analysis-api ./internal/server)"
@@ -88,16 +72,12 @@ jobs:
             exit 1
           fi
       - name: Download dependencies
-        working-directory: ${{ matrix.module }}
         run: go mod download
       - name: Run tests
-        working-directory: ${{ matrix.module }}
         run: go test ./...
       - name: Run race detector
-        working-directory: ${{ matrix.module }}
         run: go test -race ./...
       - name: Run go vet
-        working-directory: ${{ matrix.module }}
         run: go vet ./...
 
   market-data-module-test:

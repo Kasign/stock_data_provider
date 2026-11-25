@@ -9,8 +9,6 @@ on:
       - '**/*.go'
       - 'go.mod'
       - 'go.sum'
-      - 'go-core/go.mod'
-      - 'go-core/go.sum'
       - 'web/**'
       - 'docker-compose.yml'
       - '.env.example'
@@ -24,8 +22,6 @@ on:
       - '**/*.go'
       - 'go.mod'
       - 'go.sum'
-      - 'go-core/go.mod'
-      - 'go-core/go.sum'
       - 'web/**'
       - 'docker-compose.yml'
       - '.env.example'
@@ -199,18 +195,6 @@ jobs:
           if grep -q 'no tests to run' /tmp/worker_bootstrap_verbose.log; then exit 1; fi
           grep -Fq -- '--- PASS: TestWorkerBootstrapMariaDBRedisIntegration (' /tmp/worker_bootstrap_verbose.log
 
-      - name: Run go vet (go-core module)
-        id: vet-core
-        continue-on-error: true
-        working-directory: go-core
-        run: go vet ./...
-
-      - name: Run Go tests and compile packages (go-core module)
-        id: test-core
-        continue-on-error: true
-        working-directory: go-core
-        run: go test ./...
-
       - name: Prepare example environment
         id: prepare-env
         continue-on-error: true
@@ -261,8 +245,6 @@ jobs:
           TEST_ROOT: ${{ steps.test-root.outcome }}
           TEST_INTEGRATION_VERBOSE: ${{ steps.test-integration-verbose.outcome }}
           TEST_WORKER_BOOTSTRAP: ${{ steps.test-worker-bootstrap.outcome }}
-          VET_CORE: ${{ steps.vet-core.outcome }}
-          TEST_CORE: ${{ steps.test-core.outcome }}
           PREPARE_ENV: ${{ steps.prepare-env.outcome }}
           COMPOSE: ${{ steps.compose.outcome }}
           SETUP_NODE: ${{ steps.setup-node.outcome }}
@@ -281,8 +263,8 @@ jobs:
           }
 
           echo "========== Integration CI 检查汇总 =========="
-          printf 'CHECKOUT=%s SETUP_GO=%s GOFMT=%s VET_ROOT=%s TEST_ROOT=%s TEST_INTEGRATION_VERBOSE=%s TEST_WORKER_BOOTSTRAP=%s VET_CORE=%s TEST_CORE=%s PREPARE_ENV=%s COMPOSE=%s SETUP_NODE=%s JS_CHECK=%s WEB_TEST=%s WEB_BUILD=%s\n' \
-            "$CHECKOUT" "$SETUP_GO" "$GOFMT" "$VET_ROOT" "$TEST_ROOT" "$TEST_INTEGRATION_VERBOSE" "$TEST_WORKER_BOOTSTRAP" "$VET_CORE" "$TEST_CORE" \
+          printf 'CHECKOUT=%s SETUP_GO=%s GOFMT=%s VET_ROOT=%s TEST_ROOT=%s TEST_INTEGRATION_VERBOSE=%s TEST_WORKER_BOOTSTRAP=%s PREPARE_ENV=%s COMPOSE=%s SETUP_NODE=%s JS_CHECK=%s WEB_TEST=%s WEB_BUILD=%s\n' \
+            "$CHECKOUT" "$SETUP_GO" "$GOFMT" "$VET_ROOT" "$TEST_ROOT" "$TEST_INTEGRATION_VERBOSE" "$TEST_WORKER_BOOTSTRAP" \
             "$PREPARE_ENV" "$COMPOSE" "$SETUP_NODE" "$JS_CHECK" "$WEB_TEST" "$WEB_BUILD"
           report "Checkout" "$CHECKOUT"
           report "Go 环境准备" "$SETUP_GO"
@@ -291,8 +273,6 @@ jobs:
           report "go test（根模块）" "$TEST_ROOT"
           report "News/Research/Researchflow 跨模块测试（-v 逐用例）" "$TEST_INTEGRATION_VERBOSE"
           report "Worker Bootstrap MariaDB/Redis 生命周期" "$TEST_WORKER_BOOTSTRAP"
-          report "go vet（go-core）" "$VET_CORE"
-          report "go test（go-core）" "$TEST_CORE"
           report "Web 环境准备" "$PREPARE_ENV"
           report "Docker Compose 配置检查" "$COMPOSE"
           report "Node.js 环境准备" "$SETUP_NODE"

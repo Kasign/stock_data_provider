@@ -1255,3 +1255,13 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 
 - 决策持久化的边界也已确认：`news/adapters/storage.MySQLRepository.AppendAvailabilityDecision` 已实现版本行锁、序列/前序引用、Evidence 归属和选中证据有效性校验；但 `news/app` 当前没有对应的 Availability Decision Application Port/Review Use Case，也没有 Server 生产调用方。不能因 Storage 方法存在就认为可用时间审核链已完成。
 - `news/domain.ParseAvailabilityTime` 只做语法/时区/精度解析，代码注释明确指出 parsed candidate 仍不代表来源语义已验证；不能默认把 RSS/Atom 的 `published` 或 `updated` 字段当作首次公开可获取时间。决策规则必须基于来源字段语义与可复核证据，不得由 Server 临时写死通用推断。
+
+
+## 2026-11-25 RA-04：独立 Go Core / Python Bridge 旧运行链退役
+
+- 核查基线：`repair_all` SHA `79c1620469579ecb0fbdb9a75a637eb907a08394`；开始修改前分支已出现并保留并发文档提交 `ee5f4e7638308d6a8a4f9dfbb826b1bae2f30671`，本次以其为父提交重新应用变更。
+- Root Server 组合根没有导入 Go Core/Python Bridge；根 Compose 与 `scripts/deploy-go.sh` 均不部署二者。旧 Go Core 仅由 `go-core/cmd/analysisd/main.go` 启动，并强制依赖 `PYTHON_BRIDGE_TOKEN`；其五类 Adapter 均经 Python Bridge 内部 API 调用。
+- Python Bridge 的内部调用方只有该 Go Core 运行链；反向 `python_bridge/go_core_client.py` 在仓库内无业务调用方且默认关闭。Bridge Dockerfile 还引用当前仓库不存在的根 `requirements.txt`。
+- 本组删除 Go Core、Python Bridge、专属内部 OpenAPI 契约及失效的专用迁移验证脚本；同步清理 Go Test Suite / Integration CI 中 go-core 专项矩阵、测试、vet 和汇总项。根模块及其他模块验收保持原标准。
+- 明确不处理 `internal/adapters/pythonapi/**`：它是独立 Python API 链路，旧 Analysis 代码仍有构造入口；也不处理 Root Server 旧 Analysis API/Task Queue/Worker 和 WebUI 旧 API 调用。
+- 当前状态：本组代码与 CI 配置已整理为单一提交候选；提交后必须对精确 SHA 执行 Go Test Suite 与 Integration CI。CI 未完成前不标记完整验收。
