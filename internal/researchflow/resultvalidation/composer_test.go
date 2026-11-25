@@ -274,15 +274,15 @@ func TestComposeResultRejectsEvidenceOutsideStrictPIT(t *testing.T) {
 				value := cutoff.Add(time.Second)
 				draft.AvailableAt = &value
 			},
-			},
+		},
 		{
 			name: "available_at not UTC",
 			mutate: func(draft *researchapp.EvidenceDraft, cutoff time.Time) {
 				value := cutoff.Add(-time.Minute).In(time.FixedZone("offset", 8*60*60))
 				draft.AvailableAt = &value
 			},
-			},
-		}
+		},
+	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			input := validCompositionInput()
