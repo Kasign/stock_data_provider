@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 
 	newssource "example.com/stock-analysis-flow/internal/news/adapters/source"
 	newsstage "example.com/stock-analysis-flow/internal/news/stage"
@@ -26,7 +27,7 @@ type newsFeedStageComposition struct {
 	registrations []newsapp.SourceEndpointRegistration
 	executor researchflowapplication.StageExecutor
 	registry *stageoutput.Registry
-	resourceCodes []string
+	resourceRefs []string
 }
 
 func newNewsFeedStageComposition(
@@ -109,10 +110,19 @@ func newNewsFeedStageComposition(
 	if err != nil {
 		return nil, fmt.Errorf("create News Feed Stage Output Registry: %w", err)
 	}
+	resourceRefs := make([]string, 0, len(registrations))
+	for _, registration := range registrations {
+		ref := newsstage.SourceEndpointResourceRef(registration.SourceID, registration.EndpointID)
+		if ref == "" {
+			return nil, errors.New("News Feed registration has an invalid Source/Endpoint identity")
+		}
+		resourceRefs = append(resourceRefs, ref)
+	}
+	sort.Strings(resourceRefs)
 	return &newsFeedStageComposition{
 		catalog: catalog, registrations: registrations,
 		executor: newsFeedStageExecutor{adapter: adapter}, registry: registry,
-		resourceCodes: []string{"news_feed_catalog"},
+		resourceRefs: resourceRefs,
 	}, nil
 }
 
@@ -138,12 +148,12 @@ func (e newsFeedStageExecutor) ExecuteStage(
 	policyRegistry, policyErr := resourcepolicy.NewRegistry()
 	if policyErr != nil || e.adapter == nil ||
 		request.ResourcePolicy.PolicyRef != resourcepolicy.NewsFeedConfiguredSourcesRef ||
-		len(request.ResourcePolicy.AllowedProviderCodes) != 1 ||
-		request.ResourcePolicy.AllowedProviderCodes[0] != "news_feed_catalog" ||
+		len(request.ResourcePolicy.AllowedProviderCodes) != 0 ||
+		len(request.ResourcePolicy.AllowedSourceEndpointRefs) == 0 ||
 		policyRegistry.ValidateSnapshot(request.ResourcePolicy) != nil {
 		return failedNewsFeedStage("news_feed_resource_policy_invalid"), nil
 	}
-	output, err := e.adapter.Execute(ctx, request.Run.Ref+"/"+request.Attempt.Ref, request.Stage.Code)
+	output, err := e.adapter.Execute(ctx, request.Run.Ref, request.Stage.Code, request.ResourcePolicy.AllowedSourceEndpointRefs)
 	if err != nil {
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return researchflowapplication.StageExecutionResult{}, ctxErr
@@ -167,6 +177,14 @@ func (e newsFeedStageExecutor) ExecuteStage(
 			ProviderResult: providerResult,
 		}, nil
 	case "partial":
+		if output.Retryable {
+			return researchflowapplication.StageExecutionResult{
+				AttemptStatus: researchflowdomain.AttemptFailed,
+				StageStatus: researchflowdomain.StageRetryWait,
+				ProviderResult: providerResult,
+				ReasonCodes: []string{"news_feed_retryable_source_failure"},
+			}, nil
+		}
 		return researchflowapplication.StageExecutionResult{
 			AttemptStatus: researchflowdomain.AttemptDegraded,
 			StageStatus: researchflowdomain.StageDegraded,

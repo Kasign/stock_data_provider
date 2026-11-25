@@ -74,10 +74,11 @@ func newResearchflowComposition(
 		resourcepolicy.NewsSearchConfiguredProvidersRef: append([]string(nil), newsProviderCodes...),
 		resourcepolicy.QuantDailyBarsProvidersRef:       {},
 	}
+	sourceEndpointInventories := make(map[string][]string)
 	if newsFeedStage != nil {
-		providerInventories[resourcepolicy.NewsFeedConfiguredSourcesRef] = append([]string(nil), newsFeedStage.resourceCodes...)
-		if _, err := policyRegistry.Resolve(resourcepolicy.NewsFeedConfiguredSourcesRef, newsFeedStage.resourceCodes); err != nil {
-			return nil, fmt.Errorf("validate assembled News Feed source catalog inventory: %w", err)
+		sourceEndpointInventories[resourcepolicy.NewsFeedConfiguredSourcesRef] = append([]string(nil), newsFeedStage.resourceRefs...)
+		if _, err := policyRegistry.ResolveSourceEndpoints(resourcepolicy.NewsFeedConfiguredSourcesRef, newsFeedStage.resourceRefs); err != nil {
+			return nil, fmt.Errorf("validate assembled News Feed Source/Endpoint inventory: %w", err)
 		}
 	}
 	if len(newsProviderCodes) > 0 {
@@ -120,6 +121,7 @@ func newResearchflowComposition(
 
 	policyResolver := configuredResourcePolicyResolver{
 		registry: policyRegistry, providerCodesByRef: providerInventories,
+		sourceEndpointRefsByRef: sourceEndpointInventories,
 	}
 	parameterSchemas, err := newResearchflowParameterSchemaValidator()
 	if err != nil {
@@ -221,10 +223,11 @@ func (c *researchflowComposition) publishWorkflowTemplate(ctx context.Context) e
 	return nil
 }
 
-// configuredResourcePolicyResolver snapshots only provider instances assembled by Server.
+// configuredResourcePolicyResolver snapshots only resources assembled by Server.
 type configuredResourcePolicyResolver struct {
-	registry           *resourcepolicy.Registry
-	providerCodesByRef map[string][]string
+	registry                *resourcepolicy.Registry
+	providerCodesByRef      map[string][]string
+	sourceEndpointRefsByRef map[string][]string
 }
 
 func (r configuredResourcePolicyResolver) Resolve(ctx context.Context, ref string) (resourcepolicy.Snapshot, error) {
@@ -233,6 +236,13 @@ func (r configuredResourcePolicyResolver) Resolve(ctx context.Context, ref strin
 	}
 	if err := ctx.Err(); err != nil {
 		return resourcepolicy.Snapshot{}, err
+	}
+	if ref == resourcepolicy.NewsFeedConfiguredSourcesRef {
+		refs, exists := r.sourceEndpointRefsByRef[ref]
+		if !exists {
+			return resourcepolicy.Snapshot{}, fmt.Errorf("%w: %s", resourcepolicy.ErrPolicyNotFound, ref)
+		}
+		return r.registry.ResolveSourceEndpoints(ref, append([]string(nil), refs...))
 	}
 	codes, exists := r.providerCodesByRef[ref]
 	if !exists {

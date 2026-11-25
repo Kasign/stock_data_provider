@@ -34,7 +34,7 @@ func buildNewsFeedWorkflowTemplate(
 	if resourcepolicy.NewsFeedConfiguredSourcesRef != "news.feed.configured-sources@1.0.0" {
 		return template.WorkflowTemplate{}, errors.New("News Feed ResourcePolicy identity is invalid")
 	}
-	if _, err := policies.Resolve(resourcepolicy.NewsFeedConfiguredSourcesRef, stage.resourceCodes); err != nil {
+	if _, err := policies.ResolveSourceEndpoints(resourcepolicy.NewsFeedConfiguredSourcesRef, stage.resourceRefs); err != nil {
 		return template.WorkflowTemplate{}, fmt.Errorf("resolve registered News Feed ResourcePolicy: %w", err)
 	}
 

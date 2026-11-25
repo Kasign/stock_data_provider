@@ -99,8 +99,6 @@ type ResolvedTemplate struct {
 
 var ErrInvalidTemplate = errors.New("invalid workflow template")
 
-var providerCodePattern = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
-
 const maxRetryDelayMS = int64(1<<63-1) / int64(time.Millisecond)
 
 func Validate(t WorkflowTemplate, gates HardRiskGateRegistry) error {
@@ -252,25 +250,20 @@ func resolvedFingerprint(templateFingerprint string, schema ParameterSchemaSnaps
 	return hex.EncodeToString(sum[:]), nil
 }
 
-// BindResourcePolicySnapshot binds an immutable policy decision to a resolved template.
-// The policy definition fingerprint participates in identity; the dynamic Provider
-// allowlist is persisted for execution but deliberately excluded from that identity.
+// BindResourcePolicySnapshot binds the immutable resource inventory selected at Run creation.
+// The policy definition fingerprint participates in identity; the dynamic inventory is persisted
+// for execution but deliberately excluded from that identity.
 func BindResourcePolicySnapshot(resolved ResolvedTemplate, snapshot resourcepolicy.Snapshot) (ResolvedTemplate, error) {
 	if snapshot.PolicyRef == "" || snapshot.PolicyRef != resolved.ResourcePolicyRef ||
 		len(snapshot.PolicyFingerprint) != 64 || snapshot.PolicyFingerprint != strings.ToLower(snapshot.PolicyFingerprint) ||
-		len(snapshot.AllowedProviderCodes) == 0 {
+		resourcepolicy.ValidateSnapshotInventory(snapshot) != nil {
 		return ResolvedTemplate{}, fmt.Errorf("%w: resource policy snapshot identity or inventory is invalid", ErrInvalidTemplate)
 	}
 	if _, err := hex.DecodeString(snapshot.PolicyFingerprint); err != nil {
 		return ResolvedTemplate{}, fmt.Errorf("%w: resource policy fingerprint must be SHA-256 hex", ErrInvalidTemplate)
 	}
-	codes := append([]string(nil), snapshot.AllowedProviderCodes...)
-	for i, code := range codes {
-		if !providerCodePattern.MatchString(code) || (i > 0 && codes[i-1] >= code) {
-			return ResolvedTemplate{}, fmt.Errorf("%w: resource policy Provider Codes must be valid, unique and sorted", ErrInvalidTemplate)
-		}
-	}
-	snapshot.AllowedProviderCodes = codes
+	snapshot.AllowedProviderCodes = append([]string(nil), snapshot.AllowedProviderCodes...)
+	snapshot.AllowedSourceEndpointRefs = append([]string(nil), snapshot.AllowedSourceEndpointRefs...)
 	resolved.ResourcePolicy = snapshot
 	if resolved.TemplateFingerprint == "" {
 		return ResolvedTemplate{}, fmt.Errorf("%w: resolved template fingerprint is missing", ErrInvalidTemplate)

@@ -71,16 +71,24 @@ type FeedCollectionResult struct {
 	ReasonCodes []string
 }
 
+type FeedSourceCollector interface {
+	Execute(context.Context, app.CollectSourceRequest) (app.CollectSourceResult, error)
+}
+
+type FeedSourceIngester interface {
+	Execute(context.Context, app.IngestCollectedSourceRequest) ([]domain.Observation, error)
+}
+
 type FeedCollectionAdapter struct {
 	registrations []app.SourceEndpointRegistration
-	collect *app.CollectSource
-	ingest *app.IngestCollectedSource
+	collect FeedSourceCollector
+	ingest FeedSourceIngester
 }
 
 func NewFeedCollectionAdapter(
 	registrations []app.SourceEndpointRegistration,
-	collect *app.CollectSource,
-	ingest *app.IngestCollectedSource,
+	collect FeedSourceCollector,
+	ingest FeedSourceIngester,
 ) (*FeedCollectionAdapter, error) {
 	if len(registrations) == 0 || collect == nil || ingest == nil {
 		return nil, ErrFeedCollectionAdapterRequired
@@ -104,23 +112,90 @@ func NewFeedCollectionAdapter(
 	return &FeedCollectionAdapter{registrations: owned, collect: collect, ingest: ingest}, nil
 }
 
-// Execute runs only the immutable Source/Endpoint snapshot supplied at Server startup.
+// SourceEndpointResourceRef is the stable, URL-free identity used in a Run resource snapshot.
+func SourceEndpointResourceRef(sourceID, endpointID string) string {
+	if !validFeedResourceID(sourceID) || !validFeedResourceID(endpointID) {
+		return ""
+	}
+	return sourceID + "/" + endpointID
+}
+
+func validFeedResourceID(value string) bool {
+	if value == "" || value != strings.TrimSpace(value) || len(value) > 128 {
+		return false
+	}
+	first := value[0]
+	if !((first >= 'a' && first <= 'z') || (first >= 'A' && first <= 'Z') || (first >= '0' && first <= '9')) {
+		return false
+	}
+	for _, char := range value {
+		if !(char >= 'a' && char <= 'z') && !(char >= 'A' && char <= 'Z') &&
+			!(char >= '0' && char <= '9') && char != '.' && char != '_' && char != '-' {
+			return false
+		}
+	}
+	return true
+}
+
+func splitSourceEndpointResourceRef(value string) (string, string, bool) {
+	parts := strings.Split(value, "/")
+	if len(parts) != 2 || !validFeedResourceID(parts[0]) || !validFeedResourceID(parts[1]) {
+		return "", "", false
+	}
+	return parts[0], parts[1], true
+}
+
+// Execute runs only the Source/Endpoint identities captured in the immutable Run resource snapshot.
 // It persists authorized excerpts through the unified Application ingest use case;
 // StageOutput contains identifiers and counters only, never article content or URLs.
-func (a *FeedCollectionAdapter) Execute(ctx context.Context, runID, stageCode string) (FeedCollectionResult, error) {
+func (a *FeedCollectionAdapter) Execute(
+	ctx context.Context,
+	runID, stageCode string,
+	allowedSourceEndpointRefs []string,
+) (FeedCollectionResult, error) {
 	if a == nil || a.collect == nil || a.ingest == nil || ctx == nil ||
-		strings.TrimSpace(runID) == "" || stageCode != CollectFeedsStageCode {
+		strings.TrimSpace(runID) == "" || stageCode != CollectFeedsStageCode || len(allowedSourceEndpointRefs) == 0 {
 		return FeedCollectionResult{}, ErrFeedCollectionAdapterRequired
 	}
+	registrations := make(map[string]app.SourceEndpointRegistration, len(a.registrations))
+	for _, registration := range a.registrations {
+		registrations[SourceEndpointResourceRef(registration.SourceID, registration.EndpointID)] = registration
+	}
+	resourceRefs := append([]string(nil), allowedSourceEndpointRefs...)
+	for i, ref := range resourceRefs {
+		if ref != strings.TrimSpace(ref) {
+			return FeedCollectionResult{}, ErrFeedCollectionAdapterRequired
+		}
+		if _, _, ok := splitSourceEndpointResourceRef(ref); !ok {
+			return FeedCollectionResult{}, ErrFeedCollectionAdapterRequired
+		}
+		for j := 0; j < i; j++ {
+			if resourceRefs[j] == ref {
+				return FeedCollectionResult{}, ErrFeedCollectionAdapterRequired
+			}
+		}
+	}
+	sort.Strings(resourceRefs)
 	output := FeedCollectionOutput{
-		Status: "success", SourceCount: len(a.registrations),
-		Sources: make([]FeedSourceOutcome, 0, len(a.registrations)),
+		Status: "success", SourceCount: len(resourceRefs),
+		Sources: make([]FeedSourceOutcome, 0, len(resourceRefs)),
 	}
 	reasonSet := make(map[string]struct{})
 	retryableFailureCount := 0
-	for _, registration := range a.registrations {
+	for _, resourceRef := range resourceRefs {
 		if err := ctx.Err(); err != nil {
 			return FeedCollectionResult{}, err
+		}
+		sourceID, endpointID, _ := splitSourceEndpointResourceRef(resourceRef)
+		registration, exists := registrations[resourceRef]
+		if !exists {
+			output.SkippedSourceCount++
+			output.Sources = append(output.Sources, FeedSourceOutcome{
+				SourceID: sourceID, EndpointID: endpointID, Status: "skipped",
+				NewsIDs: []string{}, ErrorCode: "source_registration_unavailable",
+			})
+			reasonSet["news_feed_source_skipped"] = struct{}{}
+			continue
 		}
 		retention := defaultFeedRetention
 		if registration.SourcePolicy.MaxRetention < retention {
@@ -245,7 +320,7 @@ func (a *FeedCollectionAdapter) Execute(ctx context.Context, runID, stageCode st
 	}
 	return FeedCollectionResult{
 		OutputType: CollectFeedsOutputType, SchemaVersion: CollectFeedsSchemaVersion,
-		Payload: payload, QualitySummary: quality, Retryable: output.Status == "failed_retryable",
+		Payload: payload, QualitySummary: quality, Retryable: retryableFailureCount > 0,
 		ReasonCodes: reasons,
 	}, nil
 }
