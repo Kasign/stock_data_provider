@@ -64,7 +64,7 @@ func TestFeedIngestionMappingToVersionOffline(t *testing.T) {
 		t.Fatal(err)
 	}
 	collection := CollectSourceResult{
-		CollectionPurpose: domain.PurposeInternalPersonalResearch,
+		CollectionPurpose:     domain.PurposeInternalPersonalResearch,
 		SourceID:              registration.SourceID,
 		EndpointID:            registration.EndpointID,
 		SourcePolicyVersionID: registration.SourcePolicyVersionID,
