@@ -159,6 +159,13 @@ func Run(ctx context.Context) (runErr error) {
 		}
 	}
 	var researchflowExecution *researchflowComposition
+	feedConfigured := len(newsConfig.FeedSources()) > 0
+	if feedConfigured && serverRole != serverconfig.RoleAPI && !processConfig.ResearchflowCapacity.Configured {
+		return errors.New("NEWS_FEED_SOURCES_JSON requires configured Researchflow capacity on Worker/All roles")
+	}
+	if feedConfigured && serverRole == serverconfig.RoleAPI && ownerSession != nil && !processConfig.ResearchflowCapacity.Configured {
+		return errors.New("NEWS_FEED_SOURCES_JSON with API Owner Session requires configured Researchflow capacity")
+	}
 	if processConfig.ResearchflowCapacity.Configured &&
 		(serverRole != serverconfig.RoleAPI || ownerSession != nil) {
 		researchflowExecution, err = newResearchflowComposition(
