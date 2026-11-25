@@ -354,6 +354,8 @@ func ValidateFeedCollectionPayload(raw json.RawMessage) error {
 		return errors.New("News Feed payload counters are inconsistent")
 	}
 	seen := make(map[string]struct{}, len(output.Sources))
+	var successCount, emptyCount, skippedCount, failedCount int
+	var collectedCount, ingestedCount int
 	for _, source := range output.Sources {
 		key := source.SourceID + "\x00" + source.EndpointID
 		if source.SourceID == "" || source.EndpointID == "" || source.CollectedCount < 0 ||
@@ -364,17 +366,67 @@ func ValidateFeedCollectionPayload(raw json.RawMessage) error {
 			return errors.New("News Feed source outcome identity is duplicated")
 		}
 		seen[key] = struct{}{}
-		switch source.Status {
-		case "success", "empty":
-			if source.ErrorCode != "" || source.Retryable {
-				return errors.New("successful News Feed source carries failure metadata")
+		collectedCount += source.CollectedCount
+		ingestedCount += source.IngestedCount
+		for i, newsID := range source.NewsIDs {
+			if newsID == "" || (i > 0 && source.NewsIDs[i-1] >= newsID) {
+				return errors.New("News Feed source News IDs must be non-empty, unique and sorted")
 			}
-		case "skipped", "failed":
-			if source.ErrorCode == "" {
-				return errors.New("failed News Feed source is missing error code")
+		}
+		switch source.Status {
+		case "success":
+			successCount++
+			if source.ErrorCode != "" || source.Retryable || source.CollectedCount == 0 {
+				return errors.New("successful News Feed source carries invalid failure metadata or no entries")
+			}
+		case "empty":
+			emptyCount++
+			if source.ErrorCode != "" || source.Retryable || source.CollectedCount != 0 || source.IngestedCount != 0 {
+				return errors.New("empty News Feed source carries content or failure metadata")
+			}
+		case "skipped":
+			skippedCount++
+			if source.ErrorCode == "" || source.Retryable || source.IngestedCount != 0 || len(source.NewsIDs) != 0 {
+				return errors.New("skipped News Feed source carries invalid failure metadata")
+			}
+		case "failed":
+			failedCount++
+			if source.ErrorCode == "" || source.IngestedCount != 0 || len(source.NewsIDs) != 0 {
+				return errors.New("failed News Feed source is missing error code or carries persisted News IDs")
 			}
 		default:
 			return errors.New("News Feed source status is invalid")
+		}
+	}
+	if successCount != output.SuccessSourceCount || emptyCount != output.EmptySourceCount ||
+		skippedCount != output.SkippedSourceCount || failedCount != output.FailedSourceCount ||
+		collectedCount != output.CollectedEntryCount || ingestedCount != output.IngestedCount {
+		return errors.New("News Feed aggregate counters do not match source outcomes")
+	}
+	switch output.Status {
+	case "success":
+		if output.FailureCode != "" || output.FailedSourceCount != 0 || output.SkippedSourceCount != 0 ||
+			output.SuccessSourceCount+output.EmptySourceCount == 0 {
+			return errors.New("successful News Feed status is inconsistent")
+		}
+	case "empty":
+		if output.FailureCode != "" || output.FailedSourceCount != 0 || output.SkippedSourceCount != 0 ||
+			output.SuccessSourceCount != 0 || output.EmptySourceCount == 0 || output.IngestedCount != 0 {
+			return errors.New("empty News Feed status is inconsistent")
+		}
+	case "partial":
+		if output.FailureCode != "" || output.SuccessSourceCount+output.EmptySourceCount == 0 ||
+			output.FailedSourceCount+output.SkippedSourceCount == 0 {
+			return errors.New("partial News Feed status is inconsistent")
+		}
+	case "failed_retryable":
+		if output.FailureCode != "news_feed_retryable_source_failure" || output.FailedSourceCount == 0 ||
+			output.SuccessSourceCount != 0 || output.EmptySourceCount != 0 || output.SkippedSourceCount != 0 {
+			return errors.New("retryable News Feed failure status is inconsistent")
+		}
+	case "failed":
+		if output.FailureCode == "" || output.SuccessSourceCount != 0 || output.EmptySourceCount != 0 {
+			return errors.New("failed News Feed status is inconsistent")
 		}
 	}
 	return nil
