@@ -42,16 +42,9 @@ func newNewsFeedStageComposition(
 		return nil, errors.New("News Feed composition requires startup context, shared Platform HTTP Client and News Repository")
 	}
 
-	registrations := make([]newsapp.SourceEndpointRegistration, 0, len(feedSources))
+	registrations := newsFeedRegistrations(feedSources)
 	policies := make(map[string]newsconfig.FeedSource, len(feedSources))
 	for _, source := range feedSources {
-		registrations = append(registrations, newsapp.SourceEndpointRegistration{
-			SourceID: source.SourceID, EndpointID: source.EndpointID, Enabled: true,
-			URL: source.URL, PublisherName: source.PublisherName, PublisherDomain: source.PublisherDomain,
-			AccessMethod: source.AccessMethod, SourcePolicy: source.SourcePolicy,
-			SourcePolicyVersionID: source.SourcePolicyVersionID,
-			URLPolicy: source.URLPolicy, MaxResponseBytes: source.MaxResponseBytes,
-		})
 		if existing, ok := policies[source.SourceID]; ok {
 			if existing.SourcePolicyVersionID != source.SourcePolicyVersionID ||
 				existing.ExpectedCurrentSourcePolicyVersionID != source.ExpectedCurrentSourcePolicyVersionID {
@@ -207,4 +200,18 @@ func failedNewsFeedStageWithOutput(reasonCode string, output *stageoutput.Provid
 	result := failedNewsFeedStage(reasonCode)
 	result.ProviderResult = output
 	return result
+}
+
+func newsFeedRegistrations(feedSources []newsconfig.FeedSource) []newsapp.SourceEndpointRegistration {
+	registrations := make([]newsapp.SourceEndpointRegistration, 0, len(feedSources))
+	for _, source := range feedSources {
+		registrations = append(registrations, newsapp.SourceEndpointRegistration{
+			SourceID: source.SourceID, EndpointID: source.EndpointID, Enabled: true,
+			URL: source.URL, PublisherName: source.PublisherName, PublisherDomain: source.PublisherDomain,
+			AccessMethod: source.AccessMethod, SourcePolicy: source.SourcePolicy,
+			SourcePolicyVersionID: source.SourcePolicyVersionID,
+			URLPolicy: source.URLPolicy, MaxResponseBytes: source.MaxResponseBytes,
+		})
+	}
+	return registrations
 }
