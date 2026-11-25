@@ -1344,3 +1344,12 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - 新增缺失 available_at、available_at 晚于 Evidence cutoff、非 UTC available_at 的回归用例；有效测试数据显式提供可证明的时间。
 - RSC-CTR-001 Schema 增加 RFC3339Nano UTC Z pattern，以及 source_owner=news 时 source_version 必填约束；nullable available_at 仍保留在 Research 存储 DTO 层，严格结果消费由 ResultComposition 门禁执行。
 - NEWS-CTR-001 Page Schema 将已存在于 DTO/Golden 的 relation_status 加入 required；NEWS-CTR-001/002/003 与 RSC-CTR-001 登记簿说明同步修正；旧 News-Research 设计文档明确降为历史参考。
+
+
+## 2026-11-25 Quant 物理 Schema 启动校验补齐
+
+- 根据 2026-11-24 Schema 审计，Quant 原先只有 Migration History/Checksum 校验和 Repository 行为集成测试，没有 Root 启动阶段的物理结构校验。
+- 新增 Quant 自有只读 storage.ValidateSchema：检查 5 张核心表、Repository/授权读取所需列，以及审计查询、策略快照唯一性和策略管理审计索引；不复制 DDL、不执行自动修复、不改变 Migration。
+- Root bootstrapDatabase 在 Migration History 校验后、Redis/Repository 装配前执行 Quant Schema 校验；缺表、缺列或关键索引漂移均 fail-closed，并返回具体表/列/索引诊断。
+- 新增结构快照单测覆盖缺表、缺列、缺索引及索引列顺序漂移；新增 MariaDB 基线集成测试验证当前真实 Migration 结构符合 Validator。
+- 本工作组只补齐 Quant 启动前物理结构校验，不代表 RA-02 Research 消费链完成。Research Stage 尚未调用 Quant GetResult；News available_at 真实证据链仍按外部阻塞处理。

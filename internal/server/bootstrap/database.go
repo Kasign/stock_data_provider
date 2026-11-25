@@ -10,6 +10,7 @@ import (
 
 	"example.com/stock-analysis-flow/internal/adapters/storage/mysqlredis"
 	analysisstorage "example.com/stock-analysis-flow/internal/analysis/storage"
+	quantstorage "example.com/stock-analysis-flow/internal/quant/storage"
 	marketdatabootstrap "example.com/stock-analysis-flow/internal/marketdata/bootstrap"
 	servermigration "example.com/stock-analysis-flow/internal/server/migration"
 	serverresources "example.com/stock-analysis-flow/internal/server/resources"
@@ -17,7 +18,7 @@ import (
 
 // bootstrapDatabase is the single database initialization path shared by the
 // normal Root Server and owner-init. It opens SQL only, applies and verifies
-// every registered module migration, and validates the final Data and Analysis schemas.
+// every registered module migration, and validates final physical schemas for critical modules.
 // Redis, HTTP clients and repositories must be created only after it succeeds.
 func bootstrapDatabase(ctx context.Context, cfg mysqlredis.Config, timeout time.Duration) (*sql.DB, *servermigration.Registry, error) {
 	if ctx == nil || timeout <= 0 {
@@ -49,6 +50,9 @@ func bootstrapDatabase(ctx context.Context, cfg mysqlredis.Config, timeout time.
 	}
 	if err := analysisstorage.ValidateSchema(migrationCtx, db); err != nil {
 		return nil, nil, errors.Join(fmt.Errorf("validate final Analysis schema: %w", err), db.Close())
+	}
+	if err := quantstorage.ValidateSchema(migrationCtx, db); err != nil {
+		return nil, nil, errors.Join(fmt.Errorf("validate final Quant schema: %w", err), db.Close())
 	}
 	return db, registry, nil
 }

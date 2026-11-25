@@ -217,3 +217,13 @@ func TestMySQLRepositoryHonorsCancellation(t *testing.T) {
 		t.Fatalf("Save with cancelled context = %v, want context.Canceled", err)
 	}
 }
+
+
+func TestMySQLSchemaValidatorAcceptsCompleteQuantBaseline(t *testing.T) {
+	db := openQuantIntegrationDB(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := ValidateSchema(ctx, db); err != nil {
+		t.Fatalf("ValidateSchema() error = %v", err)
+	}
+}
