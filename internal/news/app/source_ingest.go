@@ -160,9 +160,9 @@ func (u *IngestCollectedSource) Execute(ctx context.Context, request IngestColle
 				candidate.Title + "\x00" + candidate.PublishedAtRaw,
 		))
 		idempotencyKey := prefix + "/" + hex.EncodeToString(fingerprint[:])
-		observation, ingestErr := u.ingest.executeWithPolicyTraceAndCheck(
-			ctx, sourceID, idempotencyKey, candidate, registration.URLPolicy, trace,
-			checkPersistencePolicy,
+		observation, ingestErr := u.ingest.executeWithPolicyTraceAndCheckAndContent(
+			ctx, sourceID, idempotencyKey, candidate, entry.Content,
+			registration.URLPolicy, trace, checkPersistencePolicy,
 		)
 		if ingestErr != nil {
 			return nil, ingestErr

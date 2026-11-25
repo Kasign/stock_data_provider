@@ -191,6 +191,10 @@ func (u *candidateIngest) executeCore(
 				return err
 			}
 		}
+		if candidate.CanonicalURL == "" && len(credentials) == 0 {
+			persisted, err = tx.AppendObservation(ctx, observation)
+			return err
+		}
 
 		var urlItem domain.NewsItem
 		urlMatched := false
@@ -240,7 +244,8 @@ func (u *candidateIngest) executeCore(
 		case urlMatched:
 			item = urlItem
 		case nativeResolution.Status == domain.IdentityMatched:
-			item, urlErr := tx.FindNewsItemByID(ctx, nativeResolution.NewsID)
+			var urlErr error
+			item, _, urlErr = tx.FindNewsItemByID(ctx, nativeResolution.NewsID)
 			if urlErr != nil {
 				return urlErr
 			}
