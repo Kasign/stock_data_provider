@@ -192,9 +192,10 @@ func (p *newsSearchIntegrationProvider) Search(ctx context.Context, request news
 		return nil, &newsapp.ProviderError{Code: newsapp.ProviderErrorRateLimited}
 	}
 	return []newsdomain.Candidate{{
-		Title:         "Deterministic News Stage integration candidate",
-		RawURL:        "https://publisher.example.test/integration-candidate",
-		PublisherName: "Integration Fixture Publisher",
+		Title:           "Deterministic News Stage integration candidate",
+		ProviderSummary: "Provider summary must survive persisted StageOutput",
+		RawURL:          "https://publisher.example.test/integration-candidate",
+		PublisherName:   "Integration Fixture Publisher",
 	}}, nil
 }
 
@@ -941,6 +942,9 @@ func TestNewsSearchStageResearchflowMariaDBIntegration(t *testing.T) {
 	if payload.Status != newsdomain.SearchSuccess || len(payload.Candidates) != 1 ||
 		payload.Candidates[0].ProviderCode != "integration_fixture" {
 		t.Fatalf("持久化 News Payload 内容不符合预期: %+v", payload)
+	}
+	if payload.Candidates[0].ProviderSummary != "Provider summary must survive persisted StageOutput" {
+		t.Fatalf("Provider 摘要未通过真实 MariaDB StageOutput 持久化: %+v", payload.Candidates[0])
 	}
 	var quality newsstage.SearchCandidatesQualitySummary
 	if err := json.Unmarshal(qualityResource.Content, &quality); err != nil {
