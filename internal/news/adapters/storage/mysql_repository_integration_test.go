@@ -260,6 +260,9 @@ func applyNewsBaselineAndVerifySchema(t *testing.T, ctx context.Context, db *sql
 	if err := platformstorage.ApplyMigrations(ctx, db, MigrationNamespace, migrations); err != nil {
 		t.Fatalf("apply News baseline: %v", err)
 	}
+	if err := ValidateSchema(ctx, db); err != nil {
+		t.Fatalf("validate News baseline schema: %v", err)
+	}
 	for _, column := range []string{
 		"canonical_url", "canonical_url_hash", "title", "content_json", "content_fingerprint",
 	} {
