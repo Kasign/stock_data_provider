@@ -812,6 +812,43 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 		t.Fatalf("create second news version: %v", err)
 	}
 
+	// Strict PIT fixtures require a traceable, version-bound verified available_at decision.
+	observationRetention := secondObservation.ObservedAt.Add(24 * time.Hour)
+	if _, err := db.ExecContext(ctx,
+		"UPDATE news_observations SET retention_until = ? WHERE observation_id = ?",
+		observationRetention, secondObservation.ID,
+	); err != nil {
+		t.Fatalf("set second Observation retention: %v", err)
+	}
+	availabilityEvidenceID := secondVersion.Version.ID + "-availability-evidence"
+	candidateAvailableAt := secondObservation.ObservedAt.Add(-time.Minute).Truncate(time.Second)
+	availabilityRecordedAt := secondVersion.Version.ObservedAt.Add(100 * time.Millisecond)
+	availabilityDecisionAt := availabilityRecordedAt.Add(100 * time.Millisecond)
+	if _, err := db.ExecContext(ctx, `INSERT INTO news_version_availability_evidence
+		(evidence_id, news_id, version_id, observation_id, field_path, raw_value,
+		 source_timezone_or_offset, source_precision, parse_status, parse_reason_code,
+		 candidate_available_at_utc, parser_version, evidence_ref, observed_at, recorded_at,
+		 retention_until)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'parsed', '', ?, ?, ?, ?, ?, ?)`,
+		availabilityEvidenceID, secondObservation.NewsID, secondVersion.Version.ID,
+		secondObservation.ID, "publisher.first_available_at", candidateAvailableAt.Format(time.RFC3339),
+		"Z", "second", candidateAvailableAt, "integration-parser/1",
+		"evidence://news-integration/available-at", secondObservation.ObservedAt,
+		availabilityRecordedAt, observationRetention,
+	); err != nil {
+		t.Fatalf("insert verified available_at evidence: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, `INSERT INTO news_version_availability_decisions
+		(decision_id, version_id, decision_seq, status, selected_evidence_id,
+		 considered_evidence_ids, reason_code, review_rule_version, recorded_at)
+		VALUES (?, ?, 1, 'verified', ?, JSON_ARRAY(?), ?, ?, ?)`,
+		availabilityEvidenceID+"-decision", secondVersion.Version.ID,
+		availabilityEvidenceID, availabilityEvidenceID,
+		"availability.source_verified", "integration-review/1", availabilityDecisionAt,
+	); err != nil {
+		t.Fatalf("insert verified available_at decision: %v", err)
+	}
+
 	// Both the version and its owning Observation must be visible at system_as_of.
 	beforeVersion := app.GetEvidenceRequest{
 		NewsID:     secondObservation.NewsID,
@@ -1840,17 +1877,15 @@ func TestObservationRetentionPurgeIntegration(t *testing.T) {
 			t.Fatalf("observation tombstone row count=%d, want 1", retainedRows)
 		}
 	}
-	pitRecord, err := repository.GetEvidenceVersionAt(ctx, app.GetEvidenceRequest{
+	_, err = repository.GetEvidenceVersionAt(ctx, app.GetEvidenceRequest{
 		NewsID: referenceNewsID, VersionID: referenceVersionID, SystemAsOf: now.Add(time.Minute),
 	})
-	if err != nil {
-		t.Fatalf("PIT query after observation payload purge: %v", err)
-	}
-	if pitRecord.Observation.PayloadPurgedAt == nil || pitRecord.Observation.Candidate.Title != "" {
-		t.Fatalf("PIT query disclosed a purged candidate payload: %+v", pitRecord.Observation)
+	if !errors.Is(err, app.ErrEvidencePITNotFound) {
+		t.Fatalf("strict PIT query after availability evidence purge error = %v, want PIT not found", err)
 	}
 
-	// 列表 PIT 查询必须与单条查询保持相同的 Tombstone 载荷屏蔽语义。
+	// available_at 证据已过期并清理后，列表也必须排除该版本，不能把 Tombstone
+	// 误当成仍满足严格 PIT 的可用事实。
 	listed, err := repository.ListEvidenceVersionsAt(ctx, app.ListEvidenceRequest{
 		CallerRef:             "service:research",
 		PurposeCode:           app.EvidencePurposeResearchAnalysis,
@@ -1865,13 +1900,8 @@ func TestObservationRetentionPurgeIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListEvidence PIT query after observation payload purge: %v", err)
 	}
-	if len(listed) != 1 || listed[0].Version.ID != referenceVersionID ||
-		listed[0].Observation.ID != observations[0].ID {
-		t.Fatalf("ListEvidence PIT returned unexpected tombstone records: %+v", listed)
-	}
-	if listed[0].Observation.PayloadPurgedAt == nil ||
-		!reflect.DeepEqual(listed[0].Observation.Candidate, domain.Candidate{}) {
-		t.Fatalf("ListEvidence PIT disclosed a purged candidate payload: %+v", listed[0].Observation)
+	if len(listed) != 0 {
+		t.Fatalf("ListEvidence PIT returned %d records after available_at evidence purge, want 0", len(listed))
 	}
 	var retainedVersionRows int
 	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM news_item_versions WHERE version_id = ? AND observation_id = ?", referenceVersionID, observations[0].ID).Scan(&retainedVersionRows); err != nil {

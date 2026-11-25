@@ -1302,3 +1302,13 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - 修复 News Storage Get/List 查询：在标量 available_at 投影后用 `HAVING available_at IS NOT NULL` 过滤，避免无可用时间记录进入单条结果或固定分页 Snapshot；Application `validEvidencePITRecord` 同时将 nil 作为严格 PIT 无效。
 - 回归覆盖：单条查询和列表查询均覆盖未有 verified Decision、缺少 Evidence 溯源、unresolved 最新 Decision、异常 selected_evidence_id、Evidence payload purge；无合格时间时不返回记录。
 - 保留上一组来源溯源门禁：verified Decision 必须引用可追溯 Evidence；但不把 evidence_ref/hash 存在等同于首次公开可获取语义已验证。没有来源官方字段语义/许可证据时，Research B 组继续 SHELVED，不构造 Research Stage 空壳。
+
+
+
+### 严格 PIT 修复首轮 CI 反馈与测试契约校准（2026-11-25）
+
+- 严格 PIT 实现 SHA：`8d61f54e542b912de814b80b45313267d9befa80`。
+- Go Test Suite Run [45543207564](https://github.com/Kasign/stock_data_provider/actions/runs/45543207564) 的 News MariaDB Job 首轮失败，根因不是 SQL 语法，而是两条旧集成测试仍把缺少/已过期 `available_at` 的记录作为 PIT 可查询结果：`TestNewsMariaDBRepositoryIntegration` 未创建任何 AvailabilityDecision；`TestObservationRetentionPurgeIntegration` 的可用时间证据本身已过期并被清理，却仍断言 Tombstone 可进入严格 PIT。
+- 修正测试语义：普通可查询版本集成用例显式创建绑定到精确 Version 的可追溯 verified Evidence/Decision；Availability Evidence 已过期并清理后，单条和列表 PIT 均必须返回不可见，不再把 Tombstone 存在误当成严格 PIT 合格。
+- News MariaDB workflow 的测试筛选此前未运行 `TestNewsAvailabilityPITResolverMariaDBIntegration` 与 `TestAppendAvailabilityDecisionSerializesConcurrentWritersMariaDBIntegration`；现将两项纳入明确的 MariaDB Job，确保本轮新增查询门禁和上一组 Decision 写入门禁真正执行。
+- 首轮 CI 中 Research/Researchflow 模块检查、Researchflow WorkerStore、Compose/Docker Job 已通过；根模块和其他 MariaDB Job 当时仍在运行，整轮不记 PASS。后续以修正后的精确 SHA 重新跑完整 CI。
