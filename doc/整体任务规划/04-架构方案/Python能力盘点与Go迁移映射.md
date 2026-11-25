@@ -74,8 +74,8 @@
 | scripts/compare_market_data_exports.py 等 | Python/Go 样例对比工具 | Python 验收脚本 |
 | scripts/verify-go-migration.sh | Go 测试外还执行 Python compileall、pytest | 迁移脚本仍依赖 Python |
 | .github/workflows/data-quality-parity.yml | 安装 Python 3.12，执行对比工具测试和兼容标记检查 | Python 仍进入 CI |
-| cmd/pythonapi-smoke/ | Go 调用旧 Python API 的 quote/history/profile/overview | 旧 API 调用入口 |
-| internal/adapters/pythonapi/ | 旧 Python HTTP API Client、Collector、Config、DTO | 旧 API Adapter 仍存在 |
+| cmd/pythonapi-smoke/ | Go 调用旧 Python API 的 quote/history/profile/overview | 已于 2026-11-25 MIG-014 删除 |
+| internal/adapters/pythonapi/ | 旧 Python HTTP API Client、Collector、Config、DTO | 已于 2026-11-25 MIG-014 删除 |
 | go-core/internal/adapters/pythonbridge/ | Go Core 调用 Python Bridge 的 Client 和业务 Adapter | Go → Python 生产依赖仍存在 |
 | python_bridge/Dockerfile | Python 3.12 镜像，启动 Uvicorn 8090 | Python 镜像配置仍存在 |
 | docker/docker-compose.go-migration.yml | 可选 profile 启动 Python Bridge、Go Core、Go 行情服务 | 迁移拓扑仍包含 Python 容器 |
@@ -120,7 +120,7 @@ python_bridge/go_core_client.py 是供旧 Python API/CLI/Bot/Scheduler 使用的
 
 ### 2.4 另一个旧 Python API 适配链
 
-除 Python Bridge 外，当前仓库还有 internal/adapters/pythonapi/，配置项包括 PYTHON_API_BASE_URL、PYTHON_API_TIMEOUT、PYTHON_API_HISTORY_DAYS、PYTHON_API_MAX_CONCURRENCY、PYTHON_API_MAX_RESPONSE_BYTES、PYTHON_API_BEARER_TOKEN、PYTHON_API_COOKIE 等。它提供 Quote、History、Profile、DataOverview Client 和 Collector；internal/service/wiring.go 使用 Python API Collector，cmd/pythonapi-smoke 可直接探测旧 API。它与 Go Core 的 Python Bridge 是两条不同的迁移链，不能只删除其中一条就宣称 Python 调用清零。
+历史盘点曾记录独立的 `internal/adapters/pythonapi/` 配置与 Quote、History、Profile、DataOverview Client/Collector。该链已于 2026-11-25 MIG-014 删除：Root Server 实际使用 Data Application Port 构造 `NewAnalysisCollector`，再通过 `NewRunnerWithDataCollector` 注入 Runner；旧 `NewRunnerWithStores` 无生产调用方，已一并删除。该结论不代表旧 Analysis API/Worker 已退役。
 
 ---
 
@@ -273,7 +273,7 @@ python_bridge/go_core_client.py 是供旧 Python API/CLI/Bot/Scheduler 使用的
 
 | 能力 | Go 状态 | 关键缺口 |
 |---|---|---|
-| A 股 Quote / DailyBar | 已有主实现 | 旧 Python API Adapter 和全部调用方尚未清零 |
+| A 股 Quote / DailyBar | 已有主实现 | Root Server 旧 Analysis 已改用 Data Application Port；旧 Python API Adapter 已删除 |
 | 证券/行业/市场宽度 | 部分实现 | 历史成分、身份生命周期、覆盖率和旧调用方需对账 |
 | 财务/估值 | 部分实现 | PIT、修订、报告期和字段级验收未完成 |
 | 筹码/板块辅助 | 部分实现 | Go Core 仍请求 Python stock-auxiliary |
@@ -364,7 +364,7 @@ Go/Python 对照不是要求逐字节或所有数值完全一致。每项差异�
 10. MIG-011 迁移筛选/策略/回测，逐项完成策略语义和样本外验收。
 11. MIG-012 迁移仍需保留的旧 API、Bot、SSE、调度、队列和后台 Worker 入口。
 12. MIG-013 执行固定样本差分，按差异分类验收。
-13. MIG-014 确认生产调用量为零、调用方已切 Go、回滚窗口关闭后拆除 Bridge/兼容 Adapter。
+13. MIG-014 已完成：确认 Root Server 生产装配已使用 Data Application Port，删除未使用的 Python API Adapter、Smoke 命令及旧构造入口；旧 Analysis API/Worker 按 RA-08/RA-09 另行退役。
 14. MIG-015 删除 Python 运行时、生产部署和 CI 依赖；保留脱离 Python 运行时的黄金 JSON 样例。
 
 ---
@@ -432,9 +432,9 @@ Go/Python 对照不是要求逐字节或所有数值完全一致。每项差异�
 - 删除已失去目标模块且还引用不存在的历史 `services/market-data` 路径的 `scripts/verify-go-migration.sh`。
 - 从 Go Test Suite / Integration CI 移除 go-core 路径触发、模块矩阵、专属测试与汇总项；不降低根模块及其他现存模块的测试标准。
 
-### 明确保留的独立链路
+### RA-04 当时明确保留的独立链路（已由 MIG-014 更新）
 
-- `internal/adapters/pythonapi/**`、`cmd/pythonapi-smoke/**` 和 `internal/service/wiring.go` 的 Python API 引用不属于 Python Bridge。当前旧 Analysis 代码仍有该适配器的构造入口，因此本次不删除、不改写。
+- 在 RA-04 提交时，`internal/adapters/pythonapi/**`、`cmd/pythonapi-smoke/**` 属于独立旧 API 链路，故当时未删除；MIG-014 已确认 Root Server 生产装配不再使用它们，并完成删除。
 - Root Server 旧 Analysis Runner、Task Queue、Worker、HTTP Handler、`/api/v1/analysis/**` 路由及 WebUI 旧 API 调用不属于 Go Core/Python Bridge，保持不变。
 - 不据此宣称整个仓库已完成 Python 运行时清零；本次只完成独立 Go Core/Python Bridge 运行链退役。
 
