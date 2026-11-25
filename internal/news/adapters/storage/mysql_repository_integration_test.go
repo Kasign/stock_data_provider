@@ -822,8 +822,12 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	}
 	availabilityEvidenceID := secondVersion.Version.ID + "-availability-evidence"
 	candidateAvailableAt := secondObservation.ObservedAt.Add(-time.Minute).Truncate(time.Second)
-	availabilityRecordedAt := secondVersion.Version.ObservedAt.Add(100 * time.Millisecond)
-	availabilityDecisionAt := availabilityRecordedAt.Add(100 * time.Millisecond)
+	if !secondVersion.Version.ObservedAt.After(secondObservation.ObservedAt.Add(2 * time.Microsecond)) {
+		t.Fatalf("test fixture version time %s must follow observation time %s with room for availability review",
+			secondVersion.Version.ObservedAt, secondObservation.ObservedAt)
+	}
+	availabilityRecordedAt := secondObservation.ObservedAt.Add(time.Microsecond)
+	availabilityDecisionAt := secondVersion.Version.ObservedAt.Add(-time.Microsecond)
 	if _, err := db.ExecContext(ctx, `INSERT INTO news_version_availability_evidence
 		(evidence_id, news_id, version_id, observation_id, field_path, raw_value,
 		 source_timezone_or_offset, source_precision, parse_status, parse_reason_code,
