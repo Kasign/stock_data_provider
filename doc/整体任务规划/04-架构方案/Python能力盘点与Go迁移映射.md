@@ -192,7 +192,7 @@ python_bridge/go_core_client.py 是供旧 Python API/CLI/Bot/Scheduler 使用的
 | REST API、Bot、SSE、任务队列、调度和后台 Worker | api/v1/**、bot/**、src/services/task_queue.py、src/services/runtime_scheduler.py、src/scheduler.py、src/services/alert_worker.py | MIG-012 |
 | 固定样本、差异分类和行为验收 | 迁移对象的冻结输入/输出及 Go 测试样例 | MIG-013 |
 | 独立 Go Core / Python Bridge 运行链退役 | go-core/**、python_bridge/**、Bridge 专属契约与 CI | RA-04 | 已退役（2026-11-25） |
-| 旧 Python API Adapter 和 Root Server 旧入口处理 | internal/adapters/pythonapi/**、cmd/pythonapi-smoke/**、旧 Analysis API/Worker | MIG-014 | 保留；仍需单独核实消费者与替代链路 |
+| 旧 Python API Adapter 和 Root Server 旧入口处理 | `internal/adapters/pythonapi/**`、`cmd/pythonapi-smoke/**` 已删除；旧 Analysis API/Worker 仍按 RA-08/RA-09 迁移 | MIG-014 | Python API Client/Smoke 已删除；旧 Analysis API/Worker 保留 |
 | Python 容器、运行时、依赖和 CI 残留退役 | Dockerfile、Compose、requirements、CI、迁移脚本 | MIG-015 |
 
 ## 5. Python 数据持久化
@@ -441,3 +441,14 @@ Go/Python 对照不是要求逐字节或所有数值完全一致。每项差异�
 ### 验收状态
 
 - 本组代码与 CI 配置修改提交后，必须对该提交 SHA 执行 Go Test Suite 与 Integration CI；CI 未完成前不标记为完整验收。
+
+
+## 2026-11-25 repair_all：MIG-014 Python API Client / Smoke 旧链清理
+
+- 基线：`repair_all` SHA `9a531802eb58c18dd34b91a1d44fbea71ee0aa05`。
+- Root Server 当前真实装配路径为 `servermarketdata.NewAnalysisCollector(...)` → `service.NewRunnerWithDataCollector(...)`；不通过 Python API Client 获取行情。
+- `NewRunnerWithStores` 是 `internal/service/wiring.go` 中唯一构造旧 Python API Client/Collector 的入口，仓库生产组合根没有调用它；`cmd/pythonapi-smoke` 仅直接探测旧 Python API。
+- 删除 `internal/adapters/pythonapi/**`、`cmd/pythonapi-smoke/**`，移除未使用的 `NewRunnerWithStores` 入口。保留 `NewRunnerWithDataCollector` 与 Root Server 旧 Analysis Runner，不改变其当前 Data Application Port 调用链。
+- 原 Python HTTP 测试改为通过注入的 DataCollector 覆盖 Runner 端到端流程、质量降级、不可交易硬门禁和持久化断言；Data Adapter 的 HTTP/Provider 行为仍由 Data 模块自身测试负责。未放宽断言。
+- 本次不删除旧 Analysis API、Task Queue、Worker、HTTP 路由和 WebUI 旧 API；这些属于 RA-08/RA-09 的整体迁移门禁。
+- 本组 Go Test Suite 与 Integration CI 必须对最终提交 SHA 完整通过后方可关闭。

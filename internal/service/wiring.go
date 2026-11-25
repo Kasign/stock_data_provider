@@ -1,6 +1,5 @@
-// Package service contains the concrete, intentionally conservative MVP wiring.
-// It creates a real analysis flow around the existing Python API and persistence
-// adapters. It is not a claim that the baseline strategy has predictive edge.
+// Package service contains the conservative legacy Analysis wiring.
+// The Root Server injects its Data Application Port and persistence adapters.
 package service
 
 import (
@@ -14,7 +13,6 @@ import (
 	"strings"
 	"time"
 
-	"example.com/stock-analysis-flow/internal/adapters/pythonapi"
 	"example.com/stock-analysis-flow/internal/analysis/app"
 	"example.com/stock-analysis-flow/internal/analysis/domain"
 	"example.com/stock-analysis-flow/internal/analysis/modules"
@@ -185,10 +183,10 @@ func (qualityAssessor) Assess(ctx context.Context, req domain.RunRequest, univer
 		}
 	}
 	if req.TaskType == domain.TaskHistoricalRun {
-		// The Python endpoint does not expose provider publication time or price-adjustment basis.
-		// Historical replay must not claim point-in-time validity without those fields.
+		// This legacy Analysis path has not integrated the per-row point-in-time evidence contract.
+		// Historical replay remains blocked rather than inferring provider or adjustment metadata.
 		corePass = false
-		issues = append(issues, domain.DataIssue{Code: "historical_point_in_time_unverified", Severity: "critical", Message: "上游接口没有逐条 available_at、provider 和复权口径，历史回放按规则阻断"})
+		issues = append(issues, domain.DataIssue{Code: "historical_point_in_time_unverified", Severity: "critical", Message: "旧 Analysis 链尚未接入逐条 available_at、provider 和复权口径证据，历史回放按规则阻断"})
 	}
 	if len(snapshot.IndexBars) == 0 {
 		partial = true
@@ -419,19 +417,6 @@ func (executionAssessor) Assess(ctx context.Context, _ domain.RunRequest, _ doma
 		orders = append(orders, domain.ExecutionOrderAssessment{SignalID: p.SignalID, Status: domain.ExecutionPending, RequestedQuantity: p.Quantity, RemainingQuantity: p.Quantity, Reason: "仅记录待评估计划，当前不模拟成交"})
 	}
 	return domain.ExecutionAssessment{ModelVersion: "no-fill-mvp-v1", Orders: orders, Warnings: []string{"当前不执行真实下单，也不生成模拟成交"}}, nil
-}
-
-// NewRunnerWithStores constructs the same runner with durable storage injected.
-func NewRunnerWithStores(pyCfg pythonapi.Config, store app.RunStore, snapshots app.SnapshotStore) (*app.Runner, error) {
-	client, err := pythonapi.NewClient(pyCfg)
-	if err != nil {
-		return nil, err
-	}
-	collector, err := pythonapi.NewCollector(client, pyCfg)
-	if err != nil {
-		return nil, err
-	}
-	return newRunnerWithCollector(collector, store, snapshots)
 }
 
 // NewRunnerWithDataCollector wires the Analysis Runner to a caller-owned

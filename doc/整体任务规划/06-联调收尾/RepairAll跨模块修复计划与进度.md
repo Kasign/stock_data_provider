@@ -1267,3 +1267,13 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - 文档补充：已从 `doc/api/contracts/数据层API清单.md` 移除已退役的 Python Bridge OpenAPI 权威契约引用，明确该内部契约不属于当前 API。Go Test Suite 与 Integration CI 的路径过滤增加 `doc/api/contracts/**`，使后续契约文档变更触发完整验收。
 - 代码验收：Go Test Suite Run [45535407664](https://github.com/Kasign/stock_data_provider/actions/runs/45535407664) 与 Integration CI Run [45535407708](https://github.com/Kasign/stock_data_provider/actions/runs/45535407708) 均对精确 SHA `1d82626c1501858736b98cc1525dfb29cccd5f03` completed/success。文档修正后的 SHA `6856e9add4c6f65a53f0fdd89b7e3fa480443f6d` 的 Go Test Suite Run [45536015272](https://github.com/Kasign/stock_data_provider/actions/runs/45536015272) 与 Integration CI Run [45536015267](https://github.com/Kasign/stock_data_provider/actions/runs/45536015267) 也均 completed/success。
 - 最终 CI 复核发现 Go Test Suite 原有旧 Go 模块路径扫描曾随 go-core 专项删除而一并移除；该扫描并非 go-core 模块构建检查，已恢复为独立 guard（排除自身工作流文件，避免自匹配），仅移除已退役模块的存在性断言。Integration CI 增加对 Go Test Suite 工作流文件变更的触发，以确保两套 CI 同步验收。最新提交的精确 SHA 仍需完成两套 CI 后关闭本组。
+
+
+## 2026-11-25 RA-04 后续：MIG-014 Python API Client 独立旧链清理
+
+- 开始基线：`repair_all` SHA `9a531802eb58c18dd34b91a1d44fbea71ee0aa05`。
+- 当前 Root Server 的实际装配使用 Data 模块 Application Port：`newMarketDataModule` → `servermarketdata.NewAnalysisCollector` → `service.NewRunnerWithDataCollector`。因此生产请求链不再需要 Python API Client。
+- `internal/service/wiring.go` 的 `NewRunnerWithStores` 是旧 Python API Client/Collector 的构造入口，但没有 Root Server 生产调用方；`cmd/pythonapi-smoke` 是独立旧 API 探测工具。
+- 本工作组删除 Python API Adapter、Smoke 命令和死构造入口；Runner 的测试改为注入 DataCollector，继续验证质量门禁、候选信号、不可交易硬门禁和持久化，不再依赖旧 Python HTTP 服务。
+- Root Server 旧 Analysis Runner/Task Queue/Worker/HTTP API 仍存在，但其行情数据已从 Python API 切换为 Data Application Port。本次不提前删除这些业务入口，也不修改 WebUI。
+- 后续按 RA-03 完成 News 来源采集、内容版本与 AvailabilityEvidence 生产闭环，再接 Research Stage；完整研究 Template、结果消费/API、WebUI 迁移完成后，才按 RA-08/RA-09 统一退役旧 Analysis 链。
