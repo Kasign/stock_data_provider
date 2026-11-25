@@ -1239,3 +1239,16 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - **阶段结论：RA-02C 授权结果读取能力已接入并通过当前 SHA CI；RA-02 整条研究消费链仍未完成。** Research Stage 尚未实际调用该 Facade，也没有 Worker→Data Snapshot→Quant Result→StageOutput→Research GetResult→AccessAudit 的完整业务 E2E。
 - RA-03 不得直接把 News Search Candidates 当作 Research Evidence：`internal/news/app/search.go` 明确 SearchCandidates 不持久化；Research Evidence Importer 依赖 News 已持久化的精确版本、available_at 和当前授权复核。Research 模块当前将真实 Evidence 导入标记为 SHELVED，原因是 available_at 来源证据及授权/精确版本读取一致性尚未满足。下一步先补齐 News 受控 Provider Candidate Ingest 的真实生产接入与 PIT 可得性证据，再接 Research Evidence/Context Stage；不伪造时间或把候选直接升格为 Evidence。
 - 旧 Analysis、Python Bridge、Python API Client、go-core 仍保留；本阶段不提前删除。继续完成 Research/LLM/Risk/结果聚合与 WebUI 迁移后，按 RA-08/RA-09 一次性退役。
+
+
+## RA-03 News → Research 证据链二次校准：不能止于 Observation
+
+- 核查基线：`repair_all` SHA `ca9b65817ddf3f1c86c06c2713561044ac0fa6c4`。
+- 前一节“Provider Candidate Ingest Stage 输出持久化 NewsID/VersionID”的描述不完整，现按实际 News Application 代码修正，不能直接按该简化顺序开工。
+- `news/app.IngestProviderCandidate.Execute` 最终只通过 IdentityTransaction 创建/解析 News Item 并追加 Observation；它不创建 `NewsItemVersion`，也不产生可授权读取的内容版本。
+- `news/app.ApplyResearchUpdate.Execute` 才会在已有 Observation 归属校验后，使用明确的 Candidate + `ContentLayers` 创建/追加不可变 `NewsItemVersion`。不能把 ProviderSummary 当成来源正文，也不能把搜索候选直接构造成 ContentLayers。
+- `news/app.GetEvidence` 的 `available_at` 只来自 `news_version_availability_decisions` 与 `news_version_availability_evidence` 的最新 verified 记录；SQL 明确要求来源证据已记录、已解析、未过期、未清理，且候选时间不晚于证据观察时间、Observation 观察时间和查询 SystemAsOf。代码注释明确禁止用 observed_at 代替 available_at。
+- `news/app.RecordAvailabilityEvidence.Execute` 还要求 Source/Endpoint/Provider 当前策略在同一事务内复核，并记录 FieldPath、原始值、时区/偏移、精度、解析状态、ParserVersion 及可选来源引用/哈希；它本身也不自动认定任何时间字段等于“首次公开可获取时间”。
+- 因此 RA-03 的真实先后顺序必须是：①为受控来源配置可信 SourceCatalog、受控 SourceTransport 和当前策略版本；②执行 CollectSource / IngestCollectedSource，得到有策略轨迹的 Observation；③从已采集的实际内容生成 ContentLayers，并通过 ApplyResearchUpdate 形成 NewsItemVersion；④由有来源证据的解析器生成 AvailabilityEvidence，经 RecordAvailabilityEvidence 写入并形成 verified Decision；⑤News Evidence Query 在指定 SystemAsOf 下返回精确 NewsID/VersionID、当前授权和可验证 available_at；⑥Research Stage 才能调用现有 Importer 写 Research Evidence，再创建 Context。
+- `IngestProviderCandidate` 可以作为额外的搜索发现元数据来源，但它不是上述内容版本/available_at 生产链的替代品。若采用它，仍必须有后续真实内容获取、版本创建和来源时间证据；没有合法 Source/Endpoint/Provider Policy 时必须拒绝或 skipped，不能伪造策略或时间。
+- **当前 RA-03 阻塞：** Server 没有装配完整 SourceCatalog/SourceTransport/受控 Ingest/ApplyResearchUpdate/AvailabilityEvidence 生产流水线；Research News Evidence Importer 虽存在，但 Research 模块状态仍将真实导入标为 SHELVED。下一步先完成 News Owner 的来源采集→内容版本→AvailabilityEvidence 的最小真实生产闭环及 MariaDB 集成验收，再接 Research Stage。不要先创建空壳 Research Stage，也不要修改 Research 的严格 PIT 门禁。
