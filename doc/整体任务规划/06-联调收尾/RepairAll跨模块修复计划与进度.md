@@ -1282,3 +1282,13 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - Root Server 旧 Analysis Runner/Task Queue/Worker/HTTP API 仍存在，但其行情数据已从 Python API 切换为 Data Application Port。本次不提前删除这些业务入口，也不修改 WebUI。
 - 后续按 RA-03 完成 News 来源采集、内容版本与 AvailabilityEvidence 生产闭环，再接 Research Stage；完整研究 Template、结果消费/API、WebUI 迁移完成后，才按 RA-08/RA-09 统一退役旧 Analysis 链。
 - **MIG-014 已验收关闭：** Go Test Suite Run [45538475246](https://github.com/Kasign/stock_data_provider/actions/runs/45538475246) 与 Integration CI Run [45538475107](https://github.com/Kasign/stock_data_provider/actions/runs/45538475107) 均对最终实现 SHA `b2db192acdc27a0e2108ba30798c381adc49ebef` completed/success；失败根因及修复记录见上方 RA-04 验收记录。
+
+
+## 2026-11-25 RA-03 契约门禁 Review 校准与来源溯源修复
+
+- Review 基线：`repair_all` SHA `ad71e731c4c4b7d328a1acbe5496f73e12b16704`。
+- 修正上一轮 Review 的一个判断：News Query 返回 `available_at = null` 并不等于严格 PIT 放行漏洞。News DTO 是通用只读查询结果，允许来源可得时间未知；Research Importer 的 `mapNewsEvidence` 已拒绝 null、非 UTC、精度不符或晚于 `system_as_of` 的时间，Research Domain 的 `ValidateForStrictPIT` 再次拒绝缺失 available_at。故本轮不在 News 通用查询端强制非空，不增加未经跨模块冻结的宽松 PIT Mode。未来若确有非严格研究消费场景，应先定义显式 PIT Mode，并贯穿 Template、Run、Stage、Evidence 和 Fingerprint。
+- 发现真实缺陷：`AppendAvailabilityDecision` 在选中 Evidence 时仅验证 parsed 候选、原始值、保留状态与时间顺序，没有要求可追溯来源凭据；Evidence 的 `evidence_ref/evidence_hash` 两者均空时仍可被标记 verified。查询 SQL 也没有独立过滤缺少溯源凭据的历史/异常记录。
+- 修复范围：Storage 在同一版本行锁事务内读取选中 Evidence 的 `evidence_ref/evidence_hash`，至少要求一个非空且合法；Evidence Query 的 available_at 子查询同步要求非空来源引用或 64 位小写 SHA-256。Integration Test 覆盖缺失溯源时查询不可见、Storage 拒绝 verified，补齐来源引用后才可见/追加。
+- 这项门禁只证明时间候选有可追溯的来源记录，不证明字段语义等同“首次公开可获取时间”。来源字段语义、许可范围、版本绑定、审核规则仍必须逐来源确认；不把 RSS pubDate、published/updated、fetched_at 或 observed_at 自动认定为 available_at。
+- Application 层 AvailabilityDecision Review Use Case 当前仍没有真实生产调用方，也没有统一的来源字段语义审核规则及其 Owner。暂不新增空壳接口；待真实来源/调用场景确定后，由 News Application 提供审核入口，Storage 继续负责并发序列化、版本归属与事务完整性。

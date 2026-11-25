@@ -109,7 +109,7 @@ func (r *MySQLRepository) AppendAvailabilityDecision(ctx context.Context, decisi
 	// 防止写入期间并发清理选中 Evidence 的受限载荷。
 	if len(decision.ConsideredEvidenceIDs) > 0 {
 		query := `SELECT evidence_id, parse_status, candidate_available_at_utc,
-			raw_value, payload_purged_at, observed_at, recorded_at, retention_until
+			raw_value, evidence_ref, evidence_hash, payload_purged_at, observed_at, recorded_at, retention_until
 			FROM news_version_availability_evidence
 			WHERE version_id = ? AND evidence_id IN (` +
 			evidencePlaceholders(len(decision.ConsideredEvidenceIDs)) + `) FOR UPDATE`
@@ -126,17 +126,25 @@ func (r *MySQLRepository) AppendAvailabilityDecision(ctx context.Context, decisi
 		for rows.Next() {
 			var evidenceID, parseStatus string
 			var candidateAvailableAt, payloadPurgedAt sql.NullTime
-			var rawValue sql.NullString
+			var rawValue, evidenceRef, evidenceHash sql.NullString
 			var observedAt, recordedAt, retentionUntil time.Time
 			if scanErr := rows.Scan(&evidenceID, &parseStatus, &candidateAvailableAt,
-				&rawValue, &payloadPurgedAt, &observedAt, &recordedAt, &retentionUntil); scanErr != nil {
+				&rawValue, &evidenceRef, &evidenceHash, &payloadPurgedAt, &observedAt, &recordedAt, &retentionUntil); scanErr != nil {
 				_ = rows.Close()
 				return scanErr
 			}
 			found[evidenceID] = struct{}{}
 			if decision.SelectedEvidenceID != nil && evidenceID == *decision.SelectedEvidenceID {
+				hasEvidenceRef := evidenceRef.Valid && strings.TrimSpace(evidenceRef.String) != ""
+				hasEvidenceHash := false
+				if evidenceHash.Valid && len(evidenceHash.String) == 64 &&
+					evidenceHash.String == strings.ToLower(evidenceHash.String) {
+					_, hashErr := hex.DecodeString(evidenceHash.String)
+					hasEvidenceHash = hashErr == nil
+				}
 				if parseStatus != string(domain.AvailabilityTimeParsed) ||
 					!candidateAvailableAt.Valid || !rawValue.Valid || rawValue.String == "" ||
+					(!hasEvidenceRef && !hasEvidenceHash) ||
 					payloadPurgedAt.Valid || recordedAt.After(decision.RecordedAt) ||
 					observedAt.After(decision.RecordedAt) ||
 					!retentionUntil.After(decision.RecordedAt) ||

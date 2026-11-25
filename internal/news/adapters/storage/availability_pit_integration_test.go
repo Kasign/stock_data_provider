@@ -104,9 +104,9 @@ func TestNewsAvailabilityPITResolverMariaDBIntegration(t *testing.T) {
 	if _, err := db.ExecContext(ctx, `INSERT INTO news_version_availability_evidence
 		(evidence_id, news_id, version_id, observation_id, field_path, raw_value,
 		 source_timezone_or_offset, source_precision, parse_status, parse_reason_code,
-		 candidate_available_at_utc, parser_version, observed_at, recorded_at,
+		 candidate_available_at_utc, parser_version, evidence_ref, observed_at, recorded_at,
 		 retention_until)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '', ?, ?, ?, ?, ?)`,
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '', ?, ?, NULL, ?, ?, ?)`,
 		evidenceID, newsID, versionID, observationID, "data.available_time",
 		candidateAvailableAt.Format(time.RFC3339), "Z", "second", "parsed",
 		candidateAvailableAt, "availability-time-v1", observedAt, recordedAt, retentionUntil,
@@ -121,6 +121,12 @@ func TestNewsAvailabilityPITResolverMariaDBIntegration(t *testing.T) {
 		"availability.source_verified", "review-v1", firstDecisionAt,
 	); err != nil {
 		t.Fatalf("insert verified Decision: %v", err)
+	}
+	// 历史/异常写入即使存在 verified Decision，缺少可追溯证据引用也不得进入 PIT。
+	assertAvailableAt(secondDecisionAt.Add(-time.Microsecond), nil)
+	if _, err := db.ExecContext(ctx, `UPDATE news_version_availability_evidence
+		SET evidence_ref = ? WHERE evidence_id = ?`, "https://source.example/evidence/1", evidenceID); err != nil {
+		t.Fatalf("add availability evidence provenance: %v", err)
 	}
 	assertAvailableAt(secondDecisionAt.Add(-time.Microsecond), &candidateAvailableAt)
 
@@ -232,9 +238,9 @@ func TestAppendAvailabilityDecisionSerializesConcurrentWritersMariaDBIntegration
 	if _, err := db.ExecContext(ctx, `INSERT INTO news_version_availability_evidence
 		(evidence_id, news_id, version_id, observation_id, field_path, raw_value,
 		 source_timezone_or_offset, source_precision, parse_status, parse_reason_code,
-		 candidate_available_at_utc, parser_version, observed_at, recorded_at,
+		 candidate_available_at_utc, parser_version, evidence_ref, observed_at, recorded_at,
 		 retention_until)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '', ?, ?, ?, ?, ?)`,
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '', ?, ?, NULL, ?, ?, ?)`,
 		evidenceID, newsID, versionID, observationID, "data.available_time",
 		candidateAvailableAt.Format(time.RFC3339), "Z", "second", "parsed",
 		candidateAvailableAt, "availability-time-v1", now.Add(-time.Minute),
@@ -333,8 +339,15 @@ func TestAppendAvailabilityDecisionSerializesConcurrentWritersMariaDBIntegration
 		SupersedesDecisionID:  &next.ID,
 		RecordedAt:            recordedAt,
 	}
+	if err := repository.AppendAvailabilityDecision(ctx, verified); err == nil {
+		t.Fatal("verified Decision without evidence_ref/evidence_hash must be rejected")
+	}
+	if _, err := db.ExecContext(ctx, `UPDATE news_version_availability_evidence
+		SET evidence_ref = ? WHERE evidence_id = ?`, "https://source.example/evidence/1", evidenceID); err != nil {
+		t.Fatalf("add selected Evidence provenance: %v", err)
+	}
 	if err := repository.AppendAvailabilityDecision(ctx, verified); err != nil {
-		t.Fatalf("append verified Decision with eligible Evidence: %v", err)
+		t.Fatalf("append verified Decision with eligible and traceable Evidence: %v", err)
 	}
 
 	var count int
