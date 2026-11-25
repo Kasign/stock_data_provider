@@ -2496,3 +2496,81 @@ func TestResolveCurrentSourceCollectionPoliciesMariaDBIntegration(t *testing.T) 
 		t.Fatalf("resolve current source+endpoint policies: source=%+v endpoint=%+v err=%v", source, endpoint, err)
 	}
 }
+
+
+func TestNewsPolicyVersionPointerCASMariaDBIntegration(t *testing.T) {
+	dsn := os.Getenv("NEWS_MARIADB_TEST_DSN")
+	if dsn == "" {
+		t.Skip("set NEWS_MARIADB_TEST_DSN to run News policy version CAS integration")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	db, err := sql.Open("mysql", dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	db.SetMaxOpenConns(4)
+	defer db.Close()
+	if err := db.PingContext(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := platformstorage.ApplyMigrations(ctx, db, "news", Migrations()); err != nil {
+		t.Fatal(err)
+	}
+	repository, err := NewMySQLRepository(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	publisher, err := app.NewPublishNewsPolicyVersion(repository)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	sourceID := fmt.Sprintf("policy-cas-source-%d", time.Now().UnixNano())
+	policy := domain.SourcePolicy{
+		Status: domain.AuthorizationApproved,
+		AllowedAccessMethods: []domain.AccessMethod{domain.AccessRSS},
+		AllowedPurposes: []domain.Purpose{domain.PurposeInternalPersonalResearch},
+		AllowedContentKinds: []domain.ContentKind{domain.ContentAbstract},
+		AllowedStorageModes: []domain.StorageMode{domain.StorageTransient, domain.StoragePersistentExcerpt},
+		MaxRetention: time.Hour, EvidenceRef: "policy-cas-evidence-v1",
+	}
+	payloadV1, err := json.Marshal(policy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := publisher.ExecuteIfCurrent(ctx, domain.NewsPolicyTypeSource, sourceID, "source-policy-v1", "", payloadV1); err != nil {
+		t.Fatalf("initial policy publication: %v", err)
+	}
+	if err := publisher.ExecuteIfCurrent(ctx, domain.NewsPolicyTypeSource, sourceID, "source-policy-v1", "", payloadV1); err != nil {
+		t.Fatalf("idempotent startup policy verification: %v", err)
+	}
+
+	policy.EvidenceRef = "policy-cas-evidence-v2"
+	payloadV2, err := json.Marshal(policy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := publisher.ExecuteIfCurrent(ctx, domain.NewsPolicyTypeSource, sourceID, "source-policy-v2", "", payloadV2); !errors.Is(err, app.ErrNewsPolicyVersionConflict) {
+		t.Fatalf("stale expected pointer error = %v, want policy version conflict", err)
+	}
+	if err := publisher.ExecuteIfCurrent(ctx, domain.NewsPolicyTypeSource, sourceID, "source-policy-v2", "source-policy-v1", payloadV2); err != nil {
+		t.Fatalf("explicit forward policy publication: %v", err)
+	}
+	if err := publisher.ExecuteIfCurrent(ctx, domain.NewsPolicyTypeSource, sourceID, "source-policy-v1", "", payloadV1); !errors.Is(err, app.ErrNewsPolicyVersionConflict) {
+		t.Fatalf("stale startup configuration error = %v, want policy version conflict", err)
+	}
+	changedPayload := append([]byte(nil), payloadV2...)
+	changedPayload = bytes.Replace(changedPayload, []byte("policy-cas-evidence-v2"), []byte("policy-cas-evidence-x"), 1)
+	if err := publisher.ExecuteIfCurrent(ctx, domain.NewsPolicyTypeSource, sourceID, "source-policy-v2", "source-policy-v1", changedPayload); !errors.Is(err, app.ErrNewsPolicyVersionConflict) {
+		t.Fatalf("same version with changed payload error = %v, want policy version conflict", err)
+	}
+
+	var currentVersion string
+	if err := db.QueryRowContext(ctx, "SELECT policy_version FROM news_current_policy_versions WHERE policy_type = ? AND policy_ref = ?", domain.NewsPolicyTypeSource, sourceID).Scan(&currentVersion); err != nil {
+		t.Fatal(err)
+	}
+	if currentVersion != "source-policy-v2" {
+		t.Fatalf("current policy version = %q, want source-policy-v2", currentVersion)
+	}
+}
