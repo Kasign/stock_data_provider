@@ -20,7 +20,7 @@ import (
 	"example.com/stock-analysis-flow/internal/researchflow/template"
 )
 
-const newsSearchStageOutputRegistryVersion = "1.0.0"
+const newsSearchStageOutputRegistryVersion = "1.1.0"
 
 type newsSearchStageComposition struct {
 	providers        newsapp.ProviderSet
