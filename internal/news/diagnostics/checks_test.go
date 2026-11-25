@@ -31,7 +31,7 @@ type storageProbeStub struct {
 	schemaErr error
 }
 
-func (s storageProbeStub) Ping(context.Context) error { return s.pingErr }
+func (s storageProbeStub) Ping(context.Context) error    { return s.pingErr }
 func (s storageProbeStub) RequiredSchemaTableCount() int { return 14 }
 func (s storageProbeStub) MissingSchemaTables(context.Context) ([]string, error) {
 	return append([]string(nil), s.missing...), s.schemaErr
