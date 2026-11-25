@@ -22,7 +22,7 @@ func buildNewsFeedWorkflowTemplate(
 	stage *newsFeedStageComposition,
 	policies *resourcepolicy.Registry,
 ) (template.WorkflowTemplate, error) {
-	if stage == nil || stage.registry == nil || policies == nil || len(stage.resourceCodes) == 0 {
+	if stage == nil || stage.registry == nil || policies == nil || len(stage.resourceRefs) == 0 {
 		return template.WorkflowTemplate{}, errors.New("News Feed template prerequisites are incomplete")
 	}
 	if stage.registry.Version() != newsFeedStageOutputRegistryVersion {
