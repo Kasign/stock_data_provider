@@ -2,8 +2,6 @@ package app
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"strings"
 	"time"
@@ -155,13 +153,11 @@ func (u *IngestCollectedSource) Execute(ctx context.Context, request IngestColle
 		candidate := entry.Candidate
 		// Observation 只保存候选元数据；来源摘要按授权层级保存，未识别正文不升级为全文。
 		candidate.ProviderSummary = ""
-		fingerprint := sha256.Sum256([]byte(
-			candidate.SourceItemID + "\x00" + candidate.RawURL + "\x00" +
-				candidate.Title + "\x00" + candidate.PublishedAtRaw,
-		))
-		idempotencyKey := prefix + "/" + hex.EncodeToString(fingerprint[:])
+		content := domain.RestrictContentLayers(entry.Content, policyRequest.ContentKind)
+		contentFingerprint := domain.BuildVersionFingerprint(candidate, content)
+		idempotencyKey := prefix + "/" + contentFingerprint
 		observation, ingestErr := u.ingest.executeWithPolicyTraceAndCheckAndContent(
-			ctx, sourceID, idempotencyKey, candidate, domain.RestrictContentLayers(entry.Content, policyRequest.ContentKind),
+			ctx, sourceID, idempotencyKey, candidate, content,
 			registration.URLPolicy, trace, checkPersistencePolicy,
 		)
 		if ingestErr != nil {

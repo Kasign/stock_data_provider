@@ -58,7 +58,11 @@ func TestIngestCollectedSourceRechecksVersionAndMetadataPersistencePolicy(t *tes
 	result := sealedCollectedSourceResult()
 	result.Entries = []CollectedSourceEntry{{
 		Candidate: domain.Candidate{SourceItemID: "item-1", Title: "title", ProviderSummary: "must-not-persist"},
-		Content:   domain.ContentLayers{ProviderSummary: "must-not-persist"},
+		Content: domain.ContentLayers{
+			ProviderSummary: "must-not-persist",
+			SourceSummary: "source summary",
+			SourceSummaryOrigin: domain.ContentOriginFeedSummary,
+		},
 	}}
 	if err := sealCollectSourceResult(&result); err != nil {
 		t.Fatal(err)
@@ -81,6 +85,9 @@ func TestIngestCollectedSourceRechecksVersionAndMetadataPersistencePolicy(t *tes
 	}
 	if repository.observations[0].SourcePolicyVersionID != "source-policy-v3" {
 		t.Fatalf("policy trace mismatch: %+v", repository.observations[0])
+	}
+	if len(repository.newsItems) != 1 || repository.newsItems[0].Content.SourceSummary != "source summary" {
+		t.Fatalf("authorized source summary was not stored: %+v", repository.newsItems)
 	}
 }
 
@@ -299,4 +306,45 @@ func TestIngestCollectedSourcePartialCommitCanBeSafelyRetried(t *testing.T) {
 	if retried[0].ID != repository.observations[0].ID {
 		t.Fatalf("retry did not reuse the first committed observation: returned=%+v persisted=%+v", retried, repository.observations)
 	}
+
+func TestIngestCollectedSourceContentChangeCreatesNewObservationAndVersion(t *testing.T) {
+	registration := sourcePersistenceRegistration()
+	repository := newSourcePersistenceMemoryRepository(registration)
+	nextID := 0
+	newID := func() string {
+		nextID++
+		return fmt.Sprintf("feed-observation-%d", nextID)
+	}
+	ingest := newCandidateIngest(repository, newID)
+	usecase, err := NewIngestCollectedSource(ingest.repository, ingest.newID, providerIngestCatalogStub{registration: registration})
+	if err != nil { t.Fatal(err) }
+	now := time.Date(2026, 11, 9, 10, 0, 0, 0, time.UTC)
+	usecase.now = func() time.Time { return now }
+	makeRequest := func(summary string) IngestCollectedSourceRequest {
+		result := sealedCollectedSourceResult()
+		result.Entries = []CollectedSourceEntry{{
+			Candidate: domain.Candidate{SourceItemID: "item-1", Title: "same title"},
+			Content: domain.ContentLayers{SourceSummary: summary, SourceSummaryOrigin: domain.ContentOriginFeedSummary},
+		}}
+		if err := sealCollectSourceResult(&result); err != nil { t.Fatal(err) }
+		return IngestCollectedSourceRequest{
+			Collection: result, IdempotencyPrefix: "same-collection-prefix",
+			Purpose: domain.PurposeInternalPersonalResearch, Retention: time.Hour,
+		}
+	}
+	first, err := usecase.Execute(context.Background(), makeRequest("summary A"))
+	if err != nil { t.Fatal(err) }
+	second, err := usecase.Execute(context.Background(), makeRequest("summary B"))
+	if err != nil { t.Fatal(err) }
+	if len(first) != 1 || len(second) != 1 || first[0].ID == second[0].ID ||
+		first[0].NewsID != second[0].NewsID || len(repository.newsItems) != 1 ||
+		len(repository.observations) != 2 || len(repository.versions) != 2 {
+		t.Fatalf("content update did not create a new observation/version: first=%+v second=%+v repo=%+v", first, second, repository)
+	}
+	if repository.newsItems[0].Content.SourceSummary != "summary B" ||
+		repository.versions[1].VersionNo != 2 || repository.versions[1].Content.SourceSummary != "summary B" {
+		t.Fatalf("current content/version did not advance: items=%+v versions=%+v", repository.newsItems, repository.versions)
+	}
+}
+
 }
