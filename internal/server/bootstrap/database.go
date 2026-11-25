@@ -53,6 +53,9 @@ func bootstrapDatabase(ctx context.Context, cfg mysqlredis.Config, timeout time.
 	if err := analysisstorage.ValidateSchema(migrationCtx, db); err != nil {
 		return nil, nil, errors.Join(fmt.Errorf("validate final Analysis schema: %w", err), db.Close())
 	}
+	if err := researchstorage.ValidateSchema(migrationCtx, db); err != nil {
+		return nil, nil, errors.Join(fmt.Errorf("validate final Research schema: %w", err), db.Close())
+	}
 	if err := quantstorage.ValidateSchema(migrationCtx, db); err != nil {
 		return nil, nil, errors.Join(fmt.Errorf("validate final Quant schema: %w", err), db.Close())
 	}
