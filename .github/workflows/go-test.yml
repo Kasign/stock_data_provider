@@ -219,11 +219,12 @@ jobs:
           log_file=/tmp/news_mariadb_integration.log
           go test ./internal/news/adapters/storage -run '^(TestNewsMariaDBApplicationIntegration|TestNewsMariaDBPhysicalSchemaMatchesMigrationBaseline|TestObservationRetentionPurgeIntegration|TestNewsAvailabilityPITResolverMariaDBIntegration|TestAppendAvailabilityDecisionSerializesConcurrentWritersMariaDBIntegration|TestAvailabilityEvidenceWriteRequiresCurrentFieldPolicyMariaDBIntegration|TestResolveCurrentSourceCollectionPoliciesMariaDBIntegration)$' -count=1 -v | tee "$log_file"
           for test_name in TestNewsMariaDBApplicationIntegration TestNewsMariaDBPhysicalSchemaMatchesMigrationBaseline TestObservationRetentionPurgeIntegration TestNewsAvailabilityPITResolverMariaDBIntegration TestAppendAvailabilityDecisionSerializesConcurrentWritersMariaDBIntegration TestAvailabilityEvidenceWriteRequiresCurrentFieldPolicyMariaDBIntegration TestResolveCurrentSourceCollectionPoliciesMariaDBIntegration; do
-            if ! grep -Eq "^[[:space:]]*--- PASS: ${test_name} \\(" "$log_file"; then
+            if ! grep -Fq -- "--- PASS: ${test_name} (" "$log_file"; then
               echo "::error::News MariaDB integration test ${test_name} did not report PASS"
               exit 1
             fi
           done
+
   research-module-validation:
     name: Research module format, tests, race and vet
     runs-on: ubuntu-latest
