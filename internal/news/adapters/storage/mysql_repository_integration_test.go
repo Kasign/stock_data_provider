@@ -677,9 +677,10 @@ func TestNewsMariaDBApplicationIntegration(t *testing.T) {
 	if err != nil || repeatedConcurrentCleanup != 0 {
 		t.Fatalf("repeat concurrent snapshot cleanup deleted=%d err=%v, want 0 and nil", repeatedConcurrentCleanup, err)
 	}
+	testRunID := time.Now().UnixNano()
 	var idSequence atomic.Uint64
-	newID := func() string { return fmt.Sprintf("news-it-%d", idSequence.Add(1)) }
-	sourceID := fmt.Sprintf("news-it-source-%d", time.Now().UnixNano())
+	newID := func() string { return fmt.Sprintf("news-it-%d-%d", testRunID, idSequence.Add(1)) }
+	sourceID := fmt.Sprintf("news-it-source-%d", testRunID)
 	const workers = 6
 
 	candidate := domain.Candidate{
@@ -849,9 +850,9 @@ func TestNewsMariaDBApplicationIntegration(t *testing.T) {
 		rollbackIDCalls++
 		switch rollbackIDCalls {
 		case 1:
-			return "news-it-rollback-observation"
+			return rollbackSource + "-observation"
 		case 2:
-			return "news-it-rollback-item"
+			return rollbackSource + "-item"
 		default:
 			return collisionBase
 		}
