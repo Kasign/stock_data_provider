@@ -174,6 +174,15 @@ func canonicalHashForIntegration(value string) string {
 	return hex.EncodeToString(sum[:])
 }
 
+func loadPersistedObservationTime(t *testing.T, ctx context.Context, db *sql.DB, observationID string) time.Time {
+	t.Helper()
+	var observedAt time.Time
+	if err := db.QueryRowContext(ctx, "SELECT observed_at FROM news_observations WHERE observation_id = ?", observationID).Scan(&observedAt); err != nil {
+		t.Fatalf("read persisted Observation timestamp %s: %v", observationID, err)
+	}
+	return observedAt
+}
+
 func mustMarshalAuthorizationBinding(t *testing.T, binding domain.NewsAuthorizationBinding) []byte {
 	t.Helper()
 	payload, err := json.Marshal(binding)
@@ -976,11 +985,7 @@ func TestNewsMariaDBApplicationIntegration(t *testing.T) {
 
 	// Repository writes DATETIME(6); compare the Version against the persisted Observation
 	// timestamp rather than the pre-persistence nanosecond value returned by Application.
-	var persistedObservationAt time.Time
-	if err := db.QueryRowContext(ctx, "SELECT observed_at FROM news_observations WHERE observation_id = ?", secondObservation.ID).Scan(&persistedObservationAt); err != nil {
-		t.Fatalf("read persisted source Observation timestamp: %v", err)
-	}
-	secondObservation.ObservedAt = persistedObservationAt
+	secondObservation.ObservedAt = loadPersistedObservationTime(t, ctx, db, secondObservation.ID)
 
 	// Strict PIT fixtures require a traceable, version-bound verified available_at decision.
 	observationRetention := secondObservation.ObservedAt.Add(24 * time.Hour)
@@ -1727,7 +1732,8 @@ func TestNewsMariaDBApplicationIntegration(t *testing.T) {
 	}
 
 	// 每个版本独立绑定自己的 available_at 决策；旧版本的时间证据不能
-	// 自动继承到内容已变化的新版本。
+	// 自动继承到内容已变化的新版本。时间比较以 MariaDB 持久化精度为准。
+	revisedObservation.ObservedAt = loadPersistedObservationTime(t, ctx, db, revisedObservation.ID)
 	revisedObservationRetention := revisedObservation.ObservedAt.Add(24 * time.Hour)
 	if _, err := db.ExecContext(ctx,
 		"UPDATE news_observations SET retention_until = ? WHERE observation_id = ?",
