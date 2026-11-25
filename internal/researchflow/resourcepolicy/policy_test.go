@@ -85,3 +85,75 @@ func TestQuantDailyBarsPolicySnapshotsOnlyConfiguredDataProviders(t *testing.T) 
 		t.Fatalf("valid Quant Data Provider snapshot rejected: %v", err)
 	}
 }
+
+
+func TestResolveSourceEndpointsSnapshotsExactSortedIdentityOnly(t *testing.T) {
+	registry, err := NewRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	inventory := []string{"source-b/secondary", "source-a/primary"}
+	snapshot, err := registry.ResolveSourceEndpoints(NewsFeedConfiguredSourcesRef, inventory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"source-a/primary", "source-b/secondary"}
+	if !reflect.DeepEqual(snapshot.AllowedSourceEndpointRefs, want) ||
+		len(snapshot.AllowedProviderCodes) != 0 {
+		t.Fatalf("Feed Source/Endpoint snapshot = %+v", snapshot)
+	}
+	inventory[0] = "mutated/endpoint"
+	if !reflect.DeepEqual(snapshot.AllowedSourceEndpointRefs, want) {
+		t.Fatal("Feed snapshot retained caller-owned inventory memory")
+	}
+	if err := registry.ValidateSnapshot(snapshot); err != nil {
+		t.Fatalf("valid Feed Source/Endpoint snapshot rejected: %v", err)
+	}
+}
+
+func TestResolveSourceEndpointsRejectsUnknownEmptyInvalidAndDuplicateInventory(t *testing.T) {
+	registry, err := NewRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := registry.ResolveSourceEndpoints("news.feed.configured-sources@latest", []string{"source/endpoint"}); !errors.Is(err, ErrPolicyNotFound) {
+		t.Fatalf("unknown Feed ResourcePolicy must fail closed, got %v", err)
+	}
+	if _, err := registry.ResolveSourceEndpoints(NewsFeedConfiguredSourcesRef, nil); !errors.Is(err, ErrNoProviders) {
+		t.Fatalf("empty Feed inventory must fail closed, got %v", err)
+	}
+	for _, inventory := range [][]string{
+		{"source/endpoint", "source/endpoint"},
+		{"source/endpoint/extra"},
+		{"source /endpoint"},
+		{"../source/endpoint"},
+		{"source/"},
+	} {
+		if _, err := registry.ResolveSourceEndpoints(NewsFeedConfiguredSourcesRef, inventory); !errors.Is(err, ErrInvalidInventory) {
+			t.Errorf("Feed inventory %#v must be rejected, got %v", inventory, err)
+		}
+	}
+	if _, err := registry.Resolve(NewsFeedConfiguredSourcesRef, []string{"news_feed_catalog"}); !errors.Is(err, ErrPolicyNotFound) {
+		t.Fatalf("Feed ResourcePolicy must not accept Provider codes, got %v", err)
+	}
+}
+
+func TestValidateFeedResourceSnapshotRejectsProviderCodesAndNonCanonicalRefs(t *testing.T) {
+	registry, err := NewRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := registry.ResolveSourceEndpoints(NewsFeedConfiguredSourcesRef, []string{"source/endpoint"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot.AllowedProviderCodes = []string{"bocha"}
+	if err := registry.ValidateSnapshot(snapshot); !errors.Is(err, ErrInvalidInventory) {
+		t.Fatalf("Feed snapshot with Provider codes accepted: %v", err)
+	}
+	snapshot.AllowedProviderCodes = nil
+	snapshot.AllowedSourceEndpointRefs[0] = "source/endpoint/extra"
+	if err := registry.ValidateSnapshot(snapshot); !errors.Is(err, ErrInvalidInventory) {
+		t.Fatalf("Feed snapshot with malformed Source/Endpoint ref accepted: %v", err)
+	}
+}
