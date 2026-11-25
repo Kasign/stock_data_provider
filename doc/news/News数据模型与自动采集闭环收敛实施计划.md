@@ -24,20 +24,22 @@
 
 不做旧数据迁移、旧逻辑兼容、双写或兼容视图。用户在最终 Schema 验收后手动清理旧 News 数据；本任务不远程清库。
 
-## 2. 已确认的代码依赖事实
+## 2. 当前代码事实与边界
 
-- 当前 News V1 是单个完整基线，创建 14 张表；Schema Validator 和 Migration 测试显式校验表、索引、外键清单。
-- 当前 `news_items` 只有主体 ID、首次来源 ID 和创建时间；当前内容存放在 `news_item_versions`。
-- 当前 `news_identifiers` 将 normalized-url 与来源原生 ID 一起按来源范围匹配，无法实现跨来源 URL 全局去重。
-- Feed Parser 已能生成 ProviderSummary、SourceSummary、Body 和附件元数据；当前 Feed Ingest 未将完整 ContentLayers 写入正式新闻版本。
-- Provider SearchCandidates Stage 当前输出 Researchflow StageOutput，不自动创建正式 News。
-- 当前身份写入和 ResearchUpdate 版本写入分属不同事务；`ApplyResearchUpdate` 还混有证券/行业关系断言职责。
-- Research 通过 News Evidence Query 使用 NewsID + VersionID；PIT 依赖 Version、Observation、Availability Evidence/Decision。
-- Server 当前已有 Provider Search Stage 和 Research Evidence Query 装配，但没有完整 Feed SourceCatalog/Transport/Collect/Ingest 生产组合。
-- StaticSourceCatalog、Platform Endpoint Transport、CollectSource、Source Policy Resolver、Policy Version Publisher 已存在，应优先复用。
+- News V1 Migration 当前定义最终 10 张表；Schema Validator 和 Migration 测试按精确表集合、字段、索引和外键校验。
+- news_items 保存当前新闻主体和当前可持久化内容；news_item_versions 保存不可变历史内容版本。
+- news_identifiers 只保存 source_id 范围内的来源原生文章 ID；规范 URL 通过 news_items.canonical_url_hash 全局唯一匹配。
+- 内容指纹只反映来源侧新闻内容和元数据，不包含规范 URL、来源原生 ID、Provider 摘要或采集时间。
+- Feed 摘要按 ContentAbstract/PersistentExcerpt 策略进入正式内容；未识别类型的 Body 不升级为全文，ProviderSummary 不冒充 SourceSummary。
+- Provider SearchCandidates 默认输出 Researchflow StageOutput，不自动创建正式 News；被研究流程选中后才进入统一正式入库。
+- 主体、来源身份、Observation 和内容版本由同一个正式入库事务提交；不再有双阶段 ResearchUpdate。
+- News 不负责转载关系、事件聚合、证券/行业关系或身份历史。
+- Research 通过 News Evidence Query 使用 NewsID + VersionID；PIT 继续依赖 Version、Observation、Availability Evidence/Decision。
+- Server 当前已有 Provider Search Stage 和 Research Evidence Query 装配，但完整 Feed SourceCatalog/Transport/Collect/Ingest 生产组合仍待 P0-4。
+- StaticSourceCatalog、Platform Endpoint Transport、CollectSource、Source Policy Resolver、Policy Version Publisher 已存在，继续复用。
 - StageOutput 生命周期属于 Researchflow，不由 News Cleaner 管理。
 
-以上是本任务已完成的 P0-1 审计结论，不再重复审计；实现时只对具体字段/SQL/调用点做定点核对。
+P0-1 全量依赖审计已完成；本计划后续只对具体字段、SQL 和调用点做定点核对，不重复审计。
 
 ## 3. 最终 Schema
 
@@ -71,8 +73,8 @@
 - `canonical_url`：规范 URL，可空。
 - `canonical_url_hash`：规范 URL 的 SHA-256；非空 URL 必须有值并建立全局唯一索引。
 - `title`、`publisher_name`、`publisher_domain`、`author`、`published_at`：当前新闻元数据。
-- `content_json`：当前完整内容层。
-- `content_fingerprint`：当前内容指纹。
+- `content_json`：当前允许持久化的来源内容层；摘要按策略保存，正文必须先识别类型并通过对应策略。
+- `content_fingerprint`：只覆盖来源侧内容和元数据，不覆盖 URL/来源身份/Provider 摘要/采集时间。
 - `created_at`、`updated_at`：记录创建/更新时间。
 
 删除 `origin_source_id`。来源身份由 `news_identifiers` 和 `news_observations` 表达。
@@ -99,7 +101,7 @@
 - URL 和来源原生 ID 都缺失时拒绝创建正式主体。
 - 同一 URL 被不同来源发现时，每个来源保留自己的来源原生身份和 Observation。
 - 新主体写入当前内容并创建初始版本。
-- 已有主体内容指纹不变时不新增版本；内容变化时更新主体并追加版本。
+- 已有主体内容指纹不变时不新增版本；URL 身份补全只更新主体身份字段，不创建内容版本；来源内容或内容元数据变化时更新主体并追加版本。
 - 主体、身份、Observation、版本在同一事务中提交或回滚。
 
 ### 4.1 固定事务锁顺序
