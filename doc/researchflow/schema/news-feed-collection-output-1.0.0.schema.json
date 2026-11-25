@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:kasign:researchflow:news-feed-collection-output:1.0.0",
+  "title": "News Feed Collection Output",
+  "type": "object",
+  "properties": {
+    "status": {"type": "string", "enum": ["success", "empty", "partial", "failed", "failed_retryable"]},
+    "failure_code": {"type": "string"},
+    "source_count": {"type": "integer", "minimum": 1},
+    "success_source_count": {"type": "integer", "minimum": 0},
+    "empty_source_count": {"type": "integer", "minimum": 0},
+    "skipped_source_count": {"type": "integer", "minimum": 0},
+    "failed_source_count": {"type": "integer", "minimum": 0},
+    "collected_entry_count": {"type": "integer", "minimum": 0},
+    "ingested_count": {"type": "integer", "minimum": 0},
+    "sources": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "properties": {
+          "source_id": {"type": "string", "minLength": 1},
+          "endpoint_id": {"type": "string", "minLength": 1},
+          "status": {"type": "string", "enum": ["success", "empty", "skipped", "failed"]},
+          "collected_count": {"type": "integer", "minimum": 0},
+          "ingested_count": {"type": "integer", "minimum": 0},
+          "news_ids": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true},
+          "error_code": {"type": "string"},
+          "retryable": {"type": "boolean"}
+        },
+        "required": ["source_id", "endpoint_id", "status", "collected_count", "ingested_count", "news_ids", "error_code", "retryable"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["status", "failure_code", "source_count", "success_source_count", "empty_source_count", "skipped_source_count", "failed_source_count", "collected_entry_count", "ingested_count", "sources"],
+  "additionalProperties": false
+}

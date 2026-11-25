@@ -163,3 +163,69 @@ func TestResearchflowCompositeSchemaAndApplicabilityRegistrySupportsNewsAndQuant
 		}
 	}
 }
+
+
+func TestNewsFeedParameterSchemaIsStrictImmutableAndDocumented(t *testing.T) {
+	validator, err := newResearchflowParameterSchemaValidator()
+	if err != nil {
+		t.Fatal(err)
+	}
+	valid := json.RawMessage("{}")
+	snapshot, err := validator.Validate(context.Background(), newsFeedParameterSchemaRef, valid)
+	if err != nil {
+		t.Fatalf("empty News Feed parameters rejected: %v", err)
+	}
+	if snapshot.Ref != newsFeedParameterSchemaRef || snapshot.Version != newsFeedParameterSchemaVersion || len(snapshot.Fingerprint) != 64 {
+		t.Fatalf("unexpected News Feed parameter Schema snapshot: %+v", snapshot)
+	}
+	for _, raw := range []string{"[]", "null", "{\"source_id\":\"source-a\"}", "{\"unexpected\":true}"} {
+		if _, err := validator.Validate(context.Background(), newsFeedParameterSchemaRef, json.RawMessage(raw)); err == nil {
+			t.Errorf("invalid News Feed parameters were accepted: %s", raw)
+		}
+	}
+
+	registry := researchflowParameterSchemaRegistry{}
+	definition, err := registry.Get(context.Background(), newsFeedParameterSchemaRef)
+	if err != nil {
+		t.Fatal(err)
+	}
+	definition.Document[0] = 'x'
+	again, err := registry.Get(context.Background(), newsFeedParameterSchemaRef)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !json.Valid(again.Document) {
+		t.Fatal("mutating a returned News Feed schema definition changed the immutable registry")
+	}
+	documented, err := os.ReadFile("../../../doc/researchflow/schema/news-feed-collection-parameters-1.0.0.schema.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(documented) != newsFeedParameterSchemaDocument+"\n" {
+		t.Fatal("documented News Feed parameter Schema drifted from Server registry")
+	}
+	golden, err := os.ReadFile("../../../doc/researchflow/golden/news-feed-collection-parameters-1.0.0.golden.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := validator.Validate(context.Background(), newsFeedParameterSchemaRef, golden); err != nil {
+		t.Fatalf("News Feed parameter Golden does not satisfy its Schema: %v", err)
+	}
+}
+
+func TestNewsFeedApplicabilityRuleRequiresExactVersionAndEmptyParameters(t *testing.T) {
+	evaluator := newsFeedApplicabilityEvaluator{}
+	rule := template.ApplicabilityRule{RuleRef: newsFeedApplicabilityRuleRef, RuleVersion: newsFeedApplicabilityVersion}
+	applicable, reason, err := evaluator.Evaluate(context.Background(), rule, json.RawMessage("{}"))
+	if err != nil || !applicable || reason != "" {
+		t.Fatalf("valid News Feed rule should include Stage: applicable=%v reason=%q err=%v", applicable, reason, err)
+	}
+	if _, _, err := evaluator.Evaluate(context.Background(), template.ApplicabilityRule{
+		RuleRef: newsFeedApplicabilityRuleRef, RuleVersion: "9.9.9",
+	}, json.RawMessage("{}")); err == nil {
+		t.Fatal("unknown News Feed applicability version was accepted")
+	}
+	if _, _, err := evaluator.Evaluate(context.Background(), rule, json.RawMessage("{\"source_id\":\"source-a\"}")); err == nil {
+		t.Fatal("News Feed applicability accepted a caller-selected source")
+	}
+}
