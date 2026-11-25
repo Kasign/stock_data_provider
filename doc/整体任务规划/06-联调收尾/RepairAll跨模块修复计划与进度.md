@@ -1204,3 +1204,15 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - 已新增 Reader 单测、关联适配器测试、双 Schema 内容校验测试和 MariaDB GetRecord/授权读取集成测试。当前 SHA 的完整 CI 仍需等待本提交结果。
 - RA-02 尚未最终完成：Research Context/Evidence Stage 还未消费该 Facade；必须继续完成 Research Stage 接入和真实 Worker→Data→Quant→StageOutput→GetResult→AccessAudit 跨模块 E2E。
 - 当前没有删除旧 Analysis/Python Bridge/Python API Client；继续按 RA-08/RA-09 门禁，等新模板、结果消费和 WebUI 全面迁移完成后统一删除。
+
+
+
+## 2026-11-25 RA-02C 进度复核与旧代码退役距离
+
+- 最新核查基线：`repair_all` SHA `feb1d4f79ab72b7b6664d309a9b3dc886ae7fd17`。本阶段已完成 Quant SMA20 Stage 的 Server 条件装配、Data PIT Snapshot 消费、Quant 结果持久化、Researchflow Stage Output 关联读取、当前策略授权复核与 AccessAudit 组合装配。
+- 当前 SHA 的 Go Test Suite Run `45532181367` 和 Integration CI Run `45532181223` 均 completed/success。该结果不代表真实数据准确性验收，也不代表全量股票研究流程完成。
+- 新执行链目前有 News Search 与 Quant SMA20 Stage；Research Context/Evidence/Claim 尚未作为 Researchflow Stage 消费 Quant GetResult，LLM 尚无 Server 生产 Provider/Stage，RiskDecision 尚未接入完整流程，完整报告结果读取资源/API 尚未提供。
+- WebUI 仍有明确旧调用：`web/src/api.js` 保留 `/api/v1/analysis/tasks`、旧 Run/Event API；`web/src/app.js` 仍以 Task ID、Event Cursor、analysisBase 和旧 RunResult 状态驱动任务页、历史与报告关联。虽然已有 Researchflow API helper，尚未替换主业务流。
+- Root Server 仍装配旧 Analysis Runner/Task Queue/Worker/HTTP Handler 和旧路由；Python API Client、Python Bridge、go-core 也仍在仓库。它们不能一起直接删除，否则当前旧业务入口和部分 UI 会失效。
+- 距离一次性删除旧代码，必须先完成：①完整股票研究 Template 与领域 Stage；②Research/LLM/Risk/结果持久化和授权读取闭环；③Researchflow 取消/轮询/历史/结果正文/导出 API；④WebUI 全面迁移并清零旧 API 调用；⑤旧 Analysis 业务语义迁移/明确废弃清单；⑥全仓配置、Migration、Docker、CI、文档及外部调用方核查。之后再在一个逻辑工作组删除旧入口及全部专属资产，不保留兼容链。
+- 下一工作组继续 RA-03：Research Context/Evidence 生产 Stage，消费 Server 注入的 News Evidence Importer 与 Quant Authorized GetResult；不在 Researchflow 复制领域规则，不让 Stage 访问 Repository，不绕过来源授权和 PIT 校验。
