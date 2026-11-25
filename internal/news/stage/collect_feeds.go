@@ -3,6 +3,8 @@ package stage
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -120,6 +122,22 @@ func SourceEndpointResourceRef(sourceID, endpointID string) string {
 	return sourceID + "/" + endpointID
 }
 
+// SourceEndpointSnapshotRef fingerprints the complete startup registration. A Run stores
+// this opaque digest, not the endpoint URL or policy payload, so a restarted Worker cannot
+// silently execute an older Run against a changed endpoint configuration.
+func SourceEndpointSnapshotRef(registration app.SourceEndpointRegistration) string {
+	identity := SourceEndpointResourceRef(registration.SourceID, registration.EndpointID)
+	if identity == "" {
+		return ""
+	}
+	raw, err := json.Marshal(registration)
+	if err != nil {
+		return ""
+	}
+	digest := sha256.Sum256(raw)
+	return identity + "@" + hex.EncodeToString(digest[:])
+}
+
 func validFeedResourceID(value string) bool {
 	if value == "" || value != strings.TrimSpace(value) || len(value) > 128 {
 		return false
@@ -138,11 +156,18 @@ func validFeedResourceID(value string) bool {
 }
 
 func splitSourceEndpointResourceRef(value string) (string, string, bool) {
-	parts := strings.Split(value, "/")
-	if len(parts) != 2 || !validFeedResourceID(parts[0]) || !validFeedResourceID(parts[1]) {
+	parts := strings.Split(value, "@")
+	if len(parts) != 2 || len(parts[1]) != sha256.Size*2 || parts[1] != strings.ToLower(parts[1]) {
 		return "", "", false
 	}
-	return parts[0], parts[1], true
+	if _, err := hex.DecodeString(parts[1]); err != nil {
+		return "", "", false
+	}
+	identity := strings.Split(parts[0], "/")
+	if len(identity) != 2 || !validFeedResourceID(identity[0]) || !validFeedResourceID(identity[1]) {
+		return "", "", false
+	}
+	return identity[0], identity[1], true
 }
 
 // Execute runs only the Source/Endpoint identities captured in the immutable Run resource snapshot.
@@ -159,7 +184,7 @@ func (a *FeedCollectionAdapter) Execute(
 	}
 	registrations := make(map[string]app.SourceEndpointRegistration, len(a.registrations))
 	for _, registration := range a.registrations {
-		registrations[SourceEndpointResourceRef(registration.SourceID, registration.EndpointID)] = registration
+		registrations[SourceEndpointSnapshotRef(registration)] = registration
 	}
 	resourceRefs := append([]string(nil), allowedSourceEndpointRefs...)
 	for i, ref := range resourceRefs {

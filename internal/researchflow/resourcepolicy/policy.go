@@ -29,7 +29,38 @@ var (
 
 var (
 	providerCodePattern       = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
-	sourceEndpointRefPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}/[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
+	sourceEndpointRefPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}/[A-Za-z0-9][A-Za-z0-9._-]{0,127}@[a-f0-9]{64}// Package resourcepolicy resolves immutable Researchflow resource authorization snapshots.
+package resourcepolicy
+
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"regexp"
+	"sort"
+	"strings"
+)
+
+const (
+	NewsSearchConfiguredProvidersRef = "news.search.configured-providers@1.0.0"
+	NewsFeedConfiguredSourcesRef    = "news.feed.configured-sources@1.0.0"
+	QuantDailyBarsProvidersRef      = "quant.daily-bars.configured-providers@1.0.0"
+	newsSearchPolicyVersion         = "1.0.0"
+	newsFeedPolicyVersion           = "1.0.0"
+	quantDailyBarsPolicyVersion     = "1.0.0"
+)
+
+var (
+	ErrPolicyNotFound   = errors.New("Researchflow resource policy not found")
+	ErrNoProviders      = errors.New("Researchflow resource policy has no configured providers")
+	ErrInvalidInventory = errors.New("Researchflow resource policy inventory is invalid")
+)
+
+var (
+	providerCodePattern       = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
+	)
 )
 
 // Snapshot is the immutable resource authorization decision made when a Run is created.

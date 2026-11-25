@@ -108,7 +108,7 @@ func newNewsFeedStageComposition(
 
 	resourceRefs := make([]string, 0, len(registrations))
 	for _, registration := range registrations {
-		ref := newsstage.SourceEndpointResourceRef(registration.SourceID, registration.EndpointID)
+		ref := newsstage.SourceEndpointSnapshotRef(registration)
 		if ref == "" {
 			return nil, errors.New("News Feed registration has an invalid Source/Endpoint identity")
 		}
