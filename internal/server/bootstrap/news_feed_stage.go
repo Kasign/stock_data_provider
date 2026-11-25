@@ -66,7 +66,13 @@ func newNewsFeedStageComposition(
 	if err != nil {
 		return nil, fmt.Errorf("create News Feed policy publisher: %w", err)
 	}
-	for sourceID, source := range policies {
+	policySourceIDs := make([]string, 0, len(policies))
+	for sourceID := range policies {
+		policySourceIDs = append(policySourceIDs, sourceID)
+	}
+	sort.Strings(policySourceIDs)
+	for _, sourceID := range policySourceIDs {
+		source := policies[sourceID]
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
