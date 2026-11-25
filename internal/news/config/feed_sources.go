@@ -122,10 +122,10 @@ func loadFeedSources(env platformconfig.Env) ([]FeedSource, error) {
 		}
 		sum := sha256.Sum256(payload)
 		policyFingerprint := hex.EncodeToString(sum[:])
-		if previous, exists := sourcePolicies[value.SourceID]; exists && previous != value.SourcePolicyVersionID+"\x00"+policyFingerprint {
+		if previous, exists := sourcePolicies[value.SourceID]; exists && previous != value.SourcePolicyVersionID+"\x00"+value.ExpectedCurrentSourcePolicyVersionID+"\x00"+policyFingerprint {
 			return nil, fmt.Errorf("news config %s contains conflicting policy snapshots for one source", FeedSourcesEnv)
 		}
-		sourcePolicies[value.SourceID] = value.SourcePolicyVersionID + "\x00" + policyFingerprint
+		sourcePolicies[value.SourceID] = value.SourcePolicyVersionID + "\x00" + value.ExpectedCurrentSourcePolicyVersionID + "\x00" + policyFingerprint
 		result = append(result, value)
 	}
 	return result, nil
