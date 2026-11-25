@@ -85,14 +85,14 @@ func TestNewsAvailabilityPITResolverMariaDBIntegration(t *testing.T) {
 		record, err := repository.GetEvidenceVersionAt(ctx, app.GetEvidenceRequest{
 			NewsID: newsID, VersionID: versionID, SystemAsOf: asOf.UTC(),
 		})
-		if err != nil {
-			t.Fatalf("GetEvidenceVersionAt(%s): %v", asOf, err)
-		}
 		if want == nil {
-			if record.AvailableAt != nil {
-				t.Fatalf("available_at = %s, want NULL", record.AvailableAt)
+			if !errors.Is(err, app.ErrEvidencePITNotFound) {
+				t.Fatalf("GetEvidenceVersionAt(%s) error = %v, want strict PIT not found", asOf, err)
 			}
 			return
+		}
+		if err != nil {
+			t.Fatalf("GetEvidenceVersionAt(%s): %v", asOf, err)
 		}
 		if record.AvailableAt == nil || !record.AvailableAt.Equal(*want) ||
 			record.AvailableAt.Nanosecond() != 0 {
@@ -100,7 +100,23 @@ func TestNewsAvailabilityPITResolverMariaDBIntegration(t *testing.T) {
 		}
 	}
 
+	assertListCount := func(asOf time.Time, want int) {
+		t.Helper()
+		records, err := repository.ListEvidenceVersionsAt(ctx, app.ListEvidenceRequest{
+			CallerRef: "service:research", PurposeCode: app.EvidencePurposeResearchAnalysis,
+			RequestedContentLevel: app.EvidenceContentMetadata, SystemAsOf: asOf.UTC(),
+			Filters: &app.EvidenceQueryFilters{NewsIDs: []string{newsID}}, PageSize: 10,
+		})
+		if err != nil {
+			t.Fatalf("ListEvidenceVersionsAt(%s): %v", asOf, err)
+		}
+		if len(records) != want {
+			t.Fatalf("ListEvidenceVersionsAt(%s) returned %d records, want %d", asOf, len(records), want)
+		}
+	}
+
 	assertAvailableAt(firstDecisionAt.Add(-time.Microsecond), nil)
+	assertListCount(firstDecisionAt.Add(-time.Microsecond), 0)
 	if _, err := db.ExecContext(ctx, `INSERT INTO news_version_availability_evidence
 		(evidence_id, news_id, version_id, observation_id, field_path, raw_value,
 		 source_timezone_or_offset, source_precision, parse_status, parse_reason_code,
@@ -124,11 +140,13 @@ func TestNewsAvailabilityPITResolverMariaDBIntegration(t *testing.T) {
 	}
 	// 历史/异常写入即使存在 verified Decision，缺少可追溯证据引用也不得进入 PIT。
 	assertAvailableAt(secondDecisionAt.Add(-time.Microsecond), nil)
+	assertListCount(secondDecisionAt.Add(-time.Microsecond), 0)
 	if _, err := db.ExecContext(ctx, `UPDATE news_version_availability_evidence
 		SET evidence_ref = ? WHERE evidence_id = ?`, "https://source.example/evidence/1", evidenceID); err != nil {
 		t.Fatalf("add availability evidence provenance: %v", err)
 	}
 	assertAvailableAt(secondDecisionAt.Add(-time.Microsecond), &candidateAvailableAt)
+	assertListCount(secondDecisionAt.Add(-time.Microsecond), 1)
 
 	if _, err := db.ExecContext(ctx, `INSERT INTO news_version_availability_decisions
 		(decision_id, version_id, decision_seq, status, selected_evidence_id,
@@ -141,6 +159,7 @@ func TestNewsAvailabilityPITResolverMariaDBIntegration(t *testing.T) {
 		t.Fatalf("insert superseding unresolved Decision: %v", err)
 	}
 	assertAvailableAt(secondDecisionAt.Add(time.Second), nil)
+	assertListCount(secondDecisionAt.Add(time.Second), 0)
 
 	thirdDecisionID := "availability-pit-decision-3-" + suffix
 	thirdDecisionAt := now.Add(-500 * time.Millisecond)
@@ -155,6 +174,7 @@ func TestNewsAvailabilityPITResolverMariaDBIntegration(t *testing.T) {
 		t.Fatalf("insert re-verified Decision: %v", err)
 	}
 	assertAvailableAt(now, &candidateAvailableAt)
+	assertListCount(now, 1)
 
 	// PIT 读取必须独立验证 selected_evidence_id 属于 considered_evidence_ids；
 	// 即使数据库中存在绕过 Domain Validator 的异常历史决策，也不能采信。
@@ -171,6 +191,7 @@ func TestNewsAvailabilityPITResolverMariaDBIntegration(t *testing.T) {
 		t.Fatalf("insert malformed verified Decision: %v", err)
 	}
 	assertAvailableAt(now, nil)
+	assertListCount(now, 0)
 
 	purgedAt := now
 	if _, err := db.ExecContext(ctx, `UPDATE news_version_availability_evidence
@@ -179,6 +200,7 @@ func TestNewsAvailabilityPITResolverMariaDBIntegration(t *testing.T) {
 		t.Fatalf("purge availability Evidence payload: %v", err)
 	}
 	assertAvailableAt(now, nil)
+	assertListCount(now, 0)
 }
 
 func TestAppendAvailabilityDecisionSerializesConcurrentWritersMariaDBIntegration(t *testing.T) {

@@ -33,7 +33,11 @@ func (r *MySQLRepository) GetEvidenceVersionAt(
 	if request.VersionID != "" {
 		query += " AND v.version_id = ?"
 		args = append(args, request.VersionID)
-	} else {
+	}
+	// available_at is nullable in the DTO model, but this Query contract is strict PIT:
+	// records without a verified source-availability time are not query-visible.
+	query += " HAVING available_at IS NOT NULL"
+	if request.VersionID == "" {
 		query += " ORDER BY v.observed_at DESC, v.version_no DESC, v.version_id DESC LIMIT 1"
 	}
 
@@ -104,6 +108,8 @@ func (r *MySQLRepository) ListEvidenceVersionsAt(
 		query += " AND v.published_at <= ?"
 		args = append(args, filters.PublishedAtTo.UTC())
 	}
+	// Keep unavailable/unknown source-time records out of strict PIT snapshots.
+	query += " HAVING available_at IS NOT NULL"
 	query += " ORDER BY v.observed_at DESC, v.news_id ASC, v.version_id ASC LIMIT ?"
 	args = append(args, app.MaximumEvidenceSnapshotSize+1)
 

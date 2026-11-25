@@ -150,10 +150,11 @@ func validEvidencePITRecord(pit EvidencePITRecord, request GetEvidenceRequest) b
 		(!validEvidenceUTC(observation.RetentionUntil) || !observation.RetentionUntil.After(observation.ObservedAt)) {
 		return false
 	}
-	if pit.AvailableAt != nil &&
-		(pit.AvailableAt.IsZero() || !validEvidenceUTC(*pit.AvailableAt) ||
-			pit.AvailableAt.Nanosecond() != 0 || pit.AvailableAt.After(observation.ObservedAt) ||
-			pit.AvailableAt.After(request.SystemAsOf)) {
+	if pit.AvailableAt == nil || pit.AvailableAt.IsZero() ||
+		!validEvidenceUTC(*pit.AvailableAt) ||
+		pit.AvailableAt.Nanosecond() != 0 ||
+		pit.AvailableAt.After(observation.ObservedAt) ||
+		pit.AvailableAt.After(request.SystemAsOf) {
 		return false
 	}
 	if observation.PayloadPurgedAt != nil {

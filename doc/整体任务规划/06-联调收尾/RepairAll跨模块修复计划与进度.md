@@ -1292,3 +1292,13 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - 修复范围：Storage 在同一版本行锁事务内读取选中 Evidence 的 `evidence_ref/evidence_hash`，至少要求一个非空且合法；Evidence Query 的 available_at 子查询同步要求非空来源引用或 64 位小写 SHA-256。Integration Test 覆盖缺失溯源时查询不可见、Storage 拒绝 verified，补齐来源引用后才可见/追加。
 - 这项门禁只证明时间候选有可追溯的来源记录，不证明字段语义等同“首次公开可获取时间”。来源字段语义、许可范围、版本绑定、审核规则仍必须逐来源确认；不把 RSS pubDate、published/updated、fetched_at 或 observed_at 自动认定为 available_at。
 - Application 层 AvailabilityDecision Review Use Case 当前仍没有真实生产调用方，也没有统一的来源字段语义审核规则及其 Owner。暂不新增空壳接口；待真实来源/调用场景确定后，由 News Application 提供审核入口，Storage 继续负责并发序列化、版本归属与事务完整性。
+
+
+
+## 2026-11-25 RA-03 严格 PIT 查询层 fail-closed 修复
+
+- 开始基线：`6fb64ae1322267ea41e898ef8fcc502f09d1c32f`。
+- 按 `doc/news/新闻API契约.md` 第 11.3 节，ResearchEvidenceQuery 的当前契约是严格 PIT；`available_at` nullable 是 DTO 空值表达，不是查询放行规则。缺失/unknown 必须从 Get/List 两种查询结果中排除。
+- 修复 News Storage Get/List 查询：在标量 available_at 投影后用 `HAVING available_at IS NOT NULL` 过滤，避免无可用时间记录进入单条结果或固定分页 Snapshot；Application `validEvidencePITRecord` 同时将 nil 作为严格 PIT 无效。
+- 回归覆盖：单条查询和列表查询均覆盖未有 verified Decision、缺少 Evidence 溯源、unresolved 最新 Decision、异常 selected_evidence_id、Evidence payload purge；无合格时间时不返回记录。
+- 保留上一组来源溯源门禁：verified Decision 必须引用可追溯 Evidence；但不把 evidence_ref/hash 存在等同于首次公开可获取语义已验证。没有来源官方字段语义/许可证据时，Research B 组继续 SHELVED，不构造 Research Stage 空壳。

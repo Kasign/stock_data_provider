@@ -152,8 +152,10 @@ func validGetEvidenceFixture(now time.Time) (GetEvidenceRequest, EvidencePITReco
 			}},
 		},
 	}
+	availableAt := observedAt.Add(-time.Minute)
 	return request, EvidencePITRecord{
 		SourceRef: observation.SourceID, Observation: observation, Version: version,
+		AvailableAt: &availableAt,
 	}, binding
 }
 
@@ -181,9 +183,10 @@ func TestGetEvidenceAppliesAuthorizationAndContentLevelBeforeReturningDTO(t *tes
 		result.ContentExcerpt == nil || *result.ContentExcerpt != "source summary" {
 		t.Fatalf("unexpected authorized evidence result: %+v calls=%d", result, authorizer.calls)
 	}
-	if result.ContentLevel != EvidenceContentSummary || result.AvailableAt != nil ||
+	if result.ContentLevel != EvidenceContentSummary || result.AvailableAt == nil ||
+		result.AvailableAt.After(request.SystemAsOf) ||
 		result.ContentExcerpt == nil || strings.Contains(*result.ContentExcerpt, "full article body") {
-		t.Fatalf("content exceeded requested level or invented available_at: %+v", result)
+		t.Fatalf("content level or strict PIT available_at was not preserved: %+v", result)
 	}
 	if result.AuthorizationRef != binding.AuthorizationRef.AuthorizationRef ||
 		result.AuthorizationStatus != string(domain.AuthorizationDecisionAllowed) {
@@ -275,6 +278,29 @@ func TestGetEvidenceRejectsPITRepositoryRecordOutsideRequestedBoundary(t *testin
 	result, err := usecase.Execute(context.Background(), request)
 	if !errors.Is(err, ErrInvalidEvidenceQuery) || authorizer.calls != 0 || result.Title != nil {
 		t.Fatalf("PIT boundary violation was not rejected: result=%+v err=%v calls=%d", result, err, authorizer.calls)
+	}
+}
+
+func TestGetEvidenceRejectsMissingAvailableAtForStrictPIT(t *testing.T) {
+	now := time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)
+	request, pit, binding := validGetEvidenceFixture(now)
+	pit.AvailableAt = nil
+	authorizer := &getEvidenceAuthorizerStub{}
+	contentRead := false
+	usecase, err := NewGetEvidence(
+		getEvidencePITRepositoryStub{record: pit, afterContentRead: func() { contentRead = true }},
+		getEvidenceAuthorizationSnapshotStub{binding: binding},
+		authorizer,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	usecase.now = func() time.Time { return now }
+	result, err := usecase.Execute(context.Background(), request)
+	if !errors.Is(err, ErrInvalidEvidenceQuery) || authorizer.calls != 0 ||
+		result.Title != nil || result.ContentExcerpt != nil || contentRead {
+		t.Fatalf("missing available_at passed strict PIT: result=%+v err=%v authorizer_calls=%d content_read=%v",
+			result, err, authorizer.calls, contentRead)
 	}
 }
 
