@@ -25,7 +25,7 @@
 |---|---|---|---|
 | P0 | Data Migration 定义、Platform 只读校验、Server Root 统一注册与启动路径 | Data / Platform / Server | 代码与完整 CI 验收通过；生产启停演练待完成 |
 | P0 | News Search Candidates Validator 与冻结 Schema 一致性 | News / Researchflow | 已修复，完整 Integration CI 已通过 |
-| P1 | Data、News 到 Research 的数据/时间/Evidence 契约和真实消费边界 | Data / News / Research / Server | Review 完成；DATA-CTR-007 deferred、NEWS available_at 与真实消费者仍阻塞 |
+| P1 | Data、News 到 Research 的数据/时间/Evidence 契约和真实消费边界 | Data / News / Research / Server | DATA-CTR-007 deferred；News 来源策略已按个人研究用途校准，人工导入能力与真实 PIT 证据链继续推进 |
 | P1 | Quant Application Port、结果 Envelope、Researchflow 消费接口 | Quant / Researchflow / Server | Review 完成；QNT-014/QNT-013 与生产 Stage/Root 装配未闭环 |
 | P1 | Research Context/Evidence 与 Researchflow Run/Stage/Result 语义及唯一持久化 Owner | Research / Researchflow / Server | Review 完成；Context 授权、PIT Mode 与生产 Stage 消费仍阻塞 |
 | P2 | LLM Gateway 生产 Provider、Secret、Capability Evidence 与真实调用 | LLM / Platform / Server / Researchflow | Review 完成；模块协议/传输代码 PASS，Server 生产装配、Researchflow 消费者和真实 Gateway 证据 BLOCKED |
@@ -1387,3 +1387,14 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - Root `bootstrapDatabase` 在 Migration History/Checksum 校验后、其他业务 Repository/Redis/HTTP Client 装配前调用 News 校验；失败即停止启动，不自动修复、不兼容旧 Schema。
 - 新增 News Schema 单测和真实 MariaDB Migration 基线集成测试；Go Test Suite 的 News MariaDB Job 显式运行该测试。
 - 本工作组只确认 News 当前物理 Schema 符合 V1，不代表 RA-03 真实来源授权、来源字段语义审核或 verified `available_at` 生产链已完成。
+
+
+## 2026-11-25 RA-03 个人研究用途调整与人工来源导入工作组
+
+- 用户已明确项目为完全个人使用、非商业行为，且没有书面商业授权。由此撤销“没有商业授权即所有来源整体 BLOCKED_EXTERNAL”的统一判断；不要求用户先取得商业合同才能继续项目。
+- 来源准入按具体发布者、访问方式、内容类型、用途和留存期限拆分。个人人工浏览/下载、服务端自动抓取、批量采集、长期全文留存、对外分发不是同一种行为，必须分别判断。
+- 对公开条款允许个人非商业浏览/临时下载的来源，优先推进人工取得/导入；对明确限制程序化访问的来源不做自动采集；条款不明确的来源不伪造 approved 策略，也不阻断其他来源和人工路径。
+- 已核对真实代码：CollectSource 当前仅支持 RSS/Atom 与 licensed_feed；IngestCollectedSource 要求真实 Collection Seal；SourceCatalog/Platform Endpoint Transport/当前策略 Resolver 已有模块实现，但 Server 尚未装配完整生产链。Domain 有 AccessManual，但缺少完整人工来源导入 Application 用例。
+- 下一工作组定为 NEWS-POST-07：实现受控人工来源导入，复用现有 Source Policy、Identity/Observation、NewsItemVersion、Retention 和 AvailabilityEvidence 机制；不通过直接 Repository 写入、伪造 CollectionResult 或调用方自报 available_at 绕过门禁。
+- 人工取得时间只作为系统观察/取得证据，不等于首次公开可获取时间。NEWS-CTR-001 Strict PIT 与 Research Importer 的严格校验保持不变；来源字段语义未审核前 available_at 仍为 unknown，Research B 组继续 SHELVED。
+- 本轮只校准来源策略和任务边界，未宣称 Source 生产链、人工导入或 News→Research B 组已完成。
