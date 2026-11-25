@@ -1050,8 +1050,8 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 		Status:               domain.AuthorizationApproved,
 		AllowedAccessMethods: []domain.AccessMethod{domain.AccessRSS},
 		AllowedPurposes:      []domain.Purpose{domain.PurposeInternalPersonalResearch},
-		AllowedContentKinds:  []domain.ContentKind{domain.ContentMetadata},
-		AllowedStorageModes:  []domain.StorageMode{domain.StoragePersistentMetadata},
+		AllowedContentKinds:  []domain.ContentKind{domain.ContentAbstract},
+		AllowedStorageModes:  []domain.StorageMode{domain.StoragePersistentExcerpt},
 		MaxRetention:         time.Hour,
 		EvidenceRef:          "news-it-source-ingest-lock-evidence",
 	})
@@ -1069,8 +1069,8 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 		Status:               domain.AuthorizationApproved,
 		AllowedAccessMethods: []domain.AccessMethod{domain.AccessRSS},
 		AllowedPurposes:      []domain.Purpose{domain.PurposeInternalPersonalResearch},
-		AllowedContentKinds:  []domain.ContentKind{domain.ContentMetadata},
-		AllowedStorageModes:  []domain.StorageMode{domain.StoragePersistentMetadata},
+		AllowedContentKinds:  []domain.ContentKind{domain.ContentAbstract},
+		AllowedStorageModes:  []domain.StorageMode{domain.StoragePersistentExcerpt},
 		MaxRetention:         &endpointRetention,
 		EvidenceRef:          "news-it-endpoint-ingest-evidence",
 	})
