@@ -14,6 +14,7 @@ on:
       - 'docker-compose.yml'
       - '.env.example'
       - '.github/workflows/integration-ci.yml'
+      - '.github/workflows/go-test.yml'
   push:
     branches:
       - integration
@@ -28,6 +29,7 @@ on:
       - 'docker-compose.yml'
       - '.env.example'
       - '.github/workflows/integration-ci.yml'
+      - '.github/workflows/go-test.yml'
   workflow_dispatch:
 
 permissions:
