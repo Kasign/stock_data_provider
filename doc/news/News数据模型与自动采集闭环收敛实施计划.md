@@ -119,13 +119,13 @@
 
 ### P0-1：全量依赖审计
 
-<badge>DONE</badge>
+状态：DONE
 
 已完成现有表、读写者、Repository、Research/PIT 消费者、关系职责、Server 装配和 Diagnostics/Schema 测试依赖核查。
 
 ### P0-2：最终数据模型与 Migration
 
-<badge color="warning">IN_PROGRESS</badge>
+状态：IN_PROGRESS
 
 1. 逐字段对齐 Domain、Repository、PIT SQL 和 Research Evidence DTO。
 2. 修改单一 V1 Migration，直接创建最终 10 张表。
@@ -136,6 +136,8 @@
 完成门槛：Migration 从空库直接创建最终 Schema；Validator 与真实 MariaDB 表/索引/外键一致。无需兼容旧 V1。
 
 ### P0-3：统一正式入库与全局 URL 去重
+
+状态：IN_PROGRESS（实现已开始，验收未完成）
 
 1. 建立唯一正式入库 Application 用例。
 2. RSS/Atom 和被选中的 Provider 候选复用该用例。
@@ -158,6 +160,8 @@
 完成门槛：Server 存在真实 Feed 生产调用路径，不以构造器存在或单元测试代替生产装配。
 
 ### P1-1：职责清理
+
+状态：IN_PROGRESS（旧关系/身份历史/双阶段写入代码已删除，待残留检查）
 
 1. 移除 News 证券/行业关系断言职责。
 2. 删除转载关系 Domain/Application/Repository/表。
