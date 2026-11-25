@@ -20,7 +20,7 @@ import (
 	"example.com/stock-analysis-flow/internal/researchflow/stageoutput"
 )
 
-const newsFeedStageOutputRegistryVersion = "1.0.0"
+const newsFeedStageOutputRegistryVersion = "1.1.0"
 
 type newsFeedStageComposition struct {
 	catalog *newssource.StaticSourceCatalog
@@ -99,17 +99,7 @@ func newNewsFeedStageComposition(
 	if err != nil {
 		return nil, fmt.Errorf("create News Feed collection Stage adapter: %w", err)
 	}
-	registry, err := stageoutput.NewRegistry(newsFeedStageOutputRegistryVersion, []stageoutput.Entry{{
-		StageCode: newsstage.CollectFeedsStageCode, OutputType: newsstage.CollectFeedsOutputType,
-		SchemaVersion: newsstage.CollectFeedsSchemaVersion,
-		PayloadSchemaRef: newsstage.CollectFeedsPayloadSchemaRef,
-		QualitySummarySchemaRef: newsstage.CollectFeedsQualitySummarySchemaRef,
-		PayloadValidator: stageoutput.ValidatorFunc(newsstage.ValidateFeedCollectionPayload),
-		QualitySummaryValidator: stageoutput.ValidatorFunc(newsstage.ValidateFeedCollectionQualitySummary),
-	}})
-	if err != nil {
-		return nil, fmt.Errorf("create News Feed Stage Output Registry: %w", err)
-	}
+
 	resourceRefs := make([]string, 0, len(registrations))
 	for _, registration := range registrations {
 		ref := newsstage.SourceEndpointResourceRef(registration.SourceID, registration.EndpointID)
@@ -121,7 +111,7 @@ func newNewsFeedStageComposition(
 	sort.Strings(resourceRefs)
 	return &newsFeedStageComposition{
 		catalog: catalog, registrations: registrations,
-		executor: newsFeedStageExecutor{adapter: adapter}, registry: registry,
+		executor: newsFeedStageExecutor{adapter: adapter},
 		resourceRefs: resourceRefs,
 	}, nil
 }
@@ -153,7 +143,7 @@ func (e newsFeedStageExecutor) ExecuteStage(
 		policyRegistry.ValidateSnapshot(request.ResourcePolicy) != nil {
 		return failedNewsFeedStage("news_feed_resource_policy_invalid"), nil
 	}
-	output, err := e.adapter.Execute(ctx, request.Run.Ref, request.Stage.Code, request.ResourcePolicy.AllowedSourceEndpointRefs)
+	output, err := e.adapter.Execute(ctx, request.Run.Ref+"/"+request.Attempt.Ref, request.Stage.Code, request.ResourcePolicy.AllowedSourceEndpointRefs)
 	if err != nil {
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return researchflowapplication.StageExecutionResult{}, ctxErr
