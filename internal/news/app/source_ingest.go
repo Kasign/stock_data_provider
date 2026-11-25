@@ -2,6 +2,8 @@ package app
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"strings"
 	"time"
@@ -155,7 +157,8 @@ func (u *IngestCollectedSource) Execute(ctx context.Context, request IngestColle
 		candidate.ProviderSummary = ""
 		content := domain.RestrictContentLayers(entry.Content, policyRequest.ContentKind)
 		contentFingerprint := domain.BuildVersionFingerprint(candidate, content)
-		idempotencyKey := prefix + "/" + contentFingerprint
+		identityDigest := sha256.Sum256([]byte(sourceID + "\x00" + candidate.SourceItemID + "\x00" + contentFingerprint))
+		idempotencyKey := prefix + "/" + hex.EncodeToString(identityDigest[:])
 		observation, ingestErr := u.ingest.executeWithPolicyTraceAndCheckAndContent(
 			ctx, sourceID, idempotencyKey, candidate, content,
 			registration.URLPolicy, trace, checkPersistencePolicy,
