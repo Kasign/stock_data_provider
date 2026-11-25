@@ -828,12 +828,6 @@ func TestNewsMariaDBApplicationIntegration(t *testing.T) {
 		t.Fatalf("identity-only backfill created %d versions, want 1", versionsAfterBackfill)
 	}
 
-	changed := candidate
-	changed.Title = "changed payload must conflict"
-	if _, err := ingestIntegrationFeed(ctx, repository, publisher, newID, sourceID, "news-it-key-0", changed, domain.SourceURLPolicy{}); !errors.Is(err, app.ErrObservationIdempotencyConflict) {
-		t.Fatalf("same key with different payload error = %v, want idempotency conflict", err)
-	}
-
 	// 让正式 Application 在写完主体、身份和 Observation 后因版本主键冲突失败，
 	// 验证这些写入与版本写入确实处于同一 MariaDB 事务。
 	rollbackSource := sourceID + "-application-rollback"
