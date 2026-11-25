@@ -147,7 +147,7 @@ func (e newsFeedStageExecutor) ExecuteStage(
 		request.ResourcePolicy.AllowedProviderCodes[0] != "news_feed_catalog" {
 		return failedNewsFeedStage("news_feed_resource_policy_invalid"), nil
 	}
-	output, err := e.adapter.Execute(ctx, request.Run.ID+"/"+request.Attempt.ID, request.Stage.Code)
+	output, err := e.adapter.Execute(ctx, request.Run.Ref+"/"+request.Attempt.Ref, request.Stage.Code)
 	if err != nil {
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return researchflowapplication.StageExecutionResult{}, ctxErr
