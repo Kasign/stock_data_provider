@@ -8,27 +8,11 @@ import (
 	"time"
 )
 
-type IdentifierType string
-
-const (
-	IdentifierSourceNativeID IdentifierType = "source_native_id"
-	IdentifierNormalizedURL  IdentifierType = "normalized_url"
-)
-
-type IdentifierStatus string
-
-const (
-	IdentifierActive     IdentifierStatus = "active"
-	IdentifierHistorical IdentifierStatus = "historical"
-	IdentifierInvalid    IdentifierStatus = "invalid"
-)
-
+// IdentityCredential 是来源原生文章 ID；其唯一范围仅为 SourceID。
 type IdentityCredential struct {
 	SourceID   string
-	Type       IdentifierType
 	Value      string
 	Hash       string
-	Status     IdentifierStatus
 	NewsID     string
 	ObservedAt time.Time
 }
@@ -47,41 +31,24 @@ type IdentityResolution struct {
 	Reason string
 }
 
-// BuildIdentityCredentials 只构造来源内身份凭据；URL 必须先通过来源 allowlist 校验。
-func BuildIdentityCredentials(sourceID, sourceNativeID, rawURL string, policy SourceURLPolicy) ([]IdentityCredential, error) {
+// BuildIdentityCredentials 只构造来源原生文章 ID。规范 URL 由全局 URL 身份单独处理。
+func BuildIdentityCredentials(sourceID, sourceNativeID string) ([]IdentityCredential, error) {
 	sourceID = strings.TrimSpace(sourceID)
 	if sourceID == "" {
 		return nil, errors.New("news.identity.source_required")
 	}
-
-	credentials := make([]IdentityCredential, 0, 2)
-	if value := strings.TrimSpace(sourceNativeID); value != "" {
-		credentials = append(credentials, newIdentityCredential(sourceID, IdentifierSourceNativeID, value))
+	sourceNativeID = strings.TrimSpace(sourceNativeID)
+	if sourceNativeID == "" {
+		return nil, nil
 	}
-	if strings.TrimSpace(rawURL) != "" {
-		decision := EvaluateSourceURL(rawURL, policy)
-		if !decision.Allowed {
-			// URL 不能作为身份凭据，但不应抹掉同一来源下已提供的原生条目 ID。
-			if len(credentials) == 0 {
-				return nil, errors.New("news.identity.url_rejected")
-			}
-		} else {
-			credentials = append(credentials, newIdentityCredential(sourceID, IdentifierNormalizedURL, decision.CanonicalURL))
-		}
-	}
-	if len(credentials) == 0 {
-		return nil, errors.New("news.identity.credential_required")
-	}
-	return credentials, nil
+	return []IdentityCredential{newIdentityCredential(sourceID, sourceNativeID)}, nil
 }
 
-func newIdentityCredential(sourceID string, kind IdentifierType, value string) IdentityCredential {
+func newIdentityCredential(sourceID, value string) IdentityCredential {
 	return IdentityCredential{
 		SourceID: sourceID,
-		Type:     kind,
-		Value:    value,
-		Hash:     identityValueHash(value),
-		Status:   IdentifierActive,
+		Value: value,
+		Hash: identityValueHash(value),
 	}
 }
 
@@ -90,42 +57,35 @@ func identityValueHash(value string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// ResolveIdentity 仅在同一来源内匹配凭据。Hash 命中后比较原文；任何多主体命中均隔离为冲突。
+// ResolveIdentity 只在同一来源内解析原生文章 ID；Hash 命中后必须比较原文。
 func ResolveIdentity(sourceID string, candidate, existing []IdentityCredential) IdentityResolution {
 	sourceID = strings.TrimSpace(sourceID)
-	if sourceID == "" || len(candidate) == 0 {
-		return IdentityResolution{Status: IdentityConflict, Reason: "news.identity.input_invalid"}
+	if sourceID == "" {
+		return IdentityResolution{Status: IdentityConflict, Reason: "news.identity.source_required"}
 	}
-
 	matchedNewsIDs := make(map[string]struct{})
 	for _, wanted := range candidate {
-		if wanted.SourceID != sourceID || wanted.Value == "" || wanted.Hash != identityValueHash(wanted.Value) ||
-			(wanted.Type != IdentifierSourceNativeID && wanted.Type != IdentifierNormalizedURL) {
+		if wanted.SourceID != sourceID || wanted.Value == "" ||
+			wanted.Value != strings.TrimSpace(wanted.Value) ||
+			wanted.Hash != identityValueHash(wanted.Value) {
 			return IdentityResolution{Status: IdentityConflict, Reason: "news.identity.candidate_invalid"}
 		}
 		for _, stored := range existing {
-			if stored.SourceID != sourceID || (stored.Status != IdentifierActive && stored.Status != IdentifierHistorical) {
+			if stored.SourceID != sourceID || stored.Hash != wanted.Hash {
 				continue
 			}
-			if stored.Type != wanted.Type {
-				continue
-			}
-			if stored.Value == wanted.Value {
-				if stored.Hash != wanted.Hash {
-					return IdentityResolution{Status: IdentityConflict, Reason: "news.identity.stored_hash_mismatch"}
-				}
-				if stored.NewsID == "" {
-					return IdentityResolution{Status: IdentityConflict, Reason: "news.identity.existing_owner_missing"}
-				}
-				matchedNewsIDs[stored.NewsID] = struct{}{}
-				continue
-			}
-			if stored.Hash == wanted.Hash {
+			if stored.Value != wanted.Value {
 				return IdentityResolution{Status: IdentityConflict, Reason: "news.identity.hash_collision"}
 			}
+			if stored.Hash != identityValueHash(stored.Value) {
+				return IdentityResolution{Status: IdentityConflict, Reason: "news.identity.stored_hash_mismatch"}
+			}
+			if stored.NewsID == "" {
+				return IdentityResolution{Status: IdentityConflict, Reason: "news.identity.existing_owner_missing"}
+			}
+			matchedNewsIDs[stored.NewsID] = struct{}{}
 		}
 	}
-
 	switch len(matchedNewsIDs) {
 	case 0:
 		return IdentityResolution{Status: IdentityNew}
