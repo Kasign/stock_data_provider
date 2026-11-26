@@ -14,7 +14,7 @@ import (
 
 const (
 	newsSearchWorkflowTemplateRef     = "news.search_candidates"
-	newsSearchWorkflowTemplateVersion = "1.1.0"
+	newsSearchWorkflowTemplateVersion = "1.0.0"
 	newsSearchWorkflowTemplateWithFeedVersion = "1.2.0"
 	newsSearchRetryPolicyRef          = "news.search_candidates.retry@1.0.0"
 )
