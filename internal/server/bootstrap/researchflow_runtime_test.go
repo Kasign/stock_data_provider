@@ -119,6 +119,7 @@ func TestPrincipalStageExecutorInjectsQuantIdentityOnlyForQuantStage(t *testing.
 		quantstage.SMA20StageCode,
 		quantstage.FactorStageCode,
 		quantstage.TrendStageCode,
+		quantstage.RiskStageCode,
 	}
 	for _, code := range stageCodes {
 		if _, err := executor.ExecuteStage(context.Background(), researchflowapplication.StageExecutionRequest{
@@ -145,6 +146,7 @@ func TestPrincipalStageExecutorFailsClosedWhenQuantIdentityMissing(t *testing.T)
 		quantstage.SMA20StageCode,
 		quantstage.FactorStageCode,
 		quantstage.TrendStageCode,
+		quantstage.RiskStageCode,
 	} {
 		if _, err := executor.ExecuteStage(context.Background(), researchflowapplication.StageExecutionRequest{
 			Stage: researchflowdomain.Stage{Code: code},

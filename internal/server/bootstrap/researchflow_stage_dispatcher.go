@@ -15,6 +15,7 @@ type researchflowStageDispatcher struct {
 	quant       researchflowapplication.StageExecutor
 	quantFactor researchflowapplication.StageExecutor
 	quantTrend  researchflowapplication.StageExecutor
+	quantRisk   researchflowapplication.StageExecutor
 }
 
 func (dispatcher researchflowStageDispatcher) ExecuteStage(
@@ -47,6 +48,11 @@ func (dispatcher researchflowStageDispatcher) ExecuteStage(
 			return researchflowapplication.StageExecutionResult{}, fmt.Errorf("Quant Trend Stage Executor is not configured")
 		}
 		return dispatcher.quantTrend.ExecuteStage(ctx, request)
+	case quantstage.RiskStageCode:
+		if dispatcher.quantRisk == nil {
+			return researchflowapplication.StageExecutionResult{}, fmt.Errorf("Quant Risk Stage Executor is not configured")
+		}
+		return dispatcher.quantRisk.ExecuteStage(ctx, request)
 	default:
 		return researchflowapplication.StageExecutionResult{}, fmt.Errorf("unsupported Researchflow Stage code %q", request.Stage.Code)
 	}

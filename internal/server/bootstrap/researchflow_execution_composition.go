@@ -100,6 +100,7 @@ func newResearchflowComposition(
 	var quantStage *quantSMA20StageComposition
 	var quantFactorStage *quantFactorStageComposition
 	var quantTrendStage *quantTrendStageComposition
+	var quantRiskStage *quantRiskStageComposition
 	if dataModule != nil {
 		quantStage, err = newQuantSMA20StageComposition(dataModule, shared)
 		if err != nil {
@@ -112,6 +113,10 @@ func newResearchflowComposition(
 		quantTrendStage, err = newQuantTrendStageComposition(dataModule, shared)
 		if err != nil {
 			return nil, fmt.Errorf("compose Quant Trend Stage: %w", err)
+		}
+		quantRiskStage, err = newQuantRiskStageComposition(dataModule, shared)
+		if err != nil {
+			return nil, fmt.Errorf("compose Quant Risk Stage: %w", err)
 		}
 	}
 	if quantStage != nil || quantFactorStage != nil || quantTrendStage != nil {
@@ -128,7 +133,7 @@ func newResearchflowComposition(
 		providerInventories[resourcepolicy.QuantDailyBarsProvidersRef] = mergeQuantProviderCodes(smaProviders, factorProviders, trendProviders)
 	}
 
-	workflowTemplates := make([]template.WorkflowTemplate, 0, 5)
+	workflowTemplates := make([]template.WorkflowTemplate, 0, 6)
 	newsTemplate, err := buildNewsSearchWorkflowTemplate(newsStage, policyRegistry)
 	if err != nil {
 		return nil, fmt.Errorf("preflight News Search workflow template: %w", err)
@@ -162,6 +167,13 @@ func newResearchflowComposition(
 		}
 		workflowTemplates = append(workflowTemplates, trendTemplate)
 	}
+	if quantRiskStage != nil {
+		riskTemplate, templateErr := buildQuantRiskWorkflowTemplate(quantRiskStage, policyRegistry)
+		if templateErr != nil {
+			return nil, fmt.Errorf("preflight Quant Risk workflow template: %w", templateErr)
+		}
+		workflowTemplates = append(workflowTemplates, riskTemplate)
+	}
 
 	policyResolver := configuredResourcePolicyResolver{
 		registry: policyRegistry, providerCodesByRef: providerInventories,
@@ -191,6 +203,11 @@ func newResearchflowComposition(
 		outputRegistriesList = append(outputRegistriesList, quantTrendStage.registry)
 		quantTrendExecutor = quantTrendStage.executor
 	}
+	quantRiskExecutor := researchflowapplication.StageExecutor(nil)
+	if quantRiskStage != nil {
+		outputRegistriesList = append(outputRegistriesList, quantRiskStage.registry)
+		quantRiskExecutor = quantRiskStage.executor
+	}
 	outputRegistries, err := researchflowapplication.NewStageOutputRegistrySet(outputRegistriesList...)
 	if err != nil {
 		return nil, fmt.Errorf("create immutable Researchflow Stage Output Registry set: %w", err)
@@ -201,6 +218,7 @@ func newResearchflowComposition(
 		quant:       quantExecutor,
 		quantFactor: quantFactorExecutor,
 		quantTrend:  quantTrendExecutor,
+		quantRisk:   quantRiskExecutor,
 	}
 
 	runRepository, err := researchflowstorage.NewMySQLRunRepository(shared.DB, researchflowstorage.CapacityLimits{

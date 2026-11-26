@@ -31,6 +31,10 @@ const (
 	quantTrendParameterSchemaVersion  = "1.0.0"
 	quantTrendApplicabilityRuleRef    = "quant.trend.always"
 	quantTrendApplicabilityVersion    = "1.0.0"
+	quantRiskParameterSchemaRef       = "doc/researchflow/schema/quant-risk-parameters-1.0.0.schema.json"
+	quantRiskParameterSchemaVersion   = "1.0.0"
+	quantRiskApplicabilityRuleRef     = "quant.risk.always"
+	quantRiskApplicabilityVersion     = "1.0.0"
 )
 
 var ErrUnsupportedNewsSearchApplicabilityRule = errors.New("unsupported News Search applicability rule")
@@ -172,6 +176,21 @@ const quantTrendParameterSchemaDocument = `{
   "additionalProperties": false
 }`
 
+// quantRiskParameterSchemaDocument 是 Quant Risk 参数的冻结定义。
+// 只描述"评估哪只证券的哪个交易日"：门禁没有可调阈值，参数不得承载任何规则覆盖项。
+const quantRiskParameterSchemaDocument = `{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:kasign:researchflow:quant-risk-parameters:1.0.0",
+  "title": "Quant Risk Parameters",
+  "type": "object",
+  "properties": {
+    "symbol": {"type": "string", "pattern": "^[0-9]{6}\\.(SH|SZ|BJ)$"},
+    "trade_date": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"}
+  },
+  "required": ["symbol", "trade_date"],
+  "additionalProperties": false
+}`
+
 type researchflowParameterSchemaRegistry struct{}
 
 func (researchflowParameterSchemaRegistry) Get(ctx context.Context, ref string) (parameterschema.Definition, error) {
@@ -203,6 +222,11 @@ func (researchflowParameterSchemaRegistry) Get(ctx context.Context, ref string) 
 		return parameterschema.Definition{
 			Ref: quantTrendParameterSchemaRef, Version: quantTrendParameterSchemaVersion,
 			Document: json.RawMessage(quantTrendParameterSchemaDocument),
+		}, nil
+	case quantRiskParameterSchemaRef:
+		return parameterschema.Definition{
+			Ref: quantRiskParameterSchemaRef, Version: quantRiskParameterSchemaVersion,
+			Document: json.RawMessage(quantRiskParameterSchemaDocument),
 		}, nil
 	default:
 		return parameterschema.Definition{}, fmt.Errorf("%w: %s", parameterschema.ErrSchemaNotFound, ref)
@@ -282,6 +306,29 @@ func (quantTrendApplicabilityEvaluator) Evaluate(
 	return true, "", nil
 }
 
+type quantRiskApplicabilityEvaluator struct{}
+
+func (quantRiskApplicabilityEvaluator) Evaluate(
+	ctx context.Context,
+	rule template.ApplicabilityRule,
+	parameters json.RawMessage,
+) (bool, string, error) {
+	if ctx == nil {
+		return false, "", errors.New("Quant Risk applicability context is required")
+	}
+	if err := ctx.Err(); err != nil {
+		return false, "", err
+	}
+	if rule.RuleRef != quantRiskApplicabilityRuleRef || rule.RuleVersion != quantRiskApplicabilityVersion {
+		return false, "", fmt.Errorf("unsupported Quant Risk applicability rule: %s@%s", rule.RuleRef, rule.RuleVersion)
+	}
+	var object map[string]json.RawMessage
+	if err := json.Unmarshal(parameters, &object); err != nil || object == nil {
+		return false, "", errors.New("Quant Risk applicability requires validated object parameters")
+	}
+	return true, "", nil
+}
+
 type researchflowApplicabilityEvaluator struct{}
 
 func (researchflowApplicabilityEvaluator) Evaluate(
@@ -298,6 +345,8 @@ func (researchflowApplicabilityEvaluator) Evaluate(
 		return (quantFactorApplicabilityEvaluator{}).Evaluate(ctx, rule, parameters)
 	case quantTrendApplicabilityRuleRef:
 		return (quantTrendApplicabilityEvaluator{}).Evaluate(ctx, rule, parameters)
+	case quantRiskApplicabilityRuleRef:
+		return (quantRiskApplicabilityEvaluator{}).Evaluate(ctx, rule, parameters)
 	case newsFeedApplicabilityRuleRef:
 		return (newsFeedApplicabilityEvaluator{}).Evaluate(ctx, rule, parameters)
 	default:

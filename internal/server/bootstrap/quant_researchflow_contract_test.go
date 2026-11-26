@@ -51,6 +51,15 @@ func quantContractTrendRegistry(t *testing.T) *stageoutput.Registry {
 	return registry
 }
 
+func quantContractRiskRegistry(t *testing.T) *stageoutput.Registry {
+	t.Helper()
+	registry, err := newQuantRiskOutputRegistry()
+	if err != nil {
+		t.Fatalf("create Quant Risk Output Registry: %v", err)
+	}
+	return registry
+}
+
 func quantContractSMA20Registry(t *testing.T) *stageoutput.Registry {
 	t.Helper()
 	registry, err := newQuantSMA20OutputRegistry()
@@ -83,6 +92,10 @@ func quantContractFixtures(t *testing.T) map[string]struct {
 		quantstage.TrendStageCode: {
 			payload: quantTrendAssociationPayload(t), quality: mustQuantTrendAssociationQuality(t),
 			registry: quantContractTrendRegistry(t),
+		},
+		quantstage.RiskStageCode: {
+			payload: quantRiskAssociationPayload(t), quality: mustQuantRiskAssociationQuality(t),
+			registry: quantContractRiskRegistry(t),
 		},
 	}
 }
@@ -131,6 +144,103 @@ func mustQuantTrendAssociationQuality(t *testing.T) []byte {
 		t.Fatalf("marshal Trend quality fixture: %v", err)
 	}
 	return encoded
+}
+
+func quantRiskAssociationPayload(t *testing.T) []byte {
+	t.Helper()
+	stub := validQuantRiskStageAdapterStub()
+	encoded, err := json.Marshal(stub.output)
+	if err != nil {
+		t.Fatalf("marshal Risk contract fixture: %v", err)
+	}
+	return encoded
+}
+
+func mustQuantRiskAssociationQuality(t *testing.T) []byte {
+	t.Helper()
+	stub := validQuantRiskStageAdapterStub()
+	encoded, err := json.Marshal(stub.quality)
+	if err != nil {
+		t.Fatalf("marshal Risk quality fixture: %v", err)
+	}
+	return encoded
+}
+
+func quantContractRiskIdentity() stageoutput.ExecutionIdentity {
+	return stageoutput.ExecutionIdentity{
+		RunRef: "run:researchflow:contract-001", StageRef: "stage:quant.risk", AttemptRef: "attempt:001",
+		StageCode: quantstage.RiskStageCode, TemplateVersion: quantRiskWorkflowTemplateVersion,
+		RegistryVersion: quantRiskStageOutputRegistryVersion,
+	}
+}
+
+func TestQuantResearchflowContractRegistryAcceptsRealRiskStageEnvelope(t *testing.T) {
+	adapter := validQuantRiskStageAdapterStub()
+	result, err := (quantRiskStageExecutor{adapter: adapter}).ExecuteStage(
+		context.Background(), researchflowapplication.StageExecutionRequest{
+			Stage:      researchflowdomain.Stage{Code: quantstage.RiskStageCode},
+			Parameters: validQuantRiskStageParameters(),
+			SystemAsOf: time.Date(2026, 11, 25, 15, 0, 0, 0, time.UTC),
+		},
+	)
+	if err != nil || result.ProviderResult == nil {
+		t.Fatalf("Quant Risk Stage Executor did not produce a ProviderResult: %+v (err=%v)", result, err)
+	}
+	identity := quantContractRiskIdentity()
+	envelope, err := stageoutput.BuildEnvelope(identity, *result.ProviderResult, time.Date(2026, 11, 25, 15, 1, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("build Stage Output envelope from the Quant Risk ProviderResult: %v", err)
+	}
+	registry := quantContractRiskRegistry(t)
+	if err := registry.Validate(envelope, stageoutput.ValidationContext{Identity: identity}); err != nil {
+		t.Fatalf("Researchflow Output Registry rejected the Quant Risk Stage output: %v", err)
+	}
+
+	payloadSchema := compileQuantContractSchema(t, quantRiskPayloadSchemaRef)
+	qualitySchema := compileQuantContractSchema(t, quantRiskQualitySchemaRef)
+	for name, testCase := range map[string]struct {
+		schema  *jsonschema.Schema
+		payload []byte
+	}{
+		"payload":         {payloadSchema, envelope.Payload},
+		"quality_summary": {qualitySchema, envelope.QualitySummary},
+	} {
+		decoder := json.NewDecoder(bytes.NewReader(testCase.payload))
+		decoder.UseNumber()
+		var instance any
+		if err := decoder.Decode(&instance); err != nil {
+			t.Fatalf("decode %s instance: %v", name, err)
+		}
+		if err := testCase.schema.Validate(instance); err != nil {
+			t.Fatalf("documented %s Schema rejected the runtime-valid Risk output: %v", name, err)
+		}
+	}
+
+	// 把"拒绝"改写成"完成"必须被契约两侧同时拒绝：
+	// 否则文档与运行时对"结论"存在双重标准。
+	var decoded map[string]any
+	if err := json.Unmarshal(envelope.Payload, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	decoded["result_status"] = "completed"
+	drifted, err := json.Marshal(decoded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	driftedEnvelope := envelope
+	driftedEnvelope.Payload = drifted
+	if err := registry.Validate(driftedEnvelope, stageoutput.ValidationContext{Identity: identity}); err == nil {
+		t.Fatal("Researchflow Output Registry accepted a rejected Risk decision published as completed")
+	}
+	decoder := json.NewDecoder(bytes.NewReader(drifted))
+	decoder.UseNumber()
+	var driftedInstance any
+	if err := decoder.Decode(&driftedInstance); err != nil {
+		t.Fatal(err)
+	}
+	if err := payloadSchema.Validate(driftedInstance); err == nil {
+		t.Fatal("documented Risk payload Schema accepted a rejected decision marked as completed")
+	}
 }
 
 func quantContractTrendIdentity() stageoutput.ExecutionIdentity {

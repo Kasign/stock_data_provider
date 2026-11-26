@@ -405,7 +405,7 @@ func (e principalStageExecutor) ExecuteStage(ctx context.Context, request resear
 // 而单元测试直接调用 Adapter 时不会暴露该缺口。
 func isQuantStageCode(code string) bool {
 	switch code {
-	case quantstage.SMA20StageCode, quantstage.FactorStageCode, quantstage.TrendStageCode:
+	case quantstage.SMA20StageCode, quantstage.FactorStageCode, quantstage.TrendStageCode, quantstage.RiskStageCode:
 		return true
 	default:
 		return false
