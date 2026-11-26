@@ -198,6 +198,8 @@ Researchflow 的 Context Assembly、Quant Envelope Validator、Result Composer�
 
 下一步优先复用现有 Creator/Reader：核实其实际 payload、fingerprint、事务和授权行为；补齐最小公开输入 DTO/Schema/Golden 与 Data Owner Application Port；再由 Server 注入 Researchflow Stage。不得新增重复 Snapshot Repository、Manifest 或授权框架。
 
+执行核实补记（2026-11-26，`旧Analysis退役执行清单` 1.1）："由 Server 注入 Researchflow Stage"已由 `quant.sma20` 完成——`internal/server/bootstrap/quant_sma20_stage.go:63-84` 构造 `quantDataSnapshotAdapter` 注入 `CreateSMAService` 与 `SMA20Adapter`，`researchflow_execution_composition.go:98-104,143-156` 装入 Worker dispatcher/runtime，`quant_data_snapshot_adapter.go:119-120` 实现 Quant 侧 `CloseSeriesSnapshotReader` 并在同一 MariaDB 事务内读取授权 Snapshot。因此授权读取 Port 注入不是缺口，不应重复施工；真正的未完成项是"除 SMA20 外的股票研究 Stage/Template"与"SnapshotRef/Manifest/AuthorizationRef 的 Researchflow 公开输入 DTO 绑定"，对应执行清单 2.1 与 1.2。
+
 ## 5.3 当前 WebUI 结果页依赖的完整报告字段
 
 文件：`web/src/task-result-view.js`、`web/src/report.js`

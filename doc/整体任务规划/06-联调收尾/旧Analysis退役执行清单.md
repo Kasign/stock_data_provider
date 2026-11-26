@@ -46,7 +46,7 @@
 
 | # | 任务 | 主责 | 状态 | 退出条件 / 可验证证据 |
 |---|---|---|---|---|
-| 1.1 | Data Snapshot 授权读取 Port 注入 Researchflow Worker，股票研究 Stage 消费已授权 Close Series Snapshot | Data + Server | 未开始 | Worker 组合根有真实 Data Snapshot 授权读取 Port；Stage 读取 SnapshotRef 而非旧 AnalysisCollector；无旧 Collector 调用 |
+| 1.1 | Data 授权 Snapshot 读取链路核实：Port 已由 `quant.sma20` 完整注入 Worker 并真实消费 SnapshotRef | Data + Server | 已完成（代码证实 2026-11-26） | `quant_sma20_stage.go:63-84` 构造 `quantDataSnapshotAdapter` 注入 `CreateSMAService`；`researchflow_execution_composition.go:98-104,143-156` 装入 dispatcher/runtime；`quant_data_snapshot_adapter.go:119-120` 实现 Quant 侧 `CloseSeriesSnapshotReader`；旧 `AnalysisCollector` 是独立链、不被 Stage 使用。本项无需重复施工 |
 | 1.2 | 三因子生产化：MADistance20 / Momentum5 / Momentum20 从 `internal/quant/factor` 的 float64 纯函数补齐 QNT-CTR-004 Factor Schema/Golden、Decimal Registry 与精度策略、生产 Facade、结果持久化 | Quant | 未开始 | 三因子进入冻结 Schema/Golden 与生产 Registry；通过已授权 Close Series Snapshot 取精确输入；结果可授权读取。首版仅 Close-only，不等通用 OHLC DTO |
 | 1.3 | trend-following 策略评估：正式策略契约 + 版本化计算 + 信号证据；旧实现仅作事实记录，不自动成为新规范 | Quant | 未开始 | 有生产策略 Stage 与契约；不在 Researchflow 重写算法 |
 | 1.4 | tradability/risk 硬门禁：Quant 正式 RiskDecision 覆盖 unverified-tradability-block，不可被综合评分/LLM 覆盖 | Quant | 未开始 | 等价规则测试通过；缺证据继续 fail-closed；有正式规则装配来源 |
@@ -54,7 +54,9 @@
 | 1.6 | market breadth 指标决策：保留则由 Quant 实现并正名（请求证券横截面，非全市场），否则书面废弃 | Quant + Research | 未开始 | 有书面结论；不再以“全市场广度”命名 |
 | 1.7 | 占位能力直接退役：零现金账本、全拒 Planner、no-fill Execution 不迁移 | Quant | 未开始 | 依据迁移盘点 10.6，无真实业务能力，随旧链删除 |
 
-阶段 1 内部顺序：1.1 与 1.7 不依赖契约冻结，可先行；1.2 是主线起手；1.3/1.4 依赖 1.2 的 Factor 结果契约。
+阶段 1 内部顺序：1.1 经代码核实已完成（授权 Snapshot 读取链路已由 `quant.sma20` 注入 Worker，无需重复施工）；1.2 是主线起手；1.3/1.4 依赖 1.2 的 Factor 结果契约；1.7 为占位退役，随阶段 4 一并删除。
+
+**1.1 缺口修正说明（2026-11-26）**：执行前核查推翻了清单初稿的前提——Data 授权 Snapshot Reader 已存在且已通过 `quant.sma20` 注入 Researchflow Worker，不是"尚未注入"。真正未闭环的不是 Port 注入，而是：① 除 `quant.sma20` 外没有消费 Close Series Snapshot 的股票研究 Stage/Template（归 2.1）；② 缺少把 SnapshotRef/Manifest/AuthorizationRef 绑定为 Researchflow 正式公开输入 DTO 的契约（迁移盘点 195 行）。因此阶段 1 的真实起手应直接落在 1.2 三因子生产化，不重复建设 Snapshot 注入链。
 
 ## 4. 阶段 2 · 结果闭环与授权
 
