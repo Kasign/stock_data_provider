@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -454,5 +455,24 @@ func TestSchedulerDispatchesIndependentStagesConcurrentlyThroughWorkerPool(t *te
 		outcome.result.Executions[0].StageRef != "stage-a" ||
 		outcome.result.Executions[1].StageRef != "stage-b" {
 		t.Fatalf("Scheduler did not preserve deterministic result order: %#v", outcome.result.Executions)
+	}
+}
+
+// TestBuildSchedulePlanRequiresValidatorWhenDependencySucceeds is the executable
+// evidence for decision D2: once an upstream Stage succeeds with an OutputRef, a
+// downstream dependency needs a production DependencyOutputValidator. The Server
+// currently wires nil, so a template that declares dependencies would fail at
+// scheduling time with downstream Stages never dispatched. quant.research v1
+// therefore declares no dependencies at all.
+func TestBuildSchedulePlanRequiresValidatorWhenDependencySucceeds(t *testing.T) {
+	run, now := schedulerFixture()
+	output := "stageoutput:upstream"
+	stages := []domain.Stage{
+		{Ref: "stage-up", RunRef: run.Ref, Code: "upstream", Status: domain.StageSucceeded, Version: 2, OutputRef: &output},
+		{Ref: "stage-down", RunRef: run.Ref, Code: "downstream", Status: domain.StagePending, Version: 1, Dependencies: []string{"stage-up"}},
+	}
+	_, err := BuildSchedulePlan(context.Background(), run, stages, nil, 2, now, nil)
+	if err == nil || !strings.Contains(err.Error(), "dependency output validator is required") {
+		t.Fatalf("a succeeded dependency with nil validator must fail closed: %v", err)
 	}
 }
