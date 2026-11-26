@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# 推送前跑与 CI required-checks 一致的检查；紧急情况下用 SKIP_SLOW_HOOKS=1 跳过。
+set -euo pipefail
+
+if [ "${SKIP_SLOW_HOOKS:-0}" = "1" ]; then
+  echo "[pre-push] SKIP_SLOW_HOOKS=1，跳过慢检查" >&2
+  exit 0
+fi
+
+echo "[pre-push] go vet / go test ..."
+go vet ./...
+go test ./...
+
+echo "[pre-push] web check / web test ..."
+(cd web && npm run check && npm test)
+
+echo "[pre-push] python contract test ..."
+python -m unittest scripts/test_compare_market_data_exports.py -v
+
+echo "[pre-push] OK"

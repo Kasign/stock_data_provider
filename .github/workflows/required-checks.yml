@@ -1,0 +1,62 @@
+name: Required checks
+
+# 注意：这里刻意不加 paths 过滤。
+# 分支保护要求「每次 PR 都产生检查结果」；若被 paths 跳过，PR 会永远卡在等待检查。
+on:
+  pull_request:
+    branches: [main, integration, repair_all]
+  push:
+    branches: [main, integration, repair_all]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: required-checks-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  required-checks:
+    # job 名即分支保护里要选的 status check 名称，保持固定不要改
+    name: required-checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Check gofmt
+        run: |
+          files="$(gofmt -l ./cmd ./internal)"
+          if [ -n "$files" ]; then
+            echo "::error::Go files need gofmt:"
+            echo "$files"
+            exit 1
+          fi
+
+      - name: Go vet
+        run: go vet ./...
+
+      - name: Go test
+        run: go test ./...
+
+      - name: Web check
+        working-directory: web
+        run: npm run check
+
+      - name: Web test
+        working-directory: web
+        run: npm test
+
+      - name: Python contract test
+        run: python -m unittest scripts/test_compare_market_data_exports.py -v

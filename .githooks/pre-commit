@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+# 提交前快速校验：只检查本次暂存的文件，保证秒级完成。
+set -euo pipefail
+
+staged="$(git diff --cached --name-only --diff-filter=ACMR)"
+[ -z "$staged" ] && exit 0
+
+failed=0
+
+# 1) 拦截密钥文件（.gitignore 防不住 git add -f）
+while IFS= read -r f; do
+  case "$f" in
+    .env|.env.*|*/.env|*/.env.*|secrets/*|*/secrets/*)
+      case "$f" in
+        *.example) ;;
+        *) echo "[pre-commit] 拒绝提交敏感文件: $f" >&2; failed=1 ;;
+      esac
+      ;;
+  esac
+done <<< "$staged"
+
+# 2) Go：暂存文件必须通过 gofmt
+while IFS= read -r f; do
+  [[ "$f" == *.go && -f "$f" ]] || continue
+  if [ -n "$(gofmt -l "$f")" ]; then
+    echo "[pre-commit] 需要 gofmt: $f" >&2
+    failed=1
+  fi
+done <<< "$staged"
+
+# 3) Web：JS/MJS 语法检查
+if command -v node >/dev/null 2>&1; then
+  while IFS= read -r f; do
+    [[ "$f" =~ ^web/.*\.(js|mjs)$ && -f "$f" ]] || continue
+    if ! node --check "$f" >/dev/null 2>&1; then
+      echo "[pre-commit] JS 语法错误: $f" >&2
+      failed=1
+    fi
+  done <<< "$staged"
+fi
+
+# 4) Python：语法检查（不产生 __pycache__）
+while IFS= read -r f; do
+  [[ "$f" == *.py && -f "$f" ]] || continue
+  if ! python3 -c "import sys; compile(open(sys.argv[1], encoding='utf-8').read(), sys.argv[1], 'exec')" "$f" >/dev/null 2>&1; then
+    echo "[pre-commit] Python 语法错误: $f" >&2
+    failed=1
+  fi
+done <<< "$staged"
+
+if [ "$failed" -ne 0 ]; then
+  echo "[pre-commit] 校验未通过，修复后重新 git add。" >&2
+  exit 1
+fi
+
+echo "[pre-commit] OK"
