@@ -311,8 +311,9 @@ func TestRegistryMariaDBPartialDDLFailureRequiresRecovery(t *testing.T) {
 }
 
 // TestMarketDataBaselineMigrationAndConcurrentRootRegistration verifies that
-// a completely empty database receives the complete Data schema baseline once,
-// even when two Root registries start concurrently.
+// a completely empty database receives the complete Data schema baseline plus
+// every pending additive migration exactly once, even when two Root registries
+// start concurrently.
 func TestMarketDataBaselineMigrationAndConcurrentRootRegistration(t *testing.T) {
 	dsn := os.Getenv("SERVER_RELAY_TEST_MYSQL_DSN")
 	if dsn == "" {
@@ -362,8 +363,12 @@ func TestMarketDataBaselineMigrationAndConcurrentRootRegistration(t *testing.T) 
 	}
 
 	definitions := marketdatabootstrap.MigrationDefinitions()
-	if len(definitions) != 1 || definitions[0].Version != 1 {
-		t.Fatalf("Data baseline migration definitions = %+v, want exactly one complete baseline at version 1", definitions)
+	// 迁移列表本身的形状（V1 完整基线 + 后续增量）由 mysql_versions_test.go 与
+	// bootstrap/module_test.go 以无需 DSN 的方式守着，这里不重复硬编码版本数量：
+	// 之前此处写死"恰好一条 V1"，DEC-061 新增 V2 后只有带 DSN 的 CI 才发现漂移。
+	// 本测试只要求非空（否则断言会退化），具体版本集合在后面与迁移历史对齐。
+	if len(definitions) == 0 {
+		t.Fatal("Data migration definitions are empty")
 	}
 	registries := []*Registry{NewRegistry(), NewRegistry()}
 	for _, registry := range registries {
@@ -426,6 +431,7 @@ func TestMarketDataBaselineMigrationAndConcurrentRootRegistration(t *testing.T) 
 		{"market_data_quotes", "volume_ratio"},
 		{"market_data_quotes", "turnover_rate"},
 		{"market_data_daily_bars_close_series_snapshots", "snapshot_ref"},
+		{"market_data_daily_bars_close_series_snapshots", "payload_kind"},
 		{"market_data_authorization_decisions", "authorization_ref"},
 		{"market_data_authorization_revocations", "authorization_ref"},
 		{"market_data_authorization_policy_publications", "request_id"},
@@ -442,12 +448,41 @@ func TestMarketDataBaselineMigrationAndConcurrentRootRegistration(t *testing.T) 
 		}
 	}
 
-	var historyCount, historyVersion int
-	var historyStatus string
-	if err := db.QueryRowContext(ctx, "SELECT COUNT(*), COALESCE(MAX(version), 0), COALESCE(MAX(status), '') FROM platform_schema_migrations WHERE namespace=?", marketdatabootstrap.MigrationNamespace).Scan(&historyCount, &historyVersion, &historyStatus); err != nil {
-		t.Fatalf("read Data baseline migration history: %v", err)
+	// 并发启动后历史必须与已注册定义逐条对应：任何迁移都不能重复执行，
+	// 也不能停留在 running/failed。期望版本集合由 definitions 推导而非写死，
+	// 否则每加一条增量都要同步改这里——V2 就是因为写死 "恰好一条 V1" 而漏改，
+	// 只在带 DSN 的 CI 里才暴露。
+	wantVersions := make(map[uint64]bool, len(definitions))
+	for _, definition := range definitions {
+		wantVersions[definition.Version] = true
 	}
-	if historyCount != 1 || historyVersion != 1 || historyStatus != "applied" {
-		t.Fatalf("Data baseline history = count:%d version:%d status:%q, want one applied version 1", historyCount, historyVersion, historyStatus)
+	historyRows, err := db.QueryContext(ctx, "SELECT version, status FROM platform_schema_migrations WHERE namespace=?", marketdatabootstrap.MigrationNamespace)
+	if err != nil {
+		t.Fatalf("read Data migration history: %v", err)
+	}
+	defer historyRows.Close()
+	appliedVersions := make(map[uint64]string, len(definitions))
+	for historyRows.Next() {
+		var version uint64
+		var status string
+		if err := historyRows.Scan(&version, &status); err != nil {
+			t.Fatalf("scan Data migration history row: %v", err)
+		}
+		appliedVersions[version] = status
+	}
+	if err := historyRows.Err(); err != nil {
+		t.Fatalf("iterate Data migration history: %v", err)
+	}
+	if len(appliedVersions) != len(wantVersions) {
+		t.Fatalf("Data migration history versions = %v, want exactly %v", appliedVersions, wantVersions)
+	}
+	for version := range wantVersions {
+		status, ok := appliedVersions[version]
+		if !ok {
+			t.Fatalf("Data migration history is missing version %d: got %v", version, appliedVersions)
+		}
+		if status != "applied" {
+			t.Fatalf("Data migration version %d status = %q, want applied", version, status)
+		}
 	}
 }
