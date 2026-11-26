@@ -1,0 +1,120 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:kasign:quant:stage:factor-output:1.0.0",
+  "title": "Quant Factor Stage Output",
+  "description": "QNT-CTR-003 首批 Close-only Decimal 因子的 Researchflow Stage payload。value 为十进制字符串；样本不足时 value=null。result_id 来自 QNT-CTR-005 Quant Result Manifest，Stage Provider 不得自行推导。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "result_id",
+    "snapshot_ref",
+    "metric_code",
+    "value",
+    "unit",
+    "period",
+    "metric_status",
+    "sample_count",
+    "trade_date",
+    "system_as_of",
+    "quality_status",
+    "result_status",
+    "calculation_version"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "result_id": {"type": "string", "pattern": "^quant_result:sha256:[0-9a-f]{64}$"},
+    "snapshot_ref": {"type": "string", "minLength": 1, "pattern": "^\\S(?:.*\\S)?$"},
+    "metric_code": {"type": "string", "enum": ["ma20_distance", "momentum_5d", "momentum_20d"]},
+    "value": {"type": ["string", "null"], "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$"},
+    "unit": {"const": "ratio"},
+    "period": {"type": "string", "enum": ["5d", "20d"]},
+    "metric_status": {"type": "string", "enum": ["available", "insufficient_data"]},
+    "sample_count": {"type": "integer", "minimum": 1},
+    "trade_date": {"type": "string", "format": "date"},
+    "system_as_of": {"type": "string", "format": "date-time", "pattern": "Z$"},
+    "quality_status": {"const": "valid"},
+    "result_status": {"type": "string", "enum": ["completed", "insufficient_data"]},
+    "calculation_version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$"}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"metric_code": {"const": "ma20_distance"}}, "required": ["metric_code"]},
+      "then": {"properties": {"period": {"const": "20d"}}}
+    },
+    {
+      "if": {"properties": {"metric_code": {"const": "momentum_5d"}}, "required": ["metric_code"]},
+      "then": {"properties": {"period": {"const": "5d"}}}
+    },
+    {
+      "if": {"properties": {"metric_code": {"const": "momentum_20d"}}, "required": ["metric_code"]},
+      "then": {"properties": {"period": {"const": "20d"}}}
+    },
+    {
+      "if": {
+        "properties": {"metric_status": {"const": "available"}},
+        "required": ["metric_status"]
+      },
+      "then": {
+        "properties": {
+          "value": {"type": "string", "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$"},
+          "result_status": {"const": "completed"}
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {"metric_status": {"const": "insufficient_data"}},
+        "required": ["metric_status"]
+      },
+      "then": {
+        "properties": {
+          "value": {"type": "null"},
+          "result_status": {"const": "insufficient_data"}
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {"metric_code": {"const": "ma20_distance"}, "metric_status": {"const": "available"}},
+        "required": ["metric_code", "metric_status"]
+      },
+      "then": {"properties": {"sample_count": {"const": 20}}}
+    },
+    {
+      "if": {
+        "properties": {"metric_code": {"const": "momentum_5d"}, "metric_status": {"const": "available"}},
+        "required": ["metric_code", "metric_status"]
+      },
+      "then": {"properties": {"sample_count": {"const": 6}}}
+    },
+    {
+      "if": {
+        "properties": {"metric_code": {"const": "momentum_20d"}, "metric_status": {"const": "available"}},
+        "required": ["metric_code", "metric_status"]
+      },
+      "then": {"properties": {"sample_count": {"const": 21}}}
+    },
+    {
+      "if": {
+        "properties": {"metric_code": {"const": "ma20_distance"}, "metric_status": {"const": "insufficient_data"}},
+        "required": ["metric_code", "metric_status"]
+      },
+      "then": {"properties": {"sample_count": {"maximum": 19}}}
+    },
+    {
+      "if": {
+        "properties": {"metric_code": {"const": "momentum_5d"}, "metric_status": {"const": "insufficient_data"}},
+        "required": ["metric_code", "metric_status"]
+      },
+      "then": {"properties": {"sample_count": {"maximum": 5}}}
+    },
+    {
+      "if": {
+        "properties": {"metric_code": {"const": "momentum_20d"}, "metric_status": {"const": "insufficient_data"}},
+        "required": ["metric_code", "metric_status"]
+      },
+      "then": {"properties": {"sample_count": {"maximum": 20}}}
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:kasign:quant:stage:factor-quality-summary:1.0.0",
+  "title": "Quant Factor Quality Summary",
+  "description": "QNT-CTR-003 首批 Close-only Decimal 因子的 Researchflow Stage quality_summary。minimum_required_bars 来自 Data CoverageEvidence，不是因子算法窗口；算法有效样本数由 Stage Output 的 sample_count 表达。minimum_required_bars <= observed_bars <= expected_trading_days 由 Go Validator 补充校验（JSON Schema 不表达跨字段大小比较）。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "metric_code",
+    "quality_status",
+    "calendar_quality_status",
+    "expected_trading_days",
+    "observed_bars",
+    "minimum_required_bars",
+    "coverage_sufficient"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "metric_code": {"type": "string", "enum": ["ma20_distance", "momentum_5d", "momentum_20d"]},
+    "quality_status": {"const": "valid"},
+    "calendar_quality_status": {"const": "valid"},
+    "expected_trading_days": {"type": "integer", "minimum": 1},
+    "observed_bars": {"type": "integer", "minimum": 1},
+    "minimum_required_bars": {"type": "integer", "minimum": 1},
+    "coverage_sufficient": {"const": true}
+  }
+}

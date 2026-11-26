@@ -197,3 +197,11 @@ Quant 不在 `internal/quant/**` 实现 SQL/Redis、通用 Storage、认证、�
 - Server 生产接入的必要条件：①从 Researchflow Worker 的可信执行身份构造受限 Service Principal，并保证 Data Snapshot Creator 识别到的 CallerRef 与 Data 当前授权策略主体完全一致；②注入 Data Snapshot Creator/Authorized Reader；③注入 Quant 活动 Registry、MariaDB Repository 和可信 UTC Clock，构造 `CreateSMAService`；④将 Stage Adapter 注册到 Researchflow Executor 与精确 Output Registry，并定义正式参数 Schema、Payload/QualitySummary Schema、Golden 和 Template DAG；⑤通过真实 MariaDB 集成测试验证 Data 授权、Quant 持久化、Run/Stage/Attempt 关联和失败回滚/重试语义。
 - Quant 的 `CreateSMAService` 当前不建立 Run 关联，也不提供完整结果授权读取。不得把 Stage Output 的通用资源引用直接当成 Quant `result_id`；Run→QuantResult 的正式强类型关联与策略撤销线性化读取仍须完成。
 - 本次仅校准状态与执行门槛，不把 Adapter 单测等同生产接入，不把旧历史记录中的 CI 结果外推到当前 SHA。
+
+
+## 2026-11-26 Factor Stage Output Schema 校准
+
+- 本节更新后续事实；此前“Server 只装配 News Search”“没有 Quant 正式 Stage Output Schema”等历史描述不再作为当前现状。`quant.sma20` 已有生产 Template/Executor/Output Registry Entry，SMA20 Stage Payload 携带落库后的 Quant `result_id`。
+- 首批三个 Close-only Decimal Factor 已完成 `CreateFactorService` 与 Stage Output/Quality 1.0.0 Schema、强类型 DTO、严格运行时 Validator（`QNT-CTR-003-factor-stage-output-1.0.0.schema.json`、`QNT-CTR-003-factor-quality-summary-1.0.0.schema.json`、`internal/quant/stage/factor_output.go`）。Draft 2020-12 编译/实例校验、三因子正例与违规负例、Quant 全包与 race 均 PASS。
+- 第④组只交付机器契约，不装配 Factor Stage Provider：第③组 Facade 还没有持久化结果，`result_id` 不能本地推导或伪造。剩余卡点是 Factor 结果落库/持久化 Payload 白名单、依赖可信 result_id 的 `factor_stage.go`、Run↔Result 关联、Server 装配和端到端真实质量证据。
+- QNT-CTR-003 仍 `deferred`、QNT-CTR-004/005 仍 `frozen`；本校准不升级契约状态，不开放 Factor Envelope Payload 或授权读取。
