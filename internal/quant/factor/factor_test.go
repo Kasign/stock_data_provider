@@ -178,7 +178,7 @@ func TestFactorsRejectOverflowFromFinitePositivePrices(t *testing.T) {
 		run  func() error
 	}{
 		{"momentum_5d", func() error {
-			closes := []float64{1, 1, 1, 1, 1, math.MaxFloat64}
+			closes := []float64{math.SmallestNonzeroFloat64, 1, 1, 1, 1, math.MaxFloat64}
 			_, err := Momentum5(closes)
 			return err
 		}},
