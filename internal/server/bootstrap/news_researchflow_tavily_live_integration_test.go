@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	newsconfig "example.com/stock-analysis-flow/internal/news/config"
 	newsstorage "example.com/stock-analysis-flow/internal/news/adapters/storage"
+	newsconfig "example.com/stock-analysis-flow/internal/news/config"
 	newsdomain "example.com/stock-analysis-flow/internal/news/domain"
 	newsstage "example.com/stock-analysis-flow/internal/news/stage"
 	platformconfig "example.com/stock-analysis-flow/internal/platform/config"

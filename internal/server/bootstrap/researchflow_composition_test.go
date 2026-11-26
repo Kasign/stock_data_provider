@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	newsconfig "example.com/stock-analysis-flow/internal/news/config"
 	newsstorage "example.com/stock-analysis-flow/internal/news/adapters/storage"
+	newsconfig "example.com/stock-analysis-flow/internal/news/config"
 	platformconfig "example.com/stock-analysis-flow/internal/platform/config"
 	platformhttpclient "example.com/stock-analysis-flow/internal/platform/httpclient"
 	researchflowresourcepolicy "example.com/stock-analysis-flow/internal/researchflow/resourcepolicy"
