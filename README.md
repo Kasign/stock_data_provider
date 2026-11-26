@@ -4,6 +4,8 @@
 
 ## 文档
 
+仓库执行规约（所有修改任务必读）：[AGENTS.md](./AGENTS.md)
+
 当前有效的中文项目文档统一维护在 doc/：
 - WebUI 功能说明：doc/WebUI功能说明.md
 - 数据层 API 接口清单：doc/数据层API清单.md
