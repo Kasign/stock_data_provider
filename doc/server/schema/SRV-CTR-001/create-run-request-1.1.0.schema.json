@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:kasign:server:srv-ctr-001:create-run-request:1.1.0",
+  "title": "SRV-CTR-001 CreateRun Request",
+  "description": "1.1.0 relaxes parameter typing: parameters is an opaque object envelope whose shape is defined by the parameter schema of the template addressed by template_ref/template_version. The 1.0.0 schema bound parameters to news-search-parameters-1.0.0, which left Quant and per-Stage templates with no valid request form. This schema constrains only the top-level envelope; the Server does not runtime-validate against it (validation is delegated to the resolved template's ParameterSchemaRef), but the shape described here matches the implemented boundary.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "idempotency_key",
+    "template_ref",
+    "template_version",
+    "input_snapshot_refs",
+    "parameters"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.1.0"
+    },
+    "idempotency_key": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "template_ref": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^\\S(?:.*\\S)?$"
+    },
+    "template_version": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^\\S(?:.*\\S)?$"
+    },
+    "input_snapshot_refs": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "pattern": "^\\S(?:.*\\S)?$"
+      },
+      "uniqueItems": true
+    },
+    "parameters": {
+      "type": "object",
+      "description": "Opaque parameter envelope. Its concrete shape (including per-Stage namespaces such as {\"stages\":{\"<stage_code>\":{...}}}) is owned by the parameter schema of the template addressed by template_ref/template_version and is validated at CreateRun time. This schema constrains only that parameters must be a JSON object."
+    }
+  }
+}

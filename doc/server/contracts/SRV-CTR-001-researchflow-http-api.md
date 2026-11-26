@@ -149,3 +149,11 @@ HTTP 200，返回 Run 聚合响应（见第 5 节）。新建与幂等重放使�
 - Golden：`doc/server/golden/SRV-CTR-001/`。
 - 任何路径、方法、请求字段、响应投影、认证矩阵、CSRF/Origin 语义或错误语义的非兼容变更必须升级 SRV-CTR-001 主版本，并评估 WebUI 迁移。
 - 本契约是 HTTP 边界权威定义；Researchflow Domain/Application Schema 继续由 Researchflow 模块拥有，Server 不复制其领域定义。
+
+### 9.1 请求 Schema 版本演进：create-run-request-1.1.0
+
+- `create-run-request-1.1.0.schema.json` 是本契约的**新增请求版本**，由 DEC-PLAT-002-063 决议引入；`create-run-request-1.0.0.schema.json` 保持冻结、字节不变，其 News Search 绑定语义继续有效。
+- 动机：1.0.0 把 `parameters` 直接 `$ref` 到 `news-search-parameters-1.0.0`，并把 `template_ref`/`template_version` 固定为 `news.search`/`1.0.0`，使 Quant 与 per-Stage 模板在契约层没有合法请求形态。这与实现不一致——Server 运行时**不**按该 Schema 校验请求，参数实际由 `template_ref` 指向模板的 `ParameterSchemaRef` 校验。
+- 1.1.0 只放宽三处：`schema_version` 的 `const` 改为 `1.1.0`；`template_ref`/`template_version` 从固定值改为非空无首尾空白字符串；`parameters` 从 News 参数 `$ref` 改为不透明 JSON object。**HTTP 路径、方法、认证矩阵、CSRF/Origin 语义、响应 DTO 与错误语义均未改变**，因此不升级 SRV-CTR-001 主版本。
+- `parameters` 的具体形状由目标模板的参数 Schema 拥有：News Search 仍为 `news-search-parameters-1.0.0`；per-Stage 模板（如 `quant.research`）为 `{"stages":{"<stage_code>":{...}}}` 信封。1.1.0 只约束 `parameters` 必须是 JSON object，不复制任何模板参数约束。
+- 兼容性：1.0.0 的 News 请求在 1.1.0 下依然合法；客户端按模板选择对应 `schema_version`。本版本属 additive 文档演进，不改变运行时行为，也不提前解冻任何契约。

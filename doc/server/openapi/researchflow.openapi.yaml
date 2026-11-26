@@ -22,7 +22,15 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '../schema/SRV-CTR-001/create-run-request-1.0.0.schema.json'
+              description: >-
+                Both request schema versions are accepted. 1.0.0 binds parameters to
+                News Search; 1.1.0 treats parameters as an opaque object whose shape is
+                owned by the parameter schema of the addressed template (see
+                DEC-PLAT-002-063). The Server does not runtime-validate against these
+                schemas; parameters are validated against the resolved template.
+              oneOf:
+                - $ref: '../schema/SRV-CTR-001/create-run-request-1.0.0.schema.json'
+                - $ref: '../schema/SRV-CTR-001/create-run-request-1.1.0.schema.json'
       responses:
         '200':
           description: Run created or existing idempotent Run replayed
