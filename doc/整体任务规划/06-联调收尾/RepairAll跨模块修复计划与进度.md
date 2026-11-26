@@ -1555,3 +1555,13 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - 修复后 CI（`cb11af410`）：Integration CI [45802338022](https://github.com/Kasign/stock_data_provider/actions/runs/45802338022)（`Full integration checks` 全 13 项含 `TEST_ROOT`、`Summarize all checks` 均 success）、Go test suite [45802337955](https://github.com/Kasign/stock_data_provider/actions/runs/45802337955)、Required checks [45802337985](https://github.com/Kasign/stock_data_provider/actions/runs/45802337985) 均 success。
 - 该 SHA 只有上述 3 个工作流触发；`Quant module validation` 与 `Live provider probe` 因路径过滤未触发，**不以前一次运行的结论冒充**。
 - 代码组结论：`2e4b13583` 的生产代码与 `cb11af410` 一致（两者仅差该测试文件），由 `cb11af410` 的 CI 覆盖；`c4fd7380b` 自身的 CI 失败记录保留，不改写为通过。
+
+### 2026-11-26 L3 补验：真实 MariaDB/Redis 全链路（阶段 2.1 遗留项）
+
+- 背景：阶段 2.1（`doc/quant/13` 第 11.6 节）诚实登记"完整 MariaDB/Redis 闭环未执行"。本轮补上服务与编排部分，不把 L2 内存 Store 证据冒充 L3。
+- 本机启动真实服务：Docker Desktop + `mariadb:11` / `redis:7-alpine`（CI 为 11.4 / 7.4），端口 3306 / 6379。先以真实 DSN 跑通 Platform Storage/Security 集成（5/5 PASS）、`TestWorkerBootstrapMariaDBRedisIntegration`（PASS）与组合根真实 MariaDB 装配（PASS）。
+- 新增 `internal/server/bootstrap/quant_research_mariadb_redis_integration_test.go::TestQuantResearchMariaDBRedisL3`：隔离库 + 完整迁移 + 生产组合根（带 Data Module）→ 发布 `quant.research@1.0.0` → Owner 创建带 per-Stage 信封的 Run → 真实 Worker OS 进程领取执行 → 终态从 MariaDB 回读。四 Stage 均 `AttemptNo >= 1`。
+- 真实装配约束（测试配置缺失，非产品缺陷）：Worker 注册 Quant Stage 强制要求 `data:read` Scope 服务凭据，必须注入 `PLATFORM_SERVICE_CREDENTIALS` + `QUANT_SERVICE_TOKEN`；Data Module 不能把 TradingCalendar/SecurityTradingStatus 能力挂在 eastmoney 上。两处均按现有安全门禁补齐配置，未放宽校验。
+- CI 门禁：`integration-ci.yml` `checks` job 注入 `QUANT_RESEARCH_MARIADB_REDIS_L3_TEST=1` 与 MariaDB/Redis service；新增精确步骤要求 `--- PASS`，SKIP 或 no-tests 一律失败，避免"跳过即绿"。
+- **诚实边界**：隔离库无行情 PIT 种子数据，Data 的 `GetDailyBarsV2` fail-closed，四 Stage 均产出 `quant_*_execution_failed`、Run 终态 `failed`。这是正确行为；本轮只证明 MariaDB/Redis + 编排闭环，不证明"有数据 → 四 Stage 成功"。行情种子数据链路需专项立项，不伪造快照、不降低门禁。
+- 本地全量 `go test -p 1 ./...`（真实 DSN）出现一处 News 并发摄取失败：`TestNewsMariaDBApplicationIntegration` 报 `Error 1020 Record has changed since last read`。归因：本机镜像为 mariadb:11，CI 为 11.4；该用例（跨来源并发规范 URL 摄取）从未在本地 DSN 模式验证过，且本轮未修改任何 News 代码。按规则 12 不修改无关模块消除失败；CI 结论以推送后为准，本节不预填 PASS。

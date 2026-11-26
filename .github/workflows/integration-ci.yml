@@ -59,6 +59,8 @@ jobs:
       PLATFORM_MARIADB_ADDR: 127.0.0.1:3306
       PLATFORM_MARIADB_DATABASE: integration_relay_test
       PLATFORM_REDIS_ADDR: 127.0.0.1:6379
+      # 真实 MariaDB/Redis 下的 quant.research 完整 Run 编排验收（隔离库 + 真实 Worker 进程）。
+      QUANT_RESEARCH_MARIADB_REDIS_L3_TEST: "1"
     services:
       mariadb:
         image: mariadb:11.4
@@ -202,6 +204,27 @@ jobs:
           if [ "$test_status" -ne 0 ]; then exit 1; fi
           if grep -q 'no tests to run' /tmp/worker_bootstrap_verbose.log; then exit 1; fi
           grep -Fq -- '--- PASS: TestWorkerBootstrapMariaDBRedisIntegration (' /tmp/worker_bootstrap_verbose.log
+
+      # L3 关键门禁：quant.research 必须在真实 MariaDB/Redis 下由 Worker 进程跑到
+      # 终态。只接受精确 PASS，禁止 SKIP 被包级绿灯掩盖。
+      - name: Run quant.research MariaDB/Redis L3 integration test
+        id: test-quant-research-l3
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          go test ./internal/server/bootstrap/ -run '^TestQuantResearchMariaDBRedisL3$' \
+            -count=1 -v -timeout 180s 2>&1 | tee /tmp/quant_research_l3.log
+          test_status=$?
+          if [ "$test_status" -ne 0 ]; then
+            echo "::error::quant.research L3 测试退出码 $test_status"
+            exit 1
+          fi
+          if grep -q 'no tests to run' /tmp/quant_research_l3.log; then exit 1; fi
+          if ! grep -Fq -- '--- PASS: TestQuantResearchMariaDBRedisL3 (' /tmp/quant_research_l3.log; then
+            echo "::error::quant.research L3 测试未取得精确 PASS（可能 SKIP）"
+            exit 1
+          fi
+          echo "- quant.research L3: 真实 MariaDB/Redis 下 Run 由 Worker 进程执行至终态" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Prepare example environment
         id: prepare-env
