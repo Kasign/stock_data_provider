@@ -1,6 +1,6 @@
 # News 数据模型与自动采集闭环收敛实施计划
 
-更新时间：2026-11-25  
+更新时间：2026-11-26  
 执行分支：`repair_all`  
 任务编号：`NEWS-POST-08`  
 状态：`IN_PROGRESS`
@@ -166,30 +166,43 @@ P0-1 全量依赖审计已完成；本计划后续只对具体字段、SQL 和�
 
 ### P0-4：Feed 生产自动采集闭环
 
-状态：NEXT（P0-2/P0-3 已完成；调用链审计和实施方案已完成，尚未修改生产装配）
+状态：IMPLEMENTED，待本轮最终验收
 
-#### 已核实的现状
+#### 生产配置与启动装配
 
-- `internal/news/config/config.go` 当前只加载 Bocha/Tavily/Brave/SearXNG Provider 和 Evidence Cursor Key Ring，没有 Feed Source/Endpoint 启动配置。
-- `internal/server/bootstrap/bootstrap.go` 创建 News Repository，但没有装配 Feed Collector。
-- `internal/server/bootstrap/researchflow_execution_composition.go` 当前只把 News Search Stage 和可选 Quant Stage 加入 Stage Executor/Output Registry。
-- `internal/server/bootstrap/researchflow_stage_dispatcher.go` 只分发 News SearchCandidates 和 Quant SMA20，没有 Feed Collection Stage。
-- `Researchflow Runtime` 已有 Worker Pool、Scheduler、扫描和生命周期；News 不需要新增自己的执行器。
-- 可复用实现已经存在：`internal/news/adapters/source/catalog.go` 的 `StaticSourceCatalog`、`platform_transport.go` 的 `NewPlatformEndpointTransport`、`app/collect_source.go` 的 `CollectSource`、`app/source_ingest.go` 的 `IngestCollectedSource`、`app/policy_version.go` 的 `PublishNewsPolicyVersion`。
-- `NewPlatformEndpointTransport` 已按每个 Source/Endpoint 绑定共享 Platform HTTP Client 的独立 DestinationPolicy；生产路径不得使用裸 HTTP Client。
+- News Config 使用可选环境变量 NEWS_FEED_SOURCES_JSON 读取 1..32 个只读可信 Feed Source/Endpoint 注册。
+- 每个注册必须明确 Source ID、Endpoint ID、URL、Publisher、访问方式、URL Scheme/Host/Port Allowlist、响应大小上限、Source Policy 版本、当前版本前置条件和授权证据。
+- 配置不允许未知字段、重复 Source/Endpoint、冲突 Source Policy、未授权的内容/存储路径或 Allowlist 外 URL。
+- 配置缺失时不启用 Feed；配置存在但无效时 Server 启动失败。
+- Server 组合根复用共享 MariaDB Repository 和 Platform HTTP Client，装配 StaticSourceCatalog、Platform Endpoint Transport、CollectSource、IngestCollectedSource。
+- Source Policy 通过现有 News Policy Version 表和条件指针更新接口发布。相同当前版本/相同载荷幂等成功；显式 expected-current 前进成功；旧配置回退失败。
 
-#### 实施方案
+#### Researchflow 执行路径
 
-1. 在 News Config 增加一个只读启动配置入口，装载可信 Feed Source/Endpoint 注册快照；每个入口必须明确 source_id、endpoint_id、URL、publisher、访问方式、URL host allowlist、响应大小限制和 Source Policy 版本/授权内容。禁止运行时任意 URL、动态目录管理 API 或新增来源管理表。
-2. 配置缺失时不启用 Feed Stage；配置存在但字段、授权、版本或 allowlist 无效时启动失败，不得降级到裸 HTTP 或跳过授权。
-3. Server 组合根使用共享 MariaDB Repository、共享 Platform HTTP Client，创建 StaticSourceCatalog、NewPlatformEndpointTransport、CollectSource 和 IngestCollectedSource。
-4. Source Policy 通过现有 News Policy Version 表保存。启动时必须核对当前指针和不可变载荷；相同版本不同载荷、未知当前版本或无法确认策略状态时 fail closed。不能每次启动无条件把当前指针改回配置中的旧版本。
-5. 将 Feed Collection 实现为 News-owned Researchflow Stage，由现有 Researchflow Run/Stage/Worker 调度；Stage 参数只能引用已注册的 source_id/endpoint_id。StageOutput 仅记录采集/入库摘要与必要引用，不复制文章正文；其生命周期归 Researchflow。
-6. 在 Researchflow Stage Dispatcher、Output Registry、参数 Schema 和 Workflow Template 中注册 Feed Stage；不改变 Provider SearchCandidates 的候选语义，Provider 候选仍只有在研究流程明确选中后才正式入库。
-7. 注册采集配置/策略/依赖对应的 News Diagnostics；区分配置错误、策略缺失、来源跳过、网络失败、解析失败和正式入库失败。
-8. 补齐 Server 生产装配测试、Context 取消/超时测试、重试语义测试，以及真实 MariaDB 的 Feed → 正式入库端到端测试。
+- News-owned Stage Code：news.collect_feeds。
+- Workflow Template：news.feed_collection@1.0.0。
+- Stage Output Type：news.feed_collection@1.0.0。
+- Feed-enabled News Output Registry：1.2.0；组合后 Search Workflow Template 使用新版本 1.2.0，避免相同 Registry Version 对应不同内容。
+- Feed Stage 只接受 Run ResourcePolicy 中的 Source/Endpoint 注册快照；引用包含完整注册 SHA-256 指纹。配置变化后，旧 Run 不会静默执行新 URL 或新策略。
+- 正式入库只走 CollectSource.Execute 和 IngestCollectedSource.Execute，底层仍是统一 MariaDB 事务；不复制入库算法。
+- StageOutput 只保存 Source/Endpoint、结果状态、计数、News ID 和原因码；不保存文章正文、原始 URL 或响应内容。
+- 正式入库幂等前缀稳定为 Run/Stage/Source/Endpoint，跨 Attempt 重试不改变幂等键。
+- 全部失败来源均为可重试且无跳过来源时，Stage 进入 Researchflow RetryWait；部分成功但存在不可重试/跳过来源时保留 Degraded 结果。
+- 使用现有 Researchflow Dispatcher、Output Registry、Workflow Template、Scheduler、Worker Pool 和生命周期；不新增 News Scheduler/Queue/Worker/Orchestrator。
 
-完成门槛：Server 在配置 Feed Source 后存在真实 Researchflow 调用路径；只配置 Provider 搜索不能误启 Feed；每次采集均经当前策略复核和正式事务入库；不以构造器存在或单元测试代替生产装配验收。
+#### Diagnostics 与测试
+
+- Feed 已注册 Source/Endpoint 诊断和当前 Source Policy 诊断。
+- 已增加 Config 严格解析、资源快照指纹、Stage 输出一致性、部分失败/重试/取消、Workflow Template 和组合注册测试。
+- 新增真实 MariaDB 测试：Feed RSS → 正式 Parser/CollectSource → IngestCollectedSource → MySQLRepository；验证正文授权过滤、News 主体/版本/Observation 持久化和 StageOutput 不泄露文章内容。
+- 新增 Server/Researchflow 组合 MariaDB 测试：验证 Workflow Template 发布、Dispatcher 注册、Run ResourcePolicy、Worker Runtime 构造、策略前进、同版本重复启动幂等和旧配置回退拒绝。
+- Go Test Suite 工作流已加入 Feed Stage 与 Server/Researchflow 组合两项 MariaDB 测试的精确 PASS 门禁；尚待本轮统一 CI 执行。
+
+#### 自动化边界
+
+当前 Researchflow Runtime 只会自动调度已持久化的 Run，不会按周期自动创建 Run。Feed Stage 会在 news.feed_collection Run 创建后自动执行；当前不包含无人创建 Run 的周期轮询能力。若要实现持续定时采集，需要在 Researchflow 增加通用周期触发能力，并明确采集间隔、时区、错过周期补跑和并发去重规则；不应在 News 内另建 Scheduler。
+
+完成门槛：Feed 配置和 Server/Researchflow 生产组合真实运行；策略当前指针不可回退；正式采集走统一事务；MariaDB、Go Test、Race、Vet 和跨模块 Integration CI 全部通过。
 
 ### P1-1：职责清理
 
