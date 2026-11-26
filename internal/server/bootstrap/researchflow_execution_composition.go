@@ -195,8 +195,16 @@ func newResearchflowComposition(
 	if err != nil {
 		return nil, fmt.Errorf("create Researchflow database clock: %w", err)
 	}
-	var quantResultReader *researchflowQuantResultReader
+	// 任一已装配的 Quant Stage 都要求授权读取路径：只按 quant.sma20 判断会漏掉仅含 quant.factor 的装配。
+	var quantResultRepository *quantstorage.MySQLRepository
 	if quantStage != nil {
+		quantResultRepository = quantStage.repository
+	}
+	if quantResultRepository == nil && quantFactorStage != nil {
+		quantResultRepository = quantFactorStage.repository
+	}
+	var quantResultReader *researchflowQuantResultReader
+	if quantResultRepository != nil {
 		policyStore, storeErr := quantstorage.NewMySQLResultAccessPolicyStore(shared.DB)
 		if storeErr != nil {
 			return nil, fmt.Errorf("create Quant result access policy reader: %w", storeErr)
@@ -211,9 +219,9 @@ func newResearchflowComposition(
 		if readerErr != nil {
 			return nil, fmt.Errorf("create Researchflow Stage Output association reader: %w", readerErr)
 		}
-		associationVerifier := quantSMA20ResultAssociationVerifier{reader: stageOutputReader}
+		associationVerifier := quantResultAssociationVerifier{runs: runRepository, outputs: stageOutputReader}
 		authorizedReader, authorizedErr := quantstorage.NewMySQLAuthorizedResultReader(
-			policyStore, quantStage.repository, associationVerifier,
+			policyStore, quantResultRepository, associationVerifier,
 		)
 		if authorizedErr != nil {
 			return nil, fmt.Errorf("create Quant authorized result reader: %w", authorizedErr)

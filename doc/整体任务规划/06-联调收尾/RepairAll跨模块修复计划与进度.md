@@ -1428,4 +1428,14 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - Output Registry 版本用 `1.3.0`：`NewStageOutputRegistrySet` 以 version 为唯一键，`1.0.0`/`1.2.0` 属 News、`1.1.0` 属 SMA20；新增测试 `TestQuantFactorOutputRegistryVersionDoesNotCollide` 守住该约束。
 - 复用而非复制：`quantDataSnapshotAdapter` 同时实现 `DailyBarsCloseSeriesSnapshotCreator` 与 `CloseSeriesSnapshotReader`；Provider inventory 判定抽为 `quantDailyBarsProviderCodes`（SMA/Factor 共用），`NewStageOutputRegistrySet` 前合并去重；`QuantPurposeCode`/`QuantProviderCode` 作为通用别名，`SMA20PurposeCode`/`SMA20ProviderCode` 保留兼容。
 - 验证：`go test ./internal/quant/... ./internal/server/...` 全包 PASS；覆盖三因子 Adapter 正例、insufficient 显式 null、非法请求不触达 Data、参数 Schema 文档一致性与 Golden、Executor 状态映射、Template 冻结断言、Dispatcher 路由与 Registry 版本唯一性。
-- 未完成：Factor Run↔Result 关联仍硬编码 `quant.sma20`（`quantSMA20ResultAssociationVerifier`），Factor 结果暂不能被 GetResult 授权读取；端到端真实质量证据与 Quant→Researchflow Contract Test 未做。QNT-CTR-003 仍 `deferred`；CI 状态 `not_run`。
+- 第⑥组结束时未完成（Factor Run↔Result 关联已由第⑦组解决）：端到端真实质量证据与 Quant→Researchflow Contract Test 未做。QNT-CTR-003 仍 `deferred`；CI 状态 `not_run`。
+
+## 2026-11-26 Quant 三因子生产化第⑦组 Factor Run↔Result 关联
+
+- 起始 HEAD `d574976ef`（第⑥组，已推送 `origin/repair_all`）。本组只做 Quant 结果关联校验与授权读取装配，不改契约版本。
+- 问题证据：`internal/server/bootstrap/quant_sma20_result_association.go` 把 `StageCode` 硬编码为 `quant.sma20`，而 Researchflow 只提供按 `(runRef, stageCode, outputType, schemaVersion)` 精确读取、**没有 List 能力**（`stage_output_reader.go:34-58`），因此 Factor 已落库的 `result_id` 无法通过 `GetResult` 的关联校验。
+- 方案：把校验泛化为已支持 Quant Stage 的封闭规格表（`internal/server/bootstrap/quant_result_association.go`，含 `quant.sma20` 与 `quant.factor`），并注入 Run Reader 做**前置枚举**而不是"按 stage 逐个试读"。这样能精确区分三种情况：①Run 无该 Stage 或未成功产出 → 无关联；②已成功但缺输出/质量引用、同码 Stage 重复、Run 引用不一致 → 完整性失败；③已成功但读取失败 → 直接上抛，**不降级为"无关联"**（原实现把 `ErrStageOutputUnavailable` 一律映射为 `NotFound`，会把存储故障伪装成"结果不存在"）。
+- 装配修正：`researchflow_execution_composition.go` 原先只在 `quantStage != nil` 时创建授权读取链，仅装配 `quant.factor` 时会缺失；改为按实际存在的 Quant Stage 选择 Repository，任一存在即创建 `quantResultReader`。
+- 新增测试 `internal/server/bootstrap/quant_result_association_test.go`（文件由 `quant_sma20_result_association_test.go` 重命名泛化）：SMA20/Factor 命中并断言 schema ref 与 Validator 契约、result_id 不匹配、Run 无 Quant Stage、Stage 未成功产出时不读取输出、成功后缺输出/质量引用、同码重复、Run 引用不一致、Run 无 Stage、读取失败与 GetRun 失败不被降级、未登记 Stage 被拒绝。
+- 验证：`go test ./internal/server/bootstrap/ ./internal/quant/... ./internal/server/...` 全包 PASS。
+- 未完成：端到端真实质量证据与 Quant→Researchflow Contract Test（下一组）。QNT-CTR-003 仍 `deferred`、QNT-CTR-004/005 仍 `frozen`；CI 状态 `not_run`。
