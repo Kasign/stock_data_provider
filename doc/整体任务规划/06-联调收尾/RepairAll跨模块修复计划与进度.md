@@ -1494,3 +1494,11 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - Data 侧能力边界：`MarketBreadthSnapshot` 已是严格的 `cn_a_share` 全市场口径（四类家数精确对账、`requireFullCoverage`、部分覆盖必须 degraded、最旧成分报价时间做新鲜度），并有 `GET /api/v1/market/breadth`；但 Quant 唯一合规入口（授权快照）只有单证券 `daily_bars_close_series`，广度事实暂不可被 Quant 追溯消费。
 - 交付：`doc/quant/08-market-breadth指标决策与正名.md`——代码级事实、差距矩阵、选项 A（正名为 `cross_section_participation_ma20`，A1/A2 两条实现路径及其代价）、选项 B（书面废弃，推荐）、命名规范、复活条件、QNT-005 前置依赖精确化。
 - 状态：1.6 记为“书面结论完成，待 M1 决议”，不记为已完成；QNT-005 前置项已在其任务表中精确化，契约状态全部不变。CI 状态以推送后结论为准，本节不预填。
+
+### M1 决议与 1.6 收尾（2026-11-26）
+
+- 用户决议：按推荐项执行**选项 B 书面废弃**。1.6 由“书面结论完成、待 M1”改为已完成。
+- 执行边界：不迁移、不正名、不注册为 Quant 指标，不新建“自选股广度”替代物，不为其补测试；`internal/service/wiring.go` 的 `marketAnalyzer` 仅加退役注释（指向 `doc/quant/08`，说明分母来自调用方 symbols、65/35 阈值无出处、新链无消费者、随阶段 4 删除），行为零改动。
+- 命名规范与复活条件继续生效：`breadth`/`广度` 只指 Data 的 `MarketBreadthSnapshot`；横截面比例必须 `cross_section_*`/`*_participation` 并显式写分母；复活需“真实调用方 + 横截面授权快照 + 正名与独立算法版本”三条同时满足。
+- QNT-005 前置项维持精确化状态（广度授权快照 payload、交易状态/排除事实、指数授权快照），不以 HTTP 广度或自选股横截面替代。契约状态全部不变。
+- 1.6 无代码行为变更，因此不新增单测；验证仍以全量 `go build ./...`/`go test ./...` 为准。

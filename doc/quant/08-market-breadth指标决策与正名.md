@@ -1,6 +1,7 @@
 # 08 · market breadth 指标决策与正名（执行清单 1.6）
 
-- 状态：书面结论完成（2026-11-26），**待 M1 决议**；本文件不新增代码、Schema、Registry Entry 或 Stage。
+- 状态：**M1 决议通过（2026-11-26）：选项 B 书面废弃**，执行清单 1.6 已完成；本文件不新增代码、Schema、Registry Entry 或 Stage。
+- 决议要点：旧 `watchlist_above_ma20_pct` 不迁移、不正名、不注册为 Quant 指标；真实市场环境需求归 QNT-005，其前置项见第 8 节。命名规范（第 6 节）在废弃后继续生效。
 - 范围：决策"旧 Runner 的 market breadth 指标是否保留、若保留如何正名与实现"。
 - 关联：`旧Analysis退役执行清单.md` 1.6、`WebUI旧Analysis到Researchflow迁移盘点.md` 9.x/10.x、`doc/quant/01-量化引擎总体设计.md` 第 37 行（Market 需明确全集/分母/覆盖率）、`doc/quant/模块总任务规划和进度.md` QNT-005。
 
@@ -60,7 +61,7 @@ Data 已具备市场级广度事实（`internal/marketdata/model/model.go` 的 `
 
 ## 5. 选项与判定
 
-### 选项 A：保留，正名为横截面参与度并由 Quant 实现
+### 选项 A：保留，正名为横截面参与度并由 Quant 实现（未采用）
 
 正名建议：`cross_section_participation_ma20`（分母显式写入 Metric 与 Quality Summary，禁止命名 `breadth`/`market`）。实现有两条路径：
 
@@ -69,7 +70,7 @@ Data 已具备市场级广度事实（`internal/marketdata/model/model.go` 的 `
 
 两条路径都**没有消费者**：QNT-005 未开始，2.1 Template 不含 Market Stage，旧报告页随阶段 4 删除。按本仓库既有口径（1.4/1.5 的判定逻辑：先有真实调用方，再建接口），现在建接口属无调用方建设。
 
-### 选项 B：书面废弃（推荐）
+### 选项 B：书面废弃（M1 决议通过，2026-11-26）
 
 结论：**不保留为 Quant 指标，不迁移 `mvp-watchlist-market-v1`**，理由：
 
@@ -107,9 +108,10 @@ QNT-005（Market 环境分析）当前 `NOT_STARTED`，等待"全市场 Universe
 
 在上述契约未就位前，QNT-005 不应以"先用 HTTP 广度凑"的方式启动。
 
-## 9. 本轮结论与不变项
+## 9. 决议结论与执行边界（2026-11-26 更新）
 
-- 本轮只交付书面结论与命名规范，**不新增**代码、Schema、Golden、Registry Entry、Stage 或 Data 契约。
-- 不改任何契约状态：QNT-CTR-003 仍 `deferred`、004/005 仍 `frozen`；QNT-005 仍 `NOT_STARTED`（前置项已精确化）。
-- 旧 `marketAnalyzer`、`MarketState.Regime`、旧报告页"市场状态"均保持原样，随阶段 4 删除旧链一并退役；不在 Quant 复制其 float64 实现。
-- 1.6 的退出条件"有书面结论；不再以全市场广度命名"在本文件与第 6 节规范下成立；是否记为已完成取决于 M1 决议。
+- **决议**：按选项 B 执行——书面废弃。旧指标不迁移、不正名、不注册为 Quant 指标，也不新建任何"自选股广度"替代物。
+- 范围：本轮只交付书面结论与命名规范，**不新增**代码、Schema、Golden、Registry Entry、Stage 或 Data 契约（已在 `internal/service/wiring.go` 的 `marketAnalyzer` 上标注废弃判定与文档指针，仅注释，不改行为）。
+- 旧 `marketAnalyzer`、`MarketState.Regime`、旧报告页"市场状态"保持原样，随阶段 4 删除旧链一并退役；不在 Quant 复制其 float64 实现，也不为其补测试。
+- 1.6 退出条件"有书面结论；不再以全市场广度命名"已满足：结论为本文件，规范为第 6 节，复活条件为第 7 节，QNT-005 前置项为第 8 节。
+- 契约状态不变：QNT-CTR-003 仍 `deferred`、QNT-CTR-004/005 仍 `frozen`；QNT-005 仍 `NOT_STARTED`（前置项已精确化）。

@@ -221,7 +221,7 @@ Quant 现有 GetResult 授权读取用例、SMA20 与三因子（`ma20_distance`
 - Stage 侧不再把质量门禁失败笼统记为 `*_execution_failed`：`quant_input_reason.go` 把原因投影为 `quant_sma20_input_*`/`quant_factor_input_*`/`quant_trend_input_*`（表外原因回退为 `*_input_not_applicable`，不猜测具体原因）。变异验证三处（删覆盖率分支、删 PIT 映射、去掉原因码透传）均使测试失败。
 - 契约状态未变：QNT-CTR-003 仍 `deferred`、QNT-CTR-004/005 仍 `frozen`；QNT-008 Signal 仍 NOT_STARTED。1.3/1.5 的完成只表示实现追平已通过决议，不等于对外生产发布。
 
-## 2026-11-26 执行清单 1.6 market breadth 指标决策（书面结论，待 M1）
+## 2026-11-26 执行清单 1.6 market breadth 指标决策（M1 决议：书面废弃，已完成）
 
 - 核实：旧 `marketAnalyzer`（`internal/service/wiring.go:210-255`，`mvp-watchlist-market-v1`）的分母来自 `universeResolver` 复制的 `req.Symbols`，指标是 `watchlist_above_ma20_pct` 加 65/35 无出处阈值映射出的 `regime` 字符串；缺指数数据时它自己就写了“不能视为完整市场广度分析”。消费者只有旧链（`analysis/app/runner.go` 校验 regime 非空、旧报告页展示“市场状态”），新链零消费者，QNT-005 仍 NOT_STARTED。
 - Data 侧的真·市场广度已经存在且口径严格：`MarketBreadthSnapshot` 固定 `market=cn_a_share`，四类家数必须精确对账到 `covered_securities`，`requireFullCoverage` 时要求 `covered==total`，部分覆盖必须标 `degraded`，新鲜度取最旧成分报价时间；对外有 `GET /api/v1/market/breadth`。但它**只有 HTTP 展示路径**，没有授权快照——Quant 唯一合规入口（授权快照）目前只有单证券 `daily_bars_close_series`。
@@ -229,3 +229,5 @@ Quant 现有 GetResult 授权读取用例、SMA20 与三因子（`ma20_distance`
 - QNT-005 前置项据此精确化：① Data 为 `MarketBreadthSnapshot` 增加授权快照 payload；② 停牌/ST/退市/新股排除规则需 Data 交易状态事实；③ 指数授权快照（旧 `index_20d_return_pct` 同样缺路径）。在契约就位前不以“先用 HTTP 广度凑”的方式启动 QNT-005。
 - 命名规范（废弃后继续生效）：`breadth`/`广度` 只指 Data 的全市场口径；请求证券集合内的比例必须叫 `cross_section_*`/`*_participation` 且显式写分母。旧四个 `watchlist_*`/`insufficient_cross_section` 字符串随阶段 4 删除，不进新契约。
 - 本轮不改任何契约状态：QNT-CTR-003 `deferred`、004/005 `frozen`、QNT-005 `NOT_STARTED`；不新增代码/Schema/Stage。
+
+- **M1 决议（2026-11-26）**：按推荐项执行选项 B 书面废弃。旧 `watchlist_above_ma20_pct` 不迁移、不正名、不注册为 Quant 指标，也不新建“自选股广度”替代物；`internal/service/wiring.go` 的 `marketAnalyzer` 加退役注释（仅注释、不改行为），随阶段 4 删除旧链一并退役。真实市场环境需求归 QNT-005，前置项不变（广度授权快照 + 交易状态排除事实 + 指数授权快照）。第 6 节命名规范与第 7 节复活条件继续生效，1.6 记为已完成。

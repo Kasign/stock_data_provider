@@ -201,6 +201,10 @@ func (qualityAssessor) Assess(ctx context.Context, req domain.RunRequest, univer
 	return domain.QualityReport{CorePass: corePass, Partial: partial, Issues: issues, StrategyEligible: eligible, StrategyBlockers: blockers, CheckedAt: time.Now().UTC(), PolicyVersion: req.DataPolicyVersion}, nil
 }
 
+// marketAnalyzer 是旧 Analysis 链的"市场状态"实现，已被书面废弃（执行清单 1.6，
+// doc/quant/08-market-breadth指标决策与正名.md）：分母来自调用方传入的 symbols，
+// 语义是请求证券集合内的参与度而非市场广度，65/35 阈值无出处，且新链无消费者。
+// 不迁移到 Quant、不补测试、不新增替代指标；随阶段 4 删除旧链一并退役。
 type marketAnalyzer struct{}
 
 func (marketAnalyzer) Analyze(ctx context.Context, req domain.RunRequest, s domain.MarketSnapshot) (domain.MarketState, error) {
