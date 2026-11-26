@@ -75,7 +75,7 @@
 | CTR | 当前状态 | 延期原因 | 重新进入条件 |
 |---|---|---|---|
 | DATA-CTR-005 | `deferred` | 已有 V2 读取接口、日历引用及部分 Provider 精确值证据，但公开计算字段仍为 float64，完整 Decimal 消费语义和 Schema/Golden 未形成；保留 v1，不静默改类型 | 明确原始精度证据、Decimal 字段/scale/舍入/单位/缺失规则、消费者输入 DTO，并补齐 Schema/Golden 与真实 Provider 端到端证据 |
-| DATA-CTR-007 | `deferred` | Data 内部 Snapshot Creator/Authorized Reader 已存在，但公开 SnapshotRef、Payload Schema、Manifest/AuthorizationRef 绑定及 Research Evidence 映射尚未形成完整跨模块消费契约 | 核实现有 Creator/Reader 的真实持久化结构和事务边界；定义不可变 Payload 内容寻址、SnapshotRef、Manifest 与授权证明绑定，并形成消费者 Application Port、Research Evidence source_ref/version/locator 映射及 Contract Test |
+| DATA-CTR-007 | `deferred` | 窄化 Eastmoney 未复权 Close Series 的 Payload/Manifest/内容寻址/授权读取已实现；完整跨模块消费者契约与 Research Evidence 映射尚未形成 | 基于现有实现补齐正式 Payload Schema/Golden、消费者 Application Port 与 Contract Test；明确 Research Evidence source_ref/version/locator 到 Data Snapshot 的映射和授权传播，不扩建重复 Snapshot 存储 |
 | QNT-CTR-003 | `deferred` | 首批 Factor 依赖完整日线 Snapshot、interval 和不可变交易日历版本；输入证据不足时冻结会制造虚假可比性 | DATA-CTR-005/007 达到可冻结条件，Quant Factor 输入/结果定义与引用关系完成定点复核 |
 
 ## 4. 不适用契约
