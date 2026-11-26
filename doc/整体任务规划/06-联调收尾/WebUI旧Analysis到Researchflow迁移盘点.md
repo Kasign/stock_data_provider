@@ -383,3 +383,41 @@ analysisd 当前明确要求 GO_CORE_TOKEN、PYTHON_BRIDGE_TOKEN、PYTHON_BRIDGE
 - [ ] 最终完整验收。
 
 执行原则：以真实代码调用关系推进，优先连续完成同一工作组；不等待中途 CI 结果，不降低测试标准，不为迁移保留旧兼容实现。若真实能力缺口尚未闭环，明确记录阻塞项，不以删除旧入口制造“已退役”假象。
+### 10.5 旧 Runner 阶段能力映射（按当前实现核对）
+
+以下映射来自 internal/analysis/app/runner.go、internal/analysis/app/ports.go 和 internal/service/wiring.go，不把旧阶段名称直接当成目标模块已完成的能力。
+
+| 旧 Runner 阶段/能力 | 当前旧实现的实际行为 | 目标归属 | 当前可确认的新模块能力 | 退役判断 |
+|---|---|---|---|---|
+| validate_request / resolve_universe | 校验请求；Universe 直接由请求 symbols 构造，交易状态标记 unknown，板块/交易所部分由代码前缀推断 | Server 输入校验 + Data 证券主数据 | Server 有 Researchflow 请求契约；Data 有证券/行情 Application 能力 | 不迁移旧 Resolver；以 Data 真实证券主数据和 Server DTO 校验替代 |
+| resolve_requirements / resolve_active_requirements | 从旧 Strategy/Factor Registry 汇总 daily_bars、quote、index_bars 需求 | Quant | 当前 Quant 有 SMA20 计算与结果存储，不等于旧需求注册表和完整因子需求体系 | 在 Quant 正式需求/策略能力落地时替换 |
+| collect_data | 由 Server 旧 AnalysisCollector 按证券读取日线、行情和指数 | Data | Data 已有 DailyBars Close Series Snapshot Creator、Manifest 和授权 Snapshot Reader；旧 Collector 未使用该链且丢失来源/PIT 元数据 | 新 Data Stage 必须消费授权 Snapshot；旧 Collector 可随旧 Runner 删除 |
+| persist_raw_snapshot / normalize_data / persist_market_snapshot | 旧 Analysis 自己保存 Raw/Market Snapshot；Normalizer 丢弃无效报价/日线并按日期排序 | Data | Data Snapshot 已有 Manifest/Payload 双指纹及授权读取；没有理由在 Analysis/Researchflow 复制一套行情快照存储 | Snapshot 归 Data；Researchflow 只保存输入引用和 Stage Output 关联 |
+| quality_gate | 至少一只证券有 21 根有效日 K 才通过；缺指数或上游数据会标记 partial；historical_replay 强制阻断 | Data 质量诊断 + Quant 输入适用性 | Data 有质量/诊断能力，但旧 Runner 规则尚未证明已映射到 Data/Quant 新契约 | 重建正式输入质量门禁；历史回放保持缺 PIT 证据即阻断 |
+| market_analysis | 计算自选股收盘价高于 MA20 的比例；指数 20 日收益为辅助；算法版本 mvp-watchlist-market-v1 | Quant | 当前 Quant 正式生产 Stage 仅 SMA20；没有对应市场横截面/指数市场状态 Stage | 需确认该指标是否保留；若保留由 Quant 实现，禁止继续称为全市场广度 |
+| factor_calculation | 计算 MA20 距离、5 日收益、20 日收益，使用旧 Factor Engine/Registry | Quant | 当前没有对应的三个正式 Quant Factor 生产 Stage/批量结果能力 | 这是实际功能缺口，不能删除旧 Runner 后声称已迁移 |
+| strategy_evaluation | trend-following：三项因子都为正才产生 long_candidate；信号带有入场/退出/失效规则和证据引用 | Quant | 当前未发现等价的正式策略评估 Application/Researchflow Stage | 需由 Quant 定义正式策略契约和版本化计算；不在 Researchflow 重写算法 |
+| tradability_check | 因缺少可信 ST、停牌、涨跌停和可成交量信息，对每个候选信号均阻断 | Quant 风险/可交易性门禁，数据事实归 Data | 目前旧逻辑明确 fail-closed；不能因迁移而放宽 | 保留硬门禁语义；由 Quant 正式风险决策输出，不允许评分或 LLM 覆盖 |
+| load_portfolio / persist_portfolio_snapshot | 返回 unconfigured-no-paper-ledger-v1，现金/权益为 0，无真实持仓账本 | Quant/组合能力（若未来真实需要） | 当前旧 Provider 是占位实现，没有可迁移的真实组合数据 | 直接退役，不迁移占位账本 |
+| risk_assessment | unverified-tradability-block 对所有候选信号 Allowed=false | Quant | 当前 Quant 已有 Risk Envelope/Decision 类型，但需核对正式决策服务和结果来源是否覆盖该硬门禁 | 仅在 Quant 生产决策和测试证明等价后删除旧实现；硬阻断不能弱化 |
+| portfolio_planning / execution_assessment | Planner 对所有信号拒绝生成计划；Execution 只生成 no-fill-mvp-v1 占位评估 | Quant（未来真实组合决策） | 未发现真实组合账本、仓位计划或模拟成交能力 | 两段当前均为占位行为，直接退役，不迁移假计划/假成交 |
+| Run/Stage orchestration、持久化和事件 | 旧 Runner 自己驱动阶段、写旧 Run/Stage Events 和旧 Result | Researchflow | Researchflow 已具备 Run/Stage/Worker/Output 基础框架及正式模板 | 由 Researchflow 接管编排；不迁移旧事件表/旧 Task Queue 模型 |
+| HTTP、Task Queue、WebUI 状态/报告 | 旧 Platform HTTP API、Task Queue 和 WebUI Task/Event/RunResult 绑定 | Server + WebUI | Server 已有 SRV-CTR-001 Run Create/Get/Cancel；WebUI 主流程仍调用旧 API | Server 结果读取契约与 WebUI 迁移完成后删除 |
+
+### 10.6 现在可以直接退役与必须先替换的内容
+
+可直接判定为无真实业务能力、无需迁移：
+- 旧 portfolioProvider 的零现金/零权益虚拟组合快照。
+- 旧 positionPlanner 的全量拒绝占位计划。
+- 旧 executionAssessor 的 no-fill 占位执行评估。
+- 旧 market breadth 命名中的“全市场”误导；当前实际是请求证券横截面。指标是否保留由 Quant 新契约明确。
+
+必须先完成 Owner 替换后才能删除：
+- Data Snapshot 的生产 Stage 消费和授权读取。
+- Data 输入质量事实与 Quant 适用性门禁的正式映射。
+- MA20 距离、5/20 日收益因子计算。
+- trend-following 策略评估及信号证据。
+- tradability/risk 硬门禁及不可被综合评分覆盖的决策结果。
+- Run/Stage Output 与 Quant/Research 领域结果的强类型关联、授权读取，以及 WebUI 结果页所需的 Server DTO。
+
+据此，当前旧 Analysis 退役的真正阻塞不是 Task Queue 技术迁移，而是 Quant 领域能力尚未覆盖旧 Runner 的核心因子/策略/风险结果，Data Snapshot 尚未进入股票研究 Stage，且 Server/WebUI 尚未建立完整报告读取闭环。先删除旧链会导致原有研究结果功能消失，因此不执行这种破坏性删除。
