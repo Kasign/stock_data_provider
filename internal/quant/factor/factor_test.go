@@ -33,7 +33,9 @@ func TestMADistance20UsesLatest20Closes(t *testing.T) {
 	closes[0] = 1000 // must be outside the MA20 window
 	closes[20] = 110
 	got, err := MADistance20(closes)
-	if err != nil {\n\t\tt.Fatal(err)\n\t}
+	if err != nil {
+		t.Fatal(err)
+	}
 	if got.Code != "ma20_distance" || got.Status != StatusAvailable || got.SampleCount != 20 {
 		t.Fatalf("unexpected result: %+v", got)
 	}
