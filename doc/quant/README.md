@@ -22,6 +22,7 @@
 - [Signal 契约最小切片（QNT-CTR-006）](./10-Signal契约最小切片.md)
 - [Risk 门禁 Stage 装配与拒绝路径影响分析](./11-Risk门禁Stage装配与拒绝路径影响分析.md)
 - [price_limit 事实闭环方案与前置核实](./12-price_limit事实闭环方案与前置核实.md)
+- [阶段 2.1 完整研究 Template 影响分析](./13-阶段2.1完整研究Template影响分析.md)
 - `schema/`：机器可校验的项目契约 Schema。
 - `golden/`：算法固定样例、结构样例及负例验收输入。
 
