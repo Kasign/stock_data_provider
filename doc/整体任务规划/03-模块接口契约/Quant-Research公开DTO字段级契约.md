@@ -220,7 +220,7 @@ Factor 首批仅包含单证券日线时间序列因子，不包含横截面排�
 
 | JSON 字段 | 必需 | 类型/约束 | 语义 |
 |---|---|---|---|
-| factor_code | 是 | enum：momentum_20d/momentum_60d/volatility_20d | 本次计算的因子稳定代码 |
+| factor_code | 是 | enum：momentum_20d/momentum_60d/volatility_20d/ma20_distance/momentum_5d（后两项为 2026-11-26 additive 新增的 Close-only Decimal 因子，见 DEC-PLAT-002-057） | 本次计算的因子稳定代码 |
 | metric | 是 | QuantMetric | 唯一标量输出；factor_code 必须等于 metric.metric_code |
 
 **首批 Factor 固定映射：**
@@ -230,6 +230,10 @@ Factor 首批仅包含单证券日线时间序列因子，不包含横截面排�
 | momentum_20d | 20d | ratio | 21 个连续有效 close | close_t / close_(t-20) - 1 |
 | momentum_60d | 60d | ratio | 61 个连续有效 close | close_t / close_(t-60) - 1 |
 | volatility_20d | 20d | ratio | 20 个有效 simple return（由 21 个连续有效 close 生成） | 最近 20 个 simple daily return 的样本标准差，ddof=1，不年化 |
+| ma20_distance（2026-11-26 新增） | 20d | ratio | 20 个连续有效 close | close_t / (Σ最近 20 个 close / 20) - 1；big.Rat 精确中间运算 + scale=12/half-even 舍入 |
+| momentum_5d（2026-11-26 新增） | 5d | ratio | 6 个连续有效 close | close_t / close_(t-5) - 1；big.Rat 精确中间运算 + scale=12/half-even 舍入 |
+
+新增两项的 `metric.value`/上下界为十进制字符串（GOV-CTR-001 Decimal 语法），与既有三项的 float64 `number` 值按 code 区分；精度策略见 `doc/quant/06-因子精确计算精度策略决策.md` 与 DEC-PLAT-002-057。
 
 跨字段约束：
 
@@ -240,7 +244,7 @@ Factor 首批仅包含单证券日线时间序列因子，不包含横截面排�
 5. Factor 的 input_snapshot_refs 必须非空且可追溯到真实 Data Snapshot；不能使用纯函数空输入授权例外替代行情事实依赖。
 6. 不可用结果必须由 metric_status 表达并将 value 显式置 null；不得以 0 代替缺失。Registry quality_policy 不允许时，degraded 不得作为 available 放行。
 
-**启用门禁：** 本节只补齐 Factor Payload 的字段级目标结构和首批计算映射，不改变 QNT-CTR-003 当前 deferred 状态。DATA-CTR-005 的 DailyBars v2 精度、bar interval、交易日历版本、PIT/复权和质量输入证据未闭合前，FactorResultPayload 不得注册到 Envelope Registry，不得对外输出为已支持的 factor/1.0.0。
+**启用门禁：** 本节只补齐 Factor Payload 的字段级目标结构和首批计算映射，不改变 QNT-CTR-003 当前 deferred 状态。首批 Close-only Factor 复用已授权的 DailyBars Close Series Snapshot（精确 Close 字符串、interval、CalendarRef、PIT、质量证据与内容寻址 SnapshotRef），不等待通用 OHLC DATA-CTR-005 全量契约闭合。FactorResultPayload 注册到 Envelope Registry、对外输出为已支持的 factor/1.0.0 之前，必须完成生产计算 Facade、Stage Output/Quality Schema、Envelope Payload 白名单与持久化、Run↔Result 关联、Server 装配，以及基于真实 Data Snapshot 的 Quant→Researchflow Contract Test；通用 OHLC DATA-CTR-005/007 的 Research Evidence 映射不作为该窄化路径的前置条件。
 
 #### 2.7.3 版本、注册与拒绝规则
 
