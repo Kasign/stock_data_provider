@@ -188,6 +188,16 @@ Server 生产组合根：
 
 Researchflow 的 Context Assembly、Quant Envelope Validator、Result Composer、Diagnostics Adapter 等内部构件，不等于完整股票研究能力。当前 quant.sma20 是首个已注册的 Quant 生产 Stage 切片；只有完整 Owner Facade、授权、输入输出 Schema/Golden、真实 Provider、Stage Executor、Registry、结果关联和 Server Worker 注入全部齐备，才能将其视为可交付的完整研究模板。
 
+## 5.2.1 Data Snapshot 与 DailyBars V2 的真实实现边界（2026-11-26）
+
+当前 `repair_all` 已有 Data Close Series Snapshot Creator、Manifest/Payload 双指纹、授权签发和同一 MariaDB 事务内 Authorized Snapshot Reader；不得再把这些能力列为“待从零建设”，也不得在 Quant/Researchflow 复制 Snapshot 存储或授权读取实现。
+
+`internal/marketdata/app/port.go` 已定义 `DailyBarsV2Snapshot`、`DailyBarsV2Reader`、`DailyBarExactValues`；`internal/marketdata/application/reader.go` 已实现 `GetDailyBarsV2`，输出 `1d` interval、覆盖率证据和同次评估取得的 TradingCalendarRef。日历证据不可靠时会降级。
+
+但 `DailyBar.Close`/OHLC 等计算字段仍为 float64，ExactValues 只是部分原始十进制证据侧车；Data Snapshot 能力也尚未通过公开 DTO 将内容寻址 SnapshotRef、Payload、Manifest、AuthorizationRef 和 Research Evidence source_ref/version/locator 绑定为一个可由 Researchflow 消费的正式输入。因此 DATA-CTR-005/007 与 QNT-CTR-003 继续 deferred 是合理的，但阻塞点应准确描述为“精度消费契约与跨模块快照引用/授权映射未闭环”，不是“V2/Snapshot 代码不存在”。
+
+下一步优先复用现有 Creator/Reader：核实其实际 payload、fingerprint、事务和授权行为；补齐最小公开输入 DTO/Schema/Golden 与 Data Owner Application Port；再由 Server 注入 Researchflow Stage。不得新增重复 Snapshot Repository、Manifest 或授权框架。
+
 ## 5.3 当前 WebUI 结果页依赖的完整报告字段
 
 文件：`web/src/task-result-view.js`、`web/src/report.js`
