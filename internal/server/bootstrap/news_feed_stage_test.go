@@ -9,6 +9,8 @@ import (
 	newsapp "example.com/stock-analysis-flow/internal/news/app"
 	newsdomain "example.com/stock-analysis-flow/internal/news/domain"
 	newsstage "example.com/stock-analysis-flow/internal/news/stage"
+	newsconfig "example.com/stock-analysis-flow/internal/news/config"
+	platformconfig "example.com/stock-analysis-flow/internal/platform/config"
 	researchflowapplication "example.com/stock-analysis-flow/internal/researchflow/application"
 	researchflowdomain "example.com/stock-analysis-flow/internal/researchflow/domain"
 	"example.com/stock-analysis-flow/internal/researchflow/resourcepolicy"
