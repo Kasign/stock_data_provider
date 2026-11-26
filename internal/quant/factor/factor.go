@@ -26,7 +26,11 @@ type Result struct {
 	SampleCount int
 }
 
-func Momentum5(closes []float64) (Result, error) {\n\treturn momentum("momentum_5d", closes, 5)\n}\n\n
+func Momentum5(closes []float64) (Result, error) {
+	return momentum("momentum_5d", closes, 5)
+}
+
+
 // MADistance20 计算最新收盘价相对最近 20 根日 K 简单移动平均线的距离。
 // 结果使用 ratio 单位；例如 0.05 表示高于 MA20 5%。
 func MADistance20(closes []float64) (Result, error) {
@@ -52,7 +56,8 @@ func MADistance20(closes []float64) (Result, error) {
 	}
 	return Result{Code: "ma20_distance", Value: value, Unit: "ratio", Status: StatusAvailable, SampleCount: window}, nil
 }
-\nfunc Momentum20(closes []float64) (Result, error) {
+
+func Momentum20(closes []float64) (Result, error) {
 	return momentum("momentum_20d", closes, 20)
 }
 
