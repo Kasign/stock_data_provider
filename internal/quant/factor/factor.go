@@ -30,7 +30,6 @@ func Momentum5(closes []float64) (Result, error) {
 	return momentum("momentum_5d", closes, 5)
 }
 
-
 // MADistance20 计算最新收盘价相对最近 20 根日 K 简单移动平均线的距离。
 // 结果使用 ratio 单位；例如 0.05 表示高于 MA20 5%。
 func MADistance20(closes []float64) (Result, error) {
