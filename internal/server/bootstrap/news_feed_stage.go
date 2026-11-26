@@ -149,7 +149,7 @@ func (e newsFeedStageExecutor) ExecuteStage(
 		policyRegistry.ValidateSnapshot(request.ResourcePolicy) != nil {
 		return failedNewsFeedStage("news_feed_resource_policy_invalid"), nil
 	}
-	output, err := e.adapter.Execute(ctx, request.Run.Ref+"/"+request.Attempt.Ref, request.Stage.Code, request.ResourcePolicy.AllowedSourceEndpointRefs)
+	output, err := e.adapter.Execute(ctx, request.Run.Ref, request.Stage.Code, request.ResourcePolicy.AllowedSourceEndpointRefs)
 	if err != nil {
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return researchflowapplication.StageExecutionResult{}, ctxErr

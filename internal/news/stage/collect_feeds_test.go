@@ -83,14 +83,14 @@ func TestFeedCollectionAdapterUsesRunResourceSnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := adapter.Execute(context.Background(), "run-1/attempt-1", CollectFeedsStageCode, []string{SourceEndpointSnapshotRef(feedRegistration("source-a", "primary"))})
+	result, err := adapter.Execute(context.Background(), "run-1", CollectFeedsStageCode, []string{SourceEndpointSnapshotRef(feedRegistration("source-a", "primary"))})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(collector.calls, []string{"source-a/primary"}) {
 		t.Fatalf("collector calls escaped Run resource snapshot: %#v", collector.calls)
 	}
-	if !reflect.DeepEqual(ingester.prefixes, []string{"run-1/attempt-1/" + CollectFeedsStageCode + "/source-a/primary"}) {
+	if !reflect.DeepEqual(ingester.prefixes, []string{"run-1/" + CollectFeedsStageCode + "/source-a/primary"}) {
 		t.Fatalf("ingest idempotency prefix = %#v", ingester.prefixes)
 	}
 	var output FeedCollectionOutput
