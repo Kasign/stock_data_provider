@@ -80,3 +80,34 @@
 - 变异验证两处均使测试失败：
   - 把"事实未验证"的结论从 `triggered` 改为 `not_triggered` → 决策变成 `pass`，两条断言失败；
   - 去掉"已验证必须有证据引用"的强制 → 无证据场景变成 `pass`，fail-closed 断言失败。
+
+## 8. 三条前置的推进记录（2026-11-26）
+
+### 8.1 前置① Signal 契约：已闭环（契约层）
+
+新增 QNT-CTR-006 Signal 1.0.0（Schema/Golden/Go DTO + 一致性测试，DEC-PLAT-002-059），Risk 从此有可机读的评估对象；明细见 `doc/quant/10-Signal契约最小切片.md`。仍不装 Stage：Strategy 评估与 Signal 产出属 QNT-008 剩余工作。
+
+### 8.2 前置③ 规则目录：已闭环（目录与加载）
+
+新增 `RuleCatalog`（`qnt-risk-catalog/1.0.0`）：条目携带依据来源与状态（published / registered_not_published），另有 pending 占位（主题 + 预留 code + 缺失原因）。发布规则集只能引用 published 条目，引用未登记/未发布/pending code 一律加载失败；目录版本必须与发布集合一致。当前发布 `tradability_unverified`，登记 `input_quality_not_applicable` 但不发布，集中度/流动性/波动率/行业暴露列为 pending。收敛测试断言 `Load(tradability 版本)` 与 `TradabilityRuleSet()` 完全相等。
+
+### 8.3 前置② Data 交易事实：契约层已闭环，物理读取待接入
+
+按"只承载真实拥有的事实"口径新增 DATA-CTR-007 扩展 payload `security_trading_status_facts` 1.0.0 与同族 Manifest（DEC-PLAT-002-060）：
+
+| 事实项 | 来源 | 说明 |
+|---|---|---|
+| `risk_warning_status` | `SecurityTradingStatusSnapshot.RiskWarningStatus` | ST/风险警示 |
+| `suspension_status` | `SuspensionStatus` | 停牌状态 |
+| `delisting_status` | `DelistingStatus` | 退市状态 |
+| `listing_date` | `ListingDate` / `ListingStatusKnown` | 上市日与上市状态 |
+| `is_trading_day` | `IsTradingDay` / `TradingDayKnown` | 是否交易日 |
+
+- 逐项 `available`（带 value、不带原因）/ `unavailable`（带原因、不带 value）；五项全可用 → `valid`，任一不可用 → `degraded`。
+- **不含涨跌停与可成交量**：Provider 从未提供，写入等于把推导当事实；缺项由 `tradability_unverified` 门禁阻断。
+- 指纹沿用 JCS + 双指纹 + 组合 `SnapshotRef`；新增 Schema/Golden，测试覆盖 Golden↔Schema↔DTO、派生 key（`price_limit`/`tradable_volume`）双侧拒绝、质量一致性、身份与指纹漂移、信任边界（caller_ref/purpose/UTC as-of/sources）。
+- **仍未接入**：存储列与 payload kind 分流、授权签发与 Authorized Reader 分流、`SecurityTradingStatus` Creator、MariaDB 集成测试与 Quant 消费端 Contract Test。这些必须与 DATA-CTR-008 的 Manifest/授权语义一起改，属下一组。
+
+### 8.4 因此 1.4 的状态
+
+仍记为"部分完成"，但阻塞从"三条全缺"收敛为一条：**交易事实的物理读取链路**。Signal 与规则目录就位后，Risk 已具备"有输入、有规则、有目录"的评估前提；剩下的接入工作不再是"设计缺口"，而是"实现与集成验证"。

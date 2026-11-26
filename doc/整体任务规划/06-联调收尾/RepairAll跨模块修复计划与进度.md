@@ -1511,3 +1511,13 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - 与旧链等价：旧链四类事实不可得即 `Allowed=false`；新门禁未验证即 `reject`；旧链缺判定在规划阶段拒绝；新门禁必需规则缺失/执行失败为 `block+unknown`（比旧链更严）。
 - 阻塞登记（1.4 剩余部分）：Signal 契约（QNT-008 NOT_STARTED）、Data 可交易性事实（缺涨跌停/可成交量，且无授权快照 payload）、权威规则目录。文档：`doc/quant/09-risk-tradability硬门禁切片与前置.md`。
 - 验证：`go build ./...`、`go vet`、`go test ./internal/quant/...` 通过；变异验证两处（未验证改 not_triggered、去掉证据强制）均使测试失败。CI 以推送后结论为准，本节不预填。
+
+## 2026-11-26 1.4 三条前置：Signal 契约 + 规则目录 + Data 事实契约层
+
+- 起始 HEAD `d2ef6a93c`（1.6 收尾）。用户明确要求"三条前置先补上，别卡住"，并在三个口径问题上全部按推荐项通过：最小信号 / 只承载真实拥有的事实 / 只登记有依据的规则。
+- 交付一（QNT-CTR-006 Signal 1.0.0，DEC-059）：`internal/quant/signal` 强类型 DTO + Schema + Golden + 一致性测试。最小信号不含价格（避免复权口径歧义）与自然语言交易规则；`direction`/`status` 独立枚举、禁止互推与自动投射。
+- 交付二（规则目录）：`internal/quant/risk/catalog.go` + 测试。目录条目携带依据来源与发布状态，pending 占位表达"缺权威阈值"；发布集合引用未发布规则即失败，不做"跳过缺失规则继续评估"。
+- 交付三（DATA-CTR-007 扩展，DEC-060）：`security_trading_status_facts` payload 1.0.0 + 同族 Manifest 1.0.0 + Schema/Golden + 测试。五项真实事实逐项 available/unavailable；不含涨跌停/可成交量；JCS 双指纹与组合 SnapshotRef；本轮只交付契约层，存储与授权分流待接入。
+- 契约统计变化：正式 CTR 44→45（新增 QNT-CTR-006 `deferred`）；QNT-CTR-003/004/005 与 DATA-CTR-007/008 状态均未改变。
+- 验证：`go build ./...`、`go test ./internal/...` 全绿；变异验证两处（tradability 条目改未发布、去掉事实 key 顺序校验）均使测试失败。
+- 1.4 仍为部分完成：唯一阻塞是 Data 交易事实的物理读取链路（存储列 + 授权读取分流 + Creator + MariaDB 集成测试）。

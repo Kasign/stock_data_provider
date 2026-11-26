@@ -240,3 +240,10 @@ Quant 现有 GetResult 授权读取用例、SMA20 与三因子（`ma20_distance`
 - 仍然阻塞（三条，缺一不可）：① `Signal` 契约（QNT-008 NOT_STARTED）——无评估对象，建 Facade/Stage 即零调用方接口；② Data 可交易性事实——`SecurityTradingStatusSnapshot` 缺**涨跌停状态与可成交量**，且无授权快照 payload（授权快照只有单证券 `daily_bars_close_series`）；③ 权威规则目录——QNT-010 明示不得由 Quant 猜测规则。
 - 边界：不建 Risk Facade、不装 `quant.risk` Stage、不定义其余风险规则、不改任何契约。等价性对照、未做原因与推进条件见 `doc/quant/09-risk-tradability硬门禁切片与前置.md`。
 - 验证：`go test ./internal/quant/risk/` 全绿（新增 9 用例）；变异验证两处均失败有效——把未验证结论改为 `not_triggered`（决策变 pass）、去掉“已验证必须有证据引用”（无证据变 pass）。
+
+### 1.4 三条前置推进（2026-11-26 晚）
+
+- 前置① Signal：新增 QNT-CTR-006 Signal 1.0.0（`internal/quant/signal` + Schema + Golden，DEC-059，`deferred`）。最小信号不含价格与自然语言规则；`direction`/`status` 独立枚举、禁止互推；`strategy_rule_set_version` 与 RiskDecision 的 `rule_set_version` 分层。
+- 前置③ 规则目录：新增 `RuleCatalog`（`qnt-risk-catalog/1.0.0`），条目带依据来源与发布状态，pending 占位显式列出缺权威来源的规则主题；发布规则集只能引用已发布条目，引用未登记/未发布/pending 一律加载失败。收敛测试断言 `Load()` 与 `TradabilityRuleSet()` 完全相等。
+- 前置② Data 事实（契约层）：新增 DATA-CTR-007 扩展 payload `security_trading_status_facts` 1.0.0 + 同族 Manifest 1.0.0（DEC-060）。五项事实逐项 available/unavailable，五项全可用→valid、任一不可用→degraded；不含涨跌停与可成交量（Provider 未提供，写入即等于把推导当事实）。测试覆盖派生 key 双侧拒绝、质量一致性、身份/指纹漂移与信任边界。
+- 剩余阻塞收敛为一条：交易事实的存储列与授权读取分流（需与 DATA-CTR-008 Manifest/授权语义一起改，并在真实 MariaDB 环境验证），之后才谈 Risk Facade/Stage 装配。
