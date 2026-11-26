@@ -47,7 +47,7 @@
 | # | 任务 | 主责 | 状态 | 退出条件 / 可验证证据 |
 |---|---|---|---|---|
 | 1.1 | Data 授权 Snapshot 读取链路核实：Port 已由 `quant.sma20` 完整注入 Worker 并真实消费 SnapshotRef | Data + Server | 已完成（代码证实 2026-11-26） | `quant_sma20_stage.go:63-84` 构造 `quantDataSnapshotAdapter` 注入 `CreateSMAService`；`researchflow_execution_composition.go:98-104,143-156` 装入 dispatcher/runtime；`quant_data_snapshot_adapter.go:119-120` 实现 Quant 侧 `CloseSeriesSnapshotReader`；旧 `AnalysisCollector` 是独立链、不被 Stage 使用。本项无需重复施工 |
-| 1.2 | 三因子生产化：MADistance20 / Momentum5 / Momentum20 从 `internal/quant/factor` 的 float64 纯函数补齐 QNT-CTR-004 Factor Schema/Golden、Decimal Registry 与精度策略、生产 Facade、结果持久化 | Quant | 未开始 | 三因子进入冻结 Schema/Golden 与生产 Registry；通过已授权 Close Series Snapshot 取精确输入；结果可授权读取。首版仅 Close-only，不等通用 OHLC DTO |
+| 1.2 | 三因子生产化：MADistance20 / Momentum5 / Momentum20 从 `internal/quant/factor` 的 float64 纯函数补齐 QNT-CTR-004 Factor Schema/Golden、Decimal Registry 与精度策略、生产 Facade、结果持久化 | Quant | 部分完成（地基组 2026-11-26） | 三因子进入冻结 Schema/Golden 与生产 Registry；通过已授权 Close Series Snapshot 取精确输入；结果可授权读取。首版仅 Close-only，不等通用 OHLC DTO。**已完成**：big.Rat 精确计算层（`decimal_factor.go`，scale=12/half-even）+ 测试 + 精度策略决策文档（`doc/quant/06`），factor 包与 quant 全包测试 PASS、race PASS。**剩余**：Factor Request/Result Schema/Golden、Decimal Registry Entry、生产 Facade、Stage Output、持久化 Payload、Run 关联、Server 装配与端到端证据 |
 | 1.3 | trend-following 策略评估：正式策略契约 + 版本化计算 + 信号证据；旧实现仅作事实记录，不自动成为新规范 | Quant | 未开始 | 有生产策略 Stage 与契约；不在 Researchflow 重写算法 |
 | 1.4 | tradability/risk 硬门禁：Quant 正式 RiskDecision 覆盖 unverified-tradability-block，不可被综合评分/LLM 覆盖 | Quant | 未开始 | 等价规则测试通过；缺证据继续 fail-closed；有正式规则装配来源 |
 | 1.5 | 输入质量门禁：Data 质量事实 → Quant 适用性正式映射；历史回放缺 PIT 证据继续阻断 | Data + Quant | 未开始 | 旧 corePass 规则不再充当全局门禁；质量与适用性由各 Owner 分别提供 |
@@ -57,6 +57,8 @@
 阶段 1 内部顺序：1.1 经代码核实已完成（授权 Snapshot 读取链路已由 `quant.sma20` 注入 Worker，无需重复施工）；1.2 是主线起手；1.3/1.4 依赖 1.2 的 Factor 结果契约；1.7 为占位退役，随阶段 4 一并删除。
 
 **1.1 缺口修正说明（2026-11-26）**：执行前核查推翻了清单初稿的前提——Data 授权 Snapshot Reader 已存在且已通过 `quant.sma20` 注入 Researchflow Worker，不是"尚未注入"。真正未闭环的不是 Port 注入，而是：① 除 `quant.sma20` 外没有消费 Close Series Snapshot 的股票研究 Stage/Template（归 2.1）；② 缺少把 SnapshotRef/Manifest/AuthorizationRef 绑定为 Researchflow 正式公开输入 DTO 的契约（迁移盘点 195 行）。因此阶段 1 的真实起手应直接落在 1.2 三因子生产化，不重复建设 Snapshot 注入链。
+
+**1.2 地基工作组进度（2026-11-26）**：精度路线经决策采用"Decimal + big.Rat / 固定 scale=12 / half-even"，而非照抄 SMA 的 exact（比率因子通常是无限循环小数，exact 会拒绝合法输入），也不是沿用现有 float64（违背精确 Snapshot 输入初衷）。决策依据与边界见 `doc/quant/06-因子精确计算精度策略决策.md`。本工作组只交付精确计算层 + 测试 + 决策文档，已通过针对性测试；生产接入与契约变更属后续工作组，QNT-CTR-003 仍为 `deferred`。按每组工作边界，本组到此提交并汇报，不连续推进剩余层。
 
 ## 4. 阶段 2 · 结果闭环与授权
 
