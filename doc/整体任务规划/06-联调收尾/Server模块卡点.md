@@ -282,7 +282,7 @@
 - RA009 Root Server Data 单入口代码验收已完成：精确 SHA `1e916220a8784ae840132ce0cec3b3654c6b9655` 的 Integration CI Run [44482650366](https://github.com/Kasign/stock_data_provider/actions/runs/44482650366) 全项 success。此前“等待最新精确 SHA CI”的段落是实施过程记录，不再代表当前代码状态。
 - RA011 Lifecycle Shutdown 预算修复已由精确 SHA `9a0680463f1ddea8f137e9009a6306f26e331ffd` 的 Integration CI Run [44489065474](https://github.com/Kasign/stock_data_provider/actions/runs/44489065474) 全项 success。
 - Server 当前实质卡点转为其他模块生产组合装配（Quant、LLM、Notification、Research Context/Stage）及 M6 真实目标环境验收；不再将 RA009/RA011 代码验收列为开放任务。
-- 统一责任与解锁顺序见 `doc/整体任务规划/05-治理与验收/RepairAll跨模块修复计划与进度.md` 第 28 节。
+- 统一责任与解锁顺序见本目录 [RepairAll跨模块修复计划与进度](./RepairAll跨模块修复计划与进度.md) 第 2 节“修复顺序”及后续日期记录（旧引用“第 28 节”为历史编号）。
 
 
 ## RepairAll Quant 生产装配复核更新（2026-11-20）

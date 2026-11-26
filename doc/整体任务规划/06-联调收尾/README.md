@@ -10,7 +10,7 @@
 - [Quant模块卡点](./Quant模块卡点.md)
 - [Research模块卡点](./Research模块卡点.md)
 - [Researchflow模块卡点](./Researchflow模块卡点.md)
-- [旧Analysis退役执行清单](./旧Analysis退役执行清单.md)：旧 Analysis 退役主线的唯一可勾选执行清单，按阶段列任务、状态、责任模块与退出条件。阶段依赖、当前卡点和执行口径以此为准。
+- [旧Analysis退役执行清单](./旧Analysis退役执行清单.md)：旧 Analysis 退役主线的唯一可勾选执行清单，按阶段列任务、状态、责任模块与退出条件。其阶段依赖与卡点仅在该主线内有效，不替代本目录主控文档的跨模块顺序与状态。
 - [WebUI旧Analysis到Researchflow迁移盘点](./WebUI旧Analysis到Researchflow迁移盘点.md)：旧 Task/Event API、新 Run/Stage API、认证边界、生产模板缺口和退役条件。退役事实与逐阶段能力映射是该清单的事实源。
 - [LLM模块卡点](./LLM模块卡点.md)
 - [Platform模块卡点](./Platform模块卡点.md)
@@ -18,6 +18,8 @@
 - [Notification模块卡点](./Notification模块卡点.md)
 
 模块卡点文档负责记录模块边界内的具体阻断、责任归属、依赖、证据和解锁条件；不得各自另立跨模块总计划。
+
+Web/WebUI 不另设联调卡点：开发期状态在 `doc/web/当前任务状态和进度.md`，联调期的跨模块顺序、状态与验收记录只在本目录主控文档的 P3 工作项及后续日期记录中维护。
 
 ## 后续联调规则
 

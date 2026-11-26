@@ -130,7 +130,7 @@ Root Server 的 Data Module 构造、共享资源注入、Migration Registry、I
 
 - RA009 Data Root 单入口代码与精确 SHA CI 已通过（Run 44482650366）；此前“等待最新 CI”的文字仅作为当时历史记录，不再是当前卡点。
 - 当前 Data 仍开放的实质卡点为 DATA-CTR-007、DATA-003～DATA-007 外部数据证据；M6 生产部署证据由 Server/部署运维负责，不重复归入 Data 代码待办。
-- 统一责任与解锁顺序见 `doc/整体任务规划/05-治理与验收/RepairAll跨模块修复计划与进度.md` 第 28 节。
+- 统一责任与解锁顺序见本目录 [RepairAll跨模块修复计划与进度](./RepairAll跨模块修复计划与进度.md) 第 2 节“修复顺序”及后续日期记录（旧引用“第 28 节”为历史编号）。
 
 
 ## RepairAll 阶段二：交易日历不可变版本实现（2026-11-19）
