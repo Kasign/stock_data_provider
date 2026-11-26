@@ -375,7 +375,7 @@ analysisd 当前明确要求 GO_CORE_TOKEN、PYTHON_BRIDGE_TOKEN、PYTHON_BRIDGE
 - [x] 纠正 Researchflow 的职责边界：内部执行编排，不直接暴露 HTTP；Root Server 唯一对外。
 - [x] 刷新 Researchflow 模板数量和旧链实际生产装配基线。
 - [x] 确认旧 Analysis 仍有 WebUI、Server Router、Bootstrap、Worker 和 Migration 实际引用。
-- [ ] 完成旧 Runner 逐阶段能力映射及目标 Owner 现有能力核对。
+- [x] 完成旧 Runner 逐阶段能力映射；已核对 Quant 现有因子/趋势/风险构件与生产 Stage 的差异。
 - [ ] 补齐完整股票研究模板、领域结果关联和 Server 授权读取。
 - [ ] WebUI 完成 Researchflow 迁移。
 - [ ] 删除旧 Analysis 生产链和相关代码。
@@ -421,3 +421,14 @@ analysisd 当前明确要求 GO_CORE_TOKEN、PYTHON_BRIDGE_TOKEN、PYTHON_BRIDGE
 - Run/Stage Output 与 Quant/Research 领域结果的强类型关联、授权读取，以及 WebUI 结果页所需的 Server DTO。
 
 据此，当前旧 Analysis 退役的真正阻塞不是 Task Queue 技术迁移，而是 Quant 领域能力尚未覆盖旧 Runner 的核心因子/策略/风险结果，Data Snapshot 尚未进入股票研究 Stage，且 Server/WebUI 尚未建立完整报告读取闭环。先删除旧链会导致原有研究结果功能消失，因此不执行这种破坏性删除。
+### 10.7 Quant 现有构件与生产接入的区别（补充核对）
+
+进一步核对 internal/quant 当前代码后，不能把“领域构件存在”误判为“旧 Analysis 能力已经迁移”：
+
+- internal/quant/factor 当前实现 Momentum20、Momentum60、Volatility20 等单证券时间序列计算；未发现与旧 trendFactor 完全对应的 MA20 距离 + 5 日收益 + 20 日收益组合结果 Facade，也未发现旧 trend-following 策略的等价正式生产 Stage。
+- internal/quant/trend 当前提供 Trend Result 强类型 DTO 与结构校验；这不是趋势推断算法或生产计算 Application。
+- internal/quant/risk 当前提供 RiskDecision、RuleSet、通用 RuleEvaluator 和决策聚合机制；规则由上层注入，Quant 不内置旧 unverified-tradability-block 的业务规则。当前需要确认并装配正式必需规则，不能仅因 RiskDecision 类型存在就认为硬门禁已迁移。
+- internal/quant/stage 当前仅有 SMA20 Stage；Server 的 Researchflow Execution Composition 只装配该 Stage。因子、趋势、风险相关的 Quant 包尚未形成对应 Researchflow Stage Executor、Output Registry、模板与授权结果读取闭环。
+- 因此本次阶段 A 的代码盘点已完成；阶段 B 不是简单把旧 service/wiring.go 移动到 Quant，而是由 Quant 明确正式指标/因子/策略/风险契约和版本，再由 Server 装配对应 Stage。旧 trend-following 只作为旧实现事实记录，不自动成为新策略规范。
+
+这项差异是当前退役的核心技术阻塞。完成目标 Owner 能力前，不删除旧 Runner 的因子/策略/风险结果路径，也不以 SMA20 单指标 Stage 代替完整研究流程。
