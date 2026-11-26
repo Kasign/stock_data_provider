@@ -104,6 +104,9 @@ func TestFeedCollectionAdapterUsesRunResourceSnapshot(t *testing.T) {
 	if err := ValidateFeedCollectionPayload(result.Payload); err != nil {
 		t.Fatalf("valid Feed output rejected: %v", err)
 	}
+	if err := ValidateFeedCollectionQualitySummary(result.QualitySummary); err != nil {
+		t.Fatalf("valid Feed quality summary rejected: %v", err)
+	}
 }
 
 func TestFeedCollectionAdapterReportsPartialAndRetryableFailures(t *testing.T) {
@@ -144,6 +147,9 @@ func TestFeedCollectionAdapterReportsPartialAndRetryableFailures(t *testing.T) {
 	}
 	if err := ValidateFeedCollectionPayload(result.Payload); err != nil {
 		t.Fatalf("valid partial Feed payload rejected: %v", err)
+	}
+	if err := ValidateFeedCollectionQualitySummary(result.QualitySummary); err != nil {
+		t.Fatalf("valid partial Feed quality summary rejected: %v", err)
 	}
 }
 
@@ -204,6 +210,9 @@ func TestFeedCollectionAdapterMarksAllRetryableFailuresForResearchflowRetry(t *t
 	if err := ValidateFeedCollectionPayload(result.Payload); err != nil {
 		t.Fatalf("valid retryable Feed payload rejected: %v", err)
 	}
+	if err := ValidateFeedCollectionQualitySummary(result.QualitySummary); err != nil {
+		t.Fatalf("valid retryable Feed quality summary rejected: %v", err)
+	}
 }
 
 func TestFeedCollectionAdapterRejectsInvalidResourceSnapshotAndHonorsCancellation(t *testing.T) {
@@ -226,6 +235,13 @@ func TestFeedCollectionAdapterRejectsInvalidResourceSnapshotAndHonorsCancellatio
 	}
 	if got := SourceEndpointResourceRef("source/a", "primary"); got != "" {
 		t.Fatalf("invalid Source ID produced resource ref %q", got)
+	}
+}
+
+func TestValidateFeedCollectionQualitySummaryRejectsStatusCounterDrift(t *testing.T) {
+	raw := json.RawMessage("{\"status\":\"success\",\"source_count\":1,\"success_source_count\":0,\"empty_source_count\":0,\"skipped_source_count\":0,\"failed_source_count\":1,\"collected_entry_count\":1,\"ingested_count\":0}")
+	if err := ValidateFeedCollectionQualitySummary(raw); err == nil {
+		t.Fatal("quality summary with successful status and failed source was accepted")
 	}
 }
 
