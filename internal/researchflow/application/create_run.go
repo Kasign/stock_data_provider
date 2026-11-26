@@ -161,6 +161,9 @@ func (s *CreateRunService) CreateRun(ctx context.Context, command domain.CreateR
 	if err != nil {
 		return CreateRunResult{}, fmt.Errorf("resolve workflow template: %w", err)
 	}
+	if err := validatePerStageParameterBinding(tmpl, resolved, command.Parameters); err != nil {
+		return CreateRunResult{}, err
+	}
 	resourceSnapshot, err := s.resourcePolicies.Resolve(ctx, resolved.ResourcePolicyRef)
 	if err != nil {
 		return CreateRunResult{}, fmt.Errorf("resolve Researchflow resource policy: %w", err)
@@ -241,6 +244,60 @@ func (s *CreateRunService) CreateRun(ctx context.Context, command domain.CreateR
 		return CreateRunResult{}, fmt.Errorf("persist create run atomically: %w", err)
 	}
 	return result, nil
+}
+
+// validatePerStageParameterBinding enforces the per-Stage envelope contract
+// before anything is persisted.
+//
+// The template's parameter Schema owns value constraints. This check owns the
+// binding between Stage codes and subtrees, which no Schema can express:
+//   - the key set must not name a Stage the template does not declare, so a
+//     typo cannot silently leave a Stage without parameters;
+//   - every Stage that will actually execute must be addressed. Stages that the
+//     applicability rules exclude are not executable, so their subtree is
+//     optional and a caller that always sends every declared Stage is still
+//     accepted.
+//
+// Rejecting here is fail-fast: the alternative is discovering the miss at
+// execution time, after the Run row exists.
+func validatePerStageParameterBinding(tmpl template.WorkflowTemplate, resolved template.ResolvedTemplate, parameters json.RawMessage) error {
+	if tmpl.ParameterScope != template.ParameterScopePerStage {
+		return nil
+	}
+	split, err := template.SplitPerStageParameters(parameters)
+	if err != nil {
+		return fmt.Errorf("%w: %v", domain.ErrInvalidCommand, err)
+	}
+	declared := make(map[string]struct{}, len(tmpl.Stages))
+	for _, stage := range tmpl.Stages {
+		declared[stage.Code] = struct{}{}
+	}
+	unknown := make([]string, 0, len(split))
+	for code := range split {
+		if _, ok := declared[code]; !ok {
+			unknown = append(unknown, code)
+		}
+	}
+	missing := make([]string, 0, len(resolved.Stages))
+	for _, stage := range resolved.Stages {
+		if stage.InitialStatus != domain.StagePending {
+			continue
+		}
+		if _, ok := split[stage.Definition.Code]; !ok {
+			missing = append(missing, stage.Definition.Code)
+		}
+	}
+	sort.Strings(unknown)
+	sort.Strings(missing)
+	if len(unknown) > 0 {
+		return fmt.Errorf("%w: per-Stage parameters address stages the template does not declare: %s",
+			domain.ErrInvalidCommand, strings.Join(unknown, ","))
+	}
+	if len(missing) > 0 {
+		return fmt.Errorf("%w: per-Stage parameters are missing executable stages: %s",
+			domain.ErrInvalidCommand, strings.Join(missing, ","))
+	}
+	return nil
 }
 
 func cloneString(value *string) *string {

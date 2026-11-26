@@ -270,6 +270,66 @@ func TestWorkerPassesOwnedResourcePolicySnapshotToExecutor(t *testing.T) {
 	}
 }
 
+func TestWorkerPassesPerStageSubtreeVerbatimToExecutor(t *testing.T) {
+	store, result := newWorkerFixture()
+	store.snapshot.ParameterScope = template.ParameterScopePerStage
+	store.snapshot.Stage.Code = "quant"
+	store.snapshot.Parameters = []byte(`{"stages":{"quant":{"symbol":"AAA","limit":20},"other":{"z":1}}}`)
+	captured := &StageExecutionRequest{}
+	worker := newWorker(t, store, result)
+	worker.executor = workerExecutorFake{result: result, captured: captured}
+	if _, err := worker.Execute(context.Background(), "run-1", "stage-1", "attempt-new"); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := string(captured.Parameters), `{"symbol":"AAA","limit":20}`; got != want {
+		t.Fatalf("executor parameters = %s, want addressed subtree %s", got, want)
+	}
+}
+
+func TestWorkerPassesTemplateScopeParametersVerbatim(t *testing.T) {
+	store, result := newWorkerFixture()
+	// Empty scope is the historical template scope: the whole document is delivered.
+	store.snapshot.ParameterScope = ""
+	store.snapshot.Parameters = []byte(`{"stages":{"quant":{"symbol":"AAA"}},"symbol":"BBB"}`)
+	captured := &StageExecutionRequest{}
+	worker := newWorker(t, store, result)
+	worker.executor = workerExecutorFake{result: result, captured: captured}
+	if _, err := worker.Execute(context.Background(), "run-1", "stage-1", "attempt-new"); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := string(captured.Parameters), string(store.snapshot.Parameters); got != want {
+		t.Fatalf("template scope parameters changed: got %s want %s", got, want)
+	}
+}
+
+func TestWorkerFailsClosedWhenPerStageSubtreeMissing(t *testing.T) {
+	store, result := newWorkerFixture()
+	store.snapshot.ParameterScope = template.ParameterScopePerStage
+	store.snapshot.Stage.Code = "quant"
+	store.snapshot.Parameters = []byte(`{"stages":{"other":{"z":1}}}`)
+	captured := &StageExecutionRequest{}
+	worker := newWorker(t, store, result)
+	worker.executor = workerExecutorFake{result: result, captured: captured}
+	if _, err := worker.Execute(context.Background(), "run-1", "stage-1", "attempt-new"); err != nil {
+		t.Fatalf("a missing subtree must be committed as a failed Stage, not a Worker error: %v", err)
+	}
+	if captured.Run.Ref != "" {
+		t.Fatal("executor must not run when the per-Stage subtree is missing")
+	}
+	if store.commits != 1 || store.commit.AttemptStatus != domain.AttemptFailed {
+		t.Fatalf("missing subtree must commit a failed Attempt: commits=%d status=%s", store.commits, store.commit.AttemptStatus)
+	}
+	codeFound := false
+	for _, code := range store.commit.Stage.ReasonCodes {
+		if code == ReasonCodeStageParametersMissing {
+			codeFound = true
+		}
+	}
+	if !codeFound {
+		t.Fatalf("missing subtree reason code not committed: %v", store.commit.Stage.ReasonCodes)
+	}
+}
+
 func TestWorkerExecuteClaimsExecutesAndCommits(t *testing.T) {
 	store, result := newWorkerFixture()
 	captured := &StageExecutionRequest{}

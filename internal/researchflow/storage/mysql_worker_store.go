@@ -137,8 +137,13 @@ func (r *MySQLRunRepository) LoadStageExecutionSnapshot(
 	return application.StageExecutionSnapshot{
 		Run: run, Stage: stage, AuthenticatedCallerRef: authenticatedCallerRef,
 		OutputRegistryVersion: resolved.OutputRegistryVersion,
-		Parameters:            parameters, InputSnapshotRefs: append([]string(nil), run.InputSnapshotRefs...),
-		RetryPolicy: retryPolicy, ResourcePolicy: cloneStorageResourcePolicySnapshot(resolved.ResourcePolicy),
+		// Parameter scope comes from the persisted resolved template, never from
+		// the mutable registry, so a template edit cannot change how an existing
+		// Run's parameters are routed.
+		ParameterScope:    resolved.ParameterScope,
+		Parameters:        parameters,
+		InputSnapshotRefs: append([]string(nil), run.InputSnapshotRefs...),
+		RetryPolicy:       retryPolicy, ResourcePolicy: cloneStorageResourcePolicySnapshot(resolved.ResourcePolicy),
 	}, nil
 }
 

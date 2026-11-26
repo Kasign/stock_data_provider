@@ -371,3 +371,80 @@ func TestCreateRunGeneratesCurrentPITAndAbsoluteDeadlineFromDatabaseClock(t *tes
 		t.Fatalf("deadline_at = %s, want %s", got.Run.DeadlineAt, wantDeadline)
 	}
 }
+
+func perStageTemplate() template.WorkflowTemplate {
+	tmpl := validTemplate()
+	tmpl.ParameterScope = template.ParameterScopePerStage
+	return tmpl
+}
+
+func TestCreateRunPerStageAcceptsCompleteBinding(t *testing.T) {
+	now := time.Date(2026, 11, 6, 1, 0, 0, 0, time.UTC)
+	repo := &repositoryStub{}
+	service, err := newService(t, repo, &idsStub{}, &templatesStub{value: perStageTemplate()}, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd := command(now)
+	cmd.Parameters = json.RawMessage(`{"stages":{"quote":{"symbol":"AAA"},"research":{"symbol":"BBB"}}}`)
+	got, err := service.CreateRun(context.Background(), cmd)
+	if err != nil {
+		t.Fatalf("complete per-Stage binding must be accepted: %v", err)
+	}
+	if len(got.Stages) != 2 {
+		t.Fatalf("expected both executable Stages, got %d", len(got.Stages))
+	}
+	if repo.created == nil || repo.created.ResolvedTemplate.ParameterScope != template.ParameterScopePerStage {
+		t.Fatal("resolved template must persist the per-Stage scope for Worker dispatch")
+	}
+}
+
+func TestCreateRunPerStageRejectsMissingExecutableStage(t *testing.T) {
+	now := time.Date(2026, 11, 6, 1, 0, 0, 0, time.UTC)
+	repo := &repositoryStub{}
+	service, err := newService(t, repo, &idsStub{}, &templatesStub{value: perStageTemplate()}, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd := command(now)
+	cmd.Parameters = json.RawMessage(`{"stages":{"quote":{"symbol":"AAA"}}}`)
+	_, err = service.CreateRun(context.Background(), cmd)
+	if !errors.Is(err, domain.ErrInvalidCommand) || !strings.Contains(err.Error(), "research") {
+		t.Fatalf("missing executable Stage must be rejected naming its code: %v", err)
+	}
+	if repo.created != nil {
+		t.Fatal("invalid per-Stage binding must not persist a Run")
+	}
+}
+
+func TestCreateRunPerStageRejectsUnknownStage(t *testing.T) {
+	now := time.Date(2026, 11, 6, 1, 0, 0, 0, time.UTC)
+	repo := &repositoryStub{}
+	service, err := newService(t, repo, &idsStub{}, &templatesStub{value: perStageTemplate()}, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd := command(now)
+	cmd.Parameters = json.RawMessage(`{"stages":{"quote":{"symbol":"AAA"},"research":{"symbol":"BBB"},"ghost":{"x":1}}}`)
+	_, err = service.CreateRun(context.Background(), cmd)
+	if !errors.Is(err, domain.ErrInvalidCommand) || !strings.Contains(err.Error(), "ghost") {
+		t.Fatalf("undeclared Stage subtree must be rejected naming its code: %v", err)
+	}
+	if repo.created != nil {
+		t.Fatal("invalid per-Stage binding must not persist a Run")
+	}
+}
+
+func TestCreateRunTemplateScopeIgnoresPerStageBindingCheck(t *testing.T) {
+	now := time.Date(2026, 11, 6, 1, 0, 0, 0, time.UTC)
+	repo := &repositoryStub{}
+	service, err := newService(t, repo, &idsStub{}, &templatesStub{value: validTemplate()}, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd := command(now)
+	cmd.Parameters = json.RawMessage(`{"stages":{"quote":{"symbol":"AAA"}}}`)
+	if _, err := service.CreateRun(context.Background(), cmd); err != nil {
+		t.Fatalf("template scope must not apply the per-Stage binding check: %v", err)
+	}
+}

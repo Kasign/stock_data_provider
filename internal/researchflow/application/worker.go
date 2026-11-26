@@ -20,15 +20,24 @@ var (
 	ErrWorkerCancelled = errors.New("Researchflow run cancelled")
 )
 
+// ReasonCodeStageParametersMissing marks a Stage whose per-Stage parameter
+// subtree was absent from the persisted Run snapshot. It is deliberately not
+// retryable: no retry can add a subtree that was never persisted.
+const ReasonCodeStageParametersMissing = "stage_parameters_missing"
+
 type StageExecutionSnapshot struct {
 	Run                    domain.Run
 	Stage                  domain.Stage
 	AuthenticatedCallerRef string
 	Parameters             []byte
-	InputSnapshotRefs      []string
-	RetryPolicy            template.RetryPolicy
-	OutputRegistryVersion  string
-	ResourcePolicy         resourcepolicy.Snapshot
+	// ParameterScope is the immutable template parameter scope persisted at Run
+	// creation. The empty value means template scope, which matches every Run
+	// created before the field existed.
+	ParameterScope        string
+	InputSnapshotRefs     []string
+	RetryPolicy           template.RetryPolicy
+	OutputRegistryVersion string
+	ResourcePolicy        resourcepolicy.Snapshot
 }
 
 type WorkerResultCommit struct {
@@ -249,20 +258,33 @@ func (w *Worker) Execute(ctx context.Context, runRef, stageRef, attemptRef strin
 	heartbeatErr := make(chan error, 1)
 	go w.heartbeat(runCtx, cancelExecutionCause, snapshot, attempt, stopHeartbeat, heartbeatDone, heartbeatErr)
 
-	request := StageExecutionRequest{
-		Run:                    snapshot.Run,
-		Stage:                  snapshot.Stage,
-		Attempt:                attempt,
-		AuthenticatedCallerRef: snapshot.AuthenticatedCallerRef,
-		Parameters:             append([]byte(nil), snapshot.Parameters...),
-		InputSnapshotRefs:      append([]string(nil), snapshot.InputSnapshotRefs...),
-		SystemAsOf:             snapshot.Run.SystemAsOf,
-		DeadlineAt:             snapshot.Run.DeadlineAt,
-		AttemptDeadlineAt:      attemptDeadline,
-		CorrelationID:          snapshot.Run.CorrelationID,
-		ResourcePolicy:         cloneResourcePolicySnapshot(snapshot.ResourcePolicy),
+	stageParameters, parametersErr := template.StageParameters(snapshot.ParameterScope, snapshot.Parameters, snapshot.Stage.Code)
+	var result StageExecutionResult
+	var executeErr error
+	if parametersErr != nil {
+		// 参数无法切片说明持久化快照与模板契约不一致。绝不能传空参数交给执行器，
+		// 否则会被解码成"字段缺失"，把配置错误伪装成业务参数错误。
+		result = StageExecutionResult{
+			AttemptStatus: domain.AttemptFailed,
+			StageStatus:   domain.StageRetryWait,
+			ReasonCodes:   []string{ReasonCodeStageParametersMissing},
+		}
+	} else {
+		request := StageExecutionRequest{
+			Run:                    snapshot.Run,
+			Stage:                  snapshot.Stage,
+			Attempt:                attempt,
+			AuthenticatedCallerRef: snapshot.AuthenticatedCallerRef,
+			Parameters:             stageParameters,
+			InputSnapshotRefs:      append([]string(nil), snapshot.InputSnapshotRefs...),
+			SystemAsOf:             snapshot.Run.SystemAsOf,
+			DeadlineAt:             snapshot.Run.DeadlineAt,
+			AttemptDeadlineAt:      attemptDeadline,
+			CorrelationID:          snapshot.Run.CorrelationID,
+			ResourcePolicy:         cloneResourcePolicySnapshot(snapshot.ResourcePolicy),
+		}
+		result, executeErr = w.executor.ExecuteStage(execCtx, request)
 	}
-	result, executeErr := w.executor.ExecuteStage(execCtx, request)
 	close(stopHeartbeat)
 	<-heartbeatDone
 	select {

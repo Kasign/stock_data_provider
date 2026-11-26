@@ -1,6 +1,7 @@
 package template
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -50,12 +51,27 @@ type StageDefinition struct {
 	Propagation   PropagationPolicy `json:"propagation"`
 	GateType      string            `json:"gate_type,omitempty"`
 }
+
+// Parameter scope values. The zero value means ParameterScopeTemplate so that
+// every template published before this field existed keeps its exact
+// serialized bytes and therefore its exact fingerprint.
+const (
+	// ParameterScopeTemplate passes the single parameter document verbatim to
+	// every Stage. This is the historical behaviour.
+	ParameterScopeTemplate = "template"
+	// ParameterScopePerStage requires one envelope document
+	// {"stages":{"<stage_code>":{...}}} and delivers only the addressed subtree
+	// to each Stage.
+	ParameterScopePerStage = "per_stage"
+)
+
 type WorkflowTemplate struct {
 	Ref                   string            `json:"template_ref"`
 	Version               string            `json:"version"`
 	RequiresHardRiskGate  bool              `json:"requires_hard_risk_gate"`
 	AllowEmptyInputs      bool              `json:"allow_empty_inputs"`
 	ParameterSchemaRef    string            `json:"parameter_schema_ref"`
+	ParameterScope        string            `json:"parameter_scope,omitempty"`
 	OutputRegistryVersion string            `json:"output_registry_version"`
 	ResourcePolicyRef     string            `json:"resource_policy_ref"`
 	Stages                []StageDefinition `json:"stages"`
@@ -88,6 +104,7 @@ type ResolvedTemplate struct {
 	Fingerprint           string
 	RequiresHardRiskGate  bool
 	AllowEmptyInputs      bool
+	ParameterScope        string `json:"parameter_scope,omitempty"`
 	OutputRegistryVersion string
 	ResourcePolicyRef     string
 	ResourcePolicy        resourcepolicy.Snapshot `json:"resource_policy_snapshot"`
@@ -105,6 +122,13 @@ func Validate(t WorkflowTemplate, gates HardRiskGateRegistry) error {
 		strings.TrimSpace(t.ParameterSchemaRef) == "" || strings.TrimSpace(t.OutputRegistryVersion) == "" ||
 		strings.TrimSpace(t.ResourcePolicyRef) == "" {
 		return fmt.Errorf("%w: template identity, schemas, resource policy and stages are required", ErrInvalidTemplate)
+	}
+	// An explicit scope is required so that parameter routing never depends on
+	// sniffing the shape of a business document.
+	switch t.ParameterScope {
+	case "", ParameterScopeTemplate, ParameterScopePerStage:
+	default:
+		return fmt.Errorf("%w: unsupported parameter scope %q", ErrInvalidTemplate, t.ParameterScope)
 	}
 	byCode := make(map[string]StageDefinition, len(t.Stages))
 	for _, stage := range t.Stages {
@@ -275,6 +299,69 @@ func BindResourcePolicySnapshot(resolved ResolvedTemplate, snapshot resourcepoli
 	return resolved, nil
 }
 
+var ErrStageParameters = errors.New("workflow stage parameters are invalid")
+
+// SplitPerStageParameters parses the per-Stage parameter envelope and returns
+// the exact subtree bytes addressed to each Stage code. It is the single
+// definition of the envelope shape, shared by CreateRun validation and Worker
+// dispatch, so the two can never disagree about what a subtree is.
+//
+// The returned values are copies of the envelope bytes: callers cannot mutate
+// the persisted document, and byte identity with the envelope is preserved for
+// downstream content-addressed validation.
+func SplitPerStageParameters(parameters json.RawMessage) (map[string]json.RawMessage, error) {
+	var root map[string]json.RawMessage
+	if err := json.Unmarshal(parameters, &root); err != nil {
+		return nil, fmt.Errorf("%w: per-Stage parameters must be a JSON object", ErrStageParameters)
+	}
+	if len(root) != 1 {
+		return nil, fmt.Errorf("%w: per-Stage parameters must contain exactly the stages key", ErrStageParameters)
+	}
+	rawStages, ok := root["stages"]
+	if !ok {
+		return nil, fmt.Errorf("%w: per-Stage parameters must contain exactly the stages key", ErrStageParameters)
+	}
+	if trimmed := bytes.TrimSpace(rawStages); len(trimmed) == 0 || trimmed[0] != '{' {
+		return nil, fmt.Errorf("%w: stages must be a JSON object", ErrStageParameters)
+	}
+	var stages map[string]json.RawMessage
+	if err := json.Unmarshal(rawStages, &stages); err != nil {
+		return nil, fmt.Errorf("%w: stages must be a JSON object", ErrStageParameters)
+	}
+	split := make(map[string]json.RawMessage, len(stages))
+	for code, raw := range stages {
+		if strings.TrimSpace(code) == "" || strings.TrimSpace(code) != code {
+			return nil, fmt.Errorf("%w: stage codes must be non-empty without surrounding whitespace", ErrStageParameters)
+		}
+		trimmed := bytes.TrimSpace(raw)
+		// A non-empty object is required: an empty subtree is indistinguishable
+		// from a caller that forgot to fill it in, and per-Stage dispatch has no
+		// other signal to tell those apart.
+		if len(trimmed) == 0 || trimmed[0] != '{' || bytes.Equal(trimmed, []byte("{}")) {
+			return nil, fmt.Errorf("%w: stage %q parameters must be a non-empty JSON object", ErrStageParameters, code)
+		}
+		split[code] = json.RawMessage(append([]byte(nil), trimmed...))
+	}
+	return split, nil
+}
+
+// StageParameters returns the parameter document delivered to one Stage under
+// the template's parameter scope.
+func StageParameters(scope string, parameters json.RawMessage, stageCode string) (json.RawMessage, error) {
+	if scope != ParameterScopePerStage {
+		return append(json.RawMessage(nil), parameters...), nil
+	}
+	split, err := SplitPerStageParameters(parameters)
+	if err != nil {
+		return nil, err
+	}
+	subtree, ok := split[stageCode]
+	if !ok {
+		return nil, fmt.Errorf("%w: stage %q has no parameter subtree", ErrStageParameters, stageCode)
+	}
+	return subtree, nil
+}
+
 func cloneStageDefinition(stage StageDefinition) StageDefinition {
 	stage.Dependencies = append([]string(nil), stage.Dependencies...)
 	sort.Strings(stage.Dependencies)
@@ -321,6 +408,7 @@ func Resolve(ctx context.Context, t WorkflowTemplate, parameters json.RawMessage
 	resolved := ResolvedTemplate{
 		Ref: t.Ref, Version: t.Version, TemplateFingerprint: templateFingerprint, Fingerprint: fingerprint,
 		RequiresHardRiskGate: t.RequiresHardRiskGate, AllowEmptyInputs: t.AllowEmptyInputs,
+		ParameterScope:        t.ParameterScope,
 		OutputRegistryVersion: t.OutputRegistryVersion, ResourcePolicyRef: t.ResourcePolicyRef,
 		ParameterSchema: parameterSchema,
 	}
