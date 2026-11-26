@@ -109,14 +109,14 @@ func TestNewsFeedCollectionAdapterMariaDBIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create StaticSourceCatalog: %v", err)
 	}
-	feedBody := \`<?xml version="1.0"?>
+	feedBody := `<?xml version="1.0"?>
 		<rss version="2.0"><channel><title>Integration Feed</title>
 		<item><guid isPermaLink="false">native-article-1</guid>
 		<title>真实 Feed 入库验证</title>
 		<link>https://news.example/article/1</link>
 		<description>仅授权摘要应被持久化</description>
 		<pubDate>Wed, 25 Nov 2026 10:00:00 GMT</pubDate></item>
-		</channel></rss>\`
+		</channel></rss>`
 	collector, err := newsapp.NewCollectSourceWithPolicyResolver(
 		catalog, feedStageMariaDBTransport{body: feedBody}, repository,
 	)
@@ -134,8 +134,8 @@ func TestNewsFeedCollectionAdapterMariaDBIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create FeedCollectionAdapter: %v", err)
 	}
-	resourceRef := SourceEndpointResourceRef(sourceID, endpointID)
-	result, err := adapter.Execute(ctx, "run-feed-stage/attempt-1", CollectFeedsStageCode, []string{resourceRef})
+	resourceRef := SourceEndpointSnapshotRef(registration)
+	result, err := adapter.Execute(ctx, "run-feed-stage", CollectFeedsStageCode, []string{resourceRef})
 	if err != nil {
 		t.Fatalf("execute formal Feed collection Stage: %v", err)
 	}
