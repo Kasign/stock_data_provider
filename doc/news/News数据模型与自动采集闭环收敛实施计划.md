@@ -206,23 +206,28 @@ P0-1 全量依赖审计已完成；本计划后续只对具体字段、SQL 和�
 
 ### P1-1：职责清理
 
-状态：IN_PROGRESS（旧关系/身份历史/双阶段写入代码已删除，待残留检查）
+状态：DONE
 
-1. 移除 News 证券/行业关系断言职责。
-2. 删除转载关系 Domain/Application/Repository/表。
-3. 删除身份状态历史能力。
-4. 删除双阶段写入 API、Port、DTO 和测试。
-5. 确保 Observation Retention 不处理 Researchflow StageOutput。
+已完成代码与文档残留核查：
+
+1. News 不再拥有证券/行业关系断言职责。
+2. 转载关系 Domain/Application/Repository/表及对应实现文件已删除。
+3. 身份状态历史表、类型、Repository 和调用路径已删除。
+4. 双阶段 ResearchUpdate API、Port、DTO、测试和调用路径已删除。
+5. Observation Retention 只处理 News Observation/Evidence 载荷，不管理 Researchflow StageOutput。
+6. README 指向不存在任务历史文件的链接已清理；核心当前契约未发现旧实现调用残留。
 
 ### P1-2：全量回归与验收
 
-阶段性状态：P0-2/P0-3 对应的 News MariaDB、根模块 Go Test/Race/Vet 和 Integration CI 已全部通过；P0-4 完成后必须重新执行最终全量回归。
+状态：IN_PROGRESS
+
+P0-2/P0-3 对应的 News MariaDB、根模块 Go Test/Race/Vet 和 Integration CI 已通过；P0-4 生产装配已完成代码与测试实现，仍需在当前最终代码 SHA 上统一执行全量回归。
 
 1. News 全量测试、Race Detector、Vet。
 2. MariaDB Migration、Schema、唯一约束、事务、并发和回滚测试。
 3. Research/PIT/Researchflow/Quant 消费者回归。
 4. Server 启动装配和 Feed 端到端验收。
-5. 更新当前状态和任务历史，记录精确 SHA 与 CI Run。
+5. 更新当前状态和模块总任务规划，记录精确 SHA 与 CI Run。
 6. CI 未完成不得标记 DONE。
 
 ## 6. 不实施的能力
