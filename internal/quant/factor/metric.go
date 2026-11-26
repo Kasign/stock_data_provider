@@ -81,10 +81,6 @@ func NewQuantMetric(result Result, systemAsOf time.Time, quality QualityStatus, 
 
 func factorPeriod(code string) (string, int, bool) {
 	switch code {
-	case "momentum_5d":
-	\treturn "5d", 6, true
-	case "ma20_distance":
-	\treturn "20d", 20, true
 	case "momentum_20d":
 		return "20d", 21, true
 	case "momentum_60d":
