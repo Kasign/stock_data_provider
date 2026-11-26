@@ -31,7 +31,7 @@ func (s *Store) PublishDataAuthorizationPolicyVersion(
 	if s == nil || s.db == nil || ctx == nil {
 		return ErrDataAuthorizationPolicyUnavailable
 	}
-	if _, err := authorization.DecodePolicyVersion(value); err != nil {
+	if _, err := authorization.DecodePolicyVersionFor(value, value.PolicyRef); err != nil {
 		return err
 	}
 	if audit.ActorRef != "principal:owner" || !observability.ValidRequestID(audit.RequestID) ||
@@ -127,8 +127,15 @@ func nullablePolicyVersion(value string) any {
 	return value
 }
 
+// ResolveCurrentDataAuthorizationPolicy 保持日线数据类的历史语义。
 func (s *Store) ResolveCurrentDataAuthorizationPolicy(ctx context.Context) (authorization.CurrentPolicy, error) {
-	if s == nil || s.db == nil || ctx == nil {
+	return s.ResolveCurrentDataAuthorizationPolicyByRef(ctx, authorization.DailyBarsV2PolicyRef)
+}
+
+// ResolveCurrentDataAuthorizationPolicyByRef 按数据类解析当前策略。
+// 未登记的数据类与尚未发布的策略都返回错误，不合成默认策略。
+func (s *Store) ResolveCurrentDataAuthorizationPolicyByRef(ctx context.Context, policyRef string) (authorization.CurrentPolicy, error) {
+	if s == nil || s.db == nil || ctx == nil || !authorization.ValidDataPolicyRef(policyRef) {
 		return authorization.CurrentPolicy{}, ErrDataAuthorizationPolicyUnavailable
 	}
 	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead, ReadOnly: true})
@@ -142,8 +149,8 @@ func (s *Store) ResolveCurrentDataAuthorizationPolicy(ctx context.Context) (auth
 	var currentVersion string
 	err = tx.QueryRowContext(ctx, `SELECT policy_version
 FROM market_data_current_authorization_policy_versions
-WHERE policy_type=? AND policy_ref=?`,
-		authorization.DataAccessPolicyType, authorization.DailyBarsV2PolicyRef).
+	WHERE policy_type=? AND policy_ref=?`,
+		authorization.DataAccessPolicyType, policyRef).
 		Scan(&currentVersion)
 	if errors.Is(err, sql.ErrNoRows) {
 		return authorization.CurrentPolicy{}, app.ErrDataAuthorizationPolicyNotPublished
@@ -158,7 +165,7 @@ WHERE policy_type=? AND policy_ref=?`,
 payload_json, payload_hash, created_at
 FROM market_data_authorization_policy_versions
 WHERE policy_type=? AND policy_ref=? AND policy_version=?`,
-		authorization.DataAccessPolicyType, authorization.DailyBarsV2PolicyRef, currentVersion).
+		authorization.DataAccessPolicyType, policyRef, currentVersion).
 		Scan(&value.PolicyType, &value.PolicyRef, &value.PolicyVersion, &value.Payload, &value.PayloadHash, &createdAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return authorization.CurrentPolicy{}, ErrDataAuthorizationPolicyUnavailable
@@ -167,7 +174,7 @@ WHERE policy_type=? AND policy_ref=? AND policy_version=?`,
 		return authorization.CurrentPolicy{}, fmt.Errorf("%w: %v", ErrDataAuthorizationPolicyUnavailable, err)
 	}
 	value.CreatedAt = createdAt.UTC()
-	policy, err := authorization.DecodePolicyVersion(value)
+	policy, err := authorization.DecodePolicyVersionFor(value, policyRef)
 	if err != nil {
 		return authorization.CurrentPolicy{}, fmt.Errorf("%w: %v", ErrDataAuthorizationPolicyUnavailable, err)
 	}

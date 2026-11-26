@@ -13,8 +13,24 @@ import (
 const (
 	DataAccessPolicyType          = "data_access"
 	DailyBarsV2PolicyRef          = "dailybars-v2-access"
+	SecurityStatusFactsPolicyRef  = "security-status-facts-access"
 	DataAccessPolicySchemaVersion = "1.0.0"
 )
+
+// dataPolicyRefs 是允许发布与解析的数据类策略引用闭集。
+//
+// 不同数据类必须各有独立策略引用：日线访问权限不得隐含交易状态事实访问权限。
+// 新增数据类必须在此登记，否则发布、解析与授权读取一律失败（fail-closed）。
+var dataPolicyRefs = map[string]struct{}{
+	DailyBarsV2PolicyRef:         {},
+	SecurityStatusFactsPolicyRef: {},
+}
+
+// ValidDataPolicyRef 判断策略引用是否属于已登记的数据类。
+func ValidDataPolicyRef(value string) bool {
+	_, ok := dataPolicyRefs[value]
+	return ok
+}
 
 type PolicyStatus string
 
@@ -61,8 +77,18 @@ type AccessRequest struct {
 	Now         time.Time
 }
 
+// DecodePolicyVersion 保持日线数据类的历史语义：只接受 dailybars-v2-access。
+// 需要其他数据类时使用 DecodePolicyVersionFor，避免调用方误用默认引用。
 func DecodePolicyVersion(value PolicyVersion) (DataAccessPolicy, error) {
-	if value.PolicyType != DataAccessPolicyType || value.PolicyRef != DailyBarsV2PolicyRef ||
+	return DecodePolicyVersionFor(value, DailyBarsV2PolicyRef)
+}
+
+// DecodePolicyVersionFor 按期望的数据类策略引用解码。
+// expectedRef 必须已登记，且必须与 value.PolicyRef 完全一致：
+// 只校验其中之一会让一个数据类的策略被当成另一个数据类使用。
+func DecodePolicyVersionFor(value PolicyVersion, expectedRef string) (DataAccessPolicy, error) {
+	if !ValidDataPolicyRef(expectedRef) || value.PolicyRef != expectedRef ||
+		value.PolicyType != DataAccessPolicyType ||
 		!validOpaque(value.PolicyVersion) || value.CreatedAt.IsZero() || value.CreatedAt.Location() != time.UTC ||
 		len(value.Payload) == 0 || len(value.Payload) > 64*1024 || len(value.PayloadHash) != 64 {
 		return DataAccessPolicy{}, ErrPolicyInvalid

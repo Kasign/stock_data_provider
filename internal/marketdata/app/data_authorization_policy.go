@@ -27,6 +27,14 @@ type DataAuthorizationPolicyRepository interface {
 	ResolveCurrentDataAuthorizationPolicy(context.Context) (authorization.CurrentPolicy, error)
 }
 
+// DataAuthorizationPolicyRefResolver 按数据类解析当前策略。
+//
+// 它与 DataAuthorizationPolicyRepository 分开定义：既有实现只需实现日线数据类，
+// 未实现本接口的仓储在签发其他数据类授权时必须失败（fail-closed），而不是回落到日线策略。
+type DataAuthorizationPolicyRefResolver interface {
+	ResolveCurrentDataAuthorizationPolicyByRef(context.Context, string) (authorization.CurrentPolicy, error)
+}
+
 // DataAuthorizationDecision 是 Data Owner 授权决策的不可变持久化对象。
 type DataAuthorizationDecision struct {
 	AuthorizationRef json.RawMessage

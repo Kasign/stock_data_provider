@@ -1,6 +1,7 @@
 package bootstrap
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -15,6 +16,8 @@ type dataPolicyHTTPHandler struct {
 	authenticator ownerSessionRequestAuthenticator
 	cookieName    string
 	manager       dataAuthorizationPolicyManager
+	// policyRef 为空表示日线数据类（保持既有路由与语义不变）。
+	policyRef string
 }
 
 type dataPolicyPublishRequest struct {
@@ -56,9 +59,18 @@ func newDataPolicyHTTPHandlerWithDependencies(
 		cookieName:    cookieName,
 		manager:       manager,
 	}
+	factsHandler := &dataPolicyHTTPHandler{
+		authenticator: handler.authenticator,
+		cookieName:    handler.cookieName,
+		manager:       handler.manager,
+		policyRef:     marketdataauthorization.SecurityStatusFactsPolicyRef,
+	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/v1/owner/data/daily-bars-access-policy", handler.current)
 	mux.HandleFunc("POST /api/v1/owner/data/daily-bars-access-policy/versions", handler.publish)
+	// 交易状态事实是独立数据类：策略必须分开发布、分开撤销。
+	mux.HandleFunc("GET /api/v1/owner/data/security-status-facts-access-policy", factsHandler.current)
+	mux.HandleFunc("POST /api/v1/owner/data/security-status-facts-access-policy/versions", factsHandler.publish)
 	return mux, nil
 }
 
@@ -67,7 +79,7 @@ func (h *dataPolicyHTTPHandler) current(w http.ResponseWriter, r *http.Request) 
 	if !ok {
 		return
 	}
-	current, err := h.manager.Current(authenticated.Context())
+	current, err := h.currentPolicy(authenticated.Context())
 	if err != nil {
 		h.writePolicyError(w, r, err)
 		return
@@ -99,7 +111,7 @@ func (h *dataPolicyHTTPHandler) publish(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 	}
-	published, err := h.manager.Publish(
+	published, err := h.publishPolicy(
 		authenticated.Context(), expectedVersion, input.PolicyVersion, input.Policy,
 	)
 	if err != nil {
@@ -107,6 +119,32 @@ func (h *dataPolicyHTTPHandler) publish(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	h.writePolicy(w, http.StatusCreated, published)
+}
+
+// currentPolicy 按路由绑定的数据类读取当前策略。
+// 日线保持既有调用；其他数据类要求 manager 显式支持，否则报不可用而不是复用日线策略。
+func (h *dataPolicyHTTPHandler) currentPolicy(ctx context.Context) (marketdataauthorization.CurrentPolicy, error) {
+	if h.policyRef == "" || h.policyRef == marketdataauthorization.DailyBarsV2PolicyRef {
+		return h.manager.Current(ctx)
+	}
+	refManager, ok := h.manager.(dataAuthorizationPolicyRefManager)
+	if !ok {
+		return marketdataauthorization.CurrentPolicy{}, marketdataapplication.ErrDataPolicyOwnerUnavailable
+	}
+	return refManager.CurrentFor(ctx, h.policyRef)
+}
+
+func (h *dataPolicyHTTPHandler) publishPolicy(
+	ctx context.Context, expectedVersion, newVersion string, policy marketdataauthorization.DataAccessPolicy,
+) (marketdataauthorization.CurrentPolicy, error) {
+	if h.policyRef == "" || h.policyRef == marketdataauthorization.DailyBarsV2PolicyRef {
+		return h.manager.Publish(ctx, expectedVersion, newVersion, policy)
+	}
+	refManager, ok := h.manager.(dataAuthorizationPolicyRefManager)
+	if !ok {
+		return marketdataauthorization.CurrentPolicy{}, marketdataapplication.ErrDataPolicyOwnerUnavailable
+	}
+	return refManager.PublishFor(ctx, h.policyRef, expectedVersion, newVersion, policy)
 }
 
 func (h *dataPolicyHTTPHandler) authenticate(w http.ResponseWriter, r *http.Request) (*http.Request, bool) {

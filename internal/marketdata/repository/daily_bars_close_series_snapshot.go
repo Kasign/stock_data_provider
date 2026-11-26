@@ -15,8 +15,6 @@ import (
 	"github.com/gowebpki/jcs"
 )
 
-const dailyBarsCloseSeriesSnapshotRefPrefix = "data_snapshot:sha256:"
-
 var (
 	ErrDailyBarsCloseSeriesSnapshotNotFound = errors.New("market-data close-series snapshot not found")
 	ErrDailyBarsCloseSeriesSnapshotConflict = errors.New("market-data close-series snapshot content conflict")
@@ -39,10 +37,10 @@ func (s *Store) SaveDailyBarsCloseSeriesSnapshot(ctx context.Context, snapshot a
 	}
 	manifest := snapshot.Manifest
 	_, err = s.db.ExecContext(ctx, `INSERT INTO market_data_daily_bars_close_series_snapshots
-(snapshot_ref, manifest_fingerprint, payload_fingerprint, manifest_schema_version, payload_schema_version, manifest_json, payload_json, created_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP(6))
+(snapshot_ref, payload_kind, manifest_fingerprint, payload_fingerprint, manifest_schema_version, payload_schema_version, manifest_json, payload_json, created_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP(6))
 ON DUPLICATE KEY UPDATE snapshot_ref=VALUES(snapshot_ref)`,
-		manifest.SnapshotRef, manifest.ManifestFingerprint, snapshot.PayloadFingerprint,
+		manifest.SnapshotRef, app.DailyBarsCloseSeriesPayloadKind, manifest.ManifestFingerprint, snapshot.PayloadFingerprint,
 		manifest.SchemaVersion, snapshot.Payload.SchemaVersion, string(manifestJSON), string(payloadJSON))
 	if err != nil {
 		return fmt.Errorf("persist immutable daily-bars close-series snapshot: %w", err)
@@ -87,7 +85,8 @@ func (s *Store) GetDailyBarsCloseSeriesSnapshot(ctx context.Context, snapshotRef
 	)
 	err := s.db.QueryRowContext(ctx, `SELECT manifest_fingerprint, payload_fingerprint,
 manifest_schema_version, payload_schema_version, manifest_json, payload_json
-FROM market_data_daily_bars_close_series_snapshots WHERE snapshot_ref=?`, snapshotRef).Scan(
+FROM market_data_daily_bars_close_series_snapshots WHERE snapshot_ref=? AND payload_kind=?`,
+		snapshotRef, app.DailyBarsCloseSeriesPayloadKind).Scan(
 		&manifestFingerprint, &payloadFingerprint, &manifestVersion, &payloadVersion, &manifestJSON, &payloadJSON)
 	if errors.Is(err, sql.ErrNoRows) {
 		return app.DailyBarsCloseSeriesSnapshot{}, fmt.Errorf("%w: %s", ErrDailyBarsCloseSeriesSnapshotNotFound, snapshotRef)
@@ -146,27 +145,41 @@ func canonicalDailyBarsCloseSeriesSnapshotJSON(snapshot app.DailyBarsCloseSeries
 	return canonicalManifest, canonicalPayload, nil
 }
 
-func parseDailyBarsCloseSeriesSnapshotRef(value string) (string, error) {
-	if !strings.HasPrefix(value, dailyBarsCloseSeriesSnapshotRefPrefix) {
-		return "", errors.New("daily-bars close-series snapshot_ref is malformed")
+// dataSnapshotRefPrefix 是全部不可变快照共用的内容寻址前缀。
+// 不同 payload_kind 的 SnapshotRef 由各自指纹组合而成，因此前缀相同也不会相互碰撞。
+const dataSnapshotRefPrefix = "data_snapshot:sha256:"
+
+// parseDataSnapshotRef 只校验内容寻址格式，不区分 payload_kind。
+// 类型判定必须由调用方按 payload_kind 列完成，不能从引用反推类型。
+func parseDataSnapshotRef(value string) (string, error) {
+	if !strings.HasPrefix(value, dataSnapshotRefPrefix) {
+		return "", errors.New("data snapshot_ref is malformed")
 	}
-	digest := strings.TrimPrefix(value, dailyBarsCloseSeriesSnapshotRefPrefix)
+	digest := strings.TrimPrefix(value, dataSnapshotRefPrefix)
 	if len(digest) != 64 {
-		return "", errors.New("daily-bars close-series snapshot_ref is malformed")
+		return "", errors.New("data snapshot_ref is malformed")
 	}
 	decoded, err := hex.DecodeString(digest)
 	if err != nil || len(decoded) != 32 || strings.ToLower(digest) != digest {
-		return "", errors.New("daily-bars close-series snapshot_ref is malformed")
+		return "", errors.New("data snapshot_ref is malformed")
 	}
 	return digest, nil
 }
 
-func (s *Store) validateDailyBarsCloseSeriesSnapshotSchema(ctx context.Context) error {
+func parseDailyBarsCloseSeriesSnapshotRef(value string) (string, error) {
+	return parseDataSnapshotRef(value)
+}
+
+// validateSnapshotStoreSchema 校验共享不可变快照存储的物理形态。
+// 该表按 payload_kind 承载多种 Payload，因此校验必须覆盖分流列本身：
+// 缺少 payload_kind 时读取会退化为跨类型串读，必须在启动阶段就失败。
+func (s *Store) validateSnapshotStoreSchema(ctx context.Context) error {
 	table := "market_data_daily_bars_close_series_snapshots"
 	columns := []struct {
 		name, columnType, dataType string
 	}{
 		{"snapshot_ref", "varchar(96)", "varchar"},
+		{"payload_kind", "varchar(48)", "varchar"},
 		{"manifest_fingerprint", "char(64)", "char"},
 		{"payload_fingerprint", "char(64)", "char"},
 		{"manifest_schema_version", "varchar(16)", "varchar"},

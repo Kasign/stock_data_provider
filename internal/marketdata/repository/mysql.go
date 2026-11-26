@@ -149,7 +149,7 @@ WHERE table_schema = DATABASE() AND table_name = ? AND index_name = ? ORDER BY s
 	if err := s.validateTradingCalendarSnapshotSchema(ctx); err != nil {
 		return err
 	}
-	if err := s.validateDailyBarsCloseSeriesSnapshotSchema(ctx); err != nil {
+	if err := s.validateSnapshotStoreSchema(ctx); err != nil {
 		return err
 	}
 	if err := s.validateDataAuthorizationPolicySchema(ctx); err != nil {
@@ -182,6 +182,20 @@ func MigrationDefinitions() []platformstorage.Migration {
 			"CREATE TABLE market_data_authorization_revocations (\n authorization_ref VARCHAR(256) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,\n revoked_at DATETIME(6) NOT NULL,\n revoked_by VARCHAR(256) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,\n reason_code VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n PRIMARY KEY (authorization_ref),\n KEY idx_market_data_auth_revoked_at (revoked_at),\n CONSTRAINT fk_market_data_auth_revocation_decision\n FOREIGN KEY (authorization_ref) REFERENCES market_data_authorization_decisions (authorization_ref)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
 			"CREATE TABLE market_data_authorization_policy_publications (\n id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,\n policy_type VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n policy_ref VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n previous_policy_version VARCHAR(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NULL,\n new_policy_version VARCHAR(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,\n payload_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n actor_ref VARCHAR(256) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,\n request_id VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n occurred_at DATETIME(6) NOT NULL,\n PRIMARY KEY (id),\n KEY idx_market_data_policy_publication_time (occurred_at, id),\n KEY idx_market_data_policy_publication_request (request_id),\n KEY idx_market_data_policy_publication_version (policy_type, policy_ref, new_policy_version)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
 			"CREATE TABLE market_data_valuation_versions (id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT, request_fingerprint CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL, source VARCHAR(64) NOT NULL, revision_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL, recorded_at DATETIME(6) NOT NULL, fetched_at DATETIME(6) NOT NULL, quality_status VARCHAR(16) NOT NULL, metadata JSON NOT NULL, PRIMARY KEY (id), KEY idx_market_valuation_asof (request_fingerprint, recorded_at), KEY idx_market_valuation_identity_asof (request_fingerprint, source, recorded_at, id), KEY idx_market_valuation_observed (recorded_at)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+		},
+	}, {
+		// 共享不可变快照存储按 payload_kind 分流后承载多种 Payload。
+		//
+		// 表名仍保留 close-series 字样：改名需要独占一条迁移语句（DDL 在 MySQL 中非事务），
+		// 一旦改名失败，历史里会留下 status=failed 的半完成迁移，启动即被拒绝。
+		// 因此本轮只加列，表名与历史快照保持不变；语义由 payload_kind 与文档承担。
+		//
+		// DEFAULT 只服务于本迁移对历史行的回填（历史行确实都是 close-series）。
+		// 所有写入路径必须显式给出 payload_kind，不得依赖默认值。
+		Version:     2,
+		Description: "add payload_kind to the shared immutable snapshot store",
+		Statements: []string{
+			"ALTER TABLE market_data_daily_bars_close_series_snapshots ADD COLUMN payload_kind VARCHAR(48) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT 'daily_bars_close_series' AFTER snapshot_ref",
 		},
 	}}
 }

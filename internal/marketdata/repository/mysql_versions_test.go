@@ -193,8 +193,11 @@ func TestFundamentalsRevisionHashNormalizesEquivalentOffsetInstants(t *testing.T
 
 func TestMarketDataMigrationDefinitionsExposeCompleteBaseline(t *testing.T) {
 	migrations := MigrationDefinitions()
-	if len(migrations) != 1 || migrations[0].Version != 1 || len(migrations[0].Statements) != 17 {
-		t.Fatalf("migration baseline = %#v, want one V1 with seventeen tables", migrations)
+	// V1 是已部署库的历史基线，修改任一语句都会改变 checksum 并让启动校验失败；
+	// 后续结构变更只能追加版本。V2 为共享快照表增加 payload_kind 分流列。
+	if len(migrations) != 2 || migrations[0].Version != 1 || len(migrations[0].Statements) != 17 ||
+		migrations[1].Version != 2 || len(migrations[1].Statements) != 1 {
+		t.Fatalf("migration baseline = %#v, want V1 with seventeen tables plus V2 with one statement", migrations)
 	}
 	schema := strings.Join(migrations[0].Statements, "\n")
 	for _, table := range []string{

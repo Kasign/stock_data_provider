@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -75,8 +76,16 @@ func TestNewExposesApplicationHTTPAndDiagnostics(t *testing.T) {
 
 func TestMigrationDefinitionsAvailableWithoutStorage(t *testing.T) {
 	definitions := MigrationDefinitions()
-	if len(definitions) != 1 || definitions[0].Version != 1 || len(definitions[0].Statements) != 17 {
-		t.Fatalf("MigrationDefinitions() = %+v, want one complete V1 with 17 statements", definitions)
+	// V1 是完整基线，任何修改都会改变历史 checksum 并让已部署库拒绝启动，
+	// 因此后续结构变更只能追加新版本；V2 为共享快照表增加 payload_kind 分流列。
+	if len(definitions) != 2 ||
+		definitions[0].Version != 1 || len(definitions[0].Statements) != 17 ||
+		definitions[1].Version != 2 || len(definitions[1].Statements) != 1 {
+		t.Fatalf("MigrationDefinitions() = %+v, want V1 with 17 statements plus V2 with 1 statement", definitions)
+	}
+	if statement := definitions[1].Statements[0]; !strings.Contains(statement, "payload_kind") ||
+		!strings.Contains(statement, "market_data_daily_bars_close_series_snapshots") {
+		t.Fatalf("migration V2 must add payload_kind to the shared snapshot store, got %q", statement)
 	}
 }
 

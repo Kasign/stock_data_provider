@@ -40,15 +40,20 @@ func NewDataAuthorizationPolicyOwner(repository app.DataAuthorizationPolicyRepos
 	}, nil
 }
 
-// Current 返回当前已发布策略。未发布或存储不可用时均返回错误，不合成默认策略。
+// Current 返回日线数据类的当前已发布策略。
 func (owner *DataAuthorizationPolicyOwner) Current(ctx context.Context) (authorization.CurrentPolicy, error) {
-	if owner == nil || owner.repository == nil || ctx == nil {
+	return owner.CurrentFor(ctx, authorization.DailyBarsV2PolicyRef)
+}
+
+// CurrentFor 返回指定数据类的当前已发布策略。未发布或存储不可用时均返回错误，不合成默认策略。
+func (owner *DataAuthorizationPolicyOwner) CurrentFor(ctx context.Context, policyRef string) (authorization.CurrentPolicy, error) {
+	if owner == nil || owner.repository == nil || ctx == nil || !authorization.ValidDataPolicyRef(policyRef) {
 		return authorization.CurrentPolicy{}, ErrDataPolicyOwnerUnavailable
 	}
 	if _, err := requireDataPolicyOwnerSession(ctx); err != nil {
 		return authorization.CurrentPolicy{}, err
 	}
-	current, err := owner.repository.ResolveCurrentDataAuthorizationPolicy(ctx)
+	current, err := owner.resolveCurrent(ctx, policyRef)
 	if err != nil {
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return authorization.CurrentPolicy{}, ctxErr
@@ -58,7 +63,7 @@ func (owner *DataAuthorizationPolicyOwner) Current(ctx context.Context) (authori
 		}
 		return authorization.CurrentPolicy{}, ErrDataPolicyOwnerUnavailable
 	}
-	if _, err := authorization.DecodePolicyVersion(current.Version); err != nil {
+	if _, err := authorization.DecodePolicyVersionFor(current.Version, policyRef); err != nil {
 		return authorization.CurrentPolicy{}, ErrDataPolicyOwnerUnavailable
 	}
 	if err := authorization.ValidatePolicy(current.Policy); err != nil {
@@ -67,14 +72,25 @@ func (owner *DataAuthorizationPolicyOwner) Current(ctx context.Context) (authori
 	return cloneCurrentDataPolicy(current), nil
 }
 
-// Publish 发布一个新的不可变策略版本。
-// expectedCurrentVersion 为空仅允许首次发布；非空时必须精确匹配当前版本。
+// Publish 发布日线数据类的一个新的不可变策略版本。
 func (owner *DataAuthorizationPolicyOwner) Publish(
 	ctx context.Context,
 	expectedCurrentVersion, newVersion string,
 	policy authorization.DataAccessPolicy,
 ) (authorization.CurrentPolicy, error) {
-	if owner == nil || owner.repository == nil || ctx == nil ||
+	return owner.PublishFor(ctx, authorization.DailyBarsV2PolicyRef, expectedCurrentVersion, newVersion, policy)
+}
+
+// PublishFor 发布指定数据类的一个新的不可变策略版本。
+// expectedCurrentVersion 为空仅允许首次发布；非空时必须精确匹配当前版本。
+//
+// 不同数据类的版本序列彼此独立：日线的版本号不能用于交易事实，反之亦然。
+func (owner *DataAuthorizationPolicyOwner) PublishFor(
+	ctx context.Context,
+	policyRef, expectedCurrentVersion, newVersion string,
+	policy authorization.DataAccessPolicy,
+) (authorization.CurrentPolicy, error) {
+	if owner == nil || owner.repository == nil || ctx == nil || !authorization.ValidDataPolicyRef(policyRef) ||
 		!validDataPolicyVersion(newVersion) ||
 		(expectedCurrentVersion != "" && !validDataPolicyVersion(expectedCurrentVersion)) ||
 		newVersion == expectedCurrentVersion {
@@ -101,13 +117,13 @@ func (owner *DataAuthorizationPolicyOwner) Publish(
 	sum := sha256.Sum256(payload)
 	version := authorization.PolicyVersion{
 		PolicyType:    authorization.DataAccessPolicyType,
-		PolicyRef:     authorization.DailyBarsV2PolicyRef,
+		PolicyRef:     policyRef,
 		PolicyVersion: newVersion,
 		Payload:       payload,
 		PayloadHash:   hex.EncodeToString(sum[:]),
 		CreatedAt:     createdAt,
 	}
-	publishedPolicy, err := authorization.DecodePolicyVersion(version)
+	publishedPolicy, err := authorization.DecodePolicyVersionFor(version, policyRef)
 	if err != nil {
 		return authorization.CurrentPolicy{}, ErrDataPolicyInvalidChange
 	}
@@ -135,6 +151,19 @@ func (owner *DataAuthorizationPolicyOwner) Publish(
 		Version: version,
 		Policy:  publishedPolicy,
 	}), nil
+}
+
+// resolveCurrent 按数据类解析当前策略：日线走既有方法以保持实现兼容，
+// 其他数据类必须由仓储显式支持，否则失败而不是回落到日线策略。
+func (owner *DataAuthorizationPolicyOwner) resolveCurrent(ctx context.Context, policyRef string) (authorization.CurrentPolicy, error) {
+	if policyRef == authorization.DailyBarsV2PolicyRef {
+		return owner.repository.ResolveCurrentDataAuthorizationPolicy(ctx)
+	}
+	resolver, ok := owner.repository.(app.DataAuthorizationPolicyRefResolver)
+	if !ok {
+		return authorization.CurrentPolicy{}, ErrDataPolicyOwnerUnavailable
+	}
+	return resolver.ResolveCurrentDataAuthorizationPolicyByRef(ctx, policyRef)
 }
 
 func requireDataPolicyOwnerSession(ctx context.Context) (security.Principal, error) {

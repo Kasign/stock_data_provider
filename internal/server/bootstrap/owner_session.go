@@ -29,6 +29,15 @@ type dataAuthorizationPolicyManager interface {
 	Publish(context.Context, string, string, marketdataauthorization.DataAccessPolicy) (marketdataauthorization.CurrentPolicy, error)
 }
 
+// dataAuthorizationPolicyRefManager 按数据类管理策略。
+//
+// 日线数据类继续使用上面的接口；新增数据类必须显式实现本接口。
+// 未实现时对应路由返回不可用，绝不回落到日线策略——否则一次策略发布就会同时放大两类数据的授权。
+type dataAuthorizationPolicyRefManager interface {
+	CurrentFor(context.Context, string) (marketdataauthorization.CurrentPolicy, error)
+	PublishFor(context.Context, string, string, string, marketdataauthorization.DataAccessPolicy) (marketdataauthorization.CurrentPolicy, error)
+}
+
 type ownerSessionResetState struct {
 	mu       sync.RWMutex
 	required bool

@@ -89,19 +89,22 @@ type Module struct {
 	diagnostics      Diagnostics
 	summary          ProviderSummary
 	store            *repository.Store
-	cache            cache.Cache
-	logger           *slog.Logger
-	baostockClient   *baostock.Client
-	retentionStore   quoteRetentionStore
-	retention        time.Duration
-	lifecycleMu      sync.Mutex
-	closeMu          sync.Mutex
-	started          bool
-	closing          bool
-	closed           bool
-	workerCancel     context.CancelFunc
-	workerDone       chan struct{}
-	closeErr         error
+	// securityTradingStatus 是快照 Creator 的 PIT 交易状态来源。
+	// 它必须来自 Data 自己的 Service（只读本地 append-only 版本表），不得由调用方注入。
+	securityTradingStatus application.SecurityTradingStatusPITReader
+	cache                 cache.Cache
+	logger                *slog.Logger
+	baostockClient        *baostock.Client
+	retentionStore        quoteRetentionStore
+	retention             time.Duration
+	lifecycleMu           sync.Mutex
+	closeMu               sync.Mutex
+	started               bool
+	closing               bool
+	closed                bool
+	workerCancel          context.CancelFunc
+	workerDone            chan struct{}
+	closeErr              error
 }
 
 // New 根据已加载配置和调用方提供的基础设施依赖创建 Market Data Module。
@@ -456,6 +459,7 @@ func (m *Module) build(cfg config.Config, deps Dependencies) error {
 		Index: ds, Trading: ds, Diagnostics: ds,
 	}, sourceStatuses, cfg.MaxDailyBars, cfg.RequestTimeout, logger)
 	m.diagnostics = ds
+	m.securityTradingStatus = ds
 	reader, err := application.NewReader(ds)
 	if err != nil {
 		return err

@@ -3,6 +3,7 @@ package bootstrap
 import (
 	"context"
 	"errors"
+	"time"
 
 	"example.com/stock-analysis-flow/internal/marketdata/app"
 	"example.com/stock-analysis-flow/internal/marketdata/application"
@@ -44,6 +45,45 @@ func (m *Module) ReadAuthorizedDailyBarsCloseSeriesSnapshot(
 	reader, err := application.NewAuthorizedDailyBarsCloseSeriesSnapshotReader(m.store)
 	if err != nil {
 		return app.DailyBarsCloseSeriesSnapshot{}, err
+	}
+	return reader.Read(ctx, snapshotRef, authorizationRef, purpose)
+}
+
+// CreateSecurityTradingStatusFactsSnapshot 创建并授权一个不可变的交易状态事实快照。
+// PIT 来源缺失或持久化未配置时明确失败，不会降级成实时抓取或内存快照。
+func (m *Module) CreateSecurityTradingStatusFactsSnapshot(
+	ctx context.Context,
+	symbol, tradeDate string,
+	systemAsOf time.Time,
+	purpose string,
+) (application.SecurityTradingStatusFactsSnapshotReferences, error) {
+	if m == nil || m.store == nil || m.securityTradingStatus == nil {
+		return application.SecurityTradingStatusFactsSnapshotReferences{}, errors.New("Market Data trading-status facts Snapshot persistence is unavailable")
+	}
+	owner, err := application.NewDataAuthorizationOwner(m.store, m.store)
+	if err != nil {
+		return application.SecurityTradingStatusFactsSnapshotReferences{}, err
+	}
+	creator, err := application.NewSecurityTradingStatusFactsSnapshotCreator(
+		m.securityTradingStatus, m.store, owner,
+	)
+	if err != nil {
+		return application.SecurityTradingStatusFactsSnapshotReferences{}, err
+	}
+	return creator.Create(ctx, symbol, tradeDate, systemAsOf, purpose)
+}
+
+// ReadAuthorizedSecurityTradingStatusFactsSnapshot 使用交易事实数据类的策略做授权复核，
+// 与 close-series 共用同一事务边界与 fail-closed 语义。
+func (m *Module) ReadAuthorizedSecurityTradingStatusFactsSnapshot(
+	ctx context.Context, snapshotRef, authorizationRef, purpose string,
+) (app.SecurityTradingStatusFactsSnapshot, error) {
+	if m == nil || m.store == nil {
+		return app.SecurityTradingStatusFactsSnapshot{}, errors.New("Market Data Snapshot persistence is unavailable")
+	}
+	reader, err := application.NewAuthorizedSecurityTradingStatusFactsSnapshotReader(m.store)
+	if err != nil {
+		return app.SecurityTradingStatusFactsSnapshot{}, err
 	}
 	return reader.Read(ctx, snapshotRef, authorizationRef, purpose)
 }
