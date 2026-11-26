@@ -1245,7 +1245,7 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 
 ### 已完成的自动采集生产切片
 
-- `repair_all` 当前 HEAD：`cda3f9dca9c71b9c0c7a88b619e5d9f9d907d8a8`；该提交仅更新 News 任务验收文档。News 最终代码验收 SHA：`dc5832faed4a0643b7e59cdedcef8eef8d0c5b5a`。
+- 本轮文档校准前的 `repair_all` HEAD：`cda3f9dca9c71b9c0c7a88b619e5d9f9d907d8a8`；该提交仅更新 News 任务验收文档。News 最终生产代码验收 SHA：`dc5832faed4a0643b7e59cdedcef8eef8d0c5b5a`。本节随后更新了跨模块任务状态，不改变生产代码。
 - `NEWS-POST-08` 已完成：Server 通过共享 Platform HTTP Client、News MySQL Repository、可信 StaticSourceCatalog、CollectSource、IngestCollectedSource 装配 `news.collect_feeds`；Researchflow 注册 Feed Template、Dispatcher、Output Registry 和 Source/Endpoint ResourcePolicy。
 - Feed 正式调用链为 `news.collect_feeds` → `CollectSource.Execute` → `IngestCollectedSource.Execute` → `MySQLRepository`。StageOutput 仅保存来源标识、NewsID 和计数，不保存文章正文或 URL。
 - Go Test Suite Run `45744051927` 与 Integration CI Run `45744051952` 均对最终代码 SHA `dc5832faed4a0643b7e59cdedcef8eef8d0c5b5a` 成功；覆盖 Feed MariaDB 和 Server/Researchflow 组合 MariaDB 测试。
