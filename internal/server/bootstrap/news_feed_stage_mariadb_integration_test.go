@@ -14,6 +14,9 @@ import (
 	platformconfig "example.com/stock-analysis-flow/internal/platform/config"
 	platformhttpclient "example.com/stock-analysis-flow/internal/platform/httpclient"
 	platformstorage "example.com/stock-analysis-flow/internal/platform/storage"
+	researchflowstorage "example.com/stock-analysis-flow/internal/researchflow/storage"
+	serverconfig "example.com/stock-analysis-flow/internal/server/config"
+	serverresources "example.com/stock-analysis-flow/internal/server/resources"
 
 	_ "github.com/go-sql-driver/mysql"
 )
@@ -89,6 +92,9 @@ func TestNewsFeedStageCompositionMariaDBPublishesOnlyExplicitForwardPolicyTransi
 	if err := newsstorage.ValidateSchema(ctx, db); err != nil {
 		t.Fatalf("validate News schema: %v", err)
 	}
+	if err := platformstorage.ApplyMigrations(ctx, db, researchflowstorage.MigrationNamespace, researchflowstorage.Migrations()); err != nil {
+		t.Fatalf("apply Researchflow migrations: %v", err)
+	}
 	repository, err := newsstorage.NewMySQLRepository(db)
 	if err != nil {
 		t.Fatal(err)
@@ -101,25 +107,51 @@ func TestNewsFeedStageCompositionMariaDBPublishesOnlyExplicitForwardPolicyTransi
 
 	sourceID := fmt.Sprintf("feed-startup-%d", time.Now().UnixNano())
 	initial := newsFeedStartupConfig(t, sourceID, "source-policy-v1", "", "operator-authorization:"+sourceID+":v1")
-	first, err := newNewsFeedStageComposition(ctx, initial, client, repository)
+	capacity := serverconfig.ResearchflowCapacity{Configured: true, MaxQueuedRuns: 10, MaxWorkers: 2}
+	shared := &serverresources.Resources{DB: db, HTTPClient: client}
+	first, err := newResearchflowComposition(ctx, shared, repository, initial, capacity, nil)
 	if err != nil {
-		t.Fatalf("compose first trusted Feed registration: %v", err)
+		t.Fatalf("compose first trusted Feed Researchflow path: %v", err)
 	}
-	if first == nil || first.executor == nil || len(first.resourceRefs) != 1 {
-		t.Fatalf("first Feed composition is incomplete: %+v", first)
+	if first.newsFeedStage == nil || first.newsFeedStage.executor == nil || len(first.newsFeedStage.resourceRefs) != 1 ||
+		len(first.workflowTemplates) != 2 {
+		t.Fatalf("first Feed Researchflow composition is incomplete: %+v", first)
+	}
+	dispatcher, ok := first.stageExecutor.(researchflowStageDispatcher)
+	if !ok || dispatcher.newsFeed == nil {
+		t.Fatal("Server Researchflow dispatcher did not register the News Feed Stage")
+	}
+	feedSnapshot, err := first.resourcePolicies.Resolve(ctx, "news.feed.configured-sources@1.0.0")
+	if err != nil || len(feedSnapshot.AllowedSourceEndpointRefs) != 1 ||
+		feedSnapshot.AllowedSourceEndpointRefs[0] != first.newsFeedStage.resourceRefs[0] {
+		t.Fatalf("Run creation cannot resolve the exact Feed registration snapshot: %+v err=%v", feedSnapshot, err)
+	}
+	for _, workflowTemplate := range first.workflowTemplates {
+		if workflowTemplate.OutputRegistryVersion != newsFeedStageOutputRegistryVersion {
+			t.Fatalf("Feed-enabled composition published mixed News Output Registry versions: %+v", workflowTemplate)
+		}
+	}
+	if err := first.publishWorkflowTemplate(ctx); err != nil {
+		t.Fatalf("publish News Search and Feed workflow templates: %v", err)
+	}
+	if _, err := newResearchflowRuntimeComponent(first, capacity, 1, nil); err != nil {
+		t.Fatalf("compose the existing Researchflow Worker Runtime with Feed Stage: %v", err)
 	}
 
 	forward := newsFeedStartupConfig(t, sourceID, "source-policy-v2", "source-policy-v1", "operator-authorization:"+sourceID+":v2")
-	second, err := newNewsFeedStageComposition(ctx, forward, client, repository)
+	second, err := newResearchflowComposition(ctx, shared, repository, forward, capacity, nil)
 	if err != nil {
 		t.Fatalf("compose explicitly advanced Source policy: %v", err)
 	}
-	if second == nil || len(second.resourceRefs) != 1 || second.resourceRefs[0] == first.resourceRefs[0] {
+	if second.newsFeedStage == nil || len(second.newsFeedStage.resourceRefs) != 1 ||
+		second.newsFeedStage.resourceRefs[0] == first.newsFeedStage.resourceRefs[0] {
 		t.Fatal("policy version transition did not produce a new immutable Run resource identity")
 	}
+	if err := second.publishWorkflowTemplate(ctx); err != nil {
+		t.Fatalf("idempotently publish unchanged Researchflow templates after policy advance: %v", err)
+	}
 
-	stale := newsFeedStartupConfig(t, sourceID, "source-policy-v1", "", "operator-authorization:"+sourceID+":v1")
-	if _, err := newNewsFeedStageComposition(ctx, stale, client, repository); err == nil {
+	if _, err := newResearchflowComposition(ctx, shared, repository, initial, capacity, nil); err == nil {
 		t.Fatal("stale startup configuration moved the current Source policy pointer backwards")
 	}
 	var currentVersion string
