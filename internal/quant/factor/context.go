@@ -7,18 +7,23 @@ import (
 	"example.com/stock-analysis-flow/internal/quant/domain"
 )
 
-// Momentum20WithContext 在执行 20 日动量前校验计算上下文和价格口径。
+// Momentum5WithContext 在执行 5 日动量前校验计算上下文和价格口径。
 // 交易日连续性仍需由 Data Adapter 按其权威交易日历验证。
 func Momentum5WithContext(ctx domain.CalculationContext, trustedNow time.Time, closes []float64) (Result, error) {
-	if err := ctx.Validate(trustedNow, true); err != nil { return Result{}, err }
+	if err := ctx.Validate(trustedNow, true); err != nil {
+		return Result{}, err
+	}
 	return Momentum5(closes)
 }
 
 func MADistance20WithContext(ctx domain.CalculationContext, trustedNow time.Time, closes []float64) (Result, error) {
-	if err := ctx.Validate(trustedNow, true); err != nil { return Result{}, err }
+	if err := ctx.Validate(trustedNow, true); err != nil {
+		return Result{}, err
+	}
 	return MADistance20(closes)
 }
 
+// MADistance20WithContext 在执行 MA20 距离计算前校验计算上下文和价格口径。
 func Momentum20WithContext(ctx domain.CalculationContext, trustedNow time.Time, closes []float64) (Result, error) {
 	if err := ctx.Validate(trustedNow, true); err != nil {
 		return Result{}, err
