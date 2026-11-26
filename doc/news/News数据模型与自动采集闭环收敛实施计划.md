@@ -3,7 +3,7 @@
 更新时间：2026-11-26  
 执行分支：`repair_all`  
 任务编号：`NEWS-POST-08`  
-状态：`IN_PROGRESS`
+状态：`DONE`
 
 本文是本任务唯一实施方案。当前数据规则以 [新闻数据模型与质量契约](./新闻数据模型与质量契约.md) 为准。旧版 News 数据模型、身份、转载关系和证券/行业关系规则不再适用；冲突文档已直接替换或删除，不保留兼容要求。
 
@@ -166,7 +166,7 @@ P0-1 全量依赖审计已完成；本计划后续只对具体字段、SQL 和�
 
 ### P0-4：Feed 生产自动采集闭环
 
-状态：IMPLEMENTED，待本轮最终验收
+状态：DONE
 
 #### 生产配置与启动装配
 
@@ -196,13 +196,13 @@ P0-1 全量依赖审计已完成；本计划后续只对具体字段、SQL 和�
 - 已增加 Config 严格解析、资源快照指纹、Stage 输出一致性、部分失败/重试/取消、Workflow Template 和组合注册测试。
 - 新增真实 MariaDB 测试：Feed RSS → 正式 Parser/CollectSource → IngestCollectedSource → MySQLRepository；验证正文授权过滤、News 主体/版本/Observation 持久化和 StageOutput 不泄露文章内容。
 - 新增 Server/Researchflow 组合 MariaDB 测试：验证 Workflow Template 发布、Dispatcher 注册、Run ResourcePolicy、Worker Runtime 构造、策略前进、同版本重复启动幂等和旧配置回退拒绝。
-- Go Test Suite 工作流已加入 Feed Stage 与 Server/Researchflow 组合两项 MariaDB 测试的精确 PASS 门禁；尚待本轮统一 CI 执行。
+- Go Test Suite 已加入 Feed Stage 与 Server/Researchflow 组合两项 MariaDB 测试的精确 PASS 门禁；最终 Go Test Suite Run `45744051927` 两项均通过。
 
 #### 自动化边界
 
 当前 Researchflow Runtime 只会自动调度已持久化的 Run，不会按周期自动创建 Run。Feed Stage 会在 news.feed_collection Run 创建后自动执行；当前不包含无人创建 Run 的周期轮询能力。若要实现持续定时采集，需要在 Researchflow 增加通用周期触发能力，并明确采集间隔、时区、错过周期补跑和并发去重规则；不应在 News 内另建 Scheduler。
 
-完成门槛：Feed 配置和 Server/Researchflow 生产组合真实运行；策略当前指针不可回退；正式采集走统一事务；MariaDB、Go Test、Race、Vet 和跨模块 Integration CI 全部通过。
+完成验收：Feed 配置和 Server/Researchflow 生产组合通过 MariaDB 集成测试；策略当前指针前进/回退契约通过；正式采集走统一事务；最终 Go Test Suite Run `45744051927` 和跨模块 Integration CI Run `45744051952` 全部成功。最终代码 SHA：`dc5832faed4a0643b7e59cdedcef8eef8d0c5b5a`。
 
 ### P1-1：职责清理
 
@@ -219,9 +219,9 @@ P0-1 全量依赖审计已完成；本计划后续只对具体字段、SQL 和�
 
 ### P1-2：全量回归与验收
 
-状态：IN_PROGRESS
+状态：DONE
 
-P0-2/P0-3 对应的 News MariaDB、根模块 Go Test/Race/Vet 和 Integration CI 已通过；P0-4 生产装配已完成代码与测试实现，仍需在当前最终代码 SHA 上统一执行全量回归。
+最终代码 SHA `dc5832faed4a0643b7e59cdedcef8eef8d0c5b5a` 的 Go Test Suite Run `45744051927` 和 Integration CI Run `45744051952` 全部成功。News/Research/PIT/Researchflow/Quant/Notification/Server、MariaDB、Race、Vet、Compose 和 WebUI 回归完成。
 
 1. News 全量测试、Race Detector、Vet。
 2. MariaDB Migration、Schema、唯一约束、事务、并发和回滚测试。
@@ -241,6 +241,6 @@ P0-2/P0-3 对应的 News MariaDB、根模块 Go Test/Race/Vet 和 Integration CI
 - 不由 News 负责证券/行业关系。
 - 不新增没有真实调用方的管理 API、目录数据库或生命周期子系统。
 
-## 7. 会话恢复
+## 7. 最终状态与后续边界
 
-继续任务时先核对 repair_all 最新 HEAD。P0-1/P0-2/P0-3 已关闭，不得重复审计或重新设计 Schema/统一入库。P0-4 生产装配已实现，当前只做最终 Go Test/Race/Vet/MariaDB/Integration CI 验收和失败修复；若用户要求周期采集，再在 Researchflow 设计通用周期触发，不新增 News Scheduler。只操作 repair_all，中文文档/注释/提交信息。
+NEWS-POST-08 已完成，最终验收代码 SHA 为 `dc5832faed4a0643b7e59cdedcef8eef8d0c5b5a`；Go Test Suite Run `45744051927`、Integration CI Run `45744051952` 均成功。当前无遗留的本任务代码修复项。后续若新增无人创建 Run 的周期采集需求，应作为 Researchflow 通用能力单独立项，不在 News 内新增 Scheduler。
