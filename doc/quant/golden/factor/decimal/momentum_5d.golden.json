@@ -1,0 +1,17 @@
+{
+  "fixture_type": "synthetic_fixture",
+  "schema_version": "1.0.0",
+  "factor_code": "momentum_5d",
+  "algorithm_version": "momentum5-decimal-half-even-v1",
+  "parameters": {},
+  "value_type": "decimal_string",
+  "scale": 12,
+  "rounding_mode": "half_even",
+  "input": {
+    "close": ["95", "96", "97", "98", "99", "100"]
+  },
+  "expected": {
+    "value": "0.052631578947",
+    "sample_count": 6
+  }
+}

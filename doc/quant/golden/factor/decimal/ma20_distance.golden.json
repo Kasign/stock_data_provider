@@ -1,0 +1,17 @@
+{
+  "fixture_type": "synthetic_fixture",
+  "schema_version": "1.0.0",
+  "factor_code": "ma20_distance",
+  "algorithm_version": "ma20-distance-decimal-half-even-v1",
+  "parameters": {},
+  "value_type": "decimal_string",
+  "scale": 12,
+  "rounding_mode": "half_even",
+  "input": {
+    "close": ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20"]
+  },
+  "expected": {
+    "value": "0.904761904762",
+    "sample_count": 20
+  }
+}

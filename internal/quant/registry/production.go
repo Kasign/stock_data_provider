@@ -53,6 +53,9 @@ func NewProductionRegistry() (*Registry, error) {
 	if err := registry.Register(entry, true); err != nil {
 		return nil, err
 	}
+	if err := registerProductionDecimalFactors(registry); err != nil {
+		return nil, err
+	}
 	if err := registry.Freeze(); err != nil {
 		return nil, err
 	}

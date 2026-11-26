@@ -423,6 +423,12 @@ func TestIndicatorAndFactorSchemasEnforceNumericAndEmptyParameterBoundaries(t *t
 	if err := validateJSONSchemaInstance(factorSchema, validFactor); err != nil {
 		t.Fatalf("valid empty Factor parameters rejected: %v", err)
 	}
+	for _, code := range []string{"ma20_distance", "momentum_5d"} {
+		instance := []byte(`{"schema_version":"1.0.0","factor_code":"` + code + `","parameters":{}}`)
+		if err := validateJSONSchemaInstance(factorSchema, instance); err != nil {
+			t.Errorf("valid first-batch factor %s rejected by QNT-CTR-003: %v", code, err)
+		}
+	}
 	nonEmptyFactor := []byte(`{"schema_version":"1.0.0","factor_code":"momentum_20d","parameters":{"window":20}}`)
 	if err := validateJSONSchemaInstance(factorSchema, nonEmptyFactor); err == nil {
 		t.Fatal("non-empty Factor parameters unexpectedly passed maxProperties")
@@ -514,6 +520,8 @@ func TestFirstFactorQuantMetricSchemaEnforcesPeriodAndInsufficientSampleBounds(t
 		base("momentum_20d", "20d", "insufficient_data", 20),
 		base("momentum_60d", "60d", "insufficient_data", 60),
 		base("volatility_20d", "20d", "insufficient_data", 19),
+		base("ma20_distance", "20d", "insufficient_data", 19),
+		base("momentum_5d", "5d", "insufficient_data", 5),
 	}
 	for _, instance := range valid {
 		encoded, err := json.Marshal(instance)
@@ -531,6 +539,10 @@ func TestFirstFactorQuantMetricSchemaEnforcesPeriodAndInsufficientSampleBounds(t
 		base("momentum_20d", "20d", "insufficient_data", 21),
 		base("momentum_60d", "60d", "insufficient_data", 61),
 		base("volatility_20d", "20d", "insufficient_data", 20),
+		base("ma20_distance", "5d", "insufficient_data", 19),
+		base("momentum_5d", "20d", "insufficient_data", 5),
+		base("ma20_distance", "20d", "insufficient_data", 20),
+		base("momentum_5d", "5d", "insufficient_data", 6),
 	}
 	for _, instance := range invalid {
 		encoded, err := json.Marshal(instance)

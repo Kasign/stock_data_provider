@@ -87,6 +87,10 @@ func factorPeriod(code string) (string, int, bool) {
 		return "60d", 61, true
 	case "volatility_20d":
 		return "20d", 20, true
+	case "ma20_distance":
+		return "20d", 20, true
+	case "momentum_5d":
+		return "5d", 6, true
 	default:
 		return "", 0, false
 	}

@@ -23,14 +23,18 @@
       "enum": [
         "momentum_20d",
         "momentum_60d",
-        "volatility_20d"
+        "volatility_20d",
+        "ma20_distance",
+        "momentum_5d"
       ]
     },
     "value": {
       "type": [
         "number",
+        "string",
         "null"
-      ]
+      ],
+      "description": "number 为既有 float64 因子结果；string 为按领域精度策略生成的十进制字符串结果，遵循 GOV-CTR-001 Decimal 语法。"
     },
     "unit": {
       "const": "ratio"
@@ -38,6 +42,7 @@
     "period": {
       "type": "string",
       "enum": [
+        "5d",
         "20d",
         "60d"
       ]
@@ -80,12 +85,14 @@
     "lower_bound": {
       "type": [
         "number",
+        "string",
         "null"
       ]
     },
     "upper_bound": {
       "type": [
         "number",
+        "string",
         "null"
       ]
     }
@@ -144,6 +151,44 @@
         "properties": {
           "period": {
             "const": "20d"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "metric_code": {
+            "const": "ma20_distance"
+          }
+        },
+        "required": [
+          "metric_code"
+        ]
+      },
+      "then": {
+        "properties": {
+          "period": {
+            "const": "20d"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "metric_code": {
+            "const": "momentum_5d"
+          }
+        },
+        "required": [
+          "metric_code"
+        ]
+      },
+      "then": {
+        "properties": {
+          "period": {
+            "const": "5d"
           }
         }
       }
@@ -227,6 +272,64 @@
       "if": {
         "properties": {
           "metric_code": {
+            "const": "ma20_distance"
+          },
+          "metric_status": {
+            "const": "available"
+          }
+        },
+        "required": [
+          "metric_code",
+          "metric_status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "sample_count": {
+            "minimum": 20
+          },
+          "quality_status": {
+            "enum": [
+              "valid",
+              "degraded"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "metric_code": {
+            "const": "momentum_5d"
+          },
+          "metric_status": {
+            "const": "available"
+          }
+        },
+        "required": [
+          "metric_code",
+          "metric_status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "sample_count": {
+            "minimum": 6
+          },
+          "quality_status": {
+            "enum": [
+              "valid",
+              "degraded"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "metric_code": {
             "const": "momentum_20d"
           },
           "metric_status": {
@@ -295,6 +398,52 @@
     {
       "if": {
         "properties": {
+          "metric_code": {
+            "const": "ma20_distance"
+          },
+          "metric_status": {
+            "const": "insufficient_data"
+          }
+        },
+        "required": [
+          "metric_code",
+          "metric_status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "sample_count": {
+            "maximum": 19
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "metric_code": {
+            "const": "momentum_5d"
+          },
+          "metric_status": {
+            "const": "insufficient_data"
+          }
+        },
+        "required": [
+          "metric_code",
+          "metric_status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "sample_count": {
+            "maximum": 5
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
           "metric_status": {
             "const": "available"
           }
@@ -306,7 +455,10 @@
       "then": {
         "properties": {
           "value": {
-            "type": "number"
+            "type": [
+              "number",
+              "string"
+            ]
           },
           "quality_status": {
             "enum": [
@@ -376,6 +528,16 @@
             },
             "upper_bound": {
               "type": "number"
+            }
+          }
+        },
+        {
+          "properties": {
+            "lower_bound": {
+              "type": "string"
+            },
+            "upper_bound": {
+              "type": "string"
             }
           }
         }
