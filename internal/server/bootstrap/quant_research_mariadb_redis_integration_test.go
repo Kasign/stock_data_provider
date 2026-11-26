@@ -4,9 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"os"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -18,11 +21,15 @@ import (
 	marketdataconfig "example.com/stock-analysis-flow/internal/marketdata/config"
 	marketdatarepository "example.com/stock-analysis-flow/internal/marketdata/repository"
 	newsstorage "example.com/stock-analysis-flow/internal/news/adapters/storage"
+	newsapp "example.com/stock-analysis-flow/internal/news/app"
 	newsconfig "example.com/stock-analysis-flow/internal/news/config"
 	platformhttpclient "example.com/stock-analysis-flow/internal/platform/httpclient"
 	platformsecurity "example.com/stock-analysis-flow/internal/platform/security"
 	platformstorage "example.com/stock-analysis-flow/internal/platform/storage"
+	quantapplication "example.com/stock-analysis-flow/internal/quant/application"
+	quantresult "example.com/stock-analysis-flow/internal/quant/result"
 	quantstage "example.com/stock-analysis-flow/internal/quant/stage"
+	quantstorage "example.com/stock-analysis-flow/internal/quant/storage"
 	researchflowdomain "example.com/stock-analysis-flow/internal/researchflow/domain"
 	serverconfig "example.com/stock-analysis-flow/internal/server/config"
 	serverresources "example.com/stock-analysis-flow/internal/server/resources"
@@ -349,5 +356,212 @@ func TestQuantResearchMariaDBRedisL3(t *testing.T) {
 	}
 	if !containsString(riskPayload.MissingFacts, "price_limit") || !containsString(riskPayload.MissingFacts, "tradable_volume") {
 		t.Fatalf("risk missing_facts=%v, want price_limit and tradable_volume", riskPayload.MissingFacts)
+	}
+
+	// ---- 阶段 2.2 C 组：生产授权读取链端到端贯通 ----
+	// 组合根早已装配 quantResultReader（researchflow_execution_composition.go），但此前
+	// 没有任何生产消费者。以下经唯一领域入口 readQuantResultForRun，在真实 MariaDB 上
+	// 贯通 GetResult → Run/Stage 关联校验 → 当前策略 FOR UPDATE 护栏 → 不可变结果读取。
+	// 不新增 HTTP 端点、不绕过 Worker 可信身份、不放宽任何门禁。
+	if owner.execution.quantResultReader == nil {
+		t.Fatal("生产组合根未装配 quantResultReader")
+	}
+	resultPolicyStore, err := quantstorage.NewMySQLResultAccessPolicyStore(db)
+	if err != nil {
+		t.Fatalf("create Quant result access policy store: %v", err)
+	}
+	resultPolicyManager, err := quantapplication.NewResultAccessPolicyManager(resultPolicyStore)
+	if err != nil {
+		t.Fatalf("create Quant result access policy manager: %v", err)
+	}
+	policyState, err := resultPolicyManager.Current(ctx)
+	if err != nil {
+		t.Fatalf("read current Quant result access policy: %v", err)
+	}
+	if policyState.Enabled || policyState.Version != 0 {
+		t.Fatalf("L3 隔离库应为 fail-closed 引导态: %+v", policyState)
+	}
+
+	readResult := func(runRef, resultID string) (quantresult.Envelope, error) {
+		return owner.execution.readQuantResultForRun(ctx, runRef, resultID)
+	}
+	assertDenied := func(label, runRef, resultID string) {
+		t.Helper()
+		envelope, readErr := readResult(runRef, resultID)
+		if readErr == nil || envelope.ResultID != "" || envelope.AuthorizationRef != "" {
+			t.Fatalf("%s: 期望 fail-closed，实际 envelope=%+v err=%v", label, envelope, readErr)
+		}
+	}
+
+	// 从四份真实 Stage Output 提取 result_id，复用关联规格表既有的提取器。
+	resultIDs := make(map[string]string, len(stagesByCode))
+	for code, stage := range stagesByCode {
+		resource, resourceErr := owner.execution.runRepository.GetStageOutputResource(ctx, *stage.OutputRef)
+		if resourceErr != nil {
+			t.Fatalf("read %s Stage Output: %v", code, resourceErr)
+		}
+		spec, supported := quantStageAssociationSpecFor(code)
+		if !supported {
+			t.Fatalf("Stage %s 未登记 Quant 结果关联规格表", code)
+		}
+		id, extractErr := spec.ResultID(json.RawMessage(resource.Content))
+		if extractErr != nil || id == "" {
+			t.Fatalf("extract %s result_id: %q %v", code, id, extractErr)
+		}
+		resultIDs[code] = id
+	}
+	if len(resultIDs) != 4 {
+		t.Fatalf("expected 4 Quant result_ids, got %d", len(resultIDs))
+	}
+
+	// 修复前失败证据：策略未发布时读取必须在当前策略门禁处 fail-closed。
+	probeID := resultIDs["quant.risk"]
+	assertDenied("策略未发布", created.Run.Ref, probeID)
+
+	// 由可信 Owner 用例启用既有门禁（不是放宽门禁）。
+	policyState, err = resultPolicyManager.Publish(ctx, "owner", policyState.Version)
+	if err != nil {
+		t.Fatalf("publish Quant result access policy: %v", err)
+	}
+	if !policyState.Enabled || policyState.Snapshot == nil {
+		t.Fatalf("published policy is not enabled with a snapshot: %+v", policyState)
+	}
+
+	// 1) 同 Run 关联可读：四 Stage 的 result_id 均返回完整 Envelope 与 allowed 审计。
+	for code, id := range resultIDs {
+		envelope, readErr := readResult(created.Run.Ref, id)
+		if readErr != nil {
+			t.Fatalf("同 Run 授权读取 %s(%s) 失败: %v", code, id, readErr)
+		}
+		if envelope.ResultID != id || envelope.AuthorizationRef == "" || envelope.Payload == nil {
+			t.Fatalf("同 Run %s Envelope 不完整: %+v", code, envelope)
+		}
+		var decision, reason string
+		if err := db.QueryRowContext(ctx,
+			`SELECT decision, reason_code FROM quant_access_audit WHERE run_ref = ? AND resource_ref = ? ORDER BY audit_id DESC LIMIT 1`,
+			created.Run.Ref, id).Scan(&decision, &reason); err != nil {
+			t.Fatalf("read allowed audit for %s: %v", code, err)
+		}
+		if decision != "allowed" || reason != "result_released" {
+			t.Fatalf("%s audit = %s/%s, want allowed/result_released", code, decision, reason)
+		}
+	}
+
+	// 停掉 Worker，避免它认领下面创建的第二个 Run 并引入非确定性输出。
+	child.stop(t)
+
+	// 2) 跨 Run fail-closed：第二个真实持久化的 Run + Run A 的合法 result_id。
+	createdB, err := owner.createRun.CreateRun(principalCtx, researchflowdomain.CreateRunCommand{
+		SchemaVersion:     "1.0.0",
+		IdempotencyKey:    fmt.Sprintf("quant-research-l3-B-%d", time.Now().UTC().UnixNano()),
+		TemplateRef:       quantResearchWorkflowTemplateRef,
+		TemplateVersion:   quantResearchWorkflowTemplateVersion,
+		InputSnapshotRefs: []string{},
+		Parameters:        parameters,
+	})
+	if err != nil {
+		t.Fatalf("create second real Run: %v", err)
+	}
+	assertDenied("跨 Run", createdB.Run.Ref, probeID)
+
+	// 3) 无关联 fail-closed：格式合法但不属于任何 Stage 的 result_id，且底层结果零读取。
+	unrelatedID := "quant_result:sha256:" + strings.Repeat("0", 64)
+	assertDenied("无关联", created.Run.Ref, unrelatedID)
+	var released int
+	if err := db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM quant_access_audit WHERE decision = 'allowed' AND resource_ref = ?`,
+		unrelatedID).Scan(&released); err != nil {
+		t.Fatalf("count released audit rows for unrelated result: %v", err)
+	}
+	if released != 0 {
+		t.Fatalf("unrelated result was released %d times", released)
+	}
+
+	// 4) 伪造 RunRef fail-closed：空、空白、改写聚合 Ref、合法字符集但不存在。
+	for _, forged := range []string{"", "  ", created.Run.Ref + "-tampered", "run:researchflow:forged-0001"} {
+		assertDenied("伪造 RunRef="+forged, forged, probeID)
+	}
+
+	// 5) 撤销竞态 fail-closed：读护栏持有 policy head 行锁期间 revoke 无法插入；
+	// 释放后策略已 Disabled，后续读取不得返回 Envelope。只证明阻塞，不断言调度时序。
+	var guard quantapplication.ResultAccessPolicyReadGuard = resultPolicyStore
+	locked := make(chan struct{})
+	release := make(chan struct{})
+	var releaseOnce sync.Once
+	releaseRead := func() { releaseOnce.Do(func() { close(release) }) }
+	defer releaseRead()
+	readDone := make(chan error, 1)
+	go func() {
+		readDone <- guard.WithCurrentResultAccessPolicy(ctx, func(state quantapplication.ResultAccessPolicyState) error {
+			if !state.Enabled || state.Version != policyState.Version {
+				return errors.New("policy drifted inside the active read guard")
+			}
+			close(locked)
+			<-release
+			return nil
+		})
+	}()
+	select {
+	case <-locked:
+	case <-time.After(5 * time.Second):
+		t.Fatal("read guard did not enter its callback")
+	}
+	revokeDone := make(chan error, 1)
+	go func() {
+		_, revokeErr := resultPolicyManager.Revoke(ctx, "owner", policyState.Version)
+		revokeDone <- revokeErr
+	}()
+	select {
+	case revokeErr := <-revokeDone:
+		t.Fatalf("revoke linearized inside an active read guard: %v", revokeErr)
+	case <-time.After(300 * time.Millisecond):
+	}
+	// 释放前用不加锁的裸读复核：护栏仍活跃时 revoke 不得提交新版本或审计行。
+	// 只依赖 FOR UPDATE 的线性化语义，不依赖"revoke 跑得慢"这种时序假象——移除
+	// guard 行锁的变异会在这里观测到已提交的 revoke，从而让测试失败。
+	var headVersion uint64
+	if err := db.QueryRowContext(ctx,
+		`SELECT current_version FROM quant_result_access_policy_head WHERE policy_type = 'quant_result_access' AND policy_ref = 'quant-result-access'`,
+	).Scan(&headVersion); err != nil {
+		t.Fatalf("read policy head while read guard active: %v", err)
+	}
+	if headVersion != policyState.Version {
+		t.Fatalf("revoke committed policy version %d while the read guard was active (want %d)", headVersion, policyState.Version)
+	}
+	var revokeAudits int
+	if err := db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM quant_policy_admin_audit WHERE action = 'revoke'`,
+	).Scan(&revokeAudits); err != nil {
+		t.Fatalf("read policy admin audit while read guard active: %v", err)
+	}
+	if revokeAudits != 0 {
+		t.Fatalf("revoke wrote %d admin audit rows while the read guard was active", revokeAudits)
+	}
+	releaseRead()
+	if err := <-readDone; err != nil {
+		t.Fatalf("read guard: %v", err)
+	}
+	if err := <-revokeDone; err != nil {
+		t.Fatalf("revoke: %v", err)
+	}
+	assertDenied("撤销后读取", created.Run.Ref, probeID)
+
+	// ---- 阶段 2.2 D 组：News Evidence 关联门禁在真实组合根 + 真库上 fail-closed ----
+	// quant.research Run 不含 News Evidence Stage，因此任何 Evidence 读取都必须先被
+	// Run↔Evidence 关联校验拒绝，绝不触达 News 的 PIT / 当前授权读取内核。
+	// 同 Run 可读的正例由 news_evidence_association_test.go 用生产 Validator 自检的
+	// feed payload 覆盖；真库正例需要真实 News Feed Run + Evidence PIT 授权 fixture，
+	// 属 FLOW-006 前置，如实保留（doc/quant/15）。
+	if owner.execution.newsEvidenceReader == nil {
+		t.Fatal("生产组合根未装配 newsEvidenceReader")
+	}
+	newsRequest := newsapp.GetEvidenceRequest{NewsID: "news:sha256:" + strings.Repeat("3", 64)}
+	if _, err := owner.execution.readNewsEvidenceForRun(ctx, created.Run.Ref, newsRequest); !errors.Is(err, newsapp.ErrEvidenceAssociationNotFound) {
+		t.Fatalf("无 News Evidence Stage 的 Run 读取应判无关联: %v", err)
+	}
+	for _, forged := range []string{"", "  ", "run:researchflow:news-forged-0001"} {
+		if _, err := owner.execution.readNewsEvidenceForRun(ctx, forged, newsRequest); err == nil {
+			t.Fatalf("伪造 News RunRef %q 必须 fail-closed", forged)
+		}
 	}
 }

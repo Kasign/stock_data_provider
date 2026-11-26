@@ -7,9 +7,12 @@ import (
 	"time"
 
 	marketdatabootstrap "example.com/stock-analysis-flow/internal/marketdata/bootstrap"
+	newsplatform "example.com/stock-analysis-flow/internal/news/adapters/platform"
 	newsstorage "example.com/stock-analysis-flow/internal/news/adapters/storage"
+	newsapp "example.com/stock-analysis-flow/internal/news/app"
 	newsconfig "example.com/stock-analysis-flow/internal/news/config"
 	quantapplication "example.com/stock-analysis-flow/internal/quant/application"
+	quantresult "example.com/stock-analysis-flow/internal/quant/result"
 	quantstorage "example.com/stock-analysis-flow/internal/quant/storage"
 	researchflowapplication "example.com/stock-analysis-flow/internal/researchflow/application"
 	"example.com/stock-analysis-flow/internal/researchflow/parameterschema"
@@ -24,22 +27,23 @@ import (
 // researchflowComposition contains shared execution dependencies. Owner Session
 // identity remains outside this composition so Worker-only processes can assemble it.
 type researchflowComposition struct {
-	newsStage         *newsSearchStageComposition
-	newsFeedStage     *newsFeedStageComposition
-	quantResultReader *researchflowQuantResultReader
-	quantStage        *quantSMA20StageComposition
-	quantFactorStage  *quantFactorStageComposition
-	quantTrendStage   *quantTrendStageComposition
-	runRepository     *researchflowstorage.MySQLRunRepository
-	templateRegistry  *researchflowstorage.MySQLTemplateRegistry
-	workflowTemplates []template.WorkflowTemplate
-	resourcePolicies  researchflowapplication.ResourcePolicyResolver
-	parameterSchemas  *parameterschema.Validator
-	applicability     template.ApplicabilityEvaluator
-	outputRegistries  researchflowapplication.StageOutputRegistryResolver
-	stageExecutor     researchflowapplication.StageExecutor
-	clock             *researchflowstorage.MySQLDatabaseClock
-	ids               researchflowapplication.IDGenerator
+	newsStage          *newsSearchStageComposition
+	newsFeedStage      *newsFeedStageComposition
+	quantResultReader  *researchflowQuantResultReader
+	newsEvidenceReader *researchflowNewsEvidenceReader
+	quantStage         *quantSMA20StageComposition
+	quantFactorStage   *quantFactorStageComposition
+	quantTrendStage    *quantTrendStageComposition
+	runRepository      *researchflowstorage.MySQLRunRepository
+	templateRegistry   *researchflowstorage.MySQLTemplateRegistry
+	workflowTemplates  []template.WorkflowTemplate
+	resourcePolicies   researchflowapplication.ResourcePolicyResolver
+	parameterSchemas   *parameterschema.Validator
+	applicability      template.ApplicabilityEvaluator
+	outputRegistries   researchflowapplication.StageOutputRegistryResolver
+	stageExecutor      researchflowapplication.StageExecutor
+	clock              *researchflowstorage.MySQLDatabaseClock
+	ids                researchflowapplication.IDGenerator
 }
 
 func newResearchflowComposition(
@@ -256,7 +260,17 @@ func newResearchflowComposition(
 	if err != nil {
 		return nil, fmt.Errorf("create Researchflow database clock: %w", err)
 	}
-	// 任一已装配的 Quant Stage 都要求授权读取路径：只按 quant.sma20 判断会漏掉仅含 quant.factor 的装配。
+	// Stage Output 身份读取同时供 Quant Result 与 News Evidence 的关联校验复用：
+	// 只构造一次，避免两套平行读取路径（AGENTS.md 规则 2/6）。
+	stageOutputReader, err := researchflowapplication.NewGetStageOutputForRunStage(
+		runRepository, runRepository, runRepository,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("create Researchflow Stage Output association reader: %w", err)
+	}
+	// 任一已装配的 Quant Stage 都要求授权读取路径：只按 quant.sma20 判断会漏掉
+	// 仅含其它 Quant Stage 的装配。四个 Stage 共用同一张 quant_results 表与同一套
+	// 授权读取链，因此任一已装配 Stage 的 repository 都足以建立 GetResult。
 	var quantResultRepository *quantstorage.MySQLRepository
 	if quantStage != nil {
 		quantResultRepository = quantStage.repository
@@ -267,6 +281,9 @@ func newResearchflowComposition(
 	if quantResultRepository == nil && quantTrendStage != nil {
 		quantResultRepository = quantTrendStage.repository
 	}
+	if quantResultRepository == nil && quantRiskStage != nil {
+		quantResultRepository = quantRiskStage.repository
+	}
 	var quantResultReader *researchflowQuantResultReader
 	if quantResultRepository != nil {
 		policyStore, storeErr := quantstorage.NewMySQLResultAccessPolicyStore(shared.DB)
@@ -276,12 +293,6 @@ func newResearchflowComposition(
 		auditor, auditErr := quantstorage.NewMySQLAccessAuditor(shared.DB)
 		if auditErr != nil {
 			return nil, fmt.Errorf("create Quant result access auditor: %w", auditErr)
-		}
-		stageOutputReader, readerErr := researchflowapplication.NewGetStageOutputForRunStage(
-			runRepository, runRepository, runRepository,
-		)
-		if readerErr != nil {
-			return nil, fmt.Errorf("create Researchflow Stage Output association reader: %w", readerErr)
 		}
 		associationVerifier := quantResultAssociationVerifier{runs: runRepository, outputs: stageOutputReader}
 		authorizedReader, authorizedErr := quantstorage.NewMySQLAuthorizedResultReader(
@@ -305,16 +316,64 @@ func newResearchflowComposition(
 		}
 	}
 
+	// News Evidence 侧与 Quant 同构的关联校验 + 授权读取。GetEvidence 复用组合根
+	// 已持有的 newsRepository，不改 News 授权读取内核，也不改 bootstrap.go 的装配顺序。
+	// 与 Quant 分开：身份模型（NewsID 对内容寻址 result_id）、策略锁表与授权主体都不同。
+	evidenceAuthorization, err := newsapp.NewEvaluateNewsEvidenceReadAuthorization(
+		newsplatform.NewAuthorizationFingerprintVerifier(), newsRepository,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("create News Evidence current authorization reviewer: %w", err)
+	}
+	getNewsEvidence, err := newsapp.NewGetEvidence(newsRepository, newsRepository, evidenceAuthorization)
+	if err != nil {
+		return nil, fmt.Errorf("create News GetEvidence Application Service: %w", err)
+	}
+	newsEvidenceReader := &researchflowNewsEvidenceReader{
+		verifier: newsEvidenceAssociationVerifier{runs: runRepository, outputs: stageOutputReader},
+		read:     getNewsEvidence,
+	}
+
 	return &researchflowComposition{
 		newsStage: newsStage, newsFeedStage: newsFeedStage,
 		quantStage: quantStage, quantFactorStage: quantFactorStage, quantTrendStage: quantTrendStage,
-		quantResultReader: quantResultReader,
-		runRepository:     runRepository, templateRegistry: templateRegistry,
+		quantResultReader: quantResultReader, newsEvidenceReader: newsEvidenceReader,
+		runRepository: runRepository, templateRegistry: templateRegistry,
 		workflowTemplates: workflowTemplates, resourcePolicies: policyResolver,
 		parameterSchemas: parameterSchemas, applicability: researchflowApplicabilityEvaluator{},
 		outputRegistries: outputRegistries, stageExecutor: stageExecutor,
 		clock: clock, ids: researchflowIDGenerator{},
 	}, nil
+}
+
+// readQuantResultForRun is the single domain entry point for post-terminal
+// "result read-back verification". It goes exclusively through
+// researchflowQuantResultReader.Read so the trusted in-process Worker identity
+// is injected at that boundary only: HTTP input cannot construct the marker and
+// cannot bypass the Run/Stage association check or the current-policy guard.
+func (composition *researchflowComposition) readQuantResultForRun(
+	ctx context.Context,
+	runRef, resultID string,
+) (quantresult.Envelope, error) {
+	if composition == nil || composition.quantResultReader == nil {
+		return quantresult.Envelope{}, errResearchflowWorkerPrincipalUnavailable
+	}
+	return composition.quantResultReader.Read(ctx, runRef, resultID)
+}
+
+// readNewsEvidenceForRun is the News-side counterpart of readQuantResultForRun.
+// The reader verifies the Run↔Evidence association before delegating to the
+// existing News GetEvidence use case; runRef is supplied by the trusted
+// in-process execution boundary, never by HTTP input.
+func (composition *researchflowComposition) readNewsEvidenceForRun(
+	ctx context.Context,
+	runRef string,
+	request newsapp.GetEvidenceRequest,
+) (newsapp.ResearchEvidenceRecord, error) {
+	if composition == nil || composition.newsEvidenceReader == nil {
+		return newsapp.ResearchEvidenceRecord{}, newsapp.ErrEvidenceAssociationUnavailable
+	}
+	return composition.newsEvidenceReader.Read(ctx, runRef, request)
 }
 
 // publishWorkflowTemplate publishes each preflighted immutable definition.

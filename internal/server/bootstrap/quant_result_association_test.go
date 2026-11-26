@@ -317,7 +317,10 @@ func TestQuantStageAssociationSpecsCoverEverySupportedQuantStage(t *testing.T) {
 			t.Fatalf("Quant Stage association spec %q is incomplete: %+v", spec.StageCode, spec)
 		}
 	}
-	for _, stageCode := range []string{quantstage.SMA20StageCode, quantstage.FactorStageCode} {
+	for _, stageCode := range []string{
+		quantstage.SMA20StageCode, quantstage.FactorStageCode,
+		quantstage.TrendStageCode, quantstage.RiskStageCode,
+	} {
 		if _, supported := quantStageAssociationSpecFor(stageCode); !supported {
 			t.Fatalf("Quant Stage %q is missing from the association spec table", stageCode)
 		}
@@ -332,5 +335,13 @@ func TestQuantStageAssociationSpecsCoverEverySupportedQuantStage(t *testing.T) {
 	factor, _ := quantStageAssociationSpecFor(quantstage.FactorStageCode)
 	if factor.PayloadSchemaRef != quantFactorPayloadSchemaRef || factor.QualitySummarySchemaRef != quantFactorQualitySchemaRef {
 		t.Fatalf("Factor association spec drifted from its frozen schema refs: %+v", factor)
+	}
+	trend, _ := quantStageAssociationSpecFor(quantstage.TrendStageCode)
+	if trend.PayloadSchemaRef != quantTrendPayloadSchemaRef || trend.QualitySummarySchemaRef != quantTrendQualitySchemaRef {
+		t.Fatalf("Trend association spec drifted from its frozen schema refs: %+v", trend)
+	}
+	risk, _ := quantStageAssociationSpecFor(quantstage.RiskStageCode)
+	if risk.PayloadSchemaRef != quantRiskPayloadSchemaRef || risk.QualitySummarySchemaRef != quantRiskQualitySchemaRef {
+		t.Fatalf("Risk association spec drifted from its frozen schema refs: %+v", risk)
 	}
 }
