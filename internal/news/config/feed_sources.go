@@ -26,8 +26,8 @@ const (
 var feedIdentifierPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
 
 // FeedSource 是经过启动配置校验的只读 Source/Endpoint 注册快照。
-// ExpectedCurrentSourcePolicyVersionID 是显式版本前置条件：空值只允许首次初始化；
-// 更新策略时必须填写期望替换的当前版本，避免旧配置把数据库当前策略回退。
+// ExpectedCurrentSourcePolicyVersionID 是显式版本前置条件：空值允许首次初始化；
+// 当前已是相同目标版本且载荷一致时幂等成功；更新到新版本时必须填写期望替换的当前版本，避免旧配置回退。
 type FeedSource struct {
 	SourceID string
 	EndpointID string
