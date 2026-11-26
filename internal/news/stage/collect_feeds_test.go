@@ -67,11 +67,11 @@ func TestFeedCollectionAdapterUsesRunResourceSnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := adapter.Execute(context.Background(), "run-1/attempt-1", CollectFeedsStageCode, []string{"source-a/primary"})
+	result, err := adapter.Execute(context.Background(), "run-1/attempt-1", CollectFeedsStageCode, []string{SourceEndpointSnapshotRef(feedRegistration("source-a", "primary"))})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(collector.calls, []string{"source-a/primary"}) {
+	if !reflect.DeepEqual(collector.calls, []string{SourceEndpointSnapshotRef(feedRegistration("source-a", "primary"))}) {
 		t.Fatalf("collector calls escaped Run resource snapshot: %#v", collector.calls)
 	}
 	if !reflect.DeepEqual(ingester.prefixes, []string{"run-1/attempt-1/" + CollectFeedsStageCode + "/source-a/primary"}) {
@@ -139,7 +139,7 @@ func TestFeedCollectionAdapterMarksAllRetryableFailuresForResearchflowRetry(t *t
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := adapter.Execute(context.Background(), "run-3/attempt-1", CollectFeedsStageCode, []string{"source-a/primary"})
+	result, err := adapter.Execute(context.Background(), "run-3/attempt-1", CollectFeedsStageCode, []string{SourceEndpointSnapshotRef(feedRegistration("source-a", "primary"))})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -169,7 +169,7 @@ func TestFeedCollectionAdapterRejectsInvalidResourceSnapshotAndHonorsCancellatio
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if _, err := adapter.Execute(ctx, "run-4", CollectFeedsStageCode, []string{"source-a/primary"}); !errors.Is(err, context.Canceled) {
+	if _, err := adapter.Execute(ctx, "run-4", CollectFeedsStageCode, []string{SourceEndpointSnapshotRef(feedRegistration("source-a", "primary"))}); !errors.Is(err, context.Canceled) {
 		t.Fatalf("cancelled Feed collection returned %v", err)
 	}
 	if got := SourceEndpointResourceRef("source/a", "primary"); got != "" {
