@@ -2,9 +2,9 @@
 
 - 仓库：`Kasign/stock_data_provider`
 - 核对分支：`repair_all`
-- 核对基线：`aa13059e25e866f3cc33f7d2a5ba728875692eb9`
-- 核对日期：2026-11-24
-- 状态：**盘点完成；业务生产链路未就绪；尚未切换、尚未删除旧接口**
+- 核对基线：`43d773877a20f99325843650f1f8d0799d03ffe8`
+- 核对日期：2026-11-26
+- 状态：**旧 Analysis 生产链仍在运行；Researchflow 已有 News 与 Quant 的生产模板切片，但尚不具备完整股票研究报告闭环；本次更新为退役执行基线，尚未删除旧链**
 - 目标：WebUI 业务任务统一使用 SRV-CTR-001 Researchflow API 和 Owner Session；不保留旧 Analysis API 的浏览器兼容入口，不增加 Bearer/Session 双认证。
 
 ## 1. 当前结论
@@ -13,7 +13,7 @@
 
 1. WebUI 的分析任务主流程仍调用旧 `/api/v1/analysis/**` API，并依赖独立 Analysis Base、Task ID、Run ID、事件游标和旧任务状态模型。
 2. Root Server 已有 SRV-CTR-001 的 Researchflow Run API，并有对应 WebUI API helper；但页面主流程尚未使用它。
-3. Researchflow 生产注册目前只有 `news.search_candidates@1.0.0`。它只能证明 News Search 的 Run/Worker/Stage 基础链路，不覆盖股票分析、批量分析、市场复盘或最终研究报告。
+3. Researchflow 当前生产注册至少包含 `news.search_candidates`、`news.feed_collection` 和 `quant.sma20` 三个模板。它们分别覆盖 News 候选检索、Feed 采集和单指标 SMA20 计算切片；仍不等于完整股票研究、批量分析、市场复盘或最终研究报告闭环。
 
 因此，**现在不能只把旧 URL 替换为新 URL，也不能把股票分析请求映射为 News Search**。必须先形成真实、可验收的 Researchflow 股票研究模板和生产 Stage，再迁移 WebUI，最后删除旧 HTTP API。
 
@@ -339,3 +339,47 @@ analysisd 当前明确要求 GO_CORE_TOKEN、PYTHON_BRIDGE_TOKEN、PYTHON_BRIDGE
 - WebUI 创建、幂等重放、未知提交结果、轮询、取消、历史、结果读取和导出全部迁移，旧 /api/v1/analysis/**、Python API、go-core、Python Bridge 调用点归零。
 - 对 repair_all 全仓执行旧路径/环境变量/容器名/工作流引用搜索，逐项清理；旧目标环境的外部进程/调用者已核验或明确不在范围。
 - 以上全部通过后，才允许在一个完整逻辑工作组中删除旧入口、配置、Migration、容器、CI 和文档；不保留双链路兼容期。
+
+## 10. 2026-11-26 退役执行基线与实施顺序
+
+本节覆盖旧版盘点中已过时的基线描述。后续执行以本节和当前代码为准，不再沿用 2026-11-24 的单模板数量结论。
+
+### 10.1 当前边界（已由代码确认）
+
+- Root Server 是唯一外部 HTTP 入口和组合根；Researchflow 只提供内部 Application/执行编排，不独立启动 HTTP Listener、不直接暴露外部 API。
+- WebUI 通过 Root Server 调用 SRV-CTR-001；Server 负责认证、路由、DTO 和领域 Owner Facade 装配。
+- 旧 Analysis 仍在 Bootstrap 中创建旧 Runner、Task Queue、HTTP API，并注册 legacyAnalysisWorker；Router 仍注册 /api/v1/analysis/**。因此旧链不是无调用方的死代码，不能直接删除。
+- cmd/analysis-api 当前调用 bootstrap.Run，是 Root Server 的程序入口；不得因为命名含 Analysis 而删除该入口或部署构建目标。
+- internal/platform/httpapi 除旧 Analysis API 外还承载根路径服务信息响应；退役时须把仍需要的根路径行为迁至 Root Server，再删除旧 Handler。
+- Migration Registry 严格校验已应用 namespace 集合。移除 analysis 注册前，必须按一次性退役步骤清理旧四表及 platform_schema_migrations.namespace='analysis' 记录；不保留永久兼容 namespace。
+
+### 10.2 退役前不可跳过的真实能力缺口
+
+截至基线 SHA，Researchflow 已注册 news.search_candidates、news.feed_collection、quant.sma20。quant.sma20 仅是单指标生产切片，不能替代旧页面的 Factors、Signals、Risk、报告正文等完整输出。SRV-CTR-001 当前 Run 查询也不提供完整报告正文、Attempt 明细或事件流。
+
+因此不得先删旧 API/Runner 再补业务能力；否则会直接造成 WebUI 任务入口和结果页失效。必须先完成真实 Owner 能力接线、Run 结果与领域结果强类型关联、Server 授权读取 DTO，再切换 WebUI。
+
+### 10.3 以真实调用链为准的执行顺序
+
+1. 冻结旧链调用面清单：复核 WebUI 所有旧 API 的实际调用点、Server 路由、Bootstrap 装配、Worker 生命周期、配置项、Migration、测试和部署入口；区分 Root Server 旧 Analysis、独立 go-core、独立 Python Bridge 和 Python API Adapter，不将它们混为一条生产链。
+2. 完成能力归属和缺口：旧 Runner 的数据采集/质量归 Data；指标、因子、策略和硬风险结果归 Quant；研究上下文/证据/结论归 Research；跨模块 DAG 编排归 Researchflow；外部 HTTP、认证和报告读取 DTO 归 Server。只迁移真实能力，旧占位持仓/计划逻辑不迁移。
+3. 闭环 Researchflow 股票研究执行：通过 Server 注入 Data Snapshot 授权读取 Port、Quant 正式计算/结果授权读取 Port、Research Context/Evidence Port，以及需要的 LLM Provider；定义真实模板与 Stage 输入输出契约，完成 Worker→Owner→StageOutput 持久化和关联。不得在 Researchflow 重写领域算法。
+4. 补齐 Server 读取契约：沿用 SRV-CTR-001 Run Create/Get/Cancel；按需要增加 Server 层结果/报告读取契约，鉴权后调用领域 Owner 授权读取能力。Run/Stage 聚合不冒充完整报告，不直接访问 Repository。
+5. 迁移 WebUI：将任务创建、幂等提交、未知提交结果、状态轮询、取消、历史列表、详情和报告导出改为 Root Server Researchflow 契约；执行详情以真实 Run/Stage 状态为准，不伪造旧事件流。移除 Task ID、旧 Event Cursor、Analysis Base 和旧 RunResult 依赖。
+6. 整体删除旧 Analysis：确认全仓库无生产调用方后，删除旧 HTTP API、Task Queue、Runner 生产装配、旧 Analysis 领域/存储、旧 DataCollector、路由、配置、前端调用、测试夹具和过时文档；保留 Root Server 通用认证、Health/Ready、平台能力及 cmd/analysis-api 启动入口。
+7. 一次性清理旧数据结构：在停服窗口清理 analysis_runs、analysis_stage_events、analysis_snapshots、analysis_tasks 和 Migration History 中的 analysis namespace 记录；确认外键、表定义和清理顺序后执行。旧数据不迁移、不兼容。
+8. 最终验收：验证旧路由/旧 Worker/旧配置/旧表均不存在；Researchflow Run 创建、执行、查询、取消和授权报告读取正常；WebUI 无旧 API 请求；Owner Session、Health/Ready 和标准部署正常。最后对最终 SHA 执行完整测试与 CI，本阶段不以中途 CI 状态作为停工条件。
+
+### 10.4 当前进度状态
+
+- [x] 纠正 Researchflow 的职责边界：内部执行编排，不直接暴露 HTTP；Root Server 唯一对外。
+- [x] 刷新 Researchflow 模板数量和旧链实际生产装配基线。
+- [x] 确认旧 Analysis 仍有 WebUI、Server Router、Bootstrap、Worker 和 Migration 实际引用。
+- [ ] 完成旧 Runner 逐阶段能力映射及目标 Owner 现有能力核对。
+- [ ] 补齐完整股票研究模板、领域结果关联和 Server 授权读取。
+- [ ] WebUI 完成 Researchflow 迁移。
+- [ ] 删除旧 Analysis 生产链和相关代码。
+- [ ] 一次性清理旧 Analysis 表及 Migration namespace。
+- [ ] 最终完整验收。
+
+执行原则：以真实代码调用关系推进，优先连续完成同一工作组；不等待中途 CI 结果，不降低测试标准，不为迁移保留旧兼容实现。若真实能力缺口尚未闭环，明确记录阻塞项，不以删除旧入口制造“已退役”假象。
