@@ -147,6 +147,39 @@ func TestFeedCollectionAdapterReportsPartialAndRetryableFailures(t *testing.T) {
 	}
 }
 
+func TestFeedCollectionAdapterMarksRetryablePartialResultForResearchflowRetry(t *testing.T) {
+	collector := &feedCollectorStub{
+		entries: map[string][]app.CollectedSourceEntry{
+			"source-b/primary": {{Candidate: domain.Candidate{Title: "标题乙"}}},
+		},
+		errors: map[string]error{
+			"source-a/primary": &app.SourceCollectionError{Code: "source_fetch_failed", Retryable: true},
+		},
+	}
+	adapter, err := NewFeedCollectionAdapter([]app.SourceEndpointRegistration{
+		feedRegistration("source-a", "primary"),
+		feedRegistration("source-b", "primary"),
+	}, collector, &feedIngesterStub{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := adapter.Execute(context.Background(), "run-partial-retry", CollectFeedsStageCode, []string{
+		SourceEndpointSnapshotRef(feedRegistration("source-a", "primary")),
+		SourceEndpointSnapshotRef(feedRegistration("source-b", "primary")),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var output FeedCollectionOutput
+	if err := json.Unmarshal(result.Payload, &output); err != nil {
+		t.Fatal(err)
+	}
+	if output.Status != "partial" || output.FailedSourceCount != 1 || output.SuccessSourceCount != 1 ||
+		!result.Retryable || !reflect.DeepEqual(result.ReasonCodes, []string{"news_feed_retryable_source_failure"}) {
+		t.Fatalf("retryable partial result = %+v, retryable=%v, reasons=%#v", output, result.Retryable, result.ReasonCodes)
+	}
+}
+
 func TestFeedCollectionAdapterMarksAllRetryableFailuresForResearchflowRetry(t *testing.T) {
 	collector := &feedCollectorStub{errors: map[string]error{
 		"source-a/primary": &app.SourceCollectionError{Code: "source_fetch_failed", Retryable: true},
