@@ -18,7 +18,8 @@ const (
 	QuantDailyBarsProvidersRef       = "quant.daily-bars.configured-providers@1.0.0"
 	newsSearchPolicyVersion          = "1.0.0"
 	newsFeedPolicyVersion            = "1.0.0"
-	quantDailyBarsPolicyVersion      = "1.0.0"
+	quantDailyBarsPolicyVersion = "1.0.0"
+	maxSourceEndpointRefs      = 32
 )
 
 var (
@@ -129,8 +130,8 @@ func (r *Registry) ResolveSourceEndpoints(ref string, sourceEndpointRefs []strin
 	if !ok || ref != NewsFeedConfiguredSourcesRef {
 		return Snapshot{}, fmt.Errorf("%w: %q", ErrPolicyNotFound, ref)
 	}
-	if len(sourceEndpointRefs) == 0 {
-		return Snapshot{}, ErrNoProviders
+	if len(sourceEndpointRefs) == 0 || len(sourceEndpointRefs) > maxSourceEndpointRefs {
+		return Snapshot{}, fmt.Errorf("%w: Feed inventory must contain 1..%d Source/Endpoint references", ErrInvalidInventory, maxSourceEndpointRefs)
 	}
 	refs := append([]string(nil), sourceEndpointRefs...)
 	for i, value := range refs {
@@ -154,7 +155,8 @@ func (r *Registry) ResolveSourceEndpoints(ref string, sourceEndpointRefs []strin
 // needing a Registry instance. The Registry separately verifies the policy fingerprint.
 func ValidateSnapshotInventory(snapshot Snapshot) error {
 	if snapshot.PolicyRef == NewsFeedConfiguredSourcesRef {
-		if len(snapshot.AllowedProviderCodes) != 0 || len(snapshot.AllowedSourceEndpointRefs) == 0 {
+		if len(snapshot.AllowedProviderCodes) != 0 || len(snapshot.AllowedSourceEndpointRefs) == 0 ||
+			len(snapshot.AllowedSourceEndpointRefs) > maxSourceEndpointRefs {
 			return ErrInvalidInventory
 		}
 		for i, value := range snapshot.AllowedSourceEndpointRefs {
