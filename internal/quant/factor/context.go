@@ -16,7 +16,8 @@ func Momentum5WithContext(ctx domain.CalculationContext, trustedNow time.Time, c
 	return Momentum5(closes)
 }
 
-// MADistance20WithContext 在执行 MA20 距离计算前校验计算上下文和价格口径。\nfunc MADistance20WithContext(ctx domain.CalculationContext, trustedNow time.Time, closes []float64) (Result, error) {
+// MADistance20WithContext 在执行 MA20 距离计算前校验计算上下文和价格口径。
+func MADistance20WithContext(ctx domain.CalculationContext, trustedNow time.Time, closes []float64) (Result, error) {
 	if err := ctx.Validate(trustedNow, true); err != nil {
 		return Result{}, err
 	}
