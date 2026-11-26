@@ -1502,3 +1502,12 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - 命名规范与复活条件继续生效：`breadth`/`广度` 只指 Data 的 `MarketBreadthSnapshot`；横截面比例必须 `cross_section_*`/`*_participation` 并显式写分母；复活需“真实调用方 + 横截面授权快照 + 正名与独立算法版本”三条同时满足。
 - QNT-005 前置项维持精确化状态（广度授权快照 payload、交易状态/排除事实、指数授权快照），不以 HTTP 广度或自选股横截面替代。契约状态全部不变。
 - 1.6 无代码行为变更，因此不新增单测；验证仍以全量 `go build ./...`/`go test ./...` 为准。
+
+## 2026-11-26 执行清单 1.4 tradability 硬门禁切片（部分完成）
+
+- 起始 HEAD `d2ef6a93c`（1.6 决议收尾）。本组只落地“事实缺失即阻断”的等价门禁，不发明业务规则、不建 Facade/Stage、不改契约。
+- 交付 `internal/quant/risk/tradability.go`：规则集 `qnt-risk-tradability/1.0.0`、规则 `tradability_unverified`（block + required）、四类封闭事实（风险警示/停牌/涨跌停/可成交量）、证据引用强制校验、表外事实 fail-closed。
+- 不可覆盖性用结构保证而非约定：输入结构不含 Status/RuleSetVersion/评分/模型建议；规则集版本由 `EvaluateTradabilityGate` 固定注入；`Decision.Status` 只能由 `AggregateStatus` 推导；白名单测试阻止未来新增覆盖通道。
+- 与旧链等价：旧链四类事实不可得即 `Allowed=false`；新门禁未验证即 `reject`；旧链缺判定在规划阶段拒绝；新门禁必需规则缺失/执行失败为 `block+unknown`（比旧链更严）。
+- 阻塞登记（1.4 剩余部分）：Signal 契约（QNT-008 NOT_STARTED）、Data 可交易性事实（缺涨跌停/可成交量，且无授权快照 payload）、权威规则目录。文档：`doc/quant/09-risk-tradability硬门禁切片与前置.md`。
+- 验证：`go build ./...`、`go vet`、`go test ./internal/quant/...` 通过；变异验证两处（未验证改 not_triggered、去掉证据强制）均使测试失败。CI 以推送后结论为准，本节不预填。

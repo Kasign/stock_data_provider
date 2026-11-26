@@ -22,3 +22,12 @@ DTO Validate 校验结构、枚举、Reason.code 唯一性、`evaluated_at >= sy
 ## 验收
 
 Go 强类型 DTO、单元测试、Draft 2020-12 Schema 编译测试和 Golden 校验已加入源码，并由 Quant 独立 Workflow `42618742241` 在代码 SHA `cda200a1e4a3673bb4a34cd4b914d32f0a3be823` 上执行通过（覆盖 Quant 全包测试、gofmt、Manifest 30 秒随机 Fuzz、Race 和 Vet）。当前分支 HEAD `c104fb71ebcf9360b3306a8a89ca40b26131fbc6` 在该代码验收 SHA 之后只有文档提交，没有 Quant 代码变化；该证据不是对当前文档 HEAD 直接触发的 CI。本阶段不代表 QNT-010 具体领域规则、真实数据风险评估、可信授权或跨模块集成验收完成。
+
+## 2026-11-26 tradability 门禁切片（执行清单 1.4）
+
+旧 Analysis 链的 `tradabilityChecker` 对每条候选恒 `Allowed=false`（未提供可信的 ST/停牌/涨跌停/可成交量），这是**事实门禁**而非阈值规则，因此可以在不发明业务规则的前提下正式化：
+
+- 新增 `internal/quant/risk/tradability.go`：规则集 `qnt-risk-tradability/1.0.0`，规则 `tradability_unverified`（`block` + `required`）；四类事实封闭枚举与旧链理由一一对应。
+- 结论：事实未验证 → `block + triggered` → `reject`；声明已验证但缺证据引用/证据非法/表外事实 → `block + unknown` → `unknown`。两条路径都不产生 `pass`。
+- 不可覆盖由结构保证：门禁输入不含 Status、RuleSetVersion、评分或模型建议；规则集版本由门禁函数固定注入；`Decision.Status` 只能由 `AggregateStatus` 推导。
+- 本切片不改变 QNT-CTR-004 契约（仍 `frozen`，未新增字段）；也不代表 QNT-010 完整规则目录就位——其余规则、`Signal` 输入与真实事实读取仍待前置，见 `doc/quant/09-risk-tradability硬门禁切片与前置.md`。

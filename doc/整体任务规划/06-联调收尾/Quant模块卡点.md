@@ -231,3 +231,12 @@ Quant 现有 GetResult 授权读取用例、SMA20 与三因子（`ma20_distance`
 - 本轮不改任何契约状态：QNT-CTR-003 `deferred`、004/005 `frozen`、QNT-005 `NOT_STARTED`；不新增代码/Schema/Stage。
 
 - **M1 决议（2026-11-26）**：按推荐项执行选项 B 书面废弃。旧 `watchlist_above_ma20_pct` 不迁移、不正名、不注册为 Quant 指标，也不新建“自选股广度”替代物；`internal/service/wiring.go` 的 `marketAnalyzer` 加退役注释（仅注释、不改行为），随阶段 4 删除旧链一并退役。真实市场环境需求归 QNT-005，前置项不变（广度授权快照 + 交易状态排除事实 + 指数授权快照）。第 6 节命名规范与第 7 节复活条件继续生效，1.6 记为已完成。
+
+## 2026-11-26 执行清单 1.4 tradability 硬门禁切片（部分完成）
+
+- 旧链事实：`internal/service/wiring.go:373-389` 的 `tradabilityChecker` 对每条候选恒 `Allowed=false`（理由：未提供可信的 ST/停牌/涨跌停/可成交量）；`analysis/app/runner.go:552-579` 的 `approvedForPlanning` 对“缺少可交易性判定”同样拒绝。所以 1.4 要覆盖的是**事实门禁**，不是业务阈值规则。
+- Quant 侧现状：`internal/quant/risk` 已有 RuleSet/Evaluator/Decision/aggregate 全套（block 必 required、缺失必需规则补 unknown、panic 转执行失败、warn 不得覆盖 block），`RiskPayload` 也已注册进 Envelope（`risk/1.0.0`，QNT-CTR-004 `frozen`）。缺的是规则目录、输入对象与事实来源。
+- 本轮落地：`internal/quant/risk/tradability.go` 新增规则集 `qnt-risk-tradability/1.0.0` 与规则 `tradability_unverified`（block + required）；四类事实枚举与旧链理由一一对应；未验证 → reject，声明已验证但缺证据/证据非法/表外事实 → unknown，均不产生 pass；`TradabilityGateInput` 无 Status/RuleSetVersion/评分/模型建议字段，规则集版本由门禁函数固定注入，并有白名单测试守住覆盖通道。
+- 仍然阻塞（三条，缺一不可）：① `Signal` 契约（QNT-008 NOT_STARTED）——无评估对象，建 Facade/Stage 即零调用方接口；② Data 可交易性事实——`SecurityTradingStatusSnapshot` 缺**涨跌停状态与可成交量**，且无授权快照 payload（授权快照只有单证券 `daily_bars_close_series`）；③ 权威规则目录——QNT-010 明示不得由 Quant 猜测规则。
+- 边界：不建 Risk Facade、不装 `quant.risk` Stage、不定义其余风险规则、不改任何契约。等价性对照、未做原因与推进条件见 `doc/quant/09-risk-tradability硬门禁切片与前置.md`。
+- 验证：`go test ./internal/quant/risk/` 全绿（新增 9 用例）；变异验证两处均失败有效——把未验证结论改为 `not_triggered`（决策变 pass）、去掉“已验证必须有证据引用”（无证据变 pass）。
