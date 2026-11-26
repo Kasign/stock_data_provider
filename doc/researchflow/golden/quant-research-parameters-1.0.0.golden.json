@@ -1,0 +1,27 @@
+{
+  "stages": {
+    "quant.factor": {
+      "factor_code": "momentum_5d",
+      "symbol": "600036.SH",
+      "start_date": "2026-10-01",
+      "end_date": "2026-10-30",
+      "limit": 6
+    },
+    "quant.risk": {
+      "symbol": "600036.SH",
+      "trade_date": "2026-11-25"
+    },
+    "quant.sma20": {
+      "symbol": "600036.SH",
+      "start_date": "2026-10-01",
+      "end_date": "2026-10-30",
+      "limit": 20
+    },
+    "quant.trend": {
+      "symbol": "600036.SH",
+      "start_date": "2026-09-01",
+      "end_date": "2026-10-30",
+      "limit": 61
+    }
+  }
+}

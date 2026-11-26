@@ -11,30 +11,32 @@ import (
 )
 
 const (
-	newsSearchParameterSchemaRef      = "doc/researchflow/schema/news-search-parameters-1.0.0.schema.json"
-	newsSearchParameterSchemaVersion  = "1.0.0"
-	newsSearchApplicabilityRuleRef    = "news.search_candidates.always"
-	newsSearchApplicabilityVersion    = "1.0.0"
-	newsFeedParameterSchemaRef        = "doc/researchflow/schema/news-feed-collection-parameters-1.0.0.schema.json"
-	newsFeedParameterSchemaVersion    = "1.0.0"
-	newsFeedApplicabilityRuleRef      = "news.feed_collection.configured_sources"
-	newsFeedApplicabilityVersion      = "1.0.0"
-	quantSMA20ParameterSchemaRef      = "doc/researchflow/schema/quant-sma20-parameters-1.0.0.schema.json"
-	quantSMA20ParameterSchemaVersion  = "1.0.0"
-	quantSMA20ApplicabilityRuleRef    = "quant.sma20.always"
-	quantSMA20ApplicabilityVersion    = "1.0.0"
-	quantFactorParameterSchemaRef     = "doc/researchflow/schema/quant-factor-parameters-1.0.0.schema.json"
-	quantFactorParameterSchemaVersion = "1.0.0"
-	quantFactorApplicabilityRuleRef   = "quant.factor.always"
-	quantFactorApplicabilityVersion   = "1.0.0"
-	quantTrendParameterSchemaRef      = "doc/researchflow/schema/quant-trend-parameters-1.0.0.schema.json"
-	quantTrendParameterSchemaVersion  = "1.0.0"
-	quantTrendApplicabilityRuleRef    = "quant.trend.always"
-	quantTrendApplicabilityVersion    = "1.0.0"
-	quantRiskParameterSchemaRef       = "doc/researchflow/schema/quant-risk-parameters-1.0.0.schema.json"
-	quantRiskParameterSchemaVersion   = "1.0.0"
-	quantRiskApplicabilityRuleRef     = "quant.risk.always"
-	quantRiskApplicabilityVersion     = "1.0.0"
+	newsSearchParameterSchemaRef        = "doc/researchflow/schema/news-search-parameters-1.0.0.schema.json"
+	newsSearchParameterSchemaVersion    = "1.0.0"
+	newsSearchApplicabilityRuleRef      = "news.search_candidates.always"
+	newsSearchApplicabilityVersion      = "1.0.0"
+	newsFeedParameterSchemaRef          = "doc/researchflow/schema/news-feed-collection-parameters-1.0.0.schema.json"
+	newsFeedParameterSchemaVersion      = "1.0.0"
+	newsFeedApplicabilityRuleRef        = "news.feed_collection.configured_sources"
+	newsFeedApplicabilityVersion        = "1.0.0"
+	quantSMA20ParameterSchemaRef        = "doc/researchflow/schema/quant-sma20-parameters-1.0.0.schema.json"
+	quantSMA20ParameterSchemaVersion    = "1.0.0"
+	quantSMA20ApplicabilityRuleRef      = "quant.sma20.always"
+	quantSMA20ApplicabilityVersion      = "1.0.0"
+	quantFactorParameterSchemaRef       = "doc/researchflow/schema/quant-factor-parameters-1.0.0.schema.json"
+	quantFactorParameterSchemaVersion   = "1.0.0"
+	quantFactorApplicabilityRuleRef     = "quant.factor.always"
+	quantFactorApplicabilityVersion     = "1.0.0"
+	quantTrendParameterSchemaRef        = "doc/researchflow/schema/quant-trend-parameters-1.0.0.schema.json"
+	quantTrendParameterSchemaVersion    = "1.0.0"
+	quantTrendApplicabilityRuleRef      = "quant.trend.always"
+	quantTrendApplicabilityVersion      = "1.0.0"
+	quantRiskParameterSchemaRef         = "doc/researchflow/schema/quant-risk-parameters-1.0.0.schema.json"
+	quantRiskParameterSchemaVersion     = "1.0.0"
+	quantRiskApplicabilityRuleRef       = "quant.risk.always"
+	quantRiskApplicabilityVersion       = "1.0.0"
+	quantResearchParameterSchemaRef     = "doc/researchflow/schema/quant-research-parameters-1.0.0.schema.json"
+	quantResearchParameterSchemaVersion = "1.0.0"
 )
 
 var ErrUnsupportedNewsSearchApplicabilityRule = errors.New("unsupported News Search applicability rule")
@@ -191,6 +193,80 @@ const quantRiskParameterSchemaDocument = `{
   "additionalProperties": false
 }`
 
+// quantResearchParameterSchemaDocument 是 per-Stage 模板的参数信封定义（D1）。
+// 四个 $defs 是四份既有子 Schema 约束关键字的逐字节复制，由契约测试锁定漂移。
+// 校验器禁用外部 $ref，因此约束全部内联；每个 Stage 只收到自己 code 对应的子树。
+const quantResearchParameterSchemaDocument = `{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:kasign:researchflow:quant-research-parameters:1.0.0",
+  "title": "Quant Research Parameters (per-Stage envelope)",
+  "description": "Per-Stage parameter envelope for the quant.research template (D1). The Worker delivers only the subtree addressed by each Stage code. The four $defs are byte-faithful copies of the constraint keywords (type/properties/required/additionalProperties) of quant-sma20/factor/trend/risk-parameters-1.0.0; a contract test fails on any drift. External $ref is disabled by the validator, so all constraints are inlined.",
+  "type": "object",
+  "properties": {
+    "stages": {
+      "type": "object",
+      "properties": {
+        "quant.sma20": {"$ref": "#/$defs/quantSMA20"},
+        "quant.factor": {"$ref": "#/$defs/quantFactor"},
+        "quant.trend": {"$ref": "#/$defs/quantTrend"},
+        "quant.risk": {"$ref": "#/$defs/quantRisk"}
+      },
+      "required": ["quant.sma20", "quant.factor", "quant.trend", "quant.risk"],
+      "additionalProperties": false
+    }
+  },
+  "required": ["stages"],
+  "additionalProperties": false,
+  "$defs": {
+    "quantSMA20": {
+      "type": "object",
+      "properties": {
+        "symbol": {"type": "string", "pattern": "^[0-9]{6}\\.(SH|SZ|BJ)$"},
+        "start_date": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"},
+        "end_date": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"},
+        "limit": {"type": "integer", "minimum": 20, "maximum": 1000}
+      },
+      "required": ["symbol", "start_date", "end_date", "limit"],
+      "additionalProperties": false
+    },
+    "quantFactor": {
+      "type": "object",
+      "properties": {
+        "factor_code": {
+          "type": "string",
+          "enum": ["ma20_distance", "momentum_5d", "momentum_20d"]
+        },
+        "symbol": {"type": "string", "pattern": "^[0-9]{6}\\.(SH|SZ|BJ)$"},
+        "start_date": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"},
+        "end_date": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"},
+        "limit": {"type": "integer", "minimum": 6, "maximum": 1000}
+      },
+      "required": ["factor_code", "symbol", "start_date", "end_date", "limit"],
+      "additionalProperties": false
+    },
+    "quantTrend": {
+      "type": "object",
+      "properties": {
+        "symbol": {"type": "string", "pattern": "^[0-9]{6}\\.(SH|SZ|BJ)$"},
+        "start_date": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"},
+        "end_date": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"},
+        "limit": {"type": "integer", "minimum": 61, "maximum": 1000}
+      },
+      "required": ["symbol", "start_date", "end_date", "limit"],
+      "additionalProperties": false
+    },
+    "quantRisk": {
+      "type": "object",
+      "properties": {
+        "symbol": {"type": "string", "pattern": "^[0-9]{6}\\.(SH|SZ|BJ)$"},
+        "trade_date": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"}
+      },
+      "required": ["symbol", "trade_date"],
+      "additionalProperties": false
+    }
+  }
+}`
+
 type researchflowParameterSchemaRegistry struct{}
 
 func (researchflowParameterSchemaRegistry) Get(ctx context.Context, ref string) (parameterschema.Definition, error) {
@@ -227,6 +303,11 @@ func (researchflowParameterSchemaRegistry) Get(ctx context.Context, ref string) 
 		return parameterschema.Definition{
 			Ref: quantRiskParameterSchemaRef, Version: quantRiskParameterSchemaVersion,
 			Document: json.RawMessage(quantRiskParameterSchemaDocument),
+		}, nil
+	case quantResearchParameterSchemaRef:
+		return parameterschema.Definition{
+			Ref: quantResearchParameterSchemaRef, Version: quantResearchParameterSchemaVersion,
+			Document: json.RawMessage(quantResearchParameterSchemaDocument),
 		}, nil
 	default:
 		return parameterschema.Definition{}, fmt.Errorf("%w: %s", parameterschema.ErrSchemaNotFound, ref)

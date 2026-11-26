@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:kasign:researchflow:quant-research-parameters:1.0.0",
+  "title": "Quant Research Parameters (per-Stage envelope)",
+  "description": "Per-Stage parameter envelope for the quant.research template (D1). The Worker delivers only the subtree addressed by each Stage code. The four $defs are byte-faithful copies of the constraint keywords (type/properties/required/additionalProperties) of quant-sma20/factor/trend/risk-parameters-1.0.0; a contract test fails on any drift. External $ref is disabled by the validator, so all constraints are inlined.",
+  "type": "object",
+  "properties": {
+    "stages": {
+      "type": "object",
+      "properties": {
+        "quant.sma20": {"$ref": "#/$defs/quantSMA20"},
+        "quant.factor": {"$ref": "#/$defs/quantFactor"},
+        "quant.trend": {"$ref": "#/$defs/quantTrend"},
+        "quant.risk": {"$ref": "#/$defs/quantRisk"}
+      },
+      "required": ["quant.sma20", "quant.factor", "quant.trend", "quant.risk"],
+      "additionalProperties": false
+    }
+  },
+  "required": ["stages"],
+  "additionalProperties": false,
+  "$defs": {
+    "quantSMA20": {
+      "type": "object",
+      "properties": {
+        "symbol": {"type": "string", "pattern": "^[0-9]{6}\\.(SH|SZ|BJ)$"},
+        "start_date": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"},
+        "end_date": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"},
+        "limit": {"type": "integer", "minimum": 20, "maximum": 1000}
+      },
+      "required": ["symbol", "start_date", "end_date", "limit"],
+      "additionalProperties": false
+    },
+    "quantFactor": {
+      "type": "object",
+      "properties": {
+        "factor_code": {
+          "type": "string",
+          "enum": ["ma20_distance", "momentum_5d", "momentum_20d"]
+        },
+        "symbol": {"type": "string", "pattern": "^[0-9]{6}\\.(SH|SZ|BJ)$"},
+        "start_date": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"},
+        "end_date": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"},
+        "limit": {"type": "integer", "minimum": 6, "maximum": 1000}
+      },
+      "required": ["factor_code", "symbol", "start_date", "end_date", "limit"],
+      "additionalProperties": false
+    },
+    "quantTrend": {
+      "type": "object",
+      "properties": {
+        "symbol": {"type": "string", "pattern": "^[0-9]{6}\\.(SH|SZ|BJ)$"},
+        "start_date": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"},
+        "end_date": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"},
+        "limit": {"type": "integer", "minimum": 61, "maximum": 1000}
+      },
+      "required": ["symbol", "start_date", "end_date", "limit"],
+      "additionalProperties": false
+    },
+    "quantRisk": {
+      "type": "object",
+      "properties": {
+        "symbol": {"type": "string", "pattern": "^[0-9]{6}\\.(SH|SZ|BJ)$"},
+        "trade_date": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"}
+      },
+      "required": ["symbol", "trade_date"],
+      "additionalProperties": false
+    }
+  }
+}
