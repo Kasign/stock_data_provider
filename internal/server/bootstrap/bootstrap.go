@@ -164,7 +164,7 @@ func Run(ctx context.Context) (runErr error) {
 		return errors.New("NEWS_FEED_SOURCES_JSON requires explicit Researchflow capacity on every Server role")
 	}
 	if processConfig.ResearchflowCapacity.Configured &&
-		(serverRole != serverconfig.RoleAPI || ownerSession != nil || feedConfigured) {
+		requiresResearchflowComposition(serverRole, ownerSession != nil, feedConfigured) {
 		researchflowExecution, err = newResearchflowComposition(
 			ctx, storageResources, newsRepository, newsConfig, processConfig.ResearchflowCapacity, marketDataModule,
 		)
@@ -353,6 +353,10 @@ func Run(ctx context.Context) (runErr error) {
 	case <-httpComponent.Done():
 		return httpComponent.Result()
 	}
+}
+
+func requiresResearchflowComposition(role serverconfig.Role, ownerSessionEnabled, feedConfigured bool) bool {
+	return role != serverconfig.RoleAPI || ownerSessionEnabled || feedConfigured
 }
 
 type notificationReceiverAdapter struct {

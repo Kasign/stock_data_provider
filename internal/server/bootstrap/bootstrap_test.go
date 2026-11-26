@@ -10,8 +10,32 @@ import (
 	newsconfig "example.com/stock-analysis-flow/internal/news/config"
 	platformconfig "example.com/stock-analysis-flow/internal/platform/config"
 	platformdiagnostics "example.com/stock-analysis-flow/internal/platform/diagnostics"
+	serverconfig "example.com/stock-analysis-flow/internal/server/config"
 	servermigration "example.com/stock-analysis-flow/internal/server/migration"
 )
+
+func TestRequiresResearchflowCompositionForFeedOnEveryServerRole(t *testing.T) {
+	tests := []struct {
+		name           string
+		role           serverconfig.Role
+		ownerSession   bool
+		feedConfigured bool
+		want           bool
+	}{
+		{name: "API without Owner Session or Feed", role: serverconfig.RoleAPI, want: false},
+		{name: "API with Owner Session", role: serverconfig.RoleAPI, ownerSession: true, want: true},
+		{name: "API with Feed", role: serverconfig.RoleAPI, feedConfigured: true, want: true},
+		{name: "Worker without Feed", role: serverconfig.RoleWorker, want: true},
+		{name: "All without Feed", role: serverconfig.RoleAll, want: true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := requiresResearchflowComposition(test.role, test.ownerSession, test.feedConfigured); got != test.want {
+				t.Fatalf("requiresResearchflowComposition() = %v, want %v", got, test.want)
+			}
+		})
+	}
+}
 
 func TestNewMigrationRegistryRegistersAvailableModules(t *testing.T) {
 	registry, err := newMigrationRegistry()
