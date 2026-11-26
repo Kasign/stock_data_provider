@@ -121,12 +121,8 @@ func TestNewsFeedStageCompositionMariaDBPublishesOnlyExplicitForwardPolicyTransi
 	if !ok || dispatcher.newsFeed == nil {
 		t.Fatal("Server Researchflow dispatcher did not register the News Feed Stage")
 	}
-	previousRegistry, err := first.outputRegistries.Resolve(newsSearchStageOutputRegistryVersion)
-	if err != nil {
-		t.Fatalf("previous Search-only Output Registry was not retained for persisted Runs: %v", err)
-	}
-	if _, exists := previousRegistry.Entry("news.collect_feeds", "news.feed_collection", "1.0.0"); exists {
-		t.Fatal("previous Search-only Output Registry was mutated to include Feed output")
+	if _, err := first.outputRegistries.Resolve(newsSearchStageOutputRegistryVersion); err == nil {
+		t.Fatal("Feed-enabled composition retained the retired Search-only Registry version")
 	}
 	combinedRegistry, err := first.outputRegistries.Resolve(newsFeedStageOutputRegistryVersion)
 	if err != nil {
