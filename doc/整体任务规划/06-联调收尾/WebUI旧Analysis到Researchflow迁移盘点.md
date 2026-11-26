@@ -13,7 +13,7 @@
 
 1. WebUI 的分析任务主流程仍调用旧 `/api/v1/analysis/**` API，并依赖独立 Analysis Base、Task ID、Run ID、事件游标和旧任务状态模型。
 2. Root Server 已有 SRV-CTR-001 的 Researchflow Run API，并有对应 WebUI API helper；但页面主流程尚未使用它。
-3. Researchflow 当前生产注册至少包含 `news.search_candidates`、`news.feed_collection` 和 `quant.sma20` 三个模板。它们分别覆盖 News 候选检索、Feed 采集和单指标 SMA20 计算切片；仍不等于完整股票研究、批量分析、市场复盘或最终研究报告闭环。
+3. Researchflow 当前生产注册至少包含 `news.search_candidates`、`news.feed_collection`、`quant.sma20` 和 `quant.factor` 四个模板。它们分别覆盖 News 候选检索、Feed 采集、单指标 SMA20 计算和三因子（`ma20_distance`/`momentum_5d`/`momentum_20d`）计算切片；仍不等于完整股票研究、批量分析、市场复盘或最终研究报告闭环。
 
 因此，**现在不能只把旧 URL 替换为新 URL，也不能把股票分析请求映射为 News Search**。必须先形成真实、可验收的 Researchflow 股票研究模板和生产 Stage，再迁移 WebUI，最后删除旧 HTTP API。
 
@@ -172,7 +172,7 @@ Server 生产组合根：
 - `internal/server/bootstrap/news_search_stage.go`
 - `internal/server/bootstrap/researchflow_template_prerequisites.go`
 
-当前生产注册包含三个 Template：`news.search_candidates`、`news.feed_collection` 和 `quant.sma20`。分别由 News Search、News Feed Collection 和 Quant SMA20 Stage Executor 执行，并通过对应参数 Schema、Applicability、Stage Output Registry 和 Server Dispatcher 装配。未知 Stage Code 明确失败，不存在通用占位 Executor。Quant 当前仅接入 SMA20 单指标 Stage，不代表 Factor、Trend、Risk 或完整股票研究链已生产闭环。
+当前生产注册包含四个 Template：`news.search_candidates`、`news.feed_collection`、`quant.sma20` 和 `quant.factor`。分别由 News Search、News Feed Collection、Quant SMA20 Stage Executor 和 Quant Factor Stage Executor 执行，并通过对应参数 Schema、Applicability、Stage Output Registry 和 Server Dispatcher 装配。未知 Stage Code 明确失败，不存在通用占位 Executor。Quant 已接入 SMA20 与首批三因子两个 Stage，但仍不代表 Trend、Risk 或完整股票研究链已生产闭环。
 
 ### 5.2 现有可复用构件与未闭环能力
 
@@ -180,7 +180,7 @@ Server 生产组合根：
 |---|---|---|
 | News | 真实 News Search Provider、Stage Adapter、Validator、Template/Executor/Output Registry | 已装配；只覆盖候选新闻检索，不代表完整股票分析 |
 | Research | Context Application 的 CreateContext/GetContext、Context Schema/Storage；Researchflow 有 DTO 映射和 Context Assembly | 缺可信 CallerRef/当前授权 Adapter、Run.SystemAsOf 一致性校验、Server/Worker Stage 接线 |
-| Quant | GetResult 授权读取 Application、Trend/Risk Envelope；SMA20 CreateSMAService 精确 Decimal 计算/持久化；SMA20Adapter 已进入 Server Stage Dispatcher、合并 Output Registry、参数 Schema 和 quant.sma20@1.0.0 Template；Data Snapshot Creator/Authorized Reader Adapter、Quant Repository/Registry 已装配；Factor 纯计算新增 MA20 距离和 5 日动量函数 | 生产 Researchflow Stage 仍只有 SMA20；新增加的纯计算函数不代表生产 Registry/Envelope/持久化能力。首批 Close-only Factor 可复用现有已授权 Close Series Snapshot，不被通用 DATA-CTR-005/007 deferred 阻断；其生产发布门禁是 QNT-CTR-003 自身的 Factor Schema/Golden、Decimal Registry/精度策略、生产 Facade 与 Researchflow Stage 接线（见 PLAT-002 登记簿第 51/79 行及 5.2.1 节）。缺完整 Worker→Data→Quant→StageOutput MariaDB E2E、Researchflow Run→result_id 强类型关联只读 Port、生产 AuthorizedResultReader、策略撤销一致性读取和 AccessAudit Server 装配。Trend/Risk/Factor 完整生产计算和完整股票研究 Template 仍未闭环。不得把纯函数、Stage 单测或模板注册当作端到端验收；结果读取必须走 Quant Application 授权和审计，不能访问 Repository 旁路 |
+| Quant | GetResult 授权读取 Application、Trend/Risk Envelope；SMA20 CreateSMAService 精确 Decimal 计算/持久化；SMA20Adapter 已进入 Server Stage Dispatcher、合并 Output Registry、参数 Schema 和 quant.sma20@1.0.0 Template；Data Snapshot Creator/Authorized Reader Adapter、Quant Repository/Registry 已装配；Factor 纯计算新增 MA20 距离和 5 日动量函数 | 生产 Researchflow Stage 已含 `quant.sma20` 与 `quant.factor`；Factor 结果可落库并经 `GetResult` 授权读取，Stage 输出/质量 Schema 与 Run↔Result 关联均为强类型 fail-closed。首批 Close-only Factor 可复用现有已授权 Close Series Snapshot，不被通用 DATA-CTR-005/007 deferred 阻断；其生产门禁（Factor Schema/Golden、Decimal Registry/精度策略、生产 Facade、Researchflow Stage 接线）已于第②～⑧组完成。缺真实 MariaDB 的 Worker→Data→Quant→StageOutput E2E，以及 Trend/Risk 生产计算和完整股票研究 Template（见 PLAT-002 登记簿第 51/79 行及 5.2.1 节）。 |
 | LLM | Provider.Generate/Stream、ModelRequest、Researchflow 预算/Tool Policy/结果映射 | 缺 Server 生产 Provider 注入、真实调用链和目标模型 Tokenizer；不能把估算器冒充生产 Tokenizer |
 | RiskDecision | Quant 的 `risk.Decision` 是 Quant 领域结果 | Researchflow Composer 仍接收独立 RiskDecision；唯一来源、字段映射、多结果聚合和关联身份未解决（RF-BLOCK-008） |
 | Data | 已有 DailyBars Close Series Snapshot Creator、Manifest/Payload 双指纹、授权签发和同一 MariaDB 事务内 Authorized Snapshot Reader | 代码能力已有，但 Root 尚未注入 Researchflow 消费者；服务 Principal/Owner Policy 管理入口与 Stage 输入/输出契约未闭环；DATA-CTR-007 仍 deferred。旧 AnalysisCollector 不使用该 Snapshot 链路且丢失关键 PIT/来源元数据 |
@@ -369,7 +369,7 @@ analysisd 当前明确要求 GO_CORE_TOKEN、PYTHON_BRIDGE_TOKEN、PYTHON_BRIDGE
 
 ### 10.2 退役前不可跳过的真实能力缺口
 
-截至基线 SHA，Researchflow 已注册 news.search_candidates、news.feed_collection、quant.sma20。quant.sma20 仅是单指标生产切片，不能替代旧页面的 Factors、Signals、Risk、报告正文等完整输出。SRV-CTR-001 当前 Run 查询也不提供完整报告正文、Attempt 明细或事件流。
+截至基线 SHA，Researchflow 已注册 news.search_candidates、news.feed_collection、quant.sma20；2026-11-26 起新增 quant.factor。二者均为单一切片（单指标 / 三因子），不能替代旧页面的 Factors 组合、Signals、Risk、报告正文等完整输出。SRV-CTR-001 当前 Run 查询也不提供完整报告正文、Attempt 明细或事件流。
 
 因此不得先删旧 API/Runner 再补业务能力；否则会直接造成 WebUI 任务入口和结果页失效。必须先完成真实 Owner 能力接线、Run 结果与领域结果强类型关联、Server 授权读取 DTO，再切换 WebUI。
 

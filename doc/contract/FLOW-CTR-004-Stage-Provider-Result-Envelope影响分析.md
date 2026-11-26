@@ -133,7 +133,7 @@ Quant 侧 `internal/quant/registry` 及 `doc/quant/schema/` 已有部分 QNT-CTR
 - Storage 提供按 resource_ref 读取能力；MariaDB 集成测试覆盖成功提交与两份资源读取。Worker 测试覆盖 Registry 缺失和 Provider 引用越权。
 - 精确代码 SHA：`7392caaba59aa4d322d4b91e1d34a7294d2f6505`；Integration CI Run [43837079196](https://github.com/Kasign/stock_data_provider/actions/runs/43837079196) 全量 success。
 
-### 仍然未解锁
+### 仍然未解锁（2026-11-16 时点；2026-11-26 更新见下方）
 
 - 没有真实业务 Stage Entry；不得注册占位项。
 - Data / News / Research / Quant / LLM 领域 Provider 仍须由各 Owner 提供明确 Stage Code、Application Port、Payload Schema/Golden、QualitySummary Schema/Golden、质量语义和真实执行能力。
@@ -141,4 +141,11 @@ Quant 侧 `internal/quant/registry` 及 `doc/quant/schema/` 已有部分 QNT-CTR
 - Server 生产 StageExecutor、Registry、Scheduler、WorkerPool 生命周期装配须等至少一个真实 Provider/注册项完整后推进；当前不创建空壳 Executor。
 - ResultSummary 的质量枚举、Coverage 分子/分母、Summary 身份/版本绑定未由权威口径完整定义，继续保持独立契约决议项，不影响已完成的通用 Envelope/Output Registry 执行边界。
 
-**后续主线：** 停止重复检查 Worker/Storage。按真实模块 Application Port 与现有领域 Schema/Golden，确认第一个可执行的领域 Stage；优先从 News/Research 现有能力评估，缺少领域语义时由对应 Owner 决定，不由 Researchflow/Integration 猜测。真实 Provider 完备后再做 Server 生产装配与跨模块端到端验收。
+### 2026-11-26 更新：真实 Stage Entry 与生产装配已落地
+
+- 真实业务 Stage Entry 已注册四个，均绑定真实 Provider 与领域 Schema/Golden：`news.search_candidates`、`news.feed_collection`（News）、`quant.sma20`（Quant，Output Registry 1.1.0）、`quant.factor`（Quant，Output Registry 1.3.0，`QNT-CTR-003-factor-stage-output` / `-quality-summary` 1.0.0）。不存在占位 Executor，未知 Stage Code 明确失败。
+- Quant Factor 不再受通用 DATA-CTR-005/007 阻断：首批三个 Close-only 比率因子复用已授权的 Data Close Series Snapshot（精确 Close、双指纹 SnapshotRef、PIT、覆盖率、授权读取），生产门禁改为 QNT-CTR-003 自身的 Schema/Golden、Decimal Registry、Facade 与 Stage 接线，已于第②～⑧组完成，并取得端到端质量证据与 Quant→Researchflow Contract Test。QNT-CTR-003 状态仍 `deferred`，升级待定点审查。LLM Provider/CapabilityState 仍 blocked。
+- Server 生产 StageExecutor、Output Registry 合并集、Dispatcher、Scheduler/Worker 生命周期装配已随上述 Stage 落地（`internal/server/bootstrap/researchflow_*`、`quant_sma20_stage.go`、`quant_factor_stage.go`）。
+- 仍保持独立决议项：ResultSummary 的质量枚举、coverage 分子/分母与 Summary 身份/版本绑定。该缺口不影响已注册 Stage 的 Envelope 校验与结果读取，但完整 Run 级 ResultSummary 机器校验未闭合。
+
+**后续主线（已按 2026-11-26 状态顺延）：** 不再重复检查 Worker/Storage/Envelope。后续工作转入完整股票研究 Template（执行清单 2.1）、报告读取 DTO（2.3）与 ResultSummary 质量口径决议。
