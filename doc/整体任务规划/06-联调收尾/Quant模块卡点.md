@@ -247,3 +247,14 @@ Quant 现有 GetResult 授权读取用例、SMA20 与三因子（`ma20_distance`
 - 前置③ 规则目录：新增 `RuleCatalog`（`qnt-risk-catalog/1.0.0`），条目带依据来源与发布状态，pending 占位显式列出缺权威来源的规则主题；发布规则集只能引用已发布条目，引用未登记/未发布/pending 一律加载失败。收敛测试断言 `Load()` 与 `TradabilityRuleSet()` 完全相等。
 - 前置② Data 事实（契约层）：新增 DATA-CTR-007 扩展 payload `security_trading_status_facts` 1.0.0 + 同族 Manifest 1.0.0（DEC-060）。五项事实逐项 available/unavailable，五项全可用→valid、任一不可用→degraded；不含涨跌停与可成交量（Provider 未提供，写入即等于把推导当事实）。测试覆盖派生 key 双侧拒绝、质量一致性、身份/指纹漂移与信任边界。
 - 剩余阻塞收敛为一条：交易事实的存储列与授权读取分流（需与 DATA-CTR-008 Manifest/授权语义一起改，并在真实 MariaDB 环境验证），之后才谈 Risk Facade/Stage 装配。
+
+### 1.4 前置② 物理读取链路接入（2026-11-26 深夜，#45）
+
+- 三项决议（DEC-061）：共享表 + `payload_kind` 列、新增独立 `policy_ref` `security-status-facts-access`、门禁事实集维持四项。
+- 迁移 V2 只 `ADD COLUMN payload_kind`（`VARCHAR(48)` ascii_bin 非空）；**刻意不改表名**——MySQL DDL 非事务，`RENAME` 失败会留下 `status=failed` 半完成迁移并阻断启动，代价远大于名字不贴切。
+- 存储/授权双通道隔离：写入显式给 kind，读取 `snapshot_ref` 必须带 kind 条件（前缀对所有类型相同，仅凭 ref 无法区分）；策略引用为闭集，`Issue`/`AuthorizeRead`/Owner 发布/HTTP 四处校验数据类一致，不匹配 fail-closed 且不回落日线。
+- Creator 只搬运不改判：源 `invalid`/`unknown` 拒绝，`degraded` 即使五项齐全也拒绝；枚举 `unknown` 一律 `unavailable` + 原因；仍不生成涨跌停与可成交量。
+- Quant 消费端：`price_limit`/`tradable_volume` 恒入 `MissingFacts` → `Verified` 恒 false → 决策恒 `reject`。端到端测试断言 `reject + MissingFacts=[price_limit,tradable_volume] + EvidenceRefs=[snapshotRef,authorizationRef]`，测试名 `ProducesTraceableRejection`。
+- **1.4 仍为部分完成**，但阻塞性质变了：不再缺链路，而是缺事实——没有涨跌停制度表与可成交量模型，门禁只能给出可追溯的拒绝。Facade/Stage 装配的实质前置变成"能产出非拒绝结论"，需先行立项（另行任务）。
+- 验证：`gofmt`/`go vet`/`go test ./internal/...` 全绿，`-race` 覆盖三个改动模块；变异验证六处均有效失败。MariaDB 集成测试需 `MARKET_DATA_TEST_MYSQL_DSN`，**未在真实库执行**。
+- 契约状态未变：QNT-CTR-003 `deferred`、004/005 `frozen`、006 `deferred`、DATA-CTR-007 `deferred`、008 `frozen`。

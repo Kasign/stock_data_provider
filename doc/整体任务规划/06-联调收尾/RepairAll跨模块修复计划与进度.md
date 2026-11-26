@@ -1521,3 +1521,12 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - 契约统计变化：正式 CTR 44→45（新增 QNT-CTR-006 `deferred`）；QNT-CTR-003/004/005 与 DATA-CTR-007/008 状态均未改变。
 - 验证：`go build ./...`、`go test ./internal/...` 全绿；变异验证两处（tradability 条目改未发布、去掉事实 key 顺序校验）均使测试失败。
 - 1.4 仍为部分完成：唯一阻塞是 Data 交易事实的物理读取链路（存储列 + 授权读取分流 + Creator + MariaDB 集成测试）。
+
+## 2026-11-26 1.4 前置② 物理读取链路（Data 存储/授权分流 + Quant 消费端，DEC-061）
+
+- 影响分析先行，用户三项决议全部按推荐项通过：共享表 + `payload_kind` 列、独立 `policy_ref`、门禁事实集维持四项。
+- Data 侧：迁移 V2 只 `ADD COLUMN`（不改表名，避免 DDL 非事务留下 `status=failed`）；快照写入显式给 kind、读取带 kind 条件；授权策略引用转闭集，`Issue`/`AuthorizeRead`/Owner 发布/HTTP 四处校验数据类一致且不回落日线；新增事实快照 Repository/Port/Creator/Authorized Reader（接口分开，不扩既有签名）。
+- Quant 侧：`tradability_facts.go` 组装门禁输入，`price_limit`/`tradable_volume` 恒缺失；`server/bootstrap` 适配器转换前 `Verify()`，校验 `SnapshotRef`/`PurposeCode`/`PayloadKind`。
+- 结论诚实登记：链路打通后决策仍恒 `reject`（缺涨跌停与可成交量事实），验收标准是"可追溯的拒绝"。端到端测试名 `ProducesTraceableRejection`。
+- 验证：`gofmt`/`go vet`/`go test ./internal/...` 全绿，`-race` 覆盖 `internal/marketdata/...`、`internal/quant/...`、`internal/server/bootstrap`；变异验证六处均有效失败（含 HTTP 回落日线策略、发布传空 policyRef）。MariaDB 集成测试需 DSN，未在真实库执行；CI 结论以推送后为准，本节不预填。
+- 1.4 仍未完成：缺的不是链路而是事实（涨跌停制度表、可成交量模型），须另行立项。

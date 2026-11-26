@@ -172,3 +172,20 @@ Data Migration V9 增加 Data 自有 append-only 发布审计记录，至少包�
 - 多人审批、双人复核、定时生效队列、自动回滚。
 - Provider 凭据与 Provider 权限管理。
 - 真实 Provider 数据准确性验证；由部署后的真实环境验收阶段执行。
+
+## 12. 扩展：多数据类策略路由（2026-11-26）
+
+原首版只管理 `dailybars-v2-access` 一个策略引用。交易状态事实快照（`security_trading_status_facts`）接入后需要**独立发布、独立撤销**的策略，因此路由按数据类分裂，但不改变既有两条路由的任何语义。
+
+| 方法 | 路径 | 成功状态 | 数据类 |
+|---|---|---:|---|
+| GET | /api/v1/owner/data/daily-bars-access-policy | 200 | `dailybars-v2-access` |
+| POST | /api/v1/owner/data/daily-bars-access-policy/versions | 201 | `dailybars-v2-access` |
+| GET | /api/v1/owner/data/security-status-facts-access-policy | 200 | `security-status-facts-access` |
+| POST | /api/v1/owner/data/security-status-facts-access-policy/versions | 201 | `security-status-facts-access` |
+
+- 请求/响应结构、策略 Schema、身份与安全要求、错误映射、事务与审计要求四条路由完全一致；差异只有绑定的 `policy_ref`。
+- 策略引用是**闭集**（`dailybars-v2-access`、`security-status-facts-access`），未知引用在校验层就被拒绝，不接受运行时任意值。
+- **禁止跨数据类复用**：Handler 按路由绑定的 `policy_ref` 调用 Application，Application 再校验"解析到的当前策略 `policy_ref` 与本次请求数据类一致"。若装配的 Application 只支持单数据类，新增路由必须返回 503 `server.data_policy_unavailable`，**不得回落**为"返回日线策略"——回落会让 Owner 在事实策略页面看到并修改日线策略。
+- 撤销语义不变：撤销是该数据类的一次普通版本发布（`status=revoked`），只影响本数据类。
+- 新增路由的契约登记、OpenAPI/Schema/Golden 尚未补齐；本节只记录已实现的服务端行为，不代表 SRV-CTR-003 已冻结。

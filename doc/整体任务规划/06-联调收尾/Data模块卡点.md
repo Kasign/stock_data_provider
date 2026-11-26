@@ -479,3 +479,14 @@ Root Server 的 Data Module 构造、共享资源注入、Migration Registry、I
 - 发布审计与 immutable version insert、current pointer CAS 同一 MariaDB 事务提交；审计写入失败时策略发布整体回滚。未发布仍不生成默认策略。
 - Data Owner Application 从已验证的 Owner Session Principal 取得 actor_ref，从 Platform observability Context 取得 Request ID；缺失 Request ID 时 fail closed。
 - 接口评审文档为 doc/server/contracts/Data-Owner策略管理HTTP接口提案.md，推荐 POST /versions 创建不可变版本。文档仍 DRAFT，待项目级契约登记与冻结；Server Handler 尚未开始实现。
+
+## 2026-11-26 交易状态事实快照接入（DEC-060 契约层 + DEC-061 物理链路）
+
+- 契约层（DEC-060）：新增 payload `security_trading_status_facts` 1.0.0 与同族 Manifest 1.0.0，只承载五项真实事实（ST/停牌/退市/上市日/交易日），逐项 `available`/`unavailable`；五项全可用→`valid`，任一不可用→`degraded`。**不含涨跌停与可成交量**——Provider 从未提供，写入即等于把推导伪装为事实。
+- 存储（迁移 V2）：共享不可变快照表新增 `payload_kind`（`VARCHAR(48)` ascii_bin 非空）。**刻意不改表名**：MySQL DDL 非事务，`RENAME` 失败会在 migrations 历史里留下 `status=failed` 记录并导致启动被拒绝，代价远大于表名不贴切。V1 未改一字，checksum 不变。
+- 读写分流：写入显式给 kind（列默认值只服务历史行回填）；读取 `snapshot_ref` 必须带 kind 条件——`SnapshotRef` 前缀对所有 payload 类型相同，仅凭 ref 无法区分数据类，缺 kind 条件会导致跨类型串读。
+- 授权分流：策略引用收敛为闭集（`dailybars-v2-access`、`security-status-facts-access`）。签发、读取授权、Owner 发布、HTTP 路由四处都校验"解析到的当前策略 `policy_ref` == 本次请求的数据类"，不匹配即 fail-closed；旧签名接口不回落日线策略。
+- 新增 `SecurityTradingStatusFactsSnapshotCreator`：可信 Principal → PIT 交易状态 Reader → payload 组装 → V2 存储 → Data Owner 签发。组装只搬运不改判：源记录 `invalid`/`unknown` 拒绝，`degraded` 即使五项齐全也拒绝，枚举 `unknown` 一律落 `unavailable` 并给原因；`source_version` 缺失时留空指针而非伪造版本。
+- 新增 `AuthorizedSecurityTradingStatusFactsSnapshotReader`：独立方法 + 独立 Port 接口（不扩既有 close series 签名），先校验 `policy_snapshot`/`current` 的 `policy_ref` 与 `Manifest.PurposeCode`，再走同一 `authorization.Evaluate`；授权记录、撤销、当前策略、Payload 仍在同一 Repeatable Read 只读事务内读取。
+- 新增 Owner 策略路由 `GET/POST /api/v1/owner/data/security-status-facts-access-policy[/versions]`：策略按数据类独立发布、独立撤销；装配的 Application 若不支持按数据类读写，返回 503 `server.data_policy_unavailable`，不回落日线。
+- 验证：`gofmt`/`go vet`/`go test ./internal/...` 全绿，`-race` 覆盖 `internal/marketdata/...`；MariaDB 集成测试（`MARKET_DATA_TEST_MYSQL_DSN` 门控）覆盖迁移/`ValidateSchema`/幂等/跨 kind 隔离/SQL 篡改检测，但**未在真实 MariaDB 环境执行**，不得宣称已验证。契约状态未变：DATA-CTR-007 仍 `deferred`、DATA-CTR-008 仍 `frozen`。

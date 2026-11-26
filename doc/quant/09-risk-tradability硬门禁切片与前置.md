@@ -106,8 +106,29 @@
 - 逐项 `available`（带 value、不带原因）/ `unavailable`（带原因、不带 value）；五项全可用 → `valid`，任一不可用 → `degraded`。
 - **不含涨跌停与可成交量**：Provider 从未提供，写入等于把推导当事实；缺项由 `tradability_unverified` 门禁阻断。
 - 指纹沿用 JCS + 双指纹 + 组合 `SnapshotRef`；新增 Schema/Golden，测试覆盖 Golden↔Schema↔DTO、派生 key（`price_limit`/`tradable_volume`）双侧拒绝、质量一致性、身份与指纹漂移、信任边界（caller_ref/purpose/UTC as-of/sources）。
-- **仍未接入**：存储列与 payload kind 分流、授权签发与 Authorized Reader 分流、`SecurityTradingStatus` Creator、MariaDB 集成测试与 Quant 消费端 Contract Test。这些必须与 DATA-CTR-008 的 Manifest/授权语义一起改，属下一组。
+- **后续已接入**（2026-11-26 深夜，见 8.5）：存储列与 payload kind 分流、授权签发与 Authorized Reader 分流、`SecurityTradingStatus` Creator、MariaDB 集成测试与 Quant 消费端 Contract Test 已全部落地。
 
 ### 8.4 因此 1.4 的状态
 
-仍记为"部分完成"，但阻塞从"三条全缺"收敛为一条：**交易事实的物理读取链路**。Signal 与规则目录就位后，Risk 已具备"有输入、有规则、有目录"的评估前提；剩下的接入工作不再是"设计缺口"，而是"实现与集成验证"。
+记录为"部分完成"，但阻塞从"三条全缺"收敛为一条：**交易事实的物理读取链路**。Signal 与规则目录就位后，Risk 已具备"有输入、有规则、有目录"的评估前提；剩下的接入工作不再是"设计缺口"，而是"实现与集成验证"。
+
+该唯一阻塞已在 8.5 关闭；但 1.4 仍**不记为完成**——门禁事实集里的涨跌停与可成交量依旧不存在，`tradability_unverified` 必然产出 `reject`。真正阻塞 Facade/Stage 装配的是"能否产出非拒绝结论"，不是"链路是否打通"。
+
+### 8.5 前置② 物理读取链路：已闭环，但门禁结论恒为拒绝（2026-11-26 深夜）
+
+按用户三项决议（DEC-PLAT-002-061）落地：共享表 + `payload_kind` 列、独立 `policy_ref`、门禁事实集维持四项。
+
+| 环节 | 落地位置 | 关键约束 |
+|---|---|---|
+| 迁移 | `repository/mysql.go` V2 | 只 `ADD COLUMN payload_kind`；**不改表名**（DDL 非事务，RENAME 失败会留下 `status=failed` 阻断启动） |
+| 存储分流 | `daily_bars_close_series_snapshot.go` / `security_trading_status_facts_snapshot.go` | 写入显式给 kind；读取 `snapshot_ref` 必须带 kind 条件（前缀对所有类型相同） |
+| 授权 | `authorization/policy.go`、`application/data_authorization.go` | 策略引用闭集；`Issue`/`AuthorizeRead`/Owner 发布/HTTP 四处校验"策略 `policy_ref` == 请求数据类"，不匹配 fail-closed，不回落日线 |
+| Reader | `application/security_trading_status_facts_authorized_reader.go` | 独立方法 + 独立 Port 接口（不扩既有签名）；`policy_snapshot`/`current`/`Manifest.PurposeCode` 三重校验后才 `Evaluate` |
+| Creator | `application/security_trading_status_facts_snapshot.go` | 源记录 `invalid`/`unknown` 拒绝；`degraded` 即使五项齐全也拒绝；枚举 `unknown` 一律 `unavailable` + 原因 |
+| Quant 消费 | `quant/application/tradability_facts.go`、`server/bootstrap/quant_trading_facts_adapter.go` | 转换前 `Verify()`；`price_limit`/`tradable_volume` 恒入 `MissingFacts` |
+| HTTP | `/api/v1/owner/data/security-status-facts-access-policy[/versions]` | manager 不支持按数据类时返回 503 不可用，**不回落**日线策略 |
+
+- **结论诚实登记**：五项事实到位后 `Verified` 仍恒为 false（`AssessTradabilityFacts` 无条件补两项缺失），决策恒 `reject`。端到端测试名即为 `...ProducesTraceableRejection`，不写成"门禁通过"。
+- 验证：`gofmt`/`go vet`/`go test ./internal/...` 全绿；`-race` 覆盖 `internal/marketdata/...`、`internal/quant/...`、`internal/server/bootstrap`。变异验证四处均有效失败：① 去掉两项强制缺失 → 决策变 `pass`；② 把 `RiskWarningUnknown` 当已核验 → value 泄漏 `unknown`；③ 去掉数据类一致性校验 → 能签出绑定错策略的授权；④ 去掉 adapter 的 `Verify()` → 接受被篡改 payload；⑤ 让 HTTP 回落日线策略 → 返回 `policy_ref=dailybars-v2-access`；⑥ 发布时传空 policyRef → 发布引用为空。
+- MariaDB 集成测试（`MARKET_DATA_TEST_MYSQL_DSN` 门控）覆盖：迁移/`ValidateSchema`/幂等/跨 kind 隔离/SQL 篡改检测。**未在真实 MariaDB 环境执行**，不得宣称已验证。
+- 剩余工作不属于本切片：涨跌停制度表与可成交量事实（另行立项）；Signal→RiskDecision 的 Facade/Stage 装配。
