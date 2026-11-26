@@ -71,7 +71,7 @@ func TestFeedCollectionAdapterUsesRunResourceSnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(collector.calls, []string{SourceEndpointSnapshotRef(feedRegistration("source-a", "primary"))}) {
+	if !reflect.DeepEqual(collector.calls, []string{"source-a/primary"}) {
 		t.Fatalf("collector calls escaped Run resource snapshot: %#v", collector.calls)
 	}
 	if !reflect.DeepEqual(ingester.prefixes, []string{"run-1/attempt-1/" + CollectFeedsStageCode + "/source-a/primary"}) {

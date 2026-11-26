@@ -28,24 +28,24 @@ var (
 )
 
 var (
-	providerCodePattern      = regexp.MustCompile(\`^[a-z][a-z0-9_]{0,63}$\`)
-	sourceEndpointRefPattern = regexp.MustCompile(\`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}/[A-Za-z0-9][A-Za-z0-9._-]{0,127}@[a-f0-9]{64}$\`)
+	providerCodePattern      = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
+	sourceEndpointRefPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}/[A-Za-z0-9][A-Za-z0-9._-]{0,127}@[a-f0-9]{64}$`)
 )
 
 // Snapshot is the immutable resource authorization decision made when a Run is created.
 // Provider and Source/Endpoint identities are stored separately; credentials and URLs are never included.
 type Snapshot struct {
-	PolicyRef                 string   \`json:"policy_ref"\`
-	PolicyFingerprint         string   \`json:"policy_fingerprint"\`
-	AllowedProviderCodes      []string \`json:"allowed_provider_codes,omitempty"\`
-	AllowedSourceEndpointRefs []string \`json:"allowed_source_endpoint_refs,omitempty"\`
+	PolicyRef                 string   `json:"policy_ref"`
+	PolicyFingerprint         string   `json:"policy_fingerprint"`
+	AllowedProviderCodes      []string `json:"allowed_provider_codes,omitempty"`
+	AllowedSourceEndpointRefs []string `json:"allowed_source_endpoint_refs,omitempty"`
 }
 
 type definition struct {
-	Ref          string \`json:"ref"\`
-	Version      string \`json:"version"\`
-	ResourceType string \`json:"resource_type"\`
-	Selection    string \`json:"selection"\`
+	Ref          string `json:"ref"`
+	Version      string `json:"version"`
+	ResourceType string `json:"resource_type"`
+	Selection    string `json:"selection"`
 }
 
 type Registry struct {
