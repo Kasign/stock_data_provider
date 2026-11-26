@@ -1,0 +1,16 @@
+{
+  "signal_id": "signal-quant-trend-20261126-0001",
+  "symbol": "600000.SH",
+  "direction": "long",
+  "status": "candidate",
+  "strategy_ref": {
+    "id": "quant.trend.close_only",
+    "version": "1.0.0"
+  },
+  "system_as_of": "2026-11-26T07:05:00Z",
+  "trade_date": "2026-11-26",
+  "evidence_refs": [
+    "quant_result:trend:sha256:0a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f9"
+  ],
+  "strategy_rule_set_version": "quant-trend-close-only/1.0.0"
+}

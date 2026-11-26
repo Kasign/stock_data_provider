@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kasign.example/schema/quant/QNT-CTR-006-signal-1.0.0.schema.json",
+  "title": "QNT-CTR-006 Signal 1.0.0",
+  "description": "Quant 策略产出的交易候选信号最小契约。只承载身份、方向、时点、证据与策略规则版本：不包含价格（由 Risk/Planner 读取授权快照）与自然语言交易规则（EntryRule/ExitRule/InvalidationRule 不进入机器契约）。direction 与 status 是两个独立枚举，禁止互相推导；rule 版本属策略语义层，与 RiskDecision 的 rule_set_version 不是同一字段语义。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "signal_id",
+    "symbol",
+    "direction",
+    "status",
+    "strategy_ref",
+    "system_as_of",
+    "trade_date",
+    "evidence_refs",
+    "strategy_rule_set_version"
+  ],
+  "properties": {
+    "signal_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+    },
+    "symbol": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+    },
+    "direction": {
+      "type": "string",
+      "enum": [
+        "long",
+        "close"
+      ]
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "candidate",
+        "invalidated"
+      ]
+    },
+    "strategy_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "version"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+        }
+      }
+    },
+    "system_as_of": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{0,8}[1-9])?Z$"
+    },
+    "trade_date": {
+      "type": "string",
+      "format": "date",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+    },
+    "evidence_refs": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+      }
+    },
+    "strategy_rule_set_version": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+    }
+  }
+}
