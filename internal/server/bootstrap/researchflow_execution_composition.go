@@ -138,6 +138,13 @@ func newResearchflowComposition(
 	outputRegistriesList := []researchflowapplication.StageOutputRegistry{newsStage.registry}
 	feedExecutor := researchflowapplication.StageExecutor(nil)
 	if newsFeedStage != nil {
+		// Keep the previous Search-only Registry available for already-persisted Runs.
+		// The combined Registry has a new immutable version because it adds Feed output.
+		previousNewsRegistry, registryErr := newNewsStageOutputRegistry(newsSearchStageOutputRegistryVersion, false)
+		if registryErr != nil {
+			return nil, fmt.Errorf("compose previous immutable News Stage Output Registry: %w", registryErr)
+		}
+		outputRegistriesList = append(outputRegistriesList, previousNewsRegistry)
 		feedExecutor = newsFeedStage.executor
 	}
 	quantExecutor := researchflowapplication.StageExecutor(nil)
