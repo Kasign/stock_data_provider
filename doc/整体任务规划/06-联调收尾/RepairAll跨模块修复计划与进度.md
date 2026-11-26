@@ -1530,3 +1530,15 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - 结论诚实登记：链路打通后决策仍恒 `reject`（缺涨跌停与可成交量事实），验收标准是"可追溯的拒绝"。端到端测试名 `ProducesTraceableRejection`。
 - 验证：`gofmt`/`go vet`/`go test ./internal/...` 全绿，`-race` 覆盖 `internal/marketdata/...`、`internal/quant/...`、`internal/server/bootstrap`；变异验证六处均有效失败（含 HTTP 回落日线策略、发布传空 policyRef）。MariaDB 集成测试需 DSN，未在真实库执行；CI 结论以推送后为准，本节不预填。
 - 1.4 仍未完成：缺的不是链路而是事实（涨跌停制度表、可成交量模型），须另行立项。
+
+## 2026-11-26 1.4 Facade/Stage 装配与拒绝路径验收（DEC-062）
+
+- 影响分析先行（`doc/quant/11-Risk门禁Stage装配与拒绝路径影响分析.md`），用户四项决议全部按推荐项通过：① 拒绝表达在决策里（Stage `succeeded` + `decision_status=reject` + Manifest `result_status=rejected`）；② 本轮不声明 `hard_risk` 门禁；③ 参数不要求 Signal 引用；④ `evaluated_at` 取 Run 的可信 `system_as_of`。
+- Facade（`internal/quant/application/create_risk.go`）：授权事实快照 → `AssessTradabilityFacts` → `EvaluateTradabilityDecision` → `NewRiskPayload` → 既有 `resultPersister.persist`；`trade_date > system_as_of` 直接拒绝；`quality_status` 由事实快照质量决定，不把 `degraded` 升级为 `valid`。
+- Stage：`internal/quant/stage/risk_output.go`（Stage Code/OutputType/SchemaVersion + 严格 Validator）、`risk.go`（Adapter：参数校验 → 创建事实快照 `purpose=risk_review` → 调 Facade → 双 Validator 自检）、`internal/server/bootstrap/quant_risk_stage.go`（Registry Set **1.5.0**、冻结模板、Executor、错误映射）。决策为 `unknown` 时不产出 Stage Output（`quant_risk_decision_unknown`），避免把规则执行失败当正常结论。
+- 契约（DEC-062，QNT-CTR-003 additive L2 补充）：`QNT-CTR-003-risk-stage-output-1.0.0`、`QNT-CTR-003-risk-quality-summary-1.0.0`、`doc/researchflow/schema/quant-risk-parameters-1.0.0.schema.json` + Golden。`reasons` 恰 1 条（`tradability_unverified`/`block`）、`input_refs` 恰 2 条且首条为 snapshot、事实清单封闭去重、`status`↔`result_status`↔`reason.status` 由 Schema 硬绑；`evaluated_at == system_as_of` 与 reject 时清单非空由运行时 Validator 承担，并在 Schema description 中声明该分工。QNT-CTR-003 仍 `deferred`、004/005 仍 `frozen`，不触发 L1 冻结审查。
+- 四处接线（缺一处即"注册成功但生产不可用/读不回"）：`isQuantStageCode` 服务身份注入、Dispatcher 按 Stage Code 分派、`quantStageAssociationSpecs` 结果授权读取白名单、`researchflow_template_prerequisites` 参数 Schema 与 `quant.risk.always` 适用性规则。历史教训：这类遗漏直接调 Adapter 的单测不会暴露，已各配专门测试。
+- 验收（"装配 + 拒绝路径"优先）：新增 23 个测试全 PASS（Facade 6、输出契约 4 含 14 个篡改变异子用例、Stage 组合 9、端到端 4）。断言 `decision_status=reject`、`missing_facts=[price_limit,tradable_volume]`、`evidence_refs` 精确等于 `[facts_snapshot_ref, authorization_ref]`、`evaluated_at == system_as_of`、`result_id` 可解到已落库记录且 `record.Validate()` 通过。
+- 变异验证 6 处全部有效失败并已恢复。其中"关联规格表漏登记 `quant.risk`"**原契约测试未捕获**（按表遍历会随表变短），已补 `TestQuantRiskStageIsRegisteredForResultAssociation` 显式断言后捕获——属补强要求而非调低标准。
+- 验证：`gofmt`/`go vet`/`go test ./internal/...` 全绿；`-race` 覆盖 `internal/quant/...` 与 `internal/server/bootstrap` 无告警。真实 MariaDB 集成与 CI 结论均未完成/未执行，本节不预填。
+- 1.4 仍为**部分完成**：链路与装配已通，但 `AssessTradabilityFacts` 无条件补两项缺失 → `Verified` 恒 false → 决策恒 `reject`，**门禁不能放行**。剩余阻塞为涨跌停制度表与可成交量模型（另行立项）。RF-BLOCK-008（Researchflow Composer 的 `RiskDecision` 投影）仍 OPEN，需双 Owner 决议。

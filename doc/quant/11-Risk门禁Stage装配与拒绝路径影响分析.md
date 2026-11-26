@@ -1,10 +1,10 @@
 # Risk 门禁 Stage 装配与拒绝路径影响分析
 
-- 状态：影响分析（未实施，等待决策确认）
+- 状态：**已实施并验收**（四项决策已按推荐项确认，见 §8；实施结果与验收结论见 §9）
 - 日期：2026-11-26
-- 分支：`repair_all`，HEAD `7a1576ba2`（#45 收尾）
+- 分支：`repair_all`，HEAD `295fe5aa0`（影响分析提交）
 - 对应任务：执行清单 1.4 剩余部分 / QNT-010；前置条件 #45 已完成
-- 相关文档：`doc/quant/09-risk-tradability硬门禁切片与前置.md`（8.5 物理链路）、`doc/quant/04-RiskDecision DTO.md`、`doc/quant/10-Signal契约最小切片.md`
+- 相关文档：`doc/quant/09-risk-tradability硬门禁切片与前置.md`（8.5 物理链路）、`doc/quant/04-RiskDecision DTO.md`、`doc/quant/10-Signal契约最小切片.md`、`doc/contract/decisions/项目级契约决策记录.md`（DEC-PLAT-002-062）
 
 ## 0. 结论摘要
 
@@ -42,7 +42,7 @@
 2. `researchflowStageDispatcher`（`internal/server/bootstrap/researchflow_stage_dispatcher.go:14-52`）按 Stage Code 分派；不加分支则模板注册成功、执行期找不到执行器。
 3. `quantStageAssociationSpecs`（`internal/server/bootstrap/quant_result_association.go:58-89`）是结果授权读取的白名单；不登记 `quant.risk`，决策落库了也读不回来（`GetResult` 只会返回"无关联"）。
 
-## 2. 关键设计判断（需确认）
+## 2. 关键设计判断（已确认，D1–D4 均按推荐项通过）
 
 ### D1 拒绝表达在决策里，而不是 Stage 失败里
 
@@ -125,7 +125,7 @@ Signal 目前只有 DTO 与 Schema（QNT-CTR-006 `deferred`），没有存储、
 
 ## 4. 契约影响
 
-- **QNT-CTR-003 additive 扩展**：新增第三份 Stage Output 与第四份 Quality Summary。沿用 factor/trend 的先例（"L2 机器契约补充，不升级 QNT-CTR-003 状态"）。需要一条新决策记录（DEC-PLAT-002-062），并同步 `契约版本与变更记录`、`PLAT-002` 相关行。
+- **QNT-CTR-003 additive 扩展**：新增第三份 Stage Output 与第四份 Quality Summary。沿用 factor/trend 的先例（"L2 机器契约补充，不升级 QNT-CTR-003 状态"）。决策记录 **DEC-PLAT-002-062** 已登记（`accepted_by_project_owner`），并已同步 `契约版本与变更记录`。
 - **Researchflow 参数 Schema**：新增 `quant-risk-parameters-1.0.0`，属 Stage 层参数契约，不改 CTR。
 - **状态不变**：QNT-CTR-003 仍 `deferred`、QNT-CTR-004/005 仍 `frozen`、QNT-CTR-006 仍 `deferred`、DATA-CTR-007 仍 `deferred`、DATA-CTR-008 仍 `frozen`。
 - **RF-BLOCK-008 保持 OPEN**：Researchflow Composer 的 `RiskDecision` 与 QNT-CTR-004 不 wire-compatible（`internal/researchflow/resultvalidation/risk.go:29`）。本切片产出的是 Quant `risk` Payload，**不做**到 Composer 的投影；该卡点需要 Quant + Researchflow 双 Owner 决议，不能用"Stage 已装配"冒充已解除。
@@ -191,11 +191,62 @@ Signal 目前只有 DTO 与 Schema（QNT-CTR-006 `deferred`），没有存储、
 - 不生产 Signal，不做 Strategy→Signal 评估；
 - 不做 Researchflow Composer 的 RiskDecision 投影（RF-BLOCK-008）。
 
-## 8. 待确认决策
+## 8. 决策确认结果
 
-| 编号 | 决策 | 推荐 |
+| 编号 | 决策 | 结论 |
 |---|---|---|
-| D1 | 拒绝表达在决策里（Stage succeeded）还是 Stage failed | A：Stage succeeded + `decision_status=reject` |
-| D2 | 本轮是否声明 `hard_risk` 门禁 | 否，另立项 |
-| D3 | 是否要求参数携带 Signal 引用 | 否，等 Signal 生产链路 |
-| D4 | `evaluated_at` 取 `system_as_of` 还是墙钟 | 取 `system_as_of`（可复现，真实执行时刻由 Attempt 承载） |
+| D1 | 拒绝表达在决策里（Stage succeeded）还是 Stage failed | **A：Stage `succeeded` + `decision_status=reject` + Manifest `result_status=rejected`** |
+| D2 | 本轮是否声明 `hard_risk` 门禁 | **否**：`GateType` 留空、`RequiresHardRiskGate=false`，另立项 |
+| D3 | 是否要求参数携带 Signal 引用 | **否**：`input_refs = [facts_snapshot_ref, authorization_ref]` |
+| D4 | `evaluated_at` 取 `system_as_of` 还是墙钟 | **取 `system_as_of`**（可复现，真实执行时刻由 Attempt 承载） |
+
+四项全部按推荐项执行，已写入 DEC-PLAT-002-062。
+
+## 9. 实施结果与验收结论
+
+### 9.1 实际交付
+
+| 类别 | 文件 |
+|---|---|
+| Facade | `internal/quant/application/create_risk.go`、`create_risk_test.go`（6 测试） |
+| Stage 输出契约 | `internal/quant/stage/risk_output.go`、`risk_output_test.go`（4 测试，含 14 个篡改变异子用例） |
+| Stage Adapter | `internal/quant/stage/risk.go` |
+| 组合根 | `internal/server/bootstrap/quant_risk_stage.go`、`quant_risk_stage_test.go`（9 测试） |
+| 端到端 | `internal/server/bootstrap/quant_risk_end_to_end_test.go`（4 测试） |
+| Schema | `doc/quant/schema/QNT-CTR-003-risk-stage-output-1.0.0.schema.json`、`QNT-CTR-003-risk-quality-summary-1.0.0.schema.json`、`doc/researchflow/schema/quant-risk-parameters-1.0.0.schema.json` |
+| Golden | `doc/researchflow/golden/quant-risk-parameters-1.0.0.golden.json` |
+| 四处接线 | `researchflow_runtime.go`（`isQuantStageCode`）、`researchflow_stage_dispatcher.go`、`quant_result_association.go`、`researchflow_template_prerequisites.go`；组合于 `researchflow_execution_composition.go` |
+
+与 §3 计划的差异（均已收敛，非缩水）：
+
+1. Stage Output / Quality Summary 的 Golden **未新增**——上一轮已确认 sma20/factor/trend 的同类 Golden 由契约测试内联 fixture 承担，`doc/quant/golden/` 下并无对应文件；本轮改为在 `quant_researchflow_contract_test.go` 中补 `quantRiskAssociationPayload` 等 fixture，与既有做法一致，避免制造"文档里有 Golden 但没人读"的空壳。参数 Schema 的 Golden 按既有约定落在 `doc/researchflow/golden/`。
+2. 输出校验的 `evaluated_at == system_as_of`、`Evaluate` 的两清单非空约束、`EvidenceRefs == InputRefs`，由运行时 Validator 强制（JSON Schema 无法表达），已在两份 Schema 的 `description` 中显式声明分工，避免后续误判为"Schema 已覆盖"。
+
+### 9.2 测试结果（本地，非 CI）
+
+- 新增 23 个测试，全部 PASS；`go test ./internal/...` 全绿。
+- `go test -race ./internal/quant/... ./internal/server/bootstrap/` 无告警。
+- `gofmt -l ./internal ./cmd` 空、`go vet ./internal/...` 空。
+
+关键断言：`decision_status=reject`、`missing_facts=[price_limit, tradable_volume]`、`evidence_refs` 精确等于 `[facts_snapshot_ref, authorization_ref]`、`evaluated_at == system_as_of`、`result_id` 可解到已落库记录且 `record.Validate()` 通过、两个 Validator 均通过。
+
+### 9.3 变异验证（6 处，全部有效失败并已恢复）
+
+| # | 变异 | 捕获者 |
+|---|---|---|
+| 1 | 去掉 `price_limit`/`tradable_volume` 的强制缺失 | 决策变 `status=pass`，Stage 测试失败 |
+| 2 | `reject` 映射成 `completed` | Manifest `result_status=completed`，断言失败 |
+| 3 | 去掉 `isQuantStageCode` 的 `quant.risk` | 身份注入测试失败 |
+| 4 | 授权拒绝映射成 `quant_risk_execution_failed` | 错误映射断言失败 |
+| 5 | 关联规格表漏登记 `quant.risk` | 原契约测试**未**捕获（遍历随表变短）→ 补 `TestQuantRiskStageIsRegisteredForResultAssociation` 显式断言后捕获 |
+| 6 | 参数 Schema 放开 `additionalProperties` | `root additionalProperties must be false` |
+
+变异 5 暴露了一个真实缺陷：按规格表遍历的契约测试无法发现"整条漏登记"。已用显式断言补齐，而非调低要求。
+
+### 9.4 本轮**未**完成（不得冒充）
+
+- `hard_risk` 门禁注册与 Run 终态因 `reject` 失败（D2 明确不做）；
+- RF-BLOCK-008 仍 OPEN：Researchflow Composer 的 `RiskDecision` 投影；
+- 真实 MariaDB 集成（需 DSN）与真实 Provider 交易状态数据准确性；
+- 涨跌停制度表、可成交量模型——决策仍恒 `reject`；
+- CI 结论（以推送后为准）。

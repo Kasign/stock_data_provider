@@ -258,3 +258,13 @@ Quant 现有 GetResult 授权读取用例、SMA20 与三因子（`ma20_distance`
 - **1.4 仍为部分完成**，但阻塞性质变了：不再缺链路，而是缺事实——没有涨跌停制度表与可成交量模型，门禁只能给出可追溯的拒绝。Facade/Stage 装配的实质前置变成"能产出非拒绝结论"，需先行立项（另行任务）。
 - 验证：`gofmt`/`go vet`/`go test ./internal/...` 全绿，`-race` 覆盖三个改动模块；变异验证六处均有效失败。MariaDB 集成测试需 `MARKET_DATA_TEST_MYSQL_DSN`，**未在真实库执行**。
 - 契约状态未变：QNT-CTR-003 `deferred`、004/005 `frozen`、006 `deferred`、DATA-CTR-007 `deferred`、008 `frozen`。
+
+### 1.4 Facade/Stage 装配与拒绝路径验收（2026-11-26，DEC-062）
+
+- 影响分析见 `doc/quant/11-Risk门禁Stage装配与拒绝路径影响分析.md`；四项决策按推荐项通过：拒绝表达在决策里、不声明 `hard_risk`、参数不要求 Signal 引用、`evaluated_at = system_as_of`。
+- 交付 Risk Facade（`quant/application/create_risk.go`）与 `quant.risk` Stage（`quant/stage/risk.go`、`risk_output.go`、`server/bootstrap/quant_risk_stage.go`），Output Registry Set 1.5.0，接入 `isQuantStageCode`／Dispatcher／模板与适用性规则／结果关联规格表四处。
+- 契约：新增 `QNT-CTR-003-risk-stage-output-1.0.0`、`QNT-CTR-003-risk-quality-summary-1.0.0` 与 `quant-risk-parameters-1.0.0`（+Golden），属 additive L2 补充，**不升级** QNT-CTR-003 状态、不改任何 frozen 契约。
+- **拒绝语义**：Stage `succeeded` + `decision_status=reject` + Manifest `result_status=rejected`。禁止映射为 Stage 失败——失败 Attempt 不产出 Stage Output，拒绝结论将不可授权读取、不可追溯。消费者必须读决策；Stage 状态只表示"评估已执行完成"。决策为 `unknown` 时不产出 Stage Output（fail-closed）。
+- **不声明 `hard_risk`**：决策恒 `reject`，声明门禁会让所有含该 Stage 的 Run 必然失败，等于用门禁摧毁流水线。待涨跌停/可成交量事实补齐、决策可能出现 `pass` 后另立项。
+- 验收：新增 23 个测试全 PASS；`gofmt`/`go vet`/`go test ./internal/...` 全绿；`-race` 覆盖 `internal/quant/...` 与 `internal/server/bootstrap`。变异验证 6 处均有效失败（"关联规格表漏登记"原契约测试未捕获，已补显式断言）。
+- **1.4 仍为部分完成**：装配已通、拒绝可追溯，但门禁**不能放行**——`price_limit`/`tradable_volume` 两项事实仍不存在。RF-BLOCK-008（Researchflow Composer 的 `RiskDecision` 投影）仍 OPEN，需 Quant + Researchflow 双 Owner 决议，不得用"Stage 已装配"冒充已解除。

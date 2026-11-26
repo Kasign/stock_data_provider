@@ -112,7 +112,9 @@
 
 记录为"部分完成"，但阻塞从"三条全缺"收敛为一条：**交易事实的物理读取链路**。Signal 与规则目录就位后，Risk 已具备"有输入、有规则、有目录"的评估前提；剩下的接入工作不再是"设计缺口"，而是"实现与集成验证"。
 
-该唯一阻塞已在 8.5 关闭；但 1.4 仍**不记为完成**——门禁事实集里的涨跌停与可成交量依旧不存在，`tradability_unverified` 必然产出 `reject`。真正阻塞 Facade/Stage 装配的是"能否产出非拒绝结论"，不是"链路是否打通"。
+该唯一阻塞已在 8.5 关闭；但 1.4 仍**不记为完成**——门禁事实集里的涨跌停与可成交量依旧不存在，`tradability_unverified` 必然产出 `reject`。真正阻塞"门禁放行"的是"能否产出非拒绝结论"，不是"链路是否打通"。
+
+> 口径修正（2026-11-26，见 8.6）：装配工作本身不必等非拒绝结论——把验收目标定为"拒绝可被完整追溯与读取"后已按期落地。但**门禁放行**仍然阻塞于涨跌停/可成交量事实，1.4 因此仍为部分完成。
 
 ### 8.5 前置② 物理读取链路：已闭环，但门禁结论恒为拒绝（2026-11-26 深夜）
 
@@ -131,4 +133,22 @@
 - **结论诚实登记**：五项事实到位后 `Verified` 仍恒为 false（`AssessTradabilityFacts` 无条件补两项缺失），决策恒 `reject`。端到端测试名即为 `...ProducesTraceableRejection`，不写成"门禁通过"。
 - 验证：`gofmt`/`go vet`/`go test ./internal/...` 全绿；`-race` 覆盖 `internal/marketdata/...`、`internal/quant/...`、`internal/server/bootstrap`。变异验证四处均有效失败：① 去掉两项强制缺失 → 决策变 `pass`；② 把 `RiskWarningUnknown` 当已核验 → value 泄漏 `unknown`；③ 去掉数据类一致性校验 → 能签出绑定错策略的授权；④ 去掉 adapter 的 `Verify()` → 接受被篡改 payload；⑤ 让 HTTP 回落日线策略 → 返回 `policy_ref=dailybars-v2-access`；⑥ 发布时传空 policyRef → 发布引用为空。
 - MariaDB 集成测试（`MARKET_DATA_TEST_MYSQL_DSN` 门控）覆盖：迁移/`ValidateSchema`/幂等/跨 kind 隔离/SQL 篡改检测。**未在真实 MariaDB 环境执行**，不得宣称已验证。
-- 剩余工作不属于本切片：涨跌停制度表与可成交量事实（另行立项）；Signal→RiskDecision 的 Facade/Stage 装配。
+- 剩余工作不属于本切片：涨跌停制度表与可成交量事实（另行立项）。Signal→RiskDecision 的 Facade/Stage 装配已在 8.6 完成。
+
+### 8.6 Signal→RiskDecision 的 Facade/Stage 装配：已落地，结论仍恒为拒绝（2026-11-26）
+
+按用户四项决议（DEC-PLAT-002-062，影响分析见 `doc/quant/11`）落地：
+
+| 环节 | 落地位置 | 关键约束 |
+|---|---|---|
+| Facade | `quant/application/create_risk.go` | 读授权事实快照 → `AssessTradabilityFacts` → `EvaluateTradabilityDecision` → `NewRiskPayload` → `resultPersister.persist`；`trade_date > system_as_of` 直接拒绝 |
+| Stage 输出契约 | `quant/stage/risk_output.go` + 两份 QNT-CTR-003 Schema | `reasons` 恰 1 条（`tradability_unverified`/`block`）；`input_refs` 恰 2 条且首条为 snapshot；`status`↔`result_status`↔`reason.status` 由 Schema 硬绑；`evaluated_at == system_as_of`、`evidence_refs == input_refs`、reject 时清单非空由运行时 Validator 强制 |
+| Stage Adapter | `quant/stage/risk.go` | 参数校验（symbol 格式、UTC、`trade_date ≤ system_as_of`）→ 创建事实快照（`purpose=risk_review`）→ 调 Facade → 双 Validator 自检 |
+| 组合根 | `server/bootstrap/quant_risk_stage.go` | Registry Set **1.5.0**；模板 `GateType` 留空、`RequiresHardRiskGate=false`；`OnDegraded=Accept` 其余 Fail；`unknown` 决策不产出 Stage Output（`quant_risk_decision_unknown`） |
+| 四处接线 | `researchflow_runtime.go`（`isQuantStageCode`）、`researchflow_stage_dispatcher.go`、`quant_result_association.go`（规格表登记）、`researchflow_template_prerequisites.go`（`quant.risk.always` + 参数 Schema 文档） | 缺任一处即"注册成功但生产不可用/读不回"，已各配专门测试 |
+
+- **拒绝语义**：Stage `succeeded` + `decision_status=reject` + Manifest `result_status=rejected`。消费者必须读决策；Stage 状态只表示评估已执行完成。禁止把 `reject` 映射为 Stage 失败（失败 Attempt 不产出 Stage Output，拒绝将不可追溯）。
+- **本轮未声明 `hard_risk`**：决策恒 reject，声明门禁会让所有含该 Stage 的 Run 必然失败；属独立治理动作，待事实补齐后另立项。
+- 验证：新增 23 个测试全 PASS；`gofmt`/`go vet`/`go test ./internal/...` 全绿；`-race` 覆盖 `internal/quant/...` 与 `internal/server/bootstrap`。变异验证 6 处均有效失败（其中"关联规格表漏登记"原契约测试未捕获，已补显式断言）。
+- **结论仍是拒绝**：`AssessTradabilityFacts` 无条件补 `price_limit`/`tradable_volume`，`Verified` 恒 false。1.4 因此仍为"部分完成"——链路与装配已通，**门禁不能放行**。
+- 未完成：Researchflow Composer 的 `RiskDecision` 投影（RF-BLOCK-008 仍 OPEN，wire 不兼容需双 Owner 决议）；真实 MariaDB 集成；CI 结论以推送后为准。
