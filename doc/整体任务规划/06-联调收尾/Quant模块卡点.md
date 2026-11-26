@@ -5,7 +5,7 @@
 责任模块：Quant  
 说明：本文件登记需要其他模块或项目级决策方提供输入、装配或验收的事项。模块内详细依赖见 `doc/quant/依赖/01-跨模块依赖与解锁条件.md`。
 
-> **口径收敛声明（2026-11-26）：** DATA-CTR-005/007、QNT-CTR-003 当前均为 `deferred`，以 `doc/contract/PLAT-002-项目级契约冻结登记簿.md` 第 77～79 行为准。下表 DATA-CTR-005/007 卡点针对的是**通用 OHLC Decimal 精度路径**，仍成立；但首批 Close-only Factor/SMA20 复用现有已授权 Close Series Snapshot（精确 Close、双指纹 SnapshotRef、Manifest、授权读取），该窄化路径不等待通用 DTO，其生产门禁归 QNT-CTR-003 自身 Factor Schema/Golden、Decimal Registry/精度策略、生产 Facade 与 Researchflow Stage 接线。QNT-015 的 Snapshot Adapter 已有 SMA20 先例，剩余为 Factor 正式接线；不得据旧口径称"无可用 Snapshot"。
+> **口径收敛声明（2026-11-26）：** DATA-CTR-005/007、QNT-CTR-003 当前均为 `deferred`，以 `doc/contract/PLAT-002-项目级契约冻结登记簿.md` 第 77～79 行为准。下表 DATA-CTR-005/007 卡点针对的是**通用 OHLC Decimal 精度路径**，仍成立；但首批 Close-only Factor/SMA20 复用现有已授权 Close Series Snapshot（精确 Close、双指纹 SnapshotRef、Manifest、授权读取），该窄化路径不等待通用 DTO，其生产门禁归 QNT-CTR-003 自身 Factor Schema/Golden、Decimal Registry/精度策略、生产 Facade 与 Researchflow Stage 接线。QNT-015 的 Snapshot Adapter 已有 SMA20 先例，Factor 正式接线与端到端证据已由第⑥～⑧组补齐；不得据旧口径称"无可用 Snapshot"。
 
 ## 1. Data 模块卡点
 
@@ -35,15 +35,15 @@ Quant 不在 `internal/quant/**` 实现 SQL/Redis、通用 Storage、认证、�
 | 计算 Facade 消费契约 | Quant 提供公开 Application Port；Researchflow 消费 | QNT-001/002 生产结果契约和 QNT-014 Facade 具备可发布条件 | Researchflow 通过公开 Port 调用，不依赖 Quant 内部包 |
 | CallerRef / Envelope / Payload 消费验收 | Researchflow | 传播可信 CallerRef、校验已注册 Payload、消费完整 Envelope | Integration 以精确 SHA 验证实际 Stage Provider 链路 |
 
-当前 Quant 只有 GetResult 授权读取用例，没有 Indicator/Factor 计算 Facade。不得把纯函数拼装成伪生产 Provider；Indicator/Factor 未完成 Schema/Golden/Validator/Registry 前不得开放 Envelope。
+Quant 现有 GetResult 授权读取用例、SMA20 与三因子（`ma20_distance`/`momentum_5d`/`momentum_20d`）的生产计算 Facade，且 Factor 结果已进入 Envelope 白名单。仍不得把纯函数拼装成伪生产 Provider：未完成 Schema/Golden/Validator/Registry 的 Indicator/Factor 一律不得开放 Envelope。此处以最新章节（第⑥～⑧组）为准，2026-11-19 审查记录只表示当时的基线状态。
 
 ## 4. Quant 当前可独立推进
 
 - QNT-013：完善模块内 Manifest、Record、Envelope、MemoryRepository 与公开读取契约；生产 Adapter 交由 Server/Platform。
 - QNT-001/002：推进不依赖权威外部输入的代码契约、测试和映射审计；不猜测单位、精度、舍入或质量策略。
 - QNT-010：维护 fail-closed 风险执行框架；没有权威规则目录和真实事实前，不自创业务阈值。
-- QNT-014：生产 Facade 受 QNT-001/002 阻断，不提前拼装。
-- QNT-015：DATA-CTR-005/007 解锁前保持阻断。
+- QNT-014：SMA20 与首批三因子 Facade 已交付；新增指标仍须先有 Registry/Schema/Golden，不提前拼装。
+- QNT-015：首批 Close-only Factor/SMA20 走已授权 Close Series Snapshot，不受通用 DATA-CTR-005/007 阻断；通用 OHLC Decimal 输入仍保持阻断。
 
 ## 5. 状态治理
 
@@ -206,3 +206,5 @@ Quant 不在 `internal/quant/**` 实现 SQL/Redis、通用 Storage、认证、�
 - 第⑥组已装配 `quant.factor` Stage Provider：Stage Adapter（授权 Snapshot → Facade → 强类型 Output/Quality 并自校验）、Output Registry（1.3.0，避免与 News/SMA20 版本冲突）、冻结 Workflow Template、参数 Schema（`factor_code` 三值 enum + symbol/date/limit）、`quant.factor.always` 适用性规则、Dispatcher 路由与 Runtime 前置校验。`factor_code` 只作 Stage 层分派，不透传给 Facade（其 parameters 仍为严格 `{}`）；三因子最小样本下限在 Adapter 先校验。该组结束时剩余卡点为 Factor Run↔Result 关联与端到端真实质量证据 + Contract Test，其中前者已由第⑦组解决。
 - 第⑦组已完成 Factor Run↔Result 关联：`internal/server/bootstrap/quant_result_association.go` 把硬编码 `quant.sma20` 的校验泛化为已支持 Quant Stage 的封闭规格表（`quant.sma20` + `quant.factor`）。校验先按 Run 的 Stage 清单前置枚举候选，再只读取已成功产出的 Stage：未成功产出判为无关联；已成功但缺输出/质量引用、同码 Stage 重复、Run 引用不一致或读取失败一律 fail-closed，不把真实故障降级为"无关联"。授权读取路径同步改为任一 Quant Stage 存在即注入，修掉"仅装配 `quant.factor` 时没有授权读取"的缺口。Factor 结果现可经 `GetResult` 授权读取；剩余卡点只有端到端真实质量证据与 Quant→Researchflow Contract Test。
 - QNT-CTR-003 仍 `deferred`、QNT-CTR-004/005 仍 `frozen`；Factor Envelope Payload 已开放写入/持久化（DEC-058），Run↔Result 关联能力已具备（第⑦组），但授权读取仍受 GOV-CTR-006 策略约束，且端到端证据与 Contract Test 未完成，因此未开放生产消费。本校准不升级契约状态。
+- 第⑧组已补齐此前"未取得"的两项证据，仍不改契约状态与生产行为：①端到端质量证据 `internal/server/bootstrap/quant_factor_end_to_end_test.go`——只替换持久化为内存 Store，保留真实 Data 代码（Snapshot Creator 双指纹/内容寻址、Authorization Owner 签发与复核、Authorized Snapshot Reader 复核）并贯通生产 `quantDataSnapshotAdapter` → `FactorAdapter` → `CreateFactorService` → 结果 Repository；断言 QualitySummary 逐字段等于已持久化 Data Snapshot 的 coverage evidence、因子值经独立十进制计算核对、`result_id` 等于真实落库 Manifest 且可被 Run/Stage 关联读到、insufficient 显式 null 仍以 `result_status=insufficient_data` 落库并持有 result_id。②Quant→Researchflow 契约测试 `internal/server/bootstrap/quant_researchflow_contract_test.go`——Output Registry Entry 与关联规格表一致、`stageoutput.Registry.Validate` 接受真实 Envelope、文档化 Draft 2020-12 Schema 与运行时 Validator 判定一致、模板 degraded 传播与 Executor 映射一致、`Module` 实现 `quantDataSnapshotPort`。两条测试均有变异验证证据。
+- 因此 Quant 侧"三因子生产化"在 Stage/结果闭环范围内无剩余卡点；后续门禁属 Researchflow 完整 Template（2.1）与 Server 报告读取 DTO（2.3），以及按登记簿对 QNT-CTR-003 的重新进入审批。仍需真实 MariaDB 集成与完整 CI 才能宣称生产验收。

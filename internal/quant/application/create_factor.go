@@ -110,7 +110,8 @@ func NewCreateFactorService(
 }
 
 // Execute 读取已授权 Snapshot，按活动 Registry Entry 校验参数与精度，精确计算并返回强类型 Metric。
-// 不足样本返回 metric_status=insufficient_data、value=null，不视为错误，也不落库。
+// 不足样本返回 metric_status=insufficient_data、value=null，不视为错误；该结果仍按
+// result_status=insufficient_data 落库，以便 Stage Output 与授权读取持有可信 result_id。
 func (service *CreateFactorService) Execute(ctx context.Context, request CreateFactorRequest) (FactorExecutionResult, error) {
 	if service == nil || service.snapshots == nil || service.registry == nil || service.persister == nil || service.now == nil ||
 		ctx == nil || strings.TrimSpace(request.FactorCode) == "" ||

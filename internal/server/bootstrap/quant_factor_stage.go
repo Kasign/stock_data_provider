@@ -79,15 +79,7 @@ func newQuantFactorStageComposition(
 	if err != nil {
 		return nil, fmt.Errorf("create Quant Factor Stage Adapter: %w", err)
 	}
-	registry, err := stageoutput.NewRegistry(quantFactorStageOutputRegistryVersion, []stageoutput.Entry{{
-		StageCode:               quantstage.FactorStageCode,
-		OutputType:              quantstage.FactorOutputType,
-		SchemaVersion:           quantstage.FactorSchemaVersion,
-		PayloadSchemaRef:        quantFactorPayloadSchemaRef,
-		QualitySummarySchemaRef: quantFactorQualitySchemaRef,
-		PayloadValidator:        stageoutput.ValidatorFunc(func(value json.RawMessage) error { return quantstage.ValidateFactorStageOutputJSON(value) }),
-		QualitySummaryValidator: stageoutput.ValidatorFunc(func(value json.RawMessage) error { return quantstage.ValidateFactorQualitySummaryJSON(value) }),
-	}})
+	registry, err := newQuantFactorOutputRegistry()
 	if err != nil {
 		return nil, fmt.Errorf("create Quant Factor Output Registry: %w", err)
 	}
@@ -104,6 +96,21 @@ func newQuantFactorStageComposition(
 		applicability:    quantFactorApplicabilityEvaluator{},
 		providerCodes:    append([]string(nil), allowedProviderCodes...),
 	}, nil
+}
+
+// newQuantFactorOutputRegistry 构建 quant.factor 的唯一 Output Registry。
+//
+// 组合根与契约测试共用本函数，避免测试自己复制一份 Entry 而掩盖真实注册漂移。
+func newQuantFactorOutputRegistry() (*stageoutput.Registry, error) {
+	return stageoutput.NewRegistry(quantFactorStageOutputRegistryVersion, []stageoutput.Entry{{
+		StageCode:               quantstage.FactorStageCode,
+		OutputType:              quantstage.FactorOutputType,
+		SchemaVersion:           quantstage.FactorSchemaVersion,
+		PayloadSchemaRef:        quantFactorPayloadSchemaRef,
+		QualitySummarySchemaRef: quantFactorQualitySchemaRef,
+		PayloadValidator:        stageoutput.ValidatorFunc(func(value json.RawMessage) error { return quantstage.ValidateFactorStageOutputJSON(value) }),
+		QualitySummaryValidator: stageoutput.ValidatorFunc(func(value json.RawMessage) error { return quantstage.ValidateFactorQualitySummaryJSON(value) }),
+	}})
 }
 
 func buildQuantFactorWorkflowTemplate(

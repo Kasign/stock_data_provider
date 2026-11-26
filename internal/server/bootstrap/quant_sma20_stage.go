@@ -76,15 +76,7 @@ func newQuantSMA20StageComposition(
 	if err != nil {
 		return nil, fmt.Errorf("create Quant SMA20 Stage Adapter: %w", err)
 	}
-	registry, err := stageoutput.NewRegistry(quantSMA20StageOutputRegistryVersion, []stageoutput.Entry{{
-		StageCode:               quantstage.SMA20StageCode,
-		OutputType:              quantstage.SMA20OutputType,
-		SchemaVersion:           quantstage.SMA20SchemaVersion,
-		PayloadSchemaRef:        quantSMA20PayloadSchemaRef,
-		QualitySummarySchemaRef: quantSMA20QualitySchemaRef,
-		PayloadValidator:        stageoutput.ValidatorFunc(func(value json.RawMessage) error { return quantstage.ValidateSMA20OutputJSON(value) }),
-		QualitySummaryValidator: stageoutput.ValidatorFunc(func(value json.RawMessage) error { return quantstage.ValidateSMA20QualitySummaryJSON(value) }),
-	}})
+	registry, err := newQuantSMA20OutputRegistry()
 	if err != nil {
 		return nil, fmt.Errorf("create Quant SMA20 Output Registry: %w", err)
 	}
@@ -101,6 +93,20 @@ func newQuantSMA20StageComposition(
 		applicability:    quantSMA20ApplicabilityEvaluator{},
 		providerCodes:    append([]string(nil), allowedProviderCodes...),
 	}, nil
+}
+
+// newQuantSMA20OutputRegistry 构建 quant.sma20 的唯一 Output Registry。
+// 组合根与契约测试共用本函数，避免测试复制 Entry 掩盖真实注册漂移。
+func newQuantSMA20OutputRegistry() (*stageoutput.Registry, error) {
+	return stageoutput.NewRegistry(quantSMA20StageOutputRegistryVersion, []stageoutput.Entry{{
+		StageCode:               quantstage.SMA20StageCode,
+		OutputType:              quantstage.SMA20OutputType,
+		SchemaVersion:           quantstage.SMA20SchemaVersion,
+		PayloadSchemaRef:        quantSMA20PayloadSchemaRef,
+		QualitySummarySchemaRef: quantSMA20QualitySchemaRef,
+		PayloadValidator:        stageoutput.ValidatorFunc(func(value json.RawMessage) error { return quantstage.ValidateSMA20OutputJSON(value) }),
+		QualitySummaryValidator: stageoutput.ValidatorFunc(func(value json.RawMessage) error { return quantstage.ValidateSMA20QualitySummaryJSON(value) }),
+	}})
 }
 
 func buildQuantSMA20WorkflowTemplate(stage *quantSMA20StageComposition, policies *resourcepolicy.Registry) (template.WorkflowTemplate, error) {

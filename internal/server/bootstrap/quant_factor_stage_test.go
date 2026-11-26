@@ -14,7 +14,6 @@ import (
 	researchflowapplication "example.com/stock-analysis-flow/internal/researchflow/application"
 	researchflowdomain "example.com/stock-analysis-flow/internal/researchflow/domain"
 	"example.com/stock-analysis-flow/internal/researchflow/resourcepolicy"
-	"example.com/stock-analysis-flow/internal/researchflow/stageoutput"
 	"example.com/stock-analysis-flow/internal/researchflow/template"
 )
 
@@ -237,15 +236,7 @@ func TestQuantFactorStageExecutorMapsDataAuthorizationDenialToNonRetryableFailur
 }
 
 func TestBuildQuantFactorWorkflowTemplateFreezesParametersResourcePolicyAndOutputRegistry(t *testing.T) {
-	registry, err := stageoutput.NewRegistry(quantFactorStageOutputRegistryVersion, []stageoutput.Entry{{
-		StageCode:               quantstage.FactorStageCode,
-		OutputType:              quantstage.FactorOutputType,
-		SchemaVersion:           quantstage.FactorSchemaVersion,
-		PayloadSchemaRef:        quantFactorPayloadSchemaRef,
-		QualitySummarySchemaRef: quantFactorQualitySchemaRef,
-		PayloadValidator:        stageoutput.ValidatorFunc(func(value json.RawMessage) error { return quantstage.ValidateFactorStageOutputJSON(value) }),
-		QualitySummaryValidator: stageoutput.ValidatorFunc(func(value json.RawMessage) error { return quantstage.ValidateFactorQualitySummaryJSON(value) }),
-	}})
+	registry, err := newQuantFactorOutputRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
