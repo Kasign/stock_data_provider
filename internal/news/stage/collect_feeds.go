@@ -468,11 +468,42 @@ func ValidateFeedCollectionQualitySummary(raw json.RawMessage) error {
 	if err := decoder.Decode(new(any)); err != io.EOF {
 		return errors.New("News Feed quality summary contains trailing JSON")
 	}
+	if summary.Status != "success" && summary.Status != "empty" && summary.Status != "partial" &&
+		summary.Status != "failed" && summary.Status != "failed_retryable" {
+		return errors.New("News Feed quality summary status is invalid")
+	}
 	if summary.SourceCount < 1 || summary.SuccessSourceCount < 0 || summary.EmptySourceCount < 0 ||
 		summary.SkippedSourceCount < 0 || summary.FailedSourceCount < 0 ||
 		summary.SuccessSourceCount+summary.EmptySourceCount+summary.SkippedSourceCount+summary.FailedSourceCount != summary.SourceCount ||
 		summary.CollectedEntryCount < 0 || summary.IngestedCount < 0 {
 		return errors.New("News Feed quality summary counters are inconsistent")
+	}
+	switch summary.Status {
+	case "success":
+		if summary.FailedSourceCount != 0 || summary.SkippedSourceCount != 0 ||
+			summary.SuccessSourceCount+summary.EmptySourceCount == 0 {
+			return errors.New("successful News Feed quality summary is inconsistent")
+		}
+	case "empty":
+		if summary.SuccessSourceCount != 0 || summary.FailedSourceCount != 0 ||
+			summary.SkippedSourceCount != 0 || summary.EmptySourceCount == 0 || summary.IngestedCount != 0 {
+			return errors.New("empty News Feed quality summary is inconsistent")
+		}
+	case "partial":
+		if summary.SuccessSourceCount+summary.EmptySourceCount == 0 ||
+			summary.FailedSourceCount+summary.SkippedSourceCount == 0 {
+			return errors.New("partial News Feed quality summary is inconsistent")
+		}
+	case "failed_retryable":
+		if summary.FailedSourceCount == 0 || summary.SuccessSourceCount != 0 ||
+			summary.EmptySourceCount != 0 || summary.SkippedSourceCount != 0 {
+			return errors.New("retryable News Feed quality summary is inconsistent")
+		}
+	case "failed":
+		if summary.SuccessSourceCount != 0 || summary.EmptySourceCount != 0 ||
+			summary.FailedSourceCount+summary.SkippedSourceCount == 0 {
+			return errors.New("failed News Feed quality summary is inconsistent")
+		}
 	}
 	return nil
 }
