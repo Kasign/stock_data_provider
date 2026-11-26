@@ -1428,7 +1428,7 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - Output Registry 版本用 `1.3.0`：`NewStageOutputRegistrySet` 以 version 为唯一键，`1.0.0`/`1.2.0` 属 News、`1.1.0` 属 SMA20；新增测试 `TestQuantFactorOutputRegistryVersionDoesNotCollide` 守住该约束。
 - 复用而非复制：`quantDataSnapshotAdapter` 同时实现 `DailyBarsCloseSeriesSnapshotCreator` 与 `CloseSeriesSnapshotReader`；Provider inventory 判定抽为 `quantDailyBarsProviderCodes`（SMA/Factor 共用），`NewStageOutputRegistrySet` 前合并去重；`QuantPurposeCode`/`QuantProviderCode` 作为通用别名，`SMA20PurposeCode`/`SMA20ProviderCode` 保留兼容。
 - 验证：`go test ./internal/quant/... ./internal/server/...` 全包 PASS；覆盖三因子 Adapter 正例、insufficient 显式 null、非法请求不触达 Data、参数 Schema 文档一致性与 Golden、Executor 状态映射、Template 冻结断言、Dispatcher 路由与 Registry 版本唯一性。
-- 第⑥组结束时未完成（Factor Run↔Result 关联已由第⑦组解决）：端到端真实质量证据与 Quant→Researchflow Contract Test 未做。QNT-CTR-003 仍 `deferred`；CI 状态 `not_run`。
+- 第⑥组结束时未完成（Factor Run↔Result 关联已由第⑦组解决）：端到端真实质量证据与 Quant→Researchflow Contract Test 未做。QNT-CTR-003 仍 `deferred`。CI（`d574976ef`）：Go Test Suite [https://github.com/Kasign/stock_data_provider/actions/runs/45773733316](https://github.com/Kasign/stock_data_provider/actions/runs/45773733316)、Integration CI [https://github.com/Kasign/stock_data_provider/actions/runs/45773733461](https://github.com/Kasign/stock_data_provider/actions/runs/45773733461)、Quant module validation [https://github.com/Kasign/stock_data_provider/actions/runs/45773733036](https://github.com/Kasign/stock_data_provider/actions/runs/45773733036)、Required checks [https://github.com/Kasign/stock_data_provider/actions/runs/45773732918](https://github.com/Kasign/stock_data_provider/actions/runs/45773732918) 全部 success。
 
 ## 2026-11-26 Quant 三因子生产化第⑦组 Factor Run↔Result 关联
 
@@ -1438,7 +1438,7 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - 装配修正：`researchflow_execution_composition.go` 原先只在 `quantStage != nil` 时创建授权读取链，仅装配 `quant.factor` 时会缺失；改为按实际存在的 Quant Stage 选择 Repository，任一存在即创建 `quantResultReader`。
 - 新增测试 `internal/server/bootstrap/quant_result_association_test.go`（文件由 `quant_sma20_result_association_test.go` 重命名泛化）：SMA20/Factor 命中并断言 schema ref 与 Validator 契约、result_id 不匹配、Run 无 Quant Stage、Stage 未成功产出时不读取输出、成功后缺输出/质量引用、同码重复、Run 引用不一致、Run 无 Stage、读取失败与 GetRun 失败不被降级、未登记 Stage 被拒绝。
 - 验证：`go test ./internal/server/bootstrap/ ./internal/quant/... ./internal/server/...` 全包 PASS。
-- 未完成：端到端真实质量证据与 Quant→Researchflow Contract Test（下一组）。QNT-CTR-003 仍 `deferred`、QNT-CTR-004/005 仍 `frozen`；CI 状态 `not_run`。
+- 未完成：端到端真实质量证据与 Quant→Researchflow Contract Test（下一组）。QNT-CTR-003 仍 `deferred`、QNT-CTR-004/005 仍 `frozen`。CI（`2022bf6a1`）：Go Test Suite [https://github.com/Kasign/stock_data_provider/actions/runs/45776105595](https://github.com/Kasign/stock_data_provider/actions/runs/45776105595)、Integration CI [https://github.com/Kasign/stock_data_provider/actions/runs/45776105620](https://github.com/Kasign/stock_data_provider/actions/runs/45776105620)、Quant module validation [https://github.com/Kasign/stock_data_provider/actions/runs/45776105619](https://github.com/Kasign/stock_data_provider/actions/runs/45776105619)、Required checks [https://github.com/Kasign/stock_data_provider/actions/runs/45776105613](https://github.com/Kasign/stock_data_provider/actions/runs/45776105613) 全部 success。
 
 ## 2026-11-26 Quant 三因子生产化第⑧组 端到端质量证据与跨模块契约
 
@@ -1449,7 +1449,7 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - 复用改造：把 SMA20/Factor 的 Output Registry 构建抽为 `newQuantSMA20OutputRegistry`/`newQuantFactorOutputRegistry`，组合根与契约测试共用同一构造函数，测试不再复制 Entry（原第⑥组测试里的重复 Entry 已删除）。
 - 文档/注释纠正：`create_factor.go` 原注释称 insufficient 样本"不落库"，与实现及本组证据不符，已改为按 `result_status=insufficient_data` 落库。
 - 验证：`go test ./internal/quant/... ./internal/server/... ./internal/researchflow/...` 全包 PASS；`go test -race ./internal/server/bootstrap/ ./internal/quant/stage/ ./internal/quant/application/` PASS；两条新测试均通过变异验证（改 `MinimumRequiredBars` 映射、改关联规格表 SchemaRef 后对应测试失败，恢复后通过）。
-- 阶段结论：`旧Analysis退役执行清单.md` 的 1.2 三因子生产化在 Quant + Researchflow Stage 范围内闭环。QNT-CTR-003 仍 `deferred`、QNT-CTR-004/005 仍 `frozen`（本组未改 Schema/契约状态）；剩余生产门禁属阶段 2.1 完整股票研究 Template 与阶段 2.3 报告读取 DTO。CI 状态 `not_run`。
+- 阶段结论：`旧Analysis退役执行清单.md` 的 1.2 三因子生产化在 Quant + Researchflow Stage 范围内闭环。QNT-CTR-003 仍 `deferred`、QNT-CTR-004/005 仍 `frozen`（本组未改 Schema/契约状态）；剩余生产门禁属阶段 2.1 完整股票研究 Template 与阶段 2.3 报告读取 DTO。CI（`8b3792e4d`）：Go Test Suite [https://github.com/Kasign/stock_data_provider/actions/runs/45778184833](https://github.com/Kasign/stock_data_provider/actions/runs/45778184833)、Integration CI [https://github.com/Kasign/stock_data_provider/actions/runs/45778184744](https://github.com/Kasign/stock_data_provider/actions/runs/45778184744)、Quant module validation [https://github.com/Kasign/stock_data_provider/actions/runs/45778184877](https://github.com/Kasign/stock_data_provider/actions/runs/45778184877)、Required checks [https://github.com/Kasign/stock_data_provider/actions/runs/45778184733](https://github.com/Kasign/stock_data_provider/actions/runs/45778184733) 全部 success。
 
 ## 2026-11-26 执行清单 1.3 trend-following 差距核实（书面结论，不补算法）
 
@@ -1458,4 +1458,11 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - 现有 `internal/quant/trend` 只有 `Result` DTO 与结构校验；`trend/1.0.0` Envelope 已注册可持久化；但没有算法、Registry Entry、Output/Quality Schema、参数 Schema、Template 与关联规格表条目。
 - 不补算法的四条理由：①旧逻辑不覆盖 `TrendResult` 的 direction/phase/strength/conflict 字段，映射必然新增语义决策；②DEC-PLAT-002-049 禁止方向/阶段/强度互推且不定义阈值，`doc/quant/05` 第 50–57 行的 7 项语义至今未决；③单位 percent→ratio、时间 trade_date→system_as_of/trade_date 分离，旧中文规则串不可继承；④产物层次不同（趋势状态 ≠ 交易候选，QNT-008 Signal 仍 NOT_STARTED，塞进 Payload 等于私增 frozen 字段）。
 - 交付：`doc/quant/07-trend-following策略差距与契约结论.md`——代码级事实、10 维差距矩阵、5 项决议请求（D1 周期集合 5/20 或 5/20/60，选后者须先补 `momentum_60d` Decimal Entry；D2 direction 纯符号；D3 phase v1 恒 `unknown`；D4 strength 恒 `null`；D5 先只做 TrendResult），以及决议通过后的最小可交付范围。
-- 状态：1.3 退出条件"有生产策略 Stage 与契约"未满足，记为"书面结论完成、阻塞于 D1–D5"，不得记为已完成。契约状态未变（QNT-CTR-003 `deferred`、004/005 `frozen`），QNT-004 仍 BLOCKED_BY_DECISION、QNT-008 仍 NOT_STARTED。1.4 不依赖本结论，可并行。CI 状态 `not_run`（本组无代码变更）。
+- 状态：1.3 退出条件"有生产策略 Stage 与契约"未满足，记为"书面结论完成、阻塞于 D1–D5"，不得记为已完成。契约状态未变（QNT-CTR-003 `deferred`、004/005 `frozen`），QNT-004 仍 BLOCKED_BY_DECISION、QNT-008 仍 NOT_STARTED。1.4 不依赖本结论，可并行。CI（`e14d6c0f6`）：Go Test Suite [https://github.com/Kasign/stock_data_provider/actions/runs/45779700146](https://github.com/Kasign/stock_data_provider/actions/runs/45779700146)、Integration CI [https://github.com/Kasign/stock_data_provider/actions/runs/45779700227](https://github.com/Kasign/stock_data_provider/actions/runs/45779700227)、Quant module validation [https://github.com/Kasign/stock_data_provider/actions/runs/45779700188](https://github.com/Kasign/stock_data_provider/actions/runs/45779700188)、Required checks [https://github.com/Kasign/stock_data_provider/actions/runs/45779700203](https://github.com/Kasign/stock_data_provider/actions/runs/45779700203) 全部 success；同次推送的前一个提交 `1201092fc` 未单独触发运行，不把 head 结论冒充该提交的独立 CI。
+
+## 2026-11-26 CI 证据回填（第⑤～⑧组与 1.3）
+
+- 问题：第⑤～⑧组与本轮 1.3 的进度记录一律写 `CI 状态 not_run`，但实际这些提交早已推送并触发 GitHub Actions；`not_run` 是"未等待中途 CI"的操作口径被误写成事实，与仓库可查的 Run 结论矛盾。
+- 核实结果（`gh run list`）：`0b8e42ed0`（⑤）、`d574976ef`（⑥）、`2022bf6a1`（⑦）、`8b3792e4d`（⑧）、`e14d6c0f6`（1.3）的 Go Test Suite、Integration CI、Quant module validation、Required checks 均为 `completed/success`；`1201092fc` 与 `e14d6c0f6` 同次推送，仅 head commit 触发运行，因此 `1201092fc` 无独立 CI 结论，不把 head 结论冒充为其独立验收。
+- 口径：已把各节 `CI 状态 not_run` 替换为对应 SHA 的 Run 链接；仍保留"本地测试不冒充 CI"与"文档 SHA 无独立 Run 时不冒用历史 CI"两条约束（AGENTS.md 第 14 条与第三节）。
+- 未覆盖：`4cbd118ac`（第④组）未单独触发运行，其验收仍只有本地证据；本轮回填不改变任何契约状态、代码或测试。
