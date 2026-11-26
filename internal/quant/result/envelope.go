@@ -10,6 +10,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"example.com/stock-analysis-flow/internal/quant/factor"
 	"example.com/stock-analysis-flow/internal/quant/manifest"
 	"example.com/stock-analysis-flow/internal/quant/metric"
 	"example.com/stock-analysis-flow/internal/quant/risk"
@@ -205,6 +206,8 @@ func DecodePayload(resultType, schemaVersion string, raw json.RawMessage) (Paylo
 	switch {
 	case resultType == "indicator" && schemaVersion == "1.0.0":
 		return DecodeIndicatorPayload(raw)
+	case resultType == factorResultType && schemaVersion == factorPayloadSchemaVersion:
+		return DecodeFactorPayload(raw)
 	case resultType == "trend" && schemaVersion == "1.0.0":
 		var value trend.Result
 		if err := decodeStrictPayload(raw, &value); err != nil {
@@ -330,6 +333,10 @@ func (envelope Envelope) Validate() error {
 		if err := validateIndicatorManifestMetadata(payload.value, envelope.Period, envelope.SystemAsOf, envelope.AlgorithmVersion, envelope.QualityStatus, envelope.ResultStatus); err != nil {
 			return err
 		}
+	case FactorPayload:
+		if err := validateFactorManifestMetadata(payload.value, envelope.Period, envelope.SystemAsOf, envelope.AlgorithmVersion, envelope.QualityStatus, envelope.ResultStatus); err != nil {
+			return err
+		}
 	default:
 		return ErrUnsupportedPayload
 	}
@@ -447,7 +454,7 @@ func (envelope *Envelope) UnmarshalJSON(data []byte) error {
 
 func supportedPayloadValue(payload Payload) bool {
 	switch payload.(type) {
-	case TrendPayload, RiskPayload, IndicatorPayload:
+	case TrendPayload, RiskPayload, IndicatorPayload, FactorPayload:
 		return true
 	default:
 		return false
@@ -605,6 +612,33 @@ func indicatorResultStatus(status metric.Status) (string, bool) {
 		return "insufficient_data", true
 	case metric.StatusInsufficientSample:
 		return "insufficient_sample", true
+	default:
+		return "", false
+	}
+}
+
+// validateFactorManifestMetadata 把 DecimalQuantMetric 的计算上下文绑定到不可变 Manifest。
+// 生命周期状态从领域 MetricStatus 派生，不从数值或算法含义推断。
+func validateFactorManifestMetadata(value factor.DecimalQuantMetric, period, systemAsOf, algorithmVersion, qualityStatus, resultStatus string) error {
+	expectedResultStatus, ok := factorResultStatus(value.MetricStatus)
+	if !ok || expectedResultStatus != resultStatus {
+		return ErrInvalidEnvelope
+	}
+	if value.Period != period ||
+		value.SystemAsOf != systemAsOf ||
+		value.CalculationVersion != algorithmVersion ||
+		string(value.QualityStatus) != qualityStatus {
+		return ErrInvalidEnvelope
+	}
+	return nil
+}
+
+func factorResultStatus(status factor.Status) (string, bool) {
+	switch status {
+	case factor.StatusAvailable:
+		return "completed", true
+	case factor.StatusInsufficientData:
+		return "insufficient_data", true
 	default:
 		return "", false
 	}

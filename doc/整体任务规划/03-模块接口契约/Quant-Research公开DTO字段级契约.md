@@ -244,7 +244,7 @@ Factor 首批仅包含单证券日线时间序列因子，不包含横截面排�
 5. Factor 的 input_snapshot_refs 必须非空且可追溯到真实 Data Snapshot；不能使用纯函数空输入授权例外替代行情事实依赖。
 6. 不可用结果必须由 metric_status 表达并将 value 显式置 null；不得以 0 代替缺失。Registry quality_policy 不允许时，degraded 不得作为 available 放行。
 
-**启用门禁：** 本节只补齐 Factor Payload 的字段级目标结构和首批计算映射，不改变 QNT-CTR-003 当前 deferred 状态。首批 Close-only Factor 复用已授权的 DailyBars Close Series Snapshot（精确 Close 字符串、interval、CalendarRef、PIT、质量证据与内容寻址 SnapshotRef），不等待通用 OHLC DATA-CTR-005 全量契约闭合。FactorResultPayload 注册到 Envelope Registry、对外输出为已支持的 factor/1.0.0 之前，必须完成生产计算 Facade、Stage Output/Quality Schema、Envelope Payload 白名单与持久化、Run↔Result 关联、Server 装配，以及基于真实 Data Snapshot 的 Quant→Researchflow Contract Test；通用 OHLC DATA-CTR-005/007 的 Research Evidence 映射不作为该窄化路径的前置条件。
+**启用门禁：** 本节只补齐 Factor Payload 的字段级目标结构和首批计算映射，不改变 QNT-CTR-003 当前 deferred 状态。首批 Close-only Factor 复用已授权的 DailyBars Close Series Snapshot（精确 Close 字符串、interval、CalendarRef、PIT、质量证据与内容寻址 SnapshotRef），不等待通用 OHLC DATA-CTR-005 全量契约闭合。生产计算 Facade、Stage Output/Quality Schema 与 Envelope Payload 白名单/持久化（第⑤组/DEC-058）已完成；FactorResultPayload 对外输出为已支持 factor/1.0.0 前，仍须完成 Run↔Result 关联、Server 装配，以及基于真实 Data Snapshot 的 Quant→Researchflow Contract Test；通用 OHLC DATA-CTR-005/007 的 Research Evidence 映射不作为该窄化路径的前置条件。
 
 #### 2.7.3 版本、注册与拒绝规则
 

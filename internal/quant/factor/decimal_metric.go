@@ -1,6 +1,7 @@
 package factor
 
 import (
+	"strings"
 	"time"
 )
 
@@ -63,5 +64,44 @@ func NewDecimalQuantMetric(result DecimalResult, systemAsOf time.Time, quality Q
 	default:
 		return DecimalQuantMetric{}, ErrInvalidMetric
 	}
+	if err := metric.Validate(); err != nil {
+		return DecimalQuantMetric{}, err
+	}
 	return metric, nil
+}
+
+// Validate 校验一个已反序列化的 DecimalQuantMetric 是否满足 QNT-CTR-004 首批 Decimal
+// 因子的字段级约束：metric_code→period 映射、十进制字符串语法、semver、样本边界、
+// 质量/状态一致性与规范 UTC 时间。NewDecimalQuantMetric 亦在末尾复用同一校验，
+// 确保"构造时"与"从持久化 Payload 恢复时"使用同一份规则，避免两处漂移。
+func (metric DecimalQuantMetric) Validate() error {
+	period, minimumSamples, ok := factorPeriod(metric.MetricCode)
+	if !ok || metric.Unit != "ratio" || metric.Period != period ||
+		!semanticVersionPattern.MatchString(metric.CalculationVersion) ||
+		!validQualityStatus(metric.QualityStatus) || metric.SampleCount < 0 ||
+		!canonicalDecimalMetricTime(metric.SystemAsOf) ||
+		metric.LowerBound != nil || metric.UpperBound != nil {
+		return ErrInvalidMetric
+	}
+	switch metric.MetricStatus {
+	case StatusAvailable:
+		if metric.SampleCount < minimumSamples || metric.Value == nil ||
+			!decimalFactorClosePattern.MatchString(*metric.Value) ||
+			metric.QualityStatus == QualityInvalid || metric.QualityStatus == QualityUnknown {
+			return ErrInvalidMetric
+		}
+	case StatusInsufficientData:
+		if metric.SampleCount >= minimumSamples || metric.Value != nil {
+			return ErrInvalidMetric
+		}
+	default:
+		return ErrInvalidMetric
+	}
+	return nil
+}
+
+func canonicalDecimalMetricTime(value string) bool {
+	parsed, err := time.Parse(time.RFC3339Nano, value)
+	return err == nil && parsed.Location() == time.UTC &&
+		strings.HasSuffix(value, "Z") && parsed.UTC().Format(time.RFC3339Nano) == value
 }

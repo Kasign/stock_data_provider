@@ -2,9 +2,11 @@ package registry
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
+	"example.com/stock-analysis-flow/internal/quant/factor"
 	"example.com/stock-analysis-flow/internal/quant/manifest"
 	"example.com/stock-analysis-flow/internal/quant/metric"
 	"example.com/stock-analysis-flow/internal/quant/result"
@@ -79,13 +81,72 @@ func TestQuantResultEnvelopeSchemaMatchesRegisteredPayloads(t *testing.T) {
 			if err := json.Unmarshal(encoded, &fields); err != nil {
 				t.Fatal(err)
 			}
-			fields["result_type"] = json.RawMessage(`"factor"`)
+			fields["result_type"] = json.RawMessage(`"backtest"`)
 			unsupported, err := json.Marshal(fields)
 			if err != nil {
 				t.Fatal(err)
 			}
 			if err := validateJSONSchemaInstance(schema, unsupported); err == nil {
 				t.Fatal("Envelope Schema accepted unregistered result_type")
+			}
+		})
+	}
+}
+
+func TestQuantResultEnvelopeSchemaAcceptsRegisteredFactorPayload(t *testing.T) {
+	schema := compileQuantSchemaFile(t, "QNT-CTR-004-quant-result-envelope-1.0.0.schema.json")
+	asOf, err := time.Parse(time.RFC3339Nano, "2026-11-23T00:00:00Z")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cases := []struct {
+		name         string
+		code         string
+		value        string
+		sampleCount  int
+		resultStatus string
+	}{
+		{"ma20_distance available", "ma20_distance", "0.904761904762", 20, "completed"},
+		{"momentum_5d available", "momentum_5d", "0.052631578947", 6, "completed"},
+		{"momentum_20d available", "momentum_20d", "0.2", 21, "completed"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			metric, err := factor.NewDecimalQuantMetric(
+				factor.DecimalResult{Code: tc.code, Value: tc.value, Status: factor.StatusAvailable, SampleCount: tc.sampleCount},
+				asOf, factor.QualityValid, "1.0.0",
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+			payload, err := result.NewFactorPayload(metric)
+			if err != nil {
+				t.Fatal(err)
+			}
+			payloadJSON, err := json.Marshal(payload)
+			if err != nil {
+				t.Fatal(err)
+			}
+			manifestValue, err := manifest.BuildWithPayload(manifest.Input{
+				ResultType: "factor", Scope: "stock", SecurityID: "600000.SH", TradeDate: "2026-11-23",
+				Period: metric.Period, QualityStatus: "valid", ResultStatus: tc.resultStatus,
+				SchemaVersion: "1.0.0", PayloadSchemaVersion: "1.0.0", AlgorithmVersion: metric.CalculationVersion,
+				ParameterFingerprint: "sha256:factor-parameters", SystemAsOf: asOf,
+				InputSnapshotRefs: []string{"data_snapshot:sha256:" + strings.Repeat("a", 64)},
+			}, payloadJSON)
+			if err != nil {
+				t.Fatal(err)
+			}
+			envelope, err := result.BuildEnvelope(manifestValue, "authorization-ref:current", payload)
+			if err != nil {
+				t.Fatal(err)
+			}
+			encoded, err := json.Marshal(envelope)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := validateJSONSchemaInstance(schema, encoded); err != nil {
+				t.Fatalf("factor Envelope violates QNT-CTR-004 Schema: %v; JSON: %s", err, encoded)
 			}
 		})
 	}

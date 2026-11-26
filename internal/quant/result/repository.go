@@ -48,6 +48,10 @@ func BuildRecord(input manifest.Input, payload Payload) (Record, error) {
 		if err := validateIndicatorManifestMetadata(value.value, source.Period, source.SystemAsOf, source.AlgorithmVersion, source.QualityStatus, source.ResultStatus); err != nil {
 			return Record{}, fmt.Errorf("%w: indicator payload metadata differs from manifest", ErrInvalidEnvelope)
 		}
+	case FactorPayload:
+		if err := validateFactorManifestMetadata(value.value, source.Period, source.SystemAsOf, source.AlgorithmVersion, source.QualityStatus, source.ResultStatus); err != nil {
+			return Record{}, fmt.Errorf("%w: factor payload metadata differs from manifest", ErrInvalidEnvelope)
+		}
 	default:
 		return Record{}, ErrUnsupportedPayload
 	}

@@ -203,5 +203,5 @@ Quant 不在 `internal/quant/**` 实现 SQL/Redis、通用 Storage、认证、�
 
 - 本节更新后续事实；此前“Server 只装配 News Search”“没有 Quant 正式 Stage Output Schema”等历史描述不再作为当前现状。`quant.sma20` 已有生产 Template/Executor/Output Registry Entry，SMA20 Stage Payload 携带落库后的 Quant `result_id`。
 - 首批三个 Close-only Decimal Factor 已完成 `CreateFactorService` 与 Stage Output/Quality 1.0.0 Schema、强类型 DTO、严格运行时 Validator（`QNT-CTR-003-factor-stage-output-1.0.0.schema.json`、`QNT-CTR-003-factor-quality-summary-1.0.0.schema.json`、`internal/quant/stage/factor_output.go`）。Draft 2020-12 编译/实例校验、三因子正例与违规负例、Quant 全包与 race 均 PASS。
-- 第④组只交付机器契约，不装配 Factor Stage Provider：第③组 Facade 还没有持久化结果，`result_id` 不能本地推导或伪造。剩余卡点是 Factor 结果落库/持久化 Payload 白名单、依赖可信 result_id 的 `factor_stage.go`、Run↔Result 关联、Server 装配和端到端真实质量证据。
-- QNT-CTR-003 仍 `deferred`、QNT-CTR-004/005 仍 `frozen`；本校准不升级契约状态，不开放 Factor Envelope Payload 或授权读取。
+- 第④组只交付机器契约，不装配 Factor Stage Provider：`result_id` 不能本地推导或伪造。第⑤组已补齐缺口：经 DEC-058 授权，强类型 `FactorPayload` 注册进 Envelope 四处白名单，`CreateFactorService` 复用 `resultPersister` 真实落库并返回内容寻址 `result_id`，Envelope Schema additive 追加 factor 分支、新增 factor envelope Golden，全包测试 PASS。剩余卡点是依赖已落库 result_id 的 `factor_stage.go` 装配、Run↔Result 关联、Server 装配和端到端真实质量证据。
+- QNT-CTR-003 仍 `deferred`、QNT-CTR-004/005 仍 `frozen`；Factor Envelope Payload 已开放写入/持久化（DEC-058），但授权读取仍受 GOV-CTR-006 与 Run↔Result 关联约束，未开放生产消费。本校准不升级契约状态。

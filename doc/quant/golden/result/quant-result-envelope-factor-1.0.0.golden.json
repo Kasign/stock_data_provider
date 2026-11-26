@@ -1,0 +1,32 @@
+{
+  "schema_version": "1.0.0",
+  "result_id": "quant_result:sha256:9058ca7776c33a9e060435b675e394062afb4c7f6e02af02b0cdbc851d84eac6",
+  "result_type": "factor",
+  "scope": "stock",
+  "security_id": "600000.SH",
+  "system_as_of": "2026-11-23T00:00:00Z",
+  "trade_date": "2026-11-23",
+  "period": "20d",
+  "algorithm_version": "1.0.0",
+  "parameter_fingerprint": "sha256:factor-parameters",
+  "input_snapshot_refs": [
+    "data_snapshot:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  ],
+  "quality_status": "valid",
+  "result_status": "completed",
+  "authorization_ref": "authorization-ref:current",
+  "payload_schema_version": "1.0.0",
+  "payload": {
+    "metric_code": "ma20_distance",
+    "value": "0.904761904762",
+    "unit": "ratio",
+    "period": "20d",
+    "system_as_of": "2026-11-23T00:00:00Z",
+    "quality_status": "valid",
+    "metric_status": "available",
+    "calculation_version": "1.0.0",
+    "sample_count": 20,
+    "lower_bound": null,
+    "upper_bound": null
+  }
+}

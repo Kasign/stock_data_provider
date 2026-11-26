@@ -95,6 +95,7 @@ P0 原始问题及实施约束作为审计记录保留；当前状态以第 7、
   - Server Quant 组合装配：NOT_COMPARABLE（未实现；依赖 Quant Facade/生产 Adapter 和明确 Stage 场景）。
 - 本轮未发现可在现有契约和模块职责内安全修复的局部代码缺陷。不得把纯函数、Validator、MemoryRepository 或类型声明拼成伪生产链路。
 - 卡点已同步至 Quant、Researchflow、Server 项目级卡点和模块当前任务记录；模块分支未被单独推送。
+- 状态更新（2026-11-26）：本节为 2026-11-19 历史基线（HEAD `b52c8afde`），其中"Envelope 仅注册 trend/risk、Factor Payload 未注册"已不再是当前现状。Indicator/Factor 已先后作为强类型 Payload 注册进 Envelope 白名单；Factor 经 DEC-058 授权后落库并返回 result_id（第⑤组）。当前权威状态以 `旧Analysis退役执行清单.md` 与 PLAT-002 登记簿为准，旧结论仅作历史证据保留。
 
 ## 16. RA-CROSS-REVIEW-005 登记（2026-11-19）
 

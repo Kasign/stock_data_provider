@@ -43,7 +43,7 @@ func newTestCreateFactorService(t *testing.T, reader CloseSeriesSnapshotReader, 
 	if err != nil {
 		t.Fatalf("create production Quant Registry: %v", err)
 	}
-	service, err := NewCreateFactorService(reader, quantRegistry, func() time.Time { return now })
+	service, err := NewCreateFactorService(reader, quantRegistry, result.NewMemoryRepository(), func() time.Time { return now })
 	if err != nil {
 		t.Fatalf("NewCreateFactorService() error = %v", err)
 	}
@@ -140,13 +140,13 @@ func TestCreateFactorServiceComputesAllThreeDecimalFactors(t *testing.T) {
 				t.Fatalf("authorized Snapshot reader call = purpose %q ref %q auth %q calls %d",
 					reader.lastPurpose, reader.lastRef, reader.lastAuthRef, reader.calls)
 			}
-			if execution.ManifestInput.ResultType != "factor" || execution.ManifestInput.Scope != "stock" ||
-				execution.ManifestInput.ResultStatus != "completed" ||
-				execution.ManifestInput.AlgorithmVersion != execution.Metric.CalculationVersion ||
-				len(execution.ManifestInput.InputSnapshotRefs) != 1 ||
-				execution.ManifestInput.InputSnapshotRefs[0] != execution.SnapshotRef ||
-				execution.ManifestInput.ParameterFingerprint != execution.ParameterFingerprint {
-				t.Fatalf("ManifestInput not bound to factor result/snapshot: %+v", execution.ManifestInput)
+			if execution.Manifest.ResultType != "factor" || execution.Manifest.Scope != "stock" ||
+				execution.Manifest.ResultStatus != "completed" ||
+				execution.Manifest.AlgorithmVersion != execution.Metric.CalculationVersion ||
+				len(execution.Manifest.InputSnapshotRefs) != 1 ||
+				execution.Manifest.InputSnapshotRefs[0] != execution.SnapshotRef ||
+				execution.Manifest.ParameterFingerprint != execution.ParameterFingerprint {
+				t.Fatalf("ManifestInput not bound to factor result/snapshot: %+v", execution.Manifest)
 			}
 			registryJSON, err := json.Marshal(execution.Metric)
 			if err != nil {
@@ -174,8 +174,8 @@ func TestCreateFactorServiceReturnsInsufficientDataAsNullMetric(t *testing.T) {
 		execution.Metric.SampleCount != 5 {
 		t.Fatalf("insufficient metric = %+v, want null value/status insufficient_data/5 bars", execution.Metric)
 	}
-	if execution.ManifestInput.ResultStatus != "insufficient_data" {
-		t.Fatalf("ManifestInput.ResultStatus = %q, want insufficient_data", execution.ManifestInput.ResultStatus)
+	if execution.Manifest.ResultStatus != "insufficient_data" {
+		t.Fatalf("ManifestInput.ResultStatus = %q, want insufficient_data", execution.Manifest.ResultStatus)
 	}
 }
 
@@ -343,27 +343,100 @@ func TestCreateFactorServiceRejectsNilDependencies(t *testing.T) {
 	}
 	reader := &createFactorSnapshotReader{snapshot: validCreateFactorSnapshot(sequenceCloses(1, 20))}
 	now := func() time.Time { return factorExecutionNow() }
-	if _, err := NewCreateFactorService(nil, quantRegistry, now); !errors.Is(err, ErrInvalidCreateFactorRequest) {
+	repository := result.NewMemoryRepository()
+	if _, err := NewCreateFactorService(nil, quantRegistry, repository, now); !errors.Is(err, ErrInvalidCreateFactorRequest) {
 		t.Fatalf("nil reader error = %v", err)
 	}
-	if _, err := NewCreateFactorService(reader, nil, now); !errors.Is(err, ErrInvalidCreateFactorRequest) {
+	if _, err := NewCreateFactorService(reader, nil, repository, now); !errors.Is(err, ErrInvalidCreateFactorRequest) {
 		t.Fatalf("nil registry error = %v", err)
 	}
-	if _, err := NewCreateFactorService(reader, quantRegistry, nil); !errors.Is(err, ErrInvalidCreateFactorRequest) {
+	if _, err := NewCreateFactorService(reader, quantRegistry, nil, now); !errors.Is(err, ErrInvalidCreateFactorRequest) {
+		t.Fatalf("nil repository error = %v", err)
+	}
+	if _, err := NewCreateFactorService(reader, quantRegistry, repository, nil); !errors.Is(err, ErrInvalidCreateFactorRequest) {
 		t.Fatalf("nil clock error = %v", err)
 	}
 }
 
-func TestCreateFactorServiceDoesNotPersistInFacadeLayer(t *testing.T) {
-	// Facade 层只产出 ManifestInput，不写 Repository；持久化与 Envelope Payload 属后续工作组。
+func TestCreateFactorServicePersistsContentAddressedFactorRecord(t *testing.T) {
 	reader := &createFactorSnapshotReader{snapshot: validCreateFactorSnapshot(sequenceCloses(1, 20))}
-	service := newTestCreateFactorService(t, reader, factorExecutionNow())
-	execution, err := service.Execute(context.Background(), validCreateFactorRequest(registry.ProductionMADistanceCode))
+	repository := &createFactorRecordingRepository{inner: result.NewMemoryRepository()}
+	service := newTestCreateFactorServiceWithRepository(t, reader, repository, factorExecutionNow())
+	request := validCreateFactorRequest(registry.ProductionMADistanceCode)
+
+	first, err := service.Execute(context.Background(), request)
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
-	if execution.ManifestInput.ResultType != "factor" || execution.ManifestInput.PayloadSchemaVersion != "1.0.0" ||
-		execution.ManifestInput.SchemaVersion != result.EnvelopeSchemaVersion {
-		t.Fatalf("ManifestInput missing persistence-ready metadata: %+v", execution.ManifestInput)
+	second, err := service.Execute(context.Background(), request)
+	if err != nil {
+		t.Fatalf("repeated Execute() error = %v", err)
 	}
+	if len(repository.records) != 2 || first.Manifest.ResultID != second.Manifest.ResultID {
+		t.Fatalf("repeated Execute() wrote %d records or changed result id: first=%s second=%s",
+			len(repository.records), first.Manifest.ResultID, second.Manifest.ResultID)
+	}
+	if first.Manifest.ResultType != "factor" || first.Manifest.PayloadSchemaVersion != "1.0.0" ||
+		first.Manifest.SchemaVersion != result.EnvelopeSchemaVersion || first.Manifest.ResultID == "" {
+		t.Fatalf("Manifest missing persistence-ready metadata: %+v", first.Manifest)
+	}
+	if err := first.Manifest.Verify(); err != nil {
+		t.Fatalf("persisted Manifest is not content-addressed: %v", err)
+	}
+	record := repository.records[0]
+	if err := record.Validate(); err != nil {
+		t.Fatalf("persisted Record is not payload-bound: %v", err)
+	}
+	decoded, err := result.DecodePayload(record.Manifest.ResultType, record.Manifest.PayloadSchemaVersion, record.Payload)
+	if err != nil {
+		t.Fatalf("DecodePayload() error = %v", err)
+	}
+	factorPayload, ok := decoded.(result.FactorPayload)
+	if !ok {
+		t.Fatalf("decoded payload type = %T, want result.FactorPayload", decoded)
+	}
+	if got := factorPayload.Metric(); got.MetricCode != registry.ProductionMADistanceCode ||
+		got.Value == nil || *got.Value != "0.904761904762" || got.SampleCount != 20 {
+		t.Fatalf("decoded factor metric = %+v, want ma20_distance 0.904761904762/20", got)
+	}
+}
+
+func TestCreateFactorServiceDoesNotPersistOnInvalidInput(t *testing.T) {
+	reader := &createFactorSnapshotReader{snapshot: validCreateFactorSnapshot(sequenceCloses(1, 20))}
+	repository := &createFactorRecordingRepository{inner: result.NewMemoryRepository()}
+	service := newTestCreateFactorServiceWithRepository(t, reader, repository, factorExecutionNow())
+	request := validCreateFactorRequest(registry.ProductionMADistanceCode)
+	request.AllowedProviderCodes = []string{"unapproved"}
+	if _, err := service.Execute(context.Background(), request); !errors.Is(err, ErrInvalidCreateFactorRequest) {
+		t.Fatalf("Execute() error = %v, want ErrInvalidCreateFactorRequest", err)
+	}
+	if len(repository.records) != 0 {
+		t.Fatalf("invalid request must not persist; writes=%d", len(repository.records))
+	}
+}
+
+type createFactorRecordingRepository struct {
+	inner   *result.MemoryRepository
+	records []result.Record
+}
+
+func (repository *createFactorRecordingRepository) Save(ctx context.Context, record result.Record) error {
+	if err := repository.inner.Save(ctx, record); err != nil {
+		return err
+	}
+	repository.records = append(repository.records, record)
+	return nil
+}
+
+func newTestCreateFactorServiceWithRepository(t *testing.T, reader CloseSeriesSnapshotReader, repository result.Repository, now time.Time) *CreateFactorService {
+	t.Helper()
+	quantRegistry, err := registry.NewProductionRegistry()
+	if err != nil {
+		t.Fatalf("create production Quant Registry: %v", err)
+	}
+	service, err := NewCreateFactorService(reader, quantRegistry, repository, func() time.Time { return now })
+	if err != nil {
+		t.Fatalf("NewCreateFactorService() error = %v", err)
+	}
+	return service
 }

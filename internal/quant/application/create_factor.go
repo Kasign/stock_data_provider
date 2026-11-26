@@ -26,7 +26,9 @@ import (
 //     不在 Facade 内硬编码；与计算层的 scale 一致性由测试断言守住。
 //   - Snapshot 身份/PIT/质量/覆盖率门禁复用 close_series_snapshot_validation.go，
 //     与 SMA20 共用同一实现，避免两处漂移。
-//   - 本层不落库、不签发授权、不建立 Run 关联；Factor Envelope Payload 与持久化属后续工作组。
+//   - 结果经 result.FactorPayload + resultPersister 落库并返回内容寻址 Manifest（DEC-PLAT-002-058）；
+//     持久化复用 SMA 用例同一写入端口，不复制 Repository 逻辑。
+//   - 本层不签发 Data 授权、不建立 Run 关联、不装配 Server；Factor Stage Provider 属后续工作组。
 const (
 	factorSchemaVersion  = registry.ProductionFactorSchemaVersion
 	factorPurposeCode    = "quant_analysis"
@@ -70,12 +72,12 @@ type CreateFactorRequest struct {
 	AllowedProviderCodes []string
 }
 
-// FactorExecutionResult 是一次 Factor 生产计算的可验证结果与输入质量摘要。
-// Metric 为强类型 DecimalQuantMetric（value 是十进制字符串或 null），
-// 尚未落库；持久化 Payload 与 Run 关联由后续工作组消费本结果实现。
+// FactorExecutionResult 是一次 Factor 生产计算的已持久化结果与输入质量摘要。
+// Metric 为强类型 DecimalQuantMetric（value 是十进制字符串或 null），Manifest 为
+// 内容寻址的不可变结果记录；Run 关联与 Server 装配由后续工作组消费本结果实现。
 type FactorExecutionResult struct {
+	Manifest             manifest.Manifest
 	Metric               factor.DecimalQuantMetric
-	ManifestInput        manifest.Input
 	ParameterFingerprint string
 	SnapshotRef          string
 	Coverage             CloseSeriesCoverageEvidence
@@ -83,28 +85,34 @@ type FactorExecutionResult struct {
 }
 
 // CreateFactorService 将 Data 已授权 Close Series Snapshot 转换为按活动 Registry
-// Entry 校验过的 Decimal Factor 结果。不注入默认 Entry、不签发授权、不落库。
+// Entry 校验过的 Decimal Factor 结果并持久化。不注入默认 Entry、不签发授权、不建 Run 关联。
 type CreateFactorService struct {
 	snapshots CloseSeriesSnapshotReader
 	registry  *registry.Registry
+	persister *resultPersister
 	now       func() time.Time
 }
 
 func NewCreateFactorService(
 	snapshots CloseSeriesSnapshotReader,
 	quantRegistry *registry.Registry,
+	repository result.Repository,
 	now func() time.Time,
 ) (*CreateFactorService, error) {
-	if snapshots == nil || quantRegistry == nil || now == nil {
+	if snapshots == nil || quantRegistry == nil || repository == nil || now == nil {
 		return nil, ErrInvalidCreateFactorRequest
 	}
-	return &CreateFactorService{snapshots: snapshots, registry: quantRegistry, now: now}, nil
+	persister, err := newResultPersister(repository)
+	if err != nil {
+		return nil, err
+	}
+	return &CreateFactorService{snapshots: snapshots, registry: quantRegistry, persister: persister, now: now}, nil
 }
 
 // Execute 读取已授权 Snapshot，按活动 Registry Entry 校验参数与精度，精确计算并返回强类型 Metric。
 // 不足样本返回 metric_status=insufficient_data、value=null，不视为错误，也不落库。
 func (service *CreateFactorService) Execute(ctx context.Context, request CreateFactorRequest) (FactorExecutionResult, error) {
-	if service == nil || service.snapshots == nil || service.registry == nil || service.now == nil ||
+	if service == nil || service.snapshots == nil || service.registry == nil || service.persister == nil || service.now == nil ||
 		ctx == nil || strings.TrimSpace(request.FactorCode) == "" ||
 		strings.TrimSpace(request.SnapshotRef) == "" || strings.TrimSpace(request.AuthorizationRef) == "" ||
 		request.SystemAsOf.IsZero() || request.SystemAsOf.Location() != time.UTC ||
@@ -210,9 +218,17 @@ func (service *CreateFactorService) Execute(ctx context.Context, request CreateF
 		AlgorithmVersion: entry.AlgorithmVersion, ParameterFingerprint: parameterFingerprint,
 		SystemAsOf: systemAsOf, InputSnapshotRefs: []string{snapshot.SnapshotRef},
 	}
+	payload, err := result.NewFactorPayload(decimalMetric)
+	if err != nil {
+		return FactorExecutionResult{}, err
+	}
+	persisted, err := service.persister.persist(ctx, input, payload)
+	if err != nil {
+		return FactorExecutionResult{}, err
+	}
 	return FactorExecutionResult{
+		Manifest:             persisted,
 		Metric:               decimalMetric,
-		ManifestInput:        input,
 		ParameterFingerprint: parameterFingerprint,
 		SnapshotRef:          snapshot.SnapshotRef,
 		Coverage:             snapshot.Coverage,
