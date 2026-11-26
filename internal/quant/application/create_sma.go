@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math/big"
 	"strings"
 	"time"
 
@@ -263,60 +262,23 @@ func validateExactSMRegistryEntry(entry registry.Entry) error {
 	return nil
 }
 
+// validateExactSMASnapshot 复用 Close Series 通用门禁，并保留 SMA 用例的错误类型语义。
+// Snapshot 身份、PIT/质量/覆盖率证据与 SMA/Factor 共用同一实现，避免两处漂移。
 func validateExactSMASnapshot(snapshot CloseSeriesSnapshot, request CreateSMARequest, entry registry.Entry, trustedNow time.Time) (time.Time, error) {
-	if snapshot.SnapshotRef != request.SnapshotRef ||
-		snapshot.ManifestSchemaVersion != "2.0.0" || snapshot.PayloadSchemaVersion != "1.0.0" ||
-		snapshot.PayloadKind != "daily_bars_close_series" || strings.TrimSpace(snapshot.CallerRef) == "" ||
-		snapshot.PurposeCode != smaPurposeCode || !validSMAProviderSources(snapshot.Sources, request.AllowedProviderCodes) || strings.TrimSpace(snapshot.Symbol) == "" ||
-		!validSMAISODate(snapshot.StartDate) || !validSMAISODate(snapshot.EndDate) || snapshot.StartDate > snapshot.EndDate ||
-		snapshot.AdjustmentBasis != "none" || snapshot.Interval != "1d" ||
-		strings.TrimSpace(snapshot.TradingCalendarRef) == "" || snapshot.QualityStatus != "valid" ||
-		snapshot.Coverage.CalendarQualityStatus != "valid" ||
-		snapshot.Coverage.ExpectedTradingDays <= 0 || snapshot.Coverage.MinimumRequiredBars <= 0 ||
-		!snapshot.Coverage.CoverageSufficient ||
-		len(snapshot.Bars) < snapshot.Coverage.MinimumRequiredBars ||
-		len(snapshot.Bars) > snapshot.Coverage.ExpectedTradingDays {
+	policy, err := closeSeriesValidationPolicyFromEntry(entry, smaPurposeCode, smaSourceRef, smaProviderAPIVersion)
+	if err != nil {
 		return time.Time{}, ErrInvalidSMASnapshot
 	}
-	coverage := new(big.Rat).SetFrac(big.NewInt(int64(len(snapshot.Bars))), big.NewInt(int64(snapshot.Coverage.ExpectedTradingDays)))
-	minimumCoverage := new(big.Rat).SetFloat64(entry.QualityPolicy.MinimumCoverage)
-	if minimumCoverage == nil || coverage.Cmp(minimumCoverage) < 0 {
-		return time.Time{}, ErrSMASnapshotQuality
-	}
-	var previousDate string
-	for index, bar := range snapshot.Bars {
-		if !validSMAISODate(bar.TradeDate) || bar.TradeDate < snapshot.StartDate ||
-			bar.TradeDate > snapshot.EndDate || (index > 0 && bar.TradeDate <= previousDate) ||
-			bar.QualityStatus != "valid" || strings.TrimSpace(bar.Close) == "" {
-			return time.Time{}, ErrInvalidSMASnapshot
+	systemAsOf, err := validateAuthorizedCloseSeriesSnapshot(
+		snapshot, request.SnapshotRef, request.SystemAsOf, request.AllowedProviderCodes, policy, trustedNow,
+	)
+	if err != nil {
+		if errors.Is(err, ErrCloseSeriesSnapshotQuality) {
+			return time.Time{}, ErrSMASnapshotQuality
 		}
-		previousDate = bar.TradeDate
-	}
-	if len(snapshot.Bars) == 0 {
-		return time.Time{}, ErrInvalidSMASnapshot
-	}
-	systemAsOf, err := parseCanonicalSMAUTC(snapshot.SystemAsOf)
-	if err != nil || !systemAsOf.Equal(request.SystemAsOf) ||
-		trustedNow.IsZero() || trustedNow.Location() != time.UTC || trustedNow.Before(systemAsOf) {
 		return time.Time{}, ErrInvalidSMASnapshot
 	}
 	return systemAsOf, nil
-}
-
-func parseCanonicalSMAUTC(value string) (time.Time, error) {
-	if !strings.HasSuffix(value, "Z") {
-		return time.Time{}, ErrInvalidSMASnapshot
-	}
-	parsed, err := time.Parse(time.RFC3339Nano, value)
-	if err != nil || parsed.Location() != time.UTC || parsed.UTC().Format(time.RFC3339Nano) != value {
-		return time.Time{}, ErrInvalidSMASnapshot
-	}
-	return parsed, nil
-}
-
-func validSMAISODate(value string) bool {
-	parsed, err := time.Parse("2006-01-02", value)
-	return err == nil && parsed.Format("2006-01-02") == value
 }
 
 func containsSortedUnique(values []string, expected string) bool {
@@ -333,15 +295,6 @@ func containsSortedUnique(values []string, expected string) bool {
 		}
 	}
 	return found
-}
-
-func validSMAProviderSources(sources []CloseSeriesSource, allowedProviderCodes []string) bool {
-	if len(sources) != 1 || !containsSortedUnique(allowedProviderCodes, smaSourceRef) {
-		return false
-	}
-	source := sources[0]
-	return source.SourceRef == smaSourceRef && source.SourceVersion == nil &&
-		source.ProviderInterfaceVersion == smaProviderAPIVersion
 }
 
 func containsString(values []string, expected string) bool {

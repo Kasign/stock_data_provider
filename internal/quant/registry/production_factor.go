@@ -9,16 +9,21 @@ const (
 	ProductionFactorSchemaVersion = "1.0.0"
 	ProductionFactorUnit          = "ratio"
 
+	// AlgorithmVersion 必须是 semver（QNT-CTR-004 calculation_version pattern），
+	// 且与结果级 Golden 的 calculation_version 一致；精度策略由 Precision 字段声明，
+	// 不在版本字符串里重复表达。因子身份由 code 区分，三者各自 1.0.0。
+	ProductionFactorAlgorithmVersion = "1.0.0"
+
 	ProductionMADistanceCode             = "ma20_distance"
-	ProductionMADistanceAlgorithmVersion = "ma20-distance-decimal-half-even-v1"
+	ProductionMADistanceAlgorithmVersion = ProductionFactorAlgorithmVersion
 	ProductionMADistanceCountingRule     = "Count 20 consecutive valid close bars in the window; result is one ratio."
 
 	ProductionMomentum5Code             = "momentum_5d"
-	ProductionMomentum5AlgorithmVersion = "momentum5-decimal-half-even-v1"
+	ProductionMomentum5AlgorithmVersion = ProductionFactorAlgorithmVersion
 	ProductionMomentum5CountingRule     = "Count 6 consecutive valid close bars (base plus latest); result is one ratio."
 
 	ProductionMomentum20Code             = "momentum_20d"
-	ProductionMomentum20AlgorithmVersion = "momentum20-decimal-half-even-v1"
+	ProductionMomentum20AlgorithmVersion = ProductionFactorAlgorithmVersion
 	ProductionMomentum20CountingRule     = "Count 21 consecutive valid close bars (base plus latest); result is one ratio."
 
 	// productionFactorTolerance 是固定 scale=12 末位对应的容差（JSON 字符串，与 decimal_string 类型一致）。

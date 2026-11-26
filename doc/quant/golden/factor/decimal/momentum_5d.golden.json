@@ -2,7 +2,7 @@
   "fixture_type": "synthetic_fixture",
   "schema_version": "1.0.0",
   "factor_code": "momentum_5d",
-  "algorithm_version": "momentum5-decimal-half-even-v1",
+  "algorithm_version": "1.0.0",
   "parameters": {},
   "value_type": "decimal_string",
   "scale": 12,

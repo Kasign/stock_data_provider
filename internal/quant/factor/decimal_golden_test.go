@@ -30,9 +30,9 @@ func TestDecimalFactorGoldenFixtures(t *testing.T) {
 		algorithmVersion string
 		fn               func([]string) (DecimalResult, error)
 	}{
-		{"ma20_distance", "ma20-distance-decimal-half-even-v1", DecimalMADistance20},
-		{"momentum_5d", "momentum5-decimal-half-even-v1", DecimalMomentum5},
-		{"momentum_20d", "momentum20-decimal-half-even-v1", DecimalMomentum20},
+		{"ma20_distance", "1.0.0", DecimalMADistance20},
+		{"momentum_5d", "1.0.0", DecimalMomentum5},
+		{"momentum_20d", "1.0.0", DecimalMomentum20},
 	}
 	for _, tc := range cases {
 		t.Run(tc.code, func(t *testing.T) {
