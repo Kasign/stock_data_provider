@@ -30,7 +30,7 @@ func TestMADistance20UsesLatest20Closes(t *testing.T) {
 	for i := range closes {
 		closes[i] = 100
 	}
-	closes[0] = 1000 // must be outside the MA20 window
+	closes[0] = 1000 // 该价格位于最近 20 根窗口之外，不应参与均线计算
 	closes[20] = 110
 	got, err := MADistance20(closes)
 	if err != nil {
@@ -44,7 +44,9 @@ func TestMADistance20UsesLatest20Closes(t *testing.T) {
 
 func TestMADistance20InsufficientData(t *testing.T) {
 	got, err := MADistance20([]float64{100, 101, 102})
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	if got.Status != StatusInsufficientData || got.SampleCount != 3 {
 		t.Fatalf("unexpected result: %+v", got)
 	}
@@ -175,6 +177,11 @@ func TestFactorsRejectOverflowFromFinitePositivePrices(t *testing.T) {
 		name string
 		run  func() error
 	}{
+		{"momentum_5d", func() error {
+			closes := []float64{1, 1, 1, 1, 1, math.MaxFloat64}
+			_, err := Momentum5(closes)
+			return err
+		}},
 		{"momentum_20d", func() error {
 			closes := make([]float64, 21)
 			for i := range closes {
