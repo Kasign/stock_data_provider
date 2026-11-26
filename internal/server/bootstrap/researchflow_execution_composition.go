@@ -176,12 +176,6 @@ func newResearchflowComposition(
 	if err != nil {
 		return nil, fmt.Errorf("create Researchflow database clock: %w", err)
 	}
-	if newsFeedStage != nil {
-		if err := publishNewsFeedSourcePolicies(ctx, newsFeedStage.sourcePolicies, newsRepository); err != nil {
-			return nil, fmt.Errorf("publish News Feed Source Policy snapshots: %w", err)
-		}
-	}
-
 	var quantResultReader *researchflowQuantResultReader
 	if quantStage != nil {
 		policyStore, storeErr := quantstorage.NewMySQLResultAccessPolicyStore(shared.DB)
@@ -213,6 +207,11 @@ func newResearchflowComposition(
 			return nil, fmt.Errorf("create Quant GetResult Application Service: %w", getResultErr)
 		}
 		quantResultReader = &researchflowQuantResultReader{getResult: getQuantResult}
+	}
+	if newsFeedStage != nil {
+		if err := publishNewsFeedSourcePolicies(ctx, newsFeedStage.sourcePolicies, newsRepository); err != nil {
+			return nil, fmt.Errorf("publish News Feed Source Policy snapshots: %w", err)
+		}
 	}
 
 	return &researchflowComposition{
