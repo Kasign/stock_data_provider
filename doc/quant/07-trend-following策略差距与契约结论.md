@@ -140,3 +140,37 @@
 - 旧 `trendFactor`/`trendStrategy` 保持原样，随阶段 4 删除旧链一并退役；**不**在 Quant 复制其 float64 实现，也不在 Researchflow 重写算法。
 - 1.4（tradability/risk 硬门禁）不依赖本轮：Risk 规则集与 RuleSet 评估机制已存在，缺的是权威规则目录，与本结论无关。
 - 2.1（完整股票研究 Template）不含 trend Stage，不受阻塞；但若要交付"趋势"页面能力，必须先完成 D1–D5。
+
+## 9. D1–D5 决议通过（2026-11-26）与 1.3 落地记录
+
+### 9.1 决议结论
+
+| 决议 | 选项 | 结论 |
+|---|---|---|
+| D1 周期集合 | B | 5d / 20d / 60d；同时新增 `momentum_60d` 的 Decimal Registry Entry |
+| D2 direction | A | 纯符号：`ma20_distance` 与 `momentum_20d` 同正 → `bullish`、同负 → `bearish`、异号 → `sideways`、样本不足 → `unknown`；不设幅度阈值 |
+| D3 phase | A | v1 恒为 `unknown`，phase 的判定边界留待独立决议 |
+| D4 strength | A | v1 恒为 `null`（契约允许），不引入无来源的归一化公式 |
+| D5 产物层次 | A | v1 只产出 `TrendResult`；交易候选（Signal）仍属 QNT-008，保持 NOT_STARTED |
+
+### 9.2 落地范围（与第 7 节的差异）
+
+实际交付比第 7 节的最小范围多两处，均因 D1 的多周期要求而起，并已在实现中固化：
+
+1. **证据是四个 Metric，不是三个**：`ma20_distance`、`momentum_5d`、`momentum_20d`、`momentum_60d`，顺序即契约（`TrendResult.evidence_metrics` 不随调用方变化）；`minimum_bars = 61` 来自最长窗口，而不是任取一个窗口。
+2. **质量状态是三值而非布尔**：`valid`（四个证据皆可用）、`degraded`（方向可判定但长周期证据不足）、`unknown`（方向不可判定）；并与 `result_status` 双向锁定——`unknown ⇔ insufficient_data`，其余必为 `completed`。两种降级都必须真实落库并持 `result_id`，否则 Stage Output 与授权读取拿不到可引用的结果。
+
+### 9.3 实现落点
+
+- 计算：`internal/quant/factor/decimal_factor.go`（`DecimalMomentum60`）、`internal/quant/registry/production_factor.go`（`momentum_60d` Entry，61 根）。
+- 语义：`internal/quant/trend/assess.go` 只做符号判定与质量分类，拒绝空值/非 ratio/样本不足等非规范证据；不实现 phase/strength 推导，不 import `registry`（避免测试期循环依赖，一致性由 `TestTrendEvidenceCodesMatchRegistry` 收敛）。
+- 用例：`internal/quant/application/create_trend.go`（一次 Snapshot 读取、四证据、`ValidateMetric` 对齐 Entry、`result.NewTrendPayload` 落库、Manifest `quality_status` 取判定值以满足 QNT-CTR-005）。
+- Stage：`internal/quant/stage/trend.go` + `trend_output.go`（自校验复算方向，拒绝“证据与结论打架”的 payload）、`internal/server/bootstrap/quant_trend_stage.go`（Output Registry 1.4.0、冻结 Template、`completed`→succeeded / `insufficient_data`→degraded + `quant_trend_insufficient_data`）。
+- 装配：参数 Schema（无 `window` 字段）、`quant.trend.always` 适用性规则、Dispatcher 路由、Runtime 前置校验、关联规格表条目；Quant service Principal 注入泛化为“任一 Quant Stage”。
+- 测试：trend 包纯符号与质量边界、8 类非规范证据拒绝、Facade 三类质量结果、5 类 Stage Golden（bullish/bearish/sideways/degraded/unknown）、文档 Schema 与运行时同判定、跨模块契约（Registry Entry ↔ 关联规格表 ↔ 真实 Stage Envelope）。
+
+### 9.4 未改变的部分
+
+- 契约状态：QNT-CTR-003 仍 `deferred`，QNT-CTR-004/005 仍 `frozen`；本组只是让实现追平已通过的决议，不构成对外发布授权。
+- QNT-008 Signal 仍 NOT_STARTED；DEC-PLAT-002-049“禁止 direction/phase/strength 互推”继续生效——phase/strength 的 `unknown`/`null` 是**契约内的显式取值**，不是“由 direction 推出”。
+- 旧 `trendFactor`/`trendStrategy` 未改一行，随阶段 4 删除旧链一并退役。

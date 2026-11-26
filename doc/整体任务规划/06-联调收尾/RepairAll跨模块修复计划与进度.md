@@ -1466,3 +1466,22 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - 核实结果（`gh run list`）：`0b8e42ed0`（⑤）、`d574976ef`（⑥）、`2022bf6a1`（⑦）、`8b3792e4d`（⑧）、`e14d6c0f6`（1.3）的 Go Test Suite、Integration CI、Quant module validation、Required checks 均为 `completed/success`；`1201092fc` 与 `e14d6c0f6` 同次推送，仅 head commit 触发运行，因此 `1201092fc` 无独立 CI 结论，不把 head 结论冒充为其独立验收。
 - 口径：已把各节 `CI 状态 not_run` 替换为对应 SHA 的 Run 链接；仍保留"本地测试不冒充 CI"与"文档 SHA 无独立 Run 时不冒用历史 CI"两条约束（AGENTS.md 第 14 条与第三节）。
 - 未覆盖：`4cbd118ac`（第④组）未单独触发运行，其验收仍只有本地证据；本轮回填不改变任何契约状态、代码或测试。
+
+## 2026-11-26 执行清单 1.3 落地 + 1.5 输入质量门禁（D1–D5 按推荐项通过）
+
+- 起始 HEAD `cd126e877`（CI 证据回填已推送）。决议：D1=5/20/60、D2=纯符号、D3=phase 恒 `unknown`、D4=strength 恒 `null`、D5=只产出 TrendResult，均按 `doc/quant/07` 推荐项通过。
+- 1.3 交付（`quant.trend` 成为真实生产 Stage，契约状态不变）：
+  - 计算：`momentum_60d` 精确算法（`decimal_factor.go`）+ Registry Entry（61 根）。Entry 是趋势输入最小样本与覆盖率的唯一来源，Facade 断言 Entry 而不在代码里重复声明 scale/容差。
+  - 语义：`internal/quant/trend/assess.go` 只做符号判定与质量分类（`valid`/`degraded`/`unknown`），拒绝空值、非 ratio、样本不足等 8 类非规范证据；不实现 phase/strength 推导，也不 import `registry`（registry 测试反向引用 trend 会形成测试期循环依赖，改用包内常量 + `TestTrendEvidenceCodesMatchRegistry` 收敛一致性）。
+  - 用例：`CreateTrendService` 一次授权 Snapshot 读取产出四个证据 Metric（顺序即契约），`ValidateMetric` 对齐 `momentum_60d` Entry，经 `result.NewTrendPayload` + `resultPersister` 落库；Manifest `quality_status` 取判定值以满足 QNT-CTR-005，输入质量另以 `InputQualityStatus`/`result_quality_status` 表达。
+  - Stage：Adapter 要求 `limit>=61` 且 `parameters` 严格 `{}`；Output/Quality Schema 1.0.0 + 强类型 DTO + Validator（复算方向、校验 phase/strength/conflict_refs/证据顺序、`unknown ⇔ insufficient_data`）；Output Registry `1.4.0`、冻结 Template、参数 Schema（无 `window` 字段）、`quant.trend.always`、Dispatcher 路由、Runtime 前置校验、关联规格表条目。
+  - 生产缺口修正：Quant service Principal 注入从“仅 `quant.sma20`”泛化为 `isQuantStageCode`，否则 Factor/Trend 在生产 Worker 会被 Data 拒绝（既有单测直调 Adapter 掩盖了该缺口）。
+  - 测试：trend 包纯符号/质量边界/非规范证据，Facade 三类结果，5 类 Stage Golden（bullish/bearish/sideways/degraded/unknown），文档 Schema 与运行时同判定，跨模块契约（Entry ↔ 关联规格表 ↔ 真实 Envelope），Registry 版本唯一性。
+- 1.5 交付（Data 质量事实 → Quant 适用性的正式映射）：
+  - `internal/quant/application/quality_applicability.go`：7 个封闭原因码 + 固定优先级（PIT → 快照质量 → 日历质量 → Data 覆盖率 → 样本下限 → Registry 覆盖率 → 逐 bar 质量），表外原因不猜测。
+  - `validateAuthorizedCloseSeriesSnapshot` 拆成“结构完整性”与“质量事实→适用性”两段；历史回放缺 PIT 证据继续硬阻断，不退化为“尽力计算”。
+  - `InputNotApplicableError` unwrap 到 `ErrCloseSeriesSnapshotQuality`；三个 Facade 统一经 `classifyCloseSeriesValidationError`，把原因码保留在错误链上。
+  - Stage 层 `quant_input_reason.go` 把原因投影为 `quant_{sma20|factor|trend}_input_*`，不再退化为 `*_execution_failed`；表外原因回退为 `*_input_not_applicable`。
+  - **错误分类语义变化（已同步改单测，不放宽门禁）**：此前只有“覆盖率低于 Registry 策略”落在 `Err*SnapshotQuality`，其余质量类失败（快照质量/日历/覆盖率标记/逐 bar 质量/PIT）都落在 `ErrInvalid*Snapshot`。1.5 起“输入存在但不可用”统一走前者并携带原因码，Snapshot 自身不自洽仍走后者且不带原因码。两类都继续 fail-closed。
+- 验证：`go build ./...`、`go vet`、`go test ./internal/...` 全通过；`go test -race ./internal/quant/application/ ./internal/server/bootstrap/` PASS。变异验证三处：删 `CoverageSufficient` 分支（14 处断言失败）、删 PIT 映射分支（映射与 Factor 执行器测试失败）、去掉原因码透传（分类与 Facade 测试失败）；恢复后全绿。
+- 状态：1.3、1.5 记为已完成（实现层面）；QNT-CTR-003 仍 `deferred`、004/005 仍 `frozen`，QNT-008 仍 NOT_STARTED。CI 状态以推送后 GitHub Actions 结论为准，本节不预填。

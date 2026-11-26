@@ -68,3 +68,12 @@
 - 旧逻辑只输出单一 `long_candidate`，没有 direction 四值、phase、strength 与 conflict 表达，无法映射到本 DTO 而不新增语义决策；因此不能把旧 `trendStrategy` 当作趋势算法迁移源。
 - 本轮仍不实现算法、不注册 `quant.trend` Stage、不改本 DTO 与其 Schema/Golden。phase 与 strength 在无决议时的合法表达分别为 `unknown` 与 `null`。
 - 1.3 的退出条件（生产策略 Stage 与契约）未满足，阻塞于 07 文档第 6 节的 D1–D5 五项决议。
+
+## 2026-11-26 D1–D5 决议通过后的实现状态
+
+上一节“阻塞于 D1–D5”的结论已被决议取代：D1=5/20/60、D2=纯符号、D3=phase 恒 `unknown`、D4=strength 恒 `null`、D5=只产出 TrendResult，均按 `doc/quant/07` 推荐项通过。据此：
+
+- `internal/quant/trend` 已实现方向判定与质量三分类（`valid`/`degraded`/`unknown`），`evidence_metrics` 固定为 MA20 距离 + 5d/20d/60d 四个 Metric（顺序即契约），`conflict_refs` 恒为空数组（单周期无跨周期冲突）。
+- 本 DTO 未改字段、未改 Schema：phase/strength 仍按第 6 节约定以 `unknown`/`null` 表达，这不是“由 direction 推出”，而是契约内的显式取值（DEC-PLAT-002-049 继续生效）。
+- `quant.trend` 已成为真实生产 Stage（Output/Quality Schema 1.0.0、Output Registry 1.4.0、冻结 Template、参数 Schema 无 `window`、Dispatcher 与关联规格表条目），蓝图落库、`result_id` 可被授权读取。
+- 仍不变：QNT-CTR-003 `deferred`、QNT-004 的契约状态、QNT-008 Signal NOT_STARTED；相位与强度的判定规则仍需独立决议，才可推进 v2。
