@@ -54,6 +54,22 @@ func feedRegistration(sourceID, endpointID string) app.SourceEndpointRegistratio
 	}
 }
 
+func TestSourceEndpointSnapshotRefChangesWhenRegistrationChanges(t *testing.T) {
+	registration := feedRegistration("source-a", "primary")
+	registration.URL = "https://feeds.example/source-a.xml"
+	original := SourceEndpointSnapshotRef(registration)
+	changedURL := registration
+	changedURL.URL = "https://other.example/source-a.xml"
+	if original == SourceEndpointSnapshotRef(changedURL) {
+		t.Fatal("changing endpoint URL did not change Run resource identity")
+	}
+	changedPolicy := registration
+	changedPolicy.SourcePolicy.MaxRetention += time.Hour
+	if original == SourceEndpointSnapshotRef(changedPolicy) {
+		t.Fatal("changing Source policy did not change Run resource identity")
+	}
+}
+
 func TestFeedCollectionAdapterUsesRunResourceSnapshot(t *testing.T) {
 	collector := &feedCollectorStub{entries: map[string][]app.CollectedSourceEntry{
 		"source-a/primary": {{Candidate: domain.Candidate{Title: "标题甲"}}},
@@ -108,7 +124,9 @@ func TestFeedCollectionAdapterReportsPartialAndRetryableFailures(t *testing.T) {
 		t.Fatal(err)
 	}
 	result, err := adapter.Execute(context.Background(), "run-2/attempt-1", CollectFeedsStageCode, []string{
-		"source-a/primary", "source-b/primary", "source-removed/primary",
+		SourceEndpointSnapshotRef(feedRegistration("source-a", "primary")),
+		SourceEndpointSnapshotRef(feedRegistration("source-b", "primary")),
+		SourceEndpointSnapshotRef(feedRegistration("source-removed", "primary")),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -162,7 +180,8 @@ func TestFeedCollectionAdapterRejectsInvalidResourceSnapshotAndHonorsCancellatio
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, refs := range [][]string{nil, {"source-a"}, {"source-a/primary", "source-a/primary"}, {" source-a/primary"}} {
+	validRef := SourceEndpointSnapshotRef(feedRegistration("source-a", "primary"))
+	for _, refs := range [][]string{nil, {"source-a"}, {validRef, validRef}, {" " + validRef}} {
 		if _, err := adapter.Execute(context.Background(), "run-4", CollectFeedsStageCode, refs); !errors.Is(err, ErrFeedCollectionAdapterRequired) {
 			t.Errorf("invalid resource snapshot %#v returned %v", refs, err)
 		}
