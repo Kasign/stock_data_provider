@@ -1,0 +1,34 @@
+{
+  "schema_version": "1.0.0",
+  "payload_kind": "security_trading_status_facts",
+  "symbol": "600000.SH",
+  "trade_date": "2026-11-26",
+  "quality_status": "valid",
+  "facts": [
+    {
+      "key": "risk_warning_status",
+      "availability": "available",
+      "value": "normal"
+    },
+    {
+      "key": "suspension_status",
+      "availability": "available",
+      "value": "trading"
+    },
+    {
+      "key": "delisting_status",
+      "availability": "available",
+      "value": "listed"
+    },
+    {
+      "key": "listing_date",
+      "availability": "available",
+      "value": "1999-11-10"
+    },
+    {
+      "key": "is_trading_day",
+      "availability": "available",
+      "value": "true"
+    }
+  ]
+}

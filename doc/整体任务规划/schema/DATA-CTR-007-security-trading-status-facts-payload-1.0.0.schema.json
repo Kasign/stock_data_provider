@@ -1,0 +1,258 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:kasign:stock_data_provider:data:security-trading-status-facts-payload:1.0.0",
+  "title": "DATA-CTR-007 Security Trading Status Facts Snapshot Payload",
+  "description": "Quant tradability 门禁使用的交易状态事实快照。只承载 Data 真实拥有的事实，逐项表达 available/unavailable；不包含涨跌停状态与可成交量（Provider 未提供，推导向等于猜测）。facts 顺序固定，任一 unavailable 时 quality_status 必须为 degraded。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "payload_kind",
+    "symbol",
+    "trade_date",
+    "quality_status",
+    "facts"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0.0"
+    },
+    "payload_kind": {
+      "const": "security_trading_status_facts"
+    },
+    "symbol": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+    },
+    "trade_date": {
+      "type": "string",
+      "format": "date",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+    },
+    "quality_status": {
+      "type": "string",
+      "enum": [
+        "valid",
+        "degraded"
+      ]
+    },
+    "facts": {
+      "type": "array",
+      "minItems": 5,
+      "maxItems": 5,
+      "prefixItems": [
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/fact_base"
+            },
+            {
+              "properties": {
+                "key": {
+                  "const": "risk_warning_status"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/fact_base"
+            },
+            {
+              "properties": {
+                "key": {
+                  "const": "suspension_status"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/fact_base"
+            },
+            {
+              "properties": {
+                "key": {
+                  "const": "delisting_status"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/fact_base"
+            },
+            {
+              "properties": {
+                "key": {
+                  "const": "listing_date"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/fact_base"
+            },
+            {
+              "properties": {
+                "key": {
+                  "const": "is_trading_day"
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "items": false
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "facts": {
+            "contains": {
+              "properties": {
+                "availability": {
+                  "const": "unavailable"
+                }
+              },
+              "required": [
+                "availability"
+              ]
+            }
+          }
+        },
+        "required": [
+          "facts"
+        ]
+      },
+      "then": {
+        "properties": {
+          "quality_status": {
+            "const": "degraded"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "not": {
+          "properties": {
+            "facts": {
+              "contains": {
+                "properties": {
+                  "availability": {
+                    "const": "unavailable"
+                  }
+                },
+                "required": [
+                  "availability"
+                ]
+              }
+            }
+          },
+          "required": [
+            "facts"
+          ]
+        }
+      },
+      "then": {
+        "properties": {
+          "quality_status": {
+            "const": "valid"
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "fact_base": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "key",
+        "availability"
+      ],
+      "properties": {
+        "key": {
+          "type": "string",
+          "minLength": 1
+        },
+        "availability": {
+          "type": "string",
+          "enum": [
+            "available",
+            "unavailable"
+          ]
+        },
+        "value": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+        },
+        "unavailable_reason": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "availability": {
+                "const": "available"
+              }
+            },
+            "required": [
+              "availability"
+            ]
+          },
+          "then": {
+            "required": [
+              "value"
+            ],
+            "not": {
+              "required": [
+                "unavailable_reason"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "availability": {
+                "const": "unavailable"
+              }
+            },
+            "required": [
+              "availability"
+            ]
+          },
+          "then": {
+            "required": [
+              "unavailable_reason"
+            ],
+            "not": {
+              "required": [
+                "value"
+              ]
+            }
+          }
+        }
+      ]
+    }
+  }
+}
