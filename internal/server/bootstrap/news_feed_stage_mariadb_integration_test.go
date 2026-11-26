@@ -150,6 +150,14 @@ func TestNewsFeedStageCompositionMariaDBPublishesOnlyExplicitForwardPolicyTransi
 	if err := second.publishWorkflowTemplate(ctx); err != nil {
 		t.Fatalf("idempotently publish unchanged Researchflow templates after policy advance: %v", err)
 	}
+	repeated, err := newResearchflowComposition(ctx, shared, repository, forward, capacity, nil)
+	if err != nil {
+		t.Fatalf("repeat startup with identical current policy snapshot: %v", err)
+	}
+	if len(repeated.newsFeedStage.resourceRefs) != 1 ||
+		repeated.newsFeedStage.resourceRefs[0] != second.newsFeedStage.resourceRefs[0] {
+		t.Fatal("identical startup configuration did not reproduce the same immutable Feed resource snapshot")
+	}
 
 	if _, err := newResearchflowComposition(ctx, shared, repository, initial, capacity, nil); err == nil {
 		t.Fatal("stale startup configuration moved the current Source policy pointer backwards")
