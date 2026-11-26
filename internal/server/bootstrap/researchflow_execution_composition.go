@@ -28,6 +28,7 @@ type researchflowComposition struct {
 	quantResultReader *researchflowQuantResultReader
 	quantStage        *quantSMA20StageComposition
 	quantFactorStage  *quantFactorStageComposition
+	quantTrendStage   *quantTrendStageComposition
 	runRepository     *researchflowstorage.MySQLRunRepository
 	templateRegistry  *researchflowstorage.MySQLTemplateRegistry
 	workflowTemplates []template.WorkflowTemplate
@@ -98,6 +99,7 @@ func newResearchflowComposition(
 
 	var quantStage *quantSMA20StageComposition
 	var quantFactorStage *quantFactorStageComposition
+	var quantTrendStage *quantTrendStageComposition
 	if dataModule != nil {
 		quantStage, err = newQuantSMA20StageComposition(dataModule, shared)
 		if err != nil {
@@ -107,19 +109,26 @@ func newResearchflowComposition(
 		if err != nil {
 			return nil, fmt.Errorf("compose Quant Factor Stage: %w", err)
 		}
+		quantTrendStage, err = newQuantTrendStageComposition(dataModule, shared)
+		if err != nil {
+			return nil, fmt.Errorf("compose Quant Trend Stage: %w", err)
+		}
 	}
-	if quantStage != nil || quantFactorStage != nil {
-		var smaProviders, factorProviders []string
+	if quantStage != nil || quantFactorStage != nil || quantTrendStage != nil {
+		var smaProviders, factorProviders, trendProviders []string
 		if quantStage != nil {
 			smaProviders = quantStage.providerCodes
 		}
 		if quantFactorStage != nil {
 			factorProviders = quantFactorStage.providerCodes
 		}
-		providerInventories[resourcepolicy.QuantDailyBarsProvidersRef] = mergeQuantProviderCodes(smaProviders, factorProviders)
+		if quantTrendStage != nil {
+			trendProviders = quantTrendStage.providerCodes
+		}
+		providerInventories[resourcepolicy.QuantDailyBarsProvidersRef] = mergeQuantProviderCodes(smaProviders, factorProviders, trendProviders)
 	}
 
-	workflowTemplates := make([]template.WorkflowTemplate, 0, 4)
+	workflowTemplates := make([]template.WorkflowTemplate, 0, 5)
 	newsTemplate, err := buildNewsSearchWorkflowTemplate(newsStage, policyRegistry)
 	if err != nil {
 		return nil, fmt.Errorf("preflight News Search workflow template: %w", err)
@@ -146,6 +155,13 @@ func newResearchflowComposition(
 		}
 		workflowTemplates = append(workflowTemplates, factorTemplate)
 	}
+	if quantTrendStage != nil {
+		trendTemplate, templateErr := buildQuantTrendWorkflowTemplate(quantTrendStage, policyRegistry)
+		if templateErr != nil {
+			return nil, fmt.Errorf("preflight Quant Trend workflow template: %w", templateErr)
+		}
+		workflowTemplates = append(workflowTemplates, trendTemplate)
+	}
 
 	policyResolver := configuredResourcePolicyResolver{
 		registry: policyRegistry, providerCodesByRef: providerInventories,
@@ -170,6 +186,11 @@ func newResearchflowComposition(
 		outputRegistriesList = append(outputRegistriesList, quantFactorStage.registry)
 		quantFactorExecutor = quantFactorStage.executor
 	}
+	quantTrendExecutor := researchflowapplication.StageExecutor(nil)
+	if quantTrendStage != nil {
+		outputRegistriesList = append(outputRegistriesList, quantTrendStage.registry)
+		quantTrendExecutor = quantTrendStage.executor
+	}
 	outputRegistries, err := researchflowapplication.NewStageOutputRegistrySet(outputRegistriesList...)
 	if err != nil {
 		return nil, fmt.Errorf("create immutable Researchflow Stage Output Registry set: %w", err)
@@ -179,6 +200,7 @@ func newResearchflowComposition(
 		newsFeed:    feedExecutor,
 		quant:       quantExecutor,
 		quantFactor: quantFactorExecutor,
+		quantTrend:  quantTrendExecutor,
 	}
 
 	runRepository, err := researchflowstorage.NewMySQLRunRepository(shared.DB, researchflowstorage.CapacityLimits{
@@ -202,6 +224,9 @@ func newResearchflowComposition(
 	}
 	if quantResultRepository == nil && quantFactorStage != nil {
 		quantResultRepository = quantFactorStage.repository
+	}
+	if quantResultRepository == nil && quantTrendStage != nil {
+		quantResultRepository = quantTrendStage.repository
 	}
 	var quantResultReader *researchflowQuantResultReader
 	if quantResultRepository != nil {
@@ -243,8 +268,9 @@ func newResearchflowComposition(
 
 	return &researchflowComposition{
 		newsStage: newsStage, newsFeedStage: newsFeedStage,
-		quantStage: quantStage, quantFactorStage: quantFactorStage, quantResultReader: quantResultReader,
-		runRepository: runRepository, templateRegistry: templateRegistry,
+		quantStage: quantStage, quantFactorStage: quantFactorStage, quantTrendStage: quantTrendStage,
+		quantResultReader: quantResultReader,
+		runRepository:     runRepository, templateRegistry: templateRegistry,
 		workflowTemplates: workflowTemplates, resourcePolicies: policyResolver,
 		parameterSchemas: parameterSchemas, applicability: researchflowApplicabilityEvaluator{},
 		outputRegistries: outputRegistries, stageExecutor: stageExecutor,

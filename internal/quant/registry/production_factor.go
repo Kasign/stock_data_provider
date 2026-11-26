@@ -26,6 +26,13 @@ const (
 	ProductionMomentum20AlgorithmVersion = ProductionFactorAlgorithmVersion
 	ProductionMomentum20CountingRule     = "Count 21 consecutive valid close bars (base plus latest); result is one ratio."
 
+	// ProductionMomentum60Code 是 Trend 长周期证据的唯一精度来源。
+	// 它尚未进入 QNT-CTR-003/004 的已发布 Factor 结果契约，因此只登记 Entry、
+	// 不被 Factor Facade 分派；调用方是 Trend Facade（D1 决议：周期集合 5/20/60）。
+	ProductionMomentum60Code             = "momentum_60d"
+	ProductionMomentum60AlgorithmVersion = ProductionFactorAlgorithmVersion
+	ProductionMomentum60CountingRule     = "Count 61 consecutive valid close bars (base plus latest); result is one ratio."
+
 	// productionFactorTolerance 是固定 scale=12 末位对应的容差（JSON 字符串，与 decimal_string 类型一致）。
 	productionFactorTolerance = `"0.000000000001"`
 )
@@ -43,6 +50,7 @@ func productionFactorEntries() []Entry {
 		{ProductionMADistanceCode, ProductionMADistanceAlgorithmVersion, ProductionMADistanceCountingRule},
 		{ProductionMomentum5Code, ProductionMomentum5AlgorithmVersion, ProductionMomentum5CountingRule},
 		{ProductionMomentum20Code, ProductionMomentum20AlgorithmVersion, ProductionMomentum20CountingRule},
+		{ProductionMomentum60Code, ProductionMomentum60AlgorithmVersion, ProductionMomentum60CountingRule},
 	}
 	entries := make([]Entry, 0, len(definitions))
 	for _, definition := range definitions {

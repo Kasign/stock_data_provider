@@ -42,6 +42,15 @@ func quantContractFactorRegistry(t *testing.T) *stageoutput.Registry {
 	return registry
 }
 
+func quantContractTrendRegistry(t *testing.T) *stageoutput.Registry {
+	t.Helper()
+	registry, err := newQuantTrendOutputRegistry()
+	if err != nil {
+		t.Fatalf("create Quant Trend Output Registry: %v", err)
+	}
+	return registry
+}
+
 func quantContractSMA20Registry(t *testing.T) *stageoutput.Registry {
 	t.Helper()
 	registry, err := newQuantSMA20OutputRegistry()
@@ -71,6 +80,10 @@ func quantContractFixtures(t *testing.T) map[string]struct {
 			payload: quantFactorAssociationPayload(t), quality: mustQuantFactorAssociationQuality(t),
 			registry: quantContractFactorRegistry(t),
 		},
+		quantstage.TrendStageCode: {
+			payload: quantTrendAssociationPayload(t), quality: mustQuantTrendAssociationQuality(t),
+			registry: quantContractTrendRegistry(t),
+		},
 	}
 }
 
@@ -97,6 +110,104 @@ func TestQuantResearchflowContractOutputRegistryMatchesAssociationSpec(t *testin
 		if err := entry.QualitySummaryValidator.ValidateJSON(fixture.quality); err != nil {
 			t.Fatalf("Output Registry quality validator for %q rejected the contract fixture: %v", spec.StageCode, err)
 		}
+	}
+}
+
+func quantTrendAssociationPayload(t *testing.T) []byte {
+	t.Helper()
+	stub := validQuantTrendStageAdapterStub(t)
+	encoded, err := json.Marshal(stub.output)
+	if err != nil {
+		t.Fatalf("marshal Trend contract fixture: %v", err)
+	}
+	return encoded
+}
+
+func mustQuantTrendAssociationQuality(t *testing.T) []byte {
+	t.Helper()
+	stub := validQuantTrendStageAdapterStub(t)
+	encoded, err := json.Marshal(stub.quality)
+	if err != nil {
+		t.Fatalf("marshal Trend quality fixture: %v", err)
+	}
+	return encoded
+}
+
+func quantContractTrendIdentity() stageoutput.ExecutionIdentity {
+	return stageoutput.ExecutionIdentity{
+		RunRef: "run:researchflow:contract-001", StageRef: "stage:quant.trend", AttemptRef: "attempt:001",
+		StageCode: quantstage.TrendStageCode, TemplateVersion: quantTrendWorkflowTemplateVersion,
+		RegistryVersion: quantTrendStageOutputRegistryVersion,
+	}
+}
+
+func TestQuantResearchflowContractRegistryAcceptsRealTrendStageEnvelope(t *testing.T) {
+	adapter := validQuantTrendStageAdapterStub(t)
+	result, err := (quantTrendStageExecutor{adapter: adapter}).ExecuteStage(
+		context.Background(), researchflowapplication.StageExecutionRequest{
+			Stage:          researchflowdomain.Stage{Code: quantstage.TrendStageCode},
+			Parameters:     validQuantTrendStageParameters(),
+			SystemAsOf:     time.Date(2026, 11, 20, 8, 0, 0, 0, time.UTC),
+			ResourcePolicy: validQuantFactorStagePolicy(t),
+		},
+	)
+	if err != nil || result.ProviderResult == nil {
+		t.Fatalf("Quant Trend Stage Executor did not produce a ProviderResult: %+v (err=%v)", result, err)
+	}
+	identity := quantContractTrendIdentity()
+	envelope, err := stageoutput.BuildEnvelope(identity, *result.ProviderResult, time.Date(2026, 11, 20, 8, 1, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("build Stage Output envelope from the Quant Trend ProviderResult: %v", err)
+	}
+	registry := quantContractTrendRegistry(t)
+	if err := registry.Validate(envelope, stageoutput.ValidationContext{Identity: identity}); err != nil {
+		t.Fatalf("Researchflow Output Registry rejected the Quant Trend Stage output: %v", err)
+	}
+
+	payloadSchema := compileQuantContractSchema(t, quantTrendPayloadSchemaRef)
+	qualitySchema := compileQuantContractSchema(t, quantTrendQualitySchemaRef)
+	for name, testCase := range map[string]struct {
+		schema  *jsonschema.Schema
+		payload []byte
+	}{
+		"payload":         {payloadSchema, envelope.Payload},
+		"quality_summary": {qualitySchema, envelope.QualitySummary},
+	} {
+		decoder := json.NewDecoder(bytes.NewReader(testCase.payload))
+		decoder.UseNumber()
+		var instance any
+		if err := decoder.Decode(&instance); err != nil {
+			t.Fatalf("decode %s instance: %v", name, err)
+		}
+		if err := testCase.schema.Validate(instance); err != nil {
+			t.Fatalf("documented %s Schema rejected the runtime-valid Trend output: %v", name, err)
+		}
+	}
+
+	// 证据值类型漂移必须被两侧同时拒绝，否则文档与运行时存在双重标准。
+	var decoded map[string]any
+	if err := json.Unmarshal(envelope.Payload, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	evidence := decoded["evidence_metrics"].([]any)
+	evidence[0].(map[string]any)["value"] = 0.0325
+	drifted, err := json.Marshal(decoded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	driftedEnvelope := envelope
+	driftedEnvelope.Payload = drifted
+	if err := registry.Validate(driftedEnvelope, stageoutput.ValidationContext{Identity: identity}); err == nil {
+		t.Fatal("Researchflow Output Registry accepted a numeric Trend evidence value that the contract requires as decimal string")
+	}
+	decoder := json.NewDecoder(bytes.NewReader(drifted))
+	decoder.UseNumber()
+	var driftedInstance any
+	if err := decoder.Decode(&driftedInstance); err != nil {
+		t.Fatal(err)
+	}
+	if err := payloadSchema.Validate(driftedInstance); err == nil {
+		t.Fatal("documented Trend payload Schema accepted a numeric evidence value")
 	}
 }
 

@@ -22,6 +22,7 @@ const (
 	decimalFactorMADistanceCode = "ma20_distance"
 	decimalFactorMomentum5Code  = "momentum_5d"
 	decimalFactorMomentum20Code = "momentum_20d"
+	decimalFactorMomentum60Code = "momentum_60d"
 )
 
 var (
@@ -73,6 +74,14 @@ func DecimalMomentum5(closes []string) (DecimalResult, error) {
 // DecimalMomentum20 以精确有理数计算 20 日动量（最新收盘价 / 21 根前收盘价 - 1）。
 func DecimalMomentum20(closes []string) (DecimalResult, error) {
 	return decimalMomentum(decimalFactorMomentum20Code, closes, 20)
+}
+
+// DecimalMomentum60 以精确有理数计算 60 日动量（最新收盘价 / 61 根前收盘价 - 1）。
+//
+// 它只为 Trend 的长周期证据提供精确输入：momentum_60d 尚未进入 QNT-CTR-003/004 的
+// 已发布 Factor 结果契约，因此本函数不被 Factor Facade 分派，也不产生 Factor 结果。
+func DecimalMomentum60(closes []string) (DecimalResult, error) {
+	return decimalMomentum(decimalFactorMomentum60Code, closes, 60)
 }
 
 func decimalMomentum(code string, closes []string, window int) (DecimalResult, error) {

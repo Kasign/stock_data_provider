@@ -27,6 +27,10 @@ const (
 	quantFactorParameterSchemaVersion = "1.0.0"
 	quantFactorApplicabilityRuleRef   = "quant.factor.always"
 	quantFactorApplicabilityVersion   = "1.0.0"
+	quantTrendParameterSchemaRef      = "doc/researchflow/schema/quant-trend-parameters-1.0.0.schema.json"
+	quantTrendParameterSchemaVersion  = "1.0.0"
+	quantTrendApplicabilityRuleRef    = "quant.trend.always"
+	quantTrendApplicabilityVersion    = "1.0.0"
 )
 
 var ErrUnsupportedNewsSearchApplicabilityRule = errors.New("unsupported News Search applicability rule")
@@ -150,6 +154,24 @@ const quantFactorParameterSchemaDocument = `{
   "additionalProperties": false
 }`
 
+// quantTrendParameterSchemaDocument 是 Quant Trend 参数的冻结定义。
+// limit 下限取 D1 周期集合的最长窗口（momentum_60d 的 61 bars）；方向判定周期
+// 由决议固定，因此参数中不存在 window/period 字段，调用方无法改变周期集合。
+const quantTrendParameterSchemaDocument = `{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:kasign:researchflow:quant-trend-parameters:1.0.0",
+  "title": "Quant Trend Parameters",
+  "type": "object",
+  "properties": {
+    "symbol": {"type": "string", "pattern": "^[0-9]{6}\\.(SH|SZ|BJ)$"},
+    "start_date": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"},
+    "end_date": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"},
+    "limit": {"type": "integer", "minimum": 61, "maximum": 1000}
+  },
+  "required": ["symbol", "start_date", "end_date", "limit"],
+  "additionalProperties": false
+}`
+
 type researchflowParameterSchemaRegistry struct{}
 
 func (researchflowParameterSchemaRegistry) Get(ctx context.Context, ref string) (parameterschema.Definition, error) {
@@ -176,6 +198,11 @@ func (researchflowParameterSchemaRegistry) Get(ctx context.Context, ref string) 
 		return parameterschema.Definition{
 			Ref: quantFactorParameterSchemaRef, Version: quantFactorParameterSchemaVersion,
 			Document: json.RawMessage(quantFactorParameterSchemaDocument),
+		}, nil
+	case quantTrendParameterSchemaRef:
+		return parameterschema.Definition{
+			Ref: quantTrendParameterSchemaRef, Version: quantTrendParameterSchemaVersion,
+			Document: json.RawMessage(quantTrendParameterSchemaDocument),
 		}, nil
 	default:
 		return parameterschema.Definition{}, fmt.Errorf("%w: %s", parameterschema.ErrSchemaNotFound, ref)
@@ -232,6 +259,29 @@ func (quantFactorApplicabilityEvaluator) Evaluate(
 	return true, "", nil
 }
 
+type quantTrendApplicabilityEvaluator struct{}
+
+func (quantTrendApplicabilityEvaluator) Evaluate(
+	ctx context.Context,
+	rule template.ApplicabilityRule,
+	parameters json.RawMessage,
+) (bool, string, error) {
+	if ctx == nil {
+		return false, "", errors.New("Quant Trend applicability context is required")
+	}
+	if err := ctx.Err(); err != nil {
+		return false, "", err
+	}
+	if rule.RuleRef != quantTrendApplicabilityRuleRef || rule.RuleVersion != quantTrendApplicabilityVersion {
+		return false, "", fmt.Errorf("unsupported Quant Trend applicability rule: %s@%s", rule.RuleRef, rule.RuleVersion)
+	}
+	var object map[string]json.RawMessage
+	if err := json.Unmarshal(parameters, &object); err != nil || object == nil {
+		return false, "", errors.New("Quant Trend applicability requires validated object parameters")
+	}
+	return true, "", nil
+}
+
 type researchflowApplicabilityEvaluator struct{}
 
 func (researchflowApplicabilityEvaluator) Evaluate(
@@ -246,6 +296,8 @@ func (researchflowApplicabilityEvaluator) Evaluate(
 		return (quantSMA20ApplicabilityEvaluator{}).Evaluate(ctx, rule, parameters)
 	case quantFactorApplicabilityRuleRef:
 		return (quantFactorApplicabilityEvaluator{}).Evaluate(ctx, rule, parameters)
+	case quantTrendApplicabilityRuleRef:
+		return (quantTrendApplicabilityEvaluator{}).Evaluate(ctx, rule, parameters)
 	case newsFeedApplicabilityRuleRef:
 		return (newsFeedApplicabilityEvaluator{}).Evaluate(ctx, rule, parameters)
 	default:

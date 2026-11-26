@@ -76,6 +76,16 @@ var quantStageAssociationSpecs = []quantStageAssociationSpec{
 		QualitySummaryValidator: quantstage.ValidateFactorQualitySummaryJSON,
 		ResultID:                quantFactorAssociationResultID,
 	},
+	{
+		StageCode:               quantstage.TrendStageCode,
+		OutputType:              quantstage.TrendOutputType,
+		SchemaVersion:           quantstage.TrendSchemaVersion,
+		PayloadSchemaRef:        quantTrendPayloadSchemaRef,
+		QualitySummarySchemaRef: quantTrendQualitySchemaRef,
+		PayloadValidator:        quantstage.ValidateTrendStageOutputJSON,
+		QualitySummaryValidator: quantstage.ValidateTrendQualitySummaryJSON,
+		ResultID:                quantTrendAssociationResultID,
+	},
 }
 
 func quantStageAssociationSpecFor(stageCode string) (quantStageAssociationSpec, bool) {
@@ -186,6 +196,14 @@ func quantSMA20AssociationResultID(raw json.RawMessage) (string, error) {
 
 func quantFactorAssociationResultID(raw json.RawMessage) (string, error) {
 	var output quantstage.FactorOutput
+	if err := json.Unmarshal(raw, &output); err != nil {
+		return "", err
+	}
+	return output.ResultID, nil
+}
+
+func quantTrendAssociationResultID(raw json.RawMessage) (string, error) {
+	var output quantstage.TrendOutput
 	if err := json.Unmarshal(raw, &output); err != nil {
 		return "", err
 	}

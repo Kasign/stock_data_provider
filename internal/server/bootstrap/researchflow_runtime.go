@@ -63,7 +63,10 @@ func newResearchflowRuntimeComponent(
 	if composition.quantFactorStage != nil && !containsQuantProviderCode(composition.quantFactorStage.providerCodes, quantstage.QuantProviderCode) {
 		return nil, errors.New("Researchflow Runtime cannot register Quant Factor Stage without an active Eastmoney DailyBars Provider")
 	}
-	if (composition.quantStage != nil || composition.quantFactorStage != nil) && (quantPrincipal == nil ||
+	if composition.quantTrendStage != nil && !containsQuantProviderCode(composition.quantTrendStage.providerCodes, quantstage.QuantProviderCode) {
+		return nil, errors.New("Researchflow Runtime cannot register Quant Trend Stage without an active Eastmoney DailyBars Provider")
+	}
+	if (composition.quantStage != nil || composition.quantFactorStage != nil || composition.quantTrendStage != nil) && (quantPrincipal == nil ||
 		quantPrincipal.Kind != platformsecurity.IdentityService ||
 		quantPrincipal.AuthMethod != platformsecurity.AuthMethodServiceBearer ||
 		quantPrincipal.Subject != "quant" ||
@@ -378,12 +381,12 @@ func (e principalStageExecutor) ExecuteStage(ctx context.Context, request resear
 	if e.next == nil {
 		return researchflowapplication.StageExecutionResult{}, errors.New("Researchflow Stage Executor is unavailable")
 	}
-	if request.Stage.Code == quantstage.SMA20StageCode {
+	if isQuantStageCode(request.Stage.Code) {
 		if e.quantPrincipal == nil ||
 			e.quantPrincipal.Kind != platformsecurity.IdentityService ||
 			e.quantPrincipal.AuthMethod != platformsecurity.AuthMethodServiceBearer ||
 			e.quantPrincipal.Subject != "quant" {
-			return researchflowapplication.StageExecutionResult{}, errors.New("Quant service identity is unavailable for SMA20 Stage")
+			return researchflowapplication.StageExecutionResult{}, fmt.Errorf("Quant service identity is unavailable for %s Stage", request.Stage.Code)
 		}
 		trustedContext, err := platformsecurity.WithPrincipal(ctx, *e.quantPrincipal)
 		if err != nil {
@@ -392,4 +395,19 @@ func (e principalStageExecutor) ExecuteStage(ctx context.Context, request resear
 		ctx = trustedContext
 	}
 	return e.next.ExecuteStage(ctx, request)
+}
+
+// isQuantStageCode 判定 Stage 是否必须携带 Quant Data service identity。
+//
+// Data 的 Close Series Snapshot 创建在 Data Owner 内从 context 解析可信 Principal，
+// 因此每一个消费 Data Snapshot 的 Quant Stage 都必须被注入；只列举 SMA20 会让
+// quant.factor/quant.trend 在生产 Worker 中被 Data 以 ErrDataAuthorizationDenied 拒绝，
+// 而单元测试直接调用 Adapter 时不会暴露该缺口。
+func isQuantStageCode(code string) bool {
+	switch code {
+	case quantstage.SMA20StageCode, quantstage.FactorStageCode, quantstage.TrendStageCode:
+		return true
+	default:
+		return false
+	}
 }

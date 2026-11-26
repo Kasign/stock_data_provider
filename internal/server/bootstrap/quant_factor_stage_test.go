@@ -374,6 +374,7 @@ func TestQuantFactorOutputRegistryVersionDoesNotCollide(t *testing.T) {
 		newsFeedStageOutputRegistryVersion,
 		quantSMA20StageOutputRegistryVersion,
 		quantFactorStageOutputRegistryVersion,
+		quantTrendStageOutputRegistryVersion,
 	}
 	seen := make(map[string]struct{}, len(versions))
 	for _, version := range versions {

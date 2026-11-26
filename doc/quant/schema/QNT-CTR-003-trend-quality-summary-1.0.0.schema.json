@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:kasign:quant:stage:trend-quality-summary:1.0.0",
+  "title": "Quant Trend Quality Summary",
+  "description": "QNT-CTR-003 close-only 趋势状态的 Researchflow Stage quality_summary。quality_status 恒为输入（Data Snapshot）质量；result_quality_status 是趋势判定本身的质量，必须与 Stage Output 的 quality_status 一致。minimum_required_bars 来自 Data CoverageEvidence，不是趋势窗口（61 根）本身；趋势样本充分性由 Stage Output 各证据 Metric 的 metric_status/sample_count 表达。minimum_required_bars <= observed_bars <= expected_trading_days 由 Go Validator 补充校验（JSON Schema 不表达跨字段大小比较）。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "trend_code",
+    "quality_status",
+    "result_quality_status",
+    "calendar_quality_status",
+    "expected_trading_days",
+    "observed_bars",
+    "minimum_required_bars",
+    "coverage_sufficient"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0.0"
+    },
+    "trend_code": {
+      "const": "close_trend_1.0.0"
+    },
+    "quality_status": {
+      "const": "valid"
+    },
+    "result_quality_status": {
+      "type": "string",
+      "enum": [
+        "valid",
+        "degraded",
+        "unknown"
+      ]
+    },
+    "calendar_quality_status": {
+      "const": "valid"
+    },
+    "expected_trading_days": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "observed_bars": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "minimum_required_bars": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "coverage_sufficient": {
+      "const": true
+    }
+  }
+}

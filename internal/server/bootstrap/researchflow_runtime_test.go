@@ -104,9 +104,9 @@ func TestPrincipalStageExecutorInjectsQuantIdentityOnlyForQuantStage(t *testing.
 		next: runtimeStageExecutorFunc(func(ctx context.Context, request researchflowapplication.StageExecutionRequest) (researchflowapplication.StageExecutionResult, error) {
 			calls++
 			got, ok := platformsecurity.PrincipalFromContextValue(ctx)
-			if request.Stage.Code == quantstage.SMA20StageCode {
+			if isQuantStageCode(request.Stage.Code) {
 				if !ok || got.Subject != "quant" || !containsServiceScope(got.Scopes, platformsecurity.ScopeDataRead) {
-					t.Fatalf("Quant Stage missing its Data-scoped Principal: %+v, ok=%t", got, ok)
+					t.Fatalf("Quant Stage %s missing its Data-scoped Principal: %+v, ok=%t", request.Stage.Code, got, ok)
 				}
 			} else if ok {
 				t.Fatalf("non-Quant Stage unexpectedly inherited service Principal: %+v", got)
@@ -114,15 +114,21 @@ func TestPrincipalStageExecutorInjectsQuantIdentityOnlyForQuantStage(t *testing.
 			return researchflowapplication.StageExecutionResult{}, nil
 		}),
 	}
-	for _, code := range []string{"news.search_candidates", quantstage.SMA20StageCode} {
+	stageCodes := []string{
+		"news.search_candidates",
+		quantstage.SMA20StageCode,
+		quantstage.FactorStageCode,
+		quantstage.TrendStageCode,
+	}
+	for _, code := range stageCodes {
 		if _, err := executor.ExecuteStage(context.Background(), researchflowapplication.StageExecutionRequest{
 			Stage: researchflowdomain.Stage{Code: code},
 		}); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if calls != 2 {
-		t.Fatalf("Stage Executor calls = %d, want 2", calls)
+	if calls != len(stageCodes) {
+		t.Fatalf("Stage Executor calls = %d, want %d", calls, len(stageCodes))
 	}
 }
 
@@ -133,9 +139,17 @@ func TestPrincipalStageExecutorFailsClosedWhenQuantIdentityMissing(t *testing.T)
 			return researchflowapplication.StageExecutionResult{}, nil
 		}),
 	}
-	if _, err := executor.ExecuteStage(context.Background(), researchflowapplication.StageExecutionRequest{
-		Stage: researchflowdomain.Stage{Code: quantstage.SMA20StageCode},
-	}); err == nil {
-		t.Fatal("Quant Stage executed without a Quant service Principal")
+	// 每个消费 Data Snapshot 的 Quant Stage 都必须 fail closed：
+	// 只覆盖 SMA20 会让 quant.factor/quant.trend 在生产 Worker 中被 Data 拒绝。
+	for _, code := range []string{
+		quantstage.SMA20StageCode,
+		quantstage.FactorStageCode,
+		quantstage.TrendStageCode,
+	} {
+		if _, err := executor.ExecuteStage(context.Background(), researchflowapplication.StageExecutionRequest{
+			Stage: researchflowdomain.Stage{Code: code},
+		}); err == nil {
+			t.Fatalf("Quant Stage %s executed without a Quant service Principal", code)
+		}
 	}
 }
