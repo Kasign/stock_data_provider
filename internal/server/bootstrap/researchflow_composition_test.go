@@ -8,6 +8,7 @@ import (
 	"time"
 
 	newsconfig "example.com/stock-analysis-flow/internal/news/config"
+	newsstorage "example.com/stock-analysis-flow/internal/news/adapters/storage"
 	platformconfig "example.com/stock-analysis-flow/internal/platform/config"
 	platformhttpclient "example.com/stock-analysis-flow/internal/platform/httpclient"
 	researchflowresourcepolicy "example.com/stock-analysis-flow/internal/researchflow/resourcepolicy"
@@ -26,8 +27,15 @@ func TestResearchflowOwnerCompositionBuildsInternalOwnerServices(t *testing.T) {
 	}
 	defer sharedClient.CloseIdleConnections()
 
+	shared := &serverresources.Resources{DB: &sql.DB{}, HTTPClient: sharedClient}
+	newsRepository, err := newsstorage.NewMySQLRepository(shared.DB)
+	if err != nil {
+		t.Fatal(err)
+	}
 	composition, err := newResearchflowOwnerComposition(
-		&serverresources.Resources{DB: &sql.DB{}, HTTPClient: sharedClient},
+		context.Background(),
+		shared,
+		newsRepository,
 		newsCfg,
 		serverconfig.ResearchflowCapacity{Configured: true, MaxQueuedRuns: 10, MaxWorkers: 2},
 		30*time.Minute,

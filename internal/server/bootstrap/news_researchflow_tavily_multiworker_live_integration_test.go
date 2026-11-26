@@ -15,6 +15,7 @@ import (
 	mysql "github.com/go-sql-driver/mysql"
 
 	newsconfig "example.com/stock-analysis-flow/internal/news/config"
+	newsstorage "example.com/stock-analysis-flow/internal/news/adapters/storage"
 	newsdomain "example.com/stock-analysis-flow/internal/news/domain"
 	newsstage "example.com/stock-analysis-flow/internal/news/stage"
 	platformconfig "example.com/stock-analysis-flow/internal/platform/config"
@@ -123,10 +124,14 @@ func TestNewsResearchflowTavilyMultiWorkerMariaDBRedisLive(t *testing.T) {
 	defer httpClient.CloseIdleConnections()
 
 	shared := &serverresources.Resources{DB: db, HTTPClient: httpClient}
+	newsRepository, err := newsstorage.NewMySQLRepository(db)
+	if err != nil {
+		t.Fatalf("创建 News Repository 失败: %v", err)
+	}
 	capacity := serverconfig.ResearchflowCapacity{
 		Configured: true, MaxQueuedRuns: 10, MaxWorkers: 2,
 	}
-	owner, err := newResearchflowOwnerComposition(shared, newsCfg, capacity, 90*time.Second, nil)
+	owner, err := newResearchflowOwnerComposition(ctx, shared, newsRepository, newsCfg, capacity, 90*time.Second, nil)
 	if err != nil {
 		t.Fatalf("创建生产 Researchflow Owner 组合失败: %v", err)
 	}

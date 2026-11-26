@@ -10,6 +10,7 @@ import (
 	"time"
 
 	newsconfig "example.com/stock-analysis-flow/internal/news/config"
+	newsstorage "example.com/stock-analysis-flow/internal/news/adapters/storage"
 	newsdomain "example.com/stock-analysis-flow/internal/news/domain"
 	newsstage "example.com/stock-analysis-flow/internal/news/stage"
 	platformconfig "example.com/stock-analysis-flow/internal/platform/config"
@@ -65,10 +66,14 @@ func TestNewsResearchflowTavilyMariaDBLive(t *testing.T) {
 	defer httpClient.CloseIdleConnections()
 
 	shared := &serverresources.Resources{DB: db, HTTPClient: httpClient}
+	newsRepository, err := newsstorage.NewMySQLRepository(db)
+	if err != nil {
+		t.Fatalf("创建 News Repository 失败: %v", err)
+	}
 	capacity := serverconfig.ResearchflowCapacity{
 		Configured: true, MaxQueuedRuns: 5, MaxWorkers: 1,
 	}
-	owner, err := newResearchflowOwnerComposition(shared, newsCfg, capacity, 90*time.Second, nil)
+	owner, err := newResearchflowOwnerComposition(ctx, shared, newsRepository, newsCfg, capacity, 90*time.Second, nil)
 	if err != nil {
 		t.Fatalf("创建 Server 生产 Researchflow Owner 组合失败: %v", err)
 	}
