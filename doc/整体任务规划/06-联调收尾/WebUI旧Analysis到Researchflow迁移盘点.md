@@ -172,7 +172,7 @@ Server 生产组合根：
 - `internal/server/bootstrap/news_search_stage.go`
 - `internal/server/bootstrap/researchflow_template_prerequisites.go`
 
-当前只有一个生产 Template：`news.search_candidates@1.0.0)，一个 News Search Stage Executor，以及一条精确 Stage Output Registry Entry。未知 Stage Code 明确失败，不存在通用占位 Executor。生产参数 Schema 和 Applicability Rule 也仅覆盖 News Search。
+当前生产注册包含三个 Template：`news.search_candidates`、`news.feed_collection` 和 `quant.sma20`。分别由 News Search、News Feed Collection 和 Quant SMA20 Stage Executor 执行，并通过对应参数 Schema、Applicability、Stage Output Registry 和 Server Dispatcher 装配。未知 Stage Code 明确失败，不存在通用占位 Executor。Quant 当前仅接入 SMA20 单指标 Stage，不代表 Factor、Trend、Risk 或完整股票研究链已生产闭环。
 
 ### 5.2 现有可复用构件与未闭环能力
 
