@@ -19,6 +19,7 @@
 - [trend-following 策略差距与契约结论](./07-trend-following策略差距与契约结论.md)
 - [market breadth 指标决策与正名](./08-market-breadth指标决策与正名.md)
 - [Risk tradability 硬门禁切片与前置](./09-risk-tradability硬门禁切片与前置.md)
+- [Signal 契约最小切片（QNT-CTR-006）](./10-Signal契约最小切片.md)
 - `schema/`：机器可校验的项目契约 Schema。
 - `golden/`：算法固定样例、结构样例及负例验收输入。
 
