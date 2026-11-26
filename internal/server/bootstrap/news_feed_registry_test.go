@@ -8,7 +8,7 @@ import (
 )
 
 func TestNewsSearchAndFeedShareOneImmutableOutputRegistryVersion(t *testing.T) {
-	registry, err := newNewsStageOutputRegistry(newsSearchStageOutputRegistryVersion, true)
+	registry, err := newNewsStageOutputRegistry(newsFeedStageOutputRegistryVersion, true)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -20,7 +20,7 @@ import (
 	"example.com/stock-analysis-flow/internal/researchflow/stageoutput"
 )
 
-const newsFeedStageOutputRegistryVersion = "1.1.0"
+const newsFeedStageOutputRegistryVersion = "1.2.0"
 
 type newsFeedStageComposition struct {
 	catalog *newssource.StaticSourceCatalog
