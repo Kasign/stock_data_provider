@@ -121,6 +121,20 @@ func TestNewsFeedStageCompositionMariaDBPublishesOnlyExplicitForwardPolicyTransi
 	if !ok || dispatcher.newsFeed == nil {
 		t.Fatal("Server Researchflow dispatcher did not register the News Feed Stage")
 	}
+	previousRegistry, err := first.outputRegistries.Resolve(newsSearchStageOutputRegistryVersion)
+	if err != nil {
+		t.Fatalf("previous Search-only Output Registry was not retained for persisted Runs: %v", err)
+	}
+	if _, exists := previousRegistry.Entry("news.collect_feeds", "news.feed_collection", "1.0.0"); exists {
+		t.Fatal("previous Search-only Output Registry was mutated to include Feed output")
+	}
+	combinedRegistry, err := first.outputRegistries.Resolve(newsFeedStageOutputRegistryVersion)
+	if err != nil {
+		t.Fatalf("combined News Output Registry is unavailable: %v", err)
+	}
+	if _, exists := combinedRegistry.Entry("news.collect_feeds", "news.feed_collection", "1.0.0"); !exists {
+		t.Fatal("combined News Output Registry omitted Feed output")
+	}
 	feedSnapshot, err := first.resourcePolicies.Resolve(ctx, "news.feed.configured-sources@1.0.0")
 	if err != nil || len(feedSnapshot.AllowedSourceEndpointRefs) != 1 ||
 		feedSnapshot.AllowedSourceEndpointRefs[0] != first.newsFeedStage.resourceRefs[0] {
