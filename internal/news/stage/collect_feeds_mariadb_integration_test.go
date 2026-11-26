@@ -33,9 +33,9 @@ func (t feedStageMariaDBTransport) Do(_ context.Context, _ string, _ string, req
 	}
 	return &http.Response{
 		StatusCode: http.StatusOK,
-		Header: http.Header{"Content-Type": []string{"application/rss+xml; charset=utf-8"}},
-		Body: io.NopCloser(strings.NewReader(t.body)),
-		Request: request,
+		Header:     http.Header{"Content-Type": []string{"application/rss+xml; charset=utf-8"}},
+		Body:       io.NopCloser(strings.NewReader(t.body)),
+		Request:    request,
 	}, nil
 }
 
@@ -72,14 +72,14 @@ func TestNewsFeedCollectionAdapterMariaDBIntegration(t *testing.T) {
 	endpointID := "rss-primary"
 	now := time.Now().UTC()
 	policy := domain.SourcePolicy{
-		Status: domain.AuthorizationApproved,
+		Status:               domain.AuthorizationApproved,
 		AllowedAccessMethods: []domain.AccessMethod{domain.AccessRSS},
-		AllowedPurposes: []domain.Purpose{domain.PurposeInternalPersonalResearch},
-		AllowedContentKinds: []domain.ContentKind{domain.ContentAbstract},
-		AllowedStorageModes: []domain.StorageMode{domain.StorageTransient, domain.StoragePersistentExcerpt},
-		MaxRetention: 24 * time.Hour,
-		EffectiveAt: now.Add(-time.Minute),
-		EvidenceRef: "operator-authorization:" + sourceID,
+		AllowedPurposes:      []domain.Purpose{domain.PurposeInternalPersonalResearch},
+		AllowedContentKinds:  []domain.ContentKind{domain.ContentAbstract},
+		AllowedStorageModes:  []domain.StorageMode{domain.StorageTransient, domain.StoragePersistentExcerpt},
+		MaxRetention:         24 * time.Hour,
+		EffectiveAt:          now.Add(-time.Minute),
+		EvidenceRef:          "operator-authorization:" + sourceID,
 	}
 	policyPayload, err := json.Marshal(policy)
 	if err != nil {
@@ -100,8 +100,8 @@ func TestNewsFeedCollectionAdapterMariaDBIntegration(t *testing.T) {
 		SourcePolicy: policy, SourcePolicyVersionID: "source-policy-v1",
 		URLPolicy: domain.SourceURLPolicy{
 			AllowedSchemes: []string{"https"},
-			AllowedHosts: []string{"feed.example", "news.example"},
-			AllowedPorts: []uint16{443},
+			AllowedHosts:   []string{"feed.example", "news.example"},
+			AllowedPorts:   []uint16{443},
 		},
 		MaxResponseBytes: 1 << 20,
 	}

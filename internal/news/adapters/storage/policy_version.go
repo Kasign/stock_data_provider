@@ -80,7 +80,6 @@ func (r *MySQLRepository) PublishNewsPolicyVersion(ctx context.Context, value do
 	return nil
 }
 
-
 var _ app.ConditionalNewsPolicyVersionWriter = (*MySQLRepository)(nil)
 
 // PublishNewsPolicyVersionIfCurrent 在事务内比较当前指针并执行显式版本切换。

@@ -18,8 +18,8 @@ const (
 	QuantDailyBarsProvidersRef       = "quant.daily-bars.configured-providers@1.0.0"
 	newsSearchPolicyVersion          = "1.0.0"
 	newsFeedPolicyVersion            = "1.0.0"
-	quantDailyBarsPolicyVersion = "1.0.0"
-	maxSourceEndpointRefs      = 32
+	quantDailyBarsPolicyVersion      = "1.0.0"
+	maxSourceEndpointRefs            = 32
 )
 
 var (
@@ -59,21 +59,21 @@ func NewRegistry() (*Registry, error) {
 		{
 			Ref: NewsSearchConfiguredProvidersRef, Version: newsSearchPolicyVersion,
 			ResourceType: "news.provider",
-			Selection: "server_successfully_assembled_provider_set_at_run_creation",
+			Selection:    "server_successfully_assembled_provider_set_at_run_creation",
 		},
 		{
 			Ref: NewsFeedConfiguredSourcesRef, Version: newsFeedPolicyVersion,
 			ResourceType: "news.feed_catalog",
-			Selection: "server_successfully_assembled_trusted_feed_source_catalog_at_run_creation",
+			Selection:    "server_successfully_assembled_trusted_feed_source_catalog_at_run_creation",
 		},
 		{
 			Ref: QuantDailyBarsProvidersRef, Version: quantDailyBarsPolicyVersion,
 			ResourceType: "marketdata.daily_bars_provider",
-			Selection: "server_successfully_assembled_daily_bars_provider_set_at_run_creation",
+			Selection:    "server_successfully_assembled_daily_bars_provider_set_at_run_creation",
 		},
 	}
 	registry := &Registry{
-		definitions: make(map[string]definition, len(definitions)),
+		definitions:  make(map[string]definition, len(definitions)),
 		fingerprints: make(map[string]string, len(definitions)),
 	}
 	for _, item := range definitions {

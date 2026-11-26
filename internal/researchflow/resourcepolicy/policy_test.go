@@ -86,7 +86,6 @@ func TestQuantDailyBarsPolicySnapshotsOnlyConfiguredDataProviders(t *testing.T) 
 	}
 }
 
-
 func TestResolveSourceEndpointsSnapshotsExactSortedIdentityOnly(t *testing.T) {
 	registry, err := NewRegistry()
 	if err != nil {

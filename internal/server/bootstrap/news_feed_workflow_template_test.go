@@ -10,7 +10,9 @@ import (
 
 func TestNewsFeedWorkflowTemplateUsesConfiguredSourceSnapshotAndCombinedRegistry(t *testing.T) {
 	registry, err := newNewsStageOutputRegistry(newsFeedStageOutputRegistryVersion, true)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	stage := &newsFeedStageComposition{
 		registry: registry,
 		resourceRefs: []string{
@@ -19,9 +21,13 @@ func TestNewsFeedWorkflowTemplateUsesConfiguredSourceSnapshotAndCombinedRegistry
 		},
 	}
 	policies, err := resourcepolicy.NewRegistry()
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	value, err := buildNewsFeedWorkflowTemplate(stage, policies)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	if value.ResourcePolicyRef != resourcepolicy.NewsFeedConfiguredSourcesRef ||
 		value.OutputRegistryVersion != newsFeedStageOutputRegistryVersion ||
 		len(value.Stages) != 1 || value.Stages[0].Code != newsstage.CollectFeedsStageCode {
@@ -36,9 +42,13 @@ func TestNewsFeedWorkflowTemplateUsesConfiguredSourceSnapshotAndCombinedRegistry
 
 func TestNewsFeedWorkflowTemplateRejectsMissingSourceInventory(t *testing.T) {
 	registry, err := newNewsStageOutputRegistry(newsFeedStageOutputRegistryVersion, true)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	policies, err := resourcepolicy.NewRegistry()
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	if _, err := buildNewsFeedWorkflowTemplate(&newsFeedStageComposition{registry: registry}, policies); err == nil {
 		t.Fatal("News Feed workflow template accepted empty source inventory")
 	}

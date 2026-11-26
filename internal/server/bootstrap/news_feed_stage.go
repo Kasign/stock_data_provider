@@ -63,7 +63,6 @@ func newNewsFeedStageComposition(
 		return nil, fmt.Errorf("validate trusted News Feed source catalog: %w", err)
 	}
 
-
 	transport, err := newssource.NewPlatformEndpointTransport(client, registrations)
 	if err != nil {
 		return nil, fmt.Errorf("bind News Feed endpoints to Platform HTTP Client: %w", err)
@@ -102,7 +101,7 @@ func newNewsFeedStageComposition(
 	}
 	return &newsFeedStageComposition{
 		catalog: catalog, registrations: registrations, sourcePolicies: sourcePolicies,
-		executor: newsFeedStageExecutor{adapter: adapter},
+		executor:     newsFeedStageExecutor{adapter: adapter},
 		resourceRefs: resourceRefs,
 	}, nil
 }
@@ -207,31 +206,31 @@ func (e newsFeedStageExecutor) ExecuteStage(
 	switch payload.Status {
 	case "success", "empty":
 		return researchflowapplication.StageExecutionResult{
-			AttemptStatus: researchflowdomain.AttemptSucceeded,
-			StageStatus: researchflowdomain.StageSucceeded,
+			AttemptStatus:  researchflowdomain.AttemptSucceeded,
+			StageStatus:    researchflowdomain.StageSucceeded,
 			ProviderResult: providerResult,
 		}, nil
 	case "partial":
 		if output.Retryable {
 			return researchflowapplication.StageExecutionResult{
-				AttemptStatus: researchflowdomain.AttemptFailed,
-				StageStatus: researchflowdomain.StageRetryWait,
+				AttemptStatus:  researchflowdomain.AttemptFailed,
+				StageStatus:    researchflowdomain.StageRetryWait,
 				ProviderResult: providerResult,
-				ReasonCodes: []string{"news_feed_retryable_source_failure"},
+				ReasonCodes:    []string{"news_feed_retryable_source_failure"},
 			}, nil
 		}
 		return researchflowapplication.StageExecutionResult{
-			AttemptStatus: researchflowdomain.AttemptDegraded,
-			StageStatus: researchflowdomain.StageDegraded,
+			AttemptStatus:  researchflowdomain.AttemptDegraded,
+			StageStatus:    researchflowdomain.StageDegraded,
 			ProviderResult: providerResult,
-			ReasonCodes: output.ReasonCodes,
+			ReasonCodes:    output.ReasonCodes,
 		}, nil
 	case "failed_retryable":
 		return researchflowapplication.StageExecutionResult{
-			AttemptStatus: researchflowdomain.AttemptFailed,
-			StageStatus: researchflowdomain.StageRetryWait,
+			AttemptStatus:  researchflowdomain.AttemptFailed,
+			StageStatus:    researchflowdomain.StageRetryWait,
 			ProviderResult: providerResult,
-			ReasonCodes: []string{"news_feed_retryable_source_failure"},
+			ReasonCodes:    []string{"news_feed_retryable_source_failure"},
 		}, nil
 	case "failed":
 		reason := payload.FailureCode
@@ -247,8 +246,8 @@ func (e newsFeedStageExecutor) ExecuteStage(
 func failedNewsFeedStage(reasonCode string) researchflowapplication.StageExecutionResult {
 	return researchflowapplication.StageExecutionResult{
 		AttemptStatus: researchflowdomain.AttemptFailed,
-		StageStatus: researchflowdomain.StageFailed,
-		ReasonCodes: []string{reasonCode},
+		StageStatus:   researchflowdomain.StageFailed,
+		ReasonCodes:   []string{reasonCode},
 	}
 }
 
@@ -266,7 +265,7 @@ func newsFeedRegistrations(feedSources []newsconfig.FeedSource) []newsapp.Source
 			URL: source.URL, PublisherName: source.PublisherName, PublisherDomain: source.PublisherDomain,
 			AccessMethod: source.AccessMethod, SourcePolicy: source.SourcePolicy,
 			SourcePolicyVersionID: source.SourcePolicyVersionID,
-			URLPolicy: source.URLPolicy, MaxResponseBytes: source.MaxResponseBytes,
+			URLPolicy:             source.URLPolicy, MaxResponseBytes: source.MaxResponseBytes,
 		})
 	}
 	return registrations

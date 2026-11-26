@@ -13,9 +13,9 @@ import (
 )
 
 const (
-	newsFeedWorkflowTemplateRef = "news.feed_collection"
+	newsFeedWorkflowTemplateRef     = "news.feed_collection"
 	newsFeedWorkflowTemplateVersion = "1.0.0"
-	newsFeedRetryPolicyRef = "news.feed_collection.retry@1.0.0"
+	newsFeedRetryPolicyRef          = "news.feed_collection.retry@1.0.0"
 )
 
 func buildNewsFeedWorkflowTemplate(
@@ -68,32 +68,32 @@ func buildNewsFeedWorkflowTemplate(
 	}
 
 	value := template.WorkflowTemplate{
-		Ref: newsFeedWorkflowTemplateRef,
-		Version: newsFeedWorkflowTemplateVersion,
-		RequiresHardRiskGate: false,
-		AllowEmptyInputs: true,
-		ParameterSchemaRef: newsFeedParameterSchemaRef,
+		Ref:                   newsFeedWorkflowTemplateRef,
+		Version:               newsFeedWorkflowTemplateVersion,
+		RequiresHardRiskGate:  false,
+		AllowEmptyInputs:      true,
+		ParameterSchemaRef:    newsFeedParameterSchemaRef,
 		OutputRegistryVersion: stage.registry.Version(),
-		ResourcePolicyRef: resourcepolicy.NewsFeedConfiguredSourcesRef,
+		ResourcePolicyRef:     resourcepolicy.NewsFeedConfiguredSourcesRef,
 		Stages: []template.StageDefinition{{
-			Code: newsstage.CollectFeedsStageCode,
-			Required: true,
-			Dependencies: []string{},
-			Priority: 0,
+			Code:          newsstage.CollectFeedsStageCode,
+			Required:      true,
+			Dependencies:  []string{},
+			Priority:      0,
 			Applicability: template.ApplicabilityRule{RuleRef: newsFeedApplicabilityRuleRef, RuleVersion: newsFeedApplicabilityVersion},
 			Retry: template.RetryPolicy{
-				Ref: newsFeedRetryPolicyRef,
-				MaxAttempts: 3,
+				Ref:                  newsFeedRetryPolicyRef,
+				MaxAttempts:          3,
 				RetryableReasonCodes: []string{"news_feed_retryable_source_failure"},
-				Backoff: template.BackoffPolicy{Algorithm: "exponential_full_jitter_v1", BaseDelayMS: 1000, MaxDelayMS: 30000},
-				AttemptTimeoutMS: 60000,
+				Backoff:              template.BackoffPolicy{Algorithm: "exponential_full_jitter_v1", BaseDelayMS: 1000, MaxDelayMS: 30000},
+				AttemptTimeoutMS:     60000,
 			},
 			Propagation: template.PropagationPolicy{
 				OnDegraded: domain.PropagatePartial,
-				OnSkipped: domain.PropagateFail,
-				OnFailed: domain.PropagateFail,
+				OnSkipped:  domain.PropagateFail,
+				OnFailed:   domain.PropagateFail,
 				OnTimedOut: domain.PropagateFail,
-				OnBlocked: domain.PropagateFail,
+				OnBlocked:  domain.PropagateFail,
 			},
 		}},
 	}

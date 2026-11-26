@@ -7,9 +7,9 @@ import (
 	"time"
 
 	newsapp "example.com/stock-analysis-flow/internal/news/app"
+	newsconfig "example.com/stock-analysis-flow/internal/news/config"
 	newsdomain "example.com/stock-analysis-flow/internal/news/domain"
 	newsstage "example.com/stock-analysis-flow/internal/news/stage"
-	newsconfig "example.com/stock-analysis-flow/internal/news/config"
 	platformconfig "example.com/stock-analysis-flow/internal/platform/config"
 	researchflowapplication "example.com/stock-analysis-flow/internal/researchflow/application"
 	researchflowdomain "example.com/stock-analysis-flow/internal/researchflow/domain"
@@ -18,7 +18,7 @@ import (
 
 type newsFeedStageCollectorStub struct {
 	entries map[string][]newsapp.CollectedSourceEntry
-	errors map[string]error
+	errors  map[string]error
 }
 
 func (s newsFeedStageCollectorStub) Execute(ctx context.Context, request newsapp.CollectSourceRequest) (newsapp.CollectSourceResult, error) {
@@ -47,7 +47,7 @@ func (newsFeedStageIngesterStub) Execute(ctx context.Context, request newsapp.In
 func newsFeedStageRegistration(sourceID string) newsapp.SourceEndpointRegistration {
 	return newsapp.SourceEndpointRegistration{
 		SourceID: sourceID, EndpointID: "primary", Enabled: true,
-		URL: "https://feeds.example/" + sourceID + ".xml",
+		URL:          "https://feeds.example/" + sourceID + ".xml",
 		SourcePolicy: newsdomain.SourcePolicy{MaxRetention: 24 * time.Hour},
 	}
 }
@@ -80,9 +80,9 @@ func TestNewsFeedStageExecutorMapsSuccessfulApplicationIngestToSucceeded(t *test
 	}
 	executor := newsFeedStageExecutor{adapter: adapter}
 	result, err := executor.ExecuteStage(context.Background(), researchflowapplication.StageExecutionRequest{
-		Run: researchflowdomain.Run{Ref: "run-feed-success"},
-		Attempt: researchflowdomain.Attempt{Ref: "attempt-1"},
-		Stage: researchflowdomain.Stage{Code: newsstage.CollectFeedsStageCode},
+		Run:            researchflowdomain.Run{Ref: "run-feed-success"},
+		Attempt:        researchflowdomain.Attempt{Ref: "attempt-1"},
+		Stage:          researchflowdomain.Stage{Code: newsstage.CollectFeedsStageCode},
 		ResourcePolicy: newsFeedStagePolicy(t, registration),
 	})
 	if err != nil {
@@ -121,9 +121,9 @@ func TestNewsFeedStageExecutorRetriesPartialResultWhenRemainingFailureIsRetryabl
 	}
 	executor := newsFeedStageExecutor{adapter: adapter}
 	result, err := executor.ExecuteStage(context.Background(), researchflowapplication.StageExecutionRequest{
-		Run: researchflowdomain.Run{Ref: "run-feed-partial"},
-		Attempt: researchflowdomain.Attempt{Ref: "attempt-1"},
-		Stage: researchflowdomain.Stage{Code: newsstage.CollectFeedsStageCode},
+		Run:            researchflowdomain.Run{Ref: "run-feed-partial"},
+		Attempt:        researchflowdomain.Attempt{Ref: "attempt-1"},
+		Stage:          researchflowdomain.Stage{Code: newsstage.CollectFeedsStageCode},
 		ResourcePolicy: newsFeedStagePolicy(t, first, second),
 	})
 	if err != nil {

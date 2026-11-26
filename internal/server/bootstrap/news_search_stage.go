@@ -263,19 +263,19 @@ func newsSkippedReasonCode(failureCode string) string {
 func newNewsStageOutputRegistry(version string, includeFeed bool) (*stageoutput.Registry, error) {
 	entries := []stageoutput.Entry{{
 		StageCode: newsstage.SearchCandidatesStageCode, OutputType: newsstage.SearchCandidatesOutputType,
-		SchemaVersion: newsstage.SearchCandidatesSchemaVersion,
-		PayloadSchemaRef: newsstage.SearchCandidatesPayloadSchemaRef,
+		SchemaVersion:           newsstage.SearchCandidatesSchemaVersion,
+		PayloadSchemaRef:        newsstage.SearchCandidatesPayloadSchemaRef,
 		QualitySummarySchemaRef: newsstage.SearchCandidatesQualitySummarySchemaRef,
-		PayloadValidator: stageoutput.ValidatorFunc(newsstage.ValidatePayloadJSON),
+		PayloadValidator:        stageoutput.ValidatorFunc(newsstage.ValidatePayloadJSON),
 		QualitySummaryValidator: stageoutput.ValidatorFunc(newsstage.ValidateQualitySummaryJSON),
 	}}
 	if includeFeed {
 		entries = append(entries, stageoutput.Entry{
 			StageCode: newsstage.CollectFeedsStageCode, OutputType: newsstage.CollectFeedsOutputType,
-			SchemaVersion: newsstage.CollectFeedsSchemaVersion,
-			PayloadSchemaRef: newsstage.CollectFeedsPayloadSchemaRef,
+			SchemaVersion:           newsstage.CollectFeedsSchemaVersion,
+			PayloadSchemaRef:        newsstage.CollectFeedsPayloadSchemaRef,
 			QualitySummarySchemaRef: newsstage.CollectFeedsQualitySummarySchemaRef,
-			PayloadValidator: stageoutput.ValidatorFunc(newsstage.ValidateFeedCollectionPayload),
+			PayloadValidator:        stageoutput.ValidatorFunc(newsstage.ValidateFeedCollectionPayload),
 			QualitySummaryValidator: stageoutput.ValidatorFunc(newsstage.ValidateFeedCollectionQualitySummary),
 		})
 	}

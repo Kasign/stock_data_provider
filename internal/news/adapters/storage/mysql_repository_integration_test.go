@@ -2498,7 +2498,6 @@ func TestResolveCurrentSourceCollectionPoliciesMariaDBIntegration(t *testing.T) 
 	}
 }
 
-
 func TestNewsPolicyVersionPointerCASMariaDBIntegration(t *testing.T) {
 	dsn := os.Getenv("NEWS_MARIADB_TEST_DSN")
 	if dsn == "" {
@@ -2529,12 +2528,12 @@ func TestNewsPolicyVersionPointerCASMariaDBIntegration(t *testing.T) {
 
 	sourceID := fmt.Sprintf("policy-cas-source-%d", time.Now().UnixNano())
 	policy := domain.SourcePolicy{
-		Status: domain.AuthorizationApproved,
+		Status:               domain.AuthorizationApproved,
 		AllowedAccessMethods: []domain.AccessMethod{domain.AccessRSS},
-		AllowedPurposes: []domain.Purpose{domain.PurposeInternalPersonalResearch},
-		AllowedContentKinds: []domain.ContentKind{domain.ContentAbstract},
-		AllowedStorageModes: []domain.StorageMode{domain.StorageTransient, domain.StoragePersistentExcerpt},
-		MaxRetention: time.Hour, EvidenceRef: "policy-cas-evidence-v1",
+		AllowedPurposes:      []domain.Purpose{domain.PurposeInternalPersonalResearch},
+		AllowedContentKinds:  []domain.ContentKind{domain.ContentAbstract},
+		AllowedStorageModes:  []domain.StorageMode{domain.StorageTransient, domain.StoragePersistentExcerpt},
+		MaxRetention:         time.Hour, EvidenceRef: "policy-cas-evidence-v1",
 	}
 	payloadV1, err := json.Marshal(policy)
 	if err != nil {

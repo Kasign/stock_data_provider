@@ -73,7 +73,7 @@ func TestLoadFeedSourcesIsOptionalAndDefensivelyCopied(t *testing.T) {
 
 func TestLoadFeedSourcesRejectsInvalidOrAmbiguousConfiguration(t *testing.T) {
 	tests := []struct {
-		name string
+		name   string
 		mutate func(map[string]any)
 	}{
 		{name: "empty array", mutate: func(v map[string]any) { v["entries"] = []any{} }},
@@ -156,7 +156,6 @@ func TestLoadFeedSourcesRejectsTrailingJSON(t *testing.T) {
 		t.Fatal("Load() accepted trailing JSON")
 	}
 }
-
 
 func TestLoadFeedSourcesRejectsConflictingExpectedCurrentPolicyAcrossEndpoints(t *testing.T) {
 	var entries []map[string]any

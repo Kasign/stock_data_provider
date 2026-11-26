@@ -164,7 +164,6 @@ func TestResearchflowCompositeSchemaAndApplicabilityRegistrySupportsNewsAndQuant
 	}
 }
 
-
 func TestNewsFeedParameterSchemaIsStrictImmutableAndDocumented(t *testing.T) {
 	validator, err := newResearchflowParameterSchemaValidator()
 	if err != nil {

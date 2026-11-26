@@ -18,8 +18,8 @@ import (
 )
 
 const (
-	FeedSourcesEnv = "NEWS_FEED_SOURCES_JSON"
-	maximumFeedSources = 32
+	FeedSourcesEnv             = "NEWS_FEED_SOURCES_JSON"
+	maximumFeedSources         = 32
 	defaultFeedIngestRetention = 24 * time.Hour
 )
 
@@ -29,17 +29,17 @@ var feedIdentifierPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127
 // ExpectedCurrentSourcePolicyVersionID 是显式版本前置条件：空值允许首次初始化；
 // 当前已是相同目标版本且载荷一致时幂等成功；更新到新版本时必须填写期望替换的当前版本，避免旧配置回退。
 type FeedSource struct {
-	SourceID string
-	EndpointID string
-	URL string
-	PublisherName string
-	PublisherDomain string
-	AccessMethod domain.AccessMethod
-	SourcePolicy domain.SourcePolicy
-	SourcePolicyVersionID string
+	SourceID                             string
+	EndpointID                           string
+	URL                                  string
+	PublisherName                        string
+	PublisherDomain                      string
+	AccessMethod                         domain.AccessMethod
+	SourcePolicy                         domain.SourcePolicy
+	SourcePolicyVersionID                string
 	ExpectedCurrentSourcePolicyVersionID string
-	URLPolicy domain.SourceURLPolicy
-	MaxResponseBytes int64
+	URLPolicy                            domain.SourceURLPolicy
+	MaxResponseBytes                     int64
 }
 
 // FeedSources returns a defensive copy of the trusted startup registrations.
@@ -52,36 +52,36 @@ func (c Config) FeedSources() []FeedSource {
 }
 
 type feedSourceJSON struct {
-	SourceID string `json:"source_id"`
-	EndpointID string `json:"endpoint_id"`
-	URL string `json:"url"`
-	PublisherName string `json:"publisher_name"`
-	PublisherDomain string `json:"publisher_domain"`
-	AccessMethod domain.AccessMethod `json:"access_method"`
-	SourcePolicyVersionID string `json:"source_policy_version_id"`
-	ExpectedCurrentSourcePolicyVersionID string `json:"expected_current_source_policy_version_id"`
-	SourcePolicy feedSourcePolicyJSON `json:"source_policy"`
-	URLPolicy feedURLPolicyJSON `json:"url_policy"`
-	MaxResponseBytes int64 `json:"max_response_bytes"`
+	SourceID                             string               `json:"source_id"`
+	EndpointID                           string               `json:"endpoint_id"`
+	URL                                  string               `json:"url"`
+	PublisherName                        string               `json:"publisher_name"`
+	PublisherDomain                      string               `json:"publisher_domain"`
+	AccessMethod                         domain.AccessMethod  `json:"access_method"`
+	SourcePolicyVersionID                string               `json:"source_policy_version_id"`
+	ExpectedCurrentSourcePolicyVersionID string               `json:"expected_current_source_policy_version_id"`
+	SourcePolicy                         feedSourcePolicyJSON `json:"source_policy"`
+	URLPolicy                            feedURLPolicyJSON    `json:"url_policy"`
+	MaxResponseBytes                     int64                `json:"max_response_bytes"`
 }
 
 type feedSourcePolicyJSON struct {
-	Status domain.AuthorizationStatus `json:"status"`
-	AllowedAccessMethods []domain.AccessMethod `json:"allowed_access_methods"`
-	AllowedPurposes []domain.Purpose `json:"allowed_purposes"`
-	AllowedContentKinds []domain.ContentKind `json:"allowed_content_kinds"`
-	AllowedStorageModes []domain.StorageMode `json:"allowed_storage_modes"`
-	AllowedMetadataFields []string `json:"allowed_metadata_fields"`
-	MaxRetentionSeconds int64 `json:"max_retention_seconds"`
-	EffectiveAt time.Time `json:"effective_at"`
-	ExpiresAt *time.Time `json:"expires_at"`
-	EvidenceRef string `json:"evidence_ref"`
+	Status                domain.AuthorizationStatus `json:"status"`
+	AllowedAccessMethods  []domain.AccessMethod      `json:"allowed_access_methods"`
+	AllowedPurposes       []domain.Purpose           `json:"allowed_purposes"`
+	AllowedContentKinds   []domain.ContentKind       `json:"allowed_content_kinds"`
+	AllowedStorageModes   []domain.StorageMode       `json:"allowed_storage_modes"`
+	AllowedMetadataFields []string                   `json:"allowed_metadata_fields"`
+	MaxRetentionSeconds   int64                      `json:"max_retention_seconds"`
+	EffectiveAt           time.Time                  `json:"effective_at"`
+	ExpiresAt             *time.Time                 `json:"expires_at"`
+	EvidenceRef           string                     `json:"evidence_ref"`
 }
 
 type feedURLPolicyJSON struct {
 	AllowedSchemes []string `json:"allowed_schemes"`
-	AllowedHosts []string `json:"allowed_hosts"`
-	AllowedPorts []uint16 `json:"allowed_ports"`
+	AllowedHosts   []string `json:"allowed_hosts"`
+	AllowedPorts   []uint16 `json:"allowed_ports"`
 }
 
 func loadFeedSources(env platformconfig.Env) ([]FeedSource, error) {
@@ -133,15 +133,15 @@ func loadFeedSources(env platformconfig.Env) ([]FeedSource, error) {
 
 func convertFeedSource(entry feedSourceJSON) (FeedSource, error) {
 	value := FeedSource{
-		SourceID: strings.TrimSpace(entry.SourceID),
-		EndpointID: strings.TrimSpace(entry.EndpointID),
-		URL: strings.TrimSpace(entry.URL),
-		PublisherName: strings.TrimSpace(entry.PublisherName),
-		PublisherDomain: strings.TrimSpace(entry.PublisherDomain),
-		AccessMethod: entry.AccessMethod,
-		SourcePolicyVersionID: strings.TrimSpace(entry.SourcePolicyVersionID),
+		SourceID:                             strings.TrimSpace(entry.SourceID),
+		EndpointID:                           strings.TrimSpace(entry.EndpointID),
+		URL:                                  strings.TrimSpace(entry.URL),
+		PublisherName:                        strings.TrimSpace(entry.PublisherName),
+		PublisherDomain:                      strings.TrimSpace(entry.PublisherDomain),
+		AccessMethod:                         entry.AccessMethod,
+		SourcePolicyVersionID:                strings.TrimSpace(entry.SourcePolicyVersionID),
 		ExpectedCurrentSourcePolicyVersionID: strings.TrimSpace(entry.ExpectedCurrentSourcePolicyVersionID),
-		MaxResponseBytes: entry.MaxResponseBytes,
+		MaxResponseBytes:                     entry.MaxResponseBytes,
 	}
 	if !feedIdentifierPattern.MatchString(value.SourceID) ||
 		!feedIdentifierPattern.MatchString(value.EndpointID) ||
@@ -158,21 +158,21 @@ func convertFeedSource(entry feedSourceJSON) (FeedSource, error) {
 		return FeedSource{}, errors.New("invalid Feed source policy retention")
 	}
 	value.SourcePolicy = domain.SourcePolicy{
-		Status: entry.SourcePolicy.Status,
-		AllowedAccessMethods: append([]domain.AccessMethod(nil), entry.SourcePolicy.AllowedAccessMethods...),
-		AllowedPurposes: append([]domain.Purpose(nil), entry.SourcePolicy.AllowedPurposes...),
-		AllowedContentKinds: append([]domain.ContentKind(nil), entry.SourcePolicy.AllowedContentKinds...),
-		AllowedStorageModes: append([]domain.StorageMode(nil), entry.SourcePolicy.AllowedStorageModes...),
+		Status:                entry.SourcePolicy.Status,
+		AllowedAccessMethods:  append([]domain.AccessMethod(nil), entry.SourcePolicy.AllowedAccessMethods...),
+		AllowedPurposes:       append([]domain.Purpose(nil), entry.SourcePolicy.AllowedPurposes...),
+		AllowedContentKinds:   append([]domain.ContentKind(nil), entry.SourcePolicy.AllowedContentKinds...),
+		AllowedStorageModes:   append([]domain.StorageMode(nil), entry.SourcePolicy.AllowedStorageModes...),
 		AllowedMetadataFields: append([]string(nil), entry.SourcePolicy.AllowedMetadataFields...),
-		MaxRetention: time.Duration(entry.SourcePolicy.MaxRetentionSeconds) * time.Second,
-		EffectiveAt: entry.SourcePolicy.EffectiveAt.UTC(),
-		ExpiresAt: cloneTime(entry.SourcePolicy.ExpiresAt),
-		EvidenceRef: strings.TrimSpace(entry.SourcePolicy.EvidenceRef),
+		MaxRetention:          time.Duration(entry.SourcePolicy.MaxRetentionSeconds) * time.Second,
+		EffectiveAt:           entry.SourcePolicy.EffectiveAt.UTC(),
+		ExpiresAt:             cloneTime(entry.SourcePolicy.ExpiresAt),
+		EvidenceRef:           strings.TrimSpace(entry.SourcePolicy.EvidenceRef),
 	}
 	value.URLPolicy = domain.SourceURLPolicy{
 		AllowedSchemes: append([]string(nil), entry.URLPolicy.AllowedSchemes...),
-		AllowedHosts: append([]string(nil), entry.URLPolicy.AllowedHosts...),
-		AllowedPorts: append([]uint16(nil), entry.URLPolicy.AllowedPorts...),
+		AllowedHosts:   append([]string(nil), entry.URLPolicy.AllowedHosts...),
+		AllowedPorts:   append([]uint16(nil), entry.URLPolicy.AllowedPorts...),
 	}
 	if !domain.EvaluateSourceURL(value.URL, value.URLPolicy).Allowed {
 		return FeedSource{}, errors.New("Feed endpoint URL is outside its allowlist")

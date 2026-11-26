@@ -18,59 +18,59 @@ import (
 )
 
 const (
-	CollectFeedsStageCode = "news.collect_feeds"
-	CollectFeedsOutputType = "news.feed_collection"
-	CollectFeedsSchemaVersion = "1.0.0"
-	CollectFeedsPayloadSchemaRef = "doc/researchflow/schema/news-feed-collection-output-1.0.0.schema.json"
+	CollectFeedsStageCode               = "news.collect_feeds"
+	CollectFeedsOutputType              = "news.feed_collection"
+	CollectFeedsSchemaVersion           = "1.0.0"
+	CollectFeedsPayloadSchemaRef        = "doc/researchflow/schema/news-feed-collection-output-1.0.0.schema.json"
 	CollectFeedsQualitySummarySchemaRef = "doc/researchflow/schema/news-feed-collection-quality-1.0.0.schema.json"
-	defaultFeedEntryLimit = 200
-	defaultFeedRetention = 24 * time.Hour
+	defaultFeedEntryLimit               = 200
+	defaultFeedRetention                = 24 * time.Hour
 )
 
 var ErrFeedCollectionAdapterRequired = errors.New("news stage: Feed collection use cases and registrations are required")
 
 type FeedCollectionOutput struct {
-	Status string `json:"status"`
-	FailureCode string `json:"failure_code"`
-	SourceCount int `json:"source_count"`
-	SuccessSourceCount int `json:"success_source_count"`
-	EmptySourceCount int `json:"empty_source_count"`
-	SkippedSourceCount int `json:"skipped_source_count"`
-	FailedSourceCount int `json:"failed_source_count"`
-	CollectedEntryCount int `json:"collected_entry_count"`
-	IngestedCount int `json:"ingested_count"`
-	Sources []FeedSourceOutcome `json:"sources"`
+	Status              string              `json:"status"`
+	FailureCode         string              `json:"failure_code"`
+	SourceCount         int                 `json:"source_count"`
+	SuccessSourceCount  int                 `json:"success_source_count"`
+	EmptySourceCount    int                 `json:"empty_source_count"`
+	SkippedSourceCount  int                 `json:"skipped_source_count"`
+	FailedSourceCount   int                 `json:"failed_source_count"`
+	CollectedEntryCount int                 `json:"collected_entry_count"`
+	IngestedCount       int                 `json:"ingested_count"`
+	Sources             []FeedSourceOutcome `json:"sources"`
 }
 
 type FeedSourceOutcome struct {
-	SourceID string `json:"source_id"`
-	EndpointID string `json:"endpoint_id"`
-	Status string `json:"status"`
-	CollectedCount int `json:"collected_count"`
-	IngestedCount int `json:"ingested_count"`
-	NewsIDs []string `json:"news_ids"`
+	SourceID       string   `json:"source_id"`
+	EndpointID     string   `json:"endpoint_id"`
+	Status         string   `json:"status"`
+	CollectedCount int      `json:"collected_count"`
+	IngestedCount  int      `json:"ingested_count"`
+	NewsIDs        []string `json:"news_ids"`
 	ErrorCode      string   `json:"error_code"`
-	Retryable bool `json:"retryable"`
+	Retryable      bool     `json:"retryable"`
 }
 
 type FeedCollectionQualitySummary struct {
-	Status string `json:"status"`
-	SourceCount int `json:"source_count"`
-	SuccessSourceCount int `json:"success_source_count"`
-	EmptySourceCount int `json:"empty_source_count"`
-	SkippedSourceCount int `json:"skipped_source_count"`
-	FailedSourceCount int `json:"failed_source_count"`
-	CollectedEntryCount int `json:"collected_entry_count"`
-	IngestedCount int `json:"ingested_count"`
+	Status              string `json:"status"`
+	SourceCount         int    `json:"source_count"`
+	SuccessSourceCount  int    `json:"success_source_count"`
+	EmptySourceCount    int    `json:"empty_source_count"`
+	SkippedSourceCount  int    `json:"skipped_source_count"`
+	FailedSourceCount   int    `json:"failed_source_count"`
+	CollectedEntryCount int    `json:"collected_entry_count"`
+	IngestedCount       int    `json:"ingested_count"`
 }
 
 type FeedCollectionResult struct {
-	OutputType string
-	SchemaVersion string
-	Payload json.RawMessage
+	OutputType     string
+	SchemaVersion  string
+	Payload        json.RawMessage
 	QualitySummary json.RawMessage
-	Retryable bool
-	ReasonCodes []string
+	Retryable      bool
+	ReasonCodes    []string
 }
 
 type FeedSourceCollector interface {
@@ -83,8 +83,8 @@ type FeedSourceIngester interface {
 
 type FeedCollectionAdapter struct {
 	registrations []app.SourceEndpointRegistration
-	collect FeedSourceCollector
-	ingest FeedSourceIngester
+	collect       FeedSourceCollector
+	ingest        FeedSourceIngester
 }
 
 func NewFeedCollectionAdapter(
@@ -232,7 +232,7 @@ func (a *FeedCollectionAdapter) Execute(
 		}
 		collection, err := a.collect.Execute(ctx, app.CollectSourceRequest{
 			SourceID: registration.SourceID, EndpointID: registration.EndpointID,
-			Purpose: domain.PurposeInternalPersonalResearch,
+			Purpose:     domain.PurposeInternalPersonalResearch,
 			ContentKind: domain.ContentAbstract, StorageMode: domain.StorageTransient,
 			Retention: retention, MaxEntries: defaultFeedEntryLimit,
 		})
@@ -268,10 +268,10 @@ func (a *FeedCollectionAdapter) Execute(
 		outcome.CollectedCount = len(collection.Entries)
 		output.CollectedEntryCount += len(collection.Entries)
 		observations, err := a.ingest.Execute(ctx, app.IngestCollectedSourceRequest{
-			Collection: collection,
+			Collection:        collection,
 			IdempotencyPrefix: strings.Join([]string{runID, stageCode, registration.SourceID, registration.EndpointID}, "/"),
-			Purpose: domain.PurposeInternalPersonalResearch,
-			Retention: retention,
+			Purpose:           domain.PurposeInternalPersonalResearch,
+			Retention:         retention,
 		})
 		if err != nil {
 			if ctxErr := ctx.Err(); ctxErr != nil {
@@ -346,7 +346,7 @@ func (a *FeedCollectionAdapter) Execute(
 	return FeedCollectionResult{
 		OutputType: CollectFeedsOutputType, SchemaVersion: CollectFeedsSchemaVersion,
 		Payload: payload, QualitySummary: quality,
-		Retryable: retryableFailureCount > 0 && retryableFailureCount == output.FailedSourceCount && output.SkippedSourceCount == 0,
+		Retryable:   retryableFailureCount > 0 && retryableFailureCount == output.FailedSourceCount && output.SkippedSourceCount == 0,
 		ReasonCodes: reasons,
 	}, nil
 }
