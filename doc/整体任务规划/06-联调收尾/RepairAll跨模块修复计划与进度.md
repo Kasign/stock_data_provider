@@ -314,7 +314,7 @@ RA009 代码关闭条件已满足：Server 路由认证矩阵、CSRF、WebUI 请
 | 顺序 | 卡点/工作包 | 主责 Owner | 协作方 | 当前真实阻塞 | 下一项可执行交付 | 关闭条件 |
 |---|---|---|---|---|---|---|
 | 0 | 卡点治理与状态同步 | RepairAll | 全模块 | 历史文档存在过期状态，卡点分散 | 统一登记编号、主责、依赖、交付和验收；同步模块文档 | 无过期开放项、无重复责任、每项有明确解除条件 |
-| 1 | DATA-CTR-007 Snapshot/Evidence | Data | Research、Quant、Server | 当前 DailyBarsSnapshot 不具备内容寻址 SnapshotRef、Manifest/Payload 绑定和 AuthorizationRef | Data 提交 Snapshot 契约方案及兼容/迁移边界；同步 Research Evidence 映射 | 冻结契约、实现、Golden/Contract Test 和可验证样本齐备 |
+| 1 | DATA-CTR-007 Snapshot/Evidence | Data | Research、Quant、Server | 历史卡点：通用 DailyBarsSnapshot 不具备内容寻址 SnapshotRef、Manifest/Payload 绑定和 AuthorizationRef；窄化 Close Series Snapshot 已实现双指纹/内容寻址/授权读取，剩余缺口是通用消费者契约与 Research Evidence 映射（见本文 2026-11-23 Snapshot V6 段落与 PLAT-002 登记簿第 44/78 行） | Data 提交 Snapshot 契约方案及兼容/迁移边界；同步 Research Evidence 映射 | 冻结契约、实现、Golden/Contract Test 和可验证样本齐备 |
 | 1 | DATA-003～DATA-007 外部数据证据 | Data | Provider/来源方、Server/运维 | PIT、估值公式/源端时间、Freshness、Go/Python 配对、Provider 请求证据不齐 | 逐字段列出已知/未知证据；先完成公开可查资料和现有样本核验，再登记真正外部缺口 | 每个子项具备指定证券/日期/Provider 的原始证据和独立复算/对账 |
 | 1 | NEWS-BLK-01/03/05 | News（配置契约）/Server（装配） | Researchflow、Platform | Source Catalog 权威来源、Feed 生产组合和真实 Diagnostics 注册未闭环 | 先确认现有配置/Resolver/Root 装配是否可复用；输出唯一配置 Owner 和接线清单 | 权威 Source 配置、真实 Resolver/HTTP 出口、Root 装配和集成测试通过 |
 | 1 | NEWS-BLK-02/04/07 | 实际业务来源 Owner | News、Researchflow、Server | Feed 无真实调用方；来源许可/网络证据和合格 available_at 来源缺失 | 从现有业务流程确认是否需要 Feed；公开核验来源时间语义与许可；无真实场景的项保持 deferred | 真实调用方、授权来源、available_at 原始证据和持久化版本链通过验收 |
@@ -355,7 +355,7 @@ RA009 代码关闭条件已满足：Server 路由认证矩阵、CSRF、WebUI 请
 
 - 已核对项目级冻结登记簿：DATA-CTR-005/007 均为 deferred；DEC-PLAT-002-020 已接受 Data Snapshot、Manifest、交易日历来源/版本和 Research Evidence 映射的责任决议；DEC-PLAT-002-047 已明确 Quant Factor 需要 interval=1d 与不可变交易日历版本。
 - 已核对真实代码：Data Model/Application Port 的 DailyBar 使用 float64；Tushare/BaoStock 在 Provider 入口 ParseFloat；Hithink 日线 JSON 解码为 float64；MariaDB 当前 OHLC DECIMAL(20,8)、Amount DECIMAL(24,2)、ChangePercent DECIMAL(16,8)。因此不能从现有 float64 反向恢复精度，也不能把 DB scale 作为源端精度契约。
-- 当前 DailyBarsSnapshot 只是查询结果 DTO；未发现 Data-owned 不可变 Payload Repository、SnapshotRef 内容寻址和读取时 AuthorizationRef 复核实现。DATA-CTR-008 Manifest Schema/Golden 只描述元数据，不包含行情 Payload。
+- 当时 DailyBarsSnapshot 只是查询结果 DTO；未发现 Data-owned 不可变 Payload Repository、SnapshotRef 内容寻址和读取时 AuthorizationRef 复核实现。DATA-CTR-008 Manifest Schema/Golden 只描述元数据，不包含行情 Payload。（注：这是 2026-11-19 的历史审计结论；此后已实现 Close Series Payload/Manifest 双指纹、内容寻址 SnapshotRef、Migration V6 不可变 Repository 与授权读取，见本文"2026-11-23 Snapshot V6 Repository 实施"段落及 PLAT-002 登记簿第 44 行，非当前状态。）
 - 已新增 Data 解阻方案 `doc/api/依赖/02-DATA-CTR-005与007解阻方案.md`，明确 D1-D7：字段证据盘点、DailyBars v2、交易日历/复权完整性、Snapshot 持久化、授权/Server 装配、Research Evidence 映射、Quant 消费验收。
 - 当前只进入 D1 证据盘点；不擅自修改冻结登记簿，不以文档方案代替实现验收。下一步从现有 Provider 代码、历史 Live Probe Artifact 和交易日历 Repository 继续收集证据，再决定可直接实施的代码项。
 
@@ -999,7 +999,7 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - 当前 Eastmoney SourceVersion 已核实为 eastmoney-stock-api-v1，映射到 provider_interface_version；Manifest source_version 明确为 nil，不伪造 Provider 数据版本。normalization_version 从 Data DTO 读取，当前 normalize.Version 为 4。
 - 新增 daily_bars_close_series_test.go，覆盖正确映射、JSON 字段名、缺 CalendarRef、日历降级、覆盖不足、float-only、来源版本不匹配、token 不一致、非 PIT、重复交易日和空诊断字段拒绝。测试代码已写入，但最新 Go Test Suite 在 gofmt 门禁处提前失败，未执行该测试；本轮最后的格式修正提交使用 skip-ci，故最终 HEAD 尚无通过 CI 的证据，不能宣称测试通过。
 - 本轮 push 触发的 Live provider probe workflow 中，实际 Provider 探测步骤全部 skipped（没有包含 [include_public] 标记，也未手动 dispatch），未重新请求 Provider。
-- 当前尚未实现 Manifest/Payload JCS 指纹、SnapshotRef、Migration V6、不可变 Snapshot Repository、Data Owner 授权签发/撤销复核；Builder 只是输入构建层，不对外开放 Snapshot 读取。
+- 当时尚未实现 Manifest/Payload JCS 指纹、SnapshotRef、Migration V6、不可变 Snapshot Repository、Data Owner 授权签发/撤销复核；Builder 当时只是输入构建层，不对外开放 Snapshot 读取。（注：这些能力已在同日后续"Snapshot 双指纹构建与校验""Snapshot V6 Repository 实施"及 Data Owner 策略持久化段落记录为已实现，属历史过程记录。）
 
 ### 下一步
 

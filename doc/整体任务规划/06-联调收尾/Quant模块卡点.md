@@ -5,6 +5,8 @@
 责任模块：Quant  
 说明：本文件登记需要其他模块或项目级决策方提供输入、装配或验收的事项。模块内详细依赖见 `doc/quant/依赖/01-跨模块依赖与解锁条件.md`。
 
+> **口径收敛声明（2026-11-26）：** DATA-CTR-005/007、QNT-CTR-003 当前均为 `deferred`，以 `doc/contract/PLAT-002-项目级契约冻结登记簿.md` 第 77～79 行为准。下表 DATA-CTR-005/007 卡点针对的是**通用 OHLC Decimal 精度路径**，仍成立；但首批 Close-only Factor/SMA20 复用现有已授权 Close Series Snapshot（精确 Close、双指纹 SnapshotRef、Manifest、授权读取），该窄化路径不等待通用 DTO，其生产门禁归 QNT-CTR-003 自身 Factor Schema/Golden、Decimal Registry/精度策略、生产 Facade 与 Researchflow Stage 接线。QNT-015 的 Snapshot Adapter 已有 SMA20 先例，剩余为 Factor 正式接线；不得据旧口径称"无可用 Snapshot"。
+
 ## 1. Data 模块卡点
 
 | 卡点 | 对 Quant 的影响 | 责任方 | 解锁条件 | Quant 解锁后动作 |

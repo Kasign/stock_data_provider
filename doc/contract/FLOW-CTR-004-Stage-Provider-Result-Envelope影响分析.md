@@ -5,6 +5,7 @@
 - 仓库/分支：`Kasign/stock_data_provider` / `integration`
 - 核对 HEAD：`17ca61fad64e87da8c557f80bdfe66cc71b0bfcd`
 - 权威基线：`doc/contract/PLAT-002-项目级契约冻结登记簿.md` 中 FLOW-CTR-004 = `frozen`；冻结语义不得由实现盘点反向修改。
+- 口径补充（2026-11-26）：本文第 6 节"Quant Factor Stage 受 DATA-CTR-005/007 与 QNT-CTR-003 阻断"为 2026-11-16 历史判断。当前 DATA-CTR-005/007、QNT-CTR-003 均为 `deferred`（PLAT-002 登记簿第 77～79 行），但首批 Close-only Factor 可复用现有已授权 Close Series Snapshot，不被通用 DATA-CTR-005/007 阻断；其生产门禁是 QNT-CTR-003 自身的 Factor Schema/Golden、Decimal Registry/精度策略、生产 Facade 与 Researchflow Stage 接线。
 
 ## 1. 结论摘要
 
