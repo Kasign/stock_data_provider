@@ -1,20 +1,23 @@
 #!/usr/bin/env bash
-# 推送前跑与 CI required-checks 一致的检查；紧急情况下用 SKIP_SLOW_HOOKS=1 跳过。
+# 推送前只做快速静态检查，不运行测试二进制。
+# 全量测试（go test / web / python）统一交给 CI 的 required-checks，
+# 避免本地生成带 macOS quarantine 属性的 Go 测试二进制，触发 Gatekeeper 弹窗。
 set -euo pipefail
 
 if [ "${SKIP_SLOW_HOOKS:-0}" = "1" ]; then
-  echo "[pre-push] SKIP_SLOW_HOOKS=1，跳过慢检查" >&2
+  echo "[pre-push] SKIP_SLOW_HOOKS=1，跳过检查" >&2
   exit 0
 fi
 
-echo "[pre-push] go vet / go test ..."
+# gofmt：格式检查，不生成二进制
+files="$(gofmt -l ./cmd ./internal)"
+if [ -n "$files" ]; then
+  echo "[pre-push] 以下 Go 文件需要 gofmt：" >&2
+  echo "$files" >&2
+  exit 1
+fi
+
+# go vet：静态分析，不执行测试二进制
 go vet ./...
-go test ./...
 
-echo "[pre-push] web check / web test ..."
-(cd web && npm run check && npm test)
-
-echo "[pre-push] python contract test ..."
-python -m unittest scripts/test_compare_market_data_exports.py -v
-
-echo "[pre-push] OK"
+echo "[pre-push] OK（全量测试由 CI required-checks 执行）"
