@@ -7,6 +7,21 @@ import (
 	researchflowapplication "example.com/stock-analysis-flow/internal/researchflow/application"
 )
 
+func TestNewsAndQuantOutputRegistryVersionsRemainGloballyDistinct(t *testing.T) {
+	versions := []string{
+		newsSearchStageOutputRegistryVersion,
+		quantSMA20StageOutputRegistryVersion,
+		newsFeedStageOutputRegistryVersion,
+	}
+	seen := make(map[string]struct{}, len(versions))
+	for _, version := range versions {
+		if _, exists := seen[version]; exists {
+			t.Fatalf("different immutable Stage Output Registry contents reuse version %q", version)
+		}
+		seen[version] = struct{}{}
+	}
+}
+
 func TestNewsSearchAndFeedShareOneImmutableOutputRegistryVersion(t *testing.T) {
 	registry, err := newNewsStageOutputRegistry(newsFeedStageOutputRegistryVersion, true)
 	if err != nil {
