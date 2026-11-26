@@ -114,7 +114,7 @@ func NewFeedCollectionAdapter(
 	return &FeedCollectionAdapter{registrations: owned, collect: collect, ingest: ingest}, nil
 }
 
-// SourceEndpointResourceRef is the stable, URL-free identity used in a Run resource snapshot.
+// SourceEndpointResourceRef is the stable, URL-free Source/Endpoint identity used for collection requests.
 func SourceEndpointResourceRef(sourceID, endpointID string) string {
 	if !validFeedResourceID(sourceID) || !validFeedResourceID(endpointID) {
 		return ""
@@ -345,7 +345,8 @@ func (a *FeedCollectionAdapter) Execute(
 	}
 	return FeedCollectionResult{
 		OutputType: CollectFeedsOutputType, SchemaVersion: CollectFeedsSchemaVersion,
-		Payload: payload, QualitySummary: quality, Retryable: output.Status == "failed_retryable",
+		Payload: payload, QualitySummary: quality,
+		Retryable: retryableFailureCount > 0 && retryableFailureCount == output.FailedSourceCount && output.SkippedSourceCount == 0,
 		ReasonCodes: reasons,
 	}, nil
 }
