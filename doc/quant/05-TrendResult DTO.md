@@ -60,3 +60,11 @@
 - 不新增猜测性的 Trend 算法或合成指标权重。
 - 不修改已冻结的 QNT-CTR-004 项目级契约。
 - QNT-004 保持“部分完成”；后续先取得上述算法语义决议，再在本分支实现纯函数聚合与 Golden。Data 多周期 Adapter 和 Researchflow 消费端验收分别由其责任分支完成。
+
+## 2026-11-26 旧 Runner 趋势逻辑核实补充
+
+本轮按执行清单 1.3 逐行核实旧 Runner 的 trend 实现（`internal/service/wiring.go:258-351`：`trendFactor` 三因子 + `trendStrategy` 三正合取）与 `internal/quant/trend` 的差距，结论与决议请求见 `doc/quant/07-trend-following策略差距与契约结论.md`：
+
+- 旧逻辑只输出单一 `long_candidate`，没有 direction 四值、phase、strength 与 conflict 表达，无法映射到本 DTO 而不新增语义决策；因此不能把旧 `trendStrategy` 当作趋势算法迁移源。
+- 本轮仍不实现算法、不注册 `quant.trend` Stage、不改本 DTO 与其 Schema/Golden。phase 与 strength 在无决议时的合法表达分别为 `unknown` 与 `null`。
+- 1.3 的退出条件（生产策略 Stage 与契约）未满足，阻塞于 07 文档第 6 节的 D1–D5 五项决议。

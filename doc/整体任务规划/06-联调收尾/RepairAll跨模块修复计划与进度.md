@@ -1450,3 +1450,12 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - 文档/注释纠正：`create_factor.go` 原注释称 insufficient 样本"不落库"，与实现及本组证据不符，已改为按 `result_status=insufficient_data` 落库。
 - 验证：`go test ./internal/quant/... ./internal/server/... ./internal/researchflow/...` 全包 PASS；`go test -race ./internal/server/bootstrap/ ./internal/quant/stage/ ./internal/quant/application/` PASS；两条新测试均通过变异验证（改 `MinimumRequiredBars` 映射、改关联规格表 SchemaRef 后对应测试失败，恢复后通过）。
 - 阶段结论：`旧Analysis退役执行清单.md` 的 1.2 三因子生产化在 Quant + Researchflow Stage 范围内闭环。QNT-CTR-003 仍 `deferred`、QNT-CTR-004/005 仍 `frozen`（本组未改 Schema/契约状态）；剩余生产门禁属阶段 2.1 完整股票研究 Template 与阶段 2.3 报告读取 DTO。CI 状态 `not_run`。
+
+## 2026-11-26 执行清单 1.3 trend-following 差距核实（书面结论，不补算法）
+
+- 起始 HEAD `1201092fc`（第⑧组与契约口径修正已推送）。本组只做代码核实与结论，不新增代码、Schema、Golden、Registry Entry 或 Stage。
+- 核实结论：旧 Runner 的 trend 逻辑是 `internal/service/wiring.go:258-305` 的 `trendFactor`（三因子：`trend.ma20_distance_pct`/`return_5d_pct`/`return_20d_pct`，percent、float64、最小样本 20/6/21）加 `wiring.go:307-351` 的 `trendStrategy`（`ma>0 && r5>0 && r20>0` 三正合取，只输出 `long_candidate`，`valid_until=as_of+24h`，entry/exit/invalidation 为中文自然语言串）。它没有 direction 四值、phase、strength、多周期冲突；`StrategyEligible` 缺失时静默 `continue`，导致"不可评估"与"无信号"不可区分；`AsOf` 取最后一根 bar 的 trade_date，无独立 `system_as_of`。
+- 现有 `internal/quant/trend` 只有 `Result` DTO 与结构校验；`trend/1.0.0` Envelope 已注册可持久化；但没有算法、Registry Entry、Output/Quality Schema、参数 Schema、Template 与关联规格表条目。
+- 不补算法的四条理由：①旧逻辑不覆盖 `TrendResult` 的 direction/phase/strength/conflict 字段，映射必然新增语义决策；②DEC-PLAT-002-049 禁止方向/阶段/强度互推且不定义阈值，`doc/quant/05` 第 50–57 行的 7 项语义至今未决；③单位 percent→ratio、时间 trade_date→system_as_of/trade_date 分离，旧中文规则串不可继承；④产物层次不同（趋势状态 ≠ 交易候选，QNT-008 Signal 仍 NOT_STARTED，塞进 Payload 等于私增 frozen 字段）。
+- 交付：`doc/quant/07-trend-following策略差距与契约结论.md`——代码级事实、10 维差距矩阵、5 项决议请求（D1 周期集合 5/20 或 5/20/60，选后者须先补 `momentum_60d` Decimal Entry；D2 direction 纯符号；D3 phase v1 恒 `unknown`；D4 strength 恒 `null`；D5 先只做 TrendResult），以及决议通过后的最小可交付范围。
+- 状态：1.3 退出条件"有生产策略 Stage 与契约"未满足，记为"书面结论完成、阻塞于 D1–D5"，不得记为已完成。契约状态未变（QNT-CTR-003 `deferred`、004/005 `frozen`），QNT-004 仍 BLOCKED_BY_DECISION、QNT-008 仍 NOT_STARTED。1.4 不依赖本结论，可并行。CI 状态 `not_run`（本组无代码变更）。
