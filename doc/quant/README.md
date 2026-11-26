@@ -16,6 +16,8 @@
 - [首批输入输出契约与验收补充](./03-首批输入输出契约与验收补充.md)
 - [RiskDecision DTO](./04-RiskDecision%20DTO.md)
 - [TrendResult DTO](./05-TrendResult%20DTO.md)
+- [trend-following 策略差距与契约结论](./07-trend-following策略差距与契约结论.md)
+- [market breadth 指标决策与正名](./08-market-breadth指标决策与正名.md)
 - `schema/`：机器可校验的项目契约 Schema。
 - `golden/`：算法固定样例、结构样例及负例验收输入。
 

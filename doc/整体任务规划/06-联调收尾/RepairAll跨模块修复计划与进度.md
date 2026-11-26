@@ -1485,3 +1485,12 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
   - **错误分类语义变化（已同步改单测，不放宽门禁）**：此前只有“覆盖率低于 Registry 策略”落在 `Err*SnapshotQuality`，其余质量类失败（快照质量/日历/覆盖率标记/逐 bar 质量/PIT）都落在 `ErrInvalid*Snapshot`。1.5 起“输入存在但不可用”统一走前者并携带原因码，Snapshot 自身不自洽仍走后者且不带原因码。两类都继续 fail-closed。
 - 验证：`go build ./...`、`go vet`、`go test ./internal/...` 全通过；`go test -race ./internal/quant/application/ ./internal/server/bootstrap/` PASS。变异验证三处：删 `CoverageSufficient` 分支（14 处断言失败）、删 PIT 映射分支（映射与 Factor 执行器测试失败）、去掉原因码透传（分类与 Facade 测试失败）；恢复后全绿。
 - 状态：1.3、1.5 记为已完成（实现层面）；QNT-CTR-003 仍 `deferred`、004/005 仍 `frozen`，QNT-008 仍 NOT_STARTED。CI 状态以推送后 GitHub Actions 结论为准，本节不预填。
+
+## 2026-11-26 执行清单 1.6 market breadth 指标决策（书面结论，待 M1）
+
+- 起始 HEAD `2bd11ca31`（1.3 落地与 1.5 门禁映射已推送）。本组只做核实与结论，不新增代码、Schema、Golden、Registry Entry、Stage 或 Data 契约。
+- 代码级事实：`internal/service/wiring.go:210-255` 的 `marketAnalyzer` 用 `MarketSnapshot.Bars`（由 `universeResolver` 复制 `req.Symbols` 而来）算 `watchlist_above_ma20_pct`，以 65/35 阈值映射 `watchlist_trend_positive`/`watchlist_trend_weak`/`watchlist_mixed`，算法版本 `mvp-watchlist-market-v1`；缺指数日 K 时自身写入“不能视为完整市场广度分析”。分母随请求变化 → 跨 Run 不可比，且不含停牌/ST/退市/新股规则。
+- 消费者边界：新链零消费者（`quant` 无 MarketStage/MarketState DTO，2.1 Template 不含 Market Stage，QNT-005 NOT_STARTED）；旧链消费者是 `analysis/app/runner.go`（仅校验 regime 非空）与旧报告页（展示“市场状态”），随阶段 4 删除。
+- Data 侧能力边界：`MarketBreadthSnapshot` 已是严格的 `cn_a_share` 全市场口径（四类家数精确对账、`requireFullCoverage`、部分覆盖必须 degraded、最旧成分报价时间做新鲜度），并有 `GET /api/v1/market/breadth`；但 Quant 唯一合规入口（授权快照）只有单证券 `daily_bars_close_series`，广度事实暂不可被 Quant 追溯消费。
+- 交付：`doc/quant/08-market-breadth指标决策与正名.md`——代码级事实、差距矩阵、选项 A（正名为 `cross_section_participation_ma20`，A1/A2 两条实现路径及其代价）、选项 B（书面废弃，推荐）、命名规范、复活条件、QNT-005 前置依赖精确化。
+- 状态：1.6 记为“书面结论完成，待 M1 决议”，不记为已完成；QNT-005 前置项已在其任务表中精确化，契约状态全部不变。CI 状态以推送后结论为准，本节不预填。

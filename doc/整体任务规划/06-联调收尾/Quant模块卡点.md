@@ -220,3 +220,12 @@ Quant 现有 GetResult 授权读取用例、SMA20 与三因子（`ma20_distance`
 - 错误分类的语义变化（需知悉）：此前除“覆盖率低于 Registry 策略”外，质量类失败一律落到 `ErrInvalidXxxSnapshot`（结构错误）。1.5 起“输入存在但不可用”统一以 `InputNotApplicableError` 表达并 unwrap 到 `ErrCloseSeriesSnapshotQuality`，三个 Facade 经 `classifyCloseSeriesValidationError` 保留原因码；Snapshot 自身不自洽（身份/Purpose/复权/日期/Provider 绑定/空 bars）仍是 `ErrInvalidXxxSnapshot` 且不带原因码。对应单测期望已同步更新，不涉及任何门禁放宽——两类都继续 fail-closed。
 - Stage 侧不再把质量门禁失败笼统记为 `*_execution_failed`：`quant_input_reason.go` 把原因投影为 `quant_sma20_input_*`/`quant_factor_input_*`/`quant_trend_input_*`（表外原因回退为 `*_input_not_applicable`，不猜测具体原因）。变异验证三处（删覆盖率分支、删 PIT 映射、去掉原因码透传）均使测试失败。
 - 契约状态未变：QNT-CTR-003 仍 `deferred`、QNT-CTR-004/005 仍 `frozen`；QNT-008 Signal 仍 NOT_STARTED。1.3/1.5 的完成只表示实现追平已通过决议，不等于对外生产发布。
+
+## 2026-11-26 执行清单 1.6 market breadth 指标决策（书面结论，待 M1）
+
+- 核实：旧 `marketAnalyzer`（`internal/service/wiring.go:210-255`，`mvp-watchlist-market-v1`）的分母来自 `universeResolver` 复制的 `req.Symbols`，指标是 `watchlist_above_ma20_pct` 加 65/35 无出处阈值映射出的 `regime` 字符串；缺指数数据时它自己就写了“不能视为完整市场广度分析”。消费者只有旧链（`analysis/app/runner.go` 校验 regime 非空、旧报告页展示“市场状态”），新链零消费者，QNT-005 仍 NOT_STARTED。
+- Data 侧的真·市场广度已经存在且口径严格：`MarketBreadthSnapshot` 固定 `market=cn_a_share`，四类家数必须精确对账到 `covered_securities`，`requireFullCoverage` 时要求 `covered==total`，部分覆盖必须标 `degraded`，新鲜度取最旧成分报价时间；对外有 `GET /api/v1/market/breadth`。但它**只有 HTTP 展示路径**，没有授权快照——Quant 唯一合规入口（授权快照）目前只有单证券 `daily_bars_close_series`。
+- 判定建议：**书面废弃**旧指标（不迁移），真实市场环境需求归 QNT-005。理由是分母随请求变化导致跨 Run 不可比、与 Data 广度同名不同义、65/35 阈值无出处；保留的两条路径（N 次单证券快照破坏 PIT 一致性 / 新增横截面 payload 属 DATA-CTR 变更）都缺真实调用方。结论、差距矩阵、命名规范与复活条件见 `doc/quant/08-market-breadth指标决策与正名.md`。
+- QNT-005 前置项据此精确化：① Data 为 `MarketBreadthSnapshot` 增加授权快照 payload；② 停牌/ST/退市/新股排除规则需 Data 交易状态事实；③ 指数授权快照（旧 `index_20d_return_pct` 同样缺路径）。在契约就位前不以“先用 HTTP 广度凑”的方式启动 QNT-005。
+- 命名规范（废弃后继续生效）：`breadth`/`广度` 只指 Data 的全市场口径；请求证券集合内的比例必须叫 `cross_section_*`/`*_participation` 且显式写分母。旧四个 `watchlist_*`/`insufficient_cross_section` 字符串随阶段 4 删除，不进新契约。
+- 本轮不改任何契约状态：QNT-CTR-003 `deferred`、004/005 `frozen`、QNT-005 `NOT_STARTED`；不新增代码/Schema/Stage。
