@@ -62,32 +62,6 @@ func newNewsFeedStageComposition(
 		return nil, fmt.Errorf("validate trusted News Feed source catalog: %w", err)
 	}
 
-	publisher, err := newsapp.NewPublishNewsPolicyVersion(repository)
-	if err != nil {
-		return nil, fmt.Errorf("create News Feed policy publisher: %w", err)
-	}
-	policySourceIDs := make([]string, 0, len(policies))
-	for sourceID := range policies {
-		policySourceIDs = append(policySourceIDs, sourceID)
-	}
-	sort.Strings(policySourceIDs)
-	for _, sourceID := range policySourceIDs {
-		source := policies[sourceID]
-		if err := ctx.Err(); err != nil {
-			return nil, err
-		}
-		payload, err := json.Marshal(source.SourcePolicy)
-		if err != nil {
-			return nil, fmt.Errorf("encode News Feed source policy %q: %w", sourceID, err)
-		}
-		if err := publisher.ExecuteIfCurrent(
-			ctx, newsdomain.NewsPolicyTypeSource, sourceID,
-			source.SourcePolicyVersionID, source.ExpectedCurrentSourcePolicyVersionID, payload,
-		); err != nil {
-			return nil, fmt.Errorf("publish News Feed source policy %q@%s with expected current %q: %w",
-				sourceID, source.SourcePolicyVersionID, source.ExpectedCurrentSourcePolicyVersionID, err)
-		}
-	}
 
 	transport, err := newssource.NewPlatformEndpointTransport(client, registrations)
 	if err != nil {
@@ -115,6 +89,36 @@ func newNewsFeedStageComposition(
 		resourceRefs = append(resourceRefs, ref)
 	}
 	sort.Strings(resourceRefs)
+
+	// Publish policy pointers only after all in-memory dependencies and registrations
+	// have passed validation, so an invalid transport/adapter cannot mutate policy state.
+	publisher, err := newsapp.NewPublishNewsPolicyVersion(repository)
+	if err != nil {
+		return nil, fmt.Errorf("create News Feed policy publisher: %w", err)
+	}
+	policySourceIDs := make([]string, 0, len(policies))
+	for sourceID := range policies {
+		policySourceIDs = append(policySourceIDs, sourceID)
+	}
+	sort.Strings(policySourceIDs)
+	for _, sourceID := range policySourceIDs {
+		source := policies[sourceID]
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		payload, err := json.Marshal(source.SourcePolicy)
+		if err != nil {
+			return nil, fmt.Errorf("encode News Feed source policy %q: %w", sourceID, err)
+		}
+		if err := publisher.ExecuteIfCurrent(
+			ctx, newsdomain.NewsPolicyTypeSource, sourceID,
+			source.SourcePolicyVersionID, source.ExpectedCurrentSourcePolicyVersionID, payload,
+		); err != nil {
+			return nil, fmt.Errorf("publish News Feed source policy %q@%s with expected current %q: %w",
+				sourceID, source.SourcePolicyVersionID, source.ExpectedCurrentSourcePolicyVersionID, err)
+		}
+	}
+
 	return &newsFeedStageComposition{
 		catalog: catalog, registrations: registrations,
 		executor: newsFeedStageExecutor{adapter: adapter},
