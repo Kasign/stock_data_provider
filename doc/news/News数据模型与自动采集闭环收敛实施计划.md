@@ -35,7 +35,7 @@
 - 主体、来源身份、Observation 和内容版本由同一个正式入库事务提交；不再有双阶段 ResearchUpdate。
 - News 不负责转载关系、事件聚合、证券/行业关系或身份历史。
 - Research 通过 News Evidence Query 使用 NewsID + VersionID；PIT 继续依赖 Version、Observation、Availability Evidence/Decision。
-- Server 当前已有 Provider Search Stage 和 Research Evidence Query 装配，但完整 Feed SourceCatalog/Transport/Collect/Ingest 生产组合仍待 P0-4。
+- Server 已装配 Provider Search Stage、Feed SourceCatalog/Platform Transport/Collect/Ingest 和 Researchflow Feed Stage；Feed 生产组合的实现与最终验收状态见 P0-4。
 - StaticSourceCatalog、Platform Endpoint Transport、CollectSource、Source Policy Resolver、Policy Version Publisher 已存在，继续复用。
 - StageOutput 生命周期属于 Researchflow，不由 News Cleaner 管理。
 
@@ -238,4 +238,4 @@ P0-1 全量依赖审计已完成；本计划后续只对具体字段、SQL 和�
 
 ## 7. 会话恢复
 
-继续任务时先核对 `repair_all` 最新 HEAD，再直接从当前未完成阶段继续。P0-1 已关闭，不得重复审计。当前从 P0-4 Feed Server 生产装配开始。P0-2/P0-3 已完成，不得重复 Schema 审计或统一入库测试方案；只在 P0-4 新增真实生产装配与 Researchflow 调用路径。只操作 `repair_all`，按功能组提交，中文文档/注释/提交信息。
+继续任务时先核对 repair_all 最新 HEAD。P0-1/P0-2/P0-3 已关闭，不得重复审计或重新设计 Schema/统一入库。P0-4 生产装配已实现，当前只做最终 Go Test/Race/Vet/MariaDB/Integration CI 验收和失败修复；若用户要求周期采集，再在 Researchflow 设计通用周期触发，不新增 News Scheduler。只操作 repair_all，中文文档/注释/提交信息。
