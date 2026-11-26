@@ -130,8 +130,11 @@ func (r *Registry) ResolveSourceEndpoints(ref string, sourceEndpointRefs []strin
 	if !ok || ref != NewsFeedConfiguredSourcesRef {
 		return Snapshot{}, fmt.Errorf("%w: %q", ErrPolicyNotFound, ref)
 	}
-	if len(sourceEndpointRefs) == 0 || len(sourceEndpointRefs) > maxSourceEndpointRefs {
-		return Snapshot{}, fmt.Errorf("%w: Feed inventory must contain 1..%d Source/Endpoint references", ErrInvalidInventory, maxSourceEndpointRefs)
+	if len(sourceEndpointRefs) == 0 {
+		return Snapshot{}, ErrNoProviders
+	}
+	if len(sourceEndpointRefs) > maxSourceEndpointRefs {
+		return Snapshot{}, fmt.Errorf("%w: Feed inventory cannot exceed %d Source/Endpoint references", ErrInvalidInventory, maxSourceEndpointRefs)
 	}
 	refs := append([]string(nil), sourceEndpointRefs...)
 	for i, value := range refs {

@@ -2,6 +2,7 @@ package resourcepolicy
 
 import (
 	"errors"
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -49,6 +50,20 @@ func TestResolveSourceEndpointsRejectsInvalidAndDuplicateReferences(t *testing.T
 	}
 	if _, err := registry.Resolve(NewsFeedConfiguredSourcesRef, []string{"news_feed_catalog"}); !errors.Is(err, ErrInvalidInventory) {
 		t.Fatalf("Feed policy accepted generic Provider marker: %v", err)
+	}
+}
+
+func TestResolveSourceEndpointsRejectsMoreThanConfiguredMaximum(t *testing.T) {
+	registry, err := NewRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	refs := make([]string, maxSourceEndpointRefs+1)
+	for i := range refs {
+		refs[i] = fmt.Sprintf("source-%02d/primary@%s", i, strings.Repeat("a", 64))
+	}
+	if _, err := registry.ResolveSourceEndpoints(NewsFeedConfiguredSourcesRef, refs); !errors.Is(err, ErrInvalidInventory) {
+		t.Fatalf("oversized Feed inventory returned %v", err)
 	}
 }
 
