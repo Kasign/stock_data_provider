@@ -34,6 +34,12 @@ func TestFactorWithContextValidatesSharedCalculationContext(t *testing.T) {
 		run  func(domain.CalculationContext) (Result, error)
 		want string
 	}{
+		{"momentum_5d", func(ctx domain.CalculationContext) (Result, error) {
+			return Momentum5WithContext(ctx, now, closes21[:6])
+		}, "momentum_5d"},
+		{"ma20_distance", func(ctx domain.CalculationContext) (Result, error) {
+			return MADistance20WithContext(ctx, now, closes21)
+		}, "ma20_distance"},
 		{"momentum_20d", func(ctx domain.CalculationContext) (Result, error) {
 			return Momentum20WithContext(ctx, now, closes21)
 		}, "momentum_20d"},
