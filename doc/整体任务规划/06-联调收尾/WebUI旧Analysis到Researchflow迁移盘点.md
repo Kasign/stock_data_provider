@@ -354,6 +354,8 @@ analysisd 当前明确要求 GO_CORE_TOKEN、PYTHON_BRIDGE_TOKEN、PYTHON_BRIDGE
 
 本节覆盖旧版盘点中已过时的基线描述。后续执行以本节和当前代码为准，不再沿用 2026-11-24 的单模板数量结论。
 
+可勾选的任务清单、责任模块与退出条件已收敛到 [旧Analysis退役执行清单](./旧Analysis退役执行清单.md)；本节继续作为该清单的事实源与调用链证据，任务状态与勾选以清单为准。
+
 ### 10.1 当前边界（已由代码确认）
 
 - Root Server 是唯一外部 HTTP 入口和组合根；Researchflow 只提供内部 Application/执行编排，不独立启动 HTTP Listener、不直接暴露外部 API。

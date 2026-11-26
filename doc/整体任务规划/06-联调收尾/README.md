@@ -10,7 +10,8 @@
 - [Quant模块卡点](./Quant模块卡点.md)
 - [Research模块卡点](./Research模块卡点.md)
 - [Researchflow模块卡点](./Researchflow模块卡点.md)
-- [WebUI旧Analysis到Researchflow迁移盘点](./WebUI旧Analysis到Researchflow迁移盘点.md)：旧 Task/Event API、新 Run/Stage API、认证边界、生产模板缺口和退役条件。
+- [旧Analysis退役执行清单](./旧Analysis退役执行清单.md)：旧 Analysis 退役主线的唯一可勾选执行清单，按阶段列任务、状态、责任模块与退出条件。阶段依赖、当前卡点和执行口径以此为准。
+- [WebUI旧Analysis到Researchflow迁移盘点](./WebUI旧Analysis到Researchflow迁移盘点.md)：旧 Task/Event API、新 Run/Stage API、认证边界、生产模板缺口和退役条件。退役事实与逐阶段能力映射是该清单的事实源。
 - [LLM模块卡点](./LLM模块卡点.md)
 - [Platform模块卡点](./Platform模块卡点.md)
 - [Server模块卡点](./Server模块卡点.md)
