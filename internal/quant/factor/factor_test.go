@@ -13,6 +13,31 @@ func assertNear(t *testing.T, got, want float64) {
 	}
 }
 
+func TestMomentum5Uses6Closes(t *testing.T) {
+	closes := []float64{100, 101, 102, 103, 104, 105}
+	got, err := Momentum5(closes)
+	if err != nil { t.Fatal(err) }
+	if got.Code != "momentum_5d" || got.Status != StatusAvailable || got.SampleCount != 6 { t.Fatalf("unexpected result: %+v", got) }
+	assertNear(t, got.Value, 105.0/100.0-1)
+}
+
+func TestMADistance20UsesLatest20Closes(t *testing.T) {
+	closes := make([]float64, 21)
+	for i := range closes { closes[i] = 100 }
+	closes[0] = 1000 // must be outside the MA20 window
+	closes[20] = 110
+	got, err := MADistance20(closes)
+	if err != nil { t.Fatal(err) }
+	if got.Code != "ma20_distance" || got.Status != StatusAvailable || got.SampleCount != 20 { t.Fatalf("unexpected result: %+v", got) }
+	assertNear(t, got.Value, 0.1)
+}
+
+func TestMADistance20InsufficientData(t *testing.T) {
+	got, err := MADistance20([]float64{100, 101, 102})
+	if err != nil { t.Fatal(err) }
+	if got.Status != StatusInsufficientData || got.SampleCount != 3 { t.Fatalf("unexpected result: %+v", got) }
+}
+
 func TestMomentum20Uses21Closes(t *testing.T) {
 	closes := make([]float64, 21)
 	for i := range closes {
