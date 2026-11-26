@@ -90,8 +90,13 @@ func newNewsFeedStageComposition(
 		resourceRefs = append(resourceRefs, ref)
 	}
 	sort.Strings(resourceRefs)
+	policySourceIDs := make([]string, 0, len(policies))
+	for sourceID := range policies {
+		policySourceIDs = append(policySourceIDs, sourceID)
+	}
+	sort.Strings(policySourceIDs)
 
-sourcePolicies := make([]newsconfig.FeedSource, 0, len(policies))
+	sourcePolicies := make([]newsconfig.FeedSource, 0, len(policies))
 	for _, sourceID := range policySourceIDs {
 		sourcePolicies = append(sourcePolicies, policies[sourceID])
 	}
