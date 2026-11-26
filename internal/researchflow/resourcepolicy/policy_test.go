@@ -3,6 +3,7 @@ package resourcepolicy
 import (
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -91,12 +92,18 @@ func TestResolveSourceEndpointsSnapshotsExactSortedIdentityOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	inventory := []string{"source-b/secondary", "source-a/primary"}
+	inventory := []string{
+		"source-b/secondary@" + strings.Repeat("b", 64),
+		"source-a/primary@" + strings.Repeat("a", 64),
+	}
 	snapshot, err := registry.ResolveSourceEndpoints(NewsFeedConfiguredSourcesRef, inventory)
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"source-a/primary", "source-b/secondary"}
+	want := []string{
+		"source-a/primary@" + strings.Repeat("a", 64),
+		"source-b/secondary@" + strings.Repeat("b", 64),
+	}
 	if !reflect.DeepEqual(snapshot.AllowedSourceEndpointRefs, want) ||
 		len(snapshot.AllowedProviderCodes) != 0 {
 		t.Fatalf("Feed Source/Endpoint snapshot = %+v", snapshot)
@@ -122,17 +129,17 @@ func TestResolveSourceEndpointsRejectsUnknownEmptyInvalidAndDuplicateInventory(t
 		t.Fatalf("empty Feed inventory must fail closed, got %v", err)
 	}
 	for _, inventory := range [][]string{
-		{"source/endpoint", "source/endpoint"},
-		{"source/endpoint/extra"},
-		{"source /endpoint"},
-		{"../source/endpoint"},
-		{"source/"},
+		{"source/endpoint@" + strings.Repeat("a", 64), "source/endpoint@" + strings.Repeat("a", 64)},
+		{"source/endpoint/extra@" + strings.Repeat("a", 64)},
+		{"source /endpoint@" + strings.Repeat("a", 64)},
+		{"../source/endpoint@" + strings.Repeat("a", 64)},
+		{"source/@" + strings.Repeat("a", 64)},
 	} {
 		if _, err := registry.ResolveSourceEndpoints(NewsFeedConfiguredSourcesRef, inventory); !errors.Is(err, ErrInvalidInventory) {
 			t.Errorf("Feed inventory %#v must be rejected, got %v", inventory, err)
 		}
 	}
-	if _, err := registry.Resolve(NewsFeedConfiguredSourcesRef, []string{"news_feed_catalog"}); !errors.Is(err, ErrPolicyNotFound) {
+	if _, err := registry.Resolve(NewsFeedConfiguredSourcesRef, []string{"news_feed_catalog"}); !errors.Is(err, ErrInvalidInventory) {
 		t.Fatalf("Feed ResourcePolicy must not accept Provider codes, got %v", err)
 	}
 }
@@ -142,7 +149,7 @@ func TestValidateFeedResourceSnapshotRejectsProviderCodesAndNonCanonicalRefs(t *
 	if err != nil {
 		t.Fatal(err)
 	}
-	snapshot, err := registry.ResolveSourceEndpoints(NewsFeedConfiguredSourcesRef, []string{"source/endpoint"})
+	snapshot, err := registry.ResolveSourceEndpoints(NewsFeedConfiguredSourcesRef, []string{"source/endpoint@" + strings.Repeat("a", 64)})
 	if err != nil {
 		t.Fatal(err)
 	}
