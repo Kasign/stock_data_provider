@@ -14,6 +14,7 @@ import (
 	researchflowapplication "example.com/stock-analysis-flow/internal/researchflow/application"
 	"example.com/stock-analysis-flow/internal/researchflow/parameterschema"
 	"example.com/stock-analysis-flow/internal/researchflow/resourcepolicy"
+	"example.com/stock-analysis-flow/internal/researchflow/stageoutput"
 	researchflowstorage "example.com/stock-analysis-flow/internal/researchflow/storage"
 	"example.com/stock-analysis-flow/internal/researchflow/template"
 	serverconfig "example.com/stock-analysis-flow/internal/server/config"
@@ -174,6 +175,21 @@ func newResearchflowComposition(
 		}
 		workflowTemplates = append(workflowTemplates, riskTemplate)
 	}
+	// The four-Stage parallel template is only assembled when every Quant Stage
+	// is configured; otherwise its combined Registry would reference missing
+	// entries. Same gate as the single-Stage Quant templates.
+	var quantResearchRegistry *stageoutput.Registry
+	if quantStage != nil && quantFactorStage != nil && quantTrendStage != nil && quantRiskStage != nil {
+		researchTemplate, combined, templateErr := buildQuantResearchWorkflowTemplate(
+			quantStage.registry, quantFactorStage.registry, quantTrendStage.registry, quantRiskStage.registry,
+			policyRegistry,
+		)
+		if templateErr != nil {
+			return nil, fmt.Errorf("preflight Quant Research workflow template: %w", templateErr)
+		}
+		workflowTemplates = append(workflowTemplates, researchTemplate)
+		quantResearchRegistry = combined
+	}
 
 	policyResolver := configuredResourcePolicyResolver{
 		registry: policyRegistry, providerCodesByRef: providerInventories,
@@ -207,6 +223,11 @@ func newResearchflowComposition(
 	if quantRiskStage != nil {
 		outputRegistriesList = append(outputRegistriesList, quantRiskStage.registry)
 		quantRiskExecutor = quantRiskStage.executor
+	}
+	// 合并 Registry 必须与 quant.research 模板同进同退：模板引用 1.6.0，
+	// 没有注册该版本时 Worker 在写 Stage Output 时会因解析失败而无法提交。
+	if quantResearchRegistry != nil {
+		outputRegistriesList = append(outputRegistriesList, quantResearchRegistry)
 	}
 	outputRegistries, err := researchflowapplication.NewStageOutputRegistrySet(outputRegistriesList...)
 	if err != nil {
