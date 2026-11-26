@@ -534,8 +534,8 @@ func TestReaderGetDailyBarsSelectsCurrentAndPITUseCases(t *testing.T) {
 		pit.Bars[0].ExactValues.RawAmount == nil || *pit.Bars[0].ExactValues.RawAmount != exactRawAmount {
 		t.Fatalf("PIT Application DTO lost exact decimal sidecar: %+v", pit.Bars)
 	}
-	if pit.QualityStatus != app.QualityDegraded {
-		t.Fatalf("PIT quality = %q, want degraded due to revision warning", pit.QualityStatus)
+	if pit.QualityStatus != app.QualityValid {
+		t.Fatalf("PIT quality = %q, want valid because revision reconstruction is informational", pit.QualityStatus)
 	}
 }
 

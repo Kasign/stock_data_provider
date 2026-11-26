@@ -1567,3 +1567,12 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - 本地全量 `go test -p 1 ./...`（真实 DSN）出现一处 News 并发摄取失败：`TestNewsMariaDBApplicationIntegration` 报 `Error 1020 Record has changed since last read`。归因：本机镜像为 mariadb:11，CI 为 11.4；该用例（跨来源并发规范 URL 摄取）从未在本地 DSN 模式验证过，且本轮未修改任何 News 代码。按规则 12 不修改无关模块消除失败；CI 结论以推送后为准，本节不预填 PASS。
 
 - CI（`2e21208d6`）：Integration CI 45820373465 / Required checks 45820373630 / Go test suite 45820373809 / Quant module validation 45820373642 全部 success；Integration CI 中新增的 `Run quant.research MariaDB/Redis L3 integration test` 步骤结论 success，证明 L3 门禁在 CI 真实 MariaDB 11.4 / Redis 7.4 下通过而非 SKIP。
+
+## 2026-11-26 行情种子数据专项：真实 Data Module 下四 Stage 结果闭环
+
+- 影响分析先行：`doc/quant/14-行情种子数据专项影响分析.md`。用户决议按推荐项执行：方案 A（真实种子 + 真实 Data Module）、D1/D2 按推荐；合成但合法种子 + risk 保留 reject。
+- 新增 `internal/server/bootstrap/quant_research_l3_seed_test.go`：通过生产 Repository API 向 L3 隔离库写入 PIT bar revisions、两张精确区间交易日历、授权策略与 trading-status 事实；所有 bar 带规范化 Volume/Amount 与精确 Close 证据，日历/bar/limit 相互自洽。
+- L3 测试 `TestQuantResearchMariaDBRedisL3` 从"仅四 Stage terminal"收紧为：Run `succeeded`；`quant.factor`/`quant.trend` `succeeded`、`quant.sma20` `degraded [quant_sma20_insufficient_data]`，四 Stage 均有 OutputRef；读取 risk payload 断言 `status=reject`、`result_status=rejected`、`missing_facts` 含 `price_limit` 与 `tradable_volume`。
+- 逐层失败归因与修复（均未降低门禁）：① 种子 SourceVersion 改为 Close Series 白名单常量；② PIT 重建提示不再被当作质量降级（同步修正 normalize/reader 测试）；③ bar 补齐 Volume/Amount；④ 日历按精确 start/end 分别写入；⑤ 因 sma20/factor 共用日历且 factor limit=6、`minimum_coverage=1`，10 月窗口只保留 6 个交易日，sma20 合法降级；⑥ risk 事实补齐历史名称与上市交易日序号；⑦ 修复真实 MariaDB 首次暴露的授权决策 JSON 字段顺序缺陷（Application 签发结构与 Repository 规范化字节校验不一致）。
+- 本地针对性验收：`go test -p 1 ./internal/marketdata/normalize/ ./internal/marketdata/application/` PASS；`go test -p 1 ./internal/marketdata/application/ ./internal/marketdata/repository/ -run 'DataAuthorization|DataAllowed|Snapshot' -count=1` PASS；`go test -p 1 ./internal/server/bootstrap/ -run '^TestQuantResearchMariaDBRedisL3$' -count=1 -v -timeout 150s` PASS。
+- 边界：三处变异验证（无日历/无策略/未来 SystemObservedAt）未执行，状态 `not_run`；完整 CI 未执行，状态 `not_run`，不得用本地 PASS 冒充。阶段 2.1 的数据准备边界已关闭；2.2/2.3/2.4、阶段 3/4/5 仍按依赖顺序推进。

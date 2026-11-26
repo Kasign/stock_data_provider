@@ -336,11 +336,14 @@ func ValidateAndSortBars(symbol string, bars []model.DailyBar, start, end string
 	return valid, unique(warnings)
 }
 
-// HasQualityDegradingBarWarnings distinguishes data-quality warnings from the
-// informational notice emitted when a response is capped to the requested limit.
+// HasQualityDegradingBarWarnings distinguishes data-quality warnings from
+// informational notices. A PIT response is reconstructed from recorded
+// revisions by design; that notice must not make every PIT snapshot degraded,
+// otherwise DATA-CTR-007 snapshots (which require an explicit PIT cutoff) can
+// never be created.
 func HasQualityDegradingBarWarnings(warnings []string) bool {
 	for _, warning := range warnings {
-		if warning == "" || warning == "bars_truncated_to_limit" {
+		if warning == "" || warning == "bars_truncated_to_limit" || warning == "daily_bars_reconstructed_from_recorded_revisions" {
 			continue
 		}
 		return true

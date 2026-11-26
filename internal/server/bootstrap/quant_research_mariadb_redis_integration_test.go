@@ -22,12 +22,22 @@ import (
 	platformhttpclient "example.com/stock-analysis-flow/internal/platform/httpclient"
 	platformsecurity "example.com/stock-analysis-flow/internal/platform/security"
 	platformstorage "example.com/stock-analysis-flow/internal/platform/storage"
+	quantstage "example.com/stock-analysis-flow/internal/quant/stage"
 	researchflowdomain "example.com/stock-analysis-flow/internal/researchflow/domain"
 	serverconfig "example.com/stock-analysis-flow/internal/server/config"
 	serverresources "example.com/stock-analysis-flow/internal/server/resources"
 )
 
 const quantResearchL3TestEnv = "QUANT_RESEARCH_MARIADB_REDIS_L3_TEST"
+
+func containsString(values []string, target string) bool {
+	for _, value := range values {
+		if value == target {
+			return true
+		}
+	}
+	return false
+}
 
 // TestQuantResearchMariaDBRedisL3 verifies the production composition path for
 // quant.research against real MariaDB and Redis: the template is published, an
@@ -101,6 +111,21 @@ func TestQuantResearchMariaDBRedisL3(t *testing.T) {
 	if err != nil {
 		t.Fatalf("apply migrations: report=%+v error=%v", report, err)
 	}
+
+	// Seed real PIT rows through production repository APIs so the real Worker's
+	// Data Module can construct authorized Close Series / facts Snapshots from
+	// MariaDB. Every gate (PIT timestamps, normalization version, exact-value
+	// evidence, valid calendar, published policies) is satisfied by the fixtures
+	// in quant_research_l3_seed_test.go; no snapshot is forged. See doc/quant/14.
+	l3DataStore, err := marketdatarepository.NewWithBorrowedDB(db)
+	if err != nil {
+		t.Fatalf("create L3 seed Data store: %v", err)
+	}
+	seedQuantResearchL3(t, ctx, l3DataStore)
+	// UpsertBars stamps revisions with UTC_TIMESTAMP(6) and the PIT reader rewrites
+	// SystemObservedAt to that recorded_at. Give the clock a clear margin so the Run
+	// system_as_of (used as the PIT cutoff) is strictly after the seeded revisions.
+	time.Sleep(2 * time.Second)
 
 	redisClient, err := platformstorage.OpenRedis(ctx, redis.Options{
 		Addr: redisAddr, Password: os.Getenv("REDIS_PASSWORD"), DB: 15,
@@ -204,6 +229,7 @@ func TestQuantResearchMariaDBRedisL3(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read persisted quant.research Run: %v", err)
 	}
+
 	if loaded.Run.Status != researchflowdomain.RunCreated || len(loaded.Stages) != 4 {
 		t.Fatalf("persisted Run shape: status=%s stages=%d", loaded.Run.Status, len(loaded.Stages))
 	}
@@ -276,8 +302,52 @@ func TestQuantResearchMariaDBRedisL3(t *testing.T) {
 			t.Fatalf("Stage %s was never dispatched by the real Worker", stage.Code)
 		}
 	}
-	t.Logf("L3 terminal status=%s stages=%d", loaded.Run.Status, len(loaded.Stages))
+	if loaded.Run.Status != researchflowdomain.RunSucceeded {
+		t.Fatalf("L3 Run status=%s, want succeeded\n%s", loaded.Run.Status, child.output.String())
+	}
+	wantStageStatus := map[string]researchflowdomain.StageStatus{
+		"quant.sma20":  researchflowdomain.StageDegraded,
+		"quant.factor": researchflowdomain.StageSucceeded,
+		"quant.trend":  researchflowdomain.StageSucceeded,
+		"quant.risk":   researchflowdomain.StageSucceeded,
+	}
+	stagesByCode := make(map[string]researchflowdomain.Stage, len(loaded.Stages))
 	for _, stage := range loaded.Stages {
-		t.Logf("stage=%s status=%s reasons=%v output=%v", stage.Code, stage.Status, stage.ReasonCodes, stage.OutputRef != nil)
+		stagesByCode[stage.Code] = stage
+		want, ok := wantStageStatus[stage.Code]
+		if !ok {
+			t.Fatalf("unexpected Stage %s in quant.research Run", stage.Code)
+		}
+		if stage.Status != want {
+			t.Fatalf("Stage %s status=%s reasons=%v, want %s\n%s", stage.Code, stage.Status, stage.ReasonCodes, want, child.output.String())
+		}
+		if stage.OutputRef == nil {
+			t.Fatalf("Stage %s has no persisted output; reasons=%v", stage.Code, stage.ReasonCodes)
+		}
+	}
+	for code, want := range wantStageStatus {
+		if _, ok := stagesByCode[code]; !ok {
+			t.Fatalf("quant.research Run is missing Stage %s (want %s)", code, want)
+		}
+	}
+	sma := stagesByCode["quant.sma20"]
+	if len(sma.ReasonCodes) != 1 || sma.ReasonCodes[0] != "quant_sma20_insufficient_data" {
+		t.Fatalf("sma20 reasons=%v, want [quant_sma20_insufficient_data]", sma.ReasonCodes)
+	}
+
+	riskStage := stagesByCode["quant.risk"]
+	riskPayloadResource, err := owner.execution.runRepository.GetStageOutputResource(ctx, *riskStage.OutputRef)
+	if err != nil {
+		t.Fatalf("read risk Stage payload: %v", err)
+	}
+	var riskPayload quantstage.RiskOutput
+	if err := json.Unmarshal(riskPayloadResource.Content, &riskPayload); err != nil {
+		t.Fatalf("decode risk Stage payload: %v", err)
+	}
+	if riskPayload.Status != "reject" || riskPayload.ResultStatus != "rejected" {
+		t.Fatalf("risk decision=%s result_status=%s, want reject/rejected", riskPayload.Status, riskPayload.ResultStatus)
+	}
+	if !containsString(riskPayload.MissingFacts, "price_limit") || !containsString(riskPayload.MissingFacts, "tradable_volume") {
+		t.Fatalf("risk missing_facts=%v, want price_limit and tradable_volume", riskPayload.MissingFacts)
 	}
 }

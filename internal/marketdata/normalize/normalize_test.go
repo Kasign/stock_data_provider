@@ -111,9 +111,11 @@ func TestInvalidOHLCWarningIncludesDroppedRowContext(t *testing.T) {
 	}
 }
 
-func TestBarWarningsDistinguishTruncationFromQualityLoss(t *testing.T) {
-	if HasQualityDegradingBarWarnings([]string{"bars_truncated_to_limit"}) {
-		t.Fatal("intentional result cap must not degrade otherwise valid bars")
+func TestBarWarningsDistinguishInformationalNoticesFromQualityLoss(t *testing.T) {
+	for _, warning := range []string{"bars_truncated_to_limit", "daily_bars_reconstructed_from_recorded_revisions"} {
+		if HasQualityDegradingBarWarnings([]string{warning}) {
+			t.Fatalf("informational warning %q must not degrade otherwise valid bars", warning)
+		}
 	}
 	if !HasQualityDegradingBarWarnings([]string{"invalid_ohlc_bar_dropped", "bars_truncated_to_limit"}) {
 		t.Fatal("invalid OHLC data must still degrade the result")

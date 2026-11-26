@@ -23,8 +23,11 @@ var (
 	ErrDataAuthorizationInvalid     = errors.New("data authorization reference invalid")
 )
 
+// Field order is part of the persisted contract: the repository re-marshals
+// these structures and requires byte-for-byte canonical agreement before an
+// authorization decision may be stored. Keep this order aligned with
+// storedDataAuthorizationRef and GOV-CTR-006-data-allowed.golden.json.
 type dataAuthorizationRef struct {
-	SchemaVersion       string   `json:"schema_version"`
 	AuthorizationRef    string   `json:"authorization_ref"`
 	PolicyOwner         string   `json:"policy_owner"`
 	PolicyVersion       string   `json:"policy_version"`
@@ -37,17 +40,20 @@ type dataAuthorizationRef struct {
 	ExpiresAt           *string  `json:"expires_at"`
 	Conditions          []string `json:"conditions"`
 	DecisionFingerprint string   `json:"decision_fingerprint"`
+	SchemaVersion       string   `json:"schema_version"`
 }
 
+// The nested policy snapshot is re-marshalled from a generic map by the
+// repository, so its keys must already be in lexicographic order.
 type dataAuthorizationPolicySnapshot struct {
-	SnapshotRef   string                          `json:"snapshot_ref"`
 	Policies      []dataAuthorizationPolicyRecord `json:"policies"`
 	SchemaVersion string                          `json:"schema_version"`
+	SnapshotRef   string                          `json:"snapshot_ref"`
 }
 
 type dataAuthorizationPolicyRecord struct {
-	PolicyType    string `json:"policy_type"`
 	PolicyRef     string `json:"policy_ref"`
+	PolicyType    string `json:"policy_type"`
 	PolicyVersion string `json:"policy_version"`
 }
 

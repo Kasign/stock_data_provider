@@ -84,12 +84,12 @@
 
 | # | 任务 | 主责 | 状态 | 退出条件 / 可验证证据 |
 |---|---|---|---|---|
-| 2.1 | 完整股票研究 Template / Stage / Registry + Root Server Worker 装配（当前仅 `quant.sma20` 单指标切片） | Researchflow + Server | 影响分析完成（2026-11-26，未实施） | 真实 Run 能跑完并持久化领域结果；SRV-CTR-001 Run Create/Get/Cancel 可用 |
+| 2.1 | 完整股票研究 Template / Stage / Registry + Root Server Worker 装配 | Researchflow + Server | 已完成（2026-11-26；L3 行情种子专项后关闭数据准备边界） | `quant.research@1.0.0` 四 Stage 已装配；真实 MariaDB/Redis + 真实 Worker OS 进程下 Run 终态成功，factor/trend 成功、sma20 合法降级、risk 可追溯 reject，四 Stage 均有 OutputRef；SRV-CTR-001 Run Create/Get/Cancel 可用。证据：`doc/quant/13` 第 11/12 节、`doc/quant/14`；CI 状态以精确提交 SHA 为准 |
 | 2.2 | Run ↔ Quant Result / Research Evidence 强类型关联 + 生产授权读取（`resultvalidation/quant.go` 当前零生产调用） | Quant + Researchflow | 未开始 | 同 Run 关联可读；跨 Run、无关联、伪造 RunRef、撤销竞态均 fail-closed |
 | 2.3 | Server 报告读取 DTO：鉴权后调用领域 Owner 授权读取；Run/Stage 聚合不冒充完整报告，不直接访问 Repository | Server | 未开始 | WebUI 有正式结果读取路径；UI 不访问模块 Repository |
 | 2.4 | FLOW-005/006 上下文一致性与风险语义：可信 CallerRef、SystemAsOf、Deadline 贯穿读取；RiskDecision 唯一来源统一 | Researchflow + Quant | 未开始 | 无第二份无来源绑定的 RiskDecision；block/unknown/缺失/撤销 fail-closed |
 
-**2.1 影响分析结论（2026-11-26，未实施）**：四个 Quant Stage 已各自可执行，但**无法直接组成一个模板**——模板只有一份参数文档，四个执行器用 `DisallowUnknownFields` 严格解码互斥的字段集（`trade_date` vs `start_date/end_date`，`limit` 下限 20/6/61 不同）；参数 Schema 校验器禁用外部 `$ref`；生产 `DependencyOutputValidator` 为 `nil`，任何带依赖的 Stage 会让调度器在上游成功后报错。推荐路线：`quant.research@1.0.0` = 四 Stage 并列无依赖 + 参数按 Stage 命名空间化（改 Worker 组装，不改四个执行器）+ 合并 Output Registry `1.6.0`。另需就 SRV-CTR-001 冻结请求 Schema 绑定 News 参数单独立 DEC。详见 `doc/quant/13-阶段2.1完整研究Template影响分析.md`。
+**2.1 影响分析结论与实施（2026-11-26）**：四个 Quant Stage 起初无法直接组成模板——模板只有一份参数文档，四个执行器用 `DisallowUnknownFields` 严格解码互斥字段集；参数 Schema 禁用外部 `$ref`；生产 `DependencyOutputValidator` 为 `nil`。落地路线：`quant.research@1.0.0` = 四 Stage 并列无依赖 + `ParameterScope=per_stage` 参数信封（`{"stages":{"<stage_code>":{...}}}`）+ 合并 Output Registry `1.6.0`；SRV-CTR-001 经 DEC-PLAT-002-063 新增 `create-run-request-1.1.0`。详见 `doc/quant/13`。后续 L3 补验先确认无种子时四 Stage fail-closed；行情种子专项（`doc/quant/14`）写入合法 PIT 种子后，Run 终态成功且三 Stage 产出 result、sma20 合法降级、risk 可追溯 reject，2.1 数据准备边界关闭。
 
 ## 5. 阶段 3 · WebUI 迁移
 
