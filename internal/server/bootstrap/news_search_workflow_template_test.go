@@ -26,7 +26,7 @@ func TestBuildNewsSearchWorkflowTemplatePreflightsAndFreezesDependencies(t *test
 	if err := template.Validate(value, nil); err != nil {
 		t.Fatalf("formal template failed validation: %v", err)
 	}
-	if value.Ref != "news.search_candidates" || value.Version != "1.0.0" ||
+	if value.Ref != "news.search_candidates" || value.Version != newsSearchWorkflowTemplateVersion ||
 		!value.AllowEmptyInputs || value.RequiresHardRiskGate ||
 		value.ParameterSchemaRef != newsSearchParameterSchemaRef ||
 		value.OutputRegistryVersion != newsSearchStageOutputRegistryVersion ||
@@ -55,6 +55,30 @@ func TestBuildNewsSearchWorkflowTemplatePreflightsAndFreezesDependencies(t *test
 		got.Propagation.OnTimedOut != domain.PropagateFail ||
 		got.Propagation.OnBlocked != domain.PropagateFail {
 		t.Fatalf("formal propagation policy drifted: %+v", got.Propagation)
+	}
+}
+
+func TestBuildNewsSearchWorkflowTemplateUsesNewImmutableVersionWithCombinedNewsRegistry(t *testing.T) {
+	stage, err := newNewsSearchStageCompositionWithProviders(newsapp.StaticProviderSet{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	combined, err := newNewsStageOutputRegistry(newsFeedStageOutputRegistryVersion, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stage.registry = combined
+	policies, err := resourcepolicy.NewRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	value, err := buildNewsSearchWorkflowTemplate(stage, policies)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if value.OutputRegistryVersion != newsFeedStageOutputRegistryVersion ||
+		value.Version != newsSearchWorkflowTemplateWithFeedVersion {
+		t.Fatalf("combined News registry must publish a new immutable Search template version: %+v", value)
 	}
 }
 

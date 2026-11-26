@@ -14,7 +14,8 @@ import (
 
 const (
 	newsSearchWorkflowTemplateRef     = "news.search_candidates"
-	newsSearchWorkflowTemplateVersion = "1.0.0"
+	newsSearchWorkflowTemplateVersion = "1.1.0"
+	newsSearchWorkflowTemplateWithFeedVersion = "1.2.0"
 	newsSearchRetryPolicyRef          = "news.search_candidates.retry@1.0.0"
 )
 
@@ -22,7 +23,8 @@ func buildNewsSearchWorkflowTemplate(stage *newsSearchStageComposition, policies
 	if stage == nil || stage.parameterSchemas == nil || stage.applicability == nil || stage.registry == nil || policies == nil {
 		return template.WorkflowTemplate{}, errors.New("News Search template prerequisites are incomplete")
 	}
-	if stage.registry.Version() != newsSearchStageOutputRegistryVersion {
+	if stage.registry.Version() != newsSearchStageOutputRegistryVersion &&
+		stage.registry.Version() != newsFeedStageOutputRegistryVersion {
 		return template.WorkflowTemplate{}, fmt.Errorf("News Search Output Registry version mismatch: %q", stage.registry.Version())
 	}
 	if newsSearchParameterSchemaRef == "" || newsSearchParameterSchemaVersion != "1.0.0" {
@@ -71,9 +73,13 @@ func buildNewsSearchWorkflowTemplate(stage *newsSearchStageComposition, policies
 		OnTimedOut: domain.PropagateFail,
 		OnBlocked:  domain.PropagateFail,
 	}
+	templateVersion := newsSearchWorkflowTemplateVersion
+	if stage.registry.Version() == newsFeedStageOutputRegistryVersion {
+		templateVersion = newsSearchWorkflowTemplateWithFeedVersion
+	}
 	value := template.WorkflowTemplate{
 		Ref:                   newsSearchWorkflowTemplateRef,
-		Version:               newsSearchWorkflowTemplateVersion,
+		Version:               templateVersion,
 		RequiresHardRiskGate:  false,
 		AllowEmptyInputs:      true,
 		ParameterSchemaRef:    newsSearchParameterSchemaRef,
