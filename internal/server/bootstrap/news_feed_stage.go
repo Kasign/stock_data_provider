@@ -23,11 +23,12 @@ import (
 const newsFeedStageOutputRegistryVersion = "1.2.0"
 
 type newsFeedStageComposition struct {
-	catalog *newssource.StaticSourceCatalog
-	registrations []newsapp.SourceEndpointRegistration
-	executor researchflowapplication.StageExecutor
-	registry *stageoutput.Registry
-	resourceRefs []string
+	catalog        *newssource.StaticSourceCatalog
+	registrations  []newsapp.SourceEndpointRegistration
+	sourcePolicies []newsconfig.FeedSource
+	executor       researchflowapplication.StageExecutor
+	registry       *stageoutput.Registry
+	resourceRefs   []string
 }
 
 func newNewsFeedStageComposition(
@@ -90,40 +91,69 @@ func newNewsFeedStageComposition(
 	}
 	sort.Strings(resourceRefs)
 
-	// Publish policy pointers only after all in-memory dependencies and registrations
-	// have passed validation, so an invalid transport/adapter cannot mutate policy state.
+sourcePolicies := make([]newsconfig.FeedSource, 0, len(policies))
+	for _, sourceID := range policySourceIDs {
+		sourcePolicies = append(sourcePolicies, policies[sourceID])
+	}
+	return &newsFeedStageComposition{
+		catalog: catalog, registrations: registrations, sourcePolicies: sourcePolicies,
+		executor: newsFeedStageExecutor{adapter: adapter},
+		resourceRefs: resourceRefs,
+	}, nil
+}
+
+// publishNewsFeedSourcePolicies runs only after the complete Server/Researchflow
+// composition has passed in-memory validation. Each source pointer remains protected
+// by its own expected-current CAS transaction in the News Repository.
+func publishNewsFeedSourcePolicies(
+	ctx context.Context,
+	sources []newsconfig.FeedSource,
+	repository *newsstorage.MySQLRepository,
+) error {
+	if len(sources) == 0 {
+		return nil
+	}
+	if ctx == nil || repository == nil {
+		return errors.New("News Feed Source Policy publication dependencies are required")
+	}
 	publisher, err := newsapp.NewPublishNewsPolicyVersion(repository)
 	if err != nil {
-		return nil, fmt.Errorf("create News Feed policy publisher: %w", err)
+		return fmt.Errorf("create News Feed policy publisher: %w", err)
 	}
-	policySourceIDs := make([]string, 0, len(policies))
-	for sourceID := range policies {
-		policySourceIDs = append(policySourceIDs, sourceID)
-	}
-	sort.Strings(policySourceIDs)
-	for _, sourceID := range policySourceIDs {
-		source := policies[sourceID]
-		if err := ctx.Err(); err != nil {
-			return nil, err
+	policies := make(map[string]newsconfig.FeedSource, len(sources))
+	for _, source := range sources {
+		if previous, exists := policies[source.SourceID]; exists {
+			if previous.SourcePolicyVersionID != source.SourcePolicyVersionID ||
+				previous.ExpectedCurrentSourcePolicyVersionID != source.ExpectedCurrentSourcePolicyVersionID {
+				return fmt.Errorf("News Feed source %q has conflicting policy version expectations", source.SourceID)
+			}
+			continue
 		}
+		policies[source.SourceID] = source
+	}
+	sourceIDs := make([]string, 0, len(policies))
+	for sourceID := range policies {
+		sourceIDs = append(sourceIDs, sourceID)
+	}
+	sort.Strings(sourceIDs)
+	for _, sourceID := range sourceIDs {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		source := policies[sourceID]
 		payload, err := json.Marshal(source.SourcePolicy)
 		if err != nil {
-			return nil, fmt.Errorf("encode News Feed source policy %q: %w", sourceID, err)
+			return fmt.Errorf("encode News Feed source policy %q: %w", sourceID, err)
 		}
 		if err := publisher.ExecuteIfCurrent(
 			ctx, newsdomain.NewsPolicyTypeSource, sourceID,
 			source.SourcePolicyVersionID, source.ExpectedCurrentSourcePolicyVersionID, payload,
 		); err != nil {
-			return nil, fmt.Errorf("publish News Feed source policy %q@%s with expected current %q: %w",
+			return fmt.Errorf("publish News Feed source policy %q@%s with expected current %q: %w",
 				sourceID, source.SourcePolicyVersionID, source.ExpectedCurrentSourcePolicyVersionID, err)
 		}
 	}
-
-	return &newsFeedStageComposition{
-		catalog: catalog, registrations: registrations,
-		executor: newsFeedStageExecutor{adapter: adapter},
-		resourceRefs: resourceRefs,
-	}, nil
+	return nil
 }
 
 func newsFeedIngestID() string {
