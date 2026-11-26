@@ -1540,5 +1540,18 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - 四处接线（缺一处即"注册成功但生产不可用/读不回"）：`isQuantStageCode` 服务身份注入、Dispatcher 按 Stage Code 分派、`quantStageAssociationSpecs` 结果授权读取白名单、`researchflow_template_prerequisites` 参数 Schema 与 `quant.risk.always` 适用性规则。历史教训：这类遗漏直接调 Adapter 的单测不会暴露，已各配专门测试。
 - 验收（"装配 + 拒绝路径"优先）：新增 23 个测试全 PASS（Facade 6、输出契约 4 含 14 个篡改变异子用例、Stage 组合 9、端到端 4）。断言 `decision_status=reject`、`missing_facts=[price_limit,tradable_volume]`、`evidence_refs` 精确等于 `[facts_snapshot_ref, authorization_ref]`、`evaluated_at == system_as_of`、`result_id` 可解到已落库记录且 `record.Validate()` 通过。
 - 变异验证 6 处全部有效失败并已恢复。其中"关联规格表漏登记 `quant.risk`"**原契约测试未捕获**（按表遍历会随表变短），已补 `TestQuantRiskStageIsRegisteredForResultAssociation` 显式断言后捕获——属补强要求而非调低标准。
-- 验证：`gofmt`/`go vet`/`go test ./internal/...` 全绿；`-race` 覆盖 `internal/quant/...` 与 `internal/server/bootstrap` 无告警。真实 MariaDB 集成与 CI 结论均未完成/未执行，本节不预填。
+- 验证：`gofmt`/`go vet`/`go test ./internal/...` 全绿；`-race` 覆盖 `internal/quant/...` 与 `internal/server/bootstrap` 无告警。真实 MariaDB 集成未在本地执行（无 DSN）；CI 结论见下节（首推失败于无关断言、修复后全绿），本节不预填。
 - 1.4 仍为**部分完成**：链路与装配已通，但 `AssessTradabilityFacts` 无条件补两项缺失 → `Verified` 恒 false → 决策恒 `reject`，**门禁不能放行**。剩余阻塞为涨跌停制度表与可成交量模型（另行立项）。RF-BLOCK-008（Researchflow Composer 的 `RiskDecision` 投影）仍 OPEN，需双 Owner 决议。
+
+### 2026-11-26 首次推送的 CI 失败与修复（Data 迁移历史断言）
+
+- 推送 `8d3a9f40e..c4fd7380b` 后 Integration CI 失败（Run [45800949890](https://github.com/Kasign/stock_data_provider/actions/runs/45800949890)）：`internal/server/migration` 的 `TestMarketDataBaselineMigrationAndConcurrentRootRegistration` 断言"Data 迁移定义恰好一条 V1"，而 DEC-061 已按模块自身策略（"Fresh databases apply one V1. Future published schema changes start at V2"）新增 V2 `ADD COLUMN payload_kind`。
+- **未在本地发现的原因**：该测试以 `SERVER_RELAY_TEST_MYSQL_DSN` 门控，本地无 DSN 时输出 SKIP 并计为通过；同批修改里 `internal/marketdata/repository/mysql_versions_test.go` 与 `internal/marketdata/bootstrap/module_test.go` 已改为期望 2 条迁移，唯独这份 DSN 门控测试未同步。这是"跳过即绿"的典型盲区，不是 CI 环境问题。
+- 同一 Run 的其余 4 项工作流（Required checks 45800949902、Go test suite 45800949922、Quant module validation 45800949941、Live provider probe 45800949994）均 success，Integration CI 内除 `TEST_ROOT` 外 12 项检查亦全 success——失败仅由该断言引起，不含其他回归。
+- 修复（`cb11af410`，`test(data): 修正 Data 迁移历史断言以覆盖 V2 增量`）：
+  1. 去掉写死的版本数量，期望版本集合由 `MigrationDefinitions()` 推导，再与 `platform_schema_migrations` 逐条对齐（每个版本恰好一次且 `status=applied`），避免每加一条增量都要同步改这里；
+  2. 迁移列表形状继续由无 DSN 的 `mysql_versions_test.go` 与 `bootstrap/module_test.go` 守着，此处不重复；
+  3. 列存在性断言补 `market_data_daily_bars_close_series_snapshots.payload_kind`，让 V2 的实际效果被覆盖——此前 V2 只有"定义条数"层面的断言，缺"列真的建出来了"的证据。
+- 修复后 CI（`cb11af410`）：Integration CI [45802338022](https://github.com/Kasign/stock_data_provider/actions/runs/45802338022)（`Full integration checks` 全 13 项含 `TEST_ROOT`、`Summarize all checks` 均 success）、Go test suite [45802337955](https://github.com/Kasign/stock_data_provider/actions/runs/45802337955)、Required checks [45802337985](https://github.com/Kasign/stock_data_provider/actions/runs/45802337985) 均 success。
+- 该 SHA 只有上述 3 个工作流触发；`Quant module validation` 与 `Live provider probe` 因路径过滤未触发，**不以前一次运行的结论冒充**。
+- 代码组结论：`2e4b13583` 的生产代码与 `cb11af410` 一致（两者仅差该测试文件），由 `cb11af410` 的 CI 覆盖；`c4fd7380b` 自身的 CI 失败记录保留，不改写为通过。
