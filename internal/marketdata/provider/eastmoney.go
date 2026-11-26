@@ -31,6 +31,11 @@ const eastmoneyLookbackBufferDays = 30
 // Eastmoney limit-pool responses can be shorter than the source total; fetch small pages until the requested coverage is reached.
 const eastmoneyLimitPoolPageSize = 30
 
+// eastmoneyFullLimitPoolMaxRows bounds full-pool paging. A limit pool can never hold more
+// rows than the listed A-share universe (roughly 5.4k), so a larger reported total means the
+// provider response is not trustworthy: fail closed instead of paging toward it.
+const eastmoneyFullLimitPoolMaxRows = 6000
+
 // defaultEastmoneyUT is the public web token commonly used by Eastmoney front-end clients.
 // It is not a user credential or private API key; deployments can override it if Eastmoney rotates it.
 const defaultEastmoneyUT = "7eea3edcaed734bea9cbfc24409ed989"
@@ -2934,7 +2939,31 @@ func (p *Eastmoney) fetchMarketBreadthLimitCount(ctx context.Context, poolType, 
 	return &count, "", nil
 }
 
+// FetchLimitPool 取回至多 limit 条涨跌停池条目。
+//
+// limit 的上限是 100，且取满即停；limit <= 0 表示默认 100，**不表示全量**。需要完整池
+// （例如判断"某证券不在池内"）必须改用 FetchFullLimitPool。
 func (p *Eastmoney) FetchLimitPool(ctx context.Context, poolType, tradeDate string, limit int) (*model.LimitPoolSnapshot, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	if limit > 100 {
+		return nil, errors.New("limit-pool limit must not exceed 100")
+	}
+	return p.fetchLimitPool(ctx, poolType, tradeDate, limit)
+}
+
+// FetchFullLimitPool 取回该交易日该池的全部条目，不受 100 条限制。
+//
+// maxRows=0 表示不按条数截断，只受 eastmoneyFullLimitPoolMaxRows 安全上界约束。返回前
+// 断言 len(Items) == Total：只要源端 tc 与实际取到的行数不一致就报错，绝不返回"部分但
+// 自称完整"的快照——那会让未返回的证券被误判为未涨跌停。
+func (p *Eastmoney) FetchFullLimitPool(ctx context.Context, poolType, tradeDate string) (*model.LimitPoolSnapshot, error) {
+	return p.fetchLimitPool(ctx, poolType, tradeDate, 0)
+}
+
+// fetchLimitPool 是限额与全量共用的取数核心。maxRows<=0 表示全量（受安全上界约束）。
+func (p *Eastmoney) fetchLimitPool(ctx context.Context, poolType, tradeDate string, maxRows int) (*model.LimitPoolSnapshot, error) {
 	poolType = strings.ToLower(strings.TrimSpace(poolType))
 	endpoints := map[string]string{"up": "getTopicZTPool", "down": "getTopicDTPool", "broken": "getTopicZBPool"}
 	endpointPath, ok := endpoints[poolType]
@@ -2951,20 +2980,15 @@ func (p *Eastmoney) FetchLimitPool(ctx context.Context, poolType, tradeDate stri
 	if rawDate > today {
 		return nil, fmt.Errorf("limit-pool trade date %s must not be in the future (China market date %s)", rawDate, today)
 	}
-	if limit <= 0 {
-		limit = 100
-	}
-	if limit > 100 {
-		return nil, errors.New("limit-pool limit must not exceed 100")
+	// pageSize 决定单页请求量：限额模式不超过 limit（历史行为），全量模式固定 30。
+	pageSize := eastmoneyLimitPoolPageSize
+	if maxRows > 0 && maxRows < pageSize {
+		pageSize = maxRows
 	}
 	sortField := "fbt:asc"
 	if poolType == "down" {
 		// The DTPool endpoint has returned tc>0/pool=[] with fbt:asc; fund:asc returns its rows.
 		sortField = "fund:asc"
-	}
-	pageSize := limit
-	if pageSize > eastmoneyLimitPoolPageSize {
-		pageSize = eastmoneyLimitPoolPageSize
 	}
 	requestPage := func(pageIndex int) (int, json.RawMessage, []map[string]json.RawMessage, error) {
 		params := url.Values{
@@ -3038,8 +3062,18 @@ func (p *Eastmoney) FetchLimitPool(ctx context.Context, poolType, tradeDate stri
 	var sourceTotal int
 	var sourceQDate json.RawMessage
 	sourceRowsReturned := 0
-	poolRows := make([]map[string]json.RawMessage, 0, limit)
-	for pageIndex := 0; pageIndex < 100; pageIndex++ {
+	// 全量模式不预分配上限容量，避免为安全上界一次性分配 6000 个 map 头。
+	initialCapacity := maxRows
+	if initialCapacity <= 0 {
+		initialCapacity = eastmoneyLimitPoolPageSize * 4
+	}
+	poolRows := make([]map[string]json.RawMessage, 0, initialCapacity)
+	// maxPages 沿用既有的宽松安全界；全量模式按安全上界推导，避免行数多时提前中止。
+	maxPages := 100
+	if maxRows <= 0 {
+		maxPages = eastmoneyFullLimitPoolMaxRows/eastmoneyLimitPoolPageSize + 2
+	}
+	for pageIndex := 0; pageIndex < maxPages; pageIndex++ {
 		total, qdate, rows, requestErr := requestPage(pageIndex)
 		if requestErr != nil {
 			return nil, requestErr
@@ -3049,6 +3083,10 @@ func (p *Eastmoney) FetchLimitPool(ctx context.Context, poolType, tradeDate stri
 			sourceTotal, sourceQDate = total, qdate
 			if total == 0 && len(rows) == 0 {
 				break
+			}
+			// 全量模式下超界即 fail-closed：不朝一个不可信的总数翻页。
+			if maxRows <= 0 && total > eastmoneyFullLimitPoolMaxRows {
+				return nil, fmt.Errorf("Eastmoney %s limit-pool total %d exceeds full-fetch safety bound %d", poolType, total, eastmoneyFullLimitPoolMaxRows)
 			}
 		} else {
 			if total != sourceTotal {
@@ -3061,16 +3099,18 @@ func (p *Eastmoney) FetchLimitPool(ctx context.Context, poolType, tradeDate stri
 		if total < 0 {
 			return nil, fmt.Errorf("Eastmoney %s limit-pool returned negative total %d", poolType, total)
 		}
-		remaining := limit - len(poolRows)
-		if remaining > len(rows) {
-			remaining = len(rows)
+		take := len(rows)
+		if maxRows > 0 {
+			if remaining := maxRows - len(poolRows); remaining < take {
+				take = remaining
+			}
 		}
-		if remaining > 0 {
-			poolRows = append(poolRows, rows[:remaining]...)
+		if take > 0 {
+			poolRows = append(poolRows, rows[:take]...)
 		}
 		targetRows := sourceTotal
-		if targetRows > limit {
-			targetRows = limit
+		if maxRows > 0 && targetRows > maxRows {
+			targetRows = maxRows
 		}
 		if sourceTotal == 0 || len(poolRows) >= targetRows {
 			break
@@ -3078,7 +3118,7 @@ func (p *Eastmoney) FetchLimitPool(ctx context.Context, poolType, tradeDate stri
 		if len(rows) == 0 {
 			return nil, fmt.Errorf("Eastmoney %s limit-pool coverage ended at %d rows before target %d (source total %d)", poolType, len(poolRows), targetRows, sourceTotal)
 		}
-		if pageIndex == 99 {
+		if pageIndex == maxPages-1 {
 			return nil, fmt.Errorf("Eastmoney %s limit-pool exceeded pagination safety limit", poolType)
 		}
 	}
@@ -3102,8 +3142,12 @@ func (p *Eastmoney) FetchLimitPool(ctx context.Context, poolType, tradeDate stri
 	if sourceTotal <= 0 || len(poolRows) == 0 {
 		return nil, errors.New("Eastmoney limit-pool total/pool mismatch")
 	}
-	if len(poolRows) > limit {
-		return nil, fmt.Errorf("Eastmoney limit-pool returned %d rows above requested limit %d", len(poolRows), limit)
+	if maxRows > 0 && len(poolRows) > maxRows {
+		return nil, fmt.Errorf("Eastmoney limit-pool returned %d rows above requested limit %d", len(poolRows), maxRows)
+	}
+	if maxRows <= 0 && len(poolRows) != sourceTotal {
+		// 全量模式必须自洽：宁可报错，也不能把"部分但自称完整"的快照交给调用方。
+		return nil, fmt.Errorf("Eastmoney %s limit-pool full-fetch coverage mismatch: %d rows for source total %d", poolType, len(poolRows), sourceTotal)
 	}
 	seen := make(map[string]struct{}, len(poolRows))
 	for index, raw := range poolRows {

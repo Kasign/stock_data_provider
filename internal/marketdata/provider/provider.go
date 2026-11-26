@@ -85,6 +85,17 @@ type LimitPoolProvider interface {
 	FetchLimitPool(ctx context.Context, poolType, tradeDate string, limit int) (*model.LimitPoolSnapshot, error)
 }
 
+// FullLimitPoolProvider 可选地按交易日取回涨跌停池的全部条目。
+//
+// 必须与 LimitPoolProvider 分开：后者的 limit 上限为 100，且取满即停，强市日涨停数量
+// 超过 100 时无法表达"全量"。需要"该证券不在池内"这类完整性结论的消费者（例如可交易性
+// 事实）只能走本接口，并在返回后断言 Total == len(Items)；否则未返回的证券会被误判为
+// 未涨跌停，把不可买说成可买。
+type FullLimitPoolProvider interface {
+	NamedProvider
+	FetchFullLimitPool(ctx context.Context, poolType, tradeDate string) (*model.LimitPoolSnapshot, error)
+}
+
 // TradingCalendarProvider returns explicit trading-day flags for an inclusive range.
 type DragonTigerProvider interface {
 	NamedProvider

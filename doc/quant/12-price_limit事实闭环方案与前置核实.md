@@ -72,22 +72,31 @@ GET ...&begin_time=2026-11-22&end_time=2026-11-22&stock_list=600000
 
 ### 2.3 池子路径的三条硬约束（每条都必须体现在实现里）
 
-#### 约束 1：现有 `FetchLimitPool` 会**静默截断**，不能直接用于全市场快照
+#### 约束 1：现有 `FetchLimitPool` **取不到全量**，不能直接用于全市场快照
+
+> 2026-11-26 修正：本节初稿写成"静默截断"，核实后不准确。截断本身**是有标记的**，真正的缺陷是"**没有任何入口能拿到全量**"。原文已在下方改为准确表述，避免实现者去"修"一段本来就正确的代码。
+
+现状（`internal/marketdata/provider/eastmoney.go`）：
 
 ```go
-// eastmoney.go:2954-2959
-if limit <= 0 { limit = 100 }
+if limit <= 0 { limit = 100 }                                    // 0/负数 = 默认 100，不是"全量"
 if limit > 100 { return errors.New("limit-pool limit must not exceed 100") }
 
-// eastmoney.go:3071-3078
 targetRows := sourceTotal
-if targetRows > limit { targetRows = limit }
-if sourceTotal == 0 || len(poolRows) >= targetRows { break }
+if targetRows > limit { targetRows = limit }                     // 取满 limit 即停
 ```
 
-即：`limit` 上限 100，且取满 `limit` 即停止，**不报错**。强市日涨停可能超过 100 只，此时"没返回"的股票会被误判成"未涨停"——把涨停说成可买，是本项目最不可接受的错误类型。
+三个事实必须分开看：
 
-**因此 Step 1a 必须新增"全量分页"读取入口**（不复用该截断语义），并在返回前断言 `len(items) == sourceTotal`；不相等即视为该日快照不可用。
+| 事实 | 结论 |
+|---|---|
+| `limit > 100` | **硬报错**，无法绕过。强市日涨停超过 100 只时，该方法**在协议层面就取不到全量** |
+| 截断是否可被发现 | **可以**。`snapshot.Total` 保留源端 `tc`，当 `Total > len(Items)` 时追加原因码 `provider_total_exceeds_returned_rows`；`TestEastmoneyFetchLimitPoolMarksPartialCoverage` 已覆盖 |
+| 截断是否可补救 | **不可以**。`limit` 上限锁死 100；`limit <= 0` 只是回落 100，不代表全量 |
+
+因此风险不在"标记缺失"，而在"**只要消费者偷懒不比对 `Total` 与 `len(Items)`，就会把未返回的证券当成未涨停**"。仅靠约定不可接受——把涨停说成可买是本项目最不可接受的错误类型。
+
+**处置（已实施，非待办）**：新增 `FullLimitPoolProvider` 可选接口与 `Eastmoney.FetchFullLimitPool`，分页取全并断言 `len(items) == Total`；不相等即报错，绝不返回"部分但自称完整"的快照。原 `FetchLimitPool` 的行为与 100 上限**保持不变**，避免影响既有调用方。Step 1a 采集直接使用新入口，不需要自己再写取数逻辑。
 
 #### 约束 2：覆盖范围必须显式声明，不得默认
 
@@ -113,7 +122,7 @@ if sourceTotal == 0 || len(poolRows) >= targetRows { break }
 
 ### 3.2 采集入口
 
-- 新增 provider 方法 `FetchLimitPoolFull(ctx, poolType, tradeDate) (snapshot, error)`：分页取全、断言 `item_count == tc`、保留 `qdate` 与 `tc`；`limit`、`complete` 语义显式。
+- 采集入口使用**已存在**的 `Eastmoney.FetchFullLimitPool(ctx, poolType, tradeDate)`（2026-11-26 随本方案一并落地）：分页取全、断言 `len(items) == tc`、保留 `qdate` 与 `tc`。Step 1a 不再自己写取数逻辑。
 - 数据源版本：`eastmoney-limit-pool-v1`（沿用既有 `SourceVersion` 命名风格）。
 - 采集须记录 `available_at`：池子是收盘后统计，`available_at` 不得早于当日收盘 + 结算延迟（保守取收盘后 30 分钟），并作为 PIT 可见性边界。
 
@@ -209,12 +218,12 @@ if sourceTotal == 0 || len(poolRows) >= targetRows { break }
 
 ## 8. 验收方案
 
-### 8.1 测试点（12 条）
+### 8.1 测试点（14 条，其中 2 条已在 Provider 层落地）
 
 | # | 测试点 | 层次 |
 |---|---|---|
 | 1 | 池快照：同 `(trade_date, pool_type)` 两版本，按 `as_of` 取到较旧版本 | Data repository |
-| 2 | 全量读取：`tc=137` 时断言取满 137 条（现有 `FetchLimitPool` 在 `limit=100` 处截断，必须失败） | provider |
+| 2 | 全量读取：`tc=137` 时断言取满 137 条（现有 `FetchLimitPool` 在 `limit=100` 处直接报错，必须失败） | provider（**已落地**） |
 | 3 | `complete=false` ⇒ `limit_status=none` 被拒绝，返回 `unknown` + reason | Data app |
 | 4 | 非交易日（`tc=0` 且非交易日）⇒ `unavailable`，不是 `none` | Data app |
 | 5 | 北交所标的 ⇒ `unavailable` + `limit_pool_board_coverage_unverified` | Data app |
@@ -225,6 +234,8 @@ if sourceTotal == 0 || len(poolRows) >= targetRows { break }
 | 10 | Quant：`at_limit_up` ⇒ `BlockingFacts` 而非 `missing_facts` | Quant application |
 | 11 | Quant：`broken_limit_up` 不 block 但留痕；`unknown` ⇒ missing | Quant application |
 | 12 | 端到端：拒绝路径的 `missing_facts` 与 reason code 与 DEC 一致，Stage 仍 `succeeded` | bootstrap |
+| 13 | 全量入口：`tc=125` 分页取 5 页、`Total == len(Items)`、不出现 `provider_total_exceeds_returned_rows` | provider（**已落地**） |
+| 14 | 全量入口：源端 `tc` 超安全上界 ⇒ 报错且只请求 1 页（fail-closed，不朝荒谬总数翻页） | provider（**已落地**） |
 
 ### 8.2 变异验证（6 处，每处必须实际失败并恢复）
 
@@ -236,6 +247,8 @@ if sourceTotal == 0 || len(poolRows) >= targetRows { break }
 | 4 | 北交所标的按"不在池中即未涨停"处理 | 测试点 5 |
 | 5 | 去掉 `system_as_of >= available_at` 校验 | 测试点 8 |
 | 6 | Quant 把 `at_limit_up` 仍算作 missing | 测试点 10 |
+
+**已执行**（2026-11-26，Provider 层，变异 1 的前置版本）：把 `FetchFullLimitPool` 内部参数由 `0`（全量）改为 `100`，`TestEastmoneyFetchFullLimitPoolExceedsCappedLimit` 以 `page calls=4, want 5 pages for 125 rows` 失败，`TestEastmoneyFetchFullLimitPoolRejectsTotalAboveSafetyBound` 同时失败；恢复后全部通过。这说明"全量入口"不是靠约定，而是有测试守着的。
 
 ## 9. Step 2 / Step 3
 
