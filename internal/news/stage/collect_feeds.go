@@ -381,6 +381,7 @@ func ValidateFeedCollectionPayload(raw json.RawMessage) error {
 	}
 	seen := make(map[string]struct{}, len(output.Sources))
 	var successCount, emptyCount, skippedCount, failedCount int
+	var retryableFailureCount int
 	var collectedCount, ingestedCount int
 	for _, source := range output.Sources {
 		key := source.SourceID + "\x00" + source.EndpointID
@@ -417,6 +418,9 @@ func ValidateFeedCollectionPayload(raw json.RawMessage) error {
 			}
 		case "failed":
 			failedCount++
+			if source.Retryable {
+				retryableFailureCount++
+			}
 			if source.ErrorCode == "" || source.IngestedCount != 0 || len(source.NewsIDs) != 0 {
 				return errors.New("failed News Feed source is missing error code or carries persisted News IDs")
 			}
@@ -447,6 +451,7 @@ func ValidateFeedCollectionPayload(raw json.RawMessage) error {
 		}
 	case "failed_retryable":
 		if output.FailureCode != "news_feed_retryable_source_failure" || output.FailedSourceCount == 0 ||
+			retryableFailureCount != output.FailedSourceCount ||
 			output.SuccessSourceCount != 0 || output.EmptySourceCount != 0 || output.SkippedSourceCount != 0 {
 			return errors.New("retryable News Feed failure status is inconsistent")
 		}
