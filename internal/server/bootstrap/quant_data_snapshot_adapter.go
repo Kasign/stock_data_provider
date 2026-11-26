@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 
 	marketdataapp "example.com/stock-analysis-flow/internal/marketdata/app"
 	marketdataapplication "example.com/stock-analysis-flow/internal/marketdata/application"
+	marketdatabootstrap "example.com/stock-analysis-flow/internal/marketdata/bootstrap"
 	quantapplication "example.com/stock-analysis-flow/internal/quant/application"
 	quantstage "example.com/stock-analysis-flow/internal/quant/stage"
 )
@@ -118,3 +120,40 @@ func (adapter *quantDataSnapshotAdapter) ReadAuthorizedCloseSeriesSnapshot(
 
 var _ quantstage.DailyBarsCloseSeriesSnapshotCreator = (*quantDataSnapshotAdapter)(nil)
 var _ quantapplication.CloseSeriesSnapshotReader = (*quantDataSnapshotAdapter)(nil)
+
+// quantDailyBarsProviderCodes 返回 Quant Stage 可用的 DailyBars Provider 清单。
+//
+// Quant Stage 只在受支持的 Provider 实际装配时注册；未装配时返回空切片，由调用方
+// 决定跳过组合而不是降级到其他 Provider。SMA 与 Factor 共用同一份判定，避免两处漂移。
+func quantDailyBarsProviderCodes(
+	dataModule *marketdatabootstrap.Module,
+	providerCode string,
+) []string {
+	if dataModule == nil {
+		return nil
+	}
+	providers := append([]string(nil), dataModule.ProviderSummary().DailyBars...)
+	sort.Strings(providers)
+	if containsQuantProviderCode(providers, providerCode) {
+		return []string{providerCode}
+	}
+	return nil
+}
+
+// mergeQuantProviderCodes 合并多个 Quant Stage 的 Provider 清单，
+// 保持去重与升序，满足 ResourcePolicy 对固定 inventory 的不可变约束。
+func mergeQuantProviderCodes(lists ...[]string) []string {
+	seen := make(map[string]struct{})
+	merged := make([]string, 0, len(lists))
+	for _, list := range lists {
+		for _, code := range list {
+			if _, exists := seen[code]; exists {
+				continue
+			}
+			seen[code] = struct{}{}
+			merged = append(merged, code)
+		}
+	}
+	sort.Strings(merged)
+	return merged
+}

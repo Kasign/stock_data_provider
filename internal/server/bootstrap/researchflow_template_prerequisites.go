@@ -11,18 +11,22 @@ import (
 )
 
 const (
-	newsSearchParameterSchemaRef     = "doc/researchflow/schema/news-search-parameters-1.0.0.schema.json"
-	newsSearchParameterSchemaVersion = "1.0.0"
-	newsSearchApplicabilityRuleRef   = "news.search_candidates.always"
-	newsSearchApplicabilityVersion   = "1.0.0"
-	newsFeedParameterSchemaRef       = "doc/researchflow/schema/news-feed-collection-parameters-1.0.0.schema.json"
-	newsFeedParameterSchemaVersion   = "1.0.0"
-	newsFeedApplicabilityRuleRef     = "news.feed_collection.configured_sources"
-	newsFeedApplicabilityVersion     = "1.0.0"
-	quantSMA20ParameterSchemaRef     = "doc/researchflow/schema/quant-sma20-parameters-1.0.0.schema.json"
-	quantSMA20ParameterSchemaVersion = "1.0.0"
-	quantSMA20ApplicabilityRuleRef   = "quant.sma20.always"
-	quantSMA20ApplicabilityVersion   = "1.0.0"
+	newsSearchParameterSchemaRef      = "doc/researchflow/schema/news-search-parameters-1.0.0.schema.json"
+	newsSearchParameterSchemaVersion  = "1.0.0"
+	newsSearchApplicabilityRuleRef    = "news.search_candidates.always"
+	newsSearchApplicabilityVersion    = "1.0.0"
+	newsFeedParameterSchemaRef        = "doc/researchflow/schema/news-feed-collection-parameters-1.0.0.schema.json"
+	newsFeedParameterSchemaVersion    = "1.0.0"
+	newsFeedApplicabilityRuleRef      = "news.feed_collection.configured_sources"
+	newsFeedApplicabilityVersion      = "1.0.0"
+	quantSMA20ParameterSchemaRef      = "doc/researchflow/schema/quant-sma20-parameters-1.0.0.schema.json"
+	quantSMA20ParameterSchemaVersion  = "1.0.0"
+	quantSMA20ApplicabilityRuleRef    = "quant.sma20.always"
+	quantSMA20ApplicabilityVersion    = "1.0.0"
+	quantFactorParameterSchemaRef     = "doc/researchflow/schema/quant-factor-parameters-1.0.0.schema.json"
+	quantFactorParameterSchemaVersion = "1.0.0"
+	quantFactorApplicabilityRuleRef   = "quant.factor.always"
+	quantFactorApplicabilityVersion   = "1.0.0"
 )
 
 var ErrUnsupportedNewsSearchApplicabilityRule = errors.New("unsupported News Search applicability rule")
@@ -124,6 +128,28 @@ const quantSMA20ParameterSchemaDocument = `{
   "additionalProperties": false
 }`
 
+// quantFactorParameterSchemaDocument 是 Quant Factor 参数的冻结定义。
+// limit 下限取三因子中最小算法窗口（momentum_5d 的 6 bars）；逐因子的精确
+// 最小样本数由 Quant Stage Adapter 与 Registry Entry 判定，Schema 只做粗筛。
+const quantFactorParameterSchemaDocument = `{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:kasign:researchflow:quant-factor-parameters:1.0.0",
+  "title": "Quant Factor Parameters",
+  "type": "object",
+  "properties": {
+    "factor_code": {
+      "type": "string",
+      "enum": ["ma20_distance", "momentum_5d", "momentum_20d"]
+    },
+    "symbol": {"type": "string", "pattern": "^[0-9]{6}\\.(SH|SZ|BJ)$"},
+    "start_date": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"},
+    "end_date": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"},
+    "limit": {"type": "integer", "minimum": 6, "maximum": 1000}
+  },
+  "required": ["factor_code", "symbol", "start_date", "end_date", "limit"],
+  "additionalProperties": false
+}`
+
 type researchflowParameterSchemaRegistry struct{}
 
 func (researchflowParameterSchemaRegistry) Get(ctx context.Context, ref string) (parameterschema.Definition, error) {
@@ -145,6 +171,11 @@ func (researchflowParameterSchemaRegistry) Get(ctx context.Context, ref string) 
 		return parameterschema.Definition{
 			Ref: quantSMA20ParameterSchemaRef, Version: quantSMA20ParameterSchemaVersion,
 			Document: json.RawMessage(quantSMA20ParameterSchemaDocument),
+		}, nil
+	case quantFactorParameterSchemaRef:
+		return parameterschema.Definition{
+			Ref: quantFactorParameterSchemaRef, Version: quantFactorParameterSchemaVersion,
+			Document: json.RawMessage(quantFactorParameterSchemaDocument),
 		}, nil
 	default:
 		return parameterschema.Definition{}, fmt.Errorf("%w: %s", parameterschema.ErrSchemaNotFound, ref)
@@ -178,6 +209,29 @@ func (quantSMA20ApplicabilityEvaluator) Evaluate(
 	return true, "", nil
 }
 
+type quantFactorApplicabilityEvaluator struct{}
+
+func (quantFactorApplicabilityEvaluator) Evaluate(
+	ctx context.Context,
+	rule template.ApplicabilityRule,
+	parameters json.RawMessage,
+) (bool, string, error) {
+	if ctx == nil {
+		return false, "", errors.New("Quant Factor applicability context is required")
+	}
+	if err := ctx.Err(); err != nil {
+		return false, "", err
+	}
+	if rule.RuleRef != quantFactorApplicabilityRuleRef || rule.RuleVersion != quantFactorApplicabilityVersion {
+		return false, "", fmt.Errorf("unsupported Quant Factor applicability rule: %s@%s", rule.RuleRef, rule.RuleVersion)
+	}
+	var object map[string]json.RawMessage
+	if err := json.Unmarshal(parameters, &object); err != nil || object == nil {
+		return false, "", errors.New("Quant Factor applicability requires validated object parameters")
+	}
+	return true, "", nil
+}
+
 type researchflowApplicabilityEvaluator struct{}
 
 func (researchflowApplicabilityEvaluator) Evaluate(
@@ -190,6 +244,8 @@ func (researchflowApplicabilityEvaluator) Evaluate(
 		return (newsSearchApplicabilityEvaluator{}).Evaluate(ctx, rule, parameters)
 	case quantSMA20ApplicabilityRuleRef:
 		return (quantSMA20ApplicabilityEvaluator{}).Evaluate(ctx, rule, parameters)
+	case quantFactorApplicabilityRuleRef:
+		return (quantFactorApplicabilityEvaluator{}).Evaluate(ctx, rule, parameters)
 	case newsFeedApplicabilityRuleRef:
 		return (newsFeedApplicabilityEvaluator{}).Evaluate(ctx, rule, parameters)
 	default:

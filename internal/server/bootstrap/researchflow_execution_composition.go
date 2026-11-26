@@ -27,6 +27,7 @@ type researchflowComposition struct {
 	newsFeedStage     *newsFeedStageComposition
 	quantResultReader *researchflowQuantResultReader
 	quantStage        *quantSMA20StageComposition
+	quantFactorStage  *quantFactorStageComposition
 	runRepository     *researchflowstorage.MySQLRunRepository
 	templateRegistry  *researchflowstorage.MySQLTemplateRegistry
 	workflowTemplates []template.WorkflowTemplate
@@ -96,17 +97,29 @@ func newResearchflowComposition(
 	}
 
 	var quantStage *quantSMA20StageComposition
+	var quantFactorStage *quantFactorStageComposition
 	if dataModule != nil {
 		quantStage, err = newQuantSMA20StageComposition(dataModule, shared)
 		if err != nil {
 			return nil, fmt.Errorf("compose Quant SMA20 Stage: %w", err)
 		}
+		quantFactorStage, err = newQuantFactorStageComposition(dataModule, shared)
+		if err != nil {
+			return nil, fmt.Errorf("compose Quant Factor Stage: %w", err)
+		}
 	}
-	if quantStage != nil {
-		providerInventories[resourcepolicy.QuantDailyBarsProvidersRef] = append([]string(nil), quantStage.providerCodes...)
+	if quantStage != nil || quantFactorStage != nil {
+		var smaProviders, factorProviders []string
+		if quantStage != nil {
+			smaProviders = quantStage.providerCodes
+		}
+		if quantFactorStage != nil {
+			factorProviders = quantFactorStage.providerCodes
+		}
+		providerInventories[resourcepolicy.QuantDailyBarsProvidersRef] = mergeQuantProviderCodes(smaProviders, factorProviders)
 	}
 
-	workflowTemplates := make([]template.WorkflowTemplate, 0, 3)
+	workflowTemplates := make([]template.WorkflowTemplate, 0, 4)
 	newsTemplate, err := buildNewsSearchWorkflowTemplate(newsStage, policyRegistry)
 	if err != nil {
 		return nil, fmt.Errorf("preflight News Search workflow template: %w", err)
@@ -125,6 +138,13 @@ func newResearchflowComposition(
 			return nil, fmt.Errorf("preflight Quant SMA20 workflow template: %w", templateErr)
 		}
 		workflowTemplates = append(workflowTemplates, quantTemplate)
+	}
+	if quantFactorStage != nil {
+		factorTemplate, templateErr := buildQuantFactorWorkflowTemplate(quantFactorStage, policyRegistry)
+		if templateErr != nil {
+			return nil, fmt.Errorf("preflight Quant Factor workflow template: %w", templateErr)
+		}
+		workflowTemplates = append(workflowTemplates, factorTemplate)
 	}
 
 	policyResolver := configuredResourcePolicyResolver{
@@ -145,14 +165,20 @@ func newResearchflowComposition(
 		outputRegistriesList = append(outputRegistriesList, quantStage.registry)
 		quantExecutor = quantStage.executor
 	}
+	quantFactorExecutor := researchflowapplication.StageExecutor(nil)
+	if quantFactorStage != nil {
+		outputRegistriesList = append(outputRegistriesList, quantFactorStage.registry)
+		quantFactorExecutor = quantFactorStage.executor
+	}
 	outputRegistries, err := researchflowapplication.NewStageOutputRegistrySet(outputRegistriesList...)
 	if err != nil {
 		return nil, fmt.Errorf("create immutable Researchflow Stage Output Registry set: %w", err)
 	}
 	stageExecutor := researchflowStageDispatcher{
-		news:     newsStage.executor,
-		newsFeed: feedExecutor,
-		quant:    quantExecutor,
+		news:        newsStage.executor,
+		newsFeed:    feedExecutor,
+		quant:       quantExecutor,
+		quantFactor: quantFactorExecutor,
 	}
 
 	runRepository, err := researchflowstorage.NewMySQLRunRepository(shared.DB, researchflowstorage.CapacityLimits{
@@ -208,7 +234,8 @@ func newResearchflowComposition(
 	}
 
 	return &researchflowComposition{
-		newsStage: newsStage, newsFeedStage: newsFeedStage, quantStage: quantStage, quantResultReader: quantResultReader,
+		newsStage: newsStage, newsFeedStage: newsFeedStage,
+		quantStage: quantStage, quantFactorStage: quantFactorStage, quantResultReader: quantResultReader,
 		runRepository: runRepository, templateRegistry: templateRegistry,
 		workflowTemplates: workflowTemplates, resourcePolicies: policyResolver,
 		parameterSchemas: parameterSchemas, applicability: researchflowApplicabilityEvaluator{},

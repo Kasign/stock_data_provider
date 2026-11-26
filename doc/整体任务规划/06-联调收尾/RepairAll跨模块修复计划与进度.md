@@ -1417,3 +1417,14 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - 下一工作组定为 NEWS-POST-07：实现受控人工来源导入，复用现有 Source Policy、Identity/Observation、NewsItemVersion、Retention 和 AvailabilityEvidence 机制；不通过直接 Repository 写入、伪造 CollectionResult 或调用方自报 available_at 绕过门禁。
 - 人工取得时间只作为系统观察/取得证据，不等于首次公开可获取时间。NEWS-CTR-001 Strict PIT 与 Research Importer 的严格校验保持不变；来源字段语义未审核前 available_at 仍为 unknown，Research B 组继续 SHELVED。
 - 本轮只校准来源策略和任务边界，未宣称 Source 生产链、人工导入或 News→Research B 组已完成。
+
+## 2026-11-26 Quant 三因子生产化第⑥组 Stage Provider 装配
+
+- 起始 HEAD `0b8e42ed0`（第⑤组，已推送 `origin/repair_all`）。本组只做 Factor Stage Provider 与 Server 装配，不改契约版本。
+- 新增 `internal/quant/stage/factor.go`：`FactorAdapter` 在可信 Run `SystemAsOf` 下创建授权 Data Close Series Snapshot，调用 `CreateFactorService`，把已落库 Manifest/Metric 投影为 `FactorOutput`/`FactorQualitySummary` 并自校验。`factor_code` 只作 Stage 层封闭分派，**不透传**给 Facade（其 parameters 契约仍为严格 `{}`）；逐因子最小样本下限（20/6/21）在 Adapter 先校验，参数 Schema 的 `limit` 下限取三者最小（6）仅作粗筛。
+- 新增 `internal/server/bootstrap/quant_factor_stage.go`：`quant.factor` 的 Output Registry、冻结 Workflow Template、Stage Executor（`available`→succeeded、`insufficient_data`→degraded、Data 授权/参数/执行错误按固定 reason code 失败），并接入 `researchflow_execution_composition.go`、`researchflow_stage_dispatcher.go`、`researchflow_runtime.go`。
+- 新增 `doc/researchflow/schema/quant-factor-parameters-1.0.0.schema.json` 与 Golden（`factor_code` 三值 enum、`limit` 6–1000），并在 `researchflow_template_prerequisites.go` 注册 Schema 文档、`quant.factor.always` 适用性规则与复合 dispatch。
+- Output Registry 版本用 `1.3.0`：`NewStageOutputRegistrySet` 以 version 为唯一键，`1.0.0`/`1.2.0` 属 News、`1.1.0` 属 SMA20；新增测试 `TestQuantFactorOutputRegistryVersionDoesNotCollide` 守住该约束。
+- 复用而非复制：`quantDataSnapshotAdapter` 同时实现 `DailyBarsCloseSeriesSnapshotCreator` 与 `CloseSeriesSnapshotReader`；Provider inventory 判定抽为 `quantDailyBarsProviderCodes`（SMA/Factor 共用），`NewStageOutputRegistrySet` 前合并去重；`QuantPurposeCode`/`QuantProviderCode` 作为通用别名，`SMA20PurposeCode`/`SMA20ProviderCode` 保留兼容。
+- 验证：`go test ./internal/quant/... ./internal/server/...` 全包 PASS；覆盖三因子 Adapter 正例、insufficient 显式 null、非法请求不触达 Data、参数 Schema 文档一致性与 Golden、Executor 状态映射、Template 冻结断言、Dispatcher 路由与 Registry 版本唯一性。
+- 未完成：Factor Run↔Result 关联仍硬编码 `quant.sma20`（`quantSMA20ResultAssociationVerifier`），Factor 结果暂不能被 GetResult 授权读取；端到端真实质量证据与 Quant→Researchflow Contract Test 未做。QNT-CTR-003 仍 `deferred`；CI 状态 `not_run`。

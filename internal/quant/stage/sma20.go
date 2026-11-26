@@ -19,9 +19,16 @@ const (
 	SMA20OutputType    = "quant.sma20_result"
 	SMA20SchemaVersion = "1.0.0"
 	SMA20QualitySchema = "1.0.0"
-	SMA20PurposeCode   = "quant_analysis"
 	SMA20Window        = 20
-	SMA20ProviderCode  = "eastmoney"
+
+	// QuantPurposeCode 与 QuantProviderCode 是 Quant 消费 Data Close Series 的
+	// 通用审计用途码与 Provider 码，SMA 与 Factor Stage 共用同一份取值；
+	// SMA20 专用常量保留为别名，避免既有调用方与契约断言漂移。
+	QuantPurposeCode  = "quant_analysis"
+	QuantProviderCode = "eastmoney"
+
+	SMA20PurposeCode  = QuantPurposeCode
+	SMA20ProviderCode = QuantProviderCode
 )
 
 var (
@@ -29,7 +36,7 @@ var (
 	ErrInvalidSMA20StageOutput  = errors.New("invalid Quant SMA20 stage output")
 )
 
-var sma20SymbolPattern = regexp.MustCompile(`^[0-9]{6}\.(SH|SZ|BJ)$`)
+var quantSymbolPattern = regexp.MustCompile(`^[0-9]{6}\.(SH|SZ|BJ)$`)
 var sma20DecimalPattern = regexp.MustCompile(`^(0|[1-9][0-9]*)(\.[0-9]+)?$`)
 
 type SnapshotCreateRequest struct {
@@ -100,7 +107,7 @@ func NewSMA20Adapter(snapshots DailyBarsCloseSeriesSnapshotCreator, service *app
 // Execute 在同一可信 Run SystemAsOf 下创建 Data Snapshot，再调用 Quant Application 生产 SMA20。
 func (adapter *SMA20Adapter) Execute(ctx context.Context, request SMA20Request) (SMA20Output, SMA20QualitySummary, error) {
 	if adapter == nil || adapter.snapshots == nil || adapter.service == nil || ctx == nil ||
-		!sma20SymbolPattern.MatchString(request.Symbol) ||
+		!quantSymbolPattern.MatchString(request.Symbol) ||
 		!validISODate(request.StartDate) || !validISODate(request.EndDate) || request.StartDate > request.EndDate ||
 		request.Limit < SMA20Window || request.Limit > 1000 ||
 		request.SystemAsOf.IsZero() || request.SystemAsOf.Location() != time.UTC ||

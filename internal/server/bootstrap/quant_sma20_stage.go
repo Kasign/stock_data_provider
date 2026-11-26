@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"sort"
 	"time"
 
 	marketdataapplication "example.com/stock-analysis-flow/internal/marketdata/application"
@@ -51,12 +50,7 @@ func newQuantSMA20StageComposition(
 	if dataModule == nil || shared == nil || shared.DB == nil {
 		return nil, errors.New("Quant SMA20 Stage requires the Data Module and shared MariaDB")
 	}
-	providers := dataModule.ProviderSummary().DailyBars
-	sort.Strings(providers)
-	allowedProviderCodes := []string{}
-	if containsQuantProviderCode(providers, quantstage.SMA20ProviderCode) {
-		allowedProviderCodes = []string{quantstage.SMA20ProviderCode}
-	}
+	allowedProviderCodes := quantDailyBarsProviderCodes(dataModule, quantstage.QuantProviderCode)
 	if len(allowedProviderCodes) == 0 {
 		return nil, nil
 	}

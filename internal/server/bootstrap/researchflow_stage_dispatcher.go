@@ -10,9 +10,10 @@ import (
 )
 
 type researchflowStageDispatcher struct {
-	news     researchflowapplication.StageExecutor
-	newsFeed researchflowapplication.StageExecutor
-	quant    researchflowapplication.StageExecutor
+	news        researchflowapplication.StageExecutor
+	newsFeed    researchflowapplication.StageExecutor
+	quant       researchflowapplication.StageExecutor
+	quantFactor researchflowapplication.StageExecutor
 }
 
 func (dispatcher researchflowStageDispatcher) ExecuteStage(
@@ -35,6 +36,11 @@ func (dispatcher researchflowStageDispatcher) ExecuteStage(
 			return researchflowapplication.StageExecutionResult{}, fmt.Errorf("Quant SMA20 Stage Executor is not configured")
 		}
 		return dispatcher.quant.ExecuteStage(ctx, request)
+	case quantstage.FactorStageCode:
+		if dispatcher.quantFactor == nil {
+			return researchflowapplication.StageExecutionResult{}, fmt.Errorf("Quant Factor Stage Executor is not configured")
+		}
+		return dispatcher.quantFactor.ExecuteStage(ctx, request)
 	default:
 		return researchflowapplication.StageExecutionResult{}, fmt.Errorf("unsupported Researchflow Stage code %q", request.Stage.Code)
 	}

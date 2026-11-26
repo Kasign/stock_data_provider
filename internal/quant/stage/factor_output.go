@@ -14,6 +14,7 @@ import (
 // Close-only Decimal 因子；不升级契约状态，也不代表 Factor 已接入生产 Stage。
 // result_id 必须由 QNT-CTR-005 Quant Result Manifest 提供，Stage 侧不得推导。
 const (
+	FactorStageCode            = "quant.factor"
 	FactorOutputType           = "quant.factor_result"
 	FactorSchemaVersion        = "1.0.0"
 	FactorQualitySchemaVersion = "1.0.0"

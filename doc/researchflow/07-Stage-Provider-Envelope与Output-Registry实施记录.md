@@ -22,6 +22,16 @@
 - 全仓 gofmt / test / vet 与 Integration CI 应在提交后按精确 SHA 记录。
 - Golden 是通用 Envelope 形状示例，不代表任何业务 Stage 已获准注册或可生产执行。
 
+## 已装配的 Output Registry 实例（2026-11-26）
+
+| Registry 版本 | Stage 组合 | 主要 Output | 装配位置 |
+|---|---|---|---|
+| News 组合版本（1.0.0 / 1.2.0） | News Search / News Feed | News Stage 输出 | `news_search_stage.go`、`news_feed_stage.go` |
+| 1.1.0 | `quant.sma20` | `quant.sma20_result` 1.0.0（`QNT-CTR-005-sma20-stage-output` / `-quality-summary`） | `quant_sma20_stage.go` |
+| 1.3.0 | `quant.factor` | `quant.factor_result` 1.0.0（`QNT-CTR-003-factor-stage-output` / `-quality-summary`） | `quant_factor_stage.go` |
+
+`NewStageOutputRegistrySet` 以 Registry version 为唯一键，新增 Registry 必须使用尚未占用的版本。`quant.factor` 使用 `1.3.0` 正是该约束的结果：`1.0.0`/`1.2.0` 已属 News、`1.1.0` 已属 SMA20。`quant.factor` 的参数 Schema 为 `doc/researchflow/schema/quant-factor-parameters-1.0.0.schema.json`，`factor_code` 只做 Stage 层封闭分派，不透传给 Quant Facade。
+
 ## 后续
 
 1. 各领域模块提供真实 Provider Port、payload Schema/Golden 和质量摘要 Schema/Validator。
