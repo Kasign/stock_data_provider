@@ -237,6 +237,9 @@ func (executor quantSMA20StageExecutor) ExecuteStage(ctx context.Context, reques
 		case errors.Is(err, marketdataapplication.ErrDataAuthorizationInvalid):
 			return failedQuantSMA20Stage("data_authorization_reference_invalid"), nil
 		default:
+			if reasonCode, ok := quantInputInapplicableReasonCode("quant_sma20_", err); ok {
+				return failedQuantSMA20Stage(reasonCode), nil
+			}
 			return failedQuantSMA20Stage("quant_sma20_execution_failed"), nil
 		}
 	}

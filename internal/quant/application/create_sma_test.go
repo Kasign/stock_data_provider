@@ -109,27 +109,36 @@ func TestCreateSMAServiceRejectsSnapshotRunAsOfMismatch(t *testing.T) {
 	service := newTestCreateSMAService(t, reader, result.NewMemoryRepository(), now)
 	request := validCreateSMARequest()
 	request.SystemAsOf = request.SystemAsOf.Add(time.Minute)
-	if _, err := service.Execute(context.Background(), request); !errors.Is(err, ErrInvalidSMASnapshot) {
-		t.Fatalf("Execute() error = %v, want ErrInvalidSMASnapshot", err)
+	_, err := service.Execute(context.Background(), request)
+	if !errors.Is(err, ErrSMASnapshotQuality) {
+		t.Fatalf("Execute() error = %v, want ErrSMASnapshotQuality", err)
 	}
+	assertOptionalReasonCode(t, err, ReasonInputPITUnavailable)
 }
 
 func TestCreateSMAServiceRejectsDegradedAndIncompleteSnapshot(t *testing.T) {
 	now := time.Date(2026, 11, 24, 8, 0, 0, 0, time.UTC)
-	for name, mutate := range map[string]func(*CloseSeriesSnapshot){
-		"degraded":              func(snapshot *CloseSeriesSnapshot) { snapshot.QualityStatus = "degraded" },
-		"calendar":              func(snapshot *CloseSeriesSnapshot) { snapshot.Coverage.CalendarQualityStatus = "degraded" },
-		"insufficient coverage": func(snapshot *CloseSeriesSnapshot) { snapshot.Coverage.CoverageSufficient = false },
-		"missing bar":           func(snapshot *CloseSeriesSnapshot) { snapshot.Bars[0].QualityStatus = "unknown" },
-	} {
-		t.Run(name, func(t *testing.T) {
+	cases := []struct {
+		name       string
+		mutate     func(*CloseSeriesSnapshot)
+		wantReason string
+	}{
+		{"degraded", func(snapshot *CloseSeriesSnapshot) { snapshot.QualityStatus = "degraded" }, ReasonInputQualityInvalid},
+		{"calendar", func(snapshot *CloseSeriesSnapshot) { snapshot.Coverage.CalendarQualityStatus = "degraded" }, ReasonInputCalendarInvalid},
+		{"insufficient coverage", func(snapshot *CloseSeriesSnapshot) { snapshot.Coverage.CoverageSufficient = false }, ReasonInputCoverageInsufficient},
+		{"missing bar", func(snapshot *CloseSeriesSnapshot) { snapshot.Bars[0].QualityStatus = "unknown" }, ReasonInputBarQualityInvalid},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
 			snapshot := validCreateSMASnapshot()
-			mutate(&snapshot)
+			testCase.mutate(&snapshot)
 			reader := &createSMASnapshotReader{snapshot: snapshot}
 			service := newTestCreateSMAService(t, reader, result.NewMemoryRepository(), now)
-			if _, err := service.Execute(context.Background(), validCreateSMARequest()); !errors.Is(err, ErrInvalidSMASnapshot) {
-				t.Fatalf("Execute() error = %v, want ErrInvalidSMASnapshot", err)
+			_, err := service.Execute(context.Background(), validCreateSMARequest())
+			if !errors.Is(err, ErrSMASnapshotQuality) {
+				t.Fatalf("Execute() error = %v, want ErrSMASnapshotQuality", err)
 			}
+			assertOptionalReasonCode(t, err, testCase.wantReason)
 		})
 	}
 }

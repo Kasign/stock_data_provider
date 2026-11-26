@@ -273,10 +273,7 @@ func validateExactSMASnapshot(snapshot CloseSeriesSnapshot, request CreateSMAReq
 		snapshot, request.SnapshotRef, request.SystemAsOf, request.AllowedProviderCodes, policy, trustedNow,
 	)
 	if err != nil {
-		if errors.Is(err, ErrCloseSeriesSnapshotQuality) {
-			return time.Time{}, ErrSMASnapshotQuality
-		}
-		return time.Time{}, ErrInvalidSMASnapshot
+		return time.Time{}, classifyCloseSeriesValidationError(err, ErrSMASnapshotQuality, ErrInvalidSMASnapshot)
 	}
 	return systemAsOf, nil
 }

@@ -251,6 +251,9 @@ func (executor quantFactorStageExecutor) ExecuteStage(
 		case errors.Is(err, quantstage.ErrInvalidFactorStageRequest):
 			return failedQuantFactorStage("quant_factor_invalid_parameters"), nil
 		default:
+			if reasonCode, ok := quantInputInapplicableReasonCode("quant_factor_", err); ok {
+				return failedQuantFactorStage(reasonCode), nil
+			}
 			return failedQuantFactorStage("quant_factor_execution_failed"), nil
 		}
 	}

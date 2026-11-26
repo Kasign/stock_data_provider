@@ -162,10 +162,7 @@ func (service *CreateFactorService) Execute(ctx context.Context, request CreateF
 		snapshot, request.SnapshotRef, request.SystemAsOf, request.AllowedProviderCodes, policy, trustedNow,
 	)
 	if err != nil {
-		if errors.Is(err, ErrCloseSeriesSnapshotQuality) {
-			return FactorExecutionResult{}, ErrFactorSnapshotQuality
-		}
-		return FactorExecutionResult{}, ErrInvalidFactorSnapshot
+		return FactorExecutionResult{}, classifyCloseSeriesValidationError(err, ErrFactorSnapshotQuality, ErrInvalidFactorSnapshot)
 	}
 
 	closes := make([]string, len(snapshot.Bars))

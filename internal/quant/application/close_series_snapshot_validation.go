@@ -37,6 +37,8 @@ func validateAuthorizedCloseSeriesSnapshot(
 	policy closeSeriesValidationPolicy,
 	trustedNow time.Time,
 ) (time.Time, error) {
+	// 第一段只做身份/结构完整性：任何一项不成立说明 Snapshot 本身不自洽，
+	// 与"输入质量不达标"是两类问题，不能合并成同一个错误。
 	if snapshot.SnapshotRef != requestSnapshotRef ||
 		snapshot.ManifestSchemaVersion != "2.0.0" || snapshot.PayloadSchemaVersion != "1.0.0" ||
 		snapshot.PayloadKind != "daily_bars_close_series" || strings.TrimSpace(snapshot.CallerRef) == "" ||
@@ -46,35 +48,49 @@ func validateAuthorizedCloseSeriesSnapshot(
 		!validCloseSeriesISODate(snapshot.StartDate) || !validCloseSeriesISODate(snapshot.EndDate) ||
 		snapshot.StartDate > snapshot.EndDate ||
 		snapshot.AdjustmentBasis != "none" || snapshot.Interval != "1d" ||
-		strings.TrimSpace(snapshot.TradingCalendarRef) == "" || snapshot.QualityStatus != "valid" ||
-		snapshot.Coverage.CalendarQualityStatus != "valid" ||
-		snapshot.Coverage.ExpectedTradingDays <= 0 || snapshot.Coverage.MinimumRequiredBars <= 0 ||
-		!snapshot.Coverage.CoverageSufficient ||
-		len(snapshot.Bars) < snapshot.Coverage.MinimumRequiredBars ||
-		len(snapshot.Bars) > snapshot.Coverage.ExpectedTradingDays {
+		strings.TrimSpace(snapshot.TradingCalendarRef) == "" || len(snapshot.Bars) == 0 {
 		return time.Time{}, ErrInvalidCloseSeriesSnapshot
 	}
-	coverage := new(big.Rat).SetFrac(big.NewInt(int64(len(snapshot.Bars))), big.NewInt(int64(snapshot.Coverage.ExpectedTradingDays)))
-	minimumCoverage := new(big.Rat).SetFloat64(policy.minimumCoverage)
-	if minimumCoverage == nil || coverage.Cmp(minimumCoverage) < 0 {
-		return time.Time{}, ErrCloseSeriesSnapshotQuality
-	}
+	barQualities := make([]string, 0, len(snapshot.Bars))
 	var previousDate string
 	for index, bar := range snapshot.Bars {
 		if !validCloseSeriesISODate(bar.TradeDate) || bar.TradeDate < snapshot.StartDate ||
 			bar.TradeDate > snapshot.EndDate || (index > 0 && bar.TradeDate <= previousDate) ||
-			bar.QualityStatus != "valid" || strings.TrimSpace(bar.Close) == "" {
+			strings.TrimSpace(bar.Close) == "" {
 			return time.Time{}, ErrInvalidCloseSeriesSnapshot
 		}
 		previousDate = bar.TradeDate
+		barQualities = append(barQualities, bar.QualityStatus)
 	}
-	if len(snapshot.Bars) == 0 {
-		return time.Time{}, ErrInvalidCloseSeriesSnapshot
+
+	// 第二段把 Data 记录的质量事实交给封闭映射表；PIT 是否可信也算事实之一，
+	// 历史回放缺少可信时点时继续阻断，而不是退化成"尽力计算"。
+	systemAsOf, systemAsOfErr := parseCanonicalCloseSeriesUTC(snapshot.SystemAsOf)
+	trustedNowValid := !trustedNow.IsZero() && trustedNow.Location() == time.UTC
+	pitAvailable := systemAsOfErr == nil && trustedNowValid && systemAsOf.Equal(requestSystemAsOf) &&
+		!trustedNow.Before(systemAsOf)
+	coverageAtOrAbovePolicy := false
+	if snapshot.Coverage.ExpectedTradingDays > 0 {
+		coverage := new(big.Rat).SetFrac(
+			big.NewInt(int64(len(snapshot.Bars))),
+			big.NewInt(int64(snapshot.Coverage.ExpectedTradingDays)),
+		)
+		if minimumCoverage := new(big.Rat).SetFloat64(policy.minimumCoverage); minimumCoverage != nil {
+			coverageAtOrAbovePolicy = coverage.Cmp(minimumCoverage) >= 0
+		}
 	}
-	systemAsOf, err := parseCanonicalCloseSeriesUTC(snapshot.SystemAsOf)
-	if err != nil || !systemAsOf.Equal(requestSystemAsOf) ||
-		trustedNow.IsZero() || trustedNow.Location() != time.UTC || trustedNow.Before(systemAsOf) {
-		return time.Time{}, ErrInvalidCloseSeriesSnapshot
+	facts := InputQualityFacts{
+		PITEvidenceAvailable:    pitAvailable,
+		SnapshotQuality:         snapshot.QualityStatus,
+		CalendarQuality:         snapshot.Coverage.CalendarQualityStatus,
+		CoverageSufficient:      snapshot.Coverage.CoverageSufficient,
+		ObservedBars:            len(snapshot.Bars),
+		MinimumRequiredBars:     snapshot.Coverage.MinimumRequiredBars,
+		CoverageAtOrAbovePolicy: coverageAtOrAbovePolicy,
+		BarQualities:            barQualities,
+	}
+	if applicable, reasonCode := EvaluateInputApplicability(facts); !applicable {
+		return time.Time{}, &InputNotApplicableError{ReasonCode: reasonCode}
 	}
 	return systemAsOf, nil
 }

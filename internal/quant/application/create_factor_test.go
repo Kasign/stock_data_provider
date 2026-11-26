@@ -217,28 +217,35 @@ func TestCreateFactorServiceRejectsInvalidRequests(t *testing.T) {
 
 func TestCreateFactorServiceRejectsWeakSnapshot(t *testing.T) {
 	now := factorExecutionNow()
-	mutations := map[string]func(*CloseSeriesSnapshot){
-		"degraded": func(snapshot *CloseSeriesSnapshot) { snapshot.QualityStatus = "degraded" },
-		"calendar": func(snapshot *CloseSeriesSnapshot) { snapshot.Coverage.CalendarQualityStatus = "degraded" },
-		"insufficient coverage": func(snapshot *CloseSeriesSnapshot) {
-			snapshot.Coverage.CoverageSufficient = false
-		},
-		"missing bar":      func(snapshot *CloseSeriesSnapshot) { snapshot.Bars[0].QualityStatus = "unknown" },
-		"wrong purpose":    func(snapshot *CloseSeriesSnapshot) { snapshot.PurposeCode = "other" },
-		"wrong adjustment": func(snapshot *CloseSeriesSnapshot) { snapshot.AdjustmentBasis = "forward_adjusted" },
-		"snapshot mismatch": func(snapshot *CloseSeriesSnapshot) {
+	// 1.5 起"输入存在但不可用"与"Snapshot 自身不自洽"分成两类错误：
+	// 前者携带唯一原因码，后者仍是结构错误且不带原因码。
+	cases := []struct {
+		name       string
+		mutate     func(*CloseSeriesSnapshot)
+		want       error
+		wantReason string
+	}{
+		{"degraded", func(snapshot *CloseSeriesSnapshot) { snapshot.QualityStatus = "degraded" }, ErrFactorSnapshotQuality, ReasonInputQualityInvalid},
+		{"calendar", func(snapshot *CloseSeriesSnapshot) { snapshot.Coverage.CalendarQualityStatus = "degraded" }, ErrFactorSnapshotQuality, ReasonInputCalendarInvalid},
+		{"insufficient coverage", func(snapshot *CloseSeriesSnapshot) { snapshot.Coverage.CoverageSufficient = false }, ErrFactorSnapshotQuality, ReasonInputCoverageInsufficient},
+		{"missing bar", func(snapshot *CloseSeriesSnapshot) { snapshot.Bars[0].QualityStatus = "unknown" }, ErrFactorSnapshotQuality, ReasonInputBarQualityInvalid},
+		{"wrong purpose", func(snapshot *CloseSeriesSnapshot) { snapshot.PurposeCode = "other" }, ErrInvalidFactorSnapshot, ""},
+		{"wrong adjustment", func(snapshot *CloseSeriesSnapshot) { snapshot.AdjustmentBasis = "forward_adjusted" }, ErrInvalidFactorSnapshot, ""},
+		{"snapshot mismatch", func(snapshot *CloseSeriesSnapshot) {
 			snapshot.SnapshotRef = "data_snapshot:sha256:" + strings.Repeat("d", 64)
-		},
+		}, ErrInvalidFactorSnapshot, ""},
 	}
-	for name, mutate := range mutations {
-		t.Run(name, func(t *testing.T) {
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
 			snapshot := validCreateFactorSnapshot(sequenceCloses(1, 20))
-			mutate(&snapshot)
+			testCase.mutate(&snapshot)
 			reader := &createFactorSnapshotReader{snapshot: snapshot}
 			service := newTestCreateFactorService(t, reader, now)
-			if _, err := service.Execute(context.Background(), validCreateFactorRequest(registry.ProductionMADistanceCode)); !errors.Is(err, ErrInvalidFactorSnapshot) {
-				t.Fatalf("Execute() error = %v, want ErrInvalidFactorSnapshot", err)
+			_, err := service.Execute(context.Background(), validCreateFactorRequest(registry.ProductionMADistanceCode))
+			if !errors.Is(err, testCase.want) {
+				t.Fatalf("Execute() error = %v, want %v", err, testCase.want)
 			}
+			assertOptionalReasonCode(t, err, testCase.wantReason)
 		})
 	}
 	t.Run("as of mismatch", func(t *testing.T) {
@@ -246,9 +253,11 @@ func TestCreateFactorServiceRejectsWeakSnapshot(t *testing.T) {
 		service := newTestCreateFactorService(t, reader, now)
 		request := validCreateFactorRequest(registry.ProductionMADistanceCode)
 		request.SystemAsOf = request.SystemAsOf.Add(time.Minute)
-		if _, err := service.Execute(context.Background(), request); !errors.Is(err, ErrInvalidFactorSnapshot) {
-			t.Fatalf("Execute() error = %v, want ErrInvalidFactorSnapshot", err)
+		_, err := service.Execute(context.Background(), request)
+		if !errors.Is(err, ErrFactorSnapshotQuality) {
+			t.Fatalf("Execute() error = %v, want ErrFactorSnapshotQuality", err)
 		}
+		assertOptionalReasonCode(t, err, ReasonInputPITUnavailable)
 	})
 }
 
