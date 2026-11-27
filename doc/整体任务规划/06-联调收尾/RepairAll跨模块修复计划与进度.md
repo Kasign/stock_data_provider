@@ -1933,3 +1933,11 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - **决策与文档**：新增 DEC-PLAT-002-077（状态 `implemented_pending_owner_review`）；`doc/quant/17` 9.3、`doc/quant/18` 6/7.6/9 节同步。
 - **剩余边界**：盘口预采集入口未扩展；真实 Run 仍需在部署环境验证。
 - **CI 状态（回填）**：提交 `381ebf3e9` 的 5 个 check run 全部 `completed/success`：required-checks `46029099955`、Integration CI `46029100209`、Go test suite `46029100237`、Live provider probe `46029100336`、Quant module validation `46029100047`。
+
+## 2026-11-28 Worker deadline 测试时序缺陷修复
+
+- **现象**：纯文档提交 `b9a62e666` 的 Go test suite `46029894929` 因 `TestWorkerConvertsAttemptDeadlineIntoPolicyControlledTimeout` 报 `Researchflow run deadline exceeded`；同 SHA required-checks `46029894937` 与 Integration CI `46029894919` success。
+- **根因**：用例把 `AttemptTimeoutMS` 设为 1ms，但 `Attempt.StartedAt` 与 Worker 首次读取的数据库时钟都取真实 `time.Now()`。CI 上两次快照加载与 attempt claim 超过 1ms 时，会在 executor 前命中 `attemptRemaining <= 0 → ErrWorkerDeadline`，被误报为 deadline 失败；本地 50/200 次重复因耗时较短未暴露。
+- **修复**：只改测试夹具，使用固定 `databaseNow` 同时设置 `Attempt.StartedAt`、`Run.DeadlineAt` 与 `workerClockFake.now`；断言不变，仍验证 policy-controlled `attempt_timeout`、`AttemptTimedOut`、`StageRetryWait` 与 `RetryAt`。
+- **变异**：关闭生产代码 `if attemptTimedOut` 转换分支后该用例有效失败；恢复后连续 200 次 PASS。全仓 `go test ./... -count=1`、`go vet ./...`、`git diff --check` 通过。
+- **CI 状态**：新代码 SHA 的 CI 待回填。

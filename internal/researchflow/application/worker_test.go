@@ -488,9 +488,15 @@ func TestWorkerDisablesRetryForNonAllowlistedReason(t *testing.T) {
 
 func TestWorkerConvertsAttemptDeadlineIntoPolicyControlledTimeout(t *testing.T) {
 	store, _ := newWorkerFixture()
+	// AttemptTimeoutMS=1 必须在可控数据库时钟下验证：若 Attempt.StartedAt 与
+	// 首次时钟读取都取真实 time.Now()，CI 加载快照超过 1ms 时会在 executor
+	// 之前走 ErrWorkerDeadline，掩盖本用例真正要验证的 attempt_timeout 转换。
+	databaseNow := time.Date(2026, 11, 28, 0, 0, 0, 0, time.UTC)
+	store.attempt.StartedAt = databaseNow
+	store.snapshot.Run.DeadlineAt = databaseNow.Add(time.Hour)
 	store.snapshot.RetryPolicy.AttemptTimeoutMS = 1
 	store.snapshot.RetryPolicy.RetryableReasonCodes = []string{"attempt_timeout"}
-	worker, err := NewWorker(store, timeoutWorkerExecutor{}, workerClockFake{}, WorkerConfig{
+	worker, err := NewWorker(store, timeoutWorkerExecutor{}, workerClockFake{now: databaseNow}, WorkerConfig{
 		WorkerID: "worker-1", LeaseDuration: time.Minute, HeartbeatInterval: time.Second, MaxParallel: 2,
 	})
 	if err != nil {
