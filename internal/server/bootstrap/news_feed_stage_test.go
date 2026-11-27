@@ -152,3 +152,24 @@ func TestNewsFeedStageCompositionIsDisabledWithoutExplicitFeedConfiguration(t *t
 		t.Fatal("News Feed Stage was enabled without explicit trusted Feed source configuration")
 	}
 }
+
+func TestNewsFeedRegistrationsPropagateOfficialAPIParams(t *testing.T) {
+	params := map[string]string{"stock": "600036,gssh0600036", "seDate": "2026-10-01~2026-11-27"}
+	registrations := newsFeedRegistrations([]newsconfig.FeedSource{
+		{
+			SourceID: "cninfo", EndpointID: "announcements",
+			URL:          "https://www.cninfo.com.cn/new/hisAnnouncement/query",
+			AccessMethod: newsdomain.AccessOfficialAPI, RequestParams: params,
+		},
+	})
+	if len(registrations) != 1 {
+		t.Fatalf("registrations=%d want 1", len(registrations))
+	}
+	got := registrations[0]
+	if got.AccessMethod != newsdomain.AccessOfficialAPI {
+		t.Fatalf("access_method=%q", got.AccessMethod)
+	}
+	if got.RequestParams["stock"] != "600036,gssh0600036" || got.RequestParams["seDate"] != "2026-10-01~2026-11-27" {
+		t.Fatalf("request_params not propagated: %v", got.RequestParams)
+	}
+}

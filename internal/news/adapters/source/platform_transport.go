@@ -9,8 +9,10 @@ import (
 	"example.com/stock-analysis-flow/internal/platform/httpclient"
 )
 
-// NewPlatformEndpointTransport 为已登记且支持 RSS/Atom 的 Source Endpoint
-// 分别创建 BoundDoer。调用方应传入可信 SourceCatalog 的启动快照；
+// NewPlatformEndpointTransport 为已登记且支持 RSS/Atom 或 official_api 的
+// Source Endpoint 分别创建 BoundDoer。BoundDoer 只绑定 host/port，不限制 HTTP
+// method 或 body，因此 RSS GET 与 official_api POST 共用同一绑定机制。
+// 调用方应传入可信 SourceCatalog 的启动快照；
 // 后续注册表变更必须重新构建传输绑定，不能退回共享裸 Client。
 func NewPlatformEndpointTransport(
 	client *httpclient.Client,
@@ -22,8 +24,10 @@ func NewPlatformEndpointTransport(
 
 	bindings := make(map[EndpointKey]app.HTTPDoer, len(registrations))
 	for _, registration := range registrations {
-		if !registration.Enabled ||
-			(registration.AccessMethod != domain.AccessRSS && registration.AccessMethod != domain.AccessLicensedFeed) {
+		supported := registration.AccessMethod == domain.AccessRSS ||
+			registration.AccessMethod == domain.AccessLicensedFeed ||
+			registration.AccessMethod == domain.AccessOfficialAPI
+		if !registration.Enabled || !supported {
 			continue
 		}
 		key := EndpointKey{SourceID: registration.SourceID, EndpointID: registration.EndpointID}

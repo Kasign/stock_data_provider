@@ -266,6 +266,7 @@ func newsFeedRegistrations(feedSources []newsconfig.FeedSource) []newsapp.Source
 			AccessMethod: source.AccessMethod, SourcePolicy: source.SourcePolicy,
 			SourcePolicyVersionID: source.SourcePolicyVersionID,
 			URLPolicy:             source.URLPolicy, MaxResponseBytes: source.MaxResponseBytes,
+			RequestParams: source.RequestParams,
 		})
 	}
 	return registrations

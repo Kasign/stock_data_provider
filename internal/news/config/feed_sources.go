@@ -40,6 +40,7 @@ type FeedSource struct {
 	ExpectedCurrentSourcePolicyVersionID string
 	URLPolicy                            domain.SourceURLPolicy
 	MaxResponseBytes                     int64
+	RequestParams                        map[string]string
 }
 
 // FeedSources returns a defensive copy of the trusted startup registrations.
@@ -63,6 +64,7 @@ type feedSourceJSON struct {
 	SourcePolicy                         feedSourcePolicyJSON `json:"source_policy"`
 	URLPolicy                            feedURLPolicyJSON    `json:"url_policy"`
 	MaxResponseBytes                     int64                `json:"max_response_bytes"`
+	RequestParams                        map[string]string    `json:"request_params"`
 }
 
 type feedSourcePolicyJSON struct {
@@ -142,15 +144,29 @@ func convertFeedSource(entry feedSourceJSON) (FeedSource, error) {
 		SourcePolicyVersionID:                strings.TrimSpace(entry.SourcePolicyVersionID),
 		ExpectedCurrentSourcePolicyVersionID: strings.TrimSpace(entry.ExpectedCurrentSourcePolicyVersionID),
 		MaxResponseBytes:                     entry.MaxResponseBytes,
+		RequestParams:                        entry.RequestParams,
 	}
+	officialAPI := entry.AccessMethod == domain.AccessOfficialAPI
 	if !feedIdentifierPattern.MatchString(value.SourceID) ||
 		!feedIdentifierPattern.MatchString(value.EndpointID) ||
 		!feedIdentifierPattern.MatchString(value.SourcePolicyVersionID) ||
 		(value.ExpectedCurrentSourcePolicyVersionID != "" && !feedIdentifierPattern.MatchString(value.ExpectedCurrentSourcePolicyVersionID)) ||
 		value.URL == "" || value.URL != entry.URL || value.PublisherName == "" || value.PublisherDomain == "" ||
-		(value.AccessMethod != domain.AccessRSS && value.AccessMethod != domain.AccessLicensedFeed) ||
+		(value.AccessMethod != domain.AccessRSS && value.AccessMethod != domain.AccessLicensedFeed && !officialAPI) ||
 		value.MaxResponseBytes < 0 || value.MaxResponseBytes > 16<<20 {
 		return FeedSource{}, errors.New("invalid Feed source identity or endpoint")
+	}
+	// official_api 必须携带启动时锁定的固定 POST 参数；Feed 路径不得携带，避免配置串味。
+	if officialAPI && len(value.RequestParams) == 0 {
+		return FeedSource{}, errors.New("official_api source requires fixed request_params")
+	}
+	if !officialAPI && len(value.RequestParams) != 0 {
+		return FeedSource{}, errors.New("request_params are only allowed for official_api source")
+	}
+	for key, item := range value.RequestParams {
+		if strings.TrimSpace(key) == "" || strings.TrimSpace(item) == "" || key != strings.TrimSpace(key) {
+			return FeedSource{}, errors.New("invalid official_api request_params")
+		}
 	}
 
 	if entry.SourcePolicy.MaxRetentionSeconds <= 0 ||
@@ -219,6 +235,13 @@ func cloneFeedSource(value FeedSource) FeedSource {
 	value.URLPolicy.AllowedSchemes = append([]string(nil), value.URLPolicy.AllowedSchemes...)
 	value.URLPolicy.AllowedHosts = append([]string(nil), value.URLPolicy.AllowedHosts...)
 	value.URLPolicy.AllowedPorts = append([]uint16(nil), value.URLPolicy.AllowedPorts...)
+	if value.RequestParams != nil {
+		copied := make(map[string]string, len(value.RequestParams))
+		for key, item := range value.RequestParams {
+			copied[key] = item
+		}
+		value.RequestParams = copied
+	}
 	return value
 }
 

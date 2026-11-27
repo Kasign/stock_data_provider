@@ -29,15 +29,18 @@ func TestNewPlatformEndpointTransportBindsEachEnabledFeedEndpoint(t *testing.T) 
 			URL: "https://disabled.example.com/rss", AccessMethod: domain.AccessRSS,
 		},
 		{
-			SourceID: "source-a", EndpointID: "unsupported", Enabled: true,
+			SourceID: "source-a", EndpointID: "official-api", Enabled: true,
 			URL: "https://api.example.com/news", AccessMethod: domain.AccessOfficialAPI,
 		},
 	})
 	if err != nil {
 		t.Fatalf("NewPlatformEndpointTransport() error = %v", err)
 	}
-	if len(transport.doers) != 2 {
-		t.Fatalf("bound endpoint count = %d, want 2", len(transport.doers))
+	if len(transport.doers) != 3 {
+		t.Fatalf("bound endpoint count = %d, want 3", len(transport.doers))
+	}
+	if _, exists := transport.doers[EndpointKey{SourceID: "source-a", EndpointID: "official-api"}]; !exists {
+		t.Fatal("official_api endpoint must receive a bound transport")
 	}
 	for key, doer := range transport.doers {
 		platformDoer, ok := doer.(*platformHTTPDoer)

@@ -1778,3 +1778,18 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - **关键架构发现**：`domain.AccessMethod` 早已预留 `AccessOfficialAPI`（`policy.go:24`），但 `feed_sources.go:151` 与 `CollectSource` 只接受 `rss`/`licensed_feed`、只走 RSS/Atom 解析。cninfo 是 JSON POST 接口，需新增 `official_api` JSON 采集/解析路径（G2），非仅加配置。
 - **状态边界**：绑定键 8 维中的 7 个内部标识须与真实 Source/Endpoint/Provider 策略版本注册逐字一致，当前这些注册不存在（G1 未装配 Feed Stage），凭空写资格目录会造成"有资格无来源"断裂绑定=伪造证据，故本轮不注册。下一步按依赖顺序：G2 `official_api` JSON 路径 + G1 真实策略注册 → 资格目录 + G3-G5 编排 → B 组真库门禁。此前 NEWS-BLK-07/RSC-002 保持 SHELVED，生产 `available_at` 继续为 null。本次为文档交付，无需代码/CI（SHA 待文档提交后回填）。
 - **CI 状态（回填）**：提交 `0f22aabbb8fc8cc620bc8f2b958e497ecfbe4155` 的 13 个 check run 全部 `completed/success`（required-checks、Full integration checks、各模块 unit/race/vet 与 MariaDB lifecycle integration、Compose/WebUI、Market-data PIT 均 success）。
+
+## 2026-11-27 第③项 G2：official_api JSON 采集路径
+
+- **范围**：打通 `official_api` 的 JSON POST 采集能力，使 cninfo 类 JSON API 能进入既有 Feed 采集链。保持 RSS/LicensedFeed 路径字节不变（现有测试全绿）。G2 只负责采集，不解析 `available_at`（披露日边界解析属 G3-G5 证据链，不得越界）。
+- **实测依据**：cninfo `hisAnnouncement/query` 仅接受 POST form，GET 返回 HTTP 500，因此必须引入固定的 POST 请求模板；响应 `announcementTime` 为 JSON 整数毫秒、日级披露日编码。
+- **实现**：
+  - `parser/api_json.go`：新增 `FeedJSON` 格式、`DetectOfficialAPIFormat`（仅 application/json，独立于 DetectFeedFormat）、`ParseAPIJSON`。严格校验 `announcementTime` 必须是 JSON 整数（用 `json.RawMessage`，避免 `json.Number` 误收字符串），原样存入 `PublishedAtRaw`、`PublishedAt` 恒 nil。未知字段忽略但不映射。
+  - `app/collect_source.go`：`AccessMethod` 门禁放行 `official_api`；缺固定请求参数即 fail-closed 且不触网；HTTP 按 method 分流（official_api 走 POST + 排序编码的 form body + `Accept: application/json`，RSS 路径不变）；解析按 format 分流。运行时 `QueryDimension` 等输入不得进入请求体。
+  - `config/feed_sources.go`：新增 `request_params` 配置字段；official_api 必须有、RSS/Licensed 禁止有；键/值非空校验；defensive copy。
+  - `adapters/source/platform_transport.go`：transport 绑定放行 official_api（BoundDoer 只绑 host/port，天然支持 POST）。
+  - `bootstrap/news_feed_stage.go`：把 `RequestParams` 从 config 贯穿到 registration。
+  - `.env.example`：补充 official_api 模板与边界说明（占位示例，无真实值）。
+- **TDD 与变异**：parser 6 项、app 采集 6 项、config 2 项、bootstrap 1 项，共 15 项新测试。变异验证：①移除时间类型严格校验→`TestParseAPIJSONRejectsNonNumericTime` 失败；②把披露日解析为精确时间→`TestParseAPIJSONKeepsDisclosureRawValueWithoutParsingTime` 失败；③移除缺参数 fail-closed→`TestCollectOfficialAPIRejectsRequestWithoutFixedParams` 失败；④official_api 误用 GET→`TestCollectOfficialAPIIssuesFixedPOSTWithParams` 失败；⑤移除 bootstrap 参数传递→`TestNewsFeedRegistrationsPropagateOfficialAPIParams` 失败。全部恢复后全绿。
+- **验证**：`go test ./... -count=1`、`go vet ./internal/news/... ./internal/server/bootstrap/...`、`gofmt -l`、`git diff --check` 全通过；现有 RSS 路径测试未受影响。
+- **状态边界**：G2 只提供采集能力，不代表生产闭环完成。仍缺 G1 真实 Source/Endpoint/Provider 策略注册（生成与 1.19.3 一致的绑定键）、资格目录条目、Qualify→Record→Review 编排（G3-G5）与 B 组真库门禁；NEWS-BLK-07/RSC-002 保持 SHELVED，生产 `available_at` 继续为 null。CI 状态：本地全绿，待提交后按 SHA 回填。

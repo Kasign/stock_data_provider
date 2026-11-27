@@ -8,6 +8,8 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -44,6 +46,10 @@ type SourceEndpointRegistration struct {
 	EndpointPolicyVersionID string
 	URLPolicy               domain.SourceURLPolicy
 	MaxResponseBytes        int64
+	// RequestParams 是 official_api 启动时锁定的固定 POST 表单参数。
+	// 运行时调用方不可注入或覆盖；为 nil/空时 official_api 采集 fail-closed。
+	// RSS/LicensedFeed 路径不使用该字段。
+	RequestParams map[string]string
 }
 
 // SourceCatalog 只解析已登记的 Source/Endpoint，不接受调用方提供任意 URL。
@@ -128,6 +134,28 @@ func NewCollectSourceWithPolicyResolver(catalog SourceCatalog, transport SourceT
 	return &CollectSource{catalog: catalog, transport: transport, policyResolver: resolver, now: time.Now}, nil
 }
 
+// encodeRequestParams 将启动锁定的参数表编码为稳定的表单串：按键排序后逐项 url 编码。
+// 相同参数集合永远产生相同字节，便于审计与幂等；调用方运行时输入不参与此函数。
+func encodeRequestParams(params map[string]string) string {
+	if len(params) == 0 {
+		return ""
+	}
+	keys := make([]string, 0, len(params))
+	for key := range params {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	values := url.Values{}
+	for _, key := range keys {
+		values.Set(key, params[key])
+	}
+	return values.Encode()
+}
+
+func isOfficialAPIAccessMethod(method domain.AccessMethod) bool {
+	return method == domain.AccessOfficialAPI
+}
+
 func (u *CollectSource) Execute(ctx context.Context, request CollectSourceRequest) (CollectSourceResult, error) {
 	if u == nil || u.catalog == nil || u.transport == nil || ctx == nil {
 		return CollectSourceResult{}, ErrSourceCollectionRequest
@@ -162,8 +190,15 @@ func (u *CollectSource) Execute(ctx context.Context, request CollectSourceReques
 		!registration.Enabled || strings.TrimSpace(registration.URL) == "" {
 		return CollectSourceResult{}, &SourceCollectionError{Code: "source_endpoint_unavailable", Skipped: true}
 	}
-	if registration.AccessMethod != domain.AccessRSS && registration.AccessMethod != domain.AccessLicensedFeed {
+	if registration.AccessMethod != domain.AccessRSS &&
+		registration.AccessMethod != domain.AccessLicensedFeed &&
+		!isOfficialAPIAccessMethod(registration.AccessMethod) {
 		return CollectSourceResult{}, &SourceCollectionError{Code: "source_access_method_unsupported", Skipped: true}
+	}
+	// official_api 必须携带启动时锁定的固定 POST 参数；缺参数即 fail-closed，且不得触网。
+	officialAPI := isOfficialAPIAccessMethod(registration.AccessMethod)
+	if officialAPI && len(registration.RequestParams) == 0 {
+		return CollectSourceResult{}, &SourceCollectionError{Code: "source_request_params_missing"}
 	}
 	if strings.TrimSpace(registration.SourcePolicyVersionID) == "" ||
 		(registration.EndpointPolicy != nil && strings.TrimSpace(registration.EndpointPolicyVersionID) == "") ||
@@ -213,11 +248,22 @@ func (u *CollectSource) Execute(ctx context.Context, request CollectSourceReques
 	if limit < 1 || limit > maximumSourceResponseLimit {
 		return CollectSourceResult{}, &SourceCollectionError{Code: "source_response_limit_invalid"}
 	}
-	httpRequest, err := http.NewRequestWithContext(ctx, http.MethodGet, urlDecision.CanonicalURL, nil)
+	httpMethod := http.MethodGet
+	var requestBody io.Reader
+	if officialAPI {
+		httpMethod = http.MethodPost
+		requestBody = strings.NewReader(encodeRequestParams(registration.RequestParams))
+	}
+	httpRequest, err := http.NewRequestWithContext(ctx, httpMethod, urlDecision.CanonicalURL, requestBody)
 	if err != nil {
 		return CollectSourceResult{}, &SourceCollectionError{Code: "source_endpoint_url_invalid"}
 	}
-	httpRequest.Header.Set("Accept", "application/rss+xml, application/atom+xml")
+	if officialAPI {
+		httpRequest.Header.Set("Accept", "application/json")
+		httpRequest.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	} else {
+		httpRequest.Header.Set("Accept", "application/rss+xml, application/atom+xml")
+	}
 	response, err := u.transport.Do(ctx, request.SourceID, request.EndpointID, httpRequest)
 	if ctxErr := ctx.Err(); ctxErr != nil {
 		if response != nil && response.Body != nil {
@@ -251,13 +297,23 @@ func (u *CollectSource) Execute(ctx context.Context, request CollectSourceReques
 	if int64(len(payload)) > limit {
 		return CollectSourceResult{}, &SourceCollectionError{Code: "source_response_too_large"}
 	}
-	declaredFormat, err := parser.DetectFeedFormat(response.Header.Get("Content-Type"))
+	var declaredFormat parser.FeedFormat
+	if officialAPI {
+		declaredFormat, err = parser.DetectOfficialAPIFormat(response.Header.Get("Content-Type"))
+	} else {
+		declaredFormat, err = parser.DetectFeedFormat(response.Header.Get("Content-Type"))
+	}
 	if err != nil {
 		return CollectSourceResult{}, &SourceCollectionError{Code: "source_content_type_unsupported"}
 	}
 
 	fetchedAt := u.now().UTC()
-	feed, err := parser.ParseFeed(payload, fetchedAt)
+	var feed parser.FeedDocument
+	if officialAPI {
+		feed, err = parser.ParseAPIJSON(payload, fetchedAt)
+	} else {
+		feed, err = parser.ParseFeed(payload, fetchedAt)
+	}
 	if ctxErr := ctx.Err(); ctxErr != nil {
 		return CollectSourceResult{}, ctxErr
 	}
