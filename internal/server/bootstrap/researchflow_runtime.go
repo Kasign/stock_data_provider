@@ -129,7 +129,7 @@ func newResearchflowRuntimeComponent(
 	}
 
 	normalFinalizer, err := researchflowapplication.NewRunFinalizer(
-		composition.runRepository, composition.clock, composition.ids,
+		composition.runRepository, composition.clock, composition.ids, nil,
 		researchflowapplication.RunFinalizerConfig{SummarySchemaVersion: "1.0.0"},
 	)
 	if err != nil {

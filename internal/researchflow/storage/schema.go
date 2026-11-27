@@ -13,7 +13,7 @@ var requiredResearchflowSchemaColumns = map[string][]string{
 		"run_ref", "schema_version", "status", "version", "system_as_of", "deadline_at",
 		"template_ref", "template_version", "template_fingerprint", "input_snapshot_refs",
 		"resolved_template_snapshot", "parameters_snapshot", "originating_request_id",
-		"correlation_id", "result_summary_ref", "termination_reason", "created_at",
+		"correlation_id", "result_summary_ref", "result_ref", "termination_reason", "created_at",
 		"started_at", "finished_at",
 	},
 	"researchflow_stages": {
@@ -31,6 +31,9 @@ var requiredResearchflowSchemaColumns = map[string][]string{
 	},
 	"researchflow_result_summaries": {
 		"result_summary_ref", "run_ref", "schema_version", "payload", "created_at",
+	},
+	"researchflow_run_results": {
+		"result_ref", "run_ref", "schema_version", "payload", "created_at",
 	},
 	"researchflow_outbox": {
 		"outbox_ref", "run_ref", "event_type", "schema_version", "idempotency_key",
@@ -80,6 +83,8 @@ var requiredResearchflowSchemaIndexes = []researchflowSchemaIndexDefinition{
 	{table: "researchflow_run_idempotency", name: "uq_researchflow_idempotency_run", unique: true, columns: []string{"run_ref"}},
 	{table: "researchflow_result_summaries", name: "PRIMARY", unique: true, columns: []string{"result_summary_ref"}},
 	{table: "researchflow_result_summaries", name: "uq_researchflow_result_summary_run", unique: true, columns: []string{"run_ref"}},
+	{table: "researchflow_run_results", name: "PRIMARY", unique: true, columns: []string{"result_ref"}},
+	{table: "researchflow_run_results", name: "uq_researchflow_run_result_run", unique: true, columns: []string{"run_ref"}},
 	{table: "researchflow_outbox", name: "PRIMARY", unique: true, columns: []string{"outbox_ref"}},
 	{table: "researchflow_outbox", name: "uq_researchflow_outbox_run_event", unique: true, columns: []string{"run_ref", "event_type"}},
 	{table: "researchflow_outbox", name: "uq_researchflow_outbox_idempotency", unique: true, columns: []string{"idempotency_key"}},
@@ -102,7 +107,7 @@ func ValidateSchema(ctx context.Context, db *sql.DB) error {
 	}
 
 	const tableNames = "'researchflow_runs', 'researchflow_stages', 'researchflow_attempts', " +
-		"'researchflow_run_idempotency', 'researchflow_result_summaries', 'researchflow_outbox', " +
+		"'researchflow_run_idempotency', 'researchflow_result_summaries', 'researchflow_run_results', 'researchflow_outbox', " +
 		"'researchflow_workflow_templates', 'researchflow_capacity_guard', 'researchflow_stage_output_resources'"
 	rows, err := db.QueryContext(ctx, "SELECT table_name, column_name\n"+
 		"FROM information_schema.columns\n"+

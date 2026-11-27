@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -24,6 +25,9 @@ type CancellationFinalizationRecord struct {
 	TerminalStatus       domain.RunStatus
 	TerminationReason    string
 	Summary              domain.ResultSummary
+	ResultRef            string
+	ResultSchemaVersion  string
+	ResultPayload        json.RawMessage
 }
 
 type CancellationFinalizerConfig struct {

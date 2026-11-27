@@ -67,6 +67,7 @@ type Run struct {
 	InputSnapshotRefs    []string        `json:"input_snapshot_refs"`
 	ResultSummary        *ResultSummary  `json:"result_summary,omitempty"`
 	ResultSummaryRef     *string         `json:"-"`
+	ResultRef            *string         `json:"-"`
 	ExcludedStages       []ExcludedStage `json:"-"`
 	OriginatingRequestID *string         `json:"originating_request_id"`
 	CorrelationID        string          `json:"correlation_id"`

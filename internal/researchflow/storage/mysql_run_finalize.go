@@ -12,6 +12,7 @@ import (
 
 	"example.com/stock-analysis-flow/internal/researchflow/application"
 	"example.com/stock-analysis-flow/internal/researchflow/domain"
+	"example.com/stock-analysis-flow/internal/researchflow/resultvalidation"
 )
 
 var ErrRunAlreadyFinalized = errors.New("Researchflow run is already finalized")
@@ -33,6 +34,9 @@ type RunFinalization struct {
 	TerminalStatus       domain.RunStatus
 	TerminationReason    string
 	Summary              domain.ResultSummary
+	ResultRef            string
+	ResultSchemaVersion  string
+	ResultPayload        json.RawMessage
 }
 
 // FinalizeRun atomically fixes ResultSummary, terminal Run state and the
@@ -54,6 +58,27 @@ func (r *MySQLRunRepository) FinalizeRun(ctx context.Context, input RunFinalizat
 		input.Summary.DegradedStageCodes == nil || input.Summary.BlockedStageCodes == nil ||
 		input.Summary.ReasonCodes == nil || input.Summary.ExcludedStages == nil {
 		return false, errors.New("Researchflow finalization requires a complete terminal status and summary")
+	}
+	hasRunResult := strings.TrimSpace(input.ResultRef) != "" ||
+		strings.TrimSpace(input.ResultSchemaVersion) != "" || len(input.ResultPayload) > 0
+	var runResultRefValue *string
+	if hasRunResult {
+		if strings.TrimSpace(input.ResultRef) == "" || len(input.ResultRef) > 255 ||
+			input.ResultSchemaVersion != resultvalidation.RunResultPayloadSchemaVersion ||
+			input.TerminationReason != "" ||
+			(input.TerminalStatus != domain.RunSucceeded && input.TerminalStatus != domain.RunPartial && input.TerminalStatus != domain.RunFailed) {
+			return false, errors.New("Researchflow RunResult finalization identity or terminal state is invalid")
+		}
+		var identity struct {
+			SchemaVersion string `json:"schema_version"`
+			RunRef        string `json:"run_ref"`
+		}
+		if !json.Valid(input.ResultPayload) || json.Unmarshal(input.ResultPayload, &identity) != nil ||
+			identity.SchemaVersion != input.ResultSchemaVersion || identity.RunRef != input.RunRef {
+			return false, errors.New("Researchflow RunResult payload is missing or does not match the Run")
+		}
+		value := input.ResultRef
+		runResultRefValue = &value
 	}
 	summaryPayload, err := json.Marshal(input.Summary)
 	if err != nil {
@@ -259,6 +284,14 @@ func (r *MySQLRunRepository) FinalizeRun(ctx context.Context, input RunFinalizat
 		input.ResultSummaryRef, input.RunRef, input.SummarySchemaVersion, string(summaryPayload), finishedAt); err != nil {
 		return false, fmt.Errorf("insert Researchflow ResultSummary: %w", err)
 	}
+	if runResultRefValue != nil {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO researchflow_run_results
+			(result_ref, run_ref, schema_version, payload, created_at)
+			VALUES (?, ?, ?, ?, ?)`,
+			input.ResultRef, input.RunRef, input.ResultSchemaVersion, string(input.ResultPayload), finishedAt); err != nil {
+			return false, fmt.Errorf("insert Researchflow RunResult: %w", err)
+		}
+	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO researchflow_outbox
 		(outbox_ref, run_ref, event_type, schema_version, idempotency_key, correlation_id,
 		payload_fingerprint, payload, created_at, published_at, attempt_count, last_error_code)
@@ -269,10 +302,10 @@ func (r *MySQLRunRepository) FinalizeRun(ctx context.Context, input RunFinalizat
 		return false, fmt.Errorf("insert Researchflow terminal Outbox event: %w", err)
 	}
 	result, err := tx.ExecContext(ctx, `UPDATE researchflow_runs SET
-		status = ?, version = version + 1, result_summary_ref = ?,
+		status = ?, version = version + 1, result_summary_ref = ?, result_ref = ?,
 		termination_reason = ?, finished_at = ?
 		WHERE run_ref = ? AND version = ? AND status = ?`,
-		string(input.TerminalStatus), input.ResultSummaryRef,
+		string(input.TerminalStatus), input.ResultSummaryRef, nullableString(runResultRefValue),
 		nullableText(input.TerminationReason), finishedAt,
 		input.RunRef, input.ExpectedVersion, runStatus)
 	if err != nil {
@@ -297,6 +330,9 @@ func (r *MySQLRunRepository) FinalizeDeadlineRun(ctx context.Context, record app
 	if record.TerminationReason != "deadline_exceeded" ||
 		(record.TerminalStatus != domain.RunFailed && record.TerminalStatus != domain.RunPartial) {
 		return false, errors.New("Researchflow deadline finalization record has an invalid termination reason or terminal status")
+	}
+	if record.ResultRef != "" || record.ResultSchemaVersion != "" || len(record.ResultPayload) > 0 {
+		return false, errors.New("Researchflow deadline finalization cannot write a RunResult")
 	}
 	return r.FinalizeRun(ctx, RunFinalization{
 		RunRef: record.RunRef, ExpectedVersion: record.ExpectedVersion,
@@ -324,6 +360,7 @@ func (r *MySQLRunRepository) FinalizeRunResult(ctx context.Context, record appli
 		ResultSummaryRef: record.ResultSummaryRef, SummarySchemaVersion: record.SummarySchemaVersion,
 		OutboxRef: record.OutboxRef, TerminalStatus: record.TerminalStatus,
 		TerminationReason: record.TerminationReason, Summary: record.Summary,
+		ResultRef: record.ResultRef, ResultSchemaVersion: record.ResultSchemaVersion, ResultPayload: record.ResultPayload,
 	})
 }
 
@@ -332,6 +369,9 @@ func (r *MySQLRunRepository) FinalizeRunResult(ctx context.Context, record appli
 func (r *MySQLRunRepository) FinalizeCancellationRun(ctx context.Context, record application.CancellationFinalizationRecord) (bool, error) {
 	if record.TerminationReason != "user_cancelled" || record.TerminalStatus != domain.RunCancelled {
 		return false, errors.New("Researchflow cancellation finalization record has an invalid termination reason or terminal status")
+	}
+	if record.ResultRef != "" || record.ResultSchemaVersion != "" || len(record.ResultPayload) > 0 {
+		return false, errors.New("Researchflow cancellation finalization cannot write a RunResult")
 	}
 	return r.FinalizeRun(ctx, RunFinalization{
 		RunRef: record.RunRef, ExpectedVersion: record.ExpectedVersion,

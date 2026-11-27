@@ -251,8 +251,8 @@ func (r *MySQLRunRepository) CompareAndSwapRun(
 	if expectedVersion == ^uint64(0) || next.Version != expectedVersion+1 || next.Status == "" {
 		return false, errors.New("Researchflow Run CAS version or status is invalid")
 	}
-	if next.ResultSummary != nil || next.ResultSummaryRef != nil || next.FinishedAt != nil {
-		return false, errors.New("Researchflow Run CAS cannot write terminal summary or finish time; use finalization")
+	if next.ResultSummary != nil || next.ResultSummaryRef != nil || next.ResultRef != nil || next.FinishedAt != nil {
+		return false, errors.New("Researchflow Run CAS cannot write terminal summary, RunResult reference or finish time; use finalization")
 	}
 	var currentStatus string
 	var currentReason, currentSummaryRef sql.NullString
@@ -535,17 +535,17 @@ func (r *MySQLRunRepository) loadRun(ctx context.Context, runRef string) (applic
 	var status string
 	var systemAsOf, deadlineAt, createdAt string
 	var inputRefs, resolvedSnapshot string
-	var requestID, resultSummaryRef, terminationReason, startedAt, finishedAt sql.NullString
+	var requestID, resultSummaryRef, resultRef, terminationReason, startedAt, finishedAt sql.NullString
 	err := r.db.QueryRowContext(ctx, `SELECT
 		run_ref, schema_version, status, version, system_as_of, deadline_at,
 		template_ref, template_version, template_fingerprint, input_snapshot_refs,
 		resolved_template_snapshot, originating_request_id, correlation_id,
-		result_summary_ref, termination_reason, created_at, started_at, finished_at
+		result_summary_ref, result_ref, termination_reason, created_at, started_at, finished_at
 		FROM researchflow_runs WHERE run_ref = ?`, runRef,
 	).Scan(
 		&run.Ref, &run.SchemaVersion, &status, &run.Version, &systemAsOf, &deadlineAt,
 		&run.TemplateRef, &run.TemplateVersion, &run.TemplateFingerprint, &inputRefs,
-		&resolvedSnapshot, &requestID, &run.CorrelationID, &resultSummaryRef,
+		&resolvedSnapshot, &requestID, &run.CorrelationID, &resultSummaryRef, &resultRef,
 		&terminationReason, &createdAt, &startedAt, &finishedAt,
 	)
 	if err != nil {
@@ -569,6 +569,7 @@ func (r *MySQLRunRepository) loadRun(ctx context.Context, runRef string) (applic
 	}
 	run.OriginatingRequestID = stringPointer(requestID)
 	run.ResultSummaryRef = stringPointer(resultSummaryRef)
+	run.ResultRef = stringPointer(resultRef)
 	if terminationReason.Valid {
 		run.TerminationReason = terminationReason.String
 	}
@@ -746,7 +747,7 @@ func (r *MySQLRunRepository) validateRecord(record application.CreateRunRecord) 
 		return errors.New("Researchflow create-run record is incomplete")
 	}
 	if record.Run.StartedAt != nil || record.Run.FinishedAt != nil ||
-		record.Run.ResultSummary != nil || record.Run.ResultSummaryRef != nil ||
+		record.Run.ResultSummary != nil || record.Run.ResultSummaryRef != nil || record.Run.ResultRef != nil ||
 		strings.TrimSpace(record.Run.TerminationReason) != "" {
 		return errors.New("Researchflow CreateRun cannot initialize lifecycle or terminal Run fields")
 	}

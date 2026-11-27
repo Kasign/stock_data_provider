@@ -10,12 +10,12 @@ func TestMigrationsDefineCompleteResearchflowBaseline(t *testing.T) {
 		t.Fatalf("MigrationNamespace = %q", MigrationNamespace)
 	}
 	migrations := Migrations()
-	if len(migrations) != 1 || migrations[0].Version != 1 {
-		t.Fatalf("migration set = %#v, want one V1 baseline", migrations)
+	if len(migrations) != 2 || migrations[0].Version != 1 || migrations[1].Version != 2 {
+		t.Fatalf("migration versions = %v, want V1 baseline followed by V2 RunResult increment", migrations)
 	}
 	statements := migrations[0].Statements
 	if len(statements) != 10 {
-		t.Fatalf("statement count = %d, want 9 tables plus capacity seed", len(statements))
+		t.Fatalf("V1 statement count = %d, want 9 tables plus capacity seed", len(statements))
 	}
 	schema := strings.Join(statements, "\n")
 	for _, table := range []string{
@@ -49,15 +49,32 @@ func TestMigrationsDefineCompleteResearchflowBaseline(t *testing.T) {
 	if strings.Contains(strings.ToUpper(schema), "ALTER TABLE") {
 		t.Fatal("fresh baseline must not contain incremental ALTER statements")
 	}
+	v2 := strings.Join(migrations[1].Statements, "\n")
+	if len(migrations[1].Statements) != 2 {
+		t.Fatalf("V2 statement count = %d, want result_ref column and RunResult table", len(migrations[1].Statements))
+	}
+	for _, fragment := range []string{
+		"ALTER TABLE researchflow_runs ADD COLUMN result_ref VARCHAR(255) NULL",
+		"CREATE TABLE researchflow_run_results (",
+		"UNIQUE KEY uq_researchflow_run_result_run (run_ref)",
+		"CONSTRAINT fk_researchflow_run_results_run FOREIGN KEY (run_ref)",
+	} {
+		if !strings.Contains(v2, fragment) {
+			t.Errorf("V2 is missing fragment %q", fragment)
+		}
+	}
 }
 
 func TestMigrationsReturnIndependentStatementSlices(t *testing.T) {
 	first, second := Migrations(), Migrations()
-	if len(first) != 1 || len(second) != 1 || len(first[0].Statements) != len(second[0].Statements) {
-		t.Fatal("migration baseline shape changed between calls")
+	if len(first) != 2 || len(second) != 2 ||
+		len(first[0].Statements) != len(second[0].Statements) ||
+		len(first[1].Statements) != len(second[1].Statements) {
+		t.Fatal("migration shape changed between calls")
 	}
 	first[0].Statements[0] = "mutated"
-	if second[0].Statements[0] == "mutated" {
+	first[1].Statements[0] = "mutated"
+	if second[0].Statements[0] == "mutated" || second[1].Statements[0] == "mutated" {
 		t.Fatal("migration statements must be independently allocated")
 	}
 }

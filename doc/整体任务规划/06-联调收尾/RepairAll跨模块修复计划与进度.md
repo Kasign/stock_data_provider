@@ -1694,3 +1694,12 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - **登记状态**：`契约版本与变更记录.md` 推进至 `0.2.68-frozen`；PLAT-002 将 FLOW-CTR-005 从 `planned` 转为 `frozen`（仅契约定义），FLOW-CTR-001 登记 Run 1.1.0 additive。
 - **状态边界**：本组只发布机器契约与 Golden；不建表、不接 HTTP、不启用生产完整报告。后续 R4-R3 才做物理表与 Finalizer 原子写入，生产成功路径仍依赖 R3 真实来源语义与 LLM Provider 注入。
 - **CI 状态（回填）**：代码提交 `6a2b8513de1218ff7a6ee56941591d08972cfbc4` 的 13 个 check run 全部 `completed/success`：required-checks `45948375866`、Go test suite workflow run `45948375842`（含 Researchflow module format/tests/race/vet、WorkerStore、MariaDB lifecycle）、Integration CI `45948375814`（Full integration checks）。R4-R2 验收完成。
+
+## 2026-11-27 四项根因根治 R4-R3：RunResult 物理表与 Finalizer 原子写入门禁
+
+- **迁移边界**：Researchflow 新增 V2 增量迁移：`researchflow_runs.result_ref` 可空列与 `researchflow_run_results(result_ref, run_ref, schema_version, payload, created_at)`，按 `run_ref` 唯一并外键绑定 Run；V1 基线字节不变。物理 Schema 校验同步覆盖新列、新表与主/唯一索引。
+- **领域与事务**：`domain.Run` 增加内部 `ResultRef` 身份；`loadRun` 回读，CreateRun/CAS 继续禁止非 Finalization 写入。`FinalizeRun` 在同一 Read Committed 事务中写 ResultSummary、可选 RunResult、Outbox 与 Run 终态；RunResult 必须同时具备引用、Schema 版本和合法 JSON，payload 的 `run_ref`/`schema_version` 必须与 finalizing Run 一致。deadline/cancellation 适配器拒绝携带 RunResult。
+- **Finalizer 门禁**：新增来源无关 `RunResultProjector` 窄端口；仅 normal finalization 的报告型终态可请求投影，投影为空时不生成报告，投影无效时 fail-closed。RunRef 使用 snapshot 可信身份，不接收调用方输入；生产组合根当前注入 `nil`，尚未启用完整报告成功路径。
+- **TDD 与变异**：先新增引用新字段/端口的测试，因 API 未定义构建失败；随后迁移、存储校验、Finalizer 投影用例全通过。变异一移除 Finalizer payload 的 RunRef 绑定校验，`TestRunFinalizerRejectsUnboundRunResultProjection` 有效失败；变异二放宽存储 Schema 版本/一致性校验，`TestFinalizeRunRejectsUnboundRunResultPayloadBeforeTransaction/wrong_schema` 有效失败；均恢复后复验通过。
+- **本地验收**：`go test ./internal/researchflow/... ./internal/server/bootstrap -count=1`、`go vet` 与 `git diff --check` 通过。完整 CI 待代码提交后按精确 SHA 回填。
+- **状态边界**：本组只完成可审计的物理持久化与原子写入门禁；不新增 HTTP、不生成生产完整报告、不把 nil projector 当成功报告。生产成功路径仍依赖 R3 真实来源语义、LLM Provider 注入与后续 ResultRef 读取门禁。

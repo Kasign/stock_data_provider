@@ -270,6 +270,52 @@ func TestFinalizeRunRejectsIncompleteSummaryBeforeTransaction(t *testing.T) {
 	}
 }
 
+func completeFinalizationForTest() RunFinalization {
+	return RunFinalization{
+		RunRef: "run-1", ExpectedVersion: 1, ResultSummaryRef: "summary-1",
+		SummarySchemaVersion: "v1", OutboxRef: "outbox-1",
+		TerminalStatus: domain.RunSucceeded,
+		Summary: domain.ResultSummary{
+			StageOutcomes:  map[string]domain.StageStatus{"context": domain.StageSucceeded},
+			ExcludedStages: []domain.ExcludedStage{}, MissingStageCodes: []string{},
+			DegradedStageCodes: []string{}, BlockedStageCodes: []string{},
+			ReasonCodes: []string{}, Coverage: 1, QualityStatus: "valid",
+			RiskGateDecisions: map[string]string{}, ActionabilityStatus: "not_evaluated",
+		},
+	}
+}
+
+func TestFinalizeRunRejectsIncompleteRunResultBeforeTransaction(t *testing.T) {
+	repository := &MySQLRunRepository{db: &sql.DB{}}
+	input := completeFinalizationForTest()
+	input.ResultRef = "result-1"
+	_, err := repository.FinalizeRun(context.Background(), input)
+	if err == nil || errors.Is(err, sql.ErrConnDone) {
+		t.Fatalf("partial RunResult identity reached database or passed: %v", err)
+	}
+}
+
+func TestFinalizeRunRejectsUnboundRunResultPayloadBeforeTransaction(t *testing.T) {
+	repository := &MySQLRunRepository{db: &sql.DB{}}
+	for name, payload := range map[string]json.RawMessage{
+		"wrong_run":     json.RawMessage(`{"schema_version":"1.0.0","run_ref":"run-2"}`),
+		"wrong_schema":  json.RawMessage(`{"schema_version":"9.9.9","run_ref":"run-1"}`),
+		"not_an_object": json.RawMessage(`[]`),
+		"invalid_json":  json.RawMessage(`{"schema_version":`),
+	} {
+		t.Run(name, func(t *testing.T) {
+			input := completeFinalizationForTest()
+			input.ResultRef = "result-1"
+			input.ResultSchemaVersion = "1.0.0"
+			input.ResultPayload = payload
+			_, err := repository.FinalizeRun(context.Background(), input)
+			if err == nil || errors.Is(err, sql.ErrConnDone) {
+				t.Fatalf("unbound RunResult payload reached database or passed: %v", err)
+			}
+		})
+	}
+}
+
 func TestMariaDBFinalizeCancellationRunAtomicallyPersistsSummaryAndOutbox(t *testing.T) {
 	if os.Getenv("PLATFORM_STORAGE_INTEGRATION") != "1" {
 		t.Skip("set PLATFORM_STORAGE_INTEGRATION=1 to run Researchflow MariaDB integration tests")
