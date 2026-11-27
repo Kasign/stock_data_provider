@@ -200,4 +200,4 @@
 - **决策**：DEC-PLAT-002-065。四个解释字段（`rule_ref`/`observed_value`/`expected_range`/`remediation_code`）纳入 Quant 权威 `risk.Decision`（QNT-CTR-004 2.0.0，MAJOR），1.0.0 冻结字节不变。
 - **实现**：`internal/quant/risk/decision.go` 权威结构 + Validate 解释字段 canonical 校验；`internal/quant/result/envelope.go` RiskPayload 版本化（1.0.0/2.0.0）+ DecodePayload 按版本分派；`internal/researchflow/resultvalidation/risk_projection.go` 的 `RiskDecisionFromQuantEnvelope` 从 Quant risk Envelope 投影权威决策（先经 `Decision.Validate`）；`composer.go` 从 QuantResults 的 risk Envelope 投影，双风险来源/多 risk Envelope/plugin payload schema 一律 fail-closed。
 - **验证**：四类 fail-closed Contract Test（triggered→reject、unknown→unknown、缺 block→unknown、status/reason 不一致拒绝）通过；投影字段保留、错误类型拒绝、schema 版本不匹配拒绝通过；2.0.0 Schema/Golden 双向校验通过；两处变异（放开双来源、跳过投影）均 `FAILED_AS_EXPECTED`；`go test ./internal/...` 全绿。
-- **状态**：`RESOLVED`。FLOW-006 风险结论唯一来源已确立，不再存在第二份无来源绑定的 RiskDecision；独立 HardRiskGate 若出现须另立领域身份与契约。
+- **状态**：`RESOLVED`。FLOW-006 风险结论唯一来源已确立，不再存在第二份无来源绑定的 RiskDecision；独立 HardRiskGate 若出现须另立领域身份与契约。代码 SHA `31849237` 四工作流全 success（Integration CI 45931642093 含 L3 真实 PASS 6.94s）。
