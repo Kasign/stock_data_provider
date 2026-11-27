@@ -64,6 +64,31 @@ paths:
         '403': { $ref: '#/components/responses/PublicError' }
         '404': { $ref: '#/components/responses/PublicError' }
         '5XX': { $ref: '#/components/responses/PublicError' }
+  /api/v1/researchflow/runs/{run_ref}/results:
+    get:
+      operationId: getResearchflowRunResults
+      summary: Read a restricted projection of authorized domain results for a Run
+      description: >-
+        Not a complete research report. Returns only already-authorized Quant
+        result views; Stage Output content, Attempt details and RiskDecision
+        raw structure are excluded (DEC-PLAT-002-064, SRV-CTR-001 1.1.0 additive).
+        Available only when the Quant authorized result read chain is assembled.
+      parameters:
+        - name: run_ref
+          in: path
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 255 }
+      responses:
+        '200':
+          description: Restricted authorized result projection
+          content:
+            application/json:
+              schema:
+                $ref: '../schema/SRV-CTR-001/result-read-response-1.1.0.schema.json'
+        '401': { $ref: '#/components/responses/PublicError' }
+        '403': { $ref: '#/components/responses/PublicError' }
+        '404': { $ref: '#/components/responses/PublicError' }
+        '5XX': { $ref: '#/components/responses/PublicError' }
   /api/v1/researchflow/runs/{run_ref}/cancel:
     post:
       operationId: cancelResearchflowRun

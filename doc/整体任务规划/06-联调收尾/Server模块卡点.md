@@ -377,3 +377,11 @@
 - 首期 News Search 只验收 Researchflow 基础执行链，不得描述为完整 A 股研究报告链路。
 - 精确代码 SHA `ab6225a5d936375ebacf6bd57c609502d8a7f75e`：Go Test Suite [Run 45132439066](https://github.com/Kasign/stock_data_provider/actions/runs/45132439066) 与 Integration CI [Run 45132439148](https://github.com/Kasign/stock_data_provider/actions/runs/45132439148) 全项 success。覆盖 gofmt、root Go tests/race/vet、Researchflow/Research、MariaDB/Redis Worker Bootstrap、WebUI syntax/unit/build。
 - 剩余 L3：真实 HTTPS 浏览器 Owner Session 登录/CSRF 恢复后创建 Run、轮询查询、取消 Run；核验真实 MariaDB 持久化、Worker 执行和最终状态回读。不得用 Mock 或单测替代目标环境验收。
+
+## 2026-11-27 SRV-CTR-001 additive 1.1.0：结果读取 DTO（阶段 2.3）
+
+- **新增路由**：`GET /api/v1/researchflow/runs/{run_ref}/results`，DEC-PLAT-002-064 授权，SRV-CTR-001 1.0.0 三条 Run 路由与 frozen 文件字节不变。
+- **实现位置**：`internal/server/bootstrap/researchflow_result_read.go`（窄端口 + 资源级授权先行 + fail-closed 发现 + 受限投影）、`researchflow_http.go`（handler 与路由注册，复用现有 `authenticate`，仅 Owner Session）。组合根复用 2.2 已装配的 Stage Output Reader 与 `GetResult`，不新建平行读取链。
+- **边界**：响应 `resource_kind=authorized_domain_results`，明确不是完整研究报告；只暴露四种已注册 result_type 的受限 DTO，`risk` 不携带 RiskDecision 原始 payload；不含 Stage Output 内容、Attempt 明细、domain.Run 内部字段。未装配 Quant 授权读取链时路由不注册。
+- **验证**：`go test ./internal/...` 全绿；真库 L3 `--- PASS (7.53s)`（含 2.3 断言）；5 处变异有效失败，1 处 `UNEXPECTED_PASS` 已归因（纵深防御，非断言问题）；完整 CI 按精确 SHA 待回填。
+- **剩余**：WebUI 页面迁移（3.1/3.2）；2.4 上下文/RiskDecision 语义冻结；目标环境 HTTPS 浏览器 Owner Session/CSRF 验收仍 PENDING。详见 `doc/quant/16` 第 12 节。

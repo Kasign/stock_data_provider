@@ -447,6 +447,47 @@ func TestQuantResearchMariaDBRedisL3(t *testing.T) {
 		}
 	}
 
+	// ---- 阶段 2.3：Server 结果读取链在真实组合根 + 真库上贯通 ----
+	// 复用 2.2 已装配的 Stage Output Reader 与 GetResult，经 Run 的已授权 Stage
+	// 集合发现 result_id，再读取受限投影；HTTP 层只做 DTO 投影，不访问 Repository。
+	if owner.execution.stageOutputReader == nil || owner.execution.quantResultRead == nil {
+		t.Fatal("生产组合根未装配 2.3 结果读取窄端口")
+	}
+	stageSlice := make([]researchflowdomain.Stage, 0, len(stagesByCode))
+	for _, stage := range stagesByCode {
+		stageSlice = append(stageSlice, stage)
+	}
+	readEnvelopes, readEnvelopesErr := owner.execution.readQuantResultsForStages(ctx, created.Run.Ref, stageSlice)
+	if readEnvelopesErr != nil {
+		t.Fatalf("2.3 真库结果读取失败: %v", readEnvelopesErr)
+	}
+	if len(readEnvelopes) != 4 {
+		t.Fatalf("2.3 结果读取 = %d, want 4", len(readEnvelopes))
+	}
+	projectedTypes := map[string]bool{}
+	for _, envelope := range readEnvelopes {
+		projected, projectErr := projectQuantResultForRead(envelope)
+		if projectErr != nil {
+			t.Fatalf("2.3 投影 %s 失败: %v", envelope.ResultType, projectErr)
+		}
+		projectedTypes[envelope.ResultType] = true
+		if envelope.ResultType == "risk" && len(projected.Payload) != 0 {
+			t.Fatal("2.3 risk 投影不得暴露 RiskDecision 原始结构")
+		}
+		if envelope.ResultType != "risk" && len(projected.Payload) == 0 {
+			t.Fatalf("2.3 %s 投影应携带强类型 payload", envelope.ResultType)
+		}
+	}
+	for _, wantType := range []string{"indicator", "factor", "trend", "risk"} {
+		if !projectedTypes[wantType] {
+			t.Fatalf("2.3 缺少 %s 结果投影，实际 %v", wantType, projectedTypes)
+		}
+	}
+	// 跨 Run 的 Stage 集合必须在发现阶段被完整性门禁拒绝，不触达结果读取。
+	if _, crossErr := owner.execution.readQuantResultsForStages(ctx, "run:researchflow:forged-l3", stageSlice); crossErr == nil {
+		t.Fatal("2.3 跨 Run Stage 集合必须 fail-closed")
+	}
+
 	// 停掉 Worker，避免它认领下面创建的第二个 Run 并引入非确定性输出。
 	child.stop(t)
 

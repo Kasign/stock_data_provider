@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:kasign:server:srv-ctr-001:result-read-response:1.1.0",
+  "title": "SRV-CTR-001 Authorized Result Read Response 1.1.0",
+  "description": "Restricted projection of authorized domain results for a Researchflow Run. This is NOT a complete research report: result_ref is the Run, results are already-authorized Quant Envelope views. Stage Output content, Attempt details and RiskDecision raw structure are excluded.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "run_ref",
+    "resource_kind",
+    "results"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.1.0"
+    },
+    "run_ref": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255
+    },
+    "resource_kind": {
+      "const": "authorized_domain_results"
+    },
+    "results": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "result_id",
+          "result_type",
+          "scope",
+          "system_as_of",
+          "quality_status",
+          "result_status",
+          "authorization_ref",
+          "payload_schema_version"
+        ],
+        "properties": {
+          "schema_version": {
+            "type": "string",
+            "const": "1.0.0"
+          },
+          "result_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "result_type": {
+            "enum": ["indicator", "factor", "trend", "risk"]
+          },
+          "scope": {
+            "type": "string",
+            "minLength": 1
+          },
+          "security_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "system_as_of": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "trade_date": {
+            "type": "string",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+          },
+          "quality_status": {
+            "type": "string",
+            "minLength": 1
+          },
+          "result_status": {
+            "type": "string",
+            "minLength": 1
+          },
+          "authorization_ref": {
+            "type": "string",
+            "minLength": 1
+          },
+          "payload_schema_version": {
+            "type": "string",
+            "const": "1.0.0"
+          },
+          "payload": {
+            "description": "Strong-typed QNT-CTR-004 payload for indicator/factor/trend. Must be absent for result_type=risk (RiskDecision raw structure is excluded).",
+            "type": "object"
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": { "result_type": { "const": "risk" } },
+              "required": ["result_type"]
+            },
+            "then": {
+              "not": { "required": ["payload"] },
+              "properties": {
+                "result_status": { "enum": ["rejected", "unknown"] }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": { "result_type": { "enum": ["indicator", "factor", "trend"] } },
+              "required": ["result_type"]
+            },
+            "then": {
+              "required": ["payload"]
+            }
+          }
+        ]
+      }
+    }
+  }
+}

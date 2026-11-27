@@ -31,19 +31,23 @@ type researchflowComposition struct {
 	newsFeedStage      *newsFeedStageComposition
 	quantResultReader  *researchflowQuantResultReader
 	newsEvidenceReader *researchflowNewsEvidenceReader
-	quantStage         *quantSMA20StageComposition
-	quantFactorStage   *quantFactorStageComposition
-	quantTrendStage    *quantTrendStageComposition
-	runRepository      *researchflowstorage.MySQLRunRepository
-	templateRegistry   *researchflowstorage.MySQLTemplateRegistry
-	workflowTemplates  []template.WorkflowTemplate
-	resourcePolicies   researchflowapplication.ResourcePolicyResolver
-	parameterSchemas   *parameterschema.Validator
-	applicability      template.ApplicabilityEvaluator
-	outputRegistries   researchflowapplication.StageOutputRegistryResolver
-	stageExecutor      researchflowapplication.StageExecutor
-	clock              *researchflowstorage.MySQLDatabaseClock
-	ids                researchflowapplication.IDGenerator
+	// stageOutputReader 与 quantResultRead 是阶段 2.3 结果读取的窄端口。
+	// 二者复用 2.2 已装配的同一对象，不新建平行读取路径（AGENTS.md 规则 15）。
+	stageOutputReader quantStageOutputReader
+	quantResultRead   quantResultReadUseCase
+	quantStage        *quantSMA20StageComposition
+	quantFactorStage  *quantFactorStageComposition
+	quantTrendStage   *quantTrendStageComposition
+	runRepository     *researchflowstorage.MySQLRunRepository
+	templateRegistry  *researchflowstorage.MySQLTemplateRegistry
+	workflowTemplates []template.WorkflowTemplate
+	resourcePolicies  researchflowapplication.ResourcePolicyResolver
+	parameterSchemas  *parameterschema.Validator
+	applicability     template.ApplicabilityEvaluator
+	outputRegistries  researchflowapplication.StageOutputRegistryResolver
+	stageExecutor     researchflowapplication.StageExecutor
+	clock             *researchflowstorage.MySQLDatabaseClock
+	ids               researchflowapplication.IDGenerator
 }
 
 func newResearchflowComposition(
@@ -338,6 +342,7 @@ func newResearchflowComposition(
 		newsStage: newsStage, newsFeedStage: newsFeedStage,
 		quantStage: quantStage, quantFactorStage: quantFactorStage, quantTrendStage: quantTrendStage,
 		quantResultReader: quantResultReader, newsEvidenceReader: newsEvidenceReader,
+		stageOutputReader: stageOutputReader, quantResultRead: quantResultReader,
 		runRepository: runRepository, templateRegistry: templateRegistry,
 		workflowTemplates: workflowTemplates, resourcePolicies: policyResolver,
 		parameterSchemas: parameterSchemas, applicability: researchflowApplicabilityEvaluator{},

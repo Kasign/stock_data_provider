@@ -157,3 +157,13 @@ HTTP 200，返回 Run 聚合响应（见第 5 节）。新建与幂等重放使�
 - 1.1.0 只放宽三处：`schema_version` 的 `const` 改为 `1.1.0`；`template_ref`/`template_version` 从固定值改为非空无首尾空白字符串；`parameters` 从 News 参数 `$ref` 改为不透明 JSON object。**HTTP 路径、方法、认证矩阵、CSRF/Origin 语义、响应 DTO 与错误语义均未改变**，因此不升级 SRV-CTR-001 主版本。
 - `parameters` 的具体形状由目标模板的参数 Schema 拥有：News Search 仍为 `news-search-parameters-1.0.0`；per-Stage 模板（如 `quant.research`）为 `{"stages":{"<stage_code>":{...}}}` 信封。1.1.0 只约束 `parameters` 必须是 JSON object，不复制任何模板参数约束。
 - 兼容性：1.0.0 的 News 请求在 1.1.0 下依然合法；客户端按模板选择对应 `schema_version`。本版本属 additive 文档演进，不改变运行时行为，也不提前解冻任何契约。
+
+### 9.2 结果读取响应版本演进：result-read-response-1.1.0（additive 路由与响应）
+
+- `result-read-response-1.1.0.schema.json` 是本契约的**新增响应版本**，由 DEC-PLAT-002-064 决议引入；1.0.0 的三条 Run 路由及其响应 Schema 保持冻结、字节不变。
+- **新增路由**：`GET /api/v1/researchflow/runs/{run_ref}/results`。认证矩阵与第 2 节完全一致：仅 Root Owner Session（`__Secure-owner_session`），拒绝 Owner Bearer、Service Token、匿名，GET 执行 Session/CredentialVersion/Host/Origin 校验。路径 `run_ref` 必须是非空、无首尾空白、长度不超过 255 的现有 Run 引用。
+- **语义**：鉴权后必须先由 `GetRunService.GetRun` 执行 Run 资源级读取授权（禁止旁路 Repository），再由 Server 以进程内可信身份调用各领域 Owner 的授权读取用例（Quant `GetResult` / News `GetEvidence`），把已授权结果投影为受限公开 DTO。**这不是完整研究报告**：`resource_kind` 固定为 `authorized_domain_results`，不含 Run/Stage 聚合字段、不含完整报告正文。
+- **响应**：`schema_version` 固定 `1.1.0`；`results[]` 每项为已授权 Envelope 的受限投影，只允许 `indicator`/`factor`/`trend`/`risk` 四种 `result_type`。`risk` 项**禁止**携带 `payload`（RiskDecision 原始结构归 RF-BLOCK-008 / 2.4 决议），其 `result_status` 为 `rejected` 或 `unknown`；其余三项携带经 QNT-CTR-004 校验的强类型 `payload`。Stage Output 内容、Attempt 明细、`domain.Run` 内部字段与 `RiskDecision` 原始结构均不得出现在响应中。
+- **可用性门控**：仅当组合根已装配 Quant 授权结果读取链（Stage Output Reader + GetResult）时注册该路由；未装配时返回 404 `researchflow.result_read_unavailable`，不返回空壳结果。
+- **错误语义**：`401` 未认证、`403` Run 读取授权拒绝、`404` Run 不存在或结果读端点未装配、`5xx` 存储/授权/关联完整性故障。跨 Run、无关联、伪造 RunRef、当前策略撤销期间的读取一律 fail-closed，不得降级为空结果或 200。
+- **兼容性**：本版本是 additive 路由与响应演进，不改变第 1 节的接口清单、第 3～6 节既有路由语义或第 7 节错误码；不升级 SRV-CTR-001 主版本。`doc/server/openapi/researchflow.openapi.yaml` 增加该路径，既有三条路径不变。

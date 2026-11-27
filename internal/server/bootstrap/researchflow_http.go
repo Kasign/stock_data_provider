@@ -1,6 +1,7 @@
 package bootstrap
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	platformsecurity "example.com/stock-analysis-flow/internal/platform/security"
+	quantresult "example.com/stock-analysis-flow/internal/quant/result"
 	researchflowapplication "example.com/stock-analysis-flow/internal/researchflow/application"
 	researchflowdomain "example.com/stock-analysis-flow/internal/researchflow/domain"
 )
@@ -18,6 +20,14 @@ type researchflowHTTPHandler struct {
 	authenticator ownerSessionRequestAuthenticator
 	cookieName    string
 	composition   *researchflowOwnerComposition
+	// resultRead 是阶段 2.3 的结果读取窄端口；由 Owner Session 认证后调用。
+	// 生产装配指向 researchflowRunResultReadService，测试可用 stub 验证边界。
+	resultRead researchflowResultReadPort
+}
+
+// researchflowResultReadPort 是 HTTP 层对 Server 结果读取用例的窄端口。
+type researchflowResultReadPort interface {
+	ReadRunResults(ctx context.Context, runRef string) ([]quantresult.Envelope, error)
 }
 
 type researchflowRunResponse struct {
@@ -67,20 +77,46 @@ type researchflowAggregateResponse struct {
 	ResultSummary *researchflowdomain.ResultSummary `json:"result_summary"`
 }
 
+// researchflowResultReadResponse 是阶段 2.3 的结果读取响应。
+// 它显式声明 result_ref 语义：这是已授权领域结果的可读投影，不是完整研究报告；
+// results 是受限 DTO，不含 Stage Output 内容、Attempt 明细或 RiskDecision 原始结构。
+type researchflowResultReadResponse struct {
+	SchemaVersion string                       `json:"schema_version"`
+	RunRef        string                       `json:"run_ref"`
+	ResourceKind  string                       `json:"resource_kind"`
+	Results       []researchflowResultReadItem `json:"results"`
+}
+
 func newResearchflowHTTPHandler(owner *ownerSessionComposition) (http.Handler, error) {
 	if owner == nil || owner.authenticator == nil || owner.researchflow == nil ||
 		owner.researchflow.createRun == nil || owner.researchflow.getRun == nil || owner.researchflow.cancelRun == nil {
 		return nil, errors.New("Owner Session and Researchflow Run use cases are required")
 	}
+	// 阶段 2.3 结果读取复用 2.2 已装配的组合根：GetRun 提供资源级授权，
+	// execution 内的授权读取窄端口提供领域结果。若组合根未装配 quant 结果
+	// 读取链（例如只配置 News Stage），则结果读取端点不可用，不注册路由。
+	var resultRead researchflowResultReadPort
+	if owner.researchflow.getRun != nil && owner.researchflow.execution != nil &&
+		owner.researchflow.execution.stageOutputReader != nil &&
+		owner.researchflow.execution.quantResultRead != nil {
+		resultRead = &researchflowRunResultReadService{
+			runs:   owner.researchflow.getRun,
+			reader: owner.researchflow.execution,
+		}
+	}
 	handler := &researchflowHTTPHandler{
 		authenticator: owner.authenticator,
 		cookieName:    owner.cookie.Name,
 		composition:   owner.researchflow,
+		resultRead:    resultRead,
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /api/v1/researchflow/runs", handler.create)
 	mux.HandleFunc("GET /api/v1/researchflow/runs/{run_ref}", handler.get)
 	mux.HandleFunc("POST /api/v1/researchflow/runs/{run_ref}/cancel", handler.cancel)
+	if resultRead != nil {
+		mux.HandleFunc("GET /api/v1/researchflow/runs/{run_ref}/results", handler.getResults)
+	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authenticated, ok := handler.authenticate(w, r)
 		if !ok {
@@ -160,6 +196,45 @@ func (h *researchflowHTTPHandler) get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.writeAggregate(w, http.StatusOK, result.Run, result.Stages)
+}
+
+// getResults 实现阶段 2.3 的正式结果读取路径。
+// 身份链：authenticate 中间件已确认 Owner Session；随后由 resultRead 内部的
+// GetRun 完成资源级授权，再由领域 Owner 授权读取；HTTP 层只做受限 DTO 投影，
+// 不访问任何模块 Repository，也不返回完整报告正文（SRV-CTR-001 冻结边界不变）。
+func (h *researchflowHTTPHandler) getResults(w http.ResponseWriter, r *http.Request) {
+	if h.resultRead == nil {
+		writePublicError(w, r, http.StatusNotFound, publicError{
+			Class: "not_found", Code: "researchflow.result_read_unavailable",
+			Message: "Researchflow result read is not configured",
+		})
+		return
+	}
+	runRef := r.PathValue("run_ref")
+	envelopes, err := h.resultRead.ReadRunResults(r.Context(), runRef)
+	if err != nil {
+		h.writeError(w, r, err)
+		return
+	}
+	response := researchflowResultReadResponse{
+		SchemaVersion: "1.1.0",
+		RunRef:        runRef,
+		ResourceKind:  "authorized_domain_results",
+		Results:       make([]researchflowResultReadItem, 0, len(envelopes)),
+	}
+	for _, envelope := range envelopes {
+		item, projectErr := projectQuantResultForRead(envelope)
+		if projectErr != nil {
+			h.writeError(w, r, projectErr)
+			return
+		}
+		response.Results = append(response.Results, item)
+	}
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(response)
 }
 
 func (h *researchflowHTTPHandler) cancel(w http.ResponseWriter, r *http.Request) {
