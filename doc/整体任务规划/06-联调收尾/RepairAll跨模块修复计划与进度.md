@@ -1711,4 +1711,7 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - **不冒充语义**：读取路径只返回 Researchflow-owned RunResult 记录；Quant `result_ref` 与 SRV-CTR-001 `authorized_domain_results` 不进入该链路，非报告终态或无 ResultRef 一律 `ErrRunResultNotFound`，不用空壳报告补位。
 - **TDD 与变异**：先新增因 API 未定义构建失败的读取用例；实现后授权、跨 Run、Schema 漂移、payload 未绑定、终态缺引用均按预期拒绝。变异“允许终态 Run 无 `result_ref`”使 `TestGetRunResultRejectsRunWithoutPersistedResultRef` 有效失败并恢复。
 - **真库证据**：新增 DSN 门控的 `TestMariaDBFinalizeRunAtomicallyPersistsRunResultAndReadsItBack`，验证同一事务落库后 `GetRunResult` 与 `GetRun.ResultRef` 回读一致；本地无 DSN 时 SKIP，执行结论以 CI 为准。
-- **状态边界**：本组不新增 HTTP 成功路径、不注入真实 projector、不接入 LLM Provider；完整报告生产可用性仍依赖 R3 真实来源语义与生产 Provider。CI 待代码提交后按精确 SHA 回填。
+- **首轮 CI 失败与归因**：提交 `436c4c9fe0951f9cebbe2fddd8a7dc7674d59596` 的 `Researchflow MariaDB lifecycle integration` 失败，日志为 `TestMariaDBFinalizeRunAtomicallyPersistsRunResultAndReadsItBack: FinalizeRun updated=false err=<nil>`。根因是测试前置 SQL 已把 Run 从 version 1 更新到 version 2，而 `completeFinalizationForTest()` 仍提供 `ExpectedVersion: 1`；Finalizer 版本不匹配返回 `(false, nil)` 是正确行为。只把该测试夹具设为 `ExpectedVersion = 2`，未放宽版本守卫或断言。
+- **本地验收**：修复后 `go test ./internal/researchflow/storage -run '^TestMariaDBFinalizeRunAtomicallyPersistsRunResultAndReadsItBack$' -count=1`、`go test ./internal/researchflow/storage -count=1`、`go test ./... -count=1`、`go vet ./...`、`git diff --check` 全部通过。
+- **CI 状态（回填）**：修复提交 `0ec56ad1e1bb75afa911d5d789a131436878f04f` 的 13 个 check run 全部 `completed/success`：required-checks `45950902488`、Go test suite workflow run `45950902566`（含 Researchflow MariaDB lifecycle integration）、Integration CI / Full integration checks `45950902560`。R4-R4 验收完成。
+- **状态边界**：本组不新增 HTTP 成功路径、不注入真实 projector、不接入 LLM Provider；完整报告生产可用性仍依赖 R3 真实来源语义与生产 Provider。

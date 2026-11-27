@@ -89,11 +89,11 @@
 - **现状**：Researchflow 的 Result Composer/Validator 已是纯函数实现；Quant Envelope 的版本/字段错配已修复。当前通过 `NewQuantPayloadRegistry` 精确注册 Quant Envelope 1.0.0 的 trend/risk Payload，并通过 `FromQuantEnvelope` 映射 Quant Typed Envelope。
 - **安全边界**：生产调用必须先通过 Quant Application `GetResult`，由 Quant Owner 完成当前授权、Manifest 绑定和读取审计；`FromQuantEnvelope` 本身只验证/映射，不授权。Research/LLM 同样必须使用各自 Owner Facade。
 - **Run 绑定**：Composer 要求 Context/Quant/LLM/Risk 的 SystemAsOf 与 Run 完全一致；Server/Worker 必须将同一 Run 的 SystemAsOf/DeadlineAt 传给各 Adapter，不得重新取当前时间。
-- **结果持久化缺口**：`ComposedResearchResult` 仍没有生产 Store/ResultRef 成功读取路径。Run 的 `ResultSummaryRef` 只指向执行摘要，不等于完整研究报告。R4-R1/R4-R2/R4-R3/R4-R4 已完成可持久化投影、`run-result` 1.0.0 / Run 1.1.0 Schema/Golden、物理表、Finalizer 同事务写入门禁与授权读取门禁；生产组合根尚未注入真实 projector，完整报告成功路径仍关闭。
+- **结果持久化缺口**：`ComposedResearchResult` 的来源无关 Store/ResultRef 读取门禁已完成；Run 的 `ResultSummaryRef` 仍只指向执行摘要，不等于完整研究报告。R4-R1/R4-R2/R4-R3/R4-R4 已完成可持久化投影、`run-result` 1.0.0 / Run 1.1.0 Schema/Golden、物理表、Finalizer 同事务写入门禁与授权读取门禁（修复提交 `0ec56ad1e` 13 项 CI 全 success）；生产组合根尚未注入真实 projector，也没有生产组合/LLM 解释给料，完整报告成功路径仍关闭。
 - **唯一 Owner（DEC-PLAT-002-068）**：Researchflow 持有按 RunRef 唯一关联的 `RunResult` 子资源；只持久化组合输出、LLM 解释和来源引用，不复制 Research/Quant 原始资源；`ResultSummaryRef` 保持执行摘要语义。Run 以 additive optional `result_ref` 引用完整报告，既有 1.0.0 Schema/Golden 字节不变，1.1.0 机器契约禁止非报告终态生成非空 `result_ref`。
 - **影响**：纯函数组合测试通过不代表真实 Quant/Research/LLM 数据、授权、模型调用和 Run 完成后的结果可检索；生产完整报告仍依赖 R3 来源语义与 LLM Provider 接线。
 - **处理责任**：Quant Owner（GetResult/授权/Manifest）、Research Owner（Context/Evidence/Claim/授权）、LLM Owner（真实模型调用/Tokenizer）、Researchflow（RunResult 唯一 Owner、组合与版本校验）、Server Owner（Worker/Adapter/持久化装配）。
-- **解除条件**：Researchflow 完成真实 Quant/Research/LLM 组合、RunResult 原子持久化、ResultRef 读取和 Contract Test；生产成功路径还须 R3 来源语义与 LLM Provider 接线完成。
+- **解除条件**：RunResult 原子持久化、ResultRef 授权读取和 Contract Test 已完成；剩余条件是 Researchflow 完成真实 Quant/Research/LLM 组合与 projector 生产注入，且 R3 来源语义与 LLM Provider 接线完成。
 - **当前状态**：`IN_PROGRESS`（DEC-068 已确定唯一 Owner）；阻断 FLOW-006 生产闭环，不阻断来源无关的 RunResult 投影、Schema/Golden 与持久化门禁先行。
 
 ### RF-BLOCK-008：Composer RiskDecision 与 Quant RiskDecision 契约不一致
