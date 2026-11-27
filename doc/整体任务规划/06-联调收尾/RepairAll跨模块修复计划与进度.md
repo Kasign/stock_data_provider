@@ -1838,3 +1838,12 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - **验证**：`go test ./... -count=1` 全绿，`go test ./internal/news/app ./internal/news/stage ./internal/server/bootstrap -count=1` 全绿，`gofmt -l` 无输出。
 - **状态边界**：G5 打通了 Qualify→Record→Review 的生产代码链，但不等于已完成真实运行验收。仍缺真实 Feed Run + B 组 MariaDB 门禁证据；不因代码链完成就声称生产 `available_at` 已非空，也不把测试夹具或 stub 当作生产证据。NEWS-BLK-07/RSC-002 保持 SHELVED 直至 B 组门禁通过。
 - **CI 状态（回填）**：提交 `a53a6193e0b8c0d04b750fe020fb697f0366ff30` 的 13 个 check run 全部 `completed/success`：required-checks `140468088121`、Full integration checks `140468088209`、Go test suite `140468088735`（含 News MariaDB `140468088936`），其余 Researchflow/Research/Notification/Market-data 集成与专项检查均 success。
+
+## 2026-11-27 第③项 B 组：G1-G5 生产链 MariaDB 门禁测试
+
+- **范围**：新增 DSN 门控的 `TestNewsAvailabilityProductionChainMariaDBIntegration`，用真实 MariaDB + 生产 use case 串通 Collect → Qualify → Ingest → Record → Review；不新增生产实现，不改任何门禁语义。
+- **真实性边界**：资格记录是测试专用 ref/rule version，`RawResponseSampleHash` 由测试内固定的 JSON 快照逐字节计算；Transport 不触网。它验证的是 G1-G5 代码链与持久化/PIT 语义，不代表生产来源已准入，也不把测试 `available_at` 当作生产证据。
+- **断言链**：Feed Stage 成功 → `news_version_availability_decisions` 存在 `verified` 且 `review_rule_version` 来自资格目录 → 选中 Evidence 的 `parse_status=parsed`、`source_precision=disclosure_boundary`、字段路径与响应样本哈希一致 → Repository 严格 PIT 在可信 cutoff 后返回 `2026-10-31T15:59:59Z`。
+- **CI 接线**：把新测试加入 `go-test.yml` 的 News MariaDB Job 精确 `-run` 清单，并显式 grep `--- PASS`，防止测试被 SKIP/漏跑仍算通过。
+- **本地验证**：`go test ./... -count=1`、`go vet ./...`、`git diff --check` 全通过；本地无 `NEWS_MARIADB_TEST_DSN`，真库测试 SKIP。
+- **CI 状态**：not_run（待提交后按精确 SHA 回填）。未取得 CI 真库 PASS 前不解除 NEWS-BLK-07/RSC-002，不声称生产 `available_at` 已可用。
