@@ -367,8 +367,14 @@ func TestQuantResearchMariaDBRedisL3(t *testing.T) {
 	if len(riskPayload.MissingFacts) != 0 {
 		t.Fatalf("risk missing_facts=%v, want none once all three fact classes are verified", riskPayload.MissingFacts)
 	}
-	if len(riskPayload.InputRefs) != 4 {
-		t.Fatalf("risk input_refs=%v, want trading-status and order-book evidence pairs", riskPayload.InputRefs)
+	// 三类事实各有独立快照与授权：固定六段，且三个快照引用互不相同。
+	if len(riskPayload.InputRefs) != 6 {
+		t.Fatalf("risk input_refs=%v, want six evidence references (three snapshot/authorization pairs)", riskPayload.InputRefs)
+	}
+	if riskPayload.InputRefs[0] == riskPayload.InputRefs[2] ||
+		riskPayload.InputRefs[0] == riskPayload.InputRefs[4] ||
+		riskPayload.InputRefs[2] == riskPayload.InputRefs[4] {
+		t.Fatalf("risk input_refs=%v, want three distinct snapshot references", riskPayload.InputRefs)
 	}
 
 	// ---- 阶段 2.2 C 组：生产授权读取链端到端贯通 ----
