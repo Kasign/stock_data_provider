@@ -33,6 +33,7 @@ func validateEgressDependencies(cfg config.Config, deps Dependencies) error {
 				MarketBreadth: settings.MarketBreadth, LimitPools: settings.LimitPools, StockBoards: settings.StockBoards,
 				Announcements: settings.Announcements, DragonTiger: settings.DragonTiger, ChipDistribution: settings.ChipDistribution,
 				CapitalFlow: settings.CapitalFlow, HotRankings: settings.HotRankings,
+				OrderBook: settings.OrderBook,
 			})
 			if err != nil {
 				return fmt.Errorf("controlled egress for eastmoney: %w", err)
@@ -125,7 +126,7 @@ func hasConfiguredProviderCapability(settings config.ProviderSettings) bool {
 		settings.SecurityTradingStatus || settings.Fundamentals || settings.Valuations ||
 		settings.IndexCatalog || settings.ChipDistribution || settings.CapitalFlow ||
 		settings.MarketCapitalFlow || settings.HotRankings || settings.DragonTiger ||
-		settings.Announcements
+		settings.Announcements || settings.OrderBook
 }
 
 func missingEgress(name string) error {

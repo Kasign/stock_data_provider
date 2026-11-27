@@ -45,6 +45,7 @@ type DataService struct {
 	stockBoardsProviders           []provider.StockBoardsProvider
 	tradingCalendarProviders       []provider.TradingCalendarProvider
 	securityTradingStatusProviders []provider.SecurityTradingStatusProvider
+	orderBookProviders             []provider.OrderBookProvider
 	priceLimitEventProviders       []provider.PriceLimitEventProvider
 	fundamentalsProviders          []provider.FundamentalsProvider
 	valuationProviders             []provider.ValuationProvider
@@ -464,6 +465,14 @@ func (s *DataService) SetSecurityTradingStatusProviders(providers []provider.Sec
 
 func (s *DataService) SecurityTradingStatusProviders() []provider.SecurityTradingStatusProvider {
 	return append([]provider.SecurityTradingStatusProvider(nil), s.securityTradingStatusProviders...)
+}
+
+func (s *DataService) SetOrderBookProviders(providers []provider.OrderBookProvider) {
+	s.orderBookProviders = append([]provider.OrderBookProvider(nil), providers...)
+}
+
+func (s *DataService) OrderBookProviders() []provider.OrderBookProvider {
+	return append([]provider.OrderBookProvider(nil), s.orderBookProviders...)
 }
 
 func (s *DataService) SetPriceLimitEventProviders(providers []provider.PriceLimitEventProvider) {

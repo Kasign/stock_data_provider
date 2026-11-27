@@ -31,6 +31,7 @@ type ProviderSettings struct {
 	StockBoards           bool `json:"stock_boards"`
 	TradingCalendar       bool `json:"trading_calendar"`
 	SecurityTradingStatus bool `json:"security_trading_status"`
+	OrderBook             bool `json:"order_book"`
 	Fundamentals          bool `json:"fundamentals"`
 	Valuations            bool `json:"valuations"`
 	IndexCatalog          bool `json:"index_catalog"`
@@ -119,7 +120,7 @@ func defaultProviderFile() providerFile {
 		ProviderPriority: []string{"eastmoney", "baostock", "hithink", "tushare", "tickflow", "tencent", "sina", "netease", "pytdx", "xueqiu"},
 		AdjustmentBasis:  "forward_adjusted",
 		Providers: map[string]ProviderSettings{
-			"eastmoney": {Enabled: true, Quote: true, DailyBars: true, StockBasic: true, StockSearch: true, SectorRankings: true, IndexQuotes: true, MarketBreadth: true, LimitPools: true, StockBoards: true, DragonTiger: true, Announcements: true, ChipDistribution: true, CapitalFlow: true, HotRankings: true},
+			"eastmoney": {Enabled: true, Quote: true, DailyBars: true, StockBasic: true, StockSearch: true, SectorRankings: true, IndexQuotes: true, MarketBreadth: true, LimitPools: true, StockBoards: true, DragonTiger: true, Announcements: true, ChipDistribution: true, CapitalFlow: true, HotRankings: true, OrderBook: true},
 			"hithink":   {Enabled: false, Quote: false, DailyBars: false, IndexQuotes: false, TradingCalendar: false, LimitPools: false, DragonTiger: false, Fundamentals: false, Valuations: false, IndexCatalog: false, HotRankings: false},
 			"tencent":   {Enabled: true, Quote: true, DailyBars: true, StockSearch: true},
 			"baostock":  {Enabled: true, Quote: false, DailyBars: true, TradingCalendar: true, Fundamentals: true},
@@ -192,6 +193,10 @@ func load(allowRootInjectedStorage bool) (Config, error) {
 			if _, specified := suppliedPresence.Providers[name]["capital_flow"]; !specified {
 				// 旧配置未定义个股资金流能力时继承默认值；显式 false 仍可关闭。
 				settings.CapitalFlow = defaults.Providers[name].CapitalFlow
+			}
+			if _, specified := suppliedPresence.Providers[name]["order_book"]; !specified {
+				// 旧配置未定义盘口能力时继承默认值；显式 false 仍可关闭。
+				settings.OrderBook = defaults.Providers[name].OrderBook
 			}
 			file.Providers[name] = settings
 		}
@@ -461,6 +466,7 @@ func overrideProvider(prefix string, p ProviderSettings) ProviderSettings {
 	p.DragonTiger = boolEnv("MARKET_DATA_"+prefix+"_DRAGON_TIGER_ENABLED", p.DragonTiger)
 	p.Announcements = boolEnv("MARKET_DATA_"+prefix+"_ANNOUNCEMENTS_ENABLED", p.Announcements)
 	p.TradingCalendar = boolEnv("MARKET_DATA_"+prefix+"_TRADING_CALENDAR_ENABLED", p.TradingCalendar)
+	p.OrderBook = boolEnv("MARKET_DATA_"+prefix+"_ORDER_BOOK_ENABLED", p.OrderBook)
 	p.Fundamentals = boolEnv("MARKET_DATA_"+prefix+"_FUNDAMENTALS_ENABLED", p.Fundamentals)
 	p.Valuations = boolEnv("MARKET_DATA_"+prefix+"_VALUATIONS_ENABLED", p.Valuations)
 	p.IndexCatalog = boolEnv("MARKET_DATA_"+prefix+"_INDEX_CATALOG_ENABLED", p.IndexCatalog)
@@ -651,7 +657,7 @@ func validateEnvironment() error {
 		"ENABLED", "QUOTE_ENABLED", "DAILY_BARS_ENABLED", "STOCK_BASIC_ENABLED", "STOCK_SEARCH_ENABLED",
 		"SECTOR_RANKINGS_ENABLED", "INDEX_QUOTES_ENABLED", "MARKET_BREADTH_ENABLED",
 		"LIMIT_POOLS_ENABLED", "STOCK_BOARDS_ENABLED", "DRAGON_TIGER_ENABLED",
-		"ANNOUNCEMENTS_ENABLED", "TRADING_CALENDAR_ENABLED", "FUNDAMENTALS_ENABLED",
+		"ANNOUNCEMENTS_ENABLED", "TRADING_CALENDAR_ENABLED", "ORDER_BOOK_ENABLED", "FUNDAMENTALS_ENABLED",
 		"VALUATIONS_ENABLED", "INDEX_CATALOG_ENABLED", "CHIP_DISTRIBUTION_ENABLED",
 		"HOT_RANKINGS_ENABLED",
 	}
@@ -672,7 +678,7 @@ func validateEnvironment() error {
 		"MARKET_DATA_EASTMONEY_QUOTE_ENABLED", "MARKET_DATA_EASTMONEY_DAILY_BARS_ENABLED",
 		"MARKET_DATA_EASTMONEY_STOCK_BASIC_ENABLED", "MARKET_DATA_EASTMONEY_SECTOR_RANKINGS_ENABLED",
 		"MARKET_DATA_EASTMONEY_INDEX_QUOTES_ENABLED", "MARKET_DATA_EASTMONEY_MARKET_BREADTH_ENABLED", "MARKET_DATA_EASTMONEY_CHIP_DISTRIBUTION_ENABLED", "MARKET_DATA_EASTMONEY_HOT_RANKINGS_ENABLED",
-		"MARKET_DATA_EASTMONEY_LIMIT_POOLS_ENABLED", "MARKET_DATA_EASTMONEY_STOCK_BOARDS_ENABLED", "MARKET_DATA_EASTMONEY_DRAGON_TIGER_ENABLED", "MARKET_DATA_EASTMONEY_ANNOUNCEMENTS_ENABLED",
+		"MARKET_DATA_EASTMONEY_LIMIT_POOLS_ENABLED", "MARKET_DATA_EASTMONEY_STOCK_BOARDS_ENABLED", "MARKET_DATA_EASTMONEY_DRAGON_TIGER_ENABLED", "MARKET_DATA_EASTMONEY_ANNOUNCEMENTS_ENABLED", "MARKET_DATA_EASTMONEY_ORDER_BOOK_ENABLED",
 		"MARKET_DATA_TENCENT_ENABLED", "MARKET_DATA_TENCENT_QUOTE_ENABLED",
 		"MARKET_DATA_TENCENT_DAILY_BARS_ENABLED", "MARKET_DATA_SINA_ENABLED", "MARKET_DATA_MX_ENABLED",
 		"MARKET_DATA_YAHOO_ENABLED", "MARKET_DATA_YAHOO_QUOTE_ENABLED", "MARKET_DATA_YAHOO_DAILY_BARS_ENABLED",

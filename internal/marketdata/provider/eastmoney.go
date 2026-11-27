@@ -193,6 +193,7 @@ type EastmoneyCapabilities struct {
 	SectorRankings, IndexQuotes, MarketBreadth          bool
 	LimitPools, StockBoards, Announcements, DragonTiger bool
 	ChipDistribution, CapitalFlow, HotRankings          bool
+	OrderBook                                           bool
 }
 
 // HTTPOriginsForCapabilities 只返回指定业务能力真实请求路径涉及的 endpoint origin。
@@ -208,7 +209,7 @@ func (p *Eastmoney) HTTPOriginsForCapabilities(c EastmoneyCapabilities) ([]strin
 			endpoints = append(endpoints, values...)
 		}
 	}
-	add(c.Quote, p.quoteURL)
+	add(c.Quote || c.OrderBook, p.quoteURL)
 	add(c.DailyBars || c.SectorRankings || c.ChipDistribution, p.klineURL)
 	add(c.StockBasic, p.stockBasicURL)
 	add(c.StockSearch || c.MarketBreadth, p.stockListURL)

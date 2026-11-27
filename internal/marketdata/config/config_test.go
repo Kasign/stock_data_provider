@@ -116,6 +116,29 @@ func TestLoadStockSearchCapabilityEnvironmentOverrides(t *testing.T) {
 	}
 }
 
+func TestLoadOrderBookCapabilityEnvironmentOverrides(t *testing.T) {
+	setDefaultProviderConfig(t)
+	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
+	t.Setenv("MARKET_DATA_EASTMONEY_ORDER_BOOK_ENABLED", "false")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.ProviderSettings["eastmoney"].OrderBook {
+		t.Fatal("order-book capability must be independently disableable")
+	}
+
+	t.Setenv("MARKET_DATA_EASTMONEY_ORDER_BOOK_ENABLED", "true")
+	cfg, err = Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.ProviderSettings["eastmoney"].OrderBook {
+		t.Fatal("environment override must enable the order-book capability")
+	}
+}
+
 func TestLoadEastmoneyHotRankingEndpointConfiguration(t *testing.T) {
 	setDefaultProviderConfig(t)
 	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")

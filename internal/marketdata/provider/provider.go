@@ -121,6 +121,13 @@ type SecurityTradingStatusProvider interface {
 	FetchSecurityTradingStatus(ctx context.Context, symbol, tradeDate string) (*model.SecurityTradingStatusSnapshot, error)
 }
 
+// OrderBookProvider 返回带来源时间与系统观察时间的真实五档盘口。
+// 它是 tradable_volume 的事实入口；不得用成交量或参与率推导盘口。
+type OrderBookProvider interface {
+	NamedProvider
+	FetchOrderBook(ctx context.Context, symbol string) (*model.OrderBook, error)
+}
+
 // PriceLimitEventProvider returns source-backed special no-limit event evidence for an exact A-share date.
 // Implementations must not infer a confirmed absence unless the source guarantees complete coverage.
 type PriceLimitEventProvider interface {

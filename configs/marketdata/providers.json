@@ -28,7 +28,8 @@
       "announcements": true,
       "chip_distribution": true,
       "capital_flow": true,
-      "hot_rankings": true
+      "hot_rankings": true,
+      "order_book": true
     },
     "hithink": {
       "enabled": false,

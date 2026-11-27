@@ -86,6 +86,31 @@ func TestEastmoneyHTTPOriginsForCapabilitiesUsesOnlyRequiredEndpoints(t *testing
 	}
 }
 
+func TestEastmoneyHTTPOriginsForCapabilitiesIncludesOrderBookQuoteOrigin(t *testing.T) {
+	cfg := config.Config{
+		EastmoneyQuoteURL:         "https://quote.example.test/api",
+		EastmoneyKlineURL:         "https://kline.example.test/api",
+		EastmoneyStockBasicURL:    "https://basic.example.test/api",
+		EastmoneySectorRankingURL: "https://sector.example.test/api",
+		EastmoneyIndexURL:         "https://index.example.test/api",
+		EastmoneyMarketStocksURL:  "https://stocks.example.test/api",
+		EastmoneyLimitPoolBaseURL: "https://limit.example.test",
+		EastmoneyStockBoardsURL:   "https://boards.example.test/api",
+		EastmoneyDragonTigerURL:   "https://dragon.example.test/api",
+		EastmoneyAnnouncementsURL: "https://ann.example.test/api",
+		EastmoneyHotRankingsURL:   "https://hot.example.test/api",
+		EastmoneyHotSurgeURL:      "https://surge.example.test/api",
+		EastmoneyCapitalFlowURL:   "https://flow.example.test/api",
+	}
+	origins, err := newEastmoneyProvider(cfg).HTTPOriginsForCapabilities(provider.EastmoneyCapabilities{OrderBook: true})
+	if err != nil {
+		t.Fatalf("HTTPOriginsForCapabilities() error = %v", err)
+	}
+	if len(origins) != 1 || origins[0] != "https://quote.example.test" {
+		t.Fatalf("order-book-only origins = %#v, want only quote origin", origins)
+	}
+}
+
 func TestEastmoneyHTTPOriginsForCapabilitiesIncludesDependentEndpoints(t *testing.T) {
 	cfg := config.Config{
 		EastmoneyKlineURL:         "https://kline.example.test/api",
@@ -158,6 +183,9 @@ func TestHasConfiguredProviderCapability(t *testing.T) {
 	}
 	if !hasConfiguredProviderCapability(config.ProviderSettings{Announcements: true}) {
 		t.Fatal("Announcements must be recognized as an enabled capability")
+	}
+	if !hasConfiguredProviderCapability(config.ProviderSettings{OrderBook: true}) {
+		t.Fatal("OrderBook must be recognized as an enabled capability")
 	}
 }
 
