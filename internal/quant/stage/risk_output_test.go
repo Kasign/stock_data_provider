@@ -13,7 +13,12 @@ func validRiskStageOutput() RiskOutput {
 	authorizationRef := "data_authorization:opaque-token"
 	orderBookRef := "data_snapshot:sha256:" + strings.Repeat("c", 64)
 	orderBookAuthorizationRef := "data_authorization:order-book-opaque-token"
-	refs := []string{snapshotRef, authorizationRef, orderBookRef, orderBookAuthorizationRef}
+	limitPoolRef := "data_snapshot:sha256:" + strings.Repeat("d", 64)
+	limitPoolAuthorizationRef := "data_authorization:limit-pool-opaque-token"
+	refs := []string{
+		snapshotRef, authorizationRef, orderBookRef, orderBookAuthorizationRef,
+		limitPoolRef, limitPoolAuthorizationRef,
+	}
 	return RiskOutput{
 		SchemaVersion: RiskSchemaVersion,
 		ResultID:      "quant_result:sha256:" + strings.Repeat("b", 64),
@@ -77,8 +82,8 @@ func TestRiskStageOutputRejectsTampering(t *testing.T) {
 		"input refs order": func(output *RiskOutput) {
 			output.InputRefs = []string{output.InputRefs[1], output.InputRefs[0], output.InputRefs[3], output.InputRefs[2]}
 		},
-		"order book evidence omitted": func(output *RiskOutput) {
-			output.InputRefs = append([]string{}, output.InputRefs[:2]...)
+		"limit pool evidence omitted": func(output *RiskOutput) {
+			output.InputRefs = append([]string{}, output.InputRefs[:4]...)
 			output.Reasons[0].EvidenceRefs = append([]string{}, output.InputRefs...)
 		},
 		"evidence refs diverged": func(output *RiskOutput) {

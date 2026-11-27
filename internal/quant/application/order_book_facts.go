@@ -85,6 +85,7 @@ type OrderBookFactsReader interface {
 type TradabilityEvidence struct {
 	TradingFacts   TradingFactsSnapshot
 	OrderBookFacts OrderBookFactsSnapshot
+	LimitPoolFacts LimitPoolFactsSnapshot
 }
 
 // Validate 校验两份证据本身及它们之间的绑定关系。
@@ -101,15 +102,30 @@ func (evidence TradabilityEvidence) Validate() error {
 	if evidence.TradingFacts.SystemAsOf != evidence.OrderBookFacts.SystemAsOf {
 		return fmt.Errorf("%w: order-book system_as_of does not match trading-status facts", ErrInvalidOrderBookFactsSnapshot)
 	}
+	if err := evidence.LimitPoolFacts.Validate(); err != nil {
+		return err
+	}
+	if evidence.TradingFacts.Symbol != evidence.LimitPoolFacts.Symbol {
+		return fmt.Errorf("%w: limit-pool symbol does not match trading-status facts", ErrInvalidLimitPoolFactsSnapshot)
+	}
+	if evidence.TradingFacts.TradeDate != evidence.LimitPoolFacts.TradeDate {
+		return fmt.Errorf("%w: limit-pool trade_date does not match trading-status facts", ErrInvalidLimitPoolFactsSnapshot)
+	}
+	if evidence.TradingFacts.SystemAsOf != evidence.LimitPoolFacts.SystemAsOf {
+		return fmt.Errorf("%w: limit-pool system_as_of does not match trading-status facts", ErrInvalidLimitPoolFactsSnapshot)
+	}
 	return nil
 }
 
-// evidenceRefs 固定输出顺序：交易状态快照、交易状态授权、盘口快照、盘口授权。
+// evidenceRefs 固定输出顺序：交易状态快照、交易状态授权、盘口快照、盘口授权、
+// 涨跌停池快照、涨跌停池授权。
 func (evidence TradabilityEvidence) evidenceRefs() []string {
 	return []string{
 		evidence.TradingFacts.SnapshotRef,
 		evidence.TradingFacts.AuthorizationRef,
 		evidence.OrderBookFacts.SnapshotRef,
 		evidence.OrderBookFacts.AuthorizationRef,
+		evidence.LimitPoolFacts.SnapshotRef,
+		evidence.LimitPoolFacts.AuthorizationRef,
 	}
 }

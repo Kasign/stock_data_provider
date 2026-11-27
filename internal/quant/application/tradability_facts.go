@@ -146,8 +146,8 @@ type TradabilityAssessment struct {
 //     这两项 Data 能提供，可用即可核验，取值命中已知不可交易时记入 BlockingFacts。
 //   - tradable_volume → 只有合法且完成绑定的 order_book 授权快照能核验；
 //     该事实是真实买盘五档挂单量之和，Quant 不推导、不估算。
-//   - price_limit → 当前仍无合格事实来源，必须继续列入缺失；
-//     因此 Verified 仍为 false，门禁仍 reject，但不能把 tradable_volume 伪称缺失。
+//   - price_limit → 只有合法且完成绑定的 limit_pool 授权快照能核验；
+//     涨跌停池不完整（unknown）时记缺失，不得当成可交易。
 //   - delisting_status / is_trading_day 不属于门禁四项，但已知的不可交易取值
 //     仍记入 BlockingFacts，避免"事实越多、结论越松"。
 func AssessTradabilityFacts(evidence TradabilityEvidence) (TradabilityAssessment, error) {
@@ -179,8 +179,17 @@ func AssessTradabilityFacts(evidence TradabilityEvidence) (TradabilityAssessment
 	assess(tradingFactKeyRiskWarning, risk.TradabilityFactRiskWarning, tradingFactRiskWarningApplied)
 	assess(tradingFactKeySuspension, risk.TradabilityFactSuspension, tradingFactSuspended, tradingFactIntradaySuspended)
 
-	// 唯一仍无合格来源的门禁事实；不得把已核验的真实盘口事实也写成缺失。
-	missing = append(missing, risk.TradabilityFactPriceLimit)
+	// price_limit 由独立 limit_pool 授权快照支撑：
+	//   none            → 已核验且当日未涨跌停；
+	//   limit_up/down   → 已核验且不可交易（进入 BlockingFacts，不能当成可交易）；
+	//   unknown         → 池不完整，只能记缺失，绝不当成可交易。
+	switch evidence.LimitPoolFacts.LimitStatus {
+	case LimitPoolStatusNone:
+	case LimitPoolStatusUp, LimitPoolStatusDown:
+		blocking = append(blocking, limitPoolFactKeyPriceLimit)
+	default:
+		missing = append(missing, risk.TradabilityFactPriceLimit)
+	}
 
 	if fact, present := byKey[tradingFactKeyDelisting]; present && fact.Availability == tradingFactAvailable {
 		if fact.Value == tradingFactDelistingRisk || fact.Value == tradingFactDelistingPeriod {

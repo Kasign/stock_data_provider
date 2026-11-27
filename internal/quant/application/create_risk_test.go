@@ -41,6 +41,21 @@ func (fake *riskOrderBookReaderFake) ReadOrderBookFactsSnapshot(
 	return fake.snapshot, fake.err
 }
 
+type riskLimitPoolReaderFake struct {
+	snapshot LimitPoolFactsSnapshot
+	err      error
+	calls    int
+	purpose  string
+}
+
+func (fake *riskLimitPoolReaderFake) ReadLimitPoolFactsSnapshot(
+	_ context.Context, _, _, purpose string,
+) (LimitPoolFactsSnapshot, error) {
+	fake.calls++
+	fake.purpose = purpose
+	return fake.snapshot, fake.err
+}
+
 type riskDecisionIDsFake struct {
 	id    string
 	err   error
@@ -82,11 +97,19 @@ func newCreateRiskTestService(
 	t *testing.T, snapshot TradingFactsSnapshot, orderBook OrderBookFactsSnapshot,
 ) (*CreateRiskService, *riskFactsReaderFake, *riskOrderBookReaderFake, *riskRecordingRepository) {
 	t.Helper()
+	return newCreateRiskTestServiceWithLimitPool(t, snapshot, orderBook, validLimitPoolFactsSnapshot())
+}
+
+func newCreateRiskTestServiceWithLimitPool(
+	t *testing.T, snapshot TradingFactsSnapshot, orderBook OrderBookFactsSnapshot, limitPool LimitPoolFactsSnapshot,
+) (*CreateRiskService, *riskFactsReaderFake, *riskOrderBookReaderFake, *riskRecordingRepository) {
+	t.Helper()
 	facts := &riskFactsReaderFake{snapshot: snapshot}
 	books := &riskOrderBookReaderFake{snapshot: orderBook}
+	pools := &riskLimitPoolReaderFake{snapshot: limitPool}
 	repository := newRiskRecordingRepository()
 	service, err := NewCreateRiskService(
-		facts, books, &riskDecisionIDsFake{id: "risk_decision_1"}, repository,
+		facts, books, pools, &riskDecisionIDsFake{id: "risk_decision_1"}, repository,
 		func() time.Time { return time.Date(2026, 11, 25, 16, 0, 0, 0, time.UTC) },
 	)
 	if err != nil {
@@ -100,14 +123,16 @@ func riskTestParameters(snapshot TradingFactsSnapshot) json.RawMessage {
 }
 
 func riskTestRequest(
-	snapshot TradingFactsSnapshot, orderBook OrderBookFactsSnapshot, systemAsOf time.Time,
-	parameters json.RawMessage,
+	snapshot TradingFactsSnapshot, orderBook OrderBookFactsSnapshot, limitPool LimitPoolFactsSnapshot,
+	systemAsOf time.Time, parameters json.RawMessage,
 ) CreateRiskRequest {
 	return CreateRiskRequest{
 		SnapshotRef:               snapshot.SnapshotRef,
 		AuthorizationRef:          snapshot.AuthorizationRef,
 		OrderBookSnapshotRef:      orderBook.SnapshotRef,
 		OrderBookAuthorizationRef: orderBook.AuthorizationRef,
+		LimitPoolSnapshotRef:      limitPool.SnapshotRef,
+		LimitPoolAuthorizationRef: limitPool.AuthorizationRef,
 		SystemAsOf:                systemAsOf,
 		Parameters:                parameters,
 	}
@@ -116,12 +141,15 @@ func riskTestRequest(
 func TestCreateRiskServiceProducesTraceableRejection(t *testing.T) {
 	snapshot := validTradingFactsSnapshot()
 	orderBook := validOrderBookFactsSnapshot()
+	limitPool := validLimitPoolFactsSnapshot()
 	service, facts, books, repository := newCreateRiskTestService(t, snapshot, orderBook)
 	execution, err := service.Execute(context.Background(), CreateRiskRequest{
 		SnapshotRef:               snapshot.SnapshotRef,
 		AuthorizationRef:          snapshot.AuthorizationRef,
 		OrderBookSnapshotRef:      orderBook.SnapshotRef,
 		OrderBookAuthorizationRef: orderBook.AuthorizationRef,
+		LimitPoolSnapshotRef:      limitPool.SnapshotRef,
+		LimitPoolAuthorizationRef: limitPool.AuthorizationRef,
 		SystemAsOf:                mustRiskTime(t, snapshot.SystemAsOf),
 		Parameters:                riskTestParameters(snapshot),
 	})
@@ -158,6 +186,7 @@ func TestCreateRiskServiceProducesTraceableRejection(t *testing.T) {
 	wantRefs := []string{
 		snapshot.SnapshotRef, snapshot.AuthorizationRef,
 		orderBook.SnapshotRef, orderBook.AuthorizationRef,
+		limitPool.SnapshotRef, limitPool.AuthorizationRef,
 	}
 	if len(execution.Decision.InputRefs) != len(wantRefs) {
 		t.Fatalf("input_refs = %v, want %v", execution.Decision.InputRefs, wantRefs)
@@ -167,7 +196,7 @@ func TestCreateRiskServiceProducesTraceableRejection(t *testing.T) {
 			t.Fatalf("input_refs[%d] = %q, want %q", index, execution.Decision.InputRefs[index], wantRefs[index])
 		}
 	}
-	wantSnapshotRefs := []string{snapshot.SnapshotRef, orderBook.SnapshotRef}
+	wantSnapshotRefs := []string{snapshot.SnapshotRef, orderBook.SnapshotRef, limitPool.SnapshotRef}
 	if len(execution.Manifest.InputSnapshotRefs) != len(wantSnapshotRefs) {
 		t.Fatalf("manifest input refs = %v, want %v", execution.Manifest.InputSnapshotRefs, wantSnapshotRefs)
 	}
@@ -201,7 +230,7 @@ func TestCreateRiskServiceUsesSystemAsOfAsEvaluatedAt(t *testing.T) {
 	service, _, _, _ := newCreateRiskTestService(t, snapshot, orderBook)
 	systemAsOf := mustRiskTime(t, snapshot.SystemAsOf)
 	execution, err := service.Execute(context.Background(),
-		riskTestRequest(snapshot, orderBook, systemAsOf, riskTestParameters(snapshot)))
+		riskTestRequest(snapshot, orderBook, validLimitPoolFactsSnapshot(), systemAsOf, riskTestParameters(snapshot)))
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
@@ -217,7 +246,7 @@ func TestCreateRiskServiceProjectsSnapshotQualityIntoManifest(t *testing.T) {
 	orderBook := validOrderBookFactsSnapshot()
 	service, _, _, _ := newCreateRiskTestService(t, snapshot, orderBook)
 	execution, err := service.Execute(context.Background(),
-		riskTestRequest(snapshot, orderBook, mustRiskTime(t, snapshot.SystemAsOf), riskTestParameters(snapshot)))
+		riskTestRequest(snapshot, orderBook, validLimitPoolFactsSnapshot(), mustRiskTime(t, snapshot.SystemAsOf), riskTestParameters(snapshot)))
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
@@ -245,7 +274,7 @@ func TestCreateRiskServiceRejectsSnapshotParameterMismatch(t *testing.T) {
 			orderBook := validOrderBookFactsSnapshot()
 			service, _, _, repository := newCreateRiskTestService(t, snapshot, orderBook)
 			_, err := service.Execute(context.Background(), riskTestRequest(
-				snapshot, orderBook, mustRiskTime(t, mutate.systemAsOf), json.RawMessage(mutate.parameters),
+				snapshot, orderBook, validLimitPoolFactsSnapshot(), mustRiskTime(t, mutate.systemAsOf), json.RawMessage(mutate.parameters),
 			))
 			if err == nil {
 				t.Fatal("Execute() accepted a mismatched request")
@@ -266,7 +295,7 @@ func TestCreateRiskServiceRejectsTamperedSnapshot(t *testing.T) {
 	orderBook := validOrderBookFactsSnapshot()
 	service, _, _, repository := newCreateRiskTestService(t, snapshot, orderBook)
 	_, err := service.Execute(context.Background(),
-		riskTestRequest(snapshot, orderBook, mustRiskTime(t, snapshot.SystemAsOf), riskTestParameters(snapshot)))
+		riskTestRequest(snapshot, orderBook, validLimitPoolFactsSnapshot(), mustRiskTime(t, snapshot.SystemAsOf), riskTestParameters(snapshot)))
 	if !errors.Is(err, ErrInvalidRiskSnapshot) {
 		t.Fatalf("error = %v, want ErrInvalidRiskSnapshot", err)
 	}
@@ -280,15 +309,16 @@ func TestCreateRiskServiceFailsWhenDecisionIdentityUnavailable(t *testing.T) {
 	orderBook := validOrderBookFactsSnapshot()
 	facts := &riskFactsReaderFake{snapshot: snapshot}
 	books := &riskOrderBookReaderFake{snapshot: orderBook}
+	pools := &riskLimitPoolReaderFake{snapshot: validLimitPoolFactsSnapshot()}
 	service, err := NewCreateRiskService(
-		facts, books, &riskDecisionIDsFake{err: errors.New("entropy unavailable")}, result.NewMemoryRepository(),
+		facts, books, pools, &riskDecisionIDsFake{err: errors.New("entropy unavailable")}, result.NewMemoryRepository(),
 		func() time.Time { return time.Date(2026, 11, 25, 16, 0, 0, 0, time.UTC) },
 	)
 	if err != nil {
 		t.Fatalf("NewCreateRiskService() error = %v", err)
 	}
 	_, err = service.Execute(context.Background(),
-		riskTestRequest(snapshot, orderBook, mustRiskTime(t, snapshot.SystemAsOf), riskTestParameters(snapshot)))
+		riskTestRequest(snapshot, orderBook, validLimitPoolFactsSnapshot(), mustRiskTime(t, snapshot.SystemAsOf), riskTestParameters(snapshot)))
 	if err == nil {
 		t.Fatal("Execute() succeeded without a decision identity")
 	}

@@ -122,6 +122,39 @@ func (m *Module) ReadAuthorizedOrderBookFactsSnapshot(
 	return reader.Read(ctx, snapshotRef, authorizationRef, purpose)
 }
 
+// CreateLimitPoolFactsSnapshot 创建并授权一个不可变的涨跌停事实快照。
+// 只接受全量池；盘中不完整会由 Provider 完整性断言与收盘后约束拒绝。
+func (m *Module) CreateLimitPoolFactsSnapshot(
+	ctx context.Context, symbol, tradeDate string, systemAsOf time.Time, purpose string,
+) (application.LimitPoolFactsSnapshotReferences, error) {
+	if m == nil || m.store == nil || m.limitPool == nil {
+		return application.LimitPoolFactsSnapshotReferences{}, errors.New("Market Data limit-pool facts Snapshot persistence is unavailable")
+	}
+	owner, err := application.NewDataAuthorizationOwner(m.store, m.store)
+	if err != nil {
+		return application.LimitPoolFactsSnapshotReferences{}, err
+	}
+	creator, err := application.NewLimitPoolFactsSnapshotCreator(m.limitPool, m.store, owner)
+	if err != nil {
+		return application.LimitPoolFactsSnapshotReferences{}, err
+	}
+	return creator.Create(ctx, symbol, tradeDate, systemAsOf, purpose)
+}
+
+// ReadAuthorizedLimitPoolFactsSnapshot 使用涨跌停数据类策略做授权复核。
+func (m *Module) ReadAuthorizedLimitPoolFactsSnapshot(
+	ctx context.Context, snapshotRef, authorizationRef, purpose string,
+) (app.LimitPoolFactsSnapshot, error) {
+	if m == nil || m.store == nil {
+		return app.LimitPoolFactsSnapshot{}, errors.New("Market Data Snapshot persistence is unavailable")
+	}
+	reader, err := application.NewAuthorizedLimitPoolFactsSnapshotReader(m.store)
+	if err != nil {
+		return app.LimitPoolFactsSnapshot{}, err
+	}
+	return reader.Read(ctx, snapshotRef, authorizationRef, purpose)
+}
+
 // DataAuthorizationPolicyOwner 返回 Data 自有的 Owner 策略管理 Application。
 // Root Server 只持有该 Application Port，不直接操作策略表或复制授权规则。
 func (m *Module) DataAuthorizationPolicyOwner() (*application.DataAuthorizationPolicyOwner, error) {

@@ -81,8 +81,8 @@ func TestQuantResearchEndToEndFactorAndRiskResultsAssociateToSameRun(t *testing.
 	if err != nil {
 		t.Fatalf("Risk Stage over real facts failed: %v", err)
 	}
-	if riskOutput.Status != risk.DecisionReject {
-		t.Fatalf("risk decision = %q, want reject", riskOutput.Status)
+	if riskOutput.Status != risk.DecisionPass {
+		t.Fatalf("risk decision = %q, want pass with all three facts verified", riskOutput.Status)
 	}
 	riskPayload, err := json.Marshal(riskOutput)
 	if err != nil {
@@ -133,9 +133,8 @@ func TestQuantResearchEndToEndFactorAndRiskResultsAssociateToSameRun(t *testing.
 		}
 	}
 
-	// risk 的 reject 结论必须由真实 Quality Summary 承载；内容寻址与 payload
-	// 结构已由上面的 association spec 校验覆盖。
-	if riskQuality.DecisionStatus != "reject" || riskQuality.ResultStatus != "rejected" {
+	// risk 的结论必须由真实 Quality Summary 承载；三类事实齐备后应为 pass。
+	if riskQuality.DecisionStatus != "pass" || riskQuality.ResultStatus != "completed" {
 		t.Fatalf("unexpected risk quality summary: %+v", riskQuality)
 	}
 }

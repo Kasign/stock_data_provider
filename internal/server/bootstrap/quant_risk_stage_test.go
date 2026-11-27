@@ -24,11 +24,14 @@ var (
 	quantRiskTestResultID             = "quant_result:sha256:" + strings.Repeat("f", 64)
 	quantRiskTestSnapshotRef          = "data_snapshot:sha256:" + strings.Repeat("c", 64)
 	quantRiskTestAuthRef              = "data_authorization:opaque-token"
+	quantRiskTestLimitPoolSnapshotRef = "data_snapshot:sha256:" + strings.Repeat("e", 64)
+	quantRiskTestLimitPoolAuthRef     = "data_authorization:limit-pool-opaque"
 	quantRiskTestOrderBookSnapshotRef = "data_snapshot:sha256:" + strings.Repeat("d", 64)
 	quantRiskTestOrderBookAuthRef     = "data_authorization:order-book-opaque-token"
 	quantRiskTestRefs                 = []string{
 		quantRiskTestSnapshotRef, quantRiskTestAuthRef,
 		quantRiskTestOrderBookSnapshotRef, quantRiskTestOrderBookAuthRef,
+		quantRiskTestLimitPoolSnapshotRef, quantRiskTestLimitPoolAuthRef,
 	}
 )
 

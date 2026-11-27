@@ -1,0 +1,290 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "QNT-CTR-003-risk-stage-output-3.0.0",
+  "title": "Quant Risk Stage Output 3.0.0",
+  "description": "可交易性硬门禁的 Stage payload。3.0.0 将 input_refs 与 reasons[].evidence_refs 扩为固定 6 项，依次为 [交易状态快照引用, 交易状态授权引用, 盘口快照引用, 盘口授权引用, 涨跌停池快照引用, 涨跌停池授权引用]：tradable_volume 来自真实盘口授权快照，price_limit 来自当日全量涨跌停池授权快照，省略任一证据都会把已核验事实伪装为无来源。规则集固定为 qnt-risk-tradability/1.0.0，只有一条 block 规则 tradability_unverified，因此 reasons 恰好一条。evaluated_at 必须等于 system_as_of（时点判断，取自 Run 的可信时间），运行时 Validator 强制该校验，Schema 无法表达两字段相等。result_status 与 status 一一对应：pass→completed、reject→rejected、unknown→failed。运行时 Validator 另要求 status=reject 时 missing_facts 与 blocking_facts 至少一项非空（Verified 为 false 必有成因），该约束不在此 Schema 中重复表达。price_limit 由涨跌停池事实支撑：涨跌停时进入 blocking_facts，池不完整时才列入 missing_facts。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "result_id",
+    "result_status",
+    "decision_id",
+    "status",
+    "rule_set_version",
+    "evaluated_at",
+    "system_as_of",
+    "reasons",
+    "input_refs",
+    "missing_facts",
+    "blocking_facts"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "3.0.0"
+    },
+    "result_id": {
+      "type": "string",
+      "pattern": "^quant_result:sha256:[0-9a-f]{64}$"
+    },
+    "result_status": {
+      "type": "string",
+      "enum": [
+        "completed",
+        "rejected",
+        "failed"
+      ]
+    },
+    "decision_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "pass",
+        "reject",
+        "unknown"
+      ]
+    },
+    "rule_set_version": {
+      "const": "qnt-risk-tradability/1.0.0"
+    },
+    "evaluated_at": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{0,8}[1-9])?Z$"
+    },
+    "system_as_of": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{0,8}[1-9])?Z$"
+    },
+    "reasons": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "severity",
+          "status",
+          "safe_message",
+          "evidence_refs"
+        ],
+        "properties": {
+          "code": {
+            "const": "tradability_unverified"
+          },
+          "severity": {
+            "const": "block"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "triggered",
+              "not_triggered",
+              "unknown"
+            ]
+          },
+          "safe_message": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+          },
+          "evidence_refs": {
+            "type": "array",
+            "minItems": 6,
+            "maxItems": 6,
+            "prefixItems": [
+              {
+                "type": "string",
+                "pattern": "^data_snapshot:sha256:[0-9a-f]{64}$"
+              },
+              {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+              },
+              {
+                "type": "string",
+                "pattern": "^data_snapshot:sha256:[0-9a-f]{64}$"
+              },
+              {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+              },
+              {
+                "type": "string",
+                "pattern": "^data_snapshot:sha256:[0-9a-f]{64}$"
+              },
+              {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+              }
+            ],
+            "items": false
+          }
+        }
+      }
+    },
+    "input_refs": {
+      "type": "array",
+      "minItems": 6,
+      "maxItems": 6,
+      "prefixItems": [
+        {
+          "type": "string",
+          "pattern": "^data_snapshot:sha256:[0-9a-f]{64}$"
+        },
+        {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+        },
+        {
+          "type": "string",
+          "pattern": "^data_snapshot:sha256:[0-9a-f]{64}$"
+        },
+        {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+        },
+        {
+          "type": "string",
+          "pattern": "^data_snapshot:sha256:[0-9a-f]{64}$"
+        },
+        {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+        }
+      ],
+      "items": false
+    },
+    "missing_facts": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "enum": [
+          "risk_warning_status",
+          "suspension_status",
+          "price_limit",
+          "tradable_volume"
+        ]
+      }
+    },
+    "blocking_facts": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "enum": [
+          "risk_warning_status",
+          "suspension_status",
+          "delisting_status",
+          "is_trading_day"
+        ]
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "reject"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "result_status": {
+            "const": "rejected"
+          },
+          "reasons": {
+            "items": {
+              "properties": {
+                "status": {
+                  "const": "triggered"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "pass"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "result_status": {
+            "const": "completed"
+          },
+          "reasons": {
+            "items": {
+              "properties": {
+                "status": {
+                  "const": "not_triggered"
+                }
+              }
+            }
+          },
+          "missing_facts": {
+            "maxItems": 0
+          },
+          "blocking_facts": {
+            "maxItems": 0
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "unknown"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "result_status": {
+            "const": "failed"
+          },
+          "reasons": {
+            "items": {
+              "properties": {
+                "status": {
+                  "const": "unknown"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

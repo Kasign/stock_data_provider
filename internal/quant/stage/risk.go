@@ -14,9 +14,9 @@ import (
 // Risk 门禁 Stage 的适配器（执行清单 1.4 / QNT-010）。
 //
 // 与 SMA20/Factor/Trend 同一套路：Stage 先用可信身份创建 Data 授权快照，
-// 再把两个引用交给 Quant Facade，避免 Facade 直接持有 Data 的连接与策略。
-// 事实分两类：交易状态来自 PIT 本地数据，tradable_volume 来自 Data 的真实盘口
-// Provider。Stage 只把两类授权引用交给 Facade，不读取 Provider，也不解析盘口数值。
+// 再把引用交给 Quant Facade，避免 Facade 直接持有 Data 的连接与策略。
+// 事实分三类：交易状态来自 PIT 本地数据，tradable_volume 来自真实盘口，
+// price_limit 来自当日全量涨跌停池。Stage 只传授权引用，不读取 Provider。
 var ErrInvalidRiskStageRequest = errors.New("invalid Quant Risk stage request")
 
 type TradingFactsSnapshotCreator interface {
@@ -33,6 +33,14 @@ type OrderBookSnapshotCreator interface {
 	) (snapshotRef, authorizationRef string, err error)
 }
 
+// LimitPoolSnapshotCreator 创建并授权当日涨跌停事实快照。
+// 它绑定 trade_date，且只在收盘后才可能给出 none 结论。
+type LimitPoolSnapshotCreator interface {
+	CreateLimitPoolFactsSnapshot(
+		ctx context.Context, symbol, tradeDate string, systemAsOf time.Time, purpose string,
+	) (snapshotRef, authorizationRef string, err error)
+}
+
 type RiskRequest struct {
 	Symbol     string
 	TradeDate  string
@@ -42,18 +50,20 @@ type RiskRequest struct {
 type RiskAdapter struct {
 	facts      TradingFactsSnapshotCreator
 	orderBooks OrderBookSnapshotCreator
+	limitPools LimitPoolSnapshotCreator
 	service    *application.CreateRiskService
 }
 
 func NewRiskAdapter(
 	facts TradingFactsSnapshotCreator,
 	orderBooks OrderBookSnapshotCreator,
+	limitPools LimitPoolSnapshotCreator,
 	service *application.CreateRiskService,
 ) (*RiskAdapter, error) {
-	if facts == nil || orderBooks == nil || service == nil {
+	if facts == nil || orderBooks == nil || limitPools == nil || service == nil {
 		return nil, ErrInvalidRiskStageRequest
 	}
-	return &RiskAdapter{facts: facts, orderBooks: orderBooks, service: service}, nil
+	return &RiskAdapter{facts: facts, orderBooks: orderBooks, limitPools: limitPools, service: service}, nil
 }
 
 // Execute 创建交易事实授权快照并评估可交易性门禁。
@@ -61,7 +71,8 @@ func NewRiskAdapter(
 func (adapter *RiskAdapter) Execute(
 	ctx context.Context, request RiskRequest,
 ) (RiskOutput, RiskQualitySummary, error) {
-	if adapter == nil || adapter.facts == nil || adapter.orderBooks == nil || adapter.service == nil || ctx == nil ||
+	if adapter == nil || adapter.facts == nil || adapter.orderBooks == nil || adapter.limitPools == nil ||
+		adapter.service == nil || ctx == nil ||
 		!quantSymbolPattern.MatchString(request.Symbol) ||
 		!validISODate(request.TradeDate) ||
 		request.SystemAsOf.IsZero() || request.SystemAsOf.Location() != time.UTC ||
@@ -83,8 +94,15 @@ func (adapter *RiskAdapter) Execute(
 	if err != nil {
 		return RiskOutput{}, RiskQualitySummary{}, fmt.Errorf("create authorized order-book facts Snapshot: %w", err)
 	}
+	limitPoolRef, limitPoolAuthorizationRef, err := adapter.limitPools.CreateLimitPoolFactsSnapshot(
+		ctx, request.Symbol, request.TradeDate, request.SystemAsOf, RiskPurposeCode,
+	)
+	if err != nil {
+		return RiskOutput{}, RiskQualitySummary{}, fmt.Errorf("create authorized limit-pool facts Snapshot: %w", err)
+	}
 	if strings.TrimSpace(snapshotRef) == "" || strings.TrimSpace(authorizationRef) == "" ||
-		strings.TrimSpace(orderBookRef) == "" || strings.TrimSpace(orderBookAuthorizationRef) == "" {
+		strings.TrimSpace(orderBookRef) == "" || strings.TrimSpace(orderBookAuthorizationRef) == "" ||
+		strings.TrimSpace(limitPoolRef) == "" || strings.TrimSpace(limitPoolAuthorizationRef) == "" {
 		return RiskOutput{}, RiskQualitySummary{}, ErrInvalidRiskStageRequest
 	}
 	parameters, err := json.Marshal(struct {
@@ -97,6 +115,7 @@ func (adapter *RiskAdapter) Execute(
 	execution, err := adapter.service.Execute(ctx, application.CreateRiskRequest{
 		SnapshotRef: snapshotRef, AuthorizationRef: authorizationRef,
 		OrderBookSnapshotRef: orderBookRef, OrderBookAuthorizationRef: orderBookAuthorizationRef,
+		LimitPoolSnapshotRef: limitPoolRef, LimitPoolAuthorizationRef: limitPoolAuthorizationRef,
 		SystemAsOf: request.SystemAsOf, Parameters: parameters,
 	})
 	if err != nil {

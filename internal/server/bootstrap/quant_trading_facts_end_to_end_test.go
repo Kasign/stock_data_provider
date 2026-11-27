@@ -36,6 +36,7 @@ const (
 type quantTradingFactsStore struct {
 	facts      map[string]marketdataapp.SecurityTradingStatusFactsSnapshot
 	orderBooks map[string]marketdataapp.OrderBookFactsSnapshot
+	limitPools map[string]marketdataapp.LimitPoolFactsSnapshot
 	policies   map[string]authorization.CurrentPolicy
 	decisions  map[string]marketdataapp.DataAuthorizationDecision
 }
@@ -44,6 +45,7 @@ func newQuantTradingFactsStore() *quantTradingFactsStore {
 	return &quantTradingFactsStore{
 		facts:      map[string]marketdataapp.SecurityTradingStatusFactsSnapshot{},
 		orderBooks: map[string]marketdataapp.OrderBookFactsSnapshot{},
+		limitPools: map[string]marketdataapp.LimitPoolFactsSnapshot{},
 		policies:   map[string]authorization.CurrentPolicy{},
 		decisions:  map[string]marketdataapp.DataAuthorizationDecision{},
 	}
@@ -94,6 +96,56 @@ func (store *quantTradingFactsStore) GetOrderBookFactsSnapshotForSystemAsOf(
 		}
 	}
 	return marketdataapp.OrderBookFactsSnapshot{}, snapshotport.ErrOrderBookFactsSnapshotNotFound
+}
+
+func (store *quantTradingFactsStore) SaveLimitPoolFactsSnapshot(
+	_ context.Context, snapshot marketdataapp.LimitPoolFactsSnapshot,
+) error {
+	store.limitPools[snapshot.Manifest.SnapshotRef] = snapshot
+	return nil
+}
+
+func (store *quantTradingFactsStore) GetLimitPoolFactsSnapshot(
+	_ context.Context, snapshotRef string,
+) (marketdataapp.LimitPoolFactsSnapshot, error) {
+	snapshot, present := store.limitPools[snapshotRef]
+	if !present {
+		return marketdataapp.LimitPoolFactsSnapshot{}, errors.New("limit-pool facts Snapshot not found")
+	}
+	return snapshot, nil
+}
+
+func (store *quantTradingFactsStore) GetLimitPoolFactsSnapshotForSystemAsOf(
+	_ context.Context, symbol, tradeDate, purpose string, systemAsOf time.Time,
+) (marketdataapp.LimitPoolFactsSnapshot, error) {
+	wantAsOf := systemAsOf.UTC().Format(time.RFC3339Nano)
+	for _, snapshot := range store.limitPools {
+		if snapshot.Manifest.Symbol == symbol && snapshot.Manifest.TradeDate == tradeDate &&
+			snapshot.Manifest.PurposeCode == purpose && snapshot.Manifest.SystemAsOf == wantAsOf {
+			return snapshot, nil
+		}
+	}
+	return marketdataapp.LimitPoolFactsSnapshot{}, snapshotport.ErrLimitPoolFactsSnapshotNotFound
+}
+
+func (store *quantTradingFactsStore) ReadDataAuthorizedLimitPoolFactsSnapshot(
+	_ context.Context, authorizationRef, snapshotRef string,
+) (marketdataapp.DataAuthorizationDecision, marketdataapp.LimitPoolFactsSnapshot, authorization.CurrentPolicy, error) {
+	decision, present := store.decisions[authorizationRef]
+	if !present {
+		return marketdataapp.DataAuthorizationDecision{}, marketdataapp.LimitPoolFactsSnapshot{}, authorization.CurrentPolicy{}, errors.New("data authorization decision not found")
+	}
+	snapshot, present := store.limitPools[snapshotRef]
+	if !present {
+		return marketdataapp.DataAuthorizationDecision{}, marketdataapp.LimitPoolFactsSnapshot{}, authorization.CurrentPolicy{}, errors.New("limit-pool facts Snapshot not found")
+	}
+	current, err := store.ResolveCurrentDataAuthorizationPolicyByRef(
+		context.Background(), authorization.LimitPoolFactsPolicyRef,
+	)
+	if err != nil {
+		return marketdataapp.DataAuthorizationDecision{}, marketdataapp.LimitPoolFactsSnapshot{}, authorization.CurrentPolicy{}, err
+	}
+	return decision, snapshot, current, nil
 }
 
 func (store *quantTradingFactsStore) PublishDataAuthorizationPolicyVersion(
@@ -261,6 +313,7 @@ type quantTradingFactsChain struct {
 	creator             *marketdataapplication.SecurityTradingStatusFactsSnapshotCreator
 	orderBookCreator    *marketdataapplication.OrderBookFactsSnapshotCreator
 	orderBookAuthorized *marketdataapplication.AuthorizedOrderBookFactsSnapshotReader
+	limitPoolAdapter    *quantLimitPoolFactsAdapter
 	context             context.Context
 	systemAsOf          time.Time
 	evaluatedAt         time.Time
@@ -326,6 +379,9 @@ func newQuantTradingFactsChain(t *testing.T, store *quantTradingFactsStore) quan
 	store.policies[authorization.OrderBookFactsPolicyRef] = tradingFactsPolicyForClass(
 		t, authorization.OrderBookFactsPolicyRef, "order-book-policy-2026-11", systemAsOf,
 	)
+	store.policies[authorization.LimitPoolFactsPolicyRef] = tradingFactsPolicyForClass(
+		t, authorization.LimitPoolFactsPolicyRef, "limit-pool-policy-2026-11", systemAsOf,
+	)
 
 	owner, err := marketdataapplication.NewDataAuthorizationOwner(store, store)
 	if err != nil {
@@ -360,6 +416,23 @@ func newQuantTradingFactsChain(t *testing.T, store *quantTradingFactsStore) quan
 	if err != nil {
 		t.Fatal(err)
 	}
+	limitPoolCreator, err := marketdataapplication.NewLimitPoolFactsSnapshotCreator(
+		&quantLimitPoolProviderFake{up: validLimitPoolUp(systemAsOf), down: validLimitPoolDown(systemAsOf)},
+		store, owner,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	limitPoolAuthorized, err := marketdataapplication.NewAuthorizedLimitPoolFactsSnapshotReader(store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	limitPoolAdapter, err := newQuantLimitPoolFactsAdapter(&quantLimitPoolFactsPortFake{
+		creator: limitPoolCreator, authorized: limitPoolAuthorized,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	ctx, err := security.WithPrincipal(context.Background(), security.Principal{
 		Kind: security.IdentityService, AuthMethod: security.AuthMethodServiceBearer,
 		Subject: "researchflow", Scopes: []string{security.ScopeDataRead},
@@ -371,7 +444,8 @@ func newQuantTradingFactsChain(t *testing.T, store *quantTradingFactsStore) quan
 		adapter: adapter, orderBookAdapter: orderBookAdapter, store: store,
 		authorized: authorized, creator: creator,
 		orderBookCreator: orderBookCreator, orderBookAuthorized: orderBookAuthorized,
-		context: ctx, systemAsOf: systemAsOf, evaluatedAt: systemAsOf.Add(time.Hour),
+		limitPoolAdapter: limitPoolAdapter,
+		context:          ctx, systemAsOf: systemAsOf, evaluatedAt: systemAsOf.Add(time.Hour),
 	}
 }
 
@@ -413,6 +487,80 @@ func (port *quantOrderBookFactsDataPort) ReadAuthorizedOrderBookFactsSnapshot(
 }
 
 var _ quantOrderBookFactsPort = (*quantOrderBookFactsDataPort)(nil)
+
+type quantLimitPoolProviderFake struct {
+	up, down *model.LimitPoolSnapshot
+}
+
+func (fake *quantLimitPoolProviderFake) FetchFullLimitPool(
+	_ context.Context, poolType, _ string,
+) (*model.LimitPoolSnapshot, error) {
+	switch poolType {
+	case "up":
+		return fake.up, nil
+	case "down":
+		return fake.down, nil
+	default:
+		return nil, errors.New("unsupported limit-pool type")
+	}
+}
+
+// unknownLimitPoolFactsForTest 构造"池不完整"的涨跌停 DTO：用于验证缺失路径，
+// 不代表真实 Provider 结果。
+func unknownLimitPoolFactsForTest(systemAsOf time.Time) quantapplication.LimitPoolFactsSnapshot {
+	return quantapplication.LimitPoolFactsSnapshot{
+		SnapshotRef:           "data_snapshot:sha256:" + strings.Repeat("e", 64),
+		AuthorizationRef:      "data_authorization:limit-pool-opaque",
+		ManifestSchemaVersion: "1.0.0",
+		PayloadSchemaVersion:  quantapplication.LimitPoolFactsPayloadSchemaVersion,
+		PayloadKind:           quantapplication.LimitPoolFactsPayloadKind,
+		CallerRef:             "principal:service:researchflow",
+		PurposeCode:           tradingFactsPurpose,
+		Symbol:                tradingFactsSymbol,
+		TradeDate:             systemAsOf.Format("2006-01-02"),
+		ObservedAt:            systemAsOf.Add(-time.Minute).Format(time.RFC3339Nano),
+		SystemAsOf:            systemAsOf.Format(time.RFC3339Nano),
+		LimitStatus:           quantapplication.LimitPoolStatusUnknown,
+		UpPoolTotal:           10,
+		UpPoolComplete:        false,
+		DownPoolComplete:      true,
+		Source:                "eastmoney",
+		QualityStatus:         "valid",
+	}
+}
+
+func validLimitPoolUp(systemAsOf time.Time) *model.LimitPoolSnapshot {
+	return &model.LimitPoolSnapshot{
+		PoolType: "up", TradeDate: systemAsOf.Format("2006-01-02"), Total: 0, HasData: true,
+		Source: "eastmoney", FetchedAt: systemAsOf.Add(-time.Minute), QualityStatus: model.QualityValid,
+	}
+}
+
+func validLimitPoolDown(systemAsOf time.Time) *model.LimitPoolSnapshot {
+	return &model.LimitPoolSnapshot{
+		PoolType: "down", TradeDate: systemAsOf.Format("2006-01-02"), Total: 0, HasData: true,
+		Source: "eastmoney", FetchedAt: systemAsOf.Add(-time.Minute), QualityStatus: model.QualityValid,
+	}
+}
+
+type quantLimitPoolFactsPortFake struct {
+	creator    *marketdataapplication.LimitPoolFactsSnapshotCreator
+	authorized *marketdataapplication.AuthorizedLimitPoolFactsSnapshotReader
+}
+
+func (port *quantLimitPoolFactsPortFake) CreateLimitPoolFactsSnapshot(
+	ctx context.Context, symbol, tradeDate string, systemAsOf time.Time, purpose string,
+) (marketdataapplication.LimitPoolFactsSnapshotReferences, error) {
+	return port.creator.Create(ctx, symbol, tradeDate, systemAsOf, purpose)
+}
+
+func (port *quantLimitPoolFactsPortFake) ReadAuthorizedLimitPoolFactsSnapshot(
+	ctx context.Context, snapshotRef, authorizationRef, purpose string,
+) (marketdataapp.LimitPoolFactsSnapshot, error) {
+	return port.authorized.Read(ctx, snapshotRef, authorizationRef, purpose)
+}
+
+var _ quantLimitPoolFactsPort = (*quantLimitPoolFactsPortFake)(nil)
 
 func TestQuantTradingFactsEndToEndProducesTraceableRejection(t *testing.T) {
 	store := newQuantTradingFactsStore()
@@ -465,7 +613,10 @@ func TestQuantTradingFactsEndToEndProducesTraceableRejection(t *testing.T) {
 		Source:                "eastmoney",
 		QualityStatus:         "valid",
 	}
-	evidence := quantapplication.TradabilityEvidence{TradingFacts: facts, OrderBookFacts: orderBookFacts}
+	evidence := quantapplication.TradabilityEvidence{
+		TradingFacts: facts, OrderBookFacts: orderBookFacts,
+		LimitPoolFacts: unknownLimitPoolFactsForTest(chain.systemAsOf),
+	}
 	assessment, err := quantapplication.AssessTradabilityFacts(evidence)
 	if err != nil {
 		t.Fatalf("AssessTradabilityFacts() error = %v", err)
@@ -484,6 +635,7 @@ func TestQuantTradingFactsEndToEndProducesTraceableRejection(t *testing.T) {
 	}
 	wantRefs := []string{
 		snapshotRef, authorizationRef, orderBookFacts.SnapshotRef, orderBookFacts.AuthorizationRef,
+		evidence.LimitPoolFacts.SnapshotRef, evidence.LimitPoolFacts.AuthorizationRef,
 	}
 	if len(assessment.Facts.EvidenceRefs) != len(wantRefs) {
 		t.Fatalf("EvidenceRefs = %v, want %v", assessment.Facts.EvidenceRefs, wantRefs)

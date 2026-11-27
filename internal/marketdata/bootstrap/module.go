@@ -93,6 +93,7 @@ type Module struct {
 	// 它必须来自 Data 自己的 Service（只读本地 append-only 版本表），不得由调用方注入。
 	securityTradingStatus application.SecurityTradingStatusPITReader
 	orderBook             application.OrderBookReader
+	limitPool             application.LimitPoolReader
 	cache                 cache.Cache
 	logger                *slog.Logger
 	baostockClient        *baostock.Client
@@ -471,6 +472,7 @@ func (m *Module) build(cfg config.Config, deps Dependencies) error {
 	m.diagnostics = ds
 	m.securityTradingStatus = ds
 	m.orderBook = ds
+	m.limitPool = ds
 	reader, err := application.NewReader(ds)
 	if err != nil {
 		return err

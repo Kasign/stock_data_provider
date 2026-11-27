@@ -53,20 +53,21 @@ func newQuantRiskEndToEndAdapter(
 	t.Helper()
 	store := newQuantRiskResultStore()
 	service, err := quantapplication.NewCreateRiskService(
-		chain.adapter, chain.orderBookAdapter, quantRiskFixedDecisionIDs{id: "risk_decision_e2e"}, store,
+		chain.adapter, chain.orderBookAdapter, chain.limitPoolAdapter,
+		quantRiskFixedDecisionIDs{id: "risk_decision_e2e"}, store,
 		func() time.Time { return chain.systemAsOf.Add(time.Minute) },
 	)
 	if err != nil {
 		t.Fatalf("NewCreateRiskService() error = %v", err)
 	}
-	adapter, err := quantstage.NewRiskAdapter(chain.adapter, chain.orderBookAdapter, service)
+	adapter, err := quantstage.NewRiskAdapter(chain.adapter, chain.orderBookAdapter, chain.limitPoolAdapter, service)
 	if err != nil {
 		t.Fatalf("NewRiskAdapter() error = %v", err)
 	}
 	return adapter, store
 }
 
-func TestQuantRiskStageEndToEndProducesTraceableRejection(t *testing.T) {
+func TestQuantRiskStageEndToEndProducesTraceablePass(t *testing.T) {
 	chain := newQuantTradingFactsChain(t, newQuantTradingFactsStore())
 	adapter, persisted := newQuantRiskEndToEndAdapter(t, chain)
 
@@ -76,42 +77,40 @@ func TestQuantRiskStageEndToEndProducesTraceableRejection(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Risk Stage Execute() error = %v", err)
 	}
-	// 1) 决策结论必须是拒绝，且理由只有门禁那一条。
-	if output.Status != risk.DecisionReject || output.ResultStatus != "rejected" ||
+	// 1) 三类事实全部可核验后，门禁必须能放行；理由仍是门禁那一条但未触发。
+	if output.Status != risk.DecisionPass || output.ResultStatus != "completed" ||
 		output.RuleSetVersion != risk.TradabilityRuleSetVersion {
 		t.Fatalf("unexpected decision: status=%q result_status=%q rule_set=%q",
 			output.Status, output.ResultStatus, output.RuleSetVersion)
 	}
 	if len(output.Reasons) != 1 || output.Reasons[0].Code != risk.TradabilityGateCode ||
-		output.Reasons[0].Status != risk.ReasonTriggered {
+		output.Reasons[0].Status != risk.ReasonNotTriggered {
 		t.Fatalf("unexpected reasons: %+v", output.Reasons)
 	}
-	// 2) 缺项必须只点名涨跌停：可成交量已由真实盘口授权快照核验。
-	wantMissing := []string{"price_limit"}
-	if len(output.MissingFacts) != len(wantMissing) {
-		t.Fatalf("missing facts = %v, want %v", output.MissingFacts, wantMissing)
-	}
-	for index, want := range wantMissing {
-		if output.MissingFacts[index] != want {
-			t.Fatalf("missing facts[%d] = %q, want %q", index, output.MissingFacts[index], want)
-		}
+	// 2) 三类事实齐备后不得再报缺项。
+	if len(output.MissingFacts) != 0 {
+		t.Fatalf("missing facts = %v, want none", output.MissingFacts)
 	}
 	if len(output.BlockingFacts) != 0 {
 		t.Fatalf("blocking facts = %v, want none for a normally traded security", output.BlockingFacts)
 	}
 	// 3) 证据引用必须包含两份真实快照与两份授权，且 evaluation 时刻等于 Run 的 system_as_of。
-	if len(output.InputRefs) != 4 {
-		t.Fatalf("input refs = %v, want four evidence references", output.InputRefs)
+	if len(output.InputRefs) != 6 {
+		t.Fatalf("input refs = %v, want six evidence references", output.InputRefs)
 	}
 	for index, prefix := range []string{
 		"data_snapshot:sha256:", "data_authorization:", "data_snapshot:sha256:", "data_authorization:",
+		"data_snapshot:sha256:", "data_authorization:",
 	} {
 		if !strings.HasPrefix(output.InputRefs[index], prefix) {
 			t.Fatalf("input_refs[%d] = %q, want prefix %q", index, output.InputRefs[index], prefix)
 		}
 	}
-	if output.InputRefs[0] == output.InputRefs[2] || output.InputRefs[1] == output.InputRefs[3] {
-		t.Fatalf("trading-status and order-book evidence must be distinct: %v", output.InputRefs)
+	if output.InputRefs[0] == output.InputRefs[2] || output.InputRefs[0] == output.InputRefs[4] ||
+		output.InputRefs[2] == output.InputRefs[4] ||
+		output.InputRefs[1] == output.InputRefs[3] || output.InputRefs[1] == output.InputRefs[5] ||
+		output.InputRefs[3] == output.InputRefs[5] {
+		t.Fatalf("the three evidence classes must be distinct: %v", output.InputRefs)
 	}
 	if _, present := chain.store.facts[output.InputRefs[0]]; !present {
 		t.Fatalf("trading-status snapshot ref %q is not persisted", output.InputRefs[0])
@@ -124,6 +123,12 @@ func TestQuantRiskStageEndToEndProducesTraceableRejection(t *testing.T) {
 	}
 	if _, present := chain.store.decisions[output.InputRefs[3]]; !present {
 		t.Fatalf("order-book authorization ref %q is not persisted", output.InputRefs[3])
+	}
+	if _, present := chain.store.limitPools[output.InputRefs[4]]; !present {
+		t.Fatalf("limit-pool snapshot ref %q is not persisted", output.InputRefs[4])
+	}
+	if _, present := chain.store.decisions[output.InputRefs[5]]; !present {
+		t.Fatalf("limit-pool authorization ref %q is not persisted", output.InputRefs[5])
 	}
 	if output.EvaluatedAt != chain.systemAsOf.Format(time.RFC3339Nano) ||
 		output.SystemAsOf != chain.systemAsOf.Format(time.RFC3339Nano) {
@@ -138,7 +143,7 @@ func TestQuantRiskStageEndToEndProducesTraceableRejection(t *testing.T) {
 	if err := record.Validate(); err != nil {
 		t.Fatalf("persisted result is not content-addressed: %v", err)
 	}
-	wantSnapshotRefs := []string{output.InputRefs[0], output.InputRefs[2]}
+	wantSnapshotRefs := []string{output.InputRefs[0], output.InputRefs[2], output.InputRefs[4]}
 	sort.Strings(wantSnapshotRefs) // Manifest 按内容寻址规则对输入快照引用排序。
 	if len(record.Manifest.InputSnapshotRefs) != len(wantSnapshotRefs) {
 		t.Fatalf("persisted manifest input refs = %v, want %v", record.Manifest.InputSnapshotRefs, wantSnapshotRefs)
@@ -152,7 +157,7 @@ func TestQuantRiskStageEndToEndProducesTraceableRejection(t *testing.T) {
 	if err := json.Unmarshal(record.Payload, &decision); err != nil {
 		t.Fatalf("decode persisted risk payload: %v", err)
 	}
-	if decision.Status != risk.DecisionReject || decision.DecisionID != "risk_decision_e2e" {
+	if decision.Status != risk.DecisionPass || decision.DecisionID != "risk_decision_e2e" {
 		t.Fatalf("persisted decision = %+v", decision)
 	}
 	// 5) Stage Output 与 Quality Summary 必须各自通过其冻结 Validator。
@@ -162,8 +167,8 @@ func TestQuantRiskStageEndToEndProducesTraceableRejection(t *testing.T) {
 	if err := quantstage.ValidateRiskQualitySummaryJSON(mustQuantRiskJSON(t, quality)); err != nil {
 		t.Fatalf("Quality Summary failed its validator: %v", err)
 	}
-	if quality.DecisionStatus != "reject" || quality.QualityStatus != "valid" ||
-		quality.ResultStatus != "rejected" {
+	if quality.DecisionStatus != "pass" || quality.QualityStatus != "valid" ||
+		quality.ResultStatus != "completed" {
 		t.Fatalf("unexpected quality summary: %+v", quality)
 	}
 }

@@ -25,8 +25,8 @@ import (
 //     真实执行时刻由 Researchflow 的 Attempt 时间戳承载，信息不丢失。
 //   - 决策结论落在 payload 里，Manifest.result_status 与之同步（reject → rejected）。
 //     Stage 是否成功是另一层语义：评估完成即成功，结论是拒绝。
-//   - price_limit 仍无合格事实来源，因此当前 Verified 恒为 false、决策恒为 reject；
-//     但 missing_facts 必须如实只列 price_limit，不能继续把已核验的可成交量写成缺失。
+//   - price_limit 由独立 limit_pool 授权快照支撑：涨跌停时进入 BlockingFacts（不可交易），
+//     池不完整只能记缺失；不得把 unknown 当成可交易，也不得推导涨跌幅比例。
 const (
 	riskPurposeCode      = TradingFactsPurposeCode
 	riskSchemaVersion    = result.EnvelopeSchemaVersion
@@ -53,6 +53,8 @@ type CreateRiskRequest struct {
 	AuthorizationRef          string
 	OrderBookSnapshotRef      string
 	OrderBookAuthorizationRef string
+	LimitPoolSnapshotRef      string
+	LimitPoolAuthorizationRef string
 	SystemAsOf                time.Time
 	Parameters                json.RawMessage
 }
@@ -73,6 +75,7 @@ type RiskExecutionResult struct {
 type CreateRiskService struct {
 	facts      TradingFactsReader
 	orderBooks OrderBookFactsReader
+	limitPools LimitPoolFactsReader
 	decisions  RiskDecisionIDGenerator
 	persister  *resultPersister
 	now        func() time.Time
@@ -81,11 +84,12 @@ type CreateRiskService struct {
 func NewCreateRiskService(
 	facts TradingFactsReader,
 	orderBooks OrderBookFactsReader,
+	limitPools LimitPoolFactsReader,
 	decisions RiskDecisionIDGenerator,
 	repository result.Repository,
 	now func() time.Time,
 ) (*CreateRiskService, error) {
-	if facts == nil || orderBooks == nil || decisions == nil || repository == nil || now == nil {
+	if facts == nil || orderBooks == nil || limitPools == nil || decisions == nil || repository == nil || now == nil {
 		return nil, ErrInvalidCreateRiskRequest
 	}
 	persister, err := newResultPersister(repository)
@@ -93,7 +97,8 @@ func NewCreateRiskService(
 		return nil, err
 	}
 	return &CreateRiskService{
-		facts: facts, orderBooks: orderBooks, decisions: decisions, persister: persister, now: now,
+		facts: facts, orderBooks: orderBooks, limitPools: limitPools,
+		decisions: decisions, persister: persister, now: now,
 	}, nil
 }
 
@@ -108,11 +113,14 @@ type riskParameters struct {
 // Execute 读取已授权事实快照，评估可交易性并落库。
 // 决策为 reject 不是错误：返回已持久化的结果，由调用方读 decision.Status。
 func (service *CreateRiskService) Execute(ctx context.Context, request CreateRiskRequest) (RiskExecutionResult, error) {
-	if service == nil || service.facts == nil || service.orderBooks == nil || service.decisions == nil ||
+	if service == nil || service.facts == nil || service.orderBooks == nil || service.limitPools == nil ||
+		service.decisions == nil ||
 		service.persister == nil || service.now == nil || ctx == nil ||
 		strings.TrimSpace(request.SnapshotRef) == "" || strings.TrimSpace(request.AuthorizationRef) == "" ||
 		strings.TrimSpace(request.OrderBookSnapshotRef) == "" ||
 		strings.TrimSpace(request.OrderBookAuthorizationRef) == "" ||
+		strings.TrimSpace(request.LimitPoolSnapshotRef) == "" ||
+		strings.TrimSpace(request.LimitPoolAuthorizationRef) == "" ||
 		request.SystemAsOf.IsZero() || request.SystemAsOf.Location() != time.UTC ||
 		len(request.Parameters) == 0 || len(request.Parameters) > riskMaxParamsBytes ||
 		!json.Valid(request.Parameters) {
@@ -149,7 +157,19 @@ func (service *CreateRiskService) Execute(ctx context.Context, request CreateRis
 		return RiskExecutionResult{}, err
 	}
 
-	evidence := TradabilityEvidence{TradingFacts: snapshot, OrderBookFacts: orderBook}
+	limitPool, err := service.limitPools.ReadLimitPoolFactsSnapshot(
+		ctx, request.LimitPoolSnapshotRef, request.LimitPoolAuthorizationRef, riskPurposeCode,
+	)
+	if err != nil {
+		return RiskExecutionResult{}, fmt.Errorf("read authorized limit-pool facts Snapshot: %w", err)
+	}
+	if err := validateRiskLimitPoolBinding(limitPool, request, parameters, snapshot); err != nil {
+		return RiskExecutionResult{}, err
+	}
+
+	evidence := TradabilityEvidence{
+		TradingFacts: snapshot, OrderBookFacts: orderBook, LimitPoolFacts: limitPool,
+	}
 	decisionID, err := service.decisions.NewDecisionID(ctx)
 	if err != nil {
 		return RiskExecutionResult{}, fmt.Errorf("generate risk decision identity: %w", err)
@@ -163,7 +183,7 @@ func (service *CreateRiskService) Execute(ctx context.Context, request CreateRis
 		return RiskExecutionResult{}, fmt.Errorf("evaluate tradability gate: %w", err)
 	}
 
-	qualityStatus := riskInputQualityStatus(snapshot.QualityStatus, orderBook.QualityStatus)
+	qualityStatus := riskInputQualityStatus(snapshot.QualityStatus, orderBook.QualityStatus, limitPool.QualityStatus)
 	input := manifest.Input{
 		ResultType: riskInputResultType, Scope: "stock", SecurityID: snapshot.Symbol,
 		TradeDate: snapshot.TradeDate, Period: riskPeriod,
@@ -174,7 +194,7 @@ func (service *CreateRiskService) Execute(ctx context.Context, request CreateRis
 		PayloadSchemaVersion: riskPayloadVersion,
 		AlgorithmVersion:     riskAlgorithmVersion, ParameterFingerprint: parameterFingerprint,
 		SystemAsOf:        request.SystemAsOf,
-		InputSnapshotRefs: []string{snapshot.SnapshotRef, orderBook.SnapshotRef},
+		InputSnapshotRefs: []string{snapshot.SnapshotRef, orderBook.SnapshotRef, limitPool.SnapshotRef},
 	}
 	payload, err := result.NewRiskPayload(decision)
 	if err != nil {
@@ -255,9 +275,34 @@ func validateRiskOrderBookBinding(
 	return nil
 }
 
-// riskInputQualityStatus 取两份证据中较差的质量；degraded 不会被升级为 valid。
-func riskInputQualityStatus(tradingQuality, orderBookQuality string) string {
-	if tradingQuality == "degraded" || orderBookQuality == "degraded" {
+func validateRiskLimitPoolBinding(
+	limitPool LimitPoolFactsSnapshot,
+	request CreateRiskRequest,
+	parameters riskParameters,
+	trading TradingFactsSnapshot,
+) error {
+	if err := limitPool.Validate(); err != nil {
+		return fmt.Errorf("%w: %v", ErrInvalidRiskSnapshot, err)
+	}
+	if limitPool.SnapshotRef != request.LimitPoolSnapshotRef || limitPool.PurposeCode != riskPurposeCode {
+		return fmt.Errorf("%w: limit-pool Snapshot identity or purpose does not match the request", ErrInvalidRiskSnapshot)
+	}
+	if limitPool.Symbol != parameters.Symbol || limitPool.Symbol != trading.Symbol {
+		return fmt.Errorf("%w: limit-pool Snapshot does not describe the authorized security", ErrInvalidRiskSnapshot)
+	}
+	if limitPool.TradeDate != parameters.TradeDate || limitPool.TradeDate != trading.TradeDate {
+		return fmt.Errorf("%w: limit-pool trade_date differs from the request", ErrInvalidRiskSnapshot)
+	}
+	if limitPool.SystemAsOf != request.SystemAsOf.Format(time.RFC3339Nano) ||
+		limitPool.SystemAsOf != trading.SystemAsOf {
+		return fmt.Errorf("%w: limit-pool system_as_of differs from the evaluation instant", ErrInvalidRiskSnapshot)
+	}
+	return nil
+}
+
+// riskInputQualityStatus 取三份证据中较差的质量；degraded 不会被升级为 valid。
+func riskInputQualityStatus(tradingQuality, orderBookQuality, limitPoolQuality string) string {
+	if tradingQuality == "degraded" || orderBookQuality == "degraded" || limitPoolQuality == "degraded" {
 		return "degraded"
 	}
 	return "valid"

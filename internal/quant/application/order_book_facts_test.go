@@ -28,10 +28,34 @@ func validOrderBookFactsSnapshot() OrderBookFactsSnapshot {
 	}
 }
 
+func validLimitPoolFactsSnapshot() LimitPoolFactsSnapshot {
+	return LimitPoolFactsSnapshot{
+		SnapshotRef:           "data_snapshot:sha256:" + repeatHex(64, 'c'),
+		AuthorizationRef:      "data_authorization:limit-pool-opaque",
+		ManifestSchemaVersion: "1.0.0",
+		PayloadSchemaVersion:  LimitPoolFactsPayloadSchemaVersion,
+		PayloadKind:           LimitPoolFactsPayloadKind,
+		CallerRef:             "principal:service:researchflow",
+		PurposeCode:           TradingFactsPurposeCode,
+		Symbol:                "600519.SH",
+		TradeDate:             "2026-11-25",
+		ObservedAt:            "2026-11-25T07:01:00Z",
+		SystemAsOf:            "2026-11-25T15:00:00Z",
+		LimitStatus:           LimitPoolStatusUnknown,
+		UpPoolTotal:           10,
+		DownPoolTotal:         0,
+		UpPoolComplete:        false,
+		DownPoolComplete:      true,
+		Source:                "eastmoney",
+		QualityStatus:         "valid",
+	}
+}
+
 func validTradabilityEvidence() TradabilityEvidence {
 	return TradabilityEvidence{
 		TradingFacts:   validTradingFactsSnapshot(),
 		OrderBookFacts: validOrderBookFactsSnapshot(),
+		LimitPoolFacts: validLimitPoolFactsSnapshot(),
 	}
 }
 
@@ -55,6 +79,8 @@ func TestAssessTradabilityFactsUsesAuthorizedOrderBookForTradableVolume(t *testi
 		validTradingFactsSnapshot().AuthorizationRef,
 		validOrderBookFactsSnapshot().SnapshotRef,
 		validOrderBookFactsSnapshot().AuthorizationRef,
+		validLimitPoolFactsSnapshot().SnapshotRef,
+		validLimitPoolFactsSnapshot().AuthorizationRef,
 	}
 	if len(assessment.Facts.EvidenceRefs) != len(wantRefs) {
 		t.Fatalf("EvidenceRefs = %v, want %v", assessment.Facts.EvidenceRefs, wantRefs)
@@ -119,6 +145,7 @@ func TestEvaluateTradabilityDecisionCitesBothAuthorizedSnapshots(t *testing.T) {
 	want := []string{
 		evidence.TradingFacts.SnapshotRef, evidence.TradingFacts.AuthorizationRef,
 		evidence.OrderBookFacts.SnapshotRef, evidence.OrderBookFacts.AuthorizationRef,
+		evidence.LimitPoolFacts.SnapshotRef, evidence.LimitPoolFacts.AuthorizationRef,
 	}
 	if len(decision.InputRefs) != len(want) {
 		t.Fatalf("InputRefs = %v, want %v", decision.InputRefs, want)
@@ -130,5 +157,71 @@ func TestEvaluateTradabilityDecisionCitesBothAuthorizedSnapshots(t *testing.T) {
 	}
 	if len(decision.Reasons) != 1 || decision.Reasons[0].Status != risk.ReasonTriggered {
 		t.Fatalf("decision reasons = %+v, want a triggered tradability gate", decision.Reasons)
+	}
+}
+
+func limitPoolWithStatus(snapshot LimitPoolFactsSnapshot, status string, complete bool) LimitPoolFactsSnapshot {
+	snapshot.LimitStatus = status
+	snapshot.UpPoolComplete = complete
+	snapshot.DownPoolComplete = complete
+	if complete {
+		snapshot.UpPoolTotal = 0
+		snapshot.DownPoolTotal = 0
+	}
+	return snapshot
+}
+
+func TestAssessTradabilityFactsBlocksOnLimitUpAndLimitDown(t *testing.T) {
+	for _, status := range []string{LimitPoolStatusUp, LimitPoolStatusDown} {
+		evidence := validTradabilityEvidence()
+		evidence.LimitPoolFacts = limitPoolWithStatus(evidence.LimitPoolFacts, status, true)
+		assessment, err := AssessTradabilityFacts(evidence)
+		if err != nil {
+			t.Fatalf("%s: AssessTradabilityFacts() error = %v", status, err)
+		}
+		if len(assessment.Facts.MissingFacts) != 0 {
+			t.Fatalf("%s: missing facts = %v, want none", status, assessment.Facts.MissingFacts)
+		}
+		if len(assessment.BlockingFacts) != 1 || assessment.BlockingFacts[0] != "price_limit" {
+			t.Fatalf("%s: blocking facts = %v, want [price_limit]", status, assessment.BlockingFacts)
+		}
+	}
+}
+
+func TestAssessTradabilityFactsVerifiesNoneOnlyWithCompletePools(t *testing.T) {
+	evidence := validTradabilityEvidence()
+	evidence.LimitPoolFacts = limitPoolWithStatus(evidence.LimitPoolFacts, LimitPoolStatusNone, true)
+	assessment, err := AssessTradabilityFacts(evidence)
+	if err != nil {
+		t.Fatalf("AssessTradabilityFacts() error = %v", err)
+	}
+	if len(assessment.Facts.MissingFacts) != 0 || len(assessment.BlockingFacts) != 0 {
+		t.Fatalf("missing=%v blocking=%v, want both empty", assessment.Facts.MissingFacts, assessment.BlockingFacts)
+	}
+	if !assessment.Facts.Verified {
+		t.Fatal("all three facts verified but gate reported Verified=false")
+	}
+
+	// none 但池不完整：Payload 自洽性校验必须拒绝，不能被当成可交易。
+	broken := validTradabilityEvidence()
+	broken.LimitPoolFacts = limitPoolWithStatus(broken.LimitPoolFacts, LimitPoolStatusNone, false)
+	if _, err := AssessTradabilityFacts(broken); err == nil {
+		t.Fatal("none with an incomplete pool must be rejected")
+	}
+}
+
+func TestAssessTradabilityFactsTreatsUnknownLimitPoolAsMissing(t *testing.T) {
+	assessment, err := AssessTradabilityFacts(validTradabilityEvidence())
+	if err != nil {
+		t.Fatalf("AssessTradabilityFacts() error = %v", err)
+	}
+	if len(assessment.Facts.MissingFacts) != 1 || assessment.Facts.MissingFacts[0] != risk.TradabilityFactPriceLimit {
+		t.Fatalf("missing facts = %v, want [price_limit]", assessment.Facts.MissingFacts)
+	}
+	if len(assessment.BlockingFacts) != 0 {
+		t.Fatalf("blocking facts = %v, want none", assessment.BlockingFacts)
+	}
+	if assessment.Facts.Verified {
+		t.Fatal("unknown limit pool must never produce Verified=true")
 	}
 }

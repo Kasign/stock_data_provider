@@ -88,6 +88,7 @@ func TestAssessTradabilityFactsRecordsKnownBlockingFacts(t *testing.T) {
 			mutate.mutate(&snapshot.Facts[target])
 			assessment, err := AssessTradabilityFacts(TradabilityEvidence{
 				TradingFacts: snapshot, OrderBookFacts: validOrderBookFactsSnapshot(),
+				LimitPoolFacts: validLimitPoolFactsSnapshot(),
 			})
 			if err != nil {
 				t.Fatalf("AssessTradabilityFacts() error = %v", err)
@@ -110,6 +111,7 @@ func TestAssessTradabilityFactsReportsUnavailableGateFactsAsMissing(t *testing.T
 	snapshot.QualityStatus = "degraded"
 	assessment, err := AssessTradabilityFacts(TradabilityEvidence{
 		TradingFacts: snapshot, OrderBookFacts: validOrderBookFactsSnapshot(),
+		LimitPoolFacts: validLimitPoolFactsSnapshot(),
 	})
 	if err != nil {
 		t.Fatalf("AssessTradabilityFacts() error = %v", err)
@@ -172,8 +174,8 @@ func TestEvaluateTradabilityDecisionAlwaysRejectsWithoutFullFacts(t *testing.T) 
 		decision.Reasons[0].Code != risk.TradabilityGateCode {
 		t.Fatalf("decision reasons = %+v, want triggered tradability gate", decision.Reasons)
 	}
-	if len(decision.InputRefs) != 4 {
-		t.Fatalf("InputRefs = %v, want both snapshot/authorization reference pairs", decision.InputRefs)
+	if len(decision.InputRefs) != 6 {
+		t.Fatalf("InputRefs = %v, want three snapshot/authorization reference pairs", decision.InputRefs)
 	}
 	if err := decision.Validate(); err != nil {
 		t.Fatalf("decision is not contract-valid: %v", err)
