@@ -1,0 +1,61 @@
+{
+  "schema_version": "1.0.0",
+  "run_ref": "run-1",
+  "system_as_of": "2026-11-09T08:00:00Z",
+  "sources": {
+    "context_id": "ctx-1",
+    "context_version": 1,
+    "context_source_refs": [
+      "snapshot-1"
+    ],
+    "context_evidence_refs": [
+      "ev-1"
+    ],
+    "quant_result_refs": [
+      "quant_result:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    ],
+    "quant_snapshot_refs": [
+      "snapshot-1"
+    ],
+    "evidence_refs": [
+      "ev-1"
+    ],
+    "claim_refs": [
+      "clm-1"
+    ]
+  },
+  "explanation": {
+    "text": "基于已提供证据，成交量变化需要结合价格结构观察。",
+    "provider_id": "provider-a",
+    "model_requested": "model-a",
+    "model_actual": "model-a",
+    "model_version": "v1",
+    "response_id": "resp-1",
+    "authority": "non_authoritative"
+  },
+  "risk_decision": {
+    "decision_id": "risk-1",
+    "status": "pass",
+    "rule_set_version": "risk-v1",
+    "evaluated_at": "2026-11-09T08:00:00Z",
+    "system_as_of": "2026-11-09T08:00:00Z",
+    "reasons": [
+      {
+        "code": "max_drawdown",
+        "severity": "block",
+        "status": "not_triggered",
+        "safe_message": "未触发阻断条件",
+        "rule_ref": "rule-max-drawdown-v1",
+        "evidence_refs": [
+          "ev-1"
+        ]
+      }
+    ],
+    "input_refs": [
+      "quant_result:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    ]
+  },
+  "limitations": [
+    "仅覆盖已授权的输入快照"
+  ]
+}

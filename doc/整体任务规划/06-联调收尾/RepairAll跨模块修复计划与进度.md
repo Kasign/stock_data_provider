@@ -1683,4 +1683,13 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - **治理前置**：DEC-PLAT-002-068 确定 Researchflow 为完整 `RunResult` 唯一 Owner；Run 仅以 additive optional `result_ref` 引用；`ResultSummaryRef` 与 Quant `result_ref` 不得冒充完整报告；旧 Schema/Golden 字节不动。
 - **投影边界**：新增 `RunResultFromComposed`，只接受可信 `run_ref`、UTC 时点、Context/Evidence/Claim/Quant/风险结论与非权威 LLM 解释齐全的组合结果；输出只包含来源身份引用和权威风险投影，不复制 Quant/Research 原始资源本体。
 - **TDD 与变异**：新增测试先因 API 未定义构建失败；实现后 6 组投影用例通过。变异“放宽 LLM Authority 校验”使 `wrong_authority` 用例有效失败并恢复。
-- **状态边界**：本组只完成来源无关的纯函数投影；不建表、不接 HTTP、不生成生产完整报告。生产成功路径仍依赖 R3 真实来源语义与 LLM Provider 接线；CI 待代码提交后按精确 SHA 回填。
+- **状态边界**：本组只完成来源无关的纯函数投影；不建表、不接 HTTP、不生成生产完整报告。生产成功路径仍依赖 R3 真实来源语义与 LLM Provider 接线。
+- **CI 状态（回填）**：代码提交 `82e3437d9f41a1c33910f01fdc9007189f6b6635` 的 13 个 check run 全部 `completed/success`：required-checks `45946902003`、Go test suite workflow run `45946901979`（含 Researchflow module format/tests/race/vet、WorkerStore、MariaDB lifecycle、Root Go module 等）、Integration CI `45946902015`（Full integration checks）。R4-R1 验收完成。
+
+## 2026-11-27 四项根因根治 R4-R2：run-result 1.0.0 与 Run 1.1.0 契约
+
+- **契约边界**：经 DEC-PLAT-002-068 授权，新增 `doc/researchflow/schema/run-result-1.0.0.schema.json` 与 `doc/researchflow/golden/run-result-1.0.0.golden.json`；Run 以 additive MINOR 发布 `doc/researchflow/schema/run-1.1.0.schema.json` 与三个 1.1.0 Golden。既有 `run-1.0.0.schema.json` 和全部 1.0.0 Run/Stage/Attempt/ResultSummary Golden 字节不变。
+- **机器语义**：RunResult 只保存 Run 绑定、UTC `system_as_of`、Context/Quant/Evidence/Claim 身份引用、非权威 LLM 解释和风险投影；`additionalProperties:false` 禁止复制来源正文，解释 `authority` 固定 `non_authoritative`。Run 1.1.0 的 optional `result_ref` 仅允许报告型终态引用完整报告；created/queued/running/cancelling/cancelled 及 user_cancelled/deadline_exceeded/run_deadline_exceeded 终态一律禁止非空 `result_ref`。
+- **TDD 与变异**：先新增引用新 Schema/Golden 的契约测试，因文件缺失失败；实现后 Golden、DTO 投影 Schema 校验、冻结 1.0.0 拒绝 `result_ref`、1.1.0 允许缺省 `result_ref` 与非报告终态拒绝均通过。变异“放宽 Run 1.1.0 终止原因门禁”使 `TestRunV11SchemaRejectsResultRefOnNonReportTerminals` 有效失败；变异“允许 `authoritative` 解释”使 `TestRunResultSchemaRejectsAuthoritativeExplanation` 有效失败；恢复后复验通过。
+- **登记状态**：`契约版本与变更记录.md` 推进至 `0.2.68-frozen`；PLAT-002 将 FLOW-CTR-005 从 `planned` 转为 `frozen`（仅契约定义），FLOW-CTR-001 登记 Run 1.1.0 additive。
+- **状态边界**：本组只发布机器契约与 Golden；不建表、不接 HTTP、不启用生产完整报告。后续 R4-R3 才做物理表与 Finalizer 原子写入，生产成功路径仍依赖 R3 真实来源语义与 LLM Provider 注入；CI 待代码提交后按精确 SHA 回填。

@@ -1,10 +1,15 @@
 package resultvalidation
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/santhosh-tekuri/jsonschema/v5"
 )
 
 func validPersistableComposedResult(t *testing.T) ComposedResearchResult {
@@ -155,5 +160,77 @@ func TestRunResultFromComposedRejectsInvalidSchemaVersion(t *testing.T) {
 	}
 	if strings.TrimSpace(RunResultPayloadSchemaVersion) == "" {
 		t.Fatal("schema version constant must be non-empty")
+	}
+}
+
+func compileRunResultContractSchemaForTest(t *testing.T) *jsonschema.Schema {
+	t.Helper()
+	schemaBytes, err := os.ReadFile(filepath.Join("../../../doc/researchflow/schema", "run-result-1.0.0.schema.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	compiler := jsonschema.NewCompiler()
+	compiler.Draft = jsonschema.Draft2020
+	compiler.AssertFormat = true
+	const schemaURL = "https://researchflow.invalid/schema/run-result-contract-test"
+	if err := compiler.AddResource(schemaURL, bytes.NewReader(schemaBytes)); err != nil {
+		t.Fatal(err)
+	}
+	compiled, err := compiler.Compile(schemaURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return compiled
+}
+
+func validateRunResultInstanceForTest(t *testing.T, compiled *jsonschema.Schema, encoded []byte) error {
+	t.Helper()
+	decoder := json.NewDecoder(bytes.NewReader(encoded))
+	decoder.UseNumber()
+	var instance any
+	if err := decoder.Decode(&instance); err != nil {
+		t.Fatal(err)
+	}
+	return compiled.Validate(instance)
+}
+
+func TestRunResultProjectionValidatesAgainstPublishedSchema(t *testing.T) {
+	payload, err := RunResultFromComposed(validPersistableComposedResult(t), "run-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := validateRunResultInstanceForTest(t, compileRunResultContractSchemaForTest(t), encoded); err != nil {
+		t.Fatalf("RunResult projection violates published schema: %v; json=%s", err, encoded)
+	}
+}
+
+func TestRunResultSchemaRejectsAuthoritativeExplanation(t *testing.T) {
+	payload, err := RunResultFromComposed(validPersistableComposedResult(t), "run-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var object map[string]any
+	if err := json.Unmarshal(encoded, &object); err != nil {
+		t.Fatal(err)
+	}
+	explanation, ok := object["explanation"].(map[string]any)
+	if !ok {
+		t.Fatalf("explanation is not an object: %s", encoded)
+	}
+	explanation["authority"] = "authoritative"
+	mutated, err := json.Marshal(object)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := validateRunResultInstanceForTest(t, compileRunResultContractSchemaForTest(t), mutated); err == nil {
+		t.Fatal("RunResult schema accepted authoritative LLM explanation")
 	}
 }

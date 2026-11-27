@@ -67,6 +67,10 @@ func TestPublicDTOSchemaGoldens(t *testing.T) {
 		{"stage-1.0.0.schema.json", "stage-failed-1.0.0.golden.json"},
 		{"attempt-1.0.0.schema.json", "attempt-running-1.0.0.golden.json"},
 		{"attempt-1.0.0.schema.json", "attempt-failed-1.0.0.golden.json"},
+		{"run-result-1.0.0.schema.json", "run-result-1.0.0.golden.json"},
+		{"run-1.1.0.schema.json", "run-created-1.1.0.golden.json"},
+		{"run-1.1.0.schema.json", "run-partial-with-result-1.1.0.golden.json"},
+		{"run-1.1.0.schema.json", "run-cancelled-1.1.0.golden.json"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.golden, func(t *testing.T) {
@@ -289,5 +293,78 @@ func TestTerminalRunSchemaRequiresSummaryReference(t *testing.T) {
 	}
 	if err := compiled.Validate(instance); err == nil {
 		t.Fatal("terminal Run without result_summary_ref passed public schema")
+	}
+}
+
+func compileResearchflowSchemaForTest(t *testing.T, name string) *jsonschema.Schema {
+	t.Helper()
+	schemaBytes, err := os.ReadFile(filepath.Join("../../../doc/researchflow/schema", name))
+	if err != nil {
+		t.Fatal(err)
+	}
+	compiler := jsonschema.NewCompiler()
+	compiler.Draft = jsonschema.Draft2020
+	compiler.AssertFormat = true
+	const schemaURL = "https://researchflow.invalid/schema/contract-test"
+	if err := compiler.AddResource(schemaURL, bytes.NewReader(schemaBytes)); err != nil {
+		t.Fatal(err)
+	}
+	compiled, err := compiler.Compile(schemaURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return compiled
+}
+
+func researchflowGoldenObjectForTest(t *testing.T, name string) map[string]any {
+	t.Helper()
+	goldenBytes, err := os.ReadFile(filepath.Join("../../../doc/researchflow/golden", name))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var object map[string]any
+	if err := json.Unmarshal(goldenBytes, &object); err != nil {
+		t.Fatal(err)
+	}
+	return object
+}
+
+func TestRunV10SchemaRejectsResultRef(t *testing.T) {
+	compiled := compileResearchflowSchemaForTest(t, "run-1.0.0.schema.json")
+	instance := researchflowGoldenObjectForTest(t, "run-partial-1.0.0.golden.json")
+	instance["result_ref"] = "run_result_01"
+	if err := compiled.Validate(instance); err == nil {
+		t.Fatal("frozen Run 1.0.0 schema accepted result_ref")
+	}
+}
+
+func TestRunV11SchemaAcceptsMissingResultRef(t *testing.T) {
+	compiled := compileResearchflowSchemaForTest(t, "run-1.1.0.schema.json")
+	instance := researchflowGoldenObjectForTest(t, "run-created-1.1.0.golden.json")
+	delete(instance, "result_ref")
+	if err := compiled.Validate(instance); err != nil {
+		t.Fatalf("additive Run 1.1.0 schema requires result_ref: %v", err)
+	}
+}
+
+func TestRunV11SchemaRejectsResultRefOnNonReportTerminals(t *testing.T) {
+	compiled := compileResearchflowSchemaForTest(t, "run-1.1.0.schema.json")
+	created := researchflowGoldenObjectForTest(t, "run-created-1.1.0.golden.json")
+	created["result_ref"] = "run_result_created"
+	if err := compiled.Validate(created); err == nil {
+		t.Fatal("non-terminal Run accepted result_ref")
+	}
+
+	cancelled := researchflowGoldenObjectForTest(t, "run-cancelled-1.1.0.golden.json")
+	cancelled["result_ref"] = "run_result_cancelled"
+	if err := compiled.Validate(cancelled); err == nil {
+		t.Fatal("cancelled Run accepted result_ref")
+	}
+
+	deadline := researchflowGoldenObjectForTest(t, "run-partial-with-result-1.1.0.golden.json")
+	deadline["status"] = "failed"
+	deadline["termination_reason"] = "deadline_exceeded"
+	if err := compiled.Validate(deadline); err == nil {
+		t.Fatal("deadline Run accepted result_ref")
 	}
 }

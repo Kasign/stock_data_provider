@@ -1,0 +1,251 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://researchflow.invalid/schema/run-result-1.0.0",
+  "title": "Researchflow RunResult",
+  "description": "Researchflow-owned complete report projection. Only source identities, a non-authoritative LLM explanation and an authoritative risk projection are persisted; Quant/Research source bodies are never copied.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "run_ref",
+    "system_as_of",
+    "sources",
+    "explanation",
+    "risk_decision",
+    "limitations"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0.0"
+    },
+    "run_ref": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+    },
+    "system_as_of": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{0,8}[1-9])?Z$"
+    },
+    "sources": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "context_id",
+        "context_version",
+        "context_source_refs",
+        "context_evidence_refs",
+        "quant_result_refs",
+        "quant_snapshot_refs",
+        "evidence_refs",
+        "claim_refs"
+      ],
+      "properties": {
+        "context_id": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+        },
+        "context_version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "context_source_refs": {
+          "$ref": "#/$defs/nonBlankRefList"
+        },
+        "context_evidence_refs": {
+          "$ref": "#/$defs/nonBlankRefList"
+        },
+        "quant_result_refs": {
+          "$ref": "#/$defs/nonBlankRefList"
+        },
+        "quant_snapshot_refs": {
+          "$ref": "#/$defs/nonBlankRefList"
+        },
+        "evidence_refs": {
+          "$ref": "#/$defs/nonBlankRefList"
+        },
+        "claim_refs": {
+          "$ref": "#/$defs/nonBlankRefList"
+        }
+      }
+    },
+    "explanation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "text",
+        "provider_id",
+        "model_requested",
+        "model_actual",
+        "model_version",
+        "response_id",
+        "authority"
+      ],
+      "properties": {
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+        },
+        "provider_id": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+        },
+        "model_requested": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+        },
+        "model_actual": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+        },
+        "model_version": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+        },
+        "response_id": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+        },
+        "authority": {
+          "const": "non_authoritative"
+        }
+      }
+    },
+    "risk_decision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "decision_id",
+        "status",
+        "rule_set_version",
+        "evaluated_at",
+        "system_as_of",
+        "reasons",
+        "input_refs"
+      ],
+      "properties": {
+        "decision_id": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+        },
+        "status": {
+          "enum": [
+            "pass",
+            "reject",
+            "unknown"
+          ]
+        },
+        "rule_set_version": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+        },
+        "evaluated_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{0,8}[1-9])?Z$"
+        },
+        "system_as_of": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{0,8}[1-9])?Z$"
+        },
+        "reasons": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "code",
+              "severity",
+              "status",
+              "safe_message",
+              "evidence_refs"
+            ],
+            "properties": {
+              "code": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+              },
+              "severity": {
+                "enum": [
+                  "block",
+                  "warn",
+                  "info"
+                ]
+              },
+              "status": {
+                "enum": [
+                  "triggered",
+                  "not_triggered",
+                  "unknown"
+                ]
+              },
+              "safe_message": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+              },
+              "rule_ref": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+              },
+              "evidence_refs": {
+                "$ref": "#/$defs/nonBlankRefList"
+              },
+              "observed_value": {
+                "type": [
+                  "string",
+                  "number",
+                  "null"
+                ]
+              },
+              "expected_range": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+              },
+              "remediation_code": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+              }
+            }
+          }
+        },
+        "input_refs": {
+          "$ref": "#/$defs/nonBlankRefList"
+        }
+      }
+    },
+    "limitations": {
+      "$ref": "#/$defs/nonBlankRefList"
+    }
+  },
+  "$defs": {
+    "nonBlankString": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+    },
+    "nonBlankRefList": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/nonBlankString"
+      },
+      "uniqueItems": true
+    }
+  }
+}
