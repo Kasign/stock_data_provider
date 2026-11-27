@@ -10,11 +10,11 @@ const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),"..");
 const screenshotDir=path.resolve(root,"../browser-screenshots/run-flow-outcomes");
 await mkdir(screenshotDir,{recursive:true});
 const tasks=[
- {task_id:"task-partial",run_id:"run-partial",symbols:["600519"],task_type:"post_market_scan",status:"partial",analysis_base:"/analysis-api"},
- {task_id:"task-failed",run_id:"run-failed",symbols:["000001"],task_type:"post_market_scan",status:"failed",failure_code:"market_snapshot_failed",error_message:"读取行情快照失败",analysis_base:"/analysis-api"},
- {task_id:"task-event-unavailable",run_id:"run-event-unavailable",symbols:["600519"],task_type:"post_market_scan",status:"succeeded",analysis_base:"/analysis-api"},
- {task_id:"task-race-a",run_id:"run-race-a",symbols:["600519"],task_type:"post_market_scan",status:"succeeded",analysis_base:"/analysis-api"},
- {task_id:"task-race-b",run_id:"run-race-b",symbols:["000001"],task_type:"post_market_scan",status:"running",analysis_base:"/analysis-api"}
+ {task_id:"task-partial",run_id:"run-partial",symbols:["600519"],task_type:"post_market_scan",status:"partial",analysis_base:"/"},
+ {task_id:"task-failed",run_id:"run-failed",symbols:["000001"],task_type:"post_market_scan",status:"failed",failure_code:"market_snapshot_failed",error_message:"读取行情快照失败",analysis_base:"/"},
+ {task_id:"task-event-unavailable",run_id:"run-event-unavailable",symbols:["600519"],task_type:"post_market_scan",status:"succeeded",analysis_base:"/"},
+ {task_id:"task-race-a",run_id:"run-race-a",symbols:["600519"],task_type:"post_market_scan",status:"succeeded",analysis_base:"/"},
+ {task_id:"task-race-b",run_id:"run-race-b",symbols:["000001"],task_type:"post_market_scan",status:"running",analysis_base:"/"}
 ];
 const runIds=Object.fromEntries(tasks.map(t=>[t.task_id,t.run_id]));
 const symbols=Object.fromEntries(tasks.map(t=>[t.task_id,t.symbols[0]]));

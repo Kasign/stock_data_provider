@@ -234,6 +234,16 @@ try {
           market_state: { regime: "unknown", evidence: [] }
         });
       }
+      // 市场总览在 Owner Session 恢复成功后才会随视图切换刷新；用同源夹具建立已登录态。
+      if (url.pathname === "/api/v1/owner/setup") {
+        return json(200, { mode: "login" });
+      }
+      if (url.pathname === "/api/v1/owner/session") {
+        return json(200, { authenticated: true, expires_at: "2026-11-04T04:00:00Z" });
+      }
+      if (url.pathname === "/api/v1/owner/session/csrf") {
+        return json(200, { csrf_token: "browser-research-csrf" });
+      }
       if (url.pathname.includes("/api/")) {
         await route.fulfill({
           status: 503, contentType: "application/json",
@@ -291,7 +301,8 @@ try {
   );
   assert.equal(await page.locator("#research-overview-symbol").textContent().then(value => value.includes("000001.SZ")), true);
 
-  // 研究列表复用自选股批量行情；连接配置从其它标签页变化后，当前研究页必须立即清除旧连接快照。
+  // 研究列表复用自选股批量行情；Root Server 连接由部署固定，其它标签页写入旧式
+  // 连接配置不得伪造连接变更、也不得清除仍有效的批量行情快照。
   await page.locator('.nav-link[data-view="watchlist"]').click();
   await page.locator("#refresh-watchlist-quotes").click();
   await page.waitForFunction(() => document.querySelector("#watchlist-quote-refresh-status")?.textContent.includes("批量行情已返回 1 / 1"));
@@ -302,10 +313,13 @@ try {
   await settingsSyncPage.evaluate(() => localStorage.setItem("stock-provider-webui.settings.v1", JSON.stringify({
     marketBase: "/market-api-v2", analysisBase: "/analysis-api", apiKey: "research-browser-key-v2"
   })));
-  await page.waitForFunction(() => {
-    const text = document.querySelector("#research-stock-list-body")?.textContent || "";
-    return !text.includes("10.50") && text.includes("未加载");
-  });
+  const effectiveConnection = await page.evaluate(() => ({
+    marketBase: document.querySelector("#market-base-input")?.value || "",
+    analysisBase: document.querySelector("#analysis-base-input")?.value || ""
+  }));
+  assert.deepEqual(effectiveConnection, { marketBase: "/", analysisBase: "/" });
+  assert.doesNotMatch(await page.locator("#research-stock-list-body").textContent(), /旧连接/);
+  assert.match(await page.locator("#research-stock-list-body").textContent(), /10\.50/);
   assert.match(await page.locator("#research-list-scope").textContent(), /当前浏览器列表/);
   await settingsSyncPage.close();
 
@@ -324,11 +338,11 @@ try {
   });
   await membershipSyncPage.close();
 
-  // 个股研究资料在途时，另一标签页切换行情连接；必须取消旧请求并恢复整组加载按钮。
+  // 个股研究资料在途时，其它标签页写入旧式连接配置不得伪造连接变更：
+  // 在途请求不应被取消，延迟响应仍应正常应用到当前标的。
   await openStocksView(page);
   await page.locator("#symbol-input").fill("000001.SZ");
   await page.locator('.nav-link[data-view="research"]').click();
-  // 请求进入路由后再切换连接；用延迟响应验证旧结果不会覆盖当前研究状态。
   await page.locator("#load-stock-research").click();
   await waitWithTimeout(crossTabResearchRequestStarted, 10000, "等待跨标签页研究档案请求启动超时");
   const researchSettingsSyncPage = await context.newPage();
@@ -336,21 +350,26 @@ try {
   await researchSettingsSyncPage.evaluate(() => localStorage.setItem("stock-provider-webui.settings.v1", JSON.stringify({
     marketBase: "/market-api-v3", analysisBase: "/analysis-api", apiKey: "research-browser-key-v3"
   })));
+  const researchConnection = await page.evaluate(() => ({
+    marketBase: document.querySelector("#market-base-input")?.value || "",
+    analysisBase: document.querySelector("#analysis-base-input")?.value || ""
+  }));
+  assert.deepEqual(researchConnection, { marketBase: "/", analysisBase: "/" });
+  assert.doesNotMatch(await page.locator("#stock-research-feedback").textContent(), /行情连接配置已变更/);
+  assert.equal(await page.locator("#load-stock-research").isDisabled(), true, "in-flight request must not be cancelled by a legacy settings write");
+  // 释放被挂起的响应，确认它按正常请求完成，而不是被当作旧连接响应丢弃。
+  releaseCrossTabResearchRequest?.();
+  await waitWithTimeout(crossTabResearchRequestSettled, 5000, "等待研究档案路由结束超时");
+  assert.equal(crossTabResearchRouteFinished, true);
   await page.waitForFunction(() => {
     const button = document.querySelector("#load-stock-research");
     return button && !button.disabled && button.textContent.includes("重新加载公司资料");
   });
-  await page.waitForFunction(() => document.querySelector("#stock-research-feedback")?.textContent.includes("行情连接配置已变更"));
   assert.equal(await page.locator("#load-stock-research").isEnabled(), true);
   assert.equal(await page.locator("#load-fundamentals").isEnabled(), true);
   assert.equal(await page.locator("#load-valuations").isEnabled(), true);
   assert.equal(await page.locator("#stock-profile-symbol").textContent(), "000001.SZ");
-  assert.doesNotMatch(await page.locator("#stock-profile-fields").textContent(), /延迟旧连接档案|stale-connection/);
-  // 先释放被测试路由挂起的旧连接响应，再确认它无法覆盖当前标的的研究内容。
-  releaseCrossTabResearchRequest?.();
-  await waitWithTimeout(crossTabResearchRequestSettled, 5000, "等待旧档案路由结束超时");
-  assert.equal(crossTabResearchRouteFinished, true);
-  assert.doesNotMatch(await page.locator("#stock-profile-fields").textContent(), /延迟旧连接档案|stale-connection/);
+  assert.match(await page.locator("#stock-profile-fields").textContent(), /延迟旧连接档案/);
   await researchSettingsSyncPage.close();
 
   // 跨标签页场景使用 000001.SZ；恢复到旧标的后再执行原有的迟到财务响应测试。
@@ -441,18 +460,18 @@ try {
     status: 503, contentType: "application/json",
     body: JSON.stringify({ error: { message: "not configured" } })
   }));
-  await noKeyPage.goto(baseUrl, { waitUntil: "load", timeout: 30000 });
-  await openStocksView(noKeyPage);
-  await noKeyPage.locator("#symbol-input").fill("600519.SH");
-  await noKeyPage.locator('.nav-link[data-view="research"]').click();
-  await noKeyPage.locator("#load-valuations").click();
-  await noKeyPage.waitForFunction(() => document.querySelector("#valuations-error")?.textContent.includes("Root Server 的 Provider 配置"));
+  await noCredentialPage.goto(baseUrl, { waitUntil: "load", timeout: 30000 });
+  await openStocksView(noCredentialPage);
+  await noCredentialPage.locator("#symbol-input").fill("600519.SH");
+  await noCredentialPage.locator('.nav-link[data-view="research"]').click();
+  await noCredentialPage.locator("#load-valuations").click();
+  await noCredentialPage.waitForFunction(() => document.querySelector("#valuations-error")?.textContent.includes("Root Server 的 Provider 配置"));
   for (const selector of [
     "#load-stock-research", "#load-fundamentals", "#load-valuations",
     "#load-chip-distribution", "#load-capital-flow"
   ]) {
-    assert.equal(await noKeyPage.locator(selector).isEnabled(), true, selector + " must remain retryable without API key");
-    assert.equal(await noKeyPage.locator(selector).getAttribute("aria-busy"), null, selector + " must not remain busy without an active request");
+    assert.equal(await noCredentialPage.locator(selector).isEnabled(), true, selector + " must remain retryable without API key");
+    assert.equal(await noCredentialPage.locator(selector).getAttribute("aria-busy"), null, selector + " must not remain busy without an active request");
   }
   await noCredentialContext.close();
   console.log("PASS stock research request cancellation and button recovery");

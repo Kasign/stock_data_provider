@@ -1989,4 +1989,15 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - **现象**：`d71f9482d` 的 `Chromium responsive layout checks` 在 CSSOM 通过后失败于 `alerts-notifications-cross-tab-browser.mjs:73`，等待 `.primary-nav-link[data-nav-primary="tracking"]` 30 秒超时。
 - **归因**：当前 `web/index.html` 已是平级 `.nav-link[data-view="..."]`，并存在 `data-view="alerts"`；`ui-contract.test.mjs:1450` 还明确断言旧 `data-nav-primary` / `primary-nav-link` 不得存在。该浏览器用例是导航扁平化后的陈旧夹具，不是产品代码回归。
 - **处理**：删除旧的一级导航点击，保留实际进入告警页的 `.nav-link[data-view="alerts"]` 点击；没有放宽任何等待或断言，也没有修改生产导航。
-- **验证**：全仓浏览器脚本中已无其他 `primary-nav-link` / `data-nav-primary` 点击残留；`git diff --check` PASS。完整 CI 按新 SHA 回填。
+- **验证**：全仓浏览器脚本中已无其他 `primary-nav-link` / `data-nav-primary` 点击残留；`git diff --check` PASS。
+- **CI 状态（如实记录）**：提交 `bf0e2b0c5` 的 14 个 check run 全部 `success`（含 required-checks、Full integration checks、WebUI source/container、各模块专项与镜像构建），但 `Chromium responsive layout checks`（`46035910247`）是 `cancelled`，不计为通过。根因与后续修复见下节。
+
+## 2026-11-28 浏览器验收夹具随 Root Server 单入口迁移
+
+- **现象与归因**：`bf0e2b0c5` 的浏览器 job 被 15 分钟 `timeout-minutes` 取消。步骤级时间线显示前 12 步全 success，`Run watchlist quote snapshot acceptance` 从 `16:44:30Z` 无任何输出挂到 `16:58:04Z`，随后 8 个步骤被标记 `skipped`、上传步骤仍 success。根因不是浏览器漂移：`web/src/api.js` 现使用同源根路径 `/api/v1/market/quotes`，而 `watchlist-quotes-browser.mjs` 仍拦截 `/market-api/api/v1/market/quotes`，请求被通用 `/api/` 分支以 503 直接返回；测试里无超时的 `await firstStarted` 永远等不到第一个行情请求。
+- **真实范围**：浏览器 smoke 自 2026-11-24 起因前面的 CSSOM/导航失败从未走完，上一次全绿是 2026-11-18，后端多份夹具实际处于"未执行"而非"通过"状态。用临时目录安装 Playwright、以系统 Chrome 本地复现全部 11 个 `*-browser.mjs`，确认 8 个脚本存在同类陈旧或缺陷：`watchlist-quotes`、`market-stocks-lifecycle`、`screening-local` 的 `/market-api` 拦截；`run-flow`、`run-flow-outcomes` 的 `/analysis-api` Run 路径与 `analysis_base:"/analysis-api"` 任务夹具（被当前视图判为"旧分析 API 地址"而不打开）；`data-center-probe` 第 174 行含字面量 `\n` 导致 `SyntaxError`；`stock-research` 缺 Owner Session 夹具导致市场总览不刷新，且末尾引用了不存在的 `noKeyPage`。
+- **修复（不放宽断言）**：拦截路径统一到同源 `/api/v1/...`；任务夹具 `analysis_base` 改为 `/`；修复字面量 `\n` 语法损坏并把迁移后 localStorage 断言对齐 `{}`，同时新增"有效入口仍为 `/`"的隐藏控件断言；`noKeyPage` 改为实际的 `noCredentialPage`；为 `stock-research` 补 `owner/setup`、`owner/session`、`owner/session/csrf` 同源夹具以建立已登录态。
+- **语义替换**：Root Server 单入口后连接地址由部署固定，`loadSettings()` 恒返回 `/` 并把浏览器存储清空为 `{}`，跨标签写入旧式连接配置不再产生 `changed`。原先"切换连接→清空快照/取消在途请求"的三组场景已不可达，按规则 16 替换为当前语义断言：有效连接仍为 `/`、无"旧连接/连接已变化"提示、当前有效快照保留、在途请求不被取消且延迟响应正常应用、请求数不因外部写入而隐式增加。所有断言都是正向验证当前行为，没有删除等待或跳过失败。
+- **CI 防护**：`.github/workflows/webui-browser-smoke.yml` 给 14 个 `node tests/...` 步骤各加 `timeout-minutes: 5`，并在 job 级注释说明"单步挂起必须明确失败，不得耗尽 job 限额并把后续步骤统一标记 cancelled"。Ruby YAML 解析验证：21 个 step、14 个有界、所有 node 步骤有界。
+- **源码契约同步**：`web/tests/market-stocks-navigation.test.mjs` 原断言浏览器夹具必须含"旧连接下的分页行情元数据已失效"，随语义替换改为断言固定入口 `/`、无"旧连接"失效提示、第三次响应时间戳仍被正常应用；生产 `market-stocks.js` 的失效能力断言保持不变。
+- **验证**：本地 11 个 `*-browser.mjs` 全部 exit=0；`npm test` 528/528 PASS、`npm run check`、`node --check`（改动脚本）、`git diff --check` PASS。本地仅作针对性证据，完整 CI 按新 SHA 回填，取得结论前状态为 `not_run`。

@@ -67,7 +67,7 @@ try {
   page.on("pageerror", error => pageErrors.push(error.stack || error.message));
   await page.route("**/*", async route => {
     const url = new URL(route.request().url());
-    if (url.pathname === "/market-api/api/v1/market/quotes") {
+    if (url.pathname === "/api/v1/market/quotes") {
       quoteRequests += 1;
       if (quoteRequests === 1) { markFirstStarted(); await firstGate; }
       if (quoteRequests === 2) { markSecondStarted(); await secondGate; }

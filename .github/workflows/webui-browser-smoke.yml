@@ -25,6 +25,8 @@ jobs:
   browser-smoke:
     name: Chromium responsive layout checks
     runs-on: ubuntu-latest
+    # 每个验收步骤另有 5 分钟上限：夹具失配导致的无限等待必须明确失败，
+    # 不得耗尽 job 限额并把后续步骤统一标记为 cancelled。
     timeout-minutes: 15
     steps:
       - name: Check out repository
@@ -52,58 +54,72 @@ jobs:
 
       - name: Run responsive browser smoke tests
         working-directory: web
+        timeout-minutes: 5
         run: node tests/browser-smoke.mjs
 
       - name: Analyze CSS cascade structure with PostCSS
         working-directory: web
+        timeout-minutes: 5
         run: node tests/css-structure-review.mjs
 
       - name: Capture Screening CSSOM computed-style baseline
         working-directory: web
+        timeout-minutes: 5
         run: node tests/cssom-baseline.mjs
 
       - name: Run settings cross-tab synchronization acceptance
         working-directory: web
+        timeout-minutes: 5
         run: node tests/settings-storage-browser.mjs
 
       - name: Run research records cross-tab synchronization acceptance
         working-directory: web
+        timeout-minutes: 5
         run: node tests/research-records-cross-tab-browser.mjs
 
       - name: Run alerts and notification preferences cross-tab synchronization acceptance
         working-directory: web
+        timeout-minutes: 5
         run: node tests/alerts-notifications-cross-tab-browser.mjs
 
       - name: Run watchlist quote snapshot acceptance
         working-directory: web
+        timeout-minutes: 5
         run: node tests/watchlist-quotes-browser.mjs
 
       - name: Run Run Flow interaction acceptance
         working-directory: web
+        timeout-minutes: 5
         run: node tests/run-flow-browser.mjs
 
       - name: Run Run Flow outcome and recovery acceptance
         working-directory: web
+        timeout-minutes: 5
         run: node tests/run-flow-outcomes-browser.mjs
 
       - name: Run Stock Research interaction acceptance
         working-directory: web
+        timeout-minutes: 5
         run: node tests/stock-research-browser.mjs
 
       - name: Run Stock Research data quality acceptance
         working-directory: web
+        timeout-minutes: 5
         run: node tests/stock-research-data-browser.mjs
 
       - name: Run Data Center Provider probe acceptance
         working-directory: web
+        timeout-minutes: 5
         run: node tests/data-center-probe-browser.mjs
 
       - name: Run local screening interaction acceptance
         working-directory: web
+        timeout-minutes: 5
         run: node tests/screening-local-browser.mjs
 
       - name: Run market stocks pagination lifecycle acceptance
         working-directory: web
+        timeout-minutes: 5
         run: node tests/market-stocks-lifecycle-browser.mjs
 
       - name: Upload browser screenshots

@@ -171,7 +171,7 @@ try {
   await page.locator("#data-center-probe-symbol").fill("600519.sh");
   await page.locator("#data-center-probe-run").click();
   await page.waitForFunction(() => document.querySelector("#data-center-probe-summary")?.textContent.includes("probe-current"));
-  assert.equal(probeRequestHeaders["x-csrf-token"], "browser-probe-csrf");\n  assert.equal(probeRequestHeaders["x-api-key"], undefined);\n  assert.equal(probeRequestHeaders["x-csrf-token"], "browser-probe-csrf");
+  assert.equal(probeRequestHeaders["x-csrf-token"], "browser-probe-csrf");
   assert.equal(probeRequestHeaders["x-api-key"], undefined);
   assert.deepEqual(probeRequestBody, {
     scope: "core", timeout_seconds: 9,
@@ -222,9 +222,15 @@ try {
     path: path.join(screenshotDir, "1280x900-data-center-probe.png"),
     fullPage: false, animations: "disabled"
   });
+  // Root Server 单入口后，浏览器不再持久化任何连接配置；有效入口由部署侧的隐藏控件固定给出。
   const migratedSettings = await page.evaluate(() => JSON.parse(localStorage.getItem("stock-provider-webui.settings.v1")));
-  assert.deepEqual(migratedSettings, { marketBase: "/", analysisBase: "/" });
+  assert.deepEqual(migratedSettings, {});
   assert.doesNotMatch(JSON.stringify(migratedSettings), /apiKey|legacy-browser-key|market-api|analysis-api/);
+  const effectiveConnection = await page.evaluate(() => ({
+    marketBase: document.querySelector("#market-base-input")?.value || "",
+    analysisBase: document.querySelector("#analysis-base-input")?.value || ""
+  }));
+  assert.deepEqual(effectiveConnection, { marketBase: "/", analysisBase: "/" });
   await context.close();
   console.log("PASS data center active Provider probe, CSRF enforcement and legacy settings cleanup");
 } finally {

@@ -51,7 +51,7 @@ try {
   const thirdMarketStocksResponseGate = new Promise(resolve => { releaseThirdMarketStocksResponse = resolve; });
   await page.route("**/*", async route => {
     const url = new URL(route.request().url());
-    if (url.pathname === "/market-api/api/v1/market/stocks") {
+    if (url.pathname === "/api/v1/market/stocks") {
       marketStocksRequests += 1;
       if (marketStocksRequests === 2 && holdSecondMarketStocksResponse) {
         markSecondMarketStocksStarted();
@@ -233,7 +233,8 @@ try {
   await page.locator("#screening-apply-current-page").click();
   await page.waitForFunction(() => document.querySelector("#screening-local-results-summary")?.textContent.includes("命中 1 条"));
 
-  // 行情连接变化必须清空全市场旧快照及元数据，并隔离取消请求的晚到响应。
+  // Root Server 单入口后连接地址由部署固定；其他标签页写入旧式连接配置
+  // 不得伪造连接变更，也不得清空当前有效快照或隔离在途请求。
   await page.locator('.nav-link[data-view="stocks"]').click();
   holdThirdMarketStocksResponse = true;
   await page.locator("#reload-market-stocks").click();
@@ -243,13 +244,18 @@ try {
   await settingsPage.evaluate(() => localStorage.setItem("stock-provider-webui.settings.v1", JSON.stringify({
     marketBase: "/market-api-v2", analysisBase: "/analysis-api", apiKey: "screening-browser-key-v2"
   })));
-  await page.waitForFunction(() => document.querySelector("#market-stocks-status")?.textContent === "连接已变化");
-  assert.match(await page.locator("#market-stocks-summary").textContent(), /旧连接下的全市场行情快照已清除/);
-  assert.match(await page.locator("#market-stocks-meta").textContent(), /旧连接下的分页行情元数据已失效/);
-  assert.equal(await page.locator("#market-stocks-body tr").count(), 1);
+  const effectiveConnection = await page.evaluate(() => ({
+    marketBase: document.querySelector("#market-base-input")?.value || "",
+    analysisBase: document.querySelector("#analysis-base-input")?.value || ""
+  }));
+  assert.deepEqual(effectiveConnection, { marketBase: "/", analysisBase: "/" });
+  assert.doesNotMatch(await page.locator("#market-stocks-status").textContent(), /连接已变化/);
+  assert.doesNotMatch(await page.locator("#market-stocks-summary").textContent(), /旧连接/);
+  assert.doesNotMatch(await page.locator("#market-stocks-meta").textContent(), /旧连接/);
   releaseThirdMarketStocksResponse();
-  await page.waitForTimeout(100);
-  assert.doesNotMatch(await page.locator("#market-stocks-body").textContent(), /测试命中|测试未命中|测试待判断/);
+  await page.waitForFunction(() => document.querySelector("#market-stocks-meta")?.textContent.includes("2026-11-03T03:00:03Z"));
+  assert.equal(await page.locator("#market-stocks-body tr").count(), 3);
+  assert.match(await page.locator("#market-stocks-body").textContent(), /测试命中/);
   await settingsPage.close();
 
   assert.deepEqual(pageErrors, []);
