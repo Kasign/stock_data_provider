@@ -1981,4 +1981,12 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - **现象**：`b501b8981` 的 `Chromium responsive layout checks` 在 CSSOM 基线步骤失败，差异集中在 `select-all`、`selected-count`、`add-watchlist-button` 的文本宽度。
 - **归因**：CSSOM fixture 于 `594f5391` 生成；随后 `1ca6956f5` 给 CI 增加 `fonts-noto-cjk` 安装步骤，`121f52276` 只有说明文字变更。两次 CI artifact 的 Chromium 版本同为 `159.0.8154.6`，但新日志显示安装 `fonts-noto-cjk 1:20240730+repack1-1build1`，字体度量变化导致宽度差异。没有 HTML/CSS 生产变更，因此不是页面回归。
 - **处理**：用当前 CI 观测 artifact 中有意更新 `web/tests/fixtures/screening-local-batch.cssom.json.gz`，并同步 `cssom-baseline.mjs` 的 fixture 说明；比较逻辑与断言强度不变，没有跳过或放宽 CSSOM 检查。
-- **验证**：新 fixture 由 artifact 的 8 个 scenario × 6 个 target 转换生成，写入后深比较一致；`node --check`、`npm run check`、`git diff --check` PASS。完整 CI 按新 SHA 回填。
+- **验证**：新 fixture 由 artifact 的 8 个 scenario × 6 个 target 转换生成，写入后深比较一致；`node --check`、`npm run check`、`git diff --check` PASS。提交 `d71f9482d` 的 CSSOM 基线步骤已 success，说明修复有效。
+- **CI 状态（如实记录）**：`d71f9482d` 的 required-checks、Full integration checks、WebUI source/container 与其余专项检查 success，但浏览器检查的下一项暴露旧导航选择器失败，见下节。
+
+## 2026-11-28 浏览器测试旧导航选择器修复
+
+- **现象**：`d71f9482d` 的 `Chromium responsive layout checks` 在 CSSOM 通过后失败于 `alerts-notifications-cross-tab-browser.mjs:73`，等待 `.primary-nav-link[data-nav-primary="tracking"]` 30 秒超时。
+- **归因**：当前 `web/index.html` 已是平级 `.nav-link[data-view="..."]`，并存在 `data-view="alerts"`；`ui-contract.test.mjs:1450` 还明确断言旧 `data-nav-primary` / `primary-nav-link` 不得存在。该浏览器用例是导航扁平化后的陈旧夹具，不是产品代码回归。
+- **处理**：删除旧的一级导航点击，保留实际进入告警页的 `.nav-link[data-view="alerts"]` 点击；没有放宽任何等待或断言，也没有修改生产导航。
+- **验证**：全仓浏览器脚本中已无其他 `primary-nav-link` / `data-nav-primary` 点击残留；`git diff --check` PASS。完整 CI 按新 SHA 回填。
