@@ -1150,3 +1150,69 @@ Integration CI Run 43810902921（#85）对提交 `ea79dc5503f36280af2b944d3557fd
 2. **事实语义门禁不变**：仍必须证明某字段是“首次公开可获取时间”，并保留字段路径、时区、精度、逐版本绑定与可审计样本；`parsed` 仍不等于 `verified`。
 3. **生产与测试严格分离**：`research_news_mariadb_integration_test.go` 的 B 组成功路径使用显式测试专用 verified Evidence/Decision 夹具，验证真实 Facade → Importer → Research 落库链路；该夹具不注册生产来源，不作为真实 `available_at` 证据。
 4. **门禁结果**：B 组不再使用 `t.Skip`；无 verified 决策时必须 `ErrEvidencePITNotFound`，有测试夹具时必须成功落库且原样保留 `available_at`。生产 B 组仍不因测试夹具而解锁。
+
+## 1.19 cninfo 来源真实值确认记录（2026-11-27，接受披露日降级后）
+
+项目负责人选择接受披露日语义降级（DEC-PLAT-002-073）并要求"先把 cninfo 那套真实值确认下来"。本节记录联网复验与逐字段确认结果，作为后续来源注册（G1）、adapter（G2/G3）与资格目录（G4/G5）的输入。**本节只确认值与语义归属，不声称生产来源准入已解除、不生成生产非空 `available_at`、不把测试夹具当作生产证据。**
+
+### 1.19.1 联网复验证据（只读、单次、无凭据）
+
+本轮对 1.17 节的两个关键端点做独立复验，SHA-256 与 1.17 节记录逐字节一致，证明响应在样本窗口内稳定可复现。所有请求均为公开查询，不带任何 API Key / Authorization / Cookie；原始响应未写入仓库。
+
+| 端点 | 请求参数 | 采集时间(UTC) | 字节数 | SHA-256 | 复验结果 |
+|---|---|---:|---:|---|---|
+| `POST http://www.cninfo.com.cn/new/information/topSearch/query` | `keyWord=600036&maxNum=10` | 2026-11-27T08:28Z | 149 | `329803493e725dd1cbdfa75555ae5942d76b6c8e471f3990e2f25c7540a78c22` | 与 1.17.1 一致；返回 `orgId=gssh0600036`、`zwjc=招商银行` |
+| `POST http://www.cninfo.com.cn/new/hisAnnouncement/query` | `pageNum=1&pageSize=30&column=szse&tabName=fulltext&stock=600036,gssh0600036&seDate=2026-10-01~2026-11-27&isHLtitle=true` | 2026-11-27T08:29Z | 6329 | `ecd135102d8d1b2726c6348835df76fa4b90f0b1cdaf9e1f56765bbce9c30d01` | 与 1.17.1 一致；`totalAnnouncement=9`，样本非空 |
+
+### 1.19.2 字段与时间语义确认
+
+- **`announcementTime`**：JSON `int` 毫秒时间戳。样本值 `1793376000000` → UTC `2026-10-30T16:00:00Z` → 声明时区 `+08:00` 下 `2026-10-31T00:00:00`。时间部分恒为 `00:00:00`，是**披露日编码**（日级精度），不是首次公开精确时刻。
+- **无更精确字段**：同一响应的 `storageTime` 在全部 9 条样本中均为 `null`；字段集中不存在秒级发布时间。因此**日级是该公开端点的时间精度上限**，采用披露日保守边界（而非秒级字段）是当前数据条件下的正确选择。
+- **保守边界换算**：披露日 `2026-10-31` → 声明时区当天最后一秒 `23:59:59 +08:00` → UTC `2026-10-31T15:59:59Z`（整秒）。该值恒不早于真实公开时刻，严格 PIT 不产生前视偏差；代价是精度降为天级（v1 已接受）。
+- **字段路径规范化**：来源侧真实 JSON 路径为 `announcements[].announcementTime`；资格记录与 Evidence 元数据使用稳定标识 `announcements.announcementTime`（不含 `[]`，符合 `validMetadataEvidenceFieldPath`）。数组符号由 adapter 在采集期规范化，此规范化行为须在 `ParserVersion` 对应的实现中固定。
+- **时区声明**：`+08:00`（数值偏移，符合 `parseFixedOffset`；不接受 `Z`）。
+
+### 1.19.3 资格记录字段填充表（v1 provisional）
+
+| 字段 | 确认值 | 类别 | 依据 |
+|---|---|---|---|
+| `QualificationRef` | `availability-qualification-cninfo-disclosure-v1` | 项目内部权威 | Owner 授权 v1；与 `availability_disclosure_boundary_test.go` 一致 |
+| `SourceID` | `cninfo` | 绑定键（须与真实注册一致） | 拟定；见 1.19.5 完整性约束 |
+| `EndpointID` | `cninfo-his-announcement` | 绑定键 | 同上 |
+| `ProviderCode` | `cninfo` | 绑定键 | 同上 |
+| `SourcePolicyVersionID` | `cninfo-source-policy-v1` | 绑定键 | 同上 |
+| `EndpointPolicyVersionID` | `cninfo-endpoint-policy-v1` | 绑定键 | 同上 |
+| `ProviderOutputPolicyRef` | `cninfo-provider-output-policy` | 绑定键 | 同上 |
+| `ProviderOutputPolicyVersionID` | `cninfo-provider-output-policy-v1` | 绑定键 | 同上 |
+| `FieldPath` | `announcements.announcementTime` | 外部实测+规范化 | 1.19.2 |
+| `ParserVersion` | `cninfo-disclosure-date-conservative-v1` | 项目内部权威 | DEC-073 专用解析器；与测试夹具一致 |
+| `ReviewRuleVersion` | `cninfo-disclosure-review-v1` | 项目内部权威 | v1 固定；须与审核规则注册一致 |
+| `DeclaredTimezoneOrOffset` | `+08:00` | 外部实测 | 1.19.2 |
+| `AllowedPrecisions` | `[disclosure_boundary]` | 项目内部权威 | DEC-073；PIT-safe |
+| `OfficialSemanticsRef` | 巨潮公告查询页 + "CSRC 指定法定披露渠道；字段为披露日" | 外部事实引用 | 1.17、DEC-073；**语义是披露日，非首次公开精确时刻** |
+| `DateBoundarySemanticsRef` | `DEC-PLAT-002-073:disclosure-date-end-of-day-v1` | 项目内部权威 | DEC-073 决策 ref；与精度成对 |
+| `EndpointAuthorizationRef` | 个人用途声明 + 采集方式留痕（引用本文件 1.17/1.19 节） | 个人项目口径 | 1.18 节；无外部合同/凭据门禁 |
+| `VersionBindingRef` | 引用本文件 1.19.1 样本（端点+参数+字节+SHA+采集时间） | 外部实测引用 | 逐版本绑定：策略版本 ↔ 样本 SHA |
+| `RawResponseSampleHash` | `ecd135102d8d1b2726c6348835df76fa4b90f0b1cdaf9e1f56765bbce9c30d01` | 外部实测 | 见 1.19.4 语义判定 |
+| `Status` | `qualified` | 项目内部权威 | v1 provisional |
+| `EffectiveAt` | `2026-11-27T00:00:00Z`（拟定，UTC 整秒） | 项目内部权威 | 不早于实测与决策日 |
+
+### 1.19.4 `RawResponseSampleHash` 语义判定（纠正一处误读）
+
+调研中曾提出疑问：`RawResponseSampleHash` 是否必须是"先对响应脱敏、再哈希"的值，从而不能直接填 1.17 节的完整响应 SHA。逐字核对权威定义后，**该疑问不成立**：
+
+- `AvailabilitySourceQualification` 结构体注释明确："It contains no raw payload and no sample value."——主语是**资格记录本身**，含义是资格记录只保存哈希、不保存原始 payload 或样本值。**哈希即脱敏机制**，而非"先脱敏再哈希"。
+- 1.17 节开头印证："原始文件未写入仓库，仅保留 URL、采集时间、字节数与 SHA-256，避免把来源许可不明的数据直接纳入版本库。"
+- 代码 `Validate()` 仅要求该字段为 64 位小写 SHA-256 hex（`availability_source_qualification.go:134-137`），无其他规范化约束。
+
+因此 **`ecd135102d…`（完整原始响应 SHA-256）是 `RawResponseSampleHash` 的正确填法**。需注明：该哈希绑定的是"1.19.1 所列参数与采集时点的那一份响应样本"（证明字段语义与版本绑定），不是"所有未来响应的哈希"；`seDate` 为窗口参数，窗口变化时须以新样本 + 新资格记录 supersede，不得复用旧哈希冒充新样本。
+
+### 1.19.5 绑定键完整性约束与剩余缺口（为何现在仍不注册生产来源）
+
+资格记录 8 维键中的 7 个内部标识（1.19.3 标注"绑定键"的行）必须与真实的 Source/Endpoint/Provider 策略版本注册**逐字一致**，否则 `availabilitySourceBindingMatches` 不成立、`QualifyAvailabilityEvidence` 返回 `ErrAvailabilitySourceQualificationNotFound`。当前：
+
+- **G1 来源注册缺失**：生产未装配 Feed Stage（`news_feed_stage.go:40-43`，`NEWS_FEED_SOURCES_JSON` 未设置），1.19.3 的绑定键标识尚无对应注册。凭空把它们写进资格目录会造成"有资格、无来源"的断裂绑定，等同伪造证据，故本轮不注册。
+- **G2 架构缺口（已定位，非猜测）**：`domain.AccessMethod` 早已预留 `AccessOfficialAPI`（`policy.go:24`），但 `feed_sources.go:151` 与 `CollectSource`（`collect_source.go:165-167`）只接受 `rss`/`licensed_feed`，且采集只走 RSS/Atom 解析（`parser/feed.go`）。cninfo 是 JSON POST 查询接口，需要新增一套 `official_api` 的 JSON 采集/解析路径，而非仅加一条配置。
+- **G3-G5 落库编排缺失**：`QualifyAvailabilityEvidence` → `RecordAvailabilityEvidence` → `ReviewAvailabilityDecision` 三段生产未串联，审核规则未注入绑定解析器（`availability_decision_review.go:245-267` fail-closed）。
+
+**下一步（按依赖顺序）**：先落地 G2 的 `official_api` JSON 采集路径与 G1 的真实 Source/Endpoint/Provider 策略注册（生成与 1.19.3 一致的绑定键），再以本节确认值建立资格目录条目并串通 G3-G5，最后以 B 组真库门禁验收生产 `available_at`。在此之前 NEWS-BLK-07 与 RSC-002 保持 SHELVED，生产 `available_at` 继续为 null。
