@@ -61,3 +61,40 @@
 1. **采集入口**：在 Run 之前按 `(symbol, trade_date, purpose)` 产出事实快照（调度任务或受限 API），否则 A 的收益无法体现在真实 Run 上。
 2. **交易状态/盘口的 as-of 与新鲜度**：需要各自定义「可接受的最大陈旧度」，例如盘口只接受 N 分钟内的观测。
 3. L3 增加「预采集 → Run 复用」的断言，替代当前「种子快照与 Run 时点完全相同」的偶然通过路径。
+
+## 7. 采集入口（已落地，2026-11-27）
+
+A 方案要求事实先于 Run 存在，因此补了一个最小采集入口：
+
+```bash
+# 收盘后预置当日涨跌停事实（只落库、不签发授权）
+make limit-pool-collect ARGS="-symbol 600519.SH -trade-date 2026-11-27 -purpose risk_review"
+# 等价于
+go run ./cmd/limit-pool-collect -symbol 600519.SH -trade-date 2026-11-27
+```
+
+### 7.1 结构
+
+- `internal/marketdata/application`：把原 Creator 拆成两层——
+  - `LimitPoolFactsSnapshotCollector.Persist`：校验 → as-of 复用 → 拉两个全量池 → 构建载荷/快照 → 落库，**不签发授权**；
+  - `LimitPoolFactsSnapshotCreator.Create`：复用 `Persist` 后追加 `IssueFor`，供 Risk Stage 使用。
+  两层共用同一份取值/构建/落库实现，没有第二套逻辑。
+- `internal/marketdata/config.LoadForCollector()`：采集工具只需要存储 DSN 与 Provider 超时，不要求 Redis，也不要求行情凭据；存储缺失仍硬失败，不静默降级。
+- `cmd/limit-pool-collect`：参数解析 + 装配 + 读回校验 + 输出。
+
+### 7.2 权限边界
+
+采集器**不签发任何授权**，因此不需要 Owner 级凭据。授权仍由 Risk Stage 在读取时签发。本地实测（真实 Provider + MariaDB）：`market_data_authorization_decisions = 0`、`authorization_policy_versions = 0`，即确实没有产生授权决策。
+
+### 7.3 时点语义（一个必须说清的细节）
+
+`-system-as-of` **默认不取「现在」**。默认取「实际观测时刻」：调用方若先取现在再采集，观测必然晚于该时点，PIT 会正确拒绝（实测报 `ErrLimitPoolFactsSnapshotStaleAsOf`）。这与「事实可用的最早时点就是它被观测到的时刻」一致。
+
+### 7.4 幂等
+
+同一 `(symbol, trade_date, purpose)` 重复采集会复用已发布快照，不会重复造。本地连续运行两次得到同一 `SnapshotRef`。
+
+### 7.5 仍未覆盖
+
+- 采集调度（cron / 平台任务）尚未接线，需要运维侧按交易日收盘后触发。
+- 交易状态与盘口仍为等值语义，且没有采集入口；它们的 as-of 与最大陈旧度需要各自定义。

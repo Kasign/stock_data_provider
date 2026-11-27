@@ -1901,3 +1901,15 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - **变异**：仓储去掉 as-of 上界过滤、Quant 取消上界判断、Creator 取消上界守卫，三处均有效失败并恢复。
 - **CI（真实数据）**：提交 `97c1327dc` 的 15 个 check run 全 success；`Probe real public provider responses`（`140580701566`）真实执行 `--- PASS: TestLiveLimitPoolFactsProductionChain (5.48s)` 与 `--- PASS: TestLiveLimitPoolFactsRejectsEvaluationBeforeObservation (4.34s)`，报告 `status=none up=417 down=0`。
 - **仍 OPEN**：① 缺少 Run 之前的采集入口，真实 Run 目前会得到可追溯 `reject`；② 交易状态与盘口仍是等值语义，需要各自的新鲜度策略；③ L3 应改为「预采集 → Run 复用」而非依赖种子时点偶然相等。
+
+## 2026-11-27 涨跌停事实预采集入口（A 方案闭环）
+
+- **为什么补**：A 方案（as-of 读取）要求事实先于 Run 存在，但生产只有 Risk Stage 内部调用 Creator，真实 Run 必然拿不到事实。补一个最小采集入口后，A 才真正可用。
+- **结构**：把原 Creator 拆成两层——`LimitPoolFactsSnapshotCollector.Persist`（校验 → as-of 复用 → 拉两个全量池 → 构建 → 落库，**不签发授权**）与 `LimitPoolFactsSnapshotCreator.Create`（复用 `Persist` 后追加 `IssueFor`）。两层共用同一份实现，无平行逻辑。
+- **权限边界**：采集器不签发任何授权，不需要 Owner 级凭据；本地实测真实 Provider + MariaDB 下 `authorization_decisions=0`、`authorization_policy_versions=0`。
+- **配置**：新增 `config.LoadForCollector()` —— 只要求存储 DSN 与 Provider 超时，不要求 Redis 与行情凭据；存储缺失仍硬失败。
+- **时点语义**：`-system-as-of` 默认取**实际观测时刻**而非「现在」。首次本地运行即被 PIT 正确拒绝（`ErrLimitPoolFactsSnapshotStaleAsOf`），说明该默认值是必要的，不是便利选择。
+- **入口**：`cmd/limit-pool-collect` + `make limit-pool-collect ARGS="-symbol 600519.SH -trade-date 2026-11-27"`。
+- **本地实测**：真实 Eastmoney + MariaDB 采集成功，`status=none up=417 down=0 quality=degraded`；连续两次运行返回同一 `SnapshotRef`（幂等）。
+- **CI**：提交 `26544f8e0` 的 14 个 check run 全 success；真实链路步骤复验 `--- PASS: TestLiveLimitPoolFactsProductionChain (3.83s)` 与 `--- PASS: TestLiveLimitPoolFactsRejectsEvaluationBeforeObservation (2.96s)`。
+- **仍未覆盖**：采集调度（cron / 平台任务）未接线；交易状态与盘口仍是等值语义且无采集入口。
