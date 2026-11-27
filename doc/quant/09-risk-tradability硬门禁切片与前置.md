@@ -114,7 +114,7 @@
 
 该唯一阻塞已在 8.5 关闭；但 1.4 仍**不记为完成**——门禁事实集里的涨跌停与可成交量依旧不存在，`tradability_unverified` 必然产出 `reject`。真正阻塞"门禁放行"的是"能否产出非拒绝结论"，不是"链路是否打通"。
 
-> 口径修正（2026-11-26，见 8.6）：装配工作本身不必等非拒绝结论——把验收目标定为"拒绝可被完整追溯与读取"后已按期落地。但**门禁放行**仍然阻塞于涨跌停/可成交量事实，1.4 因此仍为部分完成。
+> 口径修正（2026-11-26，见 8.6）：装配工作本身不必等非拒绝结论——把验收目标定为"拒绝可被完整追溯与读取"后已按期落地。但**门禁放行**仍然阻塞于 `price_limit` 事实（`tradable_volume` 后续由 DEC-PLAT-002-066 解决），1.4 因此仍为部分完成。
 
 ### 8.5 前置② 物理读取链路：已闭环，但门禁结论恒为拒绝（2026-11-26 深夜）
 
@@ -133,7 +133,7 @@
 - **结论诚实登记**：五项事实到位后 `Verified` 仍恒为 false（`AssessTradabilityFacts` 无条件补两项缺失），决策恒 `reject`。端到端测试名即为 `...ProducesTraceableRejection`，不写成"门禁通过"。
 - 验证：`gofmt`/`go vet`/`go test ./internal/...` 全绿；`-race` 覆盖 `internal/marketdata/...`、`internal/quant/...`、`internal/server/bootstrap`。变异验证四处均有效失败：① 去掉两项强制缺失 → 决策变 `pass`；② 把 `RiskWarningUnknown` 当已核验 → value 泄漏 `unknown`；③ 去掉数据类一致性校验 → 能签出绑定错策略的授权；④ 去掉 adapter 的 `Verify()` → 接受被篡改 payload；⑤ 让 HTTP 回落日线策略 → 返回 `policy_ref=dailybars-v2-access`；⑥ 发布时传空 policyRef → 发布引用为空。
 - MariaDB 集成测试（`MARKET_DATA_TEST_MYSQL_DSN` 门控）覆盖：迁移/`ValidateSchema`/幂等/跨 kind 隔离/SQL 篡改检测。**未在真实 MariaDB 环境执行**，不得宣称已验证。
-- 剩余工作不属于本切片：涨跌停制度表与可成交量事实（另行立项）。Signal→RiskDecision 的 Facade/Stage 装配已在 8.6 完成。
+- 剩余工作不属于本切片：`price_limit` 制度表（另行立项；`tradable_volume` 已由 DEC-PLAT-002-066 用 Eastmoney 五档盘口解决）。Signal→RiskDecision 的 Facade/Stage 装配已在 8.6 完成。
 
 ### 8.6 Signal→RiskDecision 的 Facade/Stage 装配：已落地，结论仍恒为拒绝（2026-11-26）
 

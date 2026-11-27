@@ -369,7 +369,7 @@ analysisd 当前明确要求 GO_CORE_TOKEN、PYTHON_BRIDGE_TOKEN、PYTHON_BRIDGE
 
 ### 10.2 退役前不可跳过的真实能力缺口
 
-截至基线 SHA，Researchflow 已注册 news.search_candidates、news.feed_collection、quant.sma20；2026-11-26 起新增 quant.factor。二者均为单一切片（单指标 / 三因子），不能替代旧页面的 Factors 组合、Signals、Risk、报告正文等完整输出。SRV-CTR-001 当前 Run 查询也不提供完整报告正文、Attempt 明细或事件流。
+**2026-11-27 校准**：Researchflow 已注册 `news.search_candidates`、`news.feed_collection`、`quant.sma20`、`quant.factor`、`quant.trend`、`quant.risk`，并以 `quant.research@1.0.0` 合并四 Stage（单 Run 可产出因子/趋势/风险结果）。仍未提供完整报告正文（RF-BLOCK-007 OPEN，projector 未注入）、Attempt 明细或事件流；WebUI 报告导出因此仍不能等价迁移，这是阶段 3.1 的硬前置。
 
 因此不得先删旧 API/Runner 再补业务能力；否则会直接造成 WebUI 任务入口和结果页失效。必须先完成真实 Owner 能力接线、Run 结果与领域结果强类型关联、Server 授权读取 DTO，再切换 WebUI。
 
@@ -390,7 +390,7 @@ analysisd 当前明确要求 GO_CORE_TOKEN、PYTHON_BRIDGE_TOKEN、PYTHON_BRIDGE
 - [x] 刷新 Researchflow 模板数量和旧链实际生产装配基线。
 - [x] 确认旧 Analysis 仍有 WebUI、Server Router、Bootstrap、Worker 和 Migration 实际引用。
 - [x] 完成旧 Runner 逐阶段能力映射；已核对 Quant 现有因子/趋势/风险构件与生产 Stage 的差异。
-- [ ] 补齐完整股票研究模板、领域结果关联和 Server 授权读取。
+- [x] 补齐完整股票研究模板、领域结果关联和 Server 授权读取（2026-11-27 校准：2.1 `quant.research@1.0.0` 四 Stage、2.2 Quant/News 授权结果读取、2.3 `GET /api/v1/researchflow/runs/{run_ref}/results` 均已完成；完整报告正文仍待 RF-BLOCK-007）。
 - [ ] WebUI 完成 Researchflow 迁移。
 - [ ] 删除旧 Analysis 生产链和相关代码。
 - [ ] 一次性清理旧 Analysis 表及 Migration namespace。
@@ -435,17 +435,16 @@ analysisd 当前明确要求 GO_CORE_TOKEN、PYTHON_BRIDGE_TOKEN、PYTHON_BRIDGE
 - Run/Stage Output 与 Quant/Research 领域结果的强类型关联、授权读取，以及 WebUI 结果页所需的 Server DTO。
 
 据此，当前旧 Analysis 退役的真正阻塞不是 Task Queue 技术迁移，而是 Quant 领域能力尚未覆盖旧 Runner 的核心因子/策略/风险结果，Data Snapshot 尚未进入股票研究 Stage，且 Server/WebUI 尚未建立完整报告读取闭环。先删除旧链会导致原有研究结果功能消失，因此不执行这种破坏性删除。
-### 10.7 Quant 现有构件与生产接入的区别（补充核对）
+### 10.7 Quant 现有构件与生产接入的区别（2026-11-27 校准）
 
-进一步核对 internal/quant 当前代码后，不能把“领域构件存在”误判为“旧 Analysis 能力已经迁移”：
+本节原结论是 2026-11-26 基线；后续 1.2/1.3/1.4 已落地，旧结论不再成立，按当前代码改写如下。
 
-- internal/quant/factor 当前实现 Momentum20、Momentum60、Volatility20 等单证券时间序列计算；未发现与旧 trendFactor 完全对应的 MA20 距离 + 5 日收益 + 20 日收益组合结果 Facade，也未发现旧 trend-following 策略的等价正式生产 Stage。
-- internal/quant/trend 当前提供 Trend Result 强类型 DTO 与结构校验；这不是趋势推断算法或生产计算 Application。
-- internal/quant/risk 当前提供 RiskDecision、RuleSet、通用 RuleEvaluator 和决策聚合机制；规则由上层注入，Quant 不内置旧 unverified-tradability-block 的业务规则。当前需要确认并装配正式必需规则，不能仅因 RiskDecision 类型存在就认为硬门禁已迁移。
-- internal/quant/stage 当前仅有 SMA20 Stage；Server 的 Researchflow Execution Composition 只装配该 Stage。因子、趋势、风险相关的 Quant 包尚未形成对应 Researchflow Stage Executor、Output Registry、模板与授权结果读取闭环。
-- 因此本次阶段 A 的代码盘点已完成；阶段 B 不是简单把旧 service/wiring.go 移动到 Quant，而是由 Quant 明确正式指标/因子/策略/风险契约和版本，再由 Server 装配对应 Stage。旧 trend-following 只作为旧实现事实记录，不自动成为新策略规范。
+- `internal/quant/factor`：已实现 `MADistance20`、`Momentum5`、`Momentum20` 的 Decimal（big.Rat, scale=12, half-even）精确计算，并由 `CreateFactorService` 通过已授权 Close Series Snapshot 产出可持久化结果；`quant.factor` Stage 已装配。**仍不等于 QNT-CTR-003 可生产发布**（契约仍 `deferred`）。
+- `internal/quant/trend`：已实现 `DirectionOf` 无阈值方向判定与 `assessQuality`，`CreateTrendService` 一次授权读取产出四个证据 Metric（MA20 距离、5d、20d、60d）；`quant.trend` Stage 已装配，`phase` 恒 `unknown`、`strength` 恒 `null`。
+- `internal/quant/risk`：`qnt-risk-tradability/1.0.0` 规则集与 `RuleCatalog` 已落地，`CreateRiskService` + `quant.risk` Stage 已装配，证据四元化为 `[交易状态快照, 交易状态授权, 盘口快照, 盘口授权]`。**决策仍恒 `reject`**：`tradable_volume` 已由 DEC-PLAT-002-066 用 Eastmoney 五档盘口解决，`price_limit` 仍缺合格来源。
+- `internal/quant/stage`：已从"仅 SMA20"扩展为 SMA20/Factor/Trend/Risk 四个 Stage；Server 的 Researchflow Execution Composition 已装配全部四个，并支持 `quant.research@1.0.0` 合并模板。
 
-这项差异是当前退役的核心技术阻塞。完成目标 Owner 能力前，不删除旧 Runner 的因子/策略/风险结果路径，也不以 SMA20 单指标 Stage 代替完整研究流程。
+因此 10.7 原判断"核心阻塞是 Quant 构件未接入生产"已关闭；**当前退役的核心阻塞变为**：完整报告唯一 Owner（RF-BLOCK-007）与 WebUI 页面迁移。
 ## 10. 本轮 Quant 因子补齐进度（2026-11-26）
 
 - 在 `internal/quant/factor` 增加 `Momentum5` 和 `MADistance20` 纯计算函数，统一返回 ratio、warm-up 状态和样本数；并增加 CalculationContext 入口校验。

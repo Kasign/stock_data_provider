@@ -1529,7 +1529,7 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - Quant 侧：`tradability_facts.go` 组装门禁输入，`price_limit`/`tradable_volume` 恒缺失；`server/bootstrap` 适配器转换前 `Verify()`，校验 `SnapshotRef`/`PurposeCode`/`PayloadKind`。
 - 结论诚实登记：链路打通后决策仍恒 `reject`（缺涨跌停与可成交量事实），验收标准是"可追溯的拒绝"。端到端测试名 `ProducesTraceableRejection`。
 - 验证：`gofmt`/`go vet`/`go test ./internal/...` 全绿，`-race` 覆盖 `internal/marketdata/...`、`internal/quant/...`、`internal/server/bootstrap`；变异验证六处均有效失败（含 HTTP 回落日线策略、发布传空 policyRef）。MariaDB 集成测试需 DSN，未在真实库执行；CI 结论以推送后为准，本节不预填。
-- 1.4 仍未完成：缺的不是链路而是事实（涨跌停制度表、可成交量模型），须另行立项。
+- 1.4 仍未完成：缺的不是链路而是事实。**2026-11-27 校准**：`tradable_volume` 已由 DEC-PLAT-002-066 用 Eastmoney 五档盘口解决，实际只剩 `price_limit`（交易所涨跌幅制度表）一项。
 
 ## 2026-11-26 1.4 Facade/Stage 装配与拒绝路径验收（DEC-062）
 
@@ -1541,7 +1541,7 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - 验收（"装配 + 拒绝路径"优先）：新增 23 个测试全 PASS（Facade 6、输出契约 4 含 14 个篡改变异子用例、Stage 组合 9、端到端 4）。断言 `decision_status=reject`、`missing_facts=[price_limit,tradable_volume]`、`evidence_refs` 精确等于 `[facts_snapshot_ref, authorization_ref]`、`evaluated_at == system_as_of`、`result_id` 可解到已落库记录且 `record.Validate()` 通过。
 - 变异验证 6 处全部有效失败并已恢复。其中"关联规格表漏登记 `quant.risk`"**原契约测试未捕获**（按表遍历会随表变短），已补 `TestQuantRiskStageIsRegisteredForResultAssociation` 显式断言后捕获——属补强要求而非调低标准。
 - 验证：`gofmt`/`go vet`/`go test ./internal/...` 全绿；`-race` 覆盖 `internal/quant/...` 与 `internal/server/bootstrap` 无告警。真实 MariaDB 集成未在本地执行（无 DSN）；CI 结论见下节（首推失败于无关断言、修复后全绿），本节不预填。
-- 1.4 仍为**部分完成**：链路与装配已通，但 `AssessTradabilityFacts` 无条件补两项缺失 → `Verified` 恒 false → 决策恒 `reject`，**门禁不能放行**。剩余阻塞为涨跌停制度表与可成交量模型（另行立项）。RF-BLOCK-008（Researchflow Composer 的 `RiskDecision` 投影）仍 OPEN，需双 Owner 决议。
+- 1.4 仍为**部分完成**：链路与装配已通，但 `AssessTradabilityFacts` 无条件补两项缺失 → `Verified` 恒 false → 决策恒 `reject`，**门禁不能放行**。剩余阻塞仅为 `price_limit`（交易所涨跌幅制度表，另行立项）；`tradable_volume` 已由 DEC-PLAT-002-066 解决。RF-BLOCK-008（Researchflow Composer 的 `RiskDecision` 投影）仍 OPEN，需双 Owner 决议。
 
 ### 2026-11-26 首次推送的 CI 失败与修复（Data 迁移历史断言）
 
@@ -1598,7 +1598,7 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - **如实保留的边界（不夸大）**：Evidence 真库正例未做——需要真实 News Feed Run + 完整 PIT/授权 fixture，而 `research_news_mariadb_integration_test.go:552` 的 `successful_import_with_verified_available_at` 因 News 未提供可验证 `available_at` 仍显式 `t.Skip`；不得伪造时间证据或放宽严格 PIT。News 撤销/当前策略门禁属 News 内核既有能力（`current_policy_version_change_rejected` 真库用例 + `news_policy_versions FOR UPDATE`），按 D4-A 不改内核、不重复实现。故第 7 节第 6 条只按「关联语义单测 + 真库负例 / 授权语义由 News 内核负责」分层覆盖，不声称「Evidence 四类语义已全真库等价验收」。
 - **完整 CI 结论（代码 SHA `edd955bf7a511d3616a00402d0c5e1d63f9a03c2`）**：推送后按该精确 SHA 查询，14 个 check run 全部 `completed / success`——[Integration CI 45848500318](https://github.com/Kasign/stock_data_provider/actions/runs/45848500318)（`Full integration checks` 成功）、[Required checks 45848500136](https://github.com/Kasign/stock_data_provider/actions/runs/45848500136)（`required-checks` 聚合成功）、[Go test suite 45848500266](https://github.com/Kasign/stock_data_provider/actions/runs/45848500266)（11 项全成功）、[Quant module validation 45848500209](https://github.com/Kasign/stock_data_provider/actions/runs/45848500209)。Integration CI 的 `Run quant.research MariaDB/Redis L3 integration test` 步骤日志含 `--- PASS: TestQuantResearchMariaDBRedisL3 (6.90s)`，步骤脚本要求精确 `--- PASS`，SKIP/no-tests 即 `::error::` 失败，故为真实执行。本结论只归属该代码 SHA，纯文档回填提交不预填 CI。
 - **状态**：本组范围已完成并验收；CI 全绿不关闭 Evidence 真库正例这一 OPEN 边界（见上条）。
-- 其余 OPEN 不变：LLM Gateway 报告正文消费者缺失、1.4 `price_limit`/`tradable_volume` 恒 `reject`、RF-BLOCK-005/007/008、行情种子专项三处变异已补验、2.4、阶段 3/4/5。依赖顺序下一步为 2.4 FLOW-005/006 上下文一致性与风险语义。
+- 其余 OPEN 不变：LLM Gateway 报告正文消费者缺失、1.4 `price_limit` 恒 `reject`（`tradable_volume` 已解决）、RF-BLOCK-005/007/008、行情种子专项三处变异已补验、2.4、阶段 3/4/5。依赖顺序下一步为 2.4 FLOW-005/006 上下文一致性与风险语义。
 
 
 ## 2026-11-27 阶段 2.3 实施完成与验收（Server 结果读取 DTO / HTTP 契约）
@@ -1861,3 +1861,13 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - **变异 ② 无授权策略**：关闭三处 `l3SeedPublishPolicy` → 四 Stage 均 `failed [data_authorization_unavailable]`，Run `failed`。`FAILED_AS_EXPECTED`，恢复后基线 PASS。
 - **变异 ③ 未来 `SystemObservedAt`**：把 bar 的来源自报观测时间改为 `observedAt + 2h` → 测试仍 PASS。**归因**：DATA-CTR-007 的 PIT reader 以系统 `recorded_at` 重写来源自报 `SystemObservedAt`，因此"来源自报未来时间"本身不构成数据提前可见的通道；该变异不是有效的 fail-closed 靶点，原 `not_run` 项收敛为正向安全性质验证，而非继续挂账。
 - **状态**：三处变异均有执行记录与归因，历史 `not_run` 清零；未修改任何生产代码，未降低 PIT/授权/日历门禁。本组为纯验收补验，无代码提交。
+
+## 2026-11-27 退役清单与迁移盘点校准
+
+- **触发**：项目负责人要求校准旧 Analysis 退役清单，并指出数据源已有明确结论。核对代码与决策记录后确认两处过期口径。
+- **1.4 阻塞收窄**：`tradable_volume` 已由 DEC-PLAT-002-066 定义为「真实买盘五档挂单量之和」，Eastmoney push2 五档盘口落地，Risk 证据四元化为 `[交易状态快照, 交易状态授权, 盘口快照, 盘口授权]`，L3 断言 `missing_facts` 只剩 `price_limit`。因此 1.4 的阻塞从「涨跌停制度表 + 可成交量模型两项」收窄为「仅 `price_limit` 一项」。`price_limit` 的数据源类别已明确为交易所涨跌幅制度，但制度表接入、版本化与证券→板块映射仍未立项——不得写成「数据源未知」。
+- **2.4 状态回填**：原记「未开始」不准确。`ContextAuthorizer` 已强制可信 `service:researchflow`/purpose 并复核每个 News EvidenceRef 的当前授权与时点；`ComposeResult` 已拒绝无 ClaimRef、未链接/多版本 Claim、Context 外 Evidence、自由文本 Limitations 与不完整 LLM 身份；RF-BLOCK-008 的 RiskDecision 唯一来源已统一。剩 `Deadline` 贯穿到 LLM 输入，需随 `RunResultProjector` 生产注入同批完成。2.4 改记「部分完成」。
+- **4.2 事实修正**：`go-core/`、`internal/adapters/pythonapi/`、`cmd/pythonapi-smoke/` 已不在仓库；剩 `python_bridge/` 仍被 `.github/workflows/data-quality-parity.yml` 引用（校验 `capabilities/market_data.py` 字符串）。4.2 改记「部分完成」，删除前须先决定该 workflow 去留。
+- **迁移盘点校准**：`10.4` 补齐 2.1/2.2/2.3 完成勾选；`10.2` 已注册 Stage 从「sma20 + factor」更新为 `sma20/factor/trend/risk + quant.research@1.0.0`；`10.7` 原「Quant 构件未接入生产」结论整节改写为当前事实。
+- **校准后阻塞链**：完整报告唯一 Owner（RF-BLOCK-007，需真实 LLM）→ WebUI 3.1/3.2 → 阶段 4 删除 → 阶段 5 验收；1.4 的 `price_limit` 与 WebUI 迁移可并行，但都不阻塞阶段 3 的「创建/轮询/取消/历史」分段施工。
+- 本次为文档校准，无代码改动；不改变任何契约状态、不放宽任何门禁。

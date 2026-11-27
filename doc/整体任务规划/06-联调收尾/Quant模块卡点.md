@@ -255,7 +255,7 @@ Quant 现有 GetResult 授权读取用例、SMA20 与三因子（`ma20_distance`
 - 存储/授权双通道隔离：写入显式给 kind，读取 `snapshot_ref` 必须带 kind 条件（前缀对所有类型相同，仅凭 ref 无法区分）；策略引用为闭集，`Issue`/`AuthorizeRead`/Owner 发布/HTTP 四处校验数据类一致，不匹配 fail-closed 且不回落日线。
 - Creator 只搬运不改判：源 `invalid`/`unknown` 拒绝，`degraded` 即使五项齐全也拒绝；枚举 `unknown` 一律 `unavailable` + 原因；仍不生成涨跌停与可成交量。
 - Quant 消费端（历史状态，R2 后已被下文 2026-11-27 小节取代）：当时 `price_limit`/`tradable_volume` 恒入 `MissingFacts` → `Verified` 恒 false → 决策恒 `reject`。端到端测试曾断言 `reject + MissingFacts=[price_limit,tradable_volume] + EvidenceRefs=[snapshotRef,authorizationRef]`。
-- **1.4 仍为部分完成**，但阻塞性质变了：不再缺链路，而是缺事实——没有涨跌停制度表与可成交量模型，门禁只能给出可追溯的拒绝。Facade/Stage 装配的实质前置变成"能产出非拒绝结论"，需先行立项（另行任务）。
+- **1.4 仍为部分完成**，但阻塞性质变了：不再缺链路，而是缺事实——仅剩 `price_limit`（交易所涨跌幅制度表）缺失；`tradable_volume` 已由 DEC-PLAT-002-066 用 Eastmoney 五档盘口解决，门禁仍只能给出可追溯的拒绝。Facade/Stage 装配的实质前置变成"能产出非拒绝结论"，需先行立项（另行任务）。
 - 验证：`gofmt`/`go vet`/`go test ./internal/...` 全绿，`-race` 覆盖三个改动模块；变异验证六处均有效失败。MariaDB 集成测试需 `MARKET_DATA_TEST_MYSQL_DSN`，**未在真实库执行**。
 - 契约状态未变：QNT-CTR-003 `deferred`、004/005 `frozen`、006 `deferred`、DATA-CTR-007 `deferred`、008 `frozen`。
 

@@ -61,7 +61,7 @@
 
 - 组合根当前传的是 `nil`（`researchflow_execution_composition.go:212`、`researchflow_composition.go:54`），本轮若声明 `hard_risk`，必须先实现注册表并改两个组合根签名；
 - hard_risk 会进入 Run 终态判定（`run_finalizer.go`、`deadline_finalizer.go` 使用 `HardRiskStageCodes`），而当前决策**恒 reject**，等于让所有含该 Stage 的 Run 必然失败——用门禁摧毁整条流水线；
-- 这属于"门禁语义与 Run 生命周期"的独立治理动作，应等涨跌停/可成交量事实补齐、决策可能出现 `pass` 之后再立项。
+- 这属于"门禁语义与 Run 生命周期"的独立治理动作，应等 `price_limit` 事实补齐（`tradable_volume` 已由 DEC-PLAT-002-066 解决）、决策可能出现 `pass` 之后再立项。
 
 结论：本轮模板 `GateType` 留空、`RequiresHardRiskGate=false`，与 sma20/factor/trend 一致。
 
@@ -148,7 +148,7 @@ Signal 目前只有 DTO 与 Schema（QNT-CTR-006 `deferred`），没有存储、
 ### 6.1 单测
 
 `internal/quant/application/create_risk_test.go`：
-1. 事实五项齐全但仍缺涨跌停/可成交量 → `reject`，`MissingFacts=[price_limit,tradable_volume]`，`EvidenceRefs` 含两个引用；
+1. 事实五项齐全但缺 `price_limit` → `reject`，`MissingFacts=[price_limit]`，`EvidenceRefs` 含四段引用（R2 后 `tradable_volume` 已由盘口证据补齐）；
 2. 事实快照 `degraded` → Manifest `quality_status=degraded`，决策仍 `reject`；
 3. `evaluated_at` 早于 `system_as_of` → 拒绝（结构性校验）；
 4. 快照身份/kind 被篡改 → 拒绝，不落库；
@@ -187,7 +187,7 @@ Signal 目前只有 DTO 与 Schema（QNT-CTR-006 `deferred`），没有存储、
 ## 7. 非目标
 
 - 不新增业务风险规则（集中度/流动性/波动率/行业暴露仍在规则目录里 pending）；
-- 不补涨跌停制度表与可成交量模型（另行立项）；
+- 不补 `price_limit` 制度表（另行立项；`tradable_volume` 已由 DEC-PLAT-002-066 解决）；
 - 不生产 Signal，不做 Strategy→Signal 评估；
 - 不做 Researchflow Composer 的 RiskDecision 投影（RF-BLOCK-008）。
 
