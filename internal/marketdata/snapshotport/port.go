@@ -15,6 +15,9 @@ var ErrOrderBookFactsSnapshotNotFound = errors.New("order-book facts snapshot no
 // ErrLimitPoolFactsSnapshotNotFound 表示没有可精确复用的涨跌停事实快照。
 var ErrLimitPoolFactsSnapshotNotFound = errors.New("limit-pool facts snapshot not found for exact binding")
 
+// ErrSecurityTradingStatusFactsSnapshotNotFound 表示没有可按 as-of 复用的交易状态事实快照。
+var ErrSecurityTradingStatusFactsSnapshotNotFound = errors.New("trading-status facts snapshot not found for as-of reuse")
+
 // DailyBarsCloseSeriesSnapshotRepository 是 Data 模块内部的持久化 Port。
 // 它不属于跨模块公开 Application API。
 type DailyBarsCloseSeriesSnapshotRepository interface {
@@ -28,6 +31,12 @@ type DailyBarsCloseSeriesSnapshotRepository interface {
 type SecurityTradingStatusFactsSnapshotRepository interface {
 	SaveSecurityTradingStatusFactsSnapshot(ctx context.Context, snapshot app.SecurityTradingStatusFactsSnapshot) error
 	GetSecurityTradingStatusFactsSnapshot(ctx context.Context, snapshotRef string) (app.SecurityTradingStatusFactsSnapshot, error)
+	// GetLatestSecurityTradingStatusFactsSnapshotAtOrBefore 取同一证券、交易日、用途下，
+	// system_as_of 不晚于给定评估时点的最新交易状态事实快照（as-of 语义）。
+	// 交易状态按 trade_date 身份精确约束，复用更早发布的快照不会取到别日事实。
+	GetLatestSecurityTradingStatusFactsSnapshotAtOrBefore(
+		ctx context.Context, symbol, tradeDate, purpose string, asOf time.Time,
+	) (app.SecurityTradingStatusFactsSnapshot, error)
 }
 
 // OrderBookFactsSnapshotRepository 是日内盘口授权快照的持久化 Port。
@@ -39,6 +48,11 @@ type OrderBookFactsSnapshotRepository interface {
 	// 已授权盘口事实；不按时间范围近似匹配，避免把旧盘口伪装成当前事实。
 	GetOrderBookFactsSnapshotForSystemAsOf(
 		ctx context.Context, symbol, purpose string, systemAsOf time.Time,
+	) (app.OrderBookFactsSnapshot, error)
+	// GetLatestOrderBookFactsSnapshotAtOrBefore 取同一证券、用途下，
+	// system_as_of 不晚于给定评估时点的最新盘口事实快照（as-of 语义）。
+	GetLatestOrderBookFactsSnapshotAtOrBefore(
+		ctx context.Context, symbol, purpose string, asOf time.Time,
 	) (app.OrderBookFactsSnapshot, error)
 }
 

@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
+	"time"
 
 	"example.com/stock-analysis-flow/internal/marketdata/app"
 	"example.com/stock-analysis-flow/internal/marketdata/snapshotport"
@@ -14,7 +16,7 @@ import (
 )
 
 var (
-	ErrSecurityTradingStatusFactsSnapshotNotFound = errors.New("market-data trading-status facts snapshot not found")
+	ErrSecurityTradingStatusFactsSnapshotNotFound = snapshotport.ErrSecurityTradingStatusFactsSnapshotNotFound
 	ErrSecurityTradingStatusFactsSnapshotConflict = errors.New("market-data trading-status facts snapshot content conflict")
 )
 
@@ -120,6 +122,65 @@ FROM market_data_daily_bars_close_series_snapshots WHERE snapshot_ref=? AND payl
 		return app.SecurityTradingStatusFactsSnapshot{}, errors.New("stored trading-status facts snapshot JSON is not canonical")
 	}
 	return snapshot, nil
+}
+
+// GetLatestSecurityTradingStatusFactsSnapshotAtOrBefore 取同一证券、交易日、用途下，
+// system_as_of 不晚于 asOf 的最新交易状态事实快照。
+//
+// manifest_json 中的 system_as_of 是变长 RFC3339Nano 字符串，SQL 字符串比较不可靠；
+// 先按身份收窄候选，再在 Go 侧解析取最大值。候选规模是单证券单日量级。
+func (s *Store) GetLatestSecurityTradingStatusFactsSnapshotAtOrBefore(
+	ctx context.Context, symbol, tradeDate, purpose string, asOf time.Time,
+) (app.SecurityTradingStatusFactsSnapshot, error) {
+	if s == nil || s.db == nil {
+		return app.SecurityTradingStatusFactsSnapshot{}, errors.New("MariaDB trading-status facts snapshot storage disabled")
+	}
+	if ctx == nil {
+		return app.SecurityTradingStatusFactsSnapshot{}, errors.New("trading-status facts snapshot context is required")
+	}
+	if strings.TrimSpace(symbol) == "" || strings.TrimSpace(tradeDate) == "" || strings.TrimSpace(purpose) == "" ||
+		asOf.IsZero() || asOf.Location() != time.UTC {
+		return app.SecurityTradingStatusFactsSnapshot{}, errors.New("trading-status facts reuse requires canonical symbol, trade_date, purpose and UTC as-of instant")
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT snapshot_ref, JSON_UNQUOTE(JSON_EXTRACT(manifest_json, '$.system_as_of'))
+FROM market_data_daily_bars_close_series_snapshots
+WHERE payload_kind=?
+  AND JSON_UNQUOTE(JSON_EXTRACT(manifest_json, '$.symbol'))=?
+  AND JSON_UNQUOTE(JSON_EXTRACT(manifest_json, '$.trade_date'))=?
+  AND JSON_UNQUOTE(JSON_EXTRACT(manifest_json, '$.purpose_code'))=?`,
+		app.SecurityTradingStatusFactsPayloadKind, symbol, tradeDate, purpose,
+	)
+	if err != nil {
+		return app.SecurityTradingStatusFactsSnapshot{}, fmt.Errorf("query reusable trading-status facts snapshot: %w", err)
+	}
+	defer rows.Close()
+
+	var bestRef string
+	var bestAsOf time.Time
+	for rows.Next() {
+		var snapshotRef, rawAsOf string
+		if err := rows.Scan(&snapshotRef, &rawAsOf); err != nil {
+			return app.SecurityTradingStatusFactsSnapshot{}, fmt.Errorf("scan reusable trading-status facts snapshot: %w", err)
+		}
+		candidate, parseErr := time.Parse(time.RFC3339Nano, rawAsOf)
+		if parseErr != nil {
+			return app.SecurityTradingStatusFactsSnapshot{}, fmt.Errorf("reusable trading-status facts snapshot %s has a non-canonical system_as_of %q", snapshotRef, rawAsOf)
+		}
+		if candidate.After(asOf) {
+			continue
+		}
+		if bestRef == "" || candidate.After(bestAsOf) {
+			bestRef, bestAsOf = snapshotRef, candidate
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return app.SecurityTradingStatusFactsSnapshot{}, fmt.Errorf("iterate reusable trading-status facts snapshots: %w", err)
+	}
+	if bestRef == "" {
+		return app.SecurityTradingStatusFactsSnapshot{}, fmt.Errorf("%w: %s/%s/%s/%s",
+			snapshotport.ErrSecurityTradingStatusFactsSnapshotNotFound, symbol, tradeDate, purpose, asOf.Format(time.RFC3339Nano))
+	}
+	return s.GetSecurityTradingStatusFactsSnapshot(ctx, bestRef)
 }
 
 func canonicalSecurityTradingStatusFactsSnapshotJSON(snapshot app.SecurityTradingStatusFactsSnapshot) ([]byte, []byte, error) {

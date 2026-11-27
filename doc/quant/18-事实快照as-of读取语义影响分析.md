@@ -59,7 +59,7 @@
 ## 6. 后续状态
 
 1. **采集入口（已落地）**：见第 7 节 CLI 与第 7.6 节收盘后调度 Worker；在 Run 之前按 `(symbol, trade_date, purpose)` 产出事实快照。
-2. **交易状态/盘口的 as-of 与新鲜度（仍 OPEN）**：需要各自定义「可接受的最大陈旧度」，例如盘口只接受 N 分钟内的观测。
+2. **交易状态/盘口的 as-of 与新鲜度（已落地）**：见第 9 节与 DEC-PLAT-002-077；交易状态按 trade_date 约束，盘口按盘中 15 分钟 / 收盘后当日收盘约束。
 3. **L3「预采集 → Run 复用」断言（已落地）**：见第 8 节；预采集时点严格早于 Run，不再依赖种子时点偶然相等。
 
 ## 7. 采集入口（已落地，2026-11-27）
@@ -100,7 +100,7 @@ go run ./cmd/limit-pool-collect -symbol 600519.SH -trade-date 2026-11-27
 
 ### 7.6 仍未覆盖
 
-- 交易状态与盘口仍为等值语义，且没有采集入口；它们的 as-of 与最大陈旧度需要各自定义。
+- 盘口的预采集入口尚未扩展（现只有涨跌停 CLI/Worker）；交易状态依赖原始 PIT 表在评估时点可读。
 - 真实部署的证券池需由运维配置 `SERVER_LIMIT_POOL_COLLECT_SYMBOLS`；未配置时不会猜测标的。
 
 ## 8. L3「预采集 → Run 复用」验收（2026-11-27）
@@ -112,3 +112,12 @@ go run ./cmd/limit-pool-collect -symbol 600519.SH -trade-date 2026-11-27
 3. 授权仍由 Risk Stage 在复用快照时签发，采集侧没有预先授权。
 
 变异验证：把预采集时点改回 `Run.SystemAsOf`（旧的精确相等路径），L3 立即失败于 `precollected limit-pool as-of ... must precede Run system_as_of ...`；恢复后真库用例 PASS。
+
+## 9. 交易状态与盘口 as-of/新鲜度（DEC-PLAT-002-077）
+
+- **交易状态**：`GetLatestSecurityTradingStatusFactsSnapshotAtOrBefore` 按 `symbol + trade_date + purpose` 身份精确、时间取上界最新；Creator 先复用，未命中才读 append-only PIT 表。Quant 绑定由等值改为上界，`trade_date` 必须等于参数日。新鲜度由交易日身份保证，不引入任意小时阈值。
+- **盘口**：`GetLatestOrderBookFactsSnapshotAtOrBefore` 按 `symbol + purpose` 身份精确、时间取上界最新；Creator 先复用，未命中才读实时 Provider。Quant 绑定要求：发布不晚于评估；盘中观测不超过 15 分钟；收盘后评估要求观测日等于 `trade_date` 且不早于当日 15:00 收盘。
+- **结果层修复**：`EvaluateTradabilityDecision` 现在显式接收 `request.SystemAsOf` 作为决策 `system_as_of`，不再从交易状态快照读取。若沿用旧写法，A 方案下「更早快照 + 更晚评估」会得到 payload/manifest 时点不一致的失败；该失败在新增单测中真实暴露后修复。
+- **冻结契约**：无 Schema/Golden/版本字节变化；DATA-CTR-007 1.0.0、QNT-CTR-003 3.0.0 均保持原状。
+- **验收与变异**：仓储真库覆盖 `-1min` miss / `+30s` 命中 / 跨用途、跨日 miss；Quant 单测覆盖更早发布可用、晚于评估拒绝、隔日盘口拒绝、盘中过旧拒绝；L3 真库 PASS。关闭交易状态/盘口仓储上界分别使对应真库用例失败，关闭盘中 15 分钟检查使新鲜度用例失败，恢复后全绿。
+- **边界**：盘口预采集入口未扩展；交易状态依赖原始 PIT 表在评估时点可读。若 Owner 否决 15 分钟或收盘边界，须以新 DEC 覆盖。

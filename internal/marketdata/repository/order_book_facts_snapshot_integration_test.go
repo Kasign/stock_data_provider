@@ -56,6 +56,27 @@ func TestMariaDBOrderBookFactsSnapshotExactSystemAsOfReuse(t *testing.T) {
 	); !errors.Is(err, ErrOrderBookFactsSnapshotNotFound) {
 		t.Fatalf("different purpose must not be reused, got %v", err)
 	}
+
+	asOf, err := store.GetLatestOrderBookFactsSnapshotAtOrBefore(ctx, snapshot.Manifest.Symbol, "risk_review", systemAsOf)
+	if err != nil || asOf.Manifest.SnapshotRef != snapshot.Manifest.SnapshotRef {
+		t.Fatalf("exact as-of lookup failed: ref=%v err=%v", asOf.Manifest.SnapshotRef, err)
+	}
+	later, err := store.GetLatestOrderBookFactsSnapshotAtOrBefore(
+		ctx, snapshot.Manifest.Symbol, "risk_review", systemAsOf.Add(30*time.Second),
+	)
+	if err != nil || later.Manifest.SnapshotRef != snapshot.Manifest.SnapshotRef {
+		t.Fatalf("later evaluation must reuse the earlier snapshot: ref=%v err=%v", later.Manifest.SnapshotRef, err)
+	}
+	if _, err := store.GetLatestOrderBookFactsSnapshotAtOrBefore(
+		ctx, snapshot.Manifest.Symbol, "risk_review", systemAsOf.Add(-time.Minute),
+	); !errors.Is(err, ErrOrderBookFactsSnapshotNotFound) {
+		t.Fatalf("earlier evaluation must not see a later snapshot, got %v", err)
+	}
+	if _, err := store.GetLatestOrderBookFactsSnapshotAtOrBefore(
+		ctx, snapshot.Manifest.Symbol, "other_purpose", systemAsOf,
+	); !errors.Is(err, ErrOrderBookFactsSnapshotNotFound) {
+		t.Fatalf("as-of lookup with a different purpose must miss, got %v", err)
+	}
 }
 
 // 盘口事实快照必须与 close-series / 交易状态事实共用同一张不可变存储，

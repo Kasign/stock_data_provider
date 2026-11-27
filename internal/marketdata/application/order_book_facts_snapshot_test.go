@@ -55,6 +55,12 @@ func (stub *orderBookSnapshotRepositoryStub) GetOrderBookFactsSnapshotForSystemA
 	return stub.reusable, nil
 }
 
+func (stub *orderBookSnapshotRepositoryStub) GetLatestOrderBookFactsSnapshotAtOrBefore(
+	ctx context.Context, symbol, purpose string, asOf time.Time,
+) (app.OrderBookFactsSnapshot, error) {
+	return stub.GetOrderBookFactsSnapshotForSystemAsOf(ctx, symbol, purpose, asOf)
+}
+
 type orderBookPolicyStoreStub struct {
 	current authorization.CurrentPolicy
 }
@@ -215,10 +221,37 @@ func TestOrderBookFactsSnapshotCreatorReusesExactSystemAsOfSnapshot(t *testing.T
 	}
 }
 
-func TestOrderBookFactsSnapshotCreatorRejectsReusedSnapshotWithDifferentSystemAsOf(t *testing.T) {
+func TestOrderBookFactsSnapshotCreatorReusesEarlierSnapshot(t *testing.T) {
 	snapshot, book := orderBookApplicationSnapshot(t)
-	systemAsOf := book.SystemObservedAt.Add(time.Second)
-	owner, _, _ := newOrderBookTestOwner(t, systemAsOf, authorization.OrderBookFactsPolicyRef)
+	snapshotAsOf, err := time.Parse(time.RFC3339Nano, snapshot.Manifest.SystemAsOf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	laterAsOf := snapshotAsOf.Add(time.Minute)
+	owner, _, _ := newOrderBookTestOwner(t, laterAsOf, authorization.OrderBookFactsPolicyRef)
+	repository := &orderBookSnapshotRepositoryStub{reusable: snapshot}
+	creator, err := NewOrderBookFactsSnapshotCreator(
+		orderBookReaderStub{err: errors.New("live provider must not be called on as-of reuse")}, repository, owner,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	refs, err := creator.Create(orderBookPrincipalContext(t), "600519.SH", laterAsOf, "risk_review")
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	if refs.SnapshotRef != snapshot.Manifest.SnapshotRef || refs.AuthorizationRef == "" {
+		t.Fatalf("as-of reuse refs = %+v, want existing snapshot ref and a new authorization", refs)
+	}
+	if book.SystemObservedAt.After(snapshotAsOf) {
+		t.Fatalf("fixture observation %s is later than snapshot as-of %s", book.SystemObservedAt, snapshotAsOf)
+	}
+}
+
+func TestOrderBookFactsSnapshotCreatorRejectsReusedSnapshotPublishedLaterThanRequest(t *testing.T) {
+	snapshot, book := orderBookApplicationSnapshot(t)
+	systemAsOf := book.SystemObservedAt // 早于快照发布时点 1 秒
+	owner, _, _ := newOrderBookTestOwner(t, systemAsOf.Add(time.Minute), authorization.OrderBookFactsPolicyRef)
 	repository := &orderBookSnapshotRepositoryStub{reusable: snapshot}
 	creator, err := NewOrderBookFactsSnapshotCreator(
 		orderBookReaderStub{err: errors.New("live provider must not be called on invalid reuse")}, repository, owner,
@@ -226,8 +259,8 @@ func TestOrderBookFactsSnapshotCreatorRejectsReusedSnapshotWithDifferentSystemAs
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := creator.Create(orderBookPrincipalContext(t), "600519.SH", systemAsOf.Add(time.Second), "risk_review"); err == nil {
-		t.Fatal("creator accepted a reused snapshot bound to a different system_as_of")
+	if _, err := creator.Create(orderBookPrincipalContext(t), "600519.SH", systemAsOf, "risk_review"); err == nil {
+		t.Fatal("creator accepted a reused snapshot published after the requested system_as_of")
 	}
 }
 

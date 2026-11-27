@@ -365,3 +365,86 @@ func TestExecuteRejectsLimitPoolPublishedAfterTheEvaluationInstant(t *testing.T)
 		t.Fatalf("error = %v, want ErrInvalidRiskSnapshot", err)
 	}
 }
+
+func TestExecuteAcceptsTradingStatusAndOrderBookPublishedBeforeEvaluation(t *testing.T) {
+	snapshot := validTradingFactsSnapshot()
+	orderBook := validOrderBookFactsSnapshot()
+	pool := validLimitPoolFactsSnapshot()
+	// 2026-11-25 收盘后事实：07:02Z（15:02 北京时间）发布，15:00Z 评估。
+	snapshot.SystemAsOf = "2026-11-25T07:02:00Z"
+	orderBook.ObservedAt = "2026-11-25T07:01:00Z"
+	orderBook.SystemAsOf = "2026-11-25T07:02:00Z"
+	service, _, _, _ := newCreateRiskTestServiceWithLimitPool(t, snapshot, orderBook, pool)
+
+	request := riskTestRequest(snapshot, orderBook, pool, mustRiskTime(t, "2026-11-25T15:00:00Z"), riskTestParameters(snapshot))
+	if _, err := service.Execute(context.Background(), request); err != nil {
+		t.Fatalf("earlier trading-status/order-book snapshots must be reusable as-of: %v", err)
+	}
+}
+
+func TestExecuteRejectsTradingStatusPublishedAfterEvaluation(t *testing.T) {
+	snapshot := validTradingFactsSnapshot()
+	orderBook := validOrderBookFactsSnapshot()
+	pool := validLimitPoolFactsSnapshot()
+	snapshot.SystemAsOf = "2026-11-25T16:00:00Z"
+	service, _, _, _ := newCreateRiskTestServiceWithLimitPool(t, snapshot, orderBook, pool)
+
+	request := riskTestRequest(snapshot, orderBook, pool, mustRiskTime(t, "2026-11-25T15:00:00Z"), riskTestParameters(snapshot))
+	if _, err := service.Execute(context.Background(), request); err == nil {
+		t.Fatal("a trading-status snapshot published after the evaluation instant must be rejected")
+	} else if !errors.Is(err, ErrInvalidRiskSnapshot) {
+		t.Fatalf("error = %v, want ErrInvalidRiskSnapshot", err)
+	}
+}
+
+func TestExecuteRejectsOrderBookPublishedAfterEvaluation(t *testing.T) {
+	snapshot := validTradingFactsSnapshot()
+	orderBook := validOrderBookFactsSnapshot()
+	pool := validLimitPoolFactsSnapshot()
+	orderBook.ObservedAt = "2026-11-25T15:59:00Z"
+	orderBook.SystemAsOf = "2026-11-25T16:00:00Z"
+	service, _, _, _ := newCreateRiskTestServiceWithLimitPool(t, snapshot, orderBook, pool)
+
+	request := riskTestRequest(snapshot, orderBook, pool, mustRiskTime(t, snapshot.SystemAsOf), riskTestParameters(snapshot))
+	if _, err := service.Execute(context.Background(), request); err == nil {
+		t.Fatal("an order-book snapshot published after the evaluation instant must be rejected")
+	} else if !errors.Is(err, ErrInvalidRiskSnapshot) {
+		t.Fatalf("error = %v, want ErrInvalidRiskSnapshot", err)
+	}
+}
+
+func TestExecuteRejectsOrderBookFromDifferentTradeDate(t *testing.T) {
+	snapshot := validTradingFactsSnapshot()
+	orderBook := validOrderBookFactsSnapshot()
+	pool := validLimitPoolFactsSnapshot()
+	orderBook.ObservedAt = "2026-11-24T07:01:00Z"
+	orderBook.SystemAsOf = "2026-11-25T07:02:00Z"
+	service, _, _, _ := newCreateRiskTestServiceWithLimitPool(t, snapshot, orderBook, pool)
+
+	request := riskTestRequest(snapshot, orderBook, pool, mustRiskTime(t, snapshot.SystemAsOf), riskTestParameters(snapshot))
+	if _, err := service.Execute(context.Background(), request); err == nil {
+		t.Fatal("an order-book observation from another trade date must be rejected")
+	} else if !errors.Is(err, ErrInvalidRiskSnapshot) {
+		t.Fatalf("error = %v, want ErrInvalidRiskSnapshot", err)
+	}
+}
+
+func TestExecuteRejectsStaleIntradayOrderBook(t *testing.T) {
+	snapshot := validTradingFactsSnapshot()
+	orderBook := validOrderBookFactsSnapshot()
+	pool := validLimitPoolFactsSnapshot()
+	// 14:00 观测、14:30 评估（北京时间），超过 15 分钟盘中新鲜度。
+	snapshot.SystemAsOf = "2026-11-25T06:01:00Z"
+	orderBook.ObservedAt = "2026-11-25T06:00:00Z"
+	orderBook.SystemAsOf = "2026-11-25T06:01:00Z"
+	pool.ObservedAt = "2026-11-25T05:58:00Z"
+	pool.SystemAsOf = "2026-11-25T05:59:00Z"
+	service, _, _, _ := newCreateRiskTestServiceWithLimitPool(t, snapshot, orderBook, pool)
+
+	request := riskTestRequest(snapshot, orderBook, pool, mustRiskTime(t, "2026-11-25T06:30:00Z"), riskTestParameters(snapshot))
+	if _, err := service.Execute(context.Background(), request); err == nil {
+		t.Fatal("an intraday order book older than the freshness bound must be rejected")
+	} else if !errors.Is(err, ErrInvalidRiskSnapshot) {
+		t.Fatalf("error = %v, want ErrInvalidRiskSnapshot", err)
+	}
+}

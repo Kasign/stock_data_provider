@@ -98,8 +98,8 @@ func TestAssessTradabilityFactsUsesAuthorizedOrderBookForTradableVolume(t *testi
 func TestAssessTradabilityFactsFailsClosedOnOrderBookEvidenceMismatch(t *testing.T) {
 	for name, mutate := range map[string]func(*OrderBookFactsSnapshot){
 		"wrong symbol": func(book *OrderBookFactsSnapshot) { book.Symbol = "000001.SZ" },
-		"wrong system as of": func(book *OrderBookFactsSnapshot) {
-			book.SystemAsOf = "2026-11-25T14:59:59Z"
+		"malformed system as of": func(book *OrderBookFactsSnapshot) {
+			book.SystemAsOf = "not-a-time"
 		},
 		"future observation": func(book *OrderBookFactsSnapshot) {
 			book.ObservedAt = "2026-11-25T15:00:01Z"
@@ -135,9 +135,9 @@ func TestAssessTradabilityFactsProjectsDegradedOrderBookAsDegradedInput(t *testi
 
 func TestEvaluateTradabilityDecisionCitesBothAuthorizedSnapshots(t *testing.T) {
 	evidence := validTradabilityEvidence()
+	systemAsOf := time.Date(2026, 11, 25, 15, 0, 0, 0, time.UTC)
 	decision, err := EvaluateTradabilityDecision(
-		context.Background(), "risk-decision-order-book",
-		time.Date(2026, 11, 25, 15, 0, 0, 0, time.UTC), evidence,
+		context.Background(), "risk-decision-order-book", systemAsOf, systemAsOf, evidence,
 	)
 	if err != nil {
 		t.Fatalf("EvaluateTradabilityDecision() error = %v", err)

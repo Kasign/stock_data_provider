@@ -236,7 +236,7 @@ func TestQuantResearchMariaDBRedisL3(t *testing.T) {
 	}
 	// R2 盘口事实与 Run 的 system_as_of 精确绑定；Risk Stage 将复用该快照，
 	// 不再依赖运行时刻是否处于 Eastmoney 五档盘口开放时段。
-	seedQuantResearchL3OrderBook(t, ctx, l3DataStore, created.Run.SystemAsOf)
+	seedQuantResearchL3OrderBook(t, ctx, l3DataStore, l3SeedRiskTradeDate, created.Run.SystemAsOf)
 	// 涨跌停走 A 方案：Worker 执行前预采集，快照时点严格早于 Run.SystemAsOf，
 	// Risk Stage 在评估时点按 as-of 复用，并由读取侧自行签发授权。
 	precollectedLimitPoolRef, precollectedLimitPoolAsOf := seedQuantResearchL3LimitPool(

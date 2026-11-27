@@ -162,6 +162,7 @@ func TestEvaluateTradabilityDecisionAlwaysRejectsWithoutFullFacts(t *testing.T) 
 	decision, err := EvaluateTradabilityDecision(
 		ctx, "risk-decision-1",
 		time.Date(2026, 11, 25, 16, 0, 0, 0, time.UTC),
+		time.Date(2026, 11, 25, 15, 0, 0, 0, time.UTC),
 		validTradabilityEvidence(),
 	)
 	if err != nil {
@@ -184,13 +185,14 @@ func TestEvaluateTradabilityDecisionAlwaysRejectsWithoutFullFacts(t *testing.T) 
 
 func TestEvaluateTradabilityDecisionRejectsNonUTCAndInvertedTimes(t *testing.T) {
 	evidence := validTradabilityEvidence()
+	systemAsOf := time.Date(2026, 11, 25, 15, 0, 0, 0, time.UTC)
 	if _, err := EvaluateTradabilityDecision(context.Background(), "risk-decision-1",
-		time.Date(2026, 11, 25, 16, 0, 0, 0, time.FixedZone("CST", 8*3600)), evidence); err == nil {
+		time.Date(2026, 11, 25, 16, 0, 0, 0, time.FixedZone("CST", 8*3600)), systemAsOf, evidence); err == nil {
 		t.Fatal("non-UTC evaluated_at was accepted")
 	}
 	// evaluated_at 早于 system_as_of 时决策不自洽，必须失败而不是产出一个"看起来合法"的拒绝。
 	if _, err := EvaluateTradabilityDecision(context.Background(), "risk-decision-1",
-		time.Date(2026, 11, 25, 14, 0, 0, 0, time.UTC), evidence); err == nil {
+		time.Date(2026, 11, 25, 14, 0, 0, 0, time.UTC), systemAsOf, evidence); err == nil {
 		t.Fatal("evaluated_at before system_as_of was accepted")
 	}
 }

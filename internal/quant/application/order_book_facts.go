@@ -99,9 +99,8 @@ func (evidence TradabilityEvidence) Validate() error {
 	if evidence.TradingFacts.Symbol != evidence.OrderBookFacts.Symbol {
 		return fmt.Errorf("%w: order-book symbol does not match trading-status facts", ErrInvalidOrderBookFactsSnapshot)
 	}
-	if evidence.TradingFacts.SystemAsOf != evidence.OrderBookFacts.SystemAsOf {
-		return fmt.Errorf("%w: order-book system_as_of does not match trading-status facts", ErrInvalidOrderBookFactsSnapshot)
-	}
+	// 不再要求跨数据类 system_as_of 相等：盘口与交易状态各有独立 as-of 与新鲜度契约，
+	// 它们与评估时点的关系由各自的绑定校验裁决（见 validateRiskOrderBookBinding）。
 	if err := evidence.LimitPoolFacts.Validate(); err != nil {
 		return err
 	}

@@ -68,6 +68,31 @@ func (store *quantTradingFactsStore) GetSecurityTradingStatusFactsSnapshot(
 	return snapshot, nil
 }
 
+func (store *quantTradingFactsStore) GetLatestSecurityTradingStatusFactsSnapshotAtOrBefore(
+	_ context.Context, symbol, tradeDate, purpose string, systemAsOf time.Time,
+) (marketdataapp.SecurityTradingStatusFactsSnapshot, error) {
+	var best marketdataapp.SecurityTradingStatusFactsSnapshot
+	var bestAsOf time.Time
+	found := false
+	for _, snapshot := range store.facts {
+		if snapshot.Manifest.Symbol != symbol || snapshot.Manifest.TradeDate != tradeDate ||
+			snapshot.Manifest.PurposeCode != purpose {
+			continue
+		}
+		candidate, err := time.Parse(time.RFC3339Nano, snapshot.Manifest.SystemAsOf)
+		if err != nil || candidate.After(systemAsOf) {
+			continue
+		}
+		if !found || candidate.After(bestAsOf) {
+			best, bestAsOf, found = snapshot, candidate, true
+		}
+	}
+	if !found {
+		return marketdataapp.SecurityTradingStatusFactsSnapshot{}, snapshotport.ErrSecurityTradingStatusFactsSnapshotNotFound
+	}
+	return best, nil
+}
+
 func (store *quantTradingFactsStore) SaveOrderBookFactsSnapshot(
 	_ context.Context, snapshot marketdataapp.OrderBookFactsSnapshot,
 ) error {
@@ -96,6 +121,30 @@ func (store *quantTradingFactsStore) GetOrderBookFactsSnapshotForSystemAsOf(
 		}
 	}
 	return marketdataapp.OrderBookFactsSnapshot{}, snapshotport.ErrOrderBookFactsSnapshotNotFound
+}
+
+func (store *quantTradingFactsStore) GetLatestOrderBookFactsSnapshotAtOrBefore(
+	_ context.Context, symbol, purpose string, systemAsOf time.Time,
+) (marketdataapp.OrderBookFactsSnapshot, error) {
+	var best marketdataapp.OrderBookFactsSnapshot
+	var bestAsOf time.Time
+	found := false
+	for _, snapshot := range store.orderBooks {
+		if snapshot.Manifest.Symbol != symbol || snapshot.Manifest.PurposeCode != purpose {
+			continue
+		}
+		candidate, err := time.Parse(time.RFC3339Nano, snapshot.Manifest.SystemAsOf)
+		if err != nil || candidate.After(systemAsOf) {
+			continue
+		}
+		if !found || candidate.After(bestAsOf) {
+			best, bestAsOf, found = snapshot, candidate, true
+		}
+	}
+	if !found {
+		return marketdataapp.OrderBookFactsSnapshot{}, snapshotport.ErrOrderBookFactsSnapshotNotFound
+	}
+	return best, nil
 }
 
 func (store *quantTradingFactsStore) SaveLimitPoolFactsSnapshot(
@@ -650,7 +699,7 @@ func TestQuantTradingFactsEndToEndProducesTraceableRejection(t *testing.T) {
 	}
 
 	decision, err := quantapplication.EvaluateTradabilityDecision(
-		chain.context, "risk-decision-1", chain.evaluatedAt, evidence,
+		chain.context, "risk-decision-1", chain.evaluatedAt, chain.evaluatedAt, evidence,
 	)
 	if err != nil {
 		t.Fatalf("EvaluateTradabilityDecision() error = %v", err)

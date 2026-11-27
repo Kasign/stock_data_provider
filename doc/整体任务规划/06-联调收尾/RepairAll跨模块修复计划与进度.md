@@ -1922,3 +1922,13 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - **验证**：`go test ./... -count=1`、`go vet ./...`、`git diff --check` 全通过；全仓单测 0 失败。上一提交 `6eb3db5ab` 的 5 个 check run 已全部 completed/success（required-checks 46026381318、Integration CI 46026381279、Go test suite 46026381193、Live provider probe 46026381236、WebUI checks 46026381157），采集 Worker 代码已获得 CI 结论。
 - **文档同步**：`doc/quant/17` 第 9.3 节改为已按 A 方案关闭；`doc/quant/18` 第 6/7.5/7.6/8 节回填采集 Worker 与 L3 验收口径。
 - **剩余边界**：交易状态与盘口仍是等值语义且无采集入口；真实 Run 仍需在部署环境按收盘后 Worker/CLI 预采集后验收。本组 CI 状态 `not_run`，待提交后按 SHA 回填。
+- **CI 回填（如实记录）**：提交 `717a49d22` 的 Integration CI、Go test suite、Quant module validation 均 success，但 Required checks `46027230623` 因 `TestWorkerConvertsAttemptDeadlineIntoPolicyControlledTimeout` 报 `Researchflow run deadline exceeded` 失败。本地对同一用例连续 20 次执行均 PASS，归因该用例在 CI 并发负载下的时序偶发，与本组改动无关；未修改无关模块，按新提交整体重跑 required-checks。
+
+## 2026-11-27 交易状态与盘口事实的 as-of/新鲜度（DEC-PLAT-002-077）
+
+- **范围**：把 DEC-076 已批准的 A 方案延伸到交易状态与盘口事实，关闭 `doc/quant/18` 第 6 节第 2 项。未改任何冻结 Schema/Golden/版本字节。
+- **Data**：`snapshotport` 与 `repository.Store` 新增 `GetLatestSecurityTradingStatusFactsSnapshotAtOrBefore`、`GetLatestOrderBookFactsSnapshotAtOrBefore`；身份字段精确、时间按 RFC3339Nano 解析取 `<= asOf` 最新。两个 Creator 先复用，未命中才分别走 append-only PIT 表 / 实时 Provider。
+- **Quant**：交易状态绑定由等值改为上界 + `trade_date` 精确；盘口绑定改为「发布 <= 评估、盘中 15 分钟新鲜度、收盘后观测日等于 trade_date 且不早于收盘」；`TradabilityEvidence.Validate` 移除盘口与交易状态跨类时点等值。`EvaluateTradabilityDecision` 改为显式接收 Run 的 `system_asOf`，修复 A 方案下 RiskDecision payload/manifest 时点不一致的真实缺陷。
+- **验证**：全仓 `go test ./... -count=1`、`go vet ./...`、`git diff --check` 通过；L3 真库 PASS（7.28s）；两个新仓储真库用例 PASS。变异验证：关闭交易状态 as-of 上界、关闭盘口 as-of 上界、关闭盘中 15 分钟检查，分别使对应用例失败，恢复后全绿。
+- **决策与文档**：新增 DEC-PLAT-002-077（状态 `implemented_pending_owner_review`）；`doc/quant/17` 9.3、`doc/quant/18` 6/7.6/9 节同步。
+- **剩余边界**：盘口预采集入口未扩展；真实 Run 仍需在部署环境验证。本组 CI 状态 `not_run`，待提交后按 SHA 回填。

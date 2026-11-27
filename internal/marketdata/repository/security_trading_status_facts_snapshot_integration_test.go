@@ -53,6 +53,33 @@ func TestMariaDBSecurityTradingStatusFactsSnapshotSharesImmutableStore(t *testin
 		t.Fatalf("loaded facts Snapshot differs from the saved content: %+v", loaded)
 	}
 
+	systemAsOf, err := time.Parse(time.RFC3339Nano, facts.Manifest.SystemAsOf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	asOf, err := store.GetLatestSecurityTradingStatusFactsSnapshotAtOrBefore(
+		ctx, facts.Manifest.Symbol, facts.Manifest.TradeDate, facts.Manifest.PurposeCode, systemAsOf,
+	)
+	if err != nil || asOf.Manifest.SnapshotRef != facts.Manifest.SnapshotRef {
+		t.Fatalf("exact as-of lookup failed: ref=%v err=%v", asOf.Manifest.SnapshotRef, err)
+	}
+	later, err := store.GetLatestSecurityTradingStatusFactsSnapshotAtOrBefore(
+		ctx, facts.Manifest.Symbol, facts.Manifest.TradeDate, facts.Manifest.PurposeCode, systemAsOf.Add(30*time.Second),
+	)
+	if err != nil || later.Manifest.SnapshotRef != facts.Manifest.SnapshotRef {
+		t.Fatalf("later evaluation must reuse the earlier trading-status snapshot: ref=%v err=%v", later.Manifest.SnapshotRef, err)
+	}
+	if _, err := store.GetLatestSecurityTradingStatusFactsSnapshotAtOrBefore(
+		ctx, facts.Manifest.Symbol, facts.Manifest.TradeDate, facts.Manifest.PurposeCode, systemAsOf.Add(-time.Minute),
+	); !errors.Is(err, ErrSecurityTradingStatusFactsSnapshotNotFound) {
+		t.Fatalf("earlier evaluation must not see a later snapshot, got %v", err)
+	}
+	if _, err := store.GetLatestSecurityTradingStatusFactsSnapshotAtOrBefore(
+		ctx, facts.Manifest.Symbol, "2026-11-24", facts.Manifest.PurposeCode, systemAsOf,
+	); !errors.Is(err, ErrSecurityTradingStatusFactsSnapshotNotFound) {
+		t.Fatalf("different trade_date must not be reused, got %v", err)
+	}
+
 	// 同一引用在另一种类型的读取器下必须是 not found，而不是"读到了但解析失败"。
 	if _, err := store.GetDailyBarsCloseSeriesSnapshot(ctx, facts.Manifest.SnapshotRef); !errors.Is(err, ErrDailyBarsCloseSeriesSnapshotNotFound) {
 		t.Fatalf("close-series reader must not read a facts row, got %v", err)

@@ -157,6 +157,65 @@ ORDER BY created_at DESC LIMIT 1`,
 	return s.GetOrderBookFactsSnapshot(ctx, snapshotRef)
 }
 
+// GetLatestOrderBookFactsSnapshotAtOrBefore 取同一证券、用途下，
+// system_as_of 不晚于 asOf 的最新盘口事实快照。
+//
+// manifest_json 中的 system_as_of 是变长 RFC3339Nano 字符串，SQL 字符串比较不可靠；
+// 先按身份收窄候选，再在 Go 侧解析取最大值。新鲜度由消费侧绑定校验负责，
+// 这里只保证 PIT 上界，不把「最新一条」无条件当成当前事实。
+func (s *Store) GetLatestOrderBookFactsSnapshotAtOrBefore(
+	ctx context.Context, symbol, purpose string, asOf time.Time,
+) (app.OrderBookFactsSnapshot, error) {
+	if s == nil || s.db == nil {
+		return app.OrderBookFactsSnapshot{}, errors.New("MariaDB order-book facts snapshot storage disabled")
+	}
+	if ctx == nil {
+		return app.OrderBookFactsSnapshot{}, errors.New("order-book facts snapshot context is required")
+	}
+	if strings.TrimSpace(symbol) == "" || strings.TrimSpace(purpose) == "" ||
+		asOf.IsZero() || asOf.Location() != time.UTC {
+		return app.OrderBookFactsSnapshot{}, errors.New("order-book facts reuse requires canonical symbol, purpose and UTC as-of instant")
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT snapshot_ref, JSON_UNQUOTE(JSON_EXTRACT(manifest_json, '$.system_as_of'))
+FROM market_data_daily_bars_close_series_snapshots
+WHERE payload_kind=?
+  AND JSON_UNQUOTE(JSON_EXTRACT(manifest_json, '$.symbol'))=?
+  AND JSON_UNQUOTE(JSON_EXTRACT(manifest_json, '$.purpose_code'))=?`,
+		app.OrderBookFactsPayloadKind, symbol, purpose,
+	)
+	if err != nil {
+		return app.OrderBookFactsSnapshot{}, fmt.Errorf("query reusable order-book facts snapshot: %w", err)
+	}
+	defer rows.Close()
+
+	var bestRef string
+	var bestAsOf time.Time
+	for rows.Next() {
+		var snapshotRef, rawAsOf string
+		if err := rows.Scan(&snapshotRef, &rawAsOf); err != nil {
+			return app.OrderBookFactsSnapshot{}, fmt.Errorf("scan reusable order-book facts snapshot: %w", err)
+		}
+		candidate, parseErr := time.Parse(time.RFC3339Nano, rawAsOf)
+		if parseErr != nil {
+			return app.OrderBookFactsSnapshot{}, fmt.Errorf("reusable order-book facts snapshot %s has a non-canonical system_as_of %q", snapshotRef, rawAsOf)
+		}
+		if candidate.After(asOf) {
+			continue
+		}
+		if bestRef == "" || candidate.After(bestAsOf) {
+			bestRef, bestAsOf = snapshotRef, candidate
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return app.OrderBookFactsSnapshot{}, fmt.Errorf("iterate reusable order-book facts snapshots: %w", err)
+	}
+	if bestRef == "" {
+		return app.OrderBookFactsSnapshot{}, fmt.Errorf("%w: %s/%s/%s",
+			snapshotport.ErrOrderBookFactsSnapshotNotFound, symbol, purpose, asOf.Format(time.RFC3339Nano))
+	}
+	return s.GetOrderBookFactsSnapshot(ctx, bestRef)
+}
+
 func canonicalOrderBookFactsSnapshotJSON(snapshot app.OrderBookFactsSnapshot) ([]byte, []byte, error) {
 	if err := snapshot.Verify(); err != nil {
 		return nil, nil, fmt.Errorf("order-book facts snapshot is invalid: %w", err)

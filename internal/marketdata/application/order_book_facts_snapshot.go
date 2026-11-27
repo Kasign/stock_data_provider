@@ -67,14 +67,17 @@ func (c *OrderBookFactsSnapshotCreator) Create(
 	if strings.TrimSpace(callerRef) == "" {
 		return OrderBookFactsSnapshotReferences{}, ErrDataAuthorizationDenied
 	}
-	// 精确复用已授权的真实盘口事实：同一证券、同一用途、同一系统评估截止时刻。
-	// 这不是“最新一条”近似匹配，也不接受旧时点事实；没有精确命中才读取实时 Provider。
-	existing, err := c.repository.GetOrderBookFactsSnapshotForSystemAsOf(ctx, symbol, purpose, systemAsOf)
+	// 优先复用「不晚于评估时点」的最新已授权盘口事实；旧事实能否使用由 Quant
+	// 绑定层按新鲜度裁决，这里只保证 PIT 上界。没有可复用快照才读取实时 Provider。
+	existing, err := c.repository.GetLatestOrderBookFactsSnapshotAtOrBefore(ctx, symbol, purpose, systemAsOf)
 	switch {
 	case err == nil:
-		if existing.Manifest.Symbol != symbol || existing.Manifest.PurposeCode != purpose ||
-			existing.Manifest.SystemAsOf != systemAsOf.Format(time.RFC3339Nano) {
+		if existing.Manifest.Symbol != symbol || existing.Manifest.PurposeCode != purpose {
 			return OrderBookFactsSnapshotReferences{}, errors.New("reused order-book facts snapshot binding does not match the request")
+		}
+		reusedAsOf, parseErr := time.Parse(time.RFC3339Nano, existing.Manifest.SystemAsOf)
+		if parseErr != nil || reusedAsOf.After(systemAsOf) {
+			return OrderBookFactsSnapshotReferences{}, errors.New("reused order-book facts snapshot was published after the requested system_as_of")
 		}
 		authorizationRef, issueErr := c.owner.IssueFor(
 			ctx, existing.Manifest.SnapshotRef, purpose, authorization.OrderBookFactsPolicyRef,

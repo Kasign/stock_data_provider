@@ -169,4 +169,4 @@ status=none up=417 down=0 quality=degraded
 - 采集入口：`cmd/limit-pool-collect` 与收盘后调度 Worker 均只落库、不签发授权，见 `doc/quant/18` 第 7 节。
 - L3 验收：`TestQuantResearchMariaDBRedisL3` 已改为「Run 前 2 分钟预采集 → Run 时 as-of 复用」，并断言 Risk 的涨跌停快照引用等于预采集 `SnapshotRef`，见 `doc/quant/18` 第 8 节。
 
-仍 OPEN 的是其他事实类：交易状态与盘口仍是等值语义且无采集入口，需各自定义新鲜度策略。
+交易状态与盘口也已按 DEC-PLAT-002-077 改为 as-of + 新鲜度语义，详见 `doc/quant/18` 第 9 节；盘口预采集入口仍未扩展。

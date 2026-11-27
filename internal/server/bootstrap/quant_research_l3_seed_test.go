@@ -13,6 +13,7 @@ import (
 	"example.com/stock-analysis-flow/internal/marketdata/application"
 	"example.com/stock-analysis-flow/internal/marketdata/authorization"
 	marketdatabootstrap "example.com/stock-analysis-flow/internal/marketdata/bootstrap"
+	"example.com/stock-analysis-flow/internal/marketdata/markettime"
 	"example.com/stock-analysis-flow/internal/marketdata/model"
 	"example.com/stock-analysis-flow/internal/marketdata/normalize"
 	"example.com/stock-analysis-flow/internal/marketdata/repository"
@@ -280,9 +281,15 @@ func seedQuantResearchL3StatusFacts(t *testing.T, ctx context.Context, store *re
 // seedQuantResearchL3OrderBook 写入与 Run 精确绑定的盘口事实快照。
 // Risk Stage 在相同 symbol/purpose/system_as_of 上复用该已授权事实，
 // 从而不依赖运行时刻是否处于交易所盘口开放时段；事实结构与校验仍走生产链路。
-func seedQuantResearchL3OrderBook(t *testing.T, ctx context.Context, store *repository.Store, systemAsOf time.Time) {
+func seedQuantResearchL3OrderBook(
+	t *testing.T, ctx context.Context, store *repository.Store, tradeDate string, systemAsOf time.Time,
+) {
 	t.Helper()
-	observed := systemAsOf.UTC().Add(-time.Minute)
+	tradeDay, err := time.ParseInLocation("2006-01-02", tradeDate, markettime.Location())
+	if err != nil {
+		t.Fatalf("parse L3 order-book trade date: %v", err)
+	}
+	observed := time.Date(tradeDay.Year(), tradeDay.Month(), tradeDay.Day(), 15, 1, 0, 0, markettime.Location()).UTC()
 	book := &model.OrderBook{
 		Symbol: l3SeedSymbol,
 		Bids: []model.OrderBookLevel{

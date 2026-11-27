@@ -215,8 +215,11 @@ func AssessTradabilityFacts(evidence TradabilityEvidence) (TradabilityAssessment
 // EvaluateTradabilityDecision 用冻结的 tradability 规则集给出正式 RiskDecision。
 // 事实缺失或被判定为已知不可交易，都只能得到 reject；不存在评分或模型覆盖入口。
 func EvaluateTradabilityDecision(
-	ctx context.Context, decisionID string, evaluatedAt time.Time, evidence TradabilityEvidence,
+	ctx context.Context, decisionID string, evaluatedAt, systemAsOf time.Time, evidence TradabilityEvidence,
 ) (risk.Decision, error) {
+	if systemAsOf.IsZero() || systemAsOf.Location() != time.UTC {
+		return risk.Decision{}, errors.New("tradability decision system_as_of must be a UTC time")
+	}
 	if evaluatedAt.IsZero() || evaluatedAt.Location() != time.UTC {
 		return risk.Decision{}, errors.New("tradability decision evaluated_at must be a UTC time")
 	}
@@ -227,7 +230,7 @@ func EvaluateTradabilityDecision(
 	return risk.EvaluateTradabilityGate(ctx, risk.TradabilityGateInput{
 		DecisionID:  decisionID,
 		EvaluatedAt: evaluatedAt.Format(time.RFC3339Nano),
-		SystemAsOf:  evidence.TradingFacts.SystemAsOf,
+		SystemAsOf:  systemAsOf.Format(time.RFC3339Nano),
 		InputRefs:   append([]string{}, assessment.Facts.EvidenceRefs...),
 		Facts:       assessment.Facts,
 	})

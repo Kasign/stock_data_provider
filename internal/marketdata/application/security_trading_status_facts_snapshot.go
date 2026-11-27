@@ -72,31 +72,58 @@ func (c *SecurityTradingStatusFactsSnapshotCreator) Create(
 		return SecurityTradingStatusFactsSnapshotReferences{}, ErrDataAuthorizationDenied
 	}
 
-	record, err := c.reader.SecurityTradingStatusAsOf(ctx, symbol, tradeDate, systemAsOf)
-	if err != nil {
-		return SecurityTradingStatusFactsSnapshotReferences{}, fmt.Errorf("read PIT trading status for Snapshot: %w", err)
-	}
-	payload, err := buildTradingStatusFactsPayload(record, symbol, tradeDate)
-	if err != nil {
-		return SecurityTradingStatusFactsSnapshotReferences{}, err
-	}
-	snapshot, err := app.BuildSecurityTradingStatusFactsSnapshot(
-		payload, tradingStatusFactsSources(record), callerRef, purpose, systemAsOf,
+	var snapshotRef string
+	existing, lookupErr := c.repository.GetLatestSecurityTradingStatusFactsSnapshotAtOrBefore(
+		ctx, symbol, tradeDate, purpose, systemAsOf,
 	)
-	if err != nil {
-		return SecurityTradingStatusFactsSnapshotReferences{}, fmt.Errorf("build trading-status facts Snapshot: %w", err)
+	switch {
+	case lookupErr == nil:
+		if existing.Manifest.Symbol != symbol || existing.Manifest.TradeDate != tradeDate ||
+			existing.Manifest.PurposeCode != purpose {
+			return SecurityTradingStatusFactsSnapshotReferences{}, errors.New(
+				"reused trading-status facts snapshot binding does not match the request")
+		}
+		reusedAsOf, parseErr := time.Parse(time.RFC3339Nano, existing.Manifest.SystemAsOf)
+		if parseErr != nil || reusedAsOf.After(systemAsOf) {
+			return SecurityTradingStatusFactsSnapshotReferences{}, errors.New(
+				"reused trading-status facts snapshot was published after the requested system_as_of")
+		}
+		snapshotRef = existing.Manifest.SnapshotRef
+	case errors.Is(lookupErr, snapshotport.ErrSecurityTradingStatusFactsSnapshotNotFound):
+		// 没有可复用快照时，仍从原始 append-only PIT 表按同一评估时点构建。
+	default:
+		return SecurityTradingStatusFactsSnapshotReferences{}, fmt.Errorf(
+			"lookup reusable trading-status facts Snapshot: %w", lookupErr)
 	}
-	if err := c.repository.SaveSecurityTradingStatusFactsSnapshot(ctx, snapshot); err != nil {
-		return SecurityTradingStatusFactsSnapshotReferences{}, fmt.Errorf("persist trading-status facts Snapshot: %w", err)
+
+	if snapshotRef == "" {
+		record, err := c.reader.SecurityTradingStatusAsOf(ctx, symbol, tradeDate, systemAsOf)
+		if err != nil {
+			return SecurityTradingStatusFactsSnapshotReferences{}, fmt.Errorf("read PIT trading status for Snapshot: %w", err)
+		}
+		payload, err := buildTradingStatusFactsPayload(record, symbol, tradeDate)
+		if err != nil {
+			return SecurityTradingStatusFactsSnapshotReferences{}, err
+		}
+		snapshot, err := app.BuildSecurityTradingStatusFactsSnapshot(
+			payload, tradingStatusFactsSources(record), callerRef, purpose, systemAsOf,
+		)
+		if err != nil {
+			return SecurityTradingStatusFactsSnapshotReferences{}, fmt.Errorf("build trading-status facts Snapshot: %w", err)
+		}
+		if err := c.repository.SaveSecurityTradingStatusFactsSnapshot(ctx, snapshot); err != nil {
+			return SecurityTradingStatusFactsSnapshotReferences{}, fmt.Errorf("persist trading-status facts Snapshot: %w", err)
+		}
+		snapshotRef = snapshot.Manifest.SnapshotRef
 	}
 	authorizationRef, err := c.owner.IssueFor(
-		ctx, snapshot.Manifest.SnapshotRef, purpose, authorization.SecurityStatusFactsPolicyRef,
+		ctx, snapshotRef, purpose, authorization.SecurityStatusFactsPolicyRef,
 	)
 	if err != nil {
-		return SecurityTradingStatusFactsSnapshotReferences{}, fmt.Errorf("Snapshot persisted but authorization was not issued: %w", err)
+		return SecurityTradingStatusFactsSnapshotReferences{}, fmt.Errorf("Snapshot exists but authorization was not issued: %w", err)
 	}
 	return SecurityTradingStatusFactsSnapshotReferences{
-		SnapshotRef: snapshot.Manifest.SnapshotRef, AuthorizationRef: authorizationRef,
+		SnapshotRef: snapshotRef, AuthorizationRef: authorizationRef,
 	}, nil
 }
 

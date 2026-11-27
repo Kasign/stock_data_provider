@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"example.com/stock-analysis-flow/internal/marketdata/markettime"
 	"example.com/stock-analysis-flow/internal/quant/manifest"
 	"example.com/stock-analysis-flow/internal/quant/result"
 	"example.com/stock-analysis-flow/internal/quant/risk"
@@ -35,6 +36,10 @@ const (
 	riskPeriod           = "1d"
 	riskAlgorithmVersion = "1.0.0"
 	riskMaxParamsBytes   = 4096
+
+	// orderBookIntradayMaxAge 只约束盘中评估：盘口是日内事实，超过 15 分钟不能
+	// 再当作当前可成交量。收盘后的评估改用交易日身份 + 收盘时刻约束。
+	orderBookIntradayMaxAge = 15 * time.Minute
 )
 
 var (
@@ -178,7 +183,7 @@ func (service *CreateRiskService) Execute(ctx context.Context, request CreateRis
 	if err != nil {
 		return RiskExecutionResult{}, fmt.Errorf("%w: %v", ErrInvalidRiskSnapshot, err)
 	}
-	decision, err := EvaluateTradabilityDecision(ctx, decisionID, request.SystemAsOf, evidence)
+	decision, err := EvaluateTradabilityDecision(ctx, decisionID, request.SystemAsOf, request.SystemAsOf, evidence)
 	if err != nil {
 		return RiskExecutionResult{}, fmt.Errorf("evaluate tradability gate: %w", err)
 	}
@@ -242,8 +247,11 @@ func validateRiskSnapshotBinding(
 	if snapshot.Symbol != parameters.Symbol || snapshot.TradeDate != parameters.TradeDate {
 		return fmt.Errorf("%w: parameters do not describe the authorized Snapshot", ErrInvalidRiskSnapshot)
 	}
-	if snapshot.SystemAsOf != request.SystemAsOf.Format(time.RFC3339Nano) {
-		return fmt.Errorf("%w: Snapshot system_as_of differs from the requested evaluation instant", ErrInvalidRiskSnapshot)
+	// as-of 语义：交易状态按 trade_date 精确约束（上方已核对），允许复用更早发布的快照；
+	// 发布晚于评估时点的快照在 PIT 上还不存在，必须拒绝。
+	snapshotAsOf, parseErr := time.Parse(time.RFC3339Nano, snapshot.SystemAsOf)
+	if parseErr != nil || snapshotAsOf.After(request.SystemAsOf.UTC()) {
+		return fmt.Errorf("%w: trading-status Snapshot was published after the evaluation instant", ErrInvalidRiskSnapshot)
 	}
 	if trustedNow.IsZero() || snapshot.TradeDate > request.SystemAsOf.UTC().Format("2006-01-02") {
 		return fmt.Errorf("%w: trade_date is later than the evaluation instant", ErrInvalidRiskSnapshot)
@@ -252,7 +260,8 @@ func validateRiskSnapshotBinding(
 }
 
 // validateRiskOrderBookBinding 把盘口授权快照钉在请求、参数与交易状态快照上。
-// 盘口是日内事实，必须以 system_as_of 对齐；任何身份或时点错配都不得进入门禁。
+// 盘口是日内事实：发布时点不得晚于评估时点；盘中要求 15 分钟内观测，收盘后要求
+// 观测日等于 trade_date 且不早于当日收盘，避免把隔日盘口当成当日当前事实。
 func validateRiskOrderBookBinding(
 	orderBook OrderBookFactsSnapshot,
 	request CreateRiskRequest,
@@ -268,9 +277,31 @@ func validateRiskOrderBookBinding(
 	if orderBook.Symbol != parameters.Symbol || orderBook.Symbol != trading.Symbol {
 		return fmt.Errorf("%w: order-book Snapshot does not describe the authorized security", ErrInvalidRiskSnapshot)
 	}
-	if orderBook.SystemAsOf != request.SystemAsOf.Format(time.RFC3339Nano) ||
-		orderBook.SystemAsOf != trading.SystemAsOf {
-		return fmt.Errorf("%w: order-book system_as_of differs from the evaluation instant", ErrInvalidRiskSnapshot)
+	orderBookAsOf, parseErr := time.Parse(time.RFC3339Nano, orderBook.SystemAsOf)
+	if parseErr != nil || orderBookAsOf.After(request.SystemAsOf.UTC()) {
+		return fmt.Errorf("%w: order-book Snapshot was published after the evaluation instant", ErrInvalidRiskSnapshot)
+	}
+	observedAt, parseErr := time.Parse(time.RFC3339Nano, orderBook.ObservedAt)
+	if parseErr != nil {
+		return fmt.Errorf("%w: order-book observed_at is not canonical", ErrInvalidRiskSnapshot)
+	}
+	location := markettime.Location()
+	tradeDay, err := time.ParseInLocation("2006-01-02", parameters.TradeDate, location)
+	if err != nil {
+		return fmt.Errorf("%w: trade_date is not an ISO date", ErrInvalidRiskSnapshot)
+	}
+	if observedAt.In(location).Format("2006-01-02") != parameters.TradeDate {
+		return fmt.Errorf("%w: order-book observation is from a different trade date", ErrInvalidRiskSnapshot)
+	}
+	closeAt := time.Date(tradeDay.Year(), tradeDay.Month(), tradeDay.Day(), 15, 0, 0, 0, location)
+	if !request.SystemAsOf.Before(closeAt) {
+		if observedAt.Before(closeAt) {
+			return fmt.Errorf("%w: order-book observation predates the trade date close", ErrInvalidRiskSnapshot)
+		}
+		return nil
+	}
+	if request.SystemAsOf.Sub(observedAt) > orderBookIntradayMaxAge {
+		return fmt.Errorf("%w: order-book observation is too old for an intraday evaluation", ErrInvalidRiskSnapshot)
 	}
 	return nil
 }
