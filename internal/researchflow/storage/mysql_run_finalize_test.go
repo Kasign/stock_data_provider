@@ -327,6 +327,8 @@ func TestMariaDBFinalizeRunAtomicallyPersistsRunResultAndReadsItBack(t *testing.
 	payload := json.RawMessage(`{"schema_version":"1.0.0","run_ref":"` + runRef + `"}`)
 	input := completeFinalizationForTest()
 	input.RunRef = runRef
+	// The fixture above moves the Run from created version 1 to running version 2.
+	input.ExpectedVersion = 2
 	input.ResultSummaryRef = "result-summary-" + suffix
 	input.OutboxRef = "result-outbox-" + suffix
 	input.ResultRef = "result-result-" + suffix
