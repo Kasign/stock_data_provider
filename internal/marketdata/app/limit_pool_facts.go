@@ -65,21 +65,22 @@ func BuildLimitPoolFactsPayload(
 	if !validLimitPoolTradeDate(up.TradeDate) || up.TradeDate != down.TradeDate {
 		return LimitPoolFactsPayload{}, fmt.Errorf("%w: trade dates are missing or inconsistent", ErrInvalidLimitPoolFacts)
 	}
-	if !up.HasData || !down.HasData {
-		return LimitPoolFactsPayload{}, fmt.Errorf("%w: pool has no data", ErrInvalidLimitPoolFacts)
-	}
 	if up.Source == "" || down.Source == "" || up.Source != down.Source {
 		return LimitPoolFactsPayload{}, fmt.Errorf("%w: pool sources are missing or inconsistent", ErrInvalidLimitPoolFacts)
 	}
 	if up.FetchedAt.IsZero() || down.FetchedAt.IsZero() {
 		return LimitPoolFactsPayload{}, fmt.Errorf("%w: pool observation time is required", ErrInvalidLimitPoolFacts)
 	}
-	quality, err := limitPoolQuality(up.QualityStatus, down.QualityStatus)
+	quality, err := limitPoolQuality(up, down)
 	if err != nil {
 		return LimitPoolFactsPayload{}, err
 	}
-	upComplete := limitPoolComplete(up)
-	downComplete := limitPoolComplete(down)
+	// 空池的歧义属于「该交易日是否可用」，而不是「该池是否为零事件」。
+	// 同一天只要有一个池返回了真实行，日期即可用，另一个空池就是零事件；
+	// 两个池都没有行时无法区分零事件与日期不可用，只能保持 unknown（fail-closed）。
+	dateLive := up.HasData || down.HasData
+	upComplete := dateLive && limitPoolComplete(up)
+	downComplete := dateLive && limitPoolComplete(down)
 
 	status := LimitPoolStatusUnknown
 	switch {
@@ -127,15 +128,22 @@ func limitPoolContainsSymbol(pool *model.LimitPoolSnapshot, symbol string) bool 
 	return false
 }
 
-func limitPoolQuality(up, down model.QualityStatus) (QualityStatus, error) {
+func limitPoolQuality(up, down *model.LimitPoolSnapshot) (QualityStatus, error) {
 	degraded := false
-	for _, status := range []model.QualityStatus{up, down} {
-		switch status {
-		case model.QualityValid:
-		case model.QualityDegraded:
+	for _, pool := range []*model.LimitPoolSnapshot{up, down} {
+		switch {
+		case !pool.HasData:
+			// 空池只能由源端声明歧义（unknown）：这正是「无法区分零事件与日期不可用」。
+			// 声称 valid/degraded 却没有任何行属于自相矛盾，必须拒绝。
+			if pool.QualityStatus != model.QualityUnknown {
+				return "", fmt.Errorf("%w: empty %s pool reports quality %q", ErrInvalidLimitPoolFacts, pool.PoolType, pool.QualityStatus)
+			}
+			degraded = true
+		case pool.QualityStatus == model.QualityValid:
+		case pool.QualityStatus == model.QualityDegraded:
 			degraded = true
 		default:
-			return "", fmt.Errorf("%w: unusable pool quality %q", ErrInvalidLimitPoolFacts, status)
+			return "", fmt.Errorf("%w: unusable pool quality %q", ErrInvalidLimitPoolFacts, pool.QualityStatus)
 		}
 	}
 	if degraded {

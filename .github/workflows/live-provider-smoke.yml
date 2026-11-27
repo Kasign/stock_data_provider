@@ -57,6 +57,11 @@ on:
         required: false
         default: false
         type: boolean
+      limit_pool_trade_date:
+        description: "Optional trade date (YYYY-MM-DD) for the full limit-pool probe; empty means the latest closed session"
+        required: false
+        default: ""
+        type: string
 
 permissions:
   contents: read
@@ -205,6 +210,13 @@ jobs:
           MARKET_DATA_LIVE_PYTDX_OFFICIAL_SUSPENSION_TESTS: "1"
           LIVE_PYTDX_OFFICIAL_SUSPENSION_REPORT_PATH: ${{ github.workspace }}/live-pytdx-official-suspension-report.json
         run: go test -run '^TestLivePytdxOfficialIntradaySuspensionDailyBars$' -count=1 -v ./internal/marketdata/provider
+      - name: Probe real Eastmoney full limit-pool completeness (price_limit source)
+        if: always() && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && contains(github.event.head_commit.message, '[include_limit_pool]')))
+        env:
+          MARKET_DATA_LIVE_LIMIT_POOL_TESTS: "1"
+          LIVE_LIMIT_POOL_TRADE_DATE: ${{ github.event.inputs.limit_pool_trade_date }}
+          LIVE_LIMIT_POOL_REPORT_PATH: ${{ github.workspace }}/live-limit-pool-report.json
+        run: go test -run '^TestLiveEastmoneyFullLimitPoolCompleteness$' -count=1 -v ./internal/marketdata/provider
       - name: Upload sanitized live Provider reports
         if: always()
         uses: actions/upload-artifact@v4
@@ -219,4 +231,5 @@ jobs:
             live-pytdx-baostock-event-report.json
             live-tushare-suspension-report.json
             live-pytdx-official-suspension-report.json
+            live-limit-pool-report.json
           if-no-files-found: ignore
