@@ -67,3 +67,29 @@ Payload（`limit_pool` 1.0.0）：
 - 不修改 `security_trading_status_facts` 1.0.0、`order_book` 1.0.0、Risk 2.0.0 的任何字节。
 - 盘中不产出 `none`；池不完整只产出 `unknown`。
 - 不伪造 Provider 响应；L3 若无法取得真实池数据，保持 `unknown` 并如实记录，不用夹具冒充生产事实。
+
+## 7. 实施结果（2026-11-27）
+
+| 组 | 提交 | 结果 |
+|---|---|---|
+| D1 | `1aff3d01d` | `limit_pool` payload + 完整性校验；3 处变异有效 |
+| D2a | `f1ba657e2` | Manifest/快照/JCS 双指纹；识别 `trade_date` 在 manifest 指纹中的等价冗余 |
+| D2b | `c676e6ff8` | Creator + 仓储 + `limit-pool-facts-access` + CI 真库步骤；收盘门禁变异有效 |
+| D3 | `c6035b801` | 授权读取器 + 授权读分支 + 跨数据类隔离；绑定错数据类变异有效 |
+| Q1 | `7775fb96f` + `7f3d43015` + `dc898c2fc` | Quant 证据三元 + `create_risk`/Stage/组合根 + Risk Output 3.0.0 |
+
+### 7.1 门禁结论变化（已验收）
+
+L3 `TestQuantResearchMariaDBRedisL3` 在真实 MariaDB/Redis 下断言：`quant.risk` 终态 `succeeded`、payload `status=pass`、`result_status=completed`、`missing_facts=[]`、`input_refs` 为 6 段且三个快照引用互不相同。这是本项目第一次在真库链路上得到**非拒绝**的可交易性结论。
+
+### 7.2 首轮 CI 失败与根因（如实记录）
+
+- Q1 首轮提交 `7775fb96f` 的 `Full integration checks` 失败。根因不是实现错误：L3 隔离库没有 `limit_pool` 快照，`RiskAdapter` 创建快照时失败，`quant.risk` 因此不产出结果。
+- 修复：`quant_research_l3_seed_test.go` 新增 `seedQuantResearchL3LimitPool`（两池完整、不含该证券，测试专用），并在 `seedQuantResearchL3` 发布 `limit-pool-facts-access` 策略；Creator 走精确 `system_as_of` 复用，不触网。
+- 第二轮 `7f3d43015` 仍失败，但根因已变为测试断言过期：L3 的 `input_refs` 仍按 4 段断言。修正为 6 段 + 三个快照互异后，`dc898c2fc` 的 13 项 check run 全部 success。
+
+### 7.3 已知边界（不夸大）
+
+- **Provider 不可用时的行为**：`CreateLimitPoolFactsSnapshot` 是 fail-closed 的，涨跌停池不可得时 `quant.risk` 会**失败**而不是产出 `reject`。这比"缺失即拒绝"更保守，但会丢失"可追溯的拒绝"这一价值，也会让整个 Run 失败。生产若出现 Provider 抖动，需评估是否改为产出 `unknown` 状态的观测失败快照（让门禁给出 reject）。本轮未改，作为后续改进项。
+- **真实来源运行证据**：L3 用的是隔离库测试专用快照与种子策略，证明的是代码链与持久化/PIT 语义；真实交易日的 Provider 响应与盘中/盘后行为仍需以真实运行证据复核。
+- 契约状态：QNT-CTR-003 仍 `deferred`；本次只新增 `risk-stage-output` 3.0.0（MAJOR）与 `limit_pool` 1.0.0，未升级契约状态。
