@@ -1529,7 +1529,7 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - Quant 侧：`tradability_facts.go` 组装门禁输入，`price_limit`/`tradable_volume` 恒缺失；`server/bootstrap` 适配器转换前 `Verify()`，校验 `SnapshotRef`/`PurposeCode`/`PayloadKind`。
 - 结论诚实登记：链路打通后决策仍恒 `reject`（缺涨跌停与可成交量事实），验收标准是"可追溯的拒绝"。端到端测试名 `ProducesTraceableRejection`。
 - 验证：`gofmt`/`go vet`/`go test ./internal/...` 全绿，`-race` 覆盖 `internal/marketdata/...`、`internal/quant/...`、`internal/server/bootstrap`；变异验证六处均有效失败（含 HTTP 回落日线策略、发布传空 policyRef）。MariaDB 集成测试需 DSN，未在真实库执行；CI 结论以推送后为准，本节不预填。
-- 1.4 仍未完成：缺的不是链路而是事实。**2026-11-27 校准**：`tradable_volume` 已由 DEC-PLAT-002-066 用 Eastmoney 五档盘口解决，实际只剩 `price_limit`（交易所涨跌幅制度表）一项。
+- 1.4 的「缺事实」阶段已结束：`tradable_volume` 由 DEC-PLAT-002-066 解决，`price_limit` 由 DEC-PLAT-002-074 接入 Provider 全量涨跌停池，DEC-PLAT-002-075 修正空池语义。
 
 ## 2026-11-26 1.4 Facade/Stage 装配与拒绝路径验收（DEC-062）
 
@@ -1541,7 +1541,7 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - 验收（"装配 + 拒绝路径"优先）：新增 23 个测试全 PASS（Facade 6、输出契约 4 含 14 个篡改变异子用例、Stage 组合 9、端到端 4）。断言 `decision_status=reject`、`missing_facts=[price_limit,tradable_volume]`、`evidence_refs` 精确等于 `[facts_snapshot_ref, authorization_ref]`、`evaluated_at == system_as_of`、`result_id` 可解到已落库记录且 `record.Validate()` 通过。
 - 变异验证 6 处全部有效失败并已恢复。其中"关联规格表漏登记 `quant.risk`"**原契约测试未捕获**（按表遍历会随表变短），已补 `TestQuantRiskStageIsRegisteredForResultAssociation` 显式断言后捕获——属补强要求而非调低标准。
 - 验证：`gofmt`/`go vet`/`go test ./internal/...` 全绿；`-race` 覆盖 `internal/quant/...` 与 `internal/server/bootstrap` 无告警。真实 MariaDB 集成未在本地执行（无 DSN）；CI 结论见下节（首推失败于无关断言、修复后全绿），本节不预填。
-- 1.4 仍为**部分完成**：链路与装配已通，但 `AssessTradabilityFacts` 无条件补两项缺失 → `Verified` 恒 false → 决策恒 `reject`，**门禁不能放行**。剩余阻塞仅为 `price_limit`（交易所涨跌幅制度表，另行立项）；`tradable_volume` 已由 DEC-PLAT-002-066 解决。RF-BLOCK-008（Researchflow Composer 的 `RiskDecision` 投影）仍 OPEN，需双 Owner 决议。
+- 1.4 记为**已完成（代码与门禁链路 + 真实来源证据）**：`price_limit` 接入后四类事实齐备，`Verified=true`、L3 真库 `status=pass`；空池语义修正后强势日（跌停 0）不再让 Run 失败。RF-BLOCK-008（Researchflow Composer 的 `RiskDecision` 投影）仍 OPEN，需双 Owner 决议；「Provider 请求失败即 Stage 失败」仍是 fail-closed 边界。
 
 ### 2026-11-26 首次推送的 CI 失败与修复（Data 迁移历史断言）
 
@@ -1871,3 +1871,14 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - **迁移盘点校准**：`10.4` 补齐 2.1/2.2/2.3 完成勾选；`10.2` 已注册 Stage 从「sma20 + factor」更新为 `sma20/factor/trend/risk + quant.research@1.0.0`；`10.7` 原「Quant 构件未接入生产」结论整节改写为当前事实。
 - **校准后阻塞链**：完整报告唯一 Owner（RF-BLOCK-007，需真实 LLM）→ WebUI 3.1/3.2 → 阶段 4 删除 → 阶段 5 验收；1.4 的 `price_limit` 与 WebUI 迁移可并行，但都不阻塞阶段 3 的「创建/轮询/取消/历史」分段施工。
 - 本次为文档校准，无代码改动；不改变任何契约状态、不放宽任何门禁。
+
+## 2026-11-27 price_limit 真实来源证据与空池语义缺陷修复
+
+- **触发**：项目负责人指出 Data 模块测试可在 GitHub Actions 上带已配置密钥运行。核对后确认 `live-provider-smoke.yml` 已有十余个真实探针，但**没有任何一个覆盖涨跌停池**，而它正是 `price_limit` 的真实来源。
+- **新增真实探针**：`internal/marketdata/provider/eastmoney_limit_pool_live_test.go` 的 `TestLiveEastmoneyFullLimitPoolCompleteness`，由 `MARKET_DATA_LIVE_LIMIT_POOL_TESTS=1` 门控，接入 `live-provider-smoke.yml`（提交标记 `[include_limit_pool]` 或手动 dispatch），并上传 `live-limit-pool-report.json`。断言：`Total == len(Items)`、`!TotalIsLowerBound`、`ProviderReturned == Total`、池内符号唯一、涨停池只含上涨证券 / 跌停池只含下跌证券、同日两池互斥、真实响应能驱动 `none`/`limit_up`/`limit_down` 三分支且 `none` 载荷通过 `Validate`。
+- **真实数据暴露的缺陷（重要）**：2026-11-27 实际响应为涨停池 `417/417`、跌停池 `tc=0 / pool=[]`，这是普通强势交易日。原实现把「空池」当成「数据不可用」（`!HasData` 直接报错、`unknown` 质量被拒），导致 `price_limit` 在当天不可核验 → `RiskAdapter` 失败 → `quant.risk` 失败 → **整个 Run 失败**。即：只要当天没有跌停（或没有涨停），1.4 的链路就整体不可用。此前 L3 用「两池都非空」的测试夹具，因此没有暴露。
+- **修复（DEC-PLAT-002-075）**：空池的歧义属于「该交易日是否可用」，不是「该池是否零事件」。引入 `dateLive := up.HasData || down.HasData`；`complete(pool) := dateLive && !TotalIsLowerBound && Total == len(Items)`。同日任一池有真实行即证明日期可用，另一个空池就是零事件；两池皆空才 `unknown`，且**返回载荷而不是报错**，让门禁给出可追溯 `reject`。质量规则收紧：空池只能由源端声明歧义（`unknown`），空池声称 `valid`/`degraded` 或有行却 `unknown` 一律拒绝；存在空池时载荷质量统一 `degraded`。
+- **TDD 与变异**：修复前失败证据为 `empty limit-down pool next to a populated limit-up pool must be usable: pool has no data` 与 `two empty pools must yield an unknown payload, not an error`。三处变异均有效失败并恢复：忽略 `dateLive`（两池皆空会被判 `none`）、允许空池声称 `valid`、空池结论不降级质量。全仓 `go test ./... -count=1`、`go vet ./...`、`git diff --check` 通过。
+- **真实证据（GitHub Actions）**：提交 `2e5f47a7107bf18ab55227747c81ec25547583f2` 的 14 个 check run 全部 `success`，其中 `Probe real public provider responses`（`140559850625`）真实执行了该步骤：`--- PASS: TestLiveEastmoneyFullLimitPoolCompleteness (4.80s)`，报告为 `trade_date=2026-11-27, up 417/417, down 0/0, empty_pools=[down], 600519.SH → none, payload_quality=degraded`。步骤未被 SKIP。
+- **另一个真实行为（非缺陷）**：请求历史交易日时源端 `qdate` 恒返回最新交易日（请求 `20261126` 返回 `qdate=20261127`），但 `tc` 随请求日变化（417/65/51），说明 `date` 参数生效。因此请求日才是权威，`qdate` 不得用作交易日身份；探针只断言 `qdate` 可解析且不早于请求日。
+- **剩余边界**：Provider 请求本身失败（网络/协议/安全上界）仍 fail-closed，`quant.risk` 会失败而不是产出 `reject`；真实探针证明的是 Provider 响应与语义分支，不等于生产交易日全量 Run 的验收。

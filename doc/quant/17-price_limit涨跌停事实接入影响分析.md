@@ -22,7 +22,11 @@
 - `limit_up`：证券出现在**完整**涨停池（`Total == len(Items)` 且非下界）→ 不可买。
 - `limit_down`：证券出现在**完整**跌停池 → 不可卖。
 - `none`：两个池都完整且证券都不在池内 → 可正常涨跌。
-- `unknown`：任一池不完整（`TotalIsLowerBound` 或 `Total != len(Items)`）且证券不在已知池内 → 不能断言「未涨跌停」，按缺失处理。
+- **空池的歧义属于「交易日是否可用」，不属于「该池是否零事件」**（2026-11-27 修正）：
+  同一天只要有一个池返回了真实行，该交易日即可用，另一个 `tc=0 / pool=[]` 的空池就是**零事件**，
+  此时空池按「完整且为空」处理，但载荷质量必须降为 `degraded`（结论依赖兄弟池存活性推断）。
+  两个池都没有行时无法区分「当日零涨跌停」与「该交易日不可用」，只能 `unknown`。
+- `unknown`：任一池不完整（`TotalIsLowerBound` 或 `Total != len(Items)`）、或两池皆空、或证券不在已完整确认的池内 → 不能断言「未涨跌停」，按缺失处理。
 
 **PIT 时点**：涨跌停池是交易日**收盘后**的当日事实。盘中采集时池子不完整，`FetchFullLimitPool` 的完整性断言会失败，Creator 必须 fail-closed；`unknown` 只能来自「池不完整」这一显式状态，不能由盘中静默产生。
 
@@ -90,6 +94,44 @@ L3 `TestQuantResearchMariaDBRedisL3` 在真实 MariaDB/Redis 下断言：`quant.
 
 ### 7.3 已知边界（不夸大）
 
-- **Provider 不可用时的行为**：`CreateLimitPoolFactsSnapshot` 是 fail-closed 的，涨跌停池不可得时 `quant.risk` 会**失败**而不是产出 `reject`。这比"缺失即拒绝"更保守，但会丢失"可追溯的拒绝"这一价值，也会让整个 Run 失败。生产若出现 Provider 抖动，需评估是否改为产出 `unknown` 状态的观测失败快照（让门禁给出 reject）。本轮未改，作为后续改进项。
+- **Provider 不可用时的行为**（2026-11-27 部分改善）：Provider 请求本身失败（网络/协议/安全上界）时 `CreateLimitPoolFactsSnapshot` 仍是 fail-closed，`quant.risk` 会**失败**；但「两个池都返回空」不再报错，而是产出 `unknown` 载荷，让门禁给出可追溯的 `reject`。因此当前剩余的是"请求失败"这一条，而不是"当日无涨跌停"这一条。
 - **真实来源运行证据**：L3 用的是隔离库测试专用快照与种子策略，证明的是代码链与持久化/PIT 语义；真实交易日的 Provider 响应与盘中/盘后行为仍需以真实运行证据复核。
 - 契约状态：QNT-CTR-003 仍 `deferred`；本次只新增 `risk-stage-output` 3.0.0（MAJOR）与 `limit_pool` 1.0.0，未升级契约状态。
+
+## 8. 真实来源证据与空池语义缺陷（2026-11-27）
+
+### 8.1 真实探针
+
+新增 `TestLiveEastmoneyFullLimitPoolCompleteness`（`internal/marketdata/provider/eastmoney_limit_pool_live_test.go`），由 `MARKET_DATA_LIVE_LIMIT_POOL_TESTS=1` 门控，接入 `.github/workflows/live-provider-smoke.yml`（提交标记 `[include_limit_pool]` 或手动 dispatch 触发），并上传 `live-limit-pool-report.json`。它验证：
+
+- `Total == len(Items)`、`!TotalIsLowerBound`、`ProviderReturned == Total`（全量入口的完整性前提）；
+- 池内证券符号唯一、涨停池只有上涨证券、跌停池只有下跌证券（可捕获上下池接反）；
+- 同日两池互斥；
+- 真实响应能驱动 `none` / `limit_up` / `limit_down` 三个分支，且 `none` 载荷能通过 `Validate`。
+
+### 8.2 首次真实运行暴露的缺陷（已修复）
+
+真实响应（2026-11-27）为：涨停池 `417/417`，跌停池 `tc=0, pool=[]`。这是一个普通的强势交易日，但按原实现会走成：
+
+1. `FetchFullLimitPool("down")` 返回 `Total=0, HasData=false, QualityStatus=unknown`，原因 `provider_returned_empty_pool_cannot_distinguish_zero_events_from_unavailable_date`；
+2. `BuildLimitPoolFactsPayload` 直接拒绝（"pool has no data"），`limitPoolQuality` 也拒绝 `unknown`；
+3. `CreateLimitPoolFactsSnapshot` 失败 → `RiskAdapter` 失败 → `quant.risk` 失败 → 整个 Run 失败。
+
+即：**只要当天没有跌停（或没有涨停），`price_limit` 就不可核验，整个 Run 直接失败**。这是把「池为空」与「交易日不可用」混为一谈导致的真实可用性缺陷。
+
+### 8.3 修复语义（唯一正确判据）
+
+- 引入 `dateLive := up.HasData || down.HasData`：交易日可用性是**日期级**属性，由同日任一个非空池证明。
+- `upComplete := dateLive && limitPoolComplete(up)`，`downComplete` 同理；空池在日期可用时按「完整且为空」处理。
+- 两池皆空 → `dateLive=false` → 两者都不完整 → `unknown`（fail-closed），且**返回载荷而不是报错**，让门禁给出可追溯拒绝。
+- 质量：空池只能由源端声明歧义（`unknown`）。空池声称 `valid/degraded`、或有行却声明 `unknown`，都属于自相矛盾，直接拒绝；只要存在空池，最终质量一律 `degraded`。
+
+### 8.4 TDD 与变异
+
+- 修复前失败证据：`empty limit-down pool next to a populated limit-up pool must be usable: invalid limit pool facts payload: pool has no data`；`two empty pools must yield an unknown payload, not an error`。
+- 三处变异均有效失败并恢复：① 忽略 `dateLive`（两池皆空会被判成 `none`）；② 允许空池声称 `valid`；③ 空池结论不降级质量。
+- 全仓 `go test ./... -count=1`、`go vet ./...`、`git diff --check` 通过；本地真实探针 PASS（`2026-11-27`，涨停 417、跌停 0，`600519.SH` = `none`，quality `degraded`）。
+
+### 8.5 另一个真实行为（不是缺陷，但必须记住）
+
+请求历史交易日时，Eastmoney 的 `qdate` 仍返回**最新交易日**（实测请求 `20261126` 返回 `qdate=20261127`），而 `tc` 随请求日变化（417 / 65 / 51），说明 `date` 参数确实生效。因此**请求日才是权威**，与 Provider 自己声明的 `requested_trade_date_is_authoritative` 一致；探针只断言 `qdate` 可解析且不早于请求日，绝不把它当作交易日身份。
