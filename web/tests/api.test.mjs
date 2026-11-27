@@ -5,7 +5,9 @@ import {
   analysisLiveness,
   changeOwnerPassword,
   clearOwnerSessionMemory,
+  cancelResearchflowRun,
   createAnalysisTask,
+  createResearchflowRun,
   getOwnerSession,
   loginOwnerSession,
   logoutOwnerSession,
@@ -14,6 +16,7 @@ import {
   getAnalysisRun,
   getAnalysisTask,
   getAnalysisTaskEvents,
+  getResearchflowRun,
   getDailyBars,
   getChipDistribution,
   getCapitalFlow,
@@ -902,6 +905,132 @@ test("wrong current password does not discard a still-valid Owner CSRF token", a
     await logoutOwnerSession(settings);
     assert.equal(requests[2].headers["X-CSRF-Token"], "valid-session-csrf",
       "a rejected current password must not clear the authenticated session's CSRF token");
+  } finally {
+    clearOwnerSessionMemory();
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("creates Researchflow runs through Root Server with body idempotency and CSRF", async () => {
+  const originalFetch = globalThis.fetch;
+  const requests = [];
+  clearOwnerSessionMemory();
+  globalThis.fetch = async (url, init) => {
+    const record = { url: String(url), ...init };
+    requests.push(record);
+    if (record.url === "/api/v1/owner/session" && record.method === "POST") {
+      return jsonResponse({ csrf_token: "researchflow-csrf" });
+    }
+    return jsonResponse({ run: { run_ref: "run:researchflow:1" } }, 201);
+  };
+  try {
+    const settings = { analysisBase: "/legacy", apiKey: "must-not-leak" };
+    await loginOwnerSession(settings, "test-password");
+    const command = {
+      schema_version: "1.1.0",
+      idempotency_key: "idem-1",
+      template_ref: "quant.research",
+      template_version: "1.0.0",
+      input_snapshot_refs: [],
+      parameters: {}
+    };
+    const controller = new AbortController();
+    const result = await createResearchflowRun(settings, command, controller.signal);
+
+    assert.equal(result.run.run_ref, "run:researchflow:1");
+    const request = requests[1];
+    assert.equal(request.url, "/api/v1/researchflow/runs");
+    assert.equal(request.method, "POST");
+    assert.equal(request.headers["Content-Type"], "application/json");
+    assert.equal(request.headers["X-CSRF-Token"], "researchflow-csrf");
+    assert.equal(request.headers["Idempotency-Key"], undefined,
+      "Researchflow idempotency_key belongs in the CreateRun body, not a legacy header");
+    assert.equal(request.headers["X-API-Key"], undefined);
+    assert.equal(request.headers.Authorization, undefined);
+    assert.equal(request.credentials, "same-origin");
+    assert.equal(request.signal, controller.signal);
+    assert.deepEqual(JSON.parse(request.body), command);
+  } finally {
+    clearOwnerSessionMemory();
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("reads and cancels Researchflow runs with canonical run refs", async () => {
+  const originalFetch = globalThis.fetch;
+  const requests = [];
+  clearOwnerSessionMemory();
+  globalThis.fetch = async (url, init) => {
+    const record = { url: String(url), ...init };
+    requests.push(record);
+    if (record.url === "/api/v1/owner/session" && record.method === "POST") {
+      return jsonResponse({ csrf_token: "researchflow-csrf" });
+    }
+    return jsonResponse({ run: { run_ref: "run:researchflow:a/b" }, stages: [] });
+  };
+  try {
+    const settings = {};
+    await loginOwnerSession(settings, "test-password");
+    const controller = new AbortController();
+    await getResearchflowRun(settings, "run:researchflow:a/b", controller.signal);
+    await cancelResearchflowRun(settings, "run:researchflow:a/b", controller.signal);
+
+    const read = requests[1];
+    assert.equal(read.url, "/api/v1/researchflow/runs/run%3Aresearchflow%3Aa%2Fb");
+    assert.equal(read.method, "GET");
+    assert.equal(read.body, undefined);
+    assert.equal(read.headers["X-CSRF-Token"], undefined);
+    assert.equal(read.headers["X-API-Key"], undefined);
+    assert.equal(read.headers.Authorization, undefined);
+    assert.equal(read.signal, controller.signal);
+
+    const cancel = requests[2];
+    assert.equal(cancel.url, "/api/v1/researchflow/runs/run%3Aresearchflow%3Aa%2Fb/cancel");
+    assert.equal(cancel.method, "POST");
+    assert.equal(cancel.body, undefined);
+    assert.equal(cancel.headers["X-CSRF-Token"], "researchflow-csrf");
+    assert.equal(cancel.headers["Content-Type"], undefined);
+    assert.equal(cancel.headers["X-API-Key"], undefined);
+    assert.equal(cancel.headers.Authorization, undefined);
+    assert.equal(cancel.credentials, "same-origin");
+    assert.equal(cancel.signal, controller.signal);
+  } finally {
+    clearOwnerSessionMemory();
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("rejects invalid Researchflow helper inputs before any network request", async () => {
+  const originalFetch = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls += 1;
+    return jsonResponse({});
+  };
+  try {
+    await assert.rejects(createResearchflowRun({}, null), /对象/);
+    await assert.rejects(createResearchflowRun({}, []), /对象/);
+    await assert.rejects(getResearchflowRun({}, "  run:1  "), /无效/);
+    await assert.rejects(getResearchflowRun({}, "r".repeat(256)), /无效/);
+    await assert.rejects(cancelResearchflowRun({}, ""), /无效/);
+    assert.equal(calls, 0, "invalid helper inputs must fail before fetch");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Researchflow mutating helpers require an in-memory CSRF token", async () => {
+  const originalFetch = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls += 1;
+    return jsonResponse({});
+  };
+  clearOwnerSessionMemory();
+  try {
+    await assert.rejects(createResearchflowRun({}, { schema_version: "1.1.0" }), /CSRF/);
+    await assert.rejects(cancelResearchflowRun({}, "run:researchflow:1"), /CSRF/);
+    assert.equal(calls, 0, "mutating helpers must fail before fetch without CSRF");
   } finally {
     clearOwnerSessionMemory();
     globalThis.fetch = originalFetch;

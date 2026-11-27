@@ -1949,11 +1949,21 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - **时点**：`-system-as-of` 未指定时取 Provider 的系统观测时刻；指定时要求 UTC 且观测不得晚于该时点。复用按 `(symbol, purpose)` 精确、时间取上界最新，旧事实是否可用仍由 Quant 新鲜度门禁裁决。
 - **入口**：`cmd/order-book-collect` + `make order-book-collect ARGS="-symbol 600519.SH"`；复用 `config.LoadForCollector()`，不需要 Redis 或 Owner 级凭据。未增加盘口批量 Worker：盘口是日内事实，应由调用方贴近评估时点触发。
 - **真实链路**：本地 Eastmoney + MariaDB 连续两次运行返回同一 `SnapshotRef=data_snapshot:sha256:10706cc0...`，`system_as_of=2026-11-25T07:00:02Z`、`tradable_volume_shares=3600`、5 档齐全；该快照授权决策数为 0。
-- **变异**：关闭 PIT 上界检查、把默认观测时点改成 `time.Now()` 分别使两个新增用例有效失败；恢复后全仓 `go test ./... -count=1`、`go vet ./...`、`git diff --check` 通过。CI 按新 SHA 回填。
+- **变异**：关闭 PIT 上界检查、把默认观测时点改成 `time.Now()` 分别使两个新增用例有效失败；恢复后全仓 `go test ./... -count=1`、`go vet ./...`、`git diff --check` 通过。
+- **CI 状态（如实记录）**：提交 `2a7a19349` 的 required-checks、Quant、Live provider probe 及多数专项检查 success，但 `Test root Go module` 与 `Full integration checks` 为 `cancelled`，不写成全绿；后续提交 `6d07c2f27` 的 14 个 check run 全部 `success`，覆盖这两项。
 
 ## 2026-11-28 L3 验证盘口预采集复用
 
 - **范围**：把 `seedQuantResearchL3OrderBook` 从测试夹具直写快照改为生产 `OrderBookFactsSnapshotCollector.Persist`，关闭盘口与涨跌停之间的验收路径不对称。
 - **验收**：盘口在 `Run.SystemAsOf - 2m` 预采集，L3 真库断言该时点严格早于 Run，且 `quant.risk` 的 `input_refs[2]` 正是预采集 `SnapshotRef`；授权仍由 Risk Stage 复用时签发。
 - **变异**：把盘口预采集时点改回 `Run.SystemAsOf` 后，真库用例立即失败于 `precollected order-book as-of ... must precede Run system_as_of ...`；恢复后 L3 真库 PASS（7.43s）。
-- **验证**：全仓 `go test ./... -count=1`、`go vet ./...`、`git diff --check` 通过。CI 按新 SHA 回填。
+- **验证**：全仓 `go test ./... -count=1`、`go vet ./...`、`git diff --check` 通过。
+- **CI 状态（回填）**：提交 `6d07c2f27` 的 14 个 check run 全部 `completed/success`，包括 required-checks `46032807837`、Full integration checks `46032807810`、Test root Go module `46032807906`、Test Quant packages `46032807859`，以及 News/Research/Researchflow/Market Data/Notification 与 Compose 镜像专项检查。
+
+## 2026-11-28 Researchflow API helper 契约测试
+
+- **范围**：只补 `web/tests/api.test.mjs`，不改 `web/src/api.js` 生产行为，不接页面主流程，不伪造 Researchflow 事件流或完整报告。
+- **覆盖**：创建/查询/取消三个 helper 的 Root Server 路径；POST 携带内存 CSRF；幂等键只放在 CreateRun body，不写 legacy `Idempotency-Key` header；无 `X-API-Key`/`Authorization`；`same-origin`；signal 透传；`run_ref` URL 编码；非法参数与缺失 CSRF 在 fetch 前失败。
+- **变异证据**：将 `createResearchflowRun` 的 `csrf: true` 临时改为 `false` 后，CSRF 断言有效失败；恢复后生产代码无净差异。
+- **验证**：`npm test` 523/523 PASS（含 4 个新增 Researchflow 用例），`npm run check` PASS，`git diff --check` PASS。
+- **剩余边界**：WebUI 页面仍调用旧 Analysis 主流程；完整报告导出、事件流、日期/窗口/因子参数映射和多标的拆单规则未迁移。本组 CI 按新 SHA 回填，未取得结论前状态为 `not_run`。

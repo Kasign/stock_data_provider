@@ -76,6 +76,8 @@ SRV-CTR-001 v1.0.0（FROZEN）定义的唯一 WebUI 业务执行 API：
 
 三个 helper 已指向 SRV-CTR-001，并在 POST 使用当前内存 CSRF Token。当前 `app.js` 未导入/调用这些 helper。**Helper 存在不代表页面已迁移或端到端已接通。**
 
+**2026-11-28 补充**：`web/tests/api.test.mjs` 已为三个 helper 增加契约测试，覆盖创建/查询/取消路径、同源 Root Server 请求、body 内幂等键与 `Idempotency-Key` header 的区别、内存 CSRF、无 API Key/Authorization 泄漏、`run_ref` URL 编码、非法输入与缺失 CSRF 在发请求前失败。把 `createResearchflowRun` 的 `csrf: true` 临时改为 `false` 后，CSRF 断言有效失败；恢复生产代码后 WebUI 523 个测试全通过、`npm run check` 通过。本轮只验证 helper 契约，不代表页面主流程迁移或端到端验收完成。
+
 ## 3.4 旧 Task API 的实际后端执行链
 
 旧 Task API 不是单纯的 HTTP 转发。Root Server 当前仍直接装配一套旧 Analysis Runner 和异步队列：
