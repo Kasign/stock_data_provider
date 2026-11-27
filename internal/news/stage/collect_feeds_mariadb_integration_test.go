@@ -229,7 +229,22 @@ func (r *diagnosingAvailabilityRecorder) Execute(
 ) ([]domain.AvailabilityEvidence, error) {
 	evidence, err := r.inner.Execute(ctx, request)
 	if err != nil {
-		r.err = err
+		detail := "no qualified/ingest entry"
+		if len(request.Qualified) > 0 && len(request.Ingest) > 0 {
+			qualified := request.Qualified[0]
+			bound := request.Ingest[0]
+			detail = fmt.Sprintf(
+				"observation(id=%q news=%q source=%q endpoint=%q sourcePolicy=%q retention=%v purged=%v observed=%v) "+
+					"version(id=%q news=%q observation=%q observed=%v) field=%q parser=%q raw=%q binding=%+v",
+				bound.Observation.ID, bound.Observation.NewsID, bound.Observation.SourceID,
+				bound.Observation.EndpointID, bound.Observation.SourcePolicyVersionID,
+				bound.Observation.RetentionUntil, bound.Observation.PayloadPurgedAt, bound.Observation.ObservedAt,
+				bound.Version.ID, bound.Version.NewsID, bound.Version.ObservationID, bound.Version.ObservedAt,
+				qualified.Qualified.FieldPath, qualified.Qualified.ParserVersion,
+				qualified.Qualified.Candidate.RawValue, qualified.Binding,
+			)
+		}
+		r.err = fmt.Errorf("%s: %w", detail, err)
 	}
 	return evidence, err
 }
