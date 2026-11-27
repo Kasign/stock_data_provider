@@ -1974,7 +1974,7 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - **为什么补**：旧 `createAnalysisTask` 在 30 秒超时时标记 `creationOutcomeUnknown`，防止把“服务端可能已接收”误当安全失败；`createResearchflowRun` 原先无超时，直接迁移会丢失这个保护。SRV-CTR-001 1.1.0 的 `GET /results` 已冻结且有服务端实现，浏览器侧却没有 helper。
 - **实现**：`createResearchflowRun` 默认 30 秒有界超时，超时错误携带 `creationOutcomeUnknown=true` 和“不要盲目重复提交”提示；普通 HTTP 错误不误标。保留幂等键只在 CreateRun body、POST 内存 CSRF、无自动重试。新增 `getResearchflowRunResults`，默认 20 秒超时，映射到已冻结的 `authorized_domain_results` 路由，并在代码注释中明确不是完整报告投影。
 - **测试**：新增超时、普通错误、取消传播、results 路径/编码/无 CSRF/无 API Key/Authorization、结构化错误保留、非法 run_ref 前置失败等用例。变异验证：去掉 `timeoutMs`、去掉 `creationOutcomeUnknown`、去掉 `/results` 后缀均使对应用例有效失败；恢复后 `npm test` 528/528 PASS，`npm run check`、`git diff --check` PASS。
-- **剩余边界**：页面主流程仍未迁移；`getResearchflowRunResults` 只返回授权领域结果，不能渲染完整报告，也不能替代 RF-BLOCK-007 的 RunResult 成功路径。本组 CI 按新 SHA 回填。
+- **剩余边界**：页面主流程仍未迁移；`getResearchflowRunResults` 只返回授权领域结果，不能渲染完整报告，也不能替代 RF-BLOCK-007 的 RunResult 成功路径。后续浏览器 smoke 的完整 CI 结论见"浏览器验收夹具随 Root Server 单入口迁移"章节。
 
 ## 2026-11-28 CSSOM 基线按 Noto CJK 环境更新
 
@@ -2000,4 +2000,5 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - **语义替换**：Root Server 单入口后连接地址由部署固定，`loadSettings()` 恒返回 `/` 并把浏览器存储清空为 `{}`，跨标签写入旧式连接配置不再产生 `changed`。原先"切换连接→清空快照/取消在途请求"的三组场景已不可达，按规则 16 替换为当前语义断言：有效连接仍为 `/`、无"旧连接/连接已变化"提示、当前有效快照保留、在途请求不被取消且延迟响应正常应用、请求数不因外部写入而隐式增加。所有断言都是正向验证当前行为，没有删除等待或跳过失败。
 - **CI 防护**：`.github/workflows/webui-browser-smoke.yml` 给 14 个 `node tests/...` 步骤各加 `timeout-minutes: 5`，并在 job 级注释说明"单步挂起必须明确失败，不得耗尽 job 限额并把后续步骤统一标记 cancelled"。Ruby YAML 解析验证：21 个 step、14 个有界、所有 node 步骤有界。
 - **源码契约同步**：`web/tests/market-stocks-navigation.test.mjs` 原断言浏览器夹具必须含"旧连接下的分页行情元数据已失效"，随语义替换改为断言固定入口 `/`、无"旧连接"失效提示、第三次响应时间戳仍被正常应用；生产 `market-stocks.js` 的失效能力断言保持不变。
-- **验证**：本地 11 个 `*-browser.mjs` 全部 exit=0；`npm test` 528/528 PASS、`npm run check`、`node --check`（改动脚本）、`git diff --check` PASS。本地仅作针对性证据，完整 CI 按新 SHA 回填，取得结论前状态为 `not_run`。
+- **验证**：本地 11 个 `*-browser.mjs` 全部 exit=0；`npm test` 528/528 PASS、`npm run check`、`node --check`（改动脚本）、`git diff --check` PASS。本地仅作针对性证据。
+- **CI 状态（回填）**：提交 `e981685c5` 的 15 个 check run 全部 `completed/success`，包括 required-checks `46042989056`、Full integration checks `46042988965`、Validate WebUI source and container `46042988930`，以及 `Chromium responsive layout checks` `46042988891`。该浏览器 job 的步骤 7–22 全部 `success`，其中步骤 13–20 的 8 个此前被跳过的验收用例均真实执行并通过，无任何 `skipped` 或 `cancelled`。这是 2026-11-18 之后浏览器 smoke 首次完整绿色。
