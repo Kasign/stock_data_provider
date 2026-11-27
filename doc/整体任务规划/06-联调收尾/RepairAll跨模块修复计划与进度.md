@@ -1746,3 +1746,14 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - **TDD 与变异**：新增权威规则负向用例；变异移除 Claim 校验、Limitations 精确投影校验与 LLM 身份校验分别使对应用例有效失败，恢复后全绿。本地 `go test ./... -count=1`、`go vet ./...`、`git diff --check` 通过。
 - **状态边界**：本组只固定运行时事实语义，不生成 Context/Claims/Limitations，不新增 projector；完整报告成功路径仍缺 R3 `available_at` 真实来源、真实 Provider 与生产给料。
 - **CI 状态（回填）**：提交 `7d59f9cd64d3a4ce1c3459f22080d45280e2f753` 的 13 个 check run 全部 `completed/success`：required-checks `45956980591`、Go test suite workflow run `45956980560`、Full integration checks `45956980586`。
+
+## 2026-11-27 第①项 LLM 网关：可交付配置与独立真实验收入口
+
+- **范围界定**：项目负责人明确"需要做的都做好，真实验收我来做"。本组交付所有不依赖真实网关值的前置，真实验收（真实 URL/模型/凭据下的调用）由 Owner 执行；不伪造 Provider、响应、能力证据或空壳报告，不注入 projector。
+- **配置模板**：`.env.example` 新增 "LLM Gateway 配置" 段，给出 `SERVER_LLM_PROVIDER_JSON` / `SERVER_LLM_CAPABILITY_JSON` / 凭据变量（`api_key_secret_ref` 引用）的单行严格 JSON 模板和逐字段中文说明，明确成对配置、HTTPS `/v1`、OpenResty 终止证书、能力证据时间窗必须覆盖运行时刻且不超过 `capability_ttl_ms`、过期 fail-closed。示例地址/ID 均为占位，禁止提交真实值。
+- **真实验收命令**：新增 `cmd/llm-gateway-check`（`make llm-gateway-check`）。只读 `.env` 与两个 JSON，用仅含 Platform HTTPClient 的最小 `resources` 经 `llmtransport.NewResponsesAdapter` 发一次最小合规请求，不连 MariaDB/Redis。通过条件为 `status=completed` 且 `model_actual`/`model_version`/`response_id` 齐全、输出非空——与 `ComposeResult` 对 LLM 身份的 fail-closed 校验一致。
+- **脱敏**：验收报告不打印凭据、endpoint、原始响应体或上游错误细节；调用错误仅取 `AdapterError.Info.SafeMessage` 或固定 reason。
+- **TDD 与变异**：7 项单测覆盖请求合法性、身份完整、状态、空输出、凭据不泄漏、安全消息复用。变异"移除身份 fail-closed"使 `TestEvaluateProbeRejectsIncompleteIdentity` 有效失败；变异"回显原始错误"使 `TestEvaluateProbeCallErrorNeverLeaksSecret` 有效失败；恢复后全绿。未配置时运行命令正确 fail-closed（退出码 1，无敏感输出）。
+- **验证**：`go test ./... -count=1`、`go vet ./cmd/llm-gateway-check/...`、`go build ./cmd/llm-gateway-check`、`git diff --check` 全通过。
+- **文档**：新增 `doc/server/LLM网关配置与真实验收手册.md`；更新 `doc/server/模块总任务规划和进度.md` SRV-010 卡点表述。
+- **状态边界**：本组只交付配置与验收入口，不代表真实验收通过、SRV-010 关闭或完整报告成功路径可用。仍缺 Owner 执行的真实验收结果、真实 Capability Evidence/Secret 运行值，以及 projector 与上游给料闭环。CI 状态：本地全绿，待提交后按 SHA 回填。
