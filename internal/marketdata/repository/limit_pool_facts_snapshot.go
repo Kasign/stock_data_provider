@@ -118,10 +118,14 @@ FROM market_data_daily_bars_close_series_snapshots WHERE snapshot_ref=? AND payl
 	return snapshot, nil
 }
 
-// GetLimitPoolFactsSnapshotForSystemAsOf 只按精确的证券、交易日、用途与评估截止时刻
-// 复用已持久化的涨跌停事实；不使用时间范围或「最新一条」近似匹配。
-func (s *Store) GetLimitPoolFactsSnapshotForSystemAsOf(
-	ctx context.Context, symbol, tradeDate, purpose string, systemAsOf time.Time,
+// GetLatestLimitPoolFactsSnapshotAtOrBefore 取同一证券、交易日、用途下，
+// system_as_of 不晚于 asOf 的最新涨跌停事实快照。
+//
+// system_as_of 存在 manifest_json 里且是变长 RFC3339Nano 字符串，SQL 侧按字符串
+// 比较会出错（"…:05.5Z" 与 "…:05.05Z"），因此这里先按身份收窄候选，再在 Go 侧解析
+// 时间取最大值。候选规模由 (symbol, trade_date, purpose) 决定，是单证券单日量级。
+func (s *Store) GetLatestLimitPoolFactsSnapshotAtOrBefore(
+	ctx context.Context, symbol, tradeDate, purpose string, asOf time.Time,
 ) (app.LimitPoolFactsSnapshot, error) {
 	if s == nil || s.db == nil {
 		return app.LimitPoolFactsSnapshot{}, errors.New("MariaDB limit-pool facts snapshot storage disabled")
@@ -130,28 +134,48 @@ func (s *Store) GetLimitPoolFactsSnapshotForSystemAsOf(
 		return app.LimitPoolFactsSnapshot{}, errors.New("limit-pool facts snapshot context is required")
 	}
 	if strings.TrimSpace(symbol) == "" || strings.TrimSpace(tradeDate) == "" || strings.TrimSpace(purpose) == "" ||
-		systemAsOf.IsZero() || systemAsOf.Location() != time.UTC {
-		return app.LimitPoolFactsSnapshot{}, errors.New("limit-pool facts reuse requires canonical symbol, trade_date, purpose and UTC system_as_of")
+		asOf.IsZero() || asOf.Location() != time.UTC {
+		return app.LimitPoolFactsSnapshot{}, errors.New("limit-pool facts reuse requires canonical symbol, trade_date, purpose and UTC as-of instant")
 	}
-	var snapshotRef string
-	err := s.db.QueryRowContext(ctx, `SELECT snapshot_ref
+	rows, err := s.db.QueryContext(ctx, `SELECT snapshot_ref, JSON_UNQUOTE(JSON_EXTRACT(manifest_json, '$.system_as_of'))
 FROM market_data_daily_bars_close_series_snapshots
 WHERE payload_kind=?
   AND JSON_UNQUOTE(JSON_EXTRACT(manifest_json, '$.symbol'))=?
   AND JSON_UNQUOTE(JSON_EXTRACT(manifest_json, '$.trade_date'))=?
-  AND JSON_UNQUOTE(JSON_EXTRACT(manifest_json, '$.purpose_code'))=?
-  AND JSON_UNQUOTE(JSON_EXTRACT(manifest_json, '$.system_as_of'))=?
-ORDER BY created_at DESC LIMIT 1`,
-		app.LimitPoolFactsPayloadKind, symbol, tradeDate, purpose, systemAsOf.Format(time.RFC3339Nano),
-	).Scan(&snapshotRef)
-	if errors.Is(err, sql.ErrNoRows) {
-		return app.LimitPoolFactsSnapshot{}, fmt.Errorf("%w: %s/%s/%s/%s",
-			snapshotport.ErrLimitPoolFactsSnapshotNotFound, symbol, tradeDate, purpose, systemAsOf.Format(time.RFC3339Nano))
-	}
+  AND JSON_UNQUOTE(JSON_EXTRACT(manifest_json, '$.purpose_code'))=?`,
+		app.LimitPoolFactsPayloadKind, symbol, tradeDate, purpose,
+	)
 	if err != nil {
 		return app.LimitPoolFactsSnapshot{}, fmt.Errorf("query reusable limit-pool facts snapshot: %w", err)
 	}
-	return s.GetLimitPoolFactsSnapshot(ctx, snapshotRef)
+	defer rows.Close()
+
+	var bestRef string
+	var bestAsOf time.Time
+	for rows.Next() {
+		var snapshotRef, rawAsOf string
+		if err := rows.Scan(&snapshotRef, &rawAsOf); err != nil {
+			return app.LimitPoolFactsSnapshot{}, fmt.Errorf("scan reusable limit-pool facts snapshot: %w", err)
+		}
+		candidate, parseErr := time.Parse(time.RFC3339Nano, rawAsOf)
+		if parseErr != nil {
+			return app.LimitPoolFactsSnapshot{}, fmt.Errorf("reusable limit-pool facts snapshot %s has a non-canonical system_as_of %q", snapshotRef, rawAsOf)
+		}
+		if candidate.After(asOf) {
+			continue
+		}
+		if bestRef == "" || candidate.After(bestAsOf) {
+			bestRef, bestAsOf = snapshotRef, candidate
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return app.LimitPoolFactsSnapshot{}, fmt.Errorf("iterate reusable limit-pool facts snapshots: %w", err)
+	}
+	if bestRef == "" {
+		return app.LimitPoolFactsSnapshot{}, fmt.Errorf("%w: %s/%s/%s/%s",
+			snapshotport.ErrLimitPoolFactsSnapshotNotFound, symbol, tradeDate, purpose, asOf.Format(time.RFC3339Nano))
+	}
+	return s.GetLimitPoolFactsSnapshot(ctx, bestRef)
 }
 
 func canonicalLimitPoolFactsSnapshotJSON(snapshot app.LimitPoolFactsSnapshot) ([]byte, []byte, error) {

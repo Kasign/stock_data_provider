@@ -47,9 +47,13 @@ type OrderBookFactsSnapshotRepository interface {
 type LimitPoolFactsSnapshotRepository interface {
 	SaveLimitPoolFactsSnapshot(ctx context.Context, snapshot app.LimitPoolFactsSnapshot) error
 	GetLimitPoolFactsSnapshot(ctx context.Context, snapshotRef string) (app.LimitPoolFactsSnapshot, error)
-	// GetLimitPoolFactsSnapshotForSystemAsOf 精确复用同一证券、交易日、用途与评估
-	// 截止时刻的涨跌停事实；不按时间范围近似匹配。
-	GetLimitPoolFactsSnapshotForSystemAsOf(
-		ctx context.Context, symbol, tradeDate, purpose string, systemAsOf time.Time,
+	// GetLatestLimitPoolFactsSnapshotAtOrBefore 取同一证券、交易日、用途下，
+	// system_as_of 不晚于给定评估时点的**最新**涨跌停事实快照（as-of 语义）。
+	//
+	// 涨跌停池按交易日收盘后固化，同一 (symbol, trade_date, purpose) 的事实内容不随
+	// 时间变化，因此允许复用更早发布的快照；交易日身份由 trade_date 精确约束，
+	// 不会跨交易日取到过期事实。
+	GetLatestLimitPoolFactsSnapshotAtOrBefore(
+		ctx context.Context, symbol, tradeDate, purpose string, asOf time.Time,
 	) (app.LimitPoolFactsSnapshot, error)
 }

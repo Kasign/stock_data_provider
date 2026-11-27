@@ -76,7 +76,7 @@ func TestMariaDBLimitPoolFactsSnapshotRoundTripAndExactReuse(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	reused, err := store.GetLimitPoolFactsSnapshotForSystemAsOf(
+	reused, err := store.GetLatestLimitPoolFactsSnapshotAtOrBefore(
 		ctx, "600036.SH", "2026-11-27", "risk_review", systemAsOf,
 	)
 	if err != nil {
@@ -85,15 +85,57 @@ func TestMariaDBLimitPoolFactsSnapshotRoundTripAndExactReuse(t *testing.T) {
 	if reused.Manifest.SnapshotRef != snapshot.Manifest.SnapshotRef {
 		t.Fatalf("reuse lookup returned %s, want %s", reused.Manifest.SnapshotRef, snapshot.Manifest.SnapshotRef)
 	}
-	if _, err := store.GetLimitPoolFactsSnapshotForSystemAsOf(
+	// as-of 语义：更晚的评估时点必须复用更早发布的快照（先采集、后评估）。
+	later, err := store.GetLatestLimitPoolFactsSnapshotAtOrBefore(
+		ctx, "600036.SH", "2026-11-27", "risk_review", systemAsOf.Add(30*time.Second),
+	)
+	if err != nil {
+		t.Fatalf("as-of lookup after publication failed: %v", err)
+	}
+	if later.Manifest.SnapshotRef != snapshot.Manifest.SnapshotRef {
+		t.Fatalf("as-of lookup returned %s, want %s", later.Manifest.SnapshotRef, snapshot.Manifest.SnapshotRef)
+	}
+
+	// 上界方向：早于发布时刻的评估时点看不到这条快照。
+	if _, err := store.GetLatestLimitPoolFactsSnapshotAtOrBefore(
+		ctx, "600036.SH", "2026-11-27", "risk_review", systemAsOf.Add(-time.Minute),
+	); !errors.Is(err, snapshotport.ErrLimitPoolFactsSnapshotNotFound) {
+		t.Fatalf("as-of lookup before publication must miss, got %v", err)
+	}
+
+	if _, err := store.GetLatestLimitPoolFactsSnapshotAtOrBefore(
 		ctx, "600036.SH", "2026-11-26", "risk_review", systemAsOf,
 	); !errors.Is(err, snapshotport.ErrLimitPoolFactsSnapshotNotFound) {
 		t.Fatalf("different trade_date must not be reused, got %v", err)
 	}
-	if _, err := store.GetLimitPoolFactsSnapshotForSystemAsOf(
+	if _, err := store.GetLatestLimitPoolFactsSnapshotAtOrBefore(
 		ctx, "600036.SH", "2026-11-27", "risk_review", systemAsOf.Add(time.Nanosecond),
-	); !errors.Is(err, snapshotport.ErrLimitPoolFactsSnapshotNotFound) {
-		t.Fatalf("nearby system_as_of must not be reused, got %v", err)
+	); err != nil {
+		t.Fatalf("a later evaluation instant must reuse the published snapshot: %v", err)
+	}
+
+	// 多条候选时取「不晚于评估时点」中最新的那条。
+	secondSnapshot, err := app.BuildLimitPoolFactsSnapshot(
+		snapshot.Payload, []app.DailyBarsCloseSeriesSource{{SourceRef: "eastmoney"}},
+		"service:quant", "risk_review", systemAsOf.Add(2*time.Hour),
+	)
+	if err != nil {
+		t.Fatalf("build second limit-pool snapshot: %v", err)
+	}
+	if err := store.SaveLimitPoolFactsSnapshot(ctx, secondSnapshot); err != nil {
+		t.Fatalf("save second snapshot: %v", err)
+	}
+	between, err := store.GetLatestLimitPoolFactsSnapshotAtOrBefore(
+		ctx, "600036.SH", "2026-11-27", "risk_review", systemAsOf.Add(time.Hour),
+	)
+	if err != nil || between.Manifest.SnapshotRef != snapshot.Manifest.SnapshotRef {
+		t.Fatalf("evaluation between publications must pick the older snapshot: ref=%v err=%v", between.Manifest.SnapshotRef, err)
+	}
+	latest, err := store.GetLatestLimitPoolFactsSnapshotAtOrBefore(
+		ctx, "600036.SH", "2026-11-27", "risk_review", systemAsOf.Add(3*time.Hour),
+	)
+	if err != nil || latest.Manifest.SnapshotRef != secondSnapshot.Manifest.SnapshotRef {
+		t.Fatalf("evaluation after both publications must pick the newest: ref=%v err=%v", latest.Manifest.SnapshotRef, err)
 	}
 
 	// 跨数据类隔离：同一张共享表按 payload_kind 分流，order_book 读取不得看到 limit_pool。

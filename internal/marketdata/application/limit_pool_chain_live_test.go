@@ -157,7 +157,17 @@ func TestLiveLimitPoolFactsProductionChain(t *testing.T) {
 		t.Fatalf("reuse returned %s, want %s", reused.SnapshotRef, refs.SnapshotRef)
 	}
 
-	// 4) 跨数据类隔离：同一 ref 不能通过盘口读取入口拿到。
+	// 4) as-of 复用：更晚的评估时点（模拟 Run 在采集之后才创建）必须复用同一快照。
+	//    这正是「先采集、后评估」的生产顺序，也是 A 方案要解决的问题。
+	laterRun, err := creator.Create(principalCtx, liveChainSymbol, tradeDate, systemAsOf.Add(time.Hour), liveChainPurpose)
+	if err != nil {
+		t.Fatalf("as-of reuse for a later evaluation instant failed: %v", err)
+	}
+	if laterRun.SnapshotRef != refs.SnapshotRef {
+		t.Fatalf("later evaluation instant got %s, want the earlier snapshot %s", laterRun.SnapshotRef, refs.SnapshotRef)
+	}
+
+	// 5) 跨数据类隔离：同一 ref 不能通过盘口读取入口拿到。
 	if _, err := store.GetOrderBookFactsSnapshot(ctx, refs.SnapshotRef); err == nil {
 		t.Fatal("limit-pool snapshot must not be readable as an order-book snapshot")
 	}

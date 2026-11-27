@@ -115,7 +115,7 @@ func (store *quantTradingFactsStore) GetLimitPoolFactsSnapshot(
 	return snapshot, nil
 }
 
-func (store *quantTradingFactsStore) GetLimitPoolFactsSnapshotForSystemAsOf(
+func (store *quantTradingFactsStore) GetLatestLimitPoolFactsSnapshotAtOrBefore(
 	_ context.Context, symbol, tradeDate, purpose string, systemAsOf time.Time,
 ) (marketdataapp.LimitPoolFactsSnapshot, error) {
 	wantAsOf := systemAsOf.UTC().Format(time.RFC3339Nano)

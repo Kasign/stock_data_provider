@@ -111,9 +111,6 @@ func (evidence TradabilityEvidence) Validate() error {
 	if evidence.TradingFacts.TradeDate != evidence.LimitPoolFacts.TradeDate {
 		return fmt.Errorf("%w: limit-pool trade_date does not match trading-status facts", ErrInvalidLimitPoolFactsSnapshot)
 	}
-	if evidence.TradingFacts.SystemAsOf != evidence.LimitPoolFacts.SystemAsOf {
-		return fmt.Errorf("%w: limit-pool system_as_of does not match trading-status facts", ErrInvalidLimitPoolFactsSnapshot)
-	}
 	return nil
 }
 

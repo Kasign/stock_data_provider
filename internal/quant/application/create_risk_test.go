@@ -332,3 +332,36 @@ func mustRiskTime(t *testing.T, value string) time.Time {
 	}
 	return parsed.UTC()
 }
+
+// TestExecuteAcceptsLimitPoolPublishedBeforeTheEvaluationInstant 覆盖 as-of 语义：
+// 涨跌停池按交易日固化，允许复用更早发布的快照（例如 16:00 的池用于 23:00 的评估）。
+// 之前要求 system_as_of 完全相等，会让「先采集、后评估」这一合法顺序无法成立。
+func TestExecuteAcceptsLimitPoolPublishedBeforeTheEvaluationInstant(t *testing.T) {
+	snapshot := validTradingFactsSnapshot()
+	orderBook := validOrderBookFactsSnapshot()
+	pool := validLimitPoolFactsSnapshot()
+	pool.SystemAsOf = "2026-11-25T08:00:00Z" // 比评估时点（15:00Z）早 7 小时
+	service, _, _, _ := newCreateRiskTestServiceWithLimitPool(t, snapshot, orderBook, pool)
+
+	request := riskTestRequest(snapshot, orderBook, pool, mustRiskTime(t, snapshot.SystemAsOf), riskTestParameters(snapshot))
+	if _, err := service.Execute(context.Background(), request); err != nil {
+		t.Fatalf("an older but trade-date-bound limit-pool snapshot must be usable: %v", err)
+	}
+}
+
+// TestExecuteRejectsLimitPoolPublishedAfterTheEvaluationInstant 锁定 as-of 的上界方向：
+// 发布晚于评估时点的快照在 PIT 上还没有发生，绝不能使用。
+func TestExecuteRejectsLimitPoolPublishedAfterTheEvaluationInstant(t *testing.T) {
+	snapshot := validTradingFactsSnapshot()
+	orderBook := validOrderBookFactsSnapshot()
+	pool := validLimitPoolFactsSnapshot()
+	pool.SystemAsOf = "2026-11-25T16:00:00Z" // 晚于评估时点 15:00:00Z
+	service, _, _, _ := newCreateRiskTestServiceWithLimitPool(t, snapshot, orderBook, pool)
+
+	request := riskTestRequest(snapshot, orderBook, pool, mustRiskTime(t, snapshot.SystemAsOf), riskTestParameters(snapshot))
+	if _, err := service.Execute(context.Background(), request); err == nil {
+		t.Fatal("a limit-pool snapshot published after the evaluation instant must be rejected")
+	} else if !errors.Is(err, ErrInvalidRiskSnapshot) {
+		t.Fatalf("error = %v, want ErrInvalidRiskSnapshot", err)
+	}
+}

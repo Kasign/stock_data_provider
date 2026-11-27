@@ -293,9 +293,12 @@ func validateRiskLimitPoolBinding(
 	if limitPool.TradeDate != parameters.TradeDate || limitPool.TradeDate != trading.TradeDate {
 		return fmt.Errorf("%w: limit-pool trade_date differs from the request", ErrInvalidRiskSnapshot)
 	}
-	if limitPool.SystemAsOf != request.SystemAsOf.Format(time.RFC3339Nano) ||
-		limitPool.SystemAsOf != trading.SystemAsOf {
-		return fmt.Errorf("%w: limit-pool system_as_of differs from the evaluation instant", ErrInvalidRiskSnapshot)
+	// as-of 语义：涨跌停池按交易日收盘后固化，允许复用更早发布的快照，但绝不能使用
+	// 发布晚于评估时点的快照——那在 PIT 上还没有发生。交易日身份已由上面的
+	// trade_date 精确约束，因此「更早」不会跨交易日取到过期事实。
+	limitPoolAsOf, parseErr := time.Parse(time.RFC3339Nano, limitPool.SystemAsOf)
+	if parseErr != nil || limitPoolAsOf.After(request.SystemAsOf.UTC()) {
+		return fmt.Errorf("%w: limit-pool Snapshot was published after the evaluation instant", ErrInvalidRiskSnapshot)
 	}
 	return nil
 }

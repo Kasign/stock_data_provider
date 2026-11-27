@@ -80,13 +80,17 @@ func (c *LimitPoolFactsSnapshotCreator) Create(
 		return LimitPoolFactsSnapshotReferences{}, ErrDataAuthorizationDenied
 	}
 
-	existing, err := c.repository.GetLimitPoolFactsSnapshotForSystemAsOf(ctx, symbol, tradeDate, purpose, systemAsOf)
+	existing, err := c.repository.GetLatestLimitPoolFactsSnapshotAtOrBefore(ctx, symbol, tradeDate, purpose, systemAsOf)
 	switch {
 	case err == nil:
 		if existing.Manifest.Symbol != symbol || existing.Manifest.TradeDate != tradeDate ||
-			existing.Manifest.PurposeCode != purpose ||
-			existing.Manifest.SystemAsOf != systemAsOf.Format(time.RFC3339Nano) {
+			existing.Manifest.PurposeCode != purpose {
 			return LimitPoolFactsSnapshotReferences{}, errors.New("reused limit-pool facts snapshot binding does not match the request")
+		}
+		// as-of 复用只允许更早发布的快照：发布晚于评估时点的快照在 PIT 上还没发生。
+		reusedAsOf, parseErr := time.Parse(time.RFC3339Nano, existing.Manifest.SystemAsOf)
+		if parseErr != nil || reusedAsOf.After(systemAsOf) {
+			return LimitPoolFactsSnapshotReferences{}, errors.New("reused limit-pool facts snapshot was published after the requested system_as_of")
 		}
 		authorizationRef, issueErr := c.owner.IssueFor(
 			ctx, existing.Manifest.SnapshotRef, purpose, authorization.LimitPoolFactsPolicyRef,

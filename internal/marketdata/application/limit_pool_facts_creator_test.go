@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -30,6 +31,8 @@ func (s limitPoolReaderStub) FetchFullLimitPool(_ context.Context, poolType, _ s
 type limitPoolSnapshotRepositoryStub struct {
 	saved   app.LimitPoolFactsSnapshot
 	hasSave bool
+	// reuse 非空时模拟仓储返回一条可复用快照，用于验证 Creator 的 as-of 上界守卫。
+	reuse *app.LimitPoolFactsSnapshot
 }
 
 func (s *limitPoolSnapshotRepositoryStub) SaveLimitPoolFactsSnapshot(_ context.Context, snapshot app.LimitPoolFactsSnapshot) error {
@@ -44,9 +47,12 @@ func (s *limitPoolSnapshotRepositoryStub) GetLimitPoolFactsSnapshot(_ context.Co
 	return s.saved, nil
 }
 
-func (s *limitPoolSnapshotRepositoryStub) GetLimitPoolFactsSnapshotForSystemAsOf(
+func (s *limitPoolSnapshotRepositoryStub) GetLatestLimitPoolFactsSnapshotAtOrBefore(
 	_ context.Context, _ string, _ string, _ string, _ time.Time,
 ) (app.LimitPoolFactsSnapshot, error) {
+	if s.reuse != nil {
+		return *s.reuse, nil
+	}
 	return app.LimitPoolFactsSnapshot{}, snapshotport.ErrLimitPoolFactsSnapshotNotFound
 }
 
@@ -107,4 +113,32 @@ func TestNewAuthorizedLimitPoolFactsSnapshotReaderRequiresRepository(t *testing.
 	if _, err := NewAuthorizedLimitPoolFactsSnapshotReader(nil); err == nil {
 		t.Fatal("nil repository must be rejected")
 	}
+}
+
+// TestLimitPoolFactsSnapshotCreatorRejectsReusePublishedAfterRequest 守住 as-of 上界：
+// 即使仓储返回了一条「发布晚于评估时点」的快照（端口实现有缺陷时也可能发生），
+// Creator 也必须拒绝，不能让未来事实进入评估。
+func TestLimitPoolFactsSnapshotCreatorRejectsReusePublishedAfterRequest(t *testing.T) {
+	up, down := limitPoolApplicationPools()
+	systemAsOf := time.Date(2026, 11, 27, 8, 0, 0, 0, time.UTC) // 16:00 Asia/Shanghai
+	owner, _, _ := newOrderBookTestOwner(t, systemAsOf, authorization.LimitPoolFactsPolicyRef)
+	reused := app.LimitPoolFactsSnapshot{Manifest: app.LimitPoolFactsManifest{
+		SnapshotRef: "data_snapshot:sha256:" + repeatHexLocal(64, 'a'),
+		Symbol:      "600036.SH", TradeDate: "2026-11-27", PurposeCode: "risk_review",
+		SystemAsOf: systemAsOf.Add(time.Hour).Format(time.RFC3339Nano),
+	}}
+	creator, err := NewLimitPoolFactsSnapshotCreator(
+		limitPoolReaderStub{up: up, down: down},
+		&limitPoolSnapshotRepositoryStub{reuse: &reused}, owner,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := creator.Create(orderBookPrincipalContext(t), "600036.SH", "2026-11-27", systemAsOf, "risk_review"); err == nil {
+		t.Fatal("a reused snapshot published after the requested system_as_of must be rejected")
+	}
+}
+
+func repeatHexLocal(count int, value byte) string {
+	return strings.Repeat(string(value), count)
 }
