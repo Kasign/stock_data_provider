@@ -51,7 +51,8 @@ News-owned 的授权预检、Diagnostics Check 工厂和 Cleaner 一次性执行
 - 2026-11-27 G3 已把采集结果接到 Qualify：响应原始字节 SHA-256、内部响应快照定位符、七键绑定与启动字段路径进入资格调用，cninfo 原始值只产出 `disclosure_boundary` 未可信候选；这不等于 Evidence/Decision 已落库，也不证明原始响应已持久化。
 - 2026-11-27 G4 已把 Qualify 候选按同事务 Observation/Version 绑定与三方当前策略写入 `AvailabilityEvidence`，并以确定性 Evidence ID 和写前语义比较保证重放幂等；这只完成 `parsed` 候选证据落库，不证明字段语义已审核，也不代表原始响应已持久化。
 - 2026-11-27 G5 已把 G4 的 `parsed` Evidence 接到 source-bound `ReviewAvailabilityDecision`，注入精确绑定解析与唯一资格规则版本；这只是生产代码链，审核结果仍完全由资格规则决定，`parsed` 不会被自动升格为 `verified`，也未取得真实 Feed Run 的 Decision 证据。
-- 未完成真实 Feed Run + B 组 MariaDB 门禁前，不生成可声称的生产非空 `available_at`，不把 B 组测试夹具/stub 当作生产证据，不把 `parsed` 当 `verified`，不为消除 SKIP 放宽断言。B 组真库门禁仍是 NEWS-BLK-07/RSC-002 的解除前置。
+- 2026-11-27 B 组 MariaDB 门禁已通过（提交 `235eedcce8cba50b32e0e2e2412f23d624339a46`，13/13 CI success；News MariaDB Job 显式确认新增生产链用例 PASS）：G1-G5 代码链能从真实采集结果产出 verified Decision 并被严格 PIT 读出披露日保守边界；期间发现并修复了 `DATETIME(6)` 微秒列与真实纳秒时间的存储比对缺陷。
+- B 组通过的边界是代码链与真库语义，不代表生产来源准入或真实 Feed Run 已完成。生产 `available_at` 的非空结果仍须以项目负责人执行的真实运行证据为准；不把测试专用资格/响应快照/stub 当作生产证据，不把 `parsed` 当 `verified`。
 
 ## 4. 执行原则
 

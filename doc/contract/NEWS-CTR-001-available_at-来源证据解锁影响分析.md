@@ -1262,3 +1262,10 @@ G5 把 G4 写入的 `parsed` Evidence 接到既有 `ReviewAvailabilityDecision`�
 - **组合根门禁**：`newsAvailabilityReviewRuleVersion` 从资格目录解析唯一审核规则版本；多版本、空值或非法值一律 fail-closed，不用硬编码版本替代真实资格声明。
 - **Stage 编排**：recorder 成功后才调用 reviewer，失败标记 `availability_decision_review_failed` 并跳过该 source 的内存候选。同时修复一处被本组测试暴露的既有契约冲突：availability 后处理（record/review）失败时 source 已标 `failed` 却仍携带 ingest 阶段的 NewsIDs/IngestedCount，违反冻结 payload schema；现在统一回退该 source 的 ingest 投影，重试幂等仍由 idempotency prefix 保证。
 - **状态边界**：G5 打通 Qualify→Record→Review 的生产代码链，但不等于真实运行验收完成。仍缺真实 Feed Run + B 组 MariaDB 门禁证据；不因代码链完成就声称生产 `available_at` 已非空，也不把测试夹具或 stub 当作生产证据。NEWS-BLK-07/RSC-002 保持 SHELVED 直至 B 组门禁通过。
+
+## 1.24 B 组真库门禁结果（2026-11-27）
+
+- `TestNewsAvailabilityProductionChainMariaDBIntegration` 在真实 MariaDB 上以生产 use case 串通 Collect → Qualify → Ingest → Record → Review，断言 `verified` Decision、绑定 `disclosure_boundary` 的 `parsed` Evidence 与严格 PIT 读出的 `2026-10-31T15:59:59Z` 一致。
+- 门禁首次失败暴露真实缺陷：News Storage 以 `time.Time.Equal` 精确比较 `DATETIME(6)` 微秒列读回值与真实 Feed 链的纳秒时间，导致 Evidence 在插入前被误判身份不匹配；已按微秒归一化修复并补单元测试/变异验证。
+- 修复提交 `235eedcce8cba50b32e0e2e2412f23d624339a46` 的 13 个 check run 全部 success，News MariaDB Job 显式 grep 新增用例 `--- PASS`，确认未被 SKIP。
+- 边界：测试资格与响应快照为测试专用，证明的是 G1-G5 代码链与持久化/PIT 语义，不构成生产来源准入声明；生产 `available_at` 非空结果仍以项目负责人真实 Feed Run 验收为准。
