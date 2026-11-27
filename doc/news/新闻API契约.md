@@ -114,7 +114,7 @@ News 为 News 来源内容签发 AuthorizationRef。公开或无限制内容也�
 - `app.ResearchEvidenceQuery` 同进程只读 Port。
 - `doc/news/schema/NEWS-CTR-001-*.schema.json` 与 `doc/news/golden/NEWS-CTR-001-*.golden.json`。
 
-DTO、请求边界校验、Schema/Golden、HMAC Cursor Codec、PIT Repository、单条 Evidence 查询、授权快照当前复核、固定 Snapshot、分页查询及 `EvidenceQueryFacade` 均已有实现。Server 已将该同进程 Query Port 装配给 Research Adapter；这不构成独立对外 HTTP API。严格 PIT 仍受合格 `available_at` 来源证据约束，当前来源没有合格字段，相关记录的 `available_at` 为 null 并被严格 PIT 排除。因此应区分“Query 机制实现”和“NEWS-CTR-001 全量生产验收”：前者已有代码，后者仍受来源证据与生产验收条件限制。
+DTO、请求边界校验、Schema/Golden、HMAC Cursor Codec、PIT Repository、单条 Evidence 查询、授权快照当前复核、固定 Snapshot、分页查询及 `EvidenceQueryFacade` 均已有实现。Server 已将该同进程 Query Port 装配给 Research Adapter；这不构成独立对外 HTTP API。NEWS-CTR-001 1.0.0 保持冻结；2.0.0 已发布 Research Evidence Page Schema/Golden，规定 `available_at` 非 null 时必须是 UTC 整秒，其他 1.0.0 Schema/Golden 不变。严格 PIT 仍受合格 `available_at` 来源证据约束，当前来源没有合格字段，相关记录的 `available_at` 为 null 并被严格 PIT 排除。因此应区分“Query 机制实现/2.0.0 机器契约发布”和“NEWS-CTR-001 全量生产验收”：前者已有代码与 Schema，后者仍受来源证据、B 组严格门禁与生产验收条件限制。
 
 
 ### 4.6 Cursor HMAC Claims

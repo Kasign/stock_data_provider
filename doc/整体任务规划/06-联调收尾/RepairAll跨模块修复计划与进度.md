@@ -1657,3 +1657,11 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - **字段结论**：SSE `ADDDATE` 为秒级但无官方字段语义；SZSE `publishTime` 和 CNINFO `announcementTime` 实际为日级；东方财富时间字段属于第三方聚合链路；上证信息正式 API 仅产品级提到“发布时间”，字段级技术文档另发且未公开。全部不能映射为 `available_at`。
 - **授权结论**：上证信息/深证信正式 API 均需申请、审批、凭据和付费/试用授权；公开网页浏览不构成自动化采集、持久化和跨模块使用许可。助手不能合法自行生成凭据或绕过授权。
 - **状态边界**：T5 保持 `blocked_external_source`，不是“未尝试”；T4 可继续完成来源无关的 2.0.0 Schema/Golden 与严格 fail-closed 门禁，但 B 组成功路径在 T5 完成前不得解除。
+
+## 2026-11-27 四项根因根治 R3-T4a：NEWS-CTR-001 2.0.0 Schema/Golden
+
+- **基线与边界**：T1/T2/T3 已完成；本组只发布来源无关的 2.0.0 Page Schema/Golden 与秒级精度约束，1.0.0 的 4 个 Schema / 3 个 Golden 字节不变。不注册真实来源、不生成非空 `available_at`、不解除 Research B 组成功路径。
+- **机器契约**：新增 `doc/news/schema/NEWS-CTR-001-research-evidence-page-2.0.0.schema.json`，`available_at` 从通用 `nullableDateTime` 收紧为独立 `nullableSecondDateTime`：非 null 必须是 UTC `YYYY-MM-DDTHH:MM:SSZ`，null 表示当前版本没有通过来源准入与审核的证据；其他时间字段保持原精度定义。
+- **Golden 与测试**：新增 `doc/news/golden/NEWS-CTR-001-research-evidence-page-2.0.0.golden.json`。契约测试先因文件缺失失败，实现后 2.0.0 Golden 同时通过 JSON Schema 与 Go DTO 解析，且非空 `available_at.Nanosecond()==0`；带小数秒的时间被 Schema 拒绝。
+- **变异验证**：把 2.0.0 `available_at` 正则放宽为允许小数秒后，`TestNewsEvidenceQueryContractV2RejectsFractionalAvailableAt` 有效失败；恢复后复验通过。
+- **登记状态**：`契约版本与变更记录.md` 推进至 `0.2.67-frozen`，PLAT-002 NEWS-CTR-001 行登记 1.0.0 冻结不变与 2.0.0 Schema/Golden；NEWS-CTR-001 状态仍 `frozen`。T4b B 组严格门禁与 T5 真实来源仍待完成。
