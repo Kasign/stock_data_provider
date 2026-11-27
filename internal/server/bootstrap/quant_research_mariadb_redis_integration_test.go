@@ -234,10 +234,16 @@ func TestQuantResearchMariaDBRedisL3(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create quant.research Run: %v", err)
 	}
-	// R2 盘口事实与 Run 的 system_as_of 精确绑定；Risk Stage 将复用该快照，
-	// 不再依赖运行时刻是否处于 Eastmoney 五档盘口开放时段。
-	seedQuantResearchL3OrderBook(t, ctx, l3DataStore, l3SeedRiskTradeDate, created.Run.SystemAsOf)
-	// 涨跌停走 A 方案：Worker 执行前预采集，快照时点严格早于 Run.SystemAsOf，
+	// 盘口与涨跌停都走 A 方案：Worker 执行前预采集，快照时点严格早于 Run.SystemAsOf，
+	// Risk Stage 在评估时点按 as-of 复用，并由读取侧自行签发授权。
+	precollectedOrderBookRef, precollectedOrderBookAsOf := seedQuantResearchL3OrderBook(
+		t, ctx, l3DataStore, l3SeedRiskTradeDate, created.Run.SystemAsOf,
+	)
+	if !precollectedOrderBookAsOf.Before(created.Run.SystemAsOf) {
+		t.Fatalf("precollected order-book as-of %s must precede Run system_as_of %s",
+			precollectedOrderBookAsOf, created.Run.SystemAsOf)
+	}
+	// 涨跌停同样走 A 方案：Worker 执行前预采集，快照时点严格早于 Run.SystemAsOf，
 	// Risk Stage 在评估时点按 as-of 复用，并由读取侧自行签发授权。
 	precollectedLimitPoolRef, precollectedLimitPoolAsOf := seedQuantResearchL3LimitPool(
 		t, ctx, l3DataStore, l3SeedSymbol, l3SeedRiskTradeDate, created.Run.SystemAsOf,
@@ -383,6 +389,10 @@ func TestQuantResearchMariaDBRedisL3(t *testing.T) {
 		riskPayload.InputRefs[0] == riskPayload.InputRefs[4] ||
 		riskPayload.InputRefs[2] == riskPayload.InputRefs[4] {
 		t.Fatalf("risk input_refs=%v, want three distinct snapshot references", riskPayload.InputRefs)
+	}
+	if riskPayload.InputRefs[2] != precollectedOrderBookRef {
+		t.Fatalf("risk order-book snapshot ref=%s, want precollected ref %s",
+			riskPayload.InputRefs[2], precollectedOrderBookRef)
 	}
 	if riskPayload.InputRefs[4] != precollectedLimitPoolRef {
 		t.Fatalf("risk limit-pool snapshot ref=%s, want precollected ref %s",

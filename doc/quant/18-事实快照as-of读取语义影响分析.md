@@ -104,15 +104,16 @@ go run ./cmd/limit-pool-collect -symbol 600519.SH -trade-date 2026-11-27
 - 真实部署的证券池需由运维配置 `SERVER_LIMIT_POOL_COLLECT_SYMBOLS`；未配置时不会猜测标的。
 - 盘口预采集没有收盘后批量 Worker：盘口是日内事实，应由调用方贴近 Run 评估时点触发，并由 Quant 的 15 分钟/收盘边界拒绝陈旧事实。
 
-## 8. L3「预采集 → Run 复用」验收（2026-11-27）
+## 8. L3「预采集 → Run 复用」验收（2026-11-27，2026-11-28 扩充盘口）
 
-`TestQuantResearchMariaDBRedisL3` 不再把涨跌停种子写成与 `Run.SystemAsOf` 完全相同的时点：
+`TestQuantResearchMariaDBRedisL3` 不再把涨跌停与盘口种子写成与 `Run.SystemAsOf` 完全相同的时点：
 
 1. `seedQuantResearchL3LimitPool` 走生产 `LimitPoolFactsSnapshotCollector.Persist`，用确定性全量池来源在 `Run.SystemAsOf - 2m` 落快照；
-2. 测试用例断言该快照的系统时点严格早于 Run 评估时点，且 `quant.risk` 的 `input_refs[4]` 正是这个预采集 `SnapshotRef`；
-3. 授权仍由 Risk Stage 在复用快照时签发，采集侧没有预先授权。
+2. `seedQuantResearchL3OrderBook` 走生产 `OrderBookFactsSnapshotCollector.Persist`，用确定性五档来源在 `Run.SystemAsOf - 2m` 落快照；
+3. 测试用例断言两类快照的系统时点都严格早于 Run 评估时点，且 `quant.risk` 的 `input_refs[2]` / `input_refs[4]` 分别是对应预采集 `SnapshotRef`；
+4. 授权仍由 Risk Stage 在复用快照时签发，采集侧没有预先授权。
 
-变异验证：把预采集时点改回 `Run.SystemAsOf`（旧的精确相等路径），L3 立即失败于 `precollected limit-pool as-of ... must precede Run system_as_of ...`；恢复后真库用例 PASS。
+变异验证：把涨跌停预采集时点改回 `Run.SystemAsOf`（旧的精确相等路径），L3 立即失败于 `precollected limit-pool as-of ... must precede Run system_as_of ...`；把盘口预采集时点改回 `Run.SystemAsOf`，L3 立即失败于 `precollected order-book as-of ... must precede Run system_as_of ...`；恢复后真库用例 PASS。
 
 ## 9. 交易状态与盘口 as-of/新鲜度（DEC-PLAT-002-077）
 
@@ -131,3 +132,4 @@ go run ./cmd/limit-pool-collect -symbol 600519.SH -trade-date 2026-11-27
 - **入口**：`cmd/order-book-collect` + `make order-book-collect ARGS="-symbol 600519.SH"`；复用 `config.LoadForCollector()`，不需要 Redis 或 Owner 级凭据。
 - **权限边界**：真实 Eastmoney + MariaDB 连续两次运行返回同一 `SnapshotRef`（`data_snapshot:sha256:10706cc0...`），该快照 `authorization_decisions=0`；授权仍由 Risk Stage 读取时签发。
 - **变异**：关闭 PIT 上界检查后 `TestOrderBookFactsSnapshotCollectorRejectsObservationLaterThanAsOf` 有效失败；把默认观测时点改成 `time.Now()` 后 `...PersistsWithoutAuthorization` 有效失败；恢复后两用例通过。
+- **L3 复用**：`seedQuantResearchL3OrderBook` 已改为走生产 Collector，在 `Run.SystemAsOf - 2m` 预采集；L3 真库断言 `input_refs[2]` 等于该预采集快照。时点改回精确相等后真库用例失败，恢复后 PASS。

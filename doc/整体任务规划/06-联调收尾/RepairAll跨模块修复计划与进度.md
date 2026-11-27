@@ -1950,3 +1950,10 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - **入口**：`cmd/order-book-collect` + `make order-book-collect ARGS="-symbol 600519.SH"`；复用 `config.LoadForCollector()`，不需要 Redis 或 Owner 级凭据。未增加盘口批量 Worker：盘口是日内事实，应由调用方贴近评估时点触发。
 - **真实链路**：本地 Eastmoney + MariaDB 连续两次运行返回同一 `SnapshotRef=data_snapshot:sha256:10706cc0...`，`system_as_of=2026-11-25T07:00:02Z`、`tradable_volume_shares=3600`、5 档齐全；该快照授权决策数为 0。
 - **变异**：关闭 PIT 上界检查、把默认观测时点改成 `time.Now()` 分别使两个新增用例有效失败；恢复后全仓 `go test ./... -count=1`、`go vet ./...`、`git diff --check` 通过。CI 按新 SHA 回填。
+
+## 2026-11-28 L3 验证盘口预采集复用
+
+- **范围**：把 `seedQuantResearchL3OrderBook` 从测试夹具直写快照改为生产 `OrderBookFactsSnapshotCollector.Persist`，关闭盘口与涨跌停之间的验收路径不对称。
+- **验收**：盘口在 `Run.SystemAsOf - 2m` 预采集，L3 真库断言该时点严格早于 Run，且 `quant.risk` 的 `input_refs[2]` 正是预采集 `SnapshotRef`；授权仍由 Risk Stage 复用时签发。
+- **变异**：把盘口预采集时点改回 `Run.SystemAsOf` 后，真库用例立即失败于 `precollected order-book as-of ... must precede Run system_as_of ...`；恢复后 L3 真库 PASS（7.43s）。
+- **验证**：全仓 `go test ./... -count=1`、`go vet ./...`、`git diff --check` 通过。CI 按新 SHA 回填。

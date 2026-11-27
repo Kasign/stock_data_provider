@@ -278,19 +278,37 @@ func seedQuantResearchL3StatusFacts(t *testing.T, ctx context.Context, store *re
 	}
 }
 
-// seedQuantResearchL3OrderBook 写入与 Run 精确绑定的盘口事实快照。
-// Risk Stage 在相同 symbol/purpose/system_as_of 上复用该已授权事实，
-// 从而不依赖运行时刻是否处于交易所盘口开放时段；事实结构与校验仍走生产链路。
+// l3OrderBookReader 是 L3 隔离库的确定性五档盘口来源。
+// 它只提供带真实来源时间的盘口，不复制任何授权或快照构建逻辑。
+type l3OrderBookReader struct {
+	book model.OrderBook
+}
+
+func (r l3OrderBookReader) FetchOrderBook(_ context.Context, symbol string) (*model.OrderBook, error) {
+	if symbol != l3SeedSymbol {
+		return nil, fmt.Errorf("unexpected order-book symbol %q", symbol)
+	}
+	book := r.book
+	return &book, nil
+}
+
+// seedQuantResearchL3OrderBook 在 Run 创建后、Worker 执行前预采集盘口事实。
+// 预采集时点严格早于 Run.SystemAsOf：Risk Stage 只能通过 as-of 复用命中该快照，
+// 并在读取时自行签发授权，从而验证盘口也走「预采集 → Run 复用」而非测试夹具直写。
 func seedQuantResearchL3OrderBook(
-	t *testing.T, ctx context.Context, store *repository.Store, tradeDate string, systemAsOf time.Time,
-) {
+	t *testing.T, ctx context.Context, store *repository.Store, tradeDate string, runSystemAsOf time.Time,
+) (string, time.Time) {
 	t.Helper()
+	precollectedAsOf := runSystemAsOf.UTC().Add(-2 * time.Minute)
 	tradeDay, err := time.ParseInLocation("2006-01-02", tradeDate, markettime.Location())
 	if err != nil {
 		t.Fatalf("parse L3 order-book trade date: %v", err)
 	}
 	observed := time.Date(tradeDay.Year(), tradeDay.Month(), tradeDay.Day(), 15, 1, 0, 0, markettime.Location()).UTC()
-	book := &model.OrderBook{
+	if observed.Add(time.Second).After(precollectedAsOf) {
+		t.Fatalf("L3 order-book observation %s is later than precollected_as_of %s", observed, precollectedAsOf)
+	}
+	book := model.OrderBook{
 		Symbol: l3SeedSymbol,
 		Bids: []model.OrderBookLevel{
 			{Price: 38.10, Volume: 1200}, {Price: 38.09, Volume: 3500},
@@ -307,21 +325,35 @@ func seedQuantResearchL3OrderBook(
 		Source:           l3SeedSource,
 		QualityStatus:    model.QualityValid,
 	}
-	payload, err := app.BuildOrderBookFactsPayload(*book)
+	collectorCtx, err := security.WithPrincipal(ctx, security.Principal{
+		Kind:       security.IdentityService,
+		AuthMethod: security.AuthMethodServiceBearer,
+		Subject:    "quant",
+		Scopes:     []string{security.ScopeDataRead},
+	})
 	if err != nil {
-		t.Fatalf("build L3 order-book facts payload: %v", err)
+		t.Fatalf("create L3 order-book collector principal: %v", err)
 	}
-	version := l3SeedSourceVer + "-orderbook"
-	sources := []app.DailyBarsCloseSeriesSource{{SourceRef: l3SeedSource, SourceVersion: &version}}
-	snapshot, err := app.BuildOrderBookFactsSnapshot(
-		payload, sources, "principal:service:quant", "risk_review", systemAsOf.UTC(),
-	)
+	collector, err := application.NewOrderBookFactsSnapshotCollector(l3OrderBookReader{book: book}, store)
 	if err != nil {
-		t.Fatalf("build L3 order-book facts snapshot: %v", err)
+		t.Fatalf("create L3 order-book collector: %v", err)
 	}
-	if err := store.SaveOrderBookFactsSnapshot(ctx, snapshot); err != nil {
-		t.Fatalf("seed L3 order-book facts snapshot: %v", err)
+	snapshotRef, err := collector.Persist(collectorCtx, l3SeedSymbol, precollectedAsOf, "risk_review")
+	if err != nil {
+		t.Fatalf("precollect L3 order-book facts: %v", err)
 	}
+	snapshot, err := store.GetOrderBookFactsSnapshot(ctx, snapshotRef)
+	if err != nil {
+		t.Fatalf("read precollected L3 order-book facts: %v", err)
+	}
+	manifestAsOf, err := time.Parse(time.RFC3339Nano, snapshot.Manifest.SystemAsOf)
+	if err != nil {
+		t.Fatalf("parse precollected L3 order-book system_as_of: %v", err)
+	}
+	if !manifestAsOf.Equal(precollectedAsOf) {
+		t.Fatalf("precollected order-book system_as_of=%s, want %s", manifestAsOf, precollectedAsOf)
+	}
+	return snapshotRef, manifestAsOf
 }
 
 // l3LimitPoolReader 是 L3 隔离库的确定性全量池来源。两池均为零事件但 HasData=true，
