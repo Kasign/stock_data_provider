@@ -1744,4 +1744,5 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - **决策**：项目负责人授权按最优方案决定三个语义选择；形成 DEC-PLAT-002-069～072。Claim ref 唯一来源是 Research Evidence/Claim Repository；Limitations 唯一来源是 Research/Quant/Risk 权威投影；空 Limitations 只有 Context 显式 `no_known_limitation` 时允许；Evidence 必须精确等于 Context included sections 的 EvidenceRef 集合；LLM 只提供非权威解释。
 - **实现**：`ComposeResult` 拒绝无 `ClaimRef` Evidence、未链接/多版本 Claim、Context 外 Evidence、自由文本 Limitations、无权威决定的空 Limitations，以及不完整的 LLM 响应身份。`run-result` 1.0.0 Schema/Golden 与 Run 1.1.0 保持不变。
 - **TDD 与变异**：新增权威规则负向用例；变异移除 Claim 校验、Limitations 精确投影校验与 LLM 身份校验分别使对应用例有效失败，恢复后全绿。本地 `go test ./... -count=1`、`go vet ./...`、`git diff --check` 通过。
-- **状态边界**：本组只固定运行时事实语义，不生成 Context/Claims/Limitations，不新增 projector；完整报告成功路径仍缺 R3 `available_at` 真实来源、真实 Provider 与生产给料，CI 待按精确 SHA 回填。
+- **状态边界**：本组只固定运行时事实语义，不生成 Context/Claims/Limitations，不新增 projector；完整报告成功路径仍缺 R3 `available_at` 真实来源、真实 Provider 与生产给料。
+- **CI 状态（回填）**：提交 `7d59f9cd64d3a4ce1c3459f22080d45280e2f753` 的 13 个 check run 全部 `completed/success`：required-checks `45956980591`、Go test suite workflow run `45956980560`、Full integration checks `45956980586`。

@@ -96,7 +96,7 @@
 - **前置核查（2026-11-27）**：生产配置目录最初没有 LLM Provider/Gateway 加载器，`llmtransport.New` 只在测试调用；`ComposeResult`/`RunResultFromComposed` 也只在测试使用。R4-R5-T1/T2 已补齐 LLM 配置受控加载与 Research Context/Claims 授权读取准备，但 Research Context/Claims/Limitations 仍无生产给料，LLM ModelResponse 无真实 Provider。
 - **权威规则（DEC-069～072）**：Claim ref 只能从 Research Evidence/Claim Repository 发现并严格闭环；Limitations 只能由 Research/Quant/Risk 权威来源投影，空集合必须有 `no_known_limitation`；Evidence 集合必须等于 Context included sections 的 EvidenceRef 集合；LLM 响应身份必须完整且解释固定为 `non_authoritative`。`run-result` 1.0.0 Schema/Golden 字节不变，规则由运行时 fail-closed 校验承担。
 - **解除条件**：RunResult 原子持久化、ResultRef 授权读取、Contract Test 和运行时权威规则已完成；剩余条件是真实 Gateway 版本/模型 ID/CapabilityState 与证据、受控 DestinationPolicy、Research Context/Claims/Limitations 的权威生产给料、projector 生产注入，以及 R3 来源语义闭环。
-- **当前状态**：`IN_PROGRESS`（来源无关链路与权威规则已完成并通过本地全仓验证，CI 待按精确 SHA 回填）；生产成功路径保持 `BLOCKED`，阻断 FLOW-006 生产闭环。不注入占位 projector，不伪造 Provider/响应/证据或空壳报告。
+- **当前状态**：`IN_PROGRESS`（来源无关链路与权威规则已完成；提交 `7d59f9cd64d3a4ce1c3459f22080d45280e2f753` 的 13 项 CI 全 success）；生产成功路径保持 `BLOCKED`，阻断 FLOW-006 生产闭环。不注入占位 projector，不伪造 Provider/响应/证据或空壳报告。
 
 ### RF-BLOCK-008：Composer RiskDecision 与 Quant RiskDecision 契约不一致
 
