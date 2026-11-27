@@ -1648,4 +1648,4 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - **审核绑定扩展**：Review Use Case 支持可选 `AvailabilityEvidenceBindingResolver`；`SourceBoundAvailabilityReviewRule` 必须拿到 Evidence→Observation 的精确来源策略绑定，绑定不一致一律 `ineligible`，资格撤销输出 `revoked`，`parsed` 单独仍保持不可信。
 - **仓储与目录**：`MySQLRepository.ResolveAvailabilityEvidenceSourceBinding` 通过三方身份一致连接读取绑定；`StaticAvailabilityQualificationCatalog` 为不可变快照，按绑定选择最新 `effective_at`，构造期拒绝重复 ref、非法精度和歧义生效时间。
 - **TDD 与变异**：新增测试先因 API 未定义构建失败；变异“忽略来源绑定不一致”使 `TestSourceQualifiedAvailabilityReviewRuleRequiresExactSourceBinding` 有效失败并恢复。`go test ./internal/news/...`（无 DSN）、`go vet ./internal/news/...`、`go test ./... -count=1`、`git diff --check` PASS；决策链与来源绑定真库用例 PASS。本地 MariaDB 11.8.9 的既有并发 URL 去重 `Error 1020` 已在未修改基线复现，不归因本组。
-- **CI 状态**：本组提交 SHA 待生成，按精确 SHA 回填前记 `not_run`。T4 契约版本与 B 组门禁、T5 真实来源仍待推进。
+- **CI 状态（回填）**：代码提交 `57dc96804ba2086802e7eedb4f4892b0dfed8d2c` 的 13 个检查全部 `completed/success`：Integration CI `45940754064`、required-checks `45940754025`、Go test suite `45940754043`（News MariaDB、Root Go module 等全部 Job）。T4 契约版本与 B 组严格门禁、T5 真实来源仍待推进；T4 的最终 CI 通过依赖 T5。
