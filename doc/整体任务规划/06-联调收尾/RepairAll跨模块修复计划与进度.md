@@ -1701,5 +1701,14 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - **领域与事务**：`domain.Run` 增加内部 `ResultRef` 身份；`loadRun` 回读，CreateRun/CAS 继续禁止非 Finalization 写入。`FinalizeRun` 在同一 Read Committed 事务中写 ResultSummary、可选 RunResult、Outbox 与 Run 终态；RunResult 必须同时具备引用、Schema 版本和合法 JSON，payload 的 `run_ref`/`schema_version` 必须与 finalizing Run 一致。deadline/cancellation 适配器拒绝携带 RunResult。
 - **Finalizer 门禁**：新增来源无关 `RunResultProjector` 窄端口；仅 normal finalization 的报告型终态可请求投影，投影为空时不生成报告，投影无效时 fail-closed。RunRef 使用 snapshot 可信身份，不接收调用方输入；生产组合根当前注入 `nil`，尚未启用完整报告成功路径。
 - **TDD 与变异**：先新增引用新字段/端口的测试，因 API 未定义构建失败；随后迁移、存储校验、Finalizer 投影用例全通过。变异一移除 Finalizer payload 的 RunRef 绑定校验，`TestRunFinalizerRejectsUnboundRunResultProjection` 有效失败；变异二放宽存储 Schema 版本/一致性校验，`TestFinalizeRunRejectsUnboundRunResultPayloadBeforeTransaction/wrong_schema` 有效失败；均恢复后复验通过。
-- **本地验收**：`go test ./internal/researchflow/... ./internal/server/bootstrap -count=1`、`go vet` 与 `git diff --check` 通过。完整 CI 待代码提交后按精确 SHA 回填。
+- **本地验收**：`go test ./internal/researchflow/... ./internal/server/bootstrap -count=1`、`go vet` 与 `git diff --check` 通过。
+- **CI 状态（回填）**：代码提交 `a1a523f623182ec03b60cb091898233cca333e5e` 的 13 个 check run 全部 `completed/success`：required-checks `45949562230`、Go test suite workflow run `45949562234`（含 Researchflow module/tests/race/vet、WorkerStore、MariaDB lifecycle）、Integration CI `45949562208`（Full integration checks）。R4-R3 验收完成。
 - **状态边界**：本组只完成可审计的物理持久化与原子写入门禁；不新增 HTTP、不生成生产完整报告、不把 nil projector 当成功报告。生产成功路径仍依赖 R3 真实来源语义、LLM Provider 注入与后续 ResultRef 读取门禁。
+
+## 2026-11-27 四项根因根治 R4-R4：ResultRef 授权读取门禁
+
+- **读取链路**：新增 `application.GetRunResultService` 与 `RunResultReader` 窄端口；先做 Run 资源级身份/授权，再要求 Run 为报告型终态且 `result_ref` 非空；随后读取 RunResult 并校验 ResultRef、RunRef、Schema 版本与 payload 身份全一致。Storage 新增按 RunRef 读取 `researchflow_run_results` 的实现，同样拒绝未绑定 payload。
+- **不冒充语义**：读取路径只返回 Researchflow-owned RunResult 记录；Quant `result_ref` 与 SRV-CTR-001 `authorized_domain_results` 不进入该链路，非报告终态或无 ResultRef 一律 `ErrRunResultNotFound`，不用空壳报告补位。
+- **TDD 与变异**：先新增因 API 未定义构建失败的读取用例；实现后授权、跨 Run、Schema 漂移、payload 未绑定、终态缺引用均按预期拒绝。变异“允许终态 Run 无 `result_ref`”使 `TestGetRunResultRejectsRunWithoutPersistedResultRef` 有效失败并恢复。
+- **真库证据**：新增 DSN 门控的 `TestMariaDBFinalizeRunAtomicallyPersistsRunResultAndReadsItBack`，验证同一事务落库后 `GetRunResult` 与 `GetRun.ResultRef` 回读一致；本地无 DSN 时 SKIP，执行结论以 CI 为准。
+- **状态边界**：本组不新增 HTTP 成功路径、不注入真实 projector、不接入 LLM Provider；完整报告生产可用性仍依赖 R3 真实来源语义与生产 Provider。CI 待代码提交后按精确 SHA 回填。

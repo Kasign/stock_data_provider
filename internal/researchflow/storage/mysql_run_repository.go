@@ -18,6 +18,7 @@ import (
 	mariadbtime "example.com/stock-analysis-flow/internal/platform/time/mariadb"
 	"example.com/stock-analysis-flow/internal/researchflow/application"
 	"example.com/stock-analysis-flow/internal/researchflow/domain"
+	"example.com/stock-analysis-flow/internal/researchflow/resultvalidation"
 	"example.com/stock-analysis-flow/internal/researchflow/state"
 	"example.com/stock-analysis-flow/internal/researchflow/template"
 )
@@ -414,6 +415,36 @@ func (r *MySQLRunRepository) GetRun(ctx context.Context, runRef string) (applica
 		return application.CreateRunResult{}, err
 	}
 	return r.loadRun(ctx, runRef)
+}
+
+// GetRunResult loads the Researchflow-owned complete report by Run identity.
+// It never falls back to a domain result reference or an empty-shell report.
+func (r *MySQLRunRepository) GetRunResult(ctx context.Context, runRef string) (application.RunResultReadRecord, error) {
+	if err := r.validateRunRef(runRef); err != nil {
+		return application.RunResultReadRecord{}, err
+	}
+	var record application.RunResultReadRecord
+	var payload string
+	if err := r.db.QueryRowContext(ctx, `SELECT result_ref, run_ref, schema_version, payload
+		FROM researchflow_run_results WHERE run_ref = ?`, runRef,
+	).Scan(&record.ResultRef, &record.RunRef, &record.SchemaVersion, &payload); err != nil {
+		return application.RunResultReadRecord{}, fmt.Errorf("load Researchflow RunResult for run %q: %w", runRef, err)
+	}
+	record.Payload = json.RawMessage(payload)
+	if strings.TrimSpace(record.ResultRef) == "" || record.RunRef != runRef ||
+		record.SchemaVersion != resultvalidation.RunResultPayloadSchemaVersion ||
+		len(record.Payload) == 0 || !json.Valid(record.Payload) {
+		return application.RunResultReadRecord{}, errors.New("Researchflow RunResult reader returned an invalid identity")
+	}
+	var identity struct {
+		SchemaVersion string `json:"schema_version"`
+		RunRef        string `json:"run_ref"`
+	}
+	if err := json.Unmarshal(record.Payload, &identity); err != nil ||
+		identity.SchemaVersion != record.SchemaVersion || identity.RunRef != runRef {
+		return application.RunResultReadRecord{}, errors.New("Researchflow RunResult payload is not bound to its Run")
+	}
+	return record, nil
 }
 
 // GetStage loads one stage by immutable stage reference.

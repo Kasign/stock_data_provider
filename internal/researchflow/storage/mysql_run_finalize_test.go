@@ -255,6 +255,105 @@ func TestMariaDBFinalizeRunAtomicallyPersistsSummaryAndOutbox(t *testing.T) {
 	}
 }
 
+func TestMariaDBFinalizeRunAtomicallyPersistsRunResultAndReadsItBack(t *testing.T) {
+	if os.Getenv("PLATFORM_STORAGE_INTEGRATION") != "1" {
+		t.Skip("set PLATFORM_STORAGE_INTEGRATION=1 to run Researchflow MariaDB integration tests")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+	defer cancel()
+	dsn := fmt.Sprintf("%s:%s@tcp(%s)/%s?parseTime=true",
+		os.Getenv("PLATFORM_MARIADB_USER"), os.Getenv("PLATFORM_MARIADB_PASSWORD"),
+		os.Getenv("PLATFORM_MARIADB_ADDR"), os.Getenv("PLATFORM_MARIADB_DATABASE"))
+	config, err := mysql.ParseDSN(dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	connector, err := mysql.NewConnector(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := platformstorage.OpenSQL(ctx, connector, platformstorage.DefaultSQLConfig())
+	if err != nil {
+		t.Fatalf("open MariaDB: %v", err)
+	}
+	defer db.Close()
+	if err := platformstorage.ApplyMigrations(ctx, db, MigrationNamespace, Migrations()); err != nil {
+		t.Fatalf("apply Researchflow migrations: %v", err)
+	}
+	repository, err := NewMySQLRunRepository(db, CapacityLimits{MaxQueuedRuns: 1000, MaxWorkers: 64})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
+	now := time.Now().UTC()
+	runRef := "finalize-result-run-" + suffix
+	stageRef := "finalize-result-stage-" + suffix
+	fingerprint := "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+	templateFingerprint := "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+	record := application.CreateRunRecord{
+		Scope:       application.IdempotencyScope{CallerRef: "researchflow-result-test", Operation: "CreateRun", Key: "result-" + suffix},
+		Fingerprint: fingerprint,
+		Run: domain.Run{
+			Ref: runRef, SchemaVersion: "run-v1", Status: domain.RunCreated, Version: 1,
+			SystemAsOf: now.Add(-time.Minute), DeadlineAt: now.Add(5 * time.Minute),
+			TemplateRef: "result-template", TemplateVersion: "v1", TemplateFingerprint: templateFingerprint,
+			InputSnapshotRefs: []string{}, CorrelationID: "result-correlation-" + suffix,
+		},
+		Stages: []domain.Stage{{
+			Ref: stageRef, RunRef: runRef, Code: "context", Status: domain.StagePending,
+			Version: 1, Required: true, Dependencies: []string{}, RetryPolicyRef: "retry-v1",
+			DiagnosticRefs: []string{}, ReasonCodes: []string{},
+		}},
+		ResolvedTemplate: template.ResolvedTemplate{
+			Ref: "result-template", Version: "v1", Fingerprint: templateFingerprint,
+			Stages: []template.ResolvedStage{{Definition: template.StageDefinition{Code: "context"}}},
+		},
+		Parameters: json.RawMessage(`{}`),
+	}
+	if _, err := repository.CreateRunAtomic(ctx, record); err != nil {
+		t.Fatalf("CreateRunAtomic: %v", err)
+	}
+	stamp := formatResearchflowTimeValue(now)
+	if _, err := db.ExecContext(ctx, `UPDATE researchflow_runs SET status = ?, version = version + 1, started_at = ? WHERE run_ref = ?`,
+		string(domain.RunRunning), stamp, runRef); err != nil {
+		t.Fatalf("start fixture Run: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, `UPDATE researchflow_stages SET status = ?, version = version + 1, started_at = ?, finished_at = ? WHERE stage_ref = ?`,
+		string(domain.StageSucceeded), stamp, stamp, stageRef); err != nil {
+		t.Fatalf("finish fixture Stage: %v", err)
+	}
+
+	payload := json.RawMessage(`{"schema_version":"1.0.0","run_ref":"` + runRef + `"}`)
+	input := completeFinalizationForTest()
+	input.RunRef = runRef
+	input.ResultSummaryRef = "result-summary-" + suffix
+	input.OutboxRef = "result-outbox-" + suffix
+	input.ResultRef = "result-result-" + suffix
+	input.ResultSchemaVersion = "1.0.0"
+	input.ResultPayload = payload
+	input.Summary.StageOutcomes = map[string]domain.StageStatus{"context": domain.StageSucceeded}
+	if updated, err := repository.FinalizeRun(ctx, input); err != nil || !updated {
+		t.Fatalf("FinalizeRun updated=%v err=%v", updated, err)
+	}
+
+	stored, err := repository.GetRunResult(ctx, runRef)
+	if err != nil {
+		t.Fatalf("GetRunResult: %v", err)
+	}
+	if stored.ResultRef != input.ResultRef || stored.RunRef != runRef ||
+		stored.SchemaVersion != input.ResultSchemaVersion || string(stored.Payload) != string(payload) {
+		t.Fatalf("stored RunResult = %+v, want ref=%s run=%s", stored, input.ResultRef, runRef)
+	}
+	aggregate, err := repository.GetRun(ctx, runRef)
+	if err != nil {
+		t.Fatalf("GetRun: %v", err)
+	}
+	if aggregate.Run.ResultRef == nil || *aggregate.Run.ResultRef != input.ResultRef {
+		t.Fatalf("finalized Run result_ref = %v, want %s", aggregate.Run.ResultRef, input.ResultRef)
+	}
+}
+
 func TestFinalizeRunRejectsIncompleteSummaryBeforeTransaction(t *testing.T) {
 	repository := &MySQLRunRepository{db: &sql.DB{}}
 	_, err := repository.FinalizeRun(context.Background(), RunFinalization{
