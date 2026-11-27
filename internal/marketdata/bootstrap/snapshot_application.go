@@ -141,6 +141,23 @@ func (m *Module) CreateLimitPoolFactsSnapshot(
 	return creator.Create(ctx, symbol, tradeDate, systemAsOf, purpose)
 }
 
+// PersistLimitPoolFactsSnapshot 产出并持久化涨跌停事实快照，但**不签发授权**。
+//
+// 这是采集任务/工具在 Run 之前预置事实的入口：授权仍由读取方在需要时签发，
+// 因此采集侧不需要 Owner 级凭据。systemAsOf 为零值时以实际观测时刻为快照时点。
+func (m *Module) PersistLimitPoolFactsSnapshot(
+	ctx context.Context, symbol, tradeDate string, systemAsOf time.Time, purpose string,
+) (string, error) {
+	if m == nil || m.store == nil || m.limitPool == nil {
+		return "", errors.New("Market Data limit-pool facts Snapshot persistence is unavailable")
+	}
+	collector, err := application.NewLimitPoolFactsSnapshotCollector(m.limitPool, m.store)
+	if err != nil {
+		return "", err
+	}
+	return collector.Persist(ctx, symbol, tradeDate, systemAsOf, purpose)
+}
+
 // ReadAuthorizedLimitPoolFactsSnapshot 使用涨跌停数据类策略做授权复核。
 func (m *Module) ReadAuthorizedLimitPoolFactsSnapshot(
 	ctx context.Context, snapshotRef, authorizationRef, purpose string,

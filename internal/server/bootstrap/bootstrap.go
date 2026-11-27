@@ -250,6 +250,21 @@ func Run(ctx context.Context) (runErr error) {
 			return fmt.Errorf("注册 News 保留期清理 Worker 生命周期失败: %w", err)
 		}
 	}
+	if serverRole != serverconfig.RoleAPI {
+		collectionConfig, collectionConfigErr := loadLimitPoolCollectionConfig()
+		if collectionConfigErr != nil {
+			return fmt.Errorf("解析涨跌停事实采集配置失败: %w", collectionConfigErr)
+		}
+		if collectionConfig.Enabled && marketDataModule != nil {
+			collector, collectorErr := newLimitPoolCollectionComponent(marketDataModule, collectionConfig, slog.Default())
+			if collectorErr != nil {
+				return fmt.Errorf("创建涨跌停事实采集 Worker 失败: %w", collectorErr)
+			}
+			if err := lifecycle.Register(collector); err != nil {
+				return fmt.Errorf("注册涨跌停事实采集 Worker 生命周期失败: %w", err)
+			}
+		}
+	}
 	if err := lifecycle.Register(legacyAnalysisWorker{name: "legacy-analysis-worker", queue: tasks, enabled: serverRole == serverconfig.RoleWorker || serverRole == serverconfig.RoleAll}); err != nil {
 		return fmt.Errorf("注册旧 Analysis Worker 生命周期失败: %w", err)
 	}
