@@ -341,8 +341,10 @@ func newResearchflowComposition(
 		quantResultReader = &researchflowQuantResultReader{getResult: getQuantResult}
 	}
 	if newsFeedStage != nil {
-		if err := publishNewsFeedSourcePolicies(ctx, newsFeedStage.sourcePolicies, newsRepository); err != nil {
-			return nil, fmt.Errorf("publish News Feed Source Policy snapshots: %w", err)
+		if err := publishNewsFeedPolicies(
+			ctx, newsFeedStage.sourcePolicies, newsFeedStage.providerPolicies, newsRepository,
+		); err != nil {
+			return nil, fmt.Errorf("publish News Feed policy snapshots: %w", err)
 		}
 	}
 

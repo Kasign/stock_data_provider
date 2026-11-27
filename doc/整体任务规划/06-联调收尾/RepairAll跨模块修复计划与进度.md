@@ -1794,3 +1794,14 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - **验证**：`go test ./... -count=1`、`go vet ./internal/news/... ./internal/server/bootstrap/...`、`gofmt -l`、`git diff --check` 全通过；现有 RSS 路径测试未受影响。
 - **状态边界**：G2 只提供采集能力，不代表生产闭环完成。仍缺 G1 真实 Source/Endpoint/Provider 策略注册（生成与 1.19.3 一致的绑定键）、资格目录条目、Qualify→Record→Review 编排（G3-G5）与 B 组真库门禁；NEWS-BLK-07/RSC-002 保持 SHELVED，生产 `available_at` 继续为 null。CI 状态：本地全绿，待提交后按 SHA 回填。
 - **CI 状态（回填）**：提交 `d48fac54b11f96ec7f199eebfacaadbdaf09d764` 的 15 个 check run 全部 `completed/success`（required-checks、Full integration checks、各模块 unit/race/vet 与 MariaDB lifecycle integration、Compose/WebUI、Market-data PIT、Probe real public provider responses 均 success）。
+
+## 2026-11-27 第③项 G1：真实 Source/Endpoint/Provider 策略注册与资格目录
+
+- **范围**：把 1.19.3 的七个内部绑定键从“拟定值”变成启动配置、运行目录和数据库当前策略指针中的一致快照；只做注册与资格目录，不创建 Evidence/Decision，不生成生产 `available_at`。
+- **Source/Endpoint 注册**：`NEWS_FEED_SOURCES_JSON` 配置 cninfo 真实公开端点与 1.19.1 实测 POST 参数；新增 `endpoint_policy` / `endpoint_policy_version_id` / `expected_current_endpoint_policy_version_id`，并把 Endpoint 策略贯穿到 `SourceEndpointRegistration`。Source/Endpoint 策略同时授权字段路径 `announcements.announcementTime`，且 Endpoint 不得扩展 Source 权限。
+- **Provider 策略注册**：新增 `NEWS_PROVIDER_OUTPUT_POLICIES_JSON`；`ProviderOutputPolicyRegistration` 经过严格 JSON、不可变版本与权限路径校验。`IngestCollectedSourceWithProviderPolicies` 解析注册中的 Provider 绑定，写入 Observation 的 Provider 身份与策略版本，并在同一事务内执行 Provider ∩ Source ∩ Endpoint 当前策略复核；无 Provider 绑定的 RSS/Licensed 行为不变。
+- **资格目录**：新增 `NEWS_AVAILABILITY_QUALIFICATIONS_JSON`；`availability-qualification-cninfo-disclosure-v1` 携带 1.19.3 的字段路径、解析器/审核规则版本、`+08:00`、`[disclosure_boundary]`、DEC-073 边界语义、1.19.1 样本 SHA 与 `2026-11-27T00:00:00Z` 生效。资格记录只保存哈希；`seDate` 窗口变化必须新采样并 supersede。
+- **发布与防漂移**：`publishNewsFeedPolicies` 以 expected-current CAS 发布 Source、Endpoint、Provider 三类策略；配置加载与 Server 组合根双重检查资格↔注册↔Provider 的七键与字段路径授权，缺任一即 fail-closed。
+- **TDD 与变异**：新增 config 5 项、app 2 项、catalog 2 项、bootstrap 3 项，共 12 项针对性测试。五处变异均有效失败并恢复：注册未传递 Provider 绑定、Endpoint 策略未发布、Observation 未落 Provider 绑定、资格交叉校验被移除、目录 Provider 绑定校验被移除。
+- **验证**：`go test ./... -count=1`、`go vet ./...`、`gofmt -l`、`git diff --check` 全通过；`.env.example` 已给出三组真实 cninfo 配置与窗口绑定说明。
+- **状态边界**：G1 不等于生产闭环完成。仍缺 G3-G5 Qualify→Record→Review 编排、B 组真库门禁；NEWS-BLK-07/RSC-002 保持 SHELVED，生产 `available_at` 继续为 null。CI 状态：待提交后按 SHA 回填。

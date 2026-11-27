@@ -1216,3 +1216,13 @@ Integration CI Run 43810902921（#85）对提交 `ea79dc5503f36280af2b944d3557fd
 - **G3-G5 落库编排缺失**：`QualifyAvailabilityEvidence` → `RecordAvailabilityEvidence` → `ReviewAvailabilityDecision` 三段生产未串联，审核规则未注入绑定解析器（`availability_decision_review.go:245-267` fail-closed）。
 
 **下一步（按依赖顺序）**：先落地 G2 的 `official_api` JSON 采集路径与 G1 的真实 Source/Endpoint/Provider 策略注册（生成与 1.19.3 一致的绑定键），再以本节确认值建立资格目录条目并串通 G3-G5，最后以 B 组真库门禁验收生产 `available_at`。在此之前 NEWS-BLK-07 与 RSC-002 保持 SHELVED，生产 `available_at` 继续为 null。
+
+## 1.20 G1 真实策略注册与资格目录落地（2026-11-27）
+
+G2 已落地 `official_api` JSON 采集路径；本组补齐 G1，使 1.19.3 的七个内部绑定键在启动配置、运行目录和当前策略指针中都有唯一对应，不留下“有资格、无来源”的断裂绑定。
+
+- **真实 Source/Endpoint 注册**：`NEWS_FEED_SOURCES_JSON` 提供 cninfo 条目，逐字使用 `cninfo` / `cninfo-his-announcement` / `cninfo-source-policy-v1` / `cninfo-endpoint-policy-v1`；固定 POST 参数为 1.19.1 实测值，URL allowlist 仅 `http://www.cninfo.com.cn:80`。Source/Endpoint 策略同时授权 `official_api`、`internal_personal_research`、`abstract/metadata`、`transient/persistent_excerpt/persistent_metadata` 与字段路径 `announcements.announcementTime`。
+- **Provider 输出策略注册**：新增 `NEWS_PROVIDER_OUTPUT_POLICIES_JSON`，键为 `cninfo` / `cninfo-provider-output-policy` / `cninfo-provider-output-policy-v1`。Direct-source ingestion 现在从注册读取 Provider 绑定，解析可信目录后写入 Observation 的 Provider 身份与策略版本，并在同一事务内锁定 Provider ∩ Source ∩ Endpoint 当前策略；无 Provider 绑定的 RSS/Licensed 路径行为不变。
+- **资格目录**：新增 `NEWS_AVAILABILITY_QUALIFICATIONS_JSON`，使用 `availability-qualification-cninfo-disclosure-v1`、`announcements.announcementTime`、`+08:00`、`[disclosure_boundary]`、`DEC-PLAT-002-073:disclosure-date-end-of-day-v1`、1.19.1 完整响应 SHA `ecd135102d…` 与 `2026-11-27T00:00:00Z` 生效。资格记录只保存哈希，不保存原始响应。
+- **绑定闭环校验**：配置加载阶段拒绝资格记录找不到精确 Source/Endpoint/Provider 绑定或字段路径未获三方授权；Server 组合根再次校验注册、Provider 目录与资格目录，并在数据库中的 Source/Endpoint/Provider 三个当前策略指针全部发布后才允许 Run 执行。`seDate` 窗口与样本哈希绑定，窗口变化必须重新采样并用新资格记录 supersede。
+- **状态边界**：本组只完成策略注册、当前策略发布与资格目录；没有创建 Evidence/Decision，没有把 `parsed` 升级为 `verified`，没有生成生产 `available_at`。G3-G5 的 Qualify→Record→Review 编排、B 组真库门禁仍未完成；NEWS-BLK-07/RSC-002 保持 SHELVED，生产 `available_at` 继续为 null。

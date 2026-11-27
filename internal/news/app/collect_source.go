@@ -44,8 +44,14 @@ type SourceEndpointRegistration struct {
 	SourcePolicyVersionID   string
 	EndpointPolicy          *domain.EndpointPolicy
 	EndpointPolicyVersionID string
-	URLPolicy               domain.SourceURLPolicy
-	MaxResponseBytes        int64
+	// ProviderCode/ProviderOutputPolicyRef/ProviderOutputPolicyVersionID 是
+	// official_api 直接来源自身的输出策略绑定。三者必须同时存在或同时为空；
+	// 为空时沿用既有直接来源语义，不写入 Provider 授权痕迹。
+	ProviderCode                  string
+	ProviderOutputPolicyRef       string
+	ProviderOutputPolicyVersionID string
+	URLPolicy                     domain.SourceURLPolicy
+	MaxResponseBytes              int64
 	// RequestParams 是 official_api 启动时锁定的固定 POST 表单参数。
 	// 运行时调用方不可注入或覆盖；为 nil/空时 official_api 采集 fail-closed。
 	// RSS/LicensedFeed 路径不使用该字段。

@@ -81,6 +81,15 @@ func validateSourceRegistration(registration app.SourceEndpointRegistration) err
 	} else if registration.EndpointPolicyVersionID != "" {
 		return ErrInvalidSourceCatalog
 	}
+	if registration.ProviderCode != "" {
+		if !validCatalogID(registration.ProviderCode) ||
+			!validCatalogID(registration.ProviderOutputPolicyRef) ||
+			!validCatalogID(registration.ProviderOutputPolicyVersionID) {
+			return ErrInvalidSourceCatalog
+		}
+	} else if registration.ProviderOutputPolicyRef != "" || registration.ProviderOutputPolicyVersionID != "" {
+		return ErrInvalidSourceCatalog
+	}
 	if registration.MaxResponseBytes < 0 || registration.MaxResponseBytes > 16<<20 {
 		return ErrInvalidSourceCatalog
 	}

@@ -47,7 +47,8 @@ News-owned 的授权预检、Diagnostics Check 工厂和 Cleaner 一次性执行
 - 来源无关部分按 T2～T4 推进：T2 `003e4463f`、T3 `57dc96804`、T4a `a0d766a4` 与 T4b `1fab00e4d`/`b22b023c` 均已完成且对应 13 项 CI 全 success；T4b 已移除 B 组 `t.Skip`，用显式测试夹具验证真实 Facade → Importer → Research 落库成功链路。
 - 生产来源仍为独立阻塞：仓库内没有官方首次公开可获取字段语义证明、可审计原始响应与逐版本绑定证据；任何候选字段（`announcementTime`、`DOC_PUBTIME`、SSE `ADDDATE`、交易所流程时间等）在审核通过前均为 `not verified`。
 - 2026-11-27 已按项目负责人要求自行联网自采：SSE `ADDDATE` 秒级样本、SZSE `publishTime` 日级样本、CNINFO `announcementTime` 日级样本、东方财富聚合时间样本，以及上证信息公告数据服务说明书与深圳证券信息授权声明均已取得；详见影响分析第 1.17 节。个人项目口径下不再把“无外部合同/凭据”列为阻塞，但仍无法从公开材料证明字段语义，T5 转为 `blocked_source_semantics`。
-- 未完成生产来源语义准入前，不生成生产非空 `available_at`，不把 B 组测试夹具当作生产证据，不把 `parsed` 当 `verified`，不为消除 SKIP 放宽断言。
+- 2026-11-27 G1 已完成真实 Source/Endpoint/Provider 策略注册与披露日资格目录：cninfo 七个绑定键、固定 POST 参数、样本 SHA、策略发布和资格目录均有配置与启动校验；这不等于生产来源语义审核通过。
+- 未完成生产来源语义准入前，不生成生产非空 `available_at`，不把 B 组测试夹具当作生产证据，不把 `parsed` 当 `verified`，不为消除 SKIP 放宽断言。G3-G5 编排与 B 组真库门禁仍是 NEWS-BLK-07/RSC-002 的解除前置。
 
 ## 4. 执行原则
 

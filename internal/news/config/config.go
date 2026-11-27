@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"example.com/stock-analysis-flow/internal/news/app"
 	platformconfig "example.com/stock-analysis-flow/internal/platform/config"
 )
 
@@ -49,13 +50,15 @@ func (c ProviderConfig) Configured() bool {
 // Config is a startup snapshot of News provider settings.
 // Fields are private to prevent accidental mutation after loading.
 type Config struct {
-	bocha                     ProviderConfig
-	tavily                    ProviderConfig
-	brave                     ProviderConfig
-	searxng                   ProviderConfig
-	evidenceCursorActiveKeyID string
-	evidenceCursorKeys        map[string]platformconfig.Secret
-	feedSources               []FeedSource
+	bocha                      ProviderConfig
+	tavily                     ProviderConfig
+	brave                      ProviderConfig
+	searxng                    ProviderConfig
+	evidenceCursorActiveKeyID  string
+	evidenceCursorKeys         map[string]platformconfig.Secret
+	feedSources                []FeedSource
+	providerOutputPolicies     []ProviderOutputPolicyRegistration
+	availabilityQualifications []app.AvailabilitySourceQualification
 }
 
 func (c Config) Bocha() ProviderConfig {
@@ -120,12 +123,28 @@ func Load(env platformconfig.Env) (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	providerPolicies, err := loadProviderOutputPolicies(env)
+	if err != nil {
+		return Config{}, err
+	}
+	qualifications, err := loadAvailabilityQualifications(env)
+	if err != nil {
+		return Config{}, err
+	}
+	if err := validateProviderPolicyBindings(feedSources, providerPolicies); err != nil {
+		return Config{}, err
+	}
+	if err := validateQualificationBindings(feedSources, providerPolicies, qualifications); err != nil {
+		return Config{}, err
+	}
 
 	return Config{
 		bocha: bocha, tavily: tavily, brave: brave, searxng: searxng,
-		evidenceCursorActiveKeyID: activeCursorKeyID,
-		evidenceCursorKeys:        cursorKeys,
-		feedSources:               feedSources,
+		evidenceCursorActiveKeyID:  activeCursorKeyID,
+		evidenceCursorKeys:         cursorKeys,
+		feedSources:                feedSources,
+		providerOutputPolicies:     providerPolicies,
+		availabilityQualifications: qualifications,
 	}, nil
 }
 

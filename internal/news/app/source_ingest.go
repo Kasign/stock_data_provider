@@ -39,9 +39,10 @@ type IngestCollectedSourceRequest struct {
 // IngestCollectedSource 在每条 Observation 写事务内锁定并复核当前 Source/Endpoint 策略，
 // 再评估元数据持久化权限，避免授权预检与持久化之间发生撤销竞态。
 type IngestCollectedSource struct {
-	ingest  *candidateIngest
-	sources SourceCatalog
-	now     func() time.Time
+	ingest    *candidateIngest
+	sources   SourceCatalog
+	providers ProviderOutputPolicyResolver
+	now       func() time.Time
 }
 
 // NewIngestCollectedSource 是可由 Server 组合根调用的公开构造器。底层候选写入器
@@ -51,11 +52,23 @@ func NewIngestCollectedSource(
 	newID func() string,
 	sources SourceCatalog,
 ) (*IngestCollectedSource, error) {
+	return NewIngestCollectedSourceWithProviderPolicies(repository, newID, sources, nil)
+}
+
+// NewIngestCollectedSourceWithProviderPolicies 为 direct source 注册增加自身
+// 输出策略绑定。provider resolver 为空时，任何带 Provider 绑定的登记都会
+// fail-closed；无 Provider 绑定的 RSS/Licensed 登记保持既有行为。
+func NewIngestCollectedSourceWithProviderPolicies(
+	repository IdentityRepository,
+	newID func() string,
+	sources SourceCatalog,
+	providers ProviderOutputPolicyResolver,
+) (*IngestCollectedSource, error) {
 	if repository == nil || newID == nil || sources == nil {
 		return nil, ErrSourcePersistencePolicyUnavailable
 	}
 	return &IngestCollectedSource{
-		ingest: newCandidateIngest(repository, newID), sources: sources, now: time.Now,
+		ingest: newCandidateIngest(repository, newID), sources: sources, providers: providers, now: time.Now,
 	}, nil
 }
 
@@ -90,6 +103,25 @@ func (u *IngestCollectedSource) Execute(ctx context.Context, request IngestColle
 		return nil, ErrSourcePersistencePolicyUnavailable
 	}
 
+	providerCode := strings.TrimSpace(registration.ProviderCode)
+	providerRef := strings.TrimSpace(registration.ProviderOutputPolicyRef)
+	providerVersion := strings.TrimSpace(registration.ProviderOutputPolicyVersionID)
+	if providerCode == "" {
+		if providerRef != "" || providerVersion != "" {
+			return nil, ErrProviderOutputPolicyUnavailable
+		}
+	} else {
+		if providerRef == "" || providerVersion == "" || u.providers == nil {
+			return nil, ErrProviderOutputPolicyUnavailable
+		}
+		binding, err := u.providers.ResolveProviderOutputPolicy(ctx, providerCode)
+		if err != nil || strings.TrimSpace(binding.ProviderCode) != providerCode ||
+			strings.TrimSpace(binding.PolicyRef) != providerRef ||
+			strings.TrimSpace(binding.PolicyVersion) != providerVersion {
+			return nil, ErrProviderOutputPolicyUnavailable
+		}
+	}
+
 	now := u.now().UTC()
 	if result.PolicyEvaluatedAt.After(now) {
 		return nil, ErrSourcePersistencePolicyUnavailable
@@ -111,10 +143,19 @@ func (u *IngestCollectedSource) Execute(ctx context.Context, request IngestColle
 		trace.EndpointID = endpointID
 		trace.EndpointPolicyVersionID = result.EndpointPolicyVersionID
 	}
+	trace.ProviderOutputPolicyRef = providerRef
+	trace.ProviderOutputPolicyVersionID = providerVersion
 
-	// 先完整预检批次，避免前几条已写入后才发现后续条目混入 Provider 候选。
+	// 先完整预检批次，避免前几条已写入后才发现后续条目混入其他 Provider 候选。
 	for _, entry := range result.Entries {
-		if strings.TrimSpace(entry.Candidate.ProviderCode) != "" {
+		entryProviderCode := strings.TrimSpace(entry.Candidate.ProviderCode)
+		if providerCode == "" {
+			if entryProviderCode != "" {
+				return nil, ErrProviderOutputPolicyRequired
+			}
+			continue
+		}
+		if entryProviderCode != "" && entryProviderCode != providerCode {
 			return nil, ErrProviderOutputPolicyRequired
 		}
 	}
@@ -124,13 +165,18 @@ func (u *IngestCollectedSource) Execute(ctx context.Context, request IngestColle
 		if !ok {
 			return ErrSourcePersistencePolicyUnavailable
 		}
-		sourcePolicy, endpointPolicy, _, policyErr := policyTx.LockCurrentIngestPolicies(
-			ctx, sourceID, result.SourcePolicyVersionID, endpointID, result.EndpointPolicyVersionID, "", "",
+		sourcePolicy, endpointPolicy, providerPolicy, policyErr := policyTx.LockCurrentIngestPolicies(
+			ctx, sourceID, result.SourcePolicyVersionID, endpointID, result.EndpointPolicyVersionID, providerRef, providerVersion,
 		)
 		if policyErr != nil {
 			return errors.Join(ErrSourcePersistencePolicyUnavailable, policyErr)
 		}
-		decision := domain.EvaluateSourceCollectionPolicy(sourcePolicy, endpointPolicy, policyRequest, u.now().UTC())
+		if (providerCode == "") != (providerPolicy == nil) {
+			return errors.Join(ErrProviderOutputPolicyUnavailable, ErrSourcePersistencePolicyUnavailable)
+		}
+		decision := domain.EvaluateCandidateCollectionPolicy(
+			providerPolicy, sourcePolicy, endpointPolicy, policyRequest, u.now().UTC(),
+		)
 		if !decision.Allowed {
 			return errors.Join(ErrSourcePersistencePolicyDenied, errors.New(decision.ReasonCode))
 		}
@@ -153,6 +199,7 @@ func (u *IngestCollectedSource) Execute(ctx context.Context, request IngestColle
 			return nil, err
 		}
 		candidate := entry.Candidate
+		candidate.ProviderCode = providerCode
 		// Observation 只保存候选元数据；来源摘要按授权层级保存，未识别正文不升级为全文。
 		candidate.ProviderSummary = ""
 		content := domain.RestrictContentLayers(entry.Content, policyRequest.ContentKind)
