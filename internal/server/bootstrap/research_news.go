@@ -16,6 +16,8 @@ import (
 	researchstorage "example.com/stock-analysis-flow/internal/research/storage"
 )
 
+const researchflowCallerRef = "service:researchflow"
+
 // researchNewsComposition 保存 News → Research 的真实模块内依赖。
 // 它只在游标 Key Ring 已配置时创建；未配置时不生成默认密钥，也不开放分页查询。
 type researchNewsComposition struct {
@@ -23,6 +25,9 @@ type researchNewsComposition struct {
 	research   *researchapplication.Service
 	importer   *researchnews.Importer
 	authorizer *researchnews.Authorizer
+	contexts   researchapplication.ContextRepository
+	evidence   researchapplication.EvidenceRepository
+	claims     researchapplication.ClaimRepository
 }
 
 // newResearchNewsComposition 在 Server 组合边界装配 News PIT 查询、当前授权复核、
@@ -80,11 +85,20 @@ func newResearchNewsComposition(db *sql.DB, cfg newsconfig.Config) (*researchNew
 	if err != nil {
 		return nil, fmt.Errorf("创建 Research Evidence Repository 失败: %w", err)
 	}
+	claims, err := researchstorage.NewClaimRepository(db, nil)
+	if err != nil {
+		return nil, fmt.Errorf("创建 Research Claim Repository 失败: %w", err)
+	}
 	authorizer, err := researchnews.NewAuthorizer(query)
 	if err != nil {
 		return nil, fmt.Errorf("创建 Research News Authorizer 失败: %w", err)
 	}
-	researchService, err := researchapplication.NewService(contexts, evidence, authorizer, nil, nil)
+	contextAuthorizer := &researchflowContextAuthorizer{
+		callerRef: researchflowCallerRef, evidence: evidence, evidenceAuthorizer: authorizer,
+	}
+	researchService, err := researchapplication.NewServiceWithClaims(
+		contexts, evidence, claims, authorizer, nil, nil, contextAuthorizer,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("创建 Research Application Service 失败: %w", err)
 	}
@@ -94,6 +108,7 @@ func newResearchNewsComposition(db *sql.DB, cfg newsconfig.Config) (*researchNew
 	}
 	return &researchNewsComposition{
 		query: query, research: researchService, importer: importer, authorizer: authorizer,
+		contexts: contexts, evidence: evidence, claims: claims,
 	}, nil
 }
 
