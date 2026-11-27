@@ -17,7 +17,7 @@ Research 的领域基础能力、Repository/Outbox、Context 消费契约测试�
 
 | Research 任务 | 当前状态 | 卡点及原因 | 责任方 | 对 Research 的影响 |
 |---|---|---|---|---|
-| RSC-002 Evidence 真实成功导入 | SHELVED | News 当前不提供可审计的首次公开可获取时间 `available_at`；News→Research B 组按项目决议搁置。不得用 `published_at`、`observed_at` 或抓取时间推导 | News | Importer 保持 fail-closed；不得伪造成功写入或将 Fixture 成功当作真实 PIT 证据 |
+| RSC-002 Evidence 真实成功导入 | BLOCKED_EXTERNAL_SOURCE（P1 已选择） | 用户已选择 News P1；News 当前仍不提供可审计的首次公开可获取时间 `available_at`，真实来源准入与凭据仍未到位。不得用 `published_at`、`observed_at` 或抓取时间推导 | News | Importer 保持 fail-closed；不得伪造成功写入或将 Fixture 成功当作真实 PIT 证据；来源无关审核链路可先行 |
 | RSC-003 Event 来源时间与派生关系 | WAITING_EXTERNAL_EVIDENCE（规则级已完成） | 缺少真实 `occurred_at/published_at/available_at` 原始值、来源版本、时区/精度证据；缺少真实多来源合并/拆分及直接父 Event 版本样本；缺少 `asserted_by` 到来源/系统主体的映射依据 | News、Data | 不得扩展时间推断、主体命名空间/枚举/注册表；现有测试只证明规则行为，不证明真实来源符合性 |
 | RSC-004 Security/Industry 实体关联 | BLOCKED | 稳定 `SecurityRef/IndustryRef`、历史版本/知识时间语义和公开 Data Application Port 尚无可用冻结依据；项目登记中的 DATA-CTR-007 为 deferred | Data | 不复制 Data 主数据模型、SQL 或解析器；无法可靠实现历史时点实体关联 |
 | RSC-005 Claim/Hypothesis Scope 与真实样本 | WAITING_DEPENDENCY | 依赖稳定 Security/Industry 引用、可授权 Evidence 样本和明确消费者调用场景；当前 Domain、版本/状态、正反 Evidence 校验和 Repository 已实现 | Data、News、实际消费者（Researchflow 等） | 不猜测 Scope 引用格式，不新增无调用方接口；当前没有独立可执行代码任务 |
@@ -50,7 +50,7 @@ Research 的领域基础能力、Repository/Outbox、Context 消费契约测试�
 
 1. Research 继续维护现有领域规则和测试；只有出现可复现的本模块缺陷，才进行代码修复。
 2. 对 RSC-003，保持规则级完成、真实来源证据待验收，不继续增加推测性时间或主体规则。
-3. 对 RSC-002，保持 SHELVED；对 RSC-004，保持 BLOCKED；对 RSC-005/RSC-006/RSC-008，保持 WAITING_DEPENDENCY。
+3. 对 RSC-002，按 P1 保持 `BLOCKED_EXTERNAL_SOURCE`（来源无关审核链路可先行）；对 RSC-004，保持 BLOCKED；对 RSC-005/RSC-006/RSC-008，保持 WAITING_DEPENDENCY。
 4. 不为等待中的任务创建空壳接口、默认注册项、假数据、临时表或 Mock 生产装配。
 5. 每次上游状态变化后只做定点复核：核验契约状态、公开 Port、真实样本和精确 SHA；满足重新进入条件再恢复对应 Research 任务。
 6. 本文记录的是 Research 当前卡点快照；模块内部任务状态仍以 `doc/research/当前任务状态和进度.md` 为准，项目级契约状态仍以 `doc/contract/PLAT-002-项目级契约冻结登记簿.md` 为准。

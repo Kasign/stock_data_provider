@@ -1,6 +1,6 @@
 # NEWS-CTR-001 `available_at` 来源证据解锁：契约变更影响分析（提案）
 
-- 文档状态：**结构提案已获项目负责人确认，来源准入与公开契约决策仍待完成**。本次确认仅批准以两张追加式表作为后续结构设计基线，不等于 NEWS-CTR-001 2.0.0 已冻结，不授权 Migration、Provider 接入、PIT SQL 或 Go 业务代码实施。
+- 文档状态：**R3 P1 已获项目负责人授权（2026-11-27，DEC-PLAT-002-067）；来源无关审核链路可实施，真实来源准入仍未通过**。历史“搁置”与 V10 草案口径已被当前代码与决策取代，仅保留为过程证据；NEWS-CTR-001 2.0.0 尚未冻结，任何具体来源字段在未通过官方语义审核前不得映射为 `available_at`。
 - 提出日期：2026-11-14
 - 触发：项目负责人授权 Integration「工作面 A」（《[Integration 当前任务交接与继续执行](../整体任务规划/05-治理与验收/Integration当前任务交接与继续执行.md)》第 10.4 节），要求以契约 Owner + News/Research Owner 身份推进 P0。
 - 治理依据：`doc/contract/PLAT-002-项目级契约冻结登记簿.md:85-92` 第 5 节——「公开语义变更必须先完成影响分析、正式决策、消费者影响确认、版本升级和迁移边界定义」；交接文档第 10.5 节反空转规则第 2 条——授权 A 后先输出契约变更影响分析并取得确认，再动代码。
@@ -10,7 +10,7 @@
 
 ## 0. 结论摘要（先看这里）
 
-> **状态（2026-11-16）：`reopened / proposal-only`（重新启动，仅推进结构提案）。** 项目负责人已确认重新启动 P0，并同意以本提案第 1.9 节的“两表追加式模型”作为结构设计基线。历史 `shelved` 决议保留为过程记录；当前来源准入仍未通过，公开契约版本尚未升级。因此当前只推进结构定义、消费者影响和决策材料；不得提前实施 Migration、Provider、PIT SQL 或生成非空 `available_at`。
+> **状态（2026-11-27）：`P1 authorized / source-qualification pending`。** 项目负责人明确选择 P1 并排除 P2/P3；来源无关的 Review Use Case、准入框架、契约升级与 B 组门禁可按正式流程推进。当前仓库中没有通过官方首次公开可获取语义审核的来源，也没有 Endpoint 授权/凭据或原始响应样本；因此不得生成、回填或解除任何 `available_at` 成功路径，B 组在真实来源准入前保持 fail-closed。
 
 1. **A 的法定第一步已完成，结论是「冻结 Golden 指定的 `sec-edgar` 与仓库已接入的全部 Provider 均不合格」**：SEC 官方文档逐字声明 `There is no timestamp to indicate when filing content is first available on sec.gov.`；`Acceptance Time` 是「被 EDGAR 接受」的 EST 系统时间，到 sec.gov 可见还有 1-3 分钟且**不可预测**的 lag；PDS 规范里唯一的 `<TIMESTAMP>` 只用于「受理后更正」且由 R/A Subsystem 提供。详见第 1 节。
 2. **2026-11-16 Review 更正**：第 1.5 节此前把时间精度和时区误当成语义证明。EDINET `submitDateTime` 目前只能列为提交时间候选，尚未证明为首次公众可获取时间；LSE RNS FIX `SendingTime` 是消息传输时间，不能直接等同公众可获取时间。两者均未通过准入 1 的语义证明，且属于海外市场，不符合当前中国 A 股项目范围。不能声称已找到合格来源。
@@ -152,20 +152,20 @@
 
 **必须由项目负责人确认的决策点**：① 选择 P1/P2/P3；② 若 P1，指定来源与授权凭据；③ 是否同意按 MAJOR 升级版本（见第 4 节）；④ 消费者影响确认签字（见第 3.1 节）。未确认前不进入代码实施。
 
-> **2026-11-14 决议：本项 `搁置`，P1/P2/P3 均未选定。**
+> **2026-11-27 决议（用户提供文本：News P1 按方案，其他也按方案执行）：选择 P1，正式排除 P2/P3。**
 >
-> 依据第 1.5 节，P1 的真实前置不是「找到来源」，而是「为 News 新增法定披露类来源品类」这一产品定位决策；P2 按契约 `:47` 不能替代 `available_at`、且单靠新字段打不通 B 组；P3 无需变更即维持现状。三者都不构成 Integration 分支内可执行的开发动作。
+> P1 是唯一保留 `available_at` 原始语义并能打通 Research 严格 PIT 的路径。P2 的新区间字段不能替代 `available_at`，P3 的 NULL 搁置被用户明确排除。实施顺序按本计划第 2 节：先完成来源无关的 AvailabilityDecision Review Use Case、来源准入/证据产出框架、NEWS-CTR-001 2.0.0 与 B 组门禁；具体来源 Provider 在取得官方字段语义证明、Endpoint 授权/凭据、脱敏原始响应和版本绑定证据后接入。
 >
-> **重启条件（唯一）**：取得符合当前中国 A 股项目范围的官方来源字段规范、授权证明和首次公众可获取时间语义证据，并由项目负责人批准按冻结流程推进。若考虑海外来源，必须先批准项目范围扩展，再独立完成该市场的语义、授权和版本绑定审核；不得直接复用当前 A 股验收结论。
+> **真实来源准入条件（唯一）**：来源 Owner 提供官方字段规范，明确该字段是「首次向约定市场参与者公开可获取」时间；提供 Endpoint 授权、个人用途持久化/再利用许可、原始字段路径与时区/精度、逐版本绑定和更正/撤回关系、证据 URL 与脱敏样本。未经这些证据，任何字段（包括 `announcementTime`、`DOC_PUBTIME`、交易所“确认发布”流程时间、EDGAR Acceptance Time）保持 `not verified`。
 >
-> **搁置期间禁止**：不新增 `available_at` 列或证据表、不改 PIT SQL、不生成或回填 `available_at`、不启用 B 组用例、不为消除 `--- SKIP` 而改断言。
+> **P1 执行期间禁止**：用 `published_at`/`fetched_at`/`observed_at` 推导；为消除 `--- SKIP` 改弱断言；把 `parsed` 当 `verified`；把新 Provider 候选字段提前写入 `available_at`；在没有真实来源证据前把 B 组标为 PASS。
 
 ### 3.1 三、消费者影响确认（登记簿第 5 节第 2 条第三项）
 
 | 消费者 | 结论 | 依据 |
 |---|---|---|
 | Research（`internal/research/`） | 领域代码**不必改**（`available_at` 列、Schema、校验、Importer/Authorizer 均已就绪）；须签字确认，并可选统一 `isUTC`（`adapters/news/evidence.go:242-245`）与 News 侧 `validEvidenceUTC` 的零偏移判定 | `validate.go:139-144`、`:151-172`；`storage/evidence_repository.go:51-59` |
-| Server（`internal/server/bootstrap/`） | 组合根**零改动**（V10 随 `Migrations()` 自动纳入）；测试与 CI 必改 | `bootstrap.go:429`、`research_news.go` |
+| Server（`internal/server/bootstrap/`） | 现有 News/Research 装配可复用；需新增审核用例与来源准入配置的组合根注入，并按真实来源到位情况更新测试/CI 门禁。当前证据/决策表已在单一 V1 Migration 集内，不再有 V10 新增 Migration | `bootstrap.go`、`research_news.go`、`news_feed_stage.go` |
 | Researchflow / Quant / Notification / WebUI / Market Data / 旧 analysis | **不受影响**（已逐目录核对；WebUI 与 Market Data 的 `available_at` 属 DATA-CTR-002 独立语义，严禁混淆） | 登记簿 `:38` |
 | `content_fingerprint` / 幂等 | News `BuildVersionFingerprint`（`domain/version.go:15`，`news-version-v2`）**不得纳入新字段**；Research `ComputeContentFingerprint`（`validate.go:151-172`）已含 `available_at`，新记录指纹变化属预期；**不得重算/改写已落库行** | 数据模型契约 `:292/:369`、GOV-CTR-003 `:59-60`、GOV-CTR-004 `:52-53` |
 
@@ -183,10 +183,10 @@
 
 ## 5. 五、迁移边界（登记簿第 5 节第 2 条第五项）
 
-- 只能新增 **V10 前向 Migration**（PLAT-CTR-006 `:104` 禁止修改已发布的 V1-V9）；当前最高 `Version: 9`（`internal/news/adapters/storage/migrations.go:244`）。
-- 列归属：`news_item_versions` 加 `available_at DATETIME(6) NULL` + **追加式证据载体表**（满足 `:48` 修订留痕）；`news_items` / `news_authorization_snapshots` 不改（数据模型契约 `:74-76/:89`）。
-- **既有行一律保持 NULL，不回填**（范式 `migrations.go:235-240` V8；任务清单 `:275/:788`）。解锁后历史 NULL 行被严格 PIT 排除是预期 fail-closed，不是缺陷；重新获得 verified 必须走追加式证据，不得 UPDATE 旧行。
-- DDL 隐式提交，不得假设整体事务回滚（PLAT-CTR-006 `:122/:143-147`）。
+- 当前代码已采用单一 V1、10 张表 Migration 集，证据表 `news_version_availability_evidence` 与决策表 `news_version_availability_decisions` 已存在；不再实施历史 V10 草案。公开契约 2.0.0 只改变字段语义与机器契约，不要求重写已发布 Migration。
+- 列归属：`news_item_versions.available_at` 保持 NULL-safe 追加写入；原始证据与审核决定只追加到两张专用表，不覆盖旧行；`news_items` / `news_authorization_snapshots` 不改。
+- **既有行一律保持 NULL，不回填**。解锁后历史 NULL 行被严格 PIT 排除是预期 fail-closed，不是缺陷；重新获得 verified 必须走追加式证据，不得 UPDATE 旧行。
+- 新增审核决策必须保留 `supersedes` 链与 `considered_evidence_ids`，通过既有 Repository 版本行锁串行化；不得静默覆盖已 verified 决策。
 
 **不得做什么（逐条依据）**：① 从 `published_at/observed_at/fetched_at/normalized_at`/首次抓取时间推导或回填（GOV-CTR-002 `:23/:45/:51`、数据模型契约 `:44/:46/:48`）；② 修改 V1-V9（PLAT-CTR-006 `:104`）；③ 静默覆盖已验证证据（数据模型契约 `:48`、API 契约 `:203`）；④ 原地修改/覆盖已发布 Schema/Golden 或重算历史指纹（GOV-CTR-004 `:49-53`）；⑤ 把新字段纳入 `news-version-v2` 指纹（数据模型契约 `:292/:369`）；⑥ 把 `available_at` 写入 `news_items` 或跨表冗余（`:74-76/:89`）；⑦ 用负面清单字段映射（`:44`）；⑧ 证据不完整/时区不明/版本绑定不明时标 `verified`（`:41-42`）；⑨ 跳过本文第 3 节正式决策直接动代码（登记簿 `:88`）。
 
@@ -194,16 +194,14 @@
 
 ## 6. 实施计划与验收标准（决策批准后执行）
 
-按交接文档第 10.2 节十步清单，**第 1 步当前判定为不合格、第 2～10 步全部被阻断**。批准 P1 后的执行顺序：
+P1 已获授权，当前按“来源无关先行、真实来源后接”的顺序执行：
 
-1. 来源 Owner 完成字段语义审核、Source/Endpoint allowlist、证据留痕规范与版本绑定 → 形成 DEC。
-2. 按第 3/4/5 节完成正式决策、消费者确认、版本升级与迁移边界；发布 NEWS-CTR-001 2.0.0 Schema/Golden（保留 1.0.0）。
-3. V10 Migration + 追加式证据表 + `news_item_versions.available_at`；`migrations_test.go` 改 `len=10` 并补 V9→V10 既有数据保留用例。
-4. Provider 保留受控响应证据；负面清单字段仍只进 `published_at`。
-5. `Get/List` 严格 PIT SQL（`available_at IS NOT NULL AND <= system_as_of`）+ 事务内回读门禁；`researchEvidenceRecordFromPIT` 仅在 verified 且证据完整时赋值。
-6. 同步全部 PIT fixture、4 组 NULL 断言测试、Golden Contract Test；新增 GOV-CTR-002 `:76` 四类边界（缺失/晚于/等于/早于 cutoff）的 MariaDB 用例。
-7. Bootstrap：去掉 B 组 `t.Skip` 让成功路径真跑；**新增独立真库用例**覆盖「缺证据仍 `ErrEvidenceNotPITSafe` + `research_evidence_records` 零落库」（review #4 遗留缺口）；补 `ListEvidence`/`GetEvidence` 一致性断言；CI `-v` 门禁改为要求 B 组 PASS（SKIP 即失败）。
-8. 按功能聚合提交，取精确 SHA 的 Integration CI / News MariaDB Job success，再同步交接文档与模块 README。
+1. **T1 治理**：登记 DEC-PLAT-002-067，校准本影响分析中的“搁置/V10/禁止实现”旧口径，同步 News/Research 卡点与四项计划。
+2. **T2 审核用例**：新增来源无关的 AvailabilityDecision Review Use Case，输入已授权 Evidence 与审核规则版本，输出 `verified/conflict/unresolved/revoked` 并通过既有 Repository 追加决策；不生成未经审核的 `available_at`。
+3. **T3 来源准入框架**：定义来源级字段语义 allowlist、审核规则版本与 Provider 原始字段证据适配边界；未通过官方语义审核的来源不得注册，候选字段不得提前映射。
+4. **T4 契约与门禁**：发布 NEWS-CTR-001 2.0.0 Schema/Golden（1.0.0 字节不变），同步 PIT fixture/NULL 断言/Golden Contract Test；B 组 `t.Skip` 改为严格门禁（在真实来源到位前保持 fail-closed，不得以放宽断言使其通过）。
+5. **T5 真源接入（外部依赖）**：来源 Owner 提供官方字段规范、授权/凭据、脱敏原始响应与版本绑定证据后，接入具体 Provider 并跑通 Research 成功路径。
+6. 每完成一个逻辑组按精确 SHA 回填 CI；T5 未完成时保持 NEWS-BLK-07/RSC-002 的开放状态，不宣称 R3 完整验收。
 
 ---
 
@@ -1025,10 +1023,10 @@ Evidence 表最小必要字段调整为：
 - [x] 分钟级 RFC3339 时间取分钟末秒作为保守候选值，并标记 minute 精度。
 - [x] 日期、年月、年份不生成候选；无时区时间保持 ambiguous；亚秒时间保持 unsupported_precision。
 - [x] 新增对应单元测试，覆盖 UTC 偏移、分钟末秒、低精度、缺时区、亚秒、无效值及原始值保留。
-- [ ] 将解析候选接入受控 Evidence 写入端口；必须等待字段级授权、Observation/Version 绑定和留存约束落实，且不得启用未准入来源映射。
-- [ ] 完成 Evidence / Decision Domain、Migration、Repository、按 system_as_of 还原和 Research 秒级消费校验。
-- [ ] 取得目标 MariaDB 版本并运行新增 Migration / Repository 真实集成测试。
-- [ ] 来源准入与正式公开契约升级仍单独跟踪；未通过前 B 组保持 shelved。
+- [x] 将解析候选接入受控 Evidence 写入端口；字段级授权、Observation/Version 绑定和留存约束已落实，未准入来源不产生映射。
+- [x] Evidence / Decision Domain、单一 V1 表集内追加式 Repository、按 system_as_of 还原和 Research 秒级消费校验已完成。
+- [x] MariaDB 真库已覆盖 Migration、Repository、并发决策追加与 PIT 查询；精确 SHA CI 持续执行。
+- [ ] 来源准入与正式公开契约升级单独跟踪；未通过前 B 组保持 fail-closed，不用 P2/P3 替代。
 
 ### 1.16.3 当前执行结论
 

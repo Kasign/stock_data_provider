@@ -40,6 +40,13 @@ News-owned 的授权预检、Diagnostics Check 工厂和 Cleaner 一次性执行
 4. NEWS-BLK-06：Cleaner 周期触发责任及频率。
 5. NEWS-BLK-07：available_at 合格来源证据。
 
+### NEWS-BLK-07 R3 P1 启动口径（2026-11-27）
+
+- 用户已选择 P1 并排除 P2/P3，正式决策为 DEC-PLAT-002-067；历史“搁置”口径不再代表当前状态。
+- 来源无关部分可立即实施：AvailabilityDecision Review Use Case、来源准入/证据产出框架、NEWS-CTR-001 2.0.0 与 B 组 fail-closed 门禁。
+- 真实来源仍为独立阻塞：仓库内没有官方字段语义证明、Endpoint 授权/凭据、脱敏原始响应与逐版本绑定证据；任何候选字段（`announcementTime`、`DOC_PUBTIME`、EDGAR Acceptance Time、交易所流程时间等）在审核通过前均为 `not verified`。
+- 未完成真实来源准入前，不生成非空 `available_at`，不解除 B 组成功路径，不把 `parsed` 当 `verified`，不为消除 SKIP 放宽断言。
+
 ## 4. 执行原则
 
 - 卡点不等于整个 News 模块暂停；只暂停依赖该卡点的验收环节。
