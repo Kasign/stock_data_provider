@@ -275,4 +275,4 @@ Quant 现有 GetResult 授权读取用例、SMA20 与三因子（`ma20_distance`
 - 当前唯一缺失的门禁事实是 `price_limit`；RiskDecision 仍 `reject`，Stage 仍 `succeeded + decision_status=reject`，不得表述为硬门禁通过。
 - Decision / Manifest / Stage Output 证据升级为四元 `[交易快照, 交易授权, 盘口快照, 盘口授权]`；QNT-CTR-003 Stage Output 发布 2.0.0，Quality Summary 发布 1.0.1；Output Registry Set 风险 1.7.0、合并 1.8.0。
 - L3 quant.research 已改为发布盘口策略、启用 Eastmoney quote/order-book，并断言只缺 `price_limit` 且四段证据齐备；本地无 MariaDB/Redis 环境变量时按既有门控 SKIP，CI 结果需按精确 SHA 回填。
-- **L3 交易时段依赖修复（2026-11-27）**：首轮 CI 失败根因不是 Quant 门禁，而是午间休市 Eastmoney 不返回五档深度；L3 现按 Run 的精确 `system_as_of` 预置合法盘口事实快照，Risk Stage 通过 Data 精确复用链消费，仍只缺 `price_limit`。本地真库 L3 PASS，`quant.risk=succeeded`；新提交 CI 待精确 SHA 回填。
+- **L3 交易时段依赖修复（2026-11-27）**：首轮 CI 失败根因不是 Quant 门禁，而是午间休市 Eastmoney 不返回五档深度；L3 现按 Run 的精确 `system_as_of` 预置合法盘口事实快照，Risk Stage 通过 Data 精确复用链消费，仍只缺 `price_limit`。修复提交 `1423d29c9` 的 Integration CI 45937832229 success，L3 PASS 7.02s，`quant.risk=succeeded`。
