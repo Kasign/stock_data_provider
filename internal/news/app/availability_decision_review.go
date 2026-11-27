@@ -351,8 +351,7 @@ func verifiedAvailabilityDecision(
 func eligibleAvailabilityEvidence(evidence domain.AvailabilityEvidence) error {
 	if evidence.ParseStatus != domain.AvailabilityTimeParsed ||
 		evidence.CandidateAvailableAt == nil ||
-		(evidence.Precision != domain.AvailabilityTimePrecisionSecond &&
-			evidence.Precision != domain.AvailabilityTimePrecisionMinute) ||
+		!domain.IsPITSafeAvailabilityPrecision(evidence.Precision) ||
 		evidence.SourceTimezoneOrOffset == "" ||
 		(evidence.EvidenceRef == nil && evidence.EvidenceHash == nil) {
 		return errors.New("eligible availability evidence lacks verified provenance")

@@ -136,6 +136,8 @@ Evidence DTO 的 `fetched_at` 和 `normalized_at` 来自 Observation 中的 Cand
 
 首次成功抓取时间只证明内容在该时刻已可获取，不证明首次公开时间，首期不将其当作 `available_at`。证据缺失、时区不明、字段语义不明、版本绑定不明或证据冲突时，DTO 返回 `null`，严格 PIT 必须排除该记录。证据修订必须保留历史记录和修订原因，不得静默覆盖。当前已接入来源尚无符合准入规则的字段，故当前 `available_at` 均为 `null`；严格 PIT 门禁尚未完成，不能据此宣称 NEWS-CTR-001 通过。
 
+**3.0.0 披露日保守边界（DEC-PLAT-002-073，v1 provisional）**：NEWS-CTR-001 3.0.0 在 2.0.0 基础上以 MAJOR 增加一种可审核的降级语义——当来源仅提供"披露日"编码（如巨潮 `announcementTime`，北京时间整点毫秒时间戳）时，经来源资格记录显式声明 `disclosure_boundary` 精度与非空 `DateBoundarySemanticsRef` 后，`available_at` 可取该披露日当天最后一秒（23:59:59 声明时区，换算 UTC 整秒）。该值恒不早于真实公开时刻，严格 PIT 不会前视；代价是精度从秒级降为天级。1.0.0/2.0.0 Schema/Golden 字节不变，3.0.0 为独立新文件。通用 `ParseAvailabilityTime` 仍拒绝纯日期/毫秒串，边界候选只能由专用解析器在资格闸门内产生。字段路径必须为不含 `[]` 的稳定标识，JSONPath 数组符号在采集期规范化。此语义仅为通道确立；生产来源准入、Evidence/Decision 落库与 B 组真库门禁仍未闭环，`available_at` 生产值在无合格来源前继续保持 `null`。
+
 
 ### 4.8 NEWS-CTR-002 授权快照持久化边界
 

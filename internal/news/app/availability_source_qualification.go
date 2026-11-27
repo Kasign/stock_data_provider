@@ -57,12 +57,17 @@ type AvailabilitySourceQualification struct {
 	DeclaredTimezoneOrOffset      string
 	AllowedPrecisions             []domain.AvailabilityTimePrecision
 	OfficialSemanticsRef          string
-	EndpointAuthorizationRef      string
-	VersionBindingRef             string
-	RawResponseSampleHash         string
-	Status                        AvailabilitySourceQualificationStatus
-	EffectiveAt                   time.Time
-	RevokedAt                     *time.Time
+	// DateBoundarySemanticsRef declares that this field encodes a disclosure
+	// DATE and must be parsed with the conservative end-of-day boundary rule
+	// (DEC-PLAT-002-073 v1 provisional). Required iff AllowedPrecisions
+	// contains disclosure_boundary; forbidden otherwise.
+	DateBoundarySemanticsRef string
+	EndpointAuthorizationRef string
+	VersionBindingRef        string
+	RawResponseSampleHash    string
+	Status                   AvailabilitySourceQualificationStatus
+	EffectiveAt              time.Time
+	RevokedAt                *time.Time
 }
 
 func (q AvailabilitySourceQualification) Validate() error {
@@ -103,15 +108,28 @@ func (q AvailabilitySourceQualification) Validate() error {
 		return errors.New("availability qualification needs explicit allowed precisions")
 	}
 	seen := make(map[domain.AvailabilityTimePrecision]struct{}, len(q.AllowedPrecisions))
+	hasBoundaryPrecision := false
 	for _, precision := range q.AllowedPrecisions {
-		if precision != domain.AvailabilityTimePrecisionSecond &&
-			precision != domain.AvailabilityTimePrecisionMinute {
+		if !domain.IsPITSafeAvailabilityPrecision(precision) {
 			return errors.New("availability qualification precision is not PIT-safe")
 		}
 		if _, exists := seen[precision]; exists {
 			return errors.New("availability qualification precision is duplicated")
 		}
 		seen[precision] = struct{}{}
+		if precision == domain.AvailabilityTimePrecisionDisclosureBoundary {
+			hasBoundaryPrecision = true
+		}
+	}
+	// disclosure_boundary requires an explicit boundary semantics declaration,
+	// and the declaration is forbidden for exact-time qualifications. This keeps
+	// the downgrade auditable and prevents silently treating a date field as exact.
+	hasBoundaryRef := q.DateBoundarySemanticsRef != ""
+	if hasBoundaryPrecision != hasBoundaryRef {
+		return errors.New("date boundary semantics ref must match disclosure_boundary precision")
+	}
+	if hasBoundaryRef && !validAvailabilityLongRef(q.DateBoundarySemanticsRef, 512) {
+		return errors.New("date boundary semantics ref is invalid")
 	}
 	if _, err := hex.DecodeString(q.RawResponseSampleHash); err != nil ||
 		len(q.RawResponseSampleHash) != 64 || q.RawResponseSampleHash != strings.ToLower(q.RawResponseSampleHash) {
@@ -233,7 +251,17 @@ func (u *QualifyAvailabilityEvidence) Execute(
 		return QualifiedAvailabilityEvidence{}, ErrAvailabilitySourceQualificationDenied
 	}
 
+	// A qualified disclosure-date field uses the conservative end-of-day
+	// boundary parser; every other field keeps the immutable general parser.
+	// The choice is driven only by the source qualification, never by the raw
+	// value shape, so a millisecond value cannot smuggle in a boundary unless
+	// the source owner explicitly declared disclosure-date semantics.
 	candidate := domain.ParseAvailabilityTime(request.RawValue)
+	if qualification.DateBoundarySemanticsRef != "" {
+		candidate = domain.ParseDisclosureDateConservativeBoundary(
+			request.RawValue, qualification.DeclaredTimezoneOrOffset,
+		)
+	}
 	if candidate.Status != domain.AvailabilityTimeParsed || candidate.CandidateAvailableAt == nil ||
 		candidate.SourceTimezoneOrOffset != qualification.DeclaredTimezoneOrOffset ||
 		!containsAvailabilityPrecision(qualification.AllowedPrecisions, candidate.Precision) {

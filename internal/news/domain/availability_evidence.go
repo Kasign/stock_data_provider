@@ -103,8 +103,8 @@ func (e AvailabilityEvidence) Validate() error {
 	}
 
 	if e.ParseStatus == AvailabilityTimeParsed {
-		if e.Precision != AvailabilityTimePrecisionSecond && e.Precision != AvailabilityTimePrecisionMinute {
-			return fmt.Errorf("parsed availability time must have second or minute precision")
+		if !IsPITSafeAvailabilityPrecision(e.Precision) {
+			return fmt.Errorf("parsed availability time must have PIT-safe precision")
 		}
 		if e.CandidateAvailableAt == nil || e.ParseReasonCode != "" || e.SourceTimezoneOrOffset == "" {
 			return fmt.Errorf("parsed availability evidence is incomplete")
@@ -196,7 +196,7 @@ func validateAvailabilityPrecision(value AvailabilityTimePrecision) error {
 	case AvailabilityTimePrecisionSecond, AvailabilityTimePrecisionMinute,
 		AvailabilityTimePrecisionDate, AvailabilityTimePrecisionMonth,
 		AvailabilityTimePrecisionYear, AvailabilityTimePrecisionSubsecond,
-		AvailabilityTimePrecisionUnknown:
+		AvailabilityTimePrecisionDisclosureBoundary, AvailabilityTimePrecisionUnknown:
 		return nil
 	default:
 		return fmt.Errorf("availability time precision is invalid")

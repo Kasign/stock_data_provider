@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"strconv"
 	"strings"
 	"time"
 )
@@ -16,7 +17,12 @@ const (
 	AvailabilityTimePrecisionMonth     AvailabilityTimePrecision = "month"
 	AvailabilityTimePrecisionYear      AvailabilityTimePrecision = "year"
 	AvailabilityTimePrecisionSubsecond AvailabilityTimePrecision = "subsecond"
-	AvailabilityTimePrecisionUnknown   AvailabilityTimePrecision = "unknown"
+	// AvailabilityTimePrecisionDisclosureBoundary marks a PIT-safe conservative
+	// boundary derived from a source field that encodes only a disclosure DATE.
+	// It is not an exact first-public instant; the value is the end of the
+	// declared disclosure day, so it is never earlier than the real disclosure.
+	AvailabilityTimePrecisionDisclosureBoundary AvailabilityTimePrecision = "disclosure_boundary"
+	AvailabilityTimePrecisionUnknown            AvailabilityTimePrecision = "unknown"
 )
 
 // AvailabilityTimeParseStatus describes syntactic normalization only.
@@ -128,6 +134,83 @@ func ParseAvailabilityTime(raw string) AvailabilityTimeCandidate {
 	result.Status = AvailabilityTimeParsed
 	result.ReasonCode = ""
 	return result
+}
+
+// ParseDisclosureDateConservativeBoundary parses a source field that encodes a
+// disclosure DATE (e.g. CNINFO announcementTime, epoch milliseconds at local
+// midnight) into a conservative PIT boundary. The candidate is the final second
+// of the declared disclosure day in the declared fixed offset, converted to UTC.
+//
+// Semantics: this is deliberately NOT an exact first-public instant. The source
+// only proves "disclosed on date D"; using end-of-day D guarantees the candidate
+// is never earlier than the true disclosure, so strict PIT never adopts the
+// information before it was actually available (no look-ahead). The trade-off,
+// accepted by the project owner as v1 provisional, is day-level granularity.
+//
+// This parser is intentionally separate from ParseAvailabilityTime: the general
+// parser keeps rejecting date-only values, and this boundary is only reachable
+// for a source explicitly qualified with disclosure-date semantics.
+func ParseDisclosureDateConservativeBoundary(rawMillis, declaredOffset string) AvailabilityTimeCandidate {
+	result := AvailabilityTimeCandidate{
+		RawValue:               rawMillis,
+		SourceTimezoneOrOffset: declaredOffset,
+		Precision:              AvailabilityTimePrecisionDisclosureBoundary,
+		Status:                 AvailabilityTimeUnparseable,
+	}
+	if rawMillis == "" || !allDigits(rawMillis) {
+		result.ReasonCode = "news.available_at.disclosure_date.invalid_millis"
+		return result
+	}
+	millis, err := strconv.ParseInt(rawMillis, 10, 64)
+	if err != nil || millis <= 0 {
+		result.ReasonCode = "news.available_at.disclosure_date.invalid_millis"
+		return result
+	}
+	zone, err := parseFixedOffset(declaredOffset)
+	if err != nil {
+		result.ReasonCode = "news.available_at.disclosure_date.invalid_offset"
+		return result
+	}
+	local := time.UnixMilli(millis).UTC().In(zone)
+	// End of the declared disclosure day: 23:59:59 local, zero nanoseconds.
+	boundary := time.Date(local.Year(), local.Month(), local.Day(), 23, 59, 59, 0, zone).UTC()
+	result.Status = AvailabilityTimeParsed
+	result.CandidateAvailableAt = &boundary
+	return result
+}
+
+// parseFixedOffset accepts only explicit numeric offsets (+HH:MM / -HH:MM) with
+// whole-minute precision. "Z" is intentionally rejected: a disclosure-date
+// source must declare its local calendar offset to define the disclosure day.
+func parseFixedOffset(value string) (*time.Location, error) {
+	if len(value) != 6 || (value[0] != '+' && value[0] != '-') || value[3] != ':' {
+		return nil, strconv.ErrSyntax
+	}
+	hours, err := strconv.Atoi(value[1:3])
+	if err != nil || hours > 23 {
+		return nil, strconv.ErrSyntax
+	}
+	minutes, err := strconv.Atoi(value[4:6])
+	if err != nil || minutes > 59 {
+		return nil, strconv.ErrSyntax
+	}
+	offset := hours*3600 + minutes*60
+	if value[0] == '-' {
+		offset = -offset
+	}
+	return time.FixedZone(value, offset), nil
+}
+
+// IsPITSafeAvailabilityPrecision reports whether a parsed candidate at this
+// precision may be adopted by strict PIT. Second and minute are exact/upper-
+// bounded instants; disclosure_boundary is a conservative end-of-day boundary
+// whose value is a UTC whole second that is never earlier than the real
+// disclosure. Low precisions (date/month/year), subsecond and unknown are not
+// PIT-safe and must stay fail-closed.
+func IsPITSafeAvailabilityPrecision(value AvailabilityTimePrecision) bool {
+	return value == AvailabilityTimePrecisionSecond ||
+		value == AvailabilityTimePrecisionMinute ||
+		value == AvailabilityTimePrecisionDisclosureBoundary
 }
 
 func allDigits(value string) bool {
