@@ -1715,3 +1715,10 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - **本地验收**：修复后 `go test ./internal/researchflow/storage -run '^TestMariaDBFinalizeRunAtomicallyPersistsRunResultAndReadsItBack$' -count=1`、`go test ./internal/researchflow/storage -count=1`、`go test ./... -count=1`、`go vet ./...`、`git diff --check` 全部通过。
 - **CI 状态（回填）**：修复提交 `0ec56ad1e1bb75afa911d5d789a131436878f04f` 的 13 个 check run 全部 `completed/success`：required-checks `45950902488`、Go test suite workflow run `45950902566`（含 Researchflow MariaDB lifecycle integration）、Integration CI / Full integration checks `45950902560`。R4-R4 验收完成。
 - **状态边界**：本组不新增 HTTP 成功路径、不注入真实 projector、不接入 LLM Provider；完整报告生产可用性仍依赖 R3 真实来源语义与生产 Provider。
+
+## 2026-11-27 四项根因根治 R4-R5：生产成功路径前置核查
+
+- **配置结论**：只读核查 `internal/server/config/`、`configs/`、`cmd/`、`internal/server/bootstrap/`，未发现 LLM Provider/Gateway 生产配置结构或加载器；`llm.ProviderConfig` 与 `llm.CapabilityState` 仅有领域类型，`llmtransport.New` / `NewResponsesAdapter` 只被测试调用。`doc/server/模块总任务规划和进度.md` 的 SRV-010 仍为 `BLOCKED`。
+- **装配结论**：生产 `NewRunFinalizer` 仍注入 `nil` projector；`ComposeResult` 与 `RunResultFromComposed` 只在测试中使用。可复用的同 Run 授权读取入口已有 `readQuantResultForRun`、`readNewsEvidenceForRun` 与 Stage Output Registry，但 Research `Context`/`Claims` 与 `Limitations` 无生产给料，LLM `ModelResponse` 无真实 Provider。
+- **不妥协边界**：不注入返回 nil 或固定错误的占位 projector；前者空转掩盖缺口，后者会让所有 normal finalization 失败。不伪造 Provider、响应、能力证据或空壳报告，不放宽 R3 `available_at` 语义。
+- **当前结论**：R4 来源无关链路完成；生产完整报告成功路径保持 `BLOCKED`，本轮不产生代码改动。解除前置：真实 Gateway 版本/模型 ID/CapabilityState 与证据、受控 DestinationPolicy、Research Context/Claims/Limitations 权威给料，以及 R3 T5 官方字段语义与可审计样本。
