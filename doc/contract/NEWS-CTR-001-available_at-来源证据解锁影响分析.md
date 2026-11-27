@@ -1251,4 +1251,4 @@ G4 只把 G3 未可信候选按真实绑定与当前策略写入 `AvailabilityEv
 - **结果边界**：Stage 在 ingest 成功后调用 recorder；记录失败将该 Source 标为 `availability_evidence_record_failed`。冻结 Stage payload/schema 字节不变，`QualifiedAvailability` 仍只存在于进程内。
 - **TDD 与变异**：新增针对性测试覆盖真实版本绑定、错配拒绝、任意 EvidenceID 拒绝、重放幂等、Stage 记录失败与组合根装配；五处变异均有效失败并恢复。全仓 `go test ./... -count=1`、`go vet ./...`、`gofmt -l`、`git diff --check` 通过。
 - **状态边界**：G4 只落 `parsed` 候选证据。G5 Review 仍必须注入 source-bound 规则与仓储绑定解析器，B 组真库门禁仍未完成；生产 `available_at` 继续为 null，NEWS-BLK-07/RSC-002 保持 SHELVED。
-- **CI 状态（回填）**：本次逻辑工作组提交后按精确 SHA 回填；未取得 SHA 前不得记为完整验收。
+- **CI 状态（回填）**：提交 `d5275d454235c0b38d833037a9c6d791eb7e988b` 的 13 个 check run 全部 `completed/success`；这不改变上述状态边界。

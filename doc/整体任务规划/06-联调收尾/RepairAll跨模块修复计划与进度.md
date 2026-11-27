@@ -1825,6 +1825,6 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - **幂等**：Evidence ID 由语义字段确定性派生，拒绝调用方自报 ID；Storage 在写前按 ID 锁行并比较语义字段，相同幂等返回、不同冲突失败。
 - **装配与输出**：Stage 在 ingest 成功后调用 recorder，失败标记 `availability_evidence_record_failed`；冻结 Stage payload/schema 字节不变。组合根在存在资格目录时装配 recorder。
 - **验证**：新增针对性测试覆盖真实版本绑定、错配拒绝、任意 ID 拒绝、重放幂等、Stage 失败与组合根装配；五处变异均有效失败并恢复。全仓 `go test ./... -count=1`、`go vet ./...`、`gofmt -l`、`git diff --check` 通过。
-- **CI 状态（回填）**：本次逻辑工作组提交后按精确 SHA 回填；未取得 SHA 前不得记为完整验收。
+- **CI 状态（回填）**：提交 `d5275d454235c0b38d833037a9c6d791eb7e988b` 的 13 个 check run 全部 `completed/success`：required-checks `45982274904`、Full integration checks `45982274897`、Go test suite `45982274950`（含 News MariaDB Job `140448914710`），其余专项检查均 success。
 - **状态边界**：G5 Review、B 组真库门禁仍未完成；NEWS-BLK-07/RSC-002 保持 SHELVED，生产 `available_at` 继续为 null。
 - **状态边界**：G4 Record、G5 Review 与 B 组真库门禁仍未完成；原始响应持久化/留存授权与可复核性须在 Evidence 写入前解决。NEWS-BLK-07/RSC-002 保持 SHELVED，生产 `available_at` 继续为 null。
