@@ -1676,4 +1676,4 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - **变异验证**：把测试夹具 Decision 状态从 `verified` 改为 `unresolved` 后，B 组再次以 `news.evidence.pit_not_found` 失败；恢复 `verified` 后完整 `TestNewsResearchMariaDBIntegration` PASS。
 - **本地验收**：`SERVER_RELAY_TEST_MYSQL_DSN=... go test ./internal/server/bootstrap -run TestNewsResearchMariaDBIntegration -count=1 -v` PASS；`go test ./... -count=1`、`go vet ./internal/news/...`、`git diff --check` PASS。
 - **CI 首次失败与修复**：代码提交 `1fab00e4db45b76622a02c2ec6b3b21edb268655` 的 required-checks `45945031267`、Go test suite `45945031324` success；Integration CI `45945031292` failure，根因是工作流精确子测试清单仍写旧名 `list_evidence_page_excludes_missing_available_at`，并非测试失败。已同步为 `list_evidence_page_includes_verified_available_at`，并把 B 组“接受 SKIP”分支改为 SKIP 即失败。
-- **CI 状态**：工作流修复提交 SHA 待生成；按精确 SHA 取得 GitHub Actions 结论前记 `not_run`。生产 B 组仍不因测试夹具解锁，R3 完整验收仍依赖 T5 字段语义准入。
+- **CI 状态（回填）**：工作流修复提交 `b22b023cc42fb64c379aaa1ca47dacc891b0f6fe` 的 13 个检查全部 `completed/success`：required-checks `45945574254`、Go test suite `45945574315`、Integration CI `45945574250`（News/Research/Researchflow 跨模块步骤通过）。T4b 验收完成；生产 B 组仍不因测试夹具解锁，R3 完整验收仍依赖 T5 字段语义准入。
