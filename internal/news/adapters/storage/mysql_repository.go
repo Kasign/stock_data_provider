@@ -827,6 +827,10 @@ func (t *mysqlNewsTransaction) AppendAvailabilityEvidence(
 	if err != nil {
 		return err
 	}
+	// The columns are DATETIME(6): values read back from MariaDB carry only
+	// microsecond precision while in-memory time.Time from a real Feed run may
+	// carry nanoseconds. Compare at the stored precision, otherwise every real
+	// collection would be rejected as an identity mismatch before the insert.
 	if payloadPurgedAt.Valid ||
 		newsID != evidence.NewsID || observationID != evidence.ObservationID ||
 		sourceID != observation.SourceID || providerCode != observation.ProviderCode ||
@@ -834,11 +838,11 @@ func (t *mysqlNewsTransaction) AppendAvailabilityEvidence(
 		endpointPolicyVersionID != observation.EndpointPolicyVersionID ||
 		providerPolicyRef != observation.ProviderOutputPolicyRef ||
 		providerPolicyVersionID != observation.ProviderOutputPolicyVersionID ||
-		!versionObservedAt.UTC().Equal(version.ObservedAt.UTC()) ||
-		!observationObservedAt.UTC().Equal(observation.ObservedAt.UTC()) ||
-		!evidence.ObservedAt.Equal(observationObservedAt.UTC()) ||
-		!retentionUntil.UTC().Equal(observation.RetentionUntil.UTC()) ||
-		evidence.RetentionUntil.After(retentionUntil.UTC()) ||
+		!equalNewsDBTimestamp(versionObservedAt, version.ObservedAt) ||
+		!equalNewsDBTimestamp(observationObservedAt, observation.ObservedAt) ||
+		!equalNewsDBTimestamp(evidence.ObservedAt, observationObservedAt) ||
+		!equalNewsDBTimestamp(retentionUntil, observation.RetentionUntil) ||
+		evidence.RetentionUntil.UTC().Truncate(time.Microsecond).After(retentionUntil.UTC()) ||
 		!retentionUntil.After(evidence.RecordedAt) {
 		return app.ErrInvalidRequest
 	}
@@ -895,7 +899,7 @@ func samePersistedAvailabilityEvidence(
 		rawValue != evidence.RawValue || timezone != evidence.SourceTimezoneOrOffset ||
 		precision != string(evidence.Precision) || parseStatus != string(evidence.ParseStatus) ||
 		parseReasonCode != evidence.ParseReasonCode || parserVersion != evidence.ParserVersion ||
-		!observedAt.Valid || !observedAt.Time.UTC().Equal(evidence.ObservedAt.UTC()) {
+		!observedAt.Valid || !equalNewsDBTimestamp(observedAt.Time, evidence.ObservedAt) {
 		return false
 	}
 	if !nullableStringMatches(evidenceRef, evidence.EvidenceRef) ||
@@ -906,6 +910,13 @@ func samePersistedAvailabilityEvidence(
 		return false
 	}
 	return !candidateAt.Valid || candidateAt.Time.UTC().Equal(evidence.CandidateAvailableAt.UTC())
+}
+
+// equalNewsDBTimestamp compares an instant at the precision actually stored by
+// DATETIME(6) columns. Without this normalization a nanosecond in-memory value
+// never equals its microsecond database representation.
+func equalNewsDBTimestamp(left, right time.Time) bool {
+	return left.UTC().Truncate(time.Microsecond).Equal(right.UTC().Truncate(time.Microsecond))
 }
 
 func nullableStringMatches(stored sql.NullString, request *string) bool {

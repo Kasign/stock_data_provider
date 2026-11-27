@@ -1846,4 +1846,7 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - **断言链**：Feed Stage 成功 → `news_version_availability_decisions` 存在 `verified` 且 `review_rule_version` 来自资格目录 → 选中 Evidence 的 `parse_status=parsed`、`source_precision=disclosure_boundary`、字段路径与响应样本哈希一致 → Repository 严格 PIT 在可信 cutoff 后返回 `2026-10-31T15:59:59Z`。
 - **CI 接线**：把新测试加入 `go-test.yml` 的 News MariaDB Job 精确 `-run` 清单，并显式 grep `--- PASS`，防止测试被 SKIP/漏跑仍算通过。
 - **本地验证**：`go test ./... -count=1`、`go vet ./...`、`git diff --check` 全通过；本地无 `NEWS_MARIADB_TEST_DSN`，真库测试 SKIP。
-- **CI 状态**：not_run（待提交后按精确 SHA 回填）。未取得 CI 真库 PASS 前不解除 NEWS-BLK-07/RSC-002，不声称生产 `available_at` 已可用。
+- **CI 真库首次失败与根因**：提交 `3e054425547bcbd444e3c981ae27e24c763a107a` 的 News MariaDB Job 失败，新增 B 组用例在 Feed Stage 中以 `availability_evidence_record_failed` 结束。逐层诊断（测试专用 recorder 包装保留完整拒绝原因）确认是 `ErrInvalidRequest`，且 Evidence 请求的所有身份/绑定/字段均正确。根因在 News Storage：`news_observations` / `news_item_versions` 的时间列是 `DATETIME(6)`（微秒），真实 Feed 链传入的 `ObservedAt` / `RetentionUntil` 带纳秒（实测 `144625789`），`AppendAvailabilityEvidence` 写前用 `time.Time.Equal` 精确比较 DB 读回的微秒值与内存纳秒值，导致每次真实采集都在插入前被误判为身份不匹配；同一问题也影响幂等重放的 `samePersistedAvailabilityEvidence`。这是此前只跑微秒夹具、未跑真实 Feed 链而遗漏的真实缺陷。
+- **修复**：Storage 新增 `equalNewsDBTimestamp`，按实际存储精度 `Truncate(time.Microsecond)` 后比较；替换 `AppendAvailabilityEvidence` 的五项时间比对与 `samePersistedAvailabilityEvidence` 的 observed_at 比对，并把父留存上限检查也归一化到微秒。不改任何授权/语义门禁，不放宽时间顺序或来源绑定要求。Decision 写入路径只做先后比较，不受该精度问题影响。
+- **TDD 与变异**：新增 `TestEqualNewsDBTimestampNormalizesToMicroseconds` / `TestEqualNewsDBTimestampComparesInstantsAcrossLocations`；变异“恢复精确 Equal”使前者有效失败并恢复。全仓 `go test ./... -count=1`、`go vet ./...`、`git diff --check` 通过。
+- **CI 状态**：not_run（修复待按精确 SHA 回填）。未取得 CI 真库 PASS 前不解除 NEWS-BLK-07/RSC-002，不声称生产 `available_at` 已可用。
