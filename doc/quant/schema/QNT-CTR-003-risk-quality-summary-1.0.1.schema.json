@@ -1,0 +1,112 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "QNT-CTR-003-risk-quality-summary-1.0.1",
+  "title": "Quant Risk Quality Summary 1.0.1",
+  "description": "可交易性硬门禁的 quality_summary。quality_status 描述输入事实（Data 授权快照）的质量，取交易状态与盘口两份证据中较差者，不是决策结论；结论由 decision_status 表达，两者不得互相覆盖。missing_facts 列出事实缺失导致的门禁缺项；真实盘口授权快照已接入后 tradable_volume 不再恒缺失，当前 price_limit 仍无合格来源而恒列入缺失。blocking_facts 列出已核验且结论为不可交易的事实项。1.0.0 的描述口径保持冻结不变。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "rule_set_version",
+    "quality_status",
+    "decision_status",
+    "result_status",
+    "missing_facts",
+    "blocking_facts"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0.1"
+    },
+    "rule_set_version": {
+      "const": "qnt-risk-tradability/1.0.0"
+    },
+    "quality_status": {
+      "type": "string",
+      "enum": ["valid", "degraded"]
+    },
+    "decision_status": {
+      "type": "string",
+      "enum": ["pass", "reject", "unknown"]
+    },
+    "result_status": {
+      "type": "string",
+      "enum": ["completed", "rejected", "failed"]
+    },
+    "missing_facts": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "enum": ["risk_warning_status", "suspension_status", "price_limit", "tradable_volume"]
+      }
+    },
+    "blocking_facts": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "enum": ["risk_warning_status", "suspension_status", "delisting_status", "is_trading_day"]
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "decision_status": {
+            "const": "pass"
+          }
+        },
+        "required": ["decision_status"]
+      },
+      "then": {
+        "properties": {
+          "result_status": {
+            "const": "completed"
+          },
+          "missing_facts": {
+            "maxItems": 0
+          },
+          "blocking_facts": {
+            "maxItems": 0
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "decision_status": {
+            "const": "reject"
+          }
+        },
+        "required": ["decision_status"]
+      },
+      "then": {
+        "properties": {
+          "result_status": {
+            "const": "rejected"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "decision_status": {
+            "const": "unknown"
+          }
+        },
+        "required": ["decision_status"]
+      },
+      "then": {
+        "properties": {
+          "result_status": {
+            "const": "failed"
+          }
+        }
+      }
+    }
+  ]
+}

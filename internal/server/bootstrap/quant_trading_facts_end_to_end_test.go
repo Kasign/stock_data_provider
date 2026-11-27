@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -32,16 +33,18 @@ const (
 )
 
 type quantTradingFactsStore struct {
-	facts     map[string]marketdataapp.SecurityTradingStatusFactsSnapshot
-	policies  map[string]authorization.CurrentPolicy
-	decisions map[string]marketdataapp.DataAuthorizationDecision
+	facts      map[string]marketdataapp.SecurityTradingStatusFactsSnapshot
+	orderBooks map[string]marketdataapp.OrderBookFactsSnapshot
+	policies   map[string]authorization.CurrentPolicy
+	decisions  map[string]marketdataapp.DataAuthorizationDecision
 }
 
 func newQuantTradingFactsStore() *quantTradingFactsStore {
 	return &quantTradingFactsStore{
-		facts:     map[string]marketdataapp.SecurityTradingStatusFactsSnapshot{},
-		policies:  map[string]authorization.CurrentPolicy{},
-		decisions: map[string]marketdataapp.DataAuthorizationDecision{},
+		facts:      map[string]marketdataapp.SecurityTradingStatusFactsSnapshot{},
+		orderBooks: map[string]marketdataapp.OrderBookFactsSnapshot{},
+		policies:   map[string]authorization.CurrentPolicy{},
+		decisions:  map[string]marketdataapp.DataAuthorizationDecision{},
 	}
 }
 
@@ -58,6 +61,23 @@ func (store *quantTradingFactsStore) GetSecurityTradingStatusFactsSnapshot(
 	snapshot, present := store.facts[snapshotRef]
 	if !present {
 		return marketdataapp.SecurityTradingStatusFactsSnapshot{}, errors.New("trading-status facts Snapshot not found")
+	}
+	return snapshot, nil
+}
+
+func (store *quantTradingFactsStore) SaveOrderBookFactsSnapshot(
+	_ context.Context, snapshot marketdataapp.OrderBookFactsSnapshot,
+) error {
+	store.orderBooks[snapshot.Manifest.SnapshotRef] = snapshot
+	return nil
+}
+
+func (store *quantTradingFactsStore) GetOrderBookFactsSnapshot(
+	_ context.Context, snapshotRef string,
+) (marketdataapp.OrderBookFactsSnapshot, error) {
+	snapshot, present := store.orderBooks[snapshotRef]
+	if !present {
+		return marketdataapp.OrderBookFactsSnapshot{}, errors.New("order-book facts Snapshot not found")
 	}
 	return snapshot, nil
 }
@@ -129,6 +149,26 @@ func (store *quantTradingFactsStore) ReadDataAuthorizedSecurityTradingStatusFact
 	return decision, snapshot, current, nil
 }
 
+func (store *quantTradingFactsStore) ReadDataAuthorizedOrderBookFactsSnapshot(
+	_ context.Context, authorizationRef, snapshotRef string,
+) (marketdataapp.DataAuthorizationDecision, marketdataapp.OrderBookFactsSnapshot, authorization.CurrentPolicy, error) {
+	decision, present := store.decisions[authorizationRef]
+	if !present {
+		return marketdataapp.DataAuthorizationDecision{}, marketdataapp.OrderBookFactsSnapshot{}, authorization.CurrentPolicy{}, errors.New("data authorization decision not found")
+	}
+	snapshot, present := store.orderBooks[snapshotRef]
+	if !present {
+		return marketdataapp.DataAuthorizationDecision{}, marketdataapp.OrderBookFactsSnapshot{}, authorization.CurrentPolicy{}, errors.New("order-book facts Snapshot not found")
+	}
+	current, err := store.ResolveCurrentDataAuthorizationPolicyByRef(
+		context.Background(), authorization.OrderBookFactsPolicyRef,
+	)
+	if err != nil {
+		return marketdataapp.DataAuthorizationDecision{}, marketdataapp.OrderBookFactsSnapshot{}, authorization.CurrentPolicy{}, err
+	}
+	return decision, snapshot, current, nil
+}
+
 // quantTradingFactsWrongClassStore 模拟"仓储按错误数据类返回策略"的故障。
 type quantTradingFactsWrongClassStore struct{ *quantTradingFactsStore }
 
@@ -160,15 +200,57 @@ func (reader *quantTradingFactsPITReader) SecurityTradingStatusAsOf(
 	return &copy, nil
 }
 
+// quantOrderBookProviderFake 提供真实结构但确定性的五档盘口，避免端到端测试依赖外网。
+// 它不参与数值推导：值由 Data Creator 经 OrderBook.Validate 与 TradableVolumeShares 读取。
+type quantOrderBookProviderFake struct {
+	wantAsOf time.Time
+	book     *model.OrderBook
+}
+
+func (p *quantOrderBookProviderFake) FetchOrderBook(
+	_ context.Context, symbol string,
+) (*model.OrderBook, error) {
+	if p.book == nil || symbol != p.book.Symbol || !p.book.ObservedAt.Before(p.wantAsOf) {
+		return nil, errors.New("order-book identity or observation time does not match the request")
+	}
+	copy := *p.book
+	return &copy, nil
+}
+
+func validOrderBook(systemAsOf time.Time) *model.OrderBook {
+	observed := systemAsOf.Add(-2 * time.Second)
+	levels := func(base float64) []model.OrderBookLevel {
+		return []model.OrderBookLevel{
+			{Price: base, Volume: 1200},
+			{Price: base - 0.1, Volume: 900},
+			{Price: base - 0.2, Volume: 700},
+			{Price: base - 0.3, Volume: 500},
+			{Price: base - 0.4, Volume: 300},
+		}
+	}
+	return &model.OrderBook{
+		Symbol:           tradingFactsSymbol,
+		Bids:             levels(1313.1),
+		Asks:             levels(1313.2),
+		ObservedAt:       observed,
+		SystemObservedAt: observed,
+		Source:           "eastmoney",
+		QualityStatus:    model.QualityValid,
+	}
+}
+
 type quantTradingFactsChain struct {
-	adapter        *quantTradingFactsAdapter
-	store          *quantTradingFactsStore
-	authorized     *marketdataapplication.AuthorizedSecurityTradingStatusFactsSnapshotReader
-	creator        *marketdataapplication.SecurityTradingStatusFactsSnapshotCreator
-	context        context.Context
-	systemAsOf     time.Time
-	evaluatedAt    time.Time
-	closeSeriesRef string
+	adapter             *quantTradingFactsAdapter
+	orderBookAdapter    *quantOrderBookFactsAdapter
+	store               *quantTradingFactsStore
+	authorized          *marketdataapplication.AuthorizedSecurityTradingStatusFactsSnapshotReader
+	creator             *marketdataapplication.SecurityTradingStatusFactsSnapshotCreator
+	orderBookCreator    *marketdataapplication.OrderBookFactsSnapshotCreator
+	orderBookAuthorized *marketdataapplication.AuthorizedOrderBookFactsSnapshotReader
+	context             context.Context
+	systemAsOf          time.Time
+	evaluatedAt         time.Time
+	closeSeriesRef      string
 }
 
 func tradingFactsPolicy(t *testing.T, systemAsOf time.Time) authorization.CurrentPolicy {
@@ -227,6 +309,9 @@ func newQuantTradingFactsChain(t *testing.T, store *quantTradingFactsStore) quan
 	t.Helper()
 	systemAsOf := time.Date(2026, 11, 25, 15, 0, 0, 0, time.UTC)
 	store.policies[authorization.SecurityStatusFactsPolicyRef] = tradingFactsPolicy(t, systemAsOf)
+	store.policies[authorization.OrderBookFactsPolicyRef] = tradingFactsPolicyForClass(
+		t, authorization.OrderBookFactsPolicyRef, "order-book-policy-2026-11", systemAsOf,
+	)
 
 	owner, err := marketdataapplication.NewDataAuthorizationOwner(store, store)
 	if err != nil {
@@ -245,6 +330,22 @@ func newQuantTradingFactsChain(t *testing.T, store *quantTradingFactsStore) quan
 	if err != nil {
 		t.Fatal(err)
 	}
+	orderBookCreator, err := marketdataapplication.NewOrderBookFactsSnapshotCreator(
+		&quantOrderBookProviderFake{wantAsOf: systemAsOf, book: validOrderBook(systemAsOf)}, store, owner,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	orderBookAuthorized, err := marketdataapplication.NewAuthorizedOrderBookFactsSnapshotReader(store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	orderBookAdapter, err := newQuantOrderBookFactsAdapter(&quantOrderBookFactsDataPort{
+		creator: orderBookCreator, authorized: orderBookAuthorized,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	ctx, err := security.WithPrincipal(context.Background(), security.Principal{
 		Kind: security.IdentityService, AuthMethod: security.AuthMethodServiceBearer,
 		Subject: "researchflow", Scopes: []string{security.ScopeDataRead},
@@ -253,7 +354,9 @@ func newQuantTradingFactsChain(t *testing.T, store *quantTradingFactsStore) quan
 		t.Fatal(err)
 	}
 	return quantTradingFactsChain{
-		adapter: adapter, store: store, authorized: authorized, creator: creator,
+		adapter: adapter, orderBookAdapter: orderBookAdapter, store: store,
+		authorized: authorized, creator: creator,
+		orderBookCreator: orderBookCreator, orderBookAuthorized: orderBookAuthorized,
 		context: ctx, systemAsOf: systemAsOf, evaluatedAt: systemAsOf.Add(time.Hour),
 	}
 }
@@ -277,6 +380,25 @@ func (port *quantTradingFactsDataPort) ReadAuthorizedSecurityTradingStatusFactsS
 }
 
 var _ quantTradingFactsPort = (*quantTradingFactsDataPort)(nil)
+
+type quantOrderBookFactsDataPort struct {
+	creator    *marketdataapplication.OrderBookFactsSnapshotCreator
+	authorized *marketdataapplication.AuthorizedOrderBookFactsSnapshotReader
+}
+
+func (port *quantOrderBookFactsDataPort) CreateOrderBookFactsSnapshot(
+	ctx context.Context, symbol string, systemAsOf time.Time, purpose string,
+) (marketdataapplication.OrderBookFactsSnapshotReferences, error) {
+	return port.creator.Create(ctx, symbol, systemAsOf, purpose)
+}
+
+func (port *quantOrderBookFactsDataPort) ReadAuthorizedOrderBookFactsSnapshot(
+	ctx context.Context, snapshotRef, authorizationRef, purpose string,
+) (marketdataapp.OrderBookFactsSnapshot, error) {
+	return port.authorized.Read(ctx, snapshotRef, authorizationRef, purpose)
+}
+
+var _ quantOrderBookFactsPort = (*quantOrderBookFactsDataPort)(nil)
 
 func TestQuantTradingFactsEndToEndProducesTraceableRejection(t *testing.T) {
 	store := newQuantTradingFactsStore()
@@ -312,14 +434,32 @@ func TestQuantTradingFactsEndToEndProducesTraceableRejection(t *testing.T) {
 		t.Fatalf("facts payload was not transported faithfully: %+v", facts.Facts)
 	}
 
-	assessment, err := quantapplication.AssessTradabilityFacts(facts)
+	orderBookFacts := quantapplication.OrderBookFactsSnapshot{
+		SnapshotRef:           "data_snapshot:sha256:" + strings.Repeat("b", 64),
+		AuthorizationRef:      "data_authorization:order-book-opaque",
+		ManifestSchemaVersion: "1.0.0",
+		PayloadSchemaVersion:  quantapplication.OrderBookFactsPayloadSchemaVersion,
+		PayloadKind:           quantapplication.OrderBookFactsPayloadKind,
+		CallerRef:             "principal:service:researchflow",
+		PurposeCode:           tradingFactsPurpose,
+		Symbol:                tradingFactsSymbol,
+		ObservedAt:            chain.systemAsOf.Add(-2 * time.Second).Format(time.RFC3339Nano),
+		SystemAsOf:            chain.systemAsOf.Format(time.RFC3339Nano),
+		TradableVolumeShares:  3600,
+		BidLevels:             5,
+		AskLevels:             5,
+		Source:                "eastmoney",
+		QualityStatus:         "valid",
+	}
+	evidence := quantapplication.TradabilityEvidence{TradingFacts: facts, OrderBookFacts: orderBookFacts}
+	assessment, err := quantapplication.AssessTradabilityFacts(evidence)
 	if err != nil {
 		t.Fatalf("AssessTradabilityFacts() error = %v", err)
 	}
 	if assessment.Facts.Verified {
-		t.Fatal("tradability must stay unverified while price_limit and tradable_volume are absent")
+		t.Fatal("tradability must stay unverified while price_limit is absent")
 	}
-	wantMissing := []risk.TradabilityFact{risk.TradabilityFactPriceLimit, risk.TradabilityFactTradableVolume}
+	wantMissing := []risk.TradabilityFact{risk.TradabilityFactPriceLimit}
 	if len(assessment.Facts.MissingFacts) != len(wantMissing) {
 		t.Fatalf("MissingFacts = %v, want %v", assessment.Facts.MissingFacts, wantMissing)
 	}
@@ -328,16 +468,23 @@ func TestQuantTradingFactsEndToEndProducesTraceableRejection(t *testing.T) {
 			t.Fatalf("MissingFacts[%d] = %q, want %q", index, assessment.Facts.MissingFacts[index], want)
 		}
 	}
-	if len(assessment.Facts.EvidenceRefs) != 2 ||
-		assessment.Facts.EvidenceRefs[0] != snapshotRef || assessment.Facts.EvidenceRefs[1] != authorizationRef {
-		t.Fatalf("EvidenceRefs = %v, want [snapshot_ref, authorization_ref]", assessment.Facts.EvidenceRefs)
+	wantRefs := []string{
+		snapshotRef, authorizationRef, orderBookFacts.SnapshotRef, orderBookFacts.AuthorizationRef,
+	}
+	if len(assessment.Facts.EvidenceRefs) != len(wantRefs) {
+		t.Fatalf("EvidenceRefs = %v, want %v", assessment.Facts.EvidenceRefs, wantRefs)
+	}
+	for index := range wantRefs {
+		if assessment.Facts.EvidenceRefs[index] != wantRefs[index] {
+			t.Fatalf("EvidenceRefs[%d] = %q, want %q", index, assessment.Facts.EvidenceRefs[index], wantRefs[index])
+		}
 	}
 	if len(assessment.BlockingFacts) != 0 {
 		t.Fatalf("BlockingFacts = %v, want none for a normally traded security", assessment.BlockingFacts)
 	}
 
 	decision, err := quantapplication.EvaluateTradabilityDecision(
-		chain.context, "risk-decision-1", chain.evaluatedAt, facts,
+		chain.context, "risk-decision-1", chain.evaluatedAt, evidence,
 	)
 	if err != nil {
 		t.Fatalf("EvaluateTradabilityDecision() error = %v", err)
@@ -349,8 +496,13 @@ func TestQuantTradingFactsEndToEndProducesTraceableRejection(t *testing.T) {
 		decision.Reasons[0].Status != risk.ReasonTriggered {
 		t.Fatalf("decision reasons = %+v, want a triggered tradability gate", decision.Reasons)
 	}
-	if len(decision.InputRefs) != 2 || decision.InputRefs[0] != snapshotRef || decision.InputRefs[1] != authorizationRef {
+	if len(decision.InputRefs) != len(wantRefs) {
 		t.Fatalf("decision InputRefs = %v, want the same evidence as the assessment", decision.InputRefs)
+	}
+	for index := range wantRefs {
+		if decision.InputRefs[index] != wantRefs[index] {
+			t.Fatalf("decision InputRefs[%d] = %q, want %q", index, decision.InputRefs[index], wantRefs[index])
+		}
 	}
 	if err := decision.Validate(); err != nil {
 		t.Fatalf("decision is not contract-valid: %v", err)

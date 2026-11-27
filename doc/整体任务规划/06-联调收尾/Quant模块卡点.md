@@ -254,7 +254,7 @@ Quant 现有 GetResult 授权读取用例、SMA20 与三因子（`ma20_distance`
 - 迁移 V2 只 `ADD COLUMN payload_kind`（`VARCHAR(48)` ascii_bin 非空）；**刻意不改表名**——MySQL DDL 非事务，`RENAME` 失败会留下 `status=failed` 半完成迁移并阻断启动，代价远大于名字不贴切。
 - 存储/授权双通道隔离：写入显式给 kind，读取 `snapshot_ref` 必须带 kind 条件（前缀对所有类型相同，仅凭 ref 无法区分）；策略引用为闭集，`Issue`/`AuthorizeRead`/Owner 发布/HTTP 四处校验数据类一致，不匹配 fail-closed 且不回落日线。
 - Creator 只搬运不改判：源 `invalid`/`unknown` 拒绝，`degraded` 即使五项齐全也拒绝；枚举 `unknown` 一律 `unavailable` + 原因；仍不生成涨跌停与可成交量。
-- Quant 消费端：`price_limit`/`tradable_volume` 恒入 `MissingFacts` → `Verified` 恒 false → 决策恒 `reject`。端到端测试断言 `reject + MissingFacts=[price_limit,tradable_volume] + EvidenceRefs=[snapshotRef,authorizationRef]`，测试名 `ProducesTraceableRejection`。
+- Quant 消费端（历史状态，R2 后已被下文 2026-11-27 小节取代）：当时 `price_limit`/`tradable_volume` 恒入 `MissingFacts` → `Verified` 恒 false → 决策恒 `reject`。端到端测试曾断言 `reject + MissingFacts=[price_limit,tradable_volume] + EvidenceRefs=[snapshotRef,authorizationRef]`。
 - **1.4 仍为部分完成**，但阻塞性质变了：不再缺链路，而是缺事实——没有涨跌停制度表与可成交量模型，门禁只能给出可追溯的拒绝。Facade/Stage 装配的实质前置变成"能产出非拒绝结论"，需先行立项（另行任务）。
 - 验证：`gofmt`/`go vet`/`go test ./internal/...` 全绿，`-race` 覆盖三个改动模块；变异验证六处均有效失败。MariaDB 集成测试需 `MARKET_DATA_TEST_MYSQL_DSN`，**未在真实库执行**。
 - 契约状态未变：QNT-CTR-003 `deferred`、004/005 `frozen`、006 `deferred`、DATA-CTR-007 `deferred`、008 `frozen`。
@@ -267,4 +267,11 @@ Quant 现有 GetResult 授权读取用例、SMA20 与三因子（`ma20_distance`
 - **拒绝语义**：Stage `succeeded` + `decision_status=reject` + Manifest `result_status=rejected`。禁止映射为 Stage 失败——失败 Attempt 不产出 Stage Output，拒绝结论将不可授权读取、不可追溯。消费者必须读决策；Stage 状态只表示"评估已执行完成"。决策为 `unknown` 时不产出 Stage Output（fail-closed）。
 - **不声明 `hard_risk`**：决策恒 `reject`，声明门禁会让所有含该 Stage 的 Run 必然失败，等于用门禁摧毁流水线。待涨跌停/可成交量事实补齐、决策可能出现 `pass` 后另立项。
 - 验收：新增 23 个测试全 PASS；`gofmt`/`go vet`/`go test ./internal/...` 全绿；`-race` 覆盖 `internal/quant/...` 与 `internal/server/bootstrap`。变异验证 6 处均有效失败（"关联规格表漏登记"原契约测试未捕获，已补显式断言）。
-- **1.4 仍为部分完成**：装配已通、拒绝可追溯，但门禁**不能放行**——`price_limit`/`tradable_volume` 两项事实仍不存在。RF-BLOCK-008（Researchflow Composer 的 `RiskDecision` 投影）仍 OPEN，需 Quant + Researchflow 双 Owner 决议，不得用"Stage 已装配"冒充已解除。
+- **1.4 当时仍为部分完成（历史状态，R2 后见文末）**：装配已通、拒绝可追溯，但门禁**不能放行**——当时 `price_limit`/`tradable_volume` 两项事实仍不存在。RF-BLOCK-008 当时仍 OPEN，已在 R1 根治，不得用"Stage 已装配"冒充已解除。
+
+### R2 真实盘口事实闭环当前口径（2026-11-27）
+
+- `tradable_volume` 不再恒缺失：Quant 通过 `TradabilityEvidence` 显式消费交易状态授权快照与独立 `order_book` 授权快照；身份、system_as_of、payload kind、五档完整性与正成交量任一不满足即 fail-closed。
+- 当前唯一缺失的门禁事实是 `price_limit`；RiskDecision 仍 `reject`，Stage 仍 `succeeded + decision_status=reject`，不得表述为硬门禁通过。
+- Decision / Manifest / Stage Output 证据升级为四元 `[交易快照, 交易授权, 盘口快照, 盘口授权]`；QNT-CTR-003 Stage Output 发布 2.0.0，Quality Summary 发布 1.0.1；Output Registry Set 风险 1.7.0、合并 1.8.0。
+- L3 quant.research 已改为发布盘口策略、启用 Eastmoney quote/order-book，并断言只缺 `price_limit` 且四段证据齐备；本地无 MariaDB/Redis 环境变量时按既有门控 SKIP，CI 结果需按精确 SHA 回填。

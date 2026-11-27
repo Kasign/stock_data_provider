@@ -18,14 +18,15 @@ import (
 // Risk 硬门禁切片的第一个生产 Facade（执行清单 1.4 / QNT-010）。
 //
 // 设计要点：
-//   - 只消费已授权的交易事实快照；不重新解释事实，也不推导涨跌停与可成交量。
+//   - 只消费已授权的交易状态事实与真实盘口事实；不重新解释事实，也不推导涨跌停。
+//   - tradable_volume 只取自 Data 授权盘口快照中的真实买盘五档挂单量之和。
 //   - 决策的 evaluated_at 取 Run 的可信 system_as_of 而不是墙钟：决策是"某个 PIT 时刻的
 //     判断"，取墙钟会让同一份事实在重放时得到不同 result_id，破坏内容寻址的可复现性；
 //     真实执行时刻由 Researchflow 的 Attempt 时间戳承载，信息不丢失。
 //   - 决策结论落在 payload 里，Manifest.result_status 与之同步（reject → rejected）。
 //     Stage 是否成功是另一层语义：评估完成即成功，结论是拒绝。
-//   - 当前事实边界下 Verified 恒为 false（缺涨跌停与可成交量），因此决策恒为 reject。
-//     这是正确结论，不是缺陷；任何"补值"都会把推导伪装成事实。
+//   - price_limit 仍无合格事实来源，因此当前 Verified 恒为 false、决策恒为 reject；
+//     但 missing_facts 必须如实只列 price_limit，不能继续把已核验的可成交量写成缺失。
 const (
 	riskPurposeCode      = TradingFactsPurposeCode
 	riskSchemaVersion    = result.EnvelopeSchemaVersion
@@ -48,10 +49,12 @@ type RiskDecisionIDGenerator interface {
 }
 
 type CreateRiskRequest struct {
-	SnapshotRef      string
-	AuthorizationRef string
-	SystemAsOf       time.Time
-	Parameters       json.RawMessage
+	SnapshotRef               string
+	AuthorizationRef          string
+	OrderBookSnapshotRef      string
+	OrderBookAuthorizationRef string
+	SystemAsOf                time.Time
+	Parameters                json.RawMessage
 }
 
 // RiskExecutionResult 是一次可交易性判定已持久化的结果。
@@ -68,26 +71,30 @@ type RiskExecutionResult struct {
 }
 
 type CreateRiskService struct {
-	facts     TradingFactsReader
-	decisions RiskDecisionIDGenerator
-	persister *resultPersister
-	now       func() time.Time
+	facts      TradingFactsReader
+	orderBooks OrderBookFactsReader
+	decisions  RiskDecisionIDGenerator
+	persister  *resultPersister
+	now        func() time.Time
 }
 
 func NewCreateRiskService(
 	facts TradingFactsReader,
+	orderBooks OrderBookFactsReader,
 	decisions RiskDecisionIDGenerator,
 	repository result.Repository,
 	now func() time.Time,
 ) (*CreateRiskService, error) {
-	if facts == nil || decisions == nil || repository == nil || now == nil {
+	if facts == nil || orderBooks == nil || decisions == nil || repository == nil || now == nil {
 		return nil, ErrInvalidCreateRiskRequest
 	}
 	persister, err := newResultPersister(repository)
 	if err != nil {
 		return nil, err
 	}
-	return &CreateRiskService{facts: facts, decisions: decisions, persister: persister, now: now}, nil
+	return &CreateRiskService{
+		facts: facts, orderBooks: orderBooks, decisions: decisions, persister: persister, now: now,
+	}, nil
 }
 
 // riskParameters 是风险 Stage 传给 Facade 的参数。
@@ -101,9 +108,11 @@ type riskParameters struct {
 // Execute 读取已授权事实快照，评估可交易性并落库。
 // 决策为 reject 不是错误：返回已持久化的结果，由调用方读 decision.Status。
 func (service *CreateRiskService) Execute(ctx context.Context, request CreateRiskRequest) (RiskExecutionResult, error) {
-	if service == nil || service.facts == nil || service.decisions == nil || service.persister == nil ||
-		service.now == nil || ctx == nil ||
+	if service == nil || service.facts == nil || service.orderBooks == nil || service.decisions == nil ||
+		service.persister == nil || service.now == nil || ctx == nil ||
 		strings.TrimSpace(request.SnapshotRef) == "" || strings.TrimSpace(request.AuthorizationRef) == "" ||
+		strings.TrimSpace(request.OrderBookSnapshotRef) == "" ||
+		strings.TrimSpace(request.OrderBookAuthorizationRef) == "" ||
 		request.SystemAsOf.IsZero() || request.SystemAsOf.Location() != time.UTC ||
 		len(request.Parameters) == 0 || len(request.Parameters) > riskMaxParamsBytes ||
 		!json.Valid(request.Parameters) {
@@ -130,30 +139,42 @@ func (service *CreateRiskService) Execute(ctx context.Context, request CreateRis
 	if err := validateRiskSnapshotBinding(snapshot, request, parameters, service.now()); err != nil {
 		return RiskExecutionResult{}, err
 	}
+	orderBook, err := service.orderBooks.ReadOrderBookFactsSnapshot(
+		ctx, request.OrderBookSnapshotRef, request.OrderBookAuthorizationRef, riskPurposeCode,
+	)
+	if err != nil {
+		return RiskExecutionResult{}, fmt.Errorf("read authorized order-book facts Snapshot: %w", err)
+	}
+	if err := validateRiskOrderBookBinding(orderBook, request, parameters, snapshot); err != nil {
+		return RiskExecutionResult{}, err
+	}
 
+	evidence := TradabilityEvidence{TradingFacts: snapshot, OrderBookFacts: orderBook}
 	decisionID, err := service.decisions.NewDecisionID(ctx)
 	if err != nil {
 		return RiskExecutionResult{}, fmt.Errorf("generate risk decision identity: %w", err)
 	}
-	assessment, err := AssessTradabilityFacts(snapshot)
+	assessment, err := AssessTradabilityFacts(evidence)
 	if err != nil {
 		return RiskExecutionResult{}, fmt.Errorf("%w: %v", ErrInvalidRiskSnapshot, err)
 	}
-	decision, err := EvaluateTradabilityDecision(ctx, decisionID, request.SystemAsOf, snapshot)
+	decision, err := EvaluateTradabilityDecision(ctx, decisionID, request.SystemAsOf, evidence)
 	if err != nil {
 		return RiskExecutionResult{}, fmt.Errorf("evaluate tradability gate: %w", err)
 	}
 
+	qualityStatus := riskInputQualityStatus(snapshot.QualityStatus, orderBook.QualityStatus)
 	input := manifest.Input{
 		ResultType: riskInputResultType, Scope: "stock", SecurityID: snapshot.Symbol,
 		TradeDate: snapshot.TradeDate, Period: riskPeriod,
-		// quality_status 描述证据质量（事实快照质量），不是结论；结论在 decision.Status。
-		QualityStatus:        snapshot.QualityStatus,
+		// quality_status 描述证据质量（两份快照中较差者），不是结论；结论在 decision.Status。
+		QualityStatus:        qualityStatus,
 		ResultStatus:         riskResultStatus(decision.Status),
 		SchemaVersion:        riskSchemaVersion,
 		PayloadSchemaVersion: riskPayloadVersion,
 		AlgorithmVersion:     riskAlgorithmVersion, ParameterFingerprint: parameterFingerprint,
-		SystemAsOf: request.SystemAsOf, InputSnapshotRefs: []string{snapshot.SnapshotRef},
+		SystemAsOf:        request.SystemAsOf,
+		InputSnapshotRefs: []string{snapshot.SnapshotRef, orderBook.SnapshotRef},
 	}
 	payload, err := result.NewRiskPayload(decision)
 	if err != nil {
@@ -170,7 +191,7 @@ func (service *CreateRiskService) Execute(ctx context.Context, request CreateRis
 		MissingFacts:       append([]risk.TradabilityFact{}, assessment.Facts.MissingFacts...),
 		BlockingFacts:      append([]string{}, assessment.BlockingFacts...),
 		RuleSetVersion:     decision.RuleSetVersion,
-		InputQualityStatus: snapshot.QualityStatus,
+		InputQualityStatus: qualityStatus,
 	}, nil
 }
 
@@ -208,6 +229,38 @@ func validateRiskSnapshotBinding(
 		return fmt.Errorf("%w: trade_date is later than the evaluation instant", ErrInvalidRiskSnapshot)
 	}
 	return nil
+}
+
+// validateRiskOrderBookBinding 把盘口授权快照钉在请求、参数与交易状态快照上。
+// 盘口是日内事实，必须以 system_as_of 对齐；任何身份或时点错配都不得进入门禁。
+func validateRiskOrderBookBinding(
+	orderBook OrderBookFactsSnapshot,
+	request CreateRiskRequest,
+	parameters riskParameters,
+	trading TradingFactsSnapshot,
+) error {
+	if err := orderBook.Validate(); err != nil {
+		return fmt.Errorf("%w: %v", ErrInvalidRiskSnapshot, err)
+	}
+	if orderBook.SnapshotRef != request.OrderBookSnapshotRef || orderBook.PurposeCode != riskPurposeCode {
+		return fmt.Errorf("%w: order-book Snapshot identity or purpose does not match the request", ErrInvalidRiskSnapshot)
+	}
+	if orderBook.Symbol != parameters.Symbol || orderBook.Symbol != trading.Symbol {
+		return fmt.Errorf("%w: order-book Snapshot does not describe the authorized security", ErrInvalidRiskSnapshot)
+	}
+	if orderBook.SystemAsOf != request.SystemAsOf.Format(time.RFC3339Nano) ||
+		orderBook.SystemAsOf != trading.SystemAsOf {
+		return fmt.Errorf("%w: order-book system_as_of differs from the evaluation instant", ErrInvalidRiskSnapshot)
+	}
+	return nil
+}
+
+// riskInputQualityStatus 取两份证据中较差的质量；degraded 不会被升级为 valid。
+func riskInputQualityStatus(tradingQuality, orderBookQuality string) string {
+	if tradingQuality == "degraded" || orderBookQuality == "degraded" {
+		return "degraded"
+	}
+	return "valid"
 }
 
 func decodeRiskParameters(raw json.RawMessage) (riskParameters, error) {

@@ -15,13 +15,21 @@ import (
 //
 // 与 SMA20/Factor/Trend 同一套路：Stage 先用可信身份创建 Data 授权快照，
 // 再把两个引用交给 Quant Facade，避免 Facade 直接持有 Data 的连接与策略。
-// 区别在于事实类型：这里读的是交易状态事实（PIT 本地数据），不是日线行情，
-// 因此不需要 Provider 白名单，也不会触发外部抓取。
+// 事实分两类：交易状态来自 PIT 本地数据，tradable_volume 来自 Data 的真实盘口
+// Provider。Stage 只把两类授权引用交给 Facade，不读取 Provider，也不解析盘口数值。
 var ErrInvalidRiskStageRequest = errors.New("invalid Quant Risk stage request")
 
 type TradingFactsSnapshotCreator interface {
 	CreateTradingFactsSnapshot(
 		ctx context.Context, symbol, tradeDate string, systemAsOf time.Time, purpose string,
+	) (snapshotRef, authorizationRef string, err error)
+}
+
+// OrderBookSnapshotCreator 创建并授权日内盘口事实快照。
+// 盘口没有 trade_date：它以 observed_at / system_as_of 表达日内 PIT 精度。
+type OrderBookSnapshotCreator interface {
+	CreateOrderBookFactsSnapshot(
+		ctx context.Context, symbol string, systemAsOf time.Time, purpose string,
 	) (snapshotRef, authorizationRef string, err error)
 }
 
@@ -32,15 +40,20 @@ type RiskRequest struct {
 }
 
 type RiskAdapter struct {
-	facts   TradingFactsSnapshotCreator
-	service *application.CreateRiskService
+	facts      TradingFactsSnapshotCreator
+	orderBooks OrderBookSnapshotCreator
+	service    *application.CreateRiskService
 }
 
-func NewRiskAdapter(facts TradingFactsSnapshotCreator, service *application.CreateRiskService) (*RiskAdapter, error) {
-	if facts == nil || service == nil {
+func NewRiskAdapter(
+	facts TradingFactsSnapshotCreator,
+	orderBooks OrderBookSnapshotCreator,
+	service *application.CreateRiskService,
+) (*RiskAdapter, error) {
+	if facts == nil || orderBooks == nil || service == nil {
 		return nil, ErrInvalidRiskStageRequest
 	}
-	return &RiskAdapter{facts: facts, service: service}, nil
+	return &RiskAdapter{facts: facts, orderBooks: orderBooks, service: service}, nil
 }
 
 // Execute 创建交易事实授权快照并评估可交易性门禁。
@@ -48,7 +61,7 @@ func NewRiskAdapter(facts TradingFactsSnapshotCreator, service *application.Crea
 func (adapter *RiskAdapter) Execute(
 	ctx context.Context, request RiskRequest,
 ) (RiskOutput, RiskQualitySummary, error) {
-	if adapter == nil || adapter.facts == nil || adapter.service == nil || ctx == nil ||
+	if adapter == nil || adapter.facts == nil || adapter.orderBooks == nil || adapter.service == nil || ctx == nil ||
 		!quantSymbolPattern.MatchString(request.Symbol) ||
 		!validISODate(request.TradeDate) ||
 		request.SystemAsOf.IsZero() || request.SystemAsOf.Location() != time.UTC ||
@@ -64,7 +77,14 @@ func (adapter *RiskAdapter) Execute(
 	if err != nil {
 		return RiskOutput{}, RiskQualitySummary{}, fmt.Errorf("create authorized trading-status facts Snapshot: %w", err)
 	}
-	if strings.TrimSpace(snapshotRef) == "" || strings.TrimSpace(authorizationRef) == "" {
+	orderBookRef, orderBookAuthorizationRef, err := adapter.orderBooks.CreateOrderBookFactsSnapshot(
+		ctx, request.Symbol, request.SystemAsOf, RiskPurposeCode,
+	)
+	if err != nil {
+		return RiskOutput{}, RiskQualitySummary{}, fmt.Errorf("create authorized order-book facts Snapshot: %w", err)
+	}
+	if strings.TrimSpace(snapshotRef) == "" || strings.TrimSpace(authorizationRef) == "" ||
+		strings.TrimSpace(orderBookRef) == "" || strings.TrimSpace(orderBookAuthorizationRef) == "" {
 		return RiskOutput{}, RiskQualitySummary{}, ErrInvalidRiskStageRequest
 	}
 	parameters, err := json.Marshal(struct {
@@ -76,6 +96,7 @@ func (adapter *RiskAdapter) Execute(
 	}
 	execution, err := adapter.service.Execute(ctx, application.CreateRiskRequest{
 		SnapshotRef: snapshotRef, AuthorizationRef: authorizationRef,
+		OrderBookSnapshotRef: orderBookRef, OrderBookAuthorizationRef: orderBookAuthorizationRef,
 		SystemAsOf: request.SystemAsOf, Parameters: parameters,
 	})
 	if err != nil {

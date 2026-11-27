@@ -4,9 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"sort"
+	"strings"
 	"testing"
 	"time"
 
+	"example.com/stock-analysis-flow/internal/marketdata/authorization"
 	quantapplication "example.com/stock-analysis-flow/internal/quant/application"
 	"example.com/stock-analysis-flow/internal/quant/result"
 	"example.com/stock-analysis-flow/internal/quant/risk"
@@ -18,8 +21,8 @@ import (
 // 除 MariaDB 外全部使用生产代码（Data 创建器/签发器/授权读取器、Quant Facade、
 // Stage Adapter、两个 Validator）。
 //
-// 验收标准是"拒绝可追溯"，不是"能放行"：Data 没有涨跌停与可成交量事实，
-// 因此决策必然 reject，且证据必须指向真实快照与真实授权。
+// 验收标准是"拒绝可追溯"，不是"能放行"：Data 已提供真实盘口事实但尚无涨跌停事实，
+// 因此决策必然 reject，missing_facts 只点名 price_limit，且四段证据必须指向真实快照与真实授权。
 
 type quantRiskResultStore struct {
 	records map[string]result.Record
@@ -50,13 +53,13 @@ func newQuantRiskEndToEndAdapter(
 	t.Helper()
 	store := newQuantRiskResultStore()
 	service, err := quantapplication.NewCreateRiskService(
-		chain.adapter, quantRiskFixedDecisionIDs{id: "risk_decision_e2e"}, store,
+		chain.adapter, chain.orderBookAdapter, quantRiskFixedDecisionIDs{id: "risk_decision_e2e"}, store,
 		func() time.Time { return chain.systemAsOf.Add(time.Minute) },
 	)
 	if err != nil {
 		t.Fatalf("NewCreateRiskService() error = %v", err)
 	}
-	adapter, err := quantstage.NewRiskAdapter(chain.adapter, service)
+	adapter, err := quantstage.NewRiskAdapter(chain.adapter, chain.orderBookAdapter, service)
 	if err != nil {
 		t.Fatalf("NewRiskAdapter() error = %v", err)
 	}
@@ -83,8 +86,8 @@ func TestQuantRiskStageEndToEndProducesTraceableRejection(t *testing.T) {
 		output.Reasons[0].Status != risk.ReasonTriggered {
 		t.Fatalf("unexpected reasons: %+v", output.Reasons)
 	}
-	// 2) 缺项必须点名涨跌停与可成交量，而不是笼统的"未验证"。
-	wantMissing := []string{"price_limit", "tradable_volume"}
+	// 2) 缺项必须只点名涨跌停：可成交量已由真实盘口授权快照核验。
+	wantMissing := []string{"price_limit"}
 	if len(output.MissingFacts) != len(wantMissing) {
 		t.Fatalf("missing facts = %v, want %v", output.MissingFacts, wantMissing)
 	}
@@ -96,10 +99,31 @@ func TestQuantRiskStageEndToEndProducesTraceableRejection(t *testing.T) {
 	if len(output.BlockingFacts) != 0 {
 		t.Fatalf("blocking facts = %v, want none for a normally traded security", output.BlockingFacts)
 	}
-	// 3) 证据引用必须指向真实的快照与授权，且 evaluation 时刻等于 Run 的 system_as_of。
-	if len(output.InputRefs) != 2 || output.InputRefs[0] != quantRiskInputSnapshotRef(t, output) ||
-		output.InputRefs[1] != quantRiskInputAuthorizationRef(t, output) {
-		t.Fatalf("input refs = %v", output.InputRefs)
+	// 3) 证据引用必须包含两份真实快照与两份授权，且 evaluation 时刻等于 Run 的 system_as_of。
+	if len(output.InputRefs) != 4 {
+		t.Fatalf("input refs = %v, want four evidence references", output.InputRefs)
+	}
+	for index, prefix := range []string{
+		"data_snapshot:sha256:", "data_authorization:", "data_snapshot:sha256:", "data_authorization:",
+	} {
+		if !strings.HasPrefix(output.InputRefs[index], prefix) {
+			t.Fatalf("input_refs[%d] = %q, want prefix %q", index, output.InputRefs[index], prefix)
+		}
+	}
+	if output.InputRefs[0] == output.InputRefs[2] || output.InputRefs[1] == output.InputRefs[3] {
+		t.Fatalf("trading-status and order-book evidence must be distinct: %v", output.InputRefs)
+	}
+	if _, present := chain.store.facts[output.InputRefs[0]]; !present {
+		t.Fatalf("trading-status snapshot ref %q is not persisted", output.InputRefs[0])
+	}
+	if _, present := chain.store.orderBooks[output.InputRefs[2]]; !present {
+		t.Fatalf("order-book snapshot ref %q is not persisted", output.InputRefs[2])
+	}
+	if _, present := chain.store.decisions[output.InputRefs[1]]; !present {
+		t.Fatalf("trading-status authorization ref %q is not persisted", output.InputRefs[1])
+	}
+	if _, present := chain.store.decisions[output.InputRefs[3]]; !present {
+		t.Fatalf("order-book authorization ref %q is not persisted", output.InputRefs[3])
 	}
 	if output.EvaluatedAt != chain.systemAsOf.Format(time.RFC3339Nano) ||
 		output.SystemAsOf != chain.systemAsOf.Format(time.RFC3339Nano) {
@@ -114,8 +138,15 @@ func TestQuantRiskStageEndToEndProducesTraceableRejection(t *testing.T) {
 	if err := record.Validate(); err != nil {
 		t.Fatalf("persisted result is not content-addressed: %v", err)
 	}
-	if len(record.Manifest.InputSnapshotRefs) != 1 || record.Manifest.InputSnapshotRefs[0] != output.InputRefs[0] {
-		t.Fatalf("persisted manifest input refs = %v", record.Manifest.InputSnapshotRefs)
+	wantSnapshotRefs := []string{output.InputRefs[0], output.InputRefs[2]}
+	sort.Strings(wantSnapshotRefs) // Manifest 按内容寻址规则对输入快照引用排序。
+	if len(record.Manifest.InputSnapshotRefs) != len(wantSnapshotRefs) {
+		t.Fatalf("persisted manifest input refs = %v, want %v", record.Manifest.InputSnapshotRefs, wantSnapshotRefs)
+	}
+	for index := range wantSnapshotRefs {
+		if record.Manifest.InputSnapshotRefs[index] != wantSnapshotRefs[index] {
+			t.Fatalf("persisted manifest input_refs[%d] = %q, want %q", index, record.Manifest.InputSnapshotRefs[index], wantSnapshotRefs[index])
+		}
 	}
 	var decision risk.Decision
 	if err := json.Unmarshal(record.Payload, &decision); err != nil {
@@ -152,6 +183,22 @@ func TestQuantRiskStageEndToEndFailsClosedWithoutFactsPolicy(t *testing.T) {
 	}
 	if len(persisted.records) != 0 {
 		t.Fatalf("no risk result may be persisted without an authorization, got %d", len(persisted.records))
+	}
+}
+
+// 未发布盘口数据类策略时必须 fail closed：不得用交易事实策略替代盘口授权。
+func TestQuantRiskStageEndToEndFailsClosedWithoutOrderBookPolicy(t *testing.T) {
+	store := newQuantTradingFactsStore()
+	chain := newQuantTradingFactsChain(t, store)
+	adapter, persisted := newQuantRiskEndToEndAdapter(t, chain)
+	delete(store.policies, authorization.OrderBookFactsPolicyRef)
+	if _, _, err := adapter.Execute(chain.context, quantstage.RiskRequest{
+		Symbol: tradingFactsSymbol, TradeDate: tradingFactsDate, SystemAsOf: chain.systemAsOf,
+	}); err == nil {
+		t.Fatal("Risk Stage produced a decision without a published order-book policy")
+	}
+	if len(persisted.records) != 0 {
+		t.Fatalf("no risk result may be persisted without order-book authorization, got %d", len(persisted.records))
 	}
 }
 
@@ -196,7 +243,7 @@ func mustQuantRiskJSON(t *testing.T, value any) []byte {
 
 func quantRiskInputSnapshotRef(t *testing.T, output quantstage.RiskOutput) string {
 	t.Helper()
-	if len(output.InputRefs) != 2 {
+	if len(output.InputRefs) != 4 {
 		t.Fatalf("input refs = %v", output.InputRefs)
 	}
 	return output.InputRefs[0]
@@ -204,7 +251,7 @@ func quantRiskInputSnapshotRef(t *testing.T, output quantstage.RiskOutput) strin
 
 func quantRiskInputAuthorizationRef(t *testing.T, output quantstage.RiskOutput) string {
 	t.Helper()
-	if len(output.InputRefs) != 2 {
+	if len(output.InputRefs) != 4 {
 		t.Fatalf("input refs = %v", output.InputRefs)
 	}
 	return output.InputRefs[1]

@@ -25,17 +25,18 @@ import (
 // legal trading-day series used as a test fixture (see doc/quant/14 D1).
 
 const (
-	l3SeedSymbol      = "600036.SH"
-	l3SeedSource      = "eastmoney"
-	l3SeedSourceVer   = "eastmoney-stock-api-v1"
-	l3SeedStart       = "2026-09-01"
-	l3SeedEnd         = "2026-10-30"
-	l3SeedSMAStart    = "2026-10-01"
-	l3SeedSMATrading  = 6 // factor limit=6 and Quant minimum_coverage=1 share this calendar
-	l3SeedStatusDate  = "2026-11-25"
-	l3SeedBarsCount   = 36 // 2026-09-01..09-30 plus 2026-10-25..10-30, matching both calendars
-	l3SeedPolicyDaily = "policy-l3-daily-v1"
-	l3SeedPolicyFacts = "policy-l3-facts-v1"
+	l3SeedSymbol          = "600036.SH"
+	l3SeedSource          = "eastmoney"
+	l3SeedSourceVer       = "eastmoney-stock-api-v1"
+	l3SeedStart           = "2026-09-01"
+	l3SeedEnd             = "2026-10-30"
+	l3SeedSMAStart        = "2026-10-01"
+	l3SeedSMATrading      = 6 // factor limit=6 and Quant minimum_coverage=1 share this calendar
+	l3SeedStatusDate      = "2026-11-25"
+	l3SeedBarsCount       = 36 // 2026-09-01..09-30 plus 2026-10-25..10-30, matching both calendars
+	l3SeedPolicyDaily     = "policy-l3-daily-v1"
+	l3SeedPolicyFacts     = "policy-l3-facts-v1"
+	l3SeedPolicyOrderBook = "policy-l3-order-book-v1"
 )
 
 // l3SeedCloses is 61 two-decimal closes generated deterministically so the series is
@@ -246,8 +247,9 @@ func l3SeedPublishPolicy(
 }
 
 // seedQuantResearchL3StatusFacts writes a valid trading-status revision so the risk
-// Stage can create an authorized facts Snapshot. The risk decision itself stays
-// reject because price_limit and tradable_volume remain unavailable (doc/quant/14 D2).
+// Stage can create an authorized facts Snapshot. After R2, tradable_volume comes from
+// the live Eastmoney order-book Provider; the decision still rejects because
+// price_limit remains unavailable.
 func seedQuantResearchL3StatusFacts(t *testing.T, ctx context.Context, store *repository.Store, observedAt time.Time) {
 	t.Helper()
 	observed := observedAt.Add(-time.Hour)
@@ -280,6 +282,7 @@ func seedQuantResearchL3(t *testing.T, ctx context.Context, store *repository.St
 	seedQuantResearchL3Calendar(t, ctx, store, observedAt)
 	l3SeedPublishPolicy(t, ctx, store, authorization.DailyBarsV2PolicyRef, l3SeedPolicyDaily, "quant_analysis", observedAt.Add(-24*time.Hour))
 	l3SeedPublishPolicy(t, ctx, store, authorization.SecurityStatusFactsPolicyRef, l3SeedPolicyFacts, "risk_review", observedAt.Add(-24*time.Hour))
+	l3SeedPublishPolicy(t, ctx, store, authorization.OrderBookFactsPolicyRef, l3SeedPolicyOrderBook, "risk_review", observedAt.Add(-24*time.Hour))
 	seedQuantResearchL3StatusFacts(t, ctx, store, observedAt)
 }
 

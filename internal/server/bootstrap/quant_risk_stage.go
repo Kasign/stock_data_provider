@@ -25,16 +25,18 @@ import (
 
 // Quant Risk Stage 的 Server 组合（执行清单 1.4 / QNT-010）。
 //
-// Output Registry 版本在 Registry Set 内必须唯一（Set 以 version 为键），
-// 因此这里使用与 News(1.0.0/1.2.0)、SMA20(1.1.0)、Factor(1.3.0)、Trend(1.4.0) 不同的版本。
+// Output Registry 版本在 Registry Set 内必须唯一（Set 以 version 为键）。
+// R2 引入真实盘口证据后，Risk Stage Output 的输入/证据引用从 2 项扩为 4 项，
+// 属于 MAJOR 语义变化：旧 1.0.0 Schema 保留冻结，当前使用 2.0.0，
+// 本 Set 相应从 1.5.0 演进到 1.7.0（1.6.0 已由 quant.research 合并 Set 占用）。
 //
 // 本轮刻意**不**声明 hard_risk 门禁类型：组合根的 HardRiskGateRegistry 仍为 nil，
 // 且 hard_risk 会进入 Run 终态判定，而当前决策恒 reject，声明它会让所有含此 Stage 的
 // Run 必然失败。门禁类型与 Run 生命周期的绑定属独立治理动作。
 const (
-	quantRiskStageOutputRegistryVersion = "1.5.0"
-	quantRiskPayloadSchemaRef           = "doc/quant/schema/QNT-CTR-003-risk-stage-output-1.0.0.schema.json"
-	quantRiskQualitySchemaRef           = "doc/quant/schema/QNT-CTR-003-risk-quality-summary-1.0.0.schema.json"
+	quantRiskStageOutputRegistryVersion = "1.7.0"
+	quantRiskPayloadSchemaRef           = "doc/quant/schema/QNT-CTR-003-risk-stage-output-2.0.0.schema.json"
+	quantRiskQualitySchemaRef           = "doc/quant/schema/QNT-CTR-003-risk-quality-summary-1.0.1.schema.json"
 	quantRiskWorkflowTemplateRef        = "quant.risk"
 	quantRiskWorkflowTemplateVersion    = "1.0.0"
 	quantRiskRetryPolicyRef             = "quant.risk.retry@1.0.0"
@@ -69,18 +71,22 @@ func newQuantRiskStageComposition(
 	if err != nil {
 		return nil, fmt.Errorf("create Quant trading-status facts adapter: %w", err)
 	}
+	orderBookAdapter, err := newQuantOrderBookFactsAdapter(dataModule)
+	if err != nil {
+		return nil, fmt.Errorf("create Quant order-book facts adapter: %w", err)
+	}
 	quantRepository, err := quantstorage.NewMySQLRepository(shared.DB)
 	if err != nil {
 		return nil, fmt.Errorf("create Quant result Repository: %w", err)
 	}
 	service, err := quantapplication.NewCreateRiskService(
-		factsAdapter, quantRiskDecisionIDs{generator: researchflowIDGenerator{}}, quantRepository,
+		factsAdapter, orderBookAdapter, quantRiskDecisionIDs{generator: researchflowIDGenerator{}}, quantRepository,
 		func() time.Time { return time.Now().UTC() },
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create Quant Risk Application Service: %w", err)
 	}
-	adapter, err := quantstage.NewRiskAdapter(factsAdapter, service)
+	adapter, err := quantstage.NewRiskAdapter(factsAdapter, orderBookAdapter, service)
 	if err != nil {
 		return nil, fmt.Errorf("create Quant Risk Stage Adapter: %w", err)
 	}
@@ -266,7 +272,8 @@ func (executor quantRiskStageExecutor) ExecuteStage(
 			errors.Is(err, quantapplication.ErrInvalidCreateRiskRequest):
 			return failedQuantRiskStage("quant_risk_invalid_parameters"), nil
 		case errors.Is(err, quantapplication.ErrInvalidRiskSnapshot),
-			errors.Is(err, quantapplication.ErrInvalidTradingFactsSnapshot):
+			errors.Is(err, quantapplication.ErrInvalidTradingFactsSnapshot),
+			errors.Is(err, quantapplication.ErrInvalidOrderBookFactsSnapshot):
 			return failedQuantRiskStage("quant_risk_invalid_facts_snapshot"), nil
 		default:
 			return failedQuantRiskStage("quant_risk_execution_failed"), nil

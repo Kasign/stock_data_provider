@@ -14,11 +14,13 @@ import (
 // 这份 Schema 属于 QNT-CTR-003（deferred）的 L2 机器契约，只约束可交易性硬门禁切片。
 // 它刻意只允许一条 Reason：规则集 qnt-risk-tradability/1.0.0 只有一条 block 规则；
 // 将来扩充规则必须发新的 Stage Output Schema 版本，不能靠"多塞几条理由"静默扩展。
+// 2.0.0 将输入证据从 2 项扩为 4 项（交易状态快照/授权 + 盘口快照/授权）；
+// Quality Summary 1.0.1 仅修正描述口径，字段结构不变。1.0.0 两份均保留冻结。
 const (
 	RiskStageCode            = "quant.risk"
 	RiskOutputType           = "quant.risk_result"
-	RiskSchemaVersion        = "1.0.0"
-	RiskQualitySchemaVersion = "1.0.0"
+	RiskSchemaVersion        = "2.0.0"
+	RiskQualitySchemaVersion = "1.0.1"
 
 	// RiskPurposeCode 是风险门禁读取交易事实的用途，必须与 Data 侧允许用途一致。
 	RiskPurposeCode = "risk_review"
@@ -93,8 +95,9 @@ func ValidateRiskStageOutputJSON(payload []byte) error {
 	if output.EvaluatedAt != output.SystemAsOf {
 		return ErrInvalidRiskStageOutput
 	}
-	if len(output.InputRefs) != 2 || !riskStageSnapshotPattern.MatchString(output.InputRefs[0]) ||
-		!factorStageOpaqueRef(output.InputRefs[1]) {
+	if len(output.InputRefs) != 4 || !riskStageSnapshotPattern.MatchString(output.InputRefs[0]) ||
+		!factorStageOpaqueRef(output.InputRefs[1]) || !riskStageSnapshotPattern.MatchString(output.InputRefs[2]) ||
+		!factorStageOpaqueRef(output.InputRefs[3]) {
 		return ErrInvalidRiskStageOutput
 	}
 	if len(output.Reasons) != 1 {
@@ -102,9 +105,13 @@ func ValidateRiskStageOutputJSON(payload []byte) error {
 	}
 	reason := output.Reasons[0]
 	if reason.Code != risk.TradabilityGateCode || reason.Severity != risk.SeverityBlock ||
-		len(reason.EvidenceRefs) != 2 || reason.EvidenceRefs[0] != output.InputRefs[0] ||
-		reason.EvidenceRefs[1] != output.InputRefs[1] {
+		len(reason.EvidenceRefs) != len(output.InputRefs) {
 		return ErrInvalidRiskStageOutput
+	}
+	for index := range output.InputRefs {
+		if reason.EvidenceRefs[index] != output.InputRefs[index] {
+			return ErrInvalidRiskStageOutput
+		}
 	}
 	if err := validateRiskFactLists(output.MissingFacts, output.BlockingFacts); err != nil {
 		return err

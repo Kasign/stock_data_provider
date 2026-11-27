@@ -44,8 +44,8 @@ func newQuantResearchTemplateFixture(t *testing.T) (template.WorkflowTemplate, *
 
 func TestQuantResearchOutputRegistryIsCombinedAndVersionUnique(t *testing.T) {
 	_, combined := newQuantResearchTemplateFixture(t)
-	if combined.Version() != quantResearchStageOutputRegistryVersion || combined.Version() != "1.6.0" {
-		t.Fatalf("combined registry version = %q, want 1.6.0", combined.Version())
+	if combined.Version() != quantResearchStageOutputRegistryVersion || combined.Version() != "1.8.0" {
+		t.Fatalf("combined registry version = %q, want 1.8.0", combined.Version())
 	}
 	wantEntries := [][3]string{
 		{stage.SMA20StageCode, stage.SMA20OutputType, stage.SMA20SchemaVersion},

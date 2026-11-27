@@ -160,7 +160,9 @@ func TestQuantResearchMariaDBRedisL3(t *testing.T) {
 	dataCfg := marketdataconfig.Config{
 		ProviderPriority: []string{"eastmoney"},
 		ProviderSettings: map[string]marketdataconfig.ProviderSettings{
-			"eastmoney": {Enabled: true, DailyBars: true},
+			// R2: Risk Stage now creates an authorized intraday order-book Snapshot;
+			// Eastmoney push2 requires the quote origin, which also covers order book.
+			"eastmoney": {Enabled: true, Quote: true, DailyBars: true, OrderBook: true},
 		},
 	}
 	dataModule, err := marketdatabootstrap.New(dataCfg, marketdatabootstrap.Dependencies{
@@ -354,8 +356,11 @@ func TestQuantResearchMariaDBRedisL3(t *testing.T) {
 	if riskPayload.Status != "reject" || riskPayload.ResultStatus != "rejected" {
 		t.Fatalf("risk decision=%s result_status=%s, want reject/rejected", riskPayload.Status, riskPayload.ResultStatus)
 	}
-	if !containsString(riskPayload.MissingFacts, "price_limit") || !containsString(riskPayload.MissingFacts, "tradable_volume") {
-		t.Fatalf("risk missing_facts=%v, want price_limit and tradable_volume", riskPayload.MissingFacts)
+	if !containsString(riskPayload.MissingFacts, "price_limit") || containsString(riskPayload.MissingFacts, "tradable_volume") {
+		t.Fatalf("risk missing_facts=%v, want only price_limit after the R2 order-book path", riskPayload.MissingFacts)
+	}
+	if len(riskPayload.InputRefs) != 4 {
+		t.Fatalf("risk input_refs=%v, want trading-status and order-book evidence pairs", riskPayload.InputRefs)
 	}
 
 	// ---- 阶段 2.2 C 组：生产授权读取链端到端贯通 ----

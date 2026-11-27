@@ -21,9 +21,15 @@ import (
 )
 
 var (
-	quantRiskTestResultID    = "quant_result:sha256:" + strings.Repeat("f", 64)
-	quantRiskTestSnapshotRef = "data_snapshot:sha256:" + strings.Repeat("c", 64)
-	quantRiskTestAuthRef     = "data_authorization:opaque-token"
+	quantRiskTestResultID             = "quant_result:sha256:" + strings.Repeat("f", 64)
+	quantRiskTestSnapshotRef          = "data_snapshot:sha256:" + strings.Repeat("c", 64)
+	quantRiskTestAuthRef              = "data_authorization:opaque-token"
+	quantRiskTestOrderBookSnapshotRef = "data_snapshot:sha256:" + strings.Repeat("d", 64)
+	quantRiskTestOrderBookAuthRef     = "data_authorization:order-book-opaque-token"
+	quantRiskTestRefs                 = []string{
+		quantRiskTestSnapshotRef, quantRiskTestAuthRef,
+		quantRiskTestOrderBookSnapshotRef, quantRiskTestOrderBookAuthRef,
+	}
 )
 
 type quantRiskStageAdapterStub struct {
@@ -42,7 +48,7 @@ func (stub *quantRiskStageAdapterStub) Execute(
 	return stub.output, stub.quality, stub.err
 }
 
-// validQuantRiskStageAdapterStub 构造"事实齐全但缺涨跌停/可成交量"的真实拒绝形态：
+// validQuantRiskStageAdapterStub 构造"可成交量已核验但仍缺涨跌停"的真实拒绝形态：
 // 这是当前事实边界下唯一可能出现的结论，测试不得伪造 pass。
 func validQuantRiskStageAdapterStub() *quantRiskStageAdapterStub {
 	return &quantRiskStageAdapterStub{
@@ -50,7 +56,7 @@ func validQuantRiskStageAdapterStub() *quantRiskStageAdapterStub {
 			SchemaVersion: quantstage.RiskSchemaVersion,
 			ResultID:      quantRiskTestResultID,
 			ResultStatus:  "rejected",
-			MissingFacts:  []string{"price_limit", "tradable_volume"},
+			MissingFacts:  []string{"price_limit"},
 			BlockingFacts: []string{},
 			Decision: risk.Decision{
 				DecisionID:     "risk_decision_1",
@@ -60,16 +66,16 @@ func validQuantRiskStageAdapterStub() *quantRiskStageAdapterStub {
 				SystemAsOf:     "2026-11-25T15:00:00Z",
 				Reasons: []risk.Reason{{
 					Code: risk.TradabilityGateCode, Severity: risk.SeverityBlock, Status: risk.ReasonTriggered,
-					SafeMessage:  "可交易性事实不完整，缺失：涨跌停状态、可成交量；无法确认可交易性",
-					EvidenceRefs: []string{quantRiskTestSnapshotRef, quantRiskTestAuthRef},
+					SafeMessage:  "可交易性事实不完整，缺失：涨跌停状态；无法确认可交易性",
+					EvidenceRefs: append([]string{}, quantRiskTestRefs...),
 				}},
-				InputRefs: []string{quantRiskTestSnapshotRef, quantRiskTestAuthRef},
+				InputRefs: append([]string{}, quantRiskTestRefs...),
 			},
 		},
 		quality: quantstage.RiskQualitySummary{
 			SchemaVersion: quantstage.RiskQualitySchemaVersion, RuleSetVersion: risk.TradabilityRuleSetVersion,
 			QualityStatus: "valid", DecisionStatus: "reject", ResultStatus: "rejected",
-			MissingFacts: []string{"price_limit", "tradable_volume"}, BlockingFacts: []string{},
+			MissingFacts: []string{"price_limit"}, BlockingFacts: []string{},
 		},
 	}
 }
@@ -114,7 +120,8 @@ func TestQuantRiskStageExecutorProducesTraceableRejection(t *testing.T) {
 		t.Fatal(err)
 	}
 	if payload.Status != risk.DecisionReject || payload.DecisionID != "risk_decision_1" ||
-		len(payload.MissingFacts) != 2 || payload.ResultStatus != "rejected" {
+		len(payload.MissingFacts) != 1 || payload.MissingFacts[0] != "price_limit" ||
+		payload.ResultStatus != "rejected" {
 		t.Fatalf("Risk Stage payload lost its decision: %+v", payload)
 	}
 }

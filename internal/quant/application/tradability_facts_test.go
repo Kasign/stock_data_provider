@@ -39,15 +39,15 @@ func repeatHex(length int, char byte) string {
 	return string(buffer)
 }
 
-func TestAssessTradabilityFactsKeepsPriceLimitAndTradableVolumeMissing(t *testing.T) {
-	assessment, err := AssessTradabilityFacts(validTradingFactsSnapshot())
+func TestAssessTradabilityFactsKeepsOnlyPriceLimitMissing(t *testing.T) {
+	assessment, err := AssessTradabilityFacts(validTradabilityEvidence())
 	if err != nil {
 		t.Fatalf("AssessTradabilityFacts() error = %v", err)
 	}
 	if assessment.Facts.Verified {
-		t.Fatal("tradability must not be verified while Data has no price-limit or tradable-volume facts")
+		t.Fatal("tradability must not be verified while Data has no price-limit fact")
 	}
-	want := []risk.TradabilityFact{risk.TradabilityFactPriceLimit, risk.TradabilityFactTradableVolume}
+	want := []risk.TradabilityFact{risk.TradabilityFactPriceLimit}
 	if len(assessment.Facts.MissingFacts) != len(want) {
 		t.Fatalf("MissingFacts = %v, want %v", assessment.Facts.MissingFacts, want)
 	}
@@ -86,7 +86,9 @@ func TestAssessTradabilityFactsRecordsKnownBlockingFacts(t *testing.T) {
 				target = 4
 			}
 			mutate.mutate(&snapshot.Facts[target])
-			assessment, err := AssessTradabilityFacts(snapshot)
+			assessment, err := AssessTradabilityFacts(TradabilityEvidence{
+				TradingFacts: snapshot, OrderBookFacts: validOrderBookFactsSnapshot(),
+			})
 			if err != nil {
 				t.Fatalf("AssessTradabilityFacts() error = %v", err)
 			}
@@ -106,12 +108,14 @@ func TestAssessTradabilityFactsReportsUnavailableGateFactsAsMissing(t *testing.T
 		Key: "suspension_status", Availability: tradingFactUnavailable, UnavailableReason: "suspension_status_unknown",
 	}
 	snapshot.QualityStatus = "degraded"
-	assessment, err := AssessTradabilityFacts(snapshot)
+	assessment, err := AssessTradabilityFacts(TradabilityEvidence{
+		TradingFacts: snapshot, OrderBookFacts: validOrderBookFactsSnapshot(),
+	})
 	if err != nil {
 		t.Fatalf("AssessTradabilityFacts() error = %v", err)
 	}
 	want := []risk.TradabilityFact{
-		risk.TradabilityFactSuspension, risk.TradabilityFactPriceLimit, risk.TradabilityFactTradableVolume,
+		risk.TradabilityFactSuspension, risk.TradabilityFactPriceLimit,
 	}
 	if len(assessment.Facts.MissingFacts) != len(want) {
 		t.Fatalf("MissingFacts = %v, want %v", assessment.Facts.MissingFacts, want)
@@ -156,7 +160,7 @@ func TestEvaluateTradabilityDecisionAlwaysRejectsWithoutFullFacts(t *testing.T) 
 	decision, err := EvaluateTradabilityDecision(
 		ctx, "risk-decision-1",
 		time.Date(2026, 11, 25, 16, 0, 0, 0, time.UTC),
-		validTradingFactsSnapshot(),
+		validTradabilityEvidence(),
 	)
 	if err != nil {
 		t.Fatalf("EvaluateTradabilityDecision() error = %v", err)
@@ -168,8 +172,8 @@ func TestEvaluateTradabilityDecisionAlwaysRejectsWithoutFullFacts(t *testing.T) 
 		decision.Reasons[0].Code != risk.TradabilityGateCode {
 		t.Fatalf("decision reasons = %+v, want triggered tradability gate", decision.Reasons)
 	}
-	if len(decision.InputRefs) != 2 {
-		t.Fatalf("InputRefs = %v, want snapshot and authorization references", decision.InputRefs)
+	if len(decision.InputRefs) != 4 {
+		t.Fatalf("InputRefs = %v, want both snapshot/authorization reference pairs", decision.InputRefs)
 	}
 	if err := decision.Validate(); err != nil {
 		t.Fatalf("decision is not contract-valid: %v", err)
@@ -177,14 +181,14 @@ func TestEvaluateTradabilityDecisionAlwaysRejectsWithoutFullFacts(t *testing.T) 
 }
 
 func TestEvaluateTradabilityDecisionRejectsNonUTCAndInvertedTimes(t *testing.T) {
-	snapshot := validTradingFactsSnapshot()
+	evidence := validTradabilityEvidence()
 	if _, err := EvaluateTradabilityDecision(context.Background(), "risk-decision-1",
-		time.Date(2026, 11, 25, 16, 0, 0, 0, time.FixedZone("CST", 8*3600)), snapshot); err == nil {
+		time.Date(2026, 11, 25, 16, 0, 0, 0, time.FixedZone("CST", 8*3600)), evidence); err == nil {
 		t.Fatal("non-UTC evaluated_at was accepted")
 	}
 	// evaluated_at 早于 system_as_of 时决策不自洽，必须失败而不是产出一个"看起来合法"的拒绝。
 	if _, err := EvaluateTradabilityDecision(context.Background(), "risk-decision-1",
-		time.Date(2026, 11, 25, 14, 0, 0, 0, time.UTC), snapshot); err == nil {
+		time.Date(2026, 11, 25, 14, 0, 0, 0, time.UTC), evidence); err == nil {
 		t.Fatal("evaluated_at before system_as_of was accepted")
 	}
 }

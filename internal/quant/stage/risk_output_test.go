@@ -11,11 +11,14 @@ import (
 func validRiskStageOutput() RiskOutput {
 	snapshotRef := "data_snapshot:sha256:" + strings.Repeat("a", 64)
 	authorizationRef := "data_authorization:opaque-token"
+	orderBookRef := "data_snapshot:sha256:" + strings.Repeat("c", 64)
+	orderBookAuthorizationRef := "data_authorization:order-book-opaque-token"
+	refs := []string{snapshotRef, authorizationRef, orderBookRef, orderBookAuthorizationRef}
 	return RiskOutput{
 		SchemaVersion: RiskSchemaVersion,
 		ResultID:      "quant_result:sha256:" + strings.Repeat("b", 64),
 		ResultStatus:  "rejected",
-		MissingFacts:  []string{"price_limit", "tradable_volume"},
+		MissingFacts:  []string{"price_limit"},
 		BlockingFacts: []string{},
 		Decision: risk.Decision{
 			DecisionID:     "risk_decision_1",
@@ -25,10 +28,10 @@ func validRiskStageOutput() RiskOutput {
 			SystemAsOf:     "2026-11-25T15:00:00Z",
 			Reasons: []risk.Reason{{
 				Code: risk.TradabilityGateCode, Severity: risk.SeverityBlock, Status: risk.ReasonTriggered,
-				SafeMessage:  "可交易性事实不完整，缺失：涨跌停状态、可成交量；无法确认可交易性",
-				EvidenceRefs: []string{snapshotRef, authorizationRef},
+				SafeMessage:  "可交易性事实不完整，缺失：涨跌停状态；无法确认可交易性",
+				EvidenceRefs: append([]string{}, refs...),
 			}},
-			InputRefs: []string{snapshotRef, authorizationRef},
+			InputRefs: append([]string{}, refs...),
 		},
 	}
 }
@@ -47,7 +50,8 @@ func TestRiskStageOutputAcceptsTraceableRejection(t *testing.T) {
 		t.Fatal(err)
 	}
 	if decoded.Status != risk.DecisionReject || decoded.Reasons[0].Code != risk.TradabilityGateCode ||
-		len(decoded.MissingFacts) != 2 || decoded.ResultStatus != "rejected" {
+		len(decoded.MissingFacts) != 1 || decoded.MissingFacts[0] != "price_limit" ||
+		decoded.ResultStatus != "rejected" {
 		t.Fatalf("unexpected decoded output: %+v", decoded)
 	}
 }
@@ -55,9 +59,10 @@ func TestRiskStageOutputAcceptsTraceableRejection(t *testing.T) {
 // 篡改输出必须被拒绝：这些是最容易在适配层"顺手改一下"的字段。
 func TestRiskStageOutputRejectsTampering(t *testing.T) {
 	snapshotRef := "data_snapshot:sha256:" + strings.Repeat("a", 64)
+	authorizationRef := "data_authorization:opaque-token"
 	for name, mutate := range map[string]func(*RiskOutput){
 		"result id":           func(output *RiskOutput) { output.ResultID = "quant_result:sha256:short" },
-		"schema version":      func(output *RiskOutput) { output.SchemaVersion = "2.0.0" },
+		"schema version":      func(output *RiskOutput) { output.SchemaVersion = "9.9.9" },
 		"rule set version":    func(output *RiskOutput) { output.RuleSetVersion = "qnt-risk-tradability/9.9.9" },
 		"result status":       func(output *RiskOutput) { output.ResultStatus = "completed" },
 		"evaluated at":        func(output *RiskOutput) { output.EvaluatedAt = "2026-11-25T15:00:01Z" },
@@ -70,10 +75,17 @@ func TestRiskStageOutputRejectsTampering(t *testing.T) {
 		},
 		"duplicate fact": func(output *RiskOutput) { output.MissingFacts = []string{"price_limit", "price_limit"} },
 		"input refs order": func(output *RiskOutput) {
-			output.InputRefs = []string{output.InputRefs[1], output.InputRefs[0]}
+			output.InputRefs = []string{output.InputRefs[1], output.InputRefs[0], output.InputRefs[3], output.InputRefs[2]}
+		},
+		"order book evidence omitted": func(output *RiskOutput) {
+			output.InputRefs = append([]string{}, output.InputRefs[:2]...)
+			output.Reasons[0].EvidenceRefs = append([]string{}, output.InputRefs...)
 		},
 		"evidence refs diverged": func(output *RiskOutput) {
-			output.Reasons[0].EvidenceRefs = []string{snapshotRef, "data_authorization:other"}
+			output.Reasons[0].EvidenceRefs = []string{
+				snapshotRef, authorizationRef, "data_snapshot:sha256:" + strings.Repeat("d", 64),
+				output.InputRefs[3],
+			}
 		},
 		"status": func(output *RiskOutput) { output.Status = risk.DecisionPass },
 	} {
@@ -114,7 +126,7 @@ func TestRiskQualitySummaryContract(t *testing.T) {
 	valid := RiskQualitySummary{
 		SchemaVersion: RiskQualitySchemaVersion, RuleSetVersion: risk.TradabilityRuleSetVersion,
 		QualityStatus: "valid", DecisionStatus: "reject", ResultStatus: "rejected",
-		MissingFacts: []string{"price_limit", "tradable_volume"}, BlockingFacts: []string{},
+		MissingFacts: []string{"price_limit"}, BlockingFacts: []string{},
 	}
 	payload, err := json.Marshal(valid)
 	if err != nil {

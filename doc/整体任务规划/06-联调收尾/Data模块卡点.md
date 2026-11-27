@@ -490,3 +490,11 @@ Root Server 的 Data Module 构造、共享资源注入、Migration Registry、I
 - 新增 `AuthorizedSecurityTradingStatusFactsSnapshotReader`：独立方法 + 独立 Port 接口（不扩既有 close series 签名），先校验 `policy_snapshot`/`current` 的 `policy_ref` 与 `Manifest.PurposeCode`，再走同一 `authorization.Evaluate`；授权记录、撤销、当前策略、Payload 仍在同一 Repeatable Read 只读事务内读取。
 - 新增 Owner 策略路由 `GET/POST /api/v1/owner/data/security-status-facts-access-policy[/versions]`：策略按数据类独立发布、独立撤销；装配的 Application 若不支持按数据类读写，返回 503 `server.data_policy_unavailable`，不回落日线。
 - 验证：`gofmt`/`go vet`/`go test ./internal/...` 全绿，`-race` 覆盖 `internal/marketdata/...`；MariaDB 集成测试（`MARKET_DATA_TEST_MYSQL_DSN` 门控）覆盖迁移/`ValidateSchema`/幂等/跨 kind 隔离/SQL 篡改检测，但**未在真实 MariaDB 环境执行**，不得宣称已验证。契约状态未变：DATA-CTR-007 仍 `deferred`、DATA-CTR-008 仍 `frozen`。
+
+## 2026-11-27 R2 真实五档盘口事实通道（DATA-CTR-007 同族扩展）
+
+- 新增 `OrderBookProvider` 与 Eastmoney push2 五档 Provider：买一～买五 `f19/f20 … f11/f12`、卖一～卖五 `f39/f40 … f31/f32`；手数经 `normalize.HandsToShares` 转股；缺 `f86` 来源时间、证券错配、不完整五档一律拒绝。成交量单位与字段映射均有变异验证。
+- 配置能力 `order_book` 与受控出站 origin 接入；`DataService` 维护独立 provider 列表与 fallback；调用方不能传入盘口数值。
+- 新增 `order_book` payload/Manifest/Snapshot：复用共享不可变快照表按 `payload_kind=order_book` 分流；`observed_at`（来源时刻）与 `system_as_of`（评估截止）分别绑定，JCS 双指纹与 SnapshotRef 防篡改；新增独立数据类策略 `order-book-facts-access` 与 Owner 策略路由，与 close-series / 交易状态策略互不替代。
+- `tradable_volume` 的唯一口径是买盘五档挂单量之和；Provider、Creator、Repository、Authorized Reader 均不接受参与率、成交量推导或调用方声称值。
+- 新增 MariaDB 盘口快照集成测试：共享存储、跨 `payload_kind` 隔离、幂等读回、直接改库篡改检测；本地 `MARKET_DATA_TEST_MYSQL_DSN` 未配置时 SKIP，CI 结论按精确 SHA 回填。契约状态未变：DATA-CTR-007 仍 `deferred`、DATA-CTR-008 仍 `frozen`。

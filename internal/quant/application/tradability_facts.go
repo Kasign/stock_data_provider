@@ -13,8 +13,8 @@ import (
 // 交易状态事实的消费边界（执行清单 1.4 前置②③之后的物理读取链路）。
 //
 // Quant 只消费 Data 授权快照里的事实，不重新解释事实、不推导涨跌停与可成交量：
-// Data 没有提供这两类事实，任何"补出来"的值都是猜测。
-// 因此即使链路完全打通，只要这两类事实缺席，tradability 门禁就必须继续拒绝。
+// tradable_volume 来自独立的真实盘口授权快照；price_limit 仍无合格事实来源，
+// 因此当前只能继续列为缺失。任何没有授权快照支撑的"补值"都是猜测。
 
 const (
 	// TradingFactsPayloadKind 必须与 Data 侧 payload kind 完全一致，用于防止串读。
@@ -139,19 +139,22 @@ type TradabilityAssessment struct {
 	BlockingFacts []string
 }
 
-// AssessTradabilityFacts 把 Data 事实转换为 tradability 门禁输入。
+// AssessTradabilityFacts 把两份 Data 授权事实转换为 tradability 门禁输入。
 //
 // 映射规则（不新增任何业务阈值）：
 //   - risk_warning_status → risk_warning；suspension_status → suspension；
 //     这两项 Data 能提供，可用即可核验，取值命中已知不可交易时记入 BlockingFacts。
-//   - price_limit / tradable_volume → 恒列入缺失。Data 从未提供这两类事实，
-//     因此 Verified 必然为 false，门禁必然 reject；这是当前事实边界下的正确结论。
+//   - tradable_volume → 只有合法且完成绑定的 order_book 授权快照能核验；
+//     该事实是真实买盘五档挂单量之和，Quant 不推导、不估算。
+//   - price_limit → 当前仍无合格事实来源，必须继续列入缺失；
+//     因此 Verified 仍为 false，门禁仍 reject，但不能把 tradable_volume 伪称缺失。
 //   - delisting_status / is_trading_day 不属于门禁四项，但已知的不可交易取值
 //     仍记入 BlockingFacts，避免"事实越多、结论越松"。
-func AssessTradabilityFacts(snapshot TradingFactsSnapshot) (TradabilityAssessment, error) {
-	if err := snapshot.Validate(); err != nil {
+func AssessTradabilityFacts(evidence TradabilityEvidence) (TradabilityAssessment, error) {
+	if err := evidence.Validate(); err != nil {
 		return TradabilityAssessment{}, err
 	}
+	snapshot := evidence.TradingFacts
 	byKey := make(map[string]TradingFact, len(snapshot.Facts))
 	for _, fact := range snapshot.Facts {
 		byKey[fact.Key] = fact
@@ -176,8 +179,8 @@ func AssessTradabilityFacts(snapshot TradingFactsSnapshot) (TradabilityAssessmen
 	assess(tradingFactKeyRiskWarning, risk.TradabilityFactRiskWarning, tradingFactRiskWarningApplied)
 	assess(tradingFactKeySuspension, risk.TradabilityFactSuspension, tradingFactSuspended, tradingFactIntradaySuspended)
 
-	// Data 无此两类事实：无论调用方如何声称，都只能是缺失。
-	missing = append(missing, risk.TradabilityFactPriceLimit, risk.TradabilityFactTradableVolume)
+	// 唯一仍无合格来源的门禁事实；不得把已核验的真实盘口事实也写成缺失。
+	missing = append(missing, risk.TradabilityFactPriceLimit)
 
 	if fact, present := byKey[tradingFactKeyDelisting]; present && fact.Availability == tradingFactAvailable {
 		if fact.Value == tradingFactDelistingRisk || fact.Value == tradingFactDelistingPeriod {
@@ -193,7 +196,7 @@ func AssessTradabilityFacts(snapshot TradingFactsSnapshot) (TradabilityAssessmen
 	return TradabilityAssessment{
 		Facts: risk.TradabilityFacts{
 			Verified:     len(missing) == 0 && len(blocking) == 0,
-			EvidenceRefs: []string{snapshot.SnapshotRef, snapshot.AuthorizationRef},
+			EvidenceRefs: evidence.evidenceRefs(),
 			MissingFacts: missing,
 		},
 		BlockingFacts: blocking,
@@ -203,20 +206,20 @@ func AssessTradabilityFacts(snapshot TradingFactsSnapshot) (TradabilityAssessmen
 // EvaluateTradabilityDecision 用冻结的 tradability 规则集给出正式 RiskDecision。
 // 事实缺失或被判定为已知不可交易，都只能得到 reject；不存在评分或模型覆盖入口。
 func EvaluateTradabilityDecision(
-	ctx context.Context, decisionID string, evaluatedAt time.Time, snapshot TradingFactsSnapshot,
+	ctx context.Context, decisionID string, evaluatedAt time.Time, evidence TradabilityEvidence,
 ) (risk.Decision, error) {
 	if evaluatedAt.IsZero() || evaluatedAt.Location() != time.UTC {
 		return risk.Decision{}, errors.New("tradability decision evaluated_at must be a UTC time")
 	}
-	assessment, err := AssessTradabilityFacts(snapshot)
+	assessment, err := AssessTradabilityFacts(evidence)
 	if err != nil {
 		return risk.Decision{}, err
 	}
 	return risk.EvaluateTradabilityGate(ctx, risk.TradabilityGateInput{
 		DecisionID:  decisionID,
 		EvaluatedAt: evaluatedAt.Format(time.RFC3339Nano),
-		SystemAsOf:  snapshot.SystemAsOf,
-		InputRefs:   []string{snapshot.SnapshotRef, snapshot.AuthorizationRef},
+		SystemAsOf:  evidence.TradingFacts.SystemAsOf,
+		InputRefs:   append([]string{}, assessment.Facts.EvidenceRefs...),
 		Facts:       assessment.Facts,
 	})
 }

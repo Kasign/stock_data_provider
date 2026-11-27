@@ -16,10 +16,10 @@ const (
 	// template. v1 declares no Stage dependencies (D2) and no hard risk gate (D4).
 	quantResearchWorkflowTemplateRef     = "quant.research"
 	quantResearchWorkflowTemplateVersion = "1.0.0"
-	// 1.6.0 is the next free Output Registry version after news 1.0.0/1.2.0 and
-	// sma20/factor/trend/risk 1.1.0/1.3.0/1.4.0/1.5.0. The combined Registry is
-	// additive and never replaces a single-Stage Registry.
-	quantResearchStageOutputRegistryVersion = "1.6.0"
+	// 1.8.0 is the next free Output Registry version after news 1.0.0/1.2.0,
+	// sma20/factor/trend 1.1.0/1.3.0/1.4.0 and R2 risk 1.7.0. The previous
+	// combined Set 1.6.0 remains frozen and is never replaced in place.
+	quantResearchStageOutputRegistryVersion = "1.8.0"
 )
 
 // newQuantResearchOutputRegistry builds the combined Output Registry for the
