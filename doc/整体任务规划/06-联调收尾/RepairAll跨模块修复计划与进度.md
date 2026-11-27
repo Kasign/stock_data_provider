@@ -1891,3 +1891,13 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - **TDD 与变异**：取数层修复前失败证据为 `zero-event pool must be returned instead of rejected: ... provider returned no data flag`；两处变异有效失败（恢复空池硬拒绝、去掉不自洽分类）。PIT 负例先暴露「只要报错就算过」的弱断言，补哨兵后变异「移除 Creator 时点校验」被第二层校验拒绝、断言失败，证明双保险。
 - **CI（真实数据）**：提交 `7b965a35e` 的 14 个 check run 全 success；`Probe real public provider responses`（`140571119511`）真实执行新增步骤：`--- PASS: TestLiveLimitPoolFactsProductionChain (5.53s)`、`--- PASS: TestLiveLimitPoolFactsRejectsEvaluationBeforeObservation (4.65s)`，报告 `trade_date=2026-11-27 status=none up=417 down=0 quality=degraded`，未 SKIP。
 - **新登记的架构问题（OPEN，需决议）**：`quant.risk` 的 `SystemAsOf` 来自 Run 创建时刻（`worker.go:280 → snapshot.Run.SystemAsOf`，`create_run.go:231` = now），而 Creator 要求 `observed_at <= system_as_of`。因此「Run 创建 → Stage 内现场采集」的在线顺序在契约上永不成立；L3 通过是因为种子快照命中精确复用，从未现场采集。三方案（预采集 / 现场采集且评估时点前移 / 事实快照不绑定评估时点）见 `doc/quant/17` 第 9.3 节，本轮不擅自选择。
+
+## 2026-11-27 事实快照 as-of 语义（DEC-PLAT-002-076）
+
+- **决议**：A 方案——事实按发布时刻标注，读取取「≤ 评估时点」的最新快照。否决 B（评估时点前移）与 C（快照不绑评估时点）：B 至少触碰 `resultvalidation/quant.go:242`、`risk.go:48`、`composer.go:414/428/484/529` 六处强制等值并要改 Stage Envelope 语义；C 是契约 MAJOR。
+- **交付**：`GetLatestLimitPoolFactsSnapshotAtOrBefore`（身份精确、时间 as-of；因 `system_as_of` 是变长 RFC3339Nano，SQL 侧字符串比较不可靠，改为按身份收窄后在 Go 侧解析取最大）；Creator 复用改为「不晚于请求时点」并保留身份逐项核对；Quant 绑定由等值改为上界；`TradabilityEvidence` 移除跨类等值（跨类时点关系交由持有评估时点的绑定制裁）。
+- **安全论证**：同日池收盘后固化 → 内容等价；Creator 要求 `system_as_of` ≥ 当日 15:00 → 落库必为完整收盘池；`trade_date` 精确绑定不跨日；上界仍禁止未来快照。
+- **验收**：仓储真库覆盖 `-1min` miss / `+30s` 命中 / 多条取最新 / 跨日 miss，且同一 DB 连续两次运行可重复；Creator 单测覆盖「复用到发布更晚的快照必须拒绝」；Quant 单测覆盖「更早可用 / 更晚拒绝」；真实链路追加「更晚评估时点复用同一 `SnapshotRef`」。
+- **变异**：仓储去掉 as-of 上界过滤、Quant 取消上界判断、Creator 取消上界守卫，三处均有效失败并恢复。
+- **CI（真实数据）**：提交 `97c1327dc` 的 15 个 check run 全 success；`Probe real public provider responses`（`140580701566`）真实执行 `--- PASS: TestLiveLimitPoolFactsProductionChain (5.48s)` 与 `--- PASS: TestLiveLimitPoolFactsRejectsEvaluationBeforeObservation (4.34s)`，报告 `status=none up=417 down=0`。
+- **仍 OPEN**：① 缺少 Run 之前的采集入口，真实 Run 目前会得到可追溯 `reject`；② 交易状态与盘口仍是等值语义，需要各自的新鲜度策略；③ L3 应改为「预采集 → Run 复用」而非依赖种子时点偶然相等。
