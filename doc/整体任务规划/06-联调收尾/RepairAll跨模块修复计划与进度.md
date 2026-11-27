@@ -1649,3 +1649,11 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - **仓储与目录**：`MySQLRepository.ResolveAvailabilityEvidenceSourceBinding` 通过三方身份一致连接读取绑定；`StaticAvailabilityQualificationCatalog` 为不可变快照，按绑定选择最新 `effective_at`，构造期拒绝重复 ref、非法精度和歧义生效时间。
 - **TDD 与变异**：新增测试先因 API 未定义构建失败；变异“忽略来源绑定不一致”使 `TestSourceQualifiedAvailabilityReviewRuleRequiresExactSourceBinding` 有效失败并恢复。`go test ./internal/news/...`（无 DSN）、`go vet ./internal/news/...`、`go test ./... -count=1`、`git diff --check` PASS；决策链与来源绑定真库用例 PASS。本地 MariaDB 11.8.9 的既有并发 URL 去重 `Error 1020` 已在未修改基线复现，不归因本组。
 - **CI 状态（回填）**：代码提交 `57dc96804ba2086802e7eedb4f4892b0dfed8d2c` 的 13 个检查全部 `completed/success`：Integration CI `45940754064`、required-checks `45940754025`、Go test suite `45940754043`（News MariaDB、Root Go module 等全部 Job）。T4 契约版本与 B 组严格门禁、T5 真实来源仍待推进；T4 的最终 CI 通过依赖 T5。
+
+## 2026-11-27 四项根因根治 R3-T5：真实来源数据自采结果
+
+- **用户要求**：项目负责人要求“这些数据你自己去获取一下”，本轮直接联网获取公开官方/准官方材料，不再把可公开查询的数据停在口头等待。
+- **已取得材料**：上证信息《公告数据服务说明书》1.0、深圳证券信息《关于证券信息的声明》、SSE `queryCompanyBulletin.do` 非空样本、SZSE `annList` 非空样本、CNINFO `topSearch`/`hisAnnouncement/query` 非空样本、东方财富 `api/security/ann` 聚合样本；全部记录 URL、UTC 采集时间、字节数与 SHA-256，详见 `doc/contract/NEWS-CTR-001-available_at-来源证据解锁影响分析.md` 第 1.17 节。
+- **字段结论**：SSE `ADDDATE` 为秒级但无官方字段语义；SZSE `publishTime` 和 CNINFO `announcementTime` 实际为日级；东方财富时间字段属于第三方聚合链路；上证信息正式 API 仅产品级提到“发布时间”，字段级技术文档另发且未公开。全部不能映射为 `available_at`。
+- **授权结论**：上证信息/深证信正式 API 均需申请、审批、凭据和付费/试用授权；公开网页浏览不构成自动化采集、持久化和跨模块使用许可。助手不能合法自行生成凭据或绕过授权。
+- **状态边界**：T5 保持 `blocked_external_source`，不是“未尝试”；T4 可继续完成来源无关的 2.0.0 Schema/Golden 与严格 fail-closed 门禁，但 B 组成功路径在 T5 完成前不得解除。

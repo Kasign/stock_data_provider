@@ -45,6 +45,7 @@ News-owned 的授权预检、Diagnostics Check 工厂和 Cleaner 一次性执行
 - 用户已选择 P1 并排除 P2/P3，正式决策为 DEC-PLAT-002-067；历史“搁置”口径不再代表当前状态。
 - 来源无关部分按 T2～T4 推进：T2 `003e4463f` 与 T3 `57dc96804` 均已完成且 13 项 CI 全 success；T3 已建立静态资格目录、精确策略版本绑定、候选产出与来源绑定审核规则。NEWS-CTR-001 2.0.0 与 B 组严格门禁仍待 T4，T4 CI 通过依赖 T5 真实来源准入。
 - 真实来源仍为独立阻塞：仓库内没有官方字段语义证明、Endpoint 授权/凭据、脱敏原始响应与逐版本绑定证据；任何候选字段（`announcementTime`、`DOC_PUBTIME`、EDGAR Acceptance Time、交易所流程时间等）在审核通过前均为 `not verified`。
+- 2026-11-27 已按项目负责人要求自行联网自采：SSE `ADDDATE` 秒级样本、SZSE `publishTime` 日级样本、CNINFO `announcementTime` 日级样本、东方财富聚合时间样本，以及上证信息公告数据服务说明书与深圳证券信息授权声明均已取得；详见 `doc/contract/NEWS-CTR-001-available_at-来源证据解锁影响分析.md` 第 1.17 节。结论是公开数据能取到，但官方首次公开可获取语义、Endpoint 授权凭据和字段级技术文档无法自行生成，T5 仍为 `blocked_external_source`。
 - 未完成真实来源准入前，不生成非空 `available_at`，不解除 B 组成功路径，不把 `parsed` 当 `verified`，不为消除 SKIP 放宽断言。
 
 ## 4. 执行原则
