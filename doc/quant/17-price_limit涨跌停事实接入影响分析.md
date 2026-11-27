@@ -135,3 +135,43 @@ L3 `TestQuantResearchMariaDBRedisL3` 在真实 MariaDB/Redis 下断言：`quant.
 ### 8.5 另一个真实行为（不是缺陷，但必须记住）
 
 请求历史交易日时，Eastmoney 的 `qdate` 仍返回**最新交易日**（实测请求 `20261126` 返回 `qdate=20261127`），而 `tc` 随请求日变化（417 / 65 / 51），说明 `date` 参数确实生效。因此**请求日才是权威**，与 Provider 自己声明的 `requested_trade_date_is_authoritative` 一致；探针只断言 `qdate` 可解析且不早于请求日，绝不把它当作交易日身份。
+
+## 9. 真实端到端与一个未决的时点架构问题（2026-11-27）
+
+### 9.1 同一缺陷在取数层的另一半（已修复）
+
+第 8 节只修了载荷层，**真实端到端测试证明还不够**：`DataService.validateFullLimitPool` 仍要求 `snapshot.HasData`，所以强势日（跌停 `tc=0`）的空池在到达载荷层之前就被判成「源不可用」。修复：
+
+- `len(Items)==0 && Total==0` 视为合法零事件池，原样返回；`Total>0 && len(Items)==0` 仍按部分池拒绝。
+- 新增失败分类哨兵：`ErrLimitPoolSourceUnavailable`（无来源/不实现全量接口/请求失败）与 `ErrLimitPoolSourceIncomplete`（部分池、下界总量、身份不符）。前者重试可能有救，后者没有意义。
+
+### 9.2 真实端到端证据
+
+`TestLiveLimitPoolFactsProductionChain`（`MARKET_DATA_LIVE_LIMIT_POOL_CHAIN=1` + `MARKET_DATA_TEST_MYSQL_DSN`）走真实路径：Eastmoney 全量池 → `CreateLimitPoolFactsSnapshot`（摘要指纹 + 授权签发）→ MariaDB 不可变快照 → `ReadAuthorizedLimitPoolFactsSnapshot` → Quant 消费的 DTO。2026-11-27 实测：
+
+```
+status=none up=417 down=0 quality=degraded
+```
+
+同时验证：精确 `(symbol, trade_date, purpose, system_as_of)` 复用返回同一 `SnapshotRef`；同一 ref 走盘口读取入口必须失败（跨数据类隔离）。
+
+负例 `TestLiveLimitPoolFactsRejectsEvaluationBeforeObservation` 断言「评估时点早于采集」必须被 `ErrLimitPoolFactsSnapshotStaleAsOf` 拒绝。变异「移除 Creator 的时点校验」后仍被快照构建的第二层校验拒绝，说明这是双保险。
+
+### 9.3 未决问题：在线采集与 `system_as_of` 顺序冲突（需要设计决议）
+
+代码事实：
+
+- `quant.risk` Stage 收到的 `SystemAsOf` 来自 Run：`worker.go:280 → snapshot.Run.SystemAsOf`，而 `create_run.go:231` 把它设为**创建 Run 的时刻**。
+- Creator（涨跌停与盘口都一样）要求 `observed_at <= system_as_of`，否则以 `ErrLimitPoolFactsSnapshotStaleAsOf` 拒绝。
+
+推论：**「Run 创建 → Stage 内现场采集」这个顺序在契约上永远不成立**——采集一定晚于 Run 创建。L3 之所以通过，是因为它预先把种子快照写成与 Run 相同的 `system_as_of`，命中精确复用路径，从未真正现场采集。
+
+可选方案（未实施，需决议）：
+
+| 方案 | 做法 | 代价 |
+|---|---|---|
+| A. 预采集（保持现状语义） | 由独立采集任务按 `(symbol, trade_date, purpose, system_as_of)` 先落快照，Stage 只走复用 | 需要调度与对齐机制；Run 与快照时点必须精确匹配 |
+| B. Stage 内现场采集 + 评估时点前移 | 允许 Creator 用「采集时刻」作为 `system_as_of`，Stage 输出按该时点标注 | 改变「评估时点」的权威来源，需重审 PIT 可复现性与结果关联 |
+| C. 事实快照不绑定评估时点 | DTO 的 `system_as_of` 改为「观测时点」，Run 的时点只用于筛选 | 契约语义变更（MAJOR），影响所有事实类快照 |
+
+本轮不擅自选择：这决定「Run 的时点是什么」这一根语义，属治理决议。已登记为 OPEN。

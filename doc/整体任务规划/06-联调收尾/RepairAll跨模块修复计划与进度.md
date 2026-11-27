@@ -1882,3 +1882,12 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - **真实证据（GitHub Actions）**：提交 `2e5f47a7107bf18ab55227747c81ec25547583f2` 的 14 个 check run 全部 `success`，其中 `Probe real public provider responses`（`140559850625`）真实执行了该步骤：`--- PASS: TestLiveEastmoneyFullLimitPoolCompleteness (4.80s)`，报告为 `trade_date=2026-11-27, up 417/417, down 0/0, empty_pools=[down], 600519.SH → none, payload_quality=degraded`。步骤未被 SKIP。
 - **另一个真实行为（非缺陷）**：请求历史交易日时源端 `qdate` 恒返回最新交易日（请求 `20261126` 返回 `qdate=20261127`），但 `tc` 随请求日变化（417/65/51），说明 `date` 参数生效。因此请求日才是权威，`qdate` 不得用作交易日身份；探针只断言 `qdate` 可解析且不早于请求日。
 - **剩余边界**：Provider 请求本身失败（网络/协议/安全上界）仍 fail-closed，`quant.risk` 会失败而不是产出 `reject`；真实探针证明的是 Provider 响应与语义分支，不等于生产交易日全量 Run 的验收。
+
+## 2026-11-27 price_limit 真实端到端（取数层缺陷修复 + 时点架构问题登记）
+
+- **上一轮的残留缺口**：第 8 节只修了载荷层。真实端到端测试证明取数层仍会把零事件池判失败——`DataService.validateFullLimitPool` 要求 `snapshot.HasData`，强势日（跌停 `tc=0`）的空池根本到不了载荷层。即「同一个语义错误在两层各写了一遍」。
+- **取数层修复**：`len(Items)==0 && Total==0` 视为合法零事件池原样返回；`Total>0 && len(Items)==0` 仍按部分池拒绝。新增失败分类哨兵 `ErrLimitPoolSourceUnavailable`（无来源/不实现全量接口/请求失败）与 `ErrLimitPoolSourceIncomplete`（部分池、下界总量、身份不符），用于区分「重试有意义」与「重试无意义」。
+- **真实端到端证据**：`TestLiveLimitPoolFactsProductionChain`（`MARKET_DATA_LIVE_LIMIT_POOL_CHAIN=1` + `MARKET_DATA_TEST_MYSQL_DSN`）走真实路径：Eastmoney 全量池 → Creator（摘要指纹 + 授权签发）→ MariaDB 不可变快照 → `limit-pool-facts-access` 授权读回 → Quant DTO；并断言精确 `(symbol, trade_date, purpose, system_as_of)` 复用返回同一 `SnapshotRef`、同一 ref 走盘口入口必须失败。负例 `TestLiveLimitPoolFactsRejectsEvaluationBeforeObservation` 断言「评估时点早于采集」被 `ErrLimitPoolFactsSnapshotStaleAsOf` 拒绝。
+- **TDD 与变异**：取数层修复前失败证据为 `zero-event pool must be returned instead of rejected: ... provider returned no data flag`；两处变异有效失败（恢复空池硬拒绝、去掉不自洽分类）。PIT 负例先暴露「只要报错就算过」的弱断言，补哨兵后变异「移除 Creator 时点校验」被第二层校验拒绝、断言失败，证明双保险。
+- **CI（真实数据）**：提交 `7b965a35e` 的 14 个 check run 全 success；`Probe real public provider responses`（`140571119511`）真实执行新增步骤：`--- PASS: TestLiveLimitPoolFactsProductionChain (5.53s)`、`--- PASS: TestLiveLimitPoolFactsRejectsEvaluationBeforeObservation (4.65s)`，报告 `trade_date=2026-11-27 status=none up=417 down=0 quality=degraded`，未 SKIP。
+- **新登记的架构问题（OPEN，需决议）**：`quant.risk` 的 `SystemAsOf` 来自 Run 创建时刻（`worker.go:280 → snapshot.Run.SystemAsOf`，`create_run.go:231` = now），而 Creator 要求 `observed_at <= system_as_of`。因此「Run 创建 → Stage 内现场采集」的在线顺序在契约上永不成立；L3 通过是因为种子快照命中精确复用，从未现场采集。三方案（预采集 / 现场采集且评估时点前移 / 事实快照不绑定评估时点）见 `doc/quant/17` 第 9.3 节，本轮不擅自选择。
