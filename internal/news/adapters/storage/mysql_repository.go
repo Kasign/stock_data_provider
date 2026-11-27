@@ -29,6 +29,7 @@ type MySQLRepository struct {
 
 var _ app.IdentityRepository = (*MySQLRepository)(nil)
 var _ app.EvidencePITRepository = (*MySQLRepository)(nil)
+var _ app.AvailabilityDecisionStore = (*MySQLRepository)(nil)
 
 var _ app.IdentityTransaction = (*mysqlNewsTransaction)(nil)
 
@@ -41,6 +42,46 @@ func NewMySQLRepository(db *sql.DB) (*MySQLRepository, error) {
 }
 
 var ErrAvailabilityDecisionSequenceConflict = errors.New("news storage: availability decision sequence conflict")
+var ErrAvailabilityDecisionNotFound = app.ErrAvailabilityDecisionNotFound
+
+// LatestAvailabilityDecisionForVersion 返回版本当前决策链头。
+// 读取本身不加锁；并发写入由 AppendAvailabilityDecision 的序号 CAS 拒绝陈旧前驱。
+func (r *MySQLRepository) LatestAvailabilityDecisionForVersion(
+	ctx context.Context,
+	versionID string,
+) (app.AvailabilityDecisionState, error) {
+	if r == nil || r.db == nil || ctx == nil ||
+		versionID == "" || versionID != strings.TrimSpace(versionID) {
+		return app.AvailabilityDecisionState{}, app.ErrInvalidRequest
+	}
+	if err := ctx.Err(); err != nil {
+		return app.AvailabilityDecisionState{}, err
+	}
+
+	var state app.AvailabilityDecisionState
+	var status string
+	err := r.db.QueryRowContext(ctx, `SELECT version_id, decision_id, decision_seq, status
+		FROM news_version_availability_decisions
+		WHERE version_id = ?
+		ORDER BY decision_seq DESC
+		LIMIT 1`, versionID,
+	).Scan(&state.VersionID, &state.DecisionID, &state.Sequence, &status)
+	if errors.Is(err, sql.ErrNoRows) {
+		return app.AvailabilityDecisionState{}, ErrAvailabilityDecisionNotFound
+	}
+	if err != nil {
+		return app.AvailabilityDecisionState{}, err
+	}
+	state.Status = domain.AvailabilityDecisionStatus(status)
+	if state.VersionID != versionID || state.DecisionID == "" || state.Sequence == 0 ||
+		(state.Status != domain.AvailabilityDecisionVerified &&
+			state.Status != domain.AvailabilityDecisionConflict &&
+			state.Status != domain.AvailabilityDecisionUnresolved &&
+			state.Status != domain.AvailabilityDecisionRevoked) {
+		return app.AvailabilityDecisionState{}, fmt.Errorf("news storage: invalid availability decision chain head")
+	}
+	return state, nil
+}
 
 // AppendAvailabilityDecision 在版本行锁保护下追加完整决策状态。
 // 版本行是串行化锚点，因此即使当前尚无 Decision 行，并发首写也不会分叉。

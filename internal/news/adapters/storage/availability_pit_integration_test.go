@@ -414,4 +414,16 @@ func TestAppendAvailabilityDecisionSerializesConcurrentWritersMariaDBIntegration
 	if count != 3 || maxSequence != 3 {
 		t.Fatalf("decision chain count=%d max_sequence=%d, want 3 and 3", count, maxSequence)
 	}
+
+	latest, err := repository.LatestAvailabilityDecisionForVersion(ctx, versionID)
+	if err != nil {
+		t.Fatalf("read latest availability decision: %v", err)
+	}
+	if latest.VersionID != versionID || latest.DecisionID != verified.ID ||
+		latest.Sequence != 3 || latest.Status != domain.AvailabilityDecisionVerified {
+		t.Fatalf("latest decision state=%+v, want verified decision %s", latest, verified.ID)
+	}
+	if _, err := repository.LatestAvailabilityDecisionForVersion(ctx, "availability-decision-unknown-"+suffix); !errors.Is(err, ErrAvailabilityDecisionNotFound) {
+		t.Fatalf("unknown version latest decision error=%v, want not found", err)
+	}
 }

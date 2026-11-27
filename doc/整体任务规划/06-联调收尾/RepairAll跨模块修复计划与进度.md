@@ -1629,3 +1629,13 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - **TDD 与变异验证**：修复前 `TestOrderBookFactsSnapshotCreatorReusesExactSystemAsOfSnapshot` 因调用实时 Provider 失败；修复后通过。变异一关闭 Creator 绑定校验，`RejectsReusedSnapshotWithDifferentSystemAsOf` failed；变异二移除 Repository 的 `system_as_of` 过滤，真库 `TestMariaDBOrderBookFactsSnapshotExactSystemAsOfReuse` failed；均恢复后复验通过。
 - **本地验收**：`go test ./internal/... -count=1` 全包通过；`go vet ./internal/...` 通过；`gofmt -l` 无输出；`git diff --check` 通过；真库 `TestMariaDBOrderBookFactsSnapshotExactSystemAsOfReuse` PASS；本地 MariaDB/Redis `TestQuantResearchMariaDBRedisL3` PASS，四个 Stage 均终态且 `quant.risk=succeeded`。
 - **CI 状态（回填）**：修复提交 `1423d29c9460906fc5caec969fb065f2a3f18eb9` 的 Required checks `45937832282`、Go test suite `45937832293`、Live provider probe `45937832230`、Integration CI `45937832229` 均 success；Integration CI 明确包含 `--- PASS: TestQuantResearchMariaDBRedisL3 (7.02s)`。Quant module validation 因本轮未改 `internal/quant` 未触发，按工作流路径规则不适用。R2 代码与 CI 验收完成；`price_limit` 仍缺失、RiskDecision 仍 reject 的语义边界不变。
+
+## 2026-11-27 四项根因根治 R3-T2：来源无关 AvailabilityDecision 审核用例
+
+- **基线与边界**：`repair_all`，T1 文档提交 `0806e572caf62281ab22d1789d94ed64e48cd53e`（DEC-PLAT-002-067）已推送；本组只做来源无关审核用例与决策链读取，不接入 Provider、不生成非空 `available_at`、不改 NEWS-CTR-001 1.0.0 Schema/Golden。
+- **应用语义**：新增 `internal/news/app/availability_decision_review.go`，以 `AvailabilityReviewRule` 承接未来来源准入规则（版本必须绑定请求中的 `ReviewRuleVersion`）。唯一可形成 `verified` 的路径是规则判定 eligible、证据 `parsed` 且具备秒/分钟精度、来源时区、证据 URL/hash 与候选时间；多条 eligible 无唯一 preferred → `conflict`，无 eligible → `unresolved`，规则判定撤销 → `revoked`。决策保留完整 `considered_evidence_ids` 与 `supersedes` 链，不覆盖历史决策。
+- **仓储语义**：`MySQLRepository` 新增 `LatestAvailabilityDecisionForVersion`，只读取链头；并发正确性仍由 `AppendAvailabilityDecision` 的版本行锁与序号 CAS 保证。真库用例新增链头断言与未知版本 `ErrAvailabilityDecisionNotFound` 断言。
+- **TDD 与变异**：新增用例先因 API 未定义构建失败；实现后 `verified/conflict/unresolved/revoked`、规则版本不匹配、foreign/purged evidence、append 失败均按预期通过。变异“把 parsed 直接判为 verified”使 `TestReviewAvailabilityDecisionTreatsParsedWithoutRuleEligibilityAsUnresolved` 有效失败并恢复。
+- **本地验收**：`go test ./internal/news/app -run TestReviewAvailabilityDecision -count=1` PASS；`go test ./internal/news/... -count=1` PASS；`go vet ./internal/news/...` PASS；`go test ./... -count=1` PASS；决策链真库 `TestAppendAvailabilityDecisionSerializesConcurrentWritersMariaDBIntegration` PASS。
+- **本地基线边界**：本地 MariaDB 11.8.9 上 `TestNewsMariaDBApplicationIntegration` 的并发 URL 去重置现 `Error 1020`；在未修改基线同样失败，归因环境与既有基线，不修改无关模块或放宽断言。CI 目标为 MariaDB 11.4。
+- **CI 状态**：本组代码提交 SHA 待生成，按精确 SHA 回填前记 `not_run`。真实来源未准入，NEWS-BLK-07/RSC-002 仍 OPEN，R3 未完整验收。

@@ -1026,6 +1026,7 @@ Evidence 表最小必要字段调整为：
 - [x] 将解析候选接入受控 Evidence 写入端口；字段级授权、Observation/Version 绑定和留存约束已落实，未准入来源不产生映射。
 - [x] Evidence / Decision Domain、单一 V1 表集内追加式 Repository、按 system_as_of 还原和 Research 秒级消费校验已完成。
 - [x] MariaDB 真库已覆盖 Migration、Repository、并发决策追加与 PIT 查询；精确 SHA CI 持续执行。
+- [x] 新增来源无关 `AvailabilityDecision Review Use Case`：已授权 Evidence + 审核规则版本 → `verified/conflict/unresolved/revoked`，按 `supersedes` 与排序后的 `considered_evidence_ids` 追加完整决策；`parsed` 未被规则判为 eligible 时只记 `unresolved`，不产生非空 `available_at`。
 - [ ] 来源准入与正式公开契约升级单独跟踪；未通过前 B 组保持 fail-closed，不用 P2/P3 替代。
 
 ### 1.16.3 当前执行结论
