@@ -245,6 +245,7 @@ func TestAppendAvailabilityDecisionSerializesConcurrentWritersMariaDBIntegration
 	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
 	newsID := "availability-decision-news-" + suffix
 	sourceID := "availability-decision-source-" + suffix
+	endpointID := "availability-decision-endpoint-" + suffix
 	observationID := "availability-decision-observation-" + suffix
 	versionID := "availability-decision-version-" + suffix
 	if err := insertIntegrationNewsItem(ctx, db, newsID); err != nil {
@@ -253,10 +254,13 @@ func TestAppendAvailabilityDecisionSerializesConcurrentWritersMariaDBIntegration
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	retentionUntil := now.Add(time.Hour)
 	if _, err := db.ExecContext(ctx, `INSERT INTO news_observations
-		(observation_id, idempotency_key, source_id, provider_code, candidate_json,
-		 observed_at, identity_status, news_id, retention_until)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		observationID, observationID+"-key", sourceID, "test-provider",
+		(observation_id, idempotency_key, source_id, provider_code, endpoint_id,
+		 source_policy_version_id, endpoint_policy_version_id,
+		 provider_output_policy_ref, provider_output_policy_version_id,
+		 candidate_json, observed_at, identity_status, news_id, retention_until)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		observationID, observationID+"-key", sourceID, "test-provider", endpointID,
+		"source-policy-v1", "endpoint-policy-v1", "provider-policy-ref", "provider-policy-v1",
 		[]byte(`{"title":"decision append fixture"}`), now.Add(-time.Minute),
 		"matched", newsID, retentionUntil,
 	); err != nil {
@@ -284,6 +288,26 @@ func TestAppendAvailabilityDecisionSerializesConcurrentWritersMariaDBIntegration
 		now.Add(-30*time.Second), retentionUntil,
 	); err != nil {
 		t.Fatalf("insert availability Evidence: %v", err)
+	}
+
+	binding, err := repository.ResolveAvailabilityEvidenceSourceBinding(ctx, domain.AvailabilityEvidence{
+		ID: evidenceID, NewsID: newsID, VersionID: versionID, ObservationID: observationID,
+	})
+	if err != nil {
+		t.Fatalf("resolve availability evidence source binding: %v", err)
+	}
+	if binding.EvidenceID != evidenceID || binding.SourceID != sourceID || binding.EndpointID != endpointID ||
+		binding.ProviderCode != "test-provider" || binding.SourcePolicyVersionID != "source-policy-v1" ||
+		binding.EndpointPolicyVersionID != "endpoint-policy-v1" ||
+		binding.ProviderOutputPolicyRef != "provider-policy-ref" ||
+		binding.ProviderOutputPolicyVersionID != "provider-policy-v1" {
+		t.Fatalf("source binding=%+v", binding)
+	}
+	if _, err := repository.ResolveAvailabilityEvidenceSourceBinding(ctx, domain.AvailabilityEvidence{
+		ID:     "availability-decision-unknown-evidence-" + suffix,
+		NewsID: newsID, VersionID: versionID, ObservationID: observationID,
+	}); !errors.Is(err, ErrAvailabilityEvidenceBindingNotFound) {
+		t.Fatalf("unknown evidence binding error=%v, want not found", err)
 	}
 
 	recordedAt := now

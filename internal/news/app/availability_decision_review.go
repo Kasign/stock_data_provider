@@ -80,6 +80,7 @@ type ReviewAvailabilityDecisionRequest struct {
 type ReviewAvailabilityDecision struct {
 	decisions AvailabilityDecisionStore
 	rule      AvailabilityReviewRule
+	bindings  AvailabilityEvidenceBindingResolver
 	newID     func() string
 	now       func() time.Time
 }
@@ -88,13 +89,19 @@ func NewReviewAvailabilityDecision(
 	decisions AvailabilityDecisionStore,
 	rule AvailabilityReviewRule,
 	newID func() string,
+	bindings ...AvailabilityEvidenceBindingResolver,
 ) (*ReviewAvailabilityDecision, error) {
-	if decisions == nil || rule == nil || newID == nil {
+	if decisions == nil || rule == nil || newID == nil || len(bindings) > 1 {
 		return nil, ErrAvailabilityReviewUnavailable
+	}
+	var resolver AvailabilityEvidenceBindingResolver
+	if len(bindings) == 1 {
+		resolver = bindings[0]
 	}
 	return &ReviewAvailabilityDecision{
 		decisions: decisions,
 		rule:      rule,
+		bindings:  resolver,
 		newID:     newID,
 		now:       time.Now,
 	}, nil
@@ -147,7 +154,7 @@ func (u *ReviewAvailabilityDecision) Execute(
 		return domain.AvailabilityDecision{}, err
 	}
 
-	reviews, err := evaluateAvailabilityReviews(ctx, u.rule, evidence)
+	reviews, err := evaluateAvailabilityReviews(ctx, u.rule, u.bindings, evidence)
 	if err != nil {
 		return domain.AvailabilityDecision{}, errors.Join(ErrAvailabilityReviewRuleRejected, err)
 	}
@@ -232,14 +239,32 @@ type availabilityEvidenceReviewResult struct {
 func evaluateAvailabilityReviews(
 	ctx context.Context,
 	rule AvailabilityReviewRule,
+	bindings AvailabilityEvidenceBindingResolver,
 	evidence []domain.AvailabilityEvidence,
 ) ([]availabilityEvidenceReviewResult, error) {
+	sourceRule, sourceBound := rule.(SourceBoundAvailabilityReviewRule)
+	if sourceBound && bindings == nil {
+		return nil, ErrAvailabilityReviewUnavailable
+	}
 	results := make([]availabilityEvidenceReviewResult, 0, len(evidence))
 	for _, item := range evidence {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		review, err := rule.Evaluate(ctx, item)
+		var review AvailabilityEvidenceReview
+		var err error
+		if sourceBound {
+			binding, bindingErr := bindings.ResolveAvailabilityEvidenceSourceBinding(ctx, item)
+			if bindingErr != nil {
+				return nil, bindingErr
+			}
+			if binding.EvidenceID != item.ID {
+				return nil, ErrAvailabilityEvidenceBindingNotFound
+			}
+			review, err = sourceRule.EvaluateSourceBound(ctx, item, binding)
+		} else {
+			review, err = rule.Evaluate(ctx, item)
+		}
 		if err != nil {
 			return nil, err
 		}

@@ -1638,4 +1638,14 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - **TDD 与变异**：新增用例先因 API 未定义构建失败；实现后 `verified/conflict/unresolved/revoked`、规则版本不匹配、foreign/purged evidence、append 失败均按预期通过。变异“把 parsed 直接判为 verified”使 `TestReviewAvailabilityDecisionTreatsParsedWithoutRuleEligibilityAsUnresolved` 有效失败并恢复。
 - **本地验收**：`go test ./internal/news/app -run TestReviewAvailabilityDecision -count=1` PASS；`go test ./internal/news/... -count=1` PASS；`go vet ./internal/news/...` PASS；`go test ./... -count=1` PASS；决策链真库 `TestAppendAvailabilityDecisionSerializesConcurrentWritersMariaDBIntegration` PASS。
 - **本地基线边界**：本地 MariaDB 11.8.9 上 `TestNewsMariaDBApplicationIntegration` 的并发 URL 去重置现 `Error 1020`；在未修改基线同样失败，归因环境与既有基线，不修改无关模块或放宽断言。CI 目标为 MariaDB 11.4。
-- **CI 状态**：本组代码提交 SHA 待生成，按精确 SHA 回填前记 `not_run`。真实来源未准入，NEWS-BLK-07/RSC-002 仍 OPEN，R3 未完整验收。
+- **CI 状态（回填）**：代码提交 `003e4463f3de70c406e255309c057d54a8128fc5` 按精确 SHA 查询的 13 个检查全部 `completed/success`：Integration CI `45940026599`、required-checks `45940026508`、Go test suite `45940026587`（含 News MariaDB、Root Go module、Research/Researchflow/Notification/Market-data 等全部 Job）。真实来源未准入，NEWS-BLK-07/RSC-002 仍 OPEN，R3 未完整验收。
+
+## 2026-11-27 四项根因根治 R3-T3：来源准入与证据产出框架
+
+- **基线与边界**：本组在 `003e4463f` 之后继续，仍只做来源无关框架；不注册任何真实来源、不写非空 `available_at`、不改 NEWS-CTR-001 1.0.0 Schema/Golden。静态目录默认为空且 fail-closed。
+- **资格记录**：新增 `AvailabilitySourceQualification`，强制官方首次公开语义引用、Endpoint 授权、逐版本绑定、声明时区/精度、脱敏原始响应 SHA-256、生效/撤销时间与审核规则版本；记录不保存原始载荷或样本值。
+- **产出边界**：`QualifyAvailabilityEvidence` 从资格目录查找精确 Source/Endpoint/Provider 策略版本绑定，只有字段路径、时区、精度与 provenance 全部合法才输出 `AvailabilityTimeCandidate`，供后续 `RecordAvailabilityEvidence` 使用；它不审核、不写入、不产生 `available_at`。
+- **审核绑定扩展**：Review Use Case 支持可选 `AvailabilityEvidenceBindingResolver`；`SourceBoundAvailabilityReviewRule` 必须拿到 Evidence→Observation 的精确来源策略绑定，绑定不一致一律 `ineligible`，资格撤销输出 `revoked`，`parsed` 单独仍保持不可信。
+- **仓储与目录**：`MySQLRepository.ResolveAvailabilityEvidenceSourceBinding` 通过三方身份一致连接读取绑定；`StaticAvailabilityQualificationCatalog` 为不可变快照，按绑定选择最新 `effective_at`，构造期拒绝重复 ref、非法精度和歧义生效时间。
+- **TDD 与变异**：新增测试先因 API 未定义构建失败；变异“忽略来源绑定不一致”使 `TestSourceQualifiedAvailabilityReviewRuleRequiresExactSourceBinding` 有效失败并恢复。`go test ./internal/news/...`（无 DSN）、`go vet ./internal/news/...`、`go test ./... -count=1`、`git diff --check` PASS；决策链与来源绑定真库用例 PASS。本地 MariaDB 11.8.9 的既有并发 URL 去重 `Error 1020` 已在未修改基线复现，不归因本组。
+- **CI 状态**：本组提交 SHA 待生成，按精确 SHA 回填前记 `not_run`。T4 契约版本与 B 组门禁、T5 真实来源仍待推进。

@@ -43,7 +43,7 @@ News-owned 的授权预检、Diagnostics Check 工厂和 Cleaner 一次性执行
 ### NEWS-BLK-07 R3 P1 启动口径（2026-11-27）
 
 - 用户已选择 P1 并排除 P2/P3，正式决策为 DEC-PLAT-002-067；历史“搁置”口径不再代表当前状态。
-- 来源无关部分按 T2～T4 推进：T2 的 AvailabilityDecision Review Use Case 已完成代码（`verified/conflict/unresolved/revoked`、规则版本绑定、`supersedes`/`considered_evidence_ids` 链，CI 待回填）；来源准入/证据产出框架与 NEWS-CTR-001 2.0.0 仍待 T3/T4。
+- 来源无关部分按 T2～T4 推进：T2 审核用例提交 `003e4463f` 已由全部 13 个 CI 检查 success 验收；T3 来源准入/证据产出框架代码完成（静态资格目录、精确策略版本绑定、候选产出与来源绑定审核规则，CI 待回填）；NEWS-CTR-001 2.0.0 与 B 组门禁仍待 T4。
 - 真实来源仍为独立阻塞：仓库内没有官方字段语义证明、Endpoint 授权/凭据、脱敏原始响应与逐版本绑定证据；任何候选字段（`announcementTime`、`DOC_PUBTIME`、EDGAR Acceptance Time、交易所流程时间等）在审核通过前均为 `not verified`。
 - 未完成真实来源准入前，不生成非空 `available_at`，不解除 B 组成功路径，不把 `parsed` 当 `verified`，不为消除 SKIP 放宽断言。
 

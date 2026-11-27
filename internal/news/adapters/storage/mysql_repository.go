@@ -30,6 +30,7 @@ type MySQLRepository struct {
 var _ app.IdentityRepository = (*MySQLRepository)(nil)
 var _ app.EvidencePITRepository = (*MySQLRepository)(nil)
 var _ app.AvailabilityDecisionStore = (*MySQLRepository)(nil)
+var _ app.AvailabilityEvidenceBindingResolver = (*MySQLRepository)(nil)
 
 var _ app.IdentityTransaction = (*mysqlNewsTransaction)(nil)
 
@@ -43,6 +44,65 @@ func NewMySQLRepository(db *sql.DB) (*MySQLRepository, error) {
 
 var ErrAvailabilityDecisionSequenceConflict = errors.New("news storage: availability decision sequence conflict")
 var ErrAvailabilityDecisionNotFound = app.ErrAvailabilityDecisionNotFound
+var ErrAvailabilityEvidenceBindingNotFound = app.ErrAvailabilityEvidenceBindingNotFound
+
+// ResolveAvailabilityEvidenceSourceBinding 从持久化证据回溯其精确来源/策略绑定。
+// 只有证据、版本和 Observation 三方身份全部一致时才返回绑定。
+func (r *MySQLRepository) ResolveAvailabilityEvidenceSourceBinding(
+	ctx context.Context,
+	evidence domain.AvailabilityEvidence,
+) (app.AvailabilityEvidenceSourceBinding, error) {
+	if r == nil || r.db == nil || ctx == nil ||
+		evidence.ID == "" || evidence.NewsID == "" || evidence.VersionID == "" || evidence.ObservationID == "" {
+		return app.AvailabilityEvidenceSourceBinding{}, app.ErrInvalidRequest
+	}
+	if err := ctx.Err(); err != nil {
+		return app.AvailabilityEvidenceSourceBinding{}, err
+	}
+
+	var binding app.AvailabilityEvidenceSourceBinding
+	var providerCode, endpointID, endpointPolicyVersionID, providerPolicyRef, providerPolicyVersionID sql.NullString
+	err := r.db.QueryRowContext(ctx, `SELECT e.evidence_id, o.source_id, o.endpoint_id, o.provider_code,
+		o.source_policy_version_id, o.endpoint_policy_version_id,
+		o.provider_output_policy_ref, o.provider_output_policy_version_id
+		FROM news_version_availability_evidence e
+		INNER JOIN news_item_versions v
+			ON v.version_id = e.version_id AND v.news_id = e.news_id AND v.observation_id = e.observation_id
+		INNER JOIN news_observations o
+			ON o.observation_id = v.observation_id AND o.news_id = v.news_id
+		WHERE e.evidence_id = ? AND e.version_id = ? AND e.news_id = ? AND e.observation_id = ?`,
+		evidence.ID, evidence.VersionID, evidence.NewsID, evidence.ObservationID,
+	).Scan(
+		&binding.EvidenceID, &binding.SourceID, &endpointID, &providerCode,
+		&binding.SourcePolicyVersionID, &endpointPolicyVersionID,
+		&providerPolicyRef, &providerPolicyVersionID,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return app.AvailabilityEvidenceSourceBinding{}, ErrAvailabilityEvidenceBindingNotFound
+	}
+	if err != nil {
+		return app.AvailabilityEvidenceSourceBinding{}, err
+	}
+	if binding.EvidenceID != evidence.ID || binding.SourceID == "" {
+		return app.AvailabilityEvidenceSourceBinding{}, ErrAvailabilityEvidenceBindingNotFound
+	}
+	if endpointID.Valid {
+		binding.EndpointID = endpointID.String
+	}
+	if providerCode.Valid {
+		binding.ProviderCode = providerCode.String
+	}
+	if endpointPolicyVersionID.Valid {
+		binding.EndpointPolicyVersionID = endpointPolicyVersionID.String
+	}
+	if providerPolicyRef.Valid {
+		binding.ProviderOutputPolicyRef = providerPolicyRef.String
+	}
+	if providerPolicyVersionID.Valid {
+		binding.ProviderOutputPolicyVersionID = providerPolicyVersionID.String
+	}
+	return binding, nil
+}
 
 // LatestAvailabilityDecisionForVersion 返回版本当前决策链头。
 // 读取本身不加锁；并发写入由 AppendAvailabilityDecision 的序号 CAS 拒绝陈旧前驱。
