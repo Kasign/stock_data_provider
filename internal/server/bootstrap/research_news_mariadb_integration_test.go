@@ -32,10 +32,10 @@ import (
 // 本文件是 News→Research 跨模块 MariaDB 联调验收（交接文档第 3 节第 3 项的 A 组）。
 // 与 research_news_test.go 的空壳 &sql.DB{} 构造测试不同，这里所有依赖都是真实实例：
 // 真实 MariaDB、真实双 namespace Migration、真实 Server 组合根、真实冻结 Golden。
-// B 组（Research Evidence 成功持久化）因 News 不提供 available_at 而被 blocked；
-// 成功路径用例已落地于 successful_import_with_verified_available_at，当前按契约
-// 事实显式 t.Skip，News Owner 完成来源证据接入与冻结契约变更后自动启用。
-// 本文件绝不伪造 available_at、不回填 published_at/observed_at、不使用 Mock Facade。
+// B 组（Research Evidence 成功持久化）先验证无来源时间证据时严格 PIT fail-closed，
+// 再通过测试专用 verified Evidence/Decision 夹具验证真实 Facade → Importer →
+// research_evidence_records 成功链路。夹具只证明门禁通过后的跨模块行为，不代表
+// 生产来源已准入；本文件不回填 published_at/observed_at，不使用 Mock Facade。
 
 const (
 	newsResearchDSNEnv    = "SERVER_RELAY_TEST_MYSQL_DSN"
@@ -250,6 +250,46 @@ func (f *newsResearchFixture) listRequest() newsapp.ListEvidenceRequest {
 		SystemAsOf:            f.systemAsOf,
 		Filters:               &newsapp.EvidenceQueryFilters{},
 		PageSize:              10,
+	}
+}
+
+// seedVerifiedAvailabilityForSuccessPath 仅为 B 组成功链路写入一个测试专用、
+// 已审核的 availability Evidence/Decision。它不注册真实来源，不声称生产环境已有
+// 合格字段；断言仍以 News Facade 实际返回的 available_at 为唯一基准。
+func (f *newsResearchFixture) seedVerifiedAvailabilityForSuccessPath(t *testing.T, ctx context.Context) {
+	t.Helper()
+	decisionAt := f.systemAsOf.Add(-time.Second).UTC()
+	recordedAt := decisionAt.Add(-time.Microsecond).UTC()
+	observedAt := f.observation.ObservedAt.UTC()
+	candidateAt := observedAt.Add(-time.Minute).Truncate(time.Second).UTC()
+	if !observedAt.Before(recordedAt) || !candidateAt.Before(observedAt) ||
+		!recordedAt.Before(decisionAt) || !decisionAt.After(f.version.ObservedAt) {
+		t.Fatalf("invalid availability fixture timeline: candidate=%s observed=%s recorded=%s decision=%s as_of=%s",
+			candidateAt, observedAt, recordedAt, decisionAt, f.systemAsOf)
+	}
+	evidenceID := f.version.ID + "-availability-evidence"
+	if _, err := f.db.ExecContext(ctx, `INSERT INTO news_version_availability_evidence
+		(evidence_id, news_id, version_id, observation_id, field_path, raw_value,
+		 source_timezone_or_offset, source_precision, parse_status, parse_reason_code,
+		 candidate_available_at_utc, parser_version, evidence_ref, observed_at, recorded_at,
+		 retention_until)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'parsed', '', ?, ?, ?, ?, ?, ?)`,
+		evidenceID, f.version.NewsID, f.version.ID, f.observation.ID,
+		"publisher.first_available_at", candidateAt.Format(time.RFC3339),
+		"Z", "second", candidateAt, "bootstrap-integration-parser/1",
+		"evidence://news-research-integration/success-path/available-at",
+		observedAt, recordedAt, f.observation.RetentionUntil.UTC(),
+	); err != nil {
+		t.Fatalf("insert B 组 availability Evidence 夹具失败: %v", err)
+	}
+	if _, err := f.db.ExecContext(ctx, `INSERT INTO news_version_availability_decisions
+		(decision_id, version_id, decision_seq, status, selected_evidence_id,
+		 considered_evidence_ids, reason_code, review_rule_version, recorded_at)
+		VALUES (?, ?, 1, 'verified', ?, JSON_ARRAY(?), ?, ?, ?)`,
+		evidenceID+"-decision", f.version.ID, evidenceID, evidenceID,
+		"availability.integration_success_path_verified", "bootstrap-integration-review/1", decisionAt,
+	); err != nil {
+		t.Fatalf("insert B 组 availability Decision 夹具失败: %v", err)
 	}
 }
 
@@ -544,16 +584,12 @@ func TestNewsResearchMariaDBIntegration(t *testing.T) {
 		})
 
 		// B 组：真实 Facade → Importer → research_evidence_records 成功落库。
-		// 当前 News 依 GOV-CTR-002 / NEWS-CTR-001 不提供可验证的 available_at，
-		// 故本用例显式 Skip；News Owner 完成来源证据接入与冻结契约变更后自动启用。
-		// 这里不制造任何时间值：时间值与内容级别以 News 输出为唯一基准，
-		// 校验落库列/返回值与之严格一致，从而拦截回填、篡改与静默改写。
-		// payload 只校验关键留痕键存在；值一致性由列级断言覆盖。
+		// 先写入测试专用 verified Decision 夹具，使严格 PIT 有可消费的已审核时间证据；
+		// 时间值与内容级别仍以 News 输出为唯一基准，校验落库列/返回值与之严格一致，
+		// 从而拦截回填、篡改与静默改写。payload 只校验关键留痕键存在。
+		f.seedVerifiedAvailabilityForSuccessPath(t, ctx)
 		t.Run("successful_import_with_verified_available_at", func(t *testing.T) {
 			record, err := f.composition.query.GetEvidence(ctx, f.getRequest())
-			if errors.Is(err, newsapp.ErrEvidencePITNotFound) {
-				t.Skip("B 组 blocked：News 尚未提供可验证 available_at 来源证据（GOV-CTR-002 / NEWS-CTR-001）；严格 PIT 在 Query 层排除该记录")
-			}
 			if err != nil {
 				t.Fatalf("B 组授权读取失败: %v", err)
 			}
@@ -678,7 +714,7 @@ func TestNewsResearchMariaDBIntegration(t *testing.T) {
 			}
 		})
 
-		t.Run("list_evidence_page_excludes_missing_available_at", func(t *testing.T) {
+		t.Run("list_evidence_page_includes_verified_available_at", func(t *testing.T) {
 			page, err := f.composition.query.ListEvidence(ctx, f.listRequest())
 			if err != nil {
 				t.Fatalf("真实快照分页失败: %v", err)
@@ -686,8 +722,16 @@ func TestNewsResearchMariaDBIntegration(t *testing.T) {
 			if page.SnapshotRef == "" || !page.SystemAsOf.Equal(f.systemAsOf) {
 				t.Fatalf("快照页边界异常: %+v", page)
 			}
-			if len(page.Items) != 0 {
-				t.Fatalf("严格 PIT 列表在没有 verified available_at 时返回了 %d 条记录", len(page.Items))
+			if len(page.Items) != 1 {
+				t.Fatalf("严格 PIT 列表在 verified available_at 后返回了 %d 条记录，want 1", len(page.Items))
+			}
+			item := page.Items[0]
+			if item.NewsID != newsResearchNewsID || item.VersionID != f.version.ID ||
+				item.AvailableAt == nil || item.AvailableAt.After(f.systemAsOf) {
+				t.Fatalf("列表记录未保持严格 PIT 绑定: %+v", item)
+			}
+			if item.AvailableAt.Nanosecond() != 0 {
+				t.Fatalf("列表 available_at 必须为整秒: %v", *item.AvailableAt)
 			}
 		})
 	})

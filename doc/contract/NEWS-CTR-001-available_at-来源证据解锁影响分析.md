@@ -10,7 +10,7 @@
 
 ## 0. 结论摘要（先看这里）
 
-> **状态（2026-11-27）：`P1 authorized / source-qualification pending`。** 项目负责人明确选择 P1 并排除 P2/P3；来源无关的 Review Use Case、准入框架、契约升级与 B 组门禁可按正式流程推进。当前仓库中没有通过官方首次公开可获取语义审核的来源，也没有 Endpoint 授权/凭据或原始响应样本；因此不得生成、回填或解除任何 `available_at` 成功路径，B 组在真实来源准入前保持 fail-closed。
+> **状态（2026-11-27）：`P1 authorized / source-semantics pending`。** 项目负责人明确选择 P1 并排除 P2/P3；本项目为个人非公开项目，外部合同/凭据不构成门禁，Endpoint 授权引用改记为个人用途与采集方式声明。来源无关的 Review Use Case、准入框架、契约升级与 B 组门禁可按正式流程推进。当前仓库中没有通过官方首次公开可获取语义审核的生产来源，也没有可审计的授权范围内原始响应样本；因此不得注册生产来源、不得生成或回填 `available_at`。B 组成功链路只允许用显式测试夹具验证，不能把夹具当成生产来源证据。
 
 1. **A 的法定第一步已完成，结论是「冻结 Golden 指定的 `sec-edgar` 与仓库已接入的全部 Provider 均不合格」**：SEC 官方文档逐字声明 `There is no timestamp to indicate when filing content is first available on sec.gov.`；`Acceptance Time` 是「被 EDGAR 接受」的 EST 系统时间，到 sec.gov 可见还有 1-3 分钟且**不可预测**的 lag；PDS 规范里唯一的 `<TIMESTAMP>` 只用于「受理后更正」且由 R/A Subsystem 提供。详见第 1 节。
 2. **2026-11-16 Review 更正**：第 1.5 节此前把时间精度和时区误当成语义证明。EDINET `submitDateTime` 目前只能列为提交时间候选，尚未证明为首次公众可获取时间；LSE RNS FIX `SendingTime` 是消息传输时间，不能直接等同公众可获取时间。两者均未通过准入 1 的语义证明，且属于海外市场，不符合当前中国 A 股项目范围。不能声称已找到合格来源。
@@ -150,11 +150,11 @@
 
 **推荐 P1**：Research 侧 DTO/Schema/表/校验全部就绪，P1 只需 News 侧补来源证据与实现，改动面最小、语义风险最低。**P2 不能作为「绕过 P1」的捷径**：Research `mapNewsEvidence` 要求 `record.AvailableAt != nil`，新区间字段无法替代它。
 
-**必须由项目负责人确认的决策点**：① 选择 P1/P2/P3；② 若 P1，指定来源与授权凭据；③ 是否同意按 MAJOR 升级版本（见第 4 节）；④ 消费者影响确认签字（见第 3.1 节）。未确认前不进入代码实施。
+**项目负责人已确认的范围**：① 选择 P1 并排除 P2/P3；② 本项目为个人非公开项目，外部合同/凭据不作为来源准入门禁，以个人用途与采集方式声明替代；③ 同意按 MAJOR 升级 NEWS-CTR-001；④ 来源无关链路与消费者影响边界已确认。此确认不等于任何生产来源字段语义已通过审核。
 
 > **2026-11-27 决议（用户提供文本：News P1 按方案，其他也按方案执行）：选择 P1，正式排除 P2/P3。**
 >
-> P1 是唯一保留 `available_at` 原始语义并能打通 Research 严格 PIT 的路径。P2 的新区间字段不能替代 `available_at`，P3 的 NULL 搁置被用户明确排除。实施顺序按本计划第 2 节：先完成来源无关的 AvailabilityDecision Review Use Case、来源准入/证据产出框架、NEWS-CTR-001 2.0.0 与 B 组门禁；具体来源 Provider 在取得官方字段语义证明、Endpoint 授权/凭据、脱敏原始响应和版本绑定证据后接入。
+> P1 是唯一保留 `available_at` 原始语义并能打通 Research 严格 PIT 的路径。P2 的新区间字段不能替代 `available_at`，P3 的 NULL 搁置被用户明确排除。实施顺序按本计划第 2 节：先完成来源无关的 AvailabilityDecision Review Use Case、来源准入/证据产出框架、NEWS-CTR-001 2.0.0 与 B 组门禁；具体来源 Provider 在取得官方字段语义证明、可审计原始响应和个人用途/采集方式声明及版本绑定证据后接入。
 >
 > **真实来源准入条件（唯一）**：来源 Owner 提供官方字段规范，明确该字段是「首次向约定市场参与者公开可获取」时间；提供 Endpoint 授权、个人用途持久化/再利用许可、原始字段路径与时区/精度、逐版本绑定和更正/撤回关系、证据 URL 与脱敏样本。未经这些证据，任何字段（包括 `announcementTime`、`DOC_PUBTIME`、交易所“确认发布”流程时间、EDGAR Acceptance Time）保持 `not verified`。
 >
@@ -199,8 +199,8 @@ P1 已获授权，当前按“来源无关先行、真实来源后接”的顺�
 1. **T1 治理**：登记 DEC-PLAT-002-067，校准本影响分析中的“搁置/V10/禁止实现”旧口径，同步 News/Research 卡点与四项计划。
 2. **T2 审核用例**：新增来源无关的 AvailabilityDecision Review Use Case，输入已授权 Evidence 与审核规则版本，输出 `verified/conflict/unresolved/revoked` 并通过既有 Repository 追加决策；不生成未经审核的 `available_at`。
 3. **T3 来源准入框架**：定义来源级字段语义 allowlist、审核规则版本与 Provider 原始字段证据适配边界；未通过官方语义审核的来源不得注册，候选字段不得提前映射。
-4. **T4 契约与门禁**：发布 NEWS-CTR-001 2.0.0 Schema/Golden（1.0.0 字节不变），同步 PIT fixture/NULL 断言/Golden Contract Test；B 组 `t.Skip` 改为严格门禁（在真实来源到位前保持 fail-closed，不得以放宽断言使其通过）。
-5. **T5 真源接入（外部依赖）**：来源 Owner 提供官方字段规范、授权/凭据、脱敏原始响应与版本绑定证据后，接入具体 Provider 并跑通 Research 成功路径。
+4. **T4 契约与门禁**：发布 NEWS-CTR-001 2.0.0 Schema/Golden（1.0.0 字节不变），同步 PIT fixture/NULL 断言/Golden Contract Test；B 组 `t.Skip` 改为先 fail-closed、再用显式测试夹具验证成功门禁，不得以放宽断言使其通过。
+5. **T5 真源接入（个人非公开项目）**：不再要求外部合同/凭据；仍需官方字段规范、可审计样本、个人用途/采集方式声明与版本绑定证据，之后接入具体 Provider 并跑通 Research 成功路径。
 6. 每完成一个逻辑组按精确 SHA 回填 CI；T5 未完成时保持 NEWS-BLK-07/RSC-002 的开放状态，不宣称 R3 完整验收。
 
 ---
@@ -1140,4 +1140,13 @@ Integration CI Run 43810902921（#85）对提交 `ea79dc5503f36280af2b944d3557fd
 | CNINFO 公开查询 `announcementTime` | 未证明 | 日级 | 非商业浏览不等于自动化持久化授权 | 有 announcementId，但时间不合格 | `rejected_for_available_at` |
 | 东方财富聚合 `display_time` / `eiTime` | 聚合链路时间，不是发布来源公开时刻 | 秒/毫秒 | 第三方聚合来源 | art_code 可绑定但来源语义不合格 | `rejected_for_available_at` |
 
-**最终结论：本轮已自行取得能公开取得的所有关键材料，但没有一条来源通过 NEWS-CTR-001 准入。** 真实来源仍为 `blocked_external_source`：缺的是来源 Owner 正式提供的字段语义证明、Endpoint 合同/凭据、授权范围内的真实响应样本和逐版本定义，而不是缺一次普通网页查询。T5 不能标记为完成；在材料到位前不注册来源、不生成非空 `available_at`、不解除 Research B 组 fail-closed 门禁。T4 可继续完成来源无关的 NEWS-CTR-001 2.0.0 与严格门禁，但最终 B 组成功路径仍依赖 T5。
+**最终结论：本轮已自行取得能公开取得的所有关键材料，但没有一条来源通过 NEWS-CTR-001 准入。** 真实来源仍为阻塞状态：缺的是来源字段的官方首次公开可获取语义证明、可审计原始响应样本和逐版本定义，而不是缺一次普通网页查询。T5 不能标记为完成；在材料到位前不注册生产来源、不生成非空 `available_at`。T4 的来源无关部分可继续完成，但生产成功路径仍依赖 T5。
+
+## 1.18 个人非公开项目口径与 B 组测试夹具（2026-11-27）
+
+项目负责人明确补充：**本项目是个人项目，不对外公开，没有外部授权**。据此调整 R3 准入口径：
+
+1. **外部授权/合同/凭据不再是门禁**：`AvailabilitySourceQualification.EndpointAuthorizationRef` 在个人非公开项目中使用“个人用途声明 + 采集方式留痕”的可审计引用，不要求来源 Owner 合同或 API Key。
+2. **事实语义门禁不变**：仍必须证明某字段是“首次公开可获取时间”，并保留字段路径、时区、精度、逐版本绑定与可审计样本；`parsed` 仍不等于 `verified`。
+3. **生产与测试严格分离**：`research_news_mariadb_integration_test.go` 的 B 组成功路径使用显式测试专用 verified Evidence/Decision 夹具，验证真实 Facade → Importer → Research 落库链路；该夹具不注册生产来源，不作为真实 `available_at` 证据。
+4. **门禁结果**：B 组不再使用 `t.Skip`；无 verified 决策时必须 `ErrEvidencePITNotFound`，有测试夹具时必须成功落库且原样保留 `available_at`。生产 B 组仍不因测试夹具而解锁。

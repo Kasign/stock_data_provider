@@ -1655,8 +1655,8 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - **用户要求**：项目负责人要求“这些数据你自己去获取一下”，本轮直接联网获取公开官方/准官方材料，不再把可公开查询的数据停在口头等待。
 - **已取得材料**：上证信息《公告数据服务说明书》1.0、深圳证券信息《关于证券信息的声明》、SSE `queryCompanyBulletin.do` 非空样本、SZSE `annList` 非空样本、CNINFO `topSearch`/`hisAnnouncement/query` 非空样本、东方财富 `api/security/ann` 聚合样本；全部记录 URL、UTC 采集时间、字节数与 SHA-256，详见 `doc/contract/NEWS-CTR-001-available_at-来源证据解锁影响分析.md` 第 1.17 节。
 - **字段结论**：SSE `ADDDATE` 为秒级但无官方字段语义；SZSE `publishTime` 和 CNINFO `announcementTime` 实际为日级；东方财富时间字段属于第三方聚合链路；上证信息正式 API 仅产品级提到“发布时间”，字段级技术文档另发且未公开。全部不能映射为 `available_at`。
-- **授权结论**：上证信息/深证信正式 API 均需申请、审批、凭据和付费/试用授权；公开网页浏览不构成自动化采集、持久化和跨模块使用许可。助手不能合法自行生成凭据或绕过授权。
-- **状态边界**：T5 保持 `blocked_external_source`，不是“未尝试”；T4 可继续完成来源无关的 2.0.0 Schema/Golden 与严格 fail-closed 门禁，但 B 组成功路径在 T5 完成前不得解除。
+- **授权结论（按个人项目口径修订）**：项目负责人确认本项目为个人非公开项目，没有外部授权；外部合同/凭据不再是 T5 门禁，`EndpointAuthorizationRef` 使用个人用途与采集方式声明。公开材料仍不能证明字段是“首次公开可获取时间”，也不足以形成逐版本事实链。
+- **状态边界**：T5 保持阻塞但不是“未尝试”，状态改为 `blocked_source_semantics`；T4 来源无关部分继续完成，B 组可用显式测试夹具验证真实跨模块成功链路，但生产成功路径仍依赖 T5 的官方字段语义与可审计样本。
 
 ## 2026-11-27 四项根因根治 R3-T4a：NEWS-CTR-001 2.0.0 Schema/Golden
 
@@ -1666,3 +1666,13 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - **变异验证**：把 2.0.0 `available_at` 正则放宽为允许小数秒后，`TestNewsEvidenceQueryContractV2RejectsFractionalAvailableAt` 有效失败；恢复后复验通过。
 - **登记状态**：`契约版本与变更记录.md` 推进至 `0.2.67-frozen`，PLAT-002 NEWS-CTR-001 行登记 1.0.0 冻结不变与 2.0.0 Schema/Golden；NEWS-CTR-001 状态仍 `frozen`。T4b B 组严格门禁与 T5 真实来源仍待完成。
 - **CI 状态（回填）**：代码提交 `a0d766a4beb7eca697a6e3bf460bebbb5e12f7aa` 的 13 个检查全部 `completed/success`：Integration CI `45943432850`、required-checks `45943432879`、Go test suite `45943432868`（Root Go module、News MariaDB 等全部 Job）。T4a 验收完成；B 组成功路径仍保持 fail-closed，依赖 T4b/T5。
+
+## 2026-11-27 四项根因根治 R3-T4b：B 组严格门禁与测试夹具
+
+- **口径修订**：项目负责人确认本项目为个人非公开项目、没有外部授权；外部合同/凭据从 T5 门禁移除，官方首次公开可获取字段语义与可审计样本仍是事实语义硬门禁。生产来源未准入，不写入生产 `available_at`。
+- **TDD 证据**：先移除 B 组 `t.Skip` 且未提供 verified 决策夹具，真库测试失败于 `B 组授权读取失败: news.evidence.pit_not_found`；这证明严格 PIT 在缺少已审核决策时仍 fail-closed。
+- **测试夹具**：`research_news_mariadb_integration_test.go` 新增显式测试专用 verified Evidence/Decision 夹具，只验证真实 News Facade → Research Importer → `research_evidence_records` 成功链路；不注册来源、不映射 Provider 字段、不把夹具当作生产证据。
+- **断言范围**：B 组成功落库列、payload 留痕键、返回值与 News 输出的 `available_at`/AuthorizationRef 严格一致；列表子测试由“无 verified 时为空”改为“verified 后返回 1 条且 `available_at` 为 UTC 整秒并不晚于 system_as_of”。
+- **变异验证**：把测试夹具 Decision 状态从 `verified` 改为 `unresolved` 后，B 组再次以 `news.evidence.pit_not_found` 失败；恢复 `verified` 后完整 `TestNewsResearchMariaDBIntegration` PASS。
+- **本地验收**：`SERVER_RELAY_TEST_MYSQL_DSN=... go test ./internal/server/bootstrap -run TestNewsResearchMariaDBIntegration -count=1 -v` PASS；`go test ./... -count=1`、`go vet ./internal/news/...`、`git diff --check` PASS。
+- **CI 状态**：本组提交 SHA 待生成；按精确 SHA 取得 GitHub Actions 结论前记 `not_run`。生产 B 组仍不因测试夹具解锁，R3 完整验收仍依赖 T5 字段语义准入。
