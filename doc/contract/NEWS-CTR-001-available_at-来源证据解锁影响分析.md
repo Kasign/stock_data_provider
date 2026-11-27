@@ -1238,3 +1238,4 @@ G3 只补 `Collect/Ingest → Qualify`，不创建 Evidence/Decision，不生成
 - **生产装配**：News Stage adapter 在 ingest 前调用 qualifier；资格失败时该来源标记 `availability_qualification_failed` 并跳过 ingest，避免未资格化数据进入正式链。Server 组合根把 G1 已构造但此前闲置的资格目录接入 qualifier。RSS/Licensed 无资格目录条目时按既有路径运行。
 - **TDD 与变异**：新增 8 项针对性测试。六处变异均有效失败并恢复：响应哈希未写入、Provider 策略版本被丢弃、采集封印校验被移除、Stage qualifier 调用被移除、字段路径来源被清空、披露日边界解析被关闭。全仓 `go test ./... -count=1`、`go vet ./...`、`gofmt -l`、`git diff --check` 通过。
 - **状态边界**：`EvidenceRef` 仅是本次执行的内部响应快照定位符；原始响应持久化、Evidence 落库与 Review 决策仍属 G4/G5，且需在写入前确认留存授权与可复核性。生产 `available_at` 继续为 null，NEWS-BLK-07/RSC-002 保持 SHELVED。
+- **CI**：提交 `5b6f68b53bb2b01b2dead93c5c29431f146ae352` 的 15 个 check run 全部 `completed/success`；这不改变上述状态边界。

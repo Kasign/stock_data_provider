@@ -1814,5 +1814,6 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - **调用链**：新增 `QualifyCollectedAvailability` 用例；字段路径只来自启动资格目录；Stage adapter 在 ingest 前调用 qualifier，失败即标记 `availability_qualification_failed` 并跳过 ingest。Server 组合根把 G1 资格目录接入 qualifier，RSS/Licensed 无资格条目时行为不变。
 - **结果边界**：`QualifiedCollectedAvailability` 携带 EntryIndex、SourceItemID、七键绑定、未可信候选和 provenance，作为 `FeedCollectionResult.QualifiedAvailability` 仅在进程内保留；Stage payload/schema 字节不变。cninfo 样本值解析为 `2026-10-31T15:59:59Z` / `disclosure_boundary`，仍是候选。
 - **TDD 与变异**：新增 8 项针对性测试；六处变异均有效失败并恢复：响应哈希未写入、Provider 策略版本被丢弃、采集封印校验移除、Stage qualifier 调用移除、字段路径来源清空、披露日边界解析关闭。
-- **验证**：`go test ./... -count=1`、`go vet ./...`、`gofmt -l`、`git diff --check` 全通过。CI 状态：待提交后按 SHA 回填。
+- **验证**：`go test ./... -count=1`、`go vet ./...`、`gofmt -l`、`git diff --check` 全通过。
+- **CI 状态（回填）**：提交 `5b6f68b53bb2b01b2dead93c5c29431f146ae352` 的 15 个 check run 全部 `completed/success`：required-checks `45977073311`、Full integration checks `45977073438`（Job `140431361677`）、Go test suite `45977073454`，其余 News/Research/Researchflow/Notification/Market-data 集成与专项检查均 success。
 - **状态边界**：G4 Record、G5 Review 与 B 组真库门禁仍未完成；原始响应持久化/留存授权与可复核性须在 Evidence 写入前解决。NEWS-BLK-07/RSC-002 保持 SHELVED，生产 `available_at` 继续为 null。
