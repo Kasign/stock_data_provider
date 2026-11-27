@@ -1804,4 +1804,5 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - **发布与防漂移**：`publishNewsFeedPolicies` 以 expected-current CAS 发布 Source、Endpoint、Provider 三类策略；配置加载与 Server 组合根双重检查资格↔注册↔Provider 的七键与字段路径授权，缺任一即 fail-closed。
 - **TDD 与变异**：新增 config 5 项、app 2 项、catalog 2 项、bootstrap 3 项，共 12 项针对性测试。五处变异均有效失败并恢复：注册未传递 Provider 绑定、Endpoint 策略未发布、Observation 未落 Provider 绑定、资格交叉校验被移除、目录 Provider 绑定校验被移除。
 - **验证**：`go test ./... -count=1`、`go vet ./...`、`gofmt -l`、`git diff --check` 全通过；`.env.example` 已给出三组真实 cninfo 配置与窗口绑定说明。
-- **状态边界**：G1 不等于生产闭环完成。仍缺 G3-G5 Qualify→Record→Review 编排、B 组真库门禁；NEWS-BLK-07/RSC-002 保持 SHELVED，生产 `available_at` 继续为 null。CI 状态：待提交后按 SHA 回填。
+- **状态边界**：G1 不等于生产闭环完成。仍缺 G3-G5 Qualify→Record→Review 编排、B 组真库门禁；NEWS-BLK-07/RSC-002 保持 SHELVED，生产 `available_at` 继续为 null。
+- **CI 状态（回填）**：提交 `868196b74bd7d45e49e3b26f30e89183fba76df3` 的 15 个 check run 全部 `completed/success`：required-checks `45972896034`、Full integration checks `45972896027`（Job `140417406465`）、Go test suite `45972896017`，其余 News/Research/Researchflow/Notification/Market-data 集成与专项检查均 success。

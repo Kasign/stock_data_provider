@@ -1226,3 +1226,4 @@ G2 已落地 `official_api` JSON 采集路径；本组补齐 G1，使 1.19.3 的
 - **资格目录**：新增 `NEWS_AVAILABILITY_QUALIFICATIONS_JSON`，使用 `availability-qualification-cninfo-disclosure-v1`、`announcements.announcementTime`、`+08:00`、`[disclosure_boundary]`、`DEC-PLAT-002-073:disclosure-date-end-of-day-v1`、1.19.1 完整响应 SHA `ecd135102d…` 与 `2026-11-27T00:00:00Z` 生效。资格记录只保存哈希，不保存原始响应。
 - **绑定闭环校验**：配置加载阶段拒绝资格记录找不到精确 Source/Endpoint/Provider 绑定或字段路径未获三方授权；Server 组合根再次校验注册、Provider 目录与资格目录，并在数据库中的 Source/Endpoint/Provider 三个当前策略指针全部发布后才允许 Run 执行。`seDate` 窗口与样本哈希绑定，窗口变化必须重新采样并用新资格记录 supersede。
 - **状态边界**：本组只完成策略注册、当前策略发布与资格目录；没有创建 Evidence/Decision，没有把 `parsed` 升级为 `verified`，没有生成生产 `available_at`。G3-G5 的 Qualify→Record→Review 编排、B 组真库门禁仍未完成；NEWS-BLK-07/RSC-002 保持 SHELVED，生产 `available_at` 继续为 null。
+- **CI**：代码提交 `868196b74bd7d45e49e3b26f30e89183fba76df3` 的 15 个 check run 全部 `completed/success`；这不改变上述状态边界。
