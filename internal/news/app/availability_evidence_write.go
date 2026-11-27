@@ -2,6 +2,9 @@ package app
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"strings"
 	"time"
@@ -13,6 +16,7 @@ var (
 	ErrAvailabilityEvidencePolicyUnavailable = errors.New("news.available_at.policy_unavailable")
 	ErrAvailabilityEvidencePolicyDenied      = errors.New("news.available_at.policy_denied")
 	ErrAvailabilityEvidenceWriteUnavailable  = errors.New("news.available_at.write_unavailable")
+	ErrAvailabilityEvidenceIDConflict        = errors.New("news.available_at.evidence_id_conflict")
 )
 
 // AvailabilityEvidenceWriteTransaction 要求策略锁定与 Evidence 写入共用同一数据库事务。
@@ -30,6 +34,9 @@ type RecordAvailabilityEvidenceRequest struct {
 	ParserVersion string
 	EvidenceRef   *string
 	EvidenceHash  *string
+	// EvidenceID 只能是从证据语义推导出的确定性 ID；调用方不能自报身份。
+	// 为空时保留原有用例的随机 ID 语义，仅供非 G4 直接调用方使用。
+	EvidenceID string
 }
 
 // RecordAvailabilityEvidence 仅在 Source、Endpoint、Provider 均明确授权目标字段持久化时追加证据。
@@ -148,8 +155,19 @@ func (u *RecordAvailabilityEvidence) Execute(ctx context.Context, request Record
 		if observation.RetentionUntil.Before(retentionUntil) {
 			retentionUntil = observation.RetentionUntil.UTC()
 		}
+		evidenceID := strings.TrimSpace(u.newID())
+		if request.EvidenceID != "" {
+			expectedID := recordAvailabilityEvidenceID(request)
+			if request.EvidenceID != expectedID || !validAvailabilityLongRef(request.EvidenceID, 128) {
+				return ErrInvalidRequest
+			}
+			evidenceID = request.EvidenceID
+		}
+		if !validAvailabilityLongRef(evidenceID, 128) {
+			return ErrInvalidRequest
+		}
 		evidence := domain.AvailabilityEvidence{
-			ID: u.newID(), NewsID: version.NewsID, VersionID: version.ID, ObservationID: observation.ID,
+			ID: evidenceID, NewsID: version.NewsID, VersionID: version.ID, ObservationID: observation.ID,
 			FieldPath: request.FieldPath, RawValue: request.Candidate.RawValue,
 			SourceTimezoneOrOffset: request.Candidate.SourceTimezoneOrOffset,
 			Precision:              request.Candidate.Precision, ParseStatus: request.Candidate.Status,
@@ -193,4 +211,55 @@ func cloneAvailabilityString(value *string) *string {
 	}
 	result := *value
 	return &result
+}
+
+// recordAvailabilityEvidenceID binds the evidence identity to the immutable
+// semantic fields, never to the write timestamp. Replaying the same collection
+// therefore converges to the same ID instead of creating a second evidence row.
+func recordAvailabilityEvidenceID(request RecordAvailabilityEvidenceRequest) string {
+	candidateAt := ""
+	if request.Candidate.CandidateAvailableAt != nil {
+		candidateAt = request.Candidate.CandidateAvailableAt.UTC().Format(time.RFC3339Nano)
+	}
+	payload, err := json.Marshal(struct {
+		NewsID        string `json:"news_id"`
+		VersionID     string `json:"version_id"`
+		ObservationID string `json:"observation_id"`
+		ObservedAt    string `json:"observed_at"`
+		FieldPath     string `json:"field_path"`
+		RawValue      string `json:"raw_value"`
+		Timezone      string `json:"timezone"`
+		Precision     string `json:"precision"`
+		ParseStatus   string `json:"parse_status"`
+		CandidateAt   string `json:"candidate_at"`
+		ParserVersion string `json:"parser_version"`
+		EvidenceRef   string `json:"evidence_ref"`
+		EvidenceHash  string `json:"evidence_hash"`
+	}{
+		NewsID:        request.Version.NewsID,
+		VersionID:     request.Version.ID,
+		ObservationID: request.Observation.ID,
+		ObservedAt:    request.Observation.ObservedAt.UTC().Format(time.RFC3339Nano),
+		FieldPath:     request.FieldPath,
+		RawValue:      request.Candidate.RawValue,
+		Timezone:      request.Candidate.SourceTimezoneOrOffset,
+		Precision:     string(request.Candidate.Precision),
+		ParseStatus:   string(request.Candidate.Status),
+		CandidateAt:   candidateAt,
+		ParserVersion: request.ParserVersion,
+		EvidenceRef:   availabilityStringValue(request.EvidenceRef),
+		EvidenceHash:  availabilityStringValue(request.EvidenceHash),
+	})
+	if err != nil {
+		return ""
+	}
+	digest := sha256.Sum256(payload)
+	return "availability-evidence-" + hex.EncodeToString(digest[:])
+}
+
+func availabilityStringValue(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
 }

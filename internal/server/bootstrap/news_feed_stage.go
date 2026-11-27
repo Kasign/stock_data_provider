@@ -29,6 +29,7 @@ type newsFeedStageComposition struct {
 	providerCatalog         *newsprovider.StaticOutputPolicyCatalog
 	qualificationCatalog    *newssource.StaticAvailabilityQualificationCatalog
 	availabilityQualifier   *newsapp.QualifyCollectedAvailability
+	availabilityRecorder    *newsapp.RecordCollectedAvailability
 	qualificationFieldPaths []string
 	registrations           []newsapp.SourceEndpointRegistration
 	sourcePolicies          []newsconfig.FeedSource
@@ -79,10 +80,25 @@ func newNewsFeedStageComposition(
 	}
 	qualificationFieldPaths := newsQualificationFieldPaths(qualifications)
 	var availabilityQualifier *newsapp.QualifyCollectedAvailability
+	var availabilityRecorder *newsapp.RecordCollectedAvailability
 	if len(qualificationFieldPaths) > 0 {
 		availabilityQualifier, err = newsapp.NewQualifyCollectedAvailability(qualificationCatalog)
 		if err != nil {
 			return nil, fmt.Errorf("create News collected availability qualifier: %w", err)
+		}
+		var providerResolver newsapp.ProviderOutputPolicyResolver
+		if outputPolicyCatalog != nil {
+			providerResolver = outputPolicyCatalog
+		}
+		recordEvidence, err := newsapp.NewRecordAvailabilityEvidence(
+			repository, sourceCatalog, providerResolver, newsFeedIngestID,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("create News availability evidence recorder: %w", err)
+		}
+		availabilityRecorder, err = newsapp.NewRecordCollectedAvailability(recordEvidence)
+		if err != nil {
+			return nil, fmt.Errorf("create News collected availability recorder: %w", err)
 		}
 	}
 	policies := make(map[string]newsconfig.FeedSource, len(feedSources))
@@ -113,8 +129,8 @@ func newNewsFeedStageComposition(
 	}
 	var adapter *newsstage.FeedCollectionAdapter
 	if availabilityQualifier != nil {
-		adapter, err = newsstage.NewFeedCollectionAdapterWithAvailabilityQualifier(
-			registrations, collect, ingest, availabilityQualifier, qualificationFieldPaths,
+		adapter, err = newsstage.NewFeedCollectionAdapterWithAvailabilityRecording(
+			registrations, collect, ingest, availabilityQualifier, qualificationFieldPaths, availabilityRecorder,
 		)
 	} else {
 		adapter, err = newsstage.NewFeedCollectionAdapter(registrations, collect, ingest)
@@ -146,6 +162,7 @@ func newNewsFeedStageComposition(
 		catalog: sourceCatalog, providerCatalog: outputPolicyCatalog,
 		qualificationCatalog:    qualificationCatalog,
 		availabilityQualifier:   availabilityQualifier,
+		availabilityRecorder:    availabilityRecorder,
 		qualificationFieldPaths: qualificationFieldPaths,
 		registrations:           registrations, sourcePolicies: sourcePolicies,
 		providerPolicies: providerPolicies,

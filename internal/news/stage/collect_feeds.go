@@ -84,6 +84,21 @@ type FeedSourceIngester interface {
 	Execute(context.Context, app.IngestCollectedSourceRequest) ([]domain.Observation, error)
 }
 
+// FeedSourceIngesterWithVersions returns the persisted Observation together
+// with the exact Version written in the same transaction. G4 requires this
+// binding; a plain Observation-only ingester is not sufficient once a recorder
+// is configured.
+type FeedSourceIngesterWithVersions interface {
+	FeedSourceIngester
+	ExecuteWithVersions(context.Context, app.IngestCollectedSourceRequest) ([]app.IngestCollectedSourceResult, error)
+}
+
+// CollectedAvailabilityRecorder is the G4 boundary. It records already
+// qualified candidates; it never creates a Decision or available_at value.
+type CollectedAvailabilityRecorder interface {
+	Execute(context.Context, app.RecordCollectedAvailabilityRequest) ([]domain.AvailabilityEvidence, error)
+}
+
 // CollectedAvailabilityQualifier is the G3 boundary. It consumes an already
 // collected result and returns untrusted availability candidates; it never
 // records Evidence or reaches available_at.
@@ -97,6 +112,7 @@ type FeedCollectionAdapter struct {
 	ingest                  FeedSourceIngester
 	availabilityQualifier   CollectedAvailabilityQualifier
 	qualificationFieldPaths []string
+	availabilityRecorder    CollectedAvailabilityRecorder
 }
 
 func NewFeedCollectionAdapter(
@@ -159,6 +175,31 @@ func NewFeedCollectionAdapterWithAvailabilityQualifier(
 	sort.Strings(ownedPaths)
 	adapter.availabilityQualifier = qualifier
 	adapter.qualificationFieldPaths = ownedPaths
+	return adapter, nil
+}
+
+// NewFeedCollectionAdapterWithAvailabilityRecording adds the G4 in-process
+// Evidence recording step after a successful formal ingest. The ingester must
+// expose persisted Version bindings; the frozen Stage payload is unchanged.
+func NewFeedCollectionAdapterWithAvailabilityRecording(
+	registrations []app.SourceEndpointRegistration,
+	collect FeedSourceCollector,
+	ingest FeedSourceIngester,
+	qualifier CollectedAvailabilityQualifier,
+	fieldPaths []string,
+	recorder CollectedAvailabilityRecorder,
+) (*FeedCollectionAdapter, error) {
+	adapter, err := NewFeedCollectionAdapterWithAvailabilityQualifier(registrations, collect, ingest, qualifier, fieldPaths)
+	if err != nil {
+		return nil, err
+	}
+	if recorder == nil {
+		return nil, ErrFeedCollectionAdapterRequired
+	}
+	if _, ok := ingest.(FeedSourceIngesterWithVersions); !ok {
+		return nil, ErrFeedCollectionAdapterRequired
+	}
+	adapter.availabilityRecorder = recorder
 	return adapter, nil
 }
 
@@ -334,14 +375,27 @@ func (a *FeedCollectionAdapter) Execute(
 				output.Sources = append(output.Sources, outcome)
 				continue
 			}
-			allQualifiedAvailability = append(allQualifiedAvailability, qualifiedAvailability...)
 		}
-		observations, err := a.ingest.Execute(ctx, app.IngestCollectedSourceRequest{
+		ingestRequest := app.IngestCollectedSourceRequest{
 			Collection:        collection,
 			IdempotencyPrefix: strings.Join([]string{runID, stageCode, registration.SourceID, registration.EndpointID}, "/"),
 			Purpose:           domain.PurposeInternalPersonalResearch,
 			Retention:         retention,
-		})
+		}
+		var observations []domain.Observation
+		var ingestedResults []app.IngestCollectedSourceResult
+		if a.availabilityRecorder != nil {
+			versionedIngest, ok := a.ingest.(FeedSourceIngesterWithVersions)
+			if !ok {
+				return FeedCollectionResult{}, ErrFeedCollectionAdapterRequired
+			}
+			ingestedResults, err = versionedIngest.ExecuteWithVersions(ctx, ingestRequest)
+			for _, result := range ingestedResults {
+				observations = append(observations, result.Observation)
+			}
+		} else {
+			observations, err = a.ingest.Execute(ctx, ingestRequest)
+		}
 		if err != nil {
 			if ctxErr := ctx.Err(); ctxErr != nil {
 				return FeedCollectionResult{}, ctxErr
@@ -367,6 +421,22 @@ func (a *FeedCollectionAdapter) Execute(
 		sort.Strings(outcome.NewsIDs)
 		outcome.IngestedCount = len(observations)
 		output.IngestedCount += len(observations)
+		if a.availabilityRecorder != nil && len(qualifiedAvailability) > 0 {
+			if _, err := a.availabilityRecorder.Execute(ctx, app.RecordCollectedAvailabilityRequest{
+				Qualified: qualifiedAvailability, Ingest: ingestedResults,
+			}); err != nil {
+				if ctxErr := ctx.Err(); ctxErr != nil {
+					return FeedCollectionResult{}, ctxErr
+				}
+				outcome.Status = "failed"
+				outcome.ErrorCode = "availability_evidence_record_failed"
+				output.FailedSourceCount++
+				reasonSet["news_feed_availability_record_failed"] = struct{}{}
+				output.Sources = append(output.Sources, outcome)
+				continue
+			}
+		}
+		allQualifiedAvailability = append(allQualifiedAvailability, qualifiedAvailability...)
 		if len(collection.Entries) == 0 {
 			outcome.Status = "empty"
 			output.EmptySourceCount++

@@ -95,20 +95,35 @@ func (u *candidateIngest) executeWithPolicyTraceAndCheckAndContent(
 	trace ObservationPolicyTrace,
 	beforePersist func(IdentityTransaction) error,
 ) (domain.Observation, error) {
+	observation, _, err := u.executeWithPolicyTraceAndCheckAndContentWithVersion(
+		ctx, sourceID, idempotencyKey, candidate, content, policy, trace, beforePersist,
+	)
+	return observation, err
+}
+
+func (u *candidateIngest) executeWithPolicyTraceAndCheckAndContentWithVersion(
+	ctx context.Context,
+	sourceID, idempotencyKey string,
+	candidate domain.Candidate,
+	content domain.ContentLayers,
+	policy domain.SourceURLPolicy,
+	trace ObservationPolicyTrace,
+	beforePersist func(IdentityTransaction) error,
+) (domain.Observation, domain.NewsItemVersion, error) {
 	trace.SourcePolicyVersionID = strings.TrimSpace(trace.SourcePolicyVersionID)
 	trace.EndpointID = strings.TrimSpace(trace.EndpointID)
 	trace.EndpointPolicyVersionID = strings.TrimSpace(trace.EndpointPolicyVersionID)
 	trace.ProviderOutputPolicyRef = strings.TrimSpace(trace.ProviderOutputPolicyRef)
 	trace.ProviderOutputPolicyVersionID = strings.TrimSpace(trace.ProviderOutputPolicyVersionID)
 	if trace.SourcePolicyVersionID == "" || trace.PolicyEvaluatedAt.IsZero() || trace.Retention <= 0 {
-		return domain.Observation{}, ErrInvalidRequest
+		return domain.Observation{}, domain.NewsItemVersion{}, ErrInvalidRequest
 	}
 	if (strings.TrimSpace(candidate.ProviderCode) != "" ||
 		trace.ProviderOutputPolicyRef != "" || trace.ProviderOutputPolicyVersionID != "") && beforePersist == nil {
-		return domain.Observation{}, ErrProviderOutputPolicyRequired
+		return domain.Observation{}, domain.NewsItemVersion{}, ErrProviderOutputPolicyRequired
 	}
 	trace.PolicyEvaluatedAt = trace.PolicyEvaluatedAt.UTC()
-	return u.executeCore(ctx, sourceID, idempotencyKey, candidate, content, policy, trace, beforePersist)
+	return u.executeCoreWithVersion(ctx, sourceID, idempotencyKey, candidate, content, policy, trace, beforePersist)
 }
 
 func (u *candidateIngest) executeCore(
@@ -120,16 +135,31 @@ func (u *candidateIngest) executeCore(
 	trace ObservationPolicyTrace,
 	beforePersist func(IdentityTransaction) error,
 ) (domain.Observation, error) {
+	observation, _, err := u.executeCoreWithVersion(
+		ctx, sourceID, idempotencyKey, candidate, content, policy, trace, beforePersist,
+	)
+	return observation, err
+}
+
+func (u *candidateIngest) executeCoreWithVersion(
+	ctx context.Context,
+	sourceID, idempotencyKey string,
+	candidate domain.Candidate,
+	content domain.ContentLayers,
+	policy domain.SourceURLPolicy,
+	trace ObservationPolicyTrace,
+	beforePersist func(IdentityTransaction) error,
+) (domain.Observation, domain.NewsItemVersion, error) {
 	if u == nil || u.repository == nil || u.newID == nil || ctx == nil {
-		return domain.Observation{}, ErrInvalidRequest
+		return domain.Observation{}, domain.NewsItemVersion{}, ErrInvalidRequest
 	}
 	if err := ctx.Err(); err != nil {
-		return domain.Observation{}, err
+		return domain.Observation{}, domain.NewsItemVersion{}, err
 	}
 	sourceID = strings.TrimSpace(sourceID)
 	idempotencyKey = strings.TrimSpace(idempotencyKey)
 	if sourceID == "" || idempotencyKey == "" {
-		return domain.Observation{}, ErrInvalidRequest
+		return domain.Observation{}, domain.NewsItemVersion{}, ErrInvalidRequest
 	}
 
 	observedAt := u.now().UTC()
@@ -161,12 +191,12 @@ func (u *candidateIngest) executeCore(
 		observation.RetentionUntil = observedAt.Add(trace.Retention).UTC()
 	}
 	if observation.ID == "" {
-		return domain.Observation{}, ErrInvalidRequest
+		return domain.Observation{}, domain.NewsItemVersion{}, ErrInvalidRequest
 	}
 
 	credentials, err := domain.BuildIdentityCredentials(sourceID, candidate.SourceItemID)
 	if err != nil {
-		return domain.Observation{}, err
+		return domain.Observation{}, domain.NewsItemVersion{}, err
 	}
 	for i := range credentials {
 		credentials[i].ObservedAt = observedAt
@@ -182,6 +212,7 @@ func (u *candidateIngest) executeCore(
 	}
 
 	var persisted domain.Observation
+	var persistedVersion domain.NewsItemVersion
 	err = u.repository.WithinIdentityTransaction(ctx, func(tx IdentityTransaction) error {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -323,15 +354,18 @@ func (u *candidateIngest) executeCore(
 		if err != nil {
 			return err
 		}
+		current, exists, err := tx.LatestNewsItemVersion(ctx, item.ID)
+		if err != nil {
+			return err
+		}
+		if exists && current.ObservationID == persisted.ID {
+			persistedVersion = current
+		}
 		// 幂等重放只返回第一次提交的 Observation，不重复改写主体或追加版本。
 		if persisted.ID != observation.ID {
 			return nil
 		}
 
-		current, exists, err := tx.LatestNewsItemVersion(ctx, item.ID)
-		if err != nil {
-			return err
-		}
 		contentChanged := !exists || current.Fingerprint != fingerprint
 		if contentChanged {
 			versionID := strings.TrimSpace(u.newID()) + "-version"
@@ -352,6 +386,7 @@ func (u *candidateIngest) executeCore(
 			if err := tx.AppendNewsItemVersion(ctx, version); err != nil {
 				return err
 			}
+			persistedVersion = version
 		}
 		// 内容变化或身份信息补全都必须更新当前主体；仅身份补全不创建内容版本。
 		if !newItem && (contentChanged || identityChanged) {
@@ -362,12 +397,12 @@ func (u *candidateIngest) executeCore(
 		return nil
 	})
 	if ctxErr := ctx.Err(); ctxErr != nil {
-		return domain.Observation{}, ctxErr
+		return domain.Observation{}, domain.NewsItemVersion{}, ctxErr
 	}
 	if err != nil {
-		return domain.Observation{}, errors.Join(ErrIdentityTransaction, err)
+		return domain.Observation{}, domain.NewsItemVersion{}, errors.Join(ErrIdentityTransaction, err)
 	}
-	return persisted, nil
+	return persisted, persistedVersion, nil
 }
 
 func credentialsNotYetStored(candidates, existing []domain.IdentityCredential) []domain.IdentityCredential {

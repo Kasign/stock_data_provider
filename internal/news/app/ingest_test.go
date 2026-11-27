@@ -164,8 +164,35 @@ func (tx memoryIdentityTransaction) AppendAvailabilityEvidence(_ context.Context
 	if tx.repository == nil {
 		return ErrAvailabilityEvidenceWriteUnavailable
 	}
+	for _, existing := range tx.repository.availabilityEvidence {
+		if existing.ID != evidence.ID {
+			continue
+		}
+		if !sameAvailabilityEvidencePayload(existing, evidence) {
+			return ErrAvailabilityEvidenceIDConflict
+		}
+		return nil
+	}
 	tx.repository.availabilityEvidence = append(tx.repository.availabilityEvidence, evidence)
 	return nil
+}
+
+func sameAvailabilityEvidencePayload(a, b domain.AvailabilityEvidence) bool {
+	if a.NewsID != b.NewsID || a.VersionID != b.VersionID || a.ObservationID != b.ObservationID ||
+		a.FieldPath != b.FieldPath || a.RawValue != b.RawValue ||
+		a.SourceTimezoneOrOffset != b.SourceTimezoneOrOffset || a.Precision != b.Precision ||
+		a.ParseStatus != b.ParseStatus || a.ParseReasonCode != b.ParseReasonCode ||
+		a.ParserVersion != b.ParserVersion || !a.ObservedAt.Equal(b.ObservedAt) {
+		return false
+	}
+	if availabilityStringValue(a.EvidenceRef) != availabilityStringValue(b.EvidenceRef) ||
+		availabilityStringValue(a.EvidenceHash) != availabilityStringValue(b.EvidenceHash) {
+		return false
+	}
+	if (a.CandidateAvailableAt == nil) != (b.CandidateAvailableAt == nil) {
+		return false
+	}
+	return a.CandidateAvailableAt == nil || a.CandidateAvailableAt.Equal(*b.CandidateAvailableAt)
 }
 
 func identityTrace() ObservationPolicyTrace {

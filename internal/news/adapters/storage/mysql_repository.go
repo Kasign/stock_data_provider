@@ -843,6 +843,31 @@ func (t *mysqlNewsTransaction) AppendAvailabilityEvidence(
 		return app.ErrInvalidRequest
 	}
 
+	var existingNewsID, existingVersionID, existingObservationID, existingFieldPath, existingRawValue string
+	var existingTimezone, existingPrecision, existingParseStatus, existingParseReasonCode, existingParserVersion string
+	var existingEvidenceRef, existingEvidenceHash sql.NullString
+	var existingCandidateAt, existingObservedAt sql.NullTime
+	err = t.tx.QueryRowContext(ctx, `SELECT news_id, version_id, observation_id, field_path, raw_value,
+		source_timezone_or_offset, source_precision, parse_status, parse_reason_code,
+		candidate_available_at_utc, parser_version, evidence_ref, evidence_hash, observed_at
+		FROM news_version_availability_evidence WHERE evidence_id = ? FOR UPDATE`, evidence.ID,
+	).Scan(&existingNewsID, &existingVersionID, &existingObservationID, &existingFieldPath, &existingRawValue,
+		&existingTimezone, &existingPrecision, &existingParseStatus, &existingParseReasonCode,
+		&existingCandidateAt, &existingParserVersion, &existingEvidenceRef, &existingEvidenceHash,
+		&existingObservedAt)
+	if err == nil {
+		if !samePersistedAvailabilityEvidence(existingNewsID, existingVersionID, existingObservationID,
+			existingFieldPath, existingRawValue, existingTimezone, existingPrecision,
+			existingParseStatus, existingParseReasonCode, existingParserVersion,
+			existingCandidateAt, existingEvidenceRef, existingEvidenceHash, existingObservedAt, evidence) {
+			return app.ErrAvailabilityEvidenceIDConflict
+		}
+		return nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+
 	_, err = t.tx.ExecContext(ctx, `INSERT INTO news_version_availability_evidence
 		(evidence_id, news_id, version_id, observation_id, field_path, raw_value,
 		 source_timezone_or_offset, source_precision, parse_status, parse_reason_code,
@@ -857,6 +882,37 @@ func (t *mysqlNewsTransaction) AppendAvailabilityEvidence(
 		evidence.ObservedAt.UTC(), evidence.RecordedAt.UTC(), evidence.RetentionUntil.UTC(),
 	)
 	return err
+}
+
+func samePersistedAvailabilityEvidence(
+	newsID, versionID, observationID, fieldPath, rawValue string,
+	timezone, precision, parseStatus, parseReasonCode, parserVersion string,
+	candidateAt sql.NullTime, evidenceRef, evidenceHash sql.NullString,
+	observedAt sql.NullTime, evidence domain.AvailabilityEvidence,
+) bool {
+	if newsID != evidence.NewsID || versionID != evidence.VersionID ||
+		observationID != evidence.ObservationID || fieldPath != evidence.FieldPath ||
+		rawValue != evidence.RawValue || timezone != evidence.SourceTimezoneOrOffset ||
+		precision != string(evidence.Precision) || parseStatus != string(evidence.ParseStatus) ||
+		parseReasonCode != evidence.ParseReasonCode || parserVersion != evidence.ParserVersion ||
+		!observedAt.Valid || !observedAt.Time.UTC().Equal(evidence.ObservedAt.UTC()) {
+		return false
+	}
+	if !nullableStringMatches(evidenceRef, evidence.EvidenceRef) ||
+		!nullableStringMatches(evidenceHash, evidence.EvidenceHash) {
+		return false
+	}
+	if candidateAt.Valid != (evidence.CandidateAvailableAt != nil) {
+		return false
+	}
+	return !candidateAt.Valid || candidateAt.Time.UTC().Equal(evidence.CandidateAvailableAt.UTC())
+}
+
+func nullableStringMatches(stored sql.NullString, request *string) bool {
+	if request == nil {
+		return !stored.Valid
+	}
+	return stored.Valid && stored.String == *request
 }
 
 func (r *MySQLRepository) ObservationRetentionBacklog(ctx context.Context, now time.Time) (int, *time.Time, error) {

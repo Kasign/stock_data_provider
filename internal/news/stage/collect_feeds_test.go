@@ -64,6 +64,64 @@ func (s *feedAvailabilityQualifierStub) Execute(
 	return append([]app.QualifiedCollectedAvailability(nil), s.results...), s.err
 }
 
+type feedVersionedIngesterStub struct {
+	versionedCalls []app.IngestCollectedSourceRequest
+	sourceItemID   string
+}
+
+func (s *feedVersionedIngesterStub) Execute(ctx context.Context, request app.IngestCollectedSourceRequest) ([]domain.Observation, error) {
+	results, err := s.ExecuteWithVersions(ctx, request)
+	if err != nil {
+		return nil, err
+	}
+	observations := make([]domain.Observation, 0, len(results))
+	for _, result := range results {
+		observations = append(observations, result.Observation)
+	}
+	return observations, nil
+}
+
+func (s *feedVersionedIngesterStub) ExecuteWithVersions(
+	ctx context.Context,
+	request app.IngestCollectedSourceRequest,
+) ([]app.IngestCollectedSourceResult, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	s.versionedCalls = append(s.versionedCalls, request)
+	observedAt := time.Date(2026, 11, 27, 3, 0, 0, 0, time.UTC)
+	return []app.IngestCollectedSourceResult{{
+		Observation: domain.Observation{
+			ID: "observation-g4-stage", NewsID: "news-g4-stage",
+			SourceID: request.Collection.SourceID, EndpointID: request.Collection.EndpointID,
+			Candidate: domain.Candidate{SourceItemID: s.sourceItemID}, ObservedAt: observedAt,
+		},
+		Version: domain.NewsItemVersion{
+			ID: "version-g4-stage", NewsID: "news-g4-stage",
+			ObservationID: "observation-g4-stage", ObservedAt: observedAt,
+		},
+	}}, nil
+}
+
+type feedAvailabilityRecorderStub struct {
+	requests []app.RecordCollectedAvailabilityRequest
+	err      error
+}
+
+func (s *feedAvailabilityRecorderStub) Execute(
+	ctx context.Context,
+	request app.RecordCollectedAvailabilityRequest,
+) ([]domain.AvailabilityEvidence, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	s.requests = append(s.requests, request)
+	if s.err != nil {
+		return nil, s.err
+	}
+	return []domain.AvailabilityEvidence{{ID: "evidence-g4-stage"}}, nil
+}
+
 func feedRegistration(sourceID, endpointID string) app.SourceEndpointRegistration {
 	return app.SourceEndpointRegistration{
 		SourceID: sourceID, EndpointID: endpointID, Enabled: true,
@@ -202,6 +260,95 @@ func TestFeedCollectionAdapterFailsSourceWhenAvailabilityQualificationFails(t *t
 	}
 	if len(output.Sources) != 1 || output.Sources[0].ErrorCode != "availability_qualification_failed" {
 		t.Fatalf("source outcome=%+v", output.Sources)
+	}
+}
+
+func TestFeedCollectionAdapterRecordsQualifiedAvailability(t *testing.T) {
+	registration := feedRegistration("cninfo", "announcements")
+	collector := &feedCollectorStub{entries: map[string][]app.CollectedSourceEntry{
+		"cninfo/announcements": {{Candidate: domain.Candidate{SourceItemID: "1225649440", PublishedAtRaw: "1793376000000"}}},
+	}}
+	ingester := &feedVersionedIngesterStub{sourceItemID: "1225649440"}
+	qualifier := &feedAvailabilityQualifierStub{results: []app.QualifiedCollectedAvailability{{
+		EntryIndex:   0,
+		SourceItemID: "1225649440",
+		Qualified: app.QualifiedAvailabilityEvidence{
+			FieldPath: "announcements.announcementTime",
+		},
+	}}}
+	recorder := &feedAvailabilityRecorderStub{}
+	adapter, err := NewFeedCollectionAdapterWithAvailabilityRecording(
+		[]app.SourceEndpointRegistration{registration}, collector, ingester,
+		qualifier, []string{"announcements.announcementTime"}, recorder,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := adapter.Execute(context.Background(), "run-g4", CollectFeedsStageCode,
+		[]string{SourceEndpointSnapshotRef(registration)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ingester.versionedCalls) != 1 || len(recorder.requests) != 1 {
+		t.Fatalf("ingest calls=%d record calls=%d", len(ingester.versionedCalls), len(recorder.requests))
+	}
+	request := recorder.requests[0]
+	if len(request.Qualified) != 1 || len(request.Ingest) != 1 ||
+		request.Ingest[0].Version.ID != "version-g4-stage" ||
+		request.Ingest[0].Observation.ID != "observation-g4-stage" {
+		t.Fatalf("record request=%+v", request)
+	}
+	if len(result.QualifiedAvailability) != 1 {
+		t.Fatalf("qualified availability=%+v", result.QualifiedAvailability)
+	}
+	var output FeedCollectionOutput
+	if err := json.Unmarshal(result.Payload, &output); err != nil {
+		t.Fatal(err)
+	}
+	if output.Status != "success" || output.SuccessSourceCount != 1 || output.IngestedCount != 1 {
+		t.Fatalf("Feed output counters = %+v", output)
+	}
+	if err := ValidateFeedCollectionPayload(result.Payload); err != nil {
+		t.Fatalf("Feed output schema changed unexpectedly: %v", err)
+	}
+}
+
+func TestFeedCollectionAdapterFailsSourceWhenAvailabilityRecordFails(t *testing.T) {
+	registration := feedRegistration("cninfo", "announcements")
+	collector := &feedCollectorStub{entries: map[string][]app.CollectedSourceEntry{
+		"cninfo/announcements": {{Candidate: domain.Candidate{SourceItemID: "1225649440", PublishedAtRaw: "1793376000000"}}},
+	}}
+	ingester := &feedVersionedIngesterStub{sourceItemID: "1225649440"}
+	qualifier := &feedAvailabilityQualifierStub{results: []app.QualifiedCollectedAvailability{{
+		EntryIndex:   0,
+		SourceItemID: "1225649440",
+		Qualified:    app.QualifiedAvailabilityEvidence{FieldPath: "announcements.announcementTime"},
+	}}}
+	recorder := &feedAvailabilityRecorderStub{err: app.ErrAvailabilityRecordInput}
+	adapter, err := NewFeedCollectionAdapterWithAvailabilityRecording(
+		[]app.SourceEndpointRegistration{registration}, collector, ingester,
+		qualifier, []string{"announcements.announcementTime"}, recorder,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := adapter.Execute(context.Background(), "run-g4", CollectFeedsStageCode,
+		[]string{SourceEndpointSnapshotRef(registration)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var output FeedCollectionOutput
+	if err := json.Unmarshal(result.Payload, &output); err != nil {
+		t.Fatal(err)
+	}
+	if output.FailedSourceCount != 1 || len(recorder.requests) != 1 {
+		t.Fatalf("record failure did not fail closed: output=%+v calls=%d", output, len(recorder.requests))
+	}
+	if len(output.Sources) != 1 || output.Sources[0].ErrorCode != "availability_evidence_record_failed" {
+		t.Fatalf("source outcome=%+v", output.Sources)
+	}
+	if len(result.QualifiedAvailability) != 0 {
+		t.Fatalf("failed record leaked in-process qualified candidates: %+v", result.QualifiedAvailability)
 	}
 }
 

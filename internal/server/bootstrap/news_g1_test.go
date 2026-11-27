@@ -1,11 +1,14 @@
 package bootstrap
 
 import (
+	"context"
 	"testing"
 
+	newsstorage "example.com/stock-analysis-flow/internal/news/adapters/storage"
 	newsconfig "example.com/stock-analysis-flow/internal/news/config"
 	newsdomain "example.com/stock-analysis-flow/internal/news/domain"
 	platformconfig "example.com/stock-analysis-flow/internal/platform/config"
+	platformhttpclient "example.com/stock-analysis-flow/internal/platform/httpclient"
 )
 
 func g1BootstrapValues() map[string]string {
@@ -95,6 +98,19 @@ func TestNewsQualificationFieldPathsAreStable(t *testing.T) {
 	want := []string{"announcements.announcementTime"}
 	if len(got) != len(want) || got[0] != want[0] {
 		t.Fatalf("field paths=%v want %v", got, want)
+	}
+}
+
+func TestNewsFeedCompositionAssemblesG4AvailabilityRecorder(t *testing.T) {
+	cfg := g1BootstrapConfig(t)
+	composition, err := newNewsFeedStageComposition(
+		context.Background(), cfg, &platformhttpclient.Client{}, &newsstorage.MySQLRepository{},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if composition == nil || composition.availabilityQualifier == nil || composition.availabilityRecorder == nil {
+		t.Fatalf("G3 qualifier/G4 recorder not assembled: %+v", composition)
 	}
 }
 

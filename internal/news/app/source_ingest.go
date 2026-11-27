@@ -73,6 +73,21 @@ func NewIngestCollectedSourceWithProviderPolicies(
 }
 
 func (u *IngestCollectedSource) Execute(ctx context.Context, request IngestCollectedSourceRequest) ([]domain.Observation, error) {
+	results, err := u.ExecuteWithVersions(ctx, request)
+	if err != nil {
+		return nil, err
+	}
+	observations := make([]domain.Observation, 0, len(results))
+	for _, result := range results {
+		observations = append(observations, result.Observation)
+	}
+	return observations, nil
+}
+
+// ExecuteWithVersions keeps the persisted Observation and the exact
+// NewsItemVersion written in the same transaction so G4 can bind Evidence to
+// a real content version instead of reconstructing one from a fingerprint.
+func (u *IngestCollectedSource) ExecuteWithVersions(ctx context.Context, request IngestCollectedSourceRequest) ([]IngestCollectedSourceResult, error) {
 	if u == nil || u.ingest == nil || u.sources == nil || ctx == nil {
 		return nil, ErrInvalidRequest
 	}
@@ -190,10 +205,10 @@ func (u *IngestCollectedSource) Execute(ctx context.Context, request IngestColle
 		if err != nil {
 			return nil, errors.Join(ErrIdentityTransaction, err)
 		}
-		return []domain.Observation{}, nil
+		return []IngestCollectedSourceResult{}, nil
 	}
 
-	observations := make([]domain.Observation, 0, len(result.Entries))
+	ingested := make([]IngestCollectedSourceResult, 0, len(result.Entries))
 	for _, entry := range result.Entries {
 		if err := ctx.Err(); err != nil {
 			return nil, err
@@ -215,14 +230,14 @@ func (u *IngestCollectedSource) Execute(ctx context.Context, request IngestColle
 				canonicalURL + "\x00" + contentFingerprint,
 		))
 		idempotencyKey := prefix + "/" + hex.EncodeToString(identityDigest[:])
-		observation, ingestErr := u.ingest.executeWithPolicyTraceAndCheckAndContent(
+		observation, version, ingestErr := u.ingest.executeWithPolicyTraceAndCheckAndContentWithVersion(
 			ctx, sourceID, idempotencyKey, candidate, content,
 			registration.URLPolicy, trace, checkPersistencePolicy,
 		)
 		if ingestErr != nil {
 			return nil, ingestErr
 		}
-		observations = append(observations, observation)
+		ingested = append(ingested, IngestCollectedSourceResult{Observation: observation, Version: version})
 	}
-	return observations, nil
+	return ingested, nil
 }

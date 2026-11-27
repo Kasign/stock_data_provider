@@ -1239,3 +1239,16 @@ G3 只补 `Collect/Ingest → Qualify`，不创建 Evidence/Decision，不生成
 - **TDD 与变异**：新增 8 项针对性测试。六处变异均有效失败并恢复：响应哈希未写入、Provider 策略版本被丢弃、采集封印校验被移除、Stage qualifier 调用被移除、字段路径来源被清空、披露日边界解析被关闭。全仓 `go test ./... -count=1`、`go vet ./...`、`gofmt -l`、`git diff --check` 通过。
 - **状态边界**：`EvidenceRef` 仅是本次执行的内部响应快照定位符；原始响应持久化、Evidence 落库与 Review 决策仍属 G4/G5，且需在写入前确认留存授权与可复核性。生产 `available_at` 继续为 null，NEWS-BLK-07/RSC-002 保持 SHELVED。
 - **CI**：提交 `5b6f68b53bb2b01b2dead93c5c29431f146ae352` 的 15 个 check run 全部 `completed/success`；这不改变上述状态边界。
+
+## 1.22 G4 Record：候选证据落库边界（2026-11-27）
+
+G4 只把 G3 未可信候选按真实绑定与当前策略写入 `AvailabilityEvidence`；不创建 Decision、不把 `parsed` 升级为 `verified`、不生成生产 `available_at`。
+
+- **真实版本绑定**：`IngestCollectedSource.ExecuteWithVersions` 返回同一身份事务内持久化的 Observation 与 NewsItemVersion。G4 不按 fingerprint 重建 Version，也不用内容变化前的旧版本代替本次 Observation。
+- **精确Entry绑定**：`RecordCollectedAvailability` 以 G3 的 `EntryIndex` 对应该次入库结果，并逐项复核 Source/Endpoint/Provider 七键、SourceItemID、NewsID 与 ObservedAt；任一错配即 fail-closed。
+- **字段级授权与留存**：复用 `RecordAvailabilityEvidence` 的事务内当前策略锁；`ContentMetadata + StoragePersistentMetadata + FieldPath` 必须同时通过 Source/Endpoint/Provider 三方交集，`retention_until` 取交集上限与父 Observation 的较早者。
+- **确定性幂等**：Evidence ID 由 VersionID、ObservationID、FieldPath、原始值、时区、精度、候选时刻、ParserVersion 与 provenance 派生，不由调用方自报；同一语义重放收敛到同一 ID。Storage 在写入前按 ID 锁定并比较语义字段，相同则幂等返回，不同则冲突失败。
+- **结果边界**：Stage 在 ingest 成功后调用 recorder；记录失败将该 Source 标为 `availability_evidence_record_failed`。冻结 Stage payload/schema 字节不变，`QualifiedAvailability` 仍只存在于进程内。
+- **TDD 与变异**：新增针对性测试覆盖真实版本绑定、错配拒绝、任意 EvidenceID 拒绝、重放幂等、Stage 记录失败与组合根装配；五处变异均有效失败并恢复。全仓 `go test ./... -count=1`、`go vet ./...`、`gofmt -l`、`git diff --check` 通过。
+- **状态边界**：G4 只落 `parsed` 候选证据。G5 Review 仍必须注入 source-bound 规则与仓储绑定解析器，B 组真库门禁仍未完成；生产 `available_at` 继续为 null，NEWS-BLK-07/RSC-002 保持 SHELVED。
+- **CI 状态（回填）**：本次逻辑工作组提交后按精确 SHA 回填；未取得 SHA 前不得记为完整验收。

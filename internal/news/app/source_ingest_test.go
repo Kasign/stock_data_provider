@@ -92,6 +92,42 @@ func TestIngestCollectedSourceRechecksVersionAndMetadataPersistencePolicy(t *tes
 	}
 }
 
+func TestIngestCollectedSourceWithVersionsReturnsPersistedVersion(t *testing.T) {
+	registration := sourcePersistenceRegistration()
+	repository := newSourcePersistenceMemoryRepository(registration)
+	usecase, err := NewIngestCollectedSource(repository, func() string { return "g4-persisted" },
+		providerIngestCatalogStub{registration: registration})
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 11, 27, 3, 0, 0, 0, time.UTC)
+	usecase.now = func() time.Time { return now }
+	result := sealedCollectedSourceResult()
+	result.Entries = []CollectedSourceEntry{{
+		Candidate: domain.Candidate{SourceItemID: "item-1", Title: "title"},
+	}}
+	if err := sealCollectSourceResult(&result); err != nil {
+		t.Fatal(err)
+	}
+	ingested, err := usecase.ExecuteWithVersions(context.Background(), IngestCollectedSourceRequest{
+		Collection: result, IdempotencyPrefix: "collection-g4",
+		Purpose: domain.PurposeInternalPersonalResearch, Retention: time.Hour,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ingested) != 1 || len(repository.versions) != 1 {
+		t.Fatalf("ingested=%d versions=%d", len(ingested), len(repository.versions))
+	}
+	got := ingested[0]
+	if got.Observation.ID != "g4-persisted" || got.Version.ID != "g4-persisted-version" ||
+		got.Version.NewsID != got.Observation.NewsID ||
+		got.Version.ObservationID != got.Observation.ID ||
+		!got.Version.ObservedAt.Equal(got.Observation.ObservedAt) {
+		t.Fatalf("persisted binding=%+v", got)
+	}
+}
+
 func TestIngestCollectedSourceRejectsPurposeRelabeling(t *testing.T) {
 	registration := sourcePersistenceRegistration()
 	registration.SourcePolicy.AllowedPurposes = []domain.Purpose{
