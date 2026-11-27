@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"example.com/stock-analysis-flow/internal/marketdata/app"
+	"example.com/stock-analysis-flow/internal/marketdata/application"
 	"example.com/stock-analysis-flow/internal/marketdata/authorization"
 	marketdatabootstrap "example.com/stock-analysis-flow/internal/marketdata/bootstrap"
 	"example.com/stock-analysis-flow/internal/marketdata/model"
@@ -316,37 +317,63 @@ func seedQuantResearchL3OrderBook(t *testing.T, ctx context.Context, store *repo
 	}
 }
 
-// seedQuantResearchL3LimitPool 写入当日完整涨跌停池事实（两池均完整且不含该证券）。
-// 该快照是 L3 隔离库的测试专用事实，用它让 Creator 精确复用，避免依赖外部 Provider；
-// 它不代表真实来源已准入，也不改变 production 的收盘后约束。
+// l3LimitPoolReader 是 L3 隔离库的确定性全量池来源。两池均为零事件但 HasData=true，
+// 走的是生产载荷层同一套「交易日可用 + 零事件池」语义，不伪造部分池。
+type l3LimitPoolReader struct {
+	source    string
+	fetchedAt time.Time
+}
+
+func (r l3LimitPoolReader) FetchFullLimitPool(_ context.Context, poolType, tradeDate string) (*model.LimitPoolSnapshot, error) {
+	if poolType != "up" && poolType != "down" {
+		return nil, fmt.Errorf("unexpected limit pool type %q", poolType)
+	}
+	return &model.LimitPoolSnapshot{
+		PoolType: poolType, TradeDate: tradeDate, Total: 0, HasData: true,
+		Source: r.source, FetchedAt: r.fetchedAt, QualityStatus: model.QualityValid,
+	}, nil
+}
+
+// seedQuantResearchL3LimitPool 在 Run 创建后、Worker 执行前预采集涨跌停事实。
+// 预采集时点严格早于 Run.SystemAsOf：Risk Stage 只能通过 as-of 复用命中该快照，
+// 并在读取时自行签发授权。这样可以验证 A 方案「预采集 → Run 复用」，而不是
+// 依赖种子时点与 Run 时点偶然相等。
 func seedQuantResearchL3LimitPool(
-	t *testing.T, ctx context.Context, store *repository.Store, symbol, tradeDate string, systemAsOf time.Time,
-) {
+	t *testing.T, ctx context.Context, store *repository.Store, symbol, tradeDate string, runSystemAsOf time.Time,
+) (string, time.Time) {
 	t.Helper()
-	observed := systemAsOf.UTC().Add(-time.Minute)
-	up := &model.LimitPoolSnapshot{
-		PoolType: "up", TradeDate: tradeDate, Total: 0, HasData: true,
-		Source: l3SeedSource, FetchedAt: observed, QualityStatus: model.QualityValid,
-	}
-	down := &model.LimitPoolSnapshot{
-		PoolType: "down", TradeDate: tradeDate, Total: 0, HasData: true,
-		Source: l3SeedSource, FetchedAt: observed, QualityStatus: model.QualityValid,
-	}
-	payload, err := app.BuildLimitPoolFactsPayload(up, down, symbol)
+	precollectedAsOf := runSystemAsOf.UTC().Add(-2 * time.Minute)
+	collectorCtx, err := security.WithPrincipal(ctx, security.Principal{
+		Kind:       security.IdentityService,
+		AuthMethod: security.AuthMethodServiceBearer,
+		Subject:    "quant",
+		Scopes:     []string{security.ScopeDataRead},
+	})
 	if err != nil {
-		t.Fatalf("build L3 limit-pool facts payload: %v", err)
+		t.Fatalf("create L3 limit-pool collector principal: %v", err)
 	}
-	version := l3SeedSourceVer + "-limitpool"
-	sources := []app.DailyBarsCloseSeriesSource{{SourceRef: l3SeedSource, SourceVersion: &version}}
-	snapshot, err := app.BuildLimitPoolFactsSnapshot(
-		payload, sources, "principal:service:quant", "risk_review", systemAsOf.UTC(),
+	collector, err := application.NewLimitPoolFactsSnapshotCollector(
+		l3LimitPoolReader{source: l3SeedSource, fetchedAt: precollectedAsOf.Add(-time.Minute)}, store,
 	)
 	if err != nil {
-		t.Fatalf("build L3 limit-pool facts snapshot: %v", err)
+		t.Fatalf("create L3 limit-pool collector: %v", err)
 	}
-	if err := store.SaveLimitPoolFactsSnapshot(ctx, snapshot); err != nil {
-		t.Fatalf("seed L3 limit-pool facts snapshot: %v", err)
+	snapshotRef, err := collector.Persist(collectorCtx, symbol, tradeDate, precollectedAsOf, "risk_review")
+	if err != nil {
+		t.Fatalf("precollect L3 limit-pool facts: %v", err)
 	}
+	snapshot, err := store.GetLimitPoolFactsSnapshot(ctx, snapshotRef)
+	if err != nil {
+		t.Fatalf("read precollected L3 limit-pool facts: %v", err)
+	}
+	manifestAsOf, err := time.Parse(time.RFC3339Nano, snapshot.Manifest.SystemAsOf)
+	if err != nil {
+		t.Fatalf("parse precollected L3 limit-pool system_as_of: %v", err)
+	}
+	if !manifestAsOf.Equal(precollectedAsOf) {
+		t.Fatalf("precollected system_as_of=%s, want %s", manifestAsOf, precollectedAsOf)
+	}
+	return snapshotRef, manifestAsOf
 }
 
 // seedQuantResearchL3 writes all real PIT seeds into the isolated L3 database.

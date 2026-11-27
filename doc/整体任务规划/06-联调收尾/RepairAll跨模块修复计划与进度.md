@@ -1913,3 +1913,12 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - **本地实测**：真实 Eastmoney + MariaDB 采集成功，`status=none up=417 down=0 quality=degraded`；连续两次运行返回同一 `SnapshotRef`（幂等）。
 - **CI**：提交 `26544f8e0` 的 14 个 check run 全 success；真实链路步骤复验 `--- PASS: TestLiveLimitPoolFactsProductionChain (3.83s)` 与 `--- PASS: TestLiveLimitPoolFactsRejectsEvaluationBeforeObservation (2.96s)`。
 - **仍未覆盖**：采集调度（cron / 平台任务）未接线；交易状态与盘口仍是等值语义且无采集入口。
+
+## 2026-11-27 L3 改为「预采集 → Run 复用」
+
+- **要关闭的 OPEN**：此前 L3 把涨跌停种子写成与 `Run.SystemAsOf` 完全相同，靠精确相等命中复用，未证明 A 方案的真实顺序；`doc/quant/18` 第 6 节第 3 项仍挂账。
+- **实现**：`seedQuantResearchL3LimitPool` 改为走生产 `LimitPoolFactsSnapshotCollector.Persist`，用确定性全量池来源在 `Run.SystemAsOf - 2m` 预采集；采集身份为 service 身份且**不签发授权**。测试用例断言预采集系统时点严格早于 Run 评估时点，并断言 `quant.risk` 的 `input_refs[4]` 等于该预采集 `SnapshotRef`；授权仍由 Risk Stage 复用时签发。
+- **变异证据**：把预采集时点改回 `Run.SystemAsOf`（旧的精确相等路径），真库 L3 立即失败于 `precollected limit-pool as-of ... must precede Run system_as_of ...`；恢复后 `TestQuantResearchMariaDBRedisL3` 本地真实 MariaDB/Redis PASS（7.31s）。
+- **验证**：`go test ./... -count=1`、`go vet ./...`、`git diff --check` 全通过；全仓单测 0 失败。上一提交 `6eb3db5ab` 的 5 个 check run 已全部 completed/success（required-checks 46026381318、Integration CI 46026381279、Go test suite 46026381193、Live provider probe 46026381236、WebUI checks 46026381157），采集 Worker 代码已获得 CI 结论。
+- **文档同步**：`doc/quant/17` 第 9.3 节改为已按 A 方案关闭；`doc/quant/18` 第 6/7.5/7.6/8 节回填采集 Worker 与 L3 验收口径。
+- **剩余边界**：交易状态与盘口仍是等值语义且无采集入口；真实 Run 仍需在部署环境按收盘后 Worker/CLI 预采集后验收。本组 CI 状态 `not_run`，待提交后按 SHA 回填。

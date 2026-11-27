@@ -157,21 +157,16 @@ status=none up=417 down=0 quality=degraded
 
 负例 `TestLiveLimitPoolFactsRejectsEvaluationBeforeObservation` 断言「评估时点早于采集」必须被 `ErrLimitPoolFactsSnapshotStaleAsOf` 拒绝。变异「移除 Creator 的时点校验」后仍被快照构建的第二层校验拒绝，说明这是双保险。
 
-### 9.3 未决问题：在线采集与 `system_as_of` 顺序冲突（需要设计决议）
+### 9.3 在线采集与 `system_as_of` 顺序冲突（已按 A 方案关闭）
 
 代码事实：
 
-- `quant.risk` Stage 收到的 `SystemAsOf` 来自 Run：`worker.go:280 → snapshot.Run.SystemAsOf`，而 `create_run.go:231` 把它设为**创建 Run 的时刻**。
-- Creator（涨跌停与盘口都一样）要求 `observed_at <= system_as_of`，否则以 `ErrLimitPoolFactsSnapshotStaleAsOf` 拒绝。
+- `quant.risk` Stage 收到的 `SystemAsOf` 来自 Run 创建时刻；Creator 要求 `observed_at <= system_as_of`，因此「Run 创建 → Stage 内现场采集」永远不成立。
+- 决议 DEC-PLAT-002-076 选择 **A 方案（预采集 + as-of 读取）**：读取取「≤ 评估时点」的最新快照，不再要求与 Run 时点精确相等；B（评估时点前移）会改动多处结果等值语义，C（快照不绑定评估时点）是契约 MAJOR，均否决。
 
-推论：**「Run 创建 → Stage 内现场采集」这个顺序在契约上永远不成立**——采集一定晚于 Run 创建。L3 之所以通过，是因为它预先把种子快照写成与 Run 相同的 `system_as_of`，命中精确复用路径，从未真正现场采集。
+落地状态：
 
-可选方案（未实施，需决议）：
+- 采集入口：`cmd/limit-pool-collect` 与收盘后调度 Worker 均只落库、不签发授权，见 `doc/quant/18` 第 7 节。
+- L3 验收：`TestQuantResearchMariaDBRedisL3` 已改为「Run 前 2 分钟预采集 → Run 时 as-of 复用」，并断言 Risk 的涨跌停快照引用等于预采集 `SnapshotRef`，见 `doc/quant/18` 第 8 节。
 
-| 方案 | 做法 | 代价 |
-|---|---|---|
-| A. 预采集（保持现状语义） | 由独立采集任务按 `(symbol, trade_date, purpose, system_as_of)` 先落快照，Stage 只走复用 | 需要调度与对齐机制；Run 与快照时点必须精确匹配 |
-| B. Stage 内现场采集 + 评估时点前移 | 允许 Creator 用「采集时刻」作为 `system_as_of`，Stage 输出按该时点标注 | 改变「评估时点」的权威来源，需重审 PIT 可复现性与结果关联 |
-| C. 事实快照不绑定评估时点 | DTO 的 `system_as_of` 改为「观测时点」，Run 的时点只用于筛选 | 契约语义变更（MAJOR），影响所有事实类快照 |
-
-本轮不擅自选择：这决定「Run 的时点是什么」这一根语义，属治理决议。已登记为 OPEN。
+仍 OPEN 的是其他事实类：交易状态与盘口仍是等值语义且无采集入口，需各自定义新鲜度策略。

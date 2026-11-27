@@ -56,11 +56,11 @@
 - 真实端到端（`TestLiveLimitPoolFactsProductionChain`）：在真实池与 MariaDB 上追加「更晚评估时点复用同一 `SnapshotRef`」的断言，直接证明「先采集、后评估」的生产顺序成立。
 - 变异：仓储去掉 as-of 上界过滤、Quant 取消上界判断、Creator 取消上界守卫，三处都必须失败。
 
-## 6. 后续（未做）
+## 6. 后续状态
 
-1. **采集入口**：在 Run 之前按 `(symbol, trade_date, purpose)` 产出事实快照（调度任务或受限 API），否则 A 的收益无法体现在真实 Run 上。
-2. **交易状态/盘口的 as-of 与新鲜度**：需要各自定义「可接受的最大陈旧度」，例如盘口只接受 N 分钟内的观测。
-3. L3 增加「预采集 → Run 复用」的断言，替代当前「种子快照与 Run 时点完全相同」的偶然通过路径。
+1. **采集入口（已落地）**：见第 7 节 CLI 与第 7.6 节收盘后调度 Worker；在 Run 之前按 `(symbol, trade_date, purpose)` 产出事实快照。
+2. **交易状态/盘口的 as-of 与新鲜度（仍 OPEN）**：需要各自定义「可接受的最大陈旧度」，例如盘口只接受 N 分钟内的观测。
+3. **L3「预采集 → Run 复用」断言（已落地）**：见第 8 节；预采集时点严格早于 Run，不再依赖种子时点偶然相等。
 
 ## 7. 采集入口（已落地，2026-11-27）
 
@@ -94,7 +94,21 @@ go run ./cmd/limit-pool-collect -symbol 600519.SH -trade-date 2026-11-27
 
 同一 `(symbol, trade_date, purpose)` 重复采集会复用已发布快照，不会重复造。本地连续运行两次得到同一 `SnapshotRef`。
 
-### 7.5 仍未覆盖
+### 7.5 收盘后调度 Worker（已落地）
 
-- 采集调度（cron / 平台任务）尚未接线，需要运维侧按交易日收盘后触发。
+`internal/server/bootstrap/limit_pool_collection.go` 在 `worker`/`all` 角色的 Server 启动时注册收盘后预采集循环：目标为最近一个已收盘交易日，按 `SERVER_LIMIT_POOL_COLLECT_SYMBOLS` 逐证券调用同一个 `LimitPoolFactsSnapshotCollector.Persist`；每天每证券只采集一次，失败按 `MaxAttempts` 有界重试。默认关闭，配置样例见 `.env.example`。它同样只落库、不签发授权。
+
+### 7.6 仍未覆盖
+
 - 交易状态与盘口仍为等值语义，且没有采集入口；它们的 as-of 与最大陈旧度需要各自定义。
+- 真实部署的证券池需由运维配置 `SERVER_LIMIT_POOL_COLLECT_SYMBOLS`；未配置时不会猜测标的。
+
+## 8. L3「预采集 → Run 复用」验收（2026-11-27）
+
+`TestQuantResearchMariaDBRedisL3` 不再把涨跌停种子写成与 `Run.SystemAsOf` 完全相同的时点：
+
+1. `seedQuantResearchL3LimitPool` 走生产 `LimitPoolFactsSnapshotCollector.Persist`，用确定性全量池来源在 `Run.SystemAsOf - 2m` 落快照；
+2. 测试用例断言该快照的系统时点严格早于 Run 评估时点，且 `quant.risk` 的 `input_refs[4]` 正是这个预采集 `SnapshotRef`；
+3. 授权仍由 Risk Stage 在复用快照时签发，采集侧没有预先授权。
+
+变异验证：把预采集时点改回 `Run.SystemAsOf`（旧的精确相等路径），L3 立即失败于 `precollected limit-pool as-of ... must precede Run system_as_of ...`；恢复后真库用例 PASS。
