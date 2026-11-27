@@ -1729,6 +1729,7 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - **目标绑定**：DestinationPolicy 从 HTTPS BaseURL 固定派生为单一 dependency/host/port，禁止 HTTP、重定向和传输重试；配置合法时 `newResearchflowComposition` 调用 `llmtransport.NewResponsesAdapter` 并把 Provider/Model/CapabilityState 保存到执行组合。
 - **TDD 与变异**：覆盖未配置、完整配置、半配置、缺凭据与跨 Provider 能力证据；变异“移除能力证据校验”使跨 Provider 误配用例有效失败，恢复后通过。`go test ./... -count=1`、`go vet ./...`、`git diff --check` 通过。
 - **状态边界**：本组只完成配置与 Adapter 构造能力；没有真实 Gateway 配置、真实 Generate/SSE 联调或 RunResult projector 消费者，SRV-010 保持 `BLOCKED`。
+- **CI 状态**：首轮 SHA `ab12fd7d1e567d25733f0128e5a9f9097f36d38b` 的 required-checks `45954459321`、Go test suite `45954459233` success；Full integration checks `45954459289` 因 `proxy.golang.org` 下载 `modernc.org/sqlite@v1.28.0` 返回 `stream error / INTERNAL_ERROR` 失败，后续 `go test` 同模块下载成功，按 runner 网络瞬断归因，不改代码。累计 SHA `5629538f49b76b034fb01744b7273ac7857b0dcf` 的 13 项 check run 全 success（required-checks `45955119122`、Go test suite `45955119145`、Full integration checks `45955119119`），T1 代码由累计 SHA 验收。
 
 ## 2026-11-27 四项根因根治 R4-R5-T2：Research Context/Claims 授权读取准备
 
@@ -1736,3 +1737,4 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - **授权门禁**：ContextAuthorizer 只接受可信 `service:researchflow` 与 research_analysis/risk_review 目的；对每个 included News Section 的 EvidenceRef 重新执行当前 News 授权复核，拒绝非 News 来源、时点漂移、非 UTC 或授权撤销。
 - **TDD 与变异**：覆盖已授权重查、不可信调用方、非 News Section、Evidence 授权撤销；变异移除调用方身份校验使不可信调用方用例有效失败并恢复。
 - **状态边界**：本组只补齐读取前置，不生成 Context/Claims/Limitations，不新增 projector；完整报告成功路径仍缺 Claim ref 发现、权威 Limitations 来源、R3 `available_at` 语义与真实 Provider 联调。
+- **CI 状态（回填）**：累计代码 SHA `5629538f49b76b034fb01744b7273ac7857b0dcf` 的 13 个 check run 全部 `completed/success`：required-checks `45955119122`、Go test suite workflow run `45955119145`、Full integration checks `45955119119`。T1 + T2 代码验收完成。
