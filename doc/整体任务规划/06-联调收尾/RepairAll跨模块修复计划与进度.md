@@ -1837,3 +1837,4 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - **TDD 与变异**：先新增因 API 未定义构建失败的 use case、Stage 与组合根测试；实现后覆盖按版本分组、同版本多证据冲突、规则版本来源、无效分组/重复 ID、append 失败传播、空输入、依赖校验、Stage 成功/失败路径与组合根装配。三处变异均有效失败并恢复：①忽略 VersionID 强并所有证据；②Stage 不调用 reviewer；③组合根允许多个 review rule version。
 - **验证**：`go test ./... -count=1` 全绿，`go test ./internal/news/app ./internal/news/stage ./internal/server/bootstrap -count=1` 全绿，`gofmt -l` 无输出。
 - **状态边界**：G5 打通了 Qualify→Record→Review 的生产代码链，但不等于已完成真实运行验收。仍缺真实 Feed Run + B 组 MariaDB 门禁证据；不因代码链完成就声称生产 `available_at` 已非空，也不把测试夹具或 stub 当作生产证据。NEWS-BLK-07/RSC-002 保持 SHELVED 直至 B 组门禁通过。
+- **CI 状态（回填）**：提交 `a53a6193e0b8c0d04b750fe020fb697f0366ff30` 的 13 个 check run 全部 `completed/success`：required-checks `140468088121`、Full integration checks `140468088209`、Go test suite `140468088735`（含 News MariaDB `140468088936`），其余 Researchflow/Research/Notification/Market-data 集成与专项检查均 success。
