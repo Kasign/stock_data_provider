@@ -1252,3 +1252,13 @@ G4 只把 G3 未可信候选按真实绑定与当前策略写入 `AvailabilityEv
 - **TDD 与变异**：新增针对性测试覆盖真实版本绑定、错配拒绝、任意 EvidenceID 拒绝、重放幂等、Stage 记录失败与组合根装配；五处变异均有效失败并恢复。全仓 `go test ./... -count=1`、`go vet ./...`、`gofmt -l`、`git diff --check` 通过。
 - **状态边界**：G4 只落 `parsed` 候选证据。G5 Review 仍必须注入 source-bound 规则与仓储绑定解析器，B 组真库门禁仍未完成；生产 `available_at` 继续为 null，NEWS-BLK-07/RSC-002 保持 SHELVED。
 - **CI 状态（回填）**：提交 `d5275d454235c0b38d833037a9c6d791eb7e988b` 的 13 个 check run 全部 `completed/success`；这不改变上述状态边界。
+
+## 1.23 G5 Review：生产审核调用链（2026-11-27）
+
+G5 把 G4 写入的 `parsed` Evidence 接到既有 `ReviewAvailabilityDecision`，并为该用例注入 source-bound 规则与持久化绑定解析器；不绕过资格判定，不把 `parsed` 直接升格为 `verified`，不在 Stage 输出中新增字段，也不直接写 `news_item_versions.available_at`。
+
+- **审核边界**：新增 `ReviewCollectedAvailability`，只接收同一次 Feed 执行中 G4 recorder 返回的 Evidence，按精确 `VersionID` 分组，每组形成一条 append-only 决策链；`ReviewRuleVersion` 只来自启动资格目录，调用方不能指定。
+- **fail-closed 判定**：`SourceQualifiedAvailabilityReviewRule` + Repository `ResolveAvailabilityEvidenceSourceBinding` 在组合根注入；规则版本、字段路径、parser 版本、时区、精度、证据溯源与七键绑定全部一致才可能 `verified`，任一不一致即 `ineligible`/`conflict`/`unresolved`/`revoked`。解析不到绑定时用例直接拒绝，不退化成通用审核。
+- **组合根门禁**：`newsAvailabilityReviewRuleVersion` 从资格目录解析唯一审核规则版本；多版本、空值或非法值一律 fail-closed，不用硬编码版本替代真实资格声明。
+- **Stage 编排**：recorder 成功后才调用 reviewer，失败标记 `availability_decision_review_failed` 并跳过该 source 的内存候选。同时修复一处被本组测试暴露的既有契约冲突：availability 后处理（record/review）失败时 source 已标 `failed` 却仍携带 ingest 阶段的 NewsIDs/IngestedCount，违反冻结 payload schema；现在统一回退该 source 的 ingest 投影，重试幂等仍由 idempotency prefix 保证。
+- **状态边界**：G5 打通 Qualify→Record→Review 的生产代码链，但不等于真实运行验收完成。仍缺真实 Feed Run + B 组 MariaDB 门禁证据；不因代码链完成就声称生产 `available_at` 已非空，也不把测试夹具或 stub 当作生产证据。NEWS-BLK-07/RSC-002 保持 SHELVED 直至 B 组门禁通过。

@@ -106,6 +106,13 @@ type CollectedAvailabilityQualifier interface {
 	Execute(context.Context, app.QualifyCollectedAvailabilityRequest) ([]app.QualifiedCollectedAvailability, error)
 }
 
+// CollectedAvailabilityReviewer is the G5 boundary. It reviews only the
+// Evidence returned by the G4 recorder in this same execution, producing
+// append-only Decisions through the source-bound rule and binding resolver.
+type CollectedAvailabilityReviewer interface {
+	Execute(context.Context, app.ReviewCollectedAvailabilityRequest) ([]domain.AvailabilityDecision, error)
+}
+
 type FeedCollectionAdapter struct {
 	registrations           []app.SourceEndpointRegistration
 	collect                 FeedSourceCollector
@@ -113,6 +120,7 @@ type FeedCollectionAdapter struct {
 	availabilityQualifier   CollectedAvailabilityQualifier
 	qualificationFieldPaths []string
 	availabilityRecorder    CollectedAvailabilityRecorder
+	availabilityReviewer    CollectedAvailabilityReviewer
 }
 
 func NewFeedCollectionAdapter(
@@ -200,6 +208,31 @@ func NewFeedCollectionAdapterWithAvailabilityRecording(
 		return nil, ErrFeedCollectionAdapterRequired
 	}
 	adapter.availabilityRecorder = recorder
+	return adapter, nil
+}
+
+// NewFeedCollectionAdapterWithAvailabilityReview adds the G5 in-process review
+// step after G4 Evidence recording. The reviewer receives only Evidence
+// returned by this execution's recorder; the frozen Stage payload is unchanged.
+func NewFeedCollectionAdapterWithAvailabilityReview(
+	registrations []app.SourceEndpointRegistration,
+	collect FeedSourceCollector,
+	ingest FeedSourceIngester,
+	qualifier CollectedAvailabilityQualifier,
+	fieldPaths []string,
+	recorder CollectedAvailabilityRecorder,
+	reviewer CollectedAvailabilityReviewer,
+) (*FeedCollectionAdapter, error) {
+	adapter, err := NewFeedCollectionAdapterWithAvailabilityRecording(
+		registrations, collect, ingest, qualifier, fieldPaths, recorder,
+	)
+	if err != nil {
+		return nil, err
+	}
+	if reviewer == nil {
+		return nil, ErrFeedCollectionAdapterRequired
+	}
+	adapter.availabilityReviewer = reviewer
 	return adapter, nil
 }
 
@@ -297,6 +330,20 @@ func (a *FeedCollectionAdapter) Execute(
 	reasonSet := make(map[string]struct{})
 	retryableFailureCount := 0
 	allQualifiedAvailability := make([]app.QualifiedCollectedAvailability, 0)
+	// A failed source must not carry persisted News IDs or ingest counters: the
+	// frozen payload schema rejects that combination. Availability post-processing
+	// runs after ingest, so its failure branches must undo the ingest projection
+	// while the idempotency prefix still prevents duplicate content ingest on retry.
+	failAfterIngest := func(outcome *FeedSourceOutcome, errorCode, reason string) {
+		output.IngestedCount -= outcome.IngestedCount
+		outcome.IngestedCount = 0
+		outcome.NewsIDs = []string{}
+		outcome.Status = "failed"
+		outcome.ErrorCode = errorCode
+		output.FailedSourceCount++
+		reasonSet[reason] = struct{}{}
+		output.Sources = append(output.Sources, *outcome)
+	}
 	for _, resourceRef := range resourceRefs {
 		if err := ctx.Err(); err != nil {
 			return FeedCollectionResult{}, err
@@ -422,18 +469,26 @@ func (a *FeedCollectionAdapter) Execute(
 		outcome.IngestedCount = len(observations)
 		output.IngestedCount += len(observations)
 		if a.availabilityRecorder != nil && len(qualifiedAvailability) > 0 {
-			if _, err := a.availabilityRecorder.Execute(ctx, app.RecordCollectedAvailabilityRequest{
+			recordedEvidence, recordErr := a.availabilityRecorder.Execute(ctx, app.RecordCollectedAvailabilityRequest{
 				Qualified: qualifiedAvailability, Ingest: ingestedResults,
-			}); err != nil {
+			})
+			if recordErr != nil {
 				if ctxErr := ctx.Err(); ctxErr != nil {
 					return FeedCollectionResult{}, ctxErr
 				}
-				outcome.Status = "failed"
-				outcome.ErrorCode = "availability_evidence_record_failed"
-				output.FailedSourceCount++
-				reasonSet["news_feed_availability_record_failed"] = struct{}{}
-				output.Sources = append(output.Sources, outcome)
+				failAfterIngest(&outcome, "availability_evidence_record_failed", "news_feed_availability_record_failed")
 				continue
+			}
+			if a.availabilityReviewer != nil && len(recordedEvidence) > 0 {
+				if _, reviewErr := a.availabilityReviewer.Execute(ctx, app.ReviewCollectedAvailabilityRequest{
+					Evidence: recordedEvidence,
+				}); reviewErr != nil {
+					if ctxErr := ctx.Err(); ctxErr != nil {
+						return FeedCollectionResult{}, ctxErr
+					}
+					failAfterIngest(&outcome, "availability_decision_review_failed", "news_feed_availability_review_failed")
+					continue
+				}
 			}
 		}
 		allQualifiedAvailability = append(allQualifiedAvailability, qualifiedAvailability...)

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	newsstorage "example.com/stock-analysis-flow/internal/news/adapters/storage"
+	newsapp "example.com/stock-analysis-flow/internal/news/app"
 	newsconfig "example.com/stock-analysis-flow/internal/news/config"
 	newsdomain "example.com/stock-analysis-flow/internal/news/domain"
 	platformconfig "example.com/stock-analysis-flow/internal/platform/config"
@@ -111,6 +112,42 @@ func TestNewsFeedCompositionAssemblesG4AvailabilityRecorder(t *testing.T) {
 	}
 	if composition == nil || composition.availabilityQualifier == nil || composition.availabilityRecorder == nil {
 		t.Fatalf("G3 qualifier/G4 recorder not assembled: %+v", composition)
+	}
+}
+
+func TestNewsFeedCompositionAssemblesG5AvailabilityReviewer(t *testing.T) {
+	cfg := g1BootstrapConfig(t)
+	composition, err := newNewsFeedStageComposition(
+		context.Background(), cfg, &platformhttpclient.Client{}, &newsstorage.MySQLRepository{},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if composition == nil || composition.availabilityReviewer == nil {
+		t.Fatalf("G5 reviewer not assembled: %+v", composition)
+	}
+}
+
+func TestNewsAvailabilityReviewRuleVersionRequiresSingleTrustedValue(t *testing.T) {
+	cfg := g1BootstrapConfig(t)
+	qualifications := cfg.AvailabilityQualifications()
+	version, err := newsAvailabilityReviewRuleVersion(qualifications)
+	if err != nil || version != "cninfo-disclosure-review-v1" {
+		t.Fatalf("version=%q err=%v", version, err)
+	}
+	if _, err := newsAvailabilityReviewRuleVersion(nil); err == nil {
+		t.Fatal("missing qualification must not produce a review rule version")
+	}
+	second := qualifications[0]
+	second.QualificationRef = "availability-qualification-cninfo-disclosure-v2"
+	second.ReviewRuleVersion = "cninfo-disclosure-review-v2"
+	if _, err := newsAvailabilityReviewRuleVersion(append(qualifications, second)); err == nil {
+		t.Fatal("multiple review rule versions must fail closed")
+	}
+	invalid := qualifications[0]
+	invalid.ReviewRuleVersion = " untrimmed"
+	if _, err := newsAvailabilityReviewRuleVersion([]newsapp.AvailabilitySourceQualification{invalid}); err == nil {
+		t.Fatal("invalid review rule version must fail closed")
 	}
 }
 

@@ -1826,5 +1826,14 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - **装配与输出**：Stage 在 ingest 成功后调用 recorder，失败标记 `availability_evidence_record_failed`；冻结 Stage payload/schema 字节不变。组合根在存在资格目录时装配 recorder。
 - **验证**：新增针对性测试覆盖真实版本绑定、错配拒绝、任意 ID 拒绝、重放幂等、Stage 失败与组合根装配；五处变异均有效失败并恢复。全仓 `go test ./... -count=1`、`go vet ./...`、`gofmt -l`、`git diff --check` 通过。
 - **CI 状态（回填）**：提交 `d5275d454235c0b38d833037a9c6d791eb7e988b` 的 13 个 check run 全部 `completed/success`：required-checks `45982274904`、Full integration checks `45982274897`、Go test suite `45982274950`（含 News MariaDB Job `140448914710`），其余专项检查均 success。
-- **状态边界**：G5 Review、B 组真库门禁仍未完成；NEWS-BLK-07/RSC-002 保持 SHELVED，生产 `available_at` 继续为 null。
-- **状态边界**：G4 Record、G5 Review 与 B 组真库门禁仍未完成；原始响应持久化/留存授权与可复核性须在 Evidence 写入前解决。NEWS-BLK-07/RSC-002 保持 SHELVED，生产 `available_at` 继续为 null。
+- **状态边界**：G4 只写 `parsed` 候选证据，不创建 Decision、不生成生产 `available_at`。G5 Review 与 B 组真库门禁仍未完成；NEWS-BLK-07/RSC-002 保持 SHELVED，生产 `available_at` 继续为 null。
+
+## 2026-11-27 第③项 G5：Review 生产调用链
+
+- **范围**：把 G4 写入的 `parsed` Evidence 接到既有 `ReviewAvailabilityDecision`，并为该用例注入 source-bound 规则与持久化绑定解析器；不绕过资格判定，不把 `parsed` 直接升格为 `verified`，不在 Stage 输出中新增字段或写 `available_at` 列。
+- **真实审核链**：新增 `ReviewCollectedAvailability`，只接收同一次 Feed 执行中 G4 recorder 返回的 Evidence，按精确 `VersionID` 分组，每组形成一条 append-only 决策链；`ReviewRuleVersion` 只来自启动资格目录。`SourceQualifiedAvailabilityReviewRule` + Repository 的 `ResolveAvailabilityEvidenceSourceBinding` 在组合根注入；规则版本、字段路径、parser 版本、时区、精度、证据溯源与七键绑定全部一致才可能 `verified`，任一不一致即 `ineligible`/`conflict`/`unresolved`/`revoked`。
+- **Stage 编排**：recorder 成功后才调用 reviewer，失败标记 `availability_decision_review_failed` 并跳过该 source 的内存候选。冻结的 Stage payload/schema 字节不变。修复一处被本组测试暴露的既有契约冲突：availability 后处理（record/review）失败时 source 已标 `failed` 却仍携带 ingest 阶段的 NewsIDs/IngestedCount，违反冻结 payload schema；现在统一回退该 source 的 ingest 投影，重试幂等仍由 idempotency prefix 保证。
+- **组合根**：`newNewsFeedStageComposition` 从资格目录解析唯一 `review_rule_version`（多版本/空值/非法值一律 fail-closed），构造 source-bound 规则、注入绑定解析器并装配 reviewer；无资格目录的 RSS/Licensed 路径行为不变。
+- **TDD 与变异**：先新增因 API 未定义构建失败的 use case、Stage 与组合根测试；实现后覆盖按版本分组、同版本多证据冲突、规则版本来源、无效分组/重复 ID、append 失败传播、空输入、依赖校验、Stage 成功/失败路径与组合根装配。三处变异均有效失败并恢复：①忽略 VersionID 强并所有证据；②Stage 不调用 reviewer；③组合根允许多个 review rule version。
+- **验证**：`go test ./... -count=1` 全绿，`go test ./internal/news/app ./internal/news/stage ./internal/server/bootstrap -count=1` 全绿，`gofmt -l` 无输出。
+- **状态边界**：G5 打通了 Qualify→Record→Review 的生产代码链，但不等于已完成真实运行验收。仍缺真实 Feed Run + B 组 MariaDB 门禁证据；不因代码链完成就声称生产 `available_at` 已非空，也不把测试夹具或 stub 当作生产证据。NEWS-BLK-07/RSC-002 保持 SHELVED 直至 B 组门禁通过。

@@ -122,6 +122,23 @@ func (s *feedAvailabilityRecorderStub) Execute(
 	return []domain.AvailabilityEvidence{{ID: "evidence-g4-stage"}}, nil
 }
 
+type feedAvailabilityReviewerStub struct {
+	requests  []app.ReviewCollectedAvailabilityRequest
+	decisions []domain.AvailabilityDecision
+	err       error
+}
+
+func (s *feedAvailabilityReviewerStub) Execute(
+	ctx context.Context,
+	request app.ReviewCollectedAvailabilityRequest,
+) ([]domain.AvailabilityDecision, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	s.requests = append(s.requests, request)
+	return append([]domain.AvailabilityDecision(nil), s.decisions...), s.err
+}
+
 func feedRegistration(sourceID, endpointID string) app.SourceEndpointRegistration {
 	return app.SourceEndpointRegistration{
 		SourceID: sourceID, EndpointID: endpointID, Enabled: true,
@@ -347,8 +364,101 @@ func TestFeedCollectionAdapterFailsSourceWhenAvailabilityRecordFails(t *testing.
 	if len(output.Sources) != 1 || output.Sources[0].ErrorCode != "availability_evidence_record_failed" {
 		t.Fatalf("source outcome=%+v", output.Sources)
 	}
+	if output.IngestedCount != 0 || len(output.Sources[0].NewsIDs) != 0 || output.Sources[0].IngestedCount != 0 {
+		t.Fatalf("failed source still carries ingest projection: %+v", output)
+	}
+	if err := ValidateFeedCollectionPayload(result.Payload); err != nil {
+		t.Fatalf("invalid Feed payload after record failure: %v", err)
+	}
 	if len(result.QualifiedAvailability) != 0 {
 		t.Fatalf("failed record leaked in-process qualified candidates: %+v", result.QualifiedAvailability)
+	}
+}
+
+func TestFeedCollectionAdapterReviewsRecordedAvailability(t *testing.T) {
+	registration := feedRegistration("cninfo", "announcements")
+	collector := &feedCollectorStub{entries: map[string][]app.CollectedSourceEntry{
+		"cninfo/announcements": {{Candidate: domain.Candidate{SourceItemID: "1225649440", PublishedAtRaw: "1793376000000"}}},
+	}}
+	ingester := &feedVersionedIngesterStub{sourceItemID: "1225649440"}
+	qualifier := &feedAvailabilityQualifierStub{results: []app.QualifiedCollectedAvailability{{
+		EntryIndex:   0,
+		SourceItemID: "1225649440",
+		Qualified:    app.QualifiedAvailabilityEvidence{FieldPath: "announcements.announcementTime"},
+	}}}
+	recorder := &feedAvailabilityRecorderStub{}
+	reviewer := &feedAvailabilityReviewerStub{decisions: []domain.AvailabilityDecision{{
+		ID: "decision-g5-stage", VersionID: "version-g4-stage",
+		Status: domain.AvailabilityDecisionVerified,
+	}}}
+	adapter, err := NewFeedCollectionAdapterWithAvailabilityReview(
+		[]app.SourceEndpointRegistration{registration}, collector, ingester,
+		qualifier, []string{"announcements.announcementTime"}, recorder, reviewer,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := adapter.Execute(context.Background(), "run-g5", CollectFeedsStageCode,
+		[]string{SourceEndpointSnapshotRef(registration)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(reviewer.requests) != 1 || len(reviewer.requests[0].Evidence) != 1 ||
+		reviewer.requests[0].Evidence[0].ID != "evidence-g4-stage" {
+		t.Fatalf("review request=%+v", reviewer.requests)
+	}
+	var output FeedCollectionOutput
+	if err := json.Unmarshal(result.Payload, &output); err != nil {
+		t.Fatal(err)
+	}
+	if output.Status != "success" || output.SuccessSourceCount != 1 {
+		t.Fatalf("Feed output counters = %+v", output)
+	}
+	if err := ValidateFeedCollectionPayload(result.Payload); err != nil {
+		t.Fatalf("Feed payload schema changed unexpectedly: %v", err)
+	}
+}
+
+func TestFeedCollectionAdapterFailsSourceWhenAvailabilityReviewFails(t *testing.T) {
+	registration := feedRegistration("cninfo", "announcements")
+	collector := &feedCollectorStub{entries: map[string][]app.CollectedSourceEntry{
+		"cninfo/announcements": {{Candidate: domain.Candidate{SourceItemID: "1225649440", PublishedAtRaw: "1793376000000"}}},
+	}}
+	ingester := &feedVersionedIngesterStub{sourceItemID: "1225649440"}
+	qualifier := &feedAvailabilityQualifierStub{results: []app.QualifiedCollectedAvailability{{
+		EntryIndex:   0,
+		SourceItemID: "1225649440",
+		Qualified:    app.QualifiedAvailabilityEvidence{FieldPath: "announcements.announcementTime"},
+	}}}
+	recorder := &feedAvailabilityRecorderStub{}
+	reviewer := &feedAvailabilityReviewerStub{err: app.ErrAvailabilityReviewCollectedInput}
+	adapter, err := NewFeedCollectionAdapterWithAvailabilityReview(
+		[]app.SourceEndpointRegistration{registration}, collector, ingester,
+		qualifier, []string{"announcements.announcementTime"}, recorder, reviewer,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := adapter.Execute(context.Background(), "run-g5", CollectFeedsStageCode,
+		[]string{SourceEndpointSnapshotRef(registration)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var output FeedCollectionOutput
+	if err := json.Unmarshal(result.Payload, &output); err != nil {
+		t.Fatal(err)
+	}
+	if output.FailedSourceCount != 1 || len(reviewer.requests) != 1 {
+		t.Fatalf("review failure did not fail closed: output=%+v calls=%d", output, len(reviewer.requests))
+	}
+	if len(output.Sources) != 1 || output.Sources[0].ErrorCode != "availability_decision_review_failed" {
+		t.Fatalf("source outcome=%+v", output.Sources)
+	}
+	if len(result.QualifiedAvailability) != 0 {
+		t.Fatalf("failed review leaked in-process qualified candidates: %+v", result.QualifiedAvailability)
+	}
+	if err := ValidateFeedCollectionPayload(result.Payload); err != nil {
+		t.Fatalf("invalid Feed payload after review failure: %v", err)
 	}
 }
 

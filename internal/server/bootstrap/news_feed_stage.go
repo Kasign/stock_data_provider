@@ -30,6 +30,7 @@ type newsFeedStageComposition struct {
 	qualificationCatalog    *newssource.StaticAvailabilityQualificationCatalog
 	availabilityQualifier   *newsapp.QualifyCollectedAvailability
 	availabilityRecorder    *newsapp.RecordCollectedAvailability
+	availabilityReviewer    *newsapp.ReviewCollectedAvailability
 	qualificationFieldPaths []string
 	registrations           []newsapp.SourceEndpointRegistration
 	sourcePolicies          []newsconfig.FeedSource
@@ -81,6 +82,14 @@ func newNewsFeedStageComposition(
 	qualificationFieldPaths := newsQualificationFieldPaths(qualifications)
 	var availabilityQualifier *newsapp.QualifyCollectedAvailability
 	var availabilityRecorder *newsapp.RecordCollectedAvailability
+	var availabilityReviewer *newsapp.ReviewCollectedAvailability
+	var reviewRuleVersion string
+	if len(qualifications) > 0 {
+		reviewRuleVersion, err = newsAvailabilityReviewRuleVersion(qualifications)
+		if err != nil {
+			return nil, fmt.Errorf("resolve News availability review rule version: %w", err)
+		}
+	}
 	if len(qualificationFieldPaths) > 0 {
 		availabilityQualifier, err = newsapp.NewQualifyCollectedAvailability(qualificationCatalog)
 		if err != nil {
@@ -99,6 +108,20 @@ func newNewsFeedStageComposition(
 		availabilityRecorder, err = newsapp.NewRecordCollectedAvailability(recordEvidence)
 		if err != nil {
 			return nil, fmt.Errorf("create News collected availability recorder: %w", err)
+		}
+		reviewRule, err := newsapp.NewSourceQualifiedAvailabilityReviewRule(qualificationCatalog, reviewRuleVersion)
+		if err != nil {
+			return nil, fmt.Errorf("create News source-qualified availability review rule: %w", err)
+		}
+		reviewDecision, err := newsapp.NewReviewAvailabilityDecision(
+			repository, reviewRule, newsFeedIngestID, repository,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("create News availability decision reviewer: %w", err)
+		}
+		availabilityReviewer, err = newsapp.NewReviewCollectedAvailability(reviewDecision, reviewRuleVersion)
+		if err != nil {
+			return nil, fmt.Errorf("create News collected availability reviewer: %w", err)
 		}
 	}
 	policies := make(map[string]newsconfig.FeedSource, len(feedSources))
@@ -128,7 +151,12 @@ func newNewsFeedStageComposition(
 		return nil, fmt.Errorf("create News Feed IngestCollectedSource use case: %w", err)
 	}
 	var adapter *newsstage.FeedCollectionAdapter
-	if availabilityQualifier != nil {
+	if availabilityReviewer != nil {
+		adapter, err = newsstage.NewFeedCollectionAdapterWithAvailabilityReview(
+			registrations, collect, ingest, availabilityQualifier, qualificationFieldPaths,
+			availabilityRecorder, availabilityReviewer,
+		)
+	} else if availabilityQualifier != nil {
 		adapter, err = newsstage.NewFeedCollectionAdapterWithAvailabilityRecording(
 			registrations, collect, ingest, availabilityQualifier, qualificationFieldPaths, availabilityRecorder,
 		)
@@ -163,6 +191,7 @@ func newNewsFeedStageComposition(
 		qualificationCatalog:    qualificationCatalog,
 		availabilityQualifier:   availabilityQualifier,
 		availabilityRecorder:    availabilityRecorder,
+		availabilityReviewer:    availabilityReviewer,
 		qualificationFieldPaths: qualificationFieldPaths,
 		registrations:           registrations, sourcePolicies: sourcePolicies,
 		providerPolicies: providerPolicies,
@@ -189,6 +218,34 @@ func newsQualificationFieldPaths(qualifications []newsapp.AvailabilitySourceQual
 	}
 	sort.Strings(paths)
 	return paths
+}
+
+// newsAvailabilityReviewRuleVersion resolves the single review rule version
+// declared by the trusted startup qualification catalog. A mixture of versions
+// cannot be represented by one source-bound rule instance, so it fails closed
+// instead of silently reviewing evidence under the wrong semantics.
+func newsAvailabilityReviewRuleVersion(qualifications []newsapp.AvailabilitySourceQualification) (string, error) {
+	if len(qualifications) == 0 {
+		return "", errors.New("News availability qualification catalog is empty")
+	}
+	version := ""
+	for _, qualification := range qualifications {
+		candidate := strings.TrimSpace(qualification.ReviewRuleVersion)
+		if candidate == "" || candidate != qualification.ReviewRuleVersion || len(candidate) > 128 {
+			return "", errors.New("News availability qualification has an invalid review rule version")
+		}
+		if version == "" {
+			version = candidate
+			continue
+		}
+		if version != candidate {
+			return "", errors.New("News availability qualifications declare conflicting review rule versions")
+		}
+	}
+	if version == "" {
+		return "", errors.New("News availability qualification catalog has no review rule version")
+	}
+	return version, nil
 }
 
 type newsPolicyPublication struct {
