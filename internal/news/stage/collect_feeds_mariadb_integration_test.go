@@ -216,6 +216,24 @@ func (t officialAPIMariaDBTransport) Do(_ context.Context, _ string, _ string, r
 	}, nil
 }
 
+// diagnosingAvailabilityRecorder keeps the production recorder unchanged while
+// exposing the exact rejection reason in integration-test logs.
+type diagnosingAvailabilityRecorder struct {
+	inner *newsapp.RecordCollectedAvailability
+	err   error
+}
+
+func (r *diagnosingAvailabilityRecorder) Execute(
+	ctx context.Context,
+	request newsapp.RecordCollectedAvailabilityRequest,
+) ([]domain.AvailabilityEvidence, error) {
+	evidence, err := r.inner.Execute(ctx, request)
+	if err != nil {
+		r.err = err
+	}
+	return evidence, err
+}
+
 // TestNewsAvailabilityProductionChainMariaDBIntegration is the B-group
 // database gate for G1-G5: a real Feed execution drives Collect → Qualify →
 // Ingest → Record → Review through the production use cases, and the resulting
@@ -402,6 +420,7 @@ func TestNewsAvailabilityProductionChainMariaDBIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	diagnosedRecorder := &diagnosingAvailabilityRecorder{inner: recorder}
 	reviewRule, err := newsapp.NewSourceQualifiedAvailabilityReviewRule(qualificationCatalog, reviewRuleVersion)
 	if err != nil {
 		t.Fatal(err)
@@ -416,7 +435,7 @@ func TestNewsAvailabilityProductionChainMariaDBIntegration(t *testing.T) {
 	}
 	adapter, err := NewFeedCollectionAdapterWithAvailabilityReview(
 		[]newsapp.SourceEndpointRegistration{registration}, collect, ingest,
-		qualifier, []string{fieldPath}, recorder, reviewer,
+		qualifier, []string{fieldPath}, diagnosedRecorder, reviewer,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -425,6 +444,9 @@ func TestNewsAvailabilityProductionChainMariaDBIntegration(t *testing.T) {
 	result, err := adapter.Execute(ctx, "run-b-group", CollectFeedsStageCode, []string{SourceEndpointSnapshotRef(registration)})
 	if err != nil {
 		t.Fatalf("execute B-group production chain: %v", err)
+	}
+	if diagnosedRecorder.err != nil {
+		t.Fatalf("G4 Record rejected the qualified candidate: %v", diagnosedRecorder.err)
 	}
 	if err := ValidateFeedCollectionPayload(result.Payload); err != nil {
 		t.Fatalf("validate Feed payload: %v", err)
