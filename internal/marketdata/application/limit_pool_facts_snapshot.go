@@ -17,6 +17,10 @@ import (
 
 var ErrLimitPoolFactsSnapshotCreationUnavailable = errors.New("limit-pool facts snapshot creator unavailable")
 
+// ErrLimitPoolFactsSnapshotStaleAsOf 表示采集时刻晚于请求的 system_as_of：
+// 该观测在评估时点还不存在，不能用来回答那个时点的问题（PIT 方向）。
+var ErrLimitPoolFactsSnapshotStaleAsOf = errors.New("limit-pool observation is later than the requested system_as_of")
+
 // LimitPoolReader 是 Data 模块内的全量涨跌停池来源窄端口。
 // 必须返回完整池（Total == len(Items)）；部分池不得被当作「未涨跌停」的证据。
 type LimitPoolReader interface {
@@ -123,7 +127,8 @@ func (c *LimitPoolFactsSnapshotCreator) Create(
 		return LimitPoolFactsSnapshotReferences{}, err
 	}
 	if payload.ObservedAt.After(systemAsOf) {
-		return LimitPoolFactsSnapshotReferences{}, errors.New("limit-pool observation is later than the requested system_as_of")
+		return LimitPoolFactsSnapshotReferences{}, fmt.Errorf("%w: observed_at=%s system_as_of=%s",
+			ErrLimitPoolFactsSnapshotStaleAsOf, payload.ObservedAt.Format(time.RFC3339Nano), systemAsOf.UTC().Format(time.RFC3339Nano))
 	}
 	sources := []app.DailyBarsCloseSeriesSource{{SourceRef: up.Source}}
 	snapshot, err := app.BuildLimitPoolFactsSnapshot(payload, sources, callerRef, purpose, systemAsOf)

@@ -217,6 +217,12 @@ jobs:
           LIVE_LIMIT_POOL_TRADE_DATE: ${{ github.event.inputs.limit_pool_trade_date }}
           LIVE_LIMIT_POOL_REPORT_PATH: ${{ github.workspace }}/live-limit-pool-report.json
         run: go test -run '^TestLiveEastmoneyFullLimitPoolCompleteness$' -count=1 -v ./internal/marketdata/provider
+      - name: Probe real limit-pool production chain (provider → MariaDB → authorized read)
+        if: always() && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && contains(github.event.head_commit.message, '[include_limit_pool_chain]')))
+        env:
+          MARKET_DATA_LIVE_LIMIT_POOL_CHAIN: "1"
+          MARKET_DATA_TEST_MYSQL_DSN: "root:market-data-ci@tcp(127.0.0.1:3306)/market_data_probe?parseTime=true&loc=UTC"
+        run: go test -run '^TestLiveLimitPoolFacts' -count=1 -v ./internal/marketdata/application
       - name: Upload sanitized live Provider reports
         if: always()
         uses: actions/upload-artifact@v4
