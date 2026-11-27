@@ -195,6 +195,61 @@ func (s *Store) ReadDataAuthorizedOrderBookFactsSnapshot(
 	return decision, snapshot, currentPolicy, nil
 }
 
+// ReadDataAuthorizedLimitPoolFactsSnapshot 与交易事实读取共享同一事务边界，
+// 但策略引用必须是 limit-pool-facts-access，数据行必须按 limit_pool kind 读取。
+// 两项任一缺省都会让其它数据类的授权被误用为日内涨跌停事实授权。
+func (s *Store) ReadDataAuthorizedLimitPoolFactsSnapshot(
+	ctx context.Context, authorizationRef, snapshotRef string,
+) (app.DataAuthorizationDecision, app.LimitPoolFactsSnapshot, authorization.CurrentPolicy, error) {
+	if s == nil || s.db == nil || ctx == nil || !validDataAuthorizationOpaque(authorizationRef) {
+		return app.DataAuthorizationDecision{}, app.LimitPoolFactsSnapshot{}, authorization.CurrentPolicy{}, ErrDataAuthorizationDecisionInvalid
+	}
+	if _, err := parseDataSnapshotRef(snapshotRef); err != nil {
+		return app.DataAuthorizationDecision{}, app.LimitPoolFactsSnapshot{}, authorization.CurrentPolicy{}, err
+	}
+	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead, ReadOnly: true})
+	if err != nil {
+		return app.DataAuthorizationDecision{}, app.LimitPoolFactsSnapshot{}, authorization.CurrentPolicy{}, fmt.Errorf("%w: begin authorized snapshot read: %v", ErrDataAuthorizationDecisionUnavailable, err)
+	}
+	defer tx.Rollback()
+
+	decision, currentPolicy, err := readAuthorizedSnapshotDecision(
+		ctx, tx, authorizationRef, authorization.LimitPoolFactsPolicyRef,
+	)
+	if err != nil {
+		return app.DataAuthorizationDecision{}, app.LimitPoolFactsSnapshot{}, authorization.CurrentPolicy{}, err
+	}
+	row, err := readAuthorizedSnapshotRow(ctx, tx, snapshotRef, app.LimitPoolFactsPayloadKind)
+	if err != nil {
+		return app.DataAuthorizationDecision{}, app.LimitPoolFactsSnapshot{}, authorization.CurrentPolicy{}, err
+	}
+	var snapshot app.LimitPoolFactsSnapshot
+	if err := json.Unmarshal(row.manifestJSON, &snapshot.Manifest); err != nil {
+		return app.DataAuthorizationDecision{}, app.LimitPoolFactsSnapshot{}, authorization.CurrentPolicy{}, ErrLimitPoolFactsSnapshotConflict
+	}
+	if err := json.Unmarshal(row.payloadJSON, &snapshot.Payload); err != nil {
+		return app.DataAuthorizationDecision{}, app.LimitPoolFactsSnapshot{}, authorization.CurrentPolicy{}, ErrLimitPoolFactsSnapshotConflict
+	}
+	snapshot.PayloadFingerprint = row.payloadFingerprint
+	if snapshot.Manifest.SnapshotRef != snapshotRef ||
+		snapshot.Manifest.ManifestFingerprint != row.manifestFingerprint ||
+		snapshot.Manifest.SchemaVersion != row.manifestVersion ||
+		snapshot.Payload.SchemaVersion != row.payloadVersion {
+		return app.DataAuthorizationDecision{}, app.LimitPoolFactsSnapshot{}, authorization.CurrentPolicy{}, ErrLimitPoolFactsSnapshotConflict
+	}
+	if err := snapshot.Verify(); err != nil {
+		return app.DataAuthorizationDecision{}, app.LimitPoolFactsSnapshot{}, authorization.CurrentPolicy{}, fmt.Errorf("%w: %v", ErrLimitPoolFactsSnapshotConflict, err)
+	}
+	canonicalManifest, canonicalPayload, err := canonicalLimitPoolFactsSnapshotJSON(snapshot)
+	if err != nil || !bytes.Equal(canonicalManifest, row.manifestJSON) || !bytes.Equal(canonicalPayload, row.payloadJSON) {
+		return app.DataAuthorizationDecision{}, app.LimitPoolFactsSnapshot{}, authorization.CurrentPolicy{}, ErrLimitPoolFactsSnapshotConflict
+	}
+	if err := tx.Commit(); err != nil {
+		return app.DataAuthorizationDecision{}, app.LimitPoolFactsSnapshot{}, authorization.CurrentPolicy{}, fmt.Errorf("%w: commit authorized snapshot read: %v", ErrDataAuthorizationDecisionUnavailable, err)
+	}
+	return decision, snapshot, currentPolicy, nil
+}
+
 // readAuthorizedSnapshotDecision 校验授权决策自身、撤销状态，并按数据类解析当前策略。
 // policyRef 决定读到哪一套策略：不同数据类的策略必须分开发布、分开撤销。
 func readAuthorizedSnapshotDecision(

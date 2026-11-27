@@ -31,3 +31,11 @@ type DataAuthorizedOrderBookRepository interface {
 		context.Context, string, string,
 	) (DataAuthorizationDecision, OrderBookFactsSnapshot, authorization.CurrentPolicy, error)
 }
+
+// DataAuthorizedLimitPoolRepository 在同一只读事务中读取授权决策、撤销状态、
+// 涨跌停数据类的当前策略和 limit_pool 快照。
+type DataAuthorizedLimitPoolRepository interface {
+	ReadDataAuthorizedLimitPoolFactsSnapshot(
+		context.Context, string, string,
+	) (DataAuthorizationDecision, LimitPoolFactsSnapshot, authorization.CurrentPolicy, error)
+}
