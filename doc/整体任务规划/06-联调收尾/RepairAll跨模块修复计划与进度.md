@@ -1940,4 +1940,13 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - **根因**：用例把 `AttemptTimeoutMS` 设为 1ms，但 `Attempt.StartedAt` 与 Worker 首次读取的数据库时钟都取真实 `time.Now()`。CI 上两次快照加载与 attempt claim 超过 1ms 时，会在 executor 前命中 `attemptRemaining <= 0 → ErrWorkerDeadline`，被误报为 deadline 失败；本地 50/200 次重复因耗时较短未暴露。
 - **修复**：只改测试夹具，使用固定 `databaseNow` 同时设置 `Attempt.StartedAt`、`Run.DeadlineAt` 与 `workerClockFake.now`；断言不变，仍验证 policy-controlled `attempt_timeout`、`AttemptTimedOut`、`StageRetryWait` 与 `RetryAt`。
 - **变异**：关闭生产代码 `if attemptTimedOut` 转换分支后该用例有效失败；恢复后连续 200 次 PASS。全仓 `go test ./... -count=1`、`go vet ./...`、`git diff --check` 通过。
-- **CI 状态**：新代码 SHA 的 CI 待回填。
+- **CI 状态**：提交 `10b05bf4f` 的 13 个 check run 全部 `completed/success`，包括 required-checks `46031102092`、Go test suite（workflow `46031102125`）、Researchflow module format/tests/race/vet `140614807058`、Full integration checks `46031102041`；此前的 deadline 偶发失败已关闭。
+
+## 2026-11-28 盘口事实预采集入口
+
+- **范围**：关闭 DEC-PLAT-002-077 的剩余边界，不碰冻结 Schema/Golden，不放宽盘中 15 分钟或收盘后边界。
+- **实现**：新增 `OrderBookFactsSnapshotCollector.Persist`，只校验、as-of 复用、真实取值、构建并落库，**不签发授权**；`OrderBookFactsSnapshotCreator.Create` 改为复用同一实现后再 `IssueFor`，无平行取值逻辑。新增 `ErrOrderBookFactsSnapshotStaleAsOf`，把 PIT 方向错误从泛化错误中分离。
+- **时点**：`-system-as-of` 未指定时取 Provider 的系统观测时刻；指定时要求 UTC 且观测不得晚于该时点。复用按 `(symbol, purpose)` 精确、时间取上界最新，旧事实是否可用仍由 Quant 新鲜度门禁裁决。
+- **入口**：`cmd/order-book-collect` + `make order-book-collect ARGS="-symbol 600519.SH"`；复用 `config.LoadForCollector()`，不需要 Redis 或 Owner 级凭据。未增加盘口批量 Worker：盘口是日内事实，应由调用方贴近评估时点触发。
+- **真实链路**：本地 Eastmoney + MariaDB 连续两次运行返回同一 `SnapshotRef=data_snapshot:sha256:10706cc0...`，`system_as_of=2026-11-25T07:00:02Z`、`tradable_volume_shares=3600`、5 档齐全；该快照授权决策数为 0。
+- **变异**：关闭 PIT 上界检查、把默认观测时点改成 `time.Now()` 分别使两个新增用例有效失败；恢复后全仓 `go test ./... -count=1`、`go vet ./...`、`git diff --check` 通过。CI 按新 SHA 回填。

@@ -173,6 +173,84 @@ func orderBookPrincipalContext(t *testing.T) context.Context {
 	return ctx
 }
 
+func TestOrderBookFactsSnapshotCollectorPersistsWithoutAuthorization(t *testing.T) {
+	_, book := orderBookApplicationSnapshot(t)
+	repository := &orderBookSnapshotRepositoryStub{}
+	collector, err := NewOrderBookFactsSnapshotCollector(orderBookReaderStub{book: book}, repository)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// system_as_of 零值表示以实际观测时刻作为快照时点，适合 Run 前预采集。
+	ref, err := collector.Persist(orderBookPrincipalContext(t), "600519.SH", time.Time{}, "risk_review")
+	if err != nil {
+		t.Fatalf("Persist() error = %v", err)
+	}
+	if !repository.saved || ref == "" || ref != repository.snapshot.Manifest.SnapshotRef {
+		t.Fatalf("Persist() did not persist the snapshot: saved=%v ref=%s stored=%+v",
+			repository.saved, ref, repository.snapshot.Manifest)
+	}
+	wantAsOf := book.SystemObservedAt.UTC().Format(time.RFC3339Nano)
+	if repository.snapshot.Manifest.SystemAsOf != wantAsOf {
+		t.Fatalf("snapshot system_as_of = %s, want observation instant %s",
+			repository.snapshot.Manifest.SystemAsOf, wantAsOf)
+	}
+}
+
+func TestOrderBookFactsSnapshotCollectorReusesAsOfSnapshotWithoutProvider(t *testing.T) {
+	snapshot, _ := orderBookApplicationSnapshot(t)
+	publishedAt, err := time.Parse(time.RFC3339Nano, snapshot.Manifest.SystemAsOf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	repository := &orderBookSnapshotRepositoryStub{reusable: snapshot}
+	collector, err := NewOrderBookFactsSnapshotCollector(
+		orderBookReaderStub{err: errors.New("live provider must not be called on as-of reuse")}, repository,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ref, err := collector.Persist(orderBookPrincipalContext(t), "600519.SH", publishedAt.Add(time.Minute), "risk_review")
+	if err != nil {
+		t.Fatalf("Persist() error = %v", err)
+	}
+	if ref != snapshot.Manifest.SnapshotRef {
+		t.Fatalf("reused ref = %q, want %q", ref, snapshot.Manifest.SnapshotRef)
+	}
+	if repository.lookupCalls != 1 || repository.saved {
+		t.Fatalf("reuse lookup_calls=%d saved=%v, want one lookup and no new snapshot", repository.lookupCalls, repository.saved)
+	}
+}
+
+func TestOrderBookFactsSnapshotCollectorRejectsObservationLaterThanAsOf(t *testing.T) {
+	_, book := orderBookApplicationSnapshot(t)
+	collector, err := NewOrderBookFactsSnapshotCollector(
+		orderBookReaderStub{book: book}, &orderBookSnapshotRepositoryStub{},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = collector.Persist(
+		orderBookPrincipalContext(t), "600519.SH", book.SystemObservedAt.Add(-time.Second), "risk_review",
+	)
+	if !errors.Is(err, ErrOrderBookFactsSnapshotStaleAsOf) {
+		t.Fatalf("error = %v, want ErrOrderBookFactsSnapshotStaleAsOf", err)
+	}
+}
+
+func TestOrderBookFactsSnapshotCollectorRejectsNonUTCSystemAsOf(t *testing.T) {
+	_, book := orderBookApplicationSnapshot(t)
+	collector, err := NewOrderBookFactsSnapshotCollector(
+		orderBookReaderStub{book: book}, &orderBookSnapshotRepositoryStub{},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = collector.Persist(orderBookPrincipalContext(t), "600519.SH", book.SystemObservedAt.In(time.FixedZone("CST", 8*3600)), "risk_review")
+	if err == nil {
+		t.Fatal("non-UTC system_as_of was accepted")
+	}
+}
+
 func TestOrderBookFactsSnapshotCreatorPersistsAndAuthorizes(t *testing.T) {
 	_, book := orderBookApplicationSnapshot(t)
 	systemAsOf := book.SystemObservedAt.Add(time.Second)

@@ -100,8 +100,9 @@ go run ./cmd/limit-pool-collect -symbol 600519.SH -trade-date 2026-11-27
 
 ### 7.6 仍未覆盖
 
-- 盘口的预采集入口尚未扩展（现只有涨跌停 CLI/Worker）；交易状态依赖原始 PIT 表在评估时点可读。
+- 交易状态依赖原始 PIT 表在评估时点可读；盘口预采集入口见第 10 节，已补齐独立 CLI 与非授权落库能力。
 - 真实部署的证券池需由运维配置 `SERVER_LIMIT_POOL_COLLECT_SYMBOLS`；未配置时不会猜测标的。
+- 盘口预采集没有收盘后批量 Worker：盘口是日内事实，应由调用方贴近 Run 评估时点触发，并由 Quant 的 15 分钟/收盘边界拒绝陈旧事实。
 
 ## 8. L3「预采集 → Run 复用」验收（2026-11-27）
 
@@ -120,4 +121,13 @@ go run ./cmd/limit-pool-collect -symbol 600519.SH -trade-date 2026-11-27
 - **结果层修复**：`EvaluateTradabilityDecision` 现在显式接收 `request.SystemAsOf` 作为决策 `system_as_of`，不再从交易状态快照读取。若沿用旧写法，A 方案下「更早快照 + 更晚评估」会得到 payload/manifest 时点不一致的失败；该失败在新增单测中真实暴露后修复。
 - **冻结契约**：无 Schema/Golden/版本字节变化；DATA-CTR-007 1.0.0、QNT-CTR-003 3.0.0 均保持原状。
 - **验收与变异**：仓储真库覆盖 `-1min` miss / `+30s` 命中 / 跨用途、跨日 miss；Quant 单测覆盖更早发布可用、晚于评估拒绝、隔日盘口拒绝、盘中过旧拒绝；L3 真库 PASS。关闭交易状态/盘口仓储上界分别使对应真库用例失败，关闭盘中 15 分钟检查使新鲜度用例失败，恢复后全绿。
-- **边界**：盘口预采集入口未扩展；交易状态依赖原始 PIT 表在评估时点可读。若 Owner 否决 15 分钟或收盘边界，须以新 DEC 覆盖。
+- **边界**：盘口预采集入口已在第 10 节补齐；交易状态依赖原始 PIT 表在评估时点可读。若 Owner 否决 15 分钟或收盘边界，须以新 DEC 覆盖。
+
+## 10. 盘口事实预采集入口（DEC-PLAT-002-077 补充）
+
+- **拆分**：`OrderBookFactsSnapshotCollector.Persist` 只校验、复用或真实取值、构建并落库，**不签发授权**；`OrderBookFactsSnapshotCreator.Create` 复用同一实现后再 `IssueFor`。两层共用一套取值/构建/落库逻辑，无平行实现。
+- **时点**：`-system-as-of` 未指定时取 Provider 的系统观测时刻。调用方若先取「现在」再采集，观测必然晚于该时点，PIT 会正确拒绝；手工指定仍要求 UTC，且观测不得晚于该时点。
+- **复用**：按 `(symbol, purpose)` 身份精确、时间取 `<= system_as_of` 的最新快照；复用时只校验 PIT 上界，不重新调用 Provider。旧盘口能否使用仍由 Quant 的盘中 15 分钟/收盘后边界裁决。
+- **入口**：`cmd/order-book-collect` + `make order-book-collect ARGS="-symbol 600519.SH"`；复用 `config.LoadForCollector()`，不需要 Redis 或 Owner 级凭据。
+- **权限边界**：真实 Eastmoney + MariaDB 连续两次运行返回同一 `SnapshotRef`（`data_snapshot:sha256:10706cc0...`），该快照 `authorization_decisions=0`；授权仍由 Risk Stage 读取时签发。
+- **变异**：关闭 PIT 上界检查后 `TestOrderBookFactsSnapshotCollectorRejectsObservationLaterThanAsOf` 有效失败；把默认观测时点改成 `time.Now()` 后 `...PersistsWithoutAuthorization` 有效失败；恢复后两用例通过。

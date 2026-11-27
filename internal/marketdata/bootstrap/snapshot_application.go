@@ -107,6 +107,23 @@ func (m *Module) CreateOrderBookFactsSnapshot(
 	return creator.Create(ctx, symbol, systemAsOf, purpose)
 }
 
+// PersistOrderBookFactsSnapshot 产出并持久化日内盘口事实快照，但**不签发授权**。
+//
+// 这是采集任务/工具在 Run 之前预置盘口事实的入口：授权仍由读取方在需要时签发，
+// 因此采集侧不需要 Owner 级凭据。systemAsOf 为零值时以实际系统观测时刻为快照时点。
+func (m *Module) PersistOrderBookFactsSnapshot(
+	ctx context.Context, symbol string, systemAsOf time.Time, purpose string,
+) (string, error) {
+	if m == nil || m.store == nil || m.orderBook == nil {
+		return "", errors.New("Market Data order-book facts Snapshot persistence is unavailable")
+	}
+	collector, err := application.NewOrderBookFactsSnapshotCollector(m.orderBook, m.store)
+	if err != nil {
+		return "", err
+	}
+	return collector.Persist(ctx, symbol, systemAsOf, purpose)
+}
+
 // ReadAuthorizedOrderBookFactsSnapshot 使用盘口数据类策略做授权复核，
 // 与交易事实共用同一事务边界和 fail-closed 语义。
 func (m *Module) ReadAuthorizedOrderBookFactsSnapshot(
