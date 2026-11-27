@@ -1576,7 +1576,7 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - 逐层失败归因与修复（均未降低门禁）：① 种子 SourceVersion 改为 Close Series 白名单常量；② PIT 重建提示不再被当作质量降级（同步修正 normalize/reader 测试）；③ bar 补齐 Volume/Amount；④ 日历按精确 start/end 分别写入；⑤ 因 sma20/factor 共用日历且 factor limit=6、`minimum_coverage=1`，10 月窗口只保留 6 个交易日，sma20 合法降级；⑥ risk 事实补齐历史名称与上市交易日序号；⑦ 修复真实 MariaDB 首次暴露的授权决策 JSON 字段顺序缺陷（Application 签发结构与 Repository 规范化字节校验不一致）。
 - 本地针对性验收：`go test -p 1 ./internal/marketdata/normalize/ ./internal/marketdata/application/` PASS；`go test -p 1 ./internal/marketdata/application/ ./internal/marketdata/repository/ -run 'DataAuthorization|DataAllowed|Snapshot' -count=1` PASS；`go test -p 1 ./internal/server/bootstrap/ -run '^TestQuantResearchMariaDBRedisL3$' -count=1 -v -timeout 150s` PASS。
 - CI 结论（代码 SHA `cdcc31c55`）：该 SHA 15 个 check run 全部 success——Integration CI [45831923632](https://github.com/Kasign/stock_data_provider/actions/runs/45831923632)（`Full integration checks` 全 13 项含 `Run quant.research MariaDB/Redis L3 integration test` 均 success）、Go test suite [45831923678](https://github.com/Kasign/stock_data_provider/actions/runs/45831923678)、Required checks [45831923615](https://github.com/Kasign/stock_data_provider/actions/runs/45831923615)、Quant module validation [45831923750](https://github.com/Kasign/stock_data_provider/actions/runs/45831923750)。CI 的 L3 步骤要求 `--- PASS`，SKIP/no-tests 即失败，故为真实执行而非跳过即绿。
-- 边界：三处变异验证（无日历/无策略/未来 SystemObservedAt）未执行，状态 `not_run`，不得记为已验收；本节的 CI 结论只归属代码 SHA `cdcc31c55`，文档回填提交本身不预填 CI。阶段 2.1 的数据准备边界已关闭；2.2/2.3/2.4、阶段 3/4/5 仍按依赖顺序推进。
+- 边界：三处变异验证已于 2026-11-27 补验（见本文件「行情种子三处变异补验」节与 `doc/quant/14`）；本节的 CI 结论只归属代码 SHA `cdcc31c55`，文档回填提交本身不预填 CI。阶段 2.1 的数据准备边界已关闭；2.2/2.3/2.4、阶段 3/4/5 仍按依赖顺序推进。
 
 ## 2026-11-26 阶段 2.2 影响分析（事实纠偏；决策已确认）
 
@@ -1584,7 +1584,7 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - **事实纠偏（本组施工依据，原 2.2 行口径过期）**：① `internal/researchflow/resultvalidation/quant.go` 是 FLOW-006 消费侧 Envelope 校验器，全仓零 Go import、只被自身 `_test.go` 触达，属孤儿包，**不是** 2.2 的关联/授权机制；② 真正的关联校验器 `internal/server/bootstrap/quant_result_association.go` **已生产装配**于 `researchflow_execution_composition.go:286`，四 Stage 封闭规格表、双 Validator、`result_id` 精确比对与 fail-closed 分流齐备；③ 真正"零"的是 `researchflowQuantResultReader.Read`（`researchflow_result_identity.go:41-49`）与 `quantResultReader` 字段——组合根构造完对象图后无任何 Stage/Worker/HTTP 读取，L3 集成测试亦零引用。故 2.2 精确含义是「生产授权读取行为未闭环」，不是「代码未写」，施工按"接通+验收既有能力"而非新建机制（规则 15）。
 - 其他确定事实：`researchflow_execution_composition.go:259-269` 的 Repository 选取漏了 `quantRiskStage`；关联靠读时从 Stage Output payload 的 `result_id` 重算，无 `(run_ref,result_id)` 表/冻结契约；Research Evidence 侧关联完全空白（`GetEvidenceRequest` 无 RunRef、`RelationStatus=not_provided`、两套策略锁表）；完整报告资源唯一 Owner/ResultRef 未决（RF-BLOCK-007 OPEN）；SRV-CTR-001 仅三路由且不开放 Stage Output 内容读取。
 - 施工分组：A 口径回填 → B 必要上下游修正（Risk 门控、规格表 Trend/Risk 覆盖断言、真实两-Run 跨读负例）→ C 生产消费者接线 + L3 端到端贯通与四类 fail-closed → D Evidence 侧同构关联。每组先补能暴露问题的测试、保留失败证据，再改实现。
-- **如实保留**：报告正文的 LLM Gateway 生产消费者缺失与 News `available_at` 来源证据未闭环、1.4 恒 `reject`、RF-BLOCK-005/007/008 OPEN、行情种子专项三处变异 `not_run`；本组不生成完整报告正文、不新建 `RunResult` 唯一 Owner 资源、不新增 HTTP 端点、不改任何契约状态、不迁移 WebUI、不删旧链、不放宽任何门禁。
+- **如实保留**：报告正文的 LLM Gateway 生产消费者缺失与 News `available_at` 来源证据未闭环、1.4 恒 `reject`、RF-BLOCK-005/007/008 OPEN、行情种子专项三处变异已补验；本组不生成完整报告正文、不新建 `RunResult` 唯一 Owner 资源、不新增 HTTP 端点、不改任何契约状态、不迁移 WebUI、不删旧链、不放宽任何门禁。
 - 状态（影响分析阶段记录）：实施中；完整 CI 结论 `not_run`，不得用本地 PASS 冒充。实施与验收结果见下一节。
 
 ## 2026-11-26 阶段 2.2 实施完成与验收（CI 已按 `edd955bf7` 回填）
@@ -1598,7 +1598,7 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - **如实保留的边界（不夸大）**：Evidence 真库正例未做——需要真实 News Feed Run + 完整 PIT/授权 fixture，而 `research_news_mariadb_integration_test.go:552` 的 `successful_import_with_verified_available_at` 因 News 未提供可验证 `available_at` 仍显式 `t.Skip`；不得伪造时间证据或放宽严格 PIT。News 撤销/当前策略门禁属 News 内核既有能力（`current_policy_version_change_rejected` 真库用例 + `news_policy_versions FOR UPDATE`），按 D4-A 不改内核、不重复实现。故第 7 节第 6 条只按「关联语义单测 + 真库负例 / 授权语义由 News 内核负责」分层覆盖，不声称「Evidence 四类语义已全真库等价验收」。
 - **完整 CI 结论（代码 SHA `edd955bf7a511d3616a00402d0c5e1d63f9a03c2`）**：推送后按该精确 SHA 查询，14 个 check run 全部 `completed / success`——[Integration CI 45848500318](https://github.com/Kasign/stock_data_provider/actions/runs/45848500318)（`Full integration checks` 成功）、[Required checks 45848500136](https://github.com/Kasign/stock_data_provider/actions/runs/45848500136)（`required-checks` 聚合成功）、[Go test suite 45848500266](https://github.com/Kasign/stock_data_provider/actions/runs/45848500266)（11 项全成功）、[Quant module validation 45848500209](https://github.com/Kasign/stock_data_provider/actions/runs/45848500209)。Integration CI 的 `Run quant.research MariaDB/Redis L3 integration test` 步骤日志含 `--- PASS: TestQuantResearchMariaDBRedisL3 (6.90s)`，步骤脚本要求精确 `--- PASS`，SKIP/no-tests 即 `::error::` 失败，故为真实执行。本结论只归属该代码 SHA，纯文档回填提交不预填 CI。
 - **状态**：本组范围已完成并验收；CI 全绿不关闭 Evidence 真库正例这一 OPEN 边界（见上条）。
-- 其余 OPEN 不变：LLM Gateway 报告正文消费者缺失、1.4 `price_limit`/`tradable_volume` 恒 `reject`、RF-BLOCK-005/007/008、行情种子专项三处变异 `not_run`、2.4、阶段 3/4/5。依赖顺序下一步为 2.4 FLOW-005/006 上下文一致性与风险语义。
+- 其余 OPEN 不变：LLM Gateway 报告正文消费者缺失、1.4 `price_limit`/`tradable_volume` 恒 `reject`、RF-BLOCK-005/007/008、行情种子专项三处变异已补验、2.4、阶段 3/4/5。依赖顺序下一步为 2.4 FLOW-005/006 上下文一致性与风险语义。
 
 
 ## 2026-11-27 阶段 2.3 实施完成与验收（Server 结果读取 DTO / HTTP 契约）
@@ -1852,3 +1852,12 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - **CI 状态（回填）**：修复提交 `235eedcce8cba50b32e0e2e2412f23d624339a46` 的 13 个 check run 全部 `completed/success`：News MariaDB `140481377573`、Full integration checks `140481377758`、required-checks `140481377428`、Test root Go module `140481377798`，其余专项集成与检查均 success。News MariaDB Job 显式 grep `--- PASS: TestNewsAvailabilityProductionChainMariaDBIntegration`，确认新用例确实在真库执行并通过，未被 SKIP。
 - **状态边界**：B 组真库门禁证明 G1-G5 生产代码链在 MariaDB 上能从真实采集结果产出 verified Decision，并被严格 PIT 读出披露日保守边界。测试资格与响应快照为测试专用，不构成生产来源准入声明；真实 Feed Run 的生产执行与 `available_at` 落库结果仍由项目负责人验收。
 - **负例扩展（2026-11-27，提交 `09853f3f5`，13/13 CI success）**：同一真库用例新增两条 fail-closed 负例——① 资格撤销后对已落库 Evidence 重审，必须追加 `revoked` 决策并正确 supersede 原 `verified` 链头，随后严格 PIT 返回 `ErrEvidencePITNotFound`；② parser 版本与资格绑定不一致时只能产出 `unresolved`，不得 `verified`。这验证了决策链的 append-only 撤销语义与绑定不一致的 fail-closed，而不只是正例。
+
+## 2026-11-27 行情种子三处变异补验（清零历史 not_run）
+
+- **背景**：`doc/quant/14` 与本文档此前把"无日历 / 无授权策略 / 未来 `SystemObservedAt`"三处变异登记为 `not_run`。本组在本地真实 MariaDB 11.4 + Redis 7 隔离容器上补做，不改生产代码。
+- **基线**：未修改代码时 `QUANT_RESEARCH_MARIADB_REDIS_L3_TEST=1 ... go test -p 1 ./internal/server/bootstrap/ -run '^TestQuantResearchMariaDBRedisL3$' -count=1 -timeout 240s` PASS（7.08s / 7.30s 两次）。
+- **变异 ① 无交易日历**：关闭 `seedQuantResearchL3Calendar` → `quant.sma20`/`quant.factor`/`quant.trend` 均 `failed [quant_*_execution_failed]` 且无 OutputRef，Run `failed`。`FAILED_AS_EXPECTED`，恢复后基线 PASS。
+- **变异 ② 无授权策略**：关闭三处 `l3SeedPublishPolicy` → 四 Stage 均 `failed [data_authorization_unavailable]`，Run `failed`。`FAILED_AS_EXPECTED`，恢复后基线 PASS。
+- **变异 ③ 未来 `SystemObservedAt`**：把 bar 的来源自报观测时间改为 `observedAt + 2h` → 测试仍 PASS。**归因**：DATA-CTR-007 的 PIT reader 以系统 `recorded_at` 重写来源自报 `SystemObservedAt`，因此"来源自报未来时间"本身不构成数据提前可见的通道；该变异不是有效的 fail-closed 靶点，原 `not_run` 项收敛为正向安全性质验证，而非继续挂账。
+- **状态**：三处变异均有执行记录与归因，历史 `not_run` 清零；未修改任何生产代码，未降低 PIT/授权/日历门禁。本组为纯验收补验，无代码提交。
