@@ -47,6 +47,23 @@ func (s *feedIngesterStub) Execute(ctx context.Context, request app.IngestCollec
 	return []domain.Observation{{NewsID: "news-" + request.Collection.SourceID}}, nil
 }
 
+type feedAvailabilityQualifierStub struct {
+	requests []app.QualifyCollectedAvailabilityRequest
+	results  []app.QualifiedCollectedAvailability
+	err      error
+}
+
+func (s *feedAvailabilityQualifierStub) Execute(
+	ctx context.Context,
+	request app.QualifyCollectedAvailabilityRequest,
+) ([]app.QualifiedCollectedAvailability, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	s.requests = append(s.requests, request)
+	return append([]app.QualifiedCollectedAvailability(nil), s.results...), s.err
+}
+
 func feedRegistration(sourceID, endpointID string) app.SourceEndpointRegistration {
 	return app.SourceEndpointRegistration{
 		SourceID: sourceID, EndpointID: endpointID, Enabled: true,
@@ -106,6 +123,85 @@ func TestFeedCollectionAdapterUsesRunResourceSnapshot(t *testing.T) {
 	}
 	if err := ValidateFeedCollectionQualitySummary(result.QualitySummary); err != nil {
 		t.Fatalf("valid Feed quality summary rejected: %v", err)
+	}
+}
+
+func TestFeedCollectionAdapterRunsAvailabilityQualifierBeforeIngest(t *testing.T) {
+	registration := feedRegistration("cninfo", "announcements")
+	registration.ProviderCode = "cninfo"
+	registration.ProviderOutputPolicyRef = "cninfo-provider-output-policy"
+	registration.ProviderOutputPolicyVersionID = "cninfo-provider-output-policy-v1"
+	collector := &feedCollectorStub{entries: map[string][]app.CollectedSourceEntry{
+		"cninfo/announcements": {{Candidate: domain.Candidate{PublishedAtRaw: "1793376000000"}}},
+	}}
+	ingester := &feedIngesterStub{}
+	qualifier := &feedAvailabilityQualifierStub{results: []app.QualifiedCollectedAvailability{{
+		EntryIndex:   0,
+		SourceItemID: "1225649440",
+		Qualified: app.QualifiedAvailabilityEvidence{
+			FieldPath: "announcements.announcementTime",
+		},
+	}}}
+	adapter, err := NewFeedCollectionAdapterWithAvailabilityQualifier(
+		[]app.SourceEndpointRegistration{registration}, collector, ingester,
+		qualifier, []string{"announcements.announcementTime"},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := adapter.Execute(context.Background(), "run-g3", CollectFeedsStageCode,
+		[]string{SourceEndpointSnapshotRef(registration)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(qualifier.requests) != 1 {
+		t.Fatalf("qualifier calls=%d want 1", len(qualifier.requests))
+	}
+	request := qualifier.requests[0]
+	if request.Registration.SourceID != "cninfo" ||
+		request.Registration.ProviderOutputPolicyVersionID != "cninfo-provider-output-policy-v1" ||
+		!reflect.DeepEqual(request.FieldPaths, []string{"announcements.announcementTime"}) {
+		t.Fatalf("qualifier request=%+v", request)
+	}
+	if len(result.QualifiedAvailability) != 1 || result.QualifiedAvailability[0].SourceItemID != "1225649440" {
+		t.Fatalf("qualified availability=%+v", result.QualifiedAvailability)
+	}
+	if len(ingester.calls) != 1 {
+		t.Fatalf("ingest calls=%d want 1", len(ingester.calls))
+	}
+	if err := ValidateFeedCollectionPayload(result.Payload); err != nil {
+		t.Fatalf("Feed output schema changed unexpectedly: %v", err)
+	}
+}
+
+func TestFeedCollectionAdapterFailsSourceWhenAvailabilityQualificationFails(t *testing.T) {
+	registration := feedRegistration("cninfo", "announcements")
+	collector := &feedCollectorStub{entries: map[string][]app.CollectedSourceEntry{
+		"cninfo/announcements": {{Candidate: domain.Candidate{PublishedAtRaw: "1793376000000"}}},
+	}}
+	ingester := &feedIngesterStub{}
+	qualifier := &feedAvailabilityQualifierStub{err: app.ErrAvailabilitySourceQualificationDenied}
+	adapter, err := NewFeedCollectionAdapterWithAvailabilityQualifier(
+		[]app.SourceEndpointRegistration{registration}, collector, ingester,
+		qualifier, []string{"announcements.announcementTime"},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := adapter.Execute(context.Background(), "run-g3", CollectFeedsStageCode,
+		[]string{SourceEndpointSnapshotRef(registration)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var output FeedCollectionOutput
+	if err := json.Unmarshal(result.Payload, &output); err != nil {
+		t.Fatal(err)
+	}
+	if output.FailedSourceCount != 1 || output.IngestedCount != 0 || len(ingester.calls) != 0 {
+		t.Fatalf("qualification failure did not fail closed: output=%+v ingest_calls=%d", output, len(ingester.calls))
+	}
+	if len(output.Sources) != 1 || output.Sources[0].ErrorCode != "availability_qualification_failed" {
+		t.Fatalf("source outcome=%+v", output.Sources)
 	}
 }
 

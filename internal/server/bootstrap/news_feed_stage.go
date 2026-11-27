@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 
 	newsprovider "example.com/stock-analysis-flow/internal/news/adapters/provider"
 	newssource "example.com/stock-analysis-flow/internal/news/adapters/source"
@@ -24,15 +25,17 @@ import (
 const newsFeedStageOutputRegistryVersion = "1.2.0"
 
 type newsFeedStageComposition struct {
-	catalog              *newssource.StaticSourceCatalog
-	providerCatalog      *newsprovider.StaticOutputPolicyCatalog
-	qualificationCatalog *newssource.StaticAvailabilityQualificationCatalog
-	registrations        []newsapp.SourceEndpointRegistration
-	sourcePolicies       []newsconfig.FeedSource
-	providerPolicies     []newsconfig.ProviderOutputPolicyRegistration
-	executor             researchflowapplication.StageExecutor
-	registry             *stageoutput.Registry
-	resourceRefs         []string
+	catalog                 *newssource.StaticSourceCatalog
+	providerCatalog         *newsprovider.StaticOutputPolicyCatalog
+	qualificationCatalog    *newssource.StaticAvailabilityQualificationCatalog
+	availabilityQualifier   *newsapp.QualifyCollectedAvailability
+	qualificationFieldPaths []string
+	registrations           []newsapp.SourceEndpointRegistration
+	sourcePolicies          []newsconfig.FeedSource
+	providerPolicies        []newsconfig.ProviderOutputPolicyRegistration
+	executor                researchflowapplication.StageExecutor
+	registry                *stageoutput.Registry
+	resourceRefs            []string
 }
 
 func newNewsFeedStageComposition(
@@ -74,6 +77,14 @@ func newNewsFeedStageComposition(
 	if err != nil {
 		return nil, fmt.Errorf("validate trusted News availability qualification catalog: %w", err)
 	}
+	qualificationFieldPaths := newsQualificationFieldPaths(qualifications)
+	var availabilityQualifier *newsapp.QualifyCollectedAvailability
+	if len(qualificationFieldPaths) > 0 {
+		availabilityQualifier, err = newsapp.NewQualifyCollectedAvailability(qualificationCatalog)
+		if err != nil {
+			return nil, fmt.Errorf("create News collected availability qualifier: %w", err)
+		}
+	}
 	policies := make(map[string]newsconfig.FeedSource, len(feedSources))
 	for _, source := range feedSources {
 		if existing, ok := policies[source.SourceID]; ok {
@@ -100,7 +111,14 @@ func newNewsFeedStageComposition(
 	if err != nil {
 		return nil, fmt.Errorf("create News Feed IngestCollectedSource use case: %w", err)
 	}
-	adapter, err := newsstage.NewFeedCollectionAdapter(registrations, collect, ingest)
+	var adapter *newsstage.FeedCollectionAdapter
+	if availabilityQualifier != nil {
+		adapter, err = newsstage.NewFeedCollectionAdapterWithAvailabilityQualifier(
+			registrations, collect, ingest, availabilityQualifier, qualificationFieldPaths,
+		)
+	} else {
+		adapter, err = newsstage.NewFeedCollectionAdapter(registrations, collect, ingest)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("create News Feed collection Stage adapter: %w", err)
 	}
@@ -126,12 +144,34 @@ func newNewsFeedStageComposition(
 	}
 	return &newsFeedStageComposition{
 		catalog: sourceCatalog, providerCatalog: outputPolicyCatalog,
-		qualificationCatalog: qualificationCatalog,
-		registrations:        registrations, sourcePolicies: sourcePolicies,
+		qualificationCatalog:    qualificationCatalog,
+		availabilityQualifier:   availabilityQualifier,
+		qualificationFieldPaths: qualificationFieldPaths,
+		registrations:           registrations, sourcePolicies: sourcePolicies,
 		providerPolicies: providerPolicies,
 		executor:         newsFeedStageExecutor{adapter: adapter},
 		resourceRefs:     resourceRefs,
 	}, nil
+}
+
+// newsQualificationFieldPaths extracts the only field paths that G3 may
+// qualify. Callers cannot supply arbitrary paths at collection time.
+func newsQualificationFieldPaths(qualifications []newsapp.AvailabilitySourceQualification) []string {
+	seen := make(map[string]struct{}, len(qualifications))
+	paths := make([]string, 0, len(qualifications))
+	for _, qualification := range qualifications {
+		fieldPath := strings.TrimSpace(qualification.FieldPath)
+		if fieldPath == "" {
+			continue
+		}
+		if _, exists := seen[fieldPath]; exists {
+			continue
+		}
+		seen[fieldPath] = struct{}{}
+		paths = append(paths, fieldPath)
+	}
+	sort.Strings(paths)
+	return paths
 }
 
 type newsPolicyPublication struct {

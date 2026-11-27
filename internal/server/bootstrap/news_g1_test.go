@@ -89,6 +89,15 @@ func TestNewsFeedPolicyPublicationsCoverSourceEndpointAndProvider(t *testing.T) 
 	}
 }
 
+func TestNewsQualificationFieldPathsAreStable(t *testing.T) {
+	cfg := g1BootstrapConfig(t)
+	got := newsQualificationFieldPaths(cfg.AvailabilityQualifications())
+	want := []string{"announcements.announcementTime"}
+	if len(got) != len(want) || got[0] != want[0] {
+		t.Fatalf("field paths=%v want %v", got, want)
+	}
+}
+
 func TestValidateNewsG1BindingsRejectsOrphanQualification(t *testing.T) {
 	cfg := g1BootstrapConfig(t)
 	registrations := newsFeedRegistrations(cfg.FeedSources())

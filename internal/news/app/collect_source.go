@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
@@ -101,7 +102,12 @@ type CollectSourceResult struct {
 	ObservedAt              time.Time
 	FetchedAt               time.Time
 	NormalizedAt            time.Time
-	Entries                 []CollectedSourceEntry
+	// ResponseHash 是本次成功响应原始字节的 SHA-256，小写十六进制。
+	// EvidenceRef 是不含 URL/凭据的内部响应快照定位符；G3 只用于内存资格判定，
+	// 不声称已持久化原始响应，也不生成 available_at。
+	ResponseHash string
+	EvidenceRef  string
+	Entries      []CollectedSourceEntry
 }
 
 // SourceCollectionError 是可安全暴露的新闻业务错误，不包含 URL、响应体或底层错误文本。
@@ -313,6 +319,9 @@ func (u *CollectSource) Execute(ctx context.Context, request CollectSourceReques
 		return CollectSourceResult{}, &SourceCollectionError{Code: "source_content_type_unsupported"}
 	}
 
+	responseDigest := sha256.Sum256(payload)
+	responseHash := hex.EncodeToString(responseDigest[:])
+
 	fetchedAt := u.now().UTC()
 	var feed parser.FeedDocument
 	if officialAPI {
@@ -340,6 +349,8 @@ func (u *CollectSource) Execute(ctx context.Context, request CollectSourceReques
 		FeedFormat:              feed.Format,
 		FeedTitle:               feed.Title,
 		FetchedAt:               fetchedAt,
+		ResponseHash:            responseHash,
+		EvidenceRef:             "response-snapshot:" + request.SourceID + "/" + request.EndpointID + "@" + responseHash,
 		Entries:                 make([]CollectedSourceEntry, 0, min(len(feed.Entries), request.MaxEntries)),
 	}
 	for _, entry := range feed.Entries {

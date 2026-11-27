@@ -2,6 +2,8 @@ package app
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"io"
 	"net/http"
 	"strings"
@@ -130,6 +132,35 @@ func TestCollectOfficialAPIPreservesDisclosureRawValue(t *testing.T) {
 	}
 	if first.Candidate.SourceItemID != "1225649440" {
 		t.Fatalf("source_item_id=%q", first.Candidate.SourceItemID)
+	}
+}
+
+func TestCollectOfficialAPICapturesResponseProvenance(t *testing.T) {
+	registration := officialAPIRegistration()
+	registration.SourceID = "cninfo"
+	registration.EndpointID = "cninfo-his-announcement"
+	transport := &apiTransportStub{response: apiJSONResponse(apiJSONBody)}
+	usecase := NewCollectSource(sourceCatalogStub{registration: registration}, transport)
+	usecase.policyResolver = &sourceCollectionPolicyResolverStub{source: registration.SourcePolicy}
+
+	request := apiCollectRequest()
+	request.SourceID = "cninfo"
+	request.EndpointID = "cninfo-his-announcement"
+	result, err := usecase.Execute(context.Background(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	digest := sha256.Sum256([]byte(apiJSONBody))
+	wantHash := hex.EncodeToString(digest[:])
+	if result.ResponseHash != wantHash {
+		t.Fatalf("response_hash=%q want %q", result.ResponseHash, wantHash)
+	}
+	wantRef := "response-snapshot:cninfo/cninfo-his-announcement@" + wantHash
+	if result.EvidenceRef != wantRef {
+		t.Fatalf("evidence_ref=%q want %q", result.EvidenceRef, wantRef)
+	}
+	if !result.hasValidCollectionSeal() {
+		t.Fatal("response provenance must be covered by collection seal")
 	}
 }
 

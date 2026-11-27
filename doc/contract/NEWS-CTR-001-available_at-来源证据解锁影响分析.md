@@ -1227,3 +1227,14 @@ G2 已落地 `official_api` JSON 采集路径；本组补齐 G1，使 1.19.3 的
 - **绑定闭环校验**：配置加载阶段拒绝资格记录找不到精确 Source/Endpoint/Provider 绑定或字段路径未获三方授权；Server 组合根再次校验注册、Provider 目录与资格目录，并在数据库中的 Source/Endpoint/Provider 三个当前策略指针全部发布后才允许 Run 执行。`seDate` 窗口与样本哈希绑定，窗口变化必须重新采样并用新资格记录 supersede。
 - **状态边界**：本组只完成策略注册、当前策略发布与资格目录；没有创建 Evidence/Decision，没有把 `parsed` 升级为 `verified`，没有生成生产 `available_at`。G3-G5 的 Qualify→Record→Review 编排、B 组真库门禁仍未完成；NEWS-BLK-07/RSC-002 保持 SHELVED，生产 `available_at` 继续为 null。
 - **CI**：代码提交 `868196b74bd7d45e49e3b26f30e89183fba76df3` 的 15 个 check run 全部 `completed/success`；这不改变上述状态边界。
+
+## 1.21 G3 Qualify 生产调用链（2026-11-27）
+
+G3 只补 `Collect/Ingest → Qualify`，不创建 Evidence/Decision，不生成生产 `available_at`。
+
+- **真实响应 provenance**：`CollectSourceResult` 新增 `ResponseHash`（成功响应原始字节的 SHA-256）和 `EvidenceRef`（`response-snapshot:<source>/<endpoint>@<hash>` 内部定位符）。二者进入采集封印，调用方修改后封印校验失败；`EvidenceRef` 不含 URL、凭据或敏感 query，且不声称原始响应已持久化。
+- **七键绑定传递**：新增 `QualifyCollectedAvailability` 用例，从 `SourceEndpointRegistration` 读取 Source/Endpoint/Provider 三组身份与策略版本，组成 `AvailabilityEvidenceSourceBinding`；字段路径只能来自启动资格目录，不接受调用方运行时注入。
+- **结果边界**：对每条 `Candidate.PublishedAtRaw` 调用既有 `QualifyAvailabilityEvidence.Execute`，输出 `QualifiedCollectedAvailability`（EntryIndex、SourceItemID、七键绑定、未可信候选、ParserVersion/ReviewRuleVersion、provenance）。该结果保留在 `FeedCollectionResult.QualifiedAvailability` 的内存字段，不进入冻结的 Stage payload/schema。cninfo 的 `1793376000000` 经 DEC-073 边界解析得到 `2026-10-31T15:59:59Z`，`Precision=disclosure_boundary`，仍为候选而非 verified。
+- **生产装配**：News Stage adapter 在 ingest 前调用 qualifier；资格失败时该来源标记 `availability_qualification_failed` 并跳过 ingest，避免未资格化数据进入正式链。Server 组合根把 G1 已构造但此前闲置的资格目录接入 qualifier。RSS/Licensed 无资格目录条目时按既有路径运行。
+- **TDD 与变异**：新增 8 项针对性测试。六处变异均有效失败并恢复：响应哈希未写入、Provider 策略版本被丢弃、采集封印校验被移除、Stage qualifier 调用被移除、字段路径来源被清空、披露日边界解析被关闭。全仓 `go test ./... -count=1`、`go vet ./...`、`gofmt -l`、`git diff --check` 通过。
+- **状态边界**：`EvidenceRef` 仅是本次执行的内部响应快照定位符；原始响应持久化、Evidence 落库与 Review 决策仍属 G4/G5，且需在写入前确认留存授权与可复核性。生产 `available_at` 继续为 null，NEWS-BLK-07/RSC-002 保持 SHELVED。

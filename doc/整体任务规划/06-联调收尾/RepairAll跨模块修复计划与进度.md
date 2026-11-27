@@ -1806,3 +1806,13 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - **验证**：`go test ./... -count=1`、`go vet ./...`、`gofmt -l`、`git diff --check` 全通过；`.env.example` 已给出三组真实 cninfo 配置与窗口绑定说明。
 - **状态边界**：G1 不等于生产闭环完成。仍缺 G3-G5 Qualify→Record→Review 编排、B 组真库门禁；NEWS-BLK-07/RSC-002 保持 SHELVED，生产 `available_at` 继续为 null。
 - **CI 状态（回填）**：提交 `868196b74bd7d45e49e3b26f30e89183fba76df3` 的 15 个 check run 全部 `completed/success`：required-checks `45972896034`、Full integration checks `45972896027`（Job `140417406465`）、Go test suite `45972896017`，其余 News/Research/Researchflow/Notification/Market-data 集成与专项检查均 success。
+
+## 2026-11-27 第③项 G3：Qualify 生产调用链
+
+- **范围**：打通 `Collect/Ingest → Qualify`，把 G1 的真实七键绑定、G2 的 `announcementTime` 原始值与启动资格目录接到既有 `QualifyAvailabilityEvidence`；不创建 Evidence/Decision，不生成生产 `available_at`。
+- **真实 provenance**：`CollectSourceResult` 新增 `ResponseHash`（成功响应原始字节 SHA-256）与 `EvidenceRef`（`response-snapshot:<source>/<endpoint>@<hash>`）；两者进入采集封印，不含 URL/凭据，不声称响应已持久化。
+- **调用链**：新增 `QualifyCollectedAvailability` 用例；字段路径只来自启动资格目录；Stage adapter 在 ingest 前调用 qualifier，失败即标记 `availability_qualification_failed` 并跳过 ingest。Server 组合根把 G1 资格目录接入 qualifier，RSS/Licensed 无资格条目时行为不变。
+- **结果边界**：`QualifiedCollectedAvailability` 携带 EntryIndex、SourceItemID、七键绑定、未可信候选和 provenance，作为 `FeedCollectionResult.QualifiedAvailability` 仅在进程内保留；Stage payload/schema 字节不变。cninfo 样本值解析为 `2026-10-31T15:59:59Z` / `disclosure_boundary`，仍是候选。
+- **TDD 与变异**：新增 8 项针对性测试；六处变异均有效失败并恢复：响应哈希未写入、Provider 策略版本被丢弃、采集封印校验移除、Stage qualifier 调用移除、字段路径来源清空、披露日边界解析关闭。
+- **验证**：`go test ./... -count=1`、`go vet ./...`、`gofmt -l`、`git diff --check` 全通过。CI 状态：待提交后按 SHA 回填。
+- **状态边界**：G4 Record、G5 Review 与 B 组真库门禁仍未完成；原始响应持久化/留存授权与可复核性须在 Evidence 写入前解决。NEWS-BLK-07/RSC-002 保持 SHELVED，生产 `available_at` 继续为 null。

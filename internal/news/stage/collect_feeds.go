@@ -71,6 +71,9 @@ type FeedCollectionResult struct {
 	QualitySummary json.RawMessage
 	Retryable      bool
 	ReasonCodes    []string
+	// QualifiedAvailability is an in-process G3 artifact for G4/G5. It is not
+	// part of the frozen Stage payload and is never serialized to Stage output.
+	QualifiedAvailability []app.QualifiedCollectedAvailability `json:"-"`
 }
 
 type FeedSourceCollector interface {
@@ -81,10 +84,19 @@ type FeedSourceIngester interface {
 	Execute(context.Context, app.IngestCollectedSourceRequest) ([]domain.Observation, error)
 }
 
+// CollectedAvailabilityQualifier is the G3 boundary. It consumes an already
+// collected result and returns untrusted availability candidates; it never
+// records Evidence or reaches available_at.
+type CollectedAvailabilityQualifier interface {
+	Execute(context.Context, app.QualifyCollectedAvailabilityRequest) ([]app.QualifiedCollectedAvailability, error)
+}
+
 type FeedCollectionAdapter struct {
-	registrations []app.SourceEndpointRegistration
-	collect       FeedSourceCollector
-	ingest        FeedSourceIngester
+	registrations           []app.SourceEndpointRegistration
+	collect                 FeedSourceCollector
+	ingest                  FeedSourceIngester
+	availabilityQualifier   CollectedAvailabilityQualifier
+	qualificationFieldPaths []string
 }
 
 func NewFeedCollectionAdapter(
@@ -112,6 +124,42 @@ func NewFeedCollectionAdapter(
 		}
 	}
 	return &FeedCollectionAdapter{registrations: owned, collect: collect, ingest: ingest}, nil
+}
+
+// NewFeedCollectionAdapterWithAvailabilityQualifier adds the G3 in-memory
+// qualification step. Field paths are supplied only by the trusted startup
+// qualification catalog and are copied/deduplicated before use.
+func NewFeedCollectionAdapterWithAvailabilityQualifier(
+	registrations []app.SourceEndpointRegistration,
+	collect FeedSourceCollector,
+	ingest FeedSourceIngester,
+	qualifier CollectedAvailabilityQualifier,
+	fieldPaths []string,
+) (*FeedCollectionAdapter, error) {
+	adapter, err := NewFeedCollectionAdapter(registrations, collect, ingest)
+	if err != nil {
+		return nil, err
+	}
+	if qualifier == nil || len(fieldPaths) == 0 {
+		return nil, ErrFeedCollectionAdapterRequired
+	}
+	ownedPaths := make([]string, 0, len(fieldPaths))
+	seen := make(map[string]struct{}, len(fieldPaths))
+	for _, fieldPath := range fieldPaths {
+		fieldPath = strings.TrimSpace(fieldPath)
+		if fieldPath == "" {
+			return nil, ErrFeedCollectionAdapterRequired
+		}
+		if _, exists := seen[fieldPath]; exists {
+			continue
+		}
+		seen[fieldPath] = struct{}{}
+		ownedPaths = append(ownedPaths, fieldPath)
+	}
+	sort.Strings(ownedPaths)
+	adapter.availabilityQualifier = qualifier
+	adapter.qualificationFieldPaths = ownedPaths
+	return adapter, nil
 }
 
 // SourceEndpointResourceRef is the stable, URL-free Source/Endpoint identity used for collection requests.
@@ -207,6 +255,7 @@ func (a *FeedCollectionAdapter) Execute(
 	}
 	reasonSet := make(map[string]struct{})
 	retryableFailureCount := 0
+	allQualifiedAvailability := make([]app.QualifiedCollectedAvailability, 0)
 	for _, resourceRef := range resourceRefs {
 		if err := ctx.Err(); err != nil {
 			return FeedCollectionResult{}, err
@@ -267,6 +316,26 @@ func (a *FeedCollectionAdapter) Execute(
 		}
 		outcome.CollectedCount = len(collection.Entries)
 		output.CollectedEntryCount += len(collection.Entries)
+		var qualifiedAvailability []app.QualifiedCollectedAvailability
+		if a.availabilityQualifier != nil && len(a.qualificationFieldPaths) > 0 {
+			qualifiedAvailability, err = a.availabilityQualifier.Execute(ctx, app.QualifyCollectedAvailabilityRequest{
+				Registration: registration,
+				Collection:   collection,
+				FieldPaths:   a.qualificationFieldPaths,
+			})
+			if err != nil {
+				if ctxErr := ctx.Err(); ctxErr != nil {
+					return FeedCollectionResult{}, ctxErr
+				}
+				outcome.Status = "failed"
+				outcome.ErrorCode = "availability_qualification_failed"
+				output.FailedSourceCount++
+				reasonSet["news_feed_source_failed"] = struct{}{}
+				output.Sources = append(output.Sources, outcome)
+				continue
+			}
+			allQualifiedAvailability = append(allQualifiedAvailability, qualifiedAvailability...)
+		}
 		observations, err := a.ingest.Execute(ctx, app.IngestCollectedSourceRequest{
 			Collection:        collection,
 			IdempotencyPrefix: strings.Join([]string{runID, stageCode, registration.SourceID, registration.EndpointID}, "/"),
@@ -346,8 +415,9 @@ func (a *FeedCollectionAdapter) Execute(
 	return FeedCollectionResult{
 		OutputType: CollectFeedsOutputType, SchemaVersion: CollectFeedsSchemaVersion,
 		Payload: payload, QualitySummary: quality,
-		Retryable:   retryableFailureCount > 0 && retryableFailureCount == output.FailedSourceCount && output.SkippedSourceCount == 0,
-		ReasonCodes: reasons,
+		Retryable:             retryableFailureCount > 0 && retryableFailureCount == output.FailedSourceCount && output.SkippedSourceCount == 0,
+		ReasonCodes:           reasons,
+		QualifiedAvailability: allQualifiedAvailability,
 	}, nil
 }
 
