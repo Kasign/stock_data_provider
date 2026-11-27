@@ -163,6 +163,20 @@ func TestNewsAvailabilityPITResolverMariaDBIntegration(t *testing.T) {
 	assertAvailableAt(secondDecisionAt.Add(-time.Microsecond), &candidateAvailableAt)
 	assertListCount(secondDecisionAt.Add(-time.Microsecond), 1)
 
+	// DEC-073 disclosure_boundary 是 PIT-safe 精度（见 domain.IsPITSafeAvailabilityPrecision
+	// 与 NEWS-CTR-001 3.0.0）。读取路径必须接受该精度的 verified 证据；否则即使上游
+	// 正确落库披露日保守边界，可用时间仍被过滤为 null。
+	if _, err := db.ExecContext(ctx, `UPDATE news_version_availability_evidence
+		SET source_precision = 'disclosure_boundary' WHERE evidence_id = ?`, evidenceID); err != nil {
+		t.Fatalf("set disclosure_boundary precision: %v", err)
+	}
+	assertAvailableAt(secondDecisionAt.Add(-time.Microsecond), &candidateAvailableAt)
+	assertListCount(secondDecisionAt.Add(-time.Microsecond), 1)
+	if _, err := db.ExecContext(ctx, `UPDATE news_version_availability_evidence
+		SET source_precision = 'second' WHERE evidence_id = ?`, evidenceID); err != nil {
+		t.Fatalf("restore second precision: %v", err)
+	}
+
 	if _, err := db.ExecContext(ctx, `INSERT INTO news_version_availability_decisions
 		(decision_id, version_id, decision_seq, status, selected_evidence_id,
 		 considered_evidence_ids, reason_code, review_rule_version,

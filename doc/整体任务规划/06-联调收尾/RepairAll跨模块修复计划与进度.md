@@ -1756,4 +1756,13 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - **TDD 与变异**：7 项单测覆盖请求合法性、身份完整、状态、空输出、凭据不泄漏、安全消息复用。变异"移除身份 fail-closed"使 `TestEvaluateProbeRejectsIncompleteIdentity` 有效失败；变异"回显原始错误"使 `TestEvaluateProbeCallErrorNeverLeaksSecret` 有效失败；恢复后全绿。未配置时运行命令正确 fail-closed（退出码 1，无敏感输出）。
 - **验证**：`go test ./... -count=1`、`go vet ./cmd/llm-gateway-check/...`、`go build ./cmd/llm-gateway-check`、`git diff --check` 全通过。
 - **文档**：新增 `doc/server/LLM网关配置与真实验收手册.md`；更新 `doc/server/模块总任务规划和进度.md` SRV-010 卡点表述。
-- **状态边界**：本组只交付配置与验收入口，不代表真实验收通过、SRV-010 关闭或完整报告成功路径可用。仍缺 Owner 执行的真实验收结果、真实 Capability Evidence/Secret 运行值，以及 projector 与上游给料闭环。CI 状态：本地全绿，待提交后按 SHA 回填。
+- **状态边界**：本组只交付配置与验收入口，不代表真实验收通过、SRV-010 关闭或完整报告成功路径可用。仍缺 Owner 执行的真实验收结果、真实 Capability Evidence/Secret 运行值，以及 projector 与上游给料闭环。
+- **CI 状态（回填）**：提交 `f29cde119061a9be38240561640d6ae0688a2b06` 的 15 个 check run 全部 `completed/success`：required-checks、Full integration checks、Test root Go module、News MariaDB Repository and Migration integration、Market-data MariaDB migration and PIT persistence、Researchflow/Research/Notification 各模块 unit/race/vet 与 MariaDB lifecycle integration、Validate Compose/WebUI、Probe real public provider responses 均 success。
+
+## 2026-11-27 第③项 G6：DEC-073 披露日精度读取路径同步修复
+
+- **缺陷根因**：DEC-073 已把 `disclosure_boundary` 定为合法 PIT-safe 精度（领域 `IsPITSafeAvailabilityPrecision` 与 NEWS-CTR-001 3.0.0 已包含），但 News 存储层落地时漏同步两处：① `evidence_query.go` 的 PIT 读取白名单仍为 `('second','minute')`；② `migrations.go` 中 `source_precision` 列为 `VARCHAR(16)`，装不下 19 字符的 `disclosure_boundary`。后果：即使上游正确落库披露日保守边界且审核通过，读路径仍把证据过滤掉，`available_at` 恒为 null。这是真实 fail-closed 一致性缺陷，非外部依赖。
+- **修复**：`source_precision` 列宽 `16 → 32`（覆盖所有枚举值且留余量）；PIT 白名单加入 `disclosure_boundary`，并加注释指向领域权威与 3.0.0 契约以防再次漂移。按 AGENTS.md 规则 16，News 为单一 V1 baseline、不考虑历史数据、可重建表，故直接改 V1 migration。
+- **TDD 与变异**：在 `availability_pit_integration_test.go` 的 PIT 集成测试中新增 `disclosure_boundary` 精度用例（改精度后仍应可读）。修复前因列宽不足失败，暴露 schema 根因；修复后在干净测试库 `news_g6_test` 上通过。变异"把白名单改回旧值"使新断言有效失败，恢复后全绿。
+- **验证**：`go test ./... -count=1`、`go vet ./internal/news/...`、`gofmt -l`、`git diff --check` 全通过；真库 PIT 集成测试在干净库上通过。
+- **状态边界**：G6 只修复"已落库的披露日证据能被正确读出"这一环，不代表第③项生产闭环完成。仍缺 cninfo 真实来源注册、JSON API adapter、资格目录真实条目、官方字段语义证明、脱敏样本哈希与 Evidence/Decision 落库编排（调研 G1/G2/G3/G4/G5/G7/G8），这些为真实外部值，不伪造。CI 状态：本地全绿，待提交后按 SHA 回填。

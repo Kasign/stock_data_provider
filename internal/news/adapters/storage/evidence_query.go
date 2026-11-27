@@ -170,7 +170,7 @@ const evidencePITSelect = `SELECT
 				JSON_QUOTE(availability_decision.selected_evidence_id)) = 1
 			AND availability_evidence.parse_status = 'parsed'
 			AND availability_evidence.parse_reason_code = ''
-			AND availability_evidence.source_precision IN ('second', 'minute')
+			AND availability_evidence.source_precision IN ('second', 'minute', 'disclosure_boundary')
 			AND NULLIF(TRIM(availability_evidence.source_timezone_or_offset), '') IS NOT NULL
 			AND NULLIF(TRIM(availability_evidence.field_path), '') IS NOT NULL
 			AND availability_evidence.field_path = TRIM(availability_evidence.field_path)
