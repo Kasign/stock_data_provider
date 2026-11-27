@@ -149,6 +149,26 @@ func LoadForRoot() (Config, error) {
 	return load(true)
 }
 
+// LoadForCollector 加载采集类工具（如 cmd/limit-pool-collect）需要的最小配置：
+// 存储 DSN 与 Provider 超时。
+//
+// 它不要求 Redis，也不要求任何行情 Provider 的凭据：这类工具只调用固定的公开行情
+// 端点并写入事实快照，既不缓存也不做授权签发。存储仍必须显式配置，缺配置就失败，
+// 不会静默降级成「没有存储」。
+func LoadForCollector() (Config, error) {
+	if err := validateEnvironment(); err != nil {
+		return Config{}, err
+	}
+	dsn, err := resolveMySQLDSN(false)
+	if err != nil {
+		return Config{}, err
+	}
+	return Config{
+		MySQLDSN:        dsn,
+		ProviderTimeout: duration("MARKET_DATA_PROVIDER_TIMEOUT", 12*time.Second),
+	}, nil
+}
+
 func load(allowRootInjectedStorage bool) (Config, error) {
 	if err := validateEnvironment(); err != nil {
 		return Config{}, err

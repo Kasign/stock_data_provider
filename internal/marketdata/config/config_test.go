@@ -969,3 +969,37 @@ func TestLoadDisabledTickFlowDoesNotRequireAPIKeyForStaleCapabilities(t *testing
 		t.Fatalf("test must preserve stale capability flags to cover the regression: %+v", cfg.ProviderSettings["tickflow"])
 	}
 }
+
+func TestLoadForCollectorNeedsStorageButNotRedis(t *testing.T) {
+	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "false")
+	t.Setenv("MARKET_DATA_DB_HOST", "")
+	t.Setenv("MARKET_DATA_DB_PORT", "")
+	t.Setenv("MARKET_DATA_DB_USER", "")
+	t.Setenv("MARKET_DATA_DB_PASSWORD", "")
+	t.Setenv("MARKET_DATA_DB_NAME", "")
+	t.Setenv("MARKET_DATA_REDIS_ADDR", "")
+	t.Setenv("MARKET_DATA_MYSQL_DSN", "collector:secret@tcp(127.0.0.1:3306)/market_data?parseTime=true&loc=UTC")
+	t.Setenv("MARKET_DATA_PROVIDER_TIMEOUT", "20s")
+
+	cfg, err := LoadForCollector()
+	if err != nil {
+		t.Fatalf("collector config must not require Redis: %v", err)
+	}
+	if cfg.MySQLDSN == "" {
+		t.Fatal("collector config must keep the configured DSN")
+	}
+	if cfg.ProviderTimeout != 20*time.Second {
+		t.Fatalf("provider timeout = %s, want 20s", cfg.ProviderTimeout)
+	}
+}
+
+func TestLoadForCollectorFailsWithoutStorage(t *testing.T) {
+	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "false")
+	t.Setenv("MARKET_DATA_DB_HOST", "")
+	t.Setenv("MARKET_DATA_DB_USER", "")
+	t.Setenv("MARKET_DATA_DB_NAME", "")
+	t.Setenv("MARKET_DATA_MYSQL_DSN", "")
+	if _, err := LoadForCollector(); err == nil {
+		t.Fatal("missing storage configuration must fail instead of degrading silently")
+	}
+}
