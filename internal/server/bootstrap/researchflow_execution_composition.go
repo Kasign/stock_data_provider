@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"example.com/stock-analysis-flow/internal/llm"
 	marketdatabootstrap "example.com/stock-analysis-flow/internal/marketdata/bootstrap"
 	newsplatform "example.com/stock-analysis-flow/internal/news/adapters/platform"
 	newsstorage "example.com/stock-analysis-flow/internal/news/adapters/storage"
@@ -21,6 +22,7 @@ import (
 	researchflowstorage "example.com/stock-analysis-flow/internal/researchflow/storage"
 	"example.com/stock-analysis-flow/internal/researchflow/template"
 	serverconfig "example.com/stock-analysis-flow/internal/server/config"
+	"example.com/stock-analysis-flow/internal/server/llmtransport"
 	serverresources "example.com/stock-analysis-flow/internal/server/resources"
 )
 
@@ -48,6 +50,9 @@ type researchflowComposition struct {
 	stageExecutor     researchflowapplication.StageExecutor
 	clock             *researchflowstorage.MySQLDatabaseClock
 	ids               researchflowapplication.IDGenerator
+	llmProvider       llm.Provider
+	llmModel          string
+	llmCapabilities   llm.CapabilityState
 }
 
 func newResearchflowComposition(
@@ -57,12 +62,33 @@ func newResearchflowComposition(
 	newsConfig newsconfig.Config,
 	capacity serverconfig.ResearchflowCapacity,
 	dataModule *marketdatabootstrap.Module,
+	llmConfigs ...serverconfig.LLM,
 ) (*researchflowComposition, error) {
 	if ctx == nil || shared == nil || shared.DB == nil || shared.HTTPClient == nil || newsRepository == nil {
 		return nil, errors.New("Researchflow composition requires shared MariaDB and Platform HTTP Client resources")
 	}
 	if !capacity.Configured {
 		return nil, errors.New("Researchflow composition requires explicit database-wide capacity configuration")
+	}
+	if len(llmConfigs) > 1 {
+		return nil, errors.New("Researchflow composition accepts at most one LLM configuration")
+	}
+	var (
+		llmProvider     llm.Provider
+		llmModel        string
+		llmCapabilities llm.CapabilityState
+	)
+	if len(llmConfigs) == 1 && llmConfigs[0].Configured {
+		provider, err := llmtransport.NewResponsesAdapter(
+			shared, llmConfigs[0].Provider, llmConfigs[0].APIKey,
+			llmConfigs[0].Capabilities, llm.SystemClock{}, llmConfigs[0].Policy,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("compose LLM Provider: %w", err)
+		}
+		llmProvider = provider
+		llmModel = llmConfigs[0].Provider.DefaultModel
+		llmCapabilities = llmConfigs[0].Capabilities
 	}
 
 	newsStage, err := newNewsSearchStageComposition(newsConfig, shared.HTTPClient)
@@ -348,6 +374,7 @@ func newResearchflowComposition(
 		parameterSchemas: parameterSchemas, applicability: researchflowApplicabilityEvaluator{},
 		outputRegistries: outputRegistries, stageExecutor: stageExecutor,
 		clock: clock, ids: researchflowIDGenerator{},
+		llmProvider: llmProvider, llmModel: llmModel, llmCapabilities: llmCapabilities,
 	}, nil
 }
 

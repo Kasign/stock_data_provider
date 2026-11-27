@@ -167,6 +167,7 @@ func Run(ctx context.Context) (runErr error) {
 		requiresResearchflowComposition(serverRole, ownerSession != nil, feedConfigured) {
 		researchflowExecution, err = newResearchflowComposition(
 			ctx, storageResources, newsRepository, newsConfig, processConfig.ResearchflowCapacity, marketDataModule,
+			processConfig.LLM,
 		)
 		if err != nil {
 			return fmt.Errorf("装配 Researchflow 执行依赖失败: %w", err)

@@ -25,6 +25,7 @@ type Process struct {
 	ResearchflowCapacity      ResearchflowCapacity
 	ResearchflowRunDeadline   time.Duration
 	ResearchflowLocalWorkers  int
+	LLM                       LLM
 }
 
 // LoadProcess 在启动阶段一次性解析 Server 进程级配置。
@@ -101,6 +102,9 @@ func LoadProcess(env platformconfig.Env) (Process, error) {
 		}
 	} else if raw := strings.TrimSpace(env.String("RESEARCHFLOW_LOCAL_WORKERS", "")); raw != "" {
 		return Process{}, fmt.Errorf("RESEARCHFLOW_LOCAL_WORKERS 仅在 Researchflow Worker 或 All 角色且已启用 Capacity 时允许配置")
+	}
+	if cfg.LLM, err = LoadLLM(env); err != nil {
+		return Process{}, err
 	}
 	return cfg, nil
 }

@@ -1722,3 +1722,10 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - **装配结论**：生产 `NewRunFinalizer` 仍注入 `nil` projector；`ComposeResult` 与 `RunResultFromComposed` 只在测试中使用。可复用的同 Run 授权读取入口已有 `readQuantResultForRun`、`readNewsEvidenceForRun` 与 Stage Output Registry，但 Research `Context`/`Claims` 与 `Limitations` 无生产给料，LLM `ModelResponse` 无真实 Provider。
 - **不妥协边界**：不注入返回 nil 或固定错误的占位 projector；前者空转掩盖缺口，后者会让所有 normal finalization 失败。不伪造 Provider、响应、能力证据或空壳报告，不放宽 R3 `available_at` 语义。
 - **当前结论**：R4 来源无关链路完成；生产完整报告成功路径保持 `BLOCKED`，本轮不产生代码改动。解除前置：真实 Gateway 版本/模型 ID/CapabilityState 与证据、受控 DestinationPolicy、Research Context/Claims/Limitations 权威给料，以及 R3 T5 官方字段语义与可审计样本。
+
+## 2026-11-27 四项根因根治 R4-R5-T1：LLM Provider 配置与受控构造
+
+- **配置门禁**：新增 `internal/server/config/llm.go`，`SERVER_LLM_PROVIDER_JSON` 与 `SERVER_LLM_CAPABILITY_JSON` 成对加载；未配置时保持 disabled，半配置、Strict JSON 多余字段/尾随内容、Provider 无效或 Capability 证据不匹配均 fail-closed。`api_key_secret_ref` 只解析为不透明 Secret，不记录值。
+- **目标绑定**：DestinationPolicy 从 HTTPS BaseURL 固定派生为单一 dependency/host/port，禁止 HTTP、重定向和传输重试；配置合法时 `newResearchflowComposition` 调用 `llmtransport.NewResponsesAdapter` 并把 Provider/Model/CapabilityState 保存到执行组合。
+- **TDD 与变异**：覆盖未配置、完整配置、半配置、缺凭据与跨 Provider 能力证据；变异“移除能力证据校验”使跨 Provider 误配用例有效失败，恢复后通过。`go test ./... -count=1`、`go vet ./...`、`git diff --check` 通过。
+- **状态边界**：本组只完成配置与 Adapter 构造能力；没有真实 Gateway 配置、真实 Generate/SSE 联调或 RunResult projector 消费者，SRV-010 保持 `BLOCKED`。
