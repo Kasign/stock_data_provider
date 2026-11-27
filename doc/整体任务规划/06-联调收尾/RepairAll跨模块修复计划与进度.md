@@ -1777,3 +1777,4 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - **文档**：新增 `doc/contract/NEWS-CTR-001-available_at-来源证据解锁影响分析.md` 1.19 节，含实测证据、字段填充表（三类值分野）、哈希语义判定、绑定键完整性约束。
 - **关键架构发现**：`domain.AccessMethod` 早已预留 `AccessOfficialAPI`（`policy.go:24`），但 `feed_sources.go:151` 与 `CollectSource` 只接受 `rss`/`licensed_feed`、只走 RSS/Atom 解析。cninfo 是 JSON POST 接口，需新增 `official_api` JSON 采集/解析路径（G2），非仅加配置。
 - **状态边界**：绑定键 8 维中的 7 个内部标识须与真实 Source/Endpoint/Provider 策略版本注册逐字一致，当前这些注册不存在（G1 未装配 Feed Stage），凭空写资格目录会造成"有资格无来源"断裂绑定=伪造证据，故本轮不注册。下一步按依赖顺序：G2 `official_api` JSON 路径 + G1 真实策略注册 → 资格目录 + G3-G5 编排 → B 组真库门禁。此前 NEWS-BLK-07/RSC-002 保持 SHELVED，生产 `available_at` 继续为 null。本次为文档交付，无需代码/CI（SHA 待文档提交后回填）。
+- **CI 状态（回填）**：提交 `0f22aabbb8fc8cc620bc8f2b958e497ecfbe4155` 的 13 个 check run 全部 `completed/success`（required-checks、Full integration checks、各模块 unit/race/vet 与 MariaDB lifecycle integration、Compose/WebUI、Market-data PIT 均 success）。
