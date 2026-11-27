@@ -76,12 +76,15 @@ func ComposeResult(input ResultCompositionInput, quantRegistry *Registry) (Compo
 	if err != nil {
 		return ComposedResearchResult{}, err
 	}
-	contextSourceRefs, err := validateContextReferences(input.Context, evidenceIDs)
+	contextSourceRefs, contextEvidenceRefs, err := validateContextReferences(input.Context, evidenceIDs)
 	if err != nil {
 		return ComposedResearchResult{}, err
 	}
 	claimIDs, err := validateResearchClaims(input.Claims, evidenceIDs, input.SystemAsOf)
 	if err != nil {
+		return ComposedResearchResult{}, err
+	}
+	if err := validateAuthoritativeClaimRefs(input.Evidence, input.Claims, contextEvidenceRefs); err != nil {
 		return ComposedResearchResult{}, err
 	}
 	for _, evidence := range input.Evidence {
@@ -187,11 +190,13 @@ func ComposeResult(input ResultCompositionInput, quantRegistry *Registry) (Compo
 	if err != nil {
 		return ComposedResearchResult{}, fmt.Errorf("%w: copy Research Claims: %v", ErrInvalidResultComposition, err)
 	}
-	limitations := append([]string{}, input.Limitations...)
-	for _, limitation := range limitations {
-		if strings.TrimSpace(limitation) == "" || limitation != strings.TrimSpace(limitation) {
-			return ComposedResearchResult{}, fmt.Errorf("%w: invalid limitation", ErrInvalidResultComposition)
-		}
+	limitations, err := authoritativeLimitations(input, quantResults, riskDecision)
+	if err != nil {
+		return ComposedResearchResult{}, err
+	}
+	providedLimitations := sortedUniqueRunResultRefs(input.Limitations)
+	if !equalStringSlices(limitations, providedLimitations) {
+		return ComposedResearchResult{}, fmt.Errorf("%w: Limitations must be the exact authoritative projection", ErrInvalidResultComposition)
 	}
 	return ComposedResearchResult{
 		RunID: input.RunID, SystemAsOf: input.SystemAsOf,
@@ -202,31 +207,32 @@ func ComposeResult(input ResultCompositionInput, quantRegistry *Registry) (Compo
 	}, nil
 }
 
-func validateContextReferences(value researchapp.ResearchContext, evidenceIDs map[string]struct{}) (map[string]struct{}, error) {
+func validateContextReferences(value researchapp.ResearchContext, evidenceIDs map[string]struct{}) (map[string]struct{}, map[string]struct{}, error) {
 	included := make(map[string]struct{}, len(value.IncludedSections))
 	omitted := make(map[string]struct{}, len(value.OmittedSections))
 	sourceRefs := make(map[string]struct{})
+	includedEvidenceRefs := make(map[string]struct{})
 	sectionIDs := make(map[string]struct{}, len(value.SectionRefs))
 	for _, sectionID := range value.IncludedSections {
 		if strings.TrimSpace(sectionID) == "" || sectionID != strings.TrimSpace(sectionID) {
-			return nil, fmt.Errorf("%w: invalid included section id", ErrInvalidResultComposition)
+			return nil, nil, fmt.Errorf("%w: invalid included section id", ErrInvalidResultComposition)
 		}
 		if _, exists := included[sectionID]; exists {
-			return nil, fmt.Errorf("%w: duplicate included section %q", ErrInvalidResultComposition, sectionID)
+			return nil, nil, fmt.Errorf("%w: duplicate included section %q", ErrInvalidResultComposition, sectionID)
 		}
 		included[sectionID] = struct{}{}
 	}
 	for _, section := range value.SectionRefs {
 		if _, exists := sectionIDs[section.SectionID]; exists {
-			return nil, fmt.Errorf("%w: duplicate Context section %q", ErrInvalidResultComposition, section.SectionID)
+			return nil, nil, fmt.Errorf("%w: duplicate Context section %q", ErrInvalidResultComposition, section.SectionID)
 		}
 		sectionIDs[section.SectionID] = struct{}{}
 		if section.Included {
 			if _, exists := included[section.SectionID]; !exists {
-				return nil, fmt.Errorf("%w: included section %q missing from included_sections", ErrInvalidResultComposition, section.SectionID)
+				return nil, nil, fmt.Errorf("%w: included section %q missing from included_sections", ErrInvalidResultComposition, section.SectionID)
 			}
 		} else if _, exists := included[section.SectionID]; exists {
-			return nil, fmt.Errorf("%w: excluded section %q listed as included", ErrInvalidResultComposition, section.SectionID)
+			return nil, nil, fmt.Errorf("%w: excluded section %q listed as included", ErrInvalidResultComposition, section.SectionID)
 		}
 		if section.Included {
 			for _, ref := range section.SourceRefs {
@@ -236,41 +242,144 @@ func validateContextReferences(value researchapp.ResearchContext, evidenceIDs ma
 				}
 				sourceRefs[ref] = struct{}{}
 			}
+			for _, ref := range section.EvidenceRefs {
+				includedEvidenceRefs[ref] = struct{}{}
+			}
 		}
 		for _, ref := range section.EvidenceRefs {
 			if _, exists := evidenceIDs[ref]; !exists {
-				return nil, fmt.Errorf("%w: Context section %q references missing Evidence %q", ErrInvalidResultComposition, section.SectionID, ref)
+				return nil, nil, fmt.Errorf("%w: Context section %q references missing Evidence %q", ErrInvalidResultComposition, section.SectionID, ref)
 			}
 		}
 	}
 	for sectionID := range included {
 		if _, exists := sectionIDs[sectionID]; !exists {
-			return nil, fmt.Errorf("%w: included section %q has no section reference", ErrInvalidResultComposition, sectionID)
+			return nil, nil, fmt.Errorf("%w: included section %q has no section reference", ErrInvalidResultComposition, sectionID)
+		}
+	}
+	for evidenceID := range evidenceIDs {
+		if _, exists := includedEvidenceRefs[evidenceID]; !exists {
+			return nil, nil, fmt.Errorf("%w: Evidence %q is not included by Research Context", ErrInvalidResultComposition, evidenceID)
 		}
 	}
 	for _, section := range value.OmittedSections {
 		if strings.TrimSpace(section.SectionID) == "" || !validSourceOwner(section.SourceOwner) ||
 			strings.TrimSpace(section.SafeMessage) == "" || section.SourceRefs == nil ||
 			hasDuplicateOrInvalidRefs(section.SourceRefs) {
-			return nil, fmt.Errorf("%w: invalid omitted section %q", ErrInvalidResultComposition, section.SectionID)
+			return nil, nil, fmt.Errorf("%w: invalid omitted section %q", ErrInvalidResultComposition, section.SectionID)
 		}
 		switch section.ReasonCode {
 		case "not_requested", "budget_exceeded", "unavailable", "unauthorized", "quality_rejected", "failed", "duplicate":
 		default:
-			return nil, fmt.Errorf("%w: unsupported omitted-section reason %q", ErrInvalidResultComposition, section.ReasonCode)
+			return nil, nil, fmt.Errorf("%w: unsupported omitted-section reason %q", ErrInvalidResultComposition, section.ReasonCode)
 		}
 		if _, exists := omitted[section.SectionID]; exists {
-			return nil, fmt.Errorf("%w: duplicate omitted section %q", ErrInvalidResultComposition, section.SectionID)
+			return nil, nil, fmt.Errorf("%w: duplicate omitted section %q", ErrInvalidResultComposition, section.SectionID)
 		}
 		if _, exists := included[section.SectionID]; exists {
-			return nil, fmt.Errorf("%w: section %q is both included and omitted", ErrInvalidResultComposition, section.SectionID)
+			return nil, nil, fmt.Errorf("%w: section %q is both included and omitted", ErrInvalidResultComposition, section.SectionID)
 		}
 		omitted[section.SectionID] = struct{}{}
 		if section.Required && value.QualitySummary.Status == "valid" {
-			return nil, fmt.Errorf("%w: required section %q omitted from a valid Context", ErrInvalidResultComposition, section.SectionID)
+			return nil, nil, fmt.Errorf("%w: required section %q omitted from a valid Context", ErrInvalidResultComposition, section.SectionID)
 		}
 	}
-	return sourceRefs, nil
+	return sourceRefs, includedEvidenceRefs, nil
+}
+
+// validateAuthoritativeClaimRefs makes Research-owned Evidence.ClaimRef the
+// only discovery source for complete-report Claims. LLM text and unlinked
+// Claim resources can never introduce a claim into the projection.
+func validateAuthoritativeClaimRefs(evidence []researchapp.EvidenceRecord, claims []researchapp.Claim, includedEvidenceRefs map[string]struct{}) error {
+	if len(claims) == 0 {
+		return fmt.Errorf("%w: complete report needs Research Claims", ErrInvalidResultComposition)
+	}
+	claimVersions := make(map[string]int, len(claims))
+	for _, claim := range claims {
+		if previous, exists := claimVersions[claim.ClaimID]; exists && previous != claim.ClaimVersion {
+			return fmt.Errorf("%w: Claim %q has conflicting versions", ErrInvalidResultComposition, claim.ClaimID)
+		}
+		claimVersions[claim.ClaimID] = claim.ClaimVersion
+	}
+	linked := make(map[string]struct{}, len(evidence))
+	for _, record := range evidence {
+		if _, included := includedEvidenceRefs[record.EvidenceID]; !included {
+			return fmt.Errorf("%w: Evidence %q is outside the included Context", ErrInvalidResultComposition, record.EvidenceID)
+		}
+		if record.ClaimRef == nil || strings.TrimSpace(*record.ClaimRef) == "" {
+			return fmt.Errorf("%w: Evidence %q lacks an authoritative ClaimRef", ErrInvalidResultComposition, record.EvidenceID)
+		}
+		if _, exists := claimVersions[*record.ClaimRef]; !exists {
+			return fmt.Errorf("%w: Evidence %q references unknown Claim %q", ErrInvalidResultComposition, record.EvidenceID, *record.ClaimRef)
+		}
+		linked[*record.ClaimRef] = struct{}{}
+	}
+	for claimID := range claimVersions {
+		if _, exists := linked[claimID]; !exists {
+			return fmt.Errorf("%w: Claim %q is not linked from included Evidence", ErrInvalidResultComposition, claimID)
+		}
+	}
+	return nil
+}
+
+// authoritativeLimitations derives Limitations only from Research/Quant/Risk
+// authoritative sources. no_known_limitation is the explicit Research-side
+// decision that permits an empty limitation set.
+func authoritativeLimitations(input ResultCompositionInput, quantResults []QuantValidation, risk *RiskDecision) ([]string, error) {
+	values := make([]string, 0)
+	noKnownLimitation := false
+	for _, code := range input.Context.QualitySummary.ReasonCodes {
+		if code == "no_known_limitation" {
+			noKnownLimitation = true
+			continue
+		}
+		values = append(values, code)
+	}
+	for _, section := range input.Context.OmittedSections {
+		values = append(values, section.SafeMessage)
+	}
+	for _, record := range input.Evidence {
+		values = append(values, record.Limitations...)
+	}
+	for _, claim := range input.Claims {
+		values = append(values, claim.Limitations...)
+	}
+	for _, quantResult := range quantResults {
+		if quantResult.Usable {
+			continue
+		}
+		values = append(values, quantResult.ReasonCodes...)
+	}
+	if risk != nil {
+		for _, reason := range risk.Reasons {
+			if reason.Status != "not_triggered" {
+				values = append(values, reason.SafeMessage)
+			}
+		}
+	}
+	canonical := sortedUniqueRunResultRefs(values)
+	if noKnownLimitation {
+		if len(canonical) != 0 {
+			return nil, fmt.Errorf("%w: no_known_limitation conflicts with authoritative limitation sources", ErrInvalidResultComposition)
+		}
+		return []string{}, nil
+	}
+	if len(canonical) == 0 {
+		return nil, fmt.Errorf("%w: empty Limitations requires authoritative no_known_limitation decision", ErrInvalidResultComposition)
+	}
+	return canonical, nil
+}
+
+func equalStringSlices(left, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for i := range left {
+		if left[i] != right[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func validateRiskReferences(value RiskDecision, quantResultRefs, quantSnapshotRefs, unusableQuantRefs, sourceRefs, evidenceIDs map[string]struct{}) error {
@@ -415,6 +524,8 @@ func validateResearchClaims(values []researchapp.Claim, evidenceIDs map[string]s
 func validateLLMExplanation(value llmapp.ModelResponse, expectedSystemAsOf time.Time) (LLMExplanation, error) {
 	if value.Status != llmapp.ResponseCompleted || strings.TrimSpace(value.OutputText) == "" ||
 		strings.TrimSpace(value.ProviderID) == "" || strings.TrimSpace(value.ModelRequested) == "" ||
+		strings.TrimSpace(value.ModelActual) == "" || strings.TrimSpace(value.ModelVersion) == "" ||
+		strings.TrimSpace(value.ResponseID) == "" ||
 		!isUTC(value.SystemAsOf) || !value.SystemAsOf.Equal(expectedSystemAsOf) ||
 		value.Error != nil || len(value.ToolCalls) > 0 {
 		return LLMExplanation{}, ErrInvalidLLMExplanation

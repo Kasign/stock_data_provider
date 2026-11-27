@@ -31,10 +31,11 @@ func validCompositionInput() ResultCompositionInput {
 			EvidenceDraft: researchapp.EvidenceDraft{
 				EvidenceType: "fact", SourceOwner: "data", SourceRef: "snapshot-1",
 				SourceVersion: nil, SourceLocator: nil, DerivedFromRefs: []string{},
+				ClaimRef:    stringPointer("clm-1"),
 				SubjectRefs: []string{"600000.SH"}, PublishedAt: nil, AvailableAt: timePointer(now.Add(-time.Minute)),
 				SystemObservedAt: now, ValidTimeStart: nil, ValidTimeEnd: nil, SystemAsOf: now,
 				Stance: "supports", QualityStatus: "valid", ContentLevel: "summary",
-				AuthorizationRef: "auth-ev-1", Limitations: []string{},
+				AuthorizationRef: "auth-ev-1", Limitations: []string{"仅覆盖已授权的输入快照"},
 			},
 			EvidenceID:         "ev-1",
 			ContentFingerprint: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -93,6 +94,7 @@ func TestComposeResultRetainsNonUsableQuantResultsWithoutPromotingThem(t *testin
 	quant := validQuantResult()
 	quant.QualityStatus = "unknown"
 	input.QuantResults = []QuantResultEnvelope{quant}
+	input.Limitations = append(input.Limitations, "quality_not_usable")
 	registry, err := NewQuantPayloadRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -144,7 +146,14 @@ func TestComposeResultRejectsRequiredOmittedSectionMarkedValid(t *testing.T) {
 	if _, err := ComposeResult(input, nil); !errors.Is(err, ErrInvalidResultComposition) {
 		t.Fatalf("required omitted section cannot remain valid, got %v", err)
 	}
+
+	input = validCompositionInput()
+	input.Context.OmittedSections = []researchapp.ContextOmittedSection{{
+		SectionID: "alpha", SourceOwner: "data", ReasonCode: "unavailable",
+		Required: true, SourceRefs: []string{}, SafeMessage: "必需数据暂不可用",
+	}}
 	input.Context.QualitySummary.Status = "degraded"
+	input.Limitations = append(input.Limitations, "必需数据暂不可用")
 	if _, err := ComposeResult(input, nil); err != nil {
 		t.Fatalf("degraded Context should preserve required omission, got %v", err)
 	}
@@ -201,6 +210,7 @@ func TestComposeResultRejectsRiskPassUsingUnusableQuantResult(t *testing.T) {
 	}
 	risk.Status = "unknown"
 	input.RiskDecision = &risk
+	input.Limitations = append(input.Limitations, "quality_not_usable")
 	if _, err := ComposeResult(input, registry); err != nil {
 		t.Fatalf("unknown RiskDecision should be preserved, got %v", err)
 	}
@@ -298,6 +308,10 @@ func timePointer(value time.Time) *time.Time {
 	return &value
 }
 
+func stringPointer(value string) *string {
+	return &value
+}
+
 func TestComposeResultRejectsUnknownEvidenceSourceOwner(t *testing.T) {
 	input := validCompositionInput()
 	input.Evidence[0].EvidenceDraft.SourceOwner = "unknown"
@@ -358,5 +372,107 @@ func TestComposeResultRejectsInvalidUTF8AcrossNestedInputs(t *testing.T) {
 				t.Fatalf("invalid UTF-8 must be rejected before composition/JSON cloning, got %v", err)
 			}
 		})
+	}
+}
+
+func TestComposeResultRejectsEvidenceWithoutAuthoritativeClaimRef(t *testing.T) {
+	input := validCompositionInput()
+	input.Evidence[0].ClaimRef = nil
+	if _, err := ComposeResult(input, nil); !errors.Is(err, ErrInvalidResultComposition) {
+		t.Fatalf("Evidence without Research-owned ClaimRef must fail closed, got %v", err)
+	}
+}
+
+func TestComposeResultRejectsClaimNotReferencedByIncludedEvidence(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(*ResultCompositionInput)
+	}{
+		{
+			name: "evidence points to unknown claim",
+			mutate: func(input *ResultCompositionInput) {
+				input.Evidence[0].ClaimRef = stringPointer("clm-missing")
+			},
+		},
+		{
+			name: "duplicate claim id with different version",
+			mutate: func(input *ResultCompositionInput) {
+				second := input.Claims[0]
+				second.ClaimVersion = 2
+				input.Claims = append(input.Claims, second)
+			},
+		},
+		{
+			name: "claim without evidence link",
+			mutate: func(input *ResultCompositionInput) {
+				second := input.Claims[0]
+				second.ClaimID = "clm-2"
+				input.Claims = append(input.Claims, second)
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			input := validCompositionInput()
+			test.mutate(&input)
+			if _, err := ComposeResult(input, nil); !errors.Is(err, ErrInvalidResultComposition) {
+				t.Fatalf("Claim ref set must be discovered only from included Evidence, got %v", err)
+			}
+		})
+	}
+}
+
+func TestComposeResultRejectsEvidenceOutsideIncludedContextSections(t *testing.T) {
+	input := validCompositionInput()
+	second := input.Evidence[0]
+	second.EvidenceID = "ev-2"
+	second.SourceRef = "snapshot-2"
+	second.ContentFingerprint = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+	second.ClaimRef = stringPointer("clm-2")
+	input.Evidence = append(input.Evidence, second)
+	claim := input.Claims[0]
+	claim.ClaimID = "clm-2"
+	claim.SupportingEvidenceRefs = []string{"ev-2"}
+	input.Claims = append(input.Claims, claim)
+
+	if _, err := ComposeResult(input, nil); !errors.Is(err, ErrInvalidResultComposition) {
+		t.Fatalf("Evidence not included by Context must fail closed, got %v", err)
+	}
+}
+
+func TestComposeResultRejectsFreeFormLimitations(t *testing.T) {
+	input := validCompositionInput()
+	input.Limitations = []string{"LLM 自行生成的限制"}
+	if _, err := ComposeResult(input, nil); !errors.Is(err, ErrInvalidResultComposition) {
+		t.Fatalf("free-form Limitations must fail closed, got %v", err)
+	}
+}
+
+func TestComposeResultEmptyLimitationsRequireAuthoritativeDecision(t *testing.T) {
+	input := validCompositionInput()
+	input.Evidence[0].Limitations = []string{}
+	input.Limitations = []string{}
+	if _, err := ComposeResult(input, nil); !errors.Is(err, ErrInvalidResultComposition) {
+		t.Fatalf("empty Limitations without authoritative decision must fail, got %v", err)
+	}
+
+	input = validCompositionInput()
+	input.Evidence[0].Limitations = []string{}
+	input.Limitations = []string{}
+	input.Context.QualitySummary.ReasonCodes = []string{"no_known_limitation"}
+	composed, err := ComposeResult(input, nil)
+	if err != nil {
+		t.Fatalf("authoritative no_known_limitation decision should be accepted: %v", err)
+	}
+	if len(composed.Limitations) != 0 {
+		t.Fatalf("no_known_limitation should project empty Limitations, got %v", composed.Limitations)
+	}
+}
+
+func TestComposeResultRejectsIncompleteLLMResponseIdentity(t *testing.T) {
+	input := validCompositionInput()
+	input.LLMResponse.ModelActual = ""
+	if _, err := ComposeResult(input, nil); !errors.Is(err, ErrInvalidLLMExplanation) {
+		t.Fatalf("LLM response without actual model identity must fail, got %v", err)
 	}
 }

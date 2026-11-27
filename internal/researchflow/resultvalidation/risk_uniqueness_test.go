@@ -107,6 +107,7 @@ func TestComposeResultRejectsTwoRiskSources(t *testing.T) {
 func TestComposeResultProjectsRiskFromEnvelope(t *testing.T) {
 	input := validCompositionInput()
 	input.QuantResults = []QuantResultEnvelope{validQuantResult(), riskEnvelopeV2(t, authoritativeRiskDecision())}
+	input.Limitations = append(input.Limitations, "硬门禁已触发")
 	registry, err := NewQuantPayloadRegistry()
 	if err != nil {
 		t.Fatal(err)

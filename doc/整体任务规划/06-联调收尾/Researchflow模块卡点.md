@@ -93,9 +93,10 @@
 - **唯一 Owner（DEC-PLAT-002-068）**：Researchflow 持有按 RunRef 唯一关联的 `RunResult` 子资源；只持久化组合输出、LLM 解释和来源引用，不复制 Research/Quant 原始资源；`ResultSummaryRef` 保持执行摘要语义。Run 以 additive optional `result_ref` 引用完整报告，既有 1.0.0 Schema/Golden 字节不变，1.1.0 机器契约禁止非报告终态生成非空 `result_ref`。
 - **影响**：纯函数组合测试通过不代表真实 Quant/Research/LLM 数据、授权、模型调用和 Run 完成后的结果可检索；生产完整报告仍依赖 R3 来源语义与 LLM Provider 接线。
 - **处理责任**：Quant Owner（GetResult/授权/Manifest）、Research Owner（Context/Evidence/Claim/授权）、LLM Owner（真实模型调用/Tokenizer）、Researchflow（RunResult 唯一 Owner、组合与版本校验）、Server Owner（Worker/Adapter/持久化装配）。
-- **前置核查（2026-11-27）**：生产配置目录没有 LLM Provider/Gateway 加载器，`llmtransport.New` 只在测试调用；`ComposeResult`/`RunResultFromComposed` 也只在测试使用。Quant 同 Run 读取与 News Evidence 读取入口可复用，但 Research Context/Claims、Limitations 无生产给料，LLM ModelResponse 无真实 Provider。
-- **解除条件**：RunResult 原子持久化、ResultRef 授权读取和 Contract Test 已完成；剩余条件是真实 Gateway 版本/模型 ID/CapabilityState 与证据、受控 DestinationPolicy、Research Context/Claims/Limitations 权威给料、projector 生产注入，以及 R3 来源语义闭环。
-- **当前状态**：`IN_PROGRESS`（来源无关链路已完成并通过 CI）；生产成功路径保持 `BLOCKED`，阻断 FLOW-006 生产闭环。不注入占位 projector，不伪造 Provider/响应/证据或空壳报告。
+- **前置核查（2026-11-27）**：生产配置目录最初没有 LLM Provider/Gateway 加载器，`llmtransport.New` 只在测试调用；`ComposeResult`/`RunResultFromComposed` 也只在测试使用。R4-R5-T1/T2 已补齐 LLM 配置受控加载与 Research Context/Claims 授权读取准备，但 Research Context/Claims/Limitations 仍无生产给料，LLM ModelResponse 无真实 Provider。
+- **权威规则（DEC-069～072）**：Claim ref 只能从 Research Evidence/Claim Repository 发现并严格闭环；Limitations 只能由 Research/Quant/Risk 权威来源投影，空集合必须有 `no_known_limitation`；Evidence 集合必须等于 Context included sections 的 EvidenceRef 集合；LLM 响应身份必须完整且解释固定为 `non_authoritative`。`run-result` 1.0.0 Schema/Golden 字节不变，规则由运行时 fail-closed 校验承担。
+- **解除条件**：RunResult 原子持久化、ResultRef 授权读取、Contract Test 和运行时权威规则已完成；剩余条件是真实 Gateway 版本/模型 ID/CapabilityState 与证据、受控 DestinationPolicy、Research Context/Claims/Limitations 的权威生产给料、projector 生产注入，以及 R3 来源语义闭环。
+- **当前状态**：`IN_PROGRESS`（来源无关链路与权威规则已完成并通过本地全仓验证，CI 待按精确 SHA 回填）；生产成功路径保持 `BLOCKED`，阻断 FLOW-006 生产闭环。不注入占位 projector，不伪造 Provider/响应/证据或空壳报告。
 
 ### RF-BLOCK-008：Composer RiskDecision 与 Quant RiskDecision 契约不一致
 
