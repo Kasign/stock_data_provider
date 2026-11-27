@@ -237,6 +237,7 @@ func TestQuantResearchMariaDBRedisL3(t *testing.T) {
 	// R2 盘口事实与 Run 的 system_as_of 精确绑定；Risk Stage 将复用该快照，
 	// 不再依赖运行时刻是否处于 Eastmoney 五档盘口开放时段。
 	seedQuantResearchL3OrderBook(t, ctx, l3DataStore, created.Run.SystemAsOf)
+	seedQuantResearchL3LimitPool(t, ctx, l3DataStore, l3SeedSymbol, l3SeedRiskTradeDate, created.Run.SystemAsOf)
 	loaded, err := owner.execution.runRepository.GetRun(ctx, created.Run.Ref)
 	if err != nil {
 		t.Fatalf("read persisted quant.research Run: %v", err)
@@ -360,11 +361,11 @@ func TestQuantResearchMariaDBRedisL3(t *testing.T) {
 	if err := json.Unmarshal(riskPayloadResource.Content, &riskPayload); err != nil {
 		t.Fatalf("decode risk Stage payload: %v", err)
 	}
-	if riskPayload.Status != "reject" || riskPayload.ResultStatus != "rejected" {
-		t.Fatalf("risk decision=%s result_status=%s, want reject/rejected", riskPayload.Status, riskPayload.ResultStatus)
+	if riskPayload.Status != "pass" || riskPayload.ResultStatus != "completed" {
+		t.Fatalf("risk decision=%s result_status=%s, want pass/completed after price_limit is verified", riskPayload.Status, riskPayload.ResultStatus)
 	}
-	if !containsString(riskPayload.MissingFacts, "price_limit") || containsString(riskPayload.MissingFacts, "tradable_volume") {
-		t.Fatalf("risk missing_facts=%v, want only price_limit after the R2 order-book path", riskPayload.MissingFacts)
+	if len(riskPayload.MissingFacts) != 0 {
+		t.Fatalf("risk missing_facts=%v, want none once all three fact classes are verified", riskPayload.MissingFacts)
 	}
 	if len(riskPayload.InputRefs) != 4 {
 		t.Fatalf("risk input_refs=%v, want trading-status and order-book evidence pairs", riskPayload.InputRefs)

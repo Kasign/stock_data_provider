@@ -37,6 +37,8 @@ const (
 	l3SeedPolicyDaily     = "policy-l3-daily-v1"
 	l3SeedPolicyFacts     = "policy-l3-facts-v1"
 	l3SeedPolicyOrderBook = "policy-l3-order-book-v1"
+	l3SeedPolicyLimitPool = "policy-l3-limit-pool-v1"
+	l3SeedRiskTradeDate   = "2026-11-25"
 )
 
 // l3SeedCloses is 61 two-decimal closes generated deterministically so the series is
@@ -314,6 +316,39 @@ func seedQuantResearchL3OrderBook(t *testing.T, ctx context.Context, store *repo
 	}
 }
 
+// seedQuantResearchL3LimitPool 写入当日完整涨跌停池事实（两池均完整且不含该证券）。
+// 该快照是 L3 隔离库的测试专用事实，用它让 Creator 精确复用，避免依赖外部 Provider；
+// 它不代表真实来源已准入，也不改变 production 的收盘后约束。
+func seedQuantResearchL3LimitPool(
+	t *testing.T, ctx context.Context, store *repository.Store, symbol, tradeDate string, systemAsOf time.Time,
+) {
+	t.Helper()
+	observed := systemAsOf.UTC().Add(-time.Minute)
+	up := &model.LimitPoolSnapshot{
+		PoolType: "up", TradeDate: tradeDate, Total: 0, HasData: true,
+		Source: l3SeedSource, FetchedAt: observed, QualityStatus: model.QualityValid,
+	}
+	down := &model.LimitPoolSnapshot{
+		PoolType: "down", TradeDate: tradeDate, Total: 0, HasData: true,
+		Source: l3SeedSource, FetchedAt: observed, QualityStatus: model.QualityValid,
+	}
+	payload, err := app.BuildLimitPoolFactsPayload(up, down, symbol)
+	if err != nil {
+		t.Fatalf("build L3 limit-pool facts payload: %v", err)
+	}
+	version := l3SeedSourceVer + "-limitpool"
+	sources := []app.DailyBarsCloseSeriesSource{{SourceRef: l3SeedSource, SourceVersion: &version}}
+	snapshot, err := app.BuildLimitPoolFactsSnapshot(
+		payload, sources, "principal:service:quant", "risk_review", systemAsOf.UTC(),
+	)
+	if err != nil {
+		t.Fatalf("build L3 limit-pool facts snapshot: %v", err)
+	}
+	if err := store.SaveLimitPoolFactsSnapshot(ctx, snapshot); err != nil {
+		t.Fatalf("seed L3 limit-pool facts snapshot: %v", err)
+	}
+}
+
 // seedQuantResearchL3 writes all real PIT seeds into the isolated L3 database.
 func seedQuantResearchL3(t *testing.T, ctx context.Context, store *repository.Store) {
 	t.Helper()
@@ -323,6 +358,7 @@ func seedQuantResearchL3(t *testing.T, ctx context.Context, store *repository.St
 	l3SeedPublishPolicy(t, ctx, store, authorization.DailyBarsV2PolicyRef, l3SeedPolicyDaily, "quant_analysis", observedAt.Add(-24*time.Hour))
 	l3SeedPublishPolicy(t, ctx, store, authorization.SecurityStatusFactsPolicyRef, l3SeedPolicyFacts, "risk_review", observedAt.Add(-24*time.Hour))
 	l3SeedPublishPolicy(t, ctx, store, authorization.OrderBookFactsPolicyRef, l3SeedPolicyOrderBook, "risk_review", observedAt.Add(-24*time.Hour))
+	l3SeedPublishPolicy(t, ctx, store, authorization.LimitPoolFactsPolicyRef, l3SeedPolicyLimitPool, "risk_review", observedAt.Add(-24*time.Hour))
 	seedQuantResearchL3StatusFacts(t, ctx, store, observedAt)
 }
 
