@@ -12,6 +12,7 @@ import (
 	"example.com/stock-analysis-flow/internal/marketdata/app"
 	"example.com/stock-analysis-flow/internal/marketdata/authorization"
 	"example.com/stock-analysis-flow/internal/marketdata/model"
+	"example.com/stock-analysis-flow/internal/marketdata/snapshotport"
 	"example.com/stock-analysis-flow/internal/platform/security"
 )
 
@@ -25,8 +26,10 @@ func (stub orderBookReaderStub) FetchOrderBook(context.Context, string) (*model.
 }
 
 type orderBookSnapshotRepositoryStub struct {
-	snapshot app.OrderBookFactsSnapshot
-	saved    bool
+	snapshot    app.OrderBookFactsSnapshot
+	saved       bool
+	reusable    app.OrderBookFactsSnapshot
+	lookupCalls int
 }
 
 func (stub *orderBookSnapshotRepositoryStub) SaveOrderBookFactsSnapshot(_ context.Context, snapshot app.OrderBookFactsSnapshot) error {
@@ -40,6 +43,16 @@ func (stub *orderBookSnapshotRepositoryStub) GetOrderBookFactsSnapshot(context.C
 		return app.OrderBookFactsSnapshot{}, errors.New("not found")
 	}
 	return stub.snapshot, nil
+}
+
+func (stub *orderBookSnapshotRepositoryStub) GetOrderBookFactsSnapshotForSystemAsOf(
+	_ context.Context, _ string, _ string, _ time.Time,
+) (app.OrderBookFactsSnapshot, error) {
+	stub.lookupCalls++
+	if stub.reusable.Manifest.SnapshotRef == "" {
+		return app.OrderBookFactsSnapshot{}, snapshotport.ErrOrderBookFactsSnapshotNotFound
+	}
+	return stub.reusable, nil
 }
 
 type orderBookPolicyStoreStub struct {
@@ -173,6 +186,48 @@ func TestOrderBookFactsSnapshotCreatorPersistsAndAuthorizes(t *testing.T) {
 	if repository.snapshot.Manifest.SnapshotRef != refs.SnapshotRef ||
 		repository.snapshot.Manifest.PurposeCode != "risk_review" {
 		t.Fatalf("stored snapshot does not match returned references: %+v", repository.snapshot.Manifest)
+	}
+}
+
+func TestOrderBookFactsSnapshotCreatorReusesExactSystemAsOfSnapshot(t *testing.T) {
+	snapshot, book := orderBookApplicationSnapshot(t)
+	systemAsOf := book.SystemObservedAt.Add(time.Second)
+	owner, _, _ := newOrderBookTestOwner(t, systemAsOf, authorization.OrderBookFactsPolicyRef)
+	repository := &orderBookSnapshotRepositoryStub{reusable: snapshot}
+	creator, err := NewOrderBookFactsSnapshotCreator(
+		orderBookReaderStub{err: errors.New("live provider must not be called on exact reuse")}, repository, owner,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	refs, err := creator.Create(orderBookPrincipalContext(t), "600519.SH", systemAsOf, "risk_review")
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	if refs.SnapshotRef != snapshot.Manifest.SnapshotRef || refs.AuthorizationRef == "" {
+		t.Fatalf("reuse refs = %+v, want existing snapshot ref and a new authorization", refs)
+	}
+	if repository.lookupCalls != 1 {
+		t.Fatalf("lookup calls = %d, want 1", repository.lookupCalls)
+	}
+	if repository.saved {
+		t.Fatal("exact reuse must not persist a duplicate snapshot")
+	}
+}
+
+func TestOrderBookFactsSnapshotCreatorRejectsReusedSnapshotWithDifferentSystemAsOf(t *testing.T) {
+	snapshot, book := orderBookApplicationSnapshot(t)
+	systemAsOf := book.SystemObservedAt.Add(time.Second)
+	owner, _, _ := newOrderBookTestOwner(t, systemAsOf, authorization.OrderBookFactsPolicyRef)
+	repository := &orderBookSnapshotRepositoryStub{reusable: snapshot}
+	creator, err := NewOrderBookFactsSnapshotCreator(
+		orderBookReaderStub{err: errors.New("live provider must not be called on invalid reuse")}, repository, owner,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := creator.Create(orderBookPrincipalContext(t), "600519.SH", systemAsOf.Add(time.Second), "risk_review"); err == nil {
+		t.Fatal("creator accepted a reused snapshot bound to a different system_as_of")
 	}
 }
 

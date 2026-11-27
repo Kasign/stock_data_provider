@@ -67,6 +67,29 @@ func (c *OrderBookFactsSnapshotCreator) Create(
 	if strings.TrimSpace(callerRef) == "" {
 		return OrderBookFactsSnapshotReferences{}, ErrDataAuthorizationDenied
 	}
+	// 精确复用已授权的真实盘口事实：同一证券、同一用途、同一系统评估截止时刻。
+	// 这不是“最新一条”近似匹配，也不接受旧时点事实；没有精确命中才读取实时 Provider。
+	existing, err := c.repository.GetOrderBookFactsSnapshotForSystemAsOf(ctx, symbol, purpose, systemAsOf)
+	switch {
+	case err == nil:
+		if existing.Manifest.Symbol != symbol || existing.Manifest.PurposeCode != purpose ||
+			existing.Manifest.SystemAsOf != systemAsOf.Format(time.RFC3339Nano) {
+			return OrderBookFactsSnapshotReferences{}, errors.New("reused order-book facts snapshot binding does not match the request")
+		}
+		authorizationRef, issueErr := c.owner.IssueFor(
+			ctx, existing.Manifest.SnapshotRef, purpose, authorization.OrderBookFactsPolicyRef,
+		)
+		if issueErr != nil {
+			return OrderBookFactsSnapshotReferences{}, fmt.Errorf("reused Snapshot authorization was not issued: %w", issueErr)
+		}
+		return OrderBookFactsSnapshotReferences{
+			SnapshotRef: existing.Manifest.SnapshotRef, AuthorizationRef: authorizationRef,
+		}, nil
+	case errors.Is(err, snapshotport.ErrOrderBookFactsSnapshotNotFound):
+		// 继续走真实 Provider。
+	default:
+		return OrderBookFactsSnapshotReferences{}, fmt.Errorf("lookup reusable order-book facts Snapshot: %w", err)
+	}
 	book, err := c.reader.FetchOrderBook(ctx, symbol)
 	if err != nil {
 		return OrderBookFactsSnapshotReferences{}, fmt.Errorf("read live order book for Snapshot: %w", err)

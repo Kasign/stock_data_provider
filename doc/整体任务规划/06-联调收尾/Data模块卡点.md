@@ -498,3 +498,4 @@ Root Server 的 Data Module 构造、共享资源注入、Migration Registry、I
 - 新增 `order_book` payload/Manifest/Snapshot：复用共享不可变快照表按 `payload_kind=order_book` 分流；`observed_at`（来源时刻）与 `system_as_of`（评估截止）分别绑定，JCS 双指纹与 SnapshotRef 防篡改；新增独立数据类策略 `order-book-facts-access` 与 Owner 策略路由，与 close-series / 交易状态策略互不替代。
 - `tradable_volume` 的唯一口径是买盘五档挂单量之和；Provider、Creator、Repository、Authorized Reader 均不接受参与率、成交量推导或调用方声称值。
 - 新增 MariaDB 盘口快照集成测试：共享存储、跨 `payload_kind` 隔离、幂等读回、直接改库篡改检测；本地 `MARKET_DATA_TEST_MYSQL_DSN` 未配置时 SKIP，CI 结论按精确 SHA 回填。契约状态未变：DATA-CTR-007 仍 `deferred`、DATA-CTR-008 仍 `frozen`。
+- **精确复用补强（2026-11-27）**：`OrderBookFactsSnapshotRepository` 新增按精确 `symbol + purpose + system_as_of` 复用已授权盘口快照的窄方法，MariaDB 实现使用精确相等过滤；Creator 在实时 Provider 前复用，绑定不一致 fail-closed。该修复使 L3 不依赖实时盘口开放时段，且没有引入参与率或近似匹配。真库 `TestMariaDBOrderBookFactsSnapshotExactSystemAsOfReuse` PASS；新提交 CI 待精确 SHA 回填。

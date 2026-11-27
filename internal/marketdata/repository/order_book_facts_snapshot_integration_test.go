@@ -10,6 +10,54 @@ import (
 	"example.com/stock-analysis-flow/internal/marketdata/app"
 )
 
+func TestMariaDBOrderBookFactsSnapshotExactSystemAsOfReuse(t *testing.T) {
+	dsn := os.Getenv("MARKET_DATA_TEST_MYSQL_DSN")
+	if dsn == "" {
+		dsn = os.Getenv("SERVER_RELAY_TEST_MYSQL_DSN")
+	}
+	if dsn == "" {
+		t.Skip("MARKET_DATA_TEST_MYSQL_DSN is not configured")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	store, err := OpenMySQL(ctx, dsn)
+	if err != nil {
+		t.Fatalf("open MariaDB: %v", err)
+	}
+	defer store.Close()
+	if err := applyMigrationsForTest(ctx, store); err != nil {
+		t.Fatalf("migrate Data schema: %v", err)
+	}
+
+	snapshot := validRepositoryOrderBookFactsSnapshot(t)
+	if err := store.SaveOrderBookFactsSnapshot(ctx, snapshot); err != nil {
+		t.Fatalf("save immutable order-book facts snapshot: %v", err)
+	}
+	systemAsOf, err := time.Parse(time.RFC3339Nano, snapshot.Manifest.SystemAsOf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := store.GetOrderBookFactsSnapshotForSystemAsOf(
+		ctx, snapshot.Manifest.Symbol, snapshot.Manifest.PurposeCode, systemAsOf,
+	)
+	if err != nil {
+		t.Fatalf("exact reuse lookup failed: %v", err)
+	}
+	if loaded.Manifest.SnapshotRef != snapshot.Manifest.SnapshotRef {
+		t.Fatalf("reuse lookup returned %s, want %s", loaded.Manifest.SnapshotRef, snapshot.Manifest.SnapshotRef)
+	}
+	if _, err := store.GetOrderBookFactsSnapshotForSystemAsOf(
+		ctx, snapshot.Manifest.Symbol, snapshot.Manifest.PurposeCode, systemAsOf.Add(time.Nanosecond),
+	); !errors.Is(err, ErrOrderBookFactsSnapshotNotFound) {
+		t.Fatalf("nearby system_as_of must not be reused, got %v", err)
+	}
+	if _, err := store.GetOrderBookFactsSnapshotForSystemAsOf(
+		ctx, snapshot.Manifest.Symbol, "other_purpose", systemAsOf,
+	); !errors.Is(err, ErrOrderBookFactsSnapshotNotFound) {
+		t.Fatalf("different purpose must not be reused, got %v", err)
+	}
+}
+
 // 盘口事实快照必须与 close-series / 交易状态事实共用同一张不可变存储，
 // 并按 payload_kind 精确隔离。该测试只在配置真实 MariaDB 时运行。
 func TestMariaDBOrderBookFactsSnapshotSharesImmutableStore(t *testing.T) {

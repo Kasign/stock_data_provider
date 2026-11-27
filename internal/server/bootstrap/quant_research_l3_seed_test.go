@@ -274,6 +274,46 @@ func seedQuantResearchL3StatusFacts(t *testing.T, ctx context.Context, store *re
 	}
 }
 
+// seedQuantResearchL3OrderBook 写入与 Run 精确绑定的盘口事实快照。
+// Risk Stage 在相同 symbol/purpose/system_as_of 上复用该已授权事实，
+// 从而不依赖运行时刻是否处于交易所盘口开放时段；事实结构与校验仍走生产链路。
+func seedQuantResearchL3OrderBook(t *testing.T, ctx context.Context, store *repository.Store, systemAsOf time.Time) {
+	t.Helper()
+	observed := systemAsOf.UTC().Add(-time.Minute)
+	book := &model.OrderBook{
+		Symbol: l3SeedSymbol,
+		Bids: []model.OrderBookLevel{
+			{Price: 38.10, Volume: 1200}, {Price: 38.09, Volume: 3500},
+			{Price: 38.08, Volume: 4800}, {Price: 38.07, Volume: 6100},
+			{Price: 38.06, Volume: 7400},
+		},
+		Asks: []model.OrderBookLevel{
+			{Price: 38.11, Volume: 900}, {Price: 38.12, Volume: 1700},
+			{Price: 38.13, Volume: 2500}, {Price: 38.14, Volume: 3300},
+			{Price: 38.15, Volume: 4100},
+		},
+		ObservedAt:       observed,
+		SystemObservedAt: observed.Add(time.Second),
+		Source:           l3SeedSource,
+		QualityStatus:    model.QualityValid,
+	}
+	payload, err := app.BuildOrderBookFactsPayload(*book)
+	if err != nil {
+		t.Fatalf("build L3 order-book facts payload: %v", err)
+	}
+	version := l3SeedSourceVer + "-orderbook"
+	sources := []app.DailyBarsCloseSeriesSource{{SourceRef: l3SeedSource, SourceVersion: &version}}
+	snapshot, err := app.BuildOrderBookFactsSnapshot(
+		payload, sources, "principal:service:quant", "risk_review", systemAsOf.UTC(),
+	)
+	if err != nil {
+		t.Fatalf("build L3 order-book facts snapshot: %v", err)
+	}
+	if err := store.SaveOrderBookFactsSnapshot(ctx, snapshot); err != nil {
+		t.Fatalf("seed L3 order-book facts snapshot: %v", err)
+	}
+}
+
 // seedQuantResearchL3 writes all real PIT seeds into the isolated L3 database.
 func seedQuantResearchL3(t *testing.T, ctx context.Context, store *repository.Store) {
 	t.Helper()

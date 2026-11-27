@@ -14,6 +14,7 @@ import (
 	marketdataapplication "example.com/stock-analysis-flow/internal/marketdata/application"
 	"example.com/stock-analysis-flow/internal/marketdata/authorization"
 	"example.com/stock-analysis-flow/internal/marketdata/model"
+	"example.com/stock-analysis-flow/internal/marketdata/snapshotport"
 	"example.com/stock-analysis-flow/internal/platform/security"
 	quantapplication "example.com/stock-analysis-flow/internal/quant/application"
 	"example.com/stock-analysis-flow/internal/quant/risk"
@@ -80,6 +81,19 @@ func (store *quantTradingFactsStore) GetOrderBookFactsSnapshot(
 		return marketdataapp.OrderBookFactsSnapshot{}, errors.New("order-book facts Snapshot not found")
 	}
 	return snapshot, nil
+}
+
+func (store *quantTradingFactsStore) GetOrderBookFactsSnapshotForSystemAsOf(
+	_ context.Context, symbol, purpose string, systemAsOf time.Time,
+) (marketdataapp.OrderBookFactsSnapshot, error) {
+	wantAsOf := systemAsOf.UTC().Format(time.RFC3339Nano)
+	for _, snapshot := range store.orderBooks {
+		if snapshot.Manifest.Symbol == symbol && snapshot.Manifest.PurposeCode == purpose &&
+			snapshot.Manifest.SystemAsOf == wantAsOf {
+			return snapshot, nil
+		}
+	}
+	return marketdataapp.OrderBookFactsSnapshot{}, snapshotport.ErrOrderBookFactsSnapshotNotFound
 }
 
 func (store *quantTradingFactsStore) PublishDataAuthorizationPolicyVersion(

@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
+	"time"
 
 	"example.com/stock-analysis-flow/internal/marketdata/app"
 	"example.com/stock-analysis-flow/internal/marketdata/snapshotport"
@@ -14,7 +16,7 @@ import (
 )
 
 var (
-	ErrOrderBookFactsSnapshotNotFound = errors.New("market-data order-book facts snapshot not found")
+	ErrOrderBookFactsSnapshotNotFound = snapshotport.ErrOrderBookFactsSnapshotNotFound
 	ErrOrderBookFactsSnapshotConflict = errors.New("market-data order-book facts snapshot content conflict")
 )
 
@@ -117,6 +119,42 @@ FROM market_data_daily_bars_close_series_snapshots WHERE snapshot_ref=? AND payl
 		return app.OrderBookFactsSnapshot{}, errors.New("stored order-book facts snapshot JSON is not canonical")
 	}
 	return snapshot, nil
+}
+
+// GetOrderBookFactsSnapshotForSystemAsOf 只按精确的证券、用途与评估截止时刻复用
+// 已持久化的盘口事实。它不使用时间范围或“最新一条”近似匹配，避免把旧盘口伪装成
+// 当前 system_as_of 的可用事实；读回后仍走 GetOrderBookFactsSnapshot 的完整校验。
+func (s *Store) GetOrderBookFactsSnapshotForSystemAsOf(
+	ctx context.Context, symbol, purpose string, systemAsOf time.Time,
+) (app.OrderBookFactsSnapshot, error) {
+	if s == nil || s.db == nil {
+		return app.OrderBookFactsSnapshot{}, errors.New("MariaDB order-book facts snapshot storage disabled")
+	}
+	if ctx == nil {
+		return app.OrderBookFactsSnapshot{}, errors.New("order-book facts snapshot context is required")
+	}
+	if strings.TrimSpace(symbol) == "" || strings.TrimSpace(purpose) == "" ||
+		systemAsOf.IsZero() || systemAsOf.Location() != time.UTC {
+		return app.OrderBookFactsSnapshot{}, errors.New("order-book facts reuse requires canonical symbol, purpose and UTC system_as_of")
+	}
+	var snapshotRef string
+	err := s.db.QueryRowContext(ctx, `SELECT snapshot_ref
+FROM market_data_daily_bars_close_series_snapshots
+WHERE payload_kind=?
+  AND JSON_UNQUOTE(JSON_EXTRACT(manifest_json, '$.symbol'))=?
+  AND JSON_UNQUOTE(JSON_EXTRACT(manifest_json, '$.purpose_code'))=?
+  AND JSON_UNQUOTE(JSON_EXTRACT(manifest_json, '$.system_as_of'))=?
+ORDER BY created_at DESC LIMIT 1`,
+		app.OrderBookFactsPayloadKind, symbol, purpose, systemAsOf.Format(time.RFC3339Nano),
+	).Scan(&snapshotRef)
+	if errors.Is(err, sql.ErrNoRows) {
+		return app.OrderBookFactsSnapshot{}, fmt.Errorf("%w: %s/%s/%s",
+			ErrOrderBookFactsSnapshotNotFound, symbol, purpose, systemAsOf.Format(time.RFC3339Nano))
+	}
+	if err != nil {
+		return app.OrderBookFactsSnapshot{}, fmt.Errorf("query reusable order-book facts snapshot: %w", err)
+	}
+	return s.GetOrderBookFactsSnapshot(ctx, snapshotRef)
 }
 
 func canonicalOrderBookFactsSnapshotJSON(snapshot app.OrderBookFactsSnapshot) ([]byte, []byte, error) {

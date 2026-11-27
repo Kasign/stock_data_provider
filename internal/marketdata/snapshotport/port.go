@@ -2,9 +2,15 @@ package snapshotport
 
 import (
 	"context"
+	"errors"
+	"time"
 
 	"example.com/stock-analysis-flow/internal/marketdata/app"
 )
+
+// ErrOrderBookFactsSnapshotNotFound 表示没有可精确复用的盘口事实快照；
+// 调用方可以继续走真实 Provider，但不能把其他时点的事实当成当前事实。
+var ErrOrderBookFactsSnapshotNotFound = errors.New("order-book facts snapshot not found for exact binding")
 
 // DailyBarsCloseSeriesSnapshotRepository 是 Data 模块内部的持久化 Port。
 // 它不属于跨模块公开 Application API。
@@ -26,4 +32,9 @@ type SecurityTradingStatusFactsSnapshotRepository interface {
 type OrderBookFactsSnapshotRepository interface {
 	SaveOrderBookFactsSnapshot(ctx context.Context, snapshot app.OrderBookFactsSnapshot) error
 	GetOrderBookFactsSnapshot(ctx context.Context, snapshotRef string) (app.OrderBookFactsSnapshot, error)
+	// GetOrderBookFactsSnapshotForSystemAsOf 精确复用同一证券、用途与评估截止时刻的
+	// 已授权盘口事实；不按时间范围近似匹配，避免把旧盘口伪装成当前事实。
+	GetOrderBookFactsSnapshotForSystemAsOf(
+		ctx context.Context, symbol, purpose string, systemAsOf time.Time,
+	) (app.OrderBookFactsSnapshot, error)
 }

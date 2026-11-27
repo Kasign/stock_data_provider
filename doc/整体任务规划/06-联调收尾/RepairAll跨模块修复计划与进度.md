@@ -1620,3 +1620,12 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - **变异验证**：三类生产语义变异均 `FAILED_AS_EXPECTED` 后恢复——把 `tradable_volume` 再写成缺失；把四段证据缩回交易状态两段；关闭两份快照的 symbol/system_as_of 绑定校验；另验证 Stage Validator 的证据基数回归会导致合法输出被拒。未删除断言、未放宽门禁。
 - **本地验收**：`go test ./internal/... -count=1` 全包通过；`go vet ./internal/...` 通过；`git diff --check` 通过。三个已提交子组 SHA 的 CI 已按精确 SHA 查询：R2 子组一 `0c0418544`、子组二 `feda09168`、子组三 `20d6533d4` 四工作流全 success（Live provider probe / Required checks / Go test suite / Integration CI）。当前子组四提交 SHA 待生成，CI `not_run`。
 - **如实保留**：`price_limit` 仍无合格事实来源，RiskDecision 仍 `reject`，不得表述为硬门禁已放行；R3 News P1、R4 完整报告唯一 Owner 仍 OPEN；当前子组四 CI 未取得前不得标记完整验收。
+
+### 2026-11-27 R2 CI 失败归因与精确盘口快照复用修复
+
+- **CI 事实**：子组四提交 `43053390f90d88201d2504fca711e8299c3af81c` 的 Required checks `45935976408`、Go test suite `45935976422`、Live provider probe `45935976512`、Quant module validation `45935976557` 均 success；Integration CI `45935976418` failure。所有前置步骤 success，失败步骤为汇总器，因为 `TEST_ROOT=failure`；根模块测试日志定位到 `TestQuantResearchMariaDBRedisL3` 的 `quant.risk` Stage：`status=failed`、`reasons=[quant_risk_execution_failed]`。
+- **根因归因（代码问题，非环境问题）**：底层错误为 `Eastmoney order-book bids: invalid price field f19`。CI 与本地复现均发生在午间休市时段，Eastmoney 单证券详情只返回 `f57/f86`，没有五档深度。Provider 按契约 fail-closed 是正确行为；缺陷在于 L3 真库测试隐含依赖实时盘口开放时段，而不是盘口事实门禁放宽。
+- **修复语义**：`snapshotport.OrderBookFactsSnapshotRepository` 新增按精确 `symbol + purpose + system_as_of` 查找已持久化盘口快照的窄方法；MariaDB 实现只用精确相等，不做“最新一条”或时间范围近似匹配。Creator 在读取实时 Provider 前精确复用已有真实盘口事实并重新签发授权；绑定不一致即 fail-closed。L3 在 CreateRun 得到精确 `system_as_of` 后写入合法盘口快照，因此不再依赖运行时刻是否处于交易时段。没有采用参与率、推断值、恒 reject 或放宽断言。
+- **TDD 与变异验证**：修复前 `TestOrderBookFactsSnapshotCreatorReusesExactSystemAsOfSnapshot` 因调用实时 Provider 失败；修复后通过。变异一关闭 Creator 绑定校验，`RejectsReusedSnapshotWithDifferentSystemAsOf` failed；变异二移除 Repository 的 `system_as_of` 过滤，真库 `TestMariaDBOrderBookFactsSnapshotExactSystemAsOfReuse` failed；均恢复后复验通过。
+- **本地验收**：`go test ./internal/... -count=1` 全包通过；`go vet ./internal/...` 通过；`gofmt -l` 无输出；`git diff --check` 通过；真库 `TestMariaDBOrderBookFactsSnapshotExactSystemAsOfReuse` PASS；本地 MariaDB/Redis `TestQuantResearchMariaDBRedisL3` PASS，四个 Stage 均终态且 `quant.risk=succeeded`。
+- **CI 状态**：修复提交 SHA 待生成，新提交 CI `not_run`；在精确 SHA 的五工作流结果回填前，R2 仍不得标记为完整验收。

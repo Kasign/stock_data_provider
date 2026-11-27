@@ -234,6 +234,9 @@ func TestQuantResearchMariaDBRedisL3(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create quant.research Run: %v", err)
 	}
+	// R2 盘口事实与 Run 的 system_as_of 精确绑定；Risk Stage 将复用该快照，
+	// 不再依赖运行时刻是否处于 Eastmoney 五档盘口开放时段。
+	seedQuantResearchL3OrderBook(t, ctx, l3DataStore, created.Run.SystemAsOf)
 	loaded, err := owner.execution.runRepository.GetRun(ctx, created.Run.Ref)
 	if err != nil {
 		t.Fatalf("read persisted quant.research Run: %v", err)
@@ -310,6 +313,10 @@ func TestQuantResearchMariaDBRedisL3(t *testing.T) {
 		if stage.AttemptNo < 1 {
 			t.Fatalf("Stage %s was never dispatched by the real Worker", stage.Code)
 		}
+	}
+	for _, stage := range loaded.Stages {
+		t.Logf("L3 terminal stage: code=%s status=%s attempt=%d reasons=%v output_ref=%v",
+			stage.Code, stage.Status, stage.AttemptNo, stage.ReasonCodes, stage.OutputRef)
 	}
 	if loaded.Run.Status != researchflowdomain.RunSucceeded {
 		t.Fatalf("L3 Run status=%s, want succeeded\n%s", loaded.Run.Status, child.output.String())
