@@ -19,7 +19,7 @@ type RiskReason struct {
 	Severity        string          `json:"severity"`
 	Status          string          `json:"status"`
 	SafeMessage     string          `json:"safe_message"`
-	RuleRef         string          `json:"rule_ref"`
+	RuleRef         *string         `json:"rule_ref,omitempty"`
 	EvidenceRefs    []string        `json:"evidence_refs"`
 	ObservedValue   json.RawMessage `json:"observed_value,omitempty"`
 	ExpectedRange   *string         `json:"expected_range,omitempty"`
@@ -54,7 +54,7 @@ func ValidateRiskDecision(decision RiskDecision, expectedSystemAsOf time.Time) e
 	blockingUnresolved := false
 	seenReasonCodes := make(map[string]struct{}, len(decision.Reasons))
 	for _, reason := range decision.Reasons {
-		if !validRiskText(reason.Code) || !validRiskText(reason.RuleRef) ||
+		if !validRiskText(reason.Code) || (reason.RuleRef != nil && !validRiskText(*reason.RuleRef)) ||
 			!validRiskText(reason.SafeMessage) || reason.EvidenceRefs == nil ||
 			hasDuplicateOrInvalidRefs(reason.EvidenceRefs) || !validRiskTexts(reason.EvidenceRefs) ||
 			!validObservedValue(reason.ObservedValue) {

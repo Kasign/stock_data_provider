@@ -1,0 +1,21 @@
+{
+  "decision_id": "risk-decision-v2-001",
+  "status": "reject",
+  "rule_set_version": "risk-rules.v8",
+  "evaluated_at": "2026-11-09T01:00:00Z",
+  "system_as_of": "2026-11-09T00:59:00Z",
+  "reasons": [
+    {
+      "code": "HARD_GATE",
+      "severity": "block",
+      "status": "triggered",
+      "safe_message": "硬门禁已触发",
+      "evidence_refs": ["evidence:quality:001"],
+      "rule_ref": "rule:hard_gate:v8",
+      "observed_value": 12.5,
+      "expected_range": "0-10",
+      "remediation_code": "REDUCE_POSITION"
+    }
+  ],
+  "input_refs": ["quant_result:001"]
+}

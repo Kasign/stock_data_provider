@@ -1,6 +1,7 @@
 package risk
 
 import (
+	"encoding/json"
 	"errors"
 	"strings"
 	"time"
@@ -34,12 +35,18 @@ const (
 )
 
 // Reason 描述一条可审计的风险规则结论。
+// 四个解释字段是 QNT-CTR-004 2.0.0 的一部分：它们是权威决策的自有解释信息，
+// 不是 Researchflow 另立的平行 RiskDecision。全部可选，不参与 AggregateStatus。
 type Reason struct {
-	Code         string       `json:"code"`
-	Severity     Severity     `json:"severity"`
-	Status       ReasonStatus `json:"status"`
-	SafeMessage  string       `json:"safe_message"`
-	EvidenceRefs []string     `json:"evidence_refs"`
+	Code            string          `json:"code"`
+	Severity        Severity        `json:"severity"`
+	Status          ReasonStatus    `json:"status"`
+	SafeMessage     string          `json:"safe_message"`
+	EvidenceRefs    []string        `json:"evidence_refs"`
+	RuleRef         *string         `json:"rule_ref,omitempty"`
+	ObservedValue   json.RawMessage `json:"observed_value,omitempty"`
+	ExpectedRange   *string         `json:"expected_range,omitempty"`
+	RemediationCode *string         `json:"remediation_code,omitempty"`
 }
 
 // Decision 是 QNT-CTR-004 RiskDecision 的强类型表示。
@@ -90,8 +97,47 @@ func (d Decision) Validate() error {
 				return ErrInvalidDecision
 			}
 		}
+		if !validExplanationFields(reason) {
+			return ErrInvalidDecision
+		}
 	}
 	return nil
+}
+
+// validExplanationFields 校验 2.0.0 的四个可选解释字段。可选项缺席合法；
+// 一旦出现则与既有字段遵守同一 canonical 约束，且 observed_value 只允许标量。
+func validExplanationFields(reason Reason) bool {
+	if reason.RuleRef != nil && !nonBlank(*reason.RuleRef) {
+		return false
+	}
+	if reason.ExpectedRange != nil && !nonBlank(*reason.ExpectedRange) {
+		return false
+	}
+	if reason.RemediationCode != nil && !nonBlank(*reason.RemediationCode) {
+		return false
+	}
+	return validScalarObservedValue(reason.ObservedValue)
+}
+
+func validScalarObservedValue(value json.RawMessage) bool {
+	if len(value) == 0 {
+		return true
+	}
+	if !json.Valid(value) {
+		return false
+	}
+	decoder := json.NewDecoder(strings.NewReader(string(value)))
+	decoder.UseNumber()
+	var decoded any
+	if err := decoder.Decode(&decoded); err != nil {
+		return false
+	}
+	switch decoded.(type) {
+	case nil, string, json.Number:
+		return true
+	default:
+		return false
+	}
 }
 
 func nonBlank(value string) bool {

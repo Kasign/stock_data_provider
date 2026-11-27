@@ -1,0 +1,128 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kasign.example/schema/quant/QNT-CTR-004-risk-decision-2.0.0.schema.json",
+  "title": "QNT-CTR-004 RiskDecision 2.0.0",
+  "description": "权威风险决策。2.0.0 将四个解释字段纳入权威结构本身（RuleRef/ObservedValue/ExpectedRange/RemediationCode），全部可选且不参与 status 聚合。Researchflow 不再另立平行 RiskDecision DTO，Composer 从 Quant risk Payload 投影。1.0.0 保持冻结不变。",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "decision_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "pass",
+        "reject",
+        "unknown"
+      ]
+    },
+    "rule_set_version": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+    },
+    "evaluated_at": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{0,8}[1-9])?Z$"
+    },
+    "system_as_of": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{0,8}[1-9])?Z$"
+    },
+    "reasons": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "block",
+              "warn",
+              "info"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "triggered",
+              "not_triggered",
+              "unknown"
+            ]
+          },
+          "safe_message": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+          },
+          "evidence_refs": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+            }
+          },
+          "rule_ref": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+          },
+          "observed_value": {
+            "type": [
+              "string",
+              "number",
+              "null"
+            ]
+          },
+          "expected_range": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+          },
+          "remediation_code": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+          }
+        },
+        "required": [
+          "code",
+          "severity",
+          "status",
+          "safe_message",
+          "evidence_refs"
+        ]
+      },
+      "minItems": 1
+    },
+    "input_refs": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+      }
+    }
+  },
+  "required": [
+    "decision_id",
+    "status",
+    "rule_set_version",
+    "evaluated_at",
+    "system_as_of",
+    "reasons",
+    "input_refs"
+  ]
+}

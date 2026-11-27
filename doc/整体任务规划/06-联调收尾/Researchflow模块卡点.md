@@ -194,3 +194,10 @@
 - Researchflow OutboxDispatcher 当前对所有 Publish 错误统一调用 RetryOutbox；OutboxErrorCoder 仅用于持久化 last_error_code，不影响是否重试。
 - Researchflow OutboxStore 无 Reject/DeadLetter 能力；项目现有决议明确暂不设最大尝试次数/死信状态，后续由消费契约定义告警和死信处置。
 - 与 Research Relay 的永久错误 Reject 行为存在策略差异。当前不擅自扩展 Outbox 状态或吞掉事件；保留为需契约 Owner 决策的操作策略卡点。
+
+## 2026-11-27 RF-BLOCK-008 根治完成（RiskDecision 唯一来源）
+
+- **决策**：DEC-PLAT-002-065。四个解释字段（`rule_ref`/`observed_value`/`expected_range`/`remediation_code`）纳入 Quant 权威 `risk.Decision`（QNT-CTR-004 2.0.0，MAJOR），1.0.0 冻结字节不变。
+- **实现**：`internal/quant/risk/decision.go` 权威结构 + Validate 解释字段 canonical 校验；`internal/quant/result/envelope.go` RiskPayload 版本化（1.0.0/2.0.0）+ DecodePayload 按版本分派；`internal/researchflow/resultvalidation/risk_projection.go` 的 `RiskDecisionFromQuantEnvelope` 从 Quant risk Envelope 投影权威决策（先经 `Decision.Validate`）；`composer.go` 从 QuantResults 的 risk Envelope 投影，双风险来源/多 risk Envelope/plugin payload schema 一律 fail-closed。
+- **验证**：四类 fail-closed Contract Test（triggered→reject、unknown→unknown、缺 block→unknown、status/reason 不一致拒绝）通过；投影字段保留、错误类型拒绝、schema 版本不匹配拒绝通过；2.0.0 Schema/Golden 双向校验通过；两处变异（放开双来源、跳过投影）均 `FAILED_AS_EXPECTED`；`go test ./internal/...` 全绿。
+- **状态**：`RESOLVED`。FLOW-006 风险结论唯一来源已确立，不再存在第二份无来源绑定的 RiskDecision；独立 HardRiskGate 若出现须另立领域身份与契约。

@@ -120,9 +120,34 @@ func ComposeResult(input ResultCompositionInput, quantRegistry *Registry) (Compo
 		explanation = &value
 	}
 
+	// 风险结论唯一来源：从本次已纳入组合的 Quant risk Envelope 投影权威决策。
+	// 独立 RiskDecision 入参仅为兼容调用方保留；一旦与 Envelope 风险来源并存即
+	// fail-closed，杜绝第二份无来源绑定的风险结论（RF-BLOCK-008）。
+	var projectedRisk *RiskDecision
+	for _, quantResult := range input.QuantResults {
+		if quantResult.ResultType != "risk" {
+			continue
+		}
+		if projectedRisk != nil {
+			return ComposedResearchResult{}, fmt.Errorf("%w: multiple Quant risk Envelopes", ErrInvalidResultComposition)
+		}
+		value, err := RiskDecisionFromQuantEnvelope(quantResult)
+		if err != nil {
+			return ComposedResearchResult{}, fmt.Errorf("%w: %v", ErrInvalidResultComposition, err)
+		}
+		projectedRisk = &value
+	}
+	if projectedRisk != nil && input.RiskDecision != nil {
+		return ComposedResearchResult{}, fmt.Errorf("%w: standalone RiskDecision conflicts with authoritative Quant risk Envelope", ErrInvalidResultComposition)
+	}
+
 	var riskDecision *RiskDecision
-	if input.RiskDecision != nil {
-		if err := ValidateRiskDecision(*input.RiskDecision, input.SystemAsOf); err != nil {
+	effectiveRisk := input.RiskDecision
+	if projectedRisk != nil {
+		effectiveRisk = projectedRisk
+	}
+	if effectiveRisk != nil {
+		if err := ValidateRiskDecision(*effectiveRisk, input.SystemAsOf); err != nil {
 			return ComposedResearchResult{}, fmt.Errorf("%w: RiskDecision: %v", ErrInvalidResultComposition, err)
 		}
 		// Quant Result ID 与其输入快照是两类不同的引用：分别建表，
@@ -140,10 +165,10 @@ func ComposeResult(input ResultCompositionInput, quantRegistry *Registry) (Compo
 				unusableQuantRefs[resultID] = struct{}{}
 			}
 		}
-		if err := validateRiskReferences(*input.RiskDecision, quantResultRefs, quantSnapshotRefs, unusableQuantRefs, contextSourceRefs, evidenceIDs); err != nil {
+		if err := validateRiskReferences(*effectiveRisk, quantResultRefs, quantSnapshotRefs, unusableQuantRefs, contextSourceRefs, evidenceIDs); err != nil {
 			return ComposedResearchResult{}, err
 		}
-		copyValue, err := cloneJSON(*input.RiskDecision)
+		copyValue, err := cloneJSON(*effectiveRisk)
 		if err != nil {
 			return ComposedResearchResult{}, fmt.Errorf("%w: copy RiskDecision: %v", ErrInvalidResultComposition, err)
 		}

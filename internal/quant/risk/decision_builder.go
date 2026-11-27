@@ -1,5 +1,7 @@
 package risk
 
+import "encoding/json"
+
 // DecisionInput 是构造 RiskDecision 所需的调用方事实；Status 不允许由调用方指定。
 type DecisionInput struct {
 	DecisionID     string
@@ -46,6 +48,21 @@ func cloneReasons(source []Reason) []Reason {
 		result[i] = reason
 		if reason.EvidenceRefs != nil {
 			result[i].EvidenceRefs = append([]string{}, reason.EvidenceRefs...)
+		}
+		if reason.RuleRef != nil {
+			value := *reason.RuleRef
+			result[i].RuleRef = &value
+		}
+		if reason.ExpectedRange != nil {
+			value := *reason.ExpectedRange
+			result[i].ExpectedRange = &value
+		}
+		if reason.RemediationCode != nil {
+			value := *reason.RemediationCode
+			result[i].RemediationCode = &value
+		}
+		if reason.ObservedValue != nil {
+			result[i].ObservedValue = append(json.RawMessage{}, reason.ObservedValue...)
 		}
 	}
 	return result

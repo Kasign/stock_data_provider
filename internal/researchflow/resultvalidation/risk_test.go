@@ -6,13 +6,15 @@ import (
 	"time"
 )
 
+func riskRef(value string) *string { return &value }
+
 func validRiskDecision() RiskDecision {
 	now := time.Date(2026, 11, 9, 8, 0, 0, 0, time.UTC)
 	return RiskDecision{
 		DecisionID: "risk-1", Status: "pass", RuleSetVersion: "risk-v1",
 		EvaluatedAt: now, SystemAsOf: now,
 		Reasons: []RiskReason{{Code: "max_drawdown", Severity: "block", Status: "not_triggered",
-			SafeMessage: "未触发阻断条件", RuleRef: "rule-max-drawdown-v1", EvidenceRefs: []string{"ev-1"}}},
+			SafeMessage: "未触发阻断条件", RuleRef: riskRef("rule-max-drawdown-v1"), EvidenceRefs: []string{"ev-1"}}},
 		InputRefs: []string{validQuantResult().ResultID},
 	}
 }
@@ -64,7 +66,7 @@ func TestValidateRiskDecisionAcceptsDistinctMultipleReasons(t *testing.T) {
 	base := validRiskDecision()
 	base.Reasons = append(base.Reasons, RiskReason{
 		Code: "turnover_spike", Severity: "warn", Status: "not_triggered",
-		SafeMessage: "换手率未达到提示阈值", RuleRef: "rule-turnover-v1",
+		SafeMessage: "换手率未达到提示阈值", RuleRef: riskRef("rule-turnover-v1"),
 		EvidenceRefs: []string{"ev-2"},
 	})
 	if err := ValidateRiskDecision(base, base.SystemAsOf); err != nil {
@@ -78,7 +80,7 @@ func TestValidateRiskDecisionRejectsNonCanonicalText(t *testing.T) {
 		"rule set version padded":    func(d *RiskDecision) { d.RuleSetVersion = " risk-v1 " },
 		"input ref padded":           func(d *RiskDecision) { d.InputRefs[0] = " " + d.InputRefs[0] },
 		"reason code padded":         func(d *RiskDecision) { d.Reasons[0].Code = " max_drawdown " },
-		"rule ref padded":            func(d *RiskDecision) { d.Reasons[0].RuleRef = " rule-max-drawdown-v1 " },
+		"rule ref padded":            func(d *RiskDecision) { d.Reasons[0].RuleRef = riskRef(" rule-max-drawdown-v1 ") },
 		"safe message padded":        func(d *RiskDecision) { d.Reasons[0].SafeMessage = " 未触发阻断条件 " },
 		"evidence ref padded":        func(d *RiskDecision) { d.Reasons[0].EvidenceRefs[0] = " ev-1 " },
 		"invalid UTF-8 decision id":  func(d *RiskDecision) { d.DecisionID = string([]byte{0xff}) },

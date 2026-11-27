@@ -52,25 +52,56 @@ func (p TrendPayload) validate() error                 { return p.value.Validate
 func (p TrendPayload) marshalPayload() ([]byte, error) { return json.Marshal(p.value) }
 func (p TrendPayload) MarshalJSON() ([]byte, error)    { return p.marshalPayload() }
 
-// RiskPayload 是 risk/1.0.0 的强类型载荷。
+// RiskPayload 是 risk Payload 的强类型载荷。
+// 1.0.0 冻结且不含解释字段；2.0.0 将四个解释字段纳入权威 Decision 结构。
 type RiskPayload struct {
-	value risk.Decision
+	value   risk.Decision
+	version string
 }
 
 func NewRiskPayload(value risk.Decision) (RiskPayload, error) {
+	return newRiskPayloadAtVersion(value, "1.0.0")
+}
+
+// NewRiskPayloadV2 构造 risk/2.0.0 Payload，允许携带 2.0.0 的解释字段。
+func NewRiskPayloadV2(value risk.Decision) (RiskPayload, error) {
+	return newRiskPayloadAtVersion(value, "2.0.0")
+}
+
+func newRiskPayloadAtVersion(value risk.Decision, version string) (RiskPayload, error) {
 	copyValue := cloneRiskDecision(value)
 	if err := copyValue.Validate(); err != nil {
 		return RiskPayload{}, fmt.Errorf("%w: risk payload: %v", ErrInvalidEnvelope, err)
 	}
-	return RiskPayload{value: copyValue}, nil
+	if version == "1.0.0" && hasExplanationFields(copyValue) {
+		return RiskPayload{}, fmt.Errorf("%w: risk/1.0.0 cannot carry 2.0.0 explanation fields", ErrInvalidEnvelope)
+	}
+	return RiskPayload{value: copyValue, version: version}, nil
 }
 
-func (p RiskPayload) Decision() risk.Decision         { return cloneRiskDecision(p.value) }
-func (RiskPayload) resultType() string                { return "risk" }
-func (RiskPayload) payloadSchemaVersion() string      { return "1.0.0" }
-func (p RiskPayload) validate() error                 { return p.value.Validate() }
-func (p RiskPayload) marshalPayload() ([]byte, error) { return json.Marshal(p.value) }
-func (p RiskPayload) MarshalJSON() ([]byte, error)    { return p.marshalPayload() }
+func hasExplanationFields(value risk.Decision) bool {
+	for _, reason := range value.Reasons {
+		if reason.RuleRef != nil || len(reason.ObservedValue) != 0 ||
+			reason.ExpectedRange != nil || reason.RemediationCode != nil {
+			return true
+		}
+	}
+	return false
+}
+
+func (p RiskPayload) Decision() risk.Decision { return cloneRiskDecision(p.value) }
+func (RiskPayload) resultType() string        { return "risk" }
+func (p RiskPayload) payloadSchemaVersion() string {
+	if p.version == "" {
+		return "1.0.0"
+	}
+	return p.version
+}
+func (p RiskPayload) validate() error { return p.value.Validate() }
+func (p RiskPayload) marshalPayload() ([]byte, error) {
+	return json.Marshal(p.value)
+}
+func (p RiskPayload) MarshalJSON() ([]byte, error) { return p.marshalPayload() }
 
 // indicatorPayloadValue 是 IndicatorResultPayload 1.0.0 的 JSON 结构。
 // 此结构校验只负责容器、映射和跨字段一致性；metric_code 的单位、精度、值域、
@@ -220,6 +251,12 @@ func DecodePayload(resultType, schemaVersion string, raw json.RawMessage) (Paylo
 			return nil, fmt.Errorf("%w: risk payload: %v", ErrInvalidEnvelope, err)
 		}
 		return NewRiskPayload(value)
+	case resultType == "risk" && schemaVersion == "2.0.0":
+		var value risk.Decision
+		if err := decodeStrictPayload(raw, &value); err != nil {
+			return nil, fmt.Errorf("%w: risk payload: %v", ErrInvalidEnvelope, err)
+		}
+		return NewRiskPayloadV2(value)
 	default:
 		return nil, fmt.Errorf("%w: %s/%s", ErrUnsupportedPayload, resultType, schemaVersion)
 	}
@@ -485,7 +522,23 @@ func cloneRiskDecision(value risk.Decision) risk.Decision {
 	copyValue := value
 	copyValue.Reasons = append([]risk.Reason{}, value.Reasons...)
 	for index := range copyValue.Reasons {
-		copyValue.Reasons[index].EvidenceRefs = append([]string{}, value.Reasons[index].EvidenceRefs...)
+		reason := &copyValue.Reasons[index]
+		reason.EvidenceRefs = append([]string{}, value.Reasons[index].EvidenceRefs...)
+		if value.Reasons[index].RuleRef != nil {
+			ref := *value.Reasons[index].RuleRef
+			reason.RuleRef = &ref
+		}
+		if value.Reasons[index].ExpectedRange != nil {
+			ref := *value.Reasons[index].ExpectedRange
+			reason.ExpectedRange = &ref
+		}
+		if value.Reasons[index].RemediationCode != nil {
+			ref := *value.Reasons[index].RemediationCode
+			reason.RemediationCode = &ref
+		}
+		if value.Reasons[index].ObservedValue != nil {
+			reason.ObservedValue = append(json.RawMessage{}, value.Reasons[index].ObservedValue...)
+		}
 	}
 	copyValue.InputRefs = append([]string{}, value.InputRefs...)
 	return copyValue

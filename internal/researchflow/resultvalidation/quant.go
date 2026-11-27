@@ -89,6 +89,7 @@ func NewQuantPayloadRegistry() (*Registry, error) {
 	}{
 		{resultType: "trend", version: "1.0.0"},
 		{resultType: "risk", version: "1.0.0"},
+		{resultType: "risk", version: "2.0.0"},
 	} {
 		resultType, version := item.resultType, item.version
 		validator := PayloadValidatorFunc(func(payload json.RawMessage) error {
