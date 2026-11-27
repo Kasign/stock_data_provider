@@ -65,12 +65,21 @@ func newDataPolicyHTTPHandlerWithDependencies(
 		manager:       handler.manager,
 		policyRef:     marketdataauthorization.SecurityStatusFactsPolicyRef,
 	}
+	orderBookHandler := &dataPolicyHTTPHandler{
+		authenticator: handler.authenticator,
+		cookieName:    handler.cookieName,
+		manager:       handler.manager,
+		policyRef:     marketdataauthorization.OrderBookFactsPolicyRef,
+	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/v1/owner/data/daily-bars-access-policy", handler.current)
 	mux.HandleFunc("POST /api/v1/owner/data/daily-bars-access-policy/versions", handler.publish)
 	// 交易状态事实是独立数据类：策略必须分开发布、分开撤销。
 	mux.HandleFunc("GET /api/v1/owner/data/security-status-facts-access-policy", factsHandler.current)
 	mux.HandleFunc("POST /api/v1/owner/data/security-status-facts-access-policy/versions", factsHandler.publish)
+	// 盘口事实是日内快照数据类：策略与交易状态事实分开发布、分开撤销。
+	mux.HandleFunc("GET /api/v1/owner/data/order-book-facts-access-policy", orderBookHandler.current)
+	mux.HandleFunc("POST /api/v1/owner/data/order-book-facts-access-policy/versions", orderBookHandler.publish)
 	return mux, nil
 }
 

@@ -66,3 +66,14 @@ func TestValidatePolicyRejectsEmptyAllowListsAndUnsortedValues(t *testing.T) {
 		t.Fatal("purpose codes must be sorted")
 	}
 }
+
+func TestValidDataPolicyRefRegistersOrderBookDataClass(t *testing.T) {
+	for _, ref := range []string{DailyBarsV2PolicyRef, SecurityStatusFactsPolicyRef, OrderBookFactsPolicyRef} {
+		if !ValidDataPolicyRef(ref) {
+			t.Fatalf("registered data-class policy ref %q was rejected", ref)
+		}
+	}
+	if ValidDataPolicyRef("unknown-access") {
+		t.Fatal("unknown data-class policy ref must stay closed")
+	}
+}

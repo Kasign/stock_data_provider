@@ -20,3 +20,10 @@ type SecurityTradingStatusFactsSnapshotRepository interface {
 	SaveSecurityTradingStatusFactsSnapshot(ctx context.Context, snapshot app.SecurityTradingStatusFactsSnapshot) error
 	GetSecurityTradingStatusFactsSnapshot(ctx context.Context, snapshotRef string) (app.SecurityTradingStatusFactsSnapshot, error)
 }
+
+// OrderBookFactsSnapshotRepository 是日内盘口授权快照的持久化 Port。
+// 它与前两类共用同一张不可变快照表，由 payload_kind 分流。
+type OrderBookFactsSnapshotRepository interface {
+	SaveOrderBookFactsSnapshot(ctx context.Context, snapshot app.OrderBookFactsSnapshot) error
+	GetOrderBookFactsSnapshot(ctx context.Context, snapshotRef string) (app.OrderBookFactsSnapshot, error)
+}

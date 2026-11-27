@@ -23,3 +23,11 @@ type DataAuthorizedTradingFactsRepository interface {
 		context.Context, string, string,
 	) (DataAuthorizationDecision, SecurityTradingStatusFactsSnapshot, authorization.CurrentPolicy, error)
 }
+
+// DataAuthorizedOrderBookRepository 在同一只读事务中读取授权决策、撤销状态、
+// 盘口数据类的当前策略和 order_book 快照。
+type DataAuthorizedOrderBookRepository interface {
+	ReadDataAuthorizedOrderBookFactsSnapshot(
+		context.Context, string, string,
+	) (DataAuthorizationDecision, OrderBookFactsSnapshot, authorization.CurrentPolicy, error)
+}

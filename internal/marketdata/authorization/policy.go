@@ -14,6 +14,7 @@ const (
 	DataAccessPolicyType          = "data_access"
 	DailyBarsV2PolicyRef          = "dailybars-v2-access"
 	SecurityStatusFactsPolicyRef  = "security-status-facts-access"
+	OrderBookFactsPolicyRef       = "order-book-facts-access"
 	DataAccessPolicySchemaVersion = "1.0.0"
 )
 
@@ -24,6 +25,7 @@ const (
 var dataPolicyRefs = map[string]struct{}{
 	DailyBarsV2PolicyRef:         {},
 	SecurityStatusFactsPolicyRef: {},
+	OrderBookFactsPolicyRef:      {},
 }
 
 // ValidDataPolicyRef 判断策略引用是否属于已登记的数据类。

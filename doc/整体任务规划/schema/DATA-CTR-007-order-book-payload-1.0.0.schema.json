@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:kasign:stock_data_provider:data:order-book-payload:1.0.0",
+  "title": "DATA-CTR-007 Order Book Facts Snapshot Payload",
+  "description": "Quant tradability 门禁使用的日内五档盘口授权快照。tradable_volume_shares 是买盘五档挂单量之和，是来源直接事实；observed_at 与 system_observed_at 绑定日内快照时刻，不得用交易日替代。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "payload_kind",
+    "symbol",
+    "observed_at",
+    "system_observed_at",
+    "tradable_volume_shares",
+    "bid_levels",
+    "ask_levels",
+    "source",
+    "quality_status"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0.0"
+    },
+    "payload_kind": {
+      "const": "order_book"
+    },
+    "symbol": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+    },
+    "observed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "system_observed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "tradable_volume_shares": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "bid_levels": {
+      "const": 5
+    },
+    "ask_levels": {
+      "const": 5
+    },
+    "source": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+    },
+    "quality_status": {
+      "type": "string",
+      "enum": [
+        "valid",
+        "degraded"
+      ]
+    }
+  }
+}

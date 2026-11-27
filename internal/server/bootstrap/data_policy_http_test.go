@@ -380,6 +380,27 @@ func TestDataPolicyHTTPSecurityStatusFactsPolicyUsesOwnPolicyRef(t *testing.T) {
 	}
 }
 
+func TestDataPolicyHTTPOrderBookFactsPolicyUsesOwnPolicyRef(t *testing.T) {
+	auth := &dataPolicyHTTPAuthenticatorFake{principal: dataPolicyHTTPTestPrincipal(platformsecurity.AuthMethodOwnerSession)}
+	manager := &dataPolicyHTTPRefManagerFake{
+		dataPolicyHTTPManagerFake: &dataPolicyHTTPManagerFake{current: dataPolicyHTTPTestCurrent()},
+		refCurrent:                dataPolicyHTTPTestCurrent(),
+	}
+	handler := newDataPolicyHTTPTestHandler(t, auth, manager)
+
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(
+		http.MethodGet, "/api/v1/owner/data/order-book-facts-access-policy", nil,
+	))
+	if response.Code != http.StatusOK {
+		t.Fatalf("order-book GET status = %d, body=%s", response.Code, response.Body.String())
+	}
+	if len(manager.currentRefs) != 1 ||
+		manager.currentRefs[0] != marketdataauthorization.OrderBookFactsPolicyRef {
+		t.Fatalf("order-book GET current refs = %v", manager.currentRefs)
+	}
+}
+
 // 按数据类读取时的不可用/冲突错误必须与日线共用同一套投影。
 func TestDataPolicyHTTPSecurityStatusFactsPolicyProjectionErrors(t *testing.T) {
 	auth := &dataPolicyHTTPAuthenticatorFake{principal: dataPolicyHTTPTestPrincipal(platformsecurity.AuthMethodOwnerSession)}

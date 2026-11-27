@@ -92,6 +92,7 @@ type Module struct {
 	// securityTradingStatus 是快照 Creator 的 PIT 交易状态来源。
 	// 它必须来自 Data 自己的 Service（只读本地 append-only 版本表），不得由调用方注入。
 	securityTradingStatus application.SecurityTradingStatusPITReader
+	orderBook             application.OrderBookReader
 	cache                 cache.Cache
 	logger                *slog.Logger
 	baostockClient        *baostock.Client
@@ -220,6 +221,7 @@ func (m *Module) build(cfg config.Config, deps Dependencies) error {
 	stockBoardsProviders := make([]provider.StockBoardsProvider, 0, len(available))
 	tradingCalendarProviders := make([]provider.TradingCalendarProvider, 0, len(available))
 	securityTradingStatusProviders := make([]provider.SecurityTradingStatusProvider, 0, len(available))
+	orderBookProviders := make([]provider.OrderBookProvider, 0, len(available))
 	fundamentalsProviders := make([]provider.FundamentalsProvider, 0, len(available))
 	valuationProviders := make([]provider.ValuationProvider, 0, len(available))
 	indexCatalogProviders := make([]provider.IndexCatalogProvider, 0, len(available))
@@ -328,6 +330,13 @@ func (m *Module) build(cfg config.Config, deps Dependencies) error {
 			}
 			securityTradingStatusProviders = append(securityTradingStatusProviders, capability)
 		}
+		if settings.OrderBook {
+			capability, ok := p.(provider.OrderBookProvider)
+			if !ok {
+				return fmt.Errorf("provider %q is configured for order book but does not implement OrderBookProvider", name)
+			}
+			orderBookProviders = append(orderBookProviders, capability)
+		}
 		if settings.Fundamentals {
 			capability, ok := p.(provider.FundamentalsProvider)
 			if !ok {
@@ -424,6 +433,7 @@ func (m *Module) build(cfg config.Config, deps Dependencies) error {
 	ds.SetStockBoardsProviders(stockBoardsProviders)
 	ds.SetTradingCalendarProviders(tradingCalendarProviders)
 	ds.SetSecurityTradingStatusProviders(securityTradingStatusProviders)
+	ds.SetOrderBookProviders(orderBookProviders)
 	ds.SetFundamentalsProviders(fundamentalsProviders)
 	ds.SetValuationProviders(valuationProviders)
 	ds.SetIndexCatalogProviders(indexCatalogProviders)
@@ -460,6 +470,7 @@ func (m *Module) build(cfg config.Config, deps Dependencies) error {
 	}, sourceStatuses, cfg.MaxDailyBars, cfg.RequestTimeout, logger)
 	m.diagnostics = ds
 	m.securityTradingStatus = ds
+	m.orderBook = ds
 	reader, err := application.NewReader(ds)
 	if err != nil {
 		return err

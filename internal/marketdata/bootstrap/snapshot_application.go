@@ -88,6 +88,40 @@ func (m *Module) ReadAuthorizedSecurityTradingStatusFactsSnapshot(
 	return reader.Read(ctx, snapshotRef, authorizationRef, purpose)
 }
 
+// CreateOrderBookFactsSnapshot 创建并授权一个不可变的日内盘口事实快照。
+// 盘口来自 Data 的真实 Provider，不读取 PIT 日线，也不接受调用方传入的数值。
+func (m *Module) CreateOrderBookFactsSnapshot(
+	ctx context.Context, symbol string, systemAsOf time.Time, purpose string,
+) (application.OrderBookFactsSnapshotReferences, error) {
+	if m == nil || m.store == nil || m.orderBook == nil {
+		return application.OrderBookFactsSnapshotReferences{}, errors.New("Market Data order-book facts Snapshot persistence is unavailable")
+	}
+	owner, err := application.NewDataAuthorizationOwner(m.store, m.store)
+	if err != nil {
+		return application.OrderBookFactsSnapshotReferences{}, err
+	}
+	creator, err := application.NewOrderBookFactsSnapshotCreator(m.orderBook, m.store, owner)
+	if err != nil {
+		return application.OrderBookFactsSnapshotReferences{}, err
+	}
+	return creator.Create(ctx, symbol, systemAsOf, purpose)
+}
+
+// ReadAuthorizedOrderBookFactsSnapshot 使用盘口数据类策略做授权复核，
+// 与交易事实共用同一事务边界和 fail-closed 语义。
+func (m *Module) ReadAuthorizedOrderBookFactsSnapshot(
+	ctx context.Context, snapshotRef, authorizationRef, purpose string,
+) (app.OrderBookFactsSnapshot, error) {
+	if m == nil || m.store == nil {
+		return app.OrderBookFactsSnapshot{}, errors.New("Market Data Snapshot persistence is unavailable")
+	}
+	reader, err := application.NewAuthorizedOrderBookFactsSnapshotReader(m.store)
+	if err != nil {
+		return app.OrderBookFactsSnapshot{}, err
+	}
+	return reader.Read(ctx, snapshotRef, authorizationRef, purpose)
+}
+
 // DataAuthorizationPolicyOwner 返回 Data 自有的 Owner 策略管理 Application。
 // Root Server 只持有该 Application Port，不直接操作策略表或复制授权规则。
 func (m *Module) DataAuthorizationPolicyOwner() (*application.DataAuthorizationPolicyOwner, error) {

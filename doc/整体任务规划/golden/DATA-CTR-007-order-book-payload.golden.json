@@ -1,0 +1,12 @@
+{
+  "schema_version": "1.0.0",
+  "payload_kind": "order_book",
+  "symbol": "600519.SH",
+  "observed_at": "2026-11-27T10:15:00Z",
+  "system_observed_at": "2026-11-27T10:15:02Z",
+  "tradable_volume_shares": 23000,
+  "bid_levels": 5,
+  "ask_levels": 5,
+  "source": "eastmoney",
+  "quality_status": "valid"
+}

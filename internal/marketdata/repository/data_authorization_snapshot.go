@@ -140,6 +140,61 @@ func (s *Store) ReadDataAuthorizedSecurityTradingStatusFactsSnapshot(
 	return decision, snapshot, currentPolicy, nil
 }
 
+// ReadDataAuthorizedOrderBookFactsSnapshot 与交易事实读取共享同一事务边界，
+// 但策略引用必须是 order-book-facts-access，数据行必须按 order_book kind 读取。
+// 两项任一缺省都会让其它数据类的授权被误用为日内盘口事实授权。
+func (s *Store) ReadDataAuthorizedOrderBookFactsSnapshot(
+	ctx context.Context, authorizationRef, snapshotRef string,
+) (app.DataAuthorizationDecision, app.OrderBookFactsSnapshot, authorization.CurrentPolicy, error) {
+	if s == nil || s.db == nil || ctx == nil || !validDataAuthorizationOpaque(authorizationRef) {
+		return app.DataAuthorizationDecision{}, app.OrderBookFactsSnapshot{}, authorization.CurrentPolicy{}, ErrDataAuthorizationDecisionInvalid
+	}
+	if _, err := parseDataSnapshotRef(snapshotRef); err != nil {
+		return app.DataAuthorizationDecision{}, app.OrderBookFactsSnapshot{}, authorization.CurrentPolicy{}, err
+	}
+	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead, ReadOnly: true})
+	if err != nil {
+		return app.DataAuthorizationDecision{}, app.OrderBookFactsSnapshot{}, authorization.CurrentPolicy{}, fmt.Errorf("%w: begin authorized snapshot read: %v", ErrDataAuthorizationDecisionUnavailable, err)
+	}
+	defer tx.Rollback()
+
+	decision, currentPolicy, err := readAuthorizedSnapshotDecision(
+		ctx, tx, authorizationRef, authorization.OrderBookFactsPolicyRef,
+	)
+	if err != nil {
+		return app.DataAuthorizationDecision{}, app.OrderBookFactsSnapshot{}, authorization.CurrentPolicy{}, err
+	}
+	row, err := readAuthorizedSnapshotRow(ctx, tx, snapshotRef, app.OrderBookFactsPayloadKind)
+	if err != nil {
+		return app.DataAuthorizationDecision{}, app.OrderBookFactsSnapshot{}, authorization.CurrentPolicy{}, err
+	}
+	var snapshot app.OrderBookFactsSnapshot
+	if err := json.Unmarshal(row.manifestJSON, &snapshot.Manifest); err != nil {
+		return app.DataAuthorizationDecision{}, app.OrderBookFactsSnapshot{}, authorization.CurrentPolicy{}, ErrOrderBookFactsSnapshotConflict
+	}
+	if err := json.Unmarshal(row.payloadJSON, &snapshot.Payload); err != nil {
+		return app.DataAuthorizationDecision{}, app.OrderBookFactsSnapshot{}, authorization.CurrentPolicy{}, ErrOrderBookFactsSnapshotConflict
+	}
+	snapshot.PayloadFingerprint = row.payloadFingerprint
+	if snapshot.Manifest.SnapshotRef != snapshotRef ||
+		snapshot.Manifest.ManifestFingerprint != row.manifestFingerprint ||
+		snapshot.Manifest.SchemaVersion != row.manifestVersion ||
+		snapshot.Payload.SchemaVersion != row.payloadVersion {
+		return app.DataAuthorizationDecision{}, app.OrderBookFactsSnapshot{}, authorization.CurrentPolicy{}, ErrOrderBookFactsSnapshotConflict
+	}
+	if err := snapshot.Verify(); err != nil {
+		return app.DataAuthorizationDecision{}, app.OrderBookFactsSnapshot{}, authorization.CurrentPolicy{}, fmt.Errorf("%w: %v", ErrOrderBookFactsSnapshotConflict, err)
+	}
+	canonicalManifest, canonicalPayload, err := canonicalOrderBookFactsSnapshotJSON(snapshot)
+	if err != nil || !bytes.Equal(canonicalManifest, row.manifestJSON) || !bytes.Equal(canonicalPayload, row.payloadJSON) {
+		return app.DataAuthorizationDecision{}, app.OrderBookFactsSnapshot{}, authorization.CurrentPolicy{}, ErrOrderBookFactsSnapshotConflict
+	}
+	if err := tx.Commit(); err != nil {
+		return app.DataAuthorizationDecision{}, app.OrderBookFactsSnapshot{}, authorization.CurrentPolicy{}, fmt.Errorf("%w: commit authorized snapshot read: %v", ErrDataAuthorizationDecisionUnavailable, err)
+	}
+	return decision, snapshot, currentPolicy, nil
+}
+
 // readAuthorizedSnapshotDecision 校验授权决策自身、撤销状态，并按数据类解析当前策略。
 // policyRef 决定读到哪一套策略：不同数据类的策略必须分开发布、分开撤销。
 func readAuthorizedSnapshotDecision(
@@ -205,10 +260,14 @@ FROM market_data_daily_bars_close_series_snapshots WHERE snapshot_ref=? AND payl
 		snapshotRef, payloadKind).Scan(
 		&row.manifestFingerprint, &row.payloadFingerprint, &row.manifestVersion, &row.payloadVersion, &row.manifestJSON, &row.payloadJSON)
 	if errors.Is(err, sql.ErrNoRows) {
-		if payloadKind == app.SecurityTradingStatusFactsPayloadKind {
+		switch payloadKind {
+		case app.SecurityTradingStatusFactsPayloadKind:
 			return authorizedSnapshotRow{}, fmt.Errorf("%w: %s", ErrSecurityTradingStatusFactsSnapshotNotFound, snapshotRef)
+		case app.OrderBookFactsPayloadKind:
+			return authorizedSnapshotRow{}, fmt.Errorf("%w: %s", ErrOrderBookFactsSnapshotNotFound, snapshotRef)
+		default:
+			return authorizedSnapshotRow{}, fmt.Errorf("%w: %s", ErrDailyBarsCloseSeriesSnapshotNotFound, snapshotRef)
 		}
-		return authorizedSnapshotRow{}, fmt.Errorf("%w: %s", ErrDailyBarsCloseSeriesSnapshotNotFound, snapshotRef)
 	}
 	if err != nil {
 		return authorizedSnapshotRow{}, fmt.Errorf("read authorized Snapshot payload: %w", err)
