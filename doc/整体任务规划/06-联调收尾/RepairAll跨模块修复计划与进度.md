@@ -1665,3 +1665,4 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - **Golden 与测试**：新增 `doc/news/golden/NEWS-CTR-001-research-evidence-page-2.0.0.golden.json`。契约测试先因文件缺失失败，实现后 2.0.0 Golden 同时通过 JSON Schema 与 Go DTO 解析，且非空 `available_at.Nanosecond()==0`；带小数秒的时间被 Schema 拒绝。
 - **变异验证**：把 2.0.0 `available_at` 正则放宽为允许小数秒后，`TestNewsEvidenceQueryContractV2RejectsFractionalAvailableAt` 有效失败；恢复后复验通过。
 - **登记状态**：`契约版本与变更记录.md` 推进至 `0.2.67-frozen`，PLAT-002 NEWS-CTR-001 行登记 1.0.0 冻结不变与 2.0.0 Schema/Golden；NEWS-CTR-001 状态仍 `frozen`。T4b B 组严格门禁与 T5 真实来源仍待完成。
+- **CI 状态（回填）**：代码提交 `a0d766a4beb7eca697a6e3bf460bebbb5e12f7aa` 的 13 个检查全部 `completed/success`：Integration CI `45943432850`、required-checks `45943432879`、Go test suite `45943432868`（Root Go module、News MariaDB 等全部 Job）。T4a 验收完成；B 组成功路径仍保持 fail-closed，依赖 T4b/T5。
