@@ -221,6 +221,11 @@ func (t officialAPIMariaDBTransport) Do(_ context.Context, _ string, _ string, r
 type diagnosingAvailabilityRecorder struct {
 	inner *newsapp.RecordCollectedAvailability
 	err   error
+	last  []domain.AvailabilityEvidence
+}
+
+func (r *diagnosingAvailabilityRecorder) recorded() []domain.AvailabilityEvidence {
+	return append([]domain.AvailabilityEvidence(nil), r.last...)
 }
 
 func (r *diagnosingAvailabilityRecorder) Execute(
@@ -228,6 +233,9 @@ func (r *diagnosingAvailabilityRecorder) Execute(
 	request newsapp.RecordCollectedAvailabilityRequest,
 ) ([]domain.AvailabilityEvidence, error) {
 	evidence, err := r.inner.Execute(ctx, request)
+	if err == nil {
+		r.last = append([]domain.AvailabilityEvidence(nil), evidence...)
+	}
 	if err != nil {
 		detail := "no qualified/ingest entry"
 		if len(request.Qualified) > 0 && len(request.Ingest) > 0 {
@@ -513,4 +521,87 @@ func TestNewsAvailabilityProductionChainMariaDBIntegration(t *testing.T) {
 	if pit.AvailableAt == nil || !pit.AvailableAt.Equal(wantAvailableAt) {
 		t.Fatalf("B-group available_at = %v, want %v", pit.AvailableAt, wantAvailableAt)
 	}
+
+	recorded := diagnosedRecorder.recorded()
+	if len(recorded) != 1 {
+		t.Fatalf("recorded evidence for reopen = %d, want 1", len(recorded))
+	}
+
+	// Negative gate 1: revoking the source qualification must append a revoked
+	// decision and make the version invisible to strict PIT again. The earlier
+	// verified decision stays in history; it is superseded, not rewritten.
+	t.Run("revoked_qualification_invalidates_verified_decision", func(t *testing.T) {
+		revokedAt := now.Add(-time.Minute)
+		revoked := qualification.Clone()
+		revoked.Status = newsapp.AvailabilitySourceQualificationRevoked
+		revoked.RevokedAt = &revokedAt
+		revokedCatalog, err := sourceadapter.NewStaticAvailabilityQualificationCatalog(
+			[]newsapp.AvailabilitySourceQualification{revoked},
+		)
+		if err != nil {
+			t.Fatalf("build revoked qualification catalog: %v", err)
+		}
+		revokedRule, err := newsapp.NewSourceQualifiedAvailabilityReviewRule(revokedCatalog, reviewRuleVersion)
+		if err != nil {
+			t.Fatal(err)
+		}
+		revokedReview, err := newsapp.NewReviewAvailabilityDecision(repository, revokedRule, newID, repository)
+		if err != nil {
+			t.Fatal(err)
+		}
+		revokedUsecase, err := newsapp.NewReviewCollectedAvailability(revokedReview, reviewRuleVersion)
+		if err != nil {
+			t.Fatal(err)
+		}
+		decisions, err := revokedUsecase.Execute(ctx, newsapp.ReviewCollectedAvailabilityRequest{Evidence: recorded})
+		if err != nil {
+			t.Fatalf("reopen review with revoked qualification: %v", err)
+		}
+		if len(decisions) != 1 || decisions[0].Status != domain.AvailabilityDecisionRevoked ||
+			decisions[0].SelectedEvidenceID != nil {
+			t.Fatalf("revoked decision = %+v", decisions)
+		}
+		if decisions[0].SupersedesDecisionID == nil || *decisions[0].SupersedesDecisionID != decisionID {
+			t.Fatalf("revoked decision did not supersede the verified head: %+v", decisions[0])
+		}
+		if _, err := repository.GetEvidenceVersionAt(ctx, newsapp.GetEvidenceRequest{
+			SystemAsOf: time.Now().UTC().Add(2 * time.Minute), NewsID: newsID, VersionID: versionID,
+		}); !errors.Is(err, newsapp.ErrEvidencePITNotFound) {
+			t.Fatalf("strict PIT error after revoke = %v, want ErrEvidencePITNotFound", err)
+		}
+	})
+
+	// Negative gate 2: an evidence record whose parser version does not match
+	// the qualified binding must stay unresolved, never verified.
+	t.Run("mismatched_parser_version_stays_unresolved", func(t *testing.T) {
+		mismatched := qualification.Clone()
+		mismatched.QualificationRef = qualificationRef + "-mismatch"
+		mismatched.ParserVersion = parserVersion + "-other"
+		mismatchedCatalog, err := sourceadapter.NewStaticAvailabilityQualificationCatalog(
+			[]newsapp.AvailabilitySourceQualification{mismatched},
+		)
+		if err != nil {
+			t.Fatalf("build mismatched qualification catalog: %v", err)
+		}
+		mismatchedRule, err := newsapp.NewSourceQualifiedAvailabilityReviewRule(mismatchedCatalog, reviewRuleVersion)
+		if err != nil {
+			t.Fatal(err)
+		}
+		mismatchedReview, err := newsapp.NewReviewAvailabilityDecision(repository, mismatchedRule, newID, repository)
+		if err != nil {
+			t.Fatal(err)
+		}
+		mismatchedUsecase, err := newsapp.NewReviewCollectedAvailability(mismatchedReview, reviewRuleVersion)
+		if err != nil {
+			t.Fatal(err)
+		}
+		decisions, err := mismatchedUsecase.Execute(ctx, newsapp.ReviewCollectedAvailabilityRequest{Evidence: recorded})
+		if err != nil {
+			t.Fatalf("reopen review with mismatched parser version: %v", err)
+		}
+		if len(decisions) != 1 || decisions[0].Status != domain.AvailabilityDecisionUnresolved ||
+			decisions[0].SelectedEvidenceID != nil {
+			t.Fatalf("mismatched decision = %+v", decisions)
+		}
+	})
 }
