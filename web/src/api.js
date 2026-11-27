@@ -531,12 +531,28 @@ export async function changeOwnerPassword(settings, currentPassword, newPassword
 
 // Researchflow Run API — SRV-CTR-001. Browser requests use the existing
 // HttpOnly Owner Session cookie; mutating calls require the in-memory CSRF token.
-export function createResearchflowRun(settings, command, signal) {
+function researchflowRequestOptions(signalOrOptions, options = {}) {
+  if (signalOrOptions && typeof signalOrOptions === "object" && !("aborted" in signalOrOptions)) {
+    return { ...signalOrOptions, ...options };
+  }
+  return { signal: signalOrOptions, ...options };
+}
+
+export function createResearchflowRun(settings, command, signalOrOptions, options = {}) {
   if (!command || typeof command !== "object" || Array.isArray(command)) {
     return Promise.reject(new Error("Researchflow 创建请求必须是对象。"));
   }
+  const requestOptions = researchflowRequestOptions(signalOrOptions, options);
+  const timeoutMs = requestOptions.timeoutMs ?? 30000;
   return request("/api/v1/researchflow/runs", {
-    method: "POST", body: command, signal, csrf: true
+    method: "POST", body: command, signal: requestOptions.signal, timeoutMs, csrf: true
+  }).catch((error) => {
+    if (error?.code === "request_timeout") {
+      const seconds = Math.max(1, Math.ceil(timeoutMs / 1000));
+      error.creationOutcomeUnknown = true;
+      error.message = `创建请求超过 ${seconds} 秒仍未完成，服务端可能已接收 Run。请先核实 Run 记录，不要盲目重复提交。`;
+    }
+    throw error;
   });
 }
 
@@ -555,5 +571,19 @@ export function cancelResearchflowRun(settings, runRef, signal) {
   }
   return request("/api/v1/researchflow/runs/" + encodeURIComponent(value) + "/cancel", {
     method: "POST", signal, csrf: true
+  });
+}
+
+// Authorized domain results only (SRV-CTR-001 1.1.0). This is not the full
+// research report projection and must not be rendered as one.
+export function getResearchflowRunResults(settings, runRef, signalOrOptions, options = {}) {
+  const value = String(runRef ?? "").trim();
+  if (!value || value !== String(runRef) || value.length > 255) {
+    return Promise.reject(new Error("Researchflow Run 引用无效。"));
+  }
+  const requestOptions = researchflowRequestOptions(signalOrOptions, options);
+  return request("/api/v1/researchflow/runs/" + encodeURIComponent(value) + "/results", {
+    signal: requestOptions.signal,
+    timeoutMs: requestOptions.timeoutMs ?? 20000
   });
 }

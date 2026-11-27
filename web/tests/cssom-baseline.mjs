@@ -73,7 +73,7 @@ try {
     notes: [
       "Computed-style capture only; this is an observation artifact, not a golden pass/fail comparison.",
       "Viewport and theme are separate scenarios because responsive and theme-dependent values are expected to differ.",
-      "Font family and pixel screenshots are intentionally excluded from this computed-style fixture; browser screenshot artifacts use Noto CJK fonts for visual review.",
+      "Font family and pixel screenshots are intentionally excluded from this computed-style fixture; the CI fixture captures text metrics with Noto CJK fonts installed for visual review.",
       "The fixture intercepts API and health requests with 503 responses; no provider data is represented."
     ],
     properties, scenarios: []

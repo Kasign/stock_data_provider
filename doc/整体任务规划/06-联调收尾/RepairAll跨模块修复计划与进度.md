@@ -1966,4 +1966,19 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - **覆盖**：创建/查询/取消三个 helper 的 Root Server 路径；POST 携带内存 CSRF；幂等键只放在 CreateRun body，不写 legacy `Idempotency-Key` header；无 `X-API-Key`/`Authorization`；`same-origin`；signal 透传；`run_ref` URL 编码；非法参数与缺失 CSRF 在 fetch 前失败。
 - **变异证据**：将 `createResearchflowRun` 的 `csrf: true` 临时改为 `false` 后，CSRF 断言有效失败；恢复后生产代码无净差异。
 - **验证**：`npm test` 523/523 PASS（含 4 个新增 Researchflow 用例），`npm run check` PASS，`git diff --check` PASS。
-- **剩余边界**：WebUI 页面仍调用旧 Analysis 主流程；完整报告导出、事件流、日期/窗口/因子参数映射和多标的拆单规则未迁移。本组 CI 按新 SHA 回填，未取得结论前状态为 `not_run`。
+- **剩余边界**：WebUI 页面仍调用旧 Analysis 主流程；完整报告导出、事件流、日期/窗口/因子参数映射和多标的拆单规则未迁移。
+- **CI 状态（如实记录）**：提交 `b501b8981` 的 required-checks、Full integration checks、WebUI source/container 检查均 success，但 `Chromium responsive layout checks`（`46033659243`）的 CSSOM 基线步骤 failure；不写成全绿。根因与修复见后续 CSSOM 基线章节。
+
+## 2026-11-28 Researchflow 创建超时与结果读取 helper
+
+- **为什么补**：旧 `createAnalysisTask` 在 30 秒超时时标记 `creationOutcomeUnknown`，防止把“服务端可能已接收”误当安全失败；`createResearchflowRun` 原先无超时，直接迁移会丢失这个保护。SRV-CTR-001 1.1.0 的 `GET /results` 已冻结且有服务端实现，浏览器侧却没有 helper。
+- **实现**：`createResearchflowRun` 默认 30 秒有界超时，超时错误携带 `creationOutcomeUnknown=true` 和“不要盲目重复提交”提示；普通 HTTP 错误不误标。保留幂等键只在 CreateRun body、POST 内存 CSRF、无自动重试。新增 `getResearchflowRunResults`，默认 20 秒超时，映射到已冻结的 `authorized_domain_results` 路由，并在代码注释中明确不是完整报告投影。
+- **测试**：新增超时、普通错误、取消传播、results 路径/编码/无 CSRF/无 API Key/Authorization、结构化错误保留、非法 run_ref 前置失败等用例。变异验证：去掉 `timeoutMs`、去掉 `creationOutcomeUnknown`、去掉 `/results` 后缀均使对应用例有效失败；恢复后 `npm test` 528/528 PASS，`npm run check`、`git diff --check` PASS。
+- **剩余边界**：页面主流程仍未迁移；`getResearchflowRunResults` 只返回授权领域结果，不能渲染完整报告，也不能替代 RF-BLOCK-007 的 RunResult 成功路径。本组 CI 按新 SHA 回填。
+
+## 2026-11-28 CSSOM 基线按 Noto CJK 环境更新
+
+- **现象**：`b501b8981` 的 `Chromium responsive layout checks` 在 CSSOM 基线步骤失败，差异集中在 `select-all`、`selected-count`、`add-watchlist-button` 的文本宽度。
+- **归因**：CSSOM fixture 于 `594f5391` 生成；随后 `1ca6956f5` 给 CI 增加 `fonts-noto-cjk` 安装步骤，`121f52276` 只有说明文字变更。两次 CI artifact 的 Chromium 版本同为 `159.0.8154.6`，但新日志显示安装 `fonts-noto-cjk 1:20240730+repack1-1build1`，字体度量变化导致宽度差异。没有 HTML/CSS 生产变更，因此不是页面回归。
+- **处理**：用当前 CI 观测 artifact 中有意更新 `web/tests/fixtures/screening-local-batch.cssom.json.gz`，并同步 `cssom-baseline.mjs` 的 fixture 说明；比较逻辑与断言强度不变，没有跳过或放宽 CSSOM 检查。
+- **验证**：新 fixture 由 artifact 的 8 个 scenario × 6 个 target 转换生成，写入后深比较一致；`node --check`、`npm run check`、`git diff --check` PASS。完整 CI 按新 SHA 回填。

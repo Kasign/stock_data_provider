@@ -73,10 +73,13 @@ SRV-CTR-001 v1.0.0（FROZEN）定义的唯一 WebUI 业务执行 API：
 - `createResearchflowRun`
 - `getResearchflowRun`
 - `cancelResearchflowRun`
+- `getResearchflowRunResults`
 
-三个 helper 已指向 SRV-CTR-001，并在 POST 使用当前内存 CSRF Token。当前 `app.js` 未导入/调用这些 helper。**Helper 存在不代表页面已迁移或端到端已接通。**
+前三个 helper 已指向 SRV-CTR-001，并在 POST 使用当前内存 CSRF Token。第四个 helper 映射到 SRV-CTR-001 1.1.0 的已冻结 `GET /api/v1/researchflow/runs/{run_ref}/results`，只返回 `authorized_domain_results`，不是完整研究报告。当前 `app.js` 未导入/调用这些 helper。**Helper 存在不代表页面已迁移或端到端已接通。**
 
-**2026-11-28 补充**：`web/tests/api.test.mjs` 已为三个 helper 增加契约测试，覆盖创建/查询/取消路径、同源 Root Server 请求、body 内幂等键与 `Idempotency-Key` header 的区别、内存 CSRF、无 API Key/Authorization 泄漏、`run_ref` URL 编码、非法输入与缺失 CSRF 在发请求前失败。把 `createResearchflowRun` 的 `csrf: true` 临时改为 `false` 后，CSRF 断言有效失败；恢复生产代码后 WebUI 523 个测试全通过、`npm run check` 通过。本轮只验证 helper 契约，不代表页面主流程迁移或端到端验收完成。
+**2026-11-28 补充**：`web/tests/api.test.mjs` 已为这些 helper 增加契约测试，覆盖创建/查询/取消/结果读取路径、同源 Root Server 请求、body 内幂等键与 `Idempotency-Key` header 的区别、内存 CSRF、无 API Key/Authorization 泄漏、`run_ref` URL 编码、非法输入与缺失 CSRF 在发请求前失败、结构化错误原样拒绝。把 `createResearchflowRun` 的 `csrf: true` 临时改为 `false` 后，CSRF 断言有效失败；恢复生产代码后 WebUI 523 个测试全通过、`npm run check` 通过。本轮只验证 helper 契约，不代表页面主流程迁移或端到端验收完成。
+
+**2026-11-28 再补充**：`createResearchflowRun` 现在默认 30 秒有界超时；超时错误标记 `creationOutcomeUnknown=true` 并提示先核实 Run、不要盲目重复提交，保持幂等键只在 body、不自动重试。普通 HTTP 错误不会被误标为 unknown。新增测试覆盖超时、普通错误、调用方取消传播。把 `timeoutMs` 或从超时错误移除 `creationOutcomeUnknown` 后，对应用例均有效失败；恢复后 528 个 WebUI 测试全通过。结果读取 helper 默认 20 秒超时，只有已授权领域结果，不得用来渲染完整报告正文。
 
 ## 3.4 旧 Task API 的实际后端执行链
 

@@ -17,6 +17,7 @@ import {
   getAnalysisTask,
   getAnalysisTaskEvents,
   getResearchflowRun,
+  getResearchflowRunResults,
   getDailyBars,
   getChipDistribution,
   getCapitalFlow,
@@ -935,7 +936,7 @@ test("creates Researchflow runs through Root Server with body idempotency and CS
       parameters: {}
     };
     const controller = new AbortController();
-    const result = await createResearchflowRun(settings, command, controller.signal);
+    const result = await createResearchflowRun(settings, command, { signal: controller.signal });
 
     assert.equal(result.run.run_ref, "run:researchflow:1");
     const request = requests[1];
@@ -948,7 +949,9 @@ test("creates Researchflow runs through Root Server with body idempotency and CS
     assert.equal(request.headers["X-API-Key"], undefined);
     assert.equal(request.headers.Authorization, undefined);
     assert.equal(request.credentials, "same-origin");
-    assert.equal(request.signal, controller.signal);
+    assert.notEqual(request.signal, controller.signal,
+      "a bounded create timeout wraps the caller signal so it can abort the underlying fetch");
+    assert.equal(request.signal.aborted, false);
     assert.deepEqual(JSON.parse(request.body), command);
   } finally {
     clearOwnerSessionMemory();
@@ -1012,6 +1015,7 @@ test("rejects invalid Researchflow helper inputs before any network request", as
     await assert.rejects(createResearchflowRun({}, []), /对象/);
     await assert.rejects(getResearchflowRun({}, "  run:1  "), /无效/);
     await assert.rejects(getResearchflowRun({}, "r".repeat(256)), /无效/);
+    await assert.rejects(getResearchflowRunResults({}, "  run:1  "), /无效/);
     await assert.rejects(cancelResearchflowRun({}, ""), /无效/);
     assert.equal(calls, 0, "invalid helper inputs must fail before fetch");
   } finally {
@@ -1031,6 +1035,183 @@ test("Researchflow mutating helpers require an in-memory CSRF token", async () =
     await assert.rejects(createResearchflowRun({}, { schema_version: "1.1.0" }), /CSRF/);
     await assert.rejects(cancelResearchflowRun({}, "run:researchflow:1"), /CSRF/);
     assert.equal(calls, 0, "mutating helpers must fail before fetch without CSRF");
+  } finally {
+    clearOwnerSessionMemory();
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("marks a timed-out Researchflow creation as an unknown outcome without retry", async () => {
+  const originalFetch = globalThis.fetch;
+  const requests = [];
+  let createSignal;
+  clearOwnerSessionMemory();
+  globalThis.fetch = async (url, init) => {
+    const record = { url: String(url), ...init };
+    requests.push(record);
+    if (record.url === "/api/v1/owner/session" && record.method === "POST") {
+      return jsonResponse({ csrf_token: "researchflow-csrf" });
+    }
+    createSignal = init.signal;
+    return new Promise((_resolve, reject) => {
+      init.signal.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")), { once: true });
+    });
+  };
+  try {
+    await loginOwnerSession({}, "test-password");
+    const command = {
+      schema_version: "1.1.0",
+      idempotency_key: "idem-researchflow-timeout",
+      template_ref: "quant.research",
+      template_version: "1.0.0",
+      input_snapshot_refs: [],
+      parameters: {}
+    };
+    await assert.rejects(
+      createResearchflowRun({}, command, { timeoutMs: 5 }),
+      (error) => {
+        assert.equal(error.code, "request_timeout");
+        assert.equal(error.timeout, true);
+        assert.equal(error.creationOutcomeUnknown, true,
+          "an unknown submit result must not be presented as a safe failure");
+        assert.match(error.message, /不要盲目重复提交/);
+        return true;
+      }
+    );
+    const createRequests = requests.filter((request) => request.url === "/api/v1/researchflow/runs");
+    assert.equal(createRequests.length, 1, "Researchflow creation must not retry automatically");
+    assert.equal(createSignal.aborted, true);
+    assert.equal(JSON.parse(createRequests[0].body).idempotency_key, "idem-researchflow-timeout");
+    assert.equal(createRequests[0].headers["Idempotency-Key"], undefined);
+  } finally {
+    clearOwnerSessionMemory();
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("does not mark ordinary Researchflow creation failures as unknown", async () => {
+  const originalFetch = globalThis.fetch;
+  const requests = [];
+  clearOwnerSessionMemory();
+  globalThis.fetch = async (url, init) => {
+    const record = { url: String(url), ...init };
+    requests.push(record);
+    if (record.url === "/api/v1/owner/session" && record.method === "POST") {
+      return jsonResponse({ csrf_token: "researchflow-csrf" });
+    }
+    return jsonResponse({ error: { code: "run_conflict", message: "Run already exists" } }, 409);
+  };
+  try {
+    await loginOwnerSession({}, "test-password");
+    await assert.rejects(
+      createResearchflowRun({}, { schema_version: "1.1.0", idempotency_key: "idem-1" }),
+      (error) => {
+        assert.equal(error.code, "run_conflict");
+        assert.equal(error.status, 409);
+        assert.equal(error.creationOutcomeUnknown, undefined);
+        assert.doesNotMatch(error.message, /不要盲目重复提交/);
+        return true;
+      }
+    );
+  } finally {
+    clearOwnerSessionMemory();
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("reads authorized Researchflow results as domain results, not a full report", async () => {
+  const originalFetch = globalThis.fetch;
+  const requests = [];
+  globalThis.fetch = async (url, init) => {
+    requests.push({ url: String(url), ...init });
+    return jsonResponse({
+      resource_kind: "authorized_domain_results",
+      results: [{ result_type: "factor", resource_ref: "result:factor:1" }]
+    });
+  };
+  try {
+    const controller = new AbortController();
+    const result = await getResearchflowRunResults({}, "run:researchflow:a/b", { signal: controller.signal });
+    assert.equal(result.resource_kind, "authorized_domain_results");
+    assert.deepEqual(result.results, [{ result_type: "factor", resource_ref: "result:factor:1" }]);
+
+    const request = requests[0];
+    assert.equal(request.url, "/api/v1/researchflow/runs/run%3Aresearchflow%3Aa%2Fb/results");
+    assert.equal(request.method, "GET");
+    assert.equal(request.body, undefined);
+    assert.equal(request.headers["X-CSRF-Token"], undefined);
+    assert.equal(request.headers["X-API-Key"], undefined);
+    assert.equal(request.headers.Authorization, undefined);
+    assert.equal(request.credentials, "same-origin");
+    assert.notEqual(request.signal, controller.signal,
+      "a bounded results read wraps the caller signal so it can abort the underlying fetch");
+    assert.equal(request.signal.aborted, false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("preserves structured errors from authorized Researchflow results", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => jsonResponse({
+    error: {
+      code: "researchflow.result_read_unavailable",
+      message: "结果读取未装配",
+      request_id: "req-researchflow-results"
+    }
+  }, 503, { "X-Request-ID": "req-header-should-not-win" });
+  try {
+    await assert.rejects(
+      getResearchflowRunResults({}, "run:researchflow:1"),
+      (error) => {
+        assert.equal(error.code, "researchflow.result_read_unavailable");
+        assert.equal(error.status, 503);
+        assert.equal(error.requestId, "req-researchflow-results");
+        assert.match(error.message, /结果读取未装配/);
+        return true;
+      }
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("forwards caller cancellation through Researchflow helper timeouts", async () => {
+  const originalFetch = globalThis.fetch;
+  const requestSignals = [];
+  clearOwnerSessionMemory();
+  globalThis.fetch = async (url, init) => {
+    if (String(url) === "/api/v1/owner/session" && init.method === "POST") {
+      return jsonResponse({ csrf_token: "researchflow-csrf" });
+    }
+    requestSignals.push(init.signal);
+    return new Promise((_resolve, reject) => {
+      init.signal.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")), { once: true });
+    });
+  };
+  try {
+    await loginOwnerSession({}, "test-password");
+
+    const createController = new AbortController();
+    const createPromise = createResearchflowRun(
+      {},
+      { schema_version: "1.1.0", idempotency_key: "idem-cancel" },
+      { signal: createController.signal, timeoutMs: 30000 }
+    );
+    createController.abort();
+    await assert.rejects(createPromise, (error) => error.name === "AbortError");
+    assert.equal(requestSignals[0].aborted, true);
+
+    requestSignals.length = 0;
+    const resultsController = new AbortController();
+    const resultsPromise = getResearchflowRunResults(
+      {},
+      "run:researchflow:1",
+      { signal: resultsController.signal, timeoutMs: 30000 }
+    );
+    resultsController.abort();
+    await assert.rejects(resultsPromise, (error) => error.name === "AbortError");
+    assert.equal(requestSignals[0].aborted, true);
   } finally {
     clearOwnerSessionMemory();
     globalThis.fetch = originalFetch;
