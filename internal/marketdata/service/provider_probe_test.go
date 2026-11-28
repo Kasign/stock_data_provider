@@ -1946,3 +1946,40 @@ func TestBuildProviderProbeCheckResultsCarriesProviderErrorMessage(t *testing.T)
 		t.Fatalf("provider error message must be projected, got %q", results[0].ErrorMessage)
 	}
 }
+
+type probeSupplementFake struct{}
+
+func (probeSupplementFake) Name() string { return "supplement-fake" }
+
+func (probeSupplementFake) FetchChipDistribution(_ context.Context, symbol string) (*model.ChipDistribution, error) {
+	return &model.ChipDistribution{
+		Symbol: symbol, Source: "supplement-fake", SourceVersion: "test-v1",
+		FetchedAt: time.Now().UTC(), AverageCost: 1500, QualityStatus: model.QualityDegraded,
+	}, nil
+}
+
+func (probeSupplementFake) FetchCapitalFlow(_ context.Context, symbol string) (*model.CapitalFlow, error) {
+	return &model.CapitalFlow{
+		Symbol: symbol, Source: "supplement-fake", SourceVersion: "test-v1",
+		FetchedAt: time.Now().UTC(), QualityStatus: model.QualityDegraded,
+	}, nil
+}
+
+// 补充数据源不进入 capability 列表，但实际请求会用它兜底；探测必须覆盖，
+// 否则 MiaoXiang 这类源失败时只能看到主源错误，无法定位。
+func TestProviderProbeIncludesSupplementProviderChipAndCapitalFlow(t *testing.T) {
+	fake := probeSupplementFake{}
+	ds := NewWithCapabilities([]provider.NamedProvider{fake}, nil, nil, cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000, ResilienceConfig{}, nil)
+	ds.SetSupplementProviders([]provider.SupplementProvider{fake})
+	run, err := ds.ProbeProviderCapabilitiesWithOptions(context.Background(), ProviderProbeOptions{
+		Scope: "all", Capabilities: []string{"chip_distribution", "capital_flow"}, TimeoutSeconds: 5,
+	})
+	if err != nil {
+		t.Fatalf("ProbeProviderCapabilitiesWithOptions() error = %v", err)
+	}
+	for _, capability := range []string{"chip_distribution", "capital_flow"} {
+		if _, found := findProbeItem(run.Items, fake.Name(), capability); !found {
+			t.Fatalf("supplement provider must be probed for %s: %+v", capability, run.Items)
+		}
+	}
+}

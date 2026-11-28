@@ -951,9 +951,8 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 			return v.QualityStatus, v.SourceVersion, append([]string(nil), v.QualityReasons...), nil
 		})
 	}
-	for _, p := range s.capitalFlowProviders {
-		p := p
-		add(p.Name(), "capital_flow", func(probeCtx context.Context) (model.QualityStatus, string, []string, error) {
+	probeCapitalFlow := func(p provider.CapitalFlowProvider) providerProbeFunc {
+		return func(probeCtx context.Context) (model.QualityStatus, string, []string, error) {
 			v, err := p.FetchCapitalFlow(probeCtx, barsSymbol)
 			if err != nil {
 				return model.QualityUnknown, "", nil, err
@@ -971,11 +970,10 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 			}
 			recordProviderProbeEvidence(probeCtx, barsSymbol, v.ProviderDate, v.Observations, v.Observations, nil)
 			return v.QualityStatus, v.SourceVersion, append([]string(nil), v.QualityReasons...), nil
-		})
+		}
 	}
-	for _, p := range s.chipDistributionProviders {
-		p := p
-		add(p.Name(), "chip_distribution", func(probeCtx context.Context) (model.QualityStatus, string, []string, error) {
+	probeChipDistribution := func(p provider.ChipDistributionProvider) providerProbeFunc {
+		return func(probeCtx context.Context) (model.QualityStatus, string, []string, error) {
 			v, err := p.FetchChipDistribution(probeCtx, barsSymbol)
 			if err != nil {
 				return model.QualityUnknown, "", nil, err
@@ -991,7 +989,23 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 			}
 			recordProviderProbeEvidence(probeCtx, barsSymbol, v.ProviderDate, 1, 1, nil)
 			return v.QualityStatus, v.SourceVersion, append([]string(nil), v.QualityReasons...), nil
-		})
+		}
+	}
+	for _, p := range s.capitalFlowProviders {
+		add(p.Name(), "capital_flow", probeCapitalFlow(p))
+	}
+	for _, p := range s.chipDistributionProviders {
+		add(p.Name(), "chip_distribution", probeChipDistribution(p))
+	}
+	// 补充数据源（如 MiaoXiang）不进入 capability 列表，但在实际请求中会参与
+	// chip/capital-flow 的兜底；探测必须覆盖它们，否则失败原因不可见。
+	for _, p := range s.supplementProviders {
+		if capability, ok := p.(provider.CapitalFlowProvider); ok {
+			add(p.Name(), "capital_flow", probeCapitalFlow(capability))
+		}
+		if capability, ok := p.(provider.ChipDistributionProvider); ok {
+			add(p.Name(), "chip_distribution", probeChipDistribution(capability))
+		}
 	}
 	// 固定核心能力清单：未注册 Provider 的能力也必须显式出现在诊断报告中。
 	requiredCapabilities := make([]string, 0, len(selected))
