@@ -2176,3 +2176,16 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - **测试**：新增导出结构、探测分组、provider 错误原因三个用例；两处变异（不导出 probe、分类不认已提取 quality）均被捕获。`npm test` 573/573、`npm run check`、`go test ./...` 93 包、`go vet`、`git diff --check` 全部通过。
 - **提交与 CI（回填）**：提交 `66292ae20b356a7a5e764aaa446a21b098abc49f` 已推送 `repair_all`，16/16 check run 全部 `completed/success`（含 `Go test suite` [46153931006](https://github.com/Kasign/stock_data_provider/actions/runs/46153931006)、`WebUI browser smoke` [46153931008](https://github.com/Kasign/stock_data_provider/actions/runs/46153931008)、`Integration CI` [46153931037](https://github.com/Kasign/stock_data_provider/actions/runs/46153931037)、`required-checks` [46153931045](https://github.com/Kasign/stock_data_provider/actions/runs/46153931045)、`WebUI checks` [46153931033](https://github.com/Kasign/stock_data_provider/actions/runs/46153931033)），无 failure、无 pending。
 - **部署后预期**：估值 503→200；探测不再 400，失败项显示具体 provider 原因；筹码/资金流取决于 `MARKET_DATA_MX_ENABLED=true`（仅有 MX_APIKEY 不够）。
+
+## 2026-11-28 市场总览四项缺口验证（重启后实测）
+
+- **背景**：用户反馈「早点还能看」。核对 `GET /api/v1/data-sources` 发现根因不是权限，而是**能力开关分两层**：`hithink` 的 `enabled=true` 但 `caps=[]`（一个能力都没开），`tickflow` 只有 `daily_bar`。指导用户开启第二层开关后复测。
+- **能力矩阵变化（实测）**：`hithink` → `[index_quote, hot_ranking]`；`tickflow` → `[daily_bar, sector_ranking, index_quote]`；`miaoxiang` 为 `[chip, capital_flow]`。
+- **四项结果（实测端点）**：
+  - 核心指数 `GET /market/indices`：**502 → 200 `valid`**，6 个指数，`source=tickflow`，上证 3606.487（+3.73%）。
+  - 人气榜 `GET /market/hot-stocks`：**502 → 200 `degraded`**，10 条，`source=hithink`。
+  - 行业排行 `GET /market/sectors`：**仍 502**。`tickflow/sector_rankings` 返回 `HTTP 403 {"code":"NO_UNIVERSE_PERMISSION","message":"无标的池查询权限"}`；`eastmoney/sector_rankings` 仍是 push2 阻断。
+  - 市场资金流 `GET /market/capital-flow`：**仍 503**（`no market-capital-flow provider is enabled`，全平台仅 Tushare 实现）。
+- **行业排行替代路径排查（全部失败，证明无解）**：`push2ex` 的 `api/qt/clist/get` 返回 404；`datacenter-web` 的 `RPT_BOARD_FUND_FLOW`、`RPT_INDUSTRY_QUOTE` 返回 `9501 报表配置不存在`；`push2ex/getTopicZTPool`（涨停池）虽可用但不提供行业排行。结论：eastmoney 的行业排行只存在于 push2，当前网络下无替代端点。
+- **诊断盲点修复（提交 `b8538b4ba`）**：MiaoXiang 走补充源通道（`SupplementProvider`）参与 chip/capital-flow 兜底，但探针只遍历主 provider 列表，导致其失败原因不可见；已抽出 `probeCapitalFlow`/`probeChipDistribution` 闭包并新增 supplement 循环，主源与补充源共用同一套校验。
+- **剩余两项的唯一路径**：行业排行需 TickFlow 开通「标的池查询」权限（其实现仅支持 `industry`，不支持概念/地域）；市场资金流需 Tushare 相应权限。均非代码或配置可解。
