@@ -2232,7 +2232,7 @@ try {
   assert.equal(blockedRecentState.removeActions, 0);
 
   blockedStoragePage.once("dialog", (dialog) => dialog.accept());
-  await blockedStoragePage.locator("#clear-recent-analysis").click();
+  await blockedStoragePage.locator("#clear-recent-runs").click();
   await blockedStoragePage.waitForFunction(
     () => document.querySelector("#recent-runs-feedback")?.textContent.includes("未能确认最近任务历史已清空"),
     null,
@@ -2357,7 +2357,7 @@ try {
     "a failed recent-task removal must preserve the original stored history bytes");
 
   quotaPage.once("dialog", (dialog) => dialog.accept());
-  await quotaPage.locator("#clear-recent-analysis").click();
+  await quotaPage.locator("#clear-recent-runs").click();
   await quotaPage.waitForFunction(
     () => document.querySelector("#recent-runs-feedback")?.textContent.includes("未能确认最近任务历史已清空"),
     null,

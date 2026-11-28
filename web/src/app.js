@@ -5269,7 +5269,7 @@ $("#recent-runs-status").addEventListener("change", () => renderRecentTasks());
 $("#recent-runs-type").addEventListener("change", () => renderRecentTasks());
 $("#recent-runs-from").addEventListener("change", () => renderRecentTasks());
 $("#recent-runs-to").addEventListener("change", () => renderRecentTasks());
-$("#clear-recent-analysis").addEventListener("click", clearRecentTaskHistory);
+$("#clear-recent-runs").addEventListener("click", clearRecentTaskHistory);
 $("#recent-runs-list").addEventListener("click", (event) => {
   const removeButton = event.target.closest("button[data-remove-task-id]");
   if (removeButton) {

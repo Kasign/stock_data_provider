@@ -835,7 +835,7 @@ test("recent analysis history exposes historical-only task types", () => {
 });
 
 test("recent analysis history supports search, single removal and local-only clearing", () => {
-  for (const id of ["recent-runs-search", "clear-recent-analysis", "recent-runs-feedback", "recent-runs-list"]) {
+  for (const id of ["recent-runs-search", "clear-recent-runs", "recent-runs-feedback", "recent-runs-list"]) {
     assert.match(html, new RegExp('id="' + id + '"'), "recent-history control must exist: " + id);
   }
   assert.ok(app.includes("function renderRecentTasks(records)"));
@@ -2883,7 +2883,7 @@ test("降级领域结果不得作为完整研究报告归档", () => {
 
 test("最近任务展示层不得回退到旧 Analysis 命名", () => {
   const presentationSources = [html, stylesheet, appSource, recentTaskView, watchlistTrackingViewModel].join("\n");
-  assert.doesNotMatch(presentationSources, /recent-\u0061nalysis-/, "展示层 DOM/CSS 不得回退到 recent-analysis-*");
+  assert.doesNotMatch(presentationSources, /recent-\u0061nalysis/, "展示层 DOM/CSS/ID 不得回退到 recent-analysis 命名（含 clear-recent-\u0061nalysis 后缀形式）");
   assert.doesNotMatch(html, /最近分析/, "用户可见文案不得再称最近分析");
   assert.doesNotMatch(presentationSources, /\u65e7分析 API 地址/, "用户可见文案不得回退到旧服务地址表述");
   assert.match(html, /recent-runs-panel/);
