@@ -39,6 +39,10 @@ const watchlistTrackingViewModel = await readFile(new URL("../src/watchlist-trac
 const watchlistListViewModel = await readFile(new URL("../src/watchlist-list-view-model.js", import.meta.url), "utf8");
 const taskEventListViewModel = await readFile(new URL("../src/task-event-list-view-model.js", import.meta.url), "utf8");
 const taskFlowSummaryViewModel = await readFile(new URL("../src/task-flow-summary-view-model.js", import.meta.url), "utf8");
+const researchflowFlow = await readFile(new URL("../src/researchflow-flow.js", import.meta.url), "utf8");
+const researchflowAdapter = await readFile(new URL("../src/researchflow-flow-adapters.js", import.meta.url), "utf8");
+const researchflowResultView = await readFile(new URL("../src/researchflow-result-view.js", import.meta.url), "utf8");
+const researchflowResultContract = await readFile(new URL("../../doc/server/schema/SRV-CTR-001/result-read-response-1.1.0.schema.json", import.meta.url), "utf8");
 
 // UI 控制器和功能模块分拆后，跨模块契约应检查实际参与运行的源码集合。
 const app = [appSource, recentTaskModule, watchlistModule, marketOverview, marketActivity, stockResearch, dataCenter, healthCheck, marketStocksModule, taskWorkflow, watchlistItemView, watchlistImportPreviewView, watchlistTrackingViewModel, watchlistListViewModel].join("\n");
@@ -163,9 +167,9 @@ test("Go rejected Run status maps to a failed task instead of false success", ()
 test("task restoration validates local references and guards stale asynchronous responses", () => {
   assert.match(app, /function restoreLastTask\(\)[\s\S]*?JSON\.parse\(localStorage\.getItem\(TASK_REFERENCE_KEY\) \|\| "null"\)[\s\S]*?catch \{[\s\S]*?return false;[\s\S]*?return activateTaskReference\(record\);/);
   assert.match(app, /function activateTaskReference\(record\)[\s\S]*?if \(!record \|\| typeof record\.task_id !== "string" \|\| !record\.task_id\.trim\(\)\) return false;[\s\S]*?stopTaskPolling\(\);[\s\S]*?state\.taskEvents\.clear\(\);[\s\S]*?void pollTaskSafely\(state\.pollGeneration\);/);
-  assert.match(app, /if \(generation !== state\.pollGeneration \|\| taskId !== state\.taskId \|\|\s*endpointGeneration !== state\.analysisConnectionGeneration \|\|\s*state\.taskAnalysisBase !== analysisBase \|\|\s*state\.settings\.analysisBase !== analysisBase\) return;/);
+  assert.match(app, /if \(generation !== state\.pollGeneration \|\| runRef !== state\.taskId \|\|\s*endpointGeneration !== state\.analysisConnectionGeneration \|\|\s*state\.taskAnalysisBase !== analysisBase \|\|\s*state\.settings\.analysisBase !== analysisBase\) return;/);
   assert.match(app, /if \(generation !== state\.runResultGeneration \|\| state\.taskId !== expectedTaskId \|\|\s*endpointGeneration !== state\.analysisConnectionGeneration \|\|\s*state\.taskAnalysisBase !== analysisBase \|\|\s*state\.settings\.analysisBase !== analysisBase\) return;/);
-  assert.match(app, /if \(task && TERMINAL_TASK_STATUSES\.has\(task\.status\)\) \{[\s\S]*?stopTaskPolling\(\);[\s\S]*?const runId = task\.run_id \|\| state\.runId;[\s\S]*?if \(runId\) void loadTaskRunResult\(runId, taskId\);/);
+  assert.match(app, /if \(view\.terminal\) \{\s*stopTaskPolling\(\);\s*void loadTaskRunResult\(runRef, runRef\);\s*return;\s*\}/);
   assert.match(recentTaskModule, /return \{[\s\S]*?task_id: record\.task_id\.trim\(\)[\s\S]*?status: typeof record\.status === "string" \? record\.status : ""/);
 });
 
@@ -183,7 +187,7 @@ test("failed Run refresh distinguishes the last verified same-Run result from a 
   const start = app.indexOf("async function loadTaskRunResult(runId, expectedTaskId) {");
   const end = app.indexOf("\nfunction stopTaskPolling()", start);
   const loader = start >= 0 && end > start ? app.slice(start, end) : "";
-  assert.ok(loader.includes("const retainedPreviousResult = Boolean(state.lastRunResult && state.lastRunResult.run_id === runId);"));
+  assert.ok(loader.includes("const retainedPreviousResult = Boolean(state.lastRunResult && state.lastRunResult.runRef === runId);"));
   assert.ok(loader.includes("页面保留的是此前已成功读取的同一 Run 结果，本次读取尚未确认。"));
   assert.ok(loader.includes("本次读取未成功，不代表结果已更新。"));
   assert.ok(loader.includes("renderTaskResult(result);"), "只有本次 Run 身份和标的校验通过才替换报告内容");
@@ -240,7 +244,8 @@ test("task restoration and manual refresh mark cached status as unconfirmed", ()
   const pollStart = app.indexOf("async function pollTask(");
   const pollEnd = app.indexOf("\nasync function createTask(", pollStart);
   const poller = app.slice(pollStart, pollEnd);
-  assert.match(poller, /task = candidate;\s*state\.taskStatusLoading = false;\s*state\.taskStatusError = ""/);
+  assert.match(poller, /const taskStatus = mapRunStatusToTaskStatus\(view\.status\);/);
+  assert.match(poller, /state\.taskStatus = taskStatus;\s*state\.taskStatusLoading = false;\s*state\.taskStatusError = "";\s*state\.taskStatusErrorRetrying = false;/);
   assert.match(poller, /if \(taskError\) \{\s*state\.taskStatusLoading = false;/);
   const watchStart = app.indexOf("function renderWatchlist(");
   const watchEnd = app.indexOf("\nfunction addCurrentSymbolToWatchlist(", watchStart);
@@ -429,7 +434,7 @@ test("创建任务的前置 UI 异常也会释放提交锁和按钮", () => {
   const declarations = creator.indexOf("let button = null;");
   const protectedTry = creator.indexOf("try {", declarations);
   const buttonSetup = creator.indexOf('button = $("#create-task-button");', protectedTry);
-  const networkCall = creator.indexOf("await createAnalysisTask(", protectedTry);
+  const networkCall = creator.indexOf("await createQuantResearchRun(", protectedTry);
   const outerCatch = creator.lastIndexOf("} catch (error) {");
   const outerFinally = creator.lastIndexOf("} finally {");
   assert.ok(declarations >= 0 && protectedTry > declarations && protectedTry < buttonSetup, "按钮查询与初始化必须位于统一 try 内");
@@ -445,10 +450,15 @@ test("new task creation responses cannot poison requested symbols or run/status 
   const createStart = app.indexOf("async function createTask(event) {");
   const createEnd = app.indexOf("\nfunction startAnalysisForSymbol(", createStart);
   const creator = createStart >= 0 && createEnd > createStart ? app.slice(createStart, createEnd) : "";
-  assert.match(creator, /const responseSymbolsMatch = task\?\.symbols === undefined \|\|[\s\S]*?sameTaskSymbolSet\(symbols, task\.symbols\)/);
-  assert.match(creator, /const responseRunId = responseSymbolsMatch && responseRunIdValid \? task\.run_id : ""/);
-  assert.match(creator, /const responseStatus = responseSymbolsMatch && responseStatusValid \? task\.status : ""/);
-  assert.match(creator, /const normalizedTask = \{[\s\S]*?task_id: task\.task_id,[\s\S]*?run_id: responseRunId,[\s\S]*?status: responseStatus,[\s\S]*?task_type: taskType,[\s\S]*?symbols,/);
+  assert.match(creator, /const primarySymbol = researchSymbol\(symbols\[0\]\)/);
+  assert.match(creator, /const aggregate = await createQuantResearchRun\(requestSettings, \{[\s\S]*?symbol: primarySymbol,[\s\S]*?idempotencyKey: effectiveIdempotencyKey,[\s\S]*?asOfDate: state\.settings\.researchAsOfDate \|\| undefined[\s\S]*?\}\)/);
+  assert.match(creator, /const run = aggregate\?\.run \|\| \{\}/);
+  assert.match(creator, /const responseRunRef = typeof run\.run_ref === "string" \? run\.run_ref\.trim\(\) : ""/);
+  assert.match(creator, /task_id: responseRunRef,[\s\S]*?run_id: responseRunRef,[\s\S]*?status: mapRunStatusToTaskStatus\(run\.status\),[\s\S]*?symbols: \[primarySymbol\]/);
+  assert.match(creator, /state\.taskSymbols = symbols;/);
+  assert.doesNotMatch(creator, /state\.taskSymbols = task\.symbols/, "Researchflow 聚合回包不得替换用户请求的标的集合");
+  assert.match(creator, /const responseRunId = responseRunRef;/);
+  assert.match(creator, /const responseStatus = task\.status;/);
   assert.match(creator, /state\.pollTimer = window\.setTimeout\(\(\) => pollTaskSafely\(generation\), 500\);/);
   assert.doesNotMatch(creator, /void loadTaskRunResult\(responseRunId, task\.task_id\)/, "终态创建/幂等回包也必须先确认阶段事件");
   assert.match(creator, /current_stage: responseSymbolsMatch \? task\.current_stage : "等待服务端确认"/);
@@ -471,7 +481,7 @@ test("late task creation responses cannot replace the task selected while submis
 });
 
 test("polling pauses on permanent API errors and Run reads use bounded, stale-safe retries", () => {
-  assert.match(app, /if \(taskError && \(!isRetryableApiError\(taskError\) \|\| taskError\.responseContractError\)\) \{[\s\S]*?自动刷新已暂停[\s\S]*?return;[\s\S]*?state\.pollTimer = window\.setTimeout\(\(\) => pollTaskSafely\(generation\), 5000\);/);
+  assert.match(app, /if \(!isRetryableApiError\(taskError\) \|\| taskError\.responseContractError\) \{[\s\S]*?自动刷新已暂停[\s\S]*?return;[\s\S]*?state\.pollTimer = window\.setTimeout\(\(\) => pollTaskSafely\(generation\), 5000\);/);
   assert.match(app, /const RUN_RESULT_RETRY_DELAYS_MS = \[1000, 2500, 5000\]/);
   assert.match(app, /generation !== state\.runResultGeneration \|\| state\.taskId !== expectedTaskId \|\|\s*endpointGeneration !== state\.analysisConnectionGeneration/);
   assert.match(app, /state\.runResultGeneration \+= 1/);
@@ -913,7 +923,7 @@ test("task detail opens an accessible run-flow drawer with separate Task and Run
   assert.match(app, /function renderTask\(task\)[\s\S]*?task\.started_at[\s\S]*?task\.finished_at/);
   assert.match(app, /function renderRunStatus\(status = ""\)[\s\S]*?renderRunStatusView\(/);
   assert.match(taskEventView, /export function renderRunStatusView\([\s\S]*?runStatusLabel\(normalized\)/);
-  assert.match(app, /function renderTaskResult\(result\)[\s\S]*?renderRunStatus\(result\.status \|\| ""\)/);
+  assert.match(app, /function renderTaskResult\(result\)[\s\S]*?renderRunStatus\(isDowngraded \? state\.taskStatus : \(result\.status \|\| ""\)\)/);
   assert.match(app, /close-run-flow-dialog/);
 });
 
@@ -955,7 +965,11 @@ test("Run result DOM adapter owns structured result rendering while app retains 
   assert.ok(renderer.includes("state.lastRunResult = result"));
   assert.ok(renderer.includes('state.runResultReadStatus = ""'));
   assert.ok(renderer.includes("persistTaskReference()"));
-  assert.ok(renderer.includes('renderRunStatus(result.status || "")'));
+  assert.ok(renderer.includes('renderRunStatus(isDowngraded ? state.taskStatus : (result.status || ""))'));
+  assert.ok(renderer.includes('const isDowngraded = result && result.isFullReport === false;'));
+  // 降级视图必须在 isDowngraded 真分支内真正调用降级渲染器，旧 RunResult 走 else 分支。
+  assert.match(renderer, /if \(isDowngraded\) \{[\s\S]*?renderResearchflowResultsView\(\{ document, view: result, runStatusLabel: taskStatusLabel \}\)[\s\S]*?\} else \{[\s\S]*?renderTaskResultView\(\{ document, result, runStatusLabel, fallbackRunId: state\.runId \}\)/,
+    "降级视图与非降级视图必须分发到各自渲染器");
   assert.ok(renderer.includes("renderTaskResultView({ document, result, runStatusLabel, fallbackRunId: state.runId })"));
   assert.ok(renderer.includes('if (state.view === "watchlist") renderWatchlist()'));
   assert.ok(taskResultView.includes("export function renderTaskResultView("));
@@ -1889,11 +1903,11 @@ test("主行情、日 K 与统一快照拒绝证券代码不匹配的响应", ()
  
 test("分析任务、阶段事件与 Run 响应必须匹配当前请求标识", () => {
   assert.match(app, /function responseIdentityError\(message\)[\s\S]*?error\.responseIdentityMismatch = true/);
-  assert.match(app, /candidate\.task_id !== taskId[\s\S]*?任务状态接口未返回 task_id/);
-  assert.match(taskWorkflow, /payload\.task_id !== taskId[\s\S]*?阶段事件接口未返回 task_id/);
-  assert.match(app, /if \(taskError && \(!isRetryableApiError\(taskError\) \|\| taskError\.responseContractError\)\)/);
-  assert.match(app, /if \(isRetryableApiError\(eventError\) && !eventError\.responseContractError\)/);
-  assert.match(app, /if \(result\?\.run_id !== runId\) \{[\s\S]*?Run 结果接口未返回 run_id/);
+  assert.match(app, /if \(view\.runRef !== runRef\) \{[\s\S]*?Run 状态接口返回了其他 Run 的结果，已忽略。/);
+  assert.match(researchflowFlow, /if \(stage\.run_ref !== run\.run_ref\) throw fail\("Stage 的 run_ref 与 Run 不一致"\)/);
+  assert.match(app, /if \(!isRetryableApiError\(taskError\) \|\| taskError\.responseContractError\)/);
+  assert.match(app, /if \(state\.pollController === controller\) state\.pollController = null;/);
+  assert.match(app, /if \(result\?\.runRef !== runId\) \{[\s\S]*?Run 结果接口未返回 run_ref，已忽略该响应。/);
   assert.match(app, /!error\.responseContractError && isRetryableApiError\(error\)/);
 });
 
@@ -1934,13 +1948,16 @@ test("任务创建成功响应缺少 task_id 时提示结果未确认，避免�
 test("任务状态和阶段事件响应结构无效时暂停重试，未知状态不进入轮询循环", () => {
   assert.match(app, /const TASK_STATUSES = new Set\(\["queued", "running", "succeeded", "partial", "failed"\]\)/);
   assert.match(app, /function responseContractError\(message\)[\s\S]*?error\.responseContractError = true/);
-  assert.match(app, /typeof candidate\.status !== "string" \|\| !TASK_STATUSES\.has\(candidate\.status\)/);
-  assert.match(app, /typeof candidate\.run_id !== "string" \|\| !candidate\.run_id\.trim\(\)/);
-  assert.match(app, /state\.runId && candidate\.run_id !== state\.runId[\s\S]*?当前任务已关联的 Run 不一致/);
-  assert.match(app, /任务状态接口返回了未支持的状态/);
-  assert.match(taskWorkflow, /阶段事件接口返回的数据结构无效/);
-  assert.match(app, /eventError = eventPage\.identityMismatch[\s\S]*?eventPage\.error/);
-  assert.match(app, /if \(!isRetryableApiError\(eventError\) \|\| eventError\.responseContractError\) state\.taskEventsUnavailable = true/);
+  assert.match(researchflowFlow, /typeof run\.run_ref !== "string" \|\| !run\.run_ref\.trim\(\)/);
+  assert.match(researchflowFlow, /throw fail\("Run 聚合响应缺少有效 run_ref"\)/);
+  assert.match(researchflowFlow, /if \(!RUN_STATUSES\.has\(run\.status\)\) throw fail\("Run 状态不受支持"\)/);
+  assert.match(researchflowFlow, /if \(!stage \|\| typeof stage !== "object"\) throw fail\("Stage 结构无效"\)/);
+  assert.match(researchflowFlow, /if \(!STAGE_STATUSES\.has\(stage\.status\)\) throw fail\("Stage 状态不受支持"\)/);
+  assert.match(app, /const taskStatus = mapRunStatusToTaskStatus\(view\.status\)/);
+  assert.match(app, /if \(view\.runRef !== runRef\) \{[\s\S]*?Run 状态接口返回了其他 Run 的结果，已忽略。/);
+  assert.match(app, /if \(result\?\.runRef !== runId\) \{[\s\S]*?Run 结果接口未返回 run_ref，已忽略该响应。/);
+  assert.match(app, /if \(!isRetryableApiError\(taskError\) \|\| taskError\.responseContractError\) \{[\s\S]*?自动刷新已暂停[\s\S]*?return;/);
+  assert.match(app, /5 秒后自动重试[\s\S]*?setTimeout\(\(\) => pollTaskSafely\(generation\), 5000\)/);
   assert.match(app, /if \(delay !== undefined && !error\.responseContractError && isRetryableApiError\(error\)\)/);
 });
 
@@ -1949,7 +1966,11 @@ test("Run 结果必须与当前任务标的集合一致后才允许渲染", () =
   assert.match(app, /const expectedRaw = Array\.isArray\(state\.taskSymbols\) \? state\.taskSymbols : \[\]/);
   assert.match(app, /Run 结果未返回请求标的列表，无法确认是否属于当前任务，已忽略/);
   assert.match(app, /function sameTaskSymbolSet\(expectedRaw, actualRaw\)[\s\S]*?normalizedTaskSymbolSet\(expectedRaw\)[\s\S]*?normalizedTaskSymbolSet\(actualRaw\)[\s\S]*?JSON\.stringify\(expected\) === JSON\.stringify\(actual\)/);
-  assert.match(app, /const symbolMismatch = runResultSymbolMismatch\(result\);[\s\S]*?if \(symbolMismatch\) throw responseIdentityError\(symbolMismatch\);[\s\S]*?renderTaskResult\(result\)/);
+  assert.match(app, /if \(result\?\.runRef !== runId\) \{[\s\S]*?Run 结果接口未返回 run_ref，已忽略该响应。[\s\S]*?state\.runId = runId;[\s\S]*?persistTaskReference\(\);[\s\S]*?renderTaskResult\(result\);/);
+  assert.match(app, /const primarySymbol = researchSymbol\(symbols\[0\]\)/);
+  assert.match(app, /symbol: primarySymbol,/);
+  assert.match(app, /state\.taskSymbols = symbols;/);
+  assert.match(researchflowResultContract, /"run_ref"[\s\S]*?"minLength": 1/);
   assert.match(app, /generation !== state\.runResultGeneration \|\| state\.taskId !== expectedTaskId \|\|\s*endpointGeneration !== state\.analysisConnectionGeneration \|\|\s*state\.taskAnalysisBase !== analysisBase/);
 });
 
@@ -1957,11 +1978,12 @@ test("Run 结果必须与当前任务标的集合一致后才允许渲染", () =
 test("任务状态轮询不允许更换已建立的 task_id/run_id 关联", () => {
   const poller = app.match(/async function pollTask\([\s\S]*?\n\}/)?.[0] || "";
   assert.ok(poller, "task poller must exist");
-  assert.match(poller, /candidate\.task_id !== taskId/);
-  assert.match(poller, /typeof candidate\.run_id !== "string" \|\| !candidate\.run_id\.trim\(\)/);
-  assert.match(poller, /state\.runId && candidate\.run_id !== state\.runId/);
-  assert.match(poller, /任务状态接口返回的 run_id 与当前任务已关联的 Run 不一致/);
-  assert.match(poller, /taskError = responseIdentityError\([\s\S]*?run_id 与当前任务已关联的 Run 不一致/);
+  assert.match(poller, /const runRef = state\.taskId;/);
+  assert.match(poller, /if \(view\.runRef !== runRef\) \{/);
+  assert.match(poller, /Run 状态接口返回了其他 Run 的结果，已忽略。/);
+  assert.match(poller, /task_id: runRef,[\s\S]*?run_id: runRef,/);
+  assert.match(poller, /void loadTaskRunResult\(runRef, runRef\)/);
+  assert.match(app, /if \(result\?\.runRef !== runId\) \{[\s\S]*?Run 结果接口未返回 run_ref，已忽略该响应。/);
 });
 
  
@@ -1985,44 +2007,48 @@ test("自选股报价和任务引用的股票代码比较兼容交易所后缀�
 });
 
  
-test("阶段事件严格校验数值序号与 event 对象结构", () => {
-  assert.match(taskWorkflow, /const sequence = typeof item\?\.sequence === "number" \? item\.sequence : NaN/);
-  assert.match(taskWorkflow, /!Number\.isSafeInteger\(sequence\) \|\| sequence < 1/);
-  assert.match(taskWorkflow, /!isRecord\(item\.event\)/);
-  assert.match(app, /字段无效的阶段事件（序号或 event 结构不符合契约），已忽略/);
-  assert.doesNotMatch(taskWorkflow, /const sequence = Number\(item\?\.sequence\)/, "boolean sequence must not coerce to integer 1");
+test("阶段状态由 Stage 聚合投影为有序事件项且不伪造执行明细", () => {
+  assert.match(researchflowFlow, /if \(!stage \|\| typeof stage !== "object"\) throw fail\("Stage 结构无效"\)/);
+  assert.match(researchflowFlow, /stageCode: stage\.stage_code/);
+  assert.match(researchflowAdapter, /if \(!stage \|\| typeof stage !== "object" \|\| typeof stage\.stageCode !== "string" \|\| !stage\.stageCode\)/);
+  assert.match(researchflowAdapter, /throw new Error\("Stage 缺少有效 stage_code"\)/);
+  assert.match(researchflowAdapter, /sequence,\s*event: "stage_status",/);
+  assert.match(app, /let sequence = 0;\s*for \(const stage of view\.stages\) \{\s*sequence \+= 1;/);
+  assert.match(app, /const event = runStageToTaskEvent\(stage, sequence\)/);
+  assert.match(app, /state\.taskEvents\.set\(event\.sequence, event\)/);
+  assert.doesNotMatch(appSource, /getAnalysisTaskEvents\(|nextAfterSequence/, "Researchflow 主流程不得复活服务端事件分页");
 });
 
-test("阶段事件的 Run ID 若存在必须匹配当前任务关联的 Run", () => {
-  assert.match(taskWorkflow, /Object\.prototype\.hasOwnProperty\.call\(item\.event, "run_id"\)/);
-  assert.match(taskWorkflow, /const eventRunId = typeof item\.event\.run_id === "string" \? item\.event\.run_id\.trim\(\) : ""/);
-  assert.match(taskWorkflow, /!runId \|\| !eventRunId \|\| eventRunId !== runId/);
-  assert.match(taskWorkflow, /domain\.StageEvent 的 run_id 并非必填字段/);
-  assert.match(app, /Run ID 与当前任务关联的 Run 不一致，已忽略/);
-  assert.match(taskWorkflow, /rejected\.mismatchedRun \+= 1/);
+test("Stage 与 Run 的引用必须一致且降级结果按 runRef 校验身份", () => {
+  assert.match(researchflowFlow, /if \(stage\.run_ref !== run\.run_ref\) throw fail\("Stage 的 run_ref 与 Run 不一致"\)/);
+  assert.match(researchflowFlow, /runRef: run\.run_ref,[\s\S]*?terminal: TERMINAL_RUN_STATUSES\.has\(run\.status\)/);
+  assert.match(app, /if \(view\.runRef !== runRef\) \{[\s\S]*?Run 状态接口返回了其他 Run 的结果，已忽略。/);
+  assert.match(app, /if \(result\?\.runRef !== runId\) \{[\s\S]*?Run 结果接口未返回 run_ref，已忽略该响应。/);
+  assert.match(researchflowResultView, /if \(typeof view\.runRef !== "string" \|\| !view\.runRef\.trim\(\)\) throw fail\("降级结果视图缺少 runRef"\)/);
+  assert.match(researchflowResultView, /"Run 引用 " \+ view\.runRef/);
 });
 
 test("增量阶段事件不会覆盖已读取的相同或更旧序号", () => {
-  assert.match(taskWorkflow, /sequence <= highestSequence \|\| seenSequences\.has\(sequence\) \|\| knownSequences\.has\(sequence\)/);
-  assert.match(taskWorkflow, /events\.push\(\{ \.\.\.item, sequence \}\)/);
-  assert.match(app, /state\.taskEvents\.set\(item\.sequence, item\)/);
-  assert.match(app, /重复或旧序号的阶段事件，已忽略/);
+  assert.match(app, /state\.taskEvents\.clear\(\);\s*let sequence = 0;\s*for \(const stage of view\.stages\)/);
+  assert.match(app, /sequence \+= 1;/);
+  assert.match(app, /state\.taskEvents\.set\(event\.sequence, event\)/);
+  assert.match(app, /state\.taskSequence = Math\.max\(state\.taskSequence, event\.sequence\)/);
+  assert.match(taskEventListViewModel, /\[\.\.\.items\]\.sort\(\(a, b\) => Number\(a\.sequence\) - Number\(b\.sequence\)\)/);
+  assert.doesNotMatch(appSource, /getAnalysisTaskEvents\(|state\.taskEventCursor \+=|nextAfterSequence/, "Stage 聚合一次性重建事件，不再按服务端游标增量写入");
 });
 
-test("终态任务按 next_after_sequence 排空阶段事件分页后才读取 Run 报告", () => {
+test("终态 Run 一次性投影 Stage 聚合后直接读取降级领域结果", () => {
   assert.match(app, /taskEventCursor: 0/);
   const pollStart = app.indexOf("async function pollTask(");
   const pollEnd = app.indexOf("\nasync function createTask(", pollStart);
   const poller = pollStart >= 0 && pollEnd > pollStart ? app.slice(pollStart, pollEnd) : "";
-  assert.match(poller, /const requestedEventCursor = state\.taskEventCursor/);
-  assert.ok(poller.includes("getAnalysisTaskEvents(requestSettings, taskId, requestedEventCursor, { signal: controller.signal })"));
-  assert.match(taskWorkflow, /!Number\.isSafeInteger\(nextAfterSequence\)/);
-  assert.match(poller, /state\.taskEventCursor = eventPage\.nextAfterSequence/);
-  assert.match(taskWorkflow, /hasMore: payload\.events\.length >= TASK_EVENT_PAGE_SIZE && nextAfterSequence > afterSequence/);
-  assert.match(poller, /if \(task && TERMINAL_TASK_STATUSES\.has\(task\.status\)\) \{[\s\S]*?if \(eventPageHasMore && !eventError && !eventsSkipped\) \{[\s\S]*?正在继续读取剩余阶段事件[\s\S]*?setTimeout\(\(\) => pollTaskSafely\(generation\), 0\)[\s\S]*?return;[\s\S]*?stopTaskPolling\(\)[\s\S]*?loadTaskRunResult/);
-  assert.match(poller, /if \(eventError && isRetryableApiError\(eventError\) && !eventError\.responseContractError\) \{[\s\S]*?5 秒后自动重试[\s\S]*?setTimeout\(\(\) => pollTaskSafely\(generation\), 5000\)/);
-  assert.match(poller, /if \(eventError\) \{[\s\S]*?Run 报告暂不加载[\s\S]*?return;[\s\S]*?if \(eventsSkipped\) \{[\s\S]*?Run 报告暂不加载[\s\S]*?return;[\s\S]*?loadTaskRunResult/,
-    "阶段事件读取失败或被跳过时，不得提前读取 Run 报告");
+  assert.match(poller, /const view = await getQuantResearchRunView\(requestSettings, runRef, controller\.signal\)/);
+  assert.match(poller, /state\.taskEvents\.clear\(\);[\s\S]*?for \(const stage of view\.stages\) \{[\s\S]*?const event = runStageToTaskEvent\(stage, sequence\)[\s\S]*?state\.taskEvents\.set\(event\.sequence, event\)/);
+  assert.match(researchflowFlow, /terminal: TERMINAL_RUN_STATUSES\.has\(run\.status\)/);
+  assert.match(poller, /if \(view\.terminal\) \{\s*stopTaskPolling\(\);\s*void loadTaskRunResult\(runRef, runRef\);\s*return;\s*\}/);
+  assert.doesNotMatch(poller, /getAnalysisTaskEvents\(|next_after_sequence|nextAfterSequence|eventPage/, "Researchflow 聚合读取不依赖服务端事件分页");
+  assert.match(poller, /if \(!isRetryableApiError\(taskError\) \|\| taskError\.responseContractError\) \{[\s\S]*?自动刷新已暂停[\s\S]*?return;/);
+  assert.match(poller, /Run 状态刷新失败：[\s\S]*?5 秒后自动重试…[\s\S]*?setTimeout\(\(\) => pollTaskSafely\(generation\), 5000\)/);
   const refreshStart = app.indexOf('$("#refresh-task").addEventListener("click"');
   const refreshEnd = app.indexOf('$("#recent-analysis-search")', refreshStart);
   const refreshHandler = refreshStart >= 0 && refreshEnd > refreshStart ? app.slice(refreshStart, refreshEnd) : "";
@@ -2046,16 +2072,19 @@ test("任务切换和分析连接切换会重置事件游标并隔离迟到轮�
     assert.match(body, /state\.taskSequence = 0;\s*state\.taskEventCursor = 0;\s*state\.taskEvents\.clear\(\)/, label + " resets both event cursors and stored events");
   }
   assert.match(app, /function stopTaskPolling\(\) \{[\s\S]*?state\.pollGeneration \+= 1/);
-  assert.match(app, /if \(generation !== state\.pollGeneration \|\| taskId !== state\.taskId \|\| endpointGeneration !== state\.analysisConnectionGeneration \|\| state\.taskAnalysisBase !== analysisBase \|\| state\.settings\.analysisBase !== analysisBase\) return;/);
+  assert.match(app, /if \(generation !== state\.pollGeneration \|\| runRef !== state\.taskId \|\| endpointGeneration !== state\.analysisConnectionGeneration \|\| state\.taskAnalysisBase !== analysisBase \|\| state\.settings\.analysisBase !== analysisBase\) return;/);
+  assert.match(app, /const view = await getQuantResearchRunView\(requestSettings, runRef, controller\.signal\)/);
 });
 
  
 test("任务状态回包不能替换任务标的集合，Run 与任务复用同一规范化比较", () => {
   assert.match(app, /function sameTaskSymbolSet\(expectedRaw, actualRaw\)/);
-  assert.match(app, /candidate\.symbols !== undefined && !Array\.isArray\(candidate\.symbols\)/);
-  assert.match(app, /Array\.isArray\(candidate\.symbols\) && state\.taskSymbols\.length &&[\s\S]*?!sameTaskSymbolSet\(state\.taskSymbols, candidate\.symbols\)/);
-  assert.match(app, /任务状态接口返回的标的列表与当前任务不一致，已忽略/);
+  assert.match(app, /const task = \{[\s\S]*?task_id: runRef,[\s\S]*?run_id: runRef,[\s\S]*?status: taskStatus,[\s\S]*?symbols: state\.taskSymbols,/);
+  assert.match(app, /state\.taskSymbols = symbols;/);
+  assert.match(app, /const primarySymbol = researchSymbol\(symbols\[0\]\)/);
+  assert.match(app, /if \(view\.runRef !== runRef\) \{[\s\S]*?Run 状态接口返回了其他 Run 的结果，已忽略。/);
   assert.match(app, /function runResultSymbolMismatch\(result\)[\s\S]*?sameTaskSymbolSet\(expectedRaw, actualRaw\)/);
+  assert.match(app, /if \(result\?\.runRef !== runId\) \{[\s\S]*?Run 结果接口未返回 run_ref，已忽略该响应。/);
 });
 test("switching task context or analysis API endpoint resets the stage-event filter", () => {
   const contexts = [
@@ -2825,4 +2854,15 @@ test("UIR-2 research chart anchors clear the sticky section navigation", () => {
   assert.match(html, /data-research-detail-target="daily-chart-panel"/);
   assert.match(html, /data-research-detail-target="technical-indicators-panel"/);
   assert.match(html, /data-research-detail-target="historical-bars-panel"/);
+});
+
+test("降级领域结果不得作为完整研究报告归档", () => {
+  const start = app.indexOf('$("#archive-run-report").addEventListener("click"');
+  const end = app.indexOf('$("#copy-run-json").addEventListener', start);
+  const handler = start >= 0 && end > start ? app.slice(start, end) : "";
+  assert.match(handler, /state\.lastRunResult\.isFullReport === false/, "归档前必须识别降级结果");
+  assert.match(handler, /降级结果不可归档为报告/, "降级结果须明确拒绝并给出提示");
+  assert.doesNotMatch(handler, /researchReports\.save\(state\.lastRunResult[^)]*\)\s*;?\s*\}/,
+    "降级结果分支不得进入完整报告归档调用");
+  assert.match(handler, /const outcome = researchReports\.save\(/, "完整报告仍可归档");
 });

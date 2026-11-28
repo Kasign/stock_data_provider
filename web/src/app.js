@@ -17,15 +17,14 @@ import {
   clearSettings,
   clearOwnerSessionMemory,
   changeOwnerPassword,
-  createAnalysisTask,
+  createQuantResearchRun,
+  getQuantResearchRunView,
+  getQuantResearchResultsView,
   getOwnerSetupStatus,
   loginOwnerSession,
   setupOwnerPassword,
   logoutOwnerSession,
   restoreOwnerSession,
-  getAnalysisRun,
-  getAnalysisTask,
-  getAnalysisTaskEvents,
   getDailyBars,
   getDataSources,
   getMarketBundle,
@@ -85,6 +84,8 @@ import { renderRecentTaskList } from "./recent-task-view.js";
 import { renderRunStatusView, renderSelectedTaskEventView } from "./task-event-view.js";
 import { buildTaskEventNode } from "./task-event-node.js";
 import { renderTaskResultView } from "./task-result-view.js";
+import { renderResearchflowResultsView } from "./researchflow-result-view.js";
+import { researchSymbol, mapRunStatusToTaskStatus, runStageToTaskEvent } from "./researchflow-flow-adapters.js";
 import { renderScreeningLocalResultRowsView } from "./screening-result-view.js";
 
 const $ = (selector) => document.querySelector(selector);
@@ -3163,11 +3164,17 @@ function renderTaskResult(result) {
   state.lastRunResult = result;
   state.runResultReadStatus = "";
   state.runResultReadError = "";
-  state.runId = result.run_id || state.runId;
-  renderRunStatus(result.status || "");
+  const isDowngraded = result && result.isFullReport === false;
+  state.runId = (isDowngraded ? result.runRef : result.run_id) || state.runId;
+  renderRunStatus(isDowngraded ? state.taskStatus : (result.status || ""));
   renderTaskFlowSummary();
   persistTaskReference();
-  renderTaskResultView({ document, result, runStatusLabel, fallbackRunId: state.runId });
+  if (isDowngraded) {
+    // 授权领域结果（SRV-CTR-001 1.1.0）：明确非完整研究报告，risk 无 payload。
+    renderResearchflowResultsView({ document, view: result, runStatusLabel: taskStatusLabel });
+  } else {
+    renderTaskResultView({ document, result, runStatusLabel, fallbackRunId: state.runId });
+  }
   // Run 结果可能在用户停留自选股页面时到达，刷新卡片中的结果摘要。
   if (state.view === "watchlist") renderWatchlist();
 }
@@ -3253,7 +3260,7 @@ async function loadTaskRunResult(runId, expectedTaskId) {
   const endpointGeneration = state.analysisConnectionGeneration;
   const generation = ++state.runResultGeneration;
   let retries = 0;
-  const retainedPreviousResult = Boolean(state.lastRunResult && state.lastRunResult.run_id === runId);
+  const retainedPreviousResult = Boolean(state.lastRunResult && state.lastRunResult.runRef === runId);
   const retainedResultNotice = retainedPreviousResult
     ? "页面保留的是此前已成功读取的同一 Run 结果，本次读取尚未确认。"
     : "";
@@ -3273,18 +3280,16 @@ async function loadTaskRunResult(runId, expectedTaskId) {
           state.settings.analysisBase !== analysisBase) return;
 
       try {
-        const result = await getAnalysisRun(requestSettings, runId, { signal: controller.signal });
+        const result = await getQuantResearchResultsView(requestSettings, runId, { signal: controller.signal });
         if (generation !== state.runResultGeneration || state.taskId !== expectedTaskId ||
             endpointGeneration !== state.analysisConnectionGeneration || state.taskAnalysisBase !== analysisBase ||
             state.settings.analysisBase !== analysisBase) return;
-        if (result?.run_id !== runId) {
-          throw responseIdentityError(result?.run_id
+        if (result?.runRef !== runId) {
+          throw responseIdentityError(result?.runRef
             ? "Run 结果接口返回了其他 Run 的结果，已忽略。"
-            : "Run 结果接口未返回 run_id，已忽略该响应。");
+            : "Run 结果接口未返回 run_ref，已忽略该响应。");
         }
-        const symbolMismatch = runResultSymbolMismatch(result);
-        if (symbolMismatch) throw responseIdentityError(symbolMismatch);
-        state.runId = result.run_id;
+        state.runId = runId;
         persistTaskReference();
         renderTaskResult(result);
         return;
@@ -3443,108 +3448,69 @@ function stopTaskPolling() {
 
 async function pollTask(generation = state.pollGeneration) {
   if (!state.taskId || generation !== state.pollGeneration) return;
-  const taskId = state.taskId;
+  const runRef = state.taskId;
   const analysisBase = state.taskAnalysisBase || state.settings.analysisBase;
   if (analysisBase !== state.settings.analysisBase) return;
   const requestSettings = { ...state.settings, analysisBase };
   const endpointGeneration = state.analysisConnectionGeneration;
-  const requestedEventCursor = state.taskEventCursor;
   const controller = new AbortController();
   state.pollController = controller;
-  const eventRequest = state.taskEventsUnavailable
-    ? Promise.resolve({ skipped: true })
-    : getAnalysisTaskEvents(requestSettings, taskId, requestedEventCursor, { signal: controller.signal });
-  const [taskResult, eventResult] = await Promise.allSettled([
-    getAnalysisTask(requestSettings, taskId, { signal: controller.signal }),
-    eventRequest
-  ]);
+  let viewResult;
+  try {
+    // SRV-CTR-001：Run/Stage 聚合一次取全，无事件分页、无 attempt 明细。
+    const view = await getQuantResearchRunView(requestSettings, runRef, controller.signal);
+    viewResult = { status: "fulfilled", value: view };
+  } catch (error) {
+    viewResult = { status: "rejected", reason: error };
+  }
   if (state.pollController === controller) state.pollController = null;
-  if (generation !== state.pollGeneration || taskId !== state.taskId || endpointGeneration !== state.analysisConnectionGeneration || state.taskAnalysisBase !== analysisBase || state.settings.analysisBase !== analysisBase) return;
+  if (generation !== state.pollGeneration || runRef !== state.taskId || endpointGeneration !== state.analysisConnectionGeneration || state.taskAnalysisBase !== analysisBase || state.settings.analysisBase !== analysisBase) return;
 
-  let task = null;
   let taskError = null;
-  let eventError = null;
-  let eventsSkipped = false;
-  let eventPageHasMore = false;
 
-  if (taskResult.status === "fulfilled") {
-    const payload = taskResult.value;
-    const candidate = payload?.task || payload;
-    if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) {
-      taskError = responseContractError("任务状态接口返回了无法识别的响应结构。");
-    } else if (candidate.task_id !== taskId) {
-      taskError = responseIdentityError(candidate.task_id
-        ? "任务状态接口返回了其他任务的结果，已忽略。"
-        : "任务状态接口未返回 task_id，已忽略该响应。");
-    } else if (typeof candidate.run_id !== "string" || !candidate.run_id.trim()) {
-      taskError = responseContractError("任务状态接口未返回有效 run_id，已暂停自动刷新。");
-    } else if (state.runId && candidate.run_id !== state.runId) {
-      taskError = responseIdentityError("任务状态接口返回的 run_id 与当前任务已关联的 Run 不一致，已忽略。");
-    } else if (candidate.symbols !== undefined && !Array.isArray(candidate.symbols)) {
-      taskError = responseContractError("任务状态接口返回的标的列表结构无效，已暂停自动刷新。");
-    } else if (Array.isArray(candidate.symbols) && state.taskSymbols.length &&
-               !sameTaskSymbolSet(state.taskSymbols, candidate.symbols)) {
-      taskError = responseIdentityError("任务状态接口返回的标的列表与当前任务不一致，已忽略。");
-    } else if (typeof candidate.status !== "string" || !TASK_STATUSES.has(candidate.status)) {
-      taskError = responseContractError(candidate.status
-        ? "任务状态接口返回了未支持的状态“" + String(candidate.status) + "”，已暂停自动刷新。"
-        : "任务状态接口未返回有效状态，已暂停自动刷新。");
+  if (viewResult.status === "fulfilled") {
+    const view = viewResult.value;
+    if (view.runRef !== runRef) {
+      taskError = responseIdentityError("Run 状态接口返回了其他 Run 的结果，已忽略。");
     } else {
-      task = candidate;
+      // 用 Stage 投影替换事件流；序号按聚合顺序生成，不伪造时间戳或 attempt。
+      state.taskEventsLoaded = true;
+      state.taskEventsError = "";
+      state.taskEvents.clear();
+      let sequence = 0;
+      for (const stage of view.stages) {
+        sequence += 1;
+        const event = runStageToTaskEvent(stage, sequence);
+        state.taskEvents.set(event.sequence, event);
+        state.taskSequence = Math.max(state.taskSequence, event.sequence);
+      }
+      renderTaskEvents();
+      const taskStatus = mapRunStatusToTaskStatus(view.status);
+      const task = {
+        task_id: runRef,
+        run_id: runRef,
+        status: taskStatus,
+        created_at: state.taskCreatedAt,
+        symbols: state.taskSymbols,
+        task_type: state.taskType,
+        current_stage: view.stages.find((s) => s.status === "running")?.stageCode || "",
+        completed_stages: view.stages.filter((s) => ["succeeded", "degraded", "skipped"].includes(s.status)).length,
+        failure_code: view.stages.flatMap((s) => s.reasonCodes || []).join(","),
+        error_message: ""
+      };
+      state.taskStatus = taskStatus;
       state.taskStatusLoading = false;
       state.taskStatusError = "";
       state.taskStatusErrorRetrying = false;
       renderTask(task);
+      if (view.terminal) {
+        stopTaskPolling();
+        void loadTaskRunResult(runRef, runRef);
+        return;
+      }
     }
   } else {
-    taskError = taskResult.reason;
-  }
-
-  if (eventResult.status === "fulfilled" && eventResult.value?.skipped === true) {
-    eventsSkipped = true;
-  } else if (eventResult.status === "fulfilled") {
-    const eventPage = validateTaskEventPage(eventResult.value, {
-      taskId,
-      runId: state.runId || task?.run_id || "",
-      afterSequence: requestedEventCursor,
-      highestSequence: state.taskSequence,
-      knownSequences: state.taskEvents
-    });
-    if (eventPage.error) {
-      eventError = eventPage.identityMismatch
-        ? responseIdentityError(eventPage.error)
-        : responseContractError(eventPage.error);
-    } else {
-      // 分页游标与可显示事件序号分离；坏事件会报告数量，但不能卡住后续续读。
-      state.taskEventCursor = eventPage.nextAfterSequence;
-      eventPageHasMore = eventPage.hasMore;
-      state.taskEventsLoaded = true;
-      state.taskEventsError = "";
-      for (const item of eventPage.events) {
-        state.taskEvents.set(item.sequence, item);
-        state.taskSequence = Math.max(state.taskSequence, item.sequence);
-      }
-      const ignoredReasons = [];
-      if (eventPage.rejected.invalidStructure) {
-        ignoredReasons.push("字段无效的阶段事件（序号或 event 结构不符合契约），已忽略 " + eventPage.rejected.invalidStructure + " 条");
-      }
-      if (eventPage.rejected.mismatchedRun) {
-        ignoredReasons.push("Run ID 与当前任务关联的 Run 不一致，已忽略 " + eventPage.rejected.mismatchedRun + " 条");
-      }
-      if (eventPage.rejected.ignoredSequence) {
-        ignoredReasons.push("重复或旧序号的阶段事件，已忽略 " + eventPage.rejected.ignoredSequence + " 条");
-      }
-      if (ignoredReasons.length) state.taskEventsError = ignoredReasons.join("；") + "。";
-      renderTaskEvents();
-    }
-  } else {
-    eventError = eventResult.reason;
-  }
-
-  if (eventError) {
-    state.taskEventsError = errorMessage(eventError);
-    if (!isRetryableApiError(eventError) || eventError.responseContractError) state.taskEventsUnavailable = true;
-    renderTaskEvents();
+    taskError = viewResult.reason;
   }
 
   if (taskError) {
@@ -3553,78 +3519,16 @@ async function pollTask(generation = state.pollGeneration) {
     state.taskStatusErrorRetrying = isRetryableApiError(taskError) && !taskError.responseContractError;
     setQualityPill($("#task-status-pill"), "unknown", state.taskStatusErrorRetrying ? "状态刷新失败" : "状态读取失败");
     if (state.view === "watchlist") renderWatchlist();
-  }
-
-  // A permanent task lookup failure means the current task reference cannot be polled safely.
-  if (taskError && (!isRetryableApiError(taskError) || taskError.responseContractError)) {
-    stopTaskPolling();
+    if (!isRetryableApiError(taskError) || taskError.responseContractError) {
+      stopTaskPolling();
+      $("#task-poll-label").textContent =
+        "自动刷新已暂停：Run 状态读取失败：" + errorMessage(taskError) +
+        "。请检查权限、API 配置或 Run 引用，再点击“立即刷新状态”重试。";
+      return;
+    }
     $("#task-poll-label").textContent =
-      "自动刷新已暂停：任务状态读取失败：" + errorMessage(taskError) +
-      (eventError ? "；阶段事件读取失败：" + errorMessage(eventError) : "") +
-      "。请检查权限、API 配置或任务 ID，再点击“立即刷新状态”重试。";
-    return;
-  }
-
-  if (task && TERMINAL_TASK_STATUSES.has(task.status)) {
-    if (eventError && isRetryableApiError(eventError) && !eventError.responseContractError) {
-      $("#task-poll-label").textContent =
-        "任务已结束；阶段事件暂时读取失败：" + errorMessage(eventError) +
-        "，5 秒后自动重试；续读完成前不会加载 Run 报告。";
-      state.pollTimer = window.setTimeout(() => pollTaskSafely(generation), 5000);
-      return;
-    }
-    if (eventPageHasMore && !eventError && !eventsSkipped) {
-      $("#task-poll-label").textContent = "任务已结束，正在继续读取剩余阶段事件…";
-      state.pollTimer = window.setTimeout(() => pollTaskSafely(generation), 0);
-      return;
-    }
-    stopTaskPolling();
-    if (eventError) {
-      $("#task-poll-label").textContent =
-        "任务已结束；阶段事件读取失败：" + errorMessage(eventError) +
-        "。Run 报告暂不加载；可点击“立即刷新状态”重新尝试读取事件。";
-      return;
-    }
-    if (eventsSkipped) {
-      $("#task-poll-label").textContent =
-        "任务已结束；阶段事件读取此前被暂停，Run 报告暂不加载；可手动刷新重试。";
-      return;
-    }
-    const runId = task.run_id || state.runId;
-    if (runId) void loadTaskRunResult(runId, taskId);
-    return;
-  }
-
-  if (taskError) {
-    $("#task-poll-label").textContent =
-      "任务状态刷新失败：" + errorMessage(taskError) +
-      (eventError ? "；阶段事件刷新失败：" + errorMessage(eventError) : "") +
-      "，5 秒后自动重试…";
+      "Run 状态刷新失败：" + errorMessage(taskError) + "，5 秒后自动重试…";
     state.pollTimer = window.setTimeout(() => pollTaskSafely(generation), 5000);
-    return;
-  }
-
-  if (eventError) {
-    if (isRetryableApiError(eventError) && !eventError.responseContractError) {
-      $("#task-poll-label").textContent =
-        "任务状态已更新，但阶段事件读取失败：" + errorMessage(eventError) + "，5 秒后重试…";
-      state.pollTimer = window.setTimeout(() => pollTaskSafely(generation), 5000);
-    } else {
-      $("#task-poll-label").textContent =
-        "任务状态正常刷新；阶段事件接口暂不可用：" + errorMessage(eventError) +
-        "。已暂停事件请求以避免重复失败；点击“立即刷新状态”可重试。";
-      state.pollTimer = window.setTimeout(() => pollTaskSafely(generation), 2500);
-    }
-    return;
-  }
-
-  if (eventPageHasMore) {
-    $("#task-poll-label").textContent = "阶段事件较多，正在继续读取后续事件…";
-    state.pollTimer = window.setTimeout(() => pollTaskSafely(generation), 0);
-    return;
-  }
-  if (eventsSkipped) {
-    state.pollTimer = window.setTimeout(() => pollTaskSafely(generation), 2500);
     return;
   }
   state.pollTimer = window.setTimeout(() => pollTaskSafely(generation), 2500);
@@ -3800,20 +3704,36 @@ async function createTask(event) {
   $("#task-result-structured").replaceChildren();
   $("#task-result-warnings").replaceChildren();
 
-    const response = await createAnalysisTask(requestSettings, payload, idempotencyKey);
-    const task = response.task || response;
-    const responseSymbolsMatch = task?.symbols === undefined ||
-      (Array.isArray(task.symbols) && sameTaskSymbolSet(symbols, task.symbols));
-    const responseStatusValid = typeof task?.status === "string" && TASK_STATUSES.has(task.status);
-    const responseRunIdValid = typeof task?.run_id === "string" && Boolean(task.run_id.trim());
-    // POST 回包不完整时保留请求上下文，随后由 Task 状态接口补齐权威字段。
-    const responseRunId = responseSymbolsMatch && responseRunIdValid ? task.run_id : "";
-    const responseStatus = responseSymbolsMatch && responseStatusValid ? task.status : "";
-    const responseCreatedAt = typeof task?.created_at === "string" ? task.created_at : "";
+    // SRV-CTR-001：首批为 quant.research 单标的。取首个标的补交易所后缀；
+    // 幂等键留空时生成一个短随机键（契约层要求 1–128 字符，不能为空）。
+    const primarySymbol = researchSymbol(symbols[0]);
+    const effectiveIdempotencyKey = idempotencyKey || ("webui-" + Date.now() + "-" + Math.random().toString(36).slice(2, 10));
+    const aggregate = await createQuantResearchRun(requestSettings, {
+      symbol: primarySymbol,
+      idempotencyKey: effectiveIdempotencyKey,
+      asOfDate: state.settings.researchAsOfDate || undefined
+    });
+    const run = aggregate?.run || {};
+    const responseRunRef = typeof run.run_ref === "string" ? run.run_ref.trim() : "";
+    // 把 Run 聚合适配成页面既有 task 结构，后续代际隔离/历史/渲染逻辑保持不变。
+    const task = {
+      task_id: responseRunRef,
+      run_id: responseRunRef,
+      status: mapRunStatusToTaskStatus(run.status),
+      created_at: run.created_at || "",
+      symbols: [primarySymbol],
+      task_type: run.template_ref || "quant.research"
+    };
+    const responseSymbolsMatch = true;
+    const responseStatusValid = TASK_STATUSES.has(task.status);
+    const responseRunIdValid = Boolean(responseRunRef);
+    const responseRunId = responseRunRef;
+    const responseStatus = task.status;
+    const responseCreatedAt = task.created_at;
     const creationResponseWarnings = [];
+    if (symbols.length > 1) creationResponseWarnings.push("当前研究链仅支持单标的，已按首个标的 " + primarySymbol + " 创建（其余 " + (symbols.length - 1) + " 只未提交）");
     if (!responseStatusValid) creationResponseWarnings.push("状态缺失或不受支持");
-    if (!responseRunIdValid) creationResponseWarnings.push("Run ID 缺失或格式无效");
-    if (!responseSymbolsMatch) creationResponseWarnings.push("回包标的列表无效或与本次请求不一致");
+    if (!responseRunIdValid) creationResponseWarnings.push("Run 引用缺失或格式无效");
     const taskHistoryWasReplaced = creationHistoryGeneration !== state.taskHistoryGeneration;
     if (requestAnalysisGeneration !== state.analysisConnectionGeneration || requestAnalysisBase !== state.settings.analysisBase) {
       if (typeof task?.task_id === "string" && task.task_id.trim()) {
@@ -3914,8 +3834,8 @@ async function createTask(event) {
       task_id: task.task_id,
       run_id: responseRunId,
       status: responseStatus,
-      task_type: taskType,
-      symbols,
+      task_type: task.task_type || taskType,
+      symbols: task.symbols,
       current_stage: responseSymbolsMatch ? task.current_stage : "等待服务端确认",
       completed_stages: responseSymbolsMatch ? task.completed_stages : undefined,
       failure_code: responseSymbolsMatch ? task.failure_code : "",
@@ -3932,7 +3852,7 @@ async function createTask(event) {
     renderTaskEvents();
     openRunFlowDrawer();
     const generation = state.pollGeneration;
-    // 即使幂等命中已结束任务，也先读取并排空阶段事件，再加载最终 Run 报告。
+    // Researchflow 聚合读取一次取全 Run/Stage；终态后由 pollTask 读取降级领域结果。
     state.pollTimer = window.setTimeout(() => pollTaskSafely(generation), 500);
   } catch (error) {
     try {
@@ -5368,7 +5288,16 @@ $("#recent-analysis-list").addEventListener("click", (event) => {
 $("#reload-run-result").addEventListener("click", () => {
   if (state.taskId && state.runId) void loadTaskRunResult(state.runId, state.taskId);
 });
-$("#archive-run-report").addEventListener("click", () => { if (!state.lastRunResult) return; const outcome = researchReports.save(state.lastRunResult, { taskId: state.taskId, analysisBase: state.taskAnalysisBase || state.settings.analysisBase }); if (outcome.ok) $("#archive-run-report").textContent = outcome.duplicate ? "已归档" : "归档成功"; });
+$("#archive-run-report").addEventListener("click", () => {
+  if (!state.lastRunResult) return;
+  // 授权领域结果（SRV-CTR-001 1.1.0）不是完整研究报告，禁止作为报告归档。
+  if (state.lastRunResult.isFullReport === false) {
+    $("#archive-run-report").textContent = "降级结果不可归档为报告";
+    return;
+  }
+  const outcome = researchReports.save(state.lastRunResult, { taskId: state.taskId, analysisBase: state.taskAnalysisBase || state.settings.analysisBase });
+  if (outcome.ok) $("#archive-run-report").textContent = outcome.duplicate ? "已归档" : "归档成功";
+});
 $("#copy-run-json").addEventListener("click", async (event) => {
   const button = event.currentTarget;
   if (!state.lastRunResult) return;

@@ -4,6 +4,10 @@ import { mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
+import {
+  makeRunAggregate,
+  makeResultsResponse
+} from "./fixtures/researchflow.mjs";
 
 const webRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const repositoryRoot = path.resolve(webRoot, "..");
@@ -199,40 +203,24 @@ try {
       const json = (status, body) => route.fulfill({
         status, contentType: "application/json", body: JSON.stringify(body)
       });
-      if (url.pathname === "/api/v1/analysis/tasks" && route.request().method() === "POST") {
+      // 创建走 Owner Session：幂等键在 body，CSRF 由内存 token 通过 header 发送。
+      if (url.pathname === "/api/v1/researchflow/runs" && route.request().method() === "POST") {
         const payload = route.request().postDataJSON();
-        assert.deepEqual(payload.symbols, ["000001"], "研究页创建任务必须使用规范化后的当前标的");
-        assert.equal(payload.task_type, "post_market_scan");
-        return json(202, { task: {
-          task_id: "task-research-archive", run_id: "run-research-archive",
-          status: "queued", task_type: "post_market_scan", symbols: ["000001"],
-          created_at: "2026-11-03T03:00:00Z"
-        }, status_url: "/api/v1/analysis/tasks/task-research-archive",
-        events_url: "/api/v1/analysis/tasks/task-research-archive/events" });
+        assert.equal(payload.schema_version, "1.1.0");
+        assert.equal(payload.template_ref, "quant.research");
+        assert.equal(payload.template_version, "1.0.0");
+        assert.deepEqual(payload.input_snapshot_refs, []);
+        assert.ok(typeof payload.idempotency_key === "string" && payload.idempotency_key.length > 0, "创建命令必须包含幂等键");
+        assert.equal(payload.parameters.stages["quant.sma20"].symbol, "000001.SZ", "研究页创建 Run 必须补交易所后缀");
+        assert.equal(route.request().headers()["x-csrf-token"], "browser-research-csrf", "创建 Run 必须带 Owner Session CSRF");
+        return json(202, makeRunAggregate({ runRef: "run-research-archive", runStatus: "queued" }));
       }
-      if (url.pathname === "/api/v1/analysis/tasks/task-research-archive") {
-        return json(200, { task: {
-          task_id: "task-research-archive", run_id: "run-research-archive",
-          status: "succeeded", task_type: "post_market_scan", symbols: ["000001"],
-          created_at: "2026-11-03T03:00:00Z", completed_stages: 1
-        } });
+      // Run/Stage 聚合轮询：无事件分页、无旧 RunResult 完整报告。
+      if (url.pathname === "/api/v1/researchflow/runs/run-research-archive") {
+        return json(200, makeRunAggregate({ runRef: "run-research-archive", runStatus: "succeeded" }));
       }
-      if (url.pathname === "/api/v1/analysis/tasks/task-research-archive/events") {
-        return json(200, { task_id: "task-research-archive", next_after_sequence: 1, events: [{
-          sequence: 1, event: {
-            run_id: "run-research-archive", stage: "研究任务完成", status: "completed",
-            message: "浏览器归档闭环专项", at: "2026-11-03T03:00:01Z"
-          }
-        }] });
-      }
-      if (url.pathname === "/api/v1/analysis/runs/run-research-archive") {
-        return json(200, {
-          run_id: "run-research-archive", status: "completed",
-          request: { symbols: ["000001"], task_type: "post_market_scan", as_of: "2026-11-03T03:00:00Z" },
-          quality: { core_pass: true, checked_at: "2026-11-03T03:00:01Z", issues: [] },
-          factors: [], signals: [], plans: [], warnings: [],
-          market_state: { regime: "unknown", evidence: [] }
-        });
+      if (url.pathname === "/api/v1/researchflow/runs/run-research-archive/results") {
+        return json(200, makeResultsResponse({ runRef: "run-research-archive" }));
       }
       // 市场总览在 Owner Session 恢复成功后才会随视图切换刷新；用同源夹具建立已登录态。
       if (url.pathname === "/api/v1/owner/setup") {
@@ -412,34 +400,38 @@ try {
   assert.equal(await page.locator("#stock-profile-symbol").textContent(), "000001.SZ");
   assert.equal(await page.locator("#load-stock-research").isEnabled(), true);
 
-  // 从研究页创建分析任务，读取真实 Run 回包，再归档并从报告创建关联笔记。
+  // 从研究页创建 Researchflow Run，轮询聚合状态并读取授权领域结果（非完整报告）。
   await page.locator("#research-start-analysis").click();
   await page.locator("#task-detail").waitFor({ state: "visible" });
   await page.waitForFunction(() => !document.querySelector("#task-result-section")?.hidden, null, { timeout: 15000 });
+  assert.equal(await page.locator("#task-id-value").textContent(), "run-research-archive", "Run 引用成为页面任务 ID");
+  assert.match(await page.locator("#task-result-note").textContent(), /非完整研究报告/);
+  assert.equal(await page.locator(".analysis-result-card").count(), 4);
+  // 降级结果不是完整报告，不能被当作完整报告归档。
   await page.locator("#archive-run-report").click();
+  assert.equal(await page.locator("#archive-run-report").textContent(), "降级结果不可归档为报告", "degraded results must not be archived as a full report");
+  const archived = await page.evaluate(() => JSON.parse(localStorage.getItem("stock-provider-webui.research-reports.v1") || "[]"));
+  assert.equal(archived.length, 0, "no full report is persisted from authorized domain results");
+  // 仍可从当前 Run 上下文创建关联研究记录。
   await page.locator('.nav-link[data-view="research"]').click();
   await page.locator("#research-view").waitFor({ state: "visible" });
-  await page.locator('#research-report-list [data-report-action="create-note"]').waitFor({ state: "visible" });
-  await page.locator('#research-report-list [data-report-action="create-note"]').click();
+  await page.locator("#research-note-create").click();
   await page.waitForFunction(() =>
-    document.querySelector("#research-note-task")?.value === "task-research-archive" &&
+    document.querySelector("#research-note-task")?.value === "run-research-archive" &&
     document.querySelector("#research-note-run")?.value === "run-research-archive"
   );
-  assert.equal(await page.locator("#research-note-symbol").inputValue(), "000001");
-  await page.locator("#research-note-content").fill("浏览器专项：报告与任务关联一致。");
+  // 从任务页返回后研究上下文不再携带报价标的，显式填写本 Run 对应的标的。
+  await page.locator("#research-note-symbol").fill("000001.SZ");
+  assert.equal(await page.locator("#research-note-symbol").inputValue(), "000001.SZ");
+  await page.locator("#research-note-title").fill("浏览器专项：Run 关联研究记录");
+  await page.locator("#research-note-content").fill("浏览器专项：Run 与研究记录关联一致。");
   await page.locator("#research-note-save").click();
-  await page.locator("#research-note-list .research-note-card").filter({ hasText: "task-research-archive" }).waitFor({ state: "visible" });
-  const archived = await page.evaluate(() => JSON.parse(localStorage.getItem("stock-provider-webui.research-reports.v1") || "[]"));
-  assert.equal(archived.length, 1);
-  assert.equal(archived[0].taskId, "task-research-archive");
-  assert.equal(archived[0].runId, "run-research-archive");
-  assert.equal(archived[0].analysisBase, "/");
-  assert.deepEqual(archived[0].symbols, ["000001"]);
+  await page.locator("#research-note-list .research-note-card").filter({ hasText: "run-research-archive" }).waitFor({ state: "visible" });
   const notes = await page.evaluate(() => JSON.parse(localStorage.getItem("stock-provider-webui.research-notes.v1") || "[]"));
   assert.equal(notes.length, 1);
-  assert.equal(notes[0].taskId, "task-research-archive");
+  assert.equal(notes[0].taskId, "run-research-archive");
   assert.equal(notes[0].runId, "run-research-archive");
-  assert.equal(notes[0].symbol, "000001");
+  assert.equal(notes[0].symbol, "000001.SZ");
   assert.deepEqual(pageErrors, [], pageErrors.join("\n"));
   await page.screenshot({
     path: path.join(screenshotDir, "1280x900-stock-research.png"),

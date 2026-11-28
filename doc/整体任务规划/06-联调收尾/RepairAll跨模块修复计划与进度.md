@@ -2025,3 +2025,22 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - **验证**：本地 `npm test` 547/547 PASS、`npm run check`、`node --check researchflow-flow.js`、`git diff --check` 全通过。
 - **剩余边界（下一组）**：`app.js` 主流程仍走旧 Analysis API；本组未改任何页面行为。完整接线需改 createTask/pollTask/loadTaskRunResult、移除事件流改 Stage 聚合轮询、把结果区改为降级渲染、新增服务端取消按钮，并同步更新 ui-contract 断言与浏览器夹具。
 - **提交与 CI**：提交 `199301bcab26483a278a847ca58845549e245fc8`（`feat(webui): 建立 Researchflow 单标的研究契约层与高阶 helper`）已推送 repair_all；按精确 SHA 查询 15/15 check run 全部 `completed/success`，含 required-checks、Full integration checks、Validate WebUI source and container、Chromium responsive layout checks，以及 Go/News/Research/Researchflow/Market-data/Notification 各专项。
+
+## 2026-11-28 深度审查（部署态"没数据"三层根因）+ 部署配置清单
+
+- **触发**：用户从"能用"角度要求深度审查，目标是移除旧 Analysis、让新服务可用；决策为"前后端彻底删 + 部署清单用户自配"。
+- **运行时实测（部署机 8093 转发）**：`/healthz` 200；`/api/readyz` 返回 `server.session_unauthenticated`（Owner Session 已启用）；`/api/v1/analysis/tasks/*` 返回 `401 WWW-Authenticate: Bearer`（旧链 Bearer-only，浏览器 Session 无权 → 页面无数据的直接原因）；`/api/v1/researchflow/runs` 返回 **404**。
+- **404 代码根因**：`router.go:111-118` 的 Researchflow 路由只在 `ownerSession.researchflow != nil` 时注册，依赖 `ResearchflowCapacity.Configured`（`bootstrap.go:166-167`），后者要求 `RESEARCHFLOW_MAX_QUEUED_RUNS`+`RESEARCHFLOW_MAX_WORKERS` 同时显式配置（`config/researchflow.go:24-43`），`.env.example:386-392` 全为注释 → 部署态未启用。
+- **"没数据"三层根因**：① 部署配置：Researchflow 容量未配（404）；② 数据：quant.research 依赖真实 PIT 事实（日线/交易状态/盘口/涨跌停），生产无自动预采集，"真库 L3"种子全在 `_test.go`；③ 前端：主流程 100% 走旧 Analysis API（401），浏览器夹具 mock 旧端点掩盖真实差异。
+- **交付**：`doc/整体任务规划/06-联调收尾/Researchflow部署启用与数据预采集操作清单.md`，含容量/Owner Session/凭据配置、涨跌停与盘口预采集 CLI 命令、端到端验证步骤、已知边界（完整报告 projector 为 nil、交易日语义）。
+
+## 2026-11-28 WebUI 主流程迁移到 Researchflow（接线组，进行中）
+
+- **改造范围**：`web/src/app.js` 的 `createTask`/`pollTask`/`loadTaskRunResult` 数据源从旧 Analysis API 切到 Researchflow 高阶 helper；`createAnalysisTask/getAnalysisTask/getAnalysisTaskEvents/getAnalysisRun` 全部移除导入。
+  - 创建：`createQuantResearchRun`，首批单标的取 `researchSymbol(symbols[0])`（六位代码补 .SH/.SZ/.BJ），幂等键留空时本地生成；回包 `{run,stages}` 取 `run.run_ref` 作为 task_id/run_id。
+  - 轮询：`getQuantResearchRunView` 单次取全 Run/Stage 聚合，去掉事件分页；Stage 经 `runStageToTaskEvent` 投影为有序事件项；Run 状态经 `mapRunStatusToTaskStatus` 映射页面状态；终态 `view.terminal` 后直接读结果。
+  - 结果：`getQuantResearchResultsView` + 降级渲染器 `renderResearchflowResultsView`（明确非完整研究报告，四类结果卡，risk 无 payload）。
+- **新增纯函数模块（TDD+变异）**：`researchflow-flow-adapters.js`（7 测试，1 变异有效）、`researchflow-result-view.js`（6 测试，2 变异有效）；契约层已有 15 测试。
+- **测试护城河同步更新**：`ui-contract.test.mjs` 18 个失败用例断言改验证新契约（无放宽/删除），终态聚合用例补强后变异有效（跳过降级分支被捕获）；`npm test` 560/560、`npm run check` 全绿。
+- **浏览器夹具**：`run-flow-browser.mjs` 已迁移（轮询次数、结果读取次数、Stage 状态标签、非完整报告标注、risk 无 payload 断言）；`run-flow-outcomes-browser.mjs`、`stock-research-browser.mjs` 迁移中。
+- **状态边界**：本组只迁移页面调用链；服务端旧 Analysis 删除为下一组；部署配置与数据预采集由用户按清单执行，未取得 CI 结论前状态 `not_run`。

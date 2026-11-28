@@ -87,6 +87,11 @@ jobs:
         timeout-minutes: 5
         run: node tests/watchlist-quotes-browser.mjs
 
+      - name: Run Researchflow create flow acceptance
+        working-directory: web
+        timeout-minutes: 5
+        run: node tests/researchflow-create-browser.mjs
+
       - name: Run Run Flow interaction acceptance
         working-directory: web
         timeout-minutes: 5
