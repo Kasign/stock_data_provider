@@ -2046,7 +2046,7 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - **状态边界**：本组只迁移页面调用链；服务端旧 Analysis 删除为下一组；部署配置与数据预采集由用户按清单执行。
 - **提交与 CI**：提交 `605c57bb9592059d16f1e9f187a5e179e5583894`（`feat(webui): 页面主流程从旧 Analysis 迁移到 Researchflow`）已推送 repair_all；按精确 SHA 查询 15/15 check run 全部 `completed/success`，含 required-checks、Full integration checks、Validate WebUI source and container、Chromium responsive layout checks。Chromium job 中新增的 `Run Researchflow create flow acceptance` 步骤 `completed/success`，与 Run Flow / Stock Research 各验收步骤均真实执行（无 skipped）。本地 13 个浏览器测试按退出码全 PASS，`npm test` 560/560、`npm run check` 通过。
 
-## 2026-11-28 服务端旧 Analysis 彻底删除（代码链，待提交）
+## 2026-11-28 服务端旧 Analysis 彻底删除（代码链，已完成）
 
 - **用户决策与范围**：用户要求从“能用”角度深度审查并要求“前后端一起彻底删”；部署配置与数据问题按已交付的 `./Researchflow部署启用与数据预采集操作清单.md` 由用户自行执行。本组只处理服务端旧 Analysis 代码链删除及其必要上下游。
 - **基线与纪律**：工作组开始/结束核对 `repair_all`，HEAD 与 `origin/repair_all` 均为 `d3314eeabb7816260b2c9c615da7bfe78576e907`；未切分支、未合并、未 rebase、未强推、未重置历史。删除前对 8 组待删包执行针对性测试，全部 PASS，证明是按决策退役旧链，不是用删测试掩盖失败。
@@ -2058,6 +2058,7 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - **本地验证结果**：`gofmt -l` 关注目录无输出；`go build ./...` PASS；`go test ./...` PASS；`npm test` 561/561 PASS；Web 契约测试 181/181 PASS；旧 Go 导入路径、旧命令、旧表名在生产代码/Makefile 中扫描归零。
 - **文档同步**：回填 `./旧Analysis退役执行清单.md`（阶段 3/4/5 状态、工作组证据）与 `./WebUI旧Analysis到Researchflow迁移盘点.md`（当前收尾口径、10.1/10.4 状态）；历史日期记录保留作审计证据，不冒充当前状态。
 - **提交与 CI（回填）**：提交 `eb695a4eeb25ea21835462f95068ef3ee3036383`（`refactor(server): 删除旧 Analysis 生产链并收敛配置装配`）已推送 `repair_all`。按精确 SHA 查询 16/16 check run 全部 `completed/success`：`required-checks` [46104699332](https://github.com/Kasign/stock_data_provider/actions/runs/46104699332)、[Full integration checks](https://github.com/Kasign/stock_data_provider/actions/runs/46104699341/job/140854728996)、[Test root Go module](https://github.com/Kasign/stock_data_provider/actions/runs/46104699325/job/140854729250)、[Validate WebUI source and container](https://github.com/Kasign/stock_data_provider/actions/runs/46104699331/job/140854728862)、[Chromium responsive layout checks](https://github.com/Kasign/stock_data_provider/actions/runs/46104699373/job/140854728850)，以及 Quant/Research/Researchflow/Notification/Market-data/Compose 各专项。
+- **文档回填提交自身 CI**：提交 `1fd8222c588ca9f940e1572a784893d29cced6cf`（`docs(governance): 回填旧 Analysis 删除 CI 结论`）按精确 SHA 查询 13/13 check run 全部 `completed/success`，含 `required-checks`、`Full integration checks`、Test root Go module 与 Market-data/News/Research/Researchflow/Notification/Compose 专项；仅文档改动，专项子集与代码提交不同。
 - **未解决事项**：部署侧容量/凭据与真实 PIT 预采集由用户按清单执行；停服窗口清 `analysis_*` 四表与 migration namespace 待执行；完整报告 projector 仍为 RF-BLOCK-007 OPEN；部署冒烟待用户配置后执行。
 
 ## 2026-11-28 前端旧 Analysis helper 收尾清理
@@ -2067,3 +2068,4 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - **测试语义替换而非放宽**：删除只覆盖旧端点的创建/事件分页/任务轮询用例；把结构化错误、请求 ID、配额错误诊断等通用行为改由 `getResearchflowRun` 承接；取消/超时覆盖继续由已有 Researchflow helper 用例保证。`api.test.mjs` 41/41、`npm test` 558/558、`npm run check` 与 12 个浏览器脚本全部通过。
 - **契约同步**：`ui-contract.test.mjs` 原先断言 `headersKey` 与 `after_sequence`，改为断言 CreateRun 的 body 幂等键/CSRF 与 Stage 投影函数存在、旧事件分页参数不存在；没有删除等待或跳过失败。
 - **状态边界**：本轮只清理旧 API 请求入口；`state.lastRunResult`、`recent-analysis.v1`、`analysis_base` 等本地命名重构仍属独立工作组，不影响旧 API 代码归零结论。
+- **提交与 CI（回填）**：提交 `ad13fb30abb3f6714802b08c49aadbd3ff664bc0`（`refactor(webui): 删除遗留 Analysis API helper`）已推送 `repair_all`；回填时核对 HEAD 与 `origin/repair_all` 均为该 SHA，工作区干净，未切分支/合并/rebase/强推/重置。按精确 SHA 查询 15/15 check run 全部 `completed/success`：`required-checks` [46106781247](https://github.com/Kasign/stock_data_provider/actions/runs/46106781247)、[Full integration checks](https://github.com/Kasign/stock_data_provider/actions/runs/46106781782)、[Test root Go module](https://github.com/Kasign/stock_data_provider/actions/runs/46106781108)、[Validate WebUI source and container](https://github.com/Kasign/stock_data_provider/actions/runs/46106781180)、[Chromium responsive layout checks](https://github.com/Kasign/stock_data_provider/actions/runs/46106781128)，以及 Market-data/News/Research/Researchflow/Notification 与 Compose 各专项；无 failure、无 pending。本轮未触发 Live provider probe 与 Quant module validation，因此为 15 项而非 `eb695a4ee` 的 16 项。至此前后端旧 Analysis 代码与请求入口删除均取得对应 SHA 的 CI 结论；部署配置、真实 PIT 预采集、停服清表和部署冒烟仍待用户执行。

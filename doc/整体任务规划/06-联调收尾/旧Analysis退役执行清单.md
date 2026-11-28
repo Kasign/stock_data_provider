@@ -1,9 +1,9 @@
 # 旧 Analysis 退役执行清单
 
-更新时间：2026-11-28（回填 WebUI 迁移、旧 Analysis 代码删除与当前未完成边界）
+更新时间：2026-11-28（回填 WebUI 迁移、旧 Analysis 代码删除、前端 API helper 清理及三次提交 CI 结论）
 执行分支：`repair_all`（集中开发，受根目录 `AGENTS.md` 约束）
 主线目标：在保留真实研究能力的前提下，按依赖顺序退役旧 Analysis 生产链，不制造“已退役”假象。
-当前状态：WebUI 主流程迁移完成；旧 Analysis 代码链与命令删除完成，代码 SHA `eb695a4ee` 的 16/16 CI 全绿；部署配置/真实 PIT 预采集、停服清表和部署冒烟仍未完成。
+当前状态：WebUI 主流程迁移完成；旧 Analysis 服务端代码链、命令与前端 API 请求入口删除完成；最终代码 SHA `ad13fb30a` 的 15/15 CI 全绿（此前 `eb695a4ee` 16/16、`1fd8222c5` 13/13 均 success）；部署配置/真实 PIT 预采集、停服清表和部署冒烟仍未完成。
 
 ## 0. 本文定位与权威来源
 
@@ -118,7 +118,7 @@
 |---|---|---|---|---|
 | 5.1 | 全仓旧路径/环境变量/容器名/工作流引用扫描归零 | Integration | 部分完成（2026-11-28：代码、Web API 客户端与 Makefile 引用归零；历史文档引用未批量改写） | 已扫描 Go/Web/工作流/Makefile：`cmd/demo`、`cmd/storage-check`、`internal/analysis/**`、`internal/platform/httpapi/**`、`internal/platform/taskqueue/**`、`internal/service/wiring.go`、`internal/server/marketdata/**` 均无生产代码引用；`web/src/api.js` 已无 `/api/v1/analysis/**` 与旧 helper；历史文档按日期保留，待最终迁移记录统一收口 |
 | 5.2 | Researchflow Run 全流程 + 授权报告读取 + WebUI 无旧请求 + Owner Session / Health / Ready 端到端 | Integration | 未开始（部署侧待用户按清单配置） | 真实流程验收通过；目前部署态 Researchflow 容量未启用、PIT 事实未预采集 |
-| 5.3 | 最终 SHA 完整 CI + 浏览器验收 + 部署冒烟 | Integration | 部分完成（代码 SHA `eb695a4ee` 的 16/16 check run 全部 `completed/success`，含 required-checks 与 Chromium；部署冒烟待用户配置后执行） | `required-checks` 聚合检查全项通过；不以中途 CI 状态作为停工条件 |
+| 5.3 | 最终 SHA 完整 CI + 浏览器验收 + 部署冒烟 | Integration | 部分完成（最终代码 SHA `ad13fb30a` 的 15/15 check run 全部 `completed/success`，含 required-checks、Validate WebUI source/container 与 Chromium；此前 `eb695a4ee` 16/16、`1fd8222c5` 13/13 亦全 success；部署冒烟待用户配置后执行） | `required-checks` 聚合检查全项通过；check 数量随变更路径触发的专项子集变化，不以中途 CI 状态作为停工条件 |
 
 ## 7.1 2026-11-28 回填：旧 Analysis 代码链删除工作组
 
@@ -133,7 +133,9 @@
 - **保留能力**：`internal/marketdata/app/port.go` 与 `internal/marketdata/application/reader.go` 的 `DailyBarsV2Reader` 未改动；`cmd/analysis-api` 启动入口、Owner Session/CSRF、Health/Ready、平台公共能力均保留。
 - **验证**：`gofmt -l` 关注目录无输出；`go build ./...` PASS；`go test ./...` PASS；`npm test` 561/561 PASS；`web/tests/ui-contract.test.mjs` 181/181 PASS；旧 Go 导入路径、旧命令、旧表名扫描在代码中归零。
 - **提交与 CI（回填）**：提交 `eb695a4eeb25ea21835462f95068ef3ee3036383`（`refactor(server): 删除旧 Analysis 生产链并收敛配置装配`）已推送 `repair_all`。按该精确 SHA 查询，16/16 check run 全部 `completed/success`：`required-checks` [46104699332](https://github.com/Kasign/stock_data_provider/actions/runs/46104699332)、[Full integration checks](https://github.com/Kasign/stock_data_provider/actions/runs/46104699341/job/140854728996)、[Test root Go module](https://github.com/Kasign/stock_data_provider/actions/runs/46104699325/job/140854729250)、[Validate WebUI source and container](https://github.com/Kasign/stock_data_provider/actions/runs/46104699331/job/140854728862)、[Chromium responsive layout checks](https://github.com/Kasign/stock_data_provider/actions/runs/46104699373/job/140854728850)，以及 Quant/Research/Researchflow/Notification/Market-data/Compose 各专项。部署冒烟仍需用户按清单配置后执行。
+- **文档回填提交的自身 CI**：提交 `1fd8222c588ca9f940e1572a784893d29cced6cf`（`docs(governance): 回填旧 Analysis 删除 CI 结论`）按精确 SHA 查询，13/13 check run 全部 `completed/success`（`required-checks`、`Full integration checks`、Test root Go module、Market-data/News/Research/Researchflow/Notification 专项与 Compose 检查）。该提交仅改文档，专项触发子集少于服务端代码提交。
 - **追加清理（前端 API 客户端）**：复核发现 `web/src/api.js` 仍保留 4 个仅供旧测试使用的 Analysis helper；本轮已删除 `createAnalysisTask`/`getAnalysisRun`/`getAnalysisTask`/`getAnalysisTaskEvents` 及 `/api/v1/analysis/**` 路径，相关通用错误/超时/取消覆盖改由 Researchflow helper 承接，并新增“旧 helper 与旧路径不得复活”源码契约断言。`npm test` 558/558、`npm run check` 与 12 个浏览器脚本通过。
+- **追加清理提交与 CI（回填）**：提交 `ad13fb30abb3f6714802b08c49aadbd3ff664bc0`（`refactor(webui): 删除遗留 Analysis API helper`）已推送 `repair_all`，回填时 HEAD 与 `origin/repair_all` 均指向该 SHA。按精确 SHA 查询，15/15 check run 全部 `completed/success`：`required-checks` [46106781247](https://github.com/Kasign/stock_data_provider/actions/runs/46106781247)、[Full integration checks](https://github.com/Kasign/stock_data_provider/actions/runs/46106781782)、[Test root Go module](https://github.com/Kasign/stock_data_provider/actions/runs/46106781108)、[Validate WebUI source and container](https://github.com/Kasign/stock_data_provider/actions/runs/46106781180)、[Chromium responsive layout checks](https://github.com/Kasign/stock_data_provider/actions/runs/46106781128)，以及 Market-data/News/Research/Researchflow/Notification 与 Compose 各专项；无 failure、无 pending。该轮未触发 Live provider probe 与 Quant module validation，故为 15 项而非此前服务端提交的 16 项。至此前后端旧 Analysis 请求入口与生产代码链的代码删除、CI 验收均已完成；部署侧配置、预采集、停服清表与冒烟仍为未完成项。
 
 ## 8. 执行口径
 
