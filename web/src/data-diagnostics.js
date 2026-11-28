@@ -157,9 +157,27 @@ export async function collectStockDiagnostics({
   return { symbol: normalized, tradeDate, rows, summary: summarizeDiagnosticRows(rows) };
 }
 
-export function buildStockProbeRequest(symbol, tradeDate) {
+// 必须与后端 service.isStockScopedProbeCapability 保持一致：只有这些能力允许带
+// symbols；trading_calendar 等市场级能力带 symbols 会被服务端以 400 拒绝。
+export const STOCK_SCOPED_PROBE_CAPABILITIES = Object.freeze([
+  "quote", "daily_bars", "stock_basic", "stock_search", "security_trading_status",
+  "price_limit_event", "stock_boards", "announcements", "fundamentals",
+  "valuations", "capital_flow", "chip_distribution"
+]);
+
+const DEFAULT_DIAGNOSTIC_PROBE_CAPABILITIES = Object.freeze([
+  "quote", "daily_bars", "security_trading_status", "stock_basic",
+  "valuations", "chip_distribution", "capital_flow"
+]);
+
+// 请求里只保留股票范围能力，避免把市场级能力混进来触发 400。
+export function buildStockProbeRequest(
+  symbol, tradeDate, capabilities = DEFAULT_DIAGNOSTIC_PROBE_CAPABILITIES
+) {
+  const allowed = (Array.isArray(capabilities) ? capabilities : [])
+    .filter((capability) => STOCK_SCOPED_PROBE_CAPABILITIES.includes(capability));
   return {
-    capabilities: ["quote", "daily_bars", "trading_calendar", "security_trading_status"],
+    capabilities: allowed.length ? allowed : [...DEFAULT_DIAGNOSTIC_PROBE_CAPABILITIES],
     symbols: [normalizeSymbol(symbol)],
     timeout_seconds: 20,
     daily_bar_start_date: shiftDays(tradeDate, -20),

@@ -64,12 +64,19 @@ test("recentTradingDay 跳过周六周日", () => {
   assert.equal(recentTradingDay(new Date(2026, 10, 1)), "2026-10-30");
 });
 
-test("buildStockProbeRequest 同时给出能力与标的并带日线窗口", () => {
+test("buildStockProbeRequest 只带股票范围能力并给出日线窗口", () => {
   const request = buildStockProbeRequest("600519.SH", "2026-11-27");
   assert.deepEqual(request.symbols, ["600519.SH"]);
-  assert.deepEqual(request.capabilities, ["quote", "daily_bars", "trading_calendar", "security_trading_status"]);
+  // trading_calendar 是市场级能力，带 symbols 会被服务端 400 拒绝。
+  assert.equal(request.capabilities.includes("trading_calendar"), false);
+  assert.equal(request.capabilities.includes("security_trading_status"), true);
   assert.equal(request.daily_bar_end_date, "2026-11-27");
   assert.equal(request.daily_bar_start_date, "2026-11-07");
+});
+
+test("buildStockProbeRequest 过滤掉非股票范围能力", () => {
+  const request = buildStockProbeRequest("600519.SH", "2026-11-27", ["quote", "trading_calendar", "sector_rankings"]);
+  assert.deepEqual(request.capabilities, ["quote"]);
 });
 
 test("collectStockDiagnostics 并发采集、区分成功与失败并保留错误码", async () => {
