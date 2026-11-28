@@ -72,8 +72,8 @@ test("无本地任务引用不推断服务端从未分析", () => {
 test("今日任务、旧分析 API 与任务状态标签保留", () => {
   const task = { task_id: "task-1", run_id: "run-1", symbols: ["600000"], created_at: "2026-11-04T01:00:00Z", updated_at: "2026-11-04T01:00:00Z", status: "running", baseRef: "https://api.old" };
   const result = build({ recentTasks: [task] });
-  assert.match(byKey(result, "today").text, /今日分析：有本地记录（旧分析 API 地址）/);
-  assert.match(byKey(result, "task").text, /旧分析 API 地址/);
+  assert.match(byKey(result, "today").text, /今日分析：有本地记录（其他研究服务地址）/);
+  assert.match(byKey(result, "task").text, /其他研究服务地址/);
 });
 
 test("旧任务缺少服务端创建时间时今日状态未知", () => {

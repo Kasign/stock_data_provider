@@ -34,7 +34,7 @@ export function renderRecentTaskList({
     const empty = document.createElement("div");
     empty.className = "empty-row";
     empty.textContent = !totalCount
-      ? "完成一次分析后，这里会显示最近任务。"
+      ? "完成一次研究后，这里会显示最近任务。"
       : "没有匹配项，请调整关键词或清除搜索。";
     root.append(empty);
     return { clearFeedback: true, refreshResearchStockList: true };
@@ -42,35 +42,35 @@ export function renderRecentTaskList({
 
   items.forEach((record) => {
     const item = document.createElement("article");
-    item.className = "recent-analysis-item";
+    item.className = "recent-runs-item";
 
     const open = document.createElement("button");
     open.type = "button";
-    open.className = "recent-analysis-open";
+    open.className = "recent-runs-open";
     open.dataset.openTaskId = record.task_id;
     const main = document.createElement("span");
-    main.className = "recent-analysis-item-main";
+    main.className = "recent-runs-item-main";
     const title = document.createElement("strong");
     title.textContent = record.symbols?.join(", ") || "标的未记录";
     const recordBaseRef = String(record.baseRef || currentBaseRef);
     const isOtherEndpoint = recordBaseRef !== currentBaseRef;
     open.dataset.openTaskBase = recordBaseRef;
     const detail = document.createElement("small");
-    detail.textContent = recentTaskTypeLabel(record.task_type) + " · " + (record.updated_at ? formatDateTime(record.updated_at) : "时间未记录") + " · " + record.task_id + (isOtherEndpoint ? " · 旧分析 API 地址" : "");
+    detail.textContent = recentTaskTypeLabel(record.task_type) + " · " + (record.updated_at ? formatDateTime(record.updated_at) : "时间未记录") + " · " + record.task_id + (isOtherEndpoint ? " · 其他研究服务地址" : "");
     const failure = document.createElement("small");
-    failure.className = "recent-analysis-failure";
+    failure.className = "recent-runs-failure";
     failure.textContent = [record.failure_code ? "错误代码：" + record.failure_code : "", record.error_message || ""].filter(Boolean).join(" · ").slice(0, 300);
     failure.hidden = !failure.textContent;
     if (failure.textContent) main.append(failure);
     const status = document.createElement("span");
-    status.className = "recent-analysis-item-status";
+    status.className = "recent-runs-item-status";
     status.textContent = taskStatusLabel(record.status);
     main.append(title, detail);
     open.append(main, status);
 
     const remove = document.createElement("button");
     remove.type = "button";
-    remove.className = "recent-analysis-remove";
+    remove.className = "recent-runs-remove";
     remove.dataset.removeTaskId = record.task_id;
     remove.dataset.removeTaskBase = recordBaseRef;
     remove.textContent = "移除";

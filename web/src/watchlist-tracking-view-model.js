@@ -78,7 +78,7 @@ export function buildWatchlistTrackingFields(input) {
 
   let todayText = "";
   if (todayTask) {
-    todayText = "今日分析：有本地记录" + (todayTaskUsesOtherEndpoint ? "（旧分析 API 地址）" : "") + " · " + taskStatusLabel(todayTask.status) + " · 创建于 " + formatDateTime(todayTask.created_at);
+    todayText = "今日分析：有本地记录" + (todayTaskUsesOtherEndpoint ? "（其他研究服务地址）" : "") + " · " + taskStatusLabel(todayTask.status) + " · 创建于 " + formatDateTime(todayTask.created_at);
   } else if (!matchingTasks.length) {
     todayText = "今日分析：未知（当前浏览器没有该股票的任务引用）";
   } else if (matchingTasks.some((task) => !dateKey(task.created_at))) {
@@ -94,7 +94,7 @@ export function buildWatchlistTrackingFields(input) {
         ? "当前任务：状态读取异常（上次状态：" + taskStatusLabel(currentTask.status) + (currentTask.statusErrorRetrying ? "，自动重试中" : "，自动刷新已暂停") + "） · " + currentTask.taskId
         : "当前任务：" + taskStatusLabel(currentTask.status) + " · " + currentTask.taskId
     : recentTask
-      ? "最近任务：" + taskStatusLabel(recentTask.status) + (recentTaskUsesOtherEndpoint ? " · 旧分析 API 地址" : "") + " · " + (recentTask.updated_at ? formatDateTime(recentTask.updated_at) : "时间未记录")
+      ? "最近任务：" + taskStatusLabel(recentTask.status) + (recentTaskUsesOtherEndpoint ? " · 其他研究服务地址" : "") + " · " + (recentTask.updated_at ? formatDateTime(recentTask.updated_at) : "时间未记录")
       : "最近任务：暂无本地任务记录（不代表从未分析）";
 
   const latestResultMatches = Boolean(recentTask && runResult

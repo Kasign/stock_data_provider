@@ -1917,7 +1917,7 @@ try {
           await page.waitForFunction(() => [...document.querySelectorAll("#watchlist-list .watchlist-name-input")].some(input => input.value === "导入名称"));
           await clickNav(page, '.nav-link[data-view="tasks"]');
           await page.waitForTimeout(100);
-          const importedTaskListText = await page.locator("#recent-analysis-list").textContent();
+          const importedTaskListText = await page.locator("#recent-runs-list").textContent();
           const importedTaskStorage = await page.evaluate((key) => localStorage.getItem(key), keys.tasks);
           assert.match(importedTaskListText || "", /task-2/, "recent task list did not refresh after import; rendered=" + importedTaskListText + "; storage=" + importedTaskStorage);
           await clickNav(page, '.nav-link[data-view="settings"]');
@@ -2213,17 +2213,17 @@ try {
   await clickNav(blockedStoragePage, '.nav-link[data-view="tasks"]');
   await blockedStoragePage.locator("#tasks-view").waitFor({ state: "visible" });
   await blockedStoragePage.waitForFunction(
-    () => document.querySelector("#recent-analysis-count")?.textContent.trim() === "不可用 / 10" &&
-      document.querySelector("#recent-analysis-feedback")?.textContent.includes("无法读取浏览器最近任务存储"),
+    () => document.querySelector("#recent-runs-count")?.textContent.trim() === "不可用 / 10" &&
+      document.querySelector("#recent-runs-feedback")?.textContent.includes("无法读取浏览器最近任务存储"),
     null,
     { timeout: 5000 }
   );
   const blockedRecentState = await blockedStoragePage.evaluate(() => ({
-    count: document.querySelector("#recent-analysis-count")?.textContent.trim() || "",
-    feedback: document.querySelector("#recent-analysis-feedback")?.textContent || "",
-    feedbackClass: document.querySelector("#recent-analysis-feedback")?.className || "",
-    rows: document.querySelectorAll("#recent-analysis-list .recent-analysis-item").length,
-    removeActions: document.querySelectorAll("#recent-analysis-list [data-remove-task-id]").length
+    count: document.querySelector("#recent-runs-count")?.textContent.trim() || "",
+    feedback: document.querySelector("#recent-runs-feedback")?.textContent || "",
+    feedbackClass: document.querySelector("#recent-runs-feedback")?.className || "",
+    rows: document.querySelectorAll("#recent-runs-list .recent-runs-item").length,
+    removeActions: document.querySelectorAll("#recent-runs-list [data-remove-task-id]").length
   }));
   assert.equal(blockedRecentState.count, "不可用 / 10");
   assert.match(blockedRecentState.feedback, /无法读取浏览器最近任务存储/);
@@ -2234,11 +2234,11 @@ try {
   blockedStoragePage.once("dialog", (dialog) => dialog.accept());
   await blockedStoragePage.locator("#clear-recent-analysis").click();
   await blockedStoragePage.waitForFunction(
-    () => document.querySelector("#recent-analysis-feedback")?.textContent.includes("未能确认最近任务历史已清空"),
+    () => document.querySelector("#recent-runs-feedback")?.textContent.includes("未能确认最近任务历史已清空"),
     null,
     { timeout: 5000 }
   );
-  const blockedClearFeedback = await blockedStoragePage.locator("#recent-analysis-feedback").textContent();
+  const blockedClearFeedback = await blockedStoragePage.locator("#recent-runs-feedback").textContent();
   assert.match(blockedClearFeedback, /未能确认最近任务历史已清空/);
   assert.doesNotMatch(blockedClearFeedback, /本地最近任务列表已清空/);
   assert.deepEqual(blockedStorageErrors, [], "blocked localStorage must not create unhandled browser errors");
@@ -2343,14 +2343,14 @@ try {
   // Recent-task removal and clearing must also verify the write, because the storage module returns a best-effort array.
   await clickNav(quotaPage, '.nav-link[data-view="tasks"]');
   await quotaPage.locator("#tasks-view").waitFor({ state: "visible" });
-  await quotaPage.locator('#recent-analysis-list [data-remove-task-id="task-browser-storage-001"]').waitFor({ state: "visible" });
-  await quotaPage.locator('#recent-analysis-list [data-remove-task-id="task-browser-storage-001"]').click();
+  await quotaPage.locator('#recent-runs-list [data-remove-task-id="task-browser-storage-001"]').waitFor({ state: "visible" });
+  await quotaPage.locator('#recent-runs-list [data-remove-task-id="task-browser-storage-001"]').click();
   await quotaPage.waitForFunction(
-    () => document.querySelector("#recent-analysis-feedback")?.textContent.includes("无法确认最近任务引用已移除"),
+    () => document.querySelector("#recent-runs-feedback")?.textContent.includes("无法确认最近任务引用已移除"),
     null,
     { timeout: 5000 }
   );
-  const failedRecentRemove = await quotaPage.locator("#recent-analysis-feedback").textContent();
+  const failedRecentRemove = await quotaPage.locator("#recent-runs-feedback").textContent();
   assert.match(failedRecentRemove, /无法确认最近任务引用已移除/);
   assert.doesNotMatch(failedRecentRemove, /已从当前浏览器移除该任务引用/);
   assert.equal(await quotaPage.evaluate((key) => localStorage.getItem(key), recentTasksKey), originalRecentTasks,
@@ -2359,11 +2359,11 @@ try {
   quotaPage.once("dialog", (dialog) => dialog.accept());
   await quotaPage.locator("#clear-recent-analysis").click();
   await quotaPage.waitForFunction(
-    () => document.querySelector("#recent-analysis-feedback")?.textContent.includes("未能确认最近任务历史已清空"),
+    () => document.querySelector("#recent-runs-feedback")?.textContent.includes("未能确认最近任务历史已清空"),
     null,
     { timeout: 5000 }
   );
-  const failedRecentClear = await quotaPage.locator("#recent-analysis-feedback").textContent();
+  const failedRecentClear = await quotaPage.locator("#recent-runs-feedback").textContent();
   assert.match(failedRecentClear, /未能确认最近任务历史已清空/);
   assert.doesNotMatch(failedRecentClear, /本地最近任务列表已清空/);
   assert.equal(await quotaPage.evaluate((key) => localStorage.getItem(key), recentTasksKey), originalRecentTasks,

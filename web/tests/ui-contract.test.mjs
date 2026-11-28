@@ -176,7 +176,7 @@ test("Researchflow cancelled Run maps to a failed task instead of false success"
 
 
 test("task restoration validates local references and guards stale asynchronous responses", () => {
-  assert.match(app, /function restoreLastTask\(\)[\s\S]*?JSON\.parse\(localStorage\.getItem\(TASK_REFERENCE_KEY\) \|\| "null"\)[\s\S]*?catch \{[\s\S]*?return false;[\s\S]*?return activateTaskReference\(record\);/);
+  assert.match(app, /function restoreLastTask\(\)[\s\S]*?JSON\.parse\(localStorage\.getItem\(RUN_REFERENCE_KEY\) \|\| "null"\)[\s\S]*?catch \{[\s\S]*?return false;[\s\S]*?return activateTaskReference\(record\);/);
   assert.match(app, /function activateTaskReference\(record\)[\s\S]*?if \(!record \|\| typeof record\.task_id !== "string" \|\| !record\.task_id\.trim\(\)\) return false;[\s\S]*?stopTaskPolling\(\);[\s\S]*?state\.taskEvents\.clear\(\);[\s\S]*?void pollTaskSafely\(state\.pollGeneration\);/);
   assert.match(app, /if \(generation !== state\.pollGeneration \|\| runRef !== state\.taskId \|\|\s*endpointGeneration !== state\.analysisConnectionGeneration \|\|\s*state\.runBase !== runBase \|\|\s*state\.settings\.analysisBase !== runBase\) return;/);
   assert.match(app, /if \(generation !== state\.runResultGeneration \|\| state\.taskId !== expectedTaskId \|\|\s*endpointGeneration !== state\.analysisConnectionGeneration \|\|\s*state\.runBase !== runBase \|\|\s*state\.settings\.analysisBase !== runBase\) return;/);
@@ -264,7 +264,7 @@ test("task restoration and manual refresh mark cached status as unconfirmed", ()
   assert.match(watchlistTrackingViewModel, /currentTask\.statusLoading \|\| Boolean\(currentTask\.statusError\)/);
   assert.match(watchlistTrackingViewModel, /正在确认服务端状态（上次状态：/);
   const manualStart = app.indexOf('$("#refresh-task").addEventListener("click"');
-  const manualEnd = app.indexOf('$("#recent-analysis-search")', manualStart);
+  const manualEnd = app.indexOf('$("#recent-runs-search")', manualStart);
   const manual = app.slice(manualStart, manualEnd);
   assert.match(manual, /state\.taskStatusLoading = true;[\s\S]*?setQualityPill\(\$\("#task-status-pill"\), "unknown", "正在刷新"\)/);
 });
@@ -272,7 +272,7 @@ test("task restoration and manual refresh mark cached status as unconfirmed", ()
 test("立即刷新状态使用忙碌锁阻止重复 Task/事件轮询", () => {
   assert.match(app, /function setTaskRefreshBusy\(busy\) \{[\s\S]*?button\.disabled = Boolean\(busy\)[\s\S]*?button\.setAttribute\("aria-busy", "true"\)[\s\S]*?button\.textContent = "立即刷新状态"/);
   const manualStart = app.indexOf('$("#refresh-task").addEventListener("click"');
-  const manualEnd = app.indexOf('$("#recent-analysis-search")', manualStart);
+  const manualEnd = app.indexOf('$("#recent-runs-search")', manualStart);
   const manual = manualStart >= 0 && manualEnd > manualStart ? app.slice(manualStart, manualEnd) : "";
   assert.match(manual, /if \(!state\.taskId \|\| \$\("#refresh-task"\)\.disabled\) return/);
   assert.match(manual, /stopTaskPolling\(\);[\s\S]*?setTaskRefreshBusy\(true\)/);
@@ -319,7 +319,7 @@ test("任务切换与分析 API 切换不会被按钮解锁异常中断", () => 
   const contexts = [
     ["创建任务", "async function createTask(event) {", "function startAnalysisForSymbol("],
     ["恢复最近任务", "function activateTaskReference(record) {", "function restoreLastTask("],
-    ["分析 API 地址切换", "function invalidateActiveTaskForAnalysisBaseChange(", "function applySettings("]
+    ["研究 API 地址切换", "function invalidateActiveTaskForAnalysisBaseChange(", "function applySettings("]
   ];
   for (const [label, startMarker, endMarker] of contexts) {
     const start = app.indexOf(startMarker);
@@ -379,7 +379,7 @@ test("轮询异常收敛中的诊断渲染失败不会再次拒绝 Promise", () 
 
 test("手动刷新前置渲染异常仍会发起安全轮询并收尾按钮状态", () => {
   const start = app.indexOf('$("#refresh-task").addEventListener("click"');
-  const end = app.indexOf('$("#recent-analysis-search")', start);
+  const end = app.indexOf('$("#recent-runs-search")', start);
   const handler = start >= 0 && end > start ? app.slice(start, end) : "";
   assert.match(handler, /try \{[\s\S]*?setQualityPill[\s\S]*?renderWatchlist\(\);[\s\S]*?catch \(setupError\)/);
   assert.match(handler, /catch \(setupError\)[\s\S]*?仍将继续读取服务端状态[\s\S]*?void pollTaskSafely\(generation\)\.finally\(/);
@@ -432,7 +432,7 @@ test("task polling errors mark last-known status stale and successful refresh cl
   assert.ok(watchlistTrackingViewModel.includes("状态读取异常（上次状态："), "自选卡片应将上次状态标为未验证");
   assert.ok(watchlistTrackingViewModel.includes("自动重试中") && watchlistTrackingViewModel.includes("自动刷新已暂停"), "自选卡片应区分临时错误与永久错误");
   const manualStart = app.indexOf('$("#refresh-task").addEventListener("click"');
-  const manualEnd = app.indexOf('$("#recent-analysis-search")', manualStart);
+  const manualEnd = app.indexOf('$("#recent-runs-search")', manualStart);
   const manualRefresh = app.slice(manualStart, manualEnd);
   assert.ok(manualRefresh.includes("state.taskEventsUnavailable = false") && manualRefresh.includes("pollTaskSafely(generation)"), "手动刷新重新尝试任务与事件读取");
   assert.ok(manualRefresh.includes("正在手动刷新任务状态与阶段事件"), "手动刷新开始后应立即反馈，避免旧错误提示看起来未响应");
@@ -529,11 +529,11 @@ test("分析结果与诊断文本字号由组件基础规则负责", () => {
   assert.ok(!stylesheet.includes(':root[data-theme="light"] .task-result-metric small'));
 });
 
-test("最近分析与自选股文字字号由组件基础规则负责", () => {
+test("最近研究 Run 与自选股文字字号由组件基础规则负责", () => {
   const expected = [
-    [".recent-analysis-item-main strong", "12px"],
-    [".recent-analysis-item-main small", "12px"],
-    [".recent-analysis-item-status", "12px"],
+    [".recent-runs-item-main strong", "12px"],
+    [".recent-runs-item-main small", "12px"],
+    [".recent-runs-item-status", "12px"],
     [".watchlist-panel .panel-heading p", "13px"],
     [".watchlist-name-field", "13px"],
     [".watchlist-item-meta", "12px"],
@@ -547,7 +547,7 @@ test("最近分析与自选股文字字号由组件基础规则负责", () => {
     assert.doesNotMatch(declarations, /!important/);
   }
 
-  assert.ok(!stylesheet.includes(".recent-analysis-item-main strong { font-size: 12px !important; }"));
+  assert.ok(!stylesheet.includes(".recent-runs-item-main strong { font-size: 12px !important; }"));
   assert.ok(!stylesheet.includes(".watchlist-panel .panel-heading p { font-size: 13px !important; }"));
 });
 
@@ -687,8 +687,8 @@ test("restoring a task resets the previous stage-event selection", () => {
 
 test("watchlist labels task history from a different analysis API address", () => {
   assert.ok(watchlistTrackingViewModel.includes("function isOtherRunBase(task, currentBaseRef)"));
-  assert.ok(watchlistTrackingViewModel.includes('todayText = "今日分析：有本地记录" + (todayTaskUsesOtherEndpoint ? "（旧分析 API 地址）" : "")'));
-  assert.ok(watchlistTrackingViewModel.includes('(recentTaskUsesOtherEndpoint ? " · 旧分析 API 地址" : "")'));
+  assert.ok(watchlistTrackingViewModel.includes('todayText = "今日分析：有本地记录" + (todayTaskUsesOtherEndpoint ? "（其他研究服务地址）" : "")'));
+  assert.ok(watchlistTrackingViewModel.includes('(recentTaskUsesOtherEndpoint ? " · 其他研究服务地址" : "")'));
   const todayTaskDeclaration = watchlistTrackingViewModel.indexOf("const todayTask = [...matchingTasks]");
   const todayEndpointUse = watchlistTrackingViewModel.indexOf("const todayTaskUsesOtherEndpoint = isOtherRunBase(todayTask");
   assert.ok(todayTaskDeclaration >= 0 && todayTaskDeclaration < todayEndpointUse, "必须先计算 todayTask 再读取其来源地址，避免暂时性死区");
@@ -835,7 +835,7 @@ test("recent analysis history exposes historical-only task types", () => {
 });
 
 test("recent analysis history supports search, single removal and local-only clearing", () => {
-  for (const id of ["recent-analysis-search", "clear-recent-analysis", "recent-analysis-feedback", "recent-analysis-list"]) {
+  for (const id of ["recent-runs-search", "clear-recent-analysis", "recent-runs-feedback", "recent-runs-list"]) {
     assert.match(html, new RegExp('id="' + id + '"'), "recent-history control must exist: " + id);
   }
   assert.ok(app.includes("function renderRecentTasks(records)"));
@@ -850,8 +850,8 @@ test("recent analysis history supports search, single removal and local-only cle
   assert.match(app, /if \(state\.taskId === taskId && \(!baseRef \|\| state\.runBase === baseRef\)\) \{[\s\S]*?state\.suppressedHistoryTaskId = taskId/);
   assert.match(recentTaskModule, /export function removeRecentTask\(/);
   assert.match(recentTaskModule, /export function clearRecentTasks\(/);
-  assert.match(stylesheet, /\.recent-analysis-search input:focus/);
-  assert.match(stylesheet, /\.recent-analysis-remove:hover/);
+  assert.match(stylesheet, /\.recent-runs-search input:focus/);
+  assert.match(stylesheet, /\.recent-runs-remove:hover/);
 });
 
 
@@ -1543,7 +1543,7 @@ test("辅助说明、任务元信息和输入占位文字统一使用主题感�
 
   assert.match(
     stylesheet,
-    /\.field input::placeholder,\s*\.field textarea::placeholder,\s*\.recent-analysis-search input::placeholder,\s*\.watchlist-name-input::placeholder\s*\{[^}]*color:\s*var\(--text-dim\)/,
+    /\.field input::placeholder,\s*\.field textarea::placeholder,\s*\.recent-runs-search input::placeholder,\s*\.watchlist-name-input::placeholder\s*\{[^}]*color:\s*var\(--text-dim\)/,
     "form and local-search placeholders should use the shared contrast-safe token"
   );
   assert.match(
@@ -1605,14 +1605,14 @@ test("Run Flow 与结构化结果在浅色主题下使用可读的前景文字",
     ".source-main small",
     ".table-footer",
     ".page-footer",
-    ".recent-analysis-item-main small",
+    ".recent-runs-item-main small",
     ".watchlist-item-meta",
     ".supplemental-context",
     ".supplemental-card-heading small",
     ".supplemental-fields dt",
     ".supplemental-reasons",
     ".section-heading h2 span",
-    ".recent-analysis-feedback"
+    ".recent-runs-feedback"
   ];
   for (const selector of dimTextSelectors) {
     assert.match(
@@ -1627,7 +1627,7 @@ test("Run Flow 与结构化结果在浅色主题下使用可读的前景文字",
   assert.match(stylesheet, /:root\[data-theme="light"\] \.analysis-result-badge\.is-blocked \{ color: #b92f41; border-color: #f2c3c9; \}/);
   assert.match(stylesheet, /:root\[data-theme="light"\] \.task-result-warnings/);
   assert.match(stylesheet, /:root\[data-theme="light"\] \.inline-callout strong \{ color: #80540b; \}/);
-  assert.match(stylesheet, /:root\[data-theme="light"\] \.settings-feedback,?\s*[\s\S]*?:root\[data-theme="light"\] \.recent-analysis-feedback\.is-error \{ color: #b92f41; \}/);
+  assert.match(stylesheet, /:root\[data-theme="light"\] \.settings-feedback,?\s*[\s\S]*?:root\[data-theme="light"\] \.recent-runs-feedback\.is-error \{ color: #b92f41; \}/);
   assert.match(stylesheet, /:root\[data-theme="light"\] \.supplemental-feedback\.is-warning \{ color: #80540b; \}/);
   assert.match(stylesheet, /:root\[data-theme="light"\] \.supplemental-feedback\.is-error \{ color: #b92f41; \}/);
   assert.match(stylesheet, /:root\[data-theme="light"\] \.soft-badge \{ color: #245d95; background: #eaf3ff; \}/);
@@ -1688,7 +1688,7 @@ test("导入浏览器工作区不会把导入前的活动任务重新写回任�
   );
   assert.match(
     importBody,
-    /localStorage\.removeItem\(TASK_REFERENCE_KEY\);[\s\S]*?applySettings\(nextSettings, \{ persistPreviousActiveTask: false \}\);[\s\S]*?applyTheme\(imported\.theme\)/
+    /localStorage\.removeItem\(RUN_REFERENCE_KEY\);[\s\S]*?applySettings\(nextSettings, \{ persistPreviousActiveTask: false \}\);[\s\S]*?applyTheme\(imported\.theme\)/
   );
   assert.match(importBody, /const importedActiveTaskId = state\.taskId;[\s\S]*?const importedActiveTaskBase = state\.runBase \|\| state\.settings\.analysisBase;/);
   assert.match(importBody, /applySettings\(nextSettings, \{ persistPreviousActiveTask: false \}\);[\s\S]*?state\.suppressedHistoryTaskId = importedActiveTaskId;[\s\S]*?state\.suppressedHistoryRunBase = importedActiveTaskId \? importedActiveTaskBase : "";/,
@@ -1710,7 +1710,7 @@ test("导入浏览器工作区不会把导入前的活动任务重新写回任�
   );
   assert.match(
     importBody,
-    /const expectedStorage = new Map\(\[[\s\S]*?\[TASK_REFERENCE_KEY, null\][\s\S]*?for \(const \[key, expectedValue\] of expectedStorage\)[\s\S]*?localStorage\.getItem\(key\) !== expectedValue[\s\S]*?throw new Error\("浏览器存储未能确认写入："/,
+    /const expectedStorage = new Map\(\[[\s\S]*?\[RUN_REFERENCE_KEY, null\][\s\S]*?for \(const \[key, expectedValue\] of expectedStorage\)[\s\S]*?localStorage\.getItem\(key\) !== expectedValue[\s\S]*?throw new Error\("浏览器存储未能确认写入："/,
     "workspace import must verify every stored value before changing in-memory state"
   );
   assert.match(importBody.slice(rollbackIndex), /storageKeys\.forEach\([\s\S]*?localStorage\.(?:setItem|removeItem)\(/,
@@ -1851,7 +1851,7 @@ test("最近任务新增与删除必须确认完整记录已持久化，失败�
 test("活动任务引用静默写入失败时仍独立保存最近任务历史并明确提示", () => {
   assert.match(
     app,
-    /const serializedReference = JSON\.stringify\(record\);[\s\S]*?localStorage\.setItem\(TASK_REFERENCE_KEY, serializedReference\);[\s\S]*?taskReferencePersisted = localStorage\.getItem\(TASK_REFERENCE_KEY\) === serializedReference/
+    /const serializedReference = JSON\.stringify\(record\);[\s\S]*?localStorage\.setItem\(RUN_REFERENCE_KEY, serializedReference\);[\s\S]*?taskReferencePersisted = localStorage\.getItem\(RUN_REFERENCE_KEY\) === serializedReference/
   );
   assert.match(
     app,
@@ -2064,7 +2064,7 @@ test("终态 Run 一次性投影 Stage 聚合后直接读取降级领域结果",
   assert.match(poller, /if \(!isRetryableApiError\(taskError\) \|\| taskError\.responseContractError\) \{[\s\S]*?自动刷新已暂停[\s\S]*?return;/);
   assert.match(poller, /Run 状态刷新失败：[\s\S]*?5 秒后自动重试…[\s\S]*?setTimeout\(\(\) => pollTaskSafely\(generation\), 5000\)/);
   const refreshStart = app.indexOf('$("#refresh-task").addEventListener("click"');
-  const refreshEnd = app.indexOf('$("#recent-analysis-search")', refreshStart);
+  const refreshEnd = app.indexOf('$("#recent-runs-search")', refreshStart);
   const refreshHandler = refreshStart >= 0 && refreshEnd > refreshStart ? app.slice(refreshStart, refreshEnd) : "";
   assert.ok(refreshHandler.includes("state.taskEventsUnavailable = false"), "手动刷新必须恢复事件读取");
   assert.ok(refreshHandler.includes("pollTaskSafely(generation)"), "手动刷新必须立即重新发起 Task/事件读取");
@@ -2418,7 +2418,7 @@ test("UIR-2 shared page frame rules merge only redundant global overrides", () =
   assert.match(stylesheet, /@media \(max-width: 700px\) \{\s*\.mobile-menu-toggle/);
   assert.match(stylesheet, /@media \(max-width: 380px\) \{\s*\.app-shell \{ --space-page: 9px; \}/);
   assert.match(stylesheet, /@media \(max-width: 800px\) \{\s*\.page-heading \{ flex-direction: column; align-items: flex-start; gap: 12px; \}/);
-  assert.match(stylesheet, /@media \(max-width: 800px\) \{\s*\.recent-analysis-tools \{ display: grid; grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
+  assert.match(stylesheet, /@media \(max-width: 800px\) \{\s*\.recent-runs-tools \{ display: grid; grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
   assert.match(stylesheet, /body \{[^}]*font-size: var\(--font-size-body-readable\); line-height: var\(--line-height-body\);/);
   assert.match(stylesheet, /button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, summary:focus-visible \{ outline: 2px solid var\(--focus-ring\);/);
   assert.doesNotMatch(stylesheet, /button:focus-visible\s*\{\s*outline:\s*2px solid var\(--accent\)/);
@@ -2568,11 +2568,11 @@ test("UIR-2 任务空态、任务标识与边界说明使用组件基础字号",
 });
 
 
-test("UIR-2 最近分析搜索、反馈和移除操作使用组件基础字号", () => {
+test("UIR-2 最近研究 Run 搜索、反馈和移除操作使用组件基础字号", () => {
   const expectedSizes = [
-    [".recent-analysis-search", /font-size:\s*13px\s*;/],
-    [".recent-analysis-feedback", /font-size:\s*13px\s*;/],
-    [".recent-analysis-remove", /font-size:\s*12px\s*;/],
+    [".recent-runs-search", /font-size:\s*13px\s*;/],
+    [".recent-runs-feedback", /font-size:\s*13px\s*;/],
+    [".recent-runs-remove", /font-size:\s*12px\s*;/],
     [".quote-heading-actions .button", /font-size:\s*12px\s*;/]
   ];
   for (const [selector, sizePattern] of expectedSizes) {
@@ -2580,10 +2580,10 @@ test("UIR-2 最近分析搜索、反馈和移除操作使用组件基础字号",
     assert.match(declaration, sizePattern, selector + " must own its readable base font size");
     assert.doesNotMatch(declaration, /!important/);
   }
-  assert.match(stylesheet, /\.recent-analysis-search input \{[^}]*font: inherit;/, "search input keeps inheriting the label font family and size");
-  assert.match(stylesheet, /\.recent-analysis-feedback\.is-error \{ color: #f0a2a9; \}/, "error feedback retains its semantic color");
-  assert.match(stylesheet, /\.recent-analysis-open:focus-visible, \.recent-analysis-remove:focus-visible \{ outline: 2px solid #8fb6cf;/);
-  assert.match(stylesheet, /@media \(max-width: 600px\) \{[\s\S]*?\.recent-analysis-tools \{ align-items: stretch; flex-direction: column; \}/);
+  assert.match(stylesheet, /\.recent-runs-search input \{[^}]*font: inherit;/, "search input keeps inheriting the label font family and size");
+  assert.match(stylesheet, /\.recent-runs-feedback\.is-error \{ color: #f0a2a9; \}/, "error feedback retains its semantic color");
+  assert.match(stylesheet, /\.recent-runs-open:focus-visible, \.recent-runs-remove:focus-visible \{ outline: 2px solid #8fb6cf;/);
+  assert.match(stylesheet, /@media \(max-width: 600px\) \{[\s\S]*?\.recent-runs-tools \{ align-items: stretch; flex-direction: column; \}/);
   assert.match(stylesheet, /@media \(max-width: 600px\) \{[\s\S]*?\.quote-heading-actions \.button \{ padding: 0 9px; \}/);
 });
 
@@ -2879,6 +2879,21 @@ test("降级领域结果不得作为完整研究报告归档", () => {
   assert.doesNotMatch(handler, /researchReports\.save\(state\.runResult[^)]*\)\s*;?\s*\}/,
     "降级结果分支不得进入完整报告归档调用");
   assert.match(handler, /const outcome = researchReports\.save\(/, "完整报告仍可归档");
+});
+
+test("最近任务展示层不得回退到旧 Analysis 命名", () => {
+  const presentationSources = [html, stylesheet, appSource, recentTaskView, watchlistTrackingViewModel].join("\n");
+  assert.doesNotMatch(presentationSources, /recent-\u0061nalysis-/, "展示层 DOM/CSS 不得回退到 recent-analysis-*");
+  assert.doesNotMatch(html, /最近分析/, "用户可见文案不得再称最近分析");
+  assert.doesNotMatch(presentationSources, /\u65e7分析 API 地址/, "用户可见文案不得回退到旧服务地址表述");
+  assert.match(html, /recent-runs-panel/);
+  assert.match(recentTaskView, /recent-runs-item/);
+});
+
+test("活动 Run 引用存储键不得回退到旧 Analysis 命名", () => {
+  assert.match(appSource, /const RUN_REFERENCE_KEY = "stock-provider-webui\.last-run\.v1"/);
+  assert.doesNotMatch(appSource, /last-analysis-task/, "活动 Run 引用键不得回退到旧 Analysis 命名");
+  assert.doesNotMatch(appSource, /\bTASK_REFERENCE_KEY\b/, "活动 Run 引用常量不得回退到旧 Analysis 命名");
 });
 
 test("WebUI 内部状态不再使用旧 Analysis 命名", () => {

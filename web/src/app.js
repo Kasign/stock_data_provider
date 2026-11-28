@@ -89,7 +89,7 @@ import { researchSymbol, mapRunStatusToTaskStatus, runStageToTaskEvent } from ".
 import { renderScreeningLocalResultRowsView } from "./screening-result-view.js";
 
 const $ = (selector) => document.querySelector(selector);
-const TASK_REFERENCE_KEY = "stock-provider-webui.last-analysis-task.v1";
+const RUN_REFERENCE_KEY = "stock-provider-webui.last-run.v1";
 const BROWSER_DATA_FORMAT = "stock-provider-webui-browser-data";
 const BROWSER_DATA_VERSION = 3;
 const TERMINAL_TASK_STATUSES = new Set(["succeeded", "partial", "failed"]);
@@ -277,7 +277,7 @@ function persistTaskReference() {
   };
   const comparable = JSON.stringify(record);
   try {
-    const previous = JSON.parse(localStorage.getItem(TASK_REFERENCE_KEY) || "null");
+    const previous = JSON.parse(localStorage.getItem(RUN_REFERENCE_KEY) || "null");
     const previousComparable = previous ? JSON.stringify({
       task_id: previous.task_id,
       run_id: previous.run_id || "",
@@ -290,7 +290,7 @@ function persistTaskReference() {
       baseRef: previous.baseRef || state.runBase || state.settings.analysisBase
     }) : "";
     if (previousComparable === comparable) {
-      // Migrate the legacy single-task reference into the new local history once.
+      // 当前活动引用与最近任务记录一致时不重复写入，避免刷新后反复重排历史。
       const historyItem = safeReadRecentTasks().find((item) =>
         item.task_id === record.task_id &&
         String(item.baseRef || taskRunBase) === taskRunBase
@@ -316,8 +316,8 @@ function persistTaskReference() {
     let taskReferencePersisted = false;
     try {
       const serializedReference = JSON.stringify(record);
-      localStorage.setItem(TASK_REFERENCE_KEY, serializedReference);
-      taskReferencePersisted = localStorage.getItem(TASK_REFERENCE_KEY) === serializedReference;
+      localStorage.setItem(RUN_REFERENCE_KEY, serializedReference);
+      taskReferencePersisted = localStorage.getItem(RUN_REFERENCE_KEY) === serializedReference;
     } catch {
       // 活动任务引用与最近任务历史分别确认；单个键写入失败不应阻止历史列表尝试保存。
     }
@@ -343,15 +343,15 @@ function renderRecentTasks(records) {
   const historyState = safeReadRecentTasksState();
   const allItems = Array.isArray(records) ? records : historyState.items;
   const filteredItems = filterRecentTasks(allItems, {
-    search: $("#recent-analysis-search").value,
-    status: $("#recent-analysis-status").value,
-    taskType: $("#recent-analysis-type").value,
-    from: $("#recent-analysis-from").value,
-    to: $("#recent-analysis-to").value
+    search: $("#recent-runs-search").value,
+    status: $("#recent-runs-status").value,
+    taskType: $("#recent-runs-type").value,
+    from: $("#recent-runs-from").value,
+    to: $("#recent-runs-to").value
   });
   const result = renderRecentTaskList({
-    root: $("#recent-analysis-list"),
-    countElement: $("#recent-analysis-count"),
+    root: $("#recent-runs-list"),
+    countElement: $("#recent-runs-count"),
     historyState,
     records: filteredItems,
     totalCount: allItems.length,
@@ -417,9 +417,9 @@ function persistRecentTaskHistory(record) {
 }
 
 function setRecentTasksFeedback(message, kind = "info") {
-  const target = $("#recent-analysis-feedback");
+  const target = $("#recent-runs-feedback");
   target.hidden = !message;
-  target.className = "recent-analysis-feedback" + (message ? " is-" + kind : "");
+  target.className = "recent-runs-feedback" + (message ? " is-" + kind : "");
   target.textContent = message;
 }
 
@@ -438,10 +438,10 @@ function removeRecentTaskReference(taskId, baseRef = "") {
 
   // 先清理兼容旧版本的单任务引用，确认成功后再删除历史列表，避免刷新后旧任务重新出现。
   try {
-    const last = JSON.parse(localStorage.getItem(TASK_REFERENCE_KEY) || "null");
+    const last = JSON.parse(localStorage.getItem(RUN_REFERENCE_KEY) || "null");
     if (last?.task_id === taskId && (!baseRef || last.baseRef === baseRef)) {
-      localStorage.removeItem(TASK_REFERENCE_KEY);
-      if (localStorage.getItem(TASK_REFERENCE_KEY) !== null) throw new Error("旧任务引用仍存在");
+      localStorage.removeItem(RUN_REFERENCE_KEY);
+      if (localStorage.getItem(RUN_REFERENCE_KEY) !== null) throw new Error("旧任务引用仍存在");
     }
   } catch (error) {
     renderRecentTasks();
@@ -483,8 +483,8 @@ function clearRecentTaskHistory() {
   const currentTaskId = state.taskId;
   let remaining = [];
   try {
-    localStorage.removeItem(TASK_REFERENCE_KEY);
-    if (localStorage.getItem(TASK_REFERENCE_KEY) !== null) throw new Error("旧任务引用仍存在");
+    localStorage.removeItem(RUN_REFERENCE_KEY);
+    if (localStorage.getItem(RUN_REFERENCE_KEY) !== null) throw new Error("旧任务引用仍存在");
     clearRecentTasks(localStorage);
     const clearedState = safeReadRecentTasksState();
     if (!clearedState.storageReadable || !clearedState.storageValid || clearedState.items.length !== 0) {
@@ -2469,7 +2469,7 @@ async function checkDraftConnectionFromSettings() {
     button.textContent = "检查中…";
     writeSettingsCheckOutputSafely(
       output,
-      "正在测试表单中的行情与分析 API 地址；本次检查不会保存配置…",
+      "正在测试表单中的行情与研究 API 地址；本次检查不会保存配置…",
       "settings-inline-status"
     );
 
@@ -3749,7 +3749,7 @@ async function createTask(event) {
         };
         if (taskHistoryWasReplaced) {
           setRecentTasksFeedback(
-            "任务已在旧分析 API 地址创建，但本地最近任务历史在提交期间已被清空或替换；按当前操作未重新写入该引用。任务 ID：" + task.task_id + "。切回原地址后可手动核实。",
+            "任务已在其他研究服务地址创建，但本地最近任务历史在提交期间已被清空或替换；按当前操作未重新写入该引用。任务 ID：" + task.task_id + "。切回原地址后可手动核实。",
             "warning"
           );
           feedback.hidden = false;
@@ -3758,18 +3758,18 @@ async function createTask(event) {
           const historyPersisted = persistRecentTaskHistory(endpointRecord);
           setRecentTasksFeedback(
             historyPersisted
-              ? "任务已在旧分析 API 地址 " + requestRunBase + " 创建，并已保存到最近分析列表。当前地址已改变；切回原地址后才能继续读取。"
-              : "任务已在旧分析 API 地址创建，但最近任务引用未能确认持久化。任务 ID：" + task.task_id + "；请切回原地址核实。",
+              ? "任务已在其他研究服务地址 " + requestRunBase + " 创建，并已保存到最近研究 Run 列表。当前地址已改变；切回原地址后才能继续读取。"
+              : "任务已在其他研究服务地址创建，但最近任务引用未能确认持久化。任务 ID：" + task.task_id + "；请切回原地址核实。",
             "warning"
           );
           feedback.hidden = false;
           feedback.textContent = historyPersisted
-            ? "任务已在旧连接创建并记录；当前界面不会把它绑定到新分析 API。切回原地址后可从最近分析恢复。"
+            ? "任务已在旧连接创建并记录；当前界面不会把它绑定到新研究服务。切回原地址后可从最近研究 Run 恢复。"
             : "任务已在旧连接创建，但本地历史未能确认保存。任务 ID：" + task.task_id + "。";
         }
       } else {
         feedback.hidden = false;
-        feedback.textContent = "提交期间分析 API 地址已变化，返回中没有可用 task_id。无法在当前连接确认任务状态；请核实旧服务，避免盲目重复提交。";
+        feedback.textContent = "提交期间研究 API 地址已变化，返回中没有可用 task_id。无法在当前连接确认任务状态；请核实旧服务，避免盲目重复提交。";
       }
       return;
     }
@@ -3797,7 +3797,7 @@ async function createTask(event) {
           const historyPersisted = persistRecentTaskHistory(endpointRecord);
           setRecentTasksFeedback(
             historyPersisted
-              ? "新建任务已创建并保存到最近分析列表；当前选中的任务不会被覆盖。"
+              ? "新建任务已创建并保存到最近研究 Run 列表；当前选中的任务不会被覆盖。"
               : "新建任务已创建，但最近任务引用未能确认持久化。任务 ID：" + task.task_id + "；当前选中的任务不会被覆盖。",
             "warning"
           );
@@ -3859,7 +3859,7 @@ async function createTask(event) {
     if (creationContextGeneration !== state.taskContextGeneration) {
       feedback.hidden = false;
       feedback.textContent = requestAnalysisGeneration !== state.analysisConnectionGeneration || requestRunBase !== state.settings.analysisBase
-        ? "提交期间分析 API 地址已变化且当前任务上下文已切换，无法确认旧连接是否创建了任务：" + errorMessage(error) + "。请核实旧服务后再决定是否重试。"
+        ? "提交期间研究 API 地址已变化且当前任务上下文已切换，无法确认旧连接是否创建了任务：" + errorMessage(error) + "。请核实旧服务后再决定是否重试。"
         : "提交期间当前任务已切换；本次创建失败或结果未知，没有覆盖当前任务界面：" + errorMessage(error);
       return;
     }
@@ -3867,7 +3867,7 @@ async function createTask(event) {
     $("#task-detail").hidden = true;
     feedback.hidden = false;
     feedback.textContent = requestAnalysisGeneration !== state.analysisConnectionGeneration || requestRunBase !== state.settings.analysisBase
-      ? "分析 API 地址在提交期间已变化，无法确认旧连接是否创建了任务：" + errorMessage(error) + "。请核实旧服务后再决定是否重试。"
+      ? "研究 API 地址在提交期间已变化，无法确认旧连接是否创建了任务：" + errorMessage(error) + "。请核实旧服务后再决定是否重试。"
       : error?.creationOutcomeUnknown ? error.message : "创建任务失败：" + errorMessage(error);
     } catch (recoveryError) {
       try {
@@ -3925,7 +3925,7 @@ function activateTaskReference(record) {
   const requestedBase = String(record.baseRef || state.settings.analysisBase);
   if (requestedBase !== state.settings.analysisBase) {
     setRecentTasksFeedback(
-      "该任务属于分析 API 地址 " + requestedBase + "，当前地址是 " + state.settings.analysisBase +
+      "该任务属于研究 API 地址 " + requestedBase + "，当前地址是 " + state.settings.analysisBase +
       "。已阻止向新地址读取旧 task_id；切回原地址后可以恢复此任务。",
       "warning"
     );
@@ -4010,7 +4010,7 @@ function activateTaskReference(record) {
 function restoreLastTask() {
   let record;
   try {
-    record = JSON.parse(localStorage.getItem(TASK_REFERENCE_KEY) || "null");
+    record = JSON.parse(localStorage.getItem(RUN_REFERENCE_KEY) || "null");
   } catch {
     return false;
   }
@@ -4093,7 +4093,7 @@ function safelyUpdateTaskContextUi(label, update) {
       if (feedback) {
         feedback.hidden = false;
         feedback.textContent =
-          "分析 API 地址已变化，旧任务状态已作废；部分界面清理失败：" + label + message +
+          "研究 API 地址已变化，旧任务状态已作废；部分界面清理失败：" + label + message +
           "。请重新载入页面核对显示。";
       }
     } catch {
@@ -4141,16 +4141,16 @@ function invalidateActiveTaskForAnalysisBaseChange(previousBase, nextBase) {
     $("#task-result-warnings").replaceChildren();
   });
   safelyUpdateTaskContextUi("更新 API 地址切换提示失败：", () => {
-    $("#task-poll-label").textContent = "分析 API 地址已变化，旧任务不再自动轮询。";
+    $("#task-poll-label").textContent = "研究 API 地址已变化，旧任务不再自动轮询。";
     $("#task-create-feedback").hidden = false;
-    $("#task-create-feedback").textContent = "分析 API 地址已从 " + previousBase + " 改为 " + nextBase +
-      "。旧任务引用仍保留在最近分析列表；切回原地址后才能恢复，当前不会向新地址发送旧 task_id。";
+    $("#task-create-feedback").textContent = "研究 API 地址已从 " + previousBase + " 改为 " + nextBase +
+      "。旧任务引用仍保留在最近研究 Run 列表；切回原地址后才能恢复，当前不会向新地址发送旧 task_id。";
   });
   safelyUpdateTaskContextUi("重绘阶段事件失败：", () => renderTaskEvents());
   safelyUpdateTaskContextUi("重绘任务流程摘要失败：", () => renderTaskFlowSummary());
   safelyUpdateTaskContextUi("重绘最近任务失败：", () => renderRecentTasks());
   safelyUpdateTaskContextUi("更新最近任务反馈失败：", () => setRecentTasksFeedback(
-    "分析 API 地址已从 " + previousBase + " 改为 " + nextBase +
+    "研究 API 地址已从 " + previousBase + " 改为 " + nextBase +
     "。旧任务引用仍保留并标注来源地址；切回原地址后可恢复。",
     "warning"
   ));
@@ -4718,7 +4718,7 @@ async function applyBrowserDataImport(imported, currentWatchlist, currentRecentT
     imported.recentTasks = mergedRecentTasks;
   }
 
-  const storageKeys = [SETTINGS_KEY, THEME_STORAGE_KEY, PREFERENCES_KEY, WATCHLIST_KEY, WATCHLIST_GROUPS_KEY, RECENT_TASKS_KEY, TASK_REFERENCE_KEY];
+  const storageKeys = [SETTINGS_KEY, THEME_STORAGE_KEY, PREFERENCES_KEY, WATCHLIST_KEY, WATCHLIST_GROUPS_KEY, RECENT_TASKS_KEY, RUN_REFERENCE_KEY];
   const previous = new Map();
   try {
     storageKeys.forEach((key) => previous.set(key, localStorage.getItem(key)));
@@ -4740,7 +4740,7 @@ async function applyBrowserDataImport(imported, currentWatchlist, currentRecentT
     localStorage.setItem(WATCHLIST_KEY, JSON.stringify(imported.watchlist));
     localStorage.setItem(WATCHLIST_GROUPS_KEY, JSON.stringify(imported.watchlistGroups));
     localStorage.setItem(RECENT_TASKS_KEY, JSON.stringify(imported.recentTasks));
-    localStorage.removeItem(TASK_REFERENCE_KEY);
+    localStorage.removeItem(RUN_REFERENCE_KEY);
 
     // 浏览器存储适配层可能静默忽略写入；应用内存状态切换前必须逐项回读确认。
     const persistedSettings = localStorage.getItem(SETTINGS_KEY);
@@ -4754,7 +4754,7 @@ async function applyBrowserDataImport(imported, currentWatchlist, currentRecentT
       [WATCHLIST_KEY, JSON.stringify(imported.watchlist)],
       [WATCHLIST_GROUPS_KEY, JSON.stringify(imported.watchlistGroups)],
       [RECENT_TASKS_KEY, JSON.stringify(imported.recentTasks)],
-      [TASK_REFERENCE_KEY, null]
+      [RUN_REFERENCE_KEY, null]
     ]);
     for (const [key, expectedValue] of expectedStorage) {
       if (localStorage.getItem(key) !== expectedValue) {
@@ -5264,13 +5264,13 @@ $("#refresh-task").addEventListener("click", () => {
     }
   });
 });
-$("#recent-analysis-search").addEventListener("input", () => renderRecentTasks());
-$("#recent-analysis-status").addEventListener("change", () => renderRecentTasks());
-$("#recent-analysis-type").addEventListener("change", () => renderRecentTasks());
-$("#recent-analysis-from").addEventListener("change", () => renderRecentTasks());
-$("#recent-analysis-to").addEventListener("change", () => renderRecentTasks());
+$("#recent-runs-search").addEventListener("input", () => renderRecentTasks());
+$("#recent-runs-status").addEventListener("change", () => renderRecentTasks());
+$("#recent-runs-type").addEventListener("change", () => renderRecentTasks());
+$("#recent-runs-from").addEventListener("change", () => renderRecentTasks());
+$("#recent-runs-to").addEventListener("change", () => renderRecentTasks());
 $("#clear-recent-analysis").addEventListener("click", clearRecentTaskHistory);
-$("#recent-analysis-list").addEventListener("click", (event) => {
+$("#recent-runs-list").addEventListener("click", (event) => {
   const removeButton = event.target.closest("button[data-remove-task-id]");
   if (removeButton) {
     removeRecentTaskReference(removeButton.dataset.removeTaskId, removeButton.dataset.removeTaskBase || "");
