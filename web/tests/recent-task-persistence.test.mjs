@@ -10,7 +10,7 @@ test("does not report a task history write as persisted when stored fields diffe
     symbols: ["600519.SH"],
     task_type: "post_market_scan",
     status: "running",
-    analysis_base: "/analysis-api",
+    baseRef: "/analysis-api",
     updated_at: "2026-10-28T08:01:00Z"
   }])]]);
   const storage = {
@@ -32,7 +32,7 @@ test("does not report a task history write as persisted when stored fields diffe
     symbols: ["000001.SZ"],
     task_type: "post_market_scan",
     status: "succeeded",
-    analysis_base: "/analysis-api",
+    baseRef: "/analysis-api",
     updated_at: "2026-10-29T08:01:00Z"
   }, storage);
 

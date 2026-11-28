@@ -752,8 +752,8 @@ test("stock research clears stale snapshots on reload and request errors without
 test("recent-task suppression and migration are scoped to the analysis API base", () => {
   assert.match(app, /suppressedHistoryRunBase: ""/);
   assert.match(app, /state\.suppressedHistoryTaskId === state\.taskId && state\.suppressedHistoryRunBase === taskRunBase/);
-  assert.match(app, /historyItem = safeReadRecentTasks\(\)\.find\(\(item\) =>\s*item\.task_id === record\.task_id &&\s*String\(item\.analysis_base \|\| taskRunBase\) === taskRunBase/);
-  assert.match(app, /analysis_base: historyItem\.analysis_base \|\| taskRunBase/);
+  assert.match(app, /historyItem = safeReadRecentTasks\(\)\.find\(\(item\) =>\s*item\.task_id === record\.task_id &&\s*String\(item\.baseRef \|\| taskRunBase\) === taskRunBase/);
+  assert.match(app, /baseRef: historyItem\.baseRef \|\| taskRunBase/);
   assert.match(app, /state\.suppressedHistoryRunBase = state\.runBase \|\| state\.settings\.analysisBase/);
 });
 
@@ -763,12 +763,12 @@ test("task polling and saved task references are scoped to the analysis API base
   assert.match(app, /function invalidateActiveTaskForAnalysisBaseChange\(/);
   assert.match(app, /if \(analysisBaseChanged\) \{[\s\S]*?invalidateActiveTaskForAnalysisBaseChange\(/);
   assert.match(app, /endpointGeneration !== state\.analysisConnectionGeneration/);
-  assert.match(app, /const taskRunBase = state\.runBase \|\| state\.settings\.analysisBase;[\s\S]*?analysis_base: taskRunBase/);
+  assert.match(app, /const taskRunBase = state\.runBase \|\| state\.settings\.analysisBase;[\s\S]*?baseRef: taskRunBase/);
   assert.match(app, /旧任务不再自动轮询/);
   const baseInvalidation = app.match(/function invalidateActiveTaskForAnalysisBaseChange\([\s\S]*?\n\}/)?.[0] || "";
   assert.match(baseInvalidation, /safelyUpdateTaskContextUi\("重绘自选股卡片失败：", \(\) => renderWatchlist\(\)\)/, "切换分析地址后应在安全清理步骤中重绘自选卡片");
   assert.match(app, /if \(requestedBase !== state\.settings\.analysisBase\)/);
-  assert.match(recentTaskModule, /analysis_base: typeof record\.analysis_base === "string"/);
+  assert.match(recentTaskModule, /baseRef: typeof record\.baseRef === "string"/);
 });
 
 test("provider capability refresh clears old connection data and owns its loading state", () => {
@@ -2882,13 +2882,17 @@ test("降级领域结果不得作为完整研究报告归档", () => {
 });
 
 test("WebUI 内部状态不再使用旧 Analysis 命名", () => {
-  const renamedSources = [appSource, recentTaskView, watchlistTrackingViewModel, taskFlowSummaryViewModel].join("\n");
+  const renamedSources = [appSource, recentTaskModule, recentTaskView, watchlistTrackingViewModel, taskFlowSummaryViewModel].join("\n");
   for (const legacy of ["lastRunResult", "taskAnalysisBase", "suppressedHistoryTaskBase", "requestAnalysisBase", "isOtherAnalysisBase", "currentAnalysisBase"]) {
     assert.doesNotMatch(renamedSources, new RegExp("\\b" + legacy + "\\b"), "旧 Analysis 内部命名不得复活：" + legacy);
   }
+  assert.doesNotMatch(renamedSources, /\banalysis_base\b/, "最近任务本地记录字段不得回退到 analysis_base");
+  assert.doesNotMatch(recentTaskModule, /recent-analysis\.v1/, "最近任务存储键不得回退到旧 Analysis 命名");
   assert.doesNotMatch(appSource, /function removeRecentTaskReference\(taskId, analysisBase\b/, "最近任务移除函数不得回退到 analysisBase 参数");
   assert.match(appSource, /state\.runResult\b/);
   assert.match(appSource, /state\.runBase\b/);
+  assert.match(recentTaskModule, /RECENT_TASKS_KEY = "stock-provider-webui\.recent-runs\.v1"/);
+  assert.match(recentTaskModule, /baseRef: typeof record\.baseRef === "string"/);
   assert.match(watchlistTrackingViewModel, /function isOtherRunBase\(task, currentBaseRef\)/);
   assert.match(taskFlowSummaryViewModel, /runResult\?\.quality\?\.core_pass/);
 });

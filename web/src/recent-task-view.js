@@ -52,7 +52,7 @@ export function renderRecentTaskList({
     main.className = "recent-analysis-item-main";
     const title = document.createElement("strong");
     title.textContent = record.symbols?.join(", ") || "标的未记录";
-    const recordBaseRef = String(record.analysis_base || currentBaseRef);
+    const recordBaseRef = String(record.baseRef || currentBaseRef);
     const isOtherEndpoint = recordBaseRef !== currentBaseRef;
     open.dataset.openTaskBase = recordBaseRef;
     const detail = document.createElement("small");

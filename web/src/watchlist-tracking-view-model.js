@@ -1,5 +1,5 @@
 function isOtherRunBase(task, currentBaseRef) {
-  return Boolean(task && String(task.analysis_base || currentBaseRef) !== String(currentBaseRef));
+  return Boolean(task && String(task.baseRef || currentBaseRef) !== String(currentBaseRef));
 }
 
 export function buildWatchlistTrackingFields(input) {
@@ -101,12 +101,12 @@ export function buildWatchlistTrackingFields(input) {
     && currentTask.taskId === recentTask.task_id
     && recentTask.run_id
     && runResult.run_id === recentTask.run_id
-    && String(recentTask.analysis_base || currentBaseRef) === String(currentTask.baseRef || currentBaseRef)
+    && String(recentTask.baseRef || currentBaseRef) === String(currentTask.baseRef || currentBaseRef)
     && Array.isArray(currentTask.symbols)
     && currentTask.symbols.some((value) => normalizeSymbol(value) === itemSymbol));
   const activeRunReadMatches = Boolean(recentTask
     && currentTask.taskId === recentTask.task_id
-    && String(recentTask.analysis_base || currentBaseRef) === String(currentTask.baseRef || currentBaseRef)
+    && String(recentTask.baseRef || currentBaseRef) === String(currentTask.baseRef || currentBaseRef)
     && Array.isArray(currentTask.symbols)
     && currentTask.symbols.some((value) => normalizeSymbol(value) === itemSymbol)
     && ["loading", "retrying", "error"].includes(runResultReadStatus));

@@ -1,4 +1,4 @@
-export const RECENT_TASKS_KEY = "stock-provider-webui.recent-analysis.v1";
+export const RECENT_TASKS_KEY = "stock-provider-webui.recent-runs.v1";
 export const MAX_RECENT_TASKS = 10;
 
 function normalizeRecord(record) {
@@ -15,7 +15,7 @@ function normalizeRecord(record) {
     status: typeof record.status === "string" ? record.status : "",
     failure_code: typeof record.failure_code === "string" ? record.failure_code.replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, 120) : "",
     error_message: typeof record.error_message === "string" ? record.error_message.replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, 240) : "",
-    analysis_base: typeof record.analysis_base === "string" ? record.analysis_base.trim() : "",
+    baseRef: typeof record.baseRef === "string" ? record.baseRef.trim() : "",
     updated_at: typeof record.updated_at === "string" ? record.updated_at : ""
   };
 }
@@ -51,7 +51,7 @@ export function readRecentTasksState(storage, limit = MAX_RECENT_TASKS) {
       malformedRecord = true;
       continue;
     }
-    const identity = JSON.stringify([normalized.task_id, normalized.analysis_base]);
+    const identity = JSON.stringify([normalized.task_id, normalized.baseRef]);
     if (seenReferences.has(identity)) {
       malformedRecord = true;
       continue;
@@ -68,15 +68,15 @@ export function readRecentTasksState(storage, limit = MAX_RECENT_TASKS) {
   };
 }
 
-// 最近任务的全局身份由服务端任务 ID 与分析服务地址共同组成。
+// 最近任务的全局身份由任务 ID 与其所属的 Run base 引用共同组成。
 export function recentTaskIdentity(record) {
   return JSON.stringify([
     String(record?.task_id ?? "").trim(),
-    String(record?.analysis_base ?? "").trim()
+    String(record?.baseRef ?? "").trim()
   ]);
 }
 
-// 导入合并时仅覆盖同一分析服务中的同一任务，保留其他服务的同 ID 任务。
+// 导入合并时仅覆盖同一 Run base 引用下的同一任务，保留其他引用的同 ID 任务。
 export function mergeRecentTaskReferences(current = [], incoming = []) {
   const merged = new Map();
   (Array.isArray(current) ? current : []).forEach((record) => merged.set(recentTaskIdentity(record), record));
@@ -111,7 +111,7 @@ export function upsertRecentTask(record, storage, limit = MAX_RECENT_TASKS) {
       item.status === normalized.status &&
       item.failure_code === normalized.failure_code &&
       item.error_message === normalized.error_message &&
-      item.analysis_base === normalized.analysis_base &&
+      item.baseRef === normalized.baseRef &&
       item.updated_at === normalized.updated_at &&
       JSON.stringify(item.symbols) === JSON.stringify(normalized.symbols)
     );
@@ -123,14 +123,14 @@ export function upsertRecentTask(record, storage, limit = MAX_RECENT_TASKS) {
   }
 }
 
-export function removeRecentTask(taskId, storage, limit = MAX_RECENT_TASKS, analysisBase = "") {
+export function removeRecentTask(taskId, storage, limit = MAX_RECENT_TASKS, baseRef = "") {
   if (typeof taskId !== "string" || !taskId.trim()) return readRecentTasks(storage, limit);
   const currentState = readRecentTasksState(storage, limit);
   if (!currentState.storageReadable || !currentState.storageValid) return currentState.items;
 
   const target = taskId.trim();
-  const targetBase = String(analysisBase ?? "").trim();
-  const targetIdentity = recentTaskIdentity({ task_id: target, analysis_base: targetBase });
+  const targetBase = String(baseRef ?? "").trim();
+  const targetIdentity = recentTaskIdentity({ task_id: target, baseRef: targetBase });
   const records = currentState.items.filter((item) => targetBase
     ? recentTaskIdentity(item) !== targetIdentity
     : item.task_id !== target
@@ -203,7 +203,7 @@ export function filterRecentTasks(items = [], filters = {}) {
     if (!keyword) return true;
     return [
       record.task_id, record.run_id, ...(record.symbols || []), record.task_type,
-      record.status, record.failure_code, record.error_message, record.updated_at, record.created_at, record.analysis_base
+      record.status, record.failure_code, record.error_message, record.updated_at, record.created_at, record.baseRef
     ].some((value) => String(value || "").toLocaleLowerCase().includes(keyword));
   });
 }

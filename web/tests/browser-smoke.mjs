@@ -1785,10 +1785,10 @@ try {
             theme: "stock-provider-webui.theme.v1",
             preferences: "stock-provider-webui.preferences.v1",
             watchlist: "stock-provider-webui.watchlist.v1",
-            tasks: "stock-provider-webui.recent-analysis.v1",
+            tasks: "stock-provider-webui.recent-runs.v1",
             researchNotes: "stock-provider-webui.research-notes.v1"
           };
-          const currentTask = { task_id: "task-1", run_id: "run-1", symbols: ["600519.SH"], task_type: "post_market_scan", status: "running", analysis_base: "/analysis-api", updated_at: "2026-10-30T00:00:00Z" };
+          const currentTask = { task_id: "task-1", run_id: "run-1", symbols: ["600519.SH"], task_type: "post_market_scan", status: "running", baseRef: "/analysis-api", updated_at: "2026-10-30T00:00:00Z" };
           await page.evaluate(({ keys, currentTask }) => {
             localStorage.setItem(keys.watchlist, JSON.stringify([{ symbol: "600519.SH", name: "原名称", updated_at: "2026-10-29T00:00:00Z" }]));
             localStorage.setItem(keys.tasks, JSON.stringify([currentTask]));
@@ -1840,7 +1840,7 @@ try {
           };
           const currentImportedTasks = [
             { ...currentTask, status: "succeeded" },
-            { task_id: "task-2", run_id: "run-2", symbols: ["000001.SZ"], task_type: "post_market_scan", status: "queued", analysis_base: "/analysis-api" }
+            { task_id: "task-2", run_id: "run-2", symbols: ["000001.SZ"], task_type: "post_market_scan", status: "queued", baseRef: "/analysis-api" }
           ];
           const mergeFile = makeImportFile([
             { symbol: "600519", name: "导入名称", updated_at: "2026-10-30T00:00:00Z" },
@@ -1931,7 +1931,7 @@ try {
 
           const replaceFile = makeImportFile(
             [{ symbol: "300750.SZ", name: "宁德时代", updated_at: "2026-10-30T00:00:00Z" }],
-            [{ task_id: "task-3", symbols: ["300750.SZ"], task_type: "post_market_scan", status: "queued", analysis_base: "/analysis-api" }],
+            [{ task_id: "task-3", symbols: ["300750.SZ"], task_type: "post_market_scan", status: "queued", baseRef: "/analysis-api" }],
             {}, 3, { groups: ["未分组", "趋势跟踪"], assignments: { "300750.SZ": "趋势跟踪" } }
           );
           await uploadWorkspace(replaceFile);
@@ -2007,7 +2007,7 @@ try {
           assert.equal((await page.evaluate((key) => JSON.parse(localStorage.getItem(key)).length, keys.watchlist)), 50);
 
           const tooManyTasks = Array.from({ length: 11 }, (_, index) => ({
-            task_id: "task-limit-" + index, symbols: [], task_type: "post_market_scan", status: "queued", analysis_base: "/analysis-api"
+            task_id: "task-limit-" + index, symbols: [], task_type: "post_market_scan", status: "queued", baseRef: "/analysis-api"
           }));
           await page.locator("#browser-data-file").setInputFiles(makeImportFile([], tooManyTasks));
           await page.waitForFunction(() => document.querySelector("#browser-data-feedback")?.textContent.includes("最近任务引用必须是数组，且不能超过 10 条"));
@@ -2023,7 +2023,7 @@ try {
           const rollbackWatchlist = [{ symbol: "300750.SZ", name: "原始数据", updated_at: "" }];
           await page.evaluate(({ keys, records }) => {
             localStorage.setItem(keys.watchlist, JSON.stringify(records));
-            localStorage.setItem(keys.tasks, JSON.stringify([{ task_id: "task-3", analysis_base: "/analysis-api" }]));
+            localStorage.setItem(keys.tasks, JSON.stringify([{ task_id: "task-3", baseRef: "/analysis-api" }]));
             const original = Storage.prototype.setItem;
             let failOnce = true;
             Storage.prototype.setItem = function (key, value) {
@@ -2247,7 +2247,7 @@ try {
   // A browser quota/write failure keeps the current page usable, but add/rename/remove must not claim persistence.
   const quotaContext = await browser.newContext({ viewport: { width: 320, height: 812 }, reducedMotion: "reduce" });
   const watchlistKey = "stock-provider-webui.watchlist.v1";
-  const recentTasksKey = "stock-provider-webui.recent-analysis.v1";
+  const recentTasksKey = "stock-provider-webui.recent-runs.v1";
   const originalWatchlist = JSON.stringify([{
     symbol: "600519.SH",
     name: "贵州茅台",
@@ -2260,12 +2260,12 @@ try {
     symbols: ["600519.SH"],
     task_type: "post_market_scan",
     status: "succeeded",
-    analysis_base: "/analysis-api",
+    baseRef: "/analysis-api",
     updated_at: "2026-10-28T07:00:00Z"
   }]);
   await quotaContext.addInitScript((seed) => {
     const watchlistKey = "stock-provider-webui.watchlist.v1";
-    const recentTasksKey = "stock-provider-webui.recent-analysis.v1";
+    const recentTasksKey = "stock-provider-webui.recent-runs.v1";
     const blockedKeys = new Set([watchlistKey, recentTasksKey]);
     window.localStorage.setItem(watchlistKey, seed.watchlist);
     window.localStorage.setItem(recentTasksKey, seed.recentTasks);

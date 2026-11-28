@@ -199,7 +199,7 @@ const stockResearch = bindStockResearch(() => state.settings, () => getQuerySymb
 const dataCenter = bindDataCenter(() => state.settings);
 const localAlertDrafts = bindLocalAlertDrafts({ root: document.querySelector("#alerts-view"), getContext: () => ({ symbol: state.quote?.symbol || state.selectedStockSearchItem?.symbol || "", name: state.quote?.name || state.selectedStockSearchItem?.name || "" }) });
 const researchNotes = bindResearchNotes({ root: document.querySelector("#research-view"), getContext: () => ({ symbol: state.quote?.symbol || state.selectedStockSearchItem?.symbol || "", name: state.quote?.name || state.selectedStockSearchItem?.name || "", taskId: state.taskId, runId: state.runId }) });
-const researchReports = bindResearchReports({ root: document.querySelector("#research-view"), onCreateNote: (item) => { setView("research"); researchNotes.createFromReport(item); }, onOpenTask: (item) => { if (!item.taskId) { setView("tasks"); setText("#task-create-feedback", "该报告未保存 Task ID，无法恢复关联任务；报告内容仍可查看。"); return; } const record = { task_id: item.taskId, run_id: item.runId, created_at: "", symbols: item.symbols, task_type: "post_market_scan", status: item.status, analysis_base: item.analysisBase || state.settings.analysisBase }; if (!activateTaskReference(record)) { setView("tasks"); setText("#task-create-feedback", "关联任务未能打开。请检查报告保存的分析服务地址是否与当前连接一致；报告内容仍可查看。"); } } });
+const researchReports = bindResearchReports({ root: document.querySelector("#research-view"), onCreateNote: (item) => { setView("research"); researchNotes.createFromReport(item); }, onOpenTask: (item) => { if (!item.taskId) { setView("tasks"); setText("#task-create-feedback", "该报告未保存 Task ID，无法恢复关联任务；报告内容仍可查看。"); return; } const record = { task_id: item.taskId, run_id: item.runId, created_at: "", symbols: item.symbols, task_type: "post_market_scan", status: item.status, baseRef: item.analysisBase || state.settings.analysisBase }; if (!activateTaskReference(record)) { setView("tasks"); setText("#task-create-feedback", "关联任务未能打开。请检查报告保存的分析服务地址是否与当前连接一致；报告内容仍可查看。"); } } });
 const notificationPreferences = bindNotificationPreferences({ root: document.querySelector("#settings-notification-section") });
 bindExistingApiTools(() => state.settings);
 const marketActivity = bindMarketActivity(
@@ -273,7 +273,7 @@ function persistTaskReference() {
     status: state.taskStatus,
     failure_code: state.taskFailureCode,
     error_message: state.taskErrorMessage,
-    analysis_base: taskRunBase
+    baseRef: taskRunBase
   };
   const comparable = JSON.stringify(record);
   try {
@@ -287,13 +287,13 @@ function persistTaskReference() {
       status: previous.status || "",
       failure_code: previous.failure_code || "",
       error_message: previous.error_message || "",
-      analysis_base: previous.analysis_base || state.runBase || state.settings.analysisBase
+      baseRef: previous.baseRef || state.runBase || state.settings.analysisBase
     }) : "";
     if (previousComparable === comparable) {
       // Migrate the legacy single-task reference into the new local history once.
       const historyItem = safeReadRecentTasks().find((item) =>
         item.task_id === record.task_id &&
-        String(item.analysis_base || taskRunBase) === taskRunBase
+        String(item.baseRef || taskRunBase) === taskRunBase
       );
       const historyComparable = historyItem ? JSON.stringify({
         task_id: historyItem.task_id,
@@ -304,7 +304,7 @@ function persistTaskReference() {
         status: historyItem.status || "",
         failure_code: historyItem.failure_code || "",
         error_message: historyItem.error_message || "",
-        analysis_base: historyItem.analysis_base || taskRunBase
+        baseRef: historyItem.baseRef || taskRunBase
       }) : "";
       if (historyComparable !== comparable) {
         record.updated_at = previous?.updated_at || new Date().toISOString();
@@ -392,7 +392,7 @@ function persistRecentTaskHistory(record) {
     status: typeof record.status === "string" ? record.status : "",
     failure_code: typeof record.failure_code === "string" ? record.failure_code : "",
     error_message: typeof record.error_message === "string" ? record.error_message : "",
-    analysis_base: typeof record.analysis_base === "string" ? record.analysis_base.trim() : "",
+    baseRef: typeof record.baseRef === "string" ? record.baseRef.trim() : "",
     updated_at: typeof record.updated_at === "string" ? record.updated_at : ""
   };
   const persisted = history.some((item) =>
@@ -403,7 +403,7 @@ function persistRecentTaskHistory(record) {
     item.status === expected.status &&
     item.failure_code === expected.failure_code &&
     item.error_message === expected.error_message &&
-    item.analysis_base === expected.analysis_base &&
+    item.baseRef === expected.baseRef &&
     item.updated_at === expected.updated_at &&
     JSON.stringify(item.symbols) === JSON.stringify(expected.symbols)
   );
@@ -439,7 +439,7 @@ function removeRecentTaskReference(taskId, baseRef = "") {
   // 先清理兼容旧版本的单任务引用，确认成功后再删除历史列表，避免刷新后旧任务重新出现。
   try {
     const last = JSON.parse(localStorage.getItem(TASK_REFERENCE_KEY) || "null");
-    if (last?.task_id === taskId && (!baseRef || last.analysis_base === baseRef)) {
+    if (last?.task_id === taskId && (!baseRef || last.baseRef === baseRef)) {
       localStorage.removeItem(TASK_REFERENCE_KEY);
       if (localStorage.getItem(TASK_REFERENCE_KEY) !== null) throw new Error("旧任务引用仍存在");
     }
@@ -462,7 +462,7 @@ function removeRecentTaskReference(taskId, baseRef = "") {
   // removeRecentTask 会尽量处理存储异常；必须回读确认目标记录确实不再存在，才能反馈成功。
   const persistedState = safeReadRecentTasksState();
   const targetStillExists = persistedState.items.some((item) =>
-    item.task_id === taskId && (!baseRef || item.analysis_base === baseRef)
+    item.task_id === taskId && (!baseRef || item.baseRef === baseRef)
   );
   if (!persistedState.storageReadable || !persistedState.storageValid || targetStillExists) {
     renderRecentTasks();
@@ -3745,7 +3745,7 @@ async function createTask(event) {
           task_type: taskType,
           status: responseStatus,
           updated_at: new Date().toISOString(),
-          analysis_base: requestRunBase
+          baseRef: requestRunBase
         };
         if (taskHistoryWasReplaced) {
           setRecentTasksFeedback(
@@ -3784,7 +3784,7 @@ async function createTask(event) {
           task_type: taskType,
           status: responseStatus,
           updated_at: new Date().toISOString(),
-          analysis_base: requestRunBase
+          baseRef: requestRunBase
         };
         if (taskHistoryWasReplaced) {
           setRecentTasksFeedback(
@@ -3922,7 +3922,7 @@ function startQuoteAnalysis() {
 
 function activateTaskReference(record) {
   if (!record || typeof record.task_id !== "string" || !record.task_id.trim()) return false;
-  const requestedBase = String(record.analysis_base || state.settings.analysisBase);
+  const requestedBase = String(record.baseRef || state.settings.analysisBase);
   if (requestedBase !== state.settings.analysisBase) {
     setRecentTasksFeedback(
       "该任务属于分析 API 地址 " + requestedBase + "，当前地址是 " + state.settings.analysisBase +
@@ -4609,11 +4609,11 @@ function validateBrowserDataPayload(payload) {
     if (rawSymbols.length > 100 || rawSymbols.some((item) => typeof item !== "string" || !item.trim())) {
       throw new Error("任务标的数量或格式无效。");
     }
-    const analysisBase = typeof record.analysis_base === "string" && record.analysis_base.trim()
-      ? normalizeBasePath(record.analysis_base, "/")
+    const recordBaseRef = typeof record.baseRef === "string" && record.baseRef.trim()
+      ? normalizeBasePath(record.baseRef, "/")
       : "";
-    // 同一 task_id 可能由不同分析服务分别生成，身份由 task_id + analysis_base 共同决定。
-    const taskIdentity = JSON.stringify([taskId, analysisBase]);
+    // 同一 task_id 可能由不同分析服务分别生成，身份由 task_id + baseRef 共同决定。
+    const taskIdentity = JSON.stringify([taskId, recordBaseRef]);
     if (seenTasks.has(taskIdentity)) throw new Error("最近任务引用包含重复的任务 ID 与服务地址：" + taskId);
     seenTasks.add(taskIdentity);
     const safeString = (value, max = 200) => typeof value === "string"
@@ -4626,7 +4626,7 @@ function validateBrowserDataPayload(payload) {
       symbols: rawSymbols.map((item) => item.trim().slice(0, 40)),
       task_type: safeString(record.task_type, 100) || "post_market_scan",
       status: safeString(record.status, 80),
-      analysis_base: analysisBase,
+      baseRef: recordBaseRef,
       updated_at: safeString(record.updated_at, 80)
     };
   });
@@ -5281,7 +5281,7 @@ $("#recent-analysis-list").addEventListener("click", (event) => {
   const selectedBase = openButton.dataset.openTaskBase || state.settings.analysisBase;
   const record = safeReadRecentTasks().find((item) =>
     item.task_id === openButton.dataset.openTaskId &&
-    String(item.analysis_base || state.settings.analysisBase) === selectedBase
+    String(item.baseRef || state.settings.analysisBase) === selectedBase
   );
   if (record) activateTaskReference(record);
 });

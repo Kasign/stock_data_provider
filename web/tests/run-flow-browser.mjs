@@ -15,8 +15,8 @@ const viewports = [{ width: 320, height: 800 }, { width: 768, height: 1024 }, { 
 
 // 历史记录中的 task_id 就是 Researchflow run_ref；标的按契约要求带交易所后缀。
 const tasks = [
-  { task_id: "run-flow-b", run_id: "run-flow-b", created_at: "2026-10-30T06:30:00Z", symbols: ["000001.SZ"], task_type: "post_market_scan", status: "queued", analysis_base: "/", updated_at: "2026-10-30T06:30:00Z" },
-  { task_id: "run-flow-a", run_id: "run-flow-a", created_at: "2026-10-30T06:20:00Z", symbols: ["600519.SH"], task_type: "post_market_scan", status: "succeeded", analysis_base: "/", updated_at: "2026-10-30T06:20:00Z" }
+  { task_id: "run-flow-b", run_id: "run-flow-b", created_at: "2026-10-30T06:30:00Z", symbols: ["000001.SZ"], task_type: "post_market_scan", status: "queued", baseRef: "/", updated_at: "2026-10-30T06:30:00Z" },
+  { task_id: "run-flow-a", run_id: "run-flow-a", created_at: "2026-10-30T06:20:00Z", symbols: ["600519.SH"], task_type: "post_market_scan", status: "succeeded", baseRef: "/", updated_at: "2026-10-30T06:20:00Z" }
 ];
 
 const server = createServer(async (req, res) => {
@@ -51,7 +51,7 @@ try {
     await context.addInitScript(seed => {
       // Root Server 单入口：连接配置由生产默认值决定，历史记录以 run_ref 保存。
       localStorage.setItem("stock-provider-webui.settings.v1", JSON.stringify({ marketBase: "/", analysisBase: "/" }));
-      localStorage.setItem("stock-provider-webui.recent-analysis.v1", JSON.stringify(seed));
+      localStorage.setItem("stock-provider-webui.recent-runs.v1", JSON.stringify(seed));
     }, tasks);
     const page = await context.newPage();
     const pageErrors = [];

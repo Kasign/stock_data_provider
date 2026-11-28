@@ -37,9 +37,9 @@ test("caps browser history and rejects malformed stored records", () => {
 
 test("rejects duplicate task references for the same analysis service without rewriting stored data", () => {
   const records = [
-    { task_id: "task-a", analysis_base: "/api", run_id: "run-1" },
-    { task_id: "task-a", analysis_base: "/api", run_id: "run-2" },
-    { task_id: "task-a", analysis_base: "/other-api", run_id: "run-3" }
+    { task_id: "task-a", baseRef: "/api", run_id: "run-1" },
+    { task_id: "task-a", baseRef: "/api", run_id: "run-2" },
+    { task_id: "task-a", baseRef: "/other-api", run_id: "run-3" }
   ];
   const original = JSON.stringify(records);
   const storage = makeStorage({ [RECENT_TASKS_KEY]: original });
@@ -48,7 +48,7 @@ test("rejects duplicate task references for the same analysis service without re
   assert.equal(state.storageReadable, true);
   assert.equal(state.storageValid, false);
   assert.equal(state.reason, "invalid");
-  assert.deepEqual(state.items.map((item) => [item.task_id, item.analysis_base]), [
+  assert.deepEqual(state.items.map((item) => [item.task_id, item.baseRef]), [
     ["task-a", "/api"],
     ["task-a", "/other-api"]
   ]);
@@ -89,7 +89,7 @@ test("stores only task references and excludes report payloads and secrets", () 
   const stored = JSON.parse(storage.getItem(RECENT_TASKS_KEY));
 
   assert.deepEqual(Object.keys(stored[0]).sort(), [
-    "analysis_base", "created_at", "error_message", "failure_code", "run_id", "status", "symbols", "task_id", "task_type", "updated_at"
+    "baseRef", "created_at", "error_message", "failure_code", "run_id", "status", "symbols", "task_id", "task_type", "updated_at"
   ].sort());
   assert.equal(records[0].task_id, "task-safe");
   assert.equal(records[0].created_at, "2026-10-27T01:20:00Z");
@@ -184,7 +184,7 @@ test("does not return a new history item when browser storage rejects the write"
 
   const returned = upsertRecentTask({
     task_id: "task-not-persisted",
-    analysis_base: "/analysis-api",
+    baseRef: "/analysis-api",
     status: "queued"
   }, storage);
 
@@ -271,41 +271,41 @@ test("labels historical task types and preserves unknown server task types", () 
 
 test("merges imported task references by task ID and analysis service identity", () => {
   const current = [
-    { task_id: "same-task", analysis_base: "/analysis-a", run_id: "run-a-old" },
-    { task_id: "same-task", analysis_base: "/analysis-b", run_id: "run-b" }
+    { task_id: "same-task", baseRef: "/analysis-a", run_id: "run-a-old" },
+    { task_id: "same-task", baseRef: "/analysis-b", run_id: "run-b" }
   ];
   const incoming = [
-    { task_id: "same-task", analysis_base: "/analysis-a", run_id: "run-a-new" },
-    { task_id: "same-task", analysis_base: "/analysis-c", run_id: "run-c" }
+    { task_id: "same-task", baseRef: "/analysis-a", run_id: "run-a-new" },
+    { task_id: "same-task", baseRef: "/analysis-c", run_id: "run-c" }
   ];
   const merged = mergeRecentTaskReferences(current, incoming);
   assert.equal(merged.length, 3);
-  assert.deepEqual(merged.map((item) => [item.task_id, item.analysis_base, item.run_id]), [
+  assert.deepEqual(merged.map((item) => [item.task_id, item.baseRef, item.run_id]), [
     ["same-task", "/analysis-a", "run-a-new"],
     ["same-task", "/analysis-b", "run-b"],
     ["same-task", "/analysis-c", "run-c"]
   ]);
-  assert.equal(recentTaskIdentity({ task_id: " same-task ", analysis_base: " /analysis-a " }),
-    recentTaskIdentity({ task_id: "same-task", analysis_base: "/analysis-a" }));
+  assert.equal(recentTaskIdentity({ task_id: " same-task ", baseRef: " /analysis-a " }),
+    recentTaskIdentity({ task_id: "same-task", baseRef: "/analysis-a" }));
 });
 
 test("新增同 ID 但不同分析服务地址的任务时保留两条记录", () => {
   const storage = makeStorage();
-  upsertRecentTask({ task_id: "shared-task", analysis_base: "", status: "running" }, storage);
-  const items = upsertRecentTask({ task_id: "shared-task", analysis_base: "/analysis-api", status: "queued" }, storage);
-  assert.deepEqual(items.map((item) => item.analysis_base), ["/analysis-api", ""]);
-  const updated = upsertRecentTask({ task_id: "shared-task", analysis_base: "/analysis-api", status: "succeeded", run_id: "run-new" }, storage);
+  upsertRecentTask({ task_id: "shared-task", baseRef: "", status: "running" }, storage);
+  const items = upsertRecentTask({ task_id: "shared-task", baseRef: "/analysis-api", status: "queued" }, storage);
+  assert.deepEqual(items.map((item) => item.baseRef), ["/analysis-api", ""]);
+  const updated = upsertRecentTask({ task_id: "shared-task", baseRef: "/analysis-api", status: "succeeded", run_id: "run-new" }, storage);
   assert.equal(updated.length, 2);
   assert.equal(updated[0].run_id, "run-new");
   assert.equal(updated[0].status, "succeeded");
-  assert.equal(updated[1].analysis_base, "");
+  assert.equal(updated[1].baseRef, "");
 });
 
 test("按指定分析服务删除任务时保留空服务地址和其他服务的同 ID 记录", () => {
   const storage = makeStorage();
-  upsertRecentTask({ task_id: "shared-task", analysis_base: "" }, storage);
-  upsertRecentTask({ task_id: "shared-task", analysis_base: "/analysis-api" }, storage);
-  upsertRecentTask({ task_id: "shared-task", analysis_base: "/other-api" }, storage);
+  upsertRecentTask({ task_id: "shared-task", baseRef: "" }, storage);
+  upsertRecentTask({ task_id: "shared-task", baseRef: "/analysis-api" }, storage);
+  upsertRecentTask({ task_id: "shared-task", baseRef: "/other-api" }, storage);
   const remaining = removeRecentTask("shared-task", storage, MAX_RECENT_TASKS, "/analysis-api");
-  assert.deepEqual(remaining.map((item) => item.analysis_base), ["/other-api", ""]);
+  assert.deepEqual(remaining.map((item) => item.baseRef), ["/other-api", ""]);
 });

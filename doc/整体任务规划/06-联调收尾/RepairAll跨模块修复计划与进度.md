@@ -2077,5 +2077,15 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - **重命名映射**：`state.lastRunResult` → `state.runResult`；`state.taskAnalysisBase` → `state.runBase`；`state.suppressedHistoryTaskBase` → `state.suppressedHistoryRunBase`；`requestAnalysisBase` → `requestRunBase`；`buildTaskFlowSummaryViewModel({ lastRunResult })` → `{ runResult }`；`isOtherAnalysisBase(task, currentAnalysisBase)` → `isOtherRunBase(task, currentBaseRef)`；`removeRecentTaskReference(taskId, analysisBase)` → `(taskId, baseRef)`；轮询/结果读取中的局部 `analysisBase` 快照 → `runBase`。`settings.analysisBase`、服务端 `analysis_base`、`.recent-analysis-*` 与“旧分析 API 地址”文案均保留。
 - **测试同步**：旧断言先失败 16 处，随后逐项替换标识符，未删断言、未放宽校验。`ui-contract.test.mjs` 新增防复活断言，禁止六个旧标识符与旧函数签名回归；变异把 `state.runResult` 改回旧名后该断言失败，恢复后 182/182 通过。
 - **本地验证**：`npm test` 559/559 PASS；`npm run check` PASS；12 个 `*-browser.mjs` 全 PASS（含 `researchflow-create-browser.mjs` 与 `run-flow-*.mjs`）；`git diff --check` PASS。临时 Playwright/postcss 依赖与截图已清理，包清单未改。
-- **状态边界**：本组只处理内存命名；localStorage 键 `stock-provider-webui.recent-analysis.v1`、本地记录字段 `analysis_base`、旧单任务键 `TASK_REFERENCE_KEY` 与用户可见文案/CSS 仍是独立工作组。
+- **状态边界**：本组只处理内存命名；localStorage 键与本地记录字段已在下一组处理，旧单任务键 `TASK_REFERENCE_KEY` 与用户可见文案/CSS 仍是独立工作组。
 - **提交与 CI（回填）**：提交 `ea14d356fee30e2f97b4f46f251daeb2a5a60cde`（`refactor(webui): 清理内部状态的旧 Analysis 命名`）已推送 `repair_all`。按精确 SHA 查询，15/15 check run 全部 `completed/success`：`required-checks` [46116811055](https://github.com/Kasign/stock_data_provider/actions/runs/46116811055)、[Full integration checks](https://github.com/Kasign/stock_data_provider/actions/runs/46116810985)、[Test root Go module](https://github.com/Kasign/stock_data_provider/actions/runs/46116811007)、[WebUI checks](https://github.com/Kasign/stock_data_provider/actions/runs/46116811004)、[Chromium responsive layout checks](https://github.com/Kasign/stock_data_provider/actions/runs/46116811048)，以及各模块与 Compose 专项；无 failure、无 pending。本组代码与测试结论已取得对应 SHA 的完整 CI，未切分支、未合并、未 rebase、未强推、未重置。
+
+## 2026-11-28 最近任务本地存储去 Analysis 化
+
+- **触发**：用户继续要求收尾旧 Analysis；盘点确认第一波后仍剩 localStorage 键 `stock-provider-webui.recent-analysis.v1` 与本地记录字段 `analysis_base`。本组只改 WebUI 本地数据形状，不碰服务端契约、`settings.analysisBase`、用户可见文案/CSS/DOM。
+- **基线与纪律**：起始 HEAD / `origin/repair_all` 为 `0d44209d2e78eb9d29aa96813e4b00d73fcbd3fc`；未切分支、未合并、未 rebase、未强推、未重置。
+- **改动映射**：`RECENT_TASKS_KEY` → `stock-provider-webui.recent-runs.v1`；记录字段 `analysis_base` → `baseRef`，覆盖 `recent-tasks.js`、`app.js`、`recent-task-view.js`、`watchlist-tracking-view-model.js` 及相关测试/浏览器夹具；`removeRecentTask` 第四参数改为 `baseRef`。按规则 16 不做旧 key/旧字段兼容读取。
+- **测试同步**：8 个旧断言先失败，随后替换字段名/键名，未删断言、未放宽校验。防复活断言扩展到 `analysis_base`、`recent-analysis.v1` 与 `RECENT_TASKS_KEY` 新值；变异把键改回旧名后断言失败，恢复后通过。
+- **本地验证**：`npm test` 559/559 PASS；`npm run check` PASS；12 个 `*-browser.mjs` 全 PASS；`git diff --check` PASS。临时依赖与截图已清理，包清单未改。
+- **状态边界**：`TASK_REFERENCE_KEY`（`stock-provider-webui.last-analysis-task.v1`）及其迁移分支、`.recent-analysis-*` CSS 与“旧分析 API 地址”文案仍未处理，留作独立工作组；部署侧事项仍待用户执行。
+- **CI 状态**：`not_run`；提交后按精确 SHA 回填，未取得结论前不标记完整验收。

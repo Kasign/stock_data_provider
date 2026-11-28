@@ -70,7 +70,7 @@ test("无本地任务引用不推断服务端从未分析", () => {
 });
 
 test("今日任务、旧分析 API 与任务状态标签保留", () => {
-  const task = { task_id: "task-1", run_id: "run-1", symbols: ["600000"], created_at: "2026-11-04T01:00:00Z", updated_at: "2026-11-04T01:00:00Z", status: "running", analysis_base: "https://api.old" };
+  const task = { task_id: "task-1", run_id: "run-1", symbols: ["600000"], created_at: "2026-11-04T01:00:00Z", updated_at: "2026-11-04T01:00:00Z", status: "running", baseRef: "https://api.old" };
   const result = build({ recentTasks: [task] });
   assert.match(byKey(result, "today").text, /今日分析：有本地记录（旧分析 API 地址）/);
   assert.match(byKey(result, "task").text, /旧分析 API 地址/);
@@ -88,7 +88,7 @@ test("当前任务状态读取中和读取失败保留上次状态及重试语�
 });
 
 test("Run 结果匹配任务、Run、连接和证券；重读失败时明确保留旧结果", () => {
-  const recentTask = { task_id: "task-current", run_id: "run-current", symbols: ["600000"], created_at: "2026-11-04T01:00:00Z", updated_at: "2026-11-04T01:00:00Z", status: "succeeded", analysis_base: "https://api.new" };
+  const recentTask = { task_id: "task-current", run_id: "run-current", symbols: ["600000"], created_at: "2026-11-04T01:00:00Z", updated_at: "2026-11-04T01:00:00Z", status: "succeeded", baseRef: "https://api.new" };
   const currentTask = { taskId: "task-current", runId: "run-current", baseRef: "https://api.new", symbols: ["600000"], status: "succeeded" };
   const runResult = { run_id: "run-current", status: "completed", quality: { core_pass: false }, warnings: ["warning"] };
   const matching = build({ recentTasks: [recentTask], currentTask, runResult, runResultReadStatus: "error", runResultReadError: "read failed" });
@@ -105,7 +105,7 @@ test("Run 结果匹配任务、Run、连接和证券；重读失败时明确保�
 });
 
 test("当前 Run 正在读取/重试/失败时，即使旧任务没有已载入结果也明确提示", () => {
-  const recentTask = { task_id: "task-current", run_id: "run-current", symbols: ["600000"], analysis_base: "https://api.new" };
+  const recentTask = { task_id: "task-current", run_id: "run-current", symbols: ["600000"], baseRef: "https://api.new" };
   const currentTask = { taskId: "task-current", baseRef: "https://api.new", symbols: ["600000"] };
   assert.match(byKey(build({ recentTasks: [recentTask], currentTask, runResultReadStatus: "loading" }), "result").text, /正在读取服务端结果/);
   assert.match(byKey(build({ recentTasks: [recentTask], currentTask, runResultReadStatus: "retrying" }), "result").text, /自动重试/);

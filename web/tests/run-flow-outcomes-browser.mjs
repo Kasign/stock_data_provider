@@ -13,13 +13,13 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const screenshotDir = path.resolve(root, "../browser-screenshots/run-flow-outcomes");
 await mkdir(screenshotDir, { recursive: true });
 
-// run_ref 直接作为历史记录 task_id；所有标的带交易所后缀，analysis_base 为 Root Server 单入口。
+// run_ref 直接作为历史记录 task_id；所有标的带交易所后缀，baseRef 为 Root Server 单入口。
 const tasks = [
-  { task_id: "run-partial", run_id: "run-partial", symbols: ["600519.SH"], task_type: "post_market_scan", status: "partial", analysis_base: "/" },
-  { task_id: "run-failed", run_id: "run-failed", symbols: ["000001.SZ"], task_type: "post_market_scan", status: "failed", failure_code: "market_snapshot_failed", error_message: "读取行情快照失败", analysis_base: "/" },
-  { task_id: "run-unavailable", run_id: "run-unavailable", symbols: ["600519.SH"], task_type: "post_market_scan", status: "succeeded", analysis_base: "/" },
-  { task_id: "run-race-a", run_id: "run-race-a", symbols: ["600519.SH"], task_type: "post_market_scan", status: "succeeded", analysis_base: "/" },
-  { task_id: "run-race-b", run_id: "run-race-b", symbols: ["000001.SZ"], task_type: "post_market_scan", status: "running", analysis_base: "/" }
+  { task_id: "run-partial", run_id: "run-partial", symbols: ["600519.SH"], task_type: "post_market_scan", status: "partial", baseRef: "/" },
+  { task_id: "run-failed", run_id: "run-failed", symbols: ["000001.SZ"], task_type: "post_market_scan", status: "failed", failure_code: "market_snapshot_failed", error_message: "读取行情快照失败", baseRef: "/" },
+  { task_id: "run-unavailable", run_id: "run-unavailable", symbols: ["600519.SH"], task_type: "post_market_scan", status: "succeeded", baseRef: "/" },
+  { task_id: "run-race-a", run_id: "run-race-a", symbols: ["600519.SH"], task_type: "post_market_scan", status: "succeeded", baseRef: "/" },
+  { task_id: "run-race-b", run_id: "run-race-b", symbols: ["000001.SZ"], task_type: "post_market_scan", status: "running", baseRef: "/" }
 ];
 const server = createServer(async (req, res) => {
   const p = decodeURIComponent(new URL(req.url || "/", "http://127.0.0.1").pathname);
@@ -51,7 +51,7 @@ try {
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, reducedMotion: "reduce" });
   await context.addInitScript(seed => {
     localStorage.setItem("stock-provider-webui.settings.v1", JSON.stringify({ marketBase: "/", analysisBase: "/" }));
-    localStorage.setItem("stock-provider-webui.recent-analysis.v1", JSON.stringify(seed));
+    localStorage.setItem("stock-provider-webui.recent-runs.v1", JSON.stringify(seed));
   }, tasks);
   const page = await context.newPage(), pageErrors = [];
   page.on("pageerror", e => pageErrors.push(e.message));
