@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import {
   buildDiagnosticExport,
   buildStockProbeRequest,
+  explainReason,
+  extractQualityReasons,
   classifyDiagnosticRow,
   collectStockDiagnostics,
   describeDiagnosticBody,
@@ -165,4 +167,41 @@ test("buildDiagnosticExport 附带探测分组与 provider 错误原因", () => 
   }));
   assert.equal(parsed.probe.groups.length, 1);
   assert.equal(parsed.probe.groups[0].checks[0].errorMessage, "permission_required (40203)");
+});
+
+test("extractQualityReasons 同时取 quality_reasons 与 warnings", () => {
+  assert.deepEqual(
+    extractQualityReasons({ quality_reasons: ["a", "b"], warnings: ["b", "c"] }),
+    ["a", "b", "c"]
+  );
+  assert.deepEqual(extractQualityReasons({ warnings: ["daily_bar_provider_fallback_used"] }), ["daily_bar_provider_fallback_used"]);
+  assert.deepEqual(extractQualityReasons({}), []);
+  assert.deepEqual(extractQualityReasons(null), []);
+});
+
+test("collectStockDiagnostics 把 bars 的 warnings 记为降级原因", async () => {
+  const report = await collectStockDiagnostics({
+    api: {
+      getDailyBars: async () => ({ quality_status: "degraded", warnings: ["daily_bar_provider_fallback_used"], bars: [{ trade_date: "2026-11-27" }] })
+    },
+    settings: {}, symbol: "600519.SH", tradeDate: "2026-11-27",
+    cases: [{ key: "bars", label: "日线", invoke: (api) => api.getDailyBars() }]
+  });
+  assert.deepEqual(report.rows[0].reasons, ["daily_bar_provider_fallback_used"]);
+  const parsed = JSON.parse(buildDiagnosticExport({ report, generatedAt: "2026-11-28T14:00:00Z" }));
+  assert.deepEqual(parsed.checks[0].quality_reasons, ["daily_bar_provider_fallback_used"]);
+  assert.equal(typeof parsed.build, "string");
+});
+
+test("extractQualityReasons 下探 fundamentals 的 sections 层", () => {
+  assert.deepEqual(
+    extractQualityReasons({ quality_status: "degraded", sections: [{ quality_reasons: ["one_or_more_metrics_missing"] }, {}] }),
+    ["one_or_more_metrics_missing"]
+  );
+});
+
+test("explainReason 保留原因码并附中文说明", () => {
+  assert.match(explainReason("daily_bar_provider_fallback_used"), /主源失败.*daily_bar_provider_fallback_used/);
+  assert.equal(explainReason("some_unknown_code"), "some_unknown_code");
+  assert.equal(explainReason(""), "");
 });

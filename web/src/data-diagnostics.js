@@ -5,6 +5,9 @@ import {
 } from "./api.js";
 import { describeApiError, finiteNumberOrNull, formatDateTime, normalizeSymbol } from "./format.js";
 
+// 用于确认浏览器是否加载了最新前端；页面与导出 JSON 都会带上。
+export const DIAGNOSTICS_BUILD = "2026-11-28.3";
+
 const QUALITY_WORD = { valid: "正常", degraded: "降级", stale: "过期", invalid: "无效", unknown: "未知" };
 const DEGRADED_QUALITY = new Set(["degraded", "stale", "invalid", "unknown"]);
 const LEVEL_WORD = { ok: "通过", degraded: "降级", failed: "失败" };
@@ -72,6 +75,49 @@ export function describeDiagnosticBody(key, body) {
 
 // 只有 HTTP 成功且质量不落在降级集合、且未显式 has_data=false 才算通过。
 // 同时接受原始 body 与已提取的 quality：导出与渲染拿到的可能是同一行的不同投影。
+// 各端点的降级理由分散在 quality_reasons（quote/profile 等）与 warnings
+// （bars/bundle）两个字段；诊断必须把两者都取出来，否则只显示"降级"没有原因。
+export function extractQualityReasons(body) {
+  const own = (value) => [
+    ...(Array.isArray(value?.quality_reasons) ? value.quality_reasons : []),
+    ...(Array.isArray(value?.warnings) ? value.warnings : [])
+  ];
+  // fundamentals 把原因放在 sections 子项上，快照层本身为空，必须下探一层。
+  const nested = Array.isArray(body?.sections)
+    ? body.sections.flatMap((section) => (Array.isArray(section?.quality_reasons) ? section.quality_reasons : []))
+    : [];
+  return [...new Set([...own(body), ...nested].filter((value) => typeof value === "string" && value.trim()))];
+}
+
+// 原因码保留英文原样供排查；页面上再叠一句中文，避免只看到一屏 code。
+const REASON_TEXT = Object.freeze({
+  daily_bar_provider_fallback_used: "主源失败，已改用备选源",
+  quote_older_than_24_hours_outside_trading_clock: "报价超过 24 小时，非实时",
+  no_provider_returned_a_fresh_timestamped_quote: "没有数据源返回新鲜报价",
+  volume_unit_inferred_from_turnover_metrics: "成交量单位由换手率推断",
+  volume_ratio_unsupported_by_tencent_quote_contract: "该源不提供量比",
+  realtime_quote_quality_stale: "实时报价已过期",
+  market_profile_timestamp_not_exposed: "数据源未提供快照时间",
+  provider_snapshot_timestamp_not_exposed: "数据源未提供快照时间",
+  market_profile_quote_supplement_unavailable: "行情补充不可用（行情域名不可达）",
+  one_or_more_metrics_missing: "部分指标缺失",
+  security_trading_status_provider_unavailable: "交易状态数据源不可用",
+  security_trading_status_evidence_missing: "缺少交易状态证据",
+  price_limit_event_evidence_missing: "缺少涨跌停事件证据",
+  price_limit_special_exception_status_unverified: "特殊例外状态未验证",
+  eastmoney_valuation_pe_mrq_not_supported: "该源不提供 PE(MRQ)",
+  eastmoney_valuation_turnover_rate_not_supported: "该源不提供换手率",
+  eastmoney_valuation_volume_ratio_not_supported: "该源不提供量比",
+  eastmoney_valuation_dividend_yield_not_supported: "该源不提供股息率",
+  eastmoney_valuation_provider_snapshot_time_not_exposed: "该源未提供快照时间",
+  eastmoney_valuation_missing_symbols: "部分标的无估值记录"
+});
+
+export function explainReason(code) {
+  const text = REASON_TEXT[String(code || "").trim()];
+  return text ? text + "（" + code + "）" : String(code || "");
+}
+
 export function classifyDiagnosticRow({ ok, body, quality }) {
   if (!ok) return "failed";
   if (DEGRADED_QUALITY.has(String(quality || body?.quality_status || "").toLowerCase())) return "degraded";
@@ -145,13 +191,15 @@ export async function collectStockDiagnostics({
       return {
         key: item.key, label: item.label, ok: true, status: 200,
         durationMs: Math.max(0, now() - started), body,
-        detail: describeDiagnosticBody(item.key, body), errorText: "", quality: String(body?.quality_status || "")
+        detail: describeDiagnosticBody(item.key, body), errorText: "",
+        quality: String(body?.quality_status || ""), reasons: extractQualityReasons(body)
       };
     } catch (error) {
       return {
         key: item.key, label: item.label, ok: false, status: Number(error?.status) || 0,
         durationMs: Math.max(0, now() - started), body: null, detail: "",
-        errorText: describeApiError(error, "请求失败") + (error?.code ? " (" + error.code + ")" : ""), quality: ""
+        errorText: describeApiError(error, "请求失败") + (error?.code ? " (" + error.code + ")" : ""),
+        quality: "", reasons: []
       };
     }
   }));
@@ -222,6 +270,7 @@ export function buildDiagnosticExport({ report, probe = null, generatedAt = "now
   return JSON.stringify({
     kind: "stock-data-diagnostic",
     version: 1,
+    build: DIAGNOSTICS_BUILD,
     generated_at: generatedAt === "now" ? new Date().toISOString() : generatedAt,
     symbol: report?.symbol || "",
     trade_date: report?.tradeDate || "",
@@ -237,7 +286,8 @@ export function buildDiagnosticExport({ report, probe = null, generatedAt = "now
       key: row.key, label: row.label, ok: Boolean(row.ok),
       http_status: row.status || 0, duration_ms: row.durationMs ?? null,
       quality: row.quality || "", level: classifyDiagnosticRow(row),
-      detail: row.detail || "", error: row.errorText || ""
+      detail: row.detail || "", error: row.errorText || "",
+      quality_reasons: Array.isArray(row.reasons) ? row.reasons : extractQualityReasons(row.body)
     })),
     probe: probe
       ? {
@@ -313,7 +363,11 @@ export function bindDataDiagnostics({ root = document, getSettings, getSymbol, g
       qualityCell.append(qualityPill(level, row.quality ? qualityWord(row.quality) : level === "failed" ? "失败" : "未报告"));
       tr.append(qualityCell);
       tr.append(el("td", "", row.detail || "—"));
-      tr.append(el("td", row.ok ? "" : "diagnostics-error", row.errorText || "—"));
+      const reasonCell = el("td", row.ok ? "" : "diagnostics-error");
+      if (!row.ok) reasonCell.textContent = row.errorText || "—";
+      else if (row.reasons && row.reasons.length) reasonCell.append(el("span", "diagnostics-reason", row.reasons.map(explainReason).join("；")));
+      else reasonCell.textContent = "—";
+      tr.append(reasonCell);
       if (!row.ok) tr.classList.add("diagnostics-row-failed");
       else if (level === "degraded") tr.classList.add("diagnostics-row-degraded");
       rowsBody.append(tr);
@@ -454,6 +508,9 @@ export function bindDataDiagnostics({ root = document, getSettings, getSymbol, g
   runButton?.addEventListener("click", () => { void run(); });
   probeButton?.addEventListener("click", () => { void runProbe(); });
   copyButton?.addEventListener("click", () => { void copyExport(); });
+
+  const buildNode = root.querySelector("#diagnostics-build");
+  if (buildNode) buildNode.textContent = "前端版本 " + DIAGNOSTICS_BUILD;
 
   function ensureDefaults() {
     if (dateInput && !String(dateInput.value || "").trim()) dateInput.value = recentTradingDay();

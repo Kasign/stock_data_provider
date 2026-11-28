@@ -1251,6 +1251,7 @@
               <label class="field"><span>股票代码</span><input id="diagnostics-symbol" type="text" value="600519.SH" maxlength="32" autocomplete="off" spellcheck="false" placeholder="例如 600519.SH"></label>
               <label class="field"><span>交易日</span><input id="diagnostics-date" type="date"></label>
               <button class="button" id="run-diagnostics" type="button">运行诊断</button>
+              <small class="diagnostics-build" id="diagnostics-build"></small>
             </div>
             <p class="diagnostics-summary" id="diagnostics-summary">尚未运行。诊断只读取接口返回，不写入任何数据。</p>
             <div class="diagnostics-stats" id="diagnostics-stats" hidden>
@@ -1261,7 +1262,7 @@
             </div>
             <div class="table-scroll">
               <table class="data-table diagnostics-table">
-                <thead><tr><th>数据项</th><th>结果</th><th>耗时</th><th>质量</th><th>关键字段</th><th>错误</th></tr></thead>
+                <thead><tr><th>数据项</th><th>结果</th><th>耗时</th><th>质量</th><th>关键字段</th><th>错误 / 降级原因</th></tr></thead>
                 <tbody id="diagnostics-rows"><tr><td colspan="6">尚未运行。</td></tr></tbody>
               </table>
             </div>
