@@ -1253,15 +1253,29 @@
               <button class="button" id="run-diagnostics" type="button">运行诊断</button>
             </div>
             <p class="diagnostics-summary" id="diagnostics-summary">尚未运行。诊断只读取接口返回，不写入任何数据。</p>
+            <div class="diagnostics-stats" id="diagnostics-stats" hidden>
+              <article class="diagnostics-stat" data-tone="total"><span class="diagnostics-stat-value" id="diagnostics-stat-total">—</span><span class="diagnostics-stat-label">检查项</span></article>
+              <article class="diagnostics-stat" data-tone="ok"><span class="diagnostics-stat-value" id="diagnostics-stat-ok">—</span><span class="diagnostics-stat-label">通过</span></article>
+              <article class="diagnostics-stat" data-tone="degraded"><span class="diagnostics-stat-value" id="diagnostics-stat-degraded">—</span><span class="diagnostics-stat-label">降级</span></article>
+              <article class="diagnostics-stat" data-tone="failed"><span class="diagnostics-stat-value" id="diagnostics-stat-failed">—</span><span class="diagnostics-stat-label">失败</span></article>
+            </div>
             <div class="table-scroll">
-              <table class="data-table">
-                <thead><tr><th>数据项</th><th>状态</th><th>耗时</th><th>质量</th><th>关键字段</th><th>错误</th></tr></thead>
+              <table class="data-table diagnostics-table">
+                <thead><tr><th>数据项</th><th>结果</th><th>耗时</th><th>质量</th><th>关键字段</th><th>错误</th></tr></thead>
                 <tbody id="diagnostics-rows"><tr><td colspan="6">尚未运行。</td></tr></tbody>
               </table>
             </div>
+            <details class="diagnostics-export" id="diagnostics-export" hidden>
+              <summary>诊断结果 JSON（复制后可直接发给维护者，无需截图）</summary>
+              <div class="diagnostics-export-actions">
+                <button class="button button-secondary" id="copy-diagnostics-json" type="button">复制 JSON</button>
+                <span class="diagnostics-export-status" id="diagnostics-export-status" role="status" aria-live="polite"></span>
+              </div>
+              <textarea class="diagnostics-export-text" id="diagnostics-export-text" readonly rows="14" spellcheck="false" aria-label="诊断结果 JSON"></textarea>
+            </details>
           </section>
           <section class="panel">
-            <div class="panel-heading"><div><h2>数据源主动探测</h2><p>对该标的的行情、日线、交易日历与交易状态执行 Provider 级 connectivity / contract / quality 检查；探测条目由服务端返回。</p></div></div>
+            <div class="panel-heading"><div><h2>数据源主动探测</h2><p>对该标的的行情、日线、交易状态、证券档案、估值、筹码与资金流执行 Provider 级 connectivity / contract / quality 检查；探测条目由服务端返回。</p></div></div>
             <div class="diagnostics-toolbar">
               <button class="button button-secondary" id="run-diagnostic-probe" type="button">运行探测</button>
             </div>

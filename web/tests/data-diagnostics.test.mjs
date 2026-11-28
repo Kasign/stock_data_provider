@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  buildDiagnosticExport,
   buildStockProbeRequest,
   classifyDiagnosticRow,
   collectStockDiagnostics,
@@ -127,5 +128,41 @@ test("summarizeProbeRun 按 Provider 聚合检查结论", () => {
   const eastmoney = groups.find((group) => group.provider === "eastmoney");
   assert.equal(baostock.status, "degraded");
   assert.equal(eastmoney.status, "failed");
-  assert.match(eastmoney.checks[0].error, /provider_error/);
+  assert.match(eastmoney.checks[0].errorCode, /provider_error/);
+});
+
+test("buildDiagnosticExport 输出可直接粘贴的结构化结论", () => {
+  const report = {
+    symbol: "600519.SH", tradeDate: "2026-11-27",
+    rows: [
+      { key: "quote", label: "实时行情", ok: true, status: 200, durationMs: 870, quality: "stale", detail: "价格 1472.36", errorText: "" },
+      { key: "chip", label: "筹码分布", ok: false, status: 502, durationMs: 278, quality: "", detail: "", errorText: "upstream invalid (PROVIDER_BAD_RESPONSE)" }
+    ],
+    summary: { total: 2, ok: 0, degraded: 1, failed: 1, degradedItems: ["实时行情"], failedItems: ["筹码分布"] }
+  };
+  const parsed = JSON.parse(buildDiagnosticExport({ report, generatedAt: "2026-11-28T14:00:00Z" }));
+  assert.equal(parsed.kind, "stock-data-diagnostic");
+  assert.equal(parsed.version, 1);
+  assert.equal(parsed.symbol, "600519.SH");
+  assert.equal(parsed.trade_date, "2026-11-27");
+  assert.equal(parsed.checks.length, 2);
+  assert.equal(parsed.checks[0].level, "degraded");
+  assert.equal(parsed.checks[1].level, "failed");
+  assert.match(parsed.checks[1].error, /PROVIDER_BAD_RESPONSE/);
+  assert.deepEqual(parsed.summary.failed_items, ["筹码分布"]);
+  assert.equal(parsed.probe, null);
+  assert.doesNotMatch(JSON.stringify(parsed), /cookie|authorization/i);
+});
+
+test("buildDiagnosticExport 附带探测分组与 provider 错误原因", () => {
+  const parsed = JSON.parse(buildDiagnosticExport({
+    report: { symbol: "600519.SH", tradeDate: "2026-11-27", rows: [], summary: { total: 0 } },
+    probe: {
+      run_id: "r1", requested_capabilities: ["quote"], requested_symbols: ["600519.SH"],
+      check_results: [{ provider: "tushare", capability: "security_trading_status", check: "connectivity", status: "failed", error_code: "provider_error", error_message: "permission_required (40203)" }]
+    },
+    generatedAt: "2026-11-28T14:00:00Z"
+  }));
+  assert.equal(parsed.probe.groups.length, 1);
+  assert.equal(parsed.probe.groups[0].checks[0].errorMessage, "permission_required (40203)");
 });

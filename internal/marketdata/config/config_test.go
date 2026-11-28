@@ -1042,3 +1042,13 @@ func TestTushareSecurityTradingStatusCapabilityHonorsEnvironmentOverride(t *test
 		t.Fatalf("explicit false must disable the capability: %+v", cfg.ProviderSettings["tushare"])
 	}
 }
+
+// 容器镜像不含 configs/，运行时用的是 defaultProviderFile() 这份硬编码默认值。
+// 如果这里不启用 eastmoney 估值，容器部署的 /api/v1/market/valuations 会恒为 503，
+// 只改 configs/marketdata/providers.json 不会生效。
+func TestDefaultProviderFileEnablesEastmoneyValuations(t *testing.T) {
+	file := defaultProviderFile()
+	if !file.Providers["eastmoney"].Enabled || !file.Providers["eastmoney"].Valuations {
+		t.Fatalf("default eastmoney must enable valuations: %+v", file.Providers["eastmoney"])
+	}
+}

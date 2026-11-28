@@ -71,9 +71,10 @@ export function describeDiagnosticBody(key, body) {
 }
 
 // 只有 HTTP 成功且质量不落在降级集合、且未显式 has_data=false 才算通过。
-export function classifyDiagnosticRow({ ok, body }) {
+// 同时接受原始 body 与已提取的 quality：导出与渲染拿到的可能是同一行的不同投影。
+export function classifyDiagnosticRow({ ok, body, quality }) {
   if (!ok) return "failed";
-  if (DEGRADED_QUALITY.has(String(body?.quality_status || "").toLowerCase())) return "degraded";
+  if (DEGRADED_QUALITY.has(String(quality || body?.quality_status || "").toLowerCase())) return "degraded";
   if (body?.has_data === false) return "degraded";
   return "ok";
 }
@@ -207,8 +208,46 @@ export function summarizeProbeRun(run) {
     status: checks.some((check) => check.status === "failed") ? "failed"
       : checks.some((check) => check.status === "degraded") ? "degraded"
         : checks.every((check) => check.status === "not_supported") ? "not_supported" : "passed",
-    checks: checks.map((check) => ({ check: check.check, status: check.status, error: check.error_code || check.error_message || "" }))
+    checks: checks.map((check) => ({
+      check: check.check, status: check.status,
+      errorCode: check.error_code || "", errorMessage: check.error_message || ""
+    }))
   }));
+}
+
+// 导出只包含诊断结论与错误，不含任何凭据；粘贴给维护者即可复现问题。
+export function buildDiagnosticExport({ report, probe = null, generatedAt = "now" } = {}) {
+  const rows = Array.isArray(report?.rows) ? report.rows : [];
+  const summary = report?.summary || {};
+  return JSON.stringify({
+    kind: "stock-data-diagnostic",
+    version: 1,
+    generated_at: generatedAt === "now" ? new Date().toISOString() : generatedAt,
+    symbol: report?.symbol || "",
+    trade_date: report?.tradeDate || "",
+    summary: {
+      total: summary.total ?? rows.length,
+      ok: summary.ok ?? 0,
+      degraded: summary.degraded ?? 0,
+      failed: summary.failed ?? 0,
+      degraded_items: summary.degradedItems || [],
+      failed_items: summary.failedItems || []
+    },
+    checks: rows.map((row) => ({
+      key: row.key, label: row.label, ok: Boolean(row.ok),
+      http_status: row.status || 0, duration_ms: row.durationMs ?? null,
+      quality: row.quality || "", level: classifyDiagnosticRow(row),
+      detail: row.detail || "", error: row.errorText || ""
+    })),
+    probe: probe
+      ? {
+        run_id: probe.run_id || "",
+        requested_capabilities: probe.requested_capabilities || [],
+        requested_symbols: probe.requested_symbols || [],
+        groups: summarizeProbeRun(probe)
+      }
+      : null
+  }, null, 2);
 }
 
 function el(tag, cls, text) {
@@ -232,8 +271,15 @@ export function bindDataDiagnostics({ root = document, getSettings, getSymbol, g
   const summaryNode = root.querySelector("#diagnostics-summary");
   const overallNode = root.querySelector("#diagnostics-overall");
   const probeNode = root.querySelector("#diagnostics-probe-result");
+  const statsNode = root.querySelector("#diagnostics-stats");
+  const exportNode = root.querySelector("#diagnostics-export");
+  const exportText = root.querySelector("#diagnostics-export-text");
+  const exportStatus = root.querySelector("#diagnostics-export-status");
+  const copyButton = root.querySelector("#copy-diagnostics-json");
   void getSymbol;
   void getTradeDate;
+  let lastReport = null;
+  let lastProbe = null;
 
   function readInputs() {
     const symbol = String(symbolInput?.value || "").trim().toUpperCase();
@@ -256,16 +302,56 @@ export function bindDataDiagnostics({ root = document, getSettings, getSymbol, g
       const level = classifyDiagnosticRow(row);
       const tr = el("tr");
       tr.append(el("td", "", row.label));
-      tr.append(el("td", "", `${row.status || "—"} · ${levelWord(level)}`));
-      tr.append(el("td", "", `${row.durationMs} ms`));
+      const resultCell = el("td");
+      const resultWrap = el("span", "diagnostics-result");
+      resultWrap.dataset.level = level;
+      resultWrap.append(el("span", "diagnostics-dot"), el("span", "", `${row.status || "—"} · ${levelWord(level)}`));
+      resultCell.append(resultWrap);
+      tr.append(resultCell);
+      tr.append(el("td", "diagnostics-duration", `${row.durationMs} ms`));
       const qualityCell = el("td");
       qualityCell.append(qualityPill(level, row.quality ? qualityWord(row.quality) : level === "failed" ? "失败" : "未报告"));
       tr.append(qualityCell);
       tr.append(el("td", "", row.detail || "—"));
-      tr.append(el("td", "", row.errorText || "—"));
+      tr.append(el("td", row.ok ? "" : "diagnostics-error", row.errorText || "—"));
       if (!row.ok) tr.classList.add("diagnostics-row-failed");
       else if (level === "degraded") tr.classList.add("diagnostics-row-degraded");
       rowsBody.append(tr);
+    }
+  }
+
+  function renderStats(summary) {
+    if (!statsNode) return;
+    statsNode.hidden = false;
+    for (const key of ["total", "ok", "degraded", "failed"]) {
+      const node = root.querySelector("#diagnostics-stat-" + key);
+      if (node) node.textContent = String(summary?.[key] ?? 0);
+    }
+  }
+
+  function refreshExport() {
+    if (!exportNode || !exportText) return;
+    if (!lastReport) { exportNode.hidden = true; return; }
+    exportNode.hidden = false;
+    exportText.value = buildDiagnosticExport({ report: lastReport, probe: lastProbe });
+  }
+
+  function setExportStatus(text) {
+    if (exportStatus) exportStatus.textContent = text;
+  }
+
+  async function copyExport() {
+    if (!exportText) return;
+    const text = exportText.value;
+    if (!text) { setExportStatus("尚无结果可复制"); return; }
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error("clipboard unavailable");
+      await navigator.clipboard.writeText(text);
+      setExportStatus("已复制到剪贴板");
+    } catch {
+      exportText.focus();
+      exportText.select();
+      setExportStatus("已选中文本，请按 Ctrl/Cmd+C 复制");
     }
   }
 
@@ -298,8 +384,11 @@ export function bindDataDiagnostics({ root = document, getSettings, getSymbol, g
         symbol: inputs.symbol,
         tradeDate: inputs.tradeDate
       });
+      lastReport = report;
       renderRows(report);
+      renderStats(report.summary);
       renderSummary(report);
+      refreshExport();
       return report;
     } catch (error) {
       if (summaryNode) summaryNode.textContent = error.message || "诊断执行失败";
@@ -322,6 +411,8 @@ export function bindDataDiagnostics({ root = document, getSettings, getSymbol, g
     if (probeNode) probeNode.textContent = "正在对行情、日线、交易日历与交易状态执行 Provider 级探测…";
     try {
       const run = await runDataSourceProbe(getSettings ? getSettings() : null, buildStockProbeRequest(inputs.symbol, inputs.tradeDate));
+      lastProbe = run;
+      refreshExport();
       const groups = summarizeProbeRun(run);
       if (probeNode) {
         probeNode.replaceChildren();
@@ -341,7 +432,10 @@ export function bindDataDiagnostics({ root = document, getSettings, getSymbol, g
             const statusCell = el("td");
             statusCell.append(qualityPill(group.status === "passed" ? "ok" : group.status === "degraded" ? "degraded" : "failed", group.status));
             tr.append(statusCell);
-            tr.append(el("td", "", group.checks.map((check) => check.check + ":" + check.status + (check.error ? "/" + check.error : "")).join(" · ")));
+            tr.append(el("td", "", group.checks.map((check) => {
+              const reason = check.errorMessage || check.errorCode;
+              return check.check + ":" + check.status + (reason ? "/" + reason : "");
+            }).join(" · ")));
             tbody.append(tr);
           }
           table.append(thead, tbody);
@@ -359,6 +453,7 @@ export function bindDataDiagnostics({ root = document, getSettings, getSymbol, g
 
   runButton?.addEventListener("click", () => { void run(); });
   probeButton?.addEventListener("click", () => { void runProbe(); });
+  copyButton?.addEventListener("click", () => { void copyExport(); });
 
   function ensureDefaults() {
     if (dateInput && !String(dateInput.value || "").trim()) dateInput.value = recentTradingDay();

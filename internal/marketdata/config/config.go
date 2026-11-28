@@ -120,7 +120,7 @@ func defaultProviderFile() providerFile {
 		ProviderPriority: []string{"eastmoney", "baostock", "hithink", "tushare", "tickflow", "tencent", "sina", "netease", "pytdx", "xueqiu"},
 		AdjustmentBasis:  "forward_adjusted",
 		Providers: map[string]ProviderSettings{
-			"eastmoney": {Enabled: true, Quote: true, DailyBars: true, StockBasic: true, StockSearch: true, SectorRankings: true, IndexQuotes: true, MarketBreadth: true, LimitPools: true, StockBoards: true, DragonTiger: true, Announcements: true, ChipDistribution: true, CapitalFlow: true, HotRankings: true, OrderBook: true},
+			"eastmoney": {Enabled: true, Quote: true, DailyBars: true, StockBasic: true, StockSearch: true, SectorRankings: true, IndexQuotes: true, MarketBreadth: true, LimitPools: true, StockBoards: true, DragonTiger: true, Announcements: true, ChipDistribution: true, CapitalFlow: true, HotRankings: true, OrderBook: true, Valuations: true},
 			"hithink":   {Enabled: false, Quote: false, DailyBars: false, IndexQuotes: false, TradingCalendar: false, LimitPools: false, DragonTiger: false, Fundamentals: false, Valuations: false, IndexCatalog: false, HotRankings: false},
 			"tencent":   {Enabled: true, Quote: true, DailyBars: true, StockSearch: true},
 			"baostock":  {Enabled: true, Quote: false, DailyBars: true, TradingCalendar: true, Fundamentals: true},
