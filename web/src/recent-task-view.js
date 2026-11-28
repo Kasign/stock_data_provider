@@ -4,7 +4,7 @@ export function renderRecentTaskList({
   historyState,
   records,
   totalCount = Array.isArray(records) ? records.length : 0,
-  analysisBase = "",
+  currentBaseRef = "",
   formatDateTime,
   taskStatusLabel,
   recentTaskTypeLabel
@@ -52,9 +52,9 @@ export function renderRecentTaskList({
     main.className = "recent-analysis-item-main";
     const title = document.createElement("strong");
     title.textContent = record.symbols?.join(", ") || "标的未记录";
-    const recordAnalysisBase = String(record.analysis_base || analysisBase);
-    const isOtherEndpoint = recordAnalysisBase !== analysisBase;
-    open.dataset.openTaskBase = recordAnalysisBase;
+    const recordBaseRef = String(record.analysis_base || currentBaseRef);
+    const isOtherEndpoint = recordBaseRef !== currentBaseRef;
+    open.dataset.openTaskBase = recordBaseRef;
     const detail = document.createElement("small");
     detail.textContent = recentTaskTypeLabel(record.task_type) + " · " + (record.updated_at ? formatDateTime(record.updated_at) : "时间未记录") + " · " + record.task_id + (isOtherEndpoint ? " · 旧分析 API 地址" : "");
     const failure = document.createElement("small");
@@ -72,7 +72,7 @@ export function renderRecentTaskList({
     remove.type = "button";
     remove.className = "recent-analysis-remove";
     remove.dataset.removeTaskId = record.task_id;
-    remove.dataset.removeTaskBase = recordAnalysisBase;
+    remove.dataset.removeTaskBase = recordBaseRef;
     remove.textContent = "移除";
     remove.setAttribute("aria-label", "从本地列表移除任务 " + record.task_id);
 

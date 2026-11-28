@@ -28,7 +28,7 @@ function build(overrides = {}) {
     recentTasks: [],
     currentTask: {},
     runResult: null,
-    currentAnalysisBase: "https://api.new",
+    currentBaseRef: "https://api.new",
     displayOrder: fields,
     displayFields: fields,
     now: fixedNow,
@@ -89,7 +89,7 @@ test("当前任务状态读取中和读取失败保留上次状态及重试语�
 
 test("Run 结果匹配任务、Run、连接和证券；重读失败时明确保留旧结果", () => {
   const recentTask = { task_id: "task-current", run_id: "run-current", symbols: ["600000"], created_at: "2026-11-04T01:00:00Z", updated_at: "2026-11-04T01:00:00Z", status: "succeeded", analysis_base: "https://api.new" };
-  const currentTask = { taskId: "task-current", runId: "run-current", analysisBase: "https://api.new", symbols: ["600000"], status: "succeeded" };
+  const currentTask = { taskId: "task-current", runId: "run-current", baseRef: "https://api.new", symbols: ["600000"], status: "succeeded" };
   const runResult = { run_id: "run-current", status: "completed", quality: { core_pass: false }, warnings: ["warning"] };
   const matching = build({ recentTasks: [recentTask], currentTask, runResult, runResultReadStatus: "error", runResultReadError: "read failed" });
   assert.match(byKey(matching, "result").text, /本页保留旧结果（本次读取失败）/);
@@ -98,7 +98,7 @@ test("Run 结果匹配任务、Run、连接和证券；重读失败时明确保�
 
   const wrongRun = build({ recentTasks: [recentTask], currentTask, runResult: { ...runResult, run_id: "other-run" } });
   assert.equal(byKey(wrongRun, "result").text, "结果详情：尚未载入当前页面");
-  const wrongConnection = build({ recentTasks: [recentTask], currentTask: { ...currentTask, analysisBase: "https://api.old" }, runResult });
+  const wrongConnection = build({ recentTasks: [recentTask], currentTask: { ...currentTask, baseRef: "https://api.old" }, runResult });
   assert.equal(byKey(wrongConnection, "result").text, "结果详情：尚未载入当前页面");
   const wrongSymbol = build({ recentTasks: [recentTask], currentTask: { ...currentTask, symbols: ["000001"] }, runResult });
   assert.equal(byKey(wrongSymbol, "result").text, "结果详情：尚未载入当前页面");
@@ -106,7 +106,7 @@ test("Run 结果匹配任务、Run、连接和证券；重读失败时明确保�
 
 test("当前 Run 正在读取/重试/失败时，即使旧任务没有已载入结果也明确提示", () => {
   const recentTask = { task_id: "task-current", run_id: "run-current", symbols: ["600000"], analysis_base: "https://api.new" };
-  const currentTask = { taskId: "task-current", analysisBase: "https://api.new", symbols: ["600000"] };
+  const currentTask = { taskId: "task-current", baseRef: "https://api.new", symbols: ["600000"] };
   assert.match(byKey(build({ recentTasks: [recentTask], currentTask, runResultReadStatus: "loading" }), "result").text, /正在读取服务端结果/);
   assert.match(byKey(build({ recentTasks: [recentTask], currentTask, runResultReadStatus: "retrying" }), "result").text, /自动重试/);
   assert.match(byKey(build({ recentTasks: [recentTask], currentTask, runResultReadStatus: "error", runResultReadError: "unavailable" }), "result").text, /读取失败 · unavailable/);

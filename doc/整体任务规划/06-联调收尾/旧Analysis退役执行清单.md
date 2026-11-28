@@ -101,7 +101,7 @@
 | # | 任务 | 主责 | 状态 | 退出条件 / 可验证证据 |
 |---|---|---|---|---|
 | 3.1 | 任务创建/幂等重放/轮询/取消/历史/详情/报告导出改接 Run Create/Get/Cancel 契约 | WebUI | 已完成主流程（2026-11-28，提交 `605c57bb9` + `d3314eeab`，15/15 CI success） | `app.js` 创建/轮询/结果改走 `createQuantResearchRun`/`getQuantResearchRunView`/`getQuantResearchResultsView`；浏览器夹具证明无旧 Analysis 请求；完整报告导出仍受 RF-BLOCK-007 阻塞，不在本项范围 |
-| 3.2 | 清除 Task ID / Event Cursor / Analysis Base / 旧 RunResult 依赖 | WebUI | 部分完成（2026-11-28：执行链已改为 Run/Stage 聚合，无事件游标；`api.js` 旧 Analysis helper/请求路径已删除；本地状态字段与历史存储键仍沿用旧命名） | 已完成：取消事件分页、双 ID 回包收敛为 `run_ref`、Stage 投影不伪造事件/Attempt、降级结果禁止归档为完整报告；新增契约断言禁止 `createAnalysisTask/getAnalysisRun/getAnalysisTask/getAnalysisTaskEvents` 与 `/api/v1/analysis/**` 复活。未完成：`state.lastRunResult`、`recent-analysis.v1`、`analysis_base` 等本地命名清理属于独立工作组 |
+| 3.2 | 清除 Task ID / Event Cursor / Analysis Base / 旧 RunResult 依赖 | WebUI | 部分完成（2026-11-28：执行链已改为 Run/Stage 聚合，无事件游标；`api.js` 旧 Analysis helper/请求路径已删除；内部状态命名已完成去 Analysis 化，本地存储键与记录字段仍沿用旧命名） | 已完成：取消事件分页、双 ID 回包收敛为 `run_ref`、Stage 投影不伪造事件/Attempt、降级结果禁止归档为完整报告；新增契约断言禁止旧 API helper 与 `/api/v1/analysis/**` 复活；`state.lastRunResult/taskAnalysisBase/suppressedHistoryTaskBase/requestAnalysisBase` 等已改为 `state.runResult/runBase/suppressedHistoryRunBase/requestRunBase`，并有防复活断言。未完成：`stock-provider-webui.recent-analysis.v1` 存储键与 `analysis_base` 本地记录字段属第二波独立工作组 |
 
 ## 6. 阶段 4 · 删除与清表（一次性工作组，全部前置满足后执行）
 
@@ -136,6 +136,15 @@
 - **文档回填提交的自身 CI**：提交 `1fd8222c588ca9f940e1572a784893d29cced6cf`（`docs(governance): 回填旧 Analysis 删除 CI 结论`）按精确 SHA 查询，13/13 check run 全部 `completed/success`（`required-checks`、`Full integration checks`、Test root Go module、Market-data/News/Research/Researchflow/Notification 专项与 Compose 检查）。该提交仅改文档，专项触发子集少于服务端代码提交。
 - **追加清理（前端 API 客户端）**：复核发现 `web/src/api.js` 仍保留 4 个仅供旧测试使用的 Analysis helper；本轮已删除 `createAnalysisTask`/`getAnalysisRun`/`getAnalysisTask`/`getAnalysisTaskEvents` 及 `/api/v1/analysis/**` 路径，相关通用错误/超时/取消覆盖改由 Researchflow helper 承接，并新增“旧 helper 与旧路径不得复活”源码契约断言。`npm test` 558/558、`npm run check` 与 12 个浏览器脚本通过。
 - **追加清理提交与 CI（回填）**：提交 `ad13fb30abb3f6714802b08c49aadbd3ff664bc0`（`refactor(webui): 删除遗留 Analysis API helper`）已推送 `repair_all`，回填时 HEAD 与 `origin/repair_all` 均指向该 SHA。按精确 SHA 查询，15/15 check run 全部 `completed/success`：`required-checks` [46106781247](https://github.com/Kasign/stock_data_provider/actions/runs/46106781247)、[Full integration checks](https://github.com/Kasign/stock_data_provider/actions/runs/46106781782)、[Test root Go module](https://github.com/Kasign/stock_data_provider/actions/runs/46106781108)、[Validate WebUI source and container](https://github.com/Kasign/stock_data_provider/actions/runs/46106781180)、[Chromium responsive layout checks](https://github.com/Kasign/stock_data_provider/actions/runs/46106781128)，以及 Market-data/News/Research/Researchflow/Notification 与 Compose 各专项；无 failure、无 pending。该轮未触发 Live provider probe 与 Quant module validation，故为 15 项而非此前服务端提交的 16 项。至此前后端旧 Analysis 请求入口与生产代码链的代码删除、CI 验收均已完成；部署侧配置、预采集、停服清表与冒烟仍为未完成项。
+
+## 7.2 2026-11-28 回填：WebUI 内部状态命名去 Analysis 化
+
+- **触发与边界**：旧 Analysis 生产链与 API 请求入口已归零后，复核发现本地内存状态仍沿用 `lastRunResult`、`taskAnalysisBase`、`suppressedHistoryTaskBase`、`requestAnalysisBase` 等旧命名。本组只改纯内部标识符，不改用户可见文案、CSS、DOM 选择器、`settings.analysisBase` 工作区契约、服务端字段 `analysis_base` 或 localStorage 键，属于零行为变化工作组。
+- **重命名映射**：`state.lastRunResult` → `state.runResult`；`state.taskAnalysisBase` → `state.runBase`；`state.suppressedHistoryTaskBase` → `state.suppressedHistoryRunBase`；`requestAnalysisBase` → `requestRunBase`；`buildTaskFlowSummaryViewModel({ lastRunResult })` → `{ runResult }`；`isOtherAnalysisBase(task, currentAnalysisBase)` → `isOtherRunBase(task, currentBaseRef)`；`removeRecentTaskReference(taskId, analysisBase)` → `(taskId, baseRef)`；局部 `analysisBase` 快照改为 `runBase`，`settings.analysisBase` 原样保留。
+- **证据与测试替换**：先由旧断言失败定位 16 处不一致（5 个源码契约测试组、2 个视图模型行为组），再同步替换断言中的标识符，未删除断言、未放宽校验。`ui-contract.test.mjs` 新增防复活断言，禁止 `lastRunResult/taskAnalysisBase/suppressedHistoryTaskBase/requestAnalysisBase/isOtherAnalysisBase/currentAnalysisBase` 与旧函数签名回到源码；变异把 `state.runResult` 改回旧名后该断言失败，恢复后通过。
+- **本地验证**：`npm test` 559/559 PASS；`npm run check` PASS；12 个 `*-browser.mjs` 全部 PASS；`git diff --check` PASS。临时安装的 Playwright/postcss 依赖与截图目录在提交前已清理，未改 `package.json`/lock。
+- **仍未完成**：localStorage 键 `stock-provider-webui.recent-analysis.v1`、本地记录字段 `analysis_base`、旧单任务键 `TASK_REFERENCE_KEY`，以及用户可见文案/CSS 的 `.recent-analysis-*`，均属独立工作组；部署侧配置、预采集、停服清表和冒烟仍待用户执行。
+- **CI 状态**：`not_run`；提交后按精确 SHA 查询并回填，未取得结论前不标记完整验收。
 
 ## 8. 执行口径
 

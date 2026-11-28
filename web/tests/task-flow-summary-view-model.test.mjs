@@ -29,15 +29,15 @@ test("event read failure distinguishes retained events from an empty failed read
 });
 
 test("run quality and warning summaries retain strict true false and unknown semantics", () => {
-  const passed = buildTaskFlowSummaryViewModel({ lastRunResult: { quality: { core_pass: true }, warnings: [1, 2] } });
+  const passed = buildTaskFlowSummaryViewModel({ runResult: { quality: { core_pass: true }, warnings: [1, 2] } });
   assert.equal(passed.quality, "通过");
   assert.equal(passed.qualityClass, "is-valid");
   assert.equal(passed.warningCount, "2");
-  const failed = buildTaskFlowSummaryViewModel({ lastRunResult: { quality: { core_pass: false }, warnings: [] } });
+  const failed = buildTaskFlowSummaryViewModel({ runResult: { quality: { core_pass: false }, warnings: [] } });
   assert.equal(failed.quality, "未通过");
   assert.equal(failed.qualityClass, "is-invalid");
   assert.equal(failed.warningCount, "0");
-  const unknown = buildTaskFlowSummaryViewModel({ lastRunResult: {} });
+  const unknown = buildTaskFlowSummaryViewModel({ runResult: {} });
   assert.equal(unknown.quality, "未报告");
   assert.equal(unknown.warningCount, "未报告");
 });

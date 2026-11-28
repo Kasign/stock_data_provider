@@ -178,8 +178,8 @@ test("Researchflow cancelled Run maps to a failed task instead of false success"
 test("task restoration validates local references and guards stale asynchronous responses", () => {
   assert.match(app, /function restoreLastTask\(\)[\s\S]*?JSON\.parse\(localStorage\.getItem\(TASK_REFERENCE_KEY\) \|\| "null"\)[\s\S]*?catch \{[\s\S]*?return false;[\s\S]*?return activateTaskReference\(record\);/);
   assert.match(app, /function activateTaskReference\(record\)[\s\S]*?if \(!record \|\| typeof record\.task_id !== "string" \|\| !record\.task_id\.trim\(\)\) return false;[\s\S]*?stopTaskPolling\(\);[\s\S]*?state\.taskEvents\.clear\(\);[\s\S]*?void pollTaskSafely\(state\.pollGeneration\);/);
-  assert.match(app, /if \(generation !== state\.pollGeneration \|\| runRef !== state\.taskId \|\|\s*endpointGeneration !== state\.analysisConnectionGeneration \|\|\s*state\.taskAnalysisBase !== analysisBase \|\|\s*state\.settings\.analysisBase !== analysisBase\) return;/);
-  assert.match(app, /if \(generation !== state\.runResultGeneration \|\| state\.taskId !== expectedTaskId \|\|\s*endpointGeneration !== state\.analysisConnectionGeneration \|\|\s*state\.taskAnalysisBase !== analysisBase \|\|\s*state\.settings\.analysisBase !== analysisBase\) return;/);
+  assert.match(app, /if \(generation !== state\.pollGeneration \|\| runRef !== state\.taskId \|\|\s*endpointGeneration !== state\.analysisConnectionGeneration \|\|\s*state\.runBase !== runBase \|\|\s*state\.settings\.analysisBase !== runBase\) return;/);
+  assert.match(app, /if \(generation !== state\.runResultGeneration \|\| state\.taskId !== expectedTaskId \|\|\s*endpointGeneration !== state\.analysisConnectionGeneration \|\|\s*state\.runBase !== runBase \|\|\s*state\.settings\.analysisBase !== runBase\) return;/);
   assert.match(app, /if \(view\.terminal\) \{\s*stopTaskPolling\(\);\s*void loadTaskRunResult\(runRef, runRef\);\s*return;\s*\}/);
   assert.match(recentTaskModule, /return \{[\s\S]*?task_id: record\.task_id\.trim\(\)[\s\S]*?status: typeof record\.status === "string" \? record\.status : ""/);
 });
@@ -198,7 +198,7 @@ test("failed Run refresh distinguishes the last verified same-Run result from a 
   const start = app.indexOf("async function loadTaskRunResult(runId, expectedTaskId) {");
   const end = app.indexOf("\nfunction stopTaskPolling()", start);
   const loader = start >= 0 && end > start ? app.slice(start, end) : "";
-  assert.ok(loader.includes("const retainedPreviousResult = Boolean(state.lastRunResult && state.lastRunResult.runRef === runId);"));
+  assert.ok(loader.includes("const retainedPreviousResult = Boolean(state.runResult && state.runResult.runRef === runId);"));
   assert.ok(loader.includes("页面保留的是此前已成功读取的同一 Run 结果，本次读取尚未确认。"));
   assert.ok(loader.includes("本次读取未成功，不代表结果已更新。"));
   assert.ok(loader.includes("renderTaskResult(result);"), "只有本次 Run 身份和标的校验通过才替换报告内容");
@@ -415,7 +415,7 @@ test("Run 结果的异常诊断与按钮解锁失败不会产生二次拒绝", (
   const tail = loader.slice(loader.lastIndexOf("} finally {"));
   assert.match(tail, /generation === state\.runResultGeneration[\s\S]*?try \{\s*setRunResultReloadBusy\(false\);\s*\} catch \(unlockError\)/);
   assert.match(tail, /重新启用结果读取按钮失败：[\s\S]*?catch \{\s*\/\/ 最终收尾本身必须保持不抛错/);
-  assert.match(loader, /if \(generation !== state\.runResultGeneration \|\| state\.taskId !== expectedTaskId \|\|[\s\S]*?state\.settings\.analysisBase !== analysisBase\) return;/);
+  assert.match(loader, /if \(generation !== state\.runResultGeneration \|\| state\.taskId !== expectedTaskId \|\|[\s\S]*?state\.settings\.analysisBase !== runBase\) return;/);
 });
 
 test("task polling errors mark last-known status stale and successful refresh clears it", () => {
@@ -686,11 +686,11 @@ test("restoring a task resets the previous stage-event selection", () => {
 });
 
 test("watchlist labels task history from a different analysis API address", () => {
-  assert.ok(watchlistTrackingViewModel.includes("function isOtherAnalysisBase(task, currentAnalysisBase)"));
+  assert.ok(watchlistTrackingViewModel.includes("function isOtherRunBase(task, currentBaseRef)"));
   assert.ok(watchlistTrackingViewModel.includes('todayText = "今日分析：有本地记录" + (todayTaskUsesOtherEndpoint ? "（旧分析 API 地址）" : "")'));
   assert.ok(watchlistTrackingViewModel.includes('(recentTaskUsesOtherEndpoint ? " · 旧分析 API 地址" : "")'));
   const todayTaskDeclaration = watchlistTrackingViewModel.indexOf("const todayTask = [...matchingTasks]");
-  const todayEndpointUse = watchlistTrackingViewModel.indexOf("const todayTaskUsesOtherEndpoint = isOtherAnalysisBase(todayTask");
+  const todayEndpointUse = watchlistTrackingViewModel.indexOf("const todayTaskUsesOtherEndpoint = isOtherRunBase(todayTask");
   assert.ok(todayTaskDeclaration >= 0 && todayTaskDeclaration < todayEndpointUse, "必须先计算 todayTask 再读取其来源地址，避免暂时性死区");
 });
 
@@ -750,20 +750,20 @@ test("stock research clears stale snapshots on reload and request errors without
 });
 
 test("recent-task suppression and migration are scoped to the analysis API base", () => {
-  assert.match(app, /suppressedHistoryTaskBase: ""/);
-  assert.match(app, /state\.suppressedHistoryTaskId === state\.taskId && state\.suppressedHistoryTaskBase === taskAnalysisBase/);
-  assert.match(app, /historyItem = safeReadRecentTasks\(\)\.find\(\(item\) =>\s*item\.task_id === record\.task_id &&\s*String\(item\.analysis_base \|\| taskAnalysisBase\) === taskAnalysisBase/);
-  assert.match(app, /analysis_base: historyItem\.analysis_base \|\| taskAnalysisBase/);
-  assert.match(app, /state\.suppressedHistoryTaskBase = state\.taskAnalysisBase \|\| state\.settings\.analysisBase/);
+  assert.match(app, /suppressedHistoryRunBase: ""/);
+  assert.match(app, /state\.suppressedHistoryTaskId === state\.taskId && state\.suppressedHistoryRunBase === taskRunBase/);
+  assert.match(app, /historyItem = safeReadRecentTasks\(\)\.find\(\(item\) =>\s*item\.task_id === record\.task_id &&\s*String\(item\.analysis_base \|\| taskRunBase\) === taskRunBase/);
+  assert.match(app, /analysis_base: historyItem\.analysis_base \|\| taskRunBase/);
+  assert.match(app, /state\.suppressedHistoryRunBase = state\.runBase \|\| state\.settings\.analysisBase/);
 });
 
 test("task polling and saved task references are scoped to the analysis API base", () => {
-  assert.match(app, /taskAnalysisBase: ""/);
+  assert.match(app, /runBase: ""/);
   assert.match(app, /analysisConnectionGeneration: 0/);
   assert.match(app, /function invalidateActiveTaskForAnalysisBaseChange\(/);
   assert.match(app, /if \(analysisBaseChanged\) \{[\s\S]*?invalidateActiveTaskForAnalysisBaseChange\(/);
   assert.match(app, /endpointGeneration !== state\.analysisConnectionGeneration/);
-  assert.match(app, /const taskAnalysisBase = state\.taskAnalysisBase \|\| state\.settings\.analysisBase;[\s\S]*?analysis_base: taskAnalysisBase/);
+  assert.match(app, /const taskRunBase = state\.runBase \|\| state\.settings\.analysisBase;[\s\S]*?analysis_base: taskRunBase/);
   assert.match(app, /旧任务不再自动轮询/);
   const baseInvalidation = app.match(/function invalidateActiveTaskForAnalysisBaseChange\([\s\S]*?\n\}/)?.[0] || "";
   assert.match(baseInvalidation, /safelyUpdateTaskContextUi\("重绘自选股卡片失败：", \(\) => renderWatchlist\(\)\)/, "切换分析地址后应在安全清理步骤中重绘自选卡片");
@@ -843,11 +843,11 @@ test("recent analysis history supports search, single removal and local-only cle
   assert.ok(recentTaskView.includes("export function renderRecentTaskList("));
   assert.ok(recentTaskView.includes("record.task_id"));
   assert.ok(recentTaskView.includes("taskStatusLabel(record.status)"));
-  assert.match(app, /function removeRecentTaskReference\(taskId, analysisBase = ""\)[\s\S]*?removeRecentTask\(taskId, localStorage, undefined, analysisBase\)[\s\S]*?const persistedState = safeReadRecentTasksState\(\)[\s\S]*?targetStillExists[\s\S]*?服务端任务和报告不会被删除/);
+  assert.match(app, /function removeRecentTaskReference\(taskId, baseRef = ""\)[\s\S]*?removeRecentTask\(taskId, localStorage, undefined, baseRef\)[\s\S]*?const persistedState = safeReadRecentTasksState\(\)[\s\S]*?targetStillExists[\s\S]*?服务端任务和报告不会被删除/);
   assert.match(app, /function removeRecentTaskReference[\s\S]*?无法确认最近任务引用已移除/);
   assert.match(app, /function clearRecentTaskHistory\(\)[\s\S]*?clearRecentTasks\(localStorage\)[\s\S]*?const clearedState = safeReadRecentTasksState\(\)[\s\S]*?未能确认最近任务历史已清空[\s\S]*?服务端记录未删除/);
   assert.match(app, /state\.suppressedHistoryTaskId === state\.taskId/);
-  assert.match(app, /if \(state\.taskId === taskId && \(!analysisBase \|\| state\.taskAnalysisBase === analysisBase\)\) \{[\s\S]*?state\.suppressedHistoryTaskId = taskId/);
+  assert.match(app, /if \(state\.taskId === taskId && \(!baseRef \|\| state\.runBase === baseRef\)\) \{[\s\S]*?state\.suppressedHistoryTaskId = taskId/);
   assert.match(recentTaskModule, /export function removeRecentTask\(/);
   assert.match(recentTaskModule, /export function clearRecentTasks\(/);
   assert.match(stylesheet, /\.recent-analysis-search input:focus/);
@@ -975,7 +975,7 @@ test("Run result DOM adapter owns structured result rendering while app retains 
   const renderer = rendererStart >= 0 && rendererEnd > rendererStart
     ? app.slice(rendererStart, rendererEnd)
     : "";
-  assert.ok(renderer.includes("state.lastRunResult = result"));
+  assert.ok(renderer.includes("state.runResult = result"));
   assert.ok(renderer.includes('state.runResultReadStatus = ""'));
   assert.ok(renderer.includes("persistTaskReference()"));
   assert.ok(renderer.includes('renderRunStatus(isDowngraded ? state.taskStatus : (result.status || ""))'));
@@ -1296,7 +1296,7 @@ test("Run Flow summary and event diagnostics remain grounded in persisted Task, 
   assert.match(app, /state\.taskEventsLoaded/);
   assert.match(taskEventNode, /event\.duration_ms/);
   assert.match(taskEventNode, /event\.error_code/);
-  assert.match(taskFlowSummaryViewModel, /lastRunResult\?\.quality\?\.core_pass/);
+  assert.match(taskFlowSummaryViewModel, /runResult\?\.quality\?\.core_pass/);
   assert.match(taskFlowSummaryViewModel, /Array\.isArray\(warnings\)/);
   assert.match(stylesheet, /\.run-flow-summary/);
   assert.match(stylesheet, /\.event-row\[aria-pressed="true"\]/);
@@ -1690,8 +1690,8 @@ test("导入浏览器工作区不会把导入前的活动任务重新写回任�
     importBody,
     /localStorage\.removeItem\(TASK_REFERENCE_KEY\);[\s\S]*?applySettings\(nextSettings, \{ persistPreviousActiveTask: false \}\);[\s\S]*?applyTheme\(imported\.theme\)/
   );
-  assert.match(importBody, /const importedActiveTaskId = state\.taskId;[\s\S]*?const importedActiveTaskBase = state\.taskAnalysisBase \|\| state\.settings\.analysisBase;/);
-  assert.match(importBody, /applySettings\(nextSettings, \{ persistPreviousActiveTask: false \}\);[\s\S]*?state\.suppressedHistoryTaskId = importedActiveTaskId;[\s\S]*?state\.suppressedHistoryTaskBase = importedActiveTaskId \? importedActiveTaskBase : "";/,
+  assert.match(importBody, /const importedActiveTaskId = state\.taskId;[\s\S]*?const importedActiveTaskBase = state\.runBase \|\| state\.settings\.analysisBase;/);
+  assert.match(importBody, /applySettings\(nextSettings, \{ persistPreviousActiveTask: false \}\);[\s\S]*?state\.suppressedHistoryTaskId = importedActiveTaskId;[\s\S]*?state\.suppressedHistoryRunBase = importedActiveTaskId \? importedActiveTaskBase : "";/,
     "导入工作区后，旧活动任务不能在后续轮询中重新写回本地历史");
   const applyIndex = importBody.indexOf("applySettings(nextSettings, { persistPreviousActiveTask: false })");
   assert.ok(applyIndex >= 0, "workspace import must apply the validated settings");
@@ -1985,7 +1985,7 @@ test("Run 结果必须与当前任务标的集合一致后才允许渲染", () =
   assert.match(app, /symbol: primarySymbol,/);
   assert.match(app, /state\.taskSymbols = symbols;/);
   assert.match(researchflowResultContract, /"run_ref"[\s\S]*?"minLength": 1/);
-  assert.match(app, /generation !== state\.runResultGeneration \|\| state\.taskId !== expectedTaskId \|\|\s*endpointGeneration !== state\.analysisConnectionGeneration \|\|\s*state\.taskAnalysisBase !== analysisBase/);
+  assert.match(app, /generation !== state\.runResultGeneration \|\| state\.taskId !== expectedTaskId \|\|\s*endpointGeneration !== state\.analysisConnectionGeneration \|\|\s*state\.runBase !== runBase/);
 });
 
  
@@ -2086,7 +2086,7 @@ test("任务切换和分析连接切换会重置事件游标并隔离迟到轮�
     assert.match(body, /state\.taskSequence = 0;\s*state\.taskEventCursor = 0;\s*state\.taskEvents\.clear\(\)/, label + " resets both event cursors and stored events");
   }
   assert.match(app, /function stopTaskPolling\(\) \{[\s\S]*?state\.pollGeneration \+= 1/);
-  assert.match(app, /if \(generation !== state\.pollGeneration \|\| runRef !== state\.taskId \|\| endpointGeneration !== state\.analysisConnectionGeneration \|\| state\.taskAnalysisBase !== analysisBase \|\| state\.settings\.analysisBase !== analysisBase\) return;/);
+  assert.match(app, /if \(generation !== state\.pollGeneration \|\| runRef !== state\.taskId \|\| endpointGeneration !== state\.analysisConnectionGeneration \|\| state\.runBase !== runBase \|\| state\.settings\.analysisBase !== runBase\) return;/);
   assert.match(app, /const view = await getQuantResearchRunView\(requestSettings, runRef, controller\.signal\)/);
 });
 
@@ -2874,9 +2874,21 @@ test("降级领域结果不得作为完整研究报告归档", () => {
   const start = app.indexOf('$("#archive-run-report").addEventListener("click"');
   const end = app.indexOf('$("#copy-run-json").addEventListener', start);
   const handler = start >= 0 && end > start ? app.slice(start, end) : "";
-  assert.match(handler, /state\.lastRunResult\.isFullReport === false/, "归档前必须识别降级结果");
+  assert.match(handler, /state\.runResult\.isFullReport === false/, "归档前必须识别降级结果");
   assert.match(handler, /降级结果不可归档为报告/, "降级结果须明确拒绝并给出提示");
-  assert.doesNotMatch(handler, /researchReports\.save\(state\.lastRunResult[^)]*\)\s*;?\s*\}/,
+  assert.doesNotMatch(handler, /researchReports\.save\(state\.runResult[^)]*\)\s*;?\s*\}/,
     "降级结果分支不得进入完整报告归档调用");
   assert.match(handler, /const outcome = researchReports\.save\(/, "完整报告仍可归档");
+});
+
+test("WebUI 内部状态不再使用旧 Analysis 命名", () => {
+  const renamedSources = [appSource, recentTaskView, watchlistTrackingViewModel, taskFlowSummaryViewModel].join("\n");
+  for (const legacy of ["lastRunResult", "taskAnalysisBase", "suppressedHistoryTaskBase", "requestAnalysisBase", "isOtherAnalysisBase", "currentAnalysisBase"]) {
+    assert.doesNotMatch(renamedSources, new RegExp("\\b" + legacy + "\\b"), "旧 Analysis 内部命名不得复活：" + legacy);
+  }
+  assert.doesNotMatch(appSource, /function removeRecentTaskReference\(taskId, analysisBase\b/, "最近任务移除函数不得回退到 analysisBase 参数");
+  assert.match(appSource, /state\.runResult\b/);
+  assert.match(appSource, /state\.runBase\b/);
+  assert.match(watchlistTrackingViewModel, /function isOtherRunBase\(task, currentBaseRef\)/);
+  assert.match(taskFlowSummaryViewModel, /runResult\?\.quality\?\.core_pass/);
 });

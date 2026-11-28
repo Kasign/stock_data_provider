@@ -1,5 +1,5 @@
-function isOtherAnalysisBase(task, currentAnalysisBase) {
-  return Boolean(task && String(task.analysis_base || currentAnalysisBase) !== String(currentAnalysisBase));
+function isOtherRunBase(task, currentBaseRef) {
+  return Boolean(task && String(task.analysis_base || currentBaseRef) !== String(currentBaseRef));
 }
 
 export function buildWatchlistTrackingFields(input) {
@@ -13,7 +13,7 @@ export function buildWatchlistTrackingFields(input) {
     runResult,
     runResultReadStatus = "",
     runResultReadError = "",
-    currentAnalysisBase = "",
+    currentBaseRef = "",
     displayOrder = [],
     displayFields = [],
     now = new Date(),
@@ -69,8 +69,8 @@ export function buildWatchlistTrackingFields(input) {
   const todayTask = [...matchingTasks]
     .filter((task) => Boolean(todayKey) && dateKey(task.created_at) === todayKey)
     .sort((a, b) => (Date.parse(b.created_at || "") || 0) - (Date.parse(a.created_at || "") || 0))[0] || null;
-  const todayTaskUsesOtherEndpoint = isOtherAnalysisBase(todayTask, currentAnalysisBase);
-  const recentTaskUsesOtherEndpoint = isOtherAnalysisBase(recentTask, currentAnalysisBase);
+  const todayTaskUsesOtherEndpoint = isOtherRunBase(todayTask, currentBaseRef);
+  const recentTaskUsesOtherEndpoint = isOtherRunBase(recentTask, currentBaseRef);
   const activeTaskMatches = Boolean(currentTask.taskId) && Array.isArray(currentTask.symbols)
     && currentTask.symbols.some((value) => normalizeSymbol(value) === itemSymbol)
     && (currentTask.statusLoading || Boolean(currentTask.statusError)
@@ -101,12 +101,12 @@ export function buildWatchlistTrackingFields(input) {
     && currentTask.taskId === recentTask.task_id
     && recentTask.run_id
     && runResult.run_id === recentTask.run_id
-    && String(recentTask.analysis_base || currentAnalysisBase) === String(currentTask.analysisBase || currentAnalysisBase)
+    && String(recentTask.analysis_base || currentBaseRef) === String(currentTask.baseRef || currentBaseRef)
     && Array.isArray(currentTask.symbols)
     && currentTask.symbols.some((value) => normalizeSymbol(value) === itemSymbol));
   const activeRunReadMatches = Boolean(recentTask
     && currentTask.taskId === recentTask.task_id
-    && String(recentTask.analysis_base || currentAnalysisBase) === String(currentTask.analysisBase || currentAnalysisBase)
+    && String(recentTask.analysis_base || currentBaseRef) === String(currentTask.baseRef || currentBaseRef)
     && Array.isArray(currentTask.symbols)
     && currentTask.symbols.some((value) => normalizeSymbol(value) === itemSymbol)
     && ["loading", "retrying", "error"].includes(runResultReadStatus));
