@@ -812,7 +812,8 @@ test("analysis task submission prevents concurrent duplicate requests and releas
   assert.match(app, /async function createTask\(event\)[\s\S]*?event\.preventDefault\(\);[\s\S]*?if \(state\.isCreatingTask\)[\s\S]*?分析任务正在提交[\s\S]*?return;[\s\S]*?state\.isCreatingTask = true;[\s\S]*?parseAnalysisSymbols/);
   assert.match(app, /catch \(error\) \{\s*state\.isCreatingTask = false;[\s\S]*?return;/);
   assert.match(app, /finally \{[\s\S]*?state\.isCreatingTask = false;[\s\S]*?button\.disabled = false;/);
-  assert.match(apiClient, /headersKey \? \{ "Idempotency-Key": headersKey \} : \{\}/);
+  assert.match(apiClient, /createResearchflowRun[\s\S]*?method: "POST", body: command[\s\S]*?csrf: true/);
+  assert.doesNotMatch(apiClient, /headersKey/);
 });
 
 test("global typography has a readable baseline and key UI text is not undersized", () => {
@@ -995,7 +996,8 @@ test("run-flow events expose only server-provided durations and diagnostics", ()
   assert.match(taskEventView, /taskEventDurationLabel\(event\.duration_ms\)/);
   assert.match(taskEventNode, /event\.error_code/);
   assert.match(taskEventNode, /parts\.join\(" · "\)/);
-  assert.match(apiClient, /after_sequence/);
+  assert.match(researchflowAdapter, /export function runStageToTaskEvent\(/);
+  assert.doesNotMatch(apiClient, /after_sequence|next_after_sequence/);
   assert.match(taskEventListViewModel, /\.sort\(\(a, b\) => Number\(a\.sequence\) - Number\(b\.sequence\)\)/);
   assert.doesNotMatch(app, /completed_stages\s*\/\s*total_stages|progressPercent|fakeDAG/i);
 });

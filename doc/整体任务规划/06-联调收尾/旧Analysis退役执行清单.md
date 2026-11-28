@@ -101,7 +101,7 @@
 | # | 任务 | 主责 | 状态 | 退出条件 / 可验证证据 |
 |---|---|---|---|---|
 | 3.1 | 任务创建/幂等重放/轮询/取消/历史/详情/报告导出改接 Run Create/Get/Cancel 契约 | WebUI | 已完成主流程（2026-11-28，提交 `605c57bb9` + `d3314eeab`，15/15 CI success） | `app.js` 创建/轮询/结果改走 `createQuantResearchRun`/`getQuantResearchRunView`/`getQuantResearchResultsView`；浏览器夹具证明无旧 Analysis 请求；完整报告导出仍受 RF-BLOCK-007 阻塞，不在本项范围 |
-| 3.2 | 清除 Task ID / Event Cursor / Analysis Base / 旧 RunResult 依赖 | WebUI | 部分完成（2026-11-28：执行链已改为 Run/Stage 聚合，无事件游标；本地状态字段与历史存储键仍沿用旧命名） | 已完成：取消事件分页、双 ID 回包收敛为 `run_ref`、Stage 投影不伪造事件/Attempt、降级结果禁止归档为完整报告。未完成：`state.lastRunResult`、`recent-analysis.v1`、`analysis_base` 等本地命名清理属于独立工作组，不在旧 API 代码删除范围内 |
+| 3.2 | 清除 Task ID / Event Cursor / Analysis Base / 旧 RunResult 依赖 | WebUI | 部分完成（2026-11-28：执行链已改为 Run/Stage 聚合，无事件游标；`api.js` 旧 Analysis helper/请求路径已删除；本地状态字段与历史存储键仍沿用旧命名） | 已完成：取消事件分页、双 ID 回包收敛为 `run_ref`、Stage 投影不伪造事件/Attempt、降级结果禁止归档为完整报告；新增契约断言禁止 `createAnalysisTask/getAnalysisRun/getAnalysisTask/getAnalysisTaskEvents` 与 `/api/v1/analysis/**` 复活。未完成：`state.lastRunResult`、`recent-analysis.v1`、`analysis_base` 等本地命名清理属于独立工作组 |
 
 ## 6. 阶段 4 · 删除与清表（一次性工作组，全部前置满足后执行）
 
@@ -116,7 +116,7 @@
 
 | # | 任务 | 主责 | 状态 | 退出条件 / 可验证证据 |
 |---|---|---|---|---|
-| 5.1 | 全仓旧路径/环境变量/容器名/工作流引用扫描归零 | Integration | 部分完成（2026-11-28：代码与 Makefile 引用归零；历史文档引用未批量改写） | 已扫描 Go/Web/工作流/Makefile：`cmd/demo`、`cmd/storage-check`、`internal/analysis/**`、`internal/platform/httpapi/**`、`internal/platform/taskqueue/**`、`internal/service/wiring.go`、`internal/server/marketdata/**` 均无生产代码引用；历史文档按日期保留，待最终迁移记录统一收口 |
+| 5.1 | 全仓旧路径/环境变量/容器名/工作流引用扫描归零 | Integration | 部分完成（2026-11-28：代码、Web API 客户端与 Makefile 引用归零；历史文档引用未批量改写） | 已扫描 Go/Web/工作流/Makefile：`cmd/demo`、`cmd/storage-check`、`internal/analysis/**`、`internal/platform/httpapi/**`、`internal/platform/taskqueue/**`、`internal/service/wiring.go`、`internal/server/marketdata/**` 均无生产代码引用；`web/src/api.js` 已无 `/api/v1/analysis/**` 与旧 helper；历史文档按日期保留，待最终迁移记录统一收口 |
 | 5.2 | Researchflow Run 全流程 + 授权报告读取 + WebUI 无旧请求 + Owner Session / Health / Ready 端到端 | Integration | 未开始（部署侧待用户按清单配置） | 真实流程验收通过；目前部署态 Researchflow 容量未启用、PIT 事实未预采集 |
 | 5.3 | 最终 SHA 完整 CI + 浏览器验收 + 部署冒烟 | Integration | 部分完成（代码 SHA `eb695a4ee` 的 16/16 check run 全部 `completed/success`，含 required-checks 与 Chromium；部署冒烟待用户配置后执行） | `required-checks` 聚合检查全项通过；不以中途 CI 状态作为停工条件 |
 
@@ -133,6 +133,7 @@
 - **保留能力**：`internal/marketdata/app/port.go` 与 `internal/marketdata/application/reader.go` 的 `DailyBarsV2Reader` 未改动；`cmd/analysis-api` 启动入口、Owner Session/CSRF、Health/Ready、平台公共能力均保留。
 - **验证**：`gofmt -l` 关注目录无输出；`go build ./...` PASS；`go test ./...` PASS；`npm test` 561/561 PASS；`web/tests/ui-contract.test.mjs` 181/181 PASS；旧 Go 导入路径、旧命令、旧表名扫描在代码中归零。
 - **提交与 CI（回填）**：提交 `eb695a4eeb25ea21835462f95068ef3ee3036383`（`refactor(server): 删除旧 Analysis 生产链并收敛配置装配`）已推送 `repair_all`。按该精确 SHA 查询，16/16 check run 全部 `completed/success`：`required-checks` [46104699332](https://github.com/Kasign/stock_data_provider/actions/runs/46104699332)、[Full integration checks](https://github.com/Kasign/stock_data_provider/actions/runs/46104699341/job/140854728996)、[Test root Go module](https://github.com/Kasign/stock_data_provider/actions/runs/46104699325/job/140854729250)、[Validate WebUI source and container](https://github.com/Kasign/stock_data_provider/actions/runs/46104699331/job/140854728862)、[Chromium responsive layout checks](https://github.com/Kasign/stock_data_provider/actions/runs/46104699373/job/140854728850)，以及 Quant/Research/Researchflow/Notification/Market-data/Compose 各专项。部署冒烟仍需用户按清单配置后执行。
+- **追加清理（前端 API 客户端）**：复核发现 `web/src/api.js` 仍保留 4 个仅供旧测试使用的 Analysis helper；本轮已删除 `createAnalysisTask`/`getAnalysisRun`/`getAnalysisTask`/`getAnalysisTaskEvents` 及 `/api/v1/analysis/**` 路径，相关通用错误/超时/取消覆盖改由 Researchflow helper 承接，并新增“旧 helper 与旧路径不得复活”源码契约断言。`npm test` 558/558、`npm run check` 与 12 个浏览器脚本通过。
 
 ## 8. 执行口径
 

@@ -2059,3 +2059,11 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - **文档同步**：回填 `./旧Analysis退役执行清单.md`（阶段 3/4/5 状态、工作组证据）与 `./WebUI旧Analysis到Researchflow迁移盘点.md`（当前收尾口径、10.1/10.4 状态）；历史日期记录保留作审计证据，不冒充当前状态。
 - **提交与 CI（回填）**：提交 `eb695a4eeb25ea21835462f95068ef3ee3036383`（`refactor(server): 删除旧 Analysis 生产链并收敛配置装配`）已推送 `repair_all`。按精确 SHA 查询 16/16 check run 全部 `completed/success`：`required-checks` [46104699332](https://github.com/Kasign/stock_data_provider/actions/runs/46104699332)、[Full integration checks](https://github.com/Kasign/stock_data_provider/actions/runs/46104699341/job/140854728996)、[Test root Go module](https://github.com/Kasign/stock_data_provider/actions/runs/46104699325/job/140854729250)、[Validate WebUI source and container](https://github.com/Kasign/stock_data_provider/actions/runs/46104699331/job/140854728862)、[Chromium responsive layout checks](https://github.com/Kasign/stock_data_provider/actions/runs/46104699373/job/140854728850)，以及 Quant/Research/Researchflow/Notification/Market-data/Compose 各专项。
 - **未解决事项**：部署侧容量/凭据与真实 PIT 预采集由用户按清单执行；停服窗口清 `analysis_*` 四表与 migration namespace 待执行；完整报告 projector 仍为 RF-BLOCK-007 OPEN；部署冒烟待用户配置后执行。
+
+## 2026-11-28 前端旧 Analysis helper 收尾清理
+
+- **复核发现**：服务端旧链删除并回填 CI 后再次扫描前端，发现 `web/src/api.js` 仍保留 `createAnalysisTask`/`getAnalysisRun`/`getAnalysisTask`/`getAnalysisTaskEvents` 四个旧 helper，页面虽不调用，但不满足“前端彻底删”。
+- **先证伪再修复**：新增源码契约断言，要求这四个 helper 与 `/api/v1/analysis/**` 路径不得存在；执行后该断言失败（明确报出 `createAnalysisTask` 仍存在），随后删除生产代码。
+- **测试语义替换而非放宽**：删除只覆盖旧端点的创建/事件分页/任务轮询用例；把结构化错误、请求 ID、配额错误诊断等通用行为改由 `getResearchflowRun` 承接；取消/超时覆盖继续由已有 Researchflow helper 用例保证。`api.test.mjs` 41/41、`npm test` 558/558、`npm run check` 与 12 个浏览器脚本全部通过。
+- **契约同步**：`ui-contract.test.mjs` 原先断言 `headersKey` 与 `after_sequence`，改为断言 CreateRun 的 body 幂等键/CSRF 与 Stage 投影函数存在、旧事件分页参数不存在；没有删除等待或跳过失败。
+- **状态边界**：本轮只清理旧 API 请求入口；`state.lastRunResult`、`recent-analysis.v1`、`analysis_base` 等本地命名重构仍属独立工作组，不影响旧 API 代码归零结论。

@@ -384,32 +384,6 @@ export function getDailyBars(settings, symbol, { limit = 120, adjustment = "forw
   if (end) query.set("end", end);
   return request(`/api/v1/bars/${encodeURIComponent(symbol)}/daily?${query}`, { signal, timeoutMs });
 }
-export function createAnalysisTask(settings, payload, idempotencyKey = "", { timeoutMs = 30000 } = {}) {
-  const headersKey = idempotencyKey.trim();
-  return request("/api/v1/analysis/tasks", {
-    method: "POST",
-    body: payload,
-    timeoutMs,
-    headers: headersKey ? { "Idempotency-Key": headersKey } : {}
-  }).catch((error) => {
-    if (error?.code === "request_timeout") {
-      error.creationOutcomeUnknown = true;
-      error.message = "创建请求超过 30 秒仍未完成，服务端可能已接收任务。请先核实任务记录，不要盲目重复提交。";
-    }
-    throw error;
-  });
-}
-export function getAnalysisRun(settings, runId, { signal, timeoutMs = 20000 } = {}) {
-  return request(`/api/v1/analysis/runs/${encodeURIComponent(runId)}`, { signal, timeoutMs });
-}
-export function getAnalysisTask(settings, taskId, { signal, timeoutMs = 15000 } = {}) {
-  return request(`/api/v1/analysis/tasks/${encodeURIComponent(taskId)}`, { signal, timeoutMs });
-}
-export function getAnalysisTaskEvents(settings, taskId, afterSequence = 0, { signal, timeoutMs = 15000 } = {}) {
-  const query = new URLSearchParams({ after_sequence: String(afterSequence), limit: "100" });
-  return request(`/api/v1/analysis/tasks/${encodeURIComponent(taskId)}/events?${query}`, { signal, timeoutMs });
-}
-
 export function getChipDistribution(settings, symbol, signal, { timeoutMs = 30000 } = {}) {
   return request(`/api/v1/stocks/${encodeURIComponent(symbol)}/chip-distribution`, {
     signal,

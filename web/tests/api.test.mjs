@@ -1,12 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import {
   analysisHealth,
   analysisLiveness,
   changeOwnerPassword,
   clearOwnerSessionMemory,
   cancelResearchflowRun,
-  createAnalysisTask,
   createResearchflowRun,
   createQuantResearchRun,
   getQuantResearchRunView,
@@ -16,9 +16,6 @@ import {
   logoutOwnerSession,
   restoreOwnerSession,
   rotateOwnerSession,
-  getAnalysisRun,
-  getAnalysisTask,
-  getAnalysisTaskEvents,
   getResearchflowRun,
   getResearchflowRunResults,
   getDailyBars,
@@ -56,6 +53,14 @@ function jsonResponse(body, status = 200, headers = {}) {
   });
 }
 
+test("WebUI API 客户端不再暴露旧 Analysis 请求入口", async () => {
+  const source = await readFile(new URL("../src/api.js", import.meta.url), "utf8");
+  for (const name of ["createAnalysisTask", "getAnalysisRun", "getAnalysisTask", "getAnalysisTaskEvents"]) {
+    assert.doesNotMatch(source, new RegExp("export function " + name + "\\("), "旧 Analysis helper 必须删除：" + name);
+  }
+  assert.doesNotMatch(source, /\/api\/v1\/analysis\//, "WebUI API 客户端不得再构造旧 Analysis 请求路径");
+});
+
 
 test("routes all Data and analysis calls through the single Root Server path", async () => {
   const originalFetch = globalThis.fetch;
@@ -75,53 +80,27 @@ test("routes all Data and analysis calls through the single Root Server path", a
   }
 });
 
-test("creates a Go analysis task with the current payload and optional idempotency key", async () => {
-  const originalFetch = globalThis.fetch;
-  let request;
-  globalThis.fetch = async (url, init) => {
-    request = { url: String(url), ...init };
-    return jsonResponse({ task: { task_id: "task-1", status: "queued" } }, 202);
-  };
-  try {
-    const payload = { task_type: "post_market_scan", symbols: ["600519"] };
-    const result = await createAnalysisTask({ analysisBase: "/" }, payload, "webui-test-1");
-    assert.equal(result.task.task_id, "task-1");
-    assert.equal(request.url, "/api/v1/analysis/tasks");
-    assert.equal(request.method, "POST");
-    assert.equal(request.headers["Content-Type"], "application/json");
-    assert.equal(request.headers["Idempotency-Key"], "webui-test-1");
-    assert.deepEqual(JSON.parse(request.body), payload);
-    assert.equal(request.credentials, "same-origin");
-    assert.equal(Object.hasOwn(request.headers, "Authorization"), false,
-      "browser analysis requests must never carry the Owner Bearer credential");
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
-});
-
-test("reads Data and analysis APIs through the same Root Server without client API keys", async () => {
+test("reads Data and Researchflow APIs through the same Root Server without client API keys", async () => {
   const originalFetch = globalThis.fetch;
   const requests = [];
   globalThis.fetch = async (url, init) => {
     requests.push({ url: String(url), ...init });
-    return jsonResponse({ events: [], run_id: "run-1" });
+    return jsonResponse({ run: { run_ref: "run-1" }, stages: [] });
   };
   try {
     const settings = { marketBase: "/", analysisBase: "/" };
-    await getAnalysisTaskEvents(settings, "task/with space", 17);
     await getQuote(settings, "600519.SH");
-    await getAnalysisRun(settings, "run-1");
+    await getResearchflowRun(settings, "run-1");
 
-    assert.equal(requests[0].url, "/api/v1/analysis/tasks/task%2Fwith%20space/events?after_sequence=17&limit=100");
-    assert.equal(requests[1].url, "/api/v1/quotes/600519.SH");
-    assert.equal(requests[1].headers["X-API-Key"], undefined);
-    assert.equal(requests[2].url, "/api/v1/analysis/runs/run-1");
+    assert.equal(requests[0].url, "/api/v1/quotes/600519.SH");
+    assert.equal(requests[0].headers["X-API-Key"], undefined);
+    assert.equal(requests[1].url, "/api/v1/researchflow/runs/run-1");
     assert.equal(Object.hasOwn(requests[0].headers, "X-API-Key"), false);
-    assert.equal(Object.hasOwn(requests[2].headers, "X-API-Key"), false);
+    assert.equal(Object.hasOwn(requests[1].headers, "X-API-Key"), false);
     assert.equal(Object.hasOwn(requests[0].headers, "Authorization"), false,
-      "task event reads must not carry the Owner Bearer credential");
-    assert.equal(Object.hasOwn(requests[2].headers, "Authorization"), false,
-      "Run reads must not carry the Owner Bearer credential");
+      "Data reads must not carry the Owner Bearer credential");
+    assert.equal(Object.hasOwn(requests[1].headers, "Authorization"), false,
+      "Researchflow reads must not carry the Owner Bearer credential");
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -134,7 +113,7 @@ test("preserves structured server error code, HTTP status and request ID", async
   }, 409, { "X-Request-ID": "req-webui-123" });
   try {
     await assert.rejects(
-      getAnalysisRun({ analysisBase: "/" }, "run-pending"),
+      getResearchflowRun({ analysisBase: "/" }, "run-pending"),
       (error) => {
         assert.equal(error.message, "run result is not ready");
         assert.equal(error.status, 409);
@@ -226,7 +205,7 @@ test("bounds oversized JSON error messages and keeps plain JSON string diagnosti
         headers: { "Content-Type": "application/json" }
       });
       await assert.rejects(
-        getAnalysisRun({ analysisBase: "/" }, "run-error"),
+        getResearchflowRun({ analysisBase: "/" }, "run-error"),
         (error) => {
           assert.equal(error.status, 502);
           if (item.expectedLength) assert.equal(error.message.length, item.expectedLength);
@@ -251,7 +230,7 @@ test("prefers request IDs from the structured error envelope when both forms exi
   }, 404, { "X-Request-ID": "req-from-header" });
   try {
     await assert.rejects(
-      getAnalysisRun({ analysisBase: "/" }, "missing-run"),
+      getResearchflowRun({ analysisBase: "/" }, "missing-run"),
       (error) => {
         assert.equal(error.status, 404);
         assert.equal(error.code, "task_not_found");
@@ -611,87 +590,6 @@ test("reads bounded persisted Provider probe history through the Root Server", a
   }
 });
 
-
-test("forwards cancellation signals to task status, event and Run result requests", async () => {
-  const originalFetch = globalThis.fetch;
-  const controller = new AbortController();
-  const requests = [];
-  globalThis.fetch = async (url, init) => {
-    requests.push({ url: String(url), signal: init.signal });
-    return jsonResponse({ task_id: "task-1", run_id: "run-1", status: "running" });
-  };
-  try {
-    await getAnalysisTask({ analysisBase: "/" }, "task-1", {
-      signal: controller.signal,
-      timeoutMs: 0
-    });
-    await getAnalysisTaskEvents({ analysisBase: "/" }, "task-1", 12, {
-      signal: controller.signal,
-      timeoutMs: 0
-    });
-    await getAnalysisRun({ analysisBase: "/" }, "run-1", {
-      signal: controller.signal,
-      timeoutMs: 0
-    });
-    assert.equal(requests.length, 3);
-    assert.ok(requests.every((item) => item.signal === controller.signal));
-    assert.match(requests[0].url, /\/tasks\/task-1$/);
-    assert.match(requests[1].url, /after_sequence=12/);
-    assert.match(requests[2].url, /\/runs\/run-1$/);
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
-});
-
-test("times out stalled analysis requests and aborts their underlying fetch", async () => {
-  const originalFetch = globalThis.fetch;
-  let requestSignal;
-  globalThis.fetch = async (_url, init) => {
-    requestSignal = init.signal;
-    return new Promise((_resolve, reject) => {
-      init.signal.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")), { once: true });
-    });
-  };
-  try {
-    await assert.rejects(
-      getAnalysisTask({ analysisBase: "/" }, "task-stalled", { timeoutMs: 5 }),
-      (error) => {
-        assert.equal(error.code, "request_timeout");
-        assert.equal(error.timeout, true);
-        assert.match(error.message, /请求超过/);
-        return true;
-      }
-    );
-    assert.equal(requestSignal.aborted, true);
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
-});
-
-test("marks a timed-out task creation as an unknown outcome instead of a safe failure", async () => {
-  const originalFetch = globalThis.fetch;
-  globalThis.fetch = async (_url, init) => new Promise((_resolve, reject) => {
-    init.signal.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")), { once: true });
-  });
-  try {
-    await assert.rejects(
-      createAnalysisTask(
-        { analysisBase: "/" },
-        { task_type: "post_market_scan", symbols: ["600519"] },
-        "idempotency-timeout",
-        { timeoutMs: 5 }
-      ),
-      (error) => {
-        assert.equal(error.code, "request_timeout");
-        assert.equal(error.creationOutcomeUnknown, true);
-        assert.match(error.message, /不要盲目重复提交/);
-        return true;
-      }
-    );
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
-});
 
 
 test("板块排行请求透传排序维度、方向与行业/概念类别", async () => {
