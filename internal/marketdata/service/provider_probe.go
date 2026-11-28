@@ -1457,6 +1457,11 @@ func buildProviderProbeCheckResults(items []model.ProviderProbeItem, requestedCh
 					result.ErrorCode = "freshness_sla_not_configured"
 				}
 			}
+			// provider 侧的失败原因必须带到 check 结果里：只复制错误码会丢掉
+			// "permission_required(40203)" 这类唯一能定位问题的信息，诊断页就只剩 provider_error。
+			if result.ErrorCode != "" && result.ErrorMessage == "" {
+				result.ErrorMessage = item.ErrorMessage
+			}
 			if result.Status == "skipped" && result.ErrorMessage == "" {
 				result.ErrorMessage = providerProbeCheckMessage(result.ErrorCode)
 			}

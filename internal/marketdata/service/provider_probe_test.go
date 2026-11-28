@@ -1926,3 +1926,23 @@ func TestProviderProbeUsesInjectedClockForRunAndItemTimestamps(t *testing.T) {
 		t.Fatalf("probe item CheckedAt = %s, want %s", run.Items[0].CheckedAt, fixedNow)
 	}
 }
+
+// 诊断页只能看到 error_code 时，运维无法区分"权限不足"和"网络不通"。
+// provider 侧已经记录了具体错误，投影时必须带出来。
+func TestBuildProviderProbeCheckResultsCarriesProviderErrorMessage(t *testing.T) {
+	items := []model.ProviderProbeItem{{
+		Provider: "tushare", Capability: "security_trading_status", Status: "failed",
+		ErrorCode: "provider_error", ErrorStage: "provider",
+		ErrorMessage: "Tushare 接口返回 permission_required (code=40203)",
+	}}
+	results := buildProviderProbeCheckResults(items, []string{"connectivity"})
+	if len(results) != 1 {
+		t.Fatalf("expected one check result, got %d", len(results))
+	}
+	if results[0].ErrorCode != "provider_error" {
+		t.Fatalf("error code must be preserved: %+v", results[0])
+	}
+	if results[0].ErrorMessage != "Tushare 接口返回 permission_required (code=40203)" {
+		t.Fatalf("provider error message must be projected, got %q", results[0].ErrorMessage)
+	}
+}
