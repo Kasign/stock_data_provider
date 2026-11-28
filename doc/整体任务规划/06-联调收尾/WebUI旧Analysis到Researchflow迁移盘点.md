@@ -4,7 +4,7 @@
 - 核对分支：`repair_all`
 - 初始核对基线：`43d773877a20f99325843650f1f8d0799d03ffe8`
 - 核对日期：2026-11-26；当前口径更新：2026-11-28
-- 状态（2026-11-28）：**WebUI 主流程已迁移到 Researchflow；旧 Analysis 生产链代码已删除；部署侧仍需按清单启用 Researchflow 容量并预采集真实 PIT 事实数据；完整报告正文仍未生成；最终 SHA 的完整 CI 与部署冒烟待执行。**
+- 状态（2026-11-28）：**WebUI 主流程已迁移到 Researchflow；旧 Analysis 生产链代码已删除；代码 SHA `eb695a4ee` 的 16/16 CI 全部 success；部署侧仍需按清单启用 Researchflow 容量并预采集真实 PIT 事实数据；完整报告正文仍未生成；部署冒烟待执行。**
 - 目标：WebUI 业务任务统一使用 SRV-CTR-001 Researchflow API 和 Owner Session；不保留旧 Analysis API 的浏览器兼容入口，不增加 Bearer/Session 双认证。
 - 阅读口径：第 1、3、4、8、10 节中“旧链仍在运行/页面仍调用旧 API/尚未删除”等表述是 2026-11-26 至 2026-11-27 的盘点记录，仅作历史证据；当前状态以本节和 `./旧Analysis退役执行清单.md` 为准。
 
@@ -15,7 +15,8 @@
 - **已删除代码**：`internal/analysis/**`、`internal/service/**`、`internal/platform/httpapi/**`、`internal/platform/taskqueue/**`、`internal/server/marketdata/**`、`internal/adapters/storage/errors.go`、`internal/adapters/storage/mysqlredis/store.go` 与 `store_resources_test.go`、`cmd/demo/`、`cmd/storage-check/`；Makefile 移除 `demo` / `storage-check` 目标。
 - **保留边界**：`cmd/analysis-api` 启动入口、Owner Session/CSRF、Health/Ready、平台公共能力和 `internal/marketdata/app/port.go` / `internal/marketdata/application/reader.go` 中的 `DailyBarsV2Reader`（Quant/Researchflow 真实 PIT 日线能力）。
 - **验收证据（本地）**：`go build ./...`、`go test ./...`、`npm test` 561/561 通过；`web/tests/ui-contract.test.mjs` 已从旧 Go 源码断言切换到 Researchflow Schema 与适配器契约，181/181 通过。
-- **未完成**：部署侧 `.env` 容量/凭据与预采集由用户按 `./Researchflow部署启用与数据预采集操作清单.md` 执行；停服窗口清表和 Migration namespace 清理待执行；最终 SHA 完整 CI 与部署冒烟状态记 `not_run`。
+- **CI 结果**：代码提交 `eb695a4eeb25ea21835462f95068ef3ee3036383` 的 16/16 check run 全部 `completed/success`，含 `required-checks`、Full integration checks、Test root Go module、Chromium responsive layout checks 与各模块专项。
+- **未完成**：部署侧 `.env` 容量/凭据与预采集由用户按 `./Researchflow部署启用与数据预采集操作清单.md` 执行；停服窗口清表、Migration namespace 清理和部署冒烟待执行。
 
 ## 1. 当前结论
 
@@ -409,7 +410,7 @@ analysisd 当前明确要求 GO_CORE_TOKEN、PYTHON_BRIDGE_TOKEN、PYTHON_BRIDGE
 - [x] WebUI 完成 Researchflow 迁移（2026-11-28，创建/轮询/结果/降级渲染/归档守卫）。
 - [x] 删除旧 Analysis 生产链和相关代码（2026-11-28，`go build ./...` 与 `go test ./...` 通过，旧目录引用扫描归零）。
 - [ ] 一次性清理旧 Analysis 表及 Migration namespace（部署停服窗口操作，仓库代码已不再读写）。
-- [ ] 最终完整验收（最终 SHA 完整 CI 与部署冒烟未执行，状态 `not_run`）。
+- [ ] 最终完整验收（代码 SHA `eb695a4ee` 的 16/16 CI success；部署冒烟待用户配置后执行）。
 
 执行原则：以真实代码调用关系推进，优先连续完成同一工作组；不等待中途 CI 结果，不降低测试标准，不为迁移保留旧兼容实现。若真实能力缺口尚未闭环，明确记录阻塞项，不以删除旧入口制造“已退役”假象。
 ### 10.5 旧 Runner 阶段能力映射（按当前实现核对）
