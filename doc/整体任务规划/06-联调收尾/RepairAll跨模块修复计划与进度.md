@@ -2002,3 +2002,25 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - **源码契约同步**：`web/tests/market-stocks-navigation.test.mjs` 原断言浏览器夹具必须含"旧连接下的分页行情元数据已失效"，随语义替换改为断言固定入口 `/`、无"旧连接"失效提示、第三次响应时间戳仍被正常应用；生产 `market-stocks.js` 的失效能力断言保持不变。
 - **验证**：本地 11 个 `*-browser.mjs` 全部 exit=0；`npm test` 528/528 PASS、`npm run check`、`node --check`（改动脚本）、`git diff --check` PASS。本地仅作针对性证据。
 - **CI 状态（回填）**：提交 `e981685c5` 的 15 个 check run 全部 `completed/success`，包括 required-checks `46042989056`、Full integration checks `46042988965`、Validate WebUI source and container `46042988930`，以及 `Chromium responsive layout checks` `46042988891`。该浏览器 job 的步骤 7–22 全部 `success`，其中步骤 13–20 的 8 个此前被跳过的验收用例均真实执行并通过，无任何 `skipped` 或 `cancelled`。这是 2026-11-18 之后浏览器 smoke 首次完整绿色。
+
+## 2026-11-28 WebUI 主流程迁移到 Researchflow（进行中）
+
+- **用户决策（本轮拍板）**：首批业务链选 `quant.research` 单标的；结果区接受降级渲染（只展示 SRV-CTR-001 1.1.0 `authorized_domain_results`，明确标注非完整报告）。这两项解除了迁移盘点里"多标的拆单"与"完整报告唯一 Owner"两个产品决策阻塞；日期/窗口、factor code、task_type→模板映射按单标的固定口径处理，不臆造字段。
+- **不可替代 URL 的事实（已核对）**：`web/src/api.js` 四个 Researchflow helper（541–589）已就绪且有 528 测试保护，但 `app.js` 创建/轮询/取消/结果仍 100% 指向旧 `/api/v1/analysis/**`；取消仅 `AbortController.abort()` 停本地轮询，从不提交服务端取消。`result-read-response-1.1.0` 明确 results 非完整报告，risk 项禁止 payload。
+- **本组为一不可分割的逻辑问题**：创建/轮询/结果/取消/ID 模型与历史互相依赖，拆开会产生断链中间态，因此作为一个工作组内分三步 TDD 实施、单个提交：
+  - 步骤 1 契约层：新增纯函数模块把单标的输入构造为 1.1.0 CreateRun 命令，把 GetRun 聚合投影为 Run/Stage 状态视图（不伪造事件/Attempt），把 results 投影为降级结果视图（fail-closed 校验 `resource_kind`、risk 无 payload）。严格 TDD + 变异。
+  - 步骤 2 接线：`app.js` 创建/轮询/取消/结果切到新 helper + 契约层；事件流改 Stage 聚合轮询；task_id/run_id 双 ID 收敛为 run_ref；保留幂等键 body、内存 CSRF、超时 unknown、代际隔离与重试语义。
+  - 步骤 3 夹具与清理：更新 ui-contract / api / 浏览器夹具到新路径，清理旧 helper 的无消费者代码，文档与 CI 全量验收。
+- **状态边界**：本组只迁移页面调用链，不声称 quant.research 生产 Run 已能产出结果——真实 Run 仍需部署环境收盘后按交易日预采集涨跌停/盘口事实（见涨跌停预采集 CLI 章节），该生产前置为独立未完成项。CI 未取得结论前记 `not_run`。
+
+### 2026-11-28 步骤 1 完成：契约层 + API 高阶 helper（有真实调用方的增量）
+
+- **为什么不一次重写 app.js**：`createTask`/`pollTask`/`loadTaskRunResult` 是原子链，`app.js` 5674 行且事件分页深度耦合；`ui-contract.test.mjs` 有几十处对旧代码结构的逐字断言，11 个浏览器夹具拦截旧路径。一次性重写不可独立验收、回归面不可控。按规则 10/13，先把契约层做成有生产调用方的完整工作组，再进入接线组。
+- **新增 `web/src/researchflow-flow.js`**（纯函数契约层）：
+  - `buildQuantResearchCommand`：把单标的输入构造成 `create-run-request` 1.1.0 命令；四 Stage 同一标的，幂等键只在 body；标的格式/幂等键/factor_code/日期窗口全部 fail-closed 校验。
+  - `projectRunView`：GetRun 聚合投影为 Run/Stage 状态视图，终态判定按 domain 枚举；不含事件/Attempt 字段，拒绝无 run_ref/未知状态/跨 Run Stage。
+  - `projectResultsView`：`authorized_domain_results` 投影为降级结果视图（标注 `isFullReport:false`）；校验 `resource_kind`/`schema_version`，risk 项禁止 payload，indicator/factor/trend 必须有 payload。
+- **新增 `web/src/api.js` 三个高阶 helper**：`createQuantResearchRun` / `getQuantResearchRunView` / `getQuantResearchResultsView`，把契约层与已有 HTTP helper 组合，作为下一组 `app.js` 接线的直接入口。契约层三个函数因此全部有生产调用方，非死代码。
+- **TDD 与变异**：新增 `web/tests/researchflow-flow.test.mjs` 15 项 + `api.test.mjs` 4 项接线测试。契约层 4 处变异（移除 resource_kind 校验、放开 risk payload、放宽标的校验、写死终态判定）与高阶 helper 3 处变异（跳过契约构造、跳过 Run 投影、跳过结果投影）均有效失败并恢复。
+- **验证**：本地 `npm test` 547/547 PASS、`npm run check`、`node --check researchflow-flow.js`、`git diff --check` 全通过。
+- **剩余边界（下一组）**：`app.js` 主流程仍走旧 Analysis API；本组未改任何页面行为。完整接线需改 createTask/pollTask/loadTaskRunResult、移除事件流改 Stage 聚合轮询、把结果区改为降级渲染、新增服务端取消按钮，并同步更新 ui-contract 断言与浏览器夹具。CI 状态 `not_run`，待提交后按 SHA 回填。

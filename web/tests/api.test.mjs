@@ -8,6 +8,9 @@ import {
   cancelResearchflowRun,
   createAnalysisTask,
   createResearchflowRun,
+  createQuantResearchRun,
+  getQuantResearchRunView,
+  getQuantResearchResultsView,
   getOwnerSession,
   loginOwnerSession,
   logoutOwnerSession,
@@ -1214,6 +1217,116 @@ test("forwards caller cancellation through Researchflow helper timeouts", async 
     assert.equal(requestSignals[0].aborted, true);
   } finally {
     clearOwnerSessionMemory();
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("createQuantResearchRun 构造 1.1.0 命令并经 Root Server 创建，幂等键只在 body", async () => {
+  const originalFetch = globalThis.fetch;
+  let captured = null;
+  clearOwnerSessionMemory();
+  globalThis.fetch = async (url, init) => {
+    if (url === "/api/v1/owner/session" && init.method === "POST") {
+      return jsonResponse({ csrf_token: "qr-csrf" });
+    }
+    if (url === "/api/v1/researchflow/runs" && init.method === "POST") {
+      captured = { url: String(url), ...init };
+      return jsonResponse({ run: { run_ref: "run:quant:1" } }, 201);
+    }
+    throw new Error("unexpected fetch: " + url);
+  };
+  try {
+    const settings = { analysisBase: "/legacy", apiKey: "must-not-leak" };
+    await loginOwnerSession(settings, "pw");
+    const runRef = await createQuantResearchRun(settings, {
+      symbol: "600519.SH",
+      idempotencyKey: "quant-idem-1",
+      factorCode: "momentum_5d",
+      asOfDate: "2026-11-27"
+    });
+    assert.equal(runRef.run.run_ref, "run:quant:1");
+    assert.equal(captured.url, "/api/v1/researchflow/runs");
+    assert.equal(captured.method, "POST");
+    assert.equal(captured.headers["X-CSRF-Token"], "qr-csrf");
+    assert.equal(captured.headers["Idempotency-Key"], undefined);
+    assert.equal(captured.headers["X-API-Key"], undefined);
+    const body = JSON.parse(captured.body);
+    assert.equal(body.schema_version, "1.1.0");
+    assert.equal(body.idempotency_key, "quant-idem-1");
+    assert.equal(body.template_ref, "quant.research");
+    assert.equal(body.template_version, "1.0.0");
+    assert.deepEqual(Object.keys(body.parameters), ["stages"]);
+    assert.equal(body.parameters.stages["quant.risk"].symbol, "600519.SH");
+  } finally {
+    clearOwnerSessionMemory();
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("createQuantResearchRun 非法输入在 fetch 前失败", async () => {
+  const originalFetch = globalThis.fetch;
+  let called = false;
+  globalThis.fetch = async () => { called = true; throw new Error("should not fetch"); };
+  try {
+    await assert.rejects(createQuantResearchRun({}, { symbol: "bad", idempotencyKey: "k" }), /标的格式/);
+    await assert.rejects(createQuantResearchRun({}, { symbol: "600519.SH", idempotencyKey: "" }), /幂等键/);
+    assert.equal(called, false, "非法输入不得触发网络请求");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("getQuantResearchRunView 返回投影后的 Run/Stage 状态视图", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    if (url === "/api/v1/researchflow/runs/run%3Aquant%3A1") {
+      return jsonResponse({
+        schema_version: "1.0.0",
+        run: { run_ref: "run:quant:1", status: "running", template_ref: "quant.research", template_version: "1.0.0" },
+        stages: [{ stage_ref: "s1", run_ref: "run:quant:1", stage_code: "quant.sma20", status: "succeeded",
+          output_ref: "out-1", reason_codes: [], required: true }],
+        result_summary: null
+      });
+    }
+    throw new Error("unexpected fetch: " + url);
+  };
+  try {
+    const view = await getQuantResearchRunView({}, "run:quant:1");
+    assert.equal(view.runRef, "run:quant:1");
+    assert.equal(view.status, "running");
+    assert.equal(view.terminal, false);
+    assert.equal(view.stages.length, 1);
+    assert.equal(view.stages[0].stageCode, "quant.sma20");
+    assert.equal(view.events, undefined);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("getQuantResearchResultsView 授权领域结果投影为降级视图，非完整报告", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    if (url === "/api/v1/researchflow/runs/run%3Aquant%3A1/results") {
+      return jsonResponse({
+        schema_version: "1.1.0",
+        run_ref: "run:quant:1",
+        resource_kind: "authorized_domain_results",
+        results: [{
+          schema_version: "1.0.0", result_id: "res-1", result_type: "risk", scope: "600519.SH",
+          system_as_of: "2026-11-27T08:00:00Z", quality_status: "unknown", result_status: "rejected",
+          authorization_ref: "auth-1", payload_schema_version: "1.0.0"
+        }]
+      });
+    }
+    throw new Error("unexpected fetch: " + url);
+  };
+  try {
+    const view = await getQuantResearchResultsView({}, "run:quant:1");
+    assert.equal(view.isFullReport, false);
+    assert.equal(view.resourceKind, "authorized_domain_results");
+    assert.equal(view.items.length, 1);
+    assert.equal(view.items[0].hasPayload, false);
+  } finally {
     globalThis.fetch = originalFetch;
   }
 });

@@ -1,3 +1,5 @@
+import { buildQuantResearchCommand, projectResultsView, projectRunView } from "./researchflow-flow.js";
+
 export const SETTINGS_KEY = "stock-provider-webui.settings.v1";
 const DEFAULTS = Object.freeze({ marketBase: "/", analysisBase: "/" });
 const PERSISTED_SETTINGS = "{}";
@@ -586,4 +588,33 @@ export function getResearchflowRunResults(settings, runRef, signalOrOptions, opt
     signal: requestOptions.signal,
     timeoutMs: requestOptions.timeoutMs ?? 20000
   });
+}
+
+// ---- WebUI 主流程高阶 helper（契约层入口）----
+// 这三个函数把 researchflow-flow.js 的契约构造/投影与上面的 HTTP helper 组合，
+// 供 app.js 主流程直接使用。它们不引入新协议：命令仍走 createResearchflowRun，
+// 投影规则与契约层单元测试共享同一份纯函数实现。
+
+// 创建单标的 quant.research Run。示例输入：
+//   { symbol: "600519.SH", idempotencyKey: "k", factorCode: "momentum_5d", asOfDate: "2026-11-27", window: {...} }
+// 非法标的/幂等键/factor_code 在发请求前由契约层拒绝（同步抛错在函数内转为 rejected Promise）。
+export function createQuantResearchRun(settings, input, signalOrOptions, options = {}) {
+  let command;
+  try {
+    command = buildQuantResearchCommand(input || {});
+  } catch (error) {
+    return Promise.reject(error);
+  }
+  return createResearchflowRun(settings, command, signalOrOptions, options);
+}
+
+// 查询 Run 并返回投影后的 Run/Stage 状态视图（无事件/Attempt 伪造字段）。
+export function getQuantResearchRunView(settings, runRef, signal) {
+  return getResearchflowRun(settings, runRef, signal).then((aggregate) => projectRunView(aggregate));
+}
+
+// 读取已授权领域结果并返回降级结果视图（非完整报告，risk 无 payload）。
+export function getQuantResearchResultsView(settings, runRef, signalOrOptions, options = {}) {
+  return getResearchflowRunResults(settings, runRef, signalOrOptions, options)
+    .then((response) => projectResultsView(response));
 }
