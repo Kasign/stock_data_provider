@@ -83,6 +83,60 @@ func TestDailyBarCoverageHistoricalTimestampOnlyCalendarGapIsInformational(t *te
 	}
 }
 
+// 历史交易日历日期是稳定事实：当唯一质量缺口是上游未暴露发布时间戳、且快照已有
+// 不可变内容引用时，覆盖证据必须把日历质量视为可信，否则 Close Series 准入会因为
+// CalendarQualityStatus != valid 而永久拒绝，即使日期覆盖和 bar 质量都合格。
+func TestDailyBarCoverageHistoricalTimestampOnlyCalendarWithReferenceIsValid(t *testing.T) {
+	calendar := validTestTradingCalendar()
+	calendar.CalendarRef = "data_calendar:sha256:0000000000000000000000000000000000000000000000000000000000000000"
+	p := &testTradingCalendarProvider{snapshot: calendar}
+	svc := NewWithCapabilities([]provider.NamedProvider{p}, nil, nil, cache.NewDisabled(), nil,
+		time.Second, time.Second, 120, 2000, ResilienceConfig{}, nil)
+	svc.SetTradingCalendarProviders([]provider.TradingCalendarProvider{p})
+
+	ok, warnings, evidence := svc.dailyBarCoverageEvidence(context.Background(), "2026-10-22", "2026-10-24", 2, 2)
+	if !ok {
+		t.Fatalf("complete historical coverage should pass: warnings=%v", warnings)
+	}
+	if evidence.CalendarQualityStatus != model.QualityValid {
+		t.Fatalf("historical timestamp-only gap with a durable reference must yield valid calendar coverage, got %q: %+v",
+			evidence.CalendarQualityStatus, evidence)
+	}
+	if evidence.CoverageBasis != "exchange_calendar" || evidence.CalendarRef == "" {
+		t.Fatalf("durable reference must be preserved as exchange_calendar evidence: %+v", evidence)
+	}
+	if !containsTestWarning(warnings, "daily_bar_coverage_calendar_snapshot_time_unverified") {
+		t.Fatalf("timestamp gap must remain visible as a context warning: %v", warnings)
+	}
+	if containsTestWarning(warnings, "daily_bar_coverage_uses_degraded_trading_calendar") {
+		t.Fatalf("timestamp-only gap must not degrade calendar coverage: %v", warnings)
+	}
+	bars := []model.DailyBar{{QualityStatus: model.QualityValid}}
+	applyDailyBarCoverageWarnings(bars, warnings)
+	if bars[0].QualityStatus != model.QualityValid {
+		t.Fatalf("timestamp-only historical gap must not degrade bar quality: %+v", bars[0])
+	}
+}
+
+// 除时间戳之外还有别的降级原因时，历史日历不能被豁免。
+func TestDailyBarCoverageHistoricalCalendarWithOtherReasonStaysDegraded(t *testing.T) {
+	calendar := validTestTradingCalendar()
+	calendar.CalendarRef = "data_calendar:sha256:0000000000000000000000000000000000000000000000000000000000000000"
+	calendar.QualityReasons = []string{"provider_trading_calendar_sources_disagree"}
+	p := &testTradingCalendarProvider{snapshot: calendar}
+	svc := NewWithCapabilities([]provider.NamedProvider{p}, nil, nil, cache.NewDisabled(), nil,
+		time.Second, time.Second, 120, 2000, ResilienceConfig{}, nil)
+	svc.SetTradingCalendarProviders([]provider.TradingCalendarProvider{p})
+
+	_, warnings, evidence := svc.dailyBarCoverageEvidence(context.Background(), "2026-10-22", "2026-10-24", 2, 2)
+	if evidence.CalendarQualityStatus != model.QualityDegraded {
+		t.Fatalf("non-timestamp degradation must stay degraded, got %q: %+v", evidence.CalendarQualityStatus, evidence)
+	}
+	if !containsTestWarning(warnings, "daily_bar_coverage_uses_degraded_trading_calendar") {
+		t.Fatalf("non-timestamp degradation must keep the degraded warning: %v", warnings)
+	}
+}
+
 func TestDailyBarCoverageAsOfDoesNotConsultLiveCalendarProvider(t *testing.T) {
 	p := &testTradingCalendarProvider{snapshot: validTestTradingCalendar()}
 	svc := NewWithCapabilities([]provider.NamedProvider{p}, nil, nil, cache.NewDisabled(), nil,

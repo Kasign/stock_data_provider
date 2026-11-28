@@ -3682,8 +3682,30 @@ func (s *DataService) dailyBarCoverageEvidenceAsOf(ctx context.Context, start, e
 		evidence.CoverageBasis = "exchange_calendar_unreferenced"
 		evidence.CalendarQualityStatus = model.QualityDegraded
 	}
+	exemptHistoricalCalendarTimestampOnlyGap(&evidence, calendar)
 	evidence.Warnings = dedupeStrings(evidence.Warnings)
 	return evidence.CoverageSufficient, append([]string(nil), evidence.Warnings...), evidence
+}
+
+// exemptHistoricalCalendarTimestampOnlyGap 在历史日历仅缺上游发布时间戳、且快照已有不可变
+// 内容引用时，把覆盖证据里的日历质量视为可信：交易日日期是稳定事实，发布时间缺口不应阻塞
+// 同一评估日历引用的 Close Series 准入。该缺口仍作为上下文 warning 显式保留，不伪造
+// Provider 时间戳，也不放宽日期覆盖校验；无引用或存在其他降级原因时维持 degraded。
+func exemptHistoricalCalendarTimestampOnlyGap(evidence *DailyBarCoverageEvidence, calendar *model.TradingCalendarSnapshot) {
+	if evidence == nil || calendar == nil {
+		return
+	}
+	if evidence.CalendarQualityStatus == model.QualityValid {
+		return
+	}
+	if strings.TrimSpace(calendar.CalendarRef) == "" {
+		return
+	}
+	if !historicalCalendarTimestampOnlyDegradation(calendar) {
+		return
+	}
+	evidence.CalendarQualityStatus = model.QualityValid
+	evidence.Warnings = append(evidence.Warnings, "daily_bar_coverage_calendar_snapshot_time_unverified")
 }
 
 func (s *DataService) dailyBarCoverageEvidence(ctx context.Context, start, end string, requested, returned int) (bool, []string, DailyBarCoverageEvidence) {
@@ -3719,6 +3741,7 @@ func (s *DataService) dailyBarCoverageEvidence(ctx context.Context, start, end s
 		evidence.CalendarQualityStatus = model.QualityDegraded
 		evidence.Warnings = append(evidence.Warnings, "daily_bar_coverage_calendar_reference_unavailable")
 	}
+	exemptHistoricalCalendarTimestampOnlyGap(&evidence, calendar)
 	evidence.Warnings = dedupeStrings(evidence.Warnings)
 	return evidence.CoverageSufficient, append([]string(nil), evidence.Warnings...), evidence
 }

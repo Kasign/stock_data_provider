@@ -343,7 +343,11 @@ func ValidateAndSortBars(symbol string, bars []model.DailyBar, start, end string
 // never be created.
 func HasQualityDegradingBarWarnings(warnings []string) bool {
 	for _, warning := range warnings {
-		if warning == "" || warning == "bars_truncated_to_limit" || warning == "daily_bars_reconstructed_from_recorded_revisions" {
+		switch warning {
+		case "", "bars_truncated_to_limit", "daily_bars_reconstructed_from_recorded_revisions",
+			// 历史交易日历仅缺上游发布时间戳时，日期覆盖仍是稳定事实；该缺口保留为
+			// 上下文提示，不应把整段 PIT 序列判为 degraded（否则 DATA-CTR-007 快照永远无法创建）。
+			"daily_bar_coverage_calendar_snapshot_time_unverified":
 			continue
 		}
 		return true

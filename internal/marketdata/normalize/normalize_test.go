@@ -112,7 +112,11 @@ func TestInvalidOHLCWarningIncludesDroppedRowContext(t *testing.T) {
 }
 
 func TestBarWarningsDistinguishInformationalNoticesFromQualityLoss(t *testing.T) {
-	for _, warning := range []string{"bars_truncated_to_limit", "daily_bars_reconstructed_from_recorded_revisions"} {
+	for _, warning := range []string{
+		"bars_truncated_to_limit",
+		"daily_bars_reconstructed_from_recorded_revisions",
+		"daily_bar_coverage_calendar_snapshot_time_unverified",
+	} {
 		if HasQualityDegradingBarWarnings([]string{warning}) {
 			t.Fatalf("informational warning %q must not degrade otherwise valid bars", warning)
 		}
@@ -122,6 +126,9 @@ func TestBarWarningsDistinguishInformationalNoticesFromQualityLoss(t *testing.T)
 	}
 	if !HasQualityDegradingBarWarnings([]string{"provider_unavailable_served_from_mariadb"}) {
 		t.Fatal("stale provider fallback must degrade the result")
+	}
+	if !HasQualityDegradingBarWarnings([]string{"daily_bar_coverage_uses_degraded_trading_calendar"}) {
+		t.Fatal("genuinely degraded trading-calendar coverage must still degrade the result")
 	}
 }
 

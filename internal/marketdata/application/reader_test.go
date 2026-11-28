@@ -734,3 +734,15 @@ func TestReaderFundamentalsAndValuationsPreserveBackendErrors(t *testing.T) {
 		t.Fatal("GetValuations must reject nil context")
 	}
 }
+
+// 历史日历仅缺上游发布时间戳时，PIT 序列不能因此整体降级，否则 DATA-CTR-007
+// Close Series 会因为 aggregate quality 非 valid 而永久无法创建。
+func TestAggregateQualityTreatsHistoricalCalendarTimestampGapAsInformational(t *testing.T) {
+	bars := []model.DailyBar{{QualityStatus: model.QualityValid}}
+	if got := aggregateQuality(bars, []string{"daily_bar_coverage_calendar_snapshot_time_unverified"}); got != app.QualityValid {
+		t.Fatalf("historical calendar timestamp gap must not degrade valid PIT bars, got %q", got)
+	}
+	if got := aggregateQuality(bars, []string{"daily_bar_coverage_uses_degraded_trading_calendar"}); got != app.QualityDegraded {
+		t.Fatalf("genuinely degraded trading-calendar coverage must degrade valid PIT bars, got %q", got)
+	}
+}
