@@ -2080,6 +2080,21 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - **状态边界**：本组只处理内存命名；localStorage 键与本地记录字段已在下一组处理，旧单任务键 `TASK_REFERENCE_KEY` 与用户可见文案/CSS 仍是独立工作组。
 - **提交与 CI（回填）**：提交 `ea14d356fee30e2f97b4f46f251daeb2a5a60cde`（`refactor(webui): 清理内部状态的旧 Analysis 命名`）已推送 `repair_all`。按精确 SHA 查询，15/15 check run 全部 `completed/success`：`required-checks` [46116811055](https://github.com/Kasign/stock_data_provider/actions/runs/46116811055)、[Full integration checks](https://github.com/Kasign/stock_data_provider/actions/runs/46116810985)、[Test root Go module](https://github.com/Kasign/stock_data_provider/actions/runs/46116811007)、[WebUI checks](https://github.com/Kasign/stock_data_provider/actions/runs/46116811004)、[Chromium responsive layout checks](https://github.com/Kasign/stock_data_provider/actions/runs/46116811048)，以及各模块与 Compose 专项；无 failure、无 pending。本组代码与测试结论已取得对应 SHA 的完整 CI，未切分支、未合并、未 rebase、未强推、未重置。
 
+## 2026-11-28 WebUI 旧 Analysis 收口：活动 Run 引用键与展示层命名（代码侧完成）
+
+- **改动**：提交 `b1e8ede82890d956af6f26d78be4f7ad5a9d1c07`（`refactor(webui): 清理活动 Run 引用与展示层旧 Analysis 命名`）把 `TASK_REFERENCE_KEY`（`stock-provider-webui.last-analysis-task.v1`）改为 `RUN_REFERENCE_KEY`（`stock-provider-webui.last-run.v1`），展示层 `.recent-analysis-*` DOM/CSS 改为 `.recent-runs-*`，文案“最近分析/旧分析 API 地址/分析 API 地址”改为“最近研究 Run/其他研究服务地址/研究 API 地址”；`settings.analysisBase` 工作区连接字段与交互行为不变。
+- **验证**：先新增两条防复活断言确认红，再改实现；两次变异（键回退、DOM class 回退）均被捕获。`npm test` 561/561、`npm run check`、12 个浏览器脚本、`git diff --check` 全 PASS。
+- **CI**：按精确 SHA 查询 4/4 check run 全部 `completed/success`（required-checks、WebUI checks、WebUI browser smoke、Integration CI），无 failure/pending。WebUI-only 改动不触发 Go/Quant 专项，专项数为 4 非 15，属正常触发子集。
+- **代码侧结论**：旧 Analysis 代码链、请求入口、内部命名、本地存储与展示层命名均已收口，无待改代码项。
+
+## 2026-11-28 部署操作清单按源码取证修正（用户执行依据）
+
+- **文档**：`doc/整体任务规划/06-联调收尾/Researchflow部署启用与数据预采集操作清单.md` 重写为逐步 runbook，补充目录定位、镜像版本确认、两个独立 token、`.env` 整块配置、路由 401 判定、Owner 首次登录、预采集前置、端到端验收、停服清表与排错。
+- **源码取证纠正的 5 处错误**：Owner 登录无 CLI/默认口令（固定 `owner`，首次走 `POST /api/v1/owner/setup`）；`OWNER_SESSION_ENABLED` 由 compose 硬编码 true，写 `.env` 无效；Researchflow 无列表路由，登录态改用 `GET /api/v1/owner/session`；预采集只依赖 MariaDB、不依赖 Redis/Provider Key、需 server 先完成 Migration；`PLATFORM_SERVICE_CREDENTIALS` 为裸 JSON、不加外层引号。
+- **HTTP Cookie 陷阱**：HTTP 访问（SSH 转发 8093）必须设 `OWNER_SESSION_COOKIE_SECURE=false` 和 `OWNER_SESSION_COOKIE_NAME=owner_session`，否则默认 `__Secure-owner_session` + Secure=true 会被浏览器拒绝，表现为登录成功但刷新掉线；HTTPS 场景保持默认。
+- **交易日修正**：预采集示例日由周六 `2026-11-28` 改为最近已收盘交易日 `2026-11-27`（周五）。
+- **仍未完成**：全部为部署侧事项（容量/凭据/Owner 设置、PIT 预采集、停服清表、端到端冒烟）；RF-BLOCK-007 完整报告 projector 仍 OPEN。
+
 ## 2026-11-28 最近任务本地存储去 Analysis 化
 
 - **触发**：用户继续要求收尾旧 Analysis；盘点确认第一波后仍剩 localStorage 键 `stock-provider-webui.recent-analysis.v1` 与本地记录字段 `analysis_base`。本组只改 WebUI 本地数据形状，不碰服务端契约、`settings.analysisBase`、用户可见文案/CSS/DOM。

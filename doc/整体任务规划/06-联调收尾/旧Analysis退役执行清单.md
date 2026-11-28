@@ -3,7 +3,7 @@
 更新时间：2026-11-28（回填 WebUI 迁移、旧 Analysis 代码删除、前端 API helper 清理及三次提交 CI 结论）
 执行分支：`repair_all`（集中开发，受根目录 `AGENTS.md` 约束）
 主线目标：在保留真实研究能力的前提下，按依赖顺序退役旧 Analysis 生产链，不制造“已退役”假象。
-当前状态：WebUI 主流程迁移完成；旧 Analysis 服务端代码链、前端 API 请求入口、内部状态命名与最近任务本地存储命名均已清理；代码 SHA `bd28dfc2d` 的 15/15 CI 全绿（此前 `ad13fb30a` 15/15、`ea14d356f` 15/15、`eb695a4ee` 16/16、`1fd8222c5` 13/13 均 success）；部署配置/真实 PIT 预采集、停服清表和部署冒烟仍未完成。
+当前状态：WebUI 主流程迁移完成；旧 Analysis 服务端代码链、前端 API 请求入口、内部状态命名、最近任务本地存储、活动 Run 引用键与展示层命名均已清理（代码侧收口）；最终代码 SHA `b1e8ede82` 的 4/4 CI 全绿（此前 `bd28dfc2d` 15/15、`ad13fb30a` 15/15、`ea14d356f` 15/15、`eb695a4ee` 16/16、`1fd8222c5` 13/13 均 success）；部署操作清单已按源码取证重写为逐步 runbook；部署配置/真实 PIT 预采集、停服清表和部署冒烟仍待用户执行。
 
 ## 0. 本文定位与权威来源
 
@@ -101,7 +101,7 @@
 | # | 任务 | 主责 | 状态 | 退出条件 / 可验证证据 |
 |---|---|---|---|---|
 | 3.1 | 任务创建/幂等重放/轮询/取消/历史/详情/报告导出改接 Run Create/Get/Cancel 契约 | WebUI | 已完成主流程（2026-11-28，提交 `605c57bb9` + `d3314eeab`，15/15 CI success） | `app.js` 创建/轮询/结果改走 `createQuantResearchRun`/`getQuantResearchRunView`/`getQuantResearchResultsView`；浏览器夹具证明无旧 Analysis 请求；完整报告导出仍受 RF-BLOCK-007 阻塞，不在本项范围 |
-| 3.2 | 清除 Task ID / Event Cursor / Analysis Base / 旧 RunResult 依赖 | WebUI | 部分完成（2026-11-28：执行链、API 请求入口、内部状态命名、最近任务存储键与记录字段均已去 Analysis 化；旧单任务键 `TASK_REFERENCE_KEY` 与用户可见文案/CSS 仍属独立工作组） | 已完成：取消事件分页、双 ID 回包收敛为 `run_ref`、Stage 投影不伪造事件/Attempt、降级结果禁止归档为完整报告；源码断言禁止旧 API helper 与 `/api/v1/analysis/**` 复活；`state.lastRunResult/taskAnalysisBase/suppressedHistoryTaskBase/requestAnalysisBase` → `state.runResult/runBase/suppressedHistoryRunBase/requestRunBase`；`stock-provider-webui.recent-analysis.v1` → `stock-provider-webui.recent-runs.v1`，本地记录字段 `analysis_base` → `baseRef`；两波均有防复活断言与变异验证。未完成：`TASK_REFERENCE_KEY`（`stock-provider-webui.last-analysis-task.v1`）、`.recent-analysis-*` CSS 与“旧分析 API 地址”文案 |
+| 3.2 | 清除 Task ID / Event Cursor / Analysis Base / 旧 RunResult 依赖 | WebUI | 已完成（2026-11-28，最终代码 SHA `b1e8ede82` 的 4/4 CI 全绿，含 required-checks/WebUI checks/WebUI browser smoke/Integration CI） | 已完成：取消事件分页、双 ID 回包收敛为 `run_ref`、Stage 投影不伪造事件/Attempt、降级结果禁止归档为完整报告；源码断言禁止旧 API helper 与 `/api/v1/analysis/**` 复活；`state.lastRunResult/taskAnalysisBase/suppressedHistoryTaskBase/requestAnalysisBase` → `state.runResult/runBase/suppressedHistoryRunBase/requestRunBase`；`stock-provider-webui.recent-analysis.v1` → `stock-provider-webui.recent-runs.v1`，本地记录字段 `analysis_base` → `baseRef`；`TASK_REFERENCE_KEY`（`stock-provider-webui.last-analysis-task.v1`）→ `RUN_REFERENCE_KEY`（`stock-provider-webui.last-run.v1`）；展示层 `.recent-analysis-*` DOM/CSS → `.recent-runs-*`，“最近分析”→“最近研究 Run”、“旧分析 API 地址”→“其他研究服务地址”；三波均有防复活断言与变异验证 |
 
 ## 6. 阶段 4 · 删除与清表（一次性工作组，全部前置满足后执行）
 
@@ -154,6 +154,22 @@
 - **本地验证**：`npm test` 559/559 PASS；`npm run check` PASS；12 个 `*-browser.mjs` 全 PASS（含 `run-flow-browser.mjs`、`run-flow-outcomes-browser.mjs` 与 `browser-smoke.mjs` 的本地存储写入失败场景）；`git diff --check` PASS。临时 Playwright/postcss 依赖与截图已清理，包清单未改。
 - **仍未完成**：`TASK_REFERENCE_KEY`（`stock-provider-webui.last-analysis-task.v1`）及其迁移分支、`.recent-analysis-*` CSS 与“旧分析 API 地址”文案仍是独立工作组；部署侧配置、预采集、停服清表和冒烟仍待用户执行。
 - **提交与 CI（回填）**：提交 `bd28dfc2d154c74b479c344d97310d93bf76f47d`（`refactor(webui): 迁移最近任务本地存储命名`）已推送 `repair_all`。按精确 SHA 查询，15/15 check run 全部 `completed/success`：`required-checks` [46117557928](https://github.com/Kasign/stock_data_provider/actions/runs/46117557928)、[Full integration checks](https://github.com/Kasign/stock_data_provider/actions/runs/46117557984)、[Test root Go module](https://github.com/Kasign/stock_data_provider/actions/runs/46117557978)、[WebUI checks](https://github.com/Kasign/stock_data_provider/actions/runs/46117557903)、[Chromium responsive layout checks](https://github.com/Kasign/stock_data_provider/actions/runs/46117557923)，以及各模块与 Compose 专项；无 failure、无 pending。至此 WebUI 旧 Analysis 请求链、内部状态与本地存储命名均取得对应 SHA 的 CI 结论；`TASK_REFERENCE_KEY`、CSS/文案与部署侧事项仍未完成。
+
+## 7.4 2026-11-28 回填：活动 Run 引用键与展示层去 Analysis 化（代码侧收口）
+
+- **触发与边界**：7.3 之后 WebUI 只剩本地单任务引用键与展示层命名仍带 Analysis 字样。本组只改 WebUI 本地键名、DOM/CSS 类名与用户可见文案；不改服务端契约、不改 `settings.analysisBase` 工作区连接字段、不改交互行为，也不重建历史数据。
+- **改动映射**：`TASK_REFERENCE_KEY`（`stock-provider-webui.last-analysis-task.v1`）→ `RUN_REFERENCE_KEY`（`stock-provider-webui.last-run.v1`），并把“legacy single-task reference 迁移”注释改为当前幂等语义；`recent-analysis-*` DOM id / CSS class → `recent-runs-*`（`index.html`、`styles.css`、`app.js`、`recent-task-view.js` 及测试/浏览器夹具）；文案“最近分析”→“最近研究 Run”、“旧分析 API 地址”→“其他研究服务地址”、“分析 API 地址”→“研究 API 地址”、“完成一次分析后”→“完成一次研究后”。
+- **测试同步**：先新增两条防复活断言并确认红（活动 Run 键、展示层 DOM/CSS/文案），再改实现，随后同步逐字源码断言与行为断言。批量替换曾误伤断言中的旧词字面量，已改用 Unicode 转义保存旧词以维持断言有效。未删断言、未放宽校验。两次变异验证（键回退旧名、DOM class 回退 `recent-analysis-panel`）均被断言捕获，恢复后通过。
+- **本地验证**：`npm test` 561/561 PASS；`npm run check` PASS；12 个 `*-browser.mjs` 全 PASS；`git diff --check` PASS。临时依赖与截图已清理。
+- **提交与 CI（回填）**：提交 `b1e8ede82890d956af6f26d78be4f7ad5a9d1c07`（`refactor(webui): 清理活动 Run 引用与展示层旧 Analysis 命名`）已推送 `repair_all`。按精确 SHA 查询，4/4 check run 全部 `completed/success`：`required-checks` [46119296163](https://github.com/Kasign/stock_data_provider/actions/runs/46119296163)、[WebUI checks](https://github.com/Kasign/stock_data_provider/actions/runs/46119296134)、[WebUI browser smoke](https://github.com/Kasign/stock_data_provider/actions/runs/46119296123)、[Integration CI](https://github.com/Kasign/stock_data_provider/actions/runs/46119296118)；无 failure、无 pending。WebUI-only 改动不触发 Go/Quant 专项，故为 4 项而非此前的 15 项，不是漏跑。
+- **代码侧结论**：旧 Analysis 请求入口、服务端生产链、内部命名、本地存储与展示层命名均已收口。剩余全部为部署侧事项。
+
+## 7.5 2026-11-28 回填：部署操作清单按源码取证修正
+
+- **依据**：对部署机细节做只读核查，发现原操作清单有 5 处会直接导致用户配错：Owner 登录无 CLI/默认口令，身份固定 `owner`，首次走「设置 → 安全与备份」的 `POST /api/v1/owner/setup`；`OWNER_SESSION_ENABLED` 由 `docker-compose.yml:12` 硬编码 true，写进 `.env` 无效；Researchflow 没有列表路由，登录态应用 `GET /api/v1/owner/session` 判断；预采集只依赖 MariaDB，不依赖 Redis/Provider Key，但需 server 先完成 Migration；`.env.example:376` 的 `PLATFORM_SERVICE_CREDENTIALS` 是裸 JSON、不加外层引号。
+- **关键陷阱**：当前部署为 HTTP（SSH 转发 8093），`docker-compose.yml:16` 默认 `OWNER_SESSION_COOKIE_SECURE=true` 且 Cookie 名默认 `__Secure-owner_session`，浏览器在 HTTP 下会拒绝该 Cookie，表现为登录成功但一刷新掉线。清单已补充 HTTP 场景必须设 `OWNER_SESSION_COOKIE_SECURE=false` 与 `OWNER_SESSION_COOKIE_NAME=owner_session`（与 `.env.example:459/461` 一致），HTTPS 反向代理场景保持默认。
+- **交易日修正**：原清单预采集示例使用 `2026-11-28`，该日为周六；已改为最近已收盘交易日 `2026-11-27`（周五），并明确周末/节假日 Run 会被 risk Stage 门禁拒绝。
+- **文档范围**：`./Researchflow部署启用与数据预采集操作清单.md` 已重写为逐步 runbook，含四个地址/路径、目录定位、镜像版本确认、两个独立 token、`.env` 整块配置、路由 401 判定、Owner 首次登录、预采集前置、端到端验收、停服清表与排错。
 
 ## 8. 执行口径
 
