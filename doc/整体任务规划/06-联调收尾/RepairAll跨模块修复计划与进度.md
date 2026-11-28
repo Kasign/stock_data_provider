@@ -2043,4 +2043,5 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - **新增纯函数模块（TDD+变异）**：`researchflow-flow-adapters.js`（7 测试，1 变异有效）、`researchflow-result-view.js`（6 测试，2 变异有效）；契约层已有 15 测试。
 - **测试护城河同步更新**：`ui-contract.test.mjs` 18 个失败用例断言改验证新契约（无放宽/删除），终态聚合用例补强后变异有效（跳过降级分支被捕获）；`npm test` 560/560、`npm run check` 全绿。
 - **浏览器夹具**：`run-flow-browser.mjs` 已迁移（轮询次数、结果读取次数、Stage 状态标签、非完整报告标注、risk 无 payload 断言）；`run-flow-outcomes-browser.mjs`、`stock-research-browser.mjs` 迁移中。
-- **状态边界**：本组只迁移页面调用链；服务端旧 Analysis 删除为下一组；部署配置与数据预采集由用户按清单执行，未取得 CI 结论前状态 `not_run`。
+- **状态边界**：本组只迁移页面调用链；服务端旧 Analysis 删除为下一组；部署配置与数据预采集由用户按清单执行。
+- **提交与 CI**：提交 `605c57bb9592059d16f1e9f187a5e179e5583894`（`feat(webui): 页面主流程从旧 Analysis 迁移到 Researchflow`）已推送 repair_all；按精确 SHA 查询 15/15 check run 全部 `completed/success`，含 required-checks、Full integration checks、Validate WebUI source and container、Chromium responsive layout checks。Chromium job 中新增的 `Run Researchflow create flow acceptance` 步骤 `completed/success`，与 Run Flow / Stock Research 各验收步骤均真实执行（无 skipped）。本地 13 个浏览器测试按退出码全 PASS，`npm test` 560/560、`npm run check` 通过。
