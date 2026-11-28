@@ -2003,7 +2003,7 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - **验证**：本地 11 个 `*-browser.mjs` 全部 exit=0；`npm test` 528/528 PASS、`npm run check`、`node --check`（改动脚本）、`git diff --check` PASS。本地仅作针对性证据。
 - **CI 状态（回填）**：提交 `e981685c5` 的 15 个 check run 全部 `completed/success`，包括 required-checks `46042989056`、Full integration checks `46042988965`、Validate WebUI source and container `46042988930`，以及 `Chromium responsive layout checks` `46042988891`。该浏览器 job 的步骤 7–22 全部 `success`，其中步骤 13–20 的 8 个此前被跳过的验收用例均真实执行并通过，无任何 `skipped` 或 `cancelled`。这是 2026-11-18 之后浏览器 smoke 首次完整绿色。
 
-## 2026-11-28 WebUI 主流程迁移到 Researchflow（进行中）
+## 2026-11-28 WebUI 主流程迁移到 Researchflow（已完成）
 
 - **用户决策（本轮拍板）**：首批业务链选 `quant.research` 单标的；结果区接受降级渲染（只展示 SRV-CTR-001 1.1.0 `authorized_domain_results`，明确标注非完整报告）。这两项解除了迁移盘点里"多标的拆单"与"完整报告唯一 Owner"两个产品决策阻塞；日期/窗口、factor code、task_type→模板映射按单标的固定口径处理，不臆造字段。
 - **不可替代 URL 的事实（已核对）**：`web/src/api.js` 四个 Researchflow helper（541–589）已就绪且有 528 测试保护，但 `app.js` 创建/轮询/取消/结果仍 100% 指向旧 `/api/v1/analysis/**`；取消仅 `AbortController.abort()` 停本地轮询，从不提交服务端取消。`result-read-response-1.1.0` 明确 results 非完整报告，risk 项禁止 payload。
@@ -2034,7 +2034,7 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - **"没数据"三层根因**：① 部署配置：Researchflow 容量未配（404）；② 数据：quant.research 依赖真实 PIT 事实（日线/交易状态/盘口/涨跌停），生产无自动预采集，"真库 L3"种子全在 `_test.go`；③ 前端：主流程 100% 走旧 Analysis API（401），浏览器夹具 mock 旧端点掩盖真实差异。
 - **交付**：`doc/整体任务规划/06-联调收尾/Researchflow部署启用与数据预采集操作清单.md`，含容量/Owner Session/凭据配置、涨跌停与盘口预采集 CLI 命令、端到端验证步骤、已知边界（完整报告 projector 为 nil、交易日语义）。
 
-## 2026-11-28 WebUI 主流程迁移到 Researchflow（接线组，进行中）
+## 2026-11-28 WebUI 主流程迁移到 Researchflow（接线组，已完成）
 
 - **改造范围**：`web/src/app.js` 的 `createTask`/`pollTask`/`loadTaskRunResult` 数据源从旧 Analysis API 切到 Researchflow 高阶 helper；`createAnalysisTask/getAnalysisTask/getAnalysisTaskEvents/getAnalysisRun` 全部移除导入。
   - 创建：`createQuantResearchRun`，首批单标的取 `researchSymbol(symbols[0])`（六位代码补 .SH/.SZ/.BJ），幂等键留空时本地生成；回包 `{run,stages}` 取 `run.run_ref` 作为 task_id/run_id。
@@ -2045,3 +2045,16 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - **浏览器夹具**：`run-flow-browser.mjs` 已迁移（轮询次数、结果读取次数、Stage 状态标签、非完整报告标注、risk 无 payload 断言）；`run-flow-outcomes-browser.mjs`、`stock-research-browser.mjs` 迁移中。
 - **状态边界**：本组只迁移页面调用链；服务端旧 Analysis 删除为下一组；部署配置与数据预采集由用户按清单执行。
 - **提交与 CI**：提交 `605c57bb9592059d16f1e9f187a5e179e5583894`（`feat(webui): 页面主流程从旧 Analysis 迁移到 Researchflow`）已推送 repair_all；按精确 SHA 查询 15/15 check run 全部 `completed/success`，含 required-checks、Full integration checks、Validate WebUI source and container、Chromium responsive layout checks。Chromium job 中新增的 `Run Researchflow create flow acceptance` 步骤 `completed/success`，与 Run Flow / Stock Research 各验收步骤均真实执行（无 skipped）。本地 13 个浏览器测试按退出码全 PASS，`npm test` 560/560、`npm run check` 通过。
+
+## 2026-11-28 服务端旧 Analysis 彻底删除（代码链，待提交）
+
+- **用户决策与范围**：用户要求从“能用”角度深度审查并要求“前后端一起彻底删”；部署配置与数据问题按已交付的 `./Researchflow部署启用与数据预采集操作清单.md` 由用户自行执行。本组只处理服务端旧 Analysis 代码链删除及其必要上下游。
+- **基线与纪律**：工作组开始/结束核对 `repair_all`，HEAD 与 `origin/repair_all` 均为 `d3314eeabb7816260b2c9c615da7bfe78576e907`；未切分支、未合并、未 rebase、未强推、未重置历史。删除前对 8 组待删包执行针对性测试，全部 PASS，证明是按决策退役旧链，不是用删测试掩盖失败。
+- **配置测试修复（本组首个中断点）**：复现 `LoadHTTP` 参数过多和 `Process.Analysis*` 字段未定义的编译失败；把 `config_test.go` 的 5 处调用改为单参数并把默认写超时断言改为 `25s`；把 `process_test.go` 的旧字段断言替换为“旧 `ANALYSIS_*` 不再被读取”和 Researchflow 快照稳定性断言。`go test ./internal/server/config/`、`go test ./internal/server/bootstrap/`、`go build ./...` 通过。
+- **删除范围**：`internal/analysis/**`、`internal/service/**`、`internal/platform/httpapi/**`、`internal/platform/taskqueue/**`、`internal/server/marketdata/**`、`internal/adapters/storage/errors.go`、`internal/adapters/storage/mysqlredis/store.go`、`store_resources_test.go`、`cmd/demo/`、`cmd/storage-check/`；Makefile 去掉 `demo` / `storage-check` 目标。
+- **装配与存储收敛**：`newHTTPHandler` 去掉 `legacy` 参数与旧 Analysis 六条路由，根路径信息迁入 health handler；bootstrap 删除旧 Collector/Runner/TaskQueue/Worker/HTTP handler 与 `"analysis"` migration namespace；`OpenApplicationResources` 收敛为 `(*Resources, error)`；mysqlredis Config 删除仅服务旧 Store 的 Redis 键前缀/缓存 TTL 与 `LoadConfigFromEnv`/`RedisKey`；删除无调用方的 `resources.Storage` 别名并同步测试。
+- **保留边界**：`cmd/analysis-api` 启动入口、Owner Session/CSRF、Health/Ready、平台公共能力，以及 `internal/marketdata/app/port.go` / `internal/marketdata/application/reader.go` 的 `DailyBarsV2Reader`（Quant/Researchflow 真实 PIT 日线能力）保持不变。
+- **测试护城河同步**：`web/tests/ui-contract.test.mjs` 删除对已删除 Go 源码的读取，改为对照 `create-run-request-1.1.0`、`run-aggregate-response-1.0.0`、`result-read-response-1.1.0` 三个 Schema 与 Researchflow 适配器；断言覆盖 `authorized_domain_results`、非完整报告标注、risk 无 payload、八种 Run 状态和 cancelled→failed。181/181 PASS，未删减或放宽断言。
+- **本地验证结果**：`gofmt -l` 关注目录无输出；`go build ./...` PASS；`go test ./...` PASS；`npm test` 561/561 PASS；Web 契约测试 181/181 PASS；旧 Go 导入路径、旧命令、旧表名在生产代码/Makefile 中扫描归零。
+- **文档同步**：回填 `./旧Analysis退役执行清单.md`（阶段 3/4/5 状态、工作组证据）与 `./WebUI旧Analysis到Researchflow迁移盘点.md`（当前收尾口径、10.1/10.4 状态）；历史日期记录保留作审计证据，不冒充当前状态。
+- **未解决事项与 CI 状态**：部署侧容量/凭据与真实 PIT 预采集由用户按清单执行；停服窗口清 `analysis_*` 四表与 migration namespace 待执行；完整报告 projector 仍为 RF-BLOCK-007 OPEN。本工作组尚未提交，最终 SHA 的 `required-checks` 与浏览器验收状态记 `not_run`；`605c57bb9` / `d3314eeab` 的 15/15 success 仅代表 WebUI 迁移提交，不能替代本组验收。

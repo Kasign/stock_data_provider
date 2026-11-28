@@ -2,10 +2,20 @@
 
 - 仓库：`Kasign/stock_data_provider`
 - 核对分支：`repair_all`
-- 核对基线：`43d773877a20f99325843650f1f8d0799d03ffe8`
-- 核对日期：2026-11-26
-- 状态：**旧 Analysis 生产链仍在运行；Researchflow 已有 News 与 Quant 的生产模板切片，但尚不具备完整股票研究报告闭环；本次更新为退役执行基线，尚未删除旧链**
+- 初始核对基线：`43d773877a20f99325843650f1f8d0799d03ffe8`
+- 核对日期：2026-11-26；当前口径更新：2026-11-28
+- 状态（2026-11-28）：**WebUI 主流程已迁移到 Researchflow；旧 Analysis 生产链代码已删除；部署侧仍需按清单启用 Researchflow 容量并预采集真实 PIT 事实数据；完整报告正文仍未生成；最终 SHA 的完整 CI 与部署冒烟待执行。**
 - 目标：WebUI 业务任务统一使用 SRV-CTR-001 Researchflow API 和 Owner Session；不保留旧 Analysis API 的浏览器兼容入口，不增加 Bearer/Session 双认证。
+- 阅读口径：第 1、3、4、8、10 节中“旧链仍在运行/页面仍调用旧 API/尚未删除”等表述是 2026-11-26 至 2026-11-27 的盘点记录，仅作历史证据；当前状态以本节和 `./旧Analysis退役执行清单.md` 为准。
+
+## 0. 2026-11-28 收尾口径（当前）
+
+- **WebUI**：创建/轮询/结果切到 `createQuantResearchRun`、`getQuantResearchRunView`、`getQuantResearchResultsView`；结果区只展示 SRV-CTR-001 1.1.0 `authorized_domain_results` 并明确标注“非完整研究报告”；降级结果不得归档为完整报告。
+- **Server**：`/api/v1/analysis/**` 路由与旧 Runner/TaskQueue/Worker/Collector/Migration 装配全部移除；根路径服务信息由 `internal/server/health/handler.go` 提供；`OpenApplicationResources` 返回值收敛为 `(*Resources, error)`。
+- **已删除代码**：`internal/analysis/**`、`internal/service/**`、`internal/platform/httpapi/**`、`internal/platform/taskqueue/**`、`internal/server/marketdata/**`、`internal/adapters/storage/errors.go`、`internal/adapters/storage/mysqlredis/store.go` 与 `store_resources_test.go`、`cmd/demo/`、`cmd/storage-check/`；Makefile 移除 `demo` / `storage-check` 目标。
+- **保留边界**：`cmd/analysis-api` 启动入口、Owner Session/CSRF、Health/Ready、平台公共能力和 `internal/marketdata/app/port.go` / `internal/marketdata/application/reader.go` 中的 `DailyBarsV2Reader`（Quant/Researchflow 真实 PIT 日线能力）。
+- **验收证据（本地）**：`go build ./...`、`go test ./...`、`npm test` 561/561 通过；`web/tests/ui-contract.test.mjs` 已从旧 Go 源码断言切换到 Researchflow Schema 与适配器契约，181/181 通过。
+- **未完成**：部署侧 `.env` 容量/凭据与预采集由用户按 `./Researchflow部署启用与数据预采集操作清单.md` 执行；停服窗口清表和 Migration namespace 清理待执行；最终 SHA 完整 CI 与部署冒烟状态记 `not_run`。
 
 ## 1. 当前结论
 
@@ -363,14 +373,14 @@ analysisd 当前明确要求 GO_CORE_TOKEN、PYTHON_BRIDGE_TOKEN、PYTHON_BRIDGE
 
 可勾选的任务清单、责任模块与退出条件已收敛到 [旧Analysis退役执行清单](./旧Analysis退役执行清单.md)；本节继续作为该清单的事实源与调用链证据，任务状态与勾选以清单为准。
 
-### 10.1 当前边界（已由代码确认）
+### 10.1 当时边界（2026-11-27 代码确认；2026-11-28 已按收尾口径删除）
 
 - Root Server 是唯一外部 HTTP 入口和组合根；Researchflow 只提供内部 Application/执行编排，不独立启动 HTTP Listener、不直接暴露外部 API。
 - WebUI 通过 Root Server 调用 SRV-CTR-001；Server 负责认证、路由、DTO 和领域 Owner Facade 装配。
-- 旧 Analysis 仍在 Bootstrap 中创建旧 Runner、Task Queue、HTTP API，并注册 legacyAnalysisWorker；Router 仍注册 /api/v1/analysis/**。因此旧链不是无调用方的死代码，不能直接删除。
-- cmd/analysis-api 当前调用 bootstrap.Run，是 Root Server 的程序入口；不得因为命名含 Analysis 而删除该入口或部署构建目标。
-- internal/platform/httpapi 除旧 Analysis API 外还承载根路径服务信息响应；退役时须把仍需要的根路径行为迁至 Root Server，再删除旧 Handler。
-- Migration Registry 严格校验已应用 namespace 集合。移除 analysis 注册前，必须按一次性退役步骤清理旧四表及 platform_schema_migrations.namespace='analysis' 记录；不保留永久兼容 namespace。
+- 当时旧 Analysis 仍在 Bootstrap 中创建旧 Runner、Task Queue、HTTP API，并注册 legacyAnalysisWorker；Router 仍注册 /api/v1/analysis/**。2026-11-28 这些装配、路由和代码已整体删除。
+- cmd/analysis-api 调用 bootstrap.Run，是 Root Server 的程序入口；不因命名含 Analysis 而删除该入口或部署构建目标。
+- internal/platform/httpapi 曾承载根路径服务信息响应；该行为已迁至 Root Server 的 health handler 后旧 Handler 才删除。
+- Migration Registry 严格校验已应用 namespace 集合。代码注册已移除；旧四表及 `platform_schema_migrations.namespace='analysis'` 记录仍需在部署停服窗口一次性清理。
 
 ### 10.2 退役前不可跳过的真实能力缺口
 
@@ -396,10 +406,10 @@ analysisd 当前明确要求 GO_CORE_TOKEN、PYTHON_BRIDGE_TOKEN、PYTHON_BRIDGE
 - [x] 确认旧 Analysis 仍有 WebUI、Server Router、Bootstrap、Worker 和 Migration 实际引用。
 - [x] 完成旧 Runner 逐阶段能力映射；已核对 Quant 现有因子/趋势/风险构件与生产 Stage 的差异。
 - [x] 补齐完整股票研究模板、领域结果关联和 Server 授权读取（2026-11-27 校准：2.1 `quant.research@1.0.0` 四 Stage、2.2 Quant/News 授权结果读取、2.3 `GET /api/v1/researchflow/runs/{run_ref}/results` 均已完成；完整报告正文仍待 RF-BLOCK-007）。
-- [ ] WebUI 完成 Researchflow 迁移。
-- [ ] 删除旧 Analysis 生产链和相关代码。
-- [ ] 一次性清理旧 Analysis 表及 Migration namespace。
-- [ ] 最终完整验收。
+- [x] WebUI 完成 Researchflow 迁移（2026-11-28，创建/轮询/结果/降级渲染/归档守卫）。
+- [x] 删除旧 Analysis 生产链和相关代码（2026-11-28，`go build ./...` 与 `go test ./...` 通过，旧目录引用扫描归零）。
+- [ ] 一次性清理旧 Analysis 表及 Migration namespace（部署停服窗口操作，仓库代码已不再读写）。
+- [ ] 最终完整验收（最终 SHA 完整 CI 与部署冒烟未执行，状态 `not_run`）。
 
 执行原则：以真实代码调用关系推进，优先连续完成同一工作组；不等待中途 CI 结果，不降低测试标准，不为迁移保留旧兼容实现。若真实能力缺口尚未闭环，明确记录阻塞项，不以删除旧入口制造“已退役”假象。
 ### 10.5 旧 Runner 阶段能力映射（按当前实现核对）

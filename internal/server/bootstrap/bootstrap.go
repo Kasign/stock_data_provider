@@ -1,6 +1,5 @@
-// Package bootstrap assembles the transitional Root Server runtime.
-// Legacy Analysis components remain behind this boundary until their owning
-// modules expose production-ready Application Ports and lifecycle contracts.
+// Package bootstrap assembles the Root Server runtime from production module ports.
+// Legacy Analysis has been retired; this boundary owns shared lifecycle and HTTP composition only.
 package bootstrap
 
 import (
@@ -14,8 +13,6 @@ import (
 	"time"
 
 	"example.com/stock-analysis-flow/internal/adapters/storage/mysqlredis"
-	analysisstorage "example.com/stock-analysis-flow/internal/analysis/storage"
-	marketdataapp "example.com/stock-analysis-flow/internal/marketdata/app"
 	marketdatabootstrap "example.com/stock-analysis-flow/internal/marketdata/bootstrap"
 	marketdataconfig "example.com/stock-analysis-flow/internal/marketdata/config"
 	newssource "example.com/stock-analysis-flow/internal/news/adapters/source"
@@ -28,10 +25,8 @@ import (
 	notificationstorage "example.com/stock-analysis-flow/internal/notification/storage"
 	"example.com/stock-analysis-flow/internal/platform/config"
 	platformdiagnostics "example.com/stock-analysis-flow/internal/platform/diagnostics"
-	"example.com/stock-analysis-flow/internal/platform/httpapi"
 	platformsecurity "example.com/stock-analysis-flow/internal/platform/security"
 	platformstorage "example.com/stock-analysis-flow/internal/platform/storage"
-	"example.com/stock-analysis-flow/internal/platform/taskqueue"
 	platformtime "example.com/stock-analysis-flow/internal/platform/time"
 	quantstorage "example.com/stock-analysis-flow/internal/quant/storage"
 	researchapplication "example.com/stock-analysis-flow/internal/research/application"
@@ -40,13 +35,11 @@ import (
 	serverconfig "example.com/stock-analysis-flow/internal/server/config"
 	serverdiagnostics "example.com/stock-analysis-flow/internal/server/diagnostics"
 	serverhealth "example.com/stock-analysis-flow/internal/server/health"
-	servermarketdata "example.com/stock-analysis-flow/internal/server/marketdata"
 	servermigration "example.com/stock-analysis-flow/internal/server/migration"
 	serverrelay "example.com/stock-analysis-flow/internal/server/relay"
 	serverresources "example.com/stock-analysis-flow/internal/server/resources"
 	runtime "example.com/stock-analysis-flow/internal/server/runtime"
 	serversecurity "example.com/stock-analysis-flow/internal/server/security"
-	"example.com/stock-analysis-flow/internal/service"
 )
 
 // Run loads process configuration, assembles the currently supported runtime,
@@ -86,10 +79,6 @@ func Run(ctx context.Context) (runErr error) {
 	if serverRole != serverconfig.RoleWorker {
 		shutdownTimeout = processConfig.HTTP.ShutdownTimeout
 	}
-	analysisTimeout := processConfig.AnalysisTimeout
-	workers := processConfig.AnalysisWorkers
-	maxQueued := processConfig.AnalysisMaxQueued
-
 	var authenticator *platformsecurity.Authenticator
 	if serverRole != serverconfig.RoleWorker {
 		authenticator, err = platformsecurity.NewAuthenticator(processConfig.Security.OwnerToken, processConfig.Security.ServiceCredentials)
@@ -104,7 +93,7 @@ func Run(ctx context.Context) (runErr error) {
 	}
 
 	startupCtx, startupCancel := context.WithTimeout(ctx, 15*time.Second)
-	storageResources, store, err := serverresources.OpenApplicationResources(startupCtx, storageCfg, migrationDB)
+	storageResources, err := serverresources.OpenApplicationResources(startupCtx, storageCfg, migrationDB)
 	startupCancel()
 	if err != nil {
 		_ = migrationDB.Close()
@@ -207,32 +196,7 @@ func Run(ctx context.Context) (runErr error) {
 		}
 	}
 
-	// 旧 Analysis Collector 默认拉取 200 根日线；沿用该历史窗口，并受 Data MaxDailyBars 上限约束。
-	historyLimit := marketDataCfg.DefaultDailyBars
-	if historyLimit < 200 {
-		historyLimit = 200
-	}
-	if historyLimit > marketDataCfg.MaxDailyBars {
-		historyLimit = marketDataCfg.MaxDailyBars
-	}
-	indexSymbols := parseMarketDataIndexSymbols(os.Getenv("MARKET_DATA_INDEX_SYMBOLS"))
-	analysisCollector, err := servermarketdata.NewAnalysisCollector(
-		marketDataModule.Application(), historyLimit,
-		marketdataapp.AdjustmentBasis(marketDataCfg.Adjustment), indexSymbols,
-	)
-	if err != nil {
-		return fmt.Errorf("创建 Data Application Port 适配器失败: %w", err)
-	}
-	runner, err := service.NewRunnerWithDataCollector(analysisCollector, store, store)
-	if err != nil {
-		return fmt.Errorf("创建分析 Runner 失败: %w", err)
-	}
 	httpConfig := processConfig.HTTP
-
-	tasks, err := taskqueue.New(store.DB, runner, workers, maxQueued, analysisTimeout, 250*time.Millisecond)
-	if err != nil {
-		return fmt.Errorf("创建旧 Analysis 异步任务队列失败: %w", err)
-	}
 
 	lifecycle, err = runtime.NewLifecycleWithRollbackTimeout(shutdownTimeout)
 	if err != nil {
@@ -265,10 +229,6 @@ func Run(ctx context.Context) (runErr error) {
 			}
 		}
 	}
-	if err := lifecycle.Register(legacyAnalysisWorker{name: "legacy-analysis-worker", queue: tasks, enabled: serverRole == serverconfig.RoleWorker || serverRole == serverconfig.RoleAll}); err != nil {
-		return fmt.Errorf("注册旧 Analysis Worker 生命周期失败: %w", err)
-	}
-
 	if serverRole != serverconfig.RoleAPI {
 		relay, relayErr := newResearchNotificationRelay(storageResources, processConfig.ResearchNotificationRelay)
 		if relayErr != nil {
@@ -310,10 +270,6 @@ func Run(ctx context.Context) (runErr error) {
 	}
 	var httpComponent *httpServerComponent
 	if serverRole != serverconfig.RoleWorker {
-		api, err := httpapi.NewWithTasks(runner, store, analysisTimeout, tasks)
-		if err != nil {
-			return fmt.Errorf("创建旧 Analysis HTTP API 失败: %w", err)
-		}
 		diagnosticsService, err := newDiagnosticsService(storageResources, migrationRegistry, newsConfig, newsRepository, marketDataModule)
 		if err != nil {
 			return fmt.Errorf("创建 Server 诊断服务失败: %w", err)
@@ -322,7 +278,7 @@ func Run(ctx context.Context) (runErr error) {
 		if err != nil {
 			return fmt.Errorf("创建 Health/Readiness Handler 失败: %w", err)
 		}
-		handler, err := newHTTPHandler(authenticator, healthHandler, api.Handler(), marketDataModule.InProcessHandler(), ownerSession)
+		handler, err := newHTTPHandler(authenticator, healthHandler, marketDataModule.InProcessHandler(), ownerSession)
 		if err != nil {
 			return fmt.Errorf("注册 HTTP 路由失败: %w", err)
 		}
@@ -543,26 +499,6 @@ func stopConsumersThenCloseResources(
 	return closeResources()
 }
 
-type legacyAnalysisWorker struct {
-	name    string
-	queue   *taskqueue.Queue
-	enabled bool
-}
-
-func (w legacyAnalysisWorker) Name() string { return w.name }
-func (w legacyAnalysisWorker) Start(ctx context.Context) error {
-	if !w.enabled {
-		return nil
-	}
-	// Worker 的停止由 Lifecycle 统一控制，避免 SIGTERM 先取消 Worker、
-	// 反而早于 HTTP 在途请求完成；Queue.Close 会取消内部运行 Context。
-	return w.queue.Start(context.WithoutCancel(ctx))
-}
-func (w legacyAnalysisWorker) Stop(context.Context) error {
-	w.queue.Close()
-	return nil
-}
-
 func newJSONLogger(rawLevel string) *slog.Logger {
 	return slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: logLevel(rawLevel)}))
 }
@@ -589,7 +525,6 @@ func newMigrationRegistry() (*servermigration.Registry, error) {
 		migrations []platformstorage.Migration
 	}{
 		{namespace: marketdatabootstrap.MigrationNamespace, migrations: marketdatabootstrap.MigrationDefinitions()},
-		{namespace: analysisstorage.MigrationNamespace, migrations: analysisstorage.Migrations()},
 		{namespace: newsstorage.MigrationNamespace, migrations: newsstorage.Migrations()},
 		{namespace: platformsecurity.OwnerCredentialMigrationNamespace, migrations: platformsecurity.OwnerCredentialMigrations()},
 		{namespace: researchstorage.MigrationNamespace, migrations: researchstorage.Migrations()},

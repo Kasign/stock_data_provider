@@ -2,21 +2,19 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-const [html, appSource, format, domain, openapi, recentTaskModule, stylesheet, watchlistModule, apiClient, taskQueue, marketActivity, stockResearch, marketOverview, serviceWiring, dataCenter, healthCheck, marketHTTPServer, marketOpenAPI, marketStocksModule, notificationPreferences, taskWorkflow, localAlertDrafts, taskEventFormat, taskEventView, taskEventNode, taskResultView, watchlistItemView] = await Promise.all([
+const [html, appSource, format, createRunSchema, runAggregateSchema, recentTaskModule, stylesheet, watchlistModule, apiClient, marketActivity, stockResearch, marketOverview, dataCenter, healthCheck, marketHTTPServer, marketOpenAPI, marketStocksModule, notificationPreferences, taskWorkflow, localAlertDrafts, taskEventFormat, taskEventView, taskEventNode, taskResultView, watchlistItemView] = await Promise.all([
   readFile(new URL("../index.html", import.meta.url), "utf8"),
   readFile(new URL("../src/app.js", import.meta.url), "utf8"),
   readFile(new URL("../src/format.js", import.meta.url), "utf8"),
-  readFile(new URL("../../internal/analysis/domain/types.go", import.meta.url), "utf8"),
-  readFile(new URL("../../doc/api/contracts/分析任务.openapi.yaml", import.meta.url), "utf8"),
+  readFile(new URL("../../doc/server/schema/SRV-CTR-001/create-run-request-1.1.0.schema.json", import.meta.url), "utf8"),
+  readFile(new URL("../../doc/server/schema/SRV-CTR-001/run-aggregate-response-1.0.0.schema.json", import.meta.url), "utf8"),
   readFile(new URL("../src/recent-tasks.js", import.meta.url), "utf8"),
   readFile(new URL("../styles.css", import.meta.url), "utf8"),
   readFile(new URL("../src/watchlist.js", import.meta.url), "utf8"),
   readFile(new URL("../src/api.js", import.meta.url), "utf8"),
-  readFile(new URL("../../internal/platform/taskqueue/queue.go", import.meta.url), "utf8"),
   readFile(new URL("../src/market-activity.js", import.meta.url), "utf8"),
   readFile(new URL("../src/stock-research.js", import.meta.url), "utf8"),
   readFile(new URL("../src/market-overview.js", import.meta.url), "utf8"),
-  readFile(new URL("../../internal/service/wiring.go", import.meta.url), "utf8"),
   readFile(new URL("../src/data-center.js", import.meta.url), "utf8"),
   readFile(new URL("../src/health-check.js", import.meta.url), "utf8"),
   readFile(new URL("../../internal/marketdata/httpapi/server.go", import.meta.url), "utf8"),
@@ -123,44 +121,57 @@ test("自选股导入预览视图模块只构建 DOM，不接管页面状态或�
   assert.doesNotMatch(watchlistImportPreviewView, /localStorage|document\.querySelector|addEventListener|fetch\s*\(/);
 });
 
-test("structured result renderer uses fields declared by Go RunResult", () => {
-  const requiredFields = [
-    "market_state",
-    "factors",
-    "signals",
-    "tradability",
-    "risk",
-    "plans",
-    "planning_rejections",
-    "execution_assessment",
-    "failure",
-    "warnings"
+test("Researchflow result renderer uses fields declared by the authorized result schema", () => {
+  const schemaFields = [
+    "run_ref",
+    "resource_kind",
+    "results",
+    "result_id",
+    "result_type",
+    "scope",
+    "system_as_of",
+    "quality_status",
+    "result_status",
+    "authorization_ref",
+    "payload_schema_version"
   ];
-  for (const field of requiredFields) {
-    assert.match(domain, new RegExp('json:"' + field + '(?:,[^"]*)?"'), "Go domain model must declare " + field);
-    assert.ok(taskResultView.includes("result." + field), "Run result adapter must render result." + field);
+  for (const field of schemaFields) {
+    assert.match(researchflowResultContract, new RegExp('"' + field + '"'), "result schema must declare " + field);
   }
-  assert.doesNotMatch(taskResultView, /signal\.(score|confidence|rationale|reason)\b/, "do not display fields absent from CandidateSignal");
+  for (const field of ["resultType", "qualityStatus", "systemAsOf", "authorizationRef", "resultId", "resultStatus"]) {
+    assert.ok(researchflowResultView.includes("item." + field), "degraded result renderer must use item." + field);
+  }
+  assert.match(researchflowResultContract, /"const": "authorized_domain_results"/);
+  assert.match(researchflowResultContract, /"result_type": \{[\s\S]*?"risk"/);
+  assert.match(researchflowResultView, /item\.resultType === "risk"[\s\S]*?item\.payload !== undefined/);
+  assert.match(researchflowResultView, /非完整研究报告/);
   assert.doesNotMatch(app, /completed_stages\s*\?\?\s*0/, "missing stage counts must not be fabricated as zero");
   assert.match(html, /id="task-create-feedback"/, "task submission errors should be shown inline");
 });
 
-test("task/event endpoint parameters and status vocabulary remain grounded in the API contract", () => {
-  assert.match(openapi, /name:\s*after_sequence/);
-  assert.match(openapi, /name:\s*limit/);
+test("Researchflow endpoint parameters and status vocabulary remain grounded in the API contract", () => {
+  for (const field of ["schema_version", "idempotency_key", "template_ref", "template_version", "input_snapshot_refs", "parameters"]) {
+    assert.match(createRunSchema, new RegExp('"' + field + '"'), "CreateRun schema must declare " + field);
+  }
+  assert.match(createRunSchema, /"const": "1\.1\.0"/);
+  assert.match(runAggregateSchema, /"stages"/);
+  assert.match(runAggregateSchema, /"result_summary"/);
+  for (const status of ["created", "queued", "running", "cancelling", "succeeded", "partial", "failed", "cancelled"]) {
+    assert.match(runAggregateSchema, new RegExp('"' + status + '"'), "Run aggregate schema must declare " + status);
+    assert.ok(researchflowAdapter.includes(status + ":"), "WebUI adapter must map Run status " + status);
+  }
   for (const status of ["queued", "running", "succeeded", "partial", "failed"]) {
     assert.match(format, new RegExp("\\b" + status + "\\s*:"), "task status " + status + " must have a UI label");
   }
-  for (const status of ["running", "completed", "blocked_data_quality", "rejected_request", "partial", "failed"]) {
-    assert.match(format, new RegExp("\\b" + status + "\\s*:"), "run status " + status + " must have a UI label");
-  }
 });
 
-test("Go rejected Run status maps to a failed task instead of false success", () => {
-  assert.match(domain, /RunStatusRejected\s+RunStatus\s*=\s*"rejected_request"/);
-  const mapper = taskQueue.match(/func taskStatusForRun\(status domain\.RunStatus\) string \{[\s\S]*?\n\}/)?.[0] || "";
-  assert.ok(mapper, "Go task queue must have an explicit Run-to-Task status mapper");
-  assert.match(mapper, /case domain\.RunStatusFailed,\s*domain\.RunStatusRejected(?:,\s*domain\.RunStatusRunning)?:\s*return "failed"/);
+test("Researchflow cancelled Run maps to a failed task instead of false success", () => {
+  assert.match(runAggregateSchema, /"cancelled"/);
+  const mapper = researchflowAdapter.match(/const RUN_TO_TASK_STATUS = Object\.freeze\(\{[\s\S]*?\n\}\);/)?.[0] || "";
+  assert.ok(mapper, "WebUI adapter must have an explicit Run-to-Task status mapper");
+  assert.match(mapper, /failed: "failed"[\s\S]*?cancelled: "failed"/);
+  assert.doesNotMatch(researchflowAdapter, /rejected_request/);
+  assert.match(researchflowFlow, /TERMINAL_RUN_STATUSES\.has\(run\.status\)/);
 });
 
 
@@ -616,8 +627,9 @@ test("analysis tasks can load the browser watchlist and withhold unavailable pos
   assert.match(html, /<option value="position_review" disabled>持仓复核（持仓账本接入后开放）<\/option>/);
   assert.match(app, /function fillTaskSymbolsFromWatchlist\(\)[\s\S]*?const watchlistState = safeReadWatchlistState\(\);[\s\S]*?const records = watchlistState\.items;[\s\S]*?if \(!watchlistState\.storageReadable \|\| !watchlistState\.storageValid\)[\s\S]*?parseAnalysisSymbols\(records\.map\(\(record\) => record\.symbol\)\.join\(","\)\)[\s\S]*?\$\("#task-type"\)\.value = "watchlist_scan"/);
   assert.match(app, /\$\("#load-local-watchlist"\)\.addEventListener\("click", fillTaskSymbolsFromWatchlist\)/);
-  assert.match(serviceWiring, /Version: "unconfigured-no-paper-ledger-v1"/);
-  assert.match(serviceWiring, /AvailableCash: 0, TotalEquity: 0/);
+  assert.match(app, /const primarySymbol = researchSymbol\(symbols\[0\]\)/);
+  assert.match(app, /createQuantResearchRun\(requestSettings, \{/);
+  assert.match(researchflowAdapter, /if \(\/\^6\/\.test\(digits\)\) return "SH"/);
   assert.match(app, /当前没有可载入的本地自选股/);
 });
 

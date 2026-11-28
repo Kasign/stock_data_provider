@@ -16,9 +16,9 @@ type ownerSessionRequestAuthenticator interface {
 // newHTTPHandler registers every currently supported endpoint through explicit
 // route policies. Data routes use a dedicated Server dispatcher only when Owner
 // Session is enabled; otherwise they remain Owner Bearer-only.
-func newHTTPHandler(authenticator *platformsecurity.Authenticator, health, legacy, marketData http.Handler, ownerSession *ownerSessionComposition) (http.Handler, error) {
-	if authenticator == nil || health == nil || legacy == nil || marketData == nil {
-		return nil, errors.New("HTTP authenticator, health, legacy and Market Data handlers are required")
+func newHTTPHandler(authenticator *platformsecurity.Authenticator, health, marketData http.Handler, ownerSession *ownerSessionComposition) (http.Handler, error) {
+	if authenticator == nil || health == nil || marketData == nil {
+		return nil, errors.New("HTTP authenticator, health and Market Data handlers are required")
 	}
 	router := platformsecurity.NewRouter()
 	dataPatterns := []string{
@@ -41,13 +41,7 @@ func newHTTPHandler(authenticator *platformsecurity.Authenticator, health, legac
 		{pattern: "HEAD /readyz", policy: platformsecurity.OwnerAccess(), handler: health},
 		{pattern: "GET /diagnostics", policy: platformsecurity.OwnerAccess(), handler: health},
 		{pattern: "HEAD /diagnostics", policy: platformsecurity.OwnerAccess(), handler: health},
-		{pattern: "GET /{$}", policy: platformsecurity.OwnerAccess(), handler: legacy},
-		{pattern: "POST /api/v1/analysis/runs", policy: platformsecurity.OwnerAccess(), handler: legacy},
-		{pattern: "GET /api/v1/analysis/runs/{run_id}", policy: platformsecurity.OwnerAccess(), handler: legacy},
-		{pattern: "GET /api/v1/analysis/runs/{run_id}/events", policy: platformsecurity.OwnerAccess(), handler: legacy},
-		{pattern: "POST /api/v1/analysis/tasks", policy: platformsecurity.OwnerAccess(), handler: legacy},
-		{pattern: "GET /api/v1/analysis/tasks/{task_id}", policy: platformsecurity.OwnerAccess(), handler: legacy},
-		{pattern: "GET /api/v1/analysis/tasks/{task_id}/events", policy: platformsecurity.OwnerAccess(), handler: legacy},
+		{pattern: "GET /{$}", policy: platformsecurity.OwnerAccess(), handler: health},
 	}
 	// The browser-visible readiness alias stays under /api so the HttpOnly
 	// Owner Session cookie remains scoped to the API path.

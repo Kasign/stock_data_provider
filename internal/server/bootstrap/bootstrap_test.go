@@ -42,7 +42,7 @@ func TestNewMigrationRegistryRegistersAvailableModules(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newMigrationRegistry() error = %v", err)
 	}
-	want := []string{"analysis", "market_data", "news", "notification", "platform.security", "quant", "research", "researchflow", "server.security_audit"}
+	want := []string{"market_data", "news", "notification", "platform.security", "quant", "research", "researchflow", "server.security_audit"}
 	if got := registry.Namespaces(); !reflect.DeepEqual(got, want) {
 		t.Fatalf("registered namespaces = %v, want %v", got, want)
 	}

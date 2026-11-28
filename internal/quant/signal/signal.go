@@ -9,8 +9,8 @@ import (
 
 // QNT-CTR-006 Signal 最小切片（2026-11-26 决议）。
 //
-// 背景：RiskDecision 的评估对象是"某个待执行的候选交易"，而旧链把它叫
-// CandidateSignal。旧结构的 EntryRule/ExitRule/InvalidationRule 是自然语言，
+// 背景：RiskDecision 的评估对象是"某个待执行的候选交易"；早期模型曾把它叫
+// CandidateSignal，其 EntryRule/ExitRule/InvalidationRule 是自然语言，
 // 不适合作为跨模块机器契约（doc/quant/07 第 89 行），因此新契约只保留
 // 可机读的身份、方向、时点、证据与规则版本，不承载交易规则文本与价格：
 //   - 价格由 Risk/Planner 另行读取授权 Snapshot，避免在 Signal 里重复表达并绑定复权口径；

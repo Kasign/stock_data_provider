@@ -29,10 +29,9 @@ func TestHTTPHandlerEnforcesExplicitRoutePolicies(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewAuthenticator() error = %v", err)
 	}
-	legacy := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusNoContent) })
 	health := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
 	data := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusAccepted) })
-	handler, err := newHTTPHandler(auth, health, legacy, data, nil)
+	handler, err := newHTTPHandler(auth, health, data, nil)
 	if err != nil {
 		t.Fatalf("newHTTPHandler() error = %v", err)
 	}
@@ -47,19 +46,19 @@ func TestHTTPHandlerEnforcesExplicitRoutePolicies(t *testing.T) {
 		{name: "Owner HEAD Readiness", method: http.MethodHead, path: "/readyz", authorization: "Bearer " + token, want: http.StatusOK},
 		{name: "Owner HEAD Diagnostics", method: http.MethodHead, path: "/diagnostics", authorization: "Bearer " + token, want: http.StatusOK},
 		{name: "Readiness 未认证", method: http.MethodGet, path: "/readyz", want: http.StatusUnauthorized},
-		{name: "业务路由未认证", method: http.MethodPost, path: "/api/v1/analysis/runs", want: http.StatusUnauthorized},
+		{name: "旧 Analysis 路由已退役", method: http.MethodPost, path: "/api/v1/analysis/runs", want: http.StatusNotFound},
 		{name: "Data 路由未认证", method: http.MethodGet, path: "/api/v1/quotes/600519.SH", want: http.StatusUnauthorized},
 		{name: "Data Source 根路由未认证", method: http.MethodGet, path: "/api/v1/data-sources", want: http.StatusUnauthorized},
-		{name: "错误 Owner 凭证", method: http.MethodPost, path: "/api/v1/analysis/runs", authorization: "Bearer " + strings.Repeat("c", 43), want: http.StatusUnauthorized},
-		{name: "Service Scope 不得访问 Owner 路由", method: http.MethodPost, path: "/api/v1/analysis/runs", authorization: "Bearer " + serviceToken, want: http.StatusForbidden},
+		{name: "错误 Owner 凭证", method: http.MethodGet, path: "/diagnostics", authorization: "Bearer " + strings.Repeat("c", 43), want: http.StatusUnauthorized},
+		{name: "Service Scope 不得访问 Owner 路由", method: http.MethodGet, path: "/diagnostics", authorization: "Bearer " + serviceToken, want: http.StatusForbidden},
 		{name: "Service Scope 不得访问 Owner Readiness", method: http.MethodGet, path: "/readyz", authorization: "Bearer " + serviceToken, want: http.StatusForbidden},
 		{name: "Diagnostics 未认证", method: http.MethodGet, path: "/diagnostics", want: http.StatusUnauthorized},
 		{name: "Service Scope 不得访问 Diagnostics", method: http.MethodGet, path: "/diagnostics", authorization: "Bearer " + serviceToken, want: http.StatusForbidden},
 		{name: "Owner 读取 Diagnostics", method: http.MethodGet, path: "/diagnostics", authorization: "Bearer " + token, want: http.StatusOK},
-		{name: "Owner 创建 Run", method: http.MethodPost, path: "/api/v1/analysis/runs", authorization: "Bearer " + token, want: http.StatusNoContent},
+		{name: "旧 Analysis Run 路由已退役", method: http.MethodGet, path: "/api/v1/analysis/runs/run-1", authorization: "Bearer " + token, want: http.StatusNotFound},
 		{name: "Owner 访问 Data Handler", method: http.MethodGet, path: "/api/v1/quotes/600519.SH", authorization: "Bearer " + token, want: http.StatusAccepted},
 		{name: "Owner 访问 Data Source 根路由", method: http.MethodGet, path: "/api/v1/data-sources", authorization: "Bearer " + token, want: http.StatusAccepted},
-		{name: "Owner 查询事件", method: http.MethodGet, path: "/api/v1/analysis/runs/run-1/events", authorization: "Bearer " + token, want: http.StatusNoContent},
+		{name: "Owner 访问根路径", method: http.MethodGet, path: "/", authorization: "Bearer " + token, want: http.StatusOK},
 		{name: "Owner Session 未启用时不注册登录路由", method: http.MethodPost, path: "/api/v1/owner/session", want: http.StatusNotFound},
 		{name: "未注册路由", method: http.MethodGet, path: "/internal/debug", authorization: "Bearer " + token, want: http.StatusNotFound},
 	}

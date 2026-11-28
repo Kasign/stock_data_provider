@@ -53,6 +53,13 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	switch r.URL.Path {
+	case "/":
+		// 退役旧 Analysis 生产链后，根路径由 Root Server 直接提供服务信息。
+		writeJSON(w, r, http.StatusOK, map[string]any{
+			"service": "stock-analysis-go", "api_version": "v1",
+			"health": "/healthz", "readiness": "/readyz",
+			"researchflow": "/api/v1/researchflow/runs",
+		})
 	case "/healthz":
 		writeJSON(w, r, http.StatusOK, map[string]any{"status": "ok", "time": h.clock.Now().UTC()})
 	case "/diagnostics":

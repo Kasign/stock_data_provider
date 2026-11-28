@@ -1,4 +1,4 @@
-// Deterministic contract fixtures shaped from internal/analysis/domain/types.go.
+// Deterministic full-report fixtures retained only for archived report exports and report notes.
 // Synthetic values are for UI/export tests only; they are not live market data or recommendations.
 const request = {
   task_type: "post_market_scan",

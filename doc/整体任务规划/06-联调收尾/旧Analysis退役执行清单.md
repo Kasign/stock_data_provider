@@ -1,8 +1,9 @@
 # 旧 Analysis 退役执行清单
 
-更新时间：2026-11-27（校准：收窄 1.4 阻塞、回填 2.4 与 4.2 事实）
+更新时间：2026-11-28（回填 WebUI 迁移、旧 Analysis 代码删除与当前未完成边界）
 执行分支：`repair_all`（集中开发，受根目录 `AGENTS.md` 约束）
 主线目标：在保留真实研究能力的前提下，按依赖顺序退役旧 Analysis 生产链，不制造“已退役”假象。
+当前状态：WebUI 主流程迁移完成；旧 Analysis 代码链与命令删除完成；部署配置/真实 PIT 预采集、停服清表和最终 SHA 完整验收仍未完成。
 
 ## 0. 本文定位与权威来源
 
@@ -20,18 +21,18 @@
 ```
 0 盘点冻结（已完成）
    ↓
-1 补领域生产能力（当前唯一卡点）
+1 补领域生产能力（已完成）
    ↓
-2 结果闭环与授权
+2 结果闭环与授权（已完成本链范围；完整报告正文仍 OPEN）
    ↓
-3 WebUI 迁移
+3 WebUI 迁移（2026-11-28 已完成主流程）
    ↓
-4 删除与清表（一次性工作组）
+4 删除与清表（2026-11-28 代码删除完成；清表待停服窗口）
    ↓
-5 最终验收
+5 最终验收（not_run）
 ```
 
-阶段 1 未闭环前不得进入阶段 4。删除旧链会导致 WebUI 研究结果页失效，属于 `AGENTS.md` 规则 9/11 禁止的“为通过而清理”。
+阶段 1 当时未闭环前不得进入阶段 4；该前置现已闭环，旧链代码于 2026-11-28 完成删除。删除前已确认 WebUI 主流程不再调用旧 API，避免制造“为通过而清理”的假象；停服清表与最终验收仍按独立步骤执行。
 
 ## 2. 阶段 0 · 盘点冻结（已完成）
 
@@ -52,7 +53,7 @@
 | 1.4 | tradability/risk 硬门禁：Quant 正式 RiskDecision 覆盖 unverified-tradability-block，不可被综合评分/LLM 覆盖 | Quant | 已完成（2026-11-27，DEC-PLAT-002-074/075）：四类事实全部可核验，L3 真库首次得到 `pass`；真实 Provider 运行证据已在 GitHub Actions 取得 PASS（Provider 响应探针 + 生产链端到端：真实池→Creator→MariaDB→授权读回，2026-11-27 `status=none up=417 down=0`） | 等价规则测试通过；缺证据继续 fail-closed；有正式规则装配来源。**已落地**：`internal/quant/risk/tradability.go` 把旧链 `tradabilityChecker` 的“四类事实不可得即不放行”正式化为版本化规则集 `qnt-risk-tradability/1.0.0`，规则 `tradability_unverified` 为 `block + required`；事实未验证 → `block+triggered` → `reject`，声明已验证但缺证据/证据非法/表外事实 → `block+unknown` → `unknown`，两条路径都不产生 `pass`；`TradabilityGateInput` 结构上不含 Status/RuleSetVersion/评分/模型建议，规则集版本由门禁函数固定注入，并有白名单测试守住覆盖通道。**仍缺（2026-11-26 晚更新：①②③ 已按推荐项推进，阻塞收敛为一条）**：① Signal 契约——**已落地** QNT-CTR-006 1.0.0（Schema/Golden/Go DTO，DEC-059，`deferred`）；② Data 可交易性事实——**契约层已落地** `security_trading_status_facts` 1.0.0 与同族 Manifest（DEC-060），五项事实逐项 available/unavailable，不含涨跌停与可成交量；**存储列与授权读取分流仍未接入**；③ 权威规则目录——**已落地** `RuleCatalog`（`qnt-risk-catalog/1.0.0`）：发布 tradability、登记 input quality 不发布、其余 pending 显式占位，引用未发布规则即加载失败。剩余唯一阻塞是交易事实的物理读取链路；前置与等价性对照见 `doc/quant/09-risk-tradability硬门禁切片与前置.md` 第 8 节；本轮不改任何契约（QNT-CTR-004 仍 `frozen`）。**后续（2026-11-26，DEC-062）**：物理读取链路已按 DEC-061 接通（`payload_kind` 分流 + 独立 `policy_ref` + Creator/Authorized Reader）；Risk Facade（`internal/quant/application/create_risk.go`）与 `quant.risk` Stage（Output Registry Set 1.5.0）已装配，接入 `isQuantStageCode`／Dispatcher／模板与适用性规则／结果关联规格表四处；新增 `QNT-CTR-003-risk-stage-output-1.0.0`、`QNT-CTR-003-risk-quality-summary-1.0.0` 与 `quant-risk-parameters-1.0.0`（additive L2 补充，不升级 QNT-CTR-003 状态）。拒绝表达为 Stage `succeeded` + `decision_status=reject` + Manifest `result_status=rejected`（禁止映射为 Stage 失败，否则拒绝不可追溯）；决策 `unknown` 不产出 Stage Output。本轮**不**声明 `hard_risk` 门禁——决策恒 reject，声明会让含该 Stage 的 Run 必然失败，属独立治理动作。`price_limit` 已由 DEC-PLAT-002-074 接入（数据源是仓库内 Provider 的全量涨跌停池，不是外部涨跌幅制度表）；DEC-PLAT-002-075 进一步修正空池语义——空池的歧义属于「交易日是否可用」，同日任一池有真实行即证明日期可用，另一个空池就是零事件；两池皆空才 `unknown`。真实 Provider 运行证据已在 GitHub Actions 取得：`TestLiveEastmoneyFullLimitPoolCompleteness` 于 2026-11-27 实测涨停 417、跌停 0，`600519.SH` 判 `none`、质量 `degraded`，PASS。`tradable_volume` 已由 DEC-PLAT-002-066 解决；RF-BLOCK-008 的 Composer `RiskDecision` 投影仍 OPEN，需双 Owner 决议 |
 | 1.5 | 输入质量门禁：Data 质量事实 → Quant 适用性正式映射；历史回放缺 PIT 证据继续阻断 | Data + Quant | 已完成（2026-11-26） | 旧 corePass 规则不再充当全局门禁；质量与适用性由各 Owner 分别提供。**落地**：`internal/quant/application/quality_applicability.go` 定义 7 个封闭原因码（PIT 不可信/快照质量/日历质量/Data 覆盖率/样本低于下限/Registry 覆盖率/逐 bar 质量）与固定优先级，表外原因一律不猜测；`validateAuthorizedCloseSeriesSnapshot` 拆为“结构完整性”与“质量事实→适用性”两段，历史回放缺 PIT 证据继续阻断；`InputNotApplicableError` unwrap 到 `ErrCloseSeriesSnapshotQuality`，三个 Facade 经 `classifyCloseSeriesValidationError` 统一保留原因码（PIT/质量/覆盖率类失败改判为各自的 `ErrXxxSnapshotQuality`，Snapshot 自身不自洽仍是 `ErrInvalidXxxSnapshot`）；Stage Executor 把原因投影为 `quant_{sma20|factor|trend}_input_*`，不再退化成 `*_execution_failed`。变异验证：删除覆盖率分支、删除 PIT 映射、去掉原因码透传三处均使测试失败 |
 | 1.6 | market breadth 指标决策：保留则由 Quant 实现并正名（请求证券横截面，非全市场），否则书面废弃 | Quant + Research | 已完成（2026-11-26；M1 决议：**书面废弃**） | 有书面结论；不再以“全市场广度”命名。**核实结论**：旧 `marketAnalyzer`（`internal/service/wiring.go:210-255`，`mvp-watchlist-market-v1`）的分母是 `universeResolver` 复制的 `req.Symbols`（自选股集合），指标实为 `watchlist_above_ma20_pct` + 65/35 无出处阈值映射的 `regime` 字符串；代码自身已在缺指数数据时声明“不能视为完整市场广度分析”。消费者只有旧链（`analysis/app/runner.go` 校验 regime 非空、旧报告页展示“市场状态”），Researchflow/Quant 新链无消费者，QNT-005 仍 NOT_STARTED。Data 已有真·市场广度 `MarketBreadthSnapshot`（`cn_a_share` 全集、四类家数精确对账到 `covered_securities`、部分覆盖必须 degraded、最旧成分报价时间做新鲜度证据、`GET /api/v1/market/breadth`），但**没有授权快照路径**（授权快照只有单证券 `daily_bars_close_series`），因此 Quant 现在拿不到可追溯广度事实。判定与选项（A 保留为正名为 `cross_section_participation_ma20`，A1 N 次单证券快照破坏 PIT 一致性、A2 需新增横截面 payload 属 DATA-CTR 变更；B 书面废弃）见 `doc/quant/08-market-breadth指标决策与正名.md`；本轮只交付结论与命名规范，不新增代码/Schema/Stage/契约，不改 QNT-005 与各契约状态。**M1 决议（2026-11-26）**：按选项 B 书面废弃——不迁移、不正名、不注册为 Quant 指标，也不新建“自选股广度”替代物；`internal/service/wiring.go` 的 `marketAnalyzer` 加退役注释（仅注释），随阶段 4 删除旧链一并退役；真实市场环境需求归 QNT-005（前置项见 `doc/quant/08` 第 8 节）；第 6 节命名规范与第 7 节复活条件继续生效 |
-| 1.7 | 占位能力直接退役：零现金账本、全拒 Planner、no-fill Execution 不迁移 | Quant | 待随 4.1/4.2 删除（2026-11-27 校准） | 代码仍在 `internal/analysis/` 与 `internal/service/wiring.go`，无真实业务能力；不单独施工，随旧链一次性删除 |
+| 1.7 | 占位能力直接退役：零现金账本、全拒 Planner、no-fill Execution 不迁移 | Quant | 已完成（2026-11-28，随旧链代码删除） | `internal/analysis/` 与 `internal/service/wiring.go` 已整体删除；这些占位能力未迁移到 Quant/Researchflow，也不保留兼容入口 |
 
 阶段 1 内部顺序：1.1 经代码核实已完成（授权 Snapshot 读取链路已由 `quant.sma20` 注入 Worker，无需重复施工）；1.2 是主线起手；1.3/1.4 依赖 1.2 的 Factor 结果契约；1.7 为占位退役，随阶段 4 一并删除。
 
@@ -99,25 +100,39 @@
 
 | # | 任务 | 主责 | 状态 | 退出条件 / 可验证证据 |
 |---|---|---|---|---|
-| 3.1 | 任务创建/幂等重放/轮询/取消/历史/详情/报告导出改接 Run Create/Get/Cancel 契约 | WebUI | 未开始（2026-11-27 校准：`api.js` 已有 `createResearchflowRun`/`getResearchflowRun`/`cancelResearchflowRun`，但 `app.js` 未调用） | 页面主流程不再调用旧 Analysis API；迁移盘点 3.1/3.2 的调用点归零。可分段：先切创建/幂等/轮询/取消/历史，报告导出待完整报告读取 |
-| 3.2 | 清除 Task ID / Event Cursor / Analysis Base / 旧 RunResult 依赖 | WebUI | 未开始（2026-11-27 校准：`app.js` 仍有 `state.lastRunResult`、`recent-tasks.js` 的 `recent-analysis.v1`、`watchlist-tracking-view-model.js` 的 `analysis_base`） | `web/src/api.js` 等无旧引用；执行详情以真实 Run/Stage 状态为准，不伪造事件流 |
+| 3.1 | 任务创建/幂等重放/轮询/取消/历史/详情/报告导出改接 Run Create/Get/Cancel 契约 | WebUI | 已完成主流程（2026-11-28，提交 `605c57bb9` + `d3314eeab`，15/15 CI success） | `app.js` 创建/轮询/结果改走 `createQuantResearchRun`/`getQuantResearchRunView`/`getQuantResearchResultsView`；浏览器夹具证明无旧 Analysis 请求；完整报告导出仍受 RF-BLOCK-007 阻塞，不在本项范围 |
+| 3.2 | 清除 Task ID / Event Cursor / Analysis Base / 旧 RunResult 依赖 | WebUI | 部分完成（2026-11-28：执行链已改为 Run/Stage 聚合，无事件游标；本地状态字段与历史存储键仍沿用旧命名） | 已完成：取消事件分页、双 ID 回包收敛为 `run_ref`、Stage 投影不伪造事件/Attempt、降级结果禁止归档为完整报告。未完成：`state.lastRunResult`、`recent-analysis.v1`、`analysis_base` 等本地命名清理属于独立工作组，不在旧 API 代码删除范围内 |
 
 ## 6. 阶段 4 · 删除与清表（一次性工作组，全部前置满足后执行）
 
 | # | 任务 | 主责 | 状态 | 退出条件 / 可验证证据 |
 |---|---|---|---|---|
-| 4.1 | 删 Root Analysis 生产链：Runner / TaskQueue / Worker / HTTP API / Collector / 旧路由 / 配置 / 测试夹具；保留通用认证、Health/Ready 与 `cmd/analysis-api` 启动入口 | Server | 未开始 | 全仓无生产调用方证据；迁移盘点 8.4 第 1 项 |
+| 4.1 | 删 Root Analysis 生产链：Runner / TaskQueue / Worker / HTTP API / Collector / 旧路由 / 配置 / 测试夹具；保留通用认证、Health/Ready 与 `cmd/analysis-api` 启动入口 | Server | 已完成（2026-11-28；本工作组未提交前本地验证） | 删除目录与文件见本节“2026-11-28 回填”；`go build ./...`、`go test ./...`、`npm test` 561/561 通过；旧 Go 路径/旧命令引用扫描归零；`cmd/analysis-api`、Health/Ready、Owner Session、`DailyBarsV2Reader` 保留 |
 | 4.2 | 删独立 go-core + Python Bridge + Python API Client + 相关 CI/环境变量/容器配置 | Integration | 部分完成（2026-11-27 校准） | `go-core/`、`internal/adapters/pythonapi/`、`cmd/pythonapi-smoke/` 已不在仓库；剩 `python_bridge/`（当前含 `capabilities`/`schemas`/`tests`）仍被 `.github/workflows/data-quality-parity.yml` 引用（校验 `capabilities/market_data.py` 的字符串），须先决定该 workflow 是否保留，再决定删除范围；确认无外部调用方后按 8.4 第 3–6 项执行 |
 | 4.3 | 停服窗口清表 `analysis_runs` / `analysis_stage_events` / `analysis_snapshots` / `analysis_tasks` 与 `namespace='analysis'` 迁移记录；旧数据不迁移不兼容 | Integration | 未开始 | 表与 namespace 均不存在；外键/清理顺序确认 |
-| 4.4 | 文档清理：删旧服务部署/API/配置/排障说明，保留一份最终迁移记录（删除范围、无调用方证据、CI 验收） | Integration | 未开始 | 迁移盘点 8.4 第 7 项 |
+| 4.4 | 文档清理：删旧服务部署/API/配置/排障说明，保留一份最终迁移记录（删除范围、无调用方证据、CI 验收） | Integration | 进行中（2026-11-28：回填两份联调治理文档；历史模块文档仍按记录日期保留） | 本轮已更新 `./WebUI旧Analysis到Researchflow迁移盘点.md` 与本文的当前口径；历史日期文档中的旧链事实保留作审计证据，不冒充当前状态。最终迁移记录待最终 SHA CI 结论后定稿 |
 
 ## 7. 阶段 5 · 最终验收
 
 | # | 任务 | 主责 | 状态 | 退出条件 / 可验证证据 |
 |---|---|---|---|---|
-| 5.1 | 全仓旧路径/环境变量/容器名/工作流引用扫描归零 | Integration | 未开始 | 迁移盘点 8.5 与 10.3 第 8 步 |
-| 5.2 | Researchflow Run 全流程 + 授权报告读取 + WebUI 无旧请求 + Owner Session / Health / Ready 端到端 | Integration | 未开始 | 真实流程验收通过 |
-| 5.3 | 最终 SHA 完整 CI + 浏览器验收 + 部署冒烟 | Integration | 未开始 | `required-checks` 聚合检查全项通过；不以中途 CI 状态作为停工条件 |
+| 5.1 | 全仓旧路径/环境变量/容器名/工作流引用扫描归零 | Integration | 部分完成（2026-11-28：代码与 Makefile 引用归零；历史文档引用未批量改写） | 已扫描 Go/Web/工作流/Makefile：`cmd/demo`、`cmd/storage-check`、`internal/analysis/**`、`internal/platform/httpapi/**`、`internal/platform/taskqueue/**`、`internal/service/wiring.go`、`internal/server/marketdata/**` 均无生产代码引用；历史文档按日期保留，待最终迁移记录统一收口 |
+| 5.2 | Researchflow Run 全流程 + 授权报告读取 + WebUI 无旧请求 + Owner Session / Health / Ready 端到端 | Integration | 未开始（部署侧待用户按清单配置） | 真实流程验收通过；目前部署态 Researchflow 容量未启用、PIT 事实未预采集 |
+| 5.3 | 最终 SHA 完整 CI + 浏览器验收 + 部署冒烟 | Integration | `not_run`（本工作组尚未提交） | `required-checks` 聚合检查全项通过；不以中途 CI 状态作为停工条件 |
+
+## 7.1 2026-11-28 回填：旧 Analysis 代码链删除工作组
+
+- **基线与边界**：开始与结束均在 `repair_all`，起始 HEAD / `origin/repair_all` 均为 `d3314eeabb7816260b2c9c615da7bfe78576e907`；未切分支、未合并、未 rebase、未强推、未重置历史。用户明确选择“前后端一起彻底删”，部署配置与数据问题按已交付清单由用户自行执行。
+- **删除前证据**：待删包当时全绿：`go test ./internal/analysis/... ./internal/service/... ./internal/platform/httpapi/... ./internal/platform/taskqueue/... ./internal/server/marketdata/... ./internal/adapters/storage/... ./cmd/demo/... ./cmd/storage-check/...` 全部 PASS；删除的是有明确退役决策的旧链，不是用删测试掩盖失败。
+- **服务端删除面**：`internal/analysis/**`、`internal/service/**`、`internal/platform/httpapi/**`、`internal/platform/taskqueue/**`、`internal/server/marketdata/**`、`internal/adapters/storage/errors.go`、`internal/adapters/storage/mysqlredis/store.go`、`internal/adapters/storage/mysqlredis/store_resources_test.go`、`cmd/demo/`、`cmd/storage-check/`；Makefile 移除 `demo` 与 `storage-check` 目标。
+- **配置面收敛**：`LoadHTTP(env)` 去掉 Analysis timeout 第二参数，写超时默认值改为固定 `25s`；`Process` 删除 `AnalysisTimeout/AnalysisWorkers/AnalysisMaxQueued`；`config_test.go` / `process_test.go` 改为验证新签名、默认写超时和 Researchflow 快照稳定性，并新增“旧 `ANALYSIS_*` 不再被读取”断言。未删断言、未放宽校验。
+- **存储适配收敛**：`mysqlredis.Config` 删除仅供旧 Store 使用的 `RedisKeyPrefix`/`RedisCacheTTL` 与 `LoadConfigFromEnv`/`RedisKey`；`OpenApplicationResources` 返回值收敛为 `(*Resources, error)`；删除无调用方的 `resources.Storage` 兼容别名，并把 `TestStorageCloseIsNilSafe` 改为直接覆盖 `Resources`。
+- **路由与组合根**：`newHTTPHandler` 删除 `legacy` 参数与 `/api/v1/analysis/**` 六条路由；根路径服务信息迁入 `internal/server/health/handler.go`；bootstrap 删除旧 Collector/Runner/TaskQueue/Worker/HTTP handler 与 `"analysis"` migration namespace；`bootstrap_test.go` 期望 namespace 同步为 8 项。
+- **前端与测试同步**：`web/tests/ui-contract.test.mjs` 不再读取已删除的 Go 源码，改为对照 `create-run-request-1.1.0`、`run-aggregate-response-1.0.0`、`result-read-response-1.1.0` 三个 Schema 与 Researchflow 适配器；新增/改写断言覆盖 `authorized_domain_results`、非完整报告标注、risk 无 payload、八种 Run 状态映射和 cancelled→failed。旧 `run-results.mjs` fixture 注释改为“仅用于归档报告导出与报告笔记”。
+- **语义注释清理**：`quant.risk`/`quant.signal` 中引用已删除文件的注释改为 fail-closed 语义说明；`bootstrap` 包注释改为“生产模块 Port 组合根”；`marketdata_module.go` 的默认指数解析注释去掉旧链指向；`internal/quant/risk/catalog.go` 的 Source 去掉已删除 `wiring.go` 路径。
+- **保留能力**：`internal/marketdata/app/port.go` 与 `internal/marketdata/application/reader.go` 的 `DailyBarsV2Reader` 未改动；`cmd/analysis-api` 启动入口、Owner Session/CSRF、Health/Ready、平台公共能力均保留。
+- **验证**：`gofmt -l` 关注目录无输出；`go build ./...` PASS；`go test ./...` PASS；`npm test` 561/561 PASS；`web/tests/ui-contract.test.mjs` 181/181 PASS；旧 Go 导入路径、旧命令、旧表名扫描在代码中归零。
+- **CI 状态（如实）**：本工作组尚未提交，最终 SHA 的 `required-checks` 与浏览器验收状态为 `not_run`。最近一次已取得 CI 结论的提交仍是 `605c57bb9` / `d3314eeab` 的 15/15 success，不能替代本组验收。
 
 ## 8. 执行口径
 

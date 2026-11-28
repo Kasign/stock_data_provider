@@ -18,8 +18,7 @@ const (
 	TradabilityRuleSetVersion = "qnt-risk-tradability/1.0.0"
 
 	// TradabilityGateCode 是"可交易性未验证"硬门禁的规则编码。
-	// 语义与旧 Analysis 链的 tradabilityChecker 等价：拿不到可信的
-	// ST/停牌/涨跌停/可成交量事实时，不得放行。
+	// 语义为 fail-closed：拿不到可信的 ST/停牌/涨跌停/可成交量事实时，不得放行。
 	TradabilityGateCode = "tradability_unverified"
 )
 

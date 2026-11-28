@@ -120,9 +120,8 @@ func TestOwnerSessionHTTPMariaDBRedisLifecycleIntegration(t *testing.T) {
 		t.Fatalf("create Owner Bearer authenticator: %v", err)
 	}
 	health := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
-	legacy := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })
 	marketData := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })
-	handler, err := newHTTPHandler(bearer, health, legacy, marketData, composition)
+	handler, err := newHTTPHandler(bearer, health, marketData, composition)
 	if err != nil {
 		t.Fatalf("mount Root Server routes: %v", err)
 	}

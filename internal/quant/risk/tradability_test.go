@@ -25,8 +25,8 @@ func tradabilityReason(t *testing.T, decision Decision) Reason {
 	return decision.Reasons[0]
 }
 
-// 旧 Analysis 链的 tradabilityChecker 对每只证券恒返回 Allowed=false，
-// 理由是上游未提供 ST/停牌/涨跌停/可成交量。新门禁在"事实不可用"时必须等价拒绝。
+// 可交易性事实不可用时必须 fail-closed 拒绝：上游未提供
+// ST/停牌/涨跌停/可成交量，不得推导为默认放行。
 func TestTradabilityGateRejectsWhenFactsUnavailable(t *testing.T) {
 	decision, err := EvaluateTradabilityGate(context.Background(), tradabilityInput(TradabilityFacts{}))
 	if err != nil {

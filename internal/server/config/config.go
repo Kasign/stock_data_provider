@@ -41,12 +41,8 @@ type HTTP struct {
 	MaxConcurrentRequests int
 }
 
-// LoadHTTP reads and validates Server-owned HTTP settings. The legacy Analysis
-// timeout is supplied only to preserve the existing HTTP write-timeout default.
-func LoadHTTP(env platformconfig.Env, analysisTimeout time.Duration) (HTTP, error) {
-	if analysisTimeout <= 0 {
-		return HTTP{}, fmt.Errorf("analysis timeout must be positive")
-	}
+// LoadHTTP reads and validates Server-owned HTTP settings.
+func LoadHTTP(env platformconfig.Env) (HTTP, error) {
 	cfg := HTTP{
 		Address:               strings.TrimSpace(env.String("HTTP_ADDR", ":8092")),
 		ReadHeaderTimeout:     5 * time.Second,
@@ -61,7 +57,7 @@ func LoadHTTP(env platformconfig.Env, analysisTimeout time.Duration) (HTTP, erro
 	if cfg.ReadTimeout, err = env.Duration("HTTP_READ_TIMEOUT", 15*time.Second); err != nil {
 		return HTTP{}, err
 	}
-	if cfg.WriteTimeout, err = env.Duration("HTTP_WRITE_TIMEOUT", analysisTimeout+10*time.Second); err != nil {
+	if cfg.WriteTimeout, err = env.Duration("HTTP_WRITE_TIMEOUT", 25*time.Second); err != nil {
 		return HTTP{}, err
 	}
 	if cfg.IdleTimeout, err = env.Duration("HTTP_IDLE_TIMEOUT", 60*time.Second); err != nil {

@@ -10,12 +10,12 @@ import (
 func TestLoadHTTPDefaults(t *testing.T) {
 	cfg, err := LoadHTTP(platformconfig.NewEnvWithLookup(func(string) (string, bool) {
 		return "", false
-	}), 5*time.Minute)
+	}))
 	if err != nil {
 		t.Fatalf("LoadHTTP() error = %v", err)
 	}
 	if cfg.Address != ":8092" || cfg.ReadTimeout != 15*time.Second ||
-		cfg.WriteTimeout != 5*time.Minute+10*time.Second ||
+		cfg.WriteTimeout != 25*time.Second ||
 		cfg.IdleTimeout != 60*time.Second || cfg.ShutdownTimeout != 10*time.Second ||
 		cfg.MaxRequestBodyBytes != 4<<20 || cfg.MaxConcurrentRequests != 64 {
 		t.Fatalf("unexpected HTTP defaults: %+v", cfg)
@@ -29,7 +29,7 @@ func TestLoadHTTPUsesDefaultForBlankAddress(t *testing.T) {
 		}
 		return "", false
 	})
-	cfg, err := LoadHTTP(env, 5*time.Minute)
+	cfg, err := LoadHTTP(env)
 	if err != nil {
 		t.Fatalf("LoadHTTP() error = %v", err)
 	}
@@ -45,7 +45,7 @@ func TestLoadHTTPRejectsInvalidTimeout(t *testing.T) {
 		}
 		return "", false
 	})
-	if _, err := LoadHTTP(env, 5*time.Minute); err == nil {
+	if _, err := LoadHTTP(env); err == nil {
 		t.Fatal("LoadHTTP() error = nil, want invalid timeout error")
 	}
 }
@@ -70,7 +70,7 @@ func TestLoadHTTPRejectsInvalidAdmissionLimits(t *testing.T) {
 				}
 				return "", false
 			})
-			if _, err := LoadHTTP(env, 5*time.Minute); err == nil {
+			if _, err := LoadHTTP(env); err == nil {
 				t.Fatal("LoadHTTP() error = nil, want validation error")
 			}
 		})
@@ -88,7 +88,7 @@ func TestLoadHTTPAcceptsConfiguredAdmissionLimits(t *testing.T) {
 			return "", false
 		}
 	})
-	cfg, err := LoadHTTP(env, 5*time.Minute)
+	cfg, err := LoadHTTP(env)
 	if err != nil {
 		t.Fatalf("LoadHTTP() error = %v", err)
 	}

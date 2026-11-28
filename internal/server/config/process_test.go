@@ -27,8 +27,7 @@ func TestLoadProcessDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadProcess() error = %v", err)
 	}
-	if cfg.LogLevel != "info" || cfg.AnalysisTimeout != 5*time.Minute ||
-		cfg.AnalysisWorkers != 2 || cfg.AnalysisMaxQueued != 100 ||
+	if cfg.LogLevel != "info" ||
 		cfg.Role != RoleAll || cfg.HTTP.Address != ":8092" ||
 		cfg.ResearchNotificationRelay.BatchSize != 20 || cfg.ResearchNotificationRelay.EventLimits.MaxJSONDepth != 16 || cfg.NewsRetention.Interval != 5*time.Minute || cfg.NewsRetention.BatchSize != 100 || cfg.ResearchflowCapacity.Configured {
 		t.Fatalf("unexpected process defaults: %+v", cfg)
@@ -68,9 +67,6 @@ func TestLoadProcessRejectsInvalidProcessSettings(t *testing.T) {
 		raw  string
 	}{
 		{name: "log level", key: "LOG_LEVEL", raw: "trace"},
-		{name: "analysis timeout", key: "ANALYSIS_TIMEOUT", raw: "0s"},
-		{name: "workers", key: "ANALYSIS_WORKERS", raw: "0"},
-		{name: "queue smaller than workers", key: "ANALYSIS_MAX_QUEUED", raw: "1"},
 		{name: "migration timeout", key: "MIGRATION_TIMEOUT", raw: "0s"},
 		{name: "News retention interval too short", key: "NEWS_RETENTION_INTERVAL", raw: "500ms"},
 		{name: "News retention batch too large", key: "NEWS_RETENTION_BATCH_SIZE", raw: "1001"},
@@ -96,15 +92,47 @@ func TestLoadProcessRejectsInvalidProcessSettings(t *testing.T) {
 	}
 }
 
+func TestLoadProcessIgnoresRemovedAnalysisSettings(t *testing.T) {
+	values := map[string]string{
+		"PLATFORM_ADMIN_TOKEN": "0123456789abcdef0123456789abcdef",
+		"ANALYSIS_TIMEOUT":     "0s",
+		"ANALYSIS_WORKERS":     "0",
+		"ANALYSIS_MAX_QUEUED":  "0",
+	}
+	seen := make(map[string]bool)
+	env := platformconfig.NewEnvWithLookup(func(key string) (string, bool) {
+		seen[key] = true
+		if value, ok := relayRequiredTestValues[key]; ok {
+			return value, true
+		}
+		value, ok := values[key]
+		return value, ok
+	})
+	cfg, err := LoadProcess(env)
+	if err != nil {
+		t.Fatalf("LoadProcess() error = %v", err)
+	}
+	if cfg.Role != RoleAll || cfg.HTTP.Address != ":8092" {
+		t.Fatalf("unexpected process defaults: %+v", cfg)
+	}
+	for _, key := range []string{"ANALYSIS_TIMEOUT", "ANALYSIS_WORKERS", "ANALYSIS_MAX_QUEUED"} {
+		if seen[key] {
+			t.Errorf("removed analysis setting %s was still read", key)
+		}
+	}
+}
+
 func TestLoadProcessReturnsStableSnapshot(t *testing.T) {
 	values := map[string]string{
-		"LOG_LEVEL":                             "debug",
-		"ANALYSIS_WORKERS":                      "4",
-		"ANALYSIS_MAX_QUEUED":                   "200",
-		"SERVER_ROLE":                           "worker",
-		"NOTIFICATION_EVENT_MAX_ENVELOPE_BYTES": "8192",
-		"NOTIFICATION_EVENT_MAX_PAYLOAD_BYTES":  "4096",
-		"NOTIFICATION_EVENT_MAX_JSON_DEPTH":     "16",
+		"LOG_LEVEL":                    "debug",
+		"SERVER_ROLE":                  "worker",
+		"RESEARCHFLOW_MAX_QUEUED_RUNS": "100",
+		"RESEARCHFLOW_MAX_WORKERS":     "8",
+		"RESEARCHFLOW_RUN_DEADLINE":    "45m",
+		"RESEARCHFLOW_LOCAL_WORKERS":   "3",
+	}
+	for key, value := range relayRequiredTestValues {
+		values[key] = value
 	}
 	env := platformconfig.NewEnvWithLookup(func(key string) (string, bool) {
 		value, ok := values[key]
@@ -115,8 +143,8 @@ func TestLoadProcessReturnsStableSnapshot(t *testing.T) {
 		t.Fatalf("LoadProcess() error = %v", err)
 	}
 	values["LOG_LEVEL"] = "error"
-	values["ANALYSIS_WORKERS"] = "8"
-	if cfg.LogLevel != "debug" || cfg.AnalysisWorkers != 4 {
+	values["RESEARCHFLOW_LOCAL_WORKERS"] = "8"
+	if cfg.LogLevel != "debug" || cfg.ResearchflowLocalWorkers != 3 {
 		t.Fatalf("process snapshot changed after source mutation: %+v", cfg)
 	}
 }

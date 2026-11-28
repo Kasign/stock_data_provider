@@ -72,7 +72,7 @@ func marketDataReadinessChecks(module *marketdatabootstrap.Module) []platformdia
 	}}
 }
 
-// parseMarketDataIndexSymbols 保留旧 Analysis 配置的默认指数和去重语义。
+// parseMarketDataIndexSymbols 解析大盘指数标的，保留默认指数与大小写不敏感去重。
 func parseMarketDataIndexSymbols(raw string) []string {
 	if strings.TrimSpace(raw) == "" {
 		return []string{"000001.SH"}

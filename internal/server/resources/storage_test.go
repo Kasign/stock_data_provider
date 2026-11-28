@@ -17,9 +17,9 @@ func TestOpenSQLRequiresContext(t *testing.T) {
 	}
 }
 
-func TestStorageCloseIsNilSafe(t *testing.T) {
-	var storage *Storage
-	if err := storage.Close(); err != nil {
+func TestResourcesCloseIsNilSafe(t *testing.T) {
+	var resources *Resources
+	if err := resources.Close(); err != nil {
 		t.Fatalf("Close() error = %v", err)
 	}
 }

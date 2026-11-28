@@ -41,7 +41,7 @@ const (
 type RuleEntry struct {
 	Definition RuleDefinition
 	Status     RuleEntryStatus
-	// Source 说明该规则的依据来源（契约条款、文档章节、旧链等价行为或代码位置）。
+	// Source 说明该规则的依据来源（契约条款、文档章节或代码位置）。
 	// 它必须可追溯；"业务惯例""经验值"不构成依据。
 	Source string
 }
@@ -205,7 +205,7 @@ func (catalog RuleCatalog) PendingTopics() []string {
 // DefaultRuleCatalog 返回当前生效的规则目录快照。
 //
 // 只登记有代码级或契约级依据的规则：
-//   - tradability_unverified：与旧链 tradabilityChecker 的恒拒绝行为等价（doc/quant/09）；
+//   - tradability_unverified：可交易性事实缺失时 fail-closed（doc/quant/09）；
 //   - input_quality_not_applicable：依据 1.5 的封闭适用性映射（quality_applicability.go），
 //     已登记但未发布——Risk 评估链路尚未接入输入质量事实。
 //
@@ -218,7 +218,7 @@ func DefaultRuleCatalog() RuleCatalog {
 			{
 				Definition: RuleDefinition{Code: TradabilityGateCode, Severity: SeverityBlock, Required: true},
 				Status:     RuleEntryPublished,
-				Source:     "doc/quant/09-risk-tradability硬门禁切片与前置.md 第 1、4 节；旧链 internal/service/wiring.go tradabilityChecker 恒拒绝",
+				Source:     "doc/quant/09-risk-tradability硬门禁切片与前置.md 第 1、4 节；可交易性事实缺失时 fail-closed",
 			},
 			{
 				Definition: RuleDefinition{Code: InputQualityGateCode, Severity: SeverityBlock, Required: true},

@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"example.com/stock-analysis-flow/internal/adapters/storage/mysqlredis"
-	analysisstorage "example.com/stock-analysis-flow/internal/analysis/storage"
 	marketdatabootstrap "example.com/stock-analysis-flow/internal/marketdata/bootstrap"
 	newsstorage "example.com/stock-analysis-flow/internal/news/adapters/storage"
 	quantstorage "example.com/stock-analysis-flow/internal/quant/storage"
@@ -53,9 +52,6 @@ func bootstrapDatabase(ctx context.Context, cfg mysqlredis.Config, timeout time.
 	}
 	if err := newsstorage.ValidateSchema(migrationCtx, db); err != nil {
 		return nil, nil, errors.Join(fmt.Errorf("validate final News schema: %w", err), db.Close())
-	}
-	if err := analysisstorage.ValidateSchema(migrationCtx, db); err != nil {
-		return nil, nil, errors.Join(fmt.Errorf("validate final Analysis schema: %w", err), db.Close())
 	}
 	if err := researchstorage.ValidateSchema(migrationCtx, db); err != nil {
 		return nil, nil, errors.Join(fmt.Errorf("validate final Research schema: %w", err), db.Close())

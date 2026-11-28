@@ -28,8 +28,6 @@ type Config struct {
 	RedisAddr         string
 	RedisPassword     string
 	RedisDB           int
-	RedisKeyPrefix    string
-	RedisCacheTTL     time.Duration
 	RedisDialTimeout  time.Duration
 	RedisReadTimeout  time.Duration
 	RedisWriteTimeout time.Duration
@@ -42,7 +40,6 @@ func LoadConfig(env platformconfig.Env) (Config, error) {
 		DBPassword: env.Secret("DB_PASSWORD").Value(), DBName: env.String("DB_NAME", "stock_analysis"),
 		DBParams:  env.String("DB_PARAMS", "charset=utf8mb4&parseTime=true&loc=UTC"),
 		RedisAddr: env.String("REDIS_ADDR", "127.0.0.1:6379"), RedisPassword: env.Secret("REDIS_PASSWORD").Value(),
-		RedisKeyPrefix: env.String("REDIS_KEY_PREFIX", "stock-analysis:"),
 	}
 	var err error
 	if c.DBPort, err = env.Int("DB_PORT", 3306); err != nil {
@@ -60,9 +57,6 @@ func LoadConfig(env platformconfig.Env) (Config, error) {
 	if c.DBConnMaxLifetime, err = env.Duration("DB_CONN_MAX_LIFETIME", 30*time.Minute); err != nil {
 		return c, err
 	}
-	if c.RedisCacheTTL, err = env.Duration("REDIS_CACHE_TTL", 5*time.Minute); err != nil {
-		return c, err
-	}
 	if c.RedisDialTimeout, err = env.Duration("REDIS_DIAL_TIMEOUT", 3*time.Second); err != nil {
 		return c, err
 	}
@@ -72,7 +66,7 @@ func LoadConfig(env platformconfig.Env) (Config, error) {
 	if c.RedisWriteTimeout, err = env.Duration("REDIS_WRITE_TIMEOUT", 2*time.Second); err != nil {
 		return c, err
 	}
-	if c.DBConnMaxLifetime <= 0 || c.RedisCacheTTL <= 0 || c.RedisDialTimeout <= 0 || c.RedisReadTimeout <= 0 || c.RedisWriteTimeout <= 0 {
+	if c.DBConnMaxLifetime <= 0 || c.RedisDialTimeout <= 0 || c.RedisReadTimeout <= 0 || c.RedisWriteTimeout <= 0 {
 		return c, fmt.Errorf("database and Redis durations must be positive")
 	}
 	if strings.TrimSpace(c.DBHost) == "" || strings.TrimSpace(c.DBUser) == "" || strings.TrimSpace(c.DBName) == "" {
@@ -85,11 +79,6 @@ func LoadConfig(env platformconfig.Env) (Config, error) {
 		return c, fmt.Errorf("REDIS_ADDR must be host:port: %w", err)
 	}
 	return c, nil
-}
-
-// LoadConfigFromEnv preserves the legacy adapter entry point.
-func LoadConfigFromEnv() (Config, error) {
-	return LoadConfig(platformconfig.NewEnv())
 }
 
 // mysqlDriverConfig builds a driver-native config. Keeping credentials as fields
@@ -182,8 +171,6 @@ func (c Config) RedisOptions() redis.Options {
 		WriteTimeout: c.RedisWriteTimeout,
 	}
 }
-
-func (c Config) RedisKey(key string) string { return c.RedisKeyPrefix + strings.TrimLeft(key, ":") }
 
 // EscapePassword is provided for diagnostics only; do not log DSNs or credentials.
 func EscapePassword(s string) string { return url.QueryEscape(s) }
