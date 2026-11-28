@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   buildDiagnosticExport,
+  buildMarketProbeRequest,
   buildProbeExport,
   buildStockProbeRequest,
   explainReason,
@@ -247,3 +248,19 @@ test("buildProbeExport 带上请求参数便于确认服务端收到了什么", 
   assert.equal(parsed.summary.passed, 1);
   assert.equal(typeof parsed.build, "string");
 });
+
+test("buildMarketProbeRequest 不带 symbols 且只含市场级能力", () => {
+  const request = buildMarketProbeRequest();
+  assert.equal(Object.hasOwn(request, "symbols"), false);
+  assert.deepEqual(request.capabilities.sort(), [
+    "dragon_tiger", "hot_ranking", "index_catalog", "index_quotes",
+    "limit_pool", "market_breadth", "market_capital_flow",
+    "sector_rankings", "stock_universe", "trading_calendar"
+  ]);
+});
+
+test("buildMarketProbeRequest 过滤掉股票级能力", () => {
+  const request = buildMarketProbeRequest(["trading_calendar", "quote", "chip_distribution"]);
+  assert.deepEqual(request.capabilities, ["trading_calendar"]);
+});
+

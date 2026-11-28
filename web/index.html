@@ -1283,6 +1283,16 @@
               <span class="diagnostics-export-status" id="probe-export-status" role="status" aria-live="polite"></span>
             </div>
             <div id="diagnostics-probe-result"><p class="diagnostics-summary">尚未运行。</p></div>
+            <details class="diagnostics-market-probe" id="diagnostics-market-probe">
+              <summary>市场级能力探测（交易日历、指数、指数目录、市场广度、行业排行、涨跌停池、龙虎榜、人气榜、市场资金流，不带股票代码）</summary>
+              <p class="diagnostics-summary">市场级能力不接受股票代码过滤，服务端若收到 symbols 会返回 400；这里单独发起探测，用来判断某个数据源在“非个股”能力上是否还有可用接口。</p>
+              <div class="diagnostics-toolbar">
+                <button class="button button-secondary" id="run-market-probe" type="button">运行市场级探测</button>
+                <button class="button button-secondary" id="copy-market-probe-json" type="button" hidden>复制市场级 JSON</button>
+                <span class="diagnostics-export-status" id="market-probe-export-status" role="status" aria-live="polite"></span>
+              </div>
+              <div id="diagnostics-market-probe-result"><p class="diagnostics-summary">尚未运行。</p></div>
+            </details>
           </section>
         </section>
 

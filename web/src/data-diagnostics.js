@@ -214,6 +214,23 @@ export const STOCK_SCOPED_PROBE_CAPABILITIES = Object.freeze([
   "valuations", "capital_flow", "chip_distribution"
 ]);
 
+// 市场级能力不带 symbols：服务端按 isStockScopedProbeCapability 判定，
+// 这些能力一旦带 symbols 会被 400 拒绝。
+export const MARKET_PROBE_CAPABILITIES = Object.freeze([
+  "trading_calendar", "index_quotes", "index_catalog", "market_breadth",
+  "sector_rankings", "market_capital_flow", "limit_pool", "dragon_tiger",
+  "hot_ranking", "stock_universe"
+]);
+
+export function buildMarketProbeRequest(capabilities = MARKET_PROBE_CAPABILITIES) {
+  const allowed = (Array.isArray(capabilities) ? capabilities : [])
+    .filter((capability) => MARKET_PROBE_CAPABILITIES.includes(capability));
+  return {
+    capabilities: allowed.length ? allowed : [...MARKET_PROBE_CAPABILITIES],
+    timeout_seconds: 25
+  };
+}
+
 const DEFAULT_DIAGNOSTIC_PROBE_CAPABILITIES = Object.freeze([
   "quote", "daily_bars", "security_trading_status", "stock_basic",
   "valuations", "chip_distribution", "capital_flow"
@@ -335,6 +352,53 @@ function el(tag, cls, text) {
   return node;
 }
 
+// 股票级与市场级探测共用同一套渲染：主表只放数据源能力，交叉校验折叠。
+export function renderProbeGroups(node, groups) {
+  if (!node) return;
+  node.replaceChildren();
+  const list = Array.isArray(groups) ? groups : [];
+  if (!list.length) {
+    node.append(el("p", "diagnostics-summary", "探测未返回任何 Provider 结果。"));
+    return;
+  }
+  const primaryGroups = list.filter((group) => !group.system);
+  const systemGroups = list.filter((group) => group.system);
+  const buildTable = (rows, firstHeader) => {
+    const table = el("table", "data-table");
+    const head = el("tr");
+    [firstHeader, "能力", "结论", "明细"].forEach((label) => head.append(el("th", "", label)));
+    const thead = el("thead");
+    thead.append(head);
+    const tbody = el("tbody");
+    for (const group of rows) {
+      const tr = el("tr");
+      tr.append(el("td", "", group.provider));
+      tr.append(el("td", "", group.capability || "—"));
+      const statusCell = el("td");
+      statusCell.append(qualityPill(group.status === "passed" ? "ok" : group.status === "degraded" ? "degraded" : "failed", group.status));
+      tr.append(statusCell);
+      tr.append(el("td", "", group.checks.map((check) => {
+        const reason = check.errorMessage || check.errorCode;
+        return check.check + ":" + check.status + (reason ? "/" + reason : "");
+      }).join(" · ") || "—"));
+      tbody.append(tr);
+    }
+    table.append(thead, tbody);
+    return table;
+  };
+  if (primaryGroups.length) {
+    node.append(buildTable(primaryGroups, "Provider"));
+  } else {
+    node.append(el("p", "diagnostics-summary", "本次探测没有数据源能力结果，仅返回交叉校验。"));
+  }
+  if (systemGroups.length) {
+    const details = el("details", "diagnostics-system-probe");
+    details.append(el("summary", "", "交叉校验与存储检查（" + systemGroups.length + " 项，不参与数据源结论）"));
+    details.append(buildTable(systemGroups, "组合"));
+    node.append(details);
+  }
+}
+
 function qualityPill(level, label) {
   const pill = el("span", "supplement-quality supplement-quality-" + (level === "ok" ? "valid" : level === "degraded" ? "degraded" : "invalid"), label);
   return pill;
@@ -356,10 +420,15 @@ export function bindDataDiagnostics({ root = document, getSettings, getSymbol, g
   const copyButton = root.querySelector("#copy-diagnostics-json");
   const probeCopyButton = root.querySelector("#copy-probe-json");
   const probeExportStatus = root.querySelector("#probe-export-status");
+  const marketProbeButton = root.querySelector("#run-market-probe");
+  const marketProbeNode = root.querySelector("#diagnostics-market-probe-result");
+  const marketProbeCopyButton = root.querySelector("#copy-market-probe-json");
+  const marketProbeExportStatus = root.querySelector("#market-probe-export-status");
   void getSymbol;
   void getTradeDate;
   let lastReport = null;
   let lastProbe = null;
+  let lastMarketProbe = null;
 
   function readInputs() {
     const symbol = String(symbolInput?.value || "").trim().toUpperCase();
@@ -498,60 +567,7 @@ export function bindDataDiagnostics({ root = document, getSettings, getSymbol, g
       lastProbe = run;
       if (probeCopyButton) probeCopyButton.hidden = false;
       refreshExport();
-      const groups = summarizeProbeRun(run);
-      if (probeNode) {
-        probeNode.replaceChildren();
-        const primaryGroups = groups.filter((group) => !group.system);
-        const systemGroups = groups.filter((group) => group.system);
-        if (!groups.length) {
-          probeNode.append(el("p", "", "探测未返回任何 Provider 结果。"));
-        } else {
-          const table = el("table", "data-table");
-          const head = el("tr");
-          ["Provider", "能力", "结论", "明细"].forEach((label) => head.append(el("th", "", label)));
-          const thead = el("thead");
-          thead.append(head);
-          const tbody = el("tbody");
-          for (const group of primaryGroups) {
-            const tr = el("tr");
-            tr.append(el("td", "", group.provider));
-            tr.append(el("td", "", group.capability));
-            const statusCell = el("td");
-            statusCell.append(qualityPill(group.status === "passed" ? "ok" : group.status === "degraded" ? "degraded" : "failed", group.status));
-            tr.append(statusCell);
-            tr.append(el("td", "", group.checks.map((check) => {
-              const reason = check.errorMessage || check.errorCode;
-              return check.check + ":" + check.status + (reason ? "/" + reason : "");
-            }).join(" · ")));
-            tbody.append(tr);
-          }
-          table.append(thead, tbody);
-          probeNode.append(table);
-          if (systemGroups.length) {
-            const details = el("details", "diagnostics-system-probe");
-            details.append(el("summary", "", "交叉校验与存储检查（" + systemGroups.length + " 项，不参与数据源结论）"));
-            const sysTable = el("table", "data-table");
-            const sysHead = el("tr");
-            ["组合", "能力", "结论", "明细"].forEach((label) => sysHead.append(el("th", "", label)));
-            const sysThead = el("thead");
-            sysThead.append(sysHead);
-            const sysBody = el("tbody");
-            for (const group of systemGroups) {
-              const tr = el("tr");
-              tr.append(el("td", "", group.provider));
-              tr.append(el("td", "", group.capability));
-              const cell = el("td");
-              cell.append(qualityPill(group.status === "passed" ? "ok" : group.status === "degraded" ? "degraded" : "failed", group.status));
-              tr.append(cell);
-              tr.append(el("td", "", group.checks.map((check) => check.check + ":" + check.status + (check.errorMessage || check.errorCode ? "/" + (check.errorMessage || check.errorCode) : "")).join(" · ")));
-              sysBody.append(tr);
-            }
-            sysTable.append(sysThead, sysBody);
-            details.append(sysTable);
-            probeNode.append(details);
-          }
-        }
-      }
+      renderProbeGroups(probeNode, summarizeProbeRun(run));
       return run;
     } catch (error) {
       if (probeNode) probeNode.textContent = describeApiError(error, "探测失败");
@@ -564,6 +580,39 @@ export function bindDataDiagnostics({ root = document, getSettings, getSymbol, g
   runButton?.addEventListener("click", () => { void run(); });
   probeButton?.addEventListener("click", () => { void runProbe(); });
   copyButton?.addEventListener("click", () => { void copyExport(); });
+
+  async function copyJsonText(text, statusNode, label) {
+    if (!text) { if (statusNode) statusNode.textContent = "请先运行探测"; return; }
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error("clipboard unavailable");
+      await navigator.clipboard.writeText(text);
+      if (statusNode) statusNode.textContent = label + " 已复制";
+    } catch {
+      if (statusNode) statusNode.textContent = "浏览器拒绝了剪贴板访问，请展开上方诊断 JSON 手动复制";
+    }
+  }
+
+  async function runMarketProbe() {
+    if (marketProbeButton) { marketProbeButton.disabled = true; marketProbeButton.textContent = "探测中…"; }
+    if (marketProbeNode) marketProbeNode.textContent = "正在对市场级能力执行 Provider 级探测（不带股票代码）…";
+    try {
+      const run = await runDataSourceProbe(getSettings ? getSettings() : null, buildMarketProbeRequest());
+      lastMarketProbe = run;
+      if (marketProbeCopyButton) marketProbeCopyButton.hidden = false;
+      renderProbeGroups(marketProbeNode, summarizeProbeRun(run));
+      return run;
+    } catch (error) {
+      if (marketProbeNode) marketProbeNode.textContent = describeApiError(error, "市场级探测失败");
+      return null;
+    } finally {
+      if (marketProbeButton) { marketProbeButton.disabled = false; marketProbeButton.textContent = "运行市场级探测"; }
+    }
+  }
+
+  async function copyMarketProbe() {
+    if (!lastMarketProbe) { if (marketProbeExportStatus) marketProbeExportStatus.textContent = "请先运行市场级探测"; return; }
+    await copyJsonText(buildProbeExport(lastMarketProbe), marketProbeExportStatus, "市场级 JSON");
+  }
 
   async function copyProbe() {
     if (!lastProbe) { if (probeExportStatus) probeExportStatus.textContent = "请先运行探测"; return; }
@@ -578,6 +627,8 @@ export function bindDataDiagnostics({ root = document, getSettings, getSymbol, g
   }
 
   probeCopyButton?.addEventListener("click", () => { void copyProbe(); });
+  marketProbeButton?.addEventListener("click", () => { void runMarketProbe(); });
+  marketProbeCopyButton?.addEventListener("click", () => { void copyMarketProbe(); });
 
   const buildNode = root.querySelector("#diagnostics-build");
   if (buildNode) buildNode.textContent = "前端版本 " + DIAGNOSTICS_BUILD;
@@ -586,5 +637,5 @@ export function bindDataDiagnostics({ root = document, getSettings, getSymbol, g
     if (dateInput && !String(dateInput.value || "").trim()) dateInput.value = recentTradingDay();
   }
 
-  return { run, runProbe, ensureDefaults, setSymbol: (value) => { if (symbolInput) symbolInput.value = value; }, setTradeDate: (value) => { if (dateInput) dateInput.value = value; } };
+  return { run, runProbe, runMarketProbe, ensureDefaults, setSymbol: (value) => { if (symbolInput) symbolInput.value = value; }, setTradeDate: (value) => { if (dateInput) dateInput.value = value; } };
 }

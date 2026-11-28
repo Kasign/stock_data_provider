@@ -1586,6 +1586,11 @@ try {
         "navigation should mark " + viewName + " as the current page"
       );
       await assertNoHorizontalOverflow("view " + viewName);
+      if (viewName === "diagnostics") {
+        assert.equal(await page.locator("#run-market-probe").count(), 1, "market-level probe entry must exist");
+        assert.equal(await page.locator("#copy-diagnostics-json").count(), 1, "diagnostic JSON copy button must exist");
+        assert.equal(await page.locator("#diagnostics-build").count(), 1, "frontend build marker must exist");
+      }
       if (uiReviewScreenshotWidths.has(viewport.width)) {
         await page.screenshot({
           path: path.join(uiReviewScreenshotDir, viewport.width + "x" + viewport.height + "-" + viewName + ".png"),
