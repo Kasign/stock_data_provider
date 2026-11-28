@@ -242,25 +242,31 @@ function shiftDays(date, delta) {
   return base.toISOString().slice(0, 10);
 }
 
+// 必须按 provider + capability 分组：只按 provider 会把同一源的 6 个能力
+// 的检查项堆成一组，读起来像"一个能力失败了 6 次"。
 export function summarizeProbeRun(run) {
   const results = Array.isArray(run?.check_results) ? run.check_results : [];
-  const byProvider = new Map();
+  const buckets = new Map();
   for (const item of results) {
-    const name = item.provider || "未知";
-    if (!byProvider.has(name)) byProvider.set(name, []);
-    byProvider.get(name).push(item);
+    const key = (item.provider || "未知") + "|" + (item.capability || "");
+    if (!buckets.has(key)) buckets.set(key, []);
+    buckets.get(key).push(item);
   }
-  return [...byProvider.entries()].map(([provider, checks]) => ({
-    provider,
-    capability: checks[0]?.capability || "",
-    status: checks.some((check) => check.status === "failed") ? "failed"
-      : checks.some((check) => check.status === "degraded") ? "degraded"
-        : checks.every((check) => check.status === "not_supported") ? "not_supported" : "passed",
-    checks: checks.map((check) => ({
-      check: check.check, status: check.status,
-      errorCode: check.error_code || "", errorMessage: check.error_message || ""
-    }))
-  }));
+  return [...buckets.entries()].map(([key, checks]) => {
+    const [provider, capability] = key.split("|");
+    return {
+      provider, capability,
+      // 交叉校验与存储检查不属于某个数据源能力，单独标记，避免混进主结论。
+      system: provider.includes("+") || provider === "system",
+      status: checks.some((check) => check.status === "failed") ? "failed"
+        : checks.some((check) => check.status === "degraded") ? "degraded"
+          : checks.every((check) => check.status === "not_supported") ? "not_supported" : "passed",
+      checks: checks.map((check) => ({
+        check: check.check, status: check.status,
+        errorCode: check.error_code || "", errorMessage: check.error_message || ""
+      }))
+    };
+  });
 }
 
 // 导出只包含诊断结论与错误，不含任何凭据；粘贴给维护者即可复现问题。
@@ -300,6 +306,28 @@ export function buildDiagnosticExport({ report, probe = null, generatedAt = "now
   }, null, 2);
 }
 
+// 探测结果的独立导出：带请求参数（含日线窗口），便于确认"服务端到底收到了什么"。
+export function buildProbeExport(run, { generatedAt = "now" } = {}) {
+  const groups = summarizeProbeRun(run);
+  const count = (status) => groups.filter((group) => group.status === status).length;
+  return JSON.stringify({
+    kind: "stock-data-probe",
+    version: 1,
+    build: DIAGNOSTICS_BUILD,
+    generated_at: generatedAt === "now" ? new Date().toISOString() : generatedAt,
+    run_id: run?.run_id || "",
+    requested_capabilities: run?.requested_capabilities || [],
+    requested_symbols: run?.requested_symbols || [],
+    requested_daily_bar_start_date: run?.requested_daily_bar_start_date || "",
+    requested_daily_bar_end_date: run?.requested_daily_bar_end_date || "",
+    summary: {
+      total: groups.length,
+      passed: count("passed"), degraded: count("degraded"), failed: count("failed")
+    },
+    groups
+  }, null, 2);
+}
+
 function el(tag, cls, text) {
   const node = document.createElement(tag);
   if (cls) node.className = cls;
@@ -326,6 +354,8 @@ export function bindDataDiagnostics({ root = document, getSettings, getSymbol, g
   const exportText = root.querySelector("#diagnostics-export-text");
   const exportStatus = root.querySelector("#diagnostics-export-status");
   const copyButton = root.querySelector("#copy-diagnostics-json");
+  const probeCopyButton = root.querySelector("#copy-probe-json");
+  const probeExportStatus = root.querySelector("#probe-export-status");
   void getSymbol;
   void getTradeDate;
   let lastReport = null;
@@ -466,10 +496,13 @@ export function bindDataDiagnostics({ root = document, getSettings, getSymbol, g
     try {
       const run = await runDataSourceProbe(getSettings ? getSettings() : null, buildStockProbeRequest(inputs.symbol, inputs.tradeDate));
       lastProbe = run;
+      if (probeCopyButton) probeCopyButton.hidden = false;
       refreshExport();
       const groups = summarizeProbeRun(run);
       if (probeNode) {
         probeNode.replaceChildren();
+        const primaryGroups = groups.filter((group) => !group.system);
+        const systemGroups = groups.filter((group) => group.system);
         if (!groups.length) {
           probeNode.append(el("p", "", "探测未返回任何 Provider 结果。"));
         } else {
@@ -479,7 +512,7 @@ export function bindDataDiagnostics({ root = document, getSettings, getSymbol, g
           const thead = el("thead");
           thead.append(head);
           const tbody = el("tbody");
-          for (const group of groups) {
+          for (const group of primaryGroups) {
             const tr = el("tr");
             tr.append(el("td", "", group.provider));
             tr.append(el("td", "", group.capability));
@@ -494,6 +527,29 @@ export function bindDataDiagnostics({ root = document, getSettings, getSymbol, g
           }
           table.append(thead, tbody);
           probeNode.append(table);
+          if (systemGroups.length) {
+            const details = el("details", "diagnostics-system-probe");
+            details.append(el("summary", "", "交叉校验与存储检查（" + systemGroups.length + " 项，不参与数据源结论）"));
+            const sysTable = el("table", "data-table");
+            const sysHead = el("tr");
+            ["组合", "能力", "结论", "明细"].forEach((label) => sysHead.append(el("th", "", label)));
+            const sysThead = el("thead");
+            sysThead.append(sysHead);
+            const sysBody = el("tbody");
+            for (const group of systemGroups) {
+              const tr = el("tr");
+              tr.append(el("td", "", group.provider));
+              tr.append(el("td", "", group.capability));
+              const cell = el("td");
+              cell.append(qualityPill(group.status === "passed" ? "ok" : group.status === "degraded" ? "degraded" : "failed", group.status));
+              tr.append(cell);
+              tr.append(el("td", "", group.checks.map((check) => check.check + ":" + check.status + (check.errorMessage || check.errorCode ? "/" + (check.errorMessage || check.errorCode) : "")).join(" · ")));
+              sysBody.append(tr);
+            }
+            sysTable.append(sysThead, sysBody);
+            details.append(sysTable);
+            probeNode.append(details);
+          }
         }
       }
       return run;
@@ -508,6 +564,20 @@ export function bindDataDiagnostics({ root = document, getSettings, getSymbol, g
   runButton?.addEventListener("click", () => { void run(); });
   probeButton?.addEventListener("click", () => { void runProbe(); });
   copyButton?.addEventListener("click", () => { void copyExport(); });
+
+  async function copyProbe() {
+    if (!lastProbe) { if (probeExportStatus) probeExportStatus.textContent = "请先运行探测"; return; }
+    const text = buildProbeExport(lastProbe);
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error("clipboard unavailable");
+      await navigator.clipboard.writeText(text);
+      if (probeExportStatus) probeExportStatus.textContent = "探测 JSON 已复制";
+    } catch {
+      if (probeExportStatus) probeExportStatus.textContent = "浏览器拒绝了剪贴板访问，请展开上方诊断 JSON 手动复制";
+    }
+  }
+
+  probeCopyButton?.addEventListener("click", () => { void copyProbe(); });
 
   const buildNode = root.querySelector("#diagnostics-build");
   if (buildNode) buildNode.textContent = "前端版本 " + DIAGNOSTICS_BUILD;

@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   buildDiagnosticExport,
+  buildProbeExport,
   buildStockProbeRequest,
   explainReason,
   extractQualityReasons,
@@ -204,4 +205,45 @@ test("explainReason 保留原因码并附中文说明", () => {
   assert.match(explainReason("daily_bar_provider_fallback_used"), /主源失败.*daily_bar_provider_fallback_used/);
   assert.equal(explainReason("some_unknown_code"), "some_unknown_code");
   assert.equal(explainReason(""), "");
+});
+
+test("summarizeProbeRun 按 provider + capability 分组，不把同一源的多能力混在一组", () => {
+  const groups = summarizeProbeRun({
+    check_results: [
+      { provider: "eastmoney", capability: "quote", check: "connectivity", status: "failed", error_code: "provider_error" },
+      { provider: "eastmoney", capability: "daily_bars", check: "connectivity", status: "failed", error_code: "provider_error" },
+      { provider: "eastmoney", capability: "stock_basic", check: "connectivity", status: "passed" }
+    ]
+  });
+  assert.equal(groups.length, 3);
+  assert.deepEqual(groups.map((g) => g.provider + "/" + g.capability).sort(),
+    ["eastmoney/daily_bars", "eastmoney/quote", "eastmoney/stock_basic"]);
+  assert.equal(groups.find((g) => g.capability === "stock_basic").status, "passed");
+});
+
+test("summarizeProbeRun 把交叉校验与存储标记为 system", () => {
+  const groups = summarizeProbeRun({
+    check_results: [
+      { provider: "baostock+tencent", capability: "daily_bars", check: "cross_provider", status: "skipped" },
+      { provider: "system", capability: "provider_probe_history", check: "storage", status: "passed" },
+      { provider: "sina", capability: "daily_bars", check: "connectivity", status: "passed" }
+    ]
+  });
+  assert.equal(groups.filter((g) => g.system).length, 2);
+  assert.equal(groups.filter((g) => !g.system).length, 1);
+});
+
+test("buildProbeExport 带上请求参数便于确认服务端收到了什么", () => {
+  const parsed = JSON.parse(buildProbeExport({
+    run_id: "r1",
+    requested_capabilities: ["daily_bars"],
+    requested_symbols: ["600519.SH"],
+    requested_daily_bar_start_date: "2026-11-07",
+    requested_daily_bar_end_date: "2026-11-27",
+    check_results: [{ provider: "pytdx", capability: "daily_bars", check: "connectivity", status: "passed" }]
+  }, { generatedAt: "2026-11-28T14:40:00Z" }));
+  assert.equal(parsed.kind, "stock-data-probe");
+  assert.equal(parsed.requested_daily_bar_start_date, "2026-11-07");
+  assert.equal(parsed.summary.passed, 1);
+  assert.equal(typeof parsed.build, "string");
 });

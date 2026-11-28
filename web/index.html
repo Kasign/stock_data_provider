@@ -1279,6 +1279,8 @@
             <div class="panel-heading"><div><h2>数据源主动探测</h2><p>对该标的的行情、日线、交易状态、证券档案、估值、筹码与资金流执行 Provider 级 connectivity / contract / quality 检查；探测条目由服务端返回。</p></div></div>
             <div class="diagnostics-toolbar">
               <button class="button button-secondary" id="run-diagnostic-probe" type="button">运行探测</button>
+              <button class="button button-secondary" id="copy-probe-json" type="button" hidden>复制探测 JSON</button>
+              <span class="diagnostics-export-status" id="probe-export-status" role="status" aria-live="polite"></span>
             </div>
             <div id="diagnostics-probe-result"><p class="diagnostics-summary">尚未运行。</p></div>
           </section>
