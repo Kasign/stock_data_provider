@@ -3,7 +3,7 @@
 更新时间：2026-11-28（回填 WebUI 迁移、旧 Analysis 代码删除、前端 API helper 清理及三次提交 CI 结论）
 执行分支：`repair_all`（集中开发，受根目录 `AGENTS.md` 约束）
 主线目标：在保留真实研究能力的前提下，按依赖顺序退役旧 Analysis 生产链，不制造“已退役”假象。
-当前状态：WebUI 主流程迁移完成；旧 Analysis 服务端代码链、命令与前端 API 请求入口删除完成；最终代码 SHA `ad13fb30a` 的 15/15 CI 全绿（此前 `eb695a4ee` 16/16、`1fd8222c5` 13/13 均 success）；部署配置/真实 PIT 预采集、停服清表和部署冒烟仍未完成。
+当前状态：WebUI 主流程迁移完成；旧 Analysis 服务端代码链、前端 API 请求入口、内部状态命名与最近任务本地存储命名均已清理；代码 SHA `bd28dfc2d` 的 15/15 CI 全绿（此前 `ad13fb30a` 15/15、`ea14d356f` 15/15、`eb695a4ee` 16/16、`1fd8222c5` 13/13 均 success）；部署配置/真实 PIT 预采集、停服清表和部署冒烟仍未完成。
 
 ## 0. 本文定位与权威来源
 
@@ -118,7 +118,7 @@
 |---|---|---|---|---|
 | 5.1 | 全仓旧路径/环境变量/容器名/工作流引用扫描归零 | Integration | 部分完成（2026-11-28：代码、Web API 客户端与 Makefile 引用归零；历史文档引用未批量改写） | 已扫描 Go/Web/工作流/Makefile：`cmd/demo`、`cmd/storage-check`、`internal/analysis/**`、`internal/platform/httpapi/**`、`internal/platform/taskqueue/**`、`internal/service/wiring.go`、`internal/server/marketdata/**` 均无生产代码引用；`web/src/api.js` 已无 `/api/v1/analysis/**` 与旧 helper；历史文档按日期保留，待最终迁移记录统一收口 |
 | 5.2 | Researchflow Run 全流程 + 授权报告读取 + WebUI 无旧请求 + Owner Session / Health / Ready 端到端 | Integration | 未开始（部署侧待用户按清单配置） | 真实流程验收通过；目前部署态 Researchflow 容量未启用、PIT 事实未预采集 |
-| 5.3 | 最终 SHA 完整 CI + 浏览器验收 + 部署冒烟 | Integration | 部分完成（最终代码 SHA `ad13fb30a` 的 15/15 check run 全部 `completed/success`，含 required-checks、Validate WebUI source/container 与 Chromium；此前 `eb695a4ee` 16/16、`1fd8222c5` 13/13 亦全 success；部署冒烟待用户配置后执行） | `required-checks` 聚合检查全项通过；check 数量随变更路径触发的专项子集变化，不以中途 CI 状态作为停工条件 |
+| 5.3 | 最终 SHA 完整 CI + 浏览器验收 + 部署冒烟 | Integration | 部分完成（最新代码 SHA `bd28dfc2d` 的 15/15 check run 全部 `completed/success`，含 required-checks、WebUI checks、Chromium 与各 Go 专项；此前 `ea14d356f`、`ad13fb30a`、`605c57bb9` 15/15、`eb695a4ee` 16/16、`1fd8222c5` 13/13 亦全 success；部署冒烟待用户配置后执行） | `required-checks` 聚合检查全项通过；check 数量随变更路径触发的专项子集变化，不以中途 CI 状态作为停工条件 |
 
 ## 7.1 2026-11-28 回填：旧 Analysis 代码链删除工作组
 
@@ -153,7 +153,7 @@
 - **测试同步**：8 个旧断言先失败（5 个最近任务行为组、2 个源码契约组、1 个自选卡片行为组），随后同步替换字段名与键名，未删断言、未放宽校验。防复活断言扩展到 `analysis_base`、`recent-analysis.v1` 与 `RECENT_TASKS_KEY` 新值；变异把键改回旧名后断言失败，恢复后通过。
 - **本地验证**：`npm test` 559/559 PASS；`npm run check` PASS；12 个 `*-browser.mjs` 全 PASS（含 `run-flow-browser.mjs`、`run-flow-outcomes-browser.mjs` 与 `browser-smoke.mjs` 的本地存储写入失败场景）；`git diff --check` PASS。临时 Playwright/postcss 依赖与截图已清理，包清单未改。
 - **仍未完成**：`TASK_REFERENCE_KEY`（`stock-provider-webui.last-analysis-task.v1`）及其迁移分支、`.recent-analysis-*` CSS 与“旧分析 API 地址”文案仍是独立工作组；部署侧配置、预采集、停服清表和冒烟仍待用户执行。
-- **CI 状态**：`not_run`；提交后按精确 SHA 查询并回填，未取得结论前不标记完整验收。
+- **提交与 CI（回填）**：提交 `bd28dfc2d154c74b479c344d97310d93bf76f47d`（`refactor(webui): 迁移最近任务本地存储命名`）已推送 `repair_all`。按精确 SHA 查询，15/15 check run 全部 `completed/success`：`required-checks` [46117557928](https://github.com/Kasign/stock_data_provider/actions/runs/46117557928)、[Full integration checks](https://github.com/Kasign/stock_data_provider/actions/runs/46117557984)、[Test root Go module](https://github.com/Kasign/stock_data_provider/actions/runs/46117557978)、[WebUI checks](https://github.com/Kasign/stock_data_provider/actions/runs/46117557903)、[Chromium responsive layout checks](https://github.com/Kasign/stock_data_provider/actions/runs/46117557923)，以及各模块与 Compose 专项；无 failure、无 pending。至此 WebUI 旧 Analysis 请求链、内部状态与本地存储命名均取得对应 SHA 的 CI 结论；`TASK_REFERENCE_KEY`、CSS/文案与部署侧事项仍未完成。
 
 ## 8. 执行口径
 
