@@ -77,6 +77,14 @@ type TradeDate struct {
 	IsTradingDay bool
 }
 
+// AllStockRecord 是 query_all_stock 返回的一行证券目录记录。
+// Code 使用 BaoStock 的交易所前缀格式（如 sh.600519），Name 为当时的证券简称。
+type AllStockRecord struct {
+	Code        string
+	TradeStatus string
+	Name        string
+}
+
 type AdjustmentFactor struct {
 	Code             string
 	OperateDate      string
@@ -526,6 +534,81 @@ func (c *Client) QueryTradeDates(ctx context.Context, startDate, endDate string)
 	return nil, errors.New("BaoStock exceeded maximum 100-page trading-calendar query limit")
 }
 
+// QueryAllStocks 获取指定交易日 BaoStock 全量证券目录。
+//
+// 目录同时包含 A 股、B 股、指数与场内基金，调用方必须按代码前缀自行过滤；
+// 本方法只负责协议、分页完整性与重复校验，不做品种裁剪。
+func (c *Client) QueryAllStocks(ctx context.Context, tradeDate string) ([]AllStockRecord, error) {
+	if _, err := time.Parse("2006-01-02", tradeDate); err != nil {
+		return nil, fmt.Errorf("invalid BaoStock all-stock date %q", tradeDate)
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := c.acquire(ctx); err != nil {
+		return nil, err
+	}
+	defer c.release()
+	if err := c.ensureLoggedInLocked(ctx); err != nil {
+		return nil, err
+	}
+
+	rows := make([]AllStockRecord, 0, 6000)
+	seen := make(map[string]struct{}, 6000)
+	for pageNumber := 1; pageNumber <= 20; pageNumber++ {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		requestBody := strings.Join([]string{
+			"query_all_stock", c.userID, strconv.Itoa(pageNumber),
+			strconv.Itoa(defaultPageSize), tradeDate,
+		}, messageSplit)
+		messageType, responseBody, err := c.exchangeLocked(ctx, messageAllStockRequest, requestBody)
+		if err != nil {
+			return nil, fmt.Errorf("BaoStock all-stock page %d: %w", pageNumber, err)
+		}
+		if messageType == messageException {
+			return nil, protocolExceptionError(responseBody)
+		}
+		if messageType != messageAllStockResponse {
+			c.dropConnectionLocked()
+			return nil, fmt.Errorf("unexpected BaoStock all-stock response type %q", messageType)
+		}
+		page, err := parseAllStockPage(responseBody)
+		if err != nil {
+			c.dropConnectionLocked()
+			return nil, fmt.Errorf("decode BaoStock all-stock page %d: %w", pageNumber, err)
+		}
+		if page.errorCode != "0" {
+			return nil, fmt.Errorf("BaoStock all-stock query rejected: code=%s message=%s", page.errorCode, page.errorMessage)
+		}
+		if page.tradeDate != tradeDate {
+			return nil, fmt.Errorf("BaoStock all-stock response date %q does not match requested %q", page.tradeDate, tradeDate)
+		}
+		for _, row := range page.rows {
+			if _, ok := seen[row.Code]; ok {
+				return nil, fmt.Errorf("BaoStock all-stock returned duplicate security %s", row.Code)
+			}
+			seen[row.Code] = struct{}{}
+			rows = append(rows, row)
+		}
+		if len(rows) > maxQueryRows {
+			return nil, fmt.Errorf("BaoStock all-stock query exceeded safety row limit %d", maxQueryRows)
+		}
+		pageSize := page.pageSize
+		if pageSize <= 0 {
+			pageSize = defaultPageSize
+		}
+		if len(page.rows) < pageSize {
+			if len(rows) == 0 {
+				return nil, errors.New("BaoStock returned no all-stock rows")
+			}
+			return rows, nil
+		}
+	}
+	return nil, errors.New("BaoStock exceeded maximum 20-page all-stock query limit")
+}
+
 // QueryAdjustmentFactors retrieves BaoStock's date-effective forward/backward adjustment factors.
 func (c *Client) QueryAdjustmentFactors(ctx context.Context, code, startDate, endDate string) ([]AdjustmentFactor, error) {
 	code = strings.ToLower(strings.TrimSpace(code))
@@ -676,6 +759,65 @@ func parseAdjustmentFactorPage(body, userID, code, startDate, endDate string) (a
 		page.rows = append(page.rows, AdjustmentFactor{
 			Code: values[0], OperateDate: values[1],
 			ForwardFactor: factorValues[0], BackwardFactor: factorValues[1], AdjustmentFactor: factorValues[2],
+		})
+	}
+	return page, nil
+}
+
+type allStockPage struct {
+	errorCode    string
+	errorMessage string
+	pageSize     int
+	tradeDate    string
+	fields       []string
+	rows         []AllStockRecord
+}
+
+func parseAllStockPage(body string) (allStockPage, error) {
+	parts := strings.Split(body, messageSplit)
+	if len(parts) < 2 {
+		return allStockPage{}, errors.New("all-stock response has fewer than two status fields")
+	}
+	page := allStockPage{errorCode: parts[0], errorMessage: parts[1]}
+	if page.errorCode != "0" {
+		return page, nil
+	}
+	if len(parts) < 9 {
+		return allStockPage{}, fmt.Errorf("successful all-stock response has only %d fields", len(parts))
+	}
+	page.pageSize, _ = strconv.Atoi(strings.TrimSpace(parts[5]))
+	page.tradeDate = strings.TrimSpace(parts[7])
+	page.fields = strings.Split(parts[8], ",")
+	if !equalFields(page.fields, []string{"code", "tradeStatus", "code_name"}) {
+		return allStockPage{}, fmt.Errorf("unexpected all-stock field list %q", strings.Join(page.fields, ","))
+	}
+	if _, err := time.Parse("2006-01-02", page.tradeDate); err != nil {
+		return allStockPage{}, fmt.Errorf("all-stock response date %q is not YYYY-MM-DD", page.tradeDate)
+	}
+	var payload map[string]json.RawMessage
+	if strings.TrimSpace(parts[6]) != "" {
+		if err := json.Unmarshal([]byte(parts[6]), &payload); err != nil {
+			return allStockPage{}, fmt.Errorf("parse all-stock record JSON: %w", err)
+		}
+	}
+	var records [][]string
+	if raw := payload["record"]; len(raw) > 0 {
+		if err := json.Unmarshal(raw, &records); err != nil {
+			return allStockPage{}, fmt.Errorf("parse all-stock rows: %w", err)
+		}
+	}
+	for i, values := range records {
+		if len(values) != 3 {
+			return allStockPage{}, fmt.Errorf("all-stock row %d has %d columns, expected 3", i, len(values))
+		}
+		code := strings.ToLower(strings.TrimSpace(values[0]))
+		if len(code) != 9 || (code[:3] != "sh." && code[:3] != "sz." && code[:3] != "bj.") {
+			return allStockPage{}, fmt.Errorf("all-stock row %d has invalid security code %q", i, values[0])
+		}
+		page.rows = append(page.rows, AllStockRecord{
+			Code:        code,
+			TradeStatus: strings.TrimSpace(values[1]),
+			Name:        strings.TrimSpace(values[2]),
 		})
 	}
 	return page, nil

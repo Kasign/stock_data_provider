@@ -12,44 +12,24 @@ import (
 	"example.com/stock-analysis-flow/internal/marketdata/provider"
 )
 
-// StockUniverse 使用已配置的证券搜索目录 Provider 获取完整 A 股证券池。
+// StockUniverse 使用已配置的证券目录来源获取完整 A 股证券池。
+//
+// 候选来源分两组：显式注册的 StockUniverseProvider（如 BaoStock 全量目录）优先，
+// 其次是实现了该能力的 StockSearchProvider（Eastmoney 的 clist 目录）。两组按名称去重，
+// 顺序即兜底顺序；只要有一条通过完整性校验就返回，全部失败才报错。
 func (s *DataService) StockUniverse(ctx context.Context) (*model.StockUniverseSnapshot, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	var failures []string
-	for _, candidate := range s.stockSearchProviders {
-		universeProvider, ok := candidate.(provider.StockUniverseProvider)
-		if !ok {
-			continue
-		}
-		snapshot, err := universeProvider.ListStockUniverse(ctx)
+	for _, candidate := range s.stockUniverseCandidates() {
+		snapshot, err := candidate.ListStockUniverse(ctx)
 		if err != nil {
 			failures = append(failures, candidate.Name()+": "+err.Error())
 			continue
 		}
-		if snapshot == nil || snapshot.Total <= 0 || snapshot.Total != len(snapshot.Items) ||
-			snapshot.Source == "" || snapshot.SourceVersion == "" || snapshot.FetchedAt.IsZero() ||
-			(snapshot.QualityStatus != model.QualityValid && snapshot.QualityStatus != model.QualityDegraded && snapshot.QualityStatus != model.QualityStale) {
-			failures = append(failures, candidate.Name()+": invalid or incomplete stock-universe snapshot")
-			continue
-		}
-		seen := make(map[string]struct{}, len(snapshot.Items))
-		valid := true
-		for _, item := range snapshot.Items {
-			symbol, symbolErr := normalize.NormalizeSymbol(item.Symbol)
-			if symbolErr != nil || symbol != item.Symbol || item.Code == "" || item.Name == "" {
-				valid = false
-				break
-			}
-			if _, exists := seen[symbol]; exists {
-				valid = false
-				break
-			}
-			seen[symbol] = struct{}{}
-		}
-		if !valid {
-			failures = append(failures, candidate.Name()+": stock-universe contains invalid or duplicate securities")
+		if err := validateStockUniverseSnapshot(snapshot); err != nil {
+			failures = append(failures, candidate.Name()+": "+err.Error())
 			continue
 		}
 		return snapshot, nil
@@ -58,6 +38,56 @@ func (s *DataService) StockUniverse(ctx context.Context) (*model.StockUniverseSn
 		return nil, errors.New("no configured provider exposes a complete stock universe")
 	}
 	return nil, fmt.Errorf("all stock-universe providers failed: %v", failures)
+}
+
+// stockUniverseCandidates 合并显式目录来源与搜索来源中的目录实现，按名称去重并保持优先级。
+func (s *DataService) stockUniverseCandidates() []provider.StockUniverseProvider {
+	candidates := make([]provider.StockUniverseProvider, 0, len(s.stockUniverseProviders)+len(s.stockSearchProviders))
+	seen := make(map[string]struct{}, cap(candidates))
+	for _, candidate := range s.stockUniverseProviders {
+		if candidate == nil {
+			continue
+		}
+		if _, duplicate := seen[candidate.Name()]; duplicate {
+			continue
+		}
+		seen[candidate.Name()] = struct{}{}
+		candidates = append(candidates, candidate)
+	}
+	for _, searchProvider := range s.stockSearchProviders {
+		universeProvider, ok := searchProvider.(provider.StockUniverseProvider)
+		if !ok {
+			continue
+		}
+		if _, duplicate := seen[universeProvider.Name()]; duplicate {
+			continue
+		}
+		seen[universeProvider.Name()] = struct{}{}
+		candidates = append(candidates, universeProvider)
+	}
+	return candidates
+}
+
+// validateStockUniverseSnapshot 校验目录的完整性与身份一致性。
+// Total 必须等于条目数，条目必须是规范代码、非空名称且不重复，否则不得作为证券池使用。
+func validateStockUniverseSnapshot(snapshot *model.StockUniverseSnapshot) error {
+	if snapshot == nil || snapshot.Total <= 0 || snapshot.Total != len(snapshot.Items) ||
+		snapshot.Source == "" || snapshot.SourceVersion == "" || snapshot.FetchedAt.IsZero() ||
+		(snapshot.QualityStatus != model.QualityValid && snapshot.QualityStatus != model.QualityDegraded && snapshot.QualityStatus != model.QualityStale) {
+		return errors.New("invalid or incomplete stock-universe snapshot")
+	}
+	seen := make(map[string]struct{}, len(snapshot.Items))
+	for _, item := range snapshot.Items {
+		symbol, symbolErr := normalize.NormalizeSymbol(item.Symbol)
+		if symbolErr != nil || symbol != item.Symbol || item.Code == "" || item.Name == "" {
+			return errors.New("stock-universe contains invalid or duplicate securities")
+		}
+		if _, exists := seen[symbol]; exists {
+			return errors.New("stock-universe contains invalid or duplicate securities")
+		}
+		seen[symbol] = struct{}{}
+	}
+	return nil
 }
 
 // MarketStocks returns one bounded page of the complete A-share universe with quote and optional MA enrichment.

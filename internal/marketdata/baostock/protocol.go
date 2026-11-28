@@ -23,6 +23,8 @@ const (
 	messageException                = "04"
 	messageTradeDateRequest         = "33"
 	messageTradeDateResponse        = "34"
+	messageAllStockRequest          = "35"
+	messageAllStockResponse         = "36"
 	messageAdjustmentFactorRequest  = "15"
 	messageAdjustmentFactorResponse = "16"
 	messageHistoryRequest           = "95"

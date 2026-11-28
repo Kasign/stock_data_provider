@@ -36,6 +36,7 @@ type DataService struct {
 	barProviders                   []provider.DailyBarProvider
 	stockBasicProviders            []provider.StockBasicProvider
 	stockSearchProviders           []provider.StockSearchProvider
+	stockUniverseProviders         []provider.StockUniverseProvider
 	sectorRankingProviders         []provider.SectorRankingProvider
 	indexQuoteProviders            []provider.IndexQuoteProvider
 	marketBreadthProviders         []provider.MarketBreadthProvider
@@ -206,6 +207,17 @@ func (s *DataService) SetStockSearchProviders(providers []provider.StockSearchPr
 
 func (s *DataService) StockSearchProviders() []provider.StockSearchProvider {
 	return append([]provider.StockSearchProvider(nil), s.stockSearchProviders...)
+}
+
+// SetStockUniverseProviders 注册独立的证券目录来源。
+// 证券目录不属于搜索能力：BaoStock 这类只提供全量目录、不提供关键词检索的 Provider
+// 必须通过本方法注册，否则市场列表只会依赖 Eastmoney 的 clist 目录。
+func (s *DataService) SetStockUniverseProviders(providers []provider.StockUniverseProvider) {
+	s.stockUniverseProviders = append([]provider.StockUniverseProvider(nil), providers...)
+}
+
+func (s *DataService) StockUniverseProviders() []provider.StockUniverseProvider {
+	return append([]provider.StockUniverseProvider(nil), s.stockUniverseProviders...)
 }
 
 func (s *DataService) SetSectorRankingProviders(providers []provider.SectorRankingProvider) {

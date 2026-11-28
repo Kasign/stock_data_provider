@@ -7,6 +7,7 @@ import (
 	"math"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"example.com/stock-analysis-flow/internal/marketdata/baostock"
@@ -16,6 +17,9 @@ import (
 
 const baostockVersion = "baostock-public-tcp-v1"
 
+// baostockProviderName 是证券目录等不经过接收者的构造路径共用的来源名。
+const baostockProviderName = "baostock"
+
 type baostockDailyClient interface {
 	QueryDailyKLines(ctx context.Context, code, startDate, endDate, adjustFlag string) ([]baostock.DailyKLine, error)
 }
@@ -23,6 +27,11 @@ type baostockDailyClient interface {
 // Baostock implements only historical daily bars; it is not a real-time quote source.
 type Baostock struct {
 	client baostockDailyClient
+
+	// universeMu 保护证券目录缓存；目录请求是低频操作，网络查询在锁内完成以避免重复抓取。
+	universeMu        sync.Mutex
+	universe          *model.StockUniverseSnapshot
+	universeFetchedAt time.Time
 }
 
 func NewBaostock(client baostockDailyClient) *Baostock {
@@ -54,7 +63,7 @@ func baoStockDailyBarStandardField(providerField string) string {
 	}
 }
 
-func (p *Baostock) Name() string { return "baostock" }
+func (p *Baostock) Name() string { return baostockProviderName }
 
 func (p *Baostock) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endDate string, limit int, adjustment model.AdjustmentBasis) ([]model.DailyBar, error) {
 	if p == nil || p.client == nil {

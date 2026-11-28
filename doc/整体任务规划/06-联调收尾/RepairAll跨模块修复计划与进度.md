@@ -2189,3 +2189,14 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - **行业排行替代路径排查（全部失败，证明无解）**：`push2ex` 的 `api/qt/clist/get` 返回 404；`datacenter-web` 的 `RPT_BOARD_FUND_FLOW`、`RPT_INDUSTRY_QUOTE` 返回 `9501 报表配置不存在`；`push2ex/getTopicZTPool`（涨停池）虽可用但不提供行业排行。结论：eastmoney 的行业排行只存在于 push2，当前网络下无替代端点。
 - **诊断盲点修复（提交 `b8538b4ba`）**：MiaoXiang 走补充源通道（`SupplementProvider`）参与 chip/capital-flow 兜底，但探针只遍历主 provider 列表，导致其失败原因不可见；已抽出 `probeCapitalFlow`/`probeChipDistribution` 闭包并新增 supplement 循环，主源与补充源共用同一套校验。
 - **剩余两项的唯一路径**：行业排行需 TickFlow 开通「标的池查询」权限（其实现仅支持 `industry`，不支持概念/地域）；市场资金流需 Tushare 相应权限。均非代码或配置可解。
+
+## 2026-11-28 P1 首组：证券目录单点解除（BaoStock 第二来源）
+
+- **触发**：用户确认「先修 P1」。Data review 判定 `StockUniverse` 是影响面最大的单点：`/api/v1/market/stocks`、筛选、自选全市场增强共享该能力，部署态恒 503。
+- **根因**：① 唯一实现 `Eastmoney.ListStockUniverse` 走 `push2 clist`，当前网络对 `push2/push2his` 无 HTTP 响应；进程内 6h 缓存无持久化。② `DataService.StockUniverse` 只从 `StockSearchProvider` 列表动态断言目录能力，导致「只有全量目录、没有关键词检索」的 Provider 无法接入。两个都是代码结构问题，不是配置错误。
+- **方案选择**：P1 原建议含「持久化 + 冷启动兜底」，本组选「补第二 Provider 实现」。理由：持久化只能缓存已抓到的目录，而原路径从未成功抓到，落表无内容可存；真正缺的是一条可到达的独立取数路径。不改物理 Schema、不新增表、不新增平行模块。
+- **修复范围（7 个代码改动文件 + 4 个新文件 + 3 份文档同步）**：`baostock/protocol.go` + `baostock/client.go` 新增 `query_all_stock` 报文 35/36 与 `QueryAllStocks`（分页/错误码/日期一致/跨页去重/行数上限/末页判定）及 `parseAllStockPage`；`provider/baostock_universe.go`（新）实现 `Baostock.ListStockUniverse`，按最近交易日定档、过滤 A 股代码段、缺失北交所固定 degraded、<1000 条失败关闭、进程内 6h 缓存；`provider/baostock.go` 增缓存字段与来源名常量；`service/data.go` 增独立 `SetStockUniverseProviders`；`service/market_stocks.go` 合并显式目录来源与搜索来源、按名称去重、逐源兜底、完整性校验抽为独立函数；`bootstrap/module.go` 与 `httpapi/server.go` 两条装配路径同步注册；`doc/api/架构/01-Provider与数据域能力边界.md` 与 `06-联调收尾/Data模块卡点.md` 同步口径。
+- **测试**：18 个新用例（协议解析 6 含 1 个环境变量门控 live、Provider 7、Service 兜底 5）。先红证据以两处变异复现修复前行为：去掉 A 股代码过滤、把兜底链退化为「首源失败即返回」，两者均被新用例捕获，恢复后通过。临时 live 探针对真实 BaoStock 端点跑通 `QueryTradeDates → QueryAllStocks → ListStockUniverse → 完整性校验` 全链路，验证后已删除。
+- **本地验证**：`gofmt -l internal/marketdata/` 空；`go build ./...`、`go vet ./internal/marketdata/...`、`go test ./... -count=1`（全仓 ok，grep 无 FAIL/panic）、`git diff --check` 全部通过。本组只改 Go 与 Markdown，未触 WebUI，故未跑 `npm test`。
+- **状态边界**：目录不含北交所（固定 degraded + 下界声明）；仅进程内缓存，未落 MariaDB。push2 独源的 `sector_rankings`/`stock_boards`/`order_book`/`chip_distribution`/`capital_flow`、零源的 `index_catalog`/`market_capital_flow`/`security_trading_status`/`price_limit_event`、以及免费档错误码被压成 502 的诊断盲点，均仍为已登记卡点，不在本组范围。
+- **提交与 CI（回填）**：提交与精确 SHA 见下方回填行；在取得 `required-checks` 聚合检查结论前，本组验收状态为 `not_run`，本地命令只作为针对性验证证据。

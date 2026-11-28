@@ -416,6 +416,14 @@ func (m *Module) build(cfg config.Config, deps Dependencies) error {
 	if len(allProviders) == 0 {
 		return errors.New("provider priority has no enabled providers")
 	}
+	// 证券目录使用独立的注册通道：它不属于搜索能力，也不受 stock_search 开关约束。
+	// 顺序遵循 provider_priority —— Eastmoney 的 clist 目录优先，BaoStock 的 query_all_stock 目录作第二来源。
+	stockUniverseProviders := make([]provider.StockUniverseProvider, 0, len(allProviders))
+	for _, p := range allProviders {
+		if universeProvider, ok := p.(provider.StockUniverseProvider); ok {
+			stockUniverseProviders = append(stockUniverseProviders, universeProvider)
+		}
+	}
 	ds := service.NewWithCapabilities(allProviders, quoteProviders, barProviders, c, store, cfg.QuoteCacheTTL, cfg.BarsCacheTTL, cfg.DefaultDailyBars, cfg.MaxDailyBars, service.ResilienceConfig{Retries: cfg.ProviderRetries, CircuitFailureThreshold: cfg.CircuitFailureThreshold, CircuitCooldown: cfg.CircuitCooldown}, logger)
 	supplementProviders := make([]provider.SupplementProvider, 0, 1)
 	if cfg.MXEnabled {
@@ -428,6 +436,7 @@ func (m *Module) build(cfg config.Config, deps Dependencies) error {
 	ds.SetSupplementProviders(supplementProviders)
 	ds.SetStockBasicProviders(stockBasicProviders)
 	ds.SetStockSearchProviders(stockSearchProviders)
+	ds.SetStockUniverseProviders(stockUniverseProviders)
 	ds.SetSectorRankingProviders(sectorRankingProviders)
 	ds.SetIndexQuoteProviders(indexQuoteProviders)
 	ds.SetMarketBreadthProviders(marketBreadthProviders)

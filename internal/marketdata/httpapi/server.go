@@ -83,13 +83,20 @@ func NewWithConfig(defaultAdjustment string, svc *service.DataService, allProvid
 func NewWithCapabilityInterfaces(defaultAdjustment string, svc *service.DataService, allProviders []provider.NamedProvider, quoteProviders []provider.QuoteProvider, barProviders []provider.DailyBarProvider, maxBars int, requestTimeout time.Duration, logger *slog.Logger) *Server {
 	if svc != nil {
 		var priceLimitEventProviders []provider.PriceLimitEventProvider
+		var stockUniverseProviders []provider.StockUniverseProvider
 		for _, p := range allProviders {
 			if eventProvider, ok := p.(provider.PriceLimitEventProvider); ok {
 				priceLimitEventProviders = append(priceLimitEventProviders, eventProvider)
 			}
+			if universeProvider, ok := p.(provider.StockUniverseProvider); ok {
+				stockUniverseProviders = append(stockUniverseProviders, universeProvider)
+			}
 		}
 		if len(priceLimitEventProviders) > 0 {
 			svc.SetPriceLimitEventProviders(priceLimitEventProviders)
+		}
+		if len(stockUniverseProviders) > 0 {
+			svc.SetStockUniverseProviders(stockUniverseProviders)
 		}
 	}
 

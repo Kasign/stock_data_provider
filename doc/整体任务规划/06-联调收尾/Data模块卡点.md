@@ -1,7 +1,9 @@
 # Data 模块卡点
 
-更新时间：2026-11-23  
-维护分支：`repair_all`（聚合验收）  
+更新时间：2026-11-28
+
+维护分支：`repair_all`（聚合验收）
+
 模块范围：`internal/marketdata/**`；`doc/api/**`
 
 ## 当前卡点：DATA D2 精度与 Snapshot 链路（先完成 Quant 首个真实指标所需的最小输入切片）
@@ -499,3 +501,22 @@ Root Server 的 Data Module 构造、共享资源注入、Migration Registry、I
 - `tradable_volume` 的唯一口径是买盘五档挂单量之和；Provider、Creator、Repository、Authorized Reader 均不接受参与率、成交量推导或调用方声称值。
 - 新增 MariaDB 盘口快照集成测试：共享存储、跨 `payload_kind` 隔离、幂等读回、直接改库篡改检测；本地 `MARKET_DATA_TEST_MYSQL_DSN` 未配置时 SKIP，CI 结论按精确 SHA 回填。契约状态未变：DATA-CTR-007 仍 `deferred`、DATA-CTR-008 仍 `frozen`。
 - **精确复用补强（2026-11-27）**：`OrderBookFactsSnapshotRepository` 新增按精确 `symbol + purpose + system_as_of` 复用已授权盘口快照的窄方法，MariaDB 实现使用精确相等过滤；Creator 在实时 Provider 前复用，绑定不一致 fail-closed。该修复使 L3 不依赖实时盘口开放时段，且没有引入参与率或近似匹配。真库 `TestMariaDBOrderBookFactsSnapshotExactSystemAsOfReuse` PASS；修复提交 `1423d29c9` 的 Integration CI 45937832229 全项 success，含 L3 PASS 7.02s。
+
+## 2026-11-28 证券目录单点：补 BaoStock 第二来源，解除 /market/stocks 全链路失败
+
+**状态：代码完成，CI 待回填（`not_run`）；push2 阻断的其余独源能力未解决。**
+
+- **触发**：Data 模块「数据获取不全」review 确认，`StockUniverse` 是全仓影响面最大的单点：`/api/v1/market/stocks`、选股筛选、自选的全市场增强都依赖它。部署态该能力恒返回 `no configured provider exposes a complete stock universe` / 503。
+- **根因（两个叠加，都是代码结构问题）**：① `Eastmoney.ListStockUniverse` 取数走 `stockListURL = sectorRankingURL = push2 clist`，而当前网络对 `push2/push2his` 整段无 HTTP 响应；进程内 6 小时缓存无法跨重启，且 MariaDB 没有 securities 表。② 更关键的是注册路径：`DataService.StockUniverse` 只遍历 `StockSearchProvider` 列表并动态断言 `StockUniverseProvider`，因此「只有全量目录、没有关键词检索」的 Provider 永远无法接入——即使实现了也没用。
+- **方案选择（为什么不先做持久化）**：持久化只能缓存「上一次成功抓到的目录」，而原路径在部署态从未成功抓到过，落表无内容可存；冷启动兜底同样需要先有一条可到达的取数路径。因此先补第二来源（`StockUniverseProvider` 的独立实现），不改物理 Schema、不新增表，符合「能复用就复用、不新增平行实现」的约束。BaoStock 走 `public-api.baostock.com:10030` 独立 TCP 端点，与 Eastmoney 行情域名不共享任何网络路径。
+- **实现**：
+  - 协议层 `baostock/protocol.go` 增 `query_all_stock` 请求/响应报文类型 35/36；`Client.QueryAllStocks` 负责分页（≤20 页）、错误码、响应日期与请求日期一致、跨页证券代码去重、`maxQueryRows` 安全上限、末页判定；`parseAllStockPage` 校验字段表 `code,tradeStatus,code_name` 与 `sh./sz./bj.` 代码前缀，品种裁剪交给上层。
+  - `provider/baostock_universe.go` 新增 `Baostock.ListStockUniverse`：用 `QueryTradeDates` 取最近一个不晚于今日的交易日定档，按 A 股代码段过滤（沪 600/601/603/605/688/689，深 000/001/002/003/300/301/302），排除指数/B 股/场内基金与无名行；条目数 < 1000 失败关闭；快照固定 `degraded`、`total_is_lower_bound=true`，原因码 `provider_universe_excludes_beijing_exchange`；进程内缓存 6 小时，网络查询在锁内避免重复抓取。
+  - `DataService` 新增独立 `SetStockUniverseProviders` 注册通道与 `stockUniverseCandidates()`：先取显式目录来源，再追加搜索来源中同时实现目录能力的 Provider，按名称去重、保持 `provider_priority` 顺序（eastmoney → baostock），逐源失败继续、全败才报错；原有完整性校验抽为 `validateStockUniverseSnapshot`。
+  - `bootstrap/module.go` 与 `httpapi/server.go` 两条装配路径都按同一优先级收集 `StockUniverseProvider` 并注册；`doc/api/架构/01-Provider与数据域能力边界.md` 同步替换「目录是搜索能力附属」的旧口径。
+- **测试（18 个新用例 + 2 处变异）**：`client_allstock_test.go` 6 个（字段解析、大写代码归一、空末页、契约违约拒绝、查询被拒错误码、真实端点 live 用例由环境变量门控默认跳过）；`baostock_universe_test.go` 7 个（非 A 股过滤、只保留有名 A 股、目录截断失败关闭、重复代码拒绝、按最近交易日取数且命中缓存、底层失败上抛、客户端不支持目录查询时拒绝）；`stock_universe_fallback_test.go` 5 个（首源失败回退第二源、只目录不搜索的 Provider 可用、同一 Provider 不重复查询、逐源失败原因全量上报、第二源快照不完整仍拒绝）。
+  - 先红证据口径：本组未保留「实现未落地时」的测试运行快照，改以两处变异复现修复前行为并取得失败证据——① 去掉 A 股代码过滤，`TestBuildBaostockStockUniverse*` 失败；② 把兜底链退化为「首源失败即返回」（等价于旧的单源行为），`TestStockUniverse*` 失败。两处恢复后均通过，未删断言、未放宽校验、未伪造数据。
+  - 真实数据验证：临时 live 探针（用完已删除）连真实 BaoStock 端点完成 `QueryTradeDates → QueryAllStocks → ListStockUniverse → validateStockUniverseSnapshot` 全链路，返回完整 A 股目录并通过完整性校验。
+- **本地验证**：`gofmt -l internal/marketdata/` 空；`go build ./...`、`go vet ./internal/marketdata/...`、`go test ./... -count=1`（全仓 `ok`，无 FAIL/panic）、`git diff --check` 全部通过。
+- **状态边界**：目录**仍不含北交所**，故固定 degraded 且声明下界，不能当作全市场完备目录使用；目录仍只做进程内缓存、未落 MariaDB（BaoStock 端点可用时重启后重抓即可，是否需要持久化取决于后续是否出现「两端点同时不可达」的场景）。Eastmoney `push2` 阻断下的 `sector_rankings`、`stock_boards`、`order_book`、`chip_distribution`、`capital_flow`，以及零源的 `index_catalog` / `market_capital_flow` / `security_trading_status` / `price_limit_event` 均不在本组范围，仍是已登记卡点。`writeDomainErr` 把免费档 40203/403/429 统一压成 502 的诊断盲点也仍未处理。
+- **提交与 CI**：本组提交后按精确 SHA 回填；在取得 GitHub Actions `required-checks` 结论前，验收状态为 `not_run`，本地结果不冒充 CI。

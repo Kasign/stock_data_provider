@@ -24,7 +24,7 @@ Bootstrap 的 `available` 映射定义 11 个 Provider Adapter 候选；默认 `
 
 | Provider | 代码已实现能力 | 默认优先级 | 默认启用 | 默认注册能力/说明 |
 |---|---|---:|---:|---|
-| Eastmoney | Quote、DailyBars、StockBasic、StockSearch、StockUniverse、SectorRankings（Metric/Direction）、IndexQuotes、MarketBreadth、StockBoards、LimitPools、DragonTiger、Announcements、ChipDistribution、CapitalFlow、HotRankings | 是 | 是 | 上述 `providers.json` 明确开启的能力均注册；StockUniverse 通过已注册 StockSearchProvider 的动态类型断言发现 |
+| Eastmoney | Quote、DailyBars、StockBasic、StockSearch、StockUniverse、SectorRankings（Metric/Direction）、IndexQuotes、MarketBreadth、StockBoards、LimitPools、DragonTiger、Announcements、ChipDistribution、CapitalFlow、HotRankings | 是 | 是 | 上述 `providers.json` 明确开启的能力均注册；StockUniverse 由 `SetStockUniverseProviders` 显式注册 |
 | BaoStock | DailyBars、TradingCalendar、Fundamentals、AdjustmentFactors | 是 | 是 | DailyBars、TradingCalendar、Fundamentals 显式注册；AdjustmentFactorProvider 从已启用主 Provider 列表动态发现 |
 | Tencent | Quote、DailyBars、StockSearch | 是 | 是 | 三项能力均显式注册；StockSearch 使用独立优先级 |
 | Sina | Quote、DailyBars | 是 | 是 | Quote、DailyBars 显式注册 |
@@ -46,7 +46,7 @@ Bootstrap 的 `available` 映射定义 11 个 Provider Adapter 候选；默认 `
 | DailyBars | Eastmoney、BaoStock、Tencent、Sina、NetEase、TickFlow、Pytdx |
 | StockBasic | Eastmoney |
 | StockSearch | Tencent、Eastmoney（搜索优先级为 Tencent → Eastmoney） |
-| StockUniverse | Eastmoney（通过 StockSearchProvider 列表动态发现） |
+| StockUniverse | Eastmoney（clist 目录）、BaoStock（`query_all_stock` 全量目录，不含北交所） |
 | SectorRankings | Eastmoney |
 | IndexQuotes | Eastmoney |
 | MarketBreadth | Eastmoney |
@@ -76,7 +76,7 @@ MiaoXiang 的 ChipDistribution/CapitalFlow 由独立 `MARKET_DATA_MX_ENABLED` �
 
 | 能力 | 实现 Provider | 注册/消费路径 | 默认运行状态 |
 |---|---|---|---|
-| StockUniverse | Eastmoney | `StockSearchProvider` 列表中动态断言 `StockUniverseProvider`；`DataService.StockUniverse` 被 `MarketStocks` 用例调用 | Eastmoney 默认 StockSearch 开启，因此已接入 |
+| StockUniverse | Eastmoney、BaoStock | 显式 `SetStockUniverseProviders` 注册（按 `provider_priority` 排序），并保留旧有 `StockSearchProvider` 列表约定 | Eastmoney clist 优先级更高；Eastmoney 不可达时回退 BaoStock `query_all_stock` |
 | AdjustmentFactors | BaoStock、Tushare | DataService 遍历已启用的 NamedProvider 并动态断言 `AdjustmentFactorProvider` | BaoStock 默认启用；Tushare 默认关闭 |
 | CorporateActions | Tushare | DataService 遍历已启用的 NamedProvider 并动态断言 `CorporateActionProvider` | 无默认来源 |
 | HistoricalIndexConstituents | Tushare | IndexCatalog Provider 列表中动态断言 `HistoricalIndexConstituentProvider` | 无默认来源 |
@@ -86,7 +86,11 @@ MiaoXiang 的 ChipDistribution/CapitalFlow 由独立 `MARKET_DATA_MX_ENABLED` �
 | MarketCapitalFlow | Tushare | 显式 `market_capital_flow` 开关和独立能力切片 | 无默认来源；Tushare 默认关闭 |
 | PriceLimitEvents | 当前没有 Provider 实现 | Bootstrap 会扫描已启用 Provider 并收集 `PriceLimitEventProvider`，但当前扫描结果为空；HTTP `price_limit_rule` 已有真实消费者，缺少事件源时返回 unknown 并失败关闭 | 能力缺口 |
 
-**StockUniverse 不是孤立接口。** `internal/marketdata/service/market_stocks.go` 中 `DataService.StockUniverse` 遍历已注册的 StockSearchProvider，动态识别 StockUniverseProvider；`MarketStocks` 调用该方法获取全量证券目录，再做分页及行情/均线增强。因此无需新增独立配置项或重复注册机制。HTTP SourceStatus 目前只反映 StockSearch 能力，不单独暴露 StockUniverse 能力位；这不改变 Service 内部的真实消费路径。
+**StockUniverse 是独立注册的目录能力，不再是搜索能力的附属。** `internal/marketdata/service/market_stocks.go` 中 `DataService.StockUniverse` 先遍历 `SetStockUniverseProviders` 显式注册的目录来源，再追加 `StockSearchProvider` 列表中同时实现 `StockUniverseProvider` 的来源，按 Provider 名称去重并保持优先级；`MarketStocks` 调用该方法获取全量证券目录，再做分页及行情/均线增强。独立通道的存在原因是 BaoStock 只提供全量目录、不提供关键词检索：若沿用搜索列表发现，它永远不会被注册。
+
+BaoStock 目录走 `query_all_stock`（报文类型 35/36），按最近一个不晚于今日的交易日定档，只保留 A 股代码段（沪市 600/601/603/605/688/689，深市 000/001/002/003/300/301/302），并排除指数、B 股与场内基金。该来源不含北交所，因此快照固定为 `degraded` 且 `total_is_lower_bound=true`，原因码 `provider_universe_excludes_beijing_exchange`；条目数低于 1000 视为目录被截断并失败关闭。目录在进程内缓存 6 小时。
+
+HTTP SourceStatus 目前只反映 StockSearch 能力，不单独暴露 StockUniverse 能力位；这不改变 Service 内部的真实消费路径。
 
 **PriceLimitEventProvider 是已存在调用场景但缺少数据源实现的能力缺口。** Provider 目录中未发现 `FetchPriceLimitEventEvidence` 的具体实现，Bootstrap 自动收集结果为空；但 `internal/marketdata/httpapi/price_limit_rule.go` 会调用 `DataService.PriceLimitEventEvidence`，缺少独立事件证据时接口将状态置为 unknown、清空可用涨跌幅并保留质量原因，属于有意失败关闭。不能将其当作“无消费者的孤立接口”，也不能用普通涨跌停池代替特殊事件证据。
 
