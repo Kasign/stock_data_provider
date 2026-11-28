@@ -2164,3 +2164,15 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - **仍未解决（非代码可解）**：筹码分布与个股资金流依赖 `push2`/`push2his`，当前网络不可达且无 F10 替代，唯一备选是启用 `MiaoXiang`（需 API Key）；交易状态需启用 Tushare 并具备相应权限。三者均需用户侧网络或凭据决策。
 - **提交与 CI（回填）**：提交 `125b62c0ff44ef756f842b04222b1b6bbc81d0d8`（`feat(marketdata): eastmoney 补齐 F10 估值能力，修复 /market/valuations 恒 503`）已推送 `repair_all`，核对 HEAD 与 `origin/repair_all` 一致、工作区干净，未切分支/合并/rebase/强推/重置。按精确 SHA 查询 15/15 check run 全部 `completed/success`，无 failure、无 pending：`required-checks` [46150990332](https://github.com/Kasign/stock_data_provider/actions/runs/46150990332)、`Go test suite` [46150990321](https://github.com/Kasign/stock_data_provider/actions/runs/46150990321)、`Integration CI` [46150990319](https://github.com/Kasign/stock_data_provider/actions/runs/46150990319)、`Live provider probe` [46150990362](https://github.com/Kasign/stock_data_provider/actions/runs/46150990362)、`WebUI checks` [46150990311](https://github.com/Kasign/stock_data_provider/actions/runs/46150990311)，以及各模块 MariaDB/Compose 专项。
 - **待部署验证**：重建 server 镜像后 `GET /api/v1/market/valuations?symbols=600519.SH` 应从 503 变为 200（`quality_status=degraded`）。
+
+## 2026-11-28 诊断页可视化升级 + 容器默认配置漏开 eastmoney 估值
+
+- **触发**：用户按最新代码部署后估值仍 503、探测仍 400。定位到两个部署面缺口，而非逻辑缺陷本身。
+- **缺口一（配置，真缺陷）**：容器镜像不含 `configs/`（Dockerfile 未 COPY、compose 无 volume），运行时用的是 `defaultProviderFile()` **硬编码**默认值，其中 eastmoney 结构没有 `Valuations`。因此上一轮只改 `configs/marketdata/providers.json` 对容器部署无效。修复：`defaultProviderFile()` 为 eastmoney 默认开启 `Valuations`，并新增 `TestDefaultProviderFileEnablesEastmoneyValuations` 锁定该默认值。
+- **缺口二（部署面）**：用户截图的探测 400 说明 **web 镜像仍是旧版**；前端探测修复在 `7336a179a`，只有重建 `stock-analysis-web` 才生效。已在文档与回复中明确「server 与 web 两个镜像都要重建」。
+- **可视化升级**（沿用现有主题变量与 `supplement-quality` 徽章，深色/浅色主题均适配）：新增总览统计卡（检查项/通过/降级/失败，按色彩区分）、结果列改为彩色状态点、耗时等宽对齐、错误文本使用警示色、移动端统计卡两列自适应。
+- **诊断导出**：新增 `buildDiagnosticExport`，生成含 `kind/version/generated_at/symbol/trade_date/summary/checks/probe` 的结构化 JSON，明确不含任何凭据；页面提供「复制 JSON」按钮与只读文本框，剪贴板不可用时自动选中文本供手动复制，替代截图沟通。探测分组保留每个 check 的 `errorCode` 与 `errorMessage`，使 Tushare `permission_required(40203)` 这类原因可直接看到。
+- **分类口径统一**：`classifyDiagnosticRow` 同时接受原始 `body` 与已提取的 `quality`，避免渲染与导出两个投影得出不同结论。
+- **测试**：新增导出结构、探测分组、provider 错误原因三个用例；两处变异（不导出 probe、分类不认已提取 quality）均被捕获。`npm test` 573/573、`npm run check`、`go test ./...` 93 包、`go vet`、`git diff --check` 全部通过。
+- **提交与 CI（回填）**：提交 `66292ae20b356a7a5e764aaa446a21b098abc49f` 已推送 `repair_all`，16/16 check run 全部 `completed/success`（含 `Go test suite` [46153931006](https://github.com/Kasign/stock_data_provider/actions/runs/46153931006)、`WebUI browser smoke` [46153931008](https://github.com/Kasign/stock_data_provider/actions/runs/46153931008)、`Integration CI` [46153931037](https://github.com/Kasign/stock_data_provider/actions/runs/46153931037)、`required-checks` [46153931045](https://github.com/Kasign/stock_data_provider/actions/runs/46153931045)、`WebUI checks` [46153931033](https://github.com/Kasign/stock_data_provider/actions/runs/46153931033)），无 failure、无 pending。
+- **部署后预期**：估值 503→200；探测不再 400，失败项显示具体 provider 原因；筹码/资金流取决于 `MARKET_DATA_MX_ENABLED=true`（仅有 MX_APIKEY 不够）。
