@@ -2023,4 +2023,5 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - **新增 `web/src/api.js` 三个高阶 helper**：`createQuantResearchRun` / `getQuantResearchRunView` / `getQuantResearchResultsView`，把契约层与已有 HTTP helper 组合，作为下一组 `app.js` 接线的直接入口。契约层三个函数因此全部有生产调用方，非死代码。
 - **TDD 与变异**：新增 `web/tests/researchflow-flow.test.mjs` 15 项 + `api.test.mjs` 4 项接线测试。契约层 4 处变异（移除 resource_kind 校验、放开 risk payload、放宽标的校验、写死终态判定）与高阶 helper 3 处变异（跳过契约构造、跳过 Run 投影、跳过结果投影）均有效失败并恢复。
 - **验证**：本地 `npm test` 547/547 PASS、`npm run check`、`node --check researchflow-flow.js`、`git diff --check` 全通过。
-- **剩余边界（下一组）**：`app.js` 主流程仍走旧 Analysis API；本组未改任何页面行为。完整接线需改 createTask/pollTask/loadTaskRunResult、移除事件流改 Stage 聚合轮询、把结果区改为降级渲染、新增服务端取消按钮，并同步更新 ui-contract 断言与浏览器夹具。CI 状态 `not_run`，待提交后按 SHA 回填。
+- **剩余边界（下一组）**：`app.js` 主流程仍走旧 Analysis API；本组未改任何页面行为。完整接线需改 createTask/pollTask/loadTaskRunResult、移除事件流改 Stage 聚合轮询、把结果区改为降级渲染、新增服务端取消按钮，并同步更新 ui-contract 断言与浏览器夹具。
+- **提交与 CI**：提交 `199301bcab26483a278a847ca58845549e245fc8`（`feat(webui): 建立 Researchflow 单标的研究契约层与高阶 helper`）已推送 repair_all；按精确 SHA 查询 15/15 check run 全部 `completed/success`，含 required-checks、Full integration checks、Validate WebUI source and container、Chromium responsive layout checks，以及 Go/News/Research/Researchflow/Market-data/Notification 各专项。
