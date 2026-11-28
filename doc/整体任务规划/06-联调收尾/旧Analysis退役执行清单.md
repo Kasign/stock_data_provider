@@ -144,7 +144,7 @@
 - **证据与测试替换**：先由旧断言失败定位 16 处不一致（5 个源码契约测试组、2 个视图模型行为组），再同步替换断言中的标识符，未删除断言、未放宽校验。`ui-contract.test.mjs` 新增防复活断言，禁止 `lastRunResult/taskAnalysisBase/suppressedHistoryTaskBase/requestAnalysisBase/isOtherAnalysisBase/currentAnalysisBase` 与旧函数签名回到源码；变异把 `state.runResult` 改回旧名后该断言失败，恢复后通过。
 - **本地验证**：`npm test` 559/559 PASS；`npm run check` PASS；12 个 `*-browser.mjs` 全部 PASS；`git diff --check` PASS。临时安装的 Playwright/postcss 依赖与截图目录在提交前已清理，未改 `package.json`/lock。
 - **仍未完成**：localStorage 键 `stock-provider-webui.recent-analysis.v1`、本地记录字段 `analysis_base`、旧单任务键 `TASK_REFERENCE_KEY`，以及用户可见文案/CSS 的 `.recent-analysis-*`，均属独立工作组；部署侧配置、预采集、停服清表和冒烟仍待用户执行。
-- **CI 状态**：`not_run`；提交后按精确 SHA 查询并回填，未取得结论前不标记完整验收。
+- **提交与 CI（回填）**：提交 `ea14d356fee30e2f97b4f46f251daeb2a5a60cde`（`refactor(webui): 清理内部状态的旧 Analysis 命名`）已推送 `repair_all`。按精确 SHA 查询，15/15 check run 全部 `completed/success`：`required-checks` [46116811055](https://github.com/Kasign/stock_data_provider/actions/runs/46116811055)、[Full integration checks](https://github.com/Kasign/stock_data_provider/actions/runs/46116810985)、[Test root Go module](https://github.com/Kasign/stock_data_provider/actions/runs/46116811007)、[WebUI checks](https://github.com/Kasign/stock_data_provider/actions/runs/46116811004)、[Chromium responsive layout checks](https://github.com/Kasign/stock_data_provider/actions/runs/46116811048)，以及 Market-data/News/Research/Researchflow/Notification 与 Compose 各专项；无 failure、无 pending。本轮首行代码提交尚未取得自身 CI 前保持 `not_run`，现按实际 SHA 结果回填。
 
 ## 8. 执行口径
 
