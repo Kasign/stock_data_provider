@@ -497,6 +497,68 @@ func TestEastmoneyFetchStockBasicNormalizesF10IdentityAndDates(t *testing.T) {
 	}
 }
 
+// push2 行情域名在部分网络下会整段不可用（TCP 可达但无 HTTP 响应），而 datacenter
+// F10 端点仍可用。股票详情的估值、股本、行业、财务指标必须能从 F10 report 拿到，
+// 不能因为 quote 补充失败就退化成只有身份字段。
+func TestEastmoneyFetchStockBasicFallsBackToF10WhenQuoteUnavailable(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Query().Get("reportName") {
+		case "RPT_PCF10_ORG_ISSUEINFO":
+			fmt.Fprint(w, `{"success":true,"result":{"data":[{"SECUCODE":"600519.SH","SECURITY_CODE":"600519","SECURITY_NAME_ABBR":"贵州茅台","LISTING_DATE":"2001-08-27 00:00:00","OUT_DATE":null}]}}`)
+		case "RPT_F10_BASIC_ORGINFO":
+			fmt.Fprint(w, `{"success":true,"result":{"data":[{"SECUCODE":"600519.SH","EM2016":"食品饮料-饮料-白酒","BOARD_NAME_LEVEL":"食品饮料-白酒Ⅱ-白酒Ⅲ"}]}}`)
+		case "RPT_VALUEANALYSIS_DET":
+			fmt.Fprint(w, `{"success":true,"result":{"data":[{"SECUCODE":"600519.SH","BOARD_CODE":"016165","BOARD_NAME":"白酒Ⅱ","TOTAL_MARKET_CAP":1840570146048.36,"NOTLIMITED_MARKETCAP_A":1800000000000,"TOTAL_SHARES":1250081601,"FREE_SHARES_A":1250081601,"PE_TTM":22.4,"PB_MRQ":6.78,"TRADE_DATE":"2026-11-27 00:00:00"}]}}`)
+		case "RPT_F10_FINANCE_MAINFINADATA":
+			fmt.Fprint(w, `{"success":true,"result":{"data":[{"SECUCODE":"600519.SH","ROEJQ":24.47,"XSJLL":50.94,"XSMLL":89.58,"PARENTNETPROFIT":64467425981.95}]}}`)
+		default:
+			// 模拟 push2 quote 端点被网络阻断：TCP 可达但无 HTTP 响应。
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_, _ = w.Write([]byte(""))
+		}
+	}))
+	defer server.Close()
+
+	p := NewEastmoneyConfiguredWithStockBasic(2*time.Second, server.URL, "", server.URL, "")
+	item, err := p.FetchStockBasic(context.Background(), "600519")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if item.Industry == "" {
+		t.Fatalf("industry must come from F10 ORGINFO when quote is unavailable: %+v", item)
+	}
+	if item.DynamicPE == nil || *item.DynamicPE != 22.4 {
+		t.Fatalf("dynamic PE must come from F10 value analysis: %+v", item.DynamicPE)
+	}
+	if item.PB == nil || *item.PB != 6.78 {
+		t.Fatalf("PB must come from F10 value analysis: %+v", item.PB)
+	}
+	if item.MarketCapCNY == nil || *item.MarketCapCNY != 1840570146048.36 {
+		t.Fatalf("market cap must come from F10 value analysis: %+v", item.MarketCapCNY)
+	}
+	if item.TotalShares == nil || *item.TotalShares != 1250081601 {
+		t.Fatalf("total shares must come from F10 value analysis: %+v", item.TotalShares)
+	}
+	if item.FloatShares == nil || *item.FloatShares != 1250081601 {
+		t.Fatalf("float shares must come from F10 value analysis: %+v", item.FloatShares)
+	}
+	if item.BoardCode != "016165" {
+		t.Fatalf("board code must come from F10 value analysis: %q", item.BoardCode)
+	}
+	if item.ROEPercent == nil || *item.ROEPercent != 24.47 {
+		t.Fatalf("ROE must come from F10 finance metrics: %+v", item.ROEPercent)
+	}
+	if item.NetProfitMarginPercent == nil || *item.NetProfitMarginPercent != 50.94 {
+		t.Fatalf("net profit margin must come from F10 finance metrics: %+v", item.NetProfitMarginPercent)
+	}
+	if item.GrossMarginPercent == nil || *item.GrossMarginPercent != 89.58 {
+		t.Fatalf("gross margin must come from F10 finance metrics: %+v", item.GrossMarginPercent)
+	}
+	if item.NetProfitCNY == nil || *item.NetProfitCNY != 64467425981.95 {
+		t.Fatalf("net profit must come from F10 finance metrics: %+v", item.NetProfitCNY)
+	}
+}
+
 func TestEastmoneyFetchStockBasicRejectsInvalidShareCounts(t *testing.T) {
 	for _, tc := range []struct {
 		name, totalShares, floatShares, wantReason string

@@ -1,5 +1,5 @@
 import { getCapitalFlow, getChipDistribution, getMarketValuations, getStockAnnouncements, getStockBoards, getStockFundamentals, getStockProfile } from "./api.js";
-import { comparableMarketSymbol, describeApiError, finiteNumberOrNull, formatDateTime, formatPercent, normalizeSymbol, qualityLabel } from "./format.js";
+import { comparableMarketSymbol, describeApiError, finiteNumberOrNull, formatCompact, formatDateTime, formatPercent, normalizeSymbol, qualityLabel } from "./format.js";
 import { buildResearchMetaText } from "./research-meta.js";
 const $=(s)=>document.querySelector(s);
 const QUALITY=["valid","degraded","stale","invalid","unknown"];
@@ -118,8 +118,19 @@ export function bindStockResearch(getSettings,getSymbol){
  }
  function renderProfile(data,symbol){
   setText("stock-profile-symbol",data.symbol||symbol);setQuality("profile-quality",data.quality_status);
+  const ratio=(v,d=2)=>typeof v==="number"&&Number.isFinite(v)?v.toFixed(d):"—";
+  const percent=(v,d=2)=>typeof v==="number"&&Number.isFinite(v)?`${v.toFixed(d)}%`:"—";
+  const money=(v)=>typeof v==="number"&&Number.isFinite(v)?`${formatCompact(v)}元`:"—";
+  const shares=(v)=>typeof v==="number"&&Number.isFinite(v)?`${formatCompact(v)}股`:"—";
   $("#stock-profile-fields").replaceChildren(makeDl([
-   ["证券代码",data.symbol],["证券名称",data.name],["证券类型",data.security_type_label],["上市状态",data.listing_status_label],["上市日期",data.ipo_date],["退市日期",data.out_date],["标准化版本",data.normalization_version]
+   ["证券代码",data.symbol],["证券名称",data.name],["证券类型",data.security_type_label],["上市状态",data.listing_status_label],
+   ["上市日期",data.ipo_date],["退市日期",data.out_date],["所属行业",data.industry],["板块代码",data.board_code],
+   ["动态市盈率(PE)",ratio(data.pe_dynamic)],["市净率(PB)",ratio(data.pb)],
+   ["总市值",money(data.market_cap_cny)],["流通市值",money(data.float_market_cap_cny)],
+   ["总股本",shares(data.total_shares)],["流通股本",shares(data.float_shares)],
+   ["净资产收益率(ROE)",percent(data.roe_percent)],["销售净利率",percent(data.net_profit_margin_percent)],
+   ["销售毛利率",percent(data.gross_margin_percent)],["归母净利润",money(data.net_profit_cny)],
+   ["标准化版本",data.normalization_version]
   ]));
    reasons("stock-profile-reasons",data.quality_reasons);setText("stock-profile-meta",buildResearchMetaText(data));
  }

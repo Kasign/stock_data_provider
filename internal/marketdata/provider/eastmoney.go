@@ -520,13 +520,14 @@ func (p *Eastmoney) FetchStockBasic(ctx context.Context, rawSymbol string) (*mod
 	if err != nil {
 		return nil, err
 	}
+	// 公司概况表同时提供简称兜底与行业分类。始终查询：quote 行情域名整段不可用时，
+	// 行业只能从这里取得，不能等到 name 为空才查。
+	orgRow, orgErr := fetchRow("RPT_F10_BASIC_ORGINFO")
+	if orgErr != nil && readField(issueRow, "SECURITY_NAME_ABBR") == "" {
+		return nil, orgErr
+	}
 	name := readField(issueRow, "SECURITY_NAME_ABBR")
 	if name == "" {
-		// 公司概况表提供 STR_NAMEA/ORG_NAME；独立查询避免把股票代码误当成名称。
-		orgRow, orgErr := fetchRow("RPT_F10_BASIC_ORGINFO")
-		if orgErr != nil {
-			return nil, orgErr
-		}
 		for _, key := range []string{"STR_NAMEA", "SECURITY_NAME_ABBR", "ORG_NAME"} {
 			if name = readField(orgRow, key); name != "" {
 				break
@@ -558,57 +559,59 @@ func (p *Eastmoney) FetchStockBasic(ctx context.Context, rawSymbol string) (*mod
 		NormalizationVer: normalize.Version,
 	}
 
+	// 详情字段优先取 F10 数据中心：datacenter 端点在 quote 行情域名整段不可用时仍可访问，
+	// 且价值分析与主要财务指标各自带明确 trade_date / report_date，比没有快照时间的实时
+	// quote 更适合作为可审计来源。quote 仅作实时补充（见下）。
+	if orgRow != nil {
+		if industry := firstNonEmptyEastmoneyField(orgRow, "EM2016", "BOARD_NAME_LEVEL", "INDUSTRYCSRC1"); industry != "" {
+			item.Industry = industry
+		}
+	}
+	if valueRow, valueErr := fetchRow("RPT_VALUEANALYSIS_DET"); valueErr == nil {
+		item.DynamicPE = parseEastmoneyProfileNumber(valueRow["PE_TTM"])
+		item.PB = parseEastmoneyProfileNumber(valueRow["PB_MRQ"])
+		item.MarketCapCNY = parseEastmoneyProfileNumber(valueRow["TOTAL_MARKET_CAP"])
+		item.FloatMarketCapCNY = parseEastmoneyProfileNumber(valueRow["NOTLIMITED_MARKETCAP_A"])
+		item.TotalShares = parseEastmoneyProfileNumber(valueRow["TOTAL_SHARES"])
+		item.FloatShares = parseEastmoneyProfileNumber(valueRow["FREE_SHARES_A"])
+		item.BoardCode = readField(valueRow, "BOARD_CODE")
+	} else {
+		item.QualityReasons = appendUniqueEastmoneyReason(item.QualityReasons, "market_profile_value_analysis_unavailable")
+	}
+	if financeRow, financeErr := fetchRow("RPT_F10_FINANCE_MAINFINADATA"); financeErr == nil {
+		item.ROEPercent = parseEastmoneyProfileNumber(financeRow["ROEJQ"])
+		item.NetProfitMarginPercent = parseEastmoneyProfileNumber(financeRow["XSJLL"])
+		item.GrossMarginPercent = parseEastmoneyProfileNumber(financeRow["XSMLL"])
+		item.NetProfitCNY = parseEastmoneyProfileNumber(financeRow["PARENTNETPROFIT"])
+	} else {
+		item.QualityReasons = appendUniqueEastmoneyReason(item.QualityReasons, "market_profile_finance_metrics_unavailable")
+	}
+
 	// Efinance get_base_info() uses the same Eastmoney quote endpoint and field mapping.
-	// The response has no independently verifiable snapshot timestamp; do not mark this profile as fully valid.
-	secid, secidErr := eastmoneySecID(symbol)
-	if secidErr != nil {
-		item.QualityReasons = appendUniqueEastmoneyReason(item.QualityReasons, "market_profile_symbol_not_supported_by_quote_endpoint")
-		return item, nil
+	// 该端点没有可独立验证的快照时间，且行情域名可能整段不可用；因此它只作为 F10
+	// 日频数据的实时补充：成功时覆盖，失败时保留 F10 值并记录信息性原因，不阻断详情。
+	quoteFields := p.fetchStockBasicQuoteFields(ctx, symbol, item)
+	if quoteFields != nil {
+		if itemName := readEastmoneyField(quoteFields, "f58"); itemName != "" && itemName != name {
+			item.QualityReasons = appendUniqueEastmoneyReason(item.QualityReasons, "market_profile_name_differs_from_f10_identity")
+		}
+		item.DynamicPE = parseEastmoneyProfileNumber(quoteFields["f162"])
+		item.PB = parseEastmoneyProfileNumber(quoteFields["f167"])
+		if industry := readEastmoneyField(quoteFields, "f127"); industry != "" {
+			item.Industry = industry
+		}
+		item.MarketCapCNY = parseEastmoneyProfileNumber(quoteFields["f116"])
+		item.FloatMarketCapCNY = parseEastmoneyProfileNumber(quoteFields["f117"])
+		item.TotalShares = parseEastmoneyProfileNumber(quoteFields["f84"])
+		item.FloatShares = parseEastmoneyProfileNumber(quoteFields["f85"])
+		if boardCode := readEastmoneyField(quoteFields, "f198"); boardCode != "" {
+			item.BoardCode = boardCode
+		}
+		item.ROEPercent = parseEastmoneyProfileNumber(quoteFields["f173"])
+		item.NetProfitMarginPercent = parseEastmoneyProfileNumber(quoteFields["f187"])
+		item.NetProfitCNY = parseEastmoneyProfileNumber(quoteFields["f105"])
+		item.GrossMarginPercent = parseEastmoneyProfileNumber(quoteFields["f186"])
 	}
-	quoteParams := url.Values{
-		"secid":  []string{secid},
-		"fields": []string{"f57,f58,f162,f167,f127,f116,f117,f84,f85,f198,f173,f187,f105,f186"},
-		"fltt":   []string{"2"},
-		"invt":   []string{"2"},
-		"ut":     []string{p.ut},
-	}
-	var quotePayload struct {
-		RC   *int                       `json:"rc"`
-		Data map[string]json.RawMessage `json:"data"`
-	}
-	if quoteErr := p.getJSONWithRetry(ctx, p.quoteURL, quoteParams, &quotePayload, 8*time.Second); quoteErr != nil {
-		item.QualityReasons = appendUniqueEastmoneyReason(item.QualityReasons, "market_profile_request_failed")
-		return item, nil
-	}
-	if quotePayload.RC != nil && *quotePayload.RC != 0 {
-		item.QualityReasons = appendUniqueEastmoneyReason(item.QualityReasons, "market_profile_provider_error")
-		return item, nil
-	}
-	if len(quotePayload.Data) == 0 {
-		item.QualityReasons = appendUniqueEastmoneyReason(item.QualityReasons, "market_profile_data_missing")
-		return item, nil
-	}
-	sourceCode := readEastmoneyField(quotePayload.Data, "f57")
-	if sourceCode != "" && sourceCode != strings.Split(symbol, ".")[0] {
-		item.QualityReasons = appendUniqueEastmoneyReason(item.QualityReasons, "market_profile_security_code_mismatch")
-		return item, nil
-	}
-	itemName := readEastmoneyField(quotePayload.Data, "f58")
-	if itemName != "" && itemName != name {
-		item.QualityReasons = appendUniqueEastmoneyReason(item.QualityReasons, "market_profile_name_differs_from_f10_identity")
-	}
-	item.DynamicPE = parseEastmoneyProfileNumber(quotePayload.Data["f162"])
-	item.PB = parseEastmoneyProfileNumber(quotePayload.Data["f167"])
-	item.Industry = readEastmoneyField(quotePayload.Data, "f127")
-	item.MarketCapCNY = parseEastmoneyProfileNumber(quotePayload.Data["f116"])
-	item.FloatMarketCapCNY = parseEastmoneyProfileNumber(quotePayload.Data["f117"])
-	item.TotalShares = parseEastmoneyProfileNumber(quotePayload.Data["f84"])
-	item.FloatShares = parseEastmoneyProfileNumber(quotePayload.Data["f85"])
-	item.BoardCode = readEastmoneyField(quotePayload.Data, "f198")
-	item.ROEPercent = parseEastmoneyProfileNumber(quotePayload.Data["f173"])
-	item.NetProfitMarginPercent = parseEastmoneyProfileNumber(quotePayload.Data["f187"])
-	item.NetProfitCNY = parseEastmoneyProfileNumber(quotePayload.Data["f105"])
-	item.GrossMarginPercent = parseEastmoneyProfileNumber(quotePayload.Data["f186"])
 
 	for key, value := range map[string]*float64{
 		"pe_dynamic": item.DynamicPE, "pb": item.PB, "market_cap_cny": item.MarketCapCNY,
@@ -649,6 +652,57 @@ func (p *Eastmoney) FetchStockBasic(ctx context.Context, rawSymbol string) (*mod
 		item.QualityReasons = appendUniqueEastmoneyReason(item.QualityReasons, "market_profile_board_code_missing")
 	}
 	return item, nil
+}
+
+// fetchStockBasicQuoteFields 读取实时行情用于补充股票详情。
+// 行情域名不可用（TCP 可达但无 HTTP 响应）时返回 nil，只在 item 上记录信息性原因，
+// 由调用方保留 F10 日频数据继续返回详情，而不是整体降级为只有身份字段。
+func (p *Eastmoney) fetchStockBasicQuoteFields(
+	ctx context.Context, symbol string, item *model.StockBasic,
+) map[string]json.RawMessage {
+	secid, secidErr := eastmoneySecID(symbol)
+	if secidErr != nil {
+		item.QualityReasons = appendUniqueEastmoneyReason(item.QualityReasons, "market_profile_symbol_not_supported_by_quote_endpoint")
+		return nil
+	}
+	quoteParams := url.Values{
+		"secid":  []string{secid},
+		"fields": []string{"f57,f58,f162,f167,f127,f116,f117,f84,f85,f198,f173,f187,f105,f186"},
+		"fltt":   []string{"2"},
+		"invt":   []string{"2"},
+		"ut":     []string{p.ut},
+	}
+	var quotePayload struct {
+		RC   *int                       `json:"rc"`
+		Data map[string]json.RawMessage `json:"data"`
+	}
+	if quoteErr := p.getJSONWithRetry(ctx, p.quoteURL, quoteParams, &quotePayload, 8*time.Second); quoteErr != nil {
+		item.QualityReasons = appendUniqueEastmoneyReason(item.QualityReasons, "market_profile_quote_supplement_unavailable")
+		return nil
+	}
+	if quotePayload.RC != nil && *quotePayload.RC != 0 {
+		item.QualityReasons = appendUniqueEastmoneyReason(item.QualityReasons, "market_profile_provider_error")
+		return nil
+	}
+	if len(quotePayload.Data) == 0 {
+		item.QualityReasons = appendUniqueEastmoneyReason(item.QualityReasons, "market_profile_data_missing")
+		return nil
+	}
+	if sourceCode := readEastmoneyField(quotePayload.Data, "f57"); sourceCode != "" && sourceCode != strings.Split(symbol, ".")[0] {
+		item.QualityReasons = appendUniqueEastmoneyReason(item.QualityReasons, "market_profile_security_code_mismatch")
+		return nil
+	}
+	return quotePayload.Data
+}
+
+// firstNonEmptyEastmoneyField 按顺序返回第一个非空字段，用于不同 F10 报表的行业字段兜底。
+func firstNonEmptyEastmoneyField(row map[string]json.RawMessage, names ...string) string {
+	for _, name := range names {
+		if value := readEastmoneyField(row, name); value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func readEastmoneyField(row map[string]json.RawMessage, name string) string {
