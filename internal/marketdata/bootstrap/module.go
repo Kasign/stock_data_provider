@@ -319,11 +319,14 @@ func (m *Module) build(cfg config.Config, deps Dependencies) error {
 			tradingCalendarProviders = append(tradingCalendarProviders, capability)
 		}
 		if settings.SecurityTradingStatus {
+			// 交易状态需要上市日期与交易日判定，把依赖和环境变量名一起报出来，
+			// 避免运维只看到 "requires stock_basic" 却不知道该改哪一项。
+			envPrefix := "MARKET_DATA_" + strings.ToUpper(name) + "_"
 			if !settings.StockBasic {
-				return fmt.Errorf("provider %q security_trading_status requires stock_basic to be enabled for listing-date verification", name)
+				return fmt.Errorf("provider %q security_trading_status requires stock_basic for listing-date verification; set %sSTOCK_BASIC_ENABLED=true", name, envPrefix)
 			}
 			if !settings.TradingCalendar {
-				return fmt.Errorf("provider %q security_trading_status requires trading_calendar to be enabled", name)
+				return fmt.Errorf("provider %q security_trading_status requires trading_calendar for trading-day checks; set %sTRADING_CALENDAR_ENABLED=true", name, envPrefix)
 			}
 			capability, ok := p.(provider.SecurityTradingStatusProvider)
 			if !ok {

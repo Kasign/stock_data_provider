@@ -141,3 +141,20 @@ func TestNewReplacesTypedNilCacheWhenRedisIsNotConfigured(t *testing.T) {
 		t.Fatalf("Close() error = %v", err)
 	}
 }
+
+// 能力依赖失败时，错误信息必须点名具体的环境变量；否则运维只能看到
+// "requires stock_basic" 却不知道该改哪一项，排障成本高。
+func TestNewNamesExactEnvVarWhenSecurityTradingStatusLacksDependencies(t *testing.T) {
+	cfg := testConfig()
+	cfg.ProviderPriority = []string{"eastmoney", "tushare"}
+	cfg.ProviderSettings["tushare"] = config.ProviderSettings{Enabled: true, SecurityTradingStatus: true}
+	cfg.TushareToken = "test-token"
+
+	_, err := New(cfg, testDependencies())
+	if err == nil {
+		t.Fatal("New() must reject security_trading_status without stock_basic/trading_calendar")
+	}
+	if !strings.Contains(err.Error(), "MARKET_DATA_TUSHARE_STOCK_BASIC_ENABLED") {
+		t.Fatalf("error must name MARKET_DATA_TUSHARE_STOCK_BASIC_ENABLED, got: %v", err)
+	}
+}
