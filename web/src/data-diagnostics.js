@@ -1,0 +1,350 @@
+import {
+  getCapitalFlow, getChipDistribution, getDailyBars, getMarketBundle, getMarketValuations,
+  getQuote, getStockAnnouncements, getStockBoards, getStockFundamentals, getStockPriceLimitRule,
+  getStockProfile, getStockTradingStatus, runDataSourceProbe
+} from "./api.js";
+import { describeApiError, finiteNumberOrNull, formatDateTime, normalizeSymbol } from "./format.js";
+
+const QUALITY_WORD = { valid: "正常", degraded: "降级", stale: "过期", invalid: "无效", unknown: "未知" };
+const DEGRADED_QUALITY = new Set(["degraded", "stale", "invalid", "unknown"]);
+const LEVEL_WORD = { ok: "通过", degraded: "降级", failed: "失败" };
+
+export function qualityWord(status) {
+  return QUALITY_WORD[String(status || "").toLowerCase()] || "未知";
+}
+
+export function levelWord(level) {
+  return LEVEL_WORD[level] || "未知";
+}
+
+function arrayLength(value) {
+  return Array.isArray(value) ? value.length : null;
+}
+
+// 每个数据项只摘取“这次到底拿到了什么”的关键证据，不复制完整响应，
+// 避免诊断页变成第二个业务详情页。
+export function describeDiagnosticBody(key, body) {
+  if (!body || typeof body !== "object") return "无响应体";
+  switch (key) {
+    case "quote":
+      return [
+        `价格 ${finiteNumberOrNull(body.current_price) ?? "—"}`,
+        `来源 ${body.source || "—"}`,
+        body.quote_time ? `行情时间 ${formatDateTime(body.quote_time)}` : "行情时间未报告"
+      ].join(" · ");
+    case "bundle": {
+      const bars = arrayLength(body.daily_bars) ?? arrayLength(body.bars);
+      const sources = body.sources || {};
+      return `日线 ${bars ?? "—"} 根 · 行情源 ${sources.realtime_quote || "—"} · 日线源 ${sources.daily_bars || "—"}`;
+    }
+    case "bars": {
+      const bars = Array.isArray(body.bars) ? body.bars : [];
+      const last = bars.length ? bars[bars.length - 1].trade_date : "";
+      return `${bars.length} 根${last ? " · 最新 " + last : ""}`;
+    }
+    case "profile":
+      return [
+        body.name || "—",
+        `行业 ${body.industry || "未提供"}`,
+        `PE ${finiteNumberOrNull(body.pe_dynamic) ?? "—"}`,
+        `PB ${finiteNumberOrNull(body.pb) ?? "—"}`
+      ].join(" · ");
+    case "boards":
+      return `${arrayLength(body.items) ?? 0} 个板块`;
+    case "tradingStatus":
+      return `${body.trade_date || "—"} · 停牌 ${body.suspension === true ? "是" : body.suspension === false ? "否" : "未确认"}`;
+    case "priceLimitRule":
+      return `${body.board || "—"} · 规则 ${body.rule_version || "—"} · 判定 ${body.status || "—"}`;
+    case "announcements":
+      return `${arrayLength(body.items) ?? 0} 条公告`;
+    case "fundamentals":
+      return `${arrayLength(body.sections) ?? 0} 个指标分区 · has_data=${body.has_data === true}`;
+    case "chip":
+      return body.has_data === false ? "数据源未确认筹码分布" : `区间 ${arrayLength(body.bins ?? body.items) ?? "—"}`;
+    case "capitalFlow":
+      return body.has_data === false ? "数据源未返回资金流" : `记录 ${arrayLength(body.items ?? body.points) ?? "—"}`;
+    case "valuations":
+      return `${arrayLength(body.items) ?? 0} 条估值记录`;
+    default:
+      return Object.keys(body).slice(0, 5).join(", ");
+  }
+}
+
+// 只有 HTTP 成功且质量不落在降级集合、且未显式 has_data=false 才算通过。
+export function classifyDiagnosticRow({ ok, body }) {
+  if (!ok) return "failed";
+  if (DEGRADED_QUALITY.has(String(body?.quality_status || "").toLowerCase())) return "degraded";
+  if (body?.has_data === false) return "degraded";
+  return "ok";
+}
+
+export function summarizeDiagnosticRows(rows) {
+  const summary = { ok: 0, degraded: 0, failed: 0, total: 0, degradedItems: [], failedItems: [] };
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const level = classifyDiagnosticRow(row);
+    summary[level] += 1;
+    summary.total += 1;
+    if (level === "degraded") summary.degradedItems.push(row.label || row.key);
+    if (level === "failed") summary.failedItems.push(row.label || row.key);
+  }
+  return summary;
+}
+
+export const STOCK_DIAGNOSTIC_CASES = Object.freeze([
+  { key: "quote", label: "实时行情", invoke: (api, ctx) => api.getQuote(ctx.settings, ctx.symbol, ctx.signal) },
+  { key: "bundle", label: "聚合快照", invoke: (api, ctx) => api.getMarketBundle(ctx.settings, ctx.symbol, { lookbackDays: 20, adjustment: "none" }, ctx.signal) },
+  { key: "bars", label: "日线", invoke: (api, ctx) => api.getDailyBars(ctx.settings, ctx.symbol, { limit: 20, adjustment: "none" }, ctx.signal) },
+  { key: "profile", label: "公司概况", invoke: (api, ctx) => api.getStockProfile(ctx.settings, ctx.symbol, ctx.signal) },
+  { key: "boards", label: "所属板块", invoke: (api, ctx) => api.getStockBoards(ctx.settings, ctx.symbol, ctx.signal) },
+  { key: "tradingStatus", label: "交易状态", invoke: (api, ctx) => api.getStockTradingStatus(ctx.settings, ctx.symbol, ctx.tradeDate, { signal: ctx.signal }) },
+  { key: "priceLimitRule", label: "涨跌停规则", invoke: (api, ctx) => api.getStockPriceLimitRule(ctx.settings, ctx.symbol, ctx.tradeDate, ctx.signal) },
+  { key: "announcements", label: "公告", invoke: (api, ctx) => api.getStockAnnouncements(ctx.settings, ctx.symbol, { page: 1, pageSize: 5, signal: ctx.signal }) },
+  { key: "fundamentals", label: "财务指标", invoke: (api, ctx) => api.getStockFundamentals(ctx.settings, ctx.symbol, { year: ctx.year, quarter: ctx.quarter, signal: ctx.signal }) },
+  { key: "chip", label: "筹码分布", invoke: (api, ctx) => api.getChipDistribution(ctx.settings, ctx.symbol, ctx.signal) },
+  { key: "capitalFlow", label: "个股资金流", invoke: (api, ctx) => api.getCapitalFlow(ctx.settings, ctx.symbol, ctx.signal) },
+  { key: "valuations", label: "估值指标", invoke: (api, ctx) => api.getMarketValuations(ctx.settings, [ctx.symbol], ctx.signal) }
+]);
+
+// 诊断默认取最近一个工作日（跳过周六周日）；节假日由服务端健康性检查兜底。
+export function recentTradingDay(from = new Date()) {
+  const day = new Date(from.getFullYear(), from.getMonth(), from.getDate());
+  for (let i = 0; i < 10; i += 1) {
+    const weekday = day.getDay();
+    if (weekday !== 0 && weekday !== 6) {
+      const month = String(day.getMonth() + 1).padStart(2, "0");
+      const date = String(day.getDate()).padStart(2, "0");
+      return `${day.getFullYear()}-${month}-${date}`;
+    }
+    day.setDate(day.getDate() - 1);
+  }
+  return "";
+}
+
+// 报告期使用“最近一个已结束季度”：交易日所在季度通常尚未披露，
+// 直接传当前季度会被服务端以“报告期不得晚于当前”拒绝。
+export function quarterOfDate(tradeDate, fallback = new Date()) {
+  const match = /^(\d{4})-(\d{2})-\d{2}$/.exec(String(tradeDate || ""));
+  const year = match ? Number(match[1]) : fallback.getUTCFullYear();
+  const month = match ? Number(match[2]) : fallback.getUTCMonth() + 1;
+  const previous = Math.floor((month - 1) / 3);
+  return previous === 0 ? { year: year - 1, quarter: 4 } : { year, quarter: previous };
+}
+
+export async function collectStockDiagnostics({
+  api, settings, symbol, tradeDate, signal, cases = STOCK_DIAGNOSTIC_CASES, now = () => Date.now()
+}) {
+  const normalized = normalizeSymbol(symbol);
+  if (!normalized) throw new Error("股票代码无效，需为六位代码加 .SH/.SZ/.BJ 后缀");
+  const { year, quarter } = quarterOfDate(tradeDate);
+  const ctx = { settings, symbol: normalized, tradeDate, year, quarter, signal };
+  const rows = await Promise.all(cases.map(async (item) => {
+    const started = now();
+    try {
+      const body = await item.invoke(api, ctx);
+      return {
+        key: item.key, label: item.label, ok: true, status: 200,
+        durationMs: Math.max(0, now() - started), body,
+        detail: describeDiagnosticBody(item.key, body), errorText: "", quality: String(body?.quality_status || "")
+      };
+    } catch (error) {
+      return {
+        key: item.key, label: item.label, ok: false, status: Number(error?.status) || 0,
+        durationMs: Math.max(0, now() - started), body: null, detail: "",
+        errorText: describeApiError(error, "请求失败") + (error?.code ? " (" + error.code + ")" : ""), quality: ""
+      };
+    }
+  }));
+  return { symbol: normalized, tradeDate, rows, summary: summarizeDiagnosticRows(rows) };
+}
+
+export function buildStockProbeRequest(symbol, tradeDate) {
+  return {
+    capabilities: ["quote", "daily_bars", "trading_calendar", "security_trading_status"],
+    symbols: [normalizeSymbol(symbol)],
+    timeout_seconds: 20,
+    daily_bar_start_date: shiftDays(tradeDate, -20),
+    daily_bar_end_date: tradeDate
+  };
+}
+
+function shiftDays(date, delta) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(date || ""));
+  if (!match) return "";
+  const base = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
+  base.setUTCDate(base.getUTCDate() + delta);
+  return base.toISOString().slice(0, 10);
+}
+
+export function summarizeProbeRun(run) {
+  const results = Array.isArray(run?.check_results) ? run.check_results : [];
+  const byProvider = new Map();
+  for (const item of results) {
+    const name = item.provider || "未知";
+    if (!byProvider.has(name)) byProvider.set(name, []);
+    byProvider.get(name).push(item);
+  }
+  return [...byProvider.entries()].map(([provider, checks]) => ({
+    provider,
+    capability: checks[0]?.capability || "",
+    status: checks.some((check) => check.status === "failed") ? "failed"
+      : checks.some((check) => check.status === "degraded") ? "degraded"
+        : checks.every((check) => check.status === "not_supported") ? "not_supported" : "passed",
+    checks: checks.map((check) => ({ check: check.check, status: check.status, error: check.error_code || check.error_message || "" }))
+  }));
+}
+
+function el(tag, cls, text) {
+  const node = document.createElement(tag);
+  if (cls) node.className = cls;
+  if (text !== undefined && text !== null) node.textContent = String(text);
+  return node;
+}
+
+function qualityPill(level, label) {
+  const pill = el("span", "supplement-quality supplement-quality-" + (level === "ok" ? "valid" : level === "degraded" ? "degraded" : "invalid"), label);
+  return pill;
+}
+
+export function bindDataDiagnostics({ root = document, getSettings, getSymbol, getTradeDate } = {}) {
+  const symbolInput = root.querySelector("#diagnostics-symbol");
+  const dateInput = root.querySelector("#diagnostics-date");
+  const runButton = root.querySelector("#run-diagnostics");
+  const probeButton = root.querySelector("#run-diagnostic-probe");
+  const rowsBody = root.querySelector("#diagnostics-rows");
+  const summaryNode = root.querySelector("#diagnostics-summary");
+  const overallNode = root.querySelector("#diagnostics-overall");
+  const probeNode = root.querySelector("#diagnostics-probe-result");
+  void getSymbol;
+  void getTradeDate;
+
+  function readInputs() {
+    const symbol = String(symbolInput?.value || "").trim().toUpperCase();
+    const tradeDate = String(dateInput?.value || "").trim();
+    if (!normalizeSymbol(symbol)) throw new Error("请输入有效股票代码，例如 600519.SH");
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(tradeDate)) throw new Error("请选择交易日，格式 YYYY-MM-DD");
+    return { symbol, tradeDate };
+  }
+
+  function setOverall(level, label) {
+    if (!overallNode) return;
+    overallNode.className = "availability-pill " + (level === "failed" ? "is-unavailable" : level === "degraded" ? "is-readonly" : "is-local");
+    overallNode.textContent = label;
+  }
+
+  function renderRows(report) {
+    if (!rowsBody) return;
+    rowsBody.replaceChildren();
+    for (const row of report.rows) {
+      const level = classifyDiagnosticRow(row);
+      const tr = el("tr");
+      tr.append(el("td", "", row.label));
+      tr.append(el("td", "", `${row.status || "—"} · ${levelWord(level)}`));
+      tr.append(el("td", "", `${row.durationMs} ms`));
+      const qualityCell = el("td");
+      qualityCell.append(qualityPill(level, row.quality ? qualityWord(row.quality) : level === "failed" ? "失败" : "未报告"));
+      tr.append(qualityCell);
+      tr.append(el("td", "", row.detail || "—"));
+      tr.append(el("td", "", row.errorText || "—"));
+      if (!row.ok) tr.classList.add("diagnostics-row-failed");
+      else if (level === "degraded") tr.classList.add("diagnostics-row-degraded");
+      rowsBody.append(tr);
+    }
+  }
+
+  function renderSummary(report) {
+    if (!summaryNode) return;
+    const { summary } = report;
+    const parts = [`共 ${summary.total} 项`, `通过 ${summary.ok}`];
+    if (summary.degraded) parts.push(`降级 ${summary.degraded}：${summary.degradedItems.join("、")}`);
+    if (summary.failed) parts.push(`失败 ${summary.failed}：${summary.failedItems.join("、")}`);
+    summaryNode.textContent = parts.join(" · ");
+    setOverall(summary.failed ? "failed" : summary.degraded ? "degraded" : "ok", summary.failed ? "存在失败项" : summary.degraded ? "存在降级项" : "全部通过");
+  }
+
+  async function run() {
+    let inputs;
+    try {
+      inputs = readInputs();
+    } catch (error) {
+      if (summaryNode) summaryNode.textContent = error.message;
+      setOverall("failed", "输入无效");
+      return null;
+    }
+    if (runButton) { runButton.disabled = true; runButton.textContent = "诊断中…"; }
+    setOverall("degraded", "运行中");
+    if (summaryNode) summaryNode.textContent = "正在并发调用该标的相关的全部数据端点…";
+    try {
+      const report = await collectStockDiagnostics({
+        api: { getQuote, getMarketBundle, getDailyBars, getStockProfile, getStockBoards, getStockTradingStatus, getStockPriceLimitRule, getStockAnnouncements, getStockFundamentals, getChipDistribution, getCapitalFlow, getMarketValuations },
+        settings: getSettings ? getSettings() : null,
+        symbol: inputs.symbol,
+        tradeDate: inputs.tradeDate
+      });
+      renderRows(report);
+      renderSummary(report);
+      return report;
+    } catch (error) {
+      if (summaryNode) summaryNode.textContent = error.message || "诊断执行失败";
+      setOverall("failed", "执行失败");
+      return null;
+    } finally {
+      if (runButton) { runButton.disabled = false; runButton.textContent = "运行诊断"; }
+    }
+  }
+
+  async function runProbe() {
+    let inputs;
+    try {
+      inputs = readInputs();
+    } catch (error) {
+      if (probeNode) probeNode.textContent = error.message;
+      return null;
+    }
+    if (probeButton) { probeButton.disabled = true; probeButton.textContent = "探测中…"; }
+    if (probeNode) probeNode.textContent = "正在对行情、日线、交易日历与交易状态执行 Provider 级探测…";
+    try {
+      const run = await runDataSourceProbe(getSettings ? getSettings() : null, buildStockProbeRequest(inputs.symbol, inputs.tradeDate));
+      const groups = summarizeProbeRun(run);
+      if (probeNode) {
+        probeNode.replaceChildren();
+        if (!groups.length) {
+          probeNode.append(el("p", "", "探测未返回任何 Provider 结果。"));
+        } else {
+          const table = el("table", "data-table");
+          const head = el("tr");
+          ["Provider", "能力", "结论", "明细"].forEach((label) => head.append(el("th", "", label)));
+          const thead = el("thead");
+          thead.append(head);
+          const tbody = el("tbody");
+          for (const group of groups) {
+            const tr = el("tr");
+            tr.append(el("td", "", group.provider));
+            tr.append(el("td", "", group.capability));
+            const statusCell = el("td");
+            statusCell.append(qualityPill(group.status === "passed" ? "ok" : group.status === "degraded" ? "degraded" : "failed", group.status));
+            tr.append(statusCell);
+            tr.append(el("td", "", group.checks.map((check) => check.check + ":" + check.status + (check.error ? "/" + check.error : "")).join(" · ")));
+            tbody.append(tr);
+          }
+          table.append(thead, tbody);
+          probeNode.append(table);
+        }
+      }
+      return run;
+    } catch (error) {
+      if (probeNode) probeNode.textContent = describeApiError(error, "探测失败");
+      return null;
+    } finally {
+      if (probeButton) { probeButton.disabled = false; probeButton.textContent = "运行探测"; }
+    }
+  }
+
+  runButton?.addEventListener("click", () => { void run(); });
+  probeButton?.addEventListener("click", () => { void runProbe(); });
+
+  function ensureDefaults() {
+    if (dateInput && !String(dateInput.value || "").trim()) dateInput.value = recentTradingDay();
+  }
+
+  return { run, runProbe, ensureDefaults, setSymbol: (value) => { if (symbolInput) symbolInput.value = value; }, setTradeDate: (value) => { if (dateInput) dateInput.value = value; } };
+}

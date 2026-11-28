@@ -1467,7 +1467,7 @@ test("market overview and activity use readable secondary text and touch-sized c
 
 
 test("侧边栏将全部工作区作为平级一级 Tab 展示", () => {
-  const views = ["market", "stocks", "watchlist", "research", "tasks", "screening", "alerts", "chat", "notifications", "data", "settings"];
+  const views = ["market", "stocks", "watchlist", "research", "tasks", "screening", "alerts", "chat", "notifications", "data", "diagnostics", "settings"];
   assert.equal((html.match(/class="nav-link"/g) || []).length, views.length);
   assert.equal((html.match(/<h1\b/g) || []).length, views.length, "each first-level view must have one page-level h1");
   assert.match(html, /id="market-view"[\s\S]*?<h1>市场总览<\/h1>/);

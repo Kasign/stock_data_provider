@@ -5117,3 +5117,9 @@ button:disabled {
     width: 100%;
   }
 }
+
+.diagnostics-toolbar { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; margin: 12px 0; }
+.diagnostics-toolbar .field { flex: 1 1 180px; max-width: 260px; }
+.diagnostics-summary { margin: 8px 0; font-size: 12px; color: var(--text-soft); line-height: 1.6; }
+.diagnostics-row-failed td { background: rgba(240, 129, 138, .10); }
+.diagnostics-row-degraded td { background: rgba(234, 184, 106, .10); }

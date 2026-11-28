@@ -31,6 +31,7 @@
           <button class="nav-link" type="button" data-view="chat" aria-label="问股（待接入）" title="问股（待接入）"><span class="nav-icon" aria-hidden="true">✦</span><span>问股</span><span class="nav-link-state" title="服务端会话接口待接入">待接入</span></button>
           <button class="nav-link" type="button" data-view="notifications" aria-label="通知中心（待接入）" title="通知中心（待接入）"><span class="nav-icon" aria-hidden="true">♧</span><span>通知中心</span><span class="nav-link-state" title="服务端收件箱与投递接口待接入">待接入</span></button>
           <button class="nav-link" type="button" data-view="data" aria-label="数据中心" title="数据中心"><span class="nav-icon" aria-hidden="true">▥</span><span>数据中心</span></button>
+          <button class="nav-link" type="button" data-view="diagnostics" aria-label="数据诊断" title="数据诊断"><span class="nav-icon" aria-hidden="true">◎</span><span>数据诊断</span></button>
           <button class="nav-link" type="button" data-view="settings" aria-label="设置中心" title="设置中心"><span class="nav-icon" aria-hidden="true">⚙</span><span>设置中心</span></button>
         </nav>
         <div class="sidebar-bottom">
@@ -1237,6 +1238,35 @@
               </section>
             </div>
           </div>
+        </section>
+
+<section class="view feature-view" id="diagnostics-view" hidden aria-labelledby="diagnostics-title">
+          <div class="page-heading">
+            <div><p class="eyebrow">WORKSPACE / DIAGNOSTICS</p><h1 id="diagnostics-title">数据诊断</h1><p class="page-subtitle">输入股票代码，逐个调用该标的相关的全部数据端点，显示状态、耗时、质量与错误；可另行执行 Provider 级主动探测。</p></div>
+            <div class="feature-status"><span class="availability-pill is-readonly" id="diagnostics-overall">未运行</span></div>
+          </div>
+          <section class="panel">
+            <div class="panel-heading"><div><h2>单只股票数据诊断</h2><p>并发调用行情、聚合快照、日线、公司概况、板块、交易状态、涨跌停规则、公告、财务、筹码、个股资金流与估值端点。</p></div></div>
+            <div class="diagnostics-toolbar">
+              <label class="field"><span>股票代码</span><input id="diagnostics-symbol" type="text" value="600519.SH" maxlength="32" autocomplete="off" spellcheck="false" placeholder="例如 600519.SH"></label>
+              <label class="field"><span>交易日</span><input id="diagnostics-date" type="date"></label>
+              <button class="button" id="run-diagnostics" type="button">运行诊断</button>
+            </div>
+            <p class="diagnostics-summary" id="diagnostics-summary">尚未运行。诊断只读取接口返回，不写入任何数据。</p>
+            <div class="table-scroll">
+              <table class="data-table">
+                <thead><tr><th>数据项</th><th>状态</th><th>耗时</th><th>质量</th><th>关键字段</th><th>错误</th></tr></thead>
+                <tbody id="diagnostics-rows"><tr><td colspan="6">尚未运行。</td></tr></tbody>
+              </table>
+            </div>
+          </section>
+          <section class="panel">
+            <div class="panel-heading"><div><h2>数据源主动探测</h2><p>对该标的的行情、日线、交易日历与交易状态执行 Provider 级 connectivity / contract / quality 检查；探测条目由服务端返回。</p></div></div>
+            <div class="diagnostics-toolbar">
+              <button class="button button-secondary" id="run-diagnostic-probe" type="button">运行探测</button>
+            </div>
+            <div id="diagnostics-probe-result"><p class="diagnostics-summary">尚未运行。</p></div>
+          </section>
         </section>
 
 <footer class="page-footer"><span>行情研究台 · Go 数据服务</span><span>行情与分析结果仅供研究；数据质量与时点限制须独立评估。</span></footer>

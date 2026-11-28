@@ -43,6 +43,7 @@ import { buildTaskEventListViewModel } from "./task-event-list-view-model.js";
 import { validateTaskEventPage, TASK_EVENT_PAGE_SIZE } from "./task-workflow.js";
 import { bindStockResearch } from "./stock-research.js";
 import { bindDataCenter } from "./data-center.js";
+import { bindDataDiagnostics } from "./data-diagnostics.js";
 import { bindLocalAlertDrafts } from "./local-alert-drafts.js";
 import { bindResearchNotes, RESEARCH_NOTES_KEY } from "./research-notes.js";
 import { bindResearchReports, RESEARCH_REPORTS_KEY } from "./research-reports.js";
@@ -197,6 +198,7 @@ const state = {
 const marketOverview = bindMarketOverview(() => state.settings, (item, source, targetView) => selectStockFromMarket(item, source, targetView));
 const stockResearch = bindStockResearch(() => state.settings, () => getQuerySymbol());
 const dataCenter = bindDataCenter(() => state.settings);
+const dataDiagnostics = bindDataDiagnostics({ root: document, getSettings: () => state.settings });
 const localAlertDrafts = bindLocalAlertDrafts({ root: document.querySelector("#alerts-view"), getContext: () => ({ symbol: state.quote?.symbol || state.selectedStockSearchItem?.symbol || "", name: state.quote?.name || state.selectedStockSearchItem?.name || "" }) });
 const researchNotes = bindResearchNotes({ root: document.querySelector("#research-view"), getContext: () => ({ symbol: state.quote?.symbol || state.selectedStockSearchItem?.symbol || "", name: state.quote?.name || state.selectedStockSearchItem?.name || "", taskId: state.taskId, runId: state.runId }) });
 const researchReports = bindResearchReports({ root: document.querySelector("#research-view"), onCreateNote: (item) => { setView("research"); researchNotes.createFromReport(item); }, onOpenTask: (item) => { if (!item.taskId) { setView("tasks"); setText("#task-create-feedback", "该报告未保存 Task ID，无法恢复关联任务；报告内容仍可查看。"); return; } const record = { task_id: item.taskId, run_id: item.runId, created_at: "", symbols: item.symbols, task_type: "post_market_scan", status: item.status, baseRef: item.analysisBase || state.settings.analysisBase }; if (!activateTaskReference(record)) { setView("tasks"); setText("#task-create-feedback", "关联任务未能打开。请检查报告保存的分析服务地址是否与当前连接一致；报告内容仍可查看。"); } } });
@@ -1749,7 +1751,7 @@ function getQuerySymbol() {
 const VIEW_META = Object.freeze({
   market: { title: "市场总览" }, stocks: { title: "个股行情" },
   watchlist: { title: "自选与观察" }, research: { title: "个股深度研究" },
-  data: { title: "数据中心" }, tasks: { title: "分析任务" },
+  data: { title: "数据中心" }, diagnostics: { title: "数据诊断" }, tasks: { title: "分析任务" },
   notifications: { title: "通知中心" }, chat: { title: "问股" },
   screening: { title: "条件选股" }, alerts: { title: "告警" }, settings: { title: "设置中心" }
 });
@@ -1764,6 +1766,7 @@ const REFRESH_BUTTON_CONTEXT = Object.freeze({
   screening: { label: "检查服务连接（选股接口待接入）", title: "选股任务与候选 API 尚未接入；此操作只刷新行情与分析服务连接状态。" },
   alerts: { label: "检查服务连接（告警接口待接入）", title: "告警规则与触发记录 API 尚未接入；此操作只刷新行情与分析服务连接状态。" },
   data: { label: "立即检查服务与数据源能力", title: "检查行情/分析服务存活和就绪状态，并读取 Provider 能力声明；不代表逐 Provider 实时探测。" },
+  diagnostics: { label: "重新运行数据诊断", title: "使用当前股票代码与交易日重新并发调用全部数据端点；诊断只读，不写入任何数据。" },
   settings: { label: "检查服务连接", title: "检查当前已保存的行情/分析 API；未保存的连接草稿可在设置中心的连接与服务分组中检查。" }
 });
 
@@ -1831,6 +1834,7 @@ function setView(view, { updateHash = true, refreshData = true } = {}) {
     else if (nextView === "watchlist") renderWatchlist();
     else if (nextView === "research") { stockResearch.syncSymbol(); renderResearchStockList(); }
     else if (nextView === "data") void dataCenter.refresh();
+    else if (nextView === "diagnostics") dataDiagnostics.ensureDefaults();
   }
   if (nextView === "chat" && previousView !== "chat") syncChatStockContextFromMarket();
   const runFlowDialog = $("#run-flow-dialog");
