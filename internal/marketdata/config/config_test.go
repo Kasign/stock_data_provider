@@ -1003,3 +1003,42 @@ func TestLoadForCollectorFailsWithoutStorage(t *testing.T) {
 		t.Fatal("missing storage configuration must fail instead of degrading silently")
 	}
 }
+
+// Tushare 是当前唯一实现交易状态能力的 Provider；它的能力开关必须能像其它 20 项
+// 能力一样被环境变量覆盖，否则容器部署（镜像不含 configs/、使用编译进二进制的默认
+// providers.json）下，即使配置了 TUSHARE_ENABLED=true 与 token，交易状态能力也永远
+// 打不开，Researchflow 的 quant.risk 会因 PROVIDER_UNAVAILABLE 恒失败。
+func TestTushareSecurityTradingStatusCapabilityHonorsEnvironmentOverride(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "providers.json")
+	data := `{"provider_priority":["eastmoney","tushare"],"adjustment_basis":"forward_adjusted","providers":{"eastmoney":{"enabled":true,"daily_bars":true},"tushare":{"enabled":false,"security_trading_status":false}}}`
+	if err := os.WriteFile(file, []byte(data), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("MARKET_DATA_PROVIDERS_CONFIG", file)
+	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
+	t.Setenv("MARKET_DATA_DEFAULT_ADJUSTMENT", "")
+	t.Setenv("MARKET_DATA_ADJUSTMENT", "")
+	t.Setenv("MARKET_DATA_TUSHARE_ENABLED", "true")
+	t.Setenv("MARKET_DATA_TUSHARE_TOKEN", "test-token")
+	t.Setenv("MARKET_DATA_TUSHARE_SECURITY_TRADING_STATUS_ENABLED", "true")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	settings := cfg.ProviderSettings["tushare"]
+	if !settings.Enabled || !settings.SecurityTradingStatus {
+		t.Fatalf("Tushare security-trading-status capability must honor the environment override: %+v", settings)
+	}
+
+	// 显式 false 仍必须能关闭该能力。
+	t.Setenv("MARKET_DATA_TUSHARE_SECURITY_TRADING_STATUS_ENABLED", "false")
+	cfg, err = Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.ProviderSettings["tushare"].SecurityTradingStatus {
+		t.Fatalf("explicit false must disable the capability: %+v", cfg.ProviderSettings["tushare"])
+	}
+}

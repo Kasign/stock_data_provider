@@ -486,6 +486,7 @@ func overrideProvider(prefix string, p ProviderSettings) ProviderSettings {
 	p.DragonTiger = boolEnv("MARKET_DATA_"+prefix+"_DRAGON_TIGER_ENABLED", p.DragonTiger)
 	p.Announcements = boolEnv("MARKET_DATA_"+prefix+"_ANNOUNCEMENTS_ENABLED", p.Announcements)
 	p.TradingCalendar = boolEnv("MARKET_DATA_"+prefix+"_TRADING_CALENDAR_ENABLED", p.TradingCalendar)
+	p.SecurityTradingStatus = boolEnv("MARKET_DATA_"+prefix+"_SECURITY_TRADING_STATUS_ENABLED", p.SecurityTradingStatus)
 	p.OrderBook = boolEnv("MARKET_DATA_"+prefix+"_ORDER_BOOK_ENABLED", p.OrderBook)
 	p.Fundamentals = boolEnv("MARKET_DATA_"+prefix+"_FUNDAMENTALS_ENABLED", p.Fundamentals)
 	p.Valuations = boolEnv("MARKET_DATA_"+prefix+"_VALUATIONS_ENABLED", p.Valuations)
