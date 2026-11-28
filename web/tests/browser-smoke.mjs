@@ -30,6 +30,7 @@ const viewNavigation = [
   { name: "chat", selector: '.nav-link[data-view="chat"]' },
   { name: "notifications", selector: '.nav-link[data-view="notifications"]' },
   { name: "data", selector: '.nav-link[data-view="data"]' },
+  { name: "diagnostics", selector: '.nav-link[data-view="diagnostics"]' },
   { name: "settings", selector: '.nav-link[data-view="settings"]' }
 ];
 const clickNav = async (targetPage, selector) => {
@@ -589,13 +590,13 @@ try {
     await page.goto(baseUrl, { waitUntil: "load", timeout: 30000 });
     assert.deepEqual(pageErrors, [], "browser page errors after initial load at " + viewport.width + "px: " + pageErrors.join(" | ") + " details=" + JSON.stringify(await page.evaluate(() => window.__pageErrorDetails || [])));
     await page.waitForFunction(
-      () => document.querySelectorAll(".nav-link[data-view]").length === 11 &&
+      () => document.querySelectorAll(".nav-link[data-view]").length === 12 &&
         document.querySelectorAll(".workspace-tab[data-view]").length === 0,
       null,
       { timeout: 10000 }
     );
     assert.equal(await page.locator("#market-view").isVisible(), true, "market overview must be the initial view");
-    assert.equal(await page.locator("#primary-sidebar .side-nav > .nav-link").count(), 11, "all workspace views must be exposed as flat first-level navigation tabs");
+    assert.equal(await page.locator("#primary-sidebar .side-nav > .nav-link").count(), 12, "all workspace views must be exposed as flat first-level navigation tabs");
     assert.equal(await page.locator("#primary-sidebar .side-nav .nav-group, #primary-sidebar .side-nav .nav-subnav").count(), 0, "sidebar navigation must not contain nested groups or sub-navigation");
     if (viewport.width > 700) {
       const sidebarWidth = await page.locator("#primary-sidebar").evaluate((element) => element.getBoundingClientRect().width);
