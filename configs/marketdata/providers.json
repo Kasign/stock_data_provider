@@ -18,6 +18,7 @@
       "quote": true,
       "daily_bars": true,
       "stock_basic": true,
+      "valuations": true,
       "stock_search": true,
       "sector_rankings": true,
       "index_quotes": true,

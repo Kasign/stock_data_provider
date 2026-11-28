@@ -1382,3 +1382,93 @@ func TestEastmoneyDailyBarsWarnsOnInvalidOptionalChangePercent(t *testing.T) {
 		t.Fatalf("expected optional field warning with row context, got %+v", report)
 	}
 }
+
+// push2 行情域名在部分网络整段不可用时，估值仍可从 datacenter 的 F10
+// 价值分析报表取得；这是估值能力的长期数据源，不依赖 Tushare/Hithink 权限。
+func TestEastmoneyFetchValuationsUsesF10ValueAnalysis(t *testing.T) {
+	var gotQuery url.Values
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.Query()
+		if gotQuery.Get("reportName") != "RPT_VALUEANALYSIS_DET" {
+			t.Errorf("unexpected reportName %q", gotQuery.Get("reportName"))
+		}
+		fmt.Fprint(w, `{"success":true,"result":{"data":[{"SECUCODE":"600519.SH","SECURITY_NAME_ABBR":"贵州茅台","TRADE_DATE":"2026-11-27 00:00:00","PE_TTM":22.4,"PE_LAR":22.35,"PB_MRQ":6.78,"PS_TTM":10.55,"PCF_OCF_TTM":17.14}]}}`)
+	}))
+	defer server.Close()
+
+	p := NewEastmoneyConfiguredWithStockBasic(2*time.Second, server.URL, "", server.URL, "")
+	snapshot, err := p.FetchValuations(context.Background(), []string{"600519.SH"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(snapshot.RequestedSymbols) != 1 || snapshot.RequestedSymbols[0] != "600519.SH" {
+		t.Fatalf("requested symbols must preserve request order: %+v", snapshot.RequestedSymbols)
+	}
+	if snapshot.Total != 1 || len(snapshot.Items) != 1 {
+		t.Fatalf("unexpected item count: total=%d items=%d", snapshot.Total, len(snapshot.Items))
+	}
+	item := snapshot.Items[0]
+	if item.Symbol != "600519.SH" || item.Code != "600519" {
+		t.Fatalf("unexpected item identity: %+v", item)
+	}
+	if item.PETTM == nil || *item.PETTM != 22.4 || item.PBMRQ == nil || *item.PBMRQ != 6.78 {
+		t.Fatalf("PE/PB must come from F10 value analysis: %+v", item)
+	}
+	if item.PSTTM == nil || *item.PSTTM != 10.55 || item.PCFTTM == nil || *item.PCFTTM != 17.14 {
+		t.Fatalf("PS/PCF must come from F10 value analysis: %+v", item)
+	}
+	if item.PEStatic == nil || *item.PEStatic != 22.35 {
+		t.Fatalf("PE_LAR must map to static PE: %+v", item.PEStatic)
+	}
+	if snapshot.ProviderReportDate != "2026-11-27" {
+		t.Fatalf("provider_report_date must come from TRADE_DATE: %q", snapshot.ProviderReportDate)
+	}
+	if snapshot.Source != "eastmoney" || snapshot.QualityStatus != model.QualityDegraded || snapshot.SourceVersion == "" {
+		t.Fatalf("unexpected snapshot metadata: %+v", snapshot)
+	}
+	if gotQuery.Get("pageSize") != "1" || gotQuery.Get("sortColumns") != "TRADE_DATE" || gotQuery.Get("sortTypes") != "-1" {
+		t.Fatalf("valuation query must ask for the latest trade date only: %v", gotQuery)
+	}
+	// service 层会逐项复核：item 的 source/version/fetched_at 必须与快照一致，
+	// code 必须是 symbol 的六位前缀，否则整批估值会被拒绝。
+	if item.Source != snapshot.Source || item.SourceVersion != snapshot.SourceVersion || item.FetchedAt.IsZero() {
+		t.Fatalf("item metadata must match snapshot metadata: item=%+v snapshot=%+v", item, snapshot)
+	}
+	if snapshot.FetchedAt.IsZero() || snapshot.ProviderReportDate == "" {
+		t.Fatalf("snapshot must carry fetched_at and provider_report_date: %+v", snapshot)
+	}
+	for _, reason := range snapshot.QualityReasons {
+		if reason == "eastmoney_valuation_pe_mrq_not_supported" {
+			return
+		}
+	}
+	t.Fatalf("snapshot must declare unsupported PE_MRQ honestly: %v", snapshot.QualityReasons)
+}
+
+// 请求里缺失的标的必须进入 MissingSymbols，而不是伪造一条空记录。
+func TestEastmoneyFetchValuationsMarksMissingSymbols(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		filter := r.URL.Query().Get("filter")
+		if strings.Contains(filter, "000001.SZ") {
+			fmt.Fprint(w, `{"success":true,"result":{"data":[]}}`)
+			return
+		}
+		fmt.Fprint(w, `{"success":true,"result":{"data":[{"SECUCODE":"600519.SH","TRADE_DATE":"2026-11-27 00:00:00","PE_TTM":22.4}]}}`)
+	}))
+	defer server.Close()
+
+	p := NewEastmoneyConfiguredWithStockBasic(2*time.Second, server.URL, "", server.URL, "")
+	snapshot, err := p.FetchValuations(context.Background(), []string{"600519.SH", "000001.SZ"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snapshot.Total != 1 {
+		t.Fatalf("only resolvable symbols may appear as items: total=%d", snapshot.Total)
+	}
+	if len(snapshot.MissingSymbols) != 1 || snapshot.MissingSymbols[0] != "000001.SZ" {
+		t.Fatalf("unresolvable symbol must be reported as missing: %+v", snapshot.MissingSymbols)
+	}
+	if snapshot.QualityStatus != model.QualityDegraded {
+		t.Fatalf("missing symbols must degrade the snapshot: %q", snapshot.QualityStatus)
+	}
+}

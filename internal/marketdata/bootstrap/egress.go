@@ -33,7 +33,7 @@ func validateEgressDependencies(cfg config.Config, deps Dependencies) error {
 				MarketBreadth: settings.MarketBreadth, LimitPools: settings.LimitPools, StockBoards: settings.StockBoards,
 				Announcements: settings.Announcements, DragonTiger: settings.DragonTiger, ChipDistribution: settings.ChipDistribution,
 				CapitalFlow: settings.CapitalFlow, HotRankings: settings.HotRankings,
-				OrderBook: settings.OrderBook,
+				OrderBook: settings.OrderBook, Valuations: settings.Valuations,
 			})
 			if err != nil {
 				return fmt.Errorf("controlled egress for eastmoney: %w", err)

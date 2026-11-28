@@ -193,7 +193,7 @@ type EastmoneyCapabilities struct {
 	SectorRankings, IndexQuotes, MarketBreadth          bool
 	LimitPools, StockBoards, Announcements, DragonTiger bool
 	ChipDistribution, CapitalFlow, HotRankings          bool
-	OrderBook                                           bool
+	OrderBook, Valuations                               bool
 }
 
 // HTTPOriginsForCapabilities 只返回指定业务能力真实请求路径涉及的 endpoint origin。
@@ -211,7 +211,7 @@ func (p *Eastmoney) HTTPOriginsForCapabilities(c EastmoneyCapabilities) ([]strin
 	}
 	add(c.Quote || c.OrderBook, p.quoteURL)
 	add(c.DailyBars || c.SectorRankings || c.ChipDistribution, p.klineURL)
-	add(c.StockBasic, p.stockBasicURL)
+	add(c.StockBasic || c.Valuations, p.stockBasicURL)
 	add(c.StockSearch || c.MarketBreadth, p.stockListURL)
 	add(c.SectorRankings, p.sectorRankingURL)
 	add(c.IndexQuotes || c.HotRankings, p.indexURL)
@@ -406,6 +406,71 @@ func (p *Eastmoney) FetchStockBoards(ctx context.Context, rawSymbol string) (*mo
 }
 
 // FetchStockBasic retrieves low-frequency A-share identity and listing metadata from Eastmoney F10.
+var errEastmoneyF10NoRows = errors.New("eastmoney F10 report returned no rows")
+
+// fetchF10Rows 查询 datacenter F10 报表。filter/columns/排序/页大小由调用方给出：
+// 股票详情要求“恰好一行”，估值要求“按交易日取最新一行”。datacenter 端点在
+// push2 行情域名整段不可用时仍可访问，因此详情与估值都优先走这里。
+func (p *Eastmoney) fetchF10Rows(
+	ctx context.Context, reportName, filter, columns, sortColumns, sortTypes string, pageSize int,
+) ([]map[string]json.RawMessage, error) {
+	params := url.Values{
+		"reportName":   {reportName},
+		"columns":      {columns},
+		"quoteColumns": {""},
+		"filter":       {filter},
+		"pageNumber":   {"1"},
+		"pageSize":     {strconv.Itoa(pageSize)},
+		"sortTypes":    {sortTypes},
+		"sortColumns":  {sortColumns},
+		"source":       {"HSF10"},
+		"client":       {"PC"},
+		"v":            {strconv.FormatInt(providerNowUTC().UnixMilli(), 10)},
+	}
+	var payload struct {
+		Result *struct {
+			Data []map[string]json.RawMessage `json:"data"`
+		} `json:"result"`
+	}
+	u, err := url.Parse(p.stockBasicURL)
+	if err != nil {
+		return nil, fmt.Errorf("eastmoney F10 endpoint URL: %w", err)
+	}
+	u.RawQuery = params.Encode()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36")
+	req.Header.Set("Referer", "https://emweb.securities.eastmoney.com/")
+	req.Header.Set("Origin", "https://emweb.securities.eastmoney.com")
+	req.Header.Set("Accept", "application/json, text/plain, */*")
+	doer, doerErr := p.doerForURL(u.String())
+	if doerErr != nil {
+		return nil, doerErr
+	}
+	resp, err := doer.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("eastmoney F10 %s request: %w", reportName, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
+		return nil, fmt.Errorf("eastmoney F10 %s HTTP status %d", reportName, resp.StatusCode)
+	}
+	body, err := readBoundedBody(resp.Body, maxProviderPayloadBytes)
+	if err != nil {
+		return nil, fmt.Errorf("read Eastmoney F10 %s payload: %w", reportName, err)
+	}
+	if err := decodeSingleJSON(body, &payload); err != nil {
+		return nil, fmt.Errorf("decode Eastmoney F10 %s JSON: %w", reportName, err)
+	}
+	if payload.Result == nil || len(payload.Result.Data) == 0 {
+		return nil, errEastmoneyF10NoRows
+	}
+	return payload.Result.Data, nil
+}
+
 func (p *Eastmoney) FetchStockBasic(ctx context.Context, rawSymbol string) (*model.StockBasic, error) {
 	symbol, err := normalize.NormalizeSymbol(rawSymbol)
 	if err != nil {
@@ -416,64 +481,17 @@ func (p *Eastmoney) FetchStockBasic(ctx context.Context, rawSymbol string) (*mod
 	}
 
 	fetchRow := func(reportName string) (map[string]json.RawMessage, error) {
-		params := url.Values{
-			"reportName":   {reportName},
-			"columns":      {"ALL"},
-			"quoteColumns": {""},
-			"filter":       {fmt.Sprintf(`(SECUCODE="%s")`, symbol)},
-			"pageNumber":   {"1"},
-			"pageSize":     {"1"},
-			"sortTypes":    {""},
-			"sortColumns":  {""},
-			"source":       {"HSF10"},
-			"client":       {"PC"},
-			"v":            {strconv.FormatInt(providerNowUTC().UnixMilli(), 10)},
+		rows, err := p.fetchF10Rows(ctx, reportName, fmt.Sprintf(`(SECUCODE="%s")`, symbol), "ALL", "", "", 1)
+		if errors.Is(err, errEastmoneyF10NoRows) {
+			return nil, fmt.Errorf("eastmoney stock-basic report %s returned no row for %s", reportName, symbol)
 		}
-		var payload struct {
-			Result *struct {
-				Data []map[string]json.RawMessage `json:"data"`
-			} `json:"result"`
-		}
-		u, err := url.Parse(p.stockBasicURL)
-		if err != nil {
-			return nil, fmt.Errorf("eastmoney stock-basic endpoint URL: %w", err)
-		}
-		u.RawQuery = params.Encode()
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
 		if err != nil {
 			return nil, err
 		}
-		req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36")
-		req.Header.Set("Referer", "https://emweb.securities.eastmoney.com/")
-		req.Header.Set("Origin", "https://emweb.securities.eastmoney.com")
-		req.Header.Set("Accept", "application/json, text/plain, */*")
-		doer, doerErr := p.doerForURL(u.String())
-		if doerErr != nil {
-			return nil, doerErr
+		if len(rows) != 1 {
+			return nil, fmt.Errorf("eastmoney stock-basic report %s expected exactly one row for %s, got %d", reportName, symbol, len(rows))
 		}
-		resp, err := doer.Do(req)
-		if err != nil {
-			return nil, fmt.Errorf("eastmoney stock-basic request: %w", err)
-		}
-		defer resp.Body.Close()
-		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-			_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
-			return nil, fmt.Errorf("eastmoney stock-basic HTTP status %d", resp.StatusCode)
-		}
-		body, err := readBoundedBody(resp.Body, maxProviderPayloadBytes)
-		if err != nil {
-			return nil, fmt.Errorf("read Eastmoney stock-basic payload: %w", err)
-		}
-		if err := decodeSingleJSON(body, &payload); err != nil {
-			return nil, fmt.Errorf("decode Eastmoney stock-basic JSON: %w", err)
-		}
-		if payload.Result == nil || len(payload.Result.Data) == 0 {
-			return nil, fmt.Errorf("eastmoney stock-basic report %s returned no row for %s", reportName, symbol)
-		}
-		if len(payload.Result.Data) != 1 {
-			return nil, fmt.Errorf("eastmoney stock-basic report %s expected exactly one row for %s, got %d", reportName, symbol, len(payload.Result.Data))
-		}
-		row := payload.Result.Data[0]
+		row := rows[0]
 		field := func(name string) string {
 			raw, ok := row[name]
 			if !ok || len(raw) == 0 || string(raw) == "null" {
@@ -696,6 +714,109 @@ func (p *Eastmoney) fetchStockBasicQuoteFields(
 }
 
 // firstNonEmptyEastmoneyField 按顺序返回第一个非空字段，用于不同 F10 报表的行业字段兜底。
+const (
+	eastmoneyValuationVersion = "eastmoney-f10-value-analysis-v1"
+	eastmoneyValuationColumns = "SECUCODE,SECURITY_NAME_ABBR,TRADE_DATE,PE_TTM,PE_LAR,PB_MRQ,PS_TTM,PCF_OCF_TTM"
+)
+
+// FetchValuations 从 datacenter 的 F10 价值分析报表读取估值。
+// 该报表按交易日给出 PE_TTM / PE_LAR / PB_MRQ / PS_TTM / PCF_OCF_TTM，并带明确 TRADE_DATE；
+// 不含 PE_MRQ、换手率、量比与股息率，因此快照固定为 degraded，并在原因里逐项声明缺口，
+// 不把缺失值伪造成 0。逐标的查询并只取最新交易日一行，避免一个标的的历史行挤占页容量。
+func (p *Eastmoney) FetchValuations(ctx context.Context, rawSymbols []string) (*model.ValuationSnapshot, error) {
+	if len(rawSymbols) == 0 || len(rawSymbols) > 100 {
+		return nil, errors.New("eastmoney valuations require 1..100 symbols")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	symbols := make([]string, 0, len(rawSymbols))
+	seen := make(map[string]struct{}, len(rawSymbols))
+	for _, raw := range rawSymbols {
+		symbol, err := normalize.NormalizeSymbol(raw)
+		if err != nil {
+			return nil, err
+		}
+		if !isTushareAShareSymbol(symbol) {
+			return nil, fmt.Errorf("eastmoney valuations only support common A-share equities, got %q", raw)
+		}
+		if _, duplicate := seen[symbol]; duplicate {
+			continue
+		}
+		seen[symbol] = struct{}{}
+		symbols = append(symbols, symbol)
+	}
+	now := providerNowUTC()
+	snapshot := &model.ValuationSnapshot{
+		RequestedSymbols: symbols,
+		Source:           p.Name(), SourceVersion: eastmoneyValuationVersion, FetchedAt: now,
+		QualityStatus: model.QualityDegraded,
+		QualityReasons: []string{
+			"eastmoney_valuation_pe_mrq_not_supported",
+			"eastmoney_valuation_turnover_rate_not_supported",
+			"eastmoney_valuation_volume_ratio_not_supported",
+			"eastmoney_valuation_dividend_yield_not_supported",
+			"eastmoney_valuation_provider_snapshot_time_not_exposed",
+		},
+	}
+	reportDate := ""
+	var lastErr error
+	for _, symbol := range symbols {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		rows, err := p.fetchF10Rows(ctx, "RPT_VALUEANALYSIS_DET",
+			fmt.Sprintf(`(SECUCODE="%s")`, symbol), eastmoneyValuationColumns, "TRADE_DATE", "-1", 1)
+		if errors.Is(err, errEastmoneyF10NoRows) {
+			snapshot.MissingSymbols = append(snapshot.MissingSymbols, symbol)
+			continue
+		}
+		if err != nil {
+			lastErr = err
+			snapshot.MissingSymbols = append(snapshot.MissingSymbols, symbol)
+			continue
+		}
+		row := rows[0]
+		canonical, symbolErr := normalize.NormalizeSymbol(readEastmoneyField(row, "SECUCODE"))
+		if symbolErr != nil || canonical != symbol {
+			snapshot.MissingSymbols = append(snapshot.MissingSymbols, symbol)
+			continue
+		}
+		tradeDate, dateErr := parseEastmoneyProfileDate(readEastmoneyField(row, "TRADE_DATE"))
+		if dateErr != nil {
+			snapshot.MissingSymbols = append(snapshot.MissingSymbols, symbol)
+			continue
+		}
+		if tradeDate != "" && tradeDate > reportDate {
+			reportDate = tradeDate
+		}
+		snapshot.Items = append(snapshot.Items, model.ValuationItem{
+			Symbol: symbol, Code: strings.Split(symbol, ".")[0],
+			Name:     readEastmoneyField(row, "SECURITY_NAME_ABBR"),
+			PETTM:    parseEastmoneyProfileNumber(row["PE_TTM"]),
+			PEStatic: parseEastmoneyProfileNumber(row["PE_LAR"]),
+			PBMRQ:    parseEastmoneyProfileNumber(row["PB_MRQ"]),
+			PSTTM:    parseEastmoneyProfileNumber(row["PS_TTM"]),
+			PCFTTM:   parseEastmoneyProfileNumber(row["PCF_OCF_TTM"]),
+			Source:   p.Name(), SourceVersion: eastmoneyValuationVersion, FetchedAt: now,
+			QualityStatus:  model.QualityDegraded,
+			QualityReasons: []string{"eastmoney_valuation_pe_mrq_not_supported"},
+		})
+	}
+	if len(snapshot.Items) == 0 {
+		if lastErr != nil {
+			return nil, fmt.Errorf("eastmoney valuations failed for all requested symbols: %w", lastErr)
+		}
+		return nil, errors.New("eastmoney F10 value analysis returned no rows for the requested symbols")
+	}
+	if len(snapshot.MissingSymbols) > 0 {
+		snapshot.QualityReasons = append(snapshot.QualityReasons, "eastmoney_valuation_missing_symbols")
+	}
+	snapshot.ProviderReportDate = reportDate
+	snapshot.Total = len(snapshot.Items)
+	return snapshot, nil
+}
+
 func firstNonEmptyEastmoneyField(row map[string]json.RawMessage, names ...string) string {
 	for _, name := range names {
 		if value := readEastmoneyField(row, name); value != "" {

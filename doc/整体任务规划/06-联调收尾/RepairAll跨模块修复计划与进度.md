@@ -2150,3 +2150,16 @@ CI-01：.github/workflows/go-test.yml 保留已过时的 Market Data 一次性�
 - **布局约束**：诊断页放在 `settings-view` 之后。原因是契约测试用 `alerts-view` 到 `settings-view` 的切片断言「不得硬编码 600519 / 贵州茅台 等示例数据」，而诊断页的默认股票代码会落进该切片。
 - **提交与 CI（回填）**：功能提交 `12e912c36651fe55b10cf445b9ba6ed59082feb2` 已推送 `repair_all`，12 项 success（含 Go 全模块、Market-data PIT、Compose、WebUI source/container），唯一失败是 `Chromium responsive layout checks`——`browser-smoke.mjs` 硬编码一级导航数量为 11，新增页面后 `waitForFunction` 超时。已由后续提交 `1b5eab375ca1abba1c086f8f27ddbfa59c6a7b76`（`test(webui): 同步冒烟测试的一级导航数量并纳入数据诊断页`）把计数与视图遍历同步为 12，该 SHA 4/4 check run 全部 success（`WebUI checks`、`WebUI browser smoke`、`required-checks`、`Integration CI`），无 failure、无 pending。核对该 SHA 的 HEAD 与 `origin/repair_all` 一致，未切分支/合并/rebase/强推/重置。组合证据：Go 侧由 `12e912c36` 覆盖，WebUI 与浏览器冒烟由 `1b5eab375` 覆盖。
 - **未覆盖**：本组未新增独立浏览器脚本断言诊断页交互细节，仅把它纳入既有视图遍历；筹码/资金流 502 与交易状态/估值 503 属上游或配置问题，不在本组范围。
+
+## 2026-11-28 Eastmoney 补齐 F10 估值能力，修复 /market/valuations 恒 503
+
+- **触发**：按「最优长期方案」处理诊断页暴露的三项缺口（估值 503、筹码/资金流 502、交易状态 503）。先做可行性取证，避免用临时绕过掩盖真实约束。
+- **取证结论（决定方案边界）**：① eastmoney 行情域名 `push2` / `push2his` / `push2delay` 在当前网络 TCP 443 可连但无 HTTP 响应，换 IP 直连、HTTP、移动端域名（`emhsmarketwg` 404、`push2mob` 302）、`push2hq`（302 跳首页）均不可用，**没有可配置的备选行情域名**。② F10 没有筹码/资金流/风险警示报表：`RPT_F10_CHIP_DISTRIBUTION`、`RPT_CHIP_DISTRIBUTION`、`RPT_F10_MONEY_FLOW`、`RPT_F10_RISKWARNING` 全部 0 行；`RPT_MUTUAL_STOCK_NORTHSTA` 是北向持股而非个股资金流。③ 筹码与个股资金流除 eastmoney 外只有 `MiaoXiang` 实现（需付费 Key）；交易状态只有 Tushare 实现。④ 估值可由 `RPT_VALUEANALYSIS_DET` 取得，且该端点在 `datacenter` 可用。
+- **实施**：新增 `Eastmoney.FetchValuations`，走 `datacenter` 的 F10 `RPT_VALUEANALYSIS_DET`——逐标的按 `TRADE_DATE` 降序取最新一行（`pageSize=1`，避免单标的历史行挤占页容量），映射 `PE_TTM`/`PE_LAR`(静态市盈率)/`PB_MRQ`/`PS_TTM`/`PCF_OCF_TTM`，并把 `TRADE_DATE` 写入 `provider_report_date`。
+- **消除重复**：抽取 `fetchF10Rows(ctx, reportName, filter, columns, sortColumns, sortTypes, pageSize)` 统一 F10 查询；`FetchStockBasic` 的局部 `fetchRow` 改为调用它（保留“恰好一行 + symbol 一致”校验），不再重复请求/解析代码。
+- **能力接入**：`EastmoneyCapabilities` 增加 `Valuations` 并映射到 `stockBasicURL` 出站依赖；`providers.json` 与 `.env.example` 启用 `eastmoney.valuations`。
+- **诚实降级**：该报表不含 `PE_MRQ`、换手率、量比与股息率，快照固定 `degraded` 并逐项声明 `eastmoney_valuation_*_not_supported`，不把缺失值伪造成 0；查不到的标的进入 `missing_symbols` 并追加原因。
+- **测试**：新增 `TestEastmoneyFetchValuationsUsesF10ValueAnalysis`（映射、`provider_report_date`、查询参数、item 与快照元数据一致、声明 PE_MRQ 缺口）与 `TestEastmoneyFetchValuationsMarksMissingSymbols`；三处变异（不映射 PE_TTM、丢失 RequestedSymbols 顺序、不记 missing）均被捕获。
+- **真实数据验证**：用 `datacenter` 实跑 `600519.SH` 与 `000001.SZ`，两只均返回完整 `PE_TTM/PE_LAR/PB_MRQ/PS_TTM/PCF_OCF_TTM`，`provider_report_date=2026-11-27`，`missing=[]`；验证后已删除临时 live 测试文件。`go test ./...` 93 包 ok，`go vet`、`git diff --check` 通过。
+- **仍未解决（非代码可解）**：筹码分布与个股资金流依赖 `push2`/`push2his`，当前网络不可达且无 F10 替代，唯一备选是启用 `MiaoXiang`（需 API Key）；交易状态需启用 Tushare 并具备相应权限。三者均需用户侧网络或凭据决策。
+- **待部署验证**：重建 server 镜像后 `GET /api/v1/market/valuations?symbols=600519.SH` 应从 503 变为 200（`quality_status=degraded`）。
